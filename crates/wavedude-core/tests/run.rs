@@ -213,8 +213,9 @@ fn readers_on_other_threads_see_every_written_frame() {
 		.map(|_| {
 			let (st, done, s) = (st.clone(), done.clone(), s.clone());
 			std::thread::spawn(move || {
+				// A reader may first run after the last write: it reads at least once either way.
 				let mut reads = 0;
-				while !done.load(Ordering::Acquire) {
+				while reads == 0 || !done.load(Ordering::Acquire) {
 					let n = st.count();
 					if n > 0 {
 						let k = reads % n;
@@ -222,7 +223,6 @@ fn readers_on_other_threads_see_every_written_frame() {
 						reads += 1;
 					}
 				}
-				reads
 			})
 		})
 		.collect();
@@ -231,7 +231,7 @@ fn readers_on_other_threads_see_every_written_frame() {
 	}
 	done.store(true, Ordering::Release);
 	for r in readers {
-		assert!(r.join().unwrap() > 0);
+		r.join().unwrap();
 	}
 }
 
