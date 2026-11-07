@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.1...v0.1.2) - 2026-11-07
+
+### Added
+
+- crash report on next start, scratch frames that step on, .wdproj as the default save format
+
+### Other
+
+- batch GPU probe readback, share scene and scratch data, fix export, playback, modal and fit bugs
+
 ## [0.1.1](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.0...v0.1.1) - 2026-11-07
 
 ### Other
