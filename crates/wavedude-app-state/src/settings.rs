@@ -56,6 +56,11 @@ impl AppDirs {
 		self.data.join("openh264")
 	}
 
+	/// The rolling log files and the crash report.
+	pub fn logs(&self) -> PathBuf {
+		self.config.join("logs")
+	}
+
 	pub fn settings_file(&self) -> PathBuf {
 		self.config.join(FILE_NAME)
 	}

@@ -1,12 +1,13 @@
 //! Logging: a rolling log file in the config dir plus an in-memory ring of lines for the Messages pane and the
-//! status bar (Info and up), and the helpers that keep the log diagnosable (engine facts, scratch requests
-//! naming the newest edit, every change at Trace as old -> new).
+//! status bar (Info and up), the panic hook and its crash report, and the helpers that keep the log diagnosable
+//! (engine facts, scratch requests naming the newest edit, every change at Trace as old -> new).
 //!
 //! Threads: the ring is shared (`Arc<Mutex>`); any thread may log, the UI thread reads.
 
+use std::backtrace::Backtrace;
 use std::collections::VecDeque;
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -159,6 +160,56 @@ pub fn init(dir: &Path, ring: LogRing) -> anyhow::Result<LogGuard> {
 	Ok(LogGuard { _worker: guard })
 }
 
+/// The report of a panic not yet shown to the user.
+const CRASH_FILE: &str = "crash.txt";
+/// The newest report once shown.
+const SHOWN_CRASH_FILE: &str = "last-crash.txt";
+
+/// Appends every panic, with a backtrace, to `dir`'s crash report and to the log before the default hook prints it
+/// to stderr. The report is written at once: a panic on the main thread may end the process before the log's
+/// writer flushes.
+pub fn install_panic_hook(dir: &Path) {
+	let file = dir.join(CRASH_FILE);
+	let default = std::panic::take_hook();
+	std::panic::set_hook(Box::new(move |info| {
+		let thread = std::thread::current();
+		let report = format!(
+			"WaveDude Rust {} on {} {}\nthread '{}' {info}\n\n{}",
+			env!("CARGO_PKG_VERSION"),
+			std::env::consts::OS,
+			std::env::consts::ARCH,
+			thread.name().unwrap_or("<unnamed>"),
+			Backtrace::force_capture(),
+		);
+		let written = std::fs::OpenOptions::new()
+			.create(true)
+			.append(true)
+			.open(&file)
+			.and_then(|mut f| std::io::Write::write_all(&mut f, format!("{report}\n").as_bytes()));
+		if let Err(e) = written {
+			eprintln!("the crash report could not be written to '{}': {e}", file.display());
+		}
+		tracing::error!("{report}");
+		default(info);
+	}));
+}
+
+/// The crash report a panic of an earlier session left in `dir`, renamed so it is shown once.
+pub fn take_crash_report(dir: &Path) -> Option<PathBuf> {
+	let pending = dir.join(CRASH_FILE);
+	if !pending.is_file() {
+		return None;
+	}
+	let shown = dir.join(SHOWN_CRASH_FILE);
+	match std::fs::rename(&pending, &shown) {
+		Ok(()) => Some(shown),
+		Err(e) => {
+			tracing::warn!("the crash report '{}' could not be renamed: {e}", pending.display());
+			None
+		}
+	}
+}
+
 /// Logs a built engine's grid at Info: grid, canvas, rim, edges, stride, sub-steps, stencil.
 pub fn engine_built(engine: &str, scene: &SceneData, options: &EngineOptions, sub_steps: u32) {
 	tracing::info!(
@@ -202,6 +253,16 @@ mod tests {
 		}
 		assert_eq!(ring.len(), RING_LINES);
 		assert_eq!(ring.since(None)[0].message, "0");
+	}
+
+	#[test]
+	fn a_crash_report_is_taken_once() {
+		let dir = tempfile::tempdir().unwrap();
+		assert_eq!(take_crash_report(dir.path()), None);
+		std::fs::write(dir.path().join(CRASH_FILE), "boom").unwrap();
+		let shown = take_crash_report(dir.path()).expect("the report is taken");
+		assert_eq!(std::fs::read_to_string(&shown).unwrap(), "boom");
+		assert_eq!(take_crash_report(dir.path()), None, "shown once");
 	}
 
 	#[test]

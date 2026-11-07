@@ -307,7 +307,9 @@ async fn tick_loop(cx: Cx, mut theme: State<Theme>) {
 	if let Some(path) = cx.info.open.clone() {
 		cx.send(AppEvent::Guarded(Guarded::Open(path)));
 	}
-	if super::startup::due(&cx) {
+	if let Some(report) = wavedude_app_state::log::take_crash_report(&cx.info.dirs.logs()) {
+		cx.ui.show_modal(Modal::Crash(report));
+	} else if super::startup::due(&cx) {
 		cx.ui.show_modal(Modal::Startup);
 	} else if cx.shared.peek(|a| a.settings.check_for_updates == Some(true)) {
 		super::update::check(&cx, true);
@@ -367,6 +369,7 @@ fn on_notice(cx: &Cx, notice: &Notice) {
 	match notice {
 		Notice::AskMemoryWarning => cx.ui.show_modal(Modal::MemoryWarning),
 		Notice::ExportReady => export_dialog::run_ready(cx),
+		Notice::ExportStopped => export_dialog::run_stopped(cx),
 		_ => {}
 	}
 }

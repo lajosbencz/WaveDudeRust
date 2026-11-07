@@ -4,6 +4,9 @@
 //! Sources of a 9-point project are stored in the original's frequency units: reading multiplies
 //! the frequency scale is divided by [`super::nine_point_speed`], writing multiplies it back. A file whose `Simulation` carries
 //! `Rescaled="true"` already holds this program's units and is read unscaled.
+//!
+//! The root's `Generator` names the program that wrote the file. The display brightness of a file this program
+//! wrote is in its own units; one of WaveDude Next's is in the original's (spec/05-deviations.md).
 
 use std::path::Path;
 
@@ -18,6 +21,16 @@ use crate::model::*;
 
 /// File extension of a project.
 pub const EXTENSION: &str = "wdproj";
+/// The root's `Generator` in the files this program writes; the version follows it.
+pub const GENERATOR: &str = "WaveDude Rust";
+
+/// A read project and who wrote it.
+#[derive(Debug)]
+pub struct Read {
+	pub project: Project,
+	/// Written by this program (`Generator`): the brightness is in its units.
+	pub own: bool,
+}
 
 macro_rules! xml_enum {
 	($t:ty: $($m:ident),+) => {
@@ -65,12 +78,18 @@ type R<T> = std::result::Result<T, FormatError>;
 /// Parses a `.wdproj` text into a normalised project (migrated, 9-point frequencies scaled).
 /// The scene's `image_size` is left at (0, 0); [`load`] decodes it.
 pub fn read_str(text: &str) -> R<Project> {
+	read(text).map(|r| r.project)
+}
+
+/// [`read_str`] with who wrote the file.
+pub fn read(text: &str) -> R<Read> {
 	let doc = xml::parse(text)?;
 	let root = &doc.root;
 	if root.name != "Project" {
 		return Err(FormatError { message: "the document is not a WaveDude Next project".into(), at: Some(root.at) });
 	}
 	let version = root.i32("Version", PROJECT_VERSION as i32)?;
+	let own = root.get("Generator").is_some_and(|g| g.starts_with(GENERATOR));
 	let seed = match root.get("Seed") {
 		Some(v) => root.parse_i32("Seed", v)?,
 		None => Project::new_random_seed().seed,
@@ -120,7 +139,7 @@ pub fn read_str(text: &str) -> R<Project> {
 		);
 	}
 	project.normalize();
-	Ok(project)
+	Ok(Read { project, own })
 }
 
 // ---------------------------------------------------------------- attribute tables
@@ -528,11 +547,16 @@ fn read_part(el: &Element) -> R<Part> {
 
 /// Loads a `.wdproj` file and decodes the embedded image's size.
 pub fn load(path: &Path) -> Result<Project> {
+	load_read(path).map(|r| r.project)
+}
+
+/// [`load`] with who wrote the file.
+pub fn load_read(path: &Path) -> Result<Read> {
 	let text = super::read_text(path)?;
 	tracing::info!("loading project from '{}'", path.display());
-	let mut project = read_str(&text).map_err(|e| UnreadableFile::new(path, &text, e))?;
-	super::decode_image_size(&mut project, path)?;
-	Ok(project)
+	let mut read = read(&text).map_err(|e| UnreadableFile::new(path, &text, e))?;
+	super::decode_image_size(&mut read.project, path)?;
+	Ok(read)
 }
 
 // ---------------------------------------------------------------- writing
@@ -645,7 +669,9 @@ fn write_part(p: &Part) -> Element {
 /// The `Project` element of a project; `folder` makes an image path inside it relative.
 fn to_element(project: &Project, folder: Option<&Path>) -> Element {
 	let mut root = Element::new("Project");
-	root.attr("Version", PROJECT_VERSION.to_string()).attr("Seed", project.seed.to_string());
+	root.attr("Version", PROJECT_VERSION.to_string())
+		.attr("Seed", project.seed.to_string())
+		.attr("Generator", format!("{GENERATOR} {}", env!("CARGO_PKG_VERSION")));
 	if !project.description.is_empty() {
 		let mut d = Element::new("Description");
 		d.text = project.description.clone();
@@ -732,7 +758,7 @@ fn decls() -> Vec<Decl> {
 				"(Description?, Scene?, Simulation?, Display?, Source*, ({})*, Probe*, ColorScheme*)",
 				PART_ELEMENTS.join("|")
 			),
-			vec![text(None, "Version", true), text(Some("Project"), "Seed", true)],
+			vec![text(None, "Version", true), text(Some("Project"), "Seed", true), text(None, "Generator", false)],
 		),
 		Decl::new("Description", "(#PCDATA)", vec![]),
 		Decl::of::<Scene>("Scene", "(ImageData?)"),
@@ -1021,10 +1047,15 @@ mod tests {
 		p.add_probe_at(0, 0);
 		let text = write_string(&p, None);
 		let body = text.split_once("]>\n").unwrap().1;
+		let generator = format!("{GENERATOR} {}", env!("CARGO_PKG_VERSION"));
 		assert_eq!(
 			body,
-			"<Project Version=\"3\" Seed=\"7\">\n\t<Display>\n\t\t<Field ColorScheme=\"Default field\" Brightness=\"1\" BlackLevel=\"-0.05\" />\n\t\t<Intensity ColorScheme=\"Default intensity\" Brightness=\"1.5\" />\n\t</Display>\n\t<Source Name=\"Source 1\" X=\"0\" Y=\"0\" />\n\t<Lens Name=\"Lens 1\" X=\"0\" Y=\"0\" />\n\t<Probe Name=\"Probe 1\" AX=\"0\" AY=\"0\" />\n</Project>"
+			format!(
+				"<Project Version=\"3\" Seed=\"7\" Generator=\"{generator}\">\n\t<Display>\n\t\t<Field ColorScheme=\"Default field\" Brightness=\"1\" BlackLevel=\"-0.05\" />\n\t\t<Intensity ColorScheme=\"Default intensity\" Brightness=\"1.5\" />\n\t</Display>\n\t<Source Name=\"Source 1\" X=\"0\" Y=\"0\" />\n\t<Lens Name=\"Lens 1\" X=\"0\" Y=\"0\" />\n\t<Probe Name=\"Probe 1\" AX=\"0\" AY=\"0\" />\n</Project>"
+			)
 		);
+		assert!(read(&text).unwrap().own, "a file this program wrote is its own");
+		assert!(!read("<Project Version=\"3\" Seed=\"7\" />").unwrap().own);
 	}
 
 	#[test]

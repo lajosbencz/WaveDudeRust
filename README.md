@@ -10,8 +10,9 @@ probes with live graphs and video export.
 
 The maths is the project's own: unscaled Laplacians, sub-steps from the CFL
 bound, analytic physics tests ([`docs/physics.md`](docs/physics.md)). Project files of WaveDude
-Next (`.wdproj`) and of Wave Dude 2D (`configuration.json`) open as imports;
-the native format is `.wdr`, a zip with JSON and the scene image.
+Next (`.wdproj`) and of Wave Dude 2D (`configuration.json`) open; projects save
+as `.wdproj` by default, so WaveDude Next opens them too. `.wdr`, a zip with
+JSON and the scene image, opens and saves as well.
 
 ## Highlights
 

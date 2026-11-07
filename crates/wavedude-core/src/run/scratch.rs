@@ -1,9 +1,13 @@
 //! Scratch frames: "frame k of the project as it is now" for the live preview (spec/30-engine.md, Scratch frames).
 //!
+//! The kept engine steps on from where the previous request left it (finished or abandoned) when the project's
+//! steps are the same and it has not passed the frame; recent frames come from a cache.
+//!
 //! Threads: one worker thread owns the kept engine and computes the newest request; [`ScratchRunner::request`]
 //! may be called from any thread. A request superseded while stepping is abandoned at the next check, every
 //! [`CHECK_INTERVAL`] steps. Events are delivered on the worker thread.
 
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
@@ -18,6 +22,8 @@ use super::spec::RunSpec;
 
 /// Steps between two looks for a newer request.
 pub const CHECK_INTERVAL: u32 = 16;
+/// Bytes of planes the recent frames keep.
+pub const CACHE_BYTES: usize = 256 << 20;
 
 /// A computed scratch frame.
 #[derive(Clone, Debug)]
@@ -82,7 +88,7 @@ impl ScratchRunner {
 	/// A runner whose engines `factory` builds, reporting to `sink`.
 	pub fn new(factory: EngineFactory, sink: ScratchSink) -> std::io::Result<Self> {
 		let shared = Arc::new(Shared { inbox: Mutex::default(), wake: Condvar::new(), latest: AtomicU64::new(0) });
-		let worker = Worker { shared: shared.clone(), factory, sink, engine: None };
+		let worker = Worker { shared: shared.clone(), factory, sink, kept: None, cache: VecDeque::new() };
 		let thread = std::thread::Builder::new().name("scratch-frames".into()).spawn(move || worker.run())?;
 		Ok(Self { shared, thread: Some(thread) })
 	}
@@ -124,7 +130,23 @@ struct Worker {
 	shared: Arc<Shared>,
 	factory: EngineFactory,
 	sink: ScratchSink,
-	engine: Option<(Box<dyn WaveEngine>, RunSpec)>,
+	kept: Option<Kept>,
+	/// Recent frames of the kept engine's project, oldest first, within [`CACHE_BYTES`].
+	cache: VecDeque<ScratchResult>,
+}
+
+/// The kept engine, the spec it was prepared for and how far it has stepped since its reset.
+struct Kept {
+	engine: Box<dyn WaveEngine>,
+	spec: RunSpec,
+	steps_done: u32,
+	collector: Option<ProbeCollector>,
+	readings: ProbeReadings,
+}
+
+/// Same scene, emitters and probes: one more step of either is the same computation.
+fn same_steps(a: &RunSpec, b: &RunSpec) -> bool {
+	a.same_scene_as(b) && a.seed == b.seed && a.emitters == b.emitters && a.probes == b.probes
 }
 
 impl Worker {
@@ -147,11 +169,11 @@ impl Worker {
 				Ok(Ok(event)) => (self.sink)(event),
 				Ok(Err(e)) => {
 					tracing::warn!("preview frame failed: {e}");
-					self.engine = None;
+					self.forget();
 					(self.sink)(ScratchEvent::Failed { id, error: Arc::new(e.into()) });
 				}
 				Err(panic) => {
-					self.engine = None;
+					self.forget();
 					let error = Arc::new(RunError::panic("the engine", panic.as_ref()));
 					(self.sink)(ScratchEvent::Failed { id, error });
 				}
@@ -159,40 +181,87 @@ impl Worker {
 		}
 	}
 
-	/// The frame of the request; a failed engine is dropped by the caller, so the next request builds anew.
+	/// Drops a failed engine and its frames, so the next request builds anew.
+	fn forget(&mut self) {
+		self.kept = None;
+		self.cache.clear();
+	}
+
+	/// The frame of the request: from the cache, else stepped on from the kept engine's state when it has not
+	/// passed the frame, else from step 0.
 	fn compute(&mut self, Request { id, spec, frame }: Request) -> Result<ScratchEvent, EngineError> {
 		let started = Instant::now();
 		let steps = frame * spec.visualize_every + 1;
-		self.prepare_engine(&spec);
-		let engine = &mut self.engine.as_mut().expect("engine prepared").0;
-		let mut collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene));
-		engine.set_probes(collector.as_ref().map(ProbeCollector::cells).unwrap_or_default());
-		let mut readings = ProbeReadings::default();
-		for i in 0..steps {
-			if i % CHECK_INTERVAL == 0 && self.shared.latest.load(Ordering::Acquire) != id {
+		if !self.kept.as_ref().is_some_and(|k| same_steps(&k.spec, &spec)) {
+			self.cache.clear();
+		}
+		if let Some(hit) = self.cache.iter().find(|r| r.frame == frame && r.snapshot.shape == spec.shape) {
+			tracing::debug!(frame, "preview frame from the cache");
+			let elapsed = started.elapsed();
+			return Ok(ScratchEvent::Done(Box::new(ScratchResult { id, spec, elapsed, ..hit.clone() })));
+		}
+		self.prepare(&spec, steps);
+		let kept = self.kept.as_mut().expect("engine prepared");
+		let from = kept.steps_done;
+		for i in from..steps {
+			if (i - from).is_multiple_of(CHECK_INTERVAL) && self.shared.latest.load(Ordering::Acquire) != id {
 				tracing::debug!(frame, done = i, steps, "preview frame abandoned for a newer request");
 				return Ok(ScratchEvent::Abandoned { id, frame, steps_done: i, steps });
 			}
-			engine.advance_one_step()?;
-			if let Some(c) = collector.as_mut() {
-				engine.sample_probes(&mut readings)?;
-				c.record_step(&readings, i as u64 + 1);
+			kept.engine.advance_one_step()?;
+			if let Some(c) = kept.collector.as_mut() {
+				kept.engine.sample_probes(&mut kept.readings)?;
+				c.record_step(&kept.readings, u64::from(i) + 1);
 			}
+			kept.steps_done = i + 1;
 		}
-		let snapshot = engine.capture_frame(&spec.shape)?;
-		if let Some(c) = collector.as_mut() {
-			c.record_frame(&readings, steps as u64);
-		}
-		let traces = collector.map(|c| c.traces).unwrap_or_default();
+		let snapshot = kept.engine.capture_frame(&spec.shape)?;
+		let traces = kept.collector.as_ref().map_or_else(Vec::new, |c| {
+			let mut frame_end = c.clone();
+			frame_end.record_frame(&kept.readings, u64::from(steps));
+			frame_end.traces
+		});
 		let elapsed = started.elapsed();
-		tracing::debug!(frame, steps, ms = elapsed.as_secs_f64() * 1e3, "preview frame");
-		Ok(ScratchEvent::Done(Box::new(ScratchResult { id, spec, frame, snapshot, traces, elapsed })))
+		tracing::debug!(frame, steps, from, ms = elapsed.as_secs_f64() * 1e3, "preview frame");
+		let result = ScratchResult { id, spec, frame, snapshot, traces, elapsed };
+		self.remember(result.clone());
+		Ok(ScratchEvent::Done(Box::new(result)))
 	}
 
-	/// Keeps the engine reset for `spec`: as it is for the same scene, with the scene swapped in for the
-	/// same grid, else a new one.
-	fn prepare_engine(&mut self, spec: &RunSpec) {
-		let kept = self.engine.take().and_then(|(mut engine, old)| {
+	fn remember(&mut self, result: ScratchResult) {
+		let bytes = |r: &ScratchResult| r.snapshot.field.len() + r.snapshot.intensity.len();
+		let mut total = self.cache.iter().map(bytes).sum::<usize>() + bytes(&result);
+		while total > CACHE_BYTES
+			&& let Some(old) = self.cache.pop_front()
+		{
+			total -= bytes(&old);
+		}
+		if total <= CACHE_BYTES {
+			self.cache.push_back(result);
+		}
+	}
+
+	/// The kept engine ready to step on to `steps` for `spec`: as it stands when it ran the same steps and has
+	/// not passed them; else reset, with the scene swapped in for the same grid, or a new one.
+	fn prepare(&mut self, spec: &RunSpec, steps: u32) {
+		let continues = self.kept.as_ref().is_some_and(|k| same_steps(&k.spec, spec) && k.steps_done <= steps);
+		if !continues {
+			let engine = self.reset_engine(spec);
+			let collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene));
+			let mut kept =
+				Kept { engine, spec: spec.clone(), steps_done: 0, collector, readings: ProbeReadings::default() };
+			kept.engine.set_probes(kept.collector.as_ref().map(ProbeCollector::cells).unwrap_or_default());
+			self.kept = Some(kept);
+		}
+		if let Some(kept) = self.kept.as_mut() {
+			kept.spec = spec.clone();
+		}
+	}
+
+	/// The kept engine reset for `spec`: as it is for the same scene, with the scene swapped in for the same
+	/// grid, else a new one.
+	fn reset_engine(&mut self, spec: &RunSpec) -> Box<dyn WaveEngine> {
+		let kept = self.kept.take().and_then(|Kept { mut engine, spec: old, .. }| {
 			if old.same_scene_as(spec) {
 				if old.emitters != spec.emitters {
 					engine.set_emitters(&spec.emitters);
@@ -214,6 +283,6 @@ impl Worker {
 			e
 		});
 		engine.reset();
-		self.engine = Some((engine, spec.clone()));
+		engine
 	}
 }

@@ -54,7 +54,8 @@ fn every_example_loads_round_trips_and_validates() {
 	}
 }
 
-/// Every example comes back byte for byte after its DOCTYPE, except where a file was edited by hand:
+/// Every example comes back byte for byte after its DOCTYPE, except the root's `Generator` and where a file was
+/// edited by hand:
 /// Example 6 omits a probe's `BoxX` equal to its `AX` (read back the same, written out here).
 #[test]
 fn examples_are_rewritten_as_shipped() {
@@ -65,6 +66,8 @@ fn examples_are_rewritten_as_shipped() {
 		let p = wdproj::read_str(&original).unwrap();
 		let text = wdproj::write_string(&p, None);
 		let (head, body) = text.split_once("]>\n").unwrap();
+		let generator = format!(" Generator=\"{} {}\"", wdproj::GENERATOR, env!("CARGO_PKG_VERSION"));
+		let body = body.replacen(&generator, "", 1);
 		assert!(head.starts_with("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!DOCTYPE Project ["));
 		let original_body = original.split_once('\n').unwrap().1;
 		for (a, b) in body.lines().zip(original_body.lines()) {

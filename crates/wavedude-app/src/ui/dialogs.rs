@@ -25,6 +25,8 @@ pub enum Modal {
 	Error(String),
 	/// A notice with OK.
 	Info(String),
+	/// The crash report an earlier session left, with its path to copy.
+	Crash(PathBuf),
 	/// The first start's page: preview quality, MP4's codec, updates.
 	Startup,
 	MemoryWarning,
@@ -188,6 +190,7 @@ impl Component for ModalHost {
 			}),
 			Modal::Error(text) => notice(&s, ui, Disc::Error, text),
 			Modal::Info(text) => notice(&s, ui, Disc::Info, text),
+			Modal::Crash(report) => crash(&s, ui, &report),
 			Modal::Startup => super::startup::StartupPage.into_element(),
 			Modal::Confirm { text, yes } => {
 				let no = Rc::new(move || ui.close_modal()) as Rc<dyn Fn()>;
@@ -259,6 +262,26 @@ fn notice(s: &Strings, ui: Ui, disc: Disc, text: String) -> Element {
 		disc,
 		text,
 		vec![DialogButton { text: s.get("DialogOk").into(), action: close, default: true, cancel: true }],
+	)
+}
+
+fn crash(s: &Strings, ui: Ui, report: &Path) -> Element {
+	let path = report.display().to_string();
+	let copied = s.get("CrashPathCopied").to_owned();
+	let text = s.format("CrashReportFormat", &[&path]);
+	let copy = Rc::new(move || match Clipboard::set(path.clone()) {
+		Ok(()) => tracing::info!("{copied}"),
+		Err(e) => tracing::warn!("the clipboard could not be written: {e:?}"),
+	}) as Rc<dyn Fn()>;
+	let close = Rc::new(move || ui.close_modal()) as Rc<dyn Fn()>;
+	message(
+		s,
+		Disc::Error,
+		text,
+		vec![
+			DialogButton { text: s.get("CrashCopyPath").into(), action: copy, default: false, cancel: false },
+			DialogButton { text: s.get("DialogOk").into(), action: close, default: true, cancel: true },
+		],
 	)
 }
 

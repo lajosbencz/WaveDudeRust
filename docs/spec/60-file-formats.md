@@ -5,12 +5,14 @@
 XML 1.0, UTF-8 without BOM, `<?xml version="1.0" encoding="utf-8"?>`, tab indentation, no namespaces
 (`xmlns:xsi`/`xsd` suppressed). Root `Project`. Simple values are attributes; lists are repeated child elements.
 Sparse: an attribute equal to its `[DefaultValue]` is omitted (exceptions below). Numbers in invariant culture,
-f64 in shortest round-trip form, bools `true`/`false`, enums by member name.
+f64 in shortest round-trip form, bools `true`/`false`, enums by member name. This program writes the root's
+`Generator="WaveDude Rust <version>"`; a file carrying it holds this program's display brightness and is not fitted
+on opening (05-deviations.md, decision 0004).
 
 ### Element order
 
 ```
-Project @Version @Seed
+Project @Version @Seed @Generator?
   Description?           (element text; omitted when empty)
   Scene?                 (omitted when every property is at its default and no image)
     ImageData?           (base64 of the image file bytes)

@@ -167,20 +167,18 @@ pub fn boxes<B: wavedude_app_state::live::Backend>(app: &AppState<B>, layer: Lay
 	let selected = app.selection.items();
 	let mut traces: Vec<(String, ProbeTrace)> = Vec::new();
 	let mut cut = None;
-	match live.shown() {
-		Some(Shown::Scratch(_)) => {
-			if let Some(r) = live.latest_scratch() {
-				traces = r.spec.probes.iter().map(|p| p.name.clone()).zip(r.traces.iter().cloned()).collect();
-			}
+	match (live.graph_scratch(), live.shown()) {
+		(Some(r), _) => {
+			traces = r.spec.probes.iter().map(|p| p.name.clone()).zip(r.traces.iter().cloned()).collect();
 		}
-		Some(Shown::Run(k)) => {
+		(None, Some(Shown::Run(k))) => {
 			if let Some(spec) = live.run_spec() {
 				let names: Vec<String> = spec.probes.iter().map(|p| p.name.clone()).collect();
 				cut = Some((spec.step_of(k) as usize + 1, k as usize));
 				live.with_run_traces(&mut |t| traces = names.iter().cloned().zip(t.iter().cloned()).collect());
 			}
 		}
-		None => {}
+		(None, _) => {}
 	}
 	let steps = project.simulation.steps;
 	project

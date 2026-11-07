@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use wavedude_core::io::{self, FormatError, IoError, legacy, wdproj, wdr};
+use wavedude_core::io::{self, FormatError, IoError, legacy, wdproj};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{Layer, Project};
 
@@ -90,16 +90,22 @@ impl Document {
 					tracing::info!("import of '{}': {note}", path.display());
 				}
 				let suggested = legacy::suggested_file_name(path, &imported.name);
-				Self::with(imported.project, None, Some(suggested), false)
+				let mut doc = Self::with(imported.project, None, Some(suggested), false);
+				doc.needs_brightness_fit = true;
+				doc
 			}
 			wavedude_core::io::wdscheme::EXTENSION => {
 				return Ok(Opened::Scheme(wavedude_core::io::wdscheme::load(path)?));
 			}
-			"xml" => Self::with(wdproj::load(path)?, Some(path.to_owned()), None, false),
+			"xml" | wdproj::EXTENSION => {
+				let read = wdproj::load_read(path)?;
+				let mut doc = Self::with(read.project, Some(path.to_owned()), None, false);
+				doc.needs_brightness_fit = !read.own;
+				doc
+			}
 			_ => Self::with(io::load_project(path)?, Some(path.to_owned()), None, false),
 		};
 		let mut doc = doc;
-		doc.needs_brightness_fit = matches!(extension(path).as_str(), "json" | "xml" | wdproj::EXTENSION);
 		doc.adopt_scene_image();
 		tracing::info!("opened '{}'", path.display());
 		Ok(Opened::Project(Box::new(doc)))
@@ -220,7 +226,7 @@ impl Document {
 		self.save_as(&path)
 	}
 
-	/// Saves to `path` by its extension: `.wdr` (native), `.wdproj` or `.xml` (WaveDude Next XML).
+	/// Saves to `path` by its extension: `.wdproj` or `.xml` (WaveDude Next XML), `.wdr` (zip of JSON).
 	pub fn save_as(&mut self, path: &Path) -> Result<(), DocumentError> {
 		self.history.commit(&self.project);
 		match extension(path).as_str() {
@@ -236,9 +242,9 @@ impl Document {
 		Ok(())
 	}
 
-	/// The path Save As proposes: the file, else the suggested name as a native `.wdr` beside its origin.
+	/// The path Save As proposes: the file, else the suggested name as a `.wdproj` beside its origin.
 	pub fn proposed_save_path(&self) -> Option<PathBuf> {
-		self.path.clone().or_else(|| self.suggested_file_name.as_ref().map(|p| p.with_extension(wdr::EXTENSION)))
+		self.path.clone().or_else(|| self.suggested_file_name.as_ref().map(|p| p.with_extension(wdproj::EXTENSION)))
 	}
 
 	/// The name the unsaved-edits question uses: the file name, the suggested one, or `untitled`.
@@ -282,7 +288,7 @@ mod tests {
 		let mut e = Document::from_example(&crate::examples::all()[0]).unwrap();
 		assert!(e.needs_brightness_fit, "an example is written for the original's source");
 		assert_eq!(e.title("App", "Untitled", false), "App - Example01_Source_Mirror_Probe.wdproj");
-		assert_eq!(e.proposed_save_path().unwrap(), Path::new("Example01_Source_Mirror_Probe.wdr"));
+		assert_eq!(e.proposed_save_path().unwrap(), Path::new("Example01_Source_Mirror_Probe.wdproj"));
 		e.path = Some(PathBuf::from("/x/y/p.wdr"));
 		assert_eq!(e.title("App", "Untitled", true), "App - /x/y/p.wdr");
 	}

@@ -120,13 +120,17 @@ pub fn has_last(_ui: &Ui, app: &App) -> bool {
 	LAST.with_borrow(|l| l.as_ref().is_some_and(|(_, p)| *p == app.document.path))
 }
 
-/// Cancels a running export; false when none runs.
+/// Cancels a running or waiting export; false when there is none.
 pub fn cancel(cx: &Cx) -> bool {
-	let running = cx.ui.export.peek().as_ref().map(|e| e.cancel.clone());
-	match running {
-		Some(c) => {
-			c.store(true, Ordering::Relaxed);
-			PENDING.with_borrow_mut(Option::take);
+	let export = cx.ui.export.peek().as_ref().map(|e| (e.cancel.clone(), e.waiting));
+	match export {
+		Some((_, true)) => {
+			cx.shared.update(|a| a.live.cancel_export());
+			run_stopped(cx);
+			true
+		}
+		Some((flag, false)) => {
+			flag.store(true, Ordering::Relaxed);
 			true
 		}
 		None => false,
@@ -257,10 +261,18 @@ fn set_progress(cx: &Cx, p: ExportProgress) {
 	e.set(Some(p));
 }
 
+/// The waiting export's run will not complete: the export is dropped.
+pub fn run_stopped(cx: &Cx) {
+	PENDING.with_borrow_mut(Option::take);
+	let mut e = cx.ui.export;
+	e.set(None);
+}
+
 /// The live controller's run for a waiting export has completed.
 pub fn run_ready(cx: &Cx) {
-	if let Some(plan) = PENDING.with_borrow_mut(Option::take) {
-		run(cx, plan);
+	match PENDING.with_borrow_mut(Option::take) {
+		Some(plan) => run(cx, plan),
+		None => cx.shared.update(|a| a.live.end_export()),
 	}
 }
 

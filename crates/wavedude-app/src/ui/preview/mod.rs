@@ -381,7 +381,7 @@ impl Poller {
 				}
 			}
 		}
-		let (computing, position) = shared.peek(|app| (app.live.computing_frame(), app.live.playback.position()));
+		let (computing, position) = shared.peek(|app| (app.live.computing_picture(), app.live.playback.position()));
 		self.computing = match (computing, self.computing) {
 			(Some(f), Some((g, since))) if f == g => Some((g, since)),
 			(Some(f), _) => Some((f, now)),

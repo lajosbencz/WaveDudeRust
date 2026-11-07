@@ -21,8 +21,11 @@ Status bar shows ", edited since" on the run line while stale.
 ## Scratch frame
 
 - "Frame k of the project as it is now", computed from step 0 on a separate kept engine, probes sampled.
-- Requested 120 ms after the last edit or scrub, whenever the store cannot show the position: no run, stale run,
-  stale probes, or a run that has not got there.
+- Requested 120 ms after the last edit, and every 120 ms while scrubbing, whenever the store cannot show the
+  position: no run, stale run, stale probes, or a run that has not got there. A later frame steps on from the
+  previous request's progress, so a forward drag follows the pointer.
+- A frame the run can show when it arrives is not shown (the run's frame is); for stale probes alone it feeds the
+  graphs, the pictures keep the run's frame and do not dim.
 - Newest request wins: a superseded request is abandoned within a few steps; the newest is computed in full,
   however long (no time budget).
 - Not requested while playback runs; requested when playback stops on a position the store cannot show.

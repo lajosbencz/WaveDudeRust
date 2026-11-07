@@ -121,6 +121,8 @@ pub enum Notice {
 	AskMemoryWarning,
 	/// The export's run is complete and fresh.
 	ExportReady,
+	/// The waiting export's run ended before completing or was replaced: the export is dropped.
+	ExportStopped,
 	Info(String),
 	Error(String),
 }
@@ -190,6 +192,19 @@ pub enum Shown {
 	Scratch(u32),
 }
 
+/// What a scratch frame is computed for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScratchUse {
+	/// The pictures: the run cannot show the position.
+	Picture,
+	/// The probe graphs only: the run shows the position but its recordings are stale.
+	Graphs,
+	/// Auto brightness: the position in 16-bit samples, shown.
+	Fit,
+	/// An opened project's brightness fit: 16-bit samples, kept for the fit and never shown.
+	OpenFit,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Export {
 	Idle,
@@ -205,7 +220,7 @@ pub struct LiveController<B: Backend> {
 	run: Option<ActiveRun>,
 	live: bool,
 	scratch_due: Option<Instant>,
-	scratch_in_flight: Option<(u64, u32)>,
+	scratch_in_flight: Option<(u64, u32, ScratchUse)>,
 	rerun_due: Option<Instant>,
 	shown: Option<Shown>,
 	warning: Option<PendingWarning>,
@@ -215,6 +230,8 @@ pub struct LiveController<B: Backend> {
 	scratch_result: Option<Arc<ScratchResult>>,
 	/// The newest scratch frame shown, kept for the presenter and the graphs.
 	latest_scratch: Option<Arc<ScratchResult>>,
+	/// The frame an opened project's brightness fit asked for.
+	open_fit: Option<Arc<ScratchResult>>,
 }
 
 impl<B: Backend> LiveController<B> {
@@ -235,6 +252,7 @@ impl<B: Backend> LiveController<B> {
 			notices: Vec::new(),
 			scratch_result: None,
 			latest_scratch: None,
+			open_fit: None,
 		}
 	}
 
@@ -269,9 +287,19 @@ impl<B: Backend> LiveController<B> {
 		self.shown
 	}
 
-	/// The newest scratch frame that was shown (not taken by [`take_scratch_result`](Self::take_scratch_result)).
+	/// The newest scratch frame for the position (not taken by [`take_scratch_result`](Self::take_scratch_result)).
 	pub fn latest_scratch(&self) -> Option<&Arc<ScratchResult>> {
 		self.latest_scratch.as_ref()
+	}
+
+	/// The scratch frame whose probe traces the graphs show: the one shown, or the one for the run's frame shown
+	/// while the run's recordings are stale.
+	pub fn graph_scratch(&self) -> Option<&Arc<ScratchResult>> {
+		let r = self.latest_scratch.as_ref()?;
+		match self.shown? {
+			Shown::Scratch(_) => Some(r),
+			Shown::Run(k) => (r.frame == k && self.run.as_ref().is_some_and(|run| run.probes_stale)).then_some(r),
+		}
 	}
 
 	/// Calls `f` with the shown frame's shape and its plane of `layer`; `None` without a shown frame or such a plane.
@@ -292,7 +320,13 @@ impl<B: Backend> LiveController<B> {
 
 	/// The timeline frame a scratch request is computing.
 	pub fn computing_frame(&self) -> Option<u32> {
-		self.scratch_in_flight.map(|(_, frame)| frame)
+		self.scratch_in_flight.map(|(_, frame, _)| frame)
+	}
+
+	/// The timeline frame a scratch request computes for the pictures (not for the probe graphs alone).
+	pub fn computing_picture(&self) -> Option<u32> {
+		self.scratch_in_flight
+			.and_then(|(_, frame, used)| matches!(used, ScratchUse::Picture | ScratchUse::Fit).then_some(frame))
 	}
 
 	/// Calls `f` with the current run's probe traces (empty without a run).
@@ -384,6 +418,7 @@ impl<B: Backend> LiveController<B> {
 		self.live = false;
 		self.shown = None;
 		self.latest_scratch = None;
+		self.open_fit = None;
 		self.last_edit = None;
 		self.playback.pause();
 		self.playback.set_position(0);
@@ -399,6 +434,15 @@ impl<B: Backend> LiveController<B> {
 			run.handle.cancel();
 		}
 		self.playback.set_available(None);
+		self.drop_waiting_export();
+	}
+
+	fn drop_waiting_export(&mut self) {
+		if let Export::Waiting { .. } = self.export {
+			self.export = Export::Idle;
+			tracing::warn!("The export was dropped: its run stopped before the last frame.");
+			self.notices.push(Notice::ExportStopped);
+		}
 	}
 
 	/// A model change of class `kind` at `now`; `note` names the newest edit with its value.
@@ -486,16 +530,22 @@ impl<B: Backend> LiveController<B> {
 				self.playback.set_position(frames - 1);
 			}
 			self.live = false;
-			if let Export::Waiting { needs_intensity } = self.export
-				&& run.is_full_for_export(needs_intensity)
-			{
-				self.export = Export::Reading;
-				self.notices.push(Notice::ExportReady);
-			}
+			let export_ready = match self.export {
+				Export::Waiting { needs_intensity } => Some(run.is_full_for_export(needs_intensity)),
+				_ => None,
+			};
 			if let RunState::Failed(error) = &state {
 				self.notices.push(Notice::Error(error.to_string()));
 			}
 			self.notices.push(Notice::RunEnded(state));
+			match export_ready {
+				Some(true) => {
+					self.export = Export::Reading;
+					self.notices.push(Notice::ExportReady);
+				}
+				Some(false) => self.drop_waiting_export(),
+				None => {}
+			}
 		}
 	}
 
@@ -513,17 +563,27 @@ impl<B: Backend> LiveController<B> {
 
 	fn poll_scratch(&mut self) {
 		for outcome in self.backend.poll_scratch() {
-			let Some((id, frame)) = self.scratch_in_flight else {
+			let Some((id, frame, used)) = self.scratch_in_flight else {
 				continue;
 			};
 			match outcome {
 				ScratchOutcome::Done { id: done, result, .. } if done == id => {
 					self.scratch_in_flight = None;
 					self.scratch_result = result.map(Arc::from);
-					if frame == self.playback.position() {
+					if used == ScratchUse::OpenFit {
+						self.open_fit = self.scratch_result.take();
+					} else if frame == self.playback.position() {
 						self.latest_scratch.clone_from(&self.scratch_result);
-						self.shown = Some(Shown::Scratch(frame));
-						self.notices.push(Notice::ShowScratch(frame));
+						let picture = match used {
+							ScratchUse::Picture => !self.run_can_show(frame),
+							ScratchUse::Graphs => false,
+							ScratchUse::Fit => true,
+							ScratchUse::OpenFit => false,
+						};
+						if picture {
+							self.shown = Some(Shown::Scratch(frame));
+							self.notices.push(Notice::ShowScratch(frame));
+						}
 					}
 					self.resume_after_scratch();
 				}
@@ -582,11 +642,12 @@ impl<B: Backend> LiveController<B> {
 				return;
 			}
 		};
-		self.request_scratch(spec, frame);
+		let used = if self.run_can_show(frame) { ScratchUse::Graphs } else { ScratchUse::Picture };
+		self.request_scratch(spec, frame, used);
 	}
 
 	/// Pauses an active run (not one the user paused) and asks for `frame` of `spec`.
-	fn request_scratch(&mut self, spec: RunSpec, frame: u32) {
+	fn request_scratch(&mut self, spec: RunSpec, frame: u32, used: ScratchUse) {
 		if let Some(run) = &mut self.run
 			&& run.is_active()
 			&& !run.user_paused
@@ -600,18 +661,33 @@ impl<B: Backend> LiveController<B> {
 			"preview frame {frame} requested (id {id}); newest edit: {}",
 			self.last_edit.take().as_deref().unwrap_or("none")
 		);
-		self.scratch_in_flight = Some((id, frame));
+		self.scratch_in_flight = Some((id, frame, used));
 		self.notices.push(Notice::Computing(frame));
 	}
 
 	/// Auto brightness with 8-bit samples: the frame at the position once more with 16-bit samples, as a scratch
 	/// frame (shown when it arrives). Returns whether it was requested.
 	pub fn request_half_frame(&mut self, project: &Project) -> bool {
+		self.request_16_bit(project, ScratchUse::Fit)
+	}
+
+	/// An opened project's brightness fit with 8-bit samples: the frame at the position with 16-bit samples, for
+	/// [`take_open_fit`](Self::take_open_fit) alone. Returns whether it was requested.
+	pub fn request_open_fit(&mut self, project: &Project) -> bool {
+		self.request_16_bit(project, ScratchUse::OpenFit)
+	}
+
+	/// The frame [`request_open_fit`](Self::request_open_fit) asked for, once it arrived.
+	pub fn take_open_fit(&mut self) -> Option<Arc<ScratchResult>> {
+		self.open_fit.take()
+	}
+
+	fn request_16_bit(&mut self, project: &Project, used: ScratchUse) -> bool {
 		let quality = PreviewQuality { format: SampleFormat::Half, ..self.settings.quality };
 		match self.backend.spec(project, quality, false) {
 			Ok(spec) => {
 				self.scratch_due = None;
-				self.request_scratch(spec, self.playback.position());
+				self.request_scratch(spec, self.playback.position(), used);
 				true
 			}
 			Err(e) => {
@@ -771,13 +847,14 @@ impl<B: Backend> LiveController<B> {
 		self.live = on && self.run_is_active();
 	}
 
-	/// A click or drag on the timeline: the position only; playback pauses, Live turns off.
+	/// A click or drag on the timeline: the position only; playback pauses, Live turns off. A drag asks for a
+	/// scratch frame every [`SCRATCH_DEBOUNCE`] instead of after it, so the picture follows the drag.
 	pub fn scrub(&mut self, frame: u32, now: Instant) {
 		self.playback.pause();
 		self.live = false;
 		self.playback.set_position(frame);
 		if self.needs_scratch(self.playback.position()) {
-			self.schedule_scratch(now + SCRATCH_DEBOUNCE);
+			self.scratch_due.get_or_insert(now + SCRATCH_DEBOUNCE);
 		}
 	}
 
@@ -840,6 +917,18 @@ impl<B: Backend> LiveController<B> {
 	/// The export finished or was cancelled; the run may be replaced again.
 	pub fn end_export(&mut self) {
 		self.export = Export::Idle;
+	}
+
+	/// Cancels an export waiting for its run; the run stops, its frames so far stay.
+	pub fn cancel_export(&mut self) {
+		if let Export::Waiting { .. } = self.export {
+			self.export = Export::Idle;
+			if let Some(run) = &self.run
+				&& run.kind == RunKind::Export
+			{
+				run.handle.cancel();
+			}
+		}
 	}
 }
 
@@ -1267,6 +1356,44 @@ mod tests {
 	}
 
 	#[test]
+	fn a_scratch_frame_for_the_graphs_leaves_the_run_frame_shown() {
+		let t = Instant::now();
+		let mut p = project();
+		p.add_probe();
+		let mut c = controller(&p, t);
+		c.run_user(&p, t);
+		c.backend().last_run().complete();
+		c.scrub(40, t);
+		c.tick(ms(t, 10), &p);
+		assert_eq!(c.shown(), Some(Shown::Run(40)));
+		c.on_change(ChangeKind::ProbePresentation, &p, None, ms(t, 20));
+		c.tick(ms(t, 200), &p);
+		assert_eq!((c.computing_frame(), c.computing_picture()), (Some(40), None), "the pictures do not wait");
+		c.backend_mut().finish_scratch_uniform(0.5, 0.25);
+		c.tick(ms(t, 210), &p);
+		assert_eq!(c.shown(), Some(Shown::Run(40)), "the run's frame stays: no second picture");
+		assert!(c.graph_scratch().is_some_and(|r| r.frame == 40), "the graphs take the scratch frame's traces");
+		assert!(!c.take_notices().contains(&Notice::ShowScratch(40)));
+	}
+
+	#[test]
+	fn a_scratch_frame_the_run_overtook_is_not_shown() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.run_user(&p, t);
+		c.backend().last_run().publish(10);
+		c.scrub(50, t);
+		c.tick(ms(t, 130), &p);
+		assert_eq!(c.computing_picture(), Some(50));
+		c.backend().last_run().publish(60);
+		c.backend_mut().finish_scratch_uniform(0.5, 0.25);
+		c.tick(ms(t, 140), &p);
+		assert_eq!(c.shown(), Some(Shown::Run(50)));
+		assert!(!c.take_notices().contains(&Notice::ShowScratch(50)));
+	}
+
+	#[test]
 	fn scrub_pauses_and_turns_live_off() {
 		let t = Instant::now();
 		let p = project();
@@ -1340,5 +1467,37 @@ mod tests {
 		assert!(c.take_notices().contains(&Notice::ExportReady));
 		c.end_export();
 		assert_eq!(c.request_export(&p, true, t), ExportGate::Ready);
+	}
+
+	#[test]
+	fn a_waiting_export_never_outlives_its_run() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+
+		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		c.on_change(ChangeKind::Simulation, &p, None, ms(t, 10));
+		c.tick(ms(t, 20), &p);
+		assert!(c.take_notices().contains(&Notice::ExportStopped), "an edit stopped the export's run");
+		assert!(!c.export_busy());
+
+		assert_eq!(c.request_export(&p, false, ms(t, 30)), ExportGate::Waiting);
+		c.run_user(&p, ms(t, 40));
+		assert!(c.take_notices().contains(&Notice::ExportStopped), "F5 replaced the export's run");
+		assert!(!c.export_busy());
+
+		assert_eq!(c.request_export(&p, false, ms(t, 50)), ExportGate::Waiting);
+		let run = c.backend().last_run().clone();
+		c.cancel_export();
+		assert!(!c.export_busy());
+		assert_eq!(*run.state.lock().unwrap(), RunState::Cancelled, "a cancelled export stops its run");
+		c.tick(ms(t, 60), &p);
+		let notices = c.take_notices();
+		assert!(!notices.contains(&Notice::ExportReady) && !notices.contains(&Notice::ExportStopped));
+		c.on_change(ChangeKind::Simulation, &p, None, ms(t, 70));
+		c.tick(ms(t, 70 + RERUN_QUIET.as_millis() as u64), &p);
+		c.backend_mut().finish_scratch();
+		c.tick(ms(t, 80 + RERUN_QUIET.as_millis() as u64), &p);
+		assert_eq!(c.run_kind(), Some(RunKind::Automatic), "nothing holds the re-run back");
 	}
 }

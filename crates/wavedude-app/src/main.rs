@@ -16,7 +16,8 @@ fn main() -> anyhow::Result<()> {
 		.clone()
 		.unwrap_or_else(|| AppDirs::under(&std::env::temp_dir().join(wavedude_app_state::settings::APP_FOLDER)));
 	let ring = LogRing::new();
-	let _guard = log::init(&dirs.config.join("logs"), ring.clone())?;
+	let _guard = log::init(&dirs.logs(), ring.clone())?;
+	log::install_panic_hook(&dirs.logs());
 	if platform.is_none() {
 		tracing::warn!("the platform names no home folder: settings and logs go to '{}'", dirs.config.display());
 	}

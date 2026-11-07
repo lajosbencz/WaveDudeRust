@@ -226,3 +226,6 @@ Line length (graph x axis) = Euclidean length of the clamped A-B; sample k of n 
 "Frame k as the project is now": a kept engine, Reset, emitters/probes set, stepped `k*VisualizeEvery + 1` steps, probes
 sampled every step, then captured. Newest request wins; a request superseded while stepping is abandoned at the next
 check (every 16 steps). The engine is kept across scene edits of the same grid (`TryReplaceScene`), rebuilt otherwise.
+A request for the same scene, emitters and probes steps on from where the kept engine stopped (the end of the previous
+request, finished or abandoned) when it has not passed the frame; frames of the same project computed recently
+(256 MiB of planes) are answered from a cache.

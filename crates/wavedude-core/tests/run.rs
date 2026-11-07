@@ -411,6 +411,29 @@ fn scratch_frame_equals_the_run_frame() {
 }
 
 #[test]
+fn scratch_frames_step_on_and_come_back_from_the_cache() {
+	let s = spec(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
+	let r = run(&s, GIB);
+	let run_traces = r.traces();
+	let (runner, rx) = scratch();
+	runner.request(s.clone(), 10);
+	let first = done(&rx);
+	runner.request(s.clone(), 30);
+	let later = done(&rx);
+	assert_eq!(later.snapshot.field, r.store().copy_layer(30, Layer::Field).unwrap());
+	assert_eq!(later.snapshot.intensity, r.store().copy_layer(30, Layer::Intensity).unwrap());
+	assert_eq!(later.traces[0].series, run_traces[0].series[..61]);
+	assert_eq!(later.traces[1].series, run_traces[1].series[..61]);
+	assert_eq!(later.traces[2].profiles.iter().collect::<Vec<_>>(), [run_traces[2].profiles.get(30).unwrap()]);
+
+	let id = runner.request(s.clone(), 10);
+	let cached = done(&rx);
+	assert_eq!((cached.id, cached.frame), (id, 10));
+	assert_eq!(cached.snapshot.field, first.snapshot.field);
+	assert_eq!(cached.traces, first.traces);
+}
+
+#[test]
 fn a_superseded_scratch_request_is_abandoned() {
 	let s = spec(&project(256, 256, 100), PreviewQuality::FULL);
 	let (runner, rx) = scratch();

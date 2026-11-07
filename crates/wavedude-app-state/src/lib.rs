@@ -199,8 +199,6 @@ pub struct AppState<B: Backend> {
 	pending: Option<Guarded>,
 	/// The export hint of a project without a file: this session's alone.
 	session_hint: ExportHint,
-	/// The 8-bit frame a 16-bit frame was asked for to fit an imported project's brightness.
-	fit_asked: Option<live::Shown>,
 }
 
 fn live_settings(s: &Settings) -> LiveSettings {
@@ -262,7 +260,6 @@ impl<B: Backend> AppState<B> {
 			use_gpu,
 			pending: None,
 			session_hint: ExportHint::default(),
-			fit_asked: None,
 		};
 		state.sync_revisions();
 		state
@@ -368,31 +365,37 @@ impl<B: Backend> AppState<B> {
 	}
 
 	/// Fits an imported project's brightness once to the first frame with content, as Auto does, outside the
-	/// history; an 8-bit frame is computed again in 16-bit first.
+	/// history. With 8-bit frames one 16-bit frame is computed for the fit alone, never shown; it is asked again
+	/// only when it was abandoned and nothing else computes, so scrubbing never makes it follow the position.
 	fn fit_imported_brightness(&mut self, now: Instant) {
 		if !self.document.needs_brightness_fit {
 			return;
 		}
-		let Some(shown) = self.live.shown() else {
-			return;
-		};
-		let read = |layer| {
-			self.live.with_shown_plane(layer, |shape, bytes| match shape.format {
-				SampleFormat::Half => Ok(fit_brightness(&as_halves(bytes), shape.sample_kind(layer))),
-				SampleFormat::Index => Err(index_has_content(layer, bytes)),
+		let values = if let Some(frame) = self.live.take_open_fit() {
+			let s = &frame.snapshot;
+			[Layer::Field, Layer::Intensity].map(|layer| {
+				let plane = s.plane(layer);
+				if plane.is_empty() { None } else { fit_brightness(&as_halves(plane), s.shape.sample_kind(layer)) }
 			})
-		};
-		let fits = [read(Layer::Field), read(Layer::Intensity)];
-		if fits.iter().any(|f| matches!(f, Some(Err(_)))) {
-			if self.fit_asked != Some(shown)
-				&& fits.iter().any(|f| matches!(f, Some(Err(true))))
-				&& self.live.request_half_frame(&self.document.project)
-			{
-				self.fit_asked = Some(shown);
+		} else {
+			if self.live.shown().is_none() {
+				return;
 			}
-			return;
-		}
-		let values = fits.map(|f| f.and_then(Result::ok).flatten());
+			let read = |layer| {
+				self.live.with_shown_plane(layer, |shape, bytes| match shape.format {
+					SampleFormat::Half => Ok(fit_brightness(&as_halves(bytes), shape.sample_kind(layer))),
+					SampleFormat::Index => Err(index_has_content(layer, bytes)),
+				})
+			};
+			let fits = [read(Layer::Field), read(Layer::Intensity)];
+			if fits.iter().any(|f| matches!(f, Some(Err(_)))) {
+				if fits.iter().any(|f| matches!(f, Some(Err(true)))) && !self.live.scratch_pending() {
+					self.live.request_open_fit(&self.document.project);
+				}
+				return;
+			}
+			fits.map(|f| f.and_then(Result::ok).flatten())
+		};
 		if values.iter().all(Option::is_none) {
 			return;
 		}
@@ -477,7 +480,6 @@ impl<B: Backend> AppState<B> {
 		self.document_changed(true);
 		self.selection = Selection::default();
 		self.session_hint = ExportHint::default();
-		self.fit_asked = None;
 		self.live.project_replaced(&self.document.project, now);
 	}
 

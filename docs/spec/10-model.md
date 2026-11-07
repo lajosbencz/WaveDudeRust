@@ -112,8 +112,10 @@ palette's top is |u| * b = 1 (field) and sqrt(I) * b = 1 (intensity), so field 1
 and intensity 1.5 puts sqrt(1/2) * 1.5 = 1.06 just past it. The original's 30 was made for its blended source,
 which radiates 5 to 9 times less. The `.wdproj` adapter reads a missing `Brightness` (and a missing layer element) as
 30 and writes the attribute whenever the value differs from 30; `.wdr` carries the model's values. A project read
-from `.wdproj`, Wave Dude 2D json or an example has its brightness fitted once in the app (Auto's fit on both
-layers, at the first frame with content), outside the undo history and without marking the project dirty.
+from `.wdproj` without this program's `Generator`, Wave Dude 2D json or an example has its brightness fitted once in
+the app (Auto's fit on both layers, at the first frame with content), outside the undo history and without marking the
+project dirty. With 8-bit frames one 16-bit frame of that position is computed for the fit alone and never shown; it is
+asked again only when it was abandoned and nothing else computes.
 
 ### Video
 

@@ -9,10 +9,11 @@ use wavedude_app_state::clipboard::PasteTarget;
 use wavedude_app_state::commands::{Command, NewPart, Target};
 use wavedude_app_state::history::History;
 use wavedude_app_state::live::fake::FakeBackend;
-use wavedude_app_state::live::{Notice, RunKind};
+use wavedude_app_state::live::{Notice, RunKind, Shown};
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::Settings;
 use wavedude_app_state::{AppState, Event, ExportKind, Guarded, Response, SaveChoice};
+use wavedude_core::io::wdproj;
 use wavedude_core::model::Point;
 use wavedude_core::run::MachineFacts;
 
@@ -243,6 +244,7 @@ fn log_reaches_file_and_ring() {
 }
 
 /// Opens `name` holding a 64 x 48 project with one source at the original's brightness, written by its extension.
+/// Opens `p` written to `dir/name`; a `.wdproj` without its `Generator`, as WaveDude Next writes it.
 fn open_written(dir: &std::path::Path, name: &str) -> AppState<FakeBackend> {
 	let mut p = wavedude_core::model::Project::default();
 	p.display.field.brightness = 30.0;
@@ -253,6 +255,12 @@ fn open_written(dir: &std::path::Path, name: &str) -> AppState<FakeBackend> {
 	p.add_source();
 	let path = dir.join(name);
 	wavedude_core::io::save_project(&p, &path).unwrap();
+	if name.ends_with(".wdproj") {
+		let text = std::fs::read_to_string(&path).unwrap();
+		let generator = format!(" Generator=\"{} {}\"", wdproj::GENERATOR, env!("CARGO_PKG_VERSION"));
+		assert!(text.contains(&generator));
+		std::fs::write(&path, text.replace(&generator, "")).unwrap();
+	}
 	let mut s = app();
 	assert_eq!(s.handle(Event::Guarded(Guarded::Open(path)), Instant::now()), Response::None);
 	s
@@ -296,18 +304,47 @@ fn an_imported_project_gets_its_brightness_fitted_once() {
 }
 
 #[test]
-fn a_native_project_is_not_fitted() {
+fn the_open_fit_neither_follows_the_position_nor_shows_its_frame() {
 	let dir = tempfile::tempdir().unwrap();
-	let mut s = open_written(dir.path(), "own.wdr");
+	let mut s = open_written(dir.path(), "old.wdproj");
 	let t = Instant::now();
-	assert!(!s.document.needs_brightness_fit);
-	let before = s.document.project.display.clone();
 	s.live.scrub(20, t);
 	s.tick(at(t, 200));
 	s.live.backend_mut().finish_scratch_uniform(0.5, 0.0625);
 	s.tick(at(t, 210));
-	s.tick(at(t, 220));
-	assert_eq!(s.document.project.display, before);
+	let requests = s.live.backend().scratch_requests.len();
+	assert_eq!(s.live.shown(), Some(Shown::Scratch(20)));
+	for (i, frame) in (30..80).step_by(10).enumerate() {
+		s.live.scrub(frame, at(t, 220 + i as u64));
+		s.tick(at(t, 220 + i as u64));
+	}
+	assert_eq!(s.live.backend().scratch_requests.len(), requests, "one fit request, not one per position");
+	s.live.backend_mut().finish_scratch_uniform(0.5, 0.0625);
+	s.tick(at(t, 300));
+	assert!(!s.document.needs_brightness_fit, "fitted from its frame although the position moved");
+	assert_eq!(s.live.shown(), Some(Shown::Scratch(20)), "the fit's frame is never shown");
+}
+
+#[test]
+fn a_project_this_program_wrote_is_not_fitted() {
+	let dir = tempfile::tempdir().unwrap();
+	let own = open_written(dir.path(), "own.wdr");
+	let mut saved = app();
+	let path = dir.path().join("own.wdproj");
+	saved.document.project = own.document.project.clone();
+	saved.document.save_as(&path).unwrap();
+	assert_eq!(saved.handle(Event::Guarded(Guarded::Open(path)), Instant::now()), Response::None);
+	for mut s in [own, saved] {
+		let t = Instant::now();
+		assert!(!s.document.needs_brightness_fit);
+		let before = s.document.project.display.clone();
+		s.live.scrub(20, t);
+		s.tick(at(t, 200));
+		s.live.backend_mut().finish_scratch_uniform(0.5, 0.0625);
+		s.tick(at(t, 210));
+		s.tick(at(t, 220));
+		assert_eq!(s.document.project.display, before);
+	}
 }
 
 #[test]
