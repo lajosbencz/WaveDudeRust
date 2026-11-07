@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# A newer commit on the same pull request or branch cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
