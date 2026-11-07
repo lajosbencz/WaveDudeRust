@@ -10,6 +10,9 @@ the tag `v<version>` and a draft release, the package
 jobs attach the installers, the Linux tarball, the update signatures and attestations, and the last job writes
 `latest.json` and publishes the release.
 
+Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened with it starts no workflow, so the
+release job dispatches CI on the release PR's branch itself; its checks land on the PR's head commit.
+
 ## One-time setup of a repository
 
 Settings > Secrets and variables > Actions:
@@ -20,7 +23,6 @@ Settings > Secrets and variables > Actions:
 | variable | `UPDATER_PUBKEY` | the updater's public key (below); unset: builds without the updater |
 | secret | `UPDATER_PRIVATE_KEY` | the updater's private key |
 | secret | `UPDATER_PRIVATE_KEY_PASSWORD` | its password |
-| secret | `RELEASE_PLZ_TOKEN` | optional: a fine-grained token (contents, pull requests) so the release PR runs CI |
 
 The updater key, made once and kept safe (losing it means installed copies cannot update to newer releases):
 

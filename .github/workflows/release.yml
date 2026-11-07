@@ -27,6 +27,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,8 +37,14 @@ jobs:
         with:
           command: release-pr
         env:
-          # A token other than GITHUB_TOKEN lets the release PR start CI; GITHUB_TOKEN works without it.
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: CI on the release PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch=$(gh pr list --repo "${{ github.repository }}" --state open --json headRefName \
+            --jq '.[] | select(.headRefName | startswith("release-plz-")) | .headRefName' | head -n 1)
+          if [ -n "$branch" ]; then gh workflow run ci.yml --repo "${{ github.repository }}" --ref "$branch"; fi
 
   release:
     if: vars.RELEASE_ENABLED == 'true'
@@ -58,7 +65,7 @@ jobs:
         with:
           command: release
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Only for a crate's first crates.io publish; later ones go through trusted publishing (id-token).
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       - id: app
