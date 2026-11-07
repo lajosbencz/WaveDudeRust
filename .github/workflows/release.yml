@@ -132,6 +132,8 @@ jobs:
           # linuxdeploy's own strip: the system libraries come stripped, and our binaries keep their symbol names
           # for backtraces; its old strip also fails on newer distributions' libraries.
           NO_STRIP: "true"
+          # linuxdeploy is an AppImage itself: extract instead of mounting, no FUSE on the runner needed.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
       - name: Linux tarball
         if: runner.os == 'Linux'
         run: |
