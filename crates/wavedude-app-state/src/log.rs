@@ -165,9 +165,9 @@ const CRASH_FILE: &str = "crash.txt";
 /// The newest report once shown.
 const SHOWN_CRASH_FILE: &str = "last-crash.txt";
 
-/// Appends every panic, with a backtrace, to `dir`'s crash report and to the log before the default hook prints it
-/// to stderr. The report is written at once: a panic on the main thread may end the process before the log's
-/// writer flushes.
+/// Logs every panic with a backtrace before the default hook prints it to stderr. A panic of the main thread, which
+/// ends the program, is also appended to `dir`'s crash report at once, before the log's writer could flush; a worker's
+/// panic is caught by its owner or ends that thread alone.
 pub fn install_panic_hook(dir: &Path) {
 	let file = dir.join(CRASH_FILE);
 	let default = std::panic::take_hook();
@@ -181,13 +181,15 @@ pub fn install_panic_hook(dir: &Path) {
 			thread.name().unwrap_or("<unnamed>"),
 			Backtrace::force_capture(),
 		);
-		let written = std::fs::OpenOptions::new()
-			.create(true)
-			.append(true)
-			.open(&file)
-			.and_then(|mut f| std::io::Write::write_all(&mut f, format!("{report}\n").as_bytes()));
-		if let Err(e) = written {
-			eprintln!("the crash report could not be written to '{}': {e}", file.display());
+		if thread.name() == Some("main") {
+			let written = std::fs::OpenOptions::new()
+				.create(true)
+				.append(true)
+				.open(&file)
+				.and_then(|mut f| std::io::Write::write_all(&mut f, format!("{report}\n").as_bytes()));
+			if let Err(e) = written {
+				eprintln!("the crash report could not be written to '{}': {e}", file.display());
+			}
 		}
 		tracing::error!("{report}");
 		default(info);

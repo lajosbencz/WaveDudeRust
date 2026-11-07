@@ -639,7 +639,7 @@ pub fn tree_row_menu(app: &App, row: Option<Row>) -> MenuModel<MenuAction> {
 		entries.push(
 			item(MenuAction::ExportProbeCsv, "tree:csv", s, "MenuExportProbeCsv")
 				.icon(glyphs::EXPORT)
-				.enabled(active)
+				.enabled(active && !app.live.export_busy())
 				.into(),
 		);
 	}

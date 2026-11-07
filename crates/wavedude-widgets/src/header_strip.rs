@@ -58,6 +58,7 @@ pub struct HeaderStrip {
 	orientation: StripOrientation,
 	tooltip: Option<String>,
 	test_id: String,
+	box_id: Option<AccessibilityId>,
 }
 
 impl HeaderStrip {
@@ -75,6 +76,7 @@ impl HeaderStrip {
 			orientation: StripOrientation::Horizontal,
 			tooltip: None,
 			test_id: String::new(),
+			box_id: None,
 		}
 	}
 
@@ -95,6 +97,12 @@ impl HeaderStrip {
 
 	pub fn tooltip(mut self, text: impl Into<String>) -> Self {
 		self.tooltip = Some(text.into());
+		self
+	}
+
+	/// The brightness box's id, for focusing it from outside.
+	pub fn box_id(mut self, id: AccessibilityId) -> Self {
+		self.box_id = Some(id);
 		self
 	}
 
@@ -136,6 +144,9 @@ impl Component for HeaderStrip {
 			.test_id(format!("{}Brightness", self.test_id));
 		if let Some(tip) = &self.tooltip {
 			number = number.tooltip(tip.clone());
+		}
+		if let Some(id) = self.box_id {
+			number = number.a11y_id(id);
 		}
 		let auto = Button::new()
 			.flat()

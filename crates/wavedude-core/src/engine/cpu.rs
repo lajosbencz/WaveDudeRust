@@ -29,7 +29,7 @@ use super::pml::{self, CpuPml, cut, taps};
 use super::stencil::{PAD, StencilCoefficients, TimeScheme};
 use super::substeps::sub_steps;
 use super::types::{
-	Emitter, EngineOptions, FrameShape, PendingCapture, ProbeCells, ProbeReadings, SceneData, Snapshot,
+	Emitter, EngineOptions, FrameShape, PendingCapture, ProbeCells, ProbeQueue, ProbeReadings, SceneData, Snapshot,
 };
 use super::{EngineError, WaveEngine};
 use crate::model::{Edges, Layer};
@@ -120,6 +120,8 @@ pub struct CpuEngine {
 	alpha: f32,
 	/// Per probe its layer and padded cells.
 	probes: Vec<(Layer, Vec<usize>)>,
+	probe_queue: ProbeQueue,
+	probe_reading: ProbeReadings,
 	time: u32,
 }
 
@@ -165,6 +167,8 @@ impl CpuEngine {
 			values: vec![0.0; IMAGE_LEVELS],
 			alpha: 0.0,
 			probes: Vec::new(),
+			probe_queue: ProbeQueue::default(),
+			probe_reading: ProbeReadings::default(),
 			time: 0,
 			options,
 			scene,
@@ -643,6 +647,7 @@ impl WaveEngine for CpuEngine {
 		}
 		self.time = 0;
 		self.sources.reset_pulses();
+		self.probe_queue.clear();
 	}
 
 	fn set_emitters(&mut self, emitters: &[Emitter]) {
@@ -656,6 +661,7 @@ impl WaveEngine for CpuEngine {
 			.iter()
 			.map(|p| (p.layer, p.cells.iter().map(|&(x, y)| self.cell_of_canvas(x as usize, y as usize)).collect()))
 			.collect();
+		self.probe_queue = ProbeQueue::new(probes.iter().map(|p| p.cells.len()).collect());
 	}
 
 	fn try_replace_scene(&mut self, scene: &Arc<SceneData>) -> bool {
@@ -676,6 +682,19 @@ impl WaveEngine for CpuEngine {
 
 	fn sample_probes(&mut self, out: &mut ProbeReadings) -> Result<(), EngineError> {
 		CpuEngine::sample_probes(self, out);
+		Ok(())
+	}
+
+	fn queue_probes(&mut self) -> Result<(), EngineError> {
+		let mut reading = std::mem::take(&mut self.probe_reading);
+		CpuEngine::sample_probes(self, &mut reading);
+		self.probe_queue.push(reading.values());
+		self.probe_reading = reading;
+		Ok(())
+	}
+
+	fn drain_probes(&mut self, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError> {
+		self.probe_queue.drain(f);
 		Ok(())
 	}
 

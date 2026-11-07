@@ -135,6 +135,17 @@ impl Probe {
 		self.measurement != Measurement::Amplitude
 	}
 
+	/// Whether a run records `other` as it records `self`: they differ in the graph box and its axes at most.
+	pub fn records_like(&self, other: &Self) -> bool {
+		self.name == other.name
+			&& self.active == other.active
+			&& self.layer == other.layer
+			&& self.measurement == other.measurement
+			&& self.kind == other.kind
+			&& (self.ax, self.ay, self.bx, self.by) == (other.ax, other.ay, other.bx, other.by)
+			&& self.start_after == other.start_after
+	}
+
 	/// Box size in pixels before fitting into the canvas.
 	pub fn box_pixels(&self) -> (u32, u32) {
 		self.box_size.nominal().unwrap_or((self.box_width, self.box_height))

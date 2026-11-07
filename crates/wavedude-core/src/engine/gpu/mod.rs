@@ -57,7 +57,8 @@ use super::pml::{self, Strips, axis_table};
 use super::stencil::{PAD, StencilCoefficients, TimeScheme};
 use super::substeps::sub_steps;
 use super::types::{
-	Emitter, EngineOptions, FrameShape, PendingCapture, ProbeCells, ProbeReadings, SampleFormat, SceneData, Snapshot,
+	Emitter, EngineOptions, FrameShape, PendingCapture, ProbeCells, ProbeQueue, ProbeReadings, SampleFormat, SceneData,
+	Snapshot,
 };
 use super::{EngineError, WaveEngine};
 use crate::model::{Edges, Layer};
@@ -232,8 +233,14 @@ pub struct GpuEngine {
 	slot_bytes: u64,
 	probe_cells: wgpu::Buffer,
 	probe_out: wgpu::Buffer,
+	/// [`BATCH_STEPS`] readings of `probe_out`, queued on the device.
+	probe_batch: wgpu::Buffer,
+	/// Readings in `probe_batch` not read back yet.
+	probe_slots: u32,
+	/// Reads back `probe_batch`, or `probe_out` alone.
 	probe_readback: Option<Readback>,
 	probe_lengths: Vec<usize>,
+	probe_queue: ProbeQueue,
 	capture_params: wgpu::Buffer,
 	capture_out: wgpu::Buffer,
 	captures: [Option<Readback>; 2],
@@ -355,8 +362,11 @@ impl GpuEngine {
 			slot_bytes: 16,
 			probe_cells: empty("probe cells"),
 			probe_out: empty("probe out"),
+			probe_batch: empty("probe batch"),
+			probe_slots: 0,
 			probe_readback: None,
 			probe_lengths: Vec::new(),
+			probe_queue: ProbeQueue::default(),
 			capture_params,
 			capture_out: empty("capture out"),
 			captures: [None, None],
@@ -745,6 +755,8 @@ impl WaveEngine for GpuEngine {
 		self.cur = 0;
 		self.time = 0;
 		self.sources.reset_pulses();
+		self.probe_slots = 0;
+		self.probe_queue.clear();
 	}
 
 	fn set_emitters(&mut self, emitters: &[Emitter]) {
@@ -768,11 +780,14 @@ impl WaveEngine for GpuEngine {
 			})
 			.collect();
 		self.probe_lengths = probes.iter().map(|p| p.cells.len()).collect();
+		self.probe_queue = ProbeQueue::new(self.probe_lengths.clone());
+		self.probe_slots = 0;
 		self.params.probe_count = words.len() as u32;
 		self.probe_cells = storage_init(self.device(), "probe cells", bytemuck::cast_slice(&padded(words.clone(), 0)));
 		let bytes = (words.len().max(1) * 4) as u64;
 		self.probe_out = storage(self.device(), "probe out", bytes);
-		self.probe_readback = Some(readback_buffer(self.device(), "probe readback", bytes));
+		self.probe_batch = storage(self.device(), "probe batch", bytes * u64::from(BATCH_STEPS));
+		self.probe_readback = Some(readback_buffer(self.device(), "probe readback", bytes * u64::from(BATCH_STEPS)));
 		self.write_params();
 		self.bind_probes();
 	}
@@ -799,6 +814,16 @@ impl WaveEngine for GpuEngine {
 
 	fn sample_probes(&mut self, out: &mut ProbeReadings) -> Result<(), EngineError> {
 		self.guarded(|e| e.read_probes(out))
+	}
+
+	fn queue_probes(&mut self) -> Result<(), EngineError> {
+		self.guarded(Self::queue_probe_reading)
+	}
+
+	fn drain_probes(&mut self, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError> {
+		self.guarded(Self::read_probe_batch)?;
+		self.probe_queue.drain(f);
+		Ok(())
 	}
 
 	fn begin_capture(&mut self, shape: &FrameShape, into: Snapshot) -> Result<PendingCapture, EngineError> {
@@ -897,6 +922,61 @@ impl GpuEngine {
 		if self.batch_steps == BATCH_STEPS {
 			self.flush()?;
 		}
+		Ok(())
+	}
+
+	/// Records the probes kernel and the copy of its output into the batch's next slot, behind the recorded steps.
+	fn queue_probe_reading(&mut self) -> Result<(), GpuError> {
+		let count = self.params.probe_count;
+		if count == 0 {
+			self.probe_queue.push(&[]);
+			return Ok(());
+		}
+		let bytes = u64::from(count) * 4;
+		let mut encoder =
+			self.pending.take().unwrap_or_else(|| self.ctx.device.create_command_encoder(&Default::default()));
+		{
+			let mut pass = encoder.begin_compute_pass(&Default::default());
+			pass.set_pipeline(&self.probes_kernel.pipeline);
+			pass.set_bind_group(0, &self.probes_groups[self.cur], &[]);
+			pass.dispatch_workgroups(count.div_ceil(LINEAR_GROUP), 1, 1);
+		}
+		encoder.copy_buffer_to_buffer(
+			&self.probe_out,
+			0,
+			&self.probe_batch,
+			u64::from(self.probe_slots) * bytes,
+			bytes,
+		);
+		self.pending = Some(encoder);
+		self.probe_slots += 1;
+		if self.probe_slots == BATCH_STEPS {
+			self.read_probe_batch()?;
+		}
+		Ok(())
+	}
+
+	/// Moves the readings queued on the device into the host queue.
+	fn read_probe_batch(&mut self) -> Result<(), GpuError> {
+		if self.probe_slots == 0 {
+			return Ok(());
+		}
+		let bytes = u64::from(self.params.probe_count) * 4 * u64::from(self.probe_slots);
+		let mut readback = self.probe_readback.take().expect("probe readback");
+		let (batch, target) = (self.probe_batch.clone(), readback.buffer.clone());
+		let index = self.submit(|encoder| encoder.copy_buffer_to_buffer(&batch, 0, &target, 0, bytes))?;
+		map(&mut readback, index);
+		wait_mapped(&self.ctx.device, &mut readback)?;
+		{
+			let view = readback.buffer.slice(..bytes).get_mapped_range().map_err(GpuError::MapRange)?;
+			let values: &[f32] = bytemuck::cast_slice(&view);
+			for step in values.chunks_exact(self.probe_queue.width()) {
+				self.probe_queue.push(step);
+			}
+		}
+		readback.buffer.unmap();
+		self.probe_readback = Some(readback);
+		self.probe_slots = 0;
 		Ok(())
 	}
 

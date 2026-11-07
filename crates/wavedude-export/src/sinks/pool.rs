@@ -1,6 +1,7 @@
 //! The encoder threads of one export job, shared by its image sequences and movies, and the bounded task lanes
 //! through which each sink uses them.
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
@@ -83,7 +84,14 @@ impl<B: Send + 'static> Lanes<B> {
 		self.in_flight += 1;
 		let tx = self.tx.clone();
 		self.pool.spawn(move || {
-			let result = task(&mut buf);
+			let result = catch_unwind(AssertUnwindSafe(|| task(&mut buf))).unwrap_or_else(|panic| {
+				let message = panic
+					.downcast_ref::<&str>()
+					.map(|s| (*s).to_owned())
+					.or_else(|| panic.downcast_ref::<String>().cloned())
+					.unwrap_or_default();
+				Err(ExportError::Panicked(message))
+			});
 			// The receiver is gone only when the sink was dropped unfinished.
 			let _ = tx.send(Done { seq, result, buf });
 		});
@@ -99,5 +107,20 @@ impl<B: Send + 'static> Lanes<B> {
 		let done = if wait { self.rx.recv().ok() } else { self.rx.try_recv().ok() }?;
 		self.in_flight -= 1;
 		Some(done)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn a_panicking_task_comes_back_as_an_error() {
+		let mut lanes = Lanes::new(EncoderPool::default().get().unwrap());
+		let buf = lanes.free(Vec::<u8>::new).unwrap();
+		lanes.spawn(buf, |_| panic!("boom"));
+		let done = lanes.next_done(true).expect("the task reports");
+		assert!(matches!(done.result, Err(ExportError::Panicked(m)) if m == "boom"));
+		assert!(lanes.next_done(true).is_none(), "nothing left in flight");
 	}
 }

@@ -3,8 +3,7 @@
 //! [`preview_pane`] composes the pane. A task of the pane polls every few milliseconds: it hands the frame the
 //! live controller shows to the [`presenter::Presenter`] (only when what is to be drawn changed), turns the
 //! presenter's pictures into images, keeps the busy dim, finishes an Auto brightness and rebuilds the scene's
-//! outline when the scene changes. The shell may provide [`PreviewActions`] to receive the context menus'
-//! exports; without it they are logged and dropped.
+//! outline when the scene changes.
 //!
 //! Threads: everything here runs on the UI thread; the presenter and the outline builder use threads of their own.
 
@@ -15,8 +14,8 @@ pub mod pictures;
 pub mod presenter;
 pub mod transport;
 
-use std::sync::Arc;
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
@@ -25,10 +24,12 @@ use freya::engine::prelude::AlphaType;
 use freya::prelude::*;
 use serde_json::json;
 use wavedude_core::engine::SampleFormat;
+use wavedude_core::model::Project;
 use wavedude_core::model::{Layer, SceneMode, Stencil};
 use wavedude_core::render::fit_brightness;
-use wavedude_core::scene::compose::{compose_scene, decode_image};
+use wavedude_core::run::SceneCache;
 use wavedude_core::scene::glowing_edges;
+use wavedude_core::scene::pixels::ScenePixels;
 use wavedude_widgets::menu::ContextMenuRequest;
 use wavedude_widgets::{ContextMenuHost, MenuItem, MenuModel, TestIdExt, use_wave_theme};
 
@@ -38,7 +39,8 @@ use self::pictures::PictureCell;
 use self::presenter::{
 	EdgeImage, FrameSource, LayerRequest, Outline, Presenter, PresenterStats, Request, SourceKey, as_halves,
 };
-use crate::ui::app::TICK;
+use crate::ui::app::{Cx, TICK};
+use crate::ui::export_dialog::{self, ExportKindChoice};
 use crate::ui::shared::{App, Shared, Topics};
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, Target};
@@ -85,6 +87,8 @@ pub struct PaneStates {
 	pub fit: State<Option<Layer>>,
 	/// The first picture's share of the split, session state.
 	pub split: State<f32>,
+	/// Each picture's brightness box.
+	pub brightness: [AccessibilityId; 2],
 }
 
 impl PaneStates {
@@ -101,11 +105,12 @@ impl PaneStates {
 			box_grab: use_state(|| None),
 			fit: use_state(|| None),
 			split: use_state(|| 0.5),
+			brightness: [use_a11y(), use_a11y()],
 		}
 	}
 }
 
-/// What the preview's context menus ask the shell for.
+/// What the preview's context menus do beyond the pane's own auto brightness.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PreviewAction {
 	/// Focus or edit the layer's brightness.
@@ -119,16 +124,12 @@ pub enum PreviewAction {
 	ExportProbeCsv(usize),
 }
 
-/// What an entry of the preview's context menus does: the pane's own auto brightness, else the shell's action.
+/// What an entry of the preview's context menus does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PictureMenu {
 	AutoBrightness(Layer),
 	Shell(PreviewAction),
 }
-
-/// The shell's handler of [`PreviewAction`]s, provided as a context above the pane.
-#[derive(Clone, PartialEq)]
-pub struct PreviewActions(pub EventHandler<PreviewAction>);
 
 /// "field" or "intensity", the layer's key in the display settings' paths and in menu ids.
 pub fn layer_key(layer: Layer) -> &'static str {
@@ -260,60 +261,99 @@ struct SceneArt {
 	edges: Option<Arc<EdgeImage>>,
 }
 
-/// Rebuilds the scene's own picture (an image scene) and its glowing edges (when a layer shows the outline) on a
-/// thread when the scene changes; the newest build wins.
+/// A scene for the worker to draw.
+struct SceneJob {
+	generation: u64,
+	project: Project,
+	edges: bool,
+}
+
+/// An image scene's pixels lent to a picture without a copy.
+struct Rgba(Arc<ScenePixels>);
+
+impl AsRef<[u8]> for Rgba {
+	fn as_ref(&self) -> &[u8] {
+		&self.0.rgba
+	}
+}
+
+/// Builds the scene's own picture (an image scene) and its glowing edges (when a layer shows the outline) on
+/// one thread when the scene changes; a newer scene supersedes one not started yet.
 #[derive(Default)]
 struct SceneWatch {
 	inputs: Option<SceneInputs>,
 	generation: u64,
-	rx: Option<Receiver<SceneArt>>,
+	worker: Option<(Sender<SceneJob>, Receiver<SceneArt>)>,
+	building: bool,
 	edges: Option<Arc<EdgeImage>>,
 }
 
 impl SceneWatch {
 	/// A build is in flight.
 	fn building(&self) -> bool {
-		self.rx.is_some()
+		self.building
 	}
 
 	/// Polls; returns the scene picture when a build finished.
 	fn poll(&mut self, app: &App) -> Option<Option<(u32, u32, Bytes)>> {
 		let inputs = SceneInputs::of(app);
-		let wanted = inputs.image_scene || inputs.edges;
 		if self.inputs != Some(inputs) {
 			self.inputs = Some(inputs);
 			self.generation += 1;
-			if wanted {
-				let (tx, rx) = channel();
-				self.rx = Some(rx);
-				let mut project = app.document.project.clone();
-				project.probes.clear();
-				project.sources.clear();
-				let generation = self.generation;
-				let spawned = std::thread::Builder::new().name("preview-scene".into()).spawn(move || {
-					let image = decode_image(&project).map(|p| (p.width, p.height, Bytes::from(p.rgba)));
-					let edges = inputs.edges.then(|| compose_scene(&project)).flatten().map(|p| {
-						let rgba = glowing_edges::compute(&p.rgba, p.width as usize, p.height as usize);
-						Arc::new(EdgeImage { width: p.width, height: p.height, rgba })
-					});
-					let _ = tx.send(SceneArt { generation, image, edges });
-				});
-				if let Err(e) = spawned {
-					tracing::warn!("the scene outline could not be built: {e}");
-				}
-			} else {
-				self.rx = None;
+			if !(inputs.image_scene || inputs.edges) {
+				self.building = false;
 				self.edges = None;
 				return Some(None);
 			}
+			let mut project = app.document.project.clone();
+			project.probes.clear();
+			project.sources.clear();
+			let job = SceneJob { generation: self.generation, project, edges: inputs.edges };
+			let sent = self.worker(app).is_some_and(|(jobs, _)| jobs.send(job).is_ok());
+			self.building = sent;
+			if !sent {
+				self.worker = None;
+			}
 		}
-		let art = self.rx.as_ref()?.try_recv().ok()?;
-		if art.generation != self.generation {
-			return None;
-		}
-		self.rx = None;
+		let art = self.worker.as_ref()?.1.try_iter().filter(|a| a.generation == self.generation).last()?;
+		self.building = false;
 		self.edges = art.edges;
 		Some(art.image)
+	}
+
+	fn worker(&mut self, app: &App) -> Option<&(Sender<SceneJob>, Receiver<SceneArt>)> {
+		if self.worker.is_none() {
+			let cache = app.live.backend().scene_cache();
+			let (jobs, inbox) = channel();
+			let (outbox, arts) = channel();
+			let spawned = std::thread::Builder::new()
+				.name("preview-scene".into())
+				.spawn(move || draw_scenes(&cache, &inbox, &outbox));
+			match spawned {
+				Ok(_) => self.worker = Some((jobs, arts)),
+				Err(e) => tracing::warn!("the scene outline could not be built: {e}"),
+			}
+		}
+		self.worker.as_ref()
+	}
+}
+
+/// The scene worker: draws the newest job waiting, until the watch is gone.
+fn draw_scenes(cache: &Mutex<SceneCache>, inbox: &Receiver<SceneJob>, outbox: &Sender<SceneArt>) {
+	while let Ok(job) = inbox.recv() {
+		let job = inbox.try_iter().last().unwrap_or(job);
+		let (image, pixels) = {
+			let mut cache = cache.lock().unwrap_or_else(PoisonError::into_inner);
+			(cache.image(&job.project), job.edges.then(|| cache.pixels(&job.project)).flatten())
+		};
+		let image = image.map(|p| (p.width, p.height, Bytes::from_owner(Rgba(p))));
+		let edges = pixels.map(|p| {
+			let rgba = glowing_edges::compute(&p.rgba, p.width as usize, p.height as usize);
+			Arc::new(EdgeImage { width: p.width, height: p.height, rgba })
+		});
+		if outbox.send(SceneArt { generation: job.generation, image, edges }).is_err() {
+			return;
+		}
 	}
 }
 
@@ -337,7 +377,7 @@ impl Poller {
 			|| states.fit.peek().is_some()
 			|| shared.peek(|app| {
 				let live = &app.live;
-				live.playback.is_playing() || live.run_is_active() || live.scratch_pending() || live.is_live()
+				live.playback.is_playing() || live.run_is_progressing() || live.scratch_pending()
 			});
 		if due { POLL } else { TICK }
 	}
@@ -391,17 +431,11 @@ impl Poller {
 		states.busy.set_if_modified(busy);
 		let fit = *states.fit.peek();
 		if let Some(layer) = fit {
-			let ready = shared.peek(|app| match (app.live.shown(), app.live.latest_scratch()) {
-				(Some(Shown::Scratch(k)), Some(r))
-					if k == position && r.snapshot.shape.format == SampleFormat::Half =>
-				{
-					Some(FrameSource::Scratch(r.clone()))
-				}
-				_ => None,
-			});
-			if let Some(source) = ready {
+			if let Some(frame) = shared.peek_mut(|app| app.live.take_half_frame()) {
 				states.fit.set(None);
-				fit_now(shared, &source, layer);
+				if frame.frame == position {
+					fit_now(shared, &FrameSource::Scratch(frame), layer);
+				}
 			} else if !shared.peek(|app| app.live.scratch_pending()) {
 				states.fit.set(None);
 				tracing::debug!("auto brightness dropped: the 16-bit frame did not arrive");
@@ -411,12 +445,18 @@ impl Poller {
 }
 
 /// Turns a context menu entry into its effect.
-fn activate(shared: &Shared, states: PaneStates, entry: PictureMenu) {
+fn activate(cx: &Cx, states: PaneStates, entry: PictureMenu) {
+	let export = |choice| export_dialog::start(cx, choice);
 	match entry {
-		PictureMenu::AutoBrightness(layer) => auto_brightness(shared, states, layer),
-		PictureMenu::Shell(action) => match try_consume_context::<PreviewActions>() {
-			Some(PreviewActions(handler)) => handler.call(action),
-			None => tracing::debug!(?action, "no handler for the preview's menu"),
+		PictureMenu::AutoBrightness(layer) => auto_brightness(&cx.shared, states, layer),
+		PictureMenu::Shell(action) => match action {
+			PreviewAction::Brightness(layer) => states.brightness[layer as usize].request_focus(),
+			PreviewAction::ExportFrame(Layer::Field) => export(ExportKindChoice::FieldFrame),
+			PreviewAction::ExportFrame(Layer::Intensity) => export(ExportKindChoice::IntensityFrame),
+			PreviewAction::ExportField => export(ExportKindChoice::Field),
+			PreviewAction::ExportIntensity => export(ExportKindChoice::Intensity),
+			PreviewAction::ExportBoth => export(ExportKindChoice::Both),
+			PreviewAction::ExportProbeCsv(probe) => export_dialog::export_probe_csv(cx, probe),
 		},
 	}
 }
@@ -593,7 +633,7 @@ impl Component for PreviewPane {
 			}))
 			.maybe_child(show_intensity.then(|| cell(Layer::Intensity, if show_field { 1. - split } else { 1. })));
 		let key_shared = shared.clone();
-		let menu_shared = shared.clone();
+		let cx = Cx::get();
 		rect()
 			.width(Size::fill())
 			.height(Size::fill())
@@ -605,7 +645,7 @@ impl Component for PreviewPane {
 			.on_key_down(move |e: Event<KeyboardEventData>| on_pane_key(&key_shared, &e))
 			.child(pictures)
 			.child(transport::Transport)
-			.child(ContextMenuHost::new(states.menu, move |entry: PictureMenu| activate(&menu_shared, states, entry)))
+			.child(ContextMenuHost::new(states.menu, move |entry: PictureMenu| activate(&cx, states, entry)))
 	}
 }
 

@@ -11,8 +11,8 @@ Every model change is observed. Its class decides what follows.
 | Class | Examples | Effect |
 |---|---|---|
 | Simulation edit | scene (size, edges, damping, index, image, image sources), simulation settings, seed, any source, any optical part (incl. points, nodes, list changes), View > preview resolution/frames/samples, brightness while preview samples are 8-bit, a probe switched on or added that the run does not record | run marked stale; playback stops; any active run (user or automatic) stops at once; scratch frame for the position after 120 ms; automatic re-run after 1.5 s of quiet (if enabled) |
-| Probe edit | probe moved, measurement/layer/graph changed, a recorded probe switched off | frames stay valid, only recordings stale; graphs redraw from a scratch frame for the position; never starts a run; Play or F5 makes a run that refreshes them |
-| Display edit | colour scheme, brightness (16-bit), black level, outline, Preview on/off, handles/labels, export settings | redraw only; no stale run |
+| Probe edit | probe moved, measurement/layer changed, start step changed, a recorded probe switched off | frames stay valid, only recordings stale; graphs redraw from a scratch frame for the position; never starts a run; Play or F5 makes a run that refreshes them |
+| Display edit | colour scheme, brightness (16-bit), black level, outline, Preview on/off, handles/labels, export settings, a probe's graph box (place, size, axes, window) | redraw only; no stale run |
 | Colour scheme edit | stops, colours, rename (layers repoint) | recolour the frame shown |
 | Any edit | | project dirty (title `*`); undo step pending |
 

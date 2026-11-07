@@ -10,7 +10,7 @@ use std::rc::Rc;
 use freya::prelude::*;
 use serde_json::json;
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::model::{BoxSize, Layer, Measurement, Probe, ProbeKind, ScaleMode, YScale};
+use wavedude_core::model::{BoxSize, Layer, Measurement, Probe, ProbeKind, Project, ScaleMode, YScale};
 use wavedude_widgets::graph_box::GraphBoxEvent;
 use wavedude_widgets::menu::ContextMenuRequest;
 use wavedude_widgets::picture::CanvasTransform;
@@ -159,27 +159,46 @@ pub struct BoxView {
 	pub selected: bool,
 }
 
+/// Whether `layer` shows graph boxes: an active probe measures it.
+pub fn has_boxes(project: &Project, layer: Layer) -> bool {
+	project.probes.iter().any(|p| p.active && p.layer == layer)
+}
+
 /// The boxes of the active probes measuring `layer`, with the data of the frame shown.
 pub fn boxes<B: wavedude_app_state::live::Backend>(app: &AppState<B>, layer: Layer) -> Vec<BoxView> {
-	let project = &app.document.project;
-	let canvas = project.canvas_size();
+	if !has_boxes(&app.document.project, layer) {
+		return Vec::new();
+	}
 	let live = &app.live;
-	let selected = app.selection.items();
-	let mut traces: Vec<(String, ProbeTrace)> = Vec::new();
-	let mut cut = None;
 	match (live.graph_scratch(), live.shown()) {
 		(Some(r), _) => {
-			traces = r.spec.probes.iter().map(|p| p.name.clone()).zip(r.traces.iter().cloned()).collect();
+			let names: Vec<&str> = r.spec.probes.iter().map(|p| p.name.as_str()).collect();
+			views(app, layer, &names, &r.traces, None)
 		}
-		(None, Some(Shown::Run(k))) => {
-			if let Some(spec) = live.run_spec() {
-				let names: Vec<String> = spec.probes.iter().map(|p| p.name.clone()).collect();
-				cut = Some((spec.step_of(k) as usize + 1, k as usize));
-				live.with_run_traces(&mut |t| traces = names.iter().cloned().zip(t.iter().cloned()).collect());
-			}
+		(None, Some(Shown::Run(k))) if live.run_spec().is_some() => {
+			let spec = live.run_spec().expect("checked above");
+			let names: Vec<&str> = spec.probes.iter().map(|p| p.name.as_str()).collect();
+			let cut = (spec.step_of(k) as usize + 1, k as usize);
+			let mut out = Vec::new();
+			live.with_run_traces(&mut |t| out = views(app, layer, &names, t, Some(cut)));
+			out
 		}
-		(None, _) => {}
+		_ => views(app, layer, &[], &[], None),
 	}
+}
+
+/// The boxes from `traces`, recorded for the probes `names`; `cut` is the frame shown (samples, profile index)
+/// of a run's traces.
+fn views<B: wavedude_app_state::live::Backend>(
+	app: &AppState<B>,
+	layer: Layer,
+	names: &[&str],
+	traces: &[ProbeTrace],
+	cut: Option<(usize, usize)>,
+) -> Vec<BoxView> {
+	let project = &app.document.project;
+	let canvas = project.canvas_size();
+	let selected = app.selection.items();
 	let steps = project.simulation.steps;
 	project
 		.probes
@@ -187,7 +206,7 @@ pub fn boxes<B: wavedude_app_state::live::Backend>(app: &AppState<B>, layer: Lay
 		.enumerate()
 		.filter(|(_, p)| p.active && p.layer == layer)
 		.map(|(i, p)| {
-			let trace = traces.iter().find(|(n, _)| n.eq_ignore_ascii_case(&p.name)).map(|(_, t)| t);
+			let trace = names.iter().position(|n| n.eq_ignore_ascii_case(&p.name)).and_then(|t| traces.get(t));
 			let series = match (p.kind, trace) {
 				(ProbeKind::Point, Some(t)) => {
 					let samples = cut.map_or(t.series.len(), |c| c.0);
@@ -343,6 +362,7 @@ pub fn box_elements(shared: &Shared, states: PaneStates, layer: Layer, t: &Canva
 									export_text.clone(),
 									PictureMenu::Shell(PreviewAction::ExportProbeCsv(index)),
 								)
+								.enabled(!shared_menu.peek(|app| app.live.export_busy()))
 								.into(),
 							]),
 						}));

@@ -137,6 +137,8 @@ impl std::fmt::Debug for MenuCallback {
 #[derive(Clone, Copy, PartialEq)]
 pub struct Ui {
 	pub modal: State<Option<Modal>>,
+	/// Modals asked for while one is open, shown in turn.
+	pub waiting: State<VecDeque<Modal>>,
 	pub layout: State<DockLayout>,
 	pub preview_shown: State<bool>,
 	pub menu: State<Option<ContextMenuRequest<MenuCallback>>>,
@@ -166,14 +168,27 @@ impl Ui {
 		menu.set(Some(ContextMenuRequest { at, model }));
 	}
 
+	/// Shows `modal`, or queues it after the one open; a memory warning is asked once.
 	pub fn show_modal(&self, modal: Modal) {
 		let mut m = self.modal;
-		m.set(Some(modal));
+		if m.peek().is_none() {
+			m.set(Some(modal));
+			return;
+		}
+		let warning = |w: &Modal| matches!(w, Modal::MemoryWarning);
+		let mut waiting = self.waiting;
+		if warning(&modal) && (m.peek().as_ref().is_some_and(warning) || waiting.peek().iter().any(warning)) {
+			return;
+		}
+		waiting.write().push_back(modal);
 	}
 
+	/// Closes the modal open; the next queued one shows.
 	pub fn close_modal(&self) {
+		let mut waiting = self.waiting;
+		let next = if waiting.peek().is_empty() { None } else { waiting.write().pop_front() };
 		let mut m = self.modal;
-		m.set(None);
+		m.set(next);
 	}
 }
 
@@ -267,6 +282,7 @@ impl Component for Shell {
 		let ready = shared.peek(|a| a.strings.get("Ready").to_owned());
 		let ui = Ui {
 			modal: use_state(|| None),
+			waiting: use_state(VecDeque::new),
 			layout: use_state(move || window::initial_layout(saved_layout.as_deref())),
 			preview_shown: use_state(|| true),
 			menu: use_state(|| None),
@@ -320,7 +336,7 @@ async fn tick_loop(cx: Cx, mut theme: State<Theme>) {
 			cx.send(AppEvent::Guarded(Guarded::Exit));
 		}
 		let busy = cx.shared.peek(|a| {
-			a.live.run_is_active()
+			a.live.run_is_progressing()
 				|| a.live.scratch_pending()
 				|| a.live.rerun_due().is_some()
 				|| a.live.playback.is_playing()

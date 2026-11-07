@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use wavedude_core::engine::capture;
 use wavedude_core::engine::cpu::CpuEngine;
-use wavedude_core::engine::gpu::{GpuEngine, MediumLayout, context};
+use wavedude_core::engine::gpu::{BATCH_STEPS, GpuEngine, MediumLayout, context};
 use wavedude_core::engine::{
 	Emitter, EngineOptions, FrameShape, ProbeCells, ProbeReadings, SampleFormat, SceneData, Snapshot, WaveEngine,
 };
@@ -482,6 +482,38 @@ fn probes_match() {
 	);
 	assert!(worst[0] <= 1e-4 * field_peak && worst[2] <= 1e-4 * field_peak);
 	assert!(worst[1] <= 1e-3 * intensity_peak);
+}
+
+#[test]
+fn queued_probes_read_like_sampled_ones() {
+	if !gpu_available() {
+		return;
+	}
+	let (_, mut a) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
+	let (_, mut b) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
+	let probes = [
+		ProbeCells { layer: Layer::Field, cells: vec![(64, 48)] },
+		ProbeCells { layer: Layer::Intensity, cells: (10..90).map(|x| (x, 60)).collect() },
+	];
+	a.set_probes(&probes);
+	b.set_probes(&probes);
+	let mut sampled = Vec::new();
+	let mut r = ProbeReadings::default();
+	let mut queued = Vec::new();
+	// Past a full batch, drained mid-batch once.
+	for step in 1..=(BATCH_STEPS * 2 + 5) {
+		a.advance_one_step().unwrap();
+		a.sample_probes(&mut r).unwrap();
+		sampled.push(r.clone());
+		b.advance_one_step().unwrap();
+		b.queue_probes().unwrap();
+		if step == BATCH_STEPS + 3 {
+			b.drain_probes(&mut |r| queued.push(r.clone())).unwrap();
+		}
+	}
+	b.drain_probes(&mut |r| queued.push(r.clone())).unwrap();
+	assert_eq!(queued, sampled);
+	b.drain_probes(&mut |_| panic!("drained twice")).unwrap();
 }
 
 #[test]

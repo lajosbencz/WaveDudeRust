@@ -298,4 +298,65 @@ impl ProbeReadings {
 	pub fn iter(&self) -> impl ExactSizeIterator<Item = &[f32]> {
 		(0..self.len()).map(|p| self.probe(p))
 	}
+
+	/// Every probe's values one after another.
+	pub fn values(&self) -> &[f32] {
+		&self.values
+	}
+}
+
+/// Probe readings of consecutive steps, kept by an engine until [`WaveEngine`](super::WaveEngine::drain_probes)
+/// hands them out.
+#[derive(Clone, Debug, Default)]
+pub struct ProbeQueue {
+	lengths: Vec<usize>,
+	/// Values of one step's readings: the sum of `lengths`.
+	width: usize,
+	values: Vec<f32>,
+	count: usize,
+	reading: ProbeReadings,
+}
+
+impl ProbeQueue {
+	/// A queue of readings of probes with `lengths` cells.
+	pub fn new(lengths: Vec<usize>) -> Self {
+		let width = lengths.iter().sum();
+		Self { lengths, width, ..Self::default() }
+	}
+
+	/// Values of one step's readings.
+	pub fn width(&self) -> usize {
+		self.width
+	}
+
+	/// Steps queued.
+	pub fn len(&self) -> usize {
+		self.count
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.count == 0
+	}
+
+	pub fn clear(&mut self) {
+		self.values.clear();
+		self.count = 0;
+	}
+
+	/// Appends the next step's readings, [`width`](Self::width) values.
+	pub fn push(&mut self, values: &[f32]) {
+		debug_assert_eq!(values.len(), self.width);
+		self.values.extend_from_slice(values);
+		self.count += 1;
+	}
+
+	/// Calls `f` with each step's readings, oldest first, and empties the queue.
+	pub fn drain(&mut self, f: &mut dyn FnMut(&ProbeReadings)) {
+		for i in 0..self.count {
+			let at = i * self.width;
+			self.reading.fill(&self.lengths, &self.values[at..at + self.width]);
+			f(&self.reading);
+		}
+		self.clear();
+	}
 }

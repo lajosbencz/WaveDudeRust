@@ -7,8 +7,8 @@ use wavedude_core::f16;
 use wavedude_core::model::{ColorScheme, Rgb, Stop};
 use wavedude_core::render::screen::ScreenColors;
 use wavedude_core::render::{
-	DeepHalfTable, DitherDepth, HalfTable, Palette, ScreenRenderer, field_index, fit_brightness, fit_brightness_f32,
-	intensity_index, intensity_root_index, render_half, render_indexed,
+	DeepHalfTable, DitherDepth, HalfTable, Palette, ResampleAxis, ScreenRenderer, field_index, fit_brightness,
+	fit_brightness_f32, intensity_index, intensity_root_index, render_half, render_indexed,
 };
 
 fn scheme(colors: &[(f64, u32)]) -> ColorScheme {
@@ -326,4 +326,39 @@ fn timing() {
 		 screen 1920x1080 -> 914x514 {screen_ms:.3} ms, dithered {dither_ms:.3} ms",
 		rayon::current_num_threads()
 	);
+}
+
+#[test]
+fn a_zoom_window_reads_its_samples_alone_and_survives_pans() {
+	let s = inferno();
+	let (w, h) = (80, 50);
+	let plane: Vec<f16> = noise(w * h, 11).map(|v| f16::from_f64(v * 0.2)).collect();
+	let table = HalfTable::new(&s, 0.0, 3.0, SampleKind::Field);
+	let reference = |window: (f64, f64, f64, f64), tw: usize, th: usize| -> Vec<u8> {
+		let (x, y, ww, wh) = window;
+		let (ax, ay) = (ResampleAxis::window(w, (x, x + ww), tw), ResampleAxis::window(h, (y, y + wh), th));
+		let mut out = Vec::new();
+		for ty in 0..th {
+			let (fy, wys) = ay.weights_of(ty);
+			for tx in 0..tw {
+				let (fx, wxs) = ax.weights_of(tx);
+				let mut v = 0f32;
+				for (k, wy) in wys.iter().enumerate() {
+					let row: f32 =
+						wxs.iter().enumerate().map(|(j, wx)| wx * plane[(fy + k) * w + fx + j].to_f32()).sum();
+					v += wy * row;
+				}
+				out.extend(table.color(f16::from_f32(v)));
+			}
+		}
+		out
+	};
+	let zoom = (20.5, 10.25, 20.0, 12.5);
+	let pan = (40.0, 30.0, 30.0, 18.0);
+	let mut screen = ScreenRenderer::windowed(w, h, Some(zoom), 64, 40);
+	assert_eq!(screen.render_to_vec(&plane, ScreenColors::Plain(&table)), reference(zoom, 64, 40));
+	screen.set_view(w, h, Some(pan), 30, 9);
+	assert_eq!(screen.render_to_vec(&plane, ScreenColors::Plain(&table)), reference(pan, 30, 9), "a shrinking pan");
+	screen.set_view(w, h, Some(zoom), 64, 40);
+	assert_eq!(screen.render_to_vec(&plane, ScreenColors::Plain(&table)), reference(zoom, 64, 40), "and back");
 }

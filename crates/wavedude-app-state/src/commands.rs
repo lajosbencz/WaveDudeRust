@@ -12,8 +12,8 @@ use serde_json::Value;
 use wavedude_core::model::names::{self, Named};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{
-	BraggReflector, Ellipse, Fiber, GateKind, GrinLens, Lens, LogicGate, Outline, PartKind, Point, Polygon, Project,
-	Rectangle, Triangle, ZonePlate,
+	BraggReflector, Ellipse, Fiber, GateKind, GrinLens, Lens, LogicGate, Outline, PartKind, Point, Polygon, Probe,
+	Project, Rectangle, Triangle, ZonePlate,
 };
 
 use super::clipboard::{self, Fragment, PasteTarget};
@@ -281,7 +281,7 @@ pub fn classify(old: &Project, new: &Project) -> ChangeKind {
 	{
 		return ChangeKind::Simulation;
 	}
-	let probes = if old.probes != new.probes { ChangeKind::ProbePresentation } else { ChangeKind::None };
+	let probes = probes_change(&old.probes, &new.probes);
 	let brightness = old.display.field.brightness != new.display.field.brightness
 		|| old.display.intensity.brightness != new.display.intensity.brightness;
 	let display = if brightness {
@@ -294,6 +294,17 @@ pub fn classify(old: &Project, new: &Project) -> ChangeKind {
 		ChangeKind::None
 	};
 	probes.merge(display)
+}
+
+/// A probe list's change: presentation when a run records it differently, display when only boxes changed.
+fn probes_change(old: &[Probe], new: &[Probe]) -> ChangeKind {
+	if old == new {
+		ChangeKind::None
+	} else if old.len() == new.len() && old.iter().zip(new).all(|(a, b)| a.records_like(b)) {
+		ChangeKind::Display
+	} else {
+		ChangeKind::ProbePresentation
+	}
 }
 
 fn list_insert_point(project: &Project, at: Option<Point>) -> (i32, i32) {
@@ -634,13 +645,20 @@ fn set(project: &mut Project, target: Target, path: &str, value: Value) -> Resul
 		Target::Item(item) => {
 			check(project, item)?;
 			let name = item.name(project).expect("checked above").to_owned();
+			let mut kind = item_kind_change(item.kind);
 			let result = match item.kind {
 				ItemKind::Source => set_field(&mut project.sources[item.index], path, value)?,
-				ItemKind::Probe => set_field(&mut project.probes[item.index], path, value)?,
+				ItemKind::Probe => {
+					let probe = &mut project.probes[item.index];
+					let before = probe.clone();
+					let result = set_field(probe, path, value)?;
+					kind = probes_change(std::slice::from_ref(&before), std::slice::from_ref(probe));
+					result
+				}
 				ItemKind::Scheme => set_field(&mut project.color_schemes[item.index], path, value)?,
 				ItemKind::Part => set_part(project, item.index, path, value)?,
 			};
-			(name, result, item_kind_change(item.kind))
+			(name, result, kind)
 		}
 	};
 	if old == new {
@@ -711,6 +729,16 @@ mod tests {
 		assert_eq!(run(&mut p, &mut s, set(Target::Scene, "edges", json!("Reflective"))).kind, ChangeKind::Simulation);
 		let probe = Target::Item(ItemRef::new(ItemKind::Probe, 0));
 		assert_eq!(run(&mut p, &mut s, set(probe, "ax", json!(3))).kind, ChangeKind::ProbePresentation);
+		assert_eq!(
+			run(&mut p, &mut s, set(probe, "box_x", json!(40))).kind,
+			ChangeKind::Display,
+			"a box records alike"
+		);
+		let mut moved = p.clone();
+		moved.probes[0].box_y += 5;
+		assert_eq!(classify(&p, &moved), ChangeKind::Display);
+		moved.probes[0].ay += 1;
+		assert_eq!(classify(&p, &moved), ChangeKind::ProbePresentation);
 		assert_eq!(apply(&mut p, &mut s, set(src, "no_such", json!(1))), Err(CommandError::NoField("no_such".into())));
 		assert!(matches!(
 			apply(&mut p, &mut s, set(src, "frequency", json!("high"))),

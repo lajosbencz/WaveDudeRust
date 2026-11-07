@@ -26,7 +26,11 @@ pub fn decode_image(project: &Project) -> Option<ScenePixels> {
 /// enabled; else a copy of the image, or a blank canvas of `Scene.width x Scene.height` at the
 /// background index, with the enabled parts painted in list order (later over earlier).
 pub fn compose_scene(project: &Project) -> Option<ScenePixels> {
-	let image = decode_image(project);
+	compose_over(decode_image(project), project)
+}
+
+/// [`compose_scene`] on the project's image decoded already ([`decode_image`]).
+pub fn compose_over(image: Option<ScenePixels>, project: &Project) -> Option<ScenePixels> {
 	if !project.parts.iter().any(|p| p.base.enabled) {
 		return image;
 	}
@@ -58,6 +62,12 @@ impl SceneKey {
 		}
 		Self(h.finish())
 	}
+}
+
+/// A hash of an image scene's image bytes: equal keys decode alike. None for a canvas scene.
+pub fn image_key(project: &Project) -> Option<u64> {
+	let scene = &project.scene;
+	(scene.mode == SceneMode::Image).then(|| scene.image_data.as_deref().map(image_hash)).flatten()
 }
 
 /// The image bytes' hash, remembered for the last image: an unchanged image is compared, not hashed again.

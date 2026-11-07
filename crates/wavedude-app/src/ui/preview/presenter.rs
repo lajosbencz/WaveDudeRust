@@ -9,19 +9,19 @@
 //! Threads: [`Presenter`] is owned by the UI thread; rendering runs on the `preview-presenter` thread (and the
 //! renderers' rayon pool).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 pub use wavedude_core::engine::as_halves;
 use wavedude_core::engine::{FrameShape, SampleFormat};
 use wavedude_core::model::{ColorScheme, Layer};
 use wavedude_core::render::screen::{ScreenColors, Window};
-use wavedude_core::render::{DeepHalfTable, DitherDepth, HalfTable, Palette, ScreenRenderer, render_indexed};
+use wavedude_core::render::{DeepHalfTable, DitherDepth, HalfTable, Palette, ScreenRenderer, render_indexed_into};
 use wavedude_core::run::{FrameStore, ScratchResult};
 use wavedude_core::scene::glowing_edges;
 
@@ -80,8 +80,13 @@ impl FrameSource {
 
 	/// Calls `f` with the plane of `layer`; `None` when the source holds no such plane.
 	pub fn with_plane<R>(&self, layer: Layer, f: impl FnOnce(&[u8]) -> R) -> Option<R> {
+		self.with_plane_into(layer, &mut Vec::new(), f)
+	}
+
+	/// [`with_plane`](Self::with_plane) reading a spilled frame into `buf`, reused across calls.
+	pub fn with_plane_into<R>(&self, layer: Layer, buf: &mut Vec<u8>, f: impl FnOnce(&[u8]) -> R) -> Option<R> {
 		match self {
-			Self::Run { store, stored } => store.with_layer(*stored, layer, f).ok(),
+			Self::Run { store, stored } => store.with_layer_into(*stored, layer, buf, f).ok(),
 			Self::Scratch(r) => {
 				let plane = r.snapshot.plane(layer);
 				(!plane.is_empty()).then(|| f(plane))
@@ -239,47 +244,55 @@ fn work(slot: &Slot, stop: &AtomicBool, tx: &Sender<Rendered>) {
 /// An outline scaled to a picture: the source, the picture's size, the RGBA pixels.
 type ScaledOutline = (Weak<EdgeImage>, (u32, u32), Option<Window>, Vec<u8>);
 
-/// Per-layer scratch state kept between frames: the screen renderers and the scaled outlines.
+/// Pictures of a layer kept to draw into again once the UI has let go of them.
+const RECYCLED: usize = 3;
+
+/// Per-layer scratch state kept between frames: the screen renderers, the scaled outlines, a spilled frame's
+/// plane and the pictures handed out.
 #[derive(Default)]
 struct LayerRenderer {
 	screens: HashMap<Layer, ScreenRenderer>,
 	outlines: HashMap<Layer, ScaledOutline>,
+	spill: Vec<u8>,
+	/// Per layer, oldest first.
+	given: HashMap<Layer, VecDeque<Bytes>>,
 }
 
 impl LayerRenderer {
 	fn render(&mut self, source: &FrameSource, req: &LayerRequest) -> Option<Picture> {
 		let shape = source.shape();
 		let (sw, sh) = (shape.width(), shape.height());
-		let colored = source.with_plane(req.layer, |bytes| match shape.format {
+		let (width, height) = match shape.format {
+			SampleFormat::Index => (sw, sh),
+			SampleFormat::Half if req.device.0 > 0 && req.device.1 > 0 => req.device,
+			SampleFormat::Half => (sw, sh),
+		};
+		let window = if shape.format == SampleFormat::Half { req.window } else { None };
+		let mut rgba = self.buffer(req.layer, width as usize * height as usize * 4);
+		let screens = &mut self.screens;
+		let drawn = source.with_plane_into(req.layer, &mut self.spill, |bytes| match shape.format {
 			SampleFormat::Index => {
 				let palette = Palette::cached(&req.scheme, req.black_level);
-				(sw, sh, render_indexed(bytes, &palette), None)
+				render_indexed_into(bytes, &palette, &mut rgba);
 			}
 			SampleFormat::Half => {
 				let halves = as_halves(bytes);
 				let kind = shape.sample_kind(req.layer);
-				let (tw, th) = if req.device.0 > 0 && req.device.1 > 0 { req.device } else { (sw, sh) };
-				let screen = self.screens.entry(req.layer).or_insert_with(|| ScreenRenderer::new(1, 1, 1, 1));
-				if screen.source_size() != (sw as usize, sh as usize)
-					|| screen.target_size() != (tw as usize, th as usize)
-					|| screen.window() != req.window
-				{
-					*screen = ScreenRenderer::windowed(sw as usize, sh as usize, req.window, tw as usize, th as usize);
-				}
-				let rgba = match DitherDepth::from_bits(req.dither_bits) {
+				let screen = screens.entry(req.layer).or_insert_with(|| ScreenRenderer::new(1, 1, 1, 1));
+				screen.set_view(sw as usize, sh as usize, window, width as usize, height as usize);
+				match DitherDepth::from_bits(req.dither_bits) {
 					Some(depth) => {
 						let deep = DeepHalfTable::cached(&req.scheme, req.black_level, req.brightness, kind);
-						screen.render_to_vec(&halves, ScreenColors::Dithered(&deep, depth))
+						screen.render(&halves, ScreenColors::Dithered(&deep, depth), &mut rgba);
 					}
 					None => {
 						let table = HalfTable::cached(&req.scheme, req.black_level, req.brightness, kind);
-						screen.render_to_vec(&halves, ScreenColors::Plain(&table))
+						screen.render(&halves, ScreenColors::Plain(&table), &mut rgba);
 					}
-				};
-				(tw, th, rgba, req.window)
+				}
 			}
 		});
-		let (width, height, mut rgba, window) = colored?;
+		drawn?;
 		if let Some(outline) = &req.outline {
 			let e = &outline.edges;
 			let stale = self.outlines.get(&req.layer).is_none_or(|(edges, size, win, _)| {
@@ -293,7 +306,28 @@ impl LayerRenderer {
 				glowing_edges::blend_additive(&mut rgba, scaled, outline.gain);
 			}
 		}
-		Some(Picture { layer: req.layer, width, height, rgba: Bytes::from(rgba), window })
+		let rgba = rgba.freeze();
+		let given = self.given.entry(req.layer).or_default();
+		given.push_back(rgba.clone());
+		if given.len() > RECYCLED {
+			given.pop_front();
+		}
+		Some(Picture { layer: req.layer, width, height, rgba, window })
+	}
+
+	/// A buffer of `len` bytes: a picture of `layer` the UI no longer holds, else a new one.
+	fn buffer(&mut self, layer: Layer, len: usize) -> BytesMut {
+		let given = self.given.entry(layer).or_default();
+		for _ in 0..given.len() {
+			match given.pop_front().expect("counted").try_into_mut() {
+				Ok(mut free) => {
+					free.resize(len, 0);
+					return free;
+				}
+				Err(held) => given.push_back(held),
+			}
+		}
+		BytesMut::zeroed(len)
 	}
 }
 

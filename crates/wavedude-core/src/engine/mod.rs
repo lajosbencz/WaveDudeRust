@@ -48,8 +48,13 @@ pub trait WaveEngine: Send {
 	/// Swaps in another scene of the same grid, edges and image-source count; false = rebuild needed.
 	fn try_replace_scene(&mut self, scene: &Arc<SceneData>) -> bool;
 	fn advance_one_step(&mut self) -> Result<(), EngineError>;
-	/// Reads the probe cells after the last step.
+	/// Reads the probe cells after the last step, at once.
 	fn sample_probes(&mut self, out: &mut ProbeReadings) -> Result<(), EngineError>;
+	/// Queues a reading of the probe cells after the last step; the way to record every step, as an engine
+	/// that batches its steps reads a batch's readings back together.
+	fn queue_probes(&mut self) -> Result<(), EngineError>;
+	/// Calls `f` with each queued reading, oldest first, and empties the queue.
+	fn drain_probes(&mut self, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError>;
 	/// Starts converting the canvas (rim excluded) after the last step into planes of `shape`, written into
 	/// `into`'s planes (reused when large enough). The engine may step on before [`finish_capture`]
 	/// (Self::finish_capture) collects it; at most two captures may be pending.

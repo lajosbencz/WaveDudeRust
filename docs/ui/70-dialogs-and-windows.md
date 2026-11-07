@@ -6,7 +6,9 @@ Pointers: `Help/AboutWindow.xaml(.cs)`, `Help/AboutInfo.cs`, `Help/ManualWindow.
 `Logging/StatusBarTarget.cs`, `Logging/MessagesTarget.cs`, `FileAssociation.cs`, `App.xaml.cs`.
 
 All windows use the theme (brushes, title bar), the UI zoom and the current language. Modal dialogs are owned by
-the main window and not shown in the taskbar.
+the main window and not shown in the taskbar. (port) One modal shows at a time; one asked for while another is open
+(an update check's result, the memory warning of an automatic re-run) waits and shows when it closes, so no answer
+is lost; the memory warning waits once.
 
 ## Message window (app's own message box)
 
@@ -173,8 +175,9 @@ Dock pane (default bottom, hidden at first start).
 
 ## Crash report (port)
 
-A panic, on any thread, is appended with its backtrace to `crash.txt` in the log folder, logged at Error and
-printed to stderr. At the next start a message window (error disc) says "WaveDude Rust hit an internal error in
+A panic is logged at Error with its backtrace and printed to stderr. A panic of the main thread, which ends the
+program, is also appended to `crash.txt` in the log folder; a worker's panic is caught by its owner (a run fails, an
+export reports an error) or ends that thread alone. At the next start a message window (error disc) says "WaveDude Rust hit an internal error in
 the last session. The report, to attach to a bug report:" and the path; the file is renamed `last-crash.txt` so it
 shows once. Buttons: Copy path (path to the clipboard, the window stays), OK (Enter, Esc). It comes before the
 startup page and the update check, which wait for the next start.

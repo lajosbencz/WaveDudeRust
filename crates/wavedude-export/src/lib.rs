@@ -222,6 +222,8 @@ pub enum ExportError {
 	Source(anyhow::Error),
 	#[error("the output is already finished")]
 	Finished,
+	#[error("an encoder thread panicked: {0}")]
+	Panicked(String),
 }
 
 pub type Result<T, E = ExportError> = std::result::Result<T, E>;

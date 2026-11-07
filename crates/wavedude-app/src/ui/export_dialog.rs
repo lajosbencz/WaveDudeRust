@@ -139,6 +139,9 @@ pub fn cancel(cx: &Cx) -> bool {
 
 /// Opens the export dialog for a command.
 pub fn start(cx: &Cx, choice: ExportKindChoice) {
+	if cx.shared.peek(|a| a.live.export_busy()) {
+		return;
+	}
 	let (path, remembered, project_name, frame) = cx.shared.peek(|a| {
 		let kind = if choice.is_still() { ExportKind::Still } else { ExportKind::Run };
 		let stem = a.document.display_name("").trim_end_matches(".wdproj").to_owned();
@@ -168,6 +171,9 @@ pub fn start(cx: &Cx, choice: ExportKindChoice) {
 
 /// File > Export last: the last run export again, no questions.
 pub fn export_last(cx: &Cx) {
+	if cx.shared.peek(|a| a.live.export_busy()) {
+		return;
+	}
 	let last = LAST.with_borrow(|l| l.as_ref().map(|(p, _)| p.clone()));
 	if let Some(Plan::Frames { choice, format, path, frame, .. }) = last {
 		begin(cx, Plan::Frames { choice, format, path, frame, repeat: true });
@@ -176,6 +182,9 @@ pub fn export_last(cx: &Cx) {
 
 /// The tree's or the graph box's "Export probe data as CSV".
 pub fn export_probe_csv(cx: &Cx, probe: usize) {
+	if cx.shared.peek(|a| a.live.export_busy()) {
+		return;
+	}
 	let (proposal, name) = cx.shared.peek(|a| {
 		let project = a.document.display_name("").trim_end_matches(".wdproj").to_owned();
 		let probe_name = a.document.project.probes[probe].name.clone();
@@ -244,6 +253,7 @@ fn gate(cx: &Cx, plan: Plan) {
 			);
 		}
 		ExportGate::Failed => cx.ui.show_modal(Modal::Error(s.get("ExportError").to_owned())),
+		ExportGate::Busy => tracing::debug!("export refused: another export is busy"),
 	}
 }
 

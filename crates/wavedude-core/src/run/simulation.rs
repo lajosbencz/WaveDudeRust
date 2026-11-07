@@ -15,7 +15,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::engine::probes::{ProbeCollector, ProbeTrace};
-use crate::engine::{EngineError, PendingCapture, ProbeReadings, Snapshot, WaveEngine};
+use crate::engine::{EngineError, PendingCapture, Snapshot, WaveEngine};
 
 use super::spec::RunSpec;
 use super::store::{FrameStore, StoreError};
@@ -121,19 +121,19 @@ impl Shared {
 	}
 
 	fn set_state(&self, state: RunState) {
-		*self.state.lock().unwrap() = state.clone();
+		*self.state.lock().unwrap_or_else(PoisonError::into_inner) = state.clone();
 		self.emit(RunEvent::State(state));
 	}
 
 	/// Blocks while paused; false once cancelled.
 	fn gate(&self) -> bool {
-		let mut control = self.control.lock().unwrap();
+		let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
 		if control.paused && !control.cancelled {
 			drop(control);
 			self.set_state(RunState::Paused);
-			control = self.control.lock().unwrap();
+			control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
 			while control.paused && !control.cancelled {
-				control = self.wake.wait(control).unwrap();
+				control = self.wake.wait(control).unwrap_or_else(PoisonError::into_inner);
 			}
 			if !control.cancelled {
 				drop(control);
@@ -198,7 +198,7 @@ impl SimulationRun {
 	}
 
 	pub fn state(&self) -> RunState {
-		self.shared.state.lock().unwrap().clone()
+		self.shared.state.lock().unwrap_or_else(PoisonError::into_inner).clone()
 	}
 
 	pub fn steps_done(&self) -> u32 {
@@ -217,28 +217,28 @@ impl SimulationRun {
 
 	/// The probe traces in the spec's probe order, up to the last heartbeat (all of them once finished).
 	pub fn traces(&self) -> Vec<ProbeTrace> {
-		self.shared.traces.lock().unwrap().clone()
+		self.shared.traces.lock().unwrap_or_else(PoisonError::into_inner).clone()
 	}
 
 	pub fn with_traces<R>(&self, f: impl FnOnce(&[ProbeTrace]) -> R) -> R {
-		f(&self.shared.traces.lock().unwrap())
+		f(&self.shared.traces.lock().unwrap_or_else(PoisonError::into_inner))
 	}
 
 	pub fn pause(&self) {
-		self.shared.control.lock().unwrap().paused = true;
+		self.shared.control.lock().unwrap_or_else(PoisonError::into_inner).paused = true;
 	}
 
 	pub fn resume(&self) {
-		self.shared.control.lock().unwrap().paused = false;
+		self.shared.control.lock().unwrap_or_else(PoisonError::into_inner).paused = false;
 		self.shared.wake.notify_all();
 	}
 
 	pub fn is_pause_requested(&self) -> bool {
-		self.shared.control.lock().unwrap().paused
+		self.shared.control.lock().unwrap_or_else(PoisonError::into_inner).paused
 	}
 
 	pub fn cancel(&self) {
-		self.shared.control.lock().unwrap().cancelled = true;
+		self.shared.control.lock().unwrap_or_else(PoisonError::into_inner).cancelled = true;
 		self.shared.wake.notify_all();
 	}
 
@@ -319,7 +319,7 @@ fn drive(
 		"run finished"
 	);
 	shared.emit(RunEvent::Progress { steps_done, frames });
-	*shared.state.lock().unwrap() = state.clone();
+	*shared.state.lock().unwrap_or_else(PoisonError::into_inner) = state.clone();
 	shared.finished.store(true, Ordering::Release);
 	shared.emit(RunEvent::State(state));
 	engine
@@ -333,7 +333,8 @@ fn step_all(
 	shared: &Shared,
 ) -> Result<bool, RunError> {
 	let mut collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene));
-	*shared.traces.lock().unwrap() = collector.as_ref().map(|c| c.traces.clone()).unwrap_or_default();
+	*shared.traces.lock().unwrap_or_else(PoisonError::into_inner) =
+		collector.as_ref().map(|c| c.traces.clone()).unwrap_or_default();
 	engine.set_emitters(&spec.emitters);
 	engine.set_probes(collector.as_ref().map(ProbeCollector::cells).unwrap_or_default());
 	engine.reset();
@@ -380,16 +381,22 @@ fn step_loop(
 	let capture_every = spec.capture_every();
 	let mut captured = 0usize;
 	let mut pending: Option<PendingCapture> = None;
-	let mut readings = ProbeReadings::default();
+	let mut recorded = 0u32;
 	let mut last_beat = Instant::now();
 	let mut completed = true;
 	for i in 0..spec.steps {
-		// A paused run shows its last capture.
-		if let Some(last) = pending.take_if(|_| shared.control.lock().unwrap().paused)
-			&& tx.send(engine.finish_capture(last)?).is_err()
-		{
-			completed = false;
-			break;
+		// A paused run shows its last capture and its probes so far.
+		if shared.control.lock().unwrap_or_else(PoisonError::into_inner).paused {
+			if let Some(c) = collector.as_deref_mut() {
+				record(engine, c, &mut recorded, every)?;
+			}
+			publish(shared, collector.as_deref_mut(), i);
+			if let Some(last) = pending.take()
+				&& tx.send(engine.finish_capture(last)?).is_err()
+			{
+				completed = false;
+				break;
+			}
 		}
 		if !shared.gate() {
 			completed = false;
@@ -397,12 +404,8 @@ fn step_loop(
 		}
 		engine.advance_one_step()?;
 		let done = i + 1;
-		if let Some(c) = collector.as_deref_mut() {
-			engine.sample_probes(&mut readings)?;
-			c.record_step(&readings, done.into());
-			if i % every == 0 {
-				c.record_frame(&readings, done.into());
-			}
+		if collector.is_some() {
+			engine.queue_probes()?;
 		}
 		shared.steps_done.store(done, Ordering::Release);
 		if i % capture_every == 0 {
@@ -418,8 +421,14 @@ fn step_loop(
 		}
 		if last_beat.elapsed() >= HEARTBEAT {
 			last_beat = Instant::now();
+			if let Some(c) = collector.as_deref_mut() {
+				record(engine, c, &mut recorded, every)?;
+			}
 			publish(shared, collector.as_deref_mut(), done);
 		}
+	}
+	if let Some(c) = collector {
+		record(engine, c, &mut recorded, every)?;
 	}
 	if let Some(last) = pending {
 		let _ = tx.send(engine.finish_capture(last)?);
@@ -427,10 +436,28 @@ fn step_loop(
 	Ok(completed)
 }
 
+/// Records the engine's queued probe readings, the steps after `recorded`, into `collector`: every step's
+/// values, and the line profiles of each frame's step.
+pub(crate) fn record(
+	engine: &mut dyn WaveEngine,
+	collector: &mut ProbeCollector,
+	recorded: &mut u32,
+	every: u32,
+) -> Result<(), EngineError> {
+	engine.drain_probes(&mut |readings| {
+		let step = u64::from(*recorded) + 1;
+		collector.record_step(readings, step);
+		if (*recorded).is_multiple_of(every) {
+			collector.record_frame(readings, step);
+		}
+		*recorded += 1;
+	})
+}
+
 /// Moves the samples and profiles recorded since the last heartbeat into the shared traces.
 fn publish(shared: &Shared, collector: Option<&mut ProbeCollector>, steps_done: u32) {
 	if let Some(c) = collector {
-		let mut traces = shared.traces.lock().unwrap();
+		let mut traces = shared.traces.lock().unwrap_or_else(PoisonError::into_inner);
 		for (out, t) in traces.iter_mut().zip(&mut c.traces) {
 			out.series.append(&mut t.series);
 			out.profiles.append(&mut t.profiles);

@@ -184,7 +184,8 @@ cells the Mur ring reflects almost everything; the default quadratic rim (32 px)
 | SetProbes(sampler) | sets the probe cell lists |
 | TryReplaceScene(scene) | same grid size, edges and image-source count: swaps c2/d/source tables in place, re-derives sub-steps; else returns false (caller rebuilds) |
 | AdvanceOneStep | as above |
-| SampleProbes | reads probe cells after the step (field or blended intensity) |
+| SampleProbes | reads probe cells after the step (field or blended intensity), at once |
+| QueueProbes / DrainProbes | queues that reading per step; drain hands the queued readings out in order. The GPU engine copies each step's readings into a batch buffer and reads a batch (32 steps) back at once, so recording probes keeps the step batching |
 | CaptureFrame(shape, snapshot) | converts field and/or intensity of the canvas (not the rim) into planes of `FrameShape` (see 40) |
 | PrepareFrame | host-side full float copy of field and blended intensity (tests) |
 
@@ -224,8 +225,9 @@ Line length (graph x axis) = Euclidean length of the clamped A-B; sample k of n 
 ## Scratch frames
 
 "Frame k as the project is now": a kept engine, Reset, emitters/probes set, stepped `k*VisualizeEvery + 1` steps, probes
-sampled every step, then captured. Newest request wins; a request superseded while stepping is abandoned at the next
+queued every step and drained every 256 steps and at the end, then captured. Newest request wins; a request superseded while stepping is abandoned at the next
 check (every 16 steps). The engine is kept across scene edits of the same grid (`TryReplaceScene`), rebuilt otherwise.
 A request for the same scene, emitters and probes steps on from where the kept engine stopped (the end of the previous
 request, finished or abandoned) when it has not passed the frame; frames of the same project computed recently
-(256 MiB of planes) are answered from a cache.
+(256 MiB of planes and probe traces, keyed by step) are answered from a cache. Specs share the scene medium while
+the scene, its parts and edges are unchanged (`SceneCache`), so comparing two requests' scenes is a pointer compare.

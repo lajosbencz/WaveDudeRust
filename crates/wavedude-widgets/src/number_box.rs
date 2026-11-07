@@ -220,11 +220,26 @@ pub struct NumberBox {
 	width: Size,
 	test_id: Option<String>,
 	tooltip: Option<String>,
+	a11y_id: Option<AccessibilityId>,
 }
 
 impl NumberBox {
 	pub fn new(value: impl Into<WritableSetter<f64>>, spec: NumberSpec) -> Self {
-		Self { value: value.into(), spec, enabled: true, width: Size::px(90.), test_id: None, tooltip: None }
+		Self {
+			value: value.into(),
+			spec,
+			enabled: true,
+			width: Size::px(90.),
+			test_id: None,
+			tooltip: None,
+			a11y_id: None,
+		}
+	}
+
+	/// The text box's id, for focusing it from outside.
+	pub fn a11y_id(mut self, id: AccessibilityId) -> Self {
+		self.a11y_id = Some(id);
+		self
 	}
 
 	pub fn enabled(mut self, enabled: bool) -> Self {
@@ -260,7 +275,8 @@ impl Component for NumberBox {
 		let theme = use_wave_theme();
 		let spec = self.spec.clone();
 		let enabled = self.enabled;
-		let input_id = use_a11y();
+		let own_id = use_a11y();
+		let input_id = self.a11y_id.unwrap_or(own_id);
 		let focus = use_focus(input_id);
 		let modifiers = use_modifiers();
 		let mut text = use_state(|| spec.format(*self.value.peek()));

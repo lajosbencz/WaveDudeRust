@@ -176,13 +176,34 @@ impl GraphLayout {
 		self.plot.3 - (self.plot.3 - self.plot.1) * self.axis.fraction(v) as f32
 	}
 
-	/// The trace's points: `values[i]` at x = `x_range.0 + i * x_per_sample`.
-	pub fn points(&self, values: &[f32], x_per_sample: f64) -> Vec<(f32, f32)> {
-		values
-			.iter()
-			.enumerate()
-			.map(|(i, v)| (self.x_of(self.x_range.0 + i as f64 * x_per_sample), self.y_of(f64::from(*v))))
-			.collect()
+	/// The trace's points: `values[i]` at x = `x_range.0 + i * x_per_sample`. The samples of one device pixel
+	/// column (`scale` device pixels per logical one) reduce to their first, lowest, highest and last, in order,
+	/// so the path costs per column, not per sample.
+	pub fn points(&self, values: &[f32], x_per_sample: f64, scale: f32) -> Vec<(f32, f32)> {
+		let column = |x: f32| (x * scale).floor() as i64;
+		let mut out = Vec::new();
+		let mut i = 0;
+		while i < values.len() {
+			let x = self.x_of(self.x_range.0 + i as f64 * x_per_sample);
+			let mut end = i + 1;
+			while end < values.len() && column(self.x_of(self.x_range.0 + end as f64 * x_per_sample)) == column(x) {
+				end += 1;
+			}
+			let run = &values[i..end];
+			let (lo, hi) = (0..run.len()).fold((0, 0), |(lo, hi), k| {
+				(if run[k] < run[lo] { k } else { lo }, if run[k] > run[hi] { k } else { hi })
+			});
+			let (a, b) = if lo <= hi { (lo, hi) } else { (hi, lo) };
+			let mut last = None;
+			for k in [0, a, b, run.len() - 1] {
+				if last != Some(k) {
+					out.push((x, self.y_of(f64::from(run[k]))));
+					last = Some(k);
+				}
+			}
+			i = end;
+		}
+		out
 	}
 }
 
@@ -319,7 +340,7 @@ impl Component for GraphBox {
 			canvas.draw_line((xs, dy0), (xs, ys), &axis_pen);
 			canvas.draw_line((xs, ys), (dx1, ys), &axis_pen);
 
-			let points = layout.points(&data.values, data.x_per_sample);
+			let points = layout.points(&data.values, data.x_per_sample, grid.scale);
 			if points.len() > 1 {
 				canvas.save();
 				canvas.clip_rect(SkRect::new(dx0, dy0, dx1 + hl, dy1 + hl), ClipOp::Intersect, false);
@@ -490,7 +511,11 @@ mod tests {
 		assert_eq!(l.y_of(0.), 94.);
 		assert_eq!(l.y_of(10.), 22.);
 		assert_eq!(l.y_of(20.), 22.);
-		assert_eq!(l.points(&[0., 10.], 100.), vec![(40., 94.), (194., 22.)]);
+		assert_eq!(l.points(&[0., 10.], 100., 1.), vec![(40., 94.), (194., 22.)]);
+		let many: Vec<f32> = (0..10_000).map(|i| (i % 7) as f32).collect();
+		let points = l.points(&many, 0.01, 2.);
+		assert!(points.len() <= 4 * 2 * 155, "per device column, not per sample: {}", points.len());
+		assert!(points.iter().any(|p| p.1 == l.y_of(6.)) && points.iter().any(|p| p.1 == l.y_of(0.)), "extremes kept");
 		let fit = ValueAxis::fit_linear(&[3., 3.]);
 		assert_eq!(fit, ValueAxis::Linear { min: 2., max: 4. });
 		assert_eq!(

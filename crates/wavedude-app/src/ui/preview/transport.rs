@@ -170,7 +170,7 @@ pub struct Transport;
 impl Component for Transport {
 	fn render(&self) -> impl IntoElement {
 		let shared = Shared::get();
-		shared.subscribe(Topics::DOCUMENT | Topics::PLAYBACK | Topics::RUN | Topics::SETTINGS);
+		shared.subscribe(Topics::DOCUMENT | Topics::PLAYBACK | Topics::PROGRESS | Topics::RUN | Topics::SETTINGS);
 		rect().width(Size::fill()).child(timeline(&shared)).child(transport_bar(&shared))
 	}
 }

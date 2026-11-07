@@ -133,23 +133,27 @@ impl Component for PictureCell {
 		let mut area = use_state(|| (0f32, 0f32));
 		let layer = self.layer;
 		let states = self.states;
-		let topics = Topics::DOCUMENT | Topics::SELECTION | Topics::PLAYBACK | Topics::RUN | Topics::SETTINGS;
-		let (canvas, edge, title, caption, hint, brightness) = shared.read(topics, |app| {
-			let p = &app.document.project;
-			let s = &app.strings;
-			let title = match layer {
-				Layer::Field => s.get("SectionField"),
-				Layer::Intensity => s.get("SectionIntensity"),
-			};
-			(
-				p.canvas_size(),
-				edge_color(&p.scene),
-				title,
-				s.label("DisplayLayer", "Brightness"),
-				s.hint("DisplayLayer", "Brightness"),
-				p.display.layer(layer).brightness,
-			)
-		});
+		let (canvas, edge, title, caption, hint, brightness, graphs) =
+			shared.read(Topics::DOCUMENT | Topics::SELECTION | Topics::SETTINGS, |app| {
+				let p = &app.document.project;
+				let s = &app.strings;
+				let title = match layer {
+					Layer::Field => s.get("SectionField"),
+					Layer::Intensity => s.get("SectionIntensity"),
+				};
+				(
+					p.canvas_size(),
+					edge_color(&p.scene),
+					title,
+					s.label("DisplayLayer", "Brightness"),
+					s.hint("DisplayLayer", "Brightness"),
+					p.display.layer(layer).brightness,
+					graph_boxes::has_boxes(p, layer),
+				)
+			});
+		if graphs {
+			shared.subscribe(Topics::PLAYBACK | Topics::PROGRESS | Topics::SCRATCH | Topics::RUN);
+		}
 		let beside = strip_beside(*cell.read(), canvas);
 		let (aw, ah) = *area.read();
 		let mut canvas_state = use_state(|| canvas);
@@ -232,6 +236,7 @@ impl Component for PictureCell {
 		)
 		.caption(caption)
 		.tooltip(hint)
+		.box_id(states.brightness[layer as usize])
 		.orientation(if beside { StripOrientation::Vertical } else { StripOrientation::Horizontal })
 		.test_id(picture_id(layer));
 		let menu_shared = shared.clone();

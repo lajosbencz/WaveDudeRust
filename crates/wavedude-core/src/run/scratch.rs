@@ -9,7 +9,7 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -22,10 +22,12 @@ use super::spec::RunSpec;
 
 /// Steps between two looks for a newer request.
 pub const CHECK_INTERVAL: u32 = 16;
+/// Steps between two drains of the engine's queued probe readings.
+const PROBE_DRAIN: u32 = 256;
 /// Bytes of planes and probe traces the recent frames keep.
 pub const CACHE_BYTES: usize = 256 << 20;
 
-/// A computed scratch frame.
+/// A computed scratch frame; clones share its planes and traces.
 #[derive(Clone, Debug)]
 pub struct ScratchResult {
 	pub id: u64,
@@ -33,9 +35,9 @@ pub struct ScratchResult {
 	/// Timeline frame.
 	pub frame: u32,
 	/// Holds the state after step index `frame * visualize_every`.
-	pub snapshot: Snapshot,
+	pub snapshot: Arc<Snapshot>,
 	/// Every series up to the frame's step; each line probe one profile, the frame's.
-	pub traces: Vec<ProbeTrace>,
+	pub traces: Arc<[ProbeTrace]>,
 	pub elapsed: Duration,
 }
 
@@ -100,7 +102,7 @@ impl ScratchRunner {
 
 	/// Asks for timeline frame `frame` of `spec`; returns the request's id. Supersedes any earlier request.
 	pub fn request(&self, spec: RunSpec, frame: u32) -> u64 {
-		let mut inbox = self.shared.inbox.lock().unwrap();
+		let mut inbox = self.shared.inbox.lock().unwrap_or_else(PoisonError::into_inner);
 		let id = self.shared.latest.fetch_add(1, Ordering::AcqRel) + 1;
 		inbox.request = Some(Request { id, spec, frame });
 		self.shared.wake.notify_one();
@@ -109,7 +111,7 @@ impl ScratchRunner {
 
 	/// Abandons the request being computed, if any, and drops a waiting one.
 	pub fn cancel(&self) {
-		let mut inbox = self.shared.inbox.lock().unwrap();
+		let mut inbox = self.shared.inbox.lock().unwrap_or_else(PoisonError::into_inner);
 		inbox.request = None;
 		self.shared.latest.fetch_add(1, Ordering::AcqRel);
 	}
@@ -117,7 +119,7 @@ impl ScratchRunner {
 
 impl Drop for ScratchRunner {
 	fn drop(&mut self) {
-		self.shared.inbox.lock().unwrap().shutdown = true;
+		self.shared.inbox.lock().unwrap_or_else(PoisonError::into_inner).shutdown = true;
 		self.shared.latest.fetch_add(1, Ordering::AcqRel);
 		self.shared.wake.notify_one();
 		if let Some(t) = self.thread.take() {
@@ -141,7 +143,25 @@ struct Kept {
 	spec: RunSpec,
 	steps_done: u32,
 	collector: Option<ProbeCollector>,
+	/// Steps whose probe readings are in `collector`.
+	recorded: u32,
+	/// The last step's readings.
 	readings: ProbeReadings,
+}
+
+impl Kept {
+	/// Records the engine's queued probe readings, the steps up to `steps_done`; keeps the last.
+	fn record_probes(&mut self) -> Result<(), EngineError> {
+		let Some(c) = self.collector.as_mut() else { return Ok(()) };
+		let (readings, mut step) = (&mut self.readings, self.recorded);
+		self.engine.drain_probes(&mut |r| {
+			step += 1;
+			c.record_step(r, step.into());
+			readings.clone_from(r);
+		})?;
+		self.recorded = step;
+		Ok(())
+	}
 }
 
 /// Same scene, emitters and probes: one more step of either is the same computation.
@@ -153,7 +173,7 @@ impl Worker {
 	fn run(mut self) {
 		loop {
 			let request = {
-				let mut inbox = self.shared.inbox.lock().unwrap();
+				let mut inbox = self.shared.inbox.lock().unwrap_or_else(PoisonError::into_inner);
 				loop {
 					if inbox.shutdown {
 						return;
@@ -161,7 +181,7 @@ impl Worker {
 					if let Some(r) = inbox.request.take() {
 						break r;
 					}
-					inbox = self.shared.wake.wait(inbox).unwrap();
+					inbox = self.shared.wake.wait(inbox).unwrap_or_else(PoisonError::into_inner);
 				}
 			};
 			let id = request.id;
@@ -206,16 +226,20 @@ impl Worker {
 		let from = kept.steps_done;
 		for i in from..steps {
 			if (i - from).is_multiple_of(CHECK_INTERVAL) && self.shared.latest.load(Ordering::Acquire) != id {
+				kept.record_probes()?;
 				tracing::debug!(frame, done = i, steps, "preview frame abandoned for a newer request");
 				return Ok(ScratchEvent::Abandoned { id, frame, steps_done: i, steps });
 			}
 			kept.engine.advance_one_step()?;
-			if let Some(c) = kept.collector.as_mut() {
-				kept.engine.sample_probes(&mut kept.readings)?;
-				c.record_step(&kept.readings, u64::from(i) + 1);
+			if kept.collector.is_some() {
+				kept.engine.queue_probes()?;
 			}
 			kept.steps_done = i + 1;
+			if (i + 1 - from).is_multiple_of(PROBE_DRAIN) {
+				kept.record_probes()?;
+			}
 		}
+		kept.record_probes()?;
 		let snapshot = kept.engine.capture_frame(&spec.shape)?;
 		let traces = kept.collector.as_ref().map_or_else(Vec::new, |c| {
 			let mut frame_end = c.clone();
@@ -224,7 +248,7 @@ impl Worker {
 		});
 		let elapsed = started.elapsed();
 		tracing::debug!(frame, steps, from, ms = elapsed.as_secs_f64() * 1e3, "preview frame");
-		let result = ScratchResult { id, spec, frame, snapshot, traces, elapsed };
+		let result = ScratchResult { id, spec, frame, snapshot: Arc::new(snapshot), traces: traces.into(), elapsed };
 		self.remember(result.clone());
 		Ok(ScratchEvent::Done(Box::new(result)))
 	}
@@ -256,8 +280,14 @@ impl Worker {
 		if !continues {
 			let engine = self.reset_engine(spec);
 			let collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene));
-			let mut kept =
-				Kept { engine, spec: spec.clone(), steps_done: 0, collector, readings: ProbeReadings::default() };
+			let mut kept = Kept {
+				engine,
+				spec: spec.clone(),
+				steps_done: 0,
+				collector,
+				recorded: 0,
+				readings: ProbeReadings::default(),
+			};
 			kept.engine.set_probes(kept.collector.as_ref().map(ProbeCollector::cells).unwrap_or_default());
 			self.kept = Some(kept);
 		}

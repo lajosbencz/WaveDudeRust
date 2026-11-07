@@ -155,9 +155,13 @@ pub struct Revisions {
 	/// The scene and the parts: what the scene picture and the outline are built from.
 	pub scene: u64,
 	pub selection: u64,
-	/// The frame-rate state: the position, the frame shown, the frame count, a run's progress.
+	/// The position, the frame shown, the frame count.
 	pub playback: u64,
-	/// The slower live state: the run's state, playing, loop, speed, range, follow, the scratch frame.
+	/// A run's progress: its steps done and the frames it published; moves every tick of a run.
+	pub progress: u64,
+	/// A scratch frame in flight and the frame it computes.
+	pub scratch: u64,
+	/// The slower live state: the run's state, playing, loop, speed, range, follow.
 	pub run: u64,
 	/// The user settings, the language among them.
 	pub settings: u64,
@@ -168,14 +172,16 @@ pub struct Revisions {
 struct Observed {
 	document: (bool, Option<PathBuf>, bool, bool),
 	selection: Selection,
-	playback: (u32, Option<live::Shown>, u32, Option<u32>, Option<playback::Available>),
+	playback: (u32, Option<live::Shown>, u32),
+	progress: (Option<u32>, Option<playback::Available>),
+	scratch: (bool, Option<u32>),
 	run: RunObserved,
 	settings: Settings,
 }
 
 type RunObserved = (
 	Option<(wavedude_core::run::RunState, u32, bool)>,
-	(bool, bool, Option<u32>, bool, bool, bool),
+	(bool, bool, bool, bool),
 	(bool, u64, bool, (u32, u32), bool, bool),
 );
 
@@ -199,6 +205,8 @@ pub struct AppState<B: Backend> {
 	pending: Option<Guarded>,
 	/// The export hint of a project without a file: this session's alone.
 	session_hint: ExportHint,
+	/// The playback and scratch revisions of the frame the imported brightness fit read last.
+	fit_read: Option<(u64, u64)>,
 }
 
 fn live_settings(s: &Settings) -> LiveSettings {
@@ -260,6 +268,7 @@ impl<B: Backend> AppState<B> {
 			use_gpu,
 			pending: None,
 			session_hint: ExportHint::default(),
+			fit_read: None,
 		};
 		state.sync_revisions();
 		state
@@ -282,17 +291,12 @@ impl<B: Backend> AppState<B> {
 				self.document.history.can_redo(),
 			),
 			selection: self.selection.clone(),
-			playback: (p.position(), live.shown(), p.frame_count(), status.as_ref().map(|s| s.1), p.available()),
+			playback: (p.position(), live.shown(), p.frame_count()),
+			progress: (status.as_ref().map(|s| s.1), p.available()),
+			scratch: (live.scratch_pending(), live.computing_frame()),
 			run: (
 				status.map(|(state, _, total, stale)| (state, total, stale)),
-				(
-					live.run_is_active(),
-					live.scratch_pending(),
-					live.computing_frame(),
-					live.is_live(),
-					live.warning().is_some(),
-					live.export_busy(),
-				),
+				(live.run_is_active(), live.is_live(), live.warning().is_some(), live.export_busy()),
 				(
 					p.is_playing(),
 					p.speed().to_bits(),
@@ -315,6 +319,8 @@ impl<B: Backend> AppState<B> {
 			r.document += u64::from(old.document != now.document);
 			r.selection += u64::from(old.selection != now.selection);
 			r.playback += u64::from(old.playback != now.playback);
+			r.progress += u64::from(old.progress != now.progress);
+			r.scratch += u64::from(old.scratch != now.scratch);
 			r.run += u64::from(old.run != now.run);
 			r.settings += u64::from(old.settings != now.settings);
 		}
@@ -366,7 +372,8 @@ impl<B: Backend> AppState<B> {
 
 	/// Fits an imported project's brightness once to the first frame with content, as Auto does, outside the
 	/// history. With 8-bit frames one 16-bit frame is computed for the fit alone, never shown; it is asked again
-	/// only when it was abandoned and nothing else computes, so scrubbing never makes it follow the position.
+	/// only when it was abandoned and nothing else computes, so scrubbing never makes it follow the position. A
+	/// shown frame is read once.
 	fn fit_imported_brightness(&mut self, now: Instant) {
 		if !self.document.needs_brightness_fit {
 			return;
@@ -378,9 +385,11 @@ impl<B: Backend> AppState<B> {
 				if plane.is_empty() { None } else { fit_brightness(&as_halves(plane), s.shape.sample_kind(layer)) }
 			})
 		} else {
-			if self.live.shown().is_none() {
+			let frame = (self.revisions.playback, self.revisions.scratch);
+			if self.live.shown().is_none() || self.fit_read == Some(frame) {
 				return;
 			}
+			self.fit_read = Some(frame);
 			let read = |layer| {
 				self.live.with_shown_plane(layer, |shape, bytes| match shape.format {
 					SampleFormat::Half => Ok(fit_brightness(&as_halves(bytes), shape.sample_kind(layer))),

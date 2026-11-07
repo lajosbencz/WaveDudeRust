@@ -80,7 +80,8 @@ border.
   in point with Loop on.
 - Play means "show me the simulation": with no run, or a stale run, Play starts an automatic run (the memory
   warning may ask first; cancelling it turns playback off again before the clock starts) and plays; when the run
-  has not reached the next frame, playback holds at the newest frame and waits (no jump accumulates).
+  has not reached the next frame, playback holds at the newest frame and waits (no jump accumulates). A run that
+  ended short (stopped or failed) plays to its last frame as to an out point.
 - Space plays/pauses with focus anywhere in the pane (not text boxes); F7 from anywhere.
 - A click on a picture focuses the pane so Space works afterwards.
 

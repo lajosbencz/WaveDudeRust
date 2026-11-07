@@ -18,7 +18,8 @@ struct Right {
 
 fn right(cx: &Cx) -> Right {
 	let export = cx.ui.export.read().as_ref().map(|e| (e.text.clone(), e.progress()));
-	cx.shared.read(Topics::PLAYBACK | Topics::RUN | Topics::SETTINGS, |a| {
+	let topics = Topics::PLAYBACK | Topics::PROGRESS | Topics::SCRATCH | Topics::RUN | Topics::SETTINGS;
+	cx.shared.read(topics, |a| {
 		let s = &a.strings;
 		let r = a.live.playback.readout();
 		let busy = export.or_else(|| {

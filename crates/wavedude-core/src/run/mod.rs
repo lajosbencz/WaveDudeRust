@@ -11,6 +11,6 @@ pub mod warning;
 pub use quality::{MachineFacts, PreviewDefaults, PreviewQuality, PreviewTier};
 pub use scratch::{CHECK_INTERVAL, EngineFactory, ScratchEvent, ScratchResult, ScratchRunner, ScratchSink};
 pub use simulation::{EventSink, RunError, RunEvent, RunState, SimulationRun};
-pub use spec::{RunSpec, RunSpecError};
+pub use spec::{RunSpec, RunSpecError, SceneCache};
 pub use store::{Budget, FrameStore, Release, StoreError, StoreLayout};
 pub use warning::{Levers, MemoryWarning};

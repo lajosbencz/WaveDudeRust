@@ -571,3 +571,21 @@ fn store_write_timing() {
 		ms(disk)
 	);
 }
+
+#[test]
+fn specs_of_an_unchanged_scene_share_its_medium() {
+	let mut p = project(64, 32, 20);
+	let mut cache = SceneCache::default();
+	let a = cache.spec(&p, PreviewQuality::FULL, false).unwrap();
+	p.seed += 1;
+	p.sources[0].frequency += 1.;
+	let b = cache.spec(&p, PreviewQuality::DEFAULT, false).unwrap();
+	assert!(Arc::ptr_eq(&a.scene, &b.scene), "seed, sources and quality leave the medium");
+	p.scene.refractive_index = 1.5;
+	let c = cache.spec(&p, PreviewQuality::FULL, false).unwrap();
+	assert!(!Arc::ptr_eq(&a.scene, &c.scene));
+	assert_eq!(*c.scene, RunSpec::scene_of(&p, None).unwrap());
+	p.scene.edges = wavedude_core::model::Edges::Reflective;
+	let d = cache.spec(&p, PreviewQuality::FULL, false).unwrap();
+	assert_eq!(d.scene.edges, wavedude_core::model::Edges::Reflective, "the edges rebuild it too");
+}

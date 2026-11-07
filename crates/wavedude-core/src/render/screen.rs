@@ -16,6 +16,8 @@ pub struct ResampleAxis {
 	first: Vec<usize>,
 	offsets: Vec<usize>,
 	weights: Vec<f32>,
+	/// The samples any pixel weighs, `[start, end)`.
+	used: (usize, usize),
 }
 
 impl ResampleAxis {
@@ -65,7 +67,9 @@ impl ResampleAxis {
 			}
 		}
 		offsets.push(weights.len());
-		Self { source, target, first, offsets, weights }
+		let end = (0..target).map(|t| first[t] + offsets[t + 1] - offsets[t]).max().unwrap_or(0);
+		let used = (first.iter().copied().min().unwrap_or(0), end);
+		Self { source, target, first, offsets, weights, used }
 	}
 
 	pub fn source(&self) -> usize {
@@ -74,6 +78,11 @@ impl ResampleAxis {
 
 	pub fn target(&self) -> usize {
 		self.target
+	}
+
+	/// The samples any pixel weighs, `[start, end)`.
+	pub fn used(&self) -> (usize, usize) {
+		self.used
 	}
 
 	/// The first sample of pixel `t` and the weights of it and the samples after it.
@@ -161,25 +170,21 @@ impl ScreenColors<'_> {
 /// A rectangle of the source plane in samples: x, y, width, height.
 pub type Window = (f64, f64, f64, f64);
 
-/// Resamples f16 planes of one size, or a window of them, to one picture size and colours them. Keeps its scratch
-/// rows between calls.
+/// Resamples f16 planes of one size, or a window of them, to one picture size and colours them. Reads only the
+/// samples the window weighs; keeps its scratch rows between calls and views.
 #[derive(Clone, Debug)]
 pub struct ScreenRenderer {
 	x: ResampleAxis,
 	y: ResampleAxis,
 	window: Option<Window>,
+	/// The x pass of the rows the y axis uses, `target width` values each.
 	rows: Vec<f32>,
 }
 
 impl ScreenRenderer {
 	/// Sizes in samples and in device pixels; panics when one is 0.
 	pub fn new(source_width: usize, source_height: usize, target_width: usize, target_height: usize) -> Self {
-		Self {
-			x: ResampleAxis::new(source_width, target_width),
-			y: ResampleAxis::new(source_height, target_height),
-			window: None,
-			rows: vec![0.0; source_height * target_width],
-		}
+		Self::windowed(source_width, source_height, None, target_width, target_height)
 	}
 
 	/// A `window` of the source (the zoomed picture's part) to the target size; None is the whole plane.
@@ -190,15 +195,27 @@ impl ScreenRenderer {
 		target_width: usize,
 		target_height: usize,
 	) -> Self {
-		let Some((x, y, w, h)) = window else {
-			return Self::new(source_width, source_height, target_width, target_height);
-		};
-		Self {
-			x: ResampleAxis::window(source_width, (x, x + w), target_width),
-			y: ResampleAxis::window(source_height, (y, y + h), target_height),
-			window: Some((x, y, w, h)),
-			rows: vec![0.0; source_height * target_width],
+		let (x, y) = axes(source_width, source_height, window, target_width, target_height);
+		Self { x, y, window, rows: Vec::new() }
+	}
+
+	/// Changes the sizes or the window, keeping the scratch rows.
+	pub fn set_view(
+		&mut self,
+		source_width: usize,
+		source_height: usize,
+		window: Option<Window>,
+		target_width: usize,
+		target_height: usize,
+	) {
+		if self.source_size() == (source_width, source_height)
+			&& self.target_size() == (target_width, target_height)
+			&& self.window == window
+		{
+			return;
 		}
+		(self.x, self.y) = axes(source_width, source_height, window, target_width, target_height);
+		self.window = window;
 	}
 
 	pub fn window(&self) -> Option<Window> {
@@ -222,17 +239,20 @@ impl ScreenRenderer {
 		assert_eq!(plane.len(), sw * sh, "plane of the source size");
 		assert_eq!(out.len(), tw * th * 4, "RGBA8 output of the target size");
 		let energy = colors.kind() == SampleKind::IntensityRoot;
+		let (x0, x1) = self.x.used();
+		let (y0, y1) = self.y.used();
+		self.rows.resize((y1 - y0) * tw, 0.0);
 		let x_axis = &self.x;
-		self.rows.par_chunks_mut(tw).zip(plane.par_chunks(sw)).for_each_init(
-			|| vec![0f32; sw],
+		self.rows.par_chunks_mut(tw).zip(plane[y0 * sw..y1 * sw].par_chunks(sw)).for_each_init(
+			|| vec![0f32; x1 - x0],
 			|line, (target, samples)| {
-				for (l, s) in line.iter_mut().zip(samples) {
+				for (l, s) in line.iter_mut().zip(&samples[x0..x1]) {
 					let v = s.to_f32();
 					*l = if energy { v * v } else { v };
 				}
 				for (t, value) in target.iter_mut().enumerate() {
 					let (first, weights) = x_axis.weights_of(t);
-					*value = weights.iter().zip(&line[first..]).map(|(w, v)| w * v).sum();
+					*value = weights.iter().zip(&line[first - x0..]).map(|(w, v)| w * v).sum();
 				}
 			},
 		);
@@ -249,9 +269,9 @@ impl ScreenRenderer {
 				let (first, weights) = y_axis.weights_of(y);
 				values.fill(0.0);
 				for (k, w) in weights.iter().enumerate() {
-					let row = &rows[(first + k) * tw..(first + k + 1) * tw];
-					for (v, r) in values.iter_mut().zip(row) {
-						*v += w * r;
+					let r = first + k - y0;
+					for (v, s) in values.iter_mut().zip(&rows[r * tw..(r + 1) * tw]) {
+						*v += w * s;
 					}
 				}
 				let half = |v: f32| f16::from_f32(if energy { v.sqrt() } else { v });
@@ -281,6 +301,14 @@ impl ScreenRenderer {
 		let mut out = vec![0; tw * th * 4];
 		self.render(plane, colors, &mut out);
 		out
+	}
+}
+
+/// The axes of a view: the `window` of the source, or all of it, to the target size.
+fn axes(sw: usize, sh: usize, window: Option<Window>, tw: usize, th: usize) -> (ResampleAxis, ResampleAxis) {
+	match window {
+		None => (ResampleAxis::new(sw, tw), ResampleAxis::new(sh, th)),
+		Some((x, y, w, h)) => (ResampleAxis::window(sw, (x, x + w), tw), ResampleAxis::window(sh, (y, y + h), th)),
 	}
 }
 

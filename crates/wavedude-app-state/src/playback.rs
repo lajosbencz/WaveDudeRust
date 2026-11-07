@@ -72,6 +72,15 @@ impl Default for Playback {
 	}
 }
 
+/// The newest frame there is to play.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Limit {
+	/// More frames follow: playback holds here.
+	Hold(u32),
+	/// No more frames follow: playback ends here.
+	End(u32),
+}
+
 impl Playback {
 	/// The timeline of a project: its planned frames, steps per frame, video frame rate (speed 1) and export
 	/// range in steps, each count at least 1 in a normalised project. The position is kept inside the new timeline.
@@ -133,9 +142,10 @@ impl Playback {
 		self.playing
 	}
 
-	/// Starts playback at `now`; at or past the out point it starts again from the in point.
-	pub fn play(&mut self, now: Instant) {
-		let (from, to) = self.range_frames();
+	/// Starts playback at `now`; at or past the out point (or `end`, the last frame there will be) it starts again
+	/// from the in point.
+	pub fn play(&mut self, now: Instant, end: Option<u32>) {
+		let (from, to) = self.range_until(end);
 		if self.position >= to || self.position < from {
 			self.position = from;
 		}
@@ -150,11 +160,11 @@ impl Playback {
 		self.carry = 0.0;
 	}
 
-	/// Advances by the frames that fell due since the last tick, at `fps * speed` frames a second. `limit` is
-	/// the newest frame there is to show: playback holds there and drops what accumulated, so it does not jump
-	/// once the run catches up. At the out point it stops, or wraps to the in point with Loop on. Returns
-	/// whether the position moved.
-	pub fn advance(&mut self, now: Instant, limit: Option<u32>) -> bool {
+	/// Advances by the frames that fell due since the last tick, at `fps * speed` frames a second. At a
+	/// [`Limit::Hold`] playback holds and drops what accumulated, so it does not jump once the run catches up. At
+	/// the out point or a [`Limit::End`] it stops, or wraps to the in point with Loop on. Returns whether the
+	/// position moved.
+	pub fn advance(&mut self, now: Instant, limit: Option<Limit>) -> bool {
 		if !self.playing {
 			return false;
 		}
@@ -165,7 +175,11 @@ impl Playback {
 			return false;
 		}
 		self.carry -= due;
-		let (from, to) = self.range_frames();
+		let end = match limit {
+			Some(Limit::End(end)) => Some(end),
+			_ => None,
+		};
+		let (from, to) = self.range_until(end);
 		let mut target = self.position as u64 + due as u64;
 		if target > to as u64 {
 			if self.looping {
@@ -177,7 +191,7 @@ impl Playback {
 			}
 		}
 		let mut target = target as u32;
-		if let Some(limit) = limit
+		if let Some(Limit::Hold(limit)) = limit
 			&& target > limit
 		{
 			target = limit.max(self.position);
@@ -194,6 +208,13 @@ impl Playback {
 		let to = if self.out_step == 0 { last } else { (self.out_step / self.visualize_every).min(last) };
 		let from = (self.in_step / self.visualize_every).min(to);
 		(from, to)
+	}
+
+	/// [`range_frames`](Self::range_frames) ending at `end` at the latest.
+	fn range_until(&self, end: Option<u32>) -> (u32, u32) {
+		let (from, to) = self.range_frames();
+		let to = end.map_or(to, |end| to.min(end));
+		(from.min(to), to)
 	}
 
 	/// The in and out points in steps (0 out = to the end), for the project's Display.
@@ -259,8 +280,8 @@ mod tests {
 	}
 
 	/// Plays for `seconds` in ticks of 1/60 s.
-	fn play_for(p: &mut Playback, start: Instant, seconds: f64, limit: Option<u32>) -> Instant {
-		p.play(start);
+	fn play_for(p: &mut Playback, start: Instant, seconds: f64, limit: Option<Limit>) -> Instant {
+		p.play(start, None);
 		let ticks = (seconds * 60.0).round() as u32;
 		let mut now = start;
 		for i in 1..=ticks {
@@ -286,7 +307,7 @@ mod tests {
 	fn a_late_tick_catches_up() {
 		let start = Instant::now();
 		let mut p = timeline(10_000);
-		p.play(start);
+		p.play(start, None);
 		assert!(p.advance(start + Duration::from_millis(500), None));
 		assert_eq!(p.position(), 30);
 	}
@@ -313,10 +334,24 @@ mod tests {
 	fn holds_at_the_newest_frame() {
 		let start = Instant::now();
 		let mut p = timeline(10_000);
-		let now = play_for(&mut p, start, 1.0, Some(5));
-		assert_eq!(p.position(), 5);
-		p.advance(now + Duration::from_millis(17), Some(50));
+		let now = play_for(&mut p, start, 1.0, Some(Limit::Hold(5)));
+		assert_eq!((p.position(), p.is_playing()), (5, true));
+		p.advance(now + Duration::from_millis(17), Some(Limit::Hold(50)));
 		assert_eq!(p.position(), 6, "no jump accumulated while holding");
+	}
+
+	#[test]
+	fn stops_or_wraps_at_the_end_of_a_partial_run() {
+		let start = Instant::now();
+		let mut p = timeline(10_000);
+		play_for(&mut p, start, 1.0, Some(Limit::End(5)));
+		assert_eq!((p.position(), p.is_playing()), (5, false));
+		p.play(start, Some(5));
+		assert_eq!(p.position(), 0, "play at the end starts over");
+		let mut p = timeline(10_000);
+		p.set_looping(true);
+		play_for(&mut p, start, 1.0, Some(Limit::End(5)));
+		assert!(p.is_playing() && p.position() <= 5);
 	}
 
 	#[test]

@@ -372,6 +372,30 @@ fn a_playback_tick_moves_the_playback_revision_alone() {
 }
 
 #[test]
+fn a_running_run_moves_the_progress_revision_alone() {
+	let t = Instant::now();
+	let mut s = app();
+	s.handle(Event::Run, t);
+	s.tick(at(t, 10));
+	s.handle(Event::Scrub(0), at(t, 20));
+	s.live.backend().last_run().publish(1);
+	s.tick(at(t, 200));
+	s.tick(at(t, 210));
+	let before = s.revisions();
+	for i in 1..10u32 {
+		s.live.backend().last_run().publish(i * 3);
+		s.tick(at(t, 210 + u64::from(i) * 17));
+	}
+	let after = s.revisions();
+	assert!(after.progress > before.progress, "the run published frames");
+	assert_eq!(
+		(after.playback, after.run, after.scratch, after.document, after.settings),
+		(before.playback, before.run, before.scratch, before.document, before.settings),
+		"the views of the menus and the pictures stay"
+	);
+}
+
+#[test]
 fn the_scene_revision_follows_scene_and_part_edits_alone() {
 	let t = Instant::now();
 	let mut s = app();

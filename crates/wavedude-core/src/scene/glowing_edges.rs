@@ -50,10 +50,11 @@ pub fn blend_additive(frame: &mut [u8], edges: &[u8], gain: f64) {
 		return;
 	}
 	const CHUNK: usize = 64 * 1024;
+	let added: [u32; 256] = std::array::from_fn(|e| (e as f64 * gain) as u32);
 	frame.par_chunks_mut(CHUNK).zip(edges.par_chunks(CHUNK)).for_each(|(frame, edges)| {
 		for (f, e) in frame.as_chunks_mut::<4>().0.iter_mut().zip(edges.as_chunks::<4>().0) {
 			for c in 0..3 {
-				f[c] = (f[c] as u32 + (e[c] as f64 * gain) as u32).min(255) as u8;
+				f[c] = (f[c] as u32 + added[e[c] as usize]).min(255) as u8;
 			}
 		}
 	});
