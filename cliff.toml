@@ -1,0 +1,57 @@
+# git-cliff (decision 0011): CHANGELOG.md, the release notes and the next version, from the conventional commits
+# of the whole repository since the last v* tag. Commits whose type ships nothing (ci, docs, test, style, build,
+# chore, the release commits) are skipped; a release needs at least one commit left.
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project are documented in this file, generated from the commits by
+[git-cliff](https://git-cliff.org).
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+"""
+body = """
+{%- set repo = "https://github.com/lajosbencz/WaveDudeRust" -%}
+{% if version -%}
+  {% if previous.version -%}
+    ## [{{ version | trim_start_matches(pat="v") }}]({{ repo }}/compare/{{ previous.version }}...{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+  {%- else -%}
+    ## [{{ version | trim_start_matches(pat="v") }}]({{ repo }}/releases/tag/{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+  {%- endif %}
+{%- else -%}
+  ## [Unreleased]
+{%- endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.breaking %}**Breaking:** {% endif %}{% if commit.scope and commit.scope != "deps" %}*({{ commit.scope }})* {% endif %}{{ commit.message | split(pat="\n") | first | trim }}
+{%- endfor %}
+{% endfor %}
+"""
+trim = false
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+protect_breaking_commits = true
+filter_commits = true
+tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+sort_commits = "oldest"
+commit_parsers = [
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^feat", group = "<!-- 0 -->Added" },
+  { message = "^(fix|chore)\\(deps\\)", group = "<!-- 4 -->Dependencies" },
+  { message = "^fix", group = "<!-- 1 -->Fixed" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^refactor", group = "<!-- 3 -->Changed" },
+  { message = "^revert", group = "<!-- 5 -->Reverted" },
+  { message = "^(ci|docs|test|style|build|chore)", skip = true },
+]
+
+[bump]
+# 0.x: a feature bumps the patch, a breaking change the minor.
+features_always_bump_minor = false
+breaking_always_bump_major = false
+initial_tag = "v0.1.0"

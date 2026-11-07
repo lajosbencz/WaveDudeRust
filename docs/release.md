@@ -4,17 +4,28 @@ Decision 0011 says why; this is how.
 
 ## Day to day
 
-Commit with conventional commits (`feat:`, `fix:`, `chore:` ...). release-plz keeps a PR "chore: release
-v<next>" open on the default branch with the version bump and `CHANGELOG.md`. Merging it releases: GitHub gets
-the tag `v<version>` and a draft release. `package.yml`, a reusable workflow without secrets and with a read-only
-token, builds the packages with `cargo auditable` and attests them (build provenance and the CycloneDX SBOMs of both
-programs); `sign` signs the update bundles with the updater key without compiling anything; `publish` writes
-`latest.json` and `SHA256SUMS`, attests them and the signatures, attaches everything and publishes the release, which
-the repository's immutable releases then lock.
+Commit with conventional commits (`feat:`, `fix:`, `chore:` ...). After each push to the default branch,
+git-cliff (`cliff.toml`) reads the commits since the last `v*` tag. If any ships something (`feat`, `fix`, `perf`,
+`refactor`, `revert`, dependency updates as `fix(deps)` or `chore(deps)`; not `ci`, `docs`, `test`, `style`, `build`
+or other `chore`), the workflow keeps one pull request "chore(release): v<next>" open on the branch `release-pr`: the
+workspace version bumped, `Cargo.lock`, and `CHANGELOG.md` regenerated from all tags, its new section as the PR's
+body. In 0.x a feature bumps the patch and a breaking change (`!`) the minor. The branch is rebuilt as one commit on
+every push, so edits to it are lost; change the commits instead (or the version in the PR, by hand, just before
+merging).
+
+Merging it (squash) releases: the push finds the workspace version without its tag, tags the commit `v<version>` and
+drafts the release with the changelog section as notes. `package.yml`, a reusable workflow without secrets and with
+a read-only token, builds the packages with `cargo auditable` and attests them (build provenance and the CycloneDX
+SBOMs of both programs); `sign` signs the update bundles with the updater key without compiling anything; `publish`
+writes `latest.json` and `SHA256SUMS`, attests them and the signatures, attaches everything and publishes the
+release, which the repository's immutable releases then lock.
 
 Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened with it starts its CI only after someone
 approves the waiting runs on the PR page ("Approve workflows to run"); once approved, later updates of the same PR
 run without asking. The required checks come from those runs alone, so each new release PR needs that one approval.
+
+A failed release is finished by rerunning the failed jobs of its run: tagging and drafting skip what exists. The
+release stays a draft until `publish` succeeds.
 
 ## One-time setup of a repository
 
@@ -36,21 +47,21 @@ cargo packager signer generate --path wavedude-updater.key
 
 The `.pub` file's content is `UPDATER_PUBKEY`, the key file's content `UPDATER_PRIVATE_KEY`.
 
-crates.io publishing is off. To turn it on for `wavedude-core` and `wavedude-export`: in `release-plz.toml`
-replace their `release = false` with `version_group = "wavedude"` (and give the app the same group), add a
-crates.io token as the secret `CARGO_REGISTRY_TOKEN` for the first publish, then add the repository as a
-trusted publisher of both crates (crates.io > crate > Settings > Trusted Publishing, workflow `release.yml`) and
-delete the secret.
+crates.io publishing is off. `wavedude-core` and `wavedude-export` are ready for it (`wavedude-export` names
+`wavedude-core`'s version, which the release PR keeps in step); turning it on means a job in `release.yml` after
+`release` running `cargo publish -p wavedude-core` then `-p wavedude-export`, with the repository as their trusted
+publisher (crates.io > crate > Settings > Trusted Publishing; a token only for each crate's first publish).
 
 - Settings > General: immutable releases on (`gh api -X PUT repos/<owner>/<repo>/immutable-releases`); squash
-  merging only, its commit titled by the pull request's title (release-plz reads conventional commits); allow
+  merging only, its commit titled by the pull request's title (git-cliff reads conventional commits); allow
   auto-merge; delete head branches; no wiki.
 - Settings > Rules: a ruleset on the default branch requiring the CI jobs (`ubuntu-latest`, `windows-latest`,
   `macos-latest`, `MSRV`) and refusing deletion and force pushes; a ruleset on `v*` tags refusing update and deletion
-  (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and release-plz tags through it).
+  (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and the release job tags
+  through it).
   Administrators bypass both.
 - Settings > Actions > General: actions pinned to a full commit hash; approval before running workflows from every
-  outside contributor; the workflow token read-only by default, allowed to create pull requests (release-plz's).
+  outside contributor; the workflow token read-only by default, allowed to create pull requests (the release PR).
 - Settings > Advanced Security: Dependabot alerts and security updates, secret scanning with push protection, private
   vulnerability reporting (`SECURITY.md`).
 

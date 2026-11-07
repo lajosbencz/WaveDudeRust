@@ -1,6 +1,7 @@
 # Dependency updates (decision 0011): Cargo and the workflows' actions, which stay pinned to commit hashes
 # (Dependabot moves the hash and its version comment). Security updates come on top, as soon as an advisory
-# appears, once "Dependabot security updates" is on in the repository's settings.
+# appears, once "Dependabot security updates" is on in the repository's settings. The prefixes matter to cliff.toml:
+# chore(deps) counts towards a release (the dependencies ship in the programs), ci(deps) does not.
 version: 2
 updates:
   - package-ecosystem: cargo

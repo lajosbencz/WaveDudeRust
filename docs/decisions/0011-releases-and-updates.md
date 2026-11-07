@@ -2,13 +2,16 @@
 
 Status: accepted, 2026-11-07
 
-- **Versions** from conventional commits by [release-plz](https://github.com/release-plz/release-plz)
-  (`release-plz.toml`): one version for the workspace, a release PR kept open on the default branch, and on its
-  merge the app tagged `v<version>` with a draft GitHub release. `wavedude-core` and `wavedude-export` are ready
-  for crates.io (the name `wave-core` is taken there, hence the `wavedude-` prefix on every crate) but not
-  published yet, the user's choice; `docs/release.md` says how to turn it on. The other crates are
-  `publish = false`.
-  release-plz runs on the workflow's `GITHUB_TOKEN`, no personal token: CI on each release PR it opens waits once for a
+- **Versions** from the conventional commits of the whole repository by [git-cliff](https://git-cliff.org)
+  (`cliff.toml`), in `release.yml`: one version for the workspace, a release PR kept open on the default branch
+  (rebuilt as one commit per push, the pattern of skim-rs/skim), and on its merge the commit tagged `v<version>`
+  with a draft GitHub release. Only commits that ship something count, dependency updates included, so a security
+  bump of `Cargo.lock` alone releases too. release-plz did this before and was dropped: it attributes commits to
+  crates by path, so commits outside the app crate (the engine, the lockfile) never reached the changelog or
+  triggered a release. `wavedude-core` and `wavedude-export` are ready for crates.io (the name `wave-core` is taken
+  there, hence the `wavedude-` prefix on every crate) but not published yet, the user's choice; `docs/release.md`
+  says what turning it on takes. The other crates are `publish = false`.
+  Everything runs on the workflow's `GITHUB_TOKEN`, no personal token: CI on each release PR waits once for a
   person's approval on the PR page. A GitHub App's token would start it without the click; not chosen, to keep the
   setup free of an app.
 - **Installers** by [cargo-packager](https://github.com/crabnebula-dev/cargo-packager) in the reusable
@@ -36,6 +39,8 @@ Status: accepted, 2026-11-07
   patch and minor updates, security ones included, merge on their own once CI passes
   (`dependabot-automerge.yml`), major ones wait for a person (telling a major security update apart needs
   fetch-metadata's alert lookup, which needs a personal token). Renovate was the alternative; Dependabot needs no app installed.
+  Cargo updates are titled `chore(deps)`, which git-cliff counts, so they lead to a release; actions updates are
+  `ci(deps)`, which it skips.
 - **Forks**: CI runs anywhere with no secrets. The release workflow is opt-in through the repository variable
   `RELEASE_ENABLED`; it uses the fork's own repository for tags, releases and the update feed, and the fork's
   own keys (crates.io publishing needs crate names the fork owns).

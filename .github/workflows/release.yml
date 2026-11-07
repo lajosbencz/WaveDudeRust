@@ -1,8 +1,12 @@
 # Releases (decision 0011, docs/release.md). Opt-in per repository: set the variable RELEASE_ENABLED to "true".
-# release-plz keeps a release PR open from the conventional commits on the default branch; merging it makes the
-# draft GitHub release v<version> (and publishes the crates release-plz.toml lets it). package.yml builds and attests
-# the packages without secrets, `sign` signs the update bundles without compiling anything, and `publish` attaches
-# everything with latest.json and SHA256SUMS before it publishes the release, which is immutable from then on.
+# A push to the default branch either releases or prepares the next release:
+# - the workspace version has no tag v<version> yet (a release pull request was merged): `release` tags the commit and
+#   drafts the release, package.yml builds and attests the packages without secrets, `sign` signs the update bundles
+#   without compiling anything, and `publish` attaches everything with latest.json and SHA256SUMS and publishes the
+#   release, which is immutable from then on;
+# - otherwise `release-pr` computes the next version, CHANGELOG.md and the notes with git-cliff (cliff.toml) from the
+#   commits since the last tag, read-only, and `release-pr-push` keeps one pull request "chore(release): v<next>"
+#   open, rebuilt as a single commit on the branch release-pr.
 name: Release
 
 on:
@@ -18,56 +22,158 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  RELEASE_BRANCH: release-pr
 
 jobs:
-  release-pr:
+  plan:
     if: vars.RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tagged: ${{ steps.plan.outputs.tagged }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: plan
+        run: |
+          version=$(sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"$/\1/p' Cargo.toml)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::no workspace version in Cargo.toml: '$version'"; exit 1; }
+          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then tagged=true; else tagged=false; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tagged=$tagged" >> "$GITHUB_OUTPUT"
+          echo "v$version tagged: $tagged"
+
+  release-pr:
+    needs: plan
+    if: needs.plan.outputs.tagged == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: git-cliff@2.14.2
+      - id: next
+        run: |
+          if [ "$(git cliff --unreleased --context | jq '[.[].commits[]] | length')" = 0 ]; then
+            echo "Nothing to release since the last tag."
+            exit 0
+          fi
+          version=$(git cliff --bumped-version)
+          version=${version#v}
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::bad next version '$version'"; exit 1; }
+          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+            echo "::error::the next version v$version is tagged already"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Release files
+        if: steps.next.outputs.version != ''
+        env:
+          VERSION: ${{ steps.next.outputs.version }}
+        run: |
+          sed -i -E '/^\[workspace\.package\]/,/^\[/ s/^version = "[^"]*"/version = "'"$VERSION"'"/' Cargo.toml
+          # Internal dependencies that name a version (crates.io needs one).
+          sed -i -E 's/^(wavedude-[a-z-]+ = \{ path = "[^"]+", version = ")[^"]*"/\1'"$VERSION"'"/' crates/*/Cargo.toml
+          cargo update --workspace
+          git cliff --tag "v$VERSION" -o CHANGELOG.md
+          out="$RUNNER_TEMP/release-pr"
+          mkdir "$out"
+          # The release's section without its heading: the pull request's body.
+          git cliff --unreleased --tag "v$VERSION" --strip all | tail -n +2 > "$out/notes.md"
+          git diff --binary > "$out/release.patch"
+          test -s "$out/release.patch"
+          git diff --stat
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.next.outputs.version != ''
+        with:
+          name: release-pr
+          path: ${{ runner.temp }}/release-pr
+          if-no-files-found: error
+
+  # Write access, but no repository code runs here: the patch is applied, checked and pushed.
+  release-pr-push:
+    needs: release-pr
+    if: needs.release-pr.outputs.version != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+    env:
+      VERSION: ${{ needs.release-pr.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          command: release-pr
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: release-pr
+          path: ${{ runner.temp }}/release-pr
+      - name: Release commit
+        run: |
+          git apply "$RUNNER_TEMP/release-pr/release.patch"
+          unexpected=$(git diff --name-only | grep -Ev '^(CHANGELOG\.md|Cargo\.lock|Cargo\.toml|crates/[^/]+/Cargo\.toml)$' || true)
+          [ -z "$unexpected" ] || { echo "::error::the release patch touches $unexpected"; exit 1; }
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -a -m "chore(release): v$VERSION"
+      - name: Pull request
+        run: |
+          if [ "$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)" != "$GITHUB_SHA" ]; then
+            echo "$GITHUB_REF_NAME moved on; the newer push's run prepares the release."
+            exit 0
+          fi
+          git push --force origin "HEAD:refs/heads/$RELEASE_BRANCH"
+          {
+            echo "Release v$VERSION. Rebuilt as one commit from $GITHUB_REF_NAME on every push; merging it (squash) tags"
+            echo "the commit and starts the build. CHANGELOG.md is generated, edits to it here are overwritten."
+            echo
+            cat "$RUNNER_TEMP/release-pr/notes.md"
+          } > "$RUNNER_TEMP/body.md"
+          pr=$(gh pr list --head "$RELEASE_BRANCH" --base "$GITHUB_REF_NAME" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --title "chore(release): v$VERSION" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create --head "$RELEASE_BRANCH" --base "$GITHUB_REF_NAME" --title "chore(release): v$VERSION" \
+              --body-file "$RUNNER_TEMP/body.md"
+          fi
 
   release:
-    if: vars.RELEASE_ENABLED == 'true'
+    needs: plan
+    if: needs.plan.outputs.tagged == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: read
-      # crates.io trusted publishing, once publishing is on (docs/release.md).
-      id-token: write
     outputs:
-      tag: ${{ steps.app.outputs.tag }}
-      version: ${{ steps.app.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ needs.plan.outputs.version }}
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
-      - id: plz
-        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
-        with:
-          command: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Only for a crate's first crates.io publish; later ones go through trusted publishing (id-token).
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      - id: app
-        env:
-          RELEASES: ${{ steps.plz.outputs.releases }}
+      - id: release
+        # Idempotent, so a failed run can be rerun.
         run: |
-          app=$(jq -c '.[] | select(.package_name == "wavedude-app")' <<< "${RELEASES:-[]}")
-          echo "tag=$(jq -r '.tag // empty' <<< "$app")" >> "$GITHUB_OUTPUT"
-          echo "version=$(jq -r '.version // empty' <<< "$app")" >> "$GITHUB_OUTPUT"
+          tag="v$VERSION"
+          awk -v head="## [$VERSION]" 'index($0, head) == 1 { found = 1; next } found && /^## \[/ { exit } found' \
+            CHANGELOG.md > notes.md
+          grep -q '[^[:space:]]' notes.md || echo "See CHANGELOG.md." > notes.md
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --silent 2> /dev/null; then
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" --silent
+          fi
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$tag" --notes-file notes.md
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   package:
     needs: release
