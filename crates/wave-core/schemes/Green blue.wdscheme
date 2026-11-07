@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Green blue" Kind="Field" Description="9-stop copy of scheme 'afmhot (5-stop)'">
+	<Stop At="0" Color="#FFFAFA" />
+	<Stop At="0.125" Color="#5960F6" />
+	<Stop At="0.25" Color="#2331DC" />
+	<Stop At="0.375" Color="#031BA4" />
+	<Stop At="0.5" Color="#000000" />
+	<Stop At="0.625" Color="#027F06" />
+	<Stop At="0.75" Color="#1BC52A" />
+	<Stop At="0.875" Color="#4EF556" />
+	<Stop At="1" Color="#FFFFFF" />
+</ColorScheme>

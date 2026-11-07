@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="743064765">
+	<Description>Featuring a coherent pulsed assembly of sources that emits a directional stream of wave pulses.</Description>
+	<Scene DampingEdge="-64" />
+	<Simulation Steps="3000" VisualizeEvery="1" TimeDecay="7" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="4" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="8" />
+		<Video Quality="70" />
+	</Display>
+	<Source Name="Source 1" X="402" Y="542" Amplitude="70" Mode="Pulsed" OffWidth="4">
+		<Array SizeX="21" SizeY="11" SpacingX="16" SpacingY="8" />
+	</Source>
+	<Probe Name="Probe 1" AX="1401" AY="540" BoxSize="ExtraLarge" BoxX="21" BoxY="21" />
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="Value" AX="1425" AY="540" BoxSize="ExtraLarge" BoxX="21" BoxY="23" />
+</Project>

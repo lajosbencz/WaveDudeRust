@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Ice and fire" Kind="Field" Description="embedded table in wave_visualizer.py">
+	<Stop At="0" Color="#B3E0D8" />
+	<Stop At="0.031496062992125984" Color="#A5D6D5" />
+	<Stop At="0.15354330708661418" Color="#4F9DCD" />
+	<Stop At="0.18110236220472442" Color="#428FCE" />
+	<Stop At="0.23228346456692914" Color="#3D72C9" />
+	<Stop At="0.2559055118110236" Color="#4164C0" />
+	<Stop At="0.2992125984251969" Color="#464FA2" />
+	<Stop At="0.3346456692913386" Color="#424282" />
+	<Stop At="0.40551181102362205" Color="#2E2D48" />
+	<Stop At="0.4448818897637795" Color="#252431" />
+	<Stop At="0.4921259842519685" Color="#221E22" />
+	<Stop At="0.5354330708661418" Color="#2A1E21" />
+	<Stop At="0.5826771653543307" Color="#412229" />
+	<Stop At="0.65748031496063" Color="#722B3C" />
+	<Stop At="0.7283464566929134" Color="#A63141" />
+	<Stop At="0.7716535433070866" Color="#C33D3B" />
+	<Stop At="0.8149606299212598" Color="#D95335" />
+	<Stop At="0.84251968503937" Color="#E36537" />
+	<Stop At="0.889763779527559" Color="#EE864B" />
+	<Stop At="0.9606299212598425" Color="#F9B886" />
+	<Stop At="1" Color="#FDCBA0" />
+</ColorScheme>

@@ -1,0 +1,103 @@
+//! The encoder threads of one export job, shared by its image sequences and movies, and the bounded task lanes
+//! through which each sink uses them.
+
+use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::{Arc, Mutex};
+
+use rayon::{ThreadPool, ThreadPoolBuilder};
+
+use crate::{ExportError, Result};
+
+/// At most this many encoder threads per job.
+const MAX_THREADS: usize = 16;
+
+/// A job's encoder pool, started at its first use; clones share it.
+#[derive(Clone, Default)]
+pub struct EncoderPool(Arc<Mutex<Option<Arc<ThreadPool>>>>);
+
+impl EncoderPool {
+	pub(crate) fn get(&self) -> Result<Arc<ThreadPool>> {
+		let mut slot = self.0.lock().unwrap_or_else(|e| e.into_inner());
+		if let Some(pool) = slot.as_ref() {
+			return Ok(pool.clone());
+		}
+		let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).min(MAX_THREADS);
+		let pool = ThreadPoolBuilder::new()
+			.num_threads(threads)
+			.thread_name(|i| format!("export encoder {i}"))
+			.build()
+			.map_err(|e| ExportError::Io(std::io::Error::other(e)))?;
+		tracing::debug!(threads, "export encoder pool started");
+		Ok(slot.insert(Arc::new(pool)).clone())
+	}
+}
+
+/// A finished task: its sequence number, its outcome and its buffer.
+pub(crate) struct Done<B> {
+	pub seq: usize,
+	pub result: Result<()>,
+	pub buf: B,
+}
+
+/// One sink's tasks on the pool, each owning a recycled buffer, at most `limit` buffers at a time.
+pub(crate) struct Lanes<B> {
+	pool: Arc<ThreadPool>,
+	tx: Sender<Done<B>>,
+	rx: Receiver<Done<B>>,
+	free: Vec<B>,
+	allocated: usize,
+	limit: usize,
+	submitted: usize,
+	in_flight: usize,
+}
+
+impl<B: Send + 'static> Lanes<B> {
+	pub fn new(pool: Arc<ThreadPool>) -> Self {
+		let limit = pool.current_num_threads() + 1;
+		let (tx, rx) = channel();
+		Self { pool, tx, rx, free: Vec::new(), allocated: 0, limit, submitted: 0, in_flight: 0 }
+	}
+
+	/// A free buffer, a new one from `make` while under the limit; None when every buffer is in flight.
+	pub fn free(&mut self, make: impl FnOnce() -> B) -> Option<B> {
+		self.free.pop().or_else(|| {
+			(self.allocated < self.limit).then(|| {
+				self.allocated += 1;
+				make()
+			})
+		})
+	}
+
+	pub fn recycle(&mut self, buf: B) {
+		self.free.push(buf);
+	}
+
+	pub fn submitted(&self) -> usize {
+		self.submitted
+	}
+
+	/// Runs `task` on the pool with `buf`; returns its sequence number.
+	pub fn spawn(&mut self, mut buf: B, task: impl FnOnce(&mut B) -> Result<()> + Send + 'static) -> usize {
+		let seq = self.submitted;
+		self.submitted += 1;
+		self.in_flight += 1;
+		let tx = self.tx.clone();
+		self.pool.spawn(move || {
+			let result = task(&mut buf);
+			// The receiver is gone only when the sink was dropped unfinished.
+			let _ = tx.send(Done { seq, result, buf });
+		});
+		seq
+	}
+
+	/// The next finished task; with `wait`, blocks while tasks are in flight. None when none is (or none has
+	/// finished, without `wait`).
+	pub fn next_done(&mut self, wait: bool) -> Option<Done<B>> {
+		if self.in_flight == 0 {
+			return None;
+		}
+		let done = if wait { self.rx.recv().ok() } else { self.rx.try_recv().ok() }?;
+		self.in_flight -= 1;
+		Some(done)
+	}
+}

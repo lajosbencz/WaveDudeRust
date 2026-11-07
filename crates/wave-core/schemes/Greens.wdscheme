@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Greens" Kind="Field" Description="matplotlib colormap Greens, sampled at 255 points">
+	<Stop At="0" Color="#F7FCF5" />
+	<Stop At="0.11811023622047244" Color="#E6F5E1" />
+	<Stop At="0.24015748031496062" Color="#C9EAC2" />
+	<Stop At="0.3661417322834646" Color="#A4DA9E" />
+	<Stop At="0.4763779527559055" Color="#7DC87D" />
+	<Stop At="0.6141732283464567" Color="#44AC5E" />
+	<Stop At="0.84251968503937" Color="#087432" />
+	<Stop At="0.8700787401574803" Color="#016E2C" />
+	<Stop At="1" Color="#00441B" />
+</ColorScheme>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="605215505">
+	<Description>Wave energy released at the center of a cavity at almost the resonance frequency.</Description>
+	<Scene Width="500" Height="500" DampingEdge="0" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="4.34" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="8.37" />
+	</Display>
+	<Source Name="Source 1" X="250" Y="250" Frequency="8" DetachAfter="462" />
+	<Rectangle Name="Mirror background" X="250" Y="250" Mirror="true" Length="500" Width="500" />
+	<Ellipse Name="Cavity" X="250" Y="250" RefractiveIndex="1" Length="400" Width="400" />
+	<Probe Name="Probe 1" Kind="Line" AX="49" AY="250" BX="448" BY="250" BoxSize="Tiny" BoxX="49" BoxY="400" />
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="Value" Kind="Line" AX="499" AY="252" BX="3" BY="249" BoxSize="Tiny" BoxX="499" BoxY="400" StartAfter="1000" />
+</Project>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="1745615521">
+	<Description>Continuous point source and high refractive index ball lens. Probe 2A-B features 1/r intensity decay from the source with some interference of some reflections superimposed on it.</Description>
+	<Scene Width="2880" DampingEdge="-90" />
+	<Simulation Steps="4000" />
+	<Display>
+		<Field ColorScheme="Default field" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" />
+		<Video Quality="70" />
+	</Display>
+	<Source Name="Source 1" X="139" Y="533" Frequency="40" />
+	<Ellipse Name="Ball lens" X="1449" Y="535" Coating="22" CoatingProfile="Graded" RefractiveIndex="2.55" Length="488" Width="488" Linked="true" />
+	<Probe Name="Probe 1" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="1638" AY="506" BX="1638" BY="573" BoxSize="ExtraLarge" BoxX="2162" BoxY="13" />
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="360" AY="528" BX="1102" BY="531" BoxSize="ExtraLarge" BoxX="2167" BoxY="675" StartAfter="1050" />
+</Project>

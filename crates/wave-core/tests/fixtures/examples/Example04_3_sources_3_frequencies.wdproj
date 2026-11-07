@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="1312957395">
+	<Description>Geometric wave pattern resulting from 3 sources with different frequencies</Description>
+	<Scene Width="1080" />
+	<Simulation TimeDecay="17.1" />
+	<Display>
+		<Field ColorScheme="Default field" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" />
+	</Display>
+	<Source Name="Source 1" X="525" Y="440" Frequency="95" />
+	<Source Name="Source 2" X="525" Y="500" />
+	<Source Name="Source 3" X="525" Y="560" Frequency="97" />
+	<Probe Name="Probe 1" Layer="Intensity" Measurement="Value" Kind="Line" AX="1024" AY="156" BX="1024" BY="851" BoxSize="Large" BoxX="34" BoxY="774" />
+</Project>

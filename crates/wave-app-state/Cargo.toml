@@ -1,0 +1,28 @@
+[package]
+name = "wave-app-state"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "WaveDude application state without a UI toolkit: document, history, selection, commands, live runs, settings, strings, log"
+
+[lib]
+name = "wave_app_state"
+
+[dependencies]
+wave-core = { path = "../wave-core", features = ["gpu"] }
+wave-export = { path = "../wave-export", default-features = false }
+anyhow.workspace = true
+directories = "6"
+quick-xml.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+sys-locale = "0.3"
+thiserror.workspace = true
+tracing.workspace = true
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["fmt", "registry", "std"] }
+
+[dev-dependencies]
+tempfile = "3"

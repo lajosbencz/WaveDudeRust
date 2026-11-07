@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="763629701">
+	<Description>Simple omnidirectional pulsed source with a smoothed square intensity profile, reflecting of simple mirror surface. A probe measures the intensity profile near the surface.</Description>
+	<Scene Width="960" Height="540" DampingEdge="-64" />
+	<Simulation TimeDecay="13" />
+	<Display ExportFrom="10">
+		<Field ColorScheme="Ice and fire" Brightness="70" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="50" />
+		<Video Quality="70" />
+	</Display>
+	<Source Name="Source 1" X="115" Y="245" Mode="Pulsed" PulseShape="SmoothedSquare" />
+	<Rectangle Name="Rectangle 1" X="553" Y="138" Angle="18" Mirror="true" Length="52" Width="238" />
+	<Probe Name="Probe 1" Layer="Intensity" Measurement="Value" Kind="Line" AX="435" AY="175" BX="530" BY="144" BoxX="552" BoxY="328" AutoScaleY="false" YMin="0" YMax="5E-05" />
+</Project>

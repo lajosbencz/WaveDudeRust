@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Inferno" Kind="Intensity" Description="matplotlib colormap inferno, sampled at 255 points">
+	<Stop At="0" Color="#000003" />
+	<Stop At="0.05905511811023622" Color="#090621" />
+	<Stop At="0.09448818897637795" Color="#140B36" />
+	<Stop At="0.16141732283464566" Color="#300A5C" />
+	<Stop At="0.20866141732283464" Color="#450A69" />
+	<Stop At="0.2637795275590551" Color="#5B116E" />
+	<Stop At="0.3858267716535433" Color="#8D2369" />
+	<Stop At="0.5354330708661418" Color="#C83E4B" />
+	<Stop At="0.6614173228346457" Color="#EC6726" />
+	<Stop At="0.7480314960629921" Color="#F98C09" />
+	<Stop At="0.7795275590551181" Color="#FB9B06" />
+	<Stop At="0.8031496062992126" Color="#FBA60B" />
+	<Stop At="0.8740157480314961" Color="#F8C931" />
+	<Stop At="0.905511811023622" Color="#F5D948" />
+	<Stop At="0.952755905511811" Color="#F1EE74" />
+	<Stop At="1" Color="#FCFEA4" />
+</ColorScheme>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="1529591424">
+	<Description>Featuring a large (450+ composite) source that creates both spatially- as well as temporally incoherent wave emission. The probes show that even though the intensity variations are large for an incoherent source, they eventually average out over time. Probe 2 shows the 1/r relationship. where r= distance to the source.</Description>
+	<Scene Width="1400" Height="800" DampingEdge="-64" />
+	<Simulation Steps="5000" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="50" BlackLevel="-0.05" Preview="false" />
+		<Intensity ColorScheme="Hot orange" />
+		<Video Quality="70" />
+	</Display>
+	<Source Name="Source 1" X="682" Y="574" Frequency="150" Mode="Pulsed" PulseWidth="8" OffWidth="80">
+		<Array SizeX="15" SizeY="15" SpacingX="6" SpacingY="6" RandomFrequency="30" RandomPhase="180" RandomOffWidth="998" RandomPosition="3" />
+	</Source>
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="810" AY="579" BX="1360" BY="583" BoxSize="Custom" BoxX="746" BoxY="5" BoxWidth="649" BoxHeight="312" StartAfter="1000" />
+	<Probe Name="Probe 1" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="124" AY="374" BX="123" BY="785" BoxSize="Custom" BoxY="5" BoxWidth="600" BoxHeight="312" />
+</Project>

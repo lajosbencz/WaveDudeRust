@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="1567109718">
+	<Description>Simulation of 3 different fibres:
+- Top: single mode fibre
+- Middle: narrow multi-mode fibre
+- Bottom: wide multi-mode fibre
+Includes the use of two probes, an A-B (line) field probe and a single point intensity probe.</Description>
+	<Scene DampingEdge="-64" RefractiveIndex="1.01" />
+	<Simulation Steps="6000" WaveSpeed="0.563" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="20" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="20" />
+		<Video Quality="80" />
+	</Display>
+	<Source Name="Source 1" X="135" Y="198" Mode="Pulsed" PulseShape="SmoothedSquare" PulseWidth="15" OffWidth="15" />
+	<Source Name="Source 2" X="147" Y="489" Mode="Pulsed" PulseShape="SmoothedSquare" PulseWidth="15" OffWidth="15" />
+	<Source Name="Source 3" X="155" Y="835" Mode="Pulsed" PulseShape="SmoothedSquare" PulseWidth="15" OffWidth="15" />
+	<Fiber Name="Single-mode fibre" X="880" Y="202" Coating="44" CoatingProfile="Graded" FrontCoated="false" SidesCoated="false" CoreDiameter="6" CladdingIndex="1.01" CladdingThickness="31" Absorption="252">
+		<Node X="-787" Y="0" OutX="80" />
+		<Node X="-543" Y="0" InX="-80" OutX="158" />
+		<Node X="-177" Y="128" InX="-86" OutX="162" />
+		<Node X="239" Y="-128" InX="-170" OutX="162" />
+		<Node X="603" Y="0" InX="-186" OutX="60" />
+		<Node X="800" Y="0" InX="-60" />
+	</Fiber>
+	<Fiber Name="Narrow multi-mode fibre" X="880" Y="490" Coating="44" CoatingProfile="Graded" FrontCoated="false" SidesCoated="false" CoreDiameter="16" CladdingIndex="1.01" CladdingThickness="31" Absorption="252">
+		<Node X="-787" Y="0" OutX="80" />
+		<Node X="-543" Y="0" InX="-80" OutX="158" />
+		<Node X="-177" Y="128" InX="-86" OutX="162" />
+		<Node X="239" Y="-128" InX="-170" OutX="162" />
+		<Node X="603" Y="0" InX="-186" OutX="60" />
+		<Node X="800" Y="0" InX="-60" />
+	</Fiber>
+	<Fiber Name="Wide multi-mode fibre" X="880" Y="837" Coating="44" CoatingProfile="Graded" FrontCoated="false" SidesCoated="false" CoreDiameter="52" CladdingIndex="1.01" CladdingThickness="51" Absorption="252" AbsorptionRamp="15">
+		<Node X="-787" Y="0" OutX="80" />
+		<Node X="-549" Y="0" InX="-80" OutX="158" />
+		<Node X="-182" Y="128" InX="-86" OutX="158" />
+		<Node X="234" Y="-128" InX="-166" OutX="158" />
+		<Node X="599" Y="0" InX="-182" OutX="60" />
+		<Node X="800" Y="0" InX="-60" />
+	</Fiber>
+	<Rectangle Name="Left absorber" X="0" Y="540" RefractiveIndex="1.01" Absorption="255" AbsorptionRamp="64" Length="260" Width="1208" />
+	<Rectangle Name="Output separator 1" X="1760" Y="340" RefractiveIndex="1.01" Absorption="183" AbsorptionRamp="25" Length="360" Width="82" />
+	<Rectangle Name="Output separator 2" X="1760" Y="648" RefractiveIndex="1.01" Absorption="183" AbsorptionRamp="25" Length="360" Width="82" />
+	<Probe Name="Probe 1" Kind="Line" AX="1658" AY="772" BX="1658" BY="903" BoxSize="ExtraLarge" BoxX="1226" BoxY="4" AutoScaleY="false" YMin="-0.035" YMax="0.035" Window="5000" />
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="Value" AX="1630" AY="199" BoxSize="ExtraLarge" BoxX="4" BoxY="2" YMin="0" YMax="0.002" Window="10000" />
+</Project>

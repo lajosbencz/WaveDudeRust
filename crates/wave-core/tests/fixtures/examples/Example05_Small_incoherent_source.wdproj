@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="1575669912">
+	<Description>Simulation features a small (5x5 composite) source using randomized "off"-time and source frequency.</Description>
+	<Scene DampingEdge="-64" />
+	<Simulation Steps="4000" WaveSpeed="0.563" />
+	<Display>
+		<Field ColorScheme="Orange symmetry" Brightness="50" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Purple rain" Brightness="50" />
+		<Video Quality="70" />
+	</Display>
+	<Source Name="Source 1" X="542" Y="532" Mode="Pulsed" PulseWidth="5" OffWidth="20" DetachAfter="2000">
+		<Array SizeX="5" SizeY="5" SpacingX="3" SpacingY="3" RandomFrequency="50" RandomPhase="90" RandomOffWidth="19" RandomPosition="1" />
+	</Source>
+	<Probe Name="Probe 1" AX="695" AY="530" BoxSize="ExtraLarge" BoxX="14" BoxY="14" AutoScaleY="false" YMin="-0.02" YMax="0.02" />
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="Value" Kind="Line" AX="693" AY="530" BX="1690" BY="530" BoxSize="ExtraLarge" BoxX="16" BoxY="13" AutoScaleY="false" YMin="0" YMax="0.0001" />
+</Project>

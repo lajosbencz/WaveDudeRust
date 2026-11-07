@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Flare inverted" Kind="Intensity" Description="matplotlib colormap flare, sampled at 255 points">
+	<Stop At="0" Color="#ECAF80" />
+	<Stop At="0.22440944881889763" Color="#E67760" />
+	<Stop At="0.2992125984251969" Color="#E1655B" />
+	<Stop At="0.41732283464566927" Color="#D34B60" />
+	<Stop At="0.48031496062992124" Color="#C64265" />
+	<Stop At="0.6692913385826772" Color="#993570" />
+	<Stop At="0.7795275590551181" Color="#7E2E70" />
+	<Stop At="1" Color="#4A2262" />
+</ColorScheme>

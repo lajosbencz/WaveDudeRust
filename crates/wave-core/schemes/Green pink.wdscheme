@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Green pink" Description="9-stop copy of scheme 'vanimo'">
+	<Stop At="0" Color="#FFCCFC" />
+	<Stop At="0.125" Color="#CD78BD" />
+	<Stop At="0.25" Color="#933F80" />
+	<Stop At="0.375" Color="#411B38" />
+	<Stop At="0.5" Color="#191512" />
+	<Stop At="0.625" Color="#293715" />
+	<Stop At="0.75" Color="#527126" />
+	<Stop At="0.875" Color="#7EAD45" />
+	<Stop At="1" Color="#BDFCA5" />
+</ColorScheme>

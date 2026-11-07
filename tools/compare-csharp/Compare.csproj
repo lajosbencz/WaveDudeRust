@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dumps the C# WaveDudeNext CPU engine's scene, fields and probes for `wave-cli compare`; needs the sibling checkout of graealex/WaveDudeNext -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>compare-csharp</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../../graealex/WaveDudeNext/WaveDudeNext/WaveDudeNext.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -8,3 +8,34 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/lajosbencz/WaveDudeRust"
 rust-version = "1.88"
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"
+half = { version = "2.7", features = ["bytemuck", "num-traits"] }
+bytemuck = { version = "1", features = ["derive"] }
+rayon = "1.10"
+wide = "0.7"
+rand_pcg = "0.9"
+rand_core = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+quick-xml = { version = "0.37", features = ["serialize"] }
+tracing = "0.1"
+insta = "1"
+proptest = "1"
+criterion = "0.5"
+png = "0.18"
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# The engines, painter and renderer are too slow unoptimised for the tests that run them (the CLI's gate
+# demonstrations took over 15 minutes); set 0 locally to step through them.
+[profile.dev.package.wave-core]
+opt-level = 2

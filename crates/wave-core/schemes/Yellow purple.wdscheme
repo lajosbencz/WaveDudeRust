@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Yellow purple" Kind="Field" Description="9-stop copy of scheme 'gist_earth'">
+	<Stop At="0" Color="#F76EFC" />
+	<Stop At="0.125" Color="#BE02BE" />
+	<Stop At="0.25" Color="#800286" />
+	<Stop At="0.375" Color="#4D024F" />
+	<Stop At="0.5" Color="#000000" />
+	<Stop At="0.625" Color="#6F6902" />
+	<Stop At="0.75" Color="#C1C203" />
+	<Stop At="0.875" Color="#FAF60F" />
+	<Stop At="1" Color="#FDF873" />
+</ColorScheme>

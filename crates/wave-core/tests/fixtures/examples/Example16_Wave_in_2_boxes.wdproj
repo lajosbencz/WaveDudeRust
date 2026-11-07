@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="1006156977">
+	<Description>Two boxes connected by a small pipe that allows for wave energy to flow from left to right (and back).</Description>
+	<Scene Width="1500" Height="900" DampingEdge="11" />
+	<Simulation Steps="10000" TimeDecay="5" />
+	<Display>
+		<Field ColorScheme="Yellow purple" Brightness="5" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="5" />
+		<Video Quality="70" />
+	</Display>
+	<Source Name="Vertical source" X="134" Y="355" Frequency="21" Amplitude="50" Mode="Pulsed" PulseShape="SmoothedSquare" PulseWidth="20" OffWidth="4000" DetachAfter="1300">
+		<Array SizeY="29" SpacingY="20" />
+	</Source>
+	<Source Name="Horizontal source" X="401" Y="627" Frequency="22" Amplitude="50" Mode="Pulsed" PulseShape="SmoothedSquare" PulseWidth="20" OffWidth="4000" DetachAfter="1300">
+		<Array SizeX="29" SpacingX="20" />
+	</Source>
+	<Rectangle Name="Mirror background" X="750" Y="450" Mirror="true" Length="1500" Width="900" />
+	<Rectangle Name="Left box" X="405" Y="353" RefractiveIndex="1" Length="600" Width="608" />
+	<Rectangle Name="Right box" X="1120" Y="355" RefractiveIndex="1" Length="600" Width="608" />
+	<Rectangle Name="Connection" X="761" Y="359" RefractiveIndex="1" Length="180" Width="62" />
+	<Probe Name="Log intensity distribution over boxes" Layer="Intensity" Measurement="Value" Kind="Line" AX="107" AY="357" BX="1414" BY="356" BoxX="576" BoxY="670" YScale="Logarithmic" />
+	<Probe Name="Field amplitude diagonal left box" Kind="Line" AX="105" AY="652" BX="699" BY="57" BoxX="563" BoxY="679" />
+</Project>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="314604207">
+	<Description>Resonant roundabout with two sources and two exits. If you change the phase of one of the sources by 180 degrees, waves will take the other exit.</Description>
+	<Scene Width="1080" DampingEdge="31" />
+	<Simulation Steps="5000" TimeDecay="1" />
+	<Display>
+		<Field ColorScheme="Yellow purple" Brightness="10" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="21" Preview="false" />
+	</Display>
+	<Source Name="Source 1" X="294" Y="137" Frequency="24.75" Amplitude="30" />
+	<Source Name="Source 2" X="798" Y="828" Frequency="24.75" Amplitude="30" />
+	<Rectangle Name="Reflective background" X="537" Y="547" Mirror="true" RefractiveIndex="1" AbsorptionRamp="1" Length="1080" Width="1080" />
+	<Rectangle Name="Ramp 1" X="377" Y="139" RefractiveIndex="1" Length="332" Width="38" />
+	<Rectangle Name="Ramp 2" X="705" Y="829" RefractiveIndex="1" Length="350" Width="36" />
+	<Ellipse Name="Transparent path circle" X="537" Y="485" RefractiveIndex="1" Length="736" Width="728" />
+	<Ellipse Name="Central reflector" X="536" Y="484" Mirror="true" Length="662" Width="652" />
+	<Rectangle Name="Wave stop 1" X="210" Y="139" Absorption="223" AbsorptionRamp="72" Length="108" Width="100" />
+	<Rectangle Name="Wave stop 2" X="879" Y="829" Absorption="223" AbsorptionRamp="72" Length="102" Width="98" />
+	<Rectangle Name="Exit 1" X="931" Y="278" Angle="116" RefractiveIndex="1" Length="54" Width="227" />
+	<Rectangle Name="Exit 2" X="147" Y="719" Angle="116" RefractiveIndex="1" Length="52" Width="235" />
+	<Rectangle Name="Wave stop 3" X="15" Y="774" Angle="-67" Absorption="255" AbsorptionRamp="60" Length="114" Width="100" />
+	<Rectangle Name="Wave stop 4" X="1057" Y="215" Angle="-63" Absorption="255" AbsorptionRamp="60" Length="114" Width="100" />
+	<Probe Name="Probe 1" Layer="Intensity" Measurement="Value" AX="112" AY="740" BoxX="24" BoxY="861" AutoScaleY="false" YMin="0" YMax="0.002" />
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="Value" AX="978" AY="256" BoxX="664" BoxY="862" AutoScaleY="false" YMin="0" YMax="0.002" />
+</Project>

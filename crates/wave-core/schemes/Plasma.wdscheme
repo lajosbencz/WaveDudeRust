@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Plasma" Kind="Intensity" Description="9-stop copy of scheme 'plasma'">
+	<Stop At="0" Color="#0C0786" />
+	<Stop At="0.125" Color="#4C02A1" />
+	<Stop At="0.25" Color="#7D03A7" />
+	<Stop At="0.375" Color="#A82296" />
+	<Stop At="0.5" Color="#CB4777" />
+	<Stop At="0.625" Color="#E56C5B" />
+	<Stop At="0.75" Color="#F89441" />
+	<Stop At="0.875" Color="#FDC328" />
+	<Stop At="1" Color="#EFF821" />
+</ColorScheme>

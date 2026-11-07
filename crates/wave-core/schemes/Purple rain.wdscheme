@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Purple rain" Kind="Intensity" Description="9-stop copy of scheme 'Gray scales'">
+	<Stop At="0" Color="#000000" />
+	<Stop At="0.125" Color="#1D012F" />
+	<Stop At="0.25" Color="#320151" />
+	<Stop At="0.375" Color="#410268" />
+	<Stop At="0.5" Color="#6B0280" />
+	<Stop At="0.625" Color="#84029E" />
+	<Stop At="0.75" Color="#A705C6" />
+	<Stop At="0.875" Color="#C915EC" />
+	<Stop At="1" Color="#E469FC" />
+</ColorScheme>

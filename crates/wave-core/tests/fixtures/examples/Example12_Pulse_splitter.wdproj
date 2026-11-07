@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="47427475">
+	<Description>Short coherent pulse divided by a beam splitter</Description>
+	<Scene Width="1400" Height="900" DampingEdge="32" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="8.53" BlackLevel="-0.05" Preview="false" />
+		<Intensity ColorScheme="Default intensity" Brightness="3.6" />
+	</Display>
+	<Source Name="Source 1" X="236" Y="477" DetachAfter="600">
+		<Array SizeX="15" SizeY="5" SpacingX="16" SpacingY="8" />
+	</Source>
+	<Rectangle Name="Reflective cavity" X="221" Y="474" Mirror="true" Length="358" Width="204" />
+	<Rectangle Name="Inner cavity" X="263" Y="476" RefractiveIndex="1" Length="300" Width="108" />
+	<Rectangle Name="Absorber 1" X="257" Y="427" RefractiveIndex="1" Absorption="255" Length="284" Width="20" />
+	<Rectangle Name="Absorber 2" X="257" Y="526" RefractiveIndex="1" Absorption="255" Length="284" Width="20" />
+	<Rectangle Name="Beam splitter" X="819" Y="477" Coating="10" Length="380" Width="380" />
+	<Rectangle Name="Splitting reflector (gap)" X="820" Y="477" Angle="45" RefractiveIndex="1" Length="533" Width="4" />
+</Project>

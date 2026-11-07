@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Copper" Kind="Intensity" Description="matplotlib colormap copper, sampled at 255 points">
+	<Stop At="0" Color="#000000" />
+	<Stop At="0.8031496062992126" Color="#FDA065" />
+	<Stop At="1" Color="#FFC77E" />
+</ColorScheme>

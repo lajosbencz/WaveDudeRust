@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="2016764161">
+	<Description>Collection of 800+ sources distributed over the full animation space and emitting short random wave pulses with a varying frequency.</Description>
+	<Scene DampingEdge="20" Edges="Reflective" />
+	<Simulation Steps="10000" TimeDecay="3" />
+	<Display>
+		<Field ColorScheme="Ice and fire" Brightness="60" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="60" />
+		<Video Quality="70" />
+	</Display>
+	<Source Name="Emitter lattice" X="937" Y="537" Frequency="90" Mode="Pulsed" PulseWidth="4" OffWidth="1500">
+		<Array SizeX="41" SizeY="21" SpacingX="50" SpacingY="50" RandomFrequency="30" RandomPhase="180" RandomOffWidth="1500" />
+	</Source>
+	<Probe Name="Probe 1" AX="458" AY="973" BoxX="4" BoxY="880" />
+	<Probe Name="Probe 2" AX="1703" AY="239" BoxX="1513" BoxY="7" />
+</Project>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="295456226">
+	<Description>A coherent and directional source directing its waves at a ball lens with a high refractive index. It demonstrates Gaussian beam and Airy disk profiles</Description>
+	<Scene Width="2880" DampingEdge="-64" />
+	<Simulation Steps="3800" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="6" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Inferno" Brightness="6" />
+		<Video Quality="70" />
+	</Display>
+	<Source Name="Source 2" X="258" Y="533" Frequency="50" Amplitude="30">
+		<Array SizeX="20" SizeY="7" SpacingX="32" SpacingY="16" />
+	</Source>
+	<Ellipse Name="Ball lens" X="1449" Y="535" Coating="22" CoatingProfile="Graded" RefractiveIndex="2.55" Length="488" Width="488" Linked="true" />
+	<Probe Name="Probe 1" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="938" AY="269" BX="938" BY="794" BoxSize="ExtraLarge" BoxX="12" BoxY="6" />
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="1625" AY="475" BX="1625" BY="599" BoxSize="ExtraLarge" BoxX="2130" BoxY="65" YMin="0" YMax="0.005" />
+</Project>

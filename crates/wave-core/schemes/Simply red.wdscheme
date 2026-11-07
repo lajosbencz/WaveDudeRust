@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Simply red" Kind="Intensity" Description="7-stop copy of scheme 'afmhot'">
+	<Stop At="0" Color="#000000" />
+	<Stop At="0.16535433070866143" Color="#7D0101" />
+	<Stop At="0.3228346456692913" Color="#A60000" />
+	<Stop At="0.5" Color="#EB1111" />
+	<Stop At="0.6456692913385826" Color="#F54949" />
+	<Stop At="0.8267716535433071" Color="#F78E8E" />
+	<Stop At="1" Color="#FCEDED" />
+</ColorScheme>

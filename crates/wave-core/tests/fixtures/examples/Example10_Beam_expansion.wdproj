@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="1645729814">
+	<Description>A beam expander using a GRIN lens and a large confocal lens.</Description>
+	<Scene Height="500" DampingEdge="16" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" OverlayGain="2.57" />
+		<Intensity ColorScheme="Default intensity" Brightness="1" OverlayGain="2.87" />
+	</Display>
+	<Source Name="Coherent directional source" X="281" Y="237">
+		<Array SizeX="15" SizeY="5" SpacingX="16" SpacingY="8" />
+	</Source>
+	<Rectangle Name="Absorber 1" X="276" Y="184" RefractiveIndex="1" Absorption="255" Length="400" Width="36" />
+	<Rectangle Name="Absorber 2" X="280" Y="288" RefractiveIndex="1" Absorption="255" Length="388" Width="30" />
+	<GrinLens Name="GRIN lens" X="523" Y="236" Coating="4" />
+	<Lens Name="Confocal lens" X="994" Y="232" Coating="10" Diameter="396" R1="486" R2="-486" Thickness="110" />
+	<Lens Name="Highly reflective mirror" X="145" Y="235" Mirror="true" Diameter="104" R1="14401" R2="-14401" Thickness="38" />
+	<Rectangle Name="Mount 1" X="994" Y="450" RefractiveIndex="1" Absorption="255" Length="30" />
+	<Rectangle Name="Mount 2" X="994" Y="22" RefractiveIndex="1" Absorption="255" Length="34" Width="54" />
+</Project>

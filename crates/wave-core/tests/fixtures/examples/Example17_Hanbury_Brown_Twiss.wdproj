@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="569738983">
+	<Description>Switch on the small source and the two telescopes will see highly correlated signals. Switch on the large source and the correlation disappears. This is a demonstration of the area of coherence as can be measured in the HBT experiment to measure the ratio between the diameter and the distance of a star.</Description>
+	<Scene Width="2400" Height="1000" DampingEdge="64" />
+	<Simulation Steps="5000" />
+	<Display>
+		<Field ColorScheme="Yellow purple" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Gray scales" />
+	</Display>
+	<Source Name="Large incoherent source" Enabled="false" X="146" Y="520" Mode="Pulsed" OffWidth="50">
+		<Array SizeX="11" SizeY="11" RandomFrequency="30" RandomPhase="179" RandomOffWidth="49" RandomPosition="4" />
+	</Source>
+	<Source Name="Small incoherent source" X="156" Y="422" Mode="Pulsed" OffWidth="50">
+		<Array SizeX="11" SizeY="11" SpacingX="2" SpacingY="2" RandomFrequency="30" RandomPhase="179" RandomOffWidth="49" RandomPosition="4" />
+	</Source>
+	<GrinLens Name="Telescope 1" X="1863" Y="368" Coating="8" Length="108" />
+	<GrinLens Name="Telescope 2" X="1864" Y="593" Coating="9" Length="108" />
+	<Probe Name="Probe 1" Layer="Intensity" Measurement="Value" AX="1923" AY="595" BoxX="1942" BoxY="499" />
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="Value" AX="1925" AY="367" BoxX="1942" BoxY="262" />
+</Project>

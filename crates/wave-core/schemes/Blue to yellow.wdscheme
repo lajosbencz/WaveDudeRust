@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Blue to yellow" Kind="Intensity" Description="matplotlib colormap gnuplot2, sampled at 255 points">
+	<Stop At="0" Color="#000000" />
+	<Stop At="0.25196850393700787" Color="#0000FF" />
+	<Stop At="0.421259842519685" Color="#8700FF" />
+	<Stop At="0.5708661417322834" Color="#FF4DB1" />
+	<Stop At="0.9173228346456693" Color="#FFFD01" />
+	<Stop At="0.9212598425196851" Color="#FFFF04" />
+	<Stop At="1" Color="#FFFFFF" />
+</ColorScheme>

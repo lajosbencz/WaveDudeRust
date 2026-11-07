@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Gray scales" Kind="Intensity" Description="9-stop copy of scheme 'Gray scales'">
+	<Stop At="0" Color="#000000" />
+	<Stop At="0.125" Color="#232323" />
+	<Stop At="0.25" Color="#626262" />
+	<Stop At="0.375" Color="#878686" />
+	<Stop At="0.5" Color="#9F9F9F" />
+	<Stop At="0.625" Color="#B9B9B9" />
+	<Stop At="0.75" Color="#D2D2D2" />
+	<Stop At="0.875" Color="#EBEBEB" />
+	<Stop At="1" Color="#FFFFFF" />
+</ColorScheme>

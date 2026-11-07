@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="1352239642">
+	<Description>The simulation shows the interference pattern created between two high-refractive index surfaces in close proximity of each other under a small angle.</Description>
+	<Scene DampingEdge="-64" />
+	<Simulation Steps="4000" TimeDecay="5" />
+	<Display>
+		<Field ColorScheme="Default field" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="5" />
+		<Video Quality="70" />
+	</Display>
+	<Source Name="Source 1" X="185" Y="549" Frequency="160" Mode="Pulsed" PulseWidth="30" OffWidth="2000">
+		<Array SizeX="15" SizeY="5" SpacingY="5" />
+	</Source>
+	<Rectangle Name="Left plate" X="1330" Y="592" Angle="-4.73" Coating="20" CoatingProfile="Graded" BackCoated="false" SidesCoated="false" RefractiveIndex="2.55" Length="61" Width="500" />
+	<Rectangle Name="Right plate" X="1411" Y="598" Angle="-7.39" Coating="20" CoatingProfile="Graded" FrontCoated="false" SidesCoated="false" RefractiveIndex="2.55" Width="500" />
+	<Probe Name="Probe 1" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="1612" AY="375" BX="1565" BY="860" BoxSize="Large" BoxX="1411" BoxY="9" StartAfter="1725" />
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="1070" AY="229" BX="986" BY="878" BoxSize="Large" BoxX="523" BoxY="14" StartAfter="1700" />
+</Project>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Turkey brown" Kind="Field" Description="9-stop copy of scheme 'Green_blown'">
+	<Stop At="0" Color="#3E2201" />
+	<Stop At="0.125" Color="#995D12" />
+	<Stop At="0.25" Color="#CFA154" />
+	<Stop At="0.375" Color="#EFDEB0" />
+	<Stop At="0.5" Color="#FFFFFF" />
+	<Stop At="0.625" Color="#B4E2DB" />
+	<Stop At="0.75" Color="#5AB1A7" />
+	<Stop At="0.875" Color="#0E726A" />
+	<Stop At="1" Color="#000908" />
+</ColorScheme>

@@ -1,0 +1,8 @@
+---
+source: crates/wave-core/tests/render.rs
+expression: "hex_picture(&render_indexed(&indexed, &Palette::new(&s, 0.0)), 6)"
+---
+000003 070419 120A31 230A4A 350A5F 480B6A
+59116E 6B176C 7D1D6B 8F2468 A02C60 B13357
+C23B4E D04743 DC5536 E96329 F1741B F7870D
+FB9B06 FAB016 F8C52D F5DB4C F1EE74 FBFDA0

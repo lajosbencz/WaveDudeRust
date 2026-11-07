@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="355814588">
+	<Description>Visualization of dispersion (wavelength-dependent propagation speed) when using a third order Laplacian. To remove the dispersion, check the 4th order Laplacian checkbox under "Simulation".</Description>
+	<Scene Width="1600" Height="800" />
+	<Simulation FourthOrderLaplacian="false" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="81" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Hot orange" Brightness="87" />
+	</Display>
+	<Source Name="Source frequency = 30" X="105" Y="116" Frequency="30" Amplitude="20" />
+	<Source Name="Source frequency = 60" X="105" Y="302" Frequency="60" Amplitude="40" />
+	<Source Name="Source frequency = 120" X="107" Y="492" Frequency="120" Amplitude="60" />
+	<Source Name="Source frequency = 240" X="108" Y="686" Frequency="240" Amplitude="80" />
+	<Rectangle Name="Separation boundary 1" X="800" Y="23" RefractiveIndex="1" Absorption="255" Length="1600" Width="48" />
+	<Rectangle Name="Separation boundary 2" X="802" Y="212" RefractiveIndex="1" Absorption="255" Length="1600" Width="48" />
+	<Rectangle Name="Separation boundary 3" X="800" Y="390" RefractiveIndex="1" Absorption="255" Length="1600" Width="48" />
+	<Rectangle Name="Separation boundary 4" X="802" Y="594" RefractiveIndex="1" Absorption="255" Length="1600" Width="48" />
+	<Rectangle Name="Separation boundary 5" X="799" Y="776" RefractiveIndex="1" Absorption="255" Length="1600" Width="48" />
+	<Rectangle Name="Back boundary" X="25" Y="399" RefractiveIndex="1" Absorption="255" Length="50" Width="800" />
+</Project>

@@ -1,0 +1,28 @@
+[package]
+name = "wave-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Headless checks, benches and scripted exports"
+
+[features]
+default = ["mp4"]
+mp4 = ["wave-export/mp4"]
+
+[[bin]]
+name = "wave-cli"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+ctrlc = "3.4"
+png.workspace = true
+tracing-subscriber = "0.3"
+wave-core = { path = "../wave-core" }
+wave-export = { path = "../wave-export", default-features = false, features = ["clap"] }
+
+[dev-dependencies]
+tempfile = "3"

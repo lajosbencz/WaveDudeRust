@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="717445987">
+	<Description>Demo of a Bragg reflector. The layer thickness of each layer should be 1/4 lambda divided by the refractive index of the specific layer. However, reflectivity is strongly angle dependent.</Description>
+	<Scene Width="1400" DampingEdge="64" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="8" BlackLevel="-0.05" Preview="false" />
+		<Intensity ColorScheme="Simply red" Brightness="8" />
+	</Display>
+	<Source Name="Directional" X="239" Y="699" Frequency="50" DetachAfter="300">
+		<Array SizeX="8" SizeY="4" SpacingX="32" SpacingY="16" />
+	</Source>
+	<BraggReflector Name="Bragg reflector 1" X="1093" Y="688" Angle="-23" Pairs="20" Thickness1="6" Thickness2="4" Width="772" />
+	<Rectangle Name="Total reflector" X="224" Y="696" Mirror="true" Length="358" Width="204" />
+	<Rectangle Name="Cavity RI = 1.0" X="266" Y="698" RefractiveIndex="1" Length="300" Width="108" />
+	<Rectangle Name="Absorbing side 1" X="260" Y="649" RefractiveIndex="1" Absorption="255" Length="284" Width="20" />
+	<Rectangle Name="Absorbing side 2" X="260" Y="748" RefractiveIndex="1" Absorption="255" Length="284" Width="20" />
+	<Probe Name="Inside Bragg reflector" Layer="Intensity" Measurement="Value" Kind="Line" AX="1013" AY="608" BX="1203" BY="689" BoxX="786" BoxY="880" />
+	<Probe Name="Outside Bragg reflector" Layer="Intensity" Measurement="Value" Kind="Line" AX="292" AY="159" BX="1008" BY="607" BoxX="808" BoxY="18" />
+</Project>

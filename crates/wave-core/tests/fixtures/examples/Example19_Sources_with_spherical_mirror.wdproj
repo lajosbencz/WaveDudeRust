@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="823923544">
+	<Description>Wave pulse emitted from the center of the curvature of a mirror, reflecting and then returning to the point of emission. Featuring timed probes. Notice that this simulation runs extremely fast on the GPU, when no video export is selected.</Description>
+	<Scene DampingEdge="-64" />
+	<Simulation Steps="3000" WaveSpeed="0.563" TimeDecay="8" />
+	<Display>
+		<Field ColorScheme="Yellow purple" Brightness="80" BlackLevel="-0.05" Preview="false" />
+		<Intensity ColorScheme="Copper" Brightness="80" />
+		<Video Quality="80" />
+	</Display>
+	<Source Name="Source 1" X="570" Y="544" Frequency="200" Mode="Pulsed" PulseWidth="70" OffWidth="100" DetachAfter="670" />
+	<Source Name="Source 2" X="570" Y="521" Frequency="200" Mode="Pulsed" PulseWidth="70" OffWidth="100" DetachAfter="670" />
+	<Lens Name="Spherical mirror" X="1713" Y="534" Mirror="true" Diameter="824" R1="-1129" R2="0" Thickness="50" />
+	<Probe Name="Probe 2" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="572" AY="483" BX="571" BY="579" BoxSize="ExtraLarge" BoxX="572" BoxY="730" StartAfter="2000" />
+</Project>

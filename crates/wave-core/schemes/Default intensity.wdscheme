@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Default intensity" Kind="Intensity" Description="9-stop copy of scheme 'rainbow_JV'">
+	<Stop At="0" Color="#000000" />
+	<Stop At="0.125" Color="#0E4494" />
+	<Stop At="0.25" Color="#21ACDE" />
+	<Stop At="0.375" Color="#20E0D3" />
+	<Stop At="0.5" Color="#21F63D" />
+	<Stop At="0.625" Color="#F2F94D" />
+	<Stop At="0.75" Color="#EAB348" />
+	<Stop At="0.875" Color="#F04D1D" />
+	<Stop At="1" Color="#FF0000" />
+</ColorScheme>

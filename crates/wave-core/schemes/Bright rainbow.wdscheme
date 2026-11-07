@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Bright rainbow" Kind="Intensity" Description="9-stop copy of scheme 'Bright_rainbow'">
+	<Stop At="0" Color="#000000" />
+	<Stop At="0.125" Color="#8005B6" />
+	<Stop At="0.25" Color="#3212E0" />
+	<Stop At="0.375" Color="#20A4E0" />
+	<Stop At="0.5" Color="#40F9BF" />
+	<Stop At="0.625" Color="#60F06D" />
+	<Stop At="0.75" Color="#CFEA48" />
+	<Stop At="0.875" Color="#FCA81D" />
+	<Stop At="1" Color="#FF0000" />
+</ColorScheme>

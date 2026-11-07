@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Rainbow" Kind="Intensity" Description="matplotlib colormap rainbow, sampled at 255 points">
+	<Stop At="0" Color="#7F00FF" />
+	<Stop At="0.11811023622047244" Color="#435CFA" />
+	<Stop At="0.25196850393700787" Color="#00B4EB" />
+	<Stop At="0.3464566929133858" Color="#30E1DA" />
+	<Stop At="0.39763779527559057" Color="#4AF1CF" />
+	<Stop At="0.4763779527559055" Color="#72FEBB" />
+	<Stop At="0.5354330708661418" Color="#92FDA9" />
+	<Stop At="0.6141732283464567" Color="#BAEE90" />
+	<Stop At="0.6692913385826772" Color="#D6DB7E" />
+	<Stop At="0.7480314960629921" Color="#FEB461" />
+	<Stop At="0.8346456692913385" Color="#FF7E41" />
+	<Stop At="1" Color="#FF0000" />
+</ColorScheme>

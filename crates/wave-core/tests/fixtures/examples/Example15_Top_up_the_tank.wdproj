@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="47427475">
+	<Description>Filling a tank with radiative energy</Description>
+	<Scene Width="1800" Height="900" DampingEdge="32" />
+	<Simulation Steps="5000" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="8.53" BlackLevel="-0.05" Preview="false" />
+		<Intensity ColorScheme="Default intensity" Brightness="3.6" />
+	</Display>
+	<Source Name="Coherent directional source" X="223" Y="227" DetachAfter="600">
+		<Array SizeX="15" SizeY="5" SpacingX="16" SpacingY="8" />
+	</Source>
+	<Rectangle Name="Reflective housing" X="208" Y="224" Mirror="true" Length="358" Width="204" />
+	<Rectangle Name="Inner cavity" X="250" Y="226" RefractiveIndex="1" Length="300" Width="108" />
+	<Rectangle Name="Reflective tank" X="1423" Y="656" Mirror="true" Length="260" Width="248" />
+	<Ellipse Name="Ball lens" X="840" Y="223" Coating="6" Length="148" Width="144" />
+	<Rectangle Name="Absorber pinhole 1" X="582" Y="353" RefractiveIndex="1" Absorption="255" Length="50" Width="184" />
+	<Rectangle Name="Absorber pinhole 2" X="576" Y="98" RefractiveIndex="1" Absorption="255" Length="50" Width="184" />
+	<Ellipse Name="Reflective cavity" X="1424" Y="655" RefractiveIndex="1" Length="192" Width="186" />
+	<Fiber Name="Fibre" X="1042" Y="223" CoreIndex="1.52" CoreDiameter="7" CladdingIndex="1.41" Ends="Round">
+		<Node X="-109" Y="-3" OutX="67" />
+		<Node X="150" Y="16" InX="-59" InY="-19" OutX="75" OutY="24" />
+		<Node X="305" Y="108" InX="-26" InY="-28" OutX="26" OutY="27" />
+		<Node X="375" Y="227" InX="-11" InY="-49" OutX="11" OutY="49" />
+		<Node X="382" Y="356" InX="-1" InY="-20" OutX="1" OutY="20" />
+		<Node X="382" Y="374" InX="-1" InY="-20" />
+	</Fiber>
+</Project>

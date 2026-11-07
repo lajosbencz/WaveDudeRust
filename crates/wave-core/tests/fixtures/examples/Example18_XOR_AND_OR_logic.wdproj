@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="729055211">
+	<Description>3 logical wave gates chained together</Description>
+	<Scene Width="1400" Height="401" DampingEdge="32" />
+	<Simulation Steps="4000" />
+	<Display>
+		<Field ColorScheme="Default field" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" />
+	</Display>
+	<Source Name="Source 1" X="123" Y="133" Frequency="50" />
+	<Source Name="Source 2" X="123" Y="193" Frequency="50" Amplitude="80.6" Mode="Pulsed" PulseShape="SmoothedSquare" />
+	<Source Name="Source 3" X="663" Y="72" Frequency="50" Amplitude="67.47" Mode="Pulsed" PulseShape="SmoothedSquare" OffWidth="20" />
+	<Rectangle Name="Absorber 1" X="90" Y="161" Absorption="255" AbsorptionRamp="77" Length="62" Width="172" />
+	<Rectangle Name="Absorber 2" X="1246" Y="166" Absorption="255" AbsorptionRamp="197" Length="88" Width="248" />
+	<Rectangle Name="Absorber 3" X="601" Y="73" Absorption="255" AbsorptionRamp="77" Length="124" />
+	<XorGate Name="XOR gate 1" X="396" Y="163" InputCoated="false" OutputCoated="false" />
+	<AndGate Name="AND gate 1" X="936" Y="103" InputCoated="false" />
+	<OrGate Name="OR gate 1" X="935" Y="223" InputCoated="false" />
+	<Probe Name="Probe 1" Layer="Intensity" Measurement="Value" Kind="Line" AX="1173" AY="301" BX="1175" BY="31" BoxSize="Small" BoxX="282" BoxY="232" StartAfter="1100" />
+</Project>

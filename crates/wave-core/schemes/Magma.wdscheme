@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Magma" Kind="Intensity" Description="matplotlib colormap magma, sampled at 255 points">
+	<Stop At="0" Color="#000003" />
+	<Stop At="0.027559055118110236" Color="#02020F" />
+	<Stop At="0.1141732283464567" Color="#180F3F" />
+	<Stop At="0.17716535433070865" Color="#301065" />
+	<Stop At="0.2283464566929134" Color="#470F77" />
+	<Stop At="0.2637795275590551" Color="#55137D" />
+	<Stop At="0.3858267716535433" Color="#852681" />
+	<Stop At="0.4566929133858268" Color="#A3307E" />
+	<Stop At="0.5708661417322834" Color="#D3426D" />
+	<Stop At="0.6535433070866141" Color="#EE5B5E" />
+	<Stop At="0.7362204724409449" Color="#FA805E" />
+	<Stop At="0.8307086614173228" Color="#FEAE76" />
+	<Stop At="1" Color="#FBFCBF" />
+</ColorScheme>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="1022494554">
+	<Description>One source and a zone plate</Description>
+	<Scene Height="700" DampingEdge="32" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="92" BlackLevel="-0.05" OverlayGain="3.02" />
+		<Intensity ColorScheme="Default intensity" Brightness="78" />
+	</Display>
+	<Source Name="Source 1" X="93" Y="331" />
+	<ZonePlate Name="Zone plate 1" X="934" Y="351" Mount="true" MountWidth="107" Diameter="600" Thickness="16" Coating="0" DesignFrequency="160" FocalLength="500" />
+	<Probe Name="Probe 1" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="1457" AY="505" BX="1458" BY="214" BoxX="1261" BoxY="2" />
+</Project>

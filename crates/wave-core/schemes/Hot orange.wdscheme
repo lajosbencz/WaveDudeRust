@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Hot orange" Kind="Intensity" Description="matplotlib colormap afmhot, sampled at 255 points">
+	<Stop At="0" Color="#000000" />
+	<Stop At="0.25196850393700787" Color="#800000" />
+	<Stop At="0.5" Color="#FF8000" />
+	<Stop At="0.7480314960629921" Color="#FFFE7F" />
+	<Stop At="1" Color="#FFFFFF" />
+</ColorScheme>

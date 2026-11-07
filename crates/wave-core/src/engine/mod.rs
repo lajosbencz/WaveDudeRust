@@ -1,0 +1,92 @@
+//! Wave engines: the scalar wave equation on a padded grid.
+//!
+//! One driver thread per engine, no internal locking. The CPU engine is the
+//! reference; the GPU engine must agree within the tolerance in docs/physics.md.
+
+pub mod capture;
+pub mod cpu;
+pub mod emitters;
+pub mod envelope;
+pub mod forcing;
+#[cfg(feature = "gpu")]
+pub mod gpu;
+pub mod green;
+pub mod pml;
+pub mod probes;
+pub mod stencil;
+pub mod substeps;
+pub mod types;
+
+pub use types::*;
+
+use std::sync::Arc;
+
+/// Why an engine call failed.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum EngineError {
+	#[cfg(feature = "gpu")]
+	#[error(transparent)]
+	Gpu(#[from] gpu::GpuError),
+}
+
+/// What every engine does. Positions and sizes are in grid cells, times in steps.
+///
+/// A GPU failure in a call that returns no `Result` is kept and returned by the next call that does.
+pub trait WaveEngine: Send {
+	/// "CPU" or "GPU", for logs.
+	fn name(&self) -> &'static str;
+	fn scene(&self) -> &SceneData;
+	fn options(&self) -> &EngineOptions;
+	/// Steps simulated so far.
+	fn time(&self) -> u32;
+	fn sub_steps(&self) -> u32;
+	/// Field, intensity, time and pulse states to zero.
+	fn reset(&mut self);
+	/// Replaces the object emitters (outside-canvas ones are dropped).
+	fn set_emitters(&mut self, emitters: &[Emitter]);
+	fn set_probes(&mut self, probes: &[ProbeCells]);
+	/// Swaps in another scene of the same grid, edges and image-source count; false = rebuild needed.
+	fn try_replace_scene(&mut self, scene: &Arc<SceneData>) -> bool;
+	fn advance_one_step(&mut self) -> Result<(), EngineError>;
+	/// Reads the probe cells after the last step.
+	fn sample_probes(&mut self, out: &mut ProbeReadings) -> Result<(), EngineError>;
+	/// Starts converting the canvas (rim excluded) after the last step into planes of `shape`, written into
+	/// `into`'s planes (reused when large enough). The engine may step on before [`finish_capture`]
+	/// (Self::finish_capture) collects it; at most two captures may be pending.
+	fn begin_capture(&mut self, shape: &FrameShape, into: Snapshot) -> Result<PendingCapture, EngineError>;
+	/// The frame of a capture this engine began.
+	fn finish_capture(&mut self, pending: PendingCapture) -> Result<Snapshot, EngineError>;
+	/// A capture now, into new planes.
+	fn capture_frame(&mut self, shape: &FrameShape) -> Result<Snapshot, EngineError> {
+		let pending = self.begin_capture(shape, Snapshot::new(*shape))?;
+		self.finish_capture(pending)
+	}
+	/// Host copies of the canvas field and blended intensity (tests, scratch).
+	fn prepare_frame(&mut self) -> Result<(Vec<f32>, Vec<f32>), EngineError>;
+}
+
+/// The engine for `scene`: the GPU's when `prefer_gpu` and one is available, else the CPU's (the fallback is
+/// logged).
+pub fn build(scene: Arc<SceneData>, options: EngineOptions, prefer_gpu: bool) -> Box<dyn WaveEngine> {
+	if prefer_gpu {
+		#[cfg(feature = "gpu")]
+		match gpu::GpuEngine::new(scene.clone(), options.clone()) {
+			Ok(e) => return Box::new(e),
+			Err(e) => tracing::warn!("the GPU engine is not available ({e}); the CPU engine runs instead"),
+		}
+		#[cfg(not(feature = "gpu"))]
+		tracing::warn!("the GPU engine is not built in; the CPU engine runs instead");
+	}
+	Box::new(cpu::CpuEngine::new(scene, options))
+}
+
+/// The GPU adapter's description, or why there is none; `None` when the GPU engine is not built in.
+pub fn gpu_adapter() -> Option<Result<String, String>> {
+	#[cfg(feature = "gpu")]
+	return Some(match gpu::context() {
+		Ok(c) => Ok(format!("{} ({:?}, {:?})", c.info.name, c.info.backend, c.info.device_type)),
+		Err(e) => Err(e.to_string()),
+	});
+	#[cfg(not(feature = "gpu"))]
+	None
+}

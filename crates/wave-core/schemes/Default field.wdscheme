@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ColorScheme Name="Default field" Kind="Field" Description="9-stop copy of scheme 'Default_Field'">
+	<Stop At="0" Color="#FDFDFD" />
+	<Stop At="0.125" Color="#3020F4" />
+	<Stop At="0.25" Color="#160BD2" />
+	<Stop At="0.375" Color="#1A18AA" />
+	<Stop At="0.5" Color="#000000" />
+	<Stop At="0.625" Color="#770202" />
+	<Stop At="0.75" Color="#BF1515" />
+	<Stop At="0.875" Color="#FB3B3B" />
+	<Stop At="1" Color="#FFFFFF" />
+</ColorScheme>

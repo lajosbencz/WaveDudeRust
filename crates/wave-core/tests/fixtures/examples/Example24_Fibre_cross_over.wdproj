@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="3" Seed="47427475">
+	<Description>Two single-mode fibres side by side, their cores a dozen pixels apart: the evanescent field of one reaches into the other, so light launched into fibre A crosses over into fibre B and back along the length, a directional coupler. The probe along A shows the beating, the cross-fibre probe the field across both cores. Switch source A off and B on to launch from the other fibre.</Description>
+	<Scene Height="800" DampingEdge="-115" RefractiveIndex="1.23" />
+	<Simulation Steps="5000" TimeDecay="33.1" />
+	<Display>
+		<Field ColorScheme="Ice and fire" Brightness="3.08" BlackLevel="-0.13" />
+		<Intensity ColorScheme="Default intensity" Brightness="3" />
+	</Display>
+	<Source Name="Source A" X="109" Y="149" Frequency="10" />
+	<Source Name="Source B" Enabled="false" X="107" Y="212" Frequency="10" />
+	<Rectangle Name="Reflector" X="102" Y="181" Mirror="true" Length="156" Width="310" />
+	<Rectangle Name="Absorber" X="1827" Y="181" Absorption="93" AbsorptionRamp="90" Length="110" Width="262" />
+	<Fiber Name="Fibre A" X="186" Y="150" CoreIndex="1.98" CoreDiameter="50" CladdingIndex="1.4" CladdingThickness="0">
+		<Node X="-109" Y="0" OutX="67" />
+		<Node X="1603" Y="1" InX="-55" OutX="67" />
+	</Fiber>
+	<Fiber Name="Fibre B" X="185" Y="213" CoreIndex="1.98" CoreDiameter="50" CladdingIndex="1.4" CladdingThickness="0">
+		<Node X="-109" Y="0" OutX="67" />
+		<Node X="1602" Y="4" InX="-55" OutX="67" />
+	</Fiber>
+	<Probe Name="Probe along A" Layer="Intensity" Measurement="Value" Kind="Line" AX="198" AY="151" BX="1747" BY="151" BoxSize="ExtraLarge" BoxX="237" BoxY="298" AutoScaleY="false" YMin="0" YMax="0.06" />
+	<Probe Name="Probe along B" Active="false" Layer="Intensity" Measurement="Value" Kind="Line" AX="196" AY="212" BX="1749" BY="215" BoxSize="ExtraLarge" BoxX="1005" BoxY="297" AutoScaleY="false" YMin="0" YMax="0.06" />
+	<Probe Name="Cross-fibre evanescent field" Layer="Intensity" Measurement="Value" Kind="Line" AX="1011" AY="92" BX="1010" BY="268" BoxSize="ExtraLarge" BoxX="1006" BoxY="296" />
+</Project>
