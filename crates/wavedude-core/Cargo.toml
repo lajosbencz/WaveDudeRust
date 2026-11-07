@@ -23,7 +23,7 @@ serde_json.workspace = true
 quick-xml.workspace = true
 tracing.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp"] }
-base64 = "0.22"
+base64 = "0.23"
 num-complex = { version = "0.4", default-features = false, features = ["std"] }
 zip = { version = "9.4", default-features = false, features = ["deflate"] }
 sysinfo = { version = "0.38", default-features = false, features = ["system"] }
