@@ -1,7 +1,7 @@
 //! The views driven headless: which memos a playback tick reaches, and every form's paths.
 
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use freya::prelude::*;
 use freya_testing::prelude::*;
@@ -39,13 +39,29 @@ fn shell(dir: &Path, prepare: impl FnOnce(&mut super::shared::App)) -> (TestingR
 	(test, handle.shared().expect("the root provided the state"))
 }
 
+/// Drives the shell until the scratch frame an open or edit requested has arrived, so later revisions are the test's own.
+fn settle(test: &mut TestingRunner, shared: &Shared) {
+	let deadline = Instant::now() + Duration::from_secs(60);
+	loop {
+		test.sync_and_update();
+		if !shared.peek(|a| a.live.scratch_pending()) {
+			// The arrival's revisions reach the memos on the next pass.
+			test.sync_and_update();
+			return;
+		}
+		assert!(Instant::now() < deadline, "the scratch frame arrives");
+		std::thread::sleep(Duration::from_millis(10));
+	}
+}
+
 #[test]
 fn a_playback_tick_reaches_neither_the_menus_nor_the_tree() {
 	let dir = tempfile::tempdir().unwrap();
 	let (mut test, shared) = shell(dir.path(), |app| {
+		app.settings.auto_rerun = false;
 		app.handle(AppEvent::Guarded(Guarded::Open(EXAMPLE.into())), Instant::now());
 	});
-	test.sync_and_update();
+	settle(&mut test, &shared);
 	let before = (runs("menu"), runs("tree"), runs("properties"), shared.revisions());
 	assert!(before.0 > 0 && before.1 > 0, "the memos ran once");
 	for frame in 1..6 {
