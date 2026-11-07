@@ -10,9 +10,9 @@ the tag `v<version>` and a draft release, the package
 jobs attach the installers, the Linux tarball, the update signatures and attestations, and the last job writes
 `latest.json` and publishes the release.
 
-Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened or updated with it starts its CI only
-after someone approves the waiting runs on the PR page ("Approve workflows to run"), so approve them before
-merging: the required checks come from those runs alone.
+Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened with it starts its CI only after someone
+approves the waiting runs on the PR page ("Approve workflows to run"); once approved, later updates of the same PR
+run without asking. The required checks come from those runs alone, so each new release PR needs that one approval.
 
 ## One-time setup of a repository
 

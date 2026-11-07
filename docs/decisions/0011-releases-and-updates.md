@@ -8,7 +8,7 @@ Status: accepted, 2026-11-07
   for crates.io (the name `wave-core` is taken there, hence the `wavedude-` prefix on every crate) but not
   published yet, the user's choice; `docs/release.md` says how to turn it on. The other crates are
   `publish = false`.
-  release-plz runs on the workflow's `GITHUB_TOKEN`, no personal token: CI on the release PR it opens waits for a
+  release-plz runs on the workflow's `GITHUB_TOKEN`, no personal token: CI on each release PR it opens waits once for a
   person's approval on the PR page. A GitHub App's token would start it without the click; not chosen, to keep the
   setup free of an app.
 - **Installers** by [cargo-packager](https://github.com/crabnebula-dev/cargo-packager) in the same workflow
