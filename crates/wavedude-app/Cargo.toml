@@ -1,0 +1,54 @@
+[package]
+name = "wavedude-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "WaveDude desktop application (Freya)"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "wavedude-app"
+path = "src/main.rs"
+
+[features]
+# OpenH264 compiled in instead of Cisco's downloaded binary: for development and tests, not for distributed builds.
+openh264-source = ["wavedude-export/openh264-source"]
+
+[dependencies]
+cargo-packager-updater = "0.2"
+semver = "1"
+freya = { version = "0.5", features = ["engine", "markdown"] }
+wavedude-widgets = { path = "../wavedude-widgets" }
+wavedude-export = { path = "../wavedude-export" }
+wavedude-app-state = { path = "../wavedude-app-state" }
+bytes = "1"
+rfd = "0.15"
+anyhow.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+tracing.workspace = true
+wavedude-core = { path = "../wavedude-core", features = ["gpu"] }
+
+[dev-dependencies]
+freya-testing = "0.5"
+tempfile = "3"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+
+# Installers (decision 0011): `cargo packager --release -p wavedude-app --formats <format>`.
+[package.metadata.packager]
+product-name = "WaveDude Rust"
+identifier = "io.github.lajosbencz.wavedude-rust"
+category = "Education"
+description = "A 2D wave simulator"
+authors = ["Lajos Bencz"]
+copyright = "Copyright (C) 2026 Lajos Bencz"
+license-file = "../../LICENSE.md"
+icons = ["assets/icon.png"]
+out-dir = "../../target/packages"
+before-packaging-command = "cargo build --release -p wavedude-app -p wavedude-cli"
+binaries = [{ path = "wavedude-app", main = true }, { path = "wavedude-cli" }]

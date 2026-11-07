@@ -5,6 +5,9 @@ on:
     branches: [master, main]
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -17,9 +20,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Linux packages for Skia and winit
         if: runner.os == 'Linux'
         run: |
@@ -28,27 +32,29 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --features wave-export/openh264-source,wave-cli/openh264-source -- -D warnings
+        run: cargo clippy --workspace --all-targets --features wavedude-export/openh264-source,wavedude-cli/openh264-source -- -D warnings
       - name: Test
-        run: cargo test --workspace --features wave-export/openh264-source,wave-cli/openh264-source
+        run: cargo test --workspace --features wavedude-export/openh264-source,wavedude-cli/openh264-source
       - name: Feature builds
         if: runner.os == 'Linux'
         run: |
           cargo build --workspace
-          cargo build -p wave-export --no-default-features
-          cargo build -p wave-core --no-default-features
+          cargo build -p wavedude-export --no-default-features
+          cargo build -p wavedude-core --no-default-features
 
   msrv:
     name: MSRV
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Toolchain at the workspace's rust-version
         run: |
           msrv=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
           rustup toolchain install "$msrv" --profile minimal
           echo "MSRV=$msrv" >> "$GITHUB_ENV"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Linux packages for Skia and winit
         run: |
           sudo apt-get update

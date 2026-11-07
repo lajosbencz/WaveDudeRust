@@ -10,7 +10,7 @@ Conventions:
   The port needs an equivalent icon for each.
 - Every entry is 23 px high, shows its shortcut text right-aligned.
 - A disabled entry greys text and icon.
-- Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`wave-app` `ui/menus.rs`);
+- Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`wavedude-app` `ui/menus.rs`);
   the ids in this document stay the entries' test ids.
 
 ## File
@@ -102,6 +102,8 @@ row in the tree (`30-properties-pane.md`).
 |---|---|---|---|---|
 | About WaveDude Next | A/U-umlaut/P/O | - | U+E946 | Modal About dialog. |
 | Manual | M/H/M/H | F1 | U+E736 | Opens the manual window, or brings it to the front. |
+| Check for updates (port; builds with the updater) | U/U/J/U | - | none | Looks for a newer release now (docs/ui/70, Updates). |
+| Check for updates at launch (port; builds with the updater) | L/S/L/S | - | none | checkable; setting `CheckForUpdates`. |
 
 ## Context menus
 

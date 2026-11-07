@@ -30,6 +30,31 @@ As for a project without a file; cancelled Save As aborts) / Don't save / Cancel
 
 See `60-live-editing-and-runs.md`.
 
+## Startup page (port)
+
+A modal at launch on the first start (no settings file), and later while one of its questions is unanswered
+(`UseOpenH264` absent and OpenH264 not compiled in; `CheckForUpdates` absent in a build with the updater). Every
+section shows; Continue (Enter or Esc) saves every answer. Title "Welcome to WaveDude Rust".
+1. "Preview quality": one sentence on what it changes; buttons "Low", "Standard", "High" (the first start's tiers:
+   Low = half resolution, every second frame, 8-bit; Standard = full, 8-bit; High = 16-bit, 16-bit dithering), each
+   setting the four drop-downs below: Preview resolution, Preview frames, Preview samples, Preview dithering (shown
+   with 16-bit samples only), the View menu's words. Pre-set from the settings, so the first start's choice for the
+   machine.
+2. "MP4 video export" (absent when OpenH264 is compiled in): why the codec is needed, Cisco's notice, the check box
+   "Use Cisco's OpenH264 codec (downloaded from Cisco at the first MP4 export)", clear unless already enabled.
+3. "Updates" (absent without the updater): check box "Look for a new version at each launch (Help menu)", ticked
+   unless already declined. Ticked, Continue starts the first check.
+
+## Updates (port, decision 0011)
+
+With "Check for updates at launch" on, a check runs in the background at each launch; Help > Check for updates
+runs one on demand. A newer release asks "WaveDude Rust x is available (this is y). Install it now?" where the
+updater can replace the program (Windows installer, macOS app, Linux AppImage); Yes downloads, verifies the
+signature and installs, then says the new version starts with the next launch (the Windows installer ends the
+program itself). A plain Linux binary gets "... Download it from <release page>" instead. A launch check says
+nothing when there is no update or the check fails (logged); an on-demand one says "WaveDude Rust is up to date."
+or "The update failed." with the reason.
+
 ## Export Save dialog
 
 Native save dialog (port: platform file dialog, e.g. rfd).
@@ -43,7 +68,7 @@ Native save dialog (port: platform file dialog, e.g. rfd).
 - The chosen filter is the format (the two MOV formats share `.mov`); the extension follows it.
 - Port: MP4 shows "OpenH264 Video Codec provided by Cisco Systems, Inc." and the check box "Use Cisco's OpenH264
   codec (downloaded from Cisco at the first MP4 export)" (setting `UseOpenH264`); OK is disabled while it is
-  clear. The download runs on the export's worker before the first frame; a failure ends the export with its reason
+  clear. Once downloaded, a "Delete the downloaded codec" button follows; the choice stays. The download runs on the export's worker before the first frame; a failure ends the export with its reason
   in the error box. A build with OpenH264 compiled in shows neither (decision 0005).
 - The last filter index is remembered (`ExportFilterIndex`); a remembered video means PNG in the still dialog.
 - Start folder rule, per kind (run export, still, probe data) and per project file: the first export after a

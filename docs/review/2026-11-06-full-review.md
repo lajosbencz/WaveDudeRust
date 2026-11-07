@@ -2,8 +2,8 @@
 
 Scope: the whole workspace, reviewed for physical correctness, idiomatic and
 DRY Rust, modularity, future-proofing and performance. Four reviewers read
-one slice each (physics; wave-core code; wave-export and wave-cli;
-wave-widgets and wave-app). Claims below were verified by reading the code
+one slice each (physics; wavedude-core code; wavedude-export and wavedude-cli;
+wavedude-widgets and wavedude-app). Claims below were verified by reading the code
 and, where it says so, by running it. Baseline: clippy clean at default
 lints, 433 tests passing, fmt clean.
 
@@ -32,7 +32,7 @@ steps in a mirror cavity (was 1e13); diagonal mirror leak 0 (was 2.5 %);
 full-HD capture 0.20 ms on the GPU (was 0.48) and 0.9 ms on the CPU (was
 1.3); MP4 export 3.2 ms a frame (was 12), MOV PNG 3.2 (was 36); idle app
 CPU 1.15 % (was 1.9 %); playback unchanged at 30 fps, 1.3 ms a frame. The
-state layer is now the `wave-app-state` crate with no UI dependency. The
+state layer is now the `wavedude-app-state` crate with no UI dependency. The
 workspace is clean under fmt, clippy with warnings denied, and all tests,
 which now finish in about 90 s.
 
@@ -83,15 +83,15 @@ P1, performance and API
 
 P2, structure
 
-- [x] X-1 Export orchestration into wave-export (`ExportPlan`, `build_job`).
-- [x] X-4 One engine factory in wave-core, one `EngineArgs` in the CLI.
+- [x] X-1 Export orchestration into wavedude-export (`ExportPlan`, `build_job`).
+- [x] X-4 One engine factory in wavedude-core, one `EngineArgs` in the CLI.
 - [x] C-5 `.wdr` migration through `serde_json::Value`; explicit renames;
       tolerate unknown part kinds.
 - [x] C-4 One declarative field table for the `.wdproj` reader, writer, DTD
       and range keys.
 - [x] A-9/A-10 Property forms keyed on `PartKind`, paths derived; a test that
       every form row resolves.
-- [x] A-19 Move `wave-app/src/state` into its own crate.
+- [x] A-19 Move `wavedude-app/src/state` into its own crate.
 
 P3, documentation debt
 
@@ -176,7 +176,7 @@ Green's function is that of the discrete operator and time scheme including
 temporal dispersion; the n^2 area average is the TM case of Farjadpour
 2006, right for this equation; Mur at d = 1 reduces to Mur 1981.
 
-## wave-core (C)
+## wavedude-core (C)
 
 C-1 PERF/DESIGN. engine/mod.rs:40, run/simulation.rs:322, gpu/mod.rs:435,
 965. The trait has only a synchronous `capture_frame`; the GPU's pipelined
@@ -219,7 +219,7 @@ blend `(s1*0.5+s2*0.5)*scale` appears four times. Fix:
 C-7 PERF/API. engine/types.rs, scratch.rs:200. `RunSpec.scene` is an Arc,
 but both constructors take `SceneData` by value and `try_replace_scene`
 clones: every build deep-copies c2 and d (tens of MB at full HD). A failing
-`GpuEngine::new` consumes the scene, so wave-app (live.rs:865) clones it
+`GpuEngine::new` consumes the scene, so wavedude-app (live.rs:865) clones it
 first for the CPU fallback. Fix: engines hold `Arc<SceneData>`.
 
 C-8 FUTURE. gpu/context.rs:27-33, gpu/mod.rs:1245-1258. Device loss and
@@ -246,7 +246,7 @@ C-12 PERF. compose.rs:46-58. `SceneKey::of` hashes the whole image and
 serialises every part to JSON per call. Fix: derive Hash on parts with a
 float-bits newtype; image hash computed once when `image_data` changes.
 
-C-13 NOTE. Cargo.toml: `wide` and `anyhow` are unused in wave-core.
+C-13 NOTE. Cargo.toml: `wide` and `anyhow` are unused in wavedude-core.
 
 C-14 PERF. cpu.rs:150-152. `s1`, `s2` allocated full-grid even without
 intensity tracking, and the passes zip over them. Fix: allocate only when
@@ -272,21 +272,21 @@ conversion; the CPU stencil on row slices; FrameStore's single-writer
 many-reader design with testable `Budget`; thiserror at the boundary;
 bounded colour-table caches; a clean `gpu` feature gate.
 
-## wave-export and wave-cli (X)
+## wavedude-export and wavedude-cli (X)
 
-X-1 DRY/DESIGN. wave-cli/export.rs:120-193 and wave-app export_dialog.rs:
+X-1 DRY/DESIGN. wavedude-cli/export.rs:120-193 and wavedude-app export_dialog.rs:
 361-421 both orchestrate an export (range, schemes, looks, paths, sinks,
 overlays, job) and already differ: the app always composes the scene and
 filters overlays on `wants_halves`; the CLI composes only when needed and
 uses the default SchemeStore. Fix: `ExportPlan` and `build_job` in
-wave-export.
+wavedude-export.
 
-X-2 BUG. wave-cli/png_out.rs:9-13, 20-24. `write_header()?.write_image_data()`
+X-2 BUG. wavedude-cli/png_out.rs:9-13, 20-24. `write_header()?.write_image_data()`
 never calls `finish()`; IEND and the flush happen in Drop where errors are
 lost, so a full disk gives a truncated PNG and exit 0. The app's `write_csv`
 (export_dialog.rs:356) never flushes its BufWriter either.
 
-X-3 BUG. wave-cli/export.rs:180-191 and the avi/mov/mp4/mpeg1 sinks. Sinks
+X-3 BUG. wavedude-cli/export.rs:180-191 and the avi/mov/mp4/mpeg1 sinks. Sinks
 open in a loop with `?`; a later failure drops an earlier sink unfinished
 (only ImageSink has Drop), leaving zeroed headers or no moov. Nothing deletes
 partial outputs on Failed or Cancelled; the CLI passes a constant false
@@ -294,11 +294,11 @@ cancel flag, so Ctrl+C kills the process mid-container. Fix: open all sinks
 first, finish and remove on error, a ctrlc handler on the cancel flag, the
 report listing paths written.
 
-X-4 DESIGN/DRY. run.rs:65-80, bench.rs:150-165, wave-app live.rs:863. The
-engine factory exists three times; `wave-cli --gpu` fails at runtime unless
-wave-cli's own `gpu` feature is on; `run` and `probes` hardcode CPU while
+X-4 DESIGN/DRY. run.rs:65-80, bench.rs:150-165, wavedude-app live.rs:863. The
+engine factory exists three times; `wavedude-cli --gpu` fails at runtime unless
+wavedude-cli's own `gpu` feature is on; `run` and `probes` hardcode CPU while
 export, bench, truth and gates take the flag. Fix: `engine::build(scene,
-opts, prefer_gpu)` in wave-core; one `#[derive(Args)] EngineArgs` flattened
+opts, prefer_gpu)` in wavedude-core; one `#[derive(Args)] EngineArgs` flattened
 into every running subcommand.
 
 X-5 PERF. job.rs:375-399, mov.rs:596. Copy, render, overlays and encode run
@@ -326,16 +326,16 @@ never overlaps the readback (add `wait_for(frame)`); `with_layer` on a
 spilled frame allocates then copies (see C-11); the doc says f16
 little-endian but the code is native-endian.
 
-X-9 DRY. wave-cli/export.rs:20-64 mirrors `ExportFormat` and `ExportLayers`
+X-9 DRY. wavedude-cli/export.rs:20-64 mirrors `ExportFormat` and `ExportLayers`
 in clap enums. Fix: `cfg_attr(feature = "clap", derive(ValueEnum))` on the
-wave-export enums.
+wavedude-export enums.
 
 X-10 DRY. The wait-and-match on RunState repeats in export.rs:145, run.rs:106
 and 186 (ignores Cancelled), truth.rs:166. Fix: `SimulationRun::
 wait_completed()`. run.rs:171 builds `Colouring` per frame per layer.
 
-X-11 FUTURE, CI. `rust-version = "1.87"` but wave-app uses let-chains
-(1.88). CI never builds `wave-export --no-default-features` nor `wave-cli
+X-11 FUTURE, CI. `rust-version = "1.87"` but wavedude-app uses let-chains
+(1.88). CI never builds `wavedude-export --no-default-features` nor `wavedude-cli
 --features gpu`; no MSRV job.
 
 X-12 FUTURE, deps. Two `png` versions (0.17 in the CLI, 0.18 in export). The
@@ -361,7 +361,7 @@ halves and one RGBA buffer; containers and the MPEG-1 encoder are correct
 and parallel per slice; `ExportFormat` is the one source of extensions and
 capabilities; the CLI's tests decode what they export.
 
-## wave-widgets and wave-app (A)
+## wavedude-widgets and wavedude-app (A)
 
 A-1 PERF. preview/mod.rs:248-261, 281-285, polled every 4 ms (:537).
 `SceneInputs::of` clones the whole `Scene`, image bytes included, and all
@@ -458,7 +458,7 @@ loop always run, about 310 wakeups a second idle; the tick loop has an idle
 divisor, the poll does not.
 
 A-19 FUTURE. `state/**` is Freya-free but lives in the UI crate, so it
-cannot be built or reused without Freya and rfd. Fix: a `wave-app-state`
+cannot be built or reused without Freya and rfd. Fix: a `wavedude-app-state`
 crate.
 
 Checked and fine: the four language tables have identical key sets (a test

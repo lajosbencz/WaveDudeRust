@@ -25,32 +25,43 @@ the native format is `.wdr`, a zip with JSON and the scene image.
 
 | Crate | What it holds |
 |---|---|
-| `wave-core` | model, file formats, scene painter with every part kind, CPU and wgpu engines, frame store, runs, renderer |
-| `wave-export` | PNG and JPEG sequences, MPEG-1, AVI, QuickTime (Animation and PNG), H.264 MP4, OpenEXR, probe CSV, burned-in overlays |
-| `wave-widgets` | the Freya widgets: dock host, tree, property grid, number box, timeline, pictures, graph boxes, colour tools |
-| `wave-app-state` | the application state without a UI toolkit: document, history, selection, commands, clipboard, live runs, playback, settings, strings, log |
-| `wave-app` | the desktop application: thin Freya views over `wave-app-state` |
-| `wave-cli` | headless checks, benches, dispersion tables, scripted runs and exports |
+| `wavedude-core` | model, file formats, scene painter with every part kind, CPU and wgpu engines, frame store, runs, renderer |
+| `wavedude-export` | PNG and JPEG sequences, MPEG-1, AVI, QuickTime (Animation and PNG), H.264 MP4, OpenEXR, probe CSV, burned-in overlays |
+| `wavedude-widgets` | the Freya widgets: dock host, tree, property grid, number box, timeline, pictures, graph boxes, colour tools |
+| `wavedude-app-state` | the application state without a UI toolkit: document, history, selection, commands, clipboard, live runs, playback, settings, strings, log |
+| `wavedude-app` | the desktop application: thin Freya views over `wavedude-app-state` |
+| `wavedude-cli` | headless checks, benches, dispersion tables, scripted runs and exports |
 
 ```sh
-cargo test --workspace --features wave-export/openh264-source,wave-cli/openh264-source   # GPU tests skip without an adapter
-cargo run -p wave-cli --release -- bench --gpu
-cargo run -p wave-cli --release -- dispersion
-cargo run -p wave-cli --release -- openh264 enable    # downloads Cisco's OpenH264 for MP4
-cargo run -p wave-cli --release -- export project.wdproj --out out.mp4 --layers both
-cargo run -p wave-app --release -- project.wdr
+cargo test --workspace --features wavedude-export/openh264-source,wavedude-cli/openh264-source   # GPU tests skip without an adapter
+cargo run -p wavedude-cli --release -- bench --gpu
+cargo run -p wavedude-cli --release -- dispersion
+cargo run -p wavedude-cli --release -- openh264 enable    # downloads Cisco's OpenH264 for MP4
+cargo run -p wavedude-cli --release -- export project.wdproj --out out.mp4 --layers both
+cargo run -p wavedude-app --release -- project.wdr
 ```
+
+## Releases
+
+Installers for Windows (NSIS), macOS (app and DMG, Apple Silicon and Intel)
+and Linux (AppImage, and a tarball of the two programs) are on the GitHub
+releases page, unsigned by Apple and Microsoft, so Gatekeeper and SmartScreen
+warn at the first start; each file carries a build provenance attestation
+(`gh attestation verify <file> --repo <owner>/<repo>`). The installed program
+updates itself from the releases when the user agrees. How a release is made:
+`docs/release.md`
+(decision 0011).
 
 ## Dependencies
 
 MP4 export uses Cisco's prebuilt OpenH264, which Cisco's H.264 patent licence
 covers only when it is downloaded from Cisco to the user's device. Release
-builds therefore carry no H.264 encoder: the app downloads it at the first MP4
-export once "Use Cisco's OpenH264 codec" is ticked in the export dialog, the
-CLI on `wave-cli openh264 enable` (decision 0005). The `openh264-source`
+builds therefore carry no H.264 encoder: the app's startup page asks whether
+to enable it and the app downloads it at the first MP4 export, the CLI on
+`wavedude-cli openh264 enable`; both share the choice (decision 0005). The `openh264-source`
 feature compiles OpenH264 in for development and tests; a build made with it
-must not be distributed without an H.264 patent licence. `wave-export` and
-`wave-cli` build without MP4 through `--no-default-features`.
+must not be distributed without an H.264 patent licence. `wavedude-export` and
+`wavedude-cli` build without MP4 through `--no-default-features`.
 
 `docs/spec` is what the core must do, `docs/ui` what the application must do,
 `docs/decisions` why, `docs/measurements.md` how fast.

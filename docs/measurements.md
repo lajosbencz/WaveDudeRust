@@ -6,7 +6,7 @@ driver).
 
 ## Engine against WaveDude Next, same machine
 
-2026-11-07. `wave-cli bench --gpu --steps 2000` against the C# library's own
+2026-11-07. `wavedude-cli bench --gpu --steps 2000` against the C# library's own
 engines through `tools/compare-csharp/run.sh bench 1920 1080 2000`: a 1920x1080
 canvas, a 32-cell rim outside, open edges, one source at the centre, intensity
 tracked; with captures, both planes as f16 every 2 steps, pipelined. Best of
@@ -73,7 +73,7 @@ each capture into a buffer the frame store hands out (its prepared memory frame,
 or a recycled one for the spill file) and collects it after the next has begun,
 so the GPU's conversion and readback overlap the steps between captures, and a
 frame in memory is neither allocated per capture nor copied by the writer.
-`wave-cli bench --gpu` (1920x1080, rim 32, both planes as f16 every 2 steps,
+`wavedude-cli bench --gpu` (1920x1080, rim 32, both planes as f16 every 2 steps,
 200 steps), ms a capture over the steps alone; before: a synchronous capture
 into new planes per frame; after: the run's pipelined capture with two reused
 buffers. Two runs each, machine quiet.
@@ -90,7 +90,7 @@ GPU two steps plus a capture: 0.402 to 0.406 ms before, 0.255 to 0.258 after
 write of a memory frame is now a move; the copy it made (0.86 to 0.94 ms a
 full-HD frame) is gone.
 
-Export pipeline (review X-5 to X-8), `wave-cli export` of Example02 (1920x1080),
+Export pipeline (review X-5 to X-8), `wavedude-cli export` of Example02 (1920x1080),
 `--steps 1000 --from 600 --to 1000 --markers`, 200 field frames, CPU engine,
 release build, the job's time per frame. Before: the run first, then the
 export, every sink on the job's thread (MOV samples encoded there too). After:

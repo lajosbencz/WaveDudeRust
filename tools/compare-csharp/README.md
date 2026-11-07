@@ -1,6 +1,6 @@
 # compare-csharp
 
-Dumps the C# WaveDudeNext CPU engine's composed scene, fields and probe series for `wave-cli compare`.
+Dumps the C# WaveDudeNext CPU engine's composed scene, fields and probe series for `wavedude-cli compare`.
 Needs the sibling checkout `../../../../graealex/WaveDudeNext` (github.com/graealex/WaveDudeNext) and the .NET 10 SDK.
 
     ./run.sh <project.wdproj> <out-dir> --steps N [--every K] [--probe-steps]
@@ -11,5 +11,5 @@ row-major) every K steps, and `probes.csv` (each active probe's mean over its ce
 
     ./run.sh bench [w h] [steps]
 
-Times both C# engines on the scene and pattern of `wave-cli bench` (1920x1080 by default, rim 32 outside, open
+Times both C# engines on the scene and pattern of `wavedude-cli bench` (1920x1080 by default, rim 32 outside, open
 edges, one source at the centre, both planes captured as halves every 2 steps).

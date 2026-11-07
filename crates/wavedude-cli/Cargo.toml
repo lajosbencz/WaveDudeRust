@@ -1,0 +1,32 @@
+[package]
+name = "wavedude-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Headless checks, benches and scripted exports"
+
+[features]
+default = ["mp4"]
+mp4 = ["wavedude-export/mp4", "dep:wavedude-app-state"]
+# OpenH264 compiled in instead of Cisco's downloaded binary: for development and tests, not for distributed builds.
+openh264-source = ["mp4", "wavedude-export/openh264-source"]
+
+[[bin]]
+name = "wavedude-cli"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+ctrlc = "3.4"
+png.workspace = true
+tracing-subscriber = "0.3"
+wavedude-core = { path = "../wavedude-core" }
+wavedude-export = { path = "../wavedude-export", default-features = false, features = ["clap"] }
+wavedude-app-state = { path = "../wavedude-app-state", optional = true }
+
+[dev-dependencies]
+tempfile = "3"

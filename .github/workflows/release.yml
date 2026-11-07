@@ -1,0 +1,191 @@
+# Releases (decision 0011, docs/release.md). Opt-in per repository: set the variable RELEASE_ENABLED to "true".
+# release-plz keeps a release PR open from the conventional commits on the default branch; merging it makes the
+# draft GitHub release v<version> (and publishes the crates release-plz.toml lets it), to which the
+# installers, the Linux tarball, their attestations and the updater's latest.json are attached before it is
+# published.
+name: Release
+
+on:
+  push:
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  LINUX_PACKAGES: libgl1-mesa-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev
+
+jobs:
+  release-pr:
+    if: vars.RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+        with:
+          command: release-pr
+        env:
+          # A token other than GITHUB_TOKEN lets the release PR start CI; GITHUB_TOKEN works without it.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+
+  release:
+    if: vars.RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    outputs:
+      tag: ${{ steps.app.outputs.tag }}
+      version: ${{ steps.app.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: plz
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+          # Only for a crate's first crates.io publish; later ones go through trusted publishing (id-token).
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - id: app
+        env:
+          RELEASES: ${{ steps.plz.outputs.releases }}
+        run: |
+          app=$(jq -c '.[] | select(.package_name == "wavedude-app")' <<< "${RELEASES:-[]}")
+          echo "tag=$(jq -r '.tag // empty' <<< "$app")" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r '.version // empty' <<< "$app")" >> "$GITHUB_OUTPUT"
+
+  package:
+    needs: release
+    if: needs.release.outputs.tag != ''
+    name: package ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, platform: linux-x86_64, formats: appimage, update: appimage }
+          - { os: windows-latest, platform: windows-x86_64, formats: nsis, update: nsis }
+          - { os: macos-15, platform: macos-aarch64, formats: "app,dmg", update: app }
+          - { os: macos-15-intel, platform: macos-x86_64, formats: "app,dmg", update: app }
+    env:
+      TAG: ${{ needs.release.outputs.tag }}
+      VERSION: ${{ needs.release.outputs.version }}
+      WAVEDUDE_UPDATE_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
+      WAVEDUDE_UPDATE_PUBKEY: ${{ vars.UPDATER_PUBKEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y $LINUX_PACKAGES
+      - name: cargo-packager
+        run: cargo install cargo-packager --locked --version 0.11.8
+      - name: Updater signing key
+        env:
+          KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
+          PASSWORD: ${{ secrets.UPDATER_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEY" ]; then
+            { echo "CARGO_PACKAGER_SIGN_PRIVATE_KEY<<KEY_END"; echo "$KEY"; echo "KEY_END"; } >> "$GITHUB_ENV"
+            echo "CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
+          fi
+      - name: Package
+        run: cargo packager --release -p wavedude-app --formats "${{ matrix.formats }}"
+        env:
+          # linuxdeploy's own strip: the system libraries come stripped, and our binaries keep their symbol names
+          # for backtraces; its old strip also fails on newer distributions' libraries.
+          NO_STRIP: "true"
+      - name: Linux tarball
+        if: runner.os == 'Linux'
+        run: |
+          dir="wavedude-rust-$VERSION-${{ matrix.platform }}"
+          mkdir "$dir"
+          cp target/release/wavedude-app target/release/wavedude-cli LICENSE.md NOTICE.md README.md "$dir"
+          tar -czf "target/packages/$dir.tar.gz" "$dir"
+      - name: Collect
+        run: |
+          mkdir dist
+          find target/packages -maxdepth 1 -type f \( -name '*.AppImage' -o -name '*.tar.gz' -o -name '*.exe' -o -name '*.dmg' -o -name '*.sig' \) \
+            -exec cp {} dist/ \;
+          # Asset names without spaces (URLs in latest.json) and unique per platform (both macOS builds share one name).
+          for f in dist/*; do
+            name=$(basename "$f" | tr ' ' '-')
+            case "$name" in *${{ matrix.platform }}*) ;; *) name="${{ matrix.platform }}-$name" ;; esac
+            [ "dist/$name" = "$f" ] || mv "$f" "dist/$name"
+          done
+          ls -l dist
+      - name: Update entry
+        if: env.WAVEDUDE_UPDATE_PUBKEY != ''
+        run: |
+          case "${{ matrix.update }}" in
+            appimage) bundle=$(ls dist/*.AppImage) ;;
+            nsis) bundle=$(ls dist/*.exe) ;;
+            app) bundle=$(ls dist/*.app.tar.gz) ;;
+          esac
+          name=$(basename "$bundle")
+          jq -n --arg platform "${{ matrix.platform }}" --arg format "${{ matrix.update }}" \
+            --arg url "https://github.com/${{ github.repository }}/releases/download/$TAG/$name" \
+            --rawfile signature "$bundle.sig" \
+            '{($platform): {url: $url, signature: $signature, format: $format}}' > "update-${{ matrix.platform }}.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: env.WAVEDUDE_UPDATE_PUBKEY != ''
+        with:
+          name: update-${{ matrix.platform }}
+          path: update-${{ matrix.platform }}.json
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+      - name: Upload
+        run: gh release upload "$TAG" dist/* --clobber --repo "${{ github.repository }}"
+
+  publish:
+    needs: [release, package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.release.outputs.tag }}
+      VERSION: ${{ needs.release.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: vars.UPDATER_PUBKEY != ''
+        with:
+          pattern: update-*
+          merge-multiple: true
+      - name: latest.json
+        if: vars.UPDATER_PUBKEY != ''
+        run: |
+          jq -s --arg version "$VERSION" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version: $version, pub_date: $date, platforms: add}' update-*.json > latest.json
+          gh release upload "$TAG" latest.json --clobber --repo "${{ github.repository }}"
+      - name: Publish the release
+        run: gh release edit "$TAG" --draft=false --latest --repo "${{ github.repository }}"

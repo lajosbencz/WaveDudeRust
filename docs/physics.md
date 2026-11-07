@@ -166,7 +166,7 @@ the discrete frequency per step is `omega = n theta(s)`, theta from the time
 scheme's relation above, and the phase velocity `omega / |k|`.
 
 Phase velocity v/c at index 1 (2 sub-steps), space and time together
-(wave-cli `dispersion`):
+(wavedude-cli `dispersion`):
 
 | cells/wavelength | 9-point axis | 9-point diagonal | DRP axis | DRP diagonal |
 |---|---|---|---|---|
@@ -483,7 +483,7 @@ tau follows the level, not omega: omega = 0.5 L scale / 255 per step, so tau is
 changes how much ripple a project shows. Deriving tau from omega (a fixed
 number of periods) was considered and not done: TimeDecay keeps the original's
 meaning, saved projects look as they did, and the CLI's truth table derives its
-settle time from the same rule (wave-cli truth.rs); a project wanting a steady
+settle time from the same rule (wavedude-cli truth.rs); a project wanting a steady
 picture raises TimeDecay.
 
 Test (tests/physics.rs `intensity_settles_on_the_mean_square`): a continuous
@@ -557,7 +557,7 @@ does not.
   intermediate index, an effect of order (k d)^2.
 - CPML: the table under Absorbing boundaries.
 - Step time, 1920 x 1080 with a 32 px rim, intensity tracked, release build,
-  24-thread Ryzen 9 9900X and an RTX 5070 Ti (wave-cli `bench --gpu`), ms a
+  24-thread Ryzen 9 9900X and an RTX 5070 Ti (wavedude-cli `bench --gpu`), ms a
   step without captures, before and after:
 
 | engine | stencil | before | after |

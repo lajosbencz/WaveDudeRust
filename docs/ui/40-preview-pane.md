@@ -61,7 +61,7 @@ Fixed colours, not themed; preview only, never exported.
 
 ## Zoom
 
-Both pictures share one zoom over the fit (`View` in `wave-widgets/src/picture.rs`, `PaneStates.view`): the
+Both pictures share one zoom over the fit (`View` in `wavedude-widgets/src/picture.rs`, `PaneStates.view`): the
 wheel over a picture zooms in by a factor of 1.25 a notch, out by the same, never below the fit, up to 64x; the
 canvas point under the pointer stays where it is. A middle-button drag pans a zoomed view. The zoomed picture is
 larger than the cell's area and is held so that no area is left empty; the handles, the graph boxes and the

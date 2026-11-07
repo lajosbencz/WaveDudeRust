@@ -1,4 +1,4 @@
-// "bench [w h] [steps]": a step's cost on both C# engines, the scene and pattern of `wave-cli bench`
+// "bench [w h] [steps]": a step's cost on both C# engines, the scene and pattern of `wavedude-cli bench`
 // (rim 32 outside, open edges, one source at the centre, both planes captured as halves every 2 steps,
 // pipelined).
 

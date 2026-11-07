@@ -8,7 +8,7 @@ three regressions.
 ## Method
 
 - **Same inputs.** The projects are the Rust repository's copies of the C# `Examples` files (byte for byte
-  the same); 07-xor is `examples/gates/07-xor.wdr` saved as `.wdproj` with `wave-cli convert`. Each program
+  the same); 07-xor is `examples/gates/07-xor.wdr` saved as `.wdproj` with `wavedude-cli convert`. Each program
   paints its own scene from the project's parts, and the two paintings are compared pixel by pixel.
 - **Same step schedule.** 600 steps with the fields dumped every 100 (07-xor: 2592 steps every 432, its own
   run length), probes sampled every step.
@@ -16,7 +16,7 @@ three regressions.
   the 4th order, 1 on its 9-point kernel), the Rust engine its CFL rule (2 at index 1 on both stencils, 1 in
   07-xor where the C# takes 2). Nothing is forced to match.
 - **Tools.** `tools/compare-csharp` dumps the C# scene, fields, intensities and probe series;
-  `wave-cli compare` runs the Rust engine and writes `report.md` with the pictures (C# | Rust | Rust / gain -
+  `wavedude-cli compare` runs the Rust engine and writes `report.md` with the pictures (C# | Rust | Rust / gain -
   C#) into each folder below.
 
 Measures in the tables:
@@ -47,7 +47,7 @@ shape error of 5 to 17 % (table below), which is what is left of the solvers' di
 says which program is right; the analytic tests below do.
 
 Time offset that best matches the two fields (Rust step against the C# step; scratch probe, the fields of
-`wave-cli compare` at neighbouring steps):
+`wavedude-cli compare` at neighbouring steps):
 
 | scene | C# step | best Rust step | Pearson there | shape error there | same with 30 px around each source left out |
 |---|---|---|---|---|---|
@@ -78,7 +78,7 @@ leapfrog at 2 sub-steps against the Rust's modified equation at 1, in fibre guid
   for Example16's two; the input probe of 07-xor (0.870) sits next to the sources, where the two source models
   differ most.
 - **Gate logic.** 07-xor with both inputs on: the C# dump puts 0.2 % of the output into Q (previous run; the C#
-  side is unchanged), the Rust truth table 0.25 % (`wave-cli truth-table examples/gates/07-xor.wdr`: 4 of 4
+  side is unchanged), the Rust truth table 0.25 % (`wavedude-cli truth-table examples/gates/07-xor.wdr`: 4 of 4
   rows within tolerance; one input alone 0.468 / 0.532).
 - **9-point wavelengths.** Example09 as loaded (the importer divides the frequency scale by 0.562): 29.9 /
   29.8 px at level 30, 14.9 / 14.9 px at level 60, 7.4 / 7.4 px at level 120, at every dump.
@@ -165,7 +165,7 @@ docs/physics.md (tests/physics.rs, tests/gpu.rs):
   error of the set (34 %) is 10 % at a 2-step offset, the rest the source phase and the different dispersion
   at the C#'s 2 and the Rust's 1 sub-step.
 
-## The 9-point runs of `wave-cli compare`
+## The 9-point runs of `wavedude-cli compare`
 
 A 9-point project is compared twice: as loaded (the importer divides the frequency scale by the original
 kernel's phase speed 0.5621, so Example09's wavelengths come out 29.9 / 14.9 / 7.4 px against the C#'s
@@ -178,9 +178,9 @@ kernel's phase speed 0.5621, so Example09's wavelengths come out 29.9 / 14.9 / 7
 ```sh
 DOTNET_ROOT=$HOME/.dotnet PATH=$HOME/.dotnet:$PATH \
   tools/compare-csharp/run.sh <project.wdproj> <dump-dir> --steps 600 --every 100 --probe-steps
-cargo run -p wave-cli --release -- compare <project.wdproj> <dump-dir> --out docs/comparison/<name> --steps 600 --every 100
-cargo run -p wave-cli --release -- convert examples/gates/07-xor.wdr <dir>/07-xor.wdproj   # then --steps 2592 --every 432
+cargo run -p wavedude-cli --release -- compare <project.wdproj> <dump-dir> --out docs/comparison/<name> --steps 600 --every 100
+cargo run -p wavedude-cli --release -- convert examples/gates/07-xor.wdr <dir>/07-xor.wdproj   # then --steps 2592 --every 432
 ```
 
-The projects are `crates/wave-core/tests/fixtures/examples/<name>.wdproj`. The C# side needs the .NET 10 SDK and
+The projects are `crates/wavedude-core/tests/fixtures/examples/<name>.wdproj`. The C# side needs the .NET 10 SDK and
 the sibling checkout of graealex/WaveDudeNext (tools/compare-csharp/README.md).

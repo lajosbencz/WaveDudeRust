@@ -1,8 +1,0 @@
----
-source: crates/wave-core/tests/render.rs
-expression: "hex_picture(&render_half(&plane, &field), 6)"
----
-000000 00000D 050025 16003E 280055 3C0061
-4D0365 5F0966 711064 831662 941E5B A52652
-B72E49 C73640 D44533 E05326 EC6219 F2740B
-F98700 FB9C00 F9B110 F8C727 F4DC4A F2EF73

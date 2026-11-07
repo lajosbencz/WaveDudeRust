@@ -6,9 +6,9 @@ over our own enums, and duplicate guards. Guards for user input, file content, O
 and first-frame layout were kept and are listed at the end of each section.
 
 Normalisation is the anchor: every project is normalised on load (`io/wdproj.rs:122`, `io/wdr.rs:107`,
-`io/legacy.rs:264`), when a document is built (`wave-app-state/src/document.rs:59`) and after every edit
-command (`wave-app-state/src/commands.rs:390`), with the bounds of `model/ranges.rs`. Settings are
-validated at their boundary (`wave-app-state/src/settings.rs:313-317`). N:line below is
+`io/legacy.rs:264`), when a document is built (`wavedude-app-state/src/document.rs:59`) and after every edit
+command (`wavedude-app-state/src/commands.rs:390`), with the bounds of `model/ranges.rs`. Settings are
+validated at their boundary (`wavedude-app-state/src/settings.rs:313-317`). N:line below is
 `model/normalize.rs`.
 
 ## Verdict
@@ -33,7 +33,7 @@ Fix: create the spill lazily only, at the first frame that does not fit, and `.e
 header's `first` is then right by construction. `blocks[frame].set(..)` at store.rs:293 is the same
 pattern: a failed set means a frame written twice; `.expect` it.
 
-## 2. Structural causes (wave-app, wave-app-state)
+## 2. Structural causes (wavedude-app, wavedude-app-state)
 
 1. Menu, tree and combo ids are strings parsed with silent fallbacks (`ui/menus.rs:534, 543, 655-704`,
    `preview/mod.rs:150-165`): `rsplit_once(':').unwrap_or(..)`, `if let Ok(i) = parse()`, `_ => debug!`,
@@ -48,7 +48,7 @@ pattern: a failed set means a frame written twice; `.expect` it.
 3. `serde_json::to_value` of our own structs with the error swallowed (`properties.rs:40`,
    `properties_forms.rs:430, 1005, 1006`, `preview/overlay.rs:291, 328, 332` which would send
    `points = null` as an edit, `ui/app.rs:195`). Fix: `.expect`, as `history.rs:95` does.
-4. Missing string keys fall back to the key or "" (`wave-app-state/src/strings.rs:198, 217-230`). The
+4. Missing string keys fall back to the key or "" (`wavedude-app-state/src/strings.rs:198, 217-230`). The
    per-language fallback to English (`:193`) stays; a key missing from English is a bug the tests already
    enforce. Fix: panic with the key (debug at least); the test asserting the leak flips to `should_panic`.
 5. Two policies for missing platform dirs: `main.rs:23-24` builds a temp-dir fallback for the state while
@@ -72,7 +72,7 @@ pattern: a failed set means a frame written twice; `.expect` it.
 
 ## 4. Clamps and defaults the model already guarantees
 
-wave-core engine/render/scene:
+wavedude-core engine/render/scene:
 `rectangle.rs:6-7`, `ellipse.rs:7-8,16-17`, `polygon.rs:7-8`, `triangle.rs:27`, `bragg.rs:16-20`,
 `grin.rs:16-17`, `fiber.rs:123,128,206`, `zone_plate.rs:14,37,38,42` and `zone_at` (`:9-12`, return
 `i64`), `mod.rs:297-298`, `gate_design.rs:111` (keep `n_c <= n_cl` only), `painter.rs:32` (enabled is
@@ -84,7 +84,7 @@ filtered in `compose.rs:35`), `painter.rs:243-245` (`inner_edge` is always Some 
 `brightness.rs:37, 39`, mutex poison recovery at `lut.rs:202,211`, `gate_design.rs:206,210`,
 `compose.rs:66` (nothing user-supplied runs under the lock; `unwrap` like `gpu/context.rs`).
 
-wave-core model/io/run:
+wavedude-core model/io/run:
 `run/spec.rs:56` `NoSteps` (steps >= 1 by N:60; `tests/run.rs:111` feeds an unnormalised project),
 `spec.rs:96` and `model/simulation.rs:48` `visualize_every.max(1)`, `spec.rs:75, 108, 178`
 `quality.validated()` three times (make the divisor an enum `1 | 2 | 4`; `validated` also accepts 3),
@@ -98,7 +98,7 @@ as Cancelled; `join` drops it at `:262`).
 Hidden errors: `schemes.rs:86` every `read_dir` error is "no schemes" (only `NotFound` should be),
 `legacy.rs:100` every I/O error is "not found".
 
-wave-export, wave-cli:
+wavedude-export, wavedude-cli:
 `range.rs:15`, `csv.rs:53-54`, `overlays.rs:377`, `avi.rs:148`, `mov.rs:162`, `mp4.rs:103` (`fps`),
 `jpeg.rs:15`, `mp4.rs:29`, `mpeg1.rs:188` (`quality`), `mpeg1.rs:189`, `graph.rs:97, 123, 155` (and
 the `DECADES`, `MIN_WINDOW` consts), `naming.rs:33`, `jpeg.rs:17`, `mov.rs:113`; silent substitutions
@@ -108,7 +108,7 @@ to 0), `raster.rs:324`, `graph.rs:240-247`, `overlays.rs:406` (a missing trace d
 551` (`BOX.nominal()`), `bench.rs:206`, `truth.rs:175`, `export.rs:220`, `compare.rs:184, 219, 235,
 241, 293, 304`.
 
-wave-app, wave-app-state, wave-widgets (single findings):
+wavedude-app, wavedude-app-state, wavedude-widgets (single findings):
 `transport.rs:182`, `playback.rs:79-81`, `status.rs:28`, `graph_boxes.rs:47, 56, 75, 81, 83, 91`,
 `properties_forms.rs:59, 122, 136, 290-291, 371`, `properties.rs:90` (a range-key typo gives open
 bounds), `commands.rs:536, 636`, `clipboard.rs:166-171, 177-181, 218` (an undecodable pasted image is
@@ -155,7 +155,7 @@ Everything above is done, except the items judged legitimate on a second look:
 - A pasted image that does not decode is now a `FragmentError`; `.wdr` format 0 is refused; a scheme folder
   that cannot be read reports its error; a run driver's panic is a `Failed` state, not `Cancelled`; an
   export scene of another size than the canvas is an error, not silently dropped edges.
-- `wave-app-state` now depends on `wave-export` without its encoders, for the export filter count its
+- `wavedude-app-state` now depends on `wavedude-export` without its encoders, for the export filter count its
   settings clamp needs.
 
 Workspace fmt, clippy with `-D warnings` and all tests pass.

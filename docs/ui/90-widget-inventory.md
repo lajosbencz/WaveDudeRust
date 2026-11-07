@@ -1,4 +1,4 @@
-# Widget inventory for `wave-widgets` (Freya 0.5)
+# Widget inventory for `wavedude-widgets` (Freya 0.5)
 
 Derived from files 00..80. Each widget: required behaviours, then the Freya base it can likely start from.
 Every Freya judgement is unchecked: TODO(verify-freya). Judged against Freya's shipped components (Button, Input,

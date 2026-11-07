@@ -1,0 +1,237 @@
+---
+source: crates/wavedude-core/tests/io.rs
+expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
+---
+.color_schemes[].description = ""
+.color_schemes[].kind = "Unspecified"
+.color_schemes[].name = "Scheme 1"
+.color_schemes[].stops[].at
+.color_schemes[].stops[].color.b
+.color_schemes[].stops[].color.g
+.color_schemes[].stops[].color.r
+.description = ""
+.display.export_from
+.display.export_to
+.display.field.black_level
+.display.field.brightness
+.display.field.color_scheme = "Default field"
+.display.field.overlay
+.display.field.overlay_gain
+.display.field.overlay_in_export
+.display.field.preview
+.display.handles_in_preview
+.display.intensity.black_level
+.display.intensity.brightness
+.display.intensity.color_scheme = "Default intensity"
+.display.intensity.overlay
+.display.intensity.overlay_gain
+.display.intensity.overlay_in_export
+.display.intensity.preview
+.display.labels_in_preview
+.display.probe_graphs_in_export
+.display.probe_markers_in_export
+.display.source_markers_in_export
+.display.video.fps
+.display.video.quality
+.parts[].angle
+.parts[].enabled
+.parts[].kind.BraggReflector.index1
+.parts[].kind.BraggReflector.index2
+.parts[].kind.BraggReflector.pairs
+.parts[].kind.BraggReflector.thickness1
+.parts[].kind.BraggReflector.thickness2
+.parts[].kind.BraggReflector.width
+.parts[].kind.Ellipse.coating.back
+.parts[].kind.Ellipse.coating.depth
+.parts[].kind.Ellipse.coating.front
+.parts[].kind.Ellipse.coating.profile = "Layer"
+.parts[].kind.Ellipse.coating.sides
+.parts[].kind.Ellipse.length
+.parts[].kind.Ellipse.linked
+.parts[].kind.Ellipse.material.absorption
+.parts[].kind.Ellipse.material.absorption_ramp
+.parts[].kind.Ellipse.material.mirror
+.parts[].kind.Ellipse.material.refractive_index
+.parts[].kind.Ellipse.width
+.parts[].kind.Fiber.absorption
+.parts[].kind.Fiber.absorption_ramp
+.parts[].kind.Fiber.cladding_index
+.parts[].kind.Fiber.cladding_thickness
+.parts[].kind.Fiber.coating.back
+.parts[].kind.Fiber.coating.depth
+.parts[].kind.Fiber.coating.front
+.parts[].kind.Fiber.coating.profile = "Layer"
+.parts[].kind.Fiber.coating.sides
+.parts[].kind.Fiber.core_diameter
+.parts[].kind.Fiber.core_index
+.parts[].kind.Fiber.ends = "Flat"
+.parts[].kind.Fiber.nodes[].in_x
+.parts[].kind.Fiber.nodes[].in_y
+.parts[].kind.Fiber.nodes[].out_x
+.parts[].kind.Fiber.nodes[].out_y
+.parts[].kind.Fiber.nodes[].smooth
+.parts[].kind.Fiber.nodes[].x
+.parts[].kind.Fiber.nodes[].y
+.parts[].kind.GrinLens.centre_index
+.parts[].kind.GrinLens.coating.back
+.parts[].kind.GrinLens.coating.depth
+.parts[].kind.GrinLens.coating.front
+.parts[].kind.GrinLens.coating.profile = "Layer"
+.parts[].kind.GrinLens.coating.sides
+.parts[].kind.GrinLens.diameter
+.parts[].kind.GrinLens.edge_index
+.parts[].kind.GrinLens.length
+.parts[].kind.Lens.coating.back
+.parts[].kind.Lens.coating.depth
+.parts[].kind.Lens.coating.front
+.parts[].kind.Lens.coating.profile = "Layer"
+.parts[].kind.Lens.coating.sides
+.parts[].kind.Lens.diameter
+.parts[].kind.Lens.material.absorption
+.parts[].kind.Lens.material.absorption_ramp
+.parts[].kind.Lens.material.mirror
+.parts[].kind.Lens.material.refractive_index
+.parts[].kind.Lens.r1
+.parts[].kind.Lens.r2
+.parts[].kind.Lens.thickness
+.parts[].kind.LogicGate.cladding_index
+.parts[].kind.LogicGate.coating
+.parts[].kind.LogicGate.core_index
+.parts[].kind.LogicGate.design_frequency
+.parts[].kind.LogicGate.input_coated
+.parts[].kind.LogicGate.kind = "Xor"
+.parts[].kind.LogicGate.lower_output_active
+.parts[].kind.LogicGate.output_coated
+.parts[].kind.LogicGate.port_spacing
+.parts[].kind.LogicGate.upper_output_active
+.parts[].kind.Outline.coating.back
+.parts[].kind.Outline.coating.depth
+.parts[].kind.Outline.coating.front
+.parts[].kind.Outline.coating.profile = "Layer"
+.parts[].kind.Outline.coating.sides
+.parts[].kind.Outline.material.absorption
+.parts[].kind.Outline.material.absorption_ramp
+.parts[].kind.Outline.material.mirror
+.parts[].kind.Outline.material.refractive_index
+.parts[].kind.Outline.points[].x
+.parts[].kind.Outline.points[].y
+.parts[].kind.Polygon.coating.back
+.parts[].kind.Polygon.coating.depth
+.parts[].kind.Polygon.coating.front
+.parts[].kind.Polygon.coating.profile = "Layer"
+.parts[].kind.Polygon.coating.sides
+.parts[].kind.Polygon.material.absorption
+.parts[].kind.Polygon.material.absorption_ramp
+.parts[].kind.Polygon.material.mirror
+.parts[].kind.Polygon.material.refractive_index
+.parts[].kind.Polygon.side
+.parts[].kind.Polygon.sides
+.parts[].kind.Rectangle.coating.back
+.parts[].kind.Rectangle.coating.depth
+.parts[].kind.Rectangle.coating.front
+.parts[].kind.Rectangle.coating.profile = "Layer"
+.parts[].kind.Rectangle.coating.sides
+.parts[].kind.Rectangle.length
+.parts[].kind.Rectangle.linked
+.parts[].kind.Rectangle.material.absorption
+.parts[].kind.Rectangle.material.absorption_ramp
+.parts[].kind.Rectangle.material.mirror
+.parts[].kind.Rectangle.material.refractive_index
+.parts[].kind.Rectangle.width
+.parts[].kind.Triangle.angle_a
+.parts[].kind.Triangle.angle_b
+.parts[].kind.Triangle.base
+.parts[].kind.Triangle.coating.back
+.parts[].kind.Triangle.coating.depth
+.parts[].kind.Triangle.coating.front
+.parts[].kind.Triangle.coating.profile = "Layer"
+.parts[].kind.Triangle.coating.sides
+.parts[].kind.Triangle.kind = "Equilateral"
+.parts[].kind.Triangle.material.absorption
+.parts[].kind.Triangle.material.absorption_ramp
+.parts[].kind.Triangle.material.mirror
+.parts[].kind.Triangle.material.refractive_index
+.parts[].kind.ZonePlate.coating
+.parts[].kind.ZonePlate.design_frequency
+.parts[].kind.ZonePlate.diameter
+.parts[].kind.ZonePlate.focal_length
+.parts[].kind.ZonePlate.inverse
+.parts[].kind.ZonePlate.mount
+.parts[].kind.ZonePlate.mount_width
+.parts[].kind.ZonePlate.thickness
+.parts[].name = "Bragg reflector 1"
+.parts[].name = "Ellipse 1"
+.parts[].name = "Fiber 1"
+.parts[].name = "GRIN lens 1"
+.parts[].name = "Lens 1"
+.parts[].name = "Outline 1"
+.parts[].name = "Polygon 1"
+.parts[].name = "Rectangle 1"
+.parts[].name = "Triangle 1"
+.parts[].name = "XOR gate 1"
+.parts[].name = "Zone plate 1"
+.parts[].x
+.parts[].y
+.probes[].active
+.probes[].auto_scale_x
+.probes[].auto_scale_y
+.probes[].ax
+.probes[].ay
+.probes[].box_height
+.probes[].box_size = "Medium"
+.probes[].box_width
+.probes[].box_x
+.probes[].box_y
+.probes[].bx
+.probes[].by
+.probes[].decades
+.probes[].kind = "Point"
+.probes[].layer = "Field"
+.probes[].measurement = "Amplitude"
+.probes[].name = "Probe 1"
+.probes[].scale_mode = "Running"
+.probes[].start_after
+.probes[].window
+.probes[].y_max
+.probes[].y_min
+.probes[].y_scale = "Linear"
+.scene.damping_edge
+.scene.edges = "Open"
+.scene.height
+.scene.image = ""
+.scene.image_path = ""
+.scene.image_source_scale
+.scene.image_sources
+.scene.mode = "Canvas"
+.scene.object_sources
+.scene.refractive_index
+.scene.width
+.seed
+.simulation.intensity_scale
+.simulation.source_frequency_scale
+.simulation.stencil = "FourthOrder"
+.simulation.steps
+.simulation.time_decay
+.simulation.visualize_every
+.simulation.wave_speed
+.sources[].amplitude
+.sources[].array.angle
+.sources[].array.random_frequency
+.sources[].array.random_off_width
+.sources[].array.random_phase
+.sources[].array.random_position
+.sources[].array.size_x
+.sources[].array.size_y
+.sources[].array.spacing_x
+.sources[].array.spacing_y
+.sources[].detach_after
+.sources[].enabled
+.sources[].frequency
+.sources[].mode = "Continuous"
+.sources[].name = "Source 1"
+.sources[].off_width
+.sources[].phase
+.sources[].pulse_shape = "Gaussian"
+.sources[].pulse_width
+.sources[].x
+.sources[].y

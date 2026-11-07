@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-11-05
 
-- Unit tests in every crate; analytic physics tests in wave-core (0003).
+- Unit tests in every crate; analytic physics tests in wavedude-core (0003).
 - Image snapshot tests (`insta`) for the painter, renderer and export frames.
 - Golden fixtures generated from WaveDude Next (exports of the examples) are
   compared with tolerances, never bit for bit.

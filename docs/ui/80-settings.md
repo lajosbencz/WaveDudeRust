@@ -1,7 +1,10 @@
 # User settings
 
 Pointer: `WaveDudeNext.WPF/Settings.cs`. One sparse file per user (WPF: `%LOCALAPPDATA%\WaveDudeNext\Settings.xml`,
-values at their default omitted). Port: the platform config dir (e.g. `directories` crate), same sparse idea.
+values at their default omitted). Port: JSON in the platform's config dir under `WaveDudeRust` (`AppDirs`,
+`directories` crate: `~/.config/WaveDudeRust`, `%APPDATA%\WaveDudeRust\config`,
+`~/Library/Application Support/WaveDudeRust`), same sparse idea; the cache and data dirs carry the same name. The
+CLI reads and writes the same file for its OpenH264 commands.
 These are the program's settings, never the project's. Written on change (menu choices save at once) and on close.
 The port's file carries a `Version` (written always, 1 now; a file without it is version 0) and is written to a
 temporary file beside it, then renamed over it, so a crash mid-write leaves the old file whole.
@@ -34,7 +37,8 @@ moved aside. An unreadable file is not a first start.
 | ExportFilterIndex | int (index into the run-export filter list; out of range reads as 0) | 0 | export Save dialog |
 | PartDescriptionExpanded | bool | true | description header on any part form |
 | TitleFullPath | bool | false | View > Full path in the title |
-| UseOpenH264 | bool | false | export dialog, MP4: Use Cisco's OpenH264 codec |
+| UseOpenH264 | bool or absent (never asked) | absent | startup page (shown while absent); export dialog, MP4: Use Cisco's OpenH264 codec; `wavedude-cli openh264 enable/disable` |
+| CheckForUpdates | bool or absent (never asked) | absent | startup page (shown while absent, builds with the updater); Help > Check for updates at launch |
 | ExportHints | list of {Project path, Run path, Still path, Probe path}, newest project first, max 20, only existing project files | empty | each export; restored when the project is opened |
 
 Not persisted (session or project state): playback speed (resets to 1 each start; decision 0008),

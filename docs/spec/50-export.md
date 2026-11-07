@@ -60,7 +60,7 @@ Frame rate = `Display.Video.Fps`; quality = `Display.Video.Quality` (1..100).
 
 ### Export pipeline (Rust)
 
-`wave_export::ExportPlan::build_job` is the one place the app and the CLI decide an export: the frame range (a still
+`wavedude_export::ExportPlan::build_job` is the one place the app and the CLI decide an export: the frame range (a still
 beyond the run is an error; the app clamps it first), each layer's scheme (from a `SchemeStore` the caller loads),
 look and path (`_field`/`_intensity` for Both), the sinks and the overlays. The scene is composed only when a layer
 burns in its glowing edges, its one use, so the output equals always composing it. Overlays are dropped for a format
@@ -149,7 +149,7 @@ Label font: see "Burned-in overlays" below.
 - Bitrate fallback: `clamp(round_even(W*H*fps*0.01*50^(q/100)), 300000, 200000000)` bit/s.
 - Odd sizes padded to even by repeating the last row/column; maximum 4096 x 2304.
 - Rust: openh264 and the `mp4` crate, decision 0005. The encoder is Cisco's binary loaded at run time
-  (`ExportPlan::h264`, the path from `wave_export::h264`); without one the export fails with `H264Missing`.
+  (`ExportPlan::h264`, the path from `wavedude_export::h264`); without one the export fails with `H264Missing`.
 
 ## OpenEXR (`Export/ExrWriter.cs`)
 

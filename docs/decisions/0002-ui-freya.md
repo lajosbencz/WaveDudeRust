@@ -26,7 +26,7 @@ Known costs:
 - The accessibility tree is AccessKit (Freya's `accessibility` feature, on by
   default); UI tests still target the app state, not the tree.
 
-Widgets WaveDude needs that Freya does not ship live in `wave-widgets`:
+Widgets WaveDude needs that Freya does not ship live in `wavedude-widgets`:
 dock host, tree with multi-select and drag, property rows, logarithmic number
 box, gradient editor, canvas image with overlays, probe graph box, timeline,
 menu bar with mnemonics. Freya's own components (buttons, inputs, scroll views,

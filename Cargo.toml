@@ -37,5 +37,5 @@ opt-level = 2
 
 # The engines, painter and renderer are too slow unoptimised for the tests that run them (the CLI's gate
 # demonstrations took over 15 minutes); set 0 locally to step through them.
-[profile.dev.package.wave-core]
+[profile.dev.package.wavedude-core]
 opt-level = 2

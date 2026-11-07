@@ -53,12 +53,12 @@ of index 1.9 (30 px in the OR gate), the ports 82 px apart. Their inputs start a
 left edge. Past each output end lies a 58 px square absorber pad of index 1 (absorption 255, rising over 29 px
 from its outline), where the light of Q and R is dumped as in the video.
 
-The projects were written by `wave-cli gates --out examples/gates --gpu`. The brightness of each example is the
+The projects were written by `wavedude-cli gates --out examples/gates --gpu`. The brightness of each example is the
 app's Auto fit on its final frame, with the sources as saved.
 
 ## Truth tables
 
-Each table comes from four runs with the sources off and on, as measured by `wave-cli truth-table <project>` on
+Each table comes from four runs with the sources off and on, as measured by `wavedude-cli truth-table <project>` on
 the CPU engine. A value is the intensity summed over one half of a line probe and averaged over the last 256
 steps: in A and in B over the upper and lower half of the Input line, Q and R over the upper and lower half of
 the Output line. Q and R are relative to their sum with A alone, in A and in B relative to theirs. The expected
