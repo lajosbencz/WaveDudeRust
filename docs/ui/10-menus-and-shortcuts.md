@@ -91,7 +91,7 @@ row in the tree (`30-properties-pane.md`).
 | - separator | | | | | |
 | Play / Pause playback | Y/D/E/L | F7 | U+E768 / U+E769 | `CanPlayPause` | The timeline's Play/Pause from anywhere. Header and icon switch while playing. |
 | - separator | | | | | |
-| Use the GPU (OpenCL) | G/G/G/G | - | none | checkable | Engine choice (CPU fallback logged). Default on. |
+| Use the GPU | G/G/G/G | - | none | checkable | Engine choice (CPU fallback logged). Default on. |
 | Re-run automatically after edits | A/A/U/A | - | none | checkable | Default on. |
 | Warn when a run does not fit in RAM | W/W/V/W | - | none | checkable | Default on. |
 | RAM cache size > | C/C/C/C | - | Draw:FrameMemory | radio list | Auto (A), 10 %, 20 %, ... 100 % of physical RAM (11 entries), check = current. |

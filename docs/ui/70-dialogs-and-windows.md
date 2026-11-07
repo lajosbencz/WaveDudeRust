@@ -74,17 +74,15 @@ Content top to bottom:
 3. "License": the GPL notice sentence; toggle button "Show the license text" / "Hide the license text" (T).
    Shown: LICENSE.md rendered as a document (headings, lists, links) in a scrollable box (260 px, min 120);
    a taller window gives its extra height to the document; hidden: window shrinks back.
-4. "System": read-only text box (max 160 px, scrolls) with eight lines: Program, Runtime, Operating system,
-   Processor (+ logical cores), Memory ("x free of y"), GPU (OpenCL) setting (on/off), OpenCL devices (or "OpenCL
-   is not installed"), H.264 encoders (or "Media Foundation is not available" / "none").
-Port, between 3 and 4: "OpenH264": Cisco's notice and the toggle "Show the OpenH264 license" / "Hide the OpenH264
-   license" (O), showing Cisco's licence text verbatim, as plain text, in the same box; absent when OpenH264 is
-   compiled in.
+4. "System": read-only text box (max 160 px, scrolls), one line each: Program, Runtime, Operating system,
+   Processor (+ logical cores), GPU setting (on/off), Engine (the wgpu adapter's name, or "CPU (n threads)"),
+   H.264 encoder ("Cisco's OpenH264 2.6.0" when enabled and downloaded, "not enabled", or "OpenH264, compiled
+   in"). The original's Memory line is not ported.
+   Port, before "System": "OpenH264": Cisco's notice and the toggle "Show the OpenH264 license" / "Hide the
+   OpenH264 license" (O), showing Cisco's licence text verbatim, as plain text, in the same kind of box; absent
+   when OpenH264 is compiled in.
 5. Buttons: "Copy system info" (C; tooltip "Copy the system lines to the clipboard, for a bug report"; status
    "System information copied to the clipboard"), "Close" (default and cancel).
-
-Port: H.264 encoder line becomes whatever encoder the export crate uses (openh264, decision 0005); OpenCL line
-becomes the wgpu adapter(s).
 
 ## Manual window
 

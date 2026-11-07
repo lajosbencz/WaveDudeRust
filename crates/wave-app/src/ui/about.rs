@@ -46,10 +46,22 @@ fn license_view(text: impl IntoElement) -> ScrollView {
 		.child(rect().padding(4.).width(Size::fill()).child(text))
 }
 
-/// The eight system lines of the bug-report box.
+/// The MP4 encoder as the export would load it.
+fn h264_encoder(s: &wave_app_state::strings::Strings, enabled: bool) -> String {
+	if h264::BUILT_IN {
+		return s.get("AboutH264BuiltIn").to_owned();
+	}
+	match h264::default_dir().and_then(|d| h264::installed(&d)) {
+		Some(_) if enabled => format!("Cisco's OpenH264 {}", h264::VERSION),
+		_ => s.get("AboutH264Off").to_owned(),
+	}
+}
+
+/// The system lines of the bug-report box.
 pub fn system_lines(cx: &Cx) -> String {
 	let s = cx.strings();
-	let (gpu, engine) = cx.shared.peek(|a| (a.settings.use_gpu, a.live.engine_name().to_string()));
+	let (gpu, openh264, engine) =
+		cx.shared.peek(|a| (a.settings.use_gpu, a.settings.use_openh264, a.live.engine_name().to_string()));
 	let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
 	[
 		format!("{}: {} {}", s.get("AboutProductLine"), s.get("Title"), env!("CARGO_PKG_VERSION")),
@@ -57,7 +69,8 @@ pub fn system_lines(cx: &Cx) -> String {
 		format!("{}: {} {}", s.get("AboutOperatingSystem"), std::env::consts::OS, std::env::consts::ARCH),
 		format!("{}: {cores} {}", s.get("AboutProcessor"), s.get("AboutCores")),
 		format!("{}: {}", s.get("AboutGpuSetting"), s.get(if gpu { "AboutOn" } else { "AboutOff" })),
-		format!("{}: {engine}", s.get("AboutOpenClDevices")),
+		format!("{}: {engine}", s.get("AboutEngine")),
+		format!("{}: {}", s.get("AboutH264Encoder"), h264_encoder(&s, openh264)),
 	]
 	.join("\n")
 }
