@@ -18,6 +18,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # File and line in backtraces, without the full debug info that slows linking (PDBs on Windows) and bloats the cache.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
 
 jobs:
   test:
@@ -32,6 +35,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only the default branch saves (pull requests restore its cache), so the 10 GB limit keeps the useful ones;
+          # a failing test does not cost the next run its build.
+          save-if: ${{ github.ref_name == github.event.repository.default_branch }}
+          cache-on-failure: true
       - name: Linux packages for Skia and winit
         if: runner.os == 'Linux'
         run: |
@@ -63,6 +71,11 @@ jobs:
           rustup toolchain install "$msrv" --profile minimal
           echo "MSRV=$msrv" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only the default branch saves (pull requests restore its cache), so the 10 GB limit keeps the useful ones;
+          # a failing test does not cost the next run its build.
+          save-if: ${{ github.ref_name == github.event.repository.default_branch }}
+          cache-on-failure: true
       - name: Linux packages for Skia and winit
         run: |
           sudo apt-get update
