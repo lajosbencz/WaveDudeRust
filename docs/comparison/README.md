@@ -176,11 +176,11 @@ kernel's phase speed 0.5621, so Example09's wavelengths come out 29.9 / 14.9 / 7
 ## Reproducing
 
 ```sh
-DOTNET_ROOT=$HOME/.dotnet PATH=$HOME/.dotnet:$PATH \
+WAVEDUDE_NEXT_DIR=<checkout of graealex/WaveDudeNext> \
   tools/compare-csharp/run.sh <project.wdproj> <dump-dir> --steps 600 --every 100 --probe-steps
 cargo run -p wavedude-cli --release -- compare <project.wdproj> <dump-dir> --out docs/comparison/<name> --steps 600 --every 100
 cargo run -p wavedude-cli --release -- convert examples/gates/07-xor.wdr <dir>/07-xor.wdproj   # then --steps 2592 --every 432
 ```
 
-The projects are `crates/wavedude-core/tests/fixtures/examples/<name>.wdproj`. The C# side needs the .NET 10 SDK and
-the sibling checkout of graealex/WaveDudeNext (tools/compare-csharp/README.md).
+The projects are `crates/wavedude-core/tests/fixtures/examples/<name>.wdproj`. The C# side's requirements are in
+[`tools/compare-csharp/README.md`](../../tools/compare-csharp/README.md).

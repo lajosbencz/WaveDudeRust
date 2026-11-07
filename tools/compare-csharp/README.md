@@ -1,7 +1,8 @@
 # compare-csharp
 
 Dumps the C# WaveDudeNext CPU engine's composed scene, fields and probe series for `wavedude-cli compare`.
-Needs the sibling checkout `../../../../graealex/WaveDudeNext` (github.com/graealex/WaveDudeNext) and the .NET 10 SDK.
+Needs the .NET 10 SDK and `WAVEDUDE_NEXT_DIR` set to a checkout of
+[graealex/WaveDudeNext](https://github.com/graealex/WaveDudeNext); the checkout stays untouched.
 
     ./run.sh <project.wdproj> <out-dir> --steps N [--every K] [--probe-steps]
 
