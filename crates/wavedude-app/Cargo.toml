@@ -27,7 +27,7 @@ wavedude-widgets = { path = "../wavedude-widgets" }
 wavedude-export = { path = "../wavedude-export" }
 wavedude-app-state = { path = "../wavedude-app-state" }
 bytes = "1"
-rfd = "0.15"
+rfd = "0.17"
 anyhow.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["float_roundtrip"] }

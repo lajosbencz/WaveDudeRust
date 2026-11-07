@@ -17,7 +17,7 @@ bytemuck = { version = "1", features = ["derive"] }
 rayon = "1.10"
 wide = "0.7"
 rand_pcg = "0.9"
-rand_core = "0.9"
+rand_core = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 quick-xml = { version = "0.42", features = ["serialize"] }
