@@ -44,28 +44,23 @@ fn error_at(text: &str, pos: usize, message: impl fmt::Display) -> FormatError {
 }
 
 fn start_element(text: &str, pos: usize, e: &BytesStart, version: XmlVersion) -> Result<Element, FormatError> {
-	let mut el = Element {
-		name: String::from_utf8_lossy(e.name().as_ref()).into_owned(),
-		at: line_col(text, pos),
-		..Element::default()
-	};
+	let mut el = Element { name: e.name().as_ref().to_owned(), at: line_col(text, pos), ..Element::default() };
 	for attr in e.attributes() {
 		let attr = attr.map_err(|err| {
 			let key = match err {
 				quick_xml::events::attributes::AttrError::Duplicated(at, _) => {
-					let raw: &[u8] = e;
-					let k: Vec<u8> = raw[at.min(raw.len())..]
-						.iter()
-						.take_while(|b| !b.is_ascii_whitespace() && **b != b'=')
-						.copied()
+					let raw: &str = e;
+					let k: String = raw[at.min(raw.len())..]
+						.chars()
+						.take_while(|c| !c.is_ascii_whitespace() && *c != '=')
 						.collect();
-					format!("attribute '{}' is repeated", String::from_utf8_lossy(&k))
+					format!("attribute '{k}' is repeated")
 				}
 				other => other.to_string(),
 			};
 			error_at(text, pos, format!("element '{}': {key}", el.name))
 		})?;
-		let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
+		let key = attr.key.as_ref().to_owned();
 		let value = attr.normalized_value(version).map_err(|err| error_at(text, pos, err))?.into_owned();
 		el.attrs.push((key, value));
 	}
@@ -104,7 +99,7 @@ pub(crate) fn parse(text: &str) -> Result<Document, FormatError> {
 			}
 			Event::Text(t) => {
 				if let Some(el) = stack.last_mut() {
-					el.text.push_str(&t.xml_content(version).map_err(|err| error_at(text, pos, err))?);
+					el.text.push_str(&t.xml_content(version));
 				}
 			}
 			Event::GeneralRef(r) => {
@@ -115,10 +110,10 @@ pub(crate) fn parse(text: &str) -> Result<Document, FormatError> {
 			Event::Decl(d) => version = d.xml_version().map_err(|err| error_at(text, pos, err))?,
 			Event::CData(t) => {
 				if let Some(el) = stack.last_mut() {
-					el.text.push_str(&String::from_utf8_lossy(&t));
+					el.text.push_str(&t);
 				}
 			}
-			Event::DocType(t) => doctype = Some(String::from_utf8_lossy(&t).into_owned()),
+			Event::DocType(t) => doctype = Some(t.to_string()),
 			Event::Eof => break,
 			_ => {}
 		}
@@ -139,8 +134,8 @@ fn resolve_ref(r: &BytesRef, out: &mut String) -> Result<(), String> {
 		out.push(c);
 		return Ok(());
 	}
-	let name = r.decode().map_err(|e| e.to_string())?;
-	out.push_str(resolve_predefined_entity(&name).ok_or_else(|| format!("unknown entity '&{name};'"))?);
+	let name: &str = r;
+	out.push_str(resolve_predefined_entity(name).ok_or_else(|| format!("unknown entity '&{name};'"))?);
 	Ok(())
 }
 

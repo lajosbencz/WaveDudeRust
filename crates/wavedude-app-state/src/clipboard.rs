@@ -110,7 +110,7 @@ fn top_elements(text: &str) -> Result<Vec<(String, std::ops::Range<usize>)>, Fra
 			Event::Start(e) => {
 				if depth == 0 {
 					start = before;
-					name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+					name = e.name().as_ref().to_owned();
 				}
 				depth += 1;
 			}
@@ -121,10 +121,10 @@ fn top_elements(text: &str) -> Result<Vec<(String, std::ops::Range<usize>)>, Fra
 				}
 			}
 			Event::Empty(e) if depth == 0 => {
-				out.push((String::from_utf8_lossy(e.name().as_ref()).into_owned(), before..after));
+				out.push((e.name().as_ref().to_owned(), before..after));
 			}
 			Event::Text(t) if depth == 0 => {
-				if !t.iter().all(u8::is_ascii_whitespace) {
+				if !t.chars().all(|c| c.is_ascii_whitespace()) {
 					return Err(FragmentError::StrayText);
 				}
 			}
