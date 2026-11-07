@@ -6,9 +6,11 @@ Decision 0011 says why; this is how.
 
 Commit with conventional commits (`feat:`, `fix:`, `chore:` ...). release-plz keeps a PR "chore: release
 v<next>" open on the default branch with the version bump and `CHANGELOG.md`. Merging it releases: GitHub gets
-the tag `v<version>` and a draft release, the package
-jobs attach the installers, the Linux tarball, the update signatures and attestations, and the last job writes
-`latest.json` and publishes the release.
+the tag `v<version>` and a draft release. `package.yml`, a reusable workflow without secrets and with a read-only
+token, builds the packages with `cargo auditable` and attests them (build provenance and the CycloneDX SBOMs of both
+programs); `sign` signs the update bundles with the updater key without compiling anything; `publish` writes
+`latest.json` and `SHA256SUMS`, attests them and the signatures, attaches everything and publishes the release, which
+the repository's immutable releases then lock.
 
 Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened with it starts its CI only after someone
 approves the waiting runs on the PR page ("Approve workflows to run"); once approved, later updates of the same PR
@@ -40,8 +42,9 @@ crates.io token as the secret `CARGO_REGISTRY_TOKEN` for the first publish, then
 trusted publisher of both crates (crates.io > crate > Settings > Trusted Publishing, workflow `release.yml`) and
 delete the secret.
 
-- Settings > General: squash merging only, its commit titled by the pull request's title (release-plz reads
-  conventional commits); allow auto-merge; delete head branches; no wiki.
+- Settings > General: immutable releases on (`gh api -X PUT repos/<owner>/<repo>/immutable-releases`); squash
+  merging only, its commit titled by the pull request's title (release-plz reads conventional commits); allow
+  auto-merge; delete head branches; no wiki.
 - Settings > Rules: a ruleset on the default branch requiring the CI jobs (`ubuntu-latest`, `windows-latest`,
   `macos-latest`, `MSRV`) and refusing deletion and force pushes; a ruleset on `v*` tags refusing update and deletion
   (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and release-plz tags through it).

@@ -11,14 +11,18 @@ Status: accepted, 2026-11-07
   release-plz runs on the workflow's `GITHUB_TOKEN`, no personal token: CI on each release PR it opens waits once for a
   person's approval on the PR page. A GitHub App's token would start it without the click; not chosen, to keep the
   setup free of an app.
-- **Installers** by [cargo-packager](https://github.com/crabnebula-dev/cargo-packager) in the same workflow
-  (`.github/workflows/release.yml`): NSIS on Windows x86_64, app and DMG on macOS (arm64 on `macos-15`, x86_64 on
+- **Installers** by [cargo-packager](https://github.com/crabnebula-dev/cargo-packager) in the reusable
+  workflow `.github/workflows/package.yml`, which `release.yml` calls: NSIS on Windows x86_64, app and DMG on macOS (arm64 on `macos-15`, x86_64 on
   `macos-15-intel`), AppImage plus a tarball of both programs on Linux x86_64 (built on Ubuntu 22.04 for an older
   glibc). Both programs are in every package. Not signed by Apple or Microsoft (macOS bundles carry an ad-hoc
   signature, without which Apple silicon reports them as damaged): Gatekeeper and SmartScreen warn,
-  accepted. Each file gets a GitHub build provenance attestation instead (Sigstore; free, verifiable with
-  `gh attestation verify`, but no operating system checks it). The release turns public only after every
-  platform's files and `latest.json` are attached.
+  accepted. Each file gets GitHub attestations instead (Sigstore; free, verifiable with `gh attestation verify`,
+  but no operating system checks it): build provenance and CycloneDX SBOMs (`cargo cyclonedx`), signed as the
+  reusable workflow `package.yml` (SLSA Build L3), which builds with no secrets and a read-only token; the
+  binaries embed their dependency list (`cargo auditable`). The updater key is only in a later job that compiles
+  nothing, so no dependency's build script sees it. No build cache in releases (cache poisoning; it saved little).
+  The release turns public only after every platform's files, `latest.json` and `SHA256SUMS` are attached, and is
+  immutable from then on.
 - **Updater**: [cargo-packager-updater](https://crates.io/crates/cargo-packager-updater) against
   `releases/latest/download/latest.json`, whose packages are signed with a minisign key (the private key a
   secret, the public key a repository variable compiled in through `WAVEDUDE_UPDATE_PUBKEY`); the endpoint is

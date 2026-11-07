@@ -47,8 +47,21 @@ cargo run -p wavedude-app --release -- project.wdr
 Installers for Windows (NSIS), macOS (app and DMG, Apple Silicon and Intel)
 and Linux (AppImage, and a tarball of the two programs) are on the GitHub
 releases page, unsigned by Apple and Microsoft, so Gatekeeper and SmartScreen
-warn at the first start; each file carries a build provenance attestation
-(`gh attestation verify <file> --repo <owner>/<repo>`). The installed program
+warn at the first start. Releases are immutable once published. Each package
+carries build provenance and CycloneDX SBOM attestations made by the release's
+build workflow, the SBOMs are attached too, `SHA256SUMS` lists every file, and
+the binaries embed their dependency list (`cargo audit bin`). To verify a
+download:
+
+```sh
+gh attestation verify <file> --repo lajosbencz/WaveDudeRust
+```
+
+Adding `--signer-workflow lajosbencz/WaveDudeRust/.github/workflows/package.yml`
+also checks that the build workflow itself made the attestation, not any other
+workflow of the repository.
+
+The installed program
 updates itself from the releases when the user agrees. How a release is made:
 [`docs/release.md`](docs/release.md)
 ([decision 0011](docs/decisions/0011-releases-and-updates.md)).
