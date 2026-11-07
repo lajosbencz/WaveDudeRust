@@ -228,10 +228,14 @@ mod tests {
 
 	#[test]
 	fn image_paths() {
-		let folder = Path::new("/p/q");
-		assert_eq!(stored_image_path(Some(folder), "/p/q/img/a.png"), Path::new("img/a.png").to_string_lossy());
-		assert_eq!(stored_image_path(Some(folder), "/elsewhere/a.png"), "/elsewhere/a.png");
-		assert_eq!(resolve_image_path(Some(folder), "img/a.png"), Path::new("/p/q/img/a.png"));
+		let root = std::env::temp_dir();
+		let folder = root.join("p");
+		let inside = folder.join("img").join("a.png");
+		let outside = root.join("elsewhere").join("a.png");
+		let rel = Path::new("img").join("a.png");
+		assert_eq!(stored_image_path(Some(&folder), &inside.to_string_lossy()), rel.to_string_lossy());
+		assert_eq!(stored_image_path(Some(&folder), &outside.to_string_lossy()), outside.to_string_lossy());
+		assert_eq!(resolve_image_path(Some(&folder), &rel.to_string_lossy()), inside);
 		assert_eq!(resolve_image_path(None, "img/a.png"), PathBuf::new());
 	}
 }

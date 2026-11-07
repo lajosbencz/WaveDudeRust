@@ -1,0 +1,2 @@
+# LF in every checkout: tests compare shipped files byte for byte, and builds embed them.
+* text=auto eol=lf
