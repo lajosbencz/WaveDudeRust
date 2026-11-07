@@ -134,13 +134,14 @@ pub(crate) fn check_size(spec_w: u32, spec_h: u32, w: u32, h: u32, len: usize, b
 
 /// Opens the sink of `format` at `path`: a video file at the path, encoded on a thread of its own (a movie on
 /// `pool`); for a sequence format a still at the path when `still`, else the folder of
-/// [`crate::naming::sequence_folder`], encoded on `pool`.
+/// [`crate::naming::sequence_folder`], encoded on `pool`. `h264`: Cisco's OpenH264 binary for MP4 (crate::h264).
 pub fn open(
 	format: ExportFormat,
 	path: &Path,
 	spec: SinkSpec,
 	still: bool,
 	pool: &EncoderPool,
+	h264: Option<&Path>,
 ) -> Result<Box<dyn FrameSink>> {
 	use sequence::{ImageKind, ImageSink, Placement};
 	let (w, h) = (spec.width, spec.height);
@@ -160,9 +161,12 @@ pub fn open(
 	};
 	match format {
 		#[cfg(feature = "mp4")]
-		ExportFormat::Mp4 => file(path, || Threaded::new(mp4::Mp4Writer::create(path, spec)?, w, h)),
+		ExportFormat::Mp4 => file(path, || Threaded::new(mp4::Mp4Writer::create(path, spec, h264)?, w, h)),
 		#[cfg(not(feature = "mp4"))]
-		ExportFormat::Mp4 => Err(ExportError::H264("built without the mp4 feature".into())),
+		ExportFormat::Mp4 => {
+			let _ = h264;
+			Err(ExportError::H264("built without the mp4 feature".into()))
+		}
 		ExportFormat::Mpeg1 => {
 			file(path, || Threaded::new(mpeg1::Mpeg1Writer::create(path, w, h, spec.fps as f64, spec.quality)?, w, h))
 		}

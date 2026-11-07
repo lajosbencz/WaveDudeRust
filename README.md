@@ -33,20 +33,24 @@ the native format is `.wdr`, a zip with JSON and the scene image.
 | `wave-cli` | headless checks, benches, dispersion tables, scripted runs and exports |
 
 ```sh
-cargo test --workspace            # everything; GPU tests skip without an adapter
+cargo test --workspace --features wave-export/openh264-source,wave-cli/openh264-source   # GPU tests skip without an adapter
 cargo run -p wave-cli --release -- bench --gpu
 cargo run -p wave-cli --release -- dispersion
+cargo run -p wave-cli --release -- openh264 enable    # downloads Cisco's OpenH264 for MP4
 cargo run -p wave-cli --release -- export project.wdproj --out out.mp4 --layers both
 cargo run -p wave-app --release -- project.wdr
 ```
 
 ## Dependencies
 
-H.264 export uses the `openh264` crate built from Cisco's source. Cisco's
-patent licence covers only Cisco's own prebuilt binaries, so a distributed
-build with MP4 export carries the H.264 royalty question itself (decision
-0005); `wave-export` and `wave-cli` build without it through
-`--no-default-features`.
+MP4 export uses Cisco's prebuilt OpenH264, which Cisco's H.264 patent licence
+covers only when it is downloaded from Cisco to the user's device. Release
+builds therefore carry no H.264 encoder: the app downloads it at the first MP4
+export once "Use Cisco's OpenH264 codec" is ticked in the export dialog, the
+CLI on `wave-cli openh264 enable` (decision 0005). The `openh264-source`
+feature compiles OpenH264 in for development and tests; a build made with it
+must not be distributed without an H.264 patent licence. `wave-export` and
+`wave-cli` build without MP4 through `--no-default-features`.
 
 `docs/spec` is what the core must do, `docs/ui` what the application must do,
 `docs/decisions` why, `docs/measurements.md` how fast.

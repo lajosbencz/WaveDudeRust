@@ -36,6 +36,10 @@ Everything the program reports, newest last. Double-click the status bar to open
 File opens, saves and exports projects; Edit undoes, redoes and copies; View sets the theme, the zoom, the
 language and the preview quality; Simulation runs, pauses and stops the simulation; Help opens this manual.
 
+MP4 export uses Cisco's OpenH264 codec, which is not part of the program: tick "Use Cisco's OpenH264 codec" in the
+export dialog and it is downloaded from Cisco at the first MP4 export. Clearing the box turns it off again.
+Help > About shows Cisco's license.
+
 ## Project settings
 
 The Project, Scene, Simulation and Display rows of the tree hold the canvas size, the edges, the number of

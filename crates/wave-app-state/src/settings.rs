@@ -124,6 +124,8 @@ pub struct Settings {
 	pub export_hints: Vec<ExportHint>,
 	/// The window title names the project's full path rather than its file name (decision 0008).
 	pub title_full_path: bool,
+	/// MP4 export may use Cisco's OpenH264, downloaded on first use (decision 0005).
+	pub use_openh264: bool,
 }
 
 impl Default for Settings {
@@ -154,6 +156,7 @@ impl Default for Settings {
 			part_description_expanded: true,
 			export_hints: Vec::new(),
 			title_full_path: false,
+			use_openh264: false,
 		}
 	}
 }

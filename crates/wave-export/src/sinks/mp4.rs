@@ -10,7 +10,6 @@ use std::io::{BufWriter, Seek, Write};
 use std::path::Path;
 
 use mp4::{AvcConfig, MediaConfig, Mp4Config, Mp4Sample, TrackConfig, TrackType};
-use openh264::OpenH264API;
 use openh264::encoder::{
 	BitRate, Encoder, EncoderConfig, FrameRate, FrameType, IntraFramePeriod, Level, Profile, RateControlMode,
 	UsageType, VuiConfig,
@@ -80,9 +79,11 @@ pub struct Mp4Writer<W: Write + Seek> {
 }
 
 impl Mp4Writer<BufWriter<File>> {
-	pub fn create(path: &Path, spec: SinkSpec) -> Result<Self> {
+	/// `library`: Cisco's OpenH264 binary (crate::h264), unused in a build with OpenH264 compiled in.
+	pub fn create(path: &Path, spec: SinkSpec, library: Option<&Path>) -> Result<Self> {
 		Self::check(spec.width, spec.height)?;
-		Self::start(BufWriter::with_capacity(1 << 20, File::create(path)?), spec)
+		let api = crate::h264::api(library)?;
+		Self::start(BufWriter::with_capacity(1 << 20, File::create(path)?), spec, api)
 	}
 }
 
@@ -95,12 +96,12 @@ impl<W: Write + Seek> Mp4Writer<W> {
 		Ok(())
 	}
 
-	pub fn new(out: W, spec: SinkSpec) -> Result<Self> {
+	pub fn new(out: W, spec: SinkSpec, library: Option<&Path>) -> Result<Self> {
 		Self::check(spec.width, spec.height)?;
-		Self::start(out, spec)
+		Self::start(out, spec, crate::h264::api(library)?)
 	}
 
-	fn start(out: W, spec: SinkSpec) -> Result<Self> {
+	fn start(out: W, spec: SinkSpec, api: openh264::OpenH264API) -> Result<Self> {
 		let fps = spec.fps;
 		let bps = bitrate(spec.width, spec.height, fps, spec.quality);
 		let config = EncoderConfig::new()
@@ -114,7 +115,7 @@ impl<W: Write + Seek> Mp4Writer<W> {
 			.level(Level::Level_5_2)
 			.intra_frame_period(IntraFramePeriod::from_num_frames(fps))
 			.vui(VuiConfig::bt601());
-		let encoder = Encoder::with_api_config(OpenH264API::from_source(), config).map_err(h264_error)?;
+		let encoder = Encoder::with_api_config(api, config).map_err(h264_error)?;
 		let brand = |s: &str| s.parse().map_err(h264_error);
 		let muxer = mp4::Mp4Writer::write_start(
 			out,

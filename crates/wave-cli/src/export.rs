@@ -130,6 +130,10 @@ fn run_failure(run: &mut SimulationRun) -> Option<anyhow::Error> {
 
 pub fn run(args: &Args) -> Result<()> {
 	let format = format_of(args)?;
+	#[cfg(feature = "mp4")]
+	let h264 = if format == ExportFormat::Mp4 { crate::openh264::library()? } else { None };
+	#[cfg(not(feature = "mp4"))]
+	let h264 = None;
 	if args.still.is_some() && !format.supports_still() {
 		bail!("a still needs an image format, not a video");
 	}
@@ -187,6 +191,7 @@ pub fn run(args: &Args) -> Result<()> {
 		traces: &traces,
 		total_steps: spec.steps as u64,
 		keep_partial: args.keep_partial,
+		h264,
 	};
 	let source = LiveFrames { store: &store, run: &run, signal: &signal, cancel: &cancel, waited: AtomicU64::new(0) };
 	let job = plan.build_job(&source, &SchemeStore::default())?;

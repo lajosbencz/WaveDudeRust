@@ -118,6 +118,8 @@ pub enum Event {
 	SetFrameMemoryPercent(i32),
 	SetWarnWhenRamInsufficient(bool),
 	SetTitleFullPath(bool),
+	/// MP4 export may use Cisco's OpenH264.
+	SetUseOpenH264(bool),
 	SetPreviewOrientation(settings::Orientation),
 }
 
@@ -765,6 +767,11 @@ impl<B: Backend> AppState<B> {
 			}
 			Event::SetTitleFullPath(on) => {
 				self.settings.title_full_path = on;
+				self.save_settings();
+				Response::None
+			}
+			Event::SetUseOpenH264(on) => {
+				self.settings.use_openh264 = on;
 				self.save_settings();
 				Response::None
 			}

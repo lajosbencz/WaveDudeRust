@@ -11,6 +11,8 @@ use wave_core::model::Layer;
 mod bits;
 pub mod csv;
 pub mod graph;
+#[cfg(feature = "mp4")]
+pub mod h264;
 pub mod job;
 pub mod naming;
 pub mod overlays;
@@ -198,6 +200,10 @@ pub enum ExportError {
 	Exr(#[from] exr::error::Error),
 	#[error("H.264 encoding failed: {0}")]
 	H264(String),
+	#[error("OpenH264: {0}")]
+	Codec(String),
+	#[error("MP4 export needs Cisco's OpenH264 codec, which is not enabled or not downloaded")]
+	H264Missing,
 	#[error("{format} cannot carry a {width} x {height} picture ({limit})")]
 	Size { format: &'static str, width: u32, height: u32, limit: &'static str },
 	#[error("the frame is {got_width} x {got_height}, the output {width} x {height}")]

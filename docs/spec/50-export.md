@@ -6,7 +6,7 @@ Order (dialog filter order): Mp4, Mpeg1, Avi, Mov, MovPng, Png, Jpeg, Exr, ExrRo
 
 | Format | Kind | Extensions | Still | Notes |
 |---|---|---|---|---|
-| Mp4 | video | mp4, m4v | no | H.264 via Media Foundation (Windows only) |
+| Mp4 | video | mp4, m4v | no | H.264 via Media Foundation (Windows only); Rust: Cisco's OpenH264 (decision 0005) |
 | Mpeg1 | video | mpg, mpeg, m1v | no | in-house, I-frames only |
 | Avi | video | avi | no | uncompressed 24-bit, OpenDML |
 | Mov | video | mov, qt | no | QuickTime Animation (`rle `) |
@@ -148,7 +148,8 @@ Label font: see "Burned-in overlays" below.
   (`Quality`), no B-frames, GOP 1 s.
 - Bitrate fallback: `clamp(round_even(W*H*fps*0.01*50^(q/100)), 300000, 200000000)` bit/s.
 - Odd sizes padded to even by repeating the last row/column; maximum 4096 x 2304.
-- Rust: openh264 and the `mp4` crate, decision 0005.
+- Rust: openh264 and the `mp4` crate, decision 0005. The encoder is Cisco's binary loaded at run time
+  (`ExportPlan::h264`, the path from `wave_export::h264`); without one the export fails with `H264Missing`.
 
 ## OpenEXR (`Export/ExrWriter.cs`)
 

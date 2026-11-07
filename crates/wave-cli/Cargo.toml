@@ -10,6 +10,8 @@ description = "Headless checks, benches and scripted exports"
 [features]
 default = ["mp4"]
 mp4 = ["wave-export/mp4"]
+# OpenH264 compiled in instead of Cisco's downloaded binary: for development and tests, not for distributed builds.
+openh264-source = ["mp4", "wave-export/openh264-source"]
 
 [[bin]]
 name = "wave-cli"

@@ -41,6 +41,10 @@ Native save dialog (port: platform file dialog, e.g. rfd).
 | Export probe data as CSV | "Export the probe data" | CSV file (*.csv) | the probe's name |
 
 - The chosen filter is the format (the two MOV formats share `.mov`); the extension follows it.
+- Port: MP4 shows "OpenH264 Video Codec provided by Cisco Systems, Inc." and the check box "Use Cisco's OpenH264
+  codec (downloaded from Cisco at the first MP4 export)" (setting `UseOpenH264`); OK is disabled while it is
+  clear. The download runs on the export's worker before the first frame; a failure ends the export with its reason
+  in the error box. A build with OpenH264 compiled in shows neither (decision 0005).
 - The last filter index is remembered (`ExportFilterIndex`); a remembered video means PNG in the still dialog.
 - Start folder rule, per kind (run export, still, probe data) and per project file: the first export after a
   project is opened starts in the project's folder under the project's name; every later one in the last export's
@@ -73,6 +77,9 @@ Content top to bottom:
 4. "System": read-only text box (max 160 px, scrolls) with eight lines: Program, Runtime, Operating system,
    Processor (+ logical cores), Memory ("x free of y"), GPU (OpenCL) setting (on/off), OpenCL devices (or "OpenCL
    is not installed"), H.264 encoders (or "Media Foundation is not available" / "none").
+Port, between 3 and 4: "OpenH264": Cisco's notice and the toggle "Show the OpenH264 license" / "Hide the OpenH264
+   license" (O), showing Cisco's licence text verbatim, as plain text, in the same box; absent when OpenH264 is
+   compiled in.
 5. Buttons: "Copy system info" (C; tooltip "Copy the system lines to the clipboard, for a bug report"; status
    "System information copied to the clipboard"), "Close" (default and cancel).
 

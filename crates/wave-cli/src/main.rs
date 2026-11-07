@@ -6,6 +6,8 @@ mod dispersion;
 mod export;
 mod gates;
 mod info;
+#[cfg(feature = "mp4")]
+mod openh264;
 mod png_out;
 mod project;
 mod run;
@@ -52,6 +54,12 @@ enum Command {
 	Probes(run::ProbesArgs),
 	/// Run a project at full quality and export it as video, an image sequence, OpenEXR or a still.
 	Export(export::Args),
+	/// Cisco's OpenH264 codec for MP4 export: status, enable (download), disable (remove), license.
+	#[cfg(feature = "mp4")]
+	Openh264 {
+		#[arg(value_enum, default_value = "status")]
+		action: openh264::Action,
+	},
 	/// Write the photonic gate demonstrations of the Huygens Optics video as projects, laid out by the mode solver.
 	Gates(gates::Args),
 	/// Run a two-input project with sources A and B off and on and print the intensity at probes Q and R.
@@ -107,6 +115,8 @@ fn main() -> Result<()> {
 		Command::Run(args) => run::frames(&args),
 		Command::Probes(args) => run::probes(&args),
 		Command::Export(args) => export::run(&args),
+		#[cfg(feature = "mp4")]
+		Command::Openh264 { action } => openh264::run(action),
 		Command::Gates(args) => gates::run(&args),
 		Command::TruthTable(args) => truth::run(&args),
 		Command::Compare(args) => compare::run(&args),

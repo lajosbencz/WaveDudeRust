@@ -65,7 +65,7 @@ fn target(format: ExportFormat, path: &std::path::Path, layer: Layer, first: usi
 	ExportTarget {
 		layer,
 		look: look(layer),
-		sink: sinks::open(format, path, spec(first, count), false, &EncoderPool::default()).unwrap(),
+		sink: sinks::open(format, path, spec(first, count), false, &EncoderPool::default(), None).unwrap(),
 	}
 }
 
@@ -182,7 +182,7 @@ fn exr_takes_the_stored_halves_and_a_still_is_one_frame() {
 		targets: vec![ExportTarget {
 			layer: Layer::Intensity,
 			look: look(Layer::Intensity),
-			sink: sinks::open(ExportFormat::ExrRoot, &still, spec(3, 1), true, &EncoderPool::default()).unwrap(),
+			sink: sinks::open(ExportFormat::ExrRoot, &still, spec(3, 1), true, &EncoderPool::default(), None).unwrap(),
 		}],
 		overlays: None,
 		keep_partial: true,
@@ -362,6 +362,7 @@ fn a_plan_builds_one_target_per_layer_with_suffixed_paths() {
 		traces: &[],
 		total_steps: 8,
 		keep_partial: false,
+		h264: None,
 	};
 	let job = plan.build_job(&src, &SchemeStore::default()).unwrap();
 	assert_eq!(job.frames, 0..=3);
@@ -389,6 +390,7 @@ fn a_plan_that_cannot_open_an_output_removes_those_it_opened() {
 		traces: &[],
 		total_steps: 4,
 		keep_partial: false,
+		h264: None,
 	};
 	assert!(plan.build_job(&src, &SchemeStore::default()).is_err());
 	assert!(!dir.join("run_field.avi").exists(), "the field's movie is removed");

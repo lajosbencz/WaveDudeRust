@@ -14,6 +14,10 @@ path = "src/lib.rs"
 name = "wave-app"
 path = "src/main.rs"
 
+[features]
+# OpenH264 compiled in instead of Cisco's downloaded binary: for development and tests, not for distributed builds.
+openh264-source = ["wave-export/openh264-source"]
+
 [dependencies]
 freya = { version = "0.5", features = ["engine", "markdown"] }
 wave-widgets = { path = "../wave-widgets" }

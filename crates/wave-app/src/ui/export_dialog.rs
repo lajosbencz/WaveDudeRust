@@ -14,7 +14,7 @@ use wave_core::engine::probes::ProbeTrace;
 use wave_core::io::schemes::SchemeStore;
 use wave_core::model::{Layer, Project};
 use wave_core::run::store::FrameStore;
-use wave_export::{ExportFormat, ExportLayers, ExportPlan, ExportState, FrameSource, naming};
+use wave_export::{ExportError, ExportFormat, ExportLayers, ExportPlan, ExportState, FrameSource, h264, naming};
 use wave_widgets::{Progress, use_wave_theme};
 
 use wave_app_state::ExportKind;
@@ -22,7 +22,7 @@ use wave_app_state::live::ExportGate;
 
 use super::app::{Cx, Ui};
 use super::dialogs::{self, Modal, button, button_row, filters, frame};
-use super::properties::{combo_box, text_box};
+use super::properties::{check_box, combo_box, text_box};
 use super::shared::App;
 
 /// What an export command asks for.
@@ -277,6 +277,7 @@ struct Work {
 	traces: Vec<ProbeTrace>,
 	total_steps: u64,
 	schemes: SchemeStore,
+	use_openh264: bool,
 }
 
 fn run(cx: &Cx, plan: Plan) {
@@ -288,6 +289,7 @@ fn run(cx: &Cx, plan: Plan) {
 			traces: traces(a),
 			total_steps: u64::from(a.live.run_spec().expect("a run with a store has a spec").steps),
 			schemes: a.schemes.clone(),
+			use_openh264: a.settings.use_openh264,
 		})
 	});
 	let Some(work) = work else {
@@ -366,6 +368,7 @@ fn export_frames(
 ) -> Result<String, String> {
 	let store = &*work.store;
 	let count = FrameSource::frame_count(store);
+	let h264 = if format == ExportFormat::Mp4 { codec(work.use_openh264)? } else { None };
 	let plan = ExportPlan {
 		project: &work.project,
 		format,
@@ -376,6 +379,7 @@ fn export_frames(
 		traces: &work.traces,
 		total_steps: work.total_steps,
 		keep_partial: false,
+		h264,
 	};
 	let job = plan.build_job(store, &work.schemes).map_err(|e| e.to_string())?;
 	let report = job.run(|done, total| drop(tx.send(Msg::Progress(done, total))), cancel);
@@ -384,6 +388,18 @@ fn export_frames(
 		ExportState::Cancelled => Ok(format!("export cancelled after {} frames", report.frames_done)),
 		ExportState::Failed(e) => Err(e.to_string()),
 	}
+}
+
+/// Cisco's OpenH264 for an MP4 export, downloaded at the first use; `None` when it is compiled in.
+fn codec(enabled: bool) -> Result<Option<PathBuf>, String> {
+	if h264::BUILT_IN {
+		return Ok(None);
+	}
+	if !enabled {
+		return Err(ExportError::H264Missing.to_string());
+	}
+	let dir = h264::default_dir().ok_or("no user data folder for OpenH264")?;
+	h264::download(&dir).map(Some).map_err(|e| e.to_string())
 }
 
 /// Takes the worker's messages; called every tick.
@@ -430,7 +446,7 @@ pub fn poll(cx: &Cx) {
 			}
 			Err(e) => {
 				tracing::error!("export failed: {e}");
-				cx.ui.show_modal(Modal::Error(cx.strings().get("ExportError").to_owned()));
+				cx.ui.show_modal(Modal::Error(format!("{}\n{e}", cx.strings().get("ExportError"))));
 			}
 		}
 	}
@@ -491,8 +507,26 @@ impl Component for ExportDialog {
 				begin(&cx, Plan::Frames { choice, format: f, path: chosen, frame, repeat: false });
 			}
 		};
+		let mp4 = formats[*format.read()] == ExportFormat::Mp4 && !h264::BUILT_IN;
+		let openh264 = cx.shared.read(super::shared::Topics::SETTINGS, |a| a.settings.use_openh264);
+		let ready = !mp4 || openh264;
+		let codec = mp4.then(|| {
+			let cx = cx.clone();
+			rect().spacing(4.).child(label().text(h264::NOTICE).color(theme.text_dim)).child(check_box(
+				s.get("ExportUseOpenH264").to_owned(),
+				openh264,
+				move |on| {
+					cx.shared.send(wave_app_state::Event::SetUseOpenH264(on));
+				},
+			))
+		});
 		let ui = cx.ui;
-		let ok_key = ok.clone();
+		let ok_key = move || {
+			if ready {
+				ok()
+			}
+		};
+		let ok = ok_key.clone();
 		frame(560.)
 			.on_global_key_down(move |e: Event<KeyboardEventData>| match e.key {
 				Key::Named(NamedKey::Escape) => {
@@ -530,8 +564,9 @@ impl Component for ExportDialog {
 					)))
 					.child(Button::new().compact().on_press(browse).child(label().text("..."))),
 			)
+			.maybe_child(codec)
 			.child(button_row(vec![
-				button(s.get("DialogOk"), true, move |_| ok()),
+				button(s.get("DialogOk"), ready, move |_| ok()),
 				button(s.get("DialogCancel"), true, move |_| ui.close_modal()),
 			]))
 			.into_element()

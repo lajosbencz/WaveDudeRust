@@ -193,7 +193,7 @@ fn export_writes_movies_of_both_layers_overlapping_the_run() {
 	}
 }
 
-#[cfg(feature = "mp4")]
+#[cfg(feature = "openh264-source")]
 #[test]
 fn export_writes_an_mp4() {
 	let dir = tempfile::tempdir().unwrap();

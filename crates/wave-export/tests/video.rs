@@ -241,19 +241,19 @@ fn mov_decodes_to_identical_frames() {
 	std::fs::remove_dir_all(&dir).unwrap();
 }
 
-#[cfg(feature = "mp4")]
+#[cfg(feature = "openh264-source")]
 fn mp4(path: &std::path::Path, frames: &[Vec<u8>], w: u32, h: u32) {
 	use wave_export::sinks::mp4::Mp4Writer;
 	let spec =
 		wave_export::SinkSpec { width: w, height: h, fps: 60, quality: 85, first_frame: 0, frame_count: frames.len() };
-	let mut writer = Mp4Writer::create(path, spec).unwrap();
+	let mut writer = Mp4Writer::create(path, spec, None).unwrap();
 	for f in frames {
 		writer.write_frame(f, w, h).unwrap();
 	}
 	writer.finish().unwrap();
 }
 
-#[cfg(feature = "mp4")]
+#[cfg(feature = "openh264-source")]
 #[test]
 fn mp4_decodes_close_to_the_source_at_the_default_quality() {
 	use wave_export::sinks::mp4::bitrate;
@@ -276,7 +276,7 @@ fn mp4_decodes_close_to_the_source_at_the_default_quality() {
 	std::fs::remove_dir_all(&dir).unwrap();
 }
 
-#[cfg(feature = "mp4")]
+#[cfg(feature = "openh264-source")]
 #[test]
 fn mp4_pads_an_odd_size_to_even() {
 	if !has_ffmpeg() {
@@ -353,4 +353,34 @@ fn mpeg1_pts_leads_the_scr_by_a_tenth_of_a_second() {
 fn avi_refuses_a_frame_of_4_gib() {
 	assert!(AviWriter::new(Cursor::new(Vec::new()), 40_000, 40_000, 30, 1 << 30).is_err());
 	assert!(AviWriter::new(Cursor::new(Vec::new()), 1920, 1080, 30, 1 << 30).is_ok());
+}
+
+/// Cisco's binary downloaded, refused when missing, and encoding a video that decodes like the compiled-in one.
+#[cfg(all(feature = "mp4", not(feature = "openh264-source")))]
+#[test]
+#[ignore = "downloads Cisco's OpenH264; run with --ignored"]
+fn mp4_through_ciscos_downloaded_binary() {
+	use wave_export::h264;
+	use wave_export::sinks::mp4::Mp4Writer;
+	let dir = scratch("mp4-cisco");
+	let spec = wave_export::SinkSpec { width: 640, height: 360, fps: 30, quality: 85, first_frame: 0, frame_count: 10 };
+	let path = dir.join("v.mp4");
+	assert!(matches!(Mp4Writer::create(&path, spec, None), Err(wave_export::ExportError::H264Missing)));
+	let library = h264::download(&dir.join("codec")).unwrap();
+	assert_eq!(h264::installed(&dir.join("codec")), Some(library.clone()));
+	let mut writer = Mp4Writer::create(&path, spec, Some(&library)).unwrap();
+	let frames: Vec<Vec<u8>> = (0..10).map(|t| wave_frame(640, 360, t)).collect();
+	for f in &frames {
+		writer.write_frame(f, 640, 360).unwrap();
+	}
+	writer.finish().unwrap();
+	if has_ffmpeg() {
+		assert_eq!(ffprobe(&path), "h264,640,360,10");
+		let decoded = ffmpeg_frames(&path, 640, 360);
+		let worst = decoded.iter().zip(&frames).map(|(d, f)| psnr(d, &rgb(f))).fold(f64::INFINITY, f64::min);
+		assert!(worst >= 40.0, "worst PSNR {worst:.2} dB");
+	}
+	h264::remove(&dir.join("codec")).unwrap();
+	assert_eq!(h264::installed(&dir.join("codec")), None);
+	std::fs::remove_dir_all(&dir).unwrap();
 }

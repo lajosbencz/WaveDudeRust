@@ -1,7 +1,9 @@
-//! The About dialog (docs/ui/70): name, version, credits, the license notice and text, the system lines.
+//! The About dialog (docs/ui/70): name, version, credits, the license notice and text, Cisco's OpenH264 notice and
+//! license (unless OpenH264 is compiled in), the system lines.
 
 use freya::markdown::MarkdownViewerThemePartialExt as Md;
 use freya::prelude::*;
+use wave_export::h264;
 use wave_widgets::{Theme, use_wave_theme};
 
 use super::app::{Cx, Ui};
@@ -36,6 +38,14 @@ pub fn markdown(text: impl Into<std::borrow::Cow<'static, str>>, theme: &Theme) 
 	Md::code_font_size(v, theme.font_size)
 }
 
+/// A license text in a scrolled box.
+fn license_view(text: impl IntoElement) -> ScrollView {
+	ScrollView::new()
+		.width(Size::fill())
+		.height(Size::px(260.))
+		.child(rect().padding(4.).width(Size::fill()).child(text))
+}
+
 /// The eight system lines of the bug-report box.
 pub fn system_lines(cx: &Cx) -> String {
 	let s = cx.strings();
@@ -62,6 +72,7 @@ impl Component for AboutDialog {
 		let theme = use_wave_theme();
 		let s = cx.strings();
 		let mut shown = use_state(|| false);
+		let mut cisco = use_state(|| false);
 		let ui: Ui = cx.ui;
 		let lines = system_lines(&cx);
 		let copy = {
@@ -113,12 +124,20 @@ impl Component for AboutDialog {
 				},
 			));
 		if *shown.read() {
-			body = body.child(
-				ScrollView::new()
-					.width(Size::fill())
-					.height(Size::px(260.))
-					.child(rect().padding(4.).width(Size::fill()).child(markdown(LICENSE, &theme))),
-			);
+			body = body.child(license_view(markdown(LICENSE, &theme)));
+		}
+		if !h264::BUILT_IN {
+			body = body.child(heading("OpenH264")).child(label().text(h264::NOTICE)).child(button(
+				s.get(if *cisco.read() { "AboutHideOpenH264License" } else { "AboutShowOpenH264License" }),
+				true,
+				move |_| {
+					let v = !*cisco.peek();
+					cisco.set(v);
+				},
+			));
+			if *cisco.read() {
+				body = body.child(license_view(paragraph().width(Size::fill()).span(Span::new(h264::LICENSE))));
+			}
 		}
 		body.child(heading(s.get("AboutSystem")))
 			.child(

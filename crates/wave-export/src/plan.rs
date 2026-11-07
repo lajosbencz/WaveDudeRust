@@ -34,6 +34,8 @@ pub struct ExportPlan<'a> {
 	pub total_steps: u64,
 	/// Keep the outputs of a failed or cancelled job.
 	pub keep_partial: bool,
+	/// Cisco's OpenH264 binary for MP4 (crate::h264); unused when OpenH264 is compiled in.
+	pub h264: Option<PathBuf>,
 }
 
 impl ExportPlan<'_> {
@@ -90,7 +92,7 @@ impl ExportPlan<'_> {
 		let mut targets: Vec<ExportTarget> = Vec::with_capacity(layers.len());
 		for &layer in layers {
 			let path = naming::layer_path(&self.path, layer, both);
-			let sink = match sinks::open(self.format, &path, spec, self.still.is_some(), &pool) {
+			let sink = match sinks::open(self.format, &path, spec, self.still.is_some(), &pool, self.h264.as_deref()) {
 				Ok(sink) => sink,
 				Err(e) => {
 					let mut opened: Vec<Box<dyn FrameSink>> = targets.into_iter().map(|t| t.sink).collect();

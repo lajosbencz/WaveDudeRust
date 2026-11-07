@@ -37,7 +37,7 @@ fn jpeg_1080p_444() {
 	let n = 48;
 	let dir = scratch("timing_jpeg");
 	let mut sink =
-		sinks::open(ExportFormat::Jpeg, &dir.join("seq.jpg"), spec(n), false, &EncoderPool::default()).unwrap();
+		sinks::open(ExportFormat::Jpeg, &dir.join("seq.jpg"), spec(n), false, &EncoderPool::default(), None).unwrap();
 	let start = Instant::now();
 	for i in 0..n {
 		sink.write_frame(&frames[i % frames.len()], W, H).unwrap();
@@ -47,14 +47,14 @@ fn jpeg_1080p_444() {
 }
 
 /// C#: an MP4 job 16 ms a frame.
-#[cfg(feature = "mp4")]
+#[cfg(feature = "openh264-source")]
 #[test]
 #[ignore]
 fn mp4_1080p_per_frame() {
 	let frames = frames(8);
 	let n = 60;
 	let path = scratch("timing_mp4").join("run.mp4");
-	let mut sink = sinks::open(ExportFormat::Mp4, &path, spec(n), false, &EncoderPool::default()).unwrap();
+	let mut sink = sinks::open(ExportFormat::Mp4, &path, spec(n), false, &EncoderPool::default(), None).unwrap();
 	sink.write_frame(&frames[0], W, H).unwrap();
 	let start = Instant::now();
 	for i in 1..n {
@@ -70,7 +70,7 @@ fn mpeg1_1080p_per_frame() {
 	let frames = frames(8);
 	let n = 36;
 	let path = scratch("timing_mpeg1").join("run.mpg");
-	let mut sink = sinks::open(ExportFormat::Mpeg1, &path, spec(n), false, &EncoderPool::default()).unwrap();
+	let mut sink = sinks::open(ExportFormat::Mpeg1, &path, spec(n), false, &EncoderPool::default(), None).unwrap();
 	let start = Instant::now();
 	for i in 0..n {
 		sink.write_frame(&frames[i % frames.len()], W, H).unwrap();

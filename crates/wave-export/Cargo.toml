@@ -9,7 +9,10 @@ description = "Image, video, OpenEXR and CSV export sinks and the export job"
 
 [features]
 default = ["mp4"]
-mp4 = ["dep:openh264", "dep:mp4"]
+# MP4 through Cisco's prebuilt OpenH264, downloaded by the user's choice and loaded at run time (decision 0005).
+mp4 = ["dep:openh264", "openh264/libloading", "dep:mp4", "dep:ureq", "dep:bzip2", "dep:directories"]
+# OpenH264 compiled into the program instead: for development and tests, not for distributed builds.
+openh264-source = ["mp4", "openh264/source"]
 clap = ["dep:clap"]
 
 [dependencies]
@@ -25,7 +28,10 @@ clap = { workspace = true, optional = true }
 jpeg-encoder = "0.7"
 exr = "1.74"
 ab_glyph = "0.2"
-openh264 = { version = "0.9", optional = true }
+openh264 = { version = "0.9", default-features = false, optional = true }
+ureq = { version = "3", optional = true }
+bzip2 = { version = "0.6", optional = true }
+directories = { version = "6", optional = true }
 mp4 = { version = "0.14", optional = true }
 
 [dev-dependencies]

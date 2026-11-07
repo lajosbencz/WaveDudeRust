@@ -33,6 +33,8 @@ moved aside. An unreadable file is not a first start.
 | LastExportFolder | path | "" | any export (fallback start folder) |
 | ExportFilterIndex | int (index into the run-export filter list; out of range reads as 0) | 0 | export Save dialog |
 | PartDescriptionExpanded | bool | true | description header on any part form |
+| TitleFullPath | bool | false | View > Full path in the title |
+| UseOpenH264 | bool | false | export dialog, MP4: Use Cisco's OpenH264 codec |
 | ExportHints | list of {Project path, Run path, Still path, Probe path}, newest project first, max 20, only existing project files | empty | each export; restored when the project is opened |
 
 Not persisted (session or project state): playback speed (resets to 1 each start; decision 0008),
