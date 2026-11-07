@@ -434,6 +434,27 @@ fn scratch_frames_step_on_and_come_back_from_the_cache() {
 }
 
 #[test]
+fn the_scratch_cache_answers_by_step_not_by_frame() {
+	let mut p = with_probes(project(64, 48, 100));
+	let every_2 = spec(&p, PreviewQuality::FULL);
+	p.simulation.visualize_every = 4;
+	let every_4 = spec(&p, PreviewQuality::FULL);
+	let (runner, rx) = scratch();
+	runner.request(every_2.clone(), 10);
+	let step_20 = done(&rx);
+	runner.request(every_4.clone(), 10);
+	let step_40 = done(&rx);
+	assert_eq!((step_20.snapshot.step, step_40.snapshot.step), (20, 40));
+	let (fresh, fresh_rx) = scratch();
+	fresh.request(every_4.clone(), 10);
+	assert_eq!(step_40.snapshot.field, done(&fresh_rx).snapshot.field);
+	runner.request(every_4, 5);
+	let again = done(&rx);
+	assert_eq!((again.frame, again.snapshot.step), (5, 20));
+	assert_eq!(again.snapshot.field, step_20.snapshot.field);
+}
+
+#[test]
 fn a_superseded_scratch_request_is_abandoned() {
 	let s = spec(&project(256, 256, 100), PreviewQuality::FULL);
 	let (runner, rx) = scratch();

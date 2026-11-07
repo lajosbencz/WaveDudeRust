@@ -22,7 +22,7 @@ use super::spec::RunSpec;
 
 /// Steps between two looks for a newer request.
 pub const CHECK_INTERVAL: u32 = 16;
-/// Bytes of planes the recent frames keep.
+/// Bytes of planes and probe traces the recent frames keep.
 pub const CACHE_BYTES: usize = 256 << 20;
 
 /// A computed scratch frame.
@@ -195,10 +195,11 @@ impl Worker {
 		if !self.kept.as_ref().is_some_and(|k| same_steps(&k.spec, &spec)) {
 			self.cache.clear();
 		}
-		if let Some(hit) = self.cache.iter().find(|r| r.frame == frame && r.snapshot.shape == spec.shape) {
+		let step = spec.step_of(frame);
+		if let Some(hit) = self.cache.iter().find(|r| r.snapshot.step == step && r.snapshot.shape == spec.shape) {
 			tracing::debug!(frame, "preview frame from the cache");
 			let elapsed = started.elapsed();
-			return Ok(ScratchEvent::Done(Box::new(ScratchResult { id, spec, elapsed, ..hit.clone() })));
+			return Ok(ScratchEvent::Done(Box::new(ScratchResult { id, spec, frame, elapsed, ..hit.clone() })));
 		}
 		self.prepare(&spec, steps);
 		let kept = self.kept.as_mut().expect("engine prepared");
@@ -229,7 +230,14 @@ impl Worker {
 	}
 
 	fn remember(&mut self, result: ScratchResult) {
-		let bytes = |r: &ScratchResult| r.snapshot.field.len() + r.snapshot.intensity.len();
+		let bytes = |r: &ScratchResult| {
+			let traces: usize = r
+				.traces
+				.iter()
+				.map(|t| (t.series.len() + t.profiles.iter().map(<[f32]>::len).sum::<usize>()) * 4)
+				.sum();
+			r.snapshot.field.len() + r.snapshot.intensity.len() + traces
+		};
 		let mut total = self.cache.iter().map(bytes).sum::<usize>() + bytes(&result);
 		while total > CACHE_BYTES
 			&& let Some(old) = self.cache.pop_front()
