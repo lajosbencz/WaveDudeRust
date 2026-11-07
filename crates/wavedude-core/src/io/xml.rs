@@ -7,8 +7,9 @@
 use std::borrow::Cow;
 use std::fmt;
 
-use quick_xml::Reader;
-use quick_xml::events::{BytesStart, Event};
+use quick_xml::escape::resolve_predefined_entity;
+use quick_xml::events::{BytesRef, BytesStart, Event};
+use quick_xml::{Reader, XmlVersion};
 
 use super::FormatError;
 
@@ -42,7 +43,7 @@ fn error_at(text: &str, pos: usize, message: impl fmt::Display) -> FormatError {
 	FormatError { message: message.to_string(), at: Some(line_col(text, pos)) }
 }
 
-fn start_element(text: &str, pos: usize, e: &BytesStart) -> Result<Element, FormatError> {
+fn start_element(text: &str, pos: usize, e: &BytesStart, version: XmlVersion) -> Result<Element, FormatError> {
 	let mut el = Element {
 		name: String::from_utf8_lossy(e.name().as_ref()).into_owned(),
 		at: line_col(text, pos),
@@ -65,7 +66,7 @@ fn start_element(text: &str, pos: usize, e: &BytesStart) -> Result<Element, Form
 			error_at(text, pos, format!("element '{}': {key}", el.name))
 		})?;
 		let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
-		let value = attr.unescape_value().map_err(|err| error_at(text, pos, err))?.into_owned();
+		let value = attr.normalized_value(version).map_err(|err| error_at(text, pos, err))?.into_owned();
 		el.attrs.push((key, value));
 	}
 	Ok(el)
@@ -75,6 +76,7 @@ fn start_element(text: &str, pos: usize, e: &BytesStart) -> Result<Element, Form
 pub(crate) fn parse(text: &str) -> Result<Document, FormatError> {
 	let mut reader = Reader::from_str(text);
 	reader.config_mut().trim_text(false);
+	let mut version = XmlVersion::Implicit1_0;
 	let mut stack: Vec<Element> = Vec::new();
 	let mut doctype = None;
 	let mut root = None;
@@ -85,9 +87,9 @@ pub(crate) fn parse(text: &str) -> Result<Document, FormatError> {
 			Event::Start(_) | Event::Empty(_) if root.is_some() => {
 				return Err(error_at(text, pos, "the document has more than one root element"));
 			}
-			Event::Start(e) => stack.push(start_element(text, pos, &e)?),
+			Event::Start(e) => stack.push(start_element(text, pos, &e, version)?),
 			Event::Empty(e) => {
-				let el = start_element(text, pos, &e)?;
+				let el = start_element(text, pos, &e, version)?;
 				match stack.last_mut() {
 					Some(parent) => parent.children.push(el),
 					None => root = Some(el),
@@ -102,9 +104,15 @@ pub(crate) fn parse(text: &str) -> Result<Document, FormatError> {
 			}
 			Event::Text(t) => {
 				if let Some(el) = stack.last_mut() {
-					el.text.push_str(&t.unescape().map_err(|err| error_at(text, pos, err))?);
+					el.text.push_str(&t.xml_content(version).map_err(|err| error_at(text, pos, err))?);
 				}
 			}
+			Event::GeneralRef(r) => {
+				if let Some(el) = stack.last_mut() {
+					resolve_ref(&r, &mut el.text).map_err(|err| error_at(text, pos, err))?;
+				}
+			}
+			Event::Decl(d) => version = d.xml_version().map_err(|err| error_at(text, pos, err))?,
 			Event::CData(t) => {
 				if let Some(el) = stack.last_mut() {
 					el.text.push_str(&String::from_utf8_lossy(&t));
@@ -123,6 +131,17 @@ pub(crate) fn parse(text: &str) -> Result<Document, FormatError> {
 	}
 	let root = root.ok_or_else(|| FormatError { message: "the document has no root element".into(), at: None })?;
 	Ok(Document { root, doctype })
+}
+
+/// Appends the text a character or predefined entity reference stands for.
+fn resolve_ref(r: &BytesRef, out: &mut String) -> Result<(), String> {
+	if let Some(c) = r.resolve_char_ref().map_err(|e| e.to_string())? {
+		out.push(c);
+		return Ok(());
+	}
+	let name = r.decode().map_err(|e| e.to_string())?;
+	out.push_str(resolve_predefined_entity(&name).ok_or_else(|| format!("unknown entity '&{name};'"))?);
+	Ok(())
 }
 
 /// An enum written by its member name.

@@ -98,7 +98,12 @@ pub fn read_bytes(bytes: &[u8]) -> std::result::Result<Loaded, FormatError> {
 	let notes = drop_unknown_parts(&mut value);
 	let mut project: Project =
 		serde_json::from_value(value).map_err(|e| FormatError::new(format!("{PROJECT_ENTRY}: {e}")))?;
-	let scene_entry = zip.file_names().find(|n| n.starts_with(SCENE_STEM)).map(str::to_owned);
+	let scene_entry = zip
+		.file_names()
+		.find(|n| n.as_ref().map_or(true, |n| n.starts_with(SCENE_STEM)))
+		.transpose()
+		.map_err(bad)?
+		.map(|n| n.into_owned());
 	if let Some(name) = scene_entry {
 		let mut data = Vec::new();
 		zip.by_name(&name)

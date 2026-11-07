@@ -24,7 +24,8 @@ Status: accepted, 2026-11-07
   each time. It replaces the NSIS install, the macOS app and an AppImage; a plain Linux binary is told where
   the release is.
 - **Dependencies**: Dependabot for Cargo and for the workflows' actions, which are pinned to commit hashes with
-  the version in a comment (Dependabot moves both). Its security updates come as soon as an advisory appears;
+  the version in a comment (Dependabot moves both), batched: Cargo checked daily, actions weekly, one pull request for minor
+  and patch updates, one for major ones, one for security updates, which come as soon as an advisory appears;
   patch and minor updates, security ones included, merge on their own once CI passes
   (`dependabot-automerge.yml`), major ones wait for a person (telling a major security update apart needs
   fetch-metadata's alert lookup, which needs a personal token). Renovate was the alternative; Dependabot needs no app installed.

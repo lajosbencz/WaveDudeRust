@@ -25,11 +25,11 @@ tracing.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp"] }
 base64 = "0.22"
 num-complex = { version = "0.4", default-features = false, features = ["std"] }
-zip = { version = "4", default-features = false, features = ["deflate"] }
-sysinfo = { version = "0.37", default-features = false, features = ["system"] }
+zip = { version = "9.4", default-features = false, features = ["deflate"] }
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 tempfile = "3"
 wgpu = { version = "30", optional = true }
-pollster = { version = "0.4", optional = true }
+pollster = { version = "1", optional = true }
 
 [dev-dependencies]
 insta.workspace = true
