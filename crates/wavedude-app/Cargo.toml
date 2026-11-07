@@ -52,3 +52,7 @@ icons = ["assets/icon.png"]
 out-dir = "../../target/packages"
 before-packaging-command = "cargo build --release -p wavedude-app -p wavedude-cli"
 binaries = [{ path = "wavedude-app", main = true }, { path = "wavedude-cli" }]
+
+# Ad-hoc signature: an unsigned bundle on Apple silicon is reported as damaged instead of unverified.
+[package.metadata.packager.macos]
+signing-identity = "-"

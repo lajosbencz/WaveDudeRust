@@ -11,7 +11,8 @@ Status: accepted, 2026-11-07
 - **Installers** by [cargo-packager](https://github.com/crabnebula-dev/cargo-packager) in the same workflow
   (`.github/workflows/release.yml`): NSIS on Windows x86_64, app and DMG on macOS (arm64 on `macos-15`, x86_64 on
   `macos-15-intel`), AppImage plus a tarball of both programs on Linux x86_64 (built on Ubuntu 22.04 for an older
-  glibc). Both programs are in every package. Not signed by Apple or Microsoft: Gatekeeper and SmartScreen warn,
+  glibc). Both programs are in every package. Not signed by Apple or Microsoft (macOS bundles carry an ad-hoc
+  signature, without which Apple silicon reports them as damaged): Gatekeeper and SmartScreen warn,
   accepted. Each file gets a GitHub build provenance attestation instead (Sigstore; free, verifiable with
   `gh attestation verify`, but no operating system checks it). The release turns public only after every
   platform's files and `latest.json` are attached.
@@ -24,8 +25,9 @@ Status: accepted, 2026-11-07
   the release is.
 - **Dependencies**: Dependabot for Cargo and for the workflows' actions, which are pinned to commit hashes with
   the version in a comment (Dependabot moves both). Its security updates come as soon as an advisory appears;
-  security, patch and minor updates merge on their own once CI passes (`dependabot-automerge.yml`), major
-  version updates wait for a person. Renovate was the alternative; Dependabot needs no app installed.
+  patch and minor updates, security ones included, merge on their own once CI passes
+  (`dependabot-automerge.yml`), major ones wait for a person (telling a major security update apart needs
+  fetch-metadata's alert lookup, which needs a personal token). Renovate was the alternative; Dependabot needs no app installed.
 - **Forks**: CI runs anywhere with no secrets. The release workflow is opt-in through the repository variable
   `RELEASE_ENABLED`; it uses the fork's own repository for tags, releases and the update feed, and the fork's
   own keys (crates.io publishing needs crate names the fork owns).

@@ -10,8 +10,10 @@ the tag `v<version>` and a draft release, the package
 jobs attach the installers, the Linux tarball, the update signatures and attestations, and the last job writes
 `latest.json` and publishes the release.
 
-Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened with it starts no workflow, so the
-release job dispatches CI on the release PR's branch itself; its checks land on the PR's head commit.
+Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened with it starts its `pull_request`
+runs only after someone approves them on the PR page, so the release job dispatches CI on the release PR's
+branch itself (a dispatch needs no approval); its checks land on the PR's head commit. Approving the waiting runs
+as well only runs CI twice.
 
 ## One-time setup of a repository
 
@@ -39,9 +41,16 @@ crates.io token as the secret `CARGO_REGISTRY_TOKEN` for the first publish, then
 trusted publisher of both crates (crates.io > crate > Settings > Trusted Publishing, workflow `release.yml`) and
 delete the secret.
 
-Settings > General: allow auto-merge. Settings > Rules: a ruleset on the default branch requiring the CI jobs
-(`ubuntu-latest`, `windows-latest`, `macos-latest`, `MSRV`). Settings > Advanced Security: Dependabot alerts and
-Dependabot security updates on.
+- Settings > General: squash merging only, its commit titled by the pull request's title (release-plz reads
+  conventional commits); allow auto-merge; delete head branches; no wiki.
+- Settings > Rules: a ruleset on the default branch requiring the CI jobs (`ubuntu-latest`, `windows-latest`,
+  `macos-latest`, `MSRV`) and refusing deletion and force pushes; a ruleset on `v*` tags refusing update and deletion
+  (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and release-plz tags through it).
+  Administrators bypass both.
+- Settings > Actions > General: actions pinned to a full commit hash; approval before running workflows from every
+  outside contributor.
+- Settings > Advanced Security: Dependabot alerts and security updates, secret scanning with push protection, private
+  vulnerability reporting (`SECURITY.md`).
 
 ## By hand
 

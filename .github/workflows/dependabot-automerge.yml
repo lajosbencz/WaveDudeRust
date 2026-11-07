@@ -1,5 +1,5 @@
-# Dependabot's security, patch and minor updates merge on their own once the required checks pass
-# (decision 0011). Needs "Allow auto-merge" and a branch rule on the default branch that requires CI.
+# Dependabot's patch and minor updates, security ones included, merge on their own once the required checks pass
+# (decision 0011); major ones wait for a person. Needs "Allow auto-merge" and a branch rule on the default branch that requires CI.
 name: Dependabot auto-merge
 
 on: pull_request
@@ -16,7 +16,7 @@ jobs:
       - id: meta
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
       - name: Enable auto-merge
-        if: steps.meta.outputs.update-type != 'version-update:semver-major' || steps.meta.outputs.ghsa-id != ''
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
         run: gh pr merge --auto --squash "$PR"
         env:
           PR: ${{ github.event.pull_request.html_url }}
