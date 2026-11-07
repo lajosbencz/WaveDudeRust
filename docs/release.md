@@ -48,7 +48,7 @@ delete the secret.
   (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and release-plz tags through it).
   Administrators bypass both.
 - Settings > Actions > General: actions pinned to a full commit hash; approval before running workflows from every
-  outside contributor.
+  outside contributor; the workflow token read-only by default, allowed to create pull requests (release-plz's).
 - Settings > Advanced Security: Dependabot alerts and security updates, secret scanning with push protection, private
   vulnerability reporting (`SECURITY.md`).
 
