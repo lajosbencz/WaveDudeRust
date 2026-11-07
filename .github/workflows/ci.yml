@@ -4,9 +4,6 @@ on:
   push:
     branches: [master, main]
   pull_request:
-  # The release workflow starts CI on release-plz's PR this way: pull requests opened with GITHUB_TOKEN start no
-  # workflow, a dispatch does.
-  workflow_dispatch:
 
 permissions:
   contents: read
