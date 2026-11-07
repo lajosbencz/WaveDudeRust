@@ -1,8 +1,6 @@
 # Notice
 
-WaveDudeRust is an independent implementation written from scratch. It
-contains no code from the projects below; they are credited as the origin of
-the idea and of the file formats it can import.
+WaveDudeRust is an independent implementation written from scratch, but it does contain carried-over, non-code material from WaveDude Next: colour schemes, example projects, UI strings and manuals.
 
 ## Upstream projects
 
