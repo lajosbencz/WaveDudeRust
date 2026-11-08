@@ -11,7 +11,7 @@ Top to bottom (`MainWindow.xaml`):
 |---|---|
 | Menu bar | File, Edit, View, Simulation, Help. Not in the Tab cycle; F10 or Alt enters it. See `10-menus-and-shortcuts.md`. |
 | Dock host | Tool panes around one fixed centre area. Centre area = the Preview (pictures, timeline, transport bar). |
-| Status bar | Last log line (left), run status (right), busy text + progress bar (far right), resize grip in the corner. |
+| Status bar | Last log line (left), run status (right), busy text + progress bar (far right; a download first: an update, the codec), resize grip in the corner. |
 
 No toolbar on the window. The Project pane has its own toolbar (`20-project-tree.md`); the Preview has the
 transport bar (`50-timeline-transport.md`).

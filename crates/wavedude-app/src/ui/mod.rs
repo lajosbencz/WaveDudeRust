@@ -4,6 +4,7 @@ pub mod about;
 pub mod app;
 pub mod codec;
 pub mod dialogs;
+pub mod downloads;
 pub mod export_dialog;
 pub mod manual;
 pub mod memory_warning;

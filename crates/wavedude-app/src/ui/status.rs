@@ -17,7 +17,8 @@ struct Right {
 }
 
 fn right(cx: &Cx) -> Right {
-	let export = cx.ui.export.read().as_ref().map(|e| (e.text.clone(), e.progress()));
+	let download = cx.ui.download.read().clone();
+	let export = download.or_else(|| cx.ui.export.read().as_ref().map(|e| (e.text.clone(), e.progress())));
 	let topics = Topics::PLAYBACK | Topics::PROGRESS | Topics::SCRATCH | Topics::RUN | Topics::SETTINGS;
 	cx.shared.read(topics, |a| {
 		let s = &a.strings;

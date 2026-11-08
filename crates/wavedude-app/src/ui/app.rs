@@ -12,7 +12,9 @@ use std::time::Duration;
 use freya::prelude::*;
 use wavedude_widgets::menu::ContextMenuRequest;
 use wavedude_widgets::tree::TreeState;
-use wavedude_widgets::{DockLayout, MenuModel, MessageLog, StatusLine, Theme, ThemeKind, use_init_wave_theme};
+use wavedude_widgets::{
+	DockLayout, MenuModel, MessageLog, Progress, StatusLine, Theme, ThemeKind, use_init_wave_theme,
+};
 
 use wavedude_app_state::live::Notice;
 use wavedude_app_state::log::LogRing;
@@ -24,7 +26,7 @@ use wavedude_app_state::{Event as AppEvent, Guarded};
 use super::dialogs::{self, Modal};
 use super::export_dialog::{self, ExportProgress};
 use super::shared::{App, Shared};
-use super::{messages, window};
+use super::{downloads, messages, window};
 
 /// The tick period of the state loop.
 pub const TICK: Duration = Duration::from_millis(16);
@@ -146,6 +148,8 @@ pub struct Ui {
 	pub messages: State<MessageLog>,
 	pub status: State<StatusLine>,
 	pub export: State<Option<ExportProgress>>,
+	/// The oldest running download ([`downloads`]).
+	pub download: State<Option<(String, Progress)>>,
 	/// Bumped whenever new notices arrived.
 	pub notices_revision: State<u64>,
 	/// Bumped by Enter on a tree row: the properties form takes the focus.
@@ -290,6 +294,7 @@ impl Component for Shell {
 			messages: use_state(MessageLog::default),
 			status: use_state(move || StatusLine { text: ready, ..StatusLine::default() }),
 			export: use_state(|| None),
+			download: use_state(|| None),
 			notices_revision: use_state(|| 0),
 			focus_form: use_state(|| 0),
 			manual_request: use_state(|| 0),
@@ -357,6 +362,7 @@ async fn tick_loop(cx: Cx, mut theme: State<Theme>) {
 			}
 		}
 		export_dialog::poll(&cx);
+		downloads::poll(&cx);
 		sync_platform(&cx, &mut applied, &mut theme);
 		messages::poll_log(&cx, &mut applied.log_seq);
 	}

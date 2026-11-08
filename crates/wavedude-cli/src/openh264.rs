@@ -35,7 +35,7 @@ fn settings_file() -> Result<PathBuf> {
 /// The library an MP4 export loads, per the user's choice in the app's settings file.
 pub fn library() -> Result<Option<PathBuf>> {
 	let enabled = Settings::read(&settings_file()?)?.use_openh264 == Some(true);
-	h264::library(&dirs()?.codec(), enabled).map_err(|e| match e {
+	h264::library(&dirs()?.codec(), enabled, |_, _| {}).map_err(|e| match e {
 		wavedude_export::ExportError::H264Missing => anyhow::anyhow!("{e}: run `wavedude-cli openh264 enable`"),
 		e => e.into(),
 	})
@@ -74,7 +74,7 @@ pub fn run(action: Action) -> Result<()> {
 		}
 		Action::Enable => {
 			choose(true)?;
-			println!("enabled: {}", h264::download(&dir)?.display());
+			println!("enabled: {}", h264::download(&dir, |_, _| {})?.display());
 		}
 		Action::Disable => {
 			choose(false)?;

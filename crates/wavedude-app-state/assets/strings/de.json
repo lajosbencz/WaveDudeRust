@@ -251,6 +251,7 @@
 	"ExportStatusFormat": "Exportiere {0} / {1} Bilder",
 	"ExportStatusWaiting": "Export: wartet auf den Lauf",
 	"StatusComputingFormat": "Berechne Bild {0}",
+	"StatusDownloadingCodec": "Lade OpenH264 herunter",
 	"TipExportCancel": "Export abbrechen (Esc)",
 	"Untitled": "Unbenannt",
 	"SaveChangesFormat": "Änderungen an {0} speichern?",

@@ -251,6 +251,7 @@
 	"ExportStatusFormat": "Exporting {0} / {1} frames",
 	"ExportStatusWaiting": "Export: waiting for the run",
 	"StatusComputingFormat": "Computing frame {0}",
+	"StatusDownloadingCodec": "Downloading OpenH264",
 	"TipExportCancel": "Cancel the export (Esc)",
 	"Untitled": "Untitled",
 	"SaveChangesFormat": "Save the changes to {0}?",

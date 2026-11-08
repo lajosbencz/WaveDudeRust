@@ -38,16 +38,16 @@ pub fn file_name() -> Option<&'static str> {
 }
 
 /// The library an MP4 export loads: `None` when OpenH264 is compiled in, else Cisco's binary in `dir`,
-/// downloaded now when it is missing. Fails with [`ExportError::H264Missing`] unless `enabled`, the user's
-/// choice.
-pub fn library(dir: &Path, enabled: bool) -> Result<Option<PathBuf>> {
+/// downloaded now when it is missing (`on_chunk` as in [`download`]). Fails with [`ExportError::H264Missing`]
+/// unless `enabled`, the user's choice.
+pub fn library(dir: &Path, enabled: bool, on_chunk: impl FnMut(usize, Option<u64>)) -> Result<Option<PathBuf>> {
 	if BUILT_IN {
 		return Ok(None);
 	}
 	if !enabled {
 		return Err(ExportError::H264Missing);
 	}
-	download(dir).map(Some)
+	download(dir, on_chunk).map(Some)
 }
 
 /// The downloaded binary in `dir`, if there.
@@ -56,8 +56,9 @@ pub fn installed(dir: &Path) -> Option<PathBuf> {
 }
 
 /// Downloads Cisco's binary into `dir` (made when missing) unless it is there, and returns its path. The file
-/// is checked against the known SHA-256 of Cisco's builds before it takes its name.
-pub fn download(dir: &Path) -> Result<PathBuf> {
+/// is checked against the known SHA-256 of Cisco's builds before it takes its name. `on_chunk(bytes, total)`
+/// follows the download, `total` the compressed size when the server names it.
+pub fn download(dir: &Path, mut on_chunk: impl FnMut(usize, Option<u64>)) -> Result<PathBuf> {
 	if let Some(path) = installed(dir) {
 		return Ok(path);
 	}
@@ -66,7 +67,18 @@ pub fn download(dir: &Path) -> Result<PathBuf> {
 	tracing::info!(%url, "downloading OpenH264");
 	let failed = |e: &dyn std::fmt::Display| ExportError::Codec(format!("downloading {url}: {e}"));
 	let mut response = ureq::get(&url).call().map_err(|e| failed(&e))?;
-	let packed = response.body_mut().with_config().limit(MAX_DOWNLOAD).read_to_vec().map_err(|e| failed(&e))?;
+	let total = response.body().content_length();
+	let mut reader = response.body_mut().with_config().limit(MAX_DOWNLOAD).reader();
+	let mut packed = Vec::new();
+	let mut chunk = [0; 64 << 10];
+	loop {
+		let n = reader.read(&mut chunk).map_err(|e| failed(&e))?;
+		if n == 0 {
+			break;
+		}
+		packed.extend_from_slice(&chunk[..n]);
+		on_chunk(n, total);
+	}
 	let mut bytes = Vec::new();
 	bzip2::read::BzDecoder::new(packed.as_slice()).read_to_end(&mut bytes).map_err(|e| failed(&e))?;
 	std::fs::create_dir_all(dir)?;

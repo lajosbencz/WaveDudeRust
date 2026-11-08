@@ -2,7 +2,7 @@
 //! report its filter) and the path; a full-quality run is waited for when the current one does not serve; the
 //! job then runs on a worker thread, its progress in the status bar, Esc or Stop cancelling it.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,6 +22,7 @@ use wavedude_app_state::live::ExportGate;
 
 use super::app::{Cx, Ui};
 use super::dialogs::{self, Modal, button, button_row, filters, frame};
+use super::downloads::{self, Download};
 use super::properties::{check_box, combo_box, text_box};
 use super::shared::App;
 
@@ -301,6 +302,8 @@ struct Work {
 	schemes: SchemeStore,
 	use_openh264: bool,
 	codec_dir: Option<PathBuf>,
+	/// The status bar's entry for the codec's download, taken by it.
+	codec_download: Cell<Option<Download>>,
 }
 
 fn run(cx: &Cx, plan: Plan) {
@@ -314,6 +317,7 @@ fn run(cx: &Cx, plan: Plan) {
 			schemes: a.schemes.clone(),
 			use_openh264: a.settings.use_openh264 == Some(true),
 			codec_dir: a.codec_dir.clone(),
+			codec_download: Cell::new(None),
 		})
 	});
 	let Some(work) = work else {
@@ -332,6 +336,13 @@ fn run(cx: &Cx, plan: Plan) {
 		}
 	}
 	let (kind, path) = plan_kind(&plan);
+	let fetches_codec = matches!(&plan, Plan::Frames { format: ExportFormat::Mp4, .. })
+		&& work.use_openh264
+		&& !h264::BUILT_IN
+		&& !super::codec::downloaded(cx);
+	if fetches_codec {
+		work.codec_download.set(Some(downloads::start(cx, s.get("StatusDownloadingCodec").to_owned())));
+	}
 	let cancel = Arc::new(AtomicBool::new(false));
 	let (tx, rx) = mpsc::channel();
 	let flag = cancel.clone();
@@ -417,7 +428,13 @@ fn export_frames(
 /// The OpenH264 library for an MP4 export, downloaded at its first use.
 fn codec(work: &Work) -> Result<Option<PathBuf>, String> {
 	let dir = work.codec_dir.as_deref().ok_or("the app has no codec folder")?;
-	h264::library(dir, work.use_openh264).map_err(|e| e.to_string())
+	let download = work.codec_download.take();
+	let on_chunk = |bytes, total| {
+		if let Some(d) = &download {
+			d.chunk(bytes, total);
+		}
+	};
+	h264::library(dir, work.use_openh264, on_chunk).map_err(|e| e.to_string())
 }
 
 /// Takes the worker's messages; called every tick.

@@ -373,7 +373,7 @@ fn mp4_through_ciscos_downloaded_binary() {
 		wavedude_export::SinkSpec { width: 640, height: 360, fps: 30, quality: 85, first_frame: 0, frame_count: 10 };
 	let path = dir.join("v.mp4");
 	assert!(matches!(Mp4Writer::create(&path, spec, None), Err(wavedude_export::ExportError::H264Missing)));
-	let library = h264::download(&dir.join("codec")).unwrap();
+	let library = h264::download(&dir.join("codec"), |_, _| {}).unwrap();
 	assert_eq!(h264::installed(&dir.join("codec")), Some(library.clone()));
 	let mut writer = Mp4Writer::create(&path, spec, Some(&library)).unwrap();
 	let frames: Vec<Vec<u8>> = (0..10).map(|t| wave_frame(640, 360, t)).collect();

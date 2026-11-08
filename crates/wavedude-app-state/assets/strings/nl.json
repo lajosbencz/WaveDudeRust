@@ -251,6 +251,7 @@
 	"ExportStatusFormat": "Exporteren: {0} / {1} beelden",
 	"ExportStatusWaiting": "Export: wacht op de run",
 	"StatusComputingFormat": "Beeld {0} wordt berekend",
+	"StatusDownloadingCodec": "OpenH264 wordt gedownload",
 	"TipExportCancel": "Export annuleren (Esc)",
 	"Untitled": "Naamloos",
 	"SaveChangesFormat": "Wijzigingen in {0} opslaan?",
