@@ -18,7 +18,7 @@ openh264-source = ["mp4", "openh264/source"]
 clap = ["dep:clap"]
 
 [dependencies]
-wavedude-core = { path = "../wavedude-core", version = "0.1.4", default-features = false }
+wavedude-core = { path = "../wavedude-core", version = "0.1.5", default-features = false }
 anyhow.workspace = true
 thiserror.workspace = true
 half.workspace = true

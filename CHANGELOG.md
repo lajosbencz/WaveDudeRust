@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.4...v0.1.5) - 2026-11-08
+
+### Added
+
+- *(app)* close the UI gaps to WaveDude Next: dock drag and drop, the full manual with figures, handle tooltips, window placement, text box commit semantics, keyboard paths, export overwrite prompt, scene image watch
+- *(core)* sparse .wdr a twentieth of the .wdproj, the .wdproj quirks kept in its adapter, JSON5 legacy import, TIFF and GIF scenes, gate ports that carry their sources
+
+### Fixed
+
+- *(app)* read the clipboard as a menu opens, not in the render path
+
 ## [0.1.4](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.3...v0.1.4) - 2026-11-08
 
 ### Added
