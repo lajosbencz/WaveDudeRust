@@ -327,6 +327,8 @@ fn file_menu(app: &App, ui: &Ui) -> Submenu<MenuAction> {
 
 /// Whether the clipboard's text is a fragment the paste would take.
 pub fn clipboard_holds_objects() -> bool {
+	#[cfg(test)]
+	super::shared::count_run("clipboard");
 	Clipboard::get().is_ok_and(|t| wavedude_app_state::clipboard::read_fragment(&t).is_ok())
 }
 
@@ -335,7 +337,7 @@ fn has_items(app: &App) -> bool {
 	!(p.sources.is_empty() && p.parts.is_empty() && p.probes.is_empty())
 }
 
-fn edit_menu(app: &App) -> Submenu<MenuAction> {
+fn edit_menu(app: &App, pastable: bool) -> Submenu<MenuAction> {
 	let s = &app.strings;
 	let h = &app.document.history;
 	let items = !app.selection.items().is_empty();
@@ -368,7 +370,7 @@ fn edit_menu(app: &App) -> Submenu<MenuAction> {
 			item(MenuAction::Paste, "edit:paste", s, "MenuEditPaste")
 				.shortcut("Ctrl+V")
 				.icon(glyphs::PASTE)
-				.enabled(clipboard_holds_objects())
+				.enabled(pastable)
 				.into(),
 			item(MenuAction::Delete, "edit:delete", s, "MenuEditDelete")
 				.shortcut("Del")
@@ -574,10 +576,11 @@ pub fn use_menu_bar() -> Memo<MenuModel<MenuAction>> {
 		#[cfg(test)]
 		super::shared::count_run("menu");
 		let topics = Topics::DOCUMENT | Topics::SELECTION | Topics::RUN | Topics::SETTINGS;
+		let pastable = *cx.ui.pastable.read();
 		cx.shared.read(topics, |app| {
 			MenuModel::new(vec![
 				file_menu(app, &cx.ui).into(),
-				edit_menu(app).into(),
+				edit_menu(app, pastable).into(),
 				view_menu(app, &cx.ui).into(),
 				simulation_menu(app).into(),
 				help_menu(app).into(),
@@ -586,8 +589,8 @@ pub fn use_menu_bar() -> Memo<MenuModel<MenuAction>> {
 	})
 }
 
-/// The context menu of a tree row; `row` is the row it opened on.
-pub fn tree_row_menu(app: &App, row: Option<Row>) -> MenuModel<MenuAction> {
+/// The context menu of a tree row; `row` is the row it opened on, `pastable` the clipboard's state.
+pub fn tree_row_menu(app: &App, row: Option<Row>, pastable: bool) -> MenuModel<MenuAction> {
 	let s = &app.strings;
 	let item_ref = match row {
 		Some(Row::Item(i)) => Some(i),
@@ -627,10 +630,7 @@ pub fn tree_row_menu(app: &App, row: Option<Row>) -> MenuModel<MenuAction> {
 			.into(),
 		item(MenuAction::Cut, "tree:cut", s, "MenuEditCut").icon(glyphs::CUT).enabled(is_item).into(),
 		item(MenuAction::Copy, "tree:copy", s, "MenuEditCopy").icon(glyphs::COPY).enabled(copyable).into(),
-		item(MenuAction::Paste, "tree:paste", s, "MenuEditPaste")
-			.icon(glyphs::PASTE)
-			.enabled(clipboard_holds_objects())
-			.into(),
+		item(MenuAction::Paste, "tree:paste", s, "MenuEditPaste").icon(glyphs::PASTE).enabled(pastable).into(),
 		item(MenuAction::Delete, "tree:remove", s, "MenuProjectRemove")
 			.shortcut("Del")
 			.icon(glyphs::DELETE)

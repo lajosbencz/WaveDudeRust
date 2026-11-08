@@ -26,7 +26,7 @@ use wavedude_app_state::{Event as AppEvent, Guarded};
 use super::dialogs::{self, Modal};
 use super::export_dialog::{self, ExportProgress};
 use super::shared::{App, Shared};
-use super::{downloads, messages, update, window};
+use super::{downloads, menus, messages, update, window};
 
 /// The tick period of the state loop.
 pub const TICK: Duration = Duration::from_millis(16);
@@ -168,12 +168,20 @@ pub struct Ui {
 	pub messages_list: AccessibilityId,
 	/// Each preview picture's place, for drops.
 	pub pictures: State<[Option<PicturePlace>; 2]>,
+	/// The clipboard held a pasteable fragment when a menu last opened ([`Ui::look_at_clipboard`]).
+	pub pastable: State<bool>,
 }
 
 /// A preview picture's area top-left in window pixels and its canvas transform.
 pub type PicturePlace = ((f32, f32), wavedude_widgets::CanvasTransform);
 
 impl Ui {
+	/// Reads the clipboard into `pastable`; an event-time read, since the OS clipboard is I/O a render never does.
+	pub fn look_at_clipboard(&self) {
+		let mut pastable = self.pastable;
+		pastable.set_if_modified(menus::clipboard_holds_objects());
+	}
+
 	/// Opens a context menu at `at` whose activations go to `handler`.
 	pub fn open_menu<A: Clone + 'static>(&self, at: (f64, f64), model: MenuModel<A>, handler: impl Fn(A) + 'static) {
 		let handler = Rc::new(handler);
@@ -325,6 +333,7 @@ impl Component for Shell {
 			}),
 			messages_list: use_a11y(),
 			pictures: use_state(|| [None, None]),
+			pastable: use_state(|| false),
 		};
 		use_provide_context(|| ui);
 		let notices = use_provide_context(NoticeLog::default);

@@ -84,6 +84,24 @@ fn a_playback_tick_reaches_neither_the_menus_nor_the_tree() {
 	assert!(runs("tree") > before.1 && runs("properties") > before.2, "a selection reaches them");
 }
 
+/// The OS clipboard is read when a menu opens, never while rendering (copypasta off the main thread segfaults
+/// on macOS when several renders read it at once).
+#[test]
+fn the_clipboard_is_read_as_a_menu_opens_not_as_the_shell_renders() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, shared) = shell(dir.path(), |app| {
+		app.handle(AppEvent::Guarded(Guarded::Open(EXAMPLE.into())), Instant::now());
+	});
+	settle(&mut test, &shared);
+	shared.update(|a| a.selection.select(Row::Scene));
+	test.sync_and_update();
+	assert!(runs("menu") > 0, "the menu model was built");
+	assert_eq!(runs("clipboard"), 0, "no render reads the clipboard");
+	test.press_key(Key::Named(NamedKey::F10));
+	test.sync_and_update();
+	assert_eq!(runs("clipboard"), 1, "the bar opening looks once");
+}
+
 #[test]
 fn every_form_binds_paths_its_object_has() {
 	let dir = tempfile::tempdir().unwrap();

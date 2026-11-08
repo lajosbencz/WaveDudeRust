@@ -767,12 +767,20 @@ fn restore_focus(previous: State<Option<AccessibilityId>>) {
 pub struct MenuBar<A: 'static = String> {
 	model: MenuModel<A>,
 	on_activate: EventHandler<A>,
+	on_open: Option<EventHandler<()>>,
 }
 
 impl<A> MenuBar<A> {
 	/// `model.entries` are the headers, each a [`Submenu`].
 	pub fn new(model: MenuModel<A>, on_activate: impl Into<EventHandler<A>>) -> Self {
-		Self { model, on_activate: on_activate.into() }
+		Self { model, on_activate: on_activate.into(), on_open: None }
+	}
+
+	/// Called as the bar takes the keys (a header opened or F10/Alt), for state the model shows but no
+	/// signal tracks, such as the clipboard.
+	pub fn on_open(mut self, handler: impl Into<EventHandler<()>>) -> Self {
+		self.on_open = Some(handler.into());
+		self
 	}
 }
 
@@ -788,11 +796,15 @@ impl<A: Clone + PartialEq + 'static> Component for MenuBar<A> {
 		let panels = use_state(Vec::<PanelPlace>::new);
 		let headers = self.model.entries.clone();
 		let on_activate = self.on_activate.clone();
+		let on_open = self.on_open.clone();
 
-		let mut take_keys = move || {
+		let take_keys = move || {
 			if previous_focus.peek().is_none() {
 				let focused = *Platform::get().current_window().focused_accessibility_id.peek();
 				previous_focus.set(Some(focused));
+				if let Some(on_open) = &on_open {
+					on_open.call(());
+				}
 			}
 			spawn(async move { sink.request_focus() });
 		};
@@ -826,6 +838,7 @@ impl<A: Clone + PartialEq + 'static> Component for MenuBar<A> {
 
 		let on_global_key_down = {
 			let headers = headers.clone();
+			let mut take_keys = take_keys.clone();
 			move |e: Event<KeyboardEventData>| {
 				alt_held.set_if_modified(e.modifiers.contains(Modifiers::ALT) || e.key == Key::Named(NamedKey::Alt));
 				if nav.peek().active {
@@ -853,7 +866,9 @@ impl<A: Clone + PartialEq + 'static> Component for MenuBar<A> {
 			}
 		};
 
+		let mut take_keys_up = take_keys.clone();
 		let on_global_key_up = move |e: Event<KeyboardEventData>| {
+			let take_keys = &mut take_keys_up;
 			alt_held.set_if_modified(e.modifiers.contains(Modifiers::ALT) && e.key != Key::Named(NamedKey::Alt));
 			if e.key == Key::Named(NamedKey::Alt) && *alt_pending.peek() {
 				alt_pending.set(false);
@@ -888,6 +903,7 @@ impl<A: Clone + PartialEq + 'static> Component for MenuBar<A> {
 			let open = snapshot.active && snapshot.header == i;
 			let headers_c = headers.clone();
 			let headers_h = headers.clone();
+			let mut take_keys = take_keys.clone();
 			let enabled = header.is_enabled();
 			let ink = if enabled { theme.text } else { theme.text_disabled };
 			let background = if open && !snapshot.stack.is_empty() {

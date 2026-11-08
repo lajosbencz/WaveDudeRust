@@ -298,7 +298,9 @@ fn on_action(cx: &Cx, action: TreeAction<Row>, pointer: (f64, f64)) {
 			}
 		}
 		TreeAction::ContextMenu { key, at } => {
-			let model = cx.shared.peek(|a| menus::tree_row_menu(a, key));
+			cx.ui.look_at_clipboard();
+			let pastable = *cx.ui.pastable.peek();
+			let model = cx.shared.peek(|a| menus::tree_row_menu(a, key, pastable));
 			let cx2 = cx.clone();
 			cx.ui.open_menu(at, model, move |action| menus::act(&cx2, action, menus::On::Row(key)));
 		}
