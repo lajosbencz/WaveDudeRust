@@ -29,8 +29,14 @@ fn shell_at(dir: &Path, answered: bool) -> (TestingRunner, Shared) {
 	}
 	app.handle(AppEvent::SetLanguage("en".into()), std::time::Instant::now());
 	app.handle(AppEvent::Guarded(Guarded::Open(EXAMPLE.into())), std::time::Instant::now());
-	let info =
-		BootInfo { ring: LogRing::new(), dirs, close: CloseGate::default(), open: None, update: Default::default() };
+	let info = BootInfo {
+		ring: LogRing::new(),
+		dirs,
+		close: CloseGate::default(),
+		open: None,
+		update: Default::default(),
+		placement: Default::default(),
+	};
 	let boot = Boot::new(app, info);
 	let handle = boot.clone();
 	let (mut test, ()) = TestingRunner::new(

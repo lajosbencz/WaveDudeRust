@@ -88,12 +88,13 @@ pub struct StatusBar {
 	right: String,
 	busy: Option<(String, Progress)>,
 	tooltip: Option<String>,
+	busy_tooltip: Option<String>,
 	on_double_click: Option<EventHandler<()>>,
 }
 
 impl StatusBar {
 	pub fn new(line: StatusLine) -> Self {
-		Self { line, right: String::new(), busy: None, tooltip: None, on_double_click: None }
+		Self { line, right: String::new(), busy: None, tooltip: None, busy_tooltip: None, on_double_click: None }
 	}
 
 	/// The run status.
@@ -109,6 +110,12 @@ impl StatusBar {
 
 	pub fn tooltip(mut self, text: impl Into<String>) -> Self {
 		self.tooltip = Some(text.into());
+		self
+	}
+
+	/// The tooltip of the busy text and its bar.
+	pub fn busy_tooltip(mut self, text: Option<String>) -> Self {
+		self.busy_tooltip = text;
 		self
 	}
 
@@ -135,13 +142,18 @@ impl Component for StatusBar {
 			Some(t) => wide_tooltip(t.clone(), left),
 			None => left.into_element(),
 		};
+		let busy_tip = self.busy_tooltip.clone();
 		let busy = self.busy.clone().map(|(text, progress)| {
-			rect()
+			let view = rect()
 				.horizontal()
 				.cross_align(Alignment::center())
 				.spacing(6.)
 				.child(label().text(text).max_lines(1))
-				.child(ProgressBarView { progress, color: fg })
+				.child(ProgressBarView { progress, color: fg });
+			match busy_tip.clone() {
+				Some(t) => TooltipContainer::new(Tooltip::new_text(t)).child(view).into_element(),
+				None => view.into_element(),
+			}
 		});
 		rect()
 			.test_id("StatusBar")

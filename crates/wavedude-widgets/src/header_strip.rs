@@ -57,6 +57,8 @@ pub struct HeaderStrip {
 	on_auto: EventHandler<()>,
 	orientation: StripOrientation,
 	tooltip: Option<String>,
+	auto_text: String,
+	auto_tooltip: Option<String>,
 	test_id: String,
 	box_id: Option<AccessibilityId>,
 }
@@ -75,9 +77,18 @@ impl HeaderStrip {
 			on_auto: on_auto.into(),
 			orientation: StripOrientation::Horizontal,
 			tooltip: None,
+			auto_text: "Auto".into(),
+			auto_tooltip: None,
 			test_id: String::new(),
 			box_id: None,
 		}
+	}
+
+	/// The Auto button's word and tooltip.
+	pub fn auto(mut self, text: impl Into<String>, tooltip: impl Into<String>) -> Self {
+		self.auto_text = text.into();
+		self.auto_tooltip = Some(tooltip.into());
+		self
 	}
 
 	pub fn caption(mut self, caption: impl Into<String>) -> Self {
@@ -152,8 +163,12 @@ impl Component for HeaderStrip {
 			.flat()
 			.compact()
 			.on_press(move |_| on_auto.call(()))
-			.child(label().text("Auto"))
+			.child(label().text(self.auto_text.clone()))
 			.test_id_wrap(format!("{}AutoBrightness", self.test_id));
+		let auto = match self.auto_tooltip.clone() {
+			Some(tip) => TooltipContainer::new(Tooltip::new_text(tip)).child(auto).into_element(),
+			None => auto.into_element(),
+		};
 
 		if vertical {
 			let l = *length.read();

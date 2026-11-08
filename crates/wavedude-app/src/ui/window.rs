@@ -62,10 +62,15 @@ pub fn toggle_pane(ui: &Ui, id: &str) {
 	}
 }
 
-/// Opens the Messages pane, or brings it forward when shown (status bar double-click).
+/// Opens the Messages pane, or brings it forward when shown, and focuses its list (status bar double-click).
 pub fn show_messages(ui: &Ui) {
 	let mut layout = ui.layout;
 	layout.write().show("messages", default_side("messages"));
+	let list = ui.messages_list;
+	spawn(async move {
+		timer(std::time::Duration::from_millis(32)).await;
+		list.request_focus();
+	});
 }
 
 #[derive(Clone, PartialEq)]
@@ -128,6 +133,14 @@ impl Component for MainWindow {
 			let cx = cx.clone();
 			move |e: Event<KeyboardEventData>| shortcuts::on_escape(&cx, &e)
 		};
+		let on_mouse_down = {
+			let shared = cx.shared.clone();
+			move |_: Event<PointerEventData>| drop(shared.send(AppEvent::MouseDown))
+		};
+		let on_mouse_up = {
+			let shared = cx.shared.clone();
+			move |_: Event<PointerEventData>| drop(shared.send(AppEvent::MouseUp))
+		};
 		let on_drop = {
 			let cx = cx.clone();
 			move |e: Event<FileEventData>| {
@@ -145,6 +158,8 @@ impl Component for MainWindow {
 			.content(Content::flex())
 			.on_global_key_down(on_key)
 			.on_key_down(on_escape)
+			.on_global_pointer_down(on_mouse_down)
+			.on_global_pointer_up(on_mouse_up)
 			.on_file_drop(on_drop)
 			.child(MenuBar::new(model.read().clone(), on_menu))
 			.child(

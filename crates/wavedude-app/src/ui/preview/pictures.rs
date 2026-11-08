@@ -7,6 +7,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use freya::engine::prelude::Canvas;
 use freya::prelude::*;
@@ -27,6 +28,28 @@ use wavedude_app_state::commands::{Command, Target};
 
 /// The margin between a cell's edge and its picture, logical pixels.
 pub const MARGIN: f32 = 4.;
+/// A pointer resting on a handle this long shows the handle's tooltip.
+const HOVER_TIP_DELAY: Duration = Duration::from_millis(600);
+/// How often a resting pointer is checked for a tooltip.
+const HOVER_POLL: Duration = Duration::from_millis(150);
+
+/// The tooltip of handle `h`: what it is and how to move it.
+pub fn handle_tip(app: &crate::ui::shared::App, h: &super::handles::Handle) -> String {
+	use super::handles::HandleKind;
+	let s = &app.strings;
+	let name = h.item.name(&app.document.project).unwrap_or_default().to_owned();
+	match h.kind {
+		HandleKind::Source | HandleKind::PartCentre | HandleKind::ProbeA | HandleKind::ProbeB => {
+			s.format("TipMarkerFormat", &[&name])
+		}
+		HandleKind::SourceLever | HandleKind::PartLever => s.format("TipAngleMarkerFormat", &[&name]),
+		HandleKind::Grip => s.format("TipGripFormat", &[&name]),
+		HandleKind::Point(i) => s.format("TipPointFormat", &[&name, &(i + 1).to_string()]),
+		HandleKind::Node(i) => s.format("TipNodeFormat", &[&name, &(i + 1).to_string()]),
+		HandleKind::InHandle(i) => s.format("TipInHandleFormat", &[&name, &(i + 1).to_string()]),
+		HandleKind::OutHandle(i) => s.format("TipOutHandleFormat", &[&name, &(i + 1).to_string()]),
+	}
+}
 
 /// The edge line's colour: pure blue for a damping rim outside the canvas (it wins over a wall), pure red for a
 /// reflective wall, none for open edges or a damping band inside the canvas.
@@ -131,9 +154,10 @@ impl Component for PictureCell {
 		let theme = use_wave_theme();
 		let mut cell = use_state(|| (0f32, 0f32));
 		let mut area = use_state(|| (0f32, 0f32));
+		let mut area_origin = use_state(|| (0f32, 0f32));
 		let layer = self.layer;
 		let states = self.states;
-		let (canvas, edge, title, caption, hint, brightness, graphs) =
+		let (canvas, edge, title, caption, hint, brightness, graphs, auto, auto_tip) =
 			shared.read(Topics::DOCUMENT | Topics::SELECTION | Topics::SETTINGS, |app| {
 				let p = &app.document.project;
 				let s = &app.strings;
@@ -149,6 +173,8 @@ impl Component for PictureCell {
 					s.hint("DisplayLayer", "Brightness"),
 					p.display.layer(layer).brightness,
 					graph_boxes::has_boxes(p, layer),
+					s.get("ButtonAutoBrightness").to_owned(),
+					s.get("TipAutoBrightness").to_owned(),
 				)
 			});
 		if graphs {
@@ -160,6 +186,11 @@ impl Component for PictureCell {
 		canvas_state.set_if_modified(canvas);
 		let view = states.view.read().normalised(canvas);
 		let t = CanvasTransform::view(aw, ah, canvas, MARGIN, view);
+		let mut pictures = consume_context::<crate::ui::app::Ui>().pictures;
+		let origin = *area_origin.read();
+		if pictures.peek()[layer as usize] != Some((origin, t)) {
+			pictures.write()[layer as usize] = Some((origin, t));
+		}
 
 		// The handles are rebuilt only when the document, the selection or the scale changed.
 		let revisions = shared.revisions();
@@ -197,6 +228,48 @@ impl Component for PictureCell {
 			*redraw.write() += 1;
 		}
 		let hooks = use_hook(|| hooks(inputs, states, layer, canvas_state));
+
+		// A pointer resting on a handle shows its tooltip; a move or a press hides it.
+		let mut transform = use_state(|| t);
+		transform.set_if_modified(t);
+		let mut hover = use_state(|| None::<((f32, f32), Instant)>);
+		let mut hover_tip = use_state(|| None::<(String, (f32, f32))>);
+		use_hook({
+			let shared = shared.clone();
+			move || {
+				spawn(async move {
+					loop {
+						timer(HOVER_POLL).await;
+						let Some((p, since)) = *hover.peek() else { continue };
+						if since.elapsed() < HOVER_TIP_DELAY || hover_tip.peek().is_some() {
+							continue;
+						}
+						let t = *transform.peek();
+						let model = inputs.peek().model.clone();
+						let hit = super::handles::hit(&model, t.to_canvas(p.0, p.1), t.scale);
+						let text = hit.map(|i| shared.peek(|app| handle_tip(app, &model.handles[i])));
+						if let Some(text) = text {
+							hover_tip.set(Some((text, p)));
+						} else {
+							hover.set(None);
+						}
+					}
+				});
+			}
+		});
+		let tip_view = hover_tip.read().clone().map(|(text, (x, y))| {
+			rect()
+				.position(Position::new_absolute().left(x + 14.).top(y + 18.))
+				.layer(freya::prelude::Layer::Overlay)
+				.interactive(Interactive::No)
+				.max_width(Size::px(320.))
+				.padding((3., 6., 3., 6.))
+				.background(theme.menu_background)
+				.color(theme.text)
+				.border(Border::new().fill(theme.menu_border).width(1.).alignment(BorderAlignment::Inner))
+				.test_id(format!("HandleTip:{}", layer_name(layer)))
+				.child(paragraph().width(Size::fill()).span(Span::new(text)))
+		});
 		let picture = CanvasImage::new(image, canvas)
 			.image_window(image_window)
 			.view(view)
@@ -216,9 +289,29 @@ impl Component for PictureCell {
 		let picture_area = rect()
 			.width(Size::flex(1.))
 			.height(Size::flex(1.))
-			.on_sized(move |e: Event<SizedEventData>| area.set_if_modified((e.area.width(), e.area.height())))
+			.on_sized(move |e: Event<SizedEventData>| {
+				area.set_if_modified((e.area.width(), e.area.height()));
+				area_origin.set_if_modified((e.area.min_x(), e.area.min_y()));
+			})
+			.on_pointer_move(move |e: Event<PointerEventData>| {
+				let l = e.element_location();
+				let p = (l.x as f32, l.y as f32);
+				if hover.peek().is_none_or(|(q, _)| q != p) {
+					hover.set(Some((p, Instant::now())));
+					hover_tip.set_if_modified(None);
+				}
+			})
+			.on_pointer_down(move |_| {
+				hover.set_if_modified(None);
+				hover_tip.set_if_modified(None);
+			})
+			.on_pointer_leave(move |_| {
+				hover.set_if_modified(None);
+				hover_tip.set_if_modified(None);
+			})
 			.child(picture)
-			.children(boxes);
+			.children(boxes)
+			.maybe_child(tip_view);
 
 		let value_shared = shared.clone();
 		let path = format!("{}.brightness", layer_key(layer));
@@ -236,6 +329,7 @@ impl Component for PictureCell {
 		)
 		.caption(caption)
 		.tooltip(hint)
+		.auto(auto, auto_tip)
 		.box_id(states.brightness[layer as usize])
 		.orientation(if beside { StripOrientation::Vertical } else { StripOrientation::Horizontal })
 		.test_id(picture_id(layer));

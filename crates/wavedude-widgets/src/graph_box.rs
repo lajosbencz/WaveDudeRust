@@ -8,7 +8,7 @@ use freya::prelude::*;
 
 use crate::paint::{DeviceGrid, fill, stroke, text_line, text_width};
 use crate::theme::use_wave_theme;
-use crate::util::{TestIdExt, shift};
+use crate::util::{TestIdExt, focus_border, shift};
 
 /// The value axis of a graph.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -255,6 +255,7 @@ pub struct GraphBox {
 	metrics: GraphMetrics,
 	on_event: EventHandler<GraphBoxEvent>,
 	test_id: Option<String>,
+	grip_tooltip: Option<String>,
 }
 
 impl GraphBox {
@@ -267,7 +268,14 @@ impl GraphBox {
 			metrics: GraphMetrics::default(),
 			on_event: on_event.into(),
 			test_id: None,
+			grip_tooltip: None,
 		}
+	}
+
+	/// The tooltip of the corner grip.
+	pub fn grip_tooltip(mut self, text: impl Into<String>) -> Self {
+		self.grip_tooltip = Some(text.into());
+		self
 	}
 
 	pub fn selected(mut self, selected: bool) -> Self {
@@ -449,6 +457,42 @@ impl Component for GraphBox {
 			}
 		}
 
+		// The corner grip: Tab reaches it, the arrow keys resize by a pixel, ten with Shift.
+		let grip_id = use_a11y();
+		let grip_focus = use_focus(grip_id);
+		let on_grip_key = {
+			let on_event = on_event.clone();
+			move |e: Event<KeyboardEventData>| {
+				let n = if shift(&e) { 10. } else { 1. };
+				let (dw, dh) = match e.key {
+					Key::Named(NamedKey::ArrowLeft) => (-n, 0.),
+					Key::Named(NamedKey::ArrowRight) => (n, 0.),
+					Key::Named(NamedKey::ArrowUp) => (0., -n),
+					Key::Named(NamedKey::ArrowDown) => (0., n),
+					_ => return,
+				};
+				e.stop_propagation();
+				on_event.call(GraphBoxEvent::Resize {
+					width: (w + dw).max(60.),
+					height: (h + dh).max(30.),
+					done: true,
+				});
+			}
+		};
+		let grip = rect()
+			.a11y_id(grip_id)
+			.a11y_focusable(true)
+			.maybe_test_id(self.test_id.as_ref().map(|t| format!("{t}:Grip")))
+			.position(Position::new_absolute().right(0.).bottom(0.))
+			.width(Size::px(GRIP))
+			.height(Size::px(GRIP))
+			.border(focus_border(grip_focus(), theme.accent))
+			.cursor(CursorIcon::NwseResize)
+			.on_key_down(on_grip_key);
+		let grip: Element = match self.grip_tooltip.clone() {
+			Some(t) => TooltipContainer::new(Tooltip::new_text(t)).child(grip).into_element(),
+			None => grip.into_element(),
+		};
 		rect()
 			.a11y_id(id)
 			.a11y_focusable(true)
@@ -463,6 +507,7 @@ impl Component for GraphBox {
 			.on_global_pointer_move(on_global_move)
 			.on_global_pointer_up(on_global_up)
 			.on_key_down(on_key)
+			.child(grip)
 	}
 }
 

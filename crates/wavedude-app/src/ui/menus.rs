@@ -315,11 +315,19 @@ fn file_menu(app: &App, ui: &Ui) -> Submenu<MenuAction> {
 				.enabled(export_last && !app.live.export_busy())
 				.into(),
 			MenuEntry::Separator,
-			item(MenuAction::Close, "file:close", s, "MenuFileClose").icon(glyphs::CLOSE_PROJECT).into(),
+			item(MenuAction::Close, "file:close", s, "MenuFileClose")
+				.icon(glyphs::CLOSE_PROJECT)
+				.enabled(app.document.path.is_some())
+				.into(),
 			MenuEntry::Separator,
 			item(MenuAction::Exit, "file:exit", s, "MenuFileExit").shortcut("Alt+F4").icon(glyphs::EXIT).into(),
 		],
 	)
+}
+
+/// Whether the clipboard's text is a fragment the paste would take.
+pub fn clipboard_holds_objects() -> bool {
+	Clipboard::get().is_ok_and(|t| wavedude_app_state::clipboard::read_fragment(&t).is_ok())
 }
 
 fn has_items(app: &App) -> bool {
@@ -357,7 +365,11 @@ fn edit_menu(app: &App) -> Submenu<MenuAction> {
 				.icon(glyphs::COPY)
 				.enabled(copyable)
 				.into(),
-			item(MenuAction::Paste, "edit:paste", s, "MenuEditPaste").shortcut("Ctrl+V").icon(glyphs::PASTE).into(),
+			item(MenuAction::Paste, "edit:paste", s, "MenuEditPaste")
+				.shortcut("Ctrl+V")
+				.icon(glyphs::PASTE)
+				.enabled(clipboard_holds_objects())
+				.into(),
 			item(MenuAction::Delete, "edit:delete", s, "MenuEditDelete")
 				.shortcut("Del")
 				.icon(glyphs::DELETE)
@@ -615,7 +627,10 @@ pub fn tree_row_menu(app: &App, row: Option<Row>) -> MenuModel<MenuAction> {
 			.into(),
 		item(MenuAction::Cut, "tree:cut", s, "MenuEditCut").icon(glyphs::CUT).enabled(is_item).into(),
 		item(MenuAction::Copy, "tree:copy", s, "MenuEditCopy").icon(glyphs::COPY).enabled(copyable).into(),
-		item(MenuAction::Paste, "tree:paste", s, "MenuEditPaste").icon(glyphs::PASTE).into(),
+		item(MenuAction::Paste, "tree:paste", s, "MenuEditPaste")
+			.icon(glyphs::PASTE)
+			.enabled(clipboard_holds_objects())
+			.into(),
 		item(MenuAction::Delete, "tree:remove", s, "MenuProjectRemove")
 			.shortcut("Del")
 			.icon(glyphs::DELETE)
@@ -772,9 +787,9 @@ pub fn act(cx: &Cx, action: MenuAction, on: On) {
 			let mut r = cx.ui.manual_request;
 			*r.write() += 1;
 		}
-		MenuAction::AddSource => command(Command::AddSource { at: None }),
-		MenuAction::AddPart(kind) => command(Command::AddPart { kind, at: None }),
-		MenuAction::AddProbe => command(Command::AddProbe { at: None }),
+		MenuAction::AddSource => super::tree::add_then_edit(cx, Command::AddSource { at: None }),
+		MenuAction::AddPart(kind) => super::tree::add_then_edit(cx, Command::AddPart { kind, at: None }),
+		MenuAction::AddProbe => super::tree::add_then_edit(cx, Command::AddProbe { at: None }),
 		MenuAction::ToggleSelected => on_target(&|target| shared.update(|a| a.selection.toggle(target))),
 		MenuAction::ToggleEnabled => on_target(&|target| command(Command::ToggleEnabled { target })),
 		MenuAction::Duplicate => on_target(&|target| command(Command::Duplicate { target })),

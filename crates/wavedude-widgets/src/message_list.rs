@@ -346,6 +346,7 @@ pub struct MessageLabels {
 	pub copy: String,
 	pub copy_all: String,
 	pub clear: String,
+	pub clear_tip: String,
 	pub search: String,
 	pub regex: String,
 	pub regex_tip: String,
@@ -362,6 +363,7 @@ impl Default for MessageLabels {
 			copy: "_Copy".into(),
 			copy_all: "Copy _all".into(),
 			clear: "C_lear".into(),
+			clear_tip: "Clear all messages".into(),
 			search: "Search".into(),
 			regex: "Regex".into(),
 			regex_tip: "Treat the search as a regular expression".into(),
@@ -379,11 +381,23 @@ pub struct MessageList {
 	log: Writable<MessageLog>,
 	verbose: bool,
 	labels: MessageLabels,
+	list_id: Option<AccessibilityId>,
 }
 
 impl MessageList {
 	pub fn new(log: impl IntoWritable<MessageLog>) -> Self {
-		Self { log: log.into_writable(), verbose: cfg!(debug_assertions), labels: MessageLabels::default() }
+		Self {
+			log: log.into_writable(),
+			verbose: cfg!(debug_assertions),
+			labels: MessageLabels::default(),
+			list_id: None,
+		}
+	}
+
+	/// The list's id, for focusing it from outside.
+	pub fn list_id(mut self, id: AccessibilityId) -> Self {
+		self.list_id = Some(id);
+		self
 	}
 
 	pub fn labels(mut self, labels: MessageLabels) -> Self {
@@ -414,7 +428,8 @@ impl Component for MessageList {
 			..Default::default()
 		});
 		let modifiers = use_modifiers();
-		let list_id = use_a11y();
+		let own_id = use_a11y();
+		let list_id = self.list_id.unwrap_or(own_id);
 		let list_focus = use_focus(list_id);
 		let mut list_origin = use_state(|| (0., 0.));
 
@@ -544,10 +559,12 @@ impl Component for MessageList {
 				}),
 			})
 			.child(
-				Button::new()
-					.compact()
-					.on_press(move |_| clear_log.write().clear())
-					.child(label().text(words.clear.replace('_', ""))),
+				TooltipContainer::new(Tooltip::new_text(words.clear_tip.clone())).child(
+					Button::new()
+						.compact()
+						.on_press(move |_| clear_log.write().clear())
+						.child(label().text(words.clear.replace('_', ""))),
+				),
 			);
 
 		let length = ids.len();

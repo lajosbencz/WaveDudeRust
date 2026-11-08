@@ -1,7 +1,6 @@
 //! The forms of docs/ui/30, row by row, on the editors of [`super::properties`].
 
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
 use freya::prelude::*;
 use serde::Serialize;
@@ -12,8 +11,8 @@ use wavedude_core::model::{self as m, PartKind, Project, SchemeKind, SourceArray
 use wavedude_core::scene::gate_design::{self, GateDesign};
 use wavedude_widgets::icon::icons;
 use wavedude_widgets::{
-	ColorButton, DescriptionHeader, Gradient, GradientEditor, GradientStop, IconView, NumberSpec, PropertyRow, Rgb,
-	SectionHeader, TestIdExt,
+	ColorButton, DescriptionHeader, Gradient, GradientEditor, GradientStop, IconView, NumberSpec, PickerTips,
+	PropertyRow, Rgb, SectionHeader, TestIdExt,
 };
 
 use wavedude_app_state::commands::{Command, NewPart};
@@ -294,7 +293,7 @@ fn scene(f: &Form, r: &Readouts) -> Vec<Element> {
 			if !path.is_empty() && !r.image_found { format!("{path} {}", s.get("SceneImageNotFound")) } else { path };
 		canvas.push(readout(s.label("Scene", "ImagePath"), shown, "SceneImagePath"));
 		let size = r.image_size.map_or_else(|| s.get("ImageUnreadable").to_owned(), |(w, h)| format!("{w} x {h}"));
-		canvas.push(readout(s.get("LabelEmbeddedImage"), size, "SceneEmbeddedImage"));
+		canvas.push(readout(s.get("LabelEmbeddedImage"), size, "SceneEmbeddedImage").hint(s.get("TipEmbeddedImage")));
 	}
 	let (smin, smax) = bounds("Scene.Width");
 	canvas.extend([
@@ -361,15 +360,20 @@ fn layer_rows(f: &Form, layer: &str, names: &[(String, bool)]) -> Vec<PropertyRo
 		items.insert(0, (current.clone(), s.format("PickerMissingFormat", &[&current])));
 	}
 	const BROWSE: &str = "\u{1}browse";
+	const EDIT_COPY: &str = "\u{1}copy";
 	items.push((BROWSE.into(), s.get("PickerBrowse").to_owned()));
+	items.push((EDIT_COPY.into(), s.get("PickerEditCopy").to_owned()));
 	let picker = {
 		let form = f.clone();
+		let current_name = current.clone();
 		combo_box(&f.cx, current, items, format!("{layer}.ColorScheme"), move |name| {
 			if name == BROWSE {
 				let cx = form.cx.clone();
 				dialogs::pick_file(form.s.get("ColorSchemeFilter"), None, move |path| {
 					cx.send(AppEvent::Guarded(Guarded::Open(path)))
 				});
+			} else if name == EDIT_COPY {
+				edit_copy(&form, &path, &current_name);
 			} else {
 				form.set(&path, Value::from(name));
 			}
@@ -385,6 +389,24 @@ fn layer_rows(f: &Form, layer: &str, names: &[(String, bool)]) -> Vec<PropertyRo
 		l.number("OverlayGain", 0.05),
 		l.check("OverlayInExport"),
 	]
+}
+
+/// Makes a project scheme from the layer's current one (a project scheme is copied) and points the layer at it.
+fn edit_copy(f: &Form, path: &str, current: &str) {
+	let source = f.cx.shared.peek(|a| {
+		let p = &a.document.project;
+		schemes::find(&p.color_schemes, current)
+			.or_else(|| schemes::find(&a.schemes.user, current))
+			.or_else(|| schemes::find(schemes::built_in(), current))
+			.cloned()
+	});
+	let Some(scheme) = source else { return };
+	let name_after = f.cx.shared.peek(|a| {
+		let taken: Vec<String> = a.document.project.color_schemes.iter().map(|s| s.name.clone()).collect();
+		wavedude_core::model::names::copy_name(&scheme.name, taken.iter().map(String::as_str))
+	});
+	f.cx.send(AppEvent::Command(Command::ImportScheme(Box::new(scheme))));
+	f.set(path, Value::from(name_after));
 }
 
 fn display(f: &Form, r: &Readouts) -> Vec<Element> {
@@ -418,7 +440,7 @@ fn source(f: &Form, r: &Readouts) -> Vec<Element> {
 	let array_form = if composite {
 		f.clone()
 	} else {
-		Form { json: Rc::new(serde_json::json!({ "array": to_json(SourceArray::default()) })), ..f.clone() }
+		f.with_json(serde_json::json!({ "array": to_json(SourceArray::default()) }))
 	};
 	let arr = array_form.scope("SourceArray", "array", "SourceArray");
 	let wavelength = r.wavelength.map_or_else(String::new, |w| {
@@ -538,7 +560,10 @@ fn part_common(f: &Form, ty: &str, open: bool) -> Vec<Element> {
 	};
 	let (amin, amax) = bounds("Part.Angle");
 	vec![
-		DescriptionHeader::new(s.kind(ty), expanded).title(s.get("SectionDescription")).into_element(),
+		DescriptionHeader::new(s.kind(ty), expanded)
+			.title(s.get("SectionDescription"))
+			.tooltip(s.get("TipPartDescription"))
+			.into_element(),
 		section(s.get("SectionGeneral"), vec![f.name("OpticalPart"), common.check("Enabled")]),
 		section(
 			s.get("SectionPosition"),
@@ -628,7 +653,8 @@ fn lens(f: &Form, r: &Readouts, at: &str, variant: &str) -> Element {
 			l.number_in("R1", "", 10.),
 			l.number_in("R2", "", 10.),
 			l.number("Thickness", 1.),
-			readout(s.get("LabelEdgeThickness"), r.lens_edge.map(px).unwrap_or_default(), "LensEdgeThickness"),
+			readout(s.get("LabelEdgeThickness"), r.lens_edge.map(px).unwrap_or_default(), "LensEdgeThickness")
+				.hint(s.get("TipEdgeThickness")),
 		],
 	)
 }
@@ -652,7 +678,8 @@ fn triangle(f: &Form, r: &Readouts, at: &str, variant: &str) -> Element {
 			t.number("Base", 10.),
 			t.decimals("AngleA", 0.5, 1).enabled(a_on),
 			t.decimals("AngleB", 0.5, 1).enabled(tt == "Custom"),
-			readout(s.get("LabelApexAngle"), r.apex.map(|a| format!("{a:.1} deg")).unwrap_or_default(), "TriangleApex"),
+			readout(s.get("LabelApexAngle"), r.apex.map(|a| format!("{a:.1} deg")).unwrap_or_default(), "TriangleApex")
+				.hint(s.get("TipApexAngle")),
 		],
 	)
 }
@@ -667,7 +694,8 @@ fn zone_plate(f: &Form, r: &Readouts, at: &str, variant: &str) -> Vec<Element> {
 			s.get("SectionDesign"),
 			vec![
 				z.decimals("DesignFrequency", 0.1, 2),
-				readout(s.get("LabelWavelength"), r.wavelength.map(px).unwrap_or_default(), "ZoneWavelength"),
+				readout(s.get("LabelWavelength"), r.wavelength.map(px).unwrap_or_default(), "ZoneWavelength")
+					.hint(s.get("TipGateWavelength")),
 				z.number("FocalLength", 10.),
 				z.check("Inverse"),
 			],
@@ -685,8 +713,8 @@ fn zone_plate(f: &Form, r: &Readouts, at: &str, variant: &str) -> Vec<Element> {
 		section(
 			s.get("SectionZones"),
 			vec![
-				readout(s.get("LabelZoneCount"), count, "ZoneCount"),
-				readout(s.get("LabelOuterZone"), outer, "ZoneOuter"),
+				readout(s.get("LabelZoneCount"), count, "ZoneCount").hint(s.get("TipZones")),
+				readout(s.get("LabelOuterZone"), outer, "ZoneOuter").hint(s.get("TipZones")),
 			],
 		),
 	]
@@ -806,9 +834,7 @@ fn fiber(f: &Form, at: &str, variant: &str) -> Vec<Element> {
 			let path = nodes_path.clone();
 			move |on: bool| set_list(&f, &path, |l: &mut Vec<m::FiberNode>| l[i].smooth = on)
 		};
-		let head = pair((node.x, |n, v| n.x = v), (node.y, |n, v| n.y = v), "")
-			.child(super::properties::check_box(s.label("FiberNode", "Smooth").into(), node.smooth, toggle))
-			.child(remove_button::<m::FiberNode>(f, &nodes_path, i, "TipRemoveNode", format!("Node{i}.Remove")));
+		let head = pair((node.x, |n, v| n.x = v), (node.y, |n, v| n.y = v), "");
 		nodes.push(PropertyRow::new(format!("{} {}", s.get("LabelNodePoint"), i + 1), head));
 		nodes.push(PropertyRow::new(
 			s.get("LabelNodeIn"),
@@ -818,6 +844,19 @@ fn fiber(f: &Form, at: &str, variant: &str) -> Vec<Element> {
 			s.get("LabelNodeOut"),
 			pair((node.out_x, |n, v| n.out_x = v), (node.out_y, |n, v| n.out_y = v), "Out"),
 		));
+		let tail = rect()
+			.horizontal()
+			.width(Size::fill())
+			.content(Content::flex())
+			.cross_align(Alignment::center())
+			.spacing(4.)
+			.child(rect().width(Size::flex(1.)).child(super::properties::check_box(
+				s.label("FiberNode", "Smooth").into(),
+				node.smooth,
+				toggle,
+			)))
+			.child(remove_button::<m::FiberNode>(f, &nodes_path, i, "TipRemoveNode", format!("Node{i}.Remove")));
+		nodes.push(PropertyRow::new("", tail));
 	}
 	let add = {
 		let f = f.clone();
@@ -866,7 +905,8 @@ fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> V
 			s.get("SectionDesign"),
 			vec![
 				g.decimals("DesignFrequency", 0.1, 2),
-				readout(s.get("LabelWavelength"), r.wavelength.map(px).unwrap_or_default(), "GateWavelength"),
+				readout(s.get("LabelWavelength"), r.wavelength.map(px).unwrap_or_default(), "GateWavelength")
+					.hint(s.get("TipGateWavelength")),
 			],
 		),
 		section(
@@ -877,7 +917,7 @@ fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> V
 				g.number("Coating", 1.),
 				g.check("InputCoated"),
 				g.check("OutputCoated"),
-				readout(s.get("LabelQuarterWave"), quarter_text, "GateQuarterWave"),
+				readout(s.get("LabelQuarterWave"), quarter_text, "GateQuarterWave").hint(s.get("TipQuarterWave")),
 			],
 		),
 		section(s.get("SectionShape"), vec![g.number("PortSpacing", 2.)]),
@@ -887,7 +927,7 @@ fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> V
 			["LabelCoreWidth", "LabelCouplerGap", "LabelCouplerLength", "LabelGateLength"]
 				.iter()
 				.zip(layout)
-				.map(|(key, v)| readout(s.get(key), format!("{v} px"), key))
+				.map(|(key, v)| readout(s.get(key), format!("{v} px"), key).hint(s.get("TipGateLayout")))
 				.collect(),
 		),
 		section(
@@ -901,7 +941,7 @@ fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> V
 			.iter()
 			.zip(ports)
 			.enumerate()
-			.map(|(i, (text, q))| readout(text, point(q), &format!("GatePort{i}")))
+			.map(|(i, (text, q))| readout(text, point(q), &format!("GatePort{i}")).hint(s.get("TipGatePorts")))
 			.collect(),
 		),
 	]
@@ -957,6 +997,15 @@ fn probe(f: &Form) -> Vec<Element> {
 			],
 		),
 	]
+}
+
+/// The colour picker's tooltips in the UI language.
+pub fn picker_tips(s: &wavedude_app_state::strings::Strings) -> PickerTips {
+	PickerTips {
+		plane: s.get("TipColorSquare").to_owned(),
+		hue: s.get("TipColorHue").to_owned(),
+		channel: s.get("TipColorChannel").to_owned(),
+	}
 }
 
 fn to_gradient(stops: &[m::Stop]) -> Gradient {
@@ -1047,24 +1096,31 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 			.width(Size::fill())
 			.spacing(4.)
 			.cross_align(Alignment::center())
+			.child(label().width(Size::px(16.)).text(format!("{}", i + 1)))
 			.child(
 				wavedude_widgets::NumberBox::new(
 					WritableSetter::new(stop.position, move |v: f64| set_at(i, v)),
 					NumberSpec::linear(0., 1., 0.01),
 				)
 				.width(Size::px(64.))
+				.tooltip(s.get("TipStopPosition"))
 				.test_id(format!("Stop{i}.Position")),
 			)
 			.child(
 				ColorButton::new(WritableSetter::new(stop.color, move |c: Rgb| set_color(i, c)))
+					.tooltip(s.get("TipStopSwatch"))
+					.tips(picker_tips(s))
 					.test_id(format!("Stop{i}.Color")),
 			)
-			.child(rect().width(Size::flex(1.)).child(super::properties::text_box(
-				stop.color.to_hex(),
-				false,
-				move |t| set_hex(i, t),
-				format!("Stop{i}.Hex"),
-			)))
+			.child(tip(
+				s.get("TipStopColor"),
+				rect().width(Size::flex(1.)).child(super::properties::text_box(
+					stop.color.to_hex(),
+					false,
+					move |t| set_hex(i, t),
+					format!("Stop{i}.Hex"),
+				)),
+			))
 			.child(tip(
 				s.get("TipRemoveStop"),
 				Button::new()
@@ -1073,7 +1129,7 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 					.on_press(move |_| remove(i, ()))
 					.child(IconView::new(icons::MINUS)),
 			));
-		rows.push(PropertyRow::new(format!("{}", i + 1), editors));
+		rows.push(PropertyRow::new("", editors).full_width());
 	}
 	let add = stop_edit(f, &gradient, |g, _, ()| {
 		g.add_in_widest_gap();
@@ -1090,7 +1146,7 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 				f.name("ColorScheme"),
 				sc.combo("Kind", "ColorSchemeKind", &["Unspecified", "Field", "Intensity"]),
 				sc.text("Description", false),
-				PropertyRow::new(s.get("LabelBasedOn"), based_on),
+				PropertyRow::new(s.get("LabelBasedOn"), based_on).hint(s.get("TipBasedOn")),
 			],
 		),
 		section(s.get("SectionStops"), rows),

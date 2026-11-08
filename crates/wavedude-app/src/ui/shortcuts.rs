@@ -29,6 +29,9 @@ pub fn command_of(key: &Key, modifiers: Modifiers, text: bool) -> Option<MenuAct
 	}
 	match key {
 		Key::Named(NamedKey::F1) if !ctrl && !shift => Some(MenuAction::Manual),
+		Key::Named(NamedKey::Delete) if shift && !ctrl && !text => Some(MenuAction::Cut),
+		Key::Named(NamedKey::Insert) if ctrl && !shift && !text => Some(MenuAction::Copy),
+		Key::Named(NamedKey::Insert) if shift && !ctrl && !text => Some(MenuAction::Paste),
 		Key::Named(NamedKey::F5) if !ctrl => Some(if shift { MenuAction::Stop } else { MenuAction::Run }),
 		Key::Named(NamedKey::F6) if !ctrl && !shift => Some(MenuAction::PauseRun),
 		Key::Named(NamedKey::F7) if !ctrl && !shift => Some(MenuAction::Play),
@@ -98,5 +101,14 @@ mod tests {
 		);
 		assert_eq!(command_of(&Key::Named(NamedKey::F5), Modifiers::SHIFT, false), Some(MenuAction::Stop));
 		assert_eq!(command_of(&Key::Named(NamedKey::F1), Modifiers::ALT, false), None);
+	}
+
+	#[test]
+	fn the_insert_and_delete_aliases_edit_objects_only() {
+		let ins = Key::Named(NamedKey::Insert);
+		assert_eq!(command_of(&ins, Modifiers::CONTROL, false), Some(MenuAction::Copy));
+		assert_eq!(command_of(&ins, Modifiers::SHIFT, false), Some(MenuAction::Paste));
+		assert_eq!(command_of(&Key::Named(NamedKey::Delete), Modifiers::SHIFT, false), Some(MenuAction::Cut));
+		assert_eq!(command_of(&ins, Modifiers::SHIFT, true), None);
 	}
 }

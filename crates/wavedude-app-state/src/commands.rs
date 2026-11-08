@@ -142,6 +142,8 @@ pub enum Command {
 		at: Option<Point>,
 	},
 	AddScheme,
+	/// A copy of a built-in or user scheme as a project scheme, selected.
+	ImportScheme(Box<wavedude_core::model::ColorScheme>),
 	/// The target, or the whole selection when the target is one of several selected.
 	Remove {
 		target: ItemRef,
@@ -335,6 +337,11 @@ pub fn apply(project: &mut Project, selection: &mut Selection, command: Command)
 		}
 		Command::AddScheme => {
 			let i = project.add_new_color_scheme();
+			selection.set_items(vec![ItemRef::new(ItemKind::Scheme, i)]);
+			Change::step(ChangeKind::Display)
+		}
+		Command::ImportScheme(scheme) => {
+			let i = project.add_color_scheme(*scheme);
 			selection.set_items(vec![ItemRef::new(ItemKind::Scheme, i)]);
 			Change::step(ChangeKind::Display)
 		}

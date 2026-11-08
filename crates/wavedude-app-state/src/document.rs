@@ -41,6 +41,8 @@ pub struct Document {
 	pub needs_brightness_fit: bool,
 	/// The empty project at start or after Close: the title shows the app name alone until it is edited.
 	placeholder: bool,
+	/// The scene image file's modification time last seen and when it was last checked.
+	image_watch: Option<(std::time::SystemTime, Instant)>,
 }
 
 /// What a file opened as: a project, or a colour scheme for the open project.
@@ -53,6 +55,9 @@ pub enum Opened {
 fn extension(path: &Path) -> String {
 	path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()
 }
+
+/// How often the scene image's file is checked for a change.
+const IMAGE_WATCH: std::time::Duration = std::time::Duration::from_secs(1);
 
 impl Document {
 	fn with(mut project: Project, path: Option<PathBuf>, suggested: Option<PathBuf>, placeholder: bool) -> Self {
@@ -67,6 +72,7 @@ impl Document {
 			history,
 			needs_brightness_fit: false,
 			placeholder,
+			image_watch: None,
 		}
 	}
 
@@ -166,6 +172,45 @@ impl Document {
 		self.history = History::new(&self.project);
 		self.refresh_dirty();
 		tracing::info!("the scene image was re-embedded from '{}'", path.display());
+		true
+	}
+
+	/// The scene image's file, when the project names one that resolves.
+	fn image_file(&self) -> Option<PathBuf> {
+		let path = io::resolve_image_path(self.folder(), &self.project.scene.image_path);
+		(!path.as_os_str().is_empty()).then_some(path)
+	}
+
+	/// Follows the scene image's file while the project is open: checked every [`IMAGE_WATCH`], a changed file
+	/// is re-embedded as an edit (undoable, the run starts over). Returns whether the image changed.
+	pub fn poll_image_file(&mut self, now: Instant) -> bool {
+		let Some(path) = self.image_file() else {
+			self.image_watch = None;
+			return false;
+		};
+		if self.image_watch.is_some_and(|(_, checked)| now.saturating_duration_since(checked) < IMAGE_WATCH) {
+			return false;
+		}
+		let Some(modified) = std::fs::metadata(&path).and_then(|m| m.modified()).ok() else {
+			self.image_watch = None;
+			return false;
+		};
+		let changed = self.image_watch.replace((modified, now)).is_some_and(|(seen, _)| seen != modified);
+		if !changed {
+			return false;
+		}
+		let Ok(bytes) = std::fs::read(&path) else { return false };
+		if self.project.scene.image_data.as_deref() == Some(&bytes[..]) {
+			return false;
+		}
+		let Ok(size) = io::image_size(&bytes) else {
+			tracing::warn!("the scene image file '{}' does not decode; the embedded image stays", path.display());
+			return false;
+		};
+		self.project.scene.image_data = Some(bytes);
+		self.project.scene.image_size = size;
+		self.edited(now);
+		tracing::info!("the scene image was re-embedded from '{}': the file changed", path.display());
 		true
 	}
 

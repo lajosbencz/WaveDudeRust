@@ -158,6 +158,7 @@ pub fn rows(project: &Project, s: &Strings) -> Vec<TreeRow<Row>> {
 				.icon(icon.clone())
 				.group(group)
 				.can_add()
+				.add_tip(s.get("TipAdd"))
 				.test_id(format!("Tree:{key}")),
 		);
 		for (index, name) in kind.names(project).into_iter().enumerate() {
@@ -171,7 +172,12 @@ pub fn rows(project: &Project, s: &Strings) -> Vec<TreeRow<Row>> {
 				.group(group)
 				.test_id(format!("Tree:{name}"));
 			if let Some(on) = enabled_of(project, item) {
-				row = row.enabled(on);
+				let tip = match kind {
+					ItemKind::Source => "TipSourceEnabled",
+					ItemKind::Part => "TipPartEnabled",
+					ItemKind::Probe | ItemKind::Scheme => "TipProbeActive",
+				};
+				row = row.enabled(on).enabled_tip(s.get(tip));
 			}
 			rows.push(row);
 		}
@@ -205,11 +211,23 @@ fn assign_selection(cx: &Cx, sel: &TreeSelection<Row>) {
 
 fn add(cx: &Cx, kind: ItemKind, at: (f64, f64)) {
 	match kind {
-		ItemKind::Source => cx.send(AppEvent::Command(Command::AddSource { at: None })),
-		ItemKind::Probe => cx.send(AppEvent::Command(Command::AddProbe { at: None })),
-		ItemKind::Scheme => cx.send(AppEvent::Command(Command::AddScheme)),
+		ItemKind::Source => add_then_edit(cx, Command::AddSource { at: None }),
+		ItemKind::Probe => add_then_edit(cx, Command::AddProbe { at: None }),
+		ItemKind::Scheme => add_then_edit(cx, Command::AddScheme),
 		ItemKind::Part => open_part_menu(cx, at),
 	}
+}
+
+/// Adds an item and puts the caret in its form's first box (docs/ui/20, Add).
+pub fn add_then_edit(cx: &Cx, command: Command) {
+	cx.send(AppEvent::Command(command));
+	request_form_focus(cx);
+}
+
+/// Asks the Properties pane to take the keyboard focus.
+pub fn request_form_focus(cx: &Cx) {
+	let mut f = cx.ui.focus_form;
+	*f.write() += 1;
 }
 
 /// The Add part menu at `at`.
@@ -231,10 +249,7 @@ fn on_action(cx: &Cx, action: TreeAction<Row>, pointer: (f64, f64)) {
 				command(Command::ToggleEnabled { target });
 			}
 		}
-		TreeAction::Activate(_) => {
-			let mut f = cx.ui.focus_form;
-			*f.write() += 1;
-		}
+		TreeAction::Activate(_) => request_form_focus(cx),
 		TreeAction::Rename(row, name) => {
 			if let Some(target) = item_of(&row) {
 				command(Command::Rename { target, name });
@@ -277,12 +292,33 @@ fn on_action(cx: &Cx, action: TreeAction<Row>, pointer: (f64, f64)) {
 				command(Command::Reorder { target, to });
 			}
 		}
+		TreeAction::DropOutside { dragged, at } => {
+			if let Some(item) = item_of(&dragged) {
+				drop_on_picture(cx, item, at);
+			}
+		}
 		TreeAction::ContextMenu { key, at } => {
 			let model = cx.shared.peek(|a| menus::tree_row_menu(a, key));
 			let cx2 = cx.clone();
 			cx.ui.open_menu(at, model, move |action| menus::act(&cx2, action, menus::On::Row(key)));
 		}
 	}
+}
+
+/// A row dropped on a picture: a copy of the item lands where it was dropped (docs/ui/20, drag and drop).
+fn drop_on_picture(cx: &Cx, item: ItemRef, at: (f64, f64)) {
+	let target = cx.ui.pictures.peek().iter().flatten().find_map(|((ox, oy), t)| {
+		let local = (at.0 as f32 - ox, at.1 as f32 - oy);
+		t.contains(local.0, local.1).then(|| t.to_canvas(local.0, local.1))
+	});
+	let Some((x, y)) = target else { return };
+	let (text, current) = cx.shared.peek(|a| {
+		let objects = [wavedude_app_state::clipboard::Copyable::Item(item)];
+		(wavedude_app_state::clipboard::write_fragment(&a.document.project, &objects), a.selection.current())
+	});
+	let place_at = Some(wavedude_core::model::Point::new(x.floor() as i32, y.floor() as i32));
+	let target = wavedude_app_state::clipboard::PasteTarget { current, before: false };
+	cx.send(AppEvent::Paste { text, target, place_at });
 }
 
 fn tool_button(
@@ -398,7 +434,7 @@ impl Component for ProjectPane {
 				w[3].clone(),
 				true,
 				"ToolAddSource",
-				press(|cx| cx.send(AppEvent::Command(Command::AddSource { at: None }))),
+				press(|cx| add_then_edit(cx, Command::AddSource { at: None })),
 			))
 			.child(tool_button(
 				icons::PROBE,
@@ -406,7 +442,7 @@ impl Component for ProjectPane {
 				w[4].clone(),
 				true,
 				"ToolAddProbe",
-				press(|cx| cx.send(AppEvent::Command(Command::AddProbe { at: None }))),
+				press(|cx| add_then_edit(cx, Command::AddProbe { at: None })),
 			))
 			.child(
 				rect()

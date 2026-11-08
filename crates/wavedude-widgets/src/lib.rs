@@ -16,6 +16,7 @@ pub mod picture;
 pub mod property_grid;
 pub mod spinner;
 pub mod status_bar;
+pub mod text_box;
 pub mod theme;
 pub mod timeline;
 pub mod tree;
@@ -25,7 +26,7 @@ mod util;
 
 pub use util::{TestIdExt, use_modifiers};
 
-pub use color_button::{ColorButton, ColorPicker, Hsv, Rgb};
+pub use color_button::{ColorButton, ColorPicker, Hsv, PickerTips, Rgb};
 pub use dock::{DockHost, DockLayout, DockPane, PaneGroup, Side};
 pub use gradient_editor::{Gradient, GradientEditor, GradientStop};
 pub use graph_box::{GraphBox, GraphData, GraphLayout, ValueAxis};
@@ -38,6 +39,7 @@ pub use picture::{Callback, CanvasImage, CanvasTransform, PictureEvent};
 pub use property_grid::{DescriptionHeader, PropertyGrid, PropertyRow, SectionHeader};
 pub use spinner::Spinner;
 pub use status_bar::{Progress, StatusBar, StatusLevel, StatusLine};
+pub use text_box::TextBox;
 pub use theme::{Theme, ThemeKind, use_init_wave_theme, use_wave_theme};
 pub use timeline::{Timeline, TimelineEvent, TimelineModel};
 pub use tree::{TreeAction, TreeRow, TreeSelection, TreeState, TreeView};

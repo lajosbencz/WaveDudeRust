@@ -23,6 +23,7 @@ openh264-source = ["wavedude-export/openh264-source"]
 cargo-packager-updater = "0.2"
 semver = "1"
 freya = { version = "0.5", features = ["engine", "markdown"] }
+freya-winit = "0.5"
 wavedude-widgets = { path = "../wavedude-widgets" }
 wavedude-export = { path = "../wavedude-export" }
 wavedude-app-state = { path = "../wavedude-app-state" }
@@ -37,6 +38,7 @@ wavedude-core = { path = "../wavedude-core", features = ["gpu"] }
 
 [dev-dependencies]
 freya-testing = "0.5"
+image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 
@@ -53,6 +55,11 @@ icons = ["assets/icon.png"]
 out-dir = "../../target/packages"
 before-packaging-command = "cargo build --release -p wavedude-app -p wavedude-cli"
 binaries = [{ path = "wavedude-app", main = true }, { path = "wavedude-cli" }]
+file-associations = [
+	{ extensions = ["wdproj"], mime-type = "application/x-wavedude-project+xml", description = "WaveDude project", name = "WaveDude project", role = "Editor" },
+	{ extensions = ["wdr"], mime-type = "application/x-wavedude-project+zip", description = "WaveDude Rust project", name = "WaveDude Rust project", role = "Editor" },
+	{ extensions = ["wdscheme"], mime-type = "application/x-wavedude-scheme+xml", description = "WaveDude colour scheme", name = "WaveDude colour scheme", role = "Editor" },
+]
 
 # Ad-hoc signature: an unsigned bundle on Apple silicon is reported as damaged instead of unverified.
 [package.metadata.packager.macos]

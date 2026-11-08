@@ -14,10 +14,12 @@ struct Right {
 	readout: String,
 	busy: Option<(String, Progress)>,
 	tip: String,
+	busy_tip: Option<String>,
 }
 
 fn right(cx: &Cx) -> Right {
 	let download = cx.ui.download.read().clone();
+	let exporting = cx.ui.export.read().is_some();
 	let export = download.or_else(|| cx.ui.export.read().as_ref().map(|e| (e.text.clone(), e.progress())));
 	let topics = Topics::PLAYBACK | Topics::PROGRESS | Topics::SCRATCH | Topics::RUN | Topics::SETTINGS;
 	cx.shared.read(topics, |a| {
@@ -37,6 +39,7 @@ fn right(cx: &Cx) -> Right {
 			readout: format!("{}  {} {}", r.frames_text(), s.get("LabelPreviewStep"), r.step),
 			busy,
 			tip: s.get("TipStatusBar").to_owned(),
+			busy_tip: exporting.then(|| s.get("TipExportCancel").to_owned()),
 		}
 	})
 }
@@ -60,6 +63,7 @@ impl Component for StatusArea {
 			.right(text)
 			.busy(r.busy)
 			.tooltip(r.tip)
+			.busy_tooltip(r.busy_tip)
 			.on_double_click(move |_| window::show_messages(&ui))
 	}
 }

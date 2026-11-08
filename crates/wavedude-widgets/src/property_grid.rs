@@ -225,15 +225,21 @@ pub struct DescriptionHeader {
 	title: String,
 	text: String,
 	expanded: WritableSetter<bool>,
+	tooltip: Option<String>,
 }
 
 impl DescriptionHeader {
 	pub fn new(text: impl Into<String>, expanded: impl Into<WritableSetter<bool>>) -> Self {
-		Self { title: "Description".into(), text: text.into(), expanded: expanded.into() }
+		Self { title: "Description".into(), text: text.into(), expanded: expanded.into(), tooltip: None }
 	}
 
 	pub fn title(mut self, title: impl Into<String>) -> Self {
 		self.title = title.into();
+		self
+	}
+
+	pub fn tooltip(mut self, text: impl Into<String>) -> Self {
+		self.tooltip = Some(text.into());
 		self
 	}
 }
@@ -245,32 +251,30 @@ impl Component for DescriptionHeader {
 		let focus = use_focus(id);
 		let open = *self.expanded.read();
 		let mut toggle = self.expanded.clone();
-		rect()
-			.width(Size::fill())
-			.child(
-				rect()
-					.a11y_id(id)
-					.a11y_focusable(true)
-					.a11y_role(AccessibilityRole::Button)
-					.height(Size::px(theme.row_height))
-					.horizontal()
-					.cross_align(Alignment::center())
-					.border(focus_border(focus(), theme.accent))
-					.on_press(move |_| {
-						let v = !*toggle.peek();
-						toggle.set(v);
-					})
-					.child(
-						IconView::new(if open { icons::CHEVRON_DOWN } else { icons::CHEVRON_RIGHT }).color(theme.text),
-					)
-					.child(label().text(self.title.clone())),
-			)
-			.maybe_child(open.then(|| {
-				rect()
-					.width(Size::fill())
-					.padding((0., 4., 6., 20.))
-					.child(paragraph().color(theme.text_dim).span(Span::new(self.text.clone())))
-			}))
+		let header = rect()
+			.a11y_id(id)
+			.a11y_focusable(true)
+			.a11y_role(AccessibilityRole::Button)
+			.height(Size::px(theme.row_height))
+			.horizontal()
+			.cross_align(Alignment::center())
+			.border(focus_border(focus(), theme.accent))
+			.on_press(move |_| {
+				let v = !*toggle.peek();
+				toggle.set(v);
+			})
+			.child(IconView::new(if open { icons::CHEVRON_DOWN } else { icons::CHEVRON_RIGHT }).color(theme.text))
+			.child(label().text(self.title.clone()));
+		let header: Element = match self.tooltip.clone() {
+			Some(t) => TooltipContainer::new(Tooltip::new_text(t)).child(header).into_element(),
+			None => header.into_element(),
+		};
+		rect().width(Size::fill()).child(header).maybe_child(open.then(|| {
+			rect()
+				.width(Size::fill())
+				.padding((0., 4., 6., 20.))
+				.child(paragraph().color(theme.text_dim).span(Span::new(self.text.clone())))
+		}))
 	}
 }
 

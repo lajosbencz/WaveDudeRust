@@ -1,13 +1,14 @@
 //! The Properties pane (docs/ui/30): the form of the current row, built from a snapshot of the edited object
 //! as JSON, every edit sent as `Command::Set` at the object's serde path.
 
+use std::cell::Cell;
 use std::rc::Rc;
 
 use freya::prelude::*;
 use serde_json::Value;
 use wavedude_core::model::{PartKind, ranges};
 use wavedude_widgets::icon::icons;
-use wavedude_widgets::{Check, TestIdExt};
+use wavedude_widgets::{Check, TestIdExt, TextBox};
 use wavedude_widgets::{
 	IconView, MenuEntry, MenuItem, MenuModel, NumberBox, NumberSpec, PropertyGrid, PropertyRow, use_wave_theme,
 };
@@ -87,6 +88,8 @@ pub struct Form {
 	pub target: Target,
 	pub json: Rc<Value>,
 	pub s: Strings,
+	/// The id the form's first editor takes, so Enter on a tree row or Add can focus it; taken once.
+	first_editor: Rc<Cell<Option<AccessibilityId>>>,
 }
 
 /// A number's bounds from the model's range table; open for `""` and the keys the table lists as unbounded or
@@ -127,6 +130,20 @@ thread_local! {
 }
 
 impl Form {
+	pub fn new(cx: Cx, target: Target, json: Rc<Value>, s: Strings, first_editor: AccessibilityId) -> Self {
+		Self { cx, target, json, s, first_editor: Rc::new(Cell::new(Some(first_editor))) }
+	}
+
+	/// The first editor's id, for the editor that claims it first.
+	fn claim_first(&self) -> Option<AccessibilityId> {
+		self.first_editor.take()
+	}
+
+	/// The same form over another object (a default shown greyed).
+	pub fn with_json(&self, json: Value) -> Self {
+		Self { json: Rc::new(json), ..self.clone() }
+	}
+
 	/// The value at a dotted path, a number stepping into a list; `None` only for a field the model skips when
 	/// unset (a source's `array` and `detach_after`).
 	pub fn optional(&self, path: &str) -> Option<&Value> {
@@ -198,7 +215,7 @@ impl Form {
 		let value = self.num(path);
 		let form = self.clone();
 		let path_owned = path.to_owned();
-		let editor = NumberBox::new(
+		let mut editor = NumberBox::new(
 			WritableSetter::new(value, move |v: f64| {
 				let json = if integer { Value::from(v.round() as i64) } else { Value::from(v) };
 				form.set(&path_owned, json);
@@ -207,6 +224,9 @@ impl Form {
 		)
 		.width(Size::fill())
 		.test_id(format!("{ty}.{member}"));
+		if let Some(id) = self.claim_first() {
+			editor = editor.a11y_id(id);
+		}
 		PropertyRow::new(self.s.label(ty, member), editor).hint(self.s.hint(ty, member))
 	}
 
@@ -242,24 +262,26 @@ impl Form {
 		PropertyRow::new(self.s.label(ty, member), editor).hint(self.s.hint(ty, member))
 	}
 
-	/// A text box applied on every keystroke (`multiline` keeps Enter as newline).
+	/// A text box applied on Enter or focus loss, Esc reverting (`multiline` keeps Enter as newline).
 	pub fn text(&self, ty: &str, member: &str, path: &str, multiline: bool) -> PropertyRow {
 		let value = self.bind_as::<String>(path);
 		let form = self.clone();
 		let path = path.to_owned();
 		let on_text = move |t: String| form.set(&path, Value::from(t));
-		PropertyRow::new(self.s.label(ty, member), text_box(value, multiline, on_text, format!("{ty}.{member}")))
+		let editor = TextBox::new(value, on_text).multiline(multiline).id(self.claim_first());
+		PropertyRow::new(self.s.label(ty, member), tagged(editor, format!("{ty}.{member}")))
 			.hint(self.s.hint(ty, member))
 	}
 
-	/// The item's name box: renames through the command that keeps references.
+	/// The item's name box: applied on every keystroke, so the tree follows the typing; renames through the
+	/// command that keeps references.
 	pub fn name(&self, ty: &str) -> PropertyRow {
 		let Target::Item(target) = self.target else { return self.text(ty, "Name", "name", false) };
 		let value = self.bind_as::<String>("name");
 		let cx = self.cx.clone();
 		let on_text = move |name: String| cx.send(AppEvent::Command(Command::Rename { target, name }));
-		PropertyRow::new(self.s.label(ty, "Name"), text_box(value, false, on_text, format!("{ty}.Name")))
-			.hint(self.s.hint(ty, "Name"))
+		let editor = TextBox::new(value, on_text).live().id(self.claim_first());
+		PropertyRow::new(self.s.label(ty, "Name"), tagged(editor, format!("{ty}.Name"))).hint(self.s.hint(ty, "Name"))
 	}
 }
 
@@ -374,15 +396,9 @@ pub fn tagged(child: impl IntoElement, id: impl Into<String>) -> Element {
 	rect().test_id(id).child(child).into_element()
 }
 
-/// A text box; `on_text` gets every edit.
+/// A text box applied on Enter or focus loss, Esc reverting.
 pub fn text_box(value: String, multiline: bool, on_text: impl Fn(String) + 'static, test: String) -> Element {
-	tagged(
-		Input::new(WritableSetter::new(value, move |t: String| on_text(t)))
-			.multiline(multiline)
-			.width(Size::fill())
-			.compact(),
-		test,
-	)
+	tagged(TextBox::new(value, on_text).multiline(multiline), test)
 }
 
 /// A drop-down button: the current word, a menu of the choices (serde name, word) under it.
@@ -483,6 +499,20 @@ impl Component for PropertiesPane {
 				shared.read(Topics::DOCUMENT | Topics::SELECTION | Topics::SETTINGS, snapshot)
 			})
 		};
+		// Enter on a tree row or an Add bumps `focus_form`: the first editor takes the focus once it is laid out.
+		let first_editor = use_a11y();
+		let focus_form = cx.ui.focus_form;
+		let mut seen = use_state(|| *focus_form.peek());
+		use_side_effect(move || {
+			let n = *focus_form.read();
+			if n != *seen.peek() {
+				seen.set(n);
+				spawn(async move {
+					timer(std::time::Duration::from_millis(32)).await;
+					first_editor.request_focus();
+				});
+			}
+		});
 		let snap = snap.read().clone();
 		let s = snap.strings;
 		let Some(row) = snap.row else {
@@ -501,7 +531,7 @@ impl Component for PropertiesPane {
 			Row::Item(i) => Target::Item(i),
 			Row::Folder(kind) => return folder_view(&s, kind, snap.count),
 		};
-		let form = Form { cx, target, json: snap.json.clone(), s };
+		let form = Form::new(cx, target, snap.json.clone(), s, first_editor);
 		let children = forms::build(&form, row, &snap);
 		PropertyGrid::new().children(children).into_element()
 	}

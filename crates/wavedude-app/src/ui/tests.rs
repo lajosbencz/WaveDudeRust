@@ -26,8 +26,14 @@ fn shell(dir: &Path, prepare: impl FnOnce(&mut super::shared::App)) -> (TestingR
 	app.settings.check_for_updates = Some(false);
 	app.handle(AppEvent::SetLanguage("en".into()), Instant::now());
 	prepare(&mut app);
-	let info =
-		BootInfo { ring: LogRing::new(), dirs, close: CloseGate::default(), open: None, update: Default::default() };
+	let info = BootInfo {
+		ring: LogRing::new(),
+		dirs,
+		close: CloseGate::default(),
+		open: None,
+		update: Default::default(),
+		placement: Default::default(),
+	};
 	let boot = Boot::new(app, info);
 	let handle = boot.clone();
 	let (mut test, ()) = TestingRunner::new(

@@ -34,6 +34,9 @@ pub struct TreeRow<K> {
 	/// Folder rows: a plus button at the right.
 	pub can_add: bool,
 	pub test_id: Option<String>,
+	/// Tooltips of the check box and the plus button.
+	pub enabled_tip: Option<String>,
+	pub add_tip: Option<String>,
 }
 
 impl<K> TreeRow<K> {
@@ -48,7 +51,19 @@ impl<K> TreeRow<K> {
 			group: None,
 			can_add: false,
 			test_id: None,
+			enabled_tip: None,
+			add_tip: None,
 		}
+	}
+
+	pub fn enabled_tip(mut self, tip: impl Into<String>) -> Self {
+		self.enabled_tip = Some(tip.into());
+		self
+	}
+
+	pub fn add_tip(mut self, tip: impl Into<String>) -> Self {
+		self.add_tip = Some(tip.into());
+		self
 	}
 
 	pub fn icon(mut self, icon: Icon) -> Self {
@@ -197,6 +212,11 @@ pub enum TreeAction<K> {
 	Drop {
 		dragged: K,
 		position: DropPosition<K>,
+	},
+	/// A row dragged out of the tree and released at `at` (window logical pixels).
+	DropOutside {
+		dragged: K,
+		at: (f64, f64),
 	},
 	/// Right click, Apps key or Shift+F10; `at` in window logical pixels.
 	ContextMenu {
@@ -507,11 +527,19 @@ impl<K: Clone + PartialEq + Debug + 'static> Component for TreeView<K> {
 
 		let on_global_up = {
 			let on_action = on_action.clone();
-			move |_: Event<PointerEventData>| {
+			move |e: Event<PointerEventData>| {
 				let Some(d) = drag.peek().clone() else { return };
 				drag.set(None);
-				if let (true, Some((_, position))) = (d.active, d.target) {
-					on_action.call(TreeAction::Drop { dragged: d.key, position });
+				if !d.active {
+					return;
+				}
+				let p = e.global_location();
+				let a = list_area.peek().to_f64();
+				let inside = p.x >= a.min_x() && p.x < a.max_x() && p.y >= a.min_y() && p.y < a.max_y();
+				match d.target {
+					Some((_, position)) => on_action.call(TreeAction::Drop { dragged: d.key, position }),
+					None if !inside => on_action.call(TreeAction::DropOutside { dragged: d.key, at: (p.x, p.y) }),
+					None => {}
 				}
 			}
 		};
@@ -679,7 +707,7 @@ fn row_view<K: Clone + PartialEq + 'static>(
 		let key = key.clone();
 		let on_action = on_action.clone();
 		let state = state.clone();
-		rect()
+		let mark = rect()
 			.width(Size::px(13.))
 			.height(Size::px(13.))
 			.margin((0., 4., 0., 0.))
@@ -691,7 +719,8 @@ fn row_view<K: Clone + PartialEq + 'static>(
 				e.stop_propagation();
 				on_action.call(TreeAction::ToggleEnabled(state.peek().selection.targets(&key)));
 			})
-			.maybe_child(on.then(|| IconView::new(icons::CHECK).size(11.).color(theme.text)))
+			.maybe_child(on.then(|| IconView::new(icons::CHECK).size(11.).color(theme.text)));
+		with_tip(row.enabled_tip.clone(), mark)
 	});
 
 	let name: Element = if renaming {
@@ -753,7 +782,8 @@ fn row_view<K: Clone + PartialEq + 'static>(
 		RowKind::Folder if row.can_add => {
 			let key = key.clone();
 			let on_action = on_action.clone();
-			vec![glyph_button(icons::PLUS, ink, move || on_action.call(TreeAction::Add(key.clone())))]
+			let button = glyph_button(icons::PLUS, ink, move || on_action.call(TreeAction::Add(key.clone())));
+			vec![with_tip(row.add_tip.clone(), button)]
 		}
 		_ => Vec::new(),
 	};
@@ -795,6 +825,13 @@ fn row_view<K: Clone + PartialEq + 'static>(
 		.child(name)
 		.children(buttons)
 		.into()
+}
+
+fn with_tip(tip: Option<String>, child: impl IntoElement) -> Element {
+	match tip {
+		Some(t) => TooltipContainer::new(Tooltip::new_text(t)).child(child).into_element(),
+		None => child.into_element(),
+	}
 }
 
 fn glyph_button(icon: Icon, color: Color, mut on_press: impl FnMut() + 'static) -> Element {

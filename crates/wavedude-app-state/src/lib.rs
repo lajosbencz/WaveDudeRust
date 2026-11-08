@@ -369,6 +369,11 @@ impl<B: Backend> AppState<B> {
 	/// ticks.
 	pub fn tick(&mut self, now: Instant) -> bool {
 		self.document.tick(now);
+		if self.document.poll_image_file(now) {
+			self.document_changed(true);
+			let note = Some("the scene image file changed".into());
+			self.live.on_change(ChangeKind::Simulation, &self.document.project, note, now);
+		}
 		self.live.tick(now, &self.document.project);
 		self.fit_imported_brightness(now);
 		self.sync_revisions()

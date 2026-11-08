@@ -220,21 +220,33 @@ pub fn export_probe_csv(cx: &Cx, probe: usize) {
 	});
 }
 
-fn begin(cx: &Cx, plan: Plan) {
-	if let Plan::Frames { format, path, repeat: false, choice, .. } = &plan
-		&& !choice.is_still()
-		&& !format.is_video()
-	{
+/// What an export would replace: a sequence folder holding files, or an existing video or still; `None` when
+/// nothing is in the way or the export repeats the last one (which replaces on purpose).
+fn would_replace(plan: &Plan) -> Option<(&'static str, PathBuf)> {
+	let Plan::Frames { format, path, repeat: false, choice, .. } = plan else { return None };
+	if !choice.is_still() && !format.is_video() {
 		let folder = naming::sequence_folder(path);
 		let holds_files = std::fs::read_dir(&folder).is_ok_and(|mut d| d.next().is_some());
-		if holds_files {
-			let s = cx.strings();
-			let text = s.format("ExportFolderExistsFormat", &[&folder.display()]);
-			let (cx2, plan2) = (cx.clone(), plan.clone());
-			let yes = std::rc::Rc::new(move || gate(&cx2, plan2.clone()));
-			cx.ui.show_modal(Modal::Confirm { text, yes });
-			return;
-		}
+		return holds_files.then_some(("ExportFolderExistsFormat", folder));
+	}
+	let both = choice == &ExportKindChoice::Both;
+	choice
+		.layers()
+		.layers()
+		.iter()
+		.map(|&layer| naming::layer_path(path, layer, both))
+		.find(|p| p.is_file())
+		.map(|p| ("ExportFileExistsFormat", p))
+}
+
+fn begin(cx: &Cx, plan: Plan) {
+	if let Some((key, target)) = would_replace(&plan) {
+		let s = cx.strings();
+		let text = s.format(key, &[&target.display()]);
+		let (cx2, plan2) = (cx.clone(), plan.clone());
+		let yes = std::rc::Rc::new(move || gate(&cx2, plan2.clone()));
+		cx.ui.show_modal(Modal::Confirm { text, yes });
+		return;
 	}
 	gate(cx, plan);
 }

@@ -5859,6 +5859,8 @@ dependencies = [
  "cargo-packager-updater",
  "freya",
  "freya-testing",
+ "freya-winit",
+ "image",
  "mundy",
  "rfd",
  "semver",

@@ -1,13 +1,13 @@
 //! WaveDude Rust: the desktop application.
 
 use freya::prelude::*;
-use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, root, theme_background};
+use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, MIN_SIZE, root, theme_background};
+use wavedude_app::ui::placement::{self, Placement};
 use wavedude_app_state::AppState;
 use wavedude_app_state::log::{self, LogRing};
 use wavedude_app_state::settings::AppDirs;
 
 const ICON: &[u8] = include_bytes!("../assets/icon.png");
-const MIN_SIZE: (f64, f64) = (800.0, 500.0);
 
 fn main() -> anyhow::Result<()> {
 	let args: Vec<String> = std::env::args().skip(1).collect();
@@ -31,14 +31,18 @@ fn main() -> anyhow::Result<()> {
 		(app.settings.ui_zoom, app.settings.window_width, app.settings.window_height, app.title(), app.settings.theme);
 	let close = CloseGate::default();
 	let update = wavedude_app::ui::update::Pending::default();
-	let info = BootInfo { ring, dirs, close: close.clone(), open, update: update.clone() };
+	let placement = Placement::default();
+	let settings = app.settings.clone();
+	let info =
+		BootInfo { ring, dirs, close: close.clone(), open, update: update.clone(), placement: placement.clone() };
 	let boot = Boot::new(app, info);
 	let title: &'static str = Box::leak(title.into_boxed_str());
 	let window = WindowConfig::new(root)
 		.with_root_context(boot)
 		.with_title(title)
 		.with_size(width * zoom, height * zoom)
-		.with_min_size(MIN_SIZE.0, MIN_SIZE.1)
+		.with_min_size(MIN_SIZE.0 * zoom, MIN_SIZE.1 * zoom)
+		.with_window_attributes(move |attrs, _| placement::attributes(&settings, attrs))
 		.with_custom_scale_factor(zoom)
 		.with_background(theme_background(theme))
 		.with_app_id("wavedude")
@@ -46,7 +50,7 @@ fn main() -> anyhow::Result<()> {
 		.with_on_close(
 			move |_, _| if close.on_close_request() { CloseDecision::Close } else { CloseDecision::KeepOpen },
 		);
-	launch(LaunchConfig::new().with_window(window));
+	launch(LaunchConfig::new().with_window(window).with_plugin(placement.plugin()));
 	update.install();
 	Ok(())
 }

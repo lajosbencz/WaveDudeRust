@@ -17,7 +17,7 @@ use crate::ui::shared::{App, Shared, Topics};
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, Target};
 use wavedude_app_state::live::RunKind;
-use wavedude_app_state::playback::{Playback, SPEED_RANGE};
+use wavedude_app_state::playback::{Playback, SPEED_PRESETS, SPEED_RANGE};
 use wavedude_app_state::settings::Orientation;
 
 const fn drawn(stroke: &'static str, fill: &'static str) -> Icon {
@@ -340,6 +340,7 @@ fn transport_bar(shared: &Shared) -> impl IntoElement {
 			.tooltip(tip(14))
 			.test_id("PreviewSpeed"),
 		)
+		.child(SpeedPresets { speed: view.speed, tooltip: tip(14) })
 		.child(divider())
 		.child(
 			ToolButton::new(WAVE, tip(15), toggle("field.preview", view.show_field))
@@ -362,6 +363,51 @@ fn transport_bar(shared: &Shared) -> impl IntoElement {
 				.checked(!view.side_by_side)
 				.test_id("PreviewStacked"),
 		)
+}
+
+/// The drop-down beside the speed box: the preset factors, the current one ticked.
+#[derive(Clone, PartialEq)]
+struct SpeedPresets {
+	speed: f64,
+	tooltip: String,
+}
+
+impl Component for SpeedPresets {
+	fn render(&self) -> impl IntoElement {
+		let theme = use_wave_theme();
+		let ui = consume_context::<crate::ui::app::Ui>();
+		let shared = Shared::get();
+		let mut at = use_state(|| (0., 0.));
+		let speed = self.speed;
+		let open = move |_: Event<PressEventData>| {
+			let entries: Vec<wavedude_widgets::MenuEntry<f64>> = SPEED_PRESETS
+				.iter()
+				.map(|&p| {
+					wavedude_widgets::MenuItem::with_action(format!("speed:{p}"), format!("{p}x"), p)
+						.check(wavedude_widgets::Check::Radio((speed - p).abs() < 1e-9))
+						.into()
+				})
+				.collect();
+			let shared = shared.clone();
+			ui.open_menu(*at.peek(), wavedude_widgets::MenuModel::new(entries), move |p: f64| {
+				shared.send(AppEvent::SetSpeed(p));
+			});
+		};
+		TooltipContainer::new(Tooltip::new_text(self.tooltip.clone())).child(
+			rect()
+				.on_sized(move |e: Event<SizedEventData>| {
+					at.set((f64::from(e.area.min_x()), f64::from(e.area.max_y())));
+				})
+				.test_id("PreviewSpeedPresets")
+				.child(
+					Button::new()
+						.flat()
+						.compact()
+						.on_press(open)
+						.child(IconView::new(icons::DROPDOWN).color(theme.text)),
+				),
+		)
+	}
 }
 
 struct TransportView {

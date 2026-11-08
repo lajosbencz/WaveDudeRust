@@ -111,15 +111,39 @@ impl Hsv {
 const PLANE: f32 = 160.;
 const STRIP: f32 = 18.;
 
+/// The tooltips of the picker's parts, so the app can localise them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PickerTips {
+	pub plane: String,
+	pub hue: String,
+	pub channel: String,
+}
+
+impl Default for PickerTips {
+	fn default() -> Self {
+		Self {
+			plane: "Saturation (Left, Right) and brightness (Up, Down); Shift moves by ten steps".into(),
+			hue: "Hue: Up and Down move by a degree, ten with Shift".into(),
+			channel: "Channel 0 to 255; Up and Down step it".into(),
+		}
+	}
+}
+
 /// The picker body, bound to a colour; every change writes through.
 #[derive(Clone, PartialEq)]
 pub struct ColorPicker {
 	value: WritableSetter<Rgb>,
+	tips: PickerTips,
 }
 
 impl ColorPicker {
 	pub fn new(value: impl Into<WritableSetter<Rgb>>) -> Self {
-		Self { value: value.into() }
+		Self { value: value.into(), tips: PickerTips::default() }
+	}
+
+	pub fn tips(mut self, tips: PickerTips) -> Self {
+		self.tips = tips;
+		self
 	}
 }
 
@@ -253,24 +277,27 @@ impl Component for ColorPicker {
 			}
 		};
 
+		let tips = self.tips.clone();
 		let channel = |name: &'static str, get: fn(Rgb) -> u8, put: fn(Rgb, u8) -> Rgb| {
 			let mut value = value.clone();
-			rect()
-				.horizontal()
-				.cross_align(Alignment::center())
-				.spacing(4.)
-				.child(label().text(name).width(Size::px(12.)))
-				.child(
-					NumberBox::new(
-						WritableSetter::new(f64::from(get(rgb)), move |v: f64| {
-							let c = *value.peek();
-							value.set_if_modified(put(c, v.round().clamp(0., 255.) as u8));
-						}),
-						NumberSpec::integer(0., 255.),
-					)
-					.width(Size::px(64.))
-					.test_id(format!("ColorPicker{name}")),
-				)
+			TooltipContainer::new(Tooltip::new_text(tips.channel.clone())).child(
+				rect()
+					.horizontal()
+					.cross_align(Alignment::center())
+					.spacing(4.)
+					.child(label().text(name).width(Size::px(12.)))
+					.child(
+						NumberBox::new(
+							WritableSetter::new(f64::from(get(rgb)), move |v: f64| {
+								let c = *value.peek();
+								value.set_if_modified(put(c, v.round().clamp(0., 255.) as u8));
+							}),
+							NumberSpec::integer(0., 255.),
+						)
+						.width(Size::px(64.))
+						.test_id(format!("ColorPicker{name}")),
+					),
+			)
 		};
 		let mut hex_value = value.clone();
 
@@ -283,28 +310,32 @@ impl Component for ColorPicker {
 			.on_global_pointer_move(on_global_move)
 			.on_global_pointer_up(move |_| dragging.set_if_modified(None))
 			.child(
-				rect()
-					.a11y_id(plane_id)
-					.a11y_focusable(true)
-					.test_id("ColorPickerPlane")
-					.width(Size::px(PLANE))
-					.height(Size::px(PLANE))
-					.background(plane_painter)
-					.border(focus_border(plane_focus(), theme.accent))
-					.on_pointer_down(on_plane_down)
-					.on_key_down(on_plane_key),
+				TooltipContainer::new(Tooltip::new_text(tips.plane.clone())).child(
+					rect()
+						.a11y_id(plane_id)
+						.a11y_focusable(true)
+						.test_id("ColorPickerPlane")
+						.width(Size::px(PLANE))
+						.height(Size::px(PLANE))
+						.background(plane_painter)
+						.border(focus_border(plane_focus(), theme.accent))
+						.on_pointer_down(on_plane_down)
+						.on_key_down(on_plane_key),
+				),
 			)
 			.child(
-				rect()
-					.a11y_id(strip_id)
-					.a11y_focusable(true)
-					.test_id("ColorPickerHue")
-					.width(Size::px(STRIP))
-					.height(Size::px(PLANE))
-					.background(strip_painter)
-					.border(focus_border(strip_focus(), theme.accent))
-					.on_pointer_down(on_strip_down)
-					.on_key_down(on_strip_key),
+				TooltipContainer::new(Tooltip::new_text(tips.hue.clone())).child(
+					rect()
+						.a11y_id(strip_id)
+						.a11y_focusable(true)
+						.test_id("ColorPickerHue")
+						.width(Size::px(STRIP))
+						.height(Size::px(PLANE))
+						.background(strip_painter)
+						.border(focus_border(strip_focus(), theme.accent))
+						.on_pointer_down(on_strip_down)
+						.on_key_down(on_strip_key),
+				),
 			)
 			.child(
 				rect()
@@ -334,11 +365,25 @@ impl Component for ColorPicker {
 pub struct ColorButton {
 	value: WritableSetter<Rgb>,
 	test_id: Option<String>,
+	tooltip: Option<String>,
+	tips: PickerTips,
 }
 
 impl ColorButton {
 	pub fn new(value: impl Into<WritableSetter<Rgb>>) -> Self {
-		Self { value: value.into(), test_id: None }
+		Self { value: value.into(), test_id: None, tooltip: None, tips: PickerTips::default() }
+	}
+
+	/// The swatch's tooltip.
+	pub fn tooltip(mut self, text: impl Into<String>) -> Self {
+		self.tooltip = Some(text.into());
+		self
+	}
+
+	/// The picker's tooltips.
+	pub fn tips(mut self, tips: PickerTips) -> Self {
+		self.tips = tips;
+		self
 	}
 
 	pub fn test_id(mut self, id: impl Into<String>) -> Self {
@@ -410,8 +455,8 @@ impl Component for ColorButton {
 		rect()
 			.on_key_down(on_key)
 			.on_global_pointer_down(on_global_down)
-			.child(
-				rect()
+			.child({
+				let swatch = rect()
 					.a11y_id(id)
 					.a11y_focusable(true)
 					.a11y_role(AccessibilityRole::ColorWell)
@@ -429,8 +474,12 @@ impl Component for ColorButton {
 						} else {
 							open.set(Some(rgb));
 						}
-					}),
-			)
+					});
+				match self.tooltip.clone() {
+					Some(t) => TooltipContainer::new(Tooltip::new_text(t)).child(swatch).into_element(),
+					None => swatch.into_element(),
+				}
+			})
 			.maybe_child(open.read().is_some().then(|| {
 				rect().position(Position::new_absolute().top(20.).left(0.)).width(Size::px(0.)).child(
 					rect()
@@ -440,7 +489,7 @@ impl Component for ColorButton {
 						.border(Border::new().fill(theme.menu_border).width(1.).alignment(BorderAlignment::Inner))
 						.shadow((0., 2., 6., 0., Color::from_af32rgb(0.35, 0, 0, 0)))
 						.on_sized(move |e: Event<SizedEventData>| popup_area.set_if_modified(e.area))
-						.child(ColorPicker::new(self.value.clone())),
+						.child(ColorPicker::new(self.value.clone()).tips(self.tips.clone())),
 				)
 			}))
 	}

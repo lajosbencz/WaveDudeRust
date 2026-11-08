@@ -535,25 +535,29 @@ impl Component for Splitter {
 }
 
 /// The pane's keys, bubbled from whatever inside the pane has focus: Space plays or pauses, `,` and `.` step,
-/// I, O and X set and clear the range, L loops, F follows the run.
+/// I, O and X set and clear the range, L loops, F follows the run, Home and End go to the in and out points.
 fn on_pane_key(shared: &Shared, e: &Event<KeyboardEventData>) {
 	if !e.modifiers.is_empty() && e.modifiers != Modifiers::SHIFT {
 		return;
 	}
-	let Key::Character(c) = &e.key else { return };
-	let event = match c.to_lowercase().as_str() {
-		" " => {
-			transport::toggle_playback(shared);
-			e.prevent_default();
-			return;
-		}
-		"," => AppEvent::StepFrames(-1),
-		"." => AppEvent::StepFrames(1),
-		"i" => AppEvent::SetInPoint,
-		"o" => AppEvent::SetOutPoint,
-		"x" => AppEvent::ClearRange,
-		"l" => AppEvent::SetLoop(!shared.peek(|app| app.live.playback.looping())),
-		"f" => AppEvent::SetLive(true),
+	let event = match &e.key {
+		Key::Named(NamedKey::Home) => AppEvent::Scrub(shared.peek(|app| app.live.playback.range_frames().0)),
+		Key::Named(NamedKey::End) => AppEvent::Scrub(shared.peek(|app| app.live.playback.range_frames().1)),
+		Key::Character(c) => match c.to_lowercase().as_str() {
+			" " => {
+				transport::toggle_playback(shared);
+				e.prevent_default();
+				return;
+			}
+			"," => AppEvent::StepFrames(-1),
+			"." => AppEvent::StepFrames(1),
+			"i" => AppEvent::SetInPoint,
+			"o" => AppEvent::SetOutPoint,
+			"x" => AppEvent::ClearRange,
+			"l" => AppEvent::SetLoop(!shared.peek(|app| app.live.playback.looping())),
+			"f" => AppEvent::SetLive(!shared.peek(|app| app.live.is_live())),
+			_ => return,
+		},
 		_ => return,
 	};
 	e.prevent_default();

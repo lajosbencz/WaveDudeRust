@@ -1,11 +1,10 @@
 //! Gradient editor: the gradient bar with draggable stop markers (a click on the bar adds a stop, Del
-//! removes the selected one) and one row per stop: position, swatch, hex box, remove; Add stop.
+//! removes the selected one). The rows that edit each stop are the caller's.
 
 use freya::engine::prelude::{Paint, PathBuilder, SkRect};
 use freya::prelude::*;
 
-use crate::color_button::{ColorButton, Rgb};
-use crate::number_box::{NumberBox, NumberSpec};
+use crate::color_button::Rgb;
 use crate::paint::{fill, linear_shader, stroke};
 use crate::theme::use_wave_theme;
 use crate::util::{TestIdExt, focus_border, shift};
@@ -244,114 +243,20 @@ impl Component for GradientEditor {
 			}
 		};
 
-		let rows = (0..gradient.stops.len()).map(|i| StopRow { value: value.clone(), index: i }.into_element());
-		let mut add_value = value.clone();
 		rect()
+			.a11y_id(id)
+			.a11y_focusable(true)
+			.test_id("GradientBar")
 			.width(Size::fill())
-			.spacing(4.)
+			.height(Size::px(BAR_HEIGHT + MARKER + 4.))
 			.color(theme.text)
-			.font_size(theme.font_size)
-			.child(
-				rect()
-					.a11y_id(id)
-					.a11y_focusable(true)
-					.test_id("GradientBar")
-					.width(Size::fill())
-					.height(Size::px(BAR_HEIGHT + MARKER + 4.))
-					.background(painter)
-					.border(focus_border(focus(), theme.accent))
-					.on_sized(move |e: Event<SizedEventData>| width.set_if_modified(e.area.width().max(1.)))
-					.on_pointer_down(on_down)
-					.on_global_pointer_move(on_global_move)
-					.on_global_pointer_up(move |_| dragging.set_if_modified(None))
-					.on_key_down(on_key),
-			)
-			.children(rows)
-			.child(
-				Button::new()
-					.compact()
-					.on_press(move |_| {
-						let mut g = add_value.peek().clone();
-						let i = g.add_in_widest_gap();
-						add_value.set(g);
-						selected.set(Some(i));
-					})
-					.child(label().text("Add stop")),
-			)
-	}
-}
-
-/// One stop's row: position, swatch, hex box, remove.
-#[derive(Clone, PartialEq)]
-struct StopRow {
-	value: WritableSetter<Gradient>,
-	index: usize,
-}
-
-impl Component for StopRow {
-	fn render(&self) -> impl IntoElement {
-		let i = self.index;
-		let stop = self.value.read().stops.get(i).copied();
-		let Some(stop) = stop else { return rect().into_element() };
-		let mut hex = use_state(|| stop.color.to_hex());
-		let mut shown = use_state(|| stop.color);
-		if *shown.peek() != stop.color {
-			shown.set(stop.color);
-			hex.set(stop.color.to_hex());
-		}
-		let mut pos_value = self.value.clone();
-		let mut color_value = self.value.clone();
-		let mut hex_value = self.value.clone();
-		let mut remove_value = self.value.clone();
-		let several = self.value.read().stops.len() > 1;
-		rect()
-			.horizontal()
-			.cross_align(Alignment::center())
-			.spacing(6.)
-			.child(
-				NumberBox::new(
-					WritableSetter::new(stop.position, move |p: f64| {
-						let mut g = pos_value.peek().clone();
-						g.set_position(i, p);
-						pos_value.set(g);
-					}),
-					NumberSpec::linear(0., 1., 0.01),
-				)
-				.width(Size::px(64.))
-				.test_id(format!("StopPosition:{i}")),
-			)
-			.child(
-				ColorButton::new(WritableSetter::new(stop.color, move |c: Rgb| {
-					let mut g = color_value.peek().clone();
-					g.set_color(i, c);
-					color_value.set(g);
-				}))
-				.test_id(format!("StopColor:{i}")),
-			)
-			.child(Input::new(hex).compact().width(Size::px(80.)).on_submit(move |text: String| {
-				match Rgb::from_hex(&text) {
-					Some(c) => {
-						let mut g = hex_value.peek().clone();
-						g.set_color(i, c);
-						hex_value.set(g);
-					}
-					None => hex.set(stop.color.to_hex()),
-				}
-			}))
-			.child(
-				Button::new()
-					.flat()
-					.compact()
-					.enabled(several)
-					.on_press(move |_| {
-						let mut g = remove_value.peek().clone();
-						if g.remove(i) {
-							remove_value.set(g);
-						}
-					})
-					.child(label().text("Remove")),
-			)
-			.into_element()
+			.background(painter)
+			.border(focus_border(focus(), theme.accent))
+			.on_sized(move |e: Event<SizedEventData>| width.set_if_modified(e.area.width().max(1.)))
+			.on_pointer_down(on_down)
+			.on_global_pointer_move(on_global_move)
+			.on_global_pointer_up(move |_| dragging.set_if_modified(None))
+			.on_key_down(on_key)
 	}
 }
 

@@ -1,6 +1,10 @@
 //! Dock host: one centre area with tool panes on its four sides; panes sharing a group show a tab strip;
-//! title bars with a "window position" drop-down and a close button; draggable, keyboard-resizable
-//! splitters; show/hide by id; a serialisable layout.
+//! title bars with a "window position" drop-down and a close button; a title bar or a tab dragged past the drag
+//! threshold shows the drop targets (the four outer edges, and on each group its centre to tab into it and its
+//! two ends to split beside it); draggable, keyboard-resizable splitters; show/hide by id; a serialisable
+//! layout.
+
+use std::collections::HashMap;
 
 use freya::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -165,6 +169,27 @@ impl DockLayout {
 		}
 	}
 
+	/// Moves a pane into a new group of `side` at `index` (the end when past the groups).
+	pub fn insert_at(&mut self, id: &str, side: Side, index: usize) {
+		let Some((from_side, from_group, _)) = self.find(id) else { return };
+		let emptied = self.side(from_side).groups[from_group].panes.len() == 1;
+		self.take(id);
+		let index = if from_side == side && emptied && from_group < index { index - 1 } else { index };
+		let groups = &mut self.side_mut(side).groups;
+		let index = index.min(groups.len());
+		groups.insert(index, PaneGroup::new(vec![id.to_string()], 1.));
+	}
+
+	/// Applies a drop target.
+	pub fn drop(&mut self, id: &str, target: DropTarget) {
+		match target {
+			DropTarget::Edge(side) => self.move_to(id, side),
+			DropTarget::Tab(side, group) => self.tab_into(id, side, group),
+			DropTarget::Before(side, group) => self.insert_at(id, side, group),
+			DropTarget::After(side, group) => self.insert_at(id, side, group + 1),
+		}
+	}
+
 	/// Moves a pane into an existing group as a tab, active.
 	pub fn tab_into(&mut self, id: &str, side: Side, group: usize) {
 		let Some((from_side, from_group, _)) = self.find(id) else { return };
@@ -236,6 +261,65 @@ impl DockLayout {
 	}
 }
 
+/// Where a dragged pane may land.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DropTarget {
+	/// A new group at the end of an outer edge.
+	Edge(Side),
+	/// A tab of the group.
+	Tab(Side, usize),
+	/// A new group before the group, along its side.
+	Before(Side, usize),
+	After(Side, usize),
+}
+
+/// A rectangle in window logical pixels: left, top, width, height.
+pub type Rect4 = (f32, f32, f32, f32);
+
+fn contains(r: Rect4, p: (f32, f32)) -> bool {
+	p.0 >= r.0 && p.0 < r.0 + r.2 && p.1 >= r.1 && p.1 < r.1 + r.3
+}
+
+/// Depth of an outer edge's drop strip, logical pixels.
+pub const EDGE_STRIP: f32 = 40.;
+/// The share of a group's length at either end that splits beside it; the middle tabs into it.
+const END_SHARE: f32 = 0.3;
+
+/// The drop target under `p`, with the rectangle shown for it: a group's end or middle first, then an outer
+/// edge strip of the host. A pane never targets its own group.
+pub fn drop_target_at(
+	host: Rect4,
+	groups: &[((Side, usize), Rect4)],
+	own: Option<(Side, usize)>,
+	p: (f32, f32),
+) -> Option<(DropTarget, Rect4)> {
+	for &((side, index), r) in groups {
+		if !contains(r, p) || own == Some((side, index)) {
+			continue;
+		}
+		let (x, y, w, h) = r;
+		let (along, length, start) = if side.is_vertical() { (p.1 - y, h, y) } else { (p.0 - x, w, x) };
+		let end = length * END_SHARE;
+		let target = if along < end {
+			(DropTarget::Before(side, index), if side.is_vertical() { (x, start, w, end) } else { (start, y, end, h) })
+		} else if along > length - end {
+			let far = start + length - end;
+			(DropTarget::After(side, index), if side.is_vertical() { (x, far, w, end) } else { (far, y, end, h) })
+		} else {
+			(DropTarget::Tab(side, index), r)
+		};
+		return Some(target);
+	}
+	let (hx, hy, hw, hh) = host;
+	let strips = [
+		(Side::Left, (hx, hy, EDGE_STRIP, hh)),
+		(Side::Right, (hx + hw - EDGE_STRIP, hy, EDGE_STRIP, hh)),
+		(Side::Top, (hx, hy, hw, EDGE_STRIP)),
+		(Side::Bottom, (hx, hy + hh - EDGE_STRIP, hw, EDGE_STRIP)),
+	];
+	strips.into_iter().find(|(_, r)| contains(*r, p)).map(|(side, r)| (DropTarget::Edge(side), r))
+}
+
 /// A pane the host can show.
 #[derive(Clone, PartialEq)]
 pub struct DockPane {
@@ -269,6 +353,19 @@ impl Default for DockLabels {
 }
 
 const SPLITTER: f32 = 4.;
+/// Pointer travel that turns a press on a title bar or tab into a drag, logical pixels.
+const DRAG_THRESHOLD: f64 = 6.;
+
+/// A title bar or tab being dragged.
+#[derive(Clone, Debug, PartialEq)]
+struct DockDrag {
+	pane: String,
+	from: (Side, usize),
+	start: (f64, f64),
+	at: (f64, f64),
+	active: bool,
+	target: Option<(DropTarget, Rect4)>,
+}
 
 /// The dock host around a fixed centre area.
 #[derive(Clone, PartialEq)]
@@ -294,10 +391,45 @@ impl Component for DockHost {
 	fn render(&self) -> impl IntoElement {
 		let theme = use_wave_theme();
 		let mut host = use_state(|| (0f32, 0f32));
+		let mut host_area = use_state(Area::default);
 		let active_group = use_state(|| None::<(Side, usize)>);
 		let menu = use_state(|| None::<ContextMenuRequest>);
+		let drag = use_state(|| None::<DockDrag>);
+		let areas = use_state(HashMap::<(Side, usize), Rect4>::new);
 		let layout = self.layout.read().clone();
 		let (hw, hh) = *host.read();
+
+		let on_global_move = move |e: Event<PointerEventData>| {
+			let mut d = drag;
+			let Some(mut current) = d.peek().clone() else { return };
+			let p = e.global_location();
+			current.at = (p.x, p.y);
+			if !current.active
+				&& ((p.x - current.start.0).abs() > DRAG_THRESHOLD || (p.y - current.start.1).abs() > DRAG_THRESHOLD)
+			{
+				current.active = true;
+			}
+			if current.active {
+				let a = *host_area.peek();
+				let groups: Vec<((Side, usize), Rect4)> = areas.peek().iter().map(|(k, r)| (*k, *r)).collect();
+				let host = (a.min_x(), a.min_y(), a.width(), a.height());
+				current.target = drop_target_at(host, &groups, Some(current.from), (p.x as f32, p.y as f32));
+			}
+			d.set(Some(current));
+		};
+		let on_global_up = {
+			let mut l = self.layout.clone();
+			move |_: Event<PointerEventData>| {
+				let mut d = drag;
+				let Some(current) = d.peek().clone() else { return };
+				d.set(None);
+				if let (true, Some((target, _))) = (current.active, current.target) {
+					let mut next = l.peek().clone();
+					next.drop(&current.pane, target);
+					*l.write() = next;
+				}
+			}
+		};
 
 		let on_menu = {
 			let mut l = self.layout.clone();
@@ -322,7 +454,39 @@ impl Component for DockHost {
 			labels: self.labels.clone(),
 			active_group,
 			menu,
+			drag,
+			areas,
 		};
+		let drag_view = drag.read().clone();
+		let overlay = drag_view.filter(|d| d.active).map(|d| {
+			let a = *host_area.peek();
+			let title = self.panes.iter().find(|p| p.id == d.pane).map_or(d.pane.clone(), |p| p.title.clone());
+			let ghost = rect()
+				.position(
+					Position::new_absolute().left(d.at.0 as f32 - a.min_x() + 12.).top(d.at.1 as f32 - a.min_y() + 12.),
+				)
+				.padding((2., 8., 2., 8.))
+				.background(theme.title_active)
+				.color(theme.title_active_text)
+				.child(label().text(title).max_lines(1));
+			let marker = d.target.map(|(_, (x, y, w, h))| {
+				rect()
+					.position(Position::new_absolute().left(x - a.min_x()).top(y - a.min_y()))
+					.width(Size::px(w))
+					.height(Size::px(h))
+					.background(theme.accent.with_a(0x50))
+					.border(Border::new().fill(theme.accent).width(2.).alignment(BorderAlignment::Inner))
+			});
+			rect()
+				.position(Position::new_absolute().left(0.).top(0.))
+				.width(Size::fill())
+				.height(Size::fill())
+				.layer(Layer::Overlay)
+				.interactive(Interactive::No)
+				.test_id("DockDragOverlay")
+				.maybe_child(marker)
+				.child(ghost)
+		});
 		let side_view = |side: Side| -> Option<Element> {
 			let dock = layout.side(side);
 			(!dock.groups.is_empty()).then(|| side_view(&ctx, side, dock, if side.is_vertical() { hh } else { hw }))
@@ -355,12 +519,18 @@ impl Component for DockHost {
 			.background(theme.window_background)
 			.color(theme.text)
 			.font_size(theme.font_size)
-			.on_sized(move |e: Event<SizedEventData>| host.set_if_modified((e.area.width(), e.area.height())))
+			.on_sized(move |e: Event<SizedEventData>| {
+				host.set_if_modified((e.area.width(), e.area.height()));
+				host_area.set_if_modified(e.area);
+			})
+			.on_global_pointer_move(on_global_move)
+			.on_global_pointer_up(on_global_up)
 			.maybe_child(top.map(|v| sized(v, layout.top.size, false)))
 			.maybe_child(layout.top.groups.first().map(|_| splitter_for(Side::Top, hh - 2. * MIN_SIZE)))
 			.child(middle)
 			.maybe_child(layout.bottom.groups.first().map(|_| splitter_for(Side::Bottom, hh - 2. * MIN_SIZE)))
 			.maybe_child(bottom.map(|v| sized(v, layout.bottom.size, false)))
+			.maybe_child(overlay)
 			.child(ContextMenuHost::new(menu, on_menu))
 	}
 }
@@ -383,6 +553,17 @@ struct HostContext {
 	labels: DockLabels,
 	active_group: State<Option<(Side, usize)>>,
 	menu: State<Option<ContextMenuRequest>>,
+	drag: State<Option<DockDrag>>,
+	areas: State<HashMap<(Side, usize), Rect4>>,
+}
+
+/// Starts a press that may become a drag of `pane` out of `from`.
+fn press_to_drag(mut drag: State<Option<DockDrag>>, pane: String, from: (Side, usize), e: &Event<PointerEventData>) {
+	if e.button() != Some(MouseButton::Left) {
+		return;
+	}
+	let p = e.global_location();
+	drag.set(Some(DockDrag { pane, from, start: (p.x, p.y), at: (p.x, p.y), active: false, target: None }));
 }
 
 fn side_view(ctx: &HostContext, side: Side, dock: &SideDock, length: f32) -> Element {
@@ -431,6 +612,9 @@ fn group_view(ctx: &HostContext, side: Side, index: usize, group: &PaneGroup) ->
 	let dropdown_id = active_id.clone();
 	let close_id = active_id.clone();
 	let mut layout_close = ctx.layout.clone();
+	let drag = ctx.drag;
+	let mut areas = ctx.areas;
+	let drag_id = active_id.clone();
 
 	let title_bar = rect()
 		.width(Size::fill())
@@ -441,6 +625,7 @@ fn group_view(ctx: &HostContext, side: Side, index: usize, group: &PaneGroup) ->
 		.padding((0., 2., 0., 6.))
 		.background(bar_bg)
 		.color(bar_fg)
+		.on_pointer_down(move |e: Event<PointerEventData>| press_to_drag(drag, drag_id.clone(), (side, index), &e))
 		.test_id(format!("DockTitle:{active_id}"))
 		.child(label().text(title).max_lines(1).text_overflow(TextOverflow::Ellipsis).width(Size::flex(1.)))
 		.child(title_button(icons::DROPDOWN, bar_fg, labels.position.clone(), move |at: (f64, f64)| {
@@ -470,7 +655,10 @@ fn group_view(ctx: &HostContext, side: Side, index: usize, group: &PaneGroup) ->
 				.background(if selected { theme.tab_active } else { theme.tab_background })
 				.color(if selected { theme.text } else { theme.text_dim })
 				.test_id(format!("DockTab:{id}"))
-				.on_pointer_down(move |_| l.write().activate(&id))
+				.on_pointer_down(move |e: Event<PointerEventData>| {
+					l.write().activate(&id);
+					press_to_drag(drag, id.clone(), (side, index), &e);
+				})
 				.child(label().text(title).max_lines(1))
 				.into_element()
 		});
@@ -482,6 +670,14 @@ fn group_view(ctx: &HostContext, side: Side, index: usize, group: &PaneGroup) ->
 		.content(Content::flex())
 		.background(theme.tool_window_background)
 		.border(Border::new().fill(theme.border).width(1.).alignment(BorderAlignment::Inner))
+		.test_id(format!("DockPane:{active_id}"))
+		.on_sized(move |e: Event<SizedEventData>| {
+			let a = e.area;
+			let r = (a.min_x(), a.min_y(), a.width(), a.height());
+			if areas.peek().get(&(side, index)) != Some(&r) {
+				areas.write().insert((side, index), r);
+			}
+		})
 		.on_pointer_down(move |_| active_group.set_if_modified(Some((side, index))))
 		.child(title_bar)
 		.child(rect().width(Size::fill()).height(Size::flex(1.)).maybe_child(pane.map(|p| p.content.clone())))
@@ -632,6 +828,35 @@ mod tests {
 		assert_eq!(l.left.groups[0].active_pane(), "properties");
 		l.hide("properties");
 		assert_eq!(l.left.groups[0].active_pane(), "project");
+	}
+
+	#[test]
+	fn drops_land_as_tabs_splits_and_edges() {
+		let mut l = first_start();
+		l.drop("project", DropTarget::After(Side::Left, 1));
+		assert_eq!(l.left.groups.iter().map(|g| g.panes[0].as_str()).collect::<Vec<_>>(), ["properties", "project"]);
+		l.drop("project", DropTarget::Before(Side::Left, 0));
+		assert_eq!(l.left.groups[0].panes, ["project"]);
+		l.drop("project", DropTarget::Tab(Side::Left, 1));
+		assert_eq!(l.left.groups.len(), 1);
+		assert_eq!(l.left.groups[0].active_pane(), "project");
+		l.drop("properties", DropTarget::Edge(Side::Bottom));
+		assert_eq!(l.find("properties"), Some((Side::Bottom, 0, 0)));
+		assert_eq!(l.left.groups[0].panes, ["project"]);
+	}
+
+	#[test]
+	fn the_target_under_the_pointer_is_an_end_the_middle_or_an_edge() {
+		let host = (0., 0., 1000., 800.);
+		let groups = [((Side::Left, 0), (0., 0., 300., 400.)), ((Side::Left, 1), (0., 400., 300., 400.))];
+		let at = |p| drop_target_at(host, &groups, Some((Side::Left, 0)), p).map(|t| t.0);
+		assert_eq!(at((100., 10.)), None, "a pane never targets its own group");
+		assert_eq!(at((100., 410.)), Some(DropTarget::Before(Side::Left, 1)));
+		assert_eq!(at((100., 600.)), Some(DropTarget::Tab(Side::Left, 1)));
+		assert_eq!(at((100., 790.)), Some(DropTarget::After(Side::Left, 1)));
+		assert_eq!(at((990., 300.)), Some(DropTarget::Edge(Side::Right)));
+		assert_eq!(at((500., 790.)), Some(DropTarget::Edge(Side::Bottom)));
+		assert_eq!(at((500., 300.)), None);
 	}
 
 	#[test]

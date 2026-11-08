@@ -123,6 +123,11 @@ pub enum Notice {
 	ExportStopped,
 	Info(String),
 	Error(String),
+	/// A run could not start: `no_image` when the scene's image is missing.
+	RunFailed {
+		message: String,
+		no_image: bool,
+	},
 }
 
 /// The choice the memory warning's Run applies to the settings.
@@ -729,7 +734,7 @@ impl<B: Backend> LiveController<B> {
 			Ok(spec) => spec,
 			Err(e) => {
 				tracing::error!("the simulation could not start: {e}");
-				self.notices.push(Notice::Error(e));
+				self.notices.push(Notice::RunFailed { no_image: e.contains("no image"), message: e });
 				return false;
 			}
 		};
@@ -754,7 +759,7 @@ impl<B: Backend> LiveController<B> {
 			Ok(h) => h,
 			Err(e) => {
 				tracing::error!("the simulation could not start: {e}");
-				self.notices.push(Notice::Error(e));
+				self.notices.push(Notice::RunFailed { message: e, no_image: false });
 				return false;
 			}
 		};

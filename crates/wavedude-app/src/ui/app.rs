@@ -30,6 +30,8 @@ use super::{downloads, messages, update, window};
 
 /// The tick period of the state loop.
 pub const TICK: Duration = Duration::from_millis(16);
+/// The smallest window, unzoomed logical pixels.
+pub const MIN_SIZE: (f64, f64) = (800.0, 500.0);
 /// Idle ticks between two state ticks when nothing time-based is pending.
 const IDLE_TICKS: u32 = 15;
 /// Notices kept for late readers.
@@ -90,6 +92,8 @@ pub struct BootInfo {
 	pub open: Option<PathBuf>,
 	/// A downloaded update, installed by `main` after a restart's exit.
 	pub update: update::Pending,
+	/// The window's place, seen and asked for through the event loop.
+	pub placement: super::placement::Placement,
 }
 
 /// Notices of the live controller, kept with a sequence number so several views can read them.
@@ -160,7 +164,14 @@ pub struct Ui {
 	pub manual_request: State<u64>,
 	/// Cisco's OpenH264 binary is downloaded.
 	pub codec_downloaded: State<bool>,
+	/// The Messages pane's list, focused after a status bar double-click.
+	pub messages_list: AccessibilityId,
+	/// Each preview picture's place, for drops.
+	pub pictures: State<[Option<PicturePlace>; 2]>,
 }
+
+/// A preview picture's area top-left in window pixels and its canvas transform.
+pub type PicturePlace = ((f32, f32), wavedude_widgets::CanvasTransform);
 
 impl Ui {
 	/// Opens a context menu at `at` whose activations go to `handler`.
@@ -228,17 +239,19 @@ impl Cx {
 		self.shared.peek(|a| a.strings)
 	}
 
-	/// Saves the window's size and the dock layout, then ends the process.
+	/// Saves the window's size, place and the dock layout, then ends the process.
 	pub fn exit(&self) {
 		let layout = Some(serde_json::to_string(&*self.ui.layout.peek()).expect("a dock layout serialises"));
 		let window = Platform::get().current_window();
 		let size = *window.root_size.peek();
+		let placement = self.info.placement.clone();
 		self.shared.update(|app| {
 			app.settings.layout = layout;
-			if size.width > 0. && size.height > 0. {
+			if size.width > 0. && size.height > 0. && !placement.seen().maximized {
 				app.settings.window_width = f64::from(size.width);
 				app.settings.window_height = f64::from(size.height);
 			}
+			placement.save(&mut app.settings);
 		});
 		super::settings_views::persist(self);
 		self.info.close.allow();
@@ -310,6 +323,8 @@ impl Component for Shell {
 				let shared = shared.clone();
 				move || shared.peek(|a| a.codec_dir.as_deref().and_then(wavedude_export::h264::installed)).is_some()
 			}),
+			messages_list: use_a11y(),
+			pictures: use_state(|| [None, None]),
 		};
 		use_provide_context(|| ui);
 		let notices = use_provide_context(NoticeLog::default);
@@ -376,7 +391,8 @@ async fn tick_loop(cx: Cx, mut theme: State<Theme>) {
 	}
 }
 
-/// Window title, UI zoom and theme follow the state.
+/// Window title, UI zoom and theme follow the state. A zoom change scales the window with it, kept on its
+/// monitor, and the smallest size the window may take.
 fn sync_platform(cx: &Cx, applied: &mut Applied, theme: &mut State<Theme>) {
 	let (title, zoom, setting) = cx.shared.peek(|a| (a.title(), a.settings.ui_zoom, a.settings.theme));
 	if title != applied.title {
@@ -384,7 +400,13 @@ fn sync_platform(cx: &Cx, applied: &mut Applied, theme: &mut State<Theme>) {
 		applied.title = title;
 	}
 	if zoom != applied.zoom {
-		Platform::get().current_window().set_custom_scale_factor(zoom);
+		let window = Platform::get().current_window();
+		let size = *window.root_size.peek();
+		window.set_custom_scale_factor(zoom);
+		if size.width > 0. && !cx.info.placement.seen().maximized {
+			cx.info.placement.resize(f64::from(size.width) * zoom, f64::from(size.height) * zoom);
+		}
+		cx.info.placement.set_min_size(MIN_SIZE.0 * zoom, MIN_SIZE.1 * zoom);
 		applied.zoom = zoom;
 	}
 	let kind = theme_kind(setting);
@@ -400,6 +422,11 @@ fn on_notice(cx: &Cx, notice: &Notice) {
 		Notice::AskMemoryWarning => cx.ui.show_modal(Modal::MemoryWarning),
 		Notice::ExportReady => export_dialog::run_ready(cx),
 		Notice::ExportStopped => export_dialog::run_stopped(cx),
+		Notice::RunFailed { message, no_image } => {
+			let s = cx.strings();
+			let detail = if *no_image { s.get("RunErrorNoImage").to_owned() } else { message.clone() };
+			cx.ui.show_modal(Modal::Error(format!("{}\n{detail}", s.get("RunError"))));
+		}
 		_ => {}
 	}
 }

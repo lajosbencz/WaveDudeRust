@@ -339,7 +339,13 @@ pub fn box_elements(shared: &Shared, states: PaneStates, layer: Layer, t: &Canva
 			};
 			let shared_menu = shared.clone();
 			let mut menu = states.menu;
-			let tip = shared.peek(|app| app.strings.format("TipProbeBoxFormat", &[&view.data.title]));
+			let (tip, grip_tip) = shared.peek(|app| {
+				let s = &app.strings;
+				(
+					s.format("TipProbeBoxFormat", &[&view.data.title]),
+					s.format("TipProbeBoxCornerFormat", &[&view.data.title]),
+				)
+			});
 			let export_text = shared.peek(|app| app.strings.get("MenuExportProbeCsv").to_owned());
 			rect()
 				.position(Position::new_absolute().left(sx.round()).top(sy.round()))
@@ -368,13 +374,14 @@ pub fn box_elements(shared: &Shared, states: PaneStates, layer: Layer, t: &Canva
 						}));
 					}
 				})
-				.child(TooltipContainer::new(Tooltip::new_text(tip)).child(
-					GraphBox::new(view.data, w, h, on_event).selected(view.selected).test_id(format!(
-						"ProbeGraph:{}:{}",
-						layer_name(layer),
-						index
-					)),
-				))
+				.child(
+					TooltipContainer::new(Tooltip::new_text(tip)).child(
+						GraphBox::new(view.data, w, h, on_event)
+							.selected(view.selected)
+							.grip_tooltip(grip_tip)
+							.test_id(format!("ProbeGraph:{}:{}", layer_name(layer), index)),
+					),
+				)
 				.test_id(format!("ProbeGraphBox:{index}"))
 				.into_element()
 		})

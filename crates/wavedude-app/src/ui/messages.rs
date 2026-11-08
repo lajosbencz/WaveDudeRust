@@ -55,6 +55,7 @@ fn labels(cx: &Cx) -> MessageLabels {
 		copy: g("MessagesCopy"),
 		copy_all: g("MessagesCopyAll"),
 		clear: g("MessagesClear"),
+		clear_tip: g("TipMessagesClear"),
 		search: g("MessagesSearchHint"),
 		regex: g("MessagesRegex"),
 		regex_tip: g("TipMessagesRegex"),
@@ -79,6 +80,6 @@ impl Component for MessagesPane {
 				labels(&cx)
 			})
 		};
-		MessageList::new(cx.ui.messages).labels(words.read().clone())
+		MessageList::new(cx.ui.messages).labels(words.read().clone()).list_id(cx.ui.messages_list)
 	}
 }
