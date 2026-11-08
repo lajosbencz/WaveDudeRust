@@ -6,6 +6,21 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.2...v0.1.3) - 2026-11-08
+
+### Added
+
+- *(app)* show downloads with their progress in the status bar, starting with OpenH264's at the first MP4 export
+
+### Fixed
+
+- *(app)* keep the update, file dialog and manual tasks alive past the dialog or menu that starts them, so the installed update is reported
+- *(app)* install an update only after a restart that asks about unsaved edits, and stop a running export before any exit instead of killing it
+
+### Dependencies
+
+- bump the cargo-major group with 3 updates (#11)
+
 ## [0.1.2](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.1...v0.1.2) - 2026-11-07
 
 ### Added
