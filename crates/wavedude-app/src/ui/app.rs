@@ -262,16 +262,22 @@ pub fn theme_kind(setting: ThemeSetting) -> ThemeKind {
 	match setting {
 		ThemeSetting::Dark => ThemeKind::Dark,
 		ThemeSetting::Light => ThemeKind::Light,
-		ThemeSetting::System => match *Platform::get().current_window().preferred_theme.peek() {
-			PreferredTheme::Dark => ThemeKind::Dark,
-			_ => ThemeKind::Light,
-		},
+		ThemeSetting::System => super::os_theme::current().unwrap_or_else(|| {
+			match *Platform::get().current_window().preferred_theme.peek() {
+				PreferredTheme::Dark => ThemeKind::Dark,
+				_ => ThemeKind::Light,
+			}
+		}),
 	}
 }
 
-/// The window's background before the first frame; System counts as dark.
+/// The window's background before the first frame; System without a known OS preference counts as dark.
 pub fn theme_background(setting: ThemeSetting) -> Color {
-	let kind = if setting == ThemeSetting::Light { ThemeKind::Light } else { ThemeKind::Dark };
+	let kind = match setting {
+		ThemeSetting::Light => ThemeKind::Light,
+		ThemeSetting::Dark => ThemeKind::Dark,
+		ThemeSetting::System => super::os_theme::current().unwrap_or(ThemeKind::Dark),
+	};
 	Theme::of(kind).window_background
 }
 

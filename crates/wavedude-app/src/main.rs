@@ -24,6 +24,7 @@ fn main() -> anyhow::Result<()> {
 	for unknown in args.iter().filter(|a| a.starts_with("--") && !a.starts_with("--zoom=")) {
 		tracing::warn!("unknown switch '{unknown}'");
 	}
+	let _os_theme = wavedude_app::ui::os_theme::watch();
 	let app = AppState::start(&dirs, args.iter().map(String::as_str))?;
 	let open = args.iter().find(|a| !a.starts_with("--")).map(Into::into);
 	let (zoom, width, height, title, theme) =

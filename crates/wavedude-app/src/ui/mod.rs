@@ -10,6 +10,7 @@ pub mod manual;
 pub mod memory_warning;
 pub mod menus;
 pub mod messages;
+pub mod os_theme;
 pub mod preview;
 pub mod properties;
 pub mod properties_forms;
