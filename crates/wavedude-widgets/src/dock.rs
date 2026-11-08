@@ -464,8 +464,8 @@ fn group_view(ctx: &HostContext, side: Side, index: usize, group: &PaneGroup) ->
 			let mut l = ctx.layout.clone();
 			let id = id.clone();
 			rect()
-				.height(Size::px(theme.row_height - 2.))
-				.padding((0., 8., 0., 8.))
+				.height(Size::px(theme.row_height))
+				.padding((0., 10., 0., 10.))
 				.main_align(Alignment::center())
 				.background(if selected { theme.tab_active } else { theme.tab_background })
 				.color(if selected { theme.text } else { theme.text_dim })

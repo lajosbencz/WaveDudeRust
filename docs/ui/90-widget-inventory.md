@@ -19,7 +19,7 @@ Behaviours:
 - Splitters between siblings: drag, arrow keys.
 - Pane title bar: title, "Window position" drop-down (Move to Left/Right/Top/Bottom, Close), close button;
   active/inactive colouring by focus.
-- Tab strip when a group holds several panes.
+- Tab strip when a group holds several panes; a tab is a row high (23 px), its text 10 px from either edge.
 - Drag a title bar (group) or tab (pane) past a threshold: overlay with 4 edge targets, 5-way cluster on the
   hovered pane/centre, translucent drop preview, ghost label; drop = dock at edge, tab into group, or split.
 - Show/hide panes (hide = keep registration); default side for a pane shown without a saved place.
