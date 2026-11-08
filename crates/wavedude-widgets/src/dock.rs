@@ -850,7 +850,8 @@ mod tests {
 		let host = (0., 0., 1000., 800.);
 		let groups = [((Side::Left, 0), (0., 0., 300., 400.)), ((Side::Left, 1), (0., 400., 300., 400.))];
 		let at = |p| drop_target_at(host, &groups, Some((Side::Left, 0)), p).map(|t| t.0);
-		assert_eq!(at((100., 10.)), None, "a pane never targets its own group");
+		assert_eq!(at((100., 200.)), None, "a pane never targets its own group");
+		assert_eq!(at((100., 10.)), Some(DropTarget::Edge(Side::Top)), "but the edge strip over it still counts");
 		assert_eq!(at((100., 410.)), Some(DropTarget::Before(Side::Left, 1)));
 		assert_eq!(at((100., 600.)), Some(DropTarget::Tab(Side::Left, 1)));
 		assert_eq!(at((100., 790.)), Some(DropTarget::After(Side::Left, 1)));

@@ -153,12 +153,22 @@ writer compares with the same base, and the DTD's `ATTLIST` lines come from the 
 and never `#REQUIRED`). A part element's attributes are the part's, then the coating's and the material's when the
 kind has them, then the kind's own.
 
+Quirks kept in the adapter, for WaveDude Next's reader:
+
+- A coating thickness (`Coating`, the gates' too) is an integer there; the model's decimal is written rounded.
+- A source position is an integer there; a source between pixels is written with its decimals and a warning,
+  since rounding would move it.
+- `Brightness` is written in this program's units (05-deviations.md): WaveDude Next shows such a file darker,
+  and fits nothing on opening.
+- `Rescaled` on `Simulation` is declared in the DTD and read (a file that already holds this program's frequency
+  scale), never written: a written file carries the original's scale so WaveDude Next reads it right.
+
 ## Native project `.wdr` (Rust)
 
 A zip container: `project.json` (deflated) holding `{"format": N, "project": {...}}`, and for a scene with an image
 `scene.<ext>` (stored) with the embedded bytes verbatim (`png`, `jpg`, `bmp`, `gif`, `tif`, `webp`, else `bin`). The
-JSON carries the model's values (no sparse omission), the image path relative to the project's folder when inside
-it, never the image bytes. Names are the model's serde names, pinned by `rename_all` (fields `snake_case`, enum
+JSON is sparse: every value equal to its type's default is left out, object by object (`io/sparse.rs`, decision
+0004), the image path relative to the project's folder when inside it, never the image bytes. Names are the model's serde names, pinned by `rename_all` (fields `snake_case`, enum
 members `PascalCase`); a part is `{name, enabled, x, y, angle, "kind": {"<Kind>": {...}}}`. A snapshot test of every
 key and string value of one object of every kind (`tests/io.rs`) fails when a rename would change the format.
 

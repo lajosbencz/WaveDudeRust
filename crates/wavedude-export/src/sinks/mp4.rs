@@ -1,4 +1,4 @@
-//! H.264 in MP4: openh264 (constrained baseline at level 5.2, no B-frames, an IDR every second, bitrate rate control,
+//! H.264 in MP4: openh264 (constrained baseline at level 5.2, no B-frames, an IDR every second, quality rate control under a bitrate ceiling,
 //! no frame skipping, no background detection: it held moving waves as static and cost 3 dB) muxed by the
 //! `mp4` crate as one `avc1` track (timescale = fps, one tick per sample, the SPS and PPS in `avcC`).
 //!
@@ -107,7 +107,7 @@ impl<W: Write + Seek> Mp4Writer<W> {
 		let config = EncoderConfig::new()
 			.bitrate(BitRate::from_bps(bps))
 			.max_frame_rate(FrameRate::from_hz(fps as f32))
-			.rate_control_mode(RateControlMode::Bitrate)
+			.rate_control_mode(RateControlMode::Quality)
 			.skip_frames(false)
 			.background_detection(false)
 			.usage_type(UsageType::CameraVideoRealTime)

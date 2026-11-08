@@ -203,16 +203,18 @@ fn image_buttons(f: &Form, has_bytes: bool) -> Element {
 		move |_: Event<PressEventData>| {
 			let cx = f.cx.clone();
 			let start = cx.shared.peek(|a| a.document.folder().map(Path::to_owned));
-			dialogs::pick_file(s.get("SceneImageFilter"), start, move |path: PathBuf| match std::fs::read(&path) {
-				Ok(bytes) => {
-					let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-					cx.send(AppEvent::Command(Command::SetSceneImage {
-						name,
-						path: path.display().to_string(),
-						bytes,
-					}));
+			dialogs::pick_file(&dialogs::scene_image_filter(&s), start, move |path: PathBuf| {
+				match std::fs::read(&path) {
+					Ok(bytes) => {
+						let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+						cx.send(AppEvent::Command(Command::SetSceneImage {
+							name,
+							path: path.display().to_string(),
+							bytes,
+						}));
+					}
+					Err(e) => tracing::warn!("the image '{}' could not be read: {e}", path.display()),
 				}
-				Err(e) => tracing::warn!("the image '{}' could not be read: {e}", path.display()),
 			});
 		}
 	};

@@ -3,9 +3,16 @@
 Status: accepted, 2026-11-05
 
 The model is format-agnostic (serde). Native file: `.wdr`, a zip container
-holding `project.json` (versioned by a `format` field), `scene.png` when the
-scene has an image, and `schemes/*.json` for project colour schemes. The
-README says it is a zip; renaming it opens it in any archive tool.
+holding `project.json` (versioned by a `format` field) and `scene.<ext>` when
+the scene has an image; the project's colour schemes are part of the JSON.
+The README says it is a zip; renaming it opens it in any archive tool.
+
+## Sparse JSON (added 2026-11-08, the user's decision)
+
+`project.json` leaves out every value equal to its type's default (`io/sparse.rs`), object by object; the
+reader's serde defaults put them back. A default that changes in a later version therefore changes what an
+old file means, as it does for `.wdproj`; that is accepted. Measured on the 24 examples (docs/measurements.md),
+the container is a fraction of the `.wdproj` text, which is the point of the format.
 
 Compatibility adapters: read `.wdproj` (XML, versions 1 to 3), `.wdscheme`
 and Wave Dude 2D `configuration.json`; write `.wdproj` so projects round-trip

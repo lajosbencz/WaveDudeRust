@@ -92,6 +92,14 @@ pub fn filters(spec: &str) -> Vec<(String, Vec<String>)> {
 		.collect()
 }
 
+/// The scene image filter: the string table's name over the extensions this build decodes.
+pub fn scene_image_filter(s: &Strings) -> String {
+	let exts: Vec<String> = wavedude_core::io::image_extensions().iter().map(|e| format!("*.{e}")).collect();
+	let (name, rest) = s.get("SceneImageFilter").split_once('|').expect("the filter names the images first");
+	let all = rest.split_once('|').map_or("", |(_, all)| all);
+	format!("{name}|{}|{all}", exts.join(";"))
+}
+
 fn dialog(spec: &str, start: Option<&Path>) -> rfd::AsyncFileDialog {
 	let mut d = rfd::AsyncFileDialog::new();
 	for (name, exts) in filters(spec) {

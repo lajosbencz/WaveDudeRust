@@ -1,5 +1,6 @@
-//! The native `.wdr` project: a zip holding `project.json` (the model as JSON under a `format`
-//! number) and, for a scene with an image, `scene.<ext>` with the embedded bytes verbatim.
+//! The native `.wdr` project: a zip holding `project.json` (the model as sparse JSON under a `format` number,
+//! every value at its default left out) and, for a scene with an image, `scene.<ext>` with the embedded bytes
+//! verbatim.
 
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
@@ -23,9 +24,9 @@ const SCENE_STEM: &str = "scene.";
 const MIGRATIONS: [fn(&mut Value); FORMAT as usize - 1] = [];
 
 #[derive(Serialize)]
-struct Wrapper<'a> {
+struct Wrapper {
 	format: u32,
-	project: &'a Project,
+	project: Value,
 }
 
 /// A read container: the normalised project and what was left out of it.
@@ -52,7 +53,7 @@ fn image_extension(bytes: &[u8]) -> &'static str {
 pub fn write_bytes(project: &Project, folder: Option<&Path>) -> std::result::Result<Vec<u8>, FormatError> {
 	let mut stored = project.without_image();
 	stored.scene.image_path = super::stored_image_path(folder, &project.scene.image_path);
-	let json = serde_json::to_vec_pretty(&Wrapper { format: FORMAT, project: &stored })
+	let json = serde_json::to_vec_pretty(&Wrapper { format: FORMAT, project: super::sparse::project(&stored) })
 		.map_err(|e| FormatError::new(format!("cannot serialise the project: {e}")))?;
 	let zip_err = |e: zip::result::ZipError| FormatError::new(format!("cannot write the container: {e}"));
 	let io_err = |e: std::io::Error| FormatError::new(format!("cannot write the container: {e}"));

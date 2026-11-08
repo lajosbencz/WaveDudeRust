@@ -5,8 +5,11 @@ Status: accepted, 2026-11-05
 The original drives OpenCL by hand-written P/Invoke. OpenCL is deprecated on
 macOS and absent on many Linux installs.
 
-Decision: one GPU engine on wgpu (WGSL kernels; f16 storage where the adapter
-offers `shader-f16`, f32 otherwise) and one CPU engine (rayon + wide lanes).
+Decision: one GPU engine on wgpu (WGSL kernels, f32 storage) and one CPU engine
+(rayon over rows, the compiler's auto-vectorisation). f16 storage behind
+`shader-f16` and explicit wide lanes were considered and not built: the
+measured step costs (docs/measurements.md) are bound by the stencil's reads,
+which f16 would halve, so they stay an option, not a promise.
 Both expose the same engine trait and the same features: stencils, sub-steps,
 sources, probes, captures, scene replacement. The CPU engine is the reference
 for tests and the fallback without a usable adapter.

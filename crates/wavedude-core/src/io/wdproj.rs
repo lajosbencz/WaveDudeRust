@@ -359,8 +359,14 @@ impl Table for PartBase {
 }
 
 impl Table for Coating {
+	// The original keeps the thickness as an integer: written rounded, so its reader takes the file.
 	const FIELDS: &'static [Field<Self>] = fields!(Coating, "Coating";
-		f64 "Coating" depth,
+		[Field {
+			owner: "Coating",
+			name: "Coating",
+			codec: Codec::Int { get: |c| c.depth.round() as i64, set: |c, v| c.depth = f64::from(v) },
+			presence: Sparse,
+		}],
 		enumv "CoatingProfile" profile,
 		bool "FrontCoated" front,
 		bool "BackCoated" back,
@@ -429,7 +435,12 @@ kind_table!(GrinLens;
 );
 kind_table!(LogicGate;
 	f64 "DesignFrequency" design_frequency,
-	f64 "Coating" coating,
+	[Field {
+		owner: "LogicGate",
+		name: "Coating",
+		codec: Codec::Int { get: |g| g.coating.round() as i64, set: |g, v| g.coating = f64::from(v) },
+		presence: Sparse,
+	}],
 	bool "InputCoated" input_coated,
 	bool "OutputCoated" output_coated,
 	bool "UpperOutputActive" upper_output_active,
@@ -595,6 +606,14 @@ fn write_display(s: &Display) -> Element {
 }
 
 fn write_source(s: &Source) -> Element {
+	if s.x.fract() != 0.0 || s.y.fract() != 0.0 {
+		tracing::warn!(
+			"the source '{}' sits between pixels ({}, {}): WaveDude Next reads whole numbers only",
+			s.name,
+			s.x,
+			s.y
+		);
+	}
 	let mut el = element("Source", s);
 	if let Some(a) = &s.array {
 		el.child_el(element("Array", a));
@@ -763,7 +782,11 @@ fn decls() -> Vec<Decl> {
 		Decl::new("Description", "(#PCDATA)", vec![]),
 		Decl::of::<Scene>("Scene", "(ImageData?)"),
 		Decl::new("ImageData", "(#PCDATA)", vec![]),
-		Decl::of::<Simulation>("Simulation", "EMPTY"),
+		Decl::new("Simulation", "EMPTY", {
+			let mut attrs = fields::attrs(Simulation::FIELDS);
+			attrs.push(Attr { owner: None, name: "Rescaled", ty: AttrType::Bool, required: false });
+			attrs
+		}),
 		Decl::of::<Display>("Display", "(Field?, Intensity?, Video?)"),
 		Decl::new("Field", "EMPTY", fields::attrs(FIELD_LAYER)),
 		Decl::of::<DisplayLayer>("Intensity", "EMPTY"),

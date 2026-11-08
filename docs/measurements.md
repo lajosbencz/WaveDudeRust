@@ -46,6 +46,20 @@ A step is not the same work in both:
   the mapped buffer on the host, which overlaps the card's next steps. On the
   CPU our capture is the faster one (0.76 ms against 1.66).
 
+## Project file size, `.wdr` against `.wdproj`
+
+2026-11-08. The 24 examples loaded and written by this program: the `.wdproj` text with its DOCTYPE against the
+`.wdr` container (sparse JSON, deflated). `cargo test -p wavedude-core --test io the_native_container -- --nocapture`.
+
+| Example | .wdproj bytes | .wdr bytes | .wdr share |
+|---|---|---|---|
+| Example01_Source_Mirror_Probe | 16073 | 735 | 5 % |
+| Example16_Wave_in_2_boxes | 16764 | 970 | 6 % |
+| Example23_Fibres | 18330 | 1279 | 7 % |
+| all 24 | 395569 | 19732 | 5 % |
+
+Most of a `.wdproj` is its DOCTYPE (about 15 KB); the elements alone are still 2 to 4 times the container.
+
 ## Other operations
 
 2026-11-06 unless noted.

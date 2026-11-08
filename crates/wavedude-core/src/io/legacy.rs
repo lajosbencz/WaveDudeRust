@@ -149,7 +149,9 @@ fn import_sources(s: Option<&Obj>, project: &mut Project, notes: &mut Vec<String
 			x: double(it, "x", 0.0),
 			y: double(it, "y", 0.0),
 			enabled: flag(it, "source_on", true),
-			detach_after: flag(it, "detach_source", false).then(|| uint(it, "detach_after_steps", 1000)),
+			detach_after: flag(it, "detach_source", false)
+				.then(|| u32::try_from(int(it, "detach_after_steps", 1000)).ok())
+				.flatten(),
 			frequency: double(it, "frequency", 100.0),
 			amplitude: double(it, "amplitude", 100.0),
 			phase: double(it, "phase_deg", 0.0),
@@ -245,8 +247,11 @@ fn import_probes(s: Option<&Obj>, scene: Option<&Obj>, project: &mut Project, no
 /// Imports from the JSON text of a `configuration.json` in `folder` (where its image is looked for).
 /// The scene's `image_size` is left at (0, 0); [`import`] decodes it.
 pub fn import_str(json: &str, folder: &Path) -> std::result::Result<Imported, FormatError> {
-	let root: Value = serde_json::from_str(json)
-		.map_err(|e| FormatError { message: format!("not valid JSON: {e}"), at: Some((e.line(), e.column())) })?;
+	// The original reads with comments and trailing commas allowed; JSON5 covers both.
+	let root: Value = json5::from_str(json).map_err(|e| {
+		let json5::Error::Message { msg, location } = e;
+		FormatError { message: format!("not valid JSON: {msg}"), at: location.map(|l| (l.line, l.column)) }
+	})?;
 	let root =
 		root.as_object().ok_or_else(|| FormatError::new("not a project configuration (a JSON object was expected)"))?;
 	let version = int(Some(root), "format_version", SUPPORTED_FORMAT_VERSION);

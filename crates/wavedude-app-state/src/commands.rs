@@ -16,6 +16,8 @@ use wavedude_core::model::{
 	Project, Rectangle, Triangle, ZonePlate,
 };
 
+use wavedude_core::scene::gate_design::{self, GateDesign};
+
 use super::clipboard::{self, Fragment, PasteTarget};
 use super::log;
 use super::selection::{ItemKind, ItemRef, Row, Selection, move_group};
@@ -315,7 +317,54 @@ fn list_insert_point(project: &Project, at: Option<Point>) -> (i32, i32) {
 
 /// Applies `command` to `project`, leaves the selection the command makes in `selection`, normalises the
 /// project and classifies the change.
+/// A gate's input ports: where a source must sit to feed it (part index, A and B).
+fn gate_ports(project: &Project) -> Vec<(usize, [Point; 2])> {
+	project
+		.parts
+		.iter()
+		.enumerate()
+		.filter_map(|(i, part)| {
+			let PartKind::LogicGate(gate) = &part.kind else { return None };
+			let design = GateDesign::for_gate(gate, &project.simulation)?;
+			let [a, b, _, _] = gate_design::ports_of(&design, &part.base);
+			Some((i, [a, b]))
+		})
+		.collect()
+}
+
+/// Sources sitting on a gate's input ports before a change follow the ports after it (a moved, turned or
+/// retuned gate keeps its feed). Returns whether a source moved.
+pub fn follow_gate_ports(before: &[(usize, [Point; 2])], project: &mut Project) -> bool {
+	let after = gate_ports(project);
+	let mut moved = false;
+	for (index, old_ports) in before {
+		let Some((_, new_ports)) = after.iter().find(|(i, _)| i == index) else { continue };
+		for (old, new) in old_ports.iter().zip(new_ports) {
+			if old == new {
+				continue;
+			}
+			for source in &mut project.sources {
+				if source.x.floor() as i32 == old.x && source.y.floor() as i32 == old.y {
+					source.x = f64::from(new.x);
+					source.y = f64::from(new.y);
+					moved = true;
+				}
+			}
+		}
+	}
+	moved
+}
+
 pub fn apply(project: &mut Project, selection: &mut Selection, command: Command) -> Result<Change, CommandError> {
+	let ports = gate_ports(project);
+	let mut change = apply_command(project, selection, command)?;
+	if follow_gate_ports(&ports, project) {
+		change.kind = change.kind.merge(ChangeKind::Simulation);
+	}
+	Ok(change)
+}
+
+fn apply_command(project: &mut Project, selection: &mut Selection, command: Command) -> Result<Change, CommandError> {
 	let change = match command {
 		Command::AddSource { at } => {
 			let (x, y) = list_insert_point(project, at);

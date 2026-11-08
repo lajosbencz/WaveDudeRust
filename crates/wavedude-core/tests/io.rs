@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use wavedude_core::io::{self, IoError, legacy, wdproj, wdr};
+use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::*;
 
 fn fixtures() -> PathBuf {
@@ -78,6 +79,59 @@ fn examples_are_rewritten_as_shipped() {
 	}
 	assert_eq!(differing.len(), 1, "{}", differing.join("\n"));
 	assert!(differing[0].starts_with("Example06"), "{}", differing[0]);
+}
+
+/// The native container is the leaner file: sparse JSON deflated against the sparse XML with its DOCTYPE. The
+/// table (`--nocapture`) feeds docs/measurements.md.
+#[test]
+fn the_native_container_is_smaller_than_the_wdproj_of_every_example() {
+	let mut rows = Vec::new();
+	let (mut total_x, mut total_r) = (0usize, 0usize);
+	for path in examples() {
+		let name = path.file_name().unwrap().to_string_lossy().into_owned();
+		let p = io::load_project(&path).unwrap();
+		let xml = wdproj::write_string(&p, None).len();
+		let native = wdr::write_bytes(&p, None).unwrap().len();
+		assert!(native < xml, "{name}: .wdr {native} bytes, .wdproj {xml} bytes");
+		total_x += xml;
+		total_r += native;
+		rows.push(format!(
+			"| {} | {xml} | {native} | {:.0} % |",
+			name.trim_end_matches(".wdproj"),
+			100. * native as f64 / xml as f64
+		));
+	}
+	println!("| Example | .wdproj bytes | .wdr bytes | .wdr share |\n|---|---|---|---|\n{}", rows.join("\n"));
+	println!("| all 24 | {total_x} | {total_r} | {:.0} % |", 100. * total_r as f64 / total_x as f64);
+}
+
+proptest::proptest! {
+	/// Any numbers a file may hold normalise into their ranges, and normalising twice changes nothing.
+	#[test]
+	fn normalisation_lands_in_range_and_is_idempotent(
+		index in proptest::num::f64::ANY,
+		absorption in proptest::num::u32::ANY,
+		angle in -1e6f64..1e6,
+		brightness in proptest::num::f64::ANY,
+	) {
+		let mut p = Project::default();
+		p.scene.refractive_index = index;
+		p.display.field.brightness = brightness;
+		p.add_part(PartKind::Rectangle(Rectangle {
+			material: Material { absorption, ..Material::default() },
+			..Rectangle::default()
+		}));
+		p.parts[0].base.angle = angle;
+		p.normalize();
+		let once = p.clone();
+		p.normalize();
+		proptest::prop_assert_eq!(&p, &once);
+		proptest::prop_assert!(ranges::INDEX.contains(p.scene.refractive_index));
+		proptest::prop_assert!(ranges::LAYER_BRIGHTNESS.contains(p.display.field.brightness));
+		proptest::prop_assert!(p.parts[0].base.angle > -180.0 && p.parts[0].base.angle <= 180.0);
+		let PartKind::Rectangle(r) = &p.parts[0].kind else { unreachable!() };
+		proptest::prop_assert!(ranges::ABSORPTION.contains(f64::from(r.material.absorption)));
+	}
 }
 
 #[test]

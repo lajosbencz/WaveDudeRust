@@ -3,9 +3,13 @@
 Status: accepted, 2026-11-05; amended 2026-11-07 (run-time loading)
 
 The original encodes MP4 with Windows Media Foundation, NV12 input, 8-bit
-4:2:0. The `openh264` crate (BSD-2) gives the same sample format on every
+4:2:0, in quality mode with a bitrate fallback and the hardware encoder when
+there is one. The `openh264` crate (BSD-2) gives the same sample format on every
 platform; constrained baseline profile, slightly larger files than Media
-Foundation's Main/High at the same look. Muxing through the `mp4` crate.
+Foundation's Main/High at the same look, quality rate control under the same
+bitrate ceiling the Quality setting maps to. Software only: a hardware encoder
+would mean a platform API per OS and is out of scope. Frames up to 3840 x 2160,
+the encoder's limit. Muxing through the `mp4` crate.
 
 Cisco's AVC patent licence covers only its unmodified binary, downloaded from
 Cisco to the user's device; a build that compiles OpenH264's source carries no

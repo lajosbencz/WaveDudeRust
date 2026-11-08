@@ -107,6 +107,12 @@ pub fn make_unique<T: Named>(items: &mut [T], stem: impl Fn(&T) -> String) {
 			items.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, t)| t.name().to_owned()).collect();
 		let taken = others.iter().map(String::as_str);
 		let name = if empty { numbered_name(&stem(&items[i]), taken) } else { copy_name(items[i].name(), taken) };
+		if !empty {
+			tracing::info!(
+				"'{}' is renamed '{name}': the name was taken (a composite source's jitter follows its name)",
+				items[i].name()
+			);
+		}
 		items[i].set_name(name);
 	}
 }
