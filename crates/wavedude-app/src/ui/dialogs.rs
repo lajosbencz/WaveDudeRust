@@ -11,7 +11,7 @@ use wavedude_app_state::strings::{Strings, mnemonic, strip_mnemonic};
 use wavedude_app_state::{Event as AppEvent, Guarded, Response, SaveChoice};
 
 use super::app::{Cx, Ui};
-use super::export_dialog::{ExportDialog, ExportRequest};
+use super::export_dialog::{self, ExportDialog, ExportRequest};
 use super::{about, memory_warning};
 
 /// The modal shown over the window.
@@ -52,8 +52,27 @@ pub fn respond(cx: &Cx, response: Response) {
 		}
 		Response::MemoryWarning => cx.ui.show_modal(Modal::MemoryWarning),
 		Response::Error(message) => cx.ui.show_modal(Modal::Error(message)),
-		Response::Exit => cx.exit(),
+		Response::Exit => quit(cx, false),
+		Response::Restart => quit(cx, true),
 	}
+}
+
+/// Ends the program, as the restart into a downloaded update when `restart`. A running export is stopped first on
+/// the user's word, and the exit waits for it to end.
+fn quit(cx: &Cx, restart: bool) {
+	let finish = move |cx: &Cx| {
+		if restart && !cx.info.update.confirm_restart() {
+			tracing::warn!("a restart without a downloaded update");
+		}
+		cx.exit();
+	};
+	if cx.ui.export.peek().is_none() {
+		finish(cx);
+		return;
+	}
+	let stop_cx = cx.clone();
+	let yes = Rc::new(move || export_dialog::stop_then(&stop_cx, finish));
+	cx.ui.show_modal(Modal::Confirm { text: cx.strings().get("ExitStopsExport").to_owned(), yes });
 }
 
 /// The filters of a string table's `Name (*.a)|*.a;*.b|...` list for `rfd`; the tables are ours, so a malformed

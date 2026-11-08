@@ -114,6 +114,25 @@ thread_local! {
 	static PENDING: RefCell<Option<Plan>> = const { RefCell::new(None) };
 	/// The last run export and the project file it was made for.
 	static LAST: RefCell<Option<(Plan, Option<PathBuf>)>> = const { RefCell::new(None) };
+	/// What [`stop_then`] runs once the export has ended.
+	static THEN: RefCell<Option<Then>> = const { RefCell::new(None) };
+}
+
+type Then = Box<dyn FnOnce(&Cx)>;
+
+/// Cancels the export and calls `then` once it has ended, its partial file removed.
+pub fn stop_then(cx: &Cx, then: impl FnOnce(&Cx) + 'static) {
+	THEN.with_borrow_mut(|t| *t = Some(Box::new(then)));
+	cancel(cx);
+	if cx.ui.export.peek().is_none() {
+		run_then(cx);
+	}
+}
+
+fn run_then(cx: &Cx) {
+	if let Some(then) = THEN.with_borrow_mut(Option::take) {
+		then(cx);
+	}
 }
 
 /// Whether File > Export last has something to repeat for the open project.
@@ -485,6 +504,7 @@ pub fn poll(cx: &Cx) {
 				cx.ui.show_modal(Modal::Error(format!("{}\n{e}", cx.strings().get("ExportError"))));
 			}
 		}
+		run_then(cx);
 	}
 }
 

@@ -31,7 +31,9 @@ Status: accepted, 2026-11-07
   secret, the public key a repository variable compiled in through `WAVEDUDE_UPDATE_PUBKEY`); the endpoint is
   derived from the repository the workflow runs in. A build without both has no updater, no menu entries and no
   startup question. The check runs at launch only if the user agreed on the startup page; installing asks
-  each time. It replaces the NSIS install, the macOS app and an AppImage; a plain Linux binary is told where
+  each time. The package is downloaded and verified while the program runs and installed after an exit that asks
+  about unsaved edits like any other, then the new version is started: the program is never replaced or ended
+  under the user's work. It replaces the NSIS install, the macOS app and an AppImage; a plain Linux binary is told where
   the release is.
 - **Dependencies**: Dependabot for Cargo and for the workflows' actions, which are pinned to commit hashes with
   the version in a comment (Dependabot moves both), batched: Cargo checked daily, actions weekly, one pull request for minor

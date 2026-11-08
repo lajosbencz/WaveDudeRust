@@ -29,7 +29,8 @@ fn main() -> anyhow::Result<()> {
 	let (zoom, width, height, title, theme) =
 		(app.settings.ui_zoom, app.settings.window_width, app.settings.window_height, app.title(), app.settings.theme);
 	let close = CloseGate::default();
-	let info = BootInfo { ring, dirs, close: close.clone(), open };
+	let update = wavedude_app::ui::update::Pending::default();
+	let info = BootInfo { ring, dirs, close: close.clone(), open, update: update.clone() };
 	let boot = Boot::new(app, info);
 	let title: &'static str = Box::leak(title.into_boxed_str());
 	let window = WindowConfig::new(root)
@@ -45,5 +46,6 @@ fn main() -> anyhow::Result<()> {
 			move |_, _| if close.on_close_request() { CloseDecision::Close } else { CloseDecision::KeepOpen },
 		);
 	launch(LaunchConfig::new().with_window(window));
+	update.install();
 	Ok(())
 }

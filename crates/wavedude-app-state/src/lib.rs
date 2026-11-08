@@ -45,6 +45,8 @@ pub enum Guarded {
 	OpenExample(usize),
 	Close,
 	Exit,
+	/// Exit to install a downloaded update and start it.
+	Restart,
 }
 
 /// The answer to "Save the changes to ...?".
@@ -145,6 +147,8 @@ pub enum Response {
 	Error(String),
 	/// The app may close now.
 	Exit,
+	/// The app may close now and start again.
+	Restart,
 }
 
 /// Change counters, one per part of the state a view shows; each moves when its part may have changed.
@@ -497,6 +501,7 @@ impl<B: Backend> AppState<B> {
 			Guarded::New => self.replace_document(Document::new_project(), now),
 			Guarded::Close => self.replace_document(Document::empty(), now),
 			Guarded::Exit => return Response::Exit,
+			Guarded::Restart => return Response::Restart,
 			Guarded::OpenExample(i) => {
 				let example = &examples::all()[i];
 				match Document::from_example(example) {

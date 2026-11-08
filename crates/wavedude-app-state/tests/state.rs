@@ -157,6 +157,23 @@ fn unsaved_edits_are_asked_about() {
 }
 
 #[test]
+fn a_restart_asks_about_unsaved_edits_like_an_exit() {
+	let t = Instant::now();
+	let dir = tempfile::tempdir().unwrap();
+	let mut s = app();
+	assert_eq!(s.handle(Event::Guarded(Guarded::Restart), t), Response::Restart, "nothing to lose");
+	s.handle(Event::Command(Command::AddProbe { at: None }), t);
+	assert_eq!(s.handle(Event::Guarded(Guarded::Restart), t), Response::AskSave { name: "Untitled".into() });
+	assert_eq!(s.handle(Event::SaveChoice(SaveChoice::Cancel), t), Response::None, "Cancel keeps running");
+	assert!(s.document.dirty);
+	s.handle(Event::Guarded(Guarded::Restart), t);
+	assert_eq!(s.handle(Event::SaveChoice(SaveChoice::Save), t), Response::AskSavePath { proposed: None });
+	let path = dir.path().join("kept.wdr");
+	assert_eq!(s.handle(Event::SaveAs(path.clone()), t), Response::Restart, "restarts once saved");
+	assert!(path.is_file() && !s.document.dirty);
+}
+
+#[test]
 fn copy_paste_cut_through_text() {
 	let t = Instant::now();
 	let mut s = app();

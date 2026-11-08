@@ -26,7 +26,7 @@ use wavedude_app_state::{Event as AppEvent, Guarded};
 use super::dialogs::{self, Modal};
 use super::export_dialog::{self, ExportProgress};
 use super::shared::{App, Shared};
-use super::{downloads, messages, window};
+use super::{downloads, messages, update, window};
 
 /// The tick period of the state loop.
 pub const TICK: Duration = Duration::from_millis(16);
@@ -88,6 +88,8 @@ pub struct BootInfo {
 	pub close: CloseGate,
 	/// The file named on the command line.
 	pub open: Option<PathBuf>,
+	/// A downloaded update, installed by `main` after a restart's exit.
+	pub update: update::Pending,
 }
 
 /// Notices of the live controller, kept with a sequence number so several views can read them.

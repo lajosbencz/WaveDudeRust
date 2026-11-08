@@ -25,8 +25,12 @@ is lost; the memory warning waits once.
 
 ## Unsaved edits prompt
 
-Before New, Open, Close, Exit, opening an example or recent file: "Save the changes to <name>?" Save (saves; Save
-As for a project without a file; cancelled Save As aborts) / Don't save / Cancel (keeps the project, aborts).
+Before New, Open, Close, Exit, an update's restart, opening an example or recent file: "Save the changes to
+<name>?" Save (saves; Save As for a project without a file; cancelled Save As aborts) / Don't save / Cancel (keeps
+the project, aborts).
+
+Exit, closing the window and an update's restart during an export (port): "An export is running. Stop it and
+quit?" Yes stops it and quits once it has ended; No keeps both.
 
 ## Memory warning
 
@@ -50,10 +54,12 @@ section shows; Continue (Enter or Esc) saves every answer. Title "Welcome to Wav
 ## Updates (port, decision 0011)
 
 With "Check for updates at launch" on, a check runs in the background at each launch; Help > Check for updates
-runs one on demand. A newer release asks "WaveDude Rust x is available (this is y). Install it now?" where the
-updater can replace the program (Windows installer, macOS app, Linux AppImage); Yes downloads, verifies the
-signature and installs, then says the new version starts with the next launch (the Windows installer ends the
-program itself). A plain Linux binary gets "... Download it from <release page>" instead. A launch check says
+runs one on demand. A newer release asks "WaveDude Rust x is available (this is y). Download it?" where the
+updater can replace the program (Windows installer, macOS app, Linux AppImage); Yes downloads it, with
+"Downloading WaveDude Rust x" and its progress in the status bar, and verifies the signature, then asks "WaveDude
+Rust x is downloaded. Restart now to install it?" Yes exits as Exit does (unsaved edits and a running export asked
+about first; Cancel keeps the program running), installs, and starts the new version (on Windows its installer
+does). No drops the download. A plain Linux binary gets "... Download it from <release page>" instead. A launch check says
 nothing when there is no update or the check fails (logged); an on-demand one says "WaveDude Rust is up to date."
 or "The update failed." with the reason.
 

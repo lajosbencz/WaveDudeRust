@@ -1,17 +1,21 @@
 //! Updates from the project's GitHub releases (decision 0011): the release build names the feed and the public
 //! key its packages are signed with; a build without them has no updater. A newer release is installed on the
 //! user's word where the running program is a package the updater can replace (the Windows installer, the macOS
-//! app, a Linux AppImage); a plain Linux binary gets the release's address. Threads: the UI thread; the check and
-//! the install run on threads of their own.
+//! app, a Linux AppImage); a plain Linux binary gets the release's address. The package is downloaded and verified
+//! while the program runs, then installed by `main` after a restart that goes through the unsaved-edits question
+//! like any exit ([`Pending`]). Threads: the UI thread; the check and the download run on threads of their own.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 
 use cargo_packager_updater::{Config, Update, check_update};
 use freya::prelude::*;
+use wavedude_app_state::{Event as AppEvent, Guarded};
 
 use super::app::{Cx, TICK};
 use super::dialogs::Modal;
+use super::downloads;
 
 /// The release feed (`latest.json` of the latest GitHub release) and the minisign public key, set at build time;
 /// an empty value counts as unset, as a workflow passes an unset variable.
@@ -99,28 +103,68 @@ pub fn check(cx: &Cx, quiet: bool) {
 	});
 }
 
-/// Downloads, verifies and installs `update`; the Windows installer ends this process itself.
+/// A verified package waiting for the restart that installs it, shared by the window and `main`.
+#[derive(Clone, Default)]
+pub struct Pending(Rc<RefCell<Option<Ready>>>);
+
+struct Ready {
+	update: Update,
+	bytes: Vec<u8>,
+	/// The restart was confirmed: the exit is the restart's.
+	restart: bool,
+}
+
+impl Pending {
+	/// Marks the package for installing at this exit; false when there is none.
+	pub fn confirm_restart(&self) -> bool {
+		self.0.borrow_mut().as_mut().map(|r| r.restart = true).is_some()
+	}
+
+	/// After the window closed: installs a package whose restart was confirmed and starts the new version. The
+	/// Windows installer ends this process itself and starts the program when done.
+	pub fn install(&self) {
+		let Some(ready) = self.0.borrow_mut().take().filter(|r| r.restart) else { return };
+		let version = ready.update.version.clone();
+		tracing::info!("installing update {version}");
+		if let Err(e) = ready.update.install(ready.bytes) {
+			tracing::error!("the update {version} could not be installed: {e}");
+			return;
+		}
+		tracing::info!("update {version} installed");
+		let program = std::env::var_os("APPIMAGE").map(Into::into).map_or_else(std::env::current_exe, Ok);
+		if let Err(e) = program.and_then(|p| std::process::Command::new(p).spawn()) {
+			tracing::error!("the new version could not be started: {e}");
+		}
+	}
+}
+
+/// Downloads and verifies `update` with its progress in the status bar, then asks to restart into it.
 fn install(cx: &Cx, update: &Update) {
 	let update = update.clone();
 	let version = update.version.clone();
+	let download = downloads::start(cx, cx.strings().format("StatusDownloadingUpdateFormat", &[&version]));
 	let (tx, rx) = mpsc::channel();
-	let spawned = std::thread::Builder::new().name("update-install".into()).spawn(move || {
-		let _ = tx.send(update.download_and_install().map_err(|e| e.to_string()));
+	let spawned = std::thread::Builder::new().name("update-download".into()).spawn(move || {
+		let bytes = update.download_extended(|bytes, total| download.chunk(bytes, total), || {});
+		let _ = tx.send(bytes.map(|b| (update, b)).map_err(|e| e.to_string()));
 	});
 	if let Err(e) = spawned {
-		tracing::error!("the update could not start: {e}");
+		tracing::error!("the update download could not start: {e}");
 		return;
 	}
-	tracing::info!("installing update {version}");
+	tracing::info!("downloading update {version}");
 	let cx = cx.clone();
-	// Not `spawn`: that task would end with the confirm dialog, which closes before the install does.
+	// Not `spawn`: that task would end with the confirm dialog, which closes before the download does.
 	spawn_in_window(async move {
 		let Some(result) = receive(rx).await else { return };
 		let s = cx.strings();
 		match result {
-			Ok(()) => {
-				tracing::info!("update {version} installed");
-				cx.ui.show_modal(Modal::Info(s.format("UpdateInstalledFormat", &[&version])));
+			Ok((update, bytes)) => {
+				tracing::info!("update {version} downloaded and verified");
+				*cx.info.update.0.borrow_mut() = Some(Ready { update, bytes, restart: false });
+				let restart_cx = cx.clone();
+				let yes = Rc::new(move || restart_cx.send(AppEvent::Guarded(Guarded::Restart)));
+				cx.ui.show_modal(Modal::Confirm { text: s.format("UpdateReadyFormat", &[&version]), yes });
 			}
 			Err(e) => {
 				tracing::error!("the update failed: {e}");
