@@ -5963,7 +5963,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-app"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "bytes",
@@ -5988,7 +5988,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-app-state"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "directories",
@@ -6007,7 +6007,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-cli"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -6022,7 +6022,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-core"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "approx",
  "base64 0.23.1",
@@ -6048,7 +6048,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-export"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -6072,7 +6072,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-widgets"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bytes",
  "freya",
