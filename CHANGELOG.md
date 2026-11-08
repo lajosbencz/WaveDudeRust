@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.3...v0.1.4) - 2026-11-08
+
+### Added
+
+- *(widgets)* dock tabs are a row high with 10 px beside their text, as in WaveDude Next
+
+### Fixed
+
+- *(app)* follow the OS colour scheme on Linux through the XDG portal, where winit reports none
+
 ## [0.1.3](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.2...v0.1.3) - 2026-11-08
 
 ### Added
