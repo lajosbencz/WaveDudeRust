@@ -46,6 +46,13 @@ A step is not the same work in both:
   the mapped buffer on the host, which overlaps the card's next steps. On the
   CPU our capture is the faster one (0.76 ms against 1.66).
 
+### Re-measured 2026-11-08
+
+`wavedude-cli bench --gpu --steps 2000` after the UI and format work: GPU 9-point 0.112 ms, 4th order 0.211 ms,
+with captures 0.243 and 0.334 ms; CPU 1.54 / 3.35 ms, with captures 1.89 / 3.76 ms. Unchanged within the run-to-run
+spread. The gap to the C# is the work described above (two sub-steps, four passes, the CPML, one queue), not
+overhead; nothing cheaper than those was found, so the figures stand.
+
 ## Project file size, `.wdr` against `.wdproj`
 
 2026-11-08. The 24 examples loaded and written by this program: the `.wdproj` text with its DOCTYPE against the
