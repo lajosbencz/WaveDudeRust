@@ -96,7 +96,7 @@ fn dialog(spec: &str, start: Option<&Path>) -> rfd::AsyncFileDialog {
 /// Shows a platform Open dialog and calls `then` with the picked file.
 pub fn pick_file(spec: &str, start: Option<PathBuf>, then: impl FnOnce(PathBuf) + 'static) {
 	let d = dialog(spec, start.as_deref());
-	spawn(async move {
+	spawn_in_window(async move {
 		if let Some(f) = d.pick_file().await {
 			then(f.path().to_owned());
 		}
@@ -106,7 +106,7 @@ pub fn pick_file(spec: &str, start: Option<PathBuf>, then: impl FnOnce(PathBuf) 
 /// Shows a platform Save dialog and calls `then` with the chosen path, or `None` when cancelled.
 pub fn save_file(spec: &str, proposed: Option<PathBuf>, then: impl FnOnce(Option<PathBuf>) + 'static) {
 	let d = dialog(spec, proposed.as_deref());
-	spawn(async move {
+	spawn_in_window(async move {
 		then(d.save_file().await.map(|f| f.path().to_owned()));
 	});
 }

@@ -141,7 +141,7 @@ fn launch(cx: &Cx, open: Rc<Cell<Option<WindowId>>>) {
 			closed.set(None);
 			CloseDecision::Close
 		});
-	spawn(async move {
+	spawn_in_window(async move {
 		let id = Platform::get().launch_window(config).await;
 		open.set(Some(id));
 	});

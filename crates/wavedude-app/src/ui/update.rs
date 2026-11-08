@@ -68,7 +68,7 @@ pub fn check(cx: &Cx, quiet: bool) {
 		return;
 	}
 	let cx = cx.clone();
-	spawn(async move {
+	spawn_in_window(async move {
 		let Some(result) = receive(rx).await else { return };
 		let s = cx.strings();
 		match result {
@@ -113,7 +113,8 @@ fn install(cx: &Cx, update: &Update) {
 	}
 	tracing::info!("installing update {version}");
 	let cx = cx.clone();
-	spawn(async move {
+	// Not `spawn`: that task would end with the confirm dialog, which closes before the install does.
+	spawn_in_window(async move {
 		let Some(result) = receive(rx).await else { return };
 		let s = cx.strings();
 		match result {
