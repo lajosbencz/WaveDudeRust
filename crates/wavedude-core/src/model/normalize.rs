@@ -9,8 +9,8 @@ use super::ranges as r;
 use super::{
 	BraggReflector, Coating, ColorScheme, Diffuser, Display, DisplayLayer, Ellipse, FacettedGrating, Fiber,
 	FilterLayer, FresnelLens, GrinLens, InterferenceFilter, Layer, Lens, LogicGate, Material, Measurement, Outline,
-	Part, PartKind, Polygon, Probe, Project, Rectangle, Scene, Simulation, Source, SourceArray, Stop, Triangle,
-	TriangleType, Video, YScale, ZonePlate, normalize_angle,
+	Part, PartKind, Polygon, Probe, Project, Rectangle, Scene, SimpleGrating, Simulation, Source, SourceArray, Stop,
+	Triangle, TriangleType, Video, YScale, ZonePlate, normalize_angle,
 };
 
 /// Brings a value into its valid state.
@@ -187,6 +187,7 @@ impl Normalize for Part {
 			PartKind::Outline(p) => p.normalize(),
 			PartKind::Diffuser(p) => p.normalize(),
 			PartKind::InterferenceFilter(p) => p.normalize(),
+			PartKind::SimpleGrating(p) => p.normalize(),
 			PartKind::FacettedGrating(p) => p.normalize(),
 			PartKind::Fiber(p) => p.normalize(),
 			PartKind::BraggReflector(p) => p.normalize(),
@@ -224,6 +225,17 @@ impl Normalize for InterferenceFilter {
 		self.length = r::AT_LEAST_1.clamp_u32(self.length);
 		self.width = r::AT_LEAST_1.clamp_u32(self.width);
 		self.layers.iter_mut().for_each(Normalize::normalize);
+	}
+}
+
+impl Normalize for SimpleGrating {
+	fn normalize(&mut self) {
+		self.material.normalize();
+		self.columns = r::AT_LEAST_1.clamp_u32(self.columns);
+		self.rows = r::AT_LEAST_1.clamp_u32(self.rows);
+		self.column_spacing = r::GRATING_SPACING.clamp_u32(self.column_spacing);
+		self.row_spacing = r::GRATING_SPACING.clamp_u32(self.row_spacing);
+		self.diameter = self.guarded_diameter();
 	}
 }
 

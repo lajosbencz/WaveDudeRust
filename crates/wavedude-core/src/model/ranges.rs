@@ -90,6 +90,8 @@ pub const FRESNEL_ZONES: Range = Range::new(1.0, 100.0);
 pub const RIPPLE_WAVELENGTH: Range = Range::new(2.0, 10_000.0);
 /// A profiled plate's amplitude or sigma in pixels.
 pub const PLATE_PIXELS: Range = Range::new(0.0, 10_000.0);
+/// A simple grating's column or row spacing: room for a dot of a pixel.
+pub const GRATING_SPACING: Range = Range::new(2.0, INT_MAX);
 /// An interference filter layer's thickness in pixels; 0 leaves it out.
 pub const LAYER_THICKNESS: Range = Range::new(0.0, 1000.0);
 pub const STOP_AT: Range = Range::new(0.0, 1.0);
@@ -161,6 +163,10 @@ pub const ALL: &[(&str, Range)] = &[
 	("InterferenceFilter.Width", AT_LEAST_1),
 	("FilterLayer.Thickness", LAYER_THICKNESS),
 	("FilterLayer.RefractiveIndex", INDEX),
+	("SimpleGrating.Columns", AT_LEAST_1),
+	("SimpleGrating.Rows", AT_LEAST_1),
+	("SimpleGrating.ColumnSpacing", GRATING_SPACING),
+	("SimpleGrating.RowSpacing", GRATING_SPACING),
 	("FacettedGrating.Length", AT_LEAST_1),
 	("FacettedGrating.Width", AT_LEAST_2),
 	("FacettedGrating.Pitch", RIPPLE_WAVELENGTH),
@@ -210,6 +216,7 @@ pub const DEPENDENT: &[(&str, &str)] = &[
 	("Rectangle.Width", "equals Length while Linked"),
 	("Ellipse.Width", "equals Length while Linked"),
 	("LogicGate.PortSpacing", "raised to the design's minimum when designed"),
+	("SimpleGrating.Diameter", "1 to half the smaller spacing"),
 ];
 
 /// Persisted numbers without bounds (positions, spacings, offsets).
@@ -272,6 +279,7 @@ mod tests {
 			PartKind::Diffuser(Diffuser::default()),
 			PartKind::FacettedGrating(FacettedGrating::default()),
 			PartKind::InterferenceFilter(InterferenceFilter::new_part()),
+			PartKind::SimpleGrating(SimpleGrating::default()),
 		];
 		for (i, k) in kinds.into_iter().enumerate() {
 			let mut part = Part::new(k, 10, 10);
@@ -348,6 +356,7 @@ mod tests {
 			PartKind::FresnelLens(k) => &mut k.lens.material,
 			PartKind::Diffuser(k) => &mut k.material,
 			PartKind::InterferenceFilter(k) => &mut k.material,
+			PartKind::SimpleGrating(k) => &mut k.material,
 			PartKind::FacettedGrating(k) => &mut k.material,
 			PartKind::Polygon(k) => &mut k.material,
 			PartKind::Rectangle(k) => &mut k.material,
@@ -469,13 +478,17 @@ mod tests {
 			kind!("InterferenceFilter.Width", 14, InterferenceFilter, |k| k.width),
 			kind!("FilterLayer.Thickness", 14, InterferenceFilter, |k| k.layers[0].thickness),
 			kind!("FilterLayer.RefractiveIndex", 14, InterferenceFilter, |k| k.layers[0].refractive_index),
+			kind!("SimpleGrating.Columns", 15, SimpleGrating, |k| k.columns),
+			kind!("SimpleGrating.Rows", 15, SimpleGrating, |k| k.rows),
+			kind!("SimpleGrating.ColumnSpacing", 15, SimpleGrating, |k| k.column_spacing),
+			kind!("SimpleGrating.RowSpacing", 15, SimpleGrating, |k| k.row_spacing),
 			kind!("FacettedGrating.Length", 13, FacettedGrating, |k| k.length),
 			kind!("FacettedGrating.Width", 13, FacettedGrating, |k| k.width),
 			kind!("FacettedGrating.Pitch", 13, FacettedGrating, |k| k.pitch),
 			kind!("FacettedGrating.Amplitude", 13, FacettedGrating, |k| k.amplitude),
 			field!("Stop.At", |p| p.color_schemes[0].stops[0].at),
 		];
-		for i in (0..6).chain([11, 12, 13, 14]) {
+		for i in (0..6).chain([11, 12, 13, 14, 15]) {
 			v.push((
 				"Material.RefractiveIndex",
 				Box::new(move |p: &mut Project, x: f64| material(p, i).refractive_index = x),

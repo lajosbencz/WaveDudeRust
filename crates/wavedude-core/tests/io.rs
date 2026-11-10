@@ -278,6 +278,7 @@ fn wdr_json_names_are_stable() {
 		PartKind::Outline(Outline { points: vec![Point::new(1, 2)], ..Outline::default() }),
 		PartKind::Diffuser(Diffuser::default()),
 		PartKind::InterferenceFilter(InterferenceFilter { layers: vec![FilterLayer::default()], ..Default::default() }),
+		PartKind::SimpleGrating(SimpleGrating::default()),
 		PartKind::FacettedGrating(FacettedGrating::default()),
 		PartKind::Fiber(Fiber { nodes: vec![FiberNode::default()], ..Fiber::default() }),
 		PartKind::BraggReflector(BraggReflector::default()),

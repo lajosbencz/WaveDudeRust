@@ -70,6 +70,7 @@ const PART_ELEMENTS: &[&str] = &[
 	"Outline",
 	"Diffuser",
 	"InterferenceFilter",
+	"SimpleGrating",
 	"FacettedGrating",
 	"Fiber",
 	"BraggReflector",
@@ -469,6 +470,13 @@ impl Table for FilterLayer {
 		Self::default()
 	}
 }
+kind_table!(SimpleGrating;
+	u32 "Columns" columns,
+	u32 "Rows" rows,
+	u32 "ColumnSpacing" column_spacing,
+	u32 "RowSpacing" row_spacing,
+	u32 "Diameter" diameter,
+);
 kind_table!(FacettedGrating;
 	u32 "Length" length,
 	u32 "Width" width,
@@ -621,6 +629,7 @@ fn read_part(el: &Element, version: FileVersion) -> R<Part> {
 			layers: el.children("Layer").map(fields::read).collect::<R<_>>()?,
 			..fields::read(el)?
 		}),
+		"SimpleGrating" => PartKind::SimpleGrating(SimpleGrating { material: material?, ..fields::read(el)? }),
 		"FacettedGrating" => {
 			PartKind::FacettedGrating(FacettedGrating { coating: coating?, material: material?, ..fields::read(el)? })
 		}
@@ -716,6 +725,7 @@ fn part_element_name(kind: &PartKind) -> &'static str {
 		PartKind::Outline(_) => "Outline",
 		PartKind::Diffuser(_) => "Diffuser",
 		PartKind::InterferenceFilter(_) => "InterferenceFilter",
+		PartKind::SimpleGrating(_) => "SimpleGrating",
 		PartKind::FacettedGrating(_) => "FacettedGrating",
 		PartKind::Fiber(_) => "Fiber",
 		PartKind::BraggReflector(_) => "BraggReflector",
@@ -742,6 +752,7 @@ macro_rules! with_kind {
 			PartKind::Outline($k) => $e,
 			PartKind::Diffuser($k) => $e,
 			PartKind::InterferenceFilter($k) => $e,
+			PartKind::SimpleGrating($k) => $e,
 			PartKind::FacettedGrating($k) => $e,
 			PartKind::Fiber($k) => $e,
 			PartKind::BraggReflector($k) => $e,
@@ -775,6 +786,7 @@ fn write_part(p: &Part) -> Element {
 		| PartKind::Ellipse(_)
 		| PartKind::Triangle(_)
 		| PartKind::Diffuser(_)
+		| PartKind::SimpleGrating(_)
 		| PartKind::FacettedGrating(_)
 		| PartKind::BraggReflector(_)
 		| PartKind::GrinLens(_)
@@ -1121,6 +1133,7 @@ mod tests {
 			}),
 			PartKind::Diffuser(Diffuser { sigma: 0.0, ..Diffuser::new_part() }),
 			PartKind::InterferenceFilter(InterferenceFilter::new_part()),
+			PartKind::SimpleGrating(SimpleGrating { columns: 2, ..SimpleGrating::new_part() }),
 			PartKind::FacettedGrating(FacettedGrating {
 				pattern: FacetPattern::Sinusoidal,
 				..FacettedGrating::default()

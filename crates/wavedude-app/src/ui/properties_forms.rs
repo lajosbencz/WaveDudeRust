@@ -37,6 +37,8 @@ pub struct Readouts {
 	pub roughness: Option<(f64, usize)>,
 	/// An interference filter's stack thickness.
 	pub stack: Option<f64>,
+	/// A simple grating's largest dot diameter.
+	pub max_diameter: Option<u32>,
 	pub image_found: bool,
 	pub image_size: Option<(u32, u32)>,
 	/// Scheme names for each layer's picker: (name, project's own).
@@ -121,6 +123,7 @@ pub fn readouts(app: &App, row: Row) -> Readouts {
 					r.zones = zones(z, sim);
 				}
 				PartKind::InterferenceFilter(f) => r.stack = Some(f.stack_thickness()),
+				PartKind::SimpleGrating(g) => r.max_diameter = Some(g.max_diameter()),
 				PartKind::Polygon(_)
 				| PartKind::Rectangle(_)
 				| PartKind::Ellipse(_)
@@ -533,6 +536,8 @@ enum CoatedFaces {
 	All,
 	/// A profiled plate's flat back.
 	Back,
+	/// No coating at all (a grating's dots).
+	None,
 }
 
 /// The coating's rows of `coating` (a path); greyed when `disabled`.
@@ -566,7 +571,9 @@ fn material_faces(f: &Form, kind: &str, faces: CoatedFaces) -> Element {
 	let mat = f.scope("ShapePart", &format!("{kind}.material"), "Material");
 	let mirror = mat.flag("Mirror");
 	let mut rows = vec![mat.check("Mirror"), mat.number("RefractiveIndex", 0.01).enabled(!mirror)];
-	rows.extend(coating_rows_of(f, &format!("{kind}.coating"), mirror, faces));
+	if faces != CoatedFaces::None {
+		rows.extend(coating_rows_of(f, &format!("{kind}.coating"), mirror, faces));
+	}
 	rows.push(mat.number("Absorption", 5.).enabled(!mirror));
 	rows.push(mat.number("AbsorptionRamp", 5.).enabled(!mirror));
 	section(f.s.get("SectionMaterial"), rows)
@@ -653,6 +660,23 @@ fn part(f: &Form, r: &Readouts, kind: &PartKind, open: bool) -> Vec<Element> {
 						.hint(f.s.get("TipStackThickness")),
 				]),
 				layers(f, &i.path("Layers")),
+			]);
+		}
+		PartKind::SimpleGrating(_) => {
+			let g = f.scope("SimpleGratingPart", &at, &variant);
+			let max = f64::from(r.max_diameter.unwrap_or(1));
+			out.extend([
+				material_faces(f, &at, CoatedFaces::None),
+				section(
+					f.s.get("SectionLattice"),
+					vec![
+						g.number("Columns", 1.),
+						g.number("Rows", 1.),
+						g.number("ColumnSpacing", 1.),
+						g.number("RowSpacing", 1.),
+						g.number_with("Diameter", NumberSpec::integer(1., max)),
+					],
+				),
 			]);
 		}
 		PartKind::FacettedGrating(_) => {

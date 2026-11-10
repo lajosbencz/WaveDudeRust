@@ -354,7 +354,7 @@ The Add part menu of the project tree. <figure name="menu-add-part"/>
 6. **Zone plate**: A zone plate: Fresnel zones cut for a design frequency and a focal length, every second zone an absorbing block, the central zone open or, inverted, a block. It focuses by diffraction; an optional mount stops light passing outside the diameter.
 7. **Diffuser**: A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects.
 8. **Interference filter**: An interference filter: a plate of glass or mirror with a stack of thin layers on its front, each with its own thickness and index. Waves reflected at the layers' boundaries interfere, so the stack reflects some wavelengths and passes others; a new filter is a quarter-wave stack for a wavelength of 16 pixels.
-9. **Diffraction gratings**: The gratings, in a submenu of their own: the facetted grating.
+9. **Diffraction gratings**: The gratings, in a submenu of their own: the simple 2D grating and the facetted grating.
 10. **Polygon**: A regular polygon of glass or mirror, by its number of sides and the side length.
 11. **Rectangle**: A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one.
 12. **Ellipse**: An ellipse of glass or mirror, by the length and width of its box; linked, a circle.
@@ -544,6 +544,20 @@ An interference filter: a plate of glass or mirror with a stack of thin layers o
 17. **A layer's row**: The layer's number, its thickness in pixels to two decimals (a quarter-wave layer is the wavelength divided by four times the index; a layer of 0 is left out), its refractive index, and buttons that move it up (outwards) or down (towards the plate) and remove it.
 18. **Add layer**: Appends a copy of the last layer, so a stack of alternating layers grows by copying and changing.
 19. **Remove all**: Removes every layer at once, to build another stack from nothing; Undo (Ctrl+Z) brings them back.
+
+### Simple 2D grating
+
+A simple 2D grating: a lattice of round dots, so many columns along the axis by so many rows across, each direction with its own spacing, nothing between them. The dots are mirror, or glass with an index; a wave passing the lattice is diffracted into the orders the spacings set. One column makes a line grating. A new grating is one column of 31 mirror dots, 16 pixels apart and 2 pixels across: a line grating across the axis, which a wave from the left meets. Odd counts keep the middle dot on the part's position, even counts put the position between two dots. The dots have no anti-reflection coating. Badges 1 to 6 are the shared settings.
+
+7. **Mirror**: Makes the dots mirrors instead of glass. The refractive index and the absorption are ignored then.
+8. **Refractive index**: Refractive index of the glass dots, 1.00 to 2.55 in steps of 0.01.
+9. **Absorption**: How strongly the dots absorb waves, 0 (not at all) to 255, as for the glass parts.
+10. **Absorption ramp**: Depth in pixels over which a dot's absorption rises from nothing at its rim to its full value.
+11. **Columns**: Number of dots along the axis; one column is a line grating across the axis.
+12. **Rows**: Number of dots across the axis.
+13. **Column spacing**: Distance between neighbouring columns in pixels: the grating's period along the axis.
+14. **Row spacing**: Distance between neighbouring rows in pixels: the grating's period across the axis.
+15. **Dot diameter**: Diameter of each dot in pixels, at most half the smaller spacing; the box stops there. A dot of 2 pixels covers a square of 2 x 2 pixels; a mirror dot under 2 pixels covers no pixel centre and paints nothing.
 
 ### Facetted grating
 

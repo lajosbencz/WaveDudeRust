@@ -350,6 +350,52 @@ impl InterferenceFilter {
 	}
 }
 
+/// A lattice of round dots of one material, nothing between them and no carrier.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(default)]
+pub struct SimpleGrating {
+	pub material: Material,
+	/// Dots along the axis; an odd count keeps the middle dot on the position.
+	pub columns: u32,
+	/// Dots across the axis.
+	pub rows: u32,
+	/// Pixels, at least MIN_SPACING.
+	pub column_spacing: u32,
+	pub row_spacing: u32,
+	/// Pixels, 1 to half the smaller spacing.
+	pub diameter: u32,
+}
+
+impl Default for SimpleGrating {
+	fn default() -> Self {
+		Self { material: Material::default(), columns: 1, rows: 31, column_spacing: 16, row_spacing: 16, diameter: 2 }
+	}
+}
+
+impl SimpleGrating {
+	pub const MIN_SPACING: u32 = 2;
+
+	/// A new grating is a mirror: dots that reflect everything.
+	pub fn new_part() -> Self {
+		Self { material: Material { mirror: true, ..Material::default() }, ..Self::default() }
+	}
+
+	pub fn spacing(spacing: u32) -> u32 {
+		spacing.max(Self::MIN_SPACING)
+	}
+
+	/// The largest diameter: half the smaller spacing, 1 at least.
+	pub fn max_diameter(&self) -> u32 {
+		(Self::spacing(self.column_spacing).min(Self::spacing(self.row_spacing)) / 2).max(1)
+	}
+
+	/// The diameter as the painter takes it, 1 to [`Self::max_diameter`].
+	pub fn guarded_diameter(&self) -> u32 {
+		self.diameter.clamp(1, self.max_diameter())
+	}
+}
+
 /// The relief of a facetted grating over each pitch.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -581,6 +627,7 @@ pub enum PartKind {
 	Outline(Outline),
 	Diffuser(Diffuser),
 	InterferenceFilter(InterferenceFilter),
+	SimpleGrating(SimpleGrating),
 	FacettedGrating(FacettedGrating),
 	Fiber(Fiber),
 	BraggReflector(BraggReflector),
@@ -612,6 +659,7 @@ impl PartKind {
 			PartKind::Outline(_) => "Outline",
 			PartKind::Diffuser(_) => "Diffuser",
 			PartKind::InterferenceFilter(_) => "Interference filter",
+			PartKind::SimpleGrating(_) => "Grating",
 			PartKind::FacettedGrating(_) => "Facetted grating",
 			PartKind::Fiber(_) => "Fiber",
 			PartKind::BraggReflector(_) => "Bragg reflector",
@@ -636,6 +684,7 @@ impl PartKind {
 			PartKind::Outline(p) => Some(&p.material),
 			PartKind::Diffuser(p) => Some(&p.material),
 			PartKind::InterferenceFilter(p) => Some(&p.material),
+			PartKind::SimpleGrating(p) => Some(&p.material),
 			PartKind::FacettedGrating(p) => Some(&p.material),
 			PartKind::Fiber(_)
 			| PartKind::BraggReflector(_)
@@ -659,7 +708,10 @@ impl PartKind {
 			PartKind::FacettedGrating(p) => Some(&p.coating),
 			PartKind::Fiber(p) => Some(&p.coating),
 			PartKind::GrinLens(p) => Some(&p.coating),
-			PartKind::BraggReflector(_) | PartKind::LogicGate(_) | PartKind::ZonePlate(_) => None,
+			PartKind::SimpleGrating(_)
+			| PartKind::BraggReflector(_)
+			| PartKind::LogicGate(_)
+			| PartKind::ZonePlate(_) => None,
 		}
 	}
 }

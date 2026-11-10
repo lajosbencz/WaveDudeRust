@@ -210,7 +210,7 @@ pub fn build(
 /// centre line.
 fn part_outline(p: &Part, seed: i32) -> Option<PartOutline> {
 	let frame = Frame::of(&p.base);
-	if let Some(vertices) = shapes::vertices(&p.kind).or_else(|| shapes::plate_outline(p, seed)) {
+	if let Some(vertices) = shapes::vertices(&p.kind).or_else(|| shapes::outline_of(p, seed)) {
 		return Some(PartOutline {
 			points: vertices.into_iter().map(|q| v(frame.to_canvas(q))).collect(),
 			closed: true,

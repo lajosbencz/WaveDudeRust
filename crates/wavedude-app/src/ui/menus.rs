@@ -98,7 +98,7 @@ pub const ZOOMS: [(f64, &str); 8] = [
 ];
 
 /// The Add part menu's entries: kind, string key, test id.
-pub const PART_KINDS: [(NewPart, &str, &str); 17] = [
+pub const PART_KINDS: [(NewPart, &str, &str); 18] = [
 	(NewPart::Lens, "MenuAddLens", "Lens"),
 	(NewPart::FresnelLens, "MenuAddFresnelLens", "FresnelLens"),
 	(NewPart::Fiber, "MenuAddFiber", "Fiber"),
@@ -107,6 +107,7 @@ pub const PART_KINDS: [(NewPart, &str, &str); 17] = [
 	(NewPart::ZonePlate, "MenuAddZonePlate", "ZonePlate"),
 	(NewPart::Diffuser, "MenuAddDiffuser", "Diffuser"),
 	(NewPart::InterferenceFilter, "MenuAddInterferenceFilter", "InterferenceFilter"),
+	(NewPart::SimpleGrating, "MenuAddSimpleGrating", "SimpleGrating"),
 	(NewPart::FacettedGrating, "MenuAddFacettedGrating", "FacettedGrating"),
 	(NewPart::Polygon, "MenuAddPolygon", "Polygon"),
 	(NewPart::Rectangle, "MenuAddRectangle", "Rectangle"),
@@ -226,8 +227,8 @@ pub fn part_entries(s: &Strings, prefix: &str) -> Vec<Entry> {
 	v.push(submenu(
 		"DiffractionGratings",
 		"MenuAddDiffractionGratings",
-		NewPart::FacettedGrating,
-		NewPart::FacettedGrating,
+		NewPart::SimpleGrating,
+		NewPart::SimpleGrating,
 		NewPart::FacettedGrating,
 	));
 	v.push(MenuEntry::Separator);

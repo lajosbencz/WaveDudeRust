@@ -231,6 +231,28 @@ fn interference_filter_stack() {
 	assert_eq!((red(&p, 88, 60), red(&p, 90, 60), red(&p, 100, 60)), (200, 0, 0), "glass before a mirror plate");
 }
 
+/// A simple grating is its lattice of dots: a 2 px mirror dot on a whole-pixel position is the 2 x 2 pixels about
+/// its centre, a glass dot's rim pixels take their samples' mean, and the diameter is held to half the spacing.
+#[test]
+fn simple_grating_dots() {
+	let at = |kind| Part::new(kind, 100, 60);
+	let grating = SimpleGrating { rows: 5, row_spacing: 10, ..SimpleGrating::new_part() };
+	let p = paint(&[at(PartKind::SimpleGrating(grating.clone()))]);
+	let mirrors = p.rgba.chunks(4).filter(|px| px[0] == 0).count();
+	assert_eq!(mirrors, 5 * 4, "five 2 x 2 dots");
+	assert_eq!(
+		[red(&p, 99, 59), red(&p, 100, 60), red(&p, 101, 60), red(&p, 100, 40), red(&p, 100, 82)],
+		[0, 0, 100, 0, 100]
+	);
+	let glass = SimpleGrating { material: Material::default(), diameter: 5, ..grating.clone() };
+	let p = paint(&[at(PartKind::SimpleGrating(glass))]);
+	let rim = red(&p, 97, 59);
+	assert!(red(&p, 100, 60) == 150 && rim > 100 && rim < 150, "a glass dot's rim pixel mixes: {rim}");
+	let mut wide = SimpleGrating { diameter: 9, ..grating };
+	wide.normalize();
+	assert_eq!(wide.diameter, 5, "half the smaller spacing");
+}
+
 /// A Fresnel lens of one zone is the lens; with four zones of equal width each surface restarts at the vertex
 /// plane at every zone's inner edge, so the outer zones hold glass where the whole lens's surfaces had crossed.
 #[test]
@@ -970,6 +992,17 @@ fn kinds() -> Vec<(&'static str, PartKind)> {
 				width: 120,
 				coating: coated(3.0, CoatingProfile::Layer, true, true, true),
 				..InterferenceFilter::new_part()
+			}),
+		),
+		(
+			"grating",
+			PartKind::SimpleGrating(SimpleGrating {
+				columns: 2,
+				rows: 7,
+				column_spacing: 12,
+				row_spacing: 14,
+				diameter: 4,
+				material: Material { refractive_index: 2.0, ..Material::default() },
 			}),
 		),
 		(

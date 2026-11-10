@@ -163,6 +163,7 @@ blue = max(old blue, round_even(Absorption * share))
 | Triangle | vertices `(-h/2, -B/2), (-h/2, B/2), (h/2, apexY)` | RefractiveIndex | yes |
 | Outline | polygon through the `Point`s (part frame); < 3 points paints nothing | RefractiveIndex | yes |
 | Diffuser, FacettedGrating | a plate whose front face is a profile, see below | RefractiveIndex | yes |
+| SimpleGrating | the union of the dots' discs: `radius - distance to the nearest lattice point` (rounding along each axis, clamped to the lattice) | RefractiveIndex, no band | yes |
 | InterferenceFilter | two pieces: the plate (a rectangle, the band on its back alone) and the stack, see below | plate / layers | yes |
 | Fiber | tube around a flattened Bezier path, see below | core / cladding | yes |
 | BraggReflector | rectangle `min(L/2 - |x|, W/2 - |y|)`, `L = Pairs*(T1+T2)` | layers along x | yes |

@@ -194,6 +194,15 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].kind.Rectangle.material.mirror
 .parts[].kind.Rectangle.material.refractive_index
 .parts[].kind.Rectangle.width
+.parts[].kind.SimpleGrating.column_spacing
+.parts[].kind.SimpleGrating.columns
+.parts[].kind.SimpleGrating.diameter
+.parts[].kind.SimpleGrating.material.absorption
+.parts[].kind.SimpleGrating.material.absorption_ramp
+.parts[].kind.SimpleGrating.material.mirror
+.parts[].kind.SimpleGrating.material.refractive_index
+.parts[].kind.SimpleGrating.row_spacing
+.parts[].kind.SimpleGrating.rows
 .parts[].kind.Triangle.angle_a
 .parts[].kind.Triangle.angle_b
 .parts[].kind.Triangle.base
@@ -222,6 +231,7 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].name = "Fiber 1"
 .parts[].name = "Fresnel lens 1"
 .parts[].name = "GRIN lens 1"
+.parts[].name = "Grating 1"
 .parts[].name = "Interference filter 1"
 .parts[].name = "Lens 1"
 .parts[].name = "Outline 1"

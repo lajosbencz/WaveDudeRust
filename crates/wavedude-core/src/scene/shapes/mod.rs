@@ -9,6 +9,7 @@ mod bragg;
 mod ellipse;
 mod fiber;
 mod gate;
+mod grating;
 mod grin;
 mod lens;
 mod outline;
@@ -347,6 +348,7 @@ pub fn shape_for(part: &Part, sim: &Simulation, seed: i32) -> Option<Box<dyn Par
 			Box::new(profiled::ProfiledShape::new(g.plate(), Body::of(&g.material, &coating)))
 		}
 		PartKind::InterferenceFilter(f) => Box::new(plate_shape(f.length, f.width, &f.material, &f.coating)),
+		PartKind::SimpleGrating(g) => Box::new(grating::GratingShape::new(g)),
 		PartKind::Fiber(f) => Box::new(fiber::FiberShape::new(f)?),
 		PartKind::BraggReflector(b) => Box::new(bragg::BraggShape::new(b)),
 		PartKind::GrinLens(g) => Box::new(grin::GrinShape::new(g)),
@@ -367,6 +369,7 @@ pub fn vertices(kind: &PartKind) -> Option<Vec<Vec2>> {
 		| PartKind::FresnelLens(_)
 		| PartKind::Diffuser(_)
 		| PartKind::InterferenceFilter(_)
+		| PartKind::SimpleGrating(_)
 		| PartKind::FacettedGrating(_)
 		| PartKind::Fiber(_)
 		| PartKind::BraggReflector(_)
@@ -376,12 +379,20 @@ pub fn vertices(kind: &PartKind) -> Option<Vec<Vec2>> {
 	})
 }
 
-/// The part-frame outline of a profiled plate (a diffuser, a facetted grating): the front face pixel by pixel and
-/// the back corners; None for other kinds.
-pub fn plate_outline(part: &Part, seed: i32) -> Option<Vec<Vec2>> {
+/// The part-frame outline the overlay draws for a kind that paints as no polygon of its own: a profiled plate's
+/// (a diffuser, a facetted grating) front face pixel by pixel and the back corners, the box around a simple
+/// grating's lattice with the dots' radius; None for other kinds.
+pub fn outline_of(part: &Part, seed: i32) -> Option<Vec<Vec2>> {
 	let plate = match &part.kind {
 		PartKind::Diffuser(d) => d.plate(&part.base.name, seed),
 		PartKind::FacettedGrating(g) => g.plate(),
+		PartKind::SimpleGrating(g) => {
+			let r = g.guarded_diameter() as f64 / 2.0;
+			let l =
+				(g.columns.max(1) - 1) as f64 / 2.0 * crate::model::SimpleGrating::spacing(g.column_spacing) as f64 + r;
+			let w = (g.rows.max(1) - 1) as f64 / 2.0 * crate::model::SimpleGrating::spacing(g.row_spacing) as f64 + r;
+			return Some(vec![Vec2::new(-l, -w), Vec2::new(l, -w), Vec2::new(l, w), Vec2::new(-l, w)]);
+		}
 		_ => return None,
 	};
 	Some(plate.vertices().into_iter().map(|(x, y)| Vec2::new(x, y)).collect())

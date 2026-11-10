@@ -240,6 +240,7 @@ or undo).
 | Outline | Points | Hint text (grey, wraps); one row per point: X NB, Y NB, remove BTN (in Tab cycle); BTN "Add point" (appends after the last) |
 | Diffuser | Shape; Roughness | Length NB min 1 step 10; Width NB min 2 step 10; Centre wavelength NB 2..10000 2 decimals; Amplitude NB 0..10000; Sigma NB 0..10000; Profile height RO; Ripples RO |
 | Interference filter | Shape; Layers | the material's coating rows with the back box alone; Length NB min 1 step 10; Width NB min 1 step 10; Stack thickness RO; hint text; one row per layer: Thickness NB 0..1000 2 decimals, Index NB 1..2.55, up BTN, down BTN, remove BTN; BTN "Add layer" (a copy of the last), BTN "Remove all" |
+| Simple 2D grating | Material; Lattice | Mirror, Refractive index, Absorption, Absorption ramp without coating rows; Columns NB min 1; Rows NB min 1; Column spacing NB min 2; Row spacing NB min 2; Dot diameter NB 1 to half the smaller spacing |
 | Facetted grating | Shape; Facets | the material's coating rows without the front and sides boxes; Length, Width as the diffuser's; Pattern CMB (Sawtooth, Square wave, Sinusoidal); Pitch NB 2..10000 2 decimals; Amplitude NB 0..10000 |
 | Fibre | Core | Core index NB 1..2.55 step 0.01; Core diameter NB min 2 |
 | Fibre | Cladding | Cladding index NB 1..2.55; Cladding thickness NB min 0; Cladding absorption NB 0..255 step 5; Absorption band NB 1..400; AR coating NB 0..50; Coating profile CMB; Coat the front/back/sides CB |

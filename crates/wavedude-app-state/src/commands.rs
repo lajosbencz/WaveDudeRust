@@ -13,7 +13,7 @@ use wavedude_core::model::names::{self, Named};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{
 	BraggReflector, Diffuser, Ellipse, FacettedGrating, Fiber, FresnelLens, GateKind, GrinLens, InterferenceFilter,
-	Lens, LogicGate, Outline, PartKind, Point, Polygon, Probe, Project, Rectangle, Triangle, ZonePlate,
+	Lens, LogicGate, Outline, PartKind, Point, Polygon, Probe, Project, Rectangle, SimpleGrating, Triangle, ZonePlate,
 };
 
 use wavedude_core::scene::gate_design::{self, GateDesign};
@@ -34,6 +34,7 @@ pub enum NewPart {
 	Outline,
 	Diffuser,
 	InterferenceFilter,
+	SimpleGrating,
 	FacettedGrating,
 	Fiber,
 	BraggReflector,
@@ -45,7 +46,7 @@ pub enum NewPart {
 }
 
 impl NewPart {
-	pub const ALL: [Self; 17] = [
+	pub const ALL: [Self; 18] = [
 		Self::Lens,
 		Self::FresnelLens,
 		Self::Fiber,
@@ -54,6 +55,7 @@ impl NewPart {
 		Self::ZonePlate,
 		Self::Diffuser,
 		Self::InterferenceFilter,
+		Self::SimpleGrating,
 		Self::FacettedGrating,
 		Self::Polygon,
 		Self::Rectangle,
@@ -78,6 +80,7 @@ impl NewPart {
 			Self::Outline => PartKind::Outline(Outline::default()),
 			Self::Diffuser => PartKind::Diffuser(Diffuser::new_part()),
 			Self::InterferenceFilter => PartKind::InterferenceFilter(InterferenceFilter::new_part()),
+			Self::SimpleGrating => PartKind::SimpleGrating(SimpleGrating::new_part()),
 			Self::FacettedGrating => PartKind::FacettedGrating(FacettedGrating::default()),
 			Self::Fiber => PartKind::Fiber(Fiber::default()),
 			Self::BraggReflector => PartKind::BraggReflector(BraggReflector::default()),
@@ -101,6 +104,7 @@ impl NewPart {
 			PartKind::Outline(_) => Self::Outline,
 			PartKind::Diffuser(_) => Self::Diffuser,
 			PartKind::InterferenceFilter(_) => Self::InterferenceFilter,
+			PartKind::SimpleGrating(_) => Self::SimpleGrating,
 			PartKind::FacettedGrating(_) => Self::FacettedGrating,
 			PartKind::Fiber(_) => Self::Fiber,
 			PartKind::BraggReflector(_) => Self::BraggReflector,
@@ -126,6 +130,7 @@ impl NewPart {
 			Self::Outline => "OutlinePart",
 			Self::Diffuser => "DiffuserPart",
 			Self::InterferenceFilter => "InterferenceFilterPart",
+			Self::SimpleGrating => "SimpleGratingPart",
 			Self::FacettedGrating => "FacettedGratingPart",
 			Self::Fiber => "FiberPart",
 			Self::BraggReflector => "BraggReflectorPart",

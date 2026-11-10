@@ -66,7 +66,7 @@ then right-aligned glyph buttons Move up, Move down, Remove (18 x 18 px).
 |---|---|
 | Source | the source handle glyph (ring with crosshair ticks) as 16 px icon |
 | Probe | the probe handle glyph (square) |
-| Part (non-lens) | the kind's drawing: FresnelLens (a plate with sawtooth faces), Diffuser (a plate with a wavy front), InterferenceFilter (a plate with layers before it), FacettedGrating (a plate with a sawtooth front), Fiber (S-bent fibre), BraggReflector (alternating layers), GrinLens (block with lines thickening toward the axis), ZonePlate (plate open in the middle, blocks narrowing outward), Polygon (hexagon), Rectangle, Ellipse, Triangle, Outline (free outline), XorGate/AndGate/OrGate (ANSI symbols) |
+| Part (non-lens) | the kind's drawing: FresnelLens (a plate with sawtooth faces), Diffuser (a plate with a wavy front), InterferenceFilter (a plate with layers before it), SimpleGrating (a column of dots), FacettedGrating (a plate with a sawtooth front), Fiber (S-bent fibre), BraggReflector (alternating layers), GrinLens (block with lines thickening toward the axis), ZonePlate (plate open in the middle, blocks narrowing outward), Polygon (hexagon), Rectangle, Ellipse, Triangle, Outline (free outline), XorGate/AndGate/OrGate (ANSI symbols) |
 | Lens part | its own profile, see below |
 | Colour scheme | gradient strip |
 
@@ -153,5 +153,5 @@ root shows the Project form; settings rows show their forms (`30-properties-pane
 Toolbar: `ToolAddSource`, `ToolAddProbe`, `ToolAddPart`, `ToolMoveUp`, `ToolMoveDown`, `ToolRemove`.
 Rows: `Tree:<name>`; check boxes `Enabled:<name>`; selection marker status `InSelection`.
 Menu: `AddPart:<Kind>` (Lens, FresnelLens, Fiber, BraggReflector, GrinLens, ZonePlate, Diffuser, InterferenceFilter, DiffractionGratings,
-FacettedGrating, Polygon, Rectangle, Ellipse, Triangle, Outline, OpticalLogic, XorGate, AndGate, OrGate), `ContextToggleSelected`, `ContextSelectAll`,
+SimpleGrating, FacettedGrating, Polygon, Rectangle, Ellipse, Triangle, Outline, OpticalLogic, XorGate, AndGate, OrGate), `ContextToggleSelected`, `ContextSelectAll`,
 `ContextExportProbeCsv`. Folder count: `CollectionCount`.
