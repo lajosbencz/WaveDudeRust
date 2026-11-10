@@ -3,12 +3,13 @@
 
 use std::cell::Cell;
 use std::rc::Rc;
+use wavedude_widgets::Button;
 
 use freya::prelude::*;
 use serde_json::Value;
 use wavedude_core::model::{PartKind, ranges};
 use wavedude_widgets::icon::icons;
-use wavedude_widgets::{Check, TestIdExt, TextBox};
+use wavedude_widgets::{Check, Gradient, TestIdExt, TextBox};
 use wavedude_widgets::{
 	IconView, MenuEntry, MenuItem, MenuModel, NumberBox, NumberSpec, PropertyGrid, PropertyRow, use_wave_theme,
 };
@@ -89,6 +90,8 @@ pub struct Form {
 	pub s: Strings,
 	/// The id the form's first editor takes, so Enter on a tree row or Add can focus it; taken once.
 	first_editor: Rc<Cell<Option<AccessibilityId>>>,
+	/// Number boxes show no value (a setting that does not apply).
+	blank: bool,
 }
 
 /// A number's bounds from the model's range table; open for `""` and the keys the table lists as unbounded or
@@ -130,7 +133,7 @@ thread_local! {
 
 impl Form {
 	pub fn new(cx: Cx, target: Target, json: Rc<Value>, s: Strings, first_editor: AccessibilityId) -> Self {
-		Self { cx, target, json, s, first_editor: Rc::new(Cell::new(Some(first_editor))) }
+		Self { cx, target, json, s, first_editor: Rc::new(Cell::new(Some(first_editor))), blank: false }
 	}
 
 	/// The first editor's id, for the editor that claims it first.
@@ -141,6 +144,11 @@ impl Form {
 	/// The same form over another object (a default shown greyed).
 	pub fn with_json(&self, json: Value) -> Self {
 		Self { json: Rc::new(json), ..self.clone() }
+	}
+
+	/// The same form with its number boxes empty.
+	pub fn blanked(&self) -> Self {
+		Self { blank: true, ..self.clone() }
 	}
 
 	/// The value at a dotted path, a number stepping into a list; `None` only for a field the model skips when
@@ -205,7 +213,35 @@ impl Form {
 		self.number_with(ty, member, path, spec)
 	}
 
-	pub fn number_with(&self, ty: &str, member: &str, path: &str, mut spec: NumberSpec) -> PropertyRow {
+	pub fn number_with(&self, ty: &str, member: &str, path: &str, spec: NumberSpec) -> PropertyRow {
+		PropertyRow::switchable(self.s.label(ty, member), self.number_editor(ty, member, path, spec))
+			.hint(self.s.hint(ty, member))
+	}
+
+	/// [`Self::number_with`] with `beside` right of the box.
+	pub fn number_beside(&self, ty: &str, member: &str, path: &str, spec: NumberSpec, beside: Element) -> PropertyRow {
+		let editor = self.number_editor(ty, member, path, spec);
+		let row = move |enabled| {
+			rect()
+				.horizontal()
+				.width(Size::fill())
+				.content(Content::flex())
+				.spacing(6.)
+				.cross_align(Alignment::center())
+				.child(rect().width(Size::flex(1.)).child(editor(enabled)))
+				.child(beside.clone())
+				.into_element()
+		};
+		PropertyRow::switchable(self.s.label(ty, member), row).hint(self.s.hint(ty, member))
+	}
+
+	fn number_editor(
+		&self,
+		ty: &str,
+		member: &str,
+		path: &str,
+		mut spec: NumberSpec,
+	) -> impl Fn(bool) -> Element + 'static {
 		if self.decimal_comma() {
 			spec = spec.with_decimal_separator(',');
 		}
@@ -216,7 +252,8 @@ impl Form {
 		let path = path.to_owned();
 		let test = format!("{ty}.{member}");
 		let first = self.claim_first();
-		let editor = move |enabled| {
+		let blank = self.blank;
+		move |enabled| {
 			let (form, path) = (form.clone(), path.clone());
 			let editor = NumberBox::new(
 				WritableSetter::new(value, move |v: f64| {
@@ -227,13 +264,13 @@ impl Form {
 			)
 			.width(Size::fill())
 			.enabled(enabled)
+			.blank(blank)
 			.test_id(test.clone());
 			match first {
 				Some(id) => editor.a11y_id(id).into_element(),
 				None => editor.into_element(),
 			}
-		};
-		PropertyRow::switchable(self.s.label(ty, member), editor).hint(self.s.hint(ty, member))
+		}
 	}
 
 	/// A full-width check box carrying its label.
@@ -247,6 +284,11 @@ impl Form {
 	}
 
 	pub fn check_labelled(&self, text: String, hint: &str, path: &str, test: &str) -> PropertyRow {
+		self.check_in_column("", text, hint, path, test).full_width()
+	}
+
+	/// A check box in the editor column, `label` in the label column and `text` beside the box.
+	pub fn check_in_column(&self, label: &str, text: String, hint: &str, path: &str, test: &str) -> PropertyRow {
 		let on = self.bind_as::<bool>(path);
 		let form = self.clone();
 		let (path, test) = (path.to_owned(), test.to_owned());
@@ -256,7 +298,7 @@ impl Form {
 				.test_id(test.clone())
 				.into_element()
 		};
-		PropertyRow::switchable("", editor).hint(hint).full_width()
+		PropertyRow::switchable(label, editor).hint(hint)
 	}
 
 	/// An enum combo: `variants` are the serde names, their words `Enum.<enum_ty>.<variant>`.
@@ -292,7 +334,7 @@ impl Form {
 		let value = self.bind_as::<String>("name");
 		let cx = self.cx.clone();
 		let on_text = move |name: String| cx.send(AppEvent::Command(Command::Rename { target, name }));
-		let editor = TextBox::new(value, on_text).live().id(self.claim_first());
+		let editor = TextBox::new(value, on_text).live().select_all_on_focus(true).id(self.claim_first());
 		PropertyRow::new(self.s.label(ty, "Name"), tagged(editor, format!("{ty}.Name"))).hint(self.s.hint(ty, "Name"))
 	}
 }
@@ -428,18 +470,41 @@ pub fn combo_box(
 	test: String,
 	on_pick: impl Fn(String) + 'static,
 ) -> Element {
-	let on_pick = Rc::new(on_pick);
-	ComboBox { current, items, enabled, test, on_pick: EventHandler::new(move |v: String| on_pick(v)) }.into_element()
+	swatched_combo_box(current, items, Vec::new(), enabled, test, on_pick)
 }
+
+/// A [`combo_box`] showing the gradient `swatches` gives a value before its word, closed and in the list.
+pub fn swatched_combo_box(
+	current: String,
+	items: Vec<(String, String)>,
+	swatches: Vec<(String, Gradient)>,
+	enabled: bool,
+	test: String,
+	on_pick: impl Fn(String) + 'static,
+) -> Element {
+	let on_pick = Rc::new(on_pick);
+	ComboBox { current, items, swatches, enabled, test, on_pick: EventHandler::new(move |v: String| on_pick(v)) }
+		.into_element()
+}
+
+/// `g` as a left-to-right fill.
+fn fill_of(g: &Gradient) -> LinearGradient {
+	LinearGradient::new()
+		.angle(270.)
+		.stops(g.stops.iter().map(|s| (s.color.to_color(), s.position as f32 * 100.).into()))
+}
+
+/// A scheme's swatch: 56 x 12 with a thin border.
+const SWATCH: (f32, f32) = (56., 12.);
 
 /// Width a drop-down button adds to its widest word: padding, gap and arrow.
 const COMBO_CHROME: f32 = 56.;
-const COMBO_MIN: f32 = 80.;
 
 #[derive(PartialEq)]
 struct ComboBox {
 	current: String,
 	items: Vec<(String, String)>,
+	swatches: Vec<(String, Gradient)>,
 	enabled: bool,
 	test: String,
 	on_pick: EventHandler<String>,
@@ -449,17 +514,26 @@ impl Component for ComboBox {
 	fn render(&self) -> impl IntoElement {
 		let theme = use_wave_theme();
 		let mut at = use_state(|| (0., 0.));
-		let mut cell = use_state(|| 0f32);
 		let mut widest = use_state(|| 0f32);
 		let ui = consume_context::<super::app::Ui>();
 		let ink = if self.enabled { theme.text } else { theme.text_disabled };
+		let swatch_of = |value: &str| self.swatches.iter().find(|(v, _)| v == value).map(|(_, g)| g.clone());
+		let swatch = swatch_of(&self.current).map(|g| fill_of(&g));
 		let word = self.items.iter().find(|(v, _)| *v == self.current).map_or(self.current.clone(), |(_, w)| w.clone());
-		let (items, current, on_pick) = (self.items.clone(), self.current.clone(), self.on_pick.clone());
+		let entries: Vec<MenuEntry> = self
+			.items
+			.iter()
+			.map(|(v, w)| {
+				let item = MenuItem::new(v.clone(), w.clone()).check(Check::Radio(*v == self.current));
+				match swatch_of(v) {
+					Some(g) => item.swatch(g).into(),
+					None => item.into(),
+				}
+			})
+			.collect();
+		let on_pick = self.on_pick.clone();
 		let open = move |_: Event<PressEventData>| {
-			let entries: Vec<MenuEntry> = items
-				.iter()
-				.map(|(v, w)| MenuItem::new(v.clone(), w.clone()).check(Check::Radio(*v == current)).into())
-				.collect();
+			let entries = entries.clone();
 			let pick = on_pick.clone();
 			ui.open_menu(*at.peek(), MenuModel::new(entries), move |value: String| pick.call(value));
 		};
@@ -474,32 +548,38 @@ impl Component for ComboBox {
 					.on_sized(move |e: Event<SizedEventData>| widest.set_if_modified(e.area.width()))
 					.children(self.items.iter().map(|(_, w)| label().text(w.clone()).max_lines(1).into_element())),
 			);
+		// the column's width, never narrower than the widest word
 		let natural = *widest.read();
-		let width = if natural > 0. {
-			Size::px((natural + COMBO_CHROME).max(COMBO_MIN).min(cell.read().max(COMBO_MIN)))
-		} else {
-			Size::fill()
-		};
 		rect()
 			.width(Size::fill())
 			.on_sized(move |e: Event<SizedEventData>| {
-				cell.set_if_modified(e.area.width());
 				at.set((f64::from(e.area.min_x()), f64::from(e.area.max_y())));
 			})
 			.test_id(self.test.clone())
 			.child(measure)
 			.child(
-				rect().width(width).child(
-					Button::new().compact().expanded().enabled(self.enabled).on_press(open).child(
-						rect()
-							.horizontal()
-							.width(Size::fill())
-							.content(Content::flex())
-							.cross_align(Alignment::center())
-							.child(label().width(Size::flex(1.)).text(word).max_lines(1).color(ink))
-							.child(IconView::new(icons::DROPDOWN).color(ink)),
+				rect()
+					.width(Size::fill())
+					.maybe(natural > 0., |r| r.min_width(Size::px(natural + COMBO_CHROME)))
+					.child(
+						Button::new().compact().expanded().enabled(self.enabled).on_press(open).child(
+							rect()
+								.horizontal()
+								.width(Size::fill())
+								.content(Content::flex())
+								.cross_align(Alignment::center())
+								.maybe_child(swatch.map(|g| {
+									rect()
+										.width(Size::px(SWATCH.0))
+										.height(Size::px(SWATCH.1))
+										.margin((0., 6., 0., 0.))
+										.background(g)
+										.border(Border::new().fill(theme.input_border).width(0.5))
+								}))
+								.child(label().width(Size::flex(1.)).text(word).max_lines(1).color(ink))
+								.child(IconView::new(icons::DROPDOWN).color(ink)),
+						),
 					),
-				),
 			)
 	}
 }

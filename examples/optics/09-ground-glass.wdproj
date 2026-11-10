@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="2109">
+	<Description>Ground glass: a point source of frequency 100 (16 px) shines through a diffuser, a 20 px plate of index 1.5 whose front is rough with ripples of 24 px centre wavelength, 6 px amplitude and a spread of 8 px (a relief of some 20 px, more than a wavelength of path difference), so the light behind it is speckle. The lower half repeats the path without the plate for comparison; a gently absorbing wall (absorption 16 rising over 50 px, so it reflects little) keeps the halves apart. The line probes Speckle and Smooth read the two far fields 700 px behind the diffuser.</Description>
+	<Scene Width="1280" Height="600" />
+	<Simulation Steps="2000" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="10" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="12" />
+	</Display>
+	<Source Name="Lamp (diffuser)" X="120" Y="150" Frequency="100" />
+	<Source Name="Lamp (plain)" X="120" Y="450" Frequency="100" />
+	<Rectangle Name="Wall" X="640" Y="300" RefractiveIndex="1" Absorption="16" AbsorptionRamp="50" Length="1300" Width="140" />
+	<Diffuser Name="Ground glass" X="400" Y="150" Coating="3" FrontCoated="false" SidesCoated="false" Length="20" Width="260" CenterWavelength="24" Amplitude="6" Sigma="8" />
+	<Probe Name="Speckle" Layer="Intensity" Measurement="Value" Kind="Line" AX="1100" AY="30" BX="1100" BY="210" BoxX="680" BoxY="60" />
+	<Probe Name="Smooth" Layer="Intensity" Measurement="Value" Kind="Line" AX="1100" AY="390" BX="1100" BY="570" BoxX="680" BoxY="340" />
+</Project>

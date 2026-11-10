@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="2102">
+	<Description>Grating spectrometer: a plane wave of two frequencies, 50 (32 px) and 100 (16 px), 288 px wide, passes a line grating of mirror dots with a period of 96 px (dots 48 px, half the period open, 3 periods lit), so the first orders leave at sin(theta) = wavelength / period: 19.5 degrees for 32 px and 9.6 degrees for 16 px; a lens of focal length 600 (index 1.5, diameter 440, radii 600 and -600) behind the grating brings each order to a spot in its focal plane, at 600 tan(theta) = 212 px and 101 px from the axis. The line probe Spectrum across the focal plane reads the zero order in the middle and the first orders of the two colours on either side; the 16 px source has twice the emitter density, so both colours arrive with the same amplitude.</Description>
+	<Scene Width="1280" Height="600" />
+	<Simulation Steps="2200" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="0.8" />
+	</Display>
+	<Source Name="Red (32 px)" X="80" Y="300" Frequency="50">
+		<Array SizeY="37" SpacingY="8" />
+	</Source>
+	<Source Name="Blue (16 px)" X="80" Y="300" Frequency="100">
+		<Array SizeY="73" SpacingY="4" />
+	</Source>
+	<SimpleGrating Name="Grating" X="250" Y="300" Mirror="true" Rows="5" ColumnSpacing="96" RowSpacing="96" Diameter="48" />
+	<Lens Name="Camera lens" X="400" Y="300" Coating="6" Diameter="440" R1="600" R2="-600" Thickness="90" />
+	<Probe Name="Spectrum" Layer="Intensity" Measurement="Value" Kind="Line" AX="1000" AY="40" BX="1000" BY="560" BoxX="870" BoxY="390" />
+</Project>

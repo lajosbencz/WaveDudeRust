@@ -18,7 +18,9 @@ column below is a summary; the full text is the `Hint.*` entry (identical to the
 - Layout: `FormPanel`, two columns: labels left (column as wide as the widest label, a minimum width), editors
   right filling the rest; a check box or block marked full-width spans both columns. Section headers: name over
   a rule across the width; the gap comes after a group's rows.
-- Read-outs (computed values) are plain text, bound to every input they depend on.
+- Read-outs (computed values) are plain text, bound to every input they depend on. Estimates carry a "~ "
+  prefix and one decimal ("~ 32.0 px": wavelengths, the quarter-wave coating, the outermost zone); other pixel
+  and angle read-outs show at most one decimal ("12 px", "12.5 px").
 - Edits apply live: every keystroke in a name box, every number step, every check box. Number text is applied
   on Enter or focus loss (see Number box). Each edit marks the project dirty and follows the live editing rules
   (`60-live-editing-and-runs.md`).
@@ -61,6 +63,7 @@ Text box plus a column of two small repeat buttons (up, down) on the right.
 ### Check box, combo box
 
 - Enum combos show localised words (`Enum.*`); the words follow a language switch.
+- A combo box fills the editor column, never narrower than its widest word.
 - Full-width check boxes carry their label as content.
 
 ### Colour scheme picker (combo)
@@ -110,9 +113,9 @@ Sections: Canvas, Sources from the image.
 | Label | Ctrl | Enabled / visible | Notes |
 |---|---|---|---|
 | Mode | CMB Canvas, Image | | |
-| Scene image | TB + BTN "..." + BTN save glyph + BTN X | image rows hidden in Canvas mode | "..." picks an image (PNG, BMP, JPG/JPEG, TIF/TIFF, GIF; All files) and embeds it, switching to Image mode. Save glyph writes the embedded bytes to a file (proposed under the image's name in its folder if that exists, else the project's; filter by the bytes' type); changes nothing in the project. X drops name, path and bytes; the canvas keeps the image's size as a blank canvas. Tooltips: "Pick an image file; it is embedded in the project", "Save the embedded image to a file", "Drop the embedded image and its file path; the canvas keeps the image's size". |
-| Image file | RO path, trimmed with ellipsis, plus "(not found)" when the file is missing | hidden in Canvas mode | |
-| Embedded image | RO "W x H" (or "(unreadable)") | hidden in Canvas mode | |
+| Scene image | TB (the image's name, applied per keystroke) + BTN "..." + BTN save glyph + BTN X | image rows hidden in Canvas mode | "..." picks an image (PNG, BMP, JPG/JPEG, TIF/TIFF, GIF; All files) and embeds it, switching to Image mode. Save glyph writes the embedded bytes to a file (proposed under the image's name in its folder if that exists, else the project's; filter by the bytes' type); changes nothing in the project. X drops name, path and bytes; the canvas keeps the image's size as a blank canvas. Tooltips: "Pick an image file; it is embedded in the project", "Save the embedded image to a file", "Drop the embedded image and its file path; the canvas keeps the image's size". |
+| Image file | RO path, trimmed with ellipsis, plus "(not found)" when the file is missing (a relative path is resolved against the project's folder) | hidden in Canvas mode | |
+| Embedded image | RO "W x H, N KB" (or "(unreadable)") | hidden in Canvas mode | |
 | Width | NB 8..16384 | disabled in Image mode | |
 | Height | NB 8..16384 | disabled in Image mode | |
 | Edges | CMB Open, Reflective | | |
@@ -144,7 +147,7 @@ Layer sub-form (Field, then Intensity):
 
 | Label | Ctrl |
 |---|---|
-| Colour scheme | colour scheme picker (layer's kind) |
+| Colour scheme | colour scheme picker (layer's kind); each scheme shows its gradient swatch (56 x 12) before its name, in the closed picker and in its list |
 | Brightness | NB logarithmic 0.0001..100000 (same value as the picture header's box) |
 | Black level | NB -10..1 step 0.01 |
 | Preview | CB (show this picture; same as the transport bar's show toggle) |
@@ -182,7 +185,7 @@ Sections: General, Position, Wave, Timing, Array, Random offsets added per emitt
 | Frequency | NB 0.01..255, drag 0.1, 2 decimals | |
 | Amplitude | NB 0..100, drag 0.1, 2 decimals | |
 | Phase | NB -180..180, drag 0.5, 2 decimals | |
-| Wavelength | RO "N px", "(nominal)" appended with the 9-point stencil; tooltip explains | |
+| Wavelength | RO "~ N.N px", "(nominal)" appended with the 9-point stencil; tooltip explains | |
 | Mode | CMB Continuous, Pulsed | |
 | Pulse shape | CMB Gaussian, Smoothed square | disabled when Continuous |
 | Pulse width | NB min 1 | disabled when Continuous |
@@ -236,10 +239,10 @@ or undo).
 | Lens | Shape | Diameter NB min 2 step 10; Concave (diverging) CB (flips the sign of both radii); R1 NB step 10; R2 NB step 10; Centre thickness NB min 1; Edge thickness RO |
 | Fresnel lens | Shape | the lens's rows without the Concave box; Zones NB 1..100; Zone division CMB (Equal width, Equal depth); Edge thickness RO reckons with the deepest zone |
 | Polygon | Shape | Number of sides NB 3..64; Side length NB min 2 step 10 |
-| Rectangle | Shape | Length NB min 1 step 10; Width NB min 1 step 10; link toggle "Linked" (square) |
+| Rectangle | Shape | Length NB min 1 step 10; Width NB min 1 step 10; link toggle "Linked" (square) right of both boxes, spanning the two rows |
 | Ellipse | Shape | Length, Width as rectangle; Linked (circle) |
 | Triangle | Shape | Type CMB (Equilateral, Right isosceles (45 deg), 30-60-90, Isosceles, Custom); Base NB min 2 step 10; Angle A NB 1..178 drag 0.5 1 decimal, enabled for Isosceles and Custom; Angle B same, enabled for Custom only; Apex angle RO |
-| Outline | Points | Hint text (grey, wraps); one row per point: X NB, Y NB, remove BTN (in Tab cycle); BTN "Add point" (appends after the last) |
+| Outline | Points | Hint text (grey, wraps); a heading row (X, Y) over full-width rows, one per point: X NB, Y NB sharing the width, remove BTN (in Tab cycle); BTN "Add point" (appends after the last) |
 | Diffuser | Shape; Roughness | Length NB min 1 step 10; Width NB min 2 step 10; Centre wavelength NB 2..10000 2 decimals; Amplitude NB 0..10000; Sigma NB 0..10000; Profile height RO; Ripples RO |
 | Interference filter | Shape; Layers | the material's coating rows with the back box alone; Length NB min 1 step 10; Width NB min 1 step 10; Stack thickness RO; hint text; a heading row (Thickness, Index) over full-width rows, one per layer: ordinal, Thickness NB 0..1000 2 decimals, Index NB 1..2.55, up BTN, down BTN, remove BTN; BTN "Add layer" (a copy of the last), BTN "Remove all" |
 | Simple 2D grating | Material; Lattice | Mirror, Refractive index, Absorption, Absorption ramp without coating rows; Columns NB min 1; Rows NB min 1; Column spacing NB min 2; Row spacing NB min 2; Dot diameter NB 1 to half the smaller spacing |
@@ -255,21 +258,20 @@ or undo).
 | GRIN lens | Shape | Length NB min 1 step 10; Diameter NB min 2 step 10 |
 | Zone plate | Design | Target frequency NB 1..255 drag 0.1 2 decimals; Wavelength RO; Focal length NB min 1 step 10; Inverse CB |
 | Zone plate | Shape | Diameter NB min 2 step 10; Thickness NB min 1; Anti-reflection NB 0..400; Mount CB; Mount width NB min 1 step 10, enabled when Mount |
-| Zone plate | Zones | Number of zones RO; Outermost zone RO |
+| Zone plate | Zones | Number of zones RO (the zone index at the rim plus one); Outermost zone RO |
 | XOR / AND / OR gate | Design | Design frequency NB 1..255 drag 0.1 2 decimals; Wavelength RO |
-| gate | Material | Core index, Cladding index NB 1..2.55; AR coating NB 0..50; AR on input side CB; AR on output side CB; Quarter-wave coating RO |
-| gate | Shape | Port spacing NB 2..2000 step 2 (shows the spacing used: a too-small value is raised) |
-| gate | Outputs active | Upper output CB, Lower output CB; each check box's content is the label plus the output's function word for this gate kind (`Enum.GateOutput.*`: "XOR: dark with both on", "AND: 4 x as bright with both on", "OR: as bright for one as for two", "Remainder: 3 x with both on"; the gate model says which output carries which). |
+| gate | Material | Core index, Cladding index NB 1..2.55; AR coating NB 0..50; AR on input side CB; AR on output side CB; Quarter-wave coating RO, lambda / (4 sqrt(core index)) |
+| gate | Shape | Port spacing NB 2..2000 step 2 (shows the spacing the design uses, a too-small value raised; an edit stores the typed value) |
+| gate | Outputs active | Upper output, Lower output: label, then a CB whose content is the output's function word for this gate kind (`Enum.GateOutput.*`: "XOR: dark with both on", "AND: 4 x as bright with both on", "OR: as bright for one as for two", "Remainder: 3 x with both on"). Upper / lower: XOR gate Xor / And, AND gate And / Xor, OR gate Or / Remainder. |
 | gate | Layout | Core width, Coupler gap, Coupler length, Total length: RO |
-| gate | Ports | Input A, Input B, Upper output, Lower output: RO canvas coordinates |
+| gate | Ports | Input A, Input B, Upper output, Lower output: RO canvas coordinates "(x, y)" |
 
-The three gate kinds share one form. Read-outs show units (px, deg) as in the figures. TODO(verify) exact
-read-out formats (`Converters/LogicGateLayoutConverter.cs`, `ZonePlateConverter.cs`, `LensEdgeConverter.cs`,
-`TriangleApexConverter.cs`, `WavelengthConverter.cs`).
+The three gate kinds share one form. Read-outs show units (px, deg) as in the figures, formatted as under
+Pane behaviour.
 
 ### Probe
 
-Sections: General, Measurement, Position, Graph, Axes.
+Sections: General (Name, Active, Start after step), Measurement (Detector to Kind), Position, Graph, Axes.
 
 | Label | Ctrl |
 |---|---|
@@ -288,9 +290,9 @@ Sections: General, Measurement, Position, Graph, Axes.
 | Box x, Box y | NB min 0 |
 | Box width | NB 60..4096 step 10 (custom only per hint) |
 | Box height | NB 30..4096 step 10 (custom only per hint) |
-| Step axis | CMB Running, Full; enabled for a series (a point probe, a counting detector) |
-| Window | NB 10..1,000,000 step 10; enabled for a series |
-| Auto-scale steps | CB; enabled for a series |
+| Step axis | CMB Running, Full; enabled for a point probe |
+| Window | NB 10..1,000,000 step 10 |
+| Auto-scale steps | CB; enabled for a point probe |
 | Auto-scale values | CB |
 | Value axis | CMB Linear, Logarithmic; enabled on the intensity layer |
 | Decades | NB 1..12; enabled for a logarithmic axis |
@@ -306,9 +308,9 @@ Sections: General, Stops.
 | Name | TB | Renaming repoints every layer that used the old name (pictures keep their colours). Tree row renames live. |
 | Kind | CMB Unspecified, Field, Intensity | pickers list it for that kind only |
 | Description | TB wraps, no newline | |
-| Based on | CMB with gradient + name rows (shared schemes and the project's other schemes) | Picking copies stops, kind, category, description into this scheme; the choice stays shown until the next pick. |
-| (gradient) | the scheme's gradient bar, above the stop rows (TODO(verify) against the figure) |
-| Stop rows | Position NB 0..1 step 0.01 (64 px wide); colour swatch button; hex TB "#RRGGBB" (Enter applies); remove BTN | |
+| Based on | CMB with gradient + name rows (shared schemes and the project's other schemes); first row of Stops | Picking copies stops, kind, category, description into this scheme; the choice stays shown until the next pick. |
+| (gradient) | the scheme's gradient bar with its stop markers, above the stop rows |
+| Stop rows | Position NB 0..1 step 0.01, up to 3 decimals (64 px wide); colour swatch button; hex TB "#RRGGBB" (Enter applies); remove BTN | |
 | Add stop | BTN | Inserts a stop in the widest gap with the gradient's colour there. |
 
 Loading a sampled table (many stops) slims it to its bends (picker "Load from file..."); the scheme form has

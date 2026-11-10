@@ -204,6 +204,9 @@ pub struct AppState<B: Backend> {
 	pub codec_dir: Option<PathBuf>,
 	revisions: Revisions,
 	observed: Option<Observed>,
+	/// Bumped when the tree is to give the current row the keyboard focus: an opened project, a remove, a move,
+	/// an undo that left nothing selected. It moves with the document revision.
+	reveals: u64,
 	use_gpu: Arc<AtomicBool>,
 	pending: Option<Guarded>,
 	/// The export hint of a project without a file: this session's alone.
@@ -261,13 +264,14 @@ impl<B: Backend> AppState<B> {
 			settings_path,
 			strings,
 			document,
-			selection: Selection::default(),
+			selection: Selection::root(),
 			live,
 			schemes: SchemeStore::default(),
 			first_start: false,
 			codec_dir: None,
 			revisions: Revisions::default(),
 			observed: None,
+			reveals: 0,
 			use_gpu,
 			pending: None,
 			session_hint: ExportHint::default(),
@@ -470,9 +474,11 @@ impl<B: Backend> AppState<B> {
 	/// Applies a model command as one edit.
 	pub fn apply(&mut self, command: Command, now: Instant) -> Result<ChangeKind, CommandError> {
 		let scene = self.touches_scene(&command);
+		let reveal = matches!(command, Command::Remove { .. } | Command::Reorder { .. });
 		let change = commands::apply(&mut self.document.project, &mut self.selection, command)?;
 		let kind = change.kind;
 		self.record(change, scene, now);
+		self.reveals += u64::from(reveal);
 		Ok(kind)
 	}
 
@@ -504,7 +510,8 @@ impl<B: Backend> AppState<B> {
 		}
 		self.document = document;
 		self.document_changed(true);
-		self.selection = Selection::default();
+		self.selection = Selection::root();
+		self.reveals += 1;
 		self.session_hint = ExportHint::default();
 		self.live.project_replaced(&self.document.project, now);
 	}
@@ -626,6 +633,10 @@ impl<B: Backend> AppState<B> {
 					let p = &self.document.project;
 					self.document_changed(before.scene != p.scene || before.parts != p.parts);
 					self.selection = self.selection.follow(&before, &self.document.project);
+					if self.selection.current().is_none() {
+						self.selection = Selection::root();
+						self.reveals += 1;
+					}
 					let kind = commands::classify(&before, &self.document.project);
 					self.live.on_change(kind, &self.document.project, Some("undo or redo".into()), now);
 				}
@@ -899,6 +910,11 @@ impl<B: Backend> AppState<B> {
 	/// Selection helper for the pictures: a click on empty space.
 	pub fn deselect(&mut self) {
 		self.selection.clear();
+	}
+
+	/// See the field; read with the document topic.
+	pub fn reveals(&self) -> u64 {
+		self.reveals
 	}
 
 	/// The row the properties pane shows.

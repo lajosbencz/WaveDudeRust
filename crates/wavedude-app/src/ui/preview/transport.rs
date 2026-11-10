@@ -6,12 +6,13 @@
 
 use std::borrow::Cow;
 use std::rc::Rc;
+use wavedude_widgets::Button;
 
 use freya::prelude::*;
 use serde_json::json;
 use wavedude_widgets::{
-	Callback, Icon, IconView, NumberBox, NumberSpec, TestIdExt, Timeline, TimelineEvent, TimelineModel, icon::icons,
-	use_wave_theme,
+	Callback, Icon, IconView, NumberBox, NumberSpec, TestIdExt, Timeline, TimelineEvent, TimelineModel, Tip,
+	icon::icons, use_wave_theme,
 };
 
 use crate::ui::shared::{App, Shared, Topics};
@@ -46,7 +47,7 @@ const SIDE_BY_SIDE: Icon =
 	Icon::path("M0.5 3.5 L6.5 3.5 L6.5 11.5 L0.5 11.5 Z M8.5 3.5 L14.5 3.5 L14.5 11.5 L8.5 11.5 Z");
 const STACKED: Icon = Icon::path("M2.5 0.5 L12.5 0.5 L12.5 6.5 L2.5 6.5 Z M2.5 8.5 L12.5 8.5 L12.5 14.5 L2.5 14.5 Z");
 
-/// A 23 px tool button: an icon, a tooltip, pressed while checked, greyed and half transparent while disabled,
+/// A 22 px tool button with 1 px side margins: an icon, a tooltip, pressed while checked, greyed while disabled,
 /// an accent border under keyboard focus; Enter or Space presses it.
 #[derive(Clone, PartialEq)]
 pub struct ToolButton {
@@ -110,12 +111,12 @@ impl Component for ToolButton {
 			.a11y_focusable(enabled)
 			.a11y_role(AccessibilityRole::Button)
 			.test_id(self.test_id.clone())
-			.width(Size::px(theme.row_height))
-			.height(Size::px(theme.row_height))
+			.width(Size::px(BUTTON_SIZE))
+			.height(Size::px(BUTTON_SIZE))
+			.margin((0., 1.))
 			.center()
 			.background(background)
 			.border(border)
-			.opacity(if enabled { 1. } else { 0.5 })
 			.on_pointer_enter(move |_| hover.set(true))
 			.on_pointer_leave(move |_| hover.set(false))
 			.on_pointer_press(move |_| {
@@ -133,9 +134,11 @@ impl Component for ToolButton {
 				}
 			})
 			.child(IconView::new(self.icon.clone()).color(color));
-		TooltipContainer::new(Tooltip::new_text(self.tooltip.clone())).child(button)
+		Tip::new(self.tooltip.clone()).child(button)
 	}
 }
+
+const BUTTON_SIZE: f32 = 22.;
 
 /// The timeline's model from the playback state: frames, position, the range in frames, the frames made.
 pub fn timeline_model(playback: &Playback, available: Rc<[(u32, u32)]>, live: bool) -> TimelineModel {
@@ -167,7 +170,10 @@ pub struct Transport;
 
 impl Component for Transport {
 	fn render(&self) -> impl IntoElement {
-		rect().width(Size::fill()).child(TimelineBar).child(TransportBar)
+		rect()
+			.width(Size::fill())
+			.child(rect().width(Size::fill()).padding((2., 4.)).child(TimelineBar))
+			.child(TransportBar)
 	}
 }
 
@@ -286,16 +292,20 @@ fn transport_bar(shared: &Shared) -> impl IntoElement {
 		}
 	};
 	let speed_shared = shared.clone();
-	let divider = || rect().width(Size::px(1.)).height(Size::px(16.)).background(theme.hairline);
+	let divider =
+		|| rect().width(Size::px(1.)).height(Size::px(BUTTON_SIZE - 4.)).margin((2., 4.)).background(theme.border);
 	rect()
 		.horizontal()
 		.width(Size::fill())
-		.height(Size::px(theme.row_height + 4.))
 		.cross_align(Alignment::center())
-		.padding((2., 4., 2., 4.))
-		.spacing(2.)
+		.padding((3., 4.))
+		.border(
+			Border::new()
+				.fill(theme.border)
+				.width(BorderWidth { top: 1., right: 0., bottom: 0., left: 0. })
+				.alignment(BorderAlignment::Inner),
+		)
 		.content(Content::flex())
-		.background(theme.tool_window_background)
 		.color(theme.text)
 		.font_size(theme.font_size)
 		.child(run)
@@ -312,8 +322,10 @@ fn transport_bar(shared: &Shared) -> impl IntoElement {
 				.enabled(view.playing)
 				.test_id("PreviewPause"),
 		)
+		.child(divider())
 		.child(ToolButton::new(PREVIOUS, tip(5), send(AppEvent::StepFrames(-1))).test_id("PreviewStepBack"))
 		.child(ToolButton::new(NEXT, tip(6), send(AppEvent::StepFrames(1))).test_id("PreviewStepForward"))
+		.child(divider())
 		.child(ToolButton::new(IN_POINT, tip(7), send(AppEvent::SetInPoint)).test_id("PreviewSetIn"))
 		.child(ToolButton::new(OUT_POINT, tip(8), send(AppEvent::SetOutPoint)).test_id("PreviewSetOut"))
 		.child(
@@ -332,29 +344,21 @@ fn transport_bar(shared: &Shared) -> impl IntoElement {
 				.checked(view.live)
 				.test_id("PreviewLive"),
 		)
+		.child(divider())
 		.child(
-			rect()
-				.horizontal()
-				.cross_align(Alignment::center())
-				.spacing(6.)
-				.padding((0., 6., 0., 6.))
-				.child(
-					TooltipContainer::new(Tooltip::new_text(tip(12)))
-						.child(label().text(view.frames).test_id("PreviewFrame")),
-				)
-				.child(
-					TooltipContainer::new(Tooltip::new_text(tip(13)))
-						.child(label().text(view.step).color(theme.text_dim).test_id("PreviewStep")),
-				),
+			Tip::new(tip(12)).child(rect().margin((0., 4.)).child(label().text(view.frames).test_id("PreviewFrame"))),
 		)
+		.child(Tip::new(tip(13)).child(
+			rect().margin((0., 4.)).child(label().text(view.step).color(theme.text_disabled).test_id("PreviewStep")),
+		))
 		.child(rect().width(Size::flex(1.)))
-		.child(label().text(tip(19)).color(theme.text_dim))
+		.child(rect().margin((0., 4., 0., 8.)).child(label().text(tip(19))))
 		.child(
 			NumberBox::new(
 				WritableSetter::new(view.speed, move |v: f64| {
 					speed_shared.send(AppEvent::SetSpeed(v));
 				}),
-				NumberSpec::linear(SPEED_RANGE.0, SPEED_RANGE.1, 0.25).with_decimals(2),
+				NumberSpec::linear(SPEED_RANGE.0, SPEED_RANGE.1, 0.25),
 			)
 			.width(Size::px(64.))
 			.tooltip(tip(14))
@@ -372,7 +376,6 @@ fn transport_bar(shared: &Shared) -> impl IntoElement {
 				.checked(view.show_intensity)
 				.test_id("PreviewShowIntensity"),
 		)
-		.child(divider())
 		.child(
 			ToolButton::new(SIDE_BY_SIDE, tip(17), orient(Orientation::Horizontal))
 				.checked(view.side_by_side)
@@ -403,7 +406,7 @@ impl Component for SpeedPresets {
 			let entries: Vec<wavedude_widgets::MenuEntry<f64>> = SPEED_PRESETS
 				.iter()
 				.map(|&p| {
-					wavedude_widgets::MenuItem::with_action(format!("speed:{p}"), format!("{p}x"), p)
+					wavedude_widgets::MenuItem::with_action(format!("speed:{p}"), p.to_string(), p)
 						.check(wavedude_widgets::Check::Radio((speed - p).abs() < 1e-9))
 						.into()
 				})
@@ -413,7 +416,7 @@ impl Component for SpeedPresets {
 				shared.send(AppEvent::SetSpeed(p));
 			});
 		};
-		TooltipContainer::new(Tooltip::new_text(self.tooltip.clone())).child(
+		Tip::new(self.tooltip.clone()).child(
 			rect()
 				.on_sized(move |e: Event<SizedEventData>| {
 					at.set((f64::from(e.area.min_x()), f64::from(e.area.max_y())));

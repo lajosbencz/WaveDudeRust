@@ -7,7 +7,7 @@ use freya::prelude::*;
 use wavedude_core::model::{Lens, Part, PartKind, Project};
 use wavedude_widgets::icon::icons;
 use wavedude_widgets::tree::{DropPosition, RowKind, reorder_index};
-use wavedude_widgets::{Icon, IconView, TreeAction, TreeRow, TreeSelection, TreeView, use_wave_theme};
+use wavedude_widgets::{Button, Icon, IconView, Tip, TreeAction, TreeRow, TreeSelection, TreeView, use_wave_theme};
 
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, NewPart};
@@ -360,9 +360,17 @@ fn drop_on_picture(cx: &Cx, item: ItemRef, at: (f64, f64)) {
 	cx.send(AppEvent::Paste { text, target, place_at });
 }
 
+/// What a toolbar button shows beside its icon: nothing, its word, or its word and the caret of a button that
+/// opens a menu.
+enum Caption {
+	None,
+	Word(String),
+	Menu(String),
+}
+
 fn tool_button(
 	icon: Icon,
-	text: Option<String>,
+	caption: Caption,
 	tip: String,
 	enabled: bool,
 	test: &'static str,
@@ -370,12 +378,16 @@ fn tool_button(
 ) -> Element {
 	let theme = use_wave_theme();
 	let ink = if enabled { theme.text } else { theme.text_disabled };
-	let mut content =
+	let content =
 		rect().horizontal().cross_align(Alignment::center()).spacing(4.).child(IconView::new(icon).color(ink));
-	if let Some(text) = text {
-		content = content.child(label().text(text).color(ink));
-	}
-	TooltipContainer::new(Tooltip::new_text(tip))
+	let content = match caption {
+		Caption::None => content,
+		Caption::Word(text) => content.child(label().text(text).color(ink)),
+		Caption::Menu(text) => {
+			content.child(label().text(text).color(ink)).child(IconView::new(icons::DROPDOWN).color(ink))
+		}
+	};
+	Tip::new(tip)
 		.child(super::properties::tagged(
 			Button::new().flat().compact().enabled(enabled).on_press(on_press).child(content),
 			test,
@@ -452,6 +464,24 @@ impl Component for ProjectPane {
 				}
 			});
 		}
+		// Next's reveal: an opened project, a remove or a move gives the tree the keyboard focus once its rows are
+		// laid out.
+		{
+			let shared = cx.shared.clone();
+			let tree_id = cx.ui.tree_id;
+			let reveals = use_memo(move || shared.read(Topics::DOCUMENT, |a| a.reveals()));
+			let mut seen = use_state(|| *reveals.peek());
+			use_side_effect(move || {
+				let n = *reveals.read();
+				if n != *seen.peek() {
+					seen.set(n);
+					spawn(async move {
+						timer(std::time::Duration::from_millis(32)).await;
+						tree_id.request_focus();
+					});
+				}
+			});
+		}
 		let mut pointer = use_state(|| (0., 0.));
 		let mut part_button = use_state(|| (0., 0.));
 		let mut probe_button = use_state(|| (0., 0.));
@@ -465,12 +495,13 @@ impl Component for ProjectPane {
 		let toolbar = rect()
 			.horizontal()
 			.width(Size::fill())
+			.overflow(Overflow::Clip)
 			.padding(2.)
 			.spacing(2.)
 			.cross_align(Alignment::center())
 			.child(tool_button(
 				icons::SOURCE,
-				Some(w[0].clone()),
+				Caption::Word(w[0].clone()),
 				w[3].clone(),
 				true,
 				"ToolAddSource",
@@ -481,23 +512,30 @@ impl Component for ProjectPane {
 					.on_sized(move |e: Event<SizedEventData>| {
 						probe_button.set((f64::from(e.area.min_x()), f64::from(e.area.max_y())))
 					})
-					.child(tool_button(icons::PROBE, Some(w[1].clone()), w[4].clone(), true, "ToolAddProbe", {
-						let cx = cx.clone();
-						move |_| open_probe_menu(&cx, *probe_button.peek())
-					})),
+					.child(tool_button(
+						icons::PROBE,
+						Caption::Menu(w[1].clone()),
+						w[4].clone(),
+						true,
+						"ToolAddProbe",
+						{
+							let cx = cx.clone();
+							move |_| open_probe_menu(&cx, *probe_button.peek())
+						},
+					)),
 			)
 			.child(
 				rect()
 					.on_sized(move |e: Event<SizedEventData>| {
 						part_button.set((f64::from(e.area.min_x()), f64::from(e.area.max_y())))
 					})
-					.child(tool_button(PART_ICON, Some(w[2].clone()), w[5].clone(), true, "ToolAddPart", {
+					.child(tool_button(PART_ICON, Caption::Menu(w[2].clone()), w[5].clone(), true, "ToolAddPart", {
 						let cx = cx.clone();
 						move |_| open_part_menu(&cx, *part_button.peek())
 					})),
 			)
 			.child(rect().width(Size::px(1.)).height(Size::px(16.)).background(theme.hairline))
-			.child(tool_button(icons::CHEVRON_UP, None, w[6].clone(), snap.can_up, "ToolMoveUp", {
+			.child(tool_button(icons::CHEVRON_UP, Caption::None, w[6].clone(), snap.can_up, "ToolMoveUp", {
 				let cx = cx.clone();
 				move |_| {
 					if let Some(t) = current {
@@ -505,7 +543,7 @@ impl Component for ProjectPane {
 					}
 				}
 			}))
-			.child(tool_button(icons::CHEVRON_DOWN, None, w[7].clone(), snap.can_down, "ToolMoveDown", {
+			.child(tool_button(icons::CHEVRON_DOWN, Caption::None, w[7].clone(), snap.can_down, "ToolMoveDown", {
 				let cx = cx.clone();
 				move |_| {
 					if let Some(t) = current {
@@ -513,7 +551,7 @@ impl Component for ProjectPane {
 					}
 				}
 			}))
-			.child(tool_button(icons::MINUS, None, w[8].clone(), snap.can_remove, "ToolRemove", {
+			.child(tool_button(icons::MINUS, Caption::None, w[8].clone(), snap.can_remove, "ToolRemove", {
 				let cx = cx.clone();
 				move |_| {
 					if let Some(target) = current {
@@ -538,7 +576,7 @@ impl Component for ProjectPane {
 				rect()
 					.width(Size::fill())
 					.height(Size::flex(1.))
-					.child(TreeView::new(snap.rows, tree, on_tree).test_id("ProjectTree")),
+					.child(TreeView::new(snap.rows, tree, on_tree).a11y_id(cx.ui.tree_id).test_id("ProjectTree")),
 			)
 	}
 }

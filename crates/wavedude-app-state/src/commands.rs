@@ -522,7 +522,7 @@ fn remove_at(project: &mut Project, item: ItemRef) {
 }
 
 /// Removes the target or the selection; the user stays at the slot of the last removed: the item that took
-/// the slot is selected, else the folder.
+/// the slot, else the one above it, else the folder of the emptied list.
 fn remove(project: &mut Project, selection: &mut Selection, target: ItemRef) -> Result<Change, CommandError> {
 	check(project, target)?;
 	let targets = selection.targets(target);
@@ -532,10 +532,9 @@ fn remove(project: &mut Project, selection: &mut Selection, target: ItemRef) -> 
 		remove_at(project, *t);
 	}
 	let slot = last.index - targets.iter().filter(|t| t.kind == last.kind && t.index < last.index).count();
-	if slot < last.kind.len(project) {
-		selection.select(Row::Item(ItemRef::new(last.kind, slot)));
-	} else {
-		selection.select(Row::Folder(last.kind));
+	match last.kind.len(project) {
+		0 => selection.select(Row::Folder(last.kind)),
+		len => selection.select(Row::Item(ItemRef::new(last.kind, slot.min(len - 1)))),
 	}
 	Ok(Change::step(kind).noted(format!("removed {} items", targets.len())))
 }
@@ -924,7 +923,11 @@ mod tests {
 		assert_eq!(p.sources.len(), 4);
 		assert_eq!(s.current(), Some(Row::Item(ItemRef::new(ItemKind::Source, 3))), "Source 4 took the slot");
 		run(&mut p, &mut s, Command::Remove { target: ItemRef::new(ItemKind::Source, 3) });
-		assert_eq!(s.current(), Some(Row::Folder(ItemKind::Source)));
+		assert_eq!(s.current(), Some(Row::Item(ItemRef::new(ItemKind::Source, 2))), "the last row: the one above");
+		for _ in 0..3 {
+			run(&mut p, &mut s, Command::Remove { target: ItemRef::new(ItemKind::Source, 0) });
+		}
+		assert_eq!(s.current(), Some(Row::Folder(ItemKind::Source)), "an emptied list: its folder");
 	}
 
 	#[test]

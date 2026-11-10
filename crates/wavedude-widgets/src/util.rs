@@ -1,5 +1,6 @@
 //! Small helpers shared by the views: test ids, modifier tracking, key matching.
 
+use crate::tooltip::Tip;
 use freya::prelude::*;
 
 /// Attaches a stable test id (AccessKit author id) to an element, the port of WPF's AutomationId.
@@ -69,5 +70,5 @@ pub(crate) fn focus_border(focus: Focus, color: Color) -> Option<Border> {
 pub(crate) fn wide_tooltip(text: String, inner: impl IntoElement) -> Element {
 	let mut layout = LayoutData::default();
 	layout.layout.width = Size::fill();
-	TooltipContainer::new(Tooltip::new_text(text)).layout(layout).child(inner).into_element()
+	Tip::new(text).layout(layout).child(inner).into_element()
 }

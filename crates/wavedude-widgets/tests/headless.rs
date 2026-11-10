@@ -1,6 +1,6 @@
 use freya::prelude::*;
 use freya_testing::prelude::*;
-use wavedude_widgets::{NumberBox, NumberSpec};
+use wavedude_widgets::{NumberBox, NumberSpec, TextBox};
 
 fn find_text(test: &TestingRunner, text: &str) -> bool {
 	test.find(|_, element| Label::try_downcast(element).filter(|l| l.text.as_ref() == text)).is_some()
@@ -84,7 +84,7 @@ fn menu_panels_fit_their_entries_and_stay_inside_the_window() {
 				"tools",
 				"_Tools",
 				vec![
-					MenuItem::new("tools.x", "An entry too long under the Tools header").into(),
+					MenuItem::new("tools.x", "An entry much too long under the Tools header").into(),
 					Submenu::new("tools.more", "_More", vec![MenuItem::new("tools.m1", "One").into()]).into(),
 				],
 			)
@@ -149,4 +149,124 @@ fn menu_panels_fit_their_entries_and_stay_inside_the_window() {
 	let more = area_of(&test, "tools.more");
 	let m1 = area_of(&test, "tools.m1");
 	assert!(m1.max_x() <= more.min_x() + 4. && m1.min_x() >= 0., "submenu flipped to the left: {m1:?} of {more:?}");
+}
+
+#[test]
+fn arrows_walk_a_menu_opened_by_a_click() {
+	use wavedude_widgets::menu::{MenuBar, MenuItem, MenuModel, Submenu};
+	fn app() -> impl IntoElement {
+		wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
+		let mut last = use_state(String::new);
+		let model = MenuModel::new(vec![
+			Submenu::new(
+				"file",
+				"_File",
+				vec![
+					MenuItem::new("file.open", "_Open").into(),
+					MenuItem::new("file.save", "_Save").into(),
+					Submenu::new("file.recent", "_Recent", vec![MenuItem::new("file.r1", "One").into()]).into(),
+				],
+			)
+			.into(),
+			Submenu::new("edit", "_Edit", vec![MenuItem::new("edit.x", "Thing").into()]).into(),
+		]);
+		rect()
+			.width(Size::fill())
+			.height(Size::fill())
+			.child(MenuBar::new(model, move |a: String| last.set(a)))
+			.child(label().text(format!("last={}", last.read())))
+	}
+	let key = |test: &mut TestingRunner, k: NamedKey| {
+		test.press_key(Key::Named(k));
+		test.sync_and_update();
+	};
+	let mut test = launch_test(app);
+	test.sync_and_update();
+	test.click_cursor((15., 10.));
+	test.sync_and_update();
+	key(&mut test, NamedKey::ArrowDown);
+	key(&mut test, NamedKey::ArrowDown);
+	key(&mut test, NamedKey::Enter);
+	assert!(find_text(&test, "last=file.save"));
+
+	test.click_cursor((15., 10.));
+	test.sync_and_update();
+	key(&mut test, NamedKey::ArrowUp);
+	key(&mut test, NamedKey::ArrowRight);
+	key(&mut test, NamedKey::Enter);
+	assert!(find_text(&test, "last=file.r1"));
+
+	test.click_cursor((15., 10.));
+	test.sync_and_update();
+	key(&mut test, NamedKey::ArrowRight);
+	key(&mut test, NamedKey::ArrowDown);
+	key(&mut test, NamedKey::Enter);
+	assert!(find_text(&test, "last=edit.x"));
+}
+
+fn text_app_body(select_all: bool) -> Element {
+	{
+		wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
+		let mut value = use_state(|| "Source 1".to_string());
+		let committed = value.read().clone();
+		rect()
+			.child(
+				TextBox::new(committed.clone(), move |t: String| value.set(t)).select_all_on_focus(select_all).live(),
+			)
+			.child(label().text(format!("value={committed}")))
+			.into()
+	}
+}
+
+#[test]
+fn typing_into_a_focused_text_box_inserts_at_the_caret() {
+	let mut test = launch_test(|| text_app_body(false));
+	test.sync_and_update();
+	test.click_cursor((200., 10.));
+	test.write_text("!");
+	test.sync_and_update();
+	assert!(find_text(&test, "value=Source 1!"));
+}
+
+#[test]
+fn focusing_selects_the_whole_text_so_typing_replaces_it() {
+	let mut test = launch_test(|| text_app_body(true));
+	test.sync_and_update();
+	test.click_cursor((20., 10.));
+	test.sync_and_update();
+	test.sync_and_update();
+	test.write_text("Lamp");
+	test.sync_and_update();
+	test.sync_and_update();
+	assert!(find_text(&test, "value=Lamp"));
+	test.click_cursor((10., 10.));
+	test.sync_and_update();
+	test.sync_and_update();
+	test.write_text("x");
+	test.sync_and_update();
+	let shown =
+		test.find(|_, e| Label::try_downcast(e).filter(|l| l.text.starts_with("value")).map(|l| l.text.to_string()));
+	assert!(shown.is_some_and(|t| t.contains("amp") && t.contains('x')), "a later click places the caret");
+}
+
+#[test]
+fn escape_puts_the_old_text_back_in_a_text_box() {
+	fn app() -> impl IntoElement {
+		wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
+		let mut value = use_state(|| "Source 1".to_string());
+		let committed = value.read().clone();
+		rect()
+			.child(TextBox::new(committed.clone(), move |t: String| value.set(t)))
+			.child(label().text(format!("value={committed}")))
+	}
+	let mut test = launch_test(app);
+	test.sync_and_update();
+	test.click_cursor((200., 10.));
+	test.write_text("abc");
+	test.sync_and_update();
+	test.press_key(Key::Named(NamedKey::Escape));
+	test.sync_and_update();
+	test.press_key(Key::Named(NamedKey::Enter));
+	test.sync_and_update();
+	assert!(find_text(&test, "value=Source 1"));
 }

@@ -3,6 +3,7 @@
 
 use freya::prelude::*;
 use wavedude_widgets::dock::DockLabels;
+use wavedude_widgets::theme::UiFontExt;
 use wavedude_widgets::{ContextMenuHost, DockHost, DockLayout, DockPane, MenuBar, PaneGroup, Side, use_wave_theme};
 
 use wavedude_app_state::Event as AppEvent;
@@ -25,11 +26,10 @@ pub fn default_side(id: &str) -> Side {
 	}
 }
 
-/// The first start's arrangement: Project over Properties (1 : 2) in a left column a quarter of the default
-/// window wide; Messages hidden at the bottom.
+/// The first start's arrangement: Project over Properties (1 : 2) in a left column a quarter of the window
+/// wide (the dock's edge share); Messages hidden at the bottom.
 pub fn default_layout() -> DockLayout {
 	let mut l = DockLayout::default();
-	l.left.size = 320.;
 	l.left.groups = vec![PaneGroup::new(vec!["project".into()], 1.), PaneGroup::new(vec!["properties".into()], 2.)];
 	l.hidden = vec![("messages".into(), Side::Bottom)];
 	l
@@ -154,7 +154,7 @@ impl Component for MainWindow {
 			.height(Size::fill())
 			.background(theme.window_background)
 			.color(theme.text)
-			.font_size(theme.font_size)
+			.ui_font(&theme)
 			.content(Content::flex())
 			.on_global_key_down(on_key)
 			.on_key_down(on_escape)

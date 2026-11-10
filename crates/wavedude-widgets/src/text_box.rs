@@ -3,7 +3,36 @@
 
 use freya::prelude::*;
 
+use crate::text_field::{FIELD_PADDING, TextField};
+use crate::theme::{INPUT_HEIGHT, Theme, use_wave_theme};
 use crate::util::is_named;
+
+/// The frame of a text field (text box, number box): at least [`INPUT_HEIGHT`] high, square, a 1 px border
+/// that turns to the hover colour under the pointer and to the accent while focused, the window's background
+/// and grey text when disabled.
+pub(crate) fn field_frame(theme: &Theme, enabled: bool, focused: bool, hovered: bool) -> Rect {
+	let border = if focused {
+		theme.accent
+	} else if hovered && enabled {
+		theme.input_hover_border
+	} else {
+		theme.input_border
+	};
+	rect()
+		.min_height(Size::px(INPUT_HEIGHT))
+		.padding(1.)
+		.horizontal()
+		.content(Content::flex())
+		.cross_align(Alignment::center())
+		.background(if enabled { theme.input_background } else { theme.window_background })
+		.border(Border::new().fill(border).width(1.).alignment(BorderAlignment::Inner))
+		.color(if enabled { theme.text } else { theme.text_disabled })
+}
+
+/// A borderless Freya input with the field's text padding, for the multi-line box inside [`field_frame`].
+pub(crate) fn field_input(input: Input) -> Input {
+	input.flat().compact().theme_layout(InputLayoutThemePartial::new().padding(FIELD_PADDING))
+}
 
 /// A text box bound to a value.
 #[derive(Clone, PartialEq)]
@@ -12,12 +41,20 @@ pub struct TextBox {
 	on_apply: EventHandler<String>,
 	multiline: bool,
 	live: bool,
+	select_all: bool,
 	id: Option<AccessibilityId>,
 }
 
 impl TextBox {
 	pub fn new(value: impl Into<String>, on_apply: impl Into<EventHandler<String>>) -> Self {
-		Self { value: value.into(), on_apply: on_apply.into(), multiline: false, live: false, id: None }
+		Self {
+			value: value.into(),
+			on_apply: on_apply.into(),
+			multiline: false,
+			live: false,
+			select_all: false,
+			id: None,
+		}
 	}
 
 	/// Enter inserts a newline; the text applies on focus loss.
@@ -29,6 +66,12 @@ impl TextBox {
 	/// Every keystroke applies.
 	pub fn live(mut self) -> Self {
 		self.live = true;
+		self
+	}
+
+	/// Gaining focus selects the whole text (single-line boxes).
+	pub fn select_all_on_focus(mut self, select_all: bool) -> Self {
+		self.select_all = select_all;
 		self
 	}
 
@@ -94,18 +137,35 @@ impl Component for TextBox {
 				true
 			}
 		};
-		Input::new(WritableSetter::new(text, move |t: String| {
+		let theme = use_wave_theme();
+		let mut hovered = use_state(|| false);
+		let on_change = WritableSetter::new(text, move |t: String| {
 			text.set(t.clone());
 			if live {
 				apply.call(t);
 			} else {
 				typed.set_if_modified(true);
 			}
-		}))
-		.a11y_id(id)
-		.multiline(multiline)
-		.width(Size::fill())
-		.compact()
-		.on_pre_key_down(on_pre_key_down)
+		});
+		let input: Element = if multiline {
+			field_input(Input::new(on_change))
+				.a11y_id(id)
+				.multiline(true)
+				.width(Size::flex(1.))
+				.on_pre_key_down(on_pre_key_down)
+				.into()
+		} else {
+			TextField::new(on_change)
+				.a11y_id(id)
+				.select_all_on_focus(self.select_all)
+				.width(Size::flex(1.))
+				.on_pre_key_down(on_pre_key_down)
+				.into()
+		};
+		field_frame(&theme, true, focus().is_focused(), hovered())
+			.width(Size::fill())
+			.on_pointer_enter(move |_| hovered.set(true))
+			.on_pointer_leave(move |_| hovered.set(false))
+			.child(input)
 	}
 }

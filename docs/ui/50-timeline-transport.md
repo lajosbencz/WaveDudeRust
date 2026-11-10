@@ -12,9 +12,11 @@ ones left out.
 ## Timeline (full width, above the transport bar)
 
 Custom-drawn scrub bar:
-- Label row on top (tick labels; the labelled interval is the smallest that leaves room for its text), bar
-  below with minor (3 px) and major (6 px) ticks.
-- Playhead: a line through the bar with a handle on top and the frame number beside it.
+- 36 px high, 4,2 margin: a 14 px label row on top, the 22 px bar below. Labels every 1, 2, 5, 10, 20, 50, 100,
+  ... frames, the smallest interval at least 64 px wide, left-aligned 2 px after their tick (the last kept inside
+  the bar); major ticks 6 px, minor ticks 3 px every fifth of the interval.
+- Playhead: a line through the bar, a 10 x 6 triangle on top and the frame number 8 px beside it over a patch of
+  the bar's colour (it hides the tick labels under it).
 - In/out range: a translucent accent band between two brackets (2 px bar + 6 px feet pointing into the range)
   once the range is narrower than the run.
 - Frames made: shaded bands over the frames the live run holds (accent); they grow from the position outward
@@ -54,7 +56,7 @@ Exposed to automation as a slider with range value, plus "range <in>..<out>".
 | 7 | Set out point | "End the export range at this frame (O)" | The last frame is stored as 0 (= end). An out point before the in point clears the in point. |
 | 8 | Clear range | "Clear the export range: the whole run is exported (X)" | Disabled when no range is set. |
 | 9 | Loop (toggle) | "Loop playback over the export range (L)" | |
-| 10 | Live (toggle, dot in ring) | "Follow the newest frame while the run is in progress (F)" | Disabled (greyed, half transparent) without an active run. |
+| 10 | Live (toggle, dot in ring) | "Follow the newest frame while the run is in progress (F)" | Disabled (greyed) without an active run. |
 | - | Readout | "Frame shown / last frame" | "frame / last"; then, dimmer, "step N" (tooltip "Simulation step of the frame shown"). Shows both frame and step (do not change). |
 | 11 | Speed: label "Speed" + editable combo (64 px) | "Playback speed: pick a factor or type one" | Presets 0.25, 0.5, 1, 1.5, 2, 4 (current culture's decimal separator); any typed value 0.01..100. Space inside is swallowed. |
 | 12 | Show field (toggle, wave icon) | "Show the field picture" | = Display > Field > Preview. |
@@ -65,8 +67,10 @@ Right-docked items (speed, toggles, radios) sit at the right end. Then the timel
 the splitter follow in the pane's Tab order (harness order: play > step back/forward > in > out > loop > speed >
 show field/intensity > split > timeline > field brightness > splitter > intensity brightness).
 
-Toggle buttons stay pressed while checked; disabled look is greyed and half transparent; keyboard focus = accent
-border.
+Bar: 1 px top border, padding 4,3; buttons 22 x 22 with 1 px side margins; dividers 1 px with 4,2 margins after
+Pause run, Pause, Next frame and Live and before the picture toggles. Readout with 4 px margins, the step in grey;
+"Speed" with margins 8,0,4,0. Toggle buttons stay pressed while checked; the disabled look is grey; keyboard focus =
+accent border.
 
 ## Playback
 
@@ -111,7 +115,12 @@ border.
 ## Run states (as the user sees them)
 
 Status bar right item: "<State>: <done> / <total> steps, <engine>"; empty
-with no run. Engine e.g. "CPU (16 threads)" or the GPU name.
+with no run. Engine e.g. "CPU (16 threads)" or "GPU: <adapter name>".
+
+A run that completes or is stopped logs its summary, which the status bar's left item shows: "Run Completed:
+<done> of <total> steps, <frames> frames, <seconds> s; <stored> stored, <n> in memory (<GB>) and <n> on disk
+(<GB>)" ("Run Cancelled: ..." for a stopped run; English, as every log line). The time is wall time from
+the start of the run.
 
 | State word | Meaning | Transport |
 |---|---|---|

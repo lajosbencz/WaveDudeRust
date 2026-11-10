@@ -93,6 +93,11 @@ fn range_sequence(project: &Project, scheme: bool) -> Vec<ItemRef> {
 }
 
 impl Selection {
+	/// The project's root row alone: a project just opened, or an undo that left nothing of the selection.
+	pub fn root() -> Self {
+		Self { current: Some(Row::Project), ..Self::default() }
+	}
+
 	pub fn items(&self) -> &[ItemRef] {
 		&self.items
 	}

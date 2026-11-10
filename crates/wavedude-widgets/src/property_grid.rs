@@ -6,7 +6,8 @@ use std::rc::Rc;
 use freya::prelude::*;
 
 use crate::icon::{IconView, icons};
-use crate::theme::use_wave_theme;
+use crate::theme::{UiFontExt, use_wave_theme};
+use crate::tooltip::Tip;
 use crate::util::{TestIdExt, focus_border};
 
 /// Width of the label column: the widest label, at least `minimum`.
@@ -18,8 +19,14 @@ pub fn label_column_width(widths: impl IntoIterator<Item = f32>, minimum: f32) -
 #[derive(Clone, Copy, PartialEq)]
 struct LabelColumn(State<f32>);
 
-const MIN_LABEL: f32 = 90.;
-const LABEL_GAP: f32 = 10.;
+const MIN_LABEL: f32 = 110.;
+const LABEL_GAP: f32 = 8.;
+const ROW_SPACING: f32 = 4.;
+/// WPF's 28 px row pitch with [`ROW_SPACING`].
+const ROW_HEIGHT: f32 = 24.;
+/// The gap after a section's rows.
+const SECTION_GAP: f32 = 10.;
+const BOTTOM_RULE: BorderWidth = BorderWidth { top: 0., right: 0., bottom: 1., left: 0. };
 
 /// A vertically scrolling form; rows inside share the label column.
 #[derive(Clone, PartialEq, Default)]
@@ -53,10 +60,10 @@ impl Component for PropertyGrid {
 		ScrollView::new().expanded().child(
 			rect()
 				.width(Size::fill())
-				.padding((4., 6., 8., 6.))
+				.padding(8.)
 				.background(theme.tool_window_background)
 				.color(theme.text)
-				.font_size(theme.font_size)
+				.ui_font(&theme)
 				.children(self.children.clone()),
 		)
 	}
@@ -161,13 +168,13 @@ impl Component for PropertyRow {
 				)
 				.child(label().text(text).color(ink).max_lines(1).text_overflow(TextOverflow::Ellipsis));
 			match self.hint.clone() {
-				Some(hint) => TooltipContainer::new(Tooltip::new_text(hint)).child(cell).into_element(),
+				Some(hint) => Tip::new(hint).child(cell).into_element(),
 				None => cell.into_element(),
 			}
 		});
 		rect()
 			.width(Size::fill())
-			.min_height(Size::px(theme.row_height + 2.))
+			.min_height(Size::px(ROW_HEIGHT))
 			.horizontal()
 			.content(Content::flex())
 			.cross_align(Alignment::center())
@@ -215,8 +222,12 @@ impl Component for SectionHeader {
 		let toggle = self.collapsed.clone();
 		let header = rect()
 			.width(Size::fill())
-			.padding((8., 0., 2., 0.))
+			.margin((2., 0., 6., 0.))
+			.padding((0., 0., 2., 0.))
+			.border(Border::new().fill(theme.border).width(BOTTOM_RULE).alignment(BorderAlignment::Inner))
 			.border(focus_border(focus(), theme.accent))
+			.horizontal()
+			.cross_align(Alignment::center())
 			.maybe(toggle.is_some(), |r| {
 				let t = toggle.clone();
 				r.a11y_id(id).a11y_focusable(true).on_press(move |_| {
@@ -226,21 +237,26 @@ impl Component for SectionHeader {
 					}
 				})
 			})
-			.child(
-				rect()
-					.horizontal()
-					.cross_align(Alignment::center())
-					.maybe_child(toggle.is_some().then(|| {
-						IconView::new(if collapsed { icons::CHEVRON_RIGHT } else { icons::CHEVRON_DOWN })
-							.color(theme.text_dim)
-					}))
-					.child(label().text(self.title.clone()).color(theme.text_dim).font_weight(FontWeight::BOLD)),
-			)
-			.child(rect().margin((2., 0., 0., 0.)).width(Size::fill()).height(Size::px(1.)).background(theme.hairline));
-		rect().width(Size::fill()).child(header).maybe_child(
-			(!collapsed).then(|| rect().width(Size::fill()).padding((2., 0., 6., 0.)).children(self.children.clone())),
-		)
+			.maybe_child(toggle.is_some().then(|| chevron(&theme, !collapsed)))
+			.child(label().text(self.title.clone()).font_weight(FontWeight::SEMI_BOLD));
+		rect().width(Size::fill()).child(header).maybe_child((!collapsed).then(|| {
+			rect()
+				.width(Size::fill())
+				.padding((0., 0., SECTION_GAP, 0.))
+				.spacing(ROW_SPACING)
+				.children(self.children.clone())
+		}))
 	}
+}
+
+/// The section and description headers' chevron: 6 x 11, pointing down while open.
+fn chevron(theme: &crate::theme::Theme, open: bool) -> Rect {
+	rect()
+		.width(Size::px(6.))
+		.height(Size::px(11.))
+		.margin((0., 7., 0., 1.))
+		.center()
+		.child(IconView::new(if open { icons::CHEVRON_DOWN } else { icons::CHEVRON_RIGHT }).color(theme.text))
 }
 
 /// The parts' description header: a chevron and "Description"; the text shows under it while open.
@@ -275,29 +291,36 @@ impl Component for DescriptionHeader {
 		let focus = use_focus(id);
 		let open = *self.expanded.read();
 		let mut toggle = self.expanded.clone();
+		let mut hovered = use_state(|| false);
+		let rule = if focus().is_focused() { theme.accent } else { theme.border };
 		let header = rect()
 			.a11y_id(id)
 			.a11y_focusable(true)
 			.a11y_role(AccessibilityRole::Button)
-			.height(Size::px(theme.row_height))
+			.width(Size::fill())
+			.margin((2., 0., 6., 0.))
+			.padding((0., 0., 2., 0.))
 			.horizontal()
 			.cross_align(Alignment::center())
-			.border(focus_border(focus(), theme.accent))
+			.background(if hovered() { theme.button_hover } else { Color::TRANSPARENT })
+			.border(Border::new().fill(rule).width(BOTTOM_RULE).alignment(BorderAlignment::Inner))
+			.on_pointer_enter(move |_| hovered.set(true))
+			.on_pointer_leave(move |_| hovered.set(false))
 			.on_press(move |_| {
 				let v = !*toggle.peek();
 				toggle.set(v);
 			})
-			.child(IconView::new(if open { icons::CHEVRON_DOWN } else { icons::CHEVRON_RIGHT }).color(theme.text))
-			.child(label().text(self.title.clone()));
+			.child(chevron(&theme, open))
+			.child(label().text(self.title.clone()).font_weight(FontWeight::SEMI_BOLD));
 		let header: Element = match self.tooltip.clone() {
-			Some(t) => TooltipContainer::new(Tooltip::new_text(t)).child(header).into_element(),
+			Some(t) => Tip::new(t).child(header).into_element(),
 			None => header.into_element(),
 		};
 		rect().width(Size::fill()).child(header).maybe_child(open.then(|| {
 			rect()
 				.width(Size::fill())
-				.padding((0., 4., 6., 20.))
-				.child(paragraph().color(theme.text_dim).span(Span::new(self.text.clone())))
+				.padding((0., 0., SECTION_GAP, 0.))
+				.child(paragraph().color(theme.text).span(Span::new(self.text.clone())))
 		}))
 	}
 }

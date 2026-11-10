@@ -3,8 +3,13 @@
 
 use freya::prelude::*;
 
+use freya::engine::prelude::{Paint, SkRect};
+
+use crate::gradient_editor::Gradient;
 use crate::icon::{Icon, IconView, icons};
-use crate::theme::{Theme, use_wave_theme};
+use crate::paint::{fill, linear_shader};
+use crate::theme::{Theme, UiFontExt, use_wave_theme};
+use crate::tooltip::DelayedTip;
 use crate::util::TestIdExt;
 
 /// Check state shown in an entry's icon slot.
@@ -28,6 +33,8 @@ pub struct MenuItem<A = String> {
 	pub check: Check,
 	pub enabled: bool,
 	pub tooltip: Option<String>,
+	/// A gradient strip before the text (colour scheme lists).
+	pub swatch: Option<Gradient>,
 }
 
 impl MenuItem {
@@ -49,6 +56,7 @@ impl<A> MenuItem<A> {
 			check: Check::None,
 			enabled: true,
 			tooltip: None,
+			swatch: None,
 		}
 	}
 
@@ -74,6 +82,11 @@ impl<A> MenuItem<A> {
 
 	pub fn tooltip(mut self, text: impl Into<String>) -> Self {
 		self.tooltip = Some(text.into());
+		self
+	}
+
+	pub fn swatch(mut self, gradient: Gradient) -> Self {
+		self.swatch = Some(gradient);
 		self
 	}
 }
@@ -140,6 +153,7 @@ impl<A> MenuEntry<A> {
 				check: i.check,
 				enabled: i.enabled,
 				tooltip: i.tooltip,
+				swatch: i.swatch,
 			}),
 			MenuEntry::Submenu(s) => MenuEntry::Submenu(Submenu {
 				id: s.id,
@@ -290,6 +304,8 @@ pub struct MenuNav {
 	pub stack: Vec<Option<usize>>,
 	/// Opened by keyboard: mnemonics are underlined and the first entry is highlighted.
 	pub keyboard: bool,
+	/// The deepest highlight is under the pointer: only then does its tooltip show.
+	pub pointed: bool,
 }
 
 /// The outcome of a key press while a menu is active.
@@ -317,6 +333,7 @@ impl MenuNav {
 		self.active = true;
 		self.header = header;
 		self.keyboard = keyboard;
+		self.pointed = false;
 		self.stack = vec![None];
 		if keyboard {
 			self.stack[0] = self.menu_at(headers, 0).and_then(|m| next_enabled(m, None, true));
@@ -329,7 +346,7 @@ impl MenuNav {
 
 	/// F10 or a lone Alt: the bar takes the keys with its first header highlighted, nothing opened.
 	pub fn activate_bar(&mut self) {
-		*self = Self { active: true, header: 0, stack: Vec::new(), keyboard: true };
+		*self = Self { active: true, header: 0, stack: Vec::new(), keyboard: true, pointed: false };
 	}
 
 	/// Pointer over entry `index` of `level`: highlights it, closes deeper levels, opens its submenu.
@@ -339,8 +356,16 @@ impl MenuNav {
 			return;
 		}
 		self.stack[level] = Some(index);
+		self.pointed = true;
 		if matches!(self.menu_at(headers, level).and_then(|m| m.get(index)), Some(MenuEntry::Submenu(s)) if s.enabled) {
 			self.stack.push(None);
+		}
+	}
+
+	/// Pointer off entry `index` of `level`: the highlight stays, its tooltip goes.
+	pub fn unhover(&mut self, level: usize, index: usize) {
+		if self.stack.get(level) == Some(&Some(index)) {
+			self.pointed = false;
 		}
 	}
 
@@ -370,6 +395,7 @@ impl MenuNav {
 			return NavOutcome::Ignored;
 		}
 		self.keyboard = true;
+		self.pointed = false;
 		let depth = self.stack.len();
 		let level = depth.saturating_sub(1);
 		let current = self.stack.last().copied().flatten();
@@ -476,8 +502,14 @@ impl MenuNav {
 	}
 }
 
-const ICON_SLOT: f32 = 26.;
+/// An entry's border padding 2 and the icon column 24 (WPF's submenu item template).
+const ENTRY_PADDING: f32 = 2.;
+const ICON_SLOT: f32 = 24.;
+/// A drop-down entry: the text line between WPF's padding 2 and margin 2 above and below.
+const ENTRY_HEIGHT: f32 = 22.;
 const SEPARATOR_HEIGHT: f32 = 7.;
+/// WPF's SubmenuArrowGeometry, 4 x 8.
+const SUBMENU_ARROW: Icon = Icon::filled("M6 4 L10 8 L6 12 Z");
 
 /// A label with its mnemonic letter underlined when `underline` is set.
 fn mnemonic_label(raw: &str, underline: bool, color: Color) -> Element {
@@ -505,19 +537,27 @@ const PANEL_PADDING: f32 = 2.;
 /// Room the label leaves for its own row's shortcut, which is anchored at the right edge.
 const SHORTCUT_GAP: f32 = 90.;
 
-fn entry_height<A>(theme: &Theme, entry: &MenuEntry<A>) -> f32 {
+fn entry_height<A>(entry: &MenuEntry<A>) -> f32 {
 	match entry {
 		MenuEntry::Separator => SEPARATOR_HEIGHT,
-		_ => theme.row_height,
+		_ => ENTRY_HEIGHT,
 	}
+}
+
+/// How an entry shows: highlighted, under the pointer, with its mnemonic underlined.
+#[derive(Clone, Copy)]
+struct EntryLook {
+	highlighted: bool,
+	pointed: bool,
+	underline: bool,
 }
 
 fn entry_view<A>(
 	theme: &Theme,
 	entry: &MenuEntry<A>,
-	highlighted: bool,
-	underline: bool,
+	look: EntryLook,
 	on_hover: impl FnMut() + 'static,
+	on_leave: impl FnMut() + 'static,
 	on_press: impl FnMut() + 'static,
 ) -> Element {
 	if let MenuEntry::Separator = entry {
@@ -526,35 +566,45 @@ fn entry_view<A>(
 		return rect()
 			.width(Size::fill_minimum())
 			.height(Size::px(1.))
-			.margin((3., 2., 3., ICON_SLOT + 2.))
+			.margin((3., 2., 3., ICON_SLOT + ENTRY_PADDING))
 			.background(theme.menu_border)
 			.into();
 	}
+	let EntryLook { highlighted, pointed, underline } = look;
 	let enabled = entry.is_enabled();
 	let ink = if enabled { theme.text } else { theme.text_disabled };
-	let (icon, shortcut, submenu, tooltip, test_id) = match entry {
+	let glyph_ink = if !enabled {
+		theme.text_disabled
+	} else if highlighted {
+		theme.accent
+	} else {
+		theme.text_dim
+	};
+	let (icon, icon_ink, shortcut, submenu, tooltip, swatch, test_id) = match entry {
 		MenuEntry::Item(i) => {
-			let icon = match i.check {
-				Check::Checked(true) => icons::CHECK,
-				Check::Radio(true) => icons::RADIO,
-				_ => i.icon.clone(),
+			let (icon, icon_ink) = match i.check {
+				Check::Checked(true) | Check::Radio(true) => (icons::CHECK, glyph_ink),
+				_ => (i.icon.clone(), ink),
 			};
-			(icon, i.shortcut.clone(), false, i.tooltip.clone(), i.id.clone())
+			(icon, icon_ink, i.shortcut.clone(), false, i.tooltip.clone(), i.swatch.clone(), i.id.clone())
 		}
-		MenuEntry::Submenu(s) => (s.icon.clone(), None, true, None, s.id.clone()),
+		MenuEntry::Submenu(s) => (s.icon.clone(), ink, None, true, None, None, s.id.clone()),
 		MenuEntry::Separator => unreachable!(),
 	};
 	let mut on_hover = on_hover;
+	let mut on_leave = on_leave;
 	let mut on_press = on_press;
 	let row = rect()
 		.width(Size::fill_minimum())
-		.height(Size::px(theme.row_height))
+		.height(Size::px(ENTRY_HEIGHT))
+		.padding((0., ENTRY_PADDING))
 		.horizontal()
 		.cross_align(Alignment::center())
 		.background(if highlighted && enabled { theme.menu_hover } else { Color::TRANSPARENT })
 		.a11y_role(AccessibilityRole::MenuItem)
 		.test_id(test_id)
 		.on_pointer_enter(move |_| on_hover())
+		.on_pointer_leave(move |_| on_leave())
 		.on_pointer_down(move |e: Event<PointerEventData>| {
 			e.stop_propagation();
 			if enabled {
@@ -571,41 +621,73 @@ fn entry_view<A>(
 						.width(Size::px(ICON_SLOT))
 						.height(Size::fill())
 						.center()
-						.child(IconView::new(icon).color(ink)),
+						.child(IconView::new(icon).color(icon_ink)),
 				)
-				.child(rect().padding((0., 24., 0., 2.)).child(mnemonic_label(
-					entry.text().unwrap_or_default(),
-					underline,
-					ink,
-				)))
+				.child(
+					rect()
+						.horizontal()
+						.cross_align(Alignment::center())
+						.padding((0., 8., 0., 4.))
+						.maybe_child(swatch.map(|g| swatch_view(theme, g)))
+						.child(mnemonic_label(entry.text().unwrap_or_default(), underline, ink)),
+				)
 				.child(rect().width(Size::px(SHORTCUT_GAP))),
 		)
 		.child(
 			rect()
-				.position(Position::new_absolute().top(0.).right(0.))
+				.position(Position::new_absolute().top(0.).right(ENTRY_PADDING))
 				.horizontal()
-				.height(Size::px(theme.row_height))
+				.height(Size::px(ENTRY_HEIGHT))
 				.cross_align(Alignment::center())
 				.maybe_child(shortcut.map(|s| {
-					label().text(s).color(if enabled { theme.text_dim } else { theme.text_disabled }).max_lines(1)
+					label()
+						.margin((0., 4., 0., 16.))
+						.text(s)
+						.color(if enabled { theme.text_dim } else { theme.text_disabled })
+						.max_lines(1)
 				}))
 				.child(
 					rect()
 						.width(Size::px(16.))
 						.center()
-						.maybe_child(submenu.then(|| IconView::new(icons::SUBMENU).size(12.).color(ink))),
+						.maybe_child(submenu.then(|| IconView::new(SUBMENU_ARROW).color(glyph_ink))),
 				),
 		);
 	// Drawn by the row itself: a wrapping container would end the panel's fit-content at the window edge.
-	row.maybe_child(tooltip.filter(|_| highlighted).map(|tip| {
+	row.maybe_child(tooltip.filter(|_| highlighted && pointed).map(|tip| {
 		rect()
 			.position(Position::new_absolute().top(0.).right(-6.))
 			.width(Size::px(0.))
 			.height(Size::px(0.))
 			.layer(Layer::Overlay)
-			.child(rect().width(Size::window_percent(100.)).child(Tooltip::new_text(tip)))
+			.child(rect().width(Size::window_percent(100.)).child(DelayedTip::new(tip)))
 	}))
 	.into()
+}
+
+/// WPF's 56 x 12 scheme strip with a hairline border.
+fn swatch_view(theme: &Theme, gradient: Gradient) -> Element {
+	let painter = RenderCallback::new(move |ctx: &mut FillRenderContext| {
+		let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
+		let size = ctx.size;
+		let colors: Vec<Color> = gradient.stops.iter().map(|s| s.color.to_color()).collect();
+		let positions: Vec<f32> = gradient.stops.iter().map(|s| s.position as f32).collect();
+		let rect = SkRect::new(0., 0., size.width, size.height);
+		if colors.len() > 1 {
+			let mut p = Paint::default();
+			p.set_shader(linear_shader((rect.left, 0.), (rect.right, 0.), &colors, Some(&positions)));
+			canvas.draw_rect(rect, &p);
+		} else if let Some(c) = colors.first() {
+			canvas.draw_rect(rect, &fill(*c));
+		}
+	});
+	rect()
+		.width(Size::px(56.))
+		.height(Size::px(12.))
+		.margin((0., 6., 0., 0.))
+		.background(painter)
+		.border(Border::new().fill(theme.input_border).width(1.).alignment(BorderAlignment::Inner))
+		.into()
 }
 
 /// Where one level's panel lies: the anchor it hangs from, which the window's edge never moves, and the
@@ -695,18 +777,25 @@ fn panel_view<A: Clone + 'static>(
 		let headers_hover = headers.to_vec();
 		let headers_press = headers.to_vec();
 		let mut nav_h = nav;
+		let mut nav_l = nav;
 		let mut nav_p = nav;
 		let on_activate_row = on_activate.clone();
 		let row = entry_view(
 			theme,
 			entry,
-			highlight == Some(i),
-			underline,
+			EntryLook { highlighted: highlight == Some(i), pointed: snapshot.pointed, underline },
 			move || {
 				let mut n = nav_h.peek().clone();
 				n.hover(&headers_hover, level, i);
 				if *nav_h.peek() != n {
 					nav_h.set(n);
+				}
+			},
+			move || {
+				let mut n = nav_l.peek().clone();
+				n.unhover(level, i);
+				if *nav_l.peek() != n {
+					nav_l.set(n);
 				}
 			},
 			move || {
@@ -728,7 +817,7 @@ fn panel_view<A: Clone + 'static>(
 			let shift = shift_beside(&place, level + 1);
 			children.push(anchored(panels, level + 1, parent - PANEL_PADDING, y - 3., shift, s));
 		}
-		y += entry_height(theme, entry);
+		y += entry_height(entry);
 	}
 	// A fit-content panel takes its widest child; the spacer is the floor, since torin adds a min_width to the content.
 	children.insert(0, rect().width(Size::px(MIN_PANEL_WIDTH)).height(Size::px(0.)).into_element());
@@ -741,7 +830,7 @@ fn panel_view<A: Clone + 'static>(
 			.shadow((0., 2., 6., 0., Color::from_af32rgb(0.35, 0, 0, 0)))
 			.padding(PANEL_PADDING)
 			.color(theme.text)
-			.font_size(theme.font_size)
+			.ui_font(theme)
 			.a11y_role(AccessibilityRole::Menu)
 			.on_sized(place_at(panels, level, |p, a| p.area = a))
 			.children(children)
@@ -754,6 +843,14 @@ fn contains(panels: &[PanelPlace], p: CursorPoint, levels: usize) -> bool {
 		let a = place.area.to_f64();
 		p.x >= a.min_x() && p.x < a.max_x() && p.y >= a.min_y() && p.y < a.max_y()
 	})
+}
+
+/// An open menu keeps the keyboard focus: a click that opened it can still unfocus it after the opening
+/// request (a focused text box drops the focus on any pointer up), so it is taken back on every render.
+fn hold_focus(sink: AccessibilityId, open: bool) {
+	if open && !sink.is_focused() {
+		spawn(async move { sink.request_focus() });
+	}
 }
 
 fn restore_focus(previous: State<Option<AccessibilityId>>) {
@@ -898,6 +995,7 @@ impl<A: Clone + PartialEq + 'static> Component for MenuBar<A> {
 		};
 
 		let snapshot = nav.read().clone();
+		hold_focus(sink, snapshot.active);
 		let underline = snapshot.active && snapshot.keyboard || *alt_held.read();
 		let header_views = headers.iter().enumerate().map(|(i, header)| {
 			let open = snapshot.active && snapshot.header == i;
@@ -922,7 +1020,7 @@ impl<A: Clone + PartialEq + 'static> Component for MenuBar<A> {
 			};
 			rect()
 				.height(Size::px(theme.row_height))
-				.padding((0., 8., 0., 8.))
+				.padding((0., 7.))
 				.main_align(Alignment::center())
 				.background(background)
 				.test_id(test_id)
@@ -961,10 +1059,11 @@ impl<A: Clone + PartialEq + 'static> Component for MenuBar<A> {
 		rect()
 			.width(Size::fill())
 			.height(Size::px(theme.row_height))
+			.padding((0., 2.))
 			.horizontal()
 			.background(theme.window_background)
 			.color(theme.text)
-			.font_size(theme.font_size)
+			.ui_font(&theme)
 			.a11y_id(sink)
 			.a11y_focusable(snapshot.active)
 			.a11y_role(AccessibilityRole::MenuBar)
@@ -1028,6 +1127,7 @@ impl<A: Clone + PartialEq + 'static> Component for ContextMenuHost<A> {
 			}
 		}
 
+		hold_focus(sink, request.is_some());
 		let Some(req) = request else {
 			return rect().into_element();
 		};
@@ -1209,5 +1309,22 @@ mod tests {
 		assert_eq!(nav.stack, vec![Some(2), None]);
 		nav.hover(&b, 0, 1);
 		assert_eq!(nav.stack, vec![Some(1)]);
+	}
+
+	#[test]
+	fn only_the_pointer_shows_an_entry_tip() {
+		let b = bar();
+		let mut nav = MenuNav::default();
+		nav.open(&b, 0, true);
+		assert!(nav.stack[0].is_some() && !nav.pointed);
+		nav.hover(&b, 0, 1);
+		assert!(nav.pointed);
+		nav.unhover(0, 0);
+		assert!(nav.pointed);
+		nav.unhover(0, 1);
+		assert!(!nav.pointed);
+		nav.hover(&b, 0, 1);
+		nav.handle_key(&b, true, &Key::Named(NamedKey::ArrowDown));
+		assert!(!nav.pointed);
 	}
 }

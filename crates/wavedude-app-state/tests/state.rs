@@ -62,6 +62,7 @@ fn undo_restores_the_project_and_redo_repeats_it() {
 	s.handle(Event::Undo, at(t, 1000));
 	assert!(s.document.project.sources.is_empty());
 	assert!(s.selection.items().is_empty());
+	assert_eq!(s.selection.current(), Some(Row::Project), "nothing left: the user is put at the root");
 	assert!(!s.document.dirty, "back at the saved step");
 }
 

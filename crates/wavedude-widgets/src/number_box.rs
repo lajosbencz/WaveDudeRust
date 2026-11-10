@@ -6,15 +6,18 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::icon::{IconView, icons};
-use crate::theme::use_wave_theme;
-use crate::util::{TestIdExt, focus_border, is_named, use_modifiers};
+use crate::text_box::field_frame;
+use crate::text_field::TextField;
+use crate::theme::{INPUT_HEIGHT, use_wave_theme};
+use crate::tooltip::Tip;
+use crate::util::{TestIdExt, is_named, use_modifiers};
 
 /// How a step changes the value.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Stepping {
 	/// Adds the increment per step.
 	Linear(f64),
-	/// Multiplies by the factor per step (1.02: two percent); shown with three significant digits.
+	/// Multiplies by the factor per step (1.02: two percent); steps and drags keep three significant digits.
 	Logarithmic(f64),
 }
 
@@ -58,7 +61,7 @@ pub struct Stepped {
 pub struct NumberSpec {
 	pub min: f64,
 	pub max: f64,
-	/// Fraction digits shown and kept by a linear box.
+	/// Fraction digits a linear box's steps and drags round to.
 	pub decimals: u32,
 	pub stepping: Stepping,
 	/// Steps per PageUp/PageDown.
@@ -152,12 +155,9 @@ impl NumberSpec {
 		self.clamp(self.round(raw))
 	}
 
+	/// The shortest text that reads back as `value` ("120", "1.5", "0.125"), with the box's separator.
 	pub fn format(&self, value: f64) -> String {
-		let decimals = match self.stepping {
-			Stepping::Linear(_) => self.decimals as usize,
-			Stepping::Logarithmic(_) => significant_decimals(value, 3),
-		};
-		let text = format!("{value:.decimals$}");
+		let text = format!("{}", value + 0.);
 		if self.decimal_separator == '.' { text } else { text.replace('.', &self.decimal_separator.to_string()) }
 	}
 
@@ -172,9 +172,9 @@ impl NumberSpec {
 		self.step(self.parse(text).unwrap_or(0.), steps)
 	}
 
-	/// The value typed text commits to, clamped; `None` when it does not parse.
+	/// The value typed text commits to, clamped but kept as typed; `None` when it does not parse.
 	pub fn commit(&self, text: &str) -> Option<Stepped> {
-		self.parse(text).map(|v| self.clamp(self.round(v)))
+		self.parse(text).map(|v| self.clamp(v))
 	}
 }
 
@@ -200,16 +200,10 @@ pub fn round_significant(value: f64, digits: u32) -> f64 {
 	(value * p).round() / p
 }
 
-fn significant_decimals(value: f64, digits: u32) -> usize {
-	if value == 0. || !value.is_finite() {
-		return 0;
-	}
-	let magnitude = round_significant(value, digits).abs().log10().floor() as i32;
-	(digits as i32 - 1 - magnitude).max(0) as usize
-}
-
 const DRAG_THRESHOLD: f64 = 4.;
 const BUTTON_WIDTH: f32 = 14.;
+const REPEAT_DELAY: Duration = Duration::from_millis(400);
+const REPEAT_INTERVAL: Duration = Duration::from_millis(60);
 
 /// A number box bound to a value. Free text applies on Enter or focus loss, Esc reverts typed text.
 #[derive(Clone, PartialEq)]
@@ -220,6 +214,7 @@ pub struct NumberBox {
 	width: Size,
 	test_id: Option<String>,
 	tooltip: Option<String>,
+	blank: bool,
 	a11y_id: Option<AccessibilityId>,
 }
 
@@ -232,6 +227,7 @@ impl NumberBox {
 			width: Size::px(90.),
 			test_id: None,
 			tooltip: None,
+			blank: false,
 			a11y_id: None,
 		}
 	}
@@ -254,6 +250,12 @@ impl NumberBox {
 
 	pub fn test_id(mut self, id: impl Into<String>) -> Self {
 		self.test_id = Some(id.into());
+		self
+	}
+
+	/// Shows an empty box instead of the value (WPF's blank field for a value that does not apply).
+	pub fn blank(mut self, blank: bool) -> Self {
+		self.blank = blank;
 		self
 	}
 
@@ -285,9 +287,12 @@ impl Component for NumberBox {
 		let mut area = use_state(Area::default);
 		let mut drag = use_state(|| None::<DragState>);
 		let mut repeat = use_state(|| None::<TaskHandle>);
+		let mut hovered = use_state(|| false);
+		let mut spin_hover = use_state(|| None::<i32>);
+		let mut spin_pressed = use_state(|| None::<i32>);
 
 		let current = *self.value.read();
-		let shown = spec.format(current);
+		let shown = if self.blank { String::new() } else { spec.format(current) };
 		if !*typed.peek() && *text.peek() != shown {
 			text.set(shown.clone());
 		}
@@ -320,6 +325,7 @@ impl Component for NumberBox {
 
 		let commit = {
 			let spec = spec.clone();
+			let shown = shown.clone();
 			let mut apply = apply.clone();
 			move || {
 				if *typed.peek() {
@@ -327,7 +333,7 @@ impl Component for NumberBox {
 					match committed {
 						Some(stepped) => apply(stepped),
 						None => {
-							text.set(spec.format(current));
+							text.set(shown.clone());
 							typed.set(false);
 						}
 					}
@@ -347,6 +353,7 @@ impl Component for NumberBox {
 
 		let on_pre_key_down = {
 			let spec = spec.clone();
+			let shown = shown.clone();
 			let mut step_by = step_by.clone();
 			let mut commit = commit.clone();
 			move |e: Event<KeyboardEventData>| -> bool {
@@ -371,7 +378,7 @@ impl Component for NumberBox {
 				if is_named(&e, NamedKey::Escape) {
 					if *typed.peek() {
 						e.stop_propagation();
-						text.set(spec.format(current));
+						text.set(shown.clone());
 						typed.set(false);
 					}
 					return false;
@@ -427,6 +434,7 @@ impl Component for NumberBox {
 
 		let on_global_up = move |_: Event<PointerEventData>| {
 			drag.set_if_modified(None);
+			spin_pressed.set_if_modified(None);
 			if let Some(task) = repeat.write().take() {
 				task.cancel();
 			}
@@ -449,63 +457,60 @@ impl Component for NumberBox {
 		let repeat_button = |steps: i32, icon| {
 			let step_by = step_by.clone();
 			let mut first = step_by.clone();
+			let background = if *spin_pressed.read() == Some(steps) {
+				theme.pressed_background
+			} else if *spin_hover.read() == Some(steps) {
+				theme.button_hover
+			} else {
+				Color::TRANSPARENT
+			};
 			rect()
 				.width(Size::px(BUTTON_WIDTH))
 				.height(Size::percent(50.))
 				.center()
+				.background(background)
 				.cursor(CursorIcon::Default)
-				.maybe(enabled, |r| {
-					r.on_pointer_down(move |e: Event<PointerEventData>| {
-						e.stop_propagation();
-						input_id.request_focus();
-						first(steps);
-						let mut step_by = step_by.clone();
-						let task = spawn(async move {
-							timer(Duration::from_millis(400)).await;
-							loop {
-								step_by(steps);
-								timer(Duration::from_millis(50)).await;
-							}
-						});
-						if let Some(old) = repeat.write().replace(task) {
-							old.cancel();
+				.on_pointer_enter(move |_| spin_hover.set(Some(steps)))
+				.on_pointer_leave(move |_| spin_hover.set_if_modified(None))
+				.on_pointer_down(move |e: Event<PointerEventData>| {
+					e.stop_propagation();
+					input_id.request_focus();
+					spin_pressed.set(Some(steps));
+					first(steps);
+					let mut step_by = step_by.clone();
+					let task = spawn(async move {
+						timer(REPEAT_DELAY).await;
+						loop {
+							step_by(steps);
+							timer(REPEAT_INTERVAL).await;
 						}
-					})
+					});
+					if let Some(old) = repeat.write().replace(task) {
+						old.cancel();
+					}
 				})
-				.child(IconView::new(icon).size(10.).color(if enabled { theme.text_dim } else { theme.text_disabled }))
+				.child(IconView::new(icon).color(theme.text))
 		};
 
-		let border_color = if *flash.read() {
-			theme.clamp_flash
-		} else if focus().is_focused() {
-			theme.accent
-		} else {
-			theme.input_border
-		};
-
-		let input = Input::new(WritableSetter::new(text, move |t: String| {
+		let input = TextField::new(WritableSetter::new(text, move |t: String| {
 			text.set(t);
 			typed.set_if_modified(true);
 		}))
 		.a11y_id(input_id)
 		.enabled(enabled)
 		.width(Size::flex(1.))
-		.flat()
-		.compact()
 		.on_pre_key_down(on_pre_key_down);
 
-		let body = rect()
-			.width(if self.tooltip.is_some() { Size::fill() } else { self.width.clone() })
-			.height(Size::px(theme.row_height - 2.))
-			.horizontal()
-			.content(Content::flex())
-			.cross_align(Alignment::center())
-			.background(if enabled { theme.input_background } else { theme.control_background })
-			.border(Border::new().fill(border_color).width(1.).alignment(BorderAlignment::Inner))
-			.border(focus_border(focus(), theme.accent))
-			.color(if enabled { theme.text } else { theme.text_disabled })
-			.font_size(theme.font_size)
+		let mut frame = field_frame(&theme, enabled, focus().is_focused(), *hovered.read());
+		if *flash.read() {
+			frame = frame.border(Border::new().fill(theme.clamp_flash).width(1.).alignment(BorderAlignment::Inner));
+		}
+		let body = frame
+			.width(Size::fill())
+			.height(Size::px(INPUT_HEIGHT))
 			.on_sized(move |e: Event<SizedEventData>| area.set_if_modified(e.area))
+			.on_pointer_enter(move |_| hovered.set(true))
+			.on_pointer_leave(move |_| hovered.set(false))
 			.on_wheel(on_wheel)
 			.on_global_pointer_down(on_global_down)
 			.on_global_pointer_move(on_global_move)
@@ -513,21 +518,27 @@ impl Component for NumberBox {
 			.on_global_key_down(on_global_key)
 			.maybe_test_id(self.test_id.clone())
 			.child(input)
-			.child(
+			.maybe_child(enabled.then(|| {
 				rect()
 					.width(Size::px(BUTTON_WIDTH))
 					.height(Size::fill())
-					.child(repeat_button(1, icons::CHEVRON_UP))
-					.child(repeat_button(-1, icons::CHEVRON_DOWN)),
-			);
+					.child(repeat_button(1, icons::SPIN_UP))
+					.child(repeat_button(-1, icons::SPIN_DOWN))
+			}))
+			.maybe_child((!enabled).then(|| rect().width(Size::px(BUTTON_WIDTH))));
 
-		let tracked = crate::util::modifier_tracker(modifiers, body);
+		// the outermost wrapper takes the box's width so a flex box shares its row
+		let tracked = crate::util::modifier_tracker(modifiers, body).width(if self.tooltip.is_some() {
+			Size::fill()
+		} else {
+			self.width.clone()
+		});
 		match self.tooltip.clone() {
 			// the wrapper takes the box's width so a flex box still shares its row
 			Some(tip) => {
 				let mut layout = LayoutData::default();
 				layout.layout.width = self.width.clone();
-				TooltipContainer::new(Tooltip::new_text(tip)).layout(layout).child(tracked).into_element()
+				Tip::new(tip).layout(layout).child(tracked).into_element()
 			}
 			None => tracked.into_element(),
 		}
@@ -566,7 +577,7 @@ mod tests {
 		assert_eq!(s.page(1., 1).value, 1.22);
 		assert_eq!(s.format(0.000102), "0.000102");
 		assert_eq!(s.format(1020.), "1020");
-		assert_eq!(s.format(1.5), "1.50");
+		assert_eq!(s.format(1.5), "1.5");
 		let mut v = 1.;
 		for _ in 0..200 {
 			let next = s.step(v, 1).value;
@@ -590,9 +601,20 @@ mod tests {
 		assert_eq!(s.parse("abc"), None);
 		assert_eq!(s.step_text("abc", 1).value, 1.);
 		assert_eq!(s.format(2.), "2");
-		assert_eq!(NumberSpec::linear(0., 9., 0.25).with_decimal_separator(',').format(2.5), "2,50");
+		assert_eq!(NumberSpec::linear(0., 9., 0.25).with_decimal_separator(',').format(2.5), "2,5");
 		assert_eq!(s.commit("99"), Some(Stepped { value: 10., clamped: true }));
 		assert_eq!(s.commit("x"), None);
+	}
+
+	#[test]
+	fn values_show_their_shortest_form_and_typing_keeps_its_digits() {
+		let s = NumberSpec::linear(0., 1000., 0.01);
+		for (v, text) in [(120., "120"), (1.5, "1.5"), (0., "0"), (-0., "0"), (0.125, "0.125"), (30., "30")] {
+			assert_eq!(s.format(v), text);
+		}
+		assert_eq!(s.commit("0.125"), Some(Stepped { value: 0.125, clamped: false }));
+		assert_eq!(NumberSpec::integer(0., 9.).commit("2.5").map(|c| c.value), Some(2.5));
+		assert_eq!(s.step(0.125, 1).value, 0.14);
 	}
 
 	#[test]

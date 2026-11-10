@@ -9,9 +9,10 @@ use std::collections::HashMap;
 use freya::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::icon::{IconView, icons};
+use crate::icon::IconView;
 use crate::menu::{ContextMenuHost, ContextMenuRequest, MenuEntry, MenuItem, MenuModel};
-use crate::theme::{Theme, use_wave_theme};
+use crate::theme::{Theme, UiFontExt, use_wave_theme};
+use crate::tooltip::Tip;
 use crate::util::{TestIdExt, focus_border};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -63,21 +64,23 @@ impl PaneGroup {
 	}
 }
 
-/// The groups docked along one side; `size` is the side's depth in logical pixels.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// The groups docked along one side; `size` is the side's depth in logical pixels, 0 until the host fits it
+/// to [`EDGE_SHARE`] of its extent.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct SideDock {
 	pub size: f32,
 	pub groups: Vec<PaneGroup>,
 }
 
 impl SideDock {
-	fn new(size: f32) -> Self {
-		Self { size, groups: Vec::new() }
+	/// The depth to lay out in a host `length` px across: the fitted size, else the edge share.
+	pub fn depth(&self, length: f32) -> f32 {
+		if self.size > 0. { self.size } else { (length * EDGE_SHARE).round().max(MIN_SIZE) }
 	}
 }
 
 /// The arrangement of the dock host, saved by pane id.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct DockLayout {
 	pub left: SideDock,
 	pub right: SideDock,
@@ -87,20 +90,12 @@ pub struct DockLayout {
 	pub hidden: Vec<(String, Side)>,
 }
 
-impl Default for DockLayout {
-	fn default() -> Self {
-		Self {
-			left: SideDock::new(320.),
-			right: SideDock::new(320.),
-			top: SideDock::new(160.),
-			bottom: SideDock::new(200.),
-			hidden: Vec::new(),
-		}
-	}
-}
-
 /// Smallest side depth and group length, logical pixels.
 pub const MIN_SIZE: f32 = 60.;
+/// The share of the host a pane docked at an outer edge takes (WPF's `EdgeShare`).
+pub const EDGE_SHARE: f32 = 0.25;
+/// The share of a group a pane docked beside it takes (WPF's `RelativeShare`).
+pub const RELATIVE_SHARE: f32 = 1. / 3.;
 
 impl DockLayout {
 	pub fn side(&self, side: Side) -> &SideDock {
@@ -144,7 +139,31 @@ impl DockLayout {
 		}
 		let side = self.hidden.iter().find(|(h, _)| h == id).map_or(default_side, |(_, s)| *s);
 		self.hidden.retain(|(h, _)| h != id);
-		self.side_mut(side).groups.push(PaneGroup::new(vec![id.to_string()], 1.));
+		self.push_at_edge(id, side);
+	}
+
+	/// A new group at the end of `side`, taking [`EDGE_SHARE`] of a side that holds groups already.
+	fn push_at_edge(&mut self, id: &str, side: Side) {
+		let groups = &mut self.side_mut(side).groups;
+		let total: f32 = groups.iter().map(|g| g.weight).sum();
+		let weight = if groups.is_empty() { 1. } else { total * EDGE_SHARE / (1. - EDGE_SHARE) };
+		groups.push(PaneGroup::new(vec![id.to_string()], weight));
+	}
+
+	/// Whether a side holding groups has no depth yet.
+	pub fn needs_fit(&self) -> bool {
+		Side::ALL.into_iter().any(|s| self.side(s).size <= 0. && !self.side(s).groups.is_empty())
+	}
+
+	/// Gives each side holding groups without a depth [`EDGE_SHARE`] of the host's `extent` (width, height).
+	pub fn fit_sides(&mut self, extent: (f32, f32)) {
+		for side in Side::ALL {
+			let length = if side.is_vertical() { extent.0 } else { extent.1 };
+			let s = self.side_mut(side);
+			if !s.groups.is_empty() {
+				s.size = s.depth(length);
+			}
+		}
 	}
 
 	pub fn hide(&mut self, id: &str) {
@@ -165,7 +184,7 @@ impl DockLayout {
 	/// Moves a pane into a new group at the end of `side`.
 	pub fn move_to(&mut self, id: &str, side: Side) {
 		if self.take(id).is_some() {
-			self.side_mut(side).groups.push(PaneGroup::new(vec![id.to_string()], 1.));
+			self.push_at_edge(id, side);
 		}
 	}
 
@@ -185,9 +204,23 @@ impl DockLayout {
 		match target {
 			DropTarget::Edge(side) => self.move_to(id, side),
 			DropTarget::Tab(side, group) => self.tab_into(id, side, group),
-			DropTarget::Before(side, group) => self.insert_at(id, side, group),
-			DropTarget::After(side, group) => self.insert_at(id, side, group + 1),
+			DropTarget::Before(side, group) => self.insert_beside(id, side, group, false),
+			DropTarget::After(side, group) => self.insert_beside(id, side, group, true),
 		}
+	}
+
+	/// Moves a pane into a new group before or after group `group` of `side`, taking [`RELATIVE_SHARE`] of
+	/// that group's length.
+	fn insert_beside(&mut self, id: &str, side: Side, group: usize, after: bool) {
+		let Some(target) = self.side(side).groups.get(group).map(|g| g.active_pane().to_owned()) else { return };
+		if target == id || self.take(id).is_none() {
+			return;
+		}
+		let Some((_, g, _)) = self.find(&target) else { return };
+		let groups = &mut self.side_mut(side).groups;
+		let taken = groups[g].weight * RELATIVE_SHARE;
+		groups[g].weight -= taken;
+		groups.insert(if after { g + 1 } else { g }, PaneGroup::new(vec![id.to_string()], taken));
 	}
 
 	/// Moves a pane into an existing group as a tab, active.
@@ -250,10 +283,14 @@ impl DockLayout {
 
 	fn take(&mut self, id: &str) -> Option<Side> {
 		let (side, g, i) = self.find(id)?;
-		let groups = &mut self.side_mut(side).groups;
+		let dock = self.side_mut(side);
+		let groups = &mut dock.groups;
 		groups[g].panes.remove(i);
 		if groups[g].panes.is_empty() {
 			groups.remove(g);
+			if groups.is_empty() {
+				dock.size = 0.;
+			}
 		} else if groups[g].active >= i && groups[g].active > 0 {
 			groups[g].active -= 1;
 		}
@@ -286,7 +323,8 @@ pub const EDGE_STRIP: f32 = 40.;
 const END_SHARE: f32 = 0.3;
 
 /// The drop target under `p`, with the rectangle shown for it: a group's end or middle first, then an outer
-/// edge strip of the host. A pane never targets its own group.
+/// edge strip of the host. The rectangle is the room the pane will take: [`RELATIVE_SHARE`] of the group
+/// beside it, [`EDGE_SHARE`] of the host at an edge. A pane never targets its own group.
 pub fn drop_target_at(
 	host: Rect4,
 	groups: &[((Side, usize), Rect4)],
@@ -300,11 +338,15 @@ pub fn drop_target_at(
 		let (x, y, w, h) = r;
 		let (along, length, start) = if side.is_vertical() { (p.1 - y, h, y) } else { (p.0 - x, w, x) };
 		let end = length * END_SHARE;
+		let room = length * RELATIVE_SHARE;
 		let target = if along < end {
-			(DropTarget::Before(side, index), if side.is_vertical() { (x, start, w, end) } else { (start, y, end, h) })
+			(
+				DropTarget::Before(side, index),
+				if side.is_vertical() { (x, start, w, room) } else { (start, y, room, h) },
+			)
 		} else if along > length - end {
-			let far = start + length - end;
-			(DropTarget::After(side, index), if side.is_vertical() { (x, far, w, end) } else { (far, y, end, h) })
+			let far = start + length - room;
+			(DropTarget::After(side, index), if side.is_vertical() { (x, far, w, room) } else { (far, y, room, h) })
 		} else {
 			(DropTarget::Tab(side, index), r)
 		};
@@ -317,7 +359,16 @@ pub fn drop_target_at(
 		(Side::Top, (hx, hy, hw, EDGE_STRIP)),
 		(Side::Bottom, (hx, hy + hh - EDGE_STRIP, hw, EDGE_STRIP)),
 	];
-	strips.into_iter().find(|(_, r)| contains(*r, p)).map(|(side, r)| (DropTarget::Edge(side), r))
+	let (dw, dh) = (hw * EDGE_SHARE, hh * EDGE_SHARE);
+	strips.into_iter().find(|(_, r)| contains(*r, p)).map(|(side, _)| {
+		let room = match side {
+			Side::Left => (hx, hy, dw, hh),
+			Side::Right => (hx + hw - dw, hy, dw, hh),
+			Side::Top => (hx, hy, hw, dh),
+			Side::Bottom => (hx, hy + hh - dh, hw, dh),
+		};
+		(DropTarget::Edge(side), room)
+	})
 }
 
 /// A pane the host can show.
@@ -392,12 +443,19 @@ impl Component for DockHost {
 		let theme = use_wave_theme();
 		let mut host = use_state(|| (0f32, 0f32));
 		let mut host_area = use_state(Area::default);
-		let active_group = use_state(|| None::<(Side, usize)>);
+		// WPF marks the group holding the keyboard focus, which the first group has at start
+		let active_group = use_state(|| {
+			Side::ALL.into_iter().find(|s| !self.layout.peek().side(*s).groups.is_empty()).map(|s| (s, 0))
+		});
 		let menu = use_state(|| None::<ContextMenuRequest>);
 		let drag = use_state(|| None::<DockDrag>);
 		let areas = use_state(HashMap::<(Side, usize), Rect4>::new);
 		let layout = self.layout.read().clone();
 		let (hw, hh) = *host.read();
+		if hw > 0. && layout.needs_fit() {
+			let mut l = self.layout.clone();
+			spawn(async move { l.write().fit_sides((hw, hh)) });
+		}
 
 		let on_global_move = move |e: Event<PointerEventData>| {
 			let mut d = drag;
@@ -507,29 +565,29 @@ impl Component for DockHost {
 			.height(Size::flex(1.))
 			.horizontal()
 			.content(Content::flex())
-			.maybe_child(left.map(|v| sized(v, layout.left.size, true)))
+			.maybe_child(left.map(|v| sized(v, layout.left.depth(hw), true)))
 			.maybe_child(layout.left.groups.first().map(|_| splitter_for(Side::Left, hw - 2. * MIN_SIZE)))
 			.child(rect().width(Size::flex(1.)).height(Size::fill()).child(self.centre.clone()))
 			.maybe_child(layout.right.groups.first().map(|_| splitter_for(Side::Right, hw - 2. * MIN_SIZE)))
-			.maybe_child(right.map(|v| sized(v, layout.right.size, true)));
+			.maybe_child(right.map(|v| sized(v, layout.right.depth(hw), true)));
 
 		rect()
 			.expanded()
 			.content(Content::flex())
 			.background(theme.window_background)
 			.color(theme.text)
-			.font_size(theme.font_size)
+			.ui_font(&theme)
 			.on_sized(move |e: Event<SizedEventData>| {
 				host.set_if_modified((e.area.width(), e.area.height()));
 				host_area.set_if_modified(e.area);
 			})
 			.on_global_pointer_move(on_global_move)
 			.on_global_pointer_up(on_global_up)
-			.maybe_child(top.map(|v| sized(v, layout.top.size, false)))
+			.maybe_child(top.map(|v| sized(v, layout.top.depth(hh), false)))
 			.maybe_child(layout.top.groups.first().map(|_| splitter_for(Side::Top, hh - 2. * MIN_SIZE)))
 			.child(middle)
 			.maybe_child(layout.bottom.groups.first().map(|_| splitter_for(Side::Bottom, hh - 2. * MIN_SIZE)))
-			.maybe_child(bottom.map(|v| sized(v, layout.bottom.size, false)))
+			.maybe_child(bottom.map(|v| sized(v, layout.bottom.depth(hh), false)))
 			.maybe_child(overlay)
 			.child(ContextMenuHost::new(menu, on_menu))
 	}
@@ -616,19 +674,25 @@ fn group_view(ctx: &HostContext, side: Side, index: usize, group: &PaneGroup) ->
 	let mut areas = ctx.areas;
 	let drag_id = active_id.clone();
 
+	let (grip, button_hover) = if is_active {
+		(theme.title_grip_active, theme.title_button_hover_active)
+	} else {
+		(theme.title_grip_inactive, theme.title_button_hover_inactive)
+	};
 	let title_bar = rect()
 		.width(Size::fill())
-		.height(Size::px(theme.row_height))
+		.height(Size::px(TITLE_HEIGHT))
 		.horizontal()
 		.content(Content::flex())
 		.cross_align(Alignment::center())
-		.padding((0., 2., 0., 6.))
+		.padding((0., 2., 0., 5.))
 		.background(bar_bg)
 		.color(bar_fg)
 		.on_pointer_down(move |e: Event<PointerEventData>| press_to_drag(drag, drag_id.clone(), (side, index), &e))
 		.test_id(format!("DockTitle:{active_id}"))
-		.child(label().text(title).max_lines(1).text_overflow(TextOverflow::Ellipsis).width(Size::flex(1.)))
-		.child(title_button(icons::DROPDOWN, bar_fg, labels.position.clone(), move |at: (f64, f64)| {
+		.child(label().text(title).max_lines(1).text_overflow(TextOverflow::Ellipsis))
+		.child(grip_view(grip))
+		.child(title_button(MENU_GLYPH, bar_fg, button_hover, labels.position.clone(), move |at: (f64, f64)| {
 			let item = |action: &str, text: &str| -> MenuEntry {
 				MenuItem::new(format!("dock:{action}:{dropdown_id}"), text).into()
 			};
@@ -638,29 +702,15 @@ fn group_view(ctx: &HostContext, side: Side, index: usize, group: &PaneGroup) ->
 			entries.push(item("close", &labels.close));
 			menu.set(Some(ContextMenuRequest { at, model: MenuModel::new(entries) }));
 		}))
-		.child(title_button(icons::CLOSE, bar_fg, ctx.labels.close.replace('_', ""), move |_| {
+		.child(title_button(CLOSE_GLYPH, bar_fg, button_hover, ctx.labels.close.replace('_', ""), move |_| {
 			layout_close.write().hide(&close_id);
 		}));
 
 	let tabs = (group.panes.len() > 1).then(|| {
 		let tabs = group.panes.iter().enumerate().map(|(i, id)| {
 			let title = ctx.panes.iter().find(|p| &p.id == id).map_or(id.clone(), |p| p.title.clone());
-			let selected = i == group.active;
-			let mut l = ctx.layout.clone();
-			let id = id.clone();
-			rect()
-				.height(Size::px(theme.row_height))
-				.padding((0., 10., 0., 10.))
-				.main_align(Alignment::center())
-				.background(if selected { theme.tab_active } else { theme.tab_background })
-				.color(if selected { theme.text } else { theme.text_dim })
-				.test_id(format!("DockTab:{id}"))
-				.on_pointer_down(move |e: Event<PointerEventData>| {
-					l.write().activate(&id);
-					press_to_drag(drag, id.clone(), (side, index), &e);
-				})
-				.child(label().text(title).max_lines(1))
-				.into_element()
+			let (id, layout) = (id.clone(), ctx.layout.clone());
+			PaneTab { title, id, selected: i == group.active, from: (side, index), layout, drag }.into_element()
 		});
 		rect().width(Size::fill()).horizontal().background(theme.tab_background).children(tabs)
 	});
@@ -688,17 +738,53 @@ fn group_view(ctx: &HostContext, side: Side, index: usize, group: &PaneGroup) ->
 fn title_button(
 	icon: crate::icon::Icon,
 	color: Color,
+	hover: Color,
 	tooltip: String,
 	on_press: impl FnMut((f64, f64)) + 'static,
 ) -> Element {
-	TitleButton { icon, color, tooltip: tooltip.replace('_', ""), on_press: EventHandler::new(on_press) }.into_element()
+	TitleButton { icon, color, hover, tooltip: tooltip.replace('_', ""), on_press: EventHandler::new(on_press) }
+		.into_element()
 }
 
-/// A flat glyph button reporting its bottom-left corner (window logical pixels) when pressed.
+const TITLE_HEIGHT: f32 = 21.;
+const TITLE_BUTTON: f32 = 16.;
+/// WPF's DropDownGeometry (8 x 4) and CloseGeometry (8 x 8), centred on the 16 px grid.
+const MENU_GLYPH: crate::icon::Icon = crate::icon::Icon::filled("M4 6 L12 6 L8 10 Z");
+const CLOSE_GLYPH: crate::icon::Icon =
+	crate::icon::Icon::filled("M4 5 L5 4 L8 7 L11 4 L12 5 L9 8 L12 11 L11 12 L8 9 L5 12 L4 11 L7 8 Z");
+const GRIP_HEIGHT: f32 = 5.;
+/// The grip's texture tile: dots at (0, 0) and (2, 2).
+const GRIP_TILE: f32 = 4.;
+
+/// The title bar's drag grip: a dotted band filling the room between the title and the buttons.
+fn grip_view(color: Color) -> Rect {
+	rect()
+		.width(Size::flex(1.))
+		.height(Size::px(GRIP_HEIGHT))
+		.margin((0., 4., 0., 6.))
+		.interactive(Interactive::No)
+		.background(RenderCallback::new(move |ctx: &mut FillRenderContext| {
+			let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
+			let paint = crate::paint::fill(color);
+			let (w, h) = (ctx.size.width, ctx.size.height);
+			for row in 0..(h / 2.).ceil() as u32 {
+				let y = row as f32 * 2.;
+				let mut x = if row.is_multiple_of(2) { 0. } else { 2. };
+				while x < w {
+					canvas.draw_rect(freya::engine::prelude::SkRect::new(x, y, x + 1., y + 1.), &paint);
+					x += GRIP_TILE;
+				}
+			}
+		}))
+}
+
+/// A 16 px glyph button of a title bar, its hover colour as background, reporting its bottom-left corner
+/// (window logical pixels) when pressed.
 #[derive(Clone, PartialEq)]
 struct TitleButton {
 	icon: crate::icon::Icon,
 	color: Color,
+	hover: Color,
 	tooltip: String,
 	on_press: EventHandler<(f64, f64)>,
 }
@@ -706,21 +792,76 @@ struct TitleButton {
 impl Component for TitleButton {
 	fn render(&self) -> impl IntoElement {
 		let mut area = use_state(Area::default);
+		let mut hovered = use_state(|| false);
 		let on_press = self.on_press.clone();
-		TooltipContainer::new(Tooltip::new_text(self.tooltip.clone())).child(
-			Button::new()
-				.flat()
-				.compact()
+		Tip::new(self.tooltip.clone()).child(
+			rect()
+				.width(Size::px(TITLE_BUTTON))
+				.height(Size::px(TITLE_BUTTON))
+				.margin((0., 1.))
+				.center()
+				.a11y_role(AccessibilityRole::Button)
+				.a11y_alt(self.tooltip.clone())
+				.background(if hovered() { self.hover } else { Color::TRANSPARENT })
+				.on_sized(move |e: Event<SizedEventData>| area.set_if_modified(e.area))
+				.on_pointer_enter(move |_| hovered.set(true))
+				.on_pointer_leave(move |_| hovered.set(false))
+				.on_pointer_down(|e: Event<PointerEventData>| e.stop_propagation())
 				.on_press(move |_| {
 					let a = *area.peek();
 					on_press.call((f64::from(a.min_x()), f64::from(a.max_y())));
 				})
-				.child(
-					rect()
-						.on_sized(move |e: Event<SizedEventData>| area.set_if_modified(e.area))
-						.child(IconView::new(self.icon.clone()).size(12.).color(self.color)),
-				),
+				.child(IconView::new(self.icon.clone()).color(self.color)),
 		)
+	}
+}
+
+/// A tab of a group's strip: WPF's padding 9,4,9,3 inside a 1 px border on the sides and the bottom, which
+/// only the selected tab draws.
+#[derive(Clone, PartialEq)]
+struct PaneTab {
+	title: String,
+	id: String,
+	selected: bool,
+	from: (Side, usize),
+	layout: Writable<DockLayout>,
+	drag: State<Option<DockDrag>>,
+}
+
+impl Component for PaneTab {
+	fn render(&self) -> impl IntoElement {
+		let theme = use_wave_theme();
+		let mut hovered = use_state(|| false);
+		let (id, from, drag) = (self.id.clone(), self.from, self.drag);
+		let mut layout = self.layout.clone();
+		let ink = if self.selected {
+			theme.tab_active_text
+		} else if hovered() {
+			theme.tab_hover_text
+		} else {
+			theme.tab_text
+		};
+		rect()
+			.height(Size::px(theme.row_height))
+			.padding((4., 10., 4., 10.))
+			.main_align(Alignment::center())
+			.maybe(self.selected, |r| {
+				r.background(theme.tab_active).border(
+					Border::new()
+						.fill(theme.border)
+						.width(BorderWidth { top: 0., right: 1., bottom: 1., left: 1. })
+						.alignment(BorderAlignment::Inner),
+				)
+			})
+			.color(ink)
+			.test_id(format!("DockTab:{}", self.id))
+			.on_pointer_enter(move |_| hovered.set(true))
+			.on_pointer_leave(move |_| hovered.set(false))
+			.on_pointer_down(move |e: Event<PointerEventData>| {
+				layout.write().activate(&id);
+				press_to_drag(drag, id.clone(), from, &e);
+			})
+			.child(label().text(self.title.clone()).max_lines(1))
 	}
 }
 
@@ -861,8 +1002,33 @@ mod tests {
 	}
 
 	#[test]
+	fn drops_take_wpf_shares() {
+		let mut l = first_start();
+		l.drop("properties", DropTarget::Before(Side::Left, 0));
+		assert_eq!(l.left.groups[0].panes, ["properties"]);
+		assert!((l.left.groups[0].weight - 1. / 3.).abs() < 1e-5);
+		assert!((l.left.groups[1].weight - 2. / 3.).abs() < 1e-5);
+
+		let mut l = first_start();
+		l.show("other", Side::Left);
+		assert!((l.left.groups[2].weight - 1.).abs() < 1e-5, "a quarter of the side's 3 + 1");
+
+		let mut l = first_start();
+		l.fit_sides((1000., 800.));
+		assert_eq!(l.left.size, 250., "the first start's column is a quarter of the host");
+		l.resize_side(Side::Left, 70., 1000.);
+		l.move_to("properties", Side::Bottom);
+		l.fit_sides((1000., 800.));
+		assert_eq!(l.bottom.size, 200.);
+		assert_eq!(l.left.size, 320., "a side that held groups keeps its depth");
+		l.move_to("project", Side::Bottom);
+		assert_eq!(l.left.size, 0., "an emptied side is fitted again when it fills");
+	}
+
+	#[test]
 	fn resizing_keeps_minimums() {
 		let mut l = first_start();
+		l.fit_sides((1280., 800.));
 		l.resize_side(Side::Left, 100., 1000.);
 		assert_eq!(l.left.size, 420.);
 		l.resize_side(Side::Left, -1000., 1000.);

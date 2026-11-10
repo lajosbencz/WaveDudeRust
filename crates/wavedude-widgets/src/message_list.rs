@@ -8,8 +8,10 @@ use std::rc::Rc;
 use freya::prelude::*;
 use regex::{Regex, RegexBuilder};
 
+use crate::button::Button;
 use crate::menu::{ContextMenuHost, ContextMenuRequest, MenuEntry, MenuItem, MenuModel};
-use crate::theme::{Theme, use_wave_theme};
+use crate::theme::{Theme, UiFontExt, use_wave_theme};
+use crate::tooltip::Tip;
 use crate::util::{TestIdExt, ctrl, focus_border, is_char, is_named, modifier_tracker, shift, use_modifiers};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -320,7 +322,7 @@ pub fn copy_all(visible: &[LogLine]) -> String {
 }
 
 /// Column widths of Time, Level and Source in logical pixels; Message takes the rest.
-pub const DEFAULT_COLUMNS: [f32; 3] = [88., 52., 120.];
+pub const DEFAULT_COLUMNS: [f32; 3] = [90., 55., 130.];
 const MIN_COLUMN: f32 = 30.;
 
 #[derive(Clone)]
@@ -520,18 +522,25 @@ impl Component for MessageList {
 		let toolbar = rect()
 			.horizontal()
 			.cross_align(Alignment::center())
-			.spacing(4.)
 			.padding(2.)
 			.width(Size::fill())
+			.border(
+				Border::new()
+					.fill(theme.border)
+					.width(BorderWidth { top: 0., right: 0., bottom: 1., left: 0. })
+					.alignment(BorderAlignment::Inner),
+			)
 			.children(toggles)
 			.child(
-				Input::new(WritableSetter::new(search, move |t: String| {
-					search.set(t.clone());
-					filter.write().search = t;
-				}))
-				.placeholder(words.search.clone())
-				.compact()
-				.width(Size::px(160.)),
+				rect().margin((0., 0., 0., 6.)).child(
+					Input::new(WritableSetter::new(search, move |t: String| {
+						search.set(t.clone());
+						filter.write().search = t;
+					}))
+					.placeholder(words.search.clone())
+					.compact()
+					.width(Size::px(180.)),
+				),
 			)
 			.child(ToggleChip {
 				text: words.regex.clone(),
@@ -559,7 +568,7 @@ impl Component for MessageList {
 				}),
 			})
 			.child(
-				TooltipContainer::new(Tooltip::new_text(words.clear_tip.clone())).child(
+				Tip::new(words.clear_tip.clone()).child(
 					Button::new()
 						.compact()
 						.on_press(move |_| clear_log.write().clear())
@@ -642,7 +651,7 @@ impl Component for MessageList {
 				.height(Size::fill())
 				.background(theme.tool_window_background)
 				.color(theme.text)
-				.font_size(theme.font_size)
+				.ui_font(&theme)
 				.child(toolbar)
 				.child(ColumnHeader { columns, names: self.labels.columns.clone() })
 				.child(
@@ -693,8 +702,7 @@ fn row_view(
 	let cell = |text: &str, width: Size| {
 		label().text(text.to_owned()).max_lines(1).text_overflow(TextOverflow::Ellipsis).width(width)
 	};
-	let source = TooltipContainer::new(Tooltip::new_text(line.source.clone()))
-		.child(cell(line.source_short(), Size::px(columns[2] - 6.)));
+	let source = Tip::new(line.source.clone()).child(cell(line.source_short(), Size::px(columns[2] - 6.)));
 	let row = rect()
 		.key(id)
 		.horizontal()
@@ -769,7 +777,8 @@ impl Component for ColumnHeader {
 	}
 }
 
-/// A focusable on/off chip; Space or Enter toggles.
+/// A focusable flat toggle button (WPF's ToolToggle): padding 6,1, margin 1,0, at least 20 high, grey text
+/// while off, the button colours while on; Space or Enter toggles.
 #[derive(Clone, PartialEq)]
 struct ToggleChip {
 	text: String,
@@ -785,33 +794,49 @@ impl Component for ToggleChip {
 		let theme = use_wave_theme();
 		let a11y = use_a11y();
 		let focus = use_focus(a11y);
+		let mut hovered = use_state(|| false);
 		let (press, key) = (self.on_toggle.clone(), self.on_toggle.clone());
-		let chip =
-			rect()
-				.a11y_id(a11y)
-				.a11y_focusable(true)
-				.test_id(self.id.clone())
-				.padding((2., 6.))
-				.corner_radius(2.)
-				.background(if self.on { theme.hover_background } else { Color::TRANSPARENT })
-				.border(focus_border(focus(), theme.accent).or_else(|| {
-					Some(Border::new().fill(theme.input_border).width(1.).alignment(BorderAlignment::Inner))
-				}))
-				.color(if self.on { self.color } else { theme.text_disabled })
-				.on_pointer_down(move |e: Event<PointerEventData>| {
-					if e.button() == Some(MouseButton::Left) {
-						a11y.request_focus();
-						press.call(());
-					}
-				})
-				.on_key_down(move |e: Event<KeyboardEventData>| {
-					if is_named(&e, NamedKey::Enter) || matches!(&e.key, Key::Character(c) if c == " ") {
-						e.stop_propagation();
-						key.call(());
-					}
-				})
-				.child(label().text(self.text.clone()).max_lines(1));
-		TooltipContainer::new(Tooltip::new_text(self.tooltip.clone())).child(chip)
+		let background = if hovered() {
+			theme.button_hover
+		} else if self.on {
+			theme.button_background
+		} else {
+			Color::TRANSPARENT
+		};
+		let border = if focus().is_focused() {
+			theme.accent
+		} else if self.on {
+			theme.button_border
+		} else {
+			Color::TRANSPARENT
+		};
+		let chip = rect()
+			.a11y_id(a11y)
+			.a11y_focusable(true)
+			.test_id(self.id.clone())
+			.min_height(Size::px(20.))
+			.margin((0., 1.))
+			.padding((2., 7.))
+			.main_align(Alignment::center())
+			.background(background)
+			.border(Border::new().fill(border).width(1.).alignment(BorderAlignment::Inner))
+			.color(if self.on { self.color } else { theme.text_disabled })
+			.on_pointer_enter(move |_| hovered.set(true))
+			.on_pointer_leave(move |_| hovered.set(false))
+			.on_pointer_down(move |e: Event<PointerEventData>| {
+				if e.button() == Some(MouseButton::Left) {
+					a11y.request_focus();
+					press.call(());
+				}
+			})
+			.on_key_down(move |e: Event<KeyboardEventData>| {
+				if is_named(&e, NamedKey::Enter) || matches!(&e.key, Key::Character(c) if c == " ") {
+					e.stop_propagation();
+					key.call(());
+				}
+			})
+			.child(label().text(self.text.clone()).max_lines(1));
+		Tip::new(self.tooltip.clone()).child(chip)
 	}
 }
 

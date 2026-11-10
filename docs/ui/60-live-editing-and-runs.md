@@ -99,7 +99,8 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
   keeps its own undo.
 - A restored step is written into the same project object; it counts as an edit for the live rules (new
   frames) but is not recorded again.
-- Selection follows by name, else by index in the same list; settings objects by place.
+- Selection follows by name, else by index in the same list; settings objects by place. A step that leaves
+  nothing of it selects the project root.
 - Title asterisk clears when the current step is the saved one.
 - Paste, Cut, drop, Duplicate, Remove, image Browse/Remove: one step each.
 - New project / open: new history.

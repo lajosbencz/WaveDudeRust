@@ -10,7 +10,7 @@ use std::rc::Rc;
 use freya::prelude::*;
 use freya::winit::window::WindowId;
 use wavedude_widgets::dock::Splitter;
-use wavedude_widgets::{TestIdExt, Theme, use_init_wave_theme, use_wave_theme};
+use wavedude_widgets::{TestIdExt, Theme, Tip, use_init_wave_theme, use_wave_theme};
 
 use super::about::markdown;
 use super::app::{Cx, theme_kind};
@@ -228,7 +228,7 @@ impl Component for ManualView {
 					.child(ScrollView::new().expanded().child(rect().width(Size::fill()).children(rows))),
 			)
 			.child(
-				TooltipContainer::new(Tooltip::new_text(s.get("TipManualSplitter"))).child(
+				Tip::new(s.get("TipManualSplitter")).child(
 					Splitter::new(false, move |delta: f32| {
 						let w = (*contents_width.peek() + delta).clamp(CONTENTS_MIN, max_contents);
 						contents_width.set(w);

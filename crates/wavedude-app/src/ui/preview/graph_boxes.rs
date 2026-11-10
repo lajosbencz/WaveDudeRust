@@ -11,11 +11,14 @@ use std::rc::Rc;
 use freya::prelude::*;
 use serde_json::json;
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::model::{BoxSize, Layer, Measurement, Probe, Project, ScaleMode, YScale};
+use wavedude_core::model::{BoxSize, Layer, Probe, Project};
+use wavedude_export::graph;
 use wavedude_widgets::graph_box::GraphBoxEvent;
 use wavedude_widgets::menu::ContextMenuRequest;
 use wavedude_widgets::picture::CanvasTransform;
-use wavedude_widgets::{Callback, GraphBox, GraphData, MenuItem, MenuModel, TestIdExt, ValueAxis};
+use wavedude_widgets::{
+	Callback, GraphBox, GraphData, GraphLayout, GraphTick, MenuItem, MenuModel, TestIdExt, TextMeasure, Tip,
+};
 
 use super::{PaneStates, PictureMenu, PreviewAction, layer_name};
 use crate::ui::shared::{Shared, Topics};
@@ -30,56 +33,64 @@ pub const RELEASE_DISTANCE: f32 = 24.;
 /// A resized box within this many screen pixels of a fixed size takes it.
 pub const SIZE_SNAP: f32 = 8.;
 
-/// The values a graph shows and where they sit on its step (or distance) axis.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Series {
-	pub values: Vec<f32>,
-	pub x_range: (f64, f64),
-	pub x_per_sample: f64,
+/// A probe's recording as it stood at the frame shown, owned so the box can lay it out at any size.
+#[derive(Clone, Debug, Default)]
+struct Recording {
+	series: Rc<[f32]>,
+	profile: Option<Rc<[f32]>>,
+	length: f64,
+	sampled: u64,
 }
 
-/// A point probe's series cut after `samples` values (the frame's step index plus one): the last `window` steps
-/// (Running) or all (Full); with `auto_x` the step axis follows the samples, else it spans the window or the run.
-pub fn point_series(series: &[f32], samples: usize, mode: ScaleMode, window: u32, auto_x: bool, steps: u32) -> Series {
-	let end = samples.min(series.len());
-	let (start, x_range) = match mode {
-		ScaleMode::Running => {
-			let window = window as usize;
-			let start = end.saturating_sub(window);
-			let range = if auto_x {
-				(start as f64, end.max(start + 1) as f64)
-			} else if end >= window {
-				(start as f64, (start + window) as f64)
-			} else {
-				(0., window as f64)
-			};
-			(start, range)
+impl Recording {
+	fn at(trace: &ProbeTrace, step: u64, frame: usize) -> Self {
+		let d = graph::GraphData::at(trace, step, frame);
+		Self {
+			series: d.series.into(),
+			profile: d.profile.map(Rc::from),
+			length: d.profile_length,
+			sampled: d.steps_sampled,
 		}
-		ScaleMode::Full => (0, if auto_x { (0., end.max(1) as f64) } else { (0., f64::from(steps)) }),
-	};
-	Series { values: series[start..end].to_vec(), x_range, x_per_sample: 1. }
-}
-
-/// A line probe's profile along A..B, `length` canvas pixels.
-pub fn line_series(profile: &[f32], length: f64) -> Series {
-	let per = if profile.len() > 1 { length / (profile.len() - 1) as f64 } else { 0. };
-	Series { values: profile.to_vec(), x_range: (0., length.max(1e-9)), x_per_sample: per }
-}
-
-/// The value axis: amplitude symmetric about zero, an intensity linear or in decades; fitted or the probe's bounds.
-pub fn axis_for(probe: &Probe, values: &[f32]) -> ValueAxis {
-	if probe.measurement == Measurement::Amplitude {
-		return if probe.auto_scale_y {
-			ValueAxis::fit_symmetric(values)
-		} else {
-			ValueAxis::Symmetric { max: probe.y_min.abs().max(probe.y_max.abs()) }
-		};
 	}
-	match (probe.y_scale, probe.auto_scale_y) {
-		(YScale::Logarithmic, true) => ValueAxis::fit_logarithmic(values, probe.decades),
-		(YScale::Logarithmic, false) => ValueAxis::Logarithmic { top: probe.y_max.max(1e-30), decades: probe.decades },
-		(YScale::Linear, true) => ValueAxis::fit_linear(values),
-		(YScale::Linear, false) => ValueAxis::Linear { min: probe.y_min, max: probe.y_max },
+
+	fn data(&self) -> graph::GraphData<'_> {
+		graph::GraphData {
+			series: &self.series,
+			profile: self.profile.as_deref(),
+			profile_length: self.length,
+			steps_sampled: self.sampled,
+		}
+	}
+}
+
+/// The box's text metrics for the shared layout.
+struct Metrics<'a>(&'a TextMeasure<'a>);
+
+impl graph::TextMetrics for Metrics<'_> {
+	fn line_height(&self) -> f32 {
+		self.0.line_height
+	}
+
+	fn width(&self, text: &str) -> f32 {
+		(self.0.width)(text)
+	}
+}
+
+/// Probe `probe`'s graph over `recording` in a box `width` x `height`, laid out as an export lays it out.
+fn graph_layout(probe: &Probe, recording: &Recording, steps: u64, text: &TextMeasure, size: (f32, f32)) -> GraphLayout {
+	let g = graph::layout(probe, &recording.data(), steps, size.0, size.1, &Metrics(text));
+	let ticks = |ticks: Vec<graph::Tick>| {
+		ticks.into_iter().map(|t| GraphTick { position: t.position, label: t.label, zero: t.zero }).collect()
+	};
+	GraphLayout {
+		has_plot: g.visible && g.has_plot,
+		plot: (g.plot_x, g.plot_y, g.plot_width, g.plot_height),
+		line_width: g.line_width,
+		y_ticks: ticks(g.y_ticks),
+		x_ticks: ticks(g.x_ticks),
+		curve: g.curve,
+		title: g.title,
+		readout: g.readout,
 	}
 }
 
@@ -142,13 +153,6 @@ fn enum_name(size: BoxSize) -> &'static str {
 	}
 }
 
-fn readout(values: &[f32]) -> String {
-	values.last().map_or_else(String::new, |v| {
-		let v = f64::from(*v);
-		if v != 0. && (v.abs() >= 1e4 || v.abs() < 1e-2) { format!("{v:.2e}") } else { format!("{v:.3}") }
-	})
-}
-
 /// One box to draw: its probe and graph.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BoxView {
@@ -194,7 +198,7 @@ fn views<B: wavedude_app_state::live::Backend>(
 	let project = &app.document.project;
 	let canvas = project.canvas_size();
 	let selected = app.selection.items();
-	let steps = project.simulation.steps;
+	let steps = u64::from(project.simulation.steps);
 	project
 		.probes
 		.iter()
@@ -202,32 +206,16 @@ fn views<B: wavedude_app_state::live::Backend>(
 		.filter(|(_, p)| p.active && p.layer == layer)
 		.map(|(i, p)| {
 			let trace = names.iter().position(|n| n.eq_ignore_ascii_case(&p.name)).and_then(|t| traces.get(t));
-			let series = match (p.shows_profile(), trace) {
-				(false, Some(t)) => {
-					let samples = cut.map_or(t.series.len(), |c| c.0);
-					point_series(&t.series, samples, p.scale_mode, p.window, p.auto_scale_x, steps)
-				}
-				(true, Some(t)) => {
-					let profile = match cut {
-						Some((_, k)) => t.profiles.get(k.min(t.profiles.len().saturating_sub(1))),
-						None => t.profiles.last(),
-					};
-					line_series(profile.unwrap_or_default(), t.length)
-				}
-				(_, None) => Series { values: Vec::new(), x_range: (0., 1.), x_per_sample: 1. },
+			let recording = match (trace, cut) {
+				(Some(t), Some((samples, frame))) => Recording::at(t, samples.saturating_sub(1) as u64, frame),
+				_ => Recording::default(),
 			};
-			let axis = axis_for(p, &series.values);
+			let probe = p.clone();
 			BoxView {
 				index: i,
-				data: GraphData {
-					title: p.name.clone(),
-					readout: readout(&series.values),
-					readout_color: Color::from_rgb(0xFF, 0xD7, 0x00),
-					values: Rc::from(series.values),
-					x_range: series.x_range,
-					x_per_sample: series.x_per_sample,
-					axis,
-				},
+				data: GraphData::new(p.name.clone(), move |text, w, h| {
+					graph_layout(&probe, &recording, steps, text, (w, h))
+				}),
 				origin: box_origin(p, canvas),
 				size: box_size(p, canvas),
 				selected: selected.contains(&ItemRef::new(ItemKind::Probe, i)),
@@ -377,7 +365,7 @@ impl Component for ProbeBox {
 				}
 			})
 			.child(
-				TooltipContainer::new(Tooltip::new_text(tip)).child(
+				Tip::new(tip).child(
 					GraphBox::new(self.view.data.clone(), w, h, on_event)
 						.selected(self.view.selected)
 						.grip_tooltip(grip_tip)
@@ -459,54 +447,25 @@ fn on_box_event(shared: &Shared, states: PaneStates, index: usize, canvas: (u32,
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use wavedude_core::model::ProbeKind;
 
 	#[test]
-	fn running_graphs_slide_a_window_over_the_steps() {
-		let series: Vec<f32> = (0..100).map(|i| i as f32).collect();
-		let s = point_series(&series, 60, ScaleMode::Running, 20, false, 100);
-		assert_eq!(s.values.first(), Some(&40.));
-		assert_eq!(s.values.len(), 20);
-		assert_eq!(s.x_range, (40., 60.));
-		let early = point_series(&series, 5, ScaleMode::Running, 20, false, 100);
-		assert_eq!(early.values.len(), 5);
-		assert_eq!(early.x_range, (0., 20.), "the window keeps its width before it fills");
-		let auto = point_series(&series, 5, ScaleMode::Running, 20, true, 100);
-		assert_eq!(auto.x_range, (0., 5.));
-	}
-
-	#[test]
-	fn full_graphs_span_the_run_or_follow_the_samples() {
-		let series: Vec<f32> = vec![1.; 50];
-		assert_eq!(point_series(&series, 30, ScaleMode::Full, 20, false, 200).x_range, (0., 200.));
-		assert_eq!(point_series(&series, 30, ScaleMode::Full, 20, true, 200).x_range, (0., 30.));
-		assert_eq!(
-			point_series(&series, 500, ScaleMode::Full, 20, true, 200).values.len(),
-			50,
-			"cut at what was recorded"
-		);
-		assert!(point_series(&[], 10, ScaleMode::Running, 20, false, 10).values.is_empty());
-	}
-
-	#[test]
-	fn line_profiles_span_the_probe_length() {
-		let s = line_series(&[0., 1., 2., 3., 4.], 8.);
-		assert_eq!(s.x_per_sample, 2.);
-		assert_eq!(s.x_range, (0., 8.));
-	}
-
-	#[test]
-	fn axes_follow_the_measurement() {
-		let mut p = Probe::default();
-		assert_eq!(axis_for(&p, &[0.5, -2.]), ValueAxis::Symmetric { max: 2. });
-		p.auto_scale_y = false;
-		p.y_min = -3.;
-		p.y_max = 1.;
-		assert_eq!(axis_for(&p, &[0.5]), ValueAxis::Symmetric { max: 3. });
-		p.measurement = Measurement::Value;
-		p.y_scale = YScale::Logarithmic;
-		p.auto_scale_y = true;
-		p.decades = 4;
-		assert_eq!(axis_for(&p, &[0., 0.02, 3.]), ValueAxis::Logarithmic { top: 10., decades: 4 });
+	fn a_line_probe_reads_its_maximum_as_next_writes_it() {
+		let p = Probe { kind: ProbeKind::Line, ..Probe::default() };
+		let recording = Recording {
+			series: Rc::from([]),
+			profile: Some(Rc::from([0., 1.2e-5, 3.08e-5, 2e-6])),
+			length: 80.,
+			sampled: 10,
+		};
+		let width = |t: &str| t.len() as f32 * 6.;
+		let text = TextMeasure { line_height: 13., width: &width };
+		let g = graph_layout(&p, &recording, 100, &text, (300., 150.));
+		assert_eq!(g.readout, "max 3.08E-05");
+		assert!(g.has_plot);
+		let labels: Vec<&str> = g.x_ticks.iter().map(|t| t.label.as_str()).collect();
+		assert_eq!(labels, ["0", "20", "40", "60", "80"]);
+		assert!(g.y_ticks.iter().any(|t| t.label == "2E-05"), "{:?}", g.y_ticks);
 	}
 
 	#[test]

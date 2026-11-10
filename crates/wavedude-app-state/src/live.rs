@@ -35,7 +35,7 @@ pub trait Backend {
 	fn engine_changed(&mut self);
 	/// The store budget at `ram_percent` and at Auto, counting `reclaimed` bytes as free.
 	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64);
-	/// "CPU (16 threads)" or the GPU's name.
+	/// "CPU (16 threads)" or "GPU: <name>".
 	fn engine_name(&self) -> String;
 }
 
@@ -166,6 +166,8 @@ pub struct LiveController<B: Backend> {
 	/// The first tick came: the UI is up, so the run may build its engine (a GPU context made beside the
 	/// window's own graphics start crashes the driver).
 	started: bool,
+	/// When every frame was last asked for; cleared once the run's end is reported.
+	run_started: Option<Instant>,
 	status: Status,
 	notices: Vec<Notice>,
 }
@@ -206,6 +208,7 @@ impl<B: Backend> LiveController<B> {
 			edited_during_export: None,
 			published: None,
 			started: false,
+			run_started: None,
 			status,
 			notices: Vec::new(),
 		}
@@ -377,6 +380,43 @@ impl<B: Backend> LiveController<B> {
 		Some((state, done, steps))
 	}
 
+	/// Logs the summary of a run that completed or was stopped since it started, once.
+	fn report_run_end(&mut self, now: Instant) {
+		let Some(started) = self.run_started else { return };
+		match self.run_status() {
+			Some((RunState::Completed | RunState::Cancelled, ..)) => {
+				self.run_started = None;
+				if let Some(line) = self.run_summary(started, now) {
+					tracing::info!("{line}");
+				}
+			}
+			Some((RunState::Failed(_), ..)) => self.run_started = None,
+			_ => {}
+		}
+	}
+
+	/// "Run <state>: <done> of <steps> steps, ..." for a run started at `started` and ended by `now`; `None`
+	/// while it is under way or without one.
+	fn run_summary(&self, started: Instant, now: Instant) -> Option<String> {
+		let (state, done, steps) = self.run_status()?;
+		let word = match state {
+			RunState::Completed => "Completed",
+			RunState::Cancelled => "Cancelled",
+			_ => return None,
+		};
+		let (store, request) = (self.current_store()?, self.request.as_ref()?);
+		let frames = request.schedule().covered_frames(store.present_count() as u32);
+		let (in_memory, on_disk) = (store.frames_in_memory(), store.frames_on_disk());
+		let gb = |n: usize| (n * store.frame_bytes()) as f64 / f64::from(1u32 << 30);
+		Some(format!(
+			"Run {word}: {done} of {steps} steps, {frames} frames, {:.1} s; {} stored, {in_memory} in memory ({:.1} GB) and {on_disk} on disk ({:.1} GB)",
+			now.saturating_duration_since(started).as_secs_f64(),
+			in_memory + on_disk,
+			gb(in_memory),
+			gb(on_disk),
+		))
+	}
+
 	/// What the run is made from: the project state, quality and tracking the worker builds its spec from.
 	pub fn run_request(&self) -> Option<&RunRequest> {
 		self.request.as_ref()
@@ -448,6 +488,7 @@ impl<B: Backend> LiveController<B> {
 		self.track_intensity = false;
 		self.wanted = Wanted::Position;
 		self.ran = false;
+		self.run_started = None;
 		self.user_paused = false;
 		self.live = false;
 		self.shown = None;
@@ -543,6 +584,7 @@ impl<B: Backend> LiveController<B> {
 	fn start(&mut self, then: Then, now: Instant) {
 		self.wanted = Wanted::All;
 		self.ran = true;
+		self.run_started = Some(now);
 		self.user_paused = false;
 		match then {
 			Then::Run => {
@@ -609,6 +651,7 @@ impl<B: Backend> LiveController<B> {
 		if self.live && self.complete() {
 			self.live = false;
 		}
+		self.report_run_end(now);
 		self.advance_playback(now);
 		self.show_frame();
 		self.poll_fit();
@@ -940,7 +983,7 @@ impl Backend for CoreBackend {
 		if self.use_gpu.load(Ordering::Relaxed)
 			&& let Ok(ctx) = wavedude_core::engine::gpu::context()
 		{
-			return ctx.info.name.clone();
+			return format!("GPU: {}", ctx.info.name);
 		}
 		let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
 		format!("CPU ({threads} threads)")
@@ -1246,6 +1289,25 @@ mod tests {
 		c.set_settings(LiveSettings { auto_rerun: true, ..c.settings() });
 		c.tick(t, &p);
 		assert_eq!(c.backend().wanted(), Wanted::Position, "turning it on asks for nothing by itself");
+	}
+
+	/// The summary is checked through `run_summary`: a test subscriber can miss the log line, since tracing caches
+	/// each callsite's interest process-wide while other tests run.
+	#[test]
+	fn a_finished_run_is_summed_up_once() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.run_user(&p, t);
+		c.tick(t, &p);
+		assert_eq!(c.run_started, Some(t));
+		assert_eq!(c.run_summary(t, t), None, "under way");
+		c.backend_mut().complete();
+		c.tick(t + std::time::Duration::from_millis(400), &p);
+		assert_eq!(c.run_started, None, "reported on the tick that completed it");
+		let line = c.run_summary(t, t + std::time::Duration::from_millis(400)).expect("a completed run");
+		assert!(line.starts_with("Run Completed: 200 of 200 steps, "), "{line}");
+		assert!(line.contains(", 0.4 s; ") && line.contains(" in memory ("), "{line}");
 	}
 
 	#[test]

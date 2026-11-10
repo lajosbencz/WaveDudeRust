@@ -7,7 +7,8 @@ use std::hash::Hash;
 use freya::prelude::*;
 
 use crate::icon::{Icon, IconView, icons};
-use crate::theme::{Theme, use_wave_theme};
+use crate::theme::{Theme, UiFontExt, use_wave_theme};
+use crate::tooltip::Tip;
 use crate::util::{TestIdExt, focus_border, use_modifiers};
 
 /// Kind of a row; only [`RowKind::Item`] rows join a multi-selection and reorder.
@@ -415,6 +416,7 @@ pub struct TreeView<K: 'static> {
 	state: Writable<TreeState<K>>,
 	on_action: EventHandler<TreeAction<K>>,
 	test_id: Option<String>,
+	a11y_id: Option<AccessibilityId>,
 }
 
 impl<K: Clone + PartialEq + 'static> TreeView<K> {
@@ -423,7 +425,13 @@ impl<K: Clone + PartialEq + 'static> TreeView<K> {
 		state: impl IntoWritable<TreeState<K>>,
 		on_action: impl Into<EventHandler<TreeAction<K>>>,
 	) -> Self {
-		Self { rows, state: state.into_writable(), on_action: on_action.into(), test_id: None }
+		Self { rows, state: state.into_writable(), on_action: on_action.into(), test_id: None, a11y_id: None }
+	}
+
+	/// The tree's id, for giving it the keyboard focus from outside (`id.request_focus()`).
+	pub fn a11y_id(mut self, id: AccessibilityId) -> Self {
+		self.a11y_id = Some(id);
+		self
 	}
 
 	pub fn test_id(mut self, id: impl Into<String>) -> Self {
@@ -435,7 +443,8 @@ impl<K: Clone + PartialEq + 'static> TreeView<K> {
 impl<K: Clone + PartialEq + Debug + 'static> Component for TreeView<K> {
 	fn render(&self) -> impl IntoElement {
 		let theme = use_wave_theme();
-		let tree_id = use_a11y();
+		let own_id = use_a11y();
+		let tree_id = self.a11y_id.unwrap_or(own_id);
 		let focus = use_focus(tree_id);
 		let modifiers = use_modifiers();
 		let mut list_area = use_state(Area::default);
@@ -581,7 +590,7 @@ impl<K: Clone + PartialEq + Debug + 'static> Component for TreeView<K> {
 			.expanded()
 			.background(theme.tool_window_background)
 			.color(theme.text)
-			.font_size(theme.font_size)
+			.ui_font(&theme)
 			.border(focus_border(focus(), theme.accent))
 			.on_key_down(on_key_down)
 			.on_global_pointer_move(on_global_move)
@@ -829,7 +838,7 @@ fn row_view<K: Clone + PartialEq + 'static>(
 
 fn with_tip(tip: Option<String>, child: impl IntoElement) -> Element {
 	match tip {
-		Some(t) => TooltipContainer::new(Tooltip::new_text(t)).child(child).into_element(),
+		Some(t) => Tip::new(t).child(child).into_element(),
 		None => child.into_element(),
 	}
 }

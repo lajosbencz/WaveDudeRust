@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="2107">
+	<Description>Rayleigh criterion: two point sources 78 px apart, 400 px before a lens of focal length 200 and diameter 100 (index 1.5, radii 200 and -200, 20 px thick, in an absorbing mount), are imaged 1:1 onto the plane 400 px behind the lens. Their separation is 1.22 times wavelength (16 px, frequency 100) times image distance (400) over the diameter (100), the Rayleigh limit; the sources differ by 10 frequency levels so their fringes beat away in the time average. The imaging detector Sensor on the image plane builds the histogram of its detections in 4 px bins, two peaks with a dip between them; the line probe Image beside it reads the integrated intensity for comparison.</Description>
+	<Scene Width="1280" Height="540" />
+	<Simulation Steps="2400" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="5" />
+	</Display>
+	<Source Name="Star A" X="140" Y="231" Frequency="100" />
+	<Source Name="Star B" X="140" Y="309" Frequency="110" />
+	<Lens Name="Objective" X="540" Y="270" Coating="3" Diameter="100" R1="200" R2="-200" Thickness="20" />
+	<Rectangle Name="Mount upper" X="540" Y="110" RefractiveIndex="1" Absorption="255" AbsorptionRamp="10" Length="24" Width="220" />
+	<Rectangle Name="Mount lower" X="540" Y="430" RefractiveIndex="1" Absorption="255" AbsorptionRamp="10" Length="24" Width="220" />
+	<Probe Name="Sensor" Kind="Line" AX="940" AY="150" BX="940" BY="390" BoxX="860" BoxY="330" Detector="Imaging" Sensitivity="20" BinSize="4" StartAfter="800" />
+	<Probe Name="Image" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="944" AY="150" BX="944" BY="390" BoxX="860" BoxY="20" />
+</Project>

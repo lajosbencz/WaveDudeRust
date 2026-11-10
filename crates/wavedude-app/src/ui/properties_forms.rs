@@ -1,18 +1,19 @@
 //! The forms of docs/ui/30, row by row, on the editors of [`super::properties`].
 
 use std::path::{Path, PathBuf};
+use wavedude_widgets::Button;
 
 use freya::prelude::*;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use wavedude_core::io::schemes;
+use wavedude_core::io::{resolve_image_path, schemes};
 use wavedude_core::model::{self as m, PartKind, Project, SchemeKind, SourceArray, Stencil};
 use wavedude_core::scene::gate_design::{self, GateDesign};
-use wavedude_widgets::icon::icons;
+use wavedude_widgets::icon::{Icon, icons};
 use wavedude_widgets::{
 	ColorButton, DescriptionHeader, Gradient, GradientEditor, GradientStop, IconView, NumberSpec, PickerTips,
-	PropertyRow, Rgb, SectionHeader, TestIdExt, use_wave_theme,
+	PropertyRow, Rgb, SectionHeader, TestIdExt, TextBox, Tip, use_wave_theme,
 };
 
 use wavedude_app_state::commands::{Command, NewPart};
@@ -20,7 +21,7 @@ use wavedude_app_state::selection::{ItemKind, Row};
 use wavedude_app_state::{Event as AppEvent, Guarded};
 
 use super::dialogs;
-use super::properties::{Form, Snapshot, bounds, combo_box, readout, tagged, to_json};
+use super::properties::{Form, Scope, Snapshot, bounds, combo_box, readout, swatched_combo_box, tagged, to_json};
 use super::shared::App;
 
 /// A meta surface's read-outs.
@@ -34,6 +35,26 @@ pub struct MetaReadouts {
 	pub line: Option<f64>,
 }
 
+/// A scheme a layer's picker lists.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SchemeEntry {
+	pub name: String,
+	/// The project's own.
+	pub own: bool,
+	pub stops: Vec<m::Stop>,
+}
+
+/// A logic gate's design as its form shows it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GateReadouts {
+	/// Core width, coupler gap, coupler length, total length.
+	pub layout: [i64; 4],
+	pub ports: [m::Point; 4],
+	pub quarter_wave: f64,
+	/// The port spacing the design uses: the stored one raised to the design's minimum.
+	pub spacing: i64,
+}
+
 /// Values the forms show that the edited object alone does not hold.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Readouts {
@@ -41,8 +62,7 @@ pub struct Readouts {
 	pub nominal: bool,
 	pub lens_edge: Option<f64>,
 	pub apex: Option<f64>,
-	/// Core width, coupler gap, coupler length, total length, ports.
-	pub gate: Option<([i64; 4], [m::Point; 4], f64)>,
+	pub gate: Option<GateReadouts>,
 	pub zones: Option<(i64, f64)>,
 	/// A diffuser's roughness: the face's height from crest to trough and its number of ripples.
 	pub roughness: Option<(f64, usize)>,
@@ -52,9 +72,10 @@ pub struct Readouts {
 	pub max_diameter: Option<u32>,
 	pub meta: Option<MetaReadouts>,
 	pub image_found: bool,
-	pub image_size: Option<(u32, u32)>,
+	/// Width, height and size in KB of the embedded image.
+	pub image_size: Option<(u32, u32, usize)>,
 	/// Scheme names for each layer's picker: (name, project's own).
-	pub schemes: [Vec<(String, bool)>; 2],
+	pub schemes: [Vec<SchemeEntry>; 2],
 	/// For the scheme form's Based on picker.
 	pub based_on: Vec<String>,
 	pub can_remove_stop: bool,
@@ -70,9 +91,10 @@ fn zones(z: &m::ZonePlate, sim: &m::Simulation) -> Option<(i64, f64)> {
 	let r = f64::from(z.diameter) / 2.;
 	let a = lambda * lambda / 4.;
 	let b = lambda * f;
+	// the zone index at the rim
 	let n = ((-b + (b * b + 4. * a * r * r).sqrt()) / (2. * a)).floor() as i64;
 	let outer = if n >= 1 { radius(n as f64) - radius(n as f64 - 1.) } else { r };
-	Some((n, outer))
+	Some((n + 1, outer))
 }
 
 fn edge_thickness(l: &m::Lens, zones: u32, division: m::ZoneDivision) -> f64 {
@@ -80,13 +102,14 @@ fn edge_thickness(l: &m::Lens, zones: u32, division: m::ZoneDivision) -> f64 {
 }
 
 /// The schemes a layer's picker lists: the project's, the user's, the built-in ones.
-fn scheme_names(project: &Project, user: &[m::ColorScheme], kind: SchemeKind) -> Vec<(String, bool)> {
+fn scheme_names(project: &Project, user: &[m::ColorScheme], kind: SchemeKind) -> Vec<SchemeEntry> {
 	let fits = |k: SchemeKind| k == kind || k == SchemeKind::Unspecified;
-	let mut v: Vec<(String, bool)> =
-		project.color_schemes.iter().filter(|s| fits(s.kind)).map(|s| (s.name.clone(), true)).collect();
+	let entry = |s: &m::ColorScheme, own| SchemeEntry { name: s.name.clone(), own, stops: s.stops.clone() };
+	let mut v: Vec<SchemeEntry> =
+		project.color_schemes.iter().filter(|s| fits(s.kind)).map(|s| entry(s, true)).collect();
 	for s in user.iter().chain(schemes::built_in()).filter(|s| fits(s.kind)) {
-		if !v.iter().any(|(n, _)| n.eq_ignore_ascii_case(&s.name)) {
-			v.push((s.name.clone(), false));
+		if !v.iter().any(|e| e.name.eq_ignore_ascii_case(&s.name)) {
+			v.push(entry(s, false));
 		}
 	}
 	v
@@ -100,8 +123,10 @@ pub fn readouts(app: &App, row: Row) -> Readouts {
 	let nominal = sim.stencil == Stencil::NinePoint;
 	match row {
 		Row::Scene => {
-			r.image_found = !p.scene.image_path.is_empty() && Path::new(&p.scene.image_path).is_file();
-			r.image_size = p.scene.image_data.as_ref().map(|_| (p.scene.width, p.scene.height));
+			r.image_found = !p.scene.image_path.is_empty()
+				&& resolve_image_path(app.document.folder(), &p.scene.image_path).is_file();
+			r.image_size =
+				p.scene.image_data.as_ref().map(|b| (p.scene.width, p.scene.height, (b.len() / 1024).max(1)));
 		}
 		Row::Display => {
 			let user = &app.schemes.user;
@@ -126,8 +151,12 @@ pub fn readouts(app: &App, row: Row) -> Readouts {
 				PartKind::LogicGate(g) => {
 					r.wavelength = gate_design::gate_wavelength(g.design_frequency, sim.source_frequency_scale);
 					if let Some(d) = GateDesign::for_gate(g, sim) {
-						let ports = gate_design::ports_of(&d, &p.parts[i.index].base);
-						r.gate = Some(([d.core_width, d.coupled, d.coupler_len, d.length], ports, d.wavelength));
+						r.gate = Some(GateReadouts {
+							layout: [d.core_width, d.coupled, d.coupler_len, d.length],
+							ports: gate_design::ports_of(&d, &p.parts[i.index].base),
+							quarter_wave: d.wavelength / (4. * d.core_index.sqrt()),
+							spacing: d.port_spacing,
+						});
 					}
 				}
 				PartKind::ZonePlate(z) => {
@@ -176,8 +205,19 @@ fn section(title: &str, rows: Vec<PropertyRow>) -> Element {
 	SectionHeader::new(title).children(rows.into_iter().map(IntoElement::into_element)).into_element()
 }
 
+/// At most one decimal: "12 px", "12.5 px".
 fn px(v: f64) -> String {
-	format!("{v:.1} px")
+	format!("{} px", one_decimal(v))
+}
+
+fn one_decimal(v: f64) -> String {
+	let text = format!("{v:.1}");
+	text.strip_suffix(".0").map_or_else(|| text.clone(), str::to_owned)
+}
+
+/// An estimate: "~ 32.0 px".
+fn approx_px(v: f64) -> String {
+	format!("~ {v:.1} px")
 }
 
 /// Every row of the current form.
@@ -210,20 +250,31 @@ fn project(f: &Form) -> Vec<Element> {
 		}
 	};
 	let p = f.scope("Project", "", "Project");
+	let seed = f.number_beside(
+		"Project",
+		"Seed",
+		&p.path("Seed"),
+		NumberSpec::integer(f64::from(i32::MIN), f64::from(i32::MAX)),
+		tagged(dialogs::button(s.get("ButtonNewSeed"), true, new_seed), "ProjectNewSeed"),
+	);
 	vec![section(
 		s.get("SectionGeneral"),
 		vec![
 			readout(s.label("Project", "Version"), m::PROJECT_VERSION.to_string(), "ProjectVersion"),
-			p.number_with("Seed", NumberSpec::integer(f64::from(i32::MIN), f64::from(i32::MAX))),
-			PropertyRow::new("", dialogs::button(s.get("ButtonNewSeed"), true, new_seed))
-				.hint(s.hint("Project", "Seed")),
+			seed,
 			p.text("Description", true),
 		],
 	)]
 }
 
+/// The image's name, editable as Next's, and its browse, save and remove buttons.
 fn image_buttons(f: &Form, has_bytes: bool) -> Element {
 	let s = f.s;
+	let name = {
+		let form = f.clone();
+		let editor = TextBox::new(f.word("image"), move |t: String| form.set("image", Value::from(t))).live();
+		rect().width(Size::fill()).test_id("SceneImageName").child(editor)
+	};
 	let pick = {
 		let f = f.clone();
 		move |_: Event<PressEventData>| {
@@ -255,11 +306,11 @@ fn image_buttons(f: &Form, has_bytes: bool) -> Element {
 	let glyph = |icon| IconView::new(icon).into_element();
 	rect()
 		.horizontal()
-		.spacing(2.)
+		.spacing(4.)
 		.width(Size::fill())
 		.content(Content::flex())
 		.cross_align(Alignment::center())
-		.child(label().width(Size::flex(1.)).text(f.word("image")).max_lines(1).test_id("SceneImageName"))
+		.child(rect().width(Size::flex(1.)).child(name))
 		.child(tip(
 			s.get("TipBrowseSceneImage"),
 			tagged(Button::new().compact().on_press(pick).child(label().text("...")), "SceneImageBrowse"),
@@ -282,7 +333,7 @@ fn image_buttons(f: &Form, has_bytes: bool) -> Element {
 }
 
 fn tip(text: &str, child: impl IntoElement) -> Element {
-	TooltipContainer::new(Tooltip::new_text(text.to_owned())).child(child).into_element()
+	Tip::new(text).child(child).into_element()
 }
 
 fn save_image(f: &Form) {
@@ -320,7 +371,9 @@ fn scene(f: &Form, r: &Readouts) -> Vec<Element> {
 		let shown =
 			if !path.is_empty() && !r.image_found { format!("{path} {}", s.get("SceneImageNotFound")) } else { path };
 		canvas.push(readout(s.label("Scene", "ImagePath"), shown, "SceneImagePath"));
-		let size = r.image_size.map_or_else(|| s.get("ImageUnreadable").to_owned(), |(w, h)| format!("{w} x {h}"));
+		let size = r
+			.image_size
+			.map_or_else(|| s.get("ImageUnreadable").to_owned(), |(w, h, kb)| format!("{w} x {h}, {kb} KB"));
 		canvas.push(readout(s.get("LabelEmbeddedImage"), size, "SceneEmbeddedImage").hint(s.get("TipEmbeddedImage")));
 	}
 	let (smin, smax) = bounds("Scene.Width");
@@ -375,15 +428,19 @@ fn simulation(f: &Form) -> Vec<Element> {
 	]
 }
 
-fn layer_rows(f: &Form, layer: &str, names: &[(String, bool)]) -> Vec<PropertyRow> {
+fn layer_rows(f: &Form, layer: &str, names: &[SchemeEntry]) -> Vec<PropertyRow> {
 	let s = &f.s;
 	let l = f.scope("DisplayLayer", layer, "DisplayLayer");
 	let path = l.path("ColorScheme");
 	let current = f.bind_as::<String>(&path);
 	let mut items: Vec<(String, String)> = names
 		.iter()
-		.map(|(n, own)| (n.clone(), if *own { format!("{n} ({})", s.get("PickerProjectTag")) } else { n.clone() }))
+		.map(|e| {
+			let n = &e.name;
+			(n.clone(), if e.own { format!("{n} ({})", s.get("PickerProjectTag")) } else { n.clone() })
+		})
 		.collect();
+	let swatches = names.iter().map(|e| (e.name.clone(), to_gradient(&e.stops))).collect();
 	if !current.is_empty() && !items.iter().any(|(n, _)| *n == current) {
 		items.insert(0, (current.clone(), s.format("PickerMissingFormat", &[&current])));
 	}
@@ -394,7 +451,7 @@ fn layer_rows(f: &Form, layer: &str, names: &[(String, bool)]) -> Vec<PropertyRo
 	let picker = {
 		let form = f.clone();
 		let current_name = current.clone();
-		combo_box(current, items, true, format!("{layer}.ColorScheme"), move |name| {
+		swatched_combo_box(current, items, swatches, true, format!("{layer}.ColorScheme"), move |name| {
 			if name == BROWSE {
 				let cx = form.cx.clone();
 				dialogs::pick_file(form.s.get("ColorSchemeFilter"), None, move |path| {
@@ -464,15 +521,15 @@ fn source(f: &Form, r: &Readouts) -> Vec<Element> {
 	let src = f.scope("Source", "", "Source");
 	let pulsed = src.word("Mode") == "Pulsed";
 	let composite = f.optional("array").is_some();
-	// A plain source shows the default array, greyed.
+	// a plain source shows the array's rows greyed and empty
 	let array_form = if composite {
 		f.clone()
 	} else {
-		f.with_json(serde_json::json!({ "array": to_json(SourceArray::default()) }))
+		f.with_json(serde_json::json!({ "array": to_json(SourceArray::default()) })).blanked()
 	};
 	let arr = array_form.scope("SourceArray", "array", "SourceArray");
 	let wavelength = r.wavelength.map_or_else(String::new, |w| {
-		let text = if w.is_finite() { px(w) } else { "-".into() };
+		let text = if w.is_finite() { approx_px(w) } else { "-".into() };
 		if r.nominal { format!("{text} {}", s.get("WavelengthNominal")) } else { text }
 	});
 	let detach = {
@@ -645,11 +702,7 @@ fn part(f: &Form, r: &Readouts, kind: &PartKind, open: bool) -> Vec<Element> {
 		}
 		PartKind::Rectangle(_) | PartKind::Ellipse(_) => {
 			let ty = NewPart::of(kind).type_name();
-			let b = f.scope(ty, &at, &variant);
-			out.extend([
-				material(f, &at),
-				shape(vec![b.number("Length", 10.), b.number("Width", 10.), b.check("Linked")]),
-			]);
+			out.extend([material(f, &at), shape(vec![linked_sizes(f, ty, &f.scope(ty, &at, &variant))])]);
 		}
 		PartKind::Triangle(_) => out.extend([material(f, &at), triangle(f, r, &at, &variant)]),
 		PartKind::Outline(_) => out.extend([material(f, &at), points(f, &format!("{at}.points"))]),
@@ -747,6 +800,44 @@ fn part(f: &Form, r: &Readouts, kind: &PartKind, open: bool) -> Vec<Element> {
 	out
 }
 
+/// The chain of [`linked_sizes`]: two rings, overlapping when linked.
+const CHAIN_LINKED: Icon = Icon::path(
+	"M6.5 0.5 h2 a3 3 0 0 1 3 3 v2 a3 3 0 0 1 -3 3 h-2 a3 3 0 0 1 -3 -3 v-2 a3 3 0 0 1 3 -3 z \
+	 M6.5 6.5 h2 a3 3 0 0 1 3 3 v2 a3 3 0 0 1 -3 3 h-2 a3 3 0 0 1 -3 -3 v-2 a3 3 0 0 1 3 -3 z",
+);
+const CHAIN_PARTED: Icon = Icon::path(
+	"M6.5 0.5 h2 a3 3 0 0 1 3 3 a3 3 0 0 1 -3 3 h-2 a3 3 0 0 1 -3 -3 a3 3 0 0 1 3 -3 z \
+	 M6.5 8.5 h2 a3 3 0 0 1 3 3 a3 3 0 0 1 -3 3 h-2 a3 3 0 0 1 -3 -3 a3 3 0 0 1 3 -3 z",
+);
+
+/// Length and Width of a rectangle or ellipse with the chain toggle that links them beside both.
+fn linked_sizes(f: &Form, ty: &str, b: &Scope) -> PropertyRow {
+	let theme = use_wave_theme();
+	let linked = b.f.bind_as::<bool>(&b.path("Linked"));
+	let toggle = {
+		let (f, path) = (f.clone(), b.path("Linked"));
+		move |_: Event<PressEventData>| f.set(&path, Value::from(!linked))
+	};
+	let (icon, ink) = if linked { (CHAIN_LINKED, theme.accent) } else { (CHAIN_PARTED, theme.text_dim) };
+	let chain = tip(
+		f.s.hint(ty, "Linked"),
+		tagged(
+			Button::new().flat().compact().on_press(toggle).child(IconView::new(icon).color(ink)),
+			format!("{ty}.Linked"),
+		),
+	);
+	let sizes = rect().width(Size::flex(1.)).child(b.number("Length", 10.)).child(b.number("Width", 10.));
+	let row = rect()
+		.horizontal()
+		.width(Size::fill())
+		.content(Content::flex())
+		.spacing(ROW_SPACING)
+		.cross_align(Alignment::center())
+		.child(sizes)
+		.child(chain);
+	PropertyRow::new("", row).full_width()
+}
+
 /// The lens's shape rows; with `fresnel` (the Fresnel lens's serde variant) the zone rows instead of the Concave
 /// box, whose flip would hollow the zones.
 fn lens(f: &Form, r: &Readouts, at: &str, fresnel: Option<&str>) -> Element {
@@ -805,8 +896,12 @@ fn triangle(f: &Form, r: &Readouts, at: &str, variant: &str) -> Element {
 			t.number("Base", 10.),
 			t.decimals("AngleA", 0.5, 1).enabled(a_on),
 			t.decimals("AngleB", 0.5, 1).enabled(tt == "Custom"),
-			readout(s.get("LabelApexAngle"), r.apex.map(|a| format!("{a:.1} deg")).unwrap_or_default(), "TriangleApex")
-				.hint(s.get("TipApexAngle")),
+			readout(
+				s.get("LabelApexAngle"),
+				r.apex.map(|a| format!("{} deg", one_decimal(a))).unwrap_or_default(),
+				"TriangleApex",
+			)
+			.hint(s.get("TipApexAngle")),
 		],
 	)
 }
@@ -886,13 +981,13 @@ fn zone_plate(f: &Form, r: &Readouts, at: &str, variant: &str) -> Vec<Element> {
 	let s = &f.s;
 	let z = f.scope("ZonePlatePart", at, variant);
 	let mount = z.flag("Mount");
-	let (count, outer) = r.zones.map_or((String::new(), String::new()), |(n, o)| (n.to_string(), px(o)));
+	let (count, outer) = r.zones.map_or((String::new(), String::new()), |(n, o)| (n.to_string(), approx_px(o)));
 	vec![
 		section(
 			s.get("SectionDesign"),
 			vec![
 				z.decimals("DesignFrequency", 0.1, 2),
-				readout(s.get("LabelWavelength"), r.wavelength.map(px).unwrap_or_default(), "ZoneWavelength")
+				readout(s.get("LabelWavelength"), r.wavelength.map(approx_px).unwrap_or_default(), "ZoneWavelength")
 					.hint(s.get("TipGateWavelength")),
 				z.number("FocalLength", 10.),
 				z.check("Inverse"),
@@ -925,7 +1020,7 @@ fn set_list<T: Serialize + DeserializeOwned>(f: &Form, path: &str, edit: impl Fn
 	f.set(path, to_json(list));
 }
 
-/// A number box for one coordinate of item `index` of the list at `path`.
+/// A number box for one coordinate of item `index` of the list at `path`, for the caller to tip.
 fn list_number<T: Serialize + DeserializeOwned + 'static>(
 	f: &Form,
 	path: &str,
@@ -933,7 +1028,7 @@ fn list_number<T: Serialize + DeserializeOwned + 'static>(
 	value: i32,
 	set: fn(&mut T, i32),
 	test: String,
-) -> Element {
+) -> wavedude_widgets::NumberBox {
 	let f2 = f.clone();
 	let path = path.to_owned();
 	wavedude_widgets::NumberBox::new(
@@ -944,7 +1039,6 @@ fn list_number<T: Serialize + DeserializeOwned + 'static>(
 	)
 	.width(Size::flex(1.))
 	.test_id(test)
-	.into_element()
 }
 
 fn remove_button<T: Serialize + DeserializeOwned>(
@@ -974,20 +1068,45 @@ fn hint_row(text: &str) -> PropertyRow {
 	PropertyRow::new("", paragraph().width(Size::fill()).span(Span::new(text.to_owned()))).full_width()
 }
 
+/// A full-width list row: its boxes share the width, its buttons keep theirs.
+fn list_row() -> Rect {
+	rect()
+		.horizontal()
+		.width(Size::fill())
+		.content(Content::flex())
+		.spacing(ROW_SPACING)
+		.cross_align(Alignment::center())
+}
+
+/// A heading over a list's boxes.
+fn list_heading(text: &str) -> Label {
+	label().width(Size::flex(1.)).text(text.to_owned()).color(use_wave_theme().text_dim).max_lines(1)
+}
+
+/// An outline's points: an X / Y heading, a full-width row per point with X, Y and remove, Add point below.
 fn points(f: &Form, path: &str) -> Element {
 	let s = &f.s;
 	let list: Vec<m::Point> = f.bind_as(path);
 	let mut rows = vec![hint_row(s.get("HintPolygonPoints"))];
+	if !list.is_empty() {
+		let headings = list_row()
+			.child(list_heading(s.label("PartPoint", "X")))
+			.child(list_heading(s.label("PartPoint", "Y")))
+			.child(rect().width(Size::px(ROW_BUTTON_WIDTH)));
+		rows.push(PropertyRow::new("", headings).full_width());
+	}
 	for (i, p) in list.iter().enumerate() {
-		let editors = rect()
-			.horizontal()
-			.width(Size::fill())
-			.content(Content::flex())
-			.spacing(4.)
-			.child(list_number(f, path, i, p.x, |p: &mut m::Point, v| p.x = v, format!("Point{i}.X")))
-			.child(list_number(f, path, i, p.y, |p: &mut m::Point, v| p.y = v, format!("Point{i}.Y")))
+		let editors = list_row()
+			.child(
+				list_number(f, path, i, p.x, |p: &mut m::Point, v| p.x = v, format!("Point{i}.X"))
+					.tooltip(s.hint("PartPoint", "X")),
+			)
+			.child(
+				list_number(f, path, i, p.y, |p: &mut m::Point, v| p.y = v, format!("Point{i}.Y"))
+					.tooltip(s.hint("PartPoint", "Y")),
+			)
 			.child(remove_button::<m::Point>(f, path, i, "TipRemovePoint", format!("Point{i}.Remove")));
-		rows.push(PropertyRow::new(format!("{}", i + 1), editors));
+		rows.push(PropertyRow::new("", editors).full_width());
 	}
 	let add = {
 		let f = f.clone();
@@ -999,7 +1118,11 @@ fn points(f: &Form, path: &str) -> Element {
 			})
 		}
 	};
-	rows.push(PropertyRow::new("", dialogs::button(s.get("ButtonAddPoint"), true, add)).hint(s.get("TipAddPoint")));
+	rows.push(
+		PropertyRow::new("", dialogs::button(s.get("ButtonAddPoint"), true, add))
+			.hint(s.get("TipAddPoint"))
+			.full_width(),
+	);
 	section(s.get("SectionPoints"), rows)
 }
 
@@ -1051,8 +1174,11 @@ fn move_button<T: Serialize + DeserializeOwned>(
 	tagged(button, test)
 }
 
+/// Width of a compact glyph button: a 16 px icon and 6 px padding each side.
+const ROW_BUTTON_WIDTH: f32 = 28.;
+const ROW_SPACING: f32 = 4.;
 /// Width of a layer row's three buttons: the heading row leaves it free so the headings sit over the boxes.
-const ROW_BUTTONS_WIDTH: f32 = 92.;
+const ROW_BUTTONS_WIDTH: f32 = 3. * ROW_BUTTON_WIDTH + 2. * ROW_SPACING;
 /// Width of a layer row's ordinal.
 const ORDINAL_WIDTH: f32 = 20.;
 
@@ -1065,25 +1191,20 @@ fn layers(f: &Form, path: &str) -> Element {
 	let (imin, imax) = bounds("FilterLayer.RefractiveIndex");
 	let mut rows = vec![hint_row(s.get("HintFilterLayers"))];
 	let theme = use_wave_theme();
-	// the whole row: a narrow ordinal, the two boxes sharing the rest, the buttons
-	let row = || {
-		rect().horizontal().width(Size::fill()).content(Content::flex()).spacing(4.).cross_align(Alignment::center())
-	};
+	// each row: a narrow ordinal, the two boxes sharing the rest, the buttons
 	let ordinal = |text: String| label().width(Size::px(ORDINAL_WIDTH)).text(text).color(theme.text_dim).max_lines(1);
 	if !list.is_empty() {
-		let heading =
-			|text: &str| label().width(Size::flex(1.)).text(text.to_owned()).color(theme.text_dim).max_lines(1);
-		let headings = row()
+		let headings = list_row()
 			.child(ordinal(String::new()))
-			.child(heading(s.label("FilterLayer", "Thickness")))
-			.child(heading(s.label("FilterLayer", "RefractiveIndex")))
+			.child(list_heading(s.label("FilterLayer", "Thickness")))
+			.child(list_heading(s.label("FilterLayer", "RefractiveIndex")))
 			.child(rect().width(Size::px(ROW_BUTTONS_WIDTH)));
 		rows.push(PropertyRow::new("", headings).full_width());
 	}
 	for (i, l) in list.iter().enumerate() {
 		let thickness = NumberSpec::linear(tmin, tmax, 1.).with_decimals(2).with_drag_step(0.1);
 		let index = NumberSpec::linear(imin, imax, 0.01).with_decimals(2).with_drag_step(0.01);
-		let editors = row()
+		let editors = list_row()
 			.child(ordinal(format!("{}", i + 1)))
 			.child(
 				list_decimal(
@@ -1161,8 +1282,14 @@ fn fiber(f: &Form, at: &str, variant: &str) -> Vec<Element> {
 				.width(Size::fill())
 				.content(Content::flex())
 				.spacing(4.)
-				.child(list_number(f, &nodes_path, i, a, set_a, format!("Node{i}.{tag}X")))
-				.child(list_number(f, &nodes_path, i, b, set_b, format!("Node{i}.{tag}Y")))
+				.child(
+					list_number(f, &nodes_path, i, a, set_a, format!("Node{i}.{tag}X"))
+						.tooltip(s.hint("FiberNode", &format!("{tag}X"))),
+				)
+				.child(
+					list_number(f, &nodes_path, i, b, set_b, format!("Node{i}.{tag}Y"))
+						.tooltip(s.hint("FiberNode", &format!("{tag}Y"))),
+				)
 		};
 		let toggle = {
 			let f = f.clone();
@@ -1215,21 +1342,31 @@ fn fiber(f: &Form, at: &str, variant: &str) -> Vec<Element> {
 fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> Vec<Element> {
 	let s = &f.s;
 	let g = f.scope("LogicGatePart", at, variant);
-	let (layout, ports, quarter) = r.gate.unwrap_or(([0; 4], [m::Point::default(); 4], f64::NAN));
-	let point = |q: m::Point| format!("{}, {}", q.x, q.y);
-	let quarter_text = if quarter.is_finite() { px(quarter / 4.) } else { String::new() };
-	let output_word = |upper: bool| {
-		let word = match (kind, upper) {
-			(m::GateKind::Xor, true) | (m::GateKind::Or, false) => "Xor",
-			(m::GateKind::And, true) => "And",
-			(m::GateKind::Or, true) => "Or",
-			_ => "Remainder",
-		};
-		s.enum_word("GateOutput", word)
+	let design = r.gate;
+	let layout = design.map_or([0; 4], |d| d.layout);
+	let ports = design.map_or([m::Point::default(); 4], |d| d.ports);
+	let point = |q: m::Point| format!("({}, {})", q.x, q.y);
+	let quarter_text = design.map(|d| d.quarter_wave).filter(|q| q.is_finite()).map(approx_px).unwrap_or_default();
+	// the box shows the spacing the design uses; an edit stores the typed value
+	let spacing_form = match design {
+		Some(d) => {
+			let mut json = (*f.json).clone();
+			let pointer = format!("/{}", g.path("PortSpacing").replace('.', "/"));
+			*json.pointer_mut(&pointer).expect("a gate has a port spacing") = Value::from(d.spacing);
+			f.with_json(json)
+		}
+		None => f.clone(),
 	};
-	let output = |member: &str, upper: bool| {
-		f.check_labelled(
-			format!("{}: {}", s.label("LogicGatePart", member), output_word(upper)),
+	let spacing = spacing_form.scope("LogicGatePart", at, variant).number("PortSpacing", 2.);
+	let (upper, lower) = match kind {
+		m::GateKind::Xor => ("Xor", "And"),
+		m::GateKind::And => ("And", "Xor"),
+		m::GateKind::Or => ("Or", "Remainder"),
+	};
+	let output = |member: &str, word: &str| {
+		f.check_in_column(
+			s.label("LogicGatePart", member),
+			s.enum_word("GateOutput", word).to_owned(),
 			s.hint("LogicGatePart", member),
 			&g.path(member),
 			&format!("LogicGatePart.{member}"),
@@ -1240,7 +1377,7 @@ fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> V
 			s.get("SectionDesign"),
 			vec![
 				g.decimals("DesignFrequency", 0.1, 2),
-				readout(s.get("LabelWavelength"), r.wavelength.map(px).unwrap_or_default(), "GateWavelength")
+				readout(s.get("LabelWavelength"), r.wavelength.map(approx_px).unwrap_or_default(), "GateWavelength")
 					.hint(s.get("TipGateWavelength")),
 			],
 		),
@@ -1255,8 +1392,8 @@ fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> V
 				readout(s.get("LabelQuarterWave"), quarter_text, "GateQuarterWave").hint(s.get("TipQuarterWave")),
 			],
 		),
-		section(s.get("SectionShape"), vec![g.number("PortSpacing", 2.)]),
-		section(s.get("SectionOutputs"), vec![output("UpperOutputActive", true), output("LowerOutputActive", false)]),
+		section(s.get("SectionShape"), vec![spacing]),
+		section(s.get("SectionOutputs"), vec![output("UpperOutputActive", upper), output("LowerOutputActive", lower)]),
 		section(
 			s.get("SectionLayout"),
 			["LabelCoreWidth", "LabelCouplerGap", "LabelCouplerLength", "LabelGateLength"]
@@ -1291,25 +1428,17 @@ fn probe(f: &Form) -> Vec<Element> {
 	let field = p.word("Layer") == "Field";
 	let measurements: &[&str] = if field { &["Amplitude"] } else { &["Value", "IntegratedValue"] };
 	let custom = p.word("BoxSize") == "Custom";
-	// a profile along the line has no step axis; the field's amplitude changes sign, so its axis stays linear
-	let series = !line || detector == "Counting";
+	// the field's amplitude changes sign, so its axis stays linear
 	let log = !field && p.word("YScale") == "Logarithmic";
 	vec![
-		section(
-			s.get("SectionGeneral"),
-			vec![
-				f.name("Probe"),
-				p.check("Active"),
-				p.number("StartAfter", 1.),
-				p.combo("Detector", "ProbeDetector", &["Standard", "Counting", "Imaging"]),
-				p.decimals("Sensitivity", 0.5, 2).enabled(is_detector),
-				p.number("BinSize", 1.).enabled(detector == "Imaging"),
-			],
-		),
-		// a detector is a line probe of the integrated intensity: the three are shown as it set them
+		section(s.get("SectionGeneral"), vec![f.name("Probe"), p.check("Active"), p.number("StartAfter", 1.)]),
+		// a detector is a line probe of the integrated intensity: the three after its own are shown as it set them
 		section(
 			s.get("SectionMeasurement"),
 			vec![
+				p.combo("Detector", "ProbeDetector", &["Standard", "Counting", "Imaging"]),
+				p.decimals("Sensitivity", 0.5, 2).enabled(is_detector),
+				p.number("BinSize", 1.).enabled(detector == "Imaging"),
 				p.combo("Layer", "ProbeLayer", &["Field", "Intensity"]).enabled(!is_detector),
 				p.combo("Measurement", "ProbeMeasurement", measurements).enabled(!is_detector),
 				p.combo("Kind", "ProbeKind", &["Point", "Line"]).enabled(!is_detector),
@@ -1337,9 +1466,9 @@ fn probe(f: &Form) -> Vec<Element> {
 		section(
 			s.get("SectionAxes"),
 			vec![
-				p.combo("ScaleMode", "ProbeScaleMode", &["Running", "Full"]).enabled(series),
-				p.number("Window", 10.).enabled(series),
-				p.check("AutoScaleX").enabled(series),
+				p.combo("ScaleMode", "ProbeScaleMode", &["Running", "Full"]).enabled(!line),
+				p.number("Window", 10.),
+				p.check("AutoScaleX").enabled(!line),
 				p.check("AutoScaleY"),
 				p.combo("YScale", "ProbeValueScale", &["Linear", "Logarithmic"]).enabled(!field),
 				p.number("Decades", 1.).enabled(log),
@@ -1419,6 +1548,7 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 		})
 	};
 	let mut rows = vec![
+		PropertyRow::new(s.get("LabelBasedOn"), based_on).hint(s.get("TipBasedOn")),
 		PropertyRow::new(
 			"",
 			tagged(GradientEditor::new(WritableSetter::new(gradient.clone(), set_gradient)), "SchemeGradient"),
@@ -1451,7 +1581,7 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 			.child(
 				wavedude_widgets::NumberBox::new(
 					WritableSetter::new(stop.position, move |v: f64| set_at(i, v)),
-					NumberSpec::linear(0., 1., 0.01),
+					NumberSpec::linear(0., 1., 0.01).with_decimals(3),
 				)
 				.width(Size::px(64.))
 				.tooltip(s.get("TipStopPosition"))
@@ -1488,7 +1618,8 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 	});
 	rows.push(
 		PropertyRow::new("", dialogs::button(s.get("ButtonAddStop"), true, move |_| add(0, ())))
-			.hint(s.get("TipAddStop")),
+			.hint(s.get("TipAddStop"))
+			.full_width(),
 	);
 	vec![
 		section(
@@ -1497,7 +1628,6 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 				f.name("ColorScheme"),
 				sc.combo("Kind", "ColorSchemeKind", &["Unspecified", "Field", "Intensity"]),
 				sc.text("Description", false),
-				PropertyRow::new(s.get("LabelBasedOn"), based_on).hint(s.get("TipBasedOn")),
 			],
 		),
 		section(s.get("SectionStops"), rows),

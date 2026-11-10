@@ -16,14 +16,15 @@ Pointers: `Panes/ProjectTree.xaml(.cs)`, `MainWindow.Project.cs`, `MainWindow.Cl
 | Button | Look | Tooltip | Action |
 |---|---|---|---|
 | Source | source icon + plus badge + "Source" | Add a source (appended at the end) | Add source. |
-| Probe | probe icon + plus badge + "Probe" | Add a probe: a standard probe, or a probabilistic detector (appended at the end) | Opens the Add probe menu under the button: Standard probe; Probabilistic > Counting detector, Imaging detector. |
-| Part | part icon + plus badge + "Part" | Add an optical part (a menu of kinds; appended at the end) | Opens the Add part menu under the button. |
+| Probe | probe icon + plus badge + "Probe" + drop-down caret | Add a probe: a standard probe, or a probabilistic detector (appended at the end) | Opens the Add probe menu under the button: Standard probe; Probabilistic > Counting detector, Imaging detector. |
+| Part | part icon + plus badge + "Part" + drop-down caret | Add an optical part (a menu of kinds; appended at the end) | Opens the Add part menu under the button. |
 | Move up | chevron up glyph | Move up (Alt+Up); drag to reorder | Disabled (and skipped by Tab) when not applicable. |
 | Move down | chevron down glyph | Move down (Alt+Down); drag to reorder | Same. |
 | Remove | minus glyph | Remove (Del) | Same. |
 
 Buttons are flat; hover shows a background. The plus badge is a 5 px plus in the icon's bottom-right corner,
-accent colour (text colour when pressed or disabled). Tab order: Source > Probe > Part > (enabled move/remove)
+accent colour (text colour when pressed or disabled). The caret of Probe and Part, the buttons that open a
+menu, is the combo boxes' drop-down arrow in the text colour. Tab order: Source > Probe > Part > (enabled move/remove)
 > tree.
 
 ## Tree structure
@@ -91,6 +92,7 @@ always a member of the list. Properties shows the current item.
 | Ctrl+A | Every source, part and probe; the last becomes current. |
 | Selection made on the pictures | Mirrored in the tree; the tree row does not take focus (the handle keeps it, so Tab continues through handles). |
 | Click on empty preview space | Deselects; the tree lets go too. |
+| A project opened (New, Open, an example, start-up) | The root row alone: the Properties pane shows the Project form; the tree takes the keyboard focus. |
 
 Highlight: current row = selection colour (inactive-selection colour when the tree lacks focus, standard
 behaviour); other selected rows = inactive-selection colours. Groups, the root and settings rows can be
@@ -104,12 +106,12 @@ on the target alone.
 
 | Command | Behaviour |
 |---|---|
-| Add source / probe / part | Appended at the end of its list, placed at the centre of the canvas the preview shows (image scene: its own size). A new probe's line end B lies 100 px to the right of A. The new item becomes the selection and the caret goes into its first editor (Name, text selected). |
+| Add source / probe / part | Appended at the end of its list, placed at the centre of the canvas the preview shows (image scene: its own size). A new probe's line end B lies 100 px to the right of A. The new item becomes the selection and the caret goes into its first editor (Name, text selected: the Name box selects all text when it gains focus). |
 | Add on a folder plus | Adds to that folder (schemes folder: a new project colour scheme with the model's default stops). |
 | Enabled (Space) | Each selected item flips on its own (not set-all). |
 | Duplicate (Ctrl+D) | A copy after each original; copies become the selection, the last one current with the caret in its name. Copy named "<name> copy". |
-| Remove (Del) | Removes target or selection; the user stays at the slot of the last removed: the item that took the slot is selected, else the folder. |
-| Move up / down (Alt+Up/Down) | Within the item's own list; disabled at the ends. Selection kept. |
+| Remove (Del) | Removes target or selection; the user stays at the slot of the last removed: the item that took the slot is selected, else the one above it, else the folder of the emptied list; the tree takes the keyboard focus. |
+| Move up / down (Alt+Up/Down) | Within the item's own list; disabled at the ends. Selection kept; the tree takes the keyboard focus. |
 | Cut / Copy / Paste | See below. |
 | Export probe data as CSV | Probe rows, active probes only. |
 

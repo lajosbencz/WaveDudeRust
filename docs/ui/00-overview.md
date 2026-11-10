@@ -11,7 +11,7 @@ Top to bottom (`MainWindow.xaml`):
 |---|---|
 | Menu bar | File, Edit, View, Simulation, Help. Not in the Tab cycle; F10 or Alt enters it. See `10-menus-and-shortcuts.md`. |
 | Dock host | Tool panes around one fixed centre area. Centre area = the Preview (pictures, timeline, transport bar). |
-| Status bar | Last log line (left), run status (right), busy text + progress bar (far right; a download first: an update, the codec), resize grip in the corner. |
+| Status bar | 22 px, padding 4,0,16,0, items padded 4,2: last log line (left), run status while a run exists (right, no frame read-out), busy text + 120 x 12 progress bar (far right; a download first: an update, the codec), 16 px resize grip in the corner. |
 
 No toolbar on the window. The Project pane has its own toolbar (`20-project-tree.md`); the Preview has the
 transport bar (`50-timeline-transport.md`).
@@ -48,7 +48,10 @@ Docking behaviour (`Docking/`):
   group = tab into it; side = split next to it. Not into the centre area as a tab; not into own group.
 - Edge drop takes a default share of the host; side drop a share of the hovered pane (exact fractions in
   `DockDropAdorner.cs`, `DockHost.cs`).
-- Multiple panes in a group show a tab strip; the active pane's title bar is accent-coloured, others inactive.
+- Multiple panes in a group show a tab strip; the active pane's title bar is accent-coloured with white text
+  and a light-blue grip, others inactive.
+- Default arrangement: left column a quarter of the window (1 : 3 against the preview), Project over
+  Properties 1 : 2.
 - No floating windows.
 - View > Panes lists every registered pane with a check mark; click toggles shown/hidden. A pane shown
   without a saved position goes to its default side.
@@ -63,13 +66,15 @@ Docking behaviour (`Docking/`):
 dnSpy / Visual Studio tool-window look (look only, nothing copied).
 
 - Font: Segoe UI 12 DIP (9 pt) everywhere; icons from the platform icon font (Segoe Fluent Icons / MDL2)
-  or the app's own 16 px stroked drawings. Rust port: pick a bundled font and an icon set; keep 16 px icons.
+  or the app's own 16 px stroked drawings. Rust port: Segoe UI when installed, else the bundled Selawik
+  (Microsoft's metric-compatible stand-in, SIL OFL), 12 px; 16 px icons.
 - Themes: System (follows OS), Light, Dark; live switch, native title bars follow. Colour tokens live in
   `Themes/Dark.xaml` and `Themes/Light.xaml` (window, menu, status bar normal/warn/error, tool window,
   title bar active/inactive, tabs, tree, scroll bars, splitter, drop indicator, buttons). Dark examples:
   window `#2D2D30`, tool window `#252526`, accent `#007ACC`, status bar `#007ACC`, warn `#CA5100`,
   error `#B4211D`, tree selection `#3399FF`, inactive selection `#3F3F46`.
-- Every tree row, toolbar button and menu entry is 23 px high, the menu bar headers too.
+- Every tree row and toolbar button is 23 px high, the menu bar headers and tabs too; drop-down menu entries
+  are 22 px with Selawik (2 + 2 + the text line + 2 + 2).
 - Icons: 16 px, 1 px strokes on half pixels, ink within rows/columns 0..14 so they centre like text; drawn
   in the inherited text colour so a disabled row greys its icon with its name; greyscale (no subpixel AA).
 - Keyboard focus is an accent border, never a dotted rectangle.

@@ -679,15 +679,15 @@ The form of a point probe of the field. <figure name="properties-probe"/>
 
 ### Line probe
 
-The same form for a line probe of the intensity with a logarithmic value axis. A line probe's graph shows the values along the line from A to B at the frame shown, so the step axis settings (19 to 21) do not apply; both ends have a handle on the picture, and the line between them shows where it measures. <figure name="properties-line-probe"/>
+The same form for a line probe of the intensity with a logarithmic value axis. A line probe's graph shows the values along the line from A to B at the frame shown, so the step axis (19) and auto-scale steps (21) are greyed; both ends have a handle on the picture, and the line between them shows where it measures. <figure name="properties-line-probe"/>
 
 ### Counting detector
 
-The same form for a counting detector. The detector sets the layer, the measurement and the kind (7 to 9), which are greyed; the graph shows the detections of the whole line step by step, so the step axis settings (19 to 21) apply, and the bin size (6) does not. <figure name="properties-counting-detector"/>
+The same form for a counting detector. The detector sets the layer, the measurement and the kind (7 to 9), which are greyed; the graph shows the detections of the whole line step by step over the window (20), the step axis (19) and auto-scale steps (21) greyed as on every line probe, and the bin size (6) does not apply. <figure name="properties-counting-detector"/>
 
 ### Imaging detector
 
-The same form for an imaging detector. The detector sets the layer, the measurement and the kind (7 to 9), which are greyed; the graph shows the detections along the line from A to B, added up to the frame shown, in bins of the bin size (6), so the step axis settings (19 to 21) do not apply. <figure name="properties-imaging-detector"/>
+The same form for an imaging detector. The detector sets the layer, the measurement and the kind (7 to 9), which are greyed; the graph shows the detections along the line from A to B, added up to the frame shown, in bins of the bin size (6), so the step axis (19) and auto-scale steps (21) are greyed. <figure name="properties-imaging-detector"/>
 
 ## Colour schemes
 

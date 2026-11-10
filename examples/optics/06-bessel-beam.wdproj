@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="2106">
+	<Description>Bessel beam: a plane wave of frequency 100 (16 px) through a meta axicon, a 16 px plate of index 1.5 with ridges of index 2.00, 16 px high in cells of 2 px, turning each half of the 360 px wide wave by 10 degrees toward the axis. The halves cross along a line of focus 1021 px long (half the width over tan 10 degrees) with a core about 46 px wide (wavelength over 2 sin 10 degrees) that keeps its width along the line. Point probes Near, Middle and Far read the axis 200, 500 and 800 px behind the axicon, the line probe Across the core and its rings at 500 px.</Description>
+	<Scene Width="1280" Height="600" />
+	<Simulation Steps="2200" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="1.2" />
+	</Display>
+	<Source Name="Plane wave" X="80" Y="300" Frequency="100">
+		<Array SizeY="45" SpacingY="8" />
+	</Source>
+	<MetaAxicon Name="Axicon" X="200" Y="300" Coating="3" Length="16" Width="360" DesignFrequency="100" Pitch="2" Height="16" />
+	<Probe Name="Near" Layer="Intensity" Measurement="Value" AX="400" AY="300" BoxX="20" BoxY="20" />
+	<Probe Name="Middle" Layer="Intensity" Measurement="Value" AX="700" AY="300" BoxX="440" BoxY="20" />
+	<Probe Name="Far" Layer="Intensity" Measurement="Value" AX="1000" AY="300" BoxX="860" BoxY="20" />
+	<Probe Name="Across" Layer="Intensity" Measurement="Value" Kind="Line" AX="700" AY="180" BX="700" BY="420" BoxX="860" BoxY="390" />
+</Project>

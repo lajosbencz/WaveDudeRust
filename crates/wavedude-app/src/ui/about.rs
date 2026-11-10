@@ -4,7 +4,7 @@
 use freya::markdown::MarkdownViewerThemePartialExt as Md;
 use freya::prelude::*;
 use wavedude_export::h264;
-use wavedude_widgets::{Theme, use_wave_theme};
+use wavedude_widgets::{Theme, Tip, use_wave_theme};
 
 use super::app::{Cx, Ui};
 use super::dialogs::{button, button_row, frame};
@@ -162,9 +162,7 @@ impl Component for AboutDialog {
 					.child(paragraph().width(Size::fill()).span(Span::new(lines))),
 			)
 			.child(button_row(vec![
-				TooltipContainer::new(Tooltip::new_text(s.get("TipAboutCopy").to_owned()))
-					.child(button(s.get("AboutCopy"), true, copy))
-					.into_element(),
+				Tip::new(s.get("TipAboutCopy")).child(button(s.get("AboutCopy"), true, copy)).into_element(),
 				button(s.get("AboutClose"), true, move |_| ui.close_modal()),
 			]))
 			.into_element()

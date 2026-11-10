@@ -166,6 +166,8 @@ pub struct Ui {
 	pub codec_downloaded: State<bool>,
 	/// The Messages pane's list, focused after a status bar double-click.
 	pub messages_list: AccessibilityId,
+	/// The project tree, focused on a reveal ([`AppState::reveals`](wavedude_app_state::AppState::reveals)).
+	pub tree_id: AccessibilityId,
 	/// Each preview picture's place, for drops.
 	pub pictures: State<[Option<PicturePlace>; 2]>,
 	/// The clipboard held a pasteable fragment when a menu last opened ([`Ui::look_at_clipboard`]).
@@ -342,6 +344,7 @@ impl Component for Shell {
 				move || shared.peek(|a| a.codec_dir.as_deref().and_then(wavedude_export::h264::installed)).is_some()
 			}),
 			messages_list: use_a11y(),
+			tree_id: use_a11y(),
 			pictures: use_state(|| [None, None]),
 			pastable: use_state(|| false),
 		};

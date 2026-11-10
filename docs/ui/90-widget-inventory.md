@@ -10,16 +10,22 @@ Cross-cutting requirements for every widget:
 - Theme tokens only (no hard-coded colours) except the preview overlays and graph boxes (fixed colours).
 - Re-labels live on a language switch; scales with the UI zoom; lines on whole device pixels.
 - A stable test id per interactive element (AccessKit is available through Freya, but tests target app state).
-- 23 px row height for rows, menu entries, toolbar buttons; 16 px icons in text colour (greys when disabled).
+- 23 px row height for rows, toolbar buttons, the menu bar and tabs; 22 px for drop-down menu entries, text
+  boxes, number boxes and combo boxes; 16 px icons in text colour (greys when disabled).
+- WPF's box model: square corners everywhere; buttons padding 10,3 inside a 1 px border (toolbar text buttons
+  6,1,6,0), text fields padding 3,2 inside a 1 px border that turns to the hover colour, then the accent on
+  focus; the UI font is Segoe UI, else the bundled Selawik, at 12 px.
 
 ## 1. Dock host
 
 Behaviours:
 - Layout tree: splits (h/v, star weights), tabbed groups as leaves, one fixed centre area.
 - Splitters between siblings: drag, arrow keys.
-- Pane title bar: title, "Window position" drop-down (Move to Left/Right/Top/Bottom, Close), close button;
-  active/inactive colouring by focus.
-- Tab strip when a group holds several panes; a tab is a row high (23 px), its text 10 px from either edge.
+- Pane title bar, 21 px: title, a dotted drag grip filling the rest, "Window position" drop-down (Move to
+  Left/Right/Top/Bottom, Close), close button (16 px glyph buttons); active/inactive colouring by focus, the
+  first group active at start.
+- Tab strip when a group holds several panes; a tab is a row high (23 px), its text 10 px from either edge;
+  the selected tab on the tool window's background with a side and bottom border and accent-blue text.
 - Drag a title bar (group) or tab (pane) past a threshold: overlay with 4 edge targets, 5-way cluster on the
   hovered pane/centre, translucent drop preview, ghost label; drop = dock at edge, tab into group, or split.
 - Show/hide panes (hide = keep registration); default side for a pane shown without a saved place.
@@ -73,6 +79,7 @@ Freya base: Button. TODO(verify-freya).
 
 Behaviours:
 - Two-column layout: label column as wide as the widest label (min width), editors fill the rest; full-width rows.
+- Rows at a 28 px pitch (24 px row, 4 px spacing) as WPF lays out its 23 px editors.
 - Section headers (name over a rule); gaps after groups.
 - Conditional enable (greyed) and visibility per row.
 - Read-out rows (text bound to several inputs).
@@ -85,8 +92,11 @@ Freya base: layout primitives + ScrollView; custom form layout. TODO(verify-frey
 
 Behaviours: Enter commits to the bound value and selects all; Esc reverts when changed (consumed only then);
 per-keystroke binding option; multiline option; own undo (Ctrl+Z) and clipboard handled before window commands;
-placeholder text (Messages search).
-Freya base: Input. TODO(verify-freya): commit/revert semantics and key precedence over window shortcuts.
+placeholder text (Messages search); option to select all text when the box gains focus (the object Name box).
+Freya base: `TextField` (widgets/src/text_field.rs, single line on `freya-edit`; the text and number boxes use it) so the
+box can select on focus; the multiline box keeps Freya's Input. The focusing click selects all, a later click places
+the caret; caret blink, drag and double-click selection, scrolling to keep the caret visible and IME preedit as Input.
+TODO(verify-freya): commit/revert semantics and key precedence over window shortcuts.
 
 ## 7. Number box (linear and logarithmic)
 
@@ -96,7 +106,11 @@ Behaviours:
 - Horizontal drag scrub on an unfocused box past a threshold: per-pixel step, Shift finer x0.1, Ctrl coarser x10;
   pointer wraps at the monitor edge; Esc restores; press without move = caret click.
 - Logarithmic mode: x1.02 per step, 10 steps per page, doubling per N pixels on drag, three significant digits.
-- Min/max clamp on steps (typed text clamped by the model), decimals from increment, culture-aware parse/format.
+- Min/max clamp on steps; steps and drags round to the increment's decimals; the value shows in its shortest
+  form ("120", "1.5", "0.125"); typed text keeps its digits, clamped; culture-aware parse/format.
+- Blank mode: an empty box for a value that does not apply.
+- Look: 22 px, padding 3,2, 1 px border (hover, focus accent), 14 px spin column with 4 x 2 chevrons, hover and
+  pressed backgrounds; disabled: window background, grey text, no spin buttons.
 - Writes through to the bound value on every step; selects text after a step.
 Freya base: Input + custom behaviour; pointer wrap needs platform cursor warp (winit set_cursor_position).
 TODO(verify-freya).
@@ -191,9 +205,10 @@ Freya base: Button + composed widgets 4, 8. TODO(verify-freya).
 
 ## 19. Tooltip
 
-Behaviours: on hover (and keyboard focus where the platform does), localised text, wraps long hints, themed,
-zoomed, whole-pixel borders; on menu entries too.
-Freya base: Tooltip. TODO(verify-freya).
+Behaviours: on hover after 400 ms (WPF's initial show delay), under the pointer and kept inside the window;
+a press or leaving hides it; localised text, themed, zoomed, square 1 px border, padding 6,3, UI font; on menu
+entries too (shown 400 ms after the entry is highlighted).
+Freya base: none; own widget (`Tip`), since Freya's Tooltip has a fixed rounded look and padding.
 
 ## 20. Busy indicators
 

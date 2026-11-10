@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="2108">
+	<Description>Shot noise: a point source of frequency 50 lights two counting detectors 400 px away, lines of 100 px where the intensity is about 9e-4 per pixel. Faint counts, with a sensitivity of 30 detections per unit intensity per step, expects 2.6 photons a step and its graph shows the Poisson counts jumping between 0 and 6; Bright counts, with 300, expects 26 a step and its graph fluctuates by a fifth, the square root law. The point probe Expectation reads the smooth intensity between the lines and the line probe Fluence the integrated intensity the counts add up to.</Description>
+	<Scene Width="960" Height="540" />
+	<Simulation Steps="1600" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="10" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="10" />
+	</Display>
+	<Source Name="Lamp" X="200" Y="270" Frequency="50" />
+	<Probe Name="Faint counts" Kind="Line" AX="600" AY="220" BX="600" BY="320" BoxX="20" BoxY="330" Detector="Counting" Sensitivity="30" StartAfter="600" Window="400" />
+	<Probe Name="Bright counts" Kind="Line" AX="608" AY="220" BX="608" BY="320" BoxX="540" BoxY="330" Detector="Counting" Sensitivity="300" StartAfter="600" Window="400" />
+	<Probe Name="Expectation" Layer="Intensity" Measurement="Value" AX="604" AY="270" BoxX="20" BoxY="20" Window="400" />
+	<Probe Name="Fluence" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="612" AY="220" BX="612" BY="320" BoxX="540" BoxY="20" StartAfter="600" />
+</Project>

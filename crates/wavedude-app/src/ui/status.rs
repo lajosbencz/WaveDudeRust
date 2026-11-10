@@ -1,5 +1,5 @@
-//! The status bar: the newest Info-or-up message on the left, the busy work with its progress, the run's line
-//! and the frame/step readout on the right; a double-click opens the Messages pane.
+//! The status bar: the newest Info-or-up message on the left, the run's line (while a run exists) and the busy work
+//! with its progress on the right; a double-click opens the Messages pane.
 
 use freya::prelude::*;
 use wavedude_widgets::{Progress, StatusBar};
@@ -11,7 +11,6 @@ use super::window;
 #[derive(Clone, PartialEq)]
 struct Right {
 	run: String,
-	readout: String,
 	busy: Option<(String, Progress)>,
 	tip: String,
 	busy_tip: Option<String>,
@@ -24,13 +23,11 @@ fn right(cx: &Cx) -> Right {
 	let topics = Topics::PLAYBACK | Topics::PROGRESS | Topics::WORK | Topics::RUN | Topics::SETTINGS;
 	cx.shared.read(topics, |a| {
 		let s = &a.strings;
-		let r = a.live.playback.readout();
 		let busy = export.or_else(|| {
 			a.live.computing_frame().map(|f| (s.format("StatusComputingFormat", &[&f]), Progress::Indeterminate))
 		});
 		Right {
 			run: a.run_status(),
-			readout: format!("{}  {} {}", r.frames_text(), s.get("LabelPreviewStep"), r.step),
 			busy,
 			tip: s.get("TipStatusBar").to_owned(),
 			busy_tip: exporting.then(|| s.get("TipExportCancel").to_owned()),
@@ -51,10 +48,9 @@ impl Component for StatusArea {
 		};
 		let r = r.read().clone();
 		let line = cx.ui.status.read().clone();
-		let text = if r.run.is_empty() { r.readout } else { format!("{}    {}", r.run, r.readout) };
 		let ui = cx.ui;
 		StatusBar::new(line)
-			.right(text)
+			.right(r.run)
 			.busy(r.busy)
 			.tooltip(r.tip)
 			.busy_tooltip(r.busy_tip)

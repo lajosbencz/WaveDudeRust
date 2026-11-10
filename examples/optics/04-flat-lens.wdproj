@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="2104">
+	<Description>Flat lens: a plane wave of frequency 50 (32 px) through a meta lens, a 20 px plate of index 1.5 carrying ridges of index 2.00, 32 px high in cells of 4 px, whose fill delays the wave as a lens of focal length 300 would; the lens is 400 px wide (f/0.75). The point probe Focus sits 300 px behind the lens, the line probe Focal plane across it; the spot is about 24 px wide (wavelength times focal length over width).</Description>
+	<Scene Width="960" Height="540" />
+	<Simulation Steps="1200" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="0.6" />
+	</Display>
+	<Source Name="Plane wave" X="80" Y="270" Frequency="50">
+		<Array SizeY="41" SpacingY="8" />
+	</Source>
+	<MetaLens Name="Flat lens" X="300" Y="270" Coating="6" Length="20" Width="400" FocalLength="300" />
+	<Probe Name="Focus" Layer="Intensity" Measurement="Value" AX="610" AY="270" BoxX="540" BoxY="20" />
+	<Probe Name="Focal plane" Layer="Intensity" Measurement="Value" Kind="Line" AX="610" AY="150" BX="610" BY="390" BoxX="540" BoxY="330" />
+</Project>

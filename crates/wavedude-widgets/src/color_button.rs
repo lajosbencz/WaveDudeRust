@@ -6,7 +6,8 @@ use freya::prelude::*;
 
 use crate::number_box::{NumberBox, NumberSpec};
 use crate::paint::{fill, linear_shader, stroke};
-use crate::theme::use_wave_theme;
+use crate::theme::{UiFontExt, use_wave_theme};
+use crate::tooltip::Tip;
 use crate::util::{TestIdExt, focus_border, shift};
 
 /// An 8-bit sRGB colour.
@@ -280,7 +281,7 @@ impl Component for ColorPicker {
 		let tips = self.tips.clone();
 		let channel = |name: &'static str, get: fn(Rgb) -> u8, put: fn(Rgb, u8) -> Rgb| {
 			let mut value = value.clone();
-			TooltipContainer::new(Tooltip::new_text(tips.channel.clone())).child(
+			Tip::new(tips.channel.clone()).child(
 				rect()
 					.horizontal()
 					.cross_align(Alignment::center())
@@ -306,11 +307,11 @@ impl Component for ColorPicker {
 			.spacing(8.)
 			.padding(8.)
 			.color(theme.text)
-			.font_size(theme.font_size)
+			.ui_font(&theme)
 			.on_global_pointer_move(on_global_move)
 			.on_global_pointer_up(move |_| dragging.set_if_modified(None))
 			.child(
-				TooltipContainer::new(Tooltip::new_text(tips.plane.clone())).child(
+				Tip::new(tips.plane.clone()).child(
 					rect()
 						.a11y_id(plane_id)
 						.a11y_focusable(true)
@@ -324,7 +325,7 @@ impl Component for ColorPicker {
 				),
 			)
 			.child(
-				TooltipContainer::new(Tooltip::new_text(tips.hue.clone())).child(
+				Tip::new(tips.hue.clone()).child(
 					rect()
 						.a11y_id(strip_id)
 						.a11y_focusable(true)
@@ -476,7 +477,7 @@ impl Component for ColorButton {
 						}
 					});
 				match self.tooltip.clone() {
-					Some(t) => TooltipContainer::new(Tooltip::new_text(t)).child(swatch).into_element(),
+					Some(t) => Tip::new(t).child(swatch).into_element(),
 					None => swatch.into_element(),
 				}
 			})

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="2103">
+	<Description>Dichroic beam splitter: an interference filter whose stack is a quarter-wave design for 32 px, 8 pairs of index 2.00 at 4.00 px and 1.50 at 5.33 px and one more layer of 2.00 (17 layers, 78.6 px), on a glass plate of index 1.5, tilted 20 degrees so the reflection leaves upward. The upper beam of frequency 50 (32 px) lies in the stopband and is reflected, leaving at 40 degrees; the lower beam of frequency 80 (20 px) lies in the passband and goes through. The line probe Reflected lies across the reflected beam, Transmitted across both beams' paths behind the filter.</Description>
+	<Scene Width="1280" Height="600" />
+	<Simulation Steps="2000" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="2" />
+	</Display>
+	<Source Name="Reflected colour (32 px)" X="80" Y="300" Frequency="50">
+		<Array SizeY="17" SpacingY="8" />
+	</Source>
+	<Source Name="Passed colour (20 px)" X="80" Y="470" Frequency="80">
+		<Array SizeY="17" SpacingY="8" />
+	</Source>
+	<InterferenceFilter Name="Dichroic filter" X="640" Y="400" Angle="-20" Length="40" Width="520">
+		<Layer Thickness="4" RefractiveIndex="2" />
+		<Layer Thickness="5.33" />
+		<Layer Thickness="4" RefractiveIndex="2" />
+		<Layer Thickness="5.33" />
+		<Layer Thickness="4" RefractiveIndex="2" />
+		<Layer Thickness="5.33" />
+		<Layer Thickness="4" RefractiveIndex="2" />
+		<Layer Thickness="5.33" />
+		<Layer Thickness="4" RefractiveIndex="2" />
+		<Layer Thickness="5.33" />
+		<Layer Thickness="4" RefractiveIndex="2" />
+		<Layer Thickness="5.33" />
+		<Layer Thickness="4" RefractiveIndex="2" />
+		<Layer Thickness="5.33" />
+		<Layer Thickness="4" RefractiveIndex="2" />
+		<Layer Thickness="5.33" />
+		<Layer Thickness="4" RefractiveIndex="2" />
+	</InterferenceFilter>
+	<Probe Name="Reflected" Layer="Intensity" Measurement="Value" Kind="Line" AX="319" AY="198" BX="419" BY="74" BoxX="20" BoxY="20" />
+	<Probe Name="Transmitted" Layer="Intensity" Measurement="Value" Kind="Line" AX="1000" AY="200" BX="1000" BY="580" BoxX="860" BoxY="20" />
+</Project>

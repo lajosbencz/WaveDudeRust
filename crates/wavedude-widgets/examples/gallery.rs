@@ -13,7 +13,7 @@ use wavedude_widgets::menu::ContextMenuRequest;
 use wavedude_widgets::status_bar::StatusLine;
 use wavedude_widgets::tree::RowKind;
 use wavedude_widgets::*;
-use wavedude_widgets::{GradientStop, MenuItem, Side, Theme};
+use wavedude_widgets::{Button, GradientStop, MenuItem, Side, Theme};
 
 const CANVAS: (u32, u32) = (320, 180);
 
@@ -278,15 +278,23 @@ fn app() -> impl IntoElement {
 	let values: Rc<[f32]> = (0..400).map(|i| ((f64::from(i) / 12. - phase).sin() * 0.8) as f32).collect();
 	let (gw, gh) = *graph_size.read();
 	let graph = GraphBox::new(
-		GraphData {
-			title: "Probe 1".into(),
-			readout: "0.42".into(),
-			readout_color: Color::from_rgb(255, 230, 0),
-			axis: ValueAxis::fit_symmetric(&values),
-			values,
-			x_range: (0., 400.),
-			x_per_sample: 1.,
-		},
+		GraphData::new("Probe 1", move |_, w, h| {
+			let (pw, ph) = (w - 40., h - 30.);
+			let n = values.len().max(2) as f32 - 1.;
+			GraphLayout {
+				has_plot: true,
+				plot: (32., 20., pw, ph),
+				line_width: 1.2,
+				curve: values
+					.iter()
+					.enumerate()
+					.map(|(i, v)| (32. + pw * i as f32 / n, 20. + ph * (0.5 - v / 2.)))
+					.collect(),
+				title: "Probe 1".into(),
+				readout: "= 0.42".into(),
+				..GraphLayout::default()
+			}
+		}),
 		gw,
 		gh,
 		move |e: GraphBoxEvent| match e {

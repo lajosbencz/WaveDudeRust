@@ -3,8 +3,8 @@
 use std::borrow::Cow;
 
 use freya::engine::prelude::{
-	Canvas, FontCollection, Paint, PaintStyle, ParagraphBuilder, ParagraphStyle, Shader, SkColor4f, SkParagraph,
-	TextStyle, TileMode, gradient,
+	Canvas, FontCollection, FontStyle, Paint, PaintStyle, ParagraphBuilder, ParagraphStyle, Shader, SkColor4f,
+	SkParagraph, Slant, TextStyle, TileMode, Weight, Width, gradient,
 };
 use freya::prelude::{Color, FillRenderContext};
 
@@ -90,7 +90,7 @@ pub(crate) fn linear_shader(
 	gradient::shaders::linear_gradient((from, to), &spec, None)
 }
 
-/// A laid-out single line of text at `size` (canvas units).
+/// A laid-out single line of text at `size` (canvas units) in the regular weight.
 pub(crate) fn text_line(
 	fonts: &mut FontCollection,
 	families: &[Cow<'static, str>],
@@ -98,9 +98,22 @@ pub(crate) fn text_line(
 	size: f32,
 	color: Color,
 ) -> SkParagraph {
+	weighted_text_line(fonts, families, text, size, color, Weight::NORMAL)
+}
+
+/// A laid-out single line of text at `size` (canvas units) in `weight`.
+pub(crate) fn weighted_text_line(
+	fonts: &mut FontCollection,
+	families: &[Cow<'static, str>],
+	text: &str,
+	size: f32,
+	color: Color,
+	weight: Weight,
+) -> SkParagraph {
 	let mut style = TextStyle::new();
 	style.set_color(color);
 	style.set_font_size(size);
+	style.set_font_style(FontStyle::new(weight, Width::NORMAL, Slant::Upright));
 	// skia-safe reads an empty family list through a null pointer, which debug builds abort on.
 	if !families.is_empty() {
 		let families: Vec<&str> = families.iter().map(|f| f.as_ref()).collect();

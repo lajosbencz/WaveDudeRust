@@ -562,7 +562,7 @@ impl Component for Splitter {
 				let v = (*split.peek() + delta).clamp(0.05, 0.95);
 				split.set(v);
 			});
-		TooltipContainer::new(Tooltip::new_text(self.tooltip.clone())).child(bar)
+		wavedude_widgets::Tip::new(self.tooltip.clone()).child(bar)
 	}
 }
 
@@ -595,6 +595,9 @@ fn on_pane_key(shared: &Shared, e: &Event<KeyboardEventData>) {
 	e.prevent_default();
 	shared.send(event);
 }
+
+/// The margin around the pictures, logical pixels.
+const PICTURES_MARGIN: f32 = 4.;
 
 /// The preview pane: the pictures, the timeline and the transport bar.
 pub fn preview_pane() -> impl IntoElement {
@@ -658,13 +661,14 @@ impl Component for PreviewPane {
 		let pictures = rect()
 			.width(Size::fill())
 			.height(Size::flex(1.))
+			.padding(PICTURES_MARGIN)
 			.content(Content::flex())
 			.maybe(!vertical, |r| r.horizontal())
 			.on_sized(move |e: Event<SizedEventData>| size.set_if_modified((e.area.width(), e.area.height())))
 			.maybe_child(show_field.then(|| cell(Layer::Field, if show_intensity { split } else { 1. })))
 			.maybe_child((show_field && show_intensity).then(|| Splitter {
 				split: states.split,
-				length: length - 4.,
+				length: length - 4. - 2. * PICTURES_MARGIN,
 				vertical,
 				tooltip: tooltip.clone(),
 			}))

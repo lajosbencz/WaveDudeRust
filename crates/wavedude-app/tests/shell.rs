@@ -142,7 +142,7 @@ fn a_disabled_row_takes_no_edit() {
 }
 
 #[test]
-fn drop_downs_size_to_their_words() {
+fn drop_downs_fill_their_column() {
 	let dir = tempfile::tempdir().unwrap();
 	let (mut test, state) = shell(dir.path());
 	state.update(|a| a.selection.select(Row::Scene));
@@ -154,19 +154,24 @@ fn drop_downs_size_to_their_words() {
 			Label::try_downcast(element).is_some_and(|l| l.text.as_ref() == w).then_some(node.layout().area)
 		})
 	};
+	// the hidden measuring copy lists every word first
 	let open = words("Open");
 	let (hidden, shown) = (open[0], open[1]);
 	let reflective = words("Reflective")[0];
-	assert!(shown.width() < 90., "the label fills the cell: {}", shown.width());
-	assert!(shown.width() > hidden.width(), "the label is wider than its own word: the widest word sets it");
+	assert!(reflective.width() > hidden.width(), "the measuring copy holds the widest word");
 	assert!(
-		(shown.width() - reflective.width()).abs() < 10.,
-		"widest word {} shown {} hidden {}",
-		reflective.width(),
+		shown.width() > reflective.width() + 40.,
+		"the button fills the column past its widest word: shown {} widest {}",
 		shown.width(),
-		hidden.width()
+		reflective.width()
 	);
-	assert!(shown.max_x() < 320., "the button stays inside the pane");
+	let column = test
+		.find(|node, element| {
+			Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some("Scene.Width"))?;
+			Some(node.layout().area)
+		})
+		.expect("the width box is drawn");
+	assert!(shown.max_x() < column.max_x(), "the button stays in the editor column: {shown:?} {column:?}");
 }
 
 #[test]
@@ -193,4 +198,141 @@ fn hovering_export_opens_its_submenu_inside_the_window() {
 	assert!(field.min_x() >= new.max_x() - 4., "the submenu opens beside its parent: {field:?} vs {new:?}");
 	assert!(field.max_x() <= 1400., "the submenu stays inside the window: {field:?}");
 	assert!(new.width() < 320., "the File menu is {} px wide", new.width());
+}
+
+/// The brightness box of a strip on its side: a click on its likeness focuses it, typed text and Enter set the value.
+#[test]
+fn the_turned_brightness_box_takes_clicks_and_keys() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = shell(dir.path());
+	let id = "PreviewFieldImageBrightness";
+	let area = test
+		.find(|node, element| {
+			Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some(id))?;
+			Some(node.layout().area)
+		})
+		.expect("the box's stand-in");
+	assert!(area.height() > area.width(), "the strip is on its side: {area:?}");
+	test.click_cursor((f64::from(area.center().x), f64::from(area.center().y)));
+	test.sync_and_update();
+	test.press_key(Key::Named(NamedKey::End));
+	for _ in 0..8 {
+		test.press_key(Key::Named(NamedKey::Backspace));
+	}
+	test.write_text("42");
+	test.press_key(Key::Named(NamedKey::Enter));
+	test.sync_and_update();
+	test.sync_and_update();
+	assert_eq!(state.peek(|a| a.document.project.display.field.brightness), 42.);
+}
+
+/// The area of the element tagged `id`.
+fn tagged_area(test: &TestingRunner, id: &str) -> Option<freya::prelude::Area> {
+	test.find(|node, element| {
+		Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some(id))?;
+		Some(node.layout().area)
+	})
+}
+
+/// Whether the focused element lies inside the element tagged `id`.
+fn focus_in(test: &mut TestingRunner, id: &str) -> bool {
+	let focus = test.sync_and_update().focus;
+	let focused = test.find(|node, element| {
+		let a11y = Rect::try_downcast(element)
+			.map(|r| r.accessibility.a11y_id)
+			.or_else(|| Paragraph::try_downcast(element).map(|p| p.accessibility.a11y_id))?;
+		(a11y == Some(focus)).then(|| node.layout().area)
+	});
+	let tag = tagged_area(test, id).unwrap_or_else(|| panic!("no element {id}"));
+	focused.is_some_and(|f| tag.contains(f.center()))
+}
+
+fn settle(test: &mut TestingRunner) {
+	test.poll(std::time::Duration::from_millis(16), std::time::Duration::from_millis(120));
+	test.sync_and_update();
+}
+
+fn click_tagged(test: &mut TestingRunner, id: &str) {
+	let area = tagged_area(test, id).unwrap_or_else(|| panic!("no element {id}"));
+	test.click_cursor((f64::from(area.center().x), f64::from(area.center().y)));
+	settle(test);
+}
+
+#[test]
+fn an_opened_project_shows_its_root() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = shell(dir.path());
+	settle(&mut test);
+	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Project));
+	assert!(find_text(&test, "No selection").is_none(), "the Properties pane shows the Project form");
+	state.update(|a| drop(a.handle(AppEvent::Guarded(Guarded::New), std::time::Instant::now())));
+	settle(&mut test);
+	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Project), "a new project too");
+	assert!(focus_in(&mut test, "ProjectTree"), "the tree takes the focus");
+}
+
+/// KeyboardCheck step 2: the move and remove buttons are disabled with no item selected and skipped.
+#[test]
+fn tab_walks_the_project_toolbar_into_the_tree() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, _) = shell(dir.path());
+	settle(&mut test);
+	for _ in 0..40 {
+		if focus_in(&mut test, "ToolAddSource") {
+			break;
+		}
+		test.press_key(Key::Named(NamedKey::Tab));
+	}
+	assert!(focus_in(&mut test, "ToolAddSource"), "Tab never reached Add source");
+	assert!(!focus_in(&mut test, "ToolAddPart"));
+	for id in ["ToolAddProbe", "ToolAddPart", "ProjectTree"] {
+		test.press_key(Key::Named(NamedKey::Tab));
+		assert!(focus_in(&mut test, id), "Tab skipped {id}");
+	}
+}
+
+/// KeyboardCheck step 3: the new source is selected and its name box has the caret.
+#[test]
+fn an_added_source_is_selected_with_the_caret_in_its_name() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = shell(dir.path());
+	settle(&mut test);
+	let count = state.peek(|a| a.document.project.sources.len());
+	click_tagged(&mut test, "ToolAddSource");
+	let added = ItemRef::new(ItemKind::Source, count);
+	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Item(added)));
+	assert!(focus_in(&mut test, "Source.Name"), "the name box has no focus");
+	test.write_text("Lamp");
+	settle(&mut test);
+	let name = state.peek(|a| a.document.project.sources[count].name.clone());
+	assert_eq!(name, "Lamp", "the focused name is selected, typing replaces it");
+}
+
+/// KeyboardCheck step 7: Remove takes the selected source away and selects its neighbour.
+#[test]
+fn removing_the_last_row_selects_the_one_above() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = shell(dir.path());
+	let count = state.peek(|a| a.document.project.sources.len());
+	assert!(count >= 2, "the example has two sources");
+	state.update(|a| a.selection.select(Row::Item(ItemRef::new(ItemKind::Source, count - 1))));
+	settle(&mut test);
+	click_tagged(&mut test, "ToolRemove");
+	assert_eq!(state.peek(|a| a.document.project.sources.len()), count - 1);
+	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Item(ItemRef::new(ItemKind::Source, count - 2))));
+	assert!(focus_in(&mut test, "ProjectTree"), "the tree takes the focus from the button");
+}
+
+/// KeyboardCheck step 6: a move keeps the selection and gives the tree the focus.
+#[test]
+fn moving_a_row_keeps_it_selected_and_focuses_the_tree() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = shell(dir.path());
+	let name = state.peek(|a| a.document.project.sources[1].name.clone());
+	state.update(|a| a.selection.select(Row::Item(ItemRef::new(ItemKind::Source, 1))));
+	settle(&mut test);
+	click_tagged(&mut test, "ToolMoveUp");
+	assert_eq!(state.peek(|a| a.document.project.sources[0].name.clone()), name);
+	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Item(ItemRef::new(ItemKind::Source, 0))));
+	assert!(focus_in(&mut test, "ProjectTree"), "the tree takes the focus from the button");
 }

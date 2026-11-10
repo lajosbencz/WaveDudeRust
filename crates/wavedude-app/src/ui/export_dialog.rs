@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::Instant;
+use wavedude_widgets::Button;
 
 use freya::prelude::*;
 use wavedude_core::engine::probes::ProbeTrace;

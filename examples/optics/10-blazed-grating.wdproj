@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="2110">
+	<Description>Blazed grating: a plane wave of frequency 100 (16 px), 192 px wide, falls at 45 degrees on a mirror grating with a sawtooth relief of 64 px pitch (4 wavelengths) and 12 px amplitude (24 px from crest to trough, a blaze angle of 20.6 degrees), lighting 4.3 periods. The orders leave at sin(theta) = sin(45 degrees) - m 16/64: the zero order at 45 degrees on the other side of the normal, the first at 27 degrees, the second at 12 degrees, the third at -2.5 degrees, nearly along the normal; the facets reflect specularly at 2 x 20.6 - 45 = -3.9 degrees, so the third order carries the light and the lower orders stay weak. The line probe Blazed order lies across the beam leaving along the normal, Zero order across the specular reflection.</Description>
+	<Scene Width="1280" Height="600" />
+	<Simulation Steps="1800" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="1.5" />
+	</Display>
+	<Source Name="Plane wave" X="958" Y="408" Frequency="100">
+		<Array SizeY="25" SpacingY="8" Angle="-45" />
+	</Source>
+	<FacettedGrating Name="Blazed grating" X="640" Y="70" Angle="90" Mirror="true" Length="40" Width="400" Pitch="64" Amplitude="12" />
+	<Probe Name="Blazed order" Layer="Intensity" Measurement="Value" Kind="Line" AX="500" AY="450" BX="780" BY="450" BoxX="20" BoxY="20" />
+	<Probe Name="Zero order" Layer="Intensity" Measurement="Value" Kind="Line" AX="442" AY="458" BX="272" BY="288" BoxX="860" BoxY="20" />
+</Project>

@@ -166,3 +166,54 @@ fn a_press_on_a_graph_box_selects_its_probe() {
 	test.sync_and_update();
 	assert!(shared.peek(|a| a.selection.contains(ItemRef::new(ItemKind::Probe, 0))), "the press selected the probe");
 }
+
+/// The area of the rectangle carrying the test id `id`.
+fn area_of(test: &TestingRunner, id: &str) -> Area {
+	test.find(|node, element| {
+		Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some(id))?;
+		Some(node.layout().area)
+	})
+	.unwrap_or_else(|| panic!("'{id}' is drawn"))
+}
+
+#[test]
+fn an_outline_point_row_fits_the_pane() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, shared) = shell(dir.path(), |app| {
+		let now = Instant::now();
+		app.apply(Command::AddPart { kind: NewPart::Outline, at: None }, now).expect("the part is added");
+		let points = json!([{ "x": -40, "y": -30 }, { "x": 40, "y": -30 }, { "x": 0, "y": 40 }]);
+		let target = Target::Item(ItemRef::new(ItemKind::Part, 0));
+		app.apply(Command::Set { target, path: "kind.Outline.points".into(), value: points }, now).expect("points set");
+	});
+	shared.update(|a| a.selection.select(Row::Item(ItemRef::new(ItemKind::Part, 0))));
+	for _ in 0..3 {
+		test.sync_and_update();
+	}
+	let column = area_of(&test, "ShapePart.Coating");
+	// the points sit below the fold
+	test.scroll((f64::from(column.center().x), f64::from(column.center().y)), (0., -2000.));
+	for _ in 0..3 {
+		test.sync_and_update();
+	}
+	let (x, y, remove) = (area_of(&test, "Point0.X"), area_of(&test, "Point0.Y"), area_of(&test, "Point0.Remove"));
+	assert!(x.width() > 20. && y.width() > 20., "both boxes share the row: {x:?} {y:?}");
+	assert!(x.max_x() <= y.min_x() && y.max_x() <= remove.min_x(), "X, Y, remove in order");
+	assert!(remove.max_x() <= column.max_x() + 1., "the remove button stays in the pane: {remove:?} {column:?}");
+}
+
+#[test]
+fn gate_and_zone_plate_readouts_match_the_design() {
+	let dir = tempfile::tempdir().unwrap();
+	let (_test, shared) = shell(dir.path(), |app| {
+		let now = Instant::now();
+		app.apply(Command::AddPart { kind: NewPart::XorGate, at: None }, now).expect("the gate is added");
+		app.apply(Command::AddPart { kind: NewPart::ZonePlate, at: None }, now).expect("the plate is added");
+	});
+	let readouts =
+		|i| shared.peek(|a| super::properties_forms::readouts(a, Row::Item(ItemRef::new(ItemKind::Part, i))));
+	let gate = readouts(0).gate.expect("the default gate has a design");
+	assert_eq!(gate.spacing, 60, "the spacing the design uses, not the stored 2");
+	assert!((gate.quarter_wave - 5.0).abs() < 0.05, "lambda / (4 sqrt(core index)): {}", gate.quarter_wave);
+	assert_eq!(readouts(1).zones.expect("the plate has a wavelength").0, 8, "the zone index at the rim plus one");
+}

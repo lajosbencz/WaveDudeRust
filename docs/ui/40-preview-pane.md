@@ -34,12 +34,17 @@ Pointers: `Panes/PreviewPane.xaml(.cs)`, `Controls/SceneOverlay.cs`, `Controls/P
 
 ## Header strip
 
-One strip per picture: title ("Field" / "Intensity") at the start; at the far end the caption "Brightness",
-the brightness number box (64 px, logarithmic, 0.0001..100000, same value as Display > layer > Brightness;
-tooltip = the brightness hint) and an "Auto" button.
-- Placement: above the picture when the cell is taller than the picture's aspect (spare room above/below);
-  rotated 90 degrees on the picture's left when the cell is wider (spare room at the sides), ending at the
-  picture's bottom edge.
+One strip per picture: title ("Field" / "Intensity", semi-bold) at the start; at the far end the caption
+"Brightness", the brightness number box (64 px, logarithmic, 0.0001..100000, same value as Display > layer >
+Brightness; tooltip = the brightness hint) and an "Auto" button, 4 px apart. At least 12 px between the title and
+what follows.
+- Placement, per picture cell: above the picture when the cell (inside its 4 px margin) is taller than the
+  picture's aspect (spare room above/below), 4 px over it; otherwise the whole strip, box and button included, is
+  turned a quarter clockwise on the picture's left, reading top to bottom, 10 px below the cell's top and ending
+  4 px above its bottom, the picture's bottom edge.
+- On its side the box edits upright over its place while it has focus (Freya rotates the drawing, not the hit
+  testing or the text clipping); a click on it, Tab or the context menu focuses it, its arrows and the wheel step
+  it, Auto takes clicks, Enter and Space.
 - When short: the caption is dropped first; then the title is trimmed (ellipsis) to what the tools leave.
 - Auto: one-shot fit of the frame shown: the 99.5th percentile of |field| (or sqrt(intensity)) maps to the top
   of the colour scheme. The brightness then stays. With 8-bit samples the frame is computed once more in 16-bit
@@ -159,9 +164,11 @@ emitter dots the source layer is cached as a bitmap).
 
 ### Probe graph box
 
-- Translucent dark box (fixed author colours, not themed) with axes, labels, the curve and a title strip with
-  the probe name and a live readout (right-aligned, own colour). Fixed label text size: the text does not scale
-  with the box.
+- Translucent dark box (fixed author colours, not themed) with a light grid, value labels left of the plot,
+  step (or position) labels under it, the curve and a title strip with the probe name and a live readout
+  (right-aligned, in the curve's colour): "= <last value>" for a point probe, "max <value>" for a line probe.
+  Numbers in three significant digits as Next writes them ("0", "1E-05", "3.08E-05"). Fixed 11 px text: the text
+  does not scale with the box. Laid out by the export's graph layout, so preview and export draw the same graph.
 - Position/size from the probe: Box x/y in canvas pixels; size from Box size (Tiny 200 x 100 ... Extra large,
   Custom = Box width/height). A box larger than the canvas shrinks to fit, aspect kept. Mapped with the picture's
   scale; edges on whole pixels.

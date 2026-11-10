@@ -26,8 +26,11 @@ use crate::ui::shared::{Shared, Topics};
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, Target};
 
-/// The margin between a cell's edge and its picture, logical pixels.
+/// The margin between the picture and its area's edges, logical pixels: the cell's margin on the outer sides, the
+/// gap to the header strip on the strip's side.
 pub const MARGIN: f32 = 4.;
+/// The cell's margin around the header strip, logical pixels.
+const CELL_MARGIN: f32 = 4.;
 /// A pointer resting on a handle this long shows the handle's tooltip.
 const HOVER_TIP_DELAY: Duration = Duration::from_millis(600);
 /// How often a resting pointer is checked for a tooltip.
@@ -177,7 +180,8 @@ impl Component for PictureCell {
 					s.get("TipAutoBrightness").to_owned(),
 				)
 			});
-		let beside = strip_beside(*cell.read(), canvas);
+		let (cw, ch) = *cell.read();
+		let beside = strip_beside((cw - 2. * CELL_MARGIN, ch - 2. * CELL_MARGIN), canvas);
 		let (aw, ah) = *area.read();
 		let mut canvas_state = use_state(|| canvas);
 		canvas_state.set_if_modified(canvas);
@@ -332,8 +336,8 @@ impl Component for PictureCell {
 		.test_id(picture_id(layer));
 		let menu_shared = shared.clone();
 		let strip = rect()
-			.maybe(!beside, |r| r.width(Size::fill()))
-			.maybe(beside, |r| r.height(Size::fill()))
+			.maybe(!beside, |r| r.width(Size::fill()).padding((CELL_MARGIN, CELL_MARGIN, 0., CELL_MARGIN)))
+			.maybe(beside, |r| r.height(Size::fill()).padding((CELL_MARGIN, 0., CELL_MARGIN, CELL_MARGIN)))
 			.on_pointer_down(move |e: Event<PointerEventData>| {
 				if e.button() == Some(MouseButton::Right) {
 					let g = e.global_location();

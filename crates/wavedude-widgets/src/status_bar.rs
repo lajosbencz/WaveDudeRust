@@ -9,6 +9,7 @@ use freya::prelude::*;
 use crate::message_list::LogLevel;
 use crate::paint::{DeviceGrid, fill, stroke};
 use crate::theme::use_wave_theme;
+use crate::tooltip::Tip;
 use crate::util::{TestIdExt, wide_tooltip};
 
 /// The bar's colouring.
@@ -80,6 +81,10 @@ pub fn is_double_click(previous: Option<Instant>, now: Instant) -> bool {
 }
 
 const BAR_WIDTH: f32 = 120.;
+const HEIGHT: f32 = 22.;
+/// The resize grip's side; the bar keeps it clear on its right.
+const GRIP: f32 = 16.;
+const ITEM_PADDING: (f32, f32) = (2., 4.);
 
 /// The bar. `busy` shows its text and progress bar; nothing on the far right when `None`.
 #[derive(Clone, PartialEq)]
@@ -147,23 +152,22 @@ impl Component for StatusBar {
 			let view = rect()
 				.horizontal()
 				.cross_align(Alignment::center())
-				.spacing(6.)
+				.padding(ITEM_PADDING)
 				.child(label().text(text).max_lines(1))
-				.child(ProgressBarView { progress, color: fg });
+				.child(rect().margin((0., 8., 0., 6.)).child(ProgressBarView { progress, color: fg }));
 			match busy_tip.clone() {
-				Some(t) => TooltipContainer::new(Tooltip::new_text(t)).child(view).into_element(),
+				Some(t) => Tip::new(t).child(view).into_element(),
 				None => view.into_element(),
 			}
 		});
 		rect()
 			.test_id("StatusBar")
 			.width(Size::fill())
-			.height(Size::px(theme.row_height))
+			.min_height(Size::px(HEIGHT))
 			.horizontal()
 			.content(Content::flex())
 			.cross_align(Alignment::center())
-			.spacing(12.)
-			.padding((0., 0., 0., 6.))
+			.padding((0., GRIP, 0., 4.))
 			.background(background)
 			.color(fg)
 			.font_size(theme.font_size)
@@ -181,10 +185,14 @@ impl Component for StatusBar {
 					last_press.set(Some(now));
 				}
 			})
-			.child(rect().width(Size::flex(1.)).child(left))
-			.child(label().text(self.right.clone()).max_lines(1))
+			.child(rect().width(Size::flex(1.)).padding(ITEM_PADDING).child(left))
+			.maybe_child(
+				(!self.right.is_empty())
+					.then(|| rect().padding(ITEM_PADDING).child(label().text(self.right.clone()).max_lines(1))),
+			)
 			.maybe_child(busy)
-			.child(ResizeGrip { color: fg })
+			// absolute positions start inside the padding, which keeps the grip's corner clear
+			.child(rect().position(Position::new_absolute().right(-GRIP).bottom(0.)).child(ResizeGrip { color: fg }))
 	}
 }
 
@@ -242,14 +250,15 @@ struct ResizeGrip {
 impl Component for ResizeGrip {
 	fn render(&self) -> impl IntoElement {
 		let color = self.color;
-		rect().width(Size::px(12.)).height(Size::px(12.)).background(RenderCallback::new(
+		rect().width(Size::px(GRIP)).height(Size::px(GRIP)).background(RenderCallback::new(
 			move |ctx: &mut FillRenderContext| {
 				let grid = DeviceGrid::from_ctx(ctx);
 				let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 				grid.enter(canvas);
-				let dot = grid.hairline() * 2.;
-				for (cx, cy) in [(9., 9.), (5., 9.), (9., 5.), (1., 9.), (5., 5.), (9., 1.)] {
-					let (x, y) = (grid.x(cx).round(), grid.y(cy).round());
+				let dot = grid.width(2.);
+				// a 10 px triangle of 2 px dots, 3 px off the corner
+				for (cx, cy) in [(8., 0.), (8., 4.), (8., 8.), (4., 4.), (4., 8.), (0., 8.)] {
+					let (x, y) = (grid.x(3. + cx).round(), grid.y(3. + cy).round());
 					canvas.draw_rect(SkRect::new(x, y, x + dot, y + dot), &fill(color));
 				}
 				canvas.restore();

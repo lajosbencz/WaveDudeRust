@@ -42,3 +42,13 @@ and 1.9 ms at worst; an unpaced loop pushed 300 frames in 0.58 s with the
 window redrawing at its own rate. Skia came as a prebuilt download; the
 first build took 54 s, a release build 28 s. Keyboard traversal and the two
 other platforms are checked when the app exists.
+
+## WPF box model and font (2026-11-10)
+
+The widgets follow WaveDude Next's box model rather than Freya's defaults: `Theme::freya_theme` resizes and
+recolours Freya's Button, Input and Tooltip themes (square corners, WPF paddings, 23 px buttons, 22 px combo
+boxes), and the text box, number box and tooltip are drawn by the widgets themselves where Freya fixes a look
+(a 2 px focus border, rounded tooltips with padding 4,10). The UI font is Segoe UI when installed, else Selawik,
+Microsoft's metric-compatible stand-in under the SIL OFL, bundled and registered at start; text widths match
+Segoe UI, its line is 14.4 px against Segoe UI's 16 at 12 px, so controls carry fixed heights instead of
+deriving them from the line.

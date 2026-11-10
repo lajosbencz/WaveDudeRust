@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="2105">
+	<Description>Beam steering: a plane wave of frequency 50 (32 px) through a meta prism, a 20 px plate of index 1.5 with ridges of index 2.00, 32 px high in cells of 4 px, whose fill climbs over zones of 93.6 px (wavelength over sin 20 degrees) so the beam leaves turned by 20 degrees. The line probe Downstream, 500 px behind the prism, reads the turned beam 182 px (500 tan 20) above the axis, where the undeflected beam would be at the mark of the probe's middle.</Description>
+	<Scene Width="960" Height="540" />
+	<Simulation Steps="1200" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="1.5" />
+	</Display>
+	<Source Name="Plane wave" X="80" Y="360" Frequency="50">
+		<Array SizeY="33" SpacingY="8" />
+	</Source>
+	<MetaPrism Name="Steering prism" X="300" Y="360" Coating="6" Length="20" Width="400" />
+	<Probe Name="Downstream" Layer="Intensity" Measurement="Value" Kind="Line" AX="800" AY="40" BX="800" BY="520" BoxX="540" BoxY="330" />
+</Project>

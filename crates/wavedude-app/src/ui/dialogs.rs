@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use wavedude_widgets::Button;
 
 use freya::prelude::*;
 use wavedude_widgets::use_wave_theme;
