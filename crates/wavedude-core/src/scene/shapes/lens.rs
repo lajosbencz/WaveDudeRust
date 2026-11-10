@@ -1,32 +1,45 @@
 use super::{Band, Body, Face, PartShape, Vec2};
-use crate::model::Lens;
-use crate::model::normalize::{fit_radii, sag};
+use crate::model::lens_geometry::{fit_radii_zoned, surface_sag, zone_bound, zone_index, zone_sag};
+use crate::model::{Lens, ZoneDivision};
 
-/// A lens or curved mirror: the strip |y'| <= D/2 between the surfaces with vertices at -T/2 and +T/2.
+/// A lens or curved mirror: the strip |y'| <= D/2 between the surfaces with vertices at -T/2 and +T/2; with
+/// more than one zone a Fresnel lens, each surface's arc restarted at the vertex plane at every zone's inner edge.
 pub(super) struct LensShape {
 	half: f64,
 	vertex1: f64,
 	vertex2: f64,
 	r1: f64,
 	r2: f64,
+	zones: u32,
+	division: ZoneDivision,
 	body: Body,
 	extent: f64,
 }
 
 impl LensShape {
 	pub fn new(lens: &Lens) -> Self {
+		Self::zoned(lens, 1, ZoneDivision::EqualWidth)
+	}
+
+	pub fn zoned(lens: &Lens, zones: u32, division: ZoneDivision) -> Self {
 		let half = lens.diameter as f64 / 2.0;
 		let vertex1 = -(lens.thickness as f64) / 2.0;
 		let vertex2 = -vertex1;
 		let (r1, r2) = (lens.r1, lens.r2);
-		debug_assert_eq!(fit_radii(lens.diameter, lens.thickness, r1, r2), (r1, r2), "radii fitted by normalisation");
-		let reach = vertex2 + sag(r1, half).max(sag(r2, half));
+		debug_assert_eq!(
+			fit_radii_zoned(lens.diameter, lens.thickness, r1, r2, zones, division),
+			(r1, r2),
+			"radii fitted by normalisation"
+		);
+		let reach = vertex2 + zone_sag(r1, half, zones, division).max(zone_sag(r2, half, zones, division));
 		Self {
 			half,
 			vertex1,
 			vertex2,
 			r1,
 			r2,
+			zones,
+			division,
 			body: Body::of(&lens.material, &lens.coating),
 			extent: (reach * reach + half * half).sqrt(),
 		}
@@ -51,10 +64,44 @@ impl LensShape {
 		}
 	}
 
+	/// [`Self::surface_depth`] for a surface cut into zones: the point's zone by |y'|, the arc that zone's circle
+	/// moved along the axis so it starts at the vertex plane at the zone's inner edge, and the step across the
+	/// axis that bounds the zone's glass: at its inner edge for a convex surface (the arc recedes outward, the
+	/// next zone restarts ahead of it), at its outer edge for a concave one (the arc advances, the zone's glass
+	/// ends there); the step's distance along y', or to its inner corner past the step's reach into the lens.
+	fn zoned_depth(&self, p: Vec2, vertex: f64, radius: f64, side: f64) -> f64 {
+		if self.zones == 1 || radius == 0.0 {
+			return Self::surface_depth(p, vertex, radius, side);
+		}
+		let bound = |k| zone_bound(radius, self.half, self.zones, self.division, k);
+		let across = p.y.abs();
+		let zone = zone_index(radius, self.half, self.zones, self.division, across);
+		let inner = bound(zone);
+		let shift = surface_sag(radius, inner);
+		let mut depth = Self::surface_depth(p, vertex - shift, radius, side);
+		// the point's place along the axis from the vertex plane, positive into the lens
+		let into = (p.x - vertex) * -side;
+		if radius * side < 0.0 {
+			if zone >= 1 {
+				// convex: the step at the inner edge reaches into the lens by the previous zone's sag
+				let reach = (shift - surface_sag(radius, bound(zone - 1))) * -side;
+				let along = across - inner;
+				let past = into - reach;
+				depth = depth.min(if past <= 0.0 { along } else { along.hypot(past) });
+			}
+		} else if zone + 2 <= self.zones {
+			// concave: the step at the outer edge stands out of the vertex plane by this zone's sag, its inner
+			// corner on the plane
+			let along = bound(zone + 1) - across;
+			depth = depth.min(if into <= 0.0 { along } else { along.hypot(into) });
+		}
+		depth
+	}
+
 	fn depths3(&self, p: Vec2) -> (f64, f64, f64) {
 		(
-			Self::surface_depth(p, self.vertex1, self.r1, -1.0),
-			Self::surface_depth(p, self.vertex2, self.r2, 1.0),
+			self.zoned_depth(p, self.vertex1, self.r1, -1.0),
+			self.zoned_depth(p, self.vertex2, self.r2, 1.0),
 			self.half - p.y.abs(),
 		)
 	}
@@ -105,7 +152,7 @@ impl PartShape for LensShape {
 
 #[cfg(test)]
 mod tests {
-	use super::*;
+	use crate::model::lens_geometry::sag;
 
 	#[test]
 	fn flat_threshold_on_104_px() {

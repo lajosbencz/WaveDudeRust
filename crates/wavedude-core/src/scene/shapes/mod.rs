@@ -302,6 +302,7 @@ impl Body {
 pub fn shape_for(part: &Part, sim: &Simulation) -> Option<Box<dyn PartShape>> {
 	Some(match &part.kind {
 		PartKind::Lens(l) => Box::new(lens::LensShape::new(l)),
+		PartKind::FresnelLens(f) => Box::new(lens::LensShape::zoned(&f.lens, f.zones, f.division)),
 		PartKind::Polygon(p) => Box::new(VertexShape::new(polygon::vertices(p), &p.material, &p.coating)?),
 		PartKind::Rectangle(r) => Box::new(VertexShape::new(rectangle::vertices(r), &r.material, &r.coating)?),
 		PartKind::Ellipse(e) => Box::new(VertexShape::new(ellipse::vertices(e), &e.material, &e.coating)?),
@@ -324,6 +325,7 @@ pub fn vertices(kind: &PartKind) -> Option<Vec<Vec2>> {
 		PartKind::Triangle(t) => triangle::vertices(t),
 		PartKind::Outline(o) => outline::vertices(o),
 		PartKind::Lens(_)
+		| PartKind::FresnelLens(_)
 		| PartKind::Fiber(_)
 		| PartKind::BraggReflector(_)
 		| PartKind::GrinLens(_)

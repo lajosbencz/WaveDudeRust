@@ -98,8 +98,9 @@ pub const ZOOMS: [(f64, &str); 8] = [
 ];
 
 /// The Add part menu's entries: kind, string key, test id.
-pub const PART_KINDS: [(NewPart, &str, &str); 13] = [
+pub const PART_KINDS: [(NewPart, &str, &str); 14] = [
 	(NewPart::Lens, "MenuAddLens", "Lens"),
+	(NewPart::FresnelLens, "MenuAddFresnelLens", "FresnelLens"),
 	(NewPart::Fiber, "MenuAddFiber", "Fiber"),
 	(NewPart::BraggReflector, "MenuAddBraggReflector", "BraggReflector"),
 	(NewPart::GrinLens, "MenuAddGrinLens", "GrinLens"),
@@ -211,19 +212,18 @@ pub fn part_entries(s: &Strings, prefix: &str) -> Vec<Entry> {
 			.tooltip(s.kind(kind.type_name()))
 			.into()
 	};
-	let mut v: Vec<Entry> = PART_KINDS[..5].iter().map(entry).collect();
+	let entries = |from: NewPart, to: NewPart| -> Vec<Entry> {
+		let at = |kind| PART_KINDS.iter().position(|(k, ..)| *k == kind).expect("a kind of the menu");
+		PART_KINDS[at(from)..=at(to)].iter().map(entry).collect()
+	};
+	let submenu = |id: &str, key: &str, icon: NewPart, from, to| -> Entry {
+		Submenu::new(format!("{prefix}{id}"), s.get(key), entries(from, to)).icon(super::tree::kind_icon(icon)).into()
+	};
+	let mut v = entries(NewPart::Lens, NewPart::ZonePlate);
 	v.push(MenuEntry::Separator);
-	v.extend(PART_KINDS[5..10].iter().map(entry));
+	v.extend(entries(NewPart::Polygon, NewPart::Outline));
 	v.push(MenuEntry::Separator);
-	v.push(
-		Submenu::new(
-			format!("{prefix}OpticalLogic"),
-			s.get("MenuAddOpticalLogic"),
-			PART_KINDS[10..].iter().map(entry).collect(),
-		)
-		.icon(super::tree::kind_icon(NewPart::XorGate))
-		.into(),
-	);
+	v.push(submenu("OpticalLogic", "MenuAddOpticalLogic", NewPart::XorGate, NewPart::XorGate, NewPart::OrGate));
 	v
 }
 

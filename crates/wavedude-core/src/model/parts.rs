@@ -107,6 +107,48 @@ impl Default for Lens {
 	}
 }
 
+/// How a Fresnel lens's zones are divided from the axis to the rim.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum ZoneDivision {
+	/// Every zone the same width; the outer one the deepest.
+	#[default]
+	EqualWidth,
+	/// Every zone the same share of the rim's sag; the zones narrow outward.
+	EqualDepth,
+}
+
+/// A lens whose curved surfaces are cut into zones, each zone's arc starting again at the vertex plane.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(default)]
+pub struct FresnelLens {
+	#[serde(flatten)]
+	pub lens: Lens,
+	/// 1..MAX_ZONES; 1 is a plain lens.
+	pub zones: u32,
+	pub division: ZoneDivision,
+}
+
+impl Default for FresnelLens {
+	fn default() -> Self {
+		Self { lens: Lens::default(), zones: 4, division: ZoneDivision::EqualWidth }
+	}
+}
+
+impl FresnelLens {
+	pub const MAX_ZONES: u32 = 100;
+
+	/// A new Fresnel lens: a plate of 20 px across 500 with radii of 1500, so four zones of equal width fit
+	/// (the lens's defaults would be refit to a far flatter lens).
+	pub fn new_plate() -> Self {
+		Self {
+			lens: Lens { diameter: 500, r1: 1500.0, r2: -1500.0, thickness: 20, ..Lens::default() },
+			..Self::default()
+		}
+	}
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(default)]
@@ -388,6 +430,7 @@ impl Default for ZonePlate {
 #[serde(rename_all = "PascalCase")]
 pub enum PartKind {
 	Lens(Lens),
+	FresnelLens(FresnelLens),
 	Polygon(Polygon),
 	Rectangle(Rectangle),
 	Ellipse(Ellipse),
@@ -415,6 +458,7 @@ impl PartKind {
 		match self {
 			PartKind::Lens(l) if l.material.mirror => "Mirror",
 			PartKind::Lens(_) => "Lens",
+			PartKind::FresnelLens(_) => "Fresnel lens",
 			PartKind::Polygon(_) => "Polygon",
 			PartKind::Rectangle(_) => "Rectangle",
 			PartKind::Ellipse(_) => "Ellipse",
@@ -435,6 +479,7 @@ impl PartKind {
 	pub fn material(&self) -> Option<&Material> {
 		match self {
 			PartKind::Lens(p) => Some(&p.material),
+			PartKind::FresnelLens(p) => Some(&p.lens.material),
 			PartKind::Polygon(p) => Some(&p.material),
 			PartKind::Rectangle(p) => Some(&p.material),
 			PartKind::Ellipse(p) => Some(&p.material),
@@ -451,6 +496,7 @@ impl PartKind {
 	pub fn coating(&self) -> Option<&Coating> {
 		match self {
 			PartKind::Lens(p) => Some(&p.coating),
+			PartKind::FresnelLens(p) => Some(&p.lens.coating),
 			PartKind::Polygon(p) => Some(&p.coating),
 			PartKind::Rectangle(p) => Some(&p.coating),
 			PartKind::Ellipse(p) => Some(&p.coating),

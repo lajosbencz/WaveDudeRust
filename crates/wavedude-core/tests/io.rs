@@ -270,6 +270,7 @@ fn wdr_json_names_are_stable() {
 	p.sources[s].array = Some(SourceArray::default());
 	for kind in [
 		PartKind::Lens(Lens::default()),
+		PartKind::FresnelLens(FresnelLens::default()),
 		PartKind::Polygon(Polygon::default()),
 		PartKind::Rectangle(Rectangle::default()),
 		PartKind::Ellipse(Ellipse::default()),

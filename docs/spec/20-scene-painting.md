@@ -156,6 +156,7 @@ blue = max(old blue, round_even(Absorption * share))
 | Kind | Depth / geometry (part frame) | Index | DepthIsDistance |
 |---|---|---|---|
 | Lens | `min(SurfaceDepth(v1=-T/2, R1, -1), SurfaceDepth(v2=+T/2, R2, +1), D/2 - |y|)` | RefractiveIndex | no |
+| FresnelLens | the lens with each surface's arc restarted at the vertex plane at every zone's inner edge, see below | RefractiveIndex | no |
 | Polygon | regular n-gon, circumradius `R = Side/(2 sin(pi/n))`, vertex k at angle `pi + (2k+1)pi/n` | RefractiveIndex | yes |
 | Rectangle | vertices `(-L/2,-W/2), (L/2,-W/2), (L/2,W/2), (-L/2,W/2)` | RefractiveIndex | yes |
 | Ellipse | polygon of n vertices `(a cos(2 pi k/n), b sin(2 pi k/n))`, a = L/2, b = W/2, `n = clamp(round_even(Ramanujan circumference / 3), 24, 180)` | RefractiveIndex | yes |
@@ -184,6 +185,20 @@ Triangle (angles a = AngleA, b = AngleB in radians, half = Base/2):
 h     = 2*half*sin(a)*sin(b)/sin(a+b)
 apexY = -half + h*cos(a)/sin(a)
 ```
+
+### Fresnel lens
+
+`ZonedDepth(p, v, r, side)` for a surface of `zones` > 1 and `r != 0`: the point's zone by `|y|` (`zone_index`), its
+inner edge `inner` (`zone_bound`), `shift = SurfaceSag(r, inner)`, `depth = SurfaceDepth(p, v - shift, r, side)` (the
+circle moved along the axis so the arc starts at the vertex plane at the zone's inner edge), then the step across
+the axis that bounds the zone's glass, `into = (x - v) * -side` the place along the axis from the vertex plane:
+- convex (`r * side < 0`), zone >= 1: the step at the inner edge reaches into the lens by
+  `reach = (shift - SurfaceSag(r, bound(zone - 1))) * -side`; `along = |y| - inner`, `past = into - reach`;
+  `depth = min(depth, past <= 0 ? along : hypot(along, past))`;
+- concave, zone <= N - 2: the step at the outer edge, `along = bound(zone + 1) - |y|`;
+  `depth = min(depth, into <= 0 ? along : hypot(along, into))`.
+The sign is exact everywhere, so the band and the ramp follow the steps; one zone is the plain lens byte for byte.
+The first surface with its steps is the front, the second the back, the rim the sides.
 
 ### Fibre
 

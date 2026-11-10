@@ -24,6 +24,9 @@ pub fn kind_icon(kind: NewPart) -> Icon {
 		NewPart::Lens => {
 			Icon::path("M3.5 1.5 Q0.5 7.5 3.5 13.5 Q6.5 7.5 3.5 1.5 Z M9.5 1.5 Q12.5 7.5 9.5 13.5 M13.5 1.5 L13.5 13.5")
 		}
+		NewPart::FresnelLens => Icon::path(
+			"M5.5 1.5 L9.5 1.5 L9.5 13.5 L5.5 13.5 Z M5.5 1.5 L3.5 3.5 L5.5 4.5 L3.5 6.5 L5.5 7.5 L3.5 8.5 L5.5 10.5 L3.5 11.5 L5.5 13.5 M9.5 1.5 L11.5 3.5 L9.5 4.5 L11.5 6.5 L9.5 7.5 L11.5 8.5 L9.5 10.5 L11.5 11.5 L9.5 13.5",
+		),
 		NewPart::Fiber => Icon::path("M0.5 4.5 C6.5 4.5 7.5 10.5 14.5 10.5 M0.5 7.5 C6.5 7.5 7.5 13.5 14.5 13.5"),
 		NewPart::BraggReflector => {
 			Icon::path("M2.5 1.5 L2.5 13.5 M5.5 1.5 L5.5 13.5 M8.5 1.5 L8.5 13.5 M11.5 1.5 L11.5 13.5")
@@ -93,6 +96,7 @@ pub fn lens_icon(lens: &Lens) -> Icon {
 fn part_icon(part: &Part) -> Icon {
 	let kind = match &part.kind {
 		PartKind::Lens(l) => return lens_icon(l),
+		PartKind::FresnelLens(_) => NewPart::FresnelLens,
 		PartKind::Polygon(_) => NewPart::Polygon,
 		PartKind::Rectangle(_) => NewPart::Rectangle,
 		PartKind::Ellipse(_) => NewPart::Ellipse,

@@ -50,6 +50,7 @@ xml_enum!(PulseShape: Gaussian, SmoothedSquare);
 xml_enum!(CoatingProfile: Layer, Graded);
 xml_enum!(TriangleType: Equilateral, RightIsosceles, ThirtySixtyNinety, Isosceles, Custom);
 xml_enum!(FiberEnds: Flat, Round);
+xml_enum!(ZoneDivision: EqualWidth, EqualDepth);
 xml_enum!(Layer: Field, Intensity);
 xml_enum!(Measurement: Amplitude, Value, IntegratedValue);
 xml_enum!(ProbeKind: Point, Line);
@@ -60,6 +61,7 @@ xml_enum!(YScale: Linear, Logarithmic);
 /// The part elements in declaration order.
 const PART_ELEMENTS: &[&str] = &[
 	"Lens",
+	"FresnelLens",
 	"Polygon",
 	"Rectangle",
 	"Ellipse",
@@ -440,6 +442,8 @@ macro_rules! kind_table {
 }
 
 kind_table!(Lens; u32 "Diameter" diameter, f64 "R1" r1, f64 "R2" r2, u32 "Thickness" thickness);
+// its lens's attributes come first (read_part, write_part)
+kind_table!(FresnelLens; u32 "Zones" zones, enumv "Division" division);
 kind_table!(Polygon; u32 "Sides" sides, u32 "Side" side);
 kind_table!(Rectangle; u32 "Length" length, u32 "Width" width, bool "Linked" linked);
 kind_table!(Ellipse; u32 "Length" length, u32 "Width" width, bool "Linked" linked);
@@ -570,6 +574,10 @@ fn read_part(el: &Element, version: FileVersion) -> R<Part> {
 	let (coating, material) = (fields::read(el), fields::read(el));
 	let kind = match el.name.as_str() {
 		"Lens" => PartKind::Lens(Lens { coating: coating?, material: material?, ..fields::read(el)? }),
+		"FresnelLens" => PartKind::FresnelLens(FresnelLens {
+			lens: Lens { coating: coating?, material: material?, ..fields::read(el)? },
+			..fields::read(el)?
+		}),
 		"Polygon" => PartKind::Polygon(Polygon { coating: coating?, material: material?, ..fields::read(el)? }),
 		"Rectangle" => PartKind::Rectangle(Rectangle { coating: coating?, material: material?, ..fields::read(el)? }),
 		"Ellipse" => PartKind::Ellipse(Ellipse { coating: coating?, material: material?, ..fields::read(el)? }),
@@ -663,6 +671,7 @@ fn write_source(s: &Source) -> Element {
 fn part_element_name(kind: &PartKind) -> &'static str {
 	match kind {
 		PartKind::Lens(_) => "Lens",
+		PartKind::FresnelLens(_) => "FresnelLens",
 		PartKind::Polygon(_) => "Polygon",
 		PartKind::Rectangle(_) => "Rectangle",
 		PartKind::Ellipse(_) => "Ellipse",
@@ -685,6 +694,7 @@ macro_rules! with_kind {
 	($kind:expr, $k:ident => $e:expr) => {
 		match $kind {
 			PartKind::Lens($k) => $e,
+			PartKind::FresnelLens($k) => $e,
 			PartKind::Polygon($k) => $e,
 			PartKind::Rectangle($k) => $e,
 			PartKind::Ellipse($k) => $e,
@@ -707,11 +717,15 @@ fn write_part(p: &Part) -> Element {
 	if let Some(m) = p.kind.material() {
 		fields::write(m, &mut el);
 	}
+	if let PartKind::FresnelLens(f) = &p.kind {
+		fields::write(&f.lens, &mut el);
+	}
 	with_kind!(&p.kind, k => fields::write(k, &mut el));
 	match &p.kind {
 		PartKind::Outline(k) => el.children.extend(k.points.iter().map(|pt| element("Point", pt))),
 		PartKind::Fiber(k) => el.children.extend(k.nodes.iter().map(|n| element("Node", n))),
 		PartKind::Lens(_)
+		| PartKind::FresnelLens(_)
 		| PartKind::Polygon(_)
 		| PartKind::Rectangle(_)
 		| PartKind::Ellipse(_)
@@ -799,6 +813,9 @@ fn part_attrs(kind: &PartKind) -> Vec<Attr> {
 	}
 	if kind.material().is_some() {
 		attrs.extend(fields::attrs(Material::FIELDS));
+	}
+	if let PartKind::FresnelLens(_) = kind {
+		attrs.extend(fields::attrs(Lens::FIELDS));
 	}
 	fn own<T: Table>(_: &T) -> Vec<Attr> {
 		fields::attrs(T::FIELDS)
@@ -1037,6 +1054,7 @@ mod tests {
 		p.sources[s].array = Some(SourceArray { size_y: 7, spacing_y: 16, angle: 30.0, ..SourceArray::default() });
 		for kind in [
 			PartKind::Lens(Lens::default()),
+			PartKind::FresnelLens(FresnelLens { division: ZoneDivision::EqualDepth, ..FresnelLens::new_plate() }),
 			PartKind::Polygon(Polygon::default()),
 			PartKind::Rectangle(Rectangle {
 				coating: Coating { depth: 4.0, profile: CoatingProfile::Graded, ..Coating::default() },

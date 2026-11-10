@@ -72,6 +72,21 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].kind.Fiber.nodes[].smooth
 .parts[].kind.Fiber.nodes[].x
 .parts[].kind.Fiber.nodes[].y
+.parts[].kind.FresnelLens.coating.back
+.parts[].kind.FresnelLens.coating.depth
+.parts[].kind.FresnelLens.coating.front
+.parts[].kind.FresnelLens.coating.profile = "Layer"
+.parts[].kind.FresnelLens.coating.sides
+.parts[].kind.FresnelLens.diameter
+.parts[].kind.FresnelLens.division = "EqualWidth"
+.parts[].kind.FresnelLens.material.absorption
+.parts[].kind.FresnelLens.material.absorption_ramp
+.parts[].kind.FresnelLens.material.mirror
+.parts[].kind.FresnelLens.material.refractive_index
+.parts[].kind.FresnelLens.r1
+.parts[].kind.FresnelLens.r2
+.parts[].kind.FresnelLens.thickness
+.parts[].kind.FresnelLens.zones
 .parts[].kind.GrinLens.centre_index
 .parts[].kind.GrinLens.coating.back
 .parts[].kind.GrinLens.coating.depth
@@ -162,6 +177,7 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].name = "Bragg reflector 1"
 .parts[].name = "Ellipse 1"
 .parts[].name = "Fiber 1"
+.parts[].name = "Fresnel lens 1"
 .parts[].name = "GRIN lens 1"
 .parts[].name = "Lens 1"
 .parts[].name = "Outline 1"

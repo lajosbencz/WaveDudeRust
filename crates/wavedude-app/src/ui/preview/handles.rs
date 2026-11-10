@@ -230,6 +230,7 @@ pub fn grip_of(kind: &PartKind) -> Option<Vec2> {
 		PartKind::Ellipse(e) => Some(Vec2::new(f64::from(e.length) / 2., f64::from(e.width) / 2.)),
 		PartKind::Polygon(_) => shapes::vertices(kind).and_then(|v| v.first().copied()),
 		PartKind::Lens(l) => Some(Vec2::new(0., f64::from(l.diameter) / 2.)),
+		PartKind::FresnelLens(f) => Some(Vec2::new(0., f64::from(f.lens.diameter) / 2.)),
 		PartKind::GrinLens(g) => Some(Vec2::new(f64::from(g.length) / 2., f64::from(g.diameter) / 2.)),
 		_ => None,
 	}
@@ -367,6 +368,7 @@ pub fn grip_edits(kind: &PartKind, q: Vec2) -> Vec<(String, Value)> {
 			vec![("kind.Polygon.side".into(), json!(side))]
 		}
 		PartKind::Lens(_) => vec![("kind.Lens.diameter".into(), json!(span(q.y, 2)))],
+		PartKind::FresnelLens(_) => vec![("kind.FresnelLens.diameter".into(), json!(span(q.y, 2)))],
 		PartKind::GrinLens(_) => {
 			vec![
 				("kind.GrinLens.length".into(), json!(span(q.x, 1))),

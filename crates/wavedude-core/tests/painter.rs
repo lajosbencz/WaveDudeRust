@@ -156,6 +156,26 @@ fn biconvex_lens() {
 	assert_eq!((column, columns), (40, 100), "turned 90 deg: 40 px along y, 100 wide");
 }
 
+/// A Fresnel lens of one zone is the lens; with four zones of equal width each surface restarts at the vertex
+/// plane at every zone's inner edge, so the outer zones hold glass where the whole lens's surfaces had crossed.
+#[test]
+fn fresnel_lens_zones() {
+	let lens = Lens { diameter: 120, r1: 150.0, r2: -150.0, thickness: 14, ..Lens::default() };
+	let fresnel = |zones| {
+		Part::new(PartKind::FresnelLens(FresnelLens { lens: lens.clone(), zones, ..FresnelLens::default() }), 100, 60)
+	};
+	assert_eq!(paint(&[fresnel(1)]).rgba, paint(&[lens_part(lens.clone())]).rgba, "one zone is the lens");
+	let p = paint(&[fresnel(4)]);
+	assert_eq!(count_row(&p, 60, |r| r == 150), 14, "the plate on the axis");
+	assert!(count_row(&p, 60 + 50, |r| r == 150) >= 9, "glass in the outer zone, where the whole lens had none");
+	let before_step = count_row(&p, 60 + 44, |r| r >= 125);
+	let after_step = count_row(&p, 60 + 46, |r| r >= 125);
+	assert!(after_step > before_step + 6, "the arc restarts at the zone's inner edge: {before_step} -> {after_step}");
+	let equal_depth = FresnelLens { lens: lens.clone(), zones: 4, division: ZoneDivision::EqualDepth };
+	let q = paint(&[Part::new(PartKind::FresnelLens(equal_depth), 100, 60)]);
+	assert_ne!(p.rgba, q.rgba, "equal depths put the steps elsewhere");
+}
+
 #[test]
 fn straight_edge_takes_the_area_weighted_permittivity() {
 	for share in [0.05, 0.1, 0.25, 0.3, 0.4, 0.5, 0.6, 0.75, 0.9, 0.95] {
@@ -857,6 +877,14 @@ fn kinds() -> Vec<(&'static str, PartKind)> {
 				thickness: 40,
 				coating: coated(4.0, CoatingProfile::Graded, true, true, true),
 				..Lens::default()
+			}),
+		),
+		(
+			"fresnel",
+			PartKind::FresnelLens(FresnelLens {
+				lens: Lens { diameter: 120, r1: 150.0, r2: -150.0, thickness: 14, ..Lens::default() },
+				zones: 4,
+				division: ZoneDivision::EqualWidth,
 			}),
 		),
 		(

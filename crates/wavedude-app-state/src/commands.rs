@@ -12,8 +12,8 @@ use serde_json::Value;
 use wavedude_core::model::names::{self, Named};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{
-	BraggReflector, Ellipse, Fiber, GateKind, GrinLens, Lens, LogicGate, Outline, PartKind, Point, Polygon, Probe,
-	Project, Rectangle, Triangle, ZonePlate,
+	BraggReflector, Ellipse, Fiber, FresnelLens, GateKind, GrinLens, Lens, LogicGate, Outline, PartKind, Point,
+	Polygon, Probe, Project, Rectangle, Triangle, ZonePlate,
 };
 
 use wavedude_core::scene::gate_design::{self, GateDesign};
@@ -26,6 +26,7 @@ use super::selection::{ItemKind, ItemRef, Row, Selection, move_group};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NewPart {
 	Lens,
+	FresnelLens,
 	Polygon,
 	Rectangle,
 	Ellipse,
@@ -41,8 +42,9 @@ pub enum NewPart {
 }
 
 impl NewPart {
-	pub const ALL: [Self; 13] = [
+	pub const ALL: [Self; 14] = [
 		Self::Lens,
+		Self::FresnelLens,
 		Self::Fiber,
 		Self::BraggReflector,
 		Self::GrinLens,
@@ -62,6 +64,7 @@ impl NewPart {
 		let gate = |kind| PartKind::LogicGate(LogicGate { kind, ..LogicGate::default() });
 		match self {
 			Self::Lens => PartKind::Lens(Lens::default()),
+			Self::FresnelLens => PartKind::FresnelLens(FresnelLens::new_plate()),
 			Self::Polygon => PartKind::Polygon(Polygon::default()),
 			Self::Rectangle => PartKind::Rectangle(Rectangle::default()),
 			Self::Ellipse => PartKind::Ellipse(Ellipse::default()),
@@ -81,6 +84,7 @@ impl NewPart {
 	pub fn of(kind: &PartKind) -> Self {
 		match kind {
 			PartKind::Lens(_) => Self::Lens,
+			PartKind::FresnelLens(_) => Self::FresnelLens,
 			PartKind::Polygon(_) => Self::Polygon,
 			PartKind::Rectangle(_) => Self::Rectangle,
 			PartKind::Ellipse(_) => Self::Ellipse,
@@ -102,6 +106,7 @@ impl NewPart {
 	pub fn type_name(self) -> &'static str {
 		match self {
 			Self::Lens => "LensPart",
+			Self::FresnelLens => "FresnelLensPart",
 			Self::Polygon => "PolygonPart",
 			Self::Rectangle => "RectanglePart",
 			Self::Ellipse => "EllipsePart",

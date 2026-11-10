@@ -84,6 +84,7 @@ pub const TRIANGLE_ANGLE: Range = Range::new(1.0, 178.0);
 pub const BRAGG_PAIRS: Range = Range::new(1.0, 200.0);
 pub const GATE_PORT_SPACING: Range = Range::new(2.0, 2000.0);
 pub const ZONE_PLATE_COATING: Range = Range::new(0.0, 400.0);
+pub const FRESNEL_ZONES: Range = Range::new(1.0, 100.0);
 pub const STOP_AT: Range = Range::new(0.0, 1.0);
 
 /// Every persisted number and its bounds. `Material.*` applies to the lens and every shape,
@@ -134,6 +135,7 @@ pub const ALL: &[(&str, Range)] = &[
 	("Material.AbsorptionRamp", ABSORPTION_RAMP),
 	("Lens.Diameter", AT_LEAST_2),
 	("Lens.Thickness", AT_LEAST_1),
+	("FresnelLens.Zones", FRESNEL_ZONES),
 	("Polygon.Sides", POLYGON_SIDES),
 	("Polygon.Side", AT_LEAST_2),
 	("Rectangle.Length", AT_LEAST_1),
@@ -246,6 +248,7 @@ mod tests {
 			PartKind::GrinLens(GrinLens::default()),
 			PartKind::LogicGate(LogicGate::default()),
 			PartKind::ZonePlate(ZonePlate::default()),
+			PartKind::FresnelLens(FresnelLens::default()),
 		];
 		for (i, k) in kinds.into_iter().enumerate() {
 			let mut part = Part::new(k, 10, 10);
@@ -319,6 +322,7 @@ mod tests {
 	fn material(p: &mut Project, i: usize) -> &mut Material {
 		match &mut p.parts[i].kind {
 			PartKind::Lens(k) => &mut k.material,
+			PartKind::FresnelLens(k) => &mut k.lens.material,
 			PartKind::Polygon(k) => &mut k.material,
 			PartKind::Rectangle(k) => &mut k.material,
 			PartKind::Ellipse(k) => &mut k.material,
@@ -331,6 +335,7 @@ mod tests {
 	fn coating(p: &mut Project, i: usize) -> &mut Coating {
 		match &mut p.parts[i].kind {
 			PartKind::Lens(k) => &mut k.coating,
+			PartKind::FresnelLens(k) => &mut k.lens.coating,
 			PartKind::Polygon(k) => &mut k.coating,
 			PartKind::Rectangle(k) => &mut k.coating,
 			PartKind::Ellipse(k) => &mut k.coating,
@@ -425,9 +430,10 @@ mod tests {
 			kind!("ZonePlate.Coating", 10, ZonePlate, |k| k.coating),
 			kind!("ZonePlate.DesignFrequency", 10, ZonePlate, |k| k.design_frequency),
 			kind!("ZonePlate.FocalLength", 10, ZonePlate, |k| k.focal_length),
+			kind!("FresnelLens.Zones", 11, FresnelLens, |k| k.zones),
 			field!("Stop.At", |p| p.color_schemes[0].stops[0].at),
 		];
-		for i in 0..6 {
+		for i in (0..6).chain([11]) {
 			v.push((
 				"Material.RefractiveIndex",
 				Box::new(move |p: &mut Project, x: f64| material(p, i).refractive_index = x),
@@ -444,7 +450,7 @@ mod tests {
 				Box::new(move |p: &Project| material(&mut p.clone(), i).absorption_ramp as f64),
 			));
 		}
-		for i in [0, 1, 2, 3, 4, 5, 6, 8] {
+		for i in [0, 1, 2, 3, 4, 5, 6, 8, 11] {
 			v.push((
 				"Coating.Coating",
 				Box::new(move |p: &mut Project, x: f64| coating(p, i).depth = x),

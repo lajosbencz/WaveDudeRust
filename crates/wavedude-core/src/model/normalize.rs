@@ -7,9 +7,9 @@
 use super::names;
 use super::ranges as r;
 use super::{
-	BraggReflector, Coating, ColorScheme, Display, DisplayLayer, Ellipse, Fiber, GrinLens, Layer, Lens, LogicGate,
-	Material, Measurement, Outline, Part, PartKind, Polygon, Probe, Project, Rectangle, Scene, Simulation, Source,
-	SourceArray, Stop, Triangle, TriangleType, Video, YScale, ZonePlate, normalize_angle,
+	BraggReflector, Coating, ColorScheme, Display, DisplayLayer, Ellipse, Fiber, FresnelLens, GrinLens, Layer, Lens,
+	LogicGate, Material, Measurement, Outline, Part, PartKind, Polygon, Probe, Project, Rectangle, Scene, Simulation,
+	Source, SourceArray, Stop, Triangle, TriangleType, Video, YScale, ZonePlate, normalize_angle,
 };
 
 /// Brings a value into its valid state.
@@ -178,6 +178,7 @@ impl Normalize for Part {
 		b.angle = normalize_angle(b.angle);
 		match &mut self.kind {
 			PartKind::Lens(p) => p.normalize(),
+			PartKind::FresnelLens(p) => p.normalize(),
 			PartKind::Polygon(p) => p.normalize(),
 			PartKind::Rectangle(p) => p.normalize(),
 			PartKind::Ellipse(p) => p.normalize(),
@@ -213,6 +214,25 @@ impl Normalize for Lens {
 		self.diameter = r::AT_LEAST_2.clamp_u32(self.diameter);
 		self.thickness = r::AT_LEAST_1.clamp_u32(self.thickness);
 		(self.r1, self.r2) = fit_radii(self.diameter, self.thickness, self.r1, self.r2);
+	}
+}
+
+impl Normalize for FresnelLens {
+	fn normalize(&mut self) {
+		self.zones = r::FRESNEL_ZONES.clamp_u32(self.zones);
+		let lens = &mut self.lens;
+		lens.material.normalize();
+		lens.coating.normalize();
+		lens.diameter = r::AT_LEAST_2.clamp_u32(lens.diameter);
+		lens.thickness = r::AT_LEAST_1.clamp_u32(lens.thickness);
+		(lens.r1, lens.r2) = super::lens_geometry::fit_radii_zoned(
+			lens.diameter,
+			lens.thickness,
+			lens.r1,
+			lens.r2,
+			self.zones,
+			self.division,
+		);
 	}
 }
 
@@ -338,56 +358,7 @@ impl Normalize for ZonePlate {
 	}
 }
 
-// ---------------------------------------------------------------- lens geometry
-
-/// How far a surface of `radius` bows beyond its vertex at `half` pixels from the axis; 0 when flat.
-pub fn sag(radius: f64, half: f64) -> f64 {
-	if radius == 0.0 {
-		return 0.0;
-	}
-	let a = radius.abs();
-	let h = a.min(half);
-	a - (a * a - h * h).sqrt()
-}
-
-fn guard_radius(radius: f64, half: f64) -> f64 {
-	if !radius.is_finite() || radius == 0.0 {
-		0.0
-	} else if radius.abs() < half {
-		half.copysign(radius)
-	} else {
-		radius
-	}
-}
-
-fn radius_for_sag(half: f64, sag: f64) -> f64 {
-	((half * half + sag * sag) / (2.0 * sag)).ceil()
-}
-
-/// The radii (pixels; R1 > 0 and R2 < 0 convex, 0 flat) as a lens of `diameter` (at least 2) and centre
-/// `thickness` (at least 1) uses them: non-finite or zero is flat, a magnitude under half the diameter becomes half the diameter,
-/// and convex surfaces that would bow out by more than the thickness plus the concave sags allow are
-/// flattened in proportion, each radius rounded up to a whole pixel.
-pub fn fit_radii(diameter: u32, thickness: u32, r1: f64, r2: f64) -> (f64, f64) {
-	debug_assert!(diameter >= 2 && thickness >= 1, "lens size not normalised");
-	let half = diameter as f64 / 2.0;
-	let mut r1 = guard_radius(r1, half);
-	let mut r2 = guard_radius(r2, half);
-	let sag1 = sag(r1, half);
-	let sag2 = sag(r2, half);
-	let convex = if r1 > 0.0 { sag1 } else { 0.0 } + if r2 < 0.0 { sag2 } else { 0.0 };
-	let budget = thickness as f64 + if r1 < 0.0 { sag1 } else { 0.0 } + if r2 > 0.0 { sag2 } else { 0.0 };
-	if convex > budget + 1e-9 {
-		let scale = budget / convex;
-		if r1 > 0.0 {
-			r1 = radius_for_sag(half, sag1 * scale);
-		}
-		if r2 < 0.0 {
-			r2 = -radius_for_sag(half, sag2 * scale);
-		}
-	}
-	(r1, r2)
-}
+pub use super::lens_geometry::{fit_radii, sag};
 
 // ---------------------------------------------------------------- probe box
 
@@ -437,15 +408,13 @@ mod tests {
 	}
 
 	#[test]
-	fn lens_fit_cases() {
-		assert_eq!(fit_radii(100, 20, 50.0, -50.0), (130.0, -130.0));
-		assert_eq!(fit_radii(2000, 40, 1000.0, -1000.0), (25010.0, -25010.0));
-		assert_eq!(fit_radii(200, 40, 300.0, -300.0), (300.0, -300.0));
-		assert_eq!(fit_radii(100, 80, 10.0, f64::NAN), (50.0, 0.0));
-		assert_eq!(fit_radii(100, 40, 10.0, f64::NAN), (52.0, 0.0));
+	fn lens_radii_are_fitted() {
 		let mut lens = Lens { diameter: 100, thickness: 20, r1: 50.0, r2: -50.0, ..Lens::default() };
 		lens.normalize();
 		assert_eq!((lens.r1, lens.r2), (130.0, -130.0));
+		let mut fresnel = FresnelLens { lens: lens.clone(), zones: 200, ..FresnelLens::default() };
+		fresnel.normalize();
+		assert_eq!((fresnel.zones, fresnel.lens.r1), (100, 130.0), "100 zones of 0.5 px fit the 130 px radius");
 	}
 
 	#[test]

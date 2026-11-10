@@ -42,17 +42,6 @@ pub struct Readouts {
 	pub can_remove_stop: bool,
 }
 
-fn sag(radius: f64, half: f64) -> f64 {
-	let r = radius.abs();
-	if radius == 0. {
-		0.
-	} else if r <= half {
-		r
-	} else {
-		r - (r * r - half * half).sqrt()
-	}
-}
-
 fn zones(z: &m::ZonePlate, sim: &m::Simulation) -> Option<(i64, f64)> {
 	let lambda = m::wavelength(z.design_frequency, sim.wave_speed, sim.source_frequency_scale);
 	if !lambda.is_finite() || lambda <= 0. {
@@ -66,6 +55,10 @@ fn zones(z: &m::ZonePlate, sim: &m::Simulation) -> Option<(i64, f64)> {
 	let n = ((-b + (b * b + 4. * a * r * r).sqrt()) / (2. * a)).floor() as i64;
 	let outer = if n >= 1 { radius(n as f64) - radius(n as f64 - 1.) } else { r };
 	Some((n, outer))
+}
+
+fn edge_thickness(l: &m::Lens, zones: u32, division: m::ZoneDivision) -> f64 {
+	m::lens_geometry::edge_thickness(l.diameter, l.thickness, l.r1, l.r2, zones, division)
 }
 
 /// The schemes a layer's picker lists: the project's, the user's, the built-in ones.
@@ -103,12 +96,8 @@ pub fn readouts(app: &App, row: Row) -> Readouts {
 				r.nominal = nominal;
 			}
 			ItemKind::Part => match &p.parts[i.index].kind {
-				PartKind::Lens(l) => {
-					let half = f64::from(l.diameter) / 2.;
-					let front = sag(l.r1, half) * l.r1.signum();
-					let back = sag(l.r2, half) * -l.r2.signum();
-					r.lens_edge = Some(f64::from(l.thickness) - front - back);
-				}
+				PartKind::Lens(l) => r.lens_edge = Some(edge_thickness(l, 1, m::ZoneDivision::EqualWidth)),
+				PartKind::FresnelLens(f) => r.lens_edge = Some(edge_thickness(&f.lens, f.zones, f.division)),
 				PartKind::Triangle(t) => r.apex = Some(180. - t.angle_a - t.angle_b),
 				PartKind::LogicGate(g) => {
 					r.wavelength = gate_design::gate_wavelength(g.design_frequency, sim.source_frequency_scale);
@@ -586,7 +575,8 @@ fn part(f: &Form, r: &Readouts, kind: &PartKind, open: bool) -> Vec<Element> {
 	let mut out = part_common(f, NewPart::of(kind).type_name(), open);
 	let shape = |rows: Vec<PropertyRow>| section(f.s.get("SectionShape"), rows);
 	match kind {
-		PartKind::Lens(_) => out.extend([material(f, &at), lens(f, r, &at, &variant)]),
+		PartKind::Lens(_) => out.extend([material(f, &at), lens(f, r, &at, None)]),
+		PartKind::FresnelLens(_) => out.extend([material(f, &at), lens(f, r, &at, Some(&variant))]),
 		PartKind::Polygon(_) => {
 			let p = f.scope("PolygonPart", &at, &variant);
 			out.extend([material(f, &at), shape(vec![p.number("Sides", 1.), p.number("Side", 10.)])]);
@@ -629,9 +619,11 @@ fn part(f: &Form, r: &Readouts, kind: &PartKind, open: bool) -> Vec<Element> {
 	out
 }
 
-fn lens(f: &Form, r: &Readouts, at: &str, variant: &str) -> Element {
+/// The lens's shape rows; with `fresnel` (the Fresnel lens's serde variant) the zone rows instead of the Concave
+/// box, whose flip would hollow the zones.
+fn lens(f: &Form, r: &Readouts, at: &str, fresnel: Option<&str>) -> Element {
 	let s = &f.s;
-	let l = f.scope("LensPart", at, variant);
+	let l = f.scope("LensPart", at, "Lens");
 	let (r1, r2) = (l.num("R1"), l.num("R2"));
 	let flip = {
 		let f = f.clone();
@@ -641,10 +633,9 @@ fn lens(f: &Form, r: &Readouts, at: &str, variant: &str) -> Element {
 			f.set(&pr2, Value::from(-r2));
 		}
 	};
-	section(
-		s.get("SectionShape"),
-		vec![
-			l.number("Diameter", 10.),
+	let mut rows = vec![l.number("Diameter", 10.)];
+	if fresnel.is_none() {
+		rows.push(
 			PropertyRow::new(
 				"",
 				super::properties::check_box(s.label("LensPart", "IsConcave").into(), r1 < 0., flip)
@@ -652,13 +643,19 @@ fn lens(f: &Form, r: &Readouts, at: &str, variant: &str) -> Element {
 			)
 			.hint(s.hint("LensPart", "IsConcave"))
 			.full_width(),
-			l.number_in("R1", "", 10.),
-			l.number_in("R2", "", 10.),
-			l.number("Thickness", 1.),
-			readout(s.get("LabelEdgeThickness"), r.lens_edge.map(px).unwrap_or_default(), "LensEdgeThickness")
-				.hint(s.get("TipEdgeThickness")),
-		],
-	)
+		);
+	}
+	rows.extend([l.number_in("R1", "", 10.), l.number_in("R2", "", 10.), l.number("Thickness", 1.)]);
+	if let Some(variant) = fresnel {
+		let z = f.scope("FresnelLensPart", at, variant);
+		rows.push(z.number("Zones", 1.));
+		rows.push(z.combo("Division", "ZoneDivision", &["EqualWidth", "EqualDepth"]));
+	}
+	rows.push(
+		readout(s.get("LabelEdgeThickness"), r.lens_edge.map(px).unwrap_or_default(), "LensEdgeThickness")
+			.hint(s.get("TipEdgeThickness")),
+	);
+	section(s.get("SectionShape"), rows)
 }
 
 fn triangle(f: &Form, r: &Readouts, at: &str, variant: &str) -> Element {

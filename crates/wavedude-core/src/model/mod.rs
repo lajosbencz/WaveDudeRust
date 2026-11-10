@@ -4,6 +4,7 @@
 //! the bounds live in `ranges` so tests can prove each clamp.
 
 mod display;
+pub mod lens_geometry;
 pub mod names;
 pub mod normalize;
 mod parts;

@@ -232,6 +232,7 @@ or undo).
 | Kind | Section | Rows |
 |---|---|---|
 | Lens | Shape | Diameter NB min 2 step 10; Concave (diverging) CB (flips the sign of both radii); R1 NB step 10; R2 NB step 10; Centre thickness NB min 1; Edge thickness RO |
+| Fresnel lens | Shape | the lens's rows without the Concave box; Zones NB 1..100; Zone division CMB (Equal width, Equal depth); Edge thickness RO reckons with the deepest zone |
 | Polygon | Shape | Number of sides NB 3..64; Side length NB min 2 step 10 |
 | Rectangle | Shape | Length NB min 1 step 10; Width NB min 1 step 10; link toggle "Linked" (square) |
 | Ellipse | Shape | Length, Width as rectangle; Linked (circle) |

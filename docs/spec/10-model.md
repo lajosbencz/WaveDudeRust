@@ -272,6 +272,7 @@ Shared constants: refractive index range 1..2.55, rounded to 0.01 (round even), 
 | Element | Stem | Base | Kind-specific attributes (default, range) |
 |---|---|---|---|
 | `Lens` | Lens | Coated | `Mirror` false; `RefractiveIndex` 1.5; `Absorption` 0; `AbsorptionRamp` 40; `Diameter` 200 (>= 2); `R1` 300 (0 = flat); `R2` -300; `Thickness` 40 (>= 1) |
+| `FresnelLens` | Fresnel lens | Coated | the lens's attributes; `Zones` 4 (1..100); `Division` EqualWidth/EqualDepth. A new one is a plate of `Thickness` 20, `Diameter` 500, radii 1500 |
 | `Polygon` | Polygon | Coated shape | `Mirror`, `RefractiveIndex` 1.5, `Absorption`, `AbsorptionRamp` 40; `Sides` 6 (3..64); `Side` 60 (>= 2) |
 | `Rectangle` | Rectangle | Coated shape | shape props; `Length` 60; `Width` 60; `Linked` false |
 | `Ellipse` | Ellipse | Coated shape | shape props; `Length` 60; `Width` 60; `Linked` false |
@@ -328,6 +329,10 @@ if convex > budget + 1e-9:
   scale = budget / convex
   for each convex radius: s = sag*scale; r = sign(r) * ceil((half^2 + s^2) / (2*s))
 ```
+A Fresnel lens fits the deepest zone's sag instead (`lens_geometry::fit_radii_zoned`): for zones of equal width the
+outer zone's, `Sag(r, half) - Sag(r, half (N-1)/N)`; for equal depths `Sag(r, half) / N`; the refit radius is found by
+the sagitta for equal depths and by bisection for equal widths. Zone boundary k lies at `half k/N` (equal width) or
+where the sag reaches `k/N` of the rim's, `sqrt(r^2 - (|r| - k S/N)^2)` (equal depth).
 Shape class for icons and naming: a surface is flat when its sag at the rim < 0.5 px.
 `Mirror` toggled by the user renames "Lens n" <-> "Mirror n" (`MirrorName`); loading never renames.
 

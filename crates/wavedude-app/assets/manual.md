@@ -347,16 +347,17 @@ Optical parts are painted into the scene: a part of glass by its refractive inde
 The Add part menu of the project tree. <figure name="menu-add-part"/>
 
 1. **Lens/Mirror**: A lens or a mirror: a strip of the diameter between two spherical surfaces, each bulging outward, flat or hollow by the sign of its radius, the centre thickness apart. As a mirror it reflects everything; as a lens it refracts by its index, with an anti-reflection coating and absorption if wanted.
-2. **Fibre**: A fibre: a core of higher index inside a cladding, along a smooth path of Bezier segments through its nodes, with flat or round ends. A wave coupled into the core is guided along the path; the cladding can absorb stray light at its rim.
-3. **Bragg reflector**: A Bragg reflector: pairs of layers of two indices stacked along the axis. It reflects strongly around the wavelength the layer thicknesses are tuned to, a quarter wave each, and passes others.
-4. **GRIN lens**: A gradient-index lens: a rectangle whose index falls from the axis to the edge in a parabolic profile, so it focuses like a lens with flat faces.
-5. **Zone plate**: A zone plate: Fresnel zones cut for a design frequency and a focal length, every second zone an absorbing block, the central zone open or, inverted, a block. It focuses by diffraction; an optional mount stops light passing outside the diameter.
-6. **Polygon**: A regular polygon of glass or mirror, by its number of sides and the side length.
-7. **Rectangle**: A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one.
-8. **Ellipse**: An ellipse of glass or mirror, by the length and width of its box; linked, a circle.
-9. **Triangle**: A triangle of glass or mirror: the base across the axis, the apex along it, the base angles set by a preset or by hand.
-10. **Outline**: A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing.
-11. **Optical logic**: The gates, in a submenu of their own: XOR (Mach-Zehnder), AND and OR.
+2. **Fresnel lens**: A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, equal in width or in depth, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and their division; a flat surface stays flat.
+3. **Fibre**: A fibre: a core of higher index inside a cladding, along a smooth path of Bezier segments through its nodes, with flat or round ends. A wave coupled into the core is guided along the path; the cladding can absorb stray light at its rim.
+4. **Bragg reflector**: A Bragg reflector: pairs of layers of two indices stacked along the axis. It reflects strongly around the wavelength the layer thicknesses are tuned to, a quarter wave each, and passes others.
+5. **GRIN lens**: A gradient-index lens: a rectangle whose index falls from the axis to the edge in a parabolic profile, so it focuses like a lens with flat faces.
+6. **Zone plate**: A zone plate: Fresnel zones cut for a design frequency and a focal length, every second zone an absorbing block, the central zone open or, inverted, a block. It focuses by diffraction; an optional mount stops light passing outside the diameter.
+7. **Polygon**: A regular polygon of glass or mirror, by its number of sides and the side length.
+8. **Rectangle**: A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one.
+9. **Ellipse**: An ellipse of glass or mirror, by the length and width of its box; linked, a circle.
+10. **Triangle**: A triangle of glass or mirror: the base across the axis, the apex along it, the base angles set by a preset or by hand.
+11. **Outline**: A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing.
+12. **Optical logic**: The gates, in a submenu of their own: XOR (Mach-Zehnder), AND and OR.
 
 The XOR gate has two input waveguides, a phase section putting the lower input a quarter period ahead, and a coupler whose upper output carries their difference. It lights when one input is lit, not both, for coherent inputs at the design frequency. The AND gate is the same coupler with the lower input a quarter period behind, so the upper output carries the sum: brightest with both inputs lit, about four times a single one; a passive linear gate has no truer AND. The OR gate puts the lower input a twelfth of a period ahead, so the upper output carries half the power of either input and of both: it lights with one input or both.
 
@@ -395,6 +396,18 @@ A lens or a mirror: a strip of the diameter between two spherical surfaces, each
 19. **R2**: Radius of the second surface in pixels: negative bulges outward, positive is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest that fits.
 20. **Centre thickness**: Distance between the two surfaces on the axis in pixels.
 21. **Edge thickness**: Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim. A read-out.
+
+### Fresnel lens
+
+A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and how they are divided; a flat surface stays flat. A new Fresnel lens is 500 pixels across with radii of 1500 on a plate 20 pixels thick. The deepest zone is the one the centre thickness must hold: a radius too curved for the plate is raised until that zone's sags fit, where a whole lens would need a far flatter one; the edge thickness is what the deepest zone leaves at the rim. There is no Concave box: a negative radius hollows a surface, as on the lens. Badges 1 to 15 are the shared and the glass and mirror settings.
+
+16. **Diameter**: Extent across the axis in pixels.
+17. **R1**: Radius of the first surface in pixels: positive bulges outward, negative is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest whose zones fit.
+18. **R2**: Radius of the second surface in pixels: negative bulges outward, positive is concave, 0 is flat.
+19. **Centre thickness**: Distance between the two surfaces on the axis in pixels: the plate.
+20. **Zones**: Number of zones each curved surface is cut into, from the axis to the rim. At each zone's inner edge the arc starts again at the vertex plane, so the plate stays thin; 1 is a plain lens.
+21. **Zone division**: How the zones are divided: equal in width, the outer zone the deepest; or equal in depth, each zone cut to the same depth and the zones narrowing outward, as the elements of a lighthouse lens are.
+22. **Edge thickness**: Thickness at the rim: the centre thickness less the deepest zone's sag on each convex surface, plus what a concave one adds. A read-out.
 
 ### Polygon
 
