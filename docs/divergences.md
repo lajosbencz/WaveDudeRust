@@ -18,6 +18,7 @@ that holds the reasoning and the details. Behaviour not listed here is meant to 
 | Edit menu | Acts on a focused text box | Acts on objects; the keys go to the box | decision 0008 (13) |
 | Windows integrations | Taskbar progress, jump list, title-bar menu click-through | Not ported; file associations come from the packaging | decision 0008 (14) |
 | Manual figures | Numbered badges | Screenshots of this program, controls named in reading order | decision 0008 (15) |
+| Counting detector | A frame's detections are shared evenly over the steps since the last collection, drawn from the frame's mean rate | One count a step from that step's integrated intensity, since every step's readings are at hand; the same Poisson process, so the run's total agrees | spec/30 (Probes) |
 | Updates and releases | Installer with EV signature | GitHub releases with attestation, an in-app updater signed with its own key | decision 0011 |
 
 Adding a divergence: a line here, the details in a decision (a new one or a dated section of an existing one),
