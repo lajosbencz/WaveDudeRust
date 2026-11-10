@@ -8,7 +8,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use wavedude_core::model::{Project, Scene};
+use wavedude_core::model::Project;
 
 /// Quiet time that ends a step.
 pub const QUIET: Duration = Duration::from_millis(500);
@@ -40,40 +40,6 @@ pub struct History {
 	mouse_held: bool,
 }
 
-/// A copy of `scene` without the embedded image bytes, which are never copied.
-pub fn scene_without_image(scene: &Scene) -> Scene {
-	Scene {
-		mode: scene.mode,
-		image: scene.image.clone(),
-		image_path: scene.image_path.clone(),
-		image_data: None,
-		image_size: scene.image_size,
-		width: scene.width,
-		height: scene.height,
-		damping_edge: scene.damping_edge,
-		edges: scene.edges,
-		refractive_index: scene.refractive_index,
-		image_sources: scene.image_sources,
-		image_source_scale: scene.image_source_scale,
-		object_sources: scene.object_sources,
-	}
-}
-
-/// A copy of `project` without the scene's embedded image bytes.
-pub fn without_image(project: &Project) -> Project {
-	Project {
-		seed: project.seed,
-		description: project.description.clone(),
-		scene: scene_without_image(&project.scene),
-		simulation: project.simulation.clone(),
-		display: project.display.clone(),
-		sources: project.sources.clone(),
-		parts: project.parts.clone(),
-		probes: project.probes.clone(),
-		color_schemes: project.color_schemes.clone(),
-	}
-}
-
 impl History {
 	/// A history whose first step is `project` as it is.
 	pub fn new(project: &Project) -> Self {
@@ -84,23 +50,15 @@ impl History {
 	}
 
 	fn snapshot(&self, project: &Project) -> Step {
-		let image = project.scene.image_data.as_deref().map(|bytes| {
-			self.steps
-				.iter()
-				.rev()
-				.filter_map(|s| s.image.as_ref())
-				.find(|a| a[..] == *bytes)
-				.cloned()
-				.unwrap_or_else(|| Arc::from(bytes))
-		});
-		let json = serde_json::to_string(&without_image(project)).expect("a project serialises");
+		let image = project.scene.image_data.clone();
+		let json = serde_json::to_string(&project.without_image()).expect("a project serialises");
 		Step { json: json.into(), image, image_size: project.scene.image_size }
 	}
 
 	fn restore(&self, project: &mut Project) {
 		let step = &self.steps[self.current];
 		let mut restored: Project = serde_json::from_str(&step.json).expect("a stored step deserialises");
-		restored.scene.image_data = step.image.as_ref().map(|a| a.to_vec());
+		restored.scene.image_data = step.image.clone();
 		restored.scene.image_size = step.image_size;
 		*project = restored;
 	}
@@ -242,7 +200,7 @@ mod tests {
 	fn undo_redo_round_trip() {
 		let start = t0();
 		let mut p = Project::default();
-		p.scene.image_data = Some(vec![1, 2, 3]);
+		p.scene.image_data = Some(vec![1, 2, 3].into());
 		p.scene.image_size = (7, 9);
 		let mut h = History::new(&p);
 		let before = p.clone();

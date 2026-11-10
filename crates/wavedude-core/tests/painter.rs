@@ -109,7 +109,7 @@ fn composition_and_disabled_parts() {
 	project.scene.height = H;
 	assert_eq!(compose_scene(&project), None, "no image, no part: no pixels");
 	project.scene.mode = SceneMode::Image;
-	project.scene.image_data = Some(png(&image));
+	project.scene.image_data = Some(png(&image).into());
 	assert_eq!(compose_scene(&project).as_ref(), Some(&image), "no part: the image as is");
 	let mut lens = lens_part(biconvex());
 	lens.base.enabled = false;

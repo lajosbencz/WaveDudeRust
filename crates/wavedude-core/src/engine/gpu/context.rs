@@ -1,7 +1,7 @@
 //! The process-wide wgpu device shared by every GPU engine.
 //!
-//! Built on first use (adapter request plus device creation take 50 to 200 ms, which a scratch
-//! runner that rebuilds its engine would pay again each time) and kept until the device is lost; the
+//! Built on first use (adapter request plus device creation take 50 to 200 ms, which every engine
+//! rebuilt for an edit would pay again) and kept until the device is lost; the
 //! next engine built after a loss gets a new device. An engine on the lost device keeps failing.
 //! `wgpu::Device` and `wgpu::Queue` are `Send + Sync`; engines on different threads submit to the
 //! same queue, which wgpu serialises. Software adapters are refused: the CPU engine is faster.

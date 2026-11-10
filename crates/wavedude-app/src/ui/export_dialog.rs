@@ -320,7 +320,7 @@ pub fn run_ready(cx: &Cx) {
 
 fn traces(app: &App) -> Vec<ProbeTrace> {
 	let mut out = Vec::new();
-	app.live.with_run_traces(&mut |t| out = t.to_vec());
+	app.live.with_traces(&mut |t| out = t.to_vec());
 	out
 }
 
@@ -344,7 +344,7 @@ fn run(cx: &Cx, plan: Plan) {
 			store,
 			project: a.document.project.clone(),
 			traces: traces(a),
-			total_steps: u64::from(a.live.run_spec().expect("a run with a store has a spec").steps),
+			total_steps: u64::from(a.live.run_request().expect("a run with a store has a request").schedule().steps),
 			schemes: a.schemes.clone(),
 			use_openh264: a.settings.use_openh264 == Some(true),
 			codec_dir: a.codec_dir.clone(),

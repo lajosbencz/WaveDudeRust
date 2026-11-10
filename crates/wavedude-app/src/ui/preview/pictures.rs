@@ -177,9 +177,6 @@ impl Component for PictureCell {
 					s.get("TipAutoBrightness").to_owned(),
 				)
 			});
-		if graphs {
-			shared.subscribe(Topics::PLAYBACK | Topics::PROGRESS | Topics::SCRATCH | Topics::RUN);
-		}
 		let beside = strip_beside(*cell.read(), canvas);
 		let (aw, ah) = *area.read();
 		let mut canvas_state = use_state(|| canvas);
@@ -285,7 +282,7 @@ impl Component for PictureCell {
 			.on_wheel(hooks.on_wheel)
 			.test_id(picture_id(layer));
 
-		let boxes = graph_boxes::box_elements(&shared, states, layer, &t);
+		let boxes = graphs.then_some(graph_boxes::GraphBoxes { layer, states, transform: t });
 		let picture_area = rect()
 			.width(Size::flex(1.))
 			.height(Size::flex(1.))
@@ -310,7 +307,7 @@ impl Component for PictureCell {
 				hover_tip.set_if_modified(None);
 			})
 			.child(picture)
-			.children(boxes)
+			.maybe_child(boxes)
 			.maybe_child(tip_view);
 
 		let value_shared = shared.clone();

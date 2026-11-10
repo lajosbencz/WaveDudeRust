@@ -44,7 +44,7 @@ use crate::ui::export_dialog::{self, ExportKindChoice};
 use crate::ui::shared::{App, Shared, Topics};
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, Target};
-use wavedude_app_state::live::Shown;
+use wavedude_app_state::live::ShownSource;
 use wavedude_app_state::selection::ItemRef;
 use wavedude_app_state::settings::Orientation;
 use wavedude_app_state::strings::Strings;
@@ -164,14 +164,35 @@ pub fn open_picture_menu(shared: &Shared, states: PaneStates, layer: Layer, at: 
 
 /// The frame the pictures show, as a presenter source.
 fn shown_source(app: &App) -> Option<FrameSource> {
-	let live = &app.live;
-	match live.shown()? {
-		Shown::Run(k) => {
-			let store = live.run_store()?;
-			let stored = live.run_spec()?.stored_index_of(k) as usize;
-			(stored < store.count()).then_some(FrameSource::Run { store, stored })
+	Some(match app.live.shown_source()? {
+		ShownSource::Stored(store, stored) => FrameSource::Run { store, stored },
+		ShownSource::Snapshot { store, generation, snapshot } => FrameSource::Latest { store, generation, snapshot },
+	})
+}
+
+/// Everything [`request_of`] reads, cheap to compare: the revisions of the project, the settings and the run
+/// (motion), the frame shown, the pictures' extents and the outline's identity.
+#[derive(PartialEq)]
+struct RequestInputs {
+	document: u64,
+	settings: u64,
+	run: u64,
+	source: Option<SourceKey>,
+	extents: [PictureExtent; 2],
+	edges: Option<usize>,
+}
+
+impl RequestInputs {
+	fn of(app: &App, extents: [PictureExtent; 2], edges: Option<&Arc<EdgeImage>>) -> Self {
+		let r = app.revisions();
+		Self {
+			document: r.document,
+			settings: r.settings,
+			run: r.run,
+			source: shown_source(app).map(|s| s.key()),
+			extents,
+			edges: edges.map(|e| Arc::as_ptr(e) as usize),
 		}
-		Shown::Scratch(_) => live.latest_scratch().cloned().map(FrameSource::Scratch),
 	}
 }
 
@@ -360,6 +381,8 @@ fn draw_scenes(cache: &Mutex<SceneCache>, inbox: &Receiver<SceneJob>, outbox: &S
 /// The poll loop's memory between two polls.
 struct Poller {
 	presenter: Presenter,
+	/// What the request was built from last; the same inputs build the same request.
+	inputs: Option<RequestInputs>,
 	sent: Option<(SourceKey, Vec<LayerRequest>)>,
 	/// A request whose pictures have not come back yet.
 	awaiting: bool,
@@ -377,16 +400,21 @@ impl Poller {
 			|| states.fit.peek().is_some()
 			|| shared.peek(|app| {
 				let live = &app.live;
-				live.playback.is_playing() || live.run_is_progressing() || live.scratch_pending()
+				live.playback.is_playing() || live.run_is_progressing() || live.is_working() || live.fit_pending()
 			});
 		if due { POLL } else { TICK }
 	}
 
 	fn poll(&mut self, shared: &Shared, mut states: PaneStates) {
 		let now = Instant::now();
-		if let Some(rendered) = self.presenter.latest() {
-			if self.sent.as_ref().is_some_and(|(key, _)| *key == rendered.source) {
-				self.awaiting = false;
+		// A render of an older request is dropped: the one in flight follows. One that found no frame (the
+		// store cleared under it) frees the key, so the same frame made anew is asked for again.
+		if let Some(rendered) = self.presenter.latest()
+			&& self.sent.as_ref().is_some_and(|(key, _)| *key == rendered.source)
+		{
+			self.awaiting = false;
+			if rendered.pictures.is_empty() {
+				self.sent = None;
 			}
 			let mut pictures = states.pictures.peek().clone();
 			for p in &rendered.pictures {
@@ -404,20 +432,24 @@ impl Poller {
 			states.scene_image.set(image.and_then(|(w, h, b)| ImageHandle::from_rgba(w, h, b, AlphaType::Unpremul)));
 		}
 		let extents = *states.extents.peek();
-		let request = shared.peek(|app| request_of(app, extents, self.scene.edges.as_ref()));
-		match request {
-			Some(request) => {
-				let key = (request.source.key(), request.layers.clone());
-				if self.sent.as_ref() != Some(&key) {
-					self.sent = Some(key);
-					self.awaiting = true;
-					self.presenter.request(request);
+		let inputs = shared.peek(|app| RequestInputs::of(app, extents, self.scene.edges.as_ref()));
+		if self.inputs.as_ref() != Some(&inputs) || self.sent.is_none() {
+			self.inputs = Some(inputs);
+			let request = shared.peek(|app| request_of(app, extents, self.scene.edges.as_ref()));
+			match request {
+				Some(request) => {
+					let key = (request.source.key(), request.layers.clone());
+					if self.sent.as_ref() != Some(&key) {
+						self.sent = Some(key);
+						self.awaiting = true;
+						self.presenter.request(request);
+					}
 				}
-			}
-			None => {
-				if shared.peek(|app| app.live.shown().is_none()) && self.sent.take().is_some() {
-					self.awaiting = false;
-					states.pictures.set([None, None]);
+				None => {
+					if shared.peek(|app| app.live.shown().is_none()) && self.sent.take().is_some() {
+						self.awaiting = false;
+						states.pictures.set([None, None]);
+					}
 				}
 			}
 		}
@@ -434,9 +466,9 @@ impl Poller {
 			if let Some(frame) = shared.peek_mut(|app| app.live.take_half_frame()) {
 				states.fit.set(None);
 				if frame.frame == position {
-					fit_now(shared, &FrameSource::Scratch(frame), layer);
+					fit_now(shared, &FrameSource::Snapshot(frame.snapshot), layer);
 				}
-			} else if !shared.peek(|app| app.live.scratch_pending()) {
+			} else if !shared.peek(|app| app.live.fit_pending()) {
 				states.fit.set(None);
 				tracing::debug!("auto brightness dropped: the 16-bit frame did not arrive");
 			}
@@ -591,6 +623,7 @@ impl Component for PreviewPane {
 					};
 					let mut poller = Poller {
 						presenter,
+						inputs: None,
 						sent: None,
 						awaiting: false,
 						stats: PresenterStats::default(),

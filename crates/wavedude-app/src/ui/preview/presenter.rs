@@ -1,4 +1,4 @@
-//! The presenter: turns the frame the pictures show (a run's stored frame or a scratch frame) into RGBA8 pictures,
+//! The presenter: turns the frame the pictures show (a stored frame of the run, or a frame on its own) into RGBA8 pictures,
 //! one per visible layer, on a worker thread of its own (docs/ui/40-preview-pane.md, 8-bit vs 16-bit).
 //!
 //! 8-bit frames are coloured through the palette at the stored size and scaled by the picture; 16-bit frames go
@@ -17,38 +17,46 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use bytes::{Bytes, BytesMut};
+use wavedude_core::engine::Snapshot;
 pub use wavedude_core::engine::as_halves;
 use wavedude_core::engine::{FrameShape, SampleFormat};
 use wavedude_core::model::{ColorScheme, Layer};
 use wavedude_core::render::screen::{ScreenColors, Window};
 use wavedude_core::render::{DeepHalfTable, DitherDepth, HalfTable, Palette, ScreenRenderer, render_indexed_into};
-use wavedude_core::run::{FrameStore, ScratchResult};
+use wavedude_core::run::FrameStore;
 use wavedude_core::scene::glowing_edges;
 
 /// Where a frame's planes come from.
 #[derive(Clone)]
 pub enum FrameSource {
 	/// Stored frame `stored` of a run's store.
-	Run {
-		store: Arc<FrameStore>,
-		stored: usize,
-	},
-	Scratch(Arc<ScratchResult>),
+	Run { store: Arc<FrameStore>, stored: usize },
+	/// The frame a store kept through its last clear, made in `generation` ([`FrameStore::latest`]).
+	Latest { store: Arc<FrameStore>, generation: u64, snapshot: Arc<Snapshot> },
+	/// A frame on its own: a fit's 16-bit frame.
+	Snapshot(Arc<Snapshot>),
 }
 
-/// Identity of a [`FrameSource`]: equal keys hold equal planes. A run's key holds a weak reference to its store:
-/// the frames are freed with the run, the address is not reused while the key lives.
+/// Identity of a [`FrameSource`]: equal keys hold equal planes. A store's frames are named by the store (a weak
+/// reference: the address is not reused while the key lives), the generation and the index; a frame made anew
+/// after a clear has another generation. A fit's snapshot is named by its address, which its source keeps alive.
 #[derive(Clone)]
 pub enum SourceKey {
-	Run { store: Weak<FrameStore>, stored: usize },
-	Scratch(u64),
+	Run { store: Weak<FrameStore>, generation: u64, stored: usize },
+	Latest { store: Weak<FrameStore>, generation: u64 },
+	Snapshot(usize),
 }
 
 impl PartialEq for SourceKey {
 	fn eq(&self, other: &Self) -> bool {
 		match (self, other) {
-			(Self::Run { store: a, stored: i }, Self::Run { store: b, stored: j }) => Weak::ptr_eq(a, b) && i == j,
-			(Self::Scratch(a), Self::Scratch(b)) => a == b,
+			(Self::Run { store: a, generation: g, stored: i }, Self::Run { store: b, generation: h, stored: j }) => {
+				Weak::ptr_eq(a, b) && g == h && i == j
+			}
+			(Self::Latest { store: a, generation: g }, Self::Latest { store: b, generation: h }) => {
+				Weak::ptr_eq(a, b) && g == h
+			}
+			(Self::Snapshot(a), Self::Snapshot(b)) => a == b,
 			_ => false,
 		}
 	}
@@ -57,8 +65,9 @@ impl PartialEq for SourceKey {
 impl std::fmt::Debug for SourceKey {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Self::Run { stored, .. } => write!(f, "Run({stored})"),
-			Self::Scratch(id) => write!(f, "Scratch({id})"),
+			Self::Run { generation, stored, .. } => write!(f, "Run({generation}:{stored})"),
+			Self::Latest { generation, .. } => write!(f, "Latest({generation})"),
+			Self::Snapshot(id) => write!(f, "Snapshot({id:#x})"),
 		}
 	}
 }
@@ -66,15 +75,20 @@ impl std::fmt::Debug for SourceKey {
 impl FrameSource {
 	pub fn key(&self) -> SourceKey {
 		match self {
-			Self::Run { store, stored } => SourceKey::Run { store: Arc::downgrade(store), stored: *stored },
-			Self::Scratch(r) => SourceKey::Scratch(r.id),
+			Self::Run { store, stored } => {
+				SourceKey::Run { store: Arc::downgrade(store), generation: store.generation(), stored: *stored }
+			}
+			Self::Latest { store, generation, .. } => {
+				SourceKey::Latest { store: Arc::downgrade(store), generation: *generation }
+			}
+			Self::Snapshot(s) => SourceKey::Snapshot(Arc::as_ptr(s) as usize),
 		}
 	}
 
 	pub fn shape(&self) -> FrameShape {
 		match self {
 			Self::Run { store, .. } => *store.shape(),
-			Self::Scratch(r) => r.snapshot.shape,
+			Self::Latest { snapshot, .. } | Self::Snapshot(snapshot) => snapshot.shape,
 		}
 	}
 
@@ -87,8 +101,8 @@ impl FrameSource {
 	pub fn with_plane_into<R>(&self, layer: Layer, buf: &mut Vec<u8>, f: impl FnOnce(&[u8]) -> R) -> Option<R> {
 		match self {
 			Self::Run { store, stored } => store.with_layer_into(*stored, layer, buf, f).ok(),
-			Self::Scratch(r) => {
-				let plane = r.snapshot.plane(layer);
+			Self::Latest { snapshot: s, .. } | Self::Snapshot(s) => {
+				let plane = s.plane(layer);
 				(!plane.is_empty()).then(|| f(plane))
 			}
 		}
@@ -435,7 +449,7 @@ mod tests {
 
 	fn rendered(at: Instant, render_ms: u64, motion: bool) -> Rendered {
 		Rendered {
-			source: SourceKey::Scratch(0),
+			source: SourceKey::Snapshot(0),
 			pictures: Vec::new(),
 			render: Duration::from_millis(render_ms),
 			requested: at,

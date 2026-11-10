@@ -73,11 +73,11 @@ impl Shots {
 		Self { test, shared, dir, _tmp: tmp }
 	}
 
-	/// Lets the state and the presenter settle: ticks until no scratch frame is pending, then a little more.
+	/// Lets the state and the presenter settle: ticks until the run stepped to its frame, then a little more.
 	fn settle(&mut self) {
 		for _ in 0..200 {
 			self.test.poll(Duration::from_millis(16), Duration::from_millis(32));
-			if !self.shared.peek(|a| a.live.scratch_pending()) {
+			if !self.shared.peek(|a| a.live.is_working() || a.live.fit_pending()) {
 				break;
 			}
 		}
@@ -92,7 +92,7 @@ impl Shots {
 			self.test.poll(Duration::from_millis(16), Duration::from_millis(100));
 			let done = self.shared.peek(|a| {
 				let ended = a.live.run_status().is_some_and(|(state, ..)| state.is_finished());
-				ended || a.live.playback.available().is_some_and(|v| v.frames >= frames)
+				ended || a.live.present_spans().first().is_some_and(|&(from, to)| from == 0 && to + 1 >= frames)
 			});
 			if done {
 				break;

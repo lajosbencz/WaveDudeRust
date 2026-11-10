@@ -166,7 +166,7 @@ impl Document {
 			tracing::warn!("the scene image file '{}' does not decode; the embedded image stays", path.display());
 			return false;
 		};
-		self.project.scene.image_data = Some(bytes);
+		self.project.scene.image_data = Some(bytes.into());
 		self.project.scene.image_size = size;
 		self.saved_step = None;
 		self.history = History::new(&self.project);
@@ -207,7 +207,7 @@ impl Document {
 			tracing::warn!("the scene image file '{}' does not decode; the embedded image stays", path.display());
 			return false;
 		};
-		self.project.scene.image_data = Some(bytes);
+		self.project.scene.image_data = Some(bytes.into());
 		self.project.scene.image_size = size;
 		self.edited(now);
 		tracing::info!("the scene image was re-embedded from '{}': the file changed", path.display());

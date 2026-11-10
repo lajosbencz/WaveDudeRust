@@ -47,6 +47,8 @@ pub trait WaveEngine: Send {
 	fn set_probes(&mut self, probes: &[ProbeCells]);
 	/// Swaps in another scene of the same grid, edges and image-source count; false = rebuild needed.
 	fn try_replace_scene(&mut self, scene: &Arc<SceneData>) -> bool;
+	/// Tracks the intensity from the next reset on, or stops.
+	fn set_track_intensity(&mut self, on: bool);
 	fn advance_one_step(&mut self) -> Result<(), EngineError>;
 	/// Reads the probe cells after the last step, at once.
 	fn sample_probes(&mut self, out: &mut ProbeReadings) -> Result<(), EngineError>;
@@ -66,7 +68,7 @@ pub trait WaveEngine: Send {
 		let pending = self.begin_capture(shape, Snapshot::new(*shape))?;
 		self.finish_capture(pending)
 	}
-	/// Host copies of the canvas field and blended intensity (tests, scratch).
+	/// Host copies of the canvas field and blended intensity (tests).
 	fn prepare_frame(&mut self) -> Result<(Vec<f32>, Vec<f32>), EngineError>;
 }
 

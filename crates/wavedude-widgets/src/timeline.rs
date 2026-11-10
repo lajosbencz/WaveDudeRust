@@ -1,10 +1,13 @@
 //! The scrub bar: tick labels, minor and major ticks, playhead with its frame number, in/out brackets and
-//! band, the available-frames band, a hover line; click/drag scrub, bracket drag, keys and wheel.
+//! band, the bands of frames made, a hover line; click/drag scrub, bracket drag, keys and wheel.
+
+use std::rc::Rc;
 
 use freya::engine::prelude::SkRect;
 use freya::prelude::*;
 
 use crate::paint::{DeviceGrid, fill, stroke, text_line, text_width};
+use crate::picture::Callback;
 use crate::theme::use_wave_theme;
 use crate::util::{TestIdExt, focus_border};
 
@@ -15,11 +18,9 @@ pub struct TimelineModel {
 	pub position: u32,
 	pub in_point: Option<u32>,
 	pub out_point: Option<u32>,
-	/// Newest frame a run has produced, while it fills.
-	pub available: Option<u32>,
-	/// The run is stale: the available band turns grey.
-	pub stale: bool,
-	/// The playhead may not pass the available band (a run the user follows).
+	/// The frames a run has made, as spans of timeline frames.
+	pub available: Rc<[(u32, u32)]>,
+	/// The playhead may not leave the span it is in (a run the user follows).
 	pub bounded: bool,
 }
 
@@ -41,13 +42,13 @@ impl TimelineModel {
 		self.range() != (0, self.last())
 	}
 
-	/// `frame` held inside the run, and inside the available band when bounded.
+	/// `frame` held inside the run, and inside the position's span of frames made when bounded.
 	pub fn clamp(&self, frame: i64) -> u32 {
 		let mut max = i64::from(self.last());
 		if self.bounded
-			&& let Some(a) = self.available
+			&& let Some(&(_, to)) = self.available.iter().find(|&&(a, b)| a <= self.position && self.position <= b)
 		{
-			max = max.min(i64::from(a));
+			max = max.min(i64::from(to));
 		}
 		frame.clamp(0, max) as u32
 	}
@@ -174,12 +175,12 @@ enum Drag {
 #[derive(Clone, PartialEq)]
 pub struct Timeline {
 	model: TimelineModel,
-	on_event: EventHandler<TimelineEvent>,
+	on_event: Callback<TimelineEvent>,
 	tooltip: Option<String>,
 }
 
 impl Timeline {
-	pub fn new(model: TimelineModel, on_event: impl Into<EventHandler<TimelineEvent>>) -> Self {
+	pub fn new(model: TimelineModel, on_event: impl Into<Callback<TimelineEvent>>) -> Self {
 		Self { model, on_event: on_event.into(), tooltip: None }
 	}
 
@@ -296,9 +297,11 @@ impl Component for Timeline {
 			let x1 = grid.x(geo.right + 1.5).floor();
 			canvas.draw_rect(SkRect::new(x0, top, x1, bottom), &fill(bar_bg));
 			let col = |f: u32| grid.snap(grid.x(geo.x_of(f)));
-			if let Some(a) = model.available {
-				let band = if model.stale { Color::from_argb(0x50, 0x80, 0x80, 0x80) } else { accent.with_a(0x60) };
-				canvas.draw_rect(SkRect::new(col(0) - hl / 2., top, col(a) + hl / 2., bottom), &fill(band));
+			for &(a, b) in model.available.iter() {
+				canvas.draw_rect(
+					SkRect::new(col(a) - hl / 2., top, col(b) + hl / 2., bottom),
+					&fill(accent.with_a(0x60)),
+				);
 			}
 			if model.has_range() {
 				let (a, b) = model.range();
@@ -432,7 +435,7 @@ mod tests {
 		m.out_point = Some(70);
 		assert_eq!(m.key_target(&Key::Named(NamedKey::Home)), Some(10));
 		assert_eq!(m.key_target(&Key::Named(NamedKey::End)), Some(70));
-		m.available = Some(55);
+		m.available = Rc::from([(40, 55)]);
 		m.bounded = true;
 		assert_eq!(m.key_target(&Key::Named(NamedKey::PageUp)), Some(55));
 		assert_eq!(m.key_target(&Key::Character("x".into())), None);

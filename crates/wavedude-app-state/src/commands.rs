@@ -206,8 +206,7 @@ pub enum ChangeKind {
 	Display,
 	/// A layer's brightness: a simulation edit with 8-bit preview samples (baked into the frames), else Display.
 	Brightness,
-	/// Recordings stale, graphs refresh from a scratch frame; a simulation edit when an active probe is not
-	/// recorded by the run (the live controller decides).
+	/// A probe's place or measurement: the frames stay, the recordings are made anew.
 	ProbePresentation,
 	/// Scene, solver, seed, sources, parts: the run is stale.
 	Simulation,
@@ -232,15 +231,13 @@ pub struct Change {
 	/// The command is an undo step by itself (paste, remove, duplicate, image) rather than part of a quiet-time
 	/// step.
 	pub own_step: bool,
-	/// The newest edit with its value, for the scratch request's log line.
+	/// The newest edit with its value, for the log.
 	pub note: Option<String>,
-	/// A probe renamed (old, new), so the live controller keeps knowing it as recorded.
-	pub probe_renamed: Option<(String, String)>,
 }
 
 impl Change {
 	fn of(kind: ChangeKind) -> Self {
-		Self { kind, own_step: false, note: None, probe_renamed: None }
+		Self { kind, own_step: false, note: None }
 	}
 
 	fn step(kind: ChangeKind) -> Self {
@@ -282,6 +279,7 @@ pub fn classify(old: &Project, new: &Project) -> ChangeKind {
 		|| old.simulation != new.simulation
 		|| old.sources != new.sources
 		|| old.parts != new.parts
+		|| old.display.intensity.preview != new.display.intensity.preview
 	{
 		return ChangeKind::Simulation;
 	}
@@ -433,7 +431,7 @@ fn apply_command(project: &mut Project, selection: &mut Selection, command: Comm
 			scene.mode = wavedude_core::model::SceneMode::Image;
 			scene.image = name;
 			scene.image_path = path;
-			scene.image_data = Some(bytes);
+			scene.image_data = Some(bytes.into());
 			scene.image_size = size;
 			Change::step(ChangeKind::Simulation).noted(format!("scene image {}x{}", size.0, size.1))
 		}
@@ -590,9 +588,13 @@ fn rename(project: &mut Project, target: ItemRef, name: String) -> Result<Change
 	}
 	item.set_name(name.clone());
 	log::change(&format!("{old}.name"), &old, &name);
-	let mut change = Change::of(item_kind_change(target.kind)).noted(format!("{old} renamed to {name}"));
+	// A probe's name is not a measurement: the graphs relabel, the run keeps its traces.
+	let kind = match target.kind {
+		ItemKind::Probe => ChangeKind::Display,
+		k => item_kind_change(k),
+	};
+	let change = Change::of(kind).noted(format!("{old} renamed to {name}"));
 	match target.kind {
-		ItemKind::Probe => change.probe_renamed = Some((old, name)),
 		ItemKind::Scheme => {
 			for layer in [&mut project.display.field, &mut project.display.intensity] {
 				if layer.color_scheme.to_lowercase() == old.to_lowercase() {
@@ -600,7 +602,7 @@ fn rename(project: &mut Project, target: ItemRef, name: String) -> Result<Change
 				}
 			}
 		}
-		ItemKind::Source | ItemKind::Part => {}
+		ItemKind::Source | ItemKind::Part | ItemKind::Probe => {}
 	}
 	Ok(change)
 }
@@ -695,7 +697,14 @@ fn set(project: &mut Project, target: Target, path: &str, value: Value) -> Resul
 			("Simulation".to_owned(), set_field(&mut project.simulation, path, value)?, ChangeKind::Simulation)
 		}
 		Target::Display => {
-			let kind = if path.ends_with(".brightness") { ChangeKind::Brightness } else { ChangeKind::Display };
+			// Showing the intensity makes the run track it: other frames.
+			let kind = if path.ends_with(".brightness") {
+				ChangeKind::Brightness
+			} else if path == "intensity.preview" {
+				ChangeKind::Simulation
+			} else {
+				ChangeKind::Display
+			};
 			("Display".to_owned(), set_field(&mut project.display, path, value)?, kind)
 		}
 		Target::Item(item) => {
@@ -761,6 +770,25 @@ mod tests {
 
 	fn run(p: &mut Project, s: &mut Selection, c: Command) -> Change {
 		apply(p, s, c).unwrap()
+	}
+
+	#[test]
+	fn showing_the_intensity_is_a_simulation_change_and_a_probe_rename_is_display() {
+		let mut p = project();
+		let mut s = Selection::default();
+		let on = !p.display.intensity.preview;
+		let toggle = Command::Set { target: Target::Display, path: "intensity.preview".into(), value: json!(on) };
+		let c = run(&mut p, &mut s, toggle);
+		assert_eq!(c.kind, ChangeKind::Simulation);
+		let mut other = p.clone();
+		other.display.intensity.preview = !on;
+		assert_eq!(classify(&other, &p), ChangeKind::Simulation);
+		run(&mut p, &mut s, Command::AddProbe { at: None });
+		let probe = Target::Item(ItemRef::new(ItemKind::Probe, 0));
+		let c = run(&mut p, &mut s, Command::Rename { target: ItemRef::new(ItemKind::Probe, 0), name: "Gauge".into() });
+		assert_eq!(c.kind, ChangeKind::Display);
+		let c = run(&mut p, &mut s, Command::Set { target: probe, path: "ax".into(), value: json!(7) });
+		assert_eq!(c.kind, ChangeKind::ProbePresentation);
 	}
 
 	#[test]

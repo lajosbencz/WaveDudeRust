@@ -15,7 +15,6 @@ use wavedude_widgets::{
 
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, Target};
-use wavedude_app_state::history::scene_without_image;
 use wavedude_app_state::selection::{ItemKind, Row};
 use wavedude_app_state::strings::{Language, Strings};
 
@@ -45,7 +44,7 @@ fn object_json(app: &App, row: Row) -> Value {
 	let p = &app.document.project;
 	match row {
 		Row::Project => serde_json::json!({ "seed": p.seed, "description": p.description }),
-		Row::Scene => to_json(scene_without_image(&p.scene)),
+		Row::Scene => to_json(p.scene.without_image()),
 		Row::Simulation => to_json(&p.simulation),
 		Row::Display => to_json(&p.display),
 		Row::Folder(_) => Value::Null,

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,9 +30,10 @@ pub struct Scene {
 	pub image: String,
 	/// Where the image came from; relative to the project folder when inside it.
 	pub image_path: String,
-	/// The embedded image file bytes (PNG, JPEG, BMP); authoritative over the path.
+	/// The embedded image file bytes (PNG, JPEG, BMP); authoritative over the path. Shared, so a copy of the
+	/// project is cheap.
 	#[serde(skip_serializing_if = "Option::is_none")]
-	pub image_data: Option<Vec<u8>>,
+	pub image_data: Option<Arc<[u8]>>,
 	/// Decoded size of `image_data`, set by the loader; (0, 0) when none.
 	#[serde(skip)]
 	pub image_size: (u32, u32),

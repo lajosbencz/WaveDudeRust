@@ -94,7 +94,7 @@ fn import_scene(s: Option<&Obj>, scene: &mut Scene, folder: &Path, notes: &mut V
 	let image_path: PathBuf = folder.join(image_file.split('/').collect::<PathBuf>());
 	match std::fs::read(&image_path) {
 		Ok(bytes) => {
-			scene.image_data = Some(bytes);
+			scene.image_data = Some(bytes.into());
 			scene.image = image_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
 			scene.image_path = std::path::absolute(&image_path).unwrap_or(image_path).to_string_lossy().into_owned();
 		}

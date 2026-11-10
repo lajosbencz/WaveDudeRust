@@ -78,7 +78,7 @@ Click a handle to select its object; the tree and the Properties pane follow. Cl
 
 The mouse wheel over a picture zooms both pictures in on the point under the pointer, and out again down to the whole canvas; drag with the middle button to move a zoomed view.
 
-A picture changes only when a frame for your position is ready; until then the last picture stays. When you edit the scene, a source or a part, the frame you are on is computed afresh with your change and shown as soon as it is ready, and a new run starts by itself a moment after your last change (Simulation > Re-run automatically after edits). A long wait dims the pictures under a spinner. Moving a probe or changing its graph needs no new run.
+A picture changes only when a frame for your position is ready; until then the last picture stays. When you edit the scene, a source or a part, every frame is made again with your change, the one you are on first (Simulation > Re-run automatically after edits); during a drag the pictures hold the last frame made until a new one is ready. A long wait dims the pictures under a spinner. Moving a probe or changing its graph needs no new run.
 
 Right-click a picture for Brightness, Auto brightness, Export this frame and the exports of the run; see [Export](#export).
 
@@ -91,7 +91,7 @@ The timeline with the playhead and the in and out points, and the transport cont
 3. **Out point**: The end of the export range.
 4. **Run the simulation**: Runs the simulation from the start (F5): every frame of the project as it is now. The pictures follow the run while it computes.
 5. **Pause the simulation**: Pauses the run, and resumes it (F6).
-6. **Play**: Plays the frames at the playback speed (Space). When there is no run yet, or the project has changed since the last one, Play starts a run and follows it.
+6. **Play**: Plays the frames at the playback speed (Space). When frames are missing, Play starts a run and plays the frames as they arrive.
 7. **Pause**: Pauses playback (Space).
 8. **One frame back**: Previous frame (,).
 9. **One frame forward**: Next frame (.).

@@ -2,7 +2,7 @@
 //! with playback, the user settings, the strings and the log. The views send [`Event`]s and call
 //! [`AppState::tick`] about 60 times a second; everything here is testable without a window.
 //!
-//! Threads: `AppState` lives on the UI thread; the runs, scratch frames and the playback clock it drives work
+//! Threads: `AppState` lives on the UI thread; the live run and the playback clock it drives work
 //! on threads of their own and are polled.
 
 pub mod clipboard;
@@ -163,31 +163,30 @@ pub struct Revisions {
 	pub playback: u64,
 	/// A run's progress: its steps done and the frames it published; moves every tick of a run.
 	pub progress: u64,
-	/// A scratch frame in flight and the frame it computes.
-	pub scratch: u64,
+	/// The live run's work: stepping or not, and towards which frame.
+	pub work: u64,
 	/// The slower live state: the run's state, playing, loop, speed, range, follow.
 	pub run: u64,
 	/// The user settings, the language among them.
 	pub settings: u64,
 }
 
-/// The cheap observable part of each revision, compared after every event and tick.
+/// The observable part of each revision, compared after every event and tick: the copyable part as read,
+/// the rest held as a copy that is renewed when it differs.
 #[derive(Clone, PartialEq)]
 struct Observed {
-	document: (bool, Option<PathBuf>, bool, bool),
+	document: (bool, bool, bool),
+	path: Option<PathBuf>,
 	selection: Selection,
-	playback: (u32, Option<live::Shown>, u32),
-	progress: (Option<u32>, Option<playback::Available>),
-	scratch: (bool, Option<u32>),
+	playback: (u32, Option<u32>, u32),
+	progress: (Option<u32>, Option<(u64, usize)>),
+	work: (bool, Option<u32>, bool),
 	run: RunObserved,
 	settings: Settings,
 }
 
-type RunObserved = (
-	Option<(wavedude_core::run::RunState, u32, bool)>,
-	(bool, bool, bool, bool),
-	(bool, u64, bool, (u32, u32), bool, bool),
-);
+type RunObserved =
+	(Option<(wavedude_core::run::RunState, u32)>, (bool, bool, bool, bool), (bool, u64, bool, (u32, u32), bool));
 
 /// See the module docs.
 pub struct AppState<B: Backend> {
@@ -209,7 +208,7 @@ pub struct AppState<B: Backend> {
 	pending: Option<Guarded>,
 	/// The export hint of a project without a file: this session's alone.
 	session_hint: ExportHint,
-	/// The playback and scratch revisions of the frame the imported brightness fit read last.
+	/// The playback and work revisions of the frame the imported brightness fit read last.
 	fit_read: Option<(u64, u64)>,
 }
 
@@ -288,27 +287,16 @@ impl<B: Backend> AppState<B> {
 		let p = &live.playback;
 		let status = live.run_status();
 		Observed {
-			document: (
-				self.document.dirty,
-				self.document.path.clone(),
-				self.document.history.can_undo(),
-				self.document.history.can_redo(),
-			),
+			document: (self.document.dirty, self.document.history.can_undo(), self.document.history.can_redo()),
+			path: self.document.path.clone(),
 			selection: self.selection.clone(),
 			playback: (p.position(), live.shown(), p.frame_count()),
-			progress: (status.as_ref().map(|s| s.1), p.available()),
-			scratch: (live.scratch_pending(), live.computing_frame()),
+			progress: (status.as_ref().map(|s| s.1), live.progress_key()),
+			work: (live.is_working(), live.computing_frame(), live.fit_pending()),
 			run: (
-				status.map(|(state, _, total, stale)| (state, total, stale)),
+				status.map(|(state, _, total)| (state, total)),
 				(live.run_is_active(), live.is_live(), live.warning().is_some(), live.export_busy()),
-				(
-					p.is_playing(),
-					p.speed().to_bits(),
-					p.looping(),
-					p.range_frames(),
-					live.run_paused_by_user(),
-					live.run_kind() == Some(live::RunKind::User),
-				),
+				(p.is_playing(), p.speed().to_bits(), p.looping(), p.range_frames(), live.run_paused_by_user()),
 			),
 			settings: self.settings.clone(),
 		}
@@ -316,19 +304,45 @@ impl<B: Backend> AppState<B> {
 
 	/// Moves the counters whose observable part changed since the last call; true when any moved.
 	pub fn sync_revisions(&mut self) -> bool {
-		let now = self.observe();
 		let before = self.revisions;
-		if let Some(old) = &self.observed {
-			let r = &mut self.revisions;
-			r.document += u64::from(old.document != now.document);
-			r.selection += u64::from(old.selection != now.selection);
-			r.playback += u64::from(old.playback != now.playback);
-			r.progress += u64::from(old.progress != now.progress);
-			r.scratch += u64::from(old.scratch != now.scratch);
-			r.run += u64::from(old.run != now.run);
-			r.settings += u64::from(old.settings != now.settings);
+		let Some(old) = self.observed.as_mut() else {
+			self.observed = Some(self.observe());
+			return false;
+		};
+		let live = &self.live;
+		let p = &live.playback;
+		let status = live.run_status();
+		let r = &mut self.revisions;
+		let moved = |changed: bool| u64::from(changed);
+		let document = (self.document.dirty, self.document.history.can_undo(), self.document.history.can_redo());
+		let path_changed = old.path != self.document.path;
+		if path_changed {
+			old.path.clone_from(&self.document.path);
 		}
-		self.observed = Some(now);
+		r.document += moved(std::mem::replace(&mut old.document, document) != document || path_changed);
+		if old.selection != self.selection {
+			old.selection.clone_from(&self.selection);
+			r.selection += 1;
+		}
+		let playback = (p.position(), live.shown(), p.frame_count());
+		r.playback += moved(std::mem::replace(&mut old.playback, playback) != playback);
+		let progress = (status.as_ref().map(|s| s.1), live.progress_key());
+		r.progress += moved(std::mem::replace(&mut old.progress, progress) != progress);
+		let work = (live.is_working(), live.computing_frame(), live.fit_pending());
+		r.work += moved(std::mem::replace(&mut old.work, work) != work);
+		let run = (
+			status.map(|(state, _, total)| (state, total)),
+			(live.run_is_active(), live.is_live(), live.warning().is_some(), live.export_busy()),
+			(p.is_playing(), p.speed().to_bits(), p.looping(), p.range_frames(), live.run_paused_by_user()),
+		);
+		if old.run != run {
+			old.run = run;
+			r.run += 1;
+		}
+		if old.settings != self.settings {
+			old.settings.clone_from(&self.settings);
+			r.settings += 1;
+		}
 		before != self.revisions
 	}
 
@@ -345,7 +359,7 @@ impl<B: Backend> AppState<B> {
 
 	/// The status bar's run line: "<State>: <done> / <total> steps, <engine>[, edited since]"; empty without a run.
 	pub fn run_status(&self) -> String {
-		let Some((state, done, total, stale)) = self.live.run_status() else {
+		let Some((state, done, total)) = self.live.run_status() else {
 			return String::new();
 		};
 		let key = match state {
@@ -357,11 +371,7 @@ impl<B: Backend> AppState<B> {
 			wavedude_core::run::RunState::Failed(_) => "RunStateFailed",
 		};
 		let s = &self.strings;
-		let mut line = s.format("RunStatusFormat", &[&s.get(key), &done, &total, &self.live.engine_name()]);
-		if stale {
-			line.push_str(s.get("RunStatusStale"));
-		}
-		line
+		s.format("RunStatusFormat", &[&s.get(key), &done, &total, &self.live.engine_name()])
 	}
 
 	/// Advances the history's quiet time and the live controller to `now`; true when something a view shows
@@ -387,14 +397,14 @@ impl<B: Backend> AppState<B> {
 		if !self.document.needs_brightness_fit {
 			return;
 		}
-		let values = if let Some(frame) = self.live.take_open_fit() {
-			let s = &frame.snapshot;
+		let values = if let Some(fit) = self.live.take_open_fit() {
+			let s = &fit.snapshot;
 			[Layer::Field, Layer::Intensity].map(|layer| {
 				let plane = s.plane(layer);
 				if plane.is_empty() { None } else { fit_brightness(&as_halves(plane), s.shape.sample_kind(layer)) }
 			})
 		} else {
-			let frame = (self.revisions.playback, self.revisions.scratch);
+			let frame = (self.revisions.playback, self.revisions.work);
 			if self.live.shown().is_none() || self.fit_read == Some(frame) {
 				return;
 			}
@@ -407,7 +417,7 @@ impl<B: Backend> AppState<B> {
 			};
 			let fits = [read(Layer::Field), read(Layer::Intensity)];
 			if fits.iter().any(|f| matches!(f, Some(Err(_)))) {
-				if fits.iter().any(|f| matches!(f, Some(Err(true)))) && !self.live.scratch_pending() {
+				if fits.iter().any(|f| matches!(f, Some(Err(true)))) && !self.live.fit_pending() {
 					self.live.request_open_fit(&self.document.project);
 				}
 				return;
@@ -454,9 +464,6 @@ impl<B: Backend> AppState<B> {
 				self.document.commit_step();
 			}
 		}
-		if let Some((old, new)) = &change.probe_renamed {
-			self.live.probe_renamed(old, new);
-		}
 		self.live.on_change(change.kind, &self.document.project, change.note, now);
 	}
 
@@ -477,7 +484,8 @@ impl<B: Backend> AppState<B> {
 			| Command::SetSceneImage { .. }
 			| Command::RemoveSceneImage
 			| Command::Paste { .. }
-			| Command::Set { target: Target::Scene, .. } => true,
+			| Command::Set { target: Target::Scene, .. }
+			| Command::Set { target: Target::Simulation, .. } => true,
 			Command::Set { target: Target::Item(i), .. } | Command::Reorder { target: i, .. } => {
 				i.kind == ItemKind::Part
 			}
@@ -526,7 +534,7 @@ impl<B: Backend> AppState<B> {
 	fn add_scheme(&mut self, scheme: wavedude_core::model::ColorScheme, now: Instant) {
 		let i = self.document.project.add_color_scheme(scheme);
 		self.selection.set_items(vec![ItemRef::new(ItemKind::Scheme, i)]);
-		let mut change = Change { kind: ChangeKind::Display, own_step: true, note: None, probe_renamed: None };
+		let mut change = Change { kind: ChangeKind::Display, own_step: true, note: None };
 		change.note = Some(format!("colour scheme {} added", self.document.project.color_schemes[i].name));
 		self.record(change, false, now);
 	}
@@ -541,6 +549,11 @@ impl<B: Backend> AppState<B> {
 
 	/// An action that replaces the project: asked about first when there are unsaved edits.
 	fn guarded(&mut self, action: Guarded, now: Instant) -> Response {
+		let replaces = matches!(action, Guarded::New | Guarded::Close | Guarded::Open(_) | Guarded::OpenExample(_));
+		if replaces && self.live.export_busy() && !matches!(&action, Guarded::Open(p) if is_scheme(p)) {
+			tracing::warn!("The project stays while an export runs; finish or cancel the export first.");
+			return Response::None;
+		}
 		if self.document.dirty && !matches!(&action, Guarded::Open(p) if is_scheme(p)) {
 			let name = self.document.display_name(self.strings.get("Untitled"));
 			self.pending = Some(action);
@@ -723,11 +736,7 @@ impl<B: Backend> AppState<B> {
 						&format!("{from}..{to}"),
 					);
 					(display.export_from, display.export_to) = (from, to);
-					self.record(
-						Change { kind: ChangeKind::Display, own_step: false, note: None, probe_renamed: None },
-						false,
-						now,
-					);
+					self.record(Change { kind: ChangeKind::Display, own_step: false, note: None }, false, now);
 				}
 				Response::None
 			}
@@ -765,8 +774,9 @@ impl<B: Backend> AppState<B> {
 				Response::None
 			}
 			Event::SetPreviewQuality(q) => {
+				let changed = self.settings.preview_quality() != q.validated();
 				self.settings.set_preview_quality(q);
-				self.settings_changed(true, now);
+				self.settings_changed(changed, now);
 				Response::None
 			}
 			Event::SetDitherBits(bits) => {
@@ -781,8 +791,12 @@ impl<B: Backend> AppState<B> {
 				Response::None
 			}
 			Event::SetUseGpu(on) => {
+				let changed = self.settings.use_gpu != on;
 				self.settings.use_gpu = on;
 				self.settings_changed(false, now);
+				if changed {
+					self.live.backend_mut().engine_changed();
+				}
 				Response::None
 			}
 			Event::SetFrameMemoryPercent(pct) => {

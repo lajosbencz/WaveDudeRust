@@ -40,8 +40,8 @@ Preview (8-bit: palette at store size; 16-bit: ScreenRenderer at device size, op
 ```
 
 Side paths:
-- Scratch frame: "frame k of the project as it is now", stepped from step 0 on a kept engine, probes sampled; used
-  for live editing. Newest request wins; a superseded one is abandoned within 16 steps.
+- The live run: one engine and one store converging on the project as it is now and the frame looked at; the
+  frame looked at comes first, the rest when wanted (spec/30 The live run).
 - Probe collector: point probes one sample per step, line probes one profile per timeline frame.
 
 ## Crate mapping (proposed)
@@ -80,7 +80,7 @@ Side paths:
 | level | Frequency on Jeroen's 0..255 scale; angular frequency `omega = level/255 * 0.5 * SourceFrequencyScale` rad/step. |
 | part | An `OpticalPart` painted into the scene pixels before a run. |
 | probe | Point or line measurement of field amplitude, intensity value or integrated intensity. |
-| scratch frame | One frame computed for the live preview after an edit, from step 0, on a kept engine. |
+| live run | The run behind the preview: the project as it is now, the frame looked at first, the rest when wanted. |
 | palette | 255 colours (index 0..254) taken from a colour scheme gradient at `i/254`. |
 | half table | 65536 colours, one per f16 bit pattern, gradient evaluated at the value's own position. |
 | glowing edges | Sobel edge picture of the scene pixels, overlaid on preview, optionally added into exports. |

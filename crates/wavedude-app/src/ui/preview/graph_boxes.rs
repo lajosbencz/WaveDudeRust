@@ -1,10 +1,11 @@
 //! The probe graph boxes over a picture (docs/ui/40-preview-pane.md, Probe graph box): the data at the frame shown
-//! (the scratch frame's recording, else the run's cut at the frame's step), the axes, the box's place and size in
+//! (the run's recording cut at the frame's step), the axes, the box's place and size in
 //! canvas pixels with snap and hysteresis, and the boxes as Freya elements.
 //!
 //! Coordinates: box positions and sizes in canvas pixels; screen values in logical pixels of the picture's cell.
 //! Threads: the UI thread.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use freya::prelude::*;
@@ -14,12 +15,11 @@ use wavedude_core::model::{BoxSize, Layer, Measurement, Probe, ProbeKind, Projec
 use wavedude_widgets::graph_box::GraphBoxEvent;
 use wavedude_widgets::menu::ContextMenuRequest;
 use wavedude_widgets::picture::CanvasTransform;
-use wavedude_widgets::{GraphBox, GraphData, MenuItem, MenuModel, TestIdExt, ValueAxis};
+use wavedude_widgets::{Callback, GraphBox, GraphData, MenuItem, MenuModel, TestIdExt, ValueAxis};
 
 use super::{PaneStates, PictureMenu, PreviewAction, layer_name};
-use crate::ui::shared::Shared;
+use crate::ui::shared::{Shared, Topics};
 use wavedude_app_state::commands::{Command, Target};
-use wavedude_app_state::live::Shown;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::{AppState, Event as AppEvent};
 
@@ -170,17 +170,12 @@ pub fn boxes<B: wavedude_app_state::live::Backend>(app: &AppState<B>, layer: Lay
 		return Vec::new();
 	}
 	let live = &app.live;
-	match (live.graph_scratch(), live.shown()) {
-		(Some(r), _) => {
-			let names: Vec<&str> = r.spec.probes.iter().map(|p| p.name.as_str()).collect();
-			views(app, layer, &names, &r.traces, None)
-		}
-		(None, Some(Shown::Run(k))) if live.run_spec().is_some() => {
-			let spec = live.run_spec().expect("checked above");
-			let names: Vec<&str> = spec.probes.iter().map(|p| p.name.as_str()).collect();
-			let cut = (spec.step_of(k) as usize + 1, k as usize);
+	match (live.shown(), live.run_request()) {
+		(Some(k), Some(request)) => {
+			let names: Vec<&str> = request.probes().map(|p| p.name.as_str()).collect();
+			let cut = (request.schedule().step_of(k) as usize + 1, k as usize);
 			let mut out = Vec::new();
-			live.with_run_traces(&mut |t| out = views(app, layer, &names, t, Some(cut)));
+			live.with_traces(&mut |t| out = views(app, layer, &names, t, Some(cut)));
 			out
 		}
 		_ => views(app, layer, &[], &[], None),
@@ -256,136 +251,209 @@ fn set_probe(shared: &Shared, index: usize, path: &str, value: serde_json::Value
 	}));
 }
 
-/// The boxes of `layer` as absolutely placed elements over the picture's cell mapped by `t`.
-pub fn box_elements(shared: &Shared, states: PaneStates, layer: Layer, t: &CanvasTransform) -> Vec<Element> {
-	let views = shared.peek(|app| boxes(app, layer));
-	let mut views = views;
-	views.sort_by_key(|v| v.selected);
-	let canvas = (t.canvas_width, t.canvas_height);
-	let scale = t.scale;
-	views
-		.into_iter()
-		.map(|view| {
-			let (sx, sy) = t.to_screen(view.origin.0, view.origin.1);
-			let (w, h) = ((view.size.0 * scale).round(), (view.size.1 * scale).round());
-			let index = view.index;
-			let item = ItemRef::new(ItemKind::Probe, index);
-			let shared_ev = shared.clone();
-			let mut grab = states.box_grab;
-			let on_event = move |e: GraphBoxEvent| {
-				let shared = &shared_ev;
-				let probe = shared.peek(|app| app.document.project.probes.get(index).cloned());
-				let Some(probe) = probe else { return };
-				match e {
-					GraphBoxEvent::Move { dx, dy, done } => {
-						let held = *grab.peek();
-						let start = match held {
-							Some(g) if g.index == index => g.start,
-							_ => {
-								let start = (probe.box_x, probe.box_y);
-								if !done {
-									grab.set(Some(BoxGrab { index, start }));
-									shared.send(AppEvent::MouseDown);
-								}
-								start
-							}
-						};
-						let size = box_size(&probe, canvas);
-						let (bx, by) = if done && grab.peek().is_none() {
-							let x = (start.0 + dx as i32).clamp(0, (canvas.0 as f32 - size.0).max(0.) as i32);
-							let y = (start.1 + dy as i32).clamp(0, (canvas.1 as f32 - size.1).max(0.) as i32);
-							(x, y)
-						} else {
-							dragged_box(start, (probe.ax, probe.ay), (dx / scale, dy / scale), scale, canvas, size)
-						};
-						if (bx, by) != (probe.box_x, probe.box_y) {
-							set_probe(shared, index, "box_x", json!(bx));
-							set_probe(shared, index, "box_y", json!(by));
+/// The boxes of `layer` over the picture's cell mapped by `transform`: the frame shown, its traces, the
+/// probes and the selection redraw them; the picture itself does not.
+#[derive(Clone, PartialEq)]
+pub struct GraphBoxes {
+	pub layer: Layer,
+	pub states: PaneStates,
+	pub transform: CanvasTransform,
+}
+
+impl Component for GraphBoxes {
+	fn render(&self) -> impl IntoElement {
+		let shared = Shared::get();
+		shared.subscribe(Topics::DOCUMENT | Topics::SELECTION | Topics::PLAYBACK | Topics::PROGRESS | Topics::SETTINGS);
+		// The data is rebuilt when what it is cut from moved: the project, the selection, the frame shown, the
+		// run's frames or its traces; a heartbeat that moved none of them reuses it.
+		let (key, layer) = shared.peek(|app| {
+			let r = app.revisions();
+			let live = &app.live;
+			((r.document, r.selection, r.playback, r.settings, live.progress_key(), live.traces_steps()), self.layer)
+		});
+		let built = use_hook(|| Rc::new(RefCell::new(None::<(BoxKey, Vec<BoxView>)>)));
+		let views = {
+			let mut built = built.borrow_mut();
+			match &*built {
+				Some((k, v)) if *k == key => v.clone(),
+				_ => {
+					let mut views = shared.peek(|app| boxes(app, layer));
+					views.sort_by_key(|v| v.selected);
+					*built = Some((key, views.clone()));
+					views
+				}
+			}
+		};
+		let t = self.transform;
+		let boxes = views.into_iter().map(|view| {
+			let at = t.to_screen(view.origin.0, view.origin.1);
+			let size = ((view.size.0 * t.scale).round(), (view.size.1 * t.scale).round());
+			ProbeBox {
+				view,
+				canvas: (t.canvas_width, t.canvas_height),
+				scale: t.scale,
+				at,
+				size,
+				layer: self.layer,
+				states: self.states,
+			}
+		});
+		rect()
+			.position(Position::new_absolute().left(0.).top(0.))
+			.width(Size::px(0.))
+			.height(Size::px(0.))
+			.children(boxes.map(IntoElement::into_element))
+	}
+}
+
+/// What the boxes' data is cut from.
+type BoxKey = (u64, u64, u64, u64, Option<(u64, usize)>, u32);
+
+/// One box at `at` of `size` (logical pixels); its handler reads the geometry from a state, so it is made once
+/// and the box compares equal while its data stays.
+#[derive(Clone, PartialEq)]
+struct ProbeBox {
+	view: BoxView,
+	canvas: (u32, u32),
+	scale: f32,
+	at: (f32, f32),
+	size: (f32, f32),
+	layer: Layer,
+	states: PaneStates,
+}
+
+impl Component for ProbeBox {
+	fn render(&self) -> impl IntoElement {
+		let shared = Shared::get();
+		let index = self.view.index;
+		let item = ItemRef::new(ItemKind::Probe, index);
+		let states = self.states;
+		let mut geometry = use_state(|| (index, self.canvas, self.scale));
+		geometry.set_if_modified((index, self.canvas, self.scale));
+		let on_event = use_hook(|| {
+			let shared = shared.clone();
+			Callback::from(move |e: GraphBoxEvent| {
+				let (index, canvas, scale) = *geometry.peek();
+				on_box_event(&shared, states, index, canvas, scale, e);
+			})
+		});
+		let (w, h) = self.size;
+		let (sx, sy) = self.at;
+		let shared_menu = shared.clone();
+		let mut menu = states.menu;
+		let (tip, grip_tip, export_text) = shared.peek(|app| {
+			let s = &app.strings;
+			(
+				s.format("TipProbeBoxFormat", &[&self.view.data.title]),
+				s.format("TipProbeBoxCornerFormat", &[&self.view.data.title]),
+				s.get("MenuExportProbeCsv").to_owned(),
+			)
+		});
+		rect()
+			.position(Position::new_absolute().left(sx.round()).top(sy.round()))
+			.width(Size::px(w))
+			.height(Size::px(h))
+			.on_pointer_down(move |e: Event<PointerEventData>| {
+				if e.button() == Some(MouseButton::Right) {
+					e.stop_propagation();
+					shared_menu.update(|app| {
+						if !app.selection.contains(item) {
+							app.selection.select(Row::Item(item));
 						}
-						if done && grab.peek().is_some() {
-							grab.set(None);
-							shared.send(AppEvent::MouseUp);
-						}
+					});
+					let g = e.global_location();
+					menu.set(Some(ContextMenuRequest {
+						at: (g.x, g.y),
+						model: MenuModel::new(vec![
+							MenuItem::with_action(
+								format!("probe-csv:{index}"),
+								export_text.clone(),
+								PictureMenu::Shell(PreviewAction::ExportProbeCsv(index)),
+							)
+							.enabled(!shared_menu.peek(|app| app.live.export_busy()))
+							.into(),
+						]),
+					}));
+				}
+			})
+			.child(
+				TooltipContainer::new(Tooltip::new_text(tip)).child(
+					GraphBox::new(self.view.data.clone(), w, h, on_event)
+						.selected(self.view.selected)
+						.grip_tooltip(grip_tip)
+						.test_id(format!("ProbeGraph:{}:{}", layer_name(self.layer), index)),
+				),
+			)
+			.test_id(format!("ProbeGraphBox:{index}"))
+	}
+}
+
+/// What a box's event does to probe `index`: moves and sizes come in logical pixels of a cell at `scale`.
+fn on_box_event(shared: &Shared, states: PaneStates, index: usize, canvas: (u32, u32), scale: f32, e: GraphBoxEvent) {
+	let item = ItemRef::new(ItemKind::Probe, index);
+	let mut grab = states.box_grab;
+	let probe = shared.peek(|app| app.document.project.probes.get(index).cloned());
+	let Some(probe) = probe else { return };
+	match e {
+		GraphBoxEvent::Move { dx, dy, done } => {
+			let held = *grab.peek();
+			let start = match held {
+				Some(g) if g.index == index => g.start,
+				_ => {
+					let start = (probe.box_x, probe.box_y);
+					if !done {
+						grab.set(Some(BoxGrab { index, start }));
+						shared.send(AppEvent::MouseDown);
 					}
-					GraphBoxEvent::Resize { width, height, done } => {
-						if grab.peek().is_none() && !done {
-							grab.set(Some(BoxGrab { index, start: (probe.box_x, probe.box_y) }));
-							shared.send(AppEvent::MouseDown);
-						}
-						let (size, bw, bh) = resized_box(width / scale, height / scale, scale);
-						if size != probe.box_size {
-							set_probe(shared, index, "box_size", json!(enum_name(size)));
-						}
-						if size == BoxSize::Custom && (bw, bh) != (probe.box_width, probe.box_height) {
-							set_probe(shared, index, "box_width", json!(bw));
-							set_probe(shared, index, "box_height", json!(bh));
-						}
-						if done && grab.peek().is_some() {
-							grab.set(None);
-							shared.send(AppEvent::MouseUp);
-						}
-					}
-					GraphBoxEvent::Delete => {
-						shared.send(AppEvent::Command(Command::Remove { target: item }));
-					}
-					GraphBoxEvent::Focused => {
-						shared.update(|app| {
-							if !app.selection.contains(item) {
-								app.selection.select(Row::Item(item));
-							}
-						});
-					}
+					start
 				}
 			};
-			let shared_menu = shared.clone();
-			let mut menu = states.menu;
-			let (tip, grip_tip) = shared.peek(|app| {
-				let s = &app.strings;
-				(
-					s.format("TipProbeBoxFormat", &[&view.data.title]),
-					s.format("TipProbeBoxCornerFormat", &[&view.data.title]),
-				)
+			let size = box_size(&probe, canvas);
+			let (bx, by) = if done && grab.peek().is_none() {
+				let x = (start.0 + dx as i32).clamp(0, (canvas.0 as f32 - size.0).max(0.) as i32);
+				let y = (start.1 + dy as i32).clamp(0, (canvas.1 as f32 - size.1).max(0.) as i32);
+				(x, y)
+			} else {
+				dragged_box(start, (probe.ax, probe.ay), (dx / scale, dy / scale), scale, canvas, size)
+			};
+			if (bx, by) != (probe.box_x, probe.box_y) {
+				set_probe(shared, index, "box_x", json!(bx));
+				set_probe(shared, index, "box_y", json!(by));
+			}
+			if done && grab.peek().is_some() {
+				grab.set(None);
+				shared.send(AppEvent::MouseUp);
+			}
+		}
+		GraphBoxEvent::Resize { width, height, done } => {
+			if grab.peek().is_none() && !done {
+				grab.set(Some(BoxGrab { index, start: (probe.box_x, probe.box_y) }));
+				shared.send(AppEvent::MouseDown);
+			}
+			let (size, bw, bh) = resized_box(width / scale, height / scale, scale);
+			if size != probe.box_size {
+				set_probe(shared, index, "box_size", json!(enum_name(size)));
+			}
+			if size == BoxSize::Custom && (bw, bh) != (probe.box_width, probe.box_height) {
+				set_probe(shared, index, "box_width", json!(bw));
+				set_probe(shared, index, "box_height", json!(bh));
+			}
+			if done && grab.peek().is_some() {
+				grab.set(None);
+				shared.send(AppEvent::MouseUp);
+			}
+		}
+		GraphBoxEvent::Delete => {
+			shared.send(AppEvent::Command(Command::Remove { target: item }));
+		}
+		GraphBoxEvent::Focused => {
+			shared.update(|app| {
+				if !app.selection.contains(item) {
+					app.selection.select(Row::Item(item));
+				}
 			});
-			let export_text = shared.peek(|app| app.strings.get("MenuExportProbeCsv").to_owned());
-			rect()
-				.position(Position::new_absolute().left(sx.round()).top(sy.round()))
-				.width(Size::px(w))
-				.height(Size::px(h))
-				.on_pointer_down(move |e: Event<PointerEventData>| {
-					if e.button() == Some(MouseButton::Right) {
-						e.stop_propagation();
-						shared_menu.update(|app| {
-							if !app.selection.contains(item) {
-								app.selection.select(Row::Item(item));
-							}
-						});
-						let g = e.global_location();
-						menu.set(Some(ContextMenuRequest {
-							at: (g.x, g.y),
-							model: MenuModel::new(vec![
-								MenuItem::with_action(
-									format!("probe-csv:{index}"),
-									export_text.clone(),
-									PictureMenu::Shell(PreviewAction::ExportProbeCsv(index)),
-								)
-								.enabled(!shared_menu.peek(|app| app.live.export_busy()))
-								.into(),
-							]),
-						}));
-					}
-				})
-				.child(
-					TooltipContainer::new(Tooltip::new_text(tip)).child(
-						GraphBox::new(view.data, w, h, on_event)
-							.selected(view.selected)
-							.grip_tooltip(grip_tip)
-							.test_id(format!("ProbeGraph:{}:{}", layer_name(layer), index)),
-					),
-				)
-				.test_id(format!("ProbeGraphBox:{index}"))
-				.into_element()
-		})
-		.collect()
+		}
+	}
 }
 
 #[cfg(test)]

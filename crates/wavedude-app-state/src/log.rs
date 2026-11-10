@@ -1,6 +1,6 @@
 //! Logging: a rolling log file in the config dir plus an in-memory ring of lines for the Messages pane and the
 //! status bar (Info and up), the panic hook and its crash report, and the helpers that keep the log diagnosable
-//! (engine facts, scratch requests naming the newest edit, every change at Trace as old -> new).
+//! (engine facts, edits naming the newest change, every change at Trace as old -> new).
 //!
 //! Threads: the ring is shared (`Arc<Mutex>`); any thread may log, the UI thread reads.
 
@@ -272,10 +272,10 @@ mod tests {
 		let ring = LogRing::new();
 		let subscriber = tracing_subscriber::registry().with(RingLayer(ring.clone()));
 		tracing::subscriber::with_default(subscriber, || {
-			tracing::info!(frame = 3, "scratch request");
+			tracing::info!(frame = 3, "frame request");
 		});
 		let line = &ring.since(None)[0];
-		assert_eq!(line.message, "scratch request frame=3");
+		assert_eq!(line.message, "frame request frame=3");
 		assert!(line.reaches_status_bar());
 	}
 }

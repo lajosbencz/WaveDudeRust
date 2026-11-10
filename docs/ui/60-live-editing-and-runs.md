@@ -2,7 +2,8 @@
 
 Pointers: `MainWindow.Live.cs`, `MainWindow.Simulation.cs`, `MainWindow.History.cs`,
 `MainWindow.Clipboard.cs`, `MainWindow.SceneImageWatch.cs`, `Dialogs/MemoryWarningWindow.xaml(.cs)`,
-core: `ProjectWatcher`, `ScratchRunner`, `ProjectHistory`, `ProjectClipboard`.
+core: `ProjectWatcher`, `ProjectHistory`, `ProjectClipboard`. Rust: `wavedude-app-state/src/live.rs` (the
+controller), `wavedude-core/src/run/worker.rs` (the live run), decision 0012.
 
 ## Edit classes
 
@@ -10,41 +11,61 @@ Every model change is observed. Its class decides what follows.
 
 | Class | Examples | Effect |
 |---|---|---|
-| Simulation edit | scene (size, edges, damping, index, image, image sources), simulation settings, seed, any source, any optical part (incl. points, nodes, list changes), View > preview resolution/frames/samples, brightness while preview samples are 8-bit, a probe switched on or added that the run does not record | run marked stale; playback stops; any active run (user or automatic) stops at once; scratch frame for the position after 120 ms; automatic re-run after 1.5 s of quiet (if enabled) |
-| Probe edit | probe moved, measurement/layer changed, start step changed, a recorded probe switched off | frames stay valid, only recordings stale; graphs redraw from a scratch frame for the position; never starts a run; Play or F5 makes a run that refreshes them |
+| Simulation edit | scene (size, edges, damping, index, image, image sources), simulation settings, seed, any source, any optical part (incl. points, nodes, list changes), View > preview resolution/frames/samples, brightness while preview samples are 8-bit | the frames go (the pictures keep the last one); playback stops; the live run makes the position's frame first, then every frame when Re-run automatically is on, else nothing more |
+| Probe edit | probe moved, measurement/layer changed, start step changed, switched on or off, added or removed | the frames stay; the recordings are made anew from step 0 (up to the position, or the whole run when every frame is wanted); the graphs follow as they come; never clears the pictures |
 | Display edit | colour scheme, brightness (16-bit), black level, outline, Preview on/off, handles/labels, export settings, a probe's graph box (place, size, axes, window) | redraw only; no stale run |
 | Colour scheme edit | stops, colours, rename (layers repoint) | recolour the frame shown |
 | Any edit | | project dirty (title `*`); undo step pending |
 
-Status bar shows ", edited since" on the run line while stale.
+The status bar's run line says Running while frames are made, Stopped when some are missing and no more are wanted, Completed when all are there.
 
-## Scratch frame
+## The live run
 
-- "Frame k of the project as it is now", computed from step 0 on a separate kept engine, probes sampled.
-- Requested 120 ms after the last edit, and every 120 ms while scrubbing, whenever the store cannot show the
-  position: no run, stale run, stale probes, or a run that has not got there. A later frame steps on from the
-  previous request's progress, so a forward drag follows the pointer.
-- A frame the run can show when it arrives is not shown (the run's frame is); for stale probes alone it feeds the
-  graphs, the pictures keep the run's frame and do not dim.
-- Newest request wins: a superseded request is abandoned within a few steps; the newest is computed in full,
-  however long (no time budget).
-- Not requested while playback runs; requested when playback stops on a position the store cannot show.
-- Any active run is paused while a scratch frame computes, then resumes (a user-paused run stays paused).
-- Busy feedback: status bar "Computing frame n" with an indeterminate bar, taskbar indeterminate, pictures dim
-  under a spinner after 150 ms.
-- The first scratch frame warms the engine right after a project opens.
-- A part edit repaints the scene in the background (newest composition after the one in flight), so part
-  outlines on the pictures follow a drag smoothly.
+One worker, one engine, one store (`wavedude-core/src/run/worker.rs`). The app publishes a goal: the project's
+spec (scene, sources, parts, probes, quality), the position, how much is wanted (the position's frame alone,
+or every frame) and whether the user paused. The run converges on it, without timers:
+
+- Between two frames it reads the newest goal and takes the next target: the first stored frame at or after
+  the position that is missing or whose probe traces are not recorded; with every frame wanted, when none
+  follows, the probes' last steps and then the frames before the position.
+- It steps to the target (from step 0 when the engine has passed it), captures it when missing and, with every
+  frame wanted, the missing frames it passes, records the probes on the way and publishes progress; the
+  engine's frame time is the only pace. So an edit fills the timeline in one pass: the frame looked at lands
+  first, with the frames before it, then the rest follow in order.
+- A spec whose frames differ starts a generation: the store is cleared (its buffers kept) and refilled; the
+  engine is reused (same scene: new emitters; same grid: the scene swapped in; else rebuilt). A spec whose
+  probes alone differ clears the traces and keeps the frames.
+- A pause with an edited project adopts the edit at once: the old frames go, the new run waits paused. A
+  pause with nothing left to do is no pause: the run reads Completed. A pause holds the fill, not the frame
+  looked at: a scrub while paused still shows its frame.
+- Switching the device (Simulation > Use the GPU) builds the engine anew at its next work; frames and traces
+  stay. Showing the intensity picture makes the run track it, so the frames are made again.
+- A goal change is looked at every 16 steps. Work goes on for the project as it is now alone: an edit leaves
+  the frame being made and starts one run of the edited project; a frame for later or the probes' tail is
+  also left when the position's frame is missing or nothing more is wanted; a fit frame is left when it is
+  no longer asked for. During a drag nothing completes until the hand rests for a frame time.
+- The frame written last stays readable through a clear, so the pictures hold the last state made while the
+  edited project's frame is computed; that frame replaces it when it lands. The
+  graphs go with the picture: they show that frame's traces, and switch with it; they never draw the traces
+  of a state whose frame is not shown.
+- A probe-only edit never shows an empty picture: the frames stay and the graphs redraw as the traces come.
+- Playback holds at the newest contiguous frame from the position while frames keep coming.
+- Busy feedback: status bar "Computing frame n" with an indeterminate bar, pictures dim under a spinner after
+  150 ms while the position's frame is computed.
+- Opening a project makes frame 0 and nothing more (the engine warms up on it).
+- A part edit repaints the scene in the background, so part outlines on the pictures follow a drag smoothly.
 
 ## Automatic re-run
 
 - Setting: Simulation > Re-run automatically after edits (default on).
-- After 1.5 s of quiet following a simulation edit, while the run is stale, and after a pending scratch frame
-  for the position: starts a full run. Never moves the preview, never followed.
-- An edit during it stops it; the next quiet period starts a fresh one.
-- Not started or replaced while an export reads the current run.
+- With it on, a simulation edit wants every frame at once: the position's frame first, with the frames before
+  it made on the way, then the frames after it. Never moves the preview, never followed.
+- With it off, only the position's frame is made; Play or F5 make the rest.
+- An export waiting for its run is dropped by an edit (status bar says so). An export reading its run holds
+  the frames: a simulation or probe edit made meanwhile is taken up when the export ends; New, Open and Close
+  are refused meanwhile (the status bar says so).
+- Turning the setting on asks for nothing by itself.
 - Errors go to the status bar and log, no message box.
-- When a run ends with edits pending, the check runs again.
 
 ## Memory warning
 
@@ -66,7 +87,7 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
   {m} of them still go to disk."
 - "Do not warn me again" check box: clears the setting.
 - Run: applies the ticks to the Simulation and View settings (persisted), then runs. Cancel: nothing changes;
-  the stale run stays; an Info line says so; playback turned off again.
+  the frames it has stay; an Info line says so; playback turned off again.
 - Asked every time; no remembered answer.
 
 ## Undo and redo
@@ -76,8 +97,8 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
   one step. Undo/Redo end a pending step first.
 - Undo (Ctrl+Z), Redo (Ctrl+Y, Ctrl+Shift+Z); Edit menu entries enabled when a step exists. A focused text box
   keeps its own undo.
-- A restored step is written into the same project object; it counts as an edit for the live rules (stale run,
-  scratch frame, re-run) but is not recorded again.
+- A restored step is written into the same project object; it counts as an edit for the live rules (new
+  frames) but is not recorded again.
 - Selection follows by name, else by index in the same list; settings objects by place.
 - Title asterisk clears when the current step is the saved one.
 - Paste, Cut, drop, Duplicate, Remove, image Browse/Remove: one step each.

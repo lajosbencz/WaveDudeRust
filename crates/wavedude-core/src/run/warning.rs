@@ -2,7 +2,7 @@
 //! cache at Auto and three quality levers (spec/40-frames-store-render.md, Memory warning). The UI renders it.
 
 use super::quality::PreviewQuality;
-use super::spec::RunSpec;
+use super::spec::RunRequest;
 
 /// The warning's four checkboxes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -43,23 +43,23 @@ impl Levers {
 /// A run that does not fit, its budget now and its budget with the RAM cache at Auto (bytes).
 #[derive(Clone, Copy, Debug)]
 pub struct MemoryWarning<'a> {
-	pub spec: &'a RunSpec,
+	pub request: &'a RunRequest,
 	pub budget: u64,
 	pub auto_budget: u64,
 }
 
 impl<'a> MemoryWarning<'a> {
-	/// The warning for `spec` when its store exceeds `budget`; `None` when it fits.
-	pub fn check(spec: &'a RunSpec, budget: u64, auto_budget: u64) -> Option<Self> {
-		(spec.store_bytes() > budget).then_some(Self { spec, budget, auto_budget })
+	/// The warning for `request` when its store exceeds `budget`; `None` when it fits.
+	pub fn check(request: &'a RunRequest, budget: u64, auto_budget: u64) -> Option<Self> {
+		(request.store_bytes() > budget).then_some(Self { request, budget, auto_budget })
 	}
 
 	/// The levers with something to offer: the cache when Auto gains at least a frame, a quality lever above
 	/// its lowest notch.
 	pub fn enabled(&self) -> Levers {
-		let q = &self.spec.quality;
+		let q = &self.request.quality;
 		Levers {
-			cache_auto: self.auto_budget.saturating_sub(self.budget) >= self.spec.frame_bytes(),
+			cache_auto: self.auto_budget.saturating_sub(self.budget) >= self.request.frame_bytes(),
 			resolution: !q.resolution_at_lowest(),
 			frames: !q.frames_at_lowest(),
 			samples: !q.samples_at_lowest(),
@@ -67,7 +67,7 @@ impl<'a> MemoryWarning<'a> {
 	}
 
 	pub fn quality_of(&self, levers: Levers) -> PreviewQuality {
-		let mut q = self.spec.quality;
+		let mut q = self.request.quality;
 		if levers.resolution {
 			q = q.halve_resolution();
 		}
@@ -86,7 +86,7 @@ impl<'a> MemoryWarning<'a> {
 
 	/// The store's bytes at the levers' quality.
 	pub fn bytes_of(&self, levers: Levers) -> u64 {
-		self.spec.store_bytes_at(self.quality_of(levers))
+		self.request.store_bytes_at(self.quality_of(levers))
 	}
 
 	pub fn fits(&self, levers: Levers) -> bool {

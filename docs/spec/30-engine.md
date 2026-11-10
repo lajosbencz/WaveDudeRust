@@ -222,12 +222,29 @@ Collection during a run:
 Line length (graph x axis) = Euclidean length of the clamped A-B; sample k of n at distance
 `n > 1 ? k*length/(n-1) : 0` (as in the CSV header).
 
-## Scratch frames
+## The live run
 
-"Frame k as the project is now": a kept engine, Reset, emitters/probes set, stepped `k*VisualizeEvery + 1` steps, probes
-queued every step and drained every 256 steps and at the end, then captured. Newest request wins; a request superseded while stepping is abandoned at the next
-check (every 16 steps). The engine is kept across scene edits of the same grid (`TryReplaceScene`), rebuilt otherwise.
-A request for the same scene, emitters and probes steps on from where the kept engine stopped (the end of the previous
-request, finished or abandoned) when it has not passed the frame; frames of the same project computed recently
-(256 MiB of planes and probe traces, keyed by step) are answered from a cache. Specs share the scene medium while
-the scene, its parts and edges are unchanged (`SceneCache`), so comparing two requests' scenes is a pointer compare.
+One worker owns one engine and one frame store and converges on a goal: the run request (a copy of the
+project, the quality, whether the intensity is tracked), the timeline position, how much is wanted (the
+position's frame, or every frame), a pause, a fit request. The worker builds the spec from the request, so
+the scene is composed on its thread, never on the UI's; the UI derives what it shows meanwhile (the schedule,
+the store's size, the probes) from the request's project. The project's image bytes are shared, so the copy
+is cheap. Between frames it takes the next
+target: the first stored frame at or after the position that is missing or whose probe traces are not recorded
+(every frame wanted: then the probes' last steps while the engine stands at the traces' end, then the frames
+before the position still missing, then the probes' last steps from wherever the engine stands). It steps to it, reset to 0 when the engine passed it; `k*CaptureEvery + 1`
+steps for stored frame k, probes queued every step and drained every 256 steps and at the end; with every frame
+wanted the missing stored frames passed on the way are captured too, so one pass makes the run; a capture is
+pipelined with the steps that follow it. A goal change is read every 16 steps: a unit of work for another spec is left; one for the goal's spec goes
+on when it is the goal's frame, else while every frame is wanted and the goal's frame is there; a pause with
+another spec leaves the target so the spec is adopted. A fit frame is made in a state of its own (`Fitting`),
+which leaves the run's frames and its completion as they are. A spec with other
+frames (scene, options, emitters, seed, schedule, quality, brightness when baked into indices) starts a
+generation: the store is cleared, its buffers kept, the frame written last kept readable with the traces it was
+recorded with (when the probes measure the same); the engine is kept
+across scene edits of the same grid (`TryReplaceScene`), rebuilt otherwise. A spec with other probe measurements
+alone clears the traces and keeps the frames. Specs share the scene medium while the scene, its parts and edges
+are unchanged (`SceneCache`, shared with the outline painter), so comparing two specs' scenes is a pointer
+compare. A request that cannot be built (an image scene without its image) fails the run, which the status
+bar reports. A fit request yields the
+goal's frame once more in f16 samples, served once.

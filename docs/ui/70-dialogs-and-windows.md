@@ -86,12 +86,12 @@ Native save dialog (port: platform file dialog, e.g. rfd).
   session's alone. Fallback: settings' `LastExportFolder`.
 - A sequence goes into a folder of its own; an existing folder with files asks "Replace them?" (Export last asks
   nothing).
-- After the dialog: when there is no run, a stale one, a reduced-quality one, or one lacking the intensity plane, a
+- After the dialog: when there is no run, an incomplete one, a reduced-quality one, or one lacking the intensity plane, a
   full-quality run is started first (status "Export: waiting for the run", indeterminate); then "Exporting n / N
   frames" with a determinate bar (tooltip "Cancel the export (Esc)"). Esc cancels, while waiting too (the run
   stops). A run that ends without completing while the export waits (Stop, an edit, a failure, F5 or Play
   replacing it) drops the export with a warning in the status bar. The status bar reports the end.
-- A still renders exactly what a video export would show at that frame, never the scratch frame.
+- A still renders exactly what a video export would show at that frame, never the preview's frame.
 - CSV: a point probe one row per step ("step;amplitude" header), a line probe one row per frame
   ("frame;step;<distances>"), semicolons, decimal point. Full run first when needed.
 

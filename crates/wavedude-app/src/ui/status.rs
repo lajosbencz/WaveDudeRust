@@ -21,18 +21,12 @@ fn right(cx: &Cx) -> Right {
 	let download = cx.ui.download.read().clone();
 	let exporting = cx.ui.export.read().is_some();
 	let export = download.or_else(|| cx.ui.export.read().as_ref().map(|e| (e.text.clone(), e.progress())));
-	let topics = Topics::PLAYBACK | Topics::PROGRESS | Topics::SCRATCH | Topics::RUN | Topics::SETTINGS;
+	let topics = Topics::PLAYBACK | Topics::PROGRESS | Topics::WORK | Topics::RUN | Topics::SETTINGS;
 	cx.shared.read(topics, |a| {
 		let s = &a.strings;
 		let r = a.live.playback.readout();
 		let busy = export.or_else(|| {
 			a.live.computing_frame().map(|f| (s.format("StatusComputingFormat", &[&f]), Progress::Indeterminate))
-		});
-		let busy = busy.or_else(|| {
-			a.live
-				.run_status()
-				.filter(|(state, ..)| !state.is_finished())
-				.map(|(_, done, total, _)| (String::new(), Progress::Determinate(done as f32 / total as f32)))
 		});
 		Right {
 			run: a.run_status(),

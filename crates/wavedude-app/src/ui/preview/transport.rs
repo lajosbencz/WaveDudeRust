@@ -5,18 +5,18 @@
 //! Threads: the UI thread.
 
 use std::borrow::Cow;
+use std::rc::Rc;
 
 use freya::prelude::*;
 use serde_json::json;
 use wavedude_widgets::{
-	Icon, IconView, NumberBox, NumberSpec, TestIdExt, Timeline, TimelineEvent, TimelineModel, icon::icons,
+	Callback, Icon, IconView, NumberBox, NumberSpec, TestIdExt, Timeline, TimelineEvent, TimelineModel, icon::icons,
 	use_wave_theme,
 };
 
 use crate::ui::shared::{App, Shared, Topics};
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, Target};
-use wavedude_app_state::live::RunKind;
 use wavedude_app_state::playback::{Playback, SPEED_PRESETS, SPEED_RANGE};
 use wavedude_app_state::settings::Orientation;
 
@@ -54,12 +54,12 @@ pub struct ToolButton {
 	tooltip: String,
 	enabled: bool,
 	checked: bool,
-	on_press: EventHandler<()>,
+	on_press: Callback<()>,
 	test_id: String,
 }
 
 impl ToolButton {
-	pub fn new(icon: Icon, tooltip: impl Into<String>, on_press: impl Into<EventHandler<()>>) -> Self {
+	pub fn new(icon: Icon, tooltip: impl Into<String>, on_press: impl Into<Callback<()>>) -> Self {
 		Self {
 			icon,
 			tooltip: tooltip.into(),
@@ -137,18 +137,16 @@ impl Component for ToolButton {
 	}
 }
 
-/// The timeline's model from the playback state: frames, position, the range in frames, the available band.
-pub fn timeline_model(playback: &Playback, live: bool) -> TimelineModel {
+/// The timeline's model from the playback state: frames, position, the range in frames, the frames made.
+pub fn timeline_model(playback: &Playback, available: Rc<[(u32, u32)]>, live: bool) -> TimelineModel {
 	let (from, to) = playback.range_frames();
 	let (in_step, out_step) = playback.range_steps();
-	let available = playback.available();
 	TimelineModel {
 		frames: playback.frame_count(),
 		position: playback.position(),
 		in_point: (in_step != 0).then_some(from),
 		out_point: (out_step != 0).then_some(to),
-		available: available.and_then(|a| a.frames.checked_sub(1)),
-		stale: available.is_some_and(|a| a.stale),
+		available,
 		bounded: live,
 	}
 }
@@ -163,24 +161,46 @@ pub fn toggle_playback(shared: &Shared) {
 	shared.send(if playing { AppEvent::PausePlayback } else { AppEvent::Play });
 }
 
-/// The timeline and the transport bar, re-rendered with the playback alone.
+/// The timeline and the transport bar; the timeline alone follows the run's progress.
 #[derive(PartialEq)]
 pub struct Transport;
 
 impl Component for Transport {
 	fn render(&self) -> impl IntoElement {
-		let shared = Shared::get();
-		shared.subscribe(Topics::DOCUMENT | Topics::PLAYBACK | Topics::PROGRESS | Topics::RUN | Topics::SETTINGS);
-		rect().width(Size::fill()).child(timeline(&shared)).child(transport_bar(&shared))
+		rect().width(Size::fill()).child(TimelineBar).child(TransportBar)
 	}
 }
 
-/// The timeline bound to the playback state.
+/// The timeline bound to the playback state and the frames made.
+#[derive(PartialEq)]
+struct TimelineBar;
+
+impl Component for TimelineBar {
+	fn render(&self) -> impl IntoElement {
+		let shared = Shared::get();
+		shared.subscribe(Topics::DOCUMENT | Topics::PLAYBACK | Topics::PROGRESS | Topics::RUN | Topics::SETTINGS);
+		timeline(&shared).into_element()
+	}
+}
+
+/// The buttons, the readout and the speed.
+#[derive(PartialEq)]
+struct TransportBar;
+
+impl Component for TransportBar {
+	fn render(&self) -> impl IntoElement {
+		let shared = Shared::get();
+		shared.subscribe(Topics::DOCUMENT | Topics::PLAYBACK | Topics::RUN | Topics::SETTINGS);
+		transport_bar(&shared).into_element()
+	}
+}
+
 fn timeline(shared: &Shared) -> impl IntoElement {
 	let (model, tip, every) = shared.peek(|app: &App| {
-		let live = app.live.is_live() && app.live.run_kind() == Some(RunKind::User);
+		let live = app.live.is_live();
 		let every = app.document.project.simulation.visualize_every;
-		(timeline_model(&app.live.playback, live), app.strings.get("TipPreviewTimeline").to_owned(), every)
+		let model = timeline_model(&app.live.playback, app.live.present_spans().into(), live);
+		(model, app.strings.get("TipPreviewTimeline").to_owned(), every)
 	});
 	let last = model.last();
 	let shared = shared.clone();
@@ -429,20 +449,17 @@ struct TransportView {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use wavedude_app_state::playback::Available;
 
 	#[test]
-	fn the_timeline_shows_the_range_and_the_available_band() {
+	fn the_timeline_shows_the_range_and_the_frames_made() {
 		let mut p = Playback::default();
 		p.set_timeline(100, 4, 30, 40, 200);
 		p.set_position(20);
-		p.set_available(Some(Available { frames: 31, stale: true }));
-		let m = timeline_model(&p, true);
+		let m = timeline_model(&p, Rc::from([(0, 30)]), true);
 		assert_eq!((m.frames, m.position, m.in_point, m.out_point), (100, 20, Some(10), Some(50)));
-		assert_eq!((m.available, m.stale, m.bounded), (Some(30), true, true));
+		assert_eq!((&m.available[..], m.bounded), (&[(0, 30)][..], true));
 		p.clear_range();
-		p.set_available(None);
-		let m = timeline_model(&p, false);
-		assert_eq!((m.in_point, m.out_point, m.available), (None, None, None));
+		let m = timeline_model(&p, Rc::from([]), false);
+		assert_eq!((m.in_point, m.out_point, m.available.len()), (None, None, 0));
 	}
 }

@@ -2,7 +2,7 @@
 
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::{Serialize, ser};
 
@@ -52,7 +52,7 @@ impl SceneKey {
 		let scene = &project.scene;
 		(scene.mode == SceneMode::Image).hash(&mut h);
 		if scene.mode == SceneMode::Image {
-			scene.image_data.as_deref().map(image_hash).hash(&mut h);
+			scene.image_data.as_ref().map(image_hash).hash(&mut h);
 		}
 		(scene.width, scene.height, scene.refractive_index.to_bits()).hash(&mut h);
 		let sim = &project.simulation;
@@ -67,22 +67,22 @@ impl SceneKey {
 /// A hash of an image scene's image bytes: equal keys decode alike. None for a canvas scene.
 pub fn image_key(project: &Project) -> Option<u64> {
 	let scene = &project.scene;
-	(scene.mode == SceneMode::Image).then(|| scene.image_data.as_deref().map(image_hash)).flatten()
+	(scene.mode == SceneMode::Image).then(|| scene.image_data.as_ref().map(image_hash)).flatten()
 }
 
-/// The image bytes' hash, remembered for the last image: an unchanged image is compared, not hashed again.
-fn image_hash(bytes: &[u8]) -> u64 {
-	static LAST: Mutex<Option<(Vec<u8>, u64)>> = Mutex::new(None);
+/// The image bytes' hash, remembered for the last image: the same (shared or equal) bytes are not hashed again.
+fn image_hash(bytes: &Arc<[u8]>) -> u64 {
+	static LAST: Mutex<Option<(Arc<[u8]>, u64)>> = Mutex::new(None);
 	let mut last = LAST.lock().unwrap();
 	if let Some((cached, hash)) = &*last
-		&& cached[..] == *bytes
+		&& (Arc::ptr_eq(cached, bytes) || **cached == **bytes)
 	{
 		return *hash;
 	}
 	let mut h = DefaultHasher::new();
 	bytes.hash(&mut h);
 	let hash = h.finish();
-	*last = Some((bytes.to_vec(), hash));
+	*last = Some((bytes.clone(), hash));
 	hash
 }
 

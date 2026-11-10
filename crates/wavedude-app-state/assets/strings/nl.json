@@ -210,7 +210,6 @@
 	"RunStateCompleted": "Voltooid",
 	"RunStateCancelled": "Gestopt",
 	"RunStateFailed": "Mislukt",
-	"RunStatusStale": ", sindsdien bewerkt",
 	"RunError": "De simulatie kon niet starten.",
 	"RunErrorNoImage": "De scène gebruikt een afbeelding, maar er is geen afbeeldingsbestand ingesteld.",
 	"Ready": "Gereed",

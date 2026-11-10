@@ -1,4 +1,4 @@
-//! Runs, the frame store, scratch frames and the memory warning (spec/40, spec/30 Scratch frames, spec/70
+//! Runs, the frame store, the live run and the memory warning (spec/40, spec/30 The live run, spec/70
 //! "Store, frames, quality" and "Probes and graphs"). Canvases are small; every engine is the CPU one.
 
 use std::sync::Arc;
@@ -265,15 +265,16 @@ fn frames_in_budget() {
 
 #[test]
 fn store_bytes_at_equals_the_store_a_run_allocates() {
-	let s = spec(&project(67, 45, 21), PreviewQuality::FULL);
+	let p = project(67, 45, 21);
+	let s = spec(&p, PreviewQuality::FULL);
+	let r = request(&p, PreviewQuality::FULL);
 	for res in [1, 2, 4] {
 		for frames in [1, 2, 4] {
 			for format in [SampleFormat::Half, SampleFormat::Index] {
 				let q = PreviewQuality::new(res, frames, format);
-				let at = s.with_quality(q);
-				let st = store(&at, GIB);
-				assert_eq!(s.store_bytes_at(q), (st.capacity() * st.frame_bytes()) as u64, "{q:?}");
-				assert_eq!(at.store_bytes(), s.store_bytes_at(q));
+				let st = store(&s.with_quality(q), GIB);
+				assert_eq!(r.store_bytes_at(q), (st.capacity() * st.frame_bytes()) as u64, "{q:?}");
+				assert_eq!(r.with_quality(q).store_bytes(), r.store_bytes_at(q));
 			}
 		}
 	}
@@ -361,118 +362,372 @@ fn probe_traces_of_a_run() {
 	assert_eq!((t[0].steps_sampled, t[2].steps_sampled), (100, 99), "the last frame closes at step index 98");
 }
 
-// ---- scratch frames ----
+// ---- the live run ----
 
-fn scratch() -> (ScratchRunner, Receiver<ScratchEvent>) {
-	let (tx, rx) = channel();
-	(ScratchRunner::cpu(Box::new(move |e| drop(tx.send(e)))).unwrap(), rx)
+fn worker(dir: &std::path::Path) -> RunWorker {
+	RunWorker::cpu(dir.to_path_buf()).unwrap()
 }
 
-fn done(rx: &Receiver<ScratchEvent>) -> ScratchResult {
-	loop {
-		match rx.recv_timeout(Duration::from_secs(60)).unwrap() {
-			ScratchEvent::Done(r) => return *r,
-			ScratchEvent::Failed { error, .. } => panic!("{error}"),
-			ScratchEvent::Abandoned { .. } => {}
-		}
+fn request(p: &Project, q: PreviewQuality) -> RunRequest {
+	RunRequest::new(p, q, false)
+}
+
+fn goal(run: &RunRequest, position: u32, wanted: Wanted) -> Goal {
+	Goal { revision: 1, run: Some(run.clone()), position, wanted, ..Goal::default() }
+}
+
+/// Polls until `done` holds (within a minute).
+fn wait_until(mut done: impl FnMut() -> bool) {
+	let deadline = Instant::now() + Duration::from_secs(60);
+	while !done() {
+		assert!(Instant::now() < deadline, "the live run did not get there");
+		std::thread::sleep(Duration::from_millis(2));
+	}
+}
+
+fn store_has(w: &RunWorker, frame: u32) -> bool {
+	w.store().is_some_and(|s| s.has(frame as usize))
+}
+
+fn same_frames(a: &FrameStore, b: &FrameStore, frames: u32) {
+	for k in 0..frames as usize {
+		assert_eq!(
+			a.copy_layer(k, Layer::Field).unwrap(),
+			b.copy_layer(k, Layer::Field).unwrap(),
+			"field of frame {k}"
+		);
+		assert_eq!(
+			a.copy_layer(k, Layer::Intensity).unwrap(),
+			b.copy_layer(k, Layer::Intensity).unwrap(),
+			"intensity of frame {k}"
+		);
 	}
 }
 
 #[test]
-fn scratch_frame_equals_the_run_frame() {
+fn the_live_run_makes_the_batch_runs_frames_the_positions_first() {
+	let dir = tempfile::tempdir().unwrap();
 	let s = spec(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
+	let s_run = request(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
 	let r = run(&s, GIB);
 	let run_traces = r.traces();
-	let (runner, rx) = scratch();
-	let id = runner.request(s.clone(), 20);
-	let first = done(&rx);
-	assert_eq!((first.id, first.frame, first.snapshot.step), (id, 20, 40));
-	assert_eq!(first.snapshot.field, r.store().copy_layer(20, Layer::Field).unwrap());
-	assert_eq!(first.snapshot.intensity, r.store().copy_layer(20, Layer::Intensity).unwrap());
-	assert_eq!(first.traces[0].series, run_traces[0].series[..41]);
-	assert_eq!(first.traces[1].series, run_traces[1].series[..41]);
-	assert_eq!(first.traces[2].profiles.iter().collect::<Vec<_>>(), [run_traces[2].profiles.get(20).unwrap()]);
+	let w = worker(dir.path());
+	w.set_goal(goal(&s_run, 20, Wanted::Position));
+	wait_until(|| store_has(&w, 20));
+	let st = w.store().unwrap();
+	assert_eq!(st.copy_layer(20, Layer::Field).unwrap(), r.store().copy_layer(20, Layer::Field).unwrap());
+	assert_eq!(st.copy_layer(20, Layer::Intensity).unwrap(), r.store().copy_layer(20, Layer::Intensity).unwrap());
+	wait_until(|| w.status().state == WorkState::Idle);
+	assert_eq!((st.present_count(), st.count()), (1, 0), "the position alone, and no prefix");
+	w.with_traces(|t| {
+		assert_eq!(t[0].series, run_traces[0].series[..41]);
+		assert_eq!(t[1].series, run_traces[1].series[..41]);
+		assert_eq!(t[2].profiles.len(), 21, "a profile per frame on the way");
+		assert_eq!(t[2].profiles.get(20), run_traces[2].profiles.get(20));
+	});
+	assert_eq!((w.status().adopted, w.status().traces_steps), (1, 41));
 
-	// An earlier frame from the kept engine: the integrated sums start again.
-	runner.request(s.clone(), 7);
-	let second = done(&rx);
-	assert_eq!(second.snapshot.field, r.store().copy_layer(7, Layer::Field).unwrap());
-	assert_eq!(second.traces[1].series, run_traces[1].series[..15]);
+	w.set_goal(goal(&s_run, 20, Wanted::All));
+	wait_until(|| w.store().is_some_and(|s| s.is_complete()));
+	wait_until(|| w.status().state == WorkState::Idle);
+	same_frames(&st, r.store(), s.stored_frames());
+	w.with_traces(|t| assert_eq!(t, &run_traces[..], "the traces of the whole run"));
+	assert!(Arc::ptr_eq(&st, &w.store().unwrap()), "one store throughout");
+}
 
-	// Another scene of the same grid swaps into the kept engine.
+#[test]
+fn the_traces_of_the_frame_kept_through_a_clear_are_held_with_it() {
+	let dir = tempfile::tempdir().unwrap();
 	let mut p = with_probes(project(64, 48, 100));
+	let s_run = request(&p, PreviewQuality::FULL);
+	let w = worker(dir.path());
+	w.set_goal(goal(&s_run, 20, Wanted::Position));
+	wait_until(|| store_has(&w, 20) && w.status().state == WorkState::Idle);
+	let before = w.with_traces(|t| t.to_vec());
+	w.with_held_traces(|t| assert!(t.is_empty(), "nothing before the first generation"));
+	w.set_goal(Goal { paused: true, ..goal(&s_run, 20, Wanted::Position) });
+	wait_until(|| w.status().state == WorkState::Idle);
+	p.sources[0].frequency += 1.0;
+	w.set_goal(Goal { paused: true, ..goal(&request(&p, PreviewQuality::FULL), 20, Wanted::All) });
+	wait_until(|| w.with_traces(|t| t[0].series.is_empty()));
+	assert!(w.store().unwrap().latest().is_some(), "the frame kept through the clear");
+	w.with_held_traces(|t| assert_eq!(t, &before[..], "the previous frames' traces, with the frame kept"));
+	p.probes.truncate(1);
+	w.set_goal(Goal { paused: true, ..goal(&request(&p, PreviewQuality::FULL), 20, Wanted::All) });
+	wait_until(|| w.status().state == WorkState::Paused && w.with_traces(|t| t.len() == 1));
+	w.with_held_traces(|t| assert!(t.is_empty(), "other probes: nothing fits the frame kept"));
+}
+
+#[test]
+fn the_engine_is_kept_across_edits_of_the_same_grid() {
+	let dir = tempfile::tempdir().unwrap();
+	let built = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+	let counting = built.clone();
+	let w = RunWorker::new(
+		Box::new(move |scene, options| {
+			counting.fetch_add(1, Ordering::AcqRel);
+			Box::new(CpuEngine::new(scene, options))
+		}),
+		dir.path().to_path_buf(),
+		Arc::default(),
+	)
+	.unwrap();
+	let mut p = project(64, 48, 100);
+	let mut revision = 0;
+	let mut edit = |p: &Project| {
+		revision += 1;
+		w.set_goal(Goal { revision, ..goal(&request(p, PreviewQuality::FULL), 5, Wanted::Position) });
+		wait_until(|| w.status().adopted == revision && store_has(&w, 5) && w.status().state == WorkState::Idle);
+		built.load(Ordering::Acquire)
+	};
+	assert_eq!(edit(&p), 1);
+	p.sources[0].frequency += 1.0;
+	assert_eq!(edit(&p), 1, "a source edit keeps the engine");
+	p.parts.push(wavedude_core::model::Part::new(
+		wavedude_core::model::PartKind::Rectangle(Default::default()),
+		20,
+		20,
+	));
+	assert_eq!(edit(&p), 1, "a part edit swaps the scene in");
+	p.display.intensity.preview = true;
+	assert_eq!(edit(&p), 1, "tracking the intensity is switched on the engine");
+	p.scene.width = 80;
+	assert_eq!(edit(&p), 2, "another grid builds anew");
+}
+
+#[test]
+fn a_store_that_fits_in_memory_never_spills_across_edits() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut p = project(64, 48, 100);
+	let w = worker(dir.path());
+	for revision in 1..=4 {
+		p.sources[0].frequency += 1.0;
+		w.set_goal(Goal { revision, ..goal(&request(&p, PreviewQuality::FULL), 0, Wanted::All) });
+		wait_until(|| w.status().adopted == revision && w.store().is_some_and(|s| s.is_complete()));
+		let st = w.store().unwrap();
+		assert!(st.spill_path().is_none() && st.frames_on_disk() == 0, "generation {revision} spilled");
+	}
+}
+
+#[test]
+fn a_rebuilt_engine_keeps_the_frames_and_the_traces() {
+	let dir = tempfile::tempdir().unwrap();
+	let built = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+	let counting = built.clone();
+	let w = RunWorker::new(
+		Box::new(move |scene, options| {
+			counting.fetch_add(1, Ordering::AcqRel);
+			Box::new(CpuEngine::new(scene, options))
+		}),
+		dir.path().to_path_buf(),
+		Arc::default(),
+	)
+	.unwrap();
+	let p = with_probes(project(64, 48, 100));
+	let s = spec(&p, PreviewQuality::FULL);
+	w.set_goal(goal(&request(&p, PreviewQuality::FULL), 20, Wanted::All));
+	wait_until(|| w.store().is_some_and(|s| s.is_complete()) && w.status().state == WorkState::Idle);
+	let st = w.store().unwrap();
+	let traces = w.with_traces(|t| t.to_vec());
+	w.rebuild_engine();
+	w.set_goal(Goal { revision: 2, ..goal(&request(&p, PreviewQuality::FULL), 30, Wanted::All) });
+	wait_until(|| built.load(Ordering::Acquire) == 2 && w.status().state == WorkState::Idle);
+	assert!(st.is_complete(), "the frames stayed");
+	w.with_traces(|t| assert_eq!(t, &traces[..], "the traces stayed"));
+	same_frames(&st, run(&s, GIB).store(), s.stored_frames());
+}
+
+#[test]
+fn the_probes_tail_is_recorded_from_wherever_the_engine_stands() {
+	let dir = tempfile::tempdir().unwrap();
+	let s = spec(&with_probes(project(96, 72, 4000)), PreviewQuality::new(1, 4, SampleFormat::Index));
+	let s_run = request(&with_probes(project(96, 72, 4000)), PreviewQuality::new(1, 4, SampleFormat::Index));
+	let last = s.stored_frames() - 1;
+	let w = worker(dir.path());
+	w.set_goal(goal(&s_run, last * s.frame_divisor(), Wanted::Position));
+	wait_until(|| store_has(&w, last) && w.status().state == WorkState::Idle);
+	w.set_goal(goal(&s_run, 0, Wanted::Position));
+	wait_until(|| store_has(&w, 0) && w.status().state == WorkState::Idle);
+	let to_last = last * s.capture_every() + 1;
+	assert_eq!(w.status().traces_steps, to_last, "the traces reach the last frame, not the last step");
+	w.set_goal(goal(&s_run, 0, Wanted::All));
+	let st = w.store().unwrap();
+	wait_until(|| st.is_complete() && w.status().state == WorkState::Idle);
+	assert_eq!(w.status().traces_steps, 4000, "the tail was recorded although the engine stood before it");
+	let r = run(&s, GIB);
+	w.with_traces(|t| assert_eq!(t, &r.traces()[..]));
+}
+
+#[test]
+fn a_pause_with_another_spec_adopts_it() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut p = project(96, 72, 4000);
+	let s_run = request(&p, PreviewQuality::FULL);
+	let w = worker(dir.path());
+	w.set_goal(Goal { revision: 1, ..goal(&s_run, 99, Wanted::All) });
+	wait_until(|| w.status().steps_done > 100);
+	w.set_goal(Goal { revision: 2, paused: true, ..goal(&s_run, 99, Wanted::All) });
+	wait_until(|| w.status().state == WorkState::Paused);
+	p.sources[0].frequency += 1.0;
+	let edited_run = request(&p, PreviewQuality::FULL);
+	w.set_goal(Goal { revision: 3, paused: true, ..goal(&edited_run, 99, Wanted::All) });
+	wait_until(|| w.status().adopted == 3 && store_has(&w, 99));
+	wait_until(|| w.status().state == WorkState::Paused);
+	assert_eq!(w.store().unwrap().present_count(), 1, "while paused, the frame looked at alone is made");
+	w.set_goal(Goal { revision: 4, ..goal(&edited_run, 99, Wanted::All) });
+	wait_until(|| store_has(&w, 99));
+}
+
+#[test]
+fn a_baked_brightness_edit_keeps_the_store() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut p = project(64, 48, 100);
+	let q = PreviewQuality::new(1, 1, SampleFormat::Index);
+	let w = worker(dir.path());
+	w.set_goal(Goal { revision: 1, ..goal(&request(&p, q), 5, Wanted::Position) });
+	wait_until(|| w.status().adopted == 1 && store_has(&w, 5));
+	let st = w.store().unwrap();
+	p.display.field.brightness *= 2.0;
+	w.set_goal(Goal { revision: 2, ..goal(&request(&p, q), 5, Wanted::Position) });
+	wait_until(|| w.status().adopted == 2 && store_has(&w, 5));
+	assert!(Arc::ptr_eq(&st, &w.store().unwrap()), "the same buffers take the frames of the new brightness");
+	assert_eq!(st.generation(), 1);
+}
+
+#[test]
+fn a_pass_with_every_frame_wanted_captures_the_frames_on_the_way() {
+	let dir = tempfile::tempdir().unwrap();
+	let s = spec(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
+	let s_run = request(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
+	let w = worker(dir.path());
+	w.set_goal(goal(&s_run, 20, Wanted::All));
+	wait_until(|| store_has(&w, 20));
+	let st = w.store().unwrap();
+	assert!(st.count() >= 21, "the frames before the position landed on the way to it");
+	wait_until(|| st.is_complete() && w.status().state == WorkState::Idle);
+	assert_eq!(w.status().steps_done, s.steps, "one pass, no wrap");
+	same_frames(&st, run(&s, GIB).store(), s.stored_frames());
+}
+
+#[test]
+fn a_probe_change_keeps_the_frames_and_records_anew() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut p = with_probes(project(64, 48, 60));
+	let s = spec(&p, PreviewQuality::FULL);
+	let s_run = request(&p, PreviewQuality::FULL);
+	let w = worker(dir.path());
+	w.set_goal(goal(&s_run, 5, Wanted::All));
+	wait_until(|| w.store().is_some_and(|s| s.is_complete()));
+	let st = w.store().unwrap();
+	p.probes[0].ax += 2;
+	let moved = spec(&p, PreviewQuality::FULL);
+	let moved_run = request(&p, PreviewQuality::FULL);
+	assert!(s.same_frames_as(&moved) && !s.same_probes_as(&moved));
+	w.set_goal(Goal { revision: 2, ..goal(&moved_run, 5, Wanted::All) });
+	wait_until(|| w.status().adopted == 2);
+	assert!(st.is_complete(), "the frames stay");
+	wait_until(|| w.status().traces_steps == 60 && w.status().state == WorkState::Idle);
+	let r = run(&moved, GIB);
+	w.with_traces(|t| assert_eq!(t, &r.traces()[..]));
+	same_frames(&st, r.store(), moved.stored_frames());
+}
+
+#[test]
+fn a_frame_change_starts_over_in_the_same_store() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut p = with_probes(project(64, 48, 60));
+	let s_run = request(&p, PreviewQuality::FULL);
+	let w = worker(dir.path());
+	w.set_goal(goal(&s_run, 29, Wanted::All));
+	wait_until(|| w.store().is_some_and(|s| s.is_complete()));
+	let st = w.store().unwrap();
 	p.scene.refractive_index = 1.5;
 	let other = spec(&p, PreviewQuality::FULL);
-	runner.request(other.clone(), 5);
-	let third = done(&rx);
-	let r2 = run(&other, GIB);
-	assert_eq!(third.snapshot.field, r2.store().copy_layer(5, Layer::Field).unwrap());
-	assert_ne!(third.snapshot.field, r.store().copy_layer(5, Layer::Field).unwrap());
+	let other_run = request(&p, PreviewQuality::FULL);
+	w.set_goal(Goal { revision: 2, ..goal(&other_run, 3, Wanted::Position) });
+	wait_until(|| w.status().adopted == 2 && store_has(&w, 3) && w.status().state == WorkState::Idle);
+	assert!(Arc::ptr_eq(&st, &w.store().unwrap()), "the same layout keeps the store");
+	assert_eq!((st.present_count(), st.generation()), (1, 1), "cleared once, the position's frame back");
+	let r = run(&other, GIB);
+	assert_eq!(st.copy_layer(3, Layer::Field).unwrap(), r.store().copy_layer(3, Layer::Field).unwrap());
+	let index_run = request(&p, PreviewQuality::DEFAULT);
+	w.set_goal(Goal { revision: 3, ..goal(&index_run, 3, Wanted::Position) });
+	wait_until(|| w.status().adopted == 3 && store_has(&w, 3));
+	assert!(!Arc::ptr_eq(&st, &w.store().unwrap()), "another layout, another store");
 }
 
 #[test]
-fn scratch_frames_step_on_and_come_back_from_the_cache() {
-	let s = spec(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
-	let r = run(&s, GIB);
-	let run_traces = r.traces();
-	let (runner, rx) = scratch();
-	runner.request(s.clone(), 10);
-	let first = done(&rx);
-	runner.request(s.clone(), 30);
-	let later = done(&rx);
-	assert_eq!(later.snapshot.field, r.store().copy_layer(30, Layer::Field).unwrap());
-	assert_eq!(later.snapshot.intensity, r.store().copy_layer(30, Layer::Intensity).unwrap());
-	assert_eq!(later.traces[0].series, run_traces[0].series[..61]);
-	assert_eq!(later.traces[1].series, run_traces[1].series[..61]);
-	assert_eq!(later.traces[2].profiles.iter().collect::<Vec<_>>(), [run_traces[2].profiles.get(30).unwrap()]);
-
-	let id = runner.request(s.clone(), 10);
-	let cached = done(&rx);
-	assert_eq!((cached.id, cached.frame), (id, 10));
-	assert_eq!(cached.snapshot.field, first.snapshot.field);
-	assert_eq!(cached.traces, first.traces);
-}
-
-#[test]
-fn the_scratch_cache_answers_by_step_not_by_frame() {
-	let mut p = with_probes(project(64, 48, 100));
-	let every_2 = spec(&p, PreviewQuality::FULL);
-	p.simulation.visualize_every = 4;
-	let every_4 = spec(&p, PreviewQuality::FULL);
-	let (runner, rx) = scratch();
-	runner.request(every_2.clone(), 10);
-	let step_20 = done(&rx);
-	runner.request(every_4.clone(), 10);
-	let step_40 = done(&rx);
-	assert_eq!((step_20.snapshot.step, step_40.snapshot.step), (20, 40));
-	let (fresh, fresh_rx) = scratch();
-	fresh.request(every_4.clone(), 10);
-	assert_eq!(step_40.snapshot.field, done(&fresh_rx).snapshot.field);
-	runner.request(every_4, 5);
-	let again = done(&rx);
-	assert_eq!((again.frame, again.snapshot.step), (5, 20));
-	assert_eq!(again.snapshot.field, step_20.snapshot.field);
-}
-
-#[test]
-fn a_superseded_scratch_request_is_abandoned() {
-	let s = spec(&project(256, 256, 100), PreviewQuality::FULL);
-	let (runner, rx) = scratch();
-	let slow = runner.request(s.clone(), 20_000);
-	std::thread::sleep(Duration::from_millis(150));
-	let fast = runner.request(s.clone(), 1);
-	let mut abandoned = None;
-	let result = loop {
-		match rx.recv_timeout(Duration::from_secs(60)).unwrap() {
-			ScratchEvent::Abandoned { id, steps_done, steps, .. } => abandoned = Some((id, steps_done, steps)),
-			ScratchEvent::Done(r) => break r,
-			ScratchEvent::Failed { error, .. } => panic!("{error}"),
+fn the_fit_frame_is_the_positions_frame_in_halves() {
+	let dir = tempfile::tempdir().unwrap();
+	let s_run = request(&project(64, 48, 40), PreviewQuality::DEFAULT);
+	let full = spec(&project(64, 48, 40), PreviewQuality::FULL);
+	let r = run(&full, GIB);
+	let w = worker(dir.path());
+	let mut g = goal(&s_run, 7, Wanted::Position);
+	g.fit = Some(FitRequest { id: 1, frame: 7 });
+	w.set_goal(g);
+	let fit = loop {
+		if let Some(f) = w.take_fit() {
+			break f;
 		}
+		std::thread::sleep(Duration::from_millis(2));
 	};
-	let (id, steps_done, steps) = abandoned.expect("the slow request was abandoned");
-	assert_eq!((id, steps), (slow, 40_001));
-	assert!(steps_done > 0 && steps_done < steps && steps_done % CHECK_INTERVAL == 0, "{steps_done}");
-	assert_eq!((result.id, result.snapshot.step), (fast, 2));
+	assert_eq!((fit.id, fit.frame, fit.snapshot.shape.format, fit.snapshot.step), (1, 7, SampleFormat::Half, 14));
+	assert_eq!(fit.snapshot.field, r.store().copy_layer(7, Layer::Field).unwrap());
+	wait_until(|| store_has(&w, 7) && w.status().state == WorkState::Idle);
+	assert!(w.take_fit().is_none(), "served once");
+}
+
+#[test]
+fn a_paused_live_run_holds_its_steps() {
+	let dir = tempfile::tempdir().unwrap();
+	let s_run = request(&project(96, 72, 4000), PreviewQuality::new(1, 4, SampleFormat::Index));
+	let w = worker(dir.path());
+	w.set_goal(goal(&s_run, 999, Wanted::All));
+	wait_until(|| w.status().steps_done > CHECK_INTERVAL);
+	w.set_goal(Goal { paused: true, ..goal(&s_run, 999, Wanted::All) });
+	wait_until(|| w.status().state == WorkState::Paused);
+	let held = w.status().steps_done;
+	std::thread::sleep(Duration::from_millis(60));
+	assert_eq!(w.status().steps_done, held, "a paused run does not step");
+	w.set_goal(goal(&s_run, 999, Wanted::All));
+	wait_until(|| w.status().steps_done > held);
+	w.set_goal(goal(&s_run, 999, Wanted::Position));
+	wait_until(|| w.status().state == WorkState::Idle);
+	assert!(store_has(&w, 999 / 4) && !w.store().unwrap().is_complete(), "stopped after the position's frame");
+}
+
+#[test]
+fn a_sparse_store_tracks_presence_and_reuses_its_buffers() {
+	let dir = tempfile::tempdir().unwrap();
+	let s = spec(&project(40, 30, 20), PreviewQuality::FULL);
+	let frame = s.frame_bytes();
+	let st = FrameStore::in_dir(s.store_layout(), 4 * frame + frame / 2, None, dir.path()).unwrap();
+	st.write_at(7, snapshot_of(&s, 7.0)).unwrap();
+	st.write_at(2, snapshot_of(&s, 2.0)).unwrap();
+	assert_eq!((st.count(), st.present_count(), st.has(2), st.has(3)), (0, 2, true, false));
+	assert_eq!((st.frames_in_memory(), st.frames_on_disk()), (1, 1));
+	assert_eq!(st.present_through(2), Some(2));
+	assert_eq!(st.first_missing_from(2), Some(3));
+	assert!(matches!(st.copy_layer(3, Layer::Field), Err(StoreError::NotStored { frame: 3, .. })));
+	assert_eq!(st.copy_layer(7, Layer::Field).unwrap(), snapshot_of(&s, 7.0).field);
+	st.write_at(7, snapshot_of(&s, 70.0)).unwrap();
+	assert_eq!(st.copy_layer(7, Layer::Field).unwrap(), snapshot_of(&s, 7.0).field, "a present frame stays");
+	for k in [0, 1, 3] {
+		st.write_at(k, snapshot_of(&s, k as f32)).unwrap();
+	}
+	assert_eq!((st.count(), st.present_through(0)), (4, Some(3)));
+	st.clear();
+	assert_eq!((st.generation(), st.count(), st.present_count(), st.has(2)), (1, 0, 0, false));
+	let block = st.buffer_for(0);
+	assert_eq!(block.field.len(), s.shape.plane_bytes(), "a cleared frame's buffer comes back");
+	st.write_at(0, block).unwrap();
+	for k in 1..10 {
+		st.write_at(k, snapshot_of(&s, k as f32)).unwrap();
+	}
+	assert!(st.is_complete());
+	assert_eq!((st.frames_in_memory(), st.frames_on_disk()), (4, 6));
+	assert_eq!(st.copy_layer(9, Layer::Field).unwrap(), snapshot_of(&s, 9.0).field);
 }
 
 // ---- memory warning ----
@@ -481,7 +736,7 @@ fn a_superseded_scratch_request_is_abandoned() {
 fn memory_warning_levers_and_proposal() {
 	let mut p = project(1920, 1080, 2500);
 	p.sources.clear();
-	let s = spec(&p, PreviewQuality::FULL);
+	let s = request(&p, PreviewQuality::FULL);
 	let need = s.store_bytes();
 	assert_eq!(need, 1920 * 1080 * 2 * 2 * 1250);
 	assert!(MemoryWarning::check(&s, need, need).is_none());
@@ -588,4 +843,152 @@ fn specs_of_an_unchanged_scene_share_its_medium() {
 	p.scene.edges = wavedude_core::model::Edges::Reflective;
 	let d = cache.spec(&p, PreviewQuality::FULL, false).unwrap();
 	assert_eq!(d.scene.edges, wavedude_core::model::Edges::Reflective, "the edges rebuild it too");
+}
+
+#[test]
+fn a_frame_for_later_is_left_for_the_frame_looked_at_and_the_tail_comes_before_the_wrap() {
+	let dir = tempfile::tempdir().unwrap();
+	let s = spec(&with_probes(project(96, 72, 4000)), PreviewQuality::new(1, 4, SampleFormat::Index));
+	let s_run = request(&with_probes(project(96, 72, 4000)), PreviewQuality::new(1, 4, SampleFormat::Index));
+	let w = worker(dir.path());
+	w.set_goal(goal(&s_run, 0, Wanted::All));
+	wait_until(|| w.status().steps_done > 200);
+	w.set_goal(goal(&s_run, 999, Wanted::Position));
+	wait_until(|| store_has(&w, 999 / 4));
+	wait_until(|| w.status().state == WorkState::Idle);
+	let st = w.store().unwrap();
+	assert!(st.present_count() < st.capacity(), "the fill was left for the frame looked at");
+	w.set_goal(goal(&s_run, 500, Wanted::All));
+	wait_until(|| st.is_complete() && w.status().state == WorkState::Idle);
+	assert_eq!(w.status().traces_steps, 4000, "the probes' tail was recorded");
+	let r = run(&s, GIB);
+	w.with_traces(|t| assert_eq!(t, &r.traces()[..]));
+}
+
+/// A burst of edits at 32 a second on the GPU (docs/measurements.md, The live run): frames shown during the
+/// drag and the final frame's lag, with the position's frame alone wanted and with every frame (the frames
+/// before the position captured on the way). Run with `--ignored --nocapture`.
+#[test]
+#[ignore]
+fn live_run_drag_burst_timing() {
+	for wanted in [Wanted::Position, Wanted::All] {
+		drag_burst(wanted, false);
+	}
+	drag_burst(Wanted::All, true);
+}
+
+/// `part`: the first part moves (the scene recomposed per edit) instead of the first source.
+fn drag_burst(wanted: Wanted, part: bool) {
+	let path = std::path::Path::new("tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj");
+	let mut project = wavedude_core::io::load_project(path).unwrap();
+	let quality = PreviewQuality {
+		resolution_divisor: 2,
+		frame_divisor: 2,
+		format: SampleFormat::Index,
+		..PreviewQuality::DEFAULT
+	};
+	let dir = tempfile::tempdir().unwrap();
+	let w = RunWorker::new(
+		Box::new(|scene, options| wavedude_core::engine::build(scene, options, true)),
+		dir.path().to_path_buf(),
+		Arc::default(),
+	)
+	.unwrap();
+	let position = 100;
+	let goal = |p: &Project, revision| Goal {
+		revision,
+		run: Some(RunRequest::new(p, quality, false)),
+		position,
+		wanted,
+		..Goal::default()
+	};
+	w.set_goal(goal(&project, 1));
+	wait_until(|| w.status().adopted == 1 && store_has(&w, position / 2));
+	let one = Instant::now();
+	nudge(&mut project, part);
+	w.set_goal(goal(&project, 2));
+	wait_until(|| w.status().adopted == 2 && store_has(&w, position / 2));
+	let frame_time = one.elapsed();
+	let started = Instant::now();
+	let mut shown = 0;
+	let mut last_seen = w.store().map_or(0, |s| s.generation());
+	let edits = 120;
+	for i in 0..edits {
+		nudge(&mut project, part);
+		w.set_goal(goal(&project, 3 + i));
+		let until = started + Duration::from_millis((i + 1) * 1000 / 32);
+		while Instant::now() < until {
+			// A frame made shows until the next one: as the store's latest once its generation ends.
+			if let Some(store) = w.store()
+				&& store.generation() != last_seen
+			{
+				last_seen = store.generation();
+				shown += usize::from(store.latest().is_some());
+			}
+			std::thread::sleep(Duration::from_millis(1));
+		}
+	}
+	let last_edit = Instant::now();
+	let last = 2 + edits;
+	wait_until(|| w.status().adopted == last && store_has(&w, position / 2));
+	let lag = last_edit.elapsed();
+	println!(
+		"Example16 frame {position} at half resolution on the GPU, {wanted:?} wanted, {} moved: one frame {:.0} ms; {edits} edits at 32/s over {:.1} s: {shown} frames shown ({:.0} ms apart), the final frame {:.0} ms after the last edit ({:.1} frame times)",
+		if part { "a part" } else { "a source" },
+		frame_time.as_secs_f64() * 1e3,
+		started.elapsed().as_secs_f64(),
+		started.elapsed().as_secs_f64() * 1e3 / shown.max(1) as f64,
+		lag.as_secs_f64() * 1e3,
+		lag.as_secs_f64() / frame_time.as_secs_f64().max(1e-9)
+	);
+}
+
+fn nudge(project: &mut Project, part: bool) {
+	if part {
+		project.parts[0].base.x += 1;
+	} else {
+		project.sources[0].x += 1.0;
+	}
+}
+
+/// Where a part edit's time goes on Example16 at half resolution on the GPU: composing the scene pixels, the
+/// medium from them, the engine taking the new scene. Run with `--ignored --nocapture`.
+#[test]
+#[ignore]
+fn part_edit_cost() {
+	let path = std::path::Path::new("tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj");
+	let mut project = wavedude_core::io::load_project(path).unwrap();
+	let quality = PreviewQuality {
+		resolution_divisor: 2,
+		frame_divisor: 2,
+		format: SampleFormat::Index,
+		..PreviewQuality::DEFAULT
+	};
+	let mut cache = SceneCache::default();
+	let first = cache.spec(&project, quality, false).unwrap();
+	let mut engine = wavedude_core::engine::build(first.scene.clone(), first.options.clone(), true);
+	engine.set_emitters(&first.emitters);
+	let mut times = [0f64; 3];
+	let rounds = 10;
+	for _ in 0..rounds {
+		project.parts[0].base.x += 1;
+		let t = Instant::now();
+		let pixels = cache.pixels(&project).unwrap();
+		times[0] += t.elapsed().as_secs_f64();
+		let t = Instant::now();
+		let scene = Arc::new(RunSpec::scene_of(&project, Some(&pixels)).unwrap());
+		times[1] += t.elapsed().as_secs_f64();
+		let t = Instant::now();
+		assert!(engine.try_replace_scene(&scene));
+		engine.reset();
+		times[2] += t.elapsed().as_secs_f64();
+	}
+	println!(
+		"Example16 part edit, {}x{} canvas: compose {:.1} ms, medium {:.1} ms, scene into the GPU engine {:.1} ms",
+		project.scene.width,
+		project.scene.height,
+		times[0] * 1e3 / rounds as f64,
+		times[1] * 1e3 / rounds as f64,
+		times[2] * 1e3 / rounds as f64
+	);
 }

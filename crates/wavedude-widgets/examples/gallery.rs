@@ -73,8 +73,7 @@ fn app() -> impl IntoElement {
 		position: 0,
 		in_point: Some(20),
 		out_point: Some(200),
-		available: Some(180),
-		stale: false,
+		available: std::rc::Rc::from([(0, 180)]),
 		bounded: false,
 	});
 	let mut playing = use_state(|| false);

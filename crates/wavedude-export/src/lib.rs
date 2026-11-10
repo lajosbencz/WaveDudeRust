@@ -134,7 +134,7 @@ impl ExportLayers {
 
 /// Stored frames an export reads; the frame store implements it.
 pub trait FrameSource {
-	/// Frames held, frame k being the state after step `k * VisualizeEvery`.
+	/// Frames held, stored frame k being the state after step `k * CaptureEvery` (every frame at full quality).
 	fn frame_count(&self) -> usize;
 
 	/// Geometry and sample format of every plane.

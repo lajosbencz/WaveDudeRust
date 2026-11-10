@@ -46,17 +46,17 @@ fn shell(dir: &Path, prepare: impl FnOnce(&mut super::shared::App)) -> (TestingR
 	(test, handle.shared().expect("the root provided the state"))
 }
 
-/// Drives the shell until the scratch frame an open or edit requested has arrived, so later revisions are the test's own.
+/// Drives the shell until the frame an open or edit asked for has arrived, so later revisions are the test's own.
 fn settle(test: &mut TestingRunner, shared: &Shared) {
 	let deadline = Instant::now() + Duration::from_secs(60);
 	loop {
 		test.sync_and_update();
-		if !shared.peek(|a| a.live.scratch_pending()) {
+		if !shared.peek(|a| a.live.is_working() || a.live.fit_pending()) {
 			// The arrival's revisions reach the memos on the next pass.
 			test.sync_and_update();
 			return;
 		}
-		assert!(Instant::now() < deadline, "the scratch frame arrives");
+		assert!(Instant::now() < deadline, "the frame arrives");
 		std::thread::sleep(Duration::from_millis(10));
 	}
 }
@@ -139,4 +139,29 @@ fn every_form_binds_paths_its_object_has() {
 		}
 		assert!(BOUND.with_borrow(|b| !b.is_empty()), "{row:?} built no form");
 	}
+}
+
+/// The boxes sit in a zero-size layer over the picture; a press on one must still reach it.
+#[test]
+fn a_press_on_a_graph_box_selects_its_probe() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, shared) = shell(dir.path(), |app| {
+		app.settings.auto_rerun = false;
+		app.handle(AppEvent::Guarded(Guarded::Open(EXAMPLE.into())), Instant::now());
+	});
+	settle(&mut test, &shared);
+	let area = test
+		.find(|node, element| {
+			Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some("ProbeGraphBox:0"))?;
+			Some(node.layout().area)
+		})
+		.expect("the first probe's box is drawn");
+	assert!(area.width() > 20. && area.height() > 20., "the box has its size: {area:?}");
+	let at = (f64::from(area.center().x), f64::from(area.center().y));
+	assert!(shared.peek(|a| !a.selection.contains(ItemRef::new(ItemKind::Probe, 0))));
+	test.press_cursor(at);
+	test.sync_and_update();
+	test.release_cursor(at);
+	test.sync_and_update();
+	assert!(shared.peek(|a| a.selection.contains(ItemRef::new(ItemKind::Probe, 0))), "the press selected the probe");
 }

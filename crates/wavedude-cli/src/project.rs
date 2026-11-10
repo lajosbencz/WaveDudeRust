@@ -90,7 +90,8 @@ pub fn check(path: &Path) -> Result<()> {
 	println!("steps:        {} (a frame every {})", spec.steps, spec.visualize_every);
 	println!("frames:       {}", spec.frame_count());
 	println!("emitters:     {}, image sources {}", spec.emitters.len(), scene.image_sources.len());
-	println!("store, full:    {}", gib(spec.store_bytes_at(PreviewQuality::FULL)));
-	println!("store, default: {}", gib(spec.store_bytes_at(PreviewQuality::DEFAULT)));
+	let request = wavedude_core::run::RunRequest::new(&project, PreviewQuality::FULL, true);
+	println!("store, full:    {}", gib(request.store_bytes_at(PreviewQuality::FULL)));
+	println!("store, default: {}", gib(request.store_bytes_at(PreviewQuality::DEFAULT)));
 	Ok(())
 }

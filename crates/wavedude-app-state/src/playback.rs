@@ -1,5 +1,5 @@
-//! Playback: the position on the timeline in frames, speed, loop, the in/out points in steps and the band of
-//! available frames (docs/ui/50-timeline-transport.md).
+//! Playback: the position on the timeline in frames, speed, loop and the in/out points in steps
+//! (docs/ui/50-timeline-transport.md).
 //!
 //! The app's tick loop advances playback; it measures wall-clock time between ticks, so a late or skipped tick
 //! only accumulates. Threads: [`Playback`] lives on the UI thread.
@@ -29,13 +29,6 @@ impl Readout {
 	}
 }
 
-/// The frames a run has published, shaded on the timeline (grey while stale).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Available {
-	pub frames: u32,
-	pub stale: bool,
-}
-
 /// The timeline's state. Positions in frames, the in/out points in steps (as the project stores them).
 #[derive(Clone, Debug)]
 pub struct Playback {
@@ -48,7 +41,6 @@ pub struct Playback {
 	in_step: u32,
 	out_step: u32,
 	playing: bool,
-	available: Option<Available>,
 	last_tick: Option<Instant>,
 	carry: f64,
 }
@@ -65,7 +57,6 @@ impl Default for Playback {
 			in_step: 0,
 			out_step: 0,
 			playing: false,
-			available: None,
 			last_tick: None,
 			carry: 0.0,
 		}
@@ -256,14 +247,6 @@ impl Playback {
 	/// End: the out point (the end when unset).
 	pub fn end(&mut self) {
 		self.position = self.range_frames().1;
-	}
-
-	pub fn available(&self) -> Option<Available> {
-		self.available
-	}
-
-	pub fn set_available(&mut self, available: Option<Available>) {
-		self.available = available;
 	}
 }
 

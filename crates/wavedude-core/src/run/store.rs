@@ -6,19 +6,26 @@
 //! `0..first_spilled` live in memory as the snapshot written, its planes kept; the rest live in the spill file
 //! after its 64-byte header at `64 + (frame - first)*frame_bytes + layer_index*plane_bytes`.
 //!
-//! Threads: one writer appends frames in order ([`FrameStore::write`]); any thread may read a frame below
-//! [`FrameStore::count`] meanwhile. The capturing thread asks for the buffer of each next frame
-//! ([`FrameStore::next_buffer`]) and the engine captures into it, so a frame in memory is never copied. The
-//! memory frames are allocated and their pages touched ahead of the capture by a producer thread on a small
-//! rayon pool, after the memory the budget counts on has been released. A frame that cannot be allocated sends
-//! that frame and every later one to the file, whose frames reuse a few buffers. The file is deleted on drop.
+//! Frames are written by index, in any order ([`FrameStore::write_at`]); which are present is tracked per frame
+//! and as the contiguous prefix [`FrameStore::count`]. [`FrameStore::clear`] forgets every frame, keeps the
+//! buffers for the next generation and moves [`FrameStore::generation`], so a reader tells the frames of one
+//! project state from another's; the frame written last stays readable as [`FrameStore::latest`], so a burst of
+//! edits shows each frame made even when the next edit's generation has begun.
+//!
+//! Threads: one writer at a time; any thread may read a present frame meanwhile. The capturing thread asks for
+//! the buffer of a frame ([`FrameStore::buffer_for`]) and the engine captures into it, so a frame in memory is
+//! never copied. The memory frames are allocated and their pages touched ahead of the capture by a producer
+//! thread on a small rayon pool, after the memory the budget counts on has been released; cleared frames'
+//! buffers come back first. A frame that cannot be allocated sends that frame and every later one to the file
+//! while the file is empty, else it stays in memory; the file's frames reuse a few buffers. The file is deleted
+//! on drop.
 
 use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::thread::JoinHandle;
 
 use rayon::prelude::*;
@@ -45,7 +52,7 @@ const PAGE: usize = 4096;
 pub enum StoreError {
 	#[error("the store is full ({0} frames)")]
 	Full(usize),
-	#[error("frame {frame} is not stored yet ({count} are)")]
+	#[error("frame {frame} is not stored ({count} are)")]
 	NotStored { frame: usize, count: usize },
 	#[error("the store holds no {0:?} layer")]
 	NoLayer(Layer),
@@ -98,6 +105,25 @@ pub struct StoreLayout {
 }
 
 impl StoreLayout {
+	/// The same buffers serve: geometry, format, planes, frames and steps agree (the brightness baked into
+	/// index samples does not count, a cleared store takes the next generation's frames).
+	pub fn fits(&self, other: &Self) -> bool {
+		let geometry = |s: &Self| {
+			let f = s.shape;
+			(
+				f.canvas_width,
+				f.canvas_height,
+				f.divisor,
+				f.format,
+				f.intensity_root,
+				s.layers,
+				s.capacity,
+				s.capture_every,
+			)
+		};
+		geometry(self) == geometry(other)
+	}
+
 	pub fn frame_bytes(&self) -> usize {
 		self.layers.len() * self.shape.plane_bytes()
 	}
@@ -122,22 +148,40 @@ pub type Release = Box<dyn FnOnce() + Send>;
 pub struct FrameStore {
 	layout: StoreLayout,
 	ram_frames: usize,
-	blocks: Box<[OnceLock<Snapshot>]>,
+	/// Shared with readers, so a reader renders without the block's lock; a buffer whose reader is gone is reused.
+	blocks: Box<[Mutex<Option<Arc<Snapshot>>>]>,
 	/// Frames from here on go to the file: `ram_frames`, or the first frame the producer could not allocate.
 	memory_end: AtomicUsize,
-	/// Buffers handed out by [`next_buffer`](Self::next_buffer).
-	handed: AtomicUsize,
+	/// Cleared memory frames' buffers, for the memory frames of the next generation.
 	recycled: Mutex<Vec<Snapshot>>,
+	/// A few buffers for the frames that go to the file.
+	file_buffers: Mutex<Vec<Snapshot>>,
 	first_spilled: AtomicUsize,
 	spill: OnceLock<Spill>,
 	spill_dir: PathBuf,
-	count: AtomicUsize,
-	/// The capturing thread's end of the producer.
-	prepared: Mutex<Option<Receiver<Snapshot>>>,
-	/// Serialises writers.
+	present: Box<[AtomicBool]>,
+	/// Frames `0..prefix` are all present.
+	prefix: AtomicUsize,
+	present_count: AtomicUsize,
+	/// Frames in the file, so the file's first frame moves only while none is.
+	spilled_count: AtomicUsize,
+	generation: AtomicU64,
+	/// The frame written last; the capacity when none since the clear.
+	last_written: AtomicUsize,
+	/// The frame written last before the clear, with its index.
+	/// (stored index, generation it was made in, the frame).
+	latest: Mutex<Option<(usize, u64, Arc<Snapshot>)>>,
+	/// The capturing thread's end of the producer, and the blocks taken from it: all `ram_frames` taken means
+	/// the producer finished, fewer with the channel closed means its memory ran out.
+	prepared: Mutex<Option<(Receiver<Snapshot>, usize)>>,
+	/// Serialises writers and the clear.
 	writing: Mutex<()>,
 	cancel: Arc<AtomicBool>,
 	producer: Mutex<Option<JoinHandle<()>>>,
+}
+
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+	m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 impl FrameStore {
@@ -156,14 +200,20 @@ impl FrameStore {
 		let store = Self {
 			layout,
 			ram_frames,
-			blocks: (0..ram_frames).map(|_| OnceLock::new()).collect(),
+			blocks: (0..layout.capacity).map(|_| Mutex::new(None)).collect(),
 			memory_end: AtomicUsize::new(ram_frames),
-			handed: AtomicUsize::new(0),
 			recycled: Mutex::new(Vec::new()),
+			file_buffers: Mutex::new(Vec::new()),
 			first_spilled: AtomicUsize::new(layout.capacity),
 			spill: OnceLock::new(),
 			spill_dir: dir.to_path_buf(),
-			count: AtomicUsize::new(0),
+			present: (0..layout.capacity).map(|_| AtomicBool::new(false)).collect(),
+			prefix: AtomicUsize::new(0),
+			present_count: AtomicUsize::new(0),
+			spilled_count: AtomicUsize::new(0),
+			generation: AtomicU64::new(0),
+			last_written: AtomicUsize::new(layout.capacity),
+			latest: Mutex::new(None),
 			prepared: Mutex::new(None),
 			writing: Mutex::new(()),
 			cancel: cancel.clone(),
@@ -174,11 +224,11 @@ impl FrameStore {
 		}
 		if ram_frames > 0 {
 			let (tx, rx) = sync_channel(PREPARE_DEPTH);
-			*store.prepared.lock().unwrap() = Some(rx);
+			*lock(&store.prepared) = Some((rx, 0));
 			let handle = std::thread::Builder::new()
 				.name("frame-blocks".into())
 				.spawn(move || prepare_blocks(ram_frames, layout, release, tx, &cancel))?;
-			*store.producer.lock().unwrap() = Some(handle);
+			*lock(&store.producer) = Some(handle);
 		}
 		Ok(store)
 	}
@@ -203,9 +253,45 @@ impl FrameStore {
 		self.layout.frame_bytes()
 	}
 
-	/// Frames stored so far; frames below it are readable from any thread.
+	/// The contiguous frames from 0: every frame below it is present.
 	pub fn count(&self) -> usize {
-		self.count.load(Ordering::Acquire)
+		self.prefix.load(Ordering::Acquire)
+	}
+
+	/// Frames present, wherever they are.
+	pub fn present_count(&self) -> usize {
+		self.present_count.load(Ordering::Acquire)
+	}
+
+	pub fn is_complete(&self) -> bool {
+		self.present_count() == self.layout.capacity
+	}
+
+	/// Whether `frame` is present (readable from any thread).
+	pub fn has(&self, frame: usize) -> bool {
+		self.present.get(frame).is_some_and(|p| p.load(Ordering::Acquire))
+	}
+
+	/// The last frame of the present run starting at `frame`; `None` when `frame` is absent.
+	pub fn present_through(&self, frame: usize) -> Option<usize> {
+		if !self.has(frame) {
+			return None;
+		}
+		let mut last = frame;
+		while self.has(last + 1) {
+			last += 1;
+		}
+		Some(last)
+	}
+
+	/// The first absent frame at or after `frame`, if any.
+	pub fn first_missing_from(&self, frame: usize) -> Option<usize> {
+		(frame..self.layout.capacity).find(|&f| !self.has(f))
+	}
+
+	/// Moves at every [`clear`](Self::clear): the frames present belong to this generation.
+	pub fn generation(&self) -> u64 {
+		self.generation.load(Ordering::Acquire)
 	}
 
 	/// Frames the budget planned for memory.
@@ -219,11 +305,11 @@ impl FrameStore {
 	}
 
 	pub fn frames_in_memory(&self) -> usize {
-		self.count().min(self.first_spilled())
+		self.present_count() - self.frames_on_disk()
 	}
 
 	pub fn frames_on_disk(&self) -> usize {
-		self.count().saturating_sub(self.first_spilled())
+		self.spilled_count.load(Ordering::Acquire)
 	}
 
 	/// Bytes of memory the store holds or plans to hold.
@@ -246,9 +332,9 @@ impl FrameStore {
 	}
 
 	/// Makes frame `first` the first of the file: created at the budget's frame count, moved down to an
-	/// earlier frame when its memory could not be allocated, which happens before any frame was spilled.
+	/// earlier frame when its memory could not be allocated, which happens while the file is empty.
 	fn start_spill(&self, first: usize) -> io::Result<()> {
-		debug_assert!(self.count() <= first, "the file is empty when its first frame moves");
+		debug_assert!(self.frames_on_disk() == 0, "the file is empty when its first frame moves");
 		let layout = &self.layout;
 		let spill = match self.spill.get() {
 			Some(spill) => spill,
@@ -269,27 +355,55 @@ impl FrameStore {
 		Ok(())
 	}
 
-	/// The buffer to capture the next frame into, in frame order: the next prepared memory frame while the
-	/// frames go to memory (waiting for the producer), else a recycled or new one. Called once per frame by the
-	/// one capturing thread, each buffer then written with [`write`](Self::write).
-	pub fn next_buffer(&self) -> Snapshot {
-		let frame = self.handed.fetch_add(1, Ordering::Relaxed);
-		if frame < self.memory_end.load(Ordering::Acquire) {
-			let mut prepared = self.prepared.lock().unwrap();
-			if let Some(block) = prepared.as_ref().and_then(|rx| rx.recv().ok()) {
+	/// The buffer to capture frame `frame` into: a cleared frame's buffer or the next prepared memory frame
+	/// while the frames go to memory (waiting for the producer), else a recycled or new one. Each buffer is
+	/// then written with [`write_at`](Self::write_at).
+	pub fn buffer_for(&self, frame: usize) -> Snapshot {
+		if frame < self.first_spilled() {
+			if let Some(block) = lock(&self.recycled).pop() {
 				return block;
 			}
-			*prepared = None;
-			self.memory_end.fetch_min(frame, Ordering::AcqRel);
+			if frame < self.memory_end.load(Ordering::Acquire) {
+				let mut prepared = lock(&self.prepared);
+				if let Some((rx, taken)) = prepared.as_mut() {
+					match rx.recv() {
+						Ok(block) => {
+							*taken += 1;
+							return block;
+						}
+						Err(_) => {
+							let exhausted = *taken < self.ram_frames;
+							*prepared = None;
+							if exhausted {
+								self.memory_end.fetch_min(frame, Ordering::AcqRel);
+							}
+						}
+					}
+				}
+				if frame < self.memory_end.load(Ordering::Acquire) {
+					return Snapshot::new(self.layout.shape);
+				}
+			}
 		}
-		self.recycled.lock().unwrap().pop().unwrap_or_else(|| Snapshot::new(self.layout.shape))
+		lock(&self.file_buffers).pop().unwrap_or_else(|| Snapshot::new(self.layout.shape))
 	}
 
-	/// Appends `snapshot` (its planes in the store's shape) as the next frame: kept as it is while the frames
-	/// go to memory, else written to the file and its buffer recycled.
-	pub fn write(&self, mut snapshot: Snapshot) -> Result<usize, StoreError> {
-		let _writing = self.writing.lock().unwrap();
-		let frame = self.count.load(Ordering::Relaxed);
+	/// [`buffer_for`](Self::buffer_for) the frame an append ([`write`](Self::write)) lands on.
+	pub fn next_buffer(&self) -> Snapshot {
+		self.buffer_for(self.count())
+	}
+
+	/// Appends `snapshot` as the frame after the contiguous prefix; returns its index.
+	pub fn write(&self, snapshot: Snapshot) -> Result<usize, StoreError> {
+		let frame = self.count();
+		self.write_at(frame, snapshot)?;
+		Ok(frame)
+	}
+
+	/// Stores `snapshot` (its planes in the store's shape) as frame `frame`: kept as it is while the frame
+	/// belongs in memory, else written to the file and its buffer recycled. A present frame is left as it is.
+	pub fn write_at(&self, frame: usize, mut snapshot: Snapshot) -> Result<(), StoreError> {
+		let _writing = lock(&self.writing);
 		if frame >= self.layout.capacity {
 			return Err(StoreError::Full(self.layout.capacity));
 		}
@@ -301,36 +415,109 @@ impl FrameStore {
 		if !same || self.layout.layers.iter().any(|&l| snapshot.plane(l).len() != plane) {
 			return Err(StoreError::ShapeMismatch);
 		}
+		if self.has(frame) {
+			self.give_back(frame, snapshot);
+			return Ok(());
+		}
 		if !self.layout.layers.contains(&Layer::Intensity) {
 			snapshot.intensity = Vec::new();
 		}
-		if frame < self.memory_end.load(Ordering::Acquire) {
-			assert!(self.blocks[frame].set(snapshot).is_ok(), "each frame is written once");
+		let memory_end = self.memory_end.load(Ordering::Acquire);
+		if frame >= memory_end && frame < self.first_spilled() && self.frames_on_disk() == 0 {
+			tracing::debug!(frame, "frame memory exhausted, the rest goes to the file");
+			self.start_spill(frame)?;
+		}
+		if frame < self.first_spilled() {
+			*lock(&self.blocks[frame]) = Some(Arc::new(snapshot));
 		} else {
-			if frame < self.first_spilled() {
-				tracing::debug!(frame, "frame memory exhausted, the rest goes to the file");
-				self.start_spill(frame)?;
-			}
 			let spill = self.spill.get().expect("spill file exists past the first spilled frame");
 			let mut at = self.file_offset(spill, frame);
 			for &layer in self.layout.layers {
 				write_at(spill.file.as_file(), snapshot.plane(layer), at)?;
 				at += plane as u64;
 			}
-			let mut recycled = self.recycled.lock().unwrap();
-			if recycled.len() < RECYCLED {
+			self.spilled_count.fetch_add(1, Ordering::AcqRel);
+			self.give_back(frame, snapshot);
+		}
+		self.present[frame].store(true, Ordering::Release);
+		self.present_count.fetch_add(1, Ordering::AcqRel);
+		self.last_written.store(frame, Ordering::Release);
+		let mut prefix = self.prefix.load(Ordering::Acquire);
+		while prefix < self.layout.capacity && self.has(prefix) {
+			prefix += 1;
+		}
+		self.prefix.store(prefix, Ordering::Release);
+		Ok(())
+	}
+
+	/// Returns a buffer [`buffer_for`](Self::buffer_for) handed out for `frame` that was not kept, to the pool
+	/// it came from: the memory frames' below `memory_end`, the file's few above.
+	fn give_back(&self, frame: usize, snapshot: Snapshot) {
+		if frame < self.memory_end.load(Ordering::Acquire) {
+			lock(&self.recycled).push(snapshot);
+			return;
+		}
+		let mut buffers = lock(&self.file_buffers);
+		if buffers.len() < RECYCLED {
+			buffers.push(snapshot);
+		}
+	}
+
+	/// Forgets every frame and moves the generation; the memory frames' buffers serve the next writes, but the
+	/// frame written last stays as [`latest`](Self::latest).
+	pub fn clear(&self) {
+		let _writing = lock(&self.writing);
+		let mut recycled = lock(&self.recycled);
+		let last = self.last_written.swap(self.layout.capacity, Ordering::AcqRel);
+		let kept = self.present.get(last).is_some_and(|p| p.swap(false, Ordering::AcqRel)).then(|| {
+			lock(&self.blocks[last]).take().or_else(|| {
+				let mut snapshot = Snapshot::new(self.layout.shape);
+				for (index, &layer) in self.layout.layers.iter().enumerate() {
+					let plane = match layer {
+						Layer::Field => &mut snapshot.field,
+						Layer::Intensity => &mut snapshot.intensity,
+					};
+					plane.resize(self.layout.shape.plane_bytes(), 0);
+					if self.read_spilled(last, index, plane).is_err() {
+						return None;
+					}
+				}
+				snapshot.step = self.step_of(last) as u32;
+				Some(Arc::new(snapshot))
+			})
+		});
+		let from = self.generation.load(Ordering::Acquire);
+		let mut latest = lock(&self.latest);
+		if let Some((_, _, old)) = latest.take()
+			&& let Ok(snapshot) = Arc::try_unwrap(old)
+		{
+			recycled.push(snapshot);
+		}
+		*latest = kept.flatten().map(|s| (last, from, s));
+		for (frame, block) in self.blocks.iter().enumerate() {
+			self.present[frame].store(false, Ordering::Release);
+			if let Some(snapshot) = lock(block).take()
+				&& let Ok(snapshot) = Arc::try_unwrap(snapshot)
+			{
 				recycled.push(snapshot);
 			}
 		}
-		self.count.store(frame + 1, Ordering::Release);
-		Ok(frame)
+		self.prefix.store(0, Ordering::Release);
+		self.present_count.store(0, Ordering::Release);
+		self.spilled_count.store(0, Ordering::Release);
+		self.generation.fetch_add(1, Ordering::AcqRel);
+	}
+
+	/// The frame written last before the last clear, with its index: the picture of the previous project state.
+	pub fn latest(&self) -> Option<(usize, u64, Arc<Snapshot>)> {
+		lock(&self.latest).clone()
 	}
 
 	fn file_offset(&self, spill: &Spill, frame: usize) -> u64 {
 		HEADER_BYTES + (frame - spill.first.load(Ordering::Acquire)) as u64 * self.frame_bytes() as u64
 	}
 
-	/// Calls `f` with the plane of `layer` of stored frame `frame`.
+	/// Calls `f` with the plane of `layer` of present frame `frame`.
 	pub fn with_layer<R>(&self, frame: usize, layer: Layer, f: impl FnOnce(&[u8]) -> R) -> Result<R, StoreError> {
 		self.with_layer_into(frame, layer, &mut Vec::new(), f)
 	}
@@ -344,37 +531,51 @@ impl FrameStore {
 		f: impl FnOnce(&[u8]) -> R,
 	) -> Result<R, StoreError> {
 		let (index, plane) = self.locate(frame, layer)?;
-		if let Some(block) = self.blocks.get(frame).and_then(OnceLock::get) {
+		if let Some(block) = lock(&self.blocks[frame]).clone() {
 			return Ok(f(block.plane(self.layout.layers[index])));
 		}
 		buf.resize(plane, 0);
-		self.read_spilled(frame, index, buf)?;
+		self.read_spilled_frame(frame, index, buf)?;
 		Ok(f(buf))
 	}
 
-	/// Copies the plane of `layer` of stored frame `frame` into `out`, which must hold one plane.
-	pub fn read_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<(), StoreError> {
-		let (index, plane) = self.locate(frame, layer)?;
-		assert_eq!(out.len(), plane, "the buffer holds one plane");
-		match self.blocks.get(frame).and_then(OnceLock::get) {
-			Some(block) => out.copy_from_slice(block.plane(self.layout.layers[index])),
-			None => self.read_spilled(frame, index, out)?,
+	/// Reads a spilled frame's plane, refused when the frame is not on the file or a clear ran meanwhile (the
+	/// next generation may have written the same slot).
+	fn read_spilled_frame(&self, frame: usize, index: usize, out: &mut [u8]) -> Result<(), StoreError> {
+		let not_stored = || StoreError::NotStored { frame, count: self.present_count() };
+		let generation = self.generation();
+		if !self.has(frame) || frame < self.first_spilled() {
+			return Err(not_stored());
+		}
+		self.read_spilled(frame, index, out)?;
+		if !self.has(frame) || self.generation() != generation {
+			return Err(not_stored());
 		}
 		Ok(())
 	}
 
-	/// A copy of the plane of `layer` of stored frame `frame`.
+	/// Copies the plane of `layer` of present frame `frame` into `out`, which must hold one plane.
+	pub fn read_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<(), StoreError> {
+		let (index, plane) = self.locate(frame, layer)?;
+		assert_eq!(out.len(), plane, "the buffer holds one plane");
+		match lock(&self.blocks[frame]).clone() {
+			Some(block) => out.copy_from_slice(block.plane(self.layout.layers[index])),
+			None => self.read_spilled_frame(frame, index, out)?,
+		}
+		Ok(())
+	}
+
+	/// A copy of the plane of `layer` of present frame `frame`.
 	pub fn copy_layer(&self, frame: usize, layer: Layer) -> Result<Vec<u8>, StoreError> {
 		let mut out = vec![0; self.layout.shape.plane_bytes()];
 		self.read_layer(frame, layer, &mut out)?;
 		Ok(out)
 	}
 
-	/// The layer's index in a frame and the plane's bytes, for a stored frame.
+	/// The layer's index in a frame and the plane's bytes, for a present frame.
 	fn locate(&self, frame: usize, layer: Layer) -> Result<(usize, usize), StoreError> {
-		let count = self.count();
-		if frame >= count {
-			return Err(StoreError::NotStored { frame, count });
+		if !self.has(frame) {
+			return Err(StoreError::NotStored { frame, count: self.present_count() });
 		}
 		Ok((self.layer_index(layer)?, self.layout.shape.plane_bytes()))
 	}
@@ -389,8 +590,8 @@ impl Drop for FrameStore {
 	fn drop(&mut self) {
 		self.cancel.store(true, Ordering::Relaxed);
 		// The producer may wait on a full channel: dropping the receiver ends it.
-		self.prepared.get_mut().unwrap().take();
-		if let Some(handle) = self.producer.get_mut().unwrap().take() {
+		self.prepared.get_mut().unwrap_or_else(PoisonError::into_inner).take();
+		if let Some(handle) = self.producer.get_mut().unwrap_or_else(PoisonError::into_inner).take() {
 			let _ = handle.join();
 		}
 	}

@@ -67,6 +67,36 @@ overhead; nothing cheaper than those was found, so the figures stand.
 
 Most of a `.wdproj` is its DOCTYPE (about 15 KB); the elements alone are still 2 to 4 times the container.
 
+## The live run
+
+2026-11-09, `cargo test -p wavedude-core --test run --release -- --ignored --nocapture live_run_drag_burst_timing`:
+Example16 at half resolution, 8-bit samples, on the GPU; the source moved by a pixel 120 times at 32 edits a
+second, the position at frame 100; the position's frame alone wanted, and every frame (the 50 stored frames
+before the position captured on the way).
+
+| | source moved, position alone | source moved, every frame | part moved, every frame |
+|---|---|---|---|
+| one frame from step 0 | 25 ms | 23 ms | 88 ms |
+| frames shown during the 3.8 s burst | 120, one per edit | 120, one per edit | 1 |
+| the final frame after the last edit | under 1 ms | 21 ms (0.9 frame times) | 86 ms (1.0 frame times) |
+
+A part edit recomposes the scene and gives the engine the new medium; at 32 edits a second no frame of a mid-drag
+state completes, the picture follows one frame time after the hand rests. Where the time goes
+(`part_edit_cost`, Example16, 1500x900 canvas): composing the scene pixels 5.9 ms, the medium from them 2.7 ms,
+the GPU engine taking the new scene 31.6 ms (the medium's layout built on the CPU and uploaded); the next target
+for a lighter part drag is that upload.
+
+Before the engine was kept across edits (rebuilt per edit, 45 to 55 ms): one frame 64 to 70 ms, 59 frames
+shown during the burst.
+
+The captures on the way are hidden behind the steps: a single pass fills the timeline in order at no cost to
+the frame under the cursor. Work is done for the current project alone: a frame of a mid-drag state lands only
+when it is done before the next edit, as here; a slower frame is left and the picture follows once the hand
+rests, one frame time later.
+
+Before (scratch frames abandoned for a newer request within 16 steps, a 120 ms debounce): the same during the
+drag, the debounce on top once the hand rested.
+
 ## Other operations
 
 2026-11-06 unless noted.

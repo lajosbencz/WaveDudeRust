@@ -26,7 +26,11 @@ active non-Amplitude probe, or an export of the intensity).
 
 Run state progression: Created -> Running -> (Paused) -> Completed | Cancelled | Failed (Rust: the typed error, the
 frame store's, the engine's, a thread that could not start, or a panic with its message). A completed run's frames are
-immutable. A simulation edit marks the run stale; a stale run is never exported.
+immutable. A simulation edit replaces the frames (Rust: the live run's store is cleared and refilled, spec/30 The live
+run); an export needs the frames of the project as it is.
+
+Rust's frame store takes frames by index in any order and tracks which are present (a per-frame flag and the
+contiguous prefix); a cleared store keeps its buffers for the next generation and the frame written last.
 
 Export run rule: an export needs a run with `Full` quality (divisor 1, every frame, f16 samples, current, complete);
 otherwise a fresh full-quality run is made first. `.exr` of I needs a run with `IntensityRoot = false`.
@@ -108,7 +112,8 @@ Then frames `first..Capacity-1`, each `layers * PlaneBytes`, planes in layer ord
 
 Readers: any thread may read a frame `< Count` while the single writer appends. `CopyLayer(frame, layer)` returns the
 plane bytes. Rust: `read_layer` copies a plane into the caller's buffer, `with_layer_into` lends it (a frame in memory
-in place, a spilled one read into a caller's buffer reused across calls).
+shared with the reader, so no lock is held while it renders; a spilled one read into a caller's buffer reused across
+calls, refused when a clear ran meanwhile).
 
 Memory warning (`RunSpec.StoreBytesAt`): a preview run whose store exceeds the budget asks first (UI); levers are the
 RAM cache to Auto and three quality steps (resolution / 2, frames / 2, 8-bit).
@@ -194,4 +199,4 @@ b = clamp(1/top, 1e-4, 1e5)
 digits = 2 - floor(log10(b))
 b = digits >= 0 ? round_even(b, digits) : round_even(b / 10^-digits) * 10^-digits
 ```
-An Index frame is first recomputed as f16 (scratch at full quality).
+An Index frame is first recomputed as f16 by the live run (a fit frame at the preview's resolution).

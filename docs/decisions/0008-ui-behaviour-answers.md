@@ -37,3 +37,6 @@ Status: accepted, 2026-11-05 (the user's answers; defaults where marked)
 15. The manual's figures are screenshots of this program without numbered badges; the lists under them name
     the controls in reading order.
 16. The MP4 export has no hardware encoder (decision 0005).
+17. The live preview is one goal-driven run instead of a scratch runner beside the run, without the debounce and
+    quiet timers; an edit replaces the frames rather than leaving a stale run (decision 0012). The register of all
+    divergences is `docs/divergences.md`.

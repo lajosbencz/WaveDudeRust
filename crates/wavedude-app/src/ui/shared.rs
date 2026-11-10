@@ -34,8 +34,8 @@ impl Topics {
 	pub const SETTINGS: Self = Self(16);
 	/// A run's steps done and published frames: every tick of a run.
 	pub const PROGRESS: Self = Self(32);
-	/// A scratch frame in flight.
-	pub const SCRATCH: Self = Self(64);
+	/// The live run's work: stepping or not, and towards which frame.
+	pub const WORK: Self = Self(64);
 
 	fn has(self, other: Self) -> bool {
 		self.0 & other.0 != 0
@@ -57,7 +57,7 @@ struct Signals {
 	selection: State<u64>,
 	playback: State<u64>,
 	progress: State<u64>,
-	scratch: State<u64>,
+	work: State<u64>,
 	run: State<u64>,
 	settings: State<u64>,
 }
@@ -69,7 +69,7 @@ impl Signals {
 			(Topics::SELECTION, self.selection),
 			(Topics::PLAYBACK, self.playback),
 			(Topics::PROGRESS, self.progress),
-			(Topics::SCRATCH, self.scratch),
+			(Topics::WORK, self.work),
 			(Topics::RUN, self.run),
 			(Topics::SETTINGS, self.settings),
 		];
@@ -86,7 +86,7 @@ impl Signals {
 			(self.selection, r.selection),
 			(self.playback, r.playback),
 			(self.progress, r.progress),
-			(self.scratch, r.scratch),
+			(self.work, r.work),
 			(self.run, r.run),
 			(self.settings, r.settings),
 		];
@@ -118,7 +118,7 @@ impl Shared {
 			selection: use_state(|| r.selection),
 			playback: use_state(|| r.playback),
 			progress: use_state(|| r.progress),
-			scratch: use_state(|| r.scratch),
+			work: use_state(|| r.work),
 			run: use_state(|| r.run),
 			settings: use_state(|| r.settings),
 		};

@@ -208,6 +208,16 @@ impl Ui {
 		waiting.write().push_back(modal);
 	}
 
+	/// Drops the memory warning, open or queued: the edit it asked about is gone.
+	pub fn drop_memory_warning(&self) {
+		let warning = |w: &Modal| matches!(w, Modal::MemoryWarning);
+		let mut waiting = self.waiting;
+		waiting.write().retain(|w| !warning(w));
+		if self.modal.peek().as_ref().is_some_and(warning) {
+			self.close_modal();
+		}
+	}
+
 	/// Closes the modal open; the next queued one shows.
 	pub fn close_modal(&self) {
 		let mut waiting = self.waiting;
@@ -374,8 +384,8 @@ async fn tick_loop(cx: Cx, mut theme: State<Theme>) {
 		}
 		let busy = cx.shared.peek(|a| {
 			a.live.run_is_progressing()
-				|| a.live.scratch_pending()
-				|| a.live.rerun_due().is_some()
+				|| a.live.is_working()
+				|| a.live.fit_pending()
 				|| a.live.playback.is_playing()
 				|| a.document.history.has_pending()
 		}) || cx.ui.export.peek().is_some();
@@ -429,6 +439,7 @@ fn sync_platform(cx: &Cx, applied: &mut Applied, theme: &mut State<Theme>) {
 fn on_notice(cx: &Cx, notice: &Notice) {
 	match notice {
 		Notice::AskMemoryWarning => cx.ui.show_modal(Modal::MemoryWarning),
+		Notice::WarningDropped => cx.ui.drop_memory_warning(),
 		Notice::ExportReady => export_dialog::run_ready(cx),
 		Notice::ExportStopped => export_dialog::run_stopped(cx),
 		Notice::RunFailed { message, no_image } => {

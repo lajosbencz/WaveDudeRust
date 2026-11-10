@@ -23,11 +23,13 @@ use super::store::{FrameStore, StoreError};
 const HEARTBEAT: Duration = Duration::from_millis(33);
 const WRITE_QUEUE: usize = 2;
 
-/// Why a run or a scratch frame failed.
+/// Why a run failed.
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
 	#[error("frame store: {0}")]
 	Store(#[from] StoreError),
+	#[error("{0}")]
+	Spec(#[from] super::spec::RunSpecError),
 	#[error("engine: {0}")]
 	Engine(#[from] EngineError),
 	#[error("could not start a thread: {0}")]

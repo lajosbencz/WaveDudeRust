@@ -808,6 +808,11 @@ impl WaveEngine for GpuEngine {
 		true
 	}
 
+	/// The stages are allocated either way; the flag picks the kernels and the captured planes.
+	fn set_track_intensity(&mut self, on: bool) {
+		self.options.track_intensity = on;
+	}
+
 	fn advance_one_step(&mut self) -> Result<(), EngineError> {
 		self.guarded(Self::step)
 	}

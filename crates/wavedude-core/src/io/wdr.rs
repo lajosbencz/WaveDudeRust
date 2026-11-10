@@ -111,7 +111,7 @@ pub fn read_bytes(bytes: &[u8]) -> std::result::Result<Loaded, FormatError> {
 			.map_err(bad)?
 			.read_to_end(&mut data)
 			.map_err(|e| FormatError::new(format!("cannot read {name}: {e}")))?;
-		project.scene.image_data = Some(data);
+		project.scene.image_data = Some(data.into());
 	}
 	project.normalize();
 	Ok(Loaded { project, notes })
@@ -187,7 +187,7 @@ mod tests {
 		let mut p = Project { seed: 42, description: "d".into(), ..Project::default() };
 		p.scene.mode = SceneMode::Image;
 		p.scene.image = "a.png".into();
-		p.scene.image_data = Some(png(17, 9));
+		p.scene.image_data = Some(png(17, 9).into());
 		p.add_source();
 		p.add_part(PartKind::Lens(Lens::default()));
 		p.add_probe();

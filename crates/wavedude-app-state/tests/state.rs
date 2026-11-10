@@ -8,14 +8,15 @@ use serde_json::json;
 use wavedude_app_state::clipboard::PasteTarget;
 use wavedude_app_state::commands::{Command, NewPart, Target};
 use wavedude_app_state::history::History;
+use wavedude_app_state::live::Notice;
 use wavedude_app_state::live::fake::FakeBackend;
-use wavedude_app_state::live::{Notice, RunKind, Shown};
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::Settings;
 use wavedude_app_state::{AppState, Event, ExportKind, Guarded, Response, SaveChoice};
 use wavedude_core::io::wdproj;
 use wavedude_core::model::Point;
 use wavedude_core::run::MachineFacts;
+use wavedude_core::run::Wanted;
 
 fn app() -> AppState<FakeBackend> {
 	let mut s =
@@ -26,6 +27,7 @@ fn app() -> AppState<FakeBackend> {
 	s.document.project.simulation.steps = 100;
 	s.document.history = History::new(&s.document.project);
 	s.live.project_replaced(&s.document.project, t);
+	s.tick(t);
 	s
 }
 
@@ -85,30 +87,27 @@ fn a_drag_is_one_step() {
 }
 
 #[test]
-fn edits_drive_scratch_frames_and_the_automatic_rerun() {
+fn edits_want_every_frame_until_the_setting_says_otherwise() {
 	let t = Instant::now();
 	let mut s = app();
 	s.tick(t);
-	s.live.backend_mut().finish_scratch();
+	assert_eq!(s.live.backend().wanted(), Wanted::Position, "an opened project wants its first frame alone");
+	s.live.backend_mut().finish_position();
 	s.tick(t);
-	let requests = s.live.backend().scratch_requests.len();
 	s.handle(Event::Command(Command::AddPart { kind: NewPart::Rectangle, at: Some(Point::new(10, 10)) }), at(t, 100));
-	s.tick(at(t, 219));
-	assert_eq!(s.live.backend().scratch_requests.len(), requests);
-	s.tick(at(t, 220));
-	assert_eq!(s.live.backend().scratch_requests.len(), requests + 1);
-	s.live.backend_mut().finish_scratch();
-	s.tick(at(t, 1599));
-	assert!(s.live.backend().runs.is_empty());
-	s.tick(at(t, 1600));
-	assert_eq!(s.live.run_kind(), Some(RunKind::Automatic));
+	assert_eq!(s.live.backend().wanted(), Wanted::All, "an edit asks for every frame at once");
+	s.tick(at(t, 110));
+	assert!(s.run_status().starts_with("Running"), "{}", s.run_status());
+	s.live.backend_mut().complete();
+	s.tick(at(t, 120));
+	assert!(s.run_status().starts_with("Completed"), "{}", s.run_status());
 	s.handle(Event::SetAutoRerun(false), at(t, 1700));
-	s.handle(Event::Command(Command::ToggleEnabled { target: ItemRef::new(ItemKind::Part, 0) }), at(t, 1800));
-	assert!(s.live.run_is_stale());
-	s.live.backend_mut().finish_scratch();
-	s.tick(at(t, 5000));
-	assert_eq!(s.live.backend().runs.len(), 1, "no re-run with the setting off");
-	assert!(s.run_status().ends_with(", edited since"), "{}", s.run_status());
+	// The scripted backend's scene has no pixels, so a part edit leaves its frames; a source changes them.
+	s.handle(Event::Command(Command::AddSource { at: None }), at(t, 1800));
+	assert_eq!(s.live.backend().wanted(), Wanted::Position, "no re-run with the setting off");
+	s.live.backend_mut().finish_position();
+	s.tick(at(t, 1900));
+	assert!(s.run_status().starts_with("Stopped"), "{}", s.run_status());
 }
 
 #[test]
@@ -117,14 +116,14 @@ fn user_run_follows_and_a_scrub_turns_live_off() {
 	let mut s = app();
 	s.handle(Event::Run, t);
 	assert!(s.live.is_live());
-	s.live.backend().last_run().publish(20);
+	s.live.backend_mut().publish(20);
 	s.tick(at(t, 10));
 	assert_eq!(s.live.playback.position(), 19);
-	assert!(s.live.take_notices().contains(&Notice::ShowRunFrame(19)));
+	assert!(s.live.take_notices().contains(&Notice::ShowFrame(19)));
 	s.handle(Event::Scrub(5), at(t, 20));
 	assert!(!s.live.is_live() && !s.live.playback.is_playing());
 	s.tick(at(t, 30));
-	assert!(s.live.take_notices().contains(&Notice::ShowRunFrame(5)), "the store can show frame 5");
+	assert!(s.live.take_notices().contains(&Notice::ShowFrame(5)), "the store can show frame 5");
 	s.handle(Event::SetInPoint, at(t, 40));
 	assert_eq!(s.document.project.display.export_from, 10, "in point stored in steps");
 	assert!(s.document.dirty);
@@ -291,18 +290,16 @@ fn an_imported_project_gets_its_brightness_fitted_once() {
 	let original = s.document.project.display.clone();
 	assert_eq!((original.field.brightness, original.intensity.brightness), (30.0, 30.0));
 	s.tick(t);
-	s.live.backend_mut().finish_scratch_uniform(0.0, 0.0);
+	s.live.backend_mut().finish_frame_uniform(0, 0.0, 0.0);
 	s.tick(at(t, 10));
 	assert_eq!(s.document.project.display, original, "a dark frame has nothing to fit");
 	s.live.scrub(20, at(t, 20));
-	s.tick(at(t, 200));
-	let requests = s.live.backend().scratch_requests.len();
-	s.live.backend_mut().finish_scratch_uniform(0.5, 0.0625);
+	s.live.backend_mut().finish_frame_uniform(20, 0.5, 0.0625);
 	s.tick(at(t, 210));
-	assert_eq!(s.live.backend().scratch_requests.len(), requests + 1, "an 8-bit frame is computed again in 16-bit");
+	assert_eq!(s.live.backend().goal().fit.map(|f| f.frame), Some(20), "an 8-bit frame is computed again in 16-bit");
 	s.tick(at(t, 220));
-	assert_eq!(s.live.backend().scratch_requests.len(), requests + 1, "asked once per frame");
-	s.live.backend_mut().finish_scratch_uniform(0.5, 0.0625);
+	assert_eq!(s.live.backend().fits_served.len(), 0);
+	s.live.backend_mut().finish_fit_uniform(0.5, 0.0625);
 	s.tick(at(t, 230));
 	let d = &s.document.project.display;
 	assert_eq!((d.field.brightness, d.intensity.brightness), (2.0, 4.0));
@@ -311,10 +308,10 @@ fn an_imported_project_gets_its_brightness_fitted_once() {
 	assert_eq!(s.document.history.len(), 1);
 	assert!(!s.document.history.can_undo(), "the fit is no history step");
 	s.live.scrub(30, at(t, 300));
-	s.tick(at(t, 500));
-	s.live.backend_mut().finish_scratch_uniform(0.1, 0.01);
+	s.live.backend_mut().finish_frame_uniform(30, 0.1, 0.01);
 	s.tick(at(t, 510));
 	assert_eq!(s.document.project.display.field.brightness, 2.0, "fitted once");
+	assert!(s.live.backend().goal().fit.is_none());
 	s.handle(Event::Command(Command::AddSource { at: None }), at(t, 600));
 	s.handle(Event::Undo, at(t, 700));
 	assert_eq!(s.document.project.display.field.brightness, 2.0, "an undo keeps the fit");
@@ -326,20 +323,19 @@ fn the_open_fit_neither_follows_the_position_nor_shows_its_frame() {
 	let mut s = open_written(dir.path(), "old.wdproj");
 	let t = Instant::now();
 	s.live.scrub(20, t);
-	s.tick(at(t, 200));
-	s.live.backend_mut().finish_scratch_uniform(0.5, 0.0625);
+	s.live.backend_mut().finish_frame_uniform(20, 0.5, 0.0625);
 	s.tick(at(t, 210));
-	let requests = s.live.backend().scratch_requests.len();
-	assert_eq!(s.live.shown(), Some(Shown::Scratch(20)));
+	assert_eq!(s.live.shown(), Some(20));
+	let fit = s.live.backend().goal().fit.expect("the fit was asked for");
 	for (i, frame) in (30..80).step_by(10).enumerate() {
 		s.live.scrub(frame, at(t, 220 + i as u64));
 		s.tick(at(t, 220 + i as u64));
 	}
-	assert_eq!(s.live.backend().scratch_requests.len(), requests, "one fit request, not one per position");
-	s.live.backend_mut().finish_scratch_uniform(0.5, 0.0625);
+	assert_eq!(s.live.backend().goal().fit, Some(fit), "one fit request, not one per position");
+	s.live.backend_mut().finish_fit_uniform(0.5, 0.0625);
 	s.tick(at(t, 300));
 	assert!(!s.document.needs_brightness_fit, "fitted from its frame although the position moved");
-	assert_eq!(s.live.shown(), Some(Shown::Scratch(20)), "the fit's frame is never shown");
+	assert_eq!(s.live.shown(), Some(20), "the fit's frame is never shown");
 }
 
 #[test]
@@ -356,11 +352,11 @@ fn a_project_this_program_wrote_is_not_fitted() {
 		assert!(!s.document.needs_brightness_fit);
 		let before = s.document.project.display.clone();
 		s.live.scrub(20, t);
-		s.tick(at(t, 200));
-		s.live.backend_mut().finish_scratch_uniform(0.5, 0.0625);
+		s.live.backend_mut().finish_frame_uniform(20, 0.5, 0.0625);
 		s.tick(at(t, 210));
 		s.tick(at(t, 220));
 		assert_eq!(s.document.project.display, before);
+		assert!(s.live.backend().goal().fit.is_none());
 	}
 }
 
@@ -369,8 +365,7 @@ fn a_playback_tick_moves_the_playback_revision_alone() {
 	let t = Instant::now();
 	let mut s = app();
 	s.handle(Event::Run, t);
-	s.live.backend().last_run().publish(50);
-	s.live.backend().last_run().complete();
+	s.live.backend_mut().complete();
 	s.tick(at(t, 10));
 	s.handle(Event::Scrub(0), at(t, 20));
 	s.handle(Event::Play, at(t, 30));
@@ -395,19 +390,19 @@ fn a_running_run_moves_the_progress_revision_alone() {
 	s.handle(Event::Run, t);
 	s.tick(at(t, 10));
 	s.handle(Event::Scrub(0), at(t, 20));
-	s.live.backend().last_run().publish(1);
+	s.live.backend_mut().publish(1);
 	s.tick(at(t, 200));
 	s.tick(at(t, 210));
 	let before = s.revisions();
 	for i in 1..10u32 {
-		s.live.backend().last_run().publish(i * 3);
+		s.live.backend_mut().publish(i * 3);
 		s.tick(at(t, 210 + u64::from(i) * 17));
 	}
 	let after = s.revisions();
 	assert!(after.progress > before.progress, "the run published frames");
 	assert_eq!(
-		(after.playback, after.run, after.scratch, after.document, after.settings),
-		(before.playback, before.run, before.scratch, before.document, before.settings),
+		(after.playback, after.run, after.document, after.settings),
+		(before.playback, before.run, before.document, before.settings),
 		"the views of the menus and the pictures stay"
 	);
 }
@@ -429,4 +424,83 @@ fn the_scene_revision_follows_scene_and_part_edits_alone() {
 	s.tick(at(t, 1000));
 	s.handle(Event::Undo, at(t, 1100));
 	assert_eq!(scene(&s), r0 + 3, "an undo of a scene edit");
+}
+
+/// The app on the core's engines: Stop ends the run within half a second, and the position's frame shows
+/// again after an edit.
+#[test]
+fn on_the_cpu_backend_stop_ends_the_run_and_an_edit_shows_the_position_again() {
+	core_backend_round(false);
+}
+
+#[test]
+fn on_the_gpu_backend_stop_ends_the_run_and_an_edit_shows_the_position_again() {
+	if wavedude_core::engine::gpu::context().is_err() {
+		eprintln!("no GPU: skipped");
+		return;
+	}
+	core_backend_round(true);
+}
+
+fn core_backend_round(use_gpu: bool) {
+	use wavedude_app_state::live::CoreBackend;
+	use wavedude_core::run::RunState;
+	let dir = tempfile::tempdir().unwrap();
+	let gpu = Arc::new(AtomicBool::new(use_gpu));
+	let backend = CoreBackend::new(gpu.clone(), dir.path().to_path_buf()).unwrap();
+	let mut s = AppState::with_backend(Settings::default(), None, backend, gpu);
+	let t = Instant::now();
+	s.document.project.scene.width = 96;
+	s.document.project.scene.height = 72;
+	s.document.project.simulation.steps = 4000;
+	s.document.project.simulation.visualize_every = 4;
+	s.document.project.add_source();
+	s.document.history = History::new(&s.document.project);
+	s.live.project_replaced(&s.document.project, t);
+	type Done = Box<dyn FnMut(&AppState<CoreBackend>) -> bool>;
+	let until = |s: &mut AppState<CoreBackend>, mut done: Done| {
+		let deadline = Instant::now() + Duration::from_secs(30);
+		loop {
+			s.tick(Instant::now());
+			if done(s) {
+				return;
+			}
+			assert!(Instant::now() < deadline, "status {:?}", s.live.run_status());
+			std::thread::sleep(Duration::from_millis(5));
+		}
+	};
+	until(&mut s, Box::new(|s| s.live.shown() == Some(0)));
+	s.handle(Event::Run, Instant::now());
+	until(&mut s, Box::new(|s| s.live.present_spans().first().is_some_and(|&(_, to)| to >= 50)));
+	s.handle(Event::StopRun, Instant::now());
+	let stopped = Instant::now();
+	until(&mut s, Box::new(|s| s.live.run_status().is_some_and(|(state, ..)| state.is_finished())));
+	assert!(stopped.elapsed() < Duration::from_millis(500), "stopped after {:?}", stopped.elapsed());
+	assert_eq!(s.live.run_status().map(|r| r.0), Some(RunState::Cancelled));
+	let spans = s.live.present_spans();
+	assert!(spans.first().is_some_and(|&(from, to)| from == 0 && to >= 50), "the frames so far stay: {spans:?}");
+	s.handle(Event::Scrub(20), Instant::now());
+	s.handle(
+		Event::Command(Command::Set { target: Target::Item(source(0)), path: "frequency".into(), value: json!(123.0) }),
+		Instant::now(),
+	);
+	until(
+		&mut s,
+		Box::new(|s| matches!(s.live.shown_source(), Some(wavedude_app_state::live::ShownSource::Stored(_, 20)))),
+	);
+	assert_eq!(s.live.shown(), Some(20));
+}
+
+#[test]
+fn a_device_switch_rebuilds_the_engine_and_the_same_quality_is_no_edit() {
+	let mut s = app();
+	let t = Instant::now();
+	let on = s.settings.use_gpu;
+	s.handle(Event::SetUseGpu(!on), t);
+	assert_eq!(s.live.backend().engine_changes, 1);
+	s.handle(Event::SetUseGpu(!on), t);
+	assert_eq!(s.live.backend().engine_changes, 1, "the same device again changes nothing");
+	let revision = s.live.backend().goal().revision;
+	s.handle(Event::SetPreviewQuality(s.settings.preview_quality()), t);
+	assert_eq!(s.live.backend().goal().revision, revision, "the quality in force is no edit");
 }

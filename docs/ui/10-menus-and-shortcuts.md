@@ -75,8 +75,7 @@ All settings here are user settings, persisted, not in the project.
 | Preview samples > | S/W/H/S | Draw:PreviewSamples | radio | 16-bit float (1), 8-bit palette index (brightness fixed when the run starts) (8). |
 | Preview dithering > | D/H/M/D | Draw:PreviewDither | radio; whole submenu disabled unless samples = 16-bit | Off, 10, 12, 14, 16 bits per channel (mnemonics O,1,2,4,6). |
 
-A change of resolution/frames/samples marks the run stale, stops an automatic run, requests a scratch frame
-and schedules a re-run (like a simulation edit). Dithering only redraws.
+A change of resolution/frames/samples replaces the frames like a simulation edit. Dithering only redraws.
 
 There is no Display menu. Display settings (handles/labels in the preview etc.) are the project's Display
 row in the tree (`30-properties-pane.md`).

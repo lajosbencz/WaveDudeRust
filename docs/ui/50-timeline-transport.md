@@ -17,8 +17,9 @@ Custom-drawn scrub bar:
 - Playhead: a line through the bar with a handle on top and the frame number beside it.
 - In/out range: a translucent accent band between two brackets (2 px bar + 6 px feet pointing into the range)
   once the range is narrower than the run.
-- Available frames while a run fills: shaded band from frame 0 to the newest frame (accent; grey `#50808080`
-  when the run is stale). The playhead is bounded by it for a run the user started and follows.
+- Frames made: shaded bands over the frames the live run holds (accent); they grow from the position outward
+  after an edit, from frame 0 after Run. The playhead is bounded by the band it is in for a run the user started
+  and follows.
 - Hover: a line and the frame number under the pointer.
 - Frame 0 on the first pixel column inside the outline, the last frame on the last; lines whole device pixels.
 - Tooltip: "Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step
@@ -78,7 +79,7 @@ border.
   timer posted ahead of input; a UI timer that yields to input gave multi-second gaps).
 - Playback runs between the in and out points (whole run when unset). At the out point it stops, or wraps to the
   in point with Loop on.
-- Play means "show me the simulation": with no run, or a stale run, Play starts an automatic run (the memory
+- Play means "show me the simulation": with frames missing, Play starts an automatic run (the memory
   warning may ask first; cancelling it turns playback off again before the clock starts) and plays; when the run
   has not reached the next frame, playback holds at the newest frame and waits (no jump accumulates). A run that
   ended short (stopped or failed) plays to its last frame as to an out point.
@@ -103,33 +104,30 @@ border.
 | New, opened, imported, closed project or example | Frame 0; playback stops. |
 | User-started run | Frame 0, Live on. |
 | Automatic re-run | Unchanged. |
-| Run stopped | Frames so far stay; preview on the newest one; Live off. |
+| Run stopped | Frames so far stay; the preview moves to the newest one when it was following; Live off. |
 | Run discarded (replaced) | Position kept for what comes next. |
-| Stale or missing frame for the position | Scratch frame requested; last picture stays meanwhile. |
+| Frame missing for the position | The live run makes it first; the last picture stays meanwhile. |
 
 ## Run states (as the user sees them)
 
-Status bar right item: "<State>: <done> / <total> steps, <engine>" plus ", edited since" when stale; empty
+Status bar right item: "<State>: <done> / <total> steps, <engine>"; empty
 with no run. Engine e.g. "CPU (16 threads)" or the GPU name.
 
 | State word | Meaning | Transport |
 |---|---|---|
 | (empty) | no run | Run enabled, Pause run disabled, Live disabled |
-| Preparing / Starting | run being set up | Run button shows Stop |
 | Running | stepping; timeline shading grows | Stop, Pause run enabled, Live usable |
 | Paused | stepping halted (F6); step count holds | Pause run tooltip "Resume"; menu entry "Resume" |
 | Completed | all steps done | Run enabled, Live disabled |
-| Stopped | cancelled by Stop/Esc/an edit | frames so far stay |
+| Stopped | some frames missing and no more wanted: Stop/Esc, or an edit with Re-run automatically off | frames so far stay |
 | Failed | error; message in the status bar / log | |
-| "..., edited since" | project changed after the run started (stale) | timeline shading grey |
 
-A run is also paused automatically while a scratch frame or an Auto-brightness frame computes, then continues
-(a run the user paused stays paused).
+An edit replaces the frames (the pictures keep the last one); there is no stale run.
 
 ```mermaid
 stateDiagram-v2
   [*] --> NoRun
-  NoRun --> Running: F5 / Play (stale or none) / auto re-run
+  NoRun --> Running: F5 / Play (frames missing) / auto re-run
   Running --> Paused: F6
   Paused --> Running: F6
   Running --> Completed: last step
@@ -140,5 +138,5 @@ stateDiagram-v2
   Running --> Failed: error
 ```
 
-Stale is orthogonal: any state after a simulation edit is stale until a new run starts. An edit stops any active
-run at once (user-started or automatic).
+An edit replaces the frames and stops any active run at once (user-started or automatic); there is no stale
+state to show.

@@ -11,8 +11,8 @@ property the Rust core must prove in its test suite. Items marked (G) need golde
 - [ ] SIMD lanes (if used) bit-identical to the scalar path (field and intensity after 100 steps of a painted scene
       with two sources; 9-point and 4th order).
 - [ ] GPU vs CPU within `1e-3 * max(1, max|cpu|)` after N steps; captured index bytes identical (optional GPU).
-- [ ] Probe sampling: scratch series equals the run's first samples bit for bit; scratch line profile equals the run's
-      frame profile; a second scratch frame restarts integrated sums.
+- [x] Probe sampling: the live run's series and profiles equal the batch run's bit for bit, after a wrap to the
+      frames before the position too (tests/run.rs).
 - [ ] Emitters: one for a single source; disabled source none; `Amplitude/100`, phase in radians; randomized composite
       gives non-zero seeds; another project seed gives other emitter seeds; decimal frequency/amplitude/phase reach the
       emitter as typed; level 120.5 differs from 120; a level of 0 becomes the least level (0.01).

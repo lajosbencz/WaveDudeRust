@@ -7,6 +7,7 @@ use freya::engine::prelude::{ClipOp, PathBuilder, SkRect};
 use freya::prelude::*;
 
 use crate::paint::{DeviceGrid, fill, stroke, text_line, text_width};
+use crate::picture::Callback;
 use crate::theme::use_wave_theme;
 use crate::util::{TestIdExt, focus_border, shift};
 
@@ -253,13 +254,13 @@ pub struct GraphBox {
 	height: f32,
 	selected: bool,
 	metrics: GraphMetrics,
-	on_event: EventHandler<GraphBoxEvent>,
+	on_event: Callback<GraphBoxEvent>,
 	test_id: Option<String>,
 	grip_tooltip: Option<String>,
 }
 
 impl GraphBox {
-	pub fn new(data: GraphData, width: f32, height: f32, on_event: impl Into<EventHandler<GraphBoxEvent>>) -> Self {
+	pub fn new(data: GraphData, width: f32, height: f32, on_event: impl Into<Callback<GraphBoxEvent>>) -> Self {
 		Self {
 			data,
 			width,

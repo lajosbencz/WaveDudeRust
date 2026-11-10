@@ -491,10 +491,11 @@ fn read_scene(el: &Element) -> R<Scene> {
 	let mut scene: Scene = fields::read(el)?;
 	if let Some(data) = el.child("ImageData") {
 		let compact: String = data.text.split_ascii_whitespace().collect();
-		scene.image_data = Some(BASE64.decode(compact).map_err(|e| FormatError {
+		let bytes = BASE64.decode(compact).map_err(|e| FormatError {
 			message: format!("element 'ImageData' is not valid base64: {e}"),
 			at: Some(data.at),
-		})?);
+		})?;
+		scene.image_data = Some(bytes.into());
 	}
 	Ok(scene)
 }

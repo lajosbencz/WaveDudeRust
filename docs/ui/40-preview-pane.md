@@ -72,8 +72,9 @@ project keeps it.
 
 ## What a picture shows
 
-- A picture changes only when a frame for the current position arrives (scratch frame for the position, else
-  the run's stored frame). Otherwise the last picture stays; never black, never another frame, never a replay.
+- A picture changes only when a frame for the current position arrives (the live run makes the position's
+  frame first; during a burst of edits each frame made shows until the next). Otherwise the last picture stays;
+  never black, never another frame, never a replay.
 - While a frame for the position is computed for longer than 150 ms, both pictures dim (black at 45 %) under a
   spinner (three-quarter ring turning once a second); not hit-testable. Mirrored on the taskbar button
   (indeterminate) and the status bar ("Computing frame n", indeterminate bar).
@@ -83,7 +84,7 @@ project keeps it.
 ### 8-bit vs 16-bit (user's view)
 
 - 8-bit samples (View > Preview samples, default): stored palette indices at the store's resolution, scaled to
-  the picture. Brightness is baked in when the run starts; a brightness change is a simulation edit (stale run,
+  the picture. Brightness is baked in when the run starts; a brightness change is a simulation edit (the frames are made again,
   re-run). Dithering unavailable.
 - 16-bit samples: stored half floats; the picture is rendered at its exact size in device pixels (value-space
   resampling: box mean when shrinking, bilinear when enlarging, then the colour table), drawn 1:1. Brightness
@@ -169,9 +170,8 @@ emitter dots the source layer is cached as a bitmap).
 - Value axis: field amplitude always linear and symmetric about zero; intensity linear or logarithmic
   (Decades below the fitted top, powers-of-ten ticks, zero and smaller on the bottom line). Auto-scale values
   fits to the data, else Value minimum/maximum.
-- Data: while the picture shows a scratch frame, that frame's recording; else the run's recording as it stood at
-  the frame shown (series cut at that step). A stale run's data is shown while the stored frame is shown (no
-  empty-axis flicker on scrub).
+- Data: the live run's recording cut at the frame shown (series at that step, the frame's profile); after a probe
+  edit the recording is made anew and the graph follows as it comes.
 - Selected probe's box: accent (selection) border; drawn last.
 - Drag the box to move (kept inside the canvas). Snap: a box whose anchor comes within a radius (screen px)
   of the probe's point A lands on it and is attached (then follows the probe); it detaches only when dragged
@@ -179,15 +179,15 @@ emitter dots the source layer is cached as a bitmap).
 - Bottom-right corner grip: drag resizes, snapping to the fixed sizes, else Custom. Arrows on the grip
   resize by 1 px (Shift 10), making it Custom.
 - Arrows on the box move 1 px (Shift 10); Tab reaches boxes; focusing a box selects its probe.
-- Moving a box or a probe never marks the run stale (no new run); the graph refreshes from a scratch frame.
+- Moving a box never touches the run; moving a probe keeps the frames and records its trace anew.
 - Context menu: Export probe data as CSV...
 - Hover and focus show a border on the box.
 
 ## Busy, stale and taskbar
 
 - Busy dim + spinner: see above (150 ms delay so fast machines do not strobe).
-- Timeline shades the frames a run has produced (accent; grey when the run is stale).
-- Taskbar progress (platform-specific): export determinate, waiting/scratch indeterminate, idle none.
+- Timeline shades the frames the live run holds (accent).
+- Taskbar progress (platform-specific): export determinate, computing indeterminate, idle none.
 
 ## Automation ids
 

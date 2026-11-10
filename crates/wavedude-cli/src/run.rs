@@ -44,7 +44,7 @@ pub struct RunArgs {
 	#[arg(long)]
 	out: PathBuf,
 	/// Steps to run instead of the project's.
-	#[arg(long)]
+	#[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
 	steps: Option<u32>,
 	/// Quality the frames are stored and coloured at.
 	#[arg(long, value_enum, default_value = "default")]

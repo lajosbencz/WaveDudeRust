@@ -210,7 +210,6 @@
 	"RunStateCompleted": "Completed",
 	"RunStateCancelled": "Stopped",
 	"RunStateFailed": "Failed",
-	"RunStatusStale": ", edited since",
 	"RunError": "The simulation could not start.",
 	"RunErrorNoImage": "The scene uses an image, but no image file is set.",
 	"Ready": "Ready",

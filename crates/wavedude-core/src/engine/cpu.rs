@@ -650,6 +650,15 @@ impl WaveEngine for CpuEngine {
 		self.probe_queue.clear();
 	}
 
+	fn set_track_intensity(&mut self, on: bool) {
+		if self.options.track_intensity != on {
+			self.options.track_intensity = on;
+			let stages = if on { self.u.len() } else { 0 };
+			self.s1 = vec![0.0; stages];
+			self.s2 = vec![0.0; stages];
+		}
+	}
+
 	fn set_emitters(&mut self, emitters: &[Emitter]) {
 		self.sources.set_emitters(emitters, &self.scene);
 		self.group_sources();
