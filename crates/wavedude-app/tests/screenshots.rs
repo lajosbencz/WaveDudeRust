@@ -15,7 +15,7 @@ use wavedude_app::ui::shared::Shared;
 use wavedude_app_state::commands::{Command, NewPart, Target};
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
-use wavedude_app_state::settings::AppDirs;
+use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
 use wavedude_core::model::SourceArray;
 
@@ -36,9 +36,27 @@ struct Shots {
 
 impl Shots {
 	fn start(dir: PathBuf, size: (f32, f32)) -> Self {
+		Self::start_with(dir, size, EXAMPLE)
+	}
+
+	/// The shell at `size` with `example` open.
+	fn start_with(dir: PathBuf, size: (f32, f32), example: &str) -> Self {
+		Self::start_in(dir, size, example, None, Theme::Light)
+	}
+
+	/// As [`start_with`](Self::start_with) with the panes `hidden` tucked away and the window in `theme`.
+	fn start_in(dir: PathBuf, size: (f32, f32), example: &str, hidden: Option<&[&str]>, theme: Theme) -> Self {
 		let tmp = tempfile::tempdir().unwrap();
 		let dirs = AppDirs::under(tmp.path());
 		let mut app = AppState::start(&dirs, []).expect("state starts");
+		app.settings.theme = theme;
+		if let Some(hidden) = hidden {
+			let mut layout = wavedude_app::ui::window::default_layout();
+			for id in hidden {
+				layout.hide(id);
+			}
+			app.settings.layout = Some(serde_json::to_string(&layout).expect("a dock layout serialises"));
+		}
 		app.first_start = false;
 		app.settings.use_openh264 = Some(false);
 		app.settings.check_for_updates = Some(false);
@@ -51,7 +69,7 @@ impl Shots {
 			..wavedude_core::run::PreviewQuality::DEFAULT
 		};
 		app.handle(AppEvent::SetPreviewQuality(quality), Instant::now());
-		app.handle(AppEvent::Guarded(Guarded::Open(EXAMPLE.into())), Instant::now());
+		app.handle(AppEvent::Guarded(Guarded::Open(example.into())), Instant::now());
 		let info = BootInfo {
 			ring: LogRing::new(),
 			dirs,
@@ -239,6 +257,39 @@ fn window_states() {
 	s.test.sync_and_update();
 	s.shot("07-dock-dropped");
 	assert!(s.find_text("Properties").is_some(), "the dropped pane shows as a tab");
+}
+
+/// The README's animation: the logic gates example played through, one picture per frame of the sweep, for
+/// ffmpeg to join (docs/README.md, figures). Run with WAVEDUDE_GIF set to the output folder.
+#[test]
+#[ignore = "writes the README animation's frames; run with WAVEDUDE_GIF set"]
+fn readme_animation() {
+	let Some(dir) = out_dir("WAVEDUDE_GIF") else { return };
+	let example = "../wavedude-core/tests/fixtures/examples/Example18_XOR_AND_OR_logic.wdproj";
+	let mut s = Shots::start_in(dir, (1100., 790.), example, Some(&["project", "properties"]), Theme::Dark);
+	let set = |path: &str, value: serde_json::Value| {
+		AppEvent::Command(Command::Set { target: Target::Display, path: path.into(), value })
+	};
+	// Full resolution: the pictures are shown at the scene's own pixels.
+	let full = wavedude_core::run::PreviewQuality {
+		resolution_divisor: 1,
+		frame_divisor: 2,
+		format: wavedude_core::engine::SampleFormat::Index,
+		..wavedude_core::run::PreviewQuality::DEFAULT
+	};
+	s.shared.send(AppEvent::SetPreviewQuality(full));
+	s.run_to(2000, 0);
+	// After the open's brightness fit: both layers dimmer than the fit, so the guides keep their structure.
+	s.shared.send(set("field.brightness", serde_json::json!(5.0)));
+	s.shared.send(set("intensity.brightness", serde_json::json!(2.5)));
+	s.run_to(2000, 0);
+	// The middle of the run: the pulses have reached the gates and the outputs answer.
+	let frames = 24;
+	for i in 0..frames {
+		let frame = 700 + i * 8;
+		s.shared.send(AppEvent::Scrub(frame));
+		s.shot(&format!("frame-{i:02}"));
+	}
 }
 
 #[test]

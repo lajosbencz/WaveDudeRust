@@ -14,6 +14,8 @@ Next (`.wdproj`) and of Wave Dude 2D (`configuration.json`) open; projects save
 as `.wdproj` by default, so WaveDude Next opens them too. `.wdr`, a zip with
 JSON and the scene image, opens and saves as well.
 
+![Three wave logic gates (XOR, AND, OR) chained: the field and the intensity, played in the application](docs/figures/logic-gates.gif)
+
 ## Highlights
 
 - Runs on Linux, macOS and Windows; GPU through wgpu (Vulkan, Metal, DX12),
