@@ -200,7 +200,16 @@ impl Component for TextField {
 			e.prevent_default();
 			dragging.set_if_modified(true);
 			movement.reset();
-			if !std::mem::take(&mut *fresh.write()) {
+			// the focusing click can beat the render that selects on focus: select here then instead of placing the caret
+			if select_all_on_focus && !*was_focused.peek() {
+				was_focused.set(true);
+				let mut editor = editable.editor_mut().write();
+				let end = editor.len_utf16_cu();
+				if end > 0 {
+					editor.set_selection((0, end));
+				}
+				fresh.set(false);
+			} else if !std::mem::take(&mut *fresh.write()) {
 				editable.process_event(EditableEvent::Down {
 					location: e.element_location(),
 					editor_line: EditorLine::SingleParagraph,
