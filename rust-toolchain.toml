@@ -1,3 +1,5 @@
+# Pinned, so the CI caches (keyed on the compiler) live until the version is bumped here, by hand or by a
+# toolchain-aware updater (Dependabot has no ecosystem for this file; Renovate's rust-toolchain manager has).
 [toolchain]
-channel = "stable"
+channel = "1.99.1"
 components = ["clippy", "rustfmt"]

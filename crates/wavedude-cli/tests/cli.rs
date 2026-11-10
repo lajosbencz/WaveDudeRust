@@ -247,7 +247,8 @@ fn export_refuses_a_video_still_and_an_unknown_extension() {
 #[test]
 fn gates_writes_ten_loadable_projects() {
 	let dir = tempfile::tempdir().unwrap();
-	let text = ok(&["gates", "--out", dir.path().to_str().unwrap()]);
+	// The small design of `truth_table_runs_on_a_tiny_project`: the default 1200 px one calibrates for minutes.
+	let text = ok(&["gates", "--out", dir.path().to_str().unwrap(), "--frequency", "100", "--width", "400"]);
 	assert!(text.contains("coupling length"), "{text}");
 	let projects = files(dir.path());
 	assert_eq!(projects.len(), 10, "{projects:?}");

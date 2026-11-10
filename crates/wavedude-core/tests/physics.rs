@@ -1116,14 +1116,15 @@ fn fitted_amplitude(samples: &[f64], t0: usize, omega: f64) -> f64 {
 }
 
 /// (13) Amplitude is the swing a continuous source gives its own cell in free space: levels 20, 50,
-/// 100 and 200 (scale 2) of amplitude 0.5 on a 512 x 512 canvas with a 32 px CPML rim, both stencils,
+/// 100 and 200 (scale 2) of amplitude 0.5 on a 320 x 320 canvas with a 32 px CPML rim (the return it lets
+/// through is below the fit's resolution: the same offsets to 0.001 as on 512 x 512), both stencils,
 /// at two sub-steps (index 1, the definition) and at one (index 1.25, which one sub-step needs: there
 /// the cell swings by the ratio of the two media's |G0|, engine/green.rs). The amplitude is fitted over
 /// the last 240 of 520 steps, three periods at level 20 (measured within 0.2 % of the expectation).
 #[test]
 fn source_amplitude_is_the_free_space_swing_of_its_cell() {
 	use wavedude_core::engine::green::source_response;
-	let (w, amplitude, scale) = (512usize, 0.5, 2.0);
+	let (w, amplitude, scale) = (320usize, 0.5, 2.0);
 	let c = w as i32 / 2;
 	for stencil in STENCILS {
 		let coefficients = StencilCoefficients::of(stencil);
@@ -1162,7 +1163,7 @@ fn source_amplitude_is_the_free_space_swing_of_its_cell() {
 /// `source_amplitude_is_the_free_space_swing_of_its_cell`.
 #[test]
 fn spread_source_amplitude_is_the_swing_at_its_position() {
-	let (w, amplitude, scale) = (512usize, 0.5, 2.0);
+	let (w, amplitude, scale) = (320usize, 0.5, 2.0);
 	let c = w / 2;
 	for stencil in STENCILS {
 		let data = SceneData::blank(w as u32, w as u32, &scene(-32, Edges::Open, 1.0));

@@ -15,6 +15,10 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # BtbN/FFmpeg-Builds release and asset (LGPL build) with the digest from its checksums.sha256.
+  FFMPEG_RELEASE: autobuild-2026-11-09-12-42
+  FFMPEG_BUILD: ffmpeg-N-128718-gb2b543c079-linux64-lgpl
+  FFMPEG_SHA256: 728938551177f361c573d249ba70b0265db872d78c6389e1f1da52a41afb3379
   # File and line in backtraces, without the full debug info that slows linking (PDBs on Windows) and bloats the cache.
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
   CARGO_PROFILE_TEST_DEBUG: line-tables-only
@@ -31,6 +35,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The toolchain rust-toolchain.toml pins, installed up front so the cache key sees it.
+      - name: Toolchain
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           # Only the default branch saves (pull requests restore its cache), so the 10 GB limit keeps the useful ones;
@@ -41,19 +48,37 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev ffmpeg
+          sudo apt-get install -y --no-install-recommends libgl1-mesa-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev
+      # The export tests decode what they wrote with ffmpeg (the programs never need it). A pinned static build,
+      # checked against its published digest and cached; the distribution's package pulled in 128 others.
+      - name: ffmpeg for the export tests
+        if: runner.os == 'Linux'
+        id: ffmpeg
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/ffmpeg
+          key: ffmpeg-${{ env.FFMPEG_BUILD }}
+      - if: runner.os == 'Linux' && steps.ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          curl -sSfL "https://github.com/BtbN/FFmpeg-Builds/releases/download/$FFMPEG_RELEASE/$FFMPEG_BUILD.tar.xz" -o ffmpeg.tar.xz
+          echo "$FFMPEG_SHA256  ffmpeg.tar.xz" | sha256sum -c -
+          mkdir -p ~/ffmpeg
+          tar -xJf ffmpeg.tar.xz --strip-components=2 -C ~/ffmpeg "$FFMPEG_BUILD/bin/ffmpeg" "$FFMPEG_BUILD/bin/ffprobe"
+      - if: runner.os == 'Linux'
+        run: echo "$HOME/ffmpeg" >> "$GITHUB_PATH"
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets --features wavedude-export/openh264-source,wavedude-cli/openh264-source -- -D warnings
       - name: Test
         run: cargo test --workspace --features wavedude-export/openh264-source,wavedude-cli/openh264-source
-      - name: Feature builds
+      # The feature combinations compile; checking is the proof, codegen and linking add nothing.
+      - name: Feature checks
         if: runner.os == 'Linux'
         run: |
-          cargo build --workspace
-          cargo build -p wavedude-export --no-default-features
-          cargo build -p wavedude-core --no-default-features
+          cargo check --workspace
+          cargo check -p wavedude-export --no-default-features
+          cargo check -p wavedude-core --no-default-features
 
   msrv:
     name: MSRV
@@ -76,6 +101,6 @@ jobs:
       - name: Linux packages for Skia and winit
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev
+          sudo apt-get install -y --no-install-recommends libgl1-mesa-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev
       - name: Check
         run: cargo +"$MSRV" check --workspace --all-targets
