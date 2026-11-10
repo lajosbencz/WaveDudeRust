@@ -6,6 +6,23 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.7...v0.1.8) - 2026-11-10
+
+### Added
+
+- *(io)* project file version 4, a .wdproj read onto its version's defaults and .wdr format 2
+- *(parts)* the Fresnel lens, a lens cut into zones of equal width or depth
+- *(parts)* the diffuser and the facetted grating, plates with a profiled front face
+- *(parts)* the interference filter, a plate with a stack of thin layers on its front
+- *(parts)* the simple 2D grating, a lattice of round dots of one material
+- *(parts)* the meta lens, meta prism and meta axicon, a plate with a sub-wavelength pattern
+- *(probes)* the probabilistic detectors, counting and imaging
+- *(cli)* compare writes the Rust field and intensity dumps beside the report; the new parts measured against WaveDude Next
+
+### Fixed
+
+- *(app)* a greyed row disables its editor, the probe's step axis and value scale among them; the interference filter's layer rows fit the pane
+
 ## [0.1.7](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.6...v0.1.7) - 2026-11-10
 
 ### Changed
