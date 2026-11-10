@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.9...v0.2.0) - 2026-11-10
+
+### Added
+
+- *(app)* an Examples dialog grouped by topic with all 44 projects embedded; a followed run ends on its last frame and an imported project's brightness fit restarts the run instead of stranding it
+- **Breaking:** *(io)* one project format, WaveDude Next's .wdproj; the .wdr zip format is dropped. The adapter writes Next's brightness units and whole-pixel source positions and coatings; the gates examples become .wdproj with two half-amplitude sources per input
+
 ## [0.1.9](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.8...v0.1.9) - 2026-11-10
 
 ### Added
