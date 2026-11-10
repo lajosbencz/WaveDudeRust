@@ -13,7 +13,7 @@ use wavedude_app_state::{Event as AppEvent, Guarded, Response, SaveChoice};
 
 use super::app::{Cx, Ui};
 use super::export_dialog::{self, ExportDialog, ExportRequest};
-use super::{about, memory_warning};
+use super::{about, examples, memory_warning};
 
 /// The modal shown over the window.
 #[derive(Clone)]
@@ -32,6 +32,7 @@ pub enum Modal {
 	Startup,
 	MemoryWarning,
 	About,
+	Examples,
 	Export(ExportRequest),
 	/// A yes/no question; `yes` runs on Yes.
 	Confirm {
@@ -238,6 +239,7 @@ impl Component for ModalHost {
 			}
 			Modal::MemoryWarning => memory_warning::MemoryWarningDialog.into_element(),
 			Modal::About => about::AboutDialog.into_element(),
+			Modal::Examples => examples::ExamplesDialog.into_element(),
 			Modal::Export(request) => ExportDialog { request }.into_element(),
 		};
 		backdrop(body)

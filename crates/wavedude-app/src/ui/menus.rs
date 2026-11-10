@@ -2,8 +2,6 @@
 //! when what it shows changes), the context menus of the tree rows and the part kinds, and one dispatcher for
 //! the [`MenuAction`]s that the menu bar, the context menus and the shortcuts share.
 
-use std::sync::OnceLock;
-
 use freya::prelude::*;
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::run::PreviewQuality;
@@ -12,7 +10,6 @@ use wavedude_widgets::{Check, MenuEntry, MenuItem, MenuModel, Submenu};
 
 use wavedude_app_state::clipboard::{Copyable, PasteTarget};
 use wavedude_app_state::commands::{Command, NewPart};
-use wavedude_app_state::examples;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::{DITHER_BITS, Theme as ThemeSetting};
 use wavedude_app_state::strings::{Language, Strings};
@@ -130,8 +127,8 @@ pub enum MenuAction {
 	Open,
 	/// Entry `n` of the recent files.
 	Recent(usize),
-	/// Entry `n` of [`examples::all`].
-	Example(usize),
+	/// The Examples dialog.
+	Examples,
 	Save,
 	SaveAs,
 	Export(ExportKindChoice),
@@ -188,17 +185,6 @@ pub enum On {
 }
 
 type Entry = MenuEntry<MenuAction>;
-
-/// The example descriptions, the menu entries' tooltips; parsed once.
-fn example_descriptions() -> &'static [String] {
-	static D: OnceLock<Vec<String>> = OnceLock::new();
-	D.get_or_init(|| {
-		examples::all()
-			.iter()
-			.map(|e| wavedude_core::io::wdproj::read_str(e.text()).expect("an embedded example parses").description)
-			.collect()
-	})
-}
 
 fn item(action: MenuAction, id: &str, s: &Strings, key: &str) -> MenuItem<MenuAction> {
 	MenuItem::with_action(id, s.get(key), action)
@@ -320,16 +306,6 @@ fn file_menu(app: &App, ui: &Ui) -> Submenu<MenuAction> {
 			.into()
 		})
 		.collect();
-	let example_entries: Vec<Entry> = examples::all()
-		.iter()
-		.zip(example_descriptions())
-		.enumerate()
-		.map(|(i, (e, tip))| {
-			MenuItem::with_action(format!("file:example:{i}"), e.header().replace('_', "__"), MenuAction::Example(i))
-				.tooltip(tip.clone())
-				.into()
-		})
-		.collect();
 	let export_last = export_dialog::has_last(ui, app);
 	Submenu::new(
 		"MenuFile",
@@ -338,7 +314,7 @@ fn file_menu(app: &App, ui: &Ui) -> Submenu<MenuAction> {
 			item(MenuAction::New, "file:new", s, "MenuFileNew").shortcut("Ctrl+N").icon(glyphs::NEW).into(),
 			item(MenuAction::Open, "file:open", s, "MenuFileOpen").shortcut("Ctrl+O").icon(glyphs::OPEN).into(),
 			Submenu::new("file:recent", s.get("MenuFileRecent"), recent).icon(glyphs::RECENT).into(),
-			Submenu::new("file:examples", s.get("MenuFileExamples"), example_entries).icon(glyphs::EXAMPLES).into(),
+			item(MenuAction::Examples, "file:examples", s, "MenuFileExamples").icon(glyphs::EXAMPLES).into(),
 			MenuEntry::Separator,
 			item(MenuAction::Save, "file:save", s, "MenuFileSave").shortcut("Ctrl+S").icon(glyphs::SAVE).into(),
 			item(MenuAction::SaveAs, "file:saveas", s, "MenuFileSaveAs")
@@ -773,7 +749,7 @@ pub fn act(cx: &Cx, action: MenuAction, on: On) {
 			let path = shared.peek(|a| a.settings.recent_files[i].clone());
 			cx.send(AppEvent::Guarded(Guarded::Open(path)));
 		}
-		MenuAction::Example(i) => cx.send(AppEvent::Guarded(Guarded::OpenExample(i))),
+		MenuAction::Examples => cx.ui.show_modal(Modal::Examples),
 		MenuAction::Save => cx.send(AppEvent::Save),
 		MenuAction::SaveAs => dialogs::save_as(cx, None),
 		MenuAction::Export(choice) => export_dialog::start(cx, choice),

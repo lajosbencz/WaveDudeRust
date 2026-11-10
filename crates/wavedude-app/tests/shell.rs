@@ -336,3 +336,68 @@ fn moving_a_row_keeps_it_selected_and_focuses_the_tree() {
 	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Item(ItemRef::new(ItemKind::Source, 0))));
 	assert!(focus_in(&mut test, "ProjectTree"), "the tree takes the focus from the button");
 }
+
+/// The elements tagged with `prefix` and a tail, drawn now.
+fn count_tagged(test: &TestingRunner, prefix: &str) -> usize {
+	let count = std::cell::Cell::new(0);
+	test.find(|_, element| {
+		let tagged = Rect::try_downcast(element)
+			.is_some_and(|r| r.accessibility.builder.author_id().is_some_and(|id| id.starts_with(prefix)));
+		count.set(count.get() + usize::from(tagged));
+		None::<()>
+	});
+	count.get()
+}
+
+fn open_examples_dialog(test: &mut TestingRunner) {
+	test.press_key(Key::Named(NamedKey::F10));
+	test.sync_and_update();
+	test.press_key(Key::Named(NamedKey::ArrowDown));
+	test.sync_and_update();
+	click_tagged(test, "file:examples");
+	assert!(tagged_area(test, "ExamplesDialog").is_some(), "File > Examples opens the dialog");
+}
+
+#[test]
+fn the_examples_dialog_lists_every_example_by_topic() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, _) = shell(dir.path());
+	open_examples_dialog(&mut test);
+	for (tab, expected) in [8, 10, 6, 18, 2].into_iter().enumerate() {
+		click_tagged(&mut test, &format!("ExamplesTab:{tab}"));
+		let rows = count_tagged(&test, "Example:");
+		assert_eq!(rows, expected, "tab {tab}");
+	}
+	test.press_key(Key::Named(NamedKey::Escape));
+	settle(&mut test);
+	assert!(tagged_area(&test, "ExamplesDialog").is_none(), "Esc closes the dialog");
+}
+
+#[test]
+fn the_examples_search_narrows_the_rows() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, _) = shell(dir.path());
+	open_examples_dialog(&mut test);
+	click_tagged(&mut test, "ExamplesSearch");
+	test.write_text("fibre");
+	settle(&mut test);
+	assert!(tagged_area(&test, "Example:Example23_Fibres").is_some(), "the search follows the matches to their tab");
+	assert!(tagged_area(&test, "Example:Example24_Fibre_cross_over").is_some());
+	assert!(tagged_area(&test, "Example:Example01_Source_Mirror_Probe").is_none());
+	let rows = count_tagged(&test, "Example:");
+	assert!((2..18).contains(&rows), "{rows} rows match 'fibre'");
+}
+
+#[test]
+fn enter_opens_the_selected_example() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = shell(dir.path());
+	open_examples_dialog(&mut test);
+	click_tagged(&mut test, "ExamplesTab:2");
+	click_tagged(&mut test, "Example:Example13_Bragg_reflector");
+	test.press_key(Key::Named(NamedKey::Enter));
+	settle(&mut test);
+	assert!(tagged_area(&test, "ExamplesDialog").is_none(), "opening closes the dialog");
+	let name = state.peek(|a| a.document.display_name(""));
+	assert!(name.contains("Example13_Bragg_reflector"), "{name}");
+}

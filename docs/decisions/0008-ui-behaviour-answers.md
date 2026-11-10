@@ -40,3 +40,11 @@ Status: accepted, 2026-11-05 (the user's answers; defaults where marked)
 17. The live preview is one goal-driven run instead of a scratch runner beside the run, without the debounce and
     quiet timers; an edit replaces the frames rather than leaving a stale run (decision 0012). The register of all
     divergences is `docs/divergences.md`.
+
+## Examples dialog (added 2026-11-10)
+
+18. File > Examples is a dialog, not a submenu: 44 projects (Next's 24, our `examples/gates` and
+    `examples/optics`) do not fit a menu. Five topic tabs, a search over title and description, the description
+    shown in the row instead of a tooltip. Opening takes the old entry's path (`Guarded::OpenExample`), so the
+    unsaved-changes prompt stays. Titles of our examples come from the file slug; descriptions from the
+    project's Description, read once at first use.

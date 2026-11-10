@@ -440,7 +440,13 @@ impl<B: Backend> AppState<B> {
 			d.field.brightness, d.intensity.brightness
 		);
 		tracing::info!("{note}");
+		// with 8-bit samples the fit is a simulation edit, which would leave a followed run stranded at the
+		// frame the fit read: that run starts over as F5 does
+		let followed_run = self.live.run_is_active() && self.live.is_live();
 		self.live.on_change(ChangeKind::Brightness, &self.document.project, Some(note), now);
+		if followed_run && self.settings.preview_sample_bytes == 1 {
+			self.live.run_user(&self.document.project, now);
+		}
 	}
 
 	fn save_settings(&self) {

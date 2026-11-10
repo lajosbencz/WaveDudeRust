@@ -149,7 +149,7 @@ A probe's measurements are exported as CSV from the probe's context menu, in the
 
 #### Examples
 
-The File > Examples submenu: the example projects shipped with the program, most of them from Wave Dude 2D. Each opens as an unsaved project named after its example; save it under your own name to keep your changes. Hover over an entry for its description.
+File > Examples opens a dialog with the example projects shipped with the program, those of WaveDude Next (most from Wave Dude 2D) and our own optics and gate projects: 44 in five tabs by topic (sources and coherence, lenses and imaging, gratings and filters, guides, cavities and logic, detectors and statistics). Each row shows the title and the description; the search box above the list filters all tabs by both. Left and Right switch the tab, Up and Down the row, Enter or a double-click opens it, Esc closes. An example opens as an unsaved project named after its file; save it under your own name to keep your changes. The list below is WaveDude Next's 24.
 
 1. **Source Mirror Probe**: Simple omnidirectional pulsed source with a smoothed square intensity profile, reflecting of simple mirror surface. A probe measures the intensity profile near the surface.
 2. **Coherent source gaussian beam**: Featuring a 21 x 7 composite source that emits a continuous gaussian beam.
@@ -239,7 +239,7 @@ The project's own form. <figure name="properties-project"/>
 
 1. **Format version**: The version of the project file format; older files are read and saved in the current one.
 2. **Random seed**: The seed of every random decision in the project, the emitters' random offsets and the random gaps between bursts; the same seed reproduces the same frames.
-3. **Description**: Free-text notes about the project. An example's description is what its menu entry shows.
+3. **Description**: Free-text notes about the project. An example's description is what the Examples dialog shows.
 4. **New seed**: Draws a fresh random seed.
 
 ### Scene
@@ -707,4 +707,4 @@ In the picker, the square sets the saturation (Left, Right) and the brightness (
 
 ## The examples
 
-File > Examples opens one of the 24 example projects as an unsaved project; see [Examples](#examples) under the File menu for what each shows.
+File > Examples opens one of the 44 example projects as an unsaved project; see [Examples](#examples) under the File menu for what each shows.

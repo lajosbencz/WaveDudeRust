@@ -506,3 +506,25 @@ fn a_device_switch_rebuilds_the_engine_and_the_same_quality_is_no_edit() {
 	s.handle(Event::SetPreviewQuality(s.settings.preview_quality()), t);
 	assert_eq!(s.live.backend().goal().revision, revision, "the quality in force is no edit");
 }
+
+#[test]
+fn an_import_fit_landing_in_a_followed_run_restarts_the_run_instead_of_stranding_it() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut s = open_written(dir.path(), "old.wdproj");
+	let t = Instant::now();
+	s.tick(t);
+	assert!(s.live.run_user(&s.document.project.clone(), t));
+	assert!(s.live.is_live() && s.live.run_is_active());
+	s.live.backend_mut().publish(5);
+	s.live.backend_mut().finish_frame_uniform(5, 0.5, 0.0625);
+	s.tick(at(t, 10));
+	assert_eq!(s.live.playback.position(), 5, "the follow reached the first frame with content");
+	s.tick(at(t, 20));
+	assert_eq!(s.live.backend().goal().fit.map(|f| f.frame), Some(5), "the fit reads that frame in 16-bit");
+	s.live.backend_mut().finish_fit_uniform(0.5, 0.0625);
+	s.tick(at(t, 30));
+	assert!(!s.document.needs_brightness_fit, "the fit was applied");
+	assert!(s.live.run_is_active(), "the run goes on");
+	assert!(s.live.is_live(), "and stays followed");
+	assert_eq!(s.live.playback.position(), 0, "from the start, as F5 does");
+}

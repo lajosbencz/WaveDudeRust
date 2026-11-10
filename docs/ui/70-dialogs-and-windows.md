@@ -119,6 +119,19 @@ Content top to bottom:
 5. Buttons: "Copy system info" (C; tooltip "Copy the system lines to the clipboard, for a bug report"; status
    "System information copied to the clipboard"), "Close" (default and cancel).
 
+## Examples dialog
+
+Modal (test id `ExamplesDialog`), 720 px wide, from File > Examples; the frame, dimmed backdrop and buttons of the
+other dialogs. Title "Examples"; a tab strip of five topics (`ExamplesTab:<n>`: Sources and coherence 8, Lenses and
+imaging 10, Gratings and filters 6, Guides cavities and logic 18, Detectors and statistics 2); a search box
+(`ExamplesSearch`) filtering every tab by title and description, dimming the tabs without a match and moving to
+the first with one; a 360 px scrolled list, one row per example (`Example:<file stem>`): the title, below it the
+description wrapped in the dim text colour; Open and Cancel. Left/Right switch the tab (not while the search box
+has the focus), Up/Down move the row, Enter or Open or a double-click on a row opens it, Esc or Cancel closes,
+Tab cycles the controls. Opening closes the dialog and runs the guarded open (unsaved-changes prompt included).
+Next's 24 projects come from its `Examples` folder, ours from `examples/gates` (`.wdr`) and `examples/optics`
+(`.wdproj`), all embedded.
+
 ## Manual window
 
 - Opened by Help > Manual or F1. Not modal, owned by the main window: minimised/restored with it, stays above it,

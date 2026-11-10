@@ -10,7 +10,7 @@ use wavedude_core::io::{self, FormatError, IoError, legacy, wdproj};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{Layer, Project};
 
-use super::examples::Example;
+use super::examples::{Example, Loaded};
 use super::history::History;
 
 #[derive(Debug, thiserror::Error)]
@@ -119,14 +119,14 @@ impl Document {
 
 	/// An example as an unsaved project named after its file.
 	pub fn from_example(example: &Example) -> Result<Self, DocumentError> {
-		let mut project =
-			wdproj::read_str(example.text()).map_err(|e| DocumentError::Example(example.file_name.to_owned(), e))?;
+		let Loaded { mut project, needs_brightness_fit } =
+			example.load().map_err(|e| DocumentError::Example(example.file_name.to_owned(), e))?;
 		if let Some(bytes) = &project.scene.image_data {
 			project.scene.image_size = io::image_size(bytes).expect("an embedded example's image decodes");
 		}
 		tracing::info!("opened example '{}'", example.file_name);
 		let mut doc = Self::with(project, None, Some(PathBuf::from(example.file_name)), false);
-		doc.needs_brightness_fit = true;
+		doc.needs_brightness_fit = needs_brightness_fit;
 		Ok(doc)
 	}
 

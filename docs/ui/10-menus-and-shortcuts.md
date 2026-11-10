@@ -20,7 +20,7 @@ Conventions:
 | 1 | New Project | N/N/N/N | Ctrl+N | U+E8A5 | always | Asks about unsaved edits, then a new empty project: blank canvas, open edges, damping rim outside (-32), no sources. Timeline to frame 0. |
 | 2 | Open Project... | O/O-umlaut/O/O | Ctrl+O | U+E8E5 | always | Asks about unsaved edits; file dialog, filter: WaveDude Next projects (*.wdproj), Wave Dude 2D projects (configuration.json; *.json), XML (*.xml), All. A `configuration.json` is imported as a new unsaved project. |
 | 3 | Recent Projects > | R/Z/R/R | - | U+E81C | always (empty submenu when none) | One entry per recent file, newest first, full path as plain text (no mnemonics). Click opens. |
-| 4 | Examples > | P/P/P/V | - | U+E8F1 | always | 24 entries "N. Title" (e.g. "1. Source Mirror Probe"); tooltip = the example's description. Opens as an unsaved project named after its file (title shows it; Save As proposes it). List: see `MANUAL.md` "Examples". |
+| 4 | Examples... | P/P/P/V | - | U+E8F1 | always | Opens the Examples dialog (ui/70) of 44 projects; id `file:examples`. An example opens as an unsaved project named after its file (title shows it; Save As proposes it). List: see `MANUAL.md` "Examples". |
 | - | separator | | | | | |
 | 5 | Save | S/S/E/S | Ctrl+S | U+E74E | always | Save; Save As when the project has no file. |
 | 6 | Save As... | A/U/S/A | Ctrl+Shift+S | U+E792 | always | Save dialog, filter: *.wdproj, *.xml. Proposes the suggested name (import/example) beside its origin. |

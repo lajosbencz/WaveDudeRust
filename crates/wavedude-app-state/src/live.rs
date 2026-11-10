@@ -643,13 +643,15 @@ impl<B: Backend> LiveController<B> {
 		if self.fit.is_some() && (self.request.is_none() || matches!(self.status.state, WorkState::Failed(_))) {
 			self.fit = None;
 		}
-		if self.live
+		// the store fills from another thread, so a run can complete between the follow's look and this check:
+		// a completed run ends on its last frame, never on the frame the follow last saw
+		if self.live && self.complete() {
+			self.playback.set_position(self.playback.last_frame());
+			self.live = false;
+		} else if self.live
 			&& let Some(newest) = self.present_through(self.playback.position())
 		{
 			self.playback.set_position(newest);
-		}
-		if self.live && self.complete() {
-			self.live = false;
 		}
 		self.report_run_end(now);
 		self.advance_playback(now);
@@ -1371,6 +1373,22 @@ mod tests {
 		assert_eq!(c.backend().wanted(), Wanted::Position);
 		c.tick(t, &p);
 		assert_eq!(c.run_status().map(|s| s.0), Some(RunState::Cancelled), "stopped, the frames so far stay");
+	}
+
+	#[test]
+	fn a_run_completing_between_ticks_ends_on_its_last_frame() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert!(c.run_user(&p, t));
+		c.backend_mut().publish(30);
+		c.tick(t, &p);
+		assert_eq!(c.playback.position(), 29);
+		// the rest of the run lands before the next tick
+		c.backend_mut().complete();
+		c.tick(t, &p);
+		assert_eq!(c.playback.position(), c.playback.last_frame(), "a followed run ends on its last frame");
+		assert!(!c.is_live());
 	}
 
 	#[test]

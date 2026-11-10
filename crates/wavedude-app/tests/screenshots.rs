@@ -276,6 +276,22 @@ fn window_states() {
 	assert!(s.find_text("Properties").is_some(), "the dropped pane shows as a tab");
 }
 
+/// The Examples dialog on its first tab and on a search.
+#[test]
+#[ignore = "writes pictures; run with WAVEDUDE_SHOTS set"]
+fn examples_dialog() {
+	let Some(dir) = out_dir("WAVEDUDE_SHOTS") else { return };
+	let mut s = Shots::start(dir, (1400., 900.));
+	s.open_menu(0);
+	let entry = centre(s.area_of("file:examples"));
+	s.test.click_cursor(entry);
+	s.shot("08-examples-dialog");
+	let search = centre(s.area_of("ExamplesSearch"));
+	s.test.click_cursor(search);
+	s.test.write_text("lens");
+	s.shot("09-examples-search");
+}
+
 /// The window at common display sizes, with a long form (meta lens), a list editor (interference filter) and a
 /// detector selected, and the add-part menu open: where panes crowd or clip.
 #[test]
