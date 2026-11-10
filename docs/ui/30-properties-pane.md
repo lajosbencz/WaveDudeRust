@@ -13,7 +13,8 @@ column below is a summary; the full text is the `Hint.*` entry (identical to the
 
 - Shows the form for the type of the current item (`SelectedItem`); "No selection" (grey) when none.
 - A folder row shows its label as a section header and the count ("No entries" / "1 entry" / "N entries").
-- When a form is built for a newly added item, the caret goes into its first text box with the text selected.
+- When a form is built for a newly added item, the caret goes into its first text box with the text selected; the
+  box requests the focus when it is laid out, no timer.
 - Each form scrolls vertically; never horizontally.
 - Layout: `FormPanel`, two columns: labels left (column as wide as the widest label, a minimum width), editors
   right filling the rest; a check box or block marked full-width spans both columns. Section headers: name over
@@ -32,6 +33,12 @@ column below is a summary; the full text is the `Hint.*` entry (identical to the
 Enter pushes the text into the property at once and selects the text; Esc restores the property's value when
 the text differs. Both keys are consumed only when they did something (so Esc from an unchanged box reaches
 Stop). Multiline boxes keep Enter as newline. Name boxes update per keystroke (tree row renames live).
+
+Commit policy (text and number boxes): typed text commits on Enter, on the focus leaving the box (a reaction to
+the focus change, not a poll of the render) and before anything reads the model: every state event (Save, Run,
+Play, Export, Undo, ...), every menu or shortcut action and every change of the tree selection first flushes the
+pending commit (`PendingEdit`), so Ctrl+S, Run or a click on another tree row act on the typed value. Esc drops
+the pending text.
 
 ### Number box (`NumberBox`)
 

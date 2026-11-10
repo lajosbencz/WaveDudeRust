@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use crate::edit::{FocusRequest, use_edit_slot, use_focus_on_layout};
 use crate::icon::{IconView, icons};
 use crate::text_box::field_frame;
 use crate::text_field::TextField;
@@ -216,6 +217,7 @@ pub struct NumberBox {
 	tooltip: Option<String>,
 	blank: bool,
 	a11y_id: Option<AccessibilityId>,
+	focus_request: Option<FocusRequest>,
 }
 
 impl NumberBox {
@@ -229,12 +231,19 @@ impl NumberBox {
 			tooltip: None,
 			blank: false,
 			a11y_id: None,
+			focus_request: None,
 		}
 	}
 
 	/// The text box's id, for focusing it from outside.
 	pub fn a11y_id(mut self, id: AccessibilityId) -> Self {
 		self.a11y_id = Some(id);
+		self
+	}
+
+	/// Takes the focus when `request` is raised and the box is laid out.
+	pub fn focus_request(mut self, request: Option<FocusRequest>) -> Self {
+		self.focus_request = request;
 		self
 	}
 
@@ -341,21 +350,23 @@ impl Component for NumberBox {
 			}
 		};
 
-		let mut was_focused = use_state(|| false);
-		let focused_now = focus().is_focused();
-		if *was_focused.peek() != focused_now {
-			was_focused.set(focused_now);
-			if !focused_now {
-				let mut commit = commit.clone();
+		let slot = use_edit_slot(input_id, focus);
+		let commit = {
+			let mut commit = commit;
+			let slot = slot.clone();
+			move || {
+				slot.withdraw();
 				commit();
 			}
-		}
+		};
+		let on_laid_out = use_focus_on_layout(input_id, self.focus_request.clone());
 
 		let on_pre_key_down = {
 			let spec = spec.clone();
 			let shown = shown.clone();
 			let mut step_by = step_by.clone();
 			let mut commit = commit.clone();
+			let slot = slot.clone();
 			move |e: Event<KeyboardEventData>| -> bool {
 				let steps = match &e.key {
 					Key::Named(NamedKey::ArrowUp) => Some(1),
@@ -380,6 +391,7 @@ impl Component for NumberBox {
 						e.stop_propagation();
 						text.set(shown.clone());
 						typed.set(false);
+						slot.withdraw();
 					}
 					return false;
 				}
@@ -492,9 +504,11 @@ impl Component for NumberBox {
 				.child(IconView::new(icon).color(theme.text))
 		};
 
+		let (slot_for_typing, commit_for_typing) = (slot.clone(), commit.clone());
 		let input = TextField::new(WritableSetter::new(text, move |t: String| {
 			text.set(t);
 			typed.set_if_modified(true);
+			slot_for_typing.offer(commit_for_typing.clone());
 		}))
 		.a11y_id(input_id)
 		.enabled(enabled)
@@ -508,7 +522,13 @@ impl Component for NumberBox {
 		let body = frame
 			.width(Size::fill())
 			.height(Size::px(INPUT_HEIGHT))
-			.on_sized(move |e: Event<SizedEventData>| area.set_if_modified(e.area))
+			.on_sized({
+				let mut on_laid_out = on_laid_out;
+				move |e: Event<SizedEventData>| {
+					area.set_if_modified(e.area);
+					on_laid_out(e);
+				}
+			})
 			.on_pointer_enter(move |_| hovered.set(true))
 			.on_pointer_leave(move |_| hovered.set(false))
 			.on_wheel(on_wheel)

@@ -731,6 +731,7 @@ pub fn dispatch(cx: &Cx, action: MenuAction) {
 /// Runs `action`; item actions apply to `on`.
 pub fn act(cx: &Cx, action: MenuAction, on: On) {
 	let shared: &Shared = &cx.shared;
+	shared.flush_edit();
 	let target = || match on {
 		On::Current => shared.peek(|a| a.selection.current_item()),
 		On::Row(Some(Row::Item(i))) => Some(i),

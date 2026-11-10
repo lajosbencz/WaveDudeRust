@@ -4,7 +4,7 @@ use std::time::SystemTime;
 
 use freya::prelude::*;
 use tracing::Level;
-use wavedude_widgets::{LogLevel, LogLine, MessageLabels, MessageList};
+use wavedude_widgets::{FocusRequest, LogLevel, LogLine, MessageLabels, MessageList, use_focus_on_layout};
 
 use super::app::Cx;
 use super::shared::Topics;
@@ -80,6 +80,11 @@ impl Component for MessagesPane {
 				labels(&cx)
 			})
 		};
-		MessageList::new(cx.ui.messages).labels(words.read().clone()).list_id(cx.ui.messages_list)
+		let (revision, served) = cx.ui.focus_messages;
+		let on_sized = use_focus_on_layout(cx.ui.messages_list, Some(FocusRequest::new(revision, served)));
+		rect()
+			.expanded()
+			.on_sized(on_sized)
+			.child(MessageList::new(cx.ui.messages).labels(words.read().clone()).list_id(cx.ui.messages_list))
 	}
 }

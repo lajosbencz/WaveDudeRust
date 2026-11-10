@@ -24,9 +24,11 @@ pub mod timeline;
 pub mod tooltip;
 pub mod tree;
 
+mod edit;
 mod paint;
 mod util;
 
+pub use edit::{FocusRequest, PendingEdit, use_focus_on_layout};
 pub use util::{TestIdExt, use_modifiers};
 
 pub use button::Button;

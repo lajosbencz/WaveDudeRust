@@ -92,7 +92,7 @@ always a member of the list. Properties shows the current item.
 | Ctrl+A | Every source, part and probe; the last becomes current. |
 | Selection made on the pictures | Mirrored in the tree; the tree row does not take focus (the handle keeps it, so Tab continues through handles). |
 | Click on empty preview space | Deselects; the tree lets go too. |
-| A project opened (New, Open, an example, start-up) | The root row alone: the Properties pane shows the Project form; the tree takes the keyboard focus. |
+| A project opened (New, Open, an example, start-up) | The root row alone: the Properties pane shows the Project form; the tree takes the keyboard focus (requested by the tree once its rows are laid out, no timer). |
 
 Highlight: current row = selection colour (inactive-selection colour when the tree lacks focus, standard
 behaviour); other selected rows = inactive-selection colours. Groups, the root and settings rows can be

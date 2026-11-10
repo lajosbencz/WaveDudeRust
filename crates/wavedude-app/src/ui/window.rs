@@ -66,11 +66,8 @@ pub fn toggle_pane(ui: &Ui, id: &str) {
 pub fn show_messages(ui: &Ui) {
 	let mut layout = ui.layout;
 	layout.write().show("messages", default_side("messages"));
-	let list = ui.messages_list;
-	spawn(async move {
-		timer(std::time::Duration::from_millis(32)).await;
-		list.request_focus();
-	});
+	let mut request = ui.focus_messages.0;
+	*request.write() += 1;
 }
 
 #[derive(Clone, PartialEq)]

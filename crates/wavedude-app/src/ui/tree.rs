@@ -7,7 +7,10 @@ use freya::prelude::*;
 use wavedude_core::model::{Lens, Part, PartKind, Project};
 use wavedude_widgets::icon::icons;
 use wavedude_widgets::tree::{DropPosition, RowKind, reorder_index};
-use wavedude_widgets::{Button, Icon, IconView, Tip, TreeAction, TreeRow, TreeSelection, TreeView, use_wave_theme};
+use wavedude_widgets::{
+	Button, FocusRequest, Icon, IconView, Tip, TreeAction, TreeRow, TreeSelection, TreeView, use_focus_on_layout,
+	use_wave_theme,
+};
 
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, NewPart};
@@ -234,6 +237,7 @@ fn item_of(row: &Row) -> Option<ItemRef> {
 
 /// Takes the tree view's selection into the state.
 fn assign_selection(cx: &Cx, sel: &TreeSelection<Row>) {
+	cx.shared.flush_edit();
 	let items: Vec<ItemRef> = sel.selected.iter().filter_map(item_of).collect();
 	let anchor = sel.anchor.as_ref().and_then(item_of);
 	cx.shared.update(|a| a.selection.assign(items, sel.current, anchor));
@@ -466,22 +470,12 @@ impl Component for ProjectPane {
 		}
 		// Next's reveal: an opened project, a remove or a move gives the tree the keyboard focus once its rows are
 		// laid out.
-		{
+		let reveal = {
 			let shared = cx.shared.clone();
-			let tree_id = cx.ui.tree_id;
 			let reveals = use_memo(move || shared.read(Topics::DOCUMENT, |a| a.reveals()));
-			let mut seen = use_state(|| *reveals.peek());
-			use_side_effect(move || {
-				let n = *reveals.read();
-				if n != *seen.peek() {
-					seen.set(n);
-					spawn(async move {
-						timer(std::time::Duration::from_millis(32)).await;
-						tree_id.request_focus();
-					});
-				}
-			});
-		}
+			let served = use_state(|| *reveals.peek());
+			use_focus_on_layout(cx.ui.tree_id, Some(FocusRequest::new(reveals, served)))
+		};
 		let mut pointer = use_state(|| (0., 0.));
 		let mut part_button = use_state(|| (0., 0.));
 		let mut probe_button = use_state(|| (0., 0.));
@@ -576,6 +570,7 @@ impl Component for ProjectPane {
 				rect()
 					.width(Size::fill())
 					.height(Size::flex(1.))
+					.on_sized(reveal)
 					.child(TreeView::new(snap.rows, tree, on_tree).a11y_id(cx.ui.tree_id).test_id("ProjectTree")),
 			)
 	}

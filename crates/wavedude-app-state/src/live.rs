@@ -1366,6 +1366,57 @@ mod tests {
 		assert!(!c.is_live());
 	}
 
+	/// Half frames over an odd frame count: 101 timeline frames, 51 stored, the last stored frame covering one.
+	fn half_frames_controller(t: Instant) -> (Project, LiveController<FakeBackend>) {
+		let mut p = project();
+		p.simulation.steps = 202;
+		let settings = LiveSettings { quality: PreviewQuality::DEFAULT.halve_frames(), ..LiveSettings::default() };
+		let mut c = LiveController::new(FakeBackend::default(), settings);
+		c.project_replaced(&p, t);
+		c.tick(t, &p);
+		c.backend_mut().finish_position();
+		c.tick(t, &p);
+		c.take_notices();
+		assert_eq!((c.playback.last_frame(), c.backend().adopted_spec().stored_frames()), (100, 51));
+		(p, c)
+	}
+
+	#[test]
+	fn a_followed_run_with_half_frames_stays_live_until_its_last_frame() {
+		let t = Instant::now();
+		let (p, mut c) = half_frames_controller(t);
+		assert!(c.run_user(&p, t));
+		c.tick(t, &p);
+		let mut followed = vec![c.playback.position()];
+		// frames land out of order: a gap holds the follow at the newest contiguous frame
+		for frame in [60, 2, 4, 6, 30, 8, 10] {
+			c.backend_mut().finish_frame_uniform(frame, 0.0, 0.0);
+			c.tick(t, &p);
+			assert!(c.is_live(), "Live holds while frames are missing (after frame {frame})");
+			followed.push(c.playback.position());
+		}
+		assert_eq!(followed, [1, 1, 3, 5, 7, 7, 9, 11], "the newest contiguous frame, both halves of a stored frame");
+		assert_eq!(c.shown(), Some(11));
+		c.backend_mut().complete();
+		c.tick(t, &p);
+		assert_eq!(c.playback.position(), 100, "the last frame, not the end of the newest contiguous span seen");
+		assert_eq!(c.shown(), Some(100));
+		assert!(!c.is_live() && !c.run_is_active());
+		assert_eq!(c.run_status().map(|s| s.0), Some(RunState::Completed));
+	}
+
+	#[test]
+	fn a_followed_run_that_completes_before_its_first_tick_ends_on_its_last_frame() {
+		let t = Instant::now();
+		let (p, mut c) = half_frames_controller(t);
+		assert!(c.run_user(&p, t));
+		c.backend_mut().complete();
+		c.tick(t, &p);
+		assert_eq!((c.playback.position(), c.shown()), (100, Some(100)));
+		assert!(!c.is_live());
+		assert!(c.take_notices().contains(&Notice::ShowFrame(100)));
+	}
+
 	#[test]
 	fn play_starts_a_run_and_holds_at_the_newest_frame() {
 		let t = Instant::now();

@@ -248,7 +248,7 @@ fn focus_in(test: &mut TestingRunner, id: &str) -> bool {
 }
 
 fn settle(test: &mut TestingRunner) {
-	test.poll(std::time::Duration::from_millis(16), std::time::Duration::from_millis(120));
+	test.poll(std::time::Duration::from_millis(16), std::time::Duration::from_millis(16));
 	test.sync_and_update();
 }
 
@@ -400,4 +400,49 @@ fn enter_opens_the_selected_example() {
 	assert!(tagged_area(&test, "ExamplesDialog").is_none(), "opening closes the dialog");
 	let name = state.peek(|a| a.document.display_name(""));
 	assert!(name.contains("Example13_Bragg_reflector"), "{name}");
+}
+
+/// Types `text` into the number box tagged `id` after a click on it, without leaving it.
+fn type_into_number_box(test: &mut TestingRunner, id: &str, text: &str) {
+	let area = tagged_area(test, id).unwrap_or_else(|| panic!("no element {id}"));
+	test.click_cursor((f64::from(area.min_x()) + 6., f64::from(area.center().y)));
+	test.sync_and_update();
+	test.press_key(Key::Named(NamedKey::End));
+	for _ in 0..12 {
+		test.press_key(Key::Named(NamedKey::Backspace));
+	}
+	test.write_text(text);
+	test.sync_and_update();
+}
+
+/// A value typed into a box and not yet confirmed is in the model when a command reads it.
+#[test]
+fn a_typed_value_is_committed_before_a_command_reads_the_model() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = shell(dir.path());
+	state.update(|a| a.selection.select(Row::Item(ItemRef::new(ItemKind::Source, 0))));
+	test.sync_and_update();
+	test.sync_and_update();
+	type_into_number_box(&mut test, "Source.Frequency", "77");
+	assert_ne!(state.peek(|a| a.document.project.sources[0].frequency), 77., "typing alone does not apply");
+	state.send(AppEvent::SaveAs(dir.path().join("typed.wdproj")));
+	assert_eq!(state.peek(|a| a.document.project.sources[0].frequency), 77.);
+}
+
+/// Focus leaving the box commits its text: a click on another tree row.
+#[test]
+fn a_typed_value_is_committed_when_another_tree_row_is_clicked() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = shell(dir.path());
+	state.update(|a| a.selection.select(Row::Item(ItemRef::new(ItemKind::Source, 0))));
+	test.sync_and_update();
+	test.sync_and_update();
+	type_into_number_box(&mut test, "Source.Frequency", "66");
+	assert_ne!(state.peek(|a| a.document.project.sources[0].frequency), 66.);
+	let other = state.peek(|a| a.document.project.sources[1].name.clone());
+	let row = find_text(&test, &other).expect("the tree row").layout().area;
+	test.click_cursor((f64::from(row.center().x), f64::from(row.center().y)));
+	test.sync_and_update();
+	assert_eq!(state.peek(|a| a.document.project.sources[0].frequency), 66.);
+	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Item(ItemRef::new(ItemKind::Source, 1))));
 }

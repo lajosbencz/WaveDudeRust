@@ -9,7 +9,7 @@ use freya::prelude::*;
 use serde_json::Value;
 use wavedude_core::model::{PartKind, ranges};
 use wavedude_widgets::icon::icons;
-use wavedude_widgets::{Check, Gradient, TestIdExt, TextBox};
+use wavedude_widgets::{Check, FocusRequest, Gradient, TestIdExt, TextBox};
 use wavedude_widgets::{
 	IconView, MenuEntry, MenuItem, MenuModel, NumberBox, NumberSpec, PropertyGrid, PropertyRow, use_wave_theme,
 };
@@ -89,7 +89,7 @@ pub struct Form {
 	pub json: Rc<Value>,
 	pub s: Strings,
 	/// The id the form's first editor takes, so Enter on a tree row or Add can focus it; taken once.
-	first_editor: Rc<Cell<Option<AccessibilityId>>>,
+	first_editor: Rc<Cell<Option<(AccessibilityId, FocusRequest)>>>,
 	/// Number boxes show no value (a setting that does not apply).
 	blank: bool,
 }
@@ -132,13 +132,27 @@ thread_local! {
 }
 
 impl Form {
-	pub fn new(cx: Cx, target: Target, json: Rc<Value>, s: Strings, first_editor: AccessibilityId) -> Self {
+	pub fn new(
+		cx: Cx,
+		target: Target,
+		json: Rc<Value>,
+		s: Strings,
+		first_editor: (AccessibilityId, FocusRequest),
+	) -> Self {
 		Self { cx, target, json, s, first_editor: Rc::new(Cell::new(Some(first_editor))), blank: false }
 	}
 
-	/// The first editor's id, for the editor that claims it first.
-	fn claim_first(&self) -> Option<AccessibilityId> {
+	/// The first editor's id and focus request, for the editor that claims them first.
+	fn claim_first(&self) -> Option<(AccessibilityId, FocusRequest)> {
 		self.first_editor.take()
+	}
+
+	/// `editor` as the form's first editor when none has claimed that place yet.
+	fn first(&self, editor: TextBox) -> TextBox {
+		match self.claim_first() {
+			Some((id, request)) => editor.id(Some(id)).focus_request(Some(request)),
+			None => editor,
+		}
 	}
 
 	/// The same form over another object (a default shown greyed).
@@ -266,8 +280,8 @@ impl Form {
 			.enabled(enabled)
 			.blank(blank)
 			.test_id(test.clone());
-			match first {
-				Some(id) => editor.a11y_id(id).into_element(),
+			match first.clone() {
+				Some((id, request)) => editor.a11y_id(id).focus_request(Some(request)).into_element(),
 				None => editor.into_element(),
 			}
 		}
@@ -322,7 +336,7 @@ impl Form {
 		let form = self.clone();
 		let path = path.to_owned();
 		let on_text = move |t: String| form.set(&path, Value::from(t));
-		let editor = TextBox::new(value, on_text).multiline(multiline).id(self.claim_first());
+		let editor = self.first(TextBox::new(value, on_text).multiline(multiline));
 		PropertyRow::new(self.s.label(ty, member), tagged(editor, format!("{ty}.{member}")))
 			.hint(self.s.hint(ty, member))
 	}
@@ -334,7 +348,7 @@ impl Form {
 		let value = self.bind_as::<String>("name");
 		let cx = self.cx.clone();
 		let on_text = move |name: String| cx.send(AppEvent::Command(Command::Rename { target, name }));
-		let editor = TextBox::new(value, on_text).live().select_all_on_focus(true).id(self.claim_first());
+		let editor = self.first(TextBox::new(value, on_text).live().select_all_on_focus(true));
 		PropertyRow::new(self.s.label(ty, "Name"), tagged(editor, format!("{ty}.Name"))).hint(self.s.hint(ty, "Name"))
 	}
 }
@@ -603,17 +617,8 @@ impl Component for PropertiesPane {
 		// Enter on a tree row or an Add bumps `focus_form`: the first editor takes the focus once it is laid out.
 		let first_editor = use_a11y();
 		let focus_form = cx.ui.focus_form;
-		let mut seen = use_state(|| *focus_form.peek());
-		use_side_effect(move || {
-			let n = *focus_form.read();
-			if n != *seen.peek() {
-				seen.set(n);
-				spawn(async move {
-					timer(std::time::Duration::from_millis(32)).await;
-					first_editor.request_focus();
-				});
-			}
-		});
+		let served = use_state(|| *focus_form.peek());
+		let request = FocusRequest::new(focus_form, served);
 		let snap = snap.read().clone();
 		let s = snap.strings;
 		let Some(row) = snap.row else {
@@ -632,7 +637,7 @@ impl Component for PropertiesPane {
 			Row::Item(i) => Target::Item(i),
 			Row::Folder(kind) => return folder_view(&s, kind, snap.count),
 		};
-		let form = Form::new(cx, target, snap.json.clone(), s, first_editor);
+		let form = Form::new(cx, target, snap.json.clone(), s, (first_editor, request));
 		let children = forms::build(&form, row, &snap);
 		PropertyGrid::new().children(children).into_element()
 	}

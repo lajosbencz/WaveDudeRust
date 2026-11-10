@@ -3,6 +3,7 @@
 
 use freya::prelude::*;
 
+use crate::edit::{FocusRequest, use_edit_slot, use_focus_on_layout};
 use crate::text_field::{FIELD_PADDING, TextField};
 use crate::theme::{INPUT_HEIGHT, Theme, use_wave_theme};
 use crate::util::is_named;
@@ -43,6 +44,7 @@ pub struct TextBox {
 	live: bool,
 	select_all: bool,
 	id: Option<AccessibilityId>,
+	focus_request: Option<FocusRequest>,
 }
 
 impl TextBox {
@@ -54,6 +56,7 @@ impl TextBox {
 			live: false,
 			select_all: false,
 			id: None,
+			focus_request: None,
 		}
 	}
 
@@ -80,6 +83,12 @@ impl TextBox {
 		self.id = id;
 		self
 	}
+
+	/// Takes the focus when `request` is raised and the box is laid out.
+	pub fn focus_request(mut self, request: Option<FocusRequest>) -> Self {
+		self.focus_request = request;
+		self
+	}
 }
 
 impl Component for TextBox {
@@ -97,26 +106,23 @@ impl Component for TextBox {
 		let live = self.live;
 		let multiline = self.multiline;
 
-		let mut commit = {
+		let slot = use_edit_slot(id, focus);
+		let commit = {
 			let apply = apply.clone();
+			let slot = slot.clone();
 			move || {
+				slot.withdraw();
 				if *typed.peek() {
 					typed.set(false);
 					apply.call(text.peek().clone());
 				}
 			}
 		};
-		let mut was_focused = use_state(|| false);
-		let focused_now = focus().is_focused();
-		if *was_focused.peek() != focused_now {
-			was_focused.set(focused_now);
-			if !focused_now {
-				commit();
-			}
-		}
+		let on_sized = use_focus_on_layout(id, self.focus_request.clone());
 		let revert = bound.clone();
 		let on_pre_key_down = {
 			let mut commit = commit.clone();
+			let slot = slot.clone();
 			move |e: Event<KeyboardEventData>| -> bool {
 				if is_named(&e, NamedKey::Enter) && !multiline {
 					e.stop_propagation();
@@ -128,6 +134,7 @@ impl Component for TextBox {
 						e.stop_propagation();
 						text.set(revert.clone());
 						typed.set(false);
+						slot.withdraw();
 					}
 					return false;
 				}
@@ -145,6 +152,7 @@ impl Component for TextBox {
 				apply.call(t);
 			} else {
 				typed.set_if_modified(true);
+				slot.offer(commit.clone());
 			}
 		});
 		let input: Element = if multiline {
@@ -164,6 +172,7 @@ impl Component for TextBox {
 		};
 		field_frame(&theme, true, focus().is_focused(), hovered())
 			.width(Size::fill())
+			.on_sized(on_sized)
 			.on_pointer_enter(move |_| hovered.set(true))
 			.on_pointer_leave(move |_| hovered.set(false))
 			.child(input)

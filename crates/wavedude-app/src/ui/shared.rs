@@ -14,6 +14,7 @@ use freya::prelude::*;
 
 use wavedude_app_state::live::CoreBackend;
 use wavedude_app_state::{AppState, Event, Response, Revisions};
+use wavedude_widgets::PendingEdit;
 
 pub type App = AppState<CoreBackend>;
 
@@ -101,6 +102,7 @@ impl Signals {
 pub struct Shared {
 	app: Rc<RefCell<App>>,
 	signals: Signals,
+	pending_edit: PendingEdit,
 }
 
 impl PartialEq for Shared {
@@ -122,7 +124,8 @@ impl Shared {
 			run: use_state(|| r.run),
 			settings: use_state(|| r.settings),
 		};
-		use_provide_context(move || Shared { app: Rc::new(RefCell::new(app)), signals })
+		let pending_edit = use_provide_context(PendingEdit::default);
+		use_provide_context(move || Shared { app: Rc::new(RefCell::new(app)), signals, pending_edit })
 	}
 
 	/// The handle from context, subscribing to nothing.
@@ -163,8 +166,14 @@ impl Shared {
 		r
 	}
 
-	/// Sends an event to the state at the current time.
+	/// Commits the text typed into the focused editor, so the next read of the model sees it.
+	pub fn flush_edit(&self) {
+		self.pending_edit.flush();
+	}
+
+	/// Sends an event to the state at the current time, after the pending edit.
 	pub fn send(&self, event: Event) -> Response {
+		self.flush_edit();
 		self.update(|app| app.handle(event, Instant::now()))
 	}
 
