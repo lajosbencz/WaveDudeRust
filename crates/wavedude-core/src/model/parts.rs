@@ -396,6 +396,120 @@ impl SimpleGrating {
 	}
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum MetaLensType {
+	/// The delay greatest at the centre, falling outward within each zone, as a convex lens's glass thins.
+	#[default]
+	Converging,
+	Diverging,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(default)]
+pub struct MetaLensDesign {
+	/// Pixels along +x' to the focus; a diverging lens spreads as from a focus that far behind it.
+	pub focal_length: u32,
+	pub lens_type: MetaLensType,
+}
+
+impl Default for MetaLensDesign {
+	fn default() -> Self {
+		Self { focal_length: 500, lens_type: MetaLensType::Converging }
+	}
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(default)]
+pub struct MetaPrismDesign {
+	/// Degrees a wave along the axis is turned by, counter-clockwise on screen when positive; -89..89.
+	pub deflection: f64,
+}
+
+impl Default for MetaPrismDesign {
+	fn default() -> Self {
+		Self { deflection: 20.0 }
+	}
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(default)]
+pub struct MetaAxiconDesign {
+	/// Degrees each half of a wave along the axis is turned toward it by; 0.1..89.
+	pub cone_angle: f64,
+}
+
+impl Default for MetaAxiconDesign {
+	fn default() -> Self {
+		Self { cone_angle: 10.0 }
+	}
+}
+
+/// What a meta surface does: the phase delay it asks of each cell (`meta.rs`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum MetaDesign {
+	Lens(MetaLensDesign),
+	Prism(MetaPrismDesign),
+	Axicon(MetaAxiconDesign),
+}
+
+impl Default for MetaDesign {
+	fn default() -> Self {
+		Self::Lens(MetaLensDesign::default())
+	}
+}
+
+/// A carrier plate with a sub-wavelength pattern on its front (-x'): a ridge of `pattern_index` in every cell of
+/// `pitch` across the face, `height` deep in front of the plate, its width the cell's fill factor times the pitch;
+/// the fill from the delay the design asks. The band lies on the ridges' tops and the plate's back.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(default)]
+pub struct MetaSurface {
+	pub material: Material,
+	/// `front` is the ridges' tops, `back` the plate's back; `sides` is not offered.
+	pub coating: Coating,
+	/// The plate's, without the pattern.
+	pub length: u32,
+	pub width: u32,
+	/// Level 1..255; the wavelength it gives through the frequency scale sets every cell's fill.
+	pub design_frequency: f64,
+	/// The cell's width in pixels, 1..MAX_PIXELS.
+	pub pitch: f64,
+	/// The ridges' height in front of the plate in pixels, 1..MAX_PIXELS.
+	pub height: f64,
+	/// The ridges' index.
+	pub pattern_index: f64,
+	pub design: MetaDesign,
+}
+
+impl Default for MetaSurface {
+	fn default() -> Self {
+		Self {
+			material: Material::default(),
+			coating: Coating::default(),
+			length: 50,
+			width: 500,
+			design_frequency: 50.0,
+			pitch: 4.0,
+			height: 32.0,
+			pattern_index: 2.0,
+			design: MetaDesign::default(),
+		}
+	}
+}
+
+impl MetaSurface {
+	/// A new meta surface of `design` coats nothing on its sides.
+	pub fn new_part(design: MetaDesign) -> Self {
+		Self { design, coating: Coating { sides: false, ..Coating::default() }, ..Self::default() }
+	}
+}
+
 /// The relief of a facetted grating over each pitch.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -629,6 +743,7 @@ pub enum PartKind {
 	InterferenceFilter(InterferenceFilter),
 	SimpleGrating(SimpleGrating),
 	FacettedGrating(FacettedGrating),
+	MetaSurface(MetaSurface),
 	Fiber(Fiber),
 	BraggReflector(BraggReflector),
 	GrinLens(GrinLens),
@@ -660,6 +775,11 @@ impl PartKind {
 			PartKind::Diffuser(_) => "Diffuser",
 			PartKind::InterferenceFilter(_) => "Interference filter",
 			PartKind::SimpleGrating(_) => "Grating",
+			PartKind::MetaSurface(m) => match m.design {
+				MetaDesign::Lens(_) => "Meta lens",
+				MetaDesign::Prism(_) => "Meta prism",
+				MetaDesign::Axicon(_) => "Meta axicon",
+			},
 			PartKind::FacettedGrating(_) => "Facetted grating",
 			PartKind::Fiber(_) => "Fiber",
 			PartKind::BraggReflector(_) => "Bragg reflector",
@@ -685,6 +805,7 @@ impl PartKind {
 			PartKind::Diffuser(p) => Some(&p.material),
 			PartKind::InterferenceFilter(p) => Some(&p.material),
 			PartKind::SimpleGrating(p) => Some(&p.material),
+			PartKind::MetaSurface(p) => Some(&p.material),
 			PartKind::FacettedGrating(p) => Some(&p.material),
 			PartKind::Fiber(_)
 			| PartKind::BraggReflector(_)
@@ -706,6 +827,7 @@ impl PartKind {
 			PartKind::Diffuser(p) => Some(&p.coating),
 			PartKind::InterferenceFilter(p) => Some(&p.coating),
 			PartKind::FacettedGrating(p) => Some(&p.coating),
+			PartKind::MetaSurface(p) => Some(&p.coating),
 			PartKind::Fiber(p) => Some(&p.coating),
 			PartKind::GrinLens(p) => Some(&p.coating),
 			PartKind::SimpleGrating(_)

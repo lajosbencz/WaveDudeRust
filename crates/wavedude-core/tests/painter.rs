@@ -253,6 +253,44 @@ fn simple_grating_dots() {
 	assert_eq!(wide.diameter, 5, "half the smaller spacing");
 }
 
+/// A meta surface is its plate and, before it, its pattern: a ridge per cell as wide as the cell's fill, the
+/// pattern index, the band on the tops; a converging lens's centre cell is solid, a mirror plate stays red 0.
+#[test]
+fn meta_surface_pattern() {
+	let at = |kind| Part::new(kind, 100, 60);
+	// a short focal length, so the fill falls off within the face
+	let meta = MetaSurface {
+		length: 20,
+		width: 100,
+		height: 32.0,
+		pitch: 4.0,
+		design: MetaDesign::Lens(MetaLensDesign { focal_length: 60, ..MetaLensDesign::default() }),
+		..MetaSurface::default()
+	};
+	let p = paint(&[at(PartKind::MetaSurface(meta.clone()))]);
+	assert_eq!(count_row(&p, 60, |r| r == 150), 20, "the plate on the axis");
+	assert_eq!(count_row(&p, 60, |r| r == 200), 32, "the centre cell's ridge is solid: the whole height");
+	assert!(count_row(&p, 60 + 1, |r| r == 200) >= 31, "and 4 px wide (a corner pixel is a mean)");
+	// a cell about half filled: its ridge covers fewer of the cell's four rows
+	let fills = meta.fill_factors(sim().source_frequency_scale);
+	let half = fills.iter().position(|f| (0.3..0.7).contains(f)).expect("a half-filled cell");
+	let rows = |cell: usize| {
+		let y0 = 60.0 + meta.cell_centre(cell) - 2.0;
+		(0..4).filter(|&k| red(&p, 80, (y0 + k as f64).floor() as i32) == 200).count()
+	};
+	assert!(rows(fills.len() / 2) == 4 && rows(half) <= 2, "{} vs {}", rows(fills.len() / 2), rows(half));
+	let mirror = MetaSurface { material: Material { mirror: true, ..Material::default() }, ..meta.clone() };
+	let p = paint(&[at(PartKind::MetaSurface(mirror))]);
+	assert_eq!((red(&p, 70, 60), red(&p, 100, 60)), (200, 0), "glass ridges before a mirror plate");
+	let coated = MetaSurface { coating: coated(3.0, CoatingProfile::Layer, true, true, true), ..meta };
+	let p = paint(&[at(PartKind::MetaSurface(coated))]);
+	assert_eq!(
+		(red(&p, 59, 60), red(&p, 70, 60), red(&p, 108, 60), red(&p, 100, 60)),
+		(141, 200, 122, 150),
+		"tops and back"
+	);
+}
+
 /// A Fresnel lens of one zone is the lens; with four zones of equal width each surface restarts at the vertex
 /// plane at every zone's inner edge, so the outer zones hold glass where the whole lens's surfaces had crossed.
 #[test]
@@ -1003,6 +1041,16 @@ fn kinds() -> Vec<(&'static str, PartKind)> {
 				row_spacing: 14,
 				diameter: 4,
 				material: Material { refractive_index: 2.0, ..Material::default() },
+			}),
+		),
+		(
+			"meta_lens",
+			PartKind::MetaSurface(MetaSurface {
+				length: 20,
+				width: 120,
+				height: 16.0,
+				design: MetaDesign::Lens(MetaLensDesign { focal_length: 150, ..MetaLensDesign::default() }),
+				..MetaSurface::default()
 			}),
 		),
 		(

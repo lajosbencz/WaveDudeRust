@@ -13,7 +13,8 @@ use wavedude_core::model::names::{self, Named};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{
 	BraggReflector, Diffuser, Ellipse, FacettedGrating, Fiber, FresnelLens, GateKind, GrinLens, InterferenceFilter,
-	Lens, LogicGate, Outline, PartKind, Point, Polygon, Probe, Project, Rectangle, SimpleGrating, Triangle, ZonePlate,
+	Lens, LogicGate, MetaAxiconDesign, MetaDesign, MetaLensDesign, MetaPrismDesign, MetaSurface, Outline, PartKind,
+	Point, Polygon, Probe, Project, Rectangle, SimpleGrating, Triangle, ZonePlate,
 };
 
 use wavedude_core::scene::gate_design::{self, GateDesign};
@@ -36,6 +37,9 @@ pub enum NewPart {
 	InterferenceFilter,
 	SimpleGrating,
 	FacettedGrating,
+	MetaLens,
+	MetaPrism,
+	MetaAxicon,
 	Fiber,
 	BraggReflector,
 	GrinLens,
@@ -46,7 +50,7 @@ pub enum NewPart {
 }
 
 impl NewPart {
-	pub const ALL: [Self; 18] = [
+	pub const ALL: [Self; 21] = [
 		Self::Lens,
 		Self::FresnelLens,
 		Self::Fiber,
@@ -57,6 +61,9 @@ impl NewPart {
 		Self::InterferenceFilter,
 		Self::SimpleGrating,
 		Self::FacettedGrating,
+		Self::MetaLens,
+		Self::MetaPrism,
+		Self::MetaAxicon,
 		Self::Polygon,
 		Self::Rectangle,
 		Self::Ellipse,
@@ -81,6 +88,13 @@ impl NewPart {
 			Self::Diffuser => PartKind::Diffuser(Diffuser::new_part()),
 			Self::InterferenceFilter => PartKind::InterferenceFilter(InterferenceFilter::new_part()),
 			Self::SimpleGrating => PartKind::SimpleGrating(SimpleGrating::new_part()),
+			Self::MetaLens => PartKind::MetaSurface(MetaSurface::new_part(MetaDesign::Lens(MetaLensDesign::default()))),
+			Self::MetaPrism => {
+				PartKind::MetaSurface(MetaSurface::new_part(MetaDesign::Prism(MetaPrismDesign::default())))
+			}
+			Self::MetaAxicon => {
+				PartKind::MetaSurface(MetaSurface::new_part(MetaDesign::Axicon(MetaAxiconDesign::default())))
+			}
 			Self::FacettedGrating => PartKind::FacettedGrating(FacettedGrating::default()),
 			Self::Fiber => PartKind::Fiber(Fiber::default()),
 			Self::BraggReflector => PartKind::BraggReflector(BraggReflector::default()),
@@ -105,6 +119,11 @@ impl NewPart {
 			PartKind::Diffuser(_) => Self::Diffuser,
 			PartKind::InterferenceFilter(_) => Self::InterferenceFilter,
 			PartKind::SimpleGrating(_) => Self::SimpleGrating,
+			PartKind::MetaSurface(m) => match m.design {
+				MetaDesign::Lens(_) => Self::MetaLens,
+				MetaDesign::Prism(_) => Self::MetaPrism,
+				MetaDesign::Axicon(_) => Self::MetaAxicon,
+			},
 			PartKind::FacettedGrating(_) => Self::FacettedGrating,
 			PartKind::Fiber(_) => Self::Fiber,
 			PartKind::BraggReflector(_) => Self::BraggReflector,
@@ -131,6 +150,9 @@ impl NewPart {
 			Self::Diffuser => "DiffuserPart",
 			Self::InterferenceFilter => "InterferenceFilterPart",
 			Self::SimpleGrating => "SimpleGratingPart",
+			Self::MetaLens => "MetaLensPart",
+			Self::MetaPrism => "MetaPrismPart",
+			Self::MetaAxicon => "MetaAxiconPart",
 			Self::FacettedGrating => "FacettedGratingPart",
 			Self::Fiber => "FiberPart",
 			Self::BraggReflector => "BraggReflectorPart",

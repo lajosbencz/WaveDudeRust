@@ -164,6 +164,7 @@ blue = max(old blue, round_even(Absorption * share))
 | Outline | polygon through the `Point`s (part frame); < 3 points paints nothing | RefractiveIndex | yes |
 | Diffuser, FacettedGrating | a plate whose front face is a profile, see below | RefractiveIndex | yes |
 | SimpleGrating | the union of the dots' discs: `radius - distance to the nearest lattice point` (rounding along each axis, clamped to the lattice) | RefractiveIndex, no band | yes |
+| MetaSurface | two pieces: the plate (as the filter's) and the pattern, the union of the ridges' rectangles, see below | plate / PatternIndex | yes |
 | InterferenceFilter | two pieces: the plate (a rectangle, the band on its back alone) and the stack, see below | plate / layers | yes |
 | Fiber | tube around a flattened Bezier path, see below | core / cladding | yes |
 | BraggReflector | rectangle `min(L/2 - |x|, W/2 - |y|)`, `L = Pairs*(T1+T2)` | layers along x | yes |
@@ -224,6 +225,22 @@ layer its own index, no band, no absorption. The boundaries between layers are i
 so a fractional boundary mixes the two indices in its pixel. A glass plate is painted first and the stack over it,
 so the pixels at the plate's front average both; a mirror plate last, so its pixels stay red 0. Without a layer
 the plate alone is painted.
+
+### Meta surface
+
+The plate as the interference filter's, and the pattern (`shapes/meta.rs`): one ridge per cell across the face,
+standing in front of the plate from `x' = -L/2 - H` to `-L/2`, centred in its cell of `pitch` and as wide as the
+cell's fill factor times the pitch; the pattern index, no absorption, the band on the ridges' tops alone (the
+front; the flanks and the foot are bare). The depth is the greatest of the three nearby ridges' rectangle distances
+(the cell under y' and its neighbours), exact since the ridges stay in their cells; without a ridge nearby, at
+least the distance to the pattern's box, -1 at most. The fill of cell j at y'_j (the cells laid from one end,
+centred together on the axis, `model/meta.rs`): the delay the design asks, wrapped to a turn with a full turn kept
+as one (a converging centre cell is solid); the effective index `n_eff = 1 + (delay / 2 pi) lambda / H`; the fill
+`(n_eff^2 - 1) / (n_p^2 - 1)` clamped to 0..1 (the lamellar mean of n^2). Delays: a lens `2 pi - wrap(phi)`
+(converging) or `wrap(phi)` (diverging) with `phi = (2 pi / lambda)(sqrt(F^2 + y^2) - F)`; a prism
+`-(2 pi / lambda) y sin(theta)`; an axicon `2 pi - wrap((2 pi / lambda) |y| sin(beta))`. `lambda` is the design
+frequency's wavelength through the frequency scale (as a zone plate's); without one the pattern is empty and the
+plate alone is painted. A glass plate first and the pattern over it, a mirror plate last.
 
 ### Fibre
 

@@ -160,6 +160,25 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].kind.LogicGate.output_coated
 .parts[].kind.LogicGate.port_spacing
 .parts[].kind.LogicGate.upper_output_active
+.parts[].kind.MetaSurface.coating.back
+.parts[].kind.MetaSurface.coating.depth
+.parts[].kind.MetaSurface.coating.front
+.parts[].kind.MetaSurface.coating.profile = "Layer"
+.parts[].kind.MetaSurface.coating.sides
+.parts[].kind.MetaSurface.design.Axicon.cone_angle
+.parts[].kind.MetaSurface.design.Lens.focal_length
+.parts[].kind.MetaSurface.design.Lens.lens_type = "Converging"
+.parts[].kind.MetaSurface.design.Prism.deflection
+.parts[].kind.MetaSurface.design_frequency
+.parts[].kind.MetaSurface.height
+.parts[].kind.MetaSurface.length
+.parts[].kind.MetaSurface.material.absorption
+.parts[].kind.MetaSurface.material.absorption_ramp
+.parts[].kind.MetaSurface.material.mirror
+.parts[].kind.MetaSurface.material.refractive_index
+.parts[].kind.MetaSurface.pattern_index
+.parts[].kind.MetaSurface.pitch
+.parts[].kind.MetaSurface.width
 .parts[].kind.Outline.coating.back
 .parts[].kind.Outline.coating.depth
 .parts[].kind.Outline.coating.front
@@ -234,6 +253,9 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].name = "Grating 1"
 .parts[].name = "Interference filter 1"
 .parts[].name = "Lens 1"
+.parts[].name = "Meta axicon 1"
+.parts[].name = "Meta lens 1"
+.parts[].name = "Meta prism 1"
 .parts[].name = "Outline 1"
 .parts[].name = "Polygon 1"
 .parts[].name = "Rectangle 1"

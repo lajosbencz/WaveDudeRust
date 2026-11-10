@@ -234,6 +234,7 @@ pub fn grip_of(kind: &PartKind) -> Option<Vec2> {
 		PartKind::FresnelLens(f) => Some(Vec2::new(0., f64::from(f.lens.diameter) / 2.)),
 		PartKind::Diffuser(d) => Some(Vec2::new(f64::from(d.length) / 2., f64::from(d.width) / 2.)),
 		PartKind::InterferenceFilter(f) => Some(Vec2::new(f64::from(f.length) / 2., f64::from(f.width) / 2.)),
+		PartKind::MetaSurface(m) => Some(Vec2::new(f64::from(m.length) / 2., f64::from(m.width) / 2.)),
 		PartKind::FacettedGrating(g) => Some(Vec2::new(f64::from(g.length) / 2., f64::from(g.width) / 2.)),
 		PartKind::GrinLens(g) => Some(Vec2::new(f64::from(g.length) / 2., f64::from(g.diameter) / 2.)),
 		_ => None,
@@ -374,10 +375,14 @@ pub fn grip_edits(kind: &PartKind, q: Vec2) -> Vec<(String, Value)> {
 		}
 		PartKind::Lens(_) => vec![("kind.Lens.diameter".into(), json!(span(q.y, 2)))],
 		PartKind::FresnelLens(_) => vec![("kind.FresnelLens.diameter".into(), json!(span(q.y, 2)))],
-		PartKind::Diffuser(_) | PartKind::FacettedGrating(_) | PartKind::InterferenceFilter(_) => {
+		PartKind::Diffuser(_)
+		| PartKind::FacettedGrating(_)
+		| PartKind::InterferenceFilter(_)
+		| PartKind::MetaSurface(_) => {
 			let (variant, min_width) = match kind {
 				PartKind::Diffuser(_) => ("Diffuser", 2),
 				PartKind::FacettedGrating(_) => ("FacettedGrating", 2),
+				PartKind::MetaSurface(_) => ("MetaSurface", 2),
 				_ => ("InterferenceFilter", 1),
 			};
 			vec![

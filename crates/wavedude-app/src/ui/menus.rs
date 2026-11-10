@@ -98,7 +98,7 @@ pub const ZOOMS: [(f64, &str); 8] = [
 ];
 
 /// The Add part menu's entries: kind, string key, test id.
-pub const PART_KINDS: [(NewPart, &str, &str); 18] = [
+pub const PART_KINDS: [(NewPart, &str, &str); 21] = [
 	(NewPart::Lens, "MenuAddLens", "Lens"),
 	(NewPart::FresnelLens, "MenuAddFresnelLens", "FresnelLens"),
 	(NewPart::Fiber, "MenuAddFiber", "Fiber"),
@@ -109,6 +109,9 @@ pub const PART_KINDS: [(NewPart, &str, &str); 18] = [
 	(NewPart::InterferenceFilter, "MenuAddInterferenceFilter", "InterferenceFilter"),
 	(NewPart::SimpleGrating, "MenuAddSimpleGrating", "SimpleGrating"),
 	(NewPart::FacettedGrating, "MenuAddFacettedGrating", "FacettedGrating"),
+	(NewPart::MetaLens, "MenuAddMetaLens", "MetaLens"),
+	(NewPart::MetaPrism, "MenuAddMetaPrism", "MetaPrism"),
+	(NewPart::MetaAxicon, "MenuAddMetaAxicon", "MetaAxicon"),
 	(NewPart::Polygon, "MenuAddPolygon", "Polygon"),
 	(NewPart::Rectangle, "MenuAddRectangle", "Rectangle"),
 	(NewPart::Ellipse, "MenuAddEllipse", "Ellipse"),
@@ -231,6 +234,7 @@ pub fn part_entries(s: &Strings, prefix: &str) -> Vec<Entry> {
 		NewPart::SimpleGrating,
 		NewPart::FacettedGrating,
 	));
+	v.push(submenu("MetaSurfaces", "MenuAddMetaSurfaces", NewPart::MetaLens, NewPart::MetaLens, NewPart::MetaAxicon));
 	v.push(MenuEntry::Separator);
 	v.extend(entries(NewPart::Polygon, NewPart::Outline));
 	v.push(MenuEntry::Separator);

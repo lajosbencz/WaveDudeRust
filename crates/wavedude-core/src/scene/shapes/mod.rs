@@ -12,6 +12,7 @@ mod gate;
 mod grating;
 mod grin;
 mod lens;
+mod meta;
 mod outline;
 mod polygon;
 mod profiled;
@@ -317,6 +318,17 @@ pub fn shapes_for(part: &Part, sim: &Simulation, seed: i32) -> Vec<Box<dyn PartS
 				(Some(stack), false) => vec![plate, stack],
 			}
 		}
+		PartKind::MetaSurface(m) => {
+			// the plate and its pattern, as the filter's plate and stack
+			let plate = Box::new(plate_shape(m.length, m.width, &m.material, &m.coating)) as Box<dyn PartShape>;
+			let pattern =
+				meta::MetaPatternShape::new(m, sim.source_frequency_scale).map(|s| Box::new(s) as Box<dyn PartShape>);
+			match (pattern, m.material.mirror) {
+				(None, _) => vec![plate],
+				(Some(pattern), true) => vec![pattern, plate],
+				(Some(pattern), false) => vec![plate, pattern],
+			}
+		}
 		_ => shape_for(part, sim, seed).into_iter().collect(),
 	}
 }
@@ -349,6 +361,7 @@ pub fn shape_for(part: &Part, sim: &Simulation, seed: i32) -> Option<Box<dyn Par
 		}
 		PartKind::InterferenceFilter(f) => Box::new(plate_shape(f.length, f.width, &f.material, &f.coating)),
 		PartKind::SimpleGrating(g) => Box::new(grating::GratingShape::new(g)),
+		PartKind::MetaSurface(m) => Box::new(plate_shape(m.length, m.width, &m.material, &m.coating)),
 		PartKind::Fiber(f) => Box::new(fiber::FiberShape::new(f)?),
 		PartKind::BraggReflector(b) => Box::new(bragg::BraggShape::new(b)),
 		PartKind::GrinLens(g) => Box::new(grin::GrinShape::new(g)),
@@ -371,6 +384,7 @@ pub fn vertices(kind: &PartKind) -> Option<Vec<Vec2>> {
 		| PartKind::InterferenceFilter(_)
 		| PartKind::SimpleGrating(_)
 		| PartKind::FacettedGrating(_)
+		| PartKind::MetaSurface(_)
 		| PartKind::Fiber(_)
 		| PartKind::BraggReflector(_)
 		| PartKind::GrinLens(_)
@@ -386,6 +400,12 @@ pub fn outline_of(part: &Part, seed: i32) -> Option<Vec<Vec2>> {
 	let plate = match &part.kind {
 		PartKind::Diffuser(d) => d.plate(&part.base.name, seed),
 		PartKind::FacettedGrating(g) => g.plate(),
+		PartKind::MetaSurface(m) => {
+			let back = m.length.max(1) as f64 / 2.0;
+			let front = -back - m.guarded_height();
+			let w = m.width.max(2) as f64 / 2.0;
+			return Some(vec![Vec2::new(front, -w), Vec2::new(back, -w), Vec2::new(back, w), Vec2::new(front, w)]);
+		}
 		PartKind::SimpleGrating(g) => {
 			let r = g.guarded_diameter() as f64 / 2.0;
 			let l =

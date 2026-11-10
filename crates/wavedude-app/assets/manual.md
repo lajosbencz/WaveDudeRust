@@ -355,12 +355,13 @@ The Add part menu of the project tree. <figure name="menu-add-part"/>
 7. **Diffuser**: A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects.
 8. **Interference filter**: An interference filter: a plate of glass or mirror with a stack of thin layers on its front, each with its own thickness and index. Waves reflected at the layers' boundaries interfere, so the stack reflects some wavelengths and passes others; a new filter is a quarter-wave stack for a wavelength of 16 pixels.
 9. **Diffraction gratings**: The gratings, in a submenu of their own: the simple 2D grating and the facetted grating.
-10. **Polygon**: A regular polygon of glass or mirror, by its number of sides and the side length.
-11. **Rectangle**: A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one.
-12. **Ellipse**: An ellipse of glass or mirror, by the length and width of its box; linked, a circle.
-13. **Triangle**: A triangle of glass or mirror: the base across the axis, the apex along it, the base angles set by a preset or by hand.
-14. **Outline**: A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing.
-15. **Optical logic**: The gates, in a submenu of their own: XOR (Mach-Zehnder), AND and OR.
+10. **Meta surfaces**: The meta surfaces, in a submenu of their own: the meta lens, the meta prism and the meta axicon.
+11. **Polygon**: A regular polygon of glass or mirror, by its number of sides and the side length.
+12. **Rectangle**: A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one.
+13. **Ellipse**: An ellipse of glass or mirror, by the length and width of its box; linked, a circle.
+14. **Triangle**: A triangle of glass or mirror: the base across the axis, the apex along it, the base angles set by a preset or by hand.
+15. **Outline**: A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing.
+16. **Optical logic**: The gates, in a submenu of their own: XOR (Mach-Zehnder), AND and OR.
 
 The XOR gate has two input waveguides, a phase section putting the lower input a quarter period ahead, and a coupler whose upper output carries their difference. It lights when one input is lit, not both, for coherent inputs at the design frequency. The AND gate is the same coupler with the lower input a quarter period behind, so the upper output carries the sum: brightest with both inputs lit, about four times a single one; a passive linear gate has no truer AND. The OR gate puts the lower input a twelfth of a period ahead, so the upper output carries half the power of either input and of both: it lights with one input or both.
 
@@ -568,6 +569,45 @@ A facetted grating: a plate of glass or mirror whose front face carries a period
 16. **Pattern**: The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid.
 17. **Pitch**: The period of the facets across the face in pixels: the grating's pitch, which with the wavelength sets the diffraction angles. Two pixels at least.
 18. **Amplitude**: The relief's height either side of the mean face in pixels: the facets run from this far out to this far in, twice it from crest to trough. 0 makes the face flat.
+
+### Meta lens
+
+A meta lens: a carrier plate with a sub-wavelength pattern on its front, a ridge of its own index in every cell, whose fill is computed from the target frequency and the focal length so the cells delay the wave as a lens would, zone by zone. The wave sees each cell as a mean index between the plate's surroundings and the ridge's, the more of the cell the ridge fills, the higher; a converging lens fills the cells most at the centre and less outward within each zone, where the fill starts over, a diverging one the other way. A new meta lens is cut for a wavelength of 32 pixels with a focal length of 500, cells of 4 pixels and ridges 32 pixels high of index 2.00: just the height a full turn of phase needs, which the form shows. The anti-reflection coating can lie on the ridges' tops (the front) and the plate's back. On the pictures, a selected meta lens shows a grip on the plate's back corner that sets the length and the width. Badges 1 to 6 are the shared settings, 7 to 14 the glass and mirror settings without the sides.
+
+15. **Length**: Thickness of the carrier plate along the axis in pixels; the pattern stands on its front, outside it.
+16. **Width**: Width of the plate and its pattern across the axis in pixels.
+17. **Target frequency**: The source frequency the lens is designed for, on the same scale as a source's frequency. The cells' fill follows from the wavelength it gives, so the lens focuses this frequency at the focal length; other frequencies focus elsewhere.
+18. **Wavelength**: The wavelength the target frequency gives in a medium of index 1. A read-out.
+19. **Focal length**: Distance in pixels from the lens to its focus, for a plane wave arriving along the axis; a diverging lens spreads the wave as if from a focus that far behind it.
+20. **Lens type**: Converging, the fill greatest at the centre and falling outward within each zone; or diverging, the fill growing outward.
+21. **Zones**: The zones from the centre to the rim, each a full turn of phase. A read-out.
+22. **Pattern index**: Refractive index of the ridges, usually above the plate's. The higher, the lower the pattern can be.
+23. **Pitch**: The width of a cell of the pattern in pixels, one ridge per cell. Well below the wavelength, so the wave sees each cell as a mean index rather than diffracting at it.
+24. **Height**: The height of the ridges in front of the plate in pixels. A full turn of phase takes the wavelength over the pattern index less one; a lower pattern cannot delay enough.
+25. **Full-turn height**: The height at which a filled cell delays by a whole turn. A read-out.
+
+### Meta prism
+
+A meta prism: a carrier plate with a sub-wavelength pattern on its front whose cells delay the wave in a line across the face, so a wave arriving along the axis leaves turned by a set angle, as a blazed grating's first order. The fill of the cells climbs across each zone and starts over at the next; a zone is a full turn of phase, the wavelength over the sine of the angle wide, and must stay a few cells wide, so steep angles need fine cells. A new meta prism is cut for a wavelength of 32 pixels and turns the wave by 20 degrees, with cells of 4 pixels and ridges 32 pixels high of index 2.00. The anti-reflection coating can lie on the ridges' tops and the plate's back. Badges 1 to 6 are the shared settings, 7 to 14 the glass and mirror settings without the sides, 15 and 16 the plate's length and width as the meta lens's.
+
+17. **Target frequency**: The source frequency the prism is designed for, on the same scale as a source's frequency; the wavelength it gives sets the cells' fill. Another frequency is turned by another angle.
+18. **Wavelength**: The wavelength the target frequency gives in a medium of index 1. A read-out.
+19. **Deflection**: The angle in degrees by which a wave arriving along the axis is turned, counter-clockwise on the screen for a positive angle; 0 turns nothing.
+20. **Zone width**: The width of a zone across the face, a full turn of phase. A read-out.
+21. **Zones**: How many zones fit across the face. A read-out.
+22. **Pattern index**, **Pitch**, **Height**, **Full-turn height**: As the meta lens's, badges 22 to 25.
+
+### Meta axicon
+
+A meta axicon: a carrier plate with a sub-wavelength pattern on its front whose cells delay the wave in proportion to the distance from the axis, so the two halves of a wave arriving along the axis are turned toward it by a set angle and cross along a line behind the surface rather than at a point: a long, narrow focus that keeps its shape over its length. The fill is greatest on the axis and falls outward within each zone, as a converging lens's, but at an even pace. A new meta axicon is cut for a wavelength of 32 pixels with a cone angle of 10 degrees, cells of 4 pixels and ridges 32 pixels high of index 2.00. Badges 1 to 6 are the shared settings, 7 to 14 the glass and mirror settings without the sides, 15 and 16 the plate's length and width as the meta lens's.
+
+17. **Target frequency**: The source frequency the axicon is designed for; the wavelength it gives sets the cells' fill.
+18. **Wavelength**: The wavelength the target frequency gives in a medium of index 1. A read-out.
+19. **Cone angle**: The angle in degrees by which each half of the wave is turned toward the axis. The steeper, the shorter the line of focus and the narrower the zones.
+20. **Line of focus**: How far behind the surface the line of focus reaches: half the width over the tangent of the cone angle. A read-out.
+21. **Zone width**: The width of a zone across the face, a full turn of phase. A read-out.
+22. **Zones**: How many zones fit from the centre to the rim. A read-out.
+23. **Pattern index**, **Pitch**, **Height**, **Full-turn height**: As the meta lens's, badges 22 to 25, here 23 to 26.
 
 ### XOR, AND and OR gates
 

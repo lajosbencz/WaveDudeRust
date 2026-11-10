@@ -24,8 +24,8 @@ Project @Version @Seed @Generator?
   Source*
     Array?
   <part>*                (Lens | FresnelLens | Polygon | Rectangle | Ellipse | Triangle | Outline | Diffuser |
-                          InterferenceFilter | SimpleGrating | FacettedGrating | Fiber | BraggReflector | GrinLens | XorGate |
-                          AndGate | OrGate | ZonePlate, in list order)
+                          InterferenceFilter | SimpleGrating | FacettedGrating | MetaLens | MetaPrism | MetaAxicon |
+                          Fiber | BraggReflector | GrinLens | XorGate | AndGate | OrGate | ZonePlate, in list order)
     Point*               (Outline)
     Layer*               (InterferenceFilter; @Thickness @RefractiveIndex, sparse against 2 and 1.5)
     Node*                (Fiber)

@@ -39,6 +39,15 @@ pub fn kind_icon(kind: NewPart) -> Icon {
 		NewPart::FacettedGrating => {
 			Icon::path("M11.5 1.5 L11.5 13.5 L7.5 13.5 L4.5 11.5 L7.5 9.5 L4.5 7.5 L7.5 5.5 L4.5 3.5 L7.5 1.5 Z")
 		}
+		NewPart::MetaLens => Icon::path(
+			"M10.5 1.5 L13.5 1.5 L13.5 13.5 L10.5 13.5 Z M10.5 6 L4.5 6 L4.5 9 L10.5 9 M10.5 3 L6.5 3 L6.5 4 L10.5 4 M10.5 11 L6.5 11 L6.5 12 L10.5 12",
+		),
+		NewPart::MetaPrism => Icon::path(
+			"M10.5 1.5 L13.5 1.5 L13.5 13.5 L10.5 13.5 Z M10.5 2 L4.5 2 L4.5 3 L10.5 3 M10.5 5 L6 5 L6 7 L10.5 7 M10.5 9 L8 9 L8 10 L10.5 10 M10.5 12 L9.5 12 L9.5 13 L10.5 13",
+		),
+		NewPart::MetaAxicon => Icon::path(
+			"M10.5 1.5 L13.5 1.5 L13.5 13.5 L10.5 13.5 Z M10.5 7 L4.5 7 L4.5 8 L10.5 8 M10.5 4 L7 4 L7 5 L10.5 5 M10.5 10 L7 10 L7 11 L10.5 11 M10.5 2 L9 2 L9 2.5 L10.5 2.5 M10.5 12.5 L9 12.5 L9 13 L10.5 13",
+		),
 		NewPart::Fiber => Icon::path("M0.5 4.5 C6.5 4.5 7.5 10.5 14.5 10.5 M0.5 7.5 C6.5 7.5 7.5 13.5 14.5 13.5"),
 		NewPart::BraggReflector => {
 			Icon::path("M2.5 1.5 L2.5 13.5 M5.5 1.5 L5.5 13.5 M8.5 1.5 L8.5 13.5 M11.5 1.5 L11.5 13.5")
@@ -117,6 +126,7 @@ fn part_icon(part: &Part) -> Icon {
 		PartKind::Diffuser(_) => NewPart::Diffuser,
 		PartKind::InterferenceFilter(_) => NewPart::InterferenceFilter,
 		PartKind::SimpleGrating(_) => NewPart::SimpleGrating,
+		PartKind::MetaSurface(_) => NewPart::of(&part.kind),
 		PartKind::FacettedGrating(_) => NewPart::FacettedGrating,
 		PartKind::Fiber(_) => NewPart::Fiber,
 		PartKind::BraggReflector(_) => NewPart::BraggReflector,

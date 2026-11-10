@@ -8,9 +8,9 @@ use super::names;
 use super::ranges as r;
 use super::{
 	BraggReflector, Coating, ColorScheme, Diffuser, Display, DisplayLayer, Ellipse, FacettedGrating, Fiber,
-	FilterLayer, FresnelLens, GrinLens, InterferenceFilter, Layer, Lens, LogicGate, Material, Measurement, Outline,
-	Part, PartKind, Polygon, Probe, Project, Rectangle, Scene, SimpleGrating, Simulation, Source, SourceArray, Stop,
-	Triangle, TriangleType, Video, YScale, ZonePlate, normalize_angle,
+	FilterLayer, FresnelLens, GrinLens, InterferenceFilter, Layer, Lens, LogicGate, Material, Measurement, MetaDesign,
+	MetaSurface, Outline, Part, PartKind, Polygon, Probe, Project, Rectangle, Scene, SimpleGrating, Simulation, Source,
+	SourceArray, Stop, Triangle, TriangleType, Video, YScale, ZonePlate, normalize_angle,
 };
 
 /// Brings a value into its valid state.
@@ -188,6 +188,7 @@ impl Normalize for Part {
 			PartKind::Diffuser(p) => p.normalize(),
 			PartKind::InterferenceFilter(p) => p.normalize(),
 			PartKind::SimpleGrating(p) => p.normalize(),
+			PartKind::MetaSurface(p) => p.normalize(),
 			PartKind::FacettedGrating(p) => p.normalize(),
 			PartKind::Fiber(p) => p.normalize(),
 			PartKind::BraggReflector(p) => p.normalize(),
@@ -236,6 +237,25 @@ impl Normalize for SimpleGrating {
 		self.column_spacing = r::GRATING_SPACING.clamp_u32(self.column_spacing);
 		self.row_spacing = r::GRATING_SPACING.clamp_u32(self.row_spacing);
 		self.diameter = self.guarded_diameter();
+	}
+}
+
+impl Normalize for MetaSurface {
+	fn normalize(&mut self) {
+		self.material.normalize();
+		self.coating.normalize();
+		self.length = r::AT_LEAST_1.clamp_u32(self.length);
+		self.width = r::AT_LEAST_2.clamp_u32(self.width);
+		let d = MetaSurface::default();
+		self.design_frequency = design_level(self.design_frequency, d.design_frequency);
+		self.pitch = r::META_PIXELS.clamp_or(self.pitch, d.pitch);
+		self.height = r::META_PIXELS.clamp_or(self.height, d.height);
+		self.pattern_index = normalize_index(self.pattern_index);
+		match &mut self.design {
+			MetaDesign::Lens(l) => l.focal_length = r::AT_LEAST_1.clamp_u32(l.focal_length),
+			MetaDesign::Prism(p) => p.deflection = round2(r::META_DEFLECTION.clamp_or(p.deflection, 20.0)),
+			MetaDesign::Axicon(a) => a.cone_angle = round2(r::META_CONE_ANGLE.clamp_or(a.cone_angle, 10.0)),
+		}
 	}
 }
 

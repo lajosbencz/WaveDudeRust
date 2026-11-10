@@ -90,6 +90,12 @@ pub const FRESNEL_ZONES: Range = Range::new(1.0, 100.0);
 pub const RIPPLE_WAVELENGTH: Range = Range::new(2.0, 10_000.0);
 /// A profiled plate's amplitude or sigma in pixels.
 pub const PLATE_PIXELS: Range = Range::new(0.0, 10_000.0);
+/// A meta surface's pitch or height in pixels.
+pub const META_PIXELS: Range = Range::new(1.0, 10_000.0);
+/// A meta prism's deflection in degrees: short of grazing.
+pub const META_DEFLECTION: Range = Range::new(-89.0, 89.0);
+/// A meta axicon's cone angle in degrees: short of no cone and of grazing.
+pub const META_CONE_ANGLE: Range = Range::new(0.1, 89.0);
 /// A simple grating's column or row spacing: room for a dot of a pixel.
 pub const GRATING_SPACING: Range = Range::new(2.0, INT_MAX);
 /// An interference filter layer's thickness in pixels; 0 leaves it out.
@@ -167,6 +173,15 @@ pub const ALL: &[(&str, Range)] = &[
 	("SimpleGrating.Rows", AT_LEAST_1),
 	("SimpleGrating.ColumnSpacing", GRATING_SPACING),
 	("SimpleGrating.RowSpacing", GRATING_SPACING),
+	("MetaSurface.Length", AT_LEAST_1),
+	("MetaSurface.Width", AT_LEAST_2),
+	("MetaSurface.DesignFrequency", DESIGN_LEVEL),
+	("MetaSurface.Pitch", META_PIXELS),
+	("MetaSurface.Height", META_PIXELS),
+	("MetaSurface.PatternIndex", INDEX),
+	("MetaLens.FocalLength", AT_LEAST_1),
+	("MetaPrism.Deflection", META_DEFLECTION),
+	("MetaAxicon.ConeAngle", META_CONE_ANGLE),
 	("FacettedGrating.Length", AT_LEAST_1),
 	("FacettedGrating.Width", AT_LEAST_2),
 	("FacettedGrating.Pitch", RIPPLE_WAVELENGTH),
@@ -280,6 +295,15 @@ mod tests {
 			PartKind::FacettedGrating(FacettedGrating::default()),
 			PartKind::InterferenceFilter(InterferenceFilter::new_part()),
 			PartKind::SimpleGrating(SimpleGrating::default()),
+			PartKind::MetaSurface(MetaSurface::default()),
+			PartKind::MetaSurface(MetaSurface {
+				design: MetaDesign::Prism(MetaPrismDesign::default()),
+				..Default::default()
+			}),
+			PartKind::MetaSurface(MetaSurface {
+				design: MetaDesign::Axicon(MetaAxiconDesign::default()),
+				..Default::default()
+			}),
 		];
 		for (i, k) in kinds.into_iter().enumerate() {
 			let mut part = Part::new(k, 10, 10);
@@ -305,6 +329,29 @@ mod tests {
 				$key,
 				Box::new(|p: &mut Project, v: f64| p.sources[0].array.as_mut().unwrap().$f = num(v)) as Set,
 				Box::new(|p: &Project| p.sources[0].array.as_ref().unwrap().$f as f64) as Get,
+			)
+		};
+	}
+
+	/// A field of the meta surface design of part `$i`.
+	macro_rules! design {
+		($key:expr, $i:expr, $variant:ident, |$d:ident| $place:expr) => {
+			(
+				$key,
+				Box::new(|p: &mut Project, v: f64| {
+					if let PartKind::MetaSurface(m) = &mut p.parts[$i].kind
+						&& let MetaDesign::$variant($d) = &mut m.design
+					{
+						$place = num(v);
+					}
+				}) as Set,
+				Box::new(|p: &Project| match &p.parts[$i].kind {
+					PartKind::MetaSurface(m) => match &m.design {
+						MetaDesign::$variant($d) => $place as f64,
+						_ => unreachable!(),
+					},
+					_ => unreachable!(),
+				}) as Get,
 			)
 		};
 	}
@@ -357,6 +404,7 @@ mod tests {
 			PartKind::Diffuser(k) => &mut k.material,
 			PartKind::InterferenceFilter(k) => &mut k.material,
 			PartKind::SimpleGrating(k) => &mut k.material,
+			PartKind::MetaSurface(k) => &mut k.material,
 			PartKind::FacettedGrating(k) => &mut k.material,
 			PartKind::Polygon(k) => &mut k.material,
 			PartKind::Rectangle(k) => &mut k.material,
@@ -374,6 +422,7 @@ mod tests {
 			PartKind::Diffuser(k) => &mut k.coating,
 			PartKind::InterferenceFilter(k) => &mut k.coating,
 			PartKind::FacettedGrating(k) => &mut k.coating,
+			PartKind::MetaSurface(k) => &mut k.coating,
 			PartKind::Polygon(k) => &mut k.coating,
 			PartKind::Rectangle(k) => &mut k.coating,
 			PartKind::Ellipse(k) => &mut k.coating,
@@ -482,13 +531,22 @@ mod tests {
 			kind!("SimpleGrating.Rows", 15, SimpleGrating, |k| k.rows),
 			kind!("SimpleGrating.ColumnSpacing", 15, SimpleGrating, |k| k.column_spacing),
 			kind!("SimpleGrating.RowSpacing", 15, SimpleGrating, |k| k.row_spacing),
+			kind!("MetaSurface.Length", 16, MetaSurface, |k| k.length),
+			kind!("MetaSurface.Width", 16, MetaSurface, |k| k.width),
+			kind!("MetaSurface.DesignFrequency", 16, MetaSurface, |k| k.design_frequency),
+			kind!("MetaSurface.Pitch", 16, MetaSurface, |k| k.pitch),
+			kind!("MetaSurface.Height", 16, MetaSurface, |k| k.height),
+			kind!("MetaSurface.PatternIndex", 16, MetaSurface, |k| k.pattern_index),
+			design!("MetaLens.FocalLength", 16, Lens, |d| d.focal_length),
+			design!("MetaPrism.Deflection", 17, Prism, |d| d.deflection),
+			design!("MetaAxicon.ConeAngle", 18, Axicon, |d| d.cone_angle),
 			kind!("FacettedGrating.Length", 13, FacettedGrating, |k| k.length),
 			kind!("FacettedGrating.Width", 13, FacettedGrating, |k| k.width),
 			kind!("FacettedGrating.Pitch", 13, FacettedGrating, |k| k.pitch),
 			kind!("FacettedGrating.Amplitude", 13, FacettedGrating, |k| k.amplitude),
 			field!("Stop.At", |p| p.color_schemes[0].stops[0].at),
 		];
-		for i in (0..6).chain([11, 12, 13, 14, 15]) {
+		for i in (0..6).chain([11, 12, 13, 14, 15, 16]) {
 			v.push((
 				"Material.RefractiveIndex",
 				Box::new(move |p: &mut Project, x: f64| material(p, i).refractive_index = x),
@@ -505,7 +563,7 @@ mod tests {
 				Box::new(move |p: &Project| material(&mut p.clone(), i).absorption_ramp as f64),
 			));
 		}
-		for i in [0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 14] {
+		for i in [0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 14, 16] {
 			v.push((
 				"Coating.Coating",
 				Box::new(move |p: &mut Project, x: f64| coating(p, i).depth = x),

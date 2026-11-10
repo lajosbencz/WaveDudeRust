@@ -5,6 +5,7 @@
 
 mod display;
 pub mod lens_geometry;
+pub mod meta;
 pub mod names;
 pub mod normalize;
 mod parts;

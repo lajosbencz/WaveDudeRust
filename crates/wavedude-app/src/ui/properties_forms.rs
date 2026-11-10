@@ -23,6 +23,17 @@ use super::dialogs;
 use super::properties::{Form, Snapshot, bounds, combo_box, readout, tagged, to_json};
 use super::shared::App;
 
+/// A meta surface's read-outs.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MetaReadouts {
+	pub full_turn: Option<f64>,
+	pub zones: u32,
+	/// A prism's or an axicon's.
+	pub zone_width: Option<f64>,
+	/// An axicon's line of focus.
+	pub line: Option<f64>,
+}
+
 /// Values the forms show that the edited object alone does not hold.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Readouts {
@@ -39,6 +50,7 @@ pub struct Readouts {
 	pub stack: Option<f64>,
 	/// A simple grating's largest dot diameter.
 	pub max_diameter: Option<u32>,
+	pub meta: Option<MetaReadouts>,
 	pub image_found: bool,
 	pub image_size: Option<(u32, u32)>,
 	/// Scheme names for each layer's picker: (name, project's own).
@@ -124,6 +136,16 @@ pub fn readouts(app: &App, row: Row) -> Readouts {
 				}
 				PartKind::InterferenceFilter(f) => r.stack = Some(f.stack_thickness()),
 				PartKind::SimpleGrating(g) => r.max_diameter = Some(g.max_diameter()),
+				PartKind::MetaSurface(m) => {
+					let scale = sim.source_frequency_scale;
+					r.wavelength = Some(m::wavelength(m.design_frequency, 1.0, scale));
+					r.meta = Some(MetaReadouts {
+						full_turn: m.full_turn_height(scale),
+						zones: m.zone_count(scale),
+						zone_width: m.zone_width(scale),
+						line: m.line_length(),
+					});
+				}
 				PartKind::Polygon(_)
 				| PartKind::Rectangle(_)
 				| PartKind::Ellipse(_)
@@ -536,6 +558,8 @@ enum CoatedFaces {
 	All,
 	/// A profiled plate's flat back.
 	Back,
+	/// A meta surface's ridge tops and plate back.
+	FrontBack,
 	/// No coating at all (a grating's dots).
 	None,
 }
@@ -551,7 +575,7 @@ fn coating_rows_of(f: &Form, coating: &str, disabled: bool, faces: CoatedFaces) 
 		f.number("ShapePart", "Coating", &c("depth"), "Coating.Coating", 1.),
 		f.combo("CoatedPart", "CoatingProfile", &c("profile"), "CoatingProfile", &["Layer", "Graded"]),
 	];
-	if faces == CoatedFaces::All {
+	if matches!(faces, CoatedFaces::All | CoatedFaces::FrontBack) {
 		rows.push(f.check("CoatedPart", "FrontCoated", &c("front")));
 	}
 	rows.push(f.check("CoatedPart", "BackCoated", &c("back")));
@@ -679,6 +703,7 @@ fn part(f: &Form, r: &Readouts, kind: &PartKind, open: bool) -> Vec<Element> {
 				),
 			]);
 		}
+		PartKind::MetaSurface(m) => out.extend(meta_surface(f, r, &at, &m.design)),
 		PartKind::FacettedGrating(_) => {
 			let g = f.scope("FacettedGratingPart", &at, &variant);
 			out.extend([
@@ -784,6 +809,77 @@ fn triangle(f: &Form, r: &Readouts, at: &str, variant: &str) -> Element {
 				.hint(s.get("TipApexAngle")),
 		],
 	)
+}
+
+/// A meta surface's form: the plate's material (tops and back coated), its shape, the design's section (a lens's,
+/// a prism's or an axicon's) and the pattern.
+fn meta_surface(f: &Form, r: &Readouts, at: &str, design: &m::MetaDesign) -> Vec<Element> {
+	let s = &f.s;
+	let m = f.scope("MetaSurfacePart", at, "MetaSurface");
+	let MetaReadouts { full_turn, zones, zone_width, line } = r.meta.unwrap_or_default();
+	let wavelength = readout(s.get("LabelWavelength"), r.wavelength.map(px).unwrap_or_default(), "PartWavelength")
+		.hint(s.get("TipGateWavelength"));
+	let zones = readout(s.get("LabelMetaZones"), zones.to_string(), "PartZoneCount").hint(s.get("TipMetaZones"));
+	let zone_width = readout(s.get("LabelZoneWidth"), zone_width.map(px).unwrap_or_default(), "PartZoneWidth")
+		.hint(s.get("TipZoneWidth"));
+	let (section_key, rows) = match design {
+		m::MetaDesign::Lens(_) => {
+			let l = f.scope("MetaLensPart", &format!("{at}.design.Lens"), "MetaLens");
+			(
+				"SectionLens",
+				vec![
+					m.decimals("DesignFrequency", 0.1, 2),
+					wavelength,
+					l.number("FocalLength", 10.),
+					l.combo("LensType", "MetaLensType", &["Converging", "Diverging"]),
+					zones,
+				],
+			)
+		}
+		m::MetaDesign::Prism(_) => {
+			let p = f.scope("MetaPrismPart", &format!("{at}.design.Prism"), "MetaPrism");
+			(
+				"SectionPrism",
+				vec![
+					m.decimals("DesignFrequency", 0.1, 2),
+					wavelength,
+					p.decimals("Deflection", 0.5, 2),
+					zone_width,
+					zones,
+				],
+			)
+		}
+		m::MetaDesign::Axicon(_) => {
+			let a = f.scope("MetaAxiconPart", &format!("{at}.design.Axicon"), "MetaAxicon");
+			(
+				"SectionAxicon",
+				vec![
+					m.decimals("DesignFrequency", 0.1, 2),
+					wavelength,
+					a.decimals("ConeAngle", 0.5, 2),
+					readout(s.get("LabelLineLength"), line.map(px).unwrap_or_default(), "PartLineLength")
+						.hint(s.get("TipLineLength")),
+					zone_width,
+					zones,
+				],
+			)
+		}
+	};
+	vec![
+		material_faces(f, at, CoatedFaces::FrontBack),
+		section(s.get("SectionShape"), vec![m.number("Length", 10.), m.number("Width", 10.)]),
+		section(s.get(section_key), rows),
+		section(
+			s.get("SectionPattern"),
+			vec![
+				m.number("PatternIndex", 0.01),
+				m.decimals("Pitch", 0.1, 2),
+				m.decimals("Height", 0.1, 2),
+				readout(s.get("LabelFullTurnHeight"), full_turn.map(px).unwrap_or_default(), "PartFullTurnHeight")
+					.hint(s.get("TipFullTurnHeight")),
+			],
+		),
+	]
 }
 
 fn zone_plate(f: &Form, r: &Readouts, at: &str, variant: &str) -> Vec<Element> {

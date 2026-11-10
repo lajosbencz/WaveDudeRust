@@ -52,6 +52,7 @@ xml_enum!(TriangleType: Equilateral, RightIsosceles, ThirtySixtyNinety, Isoscele
 xml_enum!(FiberEnds: Flat, Round);
 xml_enum!(ZoneDivision: EqualWidth, EqualDepth);
 xml_enum!(FacetPattern: Sawtooth, SquareWave, Sinusoidal);
+xml_enum!(MetaLensType: Converging, Diverging);
 xml_enum!(Layer: Field, Intensity);
 xml_enum!(Measurement: Amplitude, Value, IntegratedValue);
 xml_enum!(ProbeKind: Point, Line);
@@ -72,6 +73,9 @@ const PART_ELEMENTS: &[&str] = &[
 	"InterferenceFilter",
 	"SimpleGrating",
 	"FacettedGrating",
+	"MetaLens",
+	"MetaPrism",
+	"MetaAxicon",
 	"Fiber",
 	"BraggReflector",
 	"GrinLens",
@@ -477,6 +481,37 @@ kind_table!(SimpleGrating;
 	u32 "RowSpacing" row_spacing,
 	u32 "Diameter" diameter,
 );
+// the design's attributes follow (`read_part`, `write_part`, `part_attrs`)
+kind_table!(MetaSurface;
+	u32 "Length" length,
+	u32 "Width" width,
+	f64 "DesignFrequency" design_frequency,
+	f64 "Pitch" pitch,
+	f64 "Height" height,
+	f64 "PatternIndex" pattern_index,
+);
+impl Table for MetaLensDesign {
+	const FIELDS: &'static [Field<Self>] =
+		fields!(MetaLensDesign, "MetaLens"; u32 "FocalLength" focal_length, enumv "LensType" lens_type);
+
+	fn base() -> Self {
+		Self::default()
+	}
+}
+impl Table for MetaPrismDesign {
+	const FIELDS: &'static [Field<Self>] = fields!(MetaPrismDesign, "MetaPrism"; f64 "Deflection" deflection);
+
+	fn base() -> Self {
+		Self::default()
+	}
+}
+impl Table for MetaAxiconDesign {
+	const FIELDS: &'static [Field<Self>] = fields!(MetaAxiconDesign, "MetaAxicon"; f64 "ConeAngle" cone_angle);
+
+	fn base() -> Self {
+		Self::default()
+	}
+}
 kind_table!(FacettedGrating;
 	u32 "Length" length,
 	u32 "Width" width,
@@ -630,6 +665,14 @@ fn read_part(el: &Element, version: FileVersion) -> R<Part> {
 			..fields::read(el)?
 		}),
 		"SimpleGrating" => PartKind::SimpleGrating(SimpleGrating { material: material?, ..fields::read(el)? }),
+		"MetaLens" | "MetaPrism" | "MetaAxicon" => {
+			let design = match el.name.as_str() {
+				"MetaLens" => MetaDesign::Lens(fields::read(el)?),
+				"MetaPrism" => MetaDesign::Prism(fields::read(el)?),
+				_ => MetaDesign::Axicon(fields::read(el)?),
+			};
+			PartKind::MetaSurface(MetaSurface { coating: coating?, material: material?, design, ..fields::read(el)? })
+		}
 		"FacettedGrating" => {
 			PartKind::FacettedGrating(FacettedGrating { coating: coating?, material: material?, ..fields::read(el)? })
 		}
@@ -726,6 +769,11 @@ fn part_element_name(kind: &PartKind) -> &'static str {
 		PartKind::Diffuser(_) => "Diffuser",
 		PartKind::InterferenceFilter(_) => "InterferenceFilter",
 		PartKind::SimpleGrating(_) => "SimpleGrating",
+		PartKind::MetaSurface(m) => match m.design {
+			MetaDesign::Lens(_) => "MetaLens",
+			MetaDesign::Prism(_) => "MetaPrism",
+			MetaDesign::Axicon(_) => "MetaAxicon",
+		},
 		PartKind::FacettedGrating(_) => "FacettedGrating",
 		PartKind::Fiber(_) => "Fiber",
 		PartKind::BraggReflector(_) => "BraggReflector",
@@ -753,12 +801,24 @@ macro_rules! with_kind {
 			PartKind::Diffuser($k) => $e,
 			PartKind::InterferenceFilter($k) => $e,
 			PartKind::SimpleGrating($k) => $e,
+			PartKind::MetaSurface($k) => $e,
 			PartKind::FacettedGrating($k) => $e,
 			PartKind::Fiber($k) => $e,
 			PartKind::BraggReflector($k) => $e,
 			PartKind::GrinLens($k) => $e,
 			PartKind::LogicGate($k) => $e,
 			PartKind::ZonePlate($k) => $e,
+		}
+	};
+}
+
+/// Evaluates `$e` with `$d` bound to the design's own value, whatever the design.
+macro_rules! with_design {
+	($design:expr, $d:ident => $e:expr) => {
+		match $design {
+			MetaDesign::Lens($d) => $e,
+			MetaDesign::Prism($d) => $e,
+			MetaDesign::Axicon($d) => $e,
 		}
 	};
 }
@@ -775,6 +835,9 @@ fn write_part(p: &Part) -> Element {
 		fields::write(&f.lens, &mut el);
 	}
 	with_kind!(&p.kind, k => fields::write(k, &mut el));
+	if let PartKind::MetaSurface(m) = &p.kind {
+		with_design!(&m.design, d => fields::write(d, &mut el));
+	}
 	match &p.kind {
 		PartKind::Outline(k) => el.children.extend(k.points.iter().map(|pt| element("Point", pt))),
 		PartKind::Fiber(k) => el.children.extend(k.nodes.iter().map(|n| element("Node", n))),
@@ -788,6 +851,7 @@ fn write_part(p: &Part) -> Element {
 		| PartKind::Diffuser(_)
 		| PartKind::SimpleGrating(_)
 		| PartKind::FacettedGrating(_)
+		| PartKind::MetaSurface(_)
 		| PartKind::BraggReflector(_)
 		| PartKind::GrinLens(_)
 		| PartKind::LogicGate(_)
@@ -879,6 +943,9 @@ fn part_attrs(kind: &PartKind) -> Vec<Attr> {
 		fields::attrs(T::FIELDS)
 	}
 	attrs.extend(with_kind!(kind, k => own(k)));
+	if let PartKind::MetaSurface(m) = kind {
+		attrs.extend(with_design!(&m.design, d => own(d)));
+	}
 	attrs
 }
 
@@ -1134,6 +1201,12 @@ mod tests {
 			PartKind::Diffuser(Diffuser { sigma: 0.0, ..Diffuser::new_part() }),
 			PartKind::InterferenceFilter(InterferenceFilter::new_part()),
 			PartKind::SimpleGrating(SimpleGrating { columns: 2, ..SimpleGrating::new_part() }),
+			PartKind::MetaSurface(MetaSurface::new_part(MetaDesign::Lens(MetaLensDesign {
+				lens_type: MetaLensType::Diverging,
+				..MetaLensDesign::default()
+			}))),
+			PartKind::MetaSurface(MetaSurface::new_part(MetaDesign::Prism(MetaPrismDesign { deflection: -15.0 }))),
+			PartKind::MetaSurface(MetaSurface::new_part(MetaDesign::Axicon(MetaAxiconDesign::default()))),
 			PartKind::FacettedGrating(FacettedGrating {
 				pattern: FacetPattern::Sinusoidal,
 				..FacettedGrating::default()
