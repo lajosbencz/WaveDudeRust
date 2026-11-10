@@ -270,5 +270,45 @@ jobs:
           subject-path: dist/SHA256SUMS
       - name: Upload
         run: gh release upload "$TAG" dist/* --clobber --repo "${{ github.repository }}"
+      # Every file is verified against its attestation before the release goes public, and the notes get the result:
+      # the file, its digest and the workflow that made it. A file without one from this repository's build or
+      # publish workflow stops the release.
+      - name: Provenance of every file, into the notes
+        run: |
+          repo="$GITHUB_REPOSITORY"
+          gh release view "$TAG" --repo "$repo" --json body --jq .body > notes.md
+          {
+            echo
+            echo "### Provenance"
+            echo
+            echo "Every file was built and published by this repository's GitHub Actions from commit"
+            echo "[\`${GITHUB_SHA:0:12}\`](https://github.com/$repo/commit/$GITHUB_SHA), checked against its"
+            echo "[attestation](https://github.com/$repo/attestations) before this release was published. To check a download:"
+            echo
+            echo '```sh'
+            echo "gh release verify-asset $TAG <file> --repo $repo   # the file this release published (GitHub's attestation)"
+            echo "gh attestation verify <file> --repo $repo         # built by this repository's workflow at the commit above"
+            echo '```'
+            echo
+            echo "| File | SHA-256 | Made by |"
+            echo "|---|---|---|"
+          } >> notes.md
+          for file in dist/*; do
+            name=$(basename "$file")
+            gh attestation verify "$file" --repo "$repo" --format json > verified.json
+            # The build workflow's attestation names the maker; the publish job's covers what it added.
+            workflow=$(jq -r --arg prefix "https://github.com/$repo/.github/workflows/" '
+              [.[].verificationResult.signature.certificate.buildSignerURI
+                | select(startswith($prefix)) | ltrimstr($prefix) | split("@")[0]]
+              | if index("package.yml") then "package.yml" elif index("release.yml") then "release.yml" else "" end' \
+              verified.json)
+            if [ -z "$workflow" ]; then
+              echo "::error::$name has no attestation from this repository's build or publish workflow"
+              exit 1
+            fi
+            digest=$(sha256sum "$file" | cut -c1-64)
+            echo "| $name | \`$digest\` | \`$workflow\` |" >> notes.md
+          done
+          gh release edit "$TAG" --repo "$repo" --notes-file notes.md
       - name: Publish the release
         run: gh release edit "$TAG" --draft=false --latest --repo "${{ github.repository }}"

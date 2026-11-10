@@ -1,5 +1,7 @@
 # WaveDudeRust
 
+[![Provenance: GitHub Actions attestations](https://img.shields.io/badge/provenance-GitHub_Actions_attestations-2ea44f?logo=github)](https://github.com/lajosbencz/WaveDudeRust/attestations)
+
 A cross-platform (Linux, macOS, Windows) reimplementation in Rust of
 [WaveDude Next](https://github.com/graealex/WaveDudeNext) by Alexander Graef,
 itself the successor of **Wave Dude 2D** by Jeroen Vleggaar (Huygens Optics),
@@ -52,16 +54,19 @@ releases page, unsigned by Apple and Microsoft, so Gatekeeper and SmartScreen
 warn at the first start. Releases are immutable once published. Each package
 carries build provenance and CycloneDX SBOM attestations made by the release's
 build workflow, the SBOMs are attached too, `SHA256SUMS` lists every file, and
-the binaries embed their dependency list (`cargo audit bin`). To verify a
-download:
+the binaries embed their dependency list (`cargo audit bin`). Before a release
+goes public its workflow verifies every file against its attestation and writes
+the result into the release notes: the file, its digest and the workflow that
+made it. Nothing is uploaded by hand. To check a download yourself:
 
 ```sh
-gh attestation verify <file> --repo lajosbencz/WaveDudeRust
+gh release verify-asset v0.1.7 <file> --repo lajosbencz/WaveDudeRust   # the file this release published (GitHub's attestation)
+gh attestation verify <file> --repo lajosbencz/WaveDudeRust            # built by this repository's workflow at the release's commit
 ```
 
 Adding `--signer-workflow lajosbencz/WaveDudeRust/.github/workflows/package.yml`
-also checks that the build workflow itself made the attestation, not any other
-workflow of the repository.
+to the second one also checks that the build workflow itself made the
+attestation, not any other workflow of the repository.
 
 The installed program
 updates itself from the releases when the user agrees. How a release is made:

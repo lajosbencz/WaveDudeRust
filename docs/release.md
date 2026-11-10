@@ -17,8 +17,11 @@ Merging it (squash) releases: the push finds the workspace version without its t
 drafts the release with the changelog section as notes. `package.yml`, a reusable workflow without secrets and with
 a read-only token, builds the packages with `cargo auditable` and attests them (build provenance and the CycloneDX
 SBOMs of both programs); `sign` signs the update bundles with the updater key without compiling anything; `publish`
-writes `latest.json` and `SHA256SUMS`, attests them and the signatures, attaches everything and publishes the
-release, which the repository's immutable releases then lock.
+writes `latest.json` and `SHA256SUMS`, attests them and the signatures, attaches everything, verifies every
+attached file against its attestation (a file not attested by `package.yml` or `release.yml` of this repository
+stops the release), appends the provenance table to the notes (file, digest, workflow) and publishes the release,
+which the repository's immutable releases then lock; GitHub's own release attestation follows, checked with
+`gh release verify-asset`.
 
 Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened with it starts its CI only after someone
 approves the waiting runs on the PR page ("Approve workflows to run"); once approved, later updates of the same PR
