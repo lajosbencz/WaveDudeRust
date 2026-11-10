@@ -75,6 +75,10 @@ pub const PROBE_BOX_WIDTH: Range = Range::new(60.0, 4096.0);
 pub const PROBE_BOX_HEIGHT: Range = Range::new(30.0, 4096.0);
 pub const PROBE_DECADES: Range = Range::new(1.0, 12.0);
 pub const PROBE_WINDOW: Range = Range::new(10.0, 1_000_000.0);
+/// A detector's expected detections per unit of intensity per step.
+pub const PROBE_SENSITIVITY: Range = Range::new(0.0, 1_000_000.0);
+/// An imaging detector's bin in pixels along the line.
+pub const PROBE_BIN_SIZE: Range = Range::new(1.0, 20.0);
 
 pub const COATING: Range = Range::new(0.0, 50.0);
 pub const ABSORPTION: Range = Range::new(0.0, 255.0);
@@ -141,6 +145,8 @@ pub const ALL: &[(&str, Range)] = &[
 	("Probe.Decades", PROBE_DECADES),
 	("Probe.Window", PROBE_WINDOW),
 	("Probe.StartAfter", AT_LEAST_0),
+	("Probe.Sensitivity", PROBE_SENSITIVITY),
+	("Probe.BinSize", PROBE_BIN_SIZE),
 	("Part.X", AT_LEAST_0),
 	("Part.Y", AT_LEAST_0),
 	("Part.Angle", ANGLE),
@@ -476,6 +482,8 @@ mod tests {
 			field!("Probe.Decades", |p| p.probes[0].decades),
 			field!("Probe.Window", |p| p.probes[0].window),
 			field!("Probe.StartAfter", |p| p.probes[0].start_after),
+			field!("Probe.Sensitivity", |p| p.probes[0].sensitivity),
+			field!("Probe.BinSize", |p| p.probes[0].bin_size),
 			field!("Part.X", |p| p.parts[3].base.x),
 			field!("Part.Y", |p| p.parts[7].base.y),
 			field!("Part.Angle", |p| p.parts[9].base.angle),

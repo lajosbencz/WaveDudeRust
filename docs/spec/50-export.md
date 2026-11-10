@@ -190,6 +190,7 @@ Line probe:
 frame;step;<d0>;<d1>;...           d_k = n > 1 ? k*length/(n-1) : 0, formatted "0.###"
 <frame>;<step>;<v0>;<v1>;...       one row per recorded profile p: frame = p*frameStride, step = frame*VE
 ```
+A counting detector writes as a point probe with the column `detections`; an imaging detector as a line probe.
 File name `<project>_<probe>.csv`: the probe name trimmed, `probe` if then empty; characters invalid in Windows file
 names (`<>:"/\|?*` and control chars 0..31) become `_`; inner spaces kept.
 Range: the full run (a run is made first if needed).

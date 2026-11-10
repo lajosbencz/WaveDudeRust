@@ -17,6 +17,7 @@ use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::{DITHER_BITS, Theme as ThemeSetting};
 use wavedude_app_state::strings::{Language, Strings};
 use wavedude_app_state::{Event as AppEvent, Guarded};
+use wavedude_core::model::ProbeDetector;
 
 use super::app::{Cx, Ui};
 use super::dialogs::{self, Modal};
@@ -170,7 +171,7 @@ pub enum MenuAction {
 	Manual,
 	AddSource,
 	AddPart(NewPart),
-	AddProbe,
+	AddProbe(ProbeDetector),
 	ToggleSelected,
 	ToggleEnabled,
 	Duplicate,
@@ -240,6 +241,30 @@ pub fn part_entries(s: &Strings, prefix: &str) -> Vec<Entry> {
 	v.push(MenuEntry::Separator);
 	v.push(submenu("OpticalLogic", "MenuAddOpticalLogic", NewPart::XorGate, NewPart::XorGate, NewPart::OrGate));
 	v
+}
+
+/// The Add probe entries: a standard probe, and the detectors in a Probabilistic submenu, each with its
+/// description as tooltip; test ids `<prefix><Kind>`.
+pub fn probe_entries(s: &Strings, prefix: &str) -> Vec<Entry> {
+	let entry = |detector: ProbeDetector, key: &str, tip: &str, test: &str| -> Entry {
+		MenuItem::with_action(format!("{prefix}{test}"), s.get(key), MenuAction::AddProbe(detector))
+			.icon(icons::PROBE)
+			.tooltip(s.get(tip))
+			.into()
+	};
+	vec![
+		entry(ProbeDetector::Standard, "MenuAddStandardProbe", "Detector.Standard", "Standard"),
+		Submenu::new(
+			format!("{prefix}Probabilistic"),
+			s.get("MenuAddProbabilistic"),
+			vec![
+				entry(ProbeDetector::Counting, "MenuAddCountingDetector", "Detector.Counting", "Counting"),
+				entry(ProbeDetector::Imaging, "MenuAddImagingDetector", "Detector.Imaging", "Imaging"),
+			],
+		)
+		.icon(icons::PROBE)
+		.into(),
+	]
 }
 
 fn export_entries(s: &Strings, enabled: bool) -> Vec<Entry> {
@@ -621,7 +646,9 @@ pub fn tree_row_menu(app: &App, row: Option<Row>, pastable: bool) -> MenuModel<M
 		Submenu::new("tree:add_part", s.get("MenuProjectAddPart"), part_entries(s, "tree:add_part:"))
 			.icon(icons::PLUS)
 			.into(),
-		item(MenuAction::AddProbe, "tree:add_probe", s, "MenuProjectAddProbe").icon(icons::PLUS).into(),
+		Submenu::new("tree:add_probe", s.get("MenuProjectAddProbe"), probe_entries(s, "tree:add_probe:"))
+			.icon(icons::PLUS)
+			.into(),
 		MenuEntry::Separator,
 		item(MenuAction::ToggleSelected, "tree:toggle_selected", s, "MenuProjectToggleSelected")
 			.shortcut("Ins")
@@ -804,7 +831,7 @@ pub fn act(cx: &Cx, action: MenuAction, on: On) {
 		}
 		MenuAction::AddSource => super::tree::add_then_edit(cx, Command::AddSource { at: None }),
 		MenuAction::AddPart(kind) => super::tree::add_then_edit(cx, Command::AddPart { kind, at: None }),
-		MenuAction::AddProbe => super::tree::add_then_edit(cx, Command::AddProbe { at: None }),
+		MenuAction::AddProbe(detector) => super::tree::add_then_edit(cx, Command::AddProbe { at: None, detector }),
 		MenuAction::ToggleSelected => on_target(&|target| shared.update(|a| a.selection.toggle(target))),
 		MenuAction::ToggleEnabled => on_target(&|target| command(Command::ToggleEnabled { target })),
 		MenuAction::Duplicate => on_target(&|target| command(Command::Duplicate { target })),

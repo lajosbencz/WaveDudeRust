@@ -274,9 +274,12 @@ Sections: General, Measurement, Position, Graph, Axes.
 | Name | TB |
 | Active | CB |
 | Start after step | NB min 0 |
-| Layer | CMB Field, Intensity |
-| Measurement | CMB, items by layer: Field -> Amplitude; Intensity -> Value, Integrated value |
-| Kind | CMB Point, Line |
+| Detector | CMB Standard, Counting, Imaging |
+| Detector sensitivity | NB 0..1000000 2 decimals drag 0.5; enabled for a detector |
+| Bin size | NB 1..20; enabled for an imaging detector |
+| Layer | CMB Field, Intensity; disabled for a detector (Intensity) |
+| Measurement | CMB, items by layer: Field -> Amplitude; Intensity -> Value, Integrated value; disabled for a detector (Integrated value) |
+| Kind | CMB Point, Line; disabled for a detector (Line) |
 | A x, A y | NB min 0 |
 | B x, B y | NB min 0 (line probes only; disabled for a point probe, decision 0008) |
 | Box size | CMB Tiny, Small, Medium, Large, Extra large, Custom |

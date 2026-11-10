@@ -56,6 +56,7 @@ xml_enum!(MetaLensType: Converging, Diverging);
 xml_enum!(Layer: Field, Intensity);
 xml_enum!(Measurement: Amplitude, Value, IntegratedValue);
 xml_enum!(ProbeKind: Point, Line);
+xml_enum!(ProbeDetector: Standard, Counting, Imaging);
 xml_enum!(BoxSize: Tiny, Small, Medium, Large, ExtraLarge, Custom);
 xml_enum!(ScaleMode: Running, Full);
 xml_enum!(YScale: Linear, Logarithmic);
@@ -383,6 +384,9 @@ impl Table for Probe {
 		u32 "Decades" decades,
 		u32 "Window" window,
 		u32 "StartAfter" start_after,
+		enumv "Detector" detector,
+		f64 "Sensitivity" sensitivity,
+		u32 "BinSize" bin_size,
 	);
 
 	fn base() -> Self {
@@ -1232,6 +1236,9 @@ mod tests {
 		p.probes[a].box_x = 0;
 		// a point probe's line end is not stored
 		(p.probes[a].bx, p.probes[a].by) = (0, 0);
+		let d = p.add_probe_at(300, 60);
+		p.probes[d].detector = ProbeDetector::Imaging;
+		p.probes[d].bin_size = 2;
 		let b = p.add_probe_at(200, 60);
 		let q = &mut p.probes[b];
 		q.layer = Layer::Intensity;

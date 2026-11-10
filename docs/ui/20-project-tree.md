@@ -16,7 +16,7 @@ Pointers: `Panes/ProjectTree.xaml(.cs)`, `MainWindow.Project.cs`, `MainWindow.Cl
 | Button | Look | Tooltip | Action |
 |---|---|---|---|
 | Source | source icon + plus badge + "Source" | Add a source (appended at the end) | Add source. |
-| Probe | probe icon + plus badge + "Probe" | Add a probe (appended at the end) | Add probe. |
+| Probe | probe icon + plus badge + "Probe" | Add a probe: a standard probe, or a probabilistic detector (appended at the end) | Opens the Add probe menu under the button: Standard probe; Probabilistic > Counting detector, Imaging detector. |
 | Part | part icon + plus badge + "Part" | Add an optical part (a menu of kinds; appended at the end) | Opens the Add part menu under the button. |
 | Move up | chevron up glyph | Move up (Alt+Up); drag to reorder | Disabled (and skipped by Tab) when not applicable. |
 | Move down | chevron down glyph | Move down (Alt+Down); drag to reorder | Same. |
@@ -154,4 +154,4 @@ Toolbar: `ToolAddSource`, `ToolAddProbe`, `ToolAddPart`, `ToolMoveUp`, `ToolMove
 Rows: `Tree:<name>`; check boxes `Enabled:<name>`; selection marker status `InSelection`.
 Menu: `AddPart:<Kind>` (Lens, FresnelLens, Fiber, BraggReflector, GrinLens, ZonePlate, Diffuser, InterferenceFilter, DiffractionGratings,
 SimpleGrating, FacettedGrating, MetaSurfaces, MetaLens, MetaPrism, MetaAxicon, Polygon, Rectangle, Ellipse, Triangle, Outline, OpticalLogic, XorGate, AndGate, OrGate), `ContextToggleSelected`, `ContextSelectAll`,
-`ContextExportProbeCsv`. Folder count: `CollectionCount`.
+`ContextExportProbeCsv`; `AddProbe:<Kind>` (Standard, Probabilistic, Counting, Imaging). Folder count: `CollectionCount`.

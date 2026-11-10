@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use freya::prelude::*;
 use freya_testing::prelude::*;
 use serde_json::json;
+use wavedude_core::model::ProbeDetector;
 
 use super::app::{Boot, BootInfo, CloseGate, root};
 use super::properties::BOUND;
@@ -114,7 +115,7 @@ fn every_form_binds_paths_its_object_has() {
 		apply(Command::Set { target: source, path: "array".into(), value: array });
 		apply(Command::Set { target: source, path: "detach_after".into(), value: json!(100) });
 		apply(Command::AddSource { at: None });
-		apply(Command::AddProbe { at: None });
+		apply(Command::AddProbe { at: None, detector: ProbeDetector::Standard });
 		apply(Command::AddScheme);
 		for kind in NewPart::ALL {
 			apply(Command::AddPart { kind, at: None });

@@ -470,7 +470,7 @@ impl Worker {
 
 	/// A collector for `spec`'s probes on a reset engine; the published traces start over.
 	fn restart_traces(&mut self, spec: &RunSpec) {
-		let collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene));
+		let collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene, spec.seed));
 		let engine = self.engine.as_mut().expect("an engine goes with the current spec");
 		engine.set_probes(collector.as_ref().map(ProbeCollector::cells).unwrap_or_default());
 		*lock(&self.shared.traces) = collector.as_ref().map(|c| c.traces.clone()).unwrap_or_default();
@@ -515,7 +515,7 @@ impl Worker {
 	fn restart_engine(&mut self, old: Option<&RunSpec>, spec: &RunSpec) {
 		self.publish_traces();
 		self.reset_engine(old, spec);
-		self.collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene));
+		self.collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene, spec.seed));
 		let engine = self.engine.as_mut().expect("reset_engine leaves an engine");
 		engine.set_probes(self.collector.as_ref().map(ProbeCollector::cells).unwrap_or_default());
 		self.recorded = 0;

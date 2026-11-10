@@ -1269,17 +1269,30 @@ fn probe(f: &Form) -> Vec<Element> {
 	let s = &f.s;
 	let p = f.scope("Probe", "", "Probe");
 	let line = p.word("Kind") == "Line";
+	let detector = p.word("Detector");
+	let is_detector = detector != "Standard";
 	let measurements: &[&str] = if p.word("Layer") == "Field" { &["Amplitude"] } else { &["Value", "IntegratedValue"] };
 	let custom = p.word("BoxSize") == "Custom";
 	let log = p.word("YScale") == "Logarithmic";
 	vec![
-		section(s.get("SectionGeneral"), vec![f.name("Probe"), p.check("Active"), p.number("StartAfter", 1.)]),
+		section(
+			s.get("SectionGeneral"),
+			vec![
+				f.name("Probe"),
+				p.check("Active"),
+				p.number("StartAfter", 1.),
+				p.combo("Detector", "ProbeDetector", &["Standard", "Counting", "Imaging"]),
+				p.decimals("Sensitivity", 0.5, 2).enabled(is_detector),
+				p.number("BinSize", 1.).enabled(detector == "Imaging"),
+			],
+		),
+		// a detector is a line probe of the integrated intensity: the three are shown as it set them
 		section(
 			s.get("SectionMeasurement"),
 			vec![
-				p.combo("Layer", "ProbeLayer", &["Field", "Intensity"]),
-				p.combo("Measurement", "ProbeMeasurement", measurements),
-				p.combo("Kind", "ProbeKind", &["Point", "Line"]),
+				p.combo("Layer", "ProbeLayer", &["Field", "Intensity"]).enabled(!is_detector),
+				p.combo("Measurement", "ProbeMeasurement", measurements).enabled(!is_detector),
+				p.combo("Kind", "ProbeKind", &["Point", "Line"]).enabled(!is_detector),
 			],
 		),
 		section(

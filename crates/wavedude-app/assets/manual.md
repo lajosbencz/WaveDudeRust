@@ -637,6 +637,15 @@ An optical gate: two input waveguides, a phase section and a coupler whose upper
 
 A probe measures the wave where you put it and draws a graph over the picture of the layer it measures. A point probe records the field's amplitude, or the intensity's value or its integral, at one pixel over the steps of the run; a line probe records the values along a line from A to B at each frame. Add a probe with the second button of the project tree; it lands at the centre of the canvas, its line end to the right. A probe's measurements are exported as CSV from its context menu, in the tree or on its graph box: a point probe one row per step, a line probe one row per frame, semicolons between the values and a header row; when the run is not complete, it is made first. Moving a probe or changing its graph needs no new run; a probe switched on, or a new one, is recorded by the next run, which starts by itself.
 
+### The kinds of probes
+
+The Add probe menu of the project tree.
+
+1. **Standard probe**: A standard probe: the field's amplitude, or the intensity's value or its integral, at a point over time or along a line.
+2. **Probabilistic**: The detectors, in a submenu of their own: the counting detector and the imaging detector.
+
+A counting detector gives the detections of the whole line, step by step, as a photomultiplier's pulses, drawn over time; their rate is the line's intensity times the sensitivity, and each detection is a chance. An imaging detector gives the detections at every point of the line added up over the run, as a SPAD array or an image intensifier builds an image, drawn along the line. The detections are drawn from the project's seed, so a project gives the same detections every time.
+
 ### Probe
 
 The form of a point probe of the field. <figure name="properties-probe"/>
@@ -644,30 +653,41 @@ The form of a point probe of the field. <figure name="properties-probe"/>
 1. **Name**: Name shown in the project tree and in the graph title.
 2. **Active**: Samples and draws this probe.
 3. **Start after step**: Step at which recording starts; 0 records from the first step.
-4. **Layer**: Field or Intensity: the output the probe samples and is drawn on.
-5. **Measurement**: Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run.
-6. **Kind**: A single point, or a line from A to B.
-7. **A x**: X of the probe pixel, or of the start of the line, in canvas pixels.
-8. **A y**: Y of the probe pixel, or of the start of the line, in canvas pixels.
-9. **B x**: X of the end of the line in canvas pixels; line probes only.
-10. **B y**: Y of the end of the line in canvas pixels; line probes only.
-11. **Box size**: Nominal size of the graph box drawn over the output, from tiny to extra large, or custom; a box larger than the canvas is shrunk to fit it, aspect kept.
-12. **Box x**: Left edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on.
-13. **Box y**: Top edge of the graph box in canvas pixels.
-14. **Box width**: Width of the graph box in canvas pixels; custom box size only.
-15. **Box height**: Height of the graph box in canvas pixels; custom box size only.
-16. **Step axis**: Running, a sliding window of the last steps, or Full, the whole run; point probes only.
-17. **Window**: Width of the sliding step window, in steps.
-18. **Auto-scale steps**: Lets the step axis follow the samples recorded so far; point probes only.
-19. **Auto-scale values**: Fits the value axis to the data instead of the fixed minimum and maximum.
-20. **Value axis**: A linear or a logarithmic value axis; intensity probes only, the field is always linear, its amplitude axis symmetric about zero.
-21. **Decades**: Decades a logarithmic value axis spans below its top; smaller values, zero included, sit on the bottom line.
-22. **Value minimum**: Lower bound of the value axis when it is not auto-scaled.
-23. **Value maximum**: Upper bound of the value axis when it is not auto-scaled.
+4. **Detector**: A standard probe, or a probabilistic detector: counting, the detections of the whole line step by step over time; or imaging, the detections at every point of the line added up over the run. A detector is a line probe of the integrated intensity, so the layer, the measurement and the kind are set by it.
+5. **Detector sensitivity**: Expected detections per unit of intensity per step at a point of the line: the detector's quantum efficiency and the scale from intensity to detections in one number. The detections are Poisson-distributed about intensity times sensitivity; 0 detects nothing.
+6. **Bin size**: Pixels of the line per bin of an imaging detector's histogram, 1 to 20: the detections of a bin's pixels are added up, and the graph shows the bin's total across them. Wider bins fill faster and show less detail.
+7. **Layer**: Field or Intensity: the output the probe samples and is drawn on.
+8. **Measurement**: Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run.
+9. **Kind**: A single point, or a line from A to B.
+10. **A x**: X of the probe pixel, or of the start of the line, in canvas pixels.
+11. **A y**: Y of the probe pixel, or of the start of the line, in canvas pixels.
+12. **B x**: X of the end of the line in canvas pixels; line probes only.
+13. **B y**: Y of the end of the line in canvas pixels; line probes only.
+14. **Box size**: Nominal size of the graph box drawn over the output, from tiny to extra large, or custom; a box larger than the canvas is shrunk to fit it, aspect kept.
+15. **Box x**: Left edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on.
+16. **Box y**: Top edge of the graph box in canvas pixels.
+17. **Box width**: Width of the graph box in canvas pixels; custom box size only.
+18. **Box height**: Height of the graph box in canvas pixels; custom box size only.
+19. **Step axis**: Running, a sliding window of the last steps, or Full, the whole run; point probes only.
+20. **Window**: Width of the sliding step window, in steps.
+21. **Auto-scale steps**: Lets the step axis follow the samples recorded so far; point probes only.
+22. **Auto-scale values**: Fits the value axis to the data instead of the fixed minimum and maximum.
+23. **Value axis**: A linear or a logarithmic value axis; intensity probes only, the field is always linear, its amplitude axis symmetric about zero.
+24. **Decades**: Decades a logarithmic value axis spans below its top; smaller values, zero included, sit on the bottom line.
+25. **Value minimum**: Lower bound of the value axis when it is not auto-scaled.
+26. **Value maximum**: Upper bound of the value axis when it is not auto-scaled.
 
 ### Line probe
 
-The same form for a line probe of the intensity with a logarithmic value axis. A line probe's graph shows the values along the line from A to B at the frame shown, so the step axis settings (16 to 18) do not apply; both ends have a handle on the picture, and the line between them shows where it measures. <figure name="properties-line-probe"/>
+The same form for a line probe of the intensity with a logarithmic value axis. A line probe's graph shows the values along the line from A to B at the frame shown, so the step axis settings (19 to 21) do not apply; both ends have a handle on the picture, and the line between them shows where it measures. <figure name="properties-line-probe"/>
+
+### Counting detector
+
+The same form for a counting detector. The detector sets the layer, the measurement and the kind (7 to 9), which are greyed; the graph shows the detections of the whole line step by step, so the step axis settings (19 to 21) apply, and the bin size (6) does not.
+
+### Imaging detector
+
+The same form for an imaging detector. The detector sets the layer, the measurement and the kind (7 to 9), which are greyed; the graph shows the detections along the line from A to B, added up to the frame shown, in bins of the bin size (6), so the step axis settings (19 to 21) do not apply.
 
 ## Colour schemes
 

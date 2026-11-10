@@ -334,7 +334,7 @@ fn step_all(
 	engine: &mut dyn WaveEngine,
 	shared: &Shared,
 ) -> Result<bool, RunError> {
-	let mut collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene));
+	let mut collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene, spec.seed));
 	*shared.traces.lock().unwrap_or_else(PoisonError::into_inner) =
 		collector.as_ref().map(|c| c.traces.clone()).unwrap_or_default();
 	engine.set_emitters(&spec.emitters);

@@ -4,7 +4,7 @@
 //! preview and an export draw the same graph. Numbers are formatted with a decimal point.
 
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::model::{Measurement, Probe, ProbeKind, ScaleMode, YScale};
+use wavedude_core::model::{Measurement, Probe, ScaleMode, YScale};
 
 /// Smallest box drawn at all, pixels.
 pub const MIN_VISIBLE: (f32, f32) = (40.0, 30.0);
@@ -137,7 +137,7 @@ fn log_range(probe: &Probe, fitted_hi: Option<f64>) -> (f64, f64) {
 pub fn ranges(probe: &Probe, data: &GraphData, total_steps: u64) -> (f64, f64, f64, f64) {
 	let mut y = fixed_range(probe);
 	let mut fitted_hi = None;
-	let (x_min, x_max) = if probe.kind == ProbeKind::Line {
+	let (x_min, x_max) = if probe.shows_profile() {
 		let x_max = if data.profile.is_some() && data.profile_length > 0.0 { data.profile_length } else { 1.0 };
 		if let Some((lo, hi)) = data.profile.and_then(extent).filter(|_| probe.auto_scale_y) {
 			fitted_hi = Some(hi as f64);
@@ -339,7 +339,7 @@ pub fn layout(
 	let line_width = (height / 110.0).max(1.2);
 	let line_height = text.line_height();
 	let title_height = line_height + 2.0 * EDGE_PAD;
-	let line = probe.kind == ProbeKind::Line;
+	let line = probe.shows_profile();
 	let started = probe.start_after == 0 || data.steps_sampled >= probe.start_after as u64;
 	let shown = if line && !started { GraphData::default() } else { *data };
 	let (x_min, x_max, y_min, y_max) = ranges(probe, if line { &shown } else { data }, total_steps);

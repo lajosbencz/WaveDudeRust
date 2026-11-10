@@ -66,6 +66,21 @@ pub enum YScale {
 	Logarithmic,
 }
 
+/// What a probe is: a standard probe, or a probabilistic detector that turns the intensity along its line into
+/// quantised detections, Poisson-distributed about the intensity times the sensitivity, drawn from the
+/// project's seed so a project gives the same detections every time.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum ProbeDetector {
+	#[default]
+	Standard,
+	/// The detections of the whole line, step by step, as a photomultiplier's pulses: a series over time.
+	Counting,
+	/// The detections at every point of the line added up over the run, as a SPAD array builds an image: a
+	/// profile along the line.
+	Imaging,
+}
+
 /// A point or line measurement with a graph box.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -96,6 +111,12 @@ pub struct Probe {
 	pub window: u32,
 	/// Step from which an integrated value sums.
 	pub start_after: u32,
+	/// A detector is a line probe of the integrated intensity, whatever else is set.
+	pub detector: ProbeDetector,
+	/// Expected detections per unit of intensity per step at a point of the line, 0..MAX_SENSITIVITY.
+	pub sensitivity: f64,
+	/// Pixels of the line per bin of an imaging detector's histogram, 1..MAX_BIN_SIZE.
+	pub bin_size: u32,
 }
 
 impl Default for Probe {
@@ -124,6 +145,9 @@ impl Default for Probe {
 			decades: 6,
 			window: 500,
 			start_after: 0,
+			detector: ProbeDetector::Standard,
+			sensitivity: 20.0,
+			bin_size: 4,
 		}
 	}
 }
@@ -131,8 +155,21 @@ impl Default for Probe {
 impl Probe {
 	pub const NAME_STEM: &'static str = "Probe";
 
+	pub const MAX_SENSITIVITY: f64 = 1_000_000.0;
+	pub const MAX_BIN_SIZE: u32 = 20;
+
 	pub fn uses_intensity(&self) -> bool {
 		self.measurement != Measurement::Amplitude
+	}
+
+	pub fn is_detector(&self) -> bool {
+		self.detector != ProbeDetector::Standard
+	}
+
+	/// Whether the graph shows a profile along the line (a line probe, an imaging detector) rather than a
+	/// series over time (a point probe, a counting detector, whose line gives one count a step).
+	pub fn shows_profile(&self) -> bool {
+		self.kind == ProbeKind::Line && self.detector != ProbeDetector::Counting
 	}
 
 	/// Whether a run records `other` as it records `self`: they differ in the graph box and its axes at most.
@@ -144,6 +181,7 @@ impl Probe {
 			&& self.kind == other.kind
 			&& (self.ax, self.ay, self.bx, self.by) == (other.ax, other.ay, other.bx, other.by)
 			&& self.start_after == other.start_after
+			&& (self.detector, self.sensitivity, self.bin_size) == (other.detector, other.sensitivity, other.bin_size)
 	}
 
 	/// Box size in pixels before fitting into the canvas.

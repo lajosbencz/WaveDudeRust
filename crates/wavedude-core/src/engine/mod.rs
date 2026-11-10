@@ -12,6 +12,7 @@ pub mod forcing;
 pub mod gpu;
 pub mod green;
 pub mod pml;
+pub mod poisson;
 pub mod probes;
 pub mod stencil;
 pub mod substeps;

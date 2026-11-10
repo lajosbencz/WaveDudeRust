@@ -17,6 +17,7 @@ use wavedude_app_state::log::LogRing;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
+use wavedude_core::model::ProbeDetector;
 use wavedude_core::model::SourceArray;
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj";
@@ -371,7 +372,7 @@ fn manual_figures() {
 	}
 	s.select(Row::Item(ItemRef::new(ItemKind::Probe, 0)));
 	s.figure("properties-line-probe", pane(&s), 0.);
-	s.command(Command::AddProbe { at: None });
+	s.command(Command::AddProbe { at: None, detector: ProbeDetector::Standard });
 	let probes = s.shared.peek(|a| a.document.project.probes.len());
 	s.select(Row::Item(ItemRef::new(ItemKind::Probe, probes - 1)));
 	s.figure("properties-probe", pane(&s), 0.);

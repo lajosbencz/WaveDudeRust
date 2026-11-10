@@ -11,7 +11,7 @@ use std::rc::Rc;
 use freya::prelude::*;
 use serde_json::json;
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::model::{BoxSize, Layer, Measurement, Probe, ProbeKind, Project, ScaleMode, YScale};
+use wavedude_core::model::{BoxSize, Layer, Measurement, Probe, Project, ScaleMode, YScale};
 use wavedude_widgets::graph_box::GraphBoxEvent;
 use wavedude_widgets::menu::ContextMenuRequest;
 use wavedude_widgets::picture::CanvasTransform;
@@ -202,12 +202,12 @@ fn views<B: wavedude_app_state::live::Backend>(
 		.filter(|(_, p)| p.active && p.layer == layer)
 		.map(|(i, p)| {
 			let trace = names.iter().position(|n| n.eq_ignore_ascii_case(&p.name)).and_then(|t| traces.get(t));
-			let series = match (p.kind, trace) {
-				(ProbeKind::Point, Some(t)) => {
+			let series = match (p.shows_profile(), trace) {
+				(false, Some(t)) => {
 					let samples = cut.map_or(t.series.len(), |c| c.0);
 					point_series(&t.series, samples, p.scale_mode, p.window, p.auto_scale_x, steps)
 				}
-				(ProbeKind::Line, Some(t)) => {
+				(true, Some(t)) => {
 					let profile = match cut {
 						Some((_, k)) => t.profiles.get(k.min(t.profiles.len().saturating_sub(1))),
 						None => t.profiles.last(),

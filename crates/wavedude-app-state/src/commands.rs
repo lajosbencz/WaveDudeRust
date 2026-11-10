@@ -14,7 +14,7 @@ use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{
 	BraggReflector, Diffuser, Ellipse, FacettedGrating, Fiber, FresnelLens, GateKind, GrinLens, InterferenceFilter,
 	Lens, LogicGate, MetaAxiconDesign, MetaDesign, MetaLensDesign, MetaPrismDesign, MetaSurface, Outline, PartKind,
-	Point, Polygon, Probe, Project, Rectangle, SimpleGrating, Triangle, ZonePlate,
+	Point, Polygon, Probe, ProbeDetector, Project, Rectangle, SimpleGrating, Triangle, ZonePlate,
 };
 
 use wavedude_core::scene::gate_design::{self, GateDesign};
@@ -185,6 +185,8 @@ pub enum Command {
 	},
 	AddProbe {
 		at: Option<Point>,
+		/// A standard probe or a probabilistic detector.
+		detector: ProbeDetector,
 	},
 	AddPart {
 		kind: NewPart,
@@ -417,9 +419,11 @@ fn apply_command(project: &mut Project, selection: &mut Selection, command: Comm
 			selection.set_items(vec![ItemRef::new(ItemKind::Source, i)]);
 			Change::step(ChangeKind::Simulation).noted(format!("added {}", project.sources[i].name))
 		}
-		Command::AddProbe { at } => {
+		Command::AddProbe { at, detector } => {
 			let (x, y) = list_insert_point(project, at);
 			let i = project.add_probe_at(x, y);
+			project.probes[i].detector = detector;
+			project.probes[i].normalize();
 			selection.set_items(vec![ItemRef::new(ItemKind::Probe, i)]);
 			Change::step(ChangeKind::ProbePresentation).noted(format!("added {}", project.probes[i].name))
 		}
@@ -830,7 +834,7 @@ mod tests {
 		let mut other = p.clone();
 		other.display.intensity.preview = !on;
 		assert_eq!(classify(&other, &p), ChangeKind::Simulation);
-		run(&mut p, &mut s, Command::AddProbe { at: None });
+		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard });
 		let probe = Target::Item(ItemRef::new(ItemKind::Probe, 0));
 		let c = run(&mut p, &mut s, Command::Rename { target: ItemRef::new(ItemKind::Probe, 0), name: "Gauge".into() });
 		assert_eq!(c.kind, ChangeKind::Display);
@@ -842,7 +846,10 @@ mod tests {
 	fn classification() {
 		let (mut p, mut s) = (project(), Selection::default());
 		assert_eq!(run(&mut p, &mut s, Command::AddSource { at: None }).kind, ChangeKind::Simulation);
-		assert_eq!(run(&mut p, &mut s, Command::AddProbe { at: None }).kind, ChangeKind::ProbePresentation);
+		assert_eq!(
+			run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard }).kind,
+			ChangeKind::ProbePresentation
+		);
 		assert_eq!(run(&mut p, &mut s, Command::AddScheme).kind, ChangeKind::Display);
 		let set = |target, path: &str, value| Command::Set { target, path: path.into(), value };
 		let src = Target::Item(ItemRef::new(ItemKind::Source, 0));

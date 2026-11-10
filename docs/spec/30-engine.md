@@ -218,6 +218,12 @@ Collection during a run:
 | Point, IntegratedValue | running sum of the intensity, held at 0 while `step < StartAfter`; sample j of a batch belongs to step `batchStart + j + 1` |
 | Line, Amplitude/Value | the live profile at each timeline frame (when `i % VisualizeEvery == 0`) |
 | Line, IntegratedValue | per-pixel f64 totals, added each step once `round(time) >= StartAfter`; profile per timeline frame |
+| Counting detector | one value per step: the events of the probe's Poisson process (`engine/poisson.rs`, seed `project.seed`, stream `StableHash(Name) << 24`) up to the line's integrated intensity summed over its pixels times `Sensitivity`, less those counted before (a series, as a point probe's; 0 before `StartAfter`) |
+| Imaging detector | a profile per timeline frame: at every pixel the events of that pixel's process (stream `(StableHash(Name) << 24) ^ pixel`) up to its integrated intensity times `Sensitivity`, so the image only grows; the detections of a bin of `BinSize` pixels added up and shown at each of them, the last bin shorter |
+
+A Poisson process is unit-rate on the half-line, walked from 0 with exponential gaps `-ln(1 - NextDouble)`: the count
+at a position is Poisson with that mean, and asking step by step or once gives the same count. A span of more than
+100000 expected events in one call is jumped with a normal approximation (Box-Muller) of its count.
 
 Line length (graph x axis) = Euclidean length of the clamped A-B; sample k of n at distance
 `n > 1 ? k*length/(n-1) : 0` (as in the CSV header).

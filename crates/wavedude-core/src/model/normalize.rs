@@ -9,8 +9,8 @@ use super::ranges as r;
 use super::{
 	BraggReflector, Coating, ColorScheme, Diffuser, Display, DisplayLayer, Ellipse, FacettedGrating, Fiber,
 	FilterLayer, FresnelLens, GrinLens, InterferenceFilter, Layer, Lens, LogicGate, Material, Measurement, MetaDesign,
-	MetaSurface, Outline, Part, PartKind, Polygon, Probe, Project, Rectangle, Scene, SimpleGrating, Simulation, Source,
-	SourceArray, Stop, Triangle, TriangleType, Video, YScale, ZonePlate, normalize_angle,
+	MetaSurface, Outline, Part, PartKind, Polygon, Probe, ProbeKind, Project, Rectangle, Scene, SimpleGrating,
+	Simulation, Source, SourceArray, Stop, Triangle, TriangleType, Video, YScale, ZonePlate, normalize_angle,
 };
 
 /// Brings a value into its valid state.
@@ -135,6 +135,14 @@ impl Normalize for SourceArray {
 
 impl Normalize for Probe {
 	fn normalize(&mut self) {
+		if self.is_detector() {
+			// a detector is a line probe of the integrated intensity, whatever the file says
+			self.kind = ProbeKind::Line;
+			self.layer = Layer::Intensity;
+			self.measurement = Measurement::IntegratedValue;
+		}
+		self.sensitivity = r::PROBE_SENSITIVITY.clamp_or(self.sensitivity, Probe::default().sensitivity);
+		self.bin_size = r::PROBE_BIN_SIZE.clamp_u32(self.bin_size);
 		match self.layer {
 			Layer::Field => {
 				self.measurement = Measurement::Amplitude;

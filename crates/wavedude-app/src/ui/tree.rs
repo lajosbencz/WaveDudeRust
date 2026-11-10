@@ -242,7 +242,7 @@ fn assign_selection(cx: &Cx, sel: &TreeSelection<Row>) {
 fn add(cx: &Cx, kind: ItemKind, at: (f64, f64)) {
 	match kind {
 		ItemKind::Source => add_then_edit(cx, Command::AddSource { at: None }),
-		ItemKind::Probe => add_then_edit(cx, Command::AddProbe { at: None }),
+		ItemKind::Probe => open_probe_menu(cx, at),
 		ItemKind::Scheme => add_then_edit(cx, Command::AddScheme),
 		ItemKind::Part => open_part_menu(cx, at),
 	}
@@ -258,6 +258,13 @@ pub fn add_then_edit(cx: &Cx, command: Command) {
 pub fn request_form_focus(cx: &Cx) {
 	let mut f = cx.ui.focus_form;
 	*f.write() += 1;
+}
+
+/// The Add probe menu at `at`.
+pub fn open_probe_menu(cx: &Cx, at: (f64, f64)) {
+	let model = cx.shared.peek(|a| wavedude_widgets::MenuModel::new(menus::probe_entries(&a.strings, "AddProbe:")));
+	let cx2 = cx.clone();
+	cx.ui.open_menu(at, model, move |action| menus::dispatch(&cx2, action));
 }
 
 /// The Add part menu at `at`.
@@ -447,6 +454,7 @@ impl Component for ProjectPane {
 		}
 		let mut pointer = use_state(|| (0., 0.));
 		let mut part_button = use_state(|| (0., 0.));
+		let mut probe_button = use_state(|| (0., 0.));
 		let snap = snap.read().clone();
 		let w = &snap.words;
 		let press = |f: fn(&Cx)| {
@@ -468,14 +476,16 @@ impl Component for ProjectPane {
 				"ToolAddSource",
 				press(|cx| add_then_edit(cx, Command::AddSource { at: None })),
 			))
-			.child(tool_button(
-				icons::PROBE,
-				Some(w[1].clone()),
-				w[4].clone(),
-				true,
-				"ToolAddProbe",
-				press(|cx| add_then_edit(cx, Command::AddProbe { at: None })),
-			))
+			.child(
+				rect()
+					.on_sized(move |e: Event<SizedEventData>| {
+						probe_button.set((f64::from(e.area.min_x()), f64::from(e.area.max_y())))
+					})
+					.child(tool_button(icons::PROBE, Some(w[1].clone()), w[4].clone(), true, "ToolAddProbe", {
+						let cx = cx.clone();
+						move |_| open_probe_menu(&cx, *probe_button.peek())
+					})),
+			)
 			.child(
 				rect()
 					.on_sized(move |e: Event<SizedEventData>| {

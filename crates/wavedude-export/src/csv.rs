@@ -4,7 +4,7 @@
 use std::io::{self, Write};
 
 use wavedude_core::engine::probes::{ProbeTrace, sample_distances};
-use wavedude_core::model::{Measurement, Probe, ProbeKind};
+use wavedude_core::model::{Measurement, Probe};
 
 pub const SEPARATOR: char = ';';
 
@@ -26,9 +26,10 @@ fn three_decimals(v: f64) -> String {
 
 /// Writes a probe's recording and returns the data rows written.
 ///
-/// Point probe: `step;<column>` then `i;<value after step i + 1>` per sample. Line probe: `frame;step;d0;d1;...`
-/// (`d_k = k * length / (n - 1)`, `0.###`) then one row per profile p: `frame;step;v0;v1;...` with
-/// `frame = p * frame_stride`, `step = frame * visualize_every`.
+/// Point probe or counting detector: `step;<column>` then `i;<value after step i + 1>` per sample. Line probe or
+/// imaging detector: `frame;step;d0;d1;...` (`d_k = k * length / (n - 1)`, `0.###`) then one row per profile p:
+/// `frame;step;v0;v1;...` with `frame = p * frame_stride`, `step = frame * visualize_every`. A detector's column is
+/// `detections`.
 pub fn write_probe_csv(
 	out: &mut impl Write,
 	probe: &Probe,
@@ -36,8 +37,9 @@ pub fn write_probe_csv(
 	visualize_every: u32,
 	frame_stride: u32,
 ) -> io::Result<usize> {
-	if probe.kind == ProbeKind::Point {
-		writeln!(out, "step{SEPARATOR}{}", column_name(probe.measurement))?;
+	if !probe.shows_profile() {
+		let column = if probe.is_detector() { "detections" } else { column_name(probe.measurement) };
+		writeln!(out, "step{SEPARATOR}{column}")?;
 		for (i, v) in trace.series.iter().enumerate() {
 			writeln!(out, "{i}{SEPARATOR}{v}")?;
 		}
@@ -63,6 +65,7 @@ pub fn write_probe_csv(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use wavedude_core::model::{ProbeDetector, ProbeKind};
 
 	fn csv(probe: &Probe, trace: &ProbeTrace, ve: u32) -> String {
 		let mut out = Vec::new();
@@ -89,6 +92,16 @@ mod tests {
 		assert!(csv(&Probe::default(), &trace, 1).starts_with("step;amplitude\n"));
 		let value = Probe { measurement: Measurement::Value, ..Probe::default() };
 		assert!(csv(&value, &trace, 1).starts_with("step;value\n"));
+	}
+
+	#[test]
+	fn detectors_write_detections() {
+		let trace = ProbeTrace { series: vec![1.0, 0.0, 2.0], ..ProbeTrace::default() };
+		let counting = Probe { detector: ProbeDetector::Counting, kind: ProbeKind::Line, bx: 4, ..Probe::default() };
+		assert_eq!(csv(&counting, &trace, 2), "step;detections\n0;1\n1;0\n2;2\n");
+		let imaging = Probe { detector: ProbeDetector::Imaging, ..counting };
+		let trace = ProbeTrace { profiles: vec![vec![3.0, 3.0, 1.0]].into(), length: 4.0, ..ProbeTrace::default() };
+		assert_eq!(csv(&imaging, &trace, 2), "frame;step;0;2;4\n0;0;3;3;1\n");
 	}
 
 	#[test]

@@ -269,6 +269,7 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .probes[].auto_scale_y
 .probes[].ax
 .probes[].ay
+.probes[].bin_size
 .probes[].box_height
 .probes[].box_size = "Medium"
 .probes[].box_width
@@ -277,11 +278,13 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .probes[].bx
 .probes[].by
 .probes[].decades
+.probes[].detector = "Standard"
 .probes[].kind = "Point"
 .probes[].layer = "Field"
 .probes[].measurement = "Amplitude"
 .probes[].name = "Probe 1"
 .probes[].scale_mode = "Running"
+.probes[].sensitivity
 .probes[].start_after
 .probes[].window
 .probes[].y_max

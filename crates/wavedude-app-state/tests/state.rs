@@ -15,6 +15,7 @@ use wavedude_app_state::settings::Settings;
 use wavedude_app_state::{AppState, Event, ExportKind, Guarded, Response, SaveChoice};
 use wavedude_core::io::wdproj;
 use wavedude_core::model::Point;
+use wavedude_core::model::ProbeDetector;
 use wavedude_core::run::MachineFacts;
 use wavedude_core::run::Wanted;
 
@@ -134,7 +135,7 @@ fn unsaved_edits_are_asked_about() {
 	let t = Instant::now();
 	let dir = tempfile::tempdir().unwrap();
 	let mut s = app();
-	s.handle(Event::Command(Command::AddProbe { at: None }), t);
+	s.handle(Event::Command(Command::AddProbe { at: None, detector: ProbeDetector::Standard }), t);
 	assert_eq!(s.handle(Event::Guarded(Guarded::New), t), Response::AskSave { name: "Untitled".into() });
 	assert_eq!(s.handle(Event::SaveChoice(SaveChoice::Cancel), t), Response::None);
 	assert_eq!(s.document.project.probes.len(), 1, "Cancel keeps the project");
@@ -161,7 +162,7 @@ fn a_restart_asks_about_unsaved_edits_like_an_exit() {
 	let dir = tempfile::tempdir().unwrap();
 	let mut s = app();
 	assert_eq!(s.handle(Event::Guarded(Guarded::Restart), t), Response::Restart, "nothing to lose");
-	s.handle(Event::Command(Command::AddProbe { at: None }), t);
+	s.handle(Event::Command(Command::AddProbe { at: None, detector: ProbeDetector::Standard }), t);
 	assert_eq!(s.handle(Event::Guarded(Guarded::Restart), t), Response::AskSave { name: "Untitled".into() });
 	assert_eq!(s.handle(Event::SaveChoice(SaveChoice::Cancel), t), Response::None, "Cancel keeps running");
 	assert!(s.document.dirty);
