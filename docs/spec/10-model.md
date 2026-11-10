@@ -216,7 +216,9 @@ NextDouble() = (NextUInt32() >> 8) / 2^24
 StableHash(s): h = 2166136261u32; for each UTF-16 code unit c: h = (h ^ c) * 16777619 (wrapping); return h
 Xorshift32(x): x ^= x << 13; x ^= x >> 17; x ^= x << 5
 ```
-Stream argument for sources is `StableHash(Name)` widened to u64.
+Stream argument for sources is `StableHash(Name)` widened to u64; a diffuser's roughness draws its phases from
+`Pcg32(seed, StableHash(Name) ^ 0x44494646)`, one `NextDouble` per possible component (13) in order (`model/profiled.rs`),
+so the seed is part of the scene while a diffuser is enabled (`SceneKey`).
 
 ## Probe (`Model/Probe.cs`)
 
@@ -278,6 +280,8 @@ Shared constants: refractive index range 1..2.55, rounded to 0.01 (round even), 
 | `Ellipse` | Ellipse | Coated shape | shape props; `Length` 60; `Width` 60; `Linked` false |
 | `Triangle` | Triangle | Coated shape | shape props; `Base` 60 (>= 2); `Type` Equilateral; `AngleA` 60, `AngleB` 60 (1..178) |
 | `Outline` | Outline | Coated shape | shape props; `Point` children (int X, Y, part frame) |
+| `Diffuser` | Diffuser | Coated shape | shape props; `Length` 50 (>= 1); `Width` 500 (>= 2); `CenterWavelength` 16 (2..10000); `Amplitude` 1 (0..10000); `Sigma` 6 (0..10000). A new one coats its back alone |
+| `FacettedGrating` | Facetted grating | Coated shape | shape props (the coating's `BackCoated` alone counts); `Length` 50; `Width` 500; `Pattern` Sawtooth/SquareWave/Sinusoidal; `Pitch` 32 (2..10000); `Amplitude` 4 (0..10000) |
 | `Fiber` | Fiber | Coated | `CoreIndex` 1.5; `CoreDiameter` 20 (>= 2); `CladdingIndex` 1.45; `CladdingThickness` 10 (>= 0); `Absorption` 0; `AbsorptionRamp` 10; `Ends` Flat/Round (Flat); `Node` children |
 | `BraggReflector` | Bragg reflector | part | `Pairs` 10 (1..200); `Thickness1` 10; `Thickness2` 10; `Index1` 1.5; `Index2` 2.0; `Width` 200 |
 | `GrinLens` | GRIN lens | Coated | `Length` 100; `Diameter` 100; `CentreIndex` 1.8; `EdgeIndex` 1.5 |

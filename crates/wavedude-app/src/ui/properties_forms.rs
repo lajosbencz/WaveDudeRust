@@ -33,6 +33,8 @@ pub struct Readouts {
 	/// Core width, coupler gap, coupler length, total length, ports.
 	pub gate: Option<([i64; 4], [m::Point; 4], f64)>,
 	pub zones: Option<(i64, f64)>,
+	/// A diffuser's roughness: the face's height from crest to trough and its number of ripples.
+	pub roughness: Option<(f64, usize)>,
 	pub image_found: bool,
 	pub image_size: Option<(u32, u32)>,
 	/// Scheme names for each layer's picker: (name, project's own).
@@ -98,6 +100,12 @@ pub fn readouts(app: &App, row: Row) -> Readouts {
 			ItemKind::Part => match &p.parts[i.index].kind {
 				PartKind::Lens(l) => r.lens_edge = Some(edge_thickness(l, 1, m::ZoneDivision::EqualWidth)),
 				PartKind::FresnelLens(f) => r.lens_edge = Some(edge_thickness(&f.lens, f.zones, f.division)),
+				PartKind::Diffuser(d) => {
+					let profile = d.profile(&p.parts[i.index].base.name, p.seed);
+					let (lo, hi) =
+						profile.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| (lo.min(v), hi.max(v)));
+					r.roughness = Some((hi - lo, d.components().len()));
+				}
 				PartKind::Triangle(t) => r.apex = Some(180. - t.angle_a - t.angle_b),
 				PartKind::LogicGate(g) => {
 					r.wavelength = gate_design::gate_wavelength(g.design_frequency, sim.source_frequency_scale);
@@ -114,6 +122,7 @@ pub fn readouts(app: &App, row: Row) -> Readouts {
 				| PartKind::Rectangle(_)
 				| PartKind::Ellipse(_)
 				| PartKind::Outline(_)
+				| PartKind::FacettedGrating(_)
 				| PartKind::Fiber(_)
 				| PartKind::BraggReflector(_)
 				| PartKind::GrinLens(_) => {}
@@ -515,27 +524,46 @@ fn source(f: &Form, r: &Readouts) -> Vec<Element> {
 	]
 }
 
+/// Which faces a kind offers its coating on: the boxes of the others are not shown.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CoatedFaces {
+	All,
+	/// A profiled plate's flat back.
+	Back,
+}
+
 /// The coating's rows of `coating` (a path); greyed when `disabled`.
 fn coating_rows(f: &Form, coating: &str, disabled: bool) -> Vec<PropertyRow> {
+	coating_rows_of(f, coating, disabled, CoatedFaces::All)
+}
+
+fn coating_rows_of(f: &Form, coating: &str, disabled: bool, faces: CoatedFaces) -> Vec<PropertyRow> {
 	let c = |m: &str| format!("{coating}.{m}");
-	vec![
+	let mut rows = vec![
 		f.number("ShapePart", "Coating", &c("depth"), "Coating.Coating", 1.),
 		f.combo("CoatedPart", "CoatingProfile", &c("profile"), "CoatingProfile", &["Layer", "Graded"]),
-		f.check("CoatedPart", "FrontCoated", &c("front")),
-		f.check("CoatedPart", "BackCoated", &c("back")),
-		f.check("CoatedPart", "SidesCoated", &c("sides")),
-	]
-	.into_iter()
-	.map(|r| r.enabled(!disabled))
-	.collect()
+	];
+	if faces == CoatedFaces::All {
+		rows.push(f.check("CoatedPart", "FrontCoated", &c("front")));
+	}
+	rows.push(f.check("CoatedPart", "BackCoated", &c("back")));
+	if faces == CoatedFaces::All {
+		rows.push(f.check("CoatedPart", "SidesCoated", &c("sides")));
+	}
+	rows.into_iter().map(|r| r.enabled(!disabled)).collect()
 }
 
 /// The glass or mirror of a lens or shape at `kind` (`kind.Lens`).
 fn material(f: &Form, kind: &str) -> Element {
+	material_faces(f, kind, CoatedFaces::All)
+}
+
+/// [`material`] with the coating offered on `faces` alone.
+fn material_faces(f: &Form, kind: &str, faces: CoatedFaces) -> Element {
 	let mat = f.scope("ShapePart", &format!("{kind}.material"), "Material");
 	let mirror = mat.flag("Mirror");
 	let mut rows = vec![mat.check("Mirror"), mat.number("RefractiveIndex", 0.01).enabled(!mirror)];
-	rows.extend(coating_rows(f, &format!("{kind}.coating"), mirror));
+	rows.extend(coating_rows_of(f, &format!("{kind}.coating"), mirror, faces));
 	rows.push(mat.number("Absorption", 5.).enabled(!mirror));
 	rows.push(mat.number("AbsorptionRamp", 5.).enabled(!mirror));
 	section(f.s.get("SectionMaterial"), rows)
@@ -591,6 +619,41 @@ fn part(f: &Form, r: &Readouts, kind: &PartKind, open: bool) -> Vec<Element> {
 		}
 		PartKind::Triangle(_) => out.extend([material(f, &at), triangle(f, r, &at, &variant)]),
 		PartKind::Outline(_) => out.extend([material(f, &at), points(f, &format!("{at}.points"))]),
+		PartKind::Diffuser(_) => {
+			let d = f.scope("DiffuserPart", &at, &variant);
+			let (height, ripples) = r.roughness.map_or((String::new(), String::new()), |(h, n)| (px(h), n.to_string()));
+			out.extend([
+				material(f, &at),
+				shape(vec![d.number("Length", 10.), d.number("Width", 10.)]),
+				section(
+					f.s.get("SectionRoughness"),
+					vec![
+						d.decimals("CenterWavelength", 0.1, 2),
+						d.decimals("Amplitude", 0.1, 2),
+						d.decimals("Sigma", 0.1, 2),
+						readout(f.s.get("LabelProfileHeight"), height, "ProfileHeight")
+							.hint(f.s.get("TipProfileHeight")),
+						readout(f.s.get("LabelComponentCount"), ripples, "ComponentCount")
+							.hint(f.s.get("TipComponentCount")),
+					],
+				),
+			]);
+		}
+		PartKind::FacettedGrating(_) => {
+			let g = f.scope("FacettedGratingPart", &at, &variant);
+			out.extend([
+				material_faces(f, &at, CoatedFaces::Back),
+				shape(vec![g.number("Length", 10.), g.number("Width", 10.)]),
+				section(
+					f.s.get("SectionFacets"),
+					vec![
+						g.combo("Pattern", "FacetPattern", &["Sawtooth", "SquareWave", "Sinusoidal"]),
+						g.decimals("Pitch", 0.1, 2),
+						g.decimals("Amplitude", 0.1, 2),
+					],
+				),
+			]);
+		}
 		PartKind::Fiber(_) => out.extend(fiber(f, &at, &variant)),
 		PartKind::BraggReflector(_) => {
 			let b = f.scope("BraggReflectorPart", &at, &variant);

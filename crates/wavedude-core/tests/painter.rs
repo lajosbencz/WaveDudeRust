@@ -12,6 +12,8 @@ use wavedude_core::scene::shapes::{BLOCK_ABSORPTION, Vec2, ellipse_vertex_count,
 
 const W: u32 = 200;
 const H: u32 = 120;
+/// The project seed the parts are painted with.
+const SEED: i32 = 7;
 
 fn sim() -> Simulation {
 	Simulation::default()
@@ -26,7 +28,7 @@ fn normalized(part: &Part) -> Part {
 
 fn paint_on(mut pixels: ScenePixels, parts: &[Part]) -> ScenePixels {
 	for part in parts {
-		paint_part(&mut pixels, &normalized(part), &sim());
+		paint_part(&mut pixels, &normalized(part), &sim(), SEED);
 	}
 	pixels
 }
@@ -154,6 +156,51 @@ fn biconvex_lens() {
 	let column = (0..H as i32).filter(|&y| red(&p, 100, y) == 150).count();
 	let columns = (0..W as i32).filter(|&x| (0..H as i32).any(|y| red(&p, x, y) > 100)).count();
 	assert_eq!((column, columns), (40, 100), "turned 90 deg: 40 px along y, 100 wide");
+}
+
+/// A profiled plate without a relief paints byte for byte as the rectangle of its size; with one it is the face
+/// the model computes, the same for the same project and another for another seed; the band follows the faces
+/// as the coating says, the grating's on its back alone.
+#[test]
+fn profiled_plates() {
+	let flat = Diffuser { length: 20, width: 60, amplitude: 0.0, ..Diffuser::default() };
+	let rectangle = Rectangle { length: 20, width: 60, ..Rectangle::default() };
+	let at = |kind| Part::new(kind, 100, 60);
+	assert_eq!(paint(&[at(PartKind::Diffuser(flat))]).rgba, paint(&[at(PartKind::Rectangle(rectangle))]).rgba);
+	let rough =
+		Diffuser { length: 20, width: 60, amplitude: 3.0, sigma: 0.0, center_wavelength: 20.0, ..Diffuser::default() };
+	let mut part = at(PartKind::Diffuser(rough.clone()));
+	part.base.name = "Diffuser 1".into();
+	let p = paint(&[part.clone()]);
+	let front: Vec<usize> = (31..90).map(|y| (0..W as i32).find(|&x| red(&p, x, y) > 100).unwrap() as usize).collect();
+	assert!(front.iter().max().unwrap() - front.iter().min().unwrap() >= 5, "the face ripples: {front:?}");
+	assert!(count_row(&p, 60, |r| r == 150) >= 15, "the plate on the axis");
+	let mut again = ScenePixels::blank(W, H, 1.0);
+	paint_part(&mut again, &normalized(&part), &sim(), SEED + 1);
+	assert_ne!(p.rgba, again.rgba, "another seed, another face");
+	let mut renamed = part.clone();
+	renamed.base.name = "Diffuser 2".into();
+	assert_ne!(p.rgba, paint(&[renamed]).rgba, "the phases come from the name");
+	// the band: on the rough front for the diffuser, on the back alone for the grating
+	let coated = |front, back| coated(4.0, CoatingProfile::Layer, front, back, false);
+	let d = Diffuser { coating: coated(true, false), ..rough };
+	let p = paint(&[at(PartKind::Diffuser(d))]);
+	let face_x = (0..W as i32).find(|&x| red(&p, x, 60) > 100).unwrap();
+	assert!(red(&p, face_x + 2, 60) < 150 && red(&p, 109, 60) == 150, "band on the front, bare back");
+	let g = FacettedGrating {
+		length: 20,
+		width: 64,
+		pattern: FacetPattern::SquareWave,
+		pitch: 32.0,
+		amplitude: 4.0,
+		coating: coated(true, true),
+		..FacettedGrating::default()
+	};
+	let p = paint(&[at(PartKind::FacettedGrating(g))]);
+	let crest = (0..W as i32).find(|&x| red(&p, x, 60 - 20) > 100).unwrap();
+	let trough = (0..W as i32).find(|&x| red(&p, x, 60 - 4) > 100).unwrap();
+	assert_eq!(trough - crest, 8, "a square wave of 4 px either side of the mean");
+	assert_eq!((red(&p, crest + 2, 60 - 20), red(&p, 108, 60 - 20)), (150, 122), "the front stays bare");
 }
 
 /// A Fresnel lens of one zone is the lens; with four zones of equal width each surface restarts at the vertex
@@ -826,7 +873,7 @@ fn zone_plate() {
 		let mut s = sim();
 		s.source_frequency_scale = scale;
 		let mut p = ScenePixels::blank(960, 640, 1.0);
-		paint_part(&mut p, &normalized(&part), &s);
+		paint_part(&mut p, &normalized(&part), &s, SEED);
 		(cy..640).find(|&y| blue(&p, cx, y) > 0).unwrap()
 	};
 	let expected = |lambda: f64| (cy as f64 + radius(1.0, lambda) - 0.5).ceil() as i32;
@@ -885,6 +932,17 @@ fn kinds() -> Vec<(&'static str, PartKind)> {
 				lens: Lens { diameter: 120, r1: 150.0, r2: -150.0, thickness: 14, ..Lens::default() },
 				zones: 4,
 				division: ZoneDivision::EqualWidth,
+			}),
+		),
+		("diffuser", PartKind::Diffuser(Diffuser { length: 24, width: 120, amplitude: 2.0, ..Diffuser::default() })),
+		(
+			"facetted",
+			PartKind::FacettedGrating(FacettedGrating {
+				length: 24,
+				width: 120,
+				pitch: 16.0,
+				amplitude: 3.0,
+				..FacettedGrating::default()
 			}),
 		),
 		(
@@ -1031,7 +1089,7 @@ fn timing_full_hd() {
 			.map(|_| {
 				let mut p = blank.clone();
 				let t = std::time::Instant::now();
-				paint_part(&mut p, &part, &sim());
+				paint_part(&mut p, &part, &sim(), SEED);
 				t.elapsed().as_secs_f64() * 1e3
 			})
 			.collect();

@@ -250,6 +250,89 @@ pub struct Outline {
 	pub points: Vec<Point>,
 }
 
+/// A plate whose front face (-x') is rough: a sum of ripples about a centre wavelength, their phases drawn from
+/// the project's seed and the part's name (`profiled.rs`); the back is flat.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(default)]
+pub struct Diffuser {
+	pub material: Material,
+	pub coating: Coating,
+	/// The plate's thickness at the mean of its rough face.
+	pub length: u32,
+	pub width: u32,
+	/// Pixels, 2..MAX_PIXELS: the ripple with the full amplitude.
+	pub center_wavelength: f64,
+	/// Pixels, 0..MAX_PIXELS.
+	pub amplitude: f64,
+	/// Spread of the ripples' wavelengths about the centre in pixels, 0..MAX_PIXELS; 0 is the centre alone.
+	pub sigma: f64,
+}
+
+impl Default for Diffuser {
+	fn default() -> Self {
+		Self {
+			material: Material::default(),
+			coating: Coating::default(),
+			length: 50,
+			width: 500,
+			center_wavelength: 16.0,
+			amplitude: 1.0,
+			sigma: 6.0,
+		}
+	}
+}
+
+impl Diffuser {
+	/// A new diffuser coats its flat back alone; a loaded one keeps what its file says.
+	pub fn new_part() -> Self {
+		Self { coating: Coating { front: false, sides: false, ..Coating::default() }, ..Self::default() }
+	}
+}
+
+/// The relief of a facetted grating over each pitch.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum FacetPattern {
+	/// A ramp from the crest to the trough, then a step back: a blazed grating.
+	#[default]
+	Sawtooth,
+	/// A crest over half the pitch and a trough over the other half.
+	SquareWave,
+	Sinusoidal,
+}
+
+/// A plate whose front face (-x') carries a periodic relief; the back is flat and alone takes the band.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(default)]
+pub struct FacettedGrating {
+	pub material: Material,
+	/// Only `back` counts.
+	pub coating: Coating,
+	pub length: u32,
+	pub width: u32,
+	pub pattern: FacetPattern,
+	/// Period across the face in pixels, 2..MAX_PIXELS.
+	pub pitch: f64,
+	/// The relief's height either side of the mean face in pixels, 0..MAX_PIXELS.
+	pub amplitude: f64,
+}
+
+impl Default for FacettedGrating {
+	fn default() -> Self {
+		Self {
+			material: Material::default(),
+			coating: Coating::default(),
+			length: 50,
+			width: 500,
+			pattern: FacetPattern::Sawtooth,
+			pitch: 32.0,
+			amplitude: 4.0,
+		}
+	}
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum FiberEnds {
@@ -436,6 +519,8 @@ pub enum PartKind {
 	Ellipse(Ellipse),
 	Triangle(Triangle),
 	Outline(Outline),
+	Diffuser(Diffuser),
+	FacettedGrating(FacettedGrating),
 	Fiber(Fiber),
 	BraggReflector(BraggReflector),
 	GrinLens(GrinLens),
@@ -464,6 +549,8 @@ impl PartKind {
 			PartKind::Ellipse(_) => "Ellipse",
 			PartKind::Triangle(_) => "Triangle",
 			PartKind::Outline(_) => "Outline",
+			PartKind::Diffuser(_) => "Diffuser",
+			PartKind::FacettedGrating(_) => "Facetted grating",
 			PartKind::Fiber(_) => "Fiber",
 			PartKind::BraggReflector(_) => "Bragg reflector",
 			PartKind::GrinLens(_) => "GRIN lens",
@@ -485,6 +572,8 @@ impl PartKind {
 			PartKind::Ellipse(p) => Some(&p.material),
 			PartKind::Triangle(p) => Some(&p.material),
 			PartKind::Outline(p) => Some(&p.material),
+			PartKind::Diffuser(p) => Some(&p.material),
+			PartKind::FacettedGrating(p) => Some(&p.material),
 			PartKind::Fiber(_)
 			| PartKind::BraggReflector(_)
 			| PartKind::GrinLens(_)
@@ -502,10 +591,19 @@ impl PartKind {
 			PartKind::Ellipse(p) => Some(&p.coating),
 			PartKind::Triangle(p) => Some(&p.coating),
 			PartKind::Outline(p) => Some(&p.coating),
+			PartKind::Diffuser(p) => Some(&p.coating),
+			PartKind::FacettedGrating(p) => Some(&p.coating),
 			PartKind::Fiber(p) => Some(&p.coating),
 			PartKind::GrinLens(p) => Some(&p.coating),
 			PartKind::BraggReflector(_) | PartKind::LogicGate(_) | PartKind::ZonePlate(_) => None,
 		}
+	}
+}
+
+impl PartKind {
+	/// Whether the kind draws on the project's seed (a diffuser's phases), so the seed is part of the scene.
+	pub fn is_seeded(&self) -> bool {
+		matches!(self, PartKind::Diffuser(_))
 	}
 }
 

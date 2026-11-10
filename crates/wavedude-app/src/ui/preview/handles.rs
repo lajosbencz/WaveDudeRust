@@ -169,7 +169,7 @@ pub fn build(
 		let item = ItemRef::new(ItemKind::Part, i);
 		let sel = is_selected(item);
 		let at = (p.base.x as f32, p.base.y as f32);
-		if sel && let Some(outline) = part_outline(p) {
+		if sel && let Some(outline) = part_outline(p, project.seed) {
 			m.outlines.push(outline);
 		}
 		if handles_shown || sel {
@@ -206,10 +206,11 @@ pub fn build(
 	m
 }
 
-/// The outline drawn for a selected part: the vertices of a polygon-type kind, a fibre's centre line.
-fn part_outline(p: &Part) -> Option<PartOutline> {
+/// The outline drawn for a selected part: the vertices of a polygon-type kind or a profiled plate, a fibre's
+/// centre line.
+fn part_outline(p: &Part, seed: i32) -> Option<PartOutline> {
 	let frame = Frame::of(&p.base);
-	if let Some(vertices) = shapes::vertices(&p.kind) {
+	if let Some(vertices) = shapes::vertices(&p.kind).or_else(|| shapes::plate_outline(p, seed)) {
 		return Some(PartOutline {
 			points: vertices.into_iter().map(|q| v(frame.to_canvas(q))).collect(),
 			closed: true,
@@ -231,6 +232,8 @@ pub fn grip_of(kind: &PartKind) -> Option<Vec2> {
 		PartKind::Polygon(_) => shapes::vertices(kind).and_then(|v| v.first().copied()),
 		PartKind::Lens(l) => Some(Vec2::new(0., f64::from(l.diameter) / 2.)),
 		PartKind::FresnelLens(f) => Some(Vec2::new(0., f64::from(f.lens.diameter) / 2.)),
+		PartKind::Diffuser(d) => Some(Vec2::new(f64::from(d.length) / 2., f64::from(d.width) / 2.)),
+		PartKind::FacettedGrating(g) => Some(Vec2::new(f64::from(g.length) / 2., f64::from(g.width) / 2.)),
 		PartKind::GrinLens(g) => Some(Vec2::new(f64::from(g.length) / 2., f64::from(g.diameter) / 2.)),
 		_ => None,
 	}
@@ -241,7 +244,7 @@ fn part_handles(project: &Project, p: &Part, item: ItemRef, gap: f64, out: &mut 
 	let centre = (p.base.x as f32, p.base.y as f32);
 	let handle =
 		|kind, at: Vec2, from: Option<Vec2>| Handle { item, kind, at: v(at), from: from.map(v), selected: true };
-	let extent = shapes::shape_for(p, &project.simulation).map_or(20., |s| s.extent());
+	let extent = shapes::shape_for(p, &project.simulation, project.seed).map_or(20., |s| s.extent());
 	let (dx, dy) = direction(p.base.angle);
 	let reach = extent + gap;
 	out.push(Handle {
@@ -369,6 +372,13 @@ pub fn grip_edits(kind: &PartKind, q: Vec2) -> Vec<(String, Value)> {
 		}
 		PartKind::Lens(_) => vec![("kind.Lens.diameter".into(), json!(span(q.y, 2)))],
 		PartKind::FresnelLens(_) => vec![("kind.FresnelLens.diameter".into(), json!(span(q.y, 2)))],
+		PartKind::Diffuser(_) | PartKind::FacettedGrating(_) => {
+			let variant = if matches!(kind, PartKind::Diffuser(_)) { "Diffuser" } else { "FacettedGrating" };
+			vec![
+				(format!("kind.{variant}.length"), json!(span(q.x, 1))),
+				(format!("kind.{variant}.width"), json!(span(q.y, 2))),
+			]
+		}
 		PartKind::GrinLens(_) => {
 			vec![
 				("kind.GrinLens.length".into(), json!(span(q.x, 1))),

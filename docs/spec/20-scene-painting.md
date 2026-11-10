@@ -162,6 +162,7 @@ blue = max(old blue, round_even(Absorption * share))
 | Ellipse | polygon of n vertices `(a cos(2 pi k/n), b sin(2 pi k/n))`, a = L/2, b = W/2, `n = clamp(round_even(Ramanujan circumference / 3), 24, 180)` | RefractiveIndex | yes |
 | Triangle | vertices `(-h/2, -B/2), (-h/2, B/2), (h/2, apexY)` | RefractiveIndex | yes |
 | Outline | polygon through the `Point`s (part frame); < 3 points paints nothing | RefractiveIndex | yes |
+| Diffuser, FacettedGrating | a plate whose front face is a profile, see below | RefractiveIndex | yes |
 | Fiber | tube around a flattened Bezier path, see below | core / cladding | yes |
 | BraggReflector | rectangle `min(L/2 - |x|, W/2 - |y|)`, `L = Pairs*(T1+T2)` | layers along x | yes |
 | GrinLens | rectangle Length x Diameter | `nc - (nc - ne)*(y/(D/2))^2` | yes |
@@ -199,6 +200,18 @@ the axis that bounds the zone's glass, `into = (x - v) * -side` the place along 
   `depth = min(depth, into <= 0 ? along : hypot(along, into))`.
 The sign is exact everywhere, so the band and the ramp follow the steps; one zone is the plain lens byte for byte.
 The first surface with its steps is the front, the second the back, the rim the sides.
+
+### Profiled plates (diffuser, facetted grating)
+
+The plate of `Length` along x' and `Width` across whose front face is `front[i]`, its x' at y' = i - W/2 for
+i = 0..=W (`model/profiled.rs`): `-L/2 + profile[i]` held at most at `L/2 - 1`. A diffuser's profile is the sum of
+its components, `amplitude * sin(2 pi y'/lambda + phase)`; a facetted grating's the pattern over `t = frac((y')/pitch)`:
+sawtooth `2t - 1`, square wave `t < 0.5 ? -1 : 1`, sinusoid `sin(2 pi t)`, times the amplitude. The shape
+(`shapes/profiled.rs`) is the polygon of the face, a vertex per pixel, with the three straight edges; the depth is the
+exact signed distance to it (inside when `|y'| < W/2`, `x' < L/2` and `x' > front(y')`, the face read between its
+pixels), found by the back and the two ends and then the face's segments outward from the one under the point while
+their span in y' can still come nearer. The face's segments are the front, the back the back, the ends the sides; the
+grating's band lies on the back alone. Without a relief the plate paints byte for byte as the rectangle of its size.
 
 ### Fibre
 

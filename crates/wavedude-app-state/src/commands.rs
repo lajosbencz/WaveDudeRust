@@ -12,8 +12,8 @@ use serde_json::Value;
 use wavedude_core::model::names::{self, Named};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{
-	BraggReflector, Ellipse, Fiber, FresnelLens, GateKind, GrinLens, Lens, LogicGate, Outline, PartKind, Point,
-	Polygon, Probe, Project, Rectangle, Triangle, ZonePlate,
+	BraggReflector, Diffuser, Ellipse, FacettedGrating, Fiber, FresnelLens, GateKind, GrinLens, Lens, LogicGate,
+	Outline, PartKind, Point, Polygon, Probe, Project, Rectangle, Triangle, ZonePlate,
 };
 
 use wavedude_core::scene::gate_design::{self, GateDesign};
@@ -32,6 +32,8 @@ pub enum NewPart {
 	Ellipse,
 	Triangle,
 	Outline,
+	Diffuser,
+	FacettedGrating,
 	Fiber,
 	BraggReflector,
 	GrinLens,
@@ -42,13 +44,15 @@ pub enum NewPart {
 }
 
 impl NewPart {
-	pub const ALL: [Self; 14] = [
+	pub const ALL: [Self; 16] = [
 		Self::Lens,
 		Self::FresnelLens,
 		Self::Fiber,
 		Self::BraggReflector,
 		Self::GrinLens,
 		Self::ZonePlate,
+		Self::Diffuser,
+		Self::FacettedGrating,
 		Self::Polygon,
 		Self::Rectangle,
 		Self::Ellipse,
@@ -70,6 +74,8 @@ impl NewPart {
 			Self::Ellipse => PartKind::Ellipse(Ellipse::default()),
 			Self::Triangle => PartKind::Triangle(Triangle::default()),
 			Self::Outline => PartKind::Outline(Outline::default()),
+			Self::Diffuser => PartKind::Diffuser(Diffuser::new_part()),
+			Self::FacettedGrating => PartKind::FacettedGrating(FacettedGrating::default()),
 			Self::Fiber => PartKind::Fiber(Fiber::default()),
 			Self::BraggReflector => PartKind::BraggReflector(BraggReflector::default()),
 			Self::GrinLens => PartKind::GrinLens(GrinLens::default()),
@@ -90,6 +96,8 @@ impl NewPart {
 			PartKind::Ellipse(_) => Self::Ellipse,
 			PartKind::Triangle(_) => Self::Triangle,
 			PartKind::Outline(_) => Self::Outline,
+			PartKind::Diffuser(_) => Self::Diffuser,
+			PartKind::FacettedGrating(_) => Self::FacettedGrating,
 			PartKind::Fiber(_) => Self::Fiber,
 			PartKind::BraggReflector(_) => Self::BraggReflector,
 			PartKind::GrinLens(_) => Self::GrinLens,
@@ -112,6 +120,8 @@ impl NewPart {
 			Self::Ellipse => "EllipsePart",
 			Self::Triangle => "TrianglePart",
 			Self::Outline => "OutlinePart",
+			Self::Diffuser => "DiffuserPart",
+			Self::FacettedGrating => "FacettedGratingPart",
 			Self::Fiber => "FiberPart",
 			Self::BraggReflector => "BraggReflectorPart",
 			Self::GrinLens => "GrinLensPart",

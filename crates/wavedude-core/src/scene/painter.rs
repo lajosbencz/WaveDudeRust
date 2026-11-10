@@ -28,9 +28,10 @@ pub const EDGE_REACH: f64 = 0.71;
 const NORMAL_STEP: f64 = 1e-3;
 
 /// Paints the enabled, normalised `part` into `pixels` (if it has a shape): its absorption first, then its index.
-pub fn paint_part(pixels: &mut ScenePixels, part: &Part, sim: &Simulation) {
+/// `seed` is the project's, for a kind that draws on it.
+pub fn paint_part(pixels: &mut ScenePixels, part: &Part, sim: &Simulation, seed: i32) {
 	debug_assert!(part.base.enabled, "disabled parts are filtered by the caller");
-	let Some(shape) = shape_for(part, sim) else {
+	let Some(shape) = shape_for(part, sim, seed) else {
 		tracing::debug!(name = %part.base.name, "part has no shape to paint");
 		return;
 	};
@@ -307,7 +308,7 @@ mod tests {
 		for y in 0..120 {
 			p.rgba[(y * 200 + 99) * 4] = red;
 		}
-		paint_part(&mut p, &base_edge(share), &Simulation::default());
+		paint_part(&mut p, &base_edge(share), &Simulation::default(), 0);
 		p.red(99, 60)
 	}
 

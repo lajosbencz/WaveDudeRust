@@ -13,6 +13,7 @@ mod grin;
 mod lens;
 mod outline;
 mod polygon;
+mod profiled;
 mod rectangle;
 mod triangle;
 mod vertex;
@@ -298,8 +299,9 @@ impl Body {
 
 /// The shape of a normalised `part`, or None when it has nothing to paint (an outline of fewer than three
 /// points, a fibre path of fewer than two, a gate without a design, a zone plate without a wavelength).
-/// `sim` gives the frequency scale and stencil for the frequency-designed kinds.
-pub fn shape_for(part: &Part, sim: &Simulation) -> Option<Box<dyn PartShape>> {
+/// `sim` gives the frequency scale and stencil for the frequency-designed kinds, `seed` the project's seed for
+/// a diffuser's roughness.
+pub fn shape_for(part: &Part, sim: &Simulation, seed: i32) -> Option<Box<dyn PartShape>> {
 	Some(match &part.kind {
 		PartKind::Lens(l) => Box::new(lens::LensShape::new(l)),
 		PartKind::FresnelLens(f) => Box::new(lens::LensShape::zoned(&f.lens, f.zones, f.division)),
@@ -308,6 +310,15 @@ pub fn shape_for(part: &Part, sim: &Simulation) -> Option<Box<dyn PartShape>> {
 		PartKind::Ellipse(e) => Box::new(VertexShape::new(ellipse::vertices(e), &e.material, &e.coating)?),
 		PartKind::Triangle(t) => Box::new(VertexShape::new(triangle::vertices(t), &t.material, &t.coating)?),
 		PartKind::Outline(o) => Box::new(VertexShape::new(outline::vertices(o), &o.material, &o.coating)?),
+		PartKind::Diffuser(d) => {
+			let plate = d.plate(&part.base.name, seed);
+			Box::new(profiled::ProfiledShape::new(plate, Body::of(&d.material, &d.coating)))
+		}
+		PartKind::FacettedGrating(g) => {
+			// the band on the back alone
+			let coating = Coating { front: false, sides: false, ..g.coating.clone() };
+			Box::new(profiled::ProfiledShape::new(g.plate(), Body::of(&g.material, &coating)))
+		}
 		PartKind::Fiber(f) => Box::new(fiber::FiberShape::new(f)?),
 		PartKind::BraggReflector(b) => Box::new(bragg::BraggShape::new(b)),
 		PartKind::GrinLens(g) => Box::new(grin::GrinShape::new(g)),
@@ -326,12 +337,25 @@ pub fn vertices(kind: &PartKind) -> Option<Vec<Vec2>> {
 		PartKind::Outline(o) => outline::vertices(o),
 		PartKind::Lens(_)
 		| PartKind::FresnelLens(_)
+		| PartKind::Diffuser(_)
+		| PartKind::FacettedGrating(_)
 		| PartKind::Fiber(_)
 		| PartKind::BraggReflector(_)
 		| PartKind::GrinLens(_)
 		| PartKind::LogicGate(_)
 		| PartKind::ZonePlate(_) => return None,
 	})
+}
+
+/// The part-frame outline of a profiled plate (a diffuser, a facetted grating): the front face pixel by pixel and
+/// the back corners; None for other kinds.
+pub fn plate_outline(part: &Part, seed: i32) -> Option<Vec<Vec2>> {
+	let plate = match &part.kind {
+		PartKind::Diffuser(d) => d.plate(&part.base.name, seed),
+		PartKind::FacettedGrating(g) => g.plate(),
+		_ => return None,
+	};
+	Some(plate.vertices().into_iter().map(|(x, y)| Vec2::new(x, y)).collect())
 }
 
 pub use ellipse::vertex_count as ellipse_vertex_count;

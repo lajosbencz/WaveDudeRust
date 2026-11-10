@@ -85,6 +85,11 @@ pub const BRAGG_PAIRS: Range = Range::new(1.0, 200.0);
 pub const GATE_PORT_SPACING: Range = Range::new(2.0, 2000.0);
 pub const ZONE_PLATE_COATING: Range = Range::new(0.0, 400.0);
 pub const FRESNEL_ZONES: Range = Range::new(1.0, 100.0);
+/// A ripple's or a relief's wavelength on a profiled plate: two pixels at least, what a profile sampled a pixel
+/// apart can hold.
+pub const RIPPLE_WAVELENGTH: Range = Range::new(2.0, 10_000.0);
+/// A profiled plate's amplitude or sigma in pixels.
+pub const PLATE_PIXELS: Range = Range::new(0.0, 10_000.0);
 pub const STOP_AT: Range = Range::new(0.0, 1.0);
 
 /// Every persisted number and its bounds. `Material.*` applies to the lens and every shape,
@@ -145,6 +150,15 @@ pub const ALL: &[(&str, Range)] = &[
 	("Triangle.Base", AT_LEAST_2),
 	("Triangle.AngleA", TRIANGLE_ANGLE),
 	("Triangle.AngleB", TRIANGLE_ANGLE),
+	("Diffuser.Length", AT_LEAST_1),
+	("Diffuser.Width", AT_LEAST_2),
+	("Diffuser.CenterWavelength", RIPPLE_WAVELENGTH),
+	("Diffuser.Amplitude", PLATE_PIXELS),
+	("Diffuser.Sigma", PLATE_PIXELS),
+	("FacettedGrating.Length", AT_LEAST_1),
+	("FacettedGrating.Width", AT_LEAST_2),
+	("FacettedGrating.Pitch", RIPPLE_WAVELENGTH),
+	("FacettedGrating.Amplitude", PLATE_PIXELS),
 	("Fiber.CoreIndex", INDEX),
 	("Fiber.CoreDiameter", AT_LEAST_2),
 	("Fiber.CladdingIndex", INDEX),
@@ -249,6 +263,8 @@ mod tests {
 			PartKind::LogicGate(LogicGate::default()),
 			PartKind::ZonePlate(ZonePlate::default()),
 			PartKind::FresnelLens(FresnelLens::default()),
+			PartKind::Diffuser(Diffuser::default()),
+			PartKind::FacettedGrating(FacettedGrating::default()),
 		];
 		for (i, k) in kinds.into_iter().enumerate() {
 			let mut part = Part::new(k, 10, 10);
@@ -323,6 +339,8 @@ mod tests {
 		match &mut p.parts[i].kind {
 			PartKind::Lens(k) => &mut k.material,
 			PartKind::FresnelLens(k) => &mut k.lens.material,
+			PartKind::Diffuser(k) => &mut k.material,
+			PartKind::FacettedGrating(k) => &mut k.material,
 			PartKind::Polygon(k) => &mut k.material,
 			PartKind::Rectangle(k) => &mut k.material,
 			PartKind::Ellipse(k) => &mut k.material,
@@ -336,6 +354,8 @@ mod tests {
 		match &mut p.parts[i].kind {
 			PartKind::Lens(k) => &mut k.coating,
 			PartKind::FresnelLens(k) => &mut k.lens.coating,
+			PartKind::Diffuser(k) => &mut k.coating,
+			PartKind::FacettedGrating(k) => &mut k.coating,
 			PartKind::Polygon(k) => &mut k.coating,
 			PartKind::Rectangle(k) => &mut k.coating,
 			PartKind::Ellipse(k) => &mut k.coating,
@@ -431,9 +451,18 @@ mod tests {
 			kind!("ZonePlate.DesignFrequency", 10, ZonePlate, |k| k.design_frequency),
 			kind!("ZonePlate.FocalLength", 10, ZonePlate, |k| k.focal_length),
 			kind!("FresnelLens.Zones", 11, FresnelLens, |k| k.zones),
+			kind!("Diffuser.Length", 12, Diffuser, |k| k.length),
+			kind!("Diffuser.Width", 12, Diffuser, |k| k.width),
+			kind!("Diffuser.CenterWavelength", 12, Diffuser, |k| k.center_wavelength),
+			kind!("Diffuser.Amplitude", 12, Diffuser, |k| k.amplitude),
+			kind!("Diffuser.Sigma", 12, Diffuser, |k| k.sigma),
+			kind!("FacettedGrating.Length", 13, FacettedGrating, |k| k.length),
+			kind!("FacettedGrating.Width", 13, FacettedGrating, |k| k.width),
+			kind!("FacettedGrating.Pitch", 13, FacettedGrating, |k| k.pitch),
+			kind!("FacettedGrating.Amplitude", 13, FacettedGrating, |k| k.amplitude),
 			field!("Stop.At", |p| p.color_schemes[0].stops[0].at),
 		];
-		for i in (0..6).chain([11]) {
+		for i in (0..6).chain([11, 12, 13]) {
 			v.push((
 				"Material.RefractiveIndex",
 				Box::new(move |p: &mut Project, x: f64| material(p, i).refractive_index = x),
@@ -450,7 +479,7 @@ mod tests {
 				Box::new(move |p: &Project| material(&mut p.clone(), i).absorption_ramp as f64),
 			));
 		}
-		for i in [0, 1, 2, 3, 4, 5, 6, 8, 11] {
+		for i in [0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13] {
 			v.push((
 				"Coating.Coating",
 				Box::new(move |p: &mut Project, x: f64| coating(p, i).depth = x),

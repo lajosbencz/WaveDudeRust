@@ -37,7 +37,7 @@ pub fn compose_over(image: Option<ScenePixels>, project: &Project) -> Option<Sce
 	let scene = &project.scene;
 	let mut pixels = image.unwrap_or_else(|| ScenePixels::blank(scene.width, scene.height, scene.refractive_index));
 	for part in project.parts.iter().filter(|p| p.base.enabled) {
-		paint_part(&mut pixels, part, &project.simulation);
+		paint_part(&mut pixels, part, &project.simulation, project.seed);
 	}
 	Some(pixels)
 }
@@ -59,6 +59,9 @@ impl SceneKey {
 		(sim.source_frequency_scale.to_bits(), sim.stencil == Stencil::FourthOrder).hash(&mut h);
 		for part in project.parts.iter().filter(|p| p.base.enabled) {
 			part.serialize(HashFeed(&mut h)).unwrap_or_else(|never| match never {});
+		}
+		if project.parts.iter().any(|p| p.base.enabled && p.kind.is_seeded()) {
+			project.seed.hash(&mut h);
 		}
 		Self(h.finish())
 	}
@@ -286,4 +289,28 @@ macro_rules! fields {
 fields! {
 	SerializeStruct;
 	SerializeStructVariant;
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::model::{Diffuser, PartKind, Rectangle};
+
+	/// The seed is part of the scene only while a seeded part (a diffuser) is enabled.
+	#[test]
+	fn the_seed_keys_the_scene_of_a_diffuser() {
+		let mut p = Project::default();
+		p.add_part(PartKind::Rectangle(Rectangle::default()));
+		let before = SceneKey::of(&p);
+		p.seed += 1;
+		assert_eq!(SceneKey::of(&p), before);
+		let i = p.add_part(PartKind::Diffuser(Diffuser::default()));
+		let with = SceneKey::of(&p);
+		p.seed += 1;
+		assert_ne!(SceneKey::of(&p), with);
+		p.parts[i].base.enabled = false;
+		let off = SceneKey::of(&p);
+		p.seed += 1;
+		assert_eq!(SceneKey::of(&p), off);
+	}
 }

@@ -51,6 +51,7 @@ xml_enum!(CoatingProfile: Layer, Graded);
 xml_enum!(TriangleType: Equilateral, RightIsosceles, ThirtySixtyNinety, Isosceles, Custom);
 xml_enum!(FiberEnds: Flat, Round);
 xml_enum!(ZoneDivision: EqualWidth, EqualDepth);
+xml_enum!(FacetPattern: Sawtooth, SquareWave, Sinusoidal);
 xml_enum!(Layer: Field, Intensity);
 xml_enum!(Measurement: Amplitude, Value, IntegratedValue);
 xml_enum!(ProbeKind: Point, Line);
@@ -67,6 +68,8 @@ const PART_ELEMENTS: &[&str] = &[
 	"Ellipse",
 	"Triangle",
 	"Outline",
+	"Diffuser",
+	"FacettedGrating",
 	"Fiber",
 	"BraggReflector",
 	"GrinLens",
@@ -449,6 +452,20 @@ kind_table!(Rectangle; u32 "Length" length, u32 "Width" width, bool "Linked" lin
 kind_table!(Ellipse; u32 "Length" length, u32 "Width" width, bool "Linked" linked);
 kind_table!(Triangle; u32 "Base" base, enumv "Type" kind, f64 "AngleA" angle_a, f64 "AngleB" angle_b);
 kind_table!(Outline;);
+kind_table!(Diffuser;
+	u32 "Length" length,
+	u32 "Width" width,
+	f64 "CenterWavelength" center_wavelength,
+	f64 "Amplitude" amplitude,
+	f64 "Sigma" sigma,
+);
+kind_table!(FacettedGrating;
+	u32 "Length" length,
+	u32 "Width" width,
+	enumv "Pattern" pattern,
+	f64 "Pitch" pitch,
+	f64 "Amplitude" amplitude,
+);
 kind_table!(Fiber;
 	f64 "CoreIndex" core_index,
 	u32 "CoreDiameter" core_diameter,
@@ -587,6 +604,10 @@ fn read_part(el: &Element, version: FileVersion) -> R<Part> {
 			material: material?,
 			points: el.children("Point").map(fields::read).collect::<R<_>>()?,
 		}),
+		"Diffuser" => PartKind::Diffuser(Diffuser { coating: coating?, material: material?, ..fields::read(el)? }),
+		"FacettedGrating" => {
+			PartKind::FacettedGrating(FacettedGrating { coating: coating?, material: material?, ..fields::read(el)? })
+		}
 		"Fiber" => PartKind::Fiber(Fiber {
 			coating: coating?,
 			nodes: el.children("Node").map(fields::read).collect::<R<_>>()?,
@@ -677,6 +698,8 @@ fn part_element_name(kind: &PartKind) -> &'static str {
 		PartKind::Ellipse(_) => "Ellipse",
 		PartKind::Triangle(_) => "Triangle",
 		PartKind::Outline(_) => "Outline",
+		PartKind::Diffuser(_) => "Diffuser",
+		PartKind::FacettedGrating(_) => "FacettedGrating",
 		PartKind::Fiber(_) => "Fiber",
 		PartKind::BraggReflector(_) => "BraggReflector",
 		PartKind::GrinLens(_) => "GrinLens",
@@ -700,6 +723,8 @@ macro_rules! with_kind {
 			PartKind::Ellipse($k) => $e,
 			PartKind::Triangle($k) => $e,
 			PartKind::Outline($k) => $e,
+			PartKind::Diffuser($k) => $e,
+			PartKind::FacettedGrating($k) => $e,
 			PartKind::Fiber($k) => $e,
 			PartKind::BraggReflector($k) => $e,
 			PartKind::GrinLens($k) => $e,
@@ -730,6 +755,8 @@ fn write_part(p: &Part) -> Element {
 		| PartKind::Rectangle(_)
 		| PartKind::Ellipse(_)
 		| PartKind::Triangle(_)
+		| PartKind::Diffuser(_)
+		| PartKind::FacettedGrating(_)
 		| PartKind::BraggReflector(_)
 		| PartKind::GrinLens(_)
 		| PartKind::LogicGate(_)
@@ -1070,6 +1097,11 @@ mod tests {
 			PartKind::Outline(Outline {
 				points: vec![Point::new(-40, -30), Point::new(40, -25), Point::new(30, 35)],
 				..Outline::default()
+			}),
+			PartKind::Diffuser(Diffuser { sigma: 0.0, ..Diffuser::new_part() }),
+			PartKind::FacettedGrating(FacettedGrating {
+				pattern: FacetPattern::Sinusoidal,
+				..FacettedGrating::default()
 			}),
 			PartKind::Fiber(Fiber {
 				nodes: vec![

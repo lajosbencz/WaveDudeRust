@@ -237,6 +237,8 @@ pub fn original_keys(key: &str) -> Vec<String> {
 		"Coating" => &["LensPart", "ShapePart", "FiberPart", "GrinLensPart"],
 		"Lens" => &["LensPart"],
 		"FresnelLens" => &["FresnelLensPart"],
+		"Diffuser" => &["DiffuserPart"],
+		"FacettedGrating" => &["FacettedGratingPart"],
 		"Polygon" => &["PolygonPart"],
 		"Rectangle" => &["RectanglePart"],
 		"Ellipse" => &["EllipsePart"],

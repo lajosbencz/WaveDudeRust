@@ -9,6 +9,7 @@ pub mod names;
 pub mod normalize;
 mod parts;
 mod probe;
+pub mod profiled;
 mod project;
 pub mod ranges;
 mod scene;

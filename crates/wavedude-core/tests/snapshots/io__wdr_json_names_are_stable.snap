@@ -41,6 +41,20 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].kind.BraggReflector.thickness1
 .parts[].kind.BraggReflector.thickness2
 .parts[].kind.BraggReflector.width
+.parts[].kind.Diffuser.amplitude
+.parts[].kind.Diffuser.center_wavelength
+.parts[].kind.Diffuser.coating.back
+.parts[].kind.Diffuser.coating.depth
+.parts[].kind.Diffuser.coating.front
+.parts[].kind.Diffuser.coating.profile = "Layer"
+.parts[].kind.Diffuser.coating.sides
+.parts[].kind.Diffuser.length
+.parts[].kind.Diffuser.material.absorption
+.parts[].kind.Diffuser.material.absorption_ramp
+.parts[].kind.Diffuser.material.mirror
+.parts[].kind.Diffuser.material.refractive_index
+.parts[].kind.Diffuser.sigma
+.parts[].kind.Diffuser.width
 .parts[].kind.Ellipse.coating.back
 .parts[].kind.Ellipse.coating.depth
 .parts[].kind.Ellipse.coating.front
@@ -53,6 +67,20 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].kind.Ellipse.material.mirror
 .parts[].kind.Ellipse.material.refractive_index
 .parts[].kind.Ellipse.width
+.parts[].kind.FacettedGrating.amplitude
+.parts[].kind.FacettedGrating.coating.back
+.parts[].kind.FacettedGrating.coating.depth
+.parts[].kind.FacettedGrating.coating.front
+.parts[].kind.FacettedGrating.coating.profile = "Layer"
+.parts[].kind.FacettedGrating.coating.sides
+.parts[].kind.FacettedGrating.length
+.parts[].kind.FacettedGrating.material.absorption
+.parts[].kind.FacettedGrating.material.absorption_ramp
+.parts[].kind.FacettedGrating.material.mirror
+.parts[].kind.FacettedGrating.material.refractive_index
+.parts[].kind.FacettedGrating.pattern = "Sawtooth"
+.parts[].kind.FacettedGrating.pitch
+.parts[].kind.FacettedGrating.width
 .parts[].kind.Fiber.absorption
 .parts[].kind.Fiber.absorption_ramp
 .parts[].kind.Fiber.cladding_index
@@ -175,7 +203,9 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].kind.ZonePlate.mount_width
 .parts[].kind.ZonePlate.thickness
 .parts[].name = "Bragg reflector 1"
+.parts[].name = "Diffuser 1"
 .parts[].name = "Ellipse 1"
+.parts[].name = "Facetted grating 1"
 .parts[].name = "Fiber 1"
 .parts[].name = "Fresnel lens 1"
 .parts[].name = "GRIN lens 1"

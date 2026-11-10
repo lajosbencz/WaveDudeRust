@@ -352,12 +352,14 @@ The Add part menu of the project tree. <figure name="menu-add-part"/>
 4. **Bragg reflector**: A Bragg reflector: pairs of layers of two indices stacked along the axis. It reflects strongly around the wavelength the layer thicknesses are tuned to, a quarter wave each, and passes others.
 5. **GRIN lens**: A gradient-index lens: a rectangle whose index falls from the axis to the edge in a parabolic profile, so it focuses like a lens with flat faces.
 6. **Zone plate**: A zone plate: Fresnel zones cut for a design frequency and a focal length, every second zone an absorbing block, the central zone open or, inverted, a block. It focuses by diffraction; an optional mount stops light passing outside the diameter.
-7. **Polygon**: A regular polygon of glass or mirror, by its number of sides and the side length.
-8. **Rectangle**: A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one.
-9. **Ellipse**: An ellipse of glass or mirror, by the length and width of its box; linked, a circle.
-10. **Triangle**: A triangle of glass or mirror: the base across the axis, the apex along it, the base angles set by a preset or by hand.
-11. **Outline**: A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing.
-12. **Optical logic**: The gates, in a submenu of their own: XOR (Mach-Zehnder), AND and OR.
+7. **Diffuser**: A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects.
+8. **Diffraction gratings**: The gratings, in a submenu of their own: the facetted grating.
+9. **Polygon**: A regular polygon of glass or mirror, by its number of sides and the side length.
+10. **Rectangle**: A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one.
+11. **Ellipse**: An ellipse of glass or mirror, by the length and width of its box; linked, a circle.
+12. **Triangle**: A triangle of glass or mirror: the base across the axis, the apex along it, the base angles set by a preset or by hand.
+13. **Outline**: A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing.
+14. **Optical logic**: The gates, in a submenu of their own: XOR (Mach-Zehnder), AND and OR.
 
 The XOR gate has two input waveguides, a phase section putting the lower input a quarter period ahead, and a coupler whose upper output carries their difference. It lights when one input is lit, not both, for coherent inputs at the design frequency. The AND gate is the same coupler with the lower input a quarter period behind, so the upper output carries the sum: brightest with both inputs lit, about four times a single one; a passive linear gate has no truer AND. The OR gate puts the lower input a twelfth of a period ahead, so the upper output carries half the power of either input and of both: it lights with one input or both.
 
@@ -511,6 +513,28 @@ A zone plate: Fresnel zones cut for a design frequency and a focal length, every
 15. **Mount width**: Width in pixels of the absorbing mount on either side, beyond the diameter.
 16. **Number of zones**: The zones the plate gets within its diameter. A read-out.
 17. **Outermost zone**: The width of the outermost whole zone, which the grid must resolve: a few pixels at least. A read-out.
+
+### Diffuser
+
+A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects. Coat the front puts the anti-reflection band on the rough face, Coat the back on the flat one, at any angle; a new diffuser coats the back alone. The roughness is worked out again only when a roughness setting, the width, the name or the project's seed changes, so the same project always gives the same face. On the pictures, a selected diffuser shows a grip on its back corner that sets the length and the width. Badges 1 to 15 are the shared and the glass and mirror settings.
+
+16. **Length**: Extent along the axis in pixels: the plate's thickness at the mean of its rough face.
+17. **Width**: Extent across the axis in pixels: the width of the rough face.
+18. **Centre wavelength**: The spatial wavelength in pixels at the middle of the roughness's spectrum: the ripple along the face that has the full amplitude. Two pixels at least.
+19. **Amplitude**: The amplitude in pixels of the ripple at the centre wavelength. The other wavelengths of the spread get less, by their distance from the centre, and the face carries the sum of them all; 0 makes the face flat.
+20. **Sigma**: The spread of the roughness's wavelengths about the centre wavelength, in pixels: a wavelength gets the amplitude times the bell e^(-(lambda - centre)^2 / 2 sigma^2). 0 leaves the centre wavelength alone, a single regular ripple; the larger, the more wavelengths join in and the less regular the face.
+21. **Profile height**: The rough face from its highest point to its lowest: what the ripples add up to. A read-out.
+22. **Ripples**: How many wavelengths make up the roughness: one at sigma 0, thirteen otherwise, those below two pixels left out. A read-out.
+
+### Facetted grating
+
+A facetted grating: a plate of glass or mirror whose front face carries a periodic relief, a sawtooth, a square wave or a sinusoid repeated every pitch, the back flat. A diffuser of one wavelength: the pitch and the wavelength set the angles the orders leave at. The anti-reflection coating can lie only on the flat back. On the pictures, a selected grating shows a grip on its back corner that sets the length and the width. Badges 1 to 6 are the shared settings, 7 to 13 the glass and mirror settings with the coating on the back alone.
+
+14. **Length**: Extent along the axis in pixels: the plate's thickness at the mean of its facetted face.
+15. **Width**: Extent across the axis in pixels: the width of the facetted face.
+16. **Pattern**: The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid.
+17. **Pitch**: The period of the facets across the face in pixels: the grating's pitch, which with the wavelength sets the diffraction angles. Two pixels at least.
+18. **Amplitude**: The relief's height either side of the mean face in pixels: the facets run from this far out to this far in, twice it from crest to trough. 0 makes the face flat.
 
 ### XOR, AND and OR gates
 

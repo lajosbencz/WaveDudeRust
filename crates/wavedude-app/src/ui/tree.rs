@@ -27,6 +27,12 @@ pub fn kind_icon(kind: NewPart) -> Icon {
 		NewPart::FresnelLens => Icon::path(
 			"M5.5 1.5 L9.5 1.5 L9.5 13.5 L5.5 13.5 Z M5.5 1.5 L3.5 3.5 L5.5 4.5 L3.5 6.5 L5.5 7.5 L3.5 8.5 L5.5 10.5 L3.5 11.5 L5.5 13.5 M9.5 1.5 L11.5 3.5 L9.5 4.5 L11.5 6.5 L9.5 7.5 L11.5 8.5 L9.5 10.5 L11.5 11.5 L9.5 13.5",
 		),
+		NewPart::Diffuser => {
+			Icon::path("M11.5 1.5 L11.5 13.5 L6.5 13.5 Q4.5 12 6.5 10.5 Q3.5 9 5.5 7.5 Q3.5 6 6 4.5 Q4.5 3 6.5 1.5 Z")
+		}
+		NewPart::FacettedGrating => {
+			Icon::path("M11.5 1.5 L11.5 13.5 L7.5 13.5 L4.5 11.5 L7.5 9.5 L4.5 7.5 L7.5 5.5 L4.5 3.5 L7.5 1.5 Z")
+		}
 		NewPart::Fiber => Icon::path("M0.5 4.5 C6.5 4.5 7.5 10.5 14.5 10.5 M0.5 7.5 C6.5 7.5 7.5 13.5 14.5 13.5"),
 		NewPart::BraggReflector => {
 			Icon::path("M2.5 1.5 L2.5 13.5 M5.5 1.5 L5.5 13.5 M8.5 1.5 L8.5 13.5 M11.5 1.5 L11.5 13.5")
@@ -102,6 +108,8 @@ fn part_icon(part: &Part) -> Icon {
 		PartKind::Ellipse(_) => NewPart::Ellipse,
 		PartKind::Triangle(_) => NewPart::Triangle,
 		PartKind::Outline(_) => NewPart::Outline,
+		PartKind::Diffuser(_) => NewPart::Diffuser,
+		PartKind::FacettedGrating(_) => NewPart::FacettedGrating,
 		PartKind::Fiber(_) => NewPart::Fiber,
 		PartKind::BraggReflector(_) => NewPart::BraggReflector,
 		PartKind::GrinLens(_) => NewPart::GrinLens,

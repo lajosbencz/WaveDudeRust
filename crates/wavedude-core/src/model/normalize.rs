@@ -7,9 +7,10 @@
 use super::names;
 use super::ranges as r;
 use super::{
-	BraggReflector, Coating, ColorScheme, Display, DisplayLayer, Ellipse, Fiber, FresnelLens, GrinLens, Layer, Lens,
-	LogicGate, Material, Measurement, Outline, Part, PartKind, Polygon, Probe, Project, Rectangle, Scene, Simulation,
-	Source, SourceArray, Stop, Triangle, TriangleType, Video, YScale, ZonePlate, normalize_angle,
+	BraggReflector, Coating, ColorScheme, Diffuser, Display, DisplayLayer, Ellipse, FacettedGrating, Fiber,
+	FresnelLens, GrinLens, Layer, Lens, LogicGate, Material, Measurement, Outline, Part, PartKind, Polygon, Probe,
+	Project, Rectangle, Scene, Simulation, Source, SourceArray, Stop, Triangle, TriangleType, Video, YScale, ZonePlate,
+	normalize_angle,
 };
 
 /// Brings a value into its valid state.
@@ -184,12 +185,39 @@ impl Normalize for Part {
 			PartKind::Ellipse(p) => p.normalize(),
 			PartKind::Triangle(p) => p.normalize(),
 			PartKind::Outline(p) => p.normalize(),
+			PartKind::Diffuser(p) => p.normalize(),
+			PartKind::FacettedGrating(p) => p.normalize(),
 			PartKind::Fiber(p) => p.normalize(),
 			PartKind::BraggReflector(p) => p.normalize(),
 			PartKind::GrinLens(p) => p.normalize(),
 			PartKind::LogicGate(p) => p.normalize(),
 			PartKind::ZonePlate(p) => p.normalize(),
 		}
+	}
+}
+
+impl Normalize for Diffuser {
+	fn normalize(&mut self) {
+		self.material.normalize();
+		self.coating.normalize();
+		self.length = r::AT_LEAST_1.clamp_u32(self.length);
+		self.width = r::AT_LEAST_2.clamp_u32(self.width);
+		let d = Diffuser::default();
+		self.center_wavelength = r::RIPPLE_WAVELENGTH.clamp_or(self.center_wavelength, d.center_wavelength);
+		self.amplitude = r::PLATE_PIXELS.clamp_or(self.amplitude, d.amplitude);
+		self.sigma = r::PLATE_PIXELS.clamp_or(self.sigma, d.sigma);
+	}
+}
+
+impl Normalize for FacettedGrating {
+	fn normalize(&mut self) {
+		self.material.normalize();
+		self.coating.normalize();
+		self.length = r::AT_LEAST_1.clamp_u32(self.length);
+		self.width = r::AT_LEAST_2.clamp_u32(self.width);
+		let d = FacettedGrating::default();
+		self.pitch = r::RIPPLE_WAVELENGTH.clamp_or(self.pitch, d.pitch);
+		self.amplitude = r::PLATE_PIXELS.clamp_or(self.amplitude, d.amplitude);
 	}
 }
 

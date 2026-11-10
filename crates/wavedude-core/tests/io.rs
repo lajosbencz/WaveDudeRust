@@ -276,6 +276,8 @@ fn wdr_json_names_are_stable() {
 		PartKind::Ellipse(Ellipse::default()),
 		PartKind::Triangle(Triangle::default()),
 		PartKind::Outline(Outline { points: vec![Point::new(1, 2)], ..Outline::default() }),
+		PartKind::Diffuser(Diffuser::default()),
+		PartKind::FacettedGrating(FacettedGrating::default()),
 		PartKind::Fiber(Fiber { nodes: vec![FiberNode::default()], ..Fiber::default() }),
 		PartKind::BraggReflector(BraggReflector::default()),
 		PartKind::GrinLens(GrinLens::default()),

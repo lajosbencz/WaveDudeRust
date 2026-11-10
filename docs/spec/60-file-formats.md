@@ -23,8 +23,9 @@ Project @Version @Seed @Generator?
     Video?               (omitted when at defaults)
   Source*
     Array?
-  <part>*                (Lens | FresnelLens | Polygon | Rectangle | Ellipse | Triangle | Outline | Fiber |
-                          BraggReflector | GrinLens | XorGate | AndGate | OrGate | ZonePlate, in list order)
+  <part>*                (Lens | FresnelLens | Polygon | Rectangle | Ellipse | Triangle | Outline | Diffuser |
+                          FacettedGrating | Fiber | BraggReflector | GrinLens | XorGate | AndGate | OrGate |
+                          ZonePlate, in list order)
     Point*               (Outline)
     Node*                (Fiber)
   Probe*
