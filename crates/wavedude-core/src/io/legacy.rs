@@ -248,9 +248,9 @@ fn import_probes(s: Option<&Obj>, scene: Option<&Obj>, project: &mut Project, no
 /// The scene's `image_size` is left at (0, 0); [`import`] decodes it.
 pub fn import_str(json: &str, folder: &Path) -> std::result::Result<Imported, FormatError> {
 	// The original reads with comments and trailing commas allowed; JSON5 covers both.
-	let root: Value = json5::from_str(json).map_err(|e| {
-		let json5::Error::Message { msg, location } = e;
-		FormatError { message: format!("not valid JSON: {msg}"), at: location.map(|l| (l.line, l.column)) }
+	let root: Value = json5::from_str(json).map_err(|e| FormatError {
+		message: format!("not valid JSON: {e}"),
+		at: e.position().map(|p| (p.line, p.column)),
 	})?;
 	let root =
 		root.as_object().ok_or_else(|| FormatError::new("not a project configuration (a JSON object was expected)"))?;
