@@ -2,7 +2,7 @@
 //! figures cropped to the control they show.
 //!
 //! `WAVEDUDE_SHOTS=<dir> cargo test -p wavedude-app --test screenshots -- --ignored window_states`
-//! `WAVEDUDE_FIGURES=crates/wavedude-app/assets/manual cargo test -p wavedude-app --test screenshots -- --ignored manual_figures`
+//! `WAVEDUDE_FIGURES=$PWD/crates/wavedude-app/assets/manual cargo test -p wavedude-app --test screenshots -- --ignored manual_figures`
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -216,11 +216,27 @@ impl Shots {
 		self.test.sync_and_update();
 	}
 
+	/// Hovers the submenu entry `id` of an open menu until it unfolds.
+	fn hover_submenu(&mut self, id: &str) {
+		let entry = centre(self.area_of(id));
+		self.test.move_cursor(entry);
+		self.test.poll(Duration::from_millis(16), Duration::from_millis(600));
+	}
+
 	/// The last part added, selected.
 	fn add_part(&mut self, kind: NewPart) -> ItemRef {
 		self.command(Command::AddPart { kind, at: None });
 		let index = self.shared.peek(|a| a.document.project.parts.len() - 1);
 		let item = ItemRef::new(ItemKind::Part, index);
+		self.select(Row::Item(item));
+		item
+	}
+
+	/// The last probe added, selected.
+	fn add_probe(&mut self, detector: ProbeDetector) -> ItemRef {
+		self.command(Command::AddProbe { at: None, detector });
+		let index = self.shared.peek(|a| a.document.project.probes.len() - 1);
+		let item = ItemRef::new(ItemKind::Probe, index);
 		self.select(Row::Item(item));
 		item
 	}
@@ -258,6 +274,32 @@ fn window_states() {
 	s.test.sync_and_update();
 	s.shot("07-dock-dropped");
 	assert!(s.find_text("Properties").is_some(), "the dropped pane shows as a tab");
+}
+
+/// The window at common display sizes, with a long form (meta lens), a list editor (interference filter) and a
+/// detector selected, and the add-part menu open: where panes crowd or clip.
+#[test]
+#[ignore = "writes pictures; run with WAVEDUDE_SHOTS set"]
+fn window_sizes() {
+	let Some(dir) = out_dir("WAVEDUDE_SHOTS") else { return };
+	for (w, h) in [(1024., 600.), (1280., 720.), (1366., 768.), (1920., 1080.), (2560., 1440.)] {
+		let tag = format!("{w}x{h}");
+		let mut s = Shots::start(dir.clone(), (w, h));
+		s.run_to(200, 200);
+		s.add_part(NewPart::MetaLens);
+		s.shot(&format!("size-{tag}-meta-lens"));
+		s.add_part(NewPart::InterferenceFilter);
+		s.shot(&format!("size-{tag}-filter"));
+		s.add_probe(ProbeDetector::Imaging);
+		s.shot(&format!("size-{tag}-imaging"));
+		let part_button = s.area_of("ToolAddPart");
+		s.test.click_cursor(centre(part_button));
+		s.test.sync_and_update();
+		s.test.sync_and_update();
+		s.hover_submenu("AddPart:MetaSurfaces");
+		s.shot(&format!("size-{tag}-add-part"));
+		s.close_menu();
+	}
 }
 
 /// The README's animation: the logic gates example played through, one picture per frame of the sweep, for
@@ -332,6 +374,13 @@ fn manual_figures() {
 	s.test.sync_and_update();
 	s.figure("menu-add-part", s.area_under("AddPart:").union(&part_button), 2.);
 	s.close_menu();
+	let probe_button = s.area_of("ToolAddProbe");
+	s.test.click_cursor(centre(probe_button));
+	s.test.sync_and_update();
+	s.test.sync_and_update();
+	s.hover_submenu("AddProbe:Probabilistic");
+	s.figure("menu-add-probe", s.area_under("AddProbe:").union(&probe_button), 2.);
+	s.close_menu();
 
 	// The forms, in a taller window so each fits.
 	let mut s = Shots::start(dir, (1400., 1500.));
@@ -357,6 +406,7 @@ fn manual_figures() {
 	s.figure("properties-rectangle", pane(&s), 0.);
 	for (kind, name) in [
 		(NewPart::Lens, "properties-lens"),
+		(NewPart::FresnelLens, "properties-fresnel-lens"),
 		(NewPart::Polygon, "properties-polygon"),
 		(NewPart::Ellipse, "properties-ellipse"),
 		(NewPart::Triangle, "properties-triangle"),
@@ -365,6 +415,13 @@ fn manual_figures() {
 		(NewPart::BraggReflector, "properties-bragg-reflector"),
 		(NewPart::GrinLens, "properties-grin-lens"),
 		(NewPart::ZonePlate, "properties-zone-plate"),
+		(NewPart::Diffuser, "properties-diffuser"),
+		(NewPart::InterferenceFilter, "properties-interference-filter"),
+		(NewPart::SimpleGrating, "properties-simple-grating"),
+		(NewPart::FacettedGrating, "properties-facetted-grating"),
+		(NewPart::MetaLens, "properties-meta-lens"),
+		(NewPart::MetaPrism, "properties-meta-prism"),
+		(NewPart::MetaAxicon, "properties-meta-axicon"),
 		(NewPart::XorGate, "properties-xor-gate"),
 	] {
 		s.add_part(kind);
@@ -372,10 +429,14 @@ fn manual_figures() {
 	}
 	s.select(Row::Item(ItemRef::new(ItemKind::Probe, 0)));
 	s.figure("properties-line-probe", pane(&s), 0.);
-	s.command(Command::AddProbe { at: None, detector: ProbeDetector::Standard });
-	let probes = s.shared.peek(|a| a.document.project.probes.len());
-	s.select(Row::Item(ItemRef::new(ItemKind::Probe, probes - 1)));
-	s.figure("properties-probe", pane(&s), 0.);
+	for (detector, name) in [
+		(ProbeDetector::Standard, "properties-probe"),
+		(ProbeDetector::Counting, "properties-counting-detector"),
+		(ProbeDetector::Imaging, "properties-imaging-detector"),
+	] {
+		s.add_probe(detector);
+		s.figure(name, pane(&s), 0.);
+	}
 	s.command(Command::AddScheme);
 	let schemes = s.shared.peek(|a| a.document.project.color_schemes.len());
 	s.select(Row::Item(ItemRef::new(ItemKind::Scheme, schemes - 1)));

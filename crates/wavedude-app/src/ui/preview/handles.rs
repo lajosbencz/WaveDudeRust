@@ -469,7 +469,7 @@ pub fn to_part_frame(part: &Part, p: (f32, f32)) -> Vec2 {
 
 #[cfg(test)]
 mod tests {
-	use wavedude_core::model::{Probe, Rectangle, Source, SourceArray};
+	use wavedude_core::model::{self as m, Probe, Rectangle, Source, SourceArray};
 
 	use super::*;
 
@@ -619,6 +619,34 @@ mod tests {
 		let linked = PartKind::Rectangle(Rectangle { linked: true, ..Rectangle::default() });
 		assert_eq!(grip_edits(&linked, Vec2::new(5., 30.)), vec![("kind.Rectangle.width".into(), json!(60))]);
 		assert_eq!(grip_edits(&r, Vec2::new(0., 0.))[0].1, json!(1));
+	}
+
+	/// Every kind with a grip: dropping the grip where it stands leaves the part as it is, so a drag edits
+	/// what the grip shows.
+	#[test]
+	fn grips_round_trip_through_their_edits() {
+		let kinds = [
+			PartKind::Rectangle(Rectangle::default()),
+			PartKind::Ellipse(m::Ellipse::default()),
+			PartKind::Lens(m::Lens::default()),
+			PartKind::FresnelLens(m::FresnelLens::new_plate()),
+			PartKind::Diffuser(m::Diffuser::default()),
+			PartKind::FacettedGrating(m::FacettedGrating::default()),
+			PartKind::InterferenceFilter(m::InterferenceFilter::new_part()),
+			PartKind::MetaSurface(m::MetaSurface::new_part(m::MetaDesign::default())),
+			PartKind::GrinLens(m::GrinLens::default()),
+		];
+		for kind in kinds {
+			let grip = grip_of(&kind).expect("a grip");
+			let mut json = serde_json::to_value(&kind).unwrap();
+			for (path, value) in grip_edits(&kind, grip) {
+				let mut at = &mut json;
+				for key in path.split('.').skip(1) {
+					at = at.get_mut(key).unwrap_or_else(|| panic!("{path} in {kind:?}"));
+				}
+				assert_eq!(*at, value, "{path} of {kind:?}");
+			}
+		}
 	}
 
 	#[test]

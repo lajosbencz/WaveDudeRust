@@ -403,7 +403,7 @@ A lens or a mirror: a strip of the diameter between two spherical surfaces, each
 
 ### Fresnel lens
 
-A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and how they are divided; a flat surface stays flat. A new Fresnel lens is 500 pixels across with radii of 1500 on a plate 20 pixels thick. The deepest zone is the one the centre thickness must hold: a radius too curved for the plate is raised until that zone's sags fit, where a whole lens would need a far flatter one; the edge thickness is what the deepest zone leaves at the rim. There is no Concave box: a negative radius hollows a surface, as on the lens. Badges 1 to 15 are the shared and the glass and mirror settings.
+A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and how they are divided; a flat surface stays flat. A new Fresnel lens is 500 pixels across with radii of 1500 on a plate 20 pixels thick. The deepest zone is the one the centre thickness must hold: a radius too curved for the plate is raised until that zone's sags fit, where a whole lens would need a far flatter one; the edge thickness is what the deepest zone leaves at the rim. There is no Concave box: a negative radius hollows a surface, as on the lens. Badges 1 to 15 are the shared and the glass and mirror settings. <figure name="properties-fresnel-lens"/>
 
 16. **Diameter**: Extent across the axis in pixels.
 17. **R1**: Radius of the first surface in pixels: positive bulges outward, negative is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest whose zones fit.
@@ -518,7 +518,7 @@ A zone plate: Fresnel zones cut for a design frequency and a focal length, every
 
 ### Diffuser
 
-A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects. Coat the front puts the anti-reflection band on the rough face, Coat the back on the flat one, at any angle; a new diffuser coats the back alone. The roughness is worked out again only when a roughness setting, the width, the name or the project's seed changes, so the same project always gives the same face. On the pictures, a selected diffuser shows a grip on its back corner that sets the length and the width. Badges 1 to 15 are the shared and the glass and mirror settings.
+A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects. Coat the front puts the anti-reflection band on the rough face, Coat the back on the flat one, at any angle; a new diffuser coats the back alone. The roughness is worked out again only when a roughness setting, the width, the name or the project's seed changes, so the same project always gives the same face. On the pictures, a selected diffuser shows a grip on its back corner that sets the length and the width. Badges 1 to 15 are the shared and the glass and mirror settings. <figure name="properties-diffuser"/>
 
 16. **Length**: Extent along the axis in pixels: the plate's thickness at the mean of its rough face.
 17. **Width**: Extent across the axis in pixels: the width of the rough face.
@@ -530,7 +530,7 @@ A diffuser: a plate of glass or mirror whose front face is rough, the back flat.
 
 ### Interference filter
 
-An interference filter: a plate of glass or mirror with a stack of thin layers on its front, each with its own thickness and index. Waves reflected at the layers' boundaries interfere, so the stack reflects some wavelengths and passes others; a new filter is a quarter-wave stack for a wavelength of 16 pixels in the usual design, beginning and ending with the high index: from the outside in, five pairs of a layer of index 2.00, 2.00 pixels thick, and one of 1.50, 2.67 pixels thick, then one more layer of 2.00 on the plate, eleven layers that reflect most of a wave at that wavelength. The layers lie on the plate's front, outside it, so the plate keeps its length and the filter grows by the stack; the first layer in the list is the outermost, the one a wave from the left meets first. Ticking Mirror makes the plate a mirror and leaves the layers glass in front of it: a coated mirror. The plate's anti-reflection band can lie only on its back, the face away from the layers. On the pictures, a selected filter shows a grip on the plate's back corner that sets the length and the width. Badges 1 to 6 are the shared settings.
+An interference filter: a plate of glass or mirror with a stack of thin layers on its front, each with its own thickness and index. Waves reflected at the layers' boundaries interfere, so the stack reflects some wavelengths and passes others; a new filter is a quarter-wave stack for a wavelength of 16 pixels in the usual design, beginning and ending with the high index: from the outside in, five pairs of a layer of index 2.00, 2.00 pixels thick, and one of 1.50, 2.67 pixels thick, then one more layer of 2.00 on the plate, eleven layers that reflect most of a wave at that wavelength. The layers lie on the plate's front, outside it, so the plate keeps its length and the filter grows by the stack; the first layer in the list is the outermost, the one a wave from the left meets first. Ticking Mirror makes the plate a mirror and leaves the layers glass in front of it: a coated mirror. The plate's anti-reflection band can lie only on its back, the face away from the layers. On the pictures, a selected filter shows a grip on the plate's back corner that sets the length and the width. Badges 1 to 6 are the shared settings. <figure name="properties-interference-filter"/>
 
 7. **Mirror**: Makes the plate a mirror instead of glass; the layers stay glass in front of it. The plate's refractive index, coating and absorption are ignored then.
 8. **Refractive index**: Refractive index of the plate, 1.00 to 2.55 in steps of 0.01.
@@ -548,7 +548,7 @@ An interference filter: a plate of glass or mirror with a stack of thin layers o
 
 ### Simple 2D grating
 
-A simple 2D grating: a lattice of round dots, so many columns along the axis by so many rows across, each direction with its own spacing, nothing between them. The dots are mirror, or glass with an index; a wave passing the lattice is diffracted into the orders the spacings set. One column makes a line grating. A new grating is one column of 31 mirror dots, 16 pixels apart and 2 pixels across: a line grating across the axis, which a wave from the left meets. Odd counts keep the middle dot on the part's position, even counts put the position between two dots. The dots have no anti-reflection coating. Badges 1 to 6 are the shared settings.
+A simple 2D grating: a lattice of round dots, so many columns along the axis by so many rows across, each direction with its own spacing, nothing between them. The dots are mirror, or glass with an index; a wave passing the lattice is diffracted into the orders the spacings set. One column makes a line grating. A new grating is one column of 31 mirror dots, 16 pixels apart and 2 pixels across: a line grating across the axis, which a wave from the left meets. Odd counts keep the middle dot on the part's position, even counts put the position between two dots. The dots have no anti-reflection coating. Badges 1 to 6 are the shared settings. <figure name="properties-simple-grating"/>
 
 7. **Mirror**: Makes the dots mirrors instead of glass. The refractive index and the absorption are ignored then.
 8. **Refractive index**: Refractive index of the glass dots, 1.00 to 2.55 in steps of 0.01.
@@ -562,7 +562,7 @@ A simple 2D grating: a lattice of round dots, so many columns along the axis by 
 
 ### Facetted grating
 
-A facetted grating: a plate of glass or mirror whose front face carries a periodic relief, a sawtooth, a square wave or a sinusoid repeated every pitch, the back flat. A diffuser of one wavelength: the pitch and the wavelength set the angles the orders leave at. The anti-reflection coating can lie only on the flat back. On the pictures, a selected grating shows a grip on its back corner that sets the length and the width. Badges 1 to 6 are the shared settings, 7 to 13 the glass and mirror settings with the coating on the back alone.
+A facetted grating: a plate of glass or mirror whose front face carries a periodic relief, a sawtooth, a square wave or a sinusoid repeated every pitch, the back flat. A diffuser of one wavelength: the pitch and the wavelength set the angles the orders leave at. The anti-reflection coating can lie only on the flat back. On the pictures, a selected grating shows a grip on its back corner that sets the length and the width. Badges 1 to 6 are the shared settings, 7 to 13 the glass and mirror settings with the coating on the back alone. <figure name="properties-facetted-grating"/>
 
 14. **Length**: Extent along the axis in pixels: the plate's thickness at the mean of its facetted face.
 15. **Width**: Extent across the axis in pixels: the width of the facetted face.
@@ -572,7 +572,7 @@ A facetted grating: a plate of glass or mirror whose front face carries a period
 
 ### Meta lens
 
-A meta lens: a carrier plate with a sub-wavelength pattern on its front, a ridge of its own index in every cell, whose fill is computed from the target frequency and the focal length so the cells delay the wave as a lens would, zone by zone. The wave sees each cell as a mean index between the plate's surroundings and the ridge's, the more of the cell the ridge fills, the higher; a converging lens fills the cells most at the centre and less outward within each zone, where the fill starts over, a diverging one the other way. A new meta lens is cut for a wavelength of 32 pixels with a focal length of 500, cells of 4 pixels and ridges 32 pixels high of index 2.00: just the height a full turn of phase needs, which the form shows. The anti-reflection coating can lie on the ridges' tops (the front) and the plate's back. On the pictures, a selected meta lens shows a grip on the plate's back corner that sets the length and the width. Badges 1 to 6 are the shared settings, 7 to 14 the glass and mirror settings without the sides.
+A meta lens: a carrier plate with a sub-wavelength pattern on its front, a ridge of its own index in every cell, whose fill is computed from the target frequency and the focal length so the cells delay the wave as a lens would, zone by zone. The wave sees each cell as a mean index between the plate's surroundings and the ridge's, the more of the cell the ridge fills, the higher; a converging lens fills the cells most at the centre and less outward within each zone, where the fill starts over, a diverging one the other way. A new meta lens is cut for a wavelength of 32 pixels with a focal length of 500, cells of 4 pixels and ridges 32 pixels high of index 2.00: just the height a full turn of phase needs, which the form shows. The anti-reflection coating can lie on the ridges' tops (the front) and the plate's back. On the pictures, a selected meta lens shows a grip on the plate's back corner that sets the length and the width. Badges 1 to 6 are the shared settings, 7 to 14 the glass and mirror settings without the sides. <figure name="properties-meta-lens"/>
 
 15. **Length**: Thickness of the carrier plate along the axis in pixels; the pattern stands on its front, outside it.
 16. **Width**: Width of the plate and its pattern across the axis in pixels.
@@ -588,7 +588,7 @@ A meta lens: a carrier plate with a sub-wavelength pattern on its front, a ridge
 
 ### Meta prism
 
-A meta prism: a carrier plate with a sub-wavelength pattern on its front whose cells delay the wave in a line across the face, so a wave arriving along the axis leaves turned by a set angle, as a blazed grating's first order. The fill of the cells climbs across each zone and starts over at the next; a zone is a full turn of phase, the wavelength over the sine of the angle wide, and must stay a few cells wide, so steep angles need fine cells. A new meta prism is cut for a wavelength of 32 pixels and turns the wave by 20 degrees, with cells of 4 pixels and ridges 32 pixels high of index 2.00. The anti-reflection coating can lie on the ridges' tops and the plate's back. Badges 1 to 6 are the shared settings, 7 to 14 the glass and mirror settings without the sides, 15 and 16 the plate's length and width as the meta lens's.
+A meta prism: a carrier plate with a sub-wavelength pattern on its front whose cells delay the wave in a line across the face, so a wave arriving along the axis leaves turned by a set angle, as a blazed grating's first order. The fill of the cells climbs across each zone and starts over at the next; a zone is a full turn of phase, the wavelength over the sine of the angle wide, and must stay a few cells wide, so steep angles need fine cells. A new meta prism is cut for a wavelength of 32 pixels and turns the wave by 20 degrees, with cells of 4 pixels and ridges 32 pixels high of index 2.00. The anti-reflection coating can lie on the ridges' tops and the plate's back. Badges 1 to 6 are the shared settings, 7 to 14 the glass and mirror settings without the sides, 15 and 16 the plate's length and width as the meta lens's. <figure name="properties-meta-prism"/>
 
 17. **Target frequency**: The source frequency the prism is designed for, on the same scale as a source's frequency; the wavelength it gives sets the cells' fill. Another frequency is turned by another angle.
 18. **Wavelength**: The wavelength the target frequency gives in a medium of index 1. A read-out.
@@ -599,7 +599,7 @@ A meta prism: a carrier plate with a sub-wavelength pattern on its front whose c
 
 ### Meta axicon
 
-A meta axicon: a carrier plate with a sub-wavelength pattern on its front whose cells delay the wave in proportion to the distance from the axis, so the two halves of a wave arriving along the axis are turned toward it by a set angle and cross along a line behind the surface rather than at a point: a long, narrow focus that keeps its shape over its length. The fill is greatest on the axis and falls outward within each zone, as a converging lens's, but at an even pace. A new meta axicon is cut for a wavelength of 32 pixels with a cone angle of 10 degrees, cells of 4 pixels and ridges 32 pixels high of index 2.00. Badges 1 to 6 are the shared settings, 7 to 14 the glass and mirror settings without the sides, 15 and 16 the plate's length and width as the meta lens's.
+A meta axicon: a carrier plate with a sub-wavelength pattern on its front whose cells delay the wave in proportion to the distance from the axis, so the two halves of a wave arriving along the axis are turned toward it by a set angle and cross along a line behind the surface rather than at a point: a long, narrow focus that keeps its shape over its length. The fill is greatest on the axis and falls outward within each zone, as a converging lens's, but at an even pace. A new meta axicon is cut for a wavelength of 32 pixels with a cone angle of 10 degrees, cells of 4 pixels and ridges 32 pixels high of index 2.00. Badges 1 to 6 are the shared settings, 7 to 14 the glass and mirror settings without the sides, 15 and 16 the plate's length and width as the meta lens's. <figure name="properties-meta-axicon"/>
 
 17. **Target frequency**: The source frequency the axicon is designed for; the wavelength it gives sets the cells' fill.
 18. **Wavelength**: The wavelength the target frequency gives in a medium of index 1. A read-out.
@@ -639,7 +639,7 @@ A probe measures the wave where you put it and draws a graph over the picture of
 
 ### The kinds of probes
 
-The Add probe menu of the project tree.
+The Add probe menu of the project tree. <figure name="menu-add-probe"/>
 
 1. **Standard probe**: A standard probe: the field's amplitude, or the intensity's value or its integral, at a point over time or along a line.
 2. **Probabilistic**: The detectors, in a submenu of their own: the counting detector and the imaging detector.
@@ -683,11 +683,11 @@ The same form for a line probe of the intensity with a logarithmic value axis. A
 
 ### Counting detector
 
-The same form for a counting detector. The detector sets the layer, the measurement and the kind (7 to 9), which are greyed; the graph shows the detections of the whole line step by step, so the step axis settings (19 to 21) apply, and the bin size (6) does not.
+The same form for a counting detector. The detector sets the layer, the measurement and the kind (7 to 9), which are greyed; the graph shows the detections of the whole line step by step, so the step axis settings (19 to 21) apply, and the bin size (6) does not. <figure name="properties-counting-detector"/>
 
 ### Imaging detector
 
-The same form for an imaging detector. The detector sets the layer, the measurement and the kind (7 to 9), which are greyed; the graph shows the detections along the line from A to B, added up to the frame shown, in bins of the bin size (6), so the step axis settings (19 to 21) do not apply.
+The same form for an imaging detector. The detector sets the layer, the measurement and the kind (7 to 9), which are greyed; the graph shows the detections along the line from A to B, added up to the frame shown, in bins of the bin size (6), so the step axis settings (19 to 21) do not apply. <figure name="properties-imaging-detector"/>
 
 ## Colour schemes
 
