@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1](https://github.com/lajosbencz/WaveDudeRust/compare/v0.2.0...v0.2.1) - 2026-11-10
+
+### Fixed
+
+- *(widgets)* a text field selects its text on the first key after taking focus when that key beats the render, so a new object's name is replaced on macOS too
+- *(widgets)* a focusing click that beats the render selects the text too, as the key path does
+
 ## [0.2.0](https://github.com/lajosbencz/WaveDudeRust/compare/v0.1.9...v0.2.0) - 2026-11-10
 
 ### Added
