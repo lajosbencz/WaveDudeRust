@@ -92,6 +92,11 @@ fn read_f32(path: &Path, n: usize) -> Result<Vec<f32>> {
 	Ok(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect())
 }
 
+fn write_f32(path: &Path, values: &[f32]) -> Result<()> {
+	let bytes: Vec<u8> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
+	fs::write(path, bytes).with_context(|| format!("writing {}", path.display()))
+}
+
 fn read_png_rgba(path: &Path) -> Result<(usize, usize, Vec<u8>)> {
 	let file = File::open(path).with_context(|| format!("opening {}", path.display()))?;
 	let decoder = png::Decoder::new(std::io::BufReader::new(file));
@@ -563,6 +568,13 @@ pub fn run(args: &Args) -> Result<()> {
 		.iter()
 		.map(|(p, label, tag)| run_rust(p, &pixels, args.steps, args.every, (label, tag), args.engine))
 		.collect::<Result<Vec<_>>>()?;
+	// the Rust dumps beside the report, in the C# dump's layout, for measurements the report does not make
+	for run in &runs {
+		for d in &run.dumps {
+			write_f32(&args.out.join(format!("rust{}_field_{}.f32", run.tag, d.step)), &d.field)?;
+			write_f32(&args.out.join(format!("rust{}_intensity_{}.f32", run.tag, d.step)), &d.intensity)?;
+		}
+	}
 	let spec = RunSpec::create(&project, Some(&pixels), PreviewQuality::FULL, true)?;
 	let sources: Vec<(String, f64, f64)> =
 		project.sources.iter().filter(|s| s.enabled).take(MAX_FRONTS).map(|s| (s.name.clone(), s.x, s.y)).collect();

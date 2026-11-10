@@ -53,6 +53,28 @@ with captures 0.243 and 0.334 ms; CPU 1.54 / 3.35 ms, with captures 1.89 / 3.76 
 spread. The gap to the C# is the work described above (two sub-steps, four passes, the CPML, one queue), not
 overhead; nothing cheaper than those was found, so the figures stand.
 
+## The new parts against WaveDude Next 05a0348
+
+2026-11-10. `tools/compare-csharp` on upstream's one-of-every-kind project (`_tools/ui_check/figures.wdproj` as a
+canvas scene, 800x500, 600 steps) and on four 640x400 projects of a 31-element line source before a 240 px part,
+1200 steps, `wavedude-cli compare` with the Rust dumps it now writes beside the report.
+
+Painted scene of every kind: 1.05 % of the pixels differ, all in red, 99.3 % of them within 2 px of an index edge,
+none by more than 16 levels (0.16 in index), the blue and green channels equal everywhere; the rectangle and the
+simple grating are bit for bit the same. The edge pixels are the effective medium against the C# 16-sample
+supersampling (decision 0010): a ridge under a quarter pixel wide vanishes there and keeps a faint index here.
+
+| project | field Pearson at the end | intensity Pearson | what was measured | C# | Rust |
+|---|---|---|---|---|---|
+| meta lens, F 200 | 0.954 | 0.987 | intensity peak on the axis (x), half-maximum beam width at x = 350 / 450 | 355, 19 / 37 px | 370, 19 / 34 px |
+| meta prism, 20 deg | 0.940 | 0.976 | brightest row at x = 450 / 550; centroid of the beam over x 450..600 | 178 / 74; 119 | 179 / 73; 122 |
+| facetted grating, pitch 32 | 0.978 | 0.994 | intensity across x = 500: Pearson, brightest row | 0.996; 129 | same; 131 |
+| diffuser | 0.975 | 0.994 | intensity across x = 500: Pearson, brightest row | 0.998; 267 | same; 265 |
+
+The field gain stays the known 5.5 to 6.2 of the source model (decision 0010); the C# engine took 3 sub-steps to
+our 2. Both engines focus the meta lens well short of its nominal 456 px, the near field of a 240 px aperture at
+a 32 px wavelength.
+
 ## Project file size, `.wdr` against `.wdproj`
 
 2026-11-08. The 24 examples loaded and written by this program: the `.wdproj` text with its DOCTYPE against the
