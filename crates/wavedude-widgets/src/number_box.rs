@@ -495,7 +495,7 @@ impl Component for NumberBox {
 		.on_pre_key_down(on_pre_key_down);
 
 		let body = rect()
-			.width(self.width.clone())
+			.width(if self.tooltip.is_some() { Size::fill() } else { self.width.clone() })
 			.height(Size::px(theme.row_height - 2.))
 			.horizontal()
 			.content(Content::flex())
@@ -523,7 +523,12 @@ impl Component for NumberBox {
 
 		let tracked = crate::util::modifier_tracker(modifiers, body);
 		match self.tooltip.clone() {
-			Some(tip) => TooltipContainer::new(Tooltip::new_text(tip)).child(tracked).into_element(),
+			// the wrapper takes the box's width so a flex box still shares its row
+			Some(tip) => {
+				let mut layout = LayoutData::default();
+				layout.layout.width = self.width.clone();
+				TooltipContainer::new(Tooltip::new_text(tip)).layout(layout).child(tracked).into_element()
+			}
 			None => tracked.into_element(),
 		}
 	}

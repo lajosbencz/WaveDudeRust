@@ -213,20 +213,27 @@ impl Form {
 		let integer = bound.is_i64() || bound.is_u64();
 		let value = self.num(path);
 		let form = self.clone();
-		let path_owned = path.to_owned();
-		let mut editor = NumberBox::new(
-			WritableSetter::new(value, move |v: f64| {
-				let json = if integer { Value::from(v.round() as i64) } else { Value::from(v) };
-				form.set(&path_owned, json);
-			}),
-			spec,
-		)
-		.width(Size::fill())
-		.test_id(format!("{ty}.{member}"));
-		if let Some(id) = self.claim_first() {
-			editor = editor.a11y_id(id);
-		}
-		PropertyRow::new(self.s.label(ty, member), editor).hint(self.s.hint(ty, member))
+		let path = path.to_owned();
+		let test = format!("{ty}.{member}");
+		let first = self.claim_first();
+		let editor = move |enabled| {
+			let (form, path) = (form.clone(), path.clone());
+			let editor = NumberBox::new(
+				WritableSetter::new(value, move |v: f64| {
+					let json = if integer { Value::from(v.round() as i64) } else { Value::from(v) };
+					form.set(&path, json);
+				}),
+				spec.clone(),
+			)
+			.width(Size::fill())
+			.enabled(enabled)
+			.test_id(test.clone());
+			match first {
+				Some(id) => editor.a11y_id(id).into_element(),
+				None => editor.into_element(),
+			}
+		};
+		PropertyRow::switchable(self.s.label(ty, member), editor).hint(self.s.hint(ty, member))
 	}
 
 	/// A full-width check box carrying its label.
@@ -242,10 +249,14 @@ impl Form {
 	pub fn check_labelled(&self, text: String, hint: &str, path: &str, test: &str) -> PropertyRow {
 		let on = self.bind_as::<bool>(path);
 		let form = self.clone();
-		let path = path.to_owned();
-		PropertyRow::new("", check_box(text, on, move |v| form.set(&path, Value::from(v))).test_id(test.to_owned()))
-			.hint(hint)
-			.full_width()
+		let (path, test) = (path.to_owned(), test.to_owned());
+		let editor = move |enabled| {
+			let (form, path) = (form.clone(), path.clone());
+			check_box_in(text.clone(), on, enabled, move |v| form.set(&path, Value::from(v)))
+				.test_id(test.clone())
+				.into_element()
+		};
+		PropertyRow::switchable("", editor).hint(hint).full_width()
 	}
 
 	/// An enum combo: `variants` are the serde names, their words `Enum.<enum_ty>.<variant>`.
@@ -255,10 +266,12 @@ impl Form {
 			variants.iter().map(|v| ((*v).to_owned(), self.s.enum_word(enum_ty, v).to_owned())).collect();
 		let form = self.clone();
 		let path = path.to_owned();
-		let editor = combo_box(&self.cx, current, items, format!("{ty}.{member}"), move |v| {
-			form.set(&path, Value::from(v));
-		});
-		PropertyRow::new(self.s.label(ty, member), editor).hint(self.s.hint(ty, member))
+		let test = format!("{ty}.{member}");
+		let editor = move |enabled| {
+			let (form, path) = (form.clone(), path.clone());
+			combo_box(current.clone(), items.clone(), enabled, test.clone(), move |v| form.set(&path, Value::from(v)))
+		};
+		PropertyRow::switchable(self.s.label(ty, member), editor).hint(self.s.hint(ty, member))
 	}
 
 	/// A text box applied on Enter or focus loss, Esc reverting (`multiline` keeps Enter as newline).
@@ -363,31 +376,38 @@ fn label_view(text: String) -> Rect {
 
 /// A check box with its text; the whole row toggles.
 pub fn check_box(text: String, on: bool, on_change: impl Fn(bool) + 'static) -> Rect {
+	check_box_in(text, on, true, on_change)
+}
+
+/// As [`check_box`]; disabled, it is greyed and takes neither the pointer nor the focus.
+pub fn check_box_in(text: String, on: bool, enabled: bool, on_change: impl Fn(bool) + 'static) -> Rect {
 	let theme = use_wave_theme();
+	let ink = if enabled { theme.text } else { theme.text_disabled };
 	let mark = rect()
 		.width(Size::px(14.))
 		.height(Size::px(14.))
 		.border(Border::new().fill(theme.input_border).width(1.).alignment(BorderAlignment::Inner))
-		.background(theme.input_background)
+		.background(if enabled { theme.input_background } else { theme.control_background })
 		.center()
-		.maybe_child(on.then(|| IconView::new(icons::CHECK).color(theme.text).size(12.)));
+		.maybe_child(on.then(|| IconView::new(icons::CHECK).color(ink).size(12.)));
 	let on_change = Rc::new(on_change);
 	let press = on_change.clone();
 	rect()
 		.horizontal()
 		.spacing(6.)
 		.cross_align(Alignment::center())
-		.a11y_focusable(true)
+		.a11y_focusable(enabled)
 		.a11y_role(AccessibilityRole::CheckBox)
-		.on_press(move |_| press(!on))
-		.on_key_down(move |e: Event<KeyboardEventData>| {
-			if e.key == Key::Character(" ".into()) {
-				e.stop_propagation();
-				on_change(!on);
-			}
+		.maybe(enabled, |r| {
+			r.on_press(move |_| press(!on)).on_key_down(move |e: Event<KeyboardEventData>| {
+				if e.key == Key::Character(" ".into()) {
+					e.stop_propagation();
+					on_change(!on);
+				}
+			})
 		})
 		.child(mark)
-		.child(label().text(text))
+		.child(label().text(text).color(ink))
 }
 
 /// Wraps an element that takes no accessibility builder so it carries a test id.
@@ -402,14 +422,14 @@ pub fn text_box(value: String, multiline: bool, on_text: impl Fn(String) + 'stat
 
 /// A drop-down button: the current word, a menu of the choices (serde name, word) under it.
 pub fn combo_box(
-	_cx: &Cx,
 	current: String,
 	items: Vec<(String, String)>,
+	enabled: bool,
 	test: String,
 	on_pick: impl Fn(String) + 'static,
 ) -> Element {
 	let on_pick = Rc::new(on_pick);
-	ComboBox { current, items, test, on_pick: EventHandler::new(move |v: String| on_pick(v)) }.into_element()
+	ComboBox { current, items, enabled, test, on_pick: EventHandler::new(move |v: String| on_pick(v)) }.into_element()
 }
 
 /// Width a drop-down button adds to its widest word: padding, gap and arrow.
@@ -420,6 +440,7 @@ const COMBO_MIN: f32 = 80.;
 struct ComboBox {
 	current: String,
 	items: Vec<(String, String)>,
+	enabled: bool,
 	test: String,
 	on_pick: EventHandler<String>,
 }
@@ -431,6 +452,7 @@ impl Component for ComboBox {
 		let mut cell = use_state(|| 0f32);
 		let mut widest = use_state(|| 0f32);
 		let ui = consume_context::<super::app::Ui>();
+		let ink = if self.enabled { theme.text } else { theme.text_disabled };
 		let word = self.items.iter().find(|(v, _)| *v == self.current).map_or(self.current.clone(), |(_, w)| w.clone());
 		let (items, current, on_pick) = (self.items.clone(), self.current.clone(), self.on_pick.clone());
 		let open = move |_: Event<PressEventData>| {
@@ -468,14 +490,14 @@ impl Component for ComboBox {
 			.child(measure)
 			.child(
 				rect().width(width).child(
-					Button::new().compact().expanded().on_press(open).child(
+					Button::new().compact().expanded().enabled(self.enabled).on_press(open).child(
 						rect()
 							.horizontal()
 							.width(Size::fill())
 							.content(Content::flex())
 							.cross_align(Alignment::center())
-							.child(label().width(Size::flex(1.)).text(word).max_lines(1))
-							.child(IconView::new(icons::DROPDOWN).color(theme.text)),
+							.child(label().width(Size::flex(1.)).text(word).max_lines(1).color(ink))
+							.child(IconView::new(icons::DROPDOWN).color(ink)),
 					),
 				),
 			)

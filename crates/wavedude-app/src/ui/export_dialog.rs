@@ -618,7 +618,7 @@ impl Component for ExportDialog {
 					.font_weight(FontWeight::BOLD)
 					.font_size(theme.font_size * 1.2),
 			)
-			.child(combo_box(&cx, format.read().to_string(), items, "ExportFormat".into(), pick_format))
+			.child(combo_box(format.read().to_string(), items, true, "ExportFormat".into(), pick_format))
 			.child(
 				rect()
 					.horizontal()

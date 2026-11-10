@@ -55,6 +55,8 @@ Text box plus a column of two small repeat buttons (up, down) on the right.
 - A non-parsing text counts as 0 for a step. A logarithmic box starts from Minimum (positive) if the value
   is not above zero.
 - Disabled boxes grey out.
+- A row disabled by another setting greys its label and disables its editor: a number box, check box or
+  combo box takes neither the pointer nor the focus then.
 
 ### Check box, combo box
 
@@ -239,7 +241,7 @@ or undo).
 | Triangle | Shape | Type CMB (Equilateral, Right isosceles (45 deg), 30-60-90, Isosceles, Custom); Base NB min 2 step 10; Angle A NB 1..178 drag 0.5 1 decimal, enabled for Isosceles and Custom; Angle B same, enabled for Custom only; Apex angle RO |
 | Outline | Points | Hint text (grey, wraps); one row per point: X NB, Y NB, remove BTN (in Tab cycle); BTN "Add point" (appends after the last) |
 | Diffuser | Shape; Roughness | Length NB min 1 step 10; Width NB min 2 step 10; Centre wavelength NB 2..10000 2 decimals; Amplitude NB 0..10000; Sigma NB 0..10000; Profile height RO; Ripples RO |
-| Interference filter | Shape; Layers | the material's coating rows with the back box alone; Length NB min 1 step 10; Width NB min 1 step 10; Stack thickness RO; hint text; one row per layer: Thickness NB 0..1000 2 decimals, Index NB 1..2.55, up BTN, down BTN, remove BTN; BTN "Add layer" (a copy of the last), BTN "Remove all" |
+| Interference filter | Shape; Layers | the material's coating rows with the back box alone; Length NB min 1 step 10; Width NB min 1 step 10; Stack thickness RO; hint text; a heading row (Thickness, Index) over full-width rows, one per layer: ordinal, Thickness NB 0..1000 2 decimals, Index NB 1..2.55, up BTN, down BTN, remove BTN; BTN "Add layer" (a copy of the last), BTN "Remove all" |
 | Simple 2D grating | Material; Lattice | Mirror, Refractive index, Absorption, Absorption ramp without coating rows; Columns NB min 1; Rows NB min 1; Column spacing NB min 2; Row spacing NB min 2; Dot diameter NB 1 to half the smaller spacing |
 | Meta lens / prism / axicon | Shape; Lens or Prism or Axicon; Pattern | the material's coating rows without the sides box; Length NB min 1 step 10; Width NB min 2 step 10; Target frequency NB 1..255 2 decimals; Wavelength RO; the lens: Focal length NB min 1 step 10, Lens type CMB (Converging, Diverging), Zones RO; the prism: Deflection NB -89..89 2 decimals, Zone width RO, Zones RO; the axicon: Cone angle NB 0.1..89 2 decimals, Line of focus RO, Zone width RO, Zones RO; Pattern index NB 1..2.55; Pitch NB 1..10000 2 decimals; Height NB 1..10000 2 decimals; Full-turn height RO |
 | Facetted grating | Shape; Facets | the material's coating rows without the front and sides boxes; Length, Width as the diffuser's; Pattern CMB (Sawtooth, Square wave, Sinusoidal); Pitch NB 2..10000 2 decimals; Amplitude NB 0..10000 |
@@ -286,12 +288,12 @@ Sections: General, Measurement, Position, Graph, Axes.
 | Box x, Box y | NB min 0 |
 | Box width | NB 60..4096 step 10 (custom only per hint) |
 | Box height | NB 30..4096 step 10 (custom only per hint) |
-| Step axis | CMB Running, Full |
-| Window | NB 10..1,000,000 step 10 |
-| Auto-scale steps | CB |
+| Step axis | CMB Running, Full; enabled for a series (a point probe, a counting detector) |
+| Window | NB 10..1,000,000 step 10; enabled for a series |
+| Auto-scale steps | CB; enabled for a series |
 | Auto-scale values | CB |
-| Value axis | CMB Linear, Logarithmic (intensity only per hint) |
-| Decades | NB 1..12 |
+| Value axis | CMB Linear, Logarithmic; enabled on the intensity layer |
+| Decades | NB 1..12; enabled for a logarithmic axis |
 | Value minimum | NB step 0.1 |
 | Value maximum | NB step 0.1 |
 

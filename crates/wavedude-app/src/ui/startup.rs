@@ -30,7 +30,6 @@ const DITHER: [(u32, &str); 5] = [(0, "Off"), (10, "10"), (12, "12"), (14, "14")
 
 /// A labelled drop-down of `(value, string key)` pairs.
 fn lever(
-	cx: &Cx,
 	s: &Strings,
 	label_key: &str,
 	current: u32,
@@ -44,7 +43,7 @@ fn lever(
 		.width(Size::fill())
 		.cross_align(Alignment::center())
 		.child(rect().width(Size::px(180.)).child(label().text(strip_mnemonic(s.get(label_key)))))
-		.child(combo_box(cx, current.to_string(), items, test.into(), move |v: String| {
+		.child(combo_box(current.to_string(), items, true, test.into(), move |v: String| {
 			pick(v.parse().expect("a lever's value is a number"))
 		}))
 }
@@ -102,7 +101,6 @@ impl Component for StartupPage {
 				tier("StartupTierHigh", PreviewTier::High),
 			]))
 			.child(lever(
-				&cx,
 				&s,
 				"MenuViewResolution",
 				q.resolution_divisor,
@@ -111,7 +109,6 @@ impl Component for StartupPage {
 				set(|q, v| q.resolution_divisor = v),
 			))
 			.child(lever(
-				&cx,
 				&s,
 				"MenuViewFrames",
 				q.frame_divisor,
@@ -120,7 +117,6 @@ impl Component for StartupPage {
 				set(|q, v| q.frame_divisor = v),
 			))
 			.child(lever(
-				&cx,
 				&s,
 				"MenuViewSamples",
 				if half { 2 } else { 1 },
@@ -130,7 +126,7 @@ impl Component for StartupPage {
 			))
 			.maybe_child(half.then(|| {
 				let items = DITHER.iter().map(|&(v, k)| (v, format!("MenuViewDither{k}"))).collect();
-				lever(&cx, &s, "MenuViewDither", *dither.read(), items, "StartupDither", move |v| {
+				lever(&s, "MenuViewDither", *dither.read(), items, "StartupDither", move |v| {
 					let mut dither = dither;
 					dither.set(v)
 				})

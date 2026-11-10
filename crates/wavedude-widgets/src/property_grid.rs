@@ -1,6 +1,8 @@
 //! Property form: two columns (labels as wide as the widest, editors filling the rest), full-width rows,
 //! section headers that collapse, the parts' description header, hints as tooltips.
 
+use std::rc::Rc;
+
 use freya::prelude::*;
 
 use crate::icon::{IconView, icons};
@@ -64,11 +66,28 @@ impl Component for PropertyGrid {
 	}
 }
 
+/// A row's editor: built once, or built for the row's enabled state when it is rendered.
+#[derive(Clone)]
+enum RowEditor {
+	Fixed(Element),
+	Switchable(Rc<dyn Fn(bool) -> Element>),
+}
+
+impl PartialEq for RowEditor {
+	fn eq(&self, other: &Self) -> bool {
+		match (self, other) {
+			(Self::Fixed(a), Self::Fixed(b)) => a == b,
+			(Self::Switchable(a), Self::Switchable(b)) => Rc::ptr_eq(a, b),
+			_ => false,
+		}
+	}
+}
+
 /// A label and its editor; `full_width` spans both columns (check boxes carrying their own label).
 #[derive(Clone, PartialEq)]
 pub struct PropertyRow {
 	label: String,
-	editor: Element,
+	editor: RowEditor,
 	hint: Option<String>,
 	enabled: bool,
 	full_width: bool,
@@ -77,14 +96,16 @@ pub struct PropertyRow {
 
 impl PropertyRow {
 	pub fn new(label: impl Into<String>, editor: impl IntoElement) -> Self {
-		Self {
-			label: label.into(),
-			editor: editor.into_element(),
-			hint: None,
-			enabled: true,
-			full_width: false,
-			test_id: None,
-		}
+		Self::with_editor(label, RowEditor::Fixed(editor.into_element()))
+	}
+
+	/// A row whose editor is built for its enabled state, so [`enabled`](Self::enabled) disables the editor too.
+	pub fn switchable(label: impl Into<String>, editor: impl Fn(bool) -> Element + 'static) -> Self {
+		Self::with_editor(label, RowEditor::Switchable(Rc::new(editor)))
+	}
+
+	fn with_editor(label: impl Into<String>, editor: RowEditor) -> Self {
+		Self { label: label.into(), editor, hint: None, enabled: true, full_width: false, test_id: None }
 	}
 
 	pub fn hint(mut self, hint: impl Into<String>) -> Self {
@@ -92,7 +113,7 @@ impl PropertyRow {
 		self
 	}
 
-	/// A disabled row greys its label; the editor is disabled by the caller.
+	/// A disabled row greys its label and disables a switchable editor; a fixed one is disabled by the caller.
 	pub fn enabled(mut self, enabled: bool) -> Self {
 		self.enabled = enabled;
 		self
@@ -152,7 +173,10 @@ impl Component for PropertyRow {
 			.cross_align(Alignment::center())
 			.maybe_test_id(self.test_id.clone())
 			.maybe_child(label_cell)
-			.child(rect().width(Size::flex(1.)).child(self.editor.clone()))
+			.child(rect().width(Size::flex(1.)).child(match &self.editor {
+				RowEditor::Fixed(e) => e.clone(),
+				RowEditor::Switchable(build) => build(self.enabled),
+			}))
 	}
 }
 

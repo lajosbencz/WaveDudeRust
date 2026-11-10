@@ -11,6 +11,7 @@ use wavedude_app_state::log::LogRing;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::AppDirs;
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
+use wavedude_core::model::ProbeKind;
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj";
 
@@ -108,6 +109,36 @@ fn a_property_edit_reaches_the_document() {
 	test.click_cursor((f64::from(area.min_x()) + 2., f64::from(area.center().y)));
 	test.sync_and_update();
 	assert_ne!(state.peek(|a| a.document.project.sources[0].enabled), before, "the check box did not edit the source");
+}
+
+/// A row greyed by another setting takes no edit: the line probe's step axis is a point probe's.
+#[test]
+fn a_disabled_row_takes_no_edit() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = shell(dir.path());
+	let probe = ItemRef::new(ItemKind::Probe, 0);
+	state.update(|a| a.selection.select(Row::Item(probe)));
+	test.sync_and_update();
+	test.sync_and_update();
+	assert_eq!(state.peek(|a| a.document.project.probes[0].kind), ProbeKind::Line);
+	let before = state.peek(|a| a.document.project.probes[0].auto_scale_x);
+	let toggle = find_text(&test, "Auto-scale steps").expect("the probe form shows");
+	let area = toggle.layout().area;
+	test.click_cursor((f64::from(area.min_x()) + 2., f64::from(area.center().y)));
+	test.sync_and_update();
+	assert_eq!(state.peek(|a| a.document.project.probes[0].auto_scale_x), before, "a disabled check box toggled");
+	// the combo measures its words in a hidden copy, so the menu adds a second visible "Full"
+	let words = |test: &TestingRunner, w: &str| {
+		test.find_many(|node, element| {
+			Label::try_downcast(element).is_some_and(|l| l.text.as_ref() == w).then_some(node.layout().area)
+		})
+	};
+	let shown = words(&test, "Running").into_iter().max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
+	let before = words(&test, "Full").len();
+	test.click_cursor((f64::from(shown.center().x), f64::from(shown.center().y)));
+	test.sync_and_update();
+	test.sync_and_update();
+	assert_eq!(words(&test, "Full").len(), before, "a disabled combo box opened its menu");
 }
 
 #[test]

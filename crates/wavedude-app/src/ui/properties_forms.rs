@@ -12,7 +12,7 @@ use wavedude_core::scene::gate_design::{self, GateDesign};
 use wavedude_widgets::icon::icons;
 use wavedude_widgets::{
 	ColorButton, DescriptionHeader, Gradient, GradientEditor, GradientStop, IconView, NumberSpec, PickerTips,
-	PropertyRow, Rgb, SectionHeader, TestIdExt,
+	PropertyRow, Rgb, SectionHeader, TestIdExt, use_wave_theme,
 };
 
 use wavedude_app_state::commands::{Command, NewPart};
@@ -394,7 +394,7 @@ fn layer_rows(f: &Form, layer: &str, names: &[(String, bool)]) -> Vec<PropertyRo
 	let picker = {
 		let form = f.clone();
 		let current_name = current.clone();
-		combo_box(&f.cx, current, items, format!("{layer}.ColorScheme"), move |name| {
+		combo_box(current, items, true, format!("{layer}.ColorScheme"), move |name| {
 			if name == BROWSE {
 				let cx = form.cx.clone();
 				dialogs::pick_file(form.s.get("ColorSchemeFilter"), None, move |path| {
@@ -1003,7 +1003,7 @@ fn points(f: &Form, path: &str) -> Element {
 	section(s.get("SectionPoints"), rows)
 }
 
-/// A number box for one decimal value of item `index` of the list at `path`.
+/// A number box for one decimal value of item `index` of the list at `path`, for the caller to tip.
 fn list_decimal<T: Serialize + DeserializeOwned + 'static>(
 	f: &Form,
 	path: &str,
@@ -1012,7 +1012,7 @@ fn list_decimal<T: Serialize + DeserializeOwned + 'static>(
 	spec: NumberSpec,
 	set: fn(&mut T, f64),
 	test: String,
-) -> Element {
+) -> wavedude_widgets::NumberBox {
 	let f2 = f.clone();
 	let path = path.to_owned();
 	wavedude_widgets::NumberBox::new(
@@ -1021,7 +1021,6 @@ fn list_decimal<T: Serialize + DeserializeOwned + 'static>(
 	)
 	.width(Size::flex(1.))
 	.test_id(test)
-	.into_element()
 }
 
 /// A button that moves item `index` of the list at `path` by `by` places.
@@ -1052,6 +1051,11 @@ fn move_button<T: Serialize + DeserializeOwned>(
 	tagged(button, test)
 }
 
+/// Width of a layer row's three buttons: the heading row leaves it free so the headings sit over the boxes.
+const ROW_BUTTONS_WIDTH: f32 = 92.;
+/// Width of a layer row's ordinal.
+const ORDINAL_WIDTH: f32 = 20.;
+
 /// An interference filter's layers, the outermost first: a row each with its thickness and index, up, down and
 /// remove; Add layer appends a copy of the last, Remove all empties the list in one step.
 fn layers(f: &Form, path: &str) -> Element {
@@ -1060,16 +1064,28 @@ fn layers(f: &Form, path: &str) -> Element {
 	let (tmin, tmax) = bounds("FilterLayer.Thickness");
 	let (imin, imax) = bounds("FilterLayer.RefractiveIndex");
 	let mut rows = vec![hint_row(s.get("HintFilterLayers"))];
+	let theme = use_wave_theme();
+	// the whole row: a narrow ordinal, the two boxes sharing the rest, the buttons
+	let row = || {
+		rect().horizontal().width(Size::fill()).content(Content::flex()).spacing(4.).cross_align(Alignment::center())
+	};
+	let ordinal = |text: String| label().width(Size::px(ORDINAL_WIDTH)).text(text).color(theme.text_dim).max_lines(1);
+	if !list.is_empty() {
+		let heading =
+			|text: &str| label().width(Size::flex(1.)).text(text.to_owned()).color(theme.text_dim).max_lines(1);
+		let headings = row()
+			.child(ordinal(String::new()))
+			.child(heading(s.label("FilterLayer", "Thickness")))
+			.child(heading(s.label("FilterLayer", "RefractiveIndex")))
+			.child(rect().width(Size::px(ROW_BUTTONS_WIDTH)));
+		rows.push(PropertyRow::new("", headings).full_width());
+	}
 	for (i, l) in list.iter().enumerate() {
 		let thickness = NumberSpec::linear(tmin, tmax, 1.).with_decimals(2).with_drag_step(0.1);
 		let index = NumberSpec::linear(imin, imax, 0.01).with_decimals(2).with_drag_step(0.01);
-		let editors = rect()
-			.horizontal()
-			.width(Size::fill())
-			.content(Content::flex())
-			.spacing(4.)
-			.child(tip(
-				s.hint("FilterLayer", "Thickness"),
+		let editors = row()
+			.child(ordinal(format!("{}", i + 1)))
+			.child(
 				list_decimal(
 					f,
 					path,
@@ -1078,10 +1094,10 @@ fn layers(f: &Form, path: &str) -> Element {
 					thickness,
 					|l: &mut m::FilterLayer, v| l.thickness = v,
 					format!("Layer{i}.Thickness"),
-				),
-			))
-			.child(tip(
-				s.hint("FilterLayer", "RefractiveIndex"),
+				)
+				.tooltip(s.hint("FilterLayer", "Thickness")),
+			)
+			.child(
 				list_decimal(
 					f,
 					path,
@@ -1090,12 +1106,13 @@ fn layers(f: &Form, path: &str) -> Element {
 					index,
 					|l: &mut m::FilterLayer, v| l.refractive_index = v,
 					format!("Layer{i}.RefractiveIndex"),
-				),
-			))
+				)
+				.tooltip(s.hint("FilterLayer", "RefractiveIndex")),
+			)
 			.child(move_button::<m::FilterLayer>(f, path, i, -1, "TipLayerUp", format!("Layer{i}.Up")))
 			.child(move_button::<m::FilterLayer>(f, path, i, 1, "TipLayerDown", format!("Layer{i}.Down")))
 			.child(remove_button::<m::FilterLayer>(f, path, i, "TipRemoveLayer", format!("Layer{i}.Remove")));
-		rows.push(PropertyRow::new(format!("{}", i + 1), editors));
+		rows.push(PropertyRow::new("", editors).full_width());
 	}
 	let add = {
 		let f = f.clone();
@@ -1271,9 +1288,12 @@ fn probe(f: &Form) -> Vec<Element> {
 	let line = p.word("Kind") == "Line";
 	let detector = p.word("Detector");
 	let is_detector = detector != "Standard";
-	let measurements: &[&str] = if p.word("Layer") == "Field" { &["Amplitude"] } else { &["Value", "IntegratedValue"] };
+	let field = p.word("Layer") == "Field";
+	let measurements: &[&str] = if field { &["Amplitude"] } else { &["Value", "IntegratedValue"] };
 	let custom = p.word("BoxSize") == "Custom";
-	let log = p.word("YScale") == "Logarithmic";
+	// a profile along the line has no step axis; the field's amplitude changes sign, so its axis stays linear
+	let series = !line || detector == "Counting";
+	let log = !field && p.word("YScale") == "Logarithmic";
 	vec![
 		section(
 			s.get("SectionGeneral"),
@@ -1317,11 +1337,11 @@ fn probe(f: &Form) -> Vec<Element> {
 		section(
 			s.get("SectionAxes"),
 			vec![
-				p.combo("ScaleMode", "ProbeScaleMode", &["Running", "Full"]),
-				p.number("Window", 10.),
-				p.check("AutoScaleX"),
+				p.combo("ScaleMode", "ProbeScaleMode", &["Running", "Full"]).enabled(series),
+				p.number("Window", 10.).enabled(series),
+				p.check("AutoScaleX").enabled(series),
 				p.check("AutoScaleY"),
-				p.combo("YScale", "ProbeValueScale", &["Linear", "Logarithmic"]),
+				p.combo("YScale", "ProbeValueScale", &["Linear", "Logarithmic"]).enabled(!field),
 				p.number("Decades", 1.).enabled(log),
 				p.number_in("YMin", "", 0.1),
 				p.number_in("YMax", "", 0.1),
@@ -1383,7 +1403,7 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 	let based_on = {
 		let form = f.clone();
 		let items = r.based_on.iter().map(|n| (n.clone(), n.clone())).collect();
-		combo_box(&f.cx, String::new(), items, "ColorScheme.BasedOn".into(), move |name| {
+		combo_box(String::new(), items, true, "ColorScheme.BasedOn".into(), move |name| {
 			let f = &form;
 			let source = f.cx.shared.peek(|a| {
 				schemes::find(&a.document.project.color_schemes, &name)
