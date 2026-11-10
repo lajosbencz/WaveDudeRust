@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::{ColorScheme, Display, Part, Probe, Scene, Simulation, Source};
 
 /// Current project format version (the `.wdproj` number; the `.wdr` container carries its own).
-pub const PROJECT_VERSION: u32 = 3;
+pub const PROJECT_VERSION: u32 = 4;
 
 /// A whole project: settings, items in their list order, project-local colour schemes.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -55,20 +55,26 @@ fn every_example_loads_round_trips_and_validates() {
 	}
 }
 
-/// Every example comes back byte for byte after its DOCTYPE, except the root's `Generator` and where a file was
-/// edited by hand:
-/// Example 6 omits a probe's `BoxX` equal to its `AX` (read back the same, written out here).
+/// Every example (shipped at version 3) comes back byte for byte after its DOCTYPE, except the root's `Generator`
+/// and `Version`, the `OverlayInExport="false"` version 4 writes out where version 3 left it out, and where a file
+/// was edited by hand:
+/// Example 6 omits a probe's `BoxX` equal to its `AX` (read back the same, written out here);
+/// Example 11's zone plate names `Coating="0"`, the default since version 4, so it is left out here.
 #[test]
 fn examples_are_rewritten_as_shipped() {
 	let mut differing = Vec::new();
 	for path in examples() {
 		let name = path.file_name().unwrap().to_string_lossy().into_owned();
 		let original = std::fs::read_to_string(&path).unwrap();
+		assert!(original.contains("<Project Version=\"3\""), "{name}");
 		let p = wdproj::read_str(&original).unwrap();
 		let text = wdproj::write_string(&p, None);
 		let (head, body) = text.split_once("]>\n").unwrap();
 		let generator = format!(" Generator=\"{} {}\"", wdproj::GENERATOR, env!("CARGO_PKG_VERSION"));
-		let body = body.replacen(&generator, "", 1);
+		let body = body
+			.replacen(&generator, "", 1)
+			.replacen("<Project Version=\"4\"", "<Project Version=\"3\"", 1)
+			.replace(" OverlayInExport=\"false\"", "");
 		assert!(head.starts_with("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!DOCTYPE Project ["));
 		let original_body = original.split_once('\n').unwrap().1;
 		for (a, b) in body.lines().zip(original_body.lines()) {
@@ -77,8 +83,8 @@ fn examples_are_rewritten_as_shipped() {
 			}
 		}
 	}
-	assert_eq!(differing.len(), 1, "{}", differing.join("\n"));
-	assert!(differing[0].starts_with("Example06"), "{}", differing[0]);
+	assert_eq!(differing.len(), 2, "{}", differing.join("\n"));
+	assert!(differing[0].starts_with("Example06") && differing[1].starts_with("Example11"), "{:?}", differing);
 }
 
 /// The native container is the leaner file: sparse JSON deflated against the sparse XML with its DOCTYPE. The

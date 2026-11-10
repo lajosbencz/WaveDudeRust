@@ -774,7 +774,8 @@ fn ports_track_move_turn_and_frequency() {
 
 #[test]
 fn zone_plate() {
-	let plate = ZonePlate { diameter: 480, focal_length: 360, ..ZonePlate::default() };
+	// 64 px thick with a 32 px rise, so the rise can be read a quarter of the way in
+	let plate = ZonePlate { diameter: 480, focal_length: 360, thickness: 64, coating: 32, ..ZonePlate::default() };
 	let lambda = wavelength(plate.design_frequency, 1.0, 2.0);
 	let f = plate.focal_length as f64;
 	let radius = |n: f64, lambda: f64| (n * lambda * f + (n * lambda / 2.0).powi(2)).sqrt();

@@ -104,7 +104,7 @@ Level 100, c = 1, scale 2: 16.0 px. The editor's estimate uses `c = WaveSpeed`; 
 | `Preview` | bool | true | true | layer captured/shown |
 | `Overlay` | bool | true | true | glowing edges on the preview picture |
 | `OverlayGain` | double | 3 | 3 | 0..5 |
-| `OverlayInExport` | bool | false | false | add glowing edges into exported frames |
+| `OverlayInExport` | bool | true | true | add glowing edges into exported frames (off until file version 4) |
 
 Brightness (Rust, decision 0010): the source model of docs/physics.md (Sources) swings a source cell of Amplitude
 100 % by 1 in free space, the field falling as 1/sqrt(r); its intensity, the EMA of u^2, is about 1/2 there. The
@@ -283,7 +283,7 @@ Shared constants: refractive index range 1..2.55, rounded to 0.01 (round even), 
 | `XorGate` | XOR gate | gate | outputs Xor (+90 deg) / And |
 | `AndGate` | AND gate | gate | outputs And (-90 deg) / Xor |
 | `OrGate` | OR gate | gate | outputs Or (+30 deg) / Remainder |
-| `ZonePlate` | Zone plate | part | `Mount` false; `MountWidth` 200; `Diameter` 800; `Thickness` 64; `Coating` 32 (0..400, absorption rise); `DesignFrequency` 50; `FocalLength` 600; `Inverse` false |
+| `ZonePlate` | Zone plate | part | `Mount` false; `MountWidth` 200; `Diameter` 800; `Thickness` 32; `Coating` 0 (0..400, absorption rise; 64 and 32 until file version 4); `DesignFrequency` 50; `FocalLength` 600; `Inverse` false |
 
 Size attributes are ints. Lower bounds: Bragg `Thickness1`/`Thickness2` >= 1, `Width` >= 2; GRIN `Length` >= 1,
 `Diameter` >= 2; zone plate `MountWidth` >= 1, `Diameter` >= 2, `Thickness` >= 1, `DesignFrequency` 1..255,

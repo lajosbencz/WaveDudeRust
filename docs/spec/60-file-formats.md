@@ -64,10 +64,14 @@ declarations (byte equality optional, `TODO(verify)` decide).
 parse (DTD ignored)
 if Version < 2: Scene.Edges = Reflective
 if Version < 3 and the Scene element has no DampingEdge attribute: Scene.DampingEdge = 0
-if Version > 3: warning, load anyway
-Version = 3
+if Version < 4: a Field/Intensity element without OverlayInExport = false; a ZonePlate without Thickness = 64,
+                without Coating = 32 (the defaults until 2026-11-09)
+if Version > 4: warning, load anyway
+Version = 4
 Normalize()
 ```
+The Rust adapter reads each element onto the base its file's version means (`FileVersion` in `io/wdproj.rs`) and
+writes against the current defaults, so a migrated value is written out.
 A missing `Scene` element means a default Scene, then the migration above applies (a version-1 file without Scene gets
 Reflective and DampingEdge 0; a version-3 file without Scene gets Open and -32).
 Unknown elements and attributes are ignored. A malformed file fails with the parser's line and position; the error log
@@ -85,7 +89,7 @@ values to show every conditional rule. Comments are annotations, not part of rea
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Save also writes <!DOCTYPE Project [ ... ]> here; omitted for brevity -->
-<Project Version="3" Seed="1810971758">
+<Project Version="4" Seed="1810971758">
 	<Description>One object of every kind.</Description>
 	<!-- Scene: written because Mode/size differ from the defaults. Missing attributes take defaults:
 	     DampingEdge -32 (rim of 32 px outside), Edges Open, RefractiveIndex 1, ImageSources false,
@@ -98,7 +102,7 @@ values to show every conditional rule. Comments are annotations, not part of rea
 	<Simulation Steps="4000" VisualizeEvery="4" />
 	<Display ExportFrom="400" ExportTo="2000">               <!-- in/out points in steps -->
 		<Field ColorScheme="Default field" BlackLevel="-0.05" />   <!-- both always written -->
-		<Intensity ColorScheme="Default intensity" Brightness="12" OverlayInExport="true" />
+		<Intensity ColorScheme="Default intensity" Brightness="12" OverlayInExport="false" />
 		<Video Fps="30" Quality="90" />                       <!-- omitted at 60 / 85 -->
 	</Display>
 	<!-- point source, level 20 (wavelength 80 px at scale 2, c = 1) -->
@@ -178,7 +182,8 @@ Load:
 parse project.json as JSON (a syntax error names its line and column)
 format > FORMAT: refused ("made by a newer version")
 format 0 or none: refused (no version writes it)
-migrate(project, format): one step per format from the file's to FORMAT (none yet; FORMAT = 1)
+migrate(project, format): one step per format from the file's to FORMAT (FORMAT = 2: format 1 left out
+    overlay_in_export for off and a zone plate's thickness and coating for 64 and 32)
 parts whose kind this build does not know are left out, each with a note on the load result (logged as a warning)
 deserialise into the model; missing fields take their defaults
 image bytes from scene.<ext>; Normalize()

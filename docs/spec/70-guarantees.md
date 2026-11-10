@@ -23,7 +23,8 @@ property the Rust core must prove in its test suite. Items marked (G) need golde
 - [ ] BGRA scene: green pixel -> one image source at its position and level; `CountSources` agrees.
 - [ ] Red 1..99 is index 1 (clamp), red 0 is a mirror.
 - [ ] Damping band of 6 on an 8x8+ canvas: corner d = 0, inside d = 1; rim of 32 on 103x67 gives a 167x131 grid.
-- [ ] New project: Open edges, rim 32, version 3, Scene element omitted from the file.
+- [ ] New project: Open edges, rim 32, version 4, Scene element omitted from the file.
+- [ ] Version-3 file without OverlayInExport is off, without a zone plate's Thickness/Coating is 64/32; version 4 on, 32/0.
 - [ ] Version-2 file with explicit -32 keeps it; version-3 file without the attribute is -32; version-1 is Reflective.
 - [ ] Reflection (long-wave pulse): open edges alone < 0.2 % back; reflective box without damping returns it all;
       open + 32 px rim, 4th order < 0.5 %; 64 px quadratic rim < 0.3 %.

@@ -134,9 +134,13 @@ pub(crate) fn read_into<T>(fields: &[Field<T>], el: &Element, into: &mut T) -> R
 
 /// A `T` read from `el` onto its base.
 pub(crate) fn read<T: Table>(el: &Element) -> Result<T, FormatError> {
-	let mut value = T::base();
-	read_into(T::FIELDS, el, &mut value)?;
-	Ok(value)
+	read_onto(el, T::base())
+}
+
+/// A `T` read from `el` onto `base`: what the element leaves out stays as `base` has it.
+pub(crate) fn read_onto<T: Table>(el: &Element, mut base: T) -> Result<T, FormatError> {
+	read_into(T::FIELDS, el, &mut base)?;
+	Ok(base)
 }
 
 /// Appends the attributes of `value` to `el`, a sparse one only when it differs from `base`.

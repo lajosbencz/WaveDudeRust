@@ -375,7 +375,7 @@ plate's thickness and the same profile, on both sides from `halfD` to `outerH`, 
 painted (red unchanged).
 
 Examples:
-- Default plate (Thickness 64, Coating 32, Mount off): `halfT = 32`, `ramp_z = 32`; in a block, `|x'| = 16`: share
+- A plate of Thickness 64, Coating 32, Mount off (the defaults until file version 4): `halfT = 32`, `ramp_z = 32`; in a block, `|x'| = 16`: share
   0.25, blue 24; `|x'| = 0.5`: `(31.5/32)^2 = 0.969`, blue 93.
 - Example 11 (Diameter 600, Thickness 16, Coating 0, DesignFrequency 160, FocalLength 500, Mount on, MountWidth 107,
   scale 2): `lam = 2*pi*255/160 = 10.01383`, `halfT = 8`, `ramp_z = 0` (share 1 everywhere it is not 0, blue 96),

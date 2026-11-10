@@ -1,5 +1,8 @@
-//! The WaveDude Next `.wdproj` XML: read (versions 1 to 3, DOCTYPE ignored, unknown elements and
+//! The WaveDude Next `.wdproj` XML: read (versions 1 to 4, DOCTYPE ignored, unknown elements and
 //! attributes ignored) and written sparse with a DOCTYPE that declares every element and attribute.
+//!
+//! A sparse file means its version's defaults where it names no value, so an element is read onto the base
+//! of the file's version ([`FileVersion`]) and written against the current one.
 //!
 //! Sources of a 9-point project are stored in the original's frequency units: reading multiplies
 //! the frequency scale is divided by [`super::nine_point_speed`], writing multiplies it back. A file whose `Simulation` carries
@@ -88,15 +91,15 @@ pub fn read(text: &str) -> R<Read> {
 	if root.name != "Project" {
 		return Err(FormatError { message: "the document is not a WaveDude Next project".into(), at: Some(root.at) });
 	}
-	let version = root.i32("Version", PROJECT_VERSION as i32)?;
+	let version = FileVersion(root.i32("Version", PROJECT_VERSION as i32)?);
 	let own = root.get("Generator").is_some_and(|g| g.starts_with(GENERATOR));
 	let seed = match root.get("Seed") {
 		Some(v) => root.parse_i32("Seed", v)?,
 		None => Project::new_random_seed().seed,
 	};
 	let display = Display {
-		field: original_layer(Layer::Field),
-		intensity: original_layer(Layer::Intensity),
+		field: original_layer(Layer::Field, version),
+		intensity: original_layer(Layer::Intensity, version),
 		..Display::default()
 	};
 	let mut project = Project { seed, display, ..Project::default() };
@@ -113,23 +116,24 @@ pub fn read(text: &str) -> R<Read> {
 				rescaled = el.bool("Rescaled", false)?;
 				project.simulation = fields::read(el)?;
 			}
-			"Display" => project.display = read_display(el)?,
+			"Display" => project.display = read_display(el, version)?,
 			"Source" => project.sources.push(read_source(el)?),
 			"Probe" => project.probes.push(read_probe(el)?),
 			"ColorScheme" => project.color_schemes.push(wdscheme::from_element(el)?),
-			name if PART_ELEMENTS.contains(&name) => project.parts.push(read_part(el)?),
-			_ => {}
+			name if PART_ELEMENTS.contains(&name) => project.parts.push(read_part(el, version)?),
+			name => tracing::warn!("the element '{name}' is unknown and ignored"),
 		}
 	}
-	if version > PROJECT_VERSION as i32 {
+	if version.0 > PROJECT_VERSION as i32 {
 		tracing::warn!(
-			"project file version {version} is newer than the supported {PROJECT_VERSION}; unknown settings are ignored"
+			"project file version {} is newer than the supported {PROJECT_VERSION}; unknown settings are ignored",
+			version.0
 		);
 	}
-	if version < 2 {
+	if version.0 < 2 {
 		project.scene.edges = Edges::Reflective;
 	}
-	if version < 3 && !damping_read {
+	if version.0 < 3 && !damping_read {
 		project.scene.damping_edge = 0;
 	}
 	if !rescaled && super::scale_nine_point_frequencies(&mut project, super::nine_point_speed()) {
@@ -140,6 +144,32 @@ pub fn read(text: &str) -> R<Read> {
 	}
 	project.normalize();
 	Ok(Read { project, own })
+}
+
+/// The `Version` of the file being read: what its omitted attributes mean.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FileVersion(i32);
+
+const CURRENT: FileVersion = FileVersion(PROJECT_VERSION as i32);
+
+impl FileVersion {
+	/// Until version 4 (2026-11-09) a layer without `OverlayInExport` meant off, and a zone plate without
+	/// `Thickness` or `Coating` meant 64 and 32; the defaults since are on, 32 and 0.
+	fn before_4(self) -> bool {
+		self.0 < 4
+	}
+
+	fn overlay_in_export(self) -> bool {
+		!self.before_4()
+	}
+
+	fn zone_plate(self) -> ZonePlate {
+		if self.before_4() {
+			ZonePlate { thickness: 64, coating: 32, ..ZonePlate::default() }
+		} else {
+			ZonePlate::default()
+		}
+	}
 }
 
 // ---------------------------------------------------------------- attribute tables
@@ -191,13 +221,13 @@ impl Table for Simulation {
 /// Brightness a WaveDude Next file omits: its default, made for its blended source, not this program's.
 const ORIGINAL_BRIGHTNESS: f64 = 30.0;
 
-/// A layer's defaults as WaveDude Next has them.
-fn original_layer(layer: Layer) -> DisplayLayer {
+/// A layer's defaults as WaveDude Next has them in a file of `version`.
+fn original_layer(layer: Layer, version: FileVersion) -> DisplayLayer {
 	let d = match layer {
 		Layer::Field => DisplayLayer::field_default(),
 		Layer::Intensity => DisplayLayer::intensity_default(),
 	};
-	DisplayLayer { brightness: ORIGINAL_BRIGHTNESS, ..d }
+	DisplayLayer { brightness: ORIGINAL_BRIGHTNESS, overlay_in_export: version.overlay_in_export(), ..d }
 }
 
 /// A `Field` or `Intensity` element: a missing `ColorScheme` is empty (the layer's default after
@@ -209,6 +239,11 @@ fn layer_base() -> DisplayLayer {
 		black_level: 0.0,
 		..DisplayLayer::field_default()
 	}
+}
+
+/// [`layer_base`] as a file of `version` means it.
+fn layer_base_of(version: FileVersion) -> DisplayLayer {
+	DisplayLayer { overlay_in_export: version.overlay_in_export(), ..layer_base() }
 }
 
 /// The `Intensity` element; `Field` writes its `BlackLevel` always (WaveDude Next's default 0 is not its initial
@@ -500,11 +535,14 @@ fn read_scene(el: &Element) -> R<Scene> {
 	Ok(scene)
 }
 
-fn read_display(el: &Element) -> R<Display> {
+fn read_display(el: &Element, version: FileVersion) -> R<Display> {
 	let mut display: Display = fields::read(el)?;
-	display.field = el.child("Field").map(fields::read).transpose()?.unwrap_or_else(|| original_layer(Layer::Field));
-	display.intensity =
-		el.child("Intensity").map(fields::read).transpose()?.unwrap_or_else(|| original_layer(Layer::Intensity));
+	let layer = |name, layer| match el.child(name) {
+		Some(el) => fields::read_onto(el, layer_base_of(version)),
+		None => Ok(original_layer(layer, version)),
+	};
+	display.field = layer("Field", Layer::Field)?;
+	display.intensity = layer("Intensity", Layer::Intensity)?;
 	if let Some(v) = el.child("Video") {
 		display.video = fields::read(v)?;
 	}
@@ -528,7 +566,7 @@ fn read_probe(el: &Element) -> R<Probe> {
 	Ok(probe)
 }
 
-fn read_part(el: &Element) -> R<Part> {
+fn read_part(el: &Element, version: FileVersion) -> R<Part> {
 	let (coating, material) = (fields::read(el), fields::read(el));
 	let kind = match el.name.as_str() {
 		"Lens" => PartKind::Lens(Lens { coating: coating?, material: material?, ..fields::read(el)? }),
@@ -551,7 +589,7 @@ fn read_part(el: &Element) -> R<Part> {
 		"XorGate" => PartKind::LogicGate(LogicGate { kind: GateKind::Xor, ..fields::read(el)? }),
 		"AndGate" => PartKind::LogicGate(LogicGate { kind: GateKind::And, ..fields::read(el)? }),
 		"OrGate" => PartKind::LogicGate(LogicGate { kind: GateKind::Or, ..fields::read(el)? }),
-		"ZonePlate" => PartKind::ZonePlate(fields::read(el)?),
+		"ZonePlate" => PartKind::ZonePlate(fields::read_onto(el, version.zone_plate())?),
 		other => unreachable!("not a part element: {other}"),
 	};
 	Ok(Part { base: fields::read(el)?, kind })
@@ -796,7 +834,7 @@ fn decls() -> Vec<Decl> {
 		Decl::of::<SourceArray>("Array", "EMPTY"),
 	];
 	for &name in PART_ELEMENTS {
-		let part = read_part(&Element::new(name)).expect("an element without attributes reads");
+		let part = read_part(&Element::new(name), CURRENT).expect("an element without attributes reads");
 		let content = match name {
 			"Outline" => "(Point*)",
 			"Fiber" => "(Node*)",
@@ -1075,7 +1113,7 @@ mod tests {
 		assert_eq!(
 			body,
 			format!(
-				"<Project Version=\"3\" Seed=\"7\" Generator=\"{generator}\">\n\t<Display>\n\t\t<Field ColorScheme=\"Default field\" Brightness=\"1\" BlackLevel=\"-0.05\" />\n\t\t<Intensity ColorScheme=\"Default intensity\" Brightness=\"1.5\" />\n\t</Display>\n\t<Source Name=\"Source 1\" X=\"0\" Y=\"0\" />\n\t<Lens Name=\"Lens 1\" X=\"0\" Y=\"0\" />\n\t<Probe Name=\"Probe 1\" AX=\"0\" AY=\"0\" />\n</Project>"
+				"<Project Version=\"4\" Seed=\"7\" Generator=\"{generator}\">\n\t<Display>\n\t\t<Field ColorScheme=\"Default field\" Brightness=\"1\" BlackLevel=\"-0.05\" />\n\t\t<Intensity ColorScheme=\"Default intensity\" Brightness=\"1.5\" />\n\t</Display>\n\t<Source Name=\"Source 1\" X=\"0\" Y=\"0\" />\n\t<Lens Name=\"Lens 1\" X=\"0\" Y=\"0\" />\n\t<Probe Name=\"Probe 1\" AX=\"0\" AY=\"0\" />\n</Project>"
 			)
 		);
 		assert!(read(&text).unwrap().own, "a file this program wrote is its own");
@@ -1116,6 +1154,27 @@ mod tests {
 		let v9 =
 			read_str("<Project Version=\"9\" Seed=\"3\"><Unknown A=\"1\" /><Scene Foo=\"bar\" /></Project>").unwrap();
 		assert_eq!(v9.scene.damping_edge, -32);
+	}
+
+	/// Until version 4 a layer without `OverlayInExport` meant off and a zone plate without `Thickness` or
+	/// `Coating` meant 64 and 32; a version-4 file means the defaults since, and so does a written file.
+	#[test]
+	fn version_4_changed_what_an_omitted_attribute_means() {
+		let plate = |p: &Project| match &p.parts[0].kind {
+			PartKind::ZonePlate(z) => (z.thickness, z.coating),
+			_ => panic!(),
+		};
+		let overlays = |p: &Project| (p.display.field.overlay_in_export, p.display.intensity.overlay_in_export);
+		let body = "<Display><Field /></Display><ZonePlate Name=\"z\" X=\"0\" Y=\"0\" Coating=\"5\" />";
+		let v3 = read_str(&format!("<Project Version=\"3\">{body}</Project>")).unwrap();
+		assert_eq!((overlays(&v3), plate(&v3)), ((false, false), (64, 5)));
+		let v4 = read_str(&format!("<Project Version=\"4\">{body}</Project>")).unwrap();
+		assert_eq!((overlays(&v4), plate(&v4)), ((true, true), (32, 5)));
+		let bare = read_str("<Project Version=\"3\" />").unwrap();
+		assert_eq!(overlays(&bare), (false, false));
+		let text = write_string(&v3, None);
+		assert!(text.contains("OverlayInExport=\"false\"") && text.contains("Thickness=\"64\""), "{text}");
+		assert_eq!(read_str(&text).unwrap(), v3);
 	}
 
 	#[test]

@@ -16,12 +16,34 @@ use crate::model::{PartKind, Project};
 /// File extension of a native project.
 pub const EXTENSION: &str = "wdr";
 /// The `format` number this build writes and the newest it reads.
-pub const FORMAT: u32 = 1;
+pub const FORMAT: u32 = 2;
 const PROJECT_ENTRY: &str = "project.json";
 const SCENE_STEM: &str = "scene.";
 
 /// Entry `i` turns the `project` value of format `i + 1` into format `i + 2`.
-const MIGRATIONS: [fn(&mut Value); FORMAT as usize - 1] = [];
+const MIGRATIONS: [fn(&mut Value); FORMAT as usize - 1] = [format_1_defaults];
+
+/// Format 1 (until 2026-11-10) left out `overlay_in_export` for off and a zone plate's `thickness` and `coating`
+/// for 64 and 32; the defaults since (on, 32 and 0) must not reach such a file.
+fn format_1_defaults(project: &mut Value) {
+	let put = |object: &mut Value, key: &str, value: Value| {
+		if let Value::Object(map) = object {
+			map.entry(key).or_insert(value);
+		}
+	};
+	// the display is never left out (its intensity layer differs from the field layer's defaults); a layer is
+	for layer in ["field", "intensity"] {
+		if let Some(display) = project.get_mut("display").and_then(Value::as_object_mut) {
+			let layer = display.entry(layer).or_insert_with(|| Value::Object(Default::default()));
+			put(layer, "overlay_in_export", Value::Bool(false));
+		}
+	}
+	let parts = project.get_mut("parts").and_then(Value::as_array_mut).into_iter().flatten();
+	for plate in parts.filter_map(|part| part.get_mut("kind")?.get_mut("ZonePlate")) {
+		put(plate, "thickness", 64.into());
+		put(plate, "coating", 32.into());
+	}
+}
 
 #[derive(Serialize)]
 struct Wrapper {
@@ -174,7 +196,7 @@ pub fn save(project: &Project, path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::model::{Lens, SceneMode};
+	use crate::model::{Lens, SceneMode, ZonePlate};
 
 	fn png(w: u32, h: u32) -> Vec<u8> {
 		let mut out = Vec::new();
@@ -199,7 +221,7 @@ mod tests {
 		assert!(zip.by_name("scene.png").is_ok());
 		let mut json = String::new();
 		zip.by_name(PROJECT_ENTRY).unwrap().read_to_string(&mut json).unwrap();
-		assert!(json.contains("\"format\": 1"));
+		assert!(json.contains("\"format\": 2"));
 		assert!(!json.contains("image_data"));
 		let dir = tempfile::tempdir().unwrap();
 		let path = dir.path().join("p.wdr");
@@ -239,6 +261,34 @@ mod tests {
 		let before = value.clone();
 		migrate(&mut value, FORMAT);
 		assert_eq!(value, before);
+	}
+
+	/// A format-1 container that named no `overlay_in_export`, zone plate `thickness` or `coating` meant off,
+	/// 64 and 32.
+	#[test]
+	fn format_1_keeps_its_defaults() {
+		let mut p = Project::default();
+		p.add_part(PartKind::ZonePlate(ZonePlate { coating: 5, ..ZonePlate::default() }));
+		p.normalize();
+		let mut old = p.clone();
+		old.display.field.overlay_in_export = false;
+		old.display.intensity.overlay_in_export = false;
+		old.parts[0].kind = PartKind::ZonePlate(ZonePlate { thickness: 64, coating: 5, ..ZonePlate::default() });
+		let bytes = edited(&p, |v| {
+			v["format"] = 1.into();
+			let project = &mut v["project"];
+			for layer in ["field", "intensity"] {
+				// indexing a missing member would insert a null
+				if let Some(layer) = project["display"].get_mut(layer).and_then(Value::as_object_mut) {
+					layer.remove("overlay_in_export");
+				}
+			}
+			project["parts"][0]["kind"]["ZonePlate"].as_object_mut().unwrap().remove("thickness");
+		});
+		assert_eq!(read_bytes(&bytes).unwrap().project, old);
+		p.parts[0].kind = PartKind::ZonePlate(ZonePlate { thickness: 40, coating: 5, ..ZonePlate::default() });
+		let bytes = edited(&p, |v| v["format"] = 1.into());
+		assert_eq!(read_bytes(&bytes).unwrap().project.parts, p.parts, "a named value is kept");
 	}
 
 	#[test]

@@ -43,7 +43,7 @@ impl DisplayLayer {
 			preview: true,
 			overlay: true,
 			overlay_gain: 3.0,
-			overlay_in_export: false,
+			overlay_in_export: true,
 		}
 	}
 
