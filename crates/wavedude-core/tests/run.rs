@@ -445,16 +445,16 @@ fn the_traces_of_the_frame_kept_through_a_clear_are_held_with_it() {
 	wait_until(|| store_has(&w, 20) && w.status().state == WorkState::Idle);
 	let before = w.with_traces(|t| t.to_vec());
 	w.with_held_traces(|t| assert!(t.is_empty(), "nothing before the first generation"));
-	w.set_goal(Goal { paused: true, ..goal(&s_run, 20, Wanted::Position) });
-	wait_until(|| w.status().state == WorkState::Idle);
+	w.set_goal(Goal { revision: 2, paused: true, ..goal(&s_run, 20, Wanted::Position) });
+	wait_until(|| w.status().adopted == 2 && w.status().state == WorkState::Idle);
 	p.sources[0].frequency += 1.0;
-	w.set_goal(Goal { paused: true, ..goal(&request(&p, PreviewQuality::FULL), 20, Wanted::All) });
-	wait_until(|| w.with_traces(|t| t[0].series.is_empty()));
+	w.set_goal(Goal { revision: 3, paused: true, ..goal(&request(&p, PreviewQuality::FULL), 20, Wanted::All) });
+	wait_until(|| w.status().adopted == 3);
 	assert!(w.store().unwrap().latest().is_some(), "the frame kept through the clear");
 	w.with_held_traces(|t| assert_eq!(t, &before[..], "the previous frames' traces, with the frame kept"));
 	p.probes.truncate(1);
-	w.set_goal(Goal { paused: true, ..goal(&request(&p, PreviewQuality::FULL), 20, Wanted::All) });
-	wait_until(|| w.status().state == WorkState::Paused && w.with_traces(|t| t.len() == 1));
+	w.set_goal(Goal { revision: 4, paused: true, ..goal(&request(&p, PreviewQuality::FULL), 20, Wanted::All) });
+	wait_until(|| w.status().adopted == 4 && w.with_traces(|t| t.len() == 1));
 	w.with_held_traces(|t| assert!(t.is_empty(), "other probes: nothing fits the frame kept"));
 }
 
