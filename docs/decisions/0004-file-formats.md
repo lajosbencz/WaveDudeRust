@@ -1,26 +1,20 @@
-# 0004 Native project file and compatibility adapters
+# 0004 Project file format and compatibility adapters
 
-Status: accepted, 2026-11-05
+Status: accepted, 2026-11-05; revised 2026-11-10
 
-The model is format-agnostic (serde). Native file: `.wdr`, a zip container
-holding `project.json` (versioned by a `format` field) and `scene.<ext>` when
-the scene has an image; the project's colour schemes are part of the JSON.
-The README says it is a zip; renaming it opens it in any archive tool.
+## One project format, `.wdproj` (2026-11-10, the user's decision)
 
-## Sparse JSON (added 2026-11-08, the user's decision)
+WaveDudeRust has one project file format, WaveDude Next's `.wdproj`; the zip container `.wdr` is dropped. A project
+must round-trip between the two programs without loss, which two formats cannot promise and a third format WaveDude
+Next cannot open defeats. The model and the engine keep their physical domain; what `.wdproj` cannot carry (whole-number positions and
+coating depths, brightness units) is converted in the adapter alone, and the simulation never sees the file format.
 
-`project.json` leaves out every value equal to its type's default (`io/sparse.rs`), object by object; the
-reader's serde defaults put them back. A default that changes in a later version therefore changes what an
-old file means, as it does for `.wdproj`; that is accepted. Measured on the 24 examples (docs/measurements.md),
-the container is a fraction of the `.wdproj` text, which is the point of the format.
+The model is format-agnostic (serde). Files:
 
-Compatibility adapters: read `.wdproj` (XML, versions 1 to 3), `.wdscheme`
-and Wave Dude 2D `configuration.json`; write `.wdproj` so projects round-trip
-to WaveDude Next. Colour schemes export as `.wdscheme` too.
+- `.wdproj` (XML, versions 1 to 4) read and written; the adapter (`io/wdproj.rs`, `io/fields.rs`) holds every
+  transformation: the 9-point frequency rescale and the brightness units (spec/60, spec/05).
+- `.wdscheme` colour schemes read and written.
+- Wave Dude 2D `configuration.json` read (import as an unsaved project).
 
-## `.wdproj` is the default (added 2026-11-07, the user's decision)
-
-Save As proposes `.wdproj` and lists it first; a third format WaveDude Next cannot open was the upstream maintainer's
-objection, and `.wdproj` holds the whole model (`every_kind_round_trips_and_validates`). `.wdr` still opens and saves.
-The root's `Generator="WaveDude Rust <version>"` marks a file this program wrote: its display brightness is in this
-program's units (05-deviations.md) and is not fitted on opening; WaveDude Next ignores the attribute.
+Save and Save As write `.wdproj` (or `.xml`, the same XML). A display brightness is stored in WaveDude Next's units,
+the model's value times 8, so nothing is fitted on opening.

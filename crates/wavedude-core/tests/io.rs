@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use wavedude_core::io::{self, IoError, legacy, wdproj, wdr};
+use wavedude_core::io::{self, IoError, legacy, wdproj};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::*;
 
@@ -50,13 +50,10 @@ fn every_example_loads_round_trips_and_validates() {
 		assert_eq!(wdproj::validate(&text), Vec::<String>::new(), "{name}");
 		let back = wdproj::read_str(&text).unwrap();
 		assert_same(&p, &back, &name);
-		let native = wdr::read_bytes(&wdr::write_bytes(&p, None).unwrap()).unwrap().project;
-		assert_eq!(native, p, "{name} through .wdr");
 	}
 }
 
-/// Every example (shipped at version 3) comes back byte for byte after its DOCTYPE, except the root's `Generator`
-/// and `Version`, the `OverlayInExport="false"` version 4 writes out where version 3 left it out, and where a file
+/// Every example (shipped at version 3) comes back byte for byte after its DOCTYPE, except the root's `Version`, the `OverlayInExport="false"` version 4 writes out where version 3 left it out, and where a file
 /// was edited by hand:
 /// Example 6 omits a probe's `BoxX` equal to its `AX` (read back the same, written out here);
 /// Example 11's zone plate names `Coating="0"`, the default since version 4, so it is left out here.
@@ -70,9 +67,7 @@ fn examples_are_rewritten_as_shipped() {
 		let p = wdproj::read_str(&original).unwrap();
 		let text = wdproj::write_string(&p, None);
 		let (head, body) = text.split_once("]>\n").unwrap();
-		let generator = format!(" Generator=\"{} {}\"", wdproj::GENERATOR, env!("CARGO_PKG_VERSION"));
 		let body = body
-			.replacen(&generator, "", 1)
 			.replacen("<Project Version=\"4\"", "<Project Version=\"3\"", 1)
 			.replace(" OverlayInExport=\"false\"", "");
 		assert!(head.starts_with("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!DOCTYPE Project ["));
@@ -85,30 +80,6 @@ fn examples_are_rewritten_as_shipped() {
 	}
 	assert_eq!(differing.len(), 2, "{}", differing.join("\n"));
 	assert!(differing[0].starts_with("Example06") && differing[1].starts_with("Example11"), "{:?}", differing);
-}
-
-/// The native container is the leaner file: sparse JSON deflated against the sparse XML with its DOCTYPE. The
-/// table (`--nocapture`) feeds docs/measurements.md.
-#[test]
-fn the_native_container_is_smaller_than_the_wdproj_of_every_example() {
-	let mut rows = Vec::new();
-	let (mut total_x, mut total_r) = (0usize, 0usize);
-	for path in examples() {
-		let name = path.file_name().unwrap().to_string_lossy().into_owned();
-		let p = io::load_project(&path).unwrap();
-		let xml = wdproj::write_string(&p, None).len();
-		let native = wdr::write_bytes(&p, None).unwrap().len();
-		assert!(native < xml, "{name}: .wdr {native} bytes, .wdproj {xml} bytes");
-		total_x += xml;
-		total_r += native;
-		rows.push(format!(
-			"| {} | {xml} | {native} | {:.0} % |",
-			name.trim_end_matches(".wdproj"),
-			100. * native as f64 / xml as f64
-		));
-	}
-	println!("| Example | .wdproj bytes | .wdr bytes | .wdr share |\n|---|---|---|---|\n{}", rows.join("\n"));
-	println!("| all 24 | {total_x} | {total_r} | {:.0} % |", 100. * total_r as f64 / total_x as f64);
 }
 
 proptest::proptest! {
@@ -152,11 +123,9 @@ fn nine_point_example_is_rescaled() {
 fn saved_files_load_back() {
 	let dir = tempfile::tempdir().unwrap();
 	let p = io::load_project(&fixtures().join("examples/Example23_Fibres.wdproj")).unwrap();
-	for ext in ["wdproj", "wdr"] {
-		let path = dir.path().join(format!("p.{ext}"));
-		io::save_project(&p, &path).unwrap();
-		assert_eq!(io::load_project(&path).unwrap(), p, "{ext}");
-	}
+	let path = dir.path().join("p.wdproj");
+	io::save_project(&p, &path).unwrap();
+	assert_eq!(io::load_project(&path).unwrap(), p);
 	assert!(matches!(io::save_project(&p, &dir.path().join("p.txt")), Err(IoError::UnknownType(_))));
 }
 
@@ -250,56 +219,4 @@ fn legacy_example_3_and_newer_format() {
 	std::fs::write(&path, "{\"format_version\": 2}").unwrap();
 	let Err(IoError::Unreadable(e)) = io::load_project(&path) else { panic!("a newer format is refused") };
 	assert!(e.error.message.contains("newer"));
-}
-
-/// The `.wdr` JSON's keys, and its string values, of one object of every kind: a renamed model field or enum
-/// member changes the file format and this snapshot with it.
-#[test]
-fn wdr_json_names_are_stable() {
-	fn walk(v: &serde_json::Value, path: &str, out: &mut std::collections::BTreeSet<String>) {
-		match v {
-			serde_json::Value::Object(m) => m.iter().for_each(|(k, v)| walk(v, &format!("{path}.{k}"), out)),
-			serde_json::Value::Array(a) => a.iter().for_each(|v| walk(v, &format!("{path}[]"), out)),
-			serde_json::Value::String(s) => _ = out.insert(format!("{path} = {s:?}")),
-			_ => _ = out.insert(path.to_owned()),
-		}
-	}
-	let mut p = Project::default();
-	let s = p.add_source();
-	p.sources[s].detach_after = Some(5);
-	p.sources[s].array = Some(SourceArray::default());
-	for kind in [
-		PartKind::Lens(Lens::default()),
-		PartKind::FresnelLens(FresnelLens::default()),
-		PartKind::Polygon(Polygon::default()),
-		PartKind::Rectangle(Rectangle::default()),
-		PartKind::Ellipse(Ellipse::default()),
-		PartKind::Triangle(Triangle::default()),
-		PartKind::Outline(Outline { points: vec![Point::new(1, 2)], ..Outline::default() }),
-		PartKind::Diffuser(Diffuser::default()),
-		PartKind::InterferenceFilter(InterferenceFilter { layers: vec![FilterLayer::default()], ..Default::default() }),
-		PartKind::SimpleGrating(SimpleGrating::default()),
-		PartKind::FacettedGrating(FacettedGrating::default()),
-		PartKind::MetaSurface(MetaSurface::default()),
-		PartKind::MetaSurface(MetaSurface {
-			design: MetaDesign::Prism(MetaPrismDesign::default()),
-			..Default::default()
-		}),
-		PartKind::MetaSurface(MetaSurface {
-			design: MetaDesign::Axicon(MetaAxiconDesign::default()),
-			..Default::default()
-		}),
-		PartKind::Fiber(Fiber { nodes: vec![FiberNode::default()], ..Fiber::default() }),
-		PartKind::BraggReflector(BraggReflector::default()),
-		PartKind::GrinLens(GrinLens::default()),
-		PartKind::LogicGate(LogicGate::default()),
-		PartKind::ZonePlate(ZonePlate::default()),
-	] {
-		p.add_part(kind);
-	}
-	p.add_probe();
-	p.add_new_color_scheme();
-	let mut names = std::collections::BTreeSet::new();
-	walk(&serde_json::to_value(&p).unwrap(), "", &mut names);
-	insta::assert_snapshot!(names.into_iter().collect::<Vec<_>>().join("\n"));
 }

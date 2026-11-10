@@ -180,8 +180,8 @@ Sections: General, Position, Wave, Timing, Array, Random offsets added per emitt
 |---|---|---|
 | Name | TB | |
 | Enabled | CB | |
-| X | NB min 0 | |
-| Y | NB min 0 | |
+| X | NB integer | |
+| Y | NB integer | |
 | Frequency | NB 0.01..255, drag 0.1, 2 decimals | |
 | Amplitude | NB 0..100, drag 0.1, 2 decimals | |
 | Phase | NB -180..180, drag 0.5, 2 decimals | |

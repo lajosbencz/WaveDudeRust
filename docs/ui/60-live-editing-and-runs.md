@@ -42,7 +42,7 @@ or every frame) and whether the user paused. The run converges on it, without ti
   stay. Showing the intensity picture makes the run track it, so the frames are made again.
 - A goal change is looked at every 16 steps. Work goes on for the project as it is now alone: an edit leaves
   the frame being made and starts one run of the edited project; a frame for later or the probes' tail is
-  also left when the position's frame is missing or nothing more is wanted; a fit frame is left when it is
+  also left when the position's frame is missing or nothing more is wanted; a fit frame (Auto brightness) is left when it is
   no longer asked for. During a drag nothing completes until the hand rests for a frame time.
 - The frame written last stays readable through a clear, so the pictures hold the last state made while the
   edited project's frame is computed; that frame replaces it when it lands. The

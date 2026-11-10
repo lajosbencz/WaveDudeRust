@@ -36,7 +36,7 @@ Use modern toolings for lineage tracing.
 - One Cargo workspace: core, export, cli, widgets, app state, app
 - UI: Freya 0.5
 - Render: wgpu + CPU fallback
-- Project files: support WaveDudeNext formats + create our own native `.wdr`
+- Project files: support the WaveDudeNext formats; `.wdproj` is the one project format
 - Export: PNG/JPEG/EXR sequences, MPEG-1, AVI, QuickTime, H.264 MP4 via openh264
 
 ## Plan

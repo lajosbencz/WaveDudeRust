@@ -13,8 +13,7 @@ probes with live graphs and video export.
 The maths is the project's own: unscaled Laplacians, sub-steps from the CFL
 bound, analytic physics tests ([`docs/physics.md`](docs/physics.md)). Project files of WaveDude
 Next (`.wdproj`) and of Wave Dude 2D (`configuration.json`) open; projects save
-as `.wdproj` by default, so WaveDude Next opens them too. `.wdr`, a zip with
-JSON and the scene image, opens and saves as well.
+as `.wdproj`, which WaveDude Next opens too.
 
 ![Three wave logic gates (XOR, AND, OR) chained: the field and the intensity, played in the application](docs/figures/logic-gates.gif)
 
@@ -43,7 +42,7 @@ cargo run -p wavedude-cli --release -- bench --gpu
 cargo run -p wavedude-cli --release -- dispersion
 cargo run -p wavedude-cli --release -- openh264 enable    # downloads Cisco's OpenH264 for MP4
 cargo run -p wavedude-cli --release -- export project.wdproj --out out.mp4 --layers both
-cargo run -p wavedude-app --release -- project.wdr
+cargo run -p wavedude-app --release -- project.wdproj
 ```
 
 ## Releases

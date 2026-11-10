@@ -1,5 +1,4 @@
-//! Project and colour scheme files: the native `.wdr` container, the WaveDude Next `.wdproj` and
-//! `.wdscheme` XML, and the Wave Dude 2D `configuration.json` and JSON schemes.
+//! Project and colour scheme files: the WaveDude Next `.wdproj` and `.wdscheme` XML, and the Wave Dude 2D `configuration.json` and JSON schemes.
 //!
 //! Every reader normalises what it returns. A file whose content cannot be read fails with an
 //! [`UnreadableFile`] that names the problem and quotes the file's text for the log.
@@ -7,9 +6,7 @@
 mod fields;
 pub mod legacy;
 pub mod schemes;
-pub mod sparse;
 pub mod wdproj;
-pub mod wdr;
 pub mod wdscheme;
 mod xml;
 
@@ -106,7 +103,7 @@ pub enum IoError {
 	Unreadable(#[from] UnreadableFile),
 	#[error("the scene image of '{}' cannot be decoded: {message}", path.display())]
 	Image { path: PathBuf, message: String },
-	#[error("'{}' is not a project file (.wdr, .wdproj or .json expected)", .0.display())]
+	#[error("'{}' is not a project file (.wdproj or .json expected)", .0.display())]
 	UnknownType(PathBuf),
 }
 
@@ -187,17 +184,10 @@ fn extension(path: &Path) -> String {
 	path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()
 }
 
-/// Loads a project by its extension: `.wdr`, `.wdproj`, or a Wave Dude 2D `.json` (notes are logged).
+/// Loads a project by its extension: `.wdproj`, or a Wave Dude 2D `.json` (notes are logged).
 pub fn load_project(path: &Path) -> Result<Project> {
 	match extension(path).as_str() {
-		"wdr" => {
-			let loaded = wdr::load(path)?;
-			for note in &loaded.notes {
-				tracing::warn!("loading '{}': {note}", path.display());
-			}
-			Ok(loaded.project)
-		}
-		"wdproj" => wdproj::load(path),
+		wdproj::EXTENSION => wdproj::load(path),
 		"json" => {
 			let imported = legacy::import(path)?;
 			for note in &imported.notes {
@@ -209,11 +199,10 @@ pub fn load_project(path: &Path) -> Result<Project> {
 	}
 }
 
-/// Saves a project by its extension: `.wdr` or `.wdproj`.
+/// Saves a project as `.wdproj`.
 pub fn save_project(project: &Project, path: &Path) -> Result<()> {
 	match extension(path).as_str() {
-		"wdr" => wdr::save(project, path),
-		"wdproj" => wdproj::save(project, path),
+		wdproj::EXTENSION => wdproj::save(project, path),
 		_ => Err(IoError::UnknownType(path.to_owned())),
 	}
 }

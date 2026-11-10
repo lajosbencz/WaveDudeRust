@@ -57,7 +57,6 @@ before-packaging-command = "cargo build --release -p wavedude-app -p wavedude-cl
 binaries = [{ path = "wavedude-app", main = true }, { path = "wavedude-cli" }]
 file-associations = [
 	{ extensions = ["wdproj"], mime-type = "application/x-wavedude-project+xml", description = "WaveDude project", name = "WaveDude project", role = "editor" },
-	{ extensions = ["wdr"], mime-type = "application/x-wavedude-project+zip", description = "WaveDude Rust project", name = "WaveDude Rust project", role = "editor" },
 	{ extensions = ["wdscheme"], mime-type = "application/x-wavedude-scheme+xml", description = "WaveDude colour scheme", name = "WaveDude colour scheme", role = "editor" },
 ]
 

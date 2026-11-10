@@ -4,8 +4,8 @@
 	<Scene Width="960" Height="540" />
 	<Simulation Steps="1600" />
 	<Display>
-		<Field ColorScheme="Default field" Brightness="10" BlackLevel="-0.05" />
-		<Intensity ColorScheme="Default intensity" Brightness="10" />
+		<Field ColorScheme="Default field" Brightness="80" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="80" />
 	</Display>
 	<Source Name="Lamp" X="200" Y="270" Frequency="50" />
 	<Probe Name="Faint counts" Kind="Line" AX="600" AY="220" BX="600" BY="320" BoxX="20" BoxY="330" Detector="Counting" Sensitivity="30" StartAfter="600" Window="400" />

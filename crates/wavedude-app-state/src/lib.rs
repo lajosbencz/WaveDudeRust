@@ -22,11 +22,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use wavedude_core::engine::{SampleFormat, as_halves};
 use wavedude_core::io::schemes::SchemeStore;
-use wavedude_core::model::{Layer, Point};
-use wavedude_core::render::brightness::PERCENTILE;
-use wavedude_core::render::fit_brightness;
+use wavedude_core::model::Point;
 use wavedude_core::run::{Levers, MachineFacts, PreviewQuality};
 
 use clipboard::{Copyable, PasteTarget};
@@ -211,8 +208,6 @@ pub struct AppState<B: Backend> {
 	pending: Option<Guarded>,
 	/// The export hint of a project without a file: this session's alone.
 	session_hint: ExportHint,
-	/// The playback and work revisions of the frame the imported brightness fit read last.
-	fit_read: Option<(u64, u64)>,
 }
 
 fn live_settings(s: &Settings) -> LiveSettings {
@@ -275,7 +270,6 @@ impl<B: Backend> AppState<B> {
 			use_gpu,
 			pending: None,
 			session_hint: ExportHint::default(),
-			fit_read: None,
 		};
 		state.sync_revisions();
 		state
@@ -389,64 +383,7 @@ impl<B: Backend> AppState<B> {
 			self.live.on_change(ChangeKind::Simulation, &self.document.project, note, now);
 		}
 		self.live.tick(now, &self.document.project);
-		self.fit_imported_brightness(now);
 		self.sync_revisions()
-	}
-
-	/// Fits an imported project's brightness once to the first frame with content, as Auto does, outside the
-	/// history. With 8-bit frames one 16-bit frame is computed for the fit alone, never shown; it is asked again
-	/// only when it was abandoned and nothing else computes, so scrubbing never makes it follow the position. A
-	/// shown frame is read once.
-	fn fit_imported_brightness(&mut self, now: Instant) {
-		if !self.document.needs_brightness_fit {
-			return;
-		}
-		let values = if let Some(fit) = self.live.take_open_fit() {
-			let s = &fit.snapshot;
-			[Layer::Field, Layer::Intensity].map(|layer| {
-				let plane = s.plane(layer);
-				if plane.is_empty() { None } else { fit_brightness(&as_halves(plane), s.shape.sample_kind(layer)) }
-			})
-		} else {
-			let frame = (self.revisions.playback, self.revisions.work);
-			if self.live.shown().is_none() || self.fit_read == Some(frame) {
-				return;
-			}
-			self.fit_read = Some(frame);
-			let read = |layer| {
-				self.live.with_shown_plane(layer, |shape, bytes| match shape.format {
-					SampleFormat::Half => Ok(fit_brightness(&as_halves(bytes), shape.sample_kind(layer))),
-					SampleFormat::Index => Err(index_has_content(layer, bytes)),
-				})
-			};
-			let fits = [read(Layer::Field), read(Layer::Intensity)];
-			if fits.iter().any(|f| matches!(f, Some(Err(_)))) {
-				if fits.iter().any(|f| matches!(f, Some(Err(true)))) && !self.live.fit_pending() {
-					self.live.request_open_fit(&self.document.project);
-				}
-				return;
-			}
-			fits.map(|f| f.and_then(Result::ok).flatten())
-		};
-		if values.iter().all(Option::is_none) {
-			return;
-		}
-		self.document.set_brightness_unrecorded(values);
-		self.document.needs_brightness_fit = false;
-		self.document_changed(false);
-		let d = &self.document.project.display;
-		let note = format!(
-			"brightness fitted for the imported project: field {}, intensity {}; the source model differs from the original's",
-			d.field.brightness, d.intensity.brightness
-		);
-		tracing::info!("{note}");
-		// with 8-bit samples the fit is a simulation edit, which would leave a followed run stranded at the
-		// frame the fit read: that run starts over as F5 does
-		let followed_run = self.live.run_is_active() && self.live.is_live();
-		self.live.on_change(ChangeKind::Brightness, &self.document.project, Some(note), now);
-		if followed_run && self.settings.preview_sample_bytes == 1 {
-			self.live.run_user(&self.document.project, now);
-		}
 	}
 
 	fn save_settings(&self) {
@@ -651,7 +588,7 @@ impl<B: Backend> AppState<B> {
 			Event::Guarded(action) => self.guarded(action, now),
 			Event::DropFile(path) => {
 				let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-				if ["wdproj", "wdr", "json", "xml", "wdscheme"].contains(&ext.as_str()) {
+				if ["wdproj", "json", "xml", "wdscheme"].contains(&ext.as_str()) {
 					self.guarded(Guarded::Open(path), now)
 				} else {
 					tracing::warn!("'{}' is not a project or colour scheme file", path.display());
@@ -927,14 +864,6 @@ impl<B: Backend> AppState<B> {
 	pub fn current_row(&self) -> Option<Row> {
 		self.selection.current()
 	}
-}
-
-/// Whether more samples than the fit's percentile leaves out are off the palette's zero (127 for the field, 0
-/// for the intensity), so a 16-bit copy of the frame has something to fit.
-fn index_has_content(layer: Layer, bytes: &[u8]) -> bool {
-	let zero = if layer == Layer::Field { 127 } else { 0 };
-	let off = bytes.iter().filter(|&&b| b != zero).count();
-	off as f64 > (1.0 - PERCENTILE) * bytes.len() as f64
 }
 
 fn is_scheme(path: &Path) -> bool {

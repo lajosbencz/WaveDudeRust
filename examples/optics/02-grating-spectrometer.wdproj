@@ -4,8 +4,8 @@
 	<Scene Width="1280" Height="600" />
 	<Simulation Steps="2200" />
 	<Display>
-		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" />
-		<Intensity ColorScheme="Default intensity" Brightness="0.8" />
+		<Field ColorScheme="Default field" Brightness="8" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="6.4" />
 	</Display>
 	<Source Name="Red (32 px)" X="80" Y="300" Frequency="50">
 		<Array SizeY="37" SpacingY="8" />

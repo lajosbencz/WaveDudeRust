@@ -220,6 +220,10 @@ macro_rules! codec {
 		// a negative value becomes 0 for `normalize` to raise
 		$crate::io::fields::Codec::Int { get: |v: &$t| v.$($f).+ as i64, set: |v: &mut $t, x: i32| v.$($f).+ = x.max(0) as u32 }
 	};
+	($t:ty, whole, $($f:ident).+) => {
+		// a decimal model value, written rounded: the file holds integers
+		$crate::io::fields::Codec::Int { get: |v: &$t| v.$($f).+.round() as i64, set: |v: &mut $t, x: i32| v.$($f).+ = f64::from(x) }
+	};
 	($t:ty, i32, $($f:ident).+) => {
 		$crate::io::fields::Codec::Int { get: |v: &$t| v.$($f).+ as i64, set: |v: &mut $t, x: i32| v.$($f).+ = x }
 	};

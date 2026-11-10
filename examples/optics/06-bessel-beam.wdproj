@@ -4,8 +4,8 @@
 	<Scene Width="1280" Height="600" />
 	<Simulation Steps="2200" />
 	<Display>
-		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" />
-		<Intensity ColorScheme="Default intensity" Brightness="1.2" />
+		<Field ColorScheme="Default field" Brightness="8" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="9.6" />
 	</Display>
 	<Source Name="Plane wave" X="80" Y="300" Frequency="100">
 		<Array SizeY="45" SpacingY="8" />

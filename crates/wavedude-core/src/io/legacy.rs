@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
+use super::wdproj::BRIGHTNESS_GAIN;
 use super::{FormatError, Result, UnreadableFile};
 use crate::model::normalize::Normalize;
 use crate::model::*;
@@ -126,8 +127,8 @@ fn import_simulation(s: Option<&Obj>, project: &mut Project) {
 	d.intensity.preview = flag(s, "preview_intensity", true);
 	d.field.color_scheme = text(s, "field_color_scheme", "Default field");
 	d.intensity.color_scheme = text(s, "intensity_color_scheme", "Default intensity");
-	d.field.brightness = double(s, "field_brightness", 30.0);
-	d.intensity.brightness = double(s, "intensity_brightness", 30.0);
+	d.field.brightness = double(s, "field_brightness", 30.0) / BRIGHTNESS_GAIN;
+	d.intensity.brightness = double(s, "intensity_brightness", 30.0) / BRIGHTNESS_GAIN;
 	d.field.black_level = double(s, "field_black_level", -0.05);
 	d.intensity.black_level = double(s, "intensity_black_level", 0.0);
 	d.video.fps = uint(s, "video_fps", 60);

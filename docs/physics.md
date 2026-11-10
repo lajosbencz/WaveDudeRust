@@ -235,8 +235,9 @@ the Green's function at the lattice offsets (0, 0), (1, 0), (0, 1) and (1, 1)
 source at a whole-number position is the one-cell source, bit for bit. The need:
 a fibre core of an even number of cells has its axis on a cell boundary, where a
 one-cell source sits half a cell off the axis and excites the odd modes visibly
-(the hook in the gate examples' cups before this); the gate generator now puts its
-sources on the axes at half-cell positions.
+(the hook in the gate examples' cups before this). The `.wdproj` adapter writes positions as
+integers, so the gate generator puts two half-amplitude sources in the two
+cells beside an axis.
 
 Amplitude. A source's Amplitude A is the displacement amplitude of the wave it
 radiates, at its own cell, in free space (index 1, an infinite grid), at its

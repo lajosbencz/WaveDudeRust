@@ -75,20 +75,6 @@ The field gain stays the known 5.5 to 6.2 of the source model (decision 0010); t
 our 2. Both engines focus the meta lens well short of its nominal 456 px, the near field of a 240 px aperture at
 a 32 px wavelength.
 
-## Project file size, `.wdr` against `.wdproj`
-
-2026-11-08. The 24 examples loaded and written by this program: the `.wdproj` text with its DOCTYPE against the
-`.wdr` container (sparse JSON, deflated). `cargo test -p wavedude-core --test io the_native_container -- --nocapture`.
-
-| Example | .wdproj bytes | .wdr bytes | .wdr share |
-|---|---|---|---|
-| Example01_Source_Mirror_Probe | 16073 | 735 | 5 % |
-| Example16_Wave_in_2_boxes | 16764 | 970 | 6 % |
-| Example23_Fibres | 18330 | 1279 | 7 % |
-| all 24 | 395569 | 19732 | 5 % |
-
-Most of a `.wdproj` is its DOCTYPE (about 15 KB); the elements alone are still 2 to 4 times the container.
-
 ## The live run
 
 2026-11-09, `cargo test -p wavedude-core --test run --release -- --ignored --nocapture live_run_drag_burst_timing`:

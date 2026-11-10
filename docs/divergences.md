@@ -9,7 +9,7 @@ that holds the reasoning and the details. Behaviour not listed here is meant to 
 | Probe edit | The frame shown refreshes its graph; other frames' graphs stay stale until the next run | The frames stay, the recording is made anew for the whole run when every frame is wanted | decision 0012 |
 | Undo steps | End at input boundaries (upstream since 2026-11-09) | End after 0.5 s of quiet with no mouse button held; a held key is one step | ui/60, decision 0012 |
 | Solver | 9-point and 4th order stencils as scaled Laplacians, sources on the grid | True Laplacians, CPML absorber, dispersion-relation-preserving weights, sub-steps for stability; the physics differs by design | decision 0010, physics.md, 0003 |
-| Project file | `.wdproj` XML with every value | `.wdr`: sparse JSON (defaults left out) in a zip beside the scene image; `.wdproj` stays the default save format, its quirks kept in its adapter | decision 0004, spec/60 |
+| Display brightness | Tuned to its source, which radiates 4.8 to 9.7 times less | Own units; the `.wdproj` adapter converts by a fixed factor of 8 in both directions | decision 0004, spec/60, spec/05 |
 | Video | Windows Media Foundation H.264 with a hardware encoder | Cisco's OpenH264 downloaded on consent, quality rate control, no hardware encoder; AVI, MOV, MPEG-1 built in | decision 0005 |
 | Frame store | Memory then a file, frames appended in order | The same tiers, frames written by index in any order, cleared in place between generations | spec/40 |
 | GPU | OpenCL, a transfer queue of its own for captures | wgpu compute, one queue; captures run after the steps (measurements.md) | decision 0003 |

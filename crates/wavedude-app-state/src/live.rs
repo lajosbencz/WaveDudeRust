@@ -117,15 +117,6 @@ struct PendingWarning {
 	then: Then,
 }
 
-/// What a fit frame is for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FitUse {
-	/// Auto brightness.
-	Half,
-	/// An opened project's brightness fit.
-	Open,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Export {
 	Idle,
@@ -154,8 +145,8 @@ pub struct LiveController<B: Backend> {
 	shown: Option<u32>,
 	warning: Option<PendingWarning>,
 	export: Export,
-	fit: Option<(FitRequest, FitUse)>,
-	fit_frames: Option<(FitUse, FitFrame)>,
+	fit: Option<FitRequest>,
+	fit_frames: Option<FitFrame>,
 	next_fit: u64,
 	last_edit: Option<String>,
 	/// The failure reported last.
@@ -454,7 +445,7 @@ impl<B: Backend> LiveController<B> {
 		if !self.started {
 			return;
 		}
-		let fit = self.fit.map(|(f, _)| f);
+		let fit = self.fit;
 		let position = self.playback.position();
 		let same = self.published.as_ref().is_some_and(|p| {
 			(p.revision, p.position, p.wanted, p.paused, p.fit, p.ram_percent)
@@ -688,11 +679,11 @@ impl<B: Backend> LiveController<B> {
 
 	fn poll_fit(&mut self) {
 		let Some(frame) = self.backend.take_fit() else { return };
-		if let Some((request, used)) = self.fit
+		if let Some(request) = self.fit
 			&& request.id == frame.id
 		{
 			self.fit = None;
-			self.fit_frames = Some((used, frame));
+			self.fit_frames = Some(frame);
 		}
 	}
 
@@ -715,23 +706,12 @@ impl<B: Backend> LiveController<B> {
 	/// Auto brightness with 8-bit samples: the frame at the position once more with 16-bit samples, for
 	/// [`take_half_frame`](Self::take_half_frame) alone. Returns whether it was requested.
 	pub fn request_half_frame(&mut self, _project: &Project) -> bool {
-		self.request_fit(FitUse::Half)
+		self.request_fit()
 	}
 
 	/// The frame [`request_half_frame`](Self::request_half_frame) asked for, once it arrived.
 	pub fn take_half_frame(&mut self) -> Option<FitFrame> {
-		self.take_fit_frame(FitUse::Half)
-	}
-
-	/// An opened project's brightness fit with 8-bit samples: the frame at the position with 16-bit samples, for
-	/// [`take_open_fit`](Self::take_open_fit) alone. Returns whether it was requested.
-	pub fn request_open_fit(&mut self, _project: &Project) -> bool {
-		self.request_fit(FitUse::Open)
-	}
-
-	/// The frame [`request_open_fit`](Self::request_open_fit) asked for, once it arrived.
-	pub fn take_open_fit(&mut self) -> Option<FitFrame> {
-		self.take_fit_frame(FitUse::Open)
+		self.fit_frames.take()
 	}
 
 	/// Steps whose probe readings the traces hold.
@@ -744,17 +724,13 @@ impl<B: Backend> LiveController<B> {
 		self.fit.is_some()
 	}
 
-	fn take_fit_frame(&mut self, used: FitUse) -> Option<FitFrame> {
-		self.fit_frames.take_if(|(u, _)| *u == used).map(|(_, r)| r)
-	}
-
-	fn request_fit(&mut self, used: FitUse) -> bool {
+	fn request_fit(&mut self) -> bool {
 		if self.request.is_none() {
 			tracing::warn!("no 16-bit frame for the brightness fit: no run");
 			return false;
 		}
 		self.next_fit += 1;
-		self.fit = Some((FitRequest { id: self.next_fit, frame: self.playback.position() }, used));
+		self.fit = Some(FitRequest { id: self.next_fit, frame: self.playback.position() });
 		self.publish();
 		true
 	}
@@ -1330,7 +1306,7 @@ mod tests {
 	}
 
 	#[test]
-	fn the_fit_frame_reaches_its_taker_alone() {
+	fn the_fit_frame_is_served_once() {
 		let t = Instant::now();
 		let p = project();
 		let mut c = controller(&p, t);
@@ -1344,7 +1320,6 @@ mod tests {
 		c.backend_mut().finish_fit_uniform(0.5, 0.25);
 		c.tick(t, &p);
 		assert_eq!(c.shown(), Some(40));
-		assert!(c.take_open_fit().is_none(), "only its own taker gets it");
 		let frame = c.take_half_frame().expect("the 16-bit frame");
 		assert_eq!((frame.frame, frame.snapshot.shape.format, frame.snapshot.step), (40, SampleFormat::Half, 80));
 		assert!(c.take_half_frame().is_none());

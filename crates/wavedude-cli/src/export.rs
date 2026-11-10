@@ -16,7 +16,7 @@ use crate::run::{EngineArgs, simulate_with};
 
 #[derive(ClapArgs)]
 pub struct Args {
-	/// Project file (.wdproj, .wdr or Wave Dude 2D .json).
+	/// Project file (.wdproj or Wave Dude 2D .json).
 	project: PathBuf,
 	/// Video file, image file (a sequence goes into a folder of its name) or still.
 	#[arg(long)]

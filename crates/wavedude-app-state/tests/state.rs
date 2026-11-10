@@ -13,7 +13,6 @@ use wavedude_app_state::live::fake::FakeBackend;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::Settings;
 use wavedude_app_state::{AppState, Event, ExportKind, Guarded, Response, SaveChoice};
-use wavedude_core::io::wdproj;
 use wavedude_core::model::Point;
 use wavedude_core::model::ProbeDetector;
 use wavedude_core::run::MachineFacts;
@@ -143,7 +142,7 @@ fn unsaved_edits_are_asked_about() {
 	s.handle(Event::Guarded(Guarded::OpenExample(6)), t);
 	let ask = s.handle(Event::SaveChoice(SaveChoice::Save), t);
 	assert_eq!(ask, Response::AskSavePath { proposed: None });
-	let path = dir.path().join("mine.wdr");
+	let path = dir.path().join("mine.wdproj");
 	assert_eq!(s.handle(Event::SaveAs(path.clone()), t), Response::None);
 	assert!(path.is_file());
 	assert!(s.title().ends_with("Example07_Random_emitter_lattice.wdproj"), "{}", s.title());
@@ -169,7 +168,7 @@ fn a_restart_asks_about_unsaved_edits_like_an_exit() {
 	assert!(s.document.dirty);
 	s.handle(Event::Guarded(Guarded::Restart), t);
 	assert_eq!(s.handle(Event::SaveChoice(SaveChoice::Save), t), Response::AskSavePath { proposed: None });
-	let path = dir.path().join("kept.wdr");
+	let path = dir.path().join("kept.wdproj");
 	assert_eq!(s.handle(Event::SaveAs(path.clone()), t), Response::Restart, "restarts once saved");
 	assert!(path.is_file() && !s.document.dirty);
 }
@@ -233,7 +232,7 @@ fn language_switch_and_export_proposal() {
 	let mut s = app();
 	s.handle(Event::SetLanguage("fr".into()), t);
 	assert_eq!(s.strings.language(), wavedude_app_state::strings::Language::French);
-	let project = dir.path().join("p.wdr");
+	let project = dir.path().join("p.wdproj");
 	s.handle(Event::SaveAs(project.clone()), t);
 	assert_eq!(s.export_proposal(ExportKind::Run), dir.path().join("p_field"));
 	let out = dir.path().join("videos").join("p_intensity.mp4");
@@ -259,107 +258,6 @@ fn log_reaches_file_and_ring() {
 	assert_eq!(mine.len(), if cfg!(debug_assertions) { 2 } else { 1 }, "Trace only in debug builds");
 	let file = std::fs::read_dir(dir.path()).unwrap().next().unwrap().unwrap().path();
 	assert!(std::fs::read_to_string(file).unwrap().contains("preview frame requested"));
-}
-
-/// Opens `name` holding a 64 x 48 project with one source at the original's brightness, written by its extension.
-/// Opens `p` written to `dir/name`; a `.wdproj` without its `Generator`, as WaveDude Next writes it.
-fn open_written(dir: &std::path::Path, name: &str) -> AppState<FakeBackend> {
-	let mut p = wavedude_core::model::Project::default();
-	p.display.field.brightness = 30.0;
-	p.display.intensity.brightness = 30.0;
-	p.scene.width = 64;
-	p.scene.height = 48;
-	p.simulation.steps = 100;
-	p.add_source();
-	let path = dir.join(name);
-	wavedude_core::io::save_project(&p, &path).unwrap();
-	if name.ends_with(".wdproj") {
-		let text = std::fs::read_to_string(&path).unwrap();
-		let generator = format!(" Generator=\"{} {}\"", wdproj::GENERATOR, env!("CARGO_PKG_VERSION"));
-		assert!(text.contains(&generator));
-		std::fs::write(&path, text.replace(&generator, "")).unwrap();
-	}
-	let mut s = app();
-	assert_eq!(s.handle(Event::Guarded(Guarded::Open(path)), Instant::now()), Response::None);
-	s
-}
-
-#[test]
-fn an_imported_project_gets_its_brightness_fitted_once() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut s = open_written(dir.path(), "old.wdproj");
-	let t = Instant::now();
-	let original = s.document.project.display.clone();
-	assert_eq!((original.field.brightness, original.intensity.brightness), (30.0, 30.0));
-	s.tick(t);
-	s.live.backend_mut().finish_frame_uniform(0, 0.0, 0.0);
-	s.tick(at(t, 10));
-	assert_eq!(s.document.project.display, original, "a dark frame has nothing to fit");
-	s.live.scrub(20, at(t, 20));
-	s.live.backend_mut().finish_frame_uniform(20, 0.5, 0.0625);
-	s.tick(at(t, 210));
-	assert_eq!(s.live.backend().goal().fit.map(|f| f.frame), Some(20), "an 8-bit frame is computed again in 16-bit");
-	s.tick(at(t, 220));
-	assert_eq!(s.live.backend().fits_served.len(), 0);
-	s.live.backend_mut().finish_fit_uniform(0.5, 0.0625);
-	s.tick(at(t, 230));
-	let d = &s.document.project.display;
-	assert_eq!((d.field.brightness, d.intensity.brightness), (2.0, 4.0));
-	assert!(!s.document.needs_brightness_fit);
-	assert!(!s.document.dirty, "the fit does not make the project dirty");
-	assert_eq!(s.document.history.len(), 1);
-	assert!(!s.document.history.can_undo(), "the fit is no history step");
-	s.live.scrub(30, at(t, 300));
-	s.live.backend_mut().finish_frame_uniform(30, 0.1, 0.01);
-	s.tick(at(t, 510));
-	assert_eq!(s.document.project.display.field.brightness, 2.0, "fitted once");
-	assert!(s.live.backend().goal().fit.is_none());
-	s.handle(Event::Command(Command::AddSource { at: None }), at(t, 600));
-	s.handle(Event::Undo, at(t, 700));
-	assert_eq!(s.document.project.display.field.brightness, 2.0, "an undo keeps the fit");
-}
-
-#[test]
-fn the_open_fit_neither_follows_the_position_nor_shows_its_frame() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut s = open_written(dir.path(), "old.wdproj");
-	let t = Instant::now();
-	s.live.scrub(20, t);
-	s.live.backend_mut().finish_frame_uniform(20, 0.5, 0.0625);
-	s.tick(at(t, 210));
-	assert_eq!(s.live.shown(), Some(20));
-	let fit = s.live.backend().goal().fit.expect("the fit was asked for");
-	for (i, frame) in (30..80).step_by(10).enumerate() {
-		s.live.scrub(frame, at(t, 220 + i as u64));
-		s.tick(at(t, 220 + i as u64));
-	}
-	assert_eq!(s.live.backend().goal().fit, Some(fit), "one fit request, not one per position");
-	s.live.backend_mut().finish_fit_uniform(0.5, 0.0625);
-	s.tick(at(t, 300));
-	assert!(!s.document.needs_brightness_fit, "fitted from its frame although the position moved");
-	assert_eq!(s.live.shown(), Some(20), "the fit's frame is never shown");
-}
-
-#[test]
-fn a_project_this_program_wrote_is_not_fitted() {
-	let dir = tempfile::tempdir().unwrap();
-	let own = open_written(dir.path(), "own.wdr");
-	let mut saved = app();
-	let path = dir.path().join("own.wdproj");
-	saved.document.project = own.document.project.clone();
-	saved.document.save_as(&path).unwrap();
-	assert_eq!(saved.handle(Event::Guarded(Guarded::Open(path)), Instant::now()), Response::None);
-	for mut s in [own, saved] {
-		let t = Instant::now();
-		assert!(!s.document.needs_brightness_fit);
-		let before = s.document.project.display.clone();
-		s.live.scrub(20, t);
-		s.live.backend_mut().finish_frame_uniform(20, 0.5, 0.0625);
-		s.tick(at(t, 210));
-		s.tick(at(t, 220));
-		assert_eq!(s.document.project.display, before);
-		assert!(s.live.backend().goal().fit.is_none());
-	}
 }
 
 #[test]
@@ -505,26 +403,4 @@ fn a_device_switch_rebuilds_the_engine_and_the_same_quality_is_no_edit() {
 	let revision = s.live.backend().goal().revision;
 	s.handle(Event::SetPreviewQuality(s.settings.preview_quality()), t);
 	assert_eq!(s.live.backend().goal().revision, revision, "the quality in force is no edit");
-}
-
-#[test]
-fn an_import_fit_landing_in_a_followed_run_restarts_the_run_instead_of_stranding_it() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut s = open_written(dir.path(), "old.wdproj");
-	let t = Instant::now();
-	s.tick(t);
-	assert!(s.live.run_user(&s.document.project.clone(), t));
-	assert!(s.live.is_live() && s.live.run_is_active());
-	s.live.backend_mut().publish(5);
-	s.live.backend_mut().finish_frame_uniform(5, 0.5, 0.0625);
-	s.tick(at(t, 10));
-	assert_eq!(s.live.playback.position(), 5, "the follow reached the first frame with content");
-	s.tick(at(t, 20));
-	assert_eq!(s.live.backend().goal().fit.map(|f| f.frame), Some(5), "the fit reads that frame in 16-bit");
-	s.live.backend_mut().finish_fit_uniform(0.5, 0.0625);
-	s.tick(at(t, 30));
-	assert!(!s.document.needs_brightness_fit, "the fit was applied");
-	assert!(s.live.run_is_active(), "the run goes on");
-	assert!(s.live.is_live(), "and stays followed");
-	assert_eq!(s.live.playback.position(), 0, "from the start, as F5 does");
 }

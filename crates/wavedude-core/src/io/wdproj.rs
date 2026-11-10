@@ -8,8 +8,7 @@
 //! the frequency scale is divided by [`super::nine_point_speed`], writing multiplies it back. A file whose `Simulation` carries
 //! `Rescaled="true"` already holds this program's units and is read unscaled.
 //!
-//! The root's `Generator` names the program that wrote the file. The display brightness of a file this program
-//! wrote is in its own units; one of WaveDude Next's is in the original's (spec/05-deviations.md).
+//! `Brightness` is in WaveDude Next's units in the file and in this program's in the model ([`BRIGHTNESS_GAIN`]).
 
 use std::path::Path;
 
@@ -24,16 +23,6 @@ use crate::model::*;
 
 /// File extension of a project.
 pub const EXTENSION: &str = "wdproj";
-/// The root's `Generator` in the files this program writes; the version follows it.
-pub const GENERATOR: &str = "WaveDude Rust";
-
-/// A read project and who wrote it.
-#[derive(Debug)]
-pub struct Read {
-	pub project: Project,
-	/// Written by this program (`Generator`): the brightness is in its units.
-	pub own: bool,
-}
 
 macro_rules! xml_enum {
 	($t:ty: $($m:ident),+) => {
@@ -93,18 +82,12 @@ type R<T> = std::result::Result<T, FormatError>;
 /// Parses a `.wdproj` text into a normalised project (migrated, 9-point frequencies scaled).
 /// The scene's `image_size` is left at (0, 0); [`load`] decodes it.
 pub fn read_str(text: &str) -> R<Project> {
-	read(text).map(|r| r.project)
-}
-
-/// [`read_str`] with who wrote the file.
-pub fn read(text: &str) -> R<Read> {
 	let doc = xml::parse(text)?;
 	let root = &doc.root;
 	if root.name != "Project" {
 		return Err(FormatError { message: "the document is not a WaveDude Next project".into(), at: Some(root.at) });
 	}
 	let version = FileVersion(root.i32("Version", PROJECT_VERSION as i32)?);
-	let own = root.get("Generator").is_some_and(|g| g.starts_with(GENERATOR));
 	let seed = match root.get("Seed") {
 		Some(v) => root.parse_i32("Seed", v)?,
 		None => Project::new_random_seed().seed,
@@ -155,7 +138,7 @@ pub fn read(text: &str) -> R<Read> {
 		);
 	}
 	project.normalize();
-	Ok(Read { project, own })
+	Ok(project)
 }
 
 /// The `Version` of the file being read: what its omitted attributes mean.
@@ -230,8 +213,21 @@ impl Table for Simulation {
 	}
 }
 
-/// Brightness a WaveDude Next file omits: its default, made for its blended source, not this program's.
-const ORIGINAL_BRIGHTNESS: f64 = 30.0;
+/// Factor from this program's brightness to WaveDude Next's: this program's source swings its cell 4.8 to 9.7 times
+/// as far (docs/comparison), so the same picture takes that much less gain there. A power of two, so a value
+/// converts both ways exactly.
+pub const BRIGHTNESS_GAIN: f64 = 8.0;
+
+/// The brightness WaveDude Next omits from a file, in this program's units.
+pub(super) const ORIGINAL_BRIGHTNESS: f64 = 30.0 / BRIGHTNESS_GAIN;
+
+/// The `Brightness` attribute: WaveDude Next's units in the file.
+const BRIGHTNESS: Field<DisplayLayer> = Field {
+	owner: "DisplayLayer",
+	name: "Brightness",
+	codec: Codec::F64 { get: |l| l.brightness * BRIGHTNESS_GAIN, set: |l, v| l.brightness = v / BRIGHTNESS_GAIN },
+	presence: Sparse,
+};
 
 /// A layer's defaults as WaveDude Next has them in a file of `version`.
 fn original_layer(layer: Layer, version: FileVersion) -> DisplayLayer {
@@ -263,7 +259,7 @@ fn layer_base_of(version: FileVersion) -> DisplayLayer {
 impl Table for DisplayLayer {
 	const FIELDS: &'static [Field<Self>] = fields!(DisplayLayer, "DisplayLayer";
 		text "ColorScheme" color_scheme => Always,
-		f64 "Brightness" brightness,
+		[BRIGHTNESS],
 		f64 "BlackLevel" black_level,
 		bool "Preview" preview,
 		bool "Overlay" overlay,
@@ -278,7 +274,7 @@ impl Table for DisplayLayer {
 
 const FIELD_LAYER: &[Field<DisplayLayer>] = fields!(DisplayLayer, "DisplayLayer";
 	text "ColorScheme" color_scheme => Always,
-	f64 "Brightness" brightness,
+	[BRIGHTNESS],
 	f64 "BlackLevel" black_level => When(|_| true),
 	bool "Preview" preview,
 	bool "Overlay" overlay,
@@ -314,8 +310,8 @@ impl Table for Source {
 	const FIELDS: &'static [Field<Self>] = fields!(Source, "Source";
 		text "Name" name => Always,
 		bool "Enabled" enabled,
-		f64 "X" x => Always,
-		f64 "Y" y => Always,
+		whole "X" x => Always,
+		whole "Y" y => Always,
 		f64 "Frequency" frequency,
 		f64 "Amplitude" amplitude,
 		f64 "Phase" phase,
@@ -409,14 +405,8 @@ impl Table for PartBase {
 }
 
 impl Table for Coating {
-	// The original keeps the thickness as an integer: written rounded, so its reader takes the file.
 	const FIELDS: &'static [Field<Self>] = fields!(Coating, "Coating";
-		[Field {
-			owner: "Coating",
-			name: "Coating",
-			codec: Codec::Int { get: |c| c.depth.round() as i64, set: |c, v| c.depth = f64::from(v) },
-			presence: Sparse,
-		}],
+		whole "Coating" depth,
 		enumv "CoatingProfile" profile,
 		bool "FrontCoated" front,
 		bool "BackCoated" back,
@@ -548,12 +538,7 @@ kind_table!(GrinLens;
 );
 kind_table!(LogicGate;
 	f64 "DesignFrequency" design_frequency,
-	[Field {
-		owner: "LogicGate",
-		name: "Coating",
-		codec: Codec::Int { get: |g| g.coating.round() as i64, set: |g, v| g.coating = f64::from(v) },
-		presence: Sparse,
-	}],
+	whole "Coating" coating,
 	bool "InputCoated" input_coated,
 	bool "OutputCoated" output_coated,
 	bool "UpperOutputActive" upper_output_active,
@@ -698,16 +683,11 @@ fn read_part(el: &Element, version: FileVersion) -> R<Part> {
 
 /// Loads a `.wdproj` file and decodes the embedded image's size.
 pub fn load(path: &Path) -> Result<Project> {
-	load_read(path).map(|r| r.project)
-}
-
-/// [`load`] with who wrote the file.
-pub fn load_read(path: &Path) -> Result<Read> {
 	let text = super::read_text(path)?;
 	tracing::info!("loading project from '{}'", path.display());
-	let mut read = read(&text).map_err(|e| UnreadableFile::new(path, &text, e))?;
-	super::decode_image_size(&mut read.project, path)?;
-	Ok(read)
+	let mut project = read_str(&text).map_err(|e| UnreadableFile::new(path, &text, e))?;
+	super::decode_image_size(&mut project, path)?;
+	Ok(project)
 }
 
 // ---------------------------------------------------------------- writing
@@ -745,15 +725,18 @@ fn write_display(s: &Display) -> Element {
 	el
 }
 
-fn write_source(s: &Source) -> Element {
-	if s.x.fract() != 0.0 || s.y.fract() != 0.0 {
-		tracing::warn!(
-			"the source '{}' sits between pixels ({}, {}): WaveDude Next reads whole numbers only",
-			s.name,
-			s.x,
-			s.y
-		);
+/// Warns once per attribute of `name` whose value is not whole: it is written rounded, as WaveDude Next reads
+/// integers only.
+fn warn_rounded(name: &str, values: &[(&str, f64)]) {
+	for (attr, v) in values {
+		if v.fract() != 0.0 {
+			tracing::warn!("'{name}': {attr} {v} is written rounded, WaveDude Next reads whole numbers only");
+		}
 	}
+}
+
+fn write_source(s: &Source) -> Element {
+	warn_rounded(&s.name, &[("X", s.x), ("Y", s.y)]);
 	let mut el = element("Source", s);
 	if let Some(a) = &s.array {
 		el.child_el(element("Array", a));
@@ -830,7 +813,11 @@ macro_rules! with_design {
 fn write_part(p: &Part) -> Element {
 	let mut el = element(part_element_name(&p.kind), &p.base);
 	if let Some(c) = p.kind.coating() {
+		warn_rounded(&p.base.name, &[("Coating", c.depth)]);
 		fields::write(c, &mut el);
+	}
+	if let PartKind::LogicGate(g) = &p.kind {
+		warn_rounded(&p.base.name, &[("Coating", g.coating)]);
 	}
 	if let Some(m) = p.kind.material() {
 		fields::write(m, &mut el);
@@ -867,9 +854,7 @@ fn write_part(p: &Part) -> Element {
 /// The `Project` element of a project; `folder` makes an image path inside it relative.
 fn to_element(project: &Project, folder: Option<&Path>) -> Element {
 	let mut root = Element::new("Project");
-	root.attr("Version", PROJECT_VERSION.to_string())
-		.attr("Seed", project.seed.to_string())
-		.attr("Generator", format!("{GENERATOR} {}", env!("CARGO_PKG_VERSION")));
+	root.attr("Version", PROJECT_VERSION.to_string()).attr("Seed", project.seed.to_string());
 	if !project.description.is_empty() {
 		let mut d = Element::new("Description");
 		d.text = project.description.clone();
@@ -962,7 +947,7 @@ fn decls() -> Vec<Decl> {
 				"(Description?, Scene?, Simulation?, Display?, Source*, ({})*, Probe*, ColorScheme*)",
 				PART_ELEMENTS.join("|")
 			),
-			vec![text(None, "Version", true), text(Some("Project"), "Seed", true), text(None, "Generator", false)],
+			vec![text(None, "Version", true), text(Some("Project"), "Seed", true)],
 		),
 		Decl::new("Description", "(#PCDATA)", vec![]),
 		Decl::of::<Scene>("Scene", "(ImageData?)"),
@@ -1274,25 +1259,39 @@ mod tests {
 		p.add_probe_at(0, 0);
 		let text = write_string(&p, None);
 		let body = text.split_once("]>\n").unwrap().1;
-		let generator = format!("{GENERATOR} {}", env!("CARGO_PKG_VERSION"));
 		assert_eq!(
 			body,
-			format!(
-				"<Project Version=\"4\" Seed=\"7\" Generator=\"{generator}\">\n\t<Display>\n\t\t<Field ColorScheme=\"Default field\" Brightness=\"1\" BlackLevel=\"-0.05\" />\n\t\t<Intensity ColorScheme=\"Default intensity\" Brightness=\"1.5\" />\n\t</Display>\n\t<Source Name=\"Source 1\" X=\"0\" Y=\"0\" />\n\t<Lens Name=\"Lens 1\" X=\"0\" Y=\"0\" />\n\t<Probe Name=\"Probe 1\" AX=\"0\" AY=\"0\" />\n</Project>"
-			)
+			"<Project Version=\"4\" Seed=\"7\">\n\t<Display>\n\t\t<Field ColorScheme=\"Default field\" Brightness=\"8\" BlackLevel=\"-0.05\" />\n\t\t<Intensity ColorScheme=\"Default intensity\" Brightness=\"12\" />\n\t</Display>\n\t<Source Name=\"Source 1\" X=\"0\" Y=\"0\" />\n\t<Lens Name=\"Lens 1\" X=\"0\" Y=\"0\" />\n\t<Probe Name=\"Probe 1\" AX=\"0\" AY=\"0\" />\n</Project>"
 		);
-		assert!(read(&text).unwrap().own, "a file this program wrote is its own");
-		assert!(!read("<Project Version=\"3\" Seed=\"7\" />").unwrap().own);
 	}
 
 	#[test]
-	fn brightness_omitted_is_the_originals() {
+	fn decimals_are_written_rounded() {
+		let mut p = Project { seed: 7, ..Project::default() };
+		p.add_source_at(0, 0);
+		p.sources[0].x = 41.5;
+		p.sources[0].y = 3.2;
+		p.add_part_at(PartKind::Lens(Lens::default()), 0, 0);
+		if let PartKind::Lens(l) = &mut p.parts[0].kind {
+			l.coating.depth = 2.6;
+		}
+		let text = write_string(&p, None);
+		assert!(text.contains("X=\"42\" Y=\"3\""), "{text}");
+		assert!(text.contains("Coating=\"3\""), "{text}");
+		let back = read_str(&text).unwrap();
+		assert_eq!((back.sources[0].x, back.sources[0].y), (42.0, 3.0));
+	}
+
+	#[test]
+	fn brightness_is_next_units_in_the_file() {
 		let p = read_str("<Project Version=\"3\"><Display><Field /></Display></Project>").unwrap();
-		assert_eq!((p.display.field.brightness, p.display.intensity.brightness), (30.0, 30.0));
+		assert_eq!((p.display.field.brightness, p.display.intensity.brightness), (3.75, 3.75));
 		let p = read_str("<Project Version=\"3\" />").unwrap();
-		assert_eq!((p.display.field.brightness, p.display.intensity.brightness), (30.0, 30.0));
+		assert_eq!((p.display.field.brightness, p.display.intensity.brightness), (3.75, 3.75));
 		let text = write_string(&p, None);
 		assert!(!text.split_once("]>\n").unwrap().1.contains("Brightness"), "{text}");
+		let p = read_str("<Project Version=\"4\"><Display><Field Brightness=\"16\" /></Display></Project>").unwrap();
+		assert_eq!(p.display.field.brightness, 2.0);
 	}
 
 	#[test]

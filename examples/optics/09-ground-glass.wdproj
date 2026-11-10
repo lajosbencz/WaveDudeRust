@@ -4,8 +4,8 @@
 	<Scene Width="1280" Height="600" />
 	<Simulation Steps="2000" />
 	<Display>
-		<Field ColorScheme="Default field" Brightness="10" BlackLevel="-0.05" />
-		<Intensity ColorScheme="Default intensity" Brightness="12" />
+		<Field ColorScheme="Default field" Brightness="80" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="96" />
 	</Display>
 	<Source Name="Lamp (diffuser)" X="120" Y="150" Frequency="100" />
 	<Source Name="Lamp (plain)" X="120" Y="450" Frequency="100" />

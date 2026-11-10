@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
 use clap::Args as ClapArgs;
-use wavedude_core::model::{GateKind, Measurement, PartKind, Probe, ProbeKind, Project};
+use wavedude_core::model::{GateKind, Measurement, PartKind, Probe, ProbeKind, Project, Source};
 use wavedude_core::run::PreviewQuality;
 
 use crate::project::load;
@@ -30,7 +30,7 @@ const COUPLER_TAG: &str = "Coupler:";
 
 #[derive(ClapArgs)]
 pub struct Args {
-	/// Project file with sources named A and B and line probes named Input and Output, A's and Q's arm in the upper half.
+	/// Project file with sources named A and B (each with an optional "<name> lower" partner) and line probes named Input and Output, A's and Q's arm in the upper half.
 	project: PathBuf,
 	/// Steps of each run (default: derived from the canvas width, the core index and the intensity EMA).
 	#[arg(long)]
@@ -112,6 +112,16 @@ fn named<T>(items: &[T], name: &str, of: impl Fn(&T) -> &str, what: &str) -> Res
 	items.iter().position(|i| of(i) == name).with_context(|| format!("the project has no {what} named {name}"))
 }
 
+/// The sources of the input `name`: the one named so and its "<name> lower" partner, which drives the cell
+/// below it.
+fn input_sources(sources: &[Source], name: &str) -> Result<Vec<usize>> {
+	let partner = format!("{name} lower");
+	let found: Vec<usize> =
+		sources.iter().enumerate().filter(|(_, s)| s.name == name || s.name == partner).map(|(i, _)| i).collect();
+	ensure!(!found.is_empty(), "the project has no source named {name}");
+	Ok(found)
+}
+
 /// Highest index a wave travels in: the background, a fibre's core or a gate's core.
 fn slowest_index(project: &Project) -> f64 {
 	project
@@ -187,8 +197,9 @@ fn measure(project: &Project, steps: u32, settle: u32, engine: EngineArgs) -> Re
 
 pub fn run(args: &Args) -> Result<()> {
 	let project = load(&args.project)?;
-	let a = named(&project.sources, "A", |s| &s.name, "source")?;
-	let b = named(&project.sources, "B", |s| &s.name, "source")?;
+	let a_all = input_sources(&project.sources, "A")?;
+	let b_all = input_sources(&project.sources, "B")?;
+	let (a, b) = (a_all[0], b_all[0]);
 	let index = slowest_index(&project);
 	let level = project.sources[a].frequency.min(project.sources[b].frequency);
 	let sim = &project.simulation;
@@ -208,8 +219,9 @@ pub fn run(args: &Args) -> Result<()> {
 	let mut measured = Vec::with_capacity(rows.len());
 	for &(on_a, on_b) in &rows {
 		let mut p = project.clone();
-		p.sources[a].enabled = on_a;
-		p.sources[b].enabled = on_b;
+		for (all, on) in [(&a_all, on_a), (&b_all, on_b)] {
+			all.iter().for_each(|&i| p.sources[i].enabled = on);
+		}
 		measured.push(measure(&p, steps, args.settle, args.engine)?);
 	}
 	let total = measured[1].0[2] + measured[1].0[3];

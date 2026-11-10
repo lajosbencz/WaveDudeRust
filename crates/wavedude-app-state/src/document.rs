@@ -7,10 +7,10 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use wavedude_core::io::{self, FormatError, IoError, legacy, wdproj};
+use wavedude_core::model::Project;
 use wavedude_core::model::normalize::Normalize;
-use wavedude_core::model::{Layer, Project};
 
-use super::examples::{Example, Loaded};
+use super::examples::Example;
 use super::history::History;
 
 #[derive(Debug, thiserror::Error)]
@@ -36,9 +36,6 @@ pub struct Document {
 	/// The history step the file holds; `None` when no step is saved.
 	pub saved_step: Option<usize>,
 	pub history: History,
-	/// Read from a format written for the original's blended source (`.wdproj`, Wave Dude 2D json, an example):
-	/// its brightness is fitted once to the first frame with content. Not persisted.
-	pub needs_brightness_fit: bool,
 	/// The empty project at start or after Close: the title shows the app name alone until it is edited.
 	placeholder: bool,
 	/// The scene image file's modification time last seen and when it was last checked.
@@ -70,7 +67,6 @@ impl Document {
 			dirty: false,
 			saved_step: Some(0),
 			history,
-			needs_brightness_fit: false,
 			placeholder,
 			image_watch: None,
 		}
@@ -86,7 +82,7 @@ impl Document {
 		Self::with(Project::new_random_seed(), None, None, false)
 	}
 
-	/// Opens a project file by its extension: `.wdr`, `.wdproj` (or `.xml`), a Wave Dude 2D `.json` (imported as
+	/// Opens a project file by its extension: `.wdproj` (or `.xml`), a Wave Dude 2D `.json` (imported as
 	/// an unsaved project that suggests its file name), or a `.wdscheme` colour scheme for the open project.
 	pub fn open(path: &Path) -> Result<Opened, DocumentError> {
 		let doc = match extension(path).as_str() {
@@ -96,19 +92,12 @@ impl Document {
 					tracing::info!("import of '{}': {note}", path.display());
 				}
 				let suggested = legacy::suggested_file_name(path, &imported.name);
-				let mut doc = Self::with(imported.project, None, Some(suggested), false);
-				doc.needs_brightness_fit = true;
-				doc
+				Self::with(imported.project, None, Some(suggested), false)
 			}
 			wavedude_core::io::wdscheme::EXTENSION => {
 				return Ok(Opened::Scheme(wavedude_core::io::wdscheme::load(path)?));
 			}
-			"xml" | wdproj::EXTENSION => {
-				let read = wdproj::load_read(path)?;
-				let mut doc = Self::with(read.project, Some(path.to_owned()), None, false);
-				doc.needs_brightness_fit = !read.own;
-				doc
-			}
+			"xml" => Self::with(wdproj::load(path)?, Some(path.to_owned()), None, false),
 			_ => Self::with(io::load_project(path)?, Some(path.to_owned()), None, false),
 		};
 		let mut doc = doc;
@@ -119,15 +108,12 @@ impl Document {
 
 	/// An example as an unsaved project named after its file.
 	pub fn from_example(example: &Example) -> Result<Self, DocumentError> {
-		let Loaded { mut project, needs_brightness_fit } =
-			example.load().map_err(|e| DocumentError::Example(example.file_name.to_owned(), e))?;
+		let mut project = example.load().map_err(|e| DocumentError::Example(example.file_name.to_owned(), e))?;
 		if let Some(bytes) = &project.scene.image_data {
 			project.scene.image_size = io::image_size(bytes).expect("an embedded example's image decodes");
 		}
 		tracing::info!("opened example '{}'", example.file_name);
-		let mut doc = Self::with(project, None, Some(PathBuf::from(example.file_name)), false);
-		doc.needs_brightness_fit = needs_brightness_fit;
-		Ok(doc)
+		Ok(Self::with(project, None, Some(PathBuf::from(example.file_name)), false))
 	}
 
 	/// The folder relative image paths resolve against.
@@ -228,21 +214,6 @@ impl Document {
 		}
 	}
 
-	/// Writes `brightness` (field, intensity; `None` keeps a layer's) into the project and every history step, so
-	/// neither the dirty state nor the undo history sees it.
-	pub fn set_brightness_unrecorded(&mut self, brightness: [Option<f64>; 2]) {
-		let apply = |p: &mut Project| {
-			for (layer, value) in [Layer::Field, Layer::Intensity].into_iter().zip(brightness) {
-				if let Some(v) = value {
-					p.display.layer_mut(layer).brightness = v;
-				}
-			}
-		};
-		apply(&mut self.project);
-		self.history.amend(apply);
-		self.refresh_dirty();
-	}
-
 	/// Ends the pending step now (an edit that is one step by itself: paste, cut, remove, duplicate).
 	pub fn commit_step(&mut self) {
 		self.history.commit(&self.project);
@@ -271,7 +242,7 @@ impl Document {
 		self.save_as(&path)
 	}
 
-	/// Saves to `path` by its extension: `.wdproj` or `.xml` (WaveDude Next XML), `.wdr` (zip of JSON).
+	/// Saves to `path` as WaveDude Next XML: `.wdproj` or `.xml`.
 	pub fn save_as(&mut self, path: &Path) -> Result<(), DocumentError> {
 		self.history.commit(&self.project);
 		match extension(path).as_str() {
@@ -280,7 +251,6 @@ impl Document {
 		}
 		self.path = Some(path.to_owned());
 		self.suggested_file_name = None;
-		self.needs_brightness_fit = false;
 		self.placeholder = false;
 		self.saved_step = Some(self.history.current());
 		self.refresh_dirty();
@@ -331,11 +301,10 @@ mod tests {
 		d.edited(Instant::now());
 		assert_eq!(d.title("App", "Untitled", false), "App - Untitled*");
 		let mut e = Document::from_example(&crate::examples::all()[0]).unwrap();
-		assert!(e.needs_brightness_fit, "an example is written for the original's source");
 		assert_eq!(e.title("App", "Untitled", false), "App - Example01_Source_Mirror_Probe.wdproj");
 		assert_eq!(e.proposed_save_path().unwrap(), Path::new("Example01_Source_Mirror_Probe.wdproj"));
-		e.path = Some(PathBuf::from("/x/y/p.wdr"));
-		assert_eq!(e.title("App", "Untitled", true), "App - /x/y/p.wdr");
+		e.path = Some(PathBuf::from("/x/y/p.wdproj"));
+		assert_eq!(e.title("App", "Untitled", true), "App - /x/y/p.wdproj");
 	}
 
 	#[test]
@@ -347,7 +316,7 @@ mod tests {
 		d.project.add_source();
 		d.edited(t);
 		assert!(d.dirty);
-		let path = dir.path().join("a.wdr");
+		let path = dir.path().join("a.wdproj");
 		d.save_as(&path).unwrap();
 		assert!(!d.dirty);
 		d.project.seed = 5;

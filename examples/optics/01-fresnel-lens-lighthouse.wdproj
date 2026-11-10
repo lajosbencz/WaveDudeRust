@@ -4,8 +4,8 @@
 	<Scene Width="1280" Height="600" />
 	<Simulation Steps="2000" />
 	<Display>
-		<Field ColorScheme="Default field" Brightness="20" BlackLevel="-0.05" />
-		<Intensity ColorScheme="Default intensity" Brightness="20" />
+		<Field ColorScheme="Default field" Brightness="160" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="160" />
 	</Display>
 	<Source Name="Lamp" X="100" Y="300" Frequency="150" />
 	<FresnelLens Name="Lighthouse lens" X="700" Y="300" Coating="3" Diameter="400" R1="600" R2="-600" Thickness="24" Zones="3" Division="EqualDepth" />

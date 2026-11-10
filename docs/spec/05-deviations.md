@@ -38,6 +38,11 @@ docs/decisions). Where a spec file and this file disagree, this file wins.
   (docs/physics.md, Sources). The `.wdproj` adapter writes a whole number without
   a point, as the original does, and a fraction with one, which the original's
   reader does not take.
+- The model keeps its physical domain: a source's position is a decimal in cells (the original's an integer
+  pixel) and a coating's depth a decimal. A whole position is the original's cell, a fraction spreads the drive over
+  the 2 x 2 cells around it with bilinear shares, normalised by the spread source's own response (docs/physics.md,
+  Sources). The `.wdproj` adapter writes both as integers, rounded, with one warning naming the object
+  (60-file-formats.md).
 - Sources are a forcing term (docs/physics.md, Sources): each sub-step adds
   `dt^2 f(t_k)` with `f = A / |G0(omega)| e(t) sin(omega t + phi)` where the scheme
   takes `A u`, G0 the free-space lattice Green's function of the engine's
@@ -66,9 +71,8 @@ frame indices), where the spec's rule is kept so pictures match.
 
 ## Files (60)
 
-- Native format is `.wdr` (decision 0004); `.wdproj` is read and written as a
-  compatibility format, its DOCTYPE declaring the same things, not byte for
-  byte (0009).
+- The one project format is `.wdproj` (decision 0004), its DOCTYPE declaring the
+  same things, not byte for byte (0009).
 - A `.wdproj` with Linked=true and Length != Width loads with Length = Width
   whatever the attribute order (0009).
 - A Wave Dude 2D JSON colour scheme with `colors` and no `stops` becomes
@@ -118,5 +122,8 @@ formulas, coefficients and measurements are in docs/physics.md.
 
 The source definition of docs/physics.md (Sources) radiates 5 to 9 times the
 original's amplitude, so the display brightness defaults are field 1 and
-intensity 1.5 instead of 30 (10-model.md, DisplayLayer); projects from the
-original's formats are fitted once on opening in the app.
+intensity 1.5 instead of 30 (10-model.md, DisplayLayer). The `.wdproj` adapter
+converts: a file's `Brightness` is the model's times 8 (the measured gain is 4.8
+to 9.7, docs/comparison), so a file this program writes looks as intended in
+WaveDude Next to within that spread, and one of WaveDude Next's opens at an
+eighth of its number.

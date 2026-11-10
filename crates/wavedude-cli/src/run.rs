@@ -38,7 +38,7 @@ impl EngineArgs {
 
 #[derive(ClapArgs)]
 pub struct RunArgs {
-	/// Project file (.wdproj, .wdr or Wave Dude 2D .json).
+	/// Project file (.wdproj or Wave Dude 2D .json).
 	project: PathBuf,
 	/// Directory for field_NNNN.png and intensity_NNNN.png (created if missing).
 	#[arg(long)]
@@ -61,7 +61,7 @@ pub struct RunArgs {
 
 #[derive(ClapArgs)]
 pub struct ProbesArgs {
-	/// Project file (.wdproj, .wdr or Wave Dude 2D .json).
+	/// Project file (.wdproj or Wave Dude 2D .json).
 	project: PathBuf,
 	/// Directory for the CSV files (created if missing).
 	#[arg(long)]

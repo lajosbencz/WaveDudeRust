@@ -3,7 +3,7 @@
 
 use std::sync::OnceLock;
 
-use wavedude_core::io::{wdproj, wdr};
+use wavedude_core::io::wdproj;
 use wavedude_core::model::Project;
 
 /// The dialog's tabs.
@@ -31,14 +31,8 @@ impl Topic {
 	}
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Format {
-	Wdproj,
-	Wdr,
-}
-
 /// One example: its file, title ("Example07_Random_emitter_lattice.wdproj" is "Random emitter lattice",
-/// "01-single-fiber.wdr" is "Single fiber"), the project's description and its topic.
+/// "01-single-fiber.wdproj" is "Single fiber"), the project's description and its topic.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Example {
 	pub file_name: &'static str,
@@ -46,14 +40,6 @@ pub struct Example {
 	pub description: String,
 	pub topic: Topic,
 	bytes: &'static [u8],
-	format: Format,
-}
-
-/// What an example opens as.
-pub struct Loaded {
-	pub project: Project,
-	/// Written for the original's blended source: the brightness needs a fit.
-	pub needs_brightness_fit: bool,
 }
 
 impl Example {
@@ -67,18 +53,8 @@ impl Example {
 		format!("Example:{}", self.stem())
 	}
 
-	pub fn load(&self) -> Result<Loaded, wavedude_core::io::FormatError> {
-		match self.format {
-			Format::Wdproj => {
-				let read = wdproj::read(self.text())?;
-				Ok(Loaded { project: read.project, needs_brightness_fit: !read.own })
-			}
-			Format::Wdr => Ok(Loaded { project: wdr::read_bytes(self.bytes)?.project, needs_brightness_fit: false }),
-		}
-	}
-
-	fn text(&self) -> &'static str {
-		std::str::from_utf8(self.bytes).expect("an example is UTF-8")
+	pub fn load(&self) -> Result<Project, wavedude_core::io::FormatError> {
+		wdproj::read_str(std::str::from_utf8(self.bytes).expect("an example is UTF-8"))
 	}
 }
 
@@ -192,19 +168,19 @@ const OPTICS: [(&str, &[u8]); 10] = [
 ];
 
 const GATES: [(&str, &[u8]); 10] = [
-	("01-single-fiber.wdr", include_bytes!("../../../examples/gates/01-single-fiber.wdr")),
+	("01-single-fiber.wdproj", include_bytes!("../../../examples/gates/01-single-fiber.wdproj")),
 	(
-		"02-coupled-fibers-full-transfer.wdr",
-		include_bytes!("../../../examples/gates/02-coupled-fibers-full-transfer.wdr"),
+		"02-coupled-fibers-full-transfer.wdproj",
+		include_bytes!("../../../examples/gates/02-coupled-fibers-full-transfer.wdproj"),
 	),
-	("03-coupled-fibers-close.wdr", include_bytes!("../../../examples/gates/03-coupled-fibers-close.wdr")),
-	("04-crossover.wdr", include_bytes!("../../../examples/gates/04-crossover.wdr")),
-	("05-or-plain.wdr", include_bytes!("../../../examples/gates/05-or-plain.wdr")),
-	("06-or-neat.wdr", include_bytes!("../../../examples/gates/06-or-neat.wdr")),
-	("07-xor.wdr", include_bytes!("../../../examples/gates/07-xor.wdr")),
-	("08-xor-gate-part.wdr", include_bytes!("../../../examples/gates/08-xor-gate-part.wdr")),
-	("09-or-gate-part.wdr", include_bytes!("../../../examples/gates/09-or-gate-part.wdr")),
-	("10-and-gate-part.wdr", include_bytes!("../../../examples/gates/10-and-gate-part.wdr")),
+	("03-coupled-fibers-close.wdproj", include_bytes!("../../../examples/gates/03-coupled-fibers-close.wdproj")),
+	("04-crossover.wdproj", include_bytes!("../../../examples/gates/04-crossover.wdproj")),
+	("05-or-plain.wdproj", include_bytes!("../../../examples/gates/05-or-plain.wdproj")),
+	("06-or-neat.wdproj", include_bytes!("../../../examples/gates/06-or-neat.wdproj")),
+	("07-xor.wdproj", include_bytes!("../../../examples/gates/07-xor.wdproj")),
+	("08-xor-gate-part.wdproj", include_bytes!("../../../examples/gates/08-xor-gate-part.wdproj")),
+	("09-or-gate-part.wdproj", include_bytes!("../../../examples/gates/09-or-gate-part.wdproj")),
+	("10-and-gate-part.wdproj", include_bytes!("../../../examples/gates/10-and-gate-part.wdproj")),
 ];
 
 /// The topic of a Next example by its number.
@@ -227,7 +203,7 @@ fn optics_topic(slug: &str) -> Topic {
 	}
 }
 
-/// "01-single-fiber.wdr" to ("single-fiber", "Single fiber").
+/// "01-single-fiber.wdproj" to ("single-fiber", "Single fiber").
 fn slug_title(file: &str) -> (&str, String) {
 	let stem = file.rsplit_once('.').map_or(file, |(stem, _)| stem);
 	let slug = stem.split_once('-').map_or(stem, |(_, slug)| slug);
@@ -246,10 +222,10 @@ fn parse(file: &str) -> (u32, &str) {
 		.unwrap_or_else(|| panic!("the example '{file}' is not named ExampleNN_Title.wdproj"))
 }
 
-fn build(file_name: &'static str, bytes: &'static [u8], format: Format, title: String, topic: Topic) -> Example {
-	let mut example = Example { file_name, title, description: String::new(), topic, bytes, format };
+fn build(file_name: &'static str, bytes: &'static [u8], title: String, topic: Topic) -> Example {
+	let mut example = Example { file_name, title, description: String::new(), topic, bytes };
 	let loaded = example.load().unwrap_or_else(|e| panic!("the embedded example '{file_name}' parses: {e}"));
-	example.description = loaded.project.description;
+	example.description = loaded.description;
 	example
 }
 
@@ -261,16 +237,15 @@ pub fn all() -> &'static [Example] {
 			.iter()
 			.map(|&(file, bytes)| {
 				let (number, title) = parse(file);
-				build(file, bytes, Format::Wdproj, title.replace('_', " "), next_topic(number))
+				build(file, bytes, title.replace('_', " "), next_topic(number))
 			})
 			.collect();
 		next.sort_by_key(|e| parse(e.file_name).0);
 		let optics = OPTICS.iter().map(|&(file, bytes)| {
 			let (slug, title) = slug_title(file);
-			build(file, bytes, Format::Wdproj, title, optics_topic(slug))
+			build(file, bytes, title, optics_topic(slug))
 		});
-		let gates =
-			GATES.iter().map(|&(file, bytes)| build(file, bytes, Format::Wdr, slug_title(file).1, Topic::Guides));
+		let gates = GATES.iter().map(|&(file, bytes)| build(file, bytes, slug_title(file).1, Topic::Guides));
 		next.into_iter().chain(optics).chain(gates).collect()
 	})
 }

@@ -5,14 +5,13 @@
 XML 1.0, UTF-8 without BOM, `<?xml version="1.0" encoding="utf-8"?>`, tab indentation, no namespaces
 (`xmlns:xsi`/`xsd` suppressed). Root `Project`. Simple values are attributes; lists are repeated child elements.
 Sparse: an attribute equal to its `[DefaultValue]` is omitted (exceptions below). Numbers in invariant culture,
-f64 in shortest round-trip form, bools `true`/`false`, enums by member name. This program writes the root's
-`Generator="WaveDude Rust <version>"`; a file carrying it holds this program's display brightness and is not fitted
-on opening (05-deviations.md, decision 0004).
+f64 in shortest round-trip form, bools `true`/`false`, enums by member name. This is the one project format of
+this program (decision 0004): the model holds only what it carries.
 
 ### Element order
 
 ```
-Project @Version @Seed @Generator?
+Project @Version @Seed
   Description?           (element text; omitted when empty)
   Scene?                 (omitted when every property is at its default and no image)
     ImageData?           (base64 of the image file bytes)
@@ -36,7 +35,7 @@ Project @Version @Seed @Generator?
 
 Attribute order within an element = declaration order in 10-model tables.
 
-`Source/@X @Y` are decimals in this project (05-deviations.md): a whole number is written without a point.
+`Source/@X @Y` and a coating's `Coating` (a part's and a gate's) are integers in the file, as WaveDude Next reads them.
 
 Always-written values (no default omission): `Source/@X @Y`, part `@X @Y`, `Probe/@AX @AY`, `Outline/Point/@X @Y`,
 `Fiber/Node/@X @Y`, `Field/@ColorScheme`, `Field/@BlackLevel` (its `[DefaultValue]` is 0 while the initial value is
@@ -159,37 +158,16 @@ writer compares with the same base, and the DTD's `ATTLIST` lines come from the 
 and never `#REQUIRED`). A part element's attributes are the part's, then the coating's and the material's when the
 kind has them, then the kind's own.
 
-Quirks kept in the adapter, for WaveDude Next's reader:
+Integer attributes: the model holds `Source` X and Y and a coating's depth as decimals; the adapter writes them
+rounded (half away from zero) and logs one warning naming the object when a value was not whole. This is the adapter's
+rule, not a limit of the model.
 
-- A coating thickness (`Coating`, the gates' too) is an integer there; the model's decimal is written rounded.
-- A source position is an integer there; a source between pixels is written with its decimals and a warning,
-  since rounding would move it.
-- `Brightness` is written in this program's units (05-deviations.md): WaveDude Next shows such a file darker,
-  and fits nothing on opening.
-- `Rescaled` on `Simulation` is declared in the DTD and read (a file that already holds this program's frequency
-  scale), never written: a written file carries the original's scale so WaveDude Next reads it right.
+Brightness units: `Brightness` in the file is the model's value times 8, WaveDude Next's units (05-deviations.md;
+this program's source swings its cell 4.8 to 9.7 times as far, and 8 is a power of two, so a value converts both ways
+exactly). A read divides by 8; the omitted value is 30 in the file, 3.75 in the model. Nothing is fitted on opening.
 
-## Native project `.wdr` (Rust)
-
-A zip container: `project.json` (deflated) holding `{"format": N, "project": {...}}`, and for a scene with an image
-`scene.<ext>` (stored) with the embedded bytes verbatim (`png`, `jpg`, `bmp`, `gif`, `tif`, `webp`, else `bin`). The
-JSON is sparse: every value equal to its type's default is left out, object by object (`io/sparse.rs`, decision
-0004), the image path relative to the project's folder when inside it, never the image bytes. Names are the model's serde names, pinned by `rename_all` (fields `snake_case`, enum
-members `PascalCase`); a part is `{name, enabled, x, y, angle, "kind": {"<Kind>": {...}}}`. A snapshot test of every
-key and string value of one object of every kind (`tests/io.rs`) fails when a rename would change the format.
-
-Load:
-
-```
-parse project.json as JSON (a syntax error names its line and column)
-format > FORMAT: refused ("made by a newer version")
-format 0 or none: refused (no version writes it)
-migrate(project, format): one step per format from the file's to FORMAT (FORMAT = 2: format 1 left out
-    overlay_in_export for off and a zone plate's thickness and coating for 64 and 32)
-parts whose kind this build does not know are left out, each with a note on the load result (logged as a warning)
-deserialise into the model; missing fields take their defaults
-image bytes from scene.<ext>; Normalize()
-```
+`Rescaled` on `Simulation` is declared in the DTD and read (a file that already holds this program's frequency
+scale), never written: a written file carries the original's scale so WaveDude Next reads it right.
 
 ## Colour scheme file `.wdscheme` (`Rendering/ColorScheme.cs`, `ColorSchemeStore.cs`)
 

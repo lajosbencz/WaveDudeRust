@@ -11,9 +11,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
-use clap::{Args as ClapArgs, ValueEnum};
+use clap::Args as ClapArgs;
 use wavedude_core::engine::substeps::sub_steps;
-use wavedude_core::io::save_project;
+use wavedude_core::io::{save_project, wdproj};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{
 	BoxSize, Edges, Fiber, FiberNode, GateKind, Layer, LogicGate, Material, Measurement, Outline, Part, PartBase,
@@ -43,21 +43,6 @@ const RIM: i32 = -32;
 /// Steps per timeline frame of the generated projects.
 const VISUALIZE_EVERY: u32 = 4;
 
-#[derive(Clone, Copy, ValueEnum)]
-enum FileFormat {
-	Wdr,
-	Wdproj,
-}
-
-impl FileFormat {
-	fn extension(self) -> &'static str {
-		match self {
-			Self::Wdr => "wdr",
-			Self::Wdproj => "wdproj",
-		}
-	}
-}
-
 #[derive(ClapArgs)]
 pub struct Args {
 	/// Directory for the projects (created if missing).
@@ -78,9 +63,6 @@ pub struct Args {
 	/// Canvas height of the fibre projects (default: the design's).
 	#[arg(long)]
 	height: Option<u32>,
-	/// Project file format.
-	#[arg(long, value_enum, default_value = "wdr")]
-	format: FileFormat,
 	/// Engine of the brightness fits.
 	#[command(flatten)]
 	engine: EngineArgs,
@@ -390,9 +372,21 @@ impl Cup {
 	}
 }
 
-/// A source at cell column `x` on the axis at canvas row `axis`: the cell centre half a cell above it.
-fn source(name: &str, frequency: f64, x: i32, axis: i32, phase: f64) -> Source {
-	Source { name: name.into(), x: f64::from(x), y: f64::from(axis) - 0.5, frequency, phase, ..Source::default() }
+/// An input at cell column `x` on the axis at canvas row `axis`, which lies between two cell rows: two sources
+/// at half amplitude, one in each, so a core of even width is excited symmetrically.
+fn source(name: &str, frequency: f64, x: i32, axis: i32, phase: f64) -> Vec<Source> {
+	[(name.to_owned(), axis - 1), (format!("{name} lower"), axis)]
+		.into_iter()
+		.map(|(name, y)| Source {
+			name,
+			x: f64::from(x),
+			y: f64::from(y),
+			frequency,
+			phase,
+			amplitude: 50.0,
+			..Source::default()
+		})
+		.collect()
 }
 
 /// An intensity probe; a point probe when `b` is None.
@@ -464,7 +458,7 @@ fn single_fibre(d: &FibreDesign, width: u32) -> Project {
 	let boxes_y = y + d.reach + BOX_GAP;
 	let cup = d.cup();
 	p.parts = vec![cup.single(y), straight_fibre("Fibre", d, y, width)];
-	p.sources = vec![source("A", d.frequency, cup.source, y, 0.0)];
+	p.sources = source("A", d.frequency, cup.source, y, 0.0);
 	p.probes = vec![
 		probe("Inside", (inside_x, y), None, (inside_x - box_w as i32 - BOX_GAP, boxes_y)),
 		probe("Across", (across_x, y - d.reach), Some((across_x, y + d.reach)), (across_x - box_w as i32 / 2, boxes_y)),
@@ -496,10 +490,9 @@ fn coupled_fibres(d: &FibreDesign, width: u32, gap: i64, text: &str) -> Project 
 	);
 	p.parts = cup.pair(upper, lower, d.guide.clad_index);
 	p.parts.extend([straight_fibre("Fibre A", d, upper, width), straight_fibre("Fibre B", d, lower, width)]);
-	p.sources = vec![
-		source("A", d.frequency, cup.source, upper, 0.0),
-		Source { enabled: false, ..source("B", d.frequency, cup.source, lower, 0.0) },
-	];
+	p.sources = source("A", d.frequency, cup.source, upper, 0.0);
+	p.sources
+		.extend(source("B", d.frequency, cup.source, lower, 0.0).into_iter().map(|s| Source { enabled: false, ..s }));
 	p.probes = line_probes(cup.face + d.lead / 2, probe_x, (upper, lower), d.reach, d.boxes_y(), width);
 	p
 }
@@ -535,8 +528,8 @@ fn bent_pair(d: &FibreDesign, theta: f64, phase_b: f64, text: &str) -> Result<Pr
 	let cup = d.cup();
 	p.parts = cup.pair(far_a, far_b, d.guide.clad_index);
 	p.parts.extend([bent_fibre("Fibre A", d, &pair, far_a, near_a), bent_fibre("Fibre B", d, &pair, far_b, near_b)]);
-	p.sources =
-		vec![source("A", d.frequency, cup.source, far_a, 0.0), source("B", d.frequency, cup.source, far_b, phase_b)];
+	p.sources = source("A", d.frequency, cup.source, far_a, 0.0);
+	p.sources.extend(source("B", d.frequency, cup.source, far_b, phase_b));
 	p.probes = line_probes(cup.face + d.lead / 2, pair.probe, (far_a, far_b), d.reach, d.boxes_y(), pair.width);
 	Ok(p)
 }
@@ -613,7 +606,8 @@ fn gate_project(d: &FibreDesign, kind: GateKind) -> Result<Project> {
 		dump("Dump R", out_r.y),
 	];
 	// The ports are the pixels below the arms' centre lines, which the sources sit on.
-	p.sources = vec![source("A", d.frequency, in_a.x, in_a.y, 0.0), source("B", d.frequency, in_b.x, in_b.y, 0.0)];
+	p.sources = source("A", d.frequency, in_a.x, in_a.y, 0.0);
+	p.sources.extend(source("B", d.frequency, in_b.x, in_b.y, 0.0));
 	p.probes = line_probes(in_a.x + d.lead, out_q.x, (in_a.y, in_b.y), reach, boxes_y, width);
 	Ok(p)
 }
@@ -720,7 +714,7 @@ pub fn run(args: &Args) -> Result<()> {
 		let [field, intensity] = fitted_brightness(project, args.engine)?;
 		project.display.field.brightness = field;
 		project.display.intensity.brightness = intensity;
-		let path = args.out.join(format!("{stem}.{}", args.format.extension()));
+		let path = args.out.join(format!("{stem}.{}", wdproj::EXTENSION));
 		write(&path, project)?;
 		println!(
 			"{} ({}x{}, {} steps, brightness field {field}, intensity {intensity})",

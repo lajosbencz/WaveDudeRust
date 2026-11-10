@@ -104,15 +104,6 @@ impl History {
 		true
 	}
 
-	/// Applies `f` to every step, as if the steps had always held its result.
-	pub fn amend(&mut self, f: impl Fn(&mut Project)) {
-		for step in &mut self.steps {
-			let mut p: Project = serde_json::from_str(&step.json).expect("a stored step deserialises");
-			f(&mut p);
-			step.json = serde_json::to_string(&p).expect("a project serialises").into();
-		}
-	}
-
 	/// Writes the previous step into `project`; false when there is none.
 	pub fn undo(&mut self, project: &mut Project) -> bool {
 		self.commit(project);

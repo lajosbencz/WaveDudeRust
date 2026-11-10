@@ -480,11 +480,11 @@ mod tests {
 	fn recent_and_hints() {
 		let mut s = Settings::default();
 		for i in 0..12 {
-			s.push_recent(Path::new(&format!("/p/{i}.wdr")));
+			s.push_recent(Path::new(&format!("/p/{i}.wdproj")));
 		}
-		s.push_recent(Path::new("/p/5.wdr"));
+		s.push_recent(Path::new("/p/5.wdproj"));
 		assert_eq!(s.recent_files.len(), MAX_RECENT);
-		assert_eq!(s.recent_files[0], Path::new("/p/5.wdr"));
+		assert_eq!(s.recent_files[0], Path::new("/p/5.wdproj"));
 		assert_eq!(zoom_switch(["a", "--zoom=12"]), Some(8.0));
 		assert_eq!(zoom_switch(["--zoom=x"]), None);
 	}

@@ -48,7 +48,7 @@ what follows.
 - When short: the caption is dropped first; then the title is trimmed (ellipsis) to what the tools leave.
 - Auto: one-shot fit of the frame shown: the 99.5th percentile of |field| (or sqrt(intensity)) maps to the top
   of the colour scheme. The brightness then stays. With 8-bit samples the frame is computed once more in 16-bit
-  (run paused meanwhile) for the fit alone, never shown, and fitted when it arrives if the position has not moved. The fit is an ordinary brightness edit (8-bit: a
+  (run paused meanwhile) for the fit alone, never shown, and fitted when it arrives. The fit is an ordinary brightness edit (8-bit: a
   simulation edit). Nothing to fit: says so (status bar).
 - Brightness box keys: Up/Down two percent, PageUp/PageDown a fifth; three significant digits.
 

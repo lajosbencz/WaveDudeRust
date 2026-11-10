@@ -567,7 +567,7 @@ fn source(f: &Form, r: &Readouts) -> Vec<Element> {
 		section(s.get("SectionGeneral"), vec![f.name("Source"), src.check("Enabled")]),
 		section(
 			s.get("SectionPosition"),
-			vec![src.decimals_in("X", "Source.X", 1., 2), src.decimals_in("Y", "Source.Y", 1., 2)],
+			vec![src.decimals_in("X", "Source.X", 1., 0), src.decimals_in("Y", "Source.Y", 1., 0)],
 		),
 		section(
 			s.get("SectionWave"),
@@ -629,7 +629,10 @@ fn coating_rows(f: &Form, coating: &str, disabled: bool) -> Vec<PropertyRow> {
 fn coating_rows_of(f: &Form, coating: &str, disabled: bool, faces: CoatedFaces) -> Vec<PropertyRow> {
 	let c = |m: &str| format!("{coating}.{m}");
 	let mut rows = vec![
-		f.number("ShapePart", "Coating", &c("depth"), "Coating.Coating", 1.),
+		f.number_with("ShapePart", "Coating", &c("depth"), {
+			let (min, max) = bounds("Coating.Coating");
+			NumberSpec::integer(min, max)
+		}),
 		f.combo("CoatedPart", "CoatingProfile", &c("profile"), "CoatingProfile", &["Layer", "Graded"]),
 	];
 	if matches!(faces, CoatedFaces::All | CoatedFaces::FrontBack) {
@@ -1386,7 +1389,10 @@ fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> V
 			vec![
 				g.number("CoreIndex", 0.01),
 				g.number("CladdingIndex", 0.01),
-				g.number("Coating", 1.),
+				g.number_with("Coating", {
+					let (min, max) = bounds("LogicGate.Coating");
+					NumberSpec::integer(min, max)
+				}),
 				g.check("InputCoated"),
 				g.check("OutputCoated"),
 				readout(s.get("LabelQuarterWave"), quarter_text, "GateQuarterWave").hint(s.get("TipQuarterWave")),

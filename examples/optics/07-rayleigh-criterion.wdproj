@@ -4,8 +4,8 @@
 	<Scene Width="1280" Height="540" />
 	<Simulation Steps="2400" />
 	<Display>
-		<Field ColorScheme="Default field" Brightness="1" BlackLevel="-0.05" />
-		<Intensity ColorScheme="Default intensity" Brightness="5" />
+		<Field ColorScheme="Default field" Brightness="8" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="40" />
 	</Display>
 	<Source Name="Star A" X="140" Y="231" Frequency="100" />
 	<Source Name="Star B" X="140" Y="309" Frequency="110" />

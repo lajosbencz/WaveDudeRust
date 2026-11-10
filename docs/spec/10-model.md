@@ -9,8 +9,8 @@ Rules for all model objects:
 - `Normalize()` runs after load, after import, before a run, and after every edit. Non-finite numbers become the
   default unless stated.
 - Rust: the bounds are the constants of `model/ranges.rs`, which `normalize` and the painter's limits use; a
-  non-finite number's fallback is the type's `Default` value. The `.wdr` names are the fields' `snake_case` and the
-  enum members' `PascalCase` names (60-file-formats.md).
+  non-finite number's fallback is the type's `Default` value. The model's serde names are the fields' `snake_case` and the
+  enum members' `PascalCase` names.
 - Positions are integer canvas pixels (origin top-left, y down). Angles in degrees, CCW on screen, normalised into
   (-180, 180] (see `00-overview.md`).
 - Every change is an observable event carrying (object, property, old value, new value); a simulation edit (scene,
@@ -99,7 +99,7 @@ Level 100, c = 1, scale 2: 16.0 px. The editor's estimate uses `c = WaveSpeed`; 
 | XML | Type | Field default | Intensity default | Range / notes |
 |---|---|---|---|---|
 | `ColorScheme` | string | "Default field" | "Default intensity" | empty -> the layer's default name |
-| `Brightness` | double | 1 (Rust; original 30) | 1.5 (Rust; original 30) | 1e-4..1e5; changed with the source model (decision 0010): `.wdproj` keeps 30 as the omitted value, below |
+| `Brightness` | double | 1 (Rust; original 30) | 1.5 (Rust; original 30) | 1e-4..1e5; changed with the source model (decision 0010): the `.wdproj` holds it times 8, below |
 | `BlackLevel` | double | -0.05 | 0 | -10..1; field always written (`[DefaultValue(0)]` vs initial -0.05) |
 | `Preview` | bool | true | true | layer captured/shown |
 | `Overlay` | bool | true | true | glowing edges on the preview picture |
@@ -110,12 +110,10 @@ Brightness (Rust, decision 0010): the source model of docs/physics.md (Sources) 
 100 % by 1 in free space, the field falling as 1/sqrt(r); its intensity, the EMA of u^2, is about 1/2 there. The
 palette's top is |u| * b = 1 (field) and sqrt(I) * b = 1 (intensity), so field 1 puts the source's swing at the top
 and intensity 1.5 puts sqrt(1/2) * 1.5 = 1.06 just past it. The original's 30 was made for its blended source,
-which radiates 5 to 9 times less. The `.wdproj` adapter reads a missing `Brightness` (and a missing layer element) as
-30 and writes the attribute whenever the value differs from 30; `.wdr` carries the model's values. A project read
-from `.wdproj` without this program's `Generator`, Wave Dude 2D json or an example has its brightness fitted once in
-the app (Auto's fit on both layers, at the first frame with content), outside the undo history and without marking the
-project dirty. With 8-bit frames one 16-bit frame of that position is computed for the fit alone and never shown; it is
-asked again only when it was abandoned and nothing else computes.
+which radiates 5 to 9 times less. The `.wdproj` adapter converts by a fixed factor of 8 (a power of two, inside the
+measured gain of 4.8 to 9.7, docs/comparison): the file holds the model's value times 8, WaveDude Next's units, and a
+read divides by 8. A missing `Brightness` (and a missing layer element) is 30 in the file, 3.75 in the model, and the
+attribute is written whenever the value times 8 differs from 30. Nothing is fitted on opening.
 
 ### Video
 
@@ -130,7 +128,7 @@ asked again only when it was abandoned and nothing else computes.
 |---|---|---|---|
 | `Name` | string | "Source n" | |
 | `Enabled` | bool | true | |
-| `X`, `Y` | int | centre | always written; not clamped (outside emitters are dropped by the engine) `TODO(verify)` |
+| `X`, `Y` | double (Rust; original int) | centre | always written, rounded to an integer by the `.wdproj` adapter (60); the forms step whole pixels; not clamped (outside emitters are dropped by the engine) `TODO(verify)` |
 | `Frequency` | double (level) | 100 | 0.01..255; NaN -> 100 |
 | `Amplitude` | double (%) | 100 | 0..100 |
 | `Phase` | double (deg) | 0 | -180..180 |
@@ -268,7 +266,7 @@ Shared constants: refractive index range 1..2.55, rounded to 0.01 (round even), 
 
 | XML | Type | Default | Notes |
 |---|---|---|---|
-| `Coating` | double (px) | 0 | 0..50; AR band depth |
+| `Coating` | double (px; original int) | 0 | 0..50; AR band depth; written rounded by the `.wdproj` adapter (60), whole steps in the forms |
 | `CoatingProfile` | enum `Layer`/`Graded` | Layer | |
 | `FrontCoated`, `BackCoated`, `SidesCoated` | bool | true | faces by outward normal (see 20) |
 

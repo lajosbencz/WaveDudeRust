@@ -40,7 +40,7 @@ enum Command {
 	Dispersion(dispersion::Args),
 	/// Write a project's composed scene pixels (or their glowing edges) as a PNG.
 	Paint {
-		/// Project file (.wdproj, .wdr or Wave Dude 2D .json).
+		/// Project file (.wdproj or Wave Dude 2D .json).
 		project: PathBuf,
 		/// PNG file to write.
 		out: PathBuf,
@@ -66,16 +66,16 @@ enum Command {
 	TruthTable(truth::Args),
 	/// Compare a project's scene, fields and probes against a dump of the C# WaveDudeNext (tools/compare-csharp).
 	Compare(compare::Args),
-	/// Load a project and save it in another format, chosen by the extension (.wdr or .wdproj).
+	/// Load a project and save it as .wdproj (the import of a Wave Dude 2D .json, or a rewrite of a .wdproj).
 	Convert {
-		/// Project file to read (.wdproj, .wdr or Wave Dude 2D .json).
+		/// Project file to read (.wdproj or Wave Dude 2D .json).
 		input: PathBuf,
-		/// Project file to write (.wdr or .wdproj).
+		/// Project file to write (.wdproj).
 		output: PathBuf,
 	},
 	/// Load a project, report its grid, sub-steps, frame count and store sizes; non-zero exit on error.
 	Check {
-		/// Project file (.wdproj, .wdr or Wave Dude 2D .json).
+		/// Project file (.wdproj or Wave Dude 2D .json).
 		project: PathBuf,
 	},
 }

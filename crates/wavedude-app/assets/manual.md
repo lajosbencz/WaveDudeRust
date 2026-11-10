@@ -119,11 +119,11 @@ The menu bar holds the File, Edit, View, Simulation and Help menus. Press F10 or
 The File menu. <figure name="menu-file"/>
 
 1. **New Project**: Starts a new, empty project (Ctrl+N): a blank canvas with open edges and a damping rim around it, no sources yet.
-2. **Open Project...**: Opens a project file (Ctrl+O): a WaveDude Next project (.wdproj), a WaveDude Rust project (.wdr), or a configuration.json of Wave Dude 2D, which is imported.
+2. **Open Project...**: Opens a project file (Ctrl+O): a WaveDude Next project (.wdproj), or a configuration.json of Wave Dude 2D, which is imported.
 3. **Recent Projects**: The projects you opened last.
 4. **Examples**: The example projects shipped with the program; see [Examples](#examples).
 5. **Save**: Saves the project (Ctrl+S). The scene image is embedded in the file, so a project is one file.
-6. **Save As...**: Saves the project under a new name (Ctrl+Shift+S). The file type picks the format: .wdproj, which WaveDude Next opens too, or the program's own .wdr.
+6. **Save As...**: Saves the project under a new name (Ctrl+Shift+S). The project is written as .wdproj, which WaveDude Next opens too.
 7. **Export**: Videos, image sequences and data of the run; see [Export](#export).
 8. **Export last**: Repeats the last export of a run in this session (Ctrl+E): the same pictures, format and file, without a dialog; an existing file is replaced.
 9. **Close Project**: Closes the project; unsaved changes are asked about first.
@@ -310,7 +310,7 @@ The form of a point source. <figure name="properties-source"/>
 
 1. **Name**: Name shown in the project tree and on the canvas.
 2. **Enabled**: Includes the source in simulation runs.
-3. **X**: Horizontal position of the emitter, or of the array centre, in canvas pixels; a fraction places it between pixels.
+3. **X**: Horizontal position of the emitter, or of the array centre, in canvas pixels, a whole number.
 4. **Y**: Vertical position of the emitter, or of the array centre, in canvas pixels.
 5. **Frequency**: Frequency as a level up to 255, decimals allowed, the same scale as the green channel of image sources. Above 255 the grid cannot sample the wave.
 6. **Amplitude**: Amplitude in percent, 0 to 100, decimals allowed.

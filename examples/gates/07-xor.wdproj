@@ -1,0 +1,532 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE Project [
+	<!ELEMENT Project (Description?, Scene?, Simulation?, Display?, Source*, (Lens|FresnelLens|Polygon|Rectangle|Ellipse|Triangle|Outline|Diffuser|InterferenceFilter|SimpleGrating|FacettedGrating|MetaLens|MetaPrism|MetaAxicon|Fiber|BraggReflector|GrinLens|XorGate|AndGate|OrGate|ZonePlate)*, Probe*, ColorScheme*)>
+	<!ATTLIST Project Version CDATA #REQUIRED>
+	<!ATTLIST Project Seed CDATA #REQUIRED>
+	<!ELEMENT Description (#PCDATA)>
+	<!ELEMENT Scene (ImageData?)>
+	<!ATTLIST Scene Mode (Canvas|Image) #IMPLIED>
+	<!ATTLIST Scene Image CDATA #IMPLIED>
+	<!ATTLIST Scene ImagePath CDATA #IMPLIED>
+	<!ATTLIST Scene Width CDATA #IMPLIED>
+	<!ATTLIST Scene Height CDATA #IMPLIED>
+	<!ATTLIST Scene DampingEdge CDATA #IMPLIED>
+	<!ATTLIST Scene Edges (Open|Reflective) #IMPLIED>
+	<!ATTLIST Scene RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST Scene ImageSources (true|false) #IMPLIED>
+	<!ATTLIST Scene ImageSourceScale CDATA #IMPLIED>
+	<!ATTLIST Scene ObjectSources (true|false) #IMPLIED>
+	<!ELEMENT ImageData (#PCDATA)>
+	<!ELEMENT Simulation EMPTY>
+	<!ATTLIST Simulation Steps CDATA #IMPLIED>
+	<!ATTLIST Simulation VisualizeEvery CDATA #IMPLIED>
+	<!ATTLIST Simulation FourthOrderLaplacian (true|false) #IMPLIED>
+	<!ATTLIST Simulation WaveSpeed CDATA #IMPLIED>
+	<!ATTLIST Simulation TimeDecay CDATA #IMPLIED>
+	<!ATTLIST Simulation SourceFrequencyScale CDATA #IMPLIED>
+	<!ATTLIST Simulation IntensityScale CDATA #IMPLIED>
+	<!ATTLIST Simulation Rescaled (true|false) #IMPLIED>
+	<!ELEMENT Display (Field?, Intensity?, Video?)>
+	<!ATTLIST Display ExportFrom CDATA #IMPLIED>
+	<!ATTLIST Display ExportTo CDATA #IMPLIED>
+	<!ATTLIST Display ProbeGraphsInExport (true|false) #IMPLIED>
+	<!ATTLIST Display ProbeMarkersInExport (true|false) #IMPLIED>
+	<!ATTLIST Display SourceMarkersInExport (true|false) #IMPLIED>
+	<!ATTLIST Display HandlesInPreview (true|false) #IMPLIED>
+	<!ATTLIST Display LabelsInPreview (true|false) #IMPLIED>
+	<!ELEMENT Field EMPTY>
+	<!ATTLIST Field ColorScheme CDATA #IMPLIED>
+	<!ATTLIST Field Brightness CDATA #IMPLIED>
+	<!ATTLIST Field BlackLevel CDATA #IMPLIED>
+	<!ATTLIST Field Preview (true|false) #IMPLIED>
+	<!ATTLIST Field Overlay (true|false) #IMPLIED>
+	<!ATTLIST Field OverlayGain CDATA #IMPLIED>
+	<!ATTLIST Field OverlayInExport (true|false) #IMPLIED>
+	<!ELEMENT Intensity EMPTY>
+	<!ATTLIST Intensity ColorScheme CDATA #IMPLIED>
+	<!ATTLIST Intensity Brightness CDATA #IMPLIED>
+	<!ATTLIST Intensity BlackLevel CDATA #IMPLIED>
+	<!ATTLIST Intensity Preview (true|false) #IMPLIED>
+	<!ATTLIST Intensity Overlay (true|false) #IMPLIED>
+	<!ATTLIST Intensity OverlayGain CDATA #IMPLIED>
+	<!ATTLIST Intensity OverlayInExport (true|false) #IMPLIED>
+	<!ELEMENT Video EMPTY>
+	<!ATTLIST Video Fps CDATA #IMPLIED>
+	<!ATTLIST Video Quality CDATA #IMPLIED>
+	<!ELEMENT Source (Array?)>
+	<!ATTLIST Source Name CDATA #IMPLIED>
+	<!ATTLIST Source Enabled (true|false) #IMPLIED>
+	<!ATTLIST Source X CDATA #REQUIRED>
+	<!ATTLIST Source Y CDATA #REQUIRED>
+	<!ATTLIST Source Frequency CDATA #IMPLIED>
+	<!ATTLIST Source Amplitude CDATA #IMPLIED>
+	<!ATTLIST Source Phase CDATA #IMPLIED>
+	<!ATTLIST Source Mode (Continuous|Pulsed) #IMPLIED>
+	<!ATTLIST Source PulseShape (Gaussian|SmoothedSquare) #IMPLIED>
+	<!ATTLIST Source PulseWidth CDATA #IMPLIED>
+	<!ATTLIST Source OffWidth CDATA #IMPLIED>
+	<!ATTLIST Source DetachAfter CDATA #IMPLIED>
+	<!ELEMENT Array EMPTY>
+	<!ATTLIST Array SizeX CDATA #IMPLIED>
+	<!ATTLIST Array SizeY CDATA #IMPLIED>
+	<!ATTLIST Array SpacingX CDATA #IMPLIED>
+	<!ATTLIST Array SpacingY CDATA #IMPLIED>
+	<!ATTLIST Array Angle CDATA #IMPLIED>
+	<!ATTLIST Array RandomFrequency CDATA #IMPLIED>
+	<!ATTLIST Array RandomPhase CDATA #IMPLIED>
+	<!ATTLIST Array RandomOffWidth CDATA #IMPLIED>
+	<!ATTLIST Array RandomPosition CDATA #IMPLIED>
+	<!ELEMENT Lens EMPTY>
+	<!ATTLIST Lens Name CDATA #IMPLIED>
+	<!ATTLIST Lens Enabled (true|false) #IMPLIED>
+	<!ATTLIST Lens X CDATA #REQUIRED>
+	<!ATTLIST Lens Y CDATA #REQUIRED>
+	<!ATTLIST Lens Angle CDATA #IMPLIED>
+	<!ATTLIST Lens Coating CDATA #IMPLIED>
+	<!ATTLIST Lens CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST Lens FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST Lens BackCoated (true|false) #IMPLIED>
+	<!ATTLIST Lens SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST Lens Mirror (true|false) #IMPLIED>
+	<!ATTLIST Lens RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST Lens Absorption CDATA #IMPLIED>
+	<!ATTLIST Lens AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST Lens Diameter CDATA #IMPLIED>
+	<!ATTLIST Lens R1 CDATA #IMPLIED>
+	<!ATTLIST Lens R2 CDATA #IMPLIED>
+	<!ATTLIST Lens Thickness CDATA #IMPLIED>
+	<!ELEMENT FresnelLens EMPTY>
+	<!ATTLIST FresnelLens Name CDATA #IMPLIED>
+	<!ATTLIST FresnelLens Enabled (true|false) #IMPLIED>
+	<!ATTLIST FresnelLens X CDATA #REQUIRED>
+	<!ATTLIST FresnelLens Y CDATA #REQUIRED>
+	<!ATTLIST FresnelLens Angle CDATA #IMPLIED>
+	<!ATTLIST FresnelLens Coating CDATA #IMPLIED>
+	<!ATTLIST FresnelLens CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST FresnelLens FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST FresnelLens BackCoated (true|false) #IMPLIED>
+	<!ATTLIST FresnelLens SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST FresnelLens Mirror (true|false) #IMPLIED>
+	<!ATTLIST FresnelLens RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST FresnelLens Absorption CDATA #IMPLIED>
+	<!ATTLIST FresnelLens AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST FresnelLens Diameter CDATA #IMPLIED>
+	<!ATTLIST FresnelLens R1 CDATA #IMPLIED>
+	<!ATTLIST FresnelLens R2 CDATA #IMPLIED>
+	<!ATTLIST FresnelLens Thickness CDATA #IMPLIED>
+	<!ATTLIST FresnelLens Zones CDATA #IMPLIED>
+	<!ATTLIST FresnelLens Division (EqualWidth|EqualDepth) #IMPLIED>
+	<!ELEMENT Polygon EMPTY>
+	<!ATTLIST Polygon Name CDATA #IMPLIED>
+	<!ATTLIST Polygon Enabled (true|false) #IMPLIED>
+	<!ATTLIST Polygon X CDATA #REQUIRED>
+	<!ATTLIST Polygon Y CDATA #REQUIRED>
+	<!ATTLIST Polygon Angle CDATA #IMPLIED>
+	<!ATTLIST Polygon Coating CDATA #IMPLIED>
+	<!ATTLIST Polygon CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST Polygon FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST Polygon BackCoated (true|false) #IMPLIED>
+	<!ATTLIST Polygon SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST Polygon Mirror (true|false) #IMPLIED>
+	<!ATTLIST Polygon RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST Polygon Absorption CDATA #IMPLIED>
+	<!ATTLIST Polygon AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST Polygon Sides CDATA #IMPLIED>
+	<!ATTLIST Polygon Side CDATA #IMPLIED>
+	<!ELEMENT Rectangle EMPTY>
+	<!ATTLIST Rectangle Name CDATA #IMPLIED>
+	<!ATTLIST Rectangle Enabled (true|false) #IMPLIED>
+	<!ATTLIST Rectangle X CDATA #REQUIRED>
+	<!ATTLIST Rectangle Y CDATA #REQUIRED>
+	<!ATTLIST Rectangle Angle CDATA #IMPLIED>
+	<!ATTLIST Rectangle Coating CDATA #IMPLIED>
+	<!ATTLIST Rectangle CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST Rectangle FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST Rectangle BackCoated (true|false) #IMPLIED>
+	<!ATTLIST Rectangle SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST Rectangle Mirror (true|false) #IMPLIED>
+	<!ATTLIST Rectangle RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST Rectangle Absorption CDATA #IMPLIED>
+	<!ATTLIST Rectangle AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST Rectangle Length CDATA #IMPLIED>
+	<!ATTLIST Rectangle Width CDATA #IMPLIED>
+	<!ATTLIST Rectangle Linked (true|false) #IMPLIED>
+	<!ELEMENT Ellipse EMPTY>
+	<!ATTLIST Ellipse Name CDATA #IMPLIED>
+	<!ATTLIST Ellipse Enabled (true|false) #IMPLIED>
+	<!ATTLIST Ellipse X CDATA #REQUIRED>
+	<!ATTLIST Ellipse Y CDATA #REQUIRED>
+	<!ATTLIST Ellipse Angle CDATA #IMPLIED>
+	<!ATTLIST Ellipse Coating CDATA #IMPLIED>
+	<!ATTLIST Ellipse CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST Ellipse FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST Ellipse BackCoated (true|false) #IMPLIED>
+	<!ATTLIST Ellipse SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST Ellipse Mirror (true|false) #IMPLIED>
+	<!ATTLIST Ellipse RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST Ellipse Absorption CDATA #IMPLIED>
+	<!ATTLIST Ellipse AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST Ellipse Length CDATA #IMPLIED>
+	<!ATTLIST Ellipse Width CDATA #IMPLIED>
+	<!ATTLIST Ellipse Linked (true|false) #IMPLIED>
+	<!ELEMENT Triangle EMPTY>
+	<!ATTLIST Triangle Name CDATA #IMPLIED>
+	<!ATTLIST Triangle Enabled (true|false) #IMPLIED>
+	<!ATTLIST Triangle X CDATA #REQUIRED>
+	<!ATTLIST Triangle Y CDATA #REQUIRED>
+	<!ATTLIST Triangle Angle CDATA #IMPLIED>
+	<!ATTLIST Triangle Coating CDATA #IMPLIED>
+	<!ATTLIST Triangle CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST Triangle FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST Triangle BackCoated (true|false) #IMPLIED>
+	<!ATTLIST Triangle SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST Triangle Mirror (true|false) #IMPLIED>
+	<!ATTLIST Triangle RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST Triangle Absorption CDATA #IMPLIED>
+	<!ATTLIST Triangle AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST Triangle Base CDATA #IMPLIED>
+	<!ATTLIST Triangle Type (Equilateral|RightIsosceles|ThirtySixtyNinety|Isosceles|Custom) #IMPLIED>
+	<!ATTLIST Triangle AngleA CDATA #IMPLIED>
+	<!ATTLIST Triangle AngleB CDATA #IMPLIED>
+	<!ELEMENT Outline (Point*)>
+	<!ATTLIST Outline Name CDATA #IMPLIED>
+	<!ATTLIST Outline Enabled (true|false) #IMPLIED>
+	<!ATTLIST Outline X CDATA #REQUIRED>
+	<!ATTLIST Outline Y CDATA #REQUIRED>
+	<!ATTLIST Outline Angle CDATA #IMPLIED>
+	<!ATTLIST Outline Coating CDATA #IMPLIED>
+	<!ATTLIST Outline CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST Outline FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST Outline BackCoated (true|false) #IMPLIED>
+	<!ATTLIST Outline SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST Outline Mirror (true|false) #IMPLIED>
+	<!ATTLIST Outline RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST Outline Absorption CDATA #IMPLIED>
+	<!ATTLIST Outline AbsorptionRamp CDATA #IMPLIED>
+	<!ELEMENT Point EMPTY>
+	<!ATTLIST Point X CDATA #REQUIRED>
+	<!ATTLIST Point Y CDATA #REQUIRED>
+	<!ELEMENT Diffuser EMPTY>
+	<!ATTLIST Diffuser Name CDATA #IMPLIED>
+	<!ATTLIST Diffuser Enabled (true|false) #IMPLIED>
+	<!ATTLIST Diffuser X CDATA #REQUIRED>
+	<!ATTLIST Diffuser Y CDATA #REQUIRED>
+	<!ATTLIST Diffuser Angle CDATA #IMPLIED>
+	<!ATTLIST Diffuser Coating CDATA #IMPLIED>
+	<!ATTLIST Diffuser CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST Diffuser FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST Diffuser BackCoated (true|false) #IMPLIED>
+	<!ATTLIST Diffuser SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST Diffuser Mirror (true|false) #IMPLIED>
+	<!ATTLIST Diffuser RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST Diffuser Absorption CDATA #IMPLIED>
+	<!ATTLIST Diffuser AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST Diffuser Length CDATA #IMPLIED>
+	<!ATTLIST Diffuser Width CDATA #IMPLIED>
+	<!ATTLIST Diffuser CenterWavelength CDATA #IMPLIED>
+	<!ATTLIST Diffuser Amplitude CDATA #IMPLIED>
+	<!ATTLIST Diffuser Sigma CDATA #IMPLIED>
+	<!ELEMENT InterferenceFilter (Layer*)>
+	<!ATTLIST InterferenceFilter Name CDATA #IMPLIED>
+	<!ATTLIST InterferenceFilter Enabled (true|false) #IMPLIED>
+	<!ATTLIST InterferenceFilter X CDATA #REQUIRED>
+	<!ATTLIST InterferenceFilter Y CDATA #REQUIRED>
+	<!ATTLIST InterferenceFilter Angle CDATA #IMPLIED>
+	<!ATTLIST InterferenceFilter Coating CDATA #IMPLIED>
+	<!ATTLIST InterferenceFilter CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST InterferenceFilter FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST InterferenceFilter BackCoated (true|false) #IMPLIED>
+	<!ATTLIST InterferenceFilter SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST InterferenceFilter Mirror (true|false) #IMPLIED>
+	<!ATTLIST InterferenceFilter RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST InterferenceFilter Absorption CDATA #IMPLIED>
+	<!ATTLIST InterferenceFilter AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST InterferenceFilter Length CDATA #IMPLIED>
+	<!ATTLIST InterferenceFilter Width CDATA #IMPLIED>
+	<!ELEMENT Layer EMPTY>
+	<!ATTLIST Layer Thickness CDATA #IMPLIED>
+	<!ATTLIST Layer RefractiveIndex CDATA #IMPLIED>
+	<!ELEMENT SimpleGrating EMPTY>
+	<!ATTLIST SimpleGrating Name CDATA #IMPLIED>
+	<!ATTLIST SimpleGrating Enabled (true|false) #IMPLIED>
+	<!ATTLIST SimpleGrating X CDATA #REQUIRED>
+	<!ATTLIST SimpleGrating Y CDATA #REQUIRED>
+	<!ATTLIST SimpleGrating Angle CDATA #IMPLIED>
+	<!ATTLIST SimpleGrating Mirror (true|false) #IMPLIED>
+	<!ATTLIST SimpleGrating RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST SimpleGrating Absorption CDATA #IMPLIED>
+	<!ATTLIST SimpleGrating AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST SimpleGrating Columns CDATA #IMPLIED>
+	<!ATTLIST SimpleGrating Rows CDATA #IMPLIED>
+	<!ATTLIST SimpleGrating ColumnSpacing CDATA #IMPLIED>
+	<!ATTLIST SimpleGrating RowSpacing CDATA #IMPLIED>
+	<!ATTLIST SimpleGrating Diameter CDATA #IMPLIED>
+	<!ELEMENT FacettedGrating EMPTY>
+	<!ATTLIST FacettedGrating Name CDATA #IMPLIED>
+	<!ATTLIST FacettedGrating Enabled (true|false) #IMPLIED>
+	<!ATTLIST FacettedGrating X CDATA #REQUIRED>
+	<!ATTLIST FacettedGrating Y CDATA #REQUIRED>
+	<!ATTLIST FacettedGrating Angle CDATA #IMPLIED>
+	<!ATTLIST FacettedGrating Coating CDATA #IMPLIED>
+	<!ATTLIST FacettedGrating CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST FacettedGrating FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST FacettedGrating BackCoated (true|false) #IMPLIED>
+	<!ATTLIST FacettedGrating SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST FacettedGrating Mirror (true|false) #IMPLIED>
+	<!ATTLIST FacettedGrating RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST FacettedGrating Absorption CDATA #IMPLIED>
+	<!ATTLIST FacettedGrating AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST FacettedGrating Length CDATA #IMPLIED>
+	<!ATTLIST FacettedGrating Width CDATA #IMPLIED>
+	<!ATTLIST FacettedGrating Pattern (Sawtooth|SquareWave|Sinusoidal) #IMPLIED>
+	<!ATTLIST FacettedGrating Pitch CDATA #IMPLIED>
+	<!ATTLIST FacettedGrating Amplitude CDATA #IMPLIED>
+	<!ELEMENT MetaLens EMPTY>
+	<!ATTLIST MetaLens Name CDATA #IMPLIED>
+	<!ATTLIST MetaLens Enabled (true|false) #IMPLIED>
+	<!ATTLIST MetaLens X CDATA #REQUIRED>
+	<!ATTLIST MetaLens Y CDATA #REQUIRED>
+	<!ATTLIST MetaLens Angle CDATA #IMPLIED>
+	<!ATTLIST MetaLens Coating CDATA #IMPLIED>
+	<!ATTLIST MetaLens CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST MetaLens FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST MetaLens BackCoated (true|false) #IMPLIED>
+	<!ATTLIST MetaLens SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST MetaLens Mirror (true|false) #IMPLIED>
+	<!ATTLIST MetaLens RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST MetaLens Absorption CDATA #IMPLIED>
+	<!ATTLIST MetaLens AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST MetaLens Length CDATA #IMPLIED>
+	<!ATTLIST MetaLens Width CDATA #IMPLIED>
+	<!ATTLIST MetaLens DesignFrequency CDATA #IMPLIED>
+	<!ATTLIST MetaLens Pitch CDATA #IMPLIED>
+	<!ATTLIST MetaLens Height CDATA #IMPLIED>
+	<!ATTLIST MetaLens PatternIndex CDATA #IMPLIED>
+	<!ATTLIST MetaLens FocalLength CDATA #IMPLIED>
+	<!ATTLIST MetaLens LensType (Converging|Diverging) #IMPLIED>
+	<!ELEMENT MetaPrism EMPTY>
+	<!ATTLIST MetaPrism Name CDATA #IMPLIED>
+	<!ATTLIST MetaPrism Enabled (true|false) #IMPLIED>
+	<!ATTLIST MetaPrism X CDATA #REQUIRED>
+	<!ATTLIST MetaPrism Y CDATA #REQUIRED>
+	<!ATTLIST MetaPrism Angle CDATA #IMPLIED>
+	<!ATTLIST MetaPrism Coating CDATA #IMPLIED>
+	<!ATTLIST MetaPrism CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST MetaPrism FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST MetaPrism BackCoated (true|false) #IMPLIED>
+	<!ATTLIST MetaPrism SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST MetaPrism Mirror (true|false) #IMPLIED>
+	<!ATTLIST MetaPrism RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST MetaPrism Absorption CDATA #IMPLIED>
+	<!ATTLIST MetaPrism AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST MetaPrism Length CDATA #IMPLIED>
+	<!ATTLIST MetaPrism Width CDATA #IMPLIED>
+	<!ATTLIST MetaPrism DesignFrequency CDATA #IMPLIED>
+	<!ATTLIST MetaPrism Pitch CDATA #IMPLIED>
+	<!ATTLIST MetaPrism Height CDATA #IMPLIED>
+	<!ATTLIST MetaPrism PatternIndex CDATA #IMPLIED>
+	<!ATTLIST MetaPrism Deflection CDATA #IMPLIED>
+	<!ELEMENT MetaAxicon EMPTY>
+	<!ATTLIST MetaAxicon Name CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon Enabled (true|false) #IMPLIED>
+	<!ATTLIST MetaAxicon X CDATA #REQUIRED>
+	<!ATTLIST MetaAxicon Y CDATA #REQUIRED>
+	<!ATTLIST MetaAxicon Angle CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon Coating CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST MetaAxicon FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST MetaAxicon BackCoated (true|false) #IMPLIED>
+	<!ATTLIST MetaAxicon SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST MetaAxicon Mirror (true|false) #IMPLIED>
+	<!ATTLIST MetaAxicon RefractiveIndex CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon Absorption CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon Length CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon Width CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon DesignFrequency CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon Pitch CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon Height CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon PatternIndex CDATA #IMPLIED>
+	<!ATTLIST MetaAxicon ConeAngle CDATA #IMPLIED>
+	<!ELEMENT Fiber (Node*)>
+	<!ATTLIST Fiber Name CDATA #IMPLIED>
+	<!ATTLIST Fiber Enabled (true|false) #IMPLIED>
+	<!ATTLIST Fiber X CDATA #REQUIRED>
+	<!ATTLIST Fiber Y CDATA #REQUIRED>
+	<!ATTLIST Fiber Angle CDATA #IMPLIED>
+	<!ATTLIST Fiber Coating CDATA #IMPLIED>
+	<!ATTLIST Fiber CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST Fiber FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST Fiber BackCoated (true|false) #IMPLIED>
+	<!ATTLIST Fiber SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST Fiber CoreIndex CDATA #IMPLIED>
+	<!ATTLIST Fiber CoreDiameter CDATA #IMPLIED>
+	<!ATTLIST Fiber CladdingIndex CDATA #IMPLIED>
+	<!ATTLIST Fiber CladdingThickness CDATA #IMPLIED>
+	<!ATTLIST Fiber Absorption CDATA #IMPLIED>
+	<!ATTLIST Fiber AbsorptionRamp CDATA #IMPLIED>
+	<!ATTLIST Fiber Ends (Flat|Round) #IMPLIED>
+	<!ELEMENT Node EMPTY>
+	<!ATTLIST Node X CDATA #REQUIRED>
+	<!ATTLIST Node Y CDATA #REQUIRED>
+	<!ATTLIST Node InX CDATA #IMPLIED>
+	<!ATTLIST Node InY CDATA #IMPLIED>
+	<!ATTLIST Node OutX CDATA #IMPLIED>
+	<!ATTLIST Node OutY CDATA #IMPLIED>
+	<!ATTLIST Node Smooth (true|false) #IMPLIED>
+	<!ELEMENT BraggReflector EMPTY>
+	<!ATTLIST BraggReflector Name CDATA #IMPLIED>
+	<!ATTLIST BraggReflector Enabled (true|false) #IMPLIED>
+	<!ATTLIST BraggReflector X CDATA #REQUIRED>
+	<!ATTLIST BraggReflector Y CDATA #REQUIRED>
+	<!ATTLIST BraggReflector Angle CDATA #IMPLIED>
+	<!ATTLIST BraggReflector Pairs CDATA #IMPLIED>
+	<!ATTLIST BraggReflector Thickness1 CDATA #IMPLIED>
+	<!ATTLIST BraggReflector Thickness2 CDATA #IMPLIED>
+	<!ATTLIST BraggReflector Index1 CDATA #IMPLIED>
+	<!ATTLIST BraggReflector Index2 CDATA #IMPLIED>
+	<!ATTLIST BraggReflector Width CDATA #IMPLIED>
+	<!ELEMENT GrinLens EMPTY>
+	<!ATTLIST GrinLens Name CDATA #IMPLIED>
+	<!ATTLIST GrinLens Enabled (true|false) #IMPLIED>
+	<!ATTLIST GrinLens X CDATA #REQUIRED>
+	<!ATTLIST GrinLens Y CDATA #REQUIRED>
+	<!ATTLIST GrinLens Angle CDATA #IMPLIED>
+	<!ATTLIST GrinLens Coating CDATA #IMPLIED>
+	<!ATTLIST GrinLens CoatingProfile (Layer|Graded) #IMPLIED>
+	<!ATTLIST GrinLens FrontCoated (true|false) #IMPLIED>
+	<!ATTLIST GrinLens BackCoated (true|false) #IMPLIED>
+	<!ATTLIST GrinLens SidesCoated (true|false) #IMPLIED>
+	<!ATTLIST GrinLens Length CDATA #IMPLIED>
+	<!ATTLIST GrinLens Diameter CDATA #IMPLIED>
+	<!ATTLIST GrinLens CentreIndex CDATA #IMPLIED>
+	<!ATTLIST GrinLens EdgeIndex CDATA #IMPLIED>
+	<!ELEMENT XorGate EMPTY>
+	<!ATTLIST XorGate Name CDATA #IMPLIED>
+	<!ATTLIST XorGate Enabled (true|false) #IMPLIED>
+	<!ATTLIST XorGate X CDATA #REQUIRED>
+	<!ATTLIST XorGate Y CDATA #REQUIRED>
+	<!ATTLIST XorGate Angle CDATA #IMPLIED>
+	<!ATTLIST XorGate DesignFrequency CDATA #IMPLIED>
+	<!ATTLIST XorGate Coating CDATA #IMPLIED>
+	<!ATTLIST XorGate InputCoated (true|false) #IMPLIED>
+	<!ATTLIST XorGate OutputCoated (true|false) #IMPLIED>
+	<!ATTLIST XorGate UpperOutputActive (true|false) #IMPLIED>
+	<!ATTLIST XorGate LowerOutputActive (true|false) #IMPLIED>
+	<!ATTLIST XorGate CoreIndex CDATA #IMPLIED>
+	<!ATTLIST XorGate CladdingIndex CDATA #IMPLIED>
+	<!ATTLIST XorGate PortSpacing CDATA #IMPLIED>
+	<!ELEMENT AndGate EMPTY>
+	<!ATTLIST AndGate Name CDATA #IMPLIED>
+	<!ATTLIST AndGate Enabled (true|false) #IMPLIED>
+	<!ATTLIST AndGate X CDATA #REQUIRED>
+	<!ATTLIST AndGate Y CDATA #REQUIRED>
+	<!ATTLIST AndGate Angle CDATA #IMPLIED>
+	<!ATTLIST AndGate DesignFrequency CDATA #IMPLIED>
+	<!ATTLIST AndGate Coating CDATA #IMPLIED>
+	<!ATTLIST AndGate InputCoated (true|false) #IMPLIED>
+	<!ATTLIST AndGate OutputCoated (true|false) #IMPLIED>
+	<!ATTLIST AndGate UpperOutputActive (true|false) #IMPLIED>
+	<!ATTLIST AndGate LowerOutputActive (true|false) #IMPLIED>
+	<!ATTLIST AndGate CoreIndex CDATA #IMPLIED>
+	<!ATTLIST AndGate CladdingIndex CDATA #IMPLIED>
+	<!ATTLIST AndGate PortSpacing CDATA #IMPLIED>
+	<!ELEMENT OrGate EMPTY>
+	<!ATTLIST OrGate Name CDATA #IMPLIED>
+	<!ATTLIST OrGate Enabled (true|false) #IMPLIED>
+	<!ATTLIST OrGate X CDATA #REQUIRED>
+	<!ATTLIST OrGate Y CDATA #REQUIRED>
+	<!ATTLIST OrGate Angle CDATA #IMPLIED>
+	<!ATTLIST OrGate DesignFrequency CDATA #IMPLIED>
+	<!ATTLIST OrGate Coating CDATA #IMPLIED>
+	<!ATTLIST OrGate InputCoated (true|false) #IMPLIED>
+	<!ATTLIST OrGate OutputCoated (true|false) #IMPLIED>
+	<!ATTLIST OrGate UpperOutputActive (true|false) #IMPLIED>
+	<!ATTLIST OrGate LowerOutputActive (true|false) #IMPLIED>
+	<!ATTLIST OrGate CoreIndex CDATA #IMPLIED>
+	<!ATTLIST OrGate CladdingIndex CDATA #IMPLIED>
+	<!ATTLIST OrGate PortSpacing CDATA #IMPLIED>
+	<!ELEMENT ZonePlate EMPTY>
+	<!ATTLIST ZonePlate Name CDATA #IMPLIED>
+	<!ATTLIST ZonePlate Enabled (true|false) #IMPLIED>
+	<!ATTLIST ZonePlate X CDATA #REQUIRED>
+	<!ATTLIST ZonePlate Y CDATA #REQUIRED>
+	<!ATTLIST ZonePlate Angle CDATA #IMPLIED>
+	<!ATTLIST ZonePlate Mount (true|false) #IMPLIED>
+	<!ATTLIST ZonePlate MountWidth CDATA #IMPLIED>
+	<!ATTLIST ZonePlate Diameter CDATA #IMPLIED>
+	<!ATTLIST ZonePlate Thickness CDATA #IMPLIED>
+	<!ATTLIST ZonePlate Coating CDATA #IMPLIED>
+	<!ATTLIST ZonePlate DesignFrequency CDATA #IMPLIED>
+	<!ATTLIST ZonePlate FocalLength CDATA #IMPLIED>
+	<!ATTLIST ZonePlate Inverse (true|false) #IMPLIED>
+	<!ELEMENT Probe EMPTY>
+	<!ATTLIST Probe Name CDATA #IMPLIED>
+	<!ATTLIST Probe Active (true|false) #IMPLIED>
+	<!ATTLIST Probe Layer (Field|Intensity) #IMPLIED>
+	<!ATTLIST Probe Measurement (Amplitude|Value|IntegratedValue) #IMPLIED>
+	<!ATTLIST Probe Kind (Point|Line) #IMPLIED>
+	<!ATTLIST Probe AX CDATA #REQUIRED>
+	<!ATTLIST Probe AY CDATA #REQUIRED>
+	<!ATTLIST Probe BX CDATA #IMPLIED>
+	<!ATTLIST Probe BY CDATA #IMPLIED>
+	<!ATTLIST Probe BoxSize (Tiny|Small|Medium|Large|ExtraLarge|Custom) #IMPLIED>
+	<!ATTLIST Probe BoxX CDATA #IMPLIED>
+	<!ATTLIST Probe BoxY CDATA #IMPLIED>
+	<!ATTLIST Probe BoxWidth CDATA #IMPLIED>
+	<!ATTLIST Probe BoxHeight CDATA #IMPLIED>
+	<!ATTLIST Probe ScaleMode (Running|Full) #IMPLIED>
+	<!ATTLIST Probe AutoScaleX (true|false) #IMPLIED>
+	<!ATTLIST Probe AutoScaleY (true|false) #IMPLIED>
+	<!ATTLIST Probe YMin CDATA #IMPLIED>
+	<!ATTLIST Probe YMax CDATA #IMPLIED>
+	<!ATTLIST Probe YScale (Linear|Logarithmic) #IMPLIED>
+	<!ATTLIST Probe Decades CDATA #IMPLIED>
+	<!ATTLIST Probe Window CDATA #IMPLIED>
+	<!ATTLIST Probe StartAfter CDATA #IMPLIED>
+	<!ATTLIST Probe Detector (Standard|Counting|Imaging) #IMPLIED>
+	<!ATTLIST Probe Sensitivity CDATA #IMPLIED>
+	<!ATTLIST Probe BinSize CDATA #IMPLIED>
+	<!ELEMENT ColorScheme (Stop*)>
+	<!ATTLIST ColorScheme Name CDATA #IMPLIED>
+	<!ATTLIST ColorScheme Kind (Unspecified|Field|Intensity) #IMPLIED>
+	<!ATTLIST ColorScheme Description CDATA #IMPLIED>
+	<!ELEMENT Stop EMPTY>
+	<!ATTLIST Stop At CDATA #REQUIRED>
+	<!ATTLIST Stop Color CDATA #IMPLIED>
+]>
+<Project Version="4" Seed="1">
+	<Description>XOR: input B delayed by 90 degrees; with both on everything goes to the residual R and Q goes dark. The fibres start 75 px apart (gap 63 px), S-bend over 228 px to a gap of 15 px, run parallel for 437 px and bend apart again. 0.7856 rad of coupling phase (the straight run's kappa 0.001487 rad/px times 437 px plus 0.0678 rad for each bend); one coupling length at this gap is 1056.1 px. Source B at -90 degrees. Wavelength 32.04 px in vacuum, 17.80 px in the core (index 1.8) and 22.89 px in the medium (index 1.4); single-mode core 12 px wide, beta 0.3223 rad/px, evanescent decay length 5.92 px.
+Coupler: 0.7856 rad</Description>
+	<Scene Width="993" Height="272" RefractiveIndex="1.4" />
+	<Simulation Steps="2592" VisualizeEvery="4" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="4.416" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="5.336" />
+	</Display>
+	<Source Name="A" X="24" Y="41" Frequency="50" Amplitude="50" />
+	<Source Name="A lower" X="24" Y="42" Frequency="50" Amplitude="50" />
+	<Source Name="B" X="24" Y="116" Frequency="50" Amplitude="50" Phase="-90" />
+	<Source Name="B lower" X="24" Y="117" Frequency="50" Amplitude="50" Phase="-90" />
+	<Rectangle Name="Mirror" X="24" Y="80" Mirror="true" Length="24" Width="130" />
+	<Rectangle Name="Slot A" X="27" Y="42" RefractiveIndex="1.4" AbsorptionRamp="1" Length="18" Width="18" />
+	<Rectangle Name="Slot B" X="27" Y="117" RefractiveIndex="1.4" AbsorptionRamp="1" Length="18" Width="18" />
+	<Fiber Name="Fibre A" X="0" Y="0" CoreIndex="1.8" CoreDiameter="12" CladdingIndex="1.4" CladdingThickness="0">
+		<Node X="18" Y="42" />
+		<Node X="68" Y="42" OutX="76" />
+		<Node X="296" Y="66" InX="-76" />
+		<Node X="733" Y="66" OutX="76" />
+		<Node X="961" Y="42" InX="-76" />
+		<Node X="1001" Y="42" />
+	</Fiber>
+	<Fiber Name="Fibre B" X="0" Y="0" CoreIndex="1.8" CoreDiameter="12" CladdingIndex="1.4" CladdingThickness="0">
+		<Node X="18" Y="117" />
+		<Node X="68" Y="117" OutX="76" />
+		<Node X="296" Y="93" InX="-76" />
+		<Node X="733" Y="93" OutX="76" />
+		<Node X="961" Y="117" InX="-76" />
+		<Node X="1001" Y="117" />
+	</Fiber>
+	<Probe Name="Input" Layer="Intensity" Measurement="Value" Kind="Line" AX="52" AY="12" BX="52" BY="146" BoxSize="Tiny" BoxX="2" BoxY="159" />
+	<Probe Name="Output" Layer="Intensity" Measurement="Value" Kind="Line" AX="977" AY="12" BX="977" BY="146" BoxSize="Tiny" BoxX="793" BoxY="159" />
+</Project>

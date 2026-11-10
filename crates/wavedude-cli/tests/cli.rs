@@ -253,7 +253,7 @@ fn gates_writes_ten_loadable_projects() {
 	let projects = files(dir.path());
 	assert_eq!(projects.len(), 10, "{projects:?}");
 	for path in &projects {
-		assert_eq!(path.extension().unwrap(), "wdr");
+		assert_eq!(path.extension().unwrap(), "wdproj");
 		let report = ok(&["check", path.to_str().unwrap()]);
 		assert!(report.contains("2 probes"), "{}: {report}", path.display());
 	}
@@ -263,7 +263,7 @@ fn gates_writes_ten_loadable_projects() {
 fn truth_table_runs_on_a_tiny_project() {
 	let dir = tempfile::tempdir().unwrap();
 	let out = dir.path().to_str().unwrap();
-	ok(&["gates", "--out", out, "--frequency", "100", "--width", "400", "--format", "wdproj"]);
+	ok(&["gates", "--out", out, "--frequency", "100", "--width", "400"]);
 	let project = dir.path().join("07-xor.wdproj");
 	let text = ok(&["truth-table", project.to_str().unwrap(), "--steps", "900", "--settle", "32"]);
 	assert!(text.contains("900 steps a run (given)"), "{text}");
