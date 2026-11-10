@@ -98,7 +98,7 @@ pub const ZOOMS: [(f64, &str); 8] = [
 ];
 
 /// The Add part menu's entries: kind, string key, test id.
-pub const PART_KINDS: [(NewPart, &str, &str); 16] = [
+pub const PART_KINDS: [(NewPart, &str, &str); 17] = [
 	(NewPart::Lens, "MenuAddLens", "Lens"),
 	(NewPart::FresnelLens, "MenuAddFresnelLens", "FresnelLens"),
 	(NewPart::Fiber, "MenuAddFiber", "Fiber"),
@@ -106,6 +106,7 @@ pub const PART_KINDS: [(NewPart, &str, &str); 16] = [
 	(NewPart::GrinLens, "MenuAddGrinLens", "GrinLens"),
 	(NewPart::ZonePlate, "MenuAddZonePlate", "ZonePlate"),
 	(NewPart::Diffuser, "MenuAddDiffuser", "Diffuser"),
+	(NewPart::InterferenceFilter, "MenuAddInterferenceFilter", "InterferenceFilter"),
 	(NewPart::FacettedGrating, "MenuAddFacettedGrating", "FacettedGrating"),
 	(NewPart::Polygon, "MenuAddPolygon", "Polygon"),
 	(NewPart::Rectangle, "MenuAddRectangle", "Rectangle"),
@@ -221,7 +222,7 @@ pub fn part_entries(s: &Strings, prefix: &str) -> Vec<Entry> {
 	let submenu = |id: &str, key: &str, icon: NewPart, from, to| -> Entry {
 		Submenu::new(format!("{prefix}{id}"), s.get(key), entries(from, to)).icon(super::tree::kind_icon(icon)).into()
 	};
-	let mut v = entries(NewPart::Lens, NewPart::Diffuser);
+	let mut v = entries(NewPart::Lens, NewPart::InterferenceFilter);
 	v.push(submenu(
 		"DiffractionGratings",
 		"MenuAddDiffractionGratings",

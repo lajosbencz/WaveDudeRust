@@ -69,6 +69,7 @@ const PART_ELEMENTS: &[&str] = &[
 	"Triangle",
 	"Outline",
 	"Diffuser",
+	"InterferenceFilter",
 	"FacettedGrating",
 	"Fiber",
 	"BraggReflector",
@@ -459,6 +460,15 @@ kind_table!(Diffuser;
 	f64 "Amplitude" amplitude,
 	f64 "Sigma" sigma,
 );
+kind_table!(InterferenceFilter; u32 "Length" length, u32 "Width" width);
+impl Table for FilterLayer {
+	const FIELDS: &'static [Field<Self>] =
+		fields!(FilterLayer, "FilterLayer"; f64 "Thickness" thickness, f64 "RefractiveIndex" refractive_index);
+
+	fn base() -> Self {
+		Self::default()
+	}
+}
 kind_table!(FacettedGrating;
 	u32 "Length" length,
 	u32 "Width" width,
@@ -605,6 +615,12 @@ fn read_part(el: &Element, version: FileVersion) -> R<Part> {
 			points: el.children("Point").map(fields::read).collect::<R<_>>()?,
 		}),
 		"Diffuser" => PartKind::Diffuser(Diffuser { coating: coating?, material: material?, ..fields::read(el)? }),
+		"InterferenceFilter" => PartKind::InterferenceFilter(InterferenceFilter {
+			coating: coating?,
+			material: material?,
+			layers: el.children("Layer").map(fields::read).collect::<R<_>>()?,
+			..fields::read(el)?
+		}),
 		"FacettedGrating" => {
 			PartKind::FacettedGrating(FacettedGrating { coating: coating?, material: material?, ..fields::read(el)? })
 		}
@@ -699,6 +715,7 @@ fn part_element_name(kind: &PartKind) -> &'static str {
 		PartKind::Triangle(_) => "Triangle",
 		PartKind::Outline(_) => "Outline",
 		PartKind::Diffuser(_) => "Diffuser",
+		PartKind::InterferenceFilter(_) => "InterferenceFilter",
 		PartKind::FacettedGrating(_) => "FacettedGrating",
 		PartKind::Fiber(_) => "Fiber",
 		PartKind::BraggReflector(_) => "BraggReflector",
@@ -724,6 +741,7 @@ macro_rules! with_kind {
 			PartKind::Triangle($k) => $e,
 			PartKind::Outline($k) => $e,
 			PartKind::Diffuser($k) => $e,
+			PartKind::InterferenceFilter($k) => $e,
 			PartKind::FacettedGrating($k) => $e,
 			PartKind::Fiber($k) => $e,
 			PartKind::BraggReflector($k) => $e,
@@ -749,6 +767,7 @@ fn write_part(p: &Part) -> Element {
 	match &p.kind {
 		PartKind::Outline(k) => el.children.extend(k.points.iter().map(|pt| element("Point", pt))),
 		PartKind::Fiber(k) => el.children.extend(k.nodes.iter().map(|n| element("Node", n))),
+		PartKind::InterferenceFilter(k) => el.children.extend(k.layers.iter().map(|l| element("Layer", l))),
 		PartKind::Lens(_)
 		| PartKind::FresnelLens(_)
 		| PartKind::Polygon(_)
@@ -882,12 +901,14 @@ fn decls() -> Vec<Decl> {
 		let content = match name {
 			"Outline" => "(Point*)",
 			"Fiber" => "(Node*)",
+			"InterferenceFilter" => "(Layer*)",
 			_ => "EMPTY",
 		};
 		decls.push(Decl::new(name, content, part_attrs(&part.kind)));
 		match name {
 			"Outline" => decls.push(Decl::of::<Point>("Point", "EMPTY")),
 			"Fiber" => decls.push(Decl::of::<FiberNode>("Node", "EMPTY")),
+			"InterferenceFilter" => decls.push(Decl::of::<FilterLayer>("Layer", "EMPTY")),
 			_ => {}
 		}
 	}
@@ -1099,6 +1120,7 @@ mod tests {
 				..Outline::default()
 			}),
 			PartKind::Diffuser(Diffuser { sigma: 0.0, ..Diffuser::new_part() }),
+			PartKind::InterferenceFilter(InterferenceFilter::new_part()),
 			PartKind::FacettedGrating(FacettedGrating {
 				pattern: FacetPattern::Sinusoidal,
 				..FacettedGrating::default()

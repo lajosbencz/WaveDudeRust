@@ -35,6 +35,8 @@ pub struct Readouts {
 	pub zones: Option<(i64, f64)>,
 	/// A diffuser's roughness: the face's height from crest to trough and its number of ripples.
 	pub roughness: Option<(f64, usize)>,
+	/// An interference filter's stack thickness.
+	pub stack: Option<f64>,
 	pub image_found: bool,
 	pub image_size: Option<(u32, u32)>,
 	/// Scheme names for each layer's picker: (name, project's own).
@@ -118,6 +120,7 @@ pub fn readouts(app: &App, row: Row) -> Readouts {
 					r.wavelength = Some(m::wavelength(z.design_frequency, sim.wave_speed, sim.source_frequency_scale));
 					r.zones = zones(z, sim);
 				}
+				PartKind::InterferenceFilter(f) => r.stack = Some(f.stack_thickness()),
 				PartKind::Polygon(_)
 				| PartKind::Rectangle(_)
 				| PartKind::Ellipse(_)
@@ -639,6 +642,19 @@ fn part(f: &Form, r: &Readouts, kind: &PartKind, open: bool) -> Vec<Element> {
 				),
 			]);
 		}
+		PartKind::InterferenceFilter(_) => {
+			let i = f.scope("InterferenceFilterPart", &at, &variant);
+			out.extend([
+				material_faces(f, &at, CoatedFaces::Back),
+				shape(vec![
+					i.number("Length", 10.),
+					i.number("Width", 10.),
+					readout(f.s.get("LabelStackThickness"), r.stack.map(px).unwrap_or_default(), "StackThickness")
+						.hint(f.s.get("TipStackThickness")),
+				]),
+				layers(f, &i.path("Layers")),
+			]);
+		}
 		PartKind::FacettedGrating(_) => {
 			let g = f.scope("FacettedGratingPart", &at, &variant);
 			out.extend([
@@ -865,6 +881,126 @@ fn points(f: &Form, path: &str) -> Element {
 	};
 	rows.push(PropertyRow::new("", dialogs::button(s.get("ButtonAddPoint"), true, add)).hint(s.get("TipAddPoint")));
 	section(s.get("SectionPoints"), rows)
+}
+
+/// A number box for one decimal value of item `index` of the list at `path`.
+fn list_decimal<T: Serialize + DeserializeOwned + 'static>(
+	f: &Form,
+	path: &str,
+	index: usize,
+	value: f64,
+	spec: NumberSpec,
+	set: fn(&mut T, f64),
+	test: String,
+) -> Element {
+	let f2 = f.clone();
+	let path = path.to_owned();
+	wavedude_widgets::NumberBox::new(
+		WritableSetter::new(value, move |v: f64| set_list(&f2, &path, |list: &mut Vec<T>| set(&mut list[index], v))),
+		spec,
+	)
+	.width(Size::flex(1.))
+	.test_id(test)
+	.into_element()
+}
+
+/// A button that moves item `index` of the list at `path` by `by` places.
+fn move_button<T: Serialize + DeserializeOwned>(
+	f: &Form,
+	path: &str,
+	index: usize,
+	by: isize,
+	tip_key: &str,
+	test: String,
+) -> Element {
+	let f2 = f.clone();
+	let path = path.to_owned();
+	let button = tip(
+		f.s.get(tip_key),
+		Button::new()
+			.compact()
+			.on_press(move |_| {
+				set_list(&f2, &path, |list: &mut Vec<T>| {
+					let to = index as isize + by;
+					if (0..list.len() as isize).contains(&to) {
+						list.swap(index, to as usize);
+					}
+				})
+			})
+			.child(IconView::new(if by < 0 { icons::CHEVRON_UP } else { icons::CHEVRON_DOWN })),
+	);
+	tagged(button, test)
+}
+
+/// An interference filter's layers, the outermost first: a row each with its thickness and index, up, down and
+/// remove; Add layer appends a copy of the last, Remove all empties the list in one step.
+fn layers(f: &Form, path: &str) -> Element {
+	let s = &f.s;
+	let list: Vec<m::FilterLayer> = f.bind_as(path);
+	let (tmin, tmax) = bounds("FilterLayer.Thickness");
+	let (imin, imax) = bounds("FilterLayer.RefractiveIndex");
+	let mut rows = vec![hint_row(s.get("HintFilterLayers"))];
+	for (i, l) in list.iter().enumerate() {
+		let thickness = NumberSpec::linear(tmin, tmax, 1.).with_decimals(2).with_drag_step(0.1);
+		let index = NumberSpec::linear(imin, imax, 0.01).with_decimals(2).with_drag_step(0.01);
+		let editors = rect()
+			.horizontal()
+			.width(Size::fill())
+			.content(Content::flex())
+			.spacing(4.)
+			.child(tip(
+				s.hint("FilterLayer", "Thickness"),
+				list_decimal(
+					f,
+					path,
+					i,
+					l.thickness,
+					thickness,
+					|l: &mut m::FilterLayer, v| l.thickness = v,
+					format!("Layer{i}.Thickness"),
+				),
+			))
+			.child(tip(
+				s.hint("FilterLayer", "RefractiveIndex"),
+				list_decimal(
+					f,
+					path,
+					i,
+					l.refractive_index,
+					index,
+					|l: &mut m::FilterLayer, v| l.refractive_index = v,
+					format!("Layer{i}.RefractiveIndex"),
+				),
+			))
+			.child(move_button::<m::FilterLayer>(f, path, i, -1, "TipLayerUp", format!("Layer{i}.Up")))
+			.child(move_button::<m::FilterLayer>(f, path, i, 1, "TipLayerDown", format!("Layer{i}.Down")))
+			.child(remove_button::<m::FilterLayer>(f, path, i, "TipRemoveLayer", format!("Layer{i}.Remove")));
+		rows.push(PropertyRow::new(format!("{}", i + 1), editors));
+	}
+	let add = {
+		let f = f.clone();
+		let path = path.to_owned();
+		move |_: Event<PressEventData>| {
+			set_list(&f, &path, |list: &mut Vec<m::FilterLayer>| {
+				list.push(list.last().cloned().unwrap_or_default());
+			})
+		}
+	};
+	let clear = {
+		let f = f.clone();
+		let path = path.to_owned();
+		move |_: Event<PressEventData>| set_list(&f, &path, |list: &mut Vec<m::FilterLayer>| list.clear())
+	};
+	let buttons = rect()
+		.horizontal()
+		.spacing(6.)
+		.child(tip(s.get("TipAddLayer"), tagged(dialogs::button(s.get("ButtonAddLayer"), true, add), "AddLayer")))
+		.child(tip(
+			s.get("TipRemoveAllLayers"),
+			tagged(dialogs::button(s.get("ButtonRemoveAllLayers"), !list.is_empty(), clear), "RemoveAllLayers"),
+		));
+	rows.push(PropertyRow::new("", buttons));
+	section(s.get("SectionLayers"), rows)
 }
 
 fn fiber(f: &Form, at: &str, variant: &str) -> Vec<Element> {

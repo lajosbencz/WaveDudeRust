@@ -290,6 +290,66 @@ impl Diffuser {
 	}
 }
 
+/// One layer of an interference filter's stack.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(default)]
+pub struct FilterLayer {
+	/// Pixels along the axis, 0..MAX_LAYER_THICKNESS at 0.01; 0 leaves the layer out.
+	pub thickness: f64,
+	pub refractive_index: f64,
+}
+
+impl Default for FilterLayer {
+	fn default() -> Self {
+		Self { thickness: 2.0, refractive_index: 1.5 }
+	}
+}
+
+/// A carrier plate with a stack of thin layers on its front face (-x'), outside the plate; the first layer is
+/// the outermost. A mirror plate keeps its layers glass in front of it; the band lies on the plate's back alone.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(default)]
+pub struct InterferenceFilter {
+	pub material: Material,
+	/// Only `back` counts.
+	pub coating: Coating,
+	/// The plate's, without the stack.
+	pub length: u32,
+	pub width: u32,
+	pub layers: Vec<FilterLayer>,
+}
+
+impl Default for InterferenceFilter {
+	fn default() -> Self {
+		Self { material: Material::default(), coating: Coating::default(), length: 50, width: 500, layers: Vec::new() }
+	}
+}
+
+impl InterferenceFilter {
+	pub const MAX_LAYER_THICKNESS: f64 = 1000.0;
+	/// The wavelength a new filter's stack is cut for.
+	pub const STACK_WAVELENGTH: f64 = 16.0;
+
+	/// A new filter: a quarter-wave stack for [`Self::STACK_WAVELENGTH`] that begins and ends with the high
+	/// index, five pairs of 2.00 then 1.50 from the outside in and one more 2.00 on the plate.
+	pub fn new_part() -> Self {
+		let quarter = |index: f64| FilterLayer {
+			refractive_index: index,
+			thickness: (Self::STACK_WAVELENGTH / (4.0 * index) * 100.0).round() / 100.0,
+		};
+		let mut layers: Vec<FilterLayer> = (0..5).flat_map(|_| [quarter(2.0), quarter(1.5)]).collect();
+		layers.push(quarter(2.0));
+		Self { layers, ..Self::default() }
+	}
+
+	/// The sum of the layers' thicknesses: how far the stack stands out of the plate's front.
+	pub fn stack_thickness(&self) -> f64 {
+		self.layers.iter().map(|l| l.thickness.clamp(0.0, Self::MAX_LAYER_THICKNESS)).sum()
+	}
+}
+
 /// The relief of a facetted grating over each pitch.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -520,6 +580,7 @@ pub enum PartKind {
 	Triangle(Triangle),
 	Outline(Outline),
 	Diffuser(Diffuser),
+	InterferenceFilter(InterferenceFilter),
 	FacettedGrating(FacettedGrating),
 	Fiber(Fiber),
 	BraggReflector(BraggReflector),
@@ -550,6 +611,7 @@ impl PartKind {
 			PartKind::Triangle(_) => "Triangle",
 			PartKind::Outline(_) => "Outline",
 			PartKind::Diffuser(_) => "Diffuser",
+			PartKind::InterferenceFilter(_) => "Interference filter",
 			PartKind::FacettedGrating(_) => "Facetted grating",
 			PartKind::Fiber(_) => "Fiber",
 			PartKind::BraggReflector(_) => "Bragg reflector",
@@ -573,6 +635,7 @@ impl PartKind {
 			PartKind::Triangle(p) => Some(&p.material),
 			PartKind::Outline(p) => Some(&p.material),
 			PartKind::Diffuser(p) => Some(&p.material),
+			PartKind::InterferenceFilter(p) => Some(&p.material),
 			PartKind::FacettedGrating(p) => Some(&p.material),
 			PartKind::Fiber(_)
 			| PartKind::BraggReflector(_)
@@ -592,6 +655,7 @@ impl PartKind {
 			PartKind::Triangle(p) => Some(&p.coating),
 			PartKind::Outline(p) => Some(&p.coating),
 			PartKind::Diffuser(p) => Some(&p.coating),
+			PartKind::InterferenceFilter(p) => Some(&p.coating),
 			PartKind::FacettedGrating(p) => Some(&p.coating),
 			PartKind::Fiber(p) => Some(&p.coating),
 			PartKind::GrinLens(p) => Some(&p.coating),

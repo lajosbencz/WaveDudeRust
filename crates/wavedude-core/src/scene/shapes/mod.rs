@@ -15,6 +15,7 @@ mod outline;
 mod polygon;
 mod profiled;
 mod rectangle;
+mod stack;
 mod triangle;
 mod vertex;
 mod zone_plate;
@@ -297,10 +298,36 @@ impl Body {
 	}
 }
 
-/// The shape of a normalised `part`, or None when it has nothing to paint (an outline of fewer than three
-/// points, a fibre path of fewer than two, a gate without a design, a zone plate without a wavelength).
-/// `sim` gives the frequency scale and stencil for the frequency-designed kinds, `seed` the project's seed for
-/// a diffuser's roughness.
+/// The shapes the painter paints for a normalised `part`, in order: one for every kind but an interference
+/// filter, which is its plate and its stack (a mirror plate is painted last, so its pixels stay red 0; a glass
+/// plate first, so the stack's edge pixels average with it). Empty when the part has nothing to paint (an outline
+/// of fewer than three points, a fibre path of fewer than two, a gate without a design, a zone plate without a
+/// wavelength). `sim` gives the frequency scale and stencil for the frequency-designed kinds, `seed` the project's
+/// seed for a diffuser's roughness.
+pub fn shapes_for(part: &Part, sim: &Simulation, seed: i32) -> Vec<Box<dyn PartShape>> {
+	match &part.kind {
+		PartKind::InterferenceFilter(f) => {
+			let plate = plate_shape(f.length, f.width, &f.material, &f.coating);
+			let stack = stack::StackShape::new(&f.layers, f.length, f.width).map(|s| Box::new(s) as Box<dyn PartShape>);
+			let plate = Box::new(plate) as Box<dyn PartShape>;
+			match (stack, f.material.mirror) {
+				(None, _) => vec![plate],
+				(Some(stack), true) => vec![stack, plate],
+				(Some(stack), false) => vec![plate, stack],
+			}
+		}
+		_ => shape_for(part, sim, seed).into_iter().collect(),
+	}
+}
+
+/// A carrier plate of `length` by `width`, the band on its back alone.
+fn plate_shape(length: u32, width: u32, material: &Material, coating: &Coating) -> VertexShape {
+	let coating = Coating { front: false, sides: false, ..coating.clone() };
+	let rectangle = rectangle::vertices(&crate::model::Rectangle { length, width, ..Default::default() });
+	VertexShape::new(rectangle, material, &coating).expect("a rectangle has four vertices")
+}
+
+/// The one shape of a normalised `part` whose kind paints as one; see [`shapes_for`].
 pub fn shape_for(part: &Part, sim: &Simulation, seed: i32) -> Option<Box<dyn PartShape>> {
 	Some(match &part.kind {
 		PartKind::Lens(l) => Box::new(lens::LensShape::new(l)),
@@ -319,6 +346,7 @@ pub fn shape_for(part: &Part, sim: &Simulation, seed: i32) -> Option<Box<dyn Par
 			let coating = Coating { front: false, sides: false, ..g.coating.clone() };
 			Box::new(profiled::ProfiledShape::new(g.plate(), Body::of(&g.material, &coating)))
 		}
+		PartKind::InterferenceFilter(f) => Box::new(plate_shape(f.length, f.width, &f.material, &f.coating)),
 		PartKind::Fiber(f) => Box::new(fiber::FiberShape::new(f)?),
 		PartKind::BraggReflector(b) => Box::new(bragg::BraggShape::new(b)),
 		PartKind::GrinLens(g) => Box::new(grin::GrinShape::new(g)),
@@ -338,6 +366,7 @@ pub fn vertices(kind: &PartKind) -> Option<Vec<Vec2>> {
 		PartKind::Lens(_)
 		| PartKind::FresnelLens(_)
 		| PartKind::Diffuser(_)
+		| PartKind::InterferenceFilter(_)
 		| PartKind::FacettedGrating(_)
 		| PartKind::Fiber(_)
 		| PartKind::BraggReflector(_)

@@ -163,6 +163,7 @@ blue = max(old blue, round_even(Absorption * share))
 | Triangle | vertices `(-h/2, -B/2), (-h/2, B/2), (h/2, apexY)` | RefractiveIndex | yes |
 | Outline | polygon through the `Point`s (part frame); < 3 points paints nothing | RefractiveIndex | yes |
 | Diffuser, FacettedGrating | a plate whose front face is a profile, see below | RefractiveIndex | yes |
+| InterferenceFilter | two pieces: the plate (a rectangle, the band on its back alone) and the stack, see below | plate / layers | yes |
 | Fiber | tube around a flattened Bezier path, see below | core / cladding | yes |
 | BraggReflector | rectangle `min(L/2 - |x|, W/2 - |y|)`, `L = Pairs*(T1+T2)` | layers along x | yes |
 | GrinLens | rectangle Length x Diameter | `nc - (nc - ne)*(y/(D/2))^2` | yes |
@@ -212,6 +213,16 @@ exact signed distance to it (inside when `|y'| < W/2`, `x' < L/2` and `x' > fron
 pixels), found by the back and the two ends and then the face's segments outward from the one under the point while
 their span in y' can still come nearer. The face's segments are the front, the back the back, the ends the sides; the
 grating's band lies on the back alone. Without a relief the plate paints byte for byte as the rectangle of its size.
+
+### Interference filter
+
+Two shapes (`shapes_for`), painted in order: the plate, a rectangle `Length x Width` with the material, its
+absorption and the band on the back alone; and the stack (`shapes/stack.rs`), the layers of a thickness above 0
+side by side along x' from `-L/2 - sum(thickness)` to the plate's front at `-L/2`, the plate's width across, each
+layer its own index, no band, no absorption. The boundaries between layers are inner edges (as the Bragg stack's),
+so a fractional boundary mixes the two indices in its pixel. A glass plate is painted first and the stack over it,
+so the pixels at the plate's front average both; a mirror plate last, so its pixels stay red 0. Without a layer
+the plate alone is painted.
 
 ### Fibre
 

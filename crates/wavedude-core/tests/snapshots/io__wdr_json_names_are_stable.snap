@@ -124,6 +124,19 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].kind.GrinLens.diameter
 .parts[].kind.GrinLens.edge_index
 .parts[].kind.GrinLens.length
+.parts[].kind.InterferenceFilter.coating.back
+.parts[].kind.InterferenceFilter.coating.depth
+.parts[].kind.InterferenceFilter.coating.front
+.parts[].kind.InterferenceFilter.coating.profile = "Layer"
+.parts[].kind.InterferenceFilter.coating.sides
+.parts[].kind.InterferenceFilter.layers[].refractive_index
+.parts[].kind.InterferenceFilter.layers[].thickness
+.parts[].kind.InterferenceFilter.length
+.parts[].kind.InterferenceFilter.material.absorption
+.parts[].kind.InterferenceFilter.material.absorption_ramp
+.parts[].kind.InterferenceFilter.material.mirror
+.parts[].kind.InterferenceFilter.material.refractive_index
+.parts[].kind.InterferenceFilter.width
 .parts[].kind.Lens.coating.back
 .parts[].kind.Lens.coating.depth
 .parts[].kind.Lens.coating.front
@@ -209,6 +222,7 @@ expression: "names.into_iter().collect::<Vec<_>>().join(\"\\n\")"
 .parts[].name = "Fiber 1"
 .parts[].name = "Fresnel lens 1"
 .parts[].name = "GRIN lens 1"
+.parts[].name = "Interference filter 1"
 .parts[].name = "Lens 1"
 .parts[].name = "Outline 1"
 .parts[].name = "Polygon 1"

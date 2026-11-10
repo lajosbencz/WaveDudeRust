@@ -30,6 +30,9 @@ pub fn kind_icon(kind: NewPart) -> Icon {
 		NewPart::Diffuser => {
 			Icon::path("M11.5 1.5 L11.5 13.5 L6.5 13.5 Q4.5 12 6.5 10.5 Q3.5 9 5.5 7.5 Q3.5 6 6 4.5 Q4.5 3 6.5 1.5 Z")
 		}
+		NewPart::InterferenceFilter => Icon::path(
+			"M9.5 1.5 L13.5 1.5 L13.5 13.5 L9.5 13.5 Z M7.5 1.5 L7.5 13.5 M5.5 1.5 L5.5 13.5 M3.5 1.5 L3.5 13.5",
+		),
 		NewPart::FacettedGrating => {
 			Icon::path("M11.5 1.5 L11.5 13.5 L7.5 13.5 L4.5 11.5 L7.5 9.5 L4.5 7.5 L7.5 5.5 L4.5 3.5 L7.5 1.5 Z")
 		}
@@ -109,6 +112,7 @@ fn part_icon(part: &Part) -> Icon {
 		PartKind::Triangle(_) => NewPart::Triangle,
 		PartKind::Outline(_) => NewPart::Outline,
 		PartKind::Diffuser(_) => NewPart::Diffuser,
+		PartKind::InterferenceFilter(_) => NewPart::InterferenceFilter,
 		PartKind::FacettedGrating(_) => NewPart::FacettedGrating,
 		PartKind::Fiber(_) => NewPart::Fiber,
 		PartKind::BraggReflector(_) => NewPart::BraggReflector,

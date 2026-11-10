@@ -353,13 +353,14 @@ The Add part menu of the project tree. <figure name="menu-add-part"/>
 5. **GRIN lens**: A gradient-index lens: a rectangle whose index falls from the axis to the edge in a parabolic profile, so it focuses like a lens with flat faces.
 6. **Zone plate**: A zone plate: Fresnel zones cut for a design frequency and a focal length, every second zone an absorbing block, the central zone open or, inverted, a block. It focuses by diffraction; an optional mount stops light passing outside the diameter.
 7. **Diffuser**: A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects.
-8. **Diffraction gratings**: The gratings, in a submenu of their own: the facetted grating.
-9. **Polygon**: A regular polygon of glass or mirror, by its number of sides and the side length.
-10. **Rectangle**: A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one.
-11. **Ellipse**: An ellipse of glass or mirror, by the length and width of its box; linked, a circle.
-12. **Triangle**: A triangle of glass or mirror: the base across the axis, the apex along it, the base angles set by a preset or by hand.
-13. **Outline**: A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing.
-14. **Optical logic**: The gates, in a submenu of their own: XOR (Mach-Zehnder), AND and OR.
+8. **Interference filter**: An interference filter: a plate of glass or mirror with a stack of thin layers on its front, each with its own thickness and index. Waves reflected at the layers' boundaries interfere, so the stack reflects some wavelengths and passes others; a new filter is a quarter-wave stack for a wavelength of 16 pixels.
+9. **Diffraction gratings**: The gratings, in a submenu of their own: the facetted grating.
+10. **Polygon**: A regular polygon of glass or mirror, by its number of sides and the side length.
+11. **Rectangle**: A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one.
+12. **Ellipse**: An ellipse of glass or mirror, by the length and width of its box; linked, a circle.
+13. **Triangle**: A triangle of glass or mirror: the base across the axis, the apex along it, the base angles set by a preset or by hand.
+14. **Outline**: A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing.
+15. **Optical logic**: The gates, in a submenu of their own: XOR (Mach-Zehnder), AND and OR.
 
 The XOR gate has two input waveguides, a phase section putting the lower input a quarter period ahead, and a coupler whose upper output carries their difference. It lights when one input is lit, not both, for coherent inputs at the design frequency. The AND gate is the same coupler with the lower input a quarter period behind, so the upper output carries the sum: brightest with both inputs lit, about four times a single one; a passive linear gate has no truer AND. The OR gate puts the lower input a twelfth of a period ahead, so the upper output carries half the power of either input and of both: it lights with one input or both.
 
@@ -525,6 +526,24 @@ A diffuser: a plate of glass or mirror whose front face is rough, the back flat.
 20. **Sigma**: The spread of the roughness's wavelengths about the centre wavelength, in pixels: a wavelength gets the amplitude times the bell e^(-(lambda - centre)^2 / 2 sigma^2). 0 leaves the centre wavelength alone, a single regular ripple; the larger, the more wavelengths join in and the less regular the face.
 21. **Profile height**: The rough face from its highest point to its lowest: what the ripples add up to. A read-out.
 22. **Ripples**: How many wavelengths make up the roughness: one at sigma 0, thirteen otherwise, those below two pixels left out. A read-out.
+
+### Interference filter
+
+An interference filter: a plate of glass or mirror with a stack of thin layers on its front, each with its own thickness and index. Waves reflected at the layers' boundaries interfere, so the stack reflects some wavelengths and passes others; a new filter is a quarter-wave stack for a wavelength of 16 pixels in the usual design, beginning and ending with the high index: from the outside in, five pairs of a layer of index 2.00, 2.00 pixels thick, and one of 1.50, 2.67 pixels thick, then one more layer of 2.00 on the plate, eleven layers that reflect most of a wave at that wavelength. The layers lie on the plate's front, outside it, so the plate keeps its length and the filter grows by the stack; the first layer in the list is the outermost, the one a wave from the left meets first. Ticking Mirror makes the plate a mirror and leaves the layers glass in front of it: a coated mirror. The plate's anti-reflection band can lie only on its back, the face away from the layers. On the pictures, a selected filter shows a grip on the plate's back corner that sets the length and the width. Badges 1 to 6 are the shared settings.
+
+7. **Mirror**: Makes the plate a mirror instead of glass; the layers stay glass in front of it. The plate's refractive index, coating and absorption are ignored then.
+8. **Refractive index**: Refractive index of the plate, 1.00 to 2.55 in steps of 0.01.
+9. **AR coating**: Thickness in pixels of the anti-reflection band just inside the plate's back; 0 for none.
+10. **Coating profile**: As for the glass parts: a layer at sqrt(n), or a graded rise from the medium outside to the glass.
+11. **Coat the back**: Puts the band on the plate's back, the face away from the layers. Clear it to leave the back bare.
+12. **Absorption**: How strongly the plate absorbs waves, 0 (not at all) to 255, as for the glass parts. The layers do not absorb.
+13. **Absorption ramp**: Depth in pixels over which the plate's absorption rises from nothing at its outline to its full value.
+14. **Length**: Extent of the plate along the axis in pixels, without the layers, which lie on its front.
+15. **Width**: Extent across the axis in pixels, of the plate and the layers alike.
+16. **Stack thickness**: The layers' thicknesses added up: how far the stack stands out of the plate's front. A read-out.
+17. **A layer's row**: The layer's number, its thickness in pixels to two decimals (a quarter-wave layer is the wavelength divided by four times the index; a layer of 0 is left out), its refractive index, and buttons that move it up (outwards) or down (towards the plate) and remove it.
+18. **Add layer**: Appends a copy of the last layer, so a stack of alternating layers grows by copying and changing.
+19. **Remove all**: Removes every layer at once, to build another stack from nothing; Undo (Ctrl+Z) brings them back.
 
 ### Facetted grating
 

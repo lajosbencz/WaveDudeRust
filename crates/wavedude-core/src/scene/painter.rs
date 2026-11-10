@@ -15,7 +15,7 @@
 use rayon::prelude::*;
 
 use super::pixels::ScenePixels;
-use super::shapes::{Frame, PartShape, Vec2, shape_for};
+use super::shapes::{Frame, PartShape, Vec2, shapes_for};
 use crate::model::{CoatingProfile, Part, Simulation};
 
 /// How far a sample can lie from its pixel's centre, with a margin.
@@ -27,21 +27,28 @@ pub const EDGE_REACH: f64 = 0.71;
 /// Step of the forward differences that give an edge's normal, in pixels.
 const NORMAL_STEP: f64 = 1e-3;
 
-/// Paints the enabled, normalised `part` into `pixels` (if it has a shape): its absorption first, then its index.
-/// `seed` is the project's, for a kind that draws on it.
+/// Paints the enabled, normalised `part` into `pixels` (if it has a shape), a part of several pieces piece by
+/// piece in their order: each piece's absorption first, then its index. `seed` is the project's, for a kind
+/// that draws on it.
 pub fn paint_part(pixels: &mut ScenePixels, part: &Part, sim: &Simulation, seed: i32) {
 	debug_assert!(part.base.enabled, "disabled parts are filtered by the caller");
-	let Some(shape) = shape_for(part, sim, seed) else {
+	let shapes = shapes_for(part, sim, seed);
+	if shapes.is_empty() {
 		tracing::debug!(name = %part.base.name, "part has no shape to paint");
-		return;
-	};
+	}
+	for shape in shapes {
+		paint_shape(pixels, part, shape.as_ref());
+	}
+}
+
+fn paint_shape(pixels: &mut ScenePixels, part: &Part, shape: &dyn PartShape) {
 	let frame = Frame::of(&part.base);
 	let Some(bounds) = Bounds::of(shape.extent(), frame.centre(), pixels.width, pixels.height) else {
 		tracing::debug!(name = %part.base.name, "part lies outside the canvas");
 		return;
 	};
 	let started = std::time::Instant::now();
-	let painter = Painter { shape: shape.as_ref(), frame, bounds, stride: pixels.stride() };
+	let painter = Painter { shape, frame, bounds, stride: pixels.stride() };
 	let rows = &mut pixels.rgba[bounds.y0 * painter.stride..(bounds.y1 + 1) * painter.stride];
 	if shape.absorption() > 0 {
 		painter.absorption(rows);

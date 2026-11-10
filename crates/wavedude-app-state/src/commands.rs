@@ -12,8 +12,8 @@ use serde_json::Value;
 use wavedude_core::model::names::{self, Named};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{
-	BraggReflector, Diffuser, Ellipse, FacettedGrating, Fiber, FresnelLens, GateKind, GrinLens, Lens, LogicGate,
-	Outline, PartKind, Point, Polygon, Probe, Project, Rectangle, Triangle, ZonePlate,
+	BraggReflector, Diffuser, Ellipse, FacettedGrating, Fiber, FresnelLens, GateKind, GrinLens, InterferenceFilter,
+	Lens, LogicGate, Outline, PartKind, Point, Polygon, Probe, Project, Rectangle, Triangle, ZonePlate,
 };
 
 use wavedude_core::scene::gate_design::{self, GateDesign};
@@ -33,6 +33,7 @@ pub enum NewPart {
 	Triangle,
 	Outline,
 	Diffuser,
+	InterferenceFilter,
 	FacettedGrating,
 	Fiber,
 	BraggReflector,
@@ -44,7 +45,7 @@ pub enum NewPart {
 }
 
 impl NewPart {
-	pub const ALL: [Self; 16] = [
+	pub const ALL: [Self; 17] = [
 		Self::Lens,
 		Self::FresnelLens,
 		Self::Fiber,
@@ -52,6 +53,7 @@ impl NewPart {
 		Self::GrinLens,
 		Self::ZonePlate,
 		Self::Diffuser,
+		Self::InterferenceFilter,
 		Self::FacettedGrating,
 		Self::Polygon,
 		Self::Rectangle,
@@ -75,6 +77,7 @@ impl NewPart {
 			Self::Triangle => PartKind::Triangle(Triangle::default()),
 			Self::Outline => PartKind::Outline(Outline::default()),
 			Self::Diffuser => PartKind::Diffuser(Diffuser::new_part()),
+			Self::InterferenceFilter => PartKind::InterferenceFilter(InterferenceFilter::new_part()),
 			Self::FacettedGrating => PartKind::FacettedGrating(FacettedGrating::default()),
 			Self::Fiber => PartKind::Fiber(Fiber::default()),
 			Self::BraggReflector => PartKind::BraggReflector(BraggReflector::default()),
@@ -97,6 +100,7 @@ impl NewPart {
 			PartKind::Triangle(_) => Self::Triangle,
 			PartKind::Outline(_) => Self::Outline,
 			PartKind::Diffuser(_) => Self::Diffuser,
+			PartKind::InterferenceFilter(_) => Self::InterferenceFilter,
 			PartKind::FacettedGrating(_) => Self::FacettedGrating,
 			PartKind::Fiber(_) => Self::Fiber,
 			PartKind::BraggReflector(_) => Self::BraggReflector,
@@ -121,6 +125,7 @@ impl NewPart {
 			Self::Triangle => "TrianglePart",
 			Self::Outline => "OutlinePart",
 			Self::Diffuser => "DiffuserPart",
+			Self::InterferenceFilter => "InterferenceFilterPart",
 			Self::FacettedGrating => "FacettedGratingPart",
 			Self::Fiber => "FiberPart",
 			Self::BraggReflector => "BraggReflectorPart",

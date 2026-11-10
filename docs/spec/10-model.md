@@ -281,6 +281,7 @@ Shared constants: refractive index range 1..2.55, rounded to 0.01 (round even), 
 | `Triangle` | Triangle | Coated shape | shape props; `Base` 60 (>= 2); `Type` Equilateral; `AngleA` 60, `AngleB` 60 (1..178) |
 | `Outline` | Outline | Coated shape | shape props; `Point` children (int X, Y, part frame) |
 | `Diffuser` | Diffuser | Coated shape | shape props; `Length` 50 (>= 1); `Width` 500 (>= 2); `CenterWavelength` 16 (2..10000); `Amplitude` 1 (0..10000); `Sigma` 6 (0..10000). A new one coats its back alone |
+| `InterferenceFilter` | Interference filter | Coated shape | shape props (`BackCoated` alone counts); `Length` 50 (>= 1); `Width` 500 (>= 1); `Layer` children (`Thickness` 2 (0..1000, 0.01), `RefractiveIndex` 1.5), the outermost first. A new one is a quarter-wave stack for 16 px: five pairs 2.00 at 2.00 px then 1.50 at 2.67 px and one more 2.00 |
 | `FacettedGrating` | Facetted grating | Coated shape | shape props (the coating's `BackCoated` alone counts); `Length` 50; `Width` 500; `Pattern` Sawtooth/SquareWave/Sinusoidal; `Pitch` 32 (2..10000); `Amplitude` 4 (0..10000) |
 | `Fiber` | Fiber | Coated | `CoreIndex` 1.5; `CoreDiameter` 20 (>= 2); `CladdingIndex` 1.45; `CladdingThickness` 10 (>= 0); `Absorption` 0; `AbsorptionRamp` 10; `Ends` Flat/Round (Flat); `Node` children |
 | `BraggReflector` | Bragg reflector | part | `Pairs` 10 (1..200); `Thickness1` 10; `Thickness2` 10; `Index1` 1.5; `Index2` 2.0; `Width` 200 |

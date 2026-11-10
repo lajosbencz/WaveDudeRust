@@ -203,6 +203,34 @@ fn profiled_plates() {
 	assert_eq!((red(&p, crest + 2, 60 - 20), red(&p, 108, 60 - 20)), (150, 122), "the front stays bare");
 }
 
+/// An interference filter is its plate and, outside it, its stack: each layer its own index, the outermost first,
+/// a boundary inside a pixel a mixed index; a mirror plate keeps its layers glass in front of it.
+#[test]
+fn interference_filter_stack() {
+	let at = |kind| Part::new(kind, 100, 60);
+	let bare = InterferenceFilter { length: 20, width: 60, ..InterferenceFilter::default() };
+	let rectangle = Rectangle { length: 20, width: 60, ..Rectangle::default() };
+	assert_eq!(
+		paint(&[at(PartKind::InterferenceFilter(bare.clone()))]).rgba,
+		paint(&[at(PartKind::Rectangle(rectangle))]).rgba,
+		"without layers the plate alone"
+	);
+	let layer = |thickness, index| FilterLayer { thickness, refractive_index: index };
+	let stacked = |layers| InterferenceFilter { layers, ..bare.clone() };
+	let p =
+		paint(&[at(PartKind::InterferenceFilter(stacked(vec![layer(3.0, 2.0), layer(4.0, 1.5), layer(3.0, 2.0)])))]);
+	let row: Vec<u8> = (78..112).map(|x| red(&p, x, 60)).collect();
+	assert_eq!(&row[..13], &[100, 100, 200, 200, 200, 150, 150, 150, 150, 200, 200, 200, 150], "{row:?}");
+	assert_eq!(count_row(&p, 60, |r| r == 150), 24, "the plate and the middle layer");
+	let p = paint(&[at(PartKind::InterferenceFilter(stacked(vec![layer(1.5, 2.0), layer(2.5, 1.5)])))]);
+	let mixed = red(&p, 87, 60);
+	assert!(mixed > 150 && mixed < 200, "a boundary inside a pixel mixes the indices: {mixed}");
+	let mirror = Material { mirror: true, ..Material::default() };
+	let m = stacked(vec![layer(3.0, 2.0)]);
+	let p = paint(&[at(PartKind::InterferenceFilter(InterferenceFilter { material: mirror, ..m }))]);
+	assert_eq!((red(&p, 88, 60), red(&p, 90, 60), red(&p, 100, 60)), (200, 0, 0), "glass before a mirror plate");
+}
+
 /// A Fresnel lens of one zone is the lens; with four zones of equal width each surface restarts at the vertex
 /// plane at every zone's inner edge, so the outer zones hold glass where the whole lens's surfaces had crossed.
 #[test]
@@ -935,6 +963,15 @@ fn kinds() -> Vec<(&'static str, PartKind)> {
 			}),
 		),
 		("diffuser", PartKind::Diffuser(Diffuser { length: 24, width: 120, amplitude: 2.0, ..Diffuser::default() })),
+		(
+			"filter",
+			PartKind::InterferenceFilter(InterferenceFilter {
+				length: 24,
+				width: 120,
+				coating: coated(3.0, CoatingProfile::Layer, true, true, true),
+				..InterferenceFilter::new_part()
+			}),
+		),
 		(
 			"facetted",
 			PartKind::FacettedGrating(FacettedGrating {

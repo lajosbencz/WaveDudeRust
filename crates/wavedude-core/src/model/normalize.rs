@@ -8,9 +8,9 @@ use super::names;
 use super::ranges as r;
 use super::{
 	BraggReflector, Coating, ColorScheme, Diffuser, Display, DisplayLayer, Ellipse, FacettedGrating, Fiber,
-	FresnelLens, GrinLens, Layer, Lens, LogicGate, Material, Measurement, Outline, Part, PartKind, Polygon, Probe,
-	Project, Rectangle, Scene, Simulation, Source, SourceArray, Stop, Triangle, TriangleType, Video, YScale, ZonePlate,
-	normalize_angle,
+	FilterLayer, FresnelLens, GrinLens, InterferenceFilter, Layer, Lens, LogicGate, Material, Measurement, Outline,
+	Part, PartKind, Polygon, Probe, Project, Rectangle, Scene, Simulation, Source, SourceArray, Stop, Triangle,
+	TriangleType, Video, YScale, ZonePlate, normalize_angle,
 };
 
 /// Brings a value into its valid state.
@@ -186,6 +186,7 @@ impl Normalize for Part {
 			PartKind::Triangle(p) => p.normalize(),
 			PartKind::Outline(p) => p.normalize(),
 			PartKind::Diffuser(p) => p.normalize(),
+			PartKind::InterferenceFilter(p) => p.normalize(),
 			PartKind::FacettedGrating(p) => p.normalize(),
 			PartKind::Fiber(p) => p.normalize(),
 			PartKind::BraggReflector(p) => p.normalize(),
@@ -206,6 +207,23 @@ impl Normalize for Diffuser {
 		self.center_wavelength = r::RIPPLE_WAVELENGTH.clamp_or(self.center_wavelength, d.center_wavelength);
 		self.amplitude = r::PLATE_PIXELS.clamp_or(self.amplitude, d.amplitude);
 		self.sigma = r::PLATE_PIXELS.clamp_or(self.sigma, d.sigma);
+	}
+}
+
+impl Normalize for FilterLayer {
+	fn normalize(&mut self) {
+		self.thickness = round2(r::LAYER_THICKNESS.clamp_or(self.thickness, 0.0));
+		self.refractive_index = normalize_index(self.refractive_index);
+	}
+}
+
+impl Normalize for InterferenceFilter {
+	fn normalize(&mut self) {
+		self.material.normalize();
+		self.coating.normalize();
+		self.length = r::AT_LEAST_1.clamp_u32(self.length);
+		self.width = r::AT_LEAST_1.clamp_u32(self.width);
+		self.layers.iter_mut().for_each(Normalize::normalize);
 	}
 }
 
