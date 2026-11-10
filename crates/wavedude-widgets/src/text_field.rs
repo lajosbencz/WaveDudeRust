@@ -79,6 +79,7 @@ impl Component for TextField {
 		let mut dragging = use_state(|| false);
 		let mut hovered = use_state(|| false);
 		let mut was_focused = use_state(|| false);
+		let select_all_on_focus = self.select_all_on_focus;
 		// the focusing click's press arrives after the focus change and must not undo the select-all
 		let mut fresh = use_state(|| false);
 		let mut value = self.value.clone();
@@ -97,7 +98,7 @@ impl Component for TextField {
 
 		if *was_focused.peek() != focused {
 			was_focused.set(focused);
-			if focused && self.select_all_on_focus {
+			if focused && select_all_on_focus {
 				let mut editor = editable.editor_mut().write();
 				let end = editor.len_utf16_cu();
 				if end > 0 {
@@ -162,6 +163,15 @@ impl Component for TextField {
 				Key::Named(NamedKey::Escape) => id.request_unfocus(),
 				_ => {
 					movement.reset();
+					// a key can arrive before the render that saw the focus: select here then, same as that render does
+					if select_all_on_focus && !*was_focused.peek() {
+						was_focused.set(true);
+						let mut editor = editable.editor_mut().write();
+						let end = editor.len_utf16_cu();
+						if end > 0 {
+							editor.set_selection((0, end));
+						}
+					}
 					fresh.set_if_modified(false);
 					let before = editable.editor().peek().editor_history().version;
 					editable.process_event(EditableEvent::KeyDown {
