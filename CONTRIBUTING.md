@@ -22,6 +22,7 @@ Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLAT
   should happen. When Next is the one in the wrong, this program does not imitate the bug; the maintainers decide
   whether and how to pass it on.
 - Vulnerabilities go through [`SECURITY.md`](SECURITY.md), never an issue.
+- Conduct: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
 
 ## Pull requests
 
