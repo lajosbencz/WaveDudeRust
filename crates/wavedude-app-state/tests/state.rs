@@ -4,17 +4,16 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
-use serde_json::json;
 use wavedude_app_state::clipboard::PasteTarget;
-use wavedude_app_state::commands::{Command, NewPart, Target};
+use wavedude_app_state::commands::{Command, Edit, NewPart};
 use wavedude_app_state::history::History;
 use wavedude_app_state::live::Notice;
 use wavedude_app_state::live::fake::FakeBackend;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::Settings;
 use wavedude_app_state::{AppState, Event, ExportKind, Guarded, Response, SaveChoice};
-use wavedude_core::model::Point;
 use wavedude_core::model::ProbeDetector;
+use wavedude_core::model::{Point, SourceEdit};
 use wavedude_core::run::MachineFacts;
 use wavedude_core::run::Wanted;
 
@@ -45,9 +44,7 @@ fn undo_restores_the_project_and_redo_repeats_it() {
 	let mut s = app();
 	s.handle(Event::Command(Command::AddSource { at: None }), t);
 	let added = s.document.project.clone();
-	let set = |v: f64| {
-		Event::Command(Command::Set { target: Target::Item(source(0)), path: "frequency".into(), value: json!(v) })
-	};
+	let set = |v: f64| Event::Command(Command::Edit(Edit::Source(0, SourceEdit::Frequency(v))));
 	s.handle(set(0.1 + 0.2), at(t, 10));
 	s.tick(at(t, 600));
 	let edited = s.document.project.clone();
@@ -358,10 +355,7 @@ fn core_backend_round(use_gpu: bool) {
 	let spans = s.live.present_spans();
 	assert!(spans.first().is_some_and(|&(from, to)| from == 0 && to >= 50), "the frames so far stay: {spans:?}");
 	s.handle(Event::Scrub(20), Instant::now());
-	s.handle(
-		Event::Command(Command::Set { target: Target::Item(source(0)), path: "frequency".into(), value: json!(123.0) }),
-		Instant::now(),
-	);
+	s.handle(Event::Command(Command::Edit(Edit::Source(0, SourceEdit::Frequency(123.0)))), Instant::now());
 	until(
 		&mut s,
 		Box::new(|s| matches!(s.live.shown_source(), Some(wavedude_app_state::live::ShownSource::Stored(_, 20)))),

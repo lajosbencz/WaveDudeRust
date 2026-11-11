@@ -22,10 +22,9 @@ use bytes::Bytes;
 use freya::elements::image::ImageHandle;
 use freya::engine::prelude::AlphaType;
 use freya::prelude::*;
-use serde_json::json;
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::Project;
-use wavedude_core::model::{Layer, SceneMode};
+use wavedude_core::model::{DisplayEdit, DisplayLayerEdit, Layer, ProjectEdit, SceneMode};
 use wavedude_core::render::fit_brightness;
 use wavedude_core::run::SceneCache;
 use wavedude_core::scene::compose::SceneKey;
@@ -44,7 +43,7 @@ use crate::ui::app::{Cx, TICK};
 use crate::ui::export_dialog::{self, ExportKindChoice};
 use crate::ui::shared::{App, Shared, Topics};
 use wavedude_app_state::Event as AppEvent;
-use wavedude_app_state::commands::{Command, Target};
+use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::live::ShownSource;
 use wavedude_app_state::selection::ItemRef;
 use wavedude_app_state::settings::Orientation;
@@ -138,6 +137,14 @@ pub fn layer_key(layer: Layer) -> &'static str {
 		Layer::Field => "field",
 		Layer::Intensity => "intensity",
 	}
+}
+
+/// The edit of `layer`'s display settings by `edit`.
+pub fn display_edit(layer: Layer, edit: DisplayLayerEdit) -> Edit {
+	Edit::Project(ProjectEdit::Display(match layer {
+		Layer::Field => DisplayEdit::Field(edit),
+		Layer::Intensity => DisplayEdit::Intensity(edit),
+	}))
 }
 
 /// The picture's context menu (and the header strip's).
@@ -245,11 +252,7 @@ fn fit_now(shared: &Shared, source: &FrameSource, layer: Layer) {
 	match fitted {
 		Some(value) => {
 			tracing::debug!(layer = layer_name(layer), value, "auto brightness");
-			shared.send(AppEvent::Command(Command::Set {
-				target: Target::Display,
-				path: format!("{}.brightness", layer_key(layer)),
-				value: json!(value),
-			}));
+			shared.send(AppEvent::Command(Command::Edit(display_edit(layer, DisplayLayerEdit::Brightness(value)))));
 		}
 		None => tracing::info!("Auto brightness: the frame shown has nothing to fit."),
 	}

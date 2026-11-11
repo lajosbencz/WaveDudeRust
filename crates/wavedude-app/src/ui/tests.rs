@@ -1,17 +1,15 @@
-//! The views driven headless: which memos a playback tick reaches, and every form's paths.
+//! The views driven headless: which memos a playback tick reaches, and every form's rows.
 
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 use freya::prelude::*;
 use freya_testing::prelude::*;
-use serde_json::json;
-use wavedude_core::model::ProbeDetector;
+use wavedude_core::model::{OutlineEdit, PartEdit, PartKindEdit, Point, ProbeDetector, SourceArray, SourceEdit};
 
 use super::app::{Boot, BootInfo, CloseGate, root};
-use super::properties::BOUND;
 use super::shared::{Shared, runs};
-use wavedude_app_state::commands::{Command, NewPart, Target};
+use wavedude_app_state::commands::{Command, Edit, NewPart};
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::AppDirs;
@@ -104,16 +102,14 @@ fn the_clipboard_is_read_as_a_menu_opens_not_as_the_shell_renders() {
 }
 
 #[test]
-fn every_form_binds_paths_its_object_has() {
+fn every_form_is_built_for_every_item_kind() {
 	let dir = tempfile::tempdir().unwrap();
 	let (mut test, shared) = shell(dir.path(), |app| {
 		let now = Instant::now();
 		let mut apply = |c| app.apply(c, now).expect("the command applies");
 		apply(Command::AddSource { at: None });
-		let source = Target::Item(ItemRef::new(ItemKind::Source, 0));
-		let array = serde_json::to_value(wavedude_core::model::SourceArray::default()).unwrap();
-		apply(Command::Set { target: source, path: "array".into(), value: array });
-		apply(Command::Set { target: source, path: "detach_after".into(), value: json!(100) });
+		apply(Command::Edit(Edit::Source(0, SourceEdit::SetArray(Some(SourceArray::default())))));
+		apply(Command::Edit(Edit::Source(0, SourceEdit::DetachAfter(Some(100)))));
 		apply(Command::AddSource { at: None });
 		apply(Command::AddProbe { at: None, detector: ProbeDetector::Standard });
 		apply(Command::AddScheme);
@@ -133,12 +129,24 @@ fn every_form_binds_paths_its_object_has() {
 		rows.extend((0..count).map(|i| Row::Item(ItemRef::new(kind, i))));
 	}
 	for row in rows {
-		BOUND.with_borrow_mut(Vec::clear);
 		shared.update(|a| a.selection.select(row));
 		for _ in 0..3 {
 			test.sync_and_update();
 		}
-		assert!(BOUND.with_borrow(|b| !b.is_empty()), "{row:?} built no form");
+		let first = match row {
+			Row::Project => "ProjectNewSeed",
+			Row::Scene => "Scene.Mode",
+			Row::Simulation => "Simulation.Steps",
+			Row::Display => "DisplayLayer.Brightness",
+			Row::Item(i) => match i.kind {
+				ItemKind::Source => "Source.X",
+				ItemKind::Part => "Part.X",
+				ItemKind::Probe => "Probe.BoxWidth",
+				ItemKind::Scheme => "ColorScheme.Kind",
+			},
+			Row::Folder(_) => unreachable!("the rows are objects"),
+		};
+		assert!(is_drawn(&test, first), "{row:?} built no form: '{first}' is not drawn");
 	}
 }
 
@@ -167,6 +175,15 @@ fn a_press_on_a_graph_box_selects_its_probe() {
 	assert!(shared.peek(|a| a.selection.contains(ItemRef::new(ItemKind::Probe, 0))), "the press selected the probe");
 }
 
+/// Whether a rectangle carrying the test id `id` is drawn.
+fn is_drawn(test: &TestingRunner, id: &str) -> bool {
+	test.find(|_, element| {
+		Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some(id))?;
+		Some(())
+	})
+	.is_some()
+}
+
 /// The area of the rectangle carrying the test id `id`.
 fn area_of(test: &TestingRunner, id: &str) -> Area {
 	test.find(|node, element| {
@@ -182,15 +199,15 @@ fn an_outline_point_row_fits_the_pane() {
 	let (mut test, shared) = shell(dir.path(), |app| {
 		let now = Instant::now();
 		app.apply(Command::AddPart { kind: NewPart::Outline, at: None }, now).expect("the part is added");
-		let points = json!([{ "x": -40, "y": -30 }, { "x": 40, "y": -30 }, { "x": 0, "y": 40 }]);
-		let target = Target::Item(ItemRef::new(ItemKind::Part, 0));
-		app.apply(Command::Set { target, path: "kind.Outline.points".into(), value: points }, now).expect("points set");
+		let points = vec![Point::new(-40, -30), Point::new(40, -30), Point::new(0, 40)];
+		let edit = PartEdit::Kind(PartKindEdit::Outline(OutlineEdit::Points(points)));
+		app.apply(Command::Edit(Edit::Part(0, edit)), now).expect("points set");
 	});
 	shared.update(|a| a.selection.select(Row::Item(ItemRef::new(ItemKind::Part, 0))));
 	for _ in 0..3 {
 		test.sync_and_update();
 	}
-	let column = area_of(&test, "ShapePart.Coating");
+	let column = area_of(&test, "Coating.Depth");
 	// the points sit below the fold
 	test.scroll((f64::from(column.center().x), f64::from(column.center().y)), (0., -2000.));
 	for _ in 0..3 {

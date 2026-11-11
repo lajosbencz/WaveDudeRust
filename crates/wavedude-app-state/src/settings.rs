@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use wavedude_core::engine::SampleFormat;
+use wavedude_core::model::Word;
 use wavedude_core::run::{MachineFacts, PreviewDefaults, PreviewQuality};
 
 use super::strings::Language;
@@ -78,7 +79,8 @@ pub enum WindowState {
 	Maximized,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
+#[fields(name = "AppTheme")]
 pub enum Theme {
 	#[default]
 	System,

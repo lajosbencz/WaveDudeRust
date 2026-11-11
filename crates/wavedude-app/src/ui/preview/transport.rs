@@ -9,7 +9,6 @@ use std::rc::Rc;
 use wavedude_widgets::Button;
 
 use freya::prelude::*;
-use serde_json::json;
 use wavedude_widgets::{
 	Callback, Icon, IconView, NumberBox, NumberSpec, TestIdExt, Timeline, TimelineEvent, TimelineModel, Tip,
 	icon::icons, use_wave_theme,
@@ -17,10 +16,12 @@ use wavedude_widgets::{
 
 use crate::ui::shared::{App, Shared, Topics};
 use wavedude_app_state::Event as AppEvent;
-use wavedude_app_state::commands::{Command, Target};
+use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::playback::{Playback, SPEED_PRESETS, SPEED_RANGE};
 use wavedude_app_state::settings::Orientation;
-use wavedude_core::model::Step;
+use wavedude_core::model::{DisplayEdit, DisplayLayerEdit, Layer, ProjectEdit, Step};
+
+use super::display_edit;
 
 const fn drawn(stroke: &'static str, fill: &'static str) -> Icon {
 	Icon::Path { stroke: Cow::Borrowed(stroke), fill: Some(Cow::Borrowed(fill)) }
@@ -155,8 +156,8 @@ pub fn timeline_model(playback: &Playback, available: Rc<[(u32, u32)]>, live: bo
 	}
 }
 
-fn set_display(shared: &Shared, path: &str, value: serde_json::Value) {
-	shared.send(AppEvent::Command(Command::Set { target: Target::Display, path: path.into(), value }));
+fn set_display(shared: &Shared, edit: DisplayEdit) {
+	shared.send(AppEvent::Command(Command::Edit(Edit::Project(ProjectEdit::Display(edit)))));
 }
 
 /// Play or pause playback.
@@ -216,8 +217,10 @@ fn timeline(shared: &Shared) -> impl IntoElement {
 			TimelineEvent::Seek(f) => {
 				shared.send(AppEvent::Scrub(f));
 			}
-			TimelineEvent::SetIn(f) => set_display(&shared, "export_from", json!(f * every)),
-			TimelineEvent::SetOut(f) => set_display(&shared, "export_to", json!(if f >= last { 0 } else { f * every })),
+			TimelineEvent::SetIn(f) => set_display(&shared, DisplayEdit::ExportFrom(f * every)),
+			TimelineEvent::SetOut(f) => {
+				set_display(&shared, DisplayEdit::ExportTo(if f >= last { 0 } else { f * every }));
+			}
 			TimelineEvent::PlayPause => toggle_playback(&shared),
 		})
 		.tooltip(tip),
@@ -282,9 +285,11 @@ fn transport_bar(shared: &Shared) -> impl IntoElement {
 	} else {
 		ToolButton::new(RUN, tip(0), send(AppEvent::Run)).test_id("PreviewRun")
 	};
-	let toggle = |path: &'static str, on: bool| {
+	let toggle = |layer: Layer, on: bool| {
 		let shared = shared.clone();
-		move |()| set_display(&shared, path, json!(!on))
+		move |()| {
+			shared.send(AppEvent::Command(Command::Edit(display_edit(layer, DisplayLayerEdit::Preview(!on)))));
+		}
 	};
 	let orient = |o: Orientation| {
 		let shared = shared.clone();
@@ -368,12 +373,12 @@ fn transport_bar(shared: &Shared) -> impl IntoElement {
 		.child(SpeedPresets { speed: view.speed, tooltip: tip(14) })
 		.child(divider())
 		.child(
-			ToolButton::new(WAVE, tip(15), toggle("field.preview", view.show_field))
+			ToolButton::new(WAVE, tip(15), toggle(Layer::Field, view.show_field))
 				.checked(view.show_field)
 				.test_id("PreviewShowField"),
 		)
 		.child(
-			ToolButton::new(SUN, tip(16), toggle("intensity.preview", view.show_intensity))
+			ToolButton::new(SUN, tip(16), toggle(Layer::Intensity, view.show_intensity))
 				.checked(view.show_intensity)
 				.test_id("PreviewShowIntensity"),
 		)

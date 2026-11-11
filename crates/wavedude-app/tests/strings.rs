@@ -4,10 +4,14 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use wavedude_app_state::strings::{Language, keys};
+use wavedude_app_state::strings::{Language, keys, model_field_keys, model_word_keys};
 
-/// Keys built at run time from a prefix and a member name.
-const DYNAMIC_PREFIXES: [&str; 4] = ["Label.", "Hint.", "Enum.", "Kind."];
+/// Keys built at run time from a part's type name.
+const DYNAMIC_PREFIXES: [&str; 1] = ["Kind."];
+
+/// The gate's output words, named by the gate form's outputs.
+const GATE_OUTPUT: [&str; 4] =
+	["Enum.GateOutput.Xor", "Enum.GateOutput.And", "Enum.GateOutput.Or", "Enum.GateOutput.Remainder"];
 
 fn sources(dir: &Path, out: &mut String) {
 	for entry in std::fs::read_dir(dir).expect("a source folder") {
@@ -27,10 +31,13 @@ fn every_english_key_is_used_and_every_language_is_complete() {
 	sources(&root.join("wavedude-app/src"), &mut text);
 	sources(&root.join("wavedude-app-state/src"), &mut text);
 	let english: HashSet<&str> = keys(Language::English).collect();
+	// a field or a word names its key at run time: the type's name and the member's
+	let named: HashSet<String> = model_field_keys().into_iter().chain(model_word_keys()).collect();
 	let unused: Vec<&str> = english
 		.iter()
 		.copied()
 		.filter(|k| !DYNAMIC_PREFIXES.iter().any(|p| k.starts_with(p)))
+		.filter(|k| !named.contains(*k) && !GATE_OUTPUT.contains(k))
 		.filter(|k| !text.contains(&format!("\"{k}\"")))
 		.collect();
 	assert!(unused.is_empty(), "string keys nothing looks up: {unused:?}");

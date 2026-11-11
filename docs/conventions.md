@@ -54,8 +54,9 @@ What new code follows so that it fits the code already here. Each rule names one
 - Model edit: a variant of `Command` (`crates/wavedude-app-state/src/commands.rs:181`), a struct variant with
   named fields and a `///` line, handled in `commands::apply` (`commands.rs:408`), which returns a `Change`
   whose `ChangeKind` (`commands.rs:249`) tells the live controller what to redo (`LiveController::on_change`,
-  `live.rs:526`). A property edit needs no new variant: `Command::Set` addresses it by serde path.
-- Views send edits as `Event::Command(...)` through `Cx::send` (`crates/wavedude-app/src/ui/properties.rs:207`);
+  `live.rs:526`). A property edit needs no new variant: `Command::Edit` carries the model's generated typed edit
+  (`Edit::Probe(0, ProbeEdit::BoxWidth(500))`).
+- Views send edits as `Event::Command(...)` through `Cx::send` (`crates/wavedude-app/src/ui/properties.rs:130`);
   every other user action is an `Event` variant (`crates/wavedude-app-state/src/lib.rs:67`) handled in
   `AppState::handle` (`lib.rs:549`), answered with a `Response`.
 - Export format: a variant of `ExportFormat` with its line in `ALL` and `extensions`
@@ -173,12 +174,14 @@ What new code follows so that it fits the code already here. Each rule names one
 - Every UI string is a key in all four tables `crates/wavedude-app-state/assets/strings/{en,de,fr,nl}.json`;
   `crates/wavedude-app/tests/strings.rs` fails on a key missing from a language or unused in the source.
 - Keys are literal `"Key"` strings in the code (the test searches for them); built keys use the prefixes
-  `Label.`, `Hint.`, `Enum.`, `Kind.` through `Strings::label`, `hint`, `enum_word`, `kind`.
+  `Label.`, `Hint.`, `Enum.`, `Kind.` through `Strings::label`, `hint`, `enum_word`, `kind`. `Label.`, `Hint.` and
+  `Enum.` keys are `TYPE_NAME.<field or member name>` of a model type or `Word` (`strings::model_field_keys`,
+  `model_word_keys`), the test counts those as used.
 - Lookup: `s.get("Key")` on a `Strings` from `cx.strings()` (`crates/wavedude-app/src/ui/app.rs:261`);
   placeholders `{0}`, `{1}` with `s.format("KeyFormat", &[&a, &b])`, keys ending in `Format`
   (`ui/memory_warning.rs:73`).
 - Plurals are separate keys chosen in code: `ItemCountZero`, `ItemCountOne`, `ItemCountMany`
-  (`crates/wavedude-app/src/ui/properties.rs:653`). Menu texts mark the mnemonic with `_` (`"_File"`).
+  (`crates/wavedude-app/src/ui/properties.rs:655`). Menu texts mark the mnemonic with `_` (`"_File"`).
 
 ## Tests
 

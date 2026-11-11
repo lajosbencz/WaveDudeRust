@@ -9,9 +9,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use freya::prelude::*;
-use serde_json::json;
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::model::{BoxSize, Layer, Probe, Project};
+use wavedude_core::model::{BoxSize, Layer, Probe, ProbeEdit, Project};
 use wavedude_export::graph;
 use wavedude_widgets::graph_box::GraphBoxEvent;
 use wavedude_widgets::menu::ContextMenuRequest;
@@ -22,7 +21,7 @@ use wavedude_widgets::{
 
 use super::{PaneStates, PictureMenu, PreviewAction, layer_name};
 use crate::ui::shared::{Shared, Topics};
-use wavedude_app_state::commands::{Command, Target};
+use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::{AppState, Event as AppEvent};
 
@@ -148,17 +147,6 @@ pub fn resized_box(w: f32, h: f32, scale: f32) -> (BoxSize, u32, u32) {
 	(BoxSize::Custom, w.round().max(1.) as u32, h.round().max(1.) as u32)
 }
 
-fn enum_name(size: BoxSize) -> &'static str {
-	match size {
-		BoxSize::Tiny => "Tiny",
-		BoxSize::Small => "Small",
-		BoxSize::Medium => "Medium",
-		BoxSize::Large => "Large",
-		BoxSize::ExtraLarge => "ExtraLarge",
-		BoxSize::Custom => "Custom",
-	}
-}
-
 /// One box to draw: its probe and graph.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BoxView {
@@ -237,12 +225,8 @@ pub struct BoxGrab {
 	pub start: (i32, i32),
 }
 
-fn set_probe(shared: &Shared, index: usize, path: &str, value: serde_json::Value) {
-	shared.send(AppEvent::Command(Command::Set {
-		target: Target::Item(ItemRef::new(ItemKind::Probe, index)),
-		path: path.into(),
-		value,
-	}));
+fn set_probe(shared: &Shared, index: usize, edit: ProbeEdit) {
+	shared.send(AppEvent::Command(Command::Edit(Edit::Probe(index, edit))));
 }
 
 /// The boxes of `layer` over the picture's cell mapped by `transform`: the frame shown, its traces, the
@@ -411,8 +395,8 @@ fn on_box_event(shared: &Shared, states: PaneStates, index: usize, canvas: (u32,
 				dragged_box(start, (probe.ax, probe.ay), (dx / scale, dy / scale), scale, canvas, size)
 			};
 			if (bx, by) != (probe.box_x, probe.box_y) {
-				set_probe(shared, index, "box_x", json!(bx));
-				set_probe(shared, index, "box_y", json!(by));
+				set_probe(shared, index, ProbeEdit::BoxX(bx));
+				set_probe(shared, index, ProbeEdit::BoxY(by));
 			}
 			if done && grab.peek().is_some() {
 				grab.set(None);
@@ -426,11 +410,11 @@ fn on_box_event(shared: &Shared, states: PaneStates, index: usize, canvas: (u32,
 			}
 			let (size, bw, bh) = resized_box(width / scale, height / scale, scale);
 			if size != probe.box_size {
-				set_probe(shared, index, "box_size", json!(enum_name(size)));
+				set_probe(shared, index, ProbeEdit::BoxSize(size));
 			}
 			if size == BoxSize::Custom && (bw, bh) != (probe.box_width, probe.box_height) {
-				set_probe(shared, index, "box_width", json!(bw));
-				set_probe(shared, index, "box_height", json!(bh));
+				set_probe(shared, index, ProbeEdit::BoxWidth(bw));
+				set_probe(shared, index, ProbeEdit::BoxHeight(bh));
 			}
 			if done && grab.peek().is_some() {
 				grab.set(None);

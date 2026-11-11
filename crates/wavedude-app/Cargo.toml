@@ -36,7 +36,6 @@ bytes = "1"
 mundy = { version = "0.2.3", default-features = false, features = ["async-io", "callback", "color-scheme"] }
 rfd = "0.17"
 anyhow.workspace = true
-serde.workspace = true
 serde_json = { workspace = true, features = ["float_roundtrip"] }
 tracing.workspace = true
 wavedude-core = { path = "../wavedude-core", features = ["gpu"] }

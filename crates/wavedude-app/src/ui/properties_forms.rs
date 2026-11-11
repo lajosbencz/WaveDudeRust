@@ -1,14 +1,20 @@
 //! The forms of docs/ui/30, row by row, on the editors of [`super::properties`].
 
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use wavedude_widgets::Button;
 
 use freya::prelude::*;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-use serde_json::Value;
 use wavedude_core::io::{resolve_image_path, schemes};
-use wavedude_core::model::{self as m, PartKind, Project, SchemeKind, SourceArray, Stencil};
+use wavedude_core::model::ranges;
+use wavedude_core::model::{
+	self as m, BoxSize, BraggReflector, Coating, ColorScheme, Diffuser, Display, DisplayLayer, Ellipse,
+	FacettedGrating, Fiber, FiberNode, Field as _, Fields, FilterLayer, FresnelLens, GrinLens, InterferenceFilter,
+	Layer, Lens, LogicGate, Material, Measurement, MetaAxiconDesign, MetaDesign, MetaLensDesign, MetaPrismDesign,
+	MetaSurface, Number, Outline, Part, PartBase, PartKind, Point, Polygon, Probe, ProbeDetector, ProbeKind, Project,
+	ProjectEdit, Prop, Rectangle, Scene, SceneMode, SchemeKind, SimpleGrating, Simulation, Source, SourceArray,
+	SourceMode, Stencil, Triangle, TriangleType, Video, YScale, ZonePlate,
+};
 use wavedude_core::scene::gate_design::{self, GateDesign};
 use wavedude_widgets::icon::{Icon, icons};
 use wavedude_widgets::{
@@ -16,12 +22,14 @@ use wavedude_widgets::{
 	PropertyRow, Rgb, SectionHeader, TestIdExt, TextBox, Tip, use_wave_theme,
 };
 
-use wavedude_app_state::commands::{Command, NewPart};
+use wavedude_app_state::commands::{Command, Edit, NewPart};
 use wavedude_app_state::selection::{ItemKind, Row};
 use wavedude_app_state::{Event as AppEvent, Guarded};
 
 use super::dialogs;
-use super::properties::{Form, Scope, Snapshot, bounds, combo_box, readout, swatched_combo_box, tagged, to_json};
+use super::properties::{
+	Form, List, Object, Scope, Snapshot, bounds_of, check_box, combo_box, readout, swatched_combo_box, tagged,
+};
 use super::shared::App;
 
 /// A meta surface's read-outs.
@@ -49,7 +57,7 @@ pub struct SchemeEntry {
 pub struct GateReadouts {
 	/// Core width, coupler gap, coupler length, total length.
 	pub layout: [i64; 4],
-	pub ports: [m::Point; 4],
+	pub ports: [Point; 4],
 	pub quarter_wave: f64,
 	/// The port spacing the design uses: the stored one raised to the design's minimum.
 	pub spacing: i64,
@@ -81,7 +89,7 @@ pub struct Readouts {
 	pub can_remove_stop: bool,
 }
 
-fn zones(z: &m::ZonePlate, sim: &m::Simulation) -> Option<(i64, f64)> {
+fn zones(z: &ZonePlate, sim: &Simulation) -> Option<(i64, f64)> {
 	let lambda = m::wavelength(z.design_frequency, sim.wave_speed, sim.source_frequency_scale);
 	if !lambda.is_finite() || lambda <= 0. {
 		return None;
@@ -97,14 +105,14 @@ fn zones(z: &m::ZonePlate, sim: &m::Simulation) -> Option<(i64, f64)> {
 	Some((n + 1, outer))
 }
 
-fn edge_thickness(l: &m::Lens, zones: u32, division: m::ZoneDivision) -> f64 {
+fn edge_thickness(l: &Lens, zones: u32, division: m::ZoneDivision) -> f64 {
 	m::lens_geometry::edge_thickness(l.diameter, l.thickness, l.r1, l.r2, zones, division)
 }
 
 /// The schemes a layer's picker lists: the project's, the user's, the built-in ones.
-fn scheme_names(project: &Project, user: &[m::ColorScheme], kind: SchemeKind) -> Vec<SchemeEntry> {
+fn scheme_names(project: &Project, user: &[ColorScheme], kind: SchemeKind) -> Vec<SchemeEntry> {
 	let fits = |k: SchemeKind| k == kind || k == SchemeKind::Unspecified;
-	let entry = |s: &m::ColorScheme, own| SchemeEntry { name: s.name.clone(), own, stops: s.stops.clone() };
+	let entry = |s: &ColorScheme, own| SchemeEntry { name: s.name.clone(), own, stops: s.stops.clone() };
 	let mut v: Vec<SchemeEntry> =
 		project.color_schemes.iter().filter(|s| fits(s.kind)).map(|s| entry(s, true)).collect();
 	for s in user.iter().chain(schemes::built_in()).filter(|s| fits(s.kind)) {
@@ -223,56 +231,54 @@ fn approx_px(v: f64) -> String {
 /// Every row of the current form.
 pub fn build(f: &Form, row: Row, snap: &Snapshot) -> Vec<Element> {
 	let r = &snap.readouts;
-	match row {
-		Row::Project => project(f),
-		Row::Scene => scene(f, r),
-		Row::Simulation => simulation(f),
-		Row::Display => display(f, r),
-		Row::Item(i) => match (i.kind, &snap.part) {
-			(ItemKind::Source, _) => source(f, r),
-			(ItemKind::Part, Some(kind)) => part(f, r, kind, snap.description_open),
-			(ItemKind::Part, None) => unreachable!("a part row's snapshot carries its kind"),
-			(ItemKind::Probe, _) => probe(f),
-			(ItemKind::Scheme, _) => scheme(f, r),
-		},
-		Row::Folder(_) => Vec::new(),
+	let Some(object) = &snap.object else { return Vec::new() };
+	match (&**object, row) {
+		(Object::Project { seed, description }, _) => project(f, *seed, description),
+		(Object::Scene(o), _) => scene(f, o, r),
+		(Object::Simulation(o), _) => simulation(f, o),
+		(Object::Display(o), _) => display(f, o, r),
+		(Object::Source(o), Row::Item(i)) => source(f, o, i.index, r),
+		(Object::Part(o), Row::Item(i)) => part(f, o, i.index, r, snap.description_open),
+		(Object::Probe(o), Row::Item(i)) => probe(f, o, i.index),
+		(Object::Scheme(o), Row::Item(i)) => scheme(f, o, i.index, r),
+		_ => unreachable!("an object belongs to its row"),
 	}
 }
 
-fn project(f: &Form) -> Vec<Element> {
+fn project(f: &Form, seed: i32, description: &str) -> Vec<Element> {
 	let s = &f.s;
+	// only the seed and the description are read
+	let obj = Project { seed, description: description.to_owned(), ..Project::default() };
+	let p = f.scope(&obj, Edit::Project);
 	let new_seed = {
-		let f = f.clone();
+		let set = p.setter(Project::SEED);
 		move |_: Event<PressEventData>| {
 			let nanos =
 				std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
-			f.set("seed", Value::from(i64::from(nanos & 0x7fff_ffff)));
+			set(i32::try_from(nanos & 0x7fff_ffff).unwrap_or(1));
 		}
 	};
-	let p = f.scope("Project", "", "Project");
-	let seed = f.number_beside(
-		"Project",
-		"Seed",
-		&p.path("Seed"),
+	let seed = p.number_beside(
+		Project::SEED,
 		NumberSpec::integer(f64::from(i32::MIN), f64::from(i32::MAX)),
 		tagged(dialogs::button(s.get("ButtonNewSeed"), true, new_seed), "ProjectNewSeed"),
 	);
 	vec![section(
 		s.get("SectionGeneral"),
 		vec![
-			readout(s.label("Project", "Version"), m::PROJECT_VERSION.to_string(), "ProjectVersion"),
+			readout(s.get("LabelProjectVersion"), m::PROJECT_VERSION.to_string(), "ProjectVersion"),
 			seed,
-			p.text("Description", true),
+			p.text(Project::DESCRIPTION, true),
 		],
 	)]
 }
 
 /// The image's name, editable as Next's, and its browse, save and remove buttons.
-fn image_buttons(f: &Form, has_bytes: bool) -> Element {
+fn image_buttons(f: &Form, sc: &Scope<'_, Scene>, has_bytes: bool) -> Element {
 	let s = f.s;
 	let name = {
-		let form = f.clone();
-		let editor = TextBox::new(f.word("image"), move |t: String| form.set("image", Value::from(t))).live();
+		let set = sc.setter(Scene::IMAGE);
+		let editor = TextBox::new(sc.obj.image.clone(), move |t: String| set(t)).live();
 		rect().width(Size::fill()).test_id("SceneImageName").child(editor)
 	};
 	let pick = {
@@ -356,83 +362,80 @@ fn save_image(f: &Form) {
 	});
 }
 
-fn scene(f: &Form, r: &Readouts) -> Vec<Element> {
+fn scene(f: &Form, o: &Scene, r: &Readouts) -> Vec<Element> {
 	let s = &f.s;
-	let sc = f.scope("Scene", "", "Scene");
-	let image_mode = sc.word("Mode") == "Image";
-	let mut canvas = vec![sc.combo("Mode", "SceneMode", &["Canvas", "Image"])];
+	let sc = f.scope(o, |e| Edit::Project(ProjectEdit::Scene(e)));
+	let image_mode = o.mode == SceneMode::Image;
+	let mut canvas = vec![sc.combo(Scene::MODE)];
 	if image_mode {
 		canvas.push(
-			PropertyRow::new(s.label("Scene", "Image"), image_buttons(f, r.image_size.is_some()))
-				.hint(s.hint("Scene", "Image")),
+			PropertyRow::new(sc.label(&Scene::IMAGE), image_buttons(f, &sc, r.image_size.is_some()))
+				.hint(sc.hint(&Scene::IMAGE)),
 		);
-		let path = sc.word("ImagePath");
+		let path = o.image_path.clone();
 		let shown =
 			if !path.is_empty() && !r.image_found { format!("{path} {}", s.get("SceneImageNotFound")) } else { path };
-		canvas.push(readout(s.label("Scene", "ImagePath"), shown, "SceneImagePath"));
+		canvas.push(readout(sc.label(&Scene::IMAGE_PATH), shown, "SceneImagePath"));
 		let size = r.image_size.map_or_else(
 			|| s.get("ImageUnreadable").to_owned(),
 			|(w, h, kb)| format!("{w} x {h}, {} KB", s.grouped(kb as u64)),
 		);
 		canvas.push(readout(s.get("LabelEmbeddedImage"), size, "SceneEmbeddedImage").hint(s.get("TipEmbeddedImage")));
 	}
-	let (smin, smax) = bounds("Scene.Width");
+	let (smin, smax) = bounds_of(Scene::WIDTH);
 	canvas.extend([
-		sc.number_with("Width", NumberSpec::integer(smin, smax)).enabled(!image_mode),
-		sc.number_with("Height", NumberSpec::integer(smin, smax)).enabled(!image_mode),
-		sc.combo("Edges", "EdgeMode", &["Open", "Reflective"]),
-		sc.number("DampingEdge", 1.),
-		sc.number("RefractiveIndex", 0.01),
+		sc.number_with(Scene::WIDTH, NumberSpec::integer(smin, smax)).enabled(!image_mode),
+		sc.number_with(Scene::HEIGHT, NumberSpec::integer(smin, smax)).enabled(!image_mode),
+		sc.combo(Scene::EDGES),
+		sc.number(Scene::DAMPING_EDGE, 1.),
+		sc.number(Scene::REFRACTIVE_INDEX, 0.01),
 	]);
-	let image_sources = sc.flag("ImageSources");
 	vec![
 		section(s.get("SectionCanvas"), canvas),
 		section(
 			s.get("SectionImageSources"),
 			vec![
-				sc.check("ImageSources"),
-				sc.number("ImageSourceScale", 0.1).enabled(image_sources),
-				sc.check("ObjectSources"),
+				sc.check(Scene::IMAGE_SOURCES),
+				sc.number(Scene::IMAGE_SOURCE_SCALE, 0.1).enabled(o.image_sources),
+				sc.check(Scene::OBJECT_SOURCES),
 			],
 		),
 	]
 }
 
-fn simulation(f: &Form) -> Vec<Element> {
+fn simulation(f: &Form, o: &Simulation) -> Vec<Element> {
 	let s = &f.s;
-	let sim = f.scope("Simulation", "", "Simulation");
-	let fourth = f.bind_as::<Stencil>("stencil") == Stencil::FourthOrder;
-	let stencil = {
-		let f = f.clone();
-		move |on: bool| f.set("stencil", Value::from(if on { "FourthOrder" } else { "NinePoint" }))
-	};
-	let (dmin, dmax) = bounds("Simulation.TimeDecay");
+	let sim = f.scope(o, |e| Edit::Project(ProjectEdit::Simulation(e)));
+	let (dmin, dmax) = bounds_of(Simulation::TIME_DECAY);
 	vec![
-		section(s.get("SectionRun"), vec![sim.number("Steps", 100.), sim.number("VisualizeEvery", 1.)]),
+		section(
+			s.get("SectionRun"),
+			vec![sim.number(Simulation::STEPS, 100.), sim.number(Simulation::VISUALIZE_EVERY, 1.)],
+		),
 		section(
 			s.get("SectionSolver"),
 			vec![
-				PropertyRow::new(
-					"",
-					super::properties::check_box(s.label("Simulation", "FourthOrderLaplacian").into(), fourth, stencil)
-						.test_id("Simulation.FourthOrderLaplacian"),
-				)
-				.hint(s.hint("Simulation", "FourthOrderLaplacian"))
-				.full_width(),
-				sim.number("WaveSpeed", 0.01),
-				sim.number_with("TimeDecay", NumberSpec::linear(dmin, dmax, 1.).with_decimals(1).with_drag_step(0.1)),
-				sim.number("SourceFrequencyScale", 0.1),
-				sim.number("IntensityScale", 0.1),
+				sim.check_as(
+					Simulation::STENCIL,
+					|s| *s == Stencil::FourthOrder,
+					|on| if on { Stencil::FourthOrder } else { Stencil::NinePoint },
+				),
+				sim.number(Simulation::WAVE_SPEED, 0.01),
+				sim.number_with(
+					Simulation::TIME_DECAY,
+					NumberSpec::linear(dmin, dmax, 1.).with_decimals(1).with_drag_step(0.1),
+				),
+				sim.number(Simulation::SOURCE_FREQUENCY_SCALE, 0.1),
+				sim.number(Simulation::INTENSITY_SCALE, 0.1),
 			],
 		),
 	]
 }
 
-fn layer_rows(f: &Form, layer: &str, names: &[SchemeEntry]) -> Vec<PropertyRow> {
+/// A display layer's rows; `id` is its colour picker's test id.
+fn layer_rows(f: &Form, l: &Scope<'_, DisplayLayer>, id: &str, names: &[SchemeEntry]) -> Vec<PropertyRow> {
 	let s = &f.s;
-	let l = f.scope("DisplayLayer", layer, "DisplayLayer");
-	let path = l.path("ColorScheme");
-	let current = f.bind_as::<String>(&path);
+	let current = l.obj.color_scheme.clone();
 	let mut items: Vec<(String, String)> = names
 		.iter()
 		.map(|e| {
@@ -451,32 +454,33 @@ fn layer_rows(f: &Form, layer: &str, names: &[SchemeEntry]) -> Vec<PropertyRow> 
 	let picker = {
 		let form = f.clone();
 		let current_name = current.clone();
-		swatched_combo_box(current, items, swatches, true, format!("{layer}.ColorScheme"), move |name| {
+		let set = l.setter(DisplayLayer::COLOR_SCHEME);
+		swatched_combo_box(current, items, swatches, true, format!("{id}.ColorScheme"), move |name| {
 			if name == BROWSE {
 				dialogs::pick_file_for_project(&form.cx, form.s.get("ColorSchemeFilter"), None, move |cx, path| {
 					cx.send(AppEvent::Guarded(Guarded::Open(path)));
 				});
 			} else if name == EDIT_COPY {
-				edit_copy(&form, &path, &current_name);
+				edit_copy(&form, &set, &current_name);
 			} else {
-				form.set(&path, Value::from(name));
+				set(name);
 			}
 		})
 	};
-	let (bmin, bmax) = bounds("DisplayLayer.Brightness");
+	let (bmin, bmax) = bounds_of(DisplayLayer::BRIGHTNESS);
 	vec![
-		PropertyRow::new(s.label("DisplayLayer", "ColorScheme"), picker).hint(s.hint("DisplayLayer", "ColorScheme")),
-		l.number_with("Brightness", NumberSpec::logarithmic(bmin, bmax)),
-		l.number("BlackLevel", 0.01),
-		l.check("Preview"),
-		l.check("Overlay"),
-		l.number("OverlayGain", 0.05),
-		l.check("OverlayInExport"),
+		PropertyRow::new(l.label(&DisplayLayer::COLOR_SCHEME), picker).hint(l.hint(&DisplayLayer::COLOR_SCHEME)),
+		l.number_with(DisplayLayer::BRIGHTNESS, NumberSpec::logarithmic(bmin, bmax)),
+		l.number(DisplayLayer::BLACK_LEVEL, 0.01),
+		l.check(DisplayLayer::PREVIEW),
+		l.check(DisplayLayer::OVERLAY),
+		l.number(DisplayLayer::OVERLAY_GAIN, 0.05),
+		l.check(DisplayLayer::OVERLAY_IN_EXPORT),
 	]
 }
 
 /// Makes a project scheme from the layer's current one (a project scheme is copied) and points the layer at it.
-fn edit_copy(f: &Form, path: &str, current: &str) {
+fn edit_copy(f: &Form, set: &impl Fn(String), current: &str) {
 	let source = f.cx.shared.peek(|a| {
 		let p = &a.document.project;
 		schemes::find(&p.color_schemes, current)
@@ -490,100 +494,79 @@ fn edit_copy(f: &Form, path: &str, current: &str) {
 		wavedude_core::model::names::copy_name(&scheme.name, taken.iter().map(String::as_str))
 	});
 	f.cx.send(AppEvent::Command(Command::ImportScheme(Box::new(scheme))));
-	f.set(path, Value::from(name_after));
+	set(name_after);
 }
 
-fn display(f: &Form, r: &Readouts) -> Vec<Element> {
+fn display(f: &Form, o: &Display, r: &Readouts) -> Vec<Element> {
 	let s = &f.s;
-	let d = f.scope("Display", "", "Display");
-	let v = f.scope("Video", "video", "Video");
+	let d = f.scope(o, |e| Edit::Project(ProjectEdit::Display(e)));
+	let v = d.nested(Display::VIDEO);
 	vec![
-		section(s.get("SectionField"), layer_rows(f, "field", &r.schemes[0])),
-		section(s.get("SectionIntensity"), layer_rows(f, "intensity", &r.schemes[1])),
-		section(s.get("SectionPreview"), vec![d.check("HandlesInPreview"), d.check("LabelsInPreview")]),
+		section(s.get("SectionField"), layer_rows(f, &d.nested(Display::FIELD), "field", &r.schemes[0])),
+		section(s.get("SectionIntensity"), layer_rows(f, &d.nested(Display::INTENSITY), "intensity", &r.schemes[1])),
+		section(
+			s.get("SectionPreview"),
+			vec![d.check(Display::HANDLES_IN_PREVIEW), d.check(Display::LABELS_IN_PREVIEW)],
+		),
 		section(
 			s.get("SectionExportRange"),
 			vec![
-				d.number("ExportFrom", 1.),
-				d.number("ExportTo", 1.),
-				d.check("ProbeGraphsInExport"),
-				d.check("ProbeMarkersInExport"),
-				d.check("SourceMarkersInExport"),
+				d.number(Display::EXPORT_FROM, 1.),
+				d.number(Display::EXPORT_TO, 1.),
+				d.check(Display::PROBE_GRAPHS_IN_EXPORT),
+				d.check(Display::PROBE_MARKERS_IN_EXPORT),
+				d.check(Display::SOURCE_MARKERS_IN_EXPORT),
 			],
 		),
-		section(s.get("SectionVideo"), vec![v.number("Fps", 1.), v.number("Quality", 1.)]),
+		section(s.get("SectionVideo"), vec![v.number(Video::FPS, 1.), v.number(Video::QUALITY, 1.)]),
 	]
 }
 
-fn source(f: &Form, r: &Readouts) -> Vec<Element> {
+fn source(f: &Form, o: &Source, index: usize, r: &Readouts) -> Vec<Element> {
 	let s = &f.s;
-	let src = f.scope("Source", "", "Source");
-	let pulsed = src.word("Mode") == "Pulsed";
-	let composite = f.optional("array").is_some();
+	let src = f.scope(o, move |e| Edit::Source(index, e));
+	let pulsed = o.mode == SourceMode::Pulsed;
+	let composite = o.array.is_some();
 	// a plain source shows the array's rows greyed and empty
-	let array_form = if composite {
-		f.clone()
-	} else {
-		f.with_json(serde_json::json!({ "array": to_json(SourceArray::default()) })).blanked()
-	};
-	let arr = array_form.scope("SourceArray", "array", "SourceArray");
+	let plain_array = SourceArray::default();
+	let arr = src.variant_or(Source::ARRAY, &plain_array);
 	let wavelength = r.wavelength.map_or_else(String::new, |w| {
 		let text = if w.is_finite() { approx_px(w) } else { "-".into() };
 		if r.nominal { format!("{text} {}", s.get("WavelengthNominal")) } else { text }
 	});
 	let detach = {
-		let f = f.clone();
-		let value = match f.optional("detach_after") {
-			None => -1.,
-			Some(v) => v.as_f64().expect("detach_after is a step"),
-		};
-		let (_, max) = bounds("Source.DetachAfter");
+		let value = o.detach_after.map_or(-1., f64::from);
+		let set = src.setter(Source::DETACH_AFTER);
+		let (_, max) = bounds_of(Source::DETACH_AFTER);
 		let editor = wavedude_widgets::NumberBox::new(
-			WritableSetter::new(value, move |v: f64| {
-				f.set("detach_after", if v < 0. { Value::Null } else { Value::from(v.round() as i64) });
-			}),
+			WritableSetter::new(value, move |v: f64| set((v >= 0.).then(|| v.round() as u32))),
 			NumberSpec::integer(-1., max),
 		)
 		.width(Size::fill())
 		.test_id("Source.DetachAfter");
-		PropertyRow::new(s.label("Source", "DetachAfter"), editor).hint(s.hint("Source", "DetachAfter"))
+		PropertyRow::new(src.label(&Source::DETACH_AFTER), editor).hint(src.hint(&Source::DETACH_AFTER))
 	};
-	let composite_box = {
-		let f = f.clone();
-		let toggle = move |on: bool| {
-			f.set("array", if on { to_json(SourceArray::default()) } else { Value::Null });
-		};
-		PropertyRow::new(
-			"",
-			super::properties::check_box(s.label("Source", "IsComposite").into(), composite, toggle)
-				.test_id("Source.IsComposite"),
-		)
-		.hint(s.hint("Source", "IsComposite"))
-		.full_width()
-	};
-	let (amin, amax) = bounds("SourceArray.Angle");
+	let composite_box = src.check_as(Source::SET_ARRAY, Option::is_some, |on| on.then(SourceArray::default));
+	let (amin, amax) = bounds_of(SourceArray::ANGLE);
 	vec![
-		section(s.get("SectionGeneral"), vec![f.name("Source"), src.check("Enabled")]),
-		section(
-			s.get("SectionPosition"),
-			vec![src.decimals_in("X", "Source.X", 1., 0), src.decimals_in("Y", "Source.Y", 1., 0)],
-		),
+		section(s.get("SectionGeneral"), vec![f.name::<Source>(&o.name), src.check(Source::ENABLED)]),
+		section(s.get("SectionPosition"), vec![src.decimals(Source::X, 1., 0), src.decimals(Source::Y, 1., 0)]),
 		section(
 			s.get("SectionWave"),
 			vec![
-				src.decimals("Frequency", 0.1, 2),
-				src.decimals("Amplitude", 0.1, 2),
-				src.decimals("Phase", 0.5, 2),
+				src.decimals(Source::FREQUENCY, 0.1, 2),
+				src.decimals(Source::AMPLITUDE, 0.1, 2),
+				src.decimals(Source::PHASE, 0.5, 2),
 				readout(s.get("LabelWavelength"), wavelength, "SourceWavelength").hint(s.get("TipWavelength")),
 			],
 		),
 		section(
 			s.get("SectionTiming"),
 			vec![
-				src.combo("Mode", "SourceMode", &["Continuous", "Pulsed"]),
-				src.combo("PulseShape", "PulseShape", &["Gaussian", "SmoothedSquare"]).enabled(pulsed),
-				src.number("PulseWidth", 1.).enabled(pulsed),
-				src.number("OffWidth", 1.).enabled(pulsed),
+				src.combo(Source::MODE),
+				src.combo(Source::PULSE_SHAPE).enabled(pulsed),
+				src.number(Source::PULSE_WIDTH, 1.).enabled(pulsed),
+				src.number(Source::OFF_WIDTH, 1.).enabled(pulsed),
 				detach,
 			],
 		),
@@ -591,19 +574,27 @@ fn source(f: &Form, r: &Readouts) -> Vec<Element> {
 			s.get("SectionArray"),
 			vec![
 				composite_box,
-				arr.number("SizeX", 1.).enabled(composite),
-				arr.number("SizeY", 1.).enabled(composite),
-				arr.number("SpacingX", 1.).enabled(composite),
-				arr.number("SpacingY", 1.).enabled(composite),
-				arr.number_with("Angle", NumberSpec::linear(amin, amax, 5.).with_decimals(1).with_drag_step(0.5))
-					.enabled(composite),
+				arr.number(SourceArray::SIZE_X, 1.).enabled(composite),
+				arr.number(SourceArray::SIZE_Y, 1.).enabled(composite),
+				arr.number(SourceArray::SPACING_X, 1.).enabled(composite),
+				arr.number(SourceArray::SPACING_Y, 1.).enabled(composite),
+				arr.number_with(
+					SourceArray::ANGLE,
+					NumberSpec::linear(amin, amax, 5.).with_decimals(1).with_drag_step(0.5),
+				)
+				.enabled(composite),
 			],
 		),
 		section(
 			s.get("SectionRandom"),
-			["RandomFrequency", "RandomPhase", "RandomOffWidth", "RandomPosition"]
-				.map(|m| arr.number(m, 1.).enabled(composite))
-				.into(),
+			[
+				SourceArray::RANDOM_FREQUENCY,
+				SourceArray::RANDOM_PHASE,
+				SourceArray::RANDOM_OFF_WIDTH,
+				SourceArray::RANDOM_POSITION,
+			]
+			.map(|p| arr.number(p, 1.).enabled(composite))
+			.into(),
 		),
 	]
 }
@@ -620,106 +611,128 @@ enum CoatedFaces {
 	None,
 }
 
-/// The coating's rows of `coating` (a path); greyed when `disabled`.
-fn coating_rows(f: &Form, coating: &str, disabled: bool) -> Vec<PropertyRow> {
-	coating_rows_of(f, coating, disabled, CoatedFaces::All)
+/// The coating's rows; greyed when `disabled`.
+fn coating_rows(c: &Scope<'_, Coating>, disabled: bool) -> Vec<PropertyRow> {
+	coating_rows_of(c, disabled, CoatedFaces::All)
 }
 
-fn coating_rows_of(f: &Form, coating: &str, disabled: bool, faces: CoatedFaces) -> Vec<PropertyRow> {
-	let c = |m: &str| format!("{coating}.{m}");
-	let mut rows = vec![
-		f.number_with("ShapePart", "Coating", &c("depth"), {
-			let (min, max) = bounds("Coating.Coating");
-			NumberSpec::integer(min, max)
-		}),
-		f.combo("CoatedPart", "CoatingProfile", &c("profile"), "CoatingProfile", &["Layer", "Graded"]),
-	];
+fn coating_rows_of(c: &Scope<'_, Coating>, disabled: bool, faces: CoatedFaces) -> Vec<PropertyRow> {
+	let (min, max) = bounds_of(Coating::DEPTH);
+	let mut rows = vec![c.number_with(Coating::DEPTH, NumberSpec::integer(min, max)), c.combo(Coating::PROFILE)];
 	if matches!(faces, CoatedFaces::All | CoatedFaces::FrontBack) {
-		rows.push(f.check("CoatedPart", "FrontCoated", &c("front")));
+		rows.push(c.check(Coating::FRONT));
 	}
-	rows.push(f.check("CoatedPart", "BackCoated", &c("back")));
+	rows.push(c.check(Coating::BACK));
 	if faces == CoatedFaces::All {
-		rows.push(f.check("CoatedPart", "SidesCoated", &c("sides")));
+		rows.push(c.check(Coating::SIDES));
 	}
 	rows.into_iter().map(|r| r.enabled(!disabled)).collect()
 }
 
-/// The glass or mirror of a lens or shape at `kind` (`kind.Lens`).
-fn material(f: &Form, kind: &str) -> Element {
-	material_faces(f, kind, CoatedFaces::All)
+/// The glass or mirror of a lens or shape.
+fn material(f: &Form, mat: &Scope<'_, Material>, c: &Scope<'_, Coating>) -> Element {
+	material_faces(f, mat, c, CoatedFaces::All)
 }
 
 /// [`material`] with the coating offered on `faces` alone.
-fn material_faces(f: &Form, kind: &str, faces: CoatedFaces) -> Element {
-	let mat = f.scope("ShapePart", &format!("{kind}.material"), "Material");
-	let mirror = mat.flag("Mirror");
-	let mut rows = vec![mat.check("Mirror"), mat.number("RefractiveIndex", 0.01).enabled(!mirror)];
+fn material_faces(f: &Form, mat: &Scope<'_, Material>, c: &Scope<'_, Coating>, faces: CoatedFaces) -> Element {
+	let mirror = mat.obj.mirror;
+	let mut rows = vec![mat.check(Material::MIRROR), mat.number(Material::REFRACTIVE_INDEX, 0.01).enabled(!mirror)];
 	if faces != CoatedFaces::None {
-		rows.extend(coating_rows_of(f, &format!("{kind}.coating"), mirror, faces));
+		rows.extend(coating_rows_of(c, mirror, faces));
 	}
-	rows.push(mat.number("Absorption", 5.).enabled(!mirror));
-	rows.push(mat.number("AbsorptionRamp", 5.).enabled(!mirror));
+	rows.push(mat.number(Material::ABSORPTION, 5.).enabled(!mirror));
+	rows.push(mat.number(Material::ABSORPTION_RAMP, 5.).enabled(!mirror));
 	section(f.s.get("SectionMaterial"), rows)
 }
 
 /// The rows every part shares: its description, name, enabled flag and position.
-fn part_common(f: &Form, ty: &str, open: bool) -> Vec<Element> {
+fn part_common(f: &Form, base: &Scope<'_, PartBase>, ty: &str, open: bool) -> Vec<Element> {
 	let s = &f.s;
-	let common = f.scope("OpticalPart", "", "Part");
 	let expanded = {
 		let cx = f.cx.clone();
 		WritableSetter::new(open, move |v: bool| cx.shared.update(|a| a.settings.part_description_expanded = v))
 	};
-	let (amin, amax) = bounds("Part.Angle");
+	let (amin, amax) = bounds_of(PartBase::ANGLE);
 	vec![
 		DescriptionHeader::new(s.kind(ty), expanded)
 			.title(s.get("SectionDescription"))
 			.tooltip(s.get("TipPartDescription"))
 			.into_element(),
-		section(s.get("SectionGeneral"), vec![f.name("OpticalPart"), common.check("Enabled")]),
+		section(s.get("SectionGeneral"), vec![f.name::<PartBase>(&base.obj.name), base.check(PartBase::ENABLED)]),
 		section(
 			s.get("SectionPosition"),
 			vec![
-				common.number("X", 1.),
-				common.number("Y", 1.),
-				common.number_with("Angle", NumberSpec::linear(amin, amax, 5.).with_decimals(1).with_drag_step(0.5)),
+				base.number(PartBase::X, 1.),
+				base.number(PartBase::Y, 1.),
+				base.number_with(
+					PartBase::ANGLE,
+					NumberSpec::linear(amin, amax, 5.).with_decimals(1).with_drag_step(0.5),
+				),
 			],
 		),
 	]
 }
 
-fn part(f: &Form, r: &Readouts, kind: &PartKind, open: bool) -> Vec<Element> {
-	// The serde name of the kind, the prefix of its fields' paths and its range keys.
-	let variant =
-		f.get("kind").as_object().and_then(|o| o.keys().next()).expect("a part's kind is one tagged object").clone();
-	let at = format!("kind.{variant}");
-	let mut out = part_common(f, NewPart::of(kind).type_name(), open);
+fn part(f: &Form, o: &Part, index: usize, r: &Readouts, open: bool) -> Vec<Element> {
+	let part = f.scope(o, move |e| Edit::Part(index, e));
+	let kind = part.nested(Part::KIND);
+	let mut out = part_common(f, &part.nested(Part::BASE), NewPart::of(&o.kind).type_name(), open);
 	let shape = |rows: Vec<PropertyRow>| section(f.s.get("SectionShape"), rows);
-	match kind {
-		PartKind::Lens(_) => out.extend([material(f, &at), lens(f, r, &at, None)]),
-		PartKind::FresnelLens(_) => out.extend([material(f, &at), lens(f, r, &at, Some(&variant))]),
-		PartKind::Polygon(_) => {
-			let p = f.scope("PolygonPart", &at, &variant);
-			out.extend([material(f, &at), shape(vec![p.number("Sides", 1.), p.number("Side", 10.)])]);
+	match &o.kind {
+		PartKind::Lens(inner) => {
+			let l = kind.variant_over(PartKind::LENS, inner);
+			out.extend([material(f, &l.nested(Lens::MATERIAL), &l.nested(Lens::COATING)), lens(f, r, &l, None)]);
 		}
-		PartKind::Rectangle(_) | PartKind::Ellipse(_) => {
-			let ty = NewPart::of(kind).type_name();
-			out.extend([material(f, &at), shape(vec![linked_sizes(f, ty, &f.scope(ty, &at, &variant))])]);
+		PartKind::FresnelLens(inner) => {
+			let z = kind.variant_over(PartKind::FRESNEL_LENS, inner);
+			let l = z.nested(FresnelLens::LENS);
+			out.extend([material(f, &l.nested(Lens::MATERIAL), &l.nested(Lens::COATING)), lens(f, r, &l, Some(&z))]);
 		}
-		PartKind::Triangle(_) => out.extend([material(f, &at), triangle(f, r, &at, &variant)]),
-		PartKind::Outline(_) => out.extend([material(f, &at), points(f, &format!("{at}.points"))]),
-		PartKind::Diffuser(_) => {
-			let d = f.scope("DiffuserPart", &at, &variant);
+		PartKind::Polygon(inner) => {
+			let p = kind.variant_over(PartKind::POLYGON, inner);
+			out.extend([
+				material(f, &p.nested(Polygon::MATERIAL), &p.nested(Polygon::COATING)),
+				shape(vec![p.number(Polygon::SIDES, 1.), p.number(Polygon::SIDE, 10.)]),
+			]);
+		}
+		PartKind::Rectangle(inner) => {
+			let p = kind.variant_over(PartKind::RECTANGLE, inner);
+			out.extend([
+				material(f, &p.nested(Rectangle::MATERIAL), &p.nested(Rectangle::COATING)),
+				shape(vec![linked_sizes(&p, Rectangle::LENGTH, Rectangle::WIDTH, Rectangle::LINKED)]),
+			]);
+		}
+		PartKind::Ellipse(inner) => {
+			let p = kind.variant_over(PartKind::ELLIPSE, inner);
+			out.extend([
+				material(f, &p.nested(Ellipse::MATERIAL), &p.nested(Ellipse::COATING)),
+				shape(vec![linked_sizes(&p, Ellipse::LENGTH, Ellipse::WIDTH, Ellipse::LINKED)]),
+			]);
+		}
+		PartKind::Triangle(inner) => {
+			let t = kind.variant_over(PartKind::TRIANGLE, inner);
+			out.extend([material(f, &t.nested(Triangle::MATERIAL), &t.nested(Triangle::COATING)), triangle(f, r, &t)]);
+		}
+		PartKind::Outline(inner) => {
+			let p = kind.variant_over(PartKind::OUTLINE, inner);
+			out.extend([
+				material(f, &p.nested(Outline::MATERIAL), &p.nested(Outline::COATING)),
+				points(f, &p.list(Outline::POINTS)),
+			]);
+		}
+		PartKind::Diffuser(inner) => {
+			let d = kind.variant_over(PartKind::DIFFUSER, inner);
 			let (height, ripples) = r.roughness.map_or((String::new(), String::new()), |(h, n)| (px(h), n.to_string()));
 			out.extend([
-				material(f, &at),
-				shape(vec![d.number("Length", 10.), d.number("Width", 10.)]),
+				material(f, &d.nested(Diffuser::MATERIAL), &d.nested(Diffuser::COATING)),
+				shape(vec![d.number(Diffuser::LENGTH, 10.), d.number(Diffuser::WIDTH, 10.)]),
 				section(
 					f.s.get("SectionRoughness"),
 					vec![
-						d.decimals("CenterWavelength", 0.1, 2),
-						d.decimals("Amplitude", 0.1, 2),
-						d.decimals("Sigma", 0.1, 2),
+						d.decimals(Diffuser::CENTER_WAVELENGTH, 0.1, 2),
+						d.decimals(Diffuser::AMPLITUDE, 0.1, 2),
+						d.decimals(Diffuser::SIGMA, 0.1, 2),
 						readout(f.s.get("LabelProfileHeight"), height, "ProfileHeight")
 							.hint(f.s.get("TipProfileHeight")),
 						readout(f.s.get("LabelComponentCount"), ripples, "ComponentCount")
@@ -728,76 +741,100 @@ fn part(f: &Form, r: &Readouts, kind: &PartKind, open: bool) -> Vec<Element> {
 				),
 			]);
 		}
-		PartKind::InterferenceFilter(_) => {
-			let i = f.scope("InterferenceFilterPart", &at, &variant);
+		PartKind::InterferenceFilter(inner) => {
+			let i = kind.variant_over(PartKind::INTERFERENCE_FILTER, inner);
 			out.extend([
-				material_faces(f, &at, CoatedFaces::Back),
+				material_faces(
+					f,
+					&i.nested(InterferenceFilter::MATERIAL),
+					&i.nested(InterferenceFilter::COATING),
+					CoatedFaces::Back,
+				),
 				shape(vec![
-					i.number("Length", 10.),
-					i.number("Width", 10.),
+					i.number(InterferenceFilter::LENGTH, 10.),
+					i.number(InterferenceFilter::WIDTH, 10.),
 					readout(f.s.get("LabelStackThickness"), r.stack.map(px).unwrap_or_default(), "StackThickness")
 						.hint(f.s.get("TipStackThickness")),
 				]),
-				layers(f, &i.path("Layers")),
+				layers(f, i.list(InterferenceFilter::LAYERS)),
 			]);
 		}
-		PartKind::SimpleGrating(_) => {
-			let g = f.scope("SimpleGratingPart", &at, &variant);
+		PartKind::SimpleGrating(inner) => {
+			let g = kind.variant_over(PartKind::SIMPLE_GRATING, inner);
 			let max = f64::from(r.max_diameter.unwrap_or(1));
 			out.extend([
-				material_faces(f, &at, CoatedFaces::None),
+				material_faces(
+					f,
+					&g.nested(SimpleGrating::MATERIAL),
+					&g.nested(SimpleGrating::COATING),
+					CoatedFaces::None,
+				),
 				section(
 					f.s.get("SectionLattice"),
 					vec![
-						g.number("Columns", 1.),
-						g.number("Rows", 1.),
-						g.number("ColumnSpacing", 1.),
-						g.number("RowSpacing", 1.),
-						g.number_with("Diameter", NumberSpec::integer(1., max)),
+						g.number(SimpleGrating::COLUMNS, 1.),
+						g.number(SimpleGrating::ROWS, 1.),
+						g.number(SimpleGrating::COLUMN_SPACING, 1.),
+						g.number(SimpleGrating::ROW_SPACING, 1.),
+						g.number_with(SimpleGrating::DIAMETER, NumberSpec::integer(1., max)),
 					],
 				),
 			]);
 		}
-		PartKind::MetaSurface(m) => out.extend(meta_surface(f, r, &at, &m.design)),
-		PartKind::FacettedGrating(_) => {
-			let g = f.scope("FacettedGratingPart", &at, &variant);
+		PartKind::MetaSurface(inner) => {
+			let m = kind.variant_over(PartKind::META_SURFACE, inner);
+			out.extend(meta_surface(f, r, &m));
+		}
+		PartKind::FacettedGrating(inner) => {
+			let g = kind.variant_over(PartKind::FACETTED_GRATING, inner);
 			out.extend([
-				material_faces(f, &at, CoatedFaces::Back),
-				shape(vec![g.number("Length", 10.), g.number("Width", 10.)]),
+				material_faces(
+					f,
+					&g.nested(FacettedGrating::MATERIAL),
+					&g.nested(FacettedGrating::COATING),
+					CoatedFaces::Back,
+				),
+				shape(vec![g.number(FacettedGrating::LENGTH, 10.), g.number(FacettedGrating::WIDTH, 10.)]),
 				section(
 					f.s.get("SectionFacets"),
 					vec![
-						g.combo("Pattern", "FacetPattern", &["Sawtooth", "SquareWave", "Sinusoidal"]),
-						g.decimals("Pitch", 0.1, 2),
-						g.decimals("Amplitude", 0.1, 2),
+						g.combo(FacettedGrating::PATTERN),
+						g.decimals(FacettedGrating::PITCH, 0.1, 2),
+						g.decimals(FacettedGrating::AMPLITUDE, 0.1, 2),
 					],
 				),
 			]);
 		}
-		PartKind::Fiber(_) => out.extend(fiber(f, &at, &variant)),
-		PartKind::BraggReflector(_) => {
-			let b = f.scope("BraggReflectorPart", &at, &variant);
+		PartKind::Fiber(inner) => {
+			out.extend(fiber(f, &kind.variant_over(PartKind::FIBER, inner)));
+		}
+		PartKind::BraggReflector(inner) => {
+			let b = kind.variant_over(PartKind::BRAGG_REFLECTOR, inner);
 			out.push(section(
 				f.s.get("SectionLayers"),
 				vec![
-					b.number("Pairs", 1.),
-					b.number("Thickness1", 1.),
-					b.number("Index1", 0.01),
-					b.number("Thickness2", 1.),
-					b.number("Index2", 0.01),
+					b.number(BraggReflector::PAIRS, 1.),
+					b.number(BraggReflector::THICKNESS1, 1.),
+					b.number(BraggReflector::INDEX1, 0.01),
+					b.number(BraggReflector::THICKNESS2, 1.),
+					b.number(BraggReflector::INDEX2, 0.01),
 				],
 			));
-			out.push(shape(vec![b.number("Width", 10.)]));
+			out.push(shape(vec![b.number(BraggReflector::WIDTH, 10.)]));
 		}
-		PartKind::GrinLens(_) => {
-			let g = f.scope("GrinLensPart", &at, &variant);
-			let mut rows = vec![g.number("CentreIndex", 0.01), g.number("EdgeIndex", 0.01)];
-			rows.extend(coating_rows(f, &g.path("Coating"), false));
+		PartKind::GrinLens(inner) => {
+			let g = kind.variant_over(PartKind::GRIN_LENS, inner);
+			let mut rows = vec![g.number(GrinLens::CENTRE_INDEX, 0.01), g.number(GrinLens::EDGE_INDEX, 0.01)];
+			rows.extend(coating_rows(&g.nested(GrinLens::COATING), false));
 			out.push(section(f.s.get("SectionMaterial"), rows));
-			out.push(shape(vec![g.number("Length", 10.), g.number("Diameter", 10.)]));
+			out.push(shape(vec![g.number(GrinLens::LENGTH, 10.), g.number(GrinLens::DIAMETER, 10.)]));
 		}
-		PartKind::ZonePlate(_) => out.extend(zone_plate(f, r, &at, &variant)),
-		PartKind::LogicGate(g) => out.extend(gate(f, r, &at, &variant, g.kind)),
+		PartKind::ZonePlate(inner) => {
+			out.extend(zone_plate(f, r, &kind.variant_over(PartKind::ZONE_PLATE, inner)));
+		}
+		PartKind::LogicGate(inner) => {
+			out.extend(gate(f, r, &kind.variant_over(PartKind::LOGIC_GATE, inner)));
+		}
 	}
 	out
 }
@@ -813,22 +850,27 @@ const CHAIN_PARTED: Icon = Icon::path(
 );
 
 /// Length and Width of a rectangle or ellipse with the chain toggle that links them beside both.
-fn linked_sizes(f: &Form, ty: &str, b: &Scope<'_>) -> PropertyRow {
+fn linked_sizes<T: Fields>(
+	b: &Scope<'_, T>,
+	length: Prop<T, u32>,
+	width: Prop<T, u32>,
+	linked: Prop<T, bool>,
+) -> PropertyRow {
 	let theme = use_wave_theme();
-	let linked = b.f.bind_as::<bool>(&b.path("Linked"));
+	let on = b.get(linked);
 	let toggle = {
-		let (f, path) = (f.clone(), b.path("Linked"));
-		move |_: Event<PressEventData>| f.set(&path, Value::from(!linked))
+		let set = b.setter(linked);
+		move |_: Event<PressEventData>| set(!on)
 	};
-	let (icon, ink) = if linked { (CHAIN_LINKED, theme.accent) } else { (CHAIN_PARTED, theme.text_dim) };
+	let (icon, ink) = if on { (CHAIN_LINKED, theme.accent) } else { (CHAIN_PARTED, theme.text_dim) };
 	let chain = tip(
-		f.s.hint(ty, "Linked"),
+		b.hint(&linked),
 		tagged(
 			Button::new().flat().compact().on_press(toggle).child(IconView::new(icon).color(ink)),
-			format!("{ty}.Linked"),
+			Scope::<T>::test_id(&linked),
 		),
 	);
-	let sizes = rect().width(Size::flex(1.)).child(b.number("Length", 10.)).child(b.number("Width", 10.));
+	let sizes = rect().width(Size::flex(1.)).child(b.number(length, 10.)).child(b.number(width, 10.));
 	let row = rect()
 		.horizontal()
 		.width(Size::fill())
@@ -840,37 +882,30 @@ fn linked_sizes(f: &Form, ty: &str, b: &Scope<'_>) -> PropertyRow {
 	PropertyRow::new("", row).full_width()
 }
 
-/// The lens's shape rows; with `fresnel` (the Fresnel lens's serde variant) the zone rows instead of the Concave
+/// The lens's shape rows; with `fresnel` (the Fresnel lens it belongs to) the zone rows instead of the Concave
 /// box, whose flip would hollow the zones.
-fn lens(f: &Form, r: &Readouts, at: &str, fresnel: Option<&str>) -> Element {
+fn lens(f: &Form, r: &Readouts, l: &Scope<'_, Lens>, fresnel: Option<&Scope<'_, FresnelLens>>) -> Element {
 	let s = &f.s;
-	let l = f.scope("LensPart", at, "Lens");
-	let (r1, r2) = (l.num("R1"), l.num("R2"));
+	let (r1, r2) = (l.obj.r1, l.obj.r2);
 	let flip = {
-		let f = f.clone();
-		let (pr1, pr2) = (l.path("R1"), l.path("R2"));
+		let (set1, set2) = (l.setter(Lens::R1), l.setter(Lens::R2));
 		move |_: bool| {
-			f.set(&pr1, Value::from(-r1));
-			f.set(&pr2, Value::from(-r2));
+			set1(-r1);
+			set2(-r2);
 		}
 	};
-	let mut rows = vec![l.number("Diameter", 10.)];
+	let mut rows = vec![l.number(Lens::DIAMETER, 10.)];
 	if fresnel.is_none() {
 		rows.push(
-			PropertyRow::new(
-				"",
-				super::properties::check_box(s.label("LensPart", "IsConcave").into(), r1 < 0., flip)
-					.test_id("LensPart.IsConcave"),
-			)
-			.hint(s.hint("LensPart", "IsConcave"))
-			.full_width(),
+			PropertyRow::new("", check_box(s.get("LabelLensConcave").into(), r1 < 0., flip).test_id("Lens.IsConcave"))
+				.hint(s.get("HintLensConcave"))
+				.full_width(),
 		);
 	}
-	rows.extend([l.number_in("R1", "", 10.), l.number_in("R2", "", 10.), l.number("Thickness", 1.)]);
-	if let Some(variant) = fresnel {
-		let z = f.scope("FresnelLensPart", at, variant);
-		rows.push(z.number("Zones", 1.));
-		rows.push(z.combo("Division", "ZoneDivision", &["EqualWidth", "EqualDepth"]));
+	rows.extend([l.number(Lens::R1, 10.), l.number(Lens::R2, 10.), l.number(Lens::THICKNESS, 1.)]);
+	if let Some(z) = fresnel {
+		rows.push(z.number(FresnelLens::ZONES, 1.));
+		rows.push(z.combo(FresnelLens::DIVISION));
 	}
 	rows.push(
 		readout(s.get("LabelEdgeThickness"), r.lens_edge.map(px).unwrap_or_default(), "LensEdgeThickness")
@@ -879,25 +914,17 @@ fn lens(f: &Form, r: &Readouts, at: &str, fresnel: Option<&str>) -> Element {
 	section(s.get("SectionShape"), rows)
 }
 
-fn triangle(f: &Form, r: &Readouts, at: &str, variant: &str) -> Element {
+fn triangle(f: &Form, r: &Readouts, t: &Scope<'_, Triangle>) -> Element {
 	let s = &f.s;
-	let t = f.scope("TrianglePart", at, variant);
-	let path = t.path("Kind");
-	let tt = f.word(&path);
-	let a_on = tt == "Isosceles" || tt == "Custom";
+	let kind = t.obj.kind;
+	let a_on = matches!(kind, TriangleType::Isosceles | TriangleType::Custom);
 	section(
 		s.get("SectionShape"),
 		vec![
-			f.combo(
-				"TrianglePart",
-				"Type",
-				&path,
-				"TriangleType",
-				&["Equilateral", "RightIsosceles", "ThirtySixtyNinety", "Isosceles", "Custom"],
-			),
-			t.number("Base", 10.),
-			t.decimals("AngleA", 0.5, 1).enabled(a_on),
-			t.decimals("AngleB", 0.5, 1).enabled(tt == "Custom"),
+			t.combo(Triangle::KIND),
+			t.number(Triangle::BASE, 10.),
+			t.decimals(Triangle::ANGLE_A, 0.5, 1).enabled(a_on),
+			t.decimals(Triangle::ANGLE_B, 0.5, 1).enabled(kind == TriangleType::Custom),
 			readout(
 				s.get("LabelApexAngle"),
 				r.apex.map(|a| format!("{} deg", one_decimal(a))).unwrap_or_default(),
@@ -910,50 +937,50 @@ fn triangle(f: &Form, r: &Readouts, at: &str, variant: &str) -> Element {
 
 /// A meta surface's form: the plate's material (tops and back coated), its shape, the design's section (a lens's,
 /// a prism's or an axicon's) and the pattern.
-fn meta_surface(f: &Form, r: &Readouts, at: &str, design: &m::MetaDesign) -> Vec<Element> {
+fn meta_surface(f: &Form, r: &Readouts, m: &Scope<'_, MetaSurface>) -> Vec<Element> {
 	let s = &f.s;
-	let m = f.scope("MetaSurfacePart", at, "MetaSurface");
+	let design = m.nested(MetaSurface::DESIGN);
 	let MetaReadouts { full_turn, zones, zone_width, line } = r.meta.unwrap_or_default();
 	let wavelength = readout(s.get("LabelWavelength"), r.wavelength.map(px).unwrap_or_default(), "PartWavelength")
 		.hint(s.get("TipGateWavelength"));
 	let zones = readout(s.get("LabelMetaZones"), zones.to_string(), "PartZoneCount").hint(s.get("TipMetaZones"));
 	let zone_width = readout(s.get("LabelZoneWidth"), zone_width.map(px).unwrap_or_default(), "PartZoneWidth")
 		.hint(s.get("TipZoneWidth"));
-	let (section_key, rows) = match design {
-		m::MetaDesign::Lens(_) => {
-			let l = f.scope("MetaLensPart", &format!("{at}.design.Lens"), "MetaLens");
+	let (section_key, rows) = match &design.obj {
+		MetaDesign::Lens(inner) => {
+			let l = design.variant_over(MetaDesign::LENS, inner);
 			(
 				"SectionLens",
 				vec![
-					m.decimals("DesignFrequency", 0.1, 2),
+					m.decimals(MetaSurface::DESIGN_FREQUENCY, 0.1, 2),
 					wavelength,
-					l.number("FocalLength", 10.),
-					l.combo("LensType", "MetaLensType", &["Converging", "Diverging"]),
+					l.number(MetaLensDesign::FOCAL_LENGTH, 10.),
+					l.combo(MetaLensDesign::LENS_TYPE),
 					zones,
 				],
 			)
 		}
-		m::MetaDesign::Prism(_) => {
-			let p = f.scope("MetaPrismPart", &format!("{at}.design.Prism"), "MetaPrism");
+		MetaDesign::Prism(inner) => {
+			let p = design.variant_over(MetaDesign::PRISM, inner);
 			(
 				"SectionPrism",
 				vec![
-					m.decimals("DesignFrequency", 0.1, 2),
+					m.decimals(MetaSurface::DESIGN_FREQUENCY, 0.1, 2),
 					wavelength,
-					p.decimals("Deflection", 0.5, 2),
+					p.decimals(MetaPrismDesign::DEFLECTION, 0.5, 2),
 					zone_width,
 					zones,
 				],
 			)
 		}
-		m::MetaDesign::Axicon(_) => {
-			let a = f.scope("MetaAxiconPart", &format!("{at}.design.Axicon"), "MetaAxicon");
+		MetaDesign::Axicon(inner) => {
+			let a = design.variant_over(MetaDesign::AXICON, inner);
 			(
 				"SectionAxicon",
 				vec![
-					m.decimals("DesignFrequency", 0.1, 2),
+					m.decimals(MetaSurface::DESIGN_FREQUENCY, 0.1, 2),
 					wavelength,
-					a.decimals("ConeAngle", 0.5, 2),
+					a.decimals(MetaAxiconDesign::CONE_ANGLE, 0.5, 2),
 					readout(s.get("LabelLineLength"), line.map(px).unwrap_or_default(), "PartLineLength")
 						.hint(s.get("TipLineLength")),
 					zone_width,
@@ -963,15 +990,15 @@ fn meta_surface(f: &Form, r: &Readouts, at: &str, design: &m::MetaDesign) -> Vec
 		}
 	};
 	vec![
-		material_faces(f, at, CoatedFaces::FrontBack),
-		section(s.get("SectionShape"), vec![m.number("Length", 10.), m.number("Width", 10.)]),
+		material_faces(f, &m.nested(MetaSurface::MATERIAL), &m.nested(MetaSurface::COATING), CoatedFaces::FrontBack),
+		section(s.get("SectionShape"), vec![m.number(MetaSurface::LENGTH, 10.), m.number(MetaSurface::WIDTH, 10.)]),
 		section(s.get(section_key), rows),
 		section(
 			s.get("SectionPattern"),
 			vec![
-				m.number("PatternIndex", 0.01),
-				m.decimals("Pitch", 0.1, 2),
-				m.decimals("Height", 0.1, 2),
+				m.number(MetaSurface::PATTERN_INDEX, 0.01),
+				m.decimals(MetaSurface::PITCH, 0.1, 2),
+				m.decimals(MetaSurface::HEIGHT, 0.1, 2),
 				readout(s.get("LabelFullTurnHeight"), full_turn.map(px).unwrap_or_default(), "PartFullTurnHeight")
 					.hint(s.get("TipFullTurnHeight")),
 			],
@@ -979,30 +1006,28 @@ fn meta_surface(f: &Form, r: &Readouts, at: &str, design: &m::MetaDesign) -> Vec
 	]
 }
 
-fn zone_plate(f: &Form, r: &Readouts, at: &str, variant: &str) -> Vec<Element> {
+fn zone_plate(f: &Form, r: &Readouts, z: &Scope<'_, ZonePlate>) -> Vec<Element> {
 	let s = &f.s;
-	let z = f.scope("ZonePlatePart", at, variant);
-	let mount = z.flag("Mount");
 	let (count, outer) = r.zones.map_or((String::new(), String::new()), |(n, o)| (n.to_string(), approx_px(o)));
 	vec![
 		section(
 			s.get("SectionDesign"),
 			vec![
-				z.decimals("DesignFrequency", 0.1, 2),
+				z.decimals(ZonePlate::DESIGN_FREQUENCY, 0.1, 2),
 				readout(s.get("LabelWavelength"), r.wavelength.map(approx_px).unwrap_or_default(), "ZoneWavelength")
 					.hint(s.get("TipGateWavelength")),
-				z.number("FocalLength", 10.),
-				z.check("Inverse"),
+				z.number(ZonePlate::FOCAL_LENGTH, 10.),
+				z.check(ZonePlate::INVERSE),
 			],
 		),
 		section(
 			s.get("SectionShape"),
 			vec![
-				z.number("Diameter", 10.),
-				z.number("Thickness", 1.),
-				z.number("Coating", 1.),
-				z.check("Mount"),
-				z.number("MountWidth", 10.).enabled(mount),
+				z.number(ZonePlate::DIAMETER, 10.),
+				z.number(ZonePlate::THICKNESS, 1.),
+				z.number(ZonePlate::COATING, 1.),
+				z.check(ZonePlate::MOUNT),
+				z.number(ZonePlate::MOUNT_WIDTH, 10.).enabled(z.obj.mount),
 			],
 		),
 		section(
@@ -1015,50 +1040,39 @@ fn zone_plate(f: &Form, r: &Readouts, at: &str, variant: &str) -> Vec<Element> {
 	]
 }
 
-/// A list edited as a whole: `edit` changes the model's list, which is then set at `path`.
-fn set_list<T: Serialize + DeserializeOwned>(f: &Form, path: &str, edit: impl FnOnce(&mut Vec<T>)) {
-	let mut list: Vec<T> = serde_json::from_value(f.get(path).clone()).expect("the list reads back");
-	edit(&mut list);
-	f.set(path, to_json(list));
-}
-
-/// A number box for one coordinate of item `index` of the list at `path`, for the caller to tip.
-fn list_number<T: Serialize + DeserializeOwned + 'static>(
-	f: &Form,
-	path: &str,
+/// A number box for one number of item `index` of `list`, for the caller to tip.
+fn list_value<T: Fields, U: Fields + Clone, V: Number + 'static>(
+	list: &List<T, U>,
 	index: usize,
-	value: i32,
-	set: fn(&mut T, i32),
+	p: Prop<U, V>,
+	spec: NumberSpec,
 	test: String,
 ) -> wavedude_widgets::NumberBox {
-	let f2 = f.clone();
-	let path = path.to_owned();
+	let value = (p.get)(&list.items()[index]).to_f64();
+	let list = list.clone();
 	wavedude_widgets::NumberBox::new(
-		WritableSetter::new(f64::from(value), move |v: f64| {
-			set_list(&f2, &path, |list: &mut Vec<T>| set(&mut list[index], v.round() as i32));
-		}),
-		NumberSpec::integer(-1e6, 1e6),
+		WritableSetter::new(value, move |v: f64| list.set_item(index, p, V::from_f64(v))),
+		spec,
 	)
 	.width(Size::flex(1.))
 	.test_id(test)
 }
 
-fn remove_button<T: Serialize + DeserializeOwned>(
+fn remove_button<T: Fields, U: Clone + 'static>(
 	f: &Form,
-	path: &str,
+	list: &List<T, U>,
 	index: usize,
 	tip_key: &str,
 	test: String,
 ) -> Element {
-	let f2 = f.clone();
-	let path = path.to_owned();
+	let list = list.clone();
 	let button = tip(
 		f.s.get(tip_key),
 		Button::new()
 			.compact()
 			.on_press(move |_| {
-				set_list(&f2, &path, |list: &mut Vec<T>| {
-					list.remove(index);
+				list.set(|items| {
+					items.remove(index);
 				});
 			})
 			.child(IconView::new(icons::MINUS)),
@@ -1085,38 +1099,40 @@ fn list_heading(text: &str) -> Label {
 	label().width(Size::flex(1.)).text(text.to_owned()).color(use_wave_theme().text_dim).max_lines(1)
 }
 
+/// The tooltip of a list item's field.
+fn item_hint<U: Fields, V>(f: &Form, p: &Prop<U, V>) -> &'static str {
+	f.s.hint(U::TYPE_NAME, p.field.name())
+}
+
+fn item_label<U: Fields, V>(f: &Form, p: &Prop<U, V>) -> &'static str {
+	f.s.label(U::TYPE_NAME, p.field.name())
+}
+
 /// An outline's points: an X / Y heading, a full-width row per point with X, Y and remove, Add point below.
-fn points(f: &Form, path: &str) -> Element {
+fn points(f: &Form, list: &List<Outline, Point>) -> Element {
 	let s = &f.s;
-	let list: Vec<m::Point> = f.bind_as(path);
 	let mut rows = vec![hint_row(s.get("HintPolygonPoints"))];
-	if !list.is_empty() {
+	if !list.items().is_empty() {
 		let headings = list_row()
-			.child(list_heading(s.label("PartPoint", "X")))
-			.child(list_heading(s.label("PartPoint", "Y")))
+			.child(list_heading(item_label(f, &Point::X)))
+			.child(list_heading(item_label(f, &Point::Y)))
 			.child(rect().width(Size::px(ROW_BUTTON_WIDTH)));
 		rows.push(PropertyRow::new("", headings).full_width());
 	}
-	for (i, p) in list.iter().enumerate() {
+	let spec = NumberSpec::integer(-1e6, 1e6);
+	for i in 0..list.items().len() {
 		let editors = list_row()
-			.child(
-				list_number(f, path, i, p.x, |p: &mut m::Point, v| p.x = v, format!("Point{i}.X"))
-					.tooltip(s.hint("PartPoint", "X")),
-			)
-			.child(
-				list_number(f, path, i, p.y, |p: &mut m::Point, v| p.y = v, format!("Point{i}.Y"))
-					.tooltip(s.hint("PartPoint", "Y")),
-			)
-			.child(remove_button::<m::Point>(f, path, i, "TipRemovePoint", format!("Point{i}.Remove")));
+			.child(list_value(list, i, Point::X, spec.clone(), format!("Point{i}.X")).tooltip(item_hint(f, &Point::X)))
+			.child(list_value(list, i, Point::Y, spec.clone(), format!("Point{i}.Y")).tooltip(item_hint(f, &Point::Y)))
+			.child(remove_button(f, list, i, "TipRemovePoint", format!("Point{i}.Remove")));
 		rows.push(PropertyRow::new("", editors).full_width());
 	}
 	let add = {
-		let f = f.clone();
-		let path = path.to_owned();
+		let list = list.clone();
 		move |_: Event<PressEventData>| {
-			set_list(&f, &path, |list: &mut Vec<m::Point>| {
-				let last = list.last().copied().unwrap_or_default();
-				list.push(m::Point::new(last.x + 10, last.y));
+			list.set(|items| {
+				let last = items.last().copied().unwrap_or_default();
+				items.push(Point::new(last.x + 10, last.y));
 			});
 		}
 	};
@@ -1128,46 +1144,25 @@ fn points(f: &Form, path: &str) -> Element {
 	section(s.get("SectionPoints"), rows)
 }
 
-/// A number box for one decimal value of item `index` of the list at `path`, for the caller to tip.
-fn list_decimal<T: Serialize + DeserializeOwned + 'static>(
+/// A button that moves item `index` of `list` by `by` places.
+fn move_button<T: Fields, U: Clone + 'static>(
 	f: &Form,
-	path: &str,
-	index: usize,
-	value: f64,
-	spec: NumberSpec,
-	set: fn(&mut T, f64),
-	test: String,
-) -> wavedude_widgets::NumberBox {
-	let f2 = f.clone();
-	let path = path.to_owned();
-	wavedude_widgets::NumberBox::new(
-		WritableSetter::new(value, move |v: f64| set_list(&f2, &path, |list: &mut Vec<T>| set(&mut list[index], v))),
-		spec,
-	)
-	.width(Size::flex(1.))
-	.test_id(test)
-}
-
-/// A button that moves item `index` of the list at `path` by `by` places.
-fn move_button<T: Serialize + DeserializeOwned>(
-	f: &Form,
-	path: &str,
+	list: &List<T, U>,
 	index: usize,
 	by: isize,
 	tip_key: &str,
 	test: String,
 ) -> Element {
-	let f2 = f.clone();
-	let path = path.to_owned();
+	let list = list.clone();
 	let button = tip(
 		f.s.get(tip_key),
 		Button::new()
 			.compact()
 			.on_press(move |_| {
-				set_list(&f2, &path, |list: &mut Vec<T>| {
+				list.set(|items| {
 					let to = index as isize + by;
-					if (0..list.len() as isize).contains(&to) {
-						list.swap(index, to as usize);
+					if (0..items.len() as isize).contains(&to) {
+						items.swap(index, to as usize);
 					}
 				});
 			})
@@ -1196,8 +1191,8 @@ const NODE_TAIL_WIDTH: f32 = 116.;
 /// down and remove; Add layer appends a copy of the last, Remove all empties the list in one step. A drag by a
 /// row's grip moves the layer through the list: the row whose top lies nearest the grip's top plus the drag is
 /// the target, each crossing is one edit, and the mouse held keeps them one undo step.
-fn layers(f: &Form, path: &str) -> Element {
-	LayerList { form: f.clone(), path: path.to_owned() }.into_element()
+fn layers(f: &Form, list: List<InterferenceFilter, FilterLayer>) -> Element {
+	LayerList { form: f.clone(), list }.into_element()
 }
 
 /// The layer list as a component of its own: the form builders run conditionally, so the drag's state cannot
@@ -1205,28 +1200,27 @@ fn layers(f: &Form, path: &str) -> Element {
 #[derive(Clone)]
 struct LayerList {
 	form: Form,
-	path: String,
+	list: List<InterferenceFilter, FilterLayer>,
 }
 
 impl PartialEq for LayerList {
 	fn eq(&self, other: &Self) -> bool {
-		self.path == other.path && *self.form.json == *other.form.json
+		self.form.row == other.form.row && self.form.s == other.form.s && self.list == other.list
 	}
 }
 
 impl Component for LayerList {
 	fn render(&self) -> impl IntoElement {
-		let (f, path) = (&self.form, self.path.as_str());
-		self.rows(f, path)
+		self.rows(&self.form)
 	}
 }
 
 impl LayerList {
-	fn rows(&self, f: &Form, path: &str) -> Element {
+	fn rows(&self, f: &Form) -> Element {
 		let s = &f.s;
-		let list: Vec<m::FilterLayer> = f.bind_as(path);
-		let (tmin, tmax) = bounds("FilterLayer.Thickness");
-		let (imin, imax) = bounds("FilterLayer.RefractiveIndex");
+		let list = &self.list;
+		let (tmin, tmax) = bounds_of(FilterLayer::THICKNESS);
+		let (imin, imax) = bounds_of(FilterLayer::REFRACTIVE_INDEX);
 		let mut rows = vec![hint_row(s.get("HintFilterLayers"))];
 		let theme = use_wave_theme();
 		// the rows' tops by index, and the drag: the pointer's y and the grip's top at the press, the layer's index now
@@ -1235,10 +1229,9 @@ impl LayerList {
 		// each row: the grip, a narrow ordinal, the two boxes sharing the rest, the buttons
 		let ordinal =
 			|text: String| label().width(Size::px(ORDINAL_WIDTH)).text(text).color(theme.text_dim).max_lines(1);
-		if !list.is_empty() {
+		if !list.items().is_empty() {
 			let on_move = {
-				let f = f.clone();
-				let path = path.to_owned();
+				let list = list.clone();
 				move |e: Event<PointerEventData>| {
 					let Some((y0, top0, current)) = *drag.peek() else { return };
 					let wanted = top0 + (e.global_location().y - y0) as f32;
@@ -1249,7 +1242,7 @@ impl LayerList {
 						.min_by(|a, b| (a.1 - wanted).abs().total_cmp(&(b.1 - wanted).abs()))
 						.map(|(i, _)| i);
 					let Some(target) = nearest.filter(|&t| t != current) else { return };
-					set_list(&f, &path, |l: &mut Vec<m::FilterLayer>| {
+					list.set(|l| {
 						if current < l.len() && target < l.len() {
 							let layer = l.remove(current);
 							l.insert(target, layer);
@@ -1263,12 +1256,12 @@ impl LayerList {
 				.on_global_pointer_up(move |_| drag.set_if_modified(None))
 				.child(rect().width(Size::px(GRIP_WIDTH)))
 				.child(ordinal(String::new()))
-				.child(list_heading(s.label("FilterLayer", "Thickness")))
-				.child(list_heading(s.label("FilterLayer", "RefractiveIndex")))
+				.child(list_heading(item_label(f, &FilterLayer::THICKNESS)))
+				.child(list_heading(item_label(f, &FilterLayer::REFRACTIVE_INDEX)))
 				.child(rect().width(Size::px(ROW_BUTTONS_WIDTH)));
 			rows.push(PropertyRow::new("", headings).full_width());
 		}
-		for (i, l) in list.iter().enumerate() {
+		for i in 0..list.items().len() {
 			let thickness = NumberSpec::linear(tmin, tmax, 1.).with_decimals(2).with_drag_step(0.1);
 			let index = NumberSpec::linear(imin, imax, 0.01).with_decimals(2).with_drag_step(0.01);
 			let grip = rect()
@@ -1295,47 +1288,29 @@ impl LayerList {
 				.child(tagged(tip(s.get("TipDragLayer"), grip), format!("Layer{i}.Grip")))
 				.child(ordinal(format!("{}", i + 1)))
 				.child(
-					list_decimal(
-						f,
-						path,
-						i,
-						l.thickness,
-						thickness,
-						|l: &mut m::FilterLayer, v| l.thickness = v,
-						format!("Layer{i}.Thickness"),
-					)
-					.tooltip(s.hint("FilterLayer", "Thickness")),
+					list_value(list, i, FilterLayer::THICKNESS, thickness, format!("Layer{i}.Thickness"))
+						.tooltip(item_hint(f, &FilterLayer::THICKNESS)),
 				)
 				.child(
-					list_decimal(
-						f,
-						path,
-						i,
-						l.refractive_index,
-						index,
-						|l: &mut m::FilterLayer, v| l.refractive_index = v,
-						format!("Layer{i}.RefractiveIndex"),
-					)
-					.tooltip(s.hint("FilterLayer", "RefractiveIndex")),
+					list_value(list, i, FilterLayer::REFRACTIVE_INDEX, index, format!("Layer{i}.RefractiveIndex"))
+						.tooltip(item_hint(f, &FilterLayer::REFRACTIVE_INDEX)),
 				)
-				.child(move_button::<m::FilterLayer>(f, path, i, -1, "TipLayerUp", format!("Layer{i}.Up")))
-				.child(move_button::<m::FilterLayer>(f, path, i, 1, "TipLayerDown", format!("Layer{i}.Down")))
-				.child(remove_button::<m::FilterLayer>(f, path, i, "TipRemoveLayer", format!("Layer{i}.Remove")));
+				.child(move_button(f, list, i, -1, "TipLayerUp", format!("Layer{i}.Up")))
+				.child(move_button(f, list, i, 1, "TipLayerDown", format!("Layer{i}.Down")))
+				.child(remove_button(f, list, i, "TipRemoveLayer", format!("Layer{i}.Remove")));
 			rows.push(PropertyRow::new("", editors).full_width());
 		}
 		let add = {
-			let f = f.clone();
-			let path = path.to_owned();
+			let list = list.clone();
 			move |_: Event<PressEventData>| {
-				set_list(&f, &path, |list: &mut Vec<m::FilterLayer>| {
-					list.push(list.last().cloned().unwrap_or_default());
+				list.set(|items| {
+					items.push(items.last().cloned().unwrap_or_default());
 				});
 			}
 		};
 		let clear = {
-			let f = f.clone();
-			let path = path.to_owned();
-			move |_: Event<PressEventData>| set_list(&f, &path, |list: &mut Vec<m::FilterLayer>| list.clear())
+			let list = list.clone();
+			move |_: Event<PressEventData>| list.set(Vec::clear)
 		};
 		let buttons = rect()
 			.horizontal()
@@ -1343,54 +1318,48 @@ impl LayerList {
 			.child(tip(s.get("TipAddLayer"), tagged(dialogs::button(s.get("ButtonAddLayer"), true, add), "AddLayer")))
 			.child(tip(
 				s.get("TipRemoveAllLayers"),
-				tagged(dialogs::button(s.get("ButtonRemoveAllLayers"), !list.is_empty(), clear), "RemoveAllLayers"),
+				tagged(
+					dialogs::button(s.get("ButtonRemoveAllLayers"), !list.items().is_empty(), clear),
+					"RemoveAllLayers",
+				),
 			));
 		rows.push(PropertyRow::new("", buttons));
 		section(s.get("SectionLayers"), rows)
 	}
 }
 
-fn fiber(f: &Form, at: &str, variant: &str) -> Vec<Element> {
+fn fiber(f: &Form, fb: &Scope<'_, Fiber>) -> Vec<Element> {
 	let s = &f.s;
-	let fb = f.scope("FiberPart", at, variant);
 	let mut cladding = vec![
-		fb.number("CladdingIndex", 0.01),
-		fb.number("CladdingThickness", 1.),
-		fb.number("Absorption", 5.),
-		fb.number("AbsorptionRamp", 1.),
+		fb.number(Fiber::CLADDING_INDEX, 0.01),
+		fb.number(Fiber::CLADDING_THICKNESS, 1.),
+		fb.number(Fiber::ABSORPTION, 5.),
+		fb.number(Fiber::ABSORPTION_RAMP, 1.),
 	];
-	cladding.extend(coating_rows(f, &fb.path("Coating"), false));
-	let nodes_path = fb.path("Nodes");
-	let list: Vec<m::FiberNode> = f.bind_as(&nodes_path);
+	cladding.extend(coating_rows(&fb.nested(Fiber::COATING), false));
+	let list = fb.list(Fiber::NODES);
 	let mut nodes = vec![hint_row(s.get("HintFiberNodes"))];
 	let theme = use_wave_theme();
 	// a node is three rows, "Node", "In" and "Out", each a label and its X and Y; the first carries Smooth and remove
 	let node_label =
 		|text: &str| label().width(Size::px(NODE_LABEL_WIDTH)).text(text.to_owned()).color(theme.text_dim).max_lines(1);
-	if !list.is_empty() {
+	if !list.items().is_empty() {
 		let headings = list_row()
 			.child(node_label(""))
-			.child(list_heading(s.label("FiberNode", "X")))
-			.child(list_heading(s.label("FiberNode", "Y")))
+			.child(list_heading(item_label(f, &FiberNode::X)))
+			.child(list_heading(item_label(f, &FiberNode::Y)))
 			.child(rect().width(Size::px(NODE_TAIL_WIDTH)));
 		nodes.push(PropertyRow::new("", headings).full_width());
 	}
-	type Set = fn(&mut m::FiberNode, i32);
-	for (i, node) in list.iter().enumerate() {
-		let boxes = |row: Rect, (a, set_a): (i32, Set), (b, set_b): (i32, Set), tag: &str| {
-			row.child(
-				list_number(f, &nodes_path, i, a, set_a, format!("Node{i}.{tag}X"))
-					.tooltip(s.hint("FiberNode", &format!("{tag}X"))),
-			)
-			.child(
-				list_number(f, &nodes_path, i, b, set_b, format!("Node{i}.{tag}Y"))
-					.tooltip(s.hint("FiberNode", &format!("{tag}Y"))),
-			)
+	let spec = NumberSpec::integer(-1e6, 1e6);
+	for (i, node) in list.items().iter().enumerate() {
+		let boxes = |row: Rect, x: Prop<FiberNode, i32>, y: Prop<FiberNode, i32>, tag: &str| {
+			row.child(list_value(&list, i, x, spec.clone(), format!("Node{i}.{tag}X")).tooltip(item_hint(f, &x)))
+				.child(list_value(&list, i, y, spec.clone(), format!("Node{i}.{tag}Y")).tooltip(item_hint(f, &y)))
 		};
 		let toggle = {
-			let f = f.clone();
-			let path = nodes_path.clone();
-			move |on: bool| set_list(&f, &path, |l: &mut Vec<m::FiberNode>| l[i].smooth = on)
+			let list = list.clone();
+			move |on: bool| list.set_item(i, FiberNode::SMOOTH, on)
 		};
 		let tail = rect()
 			.horizontal()
@@ -1398,95 +1367,63 @@ fn fiber(f: &Form, at: &str, variant: &str) -> Vec<Element> {
 			.content(Content::flex())
 			.cross_align(Alignment::center())
 			.spacing(ROW_SPACING)
-			.child(rect().width(Size::flex(1.)).child(super::properties::check_box(
-				s.label("FiberNode", "Smooth").into(),
+			.child(rect().width(Size::flex(1.)).child(check_box(
+				item_label(f, &FiberNode::SMOOTH).into(),
 				node.smooth,
 				toggle,
 			)))
-			.child(remove_button::<m::FiberNode>(f, &nodes_path, i, "TipRemoveNode", format!("Node{i}.Remove")));
-		let point = boxes(
-			list_row().child(node_label(s.get("LabelNodePoint"))),
-			(node.x, |n, v| n.x = v),
-			(node.y, |n, v| n.y = v),
-			"",
-		)
-		.child(tail);
+			.child(remove_button(f, &list, i, "TipRemoveNode", format!("Node{i}.Remove")));
+		let point =
+			boxes(list_row().child(node_label(s.get("LabelNodePoint"))), FiberNode::X, FiberNode::Y, "").child(tail);
 		nodes.push(PropertyRow::new("", point).full_width());
 		let spacer = || rect().width(Size::px(NODE_TAIL_WIDTH));
-		let into = boxes(
-			list_row().child(node_label(s.get("LabelNodeIn"))),
-			(node.in_x, |n, v| n.in_x = v),
-			(node.in_y, |n, v| n.in_y = v),
-			"In",
-		)
-		.child(spacer());
+		let into = boxes(list_row().child(node_label(s.get("LabelNodeIn"))), FiberNode::IN_X, FiberNode::IN_Y, "In")
+			.child(spacer());
 		nodes.push(PropertyRow::new("", into).full_width());
-		let out = boxes(
-			list_row().child(node_label(s.get("LabelNodeOut"))),
-			(node.out_x, |n, v| n.out_x = v),
-			(node.out_y, |n, v| n.out_y = v),
-			"Out",
-		)
-		.child(spacer());
+		let out = boxes(list_row().child(node_label(s.get("LabelNodeOut"))), FiberNode::OUT_X, FiberNode::OUT_Y, "Out")
+			.child(spacer());
 		nodes.push(PropertyRow::new("", out).full_width());
 	}
 	let add = {
-		let f = f.clone();
-		let path = nodes_path.clone();
+		let list = list.clone();
 		move |_: Event<PressEventData>| {
-			set_list(&f, &path, |l: &mut Vec<m::FiberNode>| {
+			list.set(|l| {
 				let (x, y) = l.last().map_or((0, 0), |n| (n.x + 50, n.y));
-				l.push(m::FiberNode { x, y, in_x: -20, in_y: 0, out_x: 20, out_y: 0, smooth: true });
+				l.push(FiberNode { x, y, in_x: -20, in_y: 0, out_x: 20, out_y: 0, smooth: true });
 			});
 		}
 	};
 	nodes.push(PropertyRow::new("", dialogs::button(s.get("ButtonAddNode"), true, add)).hint(s.get("TipAddNode")));
 	vec![
-		section(s.get("SectionCore"), vec![fb.number("CoreIndex", 0.01), fb.number("CoreDiameter", 1.)]),
+		section(s.get("SectionCore"), vec![fb.number(Fiber::CORE_INDEX, 0.01), fb.number(Fiber::CORE_DIAMETER, 1.)]),
 		section(s.get("SectionCladding"), cladding),
-		section(s.get("SectionShape"), vec![fb.combo("Ends", "FiberEnds", &["Flat", "Round"])]),
+		section(s.get("SectionShape"), vec![fb.combo(Fiber::ENDS)]),
 		section(s.get("SectionNodes"), nodes),
 	]
 }
 
-fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> Vec<Element> {
+fn gate(f: &Form, r: &Readouts, g: &Scope<'_, LogicGate>) -> Vec<Element> {
 	let s = &f.s;
-	let g = f.scope("LogicGatePart", at, variant);
 	let design = r.gate;
 	let layout = design.map_or([0; 4], |d| d.layout);
-	let ports = design.map_or([m::Point::default(); 4], |d| d.ports);
-	let point = |q: m::Point| format!("({}, {})", q.x, q.y);
+	let ports = design.map_or([Point::default(); 4], |d| d.ports);
+	let point = |q: Point| format!("({}, {})", q.x, q.y);
 	let quarter_text = design.map(|d| d.quarter_wave).filter(|q| q.is_finite()).map(approx_px).unwrap_or_default();
 	// the box shows the spacing the design uses; an edit stores the typed value
-	let spacing_form = match design {
-		Some(d) => {
-			let mut json = (*f.json).clone();
-			let pointer = format!("/{}", g.path("PortSpacing").replace('.', "/"));
-			*json.pointer_mut(&pointer).expect("a gate has a port spacing") = Value::from(d.spacing);
-			f.with_json(json)
-		}
-		None => f.clone(),
-	};
-	let spacing = spacing_form.scope("LogicGatePart", at, variant).number("PortSpacing", 2.);
-	let (upper, lower) = match kind {
+	let designed = design
+		.map(|d| LogicGate { port_spacing: u32::try_from(d.spacing).unwrap_or(g.obj.port_spacing), ..g.obj.clone() });
+	let spacing = g.over(designed.as_ref().unwrap_or(g.obj)).number(LogicGate::PORT_SPACING, 2.);
+	let (upper, lower) = match g.obj.kind {
 		m::GateKind::Xor => ("Xor", "And"),
 		m::GateKind::And => ("And", "Xor"),
 		m::GateKind::Or => ("Or", "Remainder"),
 	};
-	let output = |member: &str, word: &str| {
-		f.check_in_column(
-			s.label("LogicGatePart", member),
-			s.enum_word("GateOutput", word).to_owned(),
-			s.hint("LogicGatePart", member),
-			&g.path(member),
-			&format!("LogicGatePart.{member}"),
-		)
-	};
+	let (min, max) = bounds_of(LogicGate::COATING);
 	vec![
 		section(
 			s.get("SectionDesign"),
 			vec![
-				g.decimals("DesignFrequency", 0.1, 2),
+				g.decimals(LogicGate::DESIGN_FREQUENCY, 0.1, 2),
 				readout(s.get("LabelWavelength"), r.wavelength.map(approx_px).unwrap_or_default(), "GateWavelength")
 					.hint(s.get("TipGateWavelength")),
 			],
@@ -1494,19 +1431,22 @@ fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> V
 		section(
 			s.get("SectionMaterial"),
 			vec![
-				g.number("CoreIndex", 0.01),
-				g.number("CladdingIndex", 0.01),
-				g.number_with("Coating", {
-					let (min, max) = bounds("LogicGate.Coating");
-					NumberSpec::integer(min, max)
-				}),
-				g.check("InputCoated"),
-				g.check("OutputCoated"),
+				g.number(LogicGate::CORE_INDEX, 0.01),
+				g.number(LogicGate::CLADDING_INDEX, 0.01),
+				g.number_with(LogicGate::COATING, NumberSpec::integer(min, max)),
+				g.check(LogicGate::INPUT_COATED),
+				g.check(LogicGate::OUTPUT_COATED),
 				readout(s.get("LabelQuarterWave"), quarter_text, "GateQuarterWave").hint(s.get("TipQuarterWave")),
 			],
 		),
 		section(s.get("SectionShape"), vec![spacing]),
-		section(s.get("SectionOutputs"), vec![output("UpperOutputActive", upper), output("LowerOutputActive", lower)]),
+		section(
+			s.get("SectionOutputs"),
+			vec![
+				g.check_text(LogicGate::UPPER_OUTPUT_ACTIVE, s.enum_word("GateOutput", upper).to_owned()),
+				g.check_text(LogicGate::LOWER_OUTPUT_ACTIVE, s.enum_word("GateOutput", lower).to_owned()),
+			],
+		),
 		section(
 			s.get("SectionLayout"),
 			["LabelCoreWidth", "LabelCouplerGap", "LabelCouplerLength", "LabelGateLength"]
@@ -1520,8 +1460,8 @@ fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> V
 			[
 				s.get("LabelInputA"),
 				s.get("LabelInputB"),
-				s.label("LogicGatePart", "UpperOutputActive"),
-				s.label("LogicGatePart", "LowerOutputActive"),
+				g.label(&LogicGate::UPPER_OUTPUT_ACTIVE),
+				g.label(&LogicGate::LOWER_OUTPUT_ACTIVE),
 			]
 			.iter()
 			.zip(ports)
@@ -1532,63 +1472,67 @@ fn gate(f: &Form, r: &Readouts, at: &str, variant: &str, kind: m::GateKind) -> V
 	]
 }
 
-fn probe(f: &Form) -> Vec<Element> {
+fn probe(f: &Form, o: &Probe, index: usize) -> Vec<Element> {
 	let s = &f.s;
-	let p = f.scope("Probe", "", "Probe");
-	let line = p.word("Kind") == "Line";
-	let detector = p.word("Detector");
-	let is_detector = detector != "Standard";
-	// the step axis belongs to a graph over time: a point probe's or a counting detector's (Probe::shows_profile)
-	let profile = line && detector != "Counting";
-	let field = p.word("Layer") == "Field";
-	let measurements: &[&str] = if field { &["Amplitude"] } else { &["Value", "IntegratedValue"] };
-	let custom = p.word("BoxSize") == "Custom";
+	let p = f.scope(o, move |e| Edit::Probe(index, e));
+	let line = o.kind == ProbeKind::Line;
+	let is_detector = o.is_detector();
+	// the step axis belongs to a graph over time: a point probe's or a counting detector's
+	let profile = o.shows_profile();
+	let field = o.layer == Layer::Field;
+	let measurements: &[Measurement] =
+		if field { &[Measurement::Amplitude] } else { &[Measurement::Value, Measurement::IntegratedValue] };
+	let custom = o.box_size == BoxSize::Custom;
 	// the field's amplitude changes sign, so its axis stays linear
-	let log = !field && p.word("YScale") == "Logarithmic";
+	let log = !field && o.y_scale == YScale::Logarithmic;
+	let at_least_0 = ranges::AT_LEAST_0;
 	vec![
-		section(s.get("SectionGeneral"), vec![f.name("Probe"), p.check("Active"), p.number("StartAfter", 1.)]),
+		section(
+			s.get("SectionGeneral"),
+			vec![f.name::<Probe>(&o.name), p.check(Probe::ACTIVE), p.number(Probe::START_AFTER, 1.)],
+		),
 		// a detector is a line probe of the integrated intensity: the three after its own are shown as it set them
 		section(
 			s.get("SectionMeasurement"),
 			vec![
-				p.combo("Detector", "ProbeDetector", &["Standard", "Counting", "Imaging"]),
-				p.decimals("Sensitivity", 0.5, 2).enabled(is_detector),
-				p.number("BinSize", 1.).enabled(detector == "Imaging"),
-				p.combo("Layer", "ProbeLayer", &["Field", "Intensity"]).enabled(!is_detector),
-				p.combo("Measurement", "ProbeMeasurement", measurements).enabled(!is_detector),
-				p.combo("Kind", "ProbeKind", &["Point", "Line"]).enabled(!is_detector),
+				p.combo(Probe::DETECTOR),
+				p.decimals(Probe::SENSITIVITY, 0.5, 2).enabled(is_detector),
+				p.number(Probe::BIN_SIZE, 1.).enabled(o.detector == ProbeDetector::Imaging),
+				p.combo(Probe::LAYER).enabled(!is_detector),
+				p.combo_of(Probe::MEASUREMENT, measurements).enabled(!is_detector),
+				p.combo(Probe::KIND).enabled(!is_detector),
 			],
 		),
 		section(
 			s.get("SectionPosition"),
 			vec![
-				p.number_in("AX", "Part.X", 1.),
-				p.number_in("AY", "Part.Y", 1.),
-				p.number_in("BX", "Part.X", 1.).enabled(line),
-				p.number_in("BY", "Part.Y", 1.).enabled(line),
+				p.number_in(Probe::AX, at_least_0, 1.),
+				p.number_in(Probe::AY, at_least_0, 1.),
+				p.number_in(Probe::BX, at_least_0, 1.).enabled(line),
+				p.number_in(Probe::BY, at_least_0, 1.).enabled(line),
 			],
 		),
 		section(
 			s.get("SectionGraph"),
 			vec![
-				p.combo("BoxSize", "ProbeBoxSize", &["Tiny", "Small", "Medium", "Large", "ExtraLarge", "Custom"]),
-				p.number_in("BoxX", "Part.X", 1.),
-				p.number_in("BoxY", "Part.Y", 1.),
-				p.number("BoxWidth", 10.).enabled(custom),
-				p.number("BoxHeight", 10.).enabled(custom),
+				p.combo(Probe::BOX_SIZE),
+				p.number_in(Probe::BOX_X, at_least_0, 1.),
+				p.number_in(Probe::BOX_Y, at_least_0, 1.),
+				p.number(Probe::BOX_WIDTH, 10.).enabled(custom),
+				p.number(Probe::BOX_HEIGHT, 10.).enabled(custom),
 			],
 		),
 		section(
 			s.get("SectionAxes"),
 			vec![
-				p.combo("ScaleMode", "ProbeScaleMode", &["Running", "Full"]).enabled(!profile),
-				p.number("Window", 10.),
-				p.check("AutoScaleX").enabled(!profile),
-				p.check("AutoScaleY"),
-				p.combo("YScale", "ProbeValueScale", &["Linear", "Logarithmic"]).enabled(!field),
-				p.number("Decades", 1.).enabled(log),
-				p.number_in("YMin", "", 0.1),
-				p.number_in("YMax", "", 0.1),
+				p.combo(Probe::SCALE_MODE).enabled(!profile),
+				p.number(Probe::WINDOW, 10.),
+				p.check(Probe::AUTO_SCALE_X).enabled(!profile),
+				p.check(Probe::AUTO_SCALE_Y),
+				p.combo(Probe::Y_SCALE).enabled(!field),
+				p.number(Probe::DECADES, 1.).enabled(log),
+				p.number(Probe::Y_MIN, 0.1),
+				p.number(Probe::Y_MAX, 0.1),
 			],
 		),
 	]
@@ -1612,53 +1556,50 @@ fn to_gradient(stops: &[m::Stop]) -> Gradient {
 	)
 }
 
-fn stops_json(g: &Gradient) -> Value {
-	let stops: Vec<m::Stop> = g
-		.stops
-		.iter()
-		.map(|s| m::Stop { at: s.position, color: m::Rgb::new(s.color.r, s.color.g, s.color.b) })
-		.collect();
-	to_json(stops)
+fn stops_of(g: &Gradient) -> Vec<m::Stop> {
+	g.stops.iter().map(|s| m::Stop { at: s.position, color: m::Rgb::new(s.color.r, s.color.g, s.color.b) }).collect()
 }
 
 /// An edit of stop `i` of `gradient` by `change`, which says whether it changed anything; sets the whole stop list.
 fn stop_edit<T: 'static>(
-	f: &Form,
+	set: &Rc<dyn Fn(Vec<m::Stop>)>,
 	gradient: &Gradient,
 	change: fn(&mut Gradient, usize, T) -> bool,
 ) -> impl Fn(usize, T) + use<T> {
-	let (f, gradient) = (f.clone(), gradient.clone());
+	let (set, gradient) = (set.clone(), gradient.clone());
 	move |i, v| {
 		let mut g = gradient.clone();
 		if change(&mut g, i, v) {
-			f.set("stops", stops_json(&g));
+			set(stops_of(&g));
 		}
 	}
 }
 
-fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
+fn scheme(f: &Form, o: &ColorScheme, index: usize, r: &Readouts) -> Vec<Element> {
 	let s = &f.s;
-	let sc = f.scope("ColorScheme", "", "ColorScheme");
-	let gradient = to_gradient(&f.bind_as::<Vec<m::Stop>>("stops"));
+	let sc = f.scope(o, move |e| Edit::Scheme(index, e));
+	let gradient = to_gradient(&o.stops);
+	let set_stops: Rc<dyn Fn(Vec<m::Stop>)> = Rc::new(sc.setter(ColorScheme::STOPS));
 	let set_gradient = {
-		let f = f.clone();
-		move |g: Gradient| f.set("stops", stops_json(&g))
+		let set = set_stops.clone();
+		move |g: Gradient| set(stops_of(&g))
 	};
 	let based_on = {
 		let form = f.clone();
+		let (set_stops, set_kind, set_description) =
+			(set_stops.clone(), sc.setter(ColorScheme::KIND), sc.setter(ColorScheme::DESCRIPTION));
 		let items = r.based_on.iter().map(|n| (n.clone(), n.clone())).collect();
 		combo_box(String::new(), items, true, "ColorScheme.BasedOn".into(), move |name| {
-			let f = &form;
-			let source = f.cx.shared.peek(|a| {
+			let source = form.cx.shared.peek(|a| {
 				schemes::find(&a.document.project.color_schemes, &name)
 					.or_else(|| schemes::find(&a.schemes.user, &name))
 					.or_else(|| schemes::find(schemes::built_in(), &name))
 					.cloned()
 			});
 			if let Some(src) = source {
-				f.set("stops", to_json(&src.stops));
-				f.set("kind", to_json(src.kind));
-				f.set("description", Value::from(src.description));
+				set_stops(src.stops);
+				set_kind(src.kind);
+				set_description(src.description);
 			}
 		})
 	};
@@ -1672,22 +1613,22 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 		.hint(s.get("TipSchemeGradient")),
 	];
 	for (i, stop) in gradient.stops.iter().enumerate() {
-		let set_at = stop_edit(f, &gradient, |g, i, at: f64| {
+		let set_at = stop_edit(&set_stops, &gradient, |g, i, at: f64| {
 			g.set_position(i, at);
 			true
 		});
-		let set_color = stop_edit(f, &gradient, |g, i, c: Rgb| {
+		let set_color = stop_edit(&set_stops, &gradient, |g, i, c: Rgb| {
 			g.set_color(i, c);
 			true
 		});
-		let set_hex = stop_edit(f, &gradient, |g, i, hex: String| match Rgb::from_hex(&hex) {
+		let set_hex = stop_edit(&set_stops, &gradient, |g, i, hex: String| match Rgb::from_hex(&hex) {
 			Some(c) => {
 				g.set_color(i, c);
 				true
 			}
 			None => false,
 		});
-		let remove = stop_edit(f, &gradient, |g, i, ()| g.remove(i));
+		let remove = stop_edit(&set_stops, &gradient, |g, i, ()| g.remove(i));
 		let editors = rect()
 			.horizontal()
 			.width(Size::fill())
@@ -1728,7 +1669,7 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 			));
 		rows.push(PropertyRow::new("", editors).full_width());
 	}
-	let add = stop_edit(f, &gradient, |g, _, ()| {
+	let add = stop_edit(&set_stops, &gradient, |g, _, ()| {
 		g.add_in_widest_gap();
 		true
 	});
@@ -1740,11 +1681,7 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 	vec![
 		section(
 			s.get("SectionGeneral"),
-			vec![
-				f.name("ColorScheme"),
-				sc.combo("Kind", "ColorSchemeKind", &["Unspecified", "Field", "Intensity"]),
-				sc.text("Description", false),
-			],
+			vec![f.name::<ColorScheme>(&o.name), sc.combo(ColorScheme::KIND), sc.text(ColorScheme::DESCRIPTION, false)],
 		),
 		section(s.get("SectionStops"), rows),
 	]

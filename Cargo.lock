@@ -5955,7 +5955,6 @@ dependencies = [
  "mundy",
  "rfd",
  "semver",
- "serde",
  "serde_json",
  "tempfile",
  "tracing",

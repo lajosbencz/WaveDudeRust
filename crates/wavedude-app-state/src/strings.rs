@@ -239,45 +239,116 @@ impl Default for Strings {
 	}
 }
 
-/// The original's type names of a model property key of `wavedude_core::model::ranges` (`Part.X` is
-/// `OpticalPart.X`, `Material.RefractiveIndex` belongs to the lens and the shapes, ...).
-pub fn original_keys(key: &str) -> Vec<String> {
-	let (ty, member) = key.split_once('.').expect("a key is Type.Member");
-	let types: &[&str] = match ty {
-		"Part" => &["OpticalPart"],
-		"Point" => &["PartPoint"],
-		"Stop" => &["ColorStop"],
-		"Material" => &["LensPart", "ShapePart"],
-		"Coating" => &["LensPart", "ShapePart", "FiberPart", "GrinLensPart"],
-		"Lens" => &["LensPart"],
-		"FresnelLens" => &["FresnelLensPart"],
-		"Diffuser" => &["DiffuserPart"],
-		"InterferenceFilter" => &["InterferenceFilterPart"],
-		"SimpleGrating" => &["SimpleGratingPart"],
-		"MetaSurface" => &["MetaSurfacePart"],
-		"MetaLens" => &["MetaLensPart"],
-		"MetaPrism" => &["MetaPrismPart"],
-		"MetaAxicon" => &["MetaAxiconPart"],
-		"FacettedGrating" => &["FacettedGratingPart"],
-		"Polygon" => &["PolygonPart"],
-		"Rectangle" => &["RectanglePart"],
-		"Ellipse" => &["EllipsePart"],
-		"Triangle" => &["TrianglePart"],
-		"Fiber" => &["FiberPart"],
-		"BraggReflector" => &["BraggReflectorPart"],
-		"GrinLens" => &["GrinLensPart"],
-		"LogicGate" => &["LogicGatePart"],
-		"ZonePlate" => &["ZonePlatePart"],
-		other => return vec![format!("{other}.{}", original_member(ty, member))],
-	};
-	types.iter().map(|t| format!("{t}.{}", original_member(ty, member))).collect()
+/// Fields no row labels, with the reason.
+const NO_TEXT: [(&str, &str); 6] = [
+	// the element name carries the gate's kind
+	("LogicGate", "Kind"),
+	// a list with its own heading and hint
+	("InterferenceFilter", "Layers"),
+	("Outline", "Points"),
+	("Fiber", "Nodes"),
+	("ColorScheme", "Stops"),
+	// the stop editor's tips name it
+	("Stop", "At"),
+];
+
+/// Enums no combo shows: the stencil is a check box, the gate's kind is its element name.
+const NO_WORDS: [&str; 2] = ["Stencil", "GateKind"];
+
+/// The `Label.` and `Hint.` keys of every field of the types reachable from `Project`: a type's `TYPE_NAME`
+/// and the field's name at that level.
+pub fn model_field_keys() -> Vec<String> {
+	use wavedude_core::model::*;
+	fn named<T: Fields>(field: T::Field, out: &mut Vec<String>) {
+		if NO_TEXT.contains(&(T::TYPE_NAME, field.name())) {
+			return;
+		}
+		for prefix in ["Label", "Hint"] {
+			out.push(format!("{prefix}.{}.{}", T::TYPE_NAME, field.name()));
+		}
+	}
+	fn of<T: Fields>(out: &mut Vec<String>) {
+		for field in T::Field::all().into_iter().filter(|f| !f.path().contains('.')) {
+			named::<T>(field, out);
+		}
+	}
+	let mut out = Vec::new();
+	let o = &mut out;
+	of::<Project>(o);
+	of::<Scene>(o);
+	of::<Simulation>(o);
+	of::<Display>(o);
+	of::<DisplayLayer>(o);
+	of::<Video>(o);
+	of::<Source>(o);
+	// the composite box edits the array as a whole
+	named::<Source>(Source::SET_ARRAY.field, o);
+	of::<SourceArray>(o);
+	of::<PartBase>(o);
+	of::<Material>(o);
+	of::<Coating>(o);
+	of::<Lens>(o);
+	of::<FresnelLens>(o);
+	of::<Polygon>(o);
+	of::<Rectangle>(o);
+	of::<Ellipse>(o);
+	of::<Triangle>(o);
+	of::<Outline>(o);
+	of::<Diffuser>(o);
+	of::<FilterLayer>(o);
+	of::<InterferenceFilter>(o);
+	of::<SimpleGrating>(o);
+	of::<MetaSurface>(o);
+	of::<MetaLensDesign>(o);
+	of::<MetaPrismDesign>(o);
+	of::<MetaAxiconDesign>(o);
+	of::<FacettedGrating>(o);
+	of::<Fiber>(o);
+	of::<FiberNode>(o);
+	of::<BraggReflector>(o);
+	of::<GrinLens>(o);
+	of::<LogicGate>(o);
+	of::<ZonePlate>(o);
+	of::<Point>(o);
+	of::<Probe>(o);
+	of::<ColorScheme>(o);
+	of::<Stop>(o);
+	out
 }
 
-fn original_member<'a>(ty: &str, member: &'a str) -> &'a str {
-	match (ty, member) {
-		("Stop", "At") => "Position",
-		_ => member,
+/// The `Enum.` keys of every `Word` enum: the model's and the settings'.
+pub fn model_word_keys() -> Vec<String> {
+	use wavedude_core::model::*;
+	fn of<W: Word>(out: &mut Vec<String>) {
+		if NO_WORDS.contains(&W::TYPE_NAME) {
+			return;
+		}
+		out.extend(W::NAMES.iter().map(|name| format!("Enum.{}.{name}", W::TYPE_NAME)));
 	}
+	let mut out = Vec::new();
+	let o = &mut out;
+	of::<SceneMode>(o);
+	of::<Edges>(o);
+	of::<Stencil>(o);
+	of::<Layer>(o);
+	of::<SourceMode>(o);
+	of::<PulseShape>(o);
+	of::<Measurement>(o);
+	of::<ProbeKind>(o);
+	of::<BoxSize>(o);
+	of::<ScaleMode>(o);
+	of::<YScale>(o);
+	of::<ProbeDetector>(o);
+	of::<SchemeKind>(o);
+	of::<CoatingProfile>(o);
+	of::<ZoneDivision>(o);
+	of::<TriangleType>(o);
+	of::<MetaLensType>(o);
+	of::<FacetPattern>(o);
+	of::<FiberEnds>(o);
+	of::<GateKind>(o);
+	of::<crate::settings::Theme>(o);
+	out
 }
 
 #[cfg(test)]
@@ -297,18 +368,24 @@ mod tests {
 
 	#[test]
 	fn every_model_property_has_label_and_hint() {
-		use wavedude_core::model::ranges;
-		let all = ranges::ALL.iter().map(|(k, _)| *k).chain(ranges::UNBOUNDED.iter().copied());
-		let all: Vec<&str> = all.chain(ranges::DEPENDENT.iter().map(|(k, _)| *k)).collect();
+		let keys = model_field_keys();
+		assert!(keys.iter().any(|k| k == "Hint.Probe.BoxWidth"));
 		for l in Language::ALL {
-			for key in &all {
-				for k in original_keys(key) {
-					for prefix in ["Label", "Hint"] {
-						let full = format!("{prefix}.{k}");
-						let text = tables()[l.index()].get(&full);
-						assert!(text.is_some_and(|t| !t.is_empty()), "{l:?} lacks {full} (model key {key})");
-					}
-				}
+			for key in &keys {
+				let text = tables()[l.index()].get(key);
+				assert!(text.is_some_and(|t| !t.is_empty()), "{l:?} lacks {key}");
+			}
+		}
+	}
+
+	#[test]
+	fn every_word_has_its_members_in_every_language() {
+		let keys = model_word_keys();
+		assert!(keys.iter().any(|k| k == "Enum.BoxSize.ExtraLarge"));
+		for l in Language::ALL {
+			for key in &keys {
+				let text = tables()[l.index()].get(key);
+				assert!(text.is_some_and(|t| !t.is_empty()), "{l:?} lacks {key}");
 			}
 		}
 	}

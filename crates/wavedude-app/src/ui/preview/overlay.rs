@@ -14,8 +14,10 @@ use freya::engine::prelude::{
 	raster_n32_premul,
 };
 use freya::prelude::*;
-use serde_json::{Value, json};
-use wavedude_core::model::{Layer, PartKind, ProbeKind, Project};
+use wavedude_core::model::{
+	FiberEdit, Layer, OutlineEdit, PartBaseEdit, PartEdit, PartKind, PartKindEdit, ProbeEdit, ProbeKind, Project,
+	SourceArrayEdit, SourceEdit,
+};
 use wavedude_widgets::picture::{CanvasTransform, PictureEvent, PointerPhase};
 
 use super::handles::{
@@ -23,10 +25,9 @@ use super::handles::{
 	marquee_hits, marquee_select, moved_node, moved_point, to_part_frame, turn,
 };
 use super::{PaneStates, open_picture_menu};
-use crate::ui::properties::to_json;
 use crate::ui::shared::{App, Shared};
 use wavedude_app_state::Event as AppEvent;
-use wavedude_app_state::commands::{Command, Target};
+use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 
 /// The handles' fixed colours: light grey over a dark halo, the selection bright yellow.
@@ -254,12 +255,11 @@ pub enum Grab {
 		group: bool,
 		moved: bool,
 	},
-	/// A drag that writes properties of one item; `before` is the item as it was, for Esc.
+	/// A drag that edits fields of one item; `before` are the edits that restore them, for Esc.
 	Edit {
 		item: ItemRef,
 		kind: HandleKind,
-		before: Value,
-		paths: Vec<String>,
+		before: Vec<Edit>,
 	},
 	Marquee {
 		layer: Layer,
@@ -282,70 +282,64 @@ fn anchor_of(project: &Project, item: ItemRef) -> Option<(i32, i32)> {
 	}
 }
 
-fn item_json(project: &Project, item: ItemRef) -> Value {
-	match item.kind {
-		ItemKind::Source => to_json(&project.sources[item.index]),
-		ItemKind::Part => to_json(&project.parts[item.index]),
-		ItemKind::Probe => to_json(&project.probes[item.index]),
-		ItemKind::Scheme => unreachable!("a scheme has no handle"),
-	}
-}
-
-fn json_at<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
-	path.split('.').try_fold(value, |v, key| v.get(key))
-}
-
-/// The property writes that put handle `kind` of `item` at the canvas point `p` (`snap`: Shift on a lever).
-pub fn handle_edits(
-	project: &Project,
-	item: ItemRef,
-	kind: HandleKind,
-	p: (f32, f32),
-	snap: bool,
-) -> Vec<(String, Value)> {
+/// The edits that put handle `kind` of `item` at the canvas point `p` (`snap`: Shift on a lever).
+pub fn handle_edits(project: &Project, item: ItemRef, kind: HandleKind, p: (f32, f32), snap: bool) -> Vec<Edit> {
 	let pixel = (p.0.floor() as i32, p.1.floor() as i32);
+	let i = item.index;
 	match (item.kind, kind) {
-		(ItemKind::Source, HandleKind::SourceLever) => project.sources.get(item.index).map_or_else(Vec::new, |s| {
-			vec![("array.angle".into(), json!(lever_angle((s.x as f32 + 0.5, s.y as f32 + 0.5), p, snap)))]
+		(ItemKind::Source, HandleKind::SourceLever) => project.sources.get(i).map_or_else(Vec::new, |s| {
+			let angle = lever_angle((s.x as f32 + 0.5, s.y as f32 + 0.5), p, snap);
+			vec![Edit::Source(i, SourceEdit::Array(SourceArrayEdit::Angle(angle)))]
 		}),
-		(ItemKind::Probe, HandleKind::ProbeA) => project.probes.get(item.index).map_or_else(Vec::new, |probe| {
-			let mut edits = vec![("ax".into(), json!(pixel.0)), ("ay".into(), json!(pixel.1))];
+		(ItemKind::Probe, HandleKind::ProbeA) => project.probes.get(i).map_or_else(Vec::new, |probe| {
+			let mut edits = vec![Edit::Probe(i, ProbeEdit::Ax(pixel.0)), Edit::Probe(i, ProbeEdit::Ay(pixel.1))];
 			if (probe.box_x, probe.box_y) == (probe.ax, probe.ay) {
-				edits.extend([("box_x".into(), json!(pixel.0)), ("box_y".into(), json!(pixel.1))]);
+				edits.extend([Edit::Probe(i, ProbeEdit::BoxX(pixel.0)), Edit::Probe(i, ProbeEdit::BoxY(pixel.1))]);
 			}
 			edits
 		}),
-		(ItemKind::Probe, HandleKind::ProbeB) => vec![("bx".into(), json!(pixel.0)), ("by".into(), json!(pixel.1))],
+		(ItemKind::Probe, HandleKind::ProbeB) => {
+			vec![Edit::Probe(i, ProbeEdit::Bx(pixel.0)), Edit::Probe(i, ProbeEdit::By(pixel.1))]
+		}
 		(ItemKind::Part, _) => {
-			let Some(part) = project.parts.get(item.index) else { return Vec::new() };
-			match (kind, &part.kind) {
+			let Some(part) = project.parts.get(i) else { return Vec::new() };
+			let part_edits: Vec<PartEdit> = match (kind, &part.kind) {
 				(HandleKind::PartLever, _) => {
-					vec![("angle".into(), json!(lever_angle((part.base.x as f32, part.base.y as f32), p, snap)))]
+					let angle = lever_angle((part.base.x as f32, part.base.y as f32), p, snap);
+					vec![PartEdit::Base(PartBaseEdit::Angle(angle))]
 				}
 				(HandleKind::Grip, k) => grip_edits(k, to_part_frame(part, p)),
-				(HandleKind::Point(i), PartKind::Outline(o)) => {
-					let points = moved_point(&o.points, i, to_part_frame(part, p));
-					vec![("kind.Outline.points".into(), to_json(points))]
+				(HandleKind::Point(at), PartKind::Outline(o)) => {
+					let points = moved_point(&o.points, at, to_part_frame(part, p));
+					vec![PartEdit::Kind(PartKindEdit::Outline(OutlineEdit::Points(points)))]
 				}
 				(HandleKind::Node(_) | HandleKind::InHandle(_) | HandleKind::OutHandle(_), PartKind::Fiber(f)) => {
 					let nodes = moved_node(f, kind, to_part_frame(part, p));
-					vec![("kind.Fiber.nodes".into(), to_json(nodes))]
+					vec![PartEdit::Kind(PartKindEdit::Fiber(FiberEdit::Nodes(nodes)))]
 				}
 				(kind, _) => unreachable!("{kind:?} is no handle of part {}", part.base.name),
-			}
+			};
+			part_edits.into_iter().map(|e| Edit::Part(i, e)).collect()
 		}
 		(item_kind, kind) => unreachable!("{kind:?} is no edit handle of a {item_kind:?}"),
 	}
 }
 
-fn send_edits(shared: &Shared, item: ItemRef, edits: Vec<(String, Value)>) -> Vec<String> {
-	edits
-		.into_iter()
-		.map(|(path, value)| {
-			shared.send(AppEvent::Command(Command::Set { target: Target::Item(item), path: path.clone(), value }));
-			path
-		})
-		.collect()
+fn send_edits(shared: &Shared, edits: Vec<Edit>) {
+	for edit in edits {
+		shared.send(AppEvent::Command(Command::Edit(edit)));
+	}
+}
+
+/// Adds the edits `olds` (the fields as they are now) to `before` unless it already restores that field: a drag
+/// can start editing more fields mid-way (a box that leaves its corner), and Esc restores each field as it was
+/// before its first edit.
+fn remember(before: &mut Vec<Edit>, olds: Vec<Edit>) {
+	for old in olds {
+		if !before.iter().any(|b| b.field_ref() == old.field_ref()) {
+			before.push(old);
+		}
+	}
 }
 
 /// A whole-item handle that a property edit moves rather than a group move: a line probe's A alone, and B.
@@ -408,19 +402,19 @@ pub fn on_pointer(
 				});
 				return;
 			}
-			let (group, by_edit, project_view) = shared.update(|app| {
+			let (group, by_edit, anchor) = shared.update(|app| {
 				let group = h.kind.moves_item() && app.selection.contains(item) && app.selection.items().len() > 1;
 				if !group && app.selection.current_item() != Some(item) {
 					app.selection.select(Row::Item(item));
 				}
 				let p = &app.document.project;
-				(group, !group && moves_by_edit(p, item, h.kind), (anchor_of(p, item), item_json(p, item)))
+				(group, !group && moves_by_edit(p, item, h.kind), anchor_of(p, item))
 			});
 			shared.send(AppEvent::MouseDown);
 			grab.set(Some(if by_edit {
-				Grab::Edit { item, kind: h.kind, before: project_view.1, paths: Vec::new() }
+				Grab::Edit { item, kind: h.kind, before: Vec::new() }
 			} else {
-				let origin = project_view.0.expect("a handle's item exists");
+				let origin = anchor.expect("a handle's item exists");
 				Grab::Items { item, press: e.canvas, origin, group, moved: false }
 			}));
 		}
@@ -437,22 +431,16 @@ pub fn on_pointer(
 						grab.set(Some(Grab::Items { item, press, origin, group, moved: true }));
 					}
 				}
-				Some(Grab::Edit { item, kind, before, mut paths }) => {
-					let edits = shared.peek(|app| {
-						handle_edits(
-							&app.document.project,
-							item,
-							kind,
-							e.canvas,
-							e.modifiers.contains(Modifiers::SHIFT),
-						)
+				Some(Grab::Edit { item, kind, mut before }) => {
+					let (edits, olds) = shared.peek(|app| {
+						let p = &app.document.project;
+						let edits = handle_edits(p, item, kind, e.canvas, e.modifiers.contains(Modifiers::SHIFT));
+						let olds: Vec<Edit> = edits.iter().filter_map(|edit| edit.current(p)).collect();
+						(edits, olds)
 					});
-					for path in send_edits(shared, item, edits) {
-						if !paths.contains(&path) {
-							paths.push(path);
-						}
-					}
-					grab.set(Some(Grab::Edit { item, kind, before, paths }));
+					remember(&mut before, olds);
+					send_edits(shared, edits);
+					grab.set(Some(Grab::Edit { item, kind, before }));
 				}
 				Some(Grab::Marquee { layer, a, mode, .. }) => {
 					grab.set(Some(Grab::Marquee { layer, a, b: e.canvas, mode }));
@@ -520,16 +508,8 @@ pub fn cancel_drag(shared: &Shared, states: PaneStates) -> bool {
 			shared.send(AppEvent::MouseUp);
 			true
 		}
-		Some(Grab::Edit { item, before, paths, .. }) => {
-			for path in paths {
-				if let Some(value) = json_at(&before, &path) {
-					shared.send(AppEvent::Command(Command::Set {
-						target: Target::Item(item),
-						path,
-						value: value.clone(),
-					}));
-				}
-			}
+		Some(Grab::Edit { before, .. }) => {
+			send_edits(shared, before);
 			shared.send(AppEvent::MouseUp);
 			true
 		}
@@ -606,14 +586,20 @@ pub fn nudge(shared: &Shared, h: &Handle, dx: i32, dy: i32) {
 		let grouped = app.selection.contains(item) && app.selection.items().len() > 1;
 		if h.kind.is_lever() {
 			let delta = f64::from(dx - dy);
-			let angle = match item.kind {
-				ItemKind::Source => {
-					p.sources.get(item.index).and_then(|s| s.array.as_ref()).map(|a| ("array.angle", a.angle))
-				}
-				ItemKind::Part => p.parts.get(item.index).map(|part| ("angle", part.base.angle)),
+			let i = item.index;
+			let turned = match item.kind {
+				ItemKind::Source => p
+					.sources
+					.get(i)
+					.and_then(|s| s.array.as_ref())
+					.map(|a| Edit::Source(i, SourceEdit::Array(SourceArrayEdit::Angle(turn(a.angle, delta))))),
+				ItemKind::Part => p
+					.parts
+					.get(i)
+					.map(|part| Edit::Part(i, PartEdit::Base(PartBaseEdit::Angle(turn(part.base.angle, delta))))),
 				ItemKind::Probe | ItemKind::Scheme => unreachable!("a {:?} has no lever", item.kind),
 			};
-			return Some(angle.map_or_else(Vec::new, |(path, a)| vec![(path.to_owned(), json!(turn(a, delta)))]));
+			return Some(turned.into_iter().collect());
 		}
 		if h.kind.moves_item() && (grouped || !moves_by_edit(p, item, h.kind)) {
 			return None;
@@ -624,9 +610,7 @@ pub fn nudge(shared: &Shared, h: &Handle, dx: i32, dy: i32) {
 		None => {
 			shared.send(AppEvent::Command(Command::MoveBy { target: item, dx, dy }));
 		}
-		Some(edits) => {
-			send_edits(shared, item, edits);
-		}
+		Some(edits) => send_edits(shared, edits),
 	}
 }
 
@@ -646,9 +630,16 @@ pub fn model_of(app: &App, layer: Layer, scale: f32) -> OverlayModel {
 
 #[cfg(test)]
 mod tests {
-	use wavedude_core::model::{Part, Probe, Rectangle, Source, SourceArray};
+	use wavedude_core::model::{Part, Probe, Rectangle, RectangleEdit, Source, SourceArray};
+
+	use wavedude_app_state::selection::Selection;
+	use wavedude_core::model::normalize::Normalize;
 
 	use super::*;
+
+	fn apply_to(p: &mut Project, e: &Edit) {
+		wavedude_app_state::commands::apply(p, &mut Selection::default(), Command::Edit(e.clone())).expect("applies");
+	}
 
 	fn project() -> Project {
 		let mut p = Project::default();
@@ -665,13 +656,21 @@ mod tests {
 		let p = project();
 		let probe = ItemRef::new(ItemKind::Probe, 0);
 		let a = handle_edits(&p, probe, HandleKind::ProbeA, (7.9, 8.2), false);
-		assert_eq!(a.len(), 4, "an attached box follows A");
-		assert_eq!(a[0], ("ax".into(), json!(7)));
+		assert_eq!(
+			a,
+			vec![
+				Edit::Probe(0, ProbeEdit::Ax(7)),
+				Edit::Probe(0, ProbeEdit::Ay(8)),
+				Edit::Probe(0, ProbeEdit::BoxX(7)),
+				Edit::Probe(0, ProbeEdit::BoxY(8)),
+			],
+			"an attached box follows A"
+		);
 		let lever = handle_edits(&p, ItemRef::new(ItemKind::Source, 0), HandleKind::SourceLever, (10.5, 0.), false);
-		assert_eq!(lever, vec![("array.angle".into(), json!(90.0))]);
+		assert_eq!(lever, vec![Edit::Source(0, SourceEdit::Array(SourceArrayEdit::Angle(90.0)))]);
 		let grip = handle_edits(&p, ItemRef::new(ItemKind::Part, 0), HandleKind::Grip, (80., 60.), false);
-		assert_eq!(grip[0], ("kind.Rectangle.length".into(), json!(60)));
-		assert_eq!(grip[1], ("kind.Rectangle.width".into(), json!(20)));
+		let rect = |e| Edit::Part(0, PartEdit::Kind(PartKindEdit::Rectangle(e)));
+		assert_eq!(grip, vec![rect(RectangleEdit::Length(60)), rect(RectangleEdit::Width(20))]);
 	}
 
 	#[test]
@@ -685,10 +684,38 @@ mod tests {
 	}
 
 	#[test]
-	fn json_paths_read_nested_values() {
-		let v = json!({ "kind": { "Fiber": { "nodes": [1, 2] } }, "x": 3 });
-		assert_eq!(json_at(&v, "kind.Fiber.nodes"), Some(&json!([1, 2])));
-		assert_eq!(json_at(&v, "x"), Some(&json!(3)));
-		assert_eq!(json_at(&v, "y"), None);
+	fn a_later_move_adds_new_fields_and_keeps_the_first_values() {
+		let at = |e| Edit::Probe(0, e);
+		let mut before = vec![at(ProbeEdit::Ax(5)), at(ProbeEdit::Ay(5))];
+		remember(
+			&mut before,
+			vec![at(ProbeEdit::Ax(7)), at(ProbeEdit::Ay(8)), at(ProbeEdit::BoxX(5)), at(ProbeEdit::BoxY(5))],
+		);
+		assert_eq!(
+			before,
+			vec![at(ProbeEdit::Ax(5)), at(ProbeEdit::Ay(5)), at(ProbeEdit::BoxX(5)), at(ProbeEdit::BoxY(5))]
+		);
+		remember(&mut before, vec![Edit::Probe(1, ProbeEdit::Ax(9))]);
+		assert_eq!(before.len(), 5, "the same field of another probe is another field");
+	}
+
+	#[test]
+	fn a_drag_restores_the_fields_it_edited() {
+		// applying a command normalises (names), so the start is normalised too
+		let mut p = project();
+		p.normalize();
+		let probe = ItemRef::new(ItemKind::Probe, 0);
+		let edits = handle_edits(&p, probe, HandleKind::ProbeA, (7.9, 8.2), false);
+		let before: Vec<Edit> = edits.iter().filter_map(|e| e.current(&p)).collect();
+		assert_eq!(before.len(), edits.len());
+		let mut moved = p.clone();
+		for e in &edits {
+			apply_to(&mut moved, e);
+		}
+		assert_ne!(moved, p);
+		for e in &before {
+			apply_to(&mut moved, e);
+		}
+		assert_eq!(moved, p);
 	}
 }

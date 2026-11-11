@@ -11,8 +11,7 @@ use std::time::Duration;
 
 use freya::engine::prelude::Canvas;
 use freya::prelude::*;
-use serde_json::json;
-use wavedude_core::model::{Edges, Layer, Scene};
+use wavedude_core::model::{DisplayLayerEdit, Edges, Layer, Scene};
 use wavedude_widgets::delay::use_delayed;
 use wavedude_widgets::header_strip::strip_beside;
 use wavedude_widgets::picture::{
@@ -22,10 +21,10 @@ use wavedude_widgets::{Callback, CanvasImage, HeaderStrip, StripOrientation, Tes
 
 use super::handles::OverlayModel;
 use super::overlay::{self, DotCache, OverlayFrame};
-use super::{PaneStates, auto_brightness, graph_boxes, layer_key, layer_name, open_picture_menu};
+use super::{PaneStates, auto_brightness, display_edit, graph_boxes, layer_name, open_picture_menu};
 use crate::ui::shared::{Shared, Topics};
 use wavedude_app_state::Event as AppEvent;
-use wavedude_app_state::commands::{Command, Target};
+use wavedude_app_state::commands::Command;
 
 /// The margin between the picture and its area's edges, logical pixels: the cell's margin on the outer sides, the
 /// gap to the header strip on the strip's side.
@@ -295,16 +294,12 @@ impl Component for PictureCell {
 			.maybe_child(tip_view);
 
 		let value_shared = shared.clone();
-		let path = format!("{}.brightness", layer_key(layer));
 		let auto_shared = shared.clone();
 		let strip = HeaderStrip::new(
 			title,
 			WritableSetter::new(brightness, move |v: f64| {
-				value_shared.send(AppEvent::Command(Command::Set {
-					target: Target::Display,
-					path: path.clone(),
-					value: json!(v),
-				}));
+				value_shared
+					.send(AppEvent::Command(Command::Edit(display_edit(layer, DisplayLayerEdit::Brightness(v)))));
 			}),
 			move |()| auto_brightness(&auto_shared, states, layer),
 		)

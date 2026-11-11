@@ -1,8 +1,8 @@
-//! Bounds of every persisted number, one table, named by `"<Type>.<Property>"`.
+//! Bounds of the persisted numbers, as constants the model's fields declare (`#[field(range = ranges::X)]`).
 //!
-//! `normalize` clamps with these constants; the table lets tests prove each one is
-//! enforced at both ends. Bounds that depend on another value are listed in
-//! [`DEPENDENT`] instead and are clamped in code alone.
+//! `normalize` clamps with these constants; the tests walk the fields and prove each declared range is
+//! enforced at both ends. Bounds that depend on another value are marked `#[field(dependent)]` and are clamped
+//! in code alone.
 
 /// Inclusive bounds of a number.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -106,167 +106,8 @@ pub const GRATING_SPACING: Range = Range::new(2.0, INT_MAX);
 pub const LAYER_THICKNESS: Range = Range::new(0.0, 1000.0);
 pub const STOP_AT: Range = Range::new(0.0, 1.0);
 
-/// Every persisted number and its bounds. `Material.*` applies to the lens and every shape,
-/// `Coating.Coating` to every coated part, `Part.*` to every part.
-pub const ALL: &[(&str, Range)] = &[
-	("Scene.Width", SCENE_SIZE),
-	("Scene.Height", SCENE_SIZE),
-	("Scene.DampingEdge", SCENE_DAMPING_EDGE),
-	("Scene.RefractiveIndex", INDEX),
-	("Scene.ImageSourceScale", SCENE_IMAGE_SOURCE_SCALE),
-	("Simulation.Steps", SIM_STEPS),
-	("Simulation.VisualizeEvery", SIM_VISUALIZE_EVERY),
-	("Simulation.WaveSpeed", SIM_WAVE_SPEED),
-	("Simulation.TimeDecay", SIM_TIME_DECAY),
-	("Simulation.SourceFrequencyScale", SIM_SOURCE_FREQUENCY_SCALE),
-	("Simulation.IntensityScale", SIM_INTENSITY_SCALE),
-	("Display.ExportFrom", STEP_POINT),
-	("Display.ExportTo", STEP_POINT),
-	("DisplayLayer.Brightness", LAYER_BRIGHTNESS),
-	("DisplayLayer.BlackLevel", LAYER_BLACK_LEVEL),
-	("DisplayLayer.OverlayGain", LAYER_OVERLAY_GAIN),
-	("Video.Fps", VIDEO_FPS),
-	("Video.Quality", VIDEO_QUALITY),
-	("Source.Frequency", LEVEL),
-	("Source.Amplitude", PERCENT),
-	("Source.Phase", PHASE),
-	("Source.PulseWidth", AT_LEAST_1),
-	("Source.OffWidth", AT_LEAST_1),
-	("Source.DetachAfter", DETACH_AFTER),
-	("SourceArray.SizeX", AT_LEAST_1),
-	("SourceArray.SizeY", AT_LEAST_1),
-	("SourceArray.Angle", ANGLE),
-	("SourceArray.RandomFrequency", AT_LEAST_0),
-	("SourceArray.RandomPhase", AT_LEAST_0),
-	("SourceArray.RandomOffWidth", AT_LEAST_0),
-	("SourceArray.RandomPosition", AT_LEAST_0),
-	("Probe.BoxWidth", PROBE_BOX_WIDTH),
-	("Probe.BoxHeight", PROBE_BOX_HEIGHT),
-	("Probe.Decades", PROBE_DECADES),
-	("Probe.Window", PROBE_WINDOW),
-	("Probe.StartAfter", AT_LEAST_0),
-	("Probe.Sensitivity", PROBE_SENSITIVITY),
-	("Probe.BinSize", PROBE_BIN_SIZE),
-	("Part.X", AT_LEAST_0),
-	("Part.Y", AT_LEAST_0),
-	("Part.Angle", ANGLE),
-	("Coating.Coating", COATING),
-	("Material.RefractiveIndex", INDEX),
-	("Material.Absorption", ABSORPTION),
-	("Material.AbsorptionRamp", ABSORPTION_RAMP),
-	("Lens.Diameter", AT_LEAST_2),
-	("Lens.Thickness", AT_LEAST_1),
-	("FresnelLens.Zones", FRESNEL_ZONES),
-	("Polygon.Sides", POLYGON_SIDES),
-	("Polygon.Side", AT_LEAST_2),
-	("Rectangle.Length", AT_LEAST_1),
-	("Rectangle.Width", AT_LEAST_1),
-	("Ellipse.Length", AT_LEAST_1),
-	("Ellipse.Width", AT_LEAST_1),
-	("Triangle.Base", AT_LEAST_2),
-	("Triangle.AngleA", TRIANGLE_ANGLE),
-	("Triangle.AngleB", TRIANGLE_ANGLE),
-	("Diffuser.Length", AT_LEAST_1),
-	("Diffuser.Width", AT_LEAST_2),
-	("Diffuser.CenterWavelength", RIPPLE_WAVELENGTH),
-	("Diffuser.Amplitude", PLATE_PIXELS),
-	("Diffuser.Sigma", PLATE_PIXELS),
-	("InterferenceFilter.Length", AT_LEAST_1),
-	("InterferenceFilter.Width", AT_LEAST_1),
-	("FilterLayer.Thickness", LAYER_THICKNESS),
-	("FilterLayer.RefractiveIndex", INDEX),
-	("SimpleGrating.Columns", AT_LEAST_1),
-	("SimpleGrating.Rows", AT_LEAST_1),
-	("SimpleGrating.ColumnSpacing", GRATING_SPACING),
-	("SimpleGrating.RowSpacing", GRATING_SPACING),
-	("MetaSurface.Length", AT_LEAST_1),
-	("MetaSurface.Width", AT_LEAST_2),
-	("MetaSurface.DesignFrequency", DESIGN_LEVEL),
-	("MetaSurface.Pitch", META_PIXELS),
-	("MetaSurface.Height", META_PIXELS),
-	("MetaSurface.PatternIndex", INDEX),
-	("MetaLens.FocalLength", AT_LEAST_1),
-	("MetaPrism.Deflection", META_DEFLECTION),
-	("MetaAxicon.ConeAngle", META_CONE_ANGLE),
-	("FacettedGrating.Length", AT_LEAST_1),
-	("FacettedGrating.Width", AT_LEAST_2),
-	("FacettedGrating.Pitch", RIPPLE_WAVELENGTH),
-	("FacettedGrating.Amplitude", PLATE_PIXELS),
-	("Fiber.CoreIndex", INDEX),
-	("Fiber.CoreDiameter", AT_LEAST_2),
-	("Fiber.CladdingIndex", INDEX),
-	("Fiber.CladdingThickness", AT_LEAST_0),
-	("Fiber.Absorption", ABSORPTION),
-	("Fiber.AbsorptionRamp", ABSORPTION_RAMP),
-	("BraggReflector.Pairs", BRAGG_PAIRS),
-	("BraggReflector.Thickness1", AT_LEAST_1),
-	("BraggReflector.Thickness2", AT_LEAST_1),
-	("BraggReflector.Index1", INDEX),
-	("BraggReflector.Index2", INDEX),
-	("BraggReflector.Width", AT_LEAST_2),
-	("GrinLens.Length", AT_LEAST_1),
-	("GrinLens.Diameter", AT_LEAST_2),
-	("GrinLens.CentreIndex", INDEX),
-	("GrinLens.EdgeIndex", INDEX),
-	("LogicGate.DesignFrequency", DESIGN_LEVEL),
-	("LogicGate.Coating", COATING),
-	("LogicGate.CoreIndex", INDEX),
-	("LogicGate.CladdingIndex", INDEX),
-	("LogicGate.PortSpacing", GATE_PORT_SPACING),
-	("ZonePlate.MountWidth", AT_LEAST_1),
-	("ZonePlate.Diameter", AT_LEAST_2),
-	("ZonePlate.Thickness", AT_LEAST_1),
-	("ZonePlate.Coating", ZONE_PLATE_COATING),
-	("ZonePlate.DesignFrequency", DESIGN_LEVEL),
-	("ZonePlate.FocalLength", AT_LEAST_1),
-	("Stop.At", STOP_AT),
-];
-
-/// Keys of [`ALL`] that are wrapped into (-180, 180] rather than clamped.
+/// Fields (`<TYPE_NAME>.<name>`) that are wrapped into (-180, 180] rather than clamped.
 pub const WRAPPED: &[&str] = &["SourceArray.Angle", "Part.Angle"];
-
-/// Persisted numbers whose bounds depend on another value, with the rule `normalize` applies.
-pub const DEPENDENT: &[(&str, &str)] = &[
-	("Display.ExportTo", "0 = to the end; below ExportFrom it becomes 0"),
-	("Probe.YMin", "YMax <= YMin resets both to -1, 1"),
-	("Probe.YMax", "YMax <= YMin resets both to -1, 1"),
-	("Lens.R1", "fit to diameter and thickness (fit_radii)"),
-	("Lens.R2", "fit to diameter and thickness (fit_radii)"),
-	("Triangle.AngleA", "the type's preset; Isosceles at most 89"),
-	("Triangle.AngleB", "the type's preset; Custom at most 179 - AngleA"),
-	("Rectangle.Width", "equals Length while Linked"),
-	("Ellipse.Width", "equals Length while Linked"),
-	("LogicGate.PortSpacing", "raised to the design's minimum when designed"),
-	("SimpleGrating.Diameter", "1 to half the smaller spacing"),
-];
-
-/// Persisted numbers without bounds (positions, spacings, offsets).
-pub const UNBOUNDED: &[&str] = &[
-	"Project.Seed",
-	"Source.X",
-	"Source.Y",
-	"SourceArray.SpacingX",
-	"SourceArray.SpacingY",
-	"Probe.AX",
-	"Probe.AY",
-	"Probe.BX",
-	"Probe.BY",
-	"Probe.BoxX",
-	"Probe.BoxY",
-	"Point.X",
-	"Point.Y",
-	"FiberNode.X",
-	"FiberNode.Y",
-	"FiberNode.InX",
-	"FiberNode.InY",
-	"FiberNode.OutX",
-	"FiberNode.OutY",
-];
-
-/// The bounds of a key of [`ALL`].
-pub fn range(key: &str) -> Option<Range> {
-	ALL.iter().find(|(k, _)| *k == key).map(|(_, r)| *r)
-}
 
 #[cfg(test)]
 mod tests {
@@ -573,7 +414,7 @@ mod tests {
 		}
 		for i in [0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 14, 16] {
 			v.push((
-				"Coating.Coating",
+				"Coating.Depth",
 				Box::new(move |p: &mut Project, x: f64| coating(p, i).depth = x),
 				Box::new(move |p: &Project| coating(&mut p.clone(), i).depth),
 			));
@@ -581,14 +422,101 @@ mod tests {
 		v
 	}
 
+	/// Persisted numbers whose bounds depend on another value, with the rule `normalize` applies.
+	const DEPENDENT: &[(&str, &str)] = &[
+		("Display.ExportTo", "0 = to the end; below ExportFrom it becomes 0"),
+		("Probe.YMin", "YMax <= YMin resets both to -1, 1"),
+		("Probe.YMax", "YMax <= YMin resets both to -1, 1"),
+		("Lens.R1", "fit to diameter and thickness (fit_radii)"),
+		("Lens.R2", "fit to diameter and thickness (fit_radii)"),
+		("Triangle.AngleA", "the type's preset; Isosceles at most 89"),
+		("Triangle.AngleB", "the type's preset; Custom at most 179 - AngleA"),
+		("Rectangle.Width", "equals Length while Linked"),
+		("Ellipse.Width", "equals Length while Linked"),
+		("LogicGate.PortSpacing", "raised to the design's minimum when designed"),
+		("SimpleGrating.Diameter", "1 to half the smaller spacing"),
+	];
+
+	fn is_number(kind: ValueKind) -> bool {
+		matches!(kind, ValueKind::Int | ValueKind::UInt | ValueKind::Float)
+	}
+
+	/// The number fields the types declare, keyed `<TYPE_NAME>.<name>`.
+	#[derive(Default)]
+	struct Walk {
+		ranged: Vec<(String, Range)>,
+		dependent: Vec<String>,
+	}
+
+	/// Records the number fields `T` declares itself (a nested field's are `U`'s).
+	fn walk<T: Fields>(w: &mut Walk) {
+		for field in T::Field::all().into_iter().filter(|f| !f.path().contains('.') && is_number(f.kind())) {
+			let key = format!("{}.{}", T::TYPE_NAME, field.name());
+			if field.dependent() {
+				w.dependent.push(key.clone());
+			}
+			match field.bounds() {
+				Bounds::Range(r) => w.ranged.push((key, r)),
+				Bounds::Dependent => assert!(field.dependent(), "{key}: dependent bounds without the mark"),
+				Bounds::Open => assert!(!field.dependent(), "{key} is dependent but open"),
+			}
+		}
+	}
+
+	fn walked() -> Walk {
+		let mut w = Walk::default();
+		walk::<Project>(&mut w);
+		walk::<Scene>(&mut w);
+		walk::<Simulation>(&mut w);
+		walk::<Display>(&mut w);
+		walk::<DisplayLayer>(&mut w);
+		walk::<Video>(&mut w);
+		walk::<Source>(&mut w);
+		walk::<SourceArray>(&mut w);
+		walk::<Probe>(&mut w);
+		walk::<ColorScheme>(&mut w);
+		walk::<Stop>(&mut w);
+		walk::<Rgb>(&mut w);
+		walk::<Point>(&mut w);
+		walk::<PartBase>(&mut w);
+		walk::<Coating>(&mut w);
+		walk::<Material>(&mut w);
+		walk::<Lens>(&mut w);
+		walk::<FresnelLens>(&mut w);
+		walk::<Polygon>(&mut w);
+		walk::<Rectangle>(&mut w);
+		walk::<Ellipse>(&mut w);
+		walk::<Triangle>(&mut w);
+		walk::<Outline>(&mut w);
+		walk::<Diffuser>(&mut w);
+		walk::<FilterLayer>(&mut w);
+		walk::<InterferenceFilter>(&mut w);
+		walk::<SimpleGrating>(&mut w);
+		walk::<MetaSurface>(&mut w);
+		walk::<MetaLensDesign>(&mut w);
+		walk::<MetaPrismDesign>(&mut w);
+		walk::<MetaAxiconDesign>(&mut w);
+		walk::<FacettedGrating>(&mut w);
+		walk::<FiberNode>(&mut w);
+		walk::<Fiber>(&mut w);
+		walk::<BraggReflector>(&mut w);
+		walk::<GrinLens>(&mut w);
+		walk::<LogicGate>(&mut w);
+		walk::<ZonePlate>(&mut w);
+		w
+	}
+
 	#[test]
 	fn every_bound_is_enforced_by_normalize() {
 		let accessors = accessors();
-		for (key, _) in ALL {
+		let walk = walked();
+		for (key, _) in &walk.ranged {
 			assert!(accessors.iter().any(|(k, ..)| k == key), "no accessor for {key}");
 		}
 		for (key, set, get) in &accessors {
-			let range = range(key).unwrap_or_else(|| panic!("{key} has no declared range"));
+			let (_, range) =
+				walk.ranged.iter().find(|(k, _)| k == key).unwrap_or_else(|| panic!("{key} has no declared range"));
+			let range = *range;
 			if WRAPPED.contains(key) {
 				let mut p = fixture();
 				set(&mut p, 190.0);
@@ -613,133 +541,21 @@ mod tests {
 	}
 
 	#[test]
-	fn dependent_and_unbounded_are_named_once() {
-		for (key, _) in DEPENDENT {
-			assert!(!UNBOUNDED.contains(key), "{key}");
-		}
-		for key in UNBOUNDED {
-			assert!(range(key).is_none(), "{key}");
-		}
-	}
-
-	/// Fields whose table key is spelled differently: `Coating.Depth` is `Coating.Coating`, the probe's ends
-	/// are written `AX`.
-	const RENAMED: &[(&str, &str)] = &[
-		("Coating.Depth", "Coating.Coating"),
-		("Probe.Ax", "Probe.AX"),
-		("Probe.Ay", "Probe.AY"),
-		("Probe.Bx", "Probe.BX"),
-		("Probe.By", "Probe.BY"),
-	];
-
-	/// Open numbers that no table lists: a colour channel is bounded by its type.
-	const BOUNDED_BY_TYPE: &[&str] = &["Rgb.R", "Rgb.G", "Rgb.B"];
-
-	fn table_key(type_name: &str, name: &str) -> String {
-		let key = format!("{type_name}.{name}");
-		RENAMED.iter().find(|(from, _)| *from == key).map_or(key, |(_, to)| (*to).to_owned())
-	}
-
-	fn is_number(kind: ValueKind) -> bool {
-		matches!(kind, ValueKind::Int | ValueKind::UInt | ValueKind::Float)
-	}
-
-	#[derive(Default)]
-	struct Reached {
-		types: Vec<&'static str>,
-		ranged: Vec<String>,
-		dependent: Vec<String>,
-		unbounded: Vec<String>,
-	}
-
-	/// Checks the number fields `T` declares itself (a nested field's are `U`'s) against the tables.
-	fn check<T: Fields>(reached: &mut Reached) {
-		reached.types.push(T::TYPE_NAME);
-		for field in T::Field::all().into_iter().filter(|f| !f.path().contains('.') && is_number(f.kind())) {
-			let key = table_key(T::TYPE_NAME, field.name());
-			let in_all = ALL.iter().find(|(k, _)| *k == key);
-			let in_dependent = DEPENDENT.iter().any(|(k, _)| *k == key);
-			assert_eq!(field.dependent(), in_dependent, "{key}: dependent() and DEPENDENT");
-			if in_dependent {
-				reached.dependent.push(key.clone());
-			}
-			match field.bounds() {
-				Bounds::Range(r) => {
-					let (_, listed) = in_all.unwrap_or_else(|| panic!("{key} has a range but no entry in ALL"));
-					assert_eq!(*listed, r, "{key}");
-					reached.ranged.push(key);
-				}
-				Bounds::Dependent => {
-					assert!(in_dependent && in_all.is_none(), "{key}: dependent without a range");
-				}
-				Bounds::Open => {
-					assert!(in_all.is_none() && !in_dependent, "{key} is open but listed");
-					if BOUNDED_BY_TYPE.contains(&key.as_str()) {
-						continue;
-					}
-					assert!(UNBOUNDED.contains(&key.as_str()), "{key} is open but not in UNBOUNDED");
-					reached.unbounded.push(key);
-				}
-			}
-		}
+	fn dependent_fields_are_the_listed_ones() {
+		let walk = walked();
+		let mut listed: Vec<&str> = DEPENDENT.iter().map(|(k, _)| *k).collect();
+		let mut marked: Vec<&str> = walk.dependent.iter().map(String::as_str).collect();
+		listed.sort_unstable();
+		marked.sort_unstable();
+		assert_eq!(marked, listed);
+		assert!(DEPENDENT.iter().all(|(_, rule)| !rule.is_empty()));
 	}
 
 	#[test]
-	fn the_fields_and_the_tables_agree() {
-		let mut reached = Reached::default();
-		check::<Project>(&mut reached);
-		check::<Scene>(&mut reached);
-		check::<Simulation>(&mut reached);
-		check::<Display>(&mut reached);
-		check::<DisplayLayer>(&mut reached);
-		check::<Video>(&mut reached);
-		check::<Source>(&mut reached);
-		check::<SourceArray>(&mut reached);
-		check::<Probe>(&mut reached);
-		check::<ColorScheme>(&mut reached);
-		check::<Stop>(&mut reached);
-		check::<Rgb>(&mut reached);
-		check::<Point>(&mut reached);
-		check::<PartBase>(&mut reached);
-		check::<Coating>(&mut reached);
-		check::<Material>(&mut reached);
-		check::<Lens>(&mut reached);
-		check::<FresnelLens>(&mut reached);
-		check::<Polygon>(&mut reached);
-		check::<Rectangle>(&mut reached);
-		check::<Ellipse>(&mut reached);
-		check::<Triangle>(&mut reached);
-		check::<Outline>(&mut reached);
-		check::<Diffuser>(&mut reached);
-		check::<FilterLayer>(&mut reached);
-		check::<InterferenceFilter>(&mut reached);
-		check::<SimpleGrating>(&mut reached);
-		check::<MetaSurface>(&mut reached);
-		check::<MetaLensDesign>(&mut reached);
-		check::<MetaPrismDesign>(&mut reached);
-		check::<MetaAxiconDesign>(&mut reached);
-		check::<FacettedGrating>(&mut reached);
-		check::<FiberNode>(&mut reached);
-		check::<Fiber>(&mut reached);
-		check::<BraggReflector>(&mut reached);
-		check::<GrinLens>(&mut reached);
-		check::<LogicGate>(&mut reached);
-		check::<ZonePlate>(&mut reached);
-
-		let keys =
-			ALL.iter().map(|(k, _)| *k).chain(DEPENDENT.iter().map(|(k, _)| *k)).chain(UNBOUNDED.iter().copied());
-		for key in keys.chain(BOUNDED_BY_TYPE.iter().copied()) {
-			let owner = key.split('.').next().unwrap_or_default();
-			assert!(reached.types.contains(&owner), "{key}: {owner} is not among the types checked");
-		}
-		for (key, _) in ALL {
-			assert!(reached.ranged.iter().any(|k| k == key), "{key} in ALL is on no field");
-		}
-		for (key, _) in DEPENDENT {
-			assert!(reached.dependent.iter().any(|k| k == key), "{key} in DEPENDENT is on no field");
-		}
-		for key in UNBOUNDED {
-			assert!(reached.unbounded.iter().any(|k| k == key), "{key} in UNBOUNDED is on no field");
+	fn wrapped_fields_declare_a_range() {
+		let walk = walked();
+		for key in WRAPPED {
+			assert!(walk.ranged.iter().any(|(k, _)| k == key), "{key}");
 		}
 	}
 }

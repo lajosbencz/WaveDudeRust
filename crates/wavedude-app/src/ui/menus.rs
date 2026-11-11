@@ -15,6 +15,7 @@ use wavedude_app_state::settings::{DITHER_BITS, Theme as ThemeSetting};
 use wavedude_app_state::strings::{Language, Strings};
 use wavedude_app_state::{Event as AppEvent, Guarded};
 use wavedude_core::model::ProbeDetector;
+use wavedude_core::model::Word;
 
 use super::app::{Cx, Ui};
 use super::dialogs::{self, Modal};
@@ -416,11 +417,15 @@ fn view_menu(app: &App, ui: &Ui) -> Submenu<MenuAction> {
 	for (id, key) in PANES.iter().zip(["PaneProject", "PaneProperties", "PaneMessages"]) {
 		panes.push(pane(id, key, layout.is_shown(id)));
 	}
-	let themes = [ThemeSetting::System, ThemeSetting::Light, ThemeSetting::Dark]
-		.into_iter()
-		.map(|t| {
-			let name = format!("{t:?}");
-			radio(MenuAction::Theme(t), format!("view:theme:{name}"), s.enum_word("AppTheme", &name), st.theme == t)
+	let themes = ThemeSetting::MEMBERS
+		.iter()
+		.map(|&t| {
+			radio(
+				MenuAction::Theme(t),
+				format!("view:theme:{}", t.name()),
+				s.enum_word(ThemeSetting::TYPE_NAME, t.name()),
+				st.theme == t,
+			)
 		})
 		.collect();
 	let zooms = ZOOMS

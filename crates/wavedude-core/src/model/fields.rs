@@ -100,7 +100,7 @@ pub trait Field: Copy + Eq + Hash + fmt::Debug + 'static {
 	fn edit(self, value: Value) -> Result<<Self::Owner as Fields>::Edit, EditError>;
 }
 
-pub trait Edit: Clone + fmt::Debug + PartialEq {
+pub trait Edit: Clone + fmt::Debug + PartialEq + 'static {
 	type Owner: Fields;
 	fn field(&self) -> <Self::Owner as Fields>::Field;
 	/// Sets the field and returns the value it held.

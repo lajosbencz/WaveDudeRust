@@ -11,13 +11,12 @@ use freya::prelude::*;
 use freya_testing::prelude::*;
 use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, root};
 use wavedude_app::ui::shared::Shared;
-use wavedude_app_state::commands::{Command, NewPart, Target};
+use wavedude_app_state::commands::{Command, Edit, NewPart};
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
-use wavedude_core::model::ProbeDetector;
-use wavedude_core::model::SourceArray;
+use wavedude_core::model::{DisplayEdit, DisplayLayerEdit, Layer, ProbeDetector, ProjectEdit, SourceArray, SourceEdit};
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj";
 
@@ -316,8 +315,12 @@ fn readme_animation() {
 	let Some(dir) = out_dir("WAVEDUDE_GIF") else { return };
 	let example = "../wavedude-core/tests/fixtures/examples/Example18_XOR_AND_OR_logic.wdproj";
 	let mut s = Shots::start_in(dir, (1100., 790.), example, Some(&["project", "properties"]), Theme::Dark);
-	let set = |path: &str, value: serde_json::Value| {
-		AppEvent::Command(Command::Set { target: Target::Display, path: path.into(), value })
+	let brightness = |layer: Layer, v: f64| {
+		let edit = DisplayLayerEdit::Brightness(v);
+		AppEvent::Command(Command::Edit(Edit::Project(ProjectEdit::Display(match layer {
+			Layer::Field => DisplayEdit::Field(edit),
+			Layer::Intensity => DisplayEdit::Intensity(edit),
+		}))))
 	};
 	// Full resolution: the pictures are shown at the scene's own pixels.
 	let full = wavedude_core::run::PreviewQuality {
@@ -329,8 +332,8 @@ fn readme_animation() {
 	s.shared.send(AppEvent::SetPreviewQuality(full));
 	s.run_to(2000, 0);
 	// After the open's brightness fit: both layers dimmer than the fit, so the guides keep their structure.
-	s.shared.send(set("field.brightness", serde_json::json!(5.0)));
-	s.shared.send(set("intensity.brightness", serde_json::json!(2.5)));
+	s.shared.send(brightness(Layer::Field, 5.0));
+	s.shared.send(brightness(Layer::Intensity, 2.5));
 	s.run_to(2000, 0);
 	// The middle of the run: the pulses have reached the gates and the outputs answer.
 	let frames = 24;
@@ -403,10 +406,10 @@ fn manual_figures() {
 	}
 	let source = ItemRef::new(ItemKind::Source, 0);
 	s.select(Row::Item(source));
-	s.command(Command::Set { target: Target::Item(source), path: "array".into(), value: serde_json::Value::Null });
+	s.command(Command::Edit(Edit::Source(0, SourceEdit::SetArray(None))));
 	s.figure("properties-source", pane(&s), 0.);
-	let array = serde_json::to_value(SourceArray { size_x: 7, size_y: 3, ..SourceArray::default() }).unwrap();
-	s.command(Command::Set { target: Target::Item(source), path: "array".into(), value: array });
+	let array = SourceArray { size_x: 7, size_y: 3, ..SourceArray::default() };
+	s.command(Command::Edit(Edit::Source(0, SourceEdit::SetArray(Some(array)))));
 	s.figure("properties-composite-source", pane(&s), 0.);
 	s.select(Row::Item(ItemRef::new(ItemKind::Part, 1)));
 	s.figure("properties-rectangle", pane(&s), 0.);

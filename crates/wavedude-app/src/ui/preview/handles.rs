@@ -6,9 +6,12 @@
 //! pixel (x, y) sits at (x + 0.5, y + 0.5) and a part's centre at (x, y), the corner of its pixel. Angles in
 //! degrees, counter-clockwise on screen. `scale` is logical pixels per canvas pixel.
 
-use serde_json::{Value, json};
 use wavedude_core::engine::emitters::elements_of;
-use wavedude_core::model::{Fiber, FiberNode, Layer, Part, PartKind, Point, ProbeKind, Project};
+use wavedude_core::model::{
+	DiffuserEdit, EllipseEdit, FacettedGratingEdit, Fiber, FiberNode, FresnelLensEdit, GrinLensEdit,
+	InterferenceFilterEdit, Layer, LensEdit, MetaSurfaceEdit, Part, PartEdit, PartKind, PartKindEdit, Point,
+	PolygonEdit, ProbeKind, Project, RectangleEdit,
+};
 use wavedude_core::scene::shapes::{self, Frame, Vec2};
 
 use wavedude_app_state::selection::{ItemKind, ItemRef};
@@ -361,52 +364,58 @@ pub fn turn(angle: f64, delta: f64) -> f64 {
 	a
 }
 
-/// The property writes of dragging a part's grip to the part-frame point `q`: whole pixels, at least the kind's
+/// The edits of dragging a part's grip to the part-frame point `q`: whole pixels, at least the kind's
 /// minimum; a linked rectangle or ellipse takes the farther coordinate for both.
-pub fn grip_edits(kind: &PartKind, q: Vec2) -> Vec<(String, Value)> {
+pub fn grip_edits(kind: &PartKind, q: Vec2) -> Vec<PartEdit> {
 	let span = |c: f64, min: u32| ((2. * c.abs()).round() as u32).max(min);
+	let k = PartEdit::Kind;
 	match kind {
-		PartKind::Rectangle(r) => linked_edits("Rectangle", r.linked, span(q.x, 1), span(q.y, 1)),
-		PartKind::Ellipse(e) => linked_edits("Ellipse", e.linked, span(q.x, 1), span(q.y, 1)),
+		PartKind::Rectangle(r) => {
+			let (length, width) = linked_extents(r.linked, span(q.x, 1), span(q.y, 1));
+			let rect = |e| k(PartKindEdit::Rectangle(e));
+			length.map(RectangleEdit::Length).into_iter().chain([RectangleEdit::Width(width)]).map(rect).collect()
+		}
+		PartKind::Ellipse(e) => {
+			let (length, width) = linked_extents(e.linked, span(q.x, 1), span(q.y, 1));
+			let ellipse = |e| k(PartKindEdit::Ellipse(e));
+			length.map(EllipseEdit::Length).into_iter().chain([EllipseEdit::Width(width)]).map(ellipse).collect()
+		}
 		PartKind::Polygon(p) => {
 			let n = f64::from(p.sides.max(3));
 			let side = (2. * q.length() * (std::f64::consts::PI / n).sin()).round().max(1.) as u32;
-			vec![("kind.Polygon.side".into(), json!(side))]
+			vec![k(PartKindEdit::Polygon(PolygonEdit::Side(side)))]
 		}
-		PartKind::Lens(_) => vec![("kind.Lens.diameter".into(), json!(span(q.y, 2)))],
-		PartKind::FresnelLens(_) => vec![("kind.FresnelLens.diameter".into(), json!(span(q.y, 2)))],
-		PartKind::Diffuser(_)
-		| PartKind::FacettedGrating(_)
-		| PartKind::InterferenceFilter(_)
-		| PartKind::MetaSurface(_) => {
-			let (variant, min_width) = match kind {
-				PartKind::Diffuser(_) => ("Diffuser", 2),
-				PartKind::FacettedGrating(_) => ("FacettedGrating", 2),
-				PartKind::MetaSurface(_) => ("MetaSurface", 2),
-				_ => ("InterferenceFilter", 1),
-			};
-			vec![
-				(format!("kind.{variant}.length"), json!(span(q.x, 1))),
-				(format!("kind.{variant}.width"), json!(span(q.y, min_width))),
-			]
+		PartKind::Lens(_) => vec![k(PartKindEdit::Lens(LensEdit::Diameter(span(q.y, 2))))],
+		PartKind::FresnelLens(_) => {
+			vec![k(PartKindEdit::FresnelLens(FresnelLensEdit::Lens(LensEdit::Diameter(span(q.y, 2)))))]
 		}
-		PartKind::GrinLens(_) => {
-			vec![
-				("kind.GrinLens.length".into(), json!(span(q.x, 1))),
-				("kind.GrinLens.diameter".into(), json!(span(q.y, 2))),
-			]
-		}
+		PartKind::Diffuser(_) => vec![
+			k(PartKindEdit::Diffuser(DiffuserEdit::Length(span(q.x, 1)))),
+			k(PartKindEdit::Diffuser(DiffuserEdit::Width(span(q.y, 2)))),
+		],
+		PartKind::FacettedGrating(_) => vec![
+			k(PartKindEdit::FacettedGrating(FacettedGratingEdit::Length(span(q.x, 1)))),
+			k(PartKindEdit::FacettedGrating(FacettedGratingEdit::Width(span(q.y, 2)))),
+		],
+		PartKind::MetaSurface(_) => vec![
+			k(PartKindEdit::MetaSurface(MetaSurfaceEdit::Length(span(q.x, 1)))),
+			k(PartKindEdit::MetaSurface(MetaSurfaceEdit::Width(span(q.y, 2)))),
+		],
+		PartKind::InterferenceFilter(_) => vec![
+			k(PartKindEdit::InterferenceFilter(InterferenceFilterEdit::Length(span(q.x, 1)))),
+			k(PartKindEdit::InterferenceFilter(InterferenceFilterEdit::Width(span(q.y, 1)))),
+		],
+		PartKind::GrinLens(_) => vec![
+			k(PartKindEdit::GrinLens(GrinLensEdit::Length(span(q.x, 1)))),
+			k(PartKindEdit::GrinLens(GrinLensEdit::Diameter(span(q.y, 2)))),
+		],
 		_ => Vec::new(),
 	}
 }
 
-fn linked_edits(kind: &str, linked: bool, length: u32, width: u32) -> Vec<(String, Value)> {
-	if linked {
-		let both = length.max(width);
-		vec![(format!("kind.{kind}.width"), json!(both))]
-	} else {
-		vec![(format!("kind.{kind}.length"), json!(length)), (format!("kind.{kind}.width"), json!(width))]
-	}
+/// The length to set (`None` for a linked shape, whose width sets it) and the width.
+fn linked_extents(linked: bool, length: u32, width: u32) -> (Option<u32>, u32) {
+	if linked { (None, length.max(width)) } else { (Some(length), width) }
 }
 
 /// An outline's points with point `i` at the part-frame point `q`.
@@ -469,7 +478,7 @@ pub fn to_part_frame(part: &Part, p: (f32, f32)) -> Vec2 {
 
 #[cfg(test)]
 mod tests {
-	use wavedude_core::model::{self as m, Probe, Rectangle, Source, SourceArray};
+	use wavedude_core::model::{self as m, Edit as _, Probe, Rectangle, Source, SourceArray};
 
 	use super::*;
 
@@ -610,15 +619,13 @@ mod tests {
 
 	#[test]
 	fn grips_set_whole_extents() {
+		let rect = |e| PartEdit::Kind(PartKindEdit::Rectangle(e));
 		let r = PartKind::Rectangle(Rectangle::default());
 		let edits = grip_edits(&r, Vec2::new(-20.4, 7.));
-		assert_eq!(
-			edits,
-			vec![("kind.Rectangle.length".into(), json!(41)), ("kind.Rectangle.width".into(), json!(14))]
-		);
+		assert_eq!(edits, vec![rect(RectangleEdit::Length(41)), rect(RectangleEdit::Width(14))]);
 		let linked = PartKind::Rectangle(Rectangle { linked: true, ..Rectangle::default() });
-		assert_eq!(grip_edits(&linked, Vec2::new(5., 30.)), vec![("kind.Rectangle.width".into(), json!(60))]);
-		assert_eq!(grip_edits(&r, Vec2::new(0., 0.))[0].1, json!(1));
+		assert_eq!(grip_edits(&linked, Vec2::new(5., 30.)), vec![rect(RectangleEdit::Width(60))]);
+		assert_eq!(grip_edits(&r, Vec2::new(0., 0.))[0], rect(RectangleEdit::Length(1)));
 	}
 
 	/// Every kind with a grip: dropping the grip where it stands leaves the part as it is, so a drag edits
@@ -638,14 +645,14 @@ mod tests {
 		];
 		for kind in kinds {
 			let grip = grip_of(&kind).expect("a grip");
-			let mut json = serde_json::to_value(&kind).unwrap();
-			for (path, value) in grip_edits(&kind, grip) {
-				let mut at = &mut json;
-				for key in path.split('.').skip(1) {
-					at = at.get_mut(key).unwrap_or_else(|| panic!("{path} in {kind:?}"));
-				}
-				assert_eq!(*at, value, "{path} of {kind:?}");
+			let part = Part::new(kind, 0, 0);
+			let mut edited = part.clone();
+			let edits = grip_edits(&part.kind, grip);
+			assert!(!edits.is_empty(), "{:?}", part.kind);
+			for edit in &edits {
+				edit.apply(&mut edited).expect("the edit fits its kind");
 			}
+			assert_eq!(edited, part, "{:?}", part.kind);
 		}
 	}
 

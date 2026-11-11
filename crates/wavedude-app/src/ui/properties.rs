@@ -1,13 +1,16 @@
-//! The Properties pane (docs/ui/30): the form of the current row, built from a snapshot of the edited object
-//! as JSON, every edit sent as `Command::Set` at the object's serde path.
+//! The Properties pane (docs/ui/30): the form of the current row, built from a snapshot of the edited object,
+//! every edit sent as a typed `Command::Edit` through the model's field accessors (`Probe::BOX_WIDTH`).
 
 use std::cell::Cell;
 use std::rc::Rc;
 use wavedude_widgets::Button;
 
 use freya::prelude::*;
-use serde_json::Value;
-use wavedude_core::model::{PartKind, ranges};
+use wavedude_core::model::ranges::Range;
+use wavedude_core::model::{
+	Bounds, ColorScheme, Display, Edit as _, Field as _, Fields, Nested, Number, Part, Probe, Prop, Scene, Simulation,
+	Source, Variant, Word,
+};
 use wavedude_widgets::icon::icons;
 use wavedude_widgets::{Check, FocusRequest, Gradient, TestIdExt, TextBox};
 use wavedude_widgets::{
@@ -15,7 +18,7 @@ use wavedude_widgets::{
 };
 
 use wavedude_app_state::Event as AppEvent;
-use wavedude_app_state::commands::{Command, Target};
+use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::selection::{ItemKind, Row};
 use wavedude_app_state::strings::{Language, Strings};
 
@@ -23,39 +26,49 @@ use super::app::Cx;
 use super::properties_forms as forms;
 use super::shared::{App, Topics};
 
-/// What a form shows: the row, its object as JSON and the read-outs computed from the project.
+/// The edited object, cloned from the project at selection.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Object {
+	Project {
+		seed: i32,
+		description: String,
+	},
+	/// Without the image bytes.
+	Scene(Scene),
+	Simulation(Simulation),
+	Display(Display),
+	Source(Source),
+	Part(Part),
+	Probe(Probe),
+	Scheme(ColorScheme),
+}
+
+/// What a form shows: the row, its object and the read-outs computed from the project.
 #[derive(Clone, PartialEq)]
 pub struct Snapshot {
 	pub row: Option<Row>,
-	pub json: Rc<Value>,
-	/// The part's kind, which picks its form.
-	pub part: Option<PartKind>,
+	pub object: Option<Rc<Object>>,
 	pub strings: Strings,
 	pub readouts: forms::Readouts,
 	pub description_open: bool,
 	pub count: usize,
 }
 
-/// `value` as JSON; the model's types always serialise.
-pub fn to_json(value: impl serde::Serialize) -> Value {
-	serde_json::to_value(value).expect("a model value serialises")
-}
-
-fn object_json(app: &App, row: Row) -> Value {
+fn object_of(app: &App, row: Row) -> Option<Object> {
 	let p = &app.document.project;
-	match row {
-		Row::Project => serde_json::json!({ "seed": p.seed, "description": p.description }),
-		Row::Scene => to_json(p.scene.without_image()),
-		Row::Simulation => to_json(&p.simulation),
-		Row::Display => to_json(&p.display),
-		Row::Folder(_) => Value::Null,
+	Some(match row {
+		Row::Project => Object::Project { seed: p.seed, description: p.description.clone() },
+		Row::Scene => Object::Scene(p.scene.without_image()),
+		Row::Simulation => Object::Simulation(p.simulation.clone()),
+		Row::Display => Object::Display(p.display.clone()),
+		Row::Folder(_) => return None,
 		Row::Item(i) => match i.kind {
-			ItemKind::Source => to_json(&p.sources[i.index]),
-			ItemKind::Part => to_json(&p.parts[i.index]),
-			ItemKind::Probe => to_json(&p.probes[i.index]),
-			ItemKind::Scheme => to_json(&p.color_schemes[i.index]),
+			ItemKind::Source => Object::Source(p.sources[i.index].clone()),
+			ItemKind::Part => Object::Part(p.parts[i.index].clone()),
+			ItemKind::Probe => Object::Probe(p.probes[i.index].clone()),
+			ItemKind::Scheme => Object::Scheme(p.color_schemes[i.index].clone()),
 		},
-	}
+	})
 }
 
 fn snapshot(app: &App) -> Snapshot {
@@ -66,11 +79,7 @@ fn snapshot(app: &App) -> Snapshot {
 	});
 	Snapshot {
 		row,
-		json: Rc::new(row.map_or(Value::Null, |r| object_json(app, r))),
-		part: match row {
-			Some(Row::Item(i)) if i.kind == ItemKind::Part => Some(project.parts[i.index].kind.clone()),
-			_ => None,
-		},
+		object: row.and_then(|r| object_of(app, r)).map(Rc::new),
 		strings: app.strings,
 		readouts: row.map(|r| forms::readouts(app, r)).unwrap_or_default(),
 		description_open: app.settings.part_description_expanded,
@@ -81,65 +90,27 @@ fn snapshot(app: &App) -> Snapshot {
 	}
 }
 
-/// The edited object and the means to edit it, shared by the form builders.
+/// The means to edit the current row's object, shared by the form builders.
 #[derive(Clone)]
 pub struct Form {
 	pub cx: Cx,
-	pub target: Target,
-	pub json: Rc<Value>,
+	pub row: Row,
 	pub s: Strings,
 	/// The id the form's first editor takes, so Enter on a tree row or Add can focus it; taken once.
 	first_editor: Rc<Cell<Option<(AccessibilityId, FocusRequest)>>>,
-	/// Number boxes show no value (a setting that does not apply).
-	blank: bool,
 }
 
-/// A number's bounds from the model's range table; open for `""` and the keys the table lists as unbounded or
-/// dependent.
-pub fn bounds(key: &str) -> (f64, f64) {
-	if let Some(r) = ranges::range(key) {
-		return (r.min, r.max);
+/// A number's bounds from the field's declared range; open when it has none or depends on another value.
+pub fn bounds_of<T: Fields, V>(p: Prop<T, V>) -> (f64, f64) {
+	match p.field.bounds() {
+		Bounds::Range(r) => (r.min, r.max),
+		Bounds::Dependent | Bounds::Open => (-1e9, 1e9),
 	}
-	assert!(
-		key.is_empty() || ranges::UNBOUNDED.contains(&key) || ranges::DEPENDENT.iter().any(|(k, _)| *k == key),
-		"'{key}' is no key of the range tables"
-	);
-	(-1e9, 1e9)
-}
-
-/// A member name as its serde field: `CentreIndex` is `centre_index`, `BoxX` is `box_x`, `AX` is `ax`, `YMin` is
-/// `y_min`.
-pub fn snake(member: &str) -> String {
-	let chars: Vec<char> = member.chars().collect();
-	let mut out = String::with_capacity(member.len() + 4);
-	for (i, &c) in chars.iter().enumerate() {
-		if c.is_ascii_uppercase() && i > 0 {
-			let prev = chars[i - 1];
-			let next_lower = chars.get(i + 1).is_some_and(char::is_ascii_lowercase);
-			if prev.is_ascii_lowercase() || prev.is_ascii_digit() || (prev.is_ascii_uppercase() && next_lower) {
-				out.push('_');
-			}
-		}
-		out.push(c.to_ascii_lowercase());
-	}
-	out
-}
-
-#[cfg(test)]
-thread_local! {
-	/// Every path a row bound; read by the forms test.
-	pub static BOUND: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 impl Form {
-	pub fn new(
-		cx: Cx,
-		target: Target,
-		json: Rc<Value>,
-		s: Strings,
-		first_editor: (AccessibilityId, FocusRequest),
-	) -> Self {
-		Self { cx, target, json, s, first_editor: Rc::new(Cell::new(Some(first_editor))), blank: false }
+	pub fn new(cx: Cx, row: Row, s: Strings, first_editor: (AccessibilityId, FocusRequest)) -> Self {
+		Self { cx, row, s, first_editor: Rc::new(Cell::new(Some(first_editor))) }
 	}
 
 	/// The first editor's id and focus request, for the editor that claims them first.
@@ -155,86 +126,200 @@ impl Form {
 		}
 	}
 
-	/// The same form over another object (a default shown greyed).
-	pub fn with_json(&self, json: Value) -> Self {
-		Self { json: Rc::new(json), ..self.clone() }
-	}
-
-	/// The same form with its number boxes empty.
-	pub fn blanked(&self) -> Self {
-		Self { blank: true, ..self.clone() }
-	}
-
-	/// The value at a dotted path, a number stepping into a list; `None` only for a field the model skips when
-	/// unset (a source's `array` and `detach_after`).
-	pub fn optional(&self, path: &str) -> Option<&Value> {
-		path.split('.').try_fold(&*self.json, |at, k| match at {
-			Value::Array(list) => list.get(k.parse::<usize>().ok()?),
-			_ => at.get(k),
-		})
-	}
-
-	/// The value at a dotted path. The paths are the forms' constants, so a miss is a bug.
-	pub fn get(&self, path: &str) -> &Value {
-		self.optional(path).unwrap_or_else(|| panic!("the form's object has no '{path}'"))
-	}
-
-	/// The value a row edits at `path`.
-	pub fn bind(&self, path: &str) -> &Value {
-		#[cfg(test)]
-		BOUND.with_borrow_mut(|b| b.push(path.to_owned()));
-		self.get(path)
-	}
-
-	/// The value a row edits at `path` as the model's type.
-	pub fn bind_as<T: serde::de::DeserializeOwned>(&self, path: &str) -> T {
-		serde_json::from_value(self.bind(path).clone()).unwrap_or_else(|e| panic!("'{path}' does not read back: {e}"))
-	}
-
-	pub fn num(&self, path: &str) -> f64 {
-		self.get(path).as_f64().unwrap_or_else(|| panic!("'{path}' is not a number"))
-	}
-
-	pub fn flag(&self, path: &str) -> bool {
-		self.get(path).as_bool().unwrap_or_else(|| panic!("'{path}' is not a flag"))
-	}
-
-	pub fn word(&self, path: &str) -> String {
-		self.get(path).as_str().unwrap_or_else(|| panic!("'{path}' is not a string")).to_owned()
-	}
-
-	pub fn set(&self, path: &str, value: Value) {
-		self.cx.send(AppEvent::Command(Command::Set { target: self.target, path: path.to_owned(), value }));
-	}
-
-	/// The rows of type `ty` at `prefix` (`""` or `kind.Lens`), range keys under `range`.
-	pub fn scope<'a>(&'a self, ty: &'a str, prefix: &str, range: &'a str) -> Scope<'a> {
-		let prefix = if prefix.is_empty() { String::new() } else { format!("{prefix}.") };
-		Scope { f: self, ty, prefix, range }
+	/// The fields of `obj`, each edit sent as `wrap` makes of it.
+	pub fn scope<'a, T: Fields>(&'a self, obj: &'a T, wrap: impl Fn(T::Edit) -> Edit + 'static) -> Scope<'a, T> {
+		let cx = self.cx.clone();
+		Scope {
+			form: self,
+			obj,
+			send: Rc::new(move |e| cx.send(AppEvent::Command(Command::Edit(wrap(e))))),
+			blank: false,
+		}
 	}
 
 	fn decimal_comma(&self) -> bool {
 		self.s.language() != Language::English
 	}
 
-	/// A number box row: `ty.member` names the label and hint, `range` the range table key.
-	pub fn number(&self, ty: &str, member: &str, path: &str, range: &str, step: f64) -> PropertyRow {
-		let (min, max) = bounds(range);
-		let mut spec = NumberSpec::linear(min, max, step);
-		if self.get(path).is_i64() || self.get(path).is_u64() {
-			spec = spec.with_decimals(0);
-		}
-		self.number_with(ty, member, path, spec)
+	/// The item's name box: applied on every keystroke, so the tree follows the typing; renames through the
+	/// command that keeps references. `T` is the type whose `Name` label it takes.
+	pub fn name<T: Fields>(&self, value: &str) -> PropertyRow {
+		let Row::Item(target) = self.row else { unreachable!("only an item has a name") };
+		let cx = self.cx.clone();
+		let on_text = move |name: String| cx.send(AppEvent::Command(Command::Rename { target, name }));
+		let editor = self.first(TextBox::new(value.to_owned(), on_text).live().select_all_on_focus(true));
+		let ty = T::TYPE_NAME;
+		PropertyRow::new(self.s.label(ty, "Name"), tagged(editor, format!("{ty}.Name"))).hint(self.s.hint(ty, "Name"))
+	}
+}
+
+/// The rows of one object: labels, hints and test ids are `<TYPE_NAME>.<Member>`, the bounds the fields' own.
+pub struct Scope<'a, T: Fields> {
+	form: &'a Form,
+	/// The object the rows show.
+	pub obj: &'a T,
+	send: Rc<dyn Fn(T::Edit)>,
+	/// Number boxes show no value (a setting that does not apply).
+	blank: bool,
+}
+
+/// A list field of an object: its items as of now and the means to replace them as a whole.
+pub struct List<T: Fields, U: 'static> {
+	items: Rc<Vec<U>>,
+	prop: Prop<T, Vec<U>>,
+	send: Rc<dyn Fn(T::Edit)>,
+}
+
+impl<T: Fields, U: 'static> Clone for List<T, U> {
+	fn clone(&self) -> Self {
+		Self { items: self.items.clone(), prop: self.prop, send: self.send.clone() }
+	}
+}
+
+impl<T: Fields, U: PartialEq + 'static> PartialEq for List<T, U> {
+	fn eq(&self, other: &Self) -> bool {
+		self.prop.field == other.prop.field && self.items == other.items
+	}
+}
+
+impl<T: Fields, U: Clone + 'static> List<T, U> {
+	pub fn items(&self) -> &[U] {
+		&self.items
 	}
 
-	pub fn number_with(&self, ty: &str, member: &str, path: &str, spec: NumberSpec) -> PropertyRow {
-		PropertyRow::switchable(self.s.label(ty, member), self.number_editor(ty, member, path, spec))
-			.hint(self.s.hint(ty, member))
+	/// Sets the list to the items as `change` leaves them.
+	pub fn set(&self, change: impl FnOnce(&mut Vec<U>)) {
+		let mut items = (*self.items).clone();
+		change(&mut items);
+		(self.send)((self.prop.edit)(items));
+	}
+
+	/// Sets `p` of item `index`.
+	pub fn set_item<V>(&self, index: usize, p: Prop<U, V>, value: V)
+	where
+		U: Fields,
+	{
+		self.set(|items| {
+			(p.edit)(value).apply(&mut items[index]).expect("an edit of a struct's field applies");
+		});
+	}
+}
+
+impl<'a, T: Fields> Scope<'a, T> {
+	/// The scope of a nested field.
+	pub fn nested<U: Fields>(&self, n: Nested<T, U>) -> Scope<'a, U> {
+		let (send, wrap) = (self.send.clone(), n.wrap);
+		Scope { form: self.form, obj: (n.get)(self.obj), send: Rc::new(move |e| send(wrap(e))), blank: self.blank }
+	}
+
+	/// The scope of an enum variant or an optional composite; `None` when the object is another variant or absent.
+	pub fn variant<U: Fields>(&self, v: Variant<T, U>) -> Option<Scope<'a, U>> {
+		let (send, wrap) = (self.send.clone(), v.wrap);
+		(v.get)(self.obj).map(|obj| Scope {
+			form: self.form,
+			obj,
+			send: Rc::new(move |e| send(wrap(e))),
+			blank: self.blank,
+		})
+	}
+
+	/// As [`Self::variant`], showing `default` with empty number boxes where the variant is absent.
+	pub fn variant_or<'b, U: Fields>(&self, v: Variant<T, U>, default: &'b U) -> Scope<'b, U>
+	where
+		'a: 'b,
+	{
+		match self.variant(v) {
+			Some(scope) => scope,
+			None => self.variant_over(v, default).blanked(),
+		}
+	}
+
+	/// The scope of the variant `obj` the object is, for a caller that has matched on it.
+	pub fn variant_over<'b, U: Fields>(&self, v: Variant<T, U>, obj: &'b U) -> Scope<'b, U>
+	where
+		'a: 'b,
+	{
+		let (send, wrap) = (self.send.clone(), v.wrap);
+		Scope { form: self.form, obj, send: Rc::new(move |e| send(wrap(e))), blank: self.blank }
+	}
+
+	/// The same edits over another value: a default shown greyed, a design's spacing.
+	pub fn over<'b>(&self, obj: &'b T) -> Scope<'b, T>
+	where
+		'a: 'b,
+	{
+		Scope { form: self.form, obj, send: self.send.clone(), blank: self.blank }
+	}
+
+	/// The same rows with their number boxes empty.
+	pub fn blanked(mut self) -> Self {
+		self.blank = true;
+		self
+	}
+
+	pub fn get<V>(&self, p: Prop<T, V>) -> V {
+		(p.get)(self.obj)
+	}
+
+	pub fn set<V>(&self, p: Prop<T, V>, value: V) {
+		(self.send)((p.edit)(value));
+	}
+
+	/// `p`'s setter, for a row's own handlers.
+	pub fn setter<V: 'static>(&self, p: Prop<T, V>) -> impl Fn(V) + 'static {
+		let send = self.send.clone();
+		move |value| send((p.edit)(value))
+	}
+
+	/// `p`'s items and the means to replace them.
+	pub fn list<U: Clone + 'static>(&self, p: Prop<T, Vec<U>>) -> List<T, U> {
+		List { items: Rc::new(self.get(p)), prop: p, send: self.send.clone() }
+	}
+
+	/// The test id of the field's row.
+	pub fn test_id(p: &Prop<T, impl Sized>) -> String {
+		format!("{}.{}", T::TYPE_NAME, p.field.name())
+	}
+
+	pub fn label<V>(&self, p: &Prop<T, V>) -> &'static str {
+		self.form.s.label(T::TYPE_NAME, p.field.name())
+	}
+
+	pub fn hint<V>(&self, p: &Prop<T, V>) -> &'static str {
+		self.form.s.hint(T::TYPE_NAME, p.field.name())
+	}
+
+	/// A number bounded by the field's own range.
+	pub fn number<V: Number + 'static>(&self, p: Prop<T, V>, step: f64) -> PropertyRow {
+		let (min, max) = bounds_of(p);
+		self.number_spec(p, NumberSpec::linear(min, max, step))
+	}
+
+	/// A number bounded by `range`, which the field does not declare (a position shared with the parts).
+	pub fn number_in<V: Number + 'static>(&self, p: Prop<T, V>, range: Range, step: f64) -> PropertyRow {
+		self.number_spec(p, NumberSpec::linear(range.min, range.max, step))
+	}
+
+	fn number_spec<V: Number + 'static>(&self, p: Prop<T, V>, mut spec: NumberSpec) -> PropertyRow {
+		if V::INTEGER {
+			spec = spec.with_decimals(0);
+		}
+		self.number_with(p, spec)
+	}
+
+	pub fn number_with<V: Number + 'static>(&self, p: Prop<T, V>, spec: NumberSpec) -> PropertyRow {
+		PropertyRow::switchable(self.label(&p), self.number_editor(p, spec)).hint(self.hint(&p))
+	}
+
+	/// A number with `places` decimals, bounded by the field's range, dragged by `drag`.
+	pub fn decimals<V: Number + 'static>(&self, p: Prop<T, V>, drag: f64, places: u32) -> PropertyRow {
+		let (min, max) = bounds_of(p);
+		self.number_with(p, NumberSpec::linear(min, max, 1.).with_decimals(places).with_drag_step(drag))
 	}
 
 	/// [`Self::number_with`] with `beside` right of the box.
-	pub fn number_beside(&self, ty: &str, member: &str, path: &str, spec: NumberSpec, beside: Element) -> PropertyRow {
-		let editor = self.number_editor(ty, member, path, spec);
+	pub fn number_beside<V: Number + 'static>(&self, p: Prop<T, V>, spec: NumberSpec, beside: Element) -> PropertyRow {
+		let editor = self.number_editor(p, spec);
 		let row = move |enabled| {
 			rect()
 				.horizontal()
@@ -246,40 +331,30 @@ impl Form {
 				.child(beside.clone())
 				.into_element()
 		};
-		PropertyRow::switchable(self.s.label(ty, member), row).hint(self.s.hint(ty, member))
+		PropertyRow::switchable(self.label(&p), row).hint(self.hint(&p))
 	}
 
-	fn number_editor(
+	fn number_editor<V: Number + 'static>(
 		&self,
-		ty: &str,
-		member: &str,
-		path: &str,
+		p: Prop<T, V>,
 		mut spec: NumberSpec,
 	) -> impl Fn(bool) -> Element + 'static {
-		if self.decimal_comma() {
+		if self.form.decimal_comma() {
 			spec = spec.with_decimal_separator(',');
 		}
-		let bound = self.bind(path);
-		let integer = bound.is_i64() || bound.is_u64();
-		let value = self.num(path);
-		let form = self.clone();
-		let path = path.to_owned();
-		let test = format!("{ty}.{member}");
-		let first = self.claim_first();
+		let value = self.get(p).to_f64();
+		let set = self.setter(p);
+		let set = Rc::new(move |v: f64| set(V::from_f64(v)));
+		let test = Self::test_id(&p);
+		let first = self.form.claim_first();
 		let blank = self.blank;
 		move |enabled| {
-			let (form, path) = (form.clone(), path.clone());
-			let editor = NumberBox::new(
-				WritableSetter::new(value, move |v: f64| {
-					let json = if integer { Value::from(v.round() as i64) } else { Value::from(v) };
-					form.set(&path, json);
-				}),
-				spec.clone(),
-			)
-			.width(Size::fill())
-			.enabled(enabled)
-			.blank(blank)
-			.test_id(test.clone());
+			let set = set.clone();
+			let editor = NumberBox::new(WritableSetter::new(value, move |v: f64| set(v)), spec.clone())
+				.width(Size::fill())
+				.enabled(enabled)
+				.blank(blank)
+				.test_id(test.clone());
 			match first.clone() {
 				Some((id, request)) => editor.a11y_id(id).focus_request(Some(request)).into_element(),
 				None => editor.into_element(),
@@ -288,136 +363,70 @@ impl Form {
 	}
 
 	/// A full-width check box carrying its label.
-	pub fn check(&self, ty: &str, member: &str, path: &str) -> PropertyRow {
-		self.check_labelled(
-			self.s.label(ty, member).to_owned(),
-			self.s.hint(ty, member),
-			path,
-			&format!("{ty}.{member}"),
-		)
+	pub fn check(&self, p: Prop<T, bool>) -> PropertyRow {
+		self.check_as(p, |on| *on, |on| on)
 	}
 
-	pub fn check_labelled(&self, text: String, hint: &str, path: &str, test: &str) -> PropertyRow {
-		self.check_in_column("", text, hint, path, test).full_width()
+	/// As [`Self::check`] over a field that is not a flag: `on` says whether a value is checked, `of` the
+	/// value a state makes.
+	pub fn check_as<V: 'static>(&self, p: Prop<T, V>, on: fn(&V) -> bool, of: fn(bool) -> V) -> PropertyRow {
+		let checked = on(&self.get(p));
+		let set = self.setter(p);
+		self.check_row("", self.label(&p).to_owned(), checked, move |v| set(of(v)), &p).full_width()
 	}
 
-	/// A check box in the editor column, `label` in the label column and `text` beside the box.
-	pub fn check_in_column(&self, label: &str, text: String, hint: &str, path: &str, test: &str) -> PropertyRow {
-		let on = self.bind_as::<bool>(path);
-		let form = self.clone();
-		let (path, test) = (path.to_owned(), test.to_owned());
+	/// A check box in the editor column, the field's label in the label column and `text` beside the box.
+	pub fn check_text(&self, p: Prop<T, bool>, text: String) -> PropertyRow {
+		let set = self.setter(p);
+		self.check_row(self.label(&p), text, self.get(p), set, &p)
+	}
+
+	fn check_row<V>(
+		&self,
+		label: &str,
+		text: String,
+		on: bool,
+		set: impl Fn(bool) + 'static,
+		p: &Prop<T, V>,
+	) -> PropertyRow {
+		let set = Rc::new(set);
+		let test = Self::test_id(p);
 		let editor = move |enabled| {
-			let (form, path) = (form.clone(), path.clone());
-			check_box_in(text.clone(), on, enabled, move |v| form.set(&path, Value::from(v)))
-				.test_id(test.clone())
-				.into_element()
+			let set = set.clone();
+			check_box_in(text.clone(), on, enabled, move |v| set(v)).test_id(test.clone()).into_element()
 		};
-		PropertyRow::switchable(label, editor).hint(hint)
+		PropertyRow::switchable(label, editor).hint(self.hint(p))
 	}
 
-	/// An enum combo: `variants` are the serde names, their words `Enum.<enum_ty>.<variant>`.
-	pub fn combo(&self, ty: &str, member: &str, path: &str, enum_ty: &str, variants: &[&str]) -> PropertyRow {
-		let current = self.bind_as::<String>(path);
+	/// An enum combo over every member.
+	pub fn combo<V: Word>(&self, p: Prop<T, V>) -> PropertyRow {
+		self.combo_of(p, V::MEMBERS)
+	}
+
+	/// An enum combo over `members`.
+	pub fn combo_of<V: Word>(&self, p: Prop<T, V>, members: &[V]) -> PropertyRow {
+		let s = self.form.s;
+		let current = self.get(p).name().to_owned();
 		let items: Vec<(String, String)> =
-			variants.iter().map(|v| ((*v).to_owned(), self.s.enum_word(enum_ty, v).to_owned())).collect();
-		let form = self.clone();
-		let path = path.to_owned();
-		let test = format!("{ty}.{member}");
+			members.iter().map(|m| (m.name().to_owned(), s.enum_word(V::TYPE_NAME, m.name()).to_owned())).collect();
+		let set = Rc::new(self.setter(p));
+		let test = Self::test_id(&p);
 		let editor = move |enabled| {
-			let (form, path) = (form.clone(), path.clone());
-			combo_box(current.clone(), items.clone(), enabled, test.clone(), move |v| form.set(&path, Value::from(v)))
+			let set = set.clone();
+			combo_box(current.clone(), items.clone(), enabled, test.clone(), move |name: String| {
+				if let Some(v) = V::parse(&name) {
+					set(v);
+				}
+			})
 		};
-		PropertyRow::switchable(self.s.label(ty, member), editor).hint(self.s.hint(ty, member))
+		PropertyRow::switchable(self.label(&p), editor).hint(self.hint(&p))
 	}
 
 	/// A text box applied on Enter or focus loss, Esc reverting (`multiline` keeps Enter as newline).
-	pub fn text(&self, ty: &str, member: &str, path: &str, multiline: bool) -> PropertyRow {
-		let value = self.bind_as::<String>(path);
-		let form = self.clone();
-		let path = path.to_owned();
-		let on_text = move |t: String| form.set(&path, Value::from(t));
-		let editor = self.first(TextBox::new(value, on_text).multiline(multiline));
-		PropertyRow::new(self.s.label(ty, member), tagged(editor, format!("{ty}.{member}")))
-			.hint(self.s.hint(ty, member))
-	}
-
-	/// The item's name box: applied on every keystroke, so the tree follows the typing; renames through the
-	/// command that keeps references.
-	pub fn name(&self, ty: &str) -> PropertyRow {
-		let Target::Item(target) = self.target else { return self.text(ty, "Name", "name", false) };
-		let value = self.bind_as::<String>("name");
-		let cx = self.cx.clone();
-		let on_text = move |name: String| cx.send(AppEvent::Command(Command::Rename { target, name }));
-		let editor = self.first(TextBox::new(value, on_text).live().select_all_on_focus(true));
-		PropertyRow::new(self.s.label(ty, "Name"), tagged(editor, format!("{ty}.Name"))).hint(self.s.hint(ty, "Name"))
-	}
-}
-
-/// The rows of one object type: labels, hints and test ids are `<ty>.<Member>`, the JSON path is the prefix
-/// plus the member in snake case, the range key `<range>.<Member>`.
-pub struct Scope<'a> {
-	pub f: &'a Form,
-	ty: &'a str,
-	prefix: String,
-	range: &'a str,
-}
-
-impl Scope<'_> {
-	pub fn path(&self, member: &str) -> String {
-		format!("{}{}", self.prefix, snake(member))
-	}
-
-	fn key(&self, member: &str) -> String {
-		format!("{}.{member}", self.range)
-	}
-
-	pub fn flag(&self, member: &str) -> bool {
-		self.f.flag(&self.path(member))
-	}
-
-	pub fn num(&self, member: &str) -> f64 {
-		self.f.num(&self.path(member))
-	}
-
-	pub fn word(&self, member: &str) -> String {
-		self.f.word(&self.path(member))
-	}
-
-	/// A number bounded by the member's own range key.
-	pub fn number(&self, member: &str, step: f64) -> PropertyRow {
-		self.number_in(member, &self.key(member), step)
-	}
-
-	/// A number bounded by a shared range key (`Part.X`); `""` is unbounded.
-	pub fn number_in(&self, member: &str, range: &str, step: f64) -> PropertyRow {
-		self.f.number(self.ty, member, &self.path(member), range, step)
-	}
-
-	pub fn number_with(&self, member: &str, spec: NumberSpec) -> PropertyRow {
-		self.f.number_with(self.ty, member, &self.path(member), spec)
-	}
-
-	/// A number with `places` decimals, bounded by the member's range key, dragged by `drag`.
-	pub fn decimals(&self, member: &str, drag: f64, places: u32) -> PropertyRow {
-		self.decimals_in(member, &self.key(member), drag, places)
-	}
-
-	/// A number with `places` decimals, bounded by a shared range key, dragged by `drag`.
-	pub fn decimals_in(&self, member: &str, range: &str, drag: f64, places: u32) -> PropertyRow {
-		let (min, max) = bounds(range);
-		self.number_with(member, NumberSpec::linear(min, max, 1.).with_decimals(places).with_drag_step(drag))
-	}
-
-	pub fn check(&self, member: &str) -> PropertyRow {
-		self.f.check(self.ty, member, &self.path(member))
-	}
-
-	pub fn combo(&self, member: &str, enum_ty: &str, variants: &[&str]) -> PropertyRow {
-		self.f.combo(self.ty, member, &self.path(member), enum_ty, variants)
-	}
-
-	pub fn text(&self, member: &str, multiline: bool) -> PropertyRow {
-		self.f.text(self.ty, member, &self.path(member), multiline)
+	pub fn text(&self, p: Prop<T, String>, multiline: bool) -> PropertyRow {
+		let set = self.setter(p);
+		let editor = self.form.first(TextBox::new(self.get(p), move |t: String| set(t)).multiline(multiline));
+		PropertyRow::new(self.label(&p), tagged(editor, Self::test_id(&p))).hint(self.hint(&p))
 	}
 }
 
@@ -635,15 +644,10 @@ impl Component for PropertiesPane {
 				.child(label().text(s.get("NoSelection")).color(theme.text_dim))
 				.into_element();
 		};
-		let target = match row {
-			Row::Project => Target::Project,
-			Row::Scene => Target::Scene,
-			Row::Simulation => Target::Simulation,
-			Row::Display => Target::Display,
-			Row::Item(i) => Target::Item(i),
-			Row::Folder(kind) => return folder_view(&s, kind, snap.count),
-		};
-		let form = Form::new(cx, target, snap.json.clone(), s, (first_editor, request));
+		if let Row::Folder(kind) = row {
+			return folder_view(&s, kind, snap.count);
+		}
+		let form = Form::new(cx, row, s, (first_editor, request));
 		let children = forms::build(&form, row, &snap);
 		PropertyGrid::new().children(children).into_element()
 	}
@@ -665,18 +669,4 @@ fn folder_view(s: &Strings, kind: ItemKind, count: usize) -> Element {
 		.child(wavedude_widgets::SectionHeader::new(s.get(key)))
 		.child(readout("", text, "CollectionCount"))
 		.into_element()
-}
-
-#[cfg(test)]
-mod tests {
-	use super::snake;
-
-	#[test]
-	fn members_become_serde_fields() {
-		for (member, field) in [("CentreIndex", "centre_index"), ("BoxX", "box_x"), ("AX", "ax"), ("YMin", "y_min")] {
-			assert_eq!(snake(member), field);
-		}
-		assert_eq!(snake("Thickness1"), "thickness1");
-		assert_eq!(snake("AutoScaleX"), "auto_scale_x");
-	}
 }
