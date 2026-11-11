@@ -22,9 +22,10 @@ Project @Version @Seed
     Video?               (omitted when at defaults)
   Source*
     Array?
-  <part>*                (Lens | FresnelLens | Polygon | Rectangle | Ellipse | Triangle | Outline | Diffuser |
-                          InterferenceFilter | SimpleGrating | FacettedGrating | MetaLens | MetaPrism | MetaAxicon |
-                          Fiber | BraggReflector | GrinLens | XorGate | AndGate | OrGate | ZonePlate, in list order)
+  <part>*                (Lens | Polygon | Rectangle | Ellipse | Triangle | Outline | Fiber | BraggReflector |
+                          GrinLens | XorGate | AndGate | OrGate | ZonePlate | Diffuser | InterferenceFilter |
+                          SimpleGrating | FacettedGrating | MetaLens | MetaPrism | MetaAxicon | FresnelLens: Next's
+                          declaration order in the DTD, the parts themselves in list order)
     Point*               (Outline)
     Layer*               (InterferenceFilter; @Thickness @RefractiveIndex, sparse against 2 and 1.5)
     Node*                (Fiber)

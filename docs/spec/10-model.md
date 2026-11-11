@@ -275,7 +275,7 @@ Shared constants: refractive index range 1..2.55, rounded to 0.01 (round even), 
 | Element | Stem | Base | Kind-specific attributes (default, range) |
 |---|---|---|---|
 | `Lens` | Lens | Coated | `Mirror` false; `RefractiveIndex` 1.5; `Absorption` 0; `AbsorptionRamp` 40; `Diameter` 200 (>= 2); `R1` 300 (0 = flat); `R2` -300; `Thickness` 40 (>= 1) |
-| `FresnelLens` | Fresnel lens | Coated | the lens's attributes; `Zones` 4 (1..100); `Division` EqualWidth/EqualDepth. A new one is a plate of `Thickness` 20, `Diameter` 500, radii 1500 |
+| `FresnelLens` | Fresnel lens | Coated | the lens's attributes; `Division` EqualWidth/EqualDepth; `Zones` 4 (1..100). A new one is a plate of `Thickness` 20, `Diameter` 500, radii 1500 |
 | `Polygon` | Polygon | Coated shape | `Mirror`, `RefractiveIndex` 1.5, `Absorption`, `AbsorptionRamp` 40; `Sides` 6 (3..64); `Side` 60 (>= 2) |
 | `Rectangle` | Rectangle | Coated shape | shape props; `Length` 60; `Width` 60; `Linked` false |
 | `Ellipse` | Ellipse | Coated shape | shape props; `Length` 60; `Width` 60; `Linked` false |
@@ -283,7 +283,7 @@ Shared constants: refractive index range 1..2.55, rounded to 0.01 (round even), 
 | `Outline` | Outline | Coated shape | shape props; `Point` children (int X, Y, part frame) |
 | `Diffuser` | Diffuser | Coated shape | shape props; `Length` 50 (>= 1); `Width` 500 (>= 2); `CenterWavelength` 16 (2..10000); `Amplitude` 1 (0..10000); `Sigma` 6 (0..10000). A new one coats its back alone |
 | `InterferenceFilter` | Interference filter | Coated shape | shape props (`BackCoated` alone counts); `Length` 50 (>= 1); `Width` 500 (>= 1); `Layer` children (`Thickness` 2 (0..1000, 0.01), `RefractiveIndex` 1.5), the outermost first. A new one is a quarter-wave stack for 16 px: five pairs 2.00 at 2.00 px then 1.50 at 2.67 px and one more 2.00 |
-| `SimpleGrating` | Grating | shape material (no coating) | `Mirror` (a new one is one), `RefractiveIndex`, `Absorption`, `AbsorptionRamp`; `Columns` 1 (>= 1); `Rows` 31 (>= 1); `ColumnSpacing`, `RowSpacing` 16 (>= 2); `Diameter` 2 (1 to half the smaller spacing, clamped in `normalize`) |
+| `SimpleGrating` | Grating | Coated shape (the coating is carried for the file and never painted or shown: the dots have no faces) | `Mirror` (a new one is one), `RefractiveIndex`, `Absorption`, `AbsorptionRamp`; `Columns` 1 (>= 1); `Rows` 31 (>= 1); `ColumnSpacing`, `RowSpacing` 16 (>= 2); `Diameter` 2 (1 to half the smaller spacing, clamped in `normalize`) |
 | `MetaLens`, `MetaPrism`, `MetaAxicon` | Meta lens, Meta prism, Meta axicon | Coated shape (`FrontCoated` the ridge tops, `BackCoated` the plate's back; sides not offered) | shape props; `Length` 50 (>= 1); `Width` 500 (>= 2); `DesignFrequency` 50 (1..255); `Pitch` 4 (1..10000); `Height` 32 (1..10000); `PatternIndex` 2 (1..2.55); the lens `FocalLength` 500 (>= 1), `LensType` Converging/Diverging; the prism `Deflection` 20 (-89..89); the axicon `ConeAngle` 10 (0.1..89). Rust: one `MetaSurface` kind with a `design` (`model/meta.rs`) |
 | `FacettedGrating` | Facetted grating | Coated shape | shape props (the coating's `BackCoated` alone counts); `Length` 50; `Width` 500; `Pattern` Sawtooth/SquareWave/Sinusoidal; `Pitch` 32 (2..10000); `Amplitude` 4 (0..10000) |
 | `Fiber` | Fiber | Coated | `CoreIndex` 1.5; `CoreDiameter` 20 (>= 2); `CladdingIndex` 1.45; `CladdingThickness` 10 (>= 0); `Absorption` 0; `AbsorptionRamp` 10; `Ends` Flat/Round (Flat); `Node` children |

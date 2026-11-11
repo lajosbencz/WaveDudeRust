@@ -1053,6 +1053,7 @@ fn kinds() -> Vec<(&'static str, PartKind)> {
 				row_spacing: 14,
 				diameter: 4,
 				material: Material { refractive_index: 2.0, ..Material::default() },
+				..SimpleGrating::default()
 			}),
 		),
 		(

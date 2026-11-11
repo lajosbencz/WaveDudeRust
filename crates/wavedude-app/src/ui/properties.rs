@@ -442,7 +442,13 @@ pub fn check_box_in(text: String, on: bool, enabled: bool, on_change: impl Fn(bo
 	let mark = rect()
 		.width(Size::px(14.))
 		.height(Size::px(14.))
-		.border(Border::new().fill(theme.input_border).width(1.).alignment(BorderAlignment::Inner))
+		// the disabled fill is the pane's own colour, which the input border equals in the dark theme
+		.border(
+			Border::new()
+				.fill(if enabled { theme.input_border } else { theme.hairline })
+				.width(1.)
+				.alignment(BorderAlignment::Inner),
+		)
 		.background(if enabled { theme.input_background } else { theme.control_background })
 		.center()
 		.maybe_child(on.then(|| IconView::new(icons::CHECK).color(ink).size(12.)));

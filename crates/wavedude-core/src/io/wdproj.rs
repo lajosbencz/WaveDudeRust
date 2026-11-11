@@ -51,21 +51,14 @@ xml_enum!(ScaleMode: Running, Full);
 xml_enum!(YScale: Linear, Logarithmic);
 
 /// The part elements in declaration order.
+// Next's declaration order, which its DTD and ours follow.
 const PART_ELEMENTS: &[&str] = &[
 	"Lens",
-	"FresnelLens",
 	"Polygon",
 	"Rectangle",
 	"Ellipse",
 	"Triangle",
 	"Outline",
-	"Diffuser",
-	"InterferenceFilter",
-	"SimpleGrating",
-	"FacettedGrating",
-	"MetaLens",
-	"MetaPrism",
-	"MetaAxicon",
 	"Fiber",
 	"BraggReflector",
 	"GrinLens",
@@ -73,6 +66,14 @@ const PART_ELEMENTS: &[&str] = &[
 	"AndGate",
 	"OrGate",
 	"ZonePlate",
+	"Diffuser",
+	"InterferenceFilter",
+	"SimpleGrating",
+	"FacettedGrating",
+	"MetaLens",
+	"MetaPrism",
+	"MetaAxicon",
+	"FresnelLens",
 ];
 
 type R<T> = std::result::Result<T, FormatError>;
@@ -446,7 +447,7 @@ macro_rules! kind_table {
 
 kind_table!(Lens; u32 "Diameter" diameter, f64 "R1" r1, f64 "R2" r2, u32 "Thickness" thickness);
 // its lens's attributes come first (read_part, write_part)
-kind_table!(FresnelLens; u32 "Zones" zones, enumv "Division" division);
+kind_table!(FresnelLens; enumv "Division" division, u32 "Zones" zones);
 kind_table!(Polygon; u32 "Sides" sides, u32 "Side" side);
 kind_table!(Rectangle; u32 "Length" length, u32 "Width" width, bool "Linked" linked);
 kind_table!(Ellipse; u32 "Length" length, u32 "Width" width, bool "Linked" linked);
@@ -653,7 +654,9 @@ fn read_part(el: &Element, version: FileVersion) -> R<Part> {
 			layers: el.children("Layer").map(fields::read).collect::<R<_>>()?,
 			..fields::read(el)?
 		}),
-		"SimpleGrating" => PartKind::SimpleGrating(SimpleGrating { material: material?, ..fields::read(el)? }),
+		"SimpleGrating" => {
+			PartKind::SimpleGrating(SimpleGrating { coating: coating?, material: material?, ..fields::read(el)? })
+		}
 		"MetaLens" | "MetaPrism" | "MetaAxicon" => {
 			let design = match el.name.as_str() {
 				"MetaLens" => MetaDesign::Lens(fields::read(el)?),

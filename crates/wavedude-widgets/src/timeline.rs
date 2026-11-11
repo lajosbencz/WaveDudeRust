@@ -341,7 +341,7 @@ impl Component for Timeline {
 			}
 			if let Some(h) = hover_frame.filter(|&h| h != model.position) {
 				let x = col(h);
-				canvas.draw_line((x, top), (x, bottom), &stroke(line.with_a(0x80), hl));
+				canvas.draw_line((x, top), (x, bottom), &stroke(tick_ink.with_a(0x80), hl));
 			}
 			let x = col(model.position.min(model.last()));
 			canvas.draw_line((x, top), (x, bottom), &stroke(text, hl));

@@ -8,7 +8,7 @@
 		<Intensity ColorScheme="Default intensity" Brightness="160" />
 	</Display>
 	<Source Name="Lamp" X="100" Y="300" Frequency="150" />
-	<FresnelLens Name="Lighthouse lens" X="700" Y="300" Coating="3" Diameter="400" R1="600" R2="-600" Thickness="24" Zones="3" Division="EqualDepth" />
+	<FresnelLens Name="Lighthouse lens" X="700" Y="300" Coating="3" Diameter="400" R1="600" R2="-600" Thickness="24" Division="EqualDepth" Zones="3" />
 	<Rectangle Name="Mount upper" X="700" Y="50" RefractiveIndex="1" Absorption="255" AbsorptionRamp="10" Length="24" Width="100" />
 	<Rectangle Name="Mount lower" X="700" Y="550" RefractiveIndex="1" Absorption="255" AbsorptionRamp="10" Length="24" Width="100" />
 	<Probe Name="Beam" Layer="Intensity" Measurement="Value" Kind="Line" AX="1150" AY="40" BX="1150" BY="560" BoxX="740" BoxY="390" />

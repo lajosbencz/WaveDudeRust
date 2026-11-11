@@ -192,7 +192,7 @@ pub fn readouts(app: &App, row: Row) -> Readouts {
 					.chain(p.color_schemes.iter().filter(|s| s.name != own.name))
 					.map(|s| s.name.clone())
 					.collect();
-				r.can_remove_stop = own.stops.len() > 2;
+				r.can_remove_stop = own.stops.len() > 1;
 			}
 			ItemKind::Probe => {}
 		},

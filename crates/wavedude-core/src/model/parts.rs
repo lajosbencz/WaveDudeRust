@@ -355,6 +355,8 @@ impl InterferenceFilter {
 #[serde(rename_all = "snake_case")]
 #[serde(default)]
 pub struct SimpleGrating {
+	/// Carried for the file (Next's grating is a coated shape) and never painted: the dots have no faces.
+	pub coating: Coating,
 	pub material: Material,
 	/// Dots along the axis; an odd count keeps the middle dot on the position.
 	pub columns: u32,
@@ -369,7 +371,15 @@ pub struct SimpleGrating {
 
 impl Default for SimpleGrating {
 	fn default() -> Self {
-		Self { material: Material::default(), columns: 1, rows: 31, column_spacing: 16, row_spacing: 16, diameter: 2 }
+		Self {
+			coating: Coating::default(),
+			material: Material::default(),
+			columns: 1,
+			rows: 31,
+			column_spacing: 16,
+			row_spacing: 16,
+			diameter: 2,
+		}
 	}
 }
 
@@ -830,10 +840,8 @@ impl PartKind {
 			PartKind::MetaSurface(p) => Some(&p.coating),
 			PartKind::Fiber(p) => Some(&p.coating),
 			PartKind::GrinLens(p) => Some(&p.coating),
-			PartKind::SimpleGrating(_)
-			| PartKind::BraggReflector(_)
-			| PartKind::LogicGate(_)
-			| PartKind::ZonePlate(_) => None,
+			PartKind::SimpleGrating(p) => Some(&p.coating),
+			PartKind::BraggReflector(_) | PartKind::LogicGate(_) | PartKind::ZonePlate(_) => None,
 		}
 	}
 }

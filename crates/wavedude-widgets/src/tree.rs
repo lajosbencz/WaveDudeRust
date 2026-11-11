@@ -722,7 +722,8 @@ fn row_view<K: Clone + PartialEq + 'static>(
 			.height(Size::px(13.))
 			.margin((0., 4., 0., 0.))
 			.center()
-			.border(Border::new().fill(theme.input_border).width(1.).alignment(BorderAlignment::Inner))
+			// the hairline shows on an unfocused selected row, whose fill equals the input border in the dark theme
+			.border(Border::new().fill(theme.hairline).width(1.).alignment(BorderAlignment::Inner))
 			.background(theme.input_background)
 			.maybe(row.test_id.is_some(), |r| r.test_id(format!("Enabled:{}", row.label)))
 			.on_pointer_down(move |e: Event<PointerEventData>| {
