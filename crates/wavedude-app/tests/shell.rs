@@ -4,15 +4,16 @@ use std::path::Path;
 use std::time::Instant;
 
 use freya::prelude::*;
-use freya_testing::TestingNode;
 use freya_testing::prelude::*;
 use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, root};
 use wavedude_app::ui::shared::Shared;
+use wavedude_app_state::examples::{self, Topic};
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
-use wavedude_app_state::settings::AppDirs;
+use wavedude_app_state::settings::{AppDirs, Settings};
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
 use wavedude_core::model::{ProbeDetector, ProbeKind};
+use wavedude_testing::{click_at, click_tagged, count_tagged, find_text, label_areas, settle, tagged_area};
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj";
 
@@ -57,15 +58,6 @@ fn shell_sized(dir: &Path, answered: bool, size: Size2D) -> (TestingRunner, Shar
 	(test, shared)
 }
 
-fn find_text(test: &TestingRunner, text: &str) -> Option<TestingNode> {
-	test.find(|node, element| {
-		let label = Label::try_downcast(element).is_some_and(|l| l.text.as_ref() == text);
-		let spans = Paragraph::try_downcast(element)
-			.is_some_and(|p| p.spans.iter().map(|s| s.text.as_ref()).collect::<String>() == text);
-		(label || spans).then_some(node)
-	})
-}
-
 #[test]
 fn a_first_start_shows_the_startup_page_and_continue_saves_it() {
 	let dir = tempfile::tempdir().unwrap();
@@ -78,6 +70,11 @@ fn a_first_start_shows_the_startup_page_and_continue_saves_it() {
 	if !wavedude_export::h264::BUILT_IN {
 		assert_eq!(state.peek(|a| a.settings.use_openh264), Some(false), "the codec is never enabled unasked");
 	}
+	// Continue sends the page's answers as settings events, each of which writes the file: read back through the
+	// loader, the file holds what the state holds, and the next start is not a first one
+	let saved = Settings::load(&AppDirs::under(dir.path()).settings_file(), || panic!("the file exists"));
+	assert!(!saved.first_start);
+	assert_eq!(saved.settings, state.peek(|a| a.settings.clone()));
 }
 
 #[test]
@@ -112,8 +109,7 @@ fn a_property_edit_reaches_the_document() {
 	let before = state.peek(|a| a.document.project.sources[0].enabled);
 	let toggle = find_text(&test, "Enabled").expect("the source form shows");
 	let area = toggle.layout().area;
-	test.click_cursor((f64::from(area.min_x()) + 2., f64::from(area.center().y)));
-	test.sync_and_update();
+	click_at(&mut test, &toggle, (f64::from(area.min_x()) + 2., f64::from(area.center().y)), "Enabled");
 	assert_ne!(state.peek(|a| a.document.project.sources[0].enabled), before, "the check box did not edit the source");
 }
 
@@ -130,22 +126,20 @@ fn a_disabled_row_takes_no_edit() {
 	let before = state.peek(|a| a.document.project.probes[0].auto_scale_x);
 	let toggle = find_text(&test, "Auto-scale steps").expect("the probe form shows");
 	let area = toggle.layout().area;
-	assert!(area.max_y() < 1400., "the row is on screen: {area:?}");
-	test.click_cursor((f64::from(area.min_x()) + 2., f64::from(area.center().y)));
-	test.sync_and_update();
+	click_at(&mut test, &toggle, (f64::from(area.min_x()) + 2., f64::from(area.center().y)), "Auto-scale steps");
 	assert_eq!(state.peek(|a| a.document.project.probes[0].auto_scale_x), before, "a disabled check box toggled");
-	// the combo measures its words in a hidden copy, so the menu adds a second visible "Full"
-	let words = |test: &TestingRunner, w: &str| {
-		test.find_many(|node, element| {
-			Label::try_downcast(element).is_some_and(|l| l.text.as_ref() == w).then_some(node.layout().area)
-		})
-	};
-	let shown = words(&test, "Running").into_iter().max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
-	let before = words(&test, "Full").len();
+	assert!(!open_step_axis_combo(&mut test), "a disabled combo box opened its menu");
+}
+
+/// Clicks the Step axis combo (the widest "Running": the combo measures its words in a hidden copy) and says
+/// whether its menu opened, which adds a second visible "Full".
+fn open_step_axis_combo(test: &mut TestingRunner) -> bool {
+	let shown = label_areas(test, "Running").into_iter().max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
+	let before = label_areas(test, "Full").len();
 	test.click_cursor((f64::from(shown.center().x), f64::from(shown.center().y)));
 	test.sync_and_update();
 	test.sync_and_update();
-	assert_eq!(words(&test, "Full").len(), before, "a disabled combo box opened its menu");
+	label_areas(test, "Full").len() > before
 }
 
 /// A counting detector's graph runs over the steps, so its step axis rows take edits although its kind is Line.
@@ -165,14 +159,13 @@ fn a_counting_detectors_step_axis_takes_an_edit() {
 	let before = state.peek(|a| a.document.project.probes[0].auto_scale_x);
 	let toggle = find_text(&test, "Auto-scale steps").expect("the probe form shows");
 	let area = toggle.layout().area;
-	assert!(area.max_y() < 1400., "the row is on screen: {area:?}");
-	test.click_cursor((f64::from(area.min_x()) + 2., f64::from(area.center().y)));
-	test.sync_and_update();
+	click_at(&mut test, &toggle, (f64::from(area.min_x()) + 2., f64::from(area.center().y)), "Auto-scale steps");
 	assert_ne!(
 		state.peek(|a| a.document.project.probes[0].auto_scale_x),
 		before,
 		"the check box did not edit the detector"
 	);
+	assert!(open_step_axis_combo(&mut test), "the enabled combo box opens its menu");
 }
 
 #[test]
@@ -260,14 +253,6 @@ fn the_turned_brightness_box_takes_clicks_and_keys() {
 	assert_eq!(state.peek(|a| a.document.project.display.field.brightness), 42.);
 }
 
-/// The area of the element tagged `id`.
-fn tagged_area(test: &TestingRunner, id: &str) -> Option<Area> {
-	test.find(|node, element| {
-		Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some(id))?;
-		Some(node.layout().area)
-	})
-}
-
 /// Whether the focused element lies inside the element tagged `id`.
 fn focus_in(test: &mut TestingRunner, id: &str) -> bool {
 	let focus = test.sync_and_update().focus;
@@ -281,17 +266,6 @@ fn focus_in(test: &mut TestingRunner, id: &str) -> bool {
 	focused.is_some_and(|f| tag.contains(f.center()))
 }
 
-fn settle(test: &mut TestingRunner) {
-	test.poll(std::time::Duration::from_millis(16), std::time::Duration::from_millis(16));
-	test.sync_and_update();
-}
-
-fn click_tagged(test: &mut TestingRunner, id: &str) {
-	let area = tagged_area(test, id).unwrap_or_else(|| panic!("no element {id}"));
-	test.click_cursor((f64::from(area.center().x), f64::from(area.center().y)));
-	settle(test);
-}
-
 #[test]
 fn an_opened_project_shows_its_root() {
 	let dir = tempfile::tempdir().unwrap();
@@ -299,6 +273,7 @@ fn an_opened_project_shows_its_root() {
 	settle(&mut test);
 	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Project));
 	assert!(find_text(&test, "No selection").is_none(), "the Properties pane shows the Project form");
+	assert!(count_tagged(&test, "Project.") > 0, "the Project form's rows are shown");
 	state.update(|a| drop(a.handle(AppEvent::Guarded(Guarded::New), Instant::now())));
 	settle(&mut test);
 	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Project), "a new project too");
@@ -371,18 +346,6 @@ fn moving_a_row_keeps_it_selected_and_focuses_the_tree() {
 	assert!(focus_in(&mut test, "ProjectTree"), "the tree takes the focus from the button");
 }
 
-/// The elements tagged with `prefix` and a tail, drawn now.
-fn count_tagged(test: &TestingRunner, prefix: &str) -> usize {
-	let count = std::cell::Cell::new(0);
-	test.find(|_, element| {
-		let tagged = Rect::try_downcast(element)
-			.is_some_and(|r| r.accessibility.builder.author_id().is_some_and(|id| id.starts_with(prefix)));
-		count.set(count.get() + usize::from(tagged));
-		None::<()>
-	});
-	count.get()
-}
-
 fn open_examples_dialog(test: &mut TestingRunner) {
 	test.press_key(Key::Named(NamedKey::F10));
 	test.sync_and_update();
@@ -418,8 +381,19 @@ fn the_examples_search_narrows_the_rows() {
 	assert!(tagged_area(&test, "Example:Example23_Fibres").is_some(), "the search follows the matches to their tab");
 	assert!(tagged_area(&test, "Example:Example24_Fibre_cross_over").is_some());
 	assert!(tagged_area(&test, "Example:Example01_Source_Mirror_Probe").is_none());
-	let rows = count_tagged(&test, "Example:");
-	assert!((2..18).contains(&rows), "{rows} rows match 'fibre'");
+	let matches = |t: Topic| {
+		examples::all()
+			.iter()
+			.filter(|e| {
+				e.topic == t
+					&& (e.title.to_lowercase().contains("fibre") || e.description.to_lowercase().contains("fibre"))
+			})
+			.count()
+	};
+	// the search lands on the first tab with a match and shows that tab's matches
+	let expected = Topic::ALL.iter().map(|&t| matches(t)).find(|&n| n > 0).unwrap();
+	assert!(expected > 1, "more than one example names a fibre");
+	assert_eq!(count_tagged(&test, "Example:"), expected);
 }
 
 #[test]

@@ -39,6 +39,9 @@ What new code follows so that it fits the code already here. Each rule names one
 - `wavedude-app`: Freya views, file dialogs (`rfd`, `crates/wavedude-app/src/ui/dialogs.rs:105`), the updater.
   Depends on all of the above.
 - `wavedude-cli`: binary only (no `lib.rs`); core, export, and app-state behind feature `mp4`.
+- `wavedude-testing`: a dev-dependency of widgets and app only: finding and clicking in the headless Freya tests.
+  A click goes through its `click`/`click_at`, which assert the target lies inside the window first; a test that
+  clicks a bare point must prove the element is there some other way.
 
 ## Where new things go
 

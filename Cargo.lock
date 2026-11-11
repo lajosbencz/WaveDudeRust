@@ -5884,6 +5884,7 @@ dependencies = [
  "wavedude-app-state",
  "wavedude-core",
  "wavedude-export",
+ "wavedude-testing",
  "wavedude-widgets",
 ]
 
@@ -5971,6 +5972,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "wavedude-testing"
+version = "0.2.1"
+dependencies = [
+ "freya",
+ "freya-testing",
+]
+
+[[package]]
 name = "wavedude-widgets"
 version = "0.2.1"
 dependencies = [
@@ -5980,6 +5989,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "wavedude-testing",
 ]
 
 [[package]]

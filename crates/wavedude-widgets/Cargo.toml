@@ -19,4 +19,5 @@ regex = "1"
 [dev-dependencies]
 bytes = "1"
 freya-testing = "0.5"
+wavedude-testing = { path = "../wavedude-testing" }
 serde_json = { workspace = true }

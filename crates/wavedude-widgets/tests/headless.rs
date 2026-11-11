@@ -4,7 +4,7 @@ use wavedude_widgets::tree::{RowKind, TreeAction, TreeRow, TreeState, TreeView};
 use wavedude_widgets::{ColorPicker, Gradient, GradientEditor, GradientStop, NumberBox, NumberSpec, Rgb, TextBox};
 
 fn find_text(test: &TestingRunner, text: &str) -> bool {
-	test.find(|_, element| Label::try_downcast(element).filter(|l| l.text.as_ref() == text)).is_some()
+	wavedude_testing::find_text(test, text).is_some()
 }
 
 #[test]
@@ -306,6 +306,7 @@ fn escape_puts_the_old_text_back_in_a_text_box() {
 	test.click_cursor((200., 10.));
 	test.write_text("abc");
 	test.sync_and_update();
+	assert!(find_text(&test, "Source 1abc"), "the box shows the typed text");
 	test.press_key(Key::Named(NamedKey::Escape));
 	test.sync_and_update();
 	test.press_key(Key::Named(NamedKey::Enter));
@@ -376,6 +377,7 @@ fn a_typed_rename_applies_when_its_own_row_is_clicked() {
 fn the_rename_box_closes_when_the_focus_leaves_without_an_edit() {
 	let mut test = launch_test(tree_app);
 	start_rename(&mut test);
+	assert!(shown_with(&test, "renaming=").starts_with("renaming=Some("), "F2 opened the rename box");
 	// empty space below the tree
 	test.click_cursor((150., 250.));
 	settle(&mut test);
@@ -430,11 +432,13 @@ fn typed_hex_applies_before_a_click_on_the_plane_so_the_pick_wins() {
 	settle(&mut test);
 	test.write_text("#00FF00");
 	settle(&mut test);
+	assert!(find_text(&test, "#00FF00"), "the hex box shows the typed text");
 	assert_eq!(shown_with(&test, "rgb="), "rgb=#FF0000", "not applied before Enter");
 	// middle of the saturation/value plane
 	test.click_cursor((88., 88.));
 	settle(&mut test);
-	assert_ne!(shown_with(&test, "rgb="), "rgb=#00FF00", "the hex text overrode the click on the plane");
+	let picked = shown_with(&test, "rgb=");
+	assert!(picked != "rgb=#FF0000" && picked != "rgb=#00FF00", "the plane's pick wins over the typed hex: {picked}");
 }
 
 #[test]

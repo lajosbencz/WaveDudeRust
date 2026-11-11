@@ -43,6 +43,7 @@ wavedude-core = { path = "../wavedude-core", features = ["gpu"] }
 
 [dev-dependencies]
 freya-testing = "0.5"
+wavedude-testing = { path = "../wavedude-testing" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }

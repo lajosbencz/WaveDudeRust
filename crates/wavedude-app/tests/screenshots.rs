@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use freya::prelude::*;
-use freya_testing::TestingNode;
 use freya_testing::prelude::*;
 use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, root};
 use wavedude_app::ui::shared::Shared;
@@ -128,15 +127,6 @@ impl Shots {
 	fn shot(&mut self, name: &str) {
 		self.settle();
 		self.test.render_to_file(self.dir.join(format!("{name}.png")));
-	}
-
-	fn find_text(&self, text: &str) -> Option<TestingNode> {
-		self.test.find(|node, element| {
-			let label = Label::try_downcast(element).is_some_and(|l| l.text.as_ref() == text);
-			let spans = Paragraph::try_downcast(element)
-				.is_some_and(|p| p.spans.iter().map(|s| s.text.as_ref()).collect::<String>() == text);
-			(label || spans).then_some(node)
-		})
 	}
 
 	fn area_of(&self, id: &str) -> Area {
@@ -273,7 +263,7 @@ fn window_states() {
 	s.test.release_cursor(tree);
 	s.test.sync_and_update();
 	s.shot("07-dock-dropped");
-	assert!(s.find_text("Properties").is_some(), "the dropped pane shows as a tab");
+	assert!(wavedude_testing::tagged(&s.test, "DockTab:properties").is_some(), "the dropped pane shows as a tab");
 }
 
 /// The Examples dialog on its first tab and on a search.
