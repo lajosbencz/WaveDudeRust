@@ -60,6 +60,49 @@ fn tree_shift_down_extends_selection() {
 }
 
 #[test]
+fn f2_renames_a_tree_row_through_the_text_box_and_esc_leaves_it() {
+	use wavedude_widgets::tree::{RowKind, TreeAction, TreeRow, TreeState, TreeView};
+	fn app() -> impl IntoElement {
+		wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
+		let state = use_state(TreeState::<u32>::default);
+		let mut renamed = use_state(String::new);
+		let rows = vec![
+			TreeRow::new(0, 0, RowKind::Folder, "Sources").group(0),
+			TreeRow::new(1, 1, RowKind::Item, "One").group(0).enabled(true),
+		];
+		let renaming = state.read().renaming;
+		rect()
+			.width(Size::px(300.))
+			.height(Size::px(200.))
+			.child(rect().height(Size::px(120.)).child(TreeView::new(rows, state, move |a: TreeAction<u32>| {
+				if let TreeAction::Rename(key, text) = a {
+					renamed.set(format!("{key}={text}"));
+				}
+			})))
+			.child(label().text(format!("renaming={renaming:?} renamed={}", renamed.read())))
+	}
+	let mut test = launch_test(app);
+	test.sync_and_update();
+	test.click_cursor((100., 23. + 11.));
+	test.press_key(Key::Named(NamedKey::F2));
+	test.sync_and_update();
+	test.poll_n(std::time::Duration::from_millis(16), 2);
+	assert!(find_text(&test, "renaming=Some(1) renamed="), "F2 opens the rename box");
+	// the box took the focus with the name selected: typing replaces it
+	test.press_key(Key::Character("X".into()));
+	test.press_key(Key::Named(NamedKey::Enter));
+	test.sync_and_update();
+	assert!(find_text(&test, "renaming=None renamed=1=X"), "Enter applies and closes the box");
+	test.press_key(Key::Named(NamedKey::F2));
+	test.sync_and_update();
+	test.poll_n(std::time::Duration::from_millis(16), 2);
+	test.press_key(Key::Character("Y".into()));
+	test.press_key(Key::Named(NamedKey::Escape));
+	test.sync_and_update();
+	assert!(find_text(&test, "renaming=None renamed=1=X"), "Esc leaves the box without renaming");
+}
+
+#[test]
 fn menu_panels_fit_their_entries_and_stay_inside_the_window() {
 	use wavedude_widgets::menu::{MenuBar, MenuEntry, MenuItem, MenuModel, Submenu};
 	fn app() -> impl IntoElement {

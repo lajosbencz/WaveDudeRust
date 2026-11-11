@@ -7,12 +7,13 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use freya::engine::prelude::Canvas;
 use freya::prelude::*;
 use serde_json::json;
 use wavedude_core::model::{Edges, Layer, Scene};
+use wavedude_widgets::delay::use_delayed;
 use wavedude_widgets::header_strip::strip_beside;
 use wavedude_widgets::picture::{
 	CanvasTransform, HitTestHook, OverlayHook, PictureEvent, PictureExtent, View, WheelAt,
@@ -33,8 +34,6 @@ pub const MARGIN: f32 = 4.;
 const CELL_MARGIN: f32 = 4.;
 /// A pointer resting on a handle this long shows the handle's tooltip.
 const HOVER_TIP_DELAY: Duration = Duration::from_millis(600);
-/// How often a resting pointer is checked for a tooltip.
-const HOVER_POLL: Duration = Duration::from_millis(150);
 
 /// The tooltip of handle `h`: what it is and how to move it.
 pub fn handle_tip(app: &crate::ui::shared::App, h: &super::handles::Handle) -> String {
@@ -231,33 +230,24 @@ impl Component for PictureCell {
 		let hooks = use_hook(|| hooks(inputs, states, layer, canvas_state));
 
 		// A pointer resting on a handle shows its tooltip; a move or a press hides it.
-		let mut transform = use_state(|| t);
-		transform.set_if_modified(t);
-		let mut hover = use_state(|| None::<((f32, f32), Instant)>);
 		let mut hover_tip = use_state(|| None::<(String, (f32, f32))>);
-		use_hook({
-			let shared = shared.clone();
-			move || {
-				spawn(async move {
-					loop {
-						timer(HOVER_POLL).await;
-						let Some((p, since)) = *hover.peek() else { continue };
-						if since.elapsed() < HOVER_TIP_DELAY || hover_tip.peek().is_some() {
-							continue;
-						}
-						let t = *transform.peek();
-						let model = inputs.peek().model.clone();
-						let hit = super::handles::hit(&model, t.to_canvas(p.0, p.1), t.scale);
-						let text = hit.map(|i| shared.peek(|app| handle_tip(app, &model.handles[i])));
-						if let Some(text) = text {
-							hover_tip.set(Some((text, p)));
-						} else {
-							hover.set(None);
-						}
-					}
-				});
-			}
-		});
+		let mut rest = use_delayed();
+		let hover_shared = shared.clone();
+		let mut on_hover = move |p: (f32, f32)| {
+			hover_tip.set_if_modified(None);
+			let shared = hover_shared.clone();
+			rest.restart(HOVER_TIP_DELAY, move || {
+				let model = inputs.peek().model.clone();
+				let hit = super::handles::hit(&model, t.to_canvas(p.0, p.1), t.scale);
+				if let Some(text) = hit.map(|i| shared.peek(|app| handle_tip(app, &model.handles[i]))) {
+					hover_tip.set(Some((text, p)));
+				}
+			});
+		};
+		let mut hover_off = move || {
+			rest.cancel();
+			hover_tip.set_if_modified(None);
+		};
 		let tip_view = hover_tip.read().clone().map(|(text, (x, y))| {
 			rect()
 				.position(Position::new_absolute().left(x + 14.).top(y + 18.))
@@ -296,20 +286,10 @@ impl Component for PictureCell {
 			})
 			.on_pointer_move(move |e: Event<PointerEventData>| {
 				let l = e.element_location();
-				let p = (l.x as f32, l.y as f32);
-				if hover.peek().is_none_or(|(q, _)| q != p) {
-					hover.set(Some((p, Instant::now())));
-					hover_tip.set_if_modified(None);
-				}
+				on_hover((l.x as f32, l.y as f32));
 			})
-			.on_pointer_down(move |_| {
-				hover.set_if_modified(None);
-				hover_tip.set_if_modified(None);
-			})
-			.on_pointer_leave(move |_| {
-				hover.set_if_modified(None);
-				hover_tip.set_if_modified(None);
-			})
+			.on_pointer_down(move |_| hover_off())
+			.on_pointer_leave(move |_| hover_off())
 			.child(picture)
 			.maybe_child(boxes)
 			.maybe_child(tip_view);

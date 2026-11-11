@@ -6,11 +6,12 @@ use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::Instant;
 use wavedude_widgets::Button;
 
 use freya::prelude::*;
+use futures_channel::mpsc::{self, UnboundedSender};
+use futures_util::StreamExt;
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::{Layer, Project};
@@ -96,7 +97,6 @@ pub struct ExportProgress {
 	pub total: usize,
 	pub waiting: bool,
 	cancel: Arc<AtomicBool>,
-	rx: Option<Receiver<Msg>>,
 	kind: ExportKind,
 	path: PathBuf,
 }
@@ -279,7 +279,6 @@ fn gate(cx: &Cx, plan: Plan) {
 					total: 0,
 					waiting: true,
 					cancel: Arc::new(AtomicBool::new(false)),
-					rx: None,
 					kind,
 					path,
 				},
@@ -376,7 +375,7 @@ fn run(cx: &Cx, plan: Plan) {
 		work.codec_download.set(Some(downloads::start(cx, s.get("StatusDownloadingCodec").to_owned())));
 	}
 	let cancel = Arc::new(AtomicBool::new(false));
-	let (tx, rx) = mpsc::channel();
+	let (tx, mut rx) = mpsc::unbounded();
 	let flag = cancel.clone();
 	let spawned = std::thread::Builder::new().name("export".into()).spawn(move || {
 		let result = match plan {
@@ -385,7 +384,7 @@ fn run(cx: &Cx, plan: Plan) {
 				export_frames(&work, choice, format, &path, frame, &tx, &flag)
 			}
 		};
-		let _ = tx.send(Msg::Done(result));
+		let _ = tx.unbounded_send(Msg::Done(result));
 	});
 	if let Err(e) = spawned {
 		tracing::error!("the export thread could not start: {e}");
@@ -400,11 +399,21 @@ fn run(cx: &Cx, plan: Plan) {
 			total: 0,
 			waiting: false,
 			cancel,
-			rx: Some(rx),
 			kind,
 			path,
 		},
 	);
+	let cx = cx.clone();
+	spawn_in_window(async move {
+		let result = loop {
+			match rx.next().await {
+				Some(Msg::Progress(done, total)) => progressed(&cx, done, total),
+				Some(Msg::Done(result)) => break result,
+				None => break Err("the export thread ended".into()),
+			}
+		};
+		finished(&cx, result);
+	});
 }
 
 fn write_csv(work: &Work, probe: usize, path: &Path) -> Result<String, String> {
@@ -430,7 +439,7 @@ fn export_frames(
 	format: ExportFormat,
 	path: &Path,
 	frame: usize,
-	tx: &mpsc::Sender<Msg>,
+	tx: &UnboundedSender<Msg>,
 	cancel: &AtomicBool,
 ) -> Result<String, String> {
 	let store = &*work.store;
@@ -449,7 +458,7 @@ fn export_frames(
 		h264,
 	};
 	let job = plan.build_job(store, &work.schemes).map_err(|e| e.to_string())?;
-	let report = job.run(|done, total| drop(tx.send(Msg::Progress(done, total))), cancel);
+	let report = job.run(|done, total| drop(tx.unbounded_send(Msg::Progress(done, total))), cancel);
 	match report.state {
 		ExportState::Completed => Ok(format!("{} frames exported to {}", report.frames_done, path.display())),
 		ExportState::Cancelled => Ok(format!("export cancelled after {} frames", report.frames_done)),
@@ -469,56 +478,37 @@ fn codec(work: &Work) -> Result<Option<PathBuf>, String> {
 	h264::library(dir, work.use_openh264, on_chunk).map_err(|e| e.to_string())
 }
 
-/// Takes the worker's messages; called every tick.
-pub fn poll(cx: &Cx) {
+/// The worker's progress, shown in the status bar.
+fn progressed(cx: &Cx, done: usize, total: usize) {
+	let s = cx.strings();
 	let mut state = cx.ui.export;
-	let mut finished = None;
-	let mut moved = None;
-	if let Some(p) = state.peek().as_ref()
-		&& let Some(rx) = &p.rx
-	{
-		loop {
-			match rx.try_recv() {
-				Ok(Msg::Progress(d, t)) => moved = Some((d, t)),
-				Ok(Msg::Done(r)) => {
-					finished = Some(r);
-					break;
-				}
-				Err(TryRecvError::Empty) => break,
-				Err(TryRecvError::Disconnected) => {
-					finished = Some(Err("the export thread ended".into()));
-					break;
-				}
+	let mut w = state.write();
+	if let Some(p) = w.as_mut() {
+		p.done = done;
+		p.total = total;
+		p.text = s.format("ExportStatusFormat", &[&done, &total]);
+	}
+}
+
+/// The worker's end: the run is released, the result told, and what was waiting for the end runs.
+fn finished(cx: &Cx, result: Result<String, String>) {
+	let mut state = cx.ui.export;
+	let ended = state.write().take();
+	super::codec::refresh(cx);
+	cx.shared.update(|a| a.live.end_export());
+	match result {
+		Ok(line) => {
+			tracing::info!("{line}");
+			if let Some(p) = ended {
+				cx.shared.update(|a| a.export_done(p.kind, &p.path));
 			}
 		}
-	}
-	if let Some((done, total)) = moved {
-		let s = cx.strings();
-		let mut w = state.write();
-		if let Some(p) = w.as_mut() {
-			p.done = done;
-			p.total = total;
-			p.text = s.format("ExportStatusFormat", &[&done, &total]);
+		Err(e) => {
+			tracing::error!("export failed: {e}");
+			cx.ui.show_modal(Modal::Error(format!("{}\n{e}", cx.strings().get("ExportError"))));
 		}
 	}
-	if let Some(result) = finished {
-		let ended = state.write().take();
-		super::codec::refresh(cx);
-		cx.shared.update(|a| a.live.end_export());
-		match result {
-			Ok(line) => {
-				tracing::info!("{line}");
-				if let Some(p) = ended {
-					cx.shared.update(|a| a.export_done(p.kind, &p.path));
-				}
-			}
-			Err(e) => {
-				tracing::error!("export failed: {e}");
-				cx.ui.show_modal(Modal::Error(format!("{}\n{e}", cx.strings().get("ExportError"))));
-			}
-		}
-		run_then(cx);
-	}
+	run_then(cx);
 }
 
 /// The export dialog: format and path, then the export.

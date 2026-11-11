@@ -7,6 +7,7 @@ use std::hash::Hash;
 use freya::prelude::*;
 
 use crate::icon::{Icon, IconView, icons};
+use crate::text_box::TextBox;
 use crate::theme::{Theme, UiFontExt, use_wave_theme};
 use crate::tooltip::Tip;
 use crate::util::{TestIdExt, focus_border, use_modifiers};
@@ -450,7 +451,6 @@ impl<K: Clone + PartialEq + Debug + 'static> Component for TreeView<K> {
 		let mut list_area = use_state(Area::default);
 		let mut scroll = use_scroll_controller(ScrollConfig::default);
 		let mut drag = use_state(|| None::<DragState<K>>);
-		let mut rename_text = use_state(String::new);
 		let mut last_current = use_state(|| None::<K>);
 		let rows = self.rows.clone();
 		let state = self.state.clone();
@@ -499,10 +499,6 @@ impl<K: Clone + PartialEq + Debug + 'static> Component for TreeView<K> {
 				}
 				e.stop_propagation();
 				e.prevent_default();
-				if next.renaming.is_some() {
-					let label = rows.iter().find(|r| Some(&r.key) == next.renaming.as_ref()).map(|r| r.label.clone());
-					rename_text.set(label.unwrap_or_default());
-				}
 				if *state.peek() != next {
 					*state.write() = next;
 				}
@@ -579,7 +575,7 @@ impl<K: Clone + PartialEq + Debug + 'static> Component for TreeView<K> {
 				indicator,
 				items: items.clone(),
 			};
-			row_view(ctx, state.clone(), on_action.clone(), drag, rename_text, modifiers, tree_id)
+			row_view(ctx, state.clone(), on_action.clone(), drag, modifiers, tree_id)
 		});
 
 		let body = rect()
@@ -630,7 +626,6 @@ fn row_view<K: Clone + PartialEq + 'static>(
 	state: Writable<TreeState<K>>,
 	on_action: EventHandler<TreeAction<K>>,
 	mut drag: State<Option<DragState<K>>>,
-	mut rename_text: State<String>,
 	modifiers: State<Modifiers>,
 	tree_id: AccessibilityId,
 ) -> Element {
@@ -736,31 +731,20 @@ fn row_view<K: Clone + PartialEq + 'static>(
 		let key = key.clone();
 		let on_action = on_action.clone();
 		let mut state = state.clone();
-		let mut state2 = state.clone();
-		Input::new(rename_text)
-			.auto_focus(true)
-			.compact()
-			.width(Size::flex(1.))
-			.on_submit(move |text: String| {
-				state.write().renaming = None;
-				tree_id.request_focus();
-				on_action.call(TreeAction::Rename(key.clone(), text));
-			})
-			.on_pre_key_down(move |e: Event<KeyboardEventData>| {
-				if e.key == Key::Named(NamedKey::Escape) {
-					e.stop_propagation();
-					state2.write().renaming = None;
-					rename_text.set(String::new());
-					tree_id.request_focus();
-					return false;
-				}
-				if e.key == Key::Named(NamedKey::Enter) || e.key == Key::Named(NamedKey::Tab) {
-					return true;
-				}
-				e.stop_propagation();
-				true
-			})
-			.into()
+		let mut done_state = state.clone();
+		TextBox::new(row.label.clone(), move |text: String| {
+			state.write().renaming = None;
+			tree_id.request_focus();
+			on_action.call(TreeAction::Rename(key.clone(), text));
+		})
+		.auto_focus()
+		.select_all_on_focus(true)
+		.width(Size::flex(1.))
+		.on_done(move |_| {
+			done_state.write().renaming = None;
+			tree_id.request_focus();
+		})
+		.into()
 	} else {
 		label()
 			.text(row.label.clone())

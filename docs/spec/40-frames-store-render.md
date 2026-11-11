@@ -86,7 +86,8 @@ RamFrames  = min(Capacity, budget / FrameBytes)
 StoreBytesAt(q) = layers * PlaneBytes(div, format) * ceil(FrameCount / q.FrameDivisor)
 ```
 Frames `0..RamFrames-1` live in native memory; the rest in a spill file in `%LOCALAPPDATA%\WaveDudeNext\cache`
-(delete on close; Rust: OS cache dir). No memory mapping.
+(delete on close; Rust: an unlinked file in the OS cache dir's `frames` folder, so a killed process leaves nothing;
+named `.wdfs` leftovers of earlier builds are removed when the worker starts). No memory mapping.
 
 Spill file header (64 bytes, little-endian i32 each):
 

@@ -93,9 +93,10 @@ Freya base: layout primitives + ScrollView; custom form layout. TODO(verify-frey
 Behaviours: Enter commits to the bound value and selects all; Esc reverts when changed (consumed only then);
 per-keystroke binding option; multiline option; own undo (Ctrl+Z) and clipboard handled before window commands;
 placeholder text (Messages search); option to select all text when the box gains focus (the object Name box).
-Freya base: `TextField` (widgets/src/text_field.rs, single line on `freya-edit`; the text and number boxes use it) so the
-box can select on focus; the multiline box keeps Freya's Input. The focusing click selects all, a later click places
-the caret; caret blink, drag and double-click selection, scrolling to keep the caret visible and IME preedit as Input.
+Freya base: `TextField` (widgets/src/text_field.rs on `freya-edit`; the text and number boxes use it) so the box can
+select on focus; multi-line mode lays out one paragraph per line, wraps and scrolls vertically. The focusing click
+selects all, a later click places the caret; caret blink, drag and double-click selection, scrolling to keep the caret
+visible and IME preedit as Input.
 TODO(verify-freya): commit/revert semantics and key precedence over window shortcuts.
 
 ## 7. Number box (linear and logarithmic)
@@ -112,7 +113,7 @@ Behaviours:
 - Look: 22 px, padding 3,2, 1 px border (hover, focus accent), 14 px spin column with 4 x 2 chevrons, hover and
   pressed backgrounds; disabled: window background, grey text, no spin buttons.
 - Writes through to the bound value on every step; selects text after a step.
-Freya base: Input + custom behaviour; pointer wrap needs platform cursor warp (winit set_cursor_position).
+Freya base: `TextField` + custom behaviour; pointer wrap needs platform cursor warp (winit set_cursor_position).
 TODO(verify-freya).
 
 ## 8. Check box, combo box, editable combo

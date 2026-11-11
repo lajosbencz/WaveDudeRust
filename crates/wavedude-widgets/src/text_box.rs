@@ -4,7 +4,7 @@
 use freya::prelude::*;
 
 use crate::edit::{FocusRequest, use_edit_slot, use_focus_on_layout};
-use crate::text_field::{FIELD_PADDING, TextField};
+use crate::text_field::TextField;
 use crate::theme::{INPUT_HEIGHT, Theme, use_wave_theme};
 use crate::util::is_named;
 
@@ -30,11 +30,6 @@ pub(crate) fn field_frame(theme: &Theme, enabled: bool, focused: bool, hovered: 
 		.color(if enabled { theme.text } else { theme.text_disabled })
 }
 
-/// A borderless Freya input with the field's text padding, for the multi-line box inside [`field_frame`].
-pub(crate) fn field_input(input: Input) -> Input {
-	input.flat().compact().theme_layout(InputLayoutThemePartial::new().padding(FIELD_PADDING))
-}
-
 /// A text box bound to a value.
 #[derive(Clone, PartialEq)]
 pub struct TextBox {
@@ -43,8 +38,12 @@ pub struct TextBox {
 	multiline: bool,
 	live: bool,
 	select_all: bool,
+	auto_focus: bool,
+	placeholder: Option<String>,
+	width: Size,
 	id: Option<AccessibilityId>,
 	focus_request: Option<FocusRequest>,
+	on_done: Option<EventHandler<()>>,
 }
 
 impl TextBox {
@@ -55,9 +54,36 @@ impl TextBox {
 			multiline: false,
 			live: false,
 			select_all: false,
+			auto_focus: false,
+			placeholder: None,
+			width: Size::fill(),
 			id: None,
 			focus_request: None,
+			on_done: None,
 		}
+	}
+
+	/// Grey text shown while the box is empty.
+	pub fn placeholder(mut self, text: impl Into<String>) -> Self {
+		self.placeholder = Some(text.into());
+		self
+	}
+
+	pub fn width(mut self, width: impl Into<Size>) -> Self {
+		self.width = width.into();
+		self
+	}
+
+	/// Takes the focus once it is laid out.
+	pub fn auto_focus(mut self) -> Self {
+		self.auto_focus = true;
+		self
+	}
+
+	/// Enter applied the text or Esc put the old one back: the editing is over.
+	pub fn on_done(mut self, handler: impl Into<EventHandler<()>>) -> Self {
+		self.on_done = Some(handler.into());
+		self
 	}
 
 	/// Enter inserts a newline; the text applies on focus loss.
@@ -72,7 +98,7 @@ impl TextBox {
 		self
 	}
 
-	/// Gaining focus selects the whole text (single-line boxes).
+	/// Gaining focus selects the whole text.
 	pub fn select_all_on_focus(mut self, select_all: bool) -> Self {
 		self.select_all = select_all;
 		self
@@ -118,15 +144,21 @@ impl Component for TextBox {
 				}
 			}
 		};
-		let on_sized = use_focus_on_layout(id, self.focus_request.clone());
+		let once = use_state(|| 0u64);
+		let request = self.focus_request.clone().or_else(|| self.auto_focus.then(|| FocusRequest::new(1u64, once)));
+		let on_sized = use_focus_on_layout(id, request);
 		let revert = bound.clone();
 		let on_pre_key_down = {
 			let mut commit = commit.clone();
 			let slot = slot.clone();
+			let done = self.on_done.clone();
 			move |e: Event<KeyboardEventData>| -> bool {
 				if is_named(&e, NamedKey::Enter) && !multiline {
 					e.stop_propagation();
 					commit();
+					if let Some(done) = &done {
+						done.call(());
+					}
 					return false;
 				}
 				if is_named(&e, NamedKey::Escape) {
@@ -135,6 +167,10 @@ impl Component for TextBox {
 						text.set(revert.clone());
 						typed.set(false);
 						slot.withdraw();
+					}
+					if let Some(done) = &done {
+						e.stop_propagation();
+						done.call(());
 					}
 					return false;
 				}
@@ -155,23 +191,18 @@ impl Component for TextBox {
 				slot.offer(commit.clone());
 			}
 		});
-		let input: Element = if multiline {
-			field_input(Input::new(on_change))
-				.a11y_id(id)
-				.multiline(true)
-				.width(Size::flex(1.))
-				.on_pre_key_down(on_pre_key_down)
-				.into()
-		} else {
-			TextField::new(on_change)
-				.a11y_id(id)
-				.select_all_on_focus(self.select_all)
-				.width(Size::flex(1.))
-				.on_pre_key_down(on_pre_key_down)
-				.into()
+		let input = TextField::new(on_change)
+			.a11y_id(id)
+			.multiline(multiline)
+			.select_all_on_focus(self.select_all)
+			.width(Size::flex(1.))
+			.on_pre_key_down(on_pre_key_down);
+		let input = match &self.placeholder {
+			Some(text) => input.placeholder(text.clone()),
+			None => input,
 		};
 		field_frame(&theme, true, focus().is_focused(), hovered())
-			.width(Size::fill())
+			.width(self.width.clone())
 			.on_sized(on_sized)
 			.on_pointer_enter(move |_| hovered.set(true))
 			.on_pointer_leave(move |_| hovered.set(false))

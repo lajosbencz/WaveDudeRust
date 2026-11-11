@@ -10,6 +10,7 @@ use regex::{Regex, RegexBuilder};
 
 use crate::button::Button;
 use crate::menu::{ContextMenuHost, ContextMenuRequest, MenuEntry, MenuItem, MenuModel};
+use crate::text_box::TextBox;
 use crate::theme::{Theme, UiFontExt, use_wave_theme};
 use crate::tooltip::Tip;
 use crate::util::{TestIdExt, ctrl, focus_border, is_char, is_named, modifier_tracker, shift, use_modifiers};
@@ -423,7 +424,6 @@ impl Component for MessageList {
 		let mut auto_scroll = use_state(|| true);
 		let columns = use_state(|| DEFAULT_COLUMNS);
 		let menu = use_state(|| None::<ContextMenuRequest>);
-		let mut search = use_state(String::new);
 		let mut seen_revision = use_state(|| u64::MAX);
 		let mut scroll = use_scroll_controller(|| ScrollConfig {
 			default_vertical_position: ScrollPosition::End,
@@ -533,13 +533,10 @@ impl Component for MessageList {
 			.children(toggles)
 			.child(
 				rect().margin((0., 0., 0., 6.)).child(
-					Input::new(WritableSetter::new(search, move |t: String| {
-						search.set(t.clone());
-						filter.write().search = t;
-					}))
-					.placeholder(words.search.clone())
-					.compact()
-					.width(Size::px(180.)),
+					TextBox::new(filter.read().search.clone(), move |t: String| filter.write().search = t)
+						.live()
+						.placeholder(words.search.clone())
+						.width(Size::px(180.)),
 				),
 			)
 			.child(ToggleChip {

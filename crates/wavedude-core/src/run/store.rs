@@ -29,7 +29,6 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::thread::JoinHandle;
 
 use rayon::prelude::*;
-use tempfile::NamedTempFile;
 
 use crate::engine::{FrameShape, SampleFormat, Snapshot};
 use crate::model::Layer;
@@ -137,12 +136,31 @@ impl StoreLayout {
 /// The spill file: frames `first..capacity`, `first` moved down (the file still empty) when memory runs out
 /// before the budget's frame count.
 struct Spill {
-	file: NamedTempFile,
+	/// Unlinked at creation: the OS reclaims it when the last handle closes, a killed process included.
+	file: File,
 	first: AtomicUsize,
 }
 
 /// Waited for on the producer thread before the first block is allocated.
 pub type Release = Box<dyn FnOnce() + Send>;
+
+/// Removes the named `.wdfs` spill files earlier builds left in `dir` when their process died; the bytes freed.
+pub fn sweep_leftovers(dir: &Path) -> io::Result<u64> {
+	let mut freed = 0;
+	let entries = match std::fs::read_dir(dir) {
+		Ok(entries) => entries,
+		Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0),
+		Err(e) => return Err(e),
+	};
+	for entry in entries {
+		let entry = entry?;
+		if entry.path().extension().is_some_and(|e| e == "wdfs") {
+			freed += entry.metadata()?.len();
+			std::fs::remove_file(entry.path())?;
+		}
+	}
+	Ok(freed)
+}
 
 /// See the module docs for layout and threading.
 pub struct FrameStore {
@@ -317,9 +335,9 @@ impl FrameStore {
 		self.first_spilled().min(self.ram_frames) as u64 * self.frame_bytes() as u64
 	}
 
-	/// The spill file's path, when the store has one.
-	pub fn spill_path(&self) -> Option<&Path> {
-		self.spill.get().map(|s| s.file.path())
+	/// The spill file's size, when the store has one.
+	pub fn spill_bytes(&self) -> Option<u64> {
+		self.spill.get().map(|s| s.file.metadata().map_or(0, |m| m.len()))
 	}
 
 	/// The step index stored frame `frame` holds the state after.
@@ -340,7 +358,7 @@ impl FrameStore {
 			Some(spill) => spill,
 			None => {
 				std::fs::create_dir_all(&self.spill_dir)?;
-				let file = tempfile::Builder::new().prefix("frames-").suffix(".wdfs").tempfile_in(&self.spill_dir)?;
+				let file = tempfile::tempfile_in(&self.spill_dir)?;
 				assert!(
 					self.spill.set(Spill { file, first: AtomicUsize::new(first) }).is_ok(),
 					"the spill is created once"
@@ -348,8 +366,8 @@ impl FrameStore {
 				self.spill.get().expect("set above")
 			}
 		};
-		spill.file.as_file().set_len(layout.file_bytes(layout.capacity - first))?;
-		write_at(spill.file.as_file(), &header(layout, first), 0)?;
+		spill.file.set_len(layout.file_bytes(layout.capacity - first))?;
+		write_at(&spill.file, &header(layout, first), 0)?;
 		spill.first.store(first, Ordering::Release);
 		self.first_spilled.store(first, Ordering::Release);
 		Ok(())
@@ -433,7 +451,7 @@ impl FrameStore {
 			let spill = self.spill.get().expect("spill file exists past the first spilled frame");
 			let mut at = self.file_offset(spill, frame);
 			for &layer in self.layout.layers {
-				write_at(spill.file.as_file(), snapshot.plane(layer), at)?;
+				write_at(&spill.file, snapshot.plane(layer), at)?;
 				at += plane as u64;
 			}
 			self.spilled_count.fetch_add(1, Ordering::AcqRel);
@@ -582,7 +600,7 @@ impl FrameStore {
 
 	fn read_spilled(&self, frame: usize, index: usize, out: &mut [u8]) -> io::Result<()> {
 		let spill = self.spill.get().expect("a stored frame outside memory is in the file");
-		read_at(spill.file.as_file(), out, self.file_offset(spill, frame) + (index * out.len()) as u64)
+		read_at(&spill.file, out, self.file_offset(spill, frame) + (index * out.len()) as u64)
 	}
 }
 

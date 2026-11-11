@@ -1,11 +1,13 @@
-//! Single-line text editor on `freya-edit`: the field inside the text and number boxes, with a select-all
-//! on focus that Freya's `Input` cannot offer.
+//! Text editor on `freya-edit`: the field inside the text and number boxes, with a select-all on focus that
+//! Freya's `Input` cannot offer. Multi-line mode lays out one `paragraph` per line.
+
+use std::ops::Range;
 
 use freya::{
 	elements::paragraph::{ParagraphCursorExt, ParagraphHolderInner},
 	prelude::*,
 	text_edit::*,
-	torin::prelude::{Area, Point2D, Vector2D},
+	torin::prelude::{Area, CursorPoint, Point2D, Vector2D},
 };
 
 use crate::{theme::use_wave_theme, util::is_named};
@@ -13,13 +15,16 @@ use crate::{theme::use_wave_theme, util::is_named};
 /// WPF's text padding 3,2 inside the field's 1 px border.
 pub(crate) const FIELD_PADDING: (f32, f32) = (2., 3.);
 
-/// A borderless single-line editor for inside [`crate::text_box::field_frame`].
+/// A borderless editor for inside [`crate::text_box::field_frame`].
 #[derive(Clone, PartialEq)]
 pub struct TextField {
 	value: WritableSetter<String>,
 	enabled: bool,
 	select_all_on_focus: bool,
+	multiline: bool,
+	placeholder: Option<String>,
 	width: Size,
+	height: Size,
 	id: Option<AccessibilityId>,
 	on_pre_key_down: Option<Callback<Event<KeyboardEventData>, bool>>,
 }
@@ -31,7 +36,10 @@ impl TextField {
 			value: value.into(),
 			enabled: true,
 			select_all_on_focus: false,
+			multiline: false,
+			placeholder: None,
 			width: Size::px(150.),
+			height: Size::Inner,
 			id: None,
 			on_pre_key_down: None,
 		}
@@ -48,8 +56,20 @@ impl TextField {
 		self
 	}
 
+	/// Enter inserts a newline, long lines wrap and the text scrolls vertically.
+	pub fn multiline(mut self, multiline: bool) -> Self {
+		self.multiline = multiline;
+		self
+	}
+
 	pub fn width(mut self, width: impl Into<Size>) -> Self {
 		self.width = width.into();
+		self
+	}
+
+	/// A multi-line field higher than its text scrolls; [`Size::Inner`] grows with the text.
+	pub fn height(mut self, height: impl Into<Size>) -> Self {
+		self.height = height.into();
 		self
 	}
 
@@ -58,12 +78,61 @@ impl TextField {
 		self
 	}
 
+	/// Grey text shown while the field is empty.
+	pub fn placeholder(mut self, text: impl Into<String>) -> Self {
+		self.placeholder = Some(text.into());
+		self
+	}
+
 	/// Called first for each key press: `false` skips the field's own handling. By default the field takes
-	/// every key but Tab, Enter and Esc and stops it from bubbling.
+	/// every key but Tab, Esc and a single-line field's Enter and stops it from bubbling.
 	pub fn on_pre_key_down(mut self, handler: impl Into<Callback<Event<KeyboardEventData>, bool>>) -> Self {
 		self.on_pre_key_down = Some(handler.into());
 		self
 	}
+}
+
+/// How the text maps to `paragraph` elements: all in one, or one per line.
+#[derive(Clone, Copy, PartialEq)]
+struct Lines {
+	multiline: bool,
+}
+
+impl Lines {
+	fn count(self, editor: &RopeEditor) -> usize {
+		if self.multiline { editor.len_lines() } else { 1 }
+	}
+
+	fn editor_line(self, line: usize) -> EditorLine {
+		if self.multiline { EditorLine::Paragraph(line) } else { EditorLine::SingleParagraph }
+	}
+
+	fn caret_line(self, editor: &RopeEditor) -> usize {
+		if self.multiline { editor.cursor_row() } else { 0 }
+	}
+
+	/// Chars shown by `line`'s paragraph: its text without the line break.
+	fn chars(self, editor: &RopeEditor, line: usize) -> Range<usize> {
+		let rope = editor.rope();
+		if !self.multiline {
+			return 0..rope.len_chars();
+		}
+		let start = rope.line_to_char(line);
+		let text = rope.line(line);
+		let line_break = (0..text.len_chars())
+			.rev()
+			.map(|i| text.char(i))
+			.take_while(|c| matches!(c, '\n' | '\r' | '\u{0B}' | '\u{0C}' | '\u{85}' | '\u{2028}' | '\u{2029}'))
+			.count();
+		start..start + text.len_chars() - line_break
+	}
+}
+
+/// A laid-out line: its paragraph for hit testing and measuring, and where it is.
+#[derive(Clone, Default)]
+struct LineView {
+	holder: ParagraphHolder,
+	area: Area,
 }
 
 impl Component for TextField {
@@ -71,8 +140,8 @@ impl Component for TextField {
 		let id = use_hook(|| self.id.unwrap_or_else(AccessibilityId::new_unique));
 		let focus = use_focus(id);
 		let focused = focus().is_focused();
-		let holder = use_state(ParagraphHolder::default);
-		let mut area = use_state(Area::default);
+		let mut views = use_state(Vec::<LineView>::new);
+		let mut content = use_state(Area::default);
 		let mut viewport = use_state(Area::default);
 		let mut scroll = use_scroll_controller(ScrollConfig::default);
 		let mut editable = use_editable(|| self.value.read().to_string(), EditableConfig::new);
@@ -85,6 +154,7 @@ impl Component for TextField {
 		let mut value = self.value.clone();
 		let theme = use_wave_theme();
 		let enabled = self.enabled;
+		let lines = Lines { multiline: self.multiline };
 
 		let (mut movement, caret) = use_cursor_blink(focused, theme.text);
 
@@ -108,29 +178,58 @@ impl Component for TextField {
 			}
 		}
 
+		let count = lines.count(&editable.editor().peek());
+		if views.peek().len() != count {
+			views.write().resize_with(count, LineView::default);
+		}
+
 		let mut follow_caret = move || {
 			if !id.is_focused() {
 				return;
 			}
-			let holder = holder.peek();
-			let holder = holder.0.borrow();
-			let Some(ParagraphHolderInner { paragraph, scale_factor, .. }) = holder.as_ref() else {
-				return;
-			};
 			let view = viewport();
 			if view.width() == 0. {
 				return;
 			}
 			let editor = editable.editor().peek();
-			let rect = paragraph.cursor_rect(&editor.rope().to_string(), editor.cursor_pos(), TextAlign::default());
-			let caret = Point2D::new(rect.left, rect.top) / (*scale_factor as f32);
-			let visible = caret + Vector2D::new(FIELD_PADDING.1, FIELD_PADDING.0);
-			let start = view.min_x() - area.peek().min_x();
-			if visible.x < start {
+			let line = lines.caret_line(&editor);
+			let views = views.peek();
+			let Some(LineView { holder, area }) = views.get(line) else {
+				return;
+			};
+			let holder = holder.0.borrow();
+			let Some(ParagraphHolderInner { paragraph, scale_factor, padding }) = holder.as_ref() else {
+				return;
+			};
+			let chars = lines.chars(&editor, line);
+			let first = editor.rope().char_to_utf16_cu(chars.start);
+			let text = editor.rope().slice(chars).to_string();
+			let rect = paragraph.cursor_rect(&text, editor.cursor_pos() - first, TextAlign::default());
+			let scale = *scale_factor as f32;
+			let offset = area.min() - content.peek().min();
+			let caret = Point2D::new(rect.left, rect.top) / scale + offset;
+			let visible = caret + Vector2D::new(padding.left(), padding.top());
+			let bottom = rect.bottom / scale + offset.y + padding.top();
+			let start = view.min() - content.peek().min();
+			if visible.x < start.x {
 				scroll.scroll_to_x(-caret.x as i32);
-			} else if visible.x > start + view.width() {
-				scroll.scroll_to_x(-(visible.x + FIELD_PADDING.1 - view.width()) as i32);
+			} else if visible.x > start.x + view.width() {
+				scroll.scroll_to_x(-(visible.x + padding.right() - view.width()) as i32);
 			}
+			if visible.y < start.y {
+				scroll.scroll_to_y(-caret.y as i32);
+			} else if bottom > start.y + view.height() {
+				scroll.scroll_to_y(-(bottom + padding.bottom() - view.height()) as i32);
+			}
+		};
+
+		// the line under a window position, clamped to the first and last, and the position inside it
+		let hit = move |global: CursorPoint| {
+			let views = views.peek();
+			let line =
+				views.iter().position(|v| global.y < f64::from(v.area.max_y())).unwrap_or(views.len().checked_sub(1)?);
+			let view = &views[line];
+			Some((lines.editor_line(line), (global - view.area.to_f64().min()).to_point(), view.holder.clone()))
 		};
 
 		let on_ime_preedit = move |e: Event<ImePreeditEventData>| {
@@ -143,8 +242,9 @@ impl Component for TextField {
 		};
 
 		let pre_key_down = self.on_pre_key_down.clone().unwrap_or_else(|| {
-			Callback::new(|e: Event<KeyboardEventData>| {
-				let passes = [NamedKey::Tab, NamedKey::Enter, NamedKey::Escape].iter().any(|k| is_named(&e, *k));
+			Callback::new(move |e: Event<KeyboardEventData>| {
+				let passes = [NamedKey::Tab, NamedKey::Escape].iter().any(|k| is_named(&e, *k))
+					|| (is_named(&e, NamedKey::Enter) && !lines.multiline);
 				if !passes {
 					e.stop_propagation();
 					e.prevent_default();
@@ -159,7 +259,8 @@ impl Component for TextField {
 				return;
 			}
 			match &key {
-				Key::Named(NamedKey::Enter | NamedKey::Tab) => {}
+				Key::Named(NamedKey::Tab) => {}
+				Key::Named(NamedKey::Enter) if !lines.multiline => {}
 				Key::Named(NamedKey::Escape) => id.request_unfocus(),
 				_ => {
 					movement.reset();
@@ -174,11 +275,12 @@ impl Component for TextField {
 					}
 					fresh.set_if_modified(false);
 					let before = editable.editor().peek().editor_history().version;
+					let line = lines.caret_line(&editable.editor().peek());
 					editable.process_event(EditableEvent::KeyDown {
 						key: &key,
 						modifiers,
-						editor_line: Some(EditorLine::SingleParagraph),
-						holder: Some(&holder.read()),
+						editor_line: Some(lines.editor_line(line)),
+						holder: views.peek().get(line).map(|v| &v.holder),
 					});
 					let text = editable.editor().read().committed_text();
 					if *value.peek() != text {
@@ -209,12 +311,10 @@ impl Component for TextField {
 					editor.set_selection((0, end));
 				}
 				fresh.set(false);
-			} else if !std::mem::take(&mut *fresh.write()) {
-				editable.process_event(EditableEvent::Down {
-					location: e.element_location(),
-					editor_line: EditorLine::SingleParagraph,
-					holder: &holder.read(),
-				});
+			} else if !std::mem::take(&mut *fresh.write())
+				&& let Some((editor_line, location, holder)) = hit(e.global_location())
+			{
+				editable.process_event(EditableEvent::Down { location, editor_line, holder: &holder });
 			}
 			id.request_focus();
 		};
@@ -229,13 +329,11 @@ impl Component for TextField {
 			}
 		};
 		let on_global_pointer_move = move |e: Event<PointerEventData>| {
-			if id.is_focused() && *dragging.read() {
-				let origin = area.read().to_f64().min();
-				editable.process_event(EditableEvent::Move {
-					location: (e.global_location() - origin).to_point(),
-					editor_line: EditorLine::SingleParagraph,
-					holder: &holder.read(),
-				});
+			if id.is_focused()
+				&& *dragging.read()
+				&& let Some((editor_line, location, holder)) = hit(e.global_location())
+			{
+				editable.process_event(EditableEvent::Move { location, editor_line, holder: &holder });
 				follow_caret();
 			}
 		};
@@ -251,52 +349,97 @@ impl Component for TextField {
 				}
 			}
 		};
-		let on_paragraph_sized = move |e: Event<SizedEventData>| {
+		let on_content_sized = move |e: Event<SizedEventData>| {
 			let view = viewport();
 			if view.width() > 0. {
 				scroll.apply_layout(e.area.size, view.size);
 			}
-			let resized = area.peek().size != e.area.size;
-			area.set_if_modified(e.area);
+			let resized = content.peek().size != e.area.size;
+			content.set_if_modified(e.area);
 			if resized {
 				follow_caret();
 			}
 		};
-
-		let (cursor_index, selection) = if enabled && focused {
-			let editor = editable.editor().read();
-			(Some(editor.cursor_pos()), editor.get_visible_selection(EditorLine::SingleParagraph))
-		} else {
-			(None, None)
+		let on_line_sized = move |line: usize| {
+			move |e: Event<SizedEventData>| {
+				let Some(old) = views.peek().get(line).map(|v| v.area) else {
+					return;
+				};
+				if old != e.area {
+					views.write()[line].area = e.area;
+					if old.size != e.area.size && line == lines.caret_line(&editable.editor().peek()) {
+						follow_caret();
+					}
+				}
+			}
 		};
+
 		let text_color = if enabled { theme.text } else { theme.text_disabled };
-
 		let editor = editable.editor().read();
-		let paragraph = paragraph()
-			.holder(holder.read().clone())
-			.on_sized(on_paragraph_sized)
-			.min_width(Size::percent(100.))
+		let active = enabled && focused;
+		let caret_line = lines.caret_line(&editor);
+		let preedit = editor.has_preedit().then(|| {
+			let (before, preedit, _) = editor.preedit_text_segments();
+			let start = before.chars().count();
+			start..start + preedit.chars().count()
+		});
+		let (pad_y, pad_x) = FIELD_PADDING;
+		let shown = views.peek();
+		let paragraphs = shown.iter().enumerate().map(|(i, view)| {
+			let chars = lines.chars(&editor, i);
+			let rope = editor.rope();
+			let first = rope.char_to_utf16_cu(chars.start);
+			let cursor_index = (active && i == caret_line).then(|| editor.cursor_pos() - first);
+			let selection = if active { editor.get_visible_selection(lines.editor_line(i)) } else { None };
+			let padding =
+				Gaps::new(if i == 0 { pad_y } else { 0. }, pad_x, if i + 1 == count { pad_y } else { 0. }, pad_x);
+			let paragraph = paragraph()
+				.holder(view.holder.clone())
+				.on_sized(on_line_sized(i))
+				.padding(padding)
+				.cursor_index(cursor_index)
+				.cursor_color(caret)
+				.highlight_color(theme.selection)
+				.color(text_color)
+				.highlights(selection.map(|h| vec![h]))
+				.map(lines.multiline.then_some(()), |el, ()| el.width(Size::percent(100.)))
+				.maybe(!lines.multiline, |el| el.max_lines(1));
+			let span = |range: Range<usize>| rope.slice(range).to_string();
+			match &preedit {
+				Some(p) => {
+					let (from, to) = (p.start.clamp(chars.start, chars.end), p.end.clamp(chars.start, chars.end));
+					paragraph
+						.span(span(chars.start..from))
+						.span(Span::new(span(from..to)).text_decoration(TextDecoration::Underline))
+						.span(span(to..chars.end))
+				}
+				None => paragraph.span(span(chars)),
+			}
+		});
+		let placeholder = self.placeholder.as_ref().filter(|_| editor.rope().len_chars() == 0).map(|text| {
+			rect()
+				.position(Position::new_absolute().left(pad_x).top(pad_y))
+				.interactive(Interactive::No)
+				.child(label().color(theme.text_disabled).max_lines(1).text(text.clone()))
+		});
+		let content = rect()
+			.on_sized(on_content_sized)
 			.maybe(enabled, |el| el.on_focus_press(on_focus_press))
-			.padding(FIELD_PADDING)
-			.cursor_index(cursor_index)
-			.cursor_color(caret)
-			.highlight_color(theme.selection)
-			.color(text_color)
-			.max_lines(1)
-			.highlights(selection.map(|h| vec![h]));
-		let paragraph = if editor.has_preedit() {
-			let (before, preedit, after) = editor.preedit_text_segments();
-			paragraph.span(before).span(Span::new(preedit).text_decoration(TextDecoration::Underline)).span(after)
-		} else {
-			paragraph.span(editor.rope().to_string())
-		};
+			.map(lines.multiline.then_some(()), |el, ()| el.width(Size::percent(100.)))
+			.min_width(Size::percent(100.))
+			.children(paragraphs)
+			.maybe_child(placeholder);
 
 		rect()
 			.a11y_id(id)
 			.a11y_enabled(enabled)
 			.a11y_focusable(enabled)
 			.a11y_alt(self.value.read().to_string())
-			.a11y_role(AccessibilityRole::TextInput)
+			.a11y_role(if lines.multiline {
+				AccessibilityRole::MultilineTextInput
+			} else {
+				AccessibilityRole::TextInput
+			})
 			.maybe(enabled, |el| {
 				el.on_key_up(on_key_up)
 					.on_key_down(on_key_down)
@@ -309,17 +452,102 @@ impl Component for TextField {
 			.on_pointer_leave(move |_| hovered.set_if_modified(false))
 			.cursor(if enabled { CursorIcon::Text } else { CursorIcon::NotAllowed })
 			.width(self.width.clone())
+			.height(self.height.clone())
 			.content(Content::Flex)
 			.direction(Direction::Horizontal)
 			.cross_align(Alignment::center())
 			.child(
 				ScrollView::new_controlled(scroll)
 					.width(Size::flex(1.))
-					.height(Size::Inner)
-					.direction(Direction::Horizontal)
-					.show_scrollbar(false)
+					.height(if lines.multiline && self.height != Size::Inner { Size::fill() } else { Size::Inner })
+					.direction(if lines.multiline { Direction::Vertical } else { Direction::Horizontal })
+					.show_scrollbar(lines.multiline)
 					.on_sized(move |e: Event<SizedEventData>| viewport.set_if_modified(e.area))
-					.child(paragraph),
+					.child(content),
 			)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use freya::prelude::*;
+	use freya_testing::prelude::*;
+
+	use super::TextField;
+
+	fn field(text: &'static str, height: Size) -> Element {
+		crate::theme::use_init_wave_theme(crate::theme::Theme::dark);
+		let mut value = use_state(|| text.to_string());
+		rect()
+			.child(
+				TextField::new(WritableSetter::new(value, move |t: String| value.set(t)))
+					.multiline(true)
+					.width(Size::px(200.))
+					.height(height),
+			)
+			.child(label().text(format!("value={:?}", value.read())))
+			.into()
+	}
+
+	fn app() -> Element {
+		field("ab\ncd", Size::Inner)
+	}
+
+	fn shown(test: &TestingRunner) -> String {
+		test.find(|_, e| Label::try_downcast(e).filter(|l| l.text.starts_with("value=")).map(|l| l.text.to_string()))
+			.unwrap_or_default()
+	}
+
+	fn lines(test: &TestingRunner) -> Vec<String> {
+		test.find_many(|_, e| Paragraph::try_downcast(e).map(|p| p.spans.iter().map(|s| s.text.as_ref()).collect()))
+	}
+
+	fn key(test: &mut TestingRunner, key: NamedKey, modifiers: Modifiers) {
+		test.send_event(PlatformEvent::Keyboard {
+			name: KeyboardEventName::KeyDown,
+			key: Key::Named(key),
+			code: Code::Unidentified,
+			modifiers,
+		});
+		test.sync_and_update();
+	}
+
+	#[test]
+	fn multi_line_shows_a_paragraph_per_line_and_enter_inserts_a_newline() {
+		let mut test = launch_test(app);
+		test.sync_and_update();
+		assert_eq!(lines(&test), ["ab", "cd"]);
+		let second = test.find_many(|n, e| Paragraph::try_downcast(e).map(|_| n.layout().area)).pop().unwrap();
+		test.click_cursor((190., second.center().y as f64));
+		key(&mut test, NamedKey::Enter, Modifiers::empty());
+		test.write_text("e");
+		test.sync_and_update();
+		assert_eq!(shown(&test), r#"value="ab\ncd\ne""#);
+		assert_eq!(lines(&test), ["ab", "cd", "e"]);
+	}
+
+	#[test]
+	fn a_selection_spans_lines() {
+		let mut test = launch_test(app);
+		test.sync_and_update();
+		let second = test.find_many(|n, e| Paragraph::try_downcast(e).map(|_| n.layout().area)).pop().unwrap();
+		test.click_cursor((190., second.center().y as f64));
+		key(&mut test, NamedKey::ArrowUp, Modifiers::SHIFT);
+		test.write_text("X");
+		test.sync_and_update();
+		assert_eq!(shown(&test), r#"value="abX""#);
+	}
+
+	#[test]
+	fn the_caret_scrolls_into_view_vertically() {
+		let mut test = launch_test(|| field("1\n2\n3\n4\n5\n6", Size::px(40.)));
+		test.sync_and_update();
+		let areas = |test: &TestingRunner| test.find_many(|n, e| Paragraph::try_downcast(e).map(|_| n.layout().area));
+		assert!(areas(&test).last().unwrap().min_y() > 40., "the last line starts out of view");
+		test.click_cursor((100., 8.));
+		key(&mut test, NamedKey::End, Modifiers::CONTROL);
+		test.sync_and_update();
+		let last = *areas(&test).last().unwrap();
+		assert!(last.max_y() <= 40.5 && last.min_y() >= 0., "the caret's line is in view: {last:?}");
 	}
 }

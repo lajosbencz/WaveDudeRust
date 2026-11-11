@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use crate::delay::use_delayed;
 use crate::theme::{Theme, UiFontExt, use_wave_theme};
 
 /// WPF's initial show delay (`ToolTipService.InitialShowDelay`, the system hover time).
@@ -63,28 +64,18 @@ impl Component for Tip {
 		let mut shown_at = use_state(|| None::<(f32, f32)>);
 		let mut pointer = use_state(|| (0f32, 0f32));
 		let mut size = use_state(|| None::<Size2D>);
-		let mut pending = use_state(|| None::<TaskHandle>);
+		let mut delayed = use_delayed();
 
 		let hide = move |_| {
-			if let Some(task) = pending.write().take() {
-				task.cancel();
-			}
+			delayed.cancel();
 			shown_at.set_if_modified(None);
 		};
 		let on_move = move |e: Event<PointerEventData>| {
 			let p = e.global_location();
 			pointer.set((p.x as f32, p.y as f32));
-			if shown_at.peek().is_some() {
-				return;
+			if shown_at.peek().is_none() {
+				delayed.restart(SHOW_DELAY, move || shown_at.set(Some(*pointer.peek())));
 			}
-			if let Some(task) = pending.write().take() {
-				task.cancel();
-			}
-			let task = spawn(async move {
-				timer(SHOW_DELAY).await;
-				shown_at.set(Some(*pointer.peek()));
-			});
-			pending.set(Some(task));
 		};
 
 		let tip = shown_at.read().filter(|_| !self.text.is_empty()).map(|(x, y)| {
@@ -138,12 +129,8 @@ impl Component for DelayedTip {
 	fn render(&self) -> impl IntoElement {
 		let theme = use_wave_theme();
 		let mut due = use_state(|| false);
-		use_hook(|| {
-			spawn(async move {
-				timer(SHOW_DELAY).await;
-				due.set(true);
-			})
-		});
+		let mut delayed = use_delayed();
+		use_hook(move || delayed.restart(SHOW_DELAY, move || due.set(true)));
 		rect().maybe_child(due().then(|| tip_box(&theme, self.text.clone())))
 	}
 }

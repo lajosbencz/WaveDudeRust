@@ -12,6 +12,6 @@ pub mod worker;
 pub use quality::{MachineFacts, PreviewDefaults, PreviewQuality, PreviewTier};
 pub use simulation::{EventSink, RunError, RunEvent, RunState, SimulationRun};
 pub use spec::{RunRequest, RunSpec, RunSpecError, SceneCache, Schedule};
-pub use store::{Budget, FrameStore, Release, StoreError, StoreLayout};
+pub use store::{Budget, FrameStore, Release, StoreError, StoreLayout, sweep_leftovers};
 pub use warning::{Levers, MemoryWarning};
 pub use worker::{CHECK_INTERVAL, EngineFactory, FitFrame, FitRequest, Goal, RunWorker, Status, Wanted, WorkState};

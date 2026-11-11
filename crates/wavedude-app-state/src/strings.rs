@@ -191,6 +191,20 @@ impl Strings {
 		substitute(self.get(key), args)
 	}
 
+	/// `n` with the language's thousands separator: WPF's `N0`.
+	pub fn grouped(&self, n: u64) -> String {
+		let digits = n.to_string();
+		let separator = self.get("ThousandsSeparator");
+		let mut out = String::with_capacity(digits.len() + digits.len() / 3 * separator.len());
+		for (i, c) in digits.chars().enumerate() {
+			if i > 0 && (digits.len() - i).is_multiple_of(3) {
+				out.push_str(separator);
+			}
+			out.push(c);
+		}
+		out
+	}
+
 	/// The text of the key made of `parts`, composed in a reused buffer, as [`Self::get`].
 	fn composed(&self, parts: &[&str]) -> &'static str {
 		thread_local!(static KEY: RefCell<String> = const { RefCell::new(String::new()) });
@@ -320,6 +334,14 @@ mod tests {
 	#[should_panic(expected = "lacks 'No.Such.Key'")]
 	fn a_key_missing_from_english_panics() {
 		Strings::new(Language::German).get("No.Such.Key");
+	}
+
+	#[test]
+	fn thousands_are_grouped_by_the_language() {
+		let en = Strings::new(Language::English);
+		assert_eq!((en.grouped(0), en.grouped(999), en.grouped(1000)), ("0".into(), "999".into(), "1,000".into()));
+		assert_eq!(en.grouped(1234567), "1,234,567");
+		assert_eq!(Strings::new(Language::German).grouped(1234567), "1.234.567");
 	}
 
 	#[test]

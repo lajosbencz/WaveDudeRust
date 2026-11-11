@@ -158,6 +158,11 @@ impl RunWorker {
 	/// A worker whose engines `factory` builds, with its spill files in `cache_dir` and its scenes from
 	/// `scene` (shared with whatever else composes the scene).
 	pub fn new(factory: EngineFactory, cache_dir: PathBuf, scene: Arc<Mutex<SceneCache>>) -> std::io::Result<Self> {
+		match super::store::sweep_leftovers(&cache_dir) {
+			Ok(0) => {}
+			Ok(bytes) => tracing::info!("removed {bytes} bytes of spill files left in {}", cache_dir.display()),
+			Err(e) => tracing::warn!("the spill folder {} could not be swept: {e}", cache_dir.display()),
+		}
 		let shared = Arc::new(Shared {
 			goal: Mutex::new((Goal::default(), 0)),
 			wake: Condvar::new(),

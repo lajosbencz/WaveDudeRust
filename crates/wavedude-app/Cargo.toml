@@ -24,6 +24,8 @@ cargo-packager-updater = "0.2"
 semver = "1"
 freya = { version = "0.5", features = ["engine", "markdown"] }
 freya-winit = "0.5"
+futures-channel = "0.3"
+futures-util = { version = "0.3", default-features = false }
 wavedude-widgets = { path = "../wavedude-widgets" }
 wavedude-export = { path = "../wavedude-export" }
 wavedude-app-state = { path = "../wavedude-app-state" }

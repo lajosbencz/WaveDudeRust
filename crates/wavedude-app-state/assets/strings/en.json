@@ -46,6 +46,7 @@
 	"DockMoveBottom": "Move to _Bottom",
 	"DockCloseMenu": "_Close",
 	"WavelengthNominal": "(nominal)",
+	"ThousandsSeparator": ",",
 	"ImageUnreadable": "(unreadable)",
 	"MenuViewTheme": "_Theme",
 	"MenuViewUiZoom": "UI _zoom",

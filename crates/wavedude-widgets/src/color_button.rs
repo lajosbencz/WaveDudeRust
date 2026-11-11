@@ -6,6 +6,7 @@ use freya::prelude::*;
 
 use crate::number_box::{NumberBox, NumberSpec};
 use crate::paint::{fill, linear_shader, stroke};
+use crate::text_box::TextBox;
 use crate::theme::{UiFontExt, use_wave_theme};
 use crate::tooltip::Tip;
 use crate::util::{TestIdExt, focus_border, shift};
@@ -158,12 +159,6 @@ impl Component for ColorPicker {
 			hsv.set(next);
 		}
 		let current = *hsv.read();
-		let mut hex = use_state(|| rgb.to_hex());
-		let mut hex_shown = use_state(|| rgb);
-		if *hex_shown.peek() != rgb {
-			hex_shown.set(rgb);
-			hex.set(rgb.to_hex());
-		}
 		let plane_id = use_a11y();
 		let strip_id = use_a11y();
 		let plane_focus = use_focus(plane_id);
@@ -351,12 +346,15 @@ impl Component for ColorPicker {
 					.child(channel("R", |c| c.r, |c, v| Rgb { r: v, ..c }))
 					.child(channel("G", |c| c.g, |c, v| Rgb { g: v, ..c }))
 					.child(channel("B", |c| c.b, |c, v| Rgb { b: v, ..c }))
-					.child(Input::new(hex).compact().width(Size::px(84.)).on_submit(move |text: String| {
-						match Rgb::from_hex(&text) {
-							Some(c) => hex_value.set_if_modified(c),
-							None => hex.set(hex_value.peek().to_hex()),
-						}
-					})),
+					.child(
+						TextBox::new(rgb.to_hex(), move |text: String| {
+							if let Some(c) = Rgb::from_hex(&text) {
+								hex_value.set_if_modified(c);
+							}
+						})
+						.select_all_on_focus(true)
+						.width(Size::px(84.)),
+					),
 			)
 	}
 }

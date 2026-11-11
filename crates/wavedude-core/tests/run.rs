@@ -121,7 +121,7 @@ fn empty_store_layout() {
 	assert_eq!(st.frame_bytes(), 2 * 64 * 48 * 2);
 	assert_eq!(layout.file_bytes(10), 64 + 10 * 2 * 64 * 48 * 2, "SizeOf");
 	assert!(matches!(st.copy_layer(0, Layer::Field), Err(StoreError::NotStored { frame: 0, count: 0 })));
-	assert!(st.spill_path().is_none());
+	assert!(st.spill_bytes().is_none());
 }
 
 #[test]
@@ -168,15 +168,26 @@ fn copy_layer_is_the_half_of_every_cell() {
 }
 
 #[test]
+fn a_worker_sweeps_the_spill_files_a_dead_process_left() {
+	let dir = tempfile::tempdir().unwrap();
+	std::fs::write(dir.path().join("frames-abc.wdfs"), [0u8; 64]).unwrap();
+	std::fs::write(dir.path().join("keep.txt"), b"x").unwrap();
+	assert_eq!(wavedude_core::run::sweep_leftovers(dir.path()).unwrap(), 64);
+	assert!(dir.path().join("keep.txt").exists() && !dir.path().join("frames-abc.wdfs").exists());
+	assert_eq!(wavedude_core::run::sweep_leftovers(&dir.path().join("missing")).unwrap(), 0);
+	std::fs::write(dir.path().join("frames-def.wdfs"), [0u8; 64]).unwrap();
+	let _w = worker(dir.path());
+	assert!(!dir.path().join("frames-def.wdfs").exists(), "the worker sweeps at its start");
+}
+
+#[test]
 fn tiered_store() {
 	let dir = tempfile::tempdir().unwrap();
 	let s = spec(&project(40, 30, 20), PreviewQuality::FULL);
 	let frame = s.frame_bytes();
 	let st = FrameStore::in_dir(s.store_layout(), 4 * frame + frame / 2, None, dir.path()).unwrap();
 	assert_eq!((st.capacity(), st.ram_frames(), st.first_spilled()), (10, 4, 4));
-	let path = st.spill_path().unwrap().to_path_buf();
-	assert!(path.exists());
-	assert_eq!(std::fs::metadata(&path).unwrap().len(), s.store_layout().file_bytes(6));
+	assert_eq!(st.spill_bytes(), Some(s.store_layout().file_bytes(6)));
 	let written: Vec<Snapshot> = (0..10).map(|k| snapshot_of(&s, k as f32)).collect();
 	for w in &written {
 		st.write(w.clone()).unwrap();
@@ -188,13 +199,13 @@ fn tiered_store() {
 		assert_eq!(st.with_layer(k, Layer::Field, |b| b[7]).unwrap(), w.field[7]);
 	}
 	drop(st);
-	assert!(!path.exists(), "the file goes with the store");
+	assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0, "the file goes with the store");
 
 	let st = FrameStore::in_dir(s.store_layout(), 10 * frame, None, dir.path()).unwrap();
 	for w in &written {
 		st.write(w.clone()).unwrap();
 	}
-	assert!(st.spill_path().is_none());
+	assert!(st.spill_bytes().is_none());
 	assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0, "a run within the budget creates no file");
 
 	let st = FrameStore::in_dir(s.store_layout(), 0, None, dir.path()).unwrap();
@@ -496,6 +507,27 @@ fn the_engine_is_kept_across_edits_of_the_same_grid() {
 }
 
 #[test]
+fn scrubbing_a_finished_run_computes_nothing() {
+	let dir = tempfile::tempdir().unwrap();
+	let p = project(64, 48, 100);
+	let w = worker(dir.path());
+	let r = request(&p, PreviewQuality::FULL);
+	w.set_goal(Goal { revision: 1, ..goal(&r, 0, Wanted::All) });
+	wait_until(|| w.status().adopted == 1 && w.store().is_some_and(|s| s.is_complete()));
+	wait_until(|| w.status().state == WorkState::Idle);
+	let done = w.status().steps_done;
+	for k in 0..300u32 {
+		let wanted = if k % 2 == 0 { Wanted::Position } else { Wanted::All };
+		w.set_goal(Goal { revision: 1, ..goal(&r, (k * 37) % 100, wanted) });
+	}
+	std::thread::sleep(Duration::from_millis(200));
+	wait_until(|| w.status().state == WorkState::Idle);
+	let st = w.status();
+	assert_eq!((st.steps_done, st.adopted), (done, 1), "a stored frame is not computed again");
+	assert!(w.store().unwrap().is_complete());
+}
+
+#[test]
 fn a_store_that_fits_in_memory_never_spills_across_edits() {
 	let dir = tempfile::tempdir().unwrap();
 	let mut p = project(64, 48, 100);
@@ -505,7 +537,7 @@ fn a_store_that_fits_in_memory_never_spills_across_edits() {
 		w.set_goal(Goal { revision, ..goal(&request(&p, PreviewQuality::FULL), 0, Wanted::All) });
 		wait_until(|| w.status().adopted == revision && w.store().is_some_and(|s| s.is_complete()));
 		let st = w.store().unwrap();
-		assert!(st.spill_path().is_none() && st.frames_on_disk() == 0, "generation {revision} spilled");
+		assert!(st.spill_bytes().is_none() && st.frames_on_disk() == 0, "generation {revision} spilled");
 	}
 }
 

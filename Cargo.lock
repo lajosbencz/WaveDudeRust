@@ -5870,6 +5870,8 @@ dependencies = [
  "freya",
  "freya-testing",
  "freya-winit",
+ "futures-channel",
+ "futures-util",
  "image",
  "mundy",
  "rfd",

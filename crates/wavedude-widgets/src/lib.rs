@@ -5,6 +5,7 @@
 
 pub mod button;
 pub mod color_button;
+pub mod delay;
 pub mod dock;
 pub mod gradient_editor;
 pub mod graph_box;

@@ -410,7 +410,6 @@ async fn tick_loop(cx: Cx, mut theme: State<Theme>) {
 				*rev.write() += 1;
 			}
 		}
-		export_dialog::poll(&cx);
 		downloads::poll(&cx);
 		sync_platform(&cx, &mut applied, &mut theme);
 		messages::poll_log(&cx, &mut applied.log_seq);

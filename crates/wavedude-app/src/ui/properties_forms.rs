@@ -371,9 +371,10 @@ fn scene(f: &Form, r: &Readouts) -> Vec<Element> {
 		let shown =
 			if !path.is_empty() && !r.image_found { format!("{path} {}", s.get("SceneImageNotFound")) } else { path };
 		canvas.push(readout(s.label("Scene", "ImagePath"), shown, "SceneImagePath"));
-		let size = r
-			.image_size
-			.map_or_else(|| s.get("ImageUnreadable").to_owned(), |(w, h, kb)| format!("{w} x {h}, {kb} KB"));
+		let size = r.image_size.map_or_else(
+			|| s.get("ImageUnreadable").to_owned(),
+			|(w, h, kb)| format!("{w} x {h}, {} KB", s.grouped(kb as u64)),
+		);
 		canvas.push(readout(s.get("LabelEmbeddedImage"), size, "SceneEmbeddedImage").hint(s.get("TipEmbeddedImage")));
 	}
 	let (smin, smax) = bounds("Scene.Width");

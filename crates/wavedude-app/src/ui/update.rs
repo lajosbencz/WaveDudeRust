@@ -7,13 +7,13 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::mpsc::{self, Receiver, TryRecvError};
 
 use cargo_packager_updater::{Config, Update, check_update};
 use freya::prelude::*;
+use futures_channel::oneshot;
 use wavedude_app_state::{Event as AppEvent, Guarded};
 
-use super::app::{Cx, TICK};
+use super::app::Cx;
 use super::dialogs::Modal;
 use super::downloads;
 
@@ -62,7 +62,7 @@ pub fn check(cx: &Cx, quiet: bool) {
 	if !AVAILABLE {
 		return;
 	}
-	let (tx, rx) = mpsc::channel();
+	let (tx, rx) = oneshot::channel();
 	let spawned = std::thread::Builder::new().name("update-check".into()).spawn(move || {
 		let result = config().and_then(|c| check_update(current(), c).map_err(|e| e.to_string()));
 		let _ = tx.send(result);
@@ -73,7 +73,7 @@ pub fn check(cx: &Cx, quiet: bool) {
 	}
 	let cx = cx.clone();
 	spawn_in_window(async move {
-		let Some(result) = receive(rx).await else { return };
+		let Ok(result) = rx.await else { return };
 		let s = cx.strings();
 		match result {
 			Ok(Some(update)) => {
@@ -143,7 +143,7 @@ fn install(cx: &Cx, update: &Update) {
 	let update = update.clone();
 	let version = update.version.clone();
 	let download = downloads::start(cx, cx.strings().format("StatusDownloadingUpdateFormat", &[&version]));
-	let (tx, rx) = mpsc::channel();
+	let (tx, rx) = oneshot::channel();
 	let spawned = std::thread::Builder::new().name("update-download".into()).spawn(move || {
 		let bytes = update.download_extended(|bytes, total| download.chunk(bytes, total), || {});
 		let _ = tx.send(bytes.map(|b| (update, b)).map_err(|e| e.to_string()));
@@ -156,7 +156,7 @@ fn install(cx: &Cx, update: &Update) {
 	let cx = cx.clone();
 	// Not `spawn`: that task would end with the confirm dialog, which closes before the download does.
 	spawn_in_window(async move {
-		let Some(result) = receive(rx).await else { return };
+		let Ok(result) = rx.await else { return };
 		let s = cx.strings();
 		match result {
 			Ok((update, bytes)) => {
@@ -172,15 +172,4 @@ fn install(cx: &Cx, update: &Update) {
 			}
 		}
 	});
-}
-
-/// The worker's one message, polled every tick; `None` when the worker ended without one.
-async fn receive<T>(rx: Receiver<T>) -> Option<T> {
-	loop {
-		match rx.try_recv() {
-			Ok(v) => return Some(v),
-			Err(TryRecvError::Empty) => timer(TICK).await,
-			Err(TryRecvError::Disconnected) => return None,
-		}
-	}
 }
