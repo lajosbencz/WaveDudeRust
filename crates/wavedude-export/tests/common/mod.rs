@@ -57,7 +57,7 @@ pub(crate) fn wave_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
 	let display = DisplayLayer::field_default();
 	let scheme =
 		wavedude_core::io::schemes::find(wavedude_core::io::schemes::built_in(), &display.color_scheme).unwrap();
-	let table = HalfTable::cached(scheme, display.black_level, display.brightness, SampleKind::Field);
+	let table = HalfTable::cached(scheme, display.black_level, display.brightness as f32, SampleKind::Field);
 	let sources = [(0.3, 0.4), (0.7, 0.6)];
 	let plane: Vec<half::f16> = (0..h)
 		.flat_map(|y| (0..w).map(move |x| (x as f32, y as f32)))

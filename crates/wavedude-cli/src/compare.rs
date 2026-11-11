@@ -1,8 +1,10 @@
 //! Physical comparison against the C# `WaveDudeNext`: reads the dump of `tools/compare-csharp`, runs the same
 //! project through the CPU engine on the same step schedule and writes `report.md` with the scene, field and
-//! probe statistics and side-by-side pictures. The solvers differ by design (docs/spec/05-deviations.md), so
-//! the figures are correlations and ratios, not bit equality.
+//! probe statistics and side-by-side pictures; with a `--render` dump also the rendered frames and the probe
+//! graphs. The solvers differ by design (docs/spec/05-deviations.md), so the figures are correlations and ratios, not
+//! bit equality.
 
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::fs::{self, File};
@@ -11,11 +13,18 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail, ensure};
 use clap::Args as ClapArgs;
 use wavedude_core::engine::ProbeReadings;
-use wavedude_core::engine::probes::probe_cells;
+use wavedude_core::engine::probes::{ProbeCollector, ProbeTrace};
+use wavedude_core::engine::types::SampleKind;
+use wavedude_core::f16;
 use wavedude_core::io::nine_point_speed;
-use wavedude_core::model::{Project, Stencil};
+use wavedude_core::io::schemes::SchemeStore;
+use wavedude_core::io::wdproj::BRIGHTNESS_GAIN;
+use wavedude_core::model::normalize::box_in_canvas;
+use wavedude_core::model::{DisplayLayer, Probe, Project, Stencil};
+use wavedude_core::render::{HalfTable, fit_brightness, render_half};
 use wavedude_core::run::{PreviewQuality, RunSpec};
 use wavedude_core::scene::pixels::ScenePixels;
+use wavedude_export::graph::{self, GraphData, TextMetrics};
 
 use crate::png_out::{write_grey, write_rgba};
 use crate::project::{load, scene_pixels};
@@ -25,7 +34,7 @@ use crate::run::EngineArgs;
 pub(crate) struct Args {
 	/// Project file, the one the C# dump was made from.
 	project: PathBuf,
-	/// Directory written by tools/compare-csharp (run with --probe-steps).
+	/// Directory written by tools/compare-csharp (run with --probe-steps, and --render for the rendered frames).
 	csharp: PathBuf,
 	/// Directory for report.md and its pictures (created if missing).
 	#[arg(long)]
@@ -52,6 +61,8 @@ const FRONT_THRESHOLD: f32 = 0.01;
 /// 4 x 0.066) / 2), the constant its Mur condition uses.
 /// Pixels left out next to the source and the front when measuring a wavelength.
 const WAVELENGTH_MARGIN: usize = 10;
+/// Font size of the probe graph layouts, the C# dump's `ProbeGraphStyle.Estimate` (0.6 em a character, 1.3 em a line).
+const GRAPH_TEXT_SIZE: f32 = 11.0;
 /// Sources whose wave fronts are tabulated.
 const MAX_FRONTS: usize = 4;
 /// Distance in pixels from an index edge within which a scene difference counts as an edge difference.
@@ -73,6 +84,28 @@ struct CSharp {
 	dumps: Vec<Dump>,
 	probe_names: Vec<String>,
 	probes: Series,
+	render: Option<CsRender>,
+}
+
+/// What the C# dump's `--render` adds: Next's pictures of the planes, the brightness it would fit and its probe graphs.
+struct CsRender {
+	/// Per dump, the RGBA pictures of the field and the intensity.
+	pictures: Vec<(Vec<u8>, Vec<u8>)>,
+	/// Per dump, the fitted brightness of the field and the intensity.
+	fits: Vec<(Option<f64>, Option<f64>)>,
+	/// Per active probe, as the run ended.
+	graphs: Vec<CsGraph>,
+}
+
+/// One line of the C# dump's graph.txt with the probe's series and profile.
+struct CsGraph {
+	series: Vec<f32>,
+	profile: Vec<f32>,
+	profile_length: f64,
+	steps_sampled: u64,
+	y: (f64, f64),
+	y_ticks: String,
+	x_ticks: String,
 }
 
 /// One Rust run of the project.
@@ -84,6 +117,8 @@ struct RustRun {
 	dumps: Vec<Dump>,
 	/// Per probe, value after step i + 1.
 	probes: Vec<Vec<f64>>,
+	/// Per active probe, what its graph shows after the last step.
+	traces: Vec<ProbeTrace>,
 }
 
 fn read_f32(path: &Path, n: usize) -> Result<Vec<f32>> {
@@ -144,7 +179,48 @@ fn read_csharp(dir: &Path, steps: u32, every: u32) -> Result<CSharp> {
 		Ok(csv) => parse_probes(&csv)?,
 		Err(_) => (Vec::new(), Vec::new()),
 	};
-	Ok(CSharp { facts, width, height, scene_rgba, dumps, probe_names, probes })
+	let render = dir.join("fit.txt").exists().then(|| read_render(dir, &dumps, (width, height))).transpose()?;
+	Ok(CSharp { facts, width, height, scene_rgba, dumps, probe_names, probes, render })
+}
+
+fn read_render(dir: &Path, dumps: &[Dump], (width, height): (usize, usize)) -> Result<CsRender> {
+	let picture = |name: String| {
+		let (w, h, rgba) = read_png_rgba(&dir.join(&name))?;
+		ensure!((w, h) == (width, height), "{name} is {w}x{h}, expected {width}x{height}");
+		Ok(rgba)
+	};
+	let pictures = dumps
+		.iter()
+		.map(|d| Ok((picture(format!("field_{}.png", d.step))?, picture(format!("intensity_{}.png", d.step))?)))
+		.collect::<Result<Vec<_>>>()?;
+	let fit = |cell: &str| (cell != "-").then(|| cell.parse::<f64>()).transpose();
+	let fits = fs::read_to_string(dir.join("fit.txt"))?
+		.lines()
+		.map(|line| {
+			let cells: Vec<&str> = line.split(' ').collect();
+			ensure!(cells.len() == 3, "fit.txt: expected `step field intensity`, got `{line}`");
+			Ok((fit(cells[1])?, fit(cells[2])?))
+		})
+		.collect::<Result<Vec<_>>>()?;
+	ensure!(fits.len() == dumps.len(), "fit.txt has {} lines for {} dumps", fits.len(), dumps.len());
+	let graphs = fs::read_to_string(dir.join("graph.txt"))?
+		.lines()
+		.map(|line| {
+			let c: Vec<&str> = line.split('\t').collect();
+			ensure!(c.len() == 9, "graph.txt: expected 9 columns, got `{line}`");
+			let k: usize = c[0].parse()?;
+			Ok(CsGraph {
+				series: read_f32(&dir.join(format!("series_{k}.f32")), c[1].parse()?)?,
+				profile: read_f32(&dir.join(format!("profile_{k}.f32")), c[2].parse()?)?,
+				profile_length: c[3].parse()?,
+				steps_sampled: c[4].parse()?,
+				y: (c[5].parse()?, c[6].parse()?),
+				y_ticks: c[7].to_owned(),
+				x_ticks: c[8].to_owned(),
+			})
+		})
+		.collect::<Result<Vec<_>>>()?;
+	Ok(CsRender { pictures, fits, graphs })
 }
 
 /// Per probe, (step, value) pairs.
@@ -174,17 +250,18 @@ fn run_rust(
 ) -> Result<RustRun> {
 	let spec = RunSpec::create(project, Some(pixels), PreviewQuality::FULL, true)?;
 	let mut engine = engine.build(&spec);
-	let cells: Vec<_> = spec.probes.iter().map(|p| probe_cells(p, &spec.scene)).collect();
+	let mut collector = ProbeCollector::new(&spec.probes, &spec.scene, spec.seed);
 	engine.set_emitters(&spec.emitters);
-	engine.set_probes(&cells);
+	engine.set_probes(collector.cells());
 	engine.reset();
 	let mut readings = ProbeReadings::default();
-	let mut probes = vec![Vec::with_capacity(steps as usize); cells.len()];
+	let mut probes = vec![Vec::with_capacity(steps as usize); spec.probes.len()];
 	let mut dumps = Vec::new();
 	for step in 1..=steps {
 		engine.advance_one_step()?;
-		if !cells.is_empty() {
+		if !spec.probes.is_empty() {
 			engine.sample_probes(&mut readings)?;
+			collector.record_step(&readings, step as u64);
 			for (series, values) in probes.iter_mut().zip(readings.iter()) {
 				series.push(values.iter().map(|&v| v as f64).sum::<f64>() / values.len() as f64);
 			}
@@ -196,7 +273,10 @@ fn run_rust(
 		}
 	}
 	eprintln!();
-	Ok(RustRun { label: label.to_owned(), tag, sub_steps: engine.sub_steps(), dumps, probes })
+	if !spec.probes.is_empty() {
+		collector.record_frame(&readings, steps as u64);
+	}
+	Ok(RustRun { label: label.to_owned(), tag, sub_steps: engine.sub_steps(), dumps, probes, traces: collector.traces })
 }
 
 /// Pearson correlation of `a` and `b`; 0 when either is constant.
@@ -320,24 +400,32 @@ fn shrink(grey: &[u8], width: usize, height: usize, max_side: usize) -> (usize, 
 	(w, h, out)
 }
 
+/// `panels` of `w` x `h` pixels of `px` bytes, `cols` to a row and 4 pixels apart, on white.
+fn tile(panels: &[&[u8]], (w, h): (usize, usize), px: usize, cols: usize) -> (usize, usize, Vec<u8>) {
+	let gap = 4;
+	let rows = panels.len().div_ceil(cols);
+	let (pw, ph) = (cols * w + (cols - 1) * gap, rows * h + (rows - 1) * gap);
+	let mut picture = vec![255u8; pw * ph * px];
+	for (k, panel) in panels.iter().enumerate() {
+		let (ox, oy) = ((k % cols) * (w + gap), (k / cols) * (h + gap));
+		for y in 0..h {
+			let at = ((oy + y) * pw + ox) * px;
+			picture[at..at + w * px].copy_from_slice(&panel[y * w * px..(y + 1) * w * px]);
+		}
+	}
+	(pw, ph, picture)
+}
+
 /// C# | Rust | Rust / `gain` - C# (side by side, or stacked for a canvas wider than 1.5 times its height), shrunk and
 /// quantised to [`GREY_LEVELS`] levels so a noisy field stays a small file.
 fn side_by_side(path: &Path, w: usize, h: usize, csharp: &[f32], rust: &[f32], gain: f64) -> Result<()> {
 	let scale = brightness_scale(csharp);
 	let diff: Vec<f32> = csharp.iter().zip(rust).map(|(a, b)| (*b as f64 / gain) as f32 - a).collect();
-	let panels = [csharp, rust, &diff[..]];
+	let panels: Vec<Vec<u8>> =
+		[csharp, rust, &diff[..]].iter().map(|p| p.iter().map(|&v| grey(v, scale)).collect()).collect();
 	let stacked = w * 2 > h * 3;
-	let gap = 4;
-	let (pw, ph) = if stacked { (w, 3 * h + 2 * gap) } else { (3 * w + 2 * gap, h) };
-	let mut picture = vec![255u8; pw * ph];
-	for (k, panel) in panels.iter().enumerate() {
-		let (ox, oy) = if stacked { (0, k * (h + gap)) } else { (k * (w + gap), 0) };
-		for y in 0..h {
-			for x in 0..w {
-				picture[(oy + y) * pw + ox + x] = grey(panel[y * w + x], scale);
-			}
-		}
-	}
+	let panels: Vec<&[u8]> = panels.iter().map(Vec::as_slice).collect();
+	let (pw, ph, picture) = tile(&panels, (w, h), 1, if stacked { 1 } else { 3 });
 	let (sw, sh, mut small) = shrink(&picture, pw, ph, PICTURE_SIDE);
 	let step = 256 / GREY_LEVELS;
 	small.iter_mut().for_each(|g| *g = (*g as usize / step * step + step / 2).min(255) as u8);
@@ -513,9 +601,18 @@ fn field_section(
 	Ok(())
 }
 
-fn probe_section(report: &mut String, cs: &CSharp, runs: &[RustRun], steps: u32) -> Result<()> {
+/// A probe's agreement over the second half of the run: Pearson and amplitude ratio (None for a silent C# series).
+struct ProbeRow {
+	name: String,
+	pearson: f64,
+	ratio: Option<f64>,
+}
+
+/// The probe table of every Rust run; returns the rows of the first.
+fn probe_section(report: &mut String, cs: &CSharp, runs: &[RustRun], steps: u32) -> Result<Vec<ProbeRow>> {
+	let mut rows = Vec::new();
 	if cs.probe_names.is_empty() {
-		return Ok(());
+		return Ok(rows);
 	}
 	let from = (steps as f64 * TRANSIENT) as u32;
 	writeln!(report, "## Probes\n")?;
@@ -529,18 +626,362 @@ fn probe_section(report: &mut String, cs: &CSharp, runs: &[RustRun], steps: u32)
 	writeln!(report, "|---|---|---|---|---|---|")?;
 	for (p, name) in cs.probe_names.iter().enumerate() {
 		let cs_series: Vec<(u32, f64)> = cs.probes[p].iter().copied().filter(|&(s, _)| s > from).collect();
-		for run in runs {
+		for (i, run) in runs.iter().enumerate() {
 			let rust: Vec<f64> = cs_series.iter().map(|&(s, _)| run.probes[p][s as usize - 1]).collect();
 			let csv: Vec<f64> = cs_series.iter().map(|&(_, v)| v).collect();
 			let r = pearson(csv.iter().copied(), rust.iter().copied());
 			let q = |a: &[f64]| (a.iter().map(|v| v * v).sum::<f64>() / a.len().max(1) as f64).sqrt();
 			let (qc, qr) = (q(&csv), q(&rust));
-			let ratio = if qc > 0.0 { format!("{:.3}", qr / qc) } else { "-".into() };
-			writeln!(report, "| {name} | {} | {r:.3} | {ratio} | {qc:.3e} | {qr:.3e} |", run.label)?;
+			let ratio = (qc > 0.0).then(|| qr / qc);
+			writeln!(report, "| {name} | {} | {r:.3} | {} | {qc:.3e} | {qr:.3e} |", run.label, show(ratio))?;
+			if i == 0 {
+				rows.push(ProbeRow { name: name.clone(), pearson: r, ratio });
+			}
 		}
 	}
 	writeln!(report)?;
+	Ok(rows)
+}
+
+/// The text metrics of the C# dump's graph layouts.
+struct Estimate;
+
+impl TextMetrics for Estimate {
+	fn line_height(&self) -> f32 {
+		GRAPH_TEXT_SIZE * 1.3
+	}
+
+	fn width(&self, text: &str) -> f32 {
+		text.chars().count() as f32 * GRAPH_TEXT_SIZE * 0.6
+	}
+}
+
+/// A probe graph's y range and tick lists in the notation of the C# dump's graph.txt (`label@position`).
+struct GraphView {
+	y: (f64, f64),
+	y_ticks: String,
+	x_ticks: String,
+}
+
+fn graph_view(probe: &Probe, data: &GraphData<'_>, steps: u32, (w, h): (u32, u32)) -> GraphView {
+	let b = box_in_canvas(probe, w, h);
+	let layout = graph::layout(probe, data, steps as u64, b.width as f32, b.height as f32, &Estimate);
+	let ticks =
+		|t: &[graph::Tick]| t.iter().map(|t| format!("{}@{:.2}", t.label, t.position)).collect::<Vec<_>>().join(" ");
+	// a line probe's range is that of what the layout draws: nothing before its start step
+	let started = probe.start_after == 0 || data.steps_sampled >= probe.start_after as u64;
+	let shown = if probe.shows_profile() && !started { GraphData::default() } else { *data };
+	let (_, _, y_min, y_max) = graph::ranges(probe, &shown, steps as u64);
+	GraphView { y: (y_min, y_max), y_ticks: ticks(&layout.y_ticks), x_ticks: ticks(&layout.x_ticks) }
+}
+
+/// Mean Rec. 709 luma of RGBA pixels, 0 to 1.
+fn mean_luma(rgba: &[u8]) -> f64 {
+	let sum: f64 = rgba
+		.as_chunks::<4>()
+		.0
+		.iter()
+		.map(|p| 0.2126 * p[0] as f64 + 0.7152 * p[1] as f64 + 0.0722 * p[2] as f64)
+		.sum();
+	sum / (255.0 * (rgba.len() / 4) as f64)
+}
+
+/// Mean absolute difference of the colour channels of two RGBA pictures, in levels.
+fn mean_channel_diff(a: &[u8], b: &[u8]) -> f64 {
+	let sum: u64 = a
+		.as_chunks::<4>()
+		.0
+		.iter()
+		.zip(b.as_chunks::<4>().0)
+		.flat_map(|(p, q)| (0..3).map(move |c| p[c].abs_diff(q[c]) as u64))
+		.sum();
+	sum as f64 / (3 * (a.len() / 4)) as f64
+}
+
+/// A plane as a frame stores it for `kind`: the field itself, the intensity as its square root, as halves.
+fn halves(plane: &[f32], kind: SampleKind) -> Vec<f16> {
+	let root = kind == SampleKind::IntensityRoot;
+	plane.iter().map(|&v| f16::from_f32(if root { v.sqrt() } else { v })).collect()
+}
+
+/// Where a rendered picture differs from Next's: pixels, largest channel difference, and per differing sample value
+/// (half bits) its pixel count, Next's colour and ours.
+#[derive(Default)]
+struct Parity {
+	pixels: usize,
+	max: u8,
+	samples: BTreeMap<u16, (usize, [u8; 4], [u8; 4])>,
+}
+
+/// The `samples` of a plane through `table` against Next's `picture` of it.
+fn parity(samples: &[f16], table: &HalfTable, picture: &[u8]) -> Parity {
+	let ours = render_half(samples, table);
+	let mut p = Parity::default();
+	for ((h, a), b) in samples.iter().zip(picture.as_chunks::<4>().0).zip(ours.as_chunks::<4>().0) {
+		let max = (0..4).map(|c| a[c].abs_diff(b[c])).max().unwrap_or(0);
+		if max > 0 {
+			p.pixels += 1;
+			p.max = p.max.max(max);
+			let e = p.samples.entry(h.to_bits()).or_insert((0, [a[0], a[1], a[2], a[3]], [b[0], b[1], b[2], b[3]]));
+			e.0 += 1;
+		}
+	}
+	p
+}
+
+/// The colours of `layer`: its scheme through its black level at `brightness`.
+fn layer_table(project: &Project, layer: &DisplayLayer, brightness: f64, kind: SampleKind) -> HalfTable {
+	let scheme = SchemeStore::default().resolve(&project.color_schemes, &layer.color_scheme);
+	HalfTable::new(&scheme, layer.black_level, brightness as f32, kind)
+}
+
+/// C# field | Rust field over C# intensity | Rust intensity, shrunk like the grey pictures.
+fn render_picture(path: &Path, (w, h): (usize, usize), panels: [&[u8]; 4]) -> Result<()> {
+	let (pw, ph, picture) = tile(&panels, (w, h), 4, 2);
+	let channels: Vec<_> = (0..3)
+		.map(|c| shrink(&picture.as_chunks::<4>().0.iter().map(|p| p[c]).collect::<Vec<u8>>(), pw, ph, PICTURE_SIDE))
+		.collect();
+	let (sw, sh) = (channels[0].0, channels[0].1);
+	let small: Vec<u8> =
+		(0..sw * sh).flat_map(|i| [channels[0].2[i], channels[1].2[i], channels[2].2[i], 255]).collect();
+	write_rgba(path, sw as u32, sh as u32, &small)
+}
+
+/// One dump step of the summary, per layer (field, intensity): fit ratio C# / Rust and luma ratio Rust / C#.
+struct StepRow {
+	step: u32,
+	/// Pixels differing in both layers' render parity.
+	parity_pixels: usize,
+	fit_ratio: [Option<f64>; 2],
+	luma_ratio: [Option<f64>; 2],
+}
+
+fn ratio(num: Option<f64>, den: Option<f64>) -> Option<f64> {
+	Some(num? / den?).filter(|r| r.is_finite())
+}
+
+fn show(v: Option<f64>) -> String {
+	v.map_or_else(|| "-".to_owned(), |v| format!("{v:.4}"))
+}
+
+/// Next's own rendering against ours: the render pipeline on Next's planes, our planes as the app shows them, and the
+/// brightness fit.
+fn render_section(
+	report: &mut String,
+	out: &Path,
+	cs: &CSharp,
+	csr: &CsRender,
+	run: &RustRun,
+	project: &Project,
+) -> Result<Vec<StepRow>> {
+	let display = &project.display;
+	let size = (cs.width, cs.height);
+	let file = |b: f64| b * BRIGHTNESS_GAIN;
+	let (field, intensity) = (SampleKind::Field, SampleKind::IntensityRoot);
+	writeln!(report, "## Rendered frames\n")?;
+	writeln!(
+		report,
+		"Next's pictures are its viewport's rendering of its own planes (no edge glow, no markers): the field as halves \
+		 and the intensity as halves of its square root, through the palette and black level of the Display layers at \
+		 the file's brightness. Brightness in the project model is the file's divided by {BRIGHTNESS_GAIN}.\n"
+	)?;
+	writeln!(report, "### Render parity\n")?;
+	writeln!(
+		report,
+		"C#'s own planes rendered by our renderer at the file brightness (field {}, intensity {}) against C#'s pictures: \
+		 byte identity expected. Fit: `fit_brightness` on C#'s Half planes against Next's `BrightnessFit`.\n",
+		file(display.field.brightness),
+		file(display.intensity.brightness)
+	)?;
+	writeln!(
+		report,
+		"| step | field pixels differing | field max diff | intensity pixels differing | intensity max diff | field fit C# / ours | \
+		 intensity fit C# / ours |"
+	)?;
+	writeln!(report, "|---|---|---|---|---|---|---|")?;
+	let tables = [
+		layer_table(project, &display.field, file(display.field.brightness), field),
+		layer_table(project, &display.intensity, file(display.intensity.brightness), intensity),
+	];
+	let mut parity_pixels = Vec::new();
+	let mut details = String::new();
+	for (i, c) in cs.dumps.iter().enumerate() {
+		let samples = [halves(&c.field, field), halves(&c.intensity, intensity)];
+		let pictures = [&csr.pictures[i].0, &csr.pictures[i].1];
+		let p: Vec<Parity> = (0..2).map(|k| parity(&samples[k], &tables[k], pictures[k])).collect();
+		let fits = [fit_brightness(&samples[0], field), fit_brightness(&samples[1], intensity)];
+		let (cf, ci) = csr.fits[i];
+		writeln!(
+			report,
+			"| {} | {} | {} | {} | {} | {} / {} | {} / {} |",
+			c.step,
+			p[0].pixels,
+			p[0].max,
+			p[1].pixels,
+			p[1].max,
+			show(cf),
+			show(fits[0]),
+			show(ci),
+			show(fits[1])
+		)?;
+		for (name, p) in ["field", "intensity"].iter().zip(&p) {
+			for (bits, (n, theirs, ours)) in p.samples.iter().take(5) {
+				writeln!(
+					details,
+					"- step {} {name}: {n} pixels of sample {} (half bits {bits:#06x}): C# {theirs:?}, ours {ours:?}",
+					c.step,
+					f16::from_bits(*bits)
+				)?;
+			}
+		}
+		parity_pixels.push(p[0].pixels + p[1].pixels);
+	}
+	writeln!(report)?;
+	if !details.is_empty() {
+		writeln!(report, "Differing samples (first five per plane, RGBA):\n\n{details}")?;
+	}
+	writeln!(report, "### End to end\n")?;
+	writeln!(
+		report,
+		"Our own planes rendered at the model brightness (field {}, intensity {}) as the app shows the loaded file, \
+		 against C#'s pictures. Luma: mean Rec. 709 luma, 0 to 1; luma ratio = Rust / C#. Diff: mean absolute channel \
+		 difference in levels. Fit ratio = C# fit / Rust fit of our own plane, the amplitude ratio the brightness would need. \
+		 Pictures: C# field | Rust field over C# intensity | Rust intensity.\n",
+		display.field.brightness, display.intensity.brightness
+	)?;
+	writeln!(
+		report,
+		"| step | field luma C# / Rust / ratio | field diff | field fit ratio | intensity luma C# / Rust / ratio | intensity diff | \
+		 intensity fit ratio |"
+	)?;
+	writeln!(report, "|---|---|---|---|---|---|---|")?;
+	let tables = [
+		layer_table(project, &display.field, display.field.brightness, field),
+		layer_table(project, &display.intensity, display.intensity.brightness, intensity),
+	];
+	let mut rows = Vec::new();
+	for (i, (c, r)) in cs.dumps.iter().zip(&run.dumps).enumerate() {
+		let pictures = [&csr.pictures[i].0, &csr.pictures[i].1];
+		let samples = [halves(&r.field, field), halves(&r.intensity, intensity)];
+		let ours = [render_half(&samples[0], &tables[0]), render_half(&samples[1], &tables[1])];
+		let luma: Vec<(f64, f64)> = (0..2).map(|k| (mean_luma(pictures[k]), mean_luma(&ours[k]))).collect();
+		let diff: Vec<f64> = (0..2).map(|k| mean_channel_diff(pictures[k], &ours[k])).collect();
+		let (cf, ci) = csr.fits[i];
+		let fit_ratio =
+			[ratio(cf, fit_brightness(&samples[0], field)), ratio(ci, fit_brightness(&samples[1], intensity))];
+		let luma_ratio = [ratio(Some(luma[0].1), Some(luma[0].0)), ratio(Some(luma[1].1), Some(luma[1].0))];
+		writeln!(
+			report,
+			"| {} | {:.4} / {:.4} / {} | {:.2} | {} | {:.4} / {:.4} / {} | {:.2} | {} |",
+			c.step,
+			luma[0].0,
+			luma[0].1,
+			show(luma_ratio[0]),
+			diff[0],
+			show(fit_ratio[0]),
+			luma[1].0,
+			luma[1].1,
+			show(luma_ratio[1]),
+			diff[1],
+			show(fit_ratio[1])
+		)?;
+		rows.push(StepRow { step: c.step, parity_pixels: parity_pixels[i], fit_ratio, luma_ratio });
+		let name = format!("render_{}.png", c.step);
+		render_picture(&out.join(&name), size, [pictures[0], &ours[0], pictures[1], &ours[1]])?;
+	}
+	writeln!(report)?;
+	for r in &rows {
+		writeln!(report, "Step {}: ![step {}](render_{}.png)\n", r.step, r.step, r.step)?;
+	}
+	Ok(rows)
+}
+
+/// The probe graph layouts of Next's scope against ours, on C#'s series and on our own.
+fn scope_section(
+	report: &mut String,
+	csr: &CsRender,
+	run: &RustRun,
+	probes: &[Probe],
+	steps: u32,
+	canvas: (u32, u32),
+) -> Result<()> {
+	ensure!(
+		csr.graphs.len() == probes.len(),
+		"graph.txt has {} probes, the project {}",
+		csr.graphs.len(),
+		probes.len()
+	);
+	if probes.is_empty() {
+		return Ok(());
+	}
+	writeln!(report, "### Scope\n")?;
+	writeln!(
+		report,
+		"The graph box of each probe after the last step (`ProbeGraph.Layout` against `graph::layout`, a {GRAPH_TEXT_SIZE} px \
+		 estimated typeface on both sides): its y range and its tick labels with their pixel positions (`label@position`). \
+		 The middle row is our layout on C#'s own series and profile, which must equal the C# row.\n"
+	)?;
+	writeln!(report, "| probe | data | y range | y ticks | x ticks |")?;
+	writeln!(report, "|---|---|---|---|---|")?;
+	for (p, (probe, g)) in probes.iter().zip(&csr.graphs).enumerate() {
+		let theirs = GraphData {
+			series: &g.series,
+			profile: (!g.profile.is_empty()).then_some(&g.profile[..]),
+			profile_length: g.profile_length,
+			steps_sampled: g.steps_sampled,
+		};
+		let on_theirs = graph_view(probe, &theirs, steps, canvas);
+		let on_ours = graph_view(probe, &GraphData::at(&run.traces[p], steps as u64 - 1, 0), steps, canvas);
+		let close = |a: f64, b: f64| (a - b).abs() <= 1e-9 * a.abs().max(b.abs());
+		let same = close(g.y.0, on_theirs.y.0)
+			&& close(g.y.1, on_theirs.y.1)
+			&& g.y_ticks == on_theirs.y_ticks
+			&& g.x_ticks == on_theirs.x_ticks;
+		let row = |data: &str, y: (f64, f64), yt: &str, xt: &str| {
+			format!("| {} | {data} | {:.4e} to {:.4e} | {yt} | {xt} |", probe.name, y.0, y.1)
+		};
+		writeln!(report, "{}", row("C#", g.y, &g.y_ticks, &g.x_ticks))?;
+		writeln!(
+			report,
+			"{}",
+			row(
+				if same { "ours on C# (equal)" } else { "ours on C# (DIFFERS)" },
+				on_theirs.y,
+				&on_theirs.y_ticks,
+				&on_theirs.x_ticks
+			)
+		)?;
+		writeln!(report, "{}", row("ours on ours", on_ours.y, &on_ours.y_ticks, &on_ours.x_ticks))?;
+	}
+	writeln!(report)?;
 	Ok(())
+}
+
+/// The line layouts of summary.tsv, tab separated, `-` for an undefined ratio. Fit ratio = C# fit / Rust fit, luma ratio
+/// = Rust / C#, amplitude ratio = Rust / C#.
+const SUMMARY_LAYOUT: &str = "`step example step parity_pixels field_fit_ratio intensity_fit_ratio field_luma_ratio \
+	intensity_luma_ratio` (one line per dump step, with a `--render` dump) and `probe example name pearson \
+	amplitude_ratio` (one line per probe, first Rust run)";
+
+/// summary.tsv, see [`SUMMARY_LAYOUT`].
+fn summary(example: &str, steps: &[StepRow], probes: &[ProbeRow]) -> String {
+	let mut text = String::new();
+	for r in steps {
+		let _ = writeln!(
+			text,
+			"step\t{example}\t{}\t{}\t{}\t{}\t{}\t{}",
+			r.step,
+			r.parity_pixels,
+			show(r.fit_ratio[0]),
+			show(r.fit_ratio[1]),
+			show(r.luma_ratio[0]),
+			show(r.luma_ratio[1])
+		);
+	}
+	for p in probes {
+		let _ = writeln!(text, "probe\t{example}\t{}\t{:.4}\t{}", p.name, p.pearson, show(p.ratio));
+	}
+	text
 }
 
 pub(crate) fn run(args: &Args) -> Result<()> {
@@ -610,7 +1051,14 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 	for run in &runs {
 		field_section(&mut report, &args.out, &cs, run, &sources)?;
 	}
-	probe_section(&mut report, &cs, &runs, args.steps)?;
+	let probe_rows = probe_section(&mut report, &cs, &runs, args.steps)?;
+	let mut step_rows = Vec::new();
+	if let Some(csr) = &cs.render {
+		step_rows = render_section(&mut report, &args.out, &cs, csr, &runs[0], &project)?;
+		scope_section(&mut report, csr, &runs[0], &spec.probes, args.steps, (cs.width as u32, cs.height as u32))?;
+	}
+	writeln!(report, "## summary.tsv\n\nAlways written beside this report: tab separated lines {SUMMARY_LAYOUT}.")?;
+	fs::write(args.out.join("summary.tsv"), summary(&name, &step_rows, &probe_rows))?;
 	fs::write(args.out.join("report.md"), report)?;
 	println!("{}", args.out.join("report.md").display());
 	Ok(())
@@ -652,6 +1100,39 @@ mod tests {
 		let u = [0.5f32, -1.0, 0.25, 0.0];
 		let s = field_stats(&u, &u);
 		assert!((s.pearson - 1.0).abs() < 1e-12 && s.nrms == 0.0 && s.psnr > 100.0, "{s:?}");
+	}
+
+	#[test]
+	fn luma_and_channel_difference_of_rgba_pictures() {
+		let white = [255u8; 8];
+		assert!((mean_luma(&white) - 1.0).abs() < 1e-12);
+		assert_eq!(mean_luma(&[0, 0, 0, 255]), 0.0);
+		assert_eq!(mean_channel_diff(&[10, 20, 30, 255], &[13, 20, 24, 255]), 3.0);
+	}
+
+	#[test]
+	fn the_summary_has_a_line_per_step_and_probe() {
+		let steps =
+			[StepRow { step: 100, parity_pixels: 0, fit_ratio: [Some(2.0), None], luma_ratio: [Some(0.5), Some(1.0)] }];
+		let probes = [ProbeRow { name: "P".into(), pearson: 0.99, ratio: None }];
+		assert_eq!(
+			summary("Ex", &steps, &probes),
+			"step\tEx\t100\t0\t2.0000\t-\t0.5000\t1.0000\nprobe\tEx\tP\t0.9900\t-\n"
+		);
+	}
+
+	#[test]
+	fn parity_names_the_differing_sample() {
+		let kind = SampleKind::Field;
+		let table = HalfTable::new(&wavedude_core::model::ColorScheme::grey(), 0.0, 1.0, kind);
+		let plane = [0.0f32, 0.5];
+		let samples = halves(&plane, kind);
+		let mut picture = render_half(&samples, &table);
+		assert_eq!(parity(&samples, &table, &picture).pixels, 0);
+		picture[4] = picture[4].wrapping_add(3);
+		let p = parity(&samples, &table, &picture);
+		assert_eq!((p.pixels, p.max), (1, 3));
+		assert_eq!(p.samples.keys().copied().collect::<Vec<_>>(), [f16::from_f32(0.5).to_bits()]);
 	}
 
 	#[test]

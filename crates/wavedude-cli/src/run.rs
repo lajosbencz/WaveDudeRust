@@ -139,7 +139,7 @@ impl Colouring {
 		let scheme = store.resolve(&project.color_schemes, &settings.color_scheme);
 		match format {
 			SampleFormat::Half => {
-				Self::Half(HalfTable::cached(&scheme, settings.black_level, settings.brightness, kind))
+				Self::Half(HalfTable::cached(&scheme, settings.black_level, settings.brightness as f32, kind))
 			}
 			SampleFormat::Index => Self::Index(Palette::cached(&scheme, settings.black_level)),
 		}

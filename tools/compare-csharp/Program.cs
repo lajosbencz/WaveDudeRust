@@ -1,5 +1,5 @@
 // Runs a canvas-mode .wdproj through the C# WaveDudeNext CPU engine and dumps what `wavedude-cli compare` reads.
-// Usage: compare-csharp <project.wdproj> <out-dir> --steps N [--every K] [--probe-steps]
+// Usage: compare-csharp <project.wdproj> <out-dir> --steps N [--every K] [--probe-steps] [--render]
 //        compare-csharp bench [w h] [steps]
 
 using System.Globalization;
@@ -20,7 +20,7 @@ if (args.Length > 0 && args[0] == "bench")
 }
 if (args.Length < 2)
 {
-	Console.Error.WriteLine("usage: compare-csharp <project.wdproj> <out-dir> --steps N [--every K] [--probe-steps]");
+	Console.Error.WriteLine("usage: compare-csharp <project.wdproj> <out-dir> --steps N [--every K] [--probe-steps] [--render]");
 	return 2;
 }
 string projectPath = args[0];
@@ -28,6 +28,7 @@ string outDir = args[1];
 int steps = 600;
 int every = 100;
 bool probeSteps = false;
+bool render = false;
 for (int i = 2; i < args.Length; i++)
 {
 	switch (args[i])
@@ -35,6 +36,7 @@ for (int i = 2; i < args.Length; i++)
 		case "--steps": steps = int.Parse(args[++i]); break;
 		case "--every": every = int.Parse(args[++i]); break;
 		case "--probe-steps": probeSteps = true; break;
+		case "--render": render = true; break;
 		default: Console.Error.WriteLine($"unknown argument {args[i]}"); return 2;
 	}
 }
@@ -75,7 +77,15 @@ File.WriteAllText(Path.Combine(outDir, "scene.txt"), string.Join('\n',
 	$"stencil {(spec.Engine.FourthOrderLaplacian ? "FourthOrder" : "NinePoint")}",
 	$"substeps {SubSteps(scene, spec.Engine.FourthOrderLaplacian)}", $"emitters {spec.Emitters.Length}", $"steps {steps}", $"every {every}", ""));
 
-ProbeSampler? sampler = spec.Probes.Length > 0 ? ProbeSampler.Build(spec.Probes, cw, ch, rim) : null;
+ProbeSampler? sampler = spec.Probes.Length > 0 ? ProbeSampler.Build(spec.Probes, cw, ch, rim, spec.Seed) : null;
+// --render records the probes as a run does, for the graph layouts
+ProbeCollector? collector = render && sampler != null ? new ProbeCollector(sampler) : null;
+if (collector != null)
+{
+	engine.SetProbes(sampler);
+}
+var renderDump = render ? new RenderDump(project, outDir, cw, ch) : null;
+bool perFrame = sampler?.HasCounting == true;
 var csv = new StringBuilder("step");
 foreach (ProbeSpec probe in spec.Probes)
 {
@@ -87,6 +97,14 @@ int stride = engine.Stride;
 for (int step = 1; step <= steps; step++)
 {
 	engine.AdvanceOneStep();
+	if (collector != null)
+	{
+		engine.SampleProbes();
+		if (perFrame && (step - 1) % spec.VisualizeEvery == 0)
+		{
+			collector.CollectProfiles(engine, step);
+		}
+	}
 	bool dump = step % every == 0;
 	if (sampler != null && (probeSteps || dump))
 	{
@@ -106,27 +124,38 @@ for (int step = 1; step <= steps; step++)
 	}
 	if (dump)
 	{
-		WritePlane(Path.Combine(outDir, $"field_{step}.f32"), engine.FieldData, stride, rim, cw, ch);
-		WritePlane(Path.Combine(outDir, $"intensity_{step}.f32"), engine.IntensityData!, stride, rim, cw, ch);
+		float[] field = Crop(engine.FieldData, stride, rim, cw, ch);
+		float[] intensity = Crop(engine.IntensityData!, stride, rim, cw, ch);
+		RenderDump.WriteFloats(Path.Combine(outDir, $"field_{step}.f32"), field);
+		RenderDump.WriteFloats(Path.Combine(outDir, $"intensity_{step}.f32"), intensity);
+		renderDump?.Dump(step, field, intensity);
 		Console.Error.Write($"\rstep {step}/{steps}");
 	}
 }
 Console.Error.WriteLine();
+if (collector != null)
+{
+	collector.Collect(engine, steps);
+	if (!perFrame)
+	{
+		collector.CollectProfiles(engine, steps);
+	}
+}
+renderDump?.Finish(spec.Probes, collector?.Traces ?? [], steps, (steps - 1) / spec.VisualizeEvery);
 if (sampler != null)
 {
 	File.WriteAllText(Path.Combine(outDir, "probes.csv"), csv.ToString());
 }
 return 0;
 
-static void WritePlane(string path, float[] padded, int stride, int rim, int w, int h)
+static float[] Crop(float[] padded, int stride, int rim, int w, int h)
 {
 	float[] canvas = new float[w * h];
 	for (int y = 0; y < h; y++)
 	{
 		Array.Copy(padded, (y + rim + 1) * stride + rim + 1, canvas, y * w, w);
 	}
-	// little-endian hosts only, which every .NET 10 target is
-	File.WriteAllBytes(path, System.Runtime.InteropServices.MemoryMarshal.AsBytes(canvas.AsSpan()).ToArray());
+	return canvas;
 }
 
 static byte[] Blank(int w, int h, double index)

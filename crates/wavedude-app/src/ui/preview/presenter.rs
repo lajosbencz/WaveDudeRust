@@ -310,11 +310,11 @@ impl LayerRenderer {
 				screen.set_view(sw as usize, sh as usize, window, width as usize, height as usize);
 				match DitherDepth::from_bits(req.dither_bits) {
 					Some(depth) => {
-						let deep = DeepHalfTable::cached(&req.scheme, req.black_level, req.brightness, kind);
+						let deep = DeepHalfTable::cached(&req.scheme, req.black_level, req.brightness as f32, kind);
 						screen.render(&halves, ScreenColors::Dithered(&deep, depth), &mut rgba);
 					}
 					None => {
-						let table = HalfTable::cached(&req.scheme, req.black_level, req.brightness, kind);
+						let table = HalfTable::cached(&req.scheme, req.black_level, req.brightness as f32, kind);
 						screen.render(&halves, ScreenColors::Plain(&table), &mut rgba);
 					}
 				}

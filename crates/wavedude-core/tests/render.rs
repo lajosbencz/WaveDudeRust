@@ -9,7 +9,7 @@ use wavedude_core::model::{ColorScheme, Rgb, Stop};
 use wavedude_core::render::screen::ScreenColors;
 use wavedude_core::render::{
 	DeepHalfTable, DitherDepth, HalfTable, Palette, ResampleAxis, ScreenRenderer, field_index, fit_brightness,
-	fit_brightness_f32, intensity_index, intensity_root_index, render_half, render_indexed,
+	intensity_index, intensity_root_index, render_half, render_indexed,
 };
 
 fn scheme(colors: &[(f64, u32)]) -> ColorScheme {
@@ -251,7 +251,6 @@ fn brightness_fit() {
 	assert_eq!(fit_brightness(&[f16::NAN, f16::INFINITY], SampleKind::Field), None);
 	assert_eq!(fit_brightness(&[h(-1.0); 4], SampleKind::IntensityRoot), None);
 	assert_eq!(fit_brightness(&[h(0.03), h(0.03)], SampleKind::Field), Some(33.3));
-	assert_eq!(fit_brightness_f32(&[0.25, -0.25], SampleKind::Field), Some(4.0));
 }
 
 fn hex_picture(rgba: &[u8], width: usize) -> String {
@@ -286,7 +285,7 @@ fn timing() {
 	let _ = HalfTable::new(&s, 0.0, 1.0, SampleKind::Field);
 	let clock = Instant::now();
 	for i in 0..BUILDS {
-		std::hint::black_box(HalfTable::new(&s, 0.0, 1.0 + i as f64, SampleKind::Field));
+		std::hint::black_box(HalfTable::new(&s, 0.0, 1.0 + i as f32, SampleKind::Field));
 	}
 	let table_ms = clock.elapsed().as_secs_f64() * 1e3 / BUILDS as f64;
 	let (w, ht) = (2880, 1080);
@@ -362,4 +361,24 @@ fn a_zoom_window_reads_its_samples_alone_and_survives_pans() {
 	assert_eq!(screen.render_to_vec(&plane, ScreenColors::Plain(&table)), reference(pan, 30, 9), "a shrinking pan");
 	screen.set_view(w, h, Some(zoom), 64, 40);
 	assert_eq!(screen.render_to_vec(&plane, ScreenColors::Plain(&table)), reference(zoom, 64, 40), "and back");
+}
+
+#[test]
+fn tables_take_the_brightness_in_single_precision() {
+	// WaveDude Next builds its tables at the layer's brightness as a float; 3.6 is not the f32 3.6
+	let ramp = scheme(&[(0.0, 0x000000), (1.0, 0x0000FA)]);
+	let f32_brightness = 3.6f32;
+	let table = HalfTable::new(&ramp, 0.0, f32_brightness, SampleKind::IntensityRoot);
+	let color_at = |brightness: f64, v: f64| (((v * brightness).clamp(0.0, 1.0) * 250.0).round()) as u8;
+	let differing: Vec<u16> = (0..=u16::MAX)
+		.filter(|&b| {
+			let v = f16::from_bits(b).to_f64();
+			v > 0.0 && color_at(3.6, v) != color_at(f64::from(f32_brightness), v)
+		})
+		.collect();
+	assert!(!differing.is_empty(), "no sample tells the two precisions apart");
+	for bits in differing {
+		let v = f16::from_bits(bits).to_f64();
+		assert_eq!(table.color(f16::from_bits(bits))[2], color_at(f64::from(f32_brightness), v), "{bits:#06x}");
+	}
 }

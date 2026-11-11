@@ -37,7 +37,7 @@ impl ExportLayerLook {
 		scene: Option<&ScenePixels>,
 		canvas: (u32, u32),
 	) -> Result<Self, ExportError> {
-		let table = HalfTable::cached(scheme, display.black_level, display.brightness, kind);
+		let table = HalfTable::cached(scheme, display.black_level, display.brightness as f32, kind);
 		let edges = scene
 			.filter(|_| display.overlay_in_export && display.overlay_gain > 0.0)
 			.map(|s| {

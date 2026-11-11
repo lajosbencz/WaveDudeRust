@@ -63,7 +63,7 @@ pub struct HalfTable {
 
 impl HalfTable {
 	/// Built over the rayon pool (65,536 gradient evaluations).
-	pub fn new(scheme: &ColorScheme, black_level: f64, brightness: f64, kind: SampleKind) -> Self {
+	pub fn new(scheme: &ColorScheme, black_level: f64, brightness: f32, kind: SampleKind) -> Self {
 		let gradient = Gradient::new(&scheme.stops);
 		let entries = build(|bits| {
 			let [r, g, b] = levels(&gradient, black_level, position(kind, bits, brightness));
@@ -74,7 +74,7 @@ impl HalfTable {
 	}
 
 	/// [`HalfTable::new`] through a process-wide cache keyed by the inputs.
-	pub fn cached(scheme: &ColorScheme, black_level: f64, brightness: f64, kind: SampleKind) -> Arc<Self> {
+	pub fn cached(scheme: &ColorScheme, black_level: f64, brightness: f32, kind: SampleKind) -> Arc<Self> {
 		HALF_TABLES.get_or_build(Key::new(scheme, black_level, Some((brightness, kind))), || {
 			Self::new(scheme, black_level, brightness, kind)
 		})
@@ -103,7 +103,7 @@ pub struct DeepHalfTable {
 }
 
 impl DeepHalfTable {
-	pub fn new(scheme: &ColorScheme, black_level: f64, brightness: f64, kind: SampleKind) -> Self {
+	pub fn new(scheme: &ColorScheme, black_level: f64, brightness: f32, kind: SampleKind) -> Self {
 		let gradient = Gradient::new(&scheme.stops);
 		let entries = build(|bits| {
 			let [r, g, b] = levels(&gradient, black_level, position(kind, bits, brightness));
@@ -114,7 +114,7 @@ impl DeepHalfTable {
 	}
 
 	/// [`DeepHalfTable::new`] through a process-wide cache keyed by the inputs.
-	pub fn cached(scheme: &ColorScheme, black_level: f64, brightness: f64, kind: SampleKind) -> Arc<Self> {
+	pub fn cached(scheme: &ColorScheme, black_level: f64, brightness: f32, kind: SampleKind) -> Arc<Self> {
 		DEEP_TABLES.get_or_build(Key::new(scheme, black_level, Some((brightness, kind))), || {
 			Self::new(scheme, black_level, brightness, kind)
 		})
@@ -139,8 +139,9 @@ pub(crate) fn unpack(deep: u64) -> [u16; 3] {
 	[(deep >> 32) as u16, (deep >> 16) as u16, deep as u16]
 }
 
-/// A sample's position on the gradient (0..1) by its kind at `brightness`.
-fn position(kind: SampleKind, bits: u16, brightness: f64) -> f64 {
+/// A sample's position on the gradient (0..1) by its kind at `brightness`, a single-precision gain as in WaveDude Next.
+fn position(kind: SampleKind, bits: u16, brightness: f32) -> f64 {
+	let brightness = brightness as f64;
 	let v = f16::from_bits(bits).to_f64();
 	match kind {
 		SampleKind::Field => {
@@ -175,11 +176,11 @@ fn build<T: Copy + Default + Send>(entry: impl Fn(u16) -> T + Sync) -> Box<[T]> 
 struct Key {
 	stops: Vec<(u64, Rgb)>,
 	black_level: u64,
-	table: Option<(u64, SampleKind)>,
+	table: Option<(u32, SampleKind)>,
 }
 
 impl Key {
-	fn new(scheme: &ColorScheme, black_level: f64, table: Option<(f64, SampleKind)>) -> Self {
+	fn new(scheme: &ColorScheme, black_level: f64, table: Option<(f32, SampleKind)>) -> Self {
 		Self {
 			stops: scheme.stops.iter().map(|s| (s.at.to_bits(), s.color)).collect(),
 			black_level: black_level.to_bits(),

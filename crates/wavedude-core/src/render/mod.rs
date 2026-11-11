@@ -9,7 +9,7 @@ pub mod lut;
 pub mod screen;
 
 pub use crate::engine::capture::{field_index, intensity_index, intensity_root_index};
-pub use brightness::{fit_brightness, fit_brightness_f32};
+pub use brightness::fit_brightness;
 pub use frame::{render_half, render_half_into, render_indexed, render_indexed_into};
 pub use gradient::Gradient;
 pub use lut::{DeepHalfTable, HalfTable, Palette};

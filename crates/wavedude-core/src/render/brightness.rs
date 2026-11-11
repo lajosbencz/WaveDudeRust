@@ -16,11 +16,6 @@ pub fn fit_brightness(samples: &[f16], kind: SampleKind) -> Option<f64> {
 	fit(samples.iter().map(|s| s.to_f32()), kind)
 }
 
-/// [`fit_brightness`] of f32 samples.
-pub fn fit_brightness_f32(samples: &[f32], kind: SampleKind) -> Option<f64> {
-	fit(samples.iter().copied(), kind)
-}
-
 fn fit(samples: impl Iterator<Item = f32>, kind: SampleKind) -> Option<f64> {
 	let mut magnitudes: Vec<f32> = samples
 		.filter(|v| v.is_finite())
