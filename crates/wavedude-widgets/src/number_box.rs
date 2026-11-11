@@ -351,6 +351,19 @@ impl Component for NumberBox {
 		};
 
 		let slot = use_edit_slot(input_id, focus);
+		// what the window applies the pending text with; the states may be gone when it runs after an unmount
+		let apply_pending: std::rc::Rc<dyn Fn(&str)> = {
+			let spec = spec.clone();
+			let value = self.value.clone();
+			std::rc::Rc::new(move |t: &str| {
+				if let Some(mut typed) = typed.try_write_unchecked() {
+					*typed = false;
+				}
+				if let Some(stepped) = spec.commit(t) {
+					value.clone().set_if_modified(stepped.value);
+				}
+			})
+		};
 		let commit = {
 			let mut commit = commit;
 			let slot = slot.clone();
@@ -504,11 +517,11 @@ impl Component for NumberBox {
 				.child(IconView::new(icon).color(theme.text))
 		};
 
-		let (slot_for_typing, commit_for_typing) = (slot.clone(), commit.clone());
+		let slot_for_typing = slot.clone();
 		let input = TextField::new(WritableSetter::new(text, move |t: String| {
-			text.set(t);
+			text.set(t.clone());
 			typed.set_if_modified(true);
-			slot_for_typing.offer(commit_for_typing.clone());
+			slot_for_typing.offer(t, apply_pending.clone());
 		}))
 		.a11y_id(input_id)
 		.enabled(enabled)

@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use freya::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::edit::{PendingEdit, use_pending_edit};
 use crate::icon::IconView;
 use crate::menu::{ContextMenuHost, ContextMenuRequest, MenuEntry, MenuItem, MenuModel};
 use crate::theme::{Theme, UiFontExt, use_wave_theme};
@@ -457,6 +458,7 @@ impl Component for DockHost {
 			spawn(async move { l.write().fit_sides((hw, hh)) });
 		}
 
+		let move_layout = self.layout.clone();
 		let on_global_move = move |e: Event<PointerEventData>| {
 			let mut d = drag;
 			let Some(mut current) = d.peek().clone() else { return };
@@ -469,7 +471,7 @@ impl Component for DockHost {
 			}
 			if current.active {
 				let a = *host_area.peek();
-				let groups: Vec<((Side, usize), Rect4)> = areas.peek().iter().map(|(k, r)| (*k, *r)).collect();
+				let groups = shown_areas(&move_layout.peek(), &areas.peek());
 				let host = (a.min_x(), a.min_y(), a.width(), a.height());
 				current.target = drop_target_at(host, &groups, Some(current.from), (p.x as f32, p.y as f32));
 			}
@@ -505,7 +507,9 @@ impl Component for DockHost {
 			}
 		};
 
+		let pending = use_pending_edit();
 		let ctx = HostContext {
+			pending,
 			theme: theme.clone(),
 			layout: self.layout.clone(),
 			panes: self.panes.clone(),
@@ -593,6 +597,11 @@ impl Component for DockHost {
 	}
 }
 
+/// The group rectangles of `areas` whose group the layout still has; a hidden or moved group's leaves one behind.
+fn shown_areas(layout: &DockLayout, areas: &HashMap<(Side, usize), Rect4>) -> Vec<((Side, usize), Rect4)> {
+	areas.iter().filter(|((side, index), _)| *index < layout.side(*side).groups.len()).map(|(k, r)| (*k, *r)).collect()
+}
+
 fn sized(view: Element, size: f32, horizontal: bool) -> Element {
 	let r = rect();
 	let r = if horizontal {
@@ -613,6 +622,7 @@ struct HostContext {
 	menu: State<Option<ContextMenuRequest>>,
 	drag: State<Option<DockDrag>>,
 	areas: State<HashMap<(Side, usize), Rect4>>,
+	pending: PendingEdit,
 }
 
 /// Starts a press that may become a drag of `pane` out of `from`.
@@ -654,6 +664,7 @@ fn side_view(ctx: &HostContext, side: Side, dock: &SideDock, length: f32) -> Ele
 }
 
 fn group_view(ctx: &HostContext, side: Side, index: usize, group: &PaneGroup) -> Element {
+	let pending_group = ctx.pending.clone();
 	let theme = &ctx.theme;
 	let active_id = group.active_pane().to_owned();
 	let pane = ctx.panes.iter().find(|p| p.id == active_id);
@@ -728,7 +739,10 @@ fn group_view(ctx: &HostContext, side: Side, index: usize, group: &PaneGroup) ->
 				areas.write().insert((side, index), r);
 			}
 		})
-		.on_pointer_down(move |_| active_group.set_if_modified(Some((side, index))))
+		.on_pointer_down(move |_| {
+			pending_group.flush();
+			active_group.set_if_modified(Some((side, index)));
+		})
 		.child(title_bar)
 		.child(rect().width(Size::fill()).height(Size::flex(1.)).maybe_child(pane.map(|p| p.content.clone())))
 		.maybe_child(tabs)
@@ -834,6 +848,7 @@ impl Component for PaneTab {
 		let mut hovered = use_state(|| false);
 		let (id, from, drag) = (self.id.clone(), self.from, self.drag);
 		let mut layout = self.layout.clone();
+		let pending = use_pending_edit();
 		let ink = if self.selected {
 			theme.tab_active_text
 		} else if hovered() {
@@ -858,6 +873,7 @@ impl Component for PaneTab {
 			.on_pointer_enter(move |_| hovered.set(true))
 			.on_pointer_leave(move |_| hovered.set(false))
 			.on_pointer_down(move |e: Event<PointerEventData>| {
+				pending.flush();
 				layout.write().activate(&id);
 				press_to_drag(drag, id.clone(), from, &e);
 			})
@@ -940,6 +956,20 @@ mod tests {
 		l.left.groups = vec![PaneGroup::new(vec!["project".into()], 1.), PaneGroup::new(vec!["properties".into()], 2.)];
 		l.hidden.push(("messages".into(), Side::Bottom));
 		l
+	}
+
+	#[test]
+	fn a_hidden_group_leaves_no_drop_rectangle() {
+		let mut l = first_start();
+		let areas = HashMap::from([
+			((Side::Left, 0), (0., 0., 100., 100.)),
+			((Side::Left, 1), (0., 100., 100., 100.)),
+			((Side::Bottom, 0), (100., 150., 300., 50.)),
+		]);
+		l.hide("properties");
+		let mut shown = shown_areas(&l, &areas);
+		shown.sort_by_key(|(k, _)| k.1);
+		assert_eq!(shown, [((Side::Left, 0), (0., 0., 100., 100.))]);
 	}
 
 	#[test]

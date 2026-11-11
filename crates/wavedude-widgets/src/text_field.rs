@@ -337,6 +337,12 @@ impl Component for TextField {
 				follow_caret();
 			}
 		};
+		// a press outside the focused field: its release unfocuses (a press that focuses the field, a spin
+		// button's say, is not one; the focus lands between the press and the release)
+		let mut pressed_outside = use_state(|| false);
+		let on_global_pointer_down = move |_: Event<PointerEventData>| {
+			pressed_outside.set_if_modified(id.is_focused() && !*hovered.peek());
+		};
 		let on_global_pointer_up = move |_: Event<PointerEventData>| {
 			if *hovered.peek() || id.is_focused() {
 				editable.process_event(EditableEvent::Release);
@@ -344,7 +350,7 @@ impl Component for TextField {
 			if id.is_focused() {
 				if *dragging.read() {
 					dragging.set(false);
-				} else {
+				} else if std::mem::take(&mut *pressed_outside.write()) {
 					id.request_unfocus();
 				}
 			}
@@ -441,6 +447,7 @@ impl Component for TextField {
 					.on_key_down(on_key_down)
 					.on_pointer_press(on_pointer_press)
 					.on_ime_preedit(on_ime_preedit)
+					.on_global_pointer_down(on_global_pointer_down)
 					.on_global_pointer_up(on_global_pointer_up)
 					.on_global_pointer_move(on_global_pointer_move)
 			})

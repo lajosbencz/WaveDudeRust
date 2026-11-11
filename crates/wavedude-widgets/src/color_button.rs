@@ -4,6 +4,7 @@
 use freya::engine::prelude::{Paint, SkRect};
 use freya::prelude::*;
 
+use crate::edit::use_pending_edit;
 use crate::number_box::{NumberBox, NumberSpec};
 use crate::paint::{fill, linear_shader, stroke};
 use crate::text_box::TextBox;
@@ -215,9 +216,12 @@ impl Component for ColorPicker {
 				set_hsv(h);
 			}
 		};
+		let pending = use_pending_edit();
 		let on_plane_down = {
 			let mut pick = pick.clone();
+			let pending = pending.clone();
 			move |e: Event<PointerEventData>| {
+				pending.flush();
 				plane_id.request_focus();
 				let (l, g) = (e.element_location(), e.global_location());
 				dragging.set(Some((true, g.x - l.x, g.y - l.y)));
@@ -227,6 +231,7 @@ impl Component for ColorPicker {
 		let on_strip_down = {
 			let mut pick = pick.clone();
 			move |e: Event<PointerEventData>| {
+				pending.flush();
 				strip_id.request_focus();
 				let (l, g) = (e.element_location(), e.global_location());
 				dragging.set(Some((false, g.x - l.x, g.y - l.y)));

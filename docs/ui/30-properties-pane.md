@@ -37,8 +37,12 @@ Stop). Multiline boxes keep Enter as newline. Name boxes update per keystroke (t
 Commit policy (text and number boxes): typed text commits on Enter, on the focus leaving the box (a reaction to
 the focus change, not a poll of the render) and before anything reads the model: every state event (Save, Run,
 Play, Export, Undo, ...), every menu or shortcut action and every change of the tree selection first flushes the
-pending commit (`PendingEdit`), so Ctrl+S, Run or a click on another tree row act on the typed value. Esc drops
-the pending text.
+pending commit (`PendingEdit`), so Ctrl+S, Run or a click on another tree row act on the typed value. A widget
+whose press writes the model (a tree row, check or button, the colour picker's plane and strip, a dock tab)
+flushes first too, since the focus change that would commit lands only after the press. The pending text lives
+in `PendingEdit`, not in the box, so a box unmounted with typed text (a dock tab switch, the picker closing) still
+applies it. Esc drops the pending text. A rename box also closes when the focus leaves it; only Enter and Esc
+give the focus back to the tree.
 
 ### Number box (`NumberBox`)
 

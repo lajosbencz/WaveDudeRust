@@ -6,44 +6,54 @@ use std::rc::Rc;
 
 use freya::prelude::*;
 
-type Commit = Rc<RefCell<dyn FnMut()>>;
+type Apply = Rc<dyn Fn(&str)>;
 
-/// The commit of the text typed into the focused editor. The window provides one through the context and calls
-/// [`flush`](Self::flush) before a command, a save, a run or a selection change reads the model; an editor
-/// commits on its own when it loses the focus.
+/// The text typed into the focused editor and what applies it. The window provides one through the context and
+/// calls [`flush`](Self::flush) before a command, a save, a run or a selection change reads the model; a widget
+/// whose press writes the model flushes first ([`use_pending_edit`]); an editor flushes its own text when it loses
+/// the focus or unmounts. The text lives here, not in the editor's state, so an unmounted editor's text still
+/// applies.
 #[derive(Clone, Default)]
-pub struct PendingEdit(Rc<RefCell<Option<(AccessibilityId, Commit)>>>);
+pub struct PendingEdit(Rc<RefCell<Option<(AccessibilityId, String, Apply)>>>);
 
 impl PendingEdit {
-	/// Runs and clears the pending commit.
+	/// Applies and clears the pending text.
 	pub fn flush(&self) {
 		let taken = self.0.borrow_mut().take();
-		if let Some((_, commit)) = taken {
-			(commit.borrow_mut())();
+		if let Some((_, text, apply)) = taken {
+			apply(&text);
 		}
 	}
 
 	fn flush_of(&self, id: AccessibilityId) {
-		let mine = self.0.borrow().as_ref().is_some_and(|(owner, _)| *owner == id);
-		if mine {
+		if self.is_of(id) {
 			self.flush();
 		}
 	}
 
-	fn offer(&self, id: AccessibilityId, commit: impl FnMut() + 'static) {
-		let other = self.0.borrow().as_ref().is_some_and(|(owner, _)| *owner != id);
+	fn is_of(&self, id: AccessibilityId) -> bool {
+		self.0.borrow().as_ref().is_some_and(|(owner, ..)| *owner == id)
+	}
+
+	fn offer(&self, id: AccessibilityId, text: String, apply: Apply) {
+		let other = self.0.borrow().as_ref().is_some_and(|(owner, ..)| *owner != id);
 		if other {
 			self.flush();
 		}
-		*self.0.borrow_mut() = Some((id, Rc::new(RefCell::new(commit))));
+		*self.0.borrow_mut() = Some((id, text, apply));
 	}
 
 	fn withdraw(&self, id: AccessibilityId) {
-		let mine = self.0.borrow().as_ref().is_some_and(|(owner, _)| *owner == id);
-		if mine {
+		if self.is_of(id) {
 			self.0.borrow_mut().take();
 		}
 	}
+}
+
+/// The window's [`PendingEdit`], for a press handler that writes the model: flush before reading it. One per
+/// window: the first user provides it at the root when the window has not.
+pub fn use_pending_edit() -> PendingEdit {
+	use_hook(|| try_consume_context::<PendingEdit>().unwrap_or_else(|| provide_root_context(PendingEdit::default())))
 }
 
 /// An editor's side of [`PendingEdit`].
@@ -54,20 +64,20 @@ pub(crate) struct EditSlot {
 }
 
 impl EditSlot {
-	/// Text was typed: `commit` is what the window flushes.
-	pub fn offer(&self, commit: impl FnMut() + 'static) {
-		self.pending.offer(self.id, commit);
+	/// `text` was typed: `apply` is what the window applies it with. Called with each keystroke.
+	pub fn offer(&self, text: String, apply: Apply) {
+		self.pending.offer(self.id, text, apply);
 	}
 
-	/// The text was applied or reverted.
+	/// The text was applied or reverted by the editor itself.
 	pub fn withdraw(&self) {
 		self.pending.withdraw(self.id);
 	}
 }
 
-/// The editor's [`EditSlot`]; the pending text commits when the focus leaves `id`.
+/// The editor's [`EditSlot`]; the pending text applies when the focus leaves `id` and when the editor unmounts.
 pub(crate) fn use_edit_slot(id: AccessibilityId, focus: Memo<Focus>) -> EditSlot {
-	let pending = use_hook(|| try_consume_context::<PendingEdit>().unwrap_or_default());
+	let pending = use_pending_edit();
 	{
 		let pending = pending.clone();
 		use_side_effect(move || {
@@ -78,9 +88,20 @@ pub(crate) fn use_edit_slot(id: AccessibilityId, focus: Memo<Focus>) -> EditSlot
 	}
 	{
 		let pending = pending.clone();
-		use_drop(move || pending.withdraw(id));
+		use_drop(move || pending.flush_of(id));
 	}
 	EditSlot { pending, id }
+}
+
+/// How an editing session ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditEnd {
+	/// Enter applied the text.
+	Applied,
+	/// Esc put the old text back.
+	Reverted,
+	/// The focus went elsewhere; typed text was applied first.
+	FocusLost,
 }
 
 /// A request to focus an editor, raised by a counter: the editor serves it once, when it is laid out, if the

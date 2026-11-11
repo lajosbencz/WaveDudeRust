@@ -3,7 +3,9 @@
 
 use freya::prelude::*;
 
-use crate::edit::{FocusRequest, use_edit_slot, use_focus_on_layout};
+use std::rc::Rc;
+
+use crate::edit::{EditEnd, FocusRequest, use_edit_slot, use_focus_on_layout};
 use crate::text_field::TextField;
 use crate::theme::{INPUT_HEIGHT, Theme, use_wave_theme};
 use crate::util::is_named;
@@ -43,7 +45,7 @@ pub struct TextBox {
 	width: Size,
 	id: Option<AccessibilityId>,
 	focus_request: Option<FocusRequest>,
-	on_done: Option<EventHandler<()>>,
+	on_done: Option<EventHandler<EditEnd>>,
 }
 
 impl TextBox {
@@ -80,8 +82,8 @@ impl TextBox {
 		self
 	}
 
-	/// Enter applied the text or Esc put the old one back: the editing is over.
-	pub fn on_done(mut self, handler: impl Into<EventHandler<()>>) -> Self {
+	/// The editing is over: Enter, Esc or the focus leaving.
+	pub fn on_done(mut self, handler: impl Into<EventHandler<EditEnd>>) -> Self {
 		self.on_done = Some(handler.into());
 		self
 	}
@@ -133,6 +135,16 @@ impl Component for TextBox {
 		let multiline = self.multiline;
 
 		let slot = use_edit_slot(id, focus);
+		// what the window applies the pending text with; the states may be gone when it runs after an unmount
+		let apply_pending: Rc<dyn Fn(&str)> = {
+			let apply = apply.clone();
+			Rc::new(move |t: &str| {
+				if let Some(mut typed) = typed.try_write_unchecked() {
+					*typed = false;
+				}
+				apply.call(t.to_owned());
+			})
+		};
 		let commit = {
 			let apply = apply.clone();
 			let slot = slot.clone();
@@ -144,6 +156,20 @@ impl Component for TextBox {
 				}
 			}
 		};
+		let done = self.on_done.clone();
+		{
+			let mut was_focused = use_state(|| false);
+			let done = done.clone();
+			use_side_effect(move || {
+				let now = focus.read().is_focused();
+				if *was_focused.peek()
+					&& !now && let Some(done) = &done
+				{
+					done.call(EditEnd::FocusLost);
+				}
+				was_focused.set_if_modified(now);
+			});
+		}
 		let once = use_state(|| 0u64);
 		let request = self.focus_request.clone().or_else(|| self.auto_focus.then(|| FocusRequest::new(1u64, once)));
 		let on_sized = use_focus_on_layout(id, request);
@@ -151,13 +177,13 @@ impl Component for TextBox {
 		let on_pre_key_down = {
 			let mut commit = commit.clone();
 			let slot = slot.clone();
-			let done = self.on_done.clone();
+			let done = done.clone();
 			move |e: Event<KeyboardEventData>| -> bool {
 				if is_named(&e, NamedKey::Enter) && !multiline {
 					e.stop_propagation();
 					commit();
 					if let Some(done) = &done {
-						done.call(());
+						done.call(EditEnd::Applied);
 					}
 					return false;
 				}
@@ -170,7 +196,7 @@ impl Component for TextBox {
 					}
 					if let Some(done) = &done {
 						e.stop_propagation();
-						done.call(());
+						done.call(EditEnd::Reverted);
 					}
 					return false;
 				}
@@ -188,7 +214,7 @@ impl Component for TextBox {
 				apply.call(t);
 			} else {
 				typed.set_if_modified(true);
-				slot.offer(commit.clone());
+				slot.offer(t, apply_pending.clone());
 			}
 		});
 		let input = TextField::new(on_change)

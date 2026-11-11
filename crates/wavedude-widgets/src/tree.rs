@@ -6,6 +6,7 @@ use std::hash::Hash;
 
 use freya::prelude::*;
 
+use crate::edit::{EditEnd, PendingEdit, use_pending_edit};
 use crate::icon::{Icon, IconView, icons};
 use crate::text_box::TextBox;
 use crate::theme::{Theme, UiFontExt, use_wave_theme};
@@ -448,6 +449,7 @@ impl<K: Clone + PartialEq + Debug + 'static> Component for TreeView<K> {
 		let tree_id = self.a11y_id.unwrap_or(own_id);
 		let focus = use_focus(tree_id);
 		let modifiers = use_modifiers();
+		let pending = use_pending_edit();
 		let mut list_area = use_state(Area::default);
 		let mut scroll = use_scroll_controller(ScrollConfig::default);
 		let mut drag = use_state(|| None::<DragState<K>>);
@@ -575,7 +577,7 @@ impl<K: Clone + PartialEq + Debug + 'static> Component for TreeView<K> {
 				indicator,
 				items: items.clone(),
 			};
-			row_view(ctx, state.clone(), on_action.clone(), drag, modifiers, tree_id)
+			row_view(ctx, state.clone(), on_action.clone(), drag, modifiers, tree_id, pending.clone())
 		});
 
 		let body = rect()
@@ -628,6 +630,7 @@ fn row_view<K: Clone + PartialEq + 'static>(
 	mut drag: State<Option<DragState<K>>>,
 	modifiers: State<Modifiers>,
 	tree_id: AccessibilityId,
+	pending: PendingEdit,
 ) -> Element {
 	let RowContext { theme, row, expandable, collapsed, is_current, is_selected, focused, renaming, indicator, items } =
 		ctx;
@@ -661,6 +664,7 @@ fn row_view<K: Clone + PartialEq + 'static>(
 	let on_down = {
 		let key = key.clone();
 		let mut state = state.clone();
+		let pending = pending.clone();
 		let mut on_secondary = on_secondary;
 		move |e: Event<PointerEventData>| {
 			if e.button() == Some(MouseButton::Right) {
@@ -670,6 +674,7 @@ fn row_view<K: Clone + PartialEq + 'static>(
 			if e.button() != Some(MouseButton::Left) {
 				return;
 			}
+			pending.flush();
 			tree_id.request_focus();
 			let m = *modifiers.peek();
 			let mut next = state.peek().clone();
@@ -711,6 +716,7 @@ fn row_view<K: Clone + PartialEq + 'static>(
 		let key = key.clone();
 		let on_action = on_action.clone();
 		let state = state.clone();
+		let pending = pending.clone();
 		let mark = rect()
 			.width(Size::px(13.))
 			.height(Size::px(13.))
@@ -721,6 +727,7 @@ fn row_view<K: Clone + PartialEq + 'static>(
 			.maybe(row.test_id.is_some(), |r| r.test_id(format!("Enabled:{}", row.label)))
 			.on_pointer_down(move |e: Event<PointerEventData>| {
 				e.stop_propagation();
+				pending.flush();
 				on_action.call(TreeAction::ToggleEnabled(state.peek().selection.targets(&key)));
 			})
 			.maybe_child(on.then(|| IconView::new(icons::CHECK).size(11.).color(theme.text)));
@@ -734,15 +741,16 @@ fn row_view<K: Clone + PartialEq + 'static>(
 		let mut done_state = state.clone();
 		TextBox::new(row.label.clone(), move |text: String| {
 			state.write().renaming = None;
-			tree_id.request_focus();
 			on_action.call(TreeAction::Rename(key.clone(), text));
 		})
 		.auto_focus()
 		.select_all_on_focus(true)
 		.width(Size::flex(1.))
-		.on_done(move |_| {
+		.on_done(move |end: EditEnd| {
 			done_state.write().renaming = None;
-			tree_id.request_focus();
+			if end != EditEnd::FocusLost {
+				tree_id.request_focus();
+			}
 		})
 		.into()
 	} else {
@@ -762,7 +770,9 @@ fn row_view<K: Clone + PartialEq + 'static>(
 				let key = key.clone();
 				let on_action = on_action.clone();
 				let state = state.clone();
+				let pending = pending.clone();
 				glyph_button(icon, ink, move || {
+					pending.flush();
 					let t = state.peek().selection.targets(&key);
 					on_action.call(match which {
 						0 => TreeAction::MoveUp(t),

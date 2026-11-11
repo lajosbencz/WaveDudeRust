@@ -29,7 +29,7 @@ mod edit;
 mod paint;
 mod util;
 
-pub use edit::{FocusRequest, PendingEdit, use_focus_on_layout};
+pub use edit::{EditEnd, FocusRequest, PendingEdit, use_focus_on_layout, use_pending_edit};
 pub use util::{TestIdExt, use_modifiers};
 
 pub use button::Button;

@@ -1,6 +1,7 @@
 use freya::prelude::*;
 use freya_testing::prelude::*;
-use wavedude_widgets::{NumberBox, NumberSpec, TextBox};
+use wavedude_widgets::tree::{RowKind, TreeAction, TreeRow, TreeState, TreeView};
+use wavedude_widgets::{ColorPicker, NumberBox, NumberSpec, Rgb, TextBox};
 
 fn find_text(test: &TestingRunner, text: &str) -> bool {
 	test.find(|_, element| Label::try_downcast(element).filter(|l| l.text.as_ref() == text)).is_some()
@@ -28,7 +29,6 @@ fn number_box_up_increments() {
 
 #[test]
 fn tree_shift_down_extends_selection() {
-	use wavedude_widgets::tree::{RowKind, TreeRow, TreeState, TreeView};
 	fn app() -> impl IntoElement {
 		wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
 		let state = use_state(TreeState::<u32>::default);
@@ -61,7 +61,6 @@ fn tree_shift_down_extends_selection() {
 
 #[test]
 fn f2_renames_a_tree_row_through_the_text_box_and_esc_leaves_it() {
-	use wavedude_widgets::tree::{RowKind, TreeAction, TreeRow, TreeState, TreeView};
 	fn app() -> impl IntoElement {
 		wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
 		let state = use_state(TreeState::<u32>::default);
@@ -312,4 +311,168 @@ fn escape_puts_the_old_text_back_in_a_text_box() {
 	test.press_key(Key::Named(NamedKey::Enter));
 	test.sync_and_update();
 	assert!(find_text(&test, "value=Source 1"));
+}
+
+// Commit semantics: typed text applies before a press that writes the model, and when the editor unmounts.
+fn shown_with(test: &TestingRunner, prefix: &str) -> String {
+	test.find(|_, e| Label::try_downcast(e).filter(|l| l.text.starts_with(prefix)).map(|l| l.text.to_string()))
+		.unwrap_or_default()
+}
+
+fn settle(test: &mut TestingRunner) {
+	for _ in 0..4 {
+		test.sync_and_update();
+	}
+}
+
+fn tree_app() -> impl IntoElement {
+	wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
+	let state = use_state(TreeState::<u32>::default);
+	let mut renamed = use_state(String::new);
+	let rows = vec![
+		TreeRow::new(0, 0, RowKind::Folder, "Sources").group(0),
+		TreeRow::new(1, 1, RowKind::Item, "One").group(0).enabled(true),
+		TreeRow::new(2, 1, RowKind::Item, "Two").group(0).enabled(true),
+	];
+	let s = state.read().clone();
+	rect()
+		.width(Size::px(300.))
+		.height(Size::px(300.))
+		.child(rect().height(Size::px(120.)).child(TreeView::new(rows, state, move |a: TreeAction<u32>| {
+			if let TreeAction::Rename(key, text) = a {
+				renamed.set(format!("{key}={text}"));
+			}
+		})))
+		.child(label().text(format!(
+			"renaming={:?} renamed={} current={:?}",
+			s.renaming,
+			renamed.read(),
+			s.selection.current
+		)))
+}
+
+fn start_rename(test: &mut TestingRunner) {
+	test.sync_and_update();
+	test.click_cursor((100., 23. + 11.));
+	test.press_key(Key::Named(NamedKey::F2));
+	test.sync_and_update();
+	test.poll_n(std::time::Duration::from_millis(16), 2);
+}
+
+#[test]
+fn a_typed_rename_applies_when_its_own_row_is_clicked() {
+	let mut test = launch_test(tree_app);
+	start_rename(&mut test);
+	test.write_text("X");
+	settle(&mut test);
+	// the row's indent, outside the rename box
+	test.click_cursor((5., 23. + 11.));
+	settle(&mut test);
+	let s = shown_with(&test, "renaming=");
+	assert!(s.contains("renamed=1=X"), "{s}");
+}
+
+#[test]
+fn the_rename_box_closes_when_the_focus_leaves_without_an_edit() {
+	let mut test = launch_test(tree_app);
+	start_rename(&mut test);
+	// empty space below the tree
+	test.click_cursor((150., 250.));
+	settle(&mut test);
+	let s = shown_with(&test, "renaming=");
+	assert!(s.starts_with("renaming=None"), "{s}");
+}
+
+#[test]
+fn a_spin_click_whose_focus_lands_before_the_release_keeps_the_box_focused() {
+	fn app() -> impl IntoElement {
+		wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
+		let value = use_state(|| 1.0f64);
+		rect()
+			.child(NumberBox::new(value, NumberSpec::linear(0., 10., 0.5)).width(Size::px(120.)))
+			.child(label().text(format!("value={}", value.read())))
+	}
+	let mut test = launch_test(app);
+	test.sync_and_update();
+	// real event loops apply the focus request before the release
+	test.press_cursor((112., 5.));
+	settle(&mut test);
+	test.release_cursor((112., 5.));
+	settle(&mut test);
+	assert_eq!(shown_with(&test, "value="), "value=1.5");
+	test.press_key(Key::Named(NamedKey::ArrowUp));
+	settle(&mut test);
+	assert_eq!(shown_with(&test, "value="), "value=2", "the box kept the focus");
+}
+
+#[test]
+fn typed_hex_applies_before_a_click_on_the_plane_so_the_pick_wins() {
+	fn app() -> impl IntoElement {
+		wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
+		let value = use_state(|| Rgb::new(255, 0, 0));
+		let c = *value.read();
+		rect()
+			.width(Size::px(400.))
+			.height(Size::px(300.))
+			.child(ColorPicker::new(value))
+			.child(label().text(format!("rgb={}", c.to_hex())))
+	}
+	let mut test = launch_test(app);
+	settle(&mut test);
+	let hex = test
+		.find(|n, e| {
+			Paragraph::try_downcast(e)
+				.filter(|p| p.spans.iter().any(|s| s.text.starts_with('#')))
+				.map(|_| n.layout().area)
+		})
+		.expect("hex box");
+	test.click_cursor((hex.center().x as f64, hex.center().y as f64));
+	settle(&mut test);
+	test.write_text("#00FF00");
+	settle(&mut test);
+	assert_eq!(shown_with(&test, "rgb="), "rgb=#FF0000", "not applied before Enter");
+	// middle of the saturation/value plane
+	test.click_cursor((88., 88.));
+	settle(&mut test);
+	assert_ne!(shown_with(&test, "rgb="), "rgb=#00FF00", "the hex text overrode the click on the plane");
+}
+
+#[test]
+fn typed_hex_applies_when_the_picker_closes_on_a_click_outside() {
+	use wavedude_widgets::ColorButton;
+	fn app() -> impl IntoElement {
+		wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
+		let value = use_state(|| Rgb::new(255, 0, 0));
+		let c = *value.read();
+		rect()
+			.width(Size::px(400.))
+			.height(Size::px(400.))
+			.child(ColorButton::new(value).test_id("Swatch"))
+			.child(label().text(format!("rgb={}", c.to_hex())))
+	}
+	let mut test = launch_test(app);
+	settle(&mut test);
+	let swatch = test
+		.find(|n, e| {
+			Rect::try_downcast(e).filter(|r| r.accessibility.builder.author_id() == Some("Swatch"))?;
+			Some(n.layout().area)
+		})
+		.expect("the swatch");
+	test.click_cursor((swatch.center().x as f64, swatch.center().y as f64));
+	settle(&mut test);
+	let hex = test
+		.find(|n, e| {
+			Paragraph::try_downcast(e)
+				.filter(|p| p.spans.iter().any(|s| s.text.starts_with('#')))
+				.map(|_| n.layout().area)
+		})
+		.expect("the popup's hex box");
+	test.click_cursor((hex.center().x as f64, hex.center().y as f64));
+	settle(&mut test);
+	test.write_text("#00FF00");
+	settle(&mut test);
+	assert_eq!(shown_with(&test, "rgb="), "rgb=#FF0000", "not applied before the popup closes");
+	test.click_cursor((390., 390.));
+	settle(&mut test);
+	assert_eq!(shown_with(&test, "rgb="), "rgb=#00FF00", "the typed hex applied when the popup unmounted");
 }
