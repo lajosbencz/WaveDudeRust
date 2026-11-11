@@ -52,6 +52,9 @@ docs/decisions). Where a spec file and this file disagree, this file wins.
   (index 1). The original's `SourceOpacity = 0.9` blend once per step
   (30-engine.md, Sources) is not used: its radiated amplitude grew with the
   sub-step count. A source on a mirror cell drives nothing.
+- A refractive part takes over a mirror pixel only where it covers the pixel's
+  centre; the original averages a partly covered mirror pixel as index 1, which
+  opens a hole of glass in the mirror's edge (20-scene-painting.md).
 - Damping is centred: `u+ = u + d (u - u-) + (1 + d)/2 B u` instead of
   `u+ = u + d (u - u-) + B u`; same decay per sub-step, stable for every d in
   [0, 1] (the original's form diverges at d near 0 at two sub-steps of the
@@ -126,4 +129,5 @@ intensity 1.5 instead of 30 (10-model.md, DisplayLayer). The `.wdproj` adapter
 converts: a file's `Brightness` is the model's times 8 (the measured gain is 4.8
 to 9.7, docs/comparison), so a file this program writes looks as intended in
 WaveDude Next to within that spread, and one of WaveDude Next's opens at an
-eighth of its number.
+eighth of its number. A detector's `Sensitivity` converts by 64, the square, since
+detections follow the intensity.

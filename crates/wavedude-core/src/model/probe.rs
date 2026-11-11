@@ -83,7 +83,7 @@ pub struct Probe {
 	pub kind: ProbeKind,
 	/// A detector is a line probe of the integrated intensity, whatever else is set.
 	pub detector: ProbeDetector,
-	/// Expected detections per unit of intensity per step at a point of the line, `0..MAX_SENSITIVITY`.
+	/// Expected detections per unit of intensity per step at a point of the line.
 	#[field(range = ranges::PROBE_SENSITIVITY)]
 	pub sensitivity: f64,
 	/// Pixels of the line per bin of an imaging detector's histogram, `1..MAX_BIN_SIZE`.
@@ -145,7 +145,8 @@ impl Default for Probe {
 			window: 500,
 			start_after: 0,
 			detector: ProbeDetector::Standard,
-			sensitivity: 20.0,
+			// WaveDude Next's 20 (io::wdproj::SENSITIVITY_GAIN)
+			sensitivity: 0.3125,
 			bin_size: 4,
 		}
 	}
@@ -154,7 +155,6 @@ impl Default for Probe {
 impl Probe {
 	pub const NAME_STEM: &'static str = "Probe";
 
-	pub const MAX_SENSITIVITY: f64 = 1_000_000.0;
 	pub const MAX_BIN_SIZE: u32 = 20;
 
 	pub fn uses_intensity(&self) -> bool {

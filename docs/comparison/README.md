@@ -96,6 +96,10 @@ Each difference follows from a documented decision; none is unexplained.
    C#'s own energies at n = 2 and 3). Projects imported from the C# are brighter in the Rust app at the same
    brightness setting; the Rust brightness no longer depends on what the scene does to the sub-step count. The
    two source models also put a different phase on the radiated wave, the one-step offset above.
+   Over the 33 examples (2026-11-11, 600 steps) the brightness fit ratio C# / Rust ranges 4.1 to 14.2; in
+   Example24 and Example33 one painted pixel of index 1.04 to 1.13 (a fibre's edge over a mirror pixel) sets the
+   C#'s sub-steps to 3 instead of 2 and its amplitude 22 to 31 % higher. Decision 0014 records why the blend
+   is not replicated.
 2. **The true Laplacian speed (Example09).** The C#'s 9-point kernel (0.184 axis, 0.066 diagonal) runs at
    sqrt(0.316) = 0.562 px per step for long waves; the Rust's unscaled Laplacian at 1 (decision 0003). With the
    importer's frequency scale / 0.562 the wavelengths match, so the wave crosses the canvas 1.78 times as fast

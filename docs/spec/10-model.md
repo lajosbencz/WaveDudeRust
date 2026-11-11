@@ -235,7 +235,7 @@ so the seed is part of the scene while a diffuser is enabled (`SceneKey`).
 | `Measurement` | enum `Amplitude`/`Value`/`IntegratedValue` | Amplitude | Field forces Amplitude; Intensity + Amplitude -> Value |
 | `Kind` | enum `Point`/`Line` | Point | |
 | `Detector` | enum `Standard`/`Counting`/`Imaging` | Standard | a detector is a line probe of the integrated intensity, whatever the file says (`normalize`) |
-| `Sensitivity` | double | 20 | 0..1000000; expected detections per unit of intensity per step at a point of the line |
+| `Sensitivity` | double | 0.3125 (Rust; original 20) | 0..15625 (original 0..1000000); expected detections per unit of intensity per step at a point of the line; the `.wdproj` holds it times 64 (60-file-formats.md) |
 | `BinSize` | int (px) | 4 | 1..20; an imaging detector's histogram bin along the line |
 | `AX`, `AY` | int | centre | always written; clamped into the canvas when sampled |
 | `BX`, `BY` | int | 0 | line end; written only for Line |

@@ -75,8 +75,8 @@ pub const PROBE_BOX_WIDTH: Range = Range::new(60.0, 4096.0);
 pub const PROBE_BOX_HEIGHT: Range = Range::new(30.0, 4096.0);
 pub const PROBE_DECADES: Range = Range::new(1.0, 12.0);
 pub const PROBE_WINDOW: Range = Range::new(10.0, 1_000_000.0);
-/// A detector's expected detections per unit of intensity per step.
-pub const PROBE_SENSITIVITY: Range = Range::new(0.0, 1_000_000.0);
+/// A detector's expected detections per unit of intensity per step; WaveDude Next's 0..1000000 in its units.
+pub const PROBE_SENSITIVITY: Range = Range::new(0.0, 15_625.0);
 /// An imaging detector's bin in pixels along the line.
 pub const PROBE_BIN_SIZE: Range = Range::new(1.0, 20.0);
 

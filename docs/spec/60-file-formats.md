@@ -187,7 +187,9 @@ rule, not a limit of the model.
 
 Brightness units: `Brightness` in the file is the model's value times 8, WaveDude Next's units (05-deviations.md;
 this program's source swings its cell 4.8 to 9.7 times as far, and 8 is a power of two, so a value converts both ways
-exactly). A read divides by 8; the omitted value is 30 in the file, 3.75 in the model. Nothing is fitted on opening.
+exactly). A read divides by 8; the omitted value is 30 in the file, 3.75 in the model. A probe's `Sensitivity` follows the
+intensity, the field squared: the file holds the model's value times 64, the omitted 20 is 0.3125 in the model.
+Nothing is fitted on opening.
 
 `Rescaled` on `Simulation` is declared in the DTD and read (a file that already holds this program's frequency
 scale), never written: a written file carries the original's scale so WaveDude Next reads it right.

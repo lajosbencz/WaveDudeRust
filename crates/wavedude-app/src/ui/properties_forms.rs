@@ -1498,7 +1498,7 @@ fn probe(f: &Form, o: &Probe, index: usize) -> Vec<Element> {
 			s.get("SectionMeasurement"),
 			vec![
 				p.combo(Probe::DETECTOR),
-				p.decimals(Probe::SENSITIVITY, 0.5, 2).enabled(is_detector),
+				p.decimals(Probe::SENSITIVITY, 0.01, 4).enabled(is_detector),
 				p.number(Probe::BIN_SIZE, 1.).enabled(o.detector == ProbeDetector::Imaging),
 				p.combo(Probe::LAYER).enabled(!is_detector),
 				p.combo_of(Probe::MEASUREMENT, measurements).enabled(!is_detector),

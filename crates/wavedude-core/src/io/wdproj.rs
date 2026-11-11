@@ -8,7 +8,8 @@
 //! the frequency scale is divided by [`super::nine_point_speed`], writing multiplies it back. A file whose `Simulation` carries
 //! `Rescaled="true"` already holds this program's units and is read unscaled.
 //!
-//! `Brightness` is in `WaveDude` Next's units in the file and in this program's in the model ([`BRIGHTNESS_GAIN`]).
+//! `Brightness` and `Sensitivity` are in `WaveDude` Next's units in the file and in this program's in the model
+//! ([`BRIGHTNESS_GAIN`], [`SENSITIVITY_GAIN`]).
 
 use std::path::Path;
 
@@ -201,6 +202,21 @@ const BRIGHTNESS: Attr<DisplayLayer> = Attr::custom(
 	AttrType::Cdata,
 );
 
+/// Factor from this program's detector sensitivity to `WaveDude` Next's: detections follow the intensity, the field
+/// squared.
+pub const SENSITIVITY_GAIN: f64 = BRIGHTNESS_GAIN * BRIGHTNESS_GAIN;
+
+/// The `Sensitivity` attribute: `WaveDude` Next's units in the file.
+const SENSITIVITY: Attr<Probe> = Attr::custom(
+	ProbeField::Sensitivity,
+	|p| xml::fmt_f64(p.sensitivity * SENSITIVITY_GAIN),
+	|p, text| {
+		p.sensitivity = xml::parse_f64(text).ok_or("a number")? / SENSITIVITY_GAIN;
+		Ok(())
+	},
+	AttrType::Cdata,
+);
+
 /// A layer's defaults as `WaveDude` Next has them in a file of `version`.
 fn original_layer(layer: Layer, version: FileVersion) -> DisplayLayer {
 	let d = match layer {
@@ -319,7 +335,7 @@ impl Table for Probe {
 		Attr::of(ProbeField::Measurement),
 		Attr::of(ProbeField::Kind),
 		Attr::of(ProbeField::Detector),
-		Attr::of(ProbeField::Sensitivity),
+		SENSITIVITY,
 		Attr::of(ProbeField::BinSize),
 		Attr::of(ProbeField::Ax).named("AX").always(),
 		Attr::of(ProbeField::Ay).named("AY").always(),
@@ -1236,7 +1252,7 @@ mod tests {
 	}
 
 	#[test]
-	fn brightness_is_next_units_in_the_file() {
+	fn brightness_and_sensitivity_are_next_units_in_the_file() {
 		let p = read_str("<Project Version=\"3\"><Display><Field /></Display></Project>").unwrap();
 		assert_eq!((p.display.field.brightness, p.display.intensity.brightness), (3.75, 3.75));
 		let p = read_str("<Project Version=\"3\" />").unwrap();
@@ -1245,6 +1261,13 @@ mod tests {
 		assert!(!text.split_once("]>\n").unwrap().1.contains("Brightness"), "{text}");
 		let p = read_str("<Project Version=\"4\"><Display><Field Brightness=\"16\" /></Display></Project>").unwrap();
 		assert_eq!(p.display.field.brightness, 2.0);
+		let p =
+			read_str("<Project Version=\"4\"><Probe Name=\"P\" /><Probe Name=\"Q\" Sensitivity=\"32\" /></Project>")
+				.unwrap();
+		assert_eq!((p.probes[0].sensitivity, p.probes[1].sensitivity), (Probe::default().sensitivity, 0.5));
+		let text = write_string(&p, None);
+		assert_eq!(text.matches("Sensitivity=").count(), 1, "{text}");
+		assert!(text.contains("Sensitivity=\"32\""), "{text}");
 	}
 
 	#[test]
