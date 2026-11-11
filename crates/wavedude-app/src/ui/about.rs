@@ -10,7 +10,7 @@ use super::app::{Cx, Ui};
 use super::dialogs::{button, button_row, frame};
 
 const LICENSE: &str = include_str!("../../../../LICENSE.md");
-const ICON: &[u8] = include_bytes!("../../assets/icon.png");
+const ICON: &[u8] = include_bytes!("../../assets/icons/128x128.png");
 /// The copyright notice of this program (GPL-3.0 section 5 d); names are not translated.
 const COPYRIGHT: &str = "Copyright (C) 2026 Lajos Bencz";
 /// Names and works as the source headers give them; English in every language.

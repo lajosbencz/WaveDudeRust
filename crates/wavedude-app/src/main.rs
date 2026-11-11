@@ -10,7 +10,7 @@ use wavedude_app_state::AppState;
 use wavedude_app_state::log::{self, LogRing};
 use wavedude_app_state::settings::AppDirs;
 
-const ICON: &[u8] = include_bytes!("../assets/icon.png");
+const ICON: &[u8] = include_bytes!("../assets/icons/256x256.png");
 
 fn main() {
 	if let Err(e) = run() {
@@ -63,7 +63,8 @@ fn run() -> anyhow::Result<()> {
 		.with_window_attributes(move |attrs, _| placement::attributes(&settings, attrs))
 		.with_custom_scale_factor(zoom)
 		.with_background(theme_background(theme))
-		.with_app_id("wavedude")
+		// the name of the .desktop file cargo-packager installs, so Wayland and X11 find the icon
+		.with_app_id("wavedude-app")
 		.with_icon(LaunchConfig::window_icon(ICON))
 		.with_on_close(
 			move |_, _| if close.on_close_request() { CloseDecision::Close } else { CloseDecision::KeepOpen },

@@ -77,3 +77,11 @@ NO_STRIP=true cargo packager --release -p wavedude-app --formats appimage   # or
 
 The packages land in `target/packages`. Without `WAVEDUDE_UPDATE_ENDPOINT` and `WAVEDUDE_UPDATE_PUBKEY` in the
 environment the build has no updater.
+
+## Icons
+
+`crates/wavedude-app/assets/icon.svg` is the master; `assets/icons/` holds what is rendered from it, committed beside
+it: the PNG sizes 16 to 512 (the Linux icon theme, the window and the About dialog), `icon.ico` with 16 to 256 (the
+Windows executable through `build.rs`, and the installers) and `icon.icns` with 16 to 512 at 1x and 2x (macOS).
+cargo-packager reads them from the source tree, so the build cannot make them: after a change to the SVG, render the
+set again at those sizes and commit it with the SVG.
