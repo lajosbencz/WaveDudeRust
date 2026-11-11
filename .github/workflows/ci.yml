@@ -1,9 +1,23 @@
 name: CI
 
+# Changes to files no step here reads skip the run: a pull request touching nothing else shows its checks
+# pending, and an administrator merges it.
 on:
   push:
     branches: [master, main]
+    paths-ignore: &docs
+      - "docs/**"
+      - "*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+      - ".github/dependabot.yml"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/package.yml"
+      - "cliff.toml"
+      - ".gitignore"
+      - "tools/**"
   pull_request:
+    paths-ignore: *docs
 
 permissions:
   contents: read
