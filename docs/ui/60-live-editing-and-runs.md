@@ -17,6 +17,9 @@ Every model change is observed. Its class decides what follows.
 | Colour scheme edit | stops, colours, rename (layers repoint) | recolour the frame shown |
 | Any edit | | project dirty (title `*`); undo step pending |
 
+Edits of two classes at once (an undo, a paste) take the least destructive effect covering both: a probe edit
+with a brightness change keeps the frames unless the preview samples are 8-bit.
+
 The status bar's run line says Running while frames are made, Stopped when some are missing and no more are wanted, Completed when all are there.
 
 ## The live run
@@ -61,16 +64,17 @@ or every frame) and whether the user paused. The run converges on it, without ti
 - With it on, a simulation edit wants every frame at once: the position's frame first, with the frames before
   it made on the way, then the frames after it. Never moves the preview, never followed.
 - With it off, only the position's frame is made; Play or F5 make the rest.
-- An export waiting for its run is dropped by an edit (status bar says so). An export reading its run holds
-  the frames: a simulation or probe edit made meanwhile is taken up when the export ends; New, Open and Close
-  are refused meanwhile (the status bar says so).
+- An export waiting for its run is dropped by an edit or by Stop (status bar says so). An export reading its run
+  holds the frames: a simulation or probe edit made meanwhile is taken up when the export ends; New, Open and
+  Close are refused meanwhile (the status bar says so); F5 and Play use the frames as they are.
 - Turning the setting on asks for nothing by itself.
 - Errors go to the status bar and log, no message box.
 
 ## Memory warning
 
 Setting: Simulation > Warn when a run does not fit in RAM (default on). Asked before any preview run (F5, Play,
-automatic re-run) whose frames exceed the RAM cache budget. Never for an export's run (always full quality).
+automatic re-run) whose frames exceed the RAM cache budget. Never for an export's run (always full quality), nor
+while an export waits for or reads its run. An export closes a warning still asked.
 
 Window (message-window look, question disc, 500 px wide, not resizable, Run default, Cancel = Esc):
 - Text: "The run's frames need {need} of memory, and the RAM cache has {budget}. The frames beyond that go to the
@@ -101,7 +105,8 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
   frames) but is not recorded again.
 - Selection follows by name, else by index in the same list; settings objects by place. A step that leaves
   nothing of it selects the project root.
-- Title asterisk clears when the current step is the saved one.
+- Title asterisk clears when the current step is the saved one; an edit after an undo ends the branch that held
+  the saved step, so no step is saved then.
 - Paste, Cut, drop, Duplicate, Remove, image Browse/Remove: one step each.
 - New project / open: new history.
 

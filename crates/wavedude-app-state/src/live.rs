@@ -64,7 +64,7 @@ pub enum Notice {
 	AskMemoryWarning,
 	/// The export's run is complete and fresh.
 	ExportReady,
-	/// The waiting export's run was replaced by an edit: the export is dropped.
+	/// The waiting export's run was replaced or stopped: the export is dropped.
 	ExportStopped,
 	Info(String),
 	Error(String),
@@ -131,7 +131,8 @@ pub struct LiveController<B: Backend> {
 	pub playback: Playback,
 	/// Moves with every spec published.
 	revision: u64,
-	request: Option<RunRequest>,
+	/// The request of each revision from the adopted one on; the last is this project state's.
+	requests: Vec<(u64, RunRequest)>,
 	/// The quality in force: the setting's, or Full for an export until the next simulation edit.
 	quality: PreviewQuality,
 	/// The export's intensity, tracked until the next simulation edit.
@@ -181,7 +182,7 @@ impl<B: Backend> LiveController<B> {
 			settings,
 			playback: Playback::default(),
 			revision: 0,
-			request: None,
+			requests: Vec::new(),
 			quality: settings.quality,
 			track_intensity: false,
 			wanted: Wanted::Position,
@@ -237,17 +238,28 @@ impl<B: Backend> LiveController<B> {
 	/// edits still in flight during a burst. The pictures, the band and the graphs show them as they land; what
 	/// needs this project state exactly asks [`is_current`](Self::is_current) too.
 	fn current_store(&self) -> Option<&Arc<FrameStore>> {
-		self.request.as_ref()?;
+		self.adopted_request()?;
 		self.status.store.as_ref()
+	}
+
+	/// The request of this project state.
+	fn request(&self) -> Option<&RunRequest> {
+		self.requests.last().map(|(_, r)| r)
+	}
+
+	/// The request whose frames the store holds.
+	fn adopted_request(&self) -> Option<&RunRequest> {
+		self.requests.iter().find(|(revision, _)| *revision == self.status.adopted).map(|(_, r)| r)
 	}
 
 	/// The run holds this project state's spec.
 	fn is_current(&self) -> bool {
-		self.status.adopted == self.revision && self.request.is_some()
+		self.status.adopted == self.revision && self.request().is_some()
 	}
 
+	/// The store's index of timeline frame `frame`.
 	fn stored_index(&self, frame: u32) -> Option<usize> {
-		self.request.as_ref().map(|r| r.schedule().stored_index_of(frame) as usize)
+		self.adopted_request().map(|r| r.schedule().stored_index_of(frame) as usize)
 	}
 
 	fn store_has(&self, frame: u32) -> bool {
@@ -260,7 +272,7 @@ impl<B: Backend> LiveController<B> {
 	/// The newest timeline frame of the present run that holds `frame`.
 	fn present_through(&self, frame: u32) -> Option<u32> {
 		let (store, index) = (self.current_store()?, self.stored_index(frame)?);
-		let schedule = self.request.as_ref()?.schedule();
+		let schedule = self.adopted_request()?.schedule();
 		let last = store.present_through(index)? as u32;
 		Some(schedule.covered_frames(last + 1).saturating_sub(1).max(frame))
 	}
@@ -302,7 +314,7 @@ impl<B: Backend> LiveController<B> {
 
 	/// The timeline frame the run is stepping towards.
 	pub fn computing_frame(&self) -> Option<u32> {
-		let (WorkState::Stepping { target }, Some(request)) = (&self.status.state, self.request.as_ref()) else {
+		let (WorkState::Stepping { target }, Some(request)) = (&self.status.state, self.adopted_request()) else {
 			return None;
 		};
 		let schedule = request.schedule();
@@ -354,7 +366,7 @@ impl<B: Backend> LiveController<B> {
 
 	/// (state, steps done, total steps) of the run, for the status bar; `None` before the first run.
 	pub fn run_status(&self) -> Option<(RunState, u32, u32)> {
-		let steps = self.request.as_ref()?.schedule().steps;
+		let steps = self.request()?.schedule().steps;
 		if !self.ran {
 			return None;
 		}
@@ -395,7 +407,7 @@ impl<B: Backend> LiveController<B> {
 			RunState::Cancelled => "Cancelled",
 			_ => return None,
 		};
-		let (store, request) = (self.current_store()?, self.request.as_ref()?);
+		let (store, request) = (self.current_store()?, self.adopted_request()?);
 		let frames = request.schedule().covered_frames(store.present_count() as u32);
 		let (in_memory, on_disk) = (store.frames_in_memory(), store.frames_on_disk());
 		let gb = |n: usize| (n * store.frame_bytes()) as f64 / f64::from(1u32 << 30);
@@ -410,7 +422,7 @@ impl<B: Backend> LiveController<B> {
 
 	/// What the run is made from: the project state, quality and tracking the worker builds its spec from.
 	pub fn run_request(&self) -> Option<&RunRequest> {
-		self.request.as_ref()
+		self.request()
 	}
 
 	/// The frames of this project state, for the export.
@@ -424,7 +436,7 @@ impl<B: Backend> LiveController<B> {
 
 	/// The memory warning waiting for an answer.
 	pub fn warning(&self) -> Option<MemoryWarning<'_>> {
-		let request = self.request.as_ref()?;
+		let request = self.request()?;
 		self.warning.as_ref().map(|w| MemoryWarning { request, budget: w.budget, auto_budget: w.auto_budget })
 	}
 
@@ -456,7 +468,7 @@ impl<B: Backend> LiveController<B> {
 		}
 		let goal = Goal {
 			revision: self.revision,
-			run: self.request.clone(),
+			run: self.request().cloned(),
 			position,
 			wanted: self.wanted,
 			paused: self.user_paused,
@@ -469,8 +481,13 @@ impl<B: Backend> LiveController<B> {
 
 	/// A new request for `project` at the quality in force; the worker builds the spec and reports a failure.
 	fn respec(&mut self, project: &Project) {
+		self.revise(RunRequest::new(project, self.quality, self.track_intensity));
+	}
+
+	/// A new revision made from `request`.
+	fn revise(&mut self, request: RunRequest) {
 		self.revision += 1;
-		self.request = Some(RunRequest::new(project, self.quality, self.track_intensity));
+		self.requests.push((self.revision, request));
 	}
 
 	/// A new, opened, imported or closed project: nothing is wanted but frame 0, which warms the engine up.
@@ -510,6 +527,8 @@ impl<B: Backend> LiveController<B> {
 		let kind = match kind {
 			ChangeKind::Brightness if self.settings.quality.samples_at_lowest() => ChangeKind::Simulation,
 			ChangeKind::Brightness => ChangeKind::Display,
+			ChangeKind::ProbesAndBrightness if self.settings.quality.samples_at_lowest() => ChangeKind::Simulation,
+			ChangeKind::ProbesAndBrightness => ChangeKind::ProbePresentation,
 			k => k,
 		};
 		if note.is_some() {
@@ -545,16 +564,20 @@ impl<B: Backend> LiveController<B> {
 				}
 			}
 			ChangeKind::ProbePresentation => self.respec(project),
-			ChangeKind::Display | ChangeKind::Metadata | ChangeKind::None | ChangeKind::Brightness => {}
+			ChangeKind::Display
+			| ChangeKind::Metadata
+			| ChangeKind::None
+			| ChangeKind::Brightness
+			| ChangeKind::ProbesAndBrightness => {}
 		}
 		self.publish();
 	}
 
 	/// Asks for every frame, after the memory warning when the frames do not fit; false when the warning asks or
-	/// there is no spec.
+	/// there is no spec. An export's run never asks: its frames are wanted already.
 	fn want_all(&mut self, then: Then, now: Instant) -> bool {
-		let Some(request) = self.request.clone() else { return false };
-		if self.settings.warn_when_ram_insufficient {
+		let Some(request) = self.request().cloned() else { return false };
+		if self.settings.warn_when_ram_insufficient && !self.export_busy() {
 			let reclaimed = self.status.store.as_ref().map_or(0, |s| s.ram_bytes());
 			let (budget, auto_budget) = self.backend.budgets(self.settings.ram_percent, reclaimed);
 			if MemoryWarning::check(&request, budget, auto_budget).is_some() {
@@ -599,7 +622,7 @@ impl<B: Backend> LiveController<B> {
 
 	/// The present frames as timeline spans, for the timeline's band.
 	pub fn present_spans(&self) -> Vec<(u32, u32)> {
-		let (Some(store), Some(request)) = (self.current_store(), self.request.as_ref()) else { return Vec::new() };
+		let (Some(store), Some(request)) = (self.current_store(), self.adopted_request()) else { return Vec::new() };
 		let spec = request.schedule();
 		let mut spans = Vec::new();
 		let mut j = 0;
@@ -624,6 +647,10 @@ impl<B: Backend> LiveController<B> {
 			self.on_change(kind, project, None, now);
 		}
 		self.status = self.backend.status();
+		let adopted = self.status.adopted;
+		if let Some(first) = self.requests.iter().position(|(revision, _)| *revision >= adopted) {
+			self.requests.drain(..first);
+		}
 		if let WorkState::Failed(e) = &self.status.state
 			&& self.failed.as_ref().is_none_or(|f| !Arc::ptr_eq(f, e))
 		{
@@ -631,7 +658,7 @@ impl<B: Backend> LiveController<B> {
 			let no_image = matches!(**e, RunError::Spec(RunSpecError::NoImage));
 			self.notices.push(Notice::RunFailed { message: e.to_string(), no_image });
 		}
-		if self.fit.is_some() && (self.request.is_none() || matches!(self.status.state, WorkState::Failed(_))) {
+		if self.fit.is_some() && (self.request().is_none() || matches!(self.status.state, WorkState::Failed(_))) {
 			self.fit = None;
 		}
 		// the store fills from another thread, so a run can complete between the follow's look and this check:
@@ -697,8 +724,7 @@ impl<B: Backend> LiveController<B> {
 
 	/// Every frame of a full-quality spec (with the intensity when needed) is stored and recorded.
 	fn is_full_for_export(&self, needs_intensity: bool) -> bool {
-		self.request
-			.as_ref()
+		self.request()
 			.is_some_and(|r| r.quality.is_full() && (!needs_intensity || r.layers().contains(&Layer::Intensity)))
 			&& self.complete()
 	}
@@ -725,7 +751,7 @@ impl<B: Backend> LiveController<B> {
 	}
 
 	fn request_fit(&mut self) -> bool {
-		if self.request.is_none() {
+		if self.request().is_none() {
 			tracing::warn!("no 16-bit frame for the brightness fit: no run");
 			return false;
 		}
@@ -739,9 +765,10 @@ impl<B: Backend> LiveController<B> {
 	/// the returned choice), then the run.
 	pub fn confirm_warning(&mut self, levers: Levers, mute: bool, now: Instant) -> Option<WarningChoice> {
 		let w = self.warning.take()?;
-		let request = self.request.as_ref()?;
+		let request = self.request()?;
 		let warning = MemoryWarning { request, budget: w.budget, auto_budget: w.auto_budget };
 		let quality = warning.quality_of(levers);
+		let next = request.with_quality(quality);
 		let choice = WarningChoice { quality, cache_auto: levers.cache_auto, mute };
 		self.settings.quality = quality;
 		self.quality = quality;
@@ -751,8 +778,7 @@ impl<B: Backend> LiveController<B> {
 		if mute {
 			self.settings.warn_when_ram_insufficient = false;
 		}
-		self.revision += 1;
-		self.request = self.request.as_ref().map(|r| r.with_quality(quality));
+		self.revise(next);
 		self.start(w.then, now);
 		self.publish();
 		Some(choice)
@@ -770,7 +796,7 @@ impl<B: Backend> LiveController<B> {
 
 	/// F5 / Run: every frame from frame 0, followed.
 	pub fn run_user(&mut self, project: &Project, now: Instant) -> bool {
-		if self.request.is_none() {
+		if self.request().is_none() {
 			self.respec(project);
 		}
 		let started = self.want_all(Then::Run, now);
@@ -778,8 +804,9 @@ impl<B: Backend> LiveController<B> {
 		started
 	}
 
-	/// Stop / Esc: the frames so far stay, the preview on the newest one, Live off.
+	/// Stop / Esc: the frames so far stay, the preview on the newest one, Live off; a waiting export is dropped.
 	pub fn stop_run(&mut self) {
+		self.drop_waiting_export();
 		if self.run_is_active() {
 			if self.live
 				&& let Some(newest) = self.present_through(self.playback.position())
@@ -829,7 +856,7 @@ impl<B: Backend> LiveController<B> {
 			return;
 		}
 		self.live = false;
-		if self.request.is_none() {
+		if self.request().is_none() {
 			self.respec(project);
 		}
 		if self.complete() {
@@ -858,7 +885,9 @@ impl<B: Backend> LiveController<B> {
 		if self.export_busy() {
 			return ExportGate::Busy;
 		}
-		self.warning = None;
+		if self.warning.take().is_some() {
+			self.notices.push(Notice::WarningDropped);
+		}
 		if self.is_full_for_export(needs_intensity) {
 			self.export = Export::Reading;
 			return ExportGate::Ready;
@@ -866,7 +895,7 @@ impl<B: Backend> LiveController<B> {
 		self.quality = PreviewQuality::FULL;
 		self.track_intensity = needs_intensity;
 		self.respec(project);
-		if self.request.is_none() {
+		if self.request().is_none() {
 			return ExportGate::Failed;
 		}
 		self.start(Then::Rerun, now);
@@ -1604,5 +1633,128 @@ mod tests {
 		c.tick(t, &p);
 		assert!(c.backend().goal().revision > revision, "the edit is taken up when the export ends");
 		assert_eq!(c.backend().wanted(), Wanted::All);
+	}
+
+	#[test]
+	fn a_probe_and_brightness_edit_keeps_16_bit_frames() {
+		let t = Instant::now();
+		let mut p = project();
+		p.add_probe();
+		let settings = LiveSettings { quality: PreviewQuality::FULL, ..LiveSettings::default() };
+		let mut c = LiveController::new(FakeBackend::default(), settings);
+		c.project_replaced(&p, t);
+		c.tick(t, &p);
+		c.backend_mut().complete();
+		c.tick(t, &p);
+		let generation = c.backend().store().generation();
+		c.on_change(ChangeKind::ProbesAndBrightness, &p, None, t);
+		c.tick(t, &p);
+		assert_eq!(c.backend().store().generation(), generation, "the brightness is not baked into the frames");
+		assert!(c.backend().store().is_complete());
+	}
+
+	#[test]
+	fn stop_drops_the_export_waiting_for_its_run() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		c.tick(t, &p);
+		c.take_notices();
+		c.stop_run();
+		assert!(c.take_notices().contains(&Notice::ExportStopped), "the waiting export is told");
+		assert!(!c.export_busy());
+		assert_eq!(c.backend().wanted(), Wanted::Position, "nobody wants the export's run any more");
+	}
+
+	#[test]
+	fn an_export_drops_the_memory_warning_and_a_run_during_its_read_keeps_the_frames() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.backend_mut().budgets = Some((1, 1));
+		assert!(!c.run_user(&p, t));
+		c.take_notices();
+		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert!(c.take_notices().contains(&Notice::WarningDropped), "the warning's dialog closes");
+		assert!(c.warning().is_none());
+		c.backend_mut().complete();
+		c.tick(t, &p);
+		assert!(c.take_notices().contains(&Notice::ExportReady));
+		let revision = c.backend().goal().revision;
+		let generation = c.backend().store().generation();
+		assert!(c.run_user(&p, t), "the export's frames are all there: Run does not ask");
+		c.tick(t, &p);
+		assert!(!c.take_notices().contains(&Notice::AskMemoryWarning));
+		assert!(c.export_busy());
+		assert_eq!(c.backend().goal().revision, revision, "the frames stay while the export reads them");
+		assert_eq!(c.backend().store().generation(), generation);
+	}
+
+	/// Holds every goal until [`deliver`](Self::deliver): a worker that has not adopted yet.
+	struct Delayed {
+		inner: FakeBackend,
+		queued: Option<Goal>,
+	}
+
+	impl Delayed {
+		fn deliver(&mut self) {
+			if let Some(goal) = self.queued.take() {
+				self.inner.set_goal(goal);
+			}
+		}
+	}
+
+	impl Backend for Delayed {
+		fn set_goal(&mut self, goal: Goal) {
+			self.queued = Some(goal);
+		}
+		fn status(&self) -> Status {
+			self.inner.status()
+		}
+		fn with_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+			self.inner.with_traces(f);
+		}
+		fn with_held_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+			self.inner.with_held_traces(f);
+		}
+		fn take_fit(&mut self) -> Option<FitFrame> {
+			self.inner.take_fit()
+		}
+		fn engine_changed(&mut self) {}
+		fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64) {
+			self.inner.budgets(ram_percent, reclaimed)
+		}
+		fn engine_name(&self) -> String {
+			"delayed".into()
+		}
+	}
+
+	#[test]
+	fn the_store_is_indexed_by_the_schedule_of_the_revision_it_holds() {
+		let t = Instant::now();
+		let p = project();
+		let mut settings = LiveSettings { quality: PreviewQuality::FULL, ..LiveSettings::default() };
+		let mut c = LiveController::new(Delayed { inner: FakeBackend::default(), queued: None }, settings);
+		c.project_replaced(&p, t);
+		c.tick(t, &p);
+		c.backend_mut().deliver();
+		c.backend_mut().inner.complete();
+		c.scrub(80, t);
+		c.backend_mut().deliver();
+		c.tick(t, &p);
+		assert!(matches!(c.shown_source(), Some(ShownSource::Stored(_, 80))));
+		settings.quality = PreviewQuality { frame_divisor: 2, ..PreviewQuality::FULL };
+		c.set_settings(settings);
+		c.on_change(ChangeKind::Simulation, &p, None, t);
+		c.tick(t, &p);
+		assert!(
+			matches!(c.shown_source(), Some(ShownSource::Stored(_, 80))),
+			"the old store's frame 80 until the half frames are adopted"
+		);
+		assert_eq!(c.present_spans(), [(0, 99)]);
+		c.backend_mut().deliver();
+		c.tick(t, &p);
+		assert_eq!(c.present_spans(), [], "the new store is empty");
 	}
 }

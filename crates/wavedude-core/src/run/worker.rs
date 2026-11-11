@@ -119,14 +119,6 @@ pub struct FitFrame {
 	pub snapshot: Arc<Snapshot>,
 }
 
-#[derive(Clone, Debug)]
-struct Published {
-	adopted: u64,
-	state: WorkState,
-	steps_done: u32,
-	traces_steps: u32,
-}
-
 struct Shared {
 	goal: Mutex<(Goal, u64)>,
 	wake: Condvar,
@@ -136,12 +128,35 @@ struct Shared {
 	/// The engine is to be built anew (the device changed).
 	rebuild: AtomicBool,
 	shutdown: AtomicBool,
-	published: Mutex<Published>,
-	store: Mutex<Option<Arc<FrameStore>>>,
+	/// One lock, so a reader never pairs a revision with another revision's state or store.
+	published: Mutex<Status>,
 	traces: Mutex<Vec<ProbeTrace>>,
 	/// The traces of the generation before, while its frames are still looked at.
 	held: Mutex<Vec<ProbeTrace>>,
 	fit: Mutex<Option<FitFrame>>,
+}
+
+impl Shared {
+	fn new() -> Self {
+		Self {
+			goal: Mutex::new((Goal::default(), 0)),
+			wake: Condvar::new(),
+			goal_number: AtomicU64::new(0),
+			paused: AtomicBool::new(false),
+			rebuild: AtomicBool::new(false),
+			shutdown: AtomicBool::new(false),
+			published: Mutex::new(Status {
+				adopted: 0,
+				state: WorkState::Idle,
+				steps_done: 0,
+				traces_steps: 0,
+				store: None,
+			}),
+			traces: Mutex::new(Vec::new()),
+			held: Mutex::new(Vec::new()),
+			fit: Mutex::new(None),
+		}
+	}
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -163,36 +178,8 @@ impl RunWorker {
 			Ok(bytes) => tracing::info!("removed {bytes} bytes of spill files left in {}", cache_dir.display()),
 			Err(e) => tracing::warn!("the spill folder {} could not be swept: {e}", cache_dir.display()),
 		}
-		let shared = Arc::new(Shared {
-			goal: Mutex::new((Goal::default(), 0)),
-			wake: Condvar::new(),
-			goal_number: AtomicU64::new(0),
-			paused: AtomicBool::new(false),
-			rebuild: AtomicBool::new(false),
-			shutdown: AtomicBool::new(false),
-			published: Mutex::new(Published { adopted: 0, state: WorkState::Idle, steps_done: 0, traces_steps: 0 }),
-			store: Mutex::new(None),
-			traces: Mutex::new(Vec::new()),
-			held: Mutex::new(Vec::new()),
-			fit: Mutex::new(None),
-		});
-		let worker = Worker {
-			shared: shared.clone(),
-			factory,
-			cache_dir,
-			scene,
-			built: None,
-			engine: None,
-			current: None,
-			steps_done: 0,
-			collector: None,
-			recorded: 0,
-			traces_steps: 0,
-			pending: None,
-			served_fit: None,
-			last_beat: Instant::now(),
-			goal_seen: 0,
-		};
+		let shared = Arc::new(Shared::new());
+		let worker = Worker::new(shared.clone(), factory, cache_dir, scene);
 		let thread = std::thread::Builder::new().name("live-run".into()).spawn(move || worker.run())?;
 		Ok(Self { shared, thread: Some(thread) })
 	}
@@ -223,18 +210,11 @@ impl RunWorker {
 	}
 
 	pub fn status(&self) -> Status {
-		let p = lock(&self.shared.published).clone();
-		Status {
-			adopted: p.adopted,
-			state: p.state,
-			steps_done: p.steps_done,
-			traces_steps: p.traces_steps,
-			store: lock(&self.shared.store).clone(),
-		}
+		lock(&self.shared.published).clone()
 	}
 
 	pub fn store(&self) -> Option<Arc<FrameStore>> {
-		lock(&self.shared.store).clone()
+		lock(&self.shared.published).store.clone()
 	}
 
 	/// Calls `f` with the probe traces of the spec in force, in its probe order.
@@ -279,6 +259,8 @@ struct Worker {
 	built: Option<(RunRequest, RunSpec)>,
 	engine: Option<Box<dyn WaveEngine>>,
 	current: Option<Current>,
+	/// The goal revision `current` serves; published with the next state.
+	adopted: u64,
 	/// The engine's steps since its reset for the spec in force.
 	steps_done: u32,
 	collector: Option<ProbeCollector>,
@@ -295,6 +277,27 @@ struct Worker {
 }
 
 impl Worker {
+	fn new(shared: Arc<Shared>, factory: EngineFactory, cache_dir: PathBuf, scene: Arc<Mutex<SceneCache>>) -> Self {
+		Self {
+			shared,
+			factory,
+			cache_dir,
+			scene,
+			built: None,
+			engine: None,
+			current: None,
+			adopted: 0,
+			steps_done: 0,
+			collector: None,
+			recorded: 0,
+			traces_steps: 0,
+			pending: None,
+			served_fit: None,
+			last_beat: Instant::now(),
+			goal_seen: 0,
+		}
+	}
+
 	fn run(mut self) {
 		let mut failed_at: Option<u64> = None;
 		loop {
@@ -407,7 +410,8 @@ impl Worker {
 		Ok(spec)
 	}
 
-	/// Puts `spec` in force: a generation when its frames differ, new traces when its probes do.
+	/// Puts `spec` in force: a generation when its frames differ, new traces when its probes do. Readers learn of
+	/// it with the next state published.
 	fn adopt(&mut self, spec: &RunSpec, goal: &Goal) -> Result<(), Interrupted> {
 		let same_frames = self.current.as_ref().is_some_and(|c| c.spec.same_frames_as(spec));
 		let same_probes = self.current.as_ref().is_some_and(|c| c.spec.same_probes_as(spec));
@@ -424,7 +428,7 @@ impl Worker {
 				old => {
 					// The old store's memory counts as free once every reader let go of it; the new store's
 					// producer waits for that (bounded, a reader may hold on).
-					*lock(&self.shared.store) = None;
+					lock(&self.shared.published).store = None;
 					let old = old.map(|c| c.store);
 					let reclaimed = old.as_ref().map_or(0, |s| s.ram_bytes());
 					let release = old.map(|old| -> super::store::Release {
@@ -447,7 +451,6 @@ impl Worker {
 				let mut held = lock(&self.shared.held);
 				*held = if same_probes { std::mem::take(&mut *traces) } else { Vec::new() };
 				traces.clear();
-				*lock(&self.shared.store) = Some(store.clone());
 			}
 			self.reset_engine(old_spec.as_ref(), spec);
 			self.current = Some(Current { spec: spec.clone(), store });
@@ -466,10 +469,7 @@ impl Worker {
 				tracing::debug!(revision = goal.revision, "live run: new probes");
 			}
 		}
-		let mut p = lock(&self.shared.published);
-		p.adopted = goal.revision;
-		p.steps_done = self.steps_done;
-		p.traces_steps = self.traces_steps;
+		self.adopted = goal.revision;
 		Ok(())
 	}
 
@@ -532,7 +532,6 @@ impl Worker {
 		self.engine = None;
 		self.current = None;
 		self.collector = None;
-		*lock(&self.shared.store) = None;
 		lock(&self.shared.traces).clear();
 		lock(&self.shared.held).clear();
 	}
@@ -799,11 +798,14 @@ impl Worker {
 		self.traces_steps = self.recorded;
 	}
 
+	/// Publishes `state` with the revision, progress and store it belongs to.
 	fn publish(&self, state: WorkState) {
 		let mut p = lock(&self.shared.published);
+		p.adopted = self.adopted;
 		p.state = state;
 		p.steps_done = self.steps_done;
 		p.traces_steps = self.traces_steps;
+		p.store = self.current.as_ref().map(|c| c.store.clone());
 	}
 }
 
@@ -828,4 +830,65 @@ enum Interrupted {
 	/// The goal changed and the unit is no longer wanted.
 	Goal,
 	Failed(RunError),
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::model::{Probe, Project, Source};
+	use crate::run::PreviewQuality;
+
+	fn project(probe_x: i32) -> Project {
+		let mut p = Project::default();
+		p.scene.width = 32;
+		p.scene.height = 24;
+		p.simulation.steps = 40;
+		p.simulation.visualize_every = 2;
+		p.sources.push(Source { name: "S".into(), x: 16.0, y: 12.0, ..Source::default() });
+		p.probes.push(Probe { name: "P".into(), ax: probe_x, ay: 12, ..Probe::default() });
+		p
+	}
+
+	fn goal(revision: u64, p: &Project) -> Goal {
+		let run = RunRequest::new(p, PreviewQuality::FULL, false);
+		Goal { revision, run: Some(run), wanted: Wanted::All, ..Goal::default() }
+	}
+
+	fn served(r: Result<bool, Interrupted>) -> bool {
+		match r {
+			Ok(more) => more,
+			Err(Interrupted::Failed(e)) => panic!("the run failed: {e}"),
+			Err(_) => panic!("the run was interrupted"),
+		}
+	}
+
+	#[test]
+	fn a_probe_edit_is_published_with_the_state_it_brings() {
+		let dir = tempfile::tempdir().unwrap();
+		let shared = Arc::new(Shared::new());
+		let factory: EngineFactory = Box::new(|scene, options| Box::new(CpuEngine::new(scene, options)));
+		let mut w = Worker::new(shared.clone(), factory, dir.path().to_path_buf(), Arc::default());
+		// the handle without a thread: this test is the worker
+		let handle = RunWorker { shared, thread: None };
+		let first = goal(1, &project(20));
+		handle.set_goal(first.clone());
+		while served(w.serve(&first, 1)) {}
+		let done = handle.status();
+		assert!(done.adopted == 1 && done.state == WorkState::Idle);
+		assert!(done.store.is_some_and(|s| s.is_complete()));
+
+		let moved = goal(2, &project(22));
+		let spec = w.spec_of(moved.run.as_ref().unwrap()).unwrap();
+		served(w.adopt(&spec, &moved).map(|()| true));
+		let between = handle.status();
+		assert!(
+			between.adopted == 1 || between.state != WorkState::Idle,
+			"the new revision with the old Idle reads as a complete run without traces"
+		);
+		handle.set_goal(moved.clone());
+		assert!(served(w.serve(&moved, 2)));
+		let after = handle.status();
+		assert_eq!(after.adopted, 2);
+		assert_ne!(after.state, WorkState::Idle, "the traces are recorded anew");
+	}
 }

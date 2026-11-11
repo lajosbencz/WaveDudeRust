@@ -33,8 +33,6 @@ pub struct Document {
 	pub suggested_file_name: Option<PathBuf>,
 	/// Edits since the saved step (the title's asterisk).
 	pub dirty: bool,
-	/// The history step the file holds; `None` when no step is saved.
-	pub saved_step: Option<usize>,
 	pub history: History,
 	/// The empty project at start or after Close: the title shows the app name alone until it is edited.
 	placeholder: bool,
@@ -60,16 +58,7 @@ impl Document {
 	fn with(mut project: Project, path: Option<PathBuf>, suggested: Option<PathBuf>, placeholder: bool) -> Self {
 		project.normalize();
 		let history = History::new(&project);
-		Self {
-			project,
-			path,
-			suggested_file_name: suggested,
-			dirty: false,
-			saved_step: Some(0),
-			history,
-			placeholder,
-			image_watch: None,
-		}
+		Self { project, path, suggested_file_name: suggested, dirty: false, history, placeholder, image_watch: None }
 	}
 
 	/// The empty project at start and after Close.
@@ -154,8 +143,8 @@ impl Document {
 		};
 		self.project.scene.image_data = Some(bytes.into());
 		self.project.scene.image_size = size;
-		self.saved_step = None;
 		self.history = History::new(&self.project);
+		self.history.forget_saved();
 		self.refresh_dirty();
 		tracing::info!("the scene image was re-embedded from '{}'", path.display());
 		true
@@ -233,7 +222,7 @@ impl Document {
 	}
 
 	pub fn refresh_dirty(&mut self) {
-		self.dirty = self.history.has_pending() || self.saved_step != Some(self.history.current());
+		self.dirty = !self.history.at_saved();
 	}
 
 	/// Saves to the project's file; [`DocumentError::NoPath`] when it has none (Save As then).
@@ -252,7 +241,7 @@ impl Document {
 		self.path = Some(path.to_owned());
 		self.suggested_file_name = None;
 		self.placeholder = false;
-		self.saved_step = Some(self.history.current());
+		self.history.mark_saved();
 		self.refresh_dirty();
 		Ok(())
 	}
@@ -333,5 +322,23 @@ mod tests {
 		d.save_as(&xml).unwrap();
 		let Opened::Project(o) = Document::open(&xml).unwrap() else { panic!("a project") };
 		assert_eq!(o.project.seed, 5);
+	}
+
+	#[test]
+	fn an_edit_after_undo_is_dirty_where_the_saved_step_was() {
+		let dir = tempfile::tempdir().unwrap();
+		let t = Instant::now();
+		let mut d = Document::new_project();
+		for seed in [11, 12] {
+			d.project.seed = seed;
+			d.edited(t);
+			d.commit_step();
+		}
+		d.save_as(&dir.path().join("a.wdproj")).unwrap();
+		assert!(d.undo());
+		d.project.seed = 13;
+		d.edited(t);
+		d.commit_step();
+		assert!(d.dirty, "the file holds seed 12");
 	}
 }

@@ -257,16 +257,19 @@ pub enum ChangeKind {
 	Brightness,
 	/// A probe's place or measurement: the frames stay, the recordings are made anew.
 	ProbePresentation,
+	/// Brightness and ProbePresentation together: a simulation edit with 8-bit preview samples, else
+	/// ProbePresentation.
+	ProbesAndBrightness,
 	/// Scene, solver, seed, sources, parts: the run is stale.
 	Simulation,
 }
 
 impl ChangeKind {
-	/// The kind covering both.
+	/// The least destructive kind covering both.
 	pub fn merge(self, other: Self) -> Self {
 		match (self, other) {
 			(Self::Brightness, Self::ProbePresentation) | (Self::ProbePresentation, Self::Brightness) => {
-				Self::Simulation
+				Self::ProbesAndBrightness
 			}
 			(a, b) => a.max(b),
 		}
@@ -876,6 +879,8 @@ mod tests {
 		assert_eq!(classify(&p, &moved), ChangeKind::Display);
 		moved.probes[0].ay += 1;
 		assert_eq!(classify(&p, &moved), ChangeKind::ProbePresentation);
+		moved.display.field.brightness += 1.0;
+		assert_eq!(classify(&p, &moved), ChangeKind::ProbesAndBrightness, "the frames stay with 16-bit samples");
 		assert_eq!(apply(&mut p, &mut s, set(src, "no_such", json!(1))), Err(CommandError::NoField("no_such".into())));
 		assert!(matches!(
 			apply(&mut p, &mut s, set(src, "frequency", json!("high"))),

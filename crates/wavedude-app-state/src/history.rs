@@ -36,14 +36,16 @@ impl Step {
 pub struct History {
 	steps: Vec<Step>,
 	current: usize,
+	/// The step the file holds; `None` once no step does.
+	saved: Option<usize>,
 	pending_since: Option<Instant>,
 	mouse_held: bool,
 }
 
 impl History {
-	/// A history whose first step is `project` as it is.
+	/// A history whose first step is `project` as it is, saved.
 	pub fn new(project: &Project) -> Self {
-		let mut h = Self { steps: Vec::new(), current: 0, pending_since: None, mouse_held: false };
+		let mut h = Self { steps: Vec::new(), current: 0, saved: Some(0), pending_since: None, mouse_held: false };
 		let first = h.snapshot(project);
 		h.steps.push(first);
 		h
@@ -99,6 +101,9 @@ impl History {
 			return false;
 		}
 		self.steps.truncate(self.current + 1);
+		if self.saved > Some(self.current) {
+			self.saved = None;
+		}
 		self.steps.push(step);
 		self.current += 1;
 		true
@@ -137,6 +142,21 @@ impl History {
 	/// The index of the step the project is at.
 	pub fn current(&self) -> usize {
 		self.current
+	}
+
+	/// The project is the step the file holds.
+	pub fn at_saved(&self) -> bool {
+		self.pending_since.is_none() && self.saved == Some(self.current)
+	}
+
+	/// The current step is the one the file holds.
+	pub fn mark_saved(&mut self) {
+		self.saved = Some(self.current);
+	}
+
+	/// No step is what the file holds.
+	pub fn forget_saved(&mut self) {
+		self.saved = None;
 	}
 
 	pub fn has_pending(&self) -> bool {
@@ -212,6 +232,26 @@ mod tests {
 		assert!(!h.can_redo(), "a new edit ends the redo branch");
 		h.commit(&p);
 		assert!(!h.redo(&mut p));
+	}
+
+	#[test]
+	fn a_new_branch_drops_the_saved_step_it_replaces() {
+		let start = t0();
+		let mut p = Project::default();
+		let mut h = History::new(&p);
+		for seed in [11, 12] {
+			p.seed = seed;
+			h.edit_started(start);
+			h.commit(&p);
+		}
+		h.mark_saved();
+		assert!(h.undo(&mut p));
+		assert!(!h.at_saved());
+		p.seed = 13;
+		h.edit_started(start);
+		h.commit(&p);
+		assert_eq!(h.current(), 2, "the new step takes the saved step's index");
+		assert!(!h.at_saved(), "the step the file held is gone");
 	}
 
 	#[test]
