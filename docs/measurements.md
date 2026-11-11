@@ -53,6 +53,20 @@ with captures 0.243 and 0.334 ms; CPU 1.54 / 3.35 ms, with captures 1.89 / 3.76 
 spread. The gap to the C# is the work described above (two sub-steps, four passes, the CPML, one queue), not
 overhead; nothing cheaper than those was found, so the figures stand.
 
+### Example22 end to end, 2026-11-11
+
+Both programs on the same RTX 5070 Ti (Next under wine, OpenCL; ours wgpu), default preview settings (full
+resolution, every frame, 8-bit samples), the cache sized to hold the whole run (11.0 GB, nothing on disk), F5 from
+frame 0 over 3800 steps and 1900 frames:
+
+| | Next 05a0348 | WaveDudeRust 2a5f4e8 |
+|---|---|---|
+| Run Completed | 1.7 s | 3.5 s |
+| Grid | 2880 x 1080 canvas | 3008 x 1208 with the 64 px CPML rim, 2 sub-steps a step |
+
+The ratio is the sub-steps and the rim, as above. With the default 30 % cache the same run spilled 7.2 GB to disk
+and took 6.9 s.
+
 ## The new parts against WaveDude Next 05a0348
 
 2026-11-10. `tools/compare-csharp` on upstream's one-of-every-kind project (`_tools/ui_check/figures.wdproj` as a
