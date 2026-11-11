@@ -47,6 +47,7 @@ serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 quick-xml = { version = "0.42", features = ["serialize"] }
 tracing = "0.1"
+notify = "8"
 insta = "1"
 proptest = "1"
 png = "0.18"

@@ -4,7 +4,10 @@
 //! Threads: plain data on the UI thread; loading and saving block the caller.
 
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant};
+
+use notify::Watcher;
 
 use wavedude_core::io::{self, FormatError, IoError, legacy, wdproj};
 use wavedude_core::model::Project;
@@ -24,7 +27,7 @@ pub enum DocumentError {
 }
 
 /// The project being edited and its file.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Document {
 	pub project: Project,
 	/// The file it was opened from or saved to.
@@ -36,8 +39,8 @@ pub struct Document {
 	pub history: History,
 	/// The empty project at start or after Close: the title shows the app name alone until it is edited.
 	placeholder: bool,
-	/// The scene image file's modification time last seen and when it was last checked.
-	image_watch: Option<(std::time::SystemTime, Instant)>,
+	/// The scene image file watched while the project names one.
+	image_watch: Option<ImageWatch>,
 }
 
 /// What a file opened as: a project, or a colour scheme for the open project.
@@ -52,7 +55,57 @@ fn extension(path: &Path) -> String {
 }
 
 /// How often the scene image's file is checked for a change.
-const IMAGE_WATCH: std::time::Duration = std::time::Duration::from_secs(1);
+/// A changed scene image file is re-embedded this long after its last change (docs/ui/60): a writer may still
+/// hold it.
+const IMAGE_DEBOUNCE: Duration = Duration::from_millis(400);
+
+/// The scene image's file, watched while the project names it.
+struct ImageWatch {
+	path: PathBuf,
+	_watcher: notify::RecommendedWatcher,
+	/// When the file last changed on disk; taken once re-embedded.
+	changed: Arc<Mutex<Option<Instant>>>,
+}
+
+impl ImageWatch {
+	/// Watches `path`'s folder for changes to the file (the file itself would be lost to an editor that replaces
+	/// it). None, with a warning, where the platform refuses.
+	fn start(path: PathBuf) -> Option<Self> {
+		let changed = Arc::new(Mutex::new(None));
+		let name = path.file_name()?.to_owned();
+		let mark = changed.clone();
+		let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+			if let Ok(event) = event
+				&& event.paths.iter().any(|p| p.file_name() == Some(&name))
+			{
+				*lock(&mark) = Some(Instant::now());
+			}
+		});
+		let folder = path.parent()?.to_owned();
+		let mut watcher = match watcher {
+			Ok(w) => w,
+			Err(e) => {
+				tracing::warn!("the scene image file '{}' is not watched: {e}", path.display());
+				return None;
+			}
+		};
+		if let Err(e) = watcher.watch(&folder, notify::RecursiveMode::NonRecursive) {
+			tracing::warn!("the scene image file '{}' is not watched: {e}", path.display());
+			return None;
+		}
+		Some(Self { path, _watcher: watcher, changed })
+	}
+}
+
+impl std::fmt::Debug for ImageWatch {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("ImageWatch").field("path", &self.path).finish_non_exhaustive()
+	}
+}
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+	m.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 impl Document {
 	fn with(mut project: Project, path: Option<PathBuf>, suggested: Option<PathBuf>, placeholder: bool) -> Self {
@@ -156,25 +209,25 @@ impl Document {
 		(!path.as_os_str().is_empty()).then_some(path)
 	}
 
-	/// Follows the scene image's file while the project is open: checked every `IMAGE_WATCH`, a changed file
-	/// is re-embedded as an edit (undoable, the run starts over). Returns whether the image changed.
-	pub fn poll_image_file(&mut self, now: Instant) -> bool {
-		let Some(path) = self.image_file() else {
-			self.image_watch = None;
-			return false;
-		};
-		if self.image_watch.is_some_and(|(_, checked)| now.saturating_duration_since(checked) < IMAGE_WATCH) {
+	/// Follows the scene image's file while the project names one: a change on disk is re-embedded as an edit
+	/// (undoable, the run starts over) once `IMAGE_DEBOUNCE` has passed since the last change, and tried again
+	/// while the writer still holds the file. Returns whether the image changed.
+	pub fn follow_image_file(&mut self, now: Instant) -> bool {
+		let path = self.image_file();
+		if self.image_watch.as_ref().map(|w| &w.path) != path.as_ref() {
+			self.image_watch = path.and_then(ImageWatch::start);
+		}
+		let Some(watch) = &self.image_watch else { return false };
+		let Some(at) = *lock(&watch.changed) else { return false };
+		if now.saturating_duration_since(at) < IMAGE_DEBOUNCE {
 			return false;
 		}
-		let Some(modified) = std::fs::metadata(&path).and_then(|m| m.modified()).ok() else {
-			self.image_watch = None;
+		let path = watch.path.clone();
+		let Ok(bytes) = std::fs::read(&path) else {
+			*lock(&watch.changed) = Some(now);
 			return false;
 		};
-		let changed = self.image_watch.replace((modified, now)).is_some_and(|(seen, _)| seen != modified);
-		if !changed {
-			return false;
-		}
-		let Ok(bytes) = std::fs::read(&path) else { return false };
+		*lock(&watch.changed) = None;
 		if self.project.scene.image_data.as_deref() == Some(&bytes[..]) {
 			return false;
 		}
@@ -281,6 +334,36 @@ impl Document {
 mod tests {
 	use super::*;
 	use std::time::Duration;
+
+	fn png(value: u8) -> Vec<u8> {
+		let mut out = Vec::new();
+		let mut encoder = png::Encoder::new(&mut out, 2, 2);
+		encoder.set_color(png::ColorType::Rgba);
+		encoder.set_depth(png::BitDepth::Eight);
+		encoder.write_header().unwrap().write_image_data(&[value; 16]).unwrap();
+		out
+	}
+
+	#[test]
+	fn a_changed_scene_image_file_is_re_embedded_after_the_debounce() {
+		let dir = tempfile::tempdir().unwrap();
+		let file = dir.path().join("scene.png");
+		std::fs::write(&file, png(10)).unwrap();
+		let mut d = Document::new_project();
+		d.project.scene.image_path = file.to_string_lossy().into_owned();
+		assert!(!d.follow_image_file(Instant::now()), "nothing changed yet; the watch is armed");
+		std::fs::write(&file, png(200)).unwrap();
+		let deadline = Instant::now() + Duration::from_secs(5);
+		let mut changed = false;
+		while !changed && Instant::now() < deadline {
+			std::thread::sleep(Duration::from_millis(50));
+			// a tick past the debounce
+			changed = d.follow_image_file(Instant::now() + IMAGE_DEBOUNCE);
+		}
+		assert!(changed, "the change on disk reached the document");
+		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(200)[..]));
+		assert!(d.dirty, "the re-embed is an edit");
+	}
 
 	#[test]
 	fn titles() {

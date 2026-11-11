@@ -264,6 +264,19 @@ fn the_memory_tier_waits_for_the_release() {
 	st.write(block).unwrap();
 }
 
+/// The signal a store's drop fires, which the next store's producer waits for instead of polling.
+#[test]
+fn the_release_signal_fires_when_the_last_handle_drops() {
+	let s = spec(&project(40, 30, 4), PreviewQuality::FULL);
+	let st = Arc::new(FrameStore::new(s.store_layout(), GIB, None).unwrap());
+	let signal = st.release_signal();
+	let reader = st.clone();
+	drop(st);
+	assert!(!signal.wait(Duration::from_millis(20)), "a reader still holds the store");
+	drop(reader);
+	assert!(signal.wait(Duration::from_secs(5)), "the last handle dropped");
+}
+
 #[test]
 fn frames_in_budget() {
 	let mut p = project(1920, 1080, 2500);

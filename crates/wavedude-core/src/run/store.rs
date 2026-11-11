@@ -25,8 +25,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
 
@@ -144,6 +145,29 @@ struct Spill {
 /// Waited for on the producer thread before the first block is allocated.
 pub type Release = Box<dyn FnOnce() + Send>;
 
+/// Fires when a store is dropped (its last handle let go), so the next store's producer can wait for the
+/// memory without polling. [`FrameStore::release_signal`].
+pub struct ReleaseSignal {
+	done: Mutex<bool>,
+	fired: Condvar,
+}
+
+impl ReleaseSignal {
+	/// Waits up to `timeout` for the drop; whether it happened.
+	pub fn wait(&self, timeout: Duration) -> bool {
+		let deadline = Instant::now() + timeout;
+		let mut done = lock(&self.done);
+		while !*done {
+			let left = deadline.saturating_duration_since(Instant::now());
+			if left.is_zero() {
+				break;
+			}
+			done = self.fired.wait_timeout(done, left).unwrap_or_else(PoisonError::into_inner).0;
+		}
+		*done
+	}
+}
+
 /// Removes the named `.wdfs` spill files earlier builds left in `dir` when their process died; the bytes freed.
 pub fn sweep_leftovers(dir: &Path) -> io::Result<u64> {
 	let mut freed = 0;
@@ -196,6 +220,7 @@ pub struct FrameStore {
 	writing: Mutex<()>,
 	cancel: Arc<AtomicBool>,
 	producer: Mutex<Option<JoinHandle<()>>>,
+	released: Arc<ReleaseSignal>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -236,6 +261,7 @@ impl FrameStore {
 			writing: Mutex::new(()),
 			cancel: cancel.clone(),
 			producer: Mutex::new(None),
+			released: Arc::new(ReleaseSignal { done: Mutex::new(false), fired: Condvar::new() }),
 		};
 		if ram_frames < layout.capacity {
 			store.start_spill(ram_frames)?;
@@ -249,6 +275,11 @@ impl FrameStore {
 			*lock(&store.producer) = Some(handle);
 		}
 		Ok(store)
+	}
+
+	/// Fires when this store is dropped.
+	pub fn release_signal(&self) -> Arc<ReleaseSignal> {
+		self.released.clone()
 	}
 
 	pub fn layout(&self) -> &StoreLayout {
@@ -613,6 +644,8 @@ impl Drop for FrameStore {
 		if let Some(handle) = self.producer.get_mut().unwrap_or_else(PoisonError::into_inner).take() {
 			let _ = handle.join();
 		}
+		*lock(&self.released.done) = true;
+		self.released.fired.notify_all();
 	}
 }
 

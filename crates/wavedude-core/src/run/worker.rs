@@ -444,12 +444,10 @@ impl Worker {
 					let old = old.map(|c| c.store);
 					let reclaimed = old.as_ref().map_or(0, |s| s.ram_bytes());
 					let release = old.map(|old| -> super::store::Release {
+						let signal = old.release_signal();
 						Box::new(move || {
-							let deadline = Instant::now() + RELEASE_WAIT;
-							while Arc::strong_count(&old) > 1 && Instant::now() < deadline {
-								std::thread::sleep(Duration::from_millis(1));
-							}
 							drop(old);
+							signal.wait(RELEASE_WAIT);
 						})
 					});
 					let budget = Budget::compute(reclaimed, goal.ram_percent);

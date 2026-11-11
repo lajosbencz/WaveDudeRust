@@ -374,7 +374,7 @@ impl<B: Backend> AppState<B> {
 	/// ticks.
 	pub fn tick(&mut self, now: Instant) -> bool {
 		self.document.tick(now);
-		if self.document.poll_image_file(now) {
+		if self.document.follow_image_file(now) {
 			self.document_changed();
 			let note = Some("the scene image file changed".into());
 			self.live.on_change(ChangeKind::Simulation, &self.document.project, note, now);
