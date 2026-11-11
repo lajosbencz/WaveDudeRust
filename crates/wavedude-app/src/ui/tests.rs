@@ -29,7 +29,7 @@ fn shell(dir: &Path, prepare: impl FnOnce(&mut super::shared::App)) -> (TestingR
 		ring: LogRing::new(),
 		dirs,
 		close: CloseGate::default(),
-		open: None,
+		open: Default::default(),
 		update: Default::default(),
 		placement: Default::default(),
 	};

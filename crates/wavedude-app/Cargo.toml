@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish = false
-description = "WaveDude desktop application (Freya)"
+description = "A 2D wave simulator"
 
 [lib]
 path = "src/lib.rs"
@@ -40,6 +40,12 @@ serde_json = { workspace = true, features = ["float_roundtrip"] }
 tracing.workspace = true
 wavedude-core = { path = "../wavedude-core", features = ["gpu"] }
 
+# The Finder's open requests (src/ui/open_requests.rs).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSURL"] }
+
 # The executable's icon and names in Explorer (build.rs); cargo-packager does not embed them.
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
@@ -57,16 +63,18 @@ tracing-subscriber = { version = "0.3", features = ["fmt"] }
 product-name = "WaveDude Rust"
 identifier = "io.github.lajosbencz.wavedude-rust"
 category = "Education"
-description = "A 2D wave simulator"
 authors = ["Lajos Bencz"]
+publisher = "Lajos Bencz"
+homepage = "https://github.com/lajosbencz/WaveDudeRust"
 copyright = "Copyright (C) 2026 Lajos Bencz"
 license-file = "../../LICENSE.md"
 icons = ["assets/icons/*"]
 out-dir = "../../target/packages"
 binaries = [{ path = "wavedude-app", main = true }, { path = "wavedude-cli" }]
+# `name` is the Windows ProgId (no spaces); macOS takes its document types from assets/macos/Info.plist.
 file-associations = [
-	{ extensions = ["wdproj"], mime-type = "application/x-wavedude-project+xml", description = "WaveDude project", name = "WaveDude project", role = "editor" },
-	{ extensions = ["wdscheme"], mime-type = "application/x-wavedude-scheme+xml", description = "WaveDude colour scheme", name = "WaveDude colour scheme", role = "editor" },
+	{ extensions = ["wdproj"], mime-type = "application/x-wavedude-project+xml", description = "WaveDude project", name = "WaveDudeRust.Project", role = "editor" },
+	{ extensions = ["wdscheme"], mime-type = "application/x-wavedude-scheme+xml", description = "WaveDude colour scheme", name = "WaveDudeRust.ColorScheme", role = "editor" },
 ]
 
 [package.metadata.packager.nsis]
@@ -75,3 +83,9 @@ installer-icon = "assets/icons/icon.ico"
 # Ad-hoc signature: an unsigned bundle on Apple silicon is reported as damaged instead of unverified.
 [package.metadata.packager.macos]
 signing-identity = "-"
+# Merged over cargo-packager's: the exported types and the document types that name them.
+info-plist-path = "assets/macos/Info.plist"
+
+# The MIME types the .desktop file names, for desktop integration of the AppImage.
+[package.metadata.packager.appimage]
+files = { "assets/linux/wavedude-rust.xml" = "usr/share/mime/packages/wavedude-rust.xml" }

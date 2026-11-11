@@ -5,6 +5,7 @@
 
 use freya::prelude::*;
 use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, MIN_SIZE, root, theme_background};
+use wavedude_app::ui::open_requests::OpenRequests;
 use wavedude_app::ui::placement::{self, Placement};
 use wavedude_app_state::AppState;
 use wavedude_app_state::log::{self, LogRing};
@@ -44,15 +45,24 @@ fn run() -> anyhow::Result<()> {
 	}
 	let _os_theme = wavedude_app::ui::os_theme::watch();
 	let app = AppState::start(&dirs, args.iter().map(String::as_str))?;
-	let open = args.iter().find(|a| !a.starts_with("--")).map(Into::into);
+	let open = OpenRequests::default();
+	if let Some(path) = args.iter().find(|a| !a.starts_with("--")) {
+		open.push(path.into());
+	}
 	let (zoom, width, height, title, theme) =
 		(app.settings.ui_zoom, app.settings.window_width, app.settings.window_height, app.title(), app.settings.theme);
 	let close = CloseGate::default();
 	let update = wavedude_app::ui::update::Pending::default();
 	let placement = Placement::default();
 	let settings = app.settings.clone();
-	let info =
-		BootInfo { ring, dirs, close: close.clone(), open, update: update.clone(), placement: placement.clone() };
+	let info = BootInfo {
+		ring,
+		dirs,
+		close: close.clone(),
+		open: open.clone(),
+		update: update.clone(),
+		placement: placement.clone(),
+	};
 	let boot = Boot::new(app, info);
 	let title: &'static str = Box::leak(title.into_boxed_str());
 	let window = WindowConfig::new(root)
@@ -69,7 +79,14 @@ fn run() -> anyhow::Result<()> {
 		.with_on_close(
 			move |_, _| if close.on_close_request() { CloseDecision::Close } else { CloseDecision::KeepOpen },
 		);
-	launch(LaunchConfig::new().with_window(window).with_plugin(placement.plugin()));
+	let config = LaunchConfig::new().with_window(window).with_plugin(placement.plugin());
+	#[cfg(target_os = "macos")]
+	let (config, _delegate) = {
+		let event_loop = freya::winit::event_loop::EventLoop::<NativeEvent>::with_user_event().build()?;
+		let delegate = wavedude_app::ui::open_requests::install(&open);
+		(config.with_event_loop(event_loop), delegate)
+	};
+	launch(config);
 	update.install();
 	Ok(())
 }

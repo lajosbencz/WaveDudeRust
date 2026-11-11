@@ -11,6 +11,7 @@ pub mod manual;
 pub mod memory_warning;
 pub mod menus;
 pub mod messages;
+pub mod open_requests;
 pub mod os_theme;
 pub mod placement;
 pub mod preview;

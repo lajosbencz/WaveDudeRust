@@ -13,7 +13,8 @@ rust-version = "1.89"
 # fails the build. The cast lints and `missing_docs` are left out on purpose: casts are handled by the unit types,
 # and comments state only what the code cannot say.
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# deny, not forbid: the macOS application delegate (wavedude-app ui/open_requests.rs) allows it
+unsafe_code = "deny"
 rust_2018_idioms = { level = "deny", priority = -1 }
 unreachable_pub = "deny"
 unused_qualifications = "deny"

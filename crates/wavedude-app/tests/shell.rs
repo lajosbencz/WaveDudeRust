@@ -46,7 +46,7 @@ fn shell_sized(dir: &Path, answered: bool, size: Size2D) -> (TestingRunner, Shar
 		ring: LogRing::new(),
 		dirs,
 		close: CloseGate::default(),
-		open: None,
+		open: Default::default(),
 		update: Default::default(),
 		placement: Default::default(),
 	};

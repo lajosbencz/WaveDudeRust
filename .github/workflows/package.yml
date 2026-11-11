@@ -93,9 +93,17 @@ jobs:
       - name: Linux tarball
         if: runner.os == 'Linux'
         run: |
+          # a prefix tree with its own install.sh: menu entry, icons and file types beside the programs
           dir="wavedude-rust-$VERSION-${{ matrix.platform }}"
-          mkdir "$dir"
-          cp target/release/wavedude-app target/release/wavedude-cli LICENSE.md NOTICE.md README.md "$dir"
+          assets=crates/wavedude-app/assets
+          mkdir -p "$dir/bin" "$dir/share/applications" "$dir/share/mime/packages"
+          cp target/release/wavedude-app target/release/wavedude-cli "$dir/bin"
+          cp LICENSE.md NOTICE.md README.md "$assets/linux/install.sh" "$dir"
+          cp "$assets/linux/wavedude-app.desktop" "$dir/share/applications"
+          cp "$assets/linux/wavedude-rust.xml" "$dir/share/mime/packages"
+          for png in "$assets"/icons/*x*.png; do
+            install -D -m 644 "$png" "$dir/share/icons/hicolor/$(basename "$png" .png)/apps/wavedude-app.png"
+          done
           tar -czf "target/packages/$dir.tar.gz" "$dir"
       - name: macOS update archive
         # The updater's format, which cargo-packager makes only while signing: the bundle under its own name.

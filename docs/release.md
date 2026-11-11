@@ -85,3 +85,18 @@ it: the PNG sizes 16 to 512 (the Linux icon theme, the window and the About dial
 Windows executable through `build.rs`, and the installers) and `icon.icns` with 16 to 512 at 1x and 2x (macOS).
 cargo-packager reads them from the source tree, so the build cannot make them: after a change to the SVG, render the
 set again at those sizes and commit it with the SVG.
+
+## File types and desktop integration
+
+`.wdproj` and `.wdscheme` are declared once per platform, all naming the MIME types of the file associations in
+`crates/wavedude-app/Cargo.toml`:
+
+- Windows: the NSIS installer registers the ProgIds `WaveDudeRust.Project` and `WaveDudeRust.ColorScheme` (the
+  associations' `name`). cargo-packager 0.11.8's uninstaller leaves them registered (its template loops over
+  `association.ext`, a field that does not exist).
+- macOS: `assets/macos/Info.plist`, merged over cargo-packager's, exports the two types and names them in the document
+  types. The Finder hands a file to the running app as `application:openURLs:`, which the app delegate of
+  `src/ui/open_requests.rs` queues for the window.
+- Linux: `assets/linux/wavedude-rust.xml` (shared-mime-info) maps the globs to the MIME types the `.desktop` file names;
+  the AppImage carries it, and the tarball carries it with `wavedude-app.desktop`, the icon theme PNGs and `install.sh`,
+  which installs them under `PREFIX` (default `~/.local`) and removes them with `--uninstall`.

@@ -5,7 +5,6 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -88,8 +87,8 @@ pub struct BootInfo {
 	pub ring: LogRing,
 	pub dirs: AppDirs,
 	pub close: CloseGate,
-	/// The file named on the command line.
-	pub open: Option<PathBuf>,
+	/// Files the command line and the OS ask to open (super::open_requests).
+	pub open: super::open_requests::OpenRequests,
 	/// A downloaded update, installed by `main` after a restart's exit.
 	pub update: update::Pending,
 	/// The window's place, seen and asked for through the event loop.
@@ -374,7 +373,7 @@ struct Applied {
 
 async fn tick_loop(cx: Cx, mut theme: State<Theme>) {
 	let mut applied = Applied { zoom: 1.0, ..Applied::default() };
-	if let Some(path) = cx.info.open.clone() {
+	if let Some(path) = cx.info.open.take_last() {
 		cx.send(AppEvent::Guarded(Guarded::Open(path)));
 	}
 	if let Some(report) = wavedude_app_state::log::take_crash_report(&cx.info.dirs.logs()) {
@@ -386,6 +385,9 @@ async fn tick_loop(cx: Cx, mut theme: State<Theme>) {
 	}
 	loop {
 		timer(TICK).await;
+		if let Some(path) = cx.info.open.take_last() {
+			cx.send(AppEvent::Guarded(Guarded::Open(path)));
+		}
 		// a close asked for while a modal is open waits for it to close
 		if cx.ui.modal.peek().is_none() && cx.info.close.take_request() {
 			cx.send(AppEvent::Guarded(Guarded::Exit));
