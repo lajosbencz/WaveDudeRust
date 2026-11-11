@@ -14,7 +14,7 @@ extend-exclude = [
 ]
 
 [default]
-# Unicode code points in the key tables.
+# Icon glyph code points in the menu tables (U+EDE1 reads as the word "EDE").
 extend-ignore-re = ["U\\+[0-9A-F]{4}"]
 
 [default.extend-words]
