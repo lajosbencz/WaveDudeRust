@@ -6,6 +6,7 @@
 //! `wgpu::Device` and `wgpu::Queue` are `Send + Sync`; engines on different threads submit to the
 //! same queue, which wgpu serialises. Software adapters are refused: the CPU engine is faster.
 
+use crate::sync::lock;
 use std::sync::{Arc, Mutex};
 
 /// Why no GPU engine can be built, or why a GPU engine failed.
@@ -46,7 +47,7 @@ pub struct GpuContext {
 impl GpuContext {
 	/// The loss of the device, once it happened.
 	pub fn lost(&self) -> Option<GpuError> {
-		self.lost.lock().unwrap().clone()
+		lock(&self.lost).clone()
 	}
 }
 
@@ -55,7 +56,7 @@ static CONTEXT: Mutex<Option<Result<Arc<GpuContext>, String>>> = Mutex::new(None
 /// The shared context, created on the first call and again after a device loss; a failure to create one
 /// is kept, so a missing adapter is looked for once per process.
 pub fn context() -> Result<Arc<GpuContext>, GpuError> {
-	let mut slot = CONTEXT.lock().unwrap();
+	let mut slot = lock(&CONTEXT);
 	if let Some(Ok(c)) = slot.as_ref()
 		&& let Some(e) = c.lost()
 	{
@@ -87,7 +88,7 @@ fn create() -> Result<GpuContext, String> {
 	{
 		let lost = lost.clone();
 		device.set_device_lost_callback(move |reason, message| {
-			*lost.lock().unwrap() = Some(GpuError::Lost { reason, message });
+			*lock(&lost) = Some(GpuError::Lost { reason, message });
 		});
 	}
 	tracing::info!(

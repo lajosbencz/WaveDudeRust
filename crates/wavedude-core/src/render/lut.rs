@@ -1,5 +1,6 @@
 //! Colour tables: the 8-bit palette, the half tables and the palette indices an 8-bit frame stores.
 
+use crate::sync::lock;
 use std::sync::{Arc, Mutex};
 
 use half::f16;
@@ -199,7 +200,7 @@ impl<T> Cache<T> {
 
 	fn get_or_build(&self, key: Key, build: impl FnOnce() -> T) -> Arc<T> {
 		{
-			let mut entries = self.entries.lock().unwrap();
+			let mut entries = lock(&self.entries);
 			if let Some(i) = entries.iter().position(|(k, _)| *k == key) {
 				let hit = entries.remove(i);
 				let table = hit.1.clone();
@@ -208,7 +209,7 @@ impl<T> Cache<T> {
 			}
 		}
 		let table = Arc::new(build());
-		let mut entries = self.entries.lock().unwrap();
+		let mut entries = lock(&self.entries);
 		if entries.len() >= CACHE_CAPACITY {
 			entries.remove(0);
 		}

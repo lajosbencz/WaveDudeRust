@@ -214,7 +214,7 @@ impl Presenter {
 	/// Queues `request`, replacing one not yet started.
 	pub fn request(&self, request: Request) {
 		let (lock, wake) = &*self.slot;
-		*lock.lock().unwrap() = Some(request);
+		*wavedude_core::sync::lock(lock) = Some(request);
 		wake.notify_one();
 	}
 
@@ -239,7 +239,7 @@ fn work(slot: &Slot, stop: &AtomicBool, tx: &Sender<Rendered>) {
 	loop {
 		let request = {
 			let (lock, wake) = &**slot;
-			let mut guard = lock.lock().unwrap();
+			let mut guard = wavedude_core::sync::lock(lock);
 			loop {
 				if stop.load(Ordering::Acquire) {
 					return;

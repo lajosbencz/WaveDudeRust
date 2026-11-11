@@ -100,8 +100,10 @@ What new code follows so that it fits the code already here. Each rule names one
   `log::init` (`crates/wavedude-app-state/src/log.rs:146`).
 - A broken invariant panics through `expect` whose message states the invariant
   (`.expect("a dock layout serialises")`, `crates/wavedude-app/src/ui/app.rs:267`;
-  `.expect("an embedded string table is valid JSON")`, `strings.rs:90`). Bare `unwrap()` is for tests and
-  mutex locks (`crates/wavedude-app/src/ui/preview/presenter.rs:217`).
+  `.expect("an embedded string table is valid JSON")`, `strings.rs:90`). Bare `unwrap()` is for tests:
+  `clippy::unwrap_used` is denied in `wavedude-core` and `wavedude-export` outside their tests.
+- A mutex is taken through `wavedude_core::sync::lock`, which takes a poisoned lock too: the guarded values
+  are whole between operations and the panic was reported where it happened.
 - A missing string key is a bug and panics (`Strings::get`, `crates/wavedude-app-state/src/strings.rs:185`).
 - No silent fallbacks: a fallback is logged and stated. The GPU engine falls back to the CPU with a warning
   (`crates/wavedude-core/src/engine/mod.rs:83`); an unreadable settings file is logged with its text and kept

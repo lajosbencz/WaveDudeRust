@@ -1,5 +1,6 @@
 //! The scene's composition: the image or a blank canvas with the enabled parts painted in.
 
+use crate::sync::lock;
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
@@ -76,7 +77,7 @@ pub fn image_key(project: &Project) -> Option<u64> {
 /// The image bytes' hash, remembered for the last image: the same (shared or equal) bytes are not hashed again.
 fn image_hash(bytes: &Arc<[u8]>) -> u64 {
 	static LAST: Mutex<Option<(Arc<[u8]>, u64)>> = Mutex::new(None);
-	let mut last = LAST.lock().unwrap();
+	let mut last = lock(&LAST);
 	if let Some((cached, hash)) = &*last
 		&& (Arc::ptr_eq(cached, bytes) || **cached == **bytes)
 	{

@@ -4,10 +4,11 @@
 //! Threads: plain data on the UI thread; loading and saving block the caller.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::Watcher;
+use wavedude_core::sync::lock;
 
 use wavedude_core::io::{self, FormatError, IoError, legacy, wdproj};
 use wavedude_core::model::Project;
@@ -101,10 +102,6 @@ impl std::fmt::Debug for ImageWatch {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("ImageWatch").field("path", &self.path).finish_non_exhaustive()
 	}
-}
-
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-	m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 impl Document {

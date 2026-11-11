@@ -10,6 +10,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
+use wavedude_core::sync::lock;
 
 use tracing::field::{Field, Visit};
 use tracing::{Level, Subscriber};
@@ -59,7 +60,7 @@ impl LogRing {
 	}
 
 	pub fn push(&self, level: Level, target: &str, message: String) {
-		let mut ring = self.0.lock().unwrap();
+		let mut ring = lock(&self.0);
 		let line = LogLine { seq: ring.next, time: SystemTime::now(), level, target: target.to_owned(), message };
 		ring.next += 1;
 		if line.reaches_status_bar() {
@@ -73,17 +74,17 @@ impl LogRing {
 
 	/// The lines after `seq` (all with `None`), oldest first.
 	pub fn since(&self, seq: Option<u64>) -> Vec<LogLine> {
-		let ring = self.0.lock().unwrap();
+		let ring = lock(&self.0);
 		ring.lines.iter().filter(|l| seq.is_none_or(|s| l.seq > s)).cloned().collect()
 	}
 
 	/// The newest line of level Info and up: the status bar's text and colour (warnings and errors tint it).
 	pub fn status(&self) -> Option<LogLine> {
-		self.0.lock().unwrap().status.clone()
+		lock(&self.0).status.clone()
 	}
 
 	pub fn len(&self) -> usize {
-		self.0.lock().unwrap().lines.len()
+		lock(&self.0).lines.len()
 	}
 
 	pub fn is_empty(&self) -> bool {
@@ -92,7 +93,7 @@ impl LogRing {
 
 	/// The Messages pane's Clear; the status bar keeps its line.
 	pub fn clear(&self) {
-		self.0.lock().unwrap().lines.clear();
+		lock(&self.0).lines.clear();
 	}
 }
 

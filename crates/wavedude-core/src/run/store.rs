@@ -20,12 +20,13 @@
 //! while the file is empty, else it stays in memory; the file's frames reuse a few buffers. The file is deleted
 //! on drop.
 
+use crate::sync::lock;
 use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -221,10 +222,6 @@ pub struct FrameStore {
 	cancel: Arc<AtomicBool>,
 	producer: Mutex<Option<JoinHandle<()>>>,
 	released: Arc<ReleaseSignal>,
-}
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-	m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 impl FrameStore {

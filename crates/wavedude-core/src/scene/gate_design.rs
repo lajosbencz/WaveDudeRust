@@ -5,6 +5,7 @@
 //! is [`ModeSolver`] for the simulation's stencil and sub-steps, so the design holds for the engine
 //! that runs it (on a scene whose fastest pixel has index 1).
 
+use crate::sync::lock;
 use std::collections::HashMap;
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, PI, TAU};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -194,11 +195,11 @@ impl GateDesign {
 		let key = (lam.to_bits(), n_c.to_bits(), n_cl.to_bits(), port_in, phi.to_bits(), solver);
 		static CACHE: OnceLock<Mutex<HashMap<DesignKey, Option<Arc<GateDesign>>>>> = OnceLock::new();
 		let cache = CACHE.get_or_init(Default::default);
-		if let Some(hit) = cache.lock().unwrap().get(&key) {
+		if let Some(hit) = lock(cache).get(&key) {
 			return hit.clone();
 		}
 		let design = Self::design(lam, n_c, n_cl, port_in, phi, &solver).map(Arc::new);
-		let mut map = cache.lock().unwrap();
+		let mut map = lock(cache);
 		if map.len() >= 64 {
 			map.clear();
 		}

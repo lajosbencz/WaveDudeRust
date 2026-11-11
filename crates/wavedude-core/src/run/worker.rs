@@ -15,9 +15,10 @@
 //! thread, which owns the engine and writes the store. Traces and progress are published at heartbeats and at
 //! every frame.
 
+use crate::sync::lock;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -157,10 +158,6 @@ impl Shared {
 			fit: Mutex::new(None),
 		}
 	}
-}
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-	m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The handle; dropping it stops the worker after its current check and joins it.

@@ -1,6 +1,8 @@
 //! Image, video, `OpenEXR` and CSV export: the formats, their sinks, the burned-in overlays and the export job.
 //!
 //! Every rendered frame handed to a sink is RGBA8, row-major, top row first, no padding, alpha 255, at canvas size.
+#![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use std::path::Path;
 
