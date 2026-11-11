@@ -9,12 +9,17 @@
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use wavedude_core::model::Edit as ModelEdit;
 use wavedude_core::model::names::{self, Named};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{
 	BraggReflector, Diffuser, Ellipse, FacettedGrating, Fiber, FresnelLens, GateKind, GrinLens, InterferenceFilter,
 	Lens, LogicGate, MetaAxiconDesign, MetaDesign, MetaLensDesign, MetaPrismDesign, MetaSurface, Outline, PartKind,
 	Point, Polygon, Probe, ProbeDetector, Project, Rectangle, SimpleGrating, Triangle, ZonePlate,
+};
+use wavedude_core::model::{
+	ColorSchemeEdit, DisplayEdit, DisplayLayerEdit, EditError, EllipseEdit, Field as _, LensEdit, MaterialEdit, Part,
+	PartEdit, PartKindEdit, ProbeEdit, ProjectEdit, RectangleEdit, SourceEdit, Value as FieldValue,
 };
 
 use wavedude_core::scene::gate_design::{self, GateDesign};
@@ -176,6 +181,75 @@ pub enum Target {
 	Item(ItemRef),
 }
 
+/// A typed edit of the project's own fields or of one item's, by the item's index.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Edit {
+	Project(ProjectEdit),
+	Source(usize, SourceEdit),
+	Part(usize, PartEdit),
+	Probe(usize, ProbeEdit),
+	Scheme(usize, ColorSchemeEdit),
+}
+
+impl Edit {
+	/// The item the edit addresses; `None` for the project's own fields.
+	pub fn item(&self) -> Option<ItemRef> {
+		let (kind, index) = match self {
+			Self::Project(_) => return None,
+			Self::Source(i, _) => (ItemKind::Source, *i),
+			Self::Part(i, _) => (ItemKind::Part, *i),
+			Self::Probe(i, _) => (ItemKind::Probe, *i),
+			Self::Scheme(i, _) => (ItemKind::Scheme, *i),
+		};
+		Some(ItemRef::new(kind, index))
+	}
+
+	/// The edit that restores what `p` holds now; `None` when the item or the field is absent.
+	pub fn current(&self, p: &Project) -> Option<Self> {
+		Some(match self {
+			Self::Project(e) => Self::Project(e.current(p)?),
+			Self::Source(i, e) => Self::Source(*i, e.current(p.sources.get(*i)?)?),
+			Self::Part(i, e) => Self::Part(*i, e.current(p.parts.get(*i)?)?),
+			Self::Probe(i, e) => Self::Probe(*i, e.current(p.probes.get(*i)?)?),
+			Self::Scheme(i, e) => Self::Scheme(*i, e.current(p.color_schemes.get(*i)?)?),
+		})
+	}
+
+	/// The label, the item index and the path of the innermost object's field.
+	fn subject(&self) -> (&'static str, Option<usize>, String) {
+		match self {
+			Self::Project(e) => match e {
+				ProjectEdit::Seed(_) | ProjectEdit::Description(_) => ("Project", None, e.field().path()),
+				ProjectEdit::Scene(e) => ("Scene", None, e.field().path()),
+				ProjectEdit::Simulation(e) => ("Simulation", None, e.field().path()),
+				ProjectEdit::Display(e) => ("Display", None, e.field().path()),
+			},
+			Self::Source(i, e) => ("Source", Some(*i), e.field().path()),
+			Self::Part(i, e) => ("Part", Some(*i), e.field().path()),
+			Self::Probe(i, e) => ("Probe", Some(*i), e.field().path()),
+			Self::Scheme(i, e) => ("Scheme", Some(*i), e.field().path()),
+		}
+	}
+
+	/// As `Display`, with the item's name in place of its index: `Probe 'Probe 1'.BoxWidth`.
+	pub fn describe(&self, project: &Project) -> String {
+		let (label, _, path) = self.subject();
+		match self.item().and_then(|item| item.name(project)) {
+			Some(name) => format!("{label} '{name}'.{path}"),
+			None => self.to_string(),
+		}
+	}
+}
+
+impl std::fmt::Display for Edit {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self.subject() {
+			(label, Some(i), path) => write!(f, "{label}[{i}].{path}"),
+			(label, None, path) => write!(f, "{label}.{path}"),
+		}
+	}
+}
+
 /// A model edit.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Command {
@@ -228,6 +302,9 @@ pub enum Command {
 		path: String,
 		value: Value,
 	},
+	/// A typed field edit; a lens's mirror renames it as the editor's Mirror box does, a linked rectangle's or
+	/// ellipse's width sets its length too.
+	Edit(Edit),
 	/// Embeds image bytes as the scene: `name` is the file name, `path` where it came from.
 	SetSceneImage {
 		name: String,
@@ -310,6 +387,8 @@ pub enum CommandError {
 	NoField(String),
 	#[error("'{path}' cannot take {value}: {message}")]
 	BadValue { path: String, value: String, message: String },
+	#[error("{0}")]
+	Edit(#[from] EditError),
 	#[error("a name cannot be empty")]
 	EmptyName,
 	#[error("the image cannot be decoded: {0}")]
@@ -479,6 +558,7 @@ fn apply_command(project: &mut Project, selection: &mut Selection, command: Comm
 		Command::Reorder { target, to } => reorder(project, selection, target, to)?,
 		Command::Rename { target, name } => rename(project, target, name)?,
 		Command::Set { target, path, value } => set(project, target, &path, value)?,
+		Command::Edit(edit) => apply_edit(project, &edit)?,
 		Command::SetSceneImage { name, path, bytes } => {
 			let size = wavedude_core::io::image_size(&bytes).map_err(CommandError::Image)?;
 			let scene = &mut project.scene;
@@ -663,6 +743,85 @@ fn rename(project: &mut Project, target: ItemRef, name: String) -> Result<Change
 	Ok(change)
 }
 
+/// Applies `edit`; returns the old and the new value of its field.
+fn apply_model_edit<E: ModelEdit>(edit: &E, to: &mut E::Owner) -> Result<(FieldValue, FieldValue), EditError> {
+	let old = edit.apply(to)?;
+	Ok((old, edit.field().get(to).unwrap_or(FieldValue::Absent)))
+}
+
+fn run_part(part: &mut Part, edit: &PartEdit) -> Result<(FieldValue, FieldValue), EditError> {
+	if let PartEdit::Kind(PartKindEdit::Lens(LensEdit::Material(MaterialEdit::Mirror(on)))) = edit
+		&& let PartKind::Lens(lens) = &part.kind
+	{
+		let old = FieldValue::Bool(lens.material.mirror);
+		names::set_lens_mirror(part, *on);
+		return Ok((old, FieldValue::Bool(*on)));
+	}
+	let result = apply_model_edit(edit, part)?;
+	match (edit, &mut part.kind) {
+		(
+			PartEdit::Kind(PartKindEdit::Rectangle(RectangleEdit::Width(_))),
+			PartKind::Rectangle(Rectangle { length, width, linked: true, .. }),
+		)
+		| (
+			PartEdit::Kind(PartKindEdit::Ellipse(EllipseEdit::Width(_))),
+			PartKind::Ellipse(Ellipse { length, width, linked: true, .. }),
+		) => *length = *width,
+		_ => {}
+	}
+	Ok(result)
+}
+
+fn project_change(edit: &ProjectEdit) -> ChangeKind {
+	match edit {
+		ProjectEdit::Seed(_) | ProjectEdit::Scene(_) | ProjectEdit::Simulation(_) => ChangeKind::Simulation,
+		ProjectEdit::Description(_) => ChangeKind::Metadata,
+		ProjectEdit::Display(
+			DisplayEdit::Field(DisplayLayerEdit::Brightness(_))
+			| DisplayEdit::Intensity(DisplayLayerEdit::Brightness(_)),
+		) => ChangeKind::Brightness,
+		// Showing the intensity makes the run track it: other frames.
+		ProjectEdit::Display(DisplayEdit::Intensity(DisplayLayerEdit::Preview(_))) => ChangeKind::Simulation,
+		ProjectEdit::Display(_) => ChangeKind::Display,
+	}
+}
+
+fn apply_edit(project: &mut Project, edit: &Edit) -> Result<Change, CommandError> {
+	if let Some(item) = edit.item() {
+		check(project, item)?;
+	}
+	let label = edit.describe(project);
+	let (old, new, kind) = match edit {
+		Edit::Project(e) => {
+			let (old, new) = apply_model_edit(e, project)?;
+			(old, new, project_change(e))
+		}
+		Edit::Source(i, e) => {
+			let (old, new) = apply_model_edit(e, &mut project.sources[*i])?;
+			(old, new, ChangeKind::Simulation)
+		}
+		Edit::Part(i, e) => {
+			let (old, new) = run_part(&mut project.parts[*i], e)?;
+			(old, new, ChangeKind::Simulation)
+		}
+		Edit::Probe(i, e) => {
+			let probe = &mut project.probes[*i];
+			let before = probe.clone();
+			let (old, new) = apply_model_edit(e, probe)?;
+			(old, new, probes_change(std::slice::from_ref(&before), std::slice::from_ref(probe)))
+		}
+		Edit::Scheme(i, e) => {
+			let (old, new) = apply_model_edit(e, &mut project.color_schemes[*i])?;
+			(old, new, ChangeKind::Display)
+		}
+	};
+	if old == new {
+		return Ok(Change::of(ChangeKind::None));
+	}
+	log::change(&label, &old.to_string(), &new.to_string());
+	Ok(Change::of(kind).noted(format!("{label} = {new}")))
+}
+
 /// Replaces the value at the dotted `path` of `root`; returns the old value.
 fn put(root: &mut Value, path: &str, value: Value) -> Option<Value> {
 	let mut at = root;
@@ -816,6 +975,7 @@ fn set_part(project: &mut Project, index: usize, path: &str, value: Value) -> Re
 mod tests {
 	use super::*;
 	use serde_json::json;
+	use wavedude_core::model::SceneEdit;
 
 	fn project() -> Project {
 		let mut p = Project::default();
@@ -893,6 +1053,110 @@ mod tests {
 			Command::Set { target: Target::Item(detector), path: "box_x".into(), value: json!(30) },
 		);
 		assert_eq!(c.kind, ChangeKind::Display);
+	}
+
+	fn edit(p: &mut Project, s: &mut Selection, e: Edit) -> Change {
+		run(p, s, Command::Edit(e))
+	}
+
+	#[test]
+	fn typed_edits_classify_as_the_set_twins_do() {
+		let mut p = project();
+		let mut s = Selection::default();
+		let on = !p.display.intensity.preview;
+		let preview = ProjectEdit::Display(DisplayEdit::Intensity(DisplayLayerEdit::Preview(on)));
+		assert_eq!(edit(&mut p, &mut s, Edit::Project(preview)).kind, ChangeKind::Simulation);
+		assert_eq!(p.display.intensity.preview, on);
+		let brightness = ProjectEdit::Display(DisplayEdit::Field(DisplayLayerEdit::Brightness(5.0)));
+		assert_eq!(edit(&mut p, &mut s, Edit::Project(brightness)).kind, ChangeKind::Brightness);
+		let overlay = ProjectEdit::Display(DisplayEdit::Field(DisplayLayerEdit::Overlay(false)));
+		assert_eq!(edit(&mut p, &mut s, Edit::Project(overlay)).kind, ChangeKind::Display);
+		assert_eq!(
+			edit(&mut p, &mut s, Edit::Project(ProjectEdit::Description("x".into()))).kind,
+			ChangeKind::Metadata
+		);
+		let c = edit(&mut p, &mut s, Edit::Project(ProjectEdit::Seed(7)));
+		assert_eq!((c.kind, c.note.as_deref()), (ChangeKind::Simulation, Some("Project.Seed = 7")));
+		assert_eq!(edit(&mut p, &mut s, Edit::Project(ProjectEdit::Seed(7))).kind, ChangeKind::None);
+		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard });
+		let c = edit(&mut p, &mut s, Edit::Probe(0, ProbeEdit::Ax(7)));
+		assert_eq!((c.kind, p.probes[0].ax), (ChangeKind::ProbePresentation, 7));
+		assert_eq!(c.note.as_deref(), Some("Probe 'Probe 1'.Ax = 7"));
+		assert_eq!(edit(&mut p, &mut s, Edit::Probe(0, ProbeEdit::BoxX(40))).kind, ChangeKind::Display);
+		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Counting });
+		assert_eq!(
+			edit(&mut p, &mut s, Edit::Probe(1, ProbeEdit::Sensitivity(40.0))).kind,
+			ChangeKind::ProbePresentation
+		);
+		assert_eq!(edit(&mut p, &mut s, Edit::Probe(1, ProbeEdit::BoxX(30))).kind, ChangeKind::Display);
+		run(&mut p, &mut s, Command::AddSource { at: None });
+		let c = edit(&mut p, &mut s, Edit::Source(0, SourceEdit::Frequency(9999.0)));
+		assert_eq!((c.kind, p.sources[0].frequency), (ChangeKind::Simulation, 255.0), "normalised after the edit");
+	}
+
+	#[test]
+	fn typed_lens_mirror_renames_and_linked_width() {
+		let (mut p, mut s) = (project(), Selection::default());
+		run(&mut p, &mut s, Command::AddPart { kind: NewPart::Lens, at: None });
+		let mirror = PartEdit::Kind(PartKindEdit::Lens(LensEdit::Material(MaterialEdit::Mirror(true))));
+		edit(&mut p, &mut s, Edit::Part(0, mirror));
+		assert_eq!(p.parts[0].base.name, "Mirror 1");
+		run(&mut p, &mut s, Command::AddPart { kind: NewPart::Rectangle, at: Some(Point::new(5, 5)) });
+		let rect = |e| Edit::Part(1, PartEdit::Kind(PartKindEdit::Rectangle(e)));
+		edit(&mut p, &mut s, rect(RectangleEdit::Linked(true)));
+		edit(&mut p, &mut s, rect(RectangleEdit::Width(80)));
+		let PartKind::Rectangle(r) = &p.parts[1].kind else { panic!() };
+		assert_eq!((r.length, r.width), (80, 80));
+	}
+
+	#[test]
+	fn current_is_the_inverse_of_an_edit() {
+		let (mut p, mut s) = (project(), Selection::default());
+		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard });
+		run(&mut p, &mut s, Command::AddPart { kind: NewPart::Rectangle, at: None });
+		let edits = [
+			Edit::Project(ProjectEdit::Seed(9)),
+			Edit::Project(ProjectEdit::Display(DisplayEdit::Field(DisplayLayerEdit::Brightness(3.0)))),
+			Edit::Probe(0, ProbeEdit::Ax(11)),
+			Edit::Part(0, PartEdit::Kind(PartKindEdit::Rectangle(RectangleEdit::Length(33)))),
+		];
+		for e in edits {
+			let before = p.clone();
+			let undo = e.current(&p).expect("the field exists");
+			edit(&mut p, &mut s, e);
+			assert_ne!(p, before);
+			edit(&mut p, &mut s, undo);
+			assert_eq!(p, before);
+		}
+		assert_eq!(Edit::Probe(5, ProbeEdit::Ax(1)).current(&p), None, "no such item");
+	}
+
+	#[test]
+	fn an_edit_displays_its_subject_and_path() {
+		let (mut p, mut s) = (project(), Selection::default());
+		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard });
+		let e = Edit::Probe(0, ProbeEdit::BoxWidth(500));
+		assert_eq!(e.to_string(), "Probe[0].BoxWidth");
+		assert_eq!(e.describe(&p), "Probe 'Probe 1'.BoxWidth");
+		assert_eq!(e.item(), Some(ItemRef::new(ItemKind::Probe, 0)));
+		let e = Edit::Project(ProjectEdit::Display(DisplayEdit::Intensity(DisplayLayerEdit::Preview(true))));
+		assert_eq!(e.to_string(), "Display.Intensity.Preview");
+		assert_eq!(e.item(), None);
+		let e = Edit::Project(ProjectEdit::Scene(SceneEdit::Edges(Default::default())));
+		assert_eq!(e.to_string(), "Scene.Edges");
+	}
+
+	#[test]
+	fn an_edit_of_the_wrong_part_kind_changes_nothing() {
+		let (mut p, mut s) = (project(), Selection::default());
+		run(&mut p, &mut s, Command::AddPart { kind: NewPart::Rectangle, at: None });
+		let before = p.clone();
+		let wrong = Edit::Part(0, PartEdit::Kind(PartKindEdit::Lens(LensEdit::Diameter(10))));
+		let err = apply(&mut p, &mut s, Command::Edit(wrong)).unwrap_err();
+		assert!(matches!(err, CommandError::Edit(EditError::WrongKind { .. })), "{err:?}");
+		assert_eq!(p, before);
+		let missing = Command::Edit(Edit::Source(3, SourceEdit::Frequency(1.0)));
+		assert_eq!(apply(&mut p, &mut s, missing), Err(CommandError::NoItem(ItemRef::new(ItemKind::Source, 3))));
 	}
 
 	#[test]

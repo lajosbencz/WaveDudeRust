@@ -1,4 +1,4 @@
-//! Unlimited undo and redo: one snapshot per step, the project as JSON without the scene image plus the image
+//! Unlimited undo and redo: one snapshot per step, a clone of the project without the scene image plus the image
 //! bytes by reference, equal bytes shared between steps (docs/ui/60-live-editing-and-runs.md, Undo and redo).
 //!
 //! A step ends after [`QUIET`] without an edit while no mouse button is held, so a drag, a number-box scrub or a
@@ -15,7 +15,7 @@ pub const QUIET: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Debug)]
 struct Step {
-	json: Arc<str>,
+	project: Arc<Project>,
 	image: Option<Arc<[u8]>>,
 	image_size: (u32, u32),
 }
@@ -27,7 +27,7 @@ impl Step {
 			(Some(a), Some(b)) => Arc::ptr_eq(a, b) || a[..] == b[..],
 			_ => false,
 		};
-		image && self.json == other.json
+		image && self.project == other.project
 	}
 }
 
@@ -53,13 +53,12 @@ impl History {
 
 	fn snapshot(&self, project: &Project) -> Step {
 		let image = project.scene.image_data.clone();
-		let json = serde_json::to_string(&project.without_image()).expect("a project serialises");
-		Step { json: json.into(), image, image_size: project.scene.image_size }
+		Step { project: Arc::new(project.without_image()), image, image_size: project.scene.image_size }
 	}
 
 	fn restore(&self, project: &mut Project) {
 		let step = &self.steps[self.current];
-		let mut restored: Project = serde_json::from_str(&step.json).expect("a stored step deserialises");
+		let mut restored = Project::clone(&step.project);
 		restored.scene.image_data = step.image.clone();
 		restored.scene.image_size = step.image_size;
 		*project = restored;

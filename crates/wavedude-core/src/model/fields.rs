@@ -65,7 +65,7 @@ pub enum Bounds {
 	Open,
 }
 
-#[derive(Clone, Debug, PartialEq, Error)]
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum EditError {
 	#[error("{field} takes a {want:?}")]
 	WrongKind { field: String, want: ValueKind },

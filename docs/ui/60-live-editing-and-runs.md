@@ -96,7 +96,7 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
 
 ## Undo and redo
 
-- Unlimited. One snapshot per step (project XML without the scene image + image bytes by reference).
+- Unlimited. One snapshot per step (a project clone without the scene image + image bytes by reference).
 - A step ends after 0.5 s of quiet with no mouse button held: a drag, a number-box scrub or a held arrow key is
   one step. Undo/Redo end a pending step first.
 - Undo (Ctrl+Z), Redo (Ctrl+Y, Ctrl+Shift+Z); Edit menu entries enabled when a step exists. A focused text box
