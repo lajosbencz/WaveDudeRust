@@ -15,15 +15,18 @@ Status: accepted, 2026-11-07
   person's approval on the PR page. A GitHub App's token would start it without the click; not chosen, to keep the
   setup free of an app.
 - **Installers** by [cargo-packager](https://github.com/crabnebula-dev/cargo-packager) in the reusable
-  workflow `.github/workflows/package.yml`, which `release.yml` calls: NSIS on Windows x86_64, app and DMG on macOS (arm64 on `macos-15`, x86_64 on
-  `macos-15-intel`), AppImage plus a tarball of both programs on Linux x86_64 (built on Ubuntu 22.04 for an older
+  workflow `.github/workflows/package.yml`, which `release.yml` calls: NSIS on Windows x86_64, a universal app and
+  DMG on macOS (both architectures built on `macos-15` and joined with `lipo`; the Intel runner took twice as long
+  for a second bundle), AppImage plus a tarball of both programs on Linux x86_64 (built on Ubuntu 22.04 for an older
   glibc). Both programs are in every package. Not signed by Apple or Microsoft (macOS bundles carry an ad-hoc
   signature, without which Apple silicon reports them as damaged): Gatekeeper and SmartScreen warn,
   accepted. Each file gets GitHub attestations instead (Sigstore; free, verifiable with `gh attestation verify`,
   but no operating system checks it): build provenance and CycloneDX SBOMs (`cargo cyclonedx`), signed as the
   reusable workflow `package.yml` (SLSA Build L3), which builds with no secrets and a read-only token; the
   binaries embed their dependency list (`cargo auditable`). The updater key is only in a later job that compiles
-  nothing, so no dependency's build script sees it. No build cache in releases (cache poisoning; it saved little).
+  nothing, so no dependency's build script sees it. No build cache in releases (cache poisoning): every package is
+  built from source, tools included, which costs the release about ten minutes. CI's caches are pruned to the
+  newest per key: each lockfile change leaves a generation behind, and the allowance is 10 GB per repository.
   The release turns public only after every platform's files, `latest.json` and `SHA256SUMS` are attached, and is
   immutable from then on.
 - **Updater**: [cargo-packager-updater](https://crates.io/crates/cargo-packager-updater) against

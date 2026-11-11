@@ -212,7 +212,7 @@ jobs:
           CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.UPDATER_PRIVATE_KEY_PASSWORD }}
         run: |
           mkdir sig
-          for name in $(jq -r '.[].name' update/*.json); do
+          for name in $(jq -r '.[].name' update/*.json | sort -u); do
             cargo packager signer sign "dist/$name"
             mv "dist/$name.sig" sig/
           done

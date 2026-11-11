@@ -44,7 +44,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 
-# Installers (decision 0011): `cargo packager --release -p wavedude-app --formats <format>`.
+# Installers (decision 0011) of the built programs:
+# `cargo build --release -p wavedude-app -p wavedude-cli && cargo packager --release -p wavedude-app --formats <format>`.
 [package.metadata.packager]
 product-name = "WaveDude Rust"
 identifier = "io.github.lajosbencz.wavedude-rust"
@@ -55,7 +56,6 @@ copyright = "Copyright (C) 2026 Lajos Bencz"
 license-file = "../../LICENSE.md"
 icons = ["assets/icon.png"]
 out-dir = "../../target/packages"
-before-packaging-command = "cargo build --release -p wavedude-app -p wavedude-cli"
 binaries = [{ path = "wavedude-app", main = true }, { path = "wavedude-cli" }]
 file-associations = [
 	{ extensions = ["wdproj"], mime-type = "application/x-wavedude-project+xml", description = "WaveDude project", name = "WaveDude project", role = "editor" },

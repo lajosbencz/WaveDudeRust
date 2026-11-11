@@ -71,6 +71,7 @@ publisher (crates.io > crate > Settings > Trusted Publishing; a token only for e
 ## By hand
 
 ```sh
+cargo build --release -p wavedude-app -p wavedude-cli
 NO_STRIP=true cargo packager --release -p wavedude-app --formats appimage   # or nsis, app,dmg
 ```
 

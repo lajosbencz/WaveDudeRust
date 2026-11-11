@@ -47,7 +47,7 @@ cargo run -p wavedude-app --release -- project.wdproj
 
 ## Releases
 
-Installers for Windows (NSIS), macOS (app and DMG, Apple Silicon and Intel)
+Installers for Windows (NSIS), macOS (universal app and DMG)
 and Linux (AppImage, and a tarball of the two programs) are on the GitHub
 releases page, unsigned by Apple and Microsoft, so Gatekeeper and SmartScreen
 warn at the first start. Releases are immutable once published. Each package
