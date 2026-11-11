@@ -83,8 +83,8 @@ impl Document {
 				let suggested = legacy::suggested_file_name(path, &imported.name);
 				Self::with(imported.project, None, Some(suggested), false)
 			}
-			wavedude_core::io::wdscheme::EXTENSION => {
-				return Ok(Opened::Scheme(wavedude_core::io::wdscheme::load(path)?));
+			io::wdscheme::EXTENSION => {
+				return Ok(Opened::Scheme(io::wdscheme::load(path)?));
 			}
 			"xml" => Self::with(wdproj::load(path)?, Some(path.to_owned()), None, false),
 			_ => Self::with(io::load_project(path)?, Some(path.to_owned()), None, false),
@@ -156,7 +156,7 @@ impl Document {
 		(!path.as_os_str().is_empty()).then_some(path)
 	}
 
-	/// Follows the scene image's file while the project is open: checked every [`IMAGE_WATCH`], a changed file
+	/// Follows the scene image's file while the project is open: checked every `IMAGE_WATCH`, a changed file
 	/// is re-embedded as an edit (undoable, the run starts over). Returns whether the image changed.
 	pub fn poll_image_file(&mut self, now: Instant) -> bool {
 		let Some(path) = self.image_file() else {
@@ -231,7 +231,7 @@ impl Document {
 		self.save_as(&path)
 	}
 
-	/// Saves to `path` as WaveDude Next XML: `.wdproj` or `.xml`.
+	/// Saves to `path` as `WaveDude` Next XML: `.wdproj` or `.xml`.
 	pub fn save_as(&mut self, path: &Path) -> Result<(), DocumentError> {
 		self.history.commit(&self.project);
 		match extension(path).as_str() {

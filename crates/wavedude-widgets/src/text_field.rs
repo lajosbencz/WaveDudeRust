@@ -15,7 +15,7 @@ use crate::{theme::use_wave_theme, util::is_named};
 /// WPF's text padding 3,2 inside the field's 1 px border.
 pub(crate) const FIELD_PADDING: (f32, f32) = (2., 3.);
 
-/// A borderless editor for inside [`crate::text_box::field_frame`].
+/// A borderless editor for inside `field_frame`.
 #[derive(Clone, PartialEq)]
 pub struct TextField {
 	value: WritableSetter<String>,

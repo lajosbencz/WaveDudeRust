@@ -51,7 +51,7 @@ impl AppDirs {
 		Self { config: dir.join("config"), cache: dir.join("cache"), data: dir.join("data") }
 	}
 
-	/// Cisco's OpenH264 binary (decision 0005).
+	/// Cisco's `OpenH264` binary (decision 0005).
 	pub fn codec(&self) -> PathBuf {
 		self.data.join("openh264")
 	}
@@ -148,7 +148,7 @@ pub struct Settings {
 	pub export_hints: Vec<ExportHint>,
 	/// The window title names the project's full path rather than its file name (decision 0008).
 	pub title_full_path: bool,
-	/// MP4 export may use Cisco's OpenH264, downloaded at the first MP4 export (decision 0005); `None` until the
+	/// MP4 export may use Cisco's `OpenH264`, downloaded at the first MP4 export (decision 0005); `None` until the
 	/// user answered the launch's question. The CLI shares it.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub use_openh264: Option<bool>,

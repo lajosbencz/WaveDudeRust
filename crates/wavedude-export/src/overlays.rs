@@ -37,7 +37,7 @@ pub fn probe_label(number: usize, line: bool, end_b: bool) -> String {
 
 /// A line of squares of `(2r + 1)^2` pixels at `steps = max(|dx|, |dy|) + 1` points, point k at
 /// `(x0 + round_even(dx * k / steps), y0 + round_even(dy * k / steps))`, overwriting pixels, clipped.
-pub fn thick_line(canvas: &mut Canvas, (x0, y0): (i32, i32), (x1, y1): (i32, i32), color: Color, radius: i32) {
+pub fn thick_line(canvas: &mut Canvas<'_>, (x0, y0): (i32, i32), (x1, y1): (i32, i32), color: Color, radius: i32) {
 	let steps = (x1 - x0).abs().max((y1 - y0).abs());
 	for k in 0..=steps {
 		let at = |a: i32, b: i32| {
@@ -54,7 +54,7 @@ pub fn thick_line(canvas: &mut Canvas, (x0, y0): (i32, i32), (x1, y1): (i32, i32
 }
 
 /// A probe's strokes: the line A-B (a line probe) and a cross at each end, black at radius 2, then white at 1.
-pub fn draw_probe_strokes(canvas: &mut Canvas, probe: &Probe) {
+pub fn draw_probe_strokes(canvas: &mut Canvas<'_>, probe: &Probe) {
 	let arm = arm_length(canvas.height() as u32);
 	let line = probe.kind == ProbeKind::Line;
 	let (a, b) = ((probe.ax, probe.ay), (probe.bx, probe.by));
@@ -74,7 +74,7 @@ const LABEL_SHADOW: Color = argb(220, 0, 0, 0);
 
 /// A probe label: a rectangle of `ceil(width) + 4 x ceil(line height) + 4` at its origin, the bold text's shadow at
 /// (3, 3) inside it, the white text at (2, 2).
-pub fn draw_probe_label(canvas: &mut Canvas, text: &str, (x, y): (i32, i32)) {
+pub fn draw_probe_label(canvas: &mut Canvas<'_>, text: &str, (x, y): (i32, i32)) {
 	let size = label_size(canvas.height() as u32);
 	let face = typeface();
 	let rect =
@@ -87,7 +87,7 @@ pub fn draw_probe_label(canvas: &mut Canvas, text: &str, (x, y): (i32, i32)) {
 }
 
 /// Every probe's strokes, then every label; `probes` are (number, probe).
-pub fn draw_probe_markers<'a>(canvas: &mut Canvas, probes: impl Iterator<Item = (usize, &'a Probe)> + Clone) {
+pub fn draw_probe_markers<'a>(canvas: &mut Canvas<'_>, probes: impl Iterator<Item = (usize, &'a Probe)> + Clone) {
 	for (_, p) in probes.clone() {
 		draw_probe_strokes(canvas, p);
 	}
@@ -215,14 +215,14 @@ fn ink_of(layer: &[u8], width: usize) -> IRect {
 /// The fixed colours of a graph box.
 mod box_colors {
 	use super::{Color, argb};
-	pub const BACKGROUND: Color = argb(235, 14, 16, 22);
-	pub const BORDER: Color = argb(170, 200, 200, 210);
-	pub const GRID: Color = argb(46, 255, 255, 255);
-	pub const ZERO: Color = argb(120, 255, 255, 255);
-	pub const FRAME: Color = argb(130, 200, 200, 210);
-	pub const LABEL: Color = argb(225, 225, 225, 230);
-	pub const TITLE: Color = argb(240, 240, 240, 245);
-	pub const CURVE: Color = argb(255, 255, 208, 64);
+	pub(super) const BACKGROUND: Color = argb(235, 14, 16, 22);
+	pub(super) const BORDER: Color = argb(170, 200, 200, 210);
+	pub(super) const GRID: Color = argb(46, 255, 255, 255);
+	pub(super) const ZERO: Color = argb(120, 255, 255, 255);
+	pub(super) const FRAME: Color = argb(130, 200, 200, 210);
+	pub(super) const LABEL: Color = argb(225, 225, 225, 230);
+	pub(super) const TITLE: Color = argb(240, 240, 240, 245);
+	pub(super) const CURVE: Color = argb(255, 255, 208, 64);
 }
 
 /// Graph box text size, pixels.
@@ -245,7 +245,7 @@ impl TextMetrics for FaceMetrics {
 }
 
 /// Draws a laid-out graph box with its top-left at `(bx, by)`.
-pub fn draw_graph_box(canvas: &mut Canvas, layout: &GraphLayout, bx: i32, by: i32) {
+pub fn draw_graph_box(canvas: &mut Canvas<'_>, layout: &GraphLayout, bx: i32, by: i32) {
 	use box_colors::*;
 	if !layout.visible {
 		return;
@@ -256,7 +256,7 @@ pub fn draw_graph_box(canvas: &mut Canvas, layout: &GraphLayout, bx: i32, by: i3
 	let face = typeface();
 	let size = GRAPH_TEXT_SIZE;
 	let line_height = face.line_height(size);
-	let text = |canvas: &mut Canvas, s: &str, x: f32, y: f32, color: Color| {
+	let text = |canvas: &mut Canvas<'_>, s: &str, x: f32, y: f32, color: Color| {
 		let mask = face.mask(s, size, bx as f32 + x, by as f32 + y, false, clip);
 		canvas.fill_mask(&mask, color);
 	};

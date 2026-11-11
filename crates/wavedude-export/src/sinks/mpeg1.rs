@@ -4,7 +4,7 @@
 //! elementary stream in PES packets of at most 65000 bytes, the first with a PTS 0.1 s after the pack's SCR; at
 //! the end the sequence end code in a PES packet and the program end code. Video: a sequence header and a GOP
 //! header (closed) every 12 pictures, one slice per macroblock row, every macroblock intra with the slice's
-//! quantiser, the default intra matrix, 4:2:0 studio-range BT.601 from [`crate::yuv`], the picture padded to whole
+//! quantiser, the default intra matrix, 4:2:0 studio-range BT.601 from `yuv`, the picture padded to whole
 //! macroblocks by edge repetition.
 
 use std::fs::File;

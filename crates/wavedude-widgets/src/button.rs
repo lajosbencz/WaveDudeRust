@@ -1,4 +1,4 @@
-//! Push button in WaveDude Next's look: square, a 1 px border, the hover, pressed (accent, white text), focused
+//! Push button in `WaveDude` Next's look: square, a 1 px border, the hover, pressed (accent, white text), focused
 //! (accent border) and disabled (grey text) states. The API follows Freya's `Button`, which cannot show them.
 
 use freya::prelude::*;
@@ -13,7 +13,7 @@ enum Look {
 	/// WPF's Button: padding 10,3.
 	#[default]
 	Normal,
-	/// The toolbar's TextButton: transparent until hovered, padding 6,1,6,0, margin 1,0.
+	/// The toolbar's `TextButton`: transparent until hovered, padding 6,1,6,0, margin 1,0.
 	Toolbar,
 	/// The combo box's toggle: the field's colours, padding 4,2, 22 high.
 	Combo,

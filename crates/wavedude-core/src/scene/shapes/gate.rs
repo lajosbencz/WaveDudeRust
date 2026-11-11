@@ -21,7 +21,7 @@ pub(super) struct GateShape {
 
 impl GateShape {
 	/// None without a design (no guided mode, no wavelength).
-	pub fn new(gate: &LogicGate, sim: &Simulation) -> Option<Self> {
+	pub(super) fn new(gate: &LogicGate, sim: &Simulation) -> Option<Self> {
 		let design = GateDesign::for_gate(gate, sim)?;
 		let core = design.core_width as f64 / 2.0;
 		Some(Self {

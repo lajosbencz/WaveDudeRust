@@ -152,7 +152,7 @@ impl Component for GradientEditor {
 			let gradient = gradient.clone();
 			let (line, accent) = (theme.hairline, theme.accent);
 			let leaving = *pulled.read();
-			RenderCallback::new(move |ctx: &mut FillRenderContext| {
+			RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 				let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 				let w = ctx.size.width;
 				let colors: Vec<Color> = gradient.stops.iter().map(|s| s.color.to_color()).collect();

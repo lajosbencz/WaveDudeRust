@@ -27,11 +27,11 @@
 //! ```
 //!
 //! which the engine adds times c2 after each pass over the grid, in four stages over the rim: psi of
-//! y on u, delta_y (stored) and xi of y, psi of x on z~, then the x part and the sum. A time scheme
+//! y on u, `delta_y` (stored) and xi of y, psi of x on z~, then the x part and the sum. A time scheme
 //! applying the operator twice (the modified equation) keeps a second set of memory variables.
 //!
 //! Storage covers the rim only: `psi` and `xi` of x over the left and right strips (full height, 2 rim
-//! columns a row), of y over the top and bottom strips (2 rim rows of full width), x first; delta_y
+//! columns a row), of y over the top and bottom strips (2 rim rows of full width), x first; `delta_y`
 //! follows xi over the y strips.
 
 use rayon::prelude::*;
@@ -212,7 +212,7 @@ pub struct CpuPml {
 	axis: [f32; 4],
 	cross: f32,
 	psi: [Vec<f32>; 2],
-	/// xi of x and y, then delta_y.
+	/// xi of x and y, then `delta_y`.
 	xi: [Vec<f32>; 2],
 	/// z~ of the current application per grid row, over the x strips' columns and 3 beyond each
 	/// side: `2 (rim + 6)` values a row.

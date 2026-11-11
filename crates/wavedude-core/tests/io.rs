@@ -84,7 +84,7 @@ fn examples_are_rewritten_as_shipped() {
 		}
 	}
 	assert_eq!(differing.len(), 2, "{}", differing.join("\n"));
-	assert!(differing[0].starts_with("Example06") && differing[1].starts_with("Example11"), "{:?}", differing);
+	assert!(differing[0].starts_with("Example06") && differing[1].starts_with("Example11"), "{differing:?}");
 }
 
 proptest::proptest! {

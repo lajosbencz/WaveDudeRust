@@ -134,7 +134,7 @@ fn log_range(probe: &Probe, fitted_hi: Option<f64>) -> (f64, f64) {
 }
 
 /// `(x_min, x_max, y_min, y_max)` of a probe's graph; x in steps (a series) or line pixels (a profile).
-pub fn ranges(probe: &Probe, data: &GraphData, total_steps: u64) -> (f64, f64, f64, f64) {
+pub fn ranges(probe: &Probe, data: &GraphData<'_>, total_steps: u64) -> (f64, f64, f64, f64) {
 	let mut y = fixed_range(probe);
 	let mut fitted_hi = None;
 	let (x_min, x_max) = if probe.shows_profile() {
@@ -250,7 +250,7 @@ pub fn format_g3(v: f64) -> String {
 	}
 }
 
-/// A log tick: a power of ten outside 0.01..100 as "1e<n>", else [`format_g3`].
+/// A log tick: a power of ten outside 0.01..100 as `1e<n>`, else [`format_g3`].
 pub fn format_log_tick(v: f64) -> String {
 	let exponent = v.log10().round();
 	if (v / 10f64.powf(exponent) - 1.0).abs() > 1e-6 || exponent.abs() <= 2.0 {
@@ -310,7 +310,7 @@ fn bin_columns(values: &[f32], columns: usize, plot_x: f32, axis: &ValueAxis) ->
 	out
 }
 
-fn readout(line: bool, data: &GraphData) -> String {
+fn readout(line: bool, data: &GraphData<'_>) -> String {
 	if line {
 		return data
 			.profile
@@ -329,7 +329,7 @@ fn readout(line: bool, data: &GraphData) -> String {
 /// shows nothing until its start step is reached; a point probe's series is trimmed to the start step instead.
 pub fn layout(
 	probe: &Probe,
-	data: &GraphData,
+	data: &GraphData<'_>,
 	total_steps: u64,
 	width: f32,
 	height: f32,

@@ -27,7 +27,7 @@ pub(super) struct ZonePlateShape {
 
 impl ZonePlateShape {
 	/// None when the design frequency gives no finite positive wavelength.
-	pub fn new(z: &ZonePlate, sim: &Simulation) -> Option<Self> {
+	pub(super) fn new(z: &ZonePlate, sim: &Simulation) -> Option<Self> {
 		let lambda = wavelength(z.design_frequency, 1.0, sim.source_frequency_scale);
 		if !lambda.is_finite() || lambda <= 0.0 {
 			return None;

@@ -66,7 +66,7 @@ fn snapshot(app: &App) -> Snapshot {
 	});
 	Snapshot {
 		row,
-		json: Rc::new(row.map(|r| object_json(app, r)).unwrap_or(Value::Null)),
+		json: Rc::new(row.map_or(Value::Null, |r| object_json(app, r))),
 		part: match row {
 			Some(Row::Item(i)) if i.kind == ItemKind::Part => Some(project.parts[i.index].kind.clone()),
 			_ => None,

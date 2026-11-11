@@ -12,12 +12,12 @@ use wavedude_core::scene::pixels::ScenePixels;
 
 use crate::png_out::write_rgba;
 
-pub fn load(path: &Path) -> Result<Project> {
+pub(crate) fn load(path: &Path) -> Result<Project> {
 	load_project(path).with_context(|| format!("loading {}", path.display()))
 }
 
 /// The composed scene, or a blank canvas when the project has neither image nor enabled parts.
-pub fn scene_pixels(project: &Project) -> Result<ScenePixels> {
+pub(crate) fn scene_pixels(project: &Project) -> Result<ScenePixels> {
 	if let Some(pixels) = compose_scene(project) {
 		return Ok(pixels);
 	}
@@ -28,13 +28,13 @@ pub fn scene_pixels(project: &Project) -> Result<ScenePixels> {
 	Ok(ScenePixels::blank(scene.width, scene.height, scene.refractive_index))
 }
 
-pub fn convert(input: &Path, output: &Path) -> Result<()> {
+pub(crate) fn convert(input: &Path, output: &Path) -> Result<()> {
 	save_project(&load(input)?, output).with_context(|| format!("saving {}", output.display()))?;
 	println!("{}", output.display());
 	Ok(())
 }
 
-pub fn paint(path: &Path, out: &Path, edges: bool) -> Result<()> {
+pub(crate) fn paint(path: &Path, out: &Path, edges: bool) -> Result<()> {
 	let project = load(path)?;
 	let pixels = scene_pixels(&project)?;
 	let (width, height) = (pixels.width, pixels.height);
@@ -66,7 +66,7 @@ fn gib(bytes: u64) -> String {
 	format!("{bytes} bytes ({:.2} GiB)", bytes as f64 / (1u64 << 30) as f64)
 }
 
-pub fn check(path: &Path) -> Result<()> {
+pub(crate) fn check(path: &Path) -> Result<()> {
 	let project = load(path)?;
 	println!("project:      {}", path.display());
 	println!("normalised:   loaded normalised, a second pass changed {} lines", second_pass_changes(&project));

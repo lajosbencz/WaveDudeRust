@@ -15,7 +15,7 @@ use crate::project::load;
 use crate::run::{EngineArgs, simulate_with};
 
 #[derive(ClapArgs)]
-pub struct Args {
+pub(crate) struct Args {
 	/// Project file (.wdproj or Wave Dude 2D .json).
 	project: PathBuf,
 	/// Video file, image file (a sequence goes into a folder of its name) or still.
@@ -79,15 +79,19 @@ struct Signal {
 
 impl Signal {
 	fn notify(&self) {
-		let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+		let _guard = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 		self.cond.notify_all();
 	}
 
 	/// Waits until `done` holds; the run's events wake it, a timeout covers a write between two events.
 	fn wait_until(&self, mut done: impl FnMut() -> bool) {
-		let mut guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+		let mut guard = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 		while !done() {
-			guard = self.cond.wait_timeout(guard, Duration::from_millis(50)).unwrap_or_else(|e| e.into_inner()).0;
+			guard = self
+				.cond
+				.wait_timeout(guard, Duration::from_millis(50))
+				.unwrap_or_else(std::sync::PoisonError::into_inner)
+				.0;
 		}
 	}
 }
@@ -128,7 +132,7 @@ fn run_failure(run: &mut SimulationRun) -> Option<anyhow::Error> {
 	run.wait_completed().err().map(|e| anyhow::Error::new(e).context("the run did not complete"))
 }
 
-pub fn run(args: &Args) -> Result<()> {
+pub(crate) fn run(args: &Args) -> Result<()> {
 	let format = format_of(args)?;
 	#[cfg(feature = "mp4")]
 	let h264 = if format == ExportFormat::Mp4 { crate::openh264::library()? } else { None };

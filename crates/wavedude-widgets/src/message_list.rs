@@ -514,7 +514,7 @@ impl Component for MessageList {
 				on: filter.read().is_shown(level),
 				tooltip: words.level_tip.clone(),
 				id: format!("Level:{}", level.name()),
-				on_toggle: EventHandler::new(move |_| filter.write().toggle(level)),
+				on_toggle: EventHandler::new(move |()| filter.write().toggle(level)),
 			}
 			.into_element()
 		});
@@ -545,7 +545,7 @@ impl Component for MessageList {
 				on: filter.read().regex,
 				tooltip: words.regex_tip.clone(),
 				id: "Regex".into(),
-				on_toggle: EventHandler::new(move |_| {
+				on_toggle: EventHandler::new(move |()| {
 					let mut f = filter.write();
 					f.regex = !f.regex;
 				}),
@@ -556,7 +556,7 @@ impl Component for MessageList {
 				on: *auto_scroll.read(),
 				tooltip: words.auto_scroll_tip.clone(),
 				id: "AutoScroll".into(),
-				on_toggle: EventHandler::new(move |_| {
+				on_toggle: EventHandler::new(move |()| {
 					let on = !*auto_scroll.peek();
 					auto_scroll.set(on);
 					if on {

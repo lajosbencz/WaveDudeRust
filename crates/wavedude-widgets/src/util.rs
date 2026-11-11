@@ -3,7 +3,7 @@
 use crate::tooltip::Tip;
 use freya::prelude::*;
 
-/// Attaches a stable test id (AccessKit author id) to an element, the port of WPF's AutomationId.
+/// Attaches a stable test id (AccessKit author id) to an element, the port of WPF's `AutomationId`.
 pub trait TestIdExt: AccessibilityExt {
 	fn test_id(self, id: impl Into<String>) -> Self {
 		let id: String = id.into();
@@ -25,11 +25,14 @@ impl<T: AccessibilityExt> TestIdExt for T {}
 /// Pointer events carry no modifiers in Freya 0.5, so widgets that need Ctrl or Shift on a click read this.
 pub fn use_modifiers() -> State<Modifiers> {
 	use_hook(|| {
-		try_consume_root_context::<ModifierState>().map(|m| m.0).unwrap_or_else(|| {
-			let state = State::create_in_scope(Modifiers::empty(), ScopeId::ROOT);
-			provide_context_for_scope_id(ModifierState(state), ScopeId::ROOT);
-			state
-		})
+		try_consume_root_context::<ModifierState>().map_or_else(
+			|| {
+				let state = State::create_in_scope(Modifiers::empty(), ScopeId::ROOT);
+				provide_context_for_scope_id(ModifierState(state), ScopeId::ROOT);
+				state
+			},
+			|m| m.0,
+		)
 	})
 }
 

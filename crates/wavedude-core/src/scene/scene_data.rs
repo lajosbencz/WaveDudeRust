@@ -1,4 +1,4 @@
-//! Composed scene pixels to the engine's medium (spec/20-scene-painting.md, SceneData).
+//! Composed scene pixels to the engine's medium (spec/20-scene-painting.md, `SceneData`).
 //!
 //! Pixels are RGBA8, row-major, top row first: red the refractive index times 100 (0 = mirror),
 //! green an image source's frequency level, blue the absorption level. A mirror cell has c2 = 0: it

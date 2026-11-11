@@ -1,4 +1,4 @@
-//! Project and colour scheme files: the WaveDude Next `.wdproj` and `.wdscheme` XML, and the Wave Dude 2D `configuration.json` and JSON schemes.
+//! Project and colour scheme files: the `WaveDude` Next `.wdproj` and `.wdscheme` XML, and the Wave Dude 2D `configuration.json` and JSON schemes.
 //!
 //! Every reader normalises what it returns. A file whose content cannot be read fails with an
 //! [`UnreadableFile`] that names the problem and quotes the file's text for the log.
@@ -137,7 +137,10 @@ pub(crate) fn scale_nine_point_frequencies(project: &mut Project, speed: f64) ->
 
 /// The file extensions of the image formats a scene image may come in, as this build decodes them.
 pub fn image_extensions() -> Vec<&'static str> {
-	image::ImageFormat::all().filter(|f| f.reading_enabled()).flat_map(|f| f.extensions_str().iter().copied()).collect()
+	image::ImageFormat::all()
+		.filter(image::ImageFormat::reading_enabled)
+		.flat_map(|f| f.extensions_str().iter().copied())
+		.collect()
 }
 
 /// Width and height of encoded image bytes, read from the header.

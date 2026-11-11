@@ -46,7 +46,7 @@ pub struct TextMeasure<'a> {
 	pub width: &'a dyn Fn(&str) -> f32,
 }
 
-type Layouter = dyn Fn(&TextMeasure, f32, f32) -> GraphLayout;
+type Layouter = dyn Fn(&TextMeasure<'_>, f32, f32) -> GraphLayout;
 
 /// What a graph box shows: its title and its layout for a box size.
 #[derive(Clone)]
@@ -56,12 +56,12 @@ pub struct GraphData {
 }
 
 impl GraphData {
-	pub fn new(title: impl Into<String>, layout: impl Fn(&TextMeasure, f32, f32) -> GraphLayout + 'static) -> Self {
+	pub fn new(title: impl Into<String>, layout: impl Fn(&TextMeasure<'_>, f32, f32) -> GraphLayout + 'static) -> Self {
 		Self { title: title.into(), layout: Rc::new(layout) }
 	}
 
 	/// The graph in a box `width` x `height`.
-	pub fn layout(&self, text: &TextMeasure, width: f32, height: f32) -> GraphLayout {
+	pub fn layout(&self, text: &TextMeasure<'_>, width: f32, height: f32) -> GraphLayout {
 		(self.layout)(text, width, height)
 	}
 }
@@ -166,7 +166,7 @@ impl Component for GraphBox {
 		let border = if self.selected { SELECTED } else { BORDER };
 		let focus_ring = (focus() == Focus::Keyboard).then_some(theme.accent);
 
-		let painter = RenderCallback::new(move |ctx: &mut FillRenderContext| {
+		let painter = RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 			let grid = DeviceGrid::from_ctx(ctx);
 			let families = ctx.text_style_state.font_families.clone();
 			let RenderTarget::Background { canvas, font_collection } = &mut ctx.target else { return };
@@ -278,7 +278,7 @@ impl Component for GraphBox {
 				let p = e.global_location();
 				match *drag.peek() {
 					Some(BoxDrag::Move(x, y)) => {
-						on_event.call(GraphBoxEvent::Move { dx: (p.x - x) as f32, dy: (p.y - y) as f32, done: false })
+						on_event.call(GraphBoxEvent::Move { dx: (p.x - x) as f32, dy: (p.y - y) as f32, done: false });
 					}
 					Some(BoxDrag::Resize(x, y, w0, h0)) => on_event.call(GraphBoxEvent::Resize {
 						width: (w0 + (p.x - x) as f32).max(60.),
@@ -295,7 +295,7 @@ impl Component for GraphBox {
 				let p = e.global_location();
 				match drag.peek().as_ref().copied() {
 					Some(BoxDrag::Move(x, y)) => {
-						on_event.call(GraphBoxEvent::Move { dx: (p.x - x) as f32, dy: (p.y - y) as f32, done: true })
+						on_event.call(GraphBoxEvent::Move { dx: (p.x - x) as f32, dy: (p.y - y) as f32, done: true });
 					}
 					Some(BoxDrag::Resize(x, y, w0, h0)) => on_event.call(GraphBoxEvent::Resize {
 						width: (w0 + (p.x - x) as f32).max(60.),

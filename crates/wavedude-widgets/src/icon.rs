@@ -102,7 +102,7 @@ impl Component for IconView {
 			Icon::Path { stroke: s, fill: f } => {
 				let stroke_path = SkPath::from_svg(s.as_ref());
 				let fill_path = f.as_ref().and_then(|f| SkPath::from_svg(f.as_ref()));
-				base.background(RenderCallback::new(move |ctx: &mut FillRenderContext| {
+				base.background(RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 					let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 					canvas.save();
 					canvas.scale((size / 16., size / 16.));

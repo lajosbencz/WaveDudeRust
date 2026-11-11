@@ -1,4 +1,4 @@
-//! QuickTime movies with the Animation codec (`rle `, 24-bit, every sample a full-frame key frame) or PNG samples
+//! `QuickTime` movies with the Animation codec (`rle `, 24-bit, every sample a full-frame key frame) or PNG samples
 //! (`png `, filter None).
 //!
 //! Layout (big-endian): `ftyp` (brand `qt  `); a `free` atom of `1024 + 12 * frames` bytes when the frame count is
@@ -51,7 +51,7 @@ impl MovCodec {
 	}
 }
 
-/// A QuickTime writer.
+/// A `QuickTime` writer.
 pub struct MovWriter<W: Write + Seek> {
 	out: Counted<W>,
 	width: u32,
@@ -107,7 +107,7 @@ impl Body {
 		self
 	}
 	fn matrix(self) -> Self {
-		[0x10000, 0, 0, 0, 0x10000, 0, 0, 0, 0x4000_0000].into_iter().fold(self, |b, v| b.u32(v))
+		[0x10000, 0, 0, 0, 0x10000, 0, 0, 0, 0x4000_0000].into_iter().fold(self, Body::u32)
 	}
 	fn pascal(self, s: &str, field: usize) -> Self {
 		let len = s.len();

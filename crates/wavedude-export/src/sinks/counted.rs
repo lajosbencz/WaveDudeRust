@@ -2,19 +2,19 @@
 
 use std::io::{Result, Seek, SeekFrom, Write};
 
-pub struct Counted<W> {
+pub(super) struct Counted<W> {
 	inner: W,
 	pos: u64,
 }
 
 impl<W: Write + Seek> Counted<W> {
 	/// Takes the writer at its current position.
-	pub fn new(mut inner: W) -> Result<Self> {
+	pub(super) fn new(mut inner: W) -> Result<Self> {
 		let pos = inner.stream_position()?;
 		Ok(Self { inner, pos })
 	}
 
-	pub fn into_inner(self) -> W {
+	pub(super) fn into_inner(self) -> W {
 		self.inner
 	}
 }

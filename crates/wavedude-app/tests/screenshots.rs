@@ -319,7 +319,7 @@ fn window_sizes() {
 }
 
 /// The README's animation: the logic gates example played through, one picture per frame of the sweep, for
-/// ffmpeg to join (docs/README.md, figures). Run with WAVEDUDE_GIF set to the output folder.
+/// ffmpeg to join (docs/README.md, figures). Run with `WAVEDUDE_GIF` set to the output folder.
 #[test]
 #[ignore = "writes the README animation's frames; run with WAVEDUDE_GIF set"]
 fn readme_animation() {

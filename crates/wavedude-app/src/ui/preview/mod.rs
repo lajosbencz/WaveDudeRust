@@ -663,7 +663,7 @@ impl Component for PreviewPane {
 			.height(Size::flex(1.))
 			.padding(PICTURES_MARGIN)
 			.content(Content::flex())
-			.maybe(!vertical, |r| r.horizontal())
+			.maybe(!vertical, ContainerWithContentExt::horizontal)
 			.on_sized(move |e: Event<SizedEventData>| size.set_if_modified((e.area.width(), e.area.height())))
 			.maybe_child(show_field.then(|| cell(Layer::Field, if show_intensity { split } else { 1. })))
 			.maybe_child((show_field && show_intensity).then(|| Splitter {

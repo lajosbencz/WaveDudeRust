@@ -8,12 +8,12 @@ pub(crate) struct BitWriter {
 }
 
 impl BitWriter {
-	pub fn with_capacity(bytes: usize) -> Self {
+	pub(crate) fn with_capacity(bytes: usize) -> Self {
 		Self { bytes: Vec::with_capacity(bytes), acc: 0, count: 0 }
 	}
 
 	/// Appends the low `bits` (0..=32) of `value`.
-	pub fn write(&mut self, value: u32, bits: u32) {
+	pub(crate) fn write(&mut self, value: u32, bits: u32) {
 		debug_assert!(bits <= 32);
 		if bits == 0 {
 			return;
@@ -26,7 +26,7 @@ impl BitWriter {
 		}
 	}
 
-	pub fn write_bytes(&mut self, bytes: &[u8]) {
+	pub(crate) fn write_bytes(&mut self, bytes: &[u8]) {
 		if self.count == 0 {
 			self.bytes.extend_from_slice(bytes);
 		} else {
@@ -37,20 +37,20 @@ impl BitWriter {
 	}
 
 	/// Pads with zero bits to the next byte boundary.
-	pub fn align_zero(&mut self) {
+	pub(crate) fn align_zero(&mut self) {
 		if self.count > 0 {
 			self.write(0, 8 - self.count);
 		}
 	}
 
-	pub fn clear(&mut self) {
+	pub(crate) fn clear(&mut self) {
 		self.bytes.clear();
 		self.acc = 0;
 		self.count = 0;
 	}
 
 	/// The whole bytes written; call after [`BitWriter::align_zero`].
-	pub fn bytes(&self) -> &[u8] {
+	pub(crate) fn bytes(&self) -> &[u8] {
 		debug_assert_eq!(self.count, 0, "aligned");
 		&self.bytes
 	}

@@ -14,7 +14,7 @@ pub(super) struct StackShape {
 
 impl StackShape {
 	/// None without a layer of any thickness.
-	pub fn new(layers: &[FilterLayer], length: u32, width: u32) -> Option<Self> {
+	pub(super) fn new(layers: &[FilterLayer], length: u32, width: u32) -> Option<Self> {
 		let layers: Vec<&FilterLayer> = layers.iter().filter(|l| l.thickness > 0.0).collect();
 		if layers.is_empty() {
 			return None;

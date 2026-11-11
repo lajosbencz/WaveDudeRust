@@ -26,7 +26,7 @@ fn rectangle_depth(hl: f64, hw: f64, x: f64, y: f64) -> f64 {
 
 impl MetaPatternShape {
 	/// None when no cell holds a ridge wider than a hundredth of a pixel.
-	pub fn new(m: &MetaSurface, scale: f64) -> Option<Self> {
+	pub(super) fn new(m: &MetaSurface, scale: f64) -> Option<Self> {
 		let fills = m.fill_factors(scale);
 		let pitch = m.guarded_pitch();
 		if fills.iter().all(|f| f * pitch < 0.01) {

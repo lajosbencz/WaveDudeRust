@@ -1,5 +1,5 @@
 //! Deterministic randomness: PCG32 with streams, the name hash and xorshift32.
-//! Kept exactly as in WaveDude Next so composite sources land on the same cells.
+//! Kept exactly as in `WaveDude` Next so composite sources land on the same cells.
 
 /// PCG-XSH-RR 64/32.
 #[derive(Clone, Debug)]

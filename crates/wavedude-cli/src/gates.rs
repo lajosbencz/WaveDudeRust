@@ -44,7 +44,7 @@ const RIM: i32 = -32;
 const VISUALIZE_EVERY: u32 = 4;
 
 #[derive(ClapArgs)]
-pub struct Args {
+pub(crate) struct Args {
 	/// Directory for the projects (created if missing).
 	#[arg(long)]
 	out: PathBuf,
@@ -288,7 +288,7 @@ fn straight_fibre(name: &str, design: &FibreDesign, y: i32, width: u32) -> Part 
 	fibre(name, design, vec![node(design.cup().back, y, 0, 0), node(width as i32 + 8, y, 0, 0)])
 }
 
-/// A fibre at `far` that bends to `near` over [bend_in, coupler], runs straight to bend_out and
+/// A fibre at `far` that bends to `near` over [`bend_in`, coupler], runs straight to `bend_out` and
 /// bends back to `far` by `apart`.
 fn bent_fibre(name: &str, design: &FibreDesign, pair: &BentPair, far: i32, near: i32) -> Part {
 	let h = design.bend_len / 3;
@@ -693,7 +693,7 @@ fn write(path: &Path, project: &Project) -> Result<()> {
 	save_project(project, path).with_context(|| format!("writing {}", path.display()))
 }
 
-pub fn run(args: &Args) -> Result<()> {
+pub(crate) fn run(args: &Args) -> Result<()> {
 	let (design, mut list) = projects(args)?;
 	fs::create_dir_all(&args.out).with_context(|| format!("creating {}", args.out.display()))?;
 	println!(

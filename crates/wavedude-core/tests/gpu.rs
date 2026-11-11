@@ -358,7 +358,7 @@ fn captured_planes_match() {
 					};
 					let mut own = Vec::new();
 					capture::plane_rows(&shape, layer, &mut own, |y, row| {
-						row.iter_mut().enumerate().for_each(|(x, v)| *v = at(values, x, y))
+						row.iter_mut().enumerate().for_each(|(x, v)| *v = at(values, x, y));
 					});
 					let (conversion, _) = mismatches(g.plane(layer), &own, format);
 					let (n, max) = mismatches(g.plane(layer), c.plane(layer), format);

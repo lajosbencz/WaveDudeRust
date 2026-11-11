@@ -508,7 +508,7 @@ const ICON_SLOT: f32 = 24.;
 /// A drop-down entry: the text line between WPF's padding 2 and margin 2 above and below.
 const ENTRY_HEIGHT: f32 = 22.;
 const SEPARATOR_HEIGHT: f32 = 7.;
-/// WPF's SubmenuArrowGeometry, 4 x 8.
+/// WPF's `SubmenuArrowGeometry`, 4 x 8.
 const SUBMENU_ARROW: Icon = Icon::filled("M6 4 L10 8 L6 12 Z");
 
 /// A label with its mnemonic letter underlined when `underline` is set.
@@ -667,7 +667,7 @@ fn entry_view<A>(
 
 /// WPF's 56 x 12 scheme strip with a hairline border.
 fn swatch_view(theme: &Theme, gradient: Gradient) -> Element {
-	let painter = RenderCallback::new(move |ctx: &mut FillRenderContext| {
+	let painter = RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 		let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 		let size = ctx.size;
 		let colors: Vec<Color> = gradient.stops.iter().map(|s| s.color.to_color()).collect();

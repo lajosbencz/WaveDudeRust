@@ -1,4 +1,4 @@
-//! RGBA8 to planar 4:2:0 Y'CbCr, studio range BT.601, padded by repeating the last column and row.
+//! RGBA8 to planar 4:2:0 Y'`CbCr`, studio range BT.601, padded by repeating the last column and row.
 
 use rayon::prelude::*;
 
@@ -18,7 +18,7 @@ fn byte(v: f32) -> u8 {
 
 impl Yuv420 {
 	/// Planes of `width x height` (both even) for pictures up to that size.
-	pub fn new(width: usize, height: usize) -> Self {
+	pub(crate) fn new(width: usize, height: usize) -> Self {
 		debug_assert!(width.is_multiple_of(2) && height.is_multiple_of(2));
 		let chroma = width / 2 * (height / 2);
 		Self { width, height, y: vec![0; width * height], cb: vec![0; chroma], cr: vec![0; chroma] }
@@ -28,7 +28,7 @@ impl Yuv420 {
 	/// `Y = 16 + 0.257R + 0.504G + 0.098B`, `Cb = 128 - 0.148R - 0.291G + 0.439B`,
 	/// `Cr = 128 + 0.439R - 0.368G - 0.071B` in f32; chroma the 2 x 2 mean of the unclamped values; every byte
 	/// `clamp(round_even(v), 0, 255)`. Pixels beyond the picture repeat its last column and row.
-	pub fn convert(&mut self, rgba: &[u8], w: usize, h: usize) {
+	pub(crate) fn convert(&mut self, rgba: &[u8], w: usize, h: usize) {
 		assert!(w <= self.width && h <= self.height && rgba.len() == w * h * 4);
 		let (pw, cw) = (self.width, self.width / 2);
 		let pixel = |x: usize, y: usize| {

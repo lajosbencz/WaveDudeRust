@@ -207,7 +207,7 @@ pub struct Callback<A>(Rc<RefCell<dyn FnMut(A)>>);
 
 impl<A> Callback<A> {
 	pub fn call(&self, arg: A) {
-		(self.0.borrow_mut())(arg)
+		(self.0.borrow_mut())(arg);
 	}
 }
 
@@ -429,7 +429,7 @@ impl Component for CanvasImage {
 		let edge = self.edge;
 		let smooth = self.smooth;
 		let hover = *pointer.read();
-		let painter = RenderCallback::new(move |ctx: &mut FillRenderContext| {
+		let painter = RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 			let grid = DeviceGrid::from_ctx(ctx);
 			let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 			let (px, py, pw, ph) = transform.picture();

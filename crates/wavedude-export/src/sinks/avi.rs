@@ -1,4 +1,4 @@
-//! Uncompressed 24-bit OpenDML AVI.
+//! Uncompressed 24-bit `OpenDML` AVI.
 //!
 //! Layout (all little-endian):
 //! ```text
@@ -21,7 +21,7 @@ use super::counted::Counted;
 use super::{FrameSink, check_size};
 use crate::{ExportError, Result};
 
-/// The OpenDML segment size.
+/// The `OpenDML` segment size.
 pub const SEGMENT_LIMIT: u64 = 1 << 30;
 /// Entries reserved in the super index.
 pub const INDEX_SLOTS: usize = 1024;
@@ -35,7 +35,7 @@ struct Segment {
 	chunks: Vec<(u64, u32)>,
 }
 
-/// An OpenDML AVI writer.
+/// An `OpenDML` AVI writer.
 pub struct AviWriter<W: Write + Seek> {
 	out: Counted<W>,
 	width: u32,

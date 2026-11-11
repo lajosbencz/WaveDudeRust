@@ -16,7 +16,7 @@ pub(super) struct ProfiledShape {
 
 impl ProfiledShape {
 	/// `body`'s band carries the faces it coats; the caller leaves a face bare by clearing its flag.
-	pub fn new(plate: ProfiledPlate, body: Body) -> Self {
+	pub(super) fn new(plate: ProfiledPlate, body: Body) -> Self {
 		let half_length = plate.half_length();
 		let half_width = plate.half_width();
 		let reach = plate.front.iter().fold(half_length, |m, x| m.max(x.abs()));

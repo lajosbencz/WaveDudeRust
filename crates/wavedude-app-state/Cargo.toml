@@ -11,6 +11,9 @@ description = "WaveDude application state without a UI toolkit: document, histor
 [lib]
 name = "wavedude_app_state"
 
+[lints]
+workspace = true
+
 [dependencies]
 wavedude-core = { path = "../wavedude-core", features = ["gpu"] }
 wavedude-export = { path = "../wavedude-export", default-features = false }

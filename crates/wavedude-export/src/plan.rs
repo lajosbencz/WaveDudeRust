@@ -34,7 +34,7 @@ pub struct ExportPlan<'a> {
 	pub total_steps: u64,
 	/// Keep the outputs of a failed or cancelled job.
 	pub keep_partial: bool,
-	/// Cisco's OpenH264 binary for MP4 (crate::h264); unused when OpenH264 is compiled in.
+	/// Cisco's `OpenH264` binary for MP4 (`crate::h264`); unused when `OpenH264` is compiled in.
 	pub h264: Option<PathBuf>,
 }
 

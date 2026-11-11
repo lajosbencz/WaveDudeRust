@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout, reason = "the measurements are printed for the reader")]
 //! The Rendering guarantees of docs/spec/70-guarantees.md.
 
 use std::time::Instant;

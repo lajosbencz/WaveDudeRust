@@ -78,7 +78,7 @@ impl Component for MemoryWarningDialog {
 			if enabled {
 				check_box(text, on, move |v| {
 					let mut levers = levers;
-					set(&mut levers.write(), v)
+					set(&mut levers.write(), v);
 				})
 				.into_element()
 			} else {
@@ -120,14 +120,14 @@ impl Component for MemoryWarningDialog {
 				|l, v| l.cache_auto = v,
 			))
 			.child(lever(s.get("MemoryWarningResolution").into(), l.resolution, f.enabled.resolution, |l, v| {
-				l.resolution = v
+				l.resolution = v;
 			}))
 			.child(lever(s.get("MemoryWarningFrames").into(), l.frames, f.enabled.frames, |l, v| l.frames = v))
 			.child(lever(s.get("MemoryWarningSamples").into(), l.samples, f.enabled.samples, |l, v| l.samples = v))
 			.child(paragraph().width(Size::fill()).color(theme.text_dim).span(Span::new(line)))
 			.child(check_box(s.get("MemoryWarningMute").into(), *mute.read(), move |v| {
 				let mut mute = mute;
-				mute.set(v)
+				mute.set(v);
 			}))
 			.child(button_row(vec![
 				button(s.get("DialogRun"), true, run),

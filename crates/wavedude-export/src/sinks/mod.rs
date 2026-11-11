@@ -134,7 +134,7 @@ pub(crate) fn check_size(spec_w: u32, spec_h: u32, w: u32, h: u32, len: usize, b
 
 /// Opens the sink of `format` at `path`: a video file at the path, encoded on a thread of its own (a movie on
 /// `pool`); for a sequence format a still at the path when `still`, else the folder of
-/// [`crate::naming::sequence_folder`], encoded on `pool`. `h264`: Cisco's OpenH264 binary for MP4 (crate::h264).
+/// [`crate::naming::sequence_folder`], encoded on `pool`. `h264`: Cisco's `OpenH264` binary for MP4 (`crate::h264`).
 pub fn open(
 	format: ExportFormat,
 	path: &Path,

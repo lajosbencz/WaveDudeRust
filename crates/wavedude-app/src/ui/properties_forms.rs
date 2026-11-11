@@ -342,8 +342,7 @@ fn save_image(f: &Form) {
 		(sc.image_data.clone(), sc.image.clone(), sc.image_path.clone(), a.document.folder().map(Path::to_owned))
 	});
 	let Some(bytes) = bytes else { return };
-	let ext =
-		Path::new(&name).extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_else(|| ".png".into());
+	let ext = Path::new(&name).extension().map_or_else(|| ".png".into(), |e| format!(".{}", e.to_string_lossy()));
 	let dir = Path::new(&path).parent().filter(|p| p.is_dir()).map(Path::to_owned).or(folder);
 	let proposed = dir.map(|d| d.join(&name));
 	let spec = f.s.format("SceneImageSaveFilterFormat", &[&ext]);
@@ -455,7 +454,7 @@ fn layer_rows(f: &Form, layer: &str, names: &[SchemeEntry]) -> Vec<PropertyRow> 
 		swatched_combo_box(current, items, swatches, true, format!("{layer}.ColorScheme"), move |name| {
 			if name == BROWSE {
 				dialogs::pick_file_for_project(&form.cx, form.s.get("ColorSchemeFilter"), None, move |cx, path| {
-					cx.send(AppEvent::Guarded(Guarded::Open(path)))
+					cx.send(AppEvent::Guarded(Guarded::Open(path)));
 				});
 			} else if name == EDIT_COPY {
 				edit_copy(&form, &path, &current_name);
@@ -541,7 +540,7 @@ fn source(f: &Form, r: &Readouts) -> Vec<Element> {
 		let (_, max) = bounds("Source.DetachAfter");
 		let editor = wavedude_widgets::NumberBox::new(
 			WritableSetter::new(value, move |v: f64| {
-				f.set("detach_after", if v < 0. { Value::Null } else { Value::from(v.round() as i64) })
+				f.set("detach_after", if v < 0. { Value::Null } else { Value::from(v.round() as i64) });
 			}),
 			NumberSpec::integer(-1., max),
 		)
@@ -814,7 +813,7 @@ const CHAIN_PARTED: Icon = Icon::path(
 );
 
 /// Length and Width of a rectangle or ellipse with the chain toggle that links them beside both.
-fn linked_sizes(f: &Form, ty: &str, b: &Scope) -> PropertyRow {
+fn linked_sizes(f: &Form, ty: &str, b: &Scope<'_>) -> PropertyRow {
 	let theme = use_wave_theme();
 	let linked = b.f.bind_as::<bool>(&b.path("Linked"));
 	let toggle = {
@@ -1036,7 +1035,7 @@ fn list_number<T: Serialize + DeserializeOwned + 'static>(
 	let path = path.to_owned();
 	wavedude_widgets::NumberBox::new(
 		WritableSetter::new(f64::from(value), move |v: f64| {
-			set_list(&f2, &path, |list: &mut Vec<T>| set(&mut list[index], v.round() as i32))
+			set_list(&f2, &path, |list: &mut Vec<T>| set(&mut list[index], v.round() as i32));
 		}),
 		NumberSpec::integer(-1e6, 1e6),
 	)
@@ -1060,7 +1059,7 @@ fn remove_button<T: Serialize + DeserializeOwned>(
 			.on_press(move |_| {
 				set_list(&f2, &path, |list: &mut Vec<T>| {
 					list.remove(index);
-				})
+				});
 			})
 			.child(IconView::new(icons::MINUS)),
 	);
@@ -1118,7 +1117,7 @@ fn points(f: &Form, path: &str) -> Element {
 			set_list(&f, &path, |list: &mut Vec<m::Point>| {
 				let last = list.last().copied().unwrap_or_default();
 				list.push(m::Point::new(last.x + 10, last.y));
-			})
+			});
 		}
 	};
 	rows.push(
@@ -1170,7 +1169,7 @@ fn move_button<T: Serialize + DeserializeOwned>(
 					if (0..list.len() as isize).contains(&to) {
 						list.swap(index, to as usize);
 					}
-				})
+				});
 			})
 			.child(IconView::new(if by < 0 { icons::CHEVRON_UP } else { icons::CHEVRON_DOWN })),
 	);
@@ -1244,7 +1243,7 @@ fn layers(f: &Form, path: &str) -> Element {
 		move |_: Event<PressEventData>| {
 			set_list(&f, &path, |list: &mut Vec<m::FilterLayer>| {
 				list.push(list.last().cloned().unwrap_or_default());
-			})
+			});
 		}
 	};
 	let clear = {
@@ -1330,7 +1329,7 @@ fn fiber(f: &Form, at: &str, variant: &str) -> Vec<Element> {
 			set_list(&f, &path, |l: &mut Vec<m::FiberNode>| {
 				let (x, y) = l.last().map_or((0, 0), |n| (n.x + 50, n.y));
 				l.push(m::FiberNode { x, y, in_x: -20, in_y: 0, out_x: 20, out_y: 0, smooth: true });
-			})
+			});
 		}
 	};
 	nodes.push(PropertyRow::new("", dialogs::button(s.get("ButtonAddNode"), true, add)).hint(s.get("TipAddNode")));

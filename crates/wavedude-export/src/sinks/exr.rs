@@ -1,4 +1,4 @@
-//! OpenEXR files of a stored plane: single-part scanline, uncompressed, one HALF channel `Y`, the halves as stored.
+//! `OpenEXR` files of a stored plane: single-part scanline, uncompressed, one HALF channel `Y`, the halves as stored.
 
 use std::path::Path;
 

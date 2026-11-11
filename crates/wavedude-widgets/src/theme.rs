@@ -6,7 +6,7 @@ use freya::prelude::{
 	consume_context, dark_theme, light_theme, use_hook,
 };
 
-/// The UI font families in order of preference: WaveDude Next's Segoe UI, else Selawik, its free
+/// The UI font families in order of preference: `WaveDude` Next's Segoe UI, else Selawik, its free
 /// metric-compatible stand-in, bundled.
 pub const UI_FONTS: [&str; 2] = ["Segoe UI", BUNDLED_FONT];
 const BUNDLED_FONT: &str = "Selawik";
@@ -236,7 +236,7 @@ impl Theme {
 	}
 
 	/// Freya's component theme recoloured and resized with these tokens, so its Input, Button, Tooltip and
-	/// ScrollView match WaveDude Next's controls. Freya draws a border inside the padding, so WPF's padding is
+	/// `ScrollView` match `WaveDude` Next's controls. Freya draws a border inside the padding, so WPF's padding is
 	/// widened by the 1 px border.
 	pub fn freya_theme(&self) -> freya::prelude::Theme {
 		let mut theme = match self.kind {

@@ -20,7 +20,7 @@ enum StencilChoice {
 }
 
 #[derive(ClapArgs)]
-pub struct Args {
+pub(crate) struct Args {
 	/// Canvas width in cells.
 	#[arg(long, default_value_t = 1920)]
 	width: u32,
@@ -115,7 +115,7 @@ fn time_engine(engine: &mut dyn WaveEngine, shape: &FrameShape, steps: u32, capt
 	Ok(started.elapsed().as_secs_f64() * 1000.0 / steps as f64)
 }
 
-pub fn run(args: &Args) -> Result<()> {
+pub(crate) fn run(args: &Args) -> Result<()> {
 	if args.steps == 0 || args.width == 0 || args.height == 0 {
 		bail!("width, height and steps must be positive");
 	}

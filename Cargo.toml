@@ -9,6 +9,31 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/lajosbencz/WaveDudeRust"
 rust-version = "1.89"
 
+# The lint policy of every crate (`[lints] workspace = true`); CI runs clippy with `-D warnings`, so each of these
+# fails the build. The cast lints and `missing_docs` are left out on purpose: casts are handled by the unit types,
+# and comments state only what the code cannot say.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+rust_2018_idioms = { level = "deny", priority = -1 }
+unreachable_pub = "deny"
+unused_qualifications = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+print_stdout = "deny"
+undocumented_unsafe_blocks = "deny"
+semicolon_if_nothing_returned = "deny"
+redundant_closure_for_method_calls = "deny"
+uninlined_format_args = "deny"
+manual_let_else = "deny"
+map_unwrap_or = "deny"
+implicit_clone = "deny"
+explicit_iter_loop = "deny"
+ignored_unit_patterns = "deny"
+if_not_else = "deny"
+
 [workspace.dependencies]
 anyhow = "1"
 thiserror = "2"

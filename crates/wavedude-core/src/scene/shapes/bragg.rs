@@ -12,7 +12,7 @@ pub(super) struct BraggShape {
 }
 
 impl BraggShape {
-	pub fn new(b: &BraggReflector) -> Self {
+	pub(super) fn new(b: &BraggReflector) -> Self {
 		let thickness1 = b.thickness1 as f64;
 		let period = thickness1 + b.thickness2 as f64;
 		Self {

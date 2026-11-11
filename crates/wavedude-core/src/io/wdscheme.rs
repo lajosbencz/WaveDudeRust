@@ -64,7 +64,7 @@ pub fn read_str(text: &str, fallback_name: &str) -> std::result::Result<ColorSch
 	Ok(scheme)
 }
 
-/// The `.wdscheme` text of a scheme, as WaveDude Next writes it (no trailing newline).
+/// The `.wdscheme` text of a scheme, as `WaveDude` Next writes it (no trailing newline).
 pub fn write_string(scheme: &ColorScheme) -> String {
 	let mut out = String::from(DECLARATION);
 	out.push('\n');

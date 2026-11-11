@@ -809,13 +809,13 @@ pub fn act(cx: &Cx, action: MenuAction, on: On) {
 		MenuAction::UseGpu => cx.send(AppEvent::SetUseGpu(!shared.peek(|a| a.settings.use_gpu))),
 		MenuAction::AutoRerun => cx.send(AppEvent::SetAutoRerun(!shared.peek(|a| a.settings.auto_rerun))),
 		MenuAction::WarnMemory => {
-			cx.send(AppEvent::SetWarnWhenRamInsufficient(!shared.peek(|a| a.settings.warn_when_ram_insufficient)))
+			cx.send(AppEvent::SetWarnWhenRamInsufficient(!shared.peek(|a| a.settings.warn_when_ram_insufficient)));
 		}
 		MenuAction::FrameMemory(pct) => cx.send(AppEvent::SetFrameMemoryPercent(pct)),
 		MenuAction::About => cx.ui.show_modal(Modal::About),
 		MenuAction::CheckForUpdates => super::update::check(cx, false),
 		MenuAction::CheckAtLaunch => {
-			cx.send(AppEvent::SetCheckForUpdates(shared.peek(|a| a.settings.check_for_updates) != Some(true)))
+			cx.send(AppEvent::SetCheckForUpdates(shared.peek(|a| a.settings.check_for_updates) != Some(true)));
 		}
 		MenuAction::Manual => {
 			let mut r = cx.ui.manual_request;

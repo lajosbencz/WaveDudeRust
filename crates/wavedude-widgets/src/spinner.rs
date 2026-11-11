@@ -63,7 +63,7 @@ impl Component for Spinner {
 		let angle = spinner_angle(start.elapsed(), Duration::from_secs(1));
 		let (size, color, width) = (self.size, self.color, self.width);
 		rect().interactive(Interactive::No).width(Size::px(size)).height(Size::px(size)).background(
-			RenderCallback::new(move |ctx: &mut FillRenderContext| {
+			RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 				let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 				let mut paint = stroke(color, width);
 				paint.set_anti_alias(true);

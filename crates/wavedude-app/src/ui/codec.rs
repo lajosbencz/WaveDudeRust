@@ -1,4 +1,4 @@
-//! The app's side of Cisco's OpenH264 (decision 0005): the user's choice is the `UseOpenH264` setting, the
+//! The app's side of Cisco's `OpenH264` (decision 0005): the user's choice is the `UseOpenH264` setting, the
 //! binary a file in the app's codec folder (`AppDirs::codec`), both shared with the CLI. Threads: the UI thread.
 
 use std::path::PathBuf;

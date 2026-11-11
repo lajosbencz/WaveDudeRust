@@ -2,7 +2,7 @@
 //! no frame skipping, no background detection: it held moving waves as static and cost 3 dB) muxed by the
 //! `mp4` crate as one `avc1` track (timescale = fps, one tick per sample, the SPS and PPS in `avcC`).
 //!
-//! Input: 4:2:0 studio-range BT.601 from [`crate::yuv`]; an odd size is padded to even by repeating the last column
+//! Input: 4:2:0 studio-range BT.601 from `yuv`; an odd size is padded to even by repeating the last column
 //! and row, and the video has the padded size. At most 3840 x 2160 (openh264's limit, either orientation).
 
 use std::fs::File;
@@ -79,7 +79,7 @@ pub struct Mp4Writer<W: Write + Seek> {
 }
 
 impl Mp4Writer<BufWriter<File>> {
-	/// `library`: Cisco's OpenH264 binary (crate::h264), unused in a build with OpenH264 compiled in.
+	/// `library`: Cisco's `OpenH264` binary (`crate::h264`), unused in a build with `OpenH264` compiled in.
 	pub fn create(path: &Path, spec: SinkSpec, library: Option<&Path>) -> Result<Self> {
 		Self::check(spec.width, spec.height)?;
 		let api = crate::h264::api(library)?;

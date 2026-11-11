@@ -23,7 +23,7 @@ use crate::project::load;
 
 /// The engine a subcommand runs on.
 #[derive(ClapArgs, Clone, Copy)]
-pub struct EngineArgs {
+pub(crate) struct EngineArgs {
 	/// Run on the GPU engine (the CPU engine, with a warning, when no GPU is available).
 	#[arg(long)]
 	pub gpu: bool,
@@ -31,16 +31,16 @@ pub struct EngineArgs {
 
 impl EngineArgs {
 	/// The engine for `spec`, reset to its start.
-	pub fn build(self, spec: &RunSpec) -> Box<dyn WaveEngine> {
+	pub(crate) fn build(self, spec: &RunSpec) -> Box<dyn WaveEngine> {
 		engine::build(spec.scene.clone(), spec.options.clone(), self.gpu)
 	}
 }
 
 #[derive(ClapArgs)]
-pub struct RunArgs {
+pub(crate) struct RunArgs {
 	/// Project file (.wdproj or Wave Dude 2D .json).
 	project: PathBuf,
-	/// Directory for field_NNNN.png and intensity_NNNN.png (created if missing).
+	/// Directory for `field_NNNN.png` and `intensity_NNNN.png` (created if missing).
 	#[arg(long)]
 	out: PathBuf,
 	/// Steps to run instead of the project's.
@@ -60,7 +60,7 @@ pub struct RunArgs {
 }
 
 #[derive(ClapArgs)]
-pub struct ProbesArgs {
+pub(crate) struct ProbesArgs {
 	/// Project file (.wdproj or Wave Dude 2D .json).
 	project: PathBuf,
 	/// Directory for the CSV files (created if missing).
@@ -80,7 +80,7 @@ fn parse_range(text: &str) -> Result<Range<u32>, String> {
 }
 
 /// Starts a run of `project`, its progress on stderr.
-pub fn simulate(
+pub(crate) fn simulate(
 	project: &mut Project,
 	steps: Option<u32>,
 	quality: PreviewQuality,
@@ -97,7 +97,7 @@ pub fn simulate(
 }
 
 /// Starts a run of `project` whose events go to `events`.
-pub fn simulate_with(
+pub(crate) fn simulate_with(
 	project: &mut Project,
 	steps: Option<u32>,
 	quality: PreviewQuality,
@@ -117,7 +117,7 @@ pub fn simulate_with(
 }
 
 /// Waits for `run` to complete, its progress line ended.
-pub fn finish(run: &mut SimulationRun) -> Result<()> {
+pub(crate) fn finish(run: &mut SimulationRun) -> Result<()> {
 	let result = run.wait_completed();
 	eprintln!();
 	result.context("the run did not complete")
@@ -157,7 +157,7 @@ fn halves(plane: &[u8]) -> Vec<wavedude_core::f16> {
 	plane.as_chunks::<2>().0.iter().map(|b| wavedude_core::f16::from_ne_bytes([b[0], b[1]])).collect()
 }
 
-pub fn frames(args: &RunArgs) -> Result<()> {
+pub(crate) fn frames(args: &RunArgs) -> Result<()> {
 	let mut project = load(&args.project)?;
 	let (mut run, store) = simulate(&mut project, args.steps, args.quality.preview(), true, args.engine)?;
 	let spec = run.spec().clone();
@@ -195,7 +195,7 @@ pub fn frames(args: &RunArgs) -> Result<()> {
 	Ok(())
 }
 
-pub fn probes(args: &ProbesArgs) -> Result<()> {
+pub(crate) fn probes(args: &ProbesArgs) -> Result<()> {
 	let mut project = load(&args.project)?;
 	let (mut run, _store) = simulate(&mut project, args.steps, Quality::Default.preview(), false, args.engine)?;
 	let spec = run.spec().clone();

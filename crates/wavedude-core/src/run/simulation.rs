@@ -48,7 +48,7 @@ impl RunError {
 		let message = payload
 			.downcast_ref::<String>()
 			.cloned()
-			.or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+			.or_else(|| payload.downcast_ref::<&str>().map(ToString::to_string))
 			.unwrap_or_default();
 		Self::Panic(what, message)
 	}

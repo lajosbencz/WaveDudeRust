@@ -1,4 +1,4 @@
-//! The example projects of the Examples dialog, embedded: WaveDude Next's from the core's fixtures and our own
+//! The example projects of the Examples dialog, embedded: `WaveDude` Next's from the core's fixtures and our own
 //! from the repository's `examples` folder; one entry per file, grouped by [`Topic`].
 
 use std::sync::OnceLock;
@@ -34,7 +34,7 @@ impl Topic {
 	}
 }
 
-/// One example: its file, title ("Example07_Random_emitter_lattice.wdproj" is "Random emitter lattice",
+/// One example: its file, title ("`Example07_Random_emitter_lattice.wdproj`" is "Random emitter lattice",
 /// "01-single-fiber.wdproj" is "Single fiber"), the project's description and its topic.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Example {
@@ -254,7 +254,7 @@ fn slug_title(file: &str) -> (&str, String) {
 	(slug, title)
 }
 
-/// Splits "ExampleNN_Title.wdproj" into (NN, Title); every embedded file follows the pattern.
+/// Splits "`ExampleNN_Title.wdproj`" into (NN, Title); every embedded file follows the pattern.
 fn parse(file: &str) -> (u32, &str) {
 	file.strip_suffix(".wdproj")
 		.and_then(|stem| stem.strip_prefix("Example"))

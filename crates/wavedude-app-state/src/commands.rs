@@ -257,8 +257,8 @@ pub enum ChangeKind {
 	Brightness,
 	/// A probe's place or measurement: the frames stay, the recordings are made anew.
 	ProbePresentation,
-	/// Brightness and ProbePresentation together: a simulation edit with 8-bit preview samples, else
-	/// ProbePresentation.
+	/// Brightness and `ProbePresentation` together: a simulation edit with 8-bit preview samples, else
+	/// `ProbePresentation`.
 	ProbesAndBrightness,
 	/// Scene, solver, seed, sources, parts: the run is stale.
 	Simulation,

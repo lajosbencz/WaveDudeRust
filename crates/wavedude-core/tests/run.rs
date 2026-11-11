@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout, reason = "the measurements are printed for the reader")]
 //! Runs, the frame store, the live run and the memory warning (spec/40, spec/30 The live run, spec/70
 //! "Store, frames, quality" and "Probes and graphs"). Canvases are small; every engine is the CPU one.
 
@@ -172,9 +173,9 @@ fn a_worker_sweeps_the_spill_files_a_dead_process_left() {
 	let dir = tempfile::tempdir().unwrap();
 	std::fs::write(dir.path().join("frames-abc.wdfs"), [0u8; 64]).unwrap();
 	std::fs::write(dir.path().join("keep.txt"), b"x").unwrap();
-	assert_eq!(wavedude_core::run::sweep_leftovers(dir.path()).unwrap(), 64);
+	assert_eq!(sweep_leftovers(dir.path()).unwrap(), 64);
 	assert!(dir.path().join("keep.txt").exists() && !dir.path().join("frames-abc.wdfs").exists());
-	assert_eq!(wavedude_core::run::sweep_leftovers(&dir.path().join("missing")).unwrap(), 0);
+	assert_eq!(sweep_leftovers(&dir.path().join("missing")).unwrap(), 0);
 	std::fs::write(dir.path().join("frames-def.wdfs"), [0u8; 64]).unwrap();
 	let _w = worker(dir.path());
 	assert!(!dir.path().join("frames-def.wdfs").exists(), "the worker sweeps at its start");
@@ -454,7 +455,7 @@ fn the_traces_of_the_frame_kept_through_a_clear_are_held_with_it() {
 	let w = worker(dir.path());
 	w.set_goal(goal(&s_run, 20, Wanted::Position));
 	wait_until(|| store_has(&w, 20) && w.status().state == WorkState::Idle);
-	let before = w.with_traces(|t| t.to_vec());
+	let before = w.with_traces(<[wavedude_core::engine::probes::ProbeTrace]>::to_vec);
 	w.with_held_traces(|t| assert!(t.is_empty(), "nothing before the first generation"));
 	w.set_goal(Goal { revision: 2, paused: true, ..goal(&s_run, 20, Wanted::Position) });
 	wait_until(|| w.status().adopted == 2 && w.status().state == WorkState::Idle);
@@ -560,7 +561,7 @@ fn a_rebuilt_engine_keeps_the_frames_and_the_traces() {
 	w.set_goal(goal(&request(&p, PreviewQuality::FULL), 20, Wanted::All));
 	wait_until(|| w.store().is_some_and(|s| s.is_complete()) && w.status().state == WorkState::Idle);
 	let st = w.store().unwrap();
-	let traces = w.with_traces(|t| t.to_vec());
+	let traces = w.with_traces(<[wavedude_core::engine::probes::ProbeTrace]>::to_vec);
 	w.rebuild_engine();
 	w.set_goal(Goal { revision: 2, ..goal(&request(&p, PreviewQuality::FULL), 30, Wanted::All) });
 	wait_until(|| built.load(Ordering::Acquire) == 2 && w.status().state == WorkState::Idle);

@@ -162,7 +162,7 @@ pub struct Ui {
 	pub focus_form: State<u64>,
 	/// Bumped by F1: the manual window opens or comes forward.
 	pub manual_request: State<u64>,
-	/// Cisco's OpenH264 binary is downloaded.
+	/// Cisco's `OpenH264` binary is downloaded.
 	pub codec_downloaded: State<bool>,
 	/// The Messages pane's list, focused after a status bar double-click.
 	pub messages_list: AccessibilityId,
@@ -382,7 +382,7 @@ async fn tick_loop(cx: Cx, mut theme: State<Theme>) {
 	} else if super::startup::due(&cx) {
 		cx.ui.show_modal(Modal::Startup);
 	} else if cx.shared.peek(|a| a.settings.check_for_updates == Some(true)) {
-		super::update::check(&cx, true);
+		update::check(&cx, true);
 	}
 	loop {
 		timer(TICK).await;

@@ -35,7 +35,7 @@ pub trait Backend {
 	fn engine_changed(&mut self);
 	/// The store budget at `ram_percent` and at Auto, counting `reclaimed` bytes as free.
 	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64);
-	/// "CPU (16 threads)" or "GPU: <name>".
+	/// "CPU (16 threads)" or `GPU: <name>`.
 	fn engine_name(&self) -> String;
 }
 
@@ -992,7 +992,7 @@ impl Backend for CoreBackend {
 		{
 			return format!("GPU: {}", ctx.info.name);
 		}
-		let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+		let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
 		format!("CPU ({threads} threads)")
 	}
 }

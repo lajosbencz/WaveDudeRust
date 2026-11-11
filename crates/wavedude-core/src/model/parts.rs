@@ -47,7 +47,7 @@ pub enum CoatingProfile {
 #[serde(rename_all = "snake_case")]
 #[serde(default)]
 pub struct Coating {
-	/// Pixels, 0..MAX_COATING.
+	/// Pixels, `0..MAX_COATING`.
 	pub depth: f64,
 	pub profile: CoatingProfile,
 	pub front: bool,
@@ -125,7 +125,7 @@ pub enum ZoneDivision {
 pub struct FresnelLens {
 	#[serde(flatten)]
 	pub lens: Lens,
-	/// 1..MAX_ZONES; 1 is a plain lens.
+	/// `1..MAX_ZONES`; 1 is a plain lens.
 	pub zones: u32,
 	pub division: ZoneDivision,
 }
@@ -261,11 +261,11 @@ pub struct Diffuser {
 	/// The plate's thickness at the mean of its rough face.
 	pub length: u32,
 	pub width: u32,
-	/// Pixels, 2..MAX_PIXELS: the ripple with the full amplitude.
+	/// Pixels, `2..MAX_PIXELS`: the ripple with the full amplitude.
 	pub center_wavelength: f64,
-	/// Pixels, 0..MAX_PIXELS.
+	/// Pixels, `0..MAX_PIXELS`.
 	pub amplitude: f64,
-	/// Spread of the ripples' wavelengths about the centre in pixels, 0..MAX_PIXELS; 0 is the centre alone.
+	/// Spread of the ripples' wavelengths about the centre in pixels, `0..MAX_PIXELS`; 0 is the centre alone.
 	pub sigma: f64,
 }
 
@@ -295,7 +295,7 @@ impl Diffuser {
 #[serde(rename_all = "snake_case")]
 #[serde(default)]
 pub struct FilterLayer {
-	/// Pixels along the axis, 0..MAX_LAYER_THICKNESS at 0.01; 0 leaves the layer out.
+	/// Pixels along the axis, `0..MAX_LAYER_THICKNESS` at 0.01; 0 leaves the layer out.
 	pub thickness: f64,
 	pub refractive_index: f64,
 }
@@ -360,7 +360,7 @@ pub struct SimpleGrating {
 	pub columns: u32,
 	/// Dots across the axis.
 	pub rows: u32,
-	/// Pixels, at least MIN_SPACING.
+	/// Pixels, at least `MIN_SPACING`.
 	pub column_spacing: u32,
 	pub row_spacing: u32,
 	/// Pixels, 1 to half the smaller spacing.
@@ -478,9 +478,9 @@ pub struct MetaSurface {
 	pub width: u32,
 	/// Level 1..255; the wavelength it gives through the frequency scale sets every cell's fill.
 	pub design_frequency: f64,
-	/// The cell's width in pixels, 1..MAX_PIXELS.
+	/// The cell's width in pixels, `1..MAX_PIXELS`.
 	pub pitch: f64,
-	/// The ridges' height in front of the plate in pixels, 1..MAX_PIXELS.
+	/// The ridges' height in front of the plate in pixels, `1..MAX_PIXELS`.
 	pub height: f64,
 	/// The ridges' index.
 	pub pattern_index: f64,
@@ -533,9 +533,9 @@ pub struct FacettedGrating {
 	pub length: u32,
 	pub width: u32,
 	pub pattern: FacetPattern,
-	/// Period across the face in pixels, 2..MAX_PIXELS.
+	/// Period across the face in pixels, `2..MAX_PIXELS`.
 	pub pitch: f64,
-	/// The relief's height either side of the mean face in pixels, 0..MAX_PIXELS.
+	/// The relief's height either side of the mean face in pixels, `0..MAX_PIXELS`.
 	pub amplitude: f64,
 }
 
@@ -668,7 +668,7 @@ pub struct LogicGate {
 	pub kind: GateKind,
 	/// Level 1..255.
 	pub design_frequency: f64,
-	/// Pixels, 0..MAX_COATING.
+	/// Pixels, `0..MAX_COATING`.
 	pub coating: f64,
 	pub input_coated: bool,
 	pub output_coated: bool,

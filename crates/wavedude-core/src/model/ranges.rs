@@ -277,7 +277,7 @@ mod tests {
 	type Set = Box<dyn Fn(&mut Project, f64)>;
 	type Get = Box<dyn Fn(&Project) -> f64>;
 
-	/// One of every part kind, in this order; the triangle is Custom with AngleA 1 so AngleB may reach 178.
+	/// One of every part kind, in this order; the triangle is Custom with `AngleA` 1 so `AngleB` may reach 178.
 	fn fixture() -> Project {
 		let mut p = Project::default();
 		p.sources.push(Source { name: "S".into(), array: Some(SourceArray::default()), ..Source::default() });

@@ -1,14 +1,14 @@
-//! The WaveDude Next `.wdproj` XML: read (versions 1 to 4, DOCTYPE ignored, unknown elements and
+//! The `WaveDude` Next `.wdproj` XML: read (versions 1 to 4, DOCTYPE ignored, unknown elements and
 //! attributes ignored) and written sparse with a DOCTYPE that declares every element and attribute.
 //!
 //! A sparse file means its version's defaults where it names no value, so an element is read onto the base
-//! of the file's version ([`FileVersion`]) and written against the current one.
+//! of the file's version (`FileVersion`) and written against the current one.
 //!
 //! Sources of a 9-point project are stored in the original's frequency units: reading multiplies
 //! the frequency scale is divided by [`super::nine_point_speed`], writing multiplies it back. A file whose `Simulation` carries
 //! `Rescaled="true"` already holds this program's units and is read unscaled.
 //!
-//! `Brightness` is in WaveDude Next's units in the file and in this program's in the model ([`BRIGHTNESS_GAIN`]).
+//! `Brightness` is in `WaveDude` Next's units in the file and in this program's in the model ([`BRIGHTNESS_GAIN`]).
 
 use std::path::Path;
 
@@ -213,15 +213,15 @@ impl Table for Simulation {
 	}
 }
 
-/// Factor from this program's brightness to WaveDude Next's: this program's source swings its cell 4.8 to 9.7 times
+/// Factor from this program's brightness to `WaveDude` Next's: this program's source swings its cell 4.8 to 9.7 times
 /// as far (docs/comparison), so the same picture takes that much less gain there. A power of two, so a value
 /// converts both ways exactly.
 pub const BRIGHTNESS_GAIN: f64 = 8.0;
 
-/// The brightness WaveDude Next omits from a file, in this program's units.
+/// The brightness `WaveDude` Next omits from a file, in this program's units.
 pub(super) const ORIGINAL_BRIGHTNESS: f64 = 30.0 / BRIGHTNESS_GAIN;
 
-/// The `Brightness` attribute: WaveDude Next's units in the file.
+/// The `Brightness` attribute: `WaveDude` Next's units in the file.
 const BRIGHTNESS: Field<DisplayLayer> = Field {
 	owner: "DisplayLayer",
 	name: "Brightness",
@@ -229,7 +229,7 @@ const BRIGHTNESS: Field<DisplayLayer> = Field {
 	presence: Sparse,
 };
 
-/// A layer's defaults as WaveDude Next has them in a file of `version`.
+/// A layer's defaults as `WaveDude` Next has them in a file of `version`.
 fn original_layer(layer: Layer, version: FileVersion) -> DisplayLayer {
 	let d = match layer {
 		Layer::Field => DisplayLayer::field_default(),
@@ -239,7 +239,7 @@ fn original_layer(layer: Layer, version: FileVersion) -> DisplayLayer {
 }
 
 /// A `Field` or `Intensity` element: a missing `ColorScheme` is empty (the layer's default after
-/// normalising), a missing `BlackLevel` is 0 and a missing `Brightness` 30, as WaveDude Next reads them.
+/// normalising), a missing `BlackLevel` is 0 and a missing `Brightness` 30, as `WaveDude` Next reads them.
 fn layer_base() -> DisplayLayer {
 	DisplayLayer {
 		color_scheme: String::new(),
@@ -254,7 +254,7 @@ fn layer_base_of(version: FileVersion) -> DisplayLayer {
 	DisplayLayer { overlay_in_export: version.overlay_in_export(), ..layer_base() }
 }
 
-/// The `Intensity` element; `Field` writes its `BlackLevel` always (WaveDude Next's default 0 is not its initial
+/// The `Intensity` element; `Field` writes its `BlackLevel` always (`WaveDude` Next's default 0 is not its initial
 /// -0.05).
 impl Table for DisplayLayer {
 	const FIELDS: &'static [Field<Self>] = fields!(DisplayLayer, "DisplayLayer";
@@ -353,7 +353,7 @@ impl Table for SourceArray {
 	}
 }
 
-/// A missing `BoxX`/`BoxY` reads as A's coordinate (WaveDude Next's box follows A while attached, and its reader
+/// A missing `BoxX`/`BoxY` reads as A's coordinate (`WaveDude` Next's box follows A while attached, and its reader
 /// set A before the box), so 0 is written whenever A's is not 0.
 impl Table for Probe {
 	const FIELDS: &'static [Field<Self>] = fields!(Probe, "Probe";
@@ -725,7 +725,7 @@ fn write_display(s: &Display) -> Element {
 	el
 }
 
-/// Warns once per attribute of `name` whose value is not whole: it is written rounded, as WaveDude Next reads
+/// Warns once per attribute of `name` whose value is not whole: it is written rounded, as `WaveDude` Next reads
 /// integers only.
 fn warn_rounded(name: &str, values: &[(&str, f64)]) {
 	for (attr, v) in values {
@@ -1090,7 +1090,7 @@ fn validate_element(el: &Element, dtd: &std::collections::HashMap<String, DtdEle
 		match decl.attrs.iter().find(|(a, ..)| a == k) {
 			None => problems.push(format!("{at}: attribute '{k}' is not declared on '{}'", el.name)),
 			Some((_, Some(values), _)) if !values.iter().any(|x| x == v) => {
-				problems.push(format!("{at}: '{v}' is not a value of '{}/@{k}'", el.name))
+				problems.push(format!("{at}: '{v}' is not a value of '{}/@{k}'", el.name));
 			}
 			_ => {}
 		}

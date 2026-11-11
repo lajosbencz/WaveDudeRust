@@ -13,6 +13,9 @@ description = "Model, scene painter, wave engines (CPU and wgpu), frame store, p
 default = ["gpu"]
 gpu = ["dep:wgpu", "dep:pollster"]
 
+[lints]
+workspace = true
+
 [dependencies]
 thiserror.workspace = true
 half.workspace = true

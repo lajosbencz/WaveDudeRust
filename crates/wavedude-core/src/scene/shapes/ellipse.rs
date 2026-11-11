@@ -12,7 +12,7 @@ pub fn vertex_count(length: u32, width: u32) -> usize {
 }
 
 /// `(a cos(2 pi k/n), b sin(2 pi k/n))`, a = Length/2, b = Width/2.
-pub fn vertices(e: &Ellipse) -> Vec<Vec2> {
+pub(super) fn vertices(e: &Ellipse) -> Vec<Vec2> {
 	let a = e.length as f64 / 2.0;
 	let b = e.width as f64 / 2.0;
 	let n = vertex_count(e.length, e.width);

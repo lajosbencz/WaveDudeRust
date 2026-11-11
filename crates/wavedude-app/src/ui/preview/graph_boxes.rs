@@ -77,7 +77,13 @@ impl graph::TextMetrics for Metrics<'_> {
 }
 
 /// Probe `probe`'s graph over `recording` in a box `width` x `height`, laid out as an export lays it out.
-fn graph_layout(probe: &Probe, recording: &Recording, steps: u64, text: &TextMeasure, size: (f32, f32)) -> GraphLayout {
+fn graph_layout(
+	probe: &Probe,
+	recording: &Recording,
+	steps: u64,
+	text: &TextMeasure<'_>,
+	size: (f32, f32),
+) -> GraphLayout {
 	let g = graph::layout(probe, &recording.data(), steps, size.0, size.1, &Metrics(text));
 	let ticks = |ticks: Vec<graph::Tick>| {
 		ticks.into_iter().map(|t| GraphTick { position: t.position, label: t.label, zero: t.zero }).collect()

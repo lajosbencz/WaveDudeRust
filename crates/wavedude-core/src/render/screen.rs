@@ -231,7 +231,7 @@ impl ScreenRenderer {
 	}
 
 	/// Colours `plane` (source size, row-major) into `out`, RGBA8 at the target size. Rows first, then columns, in f32;
-	/// an IntensityRoot plane is squared before and rooted after (an energy blend); the result rounds to f16 for the
+	/// an `IntensityRoot` plane is squared before and rooted after (an energy blend); the result rounds to f16 for the
 	/// lookup. A dither matrix is fixed to the output pixels.
 	pub fn render(&mut self, plane: &[f16], colors: ScreenColors<'_>, out: &mut [u8]) {
 		let (sw, sh) = self.source_size();

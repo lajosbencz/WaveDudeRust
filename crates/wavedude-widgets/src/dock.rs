@@ -762,7 +762,7 @@ fn title_button(
 
 const TITLE_HEIGHT: f32 = 21.;
 const TITLE_BUTTON: f32 = 16.;
-/// WPF's DropDownGeometry (8 x 4) and CloseGeometry (8 x 8), centred on the 16 px grid.
+/// WPF's `DropDownGeometry` (8 x 4) and `CloseGeometry` (8 x 8), centred on the 16 px grid.
 const MENU_GLYPH: crate::icon::Icon = crate::icon::Icon::filled("M4 6 L12 6 L8 10 Z");
 const CLOSE_GLYPH: crate::icon::Icon =
 	crate::icon::Icon::filled("M4 5 L5 4 L8 7 L11 4 L12 5 L9 8 L12 11 L11 12 L8 9 L5 12 L4 11 L7 8 Z");
@@ -777,7 +777,7 @@ fn grip_view(color: Color) -> Rect {
 		.height(Size::px(GRIP_HEIGHT))
 		.margin((0., 4., 0., 6.))
 		.interactive(Interactive::No)
-		.background(RenderCallback::new(move |ctx: &mut FillRenderContext| {
+		.background(RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 			let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 			let paint = crate::paint::fill(color);
 			let (w, h) = (ctx.size.width, ctx.size.height);

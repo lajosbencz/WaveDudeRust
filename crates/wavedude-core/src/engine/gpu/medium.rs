@@ -23,7 +23,7 @@ pub enum MediumLayout {
 }
 
 /// One built medium: per-cell words and the tables (c2 first, damping from `d_base`).
-pub struct Medium {
+pub(super) struct Medium {
 	pub layout: MediumLayout,
 	/// u32 per cell (compact) or two f32 per cell (plain), as bytes.
 	pub cells: Vec<u8>,
@@ -36,7 +36,7 @@ pub struct Medium {
 }
 
 /// The medium of `scene` for `n` sub-steps in `layout`, compact falling back to plain.
-pub fn build(scene: &SceneData, n: u32, layout: MediumLayout) -> Medium {
+pub(super) fn build(scene: &SceneData, n: u32, layout: MediumLayout) -> Medium {
 	let gw = scene.grid_width() as usize;
 	let cells = scene.padded_cells();
 	let mult = 1.0 / (n as f32 * n as f32);

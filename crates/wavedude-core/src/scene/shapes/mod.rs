@@ -288,7 +288,7 @@ pub(crate) struct Body {
 
 impl Body {
 	/// A mirror carries no band and no absorption.
-	pub fn of(material: &Material, coating: &Coating) -> Self {
+	pub(crate) fn of(material: &Material, coating: &Coating) -> Self {
 		let mirror = material.mirror;
 		Body {
 			index: material.refractive_index,

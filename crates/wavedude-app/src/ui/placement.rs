@@ -128,7 +128,7 @@ impl FreyaPlugin for PlacementPlugin {
 		"wavedude-placement"
 	}
 
-	fn on_event(&mut self, event: &mut PluginEvent, _: PluginHandle) {
+	fn on_event(&mut self, event: &mut PluginEvent<'_>, _: PluginHandle) {
 		if let PluginEvent::AfterRedraw { window, .. } = event {
 			self.after_redraw(window);
 		}

@@ -42,12 +42,11 @@ impl Default for Project {
 }
 
 impl Project {
-	/// A new project with a random seed in [1, i32::MAX).
+	/// A new project with a random seed in [1, `i32::MAX`).
 	pub fn new_random_seed() -> Self {
 		let nanos = std::time::SystemTime::now()
 			.duration_since(std::time::UNIX_EPOCH)
-			.map(|d| d.subsec_nanos() as u64 ^ d.as_secs())
-			.unwrap_or(1);
+			.map_or(1, |d| d.subsec_nanos() as u64 ^ d.as_secs());
 		let mut rng = crate::rng::Pcg32::new(nanos, std::process::id() as u64);
 		Self { seed: rng.next_range(1, i32::MAX - 1), ..Self::default() }
 	}

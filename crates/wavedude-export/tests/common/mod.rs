@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// A fresh, empty scratch folder under cargo's target tmp dir.
-pub fn scratch(name: &str) -> PathBuf {
+pub(crate) fn scratch(name: &str) -> PathBuf {
 	let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("wavedude-export").join(name);
 	let _ = std::fs::remove_dir_all(&dir);
 	std::fs::create_dir_all(&dir).unwrap();
@@ -12,7 +12,7 @@ pub fn scratch(name: &str) -> PathBuf {
 }
 
 /// A smooth RGBA8 test picture that moves with `t`: gradients and a soft blob, no hard edges.
-pub fn smooth_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
+pub(crate) fn smooth_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
 	let mut out = Vec::with_capacity((w * h * 4) as usize);
 	for y in 0..h {
 		for x in 0..w {
@@ -32,7 +32,7 @@ pub fn smooth_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
 }
 
 /// A picture with hard edges and noise-like detail: exercises the lossless paths.
-pub fn busy_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
+pub(crate) fn busy_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
 	let mut out = Vec::with_capacity((w * h * 4) as usize);
 	let mut s = 0x9E37_79B9u32 ^ t.wrapping_mul(0x85EB_CA6B);
 	for y in 0..h {
@@ -50,7 +50,7 @@ pub fn busy_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
 
 /// A rendered field picture as an export makes it: two point sources' circular waves with a 1/sqrt(r) fall-off,
 /// coloured by the default field scheme at the default brightness and black level.
-pub fn wave_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
+pub(crate) fn wave_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
 	use wavedude_core::engine::types::SampleKind;
 	use wavedude_core::model::DisplayLayer;
 	use wavedude_core::render::{HalfTable, render_half};
@@ -75,18 +75,18 @@ pub fn wave_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
 	render_half(&plane, &table)
 }
 
-pub fn rgb(rgba: &[u8]) -> Vec<u8> {
+pub(crate) fn rgb(rgba: &[u8]) -> Vec<u8> {
 	rgba.as_chunks::<4>().0.iter().flat_map(|p| [p[0], p[1], p[2]]).collect()
 }
 
 /// PSNR in dB of two RGB8 pictures; infinity when equal.
-pub fn psnr(a: &[u8], b: &[u8]) -> f64 {
+pub(crate) fn psnr(a: &[u8], b: &[u8]) -> f64 {
 	assert_eq!(a.len(), b.len());
 	let mse = a.iter().zip(b).map(|(x, y)| (*x as f64 - *y as f64).powi(2)).sum::<f64>() / a.len() as f64;
 	if mse == 0.0 { f64::INFINITY } else { 10.0 * (255.0f64 * 255.0 / mse).log10() }
 }
 
-pub fn has_ffmpeg() -> bool {
+pub(crate) fn has_ffmpeg() -> bool {
 	let found = Command::new("which").arg("ffmpeg").output().is_ok_and(|o| o.status.success());
 	if !found {
 		eprintln!("ffmpeg is not on the PATH: skipping the decode check");
@@ -95,7 +95,7 @@ pub fn has_ffmpeg() -> bool {
 }
 
 /// Every frame ffmpeg decodes from `path`, as RGB8 of `w x h`.
-pub fn ffmpeg_frames(path: &Path, w: u32, h: u32) -> Vec<Vec<u8>> {
+pub(crate) fn ffmpeg_frames(path: &Path, w: u32, h: u32) -> Vec<Vec<u8>> {
 	let out = Command::new("ffmpeg")
 		.args(["-v", "error", "-i"])
 		.arg(path)
@@ -110,7 +110,7 @@ pub fn ffmpeg_frames(path: &Path, w: u32, h: u32) -> Vec<Vec<u8>> {
 }
 
 /// The codec name and frame count ffprobe reports.
-pub fn ffprobe(path: &Path) -> String {
+pub(crate) fn ffprobe(path: &Path) -> String {
 	let out = Command::new("ffprobe")
 		.args(["-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries"])
 		.arg("stream=codec_name,width,height,nb_read_frames")
@@ -121,8 +121,8 @@ pub fn ffprobe(path: &Path) -> String {
 	String::from_utf8_lossy(&out.stdout).trim().trim_end_matches(',').to_owned()
 }
 
-/// Atoms of a QuickTime file at one level: (kind, start of body, end).
-pub fn atoms(data: &[u8], from: usize, to: usize) -> Vec<([u8; 4], usize, usize)> {
+/// Atoms of a `QuickTime` file at one level: (kind, start of body, end).
+pub(crate) fn atoms(data: &[u8], from: usize, to: usize) -> Vec<([u8; 4], usize, usize)> {
 	let mut out = Vec::new();
 	let mut i = from;
 	while i + 8 <= to {
@@ -139,7 +139,7 @@ pub fn atoms(data: &[u8], from: usize, to: usize) -> Vec<([u8; 4], usize, usize)
 	out
 }
 
-pub fn find_atom(data: &[u8], path: &[&[u8; 4]]) -> Option<(usize, usize)> {
+pub(crate) fn find_atom(data: &[u8], path: &[&[u8; 4]]) -> Option<(usize, usize)> {
 	let (mut from, mut to) = (0, data.len());
 	for kind in path {
 		let (_, b, e) = atoms(data, from, to).into_iter().find(|a| &a.0 == *kind)?;

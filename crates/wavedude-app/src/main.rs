@@ -1,4 +1,4 @@
-//! WaveDude Rust: the desktop application.
+//! `WaveDude` Rust: the desktop application.
 
 use freya::prelude::*;
 use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, MIN_SIZE, root, theme_background};

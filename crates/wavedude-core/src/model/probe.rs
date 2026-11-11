@@ -93,9 +93,9 @@ pub struct Probe {
 	pub kind: ProbeKind,
 	/// A detector is a line probe of the integrated intensity, whatever else is set.
 	pub detector: ProbeDetector,
-	/// Expected detections per unit of intensity per step at a point of the line, 0..MAX_SENSITIVITY.
+	/// Expected detections per unit of intensity per step at a point of the line, `0..MAX_SENSITIVITY`.
 	pub sensitivity: f64,
-	/// Pixels of the line per bin of an imaging detector's histogram, 1..MAX_BIN_SIZE.
+	/// Pixels of the line per bin of an imaging detector's histogram, `1..MAX_BIN_SIZE`.
 	pub bin_size: u32,
 	pub ax: i32,
 	pub ay: i32,

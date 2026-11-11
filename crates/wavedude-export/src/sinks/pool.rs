@@ -18,11 +18,11 @@ pub struct EncoderPool(Arc<Mutex<Option<Arc<ThreadPool>>>>);
 
 impl EncoderPool {
 	pub(crate) fn get(&self) -> Result<Arc<ThreadPool>> {
-		let mut slot = self.0.lock().unwrap_or_else(|e| e.into_inner());
+		let mut slot = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 		if let Some(pool) = slot.as_ref() {
 			return Ok(pool.clone());
 		}
-		let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).min(MAX_THREADS);
+		let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get).min(MAX_THREADS);
 		let pool = ThreadPoolBuilder::new()
 			.num_threads(threads)
 			.thread_name(|i| format!("export encoder {i}"))
@@ -53,14 +53,14 @@ pub(crate) struct Lanes<B> {
 }
 
 impl<B: Send + 'static> Lanes<B> {
-	pub fn new(pool: Arc<ThreadPool>) -> Self {
+	pub(super) fn new(pool: Arc<ThreadPool>) -> Self {
 		let limit = pool.current_num_threads() + 1;
 		let (tx, rx) = channel();
 		Self { pool, tx, rx, free: Vec::new(), allocated: 0, limit, submitted: 0, in_flight: 0 }
 	}
 
 	/// A free buffer, a new one from `make` while under the limit; None when every buffer is in flight.
-	pub fn free(&mut self, make: impl FnOnce() -> B) -> Option<B> {
+	pub(super) fn free(&mut self, make: impl FnOnce() -> B) -> Option<B> {
 		self.free.pop().or_else(|| {
 			(self.allocated < self.limit).then(|| {
 				self.allocated += 1;
@@ -69,16 +69,16 @@ impl<B: Send + 'static> Lanes<B> {
 		})
 	}
 
-	pub fn recycle(&mut self, buf: B) {
+	pub(super) fn recycle(&mut self, buf: B) {
 		self.free.push(buf);
 	}
 
-	pub fn submitted(&self) -> usize {
+	pub(super) fn submitted(&self) -> usize {
 		self.submitted
 	}
 
 	/// Runs `task` on the pool with `buf`; returns its sequence number.
-	pub fn spawn(&mut self, mut buf: B, task: impl FnOnce(&mut B) -> Result<()> + Send + 'static) -> usize {
+	pub(super) fn spawn(&mut self, mut buf: B, task: impl FnOnce(&mut B) -> Result<()> + Send + 'static) -> usize {
 		let seq = self.submitted;
 		self.submitted += 1;
 		self.in_flight += 1;
@@ -100,7 +100,7 @@ impl<B: Send + 'static> Lanes<B> {
 
 	/// The next finished task; with `wait`, blocks while tasks are in flight. None when none is (or none has
 	/// finished, without `wait`).
-	pub fn next_done(&mut self, wait: bool) -> Option<Done<B>> {
+	pub(super) fn next_done(&mut self, wait: bool) -> Option<Done<B>> {
 		if self.in_flight == 0 {
 			return None;
 		}

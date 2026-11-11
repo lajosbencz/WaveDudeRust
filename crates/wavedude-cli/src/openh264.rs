@@ -1,4 +1,4 @@
-//! Cisco's OpenH264 for MP4 export (decision 0005): the user's choice is the app's `UseOpenH264` setting, in the
+//! Cisco's `OpenH264` for MP4 export (decision 0005): the user's choice is the app's `UseOpenH264` setting, in the
 //! app's settings file; the binary a file in the codec's folder. Every action prints Cisco's notice, as its
 //! licence asks where the user controls the codec.
 
@@ -11,7 +11,7 @@ use wavedude_export::h264;
 
 /// What to do with the codec.
 #[derive(Clone, Copy, ValueEnum)]
-pub enum Action {
+pub(crate) enum Action {
 	/// Say whether MP4 export is enabled and whether the codec is downloaded.
 	Status,
 	/// Enable MP4 export and download Cisco's binary.
@@ -33,7 +33,7 @@ fn settings_file() -> Result<PathBuf> {
 }
 
 /// The library an MP4 export loads, per the user's choice in the app's settings file.
-pub fn library() -> Result<Option<PathBuf>> {
+pub(crate) fn library() -> Result<Option<PathBuf>> {
 	let enabled = Settings::read(&settings_file()?)?.use_openh264 == Some(true);
 	h264::library(&dirs()?.codec(), enabled, |_, _| {}).map_err(|e| match e {
 		wavedude_export::ExportError::H264Missing => anyhow::anyhow!("{e}: run `wavedude-cli openh264 enable`"),
@@ -49,7 +49,7 @@ fn choose(enabled: bool) -> Result<()> {
 	Ok(())
 }
 
-pub fn run(action: Action) -> Result<()> {
+pub(crate) fn run(action: Action) -> Result<()> {
 	println!("{}", h264::NOTICE);
 	if h264::BUILT_IN {
 		println!("compiled into this build; nothing to download");

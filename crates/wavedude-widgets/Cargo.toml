@@ -8,6 +8,9 @@ rust-version.workspace = true
 publish = false
 description = "Freya widgets: dock host, tree, property rows, number box, canvas overlays, timeline"
 
+[lints]
+workspace = true
+
 [dependencies]
 freya = { version = "0.5", features = ["engine"] }
 serde = { workspace = true }

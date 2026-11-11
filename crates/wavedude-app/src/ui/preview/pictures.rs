@@ -306,7 +306,7 @@ impl Component for PictureCell {
 					value: json!(v),
 				}));
 			}),
-			move |_| auto_brightness(&auto_shared, states, layer),
+			move |()| auto_brightness(&auto_shared, states, layer),
 		)
 		.caption(caption)
 		.tooltip(hint)
@@ -330,7 +330,7 @@ impl Component for PictureCell {
 			.width(Size::fill())
 			.height(Size::fill())
 			.content(Content::flex())
-			.maybe(beside, |r| r.horizontal())
+			.maybe(beside, ContainerWithContentExt::horizontal)
 			.on_sized(move |e: Event<SizedEventData>| cell.set_if_modified((e.area.width(), e.area.height())))
 			.child(strip)
 			.child(picture_area)

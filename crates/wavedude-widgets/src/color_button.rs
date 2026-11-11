@@ -175,7 +175,7 @@ impl Component for ColorPicker {
 			}
 		};
 
-		let plane_painter = RenderCallback::new(move |ctx: &mut FillRenderContext| {
+		let plane_painter = RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 			let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 			let r = SkRect::new(0., 0., PLANE, PLANE);
 			canvas.draw_rect(r, &fill(Hsv { h: current.h, s: 1., v: 1. }.to_rgb().to_color()));
@@ -190,7 +190,7 @@ impl Component for ColorPicker {
 			canvas.draw_circle((x, y), 5., &stroke(Color::BLACK, 3.));
 			canvas.draw_circle((x, y), 5., &ring);
 		});
-		let strip_painter = RenderCallback::new(move |ctx: &mut FillRenderContext| {
+		let strip_painter = RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 			let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 			let hues: Vec<Color> =
 				(0..=6).map(|k| Hsv { h: f64::from(k) * 60., s: 1., v: 1. }.to_rgb().to_color()).collect();

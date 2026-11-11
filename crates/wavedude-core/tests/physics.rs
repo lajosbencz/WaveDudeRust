@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout, reason = "the measurements are printed for the reader")]
 //! Analytic tests of the CPU engine against docs/physics.md.
 //!
 //! Grids are small (64 to 256 cells a side) so most tests run in a few seconds in a debug build; the
@@ -815,7 +816,7 @@ fn diagonal_mirror_line_holds() {
 
 /// (8d) The intensity's two-stage filter (docs/physics.md, Intensity) settles on the mean square of a
 /// steady sinusoid: a continuous source of amplitude 0.5 at level 100 (scale 2, 16 steps a period) on
-/// a 192 x 192 canvas with a 32 px CPML rim, the time constant 40 steps (TimeDecay 40). From 6 time
+/// a 192 x 192 canvas with a 32 px CPML rim, the time constant 40 steps (`TimeDecay` 40). From 6 time
 /// constants on, sqrt(I) averaged over a period at the source cell is within 1 % of the cell's fitted
 /// swing over sqrt(2).
 #[test]

@@ -1,5 +1,5 @@
 //! The startup page: shown at the first start, and while a question it asks is unanswered. The preview quality
-//! (four levers, and three tier buttons that set them; pre-set from the machine), Cisco's OpenH264 for MP4
+//! (four levers, and three tier buttons that set them; pre-set from the machine), Cisco's `OpenH264` for MP4
 //! export (decision 0005) and the launch's update check (decision 0011). Continue saves every answer.
 
 use freya::prelude::*;
@@ -44,7 +44,7 @@ fn lever(
 		.cross_align(Alignment::center())
 		.child(rect().width(Size::px(180.)).child(label().text(strip_mnemonic(s.get(label_key)))))
 		.child(combo_box(current.to_string(), items, true, test.into(), move |v: String| {
-			pick(v.parse().expect("a lever's value is a number"))
+			pick(v.parse().expect("a lever's value is a number"));
 		}))
 }
 
@@ -128,7 +128,7 @@ impl Component for StartupPage {
 				let items = DITHER.iter().map(|&(v, k)| (v, format!("MenuViewDither{k}"))).collect();
 				lever(&s, "MenuViewDither", *dither.read(), items, "StartupDither", move |v| {
 					let mut dither = dither;
-					dither.set(v)
+					dither.set(v);
 				})
 			}));
 		if !h264::BUILT_IN {
@@ -138,7 +138,7 @@ impl Component for StartupPage {
 				.child(label().text(h264::NOTICE).color(theme.text_dim))
 				.child(check_box(s.get("ExportUseOpenH264").to_owned(), *openh264.read(), move |on| {
 					let mut openh264 = openh264;
-					openh264.set(on)
+					openh264.set(on);
 				}));
 		}
 		if update::AVAILABLE {
@@ -147,7 +147,7 @@ impl Component for StartupPage {
 				*updates.read(),
 				move |on| {
 					let mut updates = updates;
-					updates.set(on)
+					updates.set(on);
 				},
 			));
 		}

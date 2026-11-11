@@ -117,7 +117,7 @@ pub enum Event {
 	SetFrameMemoryPercent(i32),
 	SetWarnWhenRamInsufficient(bool),
 	SetTitleFullPath(bool),
-	/// The user's answer whether MP4 export may use Cisco's OpenH264.
+	/// The user's answer whether MP4 export may use Cisco's `OpenH264`.
 	SetUseOpenH264(bool),
 	/// Whether to look for a new release at launch.
 	SetCheckForUpdates(bool),
@@ -197,7 +197,7 @@ pub struct AppState<B: Backend> {
 	pub schemes: SchemeStore,
 	/// No settings file existed at the start: the startup page shows.
 	pub first_start: bool,
-	/// Cisco's OpenH264 folder (`AppDirs::codec`); `None` without one.
+	/// Cisco's `OpenH264` folder (`AppDirs::codec`); `None` without one.
 	pub codec_dir: Option<PathBuf>,
 	revisions: Revisions,
 	observed: Option<Observed>,
@@ -355,7 +355,7 @@ impl<B: Backend> AppState<B> {
 		self.document.title(self.strings.get("Title"), self.strings.get("Untitled"), self.settings.title_full_path)
 	}
 
-	/// The status bar's run line: "<State>: <done> / <total> steps, <engine>[, edited since]"; empty without a run.
+	/// The status bar's run line: `<State>: <done> / <total> steps, <engine>[, edited since]`; empty without a run.
 	pub fn run_status(&self) -> String {
 		let Some((state, done, total)) = self.live.run_status() else {
 			return String::new();
@@ -634,7 +634,7 @@ impl<B: Backend> AppState<B> {
 					Response::None
 				}
 			},
-			Event::Run => self.live_start(|live, p, now| live.run_user(p, now), now),
+			Event::Run => self.live_start(LiveController::run_user, now),
 			Event::Play => self.live_start(
 				|live, p, now| {
 					live.play(p, now);
@@ -813,8 +813,7 @@ impl<B: Backend> AppState<B> {
 		}
 		let named = self.document.path.as_deref().or(self.document.suggested_file_name.as_deref());
 		let stem = named.and_then(Path::file_stem).map(|s| s.to_string_lossy().into_owned());
-		let folder =
-			self.document.folder().map(Path::to_owned).unwrap_or_else(|| self.settings.last_export_folder.clone());
+		let folder = self.document.folder().map_or_else(|| self.settings.last_export_folder.clone(), Path::to_owned);
 		let name = match (kind, stem) {
 			(ExportKind::Run, Some(s)) => format!("{s}_field"),
 			(_, Some(s)) => s,

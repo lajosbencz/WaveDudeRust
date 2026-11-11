@@ -17,11 +17,11 @@ pub(super) struct LensShape {
 }
 
 impl LensShape {
-	pub fn new(lens: &Lens) -> Self {
+	pub(super) fn new(lens: &Lens) -> Self {
 		Self::zoned(lens, 1, ZoneDivision::EqualWidth)
 	}
 
-	pub fn zoned(lens: &Lens, zones: u32, division: ZoneDivision) -> Self {
+	pub(super) fn zoned(lens: &Lens, zones: u32, division: ZoneDivision) -> Self {
 		let half = lens.diameter as f64 / 2.0;
 		let vertex1 = -(lens.thickness as f64) / 2.0;
 		let vertex2 = -vertex1;

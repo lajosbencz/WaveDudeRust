@@ -472,7 +472,7 @@ impl Component for ProjectPane {
 		// laid out.
 		let reveal = {
 			let shared = cx.shared.clone();
-			let reveals = use_memo(move || shared.read(Topics::DOCUMENT, |a| a.reveals()));
+			let reveals = use_memo(move || shared.read(Topics::DOCUMENT, wavedude_app_state::AppState::reveals));
 			let served = use_state(|| *reveals.peek());
 			use_focus_on_layout(cx.ui.tree_id, Some(FocusRequest::new(reveals, served)))
 		};
@@ -504,7 +504,7 @@ impl Component for ProjectPane {
 			.child(
 				rect()
 					.on_sized(move |e: Event<SizedEventData>| {
-						probe_button.set((f64::from(e.area.min_x()), f64::from(e.area.max_y())))
+						probe_button.set((f64::from(e.area.min_x()), f64::from(e.area.max_y())));
 					})
 					.child(tool_button(
 						icons::PROBE,
@@ -521,7 +521,7 @@ impl Component for ProjectPane {
 			.child(
 				rect()
 					.on_sized(move |e: Event<SizedEventData>| {
-						part_button.set((f64::from(e.area.min_x()), f64::from(e.area.max_y())))
+						part_button.set((f64::from(e.area.min_x()), f64::from(e.area.max_y())));
 					})
 					.child(tool_button(PART_ICON, Caption::Menu(w[2].clone()), w[5].clone(), true, "ToolAddPart", {
 						let cx = cx.clone();

@@ -158,7 +158,7 @@ impl Component for MainWindow {
 			.on_global_pointer_down(on_mouse_down)
 			.on_global_pointer_up(on_mouse_up)
 			.on_file_drop(on_drop)
-			.child(MenuBar::new(model.read().clone(), on_menu).on_open(move |_| ui.look_at_clipboard()))
+			.child(MenuBar::new(model.read().clone(), on_menu).on_open(move |()| ui.look_at_clipboard()))
 			.child(
 				rect()
 					.width(Size::fill())

@@ -1,4 +1,4 @@
-//! Physical comparison against the C# WaveDudeNext: reads the dump of `tools/compare-csharp`, runs the same
+//! Physical comparison against the C# `WaveDudeNext`: reads the dump of `tools/compare-csharp`, runs the same
 //! project through the CPU engine on the same step schedule and writes `report.md` with the scene, field and
 //! probe statistics and side-by-side pictures. The solvers differ by design (docs/spec/05-deviations.md), so
 //! the figures are correlations and ratios, not bit equality.
@@ -22,7 +22,7 @@ use crate::project::{load, scene_pixels};
 use crate::run::EngineArgs;
 
 #[derive(ClapArgs)]
-pub struct Args {
+pub(crate) struct Args {
 	/// Project file, the one the C# dump was made from.
 	project: PathBuf,
 	/// Directory written by tools/compare-csharp (run with --probe-steps).
@@ -543,7 +543,7 @@ fn probe_section(report: &mut String, cs: &CSharp, runs: &[RustRun], steps: u32)
 	Ok(())
 }
 
-pub fn run(args: &Args) -> Result<()> {
+pub(crate) fn run(args: &Args) -> Result<()> {
 	let mut project = load(&args.project)?;
 	project.simulation.steps = args.steps;
 	let cs = read_csharp(&args.csharp, args.steps, args.every)?;

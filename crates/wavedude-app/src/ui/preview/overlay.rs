@@ -155,7 +155,7 @@ fn glyph(canvas: &Canvas, kind: HandleKind, (x, y): (f32, f32), color: Color) {
 			both(&|p| {
 				canvas.draw_rect(SkRect::new(x - r, y - r, x + r, y + r), p);
 				ticks(r + 1., 7., p);
-			})
+			});
 		}
 		HandleKind::SourceLever | HandleKind::PartLever => {
 			canvas.draw_circle((x, y), 6., &brush(HALO));
@@ -485,7 +485,7 @@ pub fn on_pointer(
 					let far = (b.0 - a.0).hypot(b.1 - a.1) * scale >= DRAG_THRESHOLD;
 					if !far {
 						if mode == MarqueeMode::Replace {
-							shared.update(|app| app.deselect());
+							shared.update(wavedude_app_state::AppState::deselect);
 						}
 						return;
 					}

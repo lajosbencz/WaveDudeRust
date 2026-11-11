@@ -1,4 +1,4 @@
-//! Image, video, OpenEXR and CSV export: the formats, their sinks, the burned-in overlays and the export job.
+//! Image, video, `OpenEXR` and CSV export: the formats, their sinks, the burned-in overlays and the export job.
 //!
 //! Every rendered frame handed to a sink is RGBA8, row-major, top row first, no padding, alpha 255, at canvas size.
 
@@ -34,20 +34,20 @@ pub enum ExportFormat {
 	Mp4,
 	/// MPEG-1 program stream, I-frames only.
 	Mpeg1,
-	/// Uncompressed 24-bit OpenDML AVI.
+	/// Uncompressed 24-bit `OpenDML` AVI.
 	Avi,
-	/// QuickTime Animation (`rle `).
+	/// `QuickTime` Animation (`rle `).
 	Mov,
-	/// QuickTime with PNG samples (`png `).
+	/// `QuickTime` with PNG samples (`png `).
 	#[cfg_attr(feature = "clap", value(name = "movpng"))]
 	MovPng,
 	/// 24-bit RGB PNG.
 	Png,
 	/// Baseline JPEG, 4:4:4.
 	Jpeg,
-	/// OpenEXR of the stored halves, the intensity as I.
+	/// `OpenEXR` of the stored halves, the intensity as I.
 	Exr,
-	/// OpenEXR of the stored halves, the intensity as sqrt(I).
+	/// `OpenEXR` of the stored halves, the intensity as sqrt(I).
 	#[cfg_attr(feature = "clap", value(name = "exrroot"))]
 	ExrRoot,
 }

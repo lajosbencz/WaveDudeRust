@@ -1,23 +1,23 @@
-//! The H.264 encoder behind MP4 export (decision 0005): Cisco's prebuilt OpenH264, which Cisco licenses
+//! The H.264 encoder behind MP4 export (decision 0005): Cisco's prebuilt `OpenH264`, which Cisco licenses
 //! under the AVC patent pool only when it is downloaded from Cisco to the user's device, the user can
 //! enable and disable it, [`NOTICE`] is shown where they do, and [`LICENSE`] where licensing information
 //! is. The user's choice lives in the program's settings and the folder is the program's to name; [`library`]
 //! downloads the binary there at the first export after it is enabled, [`delete`] removes it, and the MP4 sink
 //! loads it at run time. A build with the `openh264-source` feature compiles
-//! OpenH264 in instead ([`BUILT_IN`]).
+//! `OpenH264` in instead ([`BUILT_IN`]).
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::{ExportError, Result};
 
-/// The OpenH264 release whose binaries the `openh264` crate accepts (it checks their SHA-256).
+/// The `OpenH264` release whose binaries the `openh264` crate accepts (it checks their SHA-256).
 pub const VERSION: &str = "2.6.0";
 /// The text Cisco requires where the user controls the codec's use.
 pub const NOTICE: &str = "OpenH264 Video Codec provided by Cisco Systems, Inc.";
 /// Cisco's licence of its binary, to be shown with the program's licensing information.
 pub const LICENSE: &str = include_str!("../assets/OpenH264-BINARY_LICENSE.txt");
-/// OpenH264 is compiled into this build: no download, no Cisco terms.
+/// `OpenH264` is compiled into this build: no download, no Cisco terms.
 pub const BUILT_IN: bool = cfg!(feature = "openh264-source");
 
 const URL: &str = "https://ciscobinary.openh264.org/";
@@ -37,7 +37,7 @@ pub fn file_name() -> Option<&'static str> {
 	})
 }
 
-/// The library an MP4 export loads: `None` when OpenH264 is compiled in, else Cisco's binary in `dir`,
+/// The library an MP4 export loads: `None` when `OpenH264` is compiled in, else Cisco's binary in `dir`,
 /// downloaded now when it is missing (`on_chunk` as in [`download`]). Fails with [`ExportError::H264Missing`]
 /// unless `enabled`, the user's choice.
 pub fn library(dir: &Path, enabled: bool, on_chunk: impl FnMut(usize, Option<u64>)) -> Result<Option<PathBuf>> {

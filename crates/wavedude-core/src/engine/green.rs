@@ -27,7 +27,7 @@
 //!
 //! At a lattice offset (m, l) from the forced cell the response carries `e^{i(m kx + l ky)}`: the kx
 //! integral gains the factor `(r + xi)^m` per root and the ky integrand `cos(l ky)`. A source spread
-//! over the 2 x 2 cells around a fractional position with bilinear shares w_i answers at that
+//! over the 2 x 2 cells around a fractional position with bilinear shares `w_i` answers at that
 //! position (the field sampled with the same shares) with `sum_ij w_i w_j G(c_i - c_j)`, which
 //! `spread_response` gives.
 

@@ -17,6 +17,9 @@ mp4 = ["dep:openh264", "openh264/libloading", "dep:mp4", "dep:ureq", "dep:bzip2"
 openh264-source = ["mp4", "openh264/source"]
 clap = ["dep:clap"]
 
+[lints]
+workspace = true
+
 [dependencies]
 wavedude-core = { path = "../wavedude-core", version = "0.2.1", default-features = false }
 anyhow.workspace = true

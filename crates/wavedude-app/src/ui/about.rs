@@ -1,5 +1,5 @@
-//! The About dialog (docs/ui/70): name, version, credits, the license notice and text, Cisco's OpenH264 notice and
-//! license (unless OpenH264 is compiled in), the system lines.
+//! The About dialog (docs/ui/70): name, version, credits, the license notice and text, Cisco's `OpenH264` notice and
+//! license (unless `OpenH264` is compiled in), the system lines.
 
 use freya::markdown::MarkdownViewerThemePartialExt as Md;
 use freya::prelude::*;
@@ -61,8 +61,8 @@ fn h264_encoder(s: &wavedude_app_state::strings::Strings, choice: Option<bool>) 
 pub fn system_lines(cx: &Cx) -> String {
 	let s = cx.strings();
 	let (gpu, openh264, engine) =
-		cx.shared.peek(|a| (a.settings.use_gpu, a.settings.use_openh264, a.live.engine_name().to_string()));
-	let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+		cx.shared.peek(|a| (a.settings.use_gpu, a.settings.use_openh264, a.live.engine_name().clone()));
+	let cores = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
 	[
 		format!("{}: {} {}", s.get("AboutProductLine"), s.get("Title"), env!("CARGO_PKG_VERSION")),
 		format!("{}: Rust, Freya", s.get("AboutRuntime")),

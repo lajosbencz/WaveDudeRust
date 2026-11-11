@@ -38,8 +38,8 @@ fn shell_sized(dir: &Path, answered: bool, size: Size2D) -> (TestingRunner, Shar
 		app.settings.use_openh264 = Some(false);
 		app.settings.check_for_updates = Some(false);
 	}
-	app.handle(AppEvent::SetLanguage("en".into()), std::time::Instant::now());
-	app.handle(AppEvent::Guarded(Guarded::Open(EXAMPLE.into())), std::time::Instant::now());
+	app.handle(AppEvent::SetLanguage("en".into()), Instant::now());
+	app.handle(AppEvent::Guarded(Guarded::Open(EXAMPLE.into())), Instant::now());
 	let info = BootInfo {
 		ring: LogRing::new(),
 		dirs,
@@ -261,7 +261,7 @@ fn the_turned_brightness_box_takes_clicks_and_keys() {
 }
 
 /// The area of the element tagged `id`.
-fn tagged_area(test: &TestingRunner, id: &str) -> Option<freya::prelude::Area> {
+fn tagged_area(test: &TestingRunner, id: &str) -> Option<Area> {
 	test.find(|node, element| {
 		Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some(id))?;
 		Some(node.layout().area)
@@ -299,13 +299,13 @@ fn an_opened_project_shows_its_root() {
 	settle(&mut test);
 	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Project));
 	assert!(find_text(&test, "No selection").is_none(), "the Properties pane shows the Project form");
-	state.update(|a| drop(a.handle(AppEvent::Guarded(Guarded::New), std::time::Instant::now())));
+	state.update(|a| drop(a.handle(AppEvent::Guarded(Guarded::New), Instant::now())));
 	settle(&mut test);
 	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Project), "a new project too");
 	assert!(focus_in(&mut test, "ProjectTree"), "the tree takes the focus");
 }
 
-/// KeyboardCheck step 2: the move and remove buttons are disabled with no item selected and skipped.
+/// `KeyboardCheck` step 2: the move and remove buttons are disabled with no item selected and skipped.
 #[test]
 fn tab_walks_the_project_toolbar_into_the_tree() {
 	let dir = tempfile::tempdir().unwrap();
@@ -325,7 +325,7 @@ fn tab_walks_the_project_toolbar_into_the_tree() {
 	}
 }
 
-/// KeyboardCheck step 3: the new source is selected and its name box has the caret.
+/// `KeyboardCheck` step 3: the new source is selected and its name box has the caret.
 #[test]
 fn an_added_source_is_selected_with_the_caret_in_its_name() {
 	let dir = tempfile::tempdir().unwrap();
@@ -342,7 +342,7 @@ fn an_added_source_is_selected_with_the_caret_in_its_name() {
 	assert_eq!(name, "Lamp", "the focused name is selected, typing replaces it");
 }
 
-/// KeyboardCheck step 7: Remove takes the selected source away and selects its neighbour.
+/// `KeyboardCheck` step 7: Remove takes the selected source away and selects its neighbour.
 #[test]
 fn removing_the_last_row_selects_the_one_above() {
 	let dir = tempfile::tempdir().unwrap();
@@ -357,7 +357,7 @@ fn removing_the_last_row_selects_the_one_above() {
 	assert!(focus_in(&mut test, "ProjectTree"), "the tree takes the focus from the button");
 }
 
-/// KeyboardCheck step 6: a move keeps the selection and gives the tree the focus.
+/// `KeyboardCheck` step 6: a move keeps the selection and gives the tree the focus.
 #[test]
 fn moving_a_row_keeps_it_selected_and_focuses_the_tree() {
 	let dir = tempfile::tempdir().unwrap();

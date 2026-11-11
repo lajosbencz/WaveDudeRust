@@ -7,7 +7,7 @@ use wavedude_core::engine::substeps::sub_steps;
 use wavedude_core::model::Stencil;
 
 #[derive(ClapArgs)]
-pub struct Args {
+pub(crate) struct Args {
 	/// Cells per wavelength to tabulate.
 	#[arg(long, value_delimiter = ',', default_values_t = [4.0, 5.0, 6.0, 8.0, 10.0, 16.0, 20.0, 32.0])]
 	cells: Vec<f64>,
@@ -16,14 +16,14 @@ pub struct Args {
 const STENCILS: [(Stencil, &str); 2] = [(Stencil::NinePoint, "9-point"), (Stencil::FourthOrder, "4th order (DRP)")];
 
 /// Phase velocity over c (speed 1) of a plane wave of `cells` per wavelength at `angle` to the x axis, after
-/// `n` sub-steps of `1/n` per step of the engine's stencil and time scheme (wavedude_core::engine::stencil).
+/// `n` sub-steps of `1/n` per step of the engine's stencil and time scheme (`wavedude_core::engine::stencil`).
 fn phase_velocity(stencil: Stencil, cells: f64, angle: f64, n: u32) -> f64 {
 	let k = 2.0 * PI / cells;
 	let symbol = StencilCoefficients::of(stencil).symbol(k * angle.cos(), k * angle.sin());
 	n as f64 * TimeScheme::of(stencil).phase(symbol / (n * n) as f64) / k
 }
 
-pub fn run(args: &Args) -> Result<()> {
+pub(crate) fn run(args: &Args) -> Result<()> {
 	if args.cells.iter().any(|&c| !c.is_finite() || c < 2.0) {
 		bail!("cells per wavelength must be at least 2 (the grid's Nyquist limit)");
 	}

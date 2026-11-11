@@ -1,4 +1,5 @@
-//! Headless tool for WaveDude: machine facts, benches, the stencils' dispersion, scene pictures, scripted runs and the gate demonstrations.
+#![allow(clippy::print_stdout, reason = "a command line tool writes its results to stdout")]
+//! Headless tool for `WaveDude`: machine facts, benches, the stencils' dispersion, scene pictures, scripted runs and the gate demonstrations.
 
 mod bench;
 mod compare;
@@ -52,9 +53,9 @@ enum Command {
 	Run(run::RunArgs),
 	/// Run a project and write each active probe's series as CSV.
 	Probes(run::ProbesArgs),
-	/// Run a project at full quality and export it as video, an image sequence, OpenEXR or a still.
+	/// Run a project at full quality and export it as video, an image sequence, `OpenEXR` or a still.
 	Export(export::Args),
-	/// Cisco's OpenH264 codec for MP4 export: status, enable (and download), disable, delete the download, license.
+	/// Cisco's `OpenH264` codec for MP4 export: status, enable (and download), disable, delete the download, license.
 	#[cfg(feature = "mp4")]
 	Openh264 {
 		#[arg(value_enum, default_value = "status")]
@@ -64,7 +65,7 @@ enum Command {
 	Gates(gates::Args),
 	/// Run a two-input project with sources A and B off and on and print the intensity at probes Q and R.
 	TruthTable(truth::Args),
-	/// Compare a project's scene, fields and probes against a dump of the C# WaveDudeNext (tools/compare-csharp).
+	/// Compare a project's scene, fields and probes against a dump of the C# `WaveDudeNext` (tools/compare-csharp).
 	Compare(compare::Args),
 	/// Load a project and save it as .wdproj (the import of a Wave Dude 2D .json, or a rewrite of a .wdproj).
 	Convert {

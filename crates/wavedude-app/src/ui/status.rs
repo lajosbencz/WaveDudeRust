@@ -54,6 +54,6 @@ impl Component for StatusArea {
 			.busy(r.busy)
 			.tooltip(r.tip)
 			.busy_tooltip(r.busy_tip)
-			.on_double_click(move |_| window::show_messages(&ui))
+			.on_double_click(move |()| window::show_messages(&ui))
 	}
 }

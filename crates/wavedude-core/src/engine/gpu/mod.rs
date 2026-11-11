@@ -6,7 +6,7 @@
 //!   buffers swapped by bind group (the next field is written over the previous one), the modified
 //!   equation's `w`, the intensity stages `s1` and `s2`, the medium (see [`MediumLayout`]), the cut
 //!   bytes (four to a word), the Mur chains, the source groups, and on a rim the CPML's coefficient
-//!   tables and two sets of `psi` (the strips) and `xi` (the strips, then delta_y over the y strips;
+//!   tables and two sets of `psi` (the strips) and `xi` (the strips, then `delta_y` over the y strips;
 //!   engine/pml.rs).
 //! - Kernels (WGSL under `shaders/`): `force_w` (the sources' forcing into the modified equation's
 //!   w between its passes) or `force` / `force_intensity` (into leapfrog's next field); the grid passes `step` /
@@ -245,17 +245,17 @@ pub struct GpuEngine {
 	capture_out: wgpu::Buffer,
 	captures: [Option<Readback>; 2],
 	next_capture: usize,
-	/// step, step_intensity (leapfrog) or inner, outer, outer_intensity (modified equation).
+	/// step, `step_intensity` (leapfrog) or inner, outer, `outer_intensity` (modified equation).
 	step_kernels: Vec<Kernel>,
-	/// pml_psi_y, pml_delta_y, pml_psi_x, pml_correct at scale 1, pml_correct at scale 1/12.
+	/// `pml_psi_y`, `pml_delta_y`, `pml_psi_x`, `pml_correct` at scale 1, `pml_correct` at scale 1/12.
 	pml_kernels: Vec<Kernel>,
 	edges_kernel: Kernel,
-	/// force_w (modified equation) or force and force_intensity (leapfrog).
+	/// `force_w` (modified equation) or force and `force_intensity` (leapfrog).
 	force_kernels: Vec<Kernel>,
 	probes_kernel: Kernel,
 	capture_kernel: Kernel,
 	step_groups: [wgpu::BindGroup; 2],
-	/// Per parity, per application of the operator: the memory stages (psi_y, delta_y, psi_x) and the
+	/// Per parity, per application of the operator: the memory stages (`psi_y`, `delta_y`, `psi_x`) and the
 	/// correction.
 	psi_groups: [[wgpu::BindGroup; 2]; 2],
 	correct_groups: [[wgpu::BindGroup; 2]; 2],
@@ -745,7 +745,7 @@ impl WaveEngine for GpuEngine {
 			&self.xi[0],
 			&self.xi[1],
 		]
-		.map(|b| b.clone());
+		.map(Clone::clone);
 		let submitted = self.submit(|encoder| {
 			for b in &buffers {
 				encoder.clear_buffer(b, 0, None);
@@ -864,7 +864,7 @@ impl GpuEngine {
 		{
 			let mut pass = encoder.begin_compute_pass(&Default::default());
 			let groups = self.params.group_count;
-			let force = |pass: &mut wgpu::ComputePass, kernel: &Kernel, group: &wgpu::BindGroup, k: u32| {
+			let force = |pass: &mut wgpu::ComputePass<'_>, kernel: &Kernel, group: &wgpu::BindGroup, k: u32| {
 				if groups > 0 {
 					pass.set_pipeline(&kernel.pipeline);
 					pass.set_bind_group(0, group, &[(first_slot + k as u64 * self.slot_bytes) as u32]);
@@ -883,7 +883,7 @@ impl GpuEngine {
 			let pml = self.params.rim_cells > 0;
 			let mur = self.params.mur_count;
 			let dispatch =
-				|pass: &mut wgpu::ComputePass, kernel: &Kernel, group: &wgpu::BindGroup, (x, y): (u32, u32)| {
+				|pass: &mut wgpu::ComputePass<'_>, kernel: &Kernel, group: &wgpu::BindGroup, (x, y): (u32, u32)| {
 					pass.set_pipeline(&kernel.pipeline);
 					pass.set_bind_group(0, group, &[]);
 					pass.dispatch_workgroups(x, y, 1);
@@ -893,7 +893,7 @@ impl GpuEngine {
 				let c = self.cur;
 				let (step, psi, correct) = (&self.step_groups[c], &self.psi_groups[c], &self.correct_groups[c]);
 				let kernels = &self.pml_kernels;
-				let apply = |pass: &mut wgpu::ComputePass, set: usize, correction: &Kernel| {
+				let apply = |pass: &mut wgpu::ComputePass<'_>, set: usize, correction: &Kernel| {
 					if pml {
 						dispatch(pass, &kernels[0], &psi[set], y_strips);
 						dispatch(pass, &kernels[1], &psi[set], y_strips);
@@ -1155,7 +1155,7 @@ fn module(
 ) -> wgpu::ShaderModule {
 	let source = std::iter::once(constants(coefficients))
 		.chain(std::iter::once(COMMON.into()))
-		.chain(parts.iter().map(|p| p.to_string()));
+		.chain(parts.iter().map(ToString::to_string));
 	device.create_shader_module(wgpu::ShaderModuleDescriptor {
 		label: Some(label),
 		source: wgpu::ShaderSource::Wgsl(Cow::Owned(source.collect::<Vec<_>>().join("\n"))),

@@ -222,7 +222,7 @@ impl Component for ProgressBarView {
 		let _ = tick.read();
 		let (progress, color, elapsed) = (self.progress, self.color, start.elapsed());
 		rect().width(Size::px(BAR_WIDTH)).height(Size::px(12.)).background(RenderCallback::new(
-			move |ctx: &mut FillRenderContext| {
+			move |ctx: &mut FillRenderContext<'_>| {
 				let grid = DeviceGrid::from_ctx(ctx);
 				let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 				let (x0, x1) = progress_span(progress, BAR_WIDTH, elapsed);
@@ -251,7 +251,7 @@ impl Component for ResizeGrip {
 	fn render(&self) -> impl IntoElement {
 		let color = self.color;
 		rect().width(Size::px(GRIP)).height(Size::px(GRIP)).background(RenderCallback::new(
-			move |ctx: &mut FillRenderContext| {
+			move |ctx: &mut FillRenderContext<'_>| {
 				let grid = DeviceGrid::from_ctx(ctx);
 				let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 				grid.enter(canvas);

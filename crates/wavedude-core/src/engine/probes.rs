@@ -307,7 +307,6 @@ impl ProbeCollector {
 mod tests {
 	use super::*;
 	use crate::model::Scene;
-	use crate::model::normalize::Normalize;
 
 	fn scene() -> SceneData {
 		SceneData::blank(20, 10, &Scene { damping_edge: -3, ..Scene::default() })
@@ -389,7 +388,7 @@ mod tests {
 		];
 		let run = |seed: i32| {
 			let mut probes = probes.clone();
-			probes.iter_mut().for_each(|p| p.normalize());
+			probes.iter_mut().for_each(crate::model::normalize::Normalize::normalize);
 			let mut c = ProbeCollector::new(&probes, &s, seed);
 			for step in 1..=40u64 {
 				let r = ProbeReadings::from_probes([&[0.5f32; 6][..], &[0.5f32; 6]]);

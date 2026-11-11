@@ -30,8 +30,9 @@ Search the open and closed issues first. The forms under `.github/ISSUE_TEMPLATE
 - One concern per pull request, no unrelated commits. Pull requests are squash-merged and the title becomes the
   commit: write it as a conventional commit (below). The body says what changed, why, and how it was verified.
 - Accepted when all of this holds:
-  - The checks of `.github/workflows/ci.yml` pass: `cargo fmt`, `cargo clippy` with `-D warnings`, the tests on
-    Linux, macOS and Windows, and `cargo check` at the workspace's `rust-version`. The toolchain is pinned in
+  - The checks of `.github/workflows/ci.yml` pass: `cargo fmt`, `cargo clippy` with `-D warnings` (the lint
+    policy is the `[workspace.lints]` table of `Cargo.toml`), the tests on Linux, macOS and Windows, `cargo doc`
+    without warnings, and `cargo check` at the workspace's `rust-version`. The toolchain is pinned in
     `rust-toolchain.toml`; bump it there when a new stable is wanted (the CI caches are keyed on it).
   - A behaviour change comes with a test that failed before it: unit, headless (freya-testing), physics or
     snapshot, whichever fits (`docs/conventions.md` says where each lives). Snapshot changes (`insta`) are

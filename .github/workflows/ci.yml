@@ -93,6 +93,11 @@ jobs:
           cargo check --workspace
           cargo check -p wavedude-export --no-default-features
           cargo check -p wavedude-core --no-default-features
+      - name: Docs
+        if: runner.os == 'Linux'
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
 
   msrv:
     name: MSRV

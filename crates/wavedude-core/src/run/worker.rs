@@ -415,7 +415,19 @@ impl Worker {
 	fn adopt(&mut self, spec: &RunSpec, goal: &Goal) -> Result<(), Interrupted> {
 		let same_frames = self.current.as_ref().is_some_and(|c| c.spec.same_frames_as(spec));
 		let same_probes = self.current.as_ref().is_some_and(|c| c.spec.same_probes_as(spec));
-		if !same_frames {
+		if same_frames {
+			let current = self.current.as_mut().expect("same frames means a current spec");
+			current.spec = spec.clone();
+			if !same_probes {
+				self.finish_pending()?;
+				let engine = self.engine.as_mut().expect("an engine goes with the current spec");
+				engine.reset();
+				self.steps_done = 0;
+				lock(&self.shared.held).clear();
+				self.restart_traces(spec);
+				tracing::debug!(revision = goal.revision, "live run: new probes");
+			}
+		} else {
 			self.finish_pending()?;
 			let layout = spec.store_layout();
 			let previous = self.current.take();
@@ -456,18 +468,6 @@ impl Worker {
 			self.current = Some(Current { spec: spec.clone(), store });
 			self.restart_traces(spec);
 			tracing::debug!(revision = goal.revision, steps = spec.steps, "live run: new frames");
-		} else {
-			let current = self.current.as_mut().expect("same frames means a current spec");
-			current.spec = spec.clone();
-			if !same_probes {
-				self.finish_pending()?;
-				let engine = self.engine.as_mut().expect("an engine goes with the current spec");
-				engine.reset();
-				self.steps_done = 0;
-				lock(&self.shared.held).clear();
-				self.restart_traces(spec);
-				tracing::debug!(revision = goal.revision, "live run: new probes");
-			}
 		}
 		self.adopted = goal.revision;
 		Ok(())

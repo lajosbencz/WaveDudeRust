@@ -264,7 +264,7 @@ fn insert<T: wavedude_core::model::names::Named>(
 		let at = start + offset;
 		let lower = item.name().to_lowercase();
 		if list.iter().any(|o| o.name().to_lowercase() == lower) {
-			let name = copy_name(item.name(), list.iter().map(|o| o.name()));
+			let name = copy_name(item.name(), list.iter().map(wavedude_core::model::names::Named::name));
 			item.set_name(name);
 		}
 		list.insert(at, item);

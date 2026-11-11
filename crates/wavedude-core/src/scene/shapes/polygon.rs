@@ -3,7 +3,7 @@ use crate::model::Polygon;
 
 /// Regular n-gon of side `Side`: circumradius `Side / (2 sin(pi/n))`, vertex k at angle
 /// `pi + (2k+1) pi/n`, so a face is centred on -x'.
-pub fn vertices(p: &Polygon) -> Vec<Vec2> {
+pub(super) fn vertices(p: &Polygon) -> Vec<Vec2> {
 	let n = p.sides;
 	let radius = p.side as f64 / (2.0 * (std::f64::consts::PI / n as f64).sin());
 	(0..n)

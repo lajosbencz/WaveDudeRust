@@ -20,42 +20,42 @@ pub(crate) struct DeviceGrid {
 }
 
 impl DeviceGrid {
-	pub fn new(scale: f32, origin_x: f32, origin_y: f32) -> Self {
+	pub(crate) fn new(scale: f32, origin_x: f32, origin_y: f32) -> Self {
 		let ox = origin_x * scale;
 		let oy = origin_y * scale;
 		Self { scale, fx: ox - ox.floor(), fy: oy - oy.floor() }
 	}
 
-	pub fn from_ctx(ctx: &FillRenderContext) -> Self {
+	pub(crate) fn from_ctx(ctx: &FillRenderContext<'_>) -> Self {
 		Self::new(ctx.scale_factor as f32, ctx.origin.x, ctx.origin.y)
 	}
 
 	/// Saves the canvas and switches it to device pixels; restore with `canvas.restore()`.
-	pub fn enter(&self, canvas: &Canvas) {
+	pub(crate) fn enter(&self, canvas: &Canvas) {
 		canvas.save();
 		canvas.scale((1. / self.scale, 1. / self.scale));
 		canvas.translate((-self.fx, -self.fy));
 	}
 
-	pub fn x(&self, logical: f32) -> f32 {
+	pub(crate) fn x(&self, logical: f32) -> f32 {
 		logical * self.scale + self.fx
 	}
 
-	pub fn y(&self, logical: f32) -> f32 {
+	pub(crate) fn y(&self, logical: f32) -> f32 {
 		logical * self.scale + self.fy
 	}
 
 	/// The whole number of device pixels nearest to one logical pixel, at least 1.
-	pub fn hairline(&self) -> f32 {
+	pub(crate) fn hairline(&self) -> f32 {
 		self.scale.round().max(1.)
 	}
 
 	/// Centre of a hairline of [`Self::hairline`] width whose first device column is the one under `device`.
-	pub fn snap(&self, device: f32) -> f32 {
+	pub(crate) fn snap(&self, device: f32) -> f32 {
 		device.floor() + self.hairline() / 2.
 	}
 
-	pub fn width(&self, logical: f32) -> f32 {
+	pub(crate) fn width(&self, logical: f32) -> f32 {
 		(logical * self.scale).round()
 	}
 }
@@ -116,7 +116,7 @@ pub(crate) fn weighted_text_line(
 	style.set_font_style(FontStyle::new(weight, Width::NORMAL, Slant::Upright));
 	// skia-safe reads an empty family list through a null pointer, which debug builds abort on.
 	if !families.is_empty() {
-		let families: Vec<&str> = families.iter().map(|f| f.as_ref()).collect();
+		let families: Vec<&str> = families.iter().map(AsRef::as_ref).collect();
 		style.set_font_families(&families);
 	}
 	let mut paragraph_style = ParagraphStyle::new();

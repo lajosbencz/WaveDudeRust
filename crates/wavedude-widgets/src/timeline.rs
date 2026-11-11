@@ -55,7 +55,7 @@ impl TimelineModel {
 		frame.clamp(0, max) as u32
 	}
 
-	/// The frame a key moves to: Left/Right one, PageUp forward ten, PageDown back ten, Home/End the range.
+	/// The frame a key moves to: Left/Right one, `PageUp` forward ten, `PageDown` back ten, Home/End the range.
 	pub fn key_target(&self, key: &Key) -> Option<u32> {
 		let p = i64::from(self.position);
 		let target = match key {
@@ -103,7 +103,7 @@ impl TimelineGeometry {
 	}
 }
 
-/// Frames between labels: the smallest candidate at least [`MIN_LABEL_SPACING`] px apart.
+/// Frames between labels: the smallest candidate at least `MIN_LABEL_SPACING` px apart.
 pub fn label_step(px_per_frame: f32) -> u32 {
 	const CANDIDATES: [u32; 13] = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
 	CANDIDATES.into_iter().find(|&c| c as f32 * px_per_frame >= MIN_LABEL_SPACING).unwrap_or(CANDIDATES[12])
@@ -273,7 +273,7 @@ impl Component for Timeline {
 			theme.text_disabled,
 			theme.accent,
 		);
-		let painter = RenderCallback::new(move |ctx: &mut FillRenderContext| {
+		let painter = RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 			let grid = DeviceGrid::from_ctx(ctx);
 			let families = ctx.text_style_state.font_families.clone();
 			let RenderTarget::Background { canvas, font_collection } = &mut ctx.target else { return };

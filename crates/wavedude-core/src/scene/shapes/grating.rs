@@ -16,7 +16,7 @@ pub(super) struct GratingShape {
 }
 
 impl GratingShape {
-	pub fn new(g: &SimpleGrating) -> Self {
+	pub(super) fn new(g: &SimpleGrating) -> Self {
 		Self {
 			columns: g.columns.max(1),
 			rows: g.rows.max(1),

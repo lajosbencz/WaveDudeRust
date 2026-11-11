@@ -272,7 +272,7 @@ fn transport_bar(shared: &Shared) -> impl IntoElement {
 	let tip = |i: usize| view.tips[i].clone();
 	let send = |event: AppEvent| {
 		let shared = shared.clone();
-		move |_| {
+		move |()| {
 			shared.send(event.clone());
 		}
 	};
@@ -283,11 +283,11 @@ fn transport_bar(shared: &Shared) -> impl IntoElement {
 	};
 	let toggle = |path: &'static str, on: bool| {
 		let shared = shared.clone();
-		move |_| set_display(&shared, path, json!(!on))
+		move |()| set_display(&shared, path, json!(!on))
 	};
 	let orient = |o: Orientation| {
 		let shared = shared.clone();
-		move |_| {
+		move |()| {
 			shared.send(AppEvent::SetPreviewOrientation(o));
 		}
 	};

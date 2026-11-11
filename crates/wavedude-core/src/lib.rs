@@ -1,4 +1,4 @@
-//! WaveDude core: project model, scene painting, wave engines, runs, rendering.
+//! `WaveDude` core: project model, scene painting, wave engines, runs, rendering.
 //!
 //! Coordinates: canvas pixels, origin top-left, x right, y down; a pixel (x, y)
 //! spans [x, x+1) x [y, y+1). Angles in degrees, counter-clockwise on screen.

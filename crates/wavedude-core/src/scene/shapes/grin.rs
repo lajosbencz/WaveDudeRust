@@ -11,7 +11,7 @@ pub(super) struct GrinShape {
 }
 
 impl GrinShape {
-	pub fn new(g: &GrinLens) -> Self {
+	pub(super) fn new(g: &GrinLens) -> Self {
 		Self {
 			half_length: g.length as f64 / 2.0,
 			half_diameter: g.diameter as f64 / 2.0,

@@ -2,7 +2,7 @@ use super::{Band, Face, PartShape, Vec2, absorption_profile, segment_distance};
 use crate::model::{Fiber, FiberEnds, FiberNode};
 
 /// Largest distance of a chord from the curve, in pixels.
-pub const FLATTEN_TOLERANCE: f64 = 0.05;
+pub(super) const FLATTEN_TOLERANCE: f64 = 0.05;
 /// Side of a chord-grid cell, in pixels of the part frame.
 const CELL_SIZE: f64 = 32.0;
 /// How far beyond the tube a chord is still listed for a cell; an empty cell reports this depth outside.
@@ -97,7 +97,7 @@ pub(super) struct FiberShape {
 
 impl FiberShape {
 	/// None when the path has fewer than two points.
-	pub fn new(fiber: &Fiber) -> Option<Self> {
+	pub(super) fn new(fiber: &Fiber) -> Option<Self> {
 		let path = flatten(&fiber.nodes);
 		if path.len() < 2 {
 			return None;

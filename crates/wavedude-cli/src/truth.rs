@@ -13,7 +13,7 @@ use crate::project::load;
 use crate::run::{EngineArgs, finish, simulate};
 
 /// Steps averaged at the end of a run: eight periods at level 50 (32 steps a period).
-pub const DEFAULT_SETTLE: u32 = 256;
+pub(crate) const DEFAULT_SETTLE: u32 = 256;
 /// Largest deviation of a normalised output (in units of one input's power) for a row to pass.
 ///
 /// The design rounds every length to whole pixels (a coupler half a pixel off moves the split by
@@ -21,7 +21,7 @@ pub const DEFAULT_SETTLE: u32 = 256;
 /// still crosses the probes, the bends' coupling is integrated from the straight-guide solver, and
 /// a half line takes the other arm's evanescent tail beyond the axis. Together these stay well
 /// under a tenth of an input, while a wrong phase convention or coupling length errs by 0.5 or more.
-pub const TOLERANCE: f64 = 0.1;
+pub(crate) const TOLERANCE: f64 = 0.1;
 /// Factor over the slowest phase speed for the wave front and the mode's group delay.
 const CROSSING_MARGIN: f64 = 1.25;
 /// EMA time constants for the intensity to settle.
@@ -29,8 +29,8 @@ const EMA_SETTLE: f64 = 5.0;
 const COUPLER_TAG: &str = "Coupler:";
 
 #[derive(ClapArgs)]
-pub struct Args {
-	/// Project file with sources named A and B (each with an optional "<name> lower" partner) and line probes named Input and Output, A's and Q's arm in the upper half.
+pub(crate) struct Args {
+	/// Project file with sources named A and B (each with an optional `<name> lower` partner) and line probes named Input and Output, A's and Q's arm in the upper half.
 	project: PathBuf,
 	/// Steps of each run (default: derived from the canvas width, the core index and the intensity EMA).
 	#[arg(long)]
@@ -44,13 +44,13 @@ pub struct Args {
 
 /// Steps for a wave to cross `width` cells at the speed `1/index` (with a margin for the group
 /// delay), the intensity EMA of time constant `time_decay * 100 / level` to settle, and `settle` steps.
-pub fn run_steps(width: u32, index: f64, time_decay: f64, level: f64, settle: u32) -> u32 {
+pub(crate) fn run_steps(width: u32, index: f64, time_decay: f64, level: f64, settle: u32) -> u32 {
 	let tau = (time_decay * 100.0 / level).max(1.0);
 	(CROSSING_MARGIN * index * width as f64 + EMA_SETTLE * tau).ceil() as u32 + settle
 }
 
 /// The description line that tells [`run`] a fibre coupler's total coupling phase.
-pub fn coupler_tag(theta: f64) -> String {
+pub(crate) fn coupler_tag(theta: f64) -> String {
 	format!("{COUPLER_TAG} {theta:.4} rad")
 }
 
@@ -112,7 +112,7 @@ fn named<T>(items: &[T], name: &str, of: impl Fn(&T) -> &str, what: &str) -> Res
 	items.iter().position(|i| of(i) == name).with_context(|| format!("the project has no {what} named {name}"))
 }
 
-/// The sources of the input `name`: the one named so and its "<name> lower" partner, which drives the cell
+/// The sources of the input `name`: the one named so and its `<name> lower` partner, which drives the cell
 /// below it.
 fn input_sources(sources: &[Source], name: &str) -> Result<Vec<usize>> {
 	let partner = format!("{name} lower");
@@ -195,7 +195,7 @@ fn measure(project: &Project, steps: u32, settle: u32, engine: EngineArgs) -> Re
 	Ok((means, if total > 0.0 { drift / total } else { 0.0 }))
 }
 
-pub fn run(args: &Args) -> Result<()> {
+pub(crate) fn run(args: &Args) -> Result<()> {
 	let project = load(&args.project)?;
 	let a_all = input_sources(&project.sources, "A")?;
 	let b_all = input_sources(&project.sources, "B")?;

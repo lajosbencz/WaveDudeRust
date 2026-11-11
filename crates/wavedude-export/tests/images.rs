@@ -81,7 +81,7 @@ fn exr_is_a_version_2_scanline_file_of_one_uncompressed_half_channel() {
 			assert_eq!(
 				read.iter().map(|h| h.to_bits()).collect::<Vec<_>>(),
 				halves.iter().map(|h| h.to_bits()).collect::<Vec<_>>()
-			)
+			);
 		}
 		other => panic!("HALF expected, got {other:?}"),
 	}

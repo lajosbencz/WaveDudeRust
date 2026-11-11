@@ -1,5 +1,5 @@
-//! Image outputs: PNG, JPEG and OpenEXR sequences (one file per frame in a folder) and stills (one file), encoded on
-//! the job's [`EncoderPool`](super::EncoderPool) so a sequence keeps every core busy.
+//! Image outputs: PNG, JPEG and `OpenEXR` sequences (one file per frame in a folder) and stills (one file), encoded on
+//! the job's [`EncoderPool`] so a sequence keeps every core busy.
 
 use std::fs::File;
 use std::io::{BufWriter, Write};

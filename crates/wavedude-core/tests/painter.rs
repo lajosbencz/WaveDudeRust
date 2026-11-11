@@ -1,5 +1,5 @@
 //! The "Parts and painter" guarantees of docs/spec/70-guarantees.md, ported from the original's
-//! library_check where it states them.
+//! `library_check` where it states them.
 
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::*;

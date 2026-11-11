@@ -496,7 +496,7 @@ fn export_frames(
 	}
 }
 
-/// The OpenH264 library for an MP4 export, downloaded at its first use.
+/// The `OpenH264` library for an MP4 export, downloaded at its first use.
 fn codec(work: &Work) -> Result<Option<PathBuf>, String> {
 	let dir = work.codec_dir.as_deref().ok_or("the app has no codec folder")?;
 	let download = work.codec_download.take();
@@ -619,7 +619,7 @@ impl Component for ExportDialog {
 				.spacing(4.)
 				.child(label().text(h264::NOTICE).color(theme.text_dim))
 				.child(check_box(s.get("ExportUseOpenH264").to_owned(), enabled, move |on| {
-					super::codec::set(&toggle, on)
+					super::codec::set(&toggle, on);
 				}))
 				.maybe_child(
 					downloaded
@@ -629,7 +629,7 @@ impl Component for ExportDialog {
 		let ui = cx.ui;
 		let ok_key = move || {
 			if ready {
-				ok()
+				ok();
 			}
 		};
 		let ok = ok_key.clone();
@@ -664,7 +664,7 @@ impl Component for ExportDialog {
 						false,
 						move |t| {
 							let mut path = path;
-							path.set(t)
+							path.set(t);
 						},
 						"ExportPath".into(),
 					)))

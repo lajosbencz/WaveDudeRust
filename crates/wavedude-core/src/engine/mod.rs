@@ -59,8 +59,8 @@ pub trait WaveEngine: Send {
 	/// Calls `f` with each queued reading, oldest first, and empties the queue.
 	fn drain_probes(&mut self, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError>;
 	/// Starts converting the canvas (rim excluded) after the last step into planes of `shape`, written into
-	/// `into`'s planes (reused when large enough). The engine may step on before [`finish_capture`]
-	/// (Self::finish_capture) collects it; at most two captures may be pending.
+	/// `into`'s planes (reused when large enough). The engine may step on before `finish_capture`
+	/// (`Self::finish_capture`) collects it; at most two captures may be pending.
 	fn begin_capture(&mut self, shape: &FrameShape, into: Snapshot) -> Result<PendingCapture, EngineError>;
 	/// The frame of a capture this engine began.
 	fn finish_capture(&mut self, pending: PendingCapture) -> Result<Snapshot, EngineError>;

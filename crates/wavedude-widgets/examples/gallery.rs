@@ -73,7 +73,7 @@ fn app() -> impl IntoElement {
 		position: 0,
 		in_point: Some(20),
 		out_point: Some(200),
-		available: std::rc::Rc::from([(0, 180)]),
+		available: Rc::from([(0, 180)]),
 		bounded: false,
 	});
 	let mut playing = use_state(|| false);
@@ -244,7 +244,7 @@ fn app() -> impl IntoElement {
 			.width(Size::flex(1.))
 			.height(Size::fill())
 			.child(
-				HeaderStrip::new(title, brightness, move |_| {
+				HeaderStrip::new(title, brightness, move |()| {
 					let mut log = log;
 					log.write().push(log_line(LogLevel::Info, &format!("Auto brightness: {title}")));
 				})
@@ -261,7 +261,7 @@ fn app() -> impl IntoElement {
 					})
 					.track_pointer(true)
 					.on_event(move |e: PictureEvent| {
-						if e.phase == wavedude_widgets::picture::PointerPhase::Secondary {
+						if e.phase == picture::PointerPhase::Secondary {
 							context_menu.set(Some(ContextMenuRequest {
 								at: e.global,
 								model: MenuModel::new(vec![
@@ -383,7 +383,7 @@ fn app() -> impl IntoElement {
 				.right(format!("Frame {position} of 250"))
 				.busy(busy_state)
 				.tooltip("Double-click to open the Messages pane")
-				.on_double_click(move |_| layout.write().show("messages", Side::Bottom)),
+				.on_double_click(move |()| layout.write().show("messages", Side::Bottom)),
 		)
 		.child(ContextMenuHost::new(context_menu, move |id: String| {
 			let mut log = log;

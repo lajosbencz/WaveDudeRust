@@ -65,12 +65,12 @@ pub(crate) struct EditSlot {
 
 impl EditSlot {
 	/// `text` was typed: `apply` is what the window applies it with. Called with each keystroke.
-	pub fn offer(&self, text: String, apply: Apply) {
+	pub(crate) fn offer(&self, text: String, apply: Apply) {
 		self.pending.offer(self.id, text, apply);
 	}
 
 	/// The text was applied or reverted by the editor itself.
-	pub fn withdraw(&self) {
+	pub(crate) fn withdraw(&self) {
 		self.pending.withdraw(self.id);
 	}
 }

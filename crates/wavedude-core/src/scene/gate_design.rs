@@ -59,7 +59,7 @@ pub struct GateDesign {
 	pub wavelength: f64,
 	pub core_index: f64,
 	pub cladding_index: f64,
-	/// n_p: the phase arm's core index.
+	/// `n_p`: the phase arm's core index.
 	pub phase_index: f64,
 	/// The phase section lies on arm A (else B).
 	pub phase_on_a: bool,
@@ -67,7 +67,7 @@ pub struct GateDesign {
 	pub core_width: i64,
 	/// c: clear cladding thickness.
 	pub cladding: i64,
-	/// a_min
+	/// `a_min`
 	pub absorber_min: i64,
 	/// beta of the single guide in its band (rad/cell).
 	pub beta: f64,
@@ -87,9 +87,9 @@ pub struct GateDesign {
 	pub bend_kappa: f64,
 	pub bend_len: i64,
 	pub coupler_len: i64,
-	/// L_reg
+	/// `L_reg`
 	pub phase_region: i64,
-	/// L_ph
+	/// `L_ph`
 	pub phase_len: i64,
 	pub input_len: i64,
 	pub lead_len: i64,
@@ -206,7 +206,7 @@ impl GateDesign {
 		design
 	}
 
-	/// A_w: absorber band width, `P/2 - w/2 - c`.
+	/// `A_w`: absorber band width, `P/2 - w/2 - c`.
 	pub fn absorber_width(&self) -> f64 {
 		self.port_spacing as f64 / 2.0 - self.core_width as f64 / 2.0 - self.cladding as f64
 	}
@@ -216,43 +216,43 @@ impl GateDesign {
 		self.port_spacing as f64
 	}
 
-	/// x_L: the input end.
+	/// `x_L`: the input end.
 	pub fn left(&self) -> f64 {
 		-(self.length as f64) / 2.0
 	}
 
-	/// x_in: the input ports.
+	/// `x_in`: the input ports.
 	pub fn input_x(&self) -> f64 {
 		self.left() + self.input_len as f64
 	}
 
-	/// [x_ps, x_pe): the phase section.
+	/// [`x_ps`, `x_pe)`: the phase section.
 	pub fn phase_section(&self) -> (f64, f64) {
 		let start = self.input_x() + self.lead_len as f64;
 		(start, start + self.phase_len as f64)
 	}
 
-	/// x_b1: the S-bend in starts.
+	/// `x_b1`: the S-bend in starts.
 	pub fn bend_in(&self) -> f64 {
 		self.input_x() + 2.0 * self.lead_len as f64 + self.phase_region as f64
 	}
 
-	/// x_c0: the coupler starts.
+	/// `x_c0`: the coupler starts.
 	pub fn coupler_start(&self) -> f64 {
 		self.bend_in() + self.bend_len as f64
 	}
 
-	/// x_c1: the coupler ends, the S-bend out starts.
+	/// `x_c1`: the coupler ends, the S-bend out starts.
 	pub fn coupler_end(&self) -> f64 {
 		self.coupler_start() + self.coupler_len as f64
 	}
 
-	/// x_out: the output ports.
+	/// `x_out`: the output ports.
 	pub fn output_x(&self) -> f64 {
 		self.length as f64 / 2.0 - self.output_len as f64 + (self.wavelength / 2.0).round_ties_even()
 	}
 
-	/// x_r: a switched-off output's absorber starts to rise.
+	/// `x_r`: a switched-off output's absorber starts to rise.
 	pub fn ramp_start(&self) -> f64 {
 		self.length as f64 / 2.0 - self.ramp_len as f64
 	}

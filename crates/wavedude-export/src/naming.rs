@@ -48,7 +48,7 @@ pub fn sequence_file(chosen: &Path, frame: usize, digits: usize) -> PathBuf {
 
 /// The proposed file name of a still: `<project>[_field|_intensity]_NNNN.ext`, NNNN the shown frame padded to 4.
 pub fn still_file_name(project: &str, layer: Option<Layer>, frame: usize, ext: &str) -> String {
-	let suffix = layer.map(layer_suffix).unwrap_or("");
+	let suffix = layer.map_or("", layer_suffix);
 	format!("{project}{suffix}_{frame:04}.{ext}")
 }
 

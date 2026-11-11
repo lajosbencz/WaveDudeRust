@@ -9,8 +9,12 @@ What new code follows so that it fits the code already here. Each rule names one
 - The toolchain is pinned in `rust-toolchain.toml` (`channel = "1.99.1"`, clippy and rustfmt); bump it there.
 - `rustfmt.toml`: `hard_tabs = true`, `max_width = 120`, `use_small_heuristics = "Max"`. Indent with tabs,
   including in TOML arrays (`crates/wavedude-app/Cargo.toml`, `file-associations`).
-- Clippy runs at its default lint set with `-D warnings`; there is no `[lints]` table. A needed `#[allow]` carries
-  a `reason` (`crates/wavedude-widgets/src/picture.rs:275`).
+- The lint policy is the `[workspace.lints]` table of the root `Cargo.toml`, inherited by every crate
+  (`[lints] workspace = true`); CI runs clippy with `-D warnings`, so each listed lint fails the build. The cast
+  lints and `missing_docs` are left out on purpose. A needed `#[allow]` carries a `reason`
+  (`crates/wavedude-widgets/src/picture.rs:275`).
+- `cargo doc --workspace --no-deps` builds without warnings (`RUSTDOCFLAGS=-D warnings` in CI): a doc comment
+  links only to public items and wraps generic names like `<n>` in backticks.
 - Before a push, run what `.github/workflows/ci.yml` runs:
   `cargo fmt --all --check`;
   `cargo clippy --workspace --all-targets --features $F -- -D warnings` and `cargo test --workspace --features $F`

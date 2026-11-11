@@ -18,6 +18,9 @@ openh264-source = ["mp4", "wavedude-export/openh264-source"]
 name = "wavedude-cli"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true

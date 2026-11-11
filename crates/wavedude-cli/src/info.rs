@@ -1,10 +1,10 @@
 use anyhow::Result;
 use wavedude_core::run::{MachineFacts, PreviewDefaults};
 
-pub fn run() -> Result<()> {
+pub(crate) fn run() -> Result<()> {
 	let mut facts = MachineFacts::read();
 	let gpu = wavedude_core::engine::gpu_adapter();
-	facts.has_gpu = gpu.as_ref().map(|g| g.is_ok());
+	facts.has_gpu = gpu.as_ref().map(std::result::Result::is_ok);
 	println!("memory:   {:.1} GiB", facts.physical_bytes as f64 / (1u64 << 30) as f64);
 	println!("threads:  {}", facts.threads);
 	match gpu {

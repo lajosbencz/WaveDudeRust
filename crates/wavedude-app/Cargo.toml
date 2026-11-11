@@ -19,6 +19,9 @@ path = "src/main.rs"
 # OpenH264 compiled in instead of Cisco's downloaded binary: for development and tests, not for distributed builds.
 openh264-source = ["wavedude-export/openh264-source"]
 
+[lints]
+workspace = true
+
 [dependencies]
 cargo-packager-updater = "0.2"
 semver = "1"
