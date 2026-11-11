@@ -367,28 +367,28 @@ fn list_insert_point(project: &Project, at: Option<Point>) -> (i32, i32) {
 
 /// Applies `command` to `project`, leaves the selection the command makes in `selection`, normalises the
 /// project and classifies the change.
-/// A gate's input ports: where a source must sit to feed it (part index, A and B).
-fn gate_ports(project: &Project) -> Vec<(usize, [Point; 2])> {
+/// A gate's input ports: where a source must sit to feed it, by the gate's name (unique within the parts, and
+/// what identifies an item across a command that shifts indices, as `Selection::follow`).
+fn gate_ports(project: &Project) -> Vec<(String, [Point; 2])> {
 	project
 		.parts
 		.iter()
-		.enumerate()
-		.filter_map(|(i, part)| {
+		.filter_map(|part| {
 			let PartKind::LogicGate(gate) = &part.kind else { return None };
 			let design = GateDesign::for_gate(gate, &project.simulation)?;
 			let [a, b, _, _] = gate_design::ports_of(&design, &part.base);
-			Some((i, [a, b]))
+			Some((part.base.name.clone(), [a, b]))
 		})
 		.collect()
 }
 
 /// Sources sitting on a gate's input ports before a change follow the ports after it (a moved, turned or
 /// retuned gate keeps its feed). Returns whether a source moved.
-pub fn follow_gate_ports(before: &[(usize, [Point; 2])], project: &mut Project) -> bool {
+pub fn follow_gate_ports(before: &[(String, [Point; 2])], project: &mut Project) -> bool {
 	let after = gate_ports(project);
 	let mut moved = false;
-	for (index, old_ports) in before {
-		let Some((_, new_ports)) = after.iter().find(|(i, _)| i == index) else { continue };
+	for (name, old_ports) in before {
+		let Some((_, new_ports)) = after.iter().find(|(n, _)| n == name) else { continue };
 		for (old, new) in old_ports.iter().zip(new_ports) {
 			if old == new {
 				continue;
@@ -826,6 +826,37 @@ mod tests {
 
 	fn run(p: &mut Project, s: &mut Selection, c: Command) -> Change {
 		apply(p, s, c).unwrap()
+	}
+
+	/// The follower pairs a gate's ports before and after a command by the gate's name: a removal before the
+	/// gate shifts its index, and the sources feeding it must not jump to the gate that took the index.
+	#[test]
+	fn a_removed_part_before_a_gate_leaves_its_feed_where_it_is() {
+		use wavedude_core::model::{GateKind, LogicGate, Part, PartKind, Rectangle, Source};
+		let mut p = project();
+		p.scene.width = 3000;
+		p.scene.height = 1500;
+		let mut s = Selection::default();
+		p.parts.push(Part::new(PartKind::Rectangle(Rectangle::default()), 50, 50));
+		for (name, x, y) in [("A", 800, 400), ("B", 800, 1000)] {
+			let mut gate =
+				Part::new(PartKind::LogicGate(LogicGate { kind: GateKind::Xor, ..LogicGate::default() }), x, y);
+			gate.base.name = name.into();
+			p.parts.push(gate);
+		}
+		p.normalize();
+		let ports = gate_ports(&p);
+		assert_eq!(ports.len(), 2, "both gates have ports");
+		let feed = ports[0].1[0];
+		assert_ne!(feed, ports[1].1[0], "the gates' ports differ");
+		p.sources.push(Source { name: "S".into(), x: f64::from(feed.x), y: f64::from(feed.y), ..Source::default() });
+		run(&mut p, &mut s, Command::Remove { target: ItemRef::new(ItemKind::Part, 0) });
+		assert_eq!(p.parts.len(), 2);
+		assert_eq!(
+			(p.sources[0].x, p.sources[0].y),
+			(f64::from(feed.x), f64::from(feed.y)),
+			"the source stays on A's port"
+		);
 	}
 
 	#[test]
