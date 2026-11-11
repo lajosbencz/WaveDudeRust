@@ -10,10 +10,10 @@ use std::f64::consts::PI;
 use std::num::NonZeroU32;
 
 use wavedude_core::engine::cpu::CpuEngine;
-use wavedude_core::engine::envelope::level_omega;
 use wavedude_core::engine::stencil::{StencilCoefficients, TimeScheme};
 use wavedude_core::engine::substeps::{courant_limit, sub_steps};
 use wavedude_core::engine::{Emitter, EngineOptions, SceneData, WaveEngine};
+use wavedude_core::model::level_omega;
 use wavedude_core::model::{Edges, PulseShape, Scene, Stencil, wavelength};
 use wavedude_core::scene::modes::ModeSolver;
 

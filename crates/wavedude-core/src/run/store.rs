@@ -322,8 +322,9 @@ impl FrameStore {
 		self.first_spilled.load(Ordering::Acquire)
 	}
 
+	/// The two counters are loaded apart, and the producer moves them one after the other.
 	pub fn frames_in_memory(&self) -> usize {
-		self.present_count() - self.frames_on_disk()
+		self.present_count().saturating_sub(self.frames_on_disk())
 	}
 
 	pub fn frames_on_disk(&self) -> usize {

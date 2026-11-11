@@ -52,10 +52,14 @@ pub fn normalize_angle(a: f64) -> f64 {
 	a - 360.0 * ((a - 180.0) / 360.0).ceil()
 }
 
+/// Angular frequency in radians per step of a frequency level at frequency scale `scale`: `level/255 * 0.5 * scale`.
+pub fn level_omega(level: f64, scale: f64) -> f64 {
+	level / 255.0 * 0.5 * scale
+}
+
 /// Wavelength in pixels of a frequency level at speed `c` and frequency scale `scale`.
-/// `omega = level/255 * 0.5 * scale` radians per step.
 pub fn wavelength(level: f64, c: f64, scale: f64) -> f64 {
-	let omega = level / 255.0 * 0.5 * scale;
+	let omega = level_omega(level, scale);
 	if omega <= 0.0 {
 		return f64::INFINITY;
 	}

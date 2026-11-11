@@ -18,11 +18,6 @@ pub const CYCLE_ADVANCE_GUARD: u32 = 1000;
 /// Half-width in cycles of the smoothed square's edges.
 const EDGE_WIDTH: f64 = 0.35;
 
-/// Angular frequency in radians per step of a frequency level: `level/255 * 0.5 * scale`.
-pub fn level_omega(level: f64, scale: f64) -> f64 {
-	level / 255.0 * 0.5 * scale
-}
-
 /// Detach fade at time `t`: `None` once the emitter has stopped driving the field, else 1 before
 /// the detach step falling linearly to 0 over [`DETACH_RAMP_STEPS`].
 pub fn detach_fade(emitter: &Emitter, t: f64) -> Option<f32> {

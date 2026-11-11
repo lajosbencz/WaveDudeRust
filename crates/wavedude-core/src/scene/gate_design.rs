@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, PI, TAU};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use crate::model::{GateKind, INDEX_MAX, LogicGate, PartBase, Point, Simulation};
+use crate::model::{GateKind, INDEX_MAX, LogicGate, PartBase, Point, Simulation, level_omega};
 use crate::scene::modes::ModeSolver;
 use crate::scene::shapes::{Frame, Vec2, round_digits};
 
@@ -47,7 +47,7 @@ pub fn phase_shift(kind: GateKind) -> f64 {
 /// The design wavelength in cells at index 1 for level `frequency` and frequency scale `scale`:
 /// `round_even(clamp(2 pi / (F/255 * 0.5 * s), 6, 200), 3)`; None when not finite and positive.
 pub fn gate_wavelength(frequency: f64, scale: f64) -> Option<f64> {
-	let cycles = frequency / 255.0 * 0.5 * scale / TAU;
+	let cycles = level_omega(frequency, scale) / TAU;
 	let raw = if cycles > 0.0 { 1.0 / cycles } else { f64::NAN };
 	(raw.is_finite() && raw > 0.0).then(|| round_digits(raw.clamp(6.0, 200.0), 3))
 }

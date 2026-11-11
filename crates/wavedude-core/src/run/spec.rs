@@ -130,7 +130,7 @@ impl RunRequest {
 	pub fn store_bytes_at(&self, quality: PreviewQuality) -> u64 {
 		debug_assert!(quality.is_valid(), "invalid preview quality {quality:?}");
 		let canvas = self.project.canvas_size();
-		let frames = self.schedule().frame_count().div_ceil(quality.frame_divisor);
+		let frames = Schedule { quality, ..self.schedule() }.stored_frames();
 		self.layers().len() as u64 * shape_of(&self.project, canvas, quality).plane_bytes() as u64 * frames as u64
 	}
 

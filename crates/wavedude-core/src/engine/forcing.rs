@@ -12,10 +12,11 @@
 
 use std::collections::HashMap;
 
-use super::envelope::{Pulse, detach_fade, level_omega};
+use super::envelope::{Pulse, detach_fade};
 use super::green::spread_response;
 use super::stencil::{StencilCoefficients, TimeScheme};
 use super::types::{Emitter, SceneData};
+use crate::model::level_omega;
 
 /// Entries of the value table before the object emitters' taps: one per image level.
 pub const IMAGE_LEVELS: usize = 256;

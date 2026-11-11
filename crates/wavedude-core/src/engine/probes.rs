@@ -276,8 +276,10 @@ impl ProbeCollector {
 		let mut counts = vec![0f32; self.line_totals[p].len()];
 		for start in (0..counts.len()).step_by(spec.bin_size) {
 			let end = (start + spec.bin_size).min(counts.len());
-			let total: u32 =
-				(start..end).map(|k| processes[k].count_up_to(self.line_totals[p][k] * spec.sensitivity)).sum();
+			// each count saturates at u32::MAX, so a bin's sum needs the wider type
+			let total: u64 = (start..end)
+				.map(|k| u64::from(processes[k].count_up_to(self.line_totals[p][k] * spec.sensitivity)))
+				.sum();
 			counts[start..end].fill(total as f32);
 		}
 		counts

@@ -849,8 +849,8 @@ impl<B: Backend> LiveController<B> {
 
 	/// Arrows, PageUp/PageDown, Home/End as a frame delta; scrub rules.
 	pub fn step_frames(&mut self, delta: i64, now: Instant) {
-		let target = (self.playback.position() as i64 + delta).max(0) as u32;
-		self.scrub(target, now);
+		self.playback.step_by(delta);
+		self.scrub(self.playback.position(), now);
 	}
 
 	/// Play: "show me the simulation". Asks for every frame when some are missing, and plays as they arrive.
