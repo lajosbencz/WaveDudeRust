@@ -43,7 +43,7 @@ docs/decisions). Where a spec file and this file disagree, this file wins.
   the 2 x 2 cells around it with bilinear shares, normalised by the spread source's own response (docs/physics.md,
   Sources). The `.wdproj` adapter writes both as integers, rounded, with one warning naming the object
   (60-file-formats.md).
-- Sources are a forcing term (docs/physics.md, Sources): each sub-step adds
+- Sources are a forcing term (decision 0014; docs/physics.md, Sources): each sub-step adds
   `dt^2 f(t_k)` with `f = A / |G0(omega)| e(t) sin(omega t + phi)` where the scheme
   takes `A u`, G0 the free-space lattice Green's function of the engine's
   operator at the source cell, so a source is transparent to passing waves, its

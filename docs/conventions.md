@@ -78,7 +78,7 @@ What new code follows so that it fits the code already here. Each rule names one
 - Widget: one module per widget in `crates/wavedude-widgets/src/` named after it (`text_box.rs` -> `TextBox`),
   `pub mod` plus `pub use` in `lib.rs`, shown in `examples/gallery.rs`, tested in `tests/headless.rs`.
 - Project format quirks (WaveDude Next's units, versions, sparse writing) stay in `crates/wavedude-core/src/io/`
-  (`BRIGHTNESS_GAIN`, `wdproj.rs:219`); the model holds this program's units.
+  (`BRIGHTNESS_GAIN`, `SENSITIVITY_GAIN` in `io/wdproj.rs`); the model holds this program's units.
 - Example projects are `.wdproj` files under `examples/<topic>/` with a numeric prefix
   (`examples/gates/07-xor.wdproj`), embedded with `include_bytes!` in `crates/wavedude-app-state/src/examples.rs`.
 
