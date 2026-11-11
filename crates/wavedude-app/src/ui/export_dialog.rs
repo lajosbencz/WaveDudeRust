@@ -305,7 +305,6 @@ fn gate(cx: &Cx, plan: Plan) {
 				},
 			);
 		}
-		ExportGate::Failed => cx.ui.show_modal(Modal::Error(s.get("ExportError").to_owned())),
 		ExportGate::Busy => tracing::debug!("export refused: another export is busy"),
 	}
 }

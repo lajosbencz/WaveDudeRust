@@ -39,7 +39,8 @@ pub struct Playback {
 	speed: f64,
 	looping: bool,
 	in_step: u32,
-	out_step: u32,
+	/// None: to the end (the file's 0).
+	out_step: Option<u32>,
 	playing: bool,
 	last_tick: Option<Instant>,
 	carry: f64,
@@ -55,7 +56,7 @@ impl Default for Playback {
 			speed: 1.0,
 			looping: false,
 			in_step: 0,
-			out_step: 0,
+			out_step: None,
 			playing: false,
 			last_tick: None,
 			carry: 0.0,
@@ -75,7 +76,14 @@ pub enum Limit {
 impl Playback {
 	/// The timeline of a project: its planned frames, steps per frame, video frame rate (speed 1) and export
 	/// range in steps, each count at least 1 in a normalised project. The position is kept inside the new timeline.
-	pub fn set_timeline(&mut self, frame_count: u32, visualize_every: u32, fps: u32, in_step: u32, out_step: u32) {
+	pub fn set_timeline(
+		&mut self,
+		frame_count: u32,
+		visualize_every: u32,
+		fps: u32,
+		in_step: u32,
+		out_step: Option<u32>,
+	) {
 		self.frame_count = frame_count;
 		self.visualize_every = visualize_every;
 		self.fps = f64::from(fps);
@@ -196,7 +204,7 @@ impl Playback {
 	/// The in and out points as frames; the whole timeline when unset.
 	pub fn range_frames(&self) -> (u32, u32) {
 		let last = self.last_frame();
-		let to = if self.out_step == 0 { last } else { (self.out_step / self.visualize_every).min(last) };
+		let to = self.out_step.map_or(last, |out| (out / self.visualize_every).min(last));
 		let from = (self.in_step / self.visualize_every).min(to);
 		(from, to)
 	}
@@ -208,35 +216,35 @@ impl Playback {
 		(from.min(to), to)
 	}
 
-	/// The in and out points in steps (0 out = to the end), for the project's Display.
-	pub fn range_steps(&self) -> (u32, u32) {
+	/// The in and out points in steps; no out point is to the end.
+	pub fn range_steps(&self) -> (u32, Option<u32>) {
 		(self.in_step, self.out_step)
 	}
 
 	pub fn has_range(&self) -> bool {
-		self.in_step != 0 || self.out_step != 0
+		self.in_step != 0 || self.out_step.is_some()
 	}
 
 	/// Starts the export range at the position; an in point past the out point clears the out point.
 	pub fn set_in_here(&mut self) {
 		self.in_step = self.position * self.visualize_every;
-		if self.out_step != 0 && self.in_step > self.out_step {
-			self.out_step = 0;
+		if self.out_step.is_some_and(|out| self.in_step > out) {
+			self.out_step = None;
 		}
 	}
 
-	/// Ends the export range at the position (the last frame is stored as 0); an out point before the in point
-	/// clears the in point.
+	/// Ends the export range at the position (at the last frame: no out point); an out point before the in
+	/// point clears the in point.
 	pub fn set_out_here(&mut self) {
-		self.out_step = if self.position >= self.last_frame() { 0 } else { self.position * self.visualize_every };
-		if self.out_step != 0 && self.out_step < self.in_step {
+		self.out_step = (self.position < self.last_frame()).then(|| self.position * self.visualize_every);
+		if self.out_step.is_some_and(|out| out < self.in_step) {
 			self.in_step = 0;
 		}
 	}
 
 	pub fn clear_range(&mut self) {
 		self.in_step = 0;
-		self.out_step = 0;
+		self.out_step = None;
 	}
 
 	/// Home: the in point (the start when unset).
@@ -258,7 +266,7 @@ mod tests {
 
 	fn timeline(frames: u32) -> Playback {
 		let mut p = Playback::default();
-		p.set_timeline(frames, 2, 60, 0, 0);
+		p.set_timeline(frames, 2, 60, 0, None);
 		p
 	}
 
@@ -308,7 +316,7 @@ mod tests {
 		p.set_position(19);
 		p.set_out_here();
 		assert_eq!(p.range_frames(), (10, 19));
-		assert_eq!(p.range_steps(), (20, 38));
+		assert_eq!(p.range_steps(), (20, Some(38)));
 		play_for(&mut p, start, 1.0, None);
 		assert!(p.is_playing() && (10..=19).contains(&p.position()));
 	}
@@ -344,13 +352,17 @@ mod tests {
 		p.set_out_here();
 		p.set_position(60);
 		p.set_in_here();
-		assert_eq!(p.range_steps(), (120, 0), "an in point past the out point clears it");
+		assert_eq!(p.range_steps(), (120, None), "an in point past the out point clears it");
 		p.set_position(99);
 		p.set_out_here();
-		assert_eq!(p.range_steps().1, 0, "the last frame is stored as 0");
+		assert_eq!(p.range_steps().1, None, "an out point at the last frame is none");
 		p.set_position(10);
 		p.set_out_here();
-		assert_eq!(p.range_steps(), (0, 20), "an out point before the in point clears it");
+		assert_eq!(p.range_steps(), (0, Some(20)), "an out point before the in point clears it");
+		p.set_position(0);
+		p.set_out_here();
+		assert_eq!((p.range_steps(), p.range_frames()), ((0, Some(0)), (0, 0)), "an out point at frame 0 is frame 0");
+		assert!(p.has_range());
 		p.set_position(7);
 		assert_eq!(p.readout(), Readout { frame: 7, last: 99, step: 14 });
 		assert_eq!(p.readout().frames_text(), "7 / 99");

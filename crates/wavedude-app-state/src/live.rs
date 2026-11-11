@@ -92,10 +92,9 @@ pub struct WarningChoice {
 pub enum ExportGate {
 	/// The run is fresh, complete and full quality: export now (the run is held until `end_export`).
 	Ready,
-	/// A full-quality run was started; [`Notice::ExportReady`] follows.
+	/// A full-quality run was started; [`Notice::ExportReady`] follows, or [`Notice::ExportStopped`] when the
+	/// run fails or is replaced.
 	Waiting,
-	/// A memory or start failure; nothing to export.
-	Failed,
 	/// Another export holds or waits for the run; nothing changed.
 	Busy,
 }
@@ -448,7 +447,8 @@ impl<B: Backend> LiveController<B> {
 			project.simulation.visualize_every,
 			d.video.fps,
 			d.export_from,
-			d.export_to,
+			// the file's 0 is "to the end"
+			(d.export_to != 0).then_some(d.export_to),
 		);
 	}
 
@@ -657,6 +657,9 @@ impl<B: Backend> LiveController<B> {
 			self.failed = Some(e.clone());
 			let no_image = matches!(**e, RunError::Spec(RunSpecError::NoImage));
 			self.notices.push(Notice::RunFailed { message: e.to_string(), no_image });
+		}
+		if matches!(self.status.state, WorkState::Failed(_)) {
+			self.drop_waiting_export();
 		}
 		if self.fit.is_some() && (self.request().is_none() || matches!(self.status.state, WorkState::Failed(_))) {
 			self.fit = None;
@@ -895,9 +898,6 @@ impl<B: Backend> LiveController<B> {
 		self.quality = PreviewQuality::FULL;
 		self.track_intensity = needs_intensity;
 		self.respec(project);
-		if self.request().is_none() {
-			return ExportGate::Failed;
-		}
 		self.start(Then::Rerun, now);
 		self.export = Export::Waiting { needs_intensity };
 		self.publish();
@@ -1587,6 +1587,20 @@ mod tests {
 		c.tick(t, &p);
 		let notices = c.take_notices();
 		assert!(!notices.contains(&Notice::ExportReady) && !notices.contains(&Notice::ExportStopped));
+	}
+
+	#[test]
+	fn a_waiting_export_is_dropped_when_its_run_fails() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		c.backend_mut().fail("boom");
+		c.tick(t, &p);
+		assert!(!c.export_busy(), "nothing waits for a failed run");
+		let notices = c.take_notices();
+		assert!(notices.contains(&Notice::ExportStopped), "{notices:?}");
+		assert!(notices.iter().any(|n| matches!(n, Notice::RunFailed { .. })));
 	}
 
 	#[test]

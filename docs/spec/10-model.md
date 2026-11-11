@@ -87,7 +87,7 @@ Level 100, c = 1, scale 2: 16.0 px. The editor's estimate uses `c = WaveSpeed`; 
 | `Intensity` | DisplayLayer | intensity defaults | element |
 | `Video` | Video | defaults | element, omitted at defaults |
 | `ExportFrom` | int (steps) | 0 | >= 0 |
-| `ExportTo` | int (steps) | 0 | 0 = to the end; if `To != 0 && To < From` then `To = 0` |
+| `ExportTo` | int (steps) | 0 | 0 = to the end; if `To != 0 && To < From` then `To = 0`. In memory the out point is an `Option`; an out point at step 0 cannot be saved and reads back as none |
 | `ProbeGraphsInExport` | bool | true | |
 | `ProbeMarkersInExport` | bool | true | |
 | `SourceMarkersInExport` | bool | false | |
