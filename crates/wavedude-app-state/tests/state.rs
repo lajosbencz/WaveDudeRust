@@ -277,10 +277,7 @@ fn a_playback_tick_moves_the_playback_revision_alone() {
 	}
 	let after = s.revisions();
 	assert!(after.playback > before.playback, "the position moved");
-	assert_eq!(
-		(after.document, after.scene, after.selection, after.settings),
-		(before.document, before.scene, before.selection, before.settings)
-	);
+	assert_eq!((after.document, after.selection, after.settings), (before.document, before.selection, before.settings));
 }
 
 #[test]
@@ -305,25 +302,6 @@ fn a_running_run_moves_the_progress_revision_alone() {
 		(before.playback, before.run, before.document, before.settings),
 		"the views of the menus and the pictures stay"
 	);
-}
-
-#[test]
-fn the_scene_revision_follows_scene_and_part_edits_alone() {
-	let t = Instant::now();
-	let mut s = app();
-	let scene = |s: &AppState<FakeBackend>| s.revisions().scene;
-	let r0 = scene(&s);
-	s.handle(Event::Command(Command::AddSource { at: None }), t);
-	let set = |target, path: &str, value| Event::Command(Command::Set { target, path: path.into(), value });
-	s.handle(set(Target::Item(source(0)), "frequency", json!(20.0)), at(t, 10));
-	assert_eq!(scene(&s), r0, "sources are not the scene");
-	s.handle(Event::Command(Command::AddPart { kind: NewPart::Lens, at: None }), at(t, 20));
-	assert_eq!(scene(&s), r0 + 1);
-	s.handle(set(Target::Scene, "refractive_index", json!(1.5)), at(t, 30));
-	assert_eq!(scene(&s), r0 + 2);
-	s.tick(at(t, 1000));
-	s.handle(Event::Undo, at(t, 1100));
-	assert_eq!(scene(&s), r0 + 3, "an undo of a scene edit");
 }
 
 /// The app on the core's engines: Stop ends the run within half a second, and the position's frame shows

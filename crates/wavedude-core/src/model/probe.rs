@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Layer;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "PascalCase")]
 pub enum Measurement {
 	/// Field value (the field layer's only measurement).
@@ -14,7 +14,7 @@ pub enum Measurement {
 	IntegratedValue,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "PascalCase")]
 pub enum ProbeKind {
 	#[default]
@@ -69,7 +69,7 @@ pub enum YScale {
 /// What a probe is: a standard probe, or a probabilistic detector that turns the intensity along its line into
 /// quantised detections, Poisson-distributed about the intensity times the sensitivity, drawn from the
 /// project's seed so a project gives the same detections every time.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "PascalCase")]
 pub enum ProbeDetector {
 	#[default]
@@ -172,20 +172,40 @@ impl Probe {
 		self.kind == ProbeKind::Line && self.detector != ProbeDetector::Counting
 	}
 
-	/// Whether a run records `other` as it records `self`: they differ in the graph box and its axes at most.
-	pub fn records_like(&self, other: &Self) -> bool {
-		self.name == other.name
-			&& self.active == other.active
-			&& self.layer == other.layer
-			&& self.measurement == other.measurement
-			&& self.kind == other.kind
-			&& (self.ax, self.ay, self.bx, self.by) == (other.ax, other.ay, other.bx, other.by)
-			&& self.start_after == other.start_after
-			&& (self.detector, self.sensitivity, self.bin_size) == (other.detector, other.sensitivity, other.bin_size)
+	/// What a run records of the probe: equal keys give the same traces, so a run keeps them across the edit.
+	/// A detector's name counts, its Poisson stream being seeded by the name; a graph box and its axes never do.
+	pub fn recording_key(&self) -> RecordingKey {
+		RecordingKey {
+			stream: self.is_detector().then(|| self.name.clone()),
+			active: self.active,
+			layer: self.layer,
+			measurement: self.measurement,
+			kind: self.kind,
+			line: (self.ax, self.ay, self.bx, self.by),
+			start_after: self.start_after,
+			detector: self.detector,
+			sensitivity: self.sensitivity.to_bits(),
+			bin_size: self.bin_size,
+		}
 	}
 
 	/// Box size in pixels before fitting into the canvas.
 	pub fn box_pixels(&self) -> (u32, u32) {
 		self.box_size.nominal().unwrap_or((self.box_width, self.box_height))
 	}
+}
+
+/// See [`Probe::recording_key`].
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RecordingKey {
+	stream: Option<String>,
+	active: bool,
+	layer: Layer,
+	measurement: Measurement,
+	kind: ProbeKind,
+	line: (i32, i32, i32, i32),
+	start_after: u32,
+	detector: ProbeDetector,
+	sensitivity: u64,
+	bin_size: u32,
 }

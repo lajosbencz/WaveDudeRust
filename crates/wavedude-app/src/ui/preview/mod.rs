@@ -25,9 +25,10 @@ use freya::prelude::*;
 use serde_json::json;
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::Project;
-use wavedude_core::model::{Layer, SceneMode, Stencil};
+use wavedude_core::model::{Layer, SceneMode};
 use wavedude_core::render::fit_brightness;
 use wavedude_core::run::SceneCache;
+use wavedude_core::scene::compose::SceneKey;
 use wavedude_core::scene::glowing_edges;
 use wavedude_core::scene::pixels::ScenePixels;
 use wavedude_widgets::menu::ContextMenuRequest;
@@ -254,23 +255,21 @@ fn fit_now(shared: &Shared, source: &FrameSource, layer: Layer) {
 	}
 }
 
-/// What the scene outline and the scene picture are built from: the scene and the parts by their revision.
+/// What the scene outline and the scene picture are built from: the scene's key (everything the painter reads,
+/// the seed of a seeded part included) and whether a layer shows the outline.
 #[derive(Clone, Copy, PartialEq)]
 struct SceneInputs {
-	scene_revision: u64,
+	key: SceneKey,
 	image_scene: bool,
-	stencil_scale: (bool, u64),
 	edges: bool,
 }
 
 impl SceneInputs {
-	fn of(app: &App) -> Self {
+	fn of(app: &App, key: SceneKey) -> Self {
 		let project = &app.document.project;
-		let sim = &project.simulation;
 		Self {
-			scene_revision: app.revisions().scene,
+			key,
 			image_scene: project.scene.mode == SceneMode::Image,
-			stencil_scale: (sim.stencil == Stencil::FourthOrder, sim.source_frequency_scale.to_bits()),
 			edges: project.display.field.overlay || project.display.intensity.overlay,
 		}
 	}
@@ -303,6 +302,8 @@ impl AsRef<[u8]> for Rgba {
 #[derive(Default)]
 struct SceneWatch {
 	inputs: Option<SceneInputs>,
+	/// The scene key of the document revision it was hashed at; a key costs a pass over the parts.
+	keyed: Option<(u64, SceneKey)>,
 	generation: u64,
 	worker: Option<(Sender<SceneJob>, Receiver<SceneArt>)>,
 	building: bool,
@@ -317,7 +318,16 @@ impl SceneWatch {
 
 	/// Polls; returns the scene picture when a build finished.
 	fn poll(&mut self, app: &App) -> Option<Option<(u32, u32, Bytes)>> {
-		let inputs = SceneInputs::of(app);
+		let document = app.revisions().document;
+		let key = match self.keyed {
+			Some((at, key)) if at == document => key,
+			_ => {
+				let key = SceneKey::of(&app.document.project);
+				self.keyed = Some((document, key));
+				key
+			}
+		};
+		let inputs = SceneInputs::of(app, key);
 		if self.inputs != Some(inputs) {
 			self.inputs = Some(inputs);
 			self.generation += 1;

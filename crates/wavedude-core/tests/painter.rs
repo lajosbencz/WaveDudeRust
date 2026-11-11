@@ -122,6 +122,18 @@ fn composition_and_disabled_parts() {
 	assert_ne!(SceneKey::of(&project), key);
 	let painted = compose_scene(&project).unwrap();
 	assert_eq!(SceneKey::of(&project), SceneKey::of(&project.clone()));
+	// the seed is a scene input only through a seeded part; sources and probes never are
+	let key = SceneKey::of(&project);
+	project.seed = project.seed.wrapping_add(1);
+	assert_eq!(SceneKey::of(&project), key, "no seeded part: the seed is not the scene's");
+	project.sources.push(Source::default());
+	project.probes.push(Probe::default());
+	assert_eq!(SceneKey::of(&project), key, "sources and probes are not the scene");
+	project.parts.push(Part::new(PartKind::Diffuser(Diffuser::default()), 50, 30));
+	let seeded = SceneKey::of(&project);
+	assert_ne!(seeded, key);
+	project.seed = project.seed.wrapping_add(1);
+	assert_ne!(SceneKey::of(&project), seeded, "a seeded part paints from the seed");
 	assert_eq!((red(&painted, 100, 60), painted.green(100, 60), blue(&painted, 100, 60)), (150, 160, 33));
 	assert_eq!(blue(&painted, 5, 5), 77, "green and blue untouched under the lens");
 	assert_eq!(ScenePixels::from_image_bytes(project.scene.image_data.as_ref().unwrap()).unwrap(), image);

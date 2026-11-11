@@ -354,7 +354,7 @@ pub fn classify(old: &Project, new: &Project) -> ChangeKind {
 fn probes_change(old: &[Probe], new: &[Probe]) -> ChangeKind {
 	if old == new {
 		ChangeKind::None
-	} else if old.len() == new.len() && old.iter().zip(new).all(|(a, b)| a.records_like(b)) {
+	} else if old.iter().map(Probe::recording_key).eq(new.iter().map(Probe::recording_key)) {
 		ChangeKind::Display
 	} else {
 		ChangeKind::ProbePresentation
@@ -629,6 +629,7 @@ fn rename(project: &mut Project, target: ItemRef, name: String) -> Result<Change
 	if name.is_empty() {
 		return Err(CommandError::EmptyName);
 	}
+	let recording = (target.kind == ItemKind::Probe).then(|| project.probes[target.index].recording_key());
 	let item: &mut dyn Named = match target.kind {
 		ItemKind::Source => &mut project.sources[target.index],
 		ItemKind::Part => &mut project.parts[target.index],
@@ -641,9 +642,11 @@ fn rename(project: &mut Project, target: ItemRef, name: String) -> Result<Change
 	}
 	item.set_name(name.clone());
 	log::change(&format!("{old}.name"), &old, &name);
-	// A probe's name is not a measurement: the graphs relabel, the run keeps its traces.
+	// A probe's name is not a measurement, so the graphs relabel and the run keeps its traces; a detector's
+	// name seeds its stream.
 	let kind = match target.kind {
-		ItemKind::Probe => ChangeKind::Display,
+		ItemKind::Probe if recording == Some(project.probes[target.index].recording_key()) => ChangeKind::Display,
+		ItemKind::Probe => ChangeKind::ProbePresentation,
 		k => item_kind_change(k),
 	};
 	let change = Change::of(kind).noted(format!("{old} renamed to {name}"));
@@ -842,6 +845,23 @@ mod tests {
 		assert_eq!(c.kind, ChangeKind::Display);
 		let c = run(&mut p, &mut s, Command::Set { target: probe, path: "ax".into(), value: json!(7) });
 		assert_eq!(c.kind, ChangeKind::ProbePresentation);
+		// a detector's sensitivity and name are part of what it records; its box is not
+		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Counting });
+		let detector = ItemRef::new(ItemKind::Probe, 1);
+		let c = run(
+			&mut p,
+			&mut s,
+			Command::Set { target: Target::Item(detector), path: "sensitivity".into(), value: json!(40.0) },
+		);
+		assert_eq!(c.kind, ChangeKind::ProbePresentation);
+		let c = run(&mut p, &mut s, Command::Rename { target: detector, name: "PM 2".into() });
+		assert_eq!(c.kind, ChangeKind::ProbePresentation);
+		let c = run(
+			&mut p,
+			&mut s,
+			Command::Set { target: Target::Item(detector), path: "box_x".into(), value: json!(30) },
+		);
+		assert_eq!(c.kind, ChangeKind::Display);
 	}
 
 	#[test]

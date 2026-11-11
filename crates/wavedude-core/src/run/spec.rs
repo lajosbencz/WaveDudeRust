@@ -341,11 +341,9 @@ impl RunSpec {
 			&& baked(self) == baked(other)
 	}
 
-	/// The same measurements, so the same traces: names and graph boxes do not count.
+	/// The same recordings ([`Probe::recording_key`]), so the same traces.
 	pub fn same_probes_as(&self, other: &Self) -> bool {
-		let measured = |p: &Probe| (p.layer, p.measurement, p.kind, p.ax, p.ay, p.bx, p.by, p.start_after);
-		self.probes.len() == other.probes.len()
-			&& self.probes.iter().zip(other.probes.iter()).all(|(a, b)| measured(a) == measured(b))
+		self.probes.iter().map(Probe::recording_key).eq(other.probes.iter().map(Probe::recording_key))
 	}
 
 	/// Same grid, edges and options: an engine can take the other scene in place.

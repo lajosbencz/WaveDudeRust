@@ -27,7 +27,7 @@ use wavedude_core::model::Point;
 use wavedude_core::run::{Levers, MachineFacts, PreviewQuality};
 
 use clipboard::{Copyable, PasteTarget};
-use commands::{Change, ChangeKind, Command, CommandError, Target};
+use commands::{Change, ChangeKind, Command, CommandError};
 use document::{Document, DocumentError, Opened};
 use live::{Backend, CoreBackend, LiveController, LiveSettings};
 use selection::{ItemKind, ItemRef, Row, Selection};
@@ -153,8 +153,6 @@ pub enum Response {
 pub struct Revisions {
 	/// The project and its file: content, path, dirty flag, undo and redo.
 	pub document: u64,
-	/// The scene and the parts: what the scene picture and the outline are built from.
-	pub scene: u64,
 	pub selection: u64,
 	/// The position, the frame shown, the frame count.
 	pub playback: u64,
@@ -344,10 +342,9 @@ impl<B: Backend> AppState<B> {
 		before != self.revisions
 	}
 
-	/// The project changed in a way the cheap observation misses; `scene` when the scene or the parts did.
-	fn document_changed(&mut self, scene: bool) {
+	/// The project changed in a way the cheap observation misses.
+	fn document_changed(&mut self) {
 		self.revisions.document += 1;
-		self.revisions.scene += u64::from(scene);
 	}
 
 	/// The window title.
@@ -378,7 +375,7 @@ impl<B: Backend> AppState<B> {
 	pub fn tick(&mut self, now: Instant) -> bool {
 		self.document.tick(now);
 		if self.document.poll_image_file(now) {
-			self.document_changed(true);
+			self.document_changed();
 			let note = Some("the scene image file changed".into());
 			self.live.on_change(ChangeKind::Simulation, &self.document.project, note, now);
 		}
@@ -403,9 +400,9 @@ impl<B: Backend> AppState<B> {
 		self.save_settings();
 	}
 
-	fn record(&mut self, change: Change, scene: bool, now: Instant) {
+	fn record(&mut self, change: Change, now: Instant) {
 		if change.kind != ChangeKind::None {
-			self.document_changed(scene);
+			self.document_changed();
 			self.document.edited(now);
 			if change.own_step {
 				self.document.commit_step();
@@ -416,34 +413,12 @@ impl<B: Backend> AppState<B> {
 
 	/// Applies a model command as one edit.
 	pub fn apply(&mut self, command: Command, now: Instant) -> Result<ChangeKind, CommandError> {
-		let scene = self.touches_scene(&command);
 		let reveal = matches!(command, Command::Remove { .. } | Command::Reorder { .. });
 		let change = commands::apply(&mut self.document.project, &mut self.selection, command)?;
 		let kind = change.kind;
-		self.record(change, scene, now);
+		self.record(change, now);
 		self.reveals += u64::from(reveal);
 		Ok(kind)
-	}
-
-	/// Whether `command` may change the scene or the parts.
-	fn touches_scene(&self, command: &Command) -> bool {
-		let parts = |t: ItemRef| self.selection.targets(t).iter().any(|i| i.kind == ItemKind::Part);
-		match command {
-			Command::AddPart { .. }
-			| Command::SetSceneImage { .. }
-			| Command::RemoveSceneImage
-			| Command::Paste { .. }
-			| Command::Set { target: Target::Scene, .. }
-			| Command::Set { target: Target::Simulation, .. } => true,
-			Command::Set { target: Target::Item(i), .. } | Command::Reorder { target: i, .. } => {
-				i.kind == ItemKind::Part
-			}
-			Command::Remove { target }
-			| Command::Duplicate { target }
-			| Command::ToggleEnabled { target }
-			| Command::MoveBy { target, .. } => parts(*target),
-			_ => false,
-		}
 	}
 
 	fn replace_document(&mut self, document: Document, now: Instant) {
@@ -452,7 +427,7 @@ impl<B: Backend> AppState<B> {
 			self.save_settings();
 		}
 		self.document = document;
-		self.document_changed(true);
+		self.document_changed();
 		self.selection = Selection::root();
 		self.reveals += 1;
 		self.session_hint = ExportHint::default();
@@ -486,7 +461,7 @@ impl<B: Backend> AppState<B> {
 		self.selection.set_items(vec![ItemRef::new(ItemKind::Scheme, i)]);
 		let mut change = Change { kind: ChangeKind::Display, own_step: true, note: None };
 		change.note = Some(format!("colour scheme {} added", self.document.project.color_schemes[i].name));
-		self.record(change, false, now);
+		self.record(change, now);
 	}
 
 	fn error(&self, key: &str, what: &str, e: &DocumentError) -> Response {
@@ -573,8 +548,7 @@ impl<B: Backend> AppState<B> {
 				let before = self.document.project.clone();
 				let done = if event == Event::Undo { self.document.undo() } else { self.document.redo() };
 				if done {
-					let p = &self.document.project;
-					self.document_changed(before.scene != p.scene || before.parts != p.parts);
+					self.document_changed();
 					self.selection = self.selection.follow(&before, &self.document.project);
 					if self.selection.current().is_none() {
 						self.selection = Selection::root();
@@ -690,7 +664,7 @@ impl<B: Backend> AppState<B> {
 						&format!("{from}..{to}"),
 					);
 					(display.export_from, display.export_to) = (from, to);
-					self.record(Change { kind: ChangeKind::Display, own_step: false, note: None }, false, now);
+					self.record(Change { kind: ChangeKind::Display, own_step: false, note: None }, now);
 				}
 				Response::None
 			}
