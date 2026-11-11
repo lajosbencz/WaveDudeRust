@@ -805,9 +805,10 @@ fn row_view<K: Clone + PartialEq + 'static>(
 	if let Some(DropPosition::Append(_)) = indicator {
 		outer = outer.border(Border::new().fill(theme.drop_indicator).width(1.).alignment(BorderAlignment::Inner));
 	}
+	// centred on the row's edge, so "after this row" and "before the next" draw the same line
 	let line = match indicator {
-		Some(DropPosition::Before(_)) => Some(0.),
-		Some(DropPosition::After(_)) => Some(theme.row_height - 2.),
+		Some(DropPosition::Before(_)) => Some(-1.),
+		Some(DropPosition::After(_)) => Some(theme.row_height - 1.),
 		_ => None,
 	};
 	outer
