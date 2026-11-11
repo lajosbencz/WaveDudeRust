@@ -1,19 +1,15 @@
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
-
 use super::{Fields, Word, ranges};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum SceneMode {
 	#[default]
 	Canvas,
 	Image,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum Edges {
 	/// Mur first-order absorbing ring.
 	#[default]
@@ -23,9 +19,7 @@ pub enum Edges {
 }
 
 /// The simulated area and its border.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Scene {
 	pub mode: SceneMode,
 	/// Display name of the image file.
@@ -34,11 +28,9 @@ pub struct Scene {
 	pub image_path: String,
 	/// The embedded image file bytes (PNG, JPEG, BMP); authoritative over the path. Shared, so a copy of the
 	/// project is cheap.
-	#[serde(skip_serializing_if = "Option::is_none")]
 	#[field(skip)]
 	pub image_data: Option<Arc<[u8]>>,
 	/// Decoded size of `image_data`, set by the loader; (0, 0) when none.
-	#[serde(skip)]
 	#[field(skip)]
 	pub image_size: (u32, u32),
 	#[field(range = ranges::SCENE_SIZE)]

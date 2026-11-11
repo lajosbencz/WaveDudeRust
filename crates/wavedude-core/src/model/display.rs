@@ -1,10 +1,7 @@
-use serde::{Deserialize, Serialize};
-
 use super::{Fields, Word, ranges};
 
 /// Which stored plane a value belongs to.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Word)]
 pub enum Layer {
 	#[default]
 	Field,
@@ -12,9 +9,7 @@ pub enum Layer {
 }
 
 /// Presentation of one layer.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct DisplayLayer {
 	pub color_scheme: String,
 	/// Gain to the palette's top: |u| * b (field) or sqrt(I) * b (intensity) at 1 is the gradient's end.
@@ -68,9 +63,7 @@ impl Default for DisplayLayer {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Video {
 	#[field(range = ranges::VIDEO_FPS)]
 	pub fps: u32,
@@ -84,9 +77,7 @@ impl Default for Video {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Display {
 	#[field(nested)]
 	pub field: DisplayLayer,

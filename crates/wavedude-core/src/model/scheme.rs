@@ -1,10 +1,7 @@
-use serde::{Deserialize, Serialize};
-
 use super::{Fields, Word, ranges};
 
 /// An 8-bit RGB colour.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Fields)]
 pub struct Rgb {
 	pub r: u8,
 	pub g: u8,
@@ -31,8 +28,7 @@ impl Rgb {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum SchemeKind {
 	#[default]
 	Unspecified,
@@ -40,8 +36,7 @@ pub enum SchemeKind {
 	Intensity,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, PartialEq, Fields)]
 pub struct Stop {
 	/// Position 0..1.
 	#[field(range = ranges::STOP_AT)]
@@ -51,9 +46,7 @@ pub struct Stop {
 }
 
 /// A gradient; how many colours are taken from it is the renderer's choice.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct ColorScheme {
 	pub name: String,
 	pub kind: SchemeKind,

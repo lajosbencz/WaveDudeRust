@@ -1,8 +1,6 @@
 use super::{Fields, Timeline, Word, ranges};
-use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum Stencil {
 	/// Isotropic 9-point Laplacian, second order.
 	NinePoint,
@@ -12,9 +10,7 @@ pub enum Stencil {
 }
 
 /// Solver settings.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Simulation {
 	#[field(range = ranges::SIM_STEPS)]
 	pub steps: u32,

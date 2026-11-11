@@ -9,7 +9,7 @@ must round-trip between the two programs without loss, which two formats cannot 
 Next cannot open defeats. The model and the engine keep their physical domain; what `.wdproj` cannot carry (whole-number positions and
 coating depths, brightness units) is converted in the adapter alone, and the simulation never sees the file format.
 
-The model is format-agnostic (serde). Files:
+The model knows no file format (decision 0013). Files:
 
 - `.wdproj` (XML, versions 1 to 4) read and written; the adapter (`io/wdproj.rs`, `io/fields.rs`) holds every
   transformation: the 9-point frequency rescale and the brightness units (spec/60, spec/05).

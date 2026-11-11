@@ -31,6 +31,8 @@ What new code follows so that it fits the code already here. Each rule names one
 
 - `wavedude-core`: model, `.wdproj` and scheme IO, scene painter, engines (CPU, wgpu behind feature `gpu`),
   runs and frame store, renderer. Depends on no workspace crate (`crates/wavedude-core/Cargo.toml`).
+- `wavedude-model-derive`: the proc-macros `Fields` and `Word` of the model types (`syn`, `quote`); core re-exports
+  them as `wavedude_core::model::{Fields, Word}`. Depends on no workspace crate.
 - `wavedude-export`: sinks, overlays, CSV, the export job. Depends on core alone.
 - `wavedude-widgets`: Freya widgets. Depends on `freya`, `serde`, `regex` only: no core, no strings; labels and
   tips come in as data (`MessageLabels`, `PickerTips` in `crates/wavedude-widgets/src/lib.rs`).
@@ -47,10 +49,16 @@ What new code follows so that it fits the code already here. Each rule names one
 
 - A step index is a `Step`, a timeline position a `Frame`, and the arithmetic between them lives in `Timeline`
   alone (`crates/wavedude-core/src/model/timeline.rs`): no `* visualize_every` elsewhere.
-- Model property: a field on the `model` type, its bound in `crates/wavedude-core/src/model/ranges.rs` (`ALL`,
-  or `UNBOUNDED`/`DEPENDENT`), its clamp in `Normalize` (`model/normalize.rs:17`), its attribute in the
-  `Table` of `crates/wavedude-core/src/io/wdproj.rs` (`impl Table for Simulation`), and `Label.<Type>.<Member>` /
-  `Hint.<Type>.<Member>` in the four string tables (enforced by `every_model_property_has_label_and_hint`).
+- Model property: a field on the `model` type with its derive attributes (`#[field(range = ranges::X)]` with the
+  constant in `crates/wavedude-core/src/model/ranges.rs`, or `dependent`, `nested`, `skip`), its clamp in
+  `Normalize` (`model/normalize.rs:17`), an `Attr` in the `Table` of the type in
+  `crates/wavedude-core/src/io/wdproj.rs` (`impl Table for Simulation`), a row in the form
+  (`Scope::number(Simulation::STEPS, ...)`, `crates/wavedude-app/src/ui/properties_forms.rs`) and
+  `Label.<Type>.<Member>` / `Hint.<Type>.<Member>` in the four string tables. Tests that fail otherwise:
+  `every_field_of_a_table_type_is_an_attribute_or_skipped` (the file), `every_persisted_number_has_its_bounds_named`
+  and `every_bound_is_enforced_by_normalize` (bounds, clamp), `every_model_property_has_label_and_hint` (strings);
+  the forms test `every_form_is_built_for_every_item_kind` builds every row. A new enum derives `Word` and gets
+  `Enum.<Type>.<Member>` keys (`every_word_has_its_members_in_every_language`).
 - Model edit: a variant of `Command` (`crates/wavedude-app-state/src/commands.rs:181`), a struct variant with
   named fields and a `///` line, handled in `commands::apply` (`commands.rs:408`), which returns a `Change`
   whose `ChangeKind` (`commands.rs:249`) tells the live controller what to redo (`LiveController::on_change`,
@@ -189,6 +197,9 @@ What new code follows so that it fits the code already here. Each rule names one
 - Integration tests per crate in `tests/`: physics against `docs/physics.md` in
   `crates/wavedude-core/tests/physics.rs`, file IO with `proptest` in `tests/io.rs`, GPU against CPU in
   `tests/gpu.rs`, export decoding in `crates/wavedude-export/tests/`.
+- The model's fields are tested as tables: the adapter's coverage tests iterate `Field::all()` of every type
+  (`crates/wavedude-core/src/io/wdproj.rs`, `covered_but`), the strings tests iterate it for labels and hints
+  (`strings.rs`), the forms test builds every row of every item kind (`crates/wavedude-app/src/ui/tests.rs`).
 - Snapshots are text (`insta::assert_snapshot!` of hex or ASCII pictures, `crates/wavedude-core/tests/render.rs:268`),
   stored in `tests/snapshots/`, reviewed with `cargo insta review`.
 - Tests that need hardware or tools return early with an `eprintln!` reason: no GPU adapter (`gpu_available`,

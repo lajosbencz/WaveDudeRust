@@ -99,7 +99,7 @@ frame indices), where the spec's rule is kept so pictures match.
 
 ## Model (10)
 
-- The model is format-agnostic (serde); the XML attribute names of 10 are the
+- The model knows no file format (decision 0013); the XML attribute names of 10 are the
   `.wdproj` adapter's concern.
 - `Simulation.WaveSpeed` is kept for wavelength estimates only, as in the
   original, with default 1.

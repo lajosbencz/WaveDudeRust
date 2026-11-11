@@ -36,6 +36,26 @@ Project @Version @Seed
 
 Attribute order within an element = declaration order in 10-model tables.
 
+The Rust adapter (`io/fields.rs`, the tables in `io/wdproj.rs`) lists the attributes of each element as a typed
+`Attr` over the model's field (`Attr::of(ProbeField::Ax)`), in the order above; the attribute name is the field's
+member name unless the table names it. The ten names that differ:
+
+| Attribute | Field |
+|---|---|
+| `AX` `AY` `BX` `BY` | `Probe.Ax` `Ay` `Bx` `By` |
+| `Coating` | `Coating.Depth` (a part's and a gate's) |
+| `CoatingProfile` `FrontCoated` `BackCoated` `SidesCoated` | `Coating.Profile` `Front` `Back` `Sides` |
+| `Type` | `Triangle.Kind` |
+
+A value is read by the field's kind and written sparse against its table's base unless the entry says `always` or
+`when`; `whole` writes a decimal field rounded to an integer, and a few attributes keep a text codec of their own
+(the brightness gain, the stencil flag, `DetachAfter`'s -1 for never). The DTD takes each attribute's type from the
+field's kind. A leaf no table carries is an exemption in the coverage test, so a new model field cannot be left out of
+the file by accident: the element name carries `LogicGate.Kind` and `MetaSurface.Design`, child elements the
+display's layers and video, the source's array and the parts' points, nodes and layers, and the coating and
+material tables the shapes' coating and material. The project's lists and the scene's image bytes are `skip`
+fields of the model, written as child elements by hand.
+
 `Source/@X @Y` and a coating's `Coating` (a part's and a gate's) are integers in the file, as WaveDude Next reads them.
 
 Always-written values (no default omission): `Source/@X @Y`, part `@X @Y`, `Probe/@AX @AY`, `Outline/Point/@X @Y`,

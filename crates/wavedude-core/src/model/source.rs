@@ -1,17 +1,13 @@
-use serde::{Deserialize, Serialize};
-
 use super::{Fields, Word, ranges};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum SourceMode {
 	#[default]
 	Continuous,
 	Pulsed,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum PulseShape {
 	#[default]
 	Gaussian,
@@ -19,9 +15,7 @@ pub enum PulseShape {
 }
 
 /// A grid of elements around the source's position; present = composite source.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct SourceArray {
 	#[field(range = ranges::AT_LEAST_1)]
 	pub size_x: u32,
@@ -64,9 +58,7 @@ impl Default for SourceArray {
 }
 
 /// A point or composite source.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Source {
 	pub name: String,
 	pub enabled: bool,
@@ -92,10 +84,8 @@ pub struct Source {
 	#[field(range = ranges::AT_LEAST_1)]
 	pub off_width: u32,
 	/// Step after which the source fades out over 30 steps; None = never.
-	#[serde(skip_serializing_if = "Option::is_none")]
 	#[field(range = ranges::DETACH_AFTER)]
 	pub detach_after: Option<u32>,
-	#[serde(skip_serializing_if = "Option::is_none")]
 	#[field(nested, whole)]
 	pub array: Option<SourceArray>,
 }

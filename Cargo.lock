@@ -6018,7 +6018,6 @@ dependencies = [
  "proptest",
  "quick-xml 0.42.0",
  "rayon",
- "serde",
  "serde_json",
  "sysinfo",
  "tempfile",

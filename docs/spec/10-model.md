@@ -9,8 +9,15 @@ Rules for all model objects:
 - `Normalize()` runs after load, after import, before a run, and after every edit. Non-finite numbers become the
   default unless stated.
 - Rust: the bounds are the constants of `model/ranges.rs`, which `normalize` and the painter's limits use; a
-  non-finite number's fallback is the type's `Default` value. The model's serde names are the fields' `snake_case` and the
-  enum members' `PascalCase` names.
+  non-finite number's fallback is the type's `Default` value.
+- Rust: each model type derives `Fields` (`wavedude-model-derive`, decision 0013): a `<Type>Field` enum with one member
+  per field, the PascalCase of the field's name (`BoxWidth`, `Ax`, `R1`), a nested field being a member that wraps
+  the nested type's (`Material(MaterialField)`), and a `<Type>Edit` enum with the same members carrying the new
+  value. `Field::all()` lists every leaf of a type and is the model's table: forms, labels, hints, bounds and the
+  file adapter are checked against it. `Type::BOX_WIDTH` and the like are typed accessors (`Prop`, `Nested`,
+  `Variant`). A field's bound is `#[field(range = ranges::...)]` (or `dependent`); a field that is no scalar (the
+  project's lists, the scene's image bytes) is `#[field(skip)]` and the adapter and the forms handle it by hand. Enums derive `Word`: member names are the PascalCase names above, `MEMBERS` lists them. The
+  model has no serde derives.
 - Positions are integer canvas pixels (origin top-left, y down). Angles in degrees, CCW on screen, normalised into
   (-180, 180] (see `00-overview.md`).
 - Every change is an observable event carrying (object, property, old value, new value); a simulation edit (scene,

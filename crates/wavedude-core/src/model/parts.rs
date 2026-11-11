@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use super::{Fields, Point, Word};
 
 use super::ranges;
@@ -13,10 +11,8 @@ pub const INDEX_MAX: f64 = ranges::INDEX.max;
 pub const MAX_ABSORPTION_RAMP: u32 = ranges::ABSORPTION_RAMP.max as u32;
 
 /// What every part has.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 #[fields(name = "Part")]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
 pub struct PartBase {
 	pub name: String,
 	pub enabled: bool,
@@ -36,8 +32,7 @@ impl Default for PartBase {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum CoatingProfile {
 	/// Quarter-wave layer at sqrt(n).
 	#[default]
@@ -47,9 +42,7 @@ pub enum CoatingProfile {
 }
 
 /// Anti-reflection band on chosen faces.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Coating {
 	/// Pixels, `0..MAX_COATING`.
 	#[field(range = ranges::COATING)]
@@ -67,9 +60,7 @@ impl Default for Coating {
 }
 
 /// Glass or mirror body shared by the lens and the shapes.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Material {
 	pub mirror: bool,
 	#[field(range = ranges::INDEX)]
@@ -88,9 +79,7 @@ impl Default for Material {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Lens {
 	#[field(nested)]
 	pub material: Material,
@@ -122,8 +111,7 @@ impl Default for Lens {
 }
 
 /// How a Fresnel lens's zones are divided from the axis to the rim.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum ZoneDivision {
 	/// Every zone the same width; the outer one the deepest.
 	#[default]
@@ -133,11 +121,8 @@ pub enum ZoneDivision {
 }
 
 /// A lens whose curved surfaces are cut into zones, each zone's arc starting again at the vertex plane.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct FresnelLens {
-	#[serde(flatten)]
 	#[field(nested)]
 	pub lens: Lens,
 	/// `1..MAX_ZONES`; 1 is a plain lens.
@@ -165,9 +150,7 @@ impl FresnelLens {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Polygon {
 	#[field(nested)]
 	pub material: Material,
@@ -186,9 +169,7 @@ impl Default for Polygon {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Rectangle {
 	#[field(nested)]
 	pub material: Material,
@@ -210,9 +191,7 @@ impl Default for Rectangle {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Ellipse {
 	#[field(nested)]
 	pub material: Material,
@@ -231,8 +210,7 @@ impl Default for Ellipse {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum TriangleType {
 	#[default]
 	Equilateral,
@@ -242,9 +220,7 @@ pub enum TriangleType {
 	Custom,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Triangle {
 	#[field(nested)]
 	pub material: Material,
@@ -273,9 +249,7 @@ impl Default for Triangle {
 	}
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, Default, PartialEq, Fields)]
 pub struct Outline {
 	#[field(nested)]
 	pub material: Material,
@@ -287,9 +261,7 @@ pub struct Outline {
 
 /// A plate whose front face (-x') is rough: a sum of ripples about a centre wavelength, their phases drawn from
 /// the project's seed and the part's name (`profiled.rs`); the back is flat.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Diffuser {
 	#[field(nested)]
 	pub material: Material,
@@ -333,9 +305,7 @@ impl Diffuser {
 }
 
 /// One layer of an interference filter's stack.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct FilterLayer {
 	/// Pixels along the axis, `0..MAX_LAYER_THICKNESS` at 0.01; 0 leaves the layer out.
 	#[field(range = ranges::LAYER_THICKNESS)]
@@ -352,9 +322,7 @@ impl Default for FilterLayer {
 
 /// A carrier plate with a stack of thin layers on its front face (-x'), outside the plate; the first layer is
 /// the outermost. A mirror plate keeps its layers glass in front of it; the band lies on the plate's back alone.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct InterferenceFilter {
 	#[field(nested)]
 	pub material: Material,
@@ -399,9 +367,7 @@ impl InterferenceFilter {
 }
 
 /// A lattice of round dots of one material, nothing between them and no carrier.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct SimpleGrating {
 	/// Carried for the file (Next's grating is a coated shape) and never painted: the dots have no faces.
 	#[field(nested)]
@@ -461,8 +427,7 @@ impl SimpleGrating {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum MetaLensType {
 	/// The delay greatest at the centre, falling outward within each zone, as a convex lens's glass thins.
 	#[default]
@@ -470,10 +435,8 @@ pub enum MetaLensType {
 	Diverging,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 #[fields(name = "MetaLens")]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
 pub struct MetaLensDesign {
 	/// Pixels along +x' to the focus; a diverging lens spreads as from a focus that far behind it.
 	#[field(range = ranges::AT_LEAST_1)]
@@ -487,10 +450,8 @@ impl Default for MetaLensDesign {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 #[fields(name = "MetaPrism")]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
 pub struct MetaPrismDesign {
 	/// Degrees a wave along the axis is turned by, counter-clockwise on screen when positive; -89..89.
 	#[field(range = ranges::META_DEFLECTION)]
@@ -503,10 +464,8 @@ impl Default for MetaPrismDesign {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 #[fields(name = "MetaAxicon")]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
 pub struct MetaAxiconDesign {
 	/// Degrees each half of a wave along the axis is turned toward it by; 0.1..89.
 	#[field(range = ranges::META_CONE_ANGLE)]
@@ -520,8 +479,7 @@ impl Default for MetaAxiconDesign {
 }
 
 /// What a meta surface does: the phase delay it asks of each cell (`meta.rs`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub enum MetaDesign {
 	Lens(MetaLensDesign),
 	Prism(MetaPrismDesign),
@@ -537,9 +495,7 @@ impl Default for MetaDesign {
 /// A carrier plate with a sub-wavelength pattern on its front (-x'): a ridge of `pattern_index` in every cell of
 /// `pitch` across the face, `height` deep in front of the plate, its width the cell's fill factor times the pitch;
 /// the fill from the delay the design asks. The band lies on the ridges' tops and the plate's back.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct MetaSurface {
 	#[field(nested)]
 	pub material: Material,
@@ -591,8 +547,7 @@ impl MetaSurface {
 }
 
 /// The relief of a facetted grating over each pitch.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum FacetPattern {
 	/// A ramp from the crest to the trough, then a step back: a blazed grating.
 	#[default]
@@ -603,9 +558,7 @@ pub enum FacetPattern {
 }
 
 /// A plate whose front face (-x') carries a periodic relief; the back is flat and alone takes the band.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct FacettedGrating {
 	#[field(nested)]
 	pub material: Material,
@@ -639,8 +592,7 @@ impl Default for FacettedGrating {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum FiberEnds {
 	#[default]
 	Flat,
@@ -648,9 +600,7 @@ pub enum FiberEnds {
 }
 
 /// A Bezier node in the part frame with handles relative to it.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct FiberNode {
 	pub x: i32,
 	pub y: i32,
@@ -668,9 +618,7 @@ impl Default for FiberNode {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Fiber {
 	#[field(nested)]
 	pub coating: Coating,
@@ -710,9 +658,7 @@ impl Default for Fiber {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct BraggReflector {
 	#[field(range = ranges::BRAGG_PAIRS)]
 	pub pairs: u32,
@@ -734,9 +680,7 @@ impl Default for BraggReflector {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct GrinLens {
 	#[field(nested)]
 	pub coating: Coating,
@@ -756,8 +700,7 @@ impl Default for GrinLens {
 	}
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Word)]
 pub enum GateKind {
 	Xor,
 	And,
@@ -765,9 +708,7 @@ pub enum GateKind {
 }
 
 /// A waveguide logic gate; the layout is computed from the design frequency.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct LogicGate {
 	pub kind: GateKind,
 	/// Level 1..255.
@@ -806,9 +747,7 @@ impl Default for LogicGate {
 	}
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct ZonePlate {
 	pub mount: bool,
 	#[field(range = ranges::AT_LEAST_1)]
@@ -844,8 +783,7 @@ impl Default for ZonePlate {
 }
 
 /// The kind-specific part of a part.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub enum PartKind {
 	Lens(Lens),
 	FresnelLens(FresnelLens),
@@ -867,10 +805,8 @@ pub enum PartKind {
 }
 
 /// An optical part painted into the scene.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Part {
-	#[serde(flatten)]
 	#[field(nested)]
 	pub base: PartBase,
 	#[field(nested)]

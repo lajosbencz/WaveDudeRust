@@ -491,7 +491,7 @@ pub fn text_box(value: String, multiline: bool, on_text: impl Fn(String) + 'stat
 	tagged(TextBox::new(value, on_text).multiline(multiline), test)
 }
 
-/// A drop-down button: the current word, a menu of the choices (serde name, word) under it.
+/// A drop-down button: the current word, a menu of the choices (member name, word) under it.
 pub fn combo_box(
 	current: String,
 	items: Vec<(String, String)>,

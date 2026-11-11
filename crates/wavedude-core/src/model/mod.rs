@@ -1,4 +1,4 @@
-//! The project model: plain data with serde derives, format-agnostic.
+//! The project model: plain data, format-agnostic.
 //!
 //! Every numeric property has a default and a clamp applied by `normalize`;
 //! the bounds live in `ranges` so tests can prove each clamp.
@@ -32,8 +32,7 @@ pub use source::*;
 pub use timeline::{Frame, Step, Timeline};
 
 /// Integer canvas position.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Fields)]
 pub struct Point {
 	pub x: i32,
 	pub y: i32,

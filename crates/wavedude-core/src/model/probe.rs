@@ -1,9 +1,6 @@
-use serde::{Deserialize, Serialize};
-
 use super::{Fields, Layer, Word, ranges};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Word)]
 pub enum Measurement {
 	/// Field value (the field layer's only measurement).
 	#[default]
@@ -14,16 +11,14 @@ pub enum Measurement {
 	IntegratedValue,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Word)]
 pub enum ProbeKind {
 	#[default]
 	Point,
 	Line,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum BoxSize {
 	Tiny,
 	Small,
@@ -48,8 +43,7 @@ impl BoxSize {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum ScaleMode {
 	/// Last `window` steps.
 	#[default]
@@ -58,8 +52,7 @@ pub enum ScaleMode {
 	Full,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
 pub enum YScale {
 	#[default]
 	Linear,
@@ -69,8 +62,7 @@ pub enum YScale {
 /// What a probe is: a standard probe, or a probabilistic detector that turns the intensity along its line into
 /// quantised detections, Poisson-distributed about the intensity times the sensitivity, drawn from the
 /// project's seed so a project gives the same detections every time.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash, Word)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Word)]
 pub enum ProbeDetector {
 	#[default]
 	Standard,
@@ -82,9 +74,7 @@ pub enum ProbeDetector {
 }
 
 /// A point or line measurement with a graph box.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
-#[serde(rename_all = "snake_case")]
-#[serde(default)]
+#[derive(Clone, Debug, PartialEq, Fields)]
 pub struct Probe {
 	pub name: String,
 	pub active: bool,
