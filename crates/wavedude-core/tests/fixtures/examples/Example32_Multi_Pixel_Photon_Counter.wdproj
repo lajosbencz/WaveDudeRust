@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="1348841577">
+	<Description>2 coherent weak sources create a diffraction pattern that is then detected by a Multi Pixel Photon Counter.</Description>
+	<Scene Width="800" Height="400" />
+	<Simulation Steps="5000" />
+	<Display>
+		<Field ColorScheme="Default field" BlackLevel="-0.05" Preview="false" />
+		<Intensity ColorScheme="Default intensity" Brightness="5" />
+	</Display>
+	<Source Name="Source A" X="35" Y="212" PulseShape="SmoothedSquare" PulseWidth="20" OffWidth="5" />
+	<Source Name="Source B" X="35" Y="139" PulseShape="SmoothedSquare" PulseWidth="20" OffWidth="5" />
+	<Probe Name="Multi Pixel Photon Counter" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" Detector="Imaging" Sensitivity="30" BinSize="8" AX="297" AY="76" BX="297" BY="272" BoxSize="Small" BoxX="500" BoxY="250" />
+</Project>

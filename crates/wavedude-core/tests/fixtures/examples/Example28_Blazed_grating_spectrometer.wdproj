@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="2092670584">
+	<Description>Spectrometer containing a blazed (or "echelette") grating, which diffracts the waves from a source that emits 2 wavelengths under 2 slightly different angles. The lens performs a Fourier transform by separating the 2 wavelengths into two spatially separated focal points. You can switch on either source (or rotate the grating) to see the effect of either wavelength.</Description>
+	<Scene Width="1600" Height="800" />
+	<Simulation Steps="3567" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="2.43" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="2.71" />
+	</Display>
+	<Source Name="Wavelength 10 px" X="100" Y="298" Frequency="160">
+		<Array SizeX="10" SizeY="10" SpacingY="5" />
+	</Source>
+	<Source Name="Wavelength 12 px" X="94" Y="301" Frequency="134">
+		<Array SizeX="10" SizeY="10" SpacingX="12" SpacingY="6" />
+	</Source>
+	<FacettedGrating Name="Blazed grating" X="1283" Y="280" Angle="-21" Mirror="true" Pitch="22.4" Amplitude="6" />
+	<Lens Name="Lens" X="506" Y="580" Angle="15" Diameter="353" R1="291.86" R2="-445.93" Thickness="108" />
+	<Rectangle Name="Absorber 1" X="126" Y="178" Absorption="27" AbsorptionRamp="32" Length="580" Width="80" />
+	<Rectangle Name="Absorber 2" X="156" Y="420" Absorption="93" Length="534" Width="78" />
+	<Probe Name="Detected spectrum" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="97" AY="629" BX="148" BY="793" BoxX="1148" BoxY="590" />
+</Project>

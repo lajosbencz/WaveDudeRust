@@ -362,6 +362,9 @@ impl Table for Probe {
 		enumv "Layer" layer,
 		enumv "Measurement" measurement,
 		enumv "Kind" kind,
+		enumv "Detector" detector,
+		f64 "Sensitivity" sensitivity,
+		u32 "BinSize" bin_size,
 		i32 "AX" ax => Always,
 		i32 "AY" ay => Always,
 		i32 "BX" bx => When(|p| p.kind == ProbeKind::Line),
@@ -380,9 +383,6 @@ impl Table for Probe {
 		u32 "Decades" decades,
 		u32 "Window" window,
 		u32 "StartAfter" start_after,
-		enumv "Detector" detector,
-		f64 "Sensitivity" sensitivity,
-		u32 "BinSize" bin_size,
 	);
 
 	fn base() -> Self {

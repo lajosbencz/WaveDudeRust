@@ -227,6 +227,9 @@ so the seed is part of the scene while a diffuser is enabled (`SceneKey`).
 | `Layer` | enum `Field`/`Intensity` | Field | |
 | `Measurement` | enum `Amplitude`/`Value`/`IntegratedValue` | Amplitude | Field forces Amplitude; Intensity + Amplitude -> Value |
 | `Kind` | enum `Point`/`Line` | Point | |
+| `Detector` | enum `Standard`/`Counting`/`Imaging` | Standard | a detector is a line probe of the integrated intensity, whatever the file says (`normalize`) |
+| `Sensitivity` | double | 20 | 0..1000000; expected detections per unit of intensity per step at a point of the line |
+| `BinSize` | int (px) | 4 | 1..20; an imaging detector's histogram bin along the line |
 | `AX`, `AY` | int | centre | always written; clamped into the canvas when sampled |
 | `BX`, `BY` | int | 0 | line end; written only for Line |
 | `BoxSize` | enum `Tiny`,`Small`,`Medium`,`Large`,`ExtraLarge`,`Custom` | Medium | graph box |
@@ -240,9 +243,6 @@ so the seed is part of the scene while a diffuser is enabled (`SceneKey`).
 | `Decades` | int | 6 | 1..12 |
 | `Window` | int (steps) | 500 | 10..1000000 |
 | `StartAfter` | int (steps) | 0 | >= 0; integrated value starts here |
-| `Detector` | enum `Standard`/`Counting`/`Imaging` | Standard | a detector is a line probe of the integrated intensity, whatever the file says (`normalize`) |
-| `Sensitivity` | double | 20 | 0..1000000; expected detections per unit of intensity per step at a point of the line |
-| `BinSize` | int (px) | 4 | 1..20; an imaging detector's histogram bin along the line |
 
 Box sizes (px): Tiny 200x100, Small 300x150, Medium 400x200, Large 500x250, ExtraLarge 700x350, Custom = BoxWidth x
 BoxHeight. Fit into the canvas (`BoxInCanvas`): if larger than the canvas in either axis, scale both by

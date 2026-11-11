@@ -149,7 +149,7 @@ A probe's measurements are exported as CSV from the probe's context menu, in the
 
 #### Examples
 
-File > Examples opens a dialog with the example projects shipped with the program, those of WaveDude Next (most from Wave Dude 2D) and our own optics and gate projects: 44 in five tabs by topic (sources and coherence, lenses and imaging, gratings and filters, guides, cavities and logic, detectors and statistics). Each row shows the title and the description; the search box above the list filters all tabs by both. Left and Right switch the tab, Up and Down the row, Enter or a double-click opens it, Esc closes. An example opens as an unsaved project named after its file; save it under your own name to keep your changes. The list below is WaveDude Next's 24.
+File > Examples opens a dialog with the example projects shipped with the program, those of WaveDude Next (most from Wave Dude 2D) and our own optics and gate projects: 53 in six tabs by topic (sources and coherence, lenses and imaging, gratings and filters, metasurfaces and diffusers, guides, cavities and logic, detectors and statistics). Each row shows the title and the description; the search box above the list filters all tabs by both. Left and Right switch the tab, Up and Down the row, Enter or a double-click opens it, Esc closes. An example opens as an unsaved project named after its file; save it under your own name to keep your changes. The list below is WaveDude Next's 33.
 
 1. **Source Mirror Probe**: Simple omnidirectional pulsed source with a smoothed square intensity profile, reflecting of simple mirror surface. A probe measures the intensity profile near the surface.
 2. **Coherent source gaussian beam**: Featuring a 21 x 7 composite source that emits a continuous gaussian beam.
@@ -175,6 +175,15 @@ File > Examples opens a dialog with the example projects shipped with the progra
 22. **Coherence and ball lens**: A coherent and directional source directing its waves at a ball lens with a high refractive index. It demonstrates Gaussian beam and Airy disk profiles.
 23. **Fibres**: Simulation of 3 different fibres: top a single mode fibre, middle a narrow multi-mode fibre, bottom a wide multi-mode fibre. Includes the use of two probes, an A-B (line) field probe and a single point intensity probe.
 24. **Fibre cross over**: Two single-mode fibres side by side, their cores a dozen pixels apart: the evanescent field of one reaches into the other, so light launched into fibre A crosses over into fibre B and back along the length, a directional coupler. The probe along A shows the beating, the cross-fibre probe the field across both cores. Switch source A off and B on to launch from the other fibre.
+25. **Lens vs Fresnel lens**: The example shows the difference between a Fresnel lens and a standard lens. Both lenses have a short focal distance. The Fresnel lens is much thinner and thus much lighter; however, its beam is not as clean as that of a standard lens.
+26. **Three diffusers in a row**: The example shows a beam passing through 3 diffusers, each with a different characteristic spatial wavelength of its roughness (1: shortest, 3: longest). You can see the effects of the individual diffusers by switching them on or off individually.
+27. **Interference filter**: A quarter-wavelength stack interference filter reflects most of the energy in a pulse of frequency 100 (wavelength 16 px) but transmits frequency 50 (wavelength 32 px) almost completely.
+28. **Blazed grating spectrometer**: Spectrometer containing a blazed (or "echelette") grating, which diffracts the waves from a source that emits 2 wavelengths under 2 slightly different angles. The lens performs a Fourier transform by separating the 2 wavelengths into two spatially separated focal points. You can switch on either source (or rotate the grating) to see the effect of either wavelength.
+29. **Diffraction on a crystal lattice**: A high-frequency source irradiates a diffractive lattice. The lattice diffracts the radiation preferentially in specific directions, similar to a crystal structure in an X-ray beam. By rotating the "crystal" lattice, the diffraction angles change. By measuring the angles of the diffracted beams, the lattice structure can in principle be solved.
+30. **Meta prism**: A directional source is irradiating a meta surface prism. In the Field image you can clearly see the direction of the wavefront change; however, because the number of diffractive elements is small, the intensity distribution is somewhat messy.
+31. **Meta lens with photomultiplier**: The intensity of a weak pulsing source is detected with a photomultiplier, which is probabilistic and dependent on the intensity. In the focus, the intensity is high during a pulse and this leads to a high probability of detection events for Photomultiplier 2. The other one (Photomultiplier 1) is placed in an area with relatively low intensity and hardly triggers.
+32. **Multi Pixel Photon Counter**: 2 coherent weak sources create a diffraction pattern that is then detected by a Multi Pixel Photon Counter.
+33. **Fibre splitter with 2 PMs**: Pulses travelling through a multi-mode fibre are detected by 2 probabilistic detectors, one at each end of the fibre split.
 
 ### The Edit menu
 
@@ -707,4 +716,4 @@ In the picker, the square sets the saturation (Left, Right) and the brightness (
 
 ## The examples
 
-File > Examples opens one of the 44 example projects as an unsaved project; see [Examples](#examples) under the File menu for what each shows.
+File > Examples opens one of the 53 example projects as an unsaved project; see [Examples](#examples) under the File menu for what each shows.

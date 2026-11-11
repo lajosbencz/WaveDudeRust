@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="150363394">
+	<Description>Pulses travelling through a multi-mode fibre are detected by 2 probabilistic detectors, one at each end of the fibre split.</Description>
+	<Scene Width="1750" Height="600" RefractiveIndex="1.5" />
+	<Simulation Steps="4500" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="20.9" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="17.8" />
+	</Display>
+	<Source Name="Weak pulsed source" X="187" Y="310" Frequency="160.73" Mode="Pulsed" OffWidth="40">
+		<Array SizeX="5" SpacingX="12" SpacingY="3" />
+	</Source>
+	<Rectangle Name="Reflector" X="141" Y="311" Mirror="true" Length="272" Width="146" />
+	<Fiber Name="Fibre split 1" X="256" Y="311" FrontCoated="false" CoreIndex="1.7" CoreDiameter="30" CladdingThickness="0">
+		<Node X="-100" Y="0" OutX="67" />
+		<Node X="235" Y="2" InX="-67" InY="7" OutX="81" OutY="-9" />
+		<Node X="504" Y="-38" InX="-71" InY="25" OutX="65" OutY="-23" />
+		<Node X="724" Y="-141" InX="-58" InY="16" OutX="77" OutY="-21" />
+		<Node X="951" Y="-185" InX="-30" InY="1" />
+	</Fiber>
+	<Fiber Name="Fibre split 2" X="253" Y="312" CoreIndex="1.7" CoreDiameter="30" CladdingThickness="0">
+		<Node X="-96" Y="-1" OutX="67" />
+		<Node X="240" Y="10" InX="-67" InY="-7" OutX="75" OutY="8" />
+		<Node X="519" Y="58" InX="-59" InY="-15" OutX="65" OutY="16" />
+		<Node X="756" Y="114" InX="-62" InY="-12" OutX="52" OutY="10" />
+		<Node X="968" Y="139" InX="-52" InY="1" />
+	</Fiber>
+	<Rectangle Name="Absorber 1" X="386" Y="261" Absorption="150" AbsorptionRamp="20" Length="216" Width="58" />
+	<Rectangle Name="Absorber 2" X="374" Y="362" Absorption="150" AbsorptionRamp="20" Length="192" Width="42" />
+	<Probe Name="Detector 1" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" Detector="Counting" AX="1226" AY="493" BX="1226" BY="418" BoxX="1298" BoxY="344" Window="4000" />
+	<Probe Name="Detector 2" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" Detector="Counting" AX="1213" AY="160" BX="1204" BY="88" BoxX="1290" BoxY="36" Window="4000" />
+</Project>

@@ -17,7 +17,7 @@ fn examples() -> Vec<PathBuf> {
 		.filter(|p| p.extension().is_some_and(|e| e == "wdproj"))
 		.collect();
 	v.sort();
-	assert_eq!(v.len(), 24);
+	assert_eq!(v.len(), 33);
 	v
 }
 
@@ -53,7 +53,8 @@ fn every_example_loads_round_trips_and_validates() {
 	}
 }
 
-/// Every example (shipped at version 3) comes back byte for byte after its DOCTYPE, except the root's `Version`, the `OverlayInExport="false"` version 4 writes out where version 3 left it out, and where a file
+/// Every example comes back byte for byte after its DOCTYPE. For one shipped at version 3 the root's `Version` and
+/// the `OverlayInExport="false"` version 4 writes out where version 3 left it out are excepted, and where a file
 /// was edited by hand:
 /// Example 6 omits a probe's `BoxX` equal to its `AX` (read back the same, written out here);
 /// Example 11's zone plate names `Coating="0"`, the default since version 4, so it is left out here.
@@ -63,13 +64,17 @@ fn examples_are_rewritten_as_shipped() {
 	for path in examples() {
 		let name = path.file_name().unwrap().to_string_lossy().into_owned();
 		let original = std::fs::read_to_string(&path).unwrap();
-		assert!(original.contains("<Project Version=\"3\""), "{name}");
+		let version_3 = original.contains("<Project Version=\"3\"");
+		assert!(version_3 || original.contains("<Project Version=\"4\""), "{name}");
 		let p = wdproj::read_str(&original).unwrap();
 		let text = wdproj::write_string(&p, None);
 		let (head, body) = text.split_once("]>\n").unwrap();
-		let body = body
-			.replacen("<Project Version=\"4\"", "<Project Version=\"3\"", 1)
-			.replace(" OverlayInExport=\"false\"", "");
+		let body = if version_3 {
+			body.replacen("<Project Version=\"4\"", "<Project Version=\"3\"", 1)
+				.replace(" OverlayInExport=\"false\"", "")
+		} else {
+			body.to_owned()
+		};
 		assert!(head.starts_with("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!DOCTYPE Project ["));
 		let original_body = original.split_once('\n').unwrap().1;
 		for (a, b) in body.lines().zip(original_body.lines()) {

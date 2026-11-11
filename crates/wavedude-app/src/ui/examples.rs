@@ -193,7 +193,7 @@ impl Component for ExamplesDialog {
 				}
 			}
 		};
-		frame(720.)
+		frame(860.)
 			.test_id("ExamplesDialog")
 			.on_global_key_down(on_key)
 			.child(

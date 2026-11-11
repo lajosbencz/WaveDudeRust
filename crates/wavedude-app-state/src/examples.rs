@@ -12,12 +12,14 @@ pub enum Topic {
 	Sources,
 	Lenses,
 	Gratings,
+	Metasurfaces,
 	Guides,
 	Detectors,
 }
 
 impl Topic {
-	pub const ALL: [Topic; 5] = [Topic::Sources, Topic::Lenses, Topic::Gratings, Topic::Guides, Topic::Detectors];
+	pub const ALL: [Topic; 6] =
+		[Topic::Sources, Topic::Lenses, Topic::Gratings, Topic::Metasurfaces, Topic::Guides, Topic::Detectors];
 
 	/// The string table key of the tab's title.
 	pub fn title_key(self) -> &'static str {
@@ -25,6 +27,7 @@ impl Topic {
 			Topic::Sources => "ExamplesTopicSources",
 			Topic::Lenses => "ExamplesTopicLenses",
 			Topic::Gratings => "ExamplesTopicGratings",
+			Topic::Metasurfaces => "ExamplesTopicMetasurfaces",
 			Topic::Guides => "ExamplesTopicGuides",
 			Topic::Detectors => "ExamplesTopicDetectors",
 		}
@@ -58,7 +61,7 @@ impl Example {
 	}
 }
 
-const NEXT: [(&str, &[u8]); 24] = [
+const NEXT: [(&str, &[u8]); 33] = [
 	(
 		"Example01_Source_Mirror_Probe.wdproj",
 		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj"),
@@ -152,6 +155,42 @@ const NEXT: [(&str, &[u8]); 24] = [
 		"Example24_Fibre_cross_over.wdproj",
 		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example24_Fibre_cross_over.wdproj"),
 	),
+	(
+		"Example25_Lens_vs_Fresnel_lens.wdproj",
+		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example25_Lens_vs_Fresnel_lens.wdproj"),
+	),
+	(
+		"Example26_Three_diffusers_in_a_row.wdproj",
+		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example26_Three_diffusers_in_a_row.wdproj"),
+	),
+	(
+		"Example27_Interference_filter.wdproj",
+		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example27_Interference_filter.wdproj"),
+	),
+	(
+		"Example28_Blazed_grating_spectrometer.wdproj",
+		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example28_Blazed_grating_spectrometer.wdproj"),
+	),
+	(
+		"Example29_Diffraction_on_a_crystal_lattice.wdproj",
+		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example29_Diffraction_on_a_crystal_lattice.wdproj"),
+	),
+	(
+		"Example30_Meta_prism.wdproj",
+		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example30_Meta_prism.wdproj"),
+	),
+	(
+		"Example31_Meta_lens_with_photomultiplier.wdproj",
+		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example31_Meta_lens_with_photomultiplier.wdproj"),
+	),
+	(
+		"Example32_Multi_Pixel_Photon_Counter.wdproj",
+		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example32_Multi_Pixel_Photon_Counter.wdproj"),
+	),
+	(
+		"Example33_Fibre_splitter_with_2_PMs.wdproj",
+		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example33_Fibre_splitter_with_2_PMs.wdproj"),
+	),
 ];
 
 const OPTICS: [(&str, &[u8]); 10] = [
@@ -187,9 +226,10 @@ const GATES: [(&str, &[u8]); 10] = [
 fn next_topic(number: u32) -> Topic {
 	match number {
 		1..=7 | 9 => Topic::Sources,
-		10 | 11 | 19..=22 => Topic::Lenses,
-		13 => Topic::Gratings,
-		17 => Topic::Detectors,
+		10 | 11 | 19..=22 | 25 => Topic::Lenses,
+		13 | 27..=29 => Topic::Gratings,
+		26 | 30 => Topic::Metasurfaces,
+		17 | 31..=33 => Topic::Detectors,
 		_ => Topic::Guides,
 	}
 }
@@ -197,7 +237,8 @@ fn next_topic(number: u32) -> Topic {
 /// The topic of an optics example by its slug.
 fn optics_topic(slug: &str) -> Topic {
 	match slug {
-		"fresnel-lens-lighthouse" | "flat-lens" | "bessel-beam" | "rayleigh-criterion" => Topic::Lenses,
+		"fresnel-lens-lighthouse" | "bessel-beam" | "rayleigh-criterion" => Topic::Lenses,
+		"flat-lens" | "beam-steering" | "ground-glass" => Topic::Metasurfaces,
 		"shot-noise" => Topic::Detectors,
 		_ => Topic::Gratings,
 	}
@@ -255,14 +296,16 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn forty_four_examples_in_five_topics() {
+	fn fifty_three_examples_in_six_topics() {
 		let all = all();
-		assert_eq!(all.len(), 44);
+		assert_eq!(all.len(), 53);
 		let counts: Vec<usize> = Topic::ALL.iter().map(|&t| all.iter().filter(|e| e.topic == t).count()).collect();
-		assert_eq!(counts, [8, 10, 6, 18, 2]);
+		assert_eq!(counts, [8, 10, 7, 5, 18, 5]);
 		assert_eq!(all[0].title, "Source Mirror Probe");
 		assert_eq!(all[6].test_id(), "Example:Example07_Random_emitter_lattice");
 		assert!(all.iter().any(|e| e.title == "Fresnel lens lighthouse" && e.topic == Topic::Lenses));
+		assert!(all.iter().any(|e| e.title == "Meta prism" && e.topic == Topic::Metasurfaces));
+		assert!(all.iter().any(|e| e.title == "Fibre splitter with 2 PMs" && e.topic == Topic::Detectors));
 		assert!(all.iter().any(|e| e.title == "Single fiber" && e.topic == Topic::Guides));
 		assert!(all.iter().all(|e| !e.description.is_empty()), "every example describes itself");
 	}

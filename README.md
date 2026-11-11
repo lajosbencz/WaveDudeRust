@@ -21,7 +21,7 @@ project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wd
   tests state every tolerance ([`docs/physics.md`](docs/physics.md)).
 - Live editing: one worker, one engine and one store converge on what the
   user looks at; an edit replaces the frames without a stale run or a timer.
-- 44 example projects grouped by topic, among them the photonic logic gates
+- 53 example projects grouped by topic, among them the photonic logic gates
   from [Huygens Optics](https://www.youtube.com/@HuygensOptics)' video with
   measured truth tables (`examples/gates`).
 - Self-updating releases with build provenance and SBOM attestations.

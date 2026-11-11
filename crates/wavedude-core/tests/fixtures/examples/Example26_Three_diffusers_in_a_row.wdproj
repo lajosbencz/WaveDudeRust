@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="318976007">
+	<Description>The example shows a beam passing through 3 diffusers, each with a different characteristic spatial wavelength of its roughness (1: shortest, 3: longest). You can see the effects of the individual diffusers by switching them on or off individually.</Description>
+	<Scene Width="1500" Height="500" />
+	<Display>
+		<Field ColorScheme="Default field" BlackLevel="-0.05" Preview="false" />
+		<Intensity ColorScheme="Default intensity" Brightness="7.24" />
+	</Display>
+	<Source Name="Coherent source" X="75" Y="249" Frequency="133.5">
+		<Array SizeX="5" SizeY="10" SpacingX="12" SpacingY="6" />
+	</Source>
+	<Diffuser Name="Diffuser 1" X="273" Y="252" Coating="3" FrontCoated="false" SidesCoated="false" Length="56" Width="342" CenterWavelength="5" Sigma="4" />
+	<Diffuser Name="Diffuser 2" X="537" Y="249" Coating="4" FrontCoated="false" SidesCoated="false" Length="56" Width="342" CenterWavelength="20" Sigma="8" />
+	<Diffuser Name="Diffuser 3" X="800" Y="247" FrontCoated="false" SidesCoated="false" Length="56" Width="342" CenterWavelength="32" Amplitude="1.5" Sigma="10" />
+	<Rectangle Name="Absorbing boundary 1" X="527" Y="419" Absorption="200" Length="1072" Width="54" />
+	<Rectangle Name="Absorbing boundary 2" X="528" Y="68" Absorption="200" Length="1072" Width="54" />
+	<Probe Name="Speckle detector" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" AX="1069" AY="90" BX="1067" BY="394" BoxSize="Small" BoxX="1191" BoxY="339" />
+</Project>

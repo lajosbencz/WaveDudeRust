@@ -363,7 +363,7 @@ fn the_examples_dialog_lists_every_example_by_topic() {
 	let dir = tempfile::tempdir().unwrap();
 	let (mut test, _) = shell(dir.path());
 	open_examples_dialog(&mut test);
-	for (tab, expected) in [8, 10, 6, 18, 2].into_iter().enumerate() {
+	for (tab, expected) in [8, 10, 7, 5, 18, 5].into_iter().enumerate() {
 		click_tagged(&mut test, &format!("ExamplesTab:{tab}"));
 		let rows = count_tagged(&test, "Example:");
 		assert_eq!(rows, expected, "tab {tab}");

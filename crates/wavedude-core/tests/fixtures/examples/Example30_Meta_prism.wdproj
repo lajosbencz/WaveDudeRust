@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="1769285558">
+	<Description>A directional source is irradiating a meta surface prism. In the Field image you can clearly see the direction of the wavefront change; however, because the number of diffractive elements is small, the intensity distribution is somewhat messy.</Description>
+	<Scene Width="2600" />
+	<Simulation Steps="3500" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="2.02" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="2" />
+	</Display>
+	<Source Name="Source 1" X="242" Y="273" Frequency="40">
+		<Array SizeX="5" SizeY="25" SpacingX="40" SpacingY="20" Angle="-20" />
+	</Source>
+	<MetaPrism Name="Meta prism 1" X="1272" Y="618" Coating="32" SidesCoated="false" Length="52" Width="728" DesignFrequency="40" />
+	<Rectangle Name="Rectangle 1" X="125" Y="224" Angle="-20" Mirror="true" Length="66" Width="595" />
+</Project>

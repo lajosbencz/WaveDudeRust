@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="875938393">
+	<Description>A high-frequency source irradiates a diffractive lattice. The lattice diffracts the radiation preferentially in specific directions, similar to a crystal structure in an X-ray beam. By rotating the "crystal" lattice, the diffraction angles change. By measuring the angles of the diffracted beams, the lattice structure can in principle be solved.</Description>
+	<Display>
+		<Field ColorScheme="Default field" Brightness="3.03" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="3.34" />
+	</Display>
+	<Source Name="High frequency source" X="144" Y="551" Frequency="200">
+		<Array SizeX="10" SizeY="10" SpacingX="8" SpacingY="4" />
+	</Source>
+	<SimpleGrating Name="Crystal lattice" X="738" Y="529" Angle="-65" Mirror="true" Columns="10" Rows="10" ColumnSpacing="20" RowSpacing="20" />
+</Project>

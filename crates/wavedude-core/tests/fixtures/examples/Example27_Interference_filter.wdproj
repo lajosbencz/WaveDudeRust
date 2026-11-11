@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="1328766020">
+	<Description>A quarter-wavelength stack interference filter reflects most of the energy in a pulse of frequency 100 (wavelength 16 px) but transmits frequency 50 (wavelength 32 px) almost completely.</Description>
+	<Scene Width="1200" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="10.1" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="11.8" />
+	</Display>
+	<Source Name="Source 1" X="87" Y="828" Mode="Pulsed" PulseWidth="30">
+		<Array SizeX="5" SizeY="5" SpacingX="16" SpacingY="8" />
+	</Source>
+	<Source Name="Source 2" X="88" Y="274" Frequency="50" Mode="Pulsed" PulseWidth="15" OffWidth="5">
+		<Array SizeX="5" SizeY="5" SpacingX="32" SpacingY="16" />
+	</Source>
+	<InterferenceFilter Name="Interference filter 1" X="631" Y="547" Coating="3" Length="77" Width="1175">
+		<Layer RefractiveIndex="2" />
+		<Layer Thickness="2.67" />
+		<Layer RefractiveIndex="2" />
+		<Layer Thickness="2.67" />
+		<Layer RefractiveIndex="2" />
+		<Layer Thickness="2.67" />
+		<Layer RefractiveIndex="2" />
+		<Layer Thickness="2.67" />
+		<Layer RefractiveIndex="2" />
+		<Layer Thickness="2.67" />
+		<Layer RefractiveIndex="2" />
+	</InterferenceFilter>
+	<Rectangle Name="Rectangle 1" X="120" Y="553" Absorption="106" AbsorptionRamp="65" Length="874" Width="48" />
+</Project>

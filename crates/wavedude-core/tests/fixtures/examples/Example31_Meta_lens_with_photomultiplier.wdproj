@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="406775617">
+	<Description>The intensity of a weak pulsing source is detected with a photomultiplier, which is probabilistic and dependent on the intensity. In the focus, the intensity is high during a pulse and this leads to a high probability of detection events for Photomultiplier 2. The other one (Photomultiplier 1) is placed in an area with relatively low intensity and hardly triggers.</Description>
+	<Scene Height="750" DampingEdge="-41" />
+	<Simulation Steps="3000" />
+	<Display>
+		<Field ColorScheme="Default field" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="24.8" />
+	</Display>
+	<Source Name="Source" X="238" Y="362" Frequency="50" Mode="Pulsed" PulseShape="SmoothedSquare" PulseWidth="5" OffWidth="5" />
+	<MetaLens Name="Meta lens" X="885" Y="360" Coating="8" SidesCoated="false" Length="40" Width="786" Pitch="2.4" PatternIndex="2.5" FocalLength="240" />
+	<Probe Name="Photomultiplier 2" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" Detector="Counting" Sensitivity="39" AX="1359" AY="330" BX="1360" BY="387" BoxX="1509" BoxY="276" AutoScaleY="false" YMin="0" YMax="4" Window="1500" />
+	<Probe Name="Photomultiplier 1" Layer="Intensity" Measurement="IntegratedValue" Kind="Line" Detector="Counting" Sensitivity="39" AX="1358" AY="57" BX="1358" BY="116" BoxX="1509" BoxY="8" AutoScaleY="false" YMin="0" YMax="4" Window="1500" />
+</Project>

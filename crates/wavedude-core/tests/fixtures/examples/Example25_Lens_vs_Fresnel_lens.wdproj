@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="4" Seed="84054878">
+	<Description>The example shows the difference between a Fresnel lens and a standard lens. Both lenses have a short focal distance. The Fresnel lens is much thinner and thus much lighter; however, its beam is not as clean as that of a standard lens.</Description>
+	<Scene Width="2500" Height="600" />
+	<Display>
+		<Field ColorScheme="Default field" Brightness="80" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="80" />
+	</Display>
+	<Source Name="Source 1" X="1164" Y="298" Frequency="250" />
+	<FresnelLens Name="Fresnel lens 1" X="1494" Y="300" Coating="1" Diameter="422" R1="657.87" R2="-338.58" Thickness="35" Division="EqualDepth" />
+	<Lens Name="Lens 1" X="830" Y="302" Coating="1" Diameter="442" R1="405.45" R2="-612.27" Thickness="113" />
+</Project>
