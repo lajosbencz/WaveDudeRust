@@ -45,6 +45,8 @@ What new code follows so that it fits the code already here. Each rule names one
 
 ## Where new things go
 
+- A step index is a `Step`, a timeline position a `Frame`, and the arithmetic between them lives in `Timeline`
+  alone (`crates/wavedude-core/src/model/timeline.rs`): no `* visualize_every` elsewhere.
 - Model property: a field on the `model` type, its bound in `crates/wavedude-core/src/model/ranges.rs` (`ALL`,
   or `UNBOUNDED`/`DEPENDENT`), its clamp in `Normalize` (`model/normalize.rs:17`), its attribute in the
   `Table` of `crates/wavedude-core/src/io/wdproj.rs` (`impl Table for Simulation`), and `Label.<Type>.<Member>` /

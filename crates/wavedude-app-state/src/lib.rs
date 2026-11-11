@@ -657,7 +657,7 @@ impl<B: Backend> AppState<B> {
 				}
 				let (from, to) = p.range_steps();
 				// the file's 0 is "to the end"
-				let to = to.unwrap_or(0);
+				let (from, to) = (from.0, to.map_or(0, |step| step.0));
 				let display = &mut self.document.project.display;
 				if (display.export_from, display.export_to) != (from, to) {
 					log::change(

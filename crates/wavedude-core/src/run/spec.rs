@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::engine::emitters::emitters_of;
 use crate::engine::{Emitter, EngineOptions, FrameShape, SampleFormat, SceneData};
-use crate::model::{Layer, Measurement, Probe, Project, SceneEdges, SceneMode};
+use crate::model::{Frame, Layer, Measurement, Probe, Project, SceneEdges, SceneMode, Timeline};
 use crate::scene::compose::{SceneKey, compose_over, decode_image, image_key};
 use crate::scene::pixels::ScenePixels;
 
@@ -35,9 +35,12 @@ pub struct Schedule {
 }
 
 impl Schedule {
-	/// Timeline frames: `ceil(steps / visualize_every)`.
+	pub fn timeline(&self) -> Timeline {
+		Timeline { steps: self.steps, visualize_every: self.visualize_every }
+	}
+
 	pub fn frame_count(&self) -> u32 {
-		self.steps.div_ceil(self.visualize_every)
+		self.timeline().frame_count()
 	}
 
 	pub fn frame_divisor(&self) -> u32 {
@@ -61,7 +64,7 @@ impl Schedule {
 
 	/// The step index timeline frame `k` holds the state after.
 	pub fn step_of(&self, k: u32) -> u32 {
-		k * self.visualize_every
+		self.timeline().step_of(Frame(k)).0
 	}
 
 	/// Timeline frames covered by `stored` stored frames.

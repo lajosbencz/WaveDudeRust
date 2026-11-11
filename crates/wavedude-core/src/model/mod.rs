@@ -17,6 +17,7 @@ mod scene;
 mod scheme;
 mod simulation;
 mod source;
+pub mod timeline;
 
 pub use display::*;
 pub use parts::*;
@@ -26,6 +27,7 @@ pub use scene::*;
 pub use scheme::*;
 pub use simulation::*;
 pub use source::*;
+pub use timeline::{Frame, Step, Timeline};
 
 /// Integer canvas position.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

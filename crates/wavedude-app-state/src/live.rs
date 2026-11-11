@@ -13,7 +13,7 @@ use std::time::Instant;
 
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::engine::{EngineOptions, FrameShape, SceneData, Snapshot, WaveEngine};
-use wavedude_core::model::{Layer, Project};
+use wavedude_core::model::{Layer, Project, Step};
 use wavedude_core::run::{
 	Budget, FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, PreviewQuality, RunError, RunRequest,
 	RunSpecError, RunState, RunWorker, SceneCache, Status, Wanted, WorkState,
@@ -442,14 +442,9 @@ impl<B: Backend> LiveController<B> {
 	/// Keeps the timeline in step with the project (planned frames, steps per frame, frame rate, range).
 	pub fn sync_timeline(&mut self, project: &Project) {
 		let d = &project.display;
-		self.playback.set_timeline(
-			project.simulation.frame_count(),
-			project.simulation.visualize_every,
-			d.video.fps,
-			d.export_from,
-			// the file's 0 is "to the end"
-			(d.export_to != 0).then_some(d.export_to),
-		);
+		// the file's 0 is "to the end"
+		let out = (d.export_to != 0).then_some(Step(d.export_to));
+		self.playback.set_timeline(project.simulation.timeline(), d.video.fps, Step(d.export_from), out);
 	}
 
 	/// Publishes the goal when it differs from the one published; nothing before the first tick.

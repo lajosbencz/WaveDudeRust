@@ -1,3 +1,4 @@
+use super::Timeline;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,8 +44,12 @@ impl Default for Simulation {
 }
 
 impl Simulation {
-	/// Timeline frames of a run; `visualize_every` is at least 1 once normalised.
+	pub fn timeline(&self) -> Timeline {
+		Timeline { steps: self.steps, visualize_every: self.visualize_every }
+	}
+
+	/// Timeline frames of a run.
 	pub fn frame_count(&self) -> u32 {
-		self.steps.div_ceil(self.visualize_every)
+		self.timeline().frame_count()
 	}
 }

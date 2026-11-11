@@ -20,6 +20,7 @@ use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, Target};
 use wavedude_app_state::playback::{Playback, SPEED_PRESETS, SPEED_RANGE};
 use wavedude_app_state::settings::Orientation;
+use wavedude_core::model::Step;
 
 const fn drawn(stroke: &'static str, fill: &'static str) -> Icon {
 	Icon::Path { stroke: Cow::Borrowed(stroke), fill: Some(Cow::Borrowed(fill)) }
@@ -147,7 +148,7 @@ pub fn timeline_model(playback: &Playback, available: Rc<[(u32, u32)]>, live: bo
 	TimelineModel {
 		frames: playback.frame_count(),
 		position: playback.position(),
-		in_point: (in_step != 0).then_some(from),
+		in_point: (in_step != Step(0)).then_some(from),
 		out_point: out_step.map(|_| to),
 		available,
 		bounded: live,
@@ -456,7 +457,12 @@ mod tests {
 	#[test]
 	fn the_timeline_shows_the_range_and_the_frames_made() {
 		let mut p = Playback::default();
-		p.set_timeline(100, 4, 30, 40, Some(200));
+		p.set_timeline(
+			wavedude_core::model::Timeline { steps: 400, visualize_every: 4 },
+			30,
+			Step(40),
+			Some(Step(200)),
+		);
 		p.set_position(20);
 		let m = timeline_model(&p, Rc::from([(0, 30)]), true);
 		assert_eq!((m.frames, m.position, m.in_point, m.out_point), (100, 20, Some(10), Some(50)));
