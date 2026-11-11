@@ -76,16 +76,15 @@ impl Pulse {
 				let z = (on_pos - on as f64 / 2.0) / sigma;
 				(-0.5 * z * z).exp()
 			}
+			// A rising step about the burst's start times a falling step about its end; the gap is shared at
+			// its middle between the tail of the burst before and the rise of the burst to come. The first gap
+			// has no burst before it (a random gap starts in one).
 			PulseShape::SmoothedSquare => {
-				if on_pos < 0.0 && !first {
+				if on_pos < -(off as f64) / 2.0 && !first {
 					on_pos += period as f64;
 				}
 				let fall = on_pos - on as f64;
-				let mut rise = on_pos;
-				if rise > period as f64 / 2.0 {
-					rise -= period as f64;
-				}
-				(0.5 + (rise / EDGE_WIDTH).atan() / PI) * (0.5 - (fall / EDGE_WIDTH).atan() / PI)
+				(0.5 + (on_pos / EDGE_WIDTH).atan() / PI) * (0.5 - (fall / EDGE_WIDTH).atan() / PI)
 			}
 		}
 	}
@@ -178,6 +177,22 @@ mod tests {
 		assert!(at(&mut p, &e, 10.0) < 0.55);
 		assert!(at(&mut p, &e, 15.0) < 0.05);
 		assert!(at(&mut p, &e, 25.0) > 0.95);
+	}
+
+	#[test]
+	fn smoothed_square_burst_longer_than_its_gap_lasts_its_width() {
+		let e = emitter(PulseShape::SmoothedSquare, 20, 2, 0);
+		let mut p = Pulse::new(&e);
+		assert!(at(&mut p, &e, 1.0) > 0.85, "whole from a cycle in");
+		assert!(at(&mut p, &e, 11.0) > 0.95, "not cut at half the period");
+		assert!(at(&mut p, &e, 19.0) > 0.85, "whole to a cycle before the falling edge");
+		let edge = at(&mut p, &e, 20.0);
+		assert!((0.45..0.55).contains(&edge), "half way down at the falling edge: {edge}");
+		let middle = at(&mut p, &e, 21.0);
+		assert!(middle < 0.15, "a tenth at the gap's middle: {middle}");
+		let (before, after) = (at(&mut p, &e, 20.999), at(&mut p, &e, 21.001));
+		assert!((before - after).abs() < 1e-2, "continuous across the gap's middle: {before} {after}");
+		assert!(at(&mut p, &e, 23.0) > 0.85, "the next burst, whole from a cycle in");
 	}
 
 	#[test]

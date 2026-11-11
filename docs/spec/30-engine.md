@@ -132,10 +132,8 @@ random gap (amount a > 0): starts in the off span
 onPos = pos - off
 Gaussian:      envelope = onPos < 0 ? 0 : exp(-0.5*z^2),  z = (onPos - on/2) / max(on/6, 1e-6)
 SmoothedSquare:
-  if onPos < 0 and !isFirst: onPos += period
-  rise = onPos ; fall = onPos - on
-  if rise > period/2: rise -= period
-  envelope = (0.5 + atan(rise/0.35)/pi) * (0.5 - atan(fall/0.35)/pi)
+  if onPos < -off/2 and !isFirst: onPos += period
+  envelope = (0.5 + atan(onPos/0.35)/pi) * (0.5 - atan((onPos - on)/0.35)/pi)
 ```
 Random-gap state advances with simulated time and is reset by `Reset`. `CycleAdvanceGuard = 1000`.
 The GPU kernel uses the same xorshift sequence.
