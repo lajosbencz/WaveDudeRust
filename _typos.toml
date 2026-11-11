@@ -1,0 +1,35 @@
+# typos: spelling in code and docs, run by CI. The translated string tables, the shipped project files and the
+# review notes are not English prose.
+
+[files]
+extend-exclude = [
+	"crates/wavedude-app-state/assets/strings/de.json",
+	"crates/wavedude-app-state/assets/strings/fr.json",
+	"crates/wavedude-app-state/assets/strings/nl.json",
+	"crates/wavedude-core/tests/fixtures/**",
+	"examples/**",
+	"docs/review/**",
+	"CHANGELOG.md",
+	"crates/wavedude-core/tests/snapshots/**",
+]
+
+[default]
+# Unicode code points in the key tables.
+extend-ignore-re = ["U\\+[0-9A-F]{4}"]
+
+[default.extend-words]
+# Journal abbreviations in the citations, the atoms and filters of the file formats, and a menu mnemonic split
+# at its underscore ("Fre_snel").
+fre = "fre"
+numer = "numer"
+comput = "comput"
+trak = "trak"
+alis = "alis"
+indx = "indx"
+paeth = "paeth"
+
+[default.extend-identifiers]
+# The painter's normal, a deliberate misspelling in a test, a plural.
+iy = "iy"
+Nmae = "Nmae"
+PNGs = "PNGs"

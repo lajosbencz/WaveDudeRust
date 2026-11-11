@@ -32,7 +32,9 @@ Search the open and closed issues first. The forms under `.github/ISSUE_TEMPLATE
 - Accepted when all of this holds:
   - The checks of `.github/workflows/ci.yml` pass: `cargo fmt`, `cargo clippy` with `-D warnings` (the lint
     policy is the `[workspace.lints]` table of `Cargo.toml`), the tests on Linux, macOS and Windows, `cargo doc`
-    without warnings, and `cargo check` at the workspace's `rust-version`. The toolchain is pinned in
+    without warnings, every feature combination (`cargo hack`), no unused dependency (`cargo machete`), and
+    `cargo check` at the workspace's `rust-version`; `.github/workflows/hygiene.yml` runs `typos` and
+    `cargo deny check` (`deny.toml`: advisories, licences, sources). The toolchain is pinned in
     `rust-toolchain.toml`; bump it there when a new stable is wanted (the CI caches are keyed on it).
   - A behaviour change comes with a test that failed before it: unit, headless (freya-testing), physics or
     snapshot, whichever fits (`docs/conventions.md` says where each lives). Snapshot changes (`insta`) are

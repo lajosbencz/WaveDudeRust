@@ -8,6 +8,8 @@ rust-version.workspace = true
 keywords = ["wave", "simulation", "physics", "optics"]
 categories = ["science", "simulation"]
 description = "Model, scene painter, wave engines (CPU and wgpu), frame store, probes, renderer"
+# Not on crates.io: the workspace is built and released as one.
+publish = false
 
 [features]
 default = ["gpu"]

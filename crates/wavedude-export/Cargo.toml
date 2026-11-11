@@ -8,6 +8,8 @@ rust-version.workspace = true
 keywords = ["wave", "simulation", "physics", "optics"]
 categories = ["science", "simulation"]
 description = "Image, video, OpenEXR and CSV export sinks and the export job"
+# Not on crates.io: the workspace is built and released as one.
+publish = false
 
 [features]
 default = ["mp4"]
