@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use super::Layer;
+use super::{Fields, Layer, Word, ranges};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash, Word)]
 #[serde(rename_all = "PascalCase")]
 pub enum Measurement {
 	/// Field value (the field layer's only measurement).
@@ -14,7 +14,7 @@ pub enum Measurement {
 	IntegratedValue,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash, Word)]
 #[serde(rename_all = "PascalCase")]
 pub enum ProbeKind {
 	#[default]
@@ -22,7 +22,7 @@ pub enum ProbeKind {
 	Line,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
 #[serde(rename_all = "PascalCase")]
 pub enum BoxSize {
 	Tiny,
@@ -48,7 +48,7 @@ impl BoxSize {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
 #[serde(rename_all = "PascalCase")]
 pub enum ScaleMode {
 	/// Last `window` steps.
@@ -58,7 +58,7 @@ pub enum ScaleMode {
 	Full,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
 #[serde(rename_all = "PascalCase")]
 pub enum YScale {
 	#[default]
@@ -69,7 +69,7 @@ pub enum YScale {
 /// What a probe is: a standard probe, or a probabilistic detector that turns the intensity along its line into
 /// quantised detections, Poisson-distributed about the intensity times the sensitivity, drawn from the
 /// project's seed so a project gives the same detections every time.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Hash, Word)]
 #[serde(rename_all = "PascalCase")]
 pub enum ProbeDetector {
 	#[default]
@@ -82,7 +82,7 @@ pub enum ProbeDetector {
 }
 
 /// A point or line measurement with a graph box.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
 #[serde(rename_all = "snake_case")]
 #[serde(default)]
 pub struct Probe {
@@ -94,8 +94,10 @@ pub struct Probe {
 	/// A detector is a line probe of the integrated intensity, whatever else is set.
 	pub detector: ProbeDetector,
 	/// Expected detections per unit of intensity per step at a point of the line, `0..MAX_SENSITIVITY`.
+	#[field(range = ranges::PROBE_SENSITIVITY)]
 	pub sensitivity: f64,
 	/// Pixels of the line per bin of an imaging detector's histogram, `1..MAX_BIN_SIZE`.
+	#[field(range = ranges::PROBE_BIN_SIZE)]
 	pub bin_size: u32,
 	pub ax: i32,
 	pub ay: i32,
@@ -104,18 +106,25 @@ pub struct Probe {
 	pub box_size: BoxSize,
 	pub box_x: i32,
 	pub box_y: i32,
+	#[field(range = ranges::PROBE_BOX_WIDTH)]
 	pub box_width: u32,
+	#[field(range = ranges::PROBE_BOX_HEIGHT)]
 	pub box_height: u32,
 	pub scale_mode: ScaleMode,
 	pub auto_scale_x: bool,
 	pub auto_scale_y: bool,
+	#[field(dependent)]
 	pub y_min: f64,
+	#[field(dependent)]
 	pub y_max: f64,
 	pub y_scale: YScale,
+	#[field(range = ranges::PROBE_DECADES)]
 	pub decades: u32,
 	/// Steps shown by a running graph.
+	#[field(range = ranges::PROBE_WINDOW)]
 	pub window: u32,
 	/// Step from which an integrated value sums.
+	#[field(range = ranges::AT_LEAST_0)]
 	pub start_after: u32,
 }
 

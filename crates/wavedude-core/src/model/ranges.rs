@@ -621,4 +621,125 @@ mod tests {
 			assert!(range(key).is_none(), "{key}");
 		}
 	}
+
+	/// Fields whose table key is spelled differently: `Coating.Depth` is `Coating.Coating`, the probe's ends
+	/// are written `AX`.
+	const RENAMED: &[(&str, &str)] = &[
+		("Coating.Depth", "Coating.Coating"),
+		("Probe.Ax", "Probe.AX"),
+		("Probe.Ay", "Probe.AY"),
+		("Probe.Bx", "Probe.BX"),
+		("Probe.By", "Probe.BY"),
+	];
+
+	/// Open numbers that no table lists: a colour channel is bounded by its type.
+	const BOUNDED_BY_TYPE: &[&str] = &["Rgb.R", "Rgb.G", "Rgb.B"];
+
+	fn table_key(type_name: &str, name: &str) -> String {
+		let key = format!("{type_name}.{name}");
+		RENAMED.iter().find(|(from, _)| *from == key).map_or(key, |(_, to)| (*to).to_owned())
+	}
+
+	fn is_number(kind: ValueKind) -> bool {
+		matches!(kind, ValueKind::Int | ValueKind::UInt | ValueKind::Float)
+	}
+
+	#[derive(Default)]
+	struct Reached {
+		types: Vec<&'static str>,
+		ranged: Vec<String>,
+		dependent: Vec<String>,
+		unbounded: Vec<String>,
+	}
+
+	/// Checks the number fields `T` declares itself (a nested field's are `U`'s) against the tables.
+	fn check<T: Fields>(reached: &mut Reached) {
+		reached.types.push(T::TYPE_NAME);
+		for field in T::Field::all().into_iter().filter(|f| !f.path().contains('.') && is_number(f.kind())) {
+			let key = table_key(T::TYPE_NAME, field.name());
+			let in_all = ALL.iter().find(|(k, _)| *k == key);
+			let in_dependent = DEPENDENT.iter().any(|(k, _)| *k == key);
+			assert_eq!(field.dependent(), in_dependent, "{key}: dependent() and DEPENDENT");
+			if in_dependent {
+				reached.dependent.push(key.clone());
+			}
+			match field.bounds() {
+				Bounds::Range(r) => {
+					let (_, listed) = in_all.unwrap_or_else(|| panic!("{key} has a range but no entry in ALL"));
+					assert_eq!(*listed, r, "{key}");
+					reached.ranged.push(key);
+				}
+				Bounds::Dependent => {
+					assert!(in_dependent && in_all.is_none(), "{key}: dependent without a range");
+				}
+				Bounds::Open => {
+					assert!(in_all.is_none() && !in_dependent, "{key} is open but listed");
+					if BOUNDED_BY_TYPE.contains(&key.as_str()) {
+						continue;
+					}
+					assert!(UNBOUNDED.contains(&key.as_str()), "{key} is open but not in UNBOUNDED");
+					reached.unbounded.push(key);
+				}
+			}
+		}
+	}
+
+	#[test]
+	fn the_fields_and_the_tables_agree() {
+		let mut reached = Reached::default();
+		check::<Project>(&mut reached);
+		check::<Scene>(&mut reached);
+		check::<Simulation>(&mut reached);
+		check::<Display>(&mut reached);
+		check::<DisplayLayer>(&mut reached);
+		check::<Video>(&mut reached);
+		check::<Source>(&mut reached);
+		check::<SourceArray>(&mut reached);
+		check::<Probe>(&mut reached);
+		check::<ColorScheme>(&mut reached);
+		check::<Stop>(&mut reached);
+		check::<Rgb>(&mut reached);
+		check::<Point>(&mut reached);
+		check::<PartBase>(&mut reached);
+		check::<Coating>(&mut reached);
+		check::<Material>(&mut reached);
+		check::<Lens>(&mut reached);
+		check::<FresnelLens>(&mut reached);
+		check::<Polygon>(&mut reached);
+		check::<Rectangle>(&mut reached);
+		check::<Ellipse>(&mut reached);
+		check::<Triangle>(&mut reached);
+		check::<Outline>(&mut reached);
+		check::<Diffuser>(&mut reached);
+		check::<FilterLayer>(&mut reached);
+		check::<InterferenceFilter>(&mut reached);
+		check::<SimpleGrating>(&mut reached);
+		check::<MetaSurface>(&mut reached);
+		check::<MetaLensDesign>(&mut reached);
+		check::<MetaPrismDesign>(&mut reached);
+		check::<MetaAxiconDesign>(&mut reached);
+		check::<FacettedGrating>(&mut reached);
+		check::<FiberNode>(&mut reached);
+		check::<Fiber>(&mut reached);
+		check::<BraggReflector>(&mut reached);
+		check::<GrinLens>(&mut reached);
+		check::<LogicGate>(&mut reached);
+		check::<ZonePlate>(&mut reached);
+
+		let keys =
+			ALL.iter().map(|(k, _)| *k).chain(DEPENDENT.iter().map(|(k, _)| *k)).chain(UNBOUNDED.iter().copied());
+		for key in keys.chain(BOUNDED_BY_TYPE.iter().copied()) {
+			let owner = key.split('.').next().unwrap_or_default();
+			assert!(reached.types.contains(&owner), "{key}: {owner} is not among the types checked");
+		}
+		for (key, _) in ALL {
+			assert!(reached.ranged.iter().any(|k| k == key), "{key} in ALL is on no field");
+		}
+		for (key, _) in DEPENDENT {
+			assert!(reached.dependent.iter().any(|k| k == key), "{key} in DEPENDENT is on no field");
+		}
+		for key in UNBOUNDED {
+			assert!(reached.unbounded.iter().any(|k| k == key), "{key} in UNBOUNDED is on no field");
+		}
+	}
 }

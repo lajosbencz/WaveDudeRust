@@ -6,6 +6,9 @@
 #![deny(clippy::unwrap_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
+// The derives' generated paths (`::wavedude_core::...`) resolve inside this crate too.
+extern crate self as wavedude_core;
+
 pub mod engine;
 pub mod io;
 pub mod model;

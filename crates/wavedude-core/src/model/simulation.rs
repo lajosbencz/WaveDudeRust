@@ -1,7 +1,7 @@
-use super::Timeline;
+use super::{Fields, Timeline, Word, ranges};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Word)]
 #[serde(rename_all = "PascalCase")]
 pub enum Stencil {
 	/// Isotropic 9-point Laplacian, second order.
@@ -12,20 +12,26 @@ pub enum Stencil {
 }
 
 /// Solver settings.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
 #[serde(rename_all = "snake_case")]
 #[serde(default)]
 pub struct Simulation {
+	#[field(range = ranges::SIM_STEPS)]
 	pub steps: u32,
 	/// Steps per timeline frame.
+	#[field(range = ranges::SIM_VISUALIZE_EVERY)]
 	pub visualize_every: u32,
 	pub stencil: Stencil,
 	/// Nominal speed in px/step for wavelength estimates in the editor; never an engine input.
+	#[field(range = ranges::SIM_WAVE_SPEED)]
 	pub wave_speed: f64,
 	/// Intensity EMA time constant factor.
+	#[field(range = ranges::SIM_TIME_DECAY)]
 	pub time_decay: f64,
 	/// omega = level/255 * 0.5 * scale.
+	#[field(range = ranges::SIM_SOURCE_FREQUENCY_SCALE)]
 	pub source_frequency_scale: f64,
+	#[field(range = ranges::SIM_INTENSITY_SCALE)]
 	pub intensity_scale: f64,
 }
 

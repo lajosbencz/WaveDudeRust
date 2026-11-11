@@ -1,0 +1,21 @@
+[package]
+name = "wavedude-model-derive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Derives of the model's typed fields (Fields) and enum members (Word)"
+# Not on crates.io: the workspace is built and released as one.
+publish = false
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true
+
+[dependencies]
+syn.workspace = true
+quote.workspace = true
+proc-macro2.workspace = true

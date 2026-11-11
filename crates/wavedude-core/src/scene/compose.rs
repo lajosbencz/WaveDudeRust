@@ -1,15 +1,12 @@
 //! The scene's composition: the image or a blank canvas with the enabled parts painted in.
 
 use crate::sync::lock;
-use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
-use serde::{Serialize, ser};
-
 use super::painter::paint_part;
 use super::pixels::ScenePixels;
-use crate::model::{Project, SceneMode, Stencil};
+use crate::model::{Feed, Project, SceneMode, Stencil};
 
 /// The decoded scene image of an image scene, None otherwise or when it does not decode.
 pub fn decode_image(project: &Project) -> Option<ScenePixels> {
@@ -59,7 +56,7 @@ impl SceneKey {
 		let sim = &project.simulation;
 		(sim.source_frequency_scale.to_bits(), sim.stencil == Stencil::FourthOrder).hash(&mut h);
 		for part in project.parts.iter().filter(|p| p.base.enabled) {
-			part.serialize(HashFeed(&mut h)).unwrap_or_else(|never| match never {});
+			part.feed(&mut h);
 		}
 		if project.parts.iter().any(|p| p.base.enabled && p.kind.is_seeded()) {
 			project.seed.hash(&mut h);
@@ -88,208 +85,6 @@ fn image_hash(bytes: &Arc<[u8]>) -> u64 {
 	let hash = h.finish();
 	*last = Some((bytes.clone(), hash));
 	hash
-}
-
-/// Feeds a value's serde form to a hasher, floats by their bits, without building the serialised text.
-struct HashFeed<'a, H>(&'a mut H);
-
-#[derive(Debug)]
-enum Never {}
-
-impl fmt::Display for Never {
-	fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match *self {}
-	}
-}
-
-impl std::error::Error for Never {}
-
-impl ser::Error for Never {
-	fn custom<T: fmt::Display>(message: T) -> Self {
-		unreachable!("hashing does not fail: {message}")
-	}
-}
-
-macro_rules! feed {
-	($($method:ident($ty:ty) $(=> $conv:ident)?;)*) => {
-		$(fn $method(self, v: $ty) -> Result<(), Never> {
-			v$(.$conv())?.hash(self.0);
-			Ok(())
-		})*
-	};
-}
-
-impl<'a, H: Hasher> ser::Serializer for HashFeed<'a, H> {
-	type Ok = ();
-	type Error = Never;
-	type SerializeSeq = Self;
-	type SerializeTuple = Self;
-	type SerializeTupleStruct = Self;
-	type SerializeTupleVariant = Self;
-	type SerializeMap = Self;
-	type SerializeStruct = Self;
-	type SerializeStructVariant = Self;
-
-	feed! {
-		serialize_bool(bool);
-		serialize_i8(i8);
-		serialize_i16(i16);
-		serialize_i32(i32);
-		serialize_i64(i64);
-		serialize_u8(u8);
-		serialize_u16(u16);
-		serialize_u32(u32);
-		serialize_u64(u64);
-		serialize_f32(f32) => to_bits;
-		serialize_f64(f64) => to_bits;
-		serialize_char(char);
-		serialize_str(&str);
-		serialize_bytes(&[u8]);
-	}
-
-	fn serialize_none(self) -> Result<(), Never> {
-		0u8.hash(self.0);
-		Ok(())
-	}
-
-	fn serialize_some<T: ?Sized + Serialize>(self, value: &T) -> Result<(), Never> {
-		1u8.hash(self.0);
-		value.serialize(self)
-	}
-
-	fn serialize_unit(self) -> Result<(), Never> {
-		Ok(())
-	}
-
-	fn serialize_unit_struct(self, _: &'static str) -> Result<(), Never> {
-		Ok(())
-	}
-
-	fn serialize_unit_variant(self, _: &'static str, index: u32, _: &'static str) -> Result<(), Never> {
-		index.hash(self.0);
-		Ok(())
-	}
-
-	fn serialize_newtype_struct<T: ?Sized + Serialize>(self, _: &'static str, value: &T) -> Result<(), Never> {
-		value.serialize(self)
-	}
-
-	fn serialize_newtype_variant<T: ?Sized + Serialize>(
-		self,
-		_: &'static str,
-		index: u32,
-		_: &'static str,
-		value: &T,
-	) -> Result<(), Never> {
-		index.hash(self.0);
-		value.serialize(self)
-	}
-
-	fn serialize_seq(self, _: Option<usize>) -> Result<Self, Never> {
-		Ok(self)
-	}
-
-	fn serialize_tuple(self, _: usize) -> Result<Self, Never> {
-		Ok(self)
-	}
-
-	fn serialize_tuple_struct(self, _: &'static str, _: usize) -> Result<Self, Never> {
-		Ok(self)
-	}
-
-	fn serialize_tuple_variant(self, _: &'static str, index: u32, _: &'static str, _: usize) -> Result<Self, Never> {
-		index.hash(self.0);
-		Ok(self)
-	}
-
-	fn serialize_map(self, _: Option<usize>) -> Result<Self, Never> {
-		Ok(self)
-	}
-
-	fn serialize_struct(self, _: &'static str, _: usize) -> Result<Self, Never> {
-		Ok(self)
-	}
-
-	fn serialize_struct_variant(self, _: &'static str, index: u32, _: &'static str, _: usize) -> Result<Self, Never> {
-		index.hash(self.0);
-		Ok(self)
-	}
-}
-
-impl<H: Hasher> HashFeed<'_, H> {
-	fn element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Never> {
-		value.serialize(HashFeed(&mut *self.0))
-	}
-
-	/// Ends a sequence, so that `[a], [b]` and `[a, b]` differ.
-	fn end(self) -> Result<(), Never> {
-		u8::MAX.hash(self.0);
-		Ok(())
-	}
-}
-
-macro_rules! compound {
-	($($trait:ident :: $method:ident;)*) => {
-		$(impl<H: Hasher> ser::$trait for HashFeed<'_, H> {
-			type Ok = ();
-			type Error = Never;
-
-			fn $method<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Never> {
-				self.element(value)
-			}
-
-			fn end(self) -> Result<(), Never> {
-				HashFeed::end(self)
-			}
-		})*
-	};
-}
-
-compound! {
-	SerializeSeq::serialize_element;
-	SerializeTuple::serialize_element;
-	SerializeTupleStruct::serialize_field;
-	SerializeTupleVariant::serialize_field;
-}
-
-impl<H: Hasher> ser::SerializeMap for HashFeed<'_, H> {
-	type Ok = ();
-	type Error = Never;
-
-	fn serialize_key<T: ?Sized + Serialize>(&mut self, key: &T) -> Result<(), Never> {
-		self.element(key)
-	}
-
-	fn serialize_value<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Never> {
-		self.element(value)
-	}
-
-	fn end(self) -> Result<(), Never> {
-		HashFeed::end(self)
-	}
-}
-
-macro_rules! fields {
-	($($trait:ident;)*) => {
-		$(impl<H: Hasher> ser::$trait for HashFeed<'_, H> {
-			type Ok = ();
-			type Error = Never;
-
-			fn serialize_field<T: ?Sized + Serialize>(&mut self, key: &'static str, value: &T) -> Result<(), Never> {
-				key.hash(self.0);
-				self.element(value)
-			}
-
-			fn end(self) -> Result<(), Never> {
-				HashFeed::end(self)
-			}
-		})*
-	};
-}
-
-fields! {
-	SerializeStruct;
-	SerializeStructVariant;
 }
 
 #[cfg(test)]

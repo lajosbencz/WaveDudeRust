@@ -4,6 +4,7 @@
 //! the bounds live in `ranges` so tests can prove each clamp.
 
 mod display;
+pub mod fields;
 pub mod lens_geometry;
 pub mod meta;
 pub mod names;
@@ -20,6 +21,7 @@ mod source;
 pub mod timeline;
 
 pub use display::*;
+pub use fields::*;
 pub use parts::*;
 pub use probe::*;
 pub use project::*;
@@ -30,7 +32,7 @@ pub use source::*;
 pub use timeline::{Frame, Step, Timeline};
 
 /// Integer canvas position.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Fields)]
 #[serde(rename_all = "snake_case")]
 pub struct Point {
 	pub x: i32,

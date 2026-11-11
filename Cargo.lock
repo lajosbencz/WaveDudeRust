@@ -6025,6 +6025,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
+ "wavedude-model-derive",
  "wgpu",
 ]
 
@@ -6050,6 +6051,15 @@ dependencies = [
  "tracing",
  "ureq",
  "wavedude-core",
+]
+
+[[package]]
+name = "wavedude-model-derive"
+version = "0.2.1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

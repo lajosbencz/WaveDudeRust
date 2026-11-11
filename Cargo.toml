@@ -52,6 +52,9 @@ insta = "1"
 proptest = "1"
 png = "0.18"
 clap = { version = "4", features = ["derive"] }
+syn = { version = "2", default-features = false, features = ["derive", "parsing", "printing", "proc-macro", "clone-impls"] }
+quote = "1"
+proc-macro2 = "1"
 
 [profile.release]
 lto = "thin"

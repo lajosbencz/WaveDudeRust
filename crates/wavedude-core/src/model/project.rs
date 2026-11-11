@@ -1,27 +1,34 @@
 use serde::{Deserialize, Serialize};
 
-use super::{ColorScheme, Display, Part, Probe, Scene, Simulation, Source};
+use super::{ColorScheme, Display, Fields, Part, Probe, Scene, Simulation, Source};
 
 /// Current project format version (the `.wdproj` number).
 pub const PROJECT_VERSION: u32 = 4;
 
 /// A whole project: settings, items in their list order, project-local colour schemes.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Fields)]
 #[serde(rename_all = "snake_case")]
 #[serde(default)]
 pub struct Project {
 	/// Seeds every random stream (composite sources, emitter gaps).
 	pub seed: i32,
 	pub description: String,
+	#[field(nested)]
 	pub scene: Scene,
+	#[field(nested)]
 	pub simulation: Simulation,
+	#[field(nested)]
 	pub display: Display,
 	/// Emitter order.
+	#[field(skip)]
 	pub sources: Vec<Source>,
 	/// Paint order.
+	#[field(skip)]
 	pub parts: Vec<Part>,
 	/// Marker numbering order.
+	#[field(skip)]
 	pub probes: Vec<Probe>,
+	#[field(skip)]
 	pub color_schemes: Vec<ColorScheme>,
 }
 
