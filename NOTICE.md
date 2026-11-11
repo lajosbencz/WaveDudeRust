@@ -9,7 +9,8 @@ manual's content.
 
 - **WaveDude Next** by Alexander Graef, GPL-3.0 - <https://github.com/graealex/WaveDudeNext>. Its `.wdproj`
   project files open and save here.
-- **Wave Dude 2D** by Jeroen Vleggaar (Huygens Optics), the predecessor of WaveDude Next. Its
+- **Wave Dude 2D** by Jeroen Vleggaar (Huygens Optics) - <https://www.youtube.com/@HuygensOptics>, the predecessor
+  of WaveDude Next. Its
   `configuration.json` project files open here.
 - **WaveSimulator2D** by 0x23 - <https://github.com/0x23/WaveSimulator2D>, whose numerical approach Wave Dude 2D
   followed.

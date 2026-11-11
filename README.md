@@ -5,7 +5,7 @@
 A 2D wave-equation simulator for Linux, macOS and Windows, written in Rust:
 field and intensity views, scenes from images and optical parts, point and
 composite sources, probes with live graphs and video export. It opens the
-project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wdproj`) and of Wave Dude 2D
+project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wdproj`) and of [Wave Dude 2D](https://www.youtube.com/@HuygensOptics)
 (`configuration.json`) and saves `.wdproj`, which WaveDude Next opens too.
 
 ![Three wave logic gates (XOR, AND, OR) chained: the field and the intensity, played in the application](docs/figures/logic-gates.gif)
@@ -22,7 +22,8 @@ project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wd
 - Live editing: one worker, one engine and one store converge on what the
   user looks at; an edit replaces the frames without a stale run or a timer.
 - 44 example projects grouped by topic, among them the photonic logic gates
-  from Huygens Optics' video with measured truth tables (`examples/gates`).
+  from [Huygens Optics](https://www.youtube.com/@HuygensOptics)' video with
+  measured truth tables (`examples/gates`).
 - Self-updating releases with build provenance and SBOM attestations.
 
 ## Workspace
@@ -109,7 +110,7 @@ vulnerabilities: [`SECURITY.md`](SECURITY.md).
 
 WaveDudeRust reimplements [WaveDude Next](https://github.com/graealex/WaveDudeNext)
 by Alexander Graef, itself the successor of Wave Dude 2D by Jeroen Vleggaar
-(Huygens Optics), whose numerics followed 0x23's
+([Huygens Optics](https://www.youtube.com/@HuygensOptics)), whose numerics followed 0x23's
 [WaveSimulator2D](https://github.com/0x23/WaveSimulator2D). No code is carried
 over; the colour schemes, the example projects, the user interface strings and
 the manual's content are ([`NOTICE.md`](NOTICE.md)).
