@@ -265,12 +265,19 @@ impl Component for Timeline {
 		};
 
 		let hover_frame = *hover.read();
-		let colors = (theme.control_background, theme.border, theme.text, theme.text_disabled, theme.accent);
+		let colors = (
+			theme.control_background,
+			theme.border,
+			theme.timeline_tick,
+			theme.text,
+			theme.text_disabled,
+			theme.accent,
+		);
 		let painter = RenderCallback::new(move |ctx: &mut FillRenderContext| {
 			let grid = DeviceGrid::from_ctx(ctx);
 			let families = ctx.text_style_state.font_families.clone();
 			let RenderTarget::Background { canvas, font_collection } = &mut ctx.target else { return };
-			let (bar_bg, line, text, dim, accent) = colors;
+			let (bar_bg, line, tick_ink, text, dim, accent) = colors;
 			grid.enter(canvas);
 			let hl = grid.hairline();
 			let font = 11. * grid.scale;
@@ -301,7 +308,7 @@ impl Component for Timeline {
 			if model.frames > 1 {
 				let step = label_step(geo.px_per_frame());
 				let minor = minor_step(step);
-				let tick = stroke(line, hl);
+				let tick = stroke(tick_ink, hl);
 				let mut f = 0;
 				while f <= model.last() {
 					let major = f % step == 0;
