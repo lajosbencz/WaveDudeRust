@@ -18,14 +18,15 @@ What new code follows so that it fits the code already here. Each rule names one
 - `typos` ([`_typos.toml`](../_typos.toml) holds the exceptions: format and literature terms, the translated string tables) and
   `cargo deny check` ([`deny.toml`](../deny.toml): advisories of our own dependencies, the licence allow-list, no wildcard or
   unknown-source dependencies) run on every change in [`.github/workflows/hygiene.yml`](../.github/workflows/hygiene.yml); `cargo hack check
-  --workspace --feature-powerset --depth 2` and `cargo machete` run in the Linux CI job, whose tests run under
-  `cargo llvm-cov` (line coverage in the job summary, `lcov.info` as an artifact; no threshold).
+  --workspace --feature-powerset --depth 2` and `cargo machete` run in the Linux CI job.
 - Before a push, run what [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs:
   `cargo fmt --all --check`;
   `cargo clippy --workspace --all-targets --features $F -- -D warnings` and `cargo test --workspace --features $F`
   with `F=wavedude-export/openh264-source,wavedude-cli/openh264-source`;
   `cargo check --workspace`, `cargo check -p wavedude-export --no-default-features`,
   `cargo check -p wavedude-core --no-default-features`; and `cargo +1.89 check --workspace --all-targets` (MSRV job).
+- Coverage is a local map of code no test reaches, never a CI step or a threshold:
+  `cargo llvm-cov --workspace --features $F --summary-only` (`--html` for the per-line view).
 - Commits and pull request titles are conventional commits ([`CONTRIBUTING.md`](../CONTRIBUTING.md), "Commit messages").
 
 ## Crates and dependency direction
