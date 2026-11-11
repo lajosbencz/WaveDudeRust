@@ -8,7 +8,7 @@ use wavedude_widgets::Button;
 use freya::prelude::*;
 use wavedude_core::model::ranges::Range;
 use wavedude_core::model::{
-	Bounds, ColorScheme, Display, Edit as _, Field as _, Fields, Nested, Number, Part, Probe, Prop, Scene, Simulation,
+	ColorScheme, Display, Edit as _, Field as _, Fields, Nested, Number, Part, Probe, Project, Prop, Scene, Simulation,
 	Source, Variant, Word,
 };
 use wavedude_widgets::icon::icons;
@@ -29,10 +29,8 @@ use super::shared::{App, Topics};
 /// The edited object, cloned from the project at selection.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Object {
-	Project {
-		seed: i32,
-		description: String,
-	},
+	/// Only the seed and the description are read.
+	Project(Box<Project>),
 	/// Without the image bytes.
 	Scene(Scene),
 	Simulation(Simulation),
@@ -57,7 +55,11 @@ pub struct Snapshot {
 fn object_of(app: &App, row: Row) -> Option<Object> {
 	let p = &app.document.project;
 	Some(match row {
-		Row::Project => Object::Project { seed: p.seed, description: p.description.clone() },
+		Row::Project => Object::Project(Box::new(Project {
+			seed: p.seed,
+			description: p.description.clone(),
+			..Default::default()
+		})),
 		Row::Scene => Object::Scene(p.scene.without_image()),
 		Row::Simulation => Object::Simulation(p.simulation.clone()),
 		Row::Display => Object::Display(p.display.clone()),
@@ -102,10 +104,7 @@ pub struct Form {
 
 /// A number's bounds from the field's declared range; open when it has none or depends on another value.
 pub fn bounds_of<T: Fields, V>(p: Prop<T, V>) -> (f64, f64) {
-	match p.field.bounds() {
-		Bounds::Range(r) => (r.min, r.max),
-		Bounds::Dependent | Bounds::Open => (-1e9, 1e9),
-	}
+	p.field.range().map_or((-1e9, 1e9), |r| (r.min, r.max))
 }
 
 impl Form {
@@ -156,7 +155,6 @@ impl Form {
 /// The rows of one object: labels, hints and test ids are `<TYPE_NAME>.<Member>`, the bounds the fields' own.
 pub struct Scope<'a, T: Fields> {
 	form: &'a Form,
-	/// The object the rows show.
 	pub obj: &'a T,
 	send: Rc<dyn Fn(T::Edit)>,
 	/// Number boxes show no value (a setting that does not apply).
@@ -194,7 +192,6 @@ impl<T: Fields, U: Clone + 'static> List<T, U> {
 		(self.send)((self.prop.edit)(items));
 	}
 
-	/// Sets `p` of item `index`.
 	pub fn set_item<V>(&self, index: usize, p: Prop<U, V>, value: V)
 	where
 		U: Fields,
@@ -206,31 +203,20 @@ impl<T: Fields, U: Clone + 'static> List<T, U> {
 }
 
 impl<'a, T: Fields> Scope<'a, T> {
-	/// The scope of a nested field.
 	pub fn nested<U: Fields>(&self, n: Nested<T, U>) -> Scope<'a, U> {
 		let (send, wrap) = (self.send.clone(), n.wrap);
 		Scope { form: self.form, obj: (n.get)(self.obj), send: Rc::new(move |e| send(wrap(e))), blank: self.blank }
 	}
 
-	/// The scope of an enum variant or an optional composite; `None` when the object is another variant or absent.
-	pub fn variant<U: Fields>(&self, v: Variant<T, U>) -> Option<Scope<'a, U>> {
-		let (send, wrap) = (self.send.clone(), v.wrap);
-		(v.get)(self.obj).map(|obj| Scope {
-			form: self.form,
-			obj,
-			send: Rc::new(move |e| send(wrap(e))),
-			blank: self.blank,
-		})
-	}
-
-	/// As [`Self::variant`], showing `default` with empty number boxes where the variant is absent.
+	/// The scope of an enum variant or an optional composite; where the object is another variant or absent,
+	/// `default` with empty number boxes.
 	pub fn variant_or<'b, U: Fields>(&self, v: Variant<T, U>, default: &'b U) -> Scope<'b, U>
 	where
 		'a: 'b,
 	{
-		match self.variant(v) {
-			Some(scope) => scope,
-			None => self.variant_over(v, default).blanked(),
+		match (v.get)(self.obj) {
+			Some(obj) => self.variant_over(v, obj),
+			None => Scope { blank: true, ..self.variant_over(v, default) },
 		}
 	}
 
@@ -251,21 +237,10 @@ impl<'a, T: Fields> Scope<'a, T> {
 		Scope { form: self.form, obj, send: self.send.clone(), blank: self.blank }
 	}
 
-	/// The same rows with their number boxes empty.
-	pub fn blanked(mut self) -> Self {
-		self.blank = true;
-		self
-	}
-
 	pub fn get<V>(&self, p: Prop<T, V>) -> V {
 		(p.get)(self.obj)
 	}
 
-	pub fn set<V>(&self, p: Prop<T, V>, value: V) {
-		(self.send)((p.edit)(value));
-	}
-
-	/// `p`'s setter, for a row's own handlers.
 	pub fn setter<V: 'static>(&self, p: Prop<T, V>) -> impl Fn(V) + 'static {
 		let send = self.send.clone();
 		move |value| send((p.edit)(value))
@@ -276,7 +251,6 @@ impl<'a, T: Fields> Scope<'a, T> {
 		List { items: Rc::new(self.get(p)), prop: p, send: self.send.clone() }
 	}
 
-	/// The test id of the field's row.
 	pub fn test_id(p: &Prop<T, impl Sized>) -> String {
 		format!("{}.{}", T::TYPE_NAME, p.field.name())
 	}
@@ -445,7 +419,7 @@ pub fn check_box(text: String, on: bool, on_change: impl Fn(bool) + 'static) -> 
 }
 
 /// As [`check_box`]; disabled, it is greyed and takes neither the pointer nor the focus.
-pub fn check_box_in(text: String, on: bool, enabled: bool, on_change: impl Fn(bool) + 'static) -> Rect {
+fn check_box_in(text: String, on: bool, enabled: bool, on_change: impl Fn(bool) + 'static) -> Rect {
 	let theme = use_wave_theme();
 	let ink = if enabled { theme.text } else { theme.text_disabled };
 	let mark = rect()

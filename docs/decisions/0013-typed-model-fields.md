@@ -18,7 +18,9 @@ or not at all; the probe-form and Fresnel-writer bugs came from a field one syst
   a `<Type>Edit` enum (the same members carrying the new value), the `Fields`, `Field`, `Edit` and `Feed` impls
   (`crates/wavedude-core/src/model/fields.rs`) and an associated const per field (`Probe::BOX_WIDTH`: a `Prop`, a
   `Nested` or a `Variant` holding the field, a getter and an edit constructor).
-- `Field::all()` is the model's table. A field's bound is an attribute on it (`range`, `dependent`); a field that
+- `Field::all()` is the model's table; `Fields::visit` hands a `Visitor` every type and `Word` reachable from a type, so
+  the tests that check each type need no list of types. A field's bound is an attribute on it (`range`, `dependent`); a
+  field that
   is no scalar (a list, the image bytes) is `skip`, handled by hand in the adapter and the forms.
 - The `.wdproj` adapter owns everything XML: typed `Attr` tables in Next's order with the names, presence and
   codecs that differ from the model (`crates/wavedude-core/src/io/fields.rs`, `io/wdproj.rs`). Reading builds a

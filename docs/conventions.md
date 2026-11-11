@@ -56,9 +56,11 @@ What new code follows so that it fits the code already here. Each rule names one
   (`Scope::number(Simulation::STEPS, ...)`, `crates/wavedude-app/src/ui/properties_forms.rs`) and
   `Label.<Type>.<Member>` / `Hint.<Type>.<Member>` in the four string tables. Tests that fail otherwise:
   `every_field_of_a_table_type_is_an_attribute_or_skipped` (the file), `every_persisted_number_has_its_bounds_named`
-  and `every_bound_is_enforced_by_normalize` (bounds, clamp), `every_model_property_has_label_and_hint` (strings);
+  and `every_bound_is_enforced_by_normalize` (bounds, clamp),
+  `every_model_field_and_word_has_its_texts_in_every_language` (strings);
   the forms test `every_form_is_built_for_every_item_kind` builds every row. A new enum derives `Word` and gets
-  `Enum.<Type>.<Member>` keys (`every_word_has_its_members_in_every_language`).
+  `Enum.<Type>.<Member>` keys (the same test). The derive's `Fields::visit` walks every type and word reachable
+  from `Project`, so these tests need no hand-kept list of types.
 - Model edit: a variant of `Command` (`crates/wavedude-app-state/src/commands.rs:181`), a struct variant with
   named fields and a `///` line, handled in `commands::apply` (`commands.rs:408`), which returns a `Change`
   whose `ChangeKind` (`commands.rs:249`) tells the live controller what to redo (`LiveController::on_change`,
@@ -183,8 +185,8 @@ What new code follows so that it fits the code already here. Each rule names one
   `crates/wavedude-app/tests/strings.rs` fails on a key missing from a language or unused in the source.
 - Keys are literal `"Key"` strings in the code (the test searches for them); built keys use the prefixes
   `Label.`, `Hint.`, `Enum.`, `Kind.` through `Strings::label`, `hint`, `enum_word`, `kind`. `Label.`, `Hint.` and
-  `Enum.` keys are `TYPE_NAME.<field or member name>` of a model type or `Word` (`strings::model_field_keys`,
-  `model_word_keys`), the test counts those as used.
+   `Enum.` keys are `TYPE_NAME.<field or member name>` of a model type or `Word` (`strings::model_keys`), the test
+   counts those as used.
 - Lookup: `s.get("Key")` on a `Strings` from `cx.strings()` (`crates/wavedude-app/src/ui/app.rs:261`);
   placeholders `{0}`, `{1}` with `s.format("KeyFormat", &[&a, &b])`, keys ending in `Format`
   (`ui/memory_warning.rs:73`).

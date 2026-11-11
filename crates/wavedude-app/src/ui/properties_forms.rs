@@ -233,7 +233,7 @@ pub fn build(f: &Form, row: Row, snap: &Snapshot) -> Vec<Element> {
 	let r = &snap.readouts;
 	let Some(object) = &snap.object else { return Vec::new() };
 	match (&**object, row) {
-		(Object::Project { seed, description }, _) => project(f, *seed, description),
+		(Object::Project(o), _) => project(f, o),
 		(Object::Scene(o), _) => scene(f, o, r),
 		(Object::Simulation(o), _) => simulation(f, o),
 		(Object::Display(o), _) => display(f, o, r),
@@ -245,17 +245,15 @@ pub fn build(f: &Form, row: Row, snap: &Snapshot) -> Vec<Element> {
 	}
 }
 
-fn project(f: &Form, seed: i32, description: &str) -> Vec<Element> {
+fn project(f: &Form, obj: &Project) -> Vec<Element> {
 	let s = &f.s;
-	// only the seed and the description are read
-	let obj = Project { seed, description: description.to_owned(), ..Project::default() };
-	let p = f.scope(&obj, Edit::Project);
+	let p = f.scope(obj, Edit::Project);
 	let new_seed = {
 		let set = p.setter(Project::SEED);
 		move |_: Event<PressEventData>| {
 			let nanos =
 				std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
-			set(i32::try_from(nanos & 0x7fff_ffff).unwrap_or(1));
+			set((nanos & 0x7fff_ffff) as i32);
 		}
 	};
 	let seed = p.number_beside(
@@ -1211,12 +1209,13 @@ impl PartialEq for LayerList {
 
 impl Component for LayerList {
 	fn render(&self) -> impl IntoElement {
-		self.rows(&self.form)
+		self.rows()
 	}
 }
 
 impl LayerList {
-	fn rows(&self, f: &Form) -> Element {
+	fn rows(&self) -> Element {
+		let f = &self.form;
 		let s = &f.s;
 		let list = &self.list;
 		let (tmin, tmax) = bounds_of(FilterLayer::THICKNESS);
@@ -1225,6 +1224,9 @@ impl LayerList {
 		let theme = use_wave_theme();
 		// the rows' tops by index, and the drag: the pointer's y and the grip's top at the press, the layer's index now
 		let mut tops = use_state(Vec::<f32>::new);
+		if tops.peek().len() > list.items().len() {
+			tops.write().truncate(list.items().len());
+		}
 		let mut drag = use_state(|| None::<(f64, f32, usize)>);
 		// each row: the grip, a narrow ordinal, the two boxes sharing the rest, the buttons
 		let ordinal =

@@ -164,9 +164,8 @@ impl Table for Simulation {
 	const ATTRS: &'static [Attr<Self>] = &[
 		Attr::of(SimulationField::Steps),
 		Attr::of(SimulationField::VisualizeEvery),
-		Attr::custom(
+		Attr::<Self>::custom(
 			SimulationField::Stencil,
-			"FourthOrderLaplacian",
 			|s| (s.stencil == Stencil::FourthOrder).to_string(),
 			|s, text| {
 				let fourth = xml::parse_bool(text).ok_or("true or false")?;
@@ -174,7 +173,8 @@ impl Table for Simulation {
 				Ok(())
 			},
 			AttrType::Bool,
-		),
+		)
+		.named("FourthOrderLaplacian"),
 		Attr::of(SimulationField::WaveSpeed),
 		Attr::of(SimulationField::TimeDecay),
 		Attr::of(SimulationField::SourceFrequencyScale),
@@ -193,7 +193,6 @@ pub(super) const ORIGINAL_BRIGHTNESS: f64 = 30.0 / BRIGHTNESS_GAIN;
 /// The `Brightness` attribute: `WaveDude` Next's units in the file.
 const BRIGHTNESS: Attr<DisplayLayer> = Attr::custom(
 	DisplayLayerField::Brightness,
-	"Brightness",
 	|l| xml::fmt_f64(l.brightness * BRIGHTNESS_GAIN),
 	|l, text| {
 		l.brightness = xml::parse_f64(text).ok_or("a number")? / BRIGHTNESS_GAIN;
@@ -286,7 +285,6 @@ impl Table for Source {
 		Attr::of(SourceField::OffWidth),
 		Attr::custom(
 			SourceField::DetachAfter,
-			"DetachAfter",
 			|s| s.detach_after.map_or(-1, i64::from).to_string(),
 			|s, text| {
 				s.detach_after = u32::try_from(xml::parse_i32(text).ok_or("an integer")?).ok();
@@ -893,7 +891,7 @@ fn part_attrs(kind: &PartKind) -> Vec<AttrDecl> {
 }
 
 fn decls() -> Vec<Decl> {
-	let text = |name, required| AttrDecl { name, ty: AttrType::Cdata, required };
+	let text = |name, required| AttrDecl::plain(name, AttrType::Cdata, required);
 	let mut decls = vec![
 		Decl::new(
 			"Project",
@@ -908,7 +906,7 @@ fn decls() -> Vec<Decl> {
 		Decl::new("ImageData", "(#PCDATA)", vec![]),
 		Decl::new("Simulation", "EMPTY", {
 			let mut attrs = fields::attrs(Simulation::ATTRS);
-			attrs.push(AttrDecl { name: "Rescaled", ty: AttrType::Bool, required: false });
+			attrs.push(AttrDecl::plain("Rescaled", AttrType::Bool, false));
 			attrs
 		}),
 		Decl::of::<Display>("Display", "(Field?, Intensity?, Video?)"),
@@ -941,7 +939,7 @@ fn decls() -> Vec<Decl> {
 			"(Stop*)",
 			vec![
 				text("Name", false),
-				AttrDecl { name: "Kind", ty: AttrType::Enum(SchemeKind::NAMES), required: false },
+				AttrDecl::plain("Kind", AttrType::Enum(SchemeKind::NAMES), false),
 				text("Description", false),
 			],
 		),
@@ -1103,7 +1101,7 @@ pub fn validate(text: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::model::{Bounds, Field, ValueKind};
+	use crate::model::{Field, ValueKind};
 
 	/// One of every kind with values off their defaults where it matters.
 	fn every_kind() -> Project {
@@ -1335,18 +1333,6 @@ mod tests {
 		assert!(read_str("<ColorScheme />").is_err());
 	}
 
-	/// Calls `$f::<T>()` for every type with a table.
-	macro_rules! each_table {
-		($f:ident) => {
-			each_table!(@call $f; Scene, Simulation, DisplayLayer, Video, Display, Source, SourceArray, Probe, PartBase,
-				Coating, Material, Lens, FresnelLens, Polygon, Rectangle, Ellipse, Triangle, Outline, Diffuser,
-				InterferenceFilter, FilterLayer, SimpleGrating, MetaSurface, MetaLensDesign, MetaPrismDesign,
-				MetaAxiconDesign, FacettedGrating, Fiber, BraggReflector, GrinLens, LogicGate, ZonePlate, Point,
-				FiberNode)
-		};
-		(@call $f:ident; $($t:ty),*) => { $($f::<$t>();)* };
-	}
-
 	/// Numbers without bounds (positions, spacings, offsets), by `Type.Path`.
 	const UNBOUNDED: &[&str] = &[
 		"Project.Seed",
@@ -1370,35 +1356,17 @@ mod tests {
 		"FiberNode.OutY",
 	];
 
-	fn assert_bounds_named(key: &str, bounds: Bounds) {
-		assert!(
-			matches!(bounds, Bounds::Range(_) | Bounds::Dependent) || UNBOUNDED.contains(&key),
-			"{key} has no range, dependent bound or exemption"
-		);
+	/// A table's type and its persisted numbers: the key and whether a range or a dependent rule bounds it.
+	struct Covered {
+		type_name: &'static str,
+		/// A table without attributes (`Outline`) has no attribute declaration to name its owner.
+		declared: bool,
+		numbers: Vec<(String, bool)>,
 	}
 
-	fn bounds_are_named<T: Table>() {
-		for a in T::ATTRS {
-			let field = a.field;
-			let key = format!("{}.{}", T::TYPE_NAME, field.path());
-			match field.kind() {
-				ValueKind::Int | ValueKind::UInt | ValueKind::Float => assert_bounds_named(&key, field.bounds()),
-				ValueKind::Text | ValueKind::Bool | ValueKind::Word(_) => {}
-				ValueKind::List | ValueKind::Nested => panic!("{key} is no scalar, a table cannot carry it"),
-			}
-		}
-	}
-
-	#[test]
-	fn every_persisted_number_has_its_bounds_named() {
-		each_table!(bounds_are_named);
-		// the numbers of the hand-written declarations: the project's `Seed` and a stop's `At`
-		assert_bounds_named("Project.Seed", ProjectField::Seed.bounds());
-		assert_bounds_named("Stop.At", StopField::At.bounds());
-	}
-
-	/// Every leaf of the type's fields is an attribute of its table, or under one of `skips` (a path or its prefix).
-	fn covered_but<T: Table>(skips: &[&str]) {
+	/// Every leaf of the type's fields is an attribute of its table, or under one of `skips` (a path or its prefix);
+	/// the attribute names are unique and every attribute is a scalar.
+	fn covered_but<T: Table>(skips: &[&str]) -> Covered {
 		let carried: Vec<T::Field> = T::ATTRS.iter().map(|a| a.field).collect();
 		let all = <T::Field as Field>::all();
 		for f in &carried {
@@ -1414,6 +1382,39 @@ mod tests {
 				if skipped { "skipped but in the table" } else { "in no table and not skipped" }
 			);
 		}
+		let mut names = Vec::new();
+		let mut numbers = Vec::new();
+		for a in T::ATTRS {
+			assert!(!names.contains(&a.name()), "{} names {} twice", T::TYPE_NAME, a.name());
+			names.push(a.name());
+			let key = format!("{}.{}", T::TYPE_NAME, a.field.path());
+			match a.field.kind() {
+				ValueKind::Int | ValueKind::UInt | ValueKind::Float => numbers.push(bounded(key, a.field)),
+				ValueKind::Text | ValueKind::Bool | ValueKind::Word(_) => {}
+				ValueKind::List | ValueKind::Nested => panic!("{key} is no scalar, a table cannot carry it"),
+			}
+		}
+		Covered { type_name: T::TYPE_NAME, declared: !T::ATTRS.is_empty(), numbers }
+	}
+
+	fn bounded(key: String, field: impl Field) -> (String, bool) {
+		(key, field.range().is_some() || field.dependent())
+	}
+
+	#[test]
+	fn every_persisted_number_has_its_bounds_named() {
+		// the numbers of the hand-written declarations: the project's `Seed` and a stop's `At`
+		let mut numbers: Vec<(String, bool)> = tables().into_iter().flat_map(|c| c.numbers).collect();
+		numbers.push(bounded("Project.Seed".into(), ProjectField::Seed));
+		numbers.push(bounded("Stop.At".into(), StopField::At));
+		for (key, bounded) in &numbers {
+			assert!(*bounded || UNBOUNDED.contains(&key.as_str()), "{key} has no range, dependent bound or exemption");
+		}
+		for key in UNBOUNDED {
+			let bounded =
+				numbers.iter().find(|(k, _)| k == key).unwrap_or_else(|| panic!("{key} is no persisted number")).1;
+			assert!(!bounded, "{key} is exempt but bounded");
+		}
 	}
 
 	/// The sub-tables every part kind but a few reads beside its own: the coating's and the material's.
@@ -1421,67 +1422,63 @@ mod tests {
 
 	#[test]
 	fn every_field_of_a_table_type_is_an_attribute_or_skipped() {
-		covered_but::<Scene>(&[]);
-		covered_but::<Simulation>(&[]);
-		covered_but::<DisplayLayer>(&[]);
-		covered_but::<Video>(&[]);
-		// the layers and the video are elements of their own, `Display`'s children
-		covered_but::<Display>(&["Field", "Intensity", "Video"]);
-		// the array is the `Array` child
-		covered_but::<Source>(&["Array"]);
-		covered_but::<SourceArray>(&[]);
-		covered_but::<Probe>(&[]);
-		covered_but::<PartBase>(&[]);
-		covered_but::<Coating>(&[]);
-		covered_but::<Material>(&[]);
-		// the coating and the material are read by their own tables
-		covered_but::<Lens>(SHAPE_PARTS);
-		// its lens is read by the `Lens` table
-		covered_but::<FresnelLens>(&["Lens"]);
-		covered_but::<Polygon>(SHAPE_PARTS);
-		covered_but::<Rectangle>(SHAPE_PARTS);
-		covered_but::<Ellipse>(SHAPE_PARTS);
-		covered_but::<Triangle>(SHAPE_PARTS);
-		// the corners are `Point` children
-		covered_but::<Outline>(&["Coating", "Material", "Points"]);
-		covered_but::<Diffuser>(SHAPE_PARTS);
-		// the layers are `Layer` children
-		covered_but::<InterferenceFilter>(&["Coating", "Material", "Layers"]);
-		covered_but::<FilterLayer>(&[]);
-		covered_but::<SimpleGrating>(SHAPE_PARTS);
-		// the design is read by its own table, chosen by the element name
-		covered_but::<MetaSurface>(&["Coating", "Material", "Design"]);
-		covered_but::<MetaLensDesign>(&[]);
-		covered_but::<MetaPrismDesign>(&[]);
-		covered_but::<MetaAxiconDesign>(&[]);
-		covered_but::<FacettedGrating>(SHAPE_PARTS);
-		// the nodes are `Node` children
-		covered_but::<Fiber>(&["Coating", "Nodes"]);
-		covered_but::<BraggReflector>(&[]);
-		covered_but::<GrinLens>(&["Coating"]);
-		// the kind is the element name (`XorGate`)
-		covered_but::<LogicGate>(&["Kind"]);
-		covered_but::<ZonePlate>(&[]);
-		covered_but::<Point>(&[]);
-		covered_but::<FiberNode>(&[]);
+		let covered = tables();
+		let mut have: Vec<&str> = covered.iter().filter(|c| c.declared).map(|c| c.type_name).collect();
+		let mut declared: Vec<&str> = decls().iter().flat_map(|d| &d.attrs).filter_map(|a| a.owner).collect();
+		have.sort_unstable();
+		declared.sort_unstable();
+		declared.dedup();
+		assert_eq!(have, declared, "the covered types are the owners of the DTD's attributes");
+		let names = |attrs: &[Attr<DisplayLayer>]| attrs.iter().map(Attr::name).collect::<Vec<_>>();
+		assert_eq!(names(FIELD_LAYER), names(DisplayLayer::ATTRS));
 	}
 
-	#[test]
-	fn every_table_attribute_is_a_scalar_and_the_names_are_unique() {
-		fn scalars<T: Table>() {
-			let mut names = Vec::new();
-			for a in T::ATTRS {
-				let f = a.field;
-				assert!(
-					!matches!(f.kind(), ValueKind::List | ValueKind::Nested),
-					"{}.{} is no scalar",
-					T::TYPE_NAME,
-					f.path()
-				);
-				assert!(!names.contains(&a.name()), "{} names {} twice", T::TYPE_NAME, a.name());
-				names.push(a.name());
-			}
-		}
-		each_table!(scalars);
+	/// Every table type with the fields of its type its attributes do not carry.
+	fn tables() -> Vec<Covered> {
+		vec![
+			covered_but::<Scene>(&[]),
+			covered_but::<Simulation>(&[]),
+			covered_but::<DisplayLayer>(&[]),
+			covered_but::<Video>(&[]),
+			// the layers and the video are elements of their own, `Display`'s children
+			covered_but::<Display>(&["Field", "Intensity", "Video"]),
+			// the array is the `Array` child
+			covered_but::<Source>(&["Array"]),
+			covered_but::<SourceArray>(&[]),
+			covered_but::<Probe>(&[]),
+			covered_but::<PartBase>(&[]),
+			covered_but::<Coating>(&[]),
+			covered_but::<Material>(&[]),
+			// the coating and the material are read by their own tables
+			covered_but::<Lens>(SHAPE_PARTS),
+			// its lens is read by the `Lens` table
+			covered_but::<FresnelLens>(&["Lens"]),
+			covered_but::<Polygon>(SHAPE_PARTS),
+			covered_but::<Rectangle>(SHAPE_PARTS),
+			covered_but::<Ellipse>(SHAPE_PARTS),
+			covered_but::<Triangle>(SHAPE_PARTS),
+			// the corners are `Point` children
+			covered_but::<Outline>(&["Coating", "Material", "Points"]),
+			covered_but::<Diffuser>(SHAPE_PARTS),
+			// the layers are `Layer` children
+			covered_but::<InterferenceFilter>(&["Coating", "Material", "Layers"]),
+			covered_but::<FilterLayer>(&[]),
+			covered_but::<SimpleGrating>(SHAPE_PARTS),
+			// the design is read by its own table, chosen by the element name
+			covered_but::<MetaSurface>(&["Coating", "Material", "Design"]),
+			covered_but::<MetaLensDesign>(&[]),
+			covered_but::<MetaPrismDesign>(&[]),
+			covered_but::<MetaAxiconDesign>(&[]),
+			covered_but::<FacettedGrating>(SHAPE_PARTS),
+			// the nodes are `Node` children
+			covered_but::<Fiber>(&["Coating", "Nodes"]),
+			covered_but::<BraggReflector>(&[]),
+			covered_but::<GrinLens>(&["Coating"]),
+			// the kind is the element name (`XorGate`)
+			covered_but::<LogicGate>(&["Kind"]),
+			covered_but::<ZonePlate>(&[]),
+			covered_but::<Point>(&[]),
+			covered_but::<FiberNode>(&[]),
+		]
 	}
 }

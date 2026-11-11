@@ -7,7 +7,7 @@ use syn::{Data, DeriveInput, Error, Expr, Field, Ident, Result, Type, Variant};
 
 use crate::base;
 use crate::naming::{pascal, screaming, type_name};
-use crate::shape::{Leaf, Shape, option_inner};
+use crate::shape::{Leaf, Shape, list_element, option_inner};
 
 enum Def {
 	/// A struct field of a leaf type.
@@ -32,11 +32,12 @@ pub(crate) fn expand(input: &DeriveInput) -> Result<TokenStream> {
 	if !input.generics.params.is_empty() {
 		return Err(Error::new_spanned(&input.generics, "Fields derives on a type without generics"));
 	}
+	let mut skipped = Vec::new();
 	let (members, is_enum) = match &input.data {
 		Data::Struct(data) => {
 			let mut members = Vec::new();
 			for field in &data.fields {
-				members.extend(struct_member(field)?);
+				members.extend(struct_member(field, &mut skipped)?);
 			}
 			(members, false)
 		}
@@ -49,7 +50,7 @@ pub(crate) fn expand(input: &DeriveInput) -> Result<TokenStream> {
 	if members.is_empty() {
 		return Err(Error::new_spanned(&input.ident, "Fields needs at least one field"));
 	}
-	Ok(Gen { owner: &input.ident, type_name: type_name(input)?, members, is_enum }.all())
+	Ok(Gen { owner: &input.ident, type_name: type_name(input)?, members, skipped, is_enum }.all())
 }
 
 fn member(ident: &Ident, def: Def) -> Member {
@@ -64,7 +65,8 @@ fn member(ident: &Ident, def: Def) -> Member {
 	}
 }
 
-fn struct_member(field: &Field) -> Result<Option<Member>> {
+/// The member of a field; a skipped field adds its `Fields` list element type to `skipped`, which is visited.
+fn struct_member(field: &Field, skipped: &mut Vec<Type>) -> Result<Option<Member>> {
 	let ident = field.ident.clone().ok_or_else(|| Error::new_spanned(field, "Fields derives on named fields"))?;
 	let (mut skip, mut nested, mut whole, mut dependent) = (false, false, false, false);
 	let mut range = None;
@@ -88,6 +90,7 @@ fn struct_member(field: &Field) -> Result<Option<Member>> {
 		})?;
 	}
 	if skip {
+		skipped.extend(list_element(&field.ty).cloned());
 		return Ok(None);
 	}
 	let def = if nested {
@@ -108,12 +111,19 @@ fn struct_member(field: &Field) -> Result<Option<Member>> {
 		if whole {
 			return Err(Error::new_spanned(field, "`whole` goes with `nested`"));
 		}
-		Def::Leaf { field: ident.clone(), shape: Box::new(Shape::of(&field.ty)?), range, dependent }
+		let shape = Shape::of(&field.ty)?;
+		if (range.is_some() || dependent) && !shape.is_number() {
+			return Err(Error::new_spanned(field, "`range` and `dependent` go with a number"));
+		}
+		Def::Leaf { field: ident.clone(), shape: Box::new(shape), range, dependent }
 	};
 	Ok(Some(member(&ident, def)))
 }
 
 fn enum_member(variant: &Variant) -> Result<Member> {
+	if let Some(attr) = variant.attrs.iter().find(|a| a.path().is_ident("field")) {
+		return Err(Error::new_spanned(attr, "a variant takes no `field` attribute"));
+	}
 	let syn::Fields::Unnamed(fields) = &variant.fields else {
 		return Err(Error::new_spanned(variant, "Fields derives on newtype variants"));
 	};
@@ -130,7 +140,7 @@ struct Arms {
 	name: Vec<TokenStream>,
 	path: Vec<TokenStream>,
 	kind: Vec<TokenStream>,
-	bounds: Vec<TokenStream>,
+	range: Vec<TokenStream>,
 	dependent: Vec<TokenStream>,
 	get: Vec<TokenStream>,
 	edit: Vec<TokenStream>,
@@ -145,7 +155,7 @@ impl Arms {
 		self.name.push(quote!(Self::#v(_) => #n));
 		self.path.push(quote!(Self::#v(inner) => format!("{}.{}", #n, #p::Field::path(inner))));
 		self.kind.push(quote!(Self::#v(inner) => #p::Field::kind(inner)));
-		self.bounds.push(quote!(Self::#v(inner) => #p::Field::bounds(inner)));
+		self.range.push(quote!(Self::#v(inner) => #p::Field::range(inner)));
 		self.dependent.push(quote!(Self::#v(inner) => #p::Field::dependent(inner)));
 		self.edit.push(quote!(Self::#v(inner) => #p::Field::edit(inner, value).map(#te::#v)));
 		let inner_all = quote!(<<#ty as #p::Fields>::Field as #p::Field>::all());
@@ -157,7 +167,15 @@ struct Gen<'a> {
 	owner: &'a Ident,
 	type_name: String,
 	members: Vec<Member>,
+	/// Element types of skipped lists.
+	skipped: Vec<Type>,
 	is_enum: bool,
+}
+
+/// The statement that visits a `Fields` type.
+fn visit(ty: &Type) -> TokenStream {
+	let p = base();
+	quote!(<#ty as #p::Fields>::visit(v);)
 }
 
 impl Gen<'_> {
@@ -173,10 +191,23 @@ impl Gen<'_> {
 		let edit_impl = self.edit_impl(&tf, &te);
 		let feed = self.feed();
 		let consts = self.members.iter().map(|m| self.consts(m, &tf, &te));
-		let words = self.members.iter().filter_map(|m| match &m.def {
-			Def::Leaf { shape, .. } if shape.leaf == Leaf::Word => Some(&shape.inner),
-			_ => None,
+		let words: Vec<_> = self
+			.members
+			.iter()
+			.filter_map(|m| match &m.def {
+				Def::Leaf { shape, .. } if shape.leaf == Leaf::Word => Some(&shape.inner),
+				_ => None,
+			})
+			.collect();
+		let visits = self.members.iter().map(|m| match &m.def {
+			Def::Leaf { shape, .. } if shape.leaf == Leaf::Word => {
+				let w = &shape.inner;
+				quote!(v.word::<#w>();)
+			}
+			Def::Leaf { shape, .. } => list_element(&shape.inner).map_or_else(TokenStream::new, visit),
+			Def::Nested { ty, .. } | Def::Case { ty } => visit(ty),
 		});
+		let skipped = self.skipped.iter().map(visit);
 		quote! {
 			#field_enum
 			#edit_enum
@@ -185,6 +216,12 @@ impl Gen<'_> {
 				const TYPE_NAME: &'static str = #type_name;
 				type Field = #tf;
 				type Edit = #te;
+
+				fn visit<V: #p::Visitor>(v: &mut V) {
+					v.fields::<Self>();
+					#(#visits)*
+					#(#skipped)*
+				}
 			}
 
 			#field_impl
@@ -273,21 +310,16 @@ impl Gen<'_> {
 					a.path.push(quote!(Self::#v => String::from(#n)));
 					let k = shape.kind();
 					a.kind.push(quote!(Self::#v => #k));
-					a.bounds.push(match (range, dependent) {
-						(Some(r), _) => quote!(Self::#v => #p::Bounds::Range(#r)),
-						(None, true) => quote!(Self::#v => #p::Bounds::Dependent),
-						(None, false) => quote!(Self::#v => #p::Bounds::Open),
+					a.range.push(match range {
+						Some(r) => quote!(Self::#v => Some(#r)),
+						None => quote!(Self::#v => None),
 					});
 					a.dependent.push(quote!(Self::#v => #dependent));
 					let value = shape.value(&quote!(of.#f));
 					a.get.push(quote!(Self::#v => Some(#value)));
 					wrong_used = true;
-					a.edit.push(if shape.leaf == Leaf::List {
-						quote!(Self::#v => { let _ = value; Err(wrong()) })
-					} else {
-						let parsed = shape.parse(&quote!(value));
-						quote!(Self::#v => #parsed.map(#te::#v).ok_or_else(wrong))
-					});
+					let parsed = shape.parse(&quote!(value));
+					a.edit.push(quote!(Self::#v => #parsed.map(#te::#v).ok_or_else(wrong)));
 					a.all.push(quote!(.chain([Self::#v])));
 				}
 				Def::Nested { field: f, ty, optional, whole } => {
@@ -302,7 +334,7 @@ impl Gen<'_> {
 						a.name.push(quote!(Self::#set => #n));
 						a.path.push(quote!(Self::#set => String::from(#n)));
 						a.kind.push(quote!(Self::#set => #p::ValueKind::Nested));
-						a.bounds.push(quote!(Self::#set => #p::Bounds::Open));
+						a.range.push(quote!(Self::#set => None));
 						a.dependent.push(quote!(Self::#set => false));
 						a.get.push(quote! {
 							Self::#set => Some(match &of.#f {
@@ -310,12 +342,7 @@ impl Gen<'_> {
 								None => #p::Value::Absent,
 							})
 						});
-						a.edit.push(quote! {
-							Self::#set => match value {
-								#p::Value::Absent => Ok(#te::#set(None)),
-								_ => Err(wrong()),
-							}
-						});
+						a.edit.push(quote!(Self::#set => Err(wrong())));
 					}
 				}
 				Def::Case { ty } => {
@@ -327,7 +354,7 @@ impl Gen<'_> {
 				}
 			}
 		}
-		let Arms { name, path, kind, bounds, dependent: dependent_arms, get, edit, all } = a;
+		let Arms { name, path, kind, range, dependent: dependent_arms, get, edit, all } = a;
 		let wrong = if wrong_used {
 			quote!(let wrong = || #p::EditError::WrongKind { field: #p::Field::path(self), want: #p::Field::kind(self) };)
 		} else {
@@ -353,8 +380,8 @@ impl Gen<'_> {
 					match self { #(#kind,)* }
 				}
 
-				fn bounds(self) -> #p::Bounds {
-					match self { #(#bounds,)* }
+				fn range(self) -> Option<#p::Range> {
+					match self { #(#range,)* }
 				}
 
 				fn dependent(self) -> bool {
@@ -380,12 +407,7 @@ impl Gen<'_> {
 		let mut apply = Vec::new();
 		let mut current = Vec::new();
 		let none = quote!(None);
-		let wrong_variant = quote! {
-			Err(#p::EditError::WrongKind {
-				field: #p::Field::path(#p::Edit::field(self)),
-				want: #p::ValueKind::Nested,
-			})
-		};
+		let absent = quote!(Err(#p::EditError::Absent(#p::Field::path(#p::Edit::field(self)))));
 		for m in &self.members {
 			let (v, set) = (&m.variant, &m.set);
 			let inner_field = quote!(Self::#v(e) => #tf::#v(#p::Edit::field(e)));
@@ -404,7 +426,7 @@ impl Gen<'_> {
 						apply.push(quote! {
 							Self::#v(e) => match to.#f.as_mut() {
 								Some(v) => #p::Edit::apply(e, v),
-								None => Err(#p::EditError::Absent(#p::Field::path(#p::Edit::field(self)))),
+								None => #absent,
 							}
 						});
 						current.push(quote! {
@@ -431,7 +453,7 @@ impl Gen<'_> {
 				}
 				Def::Case { .. } => {
 					field.push(inner_field);
-					let apply_other = self.otherwise(&wrong_variant);
+					let apply_other = self.otherwise(&absent);
 					apply.push(quote! {
 						Self::#v(e) => match to { #owner::#v(v) => #p::Edit::apply(e, v), #apply_other }
 					});
@@ -501,7 +523,7 @@ impl Gen<'_> {
 				let (kind, get) =
 					if *optional { (quote!(Variant), quote!(t.#f.as_ref())) } else { (quote!(Nested), quote!(&t.#f)) };
 				let konst = quote! {
-					pub const #k: #p::#kind<#owner, #ty> = #p::#kind { get: |t| #get, wrap: #te::#v, field: #tf::#v };
+					pub const #k: #p::#kind<#owner, #ty> = #p::#kind { get: |t| #get, wrap: #te::#v };
 				};
 				if *whole {
 					let set_k = format_ident!("SET_{k}");
@@ -520,7 +542,6 @@ impl Gen<'_> {
 					pub const #k: #p::Variant<#owner, #ty> = #p::Variant {
 						get: |t| match t { #owner::#v(v) => Some(v), #other },
 						wrap: #te::#v,
-						field: #tf::#v,
 					};
 				}
 			}

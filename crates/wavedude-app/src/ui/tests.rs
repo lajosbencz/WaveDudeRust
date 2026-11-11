@@ -146,7 +146,7 @@ fn every_form_is_built_for_every_item_kind() {
 			},
 			Row::Folder(_) => unreachable!("the rows are objects"),
 		};
-		assert!(is_drawn(&test, first), "{row:?} built no form: '{first}' is not drawn");
+		assert!(area_of(&test, first).is_some(), "{row:?} built no form: '{first}' is not drawn");
 	}
 }
 
@@ -175,22 +175,12 @@ fn a_press_on_a_graph_box_selects_its_probe() {
 	assert!(shared.peek(|a| a.selection.contains(ItemRef::new(ItemKind::Probe, 0))), "the press selected the probe");
 }
 
-/// Whether a rectangle carrying the test id `id` is drawn.
-fn is_drawn(test: &TestingRunner, id: &str) -> bool {
-	test.find(|_, element| {
-		Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some(id))?;
-		Some(())
-	})
-	.is_some()
-}
-
-/// The area of the rectangle carrying the test id `id`.
-fn area_of(test: &TestingRunner, id: &str) -> Area {
+/// The area of the rectangle carrying the test id `id`, if it is drawn.
+fn area_of(test: &TestingRunner, id: &str) -> Option<Area> {
 	test.find(|node, element| {
 		Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some(id))?;
 		Some(node.layout().area)
 	})
-	.unwrap_or_else(|| panic!("'{id}' is drawn"))
 }
 
 #[test]
@@ -207,13 +197,14 @@ fn an_outline_point_row_fits_the_pane() {
 	for _ in 0..3 {
 		test.sync_and_update();
 	}
-	let column = area_of(&test, "Coating.Depth");
+	let column = area_of(&test, "Coating.Depth").expect("the coating rows are drawn");
 	// the points sit below the fold
 	test.scroll((f64::from(column.center().x), f64::from(column.center().y)), (0., -2000.));
 	for _ in 0..3 {
 		test.sync_and_update();
 	}
 	let (x, y, remove) = (area_of(&test, "Point0.X"), area_of(&test, "Point0.Y"), area_of(&test, "Point0.Remove"));
+	let [x, y, remove] = [x, y, remove].map(|a| a.expect("the point row is drawn"));
 	assert!(x.width() > 20. && y.width() > 20., "both boxes share the row: {x:?} {y:?}");
 	assert!(x.max_x() <= y.min_x() && y.max_x() <= remove.min_x(), "X, Y, remove in order");
 	assert!(remove.max_x() <= column.max_x() + 1., "the remove button stays in the pane: {remove:?} {column:?}");

@@ -27,11 +27,11 @@ pub(crate) struct Shape {
 	pub optional: bool,
 }
 
-/// The `T` of an `Option<T>`.
-pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
+/// The `T` of `name<T>`.
+fn generic_arg<'a>(ty: &'a Type, name: &str) -> Option<&'a Type> {
 	let Type::Path(path) = ty else { return None };
 	let segment = path.path.segments.last()?;
-	if segment.ident != "Option" {
+	if segment.ident != name {
 		return None;
 	}
 	let PathArguments::AngleBracketed(args) = &segment.arguments else { return None };
@@ -39,6 +39,19 @@ pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
 		GenericArgument::Type(inner) => Some(inner),
 		_ => None,
 	}
+}
+
+/// The `T` of an `Option<T>`.
+pub(crate) fn option_inner(ty: &Type) -> Option<&Type> {
+	generic_arg(ty, "Option")
+}
+
+/// The element type of a list of `Fields` types; none for another type or a list of plain values.
+pub(crate) fn list_element(ty: &Type) -> Option<&Type> {
+	let element = generic_arg(ty, "Vec")?;
+	let Type::Path(path) = element else { return None };
+	let plain = ["u8", "u32", "i32", "f64", "bool", "String"];
+	(!plain.iter().any(|p| path.path.is_ident(p))).then_some(element)
 }
 
 impl Shape {
@@ -49,12 +62,12 @@ impl Shape {
 		let Type::Path(path) = inner else { return Err(unsupported()) };
 		let segment = path.path.segments.last().ok_or_else(unsupported)?;
 		let leaf = match segment.ident.to_string().as_str() {
-			"u8" | "u16" | "u32" => Leaf::UInt,
-			"i8" | "i16" | "i32" | "i64" => Leaf::Int,
-			"u64" | "u128" | "usize" | "i128" | "isize" | "f32" => {
+			"u8" | "u32" => Leaf::UInt,
+			"i32" => Leaf::Int,
+			"u16" | "u64" | "u128" | "usize" | "i8" | "i16" | "i64" | "i128" | "isize" | "f32" => {
 				return Err(Error::new_spanned(
 					ty,
-					"not a supported number type (u8, u16, u32, i8, i16, i32, i64, f64); mark the field `#[field(skip)]`",
+					"not a supported number type (u8, u32, i32, f64); mark the field `#[field(skip)]`",
 				));
 			}
 			"f64" => Leaf::Float,
@@ -68,6 +81,11 @@ impl Shape {
 			return Err(unsupported());
 		}
 		Ok(Self { ty: ty.clone(), leaf, inner: inner.clone(), optional })
+	}
+
+	/// Whether the leaf is a number.
+	pub(crate) fn is_number(&self) -> bool {
+		matches!(self.leaf, Leaf::UInt | Leaf::Int | Leaf::Float)
 	}
 
 	/// Whether the declared type is `Copy`.
@@ -110,7 +128,7 @@ impl Shape {
 			Leaf::Bool => quote!(#p::Value::Bool(#copy)),
 			Leaf::Text => quote!(#p::Value::Text(#ex.clone())),
 			Leaf::Word => quote!(#p::Value::Word(#p::Word::name(#copy))),
-			Leaf::List => quote!(#p::Value::Other(format!("{:?}", #ex))),
+			Leaf::List => quote!(#p::Value::Other(format!("[{} items]", #ex.len()))),
 		}
 	}
 

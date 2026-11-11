@@ -68,7 +68,7 @@ pub const AT_LEAST_1: Range = Range::new(1.0, INT_MAX);
 pub const AT_LEAST_2: Range = Range::new(2.0, INT_MAX);
 /// `DetachAfter` in the file: -1 never, else a step.
 pub const DETACH_AFTER: Range = Range::new(-1.0, INT_MAX);
-/// Angles are wrapped into (-180, 180], not clamped; see [`WRAPPED`].
+/// Angles are wrapped into (-180, 180], not clamped.
 pub const ANGLE: Range = Range::new(-180.0, 180.0);
 
 pub const PROBE_BOX_WIDTH: Range = Range::new(60.0, 4096.0);
@@ -106,14 +106,17 @@ pub const GRATING_SPACING: Range = Range::new(2.0, INT_MAX);
 pub const LAYER_THICKNESS: Range = Range::new(0.0, 1000.0);
 pub const STOP_AT: Range = Range::new(0.0, 1.0);
 
-/// Fields (`<TYPE_NAME>.<name>`) that are wrapped into (-180, 180] rather than clamped.
-pub const WRAPPED: &[&str] = &["SourceArray.Angle", "Part.Angle"];
-
 #[cfg(test)]
 mod tests {
+	use std::any::TypeId;
+	use std::collections::HashSet;
+
 	use super::*;
 	use crate::model::normalize::Normalize;
 	use crate::model::*;
+
+	/// Fields (`<TYPE_NAME>.<name>`) that `normalize` wraps into (-180, 180] rather than clamps.
+	const WRAPPED: &[&str] = &["SourceArray.Angle", "Part.Angle"];
 
 	type Set = Box<dyn Fn(&mut Project, f64)>;
 	type Get = Box<dyn Fn(&Project) -> f64>;
@@ -444,65 +447,34 @@ mod tests {
 	/// The number fields the types declare, keyed `<TYPE_NAME>.<name>`.
 	#[derive(Default)]
 	struct Walk {
+		seen: HashSet<TypeId>,
 		ranged: Vec<(String, Range)>,
 		dependent: Vec<String>,
 	}
 
-	/// Records the number fields `T` declares itself (a nested field's are `U`'s).
-	fn walk<T: Fields>(w: &mut Walk) {
-		for field in T::Field::all().into_iter().filter(|f| !f.path().contains('.') && is_number(f.kind())) {
-			let key = format!("{}.{}", T::TYPE_NAME, field.name());
-			if field.dependent() {
-				w.dependent.push(key.clone());
+	impl Visitor for Walk {
+		/// Records the number fields `T` declares itself (a nested field's are `U`'s).
+		fn fields<T: Fields>(&mut self) {
+			if !self.seen.insert(TypeId::of::<T>()) {
+				return;
 			}
-			match field.bounds() {
-				Bounds::Range(r) => w.ranged.push((key, r)),
-				Bounds::Dependent => assert!(field.dependent(), "{key}: dependent bounds without the mark"),
-				Bounds::Open => assert!(!field.dependent(), "{key} is dependent but open"),
+			for field in T::Field::all().into_iter().filter(|f| !f.path().contains('.') && is_number(f.kind())) {
+				let key = format!("{}.{}", T::TYPE_NAME, field.name());
+				if field.dependent() {
+					self.dependent.push(key.clone());
+				}
+				if let Some(range) = field.range() {
+					self.ranged.push((key, range));
+				}
 			}
 		}
+
+		fn word<W: Word>(&mut self) {}
 	}
 
 	fn walked() -> Walk {
 		let mut w = Walk::default();
-		walk::<Project>(&mut w);
-		walk::<Scene>(&mut w);
-		walk::<Simulation>(&mut w);
-		walk::<Display>(&mut w);
-		walk::<DisplayLayer>(&mut w);
-		walk::<Video>(&mut w);
-		walk::<Source>(&mut w);
-		walk::<SourceArray>(&mut w);
-		walk::<Probe>(&mut w);
-		walk::<ColorScheme>(&mut w);
-		walk::<Stop>(&mut w);
-		walk::<Rgb>(&mut w);
-		walk::<Point>(&mut w);
-		walk::<PartBase>(&mut w);
-		walk::<Coating>(&mut w);
-		walk::<Material>(&mut w);
-		walk::<Lens>(&mut w);
-		walk::<FresnelLens>(&mut w);
-		walk::<Polygon>(&mut w);
-		walk::<Rectangle>(&mut w);
-		walk::<Ellipse>(&mut w);
-		walk::<Triangle>(&mut w);
-		walk::<Outline>(&mut w);
-		walk::<Diffuser>(&mut w);
-		walk::<FilterLayer>(&mut w);
-		walk::<InterferenceFilter>(&mut w);
-		walk::<SimpleGrating>(&mut w);
-		walk::<MetaSurface>(&mut w);
-		walk::<MetaLensDesign>(&mut w);
-		walk::<MetaPrismDesign>(&mut w);
-		walk::<MetaAxiconDesign>(&mut w);
-		walk::<FacettedGrating>(&mut w);
-		walk::<FiberNode>(&mut w);
-		walk::<Fiber>(&mut w);
-		walk::<BraggReflector>(&mut w);
-		walk::<GrinLens>(&mut w);
-		walk::<LogicGate>(&mut w);
-		walk::<ZonePlate>(&mut w);
+		Project::visit(&mut w);
 		w
 	}
 

@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use wavedude_app_state::strings::{Language, keys, model_field_keys, model_word_keys};
+use wavedude_app_state::strings::{Language, keys, model_keys};
 
 /// Keys built at run time from a part's type name.
 const DYNAMIC_PREFIXES: [&str; 1] = ["Kind."];
@@ -32,7 +32,7 @@ fn every_english_key_is_used_and_every_language_is_complete() {
 	sources(&root.join("wavedude-app-state/src"), &mut text);
 	let english: HashSet<&str> = keys(Language::English).collect();
 	// a field or a word names its key at run time: the type's name and the member's
-	let named: HashSet<String> = model_field_keys().into_iter().chain(model_word_keys()).collect();
+	let named: HashSet<String> = model_keys().into_iter().collect();
 	let unused: Vec<&str> = english
 		.iter()
 		.copied()

@@ -15,8 +15,8 @@ use wavedude_core::model::{
 };
 use wavedude_core::model::{
 	ColorSchemeEdit, ColorSchemeField, DisplayEdit, DisplayLayerEdit, EditError, EllipseEdit, Field as _, LensEdit,
-	MaterialEdit, Part, PartEdit, PartField, PartKindEdit, ProbeEdit, ProbeField, ProjectEdit, ProjectField,
-	RectangleEdit, SourceEdit, SourceField, Value as FieldValue,
+	MaterialEdit, Part, PartBaseEdit, PartEdit, PartField, PartKindEdit, ProbeEdit, ProbeField, ProjectEdit,
+	ProjectField, RectangleEdit, SourceEdit, SourceField, Value as FieldValue,
 };
 
 use wavedude_core::scene::gate_design::{self, GateDesign};
@@ -189,7 +189,7 @@ pub enum Edit {
 
 impl Edit {
 	/// The item the edit addresses; `None` for the project's own fields.
-	pub fn item(&self) -> Option<ItemRef> {
+	fn item(&self) -> Option<ItemRef> {
 		let (kind, index) = match self {
 			Self::Project(_) => return None,
 			Self::Source(i, _) => (ItemKind::Source, *i),
@@ -211,7 +211,9 @@ impl Edit {
 		}
 	}
 
-	/// The edit that restores what `p` holds now; `None` when the item or the field is absent.
+	/// The edit that restores what `p` holds now; `None` when the item or the field is absent. Side effects of
+	/// applying (the mirror rename, normalisation) are not undone; a linked width is exact, as linked parts are
+	/// normalised equal.
 	pub fn current(&self, p: &Project) -> Option<Self> {
 		Some(match self {
 			Self::Project(e) => Self::Project(e.current(p)?),
@@ -222,38 +224,41 @@ impl Edit {
 		})
 	}
 
-	/// The label, the item index and the path of the innermost object's field.
-	fn subject(&self) -> (&'static str, Option<usize>, String) {
+	/// The label and the path of the innermost object's field.
+	fn subject(&self) -> (&'static str, String) {
 		match self {
 			Self::Project(e) => match e {
-				ProjectEdit::Seed(_) | ProjectEdit::Description(_) => ("Project", None, e.field().path()),
-				ProjectEdit::Scene(e) => ("Scene", None, e.field().path()),
-				ProjectEdit::Simulation(e) => ("Simulation", None, e.field().path()),
-				ProjectEdit::Display(e) => ("Display", None, e.field().path()),
+				ProjectEdit::Seed(_) | ProjectEdit::Description(_) => ("Project", e.field().path()),
+				ProjectEdit::Scene(e) => ("Scene", e.field().path()),
+				ProjectEdit::Simulation(e) => ("Simulation", e.field().path()),
+				ProjectEdit::Display(e) => ("Display", e.field().path()),
 			},
-			Self::Source(i, e) => ("Source", Some(*i), e.field().path()),
-			Self::Part(i, e) => ("Part", Some(*i), e.field().path()),
-			Self::Probe(i, e) => ("Probe", Some(*i), e.field().path()),
-			Self::Scheme(i, e) => ("Scheme", Some(*i), e.field().path()),
+			Self::Source(_, e) => ("Source", e.field().path()),
+			Self::Part(_, e) => ("Part", e.field().path()),
+			Self::Probe(_, e) => ("Probe", e.field().path()),
+			Self::Scheme(_, e) => ("Scheme", e.field().path()),
 		}
 	}
 
-	/// As `Display`, with the item's name in place of its index: `Probe 'Probe 1'.BoxWidth`.
-	pub fn describe(&self, project: &Project) -> String {
-		let (label, _, path) = self.subject();
+	/// The subject and the path, with the item's name when it has one: `Probe 'Probe 1'.BoxWidth`.
+	fn describe(&self, project: &Project) -> String {
+		let (label, path) = self.subject();
 		match self.item().and_then(|item| item.name(project)) {
 			Some(name) => format!("{label} '{name}'.{path}"),
-			None => self.to_string(),
+			None => format!("{label}.{path}"),
 		}
 	}
-}
 
-impl std::fmt::Display for Edit {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self.subject() {
-			(label, Some(i), path) => write!(f, "{label}[{i}].{path}"),
-			(label, None, path) => write!(f, "{label}.{path}"),
-		}
+	/// The rename an edit of an item's `Name` stands for.
+	fn rename(&self) -> Option<(ItemRef, &str)> {
+		let (item, name) = match self {
+			Self::Source(_, SourceEdit::Name(n))
+			| Self::Part(_, PartEdit::Base(PartBaseEdit::Name(n)))
+			| Self::Probe(_, ProbeEdit::Name(n))
+			| Self::Scheme(_, ColorSchemeEdit::Name(n)) => (self.item()?, n),
+			_ => return None,
+		};
+		Some((item, name))
 	}
 }
 
@@ -440,8 +445,6 @@ fn list_insert_point(project: &Project, at: Option<Point>) -> (i32, i32) {
 	at.map_or_else(|| project.canvas_centre(), |p| (p.x, p.y))
 }
 
-/// Applies `command` to `project`, leaves the selection the command makes in `selection`, normalises the
-/// project and classifies the change.
 /// A gate's input ports: where a source must sit to feed it, by the gate's name (unique within the parts, and
 /// what identifies an item across a command that shifts indices, as `Selection::follow`).
 fn gate_ports(project: &Project) -> Vec<(String, [Point; 2])> {
@@ -480,6 +483,8 @@ pub fn follow_gate_ports(before: &[(String, [Point; 2])], project: &mut Project)
 	moved
 }
 
+/// Applies `command` to `project`, leaves the selection the command makes in `selection`, normalises the
+/// project and classifies the change.
 pub fn apply(project: &mut Project, selection: &mut Selection, command: Command) -> Result<Change, CommandError> {
 	let ports = gate_ports(project);
 	let mut change = apply_command(project, selection, command)?;
@@ -782,6 +787,9 @@ fn project_change(edit: &ProjectEdit) -> ChangeKind {
 }
 
 fn apply_edit(project: &mut Project, edit: &Edit) -> Result<Change, CommandError> {
+	if let Some((target, name)) = edit.rename() {
+		return rename(project, target, name.to_owned());
+	}
 	if let Some(item) = edit.item() {
 		check(project, item)?;
 	}
@@ -820,7 +828,7 @@ fn apply_edit(project: &mut Project, edit: &Edit) -> Result<Change, CommandError
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use wavedude_core::model::SceneEdit;
+	use wavedude_core::model::{SceneEdit, SimulationEdit, VideoEdit};
 
 	fn project() -> Project {
 		let mut p = Project::default();
@@ -865,69 +873,75 @@ mod tests {
 	}
 
 	#[test]
-	fn showing_the_intensity_is_a_simulation_change_and_a_probe_rename_is_display() {
+	fn a_probe_rename_is_display_unless_the_detector_records_by_name() {
 		let mut p = project();
 		let mut s = Selection::default();
-		let on = !p.display.intensity.preview;
-		let toggle = Edit::Project(ProjectEdit::Display(DisplayEdit::Intensity(DisplayLayerEdit::Preview(on))));
-		let c = edit(&mut p, &mut s, toggle);
-		assert_eq!(c.kind, ChangeKind::Simulation);
 		let mut other = p.clone();
-		other.display.intensity.preview = !on;
+		other.display.intensity.preview = !p.display.intensity.preview;
 		assert_eq!(classify(&other, &p), ChangeKind::Simulation);
 		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard });
 		let c = run(&mut p, &mut s, Command::Rename { target: ItemRef::new(ItemKind::Probe, 0), name: "Gauge".into() });
 		assert_eq!(c.kind, ChangeKind::Display);
-		let c = edit(&mut p, &mut s, Edit::Probe(0, ProbeEdit::Ax(7)));
-		assert_eq!(c.kind, ChangeKind::ProbePresentation);
-		// a detector's sensitivity and name are part of what it records; its box is not
+		// a detector's name is part of what it records
 		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Counting });
-		let detector = ItemRef::new(ItemKind::Probe, 1);
-		let c = edit(&mut p, &mut s, Edit::Probe(1, ProbeEdit::Sensitivity(40.0)));
+		let c = run(&mut p, &mut s, Command::Rename { target: ItemRef::new(ItemKind::Probe, 1), name: "PM 2".into() });
 		assert_eq!(c.kind, ChangeKind::ProbePresentation);
-		let c = run(&mut p, &mut s, Command::Rename { target: detector, name: "PM 2".into() });
-		assert_eq!(c.kind, ChangeKind::ProbePresentation);
-		let c = edit(&mut p, &mut s, Edit::Probe(1, ProbeEdit::BoxX(30)));
-		assert_eq!(c.kind, ChangeKind::Display);
 	}
 
 	fn edit(p: &mut Project, s: &mut Selection, e: Edit) -> Change {
 		run(p, s, Command::Edit(e))
 	}
 
+	/// One edit of every arm of `project_change` and of every item kind, in order; the last repeats the first.
 	#[test]
 	fn edits_classify_by_what_they_change() {
-		let mut p = project();
-		let mut s = Selection::default();
-		let on = !p.display.intensity.preview;
-		let preview = ProjectEdit::Display(DisplayEdit::Intensity(DisplayLayerEdit::Preview(on)));
-		assert_eq!(edit(&mut p, &mut s, Edit::Project(preview)).kind, ChangeKind::Simulation);
-		assert_eq!(p.display.intensity.preview, on);
-		let brightness = ProjectEdit::Display(DisplayEdit::Field(DisplayLayerEdit::Brightness(5.0)));
-		assert_eq!(edit(&mut p, &mut s, Edit::Project(brightness)).kind, ChangeKind::Brightness);
-		let overlay = ProjectEdit::Display(DisplayEdit::Field(DisplayLayerEdit::Overlay(false)));
-		assert_eq!(edit(&mut p, &mut s, Edit::Project(overlay)).kind, ChangeKind::Display);
-		assert_eq!(
-			edit(&mut p, &mut s, Edit::Project(ProjectEdit::Description("x".into()))).kind,
-			ChangeKind::Metadata
-		);
+		let (mut p, mut s) = (project(), Selection::default());
+		for command in [
+			Command::AddSource { at: None },
+			Command::AddProbe { at: None, detector: ProbeDetector::Standard },
+			Command::AddProbe { at: None, detector: ProbeDetector::Counting },
+			Command::AddPart { kind: NewPart::Rectangle, at: None },
+			Command::AddScheme,
+		] {
+			run(&mut p, &mut s, command);
+		}
+		let preview = !p.display.intensity.preview;
+		let display = |e| Edit::Project(ProjectEdit::Display(e));
+		let table = [
+			(Edit::Project(ProjectEdit::Seed(7)), ChangeKind::Simulation),
+			(Edit::Project(ProjectEdit::Description("x".into())), ChangeKind::Metadata),
+			(Edit::Project(ProjectEdit::Scene(SceneEdit::Width(300))), ChangeKind::Simulation),
+			(Edit::Project(ProjectEdit::Simulation(SimulationEdit::Steps(777))), ChangeKind::Simulation),
+			(display(DisplayEdit::Field(DisplayLayerEdit::Brightness(5.5))), ChangeKind::Brightness),
+			(display(DisplayEdit::Intensity(DisplayLayerEdit::Brightness(5.5))), ChangeKind::Brightness),
+			(display(DisplayEdit::Intensity(DisplayLayerEdit::Preview(preview))), ChangeKind::Simulation),
+			(display(DisplayEdit::Field(DisplayLayerEdit::Overlay(false))), ChangeKind::Display),
+			(display(DisplayEdit::Video(VideoEdit::Fps(11))), ChangeKind::Display),
+			(Edit::Source(0, SourceEdit::Frequency(120.0)), ChangeKind::Simulation),
+			(Edit::Part(0, PartEdit::Kind(PartKindEdit::Rectangle(RectangleEdit::Length(33)))), ChangeKind::Simulation),
+			(Edit::Probe(0, ProbeEdit::Ax(7)), ChangeKind::ProbePresentation),
+			(Edit::Probe(0, ProbeEdit::BoxX(40)), ChangeKind::Display),
+			(Edit::Probe(1, ProbeEdit::Sensitivity(40.0)), ChangeKind::ProbePresentation),
+			(Edit::Probe(1, ProbeEdit::BoxX(30)), ChangeKind::Display),
+			(Edit::Scheme(0, ColorSchemeEdit::Description("d".into())), ChangeKind::Display),
+			(Edit::Project(ProjectEdit::Seed(7)), ChangeKind::None),
+		];
+		for (e, want) in table {
+			assert_eq!(edit(&mut p, &mut s, e.clone()).kind, want, "{e:?}");
+		}
+	}
+
+	#[test]
+	fn a_change_is_noted_with_its_subject_and_the_edit_is_normalised() {
+		let (mut p, mut s) = (project(), Selection::default());
 		let c = edit(&mut p, &mut s, Edit::Project(ProjectEdit::Seed(7)));
-		assert_eq!((c.kind, c.note.as_deref()), (ChangeKind::Simulation, Some("Project.Seed = 7")));
-		assert_eq!(edit(&mut p, &mut s, Edit::Project(ProjectEdit::Seed(7))).kind, ChangeKind::None);
+		assert_eq!(c.note.as_deref(), Some("Project.Seed = 7"));
 		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard });
 		let c = edit(&mut p, &mut s, Edit::Probe(0, ProbeEdit::Ax(7)));
-		assert_eq!((c.kind, p.probes[0].ax), (ChangeKind::ProbePresentation, 7));
-		assert_eq!(c.note.as_deref(), Some("Probe 'Probe 1'.Ax = 7"));
-		assert_eq!(edit(&mut p, &mut s, Edit::Probe(0, ProbeEdit::BoxX(40))).kind, ChangeKind::Display);
-		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Counting });
-		assert_eq!(
-			edit(&mut p, &mut s, Edit::Probe(1, ProbeEdit::Sensitivity(40.0))).kind,
-			ChangeKind::ProbePresentation
-		);
-		assert_eq!(edit(&mut p, &mut s, Edit::Probe(1, ProbeEdit::BoxX(30))).kind, ChangeKind::Display);
+		assert_eq!((c.note.as_deref(), p.probes[0].ax), (Some("Probe 'Probe 1'.Ax = 7"), 7));
 		run(&mut p, &mut s, Command::AddSource { at: None });
 		let c = edit(&mut p, &mut s, Edit::Source(0, SourceEdit::Frequency(9999.0)));
-		assert_eq!((c.kind, p.sources[0].frequency), (ChangeKind::Simulation, 255.0), "normalised after the edit");
+		assert_eq!((c.kind, p.sources[0].frequency), (ChangeKind::Simulation, 255.0));
 	}
 
 	#[test]
@@ -950,11 +964,15 @@ mod tests {
 		let (mut p, mut s) = (project(), Selection::default());
 		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard });
 		run(&mut p, &mut s, Command::AddPart { kind: NewPart::Rectangle, at: None });
+		run(&mut p, &mut s, Command::AddPart { kind: NewPart::Rectangle, at: None });
+		let linked = PartEdit::Kind(PartKindEdit::Rectangle(RectangleEdit::Linked(true)));
+		edit(&mut p, &mut s, Edit::Part(1, linked));
 		let edits = [
 			Edit::Project(ProjectEdit::Seed(9)),
 			Edit::Project(ProjectEdit::Display(DisplayEdit::Field(DisplayLayerEdit::Brightness(3.0)))),
 			Edit::Probe(0, ProbeEdit::Ax(11)),
 			Edit::Part(0, PartEdit::Kind(PartKindEdit::Rectangle(RectangleEdit::Length(33)))),
+			Edit::Part(1, PartEdit::Kind(PartKindEdit::Rectangle(RectangleEdit::Width(44)))),
 		];
 		for e in edits {
 			let before = p.clone();
@@ -968,18 +986,31 @@ mod tests {
 	}
 
 	#[test]
-	fn an_edit_displays_its_subject_and_path() {
+	fn an_edit_describes_its_subject_and_path() {
 		let (mut p, mut s) = (project(), Selection::default());
 		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard });
 		let e = Edit::Probe(0, ProbeEdit::BoxWidth(500));
-		assert_eq!(e.to_string(), "Probe[0].BoxWidth");
 		assert_eq!(e.describe(&p), "Probe 'Probe 1'.BoxWidth");
 		assert_eq!(e.item(), Some(ItemRef::new(ItemKind::Probe, 0)));
 		let e = Edit::Project(ProjectEdit::Display(DisplayEdit::Intensity(DisplayLayerEdit::Preview(true))));
-		assert_eq!(e.to_string(), "Display.Intensity.Preview");
+		assert_eq!(e.describe(&p), "Display.Intensity.Preview");
 		assert_eq!(e.item(), None);
-		let e = Edit::Project(ProjectEdit::Scene(SceneEdit::Edges(Default::default())));
-		assert_eq!(e.to_string(), "Scene.Edges");
+	}
+
+	#[test]
+	fn a_name_edit_renames_like_the_command() {
+		let (mut p, mut s) = (project(), Selection::default());
+		run(&mut p, &mut s, Command::AddScheme);
+		p.display.field.color_scheme = "Scheme 1".into();
+		let name = |n: &str| Edit::Scheme(0, ColorSchemeEdit::Name(n.into()));
+		let c = edit(&mut p, &mut s, name("  Mine "));
+		assert_eq!(
+			(c.kind, p.color_schemes[0].name.as_str(), p.display.field.color_scheme.as_str()),
+			(ChangeKind::Display, "Mine", "Mine")
+		);
+		let blank = apply(&mut p, &mut s, Command::Edit(name("  ")));
+		assert_eq!(blank, Err(CommandError::EmptyName));
+		assert_eq!(p.color_schemes[0].name, "Mine");
 	}
 
 	#[test]
@@ -989,7 +1020,7 @@ mod tests {
 		let before = p.clone();
 		let wrong = Edit::Part(0, PartEdit::Kind(PartKindEdit::Lens(LensEdit::Diameter(10))));
 		let err = apply(&mut p, &mut s, Command::Edit(wrong)).unwrap_err();
-		assert!(matches!(err, CommandError::Edit(EditError::WrongKind { .. })), "{err:?}");
+		assert!(matches!(err, CommandError::Edit(EditError::Absent(_))), "{err:?}");
 		assert_eq!(p, before);
 		let missing = Command::Edit(Edit::Source(3, SourceEdit::Frequency(1.0)));
 		assert_eq!(apply(&mut p, &mut s, missing), Err(CommandError::NoItem(ItemRef::new(ItemKind::Source, 3))));
@@ -1004,16 +1035,6 @@ mod tests {
 			ChangeKind::ProbePresentation
 		);
 		assert_eq!(run(&mut p, &mut s, Command::AddScheme).kind, ChangeKind::Display);
-		let c = edit(&mut p, &mut s, Edit::Source(0, SourceEdit::Frequency(120.0)));
-		assert_eq!((c.kind, c.note.as_deref()), (ChangeKind::Simulation, Some("Source 'Source 1'.Frequency = 120")));
-		assert_eq!(p.sources[0].frequency, 120.0);
-		assert_eq!(edit(&mut p, &mut s, Edit::Source(0, SourceEdit::Frequency(120.0))).kind, ChangeKind::None);
-		assert_eq!(edit(&mut p, &mut s, Edit::Probe(0, ProbeEdit::Ax(3))).kind, ChangeKind::ProbePresentation);
-		assert_eq!(
-			edit(&mut p, &mut s, Edit::Probe(0, ProbeEdit::BoxX(40))).kind,
-			ChangeKind::Display,
-			"a box records alike"
-		);
 		let mut moved = p.clone();
 		moved.probes[0].box_y += 5;
 		assert_eq!(classify(&p, &moved), ChangeKind::Display);
@@ -1021,8 +1042,6 @@ mod tests {
 		assert_eq!(classify(&p, &moved), ChangeKind::ProbePresentation);
 		moved.display.field.brightness += 1.0;
 		assert_eq!(classify(&p, &moved), ChangeKind::ProbesAndBrightness, "the frames stay with 16-bit samples");
-		assert_eq!(edit(&mut p, &mut s, Edit::Source(0, SourceEdit::Frequency(9999.0))).kind, ChangeKind::Simulation);
-		assert_eq!(p.sources[0].frequency, 255.0, "normalised after the edit");
 	}
 
 	#[test]

@@ -7,10 +7,13 @@
 //!
 //! Threads: a `Strings` is plain data; the parsed tables are shared process-wide and immutable.
 
+use std::any::TypeId;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Write};
 use std::sync::OnceLock;
+
+use wavedude_core::model::{Field, Fields, Project, Source, Visitor, Word};
 
 /// A language of the string tables.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -239,151 +242,91 @@ impl Default for Strings {
 	}
 }
 
-/// Fields no row labels, with the reason.
-const NO_TEXT: [(&str, &str); 6] = [
-	// the element name carries the gate's kind
-	("LogicGate", "Kind"),
-	// a list with its own heading and hint
-	("InterferenceFilter", "Layers"),
-	("Outline", "Points"),
-	("Fiber", "Nodes"),
-	("ColorScheme", "Stops"),
-	// the stop editor's tips name it
-	("Stop", "At"),
+/// A field (`Type.Member`), every field of a type or every member of an enum (`Type`) no row or combo texts,
+/// with the reason.
+const NO_TEXT: [(&str, &str); 9] = [
+	("LogicGate.Kind", "the element name carries the gate's kind"),
+	("InterferenceFilter.Layers", "a list with its own heading and hint"),
+	("Outline.Points", "a list with its own heading and hint"),
+	("Fiber.Nodes", "a list with its own heading and hint"),
+	("ColorScheme.Stops", "a list with its own heading and hint"),
+	("Stop.At", "the stop editor's tips name it"),
+	("Rgb", "the colour picker edits a colour whole"),
+	("Stencil", "a check box"),
+	("GateKind", "the gate's kind is its element name"),
 ];
 
-/// Enums no combo shows: the stencil is a check box, the gate's kind is its element name.
-const NO_WORDS: [&str; 2] = ["Stencil", "GateKind"];
-
-/// The `Label.` and `Hint.` keys of every field of the types reachable from `Project`: a type's `TYPE_NAME`
-/// and the field's name at that level.
-pub fn model_field_keys() -> Vec<String> {
-	use wavedude_core::model::*;
-	fn named<T: Fields>(field: T::Field, out: &mut Vec<String>) {
-		if NO_TEXT.contains(&(T::TYPE_NAME, field.name())) {
-			return;
-		}
-		for prefix in ["Label", "Hint"] {
-			out.push(format!("{prefix}.{}.{}", T::TYPE_NAME, field.name()));
-		}
-	}
-	fn of<T: Fields>(out: &mut Vec<String>) {
-		for field in T::Field::all().into_iter().filter(|f| !f.path().contains('.')) {
-			named::<T>(field, out);
-		}
-	}
-	let mut out = Vec::new();
-	let o = &mut out;
-	of::<Project>(o);
-	of::<Scene>(o);
-	of::<Simulation>(o);
-	of::<Display>(o);
-	of::<DisplayLayer>(o);
-	of::<Video>(o);
-	of::<Source>(o);
-	// the composite box edits the array as a whole
-	named::<Source>(Source::SET_ARRAY.field, o);
-	of::<SourceArray>(o);
-	of::<PartBase>(o);
-	of::<Material>(o);
-	of::<Coating>(o);
-	of::<Lens>(o);
-	of::<FresnelLens>(o);
-	of::<Polygon>(o);
-	of::<Rectangle>(o);
-	of::<Ellipse>(o);
-	of::<Triangle>(o);
-	of::<Outline>(o);
-	of::<Diffuser>(o);
-	of::<FilterLayer>(o);
-	of::<InterferenceFilter>(o);
-	of::<SimpleGrating>(o);
-	of::<MetaSurface>(o);
-	of::<MetaLensDesign>(o);
-	of::<MetaPrismDesign>(o);
-	of::<MetaAxiconDesign>(o);
-	of::<FacettedGrating>(o);
-	of::<Fiber>(o);
-	of::<FiberNode>(o);
-	of::<BraggReflector>(o);
-	of::<GrinLens>(o);
-	of::<LogicGate>(o);
-	of::<ZonePlate>(o);
-	of::<Point>(o);
-	of::<Probe>(o);
-	of::<ColorScheme>(o);
-	of::<Stop>(o);
-	out
+fn exempt(name: &str) -> bool {
+	NO_TEXT.iter().any(|(n, _)| *n == name)
 }
 
-/// The `Enum.` keys of every `Word` enum: the model's and the settings'.
-pub fn model_word_keys() -> Vec<String> {
-	use wavedude_core::model::*;
-	fn of<W: Word>(out: &mut Vec<String>) {
-		if NO_WORDS.contains(&W::TYPE_NAME) {
-			return;
-		}
-		out.extend(W::NAMES.iter().map(|name| format!("Enum.{}.{name}", W::TYPE_NAME)));
+/// The keys the types reachable from `Project`, and the settings' `Theme`, need: `Label.` and `Hint.` per field
+/// of a type, `Enum.` per member of a `Word`; `reached` holds every `Type.Member` and `Type` the walk met.
+#[derive(Default)]
+struct ModelKeys {
+	seen: HashSet<TypeId>,
+	keys: Vec<String>,
+	reached: HashSet<String>,
+}
+
+impl ModelKeys {
+	fn walk() -> Self {
+		let mut walk = Self::default();
+		Project::visit(&mut walk);
+		walk.word::<crate::settings::Theme>();
+		// the composite box edits the array as a whole
+		walk.field::<Source>(Source::SET_ARRAY.field);
+		walk
 	}
-	let mut out = Vec::new();
-	let o = &mut out;
-	of::<SceneMode>(o);
-	of::<Edges>(o);
-	of::<Stencil>(o);
-	of::<Layer>(o);
-	of::<SourceMode>(o);
-	of::<PulseShape>(o);
-	of::<Measurement>(o);
-	of::<ProbeKind>(o);
-	of::<BoxSize>(o);
-	of::<ScaleMode>(o);
-	of::<YScale>(o);
-	of::<ProbeDetector>(o);
-	of::<SchemeKind>(o);
-	of::<CoatingProfile>(o);
-	of::<ZoneDivision>(o);
-	of::<TriangleType>(o);
-	of::<MetaLensType>(o);
-	of::<FacetPattern>(o);
-	of::<FiberEnds>(o);
-	of::<GateKind>(o);
-	of::<crate::settings::Theme>(o);
-	out
+
+	fn field<T: Fields>(&mut self, field: T::Field) {
+		let name = format!("{}.{}", T::TYPE_NAME, field.name());
+		if !exempt(&name) && !exempt(T::TYPE_NAME) {
+			self.keys.extend(["Label", "Hint"].map(|prefix| format!("{prefix}.{name}")));
+		}
+		self.reached.insert(name);
+	}
+}
+
+impl Visitor for ModelKeys {
+	fn fields<T: Fields>(&mut self) {
+		if self.seen.insert(TypeId::of::<T>()) {
+			self.reached.insert(T::TYPE_NAME.to_owned());
+			for field in T::Field::all().into_iter().filter(|f| !f.path().contains('.')) {
+				self.field::<T>(field);
+			}
+		}
+	}
+
+	fn word<W: Word>(&mut self) {
+		if self.seen.insert(TypeId::of::<W>()) {
+			if !exempt(W::TYPE_NAME) {
+				self.keys.extend(W::NAMES.iter().map(|name| format!("Enum.{}.{name}", W::TYPE_NAME)));
+			}
+			self.reached.insert(W::TYPE_NAME.to_owned());
+		}
+	}
+}
+
+/// The `Label.`, `Hint.` and `Enum.` keys of every field and word the model has.
+pub fn model_keys() -> Vec<String> {
+	ModelKeys::walk().keys
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::collections::BTreeSet;
 
 	#[test]
-	fn four_tables_share_one_key_set() {
-		let en: BTreeSet<&str> = keys(Language::English).collect();
-		assert!(en.len() > 700);
-		for l in Language::ALL {
-			let other: BTreeSet<&str> = keys(l).collect();
-			assert_eq!(en.symmetric_difference(&other).collect::<Vec<_>>(), Vec::<&&str>::new(), "{l:?}");
+	fn every_model_field_and_word_has_its_texts_in_every_language() {
+		let walk = ModelKeys::walk();
+		for (name, _) in NO_TEXT {
+			assert!(walk.reached.contains(name), "'{name}' is exempt but names no field or word the walk reached");
 		}
-	}
-
-	#[test]
-	fn every_model_property_has_label_and_hint() {
-		let keys = model_field_keys();
-		assert!(keys.iter().any(|k| k == "Hint.Probe.BoxWidth"));
+		assert!(walk.keys.iter().any(|k| k == "Hint.Probe.BoxWidth"));
+		assert!(walk.keys.iter().any(|k| k == "Enum.BoxSize.ExtraLarge"));
 		for l in Language::ALL {
-			for key in &keys {
-				let text = tables()[l.index()].get(key);
-				assert!(text.is_some_and(|t| !t.is_empty()), "{l:?} lacks {key}");
-			}
-		}
-	}
-
-	#[test]
-	fn every_word_has_its_members_in_every_language() {
-		let keys = model_word_keys();
-		assert!(keys.iter().any(|k| k == "Enum.BoxSize.ExtraLarge"));
-		for l in Language::ALL {
-			for key in &keys {
+			for key in &walk.keys {
 				let text = tables()[l.index()].get(key);
 				assert!(text.is_some_and(|t| !t.is_empty()), "{l:?} lacks {key}");
 			}

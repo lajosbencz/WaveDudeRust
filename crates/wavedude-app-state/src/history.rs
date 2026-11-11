@@ -1,11 +1,10 @@
-//! Unlimited undo and redo: one snapshot per step, a clone of the project without the scene image plus the image
-//! bytes by reference, equal bytes shared between steps (docs/ui/60-live-editing-and-runs.md, Undo and redo).
+//! Unlimited undo and redo: one clone of the project per step; the scene image's bytes are shared between the
+//! clones (docs/ui/60-live-editing-and-runs.md, Undo and redo).
 //!
 //! A step ends after [`QUIET`] without an edit while no mouse button is held, so a drag, a number-box scrub or a
 //! held arrow key is one step. Undo and redo end a pending step first and write the step back into the same
 //! project object. Threads: plain data on the UI thread; time comes from the caller.
 
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use wavedude_core::model::Project;
@@ -13,28 +12,10 @@ use wavedude_core::model::Project;
 /// Quiet time that ends a step.
 pub const QUIET: Duration = Duration::from_millis(500);
 
-#[derive(Clone, Debug)]
-struct Step {
-	project: Arc<Project>,
-	image: Option<Arc<[u8]>>,
-	image_size: (u32, u32),
-}
-
-impl Step {
-	fn same_as(&self, other: &Self) -> bool {
-		let image = match (&self.image, &other.image) {
-			(None, None) => true,
-			(Some(a), Some(b)) => Arc::ptr_eq(a, b) || a[..] == b[..],
-			_ => false,
-		};
-		image && self.project == other.project
-	}
-}
-
 /// The steps of one project's editing session.
 #[derive(Clone, Debug)]
 pub struct History {
-	steps: Vec<Step>,
+	steps: Vec<Project>,
 	current: usize,
 	/// The step the file holds; `None` once no step does.
 	saved: Option<usize>,
@@ -46,22 +27,8 @@ impl History {
 	/// A history whose first step is `project` as it is, saved.
 	pub fn new(project: &Project) -> Self {
 		let mut h = Self { steps: Vec::new(), current: 0, saved: Some(0), pending_since: None, mouse_held: false };
-		let first = h.snapshot(project);
-		h.steps.push(first);
+		h.steps.push(project.clone());
 		h
-	}
-
-	fn snapshot(&self, project: &Project) -> Step {
-		let image = project.scene.image_data.clone();
-		Step { project: Arc::new(project.without_image()), image, image_size: project.scene.image_size }
-	}
-
-	fn restore(&self, project: &mut Project) {
-		let step = &self.steps[self.current];
-		let mut restored = Project::clone(&step.project);
-		restored.scene.image_data = step.image.clone();
-		restored.scene.image_size = step.image_size;
-		*project = restored;
 	}
 
 	/// An edit happened at `now`; the step stays open until [`QUIET`] passes without another.
@@ -95,15 +62,14 @@ impl History {
 		if self.pending_since.take().is_none() {
 			return false;
 		}
-		let step = self.snapshot(project);
-		if step.same_as(&self.steps[self.current]) {
+		if *project == self.steps[self.current] {
 			return false;
 		}
 		self.steps.truncate(self.current + 1);
 		if self.saved > Some(self.current) {
 			self.saved = None;
 		}
-		self.steps.push(step);
+		self.steps.push(project.clone());
 		self.current += 1;
 		true
 	}
@@ -115,7 +81,7 @@ impl History {
 			return false;
 		}
 		self.current -= 1;
-		self.restore(project);
+		project.clone_from(&self.steps[self.current]);
 		true
 	}
 
@@ -126,7 +92,7 @@ impl History {
 			return false;
 		}
 		self.current += 1;
-		self.restore(project);
+		project.clone_from(&self.steps[self.current]);
 		true
 	}
 
@@ -169,15 +135,12 @@ impl History {
 	pub fn is_empty(&self) -> bool {
 		self.steps.is_empty()
 	}
-
-	/// The image bytes a step holds (shared between steps with equal bytes).
-	pub fn image_of(&self, step: usize) -> Option<&Arc<[u8]>> {
-		self.steps.get(step)?.image.as_ref()
-	}
 }
 
 #[cfg(test)]
 mod tests {
+	use std::sync::Arc;
+
 	use super::*;
 
 	fn t0() -> Instant {
@@ -220,7 +183,8 @@ mod tests {
 		assert!(h.undo(&mut p));
 		assert_eq!(p, before);
 		assert_eq!(p.scene.image_size, (7, 9));
-		assert!(Arc::ptr_eq(h.image_of(0).unwrap(), h.image_of(1).unwrap()), "equal bytes are shared");
+		let bytes = |step: &Project| step.scene.image_data.clone().unwrap();
+		assert!(Arc::ptr_eq(&bytes(&h.steps[0]), &bytes(&h.steps[1])), "equal bytes are shared");
 		assert!(h.can_redo());
 		assert!(h.redo(&mut p));
 		assert_eq!(p, after);

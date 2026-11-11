@@ -63,7 +63,7 @@ fn part_lists_every_leaf_through_its_base_and_every_kind() {
 
 #[test]
 fn paths_name_every_level_and_names_the_last() {
-	let mirror = (Part::KIND.field)((PartKind::LENS.field)((Lens::MATERIAL.field)(Material::MIRROR.field)));
+	let mirror = PartField::Kind(PartKindField::Lens(LensField::Material(MaterialField::Mirror)));
 	assert_eq!(mirror.path(), "Kind.Lens.Material.Mirror");
 	assert_eq!(mirror.name(), "Kind", "a nested field names its own level");
 	assert_eq!(Material::MIRROR.field.path(), "Mirror");
@@ -94,15 +94,15 @@ fn kinds_and_bounds_follow_the_field() {
 	assert_eq!(Outline::POINTS.field.kind(), ValueKind::List);
 	assert_eq!(Source::DETACH_AFTER.field.kind(), ValueKind::UInt, "an option has its leaf's kind");
 	assert_eq!(Source::SET_ARRAY.field.kind(), ValueKind::Nested);
-	assert_eq!(Probe::BOX_WIDTH.field.bounds(), Bounds::Range(ranges::PROBE_BOX_WIDTH));
-	assert_eq!(Probe::Y_MIN.field.bounds(), Bounds::Dependent);
-	assert_eq!(Probe::AX.field.bounds(), Bounds::Open);
+	assert_eq!(Probe::BOX_WIDTH.field.range(), Some(ranges::PROBE_BOX_WIDTH));
+	assert_eq!(Probe::Y_MIN.field.range(), None);
+	assert_eq!(Probe::AX.field.range(), None);
 	assert!(Probe::Y_MIN.field.dependent() && !Probe::AX.field.dependent());
 	let both = Rectangle::WIDTH.field;
 	assert!(both.dependent(), "a dependent field keeps its flag beside a range");
-	assert_eq!(both.bounds(), Bounds::Range(ranges::AT_LEAST_1));
-	let size_x = (Source::ARRAY.field)(SourceArray::SIZE_X.field);
-	assert_eq!(size_x.bounds(), Bounds::Range(ranges::AT_LEAST_1));
+	assert_eq!(both.range(), Some(ranges::AT_LEAST_1));
+	let size_x = SourceField::Array(SourceArrayField::SizeX);
+	assert_eq!(size_x.range(), Some(ranges::AT_LEAST_1));
 }
 
 /// Sets `field` to `new`, expecting `old` there before and the same value back through `get` after.
@@ -132,24 +132,24 @@ fn get_edit_and_apply_round_trip_for_every_kind_of_value() {
 	assert_eq!(s.detach_after, None);
 
 	let mut o = Outline::default();
-	let points = Value::Other(format!("{:?}", o.points));
+	let points = Value::Other("[0 items]".into());
 	assert_eq!(Outline::POINTS.field.get(&o), Some(points));
 	assert!(matches!(
 		Outline::POINTS.field.edit(Value::Int(1)),
 		Err(EditError::WrongKind { want: ValueKind::List, .. })
 	));
 	let edit = (Outline::POINTS.edit)(vec![Point::new(1, 2)]);
-	assert_eq!(edit.apply(&mut o).unwrap(), Value::Other("[]".into()));
+	assert_eq!(edit.apply(&mut o).unwrap(), Value::Other("[0 items]".into()));
 	assert_eq!(o.points, [Point::new(1, 2)]);
 }
 
 #[test]
 fn nested_fields_read_and_edit_through_their_owners() {
 	let mut part = lens_part();
-	let mirror = (Part::KIND.field)((PartKind::LENS.field)((Lens::MATERIAL.field)(Material::MIRROR.field)));
+	let mirror = PartField::Kind(PartKindField::Lens(LensField::Material(MaterialField::Mirror)));
 	round_trip(&mut part, mirror, Value::Bool(false), Value::Bool(true));
 	assert!(matches!(&part.kind, PartKind::Lens(l) if l.material.mirror));
-	let x = (Part::BASE.field)(PartBase::X.field);
+	let x = PartField::Base(PartBaseField::X);
 	round_trip(&mut part, x, Value::Int(5), Value::Int(9));
 	assert_eq!(part.base.x, 9);
 	// The typed accessors compose the same edit as the field does.
@@ -168,6 +168,7 @@ fn a_value_of_the_wrong_kind_is_wrong_kind() {
 	assert!(wrong(Probe::LAYER.field.edit(Value::Word("Nowhere")).map(drop)));
 	assert!(wrong(Probe::ACTIVE.field.edit(Value::Absent).map(drop)));
 	assert!(wrong(Source::SET_ARRAY.field.edit(Value::Int(1)).map(drop)));
+	assert!(wrong(Source::SET_ARRAY.field.edit(Value::Absent).map(drop)));
 	let err = Probe::BOX_WIDTH.field.edit(Value::Bool(true)).unwrap_err();
 	assert_eq!(err, EditError::WrongKind { field: "BoxWidth".into(), want: ValueKind::UInt });
 	assert_eq!(err.to_string(), "BoxWidth takes a UInt");
@@ -178,10 +179,7 @@ fn an_edit_of_another_variant_or_an_absent_option_changes_nothing() {
 	let mut kind = PartKind::Polygon(Polygon::default());
 	let before = kind.clone();
 	let edit = PartKindEdit::Lens(LensEdit::Diameter(7));
-	assert_eq!(
-		edit.apply(&mut kind),
-		Err(EditError::WrongKind { field: "Lens.Diameter".into(), want: ValueKind::Nested })
-	);
+	assert_eq!(edit.apply(&mut kind), Err(EditError::Absent("Lens.Diameter".into())));
 	assert_eq!(kind, before);
 	assert_eq!(edit.current(&kind), None);
 	assert!((PartKind::LENS.get)(&kind).is_none());
@@ -244,26 +242,6 @@ fn the_whole_prop_of_the_source_array_replaces_it() {
 	assert_eq!(s.array, None);
 	assert_eq!(Source::SET_ARRAY.field.name(), "Array");
 	assert!(!SourceField::all().contains(&Source::SET_ARRAY.field), "a whole replacement is no leaf");
-}
-
-#[test]
-fn props_are_copy_and_read_and_build_edits() {
-	let ax = Probe::AX;
-	let copy = ax;
-	let p = Probe { ax: 12, ..Probe::default() };
-	assert_eq!((ax.get)(&p), 12);
-	assert_eq!((copy.get)(&p), 12);
-	assert_eq!((ax.edit)(3), ProbeEdit::Ax(3));
-	let points = Outline::POINTS;
-	let (a, b) = (points, points);
-	assert_eq!((a.get)(&Outline::default()), (b.get)(&Outline::default()));
-	let material = Lens::MATERIAL;
-	let again = material;
-	assert_eq!((again.get)(&Lens::default()), (material.get)(&Lens::default()));
-	let lens = PartKind::LENS;
-	let again = lens;
-	assert!((again.get)(&PartKind::Lens(Lens::default())).is_some());
-	assert!((lens.get)(&PartKind::Polygon(Polygon::default())).is_none());
 }
 
 #[test]

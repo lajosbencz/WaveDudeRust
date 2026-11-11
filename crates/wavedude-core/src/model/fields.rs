@@ -10,7 +10,7 @@ use thiserror::Error;
 
 pub use wavedude_model_derive::{Fields, Word};
 
-use super::ranges::Range;
+pub use super::ranges::Range;
 
 /// A field's value as a form or a file sees it.
 #[derive(Clone, Debug, PartialEq)]
@@ -24,7 +24,7 @@ pub enum Value {
 	Word(&'static str),
 	/// An absent optional.
 	Absent,
-	/// A list or a whole composite, as its debug text.
+	/// A list as its length, a whole composite as its debug text.
 	Other(String),
 }
 
@@ -56,15 +56,6 @@ pub enum ValueKind {
 	Nested,
 }
 
-/// How a number field is bounded.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Bounds {
-	Range(Range),
-	/// Bounded by another value, in code.
-	Dependent,
-	Open,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum EditError {
 	#[error("{field} takes a {want:?}")]
@@ -79,6 +70,15 @@ pub trait Fields: Sized + 'static {
 	const TYPE_NAME: &'static str;
 	type Field: Field<Owner = Self>;
 	type Edit: Edit<Owner = Self>;
+	/// Visits this type and everything reachable from it; a type below several parents is visited each time.
+	fn visit<V: Visitor>(v: &mut V);
+}
+
+/// Receives every `Fields` type and `Word` enum a walk reaches; a type below several parents comes each time,
+/// so a visitor that wants each type once keeps its own set.
+pub trait Visitor {
+	fn fields<T: Fields>(&mut self);
+	fn word<W: Word>(&mut self);
 }
 
 pub trait Field: Copy + Eq + Hash + fmt::Debug + 'static {
@@ -90,8 +90,8 @@ pub trait Field: Copy + Eq + Hash + fmt::Debug + 'static {
 	/// The names from the owner down: `Kind.Lens.Material.Mirror`.
 	fn path(self) -> String;
 	fn kind(self) -> ValueKind;
-	/// `Range` when a range is declared, else `Dependent` when the field is dependent, else `Open`.
-	fn bounds(self) -> Bounds;
+	/// The declared range of a number.
+	fn range(self) -> Option<Range>;
 	/// Whether another value also bounds the field, in code (`#[field(dependent)]`), a range or not.
 	fn dependent(self) -> bool;
 	/// None through an absent option or another variant.
@@ -150,7 +150,7 @@ macro_rules! numbers {
 	)*};
 }
 
-numbers!(u32 => true, i32 => true, i64 => true, f64 => false);
+numbers!(u32 => true, i32 => true, f64 => false);
 
 macro_rules! feed_by_hash {
 	($($ty:ty),*) => {$(
@@ -162,7 +162,7 @@ macro_rules! feed_by_hash {
 	)*};
 }
 
-feed_by_hash!(String, bool, u8, u16, u32, i8, i16, i32, i64);
+feed_by_hash!(String, bool, u8, u32, i32);
 
 impl Feed for f64 {
 	fn feed<H: Hasher>(&self, h: &mut H) {
@@ -199,14 +199,12 @@ pub struct Prop<T: Fields, V> {
 pub struct Nested<T: Fields, U: Fields> {
 	pub get: fn(&T) -> &U,
 	pub wrap: fn(U::Edit) -> T::Edit,
-	pub field: fn(U::Field) -> T::Field,
 }
 
 /// A typed accessor of an enum variant or an optional composite: `PartKind::LENS`, `Source::ARRAY`.
 pub struct Variant<T: Fields, U: Fields> {
 	pub get: fn(&T) -> Option<&U>,
 	pub wrap: fn(U::Edit) -> T::Edit,
-	pub field: fn(U::Field) -> T::Field,
 }
 
 // By hand: derives would demand `T: Copy` and `V: Copy`, and the members are fn pointers and a `Copy` field.

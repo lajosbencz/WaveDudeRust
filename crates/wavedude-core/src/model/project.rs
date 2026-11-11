@@ -54,22 +54,6 @@ impl Project {
 		Self { seed: rng.next_range(1, i32::MAX - 1), ..Self::default() }
 	}
 
-	/// A copy without the scene's image bytes, which are not cloned.
-	pub fn without_image(&self) -> Self {
-		let Self { seed, description, scene, simulation, display, sources, parts, probes, color_schemes } = self;
-		Self {
-			seed: *seed,
-			description: description.clone(),
-			scene: scene.without_image(),
-			simulation: simulation.clone(),
-			display: display.clone(),
-			sources: sources.clone(),
-			parts: parts.clone(),
-			probes: probes.clone(),
-			color_schemes: color_schemes.clone(),
-		}
-	}
-
 	/// Canvas size the scene simulates: the image's size for an image scene, else the settings'.
 	pub fn canvas_size(&self) -> (u32, u32) {
 		self.scene.canvas_size()

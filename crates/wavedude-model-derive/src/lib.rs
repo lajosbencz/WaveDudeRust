@@ -18,7 +18,7 @@ fn base() -> TokenStream2 {
 	quote!(::wavedude_core::model::fields)
 }
 
-/// Derives the `Field` and `Edit` enums, the `Fields`, `Field`, `Edit` and `Feed` impls and one accessor const
+/// Derives the `Field` and `Edit` enums, the `Fields` (with `visit`), `Field`, `Edit` and `Feed` impls and one accessor const
 /// per field.
 ///
 /// Type attribute: `#[fields(name = "...")]`. Field attributes: `#[field(skip)]`, `#[field(nested)]`,

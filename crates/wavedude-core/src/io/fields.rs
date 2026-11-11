@@ -46,12 +46,11 @@ impl<T: Fields> Attr<T> {
 	/// An attribute with a text of its own for `field`.
 	pub(crate) const fn custom(
 		field: T::Field,
-		name: &'static str,
 		get: fn(&T) -> String,
 		set: fn(&mut T, &str) -> Result<(), &'static str>,
 		ty: AttrType,
 	) -> Self {
-		Self { field, name: Some(name), codec: Codec::Custom { get, set, ty }, presence: Presence::Sparse }
+		Self { field, name: None, codec: Codec::Custom { get, set, ty }, presence: Presence::Sparse }
 	}
 
 	pub(crate) const fn named(self, name: &'static str) -> Self {
@@ -142,7 +141,7 @@ impl<T: Fields> Attr<T> {
 			_ => AttrType::Cdata,
 		};
 		let required = matches!(self.presence, Presence::Always) && kind != ValueKind::Text;
-		AttrDecl { name: self.name(), ty, required }
+		AttrDecl { name: self.name(), ty, required, owner: Some(T::TYPE_NAME) }
 	}
 }
 
@@ -159,6 +158,16 @@ pub(crate) struct AttrDecl {
 	pub name: &'static str,
 	pub ty: AttrType,
 	pub required: bool,
+	/// The model type whose table declares it; none for the hand-written ones.
+	#[cfg_attr(not(test), allow(dead_code, reason = "read by the tests that check the tables' coverage"))]
+	pub owner: Option<&'static str>,
+}
+
+impl AttrDecl {
+	/// An attribute of no table.
+	pub(crate) const fn plain(name: &'static str, ty: AttrType, required: bool) -> Self {
+		Self { name, ty, required, owner: None }
+	}
 }
 
 /// A model type with its attribute table and the base it is read onto and written against.
@@ -170,11 +179,6 @@ pub(crate) trait Table: Fields + Default {
 	}
 }
 
-/// Sets the fields of `into` whose attributes `el` has.
-pub(crate) fn read_into<T: Fields>(attrs: &[Attr<T>], el: &Element, into: &mut T) -> Result<(), FormatError> {
-	attrs.iter().try_for_each(|a| a.read(el, into))
-}
-
 /// A `T` read from `el` onto its base.
 pub(crate) fn read<T: Table>(el: &Element) -> Result<T, FormatError> {
 	read_onto(el, T::base())
@@ -182,7 +186,7 @@ pub(crate) fn read<T: Table>(el: &Element) -> Result<T, FormatError> {
 
 /// A `T` read from `el` onto `base`: what the element leaves out stays as `base` has it.
 pub(crate) fn read_onto<T: Table>(el: &Element, mut base: T) -> Result<T, FormatError> {
-	read_into(T::ATTRS, el, &mut base)?;
+	T::ATTRS.iter().try_for_each(|a| a.read(el, &mut base))?;
 	Ok(base)
 }
 

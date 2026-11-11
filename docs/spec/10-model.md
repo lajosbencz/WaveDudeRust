@@ -15,7 +15,7 @@ Rules for all model objects:
   the nested type's (`Material(MaterialField)`), and a `<Type>Edit` enum with the same members carrying the new
   value. `Field::all()` lists every leaf of a type and is the model's table: forms, labels, hints, bounds and the
   file adapter are checked against it. `Type::BOX_WIDTH` and the like are typed accessors (`Prop`, `Nested`,
-  `Variant`). A field's bound is `#[field(range = ranges::...)]` (or `dependent`); a field that is no scalar (the
+  `Variant`). A field's range is `#[field(range = ranges::...)]` (`Field::range()`), a bound set by another value `dependent`; a field that is no scalar (the
   project's lists, the scene's image bytes) is `#[field(skip)]` and the adapter and the forms handle it by hand. Enums derive `Word`: member names are the PascalCase names above, `MEMBERS` lists them. The
   model has no serde derives.
 - Positions are integer canvas pixels (origin top-left, y down). Angles in degrees, CCW on screen, normalised into
