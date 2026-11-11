@@ -121,9 +121,18 @@ What new code follows so that it fits the code already here. Each rule names one
 - Levels: `error` for a failed user action, `warn` for a fallback or a dropped request, `info` for what the
   user did or got (`opened '...'`, `document.rs:94`), `debug` for diagnostics, `trace` for every edit as
   `old -> new` (`log.rs:235`).
-- Info and up reach the status bar and the Messages pane through the `LogRing` (`log.rs:39`, `RING_LINES`);
-  the file log is at Trace in debug builds, Debug in release (`log.rs:142`). Libraries never print; the CLI
-  prints its results with `println!`.
+- Channels of the app (`log.rs:init`): every line to the daily rolling file in the logs folder (Trace in debug
+  builds, Debug in release, seven files kept); Info and up to the status bar and the Messages pane through the
+  `LogRing` (`log.rs:39`, `RING_LINES`); Warn and up to stderr. The `log` crate's records of wgpu, winit and the
+  rest are bridged into `tracing` (the `tracing-log` feature), so nothing a dependency reports is lost. Libraries
+  never print; the CLI logs to stderr at the level its `-v` flags set and prints its results with `println!`.
+- Failures: a library returns its error; the app shows it (a `Notice`, a dialog) and logs it. A failure before the
+  window exists ends `main` with a native message box, the message also on stderr and in the log
+  (`crates/wavedude-app/src/main.rs`). On Windows the app is a GUI program (`windows_subsystem`): no console
+  opens, its stdout and stderr lead nowhere, and the file and the box are the record.
+- Panics: the hook (`log.rs:install_panic_hook`) logs every panic with a backtrace; a worker's panic is caught
+  by its owner (a failed run, a failed export, with a notice); the main thread's ends the program and leaves
+  `crash.txt` in the logs folder, which the next start shows once.
 
 ## Comments and docs in code
 

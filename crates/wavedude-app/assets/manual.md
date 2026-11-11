@@ -551,7 +551,7 @@ An interference filter: a plate of glass or mirror with a stack of thin layers o
 14. **Length**: Extent of the plate along the axis in pixels, without the layers, which lie on its front.
 15. **Width**: Extent across the axis in pixels, of the plate and the layers alike.
 16. **Stack thickness**: The layers' thicknesses added up: how far the stack stands out of the plate's front. A read-out.
-17. **A layer's row**: The layer's number, its thickness in pixels to two decimals (a quarter-wave layer is the wavelength divided by four times the index; a layer of 0 is left out), its refractive index, and buttons that move it up (outwards) or down (towards the plate) and remove it.
+17. **A layer's row**: A grip to drag the row through the list, the layer's number, its thickness in pixels to two decimals (a quarter-wave layer is the wavelength divided by four times the index; a layer of 0 is left out), its refractive index, and buttons that move it up (outwards) or down (towards the plate) and remove it.
 18. **Add layer**: Appends a copy of the last layer, so a stack of alternating layers grows by copying and changing.
 19. **Remove all**: Removes every layer at once, to build another stack from nothing; Undo (Ctrl+Z) brings them back.
 

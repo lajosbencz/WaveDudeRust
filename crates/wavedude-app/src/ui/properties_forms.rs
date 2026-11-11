@@ -1184,83 +1184,170 @@ const ROW_BUTTONS_WIDTH: f32 = 3. * ROW_BUTTON_WIDTH + 2. * ROW_SPACING;
 /// Width of a layer row's ordinal.
 const ORDINAL_WIDTH: f32 = 20.;
 
-/// An interference filter's layers, the outermost first: a row each with its thickness and index, up, down and
-/// remove; Add layer appends a copy of the last, Remove all empties the list in one step.
+/// Width of a row's drag grip.
+const GRIP_WIDTH: f32 = 14.;
+
+/// A fibre node row's label column.
+const NODE_LABEL_WIDTH: f32 = 36.;
+/// A fibre node row's tail: the Smooth box and the remove button, or the same width left empty.
+const NODE_TAIL_WIDTH: f32 = 116.;
+
+/// An interference filter's layers, the outermost first: a row each with a grip, its thickness and index, up,
+/// down and remove; Add layer appends a copy of the last, Remove all empties the list in one step. A drag by a
+/// row's grip moves the layer through the list: the row whose top lies nearest the grip's top plus the drag is
+/// the target, each crossing is one edit, and the mouse held keeps them one undo step.
 fn layers(f: &Form, path: &str) -> Element {
-	let s = &f.s;
-	let list: Vec<m::FilterLayer> = f.bind_as(path);
-	let (tmin, tmax) = bounds("FilterLayer.Thickness");
-	let (imin, imax) = bounds("FilterLayer.RefractiveIndex");
-	let mut rows = vec![hint_row(s.get("HintFilterLayers"))];
-	let theme = use_wave_theme();
-	// each row: a narrow ordinal, the two boxes sharing the rest, the buttons
-	let ordinal = |text: String| label().width(Size::px(ORDINAL_WIDTH)).text(text).color(theme.text_dim).max_lines(1);
-	if !list.is_empty() {
-		let headings = list_row()
-			.child(ordinal(String::new()))
-			.child(list_heading(s.label("FilterLayer", "Thickness")))
-			.child(list_heading(s.label("FilterLayer", "RefractiveIndex")))
-			.child(rect().width(Size::px(ROW_BUTTONS_WIDTH)));
-		rows.push(PropertyRow::new("", headings).full_width());
+	LayerList { form: f.clone(), path: path.to_owned() }.into_element()
+}
+
+/// The layer list as a component of its own: the form builders run conditionally, so the drag's state cannot
+/// be a hook of theirs.
+#[derive(Clone)]
+struct LayerList {
+	form: Form,
+	path: String,
+}
+
+impl PartialEq for LayerList {
+	fn eq(&self, other: &Self) -> bool {
+		self.path == other.path && *self.form.json == *other.form.json
 	}
-	for (i, l) in list.iter().enumerate() {
-		let thickness = NumberSpec::linear(tmin, tmax, 1.).with_decimals(2).with_drag_step(0.1);
-		let index = NumberSpec::linear(imin, imax, 0.01).with_decimals(2).with_drag_step(0.01);
-		let editors = list_row()
-			.child(ordinal(format!("{}", i + 1)))
-			.child(
-				list_decimal(
-					f,
-					path,
-					i,
-					l.thickness,
-					thickness,
-					|l: &mut m::FilterLayer, v| l.thickness = v,
-					format!("Layer{i}.Thickness"),
-				)
-				.tooltip(s.hint("FilterLayer", "Thickness")),
-			)
-			.child(
-				list_decimal(
-					f,
-					path,
-					i,
-					l.refractive_index,
-					index,
-					|l: &mut m::FilterLayer, v| l.refractive_index = v,
-					format!("Layer{i}.RefractiveIndex"),
-				)
-				.tooltip(s.hint("FilterLayer", "RefractiveIndex")),
-			)
-			.child(move_button::<m::FilterLayer>(f, path, i, -1, "TipLayerUp", format!("Layer{i}.Up")))
-			.child(move_button::<m::FilterLayer>(f, path, i, 1, "TipLayerDown", format!("Layer{i}.Down")))
-			.child(remove_button::<m::FilterLayer>(f, path, i, "TipRemoveLayer", format!("Layer{i}.Remove")));
-		rows.push(PropertyRow::new("", editors).full_width());
+}
+
+impl Component for LayerList {
+	fn render(&self) -> impl IntoElement {
+		let (f, path) = (&self.form, self.path.as_str());
+		self.rows(f, path)
 	}
-	let add = {
-		let f = f.clone();
-		let path = path.to_owned();
-		move |_: Event<PressEventData>| {
-			set_list(&f, &path, |list: &mut Vec<m::FilterLayer>| {
-				list.push(list.last().cloned().unwrap_or_default());
-			});
+}
+
+impl LayerList {
+	fn rows(&self, f: &Form, path: &str) -> Element {
+		let s = &f.s;
+		let list: Vec<m::FilterLayer> = f.bind_as(path);
+		let (tmin, tmax) = bounds("FilterLayer.Thickness");
+		let (imin, imax) = bounds("FilterLayer.RefractiveIndex");
+		let mut rows = vec![hint_row(s.get("HintFilterLayers"))];
+		let theme = use_wave_theme();
+		// the rows' tops by index, and the drag: the pointer's y and the grip's top at the press, the layer's index now
+		let mut tops = use_state(Vec::<f32>::new);
+		let mut drag = use_state(|| None::<(f64, f32, usize)>);
+		// each row: the grip, a narrow ordinal, the two boxes sharing the rest, the buttons
+		let ordinal =
+			|text: String| label().width(Size::px(ORDINAL_WIDTH)).text(text).color(theme.text_dim).max_lines(1);
+		if !list.is_empty() {
+			let on_move = {
+				let f = f.clone();
+				let path = path.to_owned();
+				move |e: Event<PointerEventData>| {
+					let Some((y0, top0, current)) = *drag.peek() else { return };
+					let wanted = top0 + (e.global_location().y - y0) as f32;
+					let nearest = tops
+						.peek()
+						.iter()
+						.enumerate()
+						.min_by(|a, b| (a.1 - wanted).abs().total_cmp(&(b.1 - wanted).abs()))
+						.map(|(i, _)| i);
+					let Some(target) = nearest.filter(|&t| t != current) else { return };
+					set_list(&f, &path, |l: &mut Vec<m::FilterLayer>| {
+						if current < l.len() && target < l.len() {
+							let layer = l.remove(current);
+							l.insert(target, layer);
+						}
+					});
+					drag.set(Some((y0, top0, target)));
+				}
+			};
+			let headings = list_row()
+				.on_global_pointer_move(on_move)
+				.on_global_pointer_up(move |_| drag.set_if_modified(None))
+				.child(rect().width(Size::px(GRIP_WIDTH)))
+				.child(ordinal(String::new()))
+				.child(list_heading(s.label("FilterLayer", "Thickness")))
+				.child(list_heading(s.label("FilterLayer", "RefractiveIndex")))
+				.child(rect().width(Size::px(ROW_BUTTONS_WIDTH)));
+			rows.push(PropertyRow::new("", headings).full_width());
 		}
-	};
-	let clear = {
-		let f = f.clone();
-		let path = path.to_owned();
-		move |_: Event<PressEventData>| set_list(&f, &path, |list: &mut Vec<m::FilterLayer>| list.clear())
-	};
-	let buttons = rect()
-		.horizontal()
-		.spacing(6.)
-		.child(tip(s.get("TipAddLayer"), tagged(dialogs::button(s.get("ButtonAddLayer"), true, add), "AddLayer")))
-		.child(tip(
-			s.get("TipRemoveAllLayers"),
-			tagged(dialogs::button(s.get("ButtonRemoveAllLayers"), !list.is_empty(), clear), "RemoveAllLayers"),
-		));
-	rows.push(PropertyRow::new("", buttons));
-	section(s.get("SectionLayers"), rows)
+		for (i, l) in list.iter().enumerate() {
+			let thickness = NumberSpec::linear(tmin, tmax, 1.).with_decimals(2).with_drag_step(0.1);
+			let index = NumberSpec::linear(imin, imax, 0.01).with_decimals(2).with_drag_step(0.01);
+			let grip = rect()
+				.width(Size::px(GRIP_WIDTH))
+				.height(Size::px(22.))
+				.center()
+				.cursor(CursorIcon::RowResize)
+				.on_sized(move |e: Event<SizedEventData>| {
+					let top = e.area.min_y();
+					if tops.peek().get(i) != Some(&top) {
+						let mut tops = tops.write();
+						if tops.len() <= i {
+							tops.resize(i + 1, 0.);
+						}
+						tops[i] = top;
+					}
+				})
+				.on_pointer_down(move |e: Event<PointerEventData>| {
+					let top = tops.peek().get(i).copied().unwrap_or(0.);
+					drag.set(Some((e.global_location().y, top, i)));
+				})
+				.child(IconView::new(icons::GRIP).color(theme.text_dim));
+			let editors = list_row()
+				.child(tagged(tip(s.get("TipDragLayer"), grip), format!("Layer{i}.Grip")))
+				.child(ordinal(format!("{}", i + 1)))
+				.child(
+					list_decimal(
+						f,
+						path,
+						i,
+						l.thickness,
+						thickness,
+						|l: &mut m::FilterLayer, v| l.thickness = v,
+						format!("Layer{i}.Thickness"),
+					)
+					.tooltip(s.hint("FilterLayer", "Thickness")),
+				)
+				.child(
+					list_decimal(
+						f,
+						path,
+						i,
+						l.refractive_index,
+						index,
+						|l: &mut m::FilterLayer, v| l.refractive_index = v,
+						format!("Layer{i}.RefractiveIndex"),
+					)
+					.tooltip(s.hint("FilterLayer", "RefractiveIndex")),
+				)
+				.child(move_button::<m::FilterLayer>(f, path, i, -1, "TipLayerUp", format!("Layer{i}.Up")))
+				.child(move_button::<m::FilterLayer>(f, path, i, 1, "TipLayerDown", format!("Layer{i}.Down")))
+				.child(remove_button::<m::FilterLayer>(f, path, i, "TipRemoveLayer", format!("Layer{i}.Remove")));
+			rows.push(PropertyRow::new("", editors).full_width());
+		}
+		let add = {
+			let f = f.clone();
+			let path = path.to_owned();
+			move |_: Event<PressEventData>| {
+				set_list(&f, &path, |list: &mut Vec<m::FilterLayer>| {
+					list.push(list.last().cloned().unwrap_or_default());
+				});
+			}
+		};
+		let clear = {
+			let f = f.clone();
+			let path = path.to_owned();
+			move |_: Event<PressEventData>| set_list(&f, &path, |list: &mut Vec<m::FilterLayer>| list.clear())
+		};
+		let buttons = rect()
+			.horizontal()
+			.spacing(6.)
+			.child(tip(s.get("TipAddLayer"), tagged(dialogs::button(s.get("ButtonAddLayer"), true, add), "AddLayer")))
+			.child(tip(
+				s.get("TipRemoveAllLayers"),
+				tagged(dialogs::button(s.get("ButtonRemoveAllLayers"), !list.is_empty(), clear), "RemoveAllLayers"),
+			));
+		rows.push(PropertyRow::new("", buttons));
+		section(s.get("SectionLayers"), rows)
+	}
 }
 
 fn fiber(f: &Form, at: &str, variant: &str) -> Vec<Element> {
@@ -1276,51 +1363,72 @@ fn fiber(f: &Form, at: &str, variant: &str) -> Vec<Element> {
 	let nodes_path = fb.path("Nodes");
 	let list: Vec<m::FiberNode> = f.bind_as(&nodes_path);
 	let mut nodes = vec![hint_row(s.get("HintFiberNodes"))];
+	let theme = use_wave_theme();
+	// a node is three rows, "Node", "In" and "Out", each a label and its X and Y; the first carries Smooth and remove
+	let node_label =
+		|text: &str| label().width(Size::px(NODE_LABEL_WIDTH)).text(text.to_owned()).color(theme.text_dim).max_lines(1);
+	if !list.is_empty() {
+		let headings = list_row()
+			.child(node_label(""))
+			.child(list_heading(s.label("FiberNode", "X")))
+			.child(list_heading(s.label("FiberNode", "Y")))
+			.child(rect().width(Size::px(NODE_TAIL_WIDTH)));
+		nodes.push(PropertyRow::new("", headings).full_width());
+	}
 	type Set = fn(&mut m::FiberNode, i32);
 	for (i, node) in list.iter().enumerate() {
-		let pair = |(a, set_a): (i32, Set), (b, set_b): (i32, Set), tag: &str| {
-			rect()
-				.horizontal()
-				.width(Size::fill())
-				.content(Content::flex())
-				.spacing(4.)
-				.child(
-					list_number(f, &nodes_path, i, a, set_a, format!("Node{i}.{tag}X"))
-						.tooltip(s.hint("FiberNode", &format!("{tag}X"))),
-				)
-				.child(
-					list_number(f, &nodes_path, i, b, set_b, format!("Node{i}.{tag}Y"))
-						.tooltip(s.hint("FiberNode", &format!("{tag}Y"))),
-				)
+		let boxes = |row: Rect, (a, set_a): (i32, Set), (b, set_b): (i32, Set), tag: &str| {
+			row.child(
+				list_number(f, &nodes_path, i, a, set_a, format!("Node{i}.{tag}X"))
+					.tooltip(s.hint("FiberNode", &format!("{tag}X"))),
+			)
+			.child(
+				list_number(f, &nodes_path, i, b, set_b, format!("Node{i}.{tag}Y"))
+					.tooltip(s.hint("FiberNode", &format!("{tag}Y"))),
+			)
 		};
 		let toggle = {
 			let f = f.clone();
 			let path = nodes_path.clone();
 			move |on: bool| set_list(&f, &path, |l: &mut Vec<m::FiberNode>| l[i].smooth = on)
 		};
-		let head = pair((node.x, |n, v| n.x = v), (node.y, |n, v| n.y = v), "");
-		nodes.push(PropertyRow::new(format!("{} {}", s.get("LabelNodePoint"), i + 1), head));
-		nodes.push(PropertyRow::new(
-			s.get("LabelNodeIn"),
-			pair((node.in_x, |n, v| n.in_x = v), (node.in_y, |n, v| n.in_y = v), "In"),
-		));
-		nodes.push(PropertyRow::new(
-			s.get("LabelNodeOut"),
-			pair((node.out_x, |n, v| n.out_x = v), (node.out_y, |n, v| n.out_y = v), "Out"),
-		));
 		let tail = rect()
 			.horizontal()
-			.width(Size::fill())
+			.width(Size::px(NODE_TAIL_WIDTH))
 			.content(Content::flex())
 			.cross_align(Alignment::center())
-			.spacing(4.)
+			.spacing(ROW_SPACING)
 			.child(rect().width(Size::flex(1.)).child(super::properties::check_box(
 				s.label("FiberNode", "Smooth").into(),
 				node.smooth,
 				toggle,
 			)))
 			.child(remove_button::<m::FiberNode>(f, &nodes_path, i, "TipRemoveNode", format!("Node{i}.Remove")));
-		nodes.push(PropertyRow::new("", tail));
+		let point = boxes(
+			list_row().child(node_label(s.get("LabelNodePoint"))),
+			(node.x, |n, v| n.x = v),
+			(node.y, |n, v| n.y = v),
+			"",
+		)
+		.child(tail);
+		nodes.push(PropertyRow::new("", point).full_width());
+		let spacer = || rect().width(Size::px(NODE_TAIL_WIDTH));
+		let into = boxes(
+			list_row().child(node_label(s.get("LabelNodeIn"))),
+			(node.in_x, |n, v| n.in_x = v),
+			(node.in_y, |n, v| n.in_y = v),
+			"In",
+		)
+		.child(spacer());
+		nodes.push(PropertyRow::new("", into).full_width());
+		let out = boxes(
+			list_row().child(node_label(s.get("LabelNodeOut"))),
+			(node.out_x, |n, v| n.out_x = v),
+			(node.out_y, |n, v| n.out_y = v),
+			"Out",
+		)
+		.child(spacer());
+		nodes.push(PropertyRow::new("", out).full_width());
 	}
 	let add = {
 		let f = f.clone();

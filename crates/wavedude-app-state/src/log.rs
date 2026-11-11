@@ -143,7 +143,9 @@ pub fn max_level() -> LevelFilter {
 	if cfg!(debug_assertions) { LevelFilter::TRACE } else { LevelFilter::DEBUG }
 }
 
-/// Installs the global subscriber: a daily rolling `wavedude.*.log` in `dir` (seven kept) and `ring`.
+/// Installs the global subscriber: a daily rolling `wavedude.*.log` in `dir` (seven kept), `ring`, and stderr for
+/// warnings and errors, so a terminal sees what the log file and the status bar see (where the process has no
+/// console, as a Windows GUI program, the writes go nowhere and nothing is lost: the file holds every line).
 pub fn init(dir: &Path, ring: LogRing) -> anyhow::Result<LogGuard> {
 	std::fs::create_dir_all(dir)?;
 	let appender = tracing_appender::rolling::Builder::new()
@@ -156,6 +158,12 @@ pub fn init(dir: &Path, ring: LogRing) -> anyhow::Result<LogGuard> {
 	tracing_subscriber::registry()
 		.with(max_level())
 		.with(tracing_subscriber::fmt::layer().with_writer(writer).with_ansi(false))
+		.with(
+			tracing_subscriber::fmt::layer()
+				.with_writer(std::io::stderr)
+				.with_ansi(false)
+				.with_filter(LevelFilter::WARN),
+		)
 		.with(RingLayer(ring))
 		.try_init()?;
 	Ok(LogGuard { _worker: guard })

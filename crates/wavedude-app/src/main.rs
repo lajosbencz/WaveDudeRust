@@ -1,4 +1,7 @@
 //! `WaveDude` Rust: the desktop application.
+// A GUI program on Windows: no console window opens with it. Its stdout and stderr lead nowhere there, so a
+// failure before the window shows is reported in a native message box, and the log file holds everything.
+#![cfg_attr(windows, windows_subsystem = "windows")]
 
 use freya::prelude::*;
 use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, MIN_SIZE, root, theme_background};
@@ -9,7 +12,22 @@ use wavedude_app_state::settings::AppDirs;
 
 const ICON: &[u8] = include_bytes!("../assets/icon.png");
 
-fn main() -> anyhow::Result<()> {
+fn main() {
+	if let Err(e) = run() {
+		let message = format!("{e:#}");
+		tracing::error!("{message}");
+		eprintln!("{message}");
+		rfd::MessageDialog::new()
+			.set_level(rfd::MessageLevel::Error)
+			.set_title("WaveDude Rust")
+			.set_description(&message)
+			.show();
+		std::process::exit(1);
+	}
+}
+
+/// Logging, settings, the state and the window; an error here is one the user has to be told of.
+fn run() -> anyhow::Result<()> {
 	let args: Vec<String> = std::env::args().skip(1).collect();
 	let platform = AppDirs::platform();
 	let dirs = platform

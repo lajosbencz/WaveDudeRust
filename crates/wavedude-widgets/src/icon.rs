@@ -44,6 +44,8 @@ pub mod icons {
 	pub const CHEVRON_RIGHT: Icon = Icon::path("M5.5 3.5 L9.5 7.5 L5.5 11.5");
 	pub const CHEVRON_DOWN: Icon = Icon::path("M3.5 5.5 L7.5 9.5 L11.5 5.5");
 	pub const CHEVRON_UP: Icon = Icon::path("M3.5 9.5 L7.5 5.5 L11.5 9.5");
+	/// A row's drag grip: three short lines.
+	pub const GRIP: Icon = Icon::path("M5 5.5 L10 5.5 M5 7.5 L10 7.5 M5 9.5 L10 9.5");
 	/// The number box's spin arrows: 4 x 2 around the centre.
 	pub const SPIN_UP: Icon = Icon::path("M6 9 L8 7 L10 9");
 	pub const SPIN_DOWN: Icon = Icon::path("M6 7 L8 9 L10 7");
