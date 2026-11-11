@@ -1431,6 +1431,8 @@ fn probe(f: &Form) -> Vec<Element> {
 	let line = p.word("Kind") == "Line";
 	let detector = p.word("Detector");
 	let is_detector = detector != "Standard";
+	// the step axis belongs to a graph over time: a point probe's or a counting detector's (Probe::shows_profile)
+	let profile = line && detector != "Counting";
 	let field = p.word("Layer") == "Field";
 	let measurements: &[&str] = if field { &["Amplitude"] } else { &["Value", "IntegratedValue"] };
 	let custom = p.word("BoxSize") == "Custom";
@@ -1472,9 +1474,9 @@ fn probe(f: &Form) -> Vec<Element> {
 		section(
 			s.get("SectionAxes"),
 			vec![
-				p.combo("ScaleMode", "ProbeScaleMode", &["Running", "Full"]).enabled(!line),
+				p.combo("ScaleMode", "ProbeScaleMode", &["Running", "Full"]).enabled(!profile),
 				p.number("Window", 10.),
-				p.check("AutoScaleX").enabled(!line),
+				p.check("AutoScaleX").enabled(!profile),
 				p.check("AutoScaleY"),
 				p.combo("YScale", "ProbeValueScale", &["Linear", "Logarithmic"]).enabled(!field),
 				p.number("Decades", 1.).enabled(log),

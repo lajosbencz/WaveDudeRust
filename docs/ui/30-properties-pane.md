@@ -301,9 +301,9 @@ Sections: General (Name, Active, Start after step), Measurement (Detector to Kin
 | Box x, Box y | NB min 0 |
 | Box width | NB 60..4096 step 10 (custom only per hint) |
 | Box height | NB 30..4096 step 10 (custom only per hint) |
-| Step axis | CMB Running, Full; enabled for a point probe |
+| Step axis | CMB Running, Full; enabled for a graph over time: a point probe or a counting detector |
 | Window | NB 10..1,000,000 step 10 |
-| Auto-scale steps | CB; enabled for a point probe |
+| Auto-scale steps | CB; enabled for a graph over time: a point probe or a counting detector |
 | Auto-scale values | CB |
 | Value axis | CMB Linear, Logarithmic; enabled on the intensity layer |
 | Decades | NB 1..12; enabled for a logarithmic axis |

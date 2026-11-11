@@ -1,6 +1,7 @@
 //! The window shell driven headless: the tree, the menu bar and a property edit.
 
 use std::path::Path;
+use std::time::Instant;
 
 use freya::prelude::*;
 use freya_testing::TestingNode;
@@ -11,7 +12,7 @@ use wavedude_app_state::log::LogRing;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::AppDirs;
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
-use wavedude_core::model::ProbeKind;
+use wavedude_core::model::{ProbeDetector, ProbeKind};
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj";
 
@@ -21,6 +22,15 @@ fn shell(dir: &Path) -> (TestingRunner, Shared) {
 }
 
 fn shell_at(dir: &Path, answered: bool) -> (TestingRunner, Shared) {
+	shell_sized(dir, answered, Size2D::new(1400., 900.))
+}
+
+/// A window tall enough for the whole probe form: its Axes section lies below a 900 px window.
+fn tall_shell(dir: &Path) -> (TestingRunner, Shared) {
+	shell_sized(dir, true, Size2D::new(1400., 1400.))
+}
+
+fn shell_sized(dir: &Path, answered: bool, size: Size2D) -> (TestingRunner, Shared) {
 	let dirs = AppDirs::under(dir);
 	let mut app = AppState::start(&dirs, []).expect("state starts");
 	if answered {
@@ -40,12 +50,8 @@ fn shell_at(dir: &Path, answered: bool) -> (TestingRunner, Shared) {
 	};
 	let boot = Boot::new(app, info);
 	let handle = boot.clone();
-	let (mut test, ()) = TestingRunner::new(
-		root,
-		Size2D::new(1400., 900.),
-		move |r| drop(r.provide_root_context(move || boot.clone())),
-		1.0,
-	);
+	let (mut test, ()) =
+		TestingRunner::new(root, size, move |r| drop(r.provide_root_context(move || boot.clone())), 1.0);
 	test.sync_and_update();
 	let shared = handle.shared().expect("the root provided the state");
 	(test, shared)
@@ -115,7 +121,7 @@ fn a_property_edit_reaches_the_document() {
 #[test]
 fn a_disabled_row_takes_no_edit() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
+	let (mut test, state) = tall_shell(dir.path());
 	let probe = ItemRef::new(ItemKind::Probe, 0);
 	state.update(|a| a.selection.select(Row::Item(probe)));
 	test.sync_and_update();
@@ -124,6 +130,7 @@ fn a_disabled_row_takes_no_edit() {
 	let before = state.peek(|a| a.document.project.probes[0].auto_scale_x);
 	let toggle = find_text(&test, "Auto-scale steps").expect("the probe form shows");
 	let area = toggle.layout().area;
+	assert!(area.max_y() < 1400., "the row is on screen: {area:?}");
 	test.click_cursor((f64::from(area.min_x()) + 2., f64::from(area.center().y)));
 	test.sync_and_update();
 	assert_eq!(state.peek(|a| a.document.project.probes[0].auto_scale_x), before, "a disabled check box toggled");
@@ -139,6 +146,33 @@ fn a_disabled_row_takes_no_edit() {
 	test.sync_and_update();
 	test.sync_and_update();
 	assert_eq!(words(&test, "Full").len(), before, "a disabled combo box opened its menu");
+}
+
+/// A counting detector's graph runs over the steps, so its step axis rows take edits although its kind is Line.
+#[test]
+fn a_counting_detectors_step_axis_takes_an_edit() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = tall_shell(dir.path());
+	let probe = ItemRef::new(ItemKind::Probe, 0);
+	state.update(|a| {
+		a.document.project.probes[0].detector = ProbeDetector::Counting;
+		a.document.edited(Instant::now());
+		a.selection.select(Row::Item(probe));
+	});
+	test.sync_and_update();
+	test.sync_and_update();
+	assert_eq!(state.peek(|a| a.document.project.probes[0].kind), ProbeKind::Line);
+	let before = state.peek(|a| a.document.project.probes[0].auto_scale_x);
+	let toggle = find_text(&test, "Auto-scale steps").expect("the probe form shows");
+	let area = toggle.layout().area;
+	assert!(area.max_y() < 1400., "the row is on screen: {area:?}");
+	test.click_cursor((f64::from(area.min_x()) + 2., f64::from(area.center().y)));
+	test.sync_and_update();
+	assert_ne!(
+		state.peek(|a| a.document.project.probes[0].auto_scale_x),
+		before,
+		"the check box did not edit the detector"
+	);
 }
 
 #[test]
