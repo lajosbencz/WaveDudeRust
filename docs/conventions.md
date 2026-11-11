@@ -18,7 +18,8 @@ What new code follows so that it fits the code already here. Each rule names one
 - `typos` (`_typos.toml` holds the exceptions: format and literature terms, the translated string tables) and
   `cargo deny check` (`deny.toml`: advisories of our own dependencies, the licence allow-list, no wildcard or
   unknown-source dependencies) run on every change in `.github/workflows/hygiene.yml`; `cargo hack check
-  --workspace --feature-powerset --depth 2` and `cargo machete` run in the Linux CI job.
+  --workspace --feature-powerset --depth 2` and `cargo machete` run in the Linux CI job, whose tests run under
+  `cargo llvm-cov` (line coverage in the job summary, `lcov.info` as an artifact; no threshold).
 - Before a push, run what `.github/workflows/ci.yml` runs:
   `cargo fmt --all --check`;
   `cargo clippy --workspace --all-targets --features $F -- -D warnings` and `cargo test --workspace --features $F`
