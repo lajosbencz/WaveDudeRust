@@ -320,7 +320,7 @@ Sections: General, Stops.
 | Kind | CMB Unspecified, Field, Intensity | pickers list it for that kind only |
 | Description | TB wraps, no newline | |
 | Based on | CMB with gradient + name rows (shared schemes and the project's other schemes); first row of Stops | Picking copies stops, kind, category, description into this scheme; the choice stays shown until the next pick. |
-| (gradient) | the scheme's gradient bar with its stop markers, above the stop rows |
+| (gradient) | the scheme's gradient bar with its stop markers, above the stop rows; a marker dragged more than 24 px above or below the bar fades and, released there, its stop is removed; a double-click on a marker removes its stop; the last stop stays |
 | Stop rows | Position NB 0..1 step 0.01, up to 3 decimals (64 px wide); colour swatch button; hex TB "#RRGGBB" (Enter applies); remove BTN | |
 | Add stop | BTN | Inserts a stop in the widest gap with the gradient's colour there. |
 

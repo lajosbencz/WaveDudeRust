@@ -1,7 +1,7 @@
 use freya::prelude::*;
 use freya_testing::prelude::*;
 use wavedude_widgets::tree::{RowKind, TreeAction, TreeRow, TreeState, TreeView};
-use wavedude_widgets::{ColorPicker, NumberBox, NumberSpec, Rgb, TextBox};
+use wavedude_widgets::{ColorPicker, Gradient, GradientEditor, GradientStop, NumberBox, NumberSpec, Rgb, TextBox};
 
 fn find_text(test: &TestingRunner, text: &str) -> bool {
 	test.find(|_, element| Label::try_downcast(element).filter(|l| l.text.as_ref() == text)).is_some()
@@ -475,4 +475,47 @@ fn typed_hex_applies_when_the_picker_closes_on_a_click_outside() {
 	test.click_cursor((390., 390.));
 	settle(&mut test);
 	assert_eq!(shown_with(&test, "rgb="), "rgb=#00FF00", "the typed hex applied when the popup unmounted");
+}
+
+/// The gradient bar's mouse ways to remove a stop: a marker pulled more than 24 px below the bar and released
+/// there, or double-clicked; one brought back into reach keeps its stop; the last stop stays.
+#[test]
+fn a_gradient_marker_pulled_away_or_double_clicked_removes_its_stop() {
+	fn app() -> impl IntoElement {
+		wavedude_widgets::theme::use_init_wave_theme(wavedude_widgets::theme::Theme::dark);
+		let value = use_state(|| {
+			Gradient::new(vec![
+				GradientStop { position: 0., color: Rgb::new(0, 0, 0) },
+				GradientStop { position: 0.5, color: Rgb::new(255, 0, 0) },
+				GradientStop { position: 1., color: Rgb::new(255, 255, 255) },
+			])
+		});
+		let positions: Vec<String> = value.read().stops.iter().map(|s| format!("{:.2}", s.position)).collect();
+		rect()
+			.child(rect().width(Size::px(300.)).child(GradientEditor::new(value)))
+			.child(label().text(format!("stops={}", positions.join(","))))
+	}
+	let mut test = launch_test(app);
+	test.sync_and_update();
+	// the bar is 20 px high over 7 px markers; the middle stop's marker sits at x 7 + 286 / 2
+	let marker = |t: f64| (7. + 286. * t, 25.);
+	test.press_cursor(marker(0.5));
+	test.move_cursor((160., 95.));
+	test.move_cursor((160., 25.));
+	test.release_cursor((160., 25.));
+	assert!(find_text(&test, "stops=0.00,0.53,1.00"), "brought back into reach, the stop stays where it was dragged");
+	test.press_cursor(marker(0.53));
+	test.move_cursor((150., 95.));
+	test.release_cursor((150., 95.));
+	assert!(find_text(&test, "stops=0.00,1.00"), "released pulled away, the stop is removed");
+	test.click_cursor(marker(1.));
+	test.click_cursor(marker(1.));
+	assert!(find_text(&test, "stops=0.00"), "a double click on a marker removes its stop");
+	test.click_cursor(marker(0.));
+	test.click_cursor(marker(0.));
+	assert!(find_text(&test, "stops=0.00"), "the last stop stays");
+	test.press_cursor(marker(0.));
+	test.move_cursor((150., 95.));
+	test.release_cursor((150., 95.));
+	assert!(find_text(&test, "stops=0.50"), "the last stop is dragged, never pulled away");
 }

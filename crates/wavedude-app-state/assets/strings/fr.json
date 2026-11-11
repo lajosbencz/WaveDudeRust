@@ -416,6 +416,7 @@
 	"LabelBasedOn": "Modèle",
 	"TipBasedOn": "Copie les points d'une palette existante dans celle-ci, à adapter ensuite",
 	"ButtonAddStop": "Ajouter un point",
+	"TipSchemeGradient": "Glisser un repère pour déplacer son point ; l'éloigner du dégradé ou un double clic supprime le point ; un clic sur le dégradé y ajoute un point. Avec le focus clavier, Gauche et Droite déplacent le point sélectionné d'un centième, d'un dixième avec Maj, Page haut et Page bas sélectionnent le point précédent ou suivant, et Suppr le supprime",
 	"TipAddStop": "Insérer un point dans le plus grand intervalle, avec la couleur du dégradé à cet endroit",
 	"TipRemoveStop": "Supprimer ce point",
 	"TipStopPosition": "Position dans le dégradé : 0 à la valeur la plus basse, 1 à la plus haute",

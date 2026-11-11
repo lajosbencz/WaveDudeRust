@@ -416,6 +416,7 @@
 	"LabelBasedOn": "Based on",
 	"TipBasedOn": "Copy the stops of an existing scheme into this one, then change them",
 	"ButtonAddStop": "Add stop",
+	"TipSchemeGradient": "Drag a marker to move its stop; drag it away from the gradient or double-click it to remove the stop; a click on the gradient adds a stop there. With keyboard focus Left and Right move the selected stop by a hundredth, a tenth with Shift, Page Up and Page Down select the stop before or after it, and Del removes it",
 	"TipAddStop": "Insert a stop in the widest gap, with the gradient's colour there",
 	"TipRemoveStop": "Remove this stop",
 	"TipStopPosition": "Position along the gradient: 0 at the lowest value, 1 at the highest",

@@ -1561,7 +1561,8 @@ fn scheme(f: &Form, r: &Readouts) -> Vec<Element> {
 			"",
 			tagged(GradientEditor::new(WritableSetter::new(gradient.clone(), set_gradient)), "SchemeGradient"),
 		)
-		.full_width(),
+		.full_width()
+		.hint(s.get("TipSchemeGradient")),
 	];
 	for (i, stop) in gradient.stops.iter().enumerate() {
 		let set_at = stop_edit(f, &gradient, |g, i, at: f64| {

@@ -708,7 +708,7 @@ The form of a project's colour scheme. <figure name="properties-colour-scheme"/>
 2. **Kind**: Field or Intensity, the output the scheme is meant for; the pickers list it for that output only.
 3. **Description**: Free text: what the scheme is, where it comes from.
 4. **Based on**: Copies the stops of an existing scheme into this one, to change them from there.
-5. **The gradient**: The scheme as a bar: drag a stop along it, click between stops to add one, Del removes the focused stop.
+5. **The gradient**: The scheme as a bar: drag a stop along it, click between stops to add one. To remove a stop, drag its marker away from the bar, up or down, until it fades, and release it there, or double-click the marker; the last stop stays. Del removes the focused stop.
 6. **A stop**: Its position along the gradient, 0 at the lowest value to 1 at the highest; its colour swatch, which opens the picker (Space opens it, Enter keeps the colour, Escape puts the old one back); the colour as #RRGGBB, applied with Enter; and a button that removes the stop.
 7. **Add a stop**: Inserts a stop in the widest gap, with the gradient's colour there.
 

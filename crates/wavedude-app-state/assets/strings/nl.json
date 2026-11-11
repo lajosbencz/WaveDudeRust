@@ -416,6 +416,7 @@
 	"LabelBasedOn": "Gebaseerd op",
 	"TipBasedOn": "Neemt de punten van een bestaand schema over; daarna aanpassen",
 	"ButtonAddStop": "Punt toevoegen",
+	"TipSchemeGradient": "Sleep een markering om het bijbehorende punt te verplaatsen; van het verloop wegslepen of dubbelklikken verwijdert het punt; een klik op het verloop voegt daar een punt in. Met toetsenbordfocus verplaatsen Links en Rechts het gekozen punt een honderdste, een tiende met Shift, PageUp en PageDown kiezen het punt ervoor of erna, en Del verwijdert het",
 	"TipAddStop": "Een punt invoegen in de grootste tussenruimte, met de kleur van het verloop op die plek",
 	"TipRemoveStop": "Dit punt verwijderen",
 	"TipStopPosition": "Positie in het verloop: 0 bij de laagste waarde, 1 bij de hoogste",

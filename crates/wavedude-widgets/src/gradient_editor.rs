@@ -115,6 +115,12 @@ impl Gradient {
 }
 
 const BAR_HEIGHT: f32 = 20.;
+/// Pixels above or below the bar at which a dragged marker is pulled away: released there, its stop is removed.
+const PULL_AWAY: f32 = 24.;
+/// How much of a pulled-away marker shows.
+const PULLED_OPACITY: f32 = 0.35;
+/// The bar's element: the bar, the markers under it and a margin.
+const HEIGHT: f32 = BAR_HEIGHT + MARKER + 4.;
 const MARKER: f32 = 7.;
 
 /// The editor, bound to a gradient.
@@ -136,7 +142,8 @@ impl Component for GradientEditor {
 		let focus = use_focus(id);
 		let mut width = use_state(|| 1f32);
 		let mut selected = use_state(|| None::<usize>);
-		let mut dragging = use_state(|| None::<f64>);
+		let mut dragging = use_state(|| None::<(f64, f64)>);
+		let mut pulled = use_state(|| false);
 		let gradient = self.value.read().clone();
 		let value = self.value.clone();
 		let sel = selected.read().filter(|&i| i < gradient.stops.len());
@@ -144,6 +151,7 @@ impl Component for GradientEditor {
 		let painter = {
 			let gradient = gradient.clone();
 			let (line, accent) = (theme.hairline, theme.accent);
+			let leaving = *pulled.read();
 			RenderCallback::new(move |ctx: &mut FillRenderContext| {
 				let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
 				let w = ctx.size.width;
@@ -169,26 +177,54 @@ impl Component for GradientEditor {
 					let path = tri.detach();
 					let mut body = fill(s.color.to_color());
 					body.set_anti_alias(true);
-					canvas.draw_path(&path, &body);
 					let mut edge =
 						stroke(if Some(i) == sel { accent } else { line }, if Some(i) == sel { 2. } else { 1. });
 					edge.set_anti_alias(true);
+					// a marker pulled away from the bar is on its way out
+					if Some(i) == sel && leaving {
+						body.set_alpha_f(PULLED_OPACITY);
+						edge.set_alpha_f(PULLED_OPACITY);
+					}
+					canvas.draw_path(&path, &body);
 					canvas.draw_path(&path, &edge);
 				}
 			})
 		};
 
 		let to_t = move |x: f64| f64::from(((x as f32 - MARKER) / (*width.peek() - 2. * MARKER).max(1.)).clamp(0., 1.));
+		// Removes stop `i` (the last one stays) and selects the stop that took its place along the bar.
+		let remove = {
+			let mut value = value.clone();
+			move |i: usize| {
+				let mut g = value.peek().clone();
+				if g.remove(i) {
+					selected.set(Some(i.min(g.stops.len() - 1)));
+					value.set(g);
+				}
+			}
+		};
+		let mut remove_at_release = remove.clone();
 		let on_down = {
 			let mut value = value.clone();
+			let mut remove = remove;
 			move |e: Event<PointerEventData>| {
 				id.request_focus();
 				let l = e.element_location();
 				let t = to_t(l.x);
-				let mut g = value.peek().clone();
 				let tol = f64::from(MARKER / (*width.peek() - 2. * MARKER).max(1.));
+				let on_marker = l.y as f32 > BAR_HEIGHT - 4.;
+				// the second press of a double click: on a marker it removes the stop; on the bar the first press
+				// added a stop there and this one adds no other
+				if EventsCombos::<()>::pressed(e.global_location()).is_double() {
+					let near = if on_marker { value.peek().stop_near(t, tol) } else { None };
+					if let Some(i) = near {
+						remove(i);
+					}
+					return;
+				}
+				let mut g = value.peek().clone();
 				let index = match g.stop_near(t, tol) {
-					Some(i) if l.y as f32 > BAR_HEIGHT - 4. => i,
+					Some(i) if on_marker => i,
 					_ if l.y as f32 <= BAR_HEIGHT => {
 						let c = g.color_at(t);
 						let i = g.insert(t, c);
@@ -199,18 +235,33 @@ impl Component for GradientEditor {
 					None => return,
 				};
 				selected.set(Some(index));
-				dragging.set(Some(e.global_location().x - l.x));
+				let global = e.global_location();
+				dragging.set(Some((global.x - l.x, global.y - l.y)));
 			}
 		};
 		let on_global_move = {
 			let mut value = value.clone();
 			move |e: Event<PointerEventData>| {
 				let (Some(origin), Some(i)) = (*dragging.peek(), *selected.peek()) else { return };
+				let global = e.global_location();
+				let (x, y) = ((global.x - origin.0), (global.y - origin.1) as f32);
 				let mut g = value.peek().clone();
-				let ni = g.set_position(i, to_t(e.global_location().x - origin));
+				// pulled away above or below the bar, the marker fades and its stop goes at the release
+				let away = g.stops.len() > 1 && (y < -PULL_AWAY || y > HEIGHT + PULL_AWAY);
+				pulled.set_if_modified(away);
+				let ni = g.set_position(i, to_t(x));
 				selected.set(Some(ni));
 				value.set(g);
 			}
+		};
+		let on_global_up = move |_| {
+			EventsCombos::<()>::released();
+			let gone = if dragging.peek().is_some() && *pulled.peek() { *selected.peek() } else { None };
+			if let Some(i) = gone {
+				remove_at_release(i);
+			}
+			pulled.set_if_modified(false);
+			dragging.set_if_modified(None);
 		};
 		let on_key = {
 			let mut value = value.clone();
@@ -248,14 +299,14 @@ impl Component for GradientEditor {
 			.a11y_focusable(true)
 			.test_id("GradientBar")
 			.width(Size::fill())
-			.height(Size::px(BAR_HEIGHT + MARKER + 4.))
+			.height(Size::px(HEIGHT))
 			.color(theme.text)
 			.background(painter)
 			.border(focus_border(focus(), theme.accent))
 			.on_sized(move |e: Event<SizedEventData>| width.set_if_modified(e.area.width().max(1.)))
 			.on_pointer_down(on_down)
 			.on_global_pointer_move(on_global_move)
-			.on_global_pointer_up(move |_| dragging.set_if_modified(None))
+			.on_global_pointer_up(on_global_up)
 			.on_key_down(on_key)
 	}
 }

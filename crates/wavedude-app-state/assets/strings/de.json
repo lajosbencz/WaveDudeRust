@@ -416,6 +416,7 @@
 	"LabelBasedOn": "Vorlage",
 	"TipBasedOn": "Übernimmt die Stützpunkte eines vorhandenen Schemas; danach anpassen",
 	"ButtonAddStop": "Stützpunkt hinzufügen",
+	"TipSchemeGradient": "Eine Marke ziehen, um ihren Stützpunkt zu verschieben; vom Verlauf wegziehen oder ein Doppelklick entfernt ihn; ein Klick auf den Verlauf fügt dort einen Stützpunkt ein. Mit Tastaturfokus verschieben Links und Rechts den gewählten Stützpunkt um ein Hundertstel, mit Umschalt um ein Zehntel, Bild auf und Bild ab wählen den Stützpunkt davor oder danach, und Entf entfernt ihn",
 	"TipAddStop": "Stützpunkt in die größte Lücke einfügen, mit der Farbe des Verlaufs an dieser Stelle",
 	"TipRemoveStop": "Diesen Stützpunkt entfernen",
 	"TipStopPosition": "Position im Verlauf: 0 beim kleinsten Wert, 1 beim größten",
