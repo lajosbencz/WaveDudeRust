@@ -36,4 +36,4 @@ one), the row below, the spec updated, the manual when users see it.
 | Manual figures | Numbered badges | Screenshots of this program, controls named in reading order | decision 0008 (15) |
 | Counting detector | A frame's detections are shared evenly over the steps since the last collection, drawn from the frame's mean rate | One count a step from that step's integrated intensity, since every step's readings are at hand; the same Poisson process, so the run's total agrees | spec/30 (Probes) |
 | Updates and releases | Installer with EV signature | GitHub releases with attestation, an in-app updater signed with its own key | decision 0011 |
-| Examples | A File > Examples submenu of its 24 projects, the description as tooltip | A File > Examples... dialog grouped by topic in five tabs with 44 projects (Next's 24 and our own 20), title and description per row, a search | decision 0008, ui/70 |
+| Examples | A File > Examples submenu of its 33 projects, the description as tooltip | A File > Examples... dialog grouped by topic in six tabs with 53 projects (Next's 33 and our own 20), title and description per row, a search | decision 0008, ui/70 |
