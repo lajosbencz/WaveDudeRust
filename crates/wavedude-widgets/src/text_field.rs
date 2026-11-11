@@ -350,10 +350,6 @@ impl Component for TextField {
 			}
 		};
 		let on_content_sized = move |e: Event<SizedEventData>| {
-			let view = viewport();
-			if view.width() > 0. {
-				scroll.apply_layout(e.area.size, view.size);
-			}
 			let resized = content.peek().size != e.area.size;
 			content.set_if_modified(e.area);
 			if resized {
@@ -545,7 +541,7 @@ mod tests {
 		let areas = |test: &TestingRunner| test.find_many(|n, e| Paragraph::try_downcast(e).map(|_| n.layout().area));
 		assert!(areas(&test).last().unwrap().min_y() > 40., "the last line starts out of view");
 		test.click_cursor((100., 8.));
-		key(&mut test, NamedKey::End, Modifiers::CONTROL);
+		key(&mut test, NamedKey::End, Modifiers::ctrl_or_meta());
 		test.sync_and_update();
 		let last = *areas(&test).last().unwrap();
 		assert!(last.max_y() <= 40.5 && last.min_y() >= 0., "the caret's line is in view: {last:?}");

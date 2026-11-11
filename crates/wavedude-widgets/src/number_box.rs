@@ -34,7 +34,7 @@ impl DragSpeed {
 	pub fn from_modifiers(modifiers: Modifiers) -> Self {
 		if modifiers.contains(Modifiers::SHIFT) {
 			Self::Fine
-		} else if modifiers.contains(Modifiers::CONTROL) {
+		} else if crate::util::command(modifiers) {
 			Self::Coarse
 		} else {
 			Self::Normal

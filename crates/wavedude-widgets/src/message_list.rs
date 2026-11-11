@@ -589,7 +589,7 @@ impl Component for MessageList {
 					let id = e.0;
 					let mut selection = selection;
 					let m = *modifiers.peek();
-					let (c, s) = (m.contains(Modifiers::CONTROL), m.contains(Modifiers::SHIFT));
+					let (c, s) = (crate::util::command(m), m.contains(Modifiers::SHIFT));
 					list_id.request_focus();
 					match e.1 {
 						MouseButton::Right => {

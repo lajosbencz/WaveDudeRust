@@ -311,7 +311,7 @@ pub fn handle_key<K: Clone + PartialEq>(
 	let visible = visible_rows(rows, &state.collapsed);
 	let items: Vec<K> =
 		visible.iter().map(|&i| &rows[i]).filter(|r| r.kind == RowKind::Item).map(|r| r.key.clone()).collect();
-	let ctrl = modifiers.contains(Modifiers::CONTROL) || modifiers.contains(Modifiers::META);
+	let ctrl = crate::util::command(modifiers);
 	let shift = modifiers.contains(Modifiers::SHIFT);
 	let alt = modifiers.contains(Modifiers::ALT);
 	let cursor = state.selection.current.as_ref().and_then(|c| visible.iter().position(|&i| rows[i].key == *c));
@@ -674,7 +674,7 @@ fn row_view<K: Clone + PartialEq + 'static>(
 			let m = *modifiers.peek();
 			let mut next = state.peek().clone();
 			next.renaming = None;
-			if m.contains(Modifiers::CONTROL) {
+			if crate::util::command(m) {
 				next.selection.toggle(key.clone(), kind == RowKind::Item);
 			} else if m.contains(Modifiers::SHIFT) && kind == RowKind::Item {
 				next.selection.extend_to(key.clone(), &items);

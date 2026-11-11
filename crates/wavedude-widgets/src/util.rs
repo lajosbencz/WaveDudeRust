@@ -53,8 +53,13 @@ pub(crate) fn is_char(e: &KeyboardEventData, c: &str) -> bool {
 	matches!(&e.key, Key::Character(s) if s.eq_ignore_ascii_case(c))
 }
 
+/// Ctrl, or Cmd on macOS.
+pub(crate) fn command(m: Modifiers) -> bool {
+	m.contains(Modifiers::CONTROL) || m.contains(Modifiers::META)
+}
+
 pub(crate) fn ctrl(e: &KeyboardEventData) -> bool {
-	e.modifiers.contains(Modifiers::CONTROL) || e.modifiers.contains(Modifiers::META)
+	command(e.modifiers)
 }
 
 pub(crate) fn shift(e: &KeyboardEventData) -> bool {
