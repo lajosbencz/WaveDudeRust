@@ -407,13 +407,13 @@ impl Poller {
 
 	fn poll(&mut self, shared: &Shared, mut states: PaneStates) {
 		let now = Instant::now();
-		// A render of an older request is dropped: the one in flight follows. One that found no frame (the
-		// store cleared under it) frees the key, so the same frame made anew is asked for again.
+		// A render of an older request is dropped: the one in flight follows. One whose frame vanished frees the
+		// key, so the same frame made anew is asked for again.
 		if let Some(rendered) = self.presenter.latest()
 			&& self.sent.as_ref().is_some_and(|(key, _)| *key == rendered.source)
 		{
 			self.awaiting = false;
-			if rendered.pictures.is_empty() {
+			if rendered.vanished {
 				self.sent = None;
 			}
 			let mut pictures = states.pictures.peek().clone();

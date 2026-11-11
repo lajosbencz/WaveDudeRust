@@ -8,7 +8,8 @@ Pointers: `Help/AboutWindow.xaml(.cs)`, `Help/AboutInfo.cs`, `Help/ManualWindow.
 All windows use the theme (brushes, title bar), the UI zoom and the current language. Modal dialogs are owned by
 the main window and not shown in the taskbar. (port) One modal shows at a time; one asked for while another is open
 (an update check's result, the memory warning of an automatic re-run) waits and shows when it closes, so no answer
-is lost; the memory warning waits once.
+is lost; the memory warning waits once. The window's close box pressed while a modal is open takes effect when it
+closes.
 
 ## Message window (app's own message box)
 
@@ -80,9 +81,9 @@ Native save dialog (port: platform file dialog, e.g. rfd).
   in the error box. A build with OpenH264 compiled in shows neither (decision 0005).
 - The last filter index is remembered (`ExportFilterIndex`); a remembered video means PNG in the still dialog.
 - Start folder rule, per kind (run export, still, probe data) and per project file: the first export after a
-  project is opened starts in the project's folder under the project's name; every later one in the last export's
-  folder (run export: last name with the layer suffix swapped). Kept in user settings (`ExportHints`, 20 projects,
-  only while their files exist), restored when the project is opened. A project without a file keeps the
+  project is opened starts in the project's folder under the project's name; every later one in the last completed
+  export's folder (run export: last name with the layer suffix swapped). Kept in user settings (`ExportHints`, 20
+  projects, only while their files exist), restored when the project is opened. A project without a file keeps the
   session's alone. Fallback: settings' `LastExportFolder`.
 - A sequence goes into a folder of its own; an existing folder with files asks "Replace them?" (Export last asks
   nothing).

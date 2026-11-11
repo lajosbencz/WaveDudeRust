@@ -140,6 +140,39 @@ pub fn save_file(spec: &str, proposed: Option<PathBuf>, then: impl FnOnce(Option
 	});
 }
 
+/// The open project's file, which a platform dialog's result is checked against: a result arriving after another
+/// project replaced it is dropped.
+fn project_file(cx: &Cx) -> Option<PathBuf> {
+	cx.shared.peek(|a| a.document.path.clone())
+}
+
+/// [`pick_file`] on behalf of the open project.
+pub fn pick_file_for_project(cx: &Cx, spec: &str, start: Option<PathBuf>, then: impl FnOnce(&Cx, PathBuf) + 'static) {
+	let (cx, file) = (cx.clone(), project_file(cx));
+	pick_file(spec, start, move |path| {
+		if project_file(&cx) == file {
+			then(&cx, path);
+		}
+	});
+}
+
+/// [`save_file`] on behalf of the open project; a cancel does nothing.
+pub fn save_file_for_project(
+	cx: &Cx,
+	spec: &str,
+	proposed: Option<PathBuf>,
+	then: impl FnOnce(&Cx, PathBuf) + 'static,
+) {
+	let (cx, file) = (cx.clone(), project_file(cx));
+	save_file(spec, proposed, move |path| {
+		if let Some(path) = path
+			&& project_file(&cx) == file
+		{
+			then(&cx, path);
+		}
+	});
+}
+
 /// File > Open: asks about unsaved edits after the pick.
 pub fn open_project(cx: &Cx) {
 	let s = cx.strings();

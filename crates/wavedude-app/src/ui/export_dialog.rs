@@ -81,13 +81,30 @@ pub struct ExportRequest {
 
 #[derive(Clone, Debug, PartialEq)]
 enum Plan {
-	Frames { choice: ExportKindChoice, format: ExportFormat, path: PathBuf, frame: usize, repeat: bool },
-	Csv { probe: usize, path: PathBuf },
+	Frames {
+		choice: ExportKindChoice,
+		format: ExportFormat,
+		path: PathBuf,
+		frame: usize,
+		repeat: bool,
+	},
+	/// The probe by name, so a reordered list still finds it.
+	Csv {
+		probe: String,
+		path: PathBuf,
+	},
+}
+
+/// How a worker's job ended, with its log line or error.
+enum Outcome {
+	Completed(String),
+	Cancelled(String),
+	Failed(String),
 }
 
 enum Msg {
 	Progress(usize, usize),
-	Done(Result<String, String>),
+	Done(Outcome),
 }
 
 /// A running export, shown in the status bar.
@@ -114,12 +131,14 @@ impl ExportProgress {
 thread_local! {
 	static PENDING: RefCell<Option<Plan>> = const { RefCell::new(None) };
 	/// The last run export and the project file it was made for.
-	static LAST: RefCell<Option<(Plan, Option<PathBuf>)>> = const { RefCell::new(None) };
+	static LAST: RefCell<Option<Last>> = const { RefCell::new(None) };
 	/// What [`stop_then`] runs once the export has ended.
 	static THEN: RefCell<Option<Then>> = const { RefCell::new(None) };
 }
 
 type Then = Box<dyn FnOnce(&Cx)>;
+/// A run export and the project file it was made for.
+type Last = (Plan, Option<PathBuf>);
 
 /// Cancels the export and calls `then` once it has ended, its partial file removed.
 pub fn stop_then(cx: &Cx, then: impl FnOnce(&Cx) + 'static) {
@@ -206,17 +225,17 @@ pub fn export_probe_csv(cx: &Cx, probe: usize) {
 	if cx.shared.peek(|a| a.live.export_busy()) {
 		return;
 	}
-	let (proposal, name) = cx.shared.peek(|a| {
+	let (proposal, file_name, probe) = cx.shared.peek(|a| {
 		let project = a.document.display_name("").trim_end_matches(".wdproj").to_owned();
-		let probe_name = a.document.project.probes[probe].name.clone();
-		(a.export_proposal(ExportKind::Probe), naming::probe_csv_file_name(&project, &probe_name))
+		let probe = a.document.project.probes[probe].name.clone();
+		(a.export_proposal(ExportKind::Probe), naming::probe_csv_file_name(&project, &probe), probe)
 	});
-	let start = if proposal.extension().is_some_and(|e| e == "csv") { proposal } else { proposal.with_file_name(name) };
+	let start =
+		if proposal.extension().is_some_and(|e| e == "csv") { proposal } else { proposal.with_file_name(file_name) };
 	let s = cx.strings();
-	let cx = cx.clone();
-	dialogs::save_file(s.get("ExportDialogFilterCsv"), Some(start), move |path| {
-		if let Some(path) = path {
-			begin(&cx, Plan::Csv { probe, path });
+	dialogs::save_file_for_project(cx, s.get("ExportDialogFilterCsv"), Some(start), move |cx, path| {
+		if cx.shared.peek(|a| a.document.project.probes.iter().any(|p| p.name == probe)) {
+			begin(cx, Plan::Csv { probe, path });
 		}
 	});
 }
@@ -265,6 +284,8 @@ fn gate(cx: &Cx, plan: Plan) {
 		let project = a.document.project.clone();
 		a.live.request_export(&project, needs, Instant::now())
 	});
+	// the gate drops the live controller's memory warning
+	cx.ui.drop_memory_warning();
 	let s = cx.strings();
 	match gate {
 		ExportGate::Ready => run(cx, plan),
@@ -356,16 +377,12 @@ fn run(cx: &Cx, plan: Plan) {
 		cx.ui.show_modal(Modal::Error(s.get("ExportError").to_owned()));
 		return;
 	};
-	if let Plan::Frames { .. } = &plan {
-		let owner = cx.shared.peek(|a| a.document.path.clone());
-		let last = match &plan {
-			Plan::Frames { choice, .. } if !choice.is_still() => Some(plan.clone()),
-			_ => None,
-		};
-		if let Some(last) = last {
-			LAST.with_borrow_mut(|l| *l = Some((last, owner)));
+	let last = match &plan {
+		Plan::Frames { choice, .. } if !choice.is_still() => {
+			Some((plan.clone(), cx.shared.peek(|a| a.document.path.clone())))
 		}
-	}
+		_ => None,
+	};
 	let (kind, path) = plan_kind(&plan);
 	let fetches_codec = matches!(&plan, Plan::Frames { format: ExportFormat::Mp4, .. })
 		&& work.use_openh264
@@ -379,7 +396,9 @@ fn run(cx: &Cx, plan: Plan) {
 	let flag = cancel.clone();
 	let spawned = std::thread::Builder::new().name("export".into()).spawn(move || {
 		let result = match plan {
-			Plan::Csv { probe, path } => write_csv(&work, probe, &path),
+			Plan::Csv { probe, path } => {
+				write_csv(&work, &probe, &path).map_or_else(Outcome::Failed, Outcome::Completed)
+			}
 			Plan::Frames { choice, format, path, frame, .. } => {
 				export_frames(&work, choice, format, &path, frame, &tx, &flag)
 			}
@@ -409,15 +428,15 @@ fn run(cx: &Cx, plan: Plan) {
 			match rx.next().await {
 				Some(Msg::Progress(done, total)) => progressed(&cx, done, total),
 				Some(Msg::Done(result)) => break result,
-				None => break Err("the export thread ended".into()),
+				None => break Outcome::Failed("the export thread ended".into()),
 			}
 		};
-		finished(&cx, result);
+		finished(&cx, result, last);
 	});
 }
 
-fn write_csv(work: &Work, probe: usize, path: &Path) -> Result<String, String> {
-	let p = work.project.probes.get(probe).ok_or("no such probe")?;
+fn write_csv(work: &Work, probe: &str, path: &Path) -> Result<String, String> {
+	let p = work.project.probes.iter().find(|p| p.name == probe).ok_or("no such probe")?;
 	let index = work
 		.project
 		.probes
@@ -441,10 +460,16 @@ fn export_frames(
 	frame: usize,
 	tx: &UnboundedSender<Msg>,
 	cancel: &AtomicBool,
-) -> Result<String, String> {
+) -> Outcome {
 	let store = &*work.store;
 	let count = FrameSource::frame_count(store);
-	let h264 = if format == ExportFormat::Mp4 { codec(work)? } else { None };
+	let h264 = match format {
+		ExportFormat::Mp4 => match codec(work) {
+			Ok(h264) => h264,
+			Err(e) => return Outcome::Failed(e),
+		},
+		_ => None,
+	};
 	let plan = ExportPlan {
 		project: &work.project,
 		format,
@@ -457,12 +482,17 @@ fn export_frames(
 		keep_partial: false,
 		h264,
 	};
-	let job = plan.build_job(store, &work.schemes).map_err(|e| e.to_string())?;
+	let job = match plan.build_job(store, &work.schemes) {
+		Ok(job) => job,
+		Err(e) => return Outcome::Failed(e.to_string()),
+	};
 	let report = job.run(|done, total| drop(tx.unbounded_send(Msg::Progress(done, total))), cancel);
 	match report.state {
-		ExportState::Completed => Ok(format!("{} frames exported to {}", report.frames_done, path.display())),
-		ExportState::Cancelled => Ok(format!("export cancelled after {} frames", report.frames_done)),
-		ExportState::Failed(e) => Err(e.to_string()),
+		ExportState::Completed => {
+			Outcome::Completed(format!("{} frames exported to {}", report.frames_done, path.display()))
+		}
+		ExportState::Cancelled => Outcome::Cancelled(format!("export cancelled after {} frames", report.frames_done)),
+		ExportState::Failed(e) => Outcome::Failed(e.to_string()),
 	}
 }
 
@@ -490,25 +520,37 @@ fn progressed(cx: &Cx, done: usize, total: usize) {
 	}
 }
 
-/// The worker's end: the run is released, the result told, and what was waiting for the end runs.
-fn finished(cx: &Cx, result: Result<String, String>) {
+/// The worker's end: the run is released, the result told, and what was waiting for the end runs. Only a
+/// completed export becomes the export hint and, a run's, File > Export last (`last`).
+fn finished(cx: &Cx, outcome: Outcome, last: Option<Last>) {
 	let mut state = cx.ui.export;
 	let ended = state.write().take();
 	super::codec::refresh(cx);
 	cx.shared.update(|a| a.live.end_export());
-	match result {
-		Ok(line) => {
+	match outcome {
+		Outcome::Completed(line) => {
 			tracing::info!("{line}");
 			if let Some(p) = ended {
 				cx.shared.update(|a| a.export_done(p.kind, &p.path));
 			}
+			if let Some(last) = last {
+				LAST.with_borrow_mut(|l| *l = Some(last));
+			}
 		}
-		Err(e) => {
+		Outcome::Cancelled(line) => tracing::info!("{line}"),
+		Outcome::Failed(e) => {
 			tracing::error!("export failed: {e}");
 			cx.ui.show_modal(Modal::Error(format!("{}\n{e}", cx.strings().get("ExportError"))));
 		}
 	}
 	run_then(cx);
+}
+
+/// The browse result for the dialog's `path`; dropped when the dialog has closed meanwhile.
+fn picked(mut path: State<String>, p: &Path) {
+	if let Some(mut w) = path.try_write() {
+		*w = p.display().to_string();
+	}
 }
 
 /// The export dialog: format and path, then the export.
@@ -525,7 +567,7 @@ impl Component for ExportDialog {
 		let request = self.request.clone();
 		let format = use_state(move || request.format);
 		let initial = self.request.path.display().to_string();
-		let mut path = use_state(move || initial);
+		let path = use_state(move || initial);
 		let choice = self.request.choice;
 		let formats = choice.formats();
 		let names: Vec<(String, Vec<String>)> = filters(s.get(choice.filter_key()));
@@ -545,7 +587,7 @@ impl Component for ExportDialog {
 				let start = Some(PathBuf::from(path.peek().clone()));
 				dialogs::save_file(&spec, start, move |p| {
 					if let Some(p) = p {
-						path.set(p.display().to_string());
+						picked(path, &p);
 					}
 				});
 			}
@@ -641,6 +683,37 @@ impl Component for ExportDialog {
 mod tests {
 	use super::*;
 	use wavedude_app_state::strings::{Language, Strings};
+
+	#[test]
+	fn a_path_picked_after_the_dialog_closed_is_dropped() {
+		use freya_testing::prelude::*;
+		thread_local! {
+			static SHOWN: Cell<Option<State<bool>>> = const { Cell::new(None) };
+			static PATH: Cell<Option<State<String>>> = const { Cell::new(None) };
+		}
+		#[derive(PartialEq)]
+		struct Dialog;
+		impl Component for Dialog {
+			fn render(&self) -> impl IntoElement {
+				let path = use_state(String::new);
+				PATH.set(Some(path));
+				label().text(path.read().clone())
+			}
+		}
+		fn app() -> impl IntoElement {
+			let shown = use_state(|| true);
+			SHOWN.set(Some(shown));
+			rect().maybe_child(shown.read().then_some(Dialog))
+		}
+		let mut test = launch_test(app);
+		test.sync_and_update();
+		let path = PATH.get().expect("the dialog rendered");
+		picked(path, Path::new("/a.png"));
+		assert_eq!(*path.peek(), "/a.png");
+		SHOWN.get().expect("the app rendered").set(false);
+		test.sync_and_update();
+		picked(path, Path::new("/b.png"));
+	}
 
 	#[test]
 	fn every_language_names_each_format_once() {

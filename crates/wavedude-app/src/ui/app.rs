@@ -386,7 +386,8 @@ async fn tick_loop(cx: Cx, mut theme: State<Theme>) {
 	}
 	loop {
 		timer(TICK).await;
-		if cx.info.close.take_request() && cx.ui.modal.peek().is_none() {
+		// a close asked for while a modal is open waits for it to close
+		if cx.ui.modal.peek().is_none() && cx.info.close.take_request() {
 			cx.send(AppEvent::Guarded(Guarded::Exit));
 		}
 		let busy = cx.shared.peek(|a| {

@@ -614,8 +614,8 @@ pub fn tree_row_menu(app: &App, row: Option<Row>, pastable: bool) -> MenuModel<M
 	};
 	let is_item = item_ref.is_some();
 	let toggles = item_ref.is_some_and(|i| i.kind != ItemKind::Scheme);
-	let first = item_ref.is_some_and(|i| i.index == 0);
-	let last = item_ref.is_some_and(|i| i.index + 1 >= i.kind.len(&app.document.project));
+	let can_up = item_ref.is_some_and(|i| can_move(app, i, true));
+	let can_down = item_ref.is_some_and(|i| can_move(app, i, false));
 	let copyable = is_item || row.and_then(Copyable::of_row).is_some();
 	let mut entries: Vec<Entry> = vec![
 		item(MenuAction::AddSource, "tree:add_source", s, "MenuProjectAddSource").icon(icons::PLUS).into(),
@@ -658,12 +658,12 @@ pub fn tree_row_menu(app: &App, row: Option<Row>, pastable: bool) -> MenuModel<M
 		item(MenuAction::MoveUp, "tree:up", s, "MenuProjectMoveUp")
 			.shortcut("Alt+Up")
 			.icon(icons::CHEVRON_UP)
-			.enabled(is_item && !first)
+			.enabled(can_up)
 			.into(),
 		item(MenuAction::MoveDown, "tree:down", s, "MenuProjectMoveDown")
 			.shortcut("Alt+Down")
 			.icon(icons::CHEVRON_DOWN)
-			.enabled(is_item && !last)
+			.enabled(can_down)
 			.into(),
 	];
 	if let Some(i) = item_ref.filter(|i| i.kind == ItemKind::Probe) {
@@ -681,19 +681,34 @@ pub fn tree_row_menu(app: &App, row: Option<Row>, pastable: bool) -> MenuModel<M
 
 /// Moves the target (or each selected item of its list) one place up or down.
 pub fn move_item(cx: &Cx, target: ItemRef, up: bool) {
-	let targets = cx.shared.peek(|a| a.selection.targets(target));
-	let mut same: Vec<ItemRef> = targets.into_iter().filter(|t| t.kind == target.kind).collect();
-	same.sort();
+	let moves = cx.shared.peek(|a| moves_of(a, target, up));
+	for (index, to) in moves {
+		cx.send(AppEvent::Command(Command::Reorder { target: ItemRef::new(target.kind, index), to }));
+	}
+}
+
+/// Whether Move up (`up`) or Move down shifts `target` and the items moving with it.
+pub fn can_move(app: &App, target: ItemRef, up: bool) -> bool {
+	!moves_of(app, target, up).is_empty()
+}
+
+fn moves_of(app: &App, target: ItemRef, up: bool) -> Vec<(usize, usize)> {
+	let indices = app.selection.targets(target).into_iter().filter(|t| t.kind == target.kind).map(|t| t.index);
+	block_moves(indices.collect(), target.kind.len(&app.document.project), up)
+}
+
+/// The reorders `(from, to)` shifting the items at `indices` of a list of `len` one place, the leading item first;
+/// none when the leading item is at the list's edge, so the block keeps its order.
+fn block_moves(mut indices: Vec<usize>, len: usize, up: bool) -> Vec<(usize, usize)> {
+	indices.sort_unstable();
 	if !up {
-		same.reverse();
+		indices.reverse();
 	}
-	let len = cx.shared.peek(|a| target.kind.len(&a.document.project));
-	for t in same {
-		let to = if up { t.index.checked_sub(1) } else { (t.index + 1 < len).then_some(t.index + 1) };
-		if let Some(to) = to {
-			cx.send(AppEvent::Command(Command::Reorder { target: t, to }));
-		}
+	let lead = indices.first().copied();
+	if lead.is_none_or(|i| if up { i == 0 } else { i + 1 >= len }) {
+		return Vec::new();
 	}
+	indices.into_iter().map(|i| (i, if up { i - 1 } else { i + 1 })).collect()
 }
 
 /// Ctrl+A: every source, part and probe.
@@ -815,5 +830,25 @@ pub fn act(cx: &Cx, action: MenuAction, on: On) {
 		MenuAction::MoveUp => on_target(&|target| move_item(cx, target, true)),
 		MenuAction::MoveDown => on_target(&|target| move_item(cx, target, false)),
 		MenuAction::ExportProbeCsv => on_target(&|target| export_dialog::export_probe_csv(cx, target.index)),
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::block_moves;
+
+	#[test]
+	fn a_block_at_the_list_edge_keeps_its_order() {
+		assert_eq!(block_moves(vec![1, 0], 3, true), []);
+		assert_eq!(block_moves(vec![1, 2], 3, false), []);
+		assert_eq!(block_moves(vec![0, 2], 4, true), []);
+	}
+
+	#[test]
+	fn a_block_moves_with_its_leading_item_first() {
+		assert_eq!(block_moves(vec![2, 1], 4, true), [(1, 0), (2, 1)]);
+		assert_eq!(block_moves(vec![1, 2], 4, false), [(2, 3), (1, 2)]);
+		assert_eq!(block_moves(vec![1, 3], 5, true), [(1, 0), (3, 2)]);
+		assert_eq!(block_moves(Vec::new(), 4, true), []);
 	}
 }

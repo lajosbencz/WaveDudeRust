@@ -92,6 +92,14 @@ impl FrameSource {
 		}
 	}
 
+	/// A run's frame that was cleared or replaced since `key` was taken; other sources never vanish.
+	fn vanished_since(&self, key: &SourceKey) -> bool {
+		match self {
+			Self::Run { store, stored } => !store.has(*stored) || self.key() != *key,
+			Self::Latest { .. } | Self::Snapshot(_) => false,
+		}
+	}
+
 	/// Calls `f` with the plane of `layer`; `None` when the source holds no such plane.
 	pub fn with_plane<R>(&self, layer: Layer, f: impl FnOnce(&[u8]) -> R) -> Option<R> {
 		self.with_plane_into(layer, &mut Vec::new(), f)
@@ -173,6 +181,8 @@ pub struct Picture {
 pub struct Rendered {
 	pub source: SourceKey,
 	pub pictures: Vec<Picture>,
+	/// A layer found no frame: the store cleared or dropped it while the request waited.
+	pub vanished: bool,
 	pub render: Duration,
 	pub requested: Instant,
 	pub motion: bool,
@@ -241,10 +251,14 @@ fn work(slot: &Slot, stop: &AtomicBool, tx: &Sender<Rendered>) {
 			}
 		};
 		let started = Instant::now();
-		let pictures = request.layers.iter().filter_map(|l| renderer.render(&request.source, l)).collect();
+		let source = request.source.key();
+		let pictures: Vec<Picture> =
+			request.layers.iter().filter_map(|l| renderer.render(&request.source, l)).collect();
+		let vanished = pictures.len() < request.layers.len() && request.source.vanished_since(&source);
 		let rendered = Rendered {
-			source: request.source.key(),
+			source,
 			pictures,
+			vanished,
 			render: started.elapsed(),
 			requested: request.at,
 			motion: request.motion,
@@ -447,10 +461,66 @@ mod tests {
 		assert_eq!(&*aligned, &values);
 	}
 
+	fn shape() -> FrameShape {
+		FrameShape {
+			canvas_width: 4,
+			canvas_height: 4,
+			divisor: 1,
+			format: SampleFormat::Index,
+			field_brightness: 1.,
+			intensity_brightness: 1.,
+			intensity_root: false,
+		}
+	}
+
+	fn layer(layer: Layer) -> LayerRequest {
+		LayerRequest {
+			layer,
+			scheme: ColorScheme::default(),
+			black_level: 0.,
+			brightness: 1.,
+			device: (0, 0),
+			window: None,
+			dither_bits: 0,
+			outline: None,
+		}
+	}
+
+	fn present(presenter: &Presenter, source: FrameSource, layers: Vec<LayerRequest>) -> Rendered {
+		presenter.request(Request { source, layers, motion: false, at: Instant::now() });
+		let deadline = Instant::now() + Duration::from_secs(10);
+		loop {
+			if let Some(r) = presenter.latest() {
+				return r;
+			}
+			assert!(Instant::now() < deadline, "the presenter did not answer");
+			std::thread::sleep(Duration::from_millis(1));
+		}
+	}
+
+	#[test]
+	fn only_a_frame_gone_from_its_store_counts_as_vanished() {
+		let presenter = Presenter::start().unwrap();
+		let mut snapshot = Snapshot::new(shape());
+		snapshot.field = vec![0; 16];
+		let snapshot = FrameSource::Snapshot(Arc::new(snapshot));
+		let none = present(&presenter, snapshot.clone(), Vec::new());
+		assert!(none.pictures.is_empty() && !none.vanished, "no layer to draw is not a vanished frame");
+		let no_plane = present(&presenter, snapshot, vec![layer(Layer::Intensity)]);
+		assert!(no_plane.pictures.is_empty() && !no_plane.vanished, "a missing plane is not a vanished frame");
+		let dir = tempfile::tempdir().unwrap();
+		let layout =
+			wavedude_core::run::StoreLayout { shape: shape(), layers: &[Layer::Field], capacity: 2, capture_every: 1 };
+		let store = Arc::new(FrameStore::in_dir(layout, 1 << 20, None, dir.path()).unwrap());
+		let gone = present(&presenter, FrameSource::Run { store, stored: 0 }, vec![layer(Layer::Field)]);
+		assert!(gone.vanished);
+	}
+
 	fn rendered(at: Instant, render_ms: u64, motion: bool) -> Rendered {
 		Rendered {
 			source: SourceKey::Snapshot(0),
 			pictures: Vec::new(),
+			vanished: false,
 			render: Duration::from_millis(render_ms),
 			requested: at,
 			motion,

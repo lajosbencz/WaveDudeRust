@@ -278,9 +278,9 @@ fn image_buttons(f: &Form, has_bytes: bool) -> Element {
 	let pick = {
 		let f = f.clone();
 		move |_: Event<PressEventData>| {
-			let cx = f.cx.clone();
+			let cx = &f.cx;
 			let start = cx.shared.peek(|a| a.document.folder().map(Path::to_owned));
-			dialogs::pick_file(&dialogs::scene_image_filter(&s), start, move |path: PathBuf| {
+			dialogs::pick_file_for_project(cx, &dialogs::scene_image_filter(&s), start, move |cx, path: PathBuf| {
 				match std::fs::read(&path) {
 					Ok(bytes) => {
 						let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -454,8 +454,7 @@ fn layer_rows(f: &Form, layer: &str, names: &[SchemeEntry]) -> Vec<PropertyRow> 
 		let current_name = current.clone();
 		swatched_combo_box(current, items, swatches, true, format!("{layer}.ColorScheme"), move |name| {
 			if name == BROWSE {
-				let cx = form.cx.clone();
-				dialogs::pick_file(form.s.get("ColorSchemeFilter"), None, move |path| {
+				dialogs::pick_file_for_project(&form.cx, form.s.get("ColorSchemeFilter"), None, move |cx, path| {
 					cx.send(AppEvent::Guarded(Guarded::Open(path)))
 				});
 			} else if name == EDIT_COPY {

@@ -55,8 +55,15 @@ impl Component for MemoryWarningDialog {
 		let initial = facts.as_ref().map_or_else(Levers::default, |f| f.proposal);
 		let levers = use_state(move || initial);
 		let mute = use_state(|| false);
+		// the live controller dropped the warning before it showed (a new project, an export)
+		let gone = facts.is_none();
+		let ui = cx.ui;
+		use_side_effect(move || {
+			if gone {
+				ui.close_modal();
+			}
+		});
 		let Some(f) = facts else {
-			cx.ui.close_modal();
 			return rect().into_element();
 		};
 		let l = *levers.read();

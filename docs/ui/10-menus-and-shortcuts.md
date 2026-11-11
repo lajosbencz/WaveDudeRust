@@ -26,7 +26,7 @@ Conventions:
 | 6 | Save As... | A/U/S/A | Ctrl+Shift+S | U+E792 | always | Save dialog, filter: *.wdproj, *.xml. Proposes the suggested name (import/example) beside its origin. |
 | - | separator | | | | | |
 | 7 | Export > | E/E/X/E | - | U+EDE1 | always | Submenu below. |
-| 8 | Export last | L/W/R/H | Ctrl+E | U+E8EE | after the first run export since the project was opened | Repeats the session's last run export: same layers, format, path; no dialog; existing file or sequence folder replaced without asking. A still does not count. |
+| 8 | Export last | L/W/R/H | Ctrl+E | U+E8EE | after the first completed run export since the project was opened | Repeats the session's last completed run export: same layers, format, path; no dialog; existing file or sequence folder replaced without asking. A still, a cancelled or a failed export does not count. |
 | - | separator | | | | | |
 | 9 | Close Project | C/C/F/L | - | U+E711 | when a project is open (`CanFileClose`) | Asks about unsaved edits, then an empty project. |
 | - | separator | | | | | |

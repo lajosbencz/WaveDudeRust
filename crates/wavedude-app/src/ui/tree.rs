@@ -428,8 +428,8 @@ fn snapshot(app: &App) -> Snapshot {
 			"TipRemove",
 		]
 		.map(|k| s.get(k).to_owned()),
-		can_up: current.is_some_and(|i| i.index > 0),
-		can_down: current.is_some_and(|i| i.index + 1 < i.kind.len(project)),
+		can_up: current.is_some_and(|i| menus::can_move(app, i, true)),
+		can_down: current.is_some_and(|i| menus::can_move(app, i, false)),
 		can_remove: current.is_some(),
 	}
 }
