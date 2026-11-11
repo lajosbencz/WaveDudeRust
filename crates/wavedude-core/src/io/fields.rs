@@ -1,40 +1,24 @@
-//! Declarative attribute tables: one list of fields per model type drives the `.wdproj` reader, the
-//! writer, the DTD and the range keys (`"<owner>.<attribute>"`, see `model::ranges`).
+//! Typed attribute tables: one list of attributes per model type drives the `.wdproj` reader, the writer and the
+//! DTD. An attribute names a typed field of the model; its value is read and written by the field's kind.
 //!
 //! Reading starts from a base value and sets each attribute present; writing compares with the same base,
 //! so a type's defaults are stated once, in its base.
 
 use super::FormatError;
-use super::xml::{Element, XmlEnum, fmt_f64, members};
+use super::xml::{Element, fmt_f64};
+use crate::model::{Field, Fields, Value, ValueKind};
 
-/// How a field's value is read and written.
+/// How an attribute's value is read and written.
 pub(crate) enum Codec<T> {
-	Text {
-		get: fn(&T) -> &str,
-		set: fn(&mut T, &str),
-	},
-	/// Read as an `i32`.
-	Int {
-		get: fn(&T) -> i64,
-		set: fn(&mut T, i32),
-	},
-	F64 {
-		get: fn(&T) -> f64,
-		set: fn(&mut T, f64),
-	},
-	Bool {
-		get: fn(&T) -> bool,
-		set: fn(&mut T, bool),
-	},
-	/// `set` is false for a name that is no member.
-	Enum {
-		get: fn(&T) -> &'static str,
-		set: fn(&mut T, &str) -> bool,
-		members: fn() -> Vec<&'static str>,
-	},
+	/// By the field's kind.
+	Field,
+	/// A decimal field, written rounded: the file holds integers.
+	Whole,
+	/// Text of its own; `set` fails with what the text should have been.
+	Custom { get: fn(&T) -> String, set: fn(&mut T, &str) -> Result<(), &'static str>, ty: AttrType },
 }
 
-/// When a field is written.
+/// When an attribute is written.
 pub(crate) enum Presence<T> {
 	/// Unless equal to the base's value.
 	Sparse,
@@ -45,91 +29,150 @@ pub(crate) enum Presence<T> {
 }
 
 /// One attribute of an element.
-pub(crate) struct Field<T> {
-	/// The model type a range key names, e.g. `Material` in `Material.RefractiveIndex`.
-	pub owner: &'static str,
-	pub name: &'static str,
-	pub codec: Codec<T>,
-	pub presence: Presence<T>,
+pub(crate) struct Attr<T: Fields> {
+	pub field: T::Field,
+	/// None: the field's own name.
+	name: Option<&'static str>,
+	codec: Codec<T>,
+	presence: Presence<T>,
 }
 
-/// A model type with its attribute table and the base it is read onto and written against.
-pub(crate) trait Table: Sized + 'static {
-	const FIELDS: &'static [Field<Self>];
+impl<T: Fields> Attr<T> {
+	/// A sparse attribute named like the field.
+	pub(crate) const fn of(field: T::Field) -> Self {
+		Self { field, name: None, codec: Codec::Field, presence: Presence::Sparse }
+	}
 
-	fn base() -> Self;
+	/// An attribute with a text of its own for `field`.
+	pub(crate) const fn custom(
+		field: T::Field,
+		name: &'static str,
+		get: fn(&T) -> String,
+		set: fn(&mut T, &str) -> Result<(), &'static str>,
+		ty: AttrType,
+	) -> Self {
+		Self { field, name: Some(name), codec: Codec::Custom { get, set, ty }, presence: Presence::Sparse }
+	}
+
+	pub(crate) const fn named(self, name: &'static str) -> Self {
+		Self { name: Some(name), ..self }
+	}
+
+	pub(crate) const fn whole(self) -> Self {
+		Self { codec: Codec::Whole, ..self }
+	}
+
+	pub(crate) const fn always(self) -> Self {
+		Self { presence: Presence::Always, ..self }
+	}
+
+	pub(crate) const fn when(self, when: fn(&T) -> bool) -> Self {
+		Self { presence: Presence::When(when), ..self }
+	}
+
+	pub(crate) fn name(&self) -> &'static str {
+		self.name.unwrap_or_else(|| self.field.name())
+	}
+
+	fn read(&self, el: &Element, into: &mut T) -> Result<(), FormatError> {
+		let name = self.name();
+		let Some(text) = el.get(name) else {
+			return Ok(());
+		};
+		if let Codec::Custom { set, .. } = &self.codec {
+			return set(into, text).map_err(|what| el.bad(name, text, what));
+		}
+		let field = self.field;
+		let value = if matches!(self.codec, Codec::Whole) {
+			Value::Float(f64::from(el.parse_i32(name, text)?))
+		} else {
+			match field.kind() {
+				ValueKind::Text => Value::Text(text.to_owned()),
+				ValueKind::Int => Value::Int(i64::from(el.parse_i32(name, text)?)),
+				// a negative value becomes 0 for `normalize` to raise
+				ValueKind::UInt => Value::Int(i64::from(el.parse_i32(name, text)?.max(0))),
+				ValueKind::Float => Value::Float(el.parse_f64(name, text)?),
+				ValueKind::Bool => Value::Bool(el.parse_bool(name, text)?),
+				ValueKind::Word(names) => {
+					let member = names.iter().find(|n| **n == text.trim());
+					Value::Word(member.ok_or_else(|| el.bad(name, text, &format!("one of {}", names.join(", "))))?)
+				}
+				ValueKind::List | ValueKind::Nested => return Err(el.bad(name, text, "a scalar")),
+			}
+		};
+		field.edit(value).and_then(|edit| crate::model::Edit::apply(&edit, into)).map(drop).map_err(|e| FormatError {
+			message: format!("element '{}': attribute '{name}': {e}", el.name),
+			at: Some(el.at),
+		})
+	}
+
+	fn same(&self, a: &T, b: &T) -> bool {
+		match &self.codec {
+			Codec::Custom { get, .. } => get(a) == get(b),
+			Codec::Whole => self.text(a) == self.text(b),
+			Codec::Field => match (self.field.get(a), self.field.get(b)) {
+				(Some(Value::Float(x)), Some(Value::Float(y))) => x.to_bits() == y.to_bits(),
+				(x, y) => x == y,
+			},
+		}
+	}
+
+	/// The attribute's text; None for an absent or composite value, which is not written.
+	fn text(&self, of: &T) -> Option<String> {
+		if let Codec::Custom { get, .. } = &self.codec {
+			return Some(get(of));
+		}
+		match (&self.codec, self.field.get(of)?) {
+			(Codec::Whole, Value::Float(x)) => Some((x.round() as i64).to_string()),
+			(_, Value::Text(s)) => Some(s),
+			(_, Value::Int(i)) => Some(i.to_string()),
+			(_, Value::Float(x)) => Some(fmt_f64(x)),
+			(_, Value::Bool(b)) => Some(b.to_string()),
+			(_, Value::Word(w)) => Some(w.to_owned()),
+			(_, Value::Absent | Value::Other(_)) => None,
+		}
+	}
+
+	fn decl(&self) -> AttrDecl {
+		let kind = self.field.kind();
+		let ty = match (&self.codec, kind) {
+			(Codec::Custom { ty, .. }, _) => *ty,
+			(_, ValueKind::Bool) => AttrType::Bool,
+			(_, ValueKind::Word(names)) => AttrType::Enum(names),
+			_ => AttrType::Cdata,
+		};
+		let required = matches!(self.presence, Presence::Always) && kind != ValueKind::Text;
+		AttrDecl { name: self.name(), ty, required }
+	}
 }
 
 /// The type of an attribute in the DTD.
+#[derive(Clone, Copy)]
 pub(crate) enum AttrType {
 	Cdata,
 	Bool,
-	Enum(Vec<&'static str>),
+	Enum(&'static [&'static str]),
 }
 
-/// An attribute declaration; `owner` is None for text and other attributes without a range key.
-pub(crate) struct Attr {
-	#[cfg_attr(not(test), expect(dead_code, reason = "the range test reads it"))]
-	pub owner: Option<&'static str>,
+/// An attribute declaration.
+pub(crate) struct AttrDecl {
 	pub name: &'static str,
 	pub ty: AttrType,
 	pub required: bool,
 }
 
-impl<T> Field<T> {
-	fn read(&self, el: &Element, into: &mut T) -> Result<(), FormatError> {
-		let Some(text) = el.get(self.name) else {
-			return Ok(());
-		};
-		match &self.codec {
-			Codec::Text { set, .. } => set(into, text),
-			Codec::Int { set, .. } => set(into, el.parse_i32(self.name, text)?),
-			Codec::F64 { set, .. } => set(into, el.parse_f64(self.name, text)?),
-			Codec::Bool { set, .. } => set(into, el.parse_bool(self.name, text)?),
-			Codec::Enum { set, members, .. } => {
-				if !set(into, text) {
-					return Err(el.bad(self.name, text, &format!("one of {}", members().join(", "))));
-				}
-			}
-		}
-		Ok(())
-	}
+/// A model type with its attribute table and the base it is read onto and written against.
+pub(crate) trait Table: Fields + Default {
+	const ATTRS: &'static [Attr<Self>];
 
-	fn same(&self, a: &T, b: &T) -> bool {
-		match &self.codec {
-			Codec::Text { get, .. } => get(a) == get(b),
-			Codec::Int { get, .. } => get(a) == get(b),
-			Codec::F64 { get, .. } => get(a).to_bits() == get(b).to_bits(),
-			Codec::Bool { get, .. } => get(a) == get(b),
-			Codec::Enum { get, .. } => get(a) == get(b),
-		}
-	}
-
-	fn text(&self, value: &T) -> String {
-		match &self.codec {
-			Codec::Text { get, .. } => get(value).to_owned(),
-			Codec::Int { get, .. } => get(value).to_string(),
-			Codec::F64 { get, .. } => fmt_f64(get(value)),
-			Codec::Bool { get, .. } => if get(value) { "true" } else { "false" }.to_owned(),
-			Codec::Enum { get, .. } => get(value).to_owned(),
-		}
-	}
-
-	fn attr(&self) -> Attr {
-		let ty = match &self.codec {
-			Codec::Bool { .. } => AttrType::Bool,
-			Codec::Enum { members, .. } => AttrType::Enum(members()),
-			Codec::Text { .. } | Codec::Int { .. } | Codec::F64 { .. } => AttrType::Cdata,
-		};
-		let text = matches!(self.codec, Codec::Text { .. });
-		let required = matches!(self.presence, Presence::Always) && !text;
-		Attr { owner: (!text).then_some(self.owner), name: self.name, ty, required }
+	fn base() -> Self {
+		Self::default()
 	}
 }
 
 /// Sets the fields of `into` whose attributes `el` has.
-pub(crate) fn read_into<T>(fields: &[Field<T>], el: &Element, into: &mut T) -> Result<(), FormatError> {
-	fields.iter().try_for_each(|f| f.read(el, into))
+pub(crate) fn read_into<T: Fields>(attrs: &[Attr<T>], el: &Element, into: &mut T) -> Result<(), FormatError> {
+	attrs.iter().try_for_each(|a| a.read(el, into))
 }
 
 /// A `T` read from `el` onto its base.
@@ -139,109 +182,30 @@ pub(crate) fn read<T: Table>(el: &Element) -> Result<T, FormatError> {
 
 /// A `T` read from `el` onto `base`: what the element leaves out stays as `base` has it.
 pub(crate) fn read_onto<T: Table>(el: &Element, mut base: T) -> Result<T, FormatError> {
-	read_into(T::FIELDS, el, &mut base)?;
+	read_into(T::ATTRS, el, &mut base)?;
 	Ok(base)
 }
 
 /// Appends the attributes of `value` to `el`, a sparse one only when it differs from `base`.
-pub(crate) fn write_against<T>(fields: &[Field<T>], value: &T, base: &T, el: &mut Element) {
-	for f in fields {
-		let written = match f.presence {
-			Presence::Sparse => !f.same(value, base),
+pub(crate) fn write_against<T: Fields>(attrs: &[Attr<T>], value: &T, base: &T, el: &mut Element) {
+	for a in attrs {
+		let written = match a.presence {
+			Presence::Sparse => !a.same(value, base),
 			Presence::Always => true,
 			Presence::When(when) => when(value),
 		};
-		if written {
-			el.attr(f.name, f.text(value));
+		if let Some(text) = written.then(|| a.text(value)).flatten() {
+			el.attr(a.name(), text);
 		}
 	}
 }
 
 /// Appends the attributes of `value` to `el` against its base.
 pub(crate) fn write<T: Table>(value: &T, el: &mut Element) {
-	write_against(T::FIELDS, value, &T::base(), el);
+	write_against(T::ATTRS, value, &T::base(), el);
 }
 
 /// The DTD declarations of a table's attributes.
-pub(crate) fn attrs<T>(fields: &[Field<T>]) -> Vec<Attr> {
-	fields.iter().map(Field::attr).collect()
+pub(crate) fn attrs<T: Fields>(attrs: &[Attr<T>]) -> Vec<AttrDecl> {
+	attrs.iter().map(Attr::decl).collect()
 }
-
-/// The member names of the enum a getter returns, for the DTD.
-pub(crate) fn members_of<T, E: XmlEnum>(_: fn(&T) -> E) -> Vec<&'static str> {
-	members::<E>()
-}
-
-/// Builds a table: `fields!(Type, "Owner"; kind "Attribute" path [=> presence], [field], ...)` with the kinds
-/// `text`, `u32`, `i32`, `f64`, `bool` and `enumv`; `path` is the field (dotted for a nested one); a bracketed
-/// item is a [`Field`] written out, for a value with its own conversion.
-macro_rules! fields {
-	($t:ty, $owner:expr; $($items:tt)*) => {
-		$crate::io::fields::fields!(@munch $t, $owner; []; $($items)*)
-	};
-	(@munch $t:ty, $owner:expr; [$($done:expr,)*]; $(,)?) => {
-		&[$($done),*]
-	};
-	(@munch $t:ty, $owner:expr; [$($done:expr,)*]; [$field:expr] $(, $($rest:tt)*)?) => {
-		$crate::io::fields::fields!(@munch $t, $owner; [$($done,)* $field,]; $($($rest)*)?)
-	};
-	(@munch $t:ty, $owner:expr; [$($done:expr,)*];
-		$kind:ident $name:literal $($f:ident).+ $(=> $presence:expr)? $(, $($rest:tt)*)?) => {
-		$crate::io::fields::fields!(
-			@munch $t, $owner;
-			[$($done,)* $crate::io::fields::field!($t, $owner, $kind, $name, $($f).+ $(=> $presence)?),];
-			$($($rest)*)?
-		)
-	};
-}
-
-macro_rules! field {
-	($t:ty, $owner:expr, $kind:ident, $name:literal, $($f:ident).+) => {
-		$crate::io::fields::field!($t, $owner, $kind, $name, $($f).+ => $crate::io::fields::Presence::Sparse)
-	};
-	($t:ty, $owner:expr, $kind:ident, $name:literal, $($f:ident).+ => $presence:expr) => {
-		$crate::io::fields::Field {
-			owner: $owner,
-			name: $name,
-			codec: $crate::io::fields::codec!($t, $kind, $($f).+),
-			presence: $presence,
-		}
-	};
-}
-
-macro_rules! codec {
-	($t:ty, text, $($f:ident).+) => {
-		$crate::io::fields::Codec::Text {
-			get: |v: &$t| v.$($f).+.as_str(),
-			set: |v: &mut $t, x: &str| v.$($f).+ = x.to_owned(),
-		}
-	};
-	($t:ty, u32, $($f:ident).+) => {
-		// a negative value becomes 0 for `normalize` to raise
-		$crate::io::fields::Codec::Int { get: |v: &$t| v.$($f).+ as i64, set: |v: &mut $t, x: i32| v.$($f).+ = x.max(0) as u32 }
-	};
-	($t:ty, whole, $($f:ident).+) => {
-		// a decimal model value, written rounded: the file holds integers
-		$crate::io::fields::Codec::Int { get: |v: &$t| v.$($f).+.round() as i64, set: |v: &mut $t, x: i32| v.$($f).+ = f64::from(x) }
-	};
-	($t:ty, i32, $($f:ident).+) => {
-		$crate::io::fields::Codec::Int { get: |v: &$t| v.$($f).+ as i64, set: |v: &mut $t, x: i32| v.$($f).+ = x }
-	};
-	($t:ty, f64, $($f:ident).+) => {
-		$crate::io::fields::Codec::F64 { get: |v: &$t| v.$($f).+, set: |v: &mut $t, x: f64| v.$($f).+ = x }
-	};
-	($t:ty, bool, $($f:ident).+) => {
-		$crate::io::fields::Codec::Bool { get: |v: &$t| v.$($f).+, set: |v: &mut $t, x: bool| v.$($f).+ = x }
-	};
-	($t:ty, enumv, $($f:ident).+) => {
-		$crate::io::fields::Codec::Enum {
-			get: |v: &$t| $crate::io::xml::XmlEnum::xml_name(v.$($f).+),
-			set: |v: &mut $t, x: &str| {
-				$crate::io::xml::XmlEnum::from_xml(x).map(|e| v.$($f).+ = e).is_some()
-			},
-			members: || $crate::io::fields::members_of(|v: &$t| v.$($f).+),
-		}
-	};
-}
-
-pub(crate) use {codec, field, fields};

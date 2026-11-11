@@ -2,18 +2,13 @@
 
 use std::path::Path;
 
-use super::xml::{self, DECLARATION, Element, XmlEnum};
+use super::xml::{self, DECLARATION, Element};
 use super::{FormatError, Result, UnreadableFile};
 use crate::model::normalize::Normalize;
 use crate::model::{ColorScheme, Rgb, SchemeKind, Stop};
 
 /// File extension of a colour scheme.
 pub const EXTENSION: &str = "wdscheme";
-
-impl XmlEnum for SchemeKind {
-	const MEMBERS: &'static [(Self, &'static str)] =
-		&[(SchemeKind::Unspecified, "Unspecified"), (SchemeKind::Field, "Field"), (SchemeKind::Intensity, "Intensity")];
-}
 
 /// Reads a `ColorScheme` element (not normalised).
 pub(crate) fn from_element(el: &Element) -> std::result::Result<ColorScheme, FormatError> {

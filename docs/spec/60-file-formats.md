@@ -152,12 +152,14 @@ Note: real files put each element's attributes on one line.
 
 ### Rust adapter
 
-One attribute table per model type (`io/wdproj.rs` on `io/fields.rs`) names each attribute once with its codec, its
-presence (sparse against the type's base, always, or conditional) and the model type that owns its range key
-(`<owner>.<attribute>` in `model/ranges.rs`). The reader starts from the base and sets each attribute present, the
-writer compares with the same base, and the DTD's `ATTLIST` lines come from the same tables (text attributes `CDATA`
-and never `#REQUIRED`). A part element's attributes are the part's, then the coating's and the material's when the
-kind has them, then the kind's own.
+The attribute tables are typed tables in the adapter (`io/wdproj.rs` on `io/fields.rs`): one list of `Attr` per model
+type, each naming a typed field of the model, in Next's order. An attribute takes its name from the field unless it is
+renamed (`AX`, `Coating`, `Type`, ...), reads and writes by the field's kind (a decimal field can be `whole`, a value
+with a text of its own is custom) and has a presence: sparse against the type's base, always, or conditional. The reader
+starts from the base and applies each attribute present as an edit of the field, the writer compares with the same base,
+and the DTD's `ATTLIST` lines come from the same tables (text attributes `CDATA` and never `#REQUIRED`). A test per
+table asserts that every field of its type is an attribute or is skipped with a reason. A part element's attributes are
+the part's, then the coating's and the material's when the kind has them, then the kind's own.
 
 Integer attributes: the model holds `Source` X and Y and a coating's depth as decimals; the adapter writes them
 rounded (half away from zero) and logs one warning naming the object when a value was not whole. This is the adapter's

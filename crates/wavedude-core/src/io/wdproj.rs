@@ -15,40 +15,14 @@ use std::path::Path;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 
-use super::fields::{self, Attr, AttrType, Codec, Field, Presence::*, Table, fields};
-use super::xml::{self, DECLARATION, Element, XmlEnum, members};
+use super::fields::{self, Attr, AttrDecl, AttrType, Table};
+use super::xml::{self, DECLARATION, Element};
 use super::{FormatError, Result, UnreadableFile, wdscheme};
 use crate::model::normalize::Normalize;
 use crate::model::*;
 
 /// File extension of a project.
 pub const EXTENSION: &str = "wdproj";
-
-macro_rules! xml_enum {
-	($t:ty: $($m:ident),+) => {
-		impl XmlEnum for $t {
-			const MEMBERS: &'static [(Self, &'static str)] = &[$((<$t>::$m, stringify!($m))),+];
-		}
-	};
-}
-
-xml_enum!(SceneMode: Canvas, Image);
-xml_enum!(Edges: Open, Reflective);
-xml_enum!(SourceMode: Continuous, Pulsed);
-xml_enum!(PulseShape: Gaussian, SmoothedSquare);
-xml_enum!(CoatingProfile: Layer, Graded);
-xml_enum!(TriangleType: Equilateral, RightIsosceles, ThirtySixtyNinety, Isosceles, Custom);
-xml_enum!(FiberEnds: Flat, Round);
-xml_enum!(ZoneDivision: EqualWidth, EqualDepth);
-xml_enum!(FacetPattern: Sawtooth, SquareWave, Sinusoidal);
-xml_enum!(MetaLensType: Converging, Diverging);
-xml_enum!(Layer: Field, Intensity);
-xml_enum!(Measurement: Amplitude, Value, IntegratedValue);
-xml_enum!(ProbeKind: Point, Line);
-xml_enum!(ProbeDetector: Standard, Counting, Imaging);
-xml_enum!(BoxSize: Tiny, Small, Medium, Large, ExtraLarge, Custom);
-xml_enum!(ScaleMode: Running, Full);
-xml_enum!(YScale: Linear, Logarithmic);
 
 /// The part elements in declaration order.
 // Next's declaration order, which its DTD and ours follow.
@@ -171,47 +145,41 @@ impl FileVersion {
 // ---------------------------------------------------------------- attribute tables
 
 impl Table for Scene {
-	const FIELDS: &'static [Field<Self>] = fields!(Scene, "Scene";
-		enumv "Mode" mode,
-		text "Image" image,
-		text "ImagePath" image_path,
-		u32 "Width" width,
-		u32 "Height" height,
-		i32 "DampingEdge" damping_edge,
-		enumv "Edges" edges,
-		f64 "RefractiveIndex" refractive_index,
-		bool "ImageSources" image_sources,
-		f64 "ImageSourceScale" image_source_scale,
-		bool "ObjectSources" object_sources,
-	);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(SceneField::Mode),
+		Attr::of(SceneField::Image),
+		Attr::of(SceneField::ImagePath),
+		Attr::of(SceneField::Width),
+		Attr::of(SceneField::Height),
+		Attr::of(SceneField::DampingEdge),
+		Attr::of(SceneField::Edges),
+		Attr::of(SceneField::RefractiveIndex),
+		Attr::of(SceneField::ImageSources),
+		Attr::of(SceneField::ImageSourceScale),
+		Attr::of(SceneField::ObjectSources),
+	];
 }
 
 impl Table for Simulation {
-	const FIELDS: &'static [Field<Self>] = fields!(Simulation, "Simulation";
-		u32 "Steps" steps,
-		u32 "VisualizeEvery" visualize_every,
-		[Field {
-			owner: "Simulation",
-			name: "FourthOrderLaplacian",
-			codec: Codec::Bool {
-				get: |s| s.stencil == Stencil::FourthOrder,
-				set: |s, fourth| s.stencil = if fourth { Stencil::FourthOrder } else { Stencil::NinePoint },
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(SimulationField::Steps),
+		Attr::of(SimulationField::VisualizeEvery),
+		Attr::custom(
+			SimulationField::Stencil,
+			"FourthOrderLaplacian",
+			|s| (s.stencil == Stencil::FourthOrder).to_string(),
+			|s, text| {
+				let fourth = xml::parse_bool(text).ok_or("true or false")?;
+				s.stencil = if fourth { Stencil::FourthOrder } else { Stencil::NinePoint };
+				Ok(())
 			},
-			presence: Sparse,
-		}],
-		f64 "WaveSpeed" wave_speed,
-		f64 "TimeDecay" time_decay,
-		f64 "SourceFrequencyScale" source_frequency_scale,
-		f64 "IntensityScale" intensity_scale,
-	);
-
-	fn base() -> Self {
-		Self::default()
-	}
+			AttrType::Bool,
+		),
+		Attr::of(SimulationField::WaveSpeed),
+		Attr::of(SimulationField::TimeDecay),
+		Attr::of(SimulationField::SourceFrequencyScale),
+		Attr::of(SimulationField::IntensityScale),
+	];
 }
 
 /// Factor from this program's brightness to `WaveDude` Next's: this program's source swings its cell 4.8 to 9.7 times
@@ -223,12 +191,16 @@ pub const BRIGHTNESS_GAIN: f64 = 8.0;
 pub(super) const ORIGINAL_BRIGHTNESS: f64 = 30.0 / BRIGHTNESS_GAIN;
 
 /// The `Brightness` attribute: `WaveDude` Next's units in the file.
-const BRIGHTNESS: Field<DisplayLayer> = Field {
-	owner: "DisplayLayer",
-	name: "Brightness",
-	codec: Codec::F64 { get: |l| l.brightness * BRIGHTNESS_GAIN, set: |l, v| l.brightness = v / BRIGHTNESS_GAIN },
-	presence: Sparse,
-};
+const BRIGHTNESS: Attr<DisplayLayer> = Attr::custom(
+	DisplayLayerField::Brightness,
+	"Brightness",
+	|l| xml::fmt_f64(l.brightness * BRIGHTNESS_GAIN),
+	|l, text| {
+		l.brightness = xml::parse_f64(text).ok_or("a number")? / BRIGHTNESS_GAIN;
+		Ok(())
+	},
+	AttrType::Cdata,
+);
 
 /// A layer's defaults as `WaveDude` Next has them in a file of `version`.
 fn original_layer(layer: Layer, version: FileVersion) -> DisplayLayer {
@@ -258,330 +230,309 @@ fn layer_base_of(version: FileVersion) -> DisplayLayer {
 /// The `Intensity` element; `Field` writes its `BlackLevel` always (`WaveDude` Next's default 0 is not its initial
 /// -0.05).
 impl Table for DisplayLayer {
-	const FIELDS: &'static [Field<Self>] = fields!(DisplayLayer, "DisplayLayer";
-		text "ColorScheme" color_scheme => Always,
-		[BRIGHTNESS],
-		f64 "BlackLevel" black_level,
-		bool "Preview" preview,
-		bool "Overlay" overlay,
-		f64 "OverlayGain" overlay_gain,
-		bool "OverlayInExport" overlay_in_export,
-	);
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(DisplayLayerField::ColorScheme).always(),
+		BRIGHTNESS,
+		Attr::of(DisplayLayerField::BlackLevel),
+		Attr::of(DisplayLayerField::Preview),
+		Attr::of(DisplayLayerField::Overlay),
+		Attr::of(DisplayLayerField::OverlayGain),
+		Attr::of(DisplayLayerField::OverlayInExport),
+	];
 
 	fn base() -> Self {
 		layer_base()
 	}
 }
 
-const FIELD_LAYER: &[Field<DisplayLayer>] = fields!(DisplayLayer, "DisplayLayer";
-	text "ColorScheme" color_scheme => Always,
-	[BRIGHTNESS],
-	f64 "BlackLevel" black_level => When(|_| true),
-	bool "Preview" preview,
-	bool "Overlay" overlay,
-	f64 "OverlayGain" overlay_gain,
-	bool "OverlayInExport" overlay_in_export,
-);
+const FIELD_LAYER: &[Attr<DisplayLayer>] = &[
+	Attr::of(DisplayLayerField::ColorScheme).always(),
+	BRIGHTNESS,
+	Attr::of(DisplayLayerField::BlackLevel).when(|_| true),
+	Attr::of(DisplayLayerField::Preview),
+	Attr::of(DisplayLayerField::Overlay),
+	Attr::of(DisplayLayerField::OverlayGain),
+	Attr::of(DisplayLayerField::OverlayInExport),
+];
 
 impl Table for Video {
-	const FIELDS: &'static [Field<Self>] = fields!(Video, "Video"; u32 "Fps" fps, u32 "Quality" quality);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[Attr::of(VideoField::Fps), Attr::of(VideoField::Quality)];
 }
 
 impl Table for Display {
-	const FIELDS: &'static [Field<Self>] = fields!(Display, "Display";
-		u32 "ExportFrom" export_from,
-		u32 "ExportTo" export_to,
-		bool "ProbeGraphsInExport" probe_graphs_in_export,
-		bool "ProbeMarkersInExport" probe_markers_in_export,
-		bool "SourceMarkersInExport" source_markers_in_export,
-		bool "HandlesInPreview" handles_in_preview,
-		bool "LabelsInPreview" labels_in_preview,
-	);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(DisplayField::ExportFrom),
+		Attr::of(DisplayField::ExportTo),
+		Attr::of(DisplayField::ProbeGraphsInExport),
+		Attr::of(DisplayField::ProbeMarkersInExport),
+		Attr::of(DisplayField::SourceMarkersInExport),
+		Attr::of(DisplayField::HandlesInPreview),
+		Attr::of(DisplayField::LabelsInPreview),
+	];
 }
 
 impl Table for Source {
-	const FIELDS: &'static [Field<Self>] = fields!(Source, "Source";
-		text "Name" name => Always,
-		bool "Enabled" enabled,
-		whole "X" x => Always,
-		whole "Y" y => Always,
-		f64 "Frequency" frequency,
-		f64 "Amplitude" amplitude,
-		f64 "Phase" phase,
-		enumv "Mode" mode,
-		enumv "PulseShape" pulse_shape,
-		u32 "PulseWidth" pulse_width,
-		u32 "OffWidth" off_width,
-		[Field {
-			owner: "Source",
-			name: "DetachAfter",
-			codec: Codec::Int {
-				get: |s| s.detach_after.map_or(-1, i64::from),
-				set: |s, step| s.detach_after = u32::try_from(step).ok(),
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(SourceField::Name).always(),
+		Attr::of(SourceField::Enabled),
+		Attr::of(SourceField::X).whole().always(),
+		Attr::of(SourceField::Y).whole().always(),
+		Attr::of(SourceField::Frequency),
+		Attr::of(SourceField::Amplitude),
+		Attr::of(SourceField::Phase),
+		Attr::of(SourceField::Mode),
+		Attr::of(SourceField::PulseShape),
+		Attr::of(SourceField::PulseWidth),
+		Attr::of(SourceField::OffWidth),
+		Attr::custom(
+			SourceField::DetachAfter,
+			"DetachAfter",
+			|s| s.detach_after.map_or(-1, i64::from).to_string(),
+			|s, text| {
+				s.detach_after = u32::try_from(xml::parse_i32(text).ok_or("an integer")?).ok();
+				Ok(())
 			},
-			presence: Sparse,
-		}],
-	);
-
-	fn base() -> Self {
-		Self::default()
-	}
+			AttrType::Cdata,
+		),
+	];
 }
 
 impl Table for SourceArray {
-	const FIELDS: &'static [Field<Self>] = fields!(SourceArray, "SourceArray";
-		u32 "SizeX" size_x,
-		u32 "SizeY" size_y,
-		i32 "SpacingX" spacing_x,
-		i32 "SpacingY" spacing_y,
-		f64 "Angle" angle,
-		u32 "RandomFrequency" random_frequency,
-		u32 "RandomPhase" random_phase,
-		u32 "RandomOffWidth" random_off_width,
-		u32 "RandomPosition" random_position,
-	);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(SourceArrayField::SizeX),
+		Attr::of(SourceArrayField::SizeY),
+		Attr::of(SourceArrayField::SpacingX),
+		Attr::of(SourceArrayField::SpacingY),
+		Attr::of(SourceArrayField::Angle),
+		Attr::of(SourceArrayField::RandomFrequency),
+		Attr::of(SourceArrayField::RandomPhase),
+		Attr::of(SourceArrayField::RandomOffWidth),
+		Attr::of(SourceArrayField::RandomPosition),
+	];
 }
 
 /// A missing `BoxX`/`BoxY` reads as A's coordinate (`WaveDude` Next's box follows A while attached, and its reader
 /// set A before the box), so 0 is written whenever A's is not 0.
 impl Table for Probe {
-	const FIELDS: &'static [Field<Self>] = fields!(Probe, "Probe";
-		text "Name" name => Always,
-		bool "Active" active,
-		enumv "Layer" layer,
-		enumv "Measurement" measurement,
-		enumv "Kind" kind,
-		enumv "Detector" detector,
-		f64 "Sensitivity" sensitivity,
-		u32 "BinSize" bin_size,
-		i32 "AX" ax => Always,
-		i32 "AY" ay => Always,
-		i32 "BX" bx => When(|p| p.kind == ProbeKind::Line),
-		i32 "BY" by => When(|p| p.kind == ProbeKind::Line),
-		enumv "BoxSize" box_size,
-		i32 "BoxX" box_x => When(|p| p.box_x != 0 || p.ax != 0),
-		i32 "BoxY" box_y => When(|p| p.box_y != 0 || p.ay != 0),
-		u32 "BoxWidth" box_width => When(|p| p.box_size == BoxSize::Custom),
-		u32 "BoxHeight" box_height => When(|p| p.box_size == BoxSize::Custom),
-		enumv "ScaleMode" scale_mode,
-		bool "AutoScaleX" auto_scale_x,
-		bool "AutoScaleY" auto_scale_y,
-		f64 "YMin" y_min,
-		f64 "YMax" y_max,
-		enumv "YScale" y_scale,
-		u32 "Decades" decades,
-		u32 "Window" window,
-		u32 "StartAfter" start_after,
-	);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(ProbeField::Name).always(),
+		Attr::of(ProbeField::Active),
+		Attr::of(ProbeField::Layer),
+		Attr::of(ProbeField::Measurement),
+		Attr::of(ProbeField::Kind),
+		Attr::of(ProbeField::Detector),
+		Attr::of(ProbeField::Sensitivity),
+		Attr::of(ProbeField::BinSize),
+		Attr::of(ProbeField::Ax).named("AX").always(),
+		Attr::of(ProbeField::Ay).named("AY").always(),
+		Attr::of(ProbeField::Bx).named("BX").when(|p| p.kind == ProbeKind::Line),
+		Attr::of(ProbeField::By).named("BY").when(|p| p.kind == ProbeKind::Line),
+		Attr::of(ProbeField::BoxSize),
+		Attr::of(ProbeField::BoxX).when(|p| p.box_x != 0 || p.ax != 0),
+		Attr::of(ProbeField::BoxY).when(|p| p.box_y != 0 || p.ay != 0),
+		Attr::of(ProbeField::BoxWidth).when(|p| p.box_size == BoxSize::Custom),
+		Attr::of(ProbeField::BoxHeight).when(|p| p.box_size == BoxSize::Custom),
+		Attr::of(ProbeField::ScaleMode),
+		Attr::of(ProbeField::AutoScaleX),
+		Attr::of(ProbeField::AutoScaleY),
+		Attr::of(ProbeField::YMin),
+		Attr::of(ProbeField::YMax),
+		Attr::of(ProbeField::YScale),
+		Attr::of(ProbeField::Decades),
+		Attr::of(ProbeField::Window),
+		Attr::of(ProbeField::StartAfter),
+	];
 }
 
 impl Table for PartBase {
-	const FIELDS: &'static [Field<Self>] = fields!(PartBase, "Part";
-		text "Name" name => Always,
-		bool "Enabled" enabled,
-		i32 "X" x => Always,
-		i32 "Y" y => Always,
-		f64 "Angle" angle,
-	);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(PartBaseField::Name).always(),
+		Attr::of(PartBaseField::Enabled),
+		Attr::of(PartBaseField::X).always(),
+		Attr::of(PartBaseField::Y).always(),
+		Attr::of(PartBaseField::Angle),
+	];
 }
 
 impl Table for Coating {
-	const FIELDS: &'static [Field<Self>] = fields!(Coating, "Coating";
-		whole "Coating" depth,
-		enumv "CoatingProfile" profile,
-		bool "FrontCoated" front,
-		bool "BackCoated" back,
-		bool "SidesCoated" sides,
-	);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(CoatingField::Depth).named("Coating").whole(),
+		Attr::of(CoatingField::Profile).named("CoatingProfile"),
+		Attr::of(CoatingField::Front).named("FrontCoated"),
+		Attr::of(CoatingField::Back).named("BackCoated"),
+		Attr::of(CoatingField::Sides).named("SidesCoated"),
+	];
 }
 
 impl Table for Material {
-	const FIELDS: &'static [Field<Self>] = fields!(Material, "Material";
-		bool "Mirror" mirror,
-		f64 "RefractiveIndex" refractive_index,
-		u32 "Absorption" absorption,
-		u32 "AbsorptionRamp" absorption_ramp,
-	);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(MaterialField::Mirror),
+		Attr::of(MaterialField::RefractiveIndex),
+		Attr::of(MaterialField::Absorption),
+		Attr::of(MaterialField::AbsorptionRamp),
+	];
 }
 
-/// A part kind's own attributes (after its coating's and material's, which are read separately).
-macro_rules! kind_table {
-	($t:ident; $($items:tt)*) => {
-		impl Table for $t {
-			const FIELDS: &'static [Field<Self>] = fields!($t, stringify!($t); $($items)*);
-
-			fn base() -> Self {
-				Self::default()
-			}
-		}
-	};
+impl Table for Lens {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(LensField::Diameter),
+		Attr::of(LensField::R1),
+		Attr::of(LensField::R2),
+		Attr::of(LensField::Thickness),
+	];
 }
-
-kind_table!(Lens; u32 "Diameter" diameter, f64 "R1" r1, f64 "R2" r2, u32 "Thickness" thickness);
 // its lens's attributes come first (read_part, write_part)
-kind_table!(FresnelLens; enumv "Division" division, u32 "Zones" zones);
-kind_table!(Polygon; u32 "Sides" sides, u32 "Side" side);
-kind_table!(Rectangle; u32 "Length" length, u32 "Width" width, bool "Linked" linked);
-kind_table!(Ellipse; u32 "Length" length, u32 "Width" width, bool "Linked" linked);
-kind_table!(Triangle; u32 "Base" base, enumv "Type" kind, f64 "AngleA" angle_a, f64 "AngleB" angle_b);
-kind_table!(Outline;);
-kind_table!(Diffuser;
-	u32 "Length" length,
-	u32 "Width" width,
-	f64 "CenterWavelength" center_wavelength,
-	f64 "Amplitude" amplitude,
-	f64 "Sigma" sigma,
-);
-kind_table!(InterferenceFilter; u32 "Length" length, u32 "Width" width);
-impl Table for FilterLayer {
-	const FIELDS: &'static [Field<Self>] =
-		fields!(FilterLayer, "FilterLayer"; f64 "Thickness" thickness, f64 "RefractiveIndex" refractive_index);
-
-	fn base() -> Self {
-		Self::default()
-	}
+impl Table for FresnelLens {
+	const ATTRS: &'static [Attr<Self>] = &[Attr::of(FresnelLensField::Division), Attr::of(FresnelLensField::Zones)];
 }
-kind_table!(SimpleGrating;
-	u32 "Columns" columns,
-	u32 "Rows" rows,
-	u32 "ColumnSpacing" column_spacing,
-	u32 "RowSpacing" row_spacing,
-	u32 "Diameter" diameter,
-);
+impl Table for Polygon {
+	const ATTRS: &'static [Attr<Self>] = &[Attr::of(PolygonField::Sides), Attr::of(PolygonField::Side)];
+}
+impl Table for Rectangle {
+	const ATTRS: &'static [Attr<Self>] =
+		&[Attr::of(RectangleField::Length), Attr::of(RectangleField::Width), Attr::of(RectangleField::Linked)];
+}
+impl Table for Ellipse {
+	const ATTRS: &'static [Attr<Self>] =
+		&[Attr::of(EllipseField::Length), Attr::of(EllipseField::Width), Attr::of(EllipseField::Linked)];
+}
+impl Table for Triangle {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(TriangleField::Base),
+		Attr::of(TriangleField::Kind).named("Type"),
+		Attr::of(TriangleField::AngleA),
+		Attr::of(TriangleField::AngleB),
+	];
+}
+impl Table for Outline {
+	const ATTRS: &'static [Attr<Self>] = &[];
+}
+impl Table for Diffuser {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(DiffuserField::Length),
+		Attr::of(DiffuserField::Width),
+		Attr::of(DiffuserField::CenterWavelength),
+		Attr::of(DiffuserField::Amplitude),
+		Attr::of(DiffuserField::Sigma),
+	];
+}
+impl Table for InterferenceFilter {
+	const ATTRS: &'static [Attr<Self>] =
+		&[Attr::of(InterferenceFilterField::Length), Attr::of(InterferenceFilterField::Width)];
+}
+impl Table for FilterLayer {
+	const ATTRS: &'static [Attr<Self>] =
+		&[Attr::of(FilterLayerField::Thickness), Attr::of(FilterLayerField::RefractiveIndex)];
+}
+impl Table for SimpleGrating {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(SimpleGratingField::Columns),
+		Attr::of(SimpleGratingField::Rows),
+		Attr::of(SimpleGratingField::ColumnSpacing),
+		Attr::of(SimpleGratingField::RowSpacing),
+		Attr::of(SimpleGratingField::Diameter),
+	];
+}
 // the design's attributes follow (`read_part`, `write_part`, `part_attrs`)
-kind_table!(MetaSurface;
-	u32 "Length" length,
-	u32 "Width" width,
-	f64 "DesignFrequency" design_frequency,
-	f64 "Pitch" pitch,
-	f64 "Height" height,
-	f64 "PatternIndex" pattern_index,
-);
+impl Table for MetaSurface {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(MetaSurfaceField::Length),
+		Attr::of(MetaSurfaceField::Width),
+		Attr::of(MetaSurfaceField::DesignFrequency),
+		Attr::of(MetaSurfaceField::Pitch),
+		Attr::of(MetaSurfaceField::Height),
+		Attr::of(MetaSurfaceField::PatternIndex),
+	];
+}
 impl Table for MetaLensDesign {
-	const FIELDS: &'static [Field<Self>] =
-		fields!(MetaLensDesign, "MetaLens"; u32 "FocalLength" focal_length, enumv "LensType" lens_type);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] =
+		&[Attr::of(MetaLensDesignField::FocalLength), Attr::of(MetaLensDesignField::LensType)];
 }
 impl Table for MetaPrismDesign {
-	const FIELDS: &'static [Field<Self>] = fields!(MetaPrismDesign, "MetaPrism"; f64 "Deflection" deflection);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[Attr::of(MetaPrismDesignField::Deflection)];
 }
 impl Table for MetaAxiconDesign {
-	const FIELDS: &'static [Field<Self>] = fields!(MetaAxiconDesign, "MetaAxicon"; f64 "ConeAngle" cone_angle);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[Attr::of(MetaAxiconDesignField::ConeAngle)];
 }
-kind_table!(FacettedGrating;
-	u32 "Length" length,
-	u32 "Width" width,
-	enumv "Pattern" pattern,
-	f64 "Pitch" pitch,
-	f64 "Amplitude" amplitude,
-);
-kind_table!(Fiber;
-	f64 "CoreIndex" core_index,
-	u32 "CoreDiameter" core_diameter,
-	f64 "CladdingIndex" cladding_index,
-	u32 "CladdingThickness" cladding_thickness,
-	u32 "Absorption" absorption,
-	u32 "AbsorptionRamp" absorption_ramp,
-	enumv "Ends" ends,
-);
-kind_table!(BraggReflector;
-	u32 "Pairs" pairs,
-	u32 "Thickness1" thickness1,
-	u32 "Thickness2" thickness2,
-	f64 "Index1" index1,
-	f64 "Index2" index2,
-	u32 "Width" width,
-);
-kind_table!(GrinLens;
-	u32 "Length" length,
-	u32 "Diameter" diameter,
-	f64 "CentreIndex" centre_index,
-	f64 "EdgeIndex" edge_index,
-);
-kind_table!(LogicGate;
-	f64 "DesignFrequency" design_frequency,
-	whole "Coating" coating,
-	bool "InputCoated" input_coated,
-	bool "OutputCoated" output_coated,
-	bool "UpperOutputActive" upper_output_active,
-	bool "LowerOutputActive" lower_output_active,
-	f64 "CoreIndex" core_index,
-	f64 "CladdingIndex" cladding_index,
-	u32 "PortSpacing" port_spacing,
-);
-kind_table!(ZonePlate;
-	bool "Mount" mount,
-	u32 "MountWidth" mount_width,
-	u32 "Diameter" diameter,
-	u32 "Thickness" thickness,
-	u32 "Coating" coating,
-	f64 "DesignFrequency" design_frequency,
-	u32 "FocalLength" focal_length,
-	bool "Inverse" inverse,
-);
+impl Table for FacettedGrating {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(FacettedGratingField::Length),
+		Attr::of(FacettedGratingField::Width),
+		Attr::of(FacettedGratingField::Pattern),
+		Attr::of(FacettedGratingField::Pitch),
+		Attr::of(FacettedGratingField::Amplitude),
+	];
+}
+impl Table for Fiber {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(FiberField::CoreIndex),
+		Attr::of(FiberField::CoreDiameter),
+		Attr::of(FiberField::CladdingIndex),
+		Attr::of(FiberField::CladdingThickness),
+		Attr::of(FiberField::Absorption),
+		Attr::of(FiberField::AbsorptionRamp),
+		Attr::of(FiberField::Ends),
+	];
+}
+impl Table for BraggReflector {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(BraggReflectorField::Pairs),
+		Attr::of(BraggReflectorField::Thickness1),
+		Attr::of(BraggReflectorField::Thickness2),
+		Attr::of(BraggReflectorField::Index1),
+		Attr::of(BraggReflectorField::Index2),
+		Attr::of(BraggReflectorField::Width),
+	];
+}
+impl Table for GrinLens {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(GrinLensField::Length),
+		Attr::of(GrinLensField::Diameter),
+		Attr::of(GrinLensField::CentreIndex),
+		Attr::of(GrinLensField::EdgeIndex),
+	];
+}
+impl Table for LogicGate {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(LogicGateField::DesignFrequency),
+		Attr::of(LogicGateField::Coating).whole(),
+		Attr::of(LogicGateField::InputCoated),
+		Attr::of(LogicGateField::OutputCoated),
+		Attr::of(LogicGateField::UpperOutputActive),
+		Attr::of(LogicGateField::LowerOutputActive),
+		Attr::of(LogicGateField::CoreIndex),
+		Attr::of(LogicGateField::CladdingIndex),
+		Attr::of(LogicGateField::PortSpacing),
+	];
+}
+impl Table for ZonePlate {
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(ZonePlateField::Mount),
+		Attr::of(ZonePlateField::MountWidth),
+		Attr::of(ZonePlateField::Diameter),
+		Attr::of(ZonePlateField::Thickness),
+		Attr::of(ZonePlateField::Coating),
+		Attr::of(ZonePlateField::DesignFrequency),
+		Attr::of(ZonePlateField::FocalLength),
+		Attr::of(ZonePlateField::Inverse),
+	];
+}
 
 /// An outline's corner.
 impl Table for Point {
-	const FIELDS: &'static [Field<Self>] = fields!(Point, "Point"; i32 "X" x => Always, i32 "Y" y => Always);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[Attr::of(PointField::X).always(), Attr::of(PointField::Y).always()];
 }
 
 impl Table for FiberNode {
-	const FIELDS: &'static [Field<Self>] = fields!(FiberNode, "FiberNode";
-		i32 "X" x => Always,
-		i32 "Y" y => Always,
-		i32 "InX" in_x,
-		i32 "InY" in_y,
-		i32 "OutX" out_x,
-		i32 "OutY" out_y,
-		bool "Smooth" smooth,
-	);
-
-	fn base() -> Self {
-		Self::default()
-	}
+	const ATTRS: &'static [Attr<Self>] = &[
+		Attr::of(FiberNodeField::X).always(),
+		Attr::of(FiberNodeField::Y).always(),
+		Attr::of(FiberNodeField::InX),
+		Attr::of(FiberNodeField::InY),
+		Attr::of(FiberNodeField::OutX),
+		Attr::of(FiberNodeField::OutY),
+		Attr::of(FiberNodeField::Smooth),
+	];
 }
 
 // ---------------------------------------------------------------- reading
@@ -906,33 +857,33 @@ struct Decl {
 	name: &'static str,
 	/// `EMPTY`, `(#PCDATA)` or a children model.
 	content: String,
-	attrs: Vec<Attr>,
+	attrs: Vec<AttrDecl>,
 }
 
 impl Decl {
-	fn new(name: &'static str, content: &str, attrs: Vec<Attr>) -> Self {
+	fn new(name: &'static str, content: &str, attrs: Vec<AttrDecl>) -> Self {
 		Self { name, content: content.into(), attrs }
 	}
 
 	fn of<T: Table>(name: &'static str, content: &str) -> Self {
-		Self::new(name, content, fields::attrs(T::FIELDS))
+		Self::new(name, content, fields::attrs(T::ATTRS))
 	}
 }
 
 /// A part element's attributes: the part's, the coating's and the material's when the kind has them, its own.
-fn part_attrs(kind: &PartKind) -> Vec<Attr> {
-	let mut attrs = fields::attrs(PartBase::FIELDS);
+fn part_attrs(kind: &PartKind) -> Vec<AttrDecl> {
+	let mut attrs = fields::attrs(PartBase::ATTRS);
 	if kind.coating().is_some() {
-		attrs.extend(fields::attrs(Coating::FIELDS));
+		attrs.extend(fields::attrs(Coating::ATTRS));
 	}
 	if kind.material().is_some() {
-		attrs.extend(fields::attrs(Material::FIELDS));
+		attrs.extend(fields::attrs(Material::ATTRS));
 	}
 	if let PartKind::FresnelLens(_) = kind {
-		attrs.extend(fields::attrs(Lens::FIELDS));
+		attrs.extend(fields::attrs(Lens::ATTRS));
 	}
-	fn own<T: Table>(_: &T) -> Vec<Attr> {
-		fields::attrs(T::FIELDS)
+	fn own<T: Table>(_: &T) -> Vec<AttrDecl> {
+		fields::attrs(T::ATTRS)
 	}
 	attrs.extend(with_kind!(kind, k => own(k)));
 	if let PartKind::MetaSurface(m) = kind {
@@ -942,7 +893,7 @@ fn part_attrs(kind: &PartKind) -> Vec<Attr> {
 }
 
 fn decls() -> Vec<Decl> {
-	let text = |owner, name, required| Attr { owner, name, ty: AttrType::Cdata, required };
+	let text = |name, required| AttrDecl { name, ty: AttrType::Cdata, required };
 	let mut decls = vec![
 		Decl::new(
 			"Project",
@@ -950,14 +901,14 @@ fn decls() -> Vec<Decl> {
 				"(Description?, Scene?, Simulation?, Display?, Source*, ({})*, Probe*, ColorScheme*)",
 				PART_ELEMENTS.join("|")
 			),
-			vec![text(None, "Version", true), text(Some("Project"), "Seed", true)],
+			vec![text("Version", true), text("Seed", true)],
 		),
 		Decl::new("Description", "(#PCDATA)", vec![]),
 		Decl::of::<Scene>("Scene", "(ImageData?)"),
 		Decl::new("ImageData", "(#PCDATA)", vec![]),
 		Decl::new("Simulation", "EMPTY", {
-			let mut attrs = fields::attrs(Simulation::FIELDS);
-			attrs.push(Attr { owner: None, name: "Rescaled", ty: AttrType::Bool, required: false });
+			let mut attrs = fields::attrs(Simulation::ATTRS);
+			attrs.push(AttrDecl { name: "Rescaled", ty: AttrType::Bool, required: false });
 			attrs
 		}),
 		Decl::of::<Display>("Display", "(Field?, Intensity?, Video?)"),
@@ -989,12 +940,12 @@ fn decls() -> Vec<Decl> {
 			"ColorScheme",
 			"(Stop*)",
 			vec![
-				text(None, "Name", false),
-				Attr { owner: None, name: "Kind", ty: AttrType::Enum(members::<SchemeKind>()), required: false },
-				text(None, "Description", false),
+				text("Name", false),
+				AttrDecl { name: "Kind", ty: AttrType::Enum(SchemeKind::NAMES), required: false },
+				text("Description", false),
 			],
 		),
-		Decl::new("Stop", "EMPTY", vec![text(Some("Stop"), "At", true), text(None, "Color", false)]),
+		Decl::new("Stop", "EMPTY", vec![text("At", true), text("Color", false)]),
 	]);
 	decls
 }
@@ -1152,6 +1103,7 @@ pub fn validate(text: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::model::{Bounds, Field, ValueKind};
 
 	/// One of every kind with values off their defaults where it matters.
 	fn every_kind() -> Project {
@@ -1383,20 +1335,153 @@ mod tests {
 		assert!(read_str("<ColorScheme />").is_err());
 	}
 
-	#[test]
-	fn every_persisted_number_has_its_bounds_named() {
-		use crate::model::ranges;
-		for d in decls() {
-			for a in &d.attrs {
-				let (Some(owner), AttrType::Cdata) = (a.owner, &a.ty) else {
-					continue;
-				};
-				let key = format!("{owner}.{}", a.name);
-				let known = ranges::range(&key).is_some()
-					|| ranges::DEPENDENT.iter().any(|(d, _)| *d == key)
-					|| ranges::UNBOUNDED.contains(&key.as_str());
-				assert!(known, "{}/@{} ({key}) has no declared range, dependent bound or exemption", d.name, a.name);
+	/// Calls `$f::<T>()` for every type with a table.
+	macro_rules! each_table {
+		($f:ident) => {
+			each_table!(@call $f; Scene, Simulation, DisplayLayer, Video, Display, Source, SourceArray, Probe, PartBase,
+				Coating, Material, Lens, FresnelLens, Polygon, Rectangle, Ellipse, Triangle, Outline, Diffuser,
+				InterferenceFilter, FilterLayer, SimpleGrating, MetaSurface, MetaLensDesign, MetaPrismDesign,
+				MetaAxiconDesign, FacettedGrating, Fiber, BraggReflector, GrinLens, LogicGate, ZonePlate, Point,
+				FiberNode)
+		};
+		(@call $f:ident; $($t:ty),*) => { $($f::<$t>();)* };
+	}
+
+	/// Numbers without bounds (positions, spacings, offsets), by `Type.Path`.
+	const UNBOUNDED: &[&str] = &[
+		"Project.Seed",
+		"Source.X",
+		"Source.Y",
+		"SourceArray.SpacingX",
+		"SourceArray.SpacingY",
+		"Probe.Ax",
+		"Probe.Ay",
+		"Probe.Bx",
+		"Probe.By",
+		"Probe.BoxX",
+		"Probe.BoxY",
+		"Point.X",
+		"Point.Y",
+		"FiberNode.X",
+		"FiberNode.Y",
+		"FiberNode.InX",
+		"FiberNode.InY",
+		"FiberNode.OutX",
+		"FiberNode.OutY",
+	];
+
+	fn assert_bounds_named(key: &str, bounds: Bounds) {
+		assert!(
+			matches!(bounds, Bounds::Range(_) | Bounds::Dependent) || UNBOUNDED.contains(&key),
+			"{key} has no range, dependent bound or exemption"
+		);
+	}
+
+	fn bounds_are_named<T: Table>() {
+		for a in T::ATTRS {
+			let field = a.field;
+			let key = format!("{}.{}", T::TYPE_NAME, field.path());
+			match field.kind() {
+				ValueKind::Int | ValueKind::UInt | ValueKind::Float => assert_bounds_named(&key, field.bounds()),
+				ValueKind::Text | ValueKind::Bool | ValueKind::Word(_) => {}
+				ValueKind::List | ValueKind::Nested => panic!("{key} is no scalar, a table cannot carry it"),
 			}
 		}
+	}
+
+	#[test]
+	fn every_persisted_number_has_its_bounds_named() {
+		each_table!(bounds_are_named);
+		// the numbers of the hand-written declarations: the project's `Seed` and a stop's `At`
+		assert_bounds_named("Project.Seed", ProjectField::Seed.bounds());
+		assert_bounds_named("Stop.At", StopField::At.bounds());
+	}
+
+	/// Every leaf of the type's fields is an attribute of its table, or under one of `skips` (a path or its prefix).
+	fn covered_but<T: Table>(skips: &[&str]) {
+		let carried: Vec<T::Field> = T::ATTRS.iter().map(|a| a.field).collect();
+		let all = <T::Field as Field>::all();
+		for f in &carried {
+			assert!(all.contains(f), "{}.{f:?} is no leaf of the type", T::TYPE_NAME);
+		}
+		for f in all {
+			let path = f.path();
+			let skipped = skips.iter().any(|s| path == *s || path.starts_with(&format!("{s}.")));
+			assert!(
+				carried.contains(&f) != skipped,
+				"{}.{path} is {}",
+				T::TYPE_NAME,
+				if skipped { "skipped but in the table" } else { "in no table and not skipped" }
+			);
+		}
+	}
+
+	/// The sub-tables every part kind but a few reads beside its own: the coating's and the material's.
+	const SHAPE_PARTS: &[&str] = &["Coating", "Material"];
+
+	#[test]
+	fn every_field_of_a_table_type_is_an_attribute_or_skipped() {
+		covered_but::<Scene>(&[]);
+		covered_but::<Simulation>(&[]);
+		covered_but::<DisplayLayer>(&[]);
+		covered_but::<Video>(&[]);
+		// the layers and the video are elements of their own, `Display`'s children
+		covered_but::<Display>(&["Field", "Intensity", "Video"]);
+		// the array is the `Array` child
+		covered_but::<Source>(&["Array"]);
+		covered_but::<SourceArray>(&[]);
+		covered_but::<Probe>(&[]);
+		covered_but::<PartBase>(&[]);
+		covered_but::<Coating>(&[]);
+		covered_but::<Material>(&[]);
+		// the coating and the material are read by their own tables
+		covered_but::<Lens>(SHAPE_PARTS);
+		// its lens is read by the `Lens` table
+		covered_but::<FresnelLens>(&["Lens"]);
+		covered_but::<Polygon>(SHAPE_PARTS);
+		covered_but::<Rectangle>(SHAPE_PARTS);
+		covered_but::<Ellipse>(SHAPE_PARTS);
+		covered_but::<Triangle>(SHAPE_PARTS);
+		// the corners are `Point` children
+		covered_but::<Outline>(&["Coating", "Material", "Points"]);
+		covered_but::<Diffuser>(SHAPE_PARTS);
+		// the layers are `Layer` children
+		covered_but::<InterferenceFilter>(&["Coating", "Material", "Layers"]);
+		covered_but::<FilterLayer>(&[]);
+		covered_but::<SimpleGrating>(SHAPE_PARTS);
+		// the design is read by its own table, chosen by the element name
+		covered_but::<MetaSurface>(&["Coating", "Material", "Design"]);
+		covered_but::<MetaLensDesign>(&[]);
+		covered_but::<MetaPrismDesign>(&[]);
+		covered_but::<MetaAxiconDesign>(&[]);
+		covered_but::<FacettedGrating>(SHAPE_PARTS);
+		// the nodes are `Node` children
+		covered_but::<Fiber>(&["Coating", "Nodes"]);
+		covered_but::<BraggReflector>(&[]);
+		covered_but::<GrinLens>(&["Coating"]);
+		// the kind is the element name (`XorGate`)
+		covered_but::<LogicGate>(&["Kind"]);
+		covered_but::<ZonePlate>(&[]);
+		covered_but::<Point>(&[]);
+		covered_but::<FiberNode>(&[]);
+	}
+
+	#[test]
+	fn every_table_attribute_is_a_scalar_and_the_names_are_unique() {
+		fn scalars<T: Table>() {
+			let mut names = Vec::new();
+			for a in T::ATTRS {
+				let f = a.field;
+				assert!(
+					!matches!(f.kind(), ValueKind::List | ValueKind::Nested),
+					"{}.{} is no scalar",
+					T::TYPE_NAME,
+					f.path()
+				);
+				assert!(!names.contains(&a.name()), "{} names {} twice", T::TYPE_NAME, a.name());
+				names.push(a.name());
+			}
+		}
+		each_table!(scalars);
 	}
 }

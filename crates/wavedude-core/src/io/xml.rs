@@ -12,6 +12,7 @@ use quick_xml::events::{BytesRef, BytesStart, Event};
 use quick_xml::{Reader, XmlVersion};
 
 use super::FormatError;
+use crate::model::Word;
 
 /// One element: attributes in order, child elements, concatenated text.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -139,24 +140,6 @@ fn resolve_ref(r: &BytesRef<'_>, out: &mut String) -> Result<(), String> {
 	Ok(())
 }
 
-/// An enum written by its member name.
-pub(crate) trait XmlEnum: Sized + Copy + PartialEq + 'static {
-	const MEMBERS: &'static [(Self, &'static str)];
-
-	fn xml_name(self) -> &'static str {
-		Self::MEMBERS.iter().find(|(m, _)| *m == self).map(|(_, n)| *n).expect("every member is listed")
-	}
-
-	fn from_xml(s: &str) -> Option<Self> {
-		Self::MEMBERS.iter().find(|(_, n)| *n == s.trim()).map(|(m, _)| *m)
-	}
-}
-
-/// The member names of an [`XmlEnum`], for the DTD.
-pub(crate) fn members<T: XmlEnum>() -> Vec<&'static str> {
-	T::MEMBERS.iter().map(|(_, n)| *n).collect()
-}
-
 /// Formats a double as .NET's `XmlConvert` does: shortest round trip, `E` notation below 1e-4 and from 1e15.
 pub(crate) fn fmt_f64(v: f64) -> String {
 	if v.is_nan() {
@@ -175,6 +158,20 @@ pub(crate) fn fmt_f64(v: f64) -> String {
 		format!("{v}")
 	} else {
 		format!("{}E{}{:02}", mantissa, if exp < 0 { '-' } else { '+' }, exp.abs())
+	}
+}
+
+/// Parses an integer as `XmlConvert` does.
+pub(crate) fn parse_i32(s: &str) -> Option<i32> {
+	s.trim().parse().ok()
+}
+
+/// Parses a boolean as `XmlConvert` does.
+pub(crate) fn parse_bool(s: &str) -> Option<bool> {
+	match s.trim() {
+		"true" | "1" => Some(true),
+		"false" | "0" => Some(false),
+		_ => None,
 	}
 }
 
@@ -239,20 +236,16 @@ impl Element {
 	}
 
 	pub(crate) fn parse_i32(&self, key: &str, v: &str) -> Result<i32, FormatError> {
-		v.trim().parse().map_err(|_| self.bad(key, v, "an integer"))
+		parse_i32(v).ok_or_else(|| self.bad(key, v, "an integer"))
 	}
 
 	pub(crate) fn parse_bool(&self, key: &str, v: &str) -> Result<bool, FormatError> {
-		match v.trim() {
-			"true" | "1" => Ok(true),
-			"false" | "0" => Ok(false),
-			_ => Err(self.bad(key, v, "true or false")),
-		}
+		parse_bool(v).ok_or_else(|| self.bad(key, v, "true or false"))
 	}
 
-	pub(crate) fn enumv<T: XmlEnum>(&self, key: &str, default: T) -> Result<T, FormatError> {
+	pub(crate) fn enumv<T: Word>(&self, key: &str, default: T) -> Result<T, FormatError> {
 		self.get(key).map_or(Ok(default), |v| {
-			T::from_xml(v).ok_or_else(|| self.bad(key, v, &format!("one of {}", members::<T>().join(", "))))
+			T::parse(v.trim()).ok_or_else(|| self.bad(key, v, &format!("one of {}", T::NAMES.join(", "))))
 		})
 	}
 
@@ -270,9 +263,9 @@ impl Element {
 		self
 	}
 
-	pub(crate) fn enum_attr<T: XmlEnum>(&mut self, key: &str, value: T, default: T) -> &mut Self {
+	pub(crate) fn enum_attr<T: Word>(&mut self, key: &str, value: T, default: T) -> &mut Self {
 		if value != default {
-			self.attr(key, value.xml_name());
+			self.attr(key, value.name());
 		}
 		self
 	}
