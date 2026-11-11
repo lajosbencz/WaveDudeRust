@@ -7,13 +7,14 @@ use freya::prelude::*;
 use freya_testing::prelude::*;
 use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, root};
 use wavedude_app::ui::shared::Shared;
+use wavedude_app_state::commands::{Command, NewPart};
 use wavedude_app_state::examples::{self, Topic};
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::{AppDirs, Settings};
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
-use wavedude_core::model::{ProbeDetector, ProbeKind};
-use wavedude_testing::{click_at, click_tagged, count_tagged, find_text, label_areas, settle, tagged_area};
+use wavedude_core::model::{FilterLayer, PartKind, ProbeDetector, ProbeKind, Project};
+use wavedude_testing::{click_at, click_tagged, count_tagged, find_text, label_areas, settle, tagged, tagged_area};
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj";
 
@@ -166,6 +167,40 @@ fn a_counting_detectors_step_axis_takes_an_edit() {
 		"the check box did not edit the detector"
 	);
 	assert!(open_step_axis_combo(&mut test), "the enabled combo box opens its menu");
+}
+
+/// A drag by a layer's grip moves it through the list: the first layer dragged one row down swaps with the second.
+#[test]
+fn a_layer_dragged_by_its_grip_moves_down_the_list() {
+	let dir = tempfile::tempdir().unwrap();
+	let (mut test, state) = tall_shell(dir.path());
+	state.update(|a| {
+		drop(a.apply(Command::AddPart { kind: NewPart::InterferenceFilter, at: None }, Instant::now()));
+	});
+	settle(&mut test);
+	let part = state.peek(|a| a.document.project.parts.len() - 1);
+	fn layers_of(project: &Project, part: usize) -> Vec<FilterLayer> {
+		match &project.parts[part].kind {
+			PartKind::InterferenceFilter(f) => f.layers.clone(),
+			_ => unreachable!("the part added is a filter"),
+		}
+	}
+	let before = state.peek(|a| layers_of(&a.document.project, part));
+	assert!(before.len() >= 2 && before[0] != before[1], "a new filter alternates two layers");
+	let first = tagged(&test, "Layer0.Grip").expect("the first layer's grip");
+	let second = tagged_area(&test, "Layer1.Grip").expect("the second layer's grip");
+	wavedude_testing::assert_on_screen(&test, &first, "Layer0.Grip");
+	let start = first.layout().area.center();
+	let pitch = f64::from(second.center().y - start.y);
+	test.press_cursor((f64::from(start.x), f64::from(start.y)));
+	test.move_cursor((f64::from(start.x), f64::from(start.y) + pitch * 0.3));
+	test.move_cursor((f64::from(start.x), f64::from(start.y) + pitch));
+	settle(&mut test);
+	test.release_cursor((f64::from(start.x), f64::from(start.y) + pitch));
+	settle(&mut test);
+	let after = state.peek(|a| layers_of(&a.document.project, part));
+	assert_eq!((&after[0], &after[1]), (&before[1], &before[0]), "the first two layers changed places");
+	assert_eq!(after[2..], before[2..], "the rest stayed");
 }
 
 #[test]
