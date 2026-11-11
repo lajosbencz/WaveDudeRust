@@ -1,0 +1,32 @@
+name: Feature request
+description: Something the program should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem, not a solution. The goals are in `docs/SEED.md`: a drop-in for WaveDude Next users, physics per the literature, one behaviour on three platforms. A request nobody plans to build within a year is closed, not parked.
+  - type: textarea
+    attributes:
+      label: Problem
+      description: What you cannot do today, and what you would do with it.
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: WaveDude Next
+      description: Does WaveDude Next have it?
+      options:
+        - "Yes, this is an alignment"
+        - "No, this is new"
+        - "I do not know"
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: How WaveDude Next behaves
+      description: For an alignment, what Next does, where in its UI or files.
+  - type: textarea
+    attributes:
+      label: Files and accuracy
+      description: Would a project using it still open in WaveDude Next? Does it change any result the physics tests check?

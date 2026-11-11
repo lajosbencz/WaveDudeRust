@@ -517,7 +517,7 @@ impl<B: Backend> LiveController<B> {
 	fn drop_waiting_export(&mut self) {
 		if let Export::Waiting { .. } = self.export {
 			self.export = Export::Idle;
-			tracing::warn!("The export was dropped: its run stopped before the last frame.");
+			tracing::warn!("the export was dropped: its run stopped before the last frame");
 			self.notices.push(Notice::ExportStopped);
 		}
 	}

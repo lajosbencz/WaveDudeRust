@@ -1,0 +1,36 @@
+name: Bug
+description: The program does something wrong.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Search the open and closed issues first. A crash has its own form; a difference from WaveDude Next too.
+  - type: input
+    attributes:
+      label: Version
+      description: Help > About, or `wavedude-cli --version`.
+      placeholder: 0.2.1
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Platform
+      options: [Linux, macOS, Windows]
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps
+      description: What you did, in order. Name the example project or attach yours (zip the `.wdproj`).
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Expected
+      description: What should have happened. Point to the section of `docs/spec` or `docs/ui` if you know it.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Output
+      description: For a wrong picture or export, attach it or a screenshot. The log of the day helps (CONTRIBUTING.md names the folder).

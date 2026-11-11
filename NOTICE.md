@@ -1,15 +1,25 @@
 # Notice
 
-WaveDudeRust is an independent implementation written from scratch, but it does contain carried-over, non-code material from WaveDude Next: colour schemes, example projects, UI strings and manuals.
+WaveDudeRust is written from scratch: no code of WaveDude Next or Wave Dude 2D is carried over. It is a modified
+work of WaveDude Next in the sense of the GNU General Public License, carrying its non-code material under the
+same licence (GPL-3.0-or-later): the colour schemes, the example projects, the user interface strings and the
+manual's content.
 
 ## Upstream projects
 
-- **WaveDude Next** by Alexander Graef - <https://github.com/graealex/WaveDudeNext> Project files are importable.
-- **Wave Dude 2D** by Jeroen Vleggaar (Huygens Optics) Project files are importable.
-- **WaveSimulator2D** by 0x23. Numerical approach followed by Wave Dude 2D.
+- **WaveDude Next** by Alexander Graef, GPL-3.0 - <https://github.com/graealex/WaveDudeNext>. Its `.wdproj`
+  project files open and save here.
+- **Wave Dude 2D** by Jeroen Vleggaar (Huygens Optics), the predecessor of WaveDude Next. Its
+  `configuration.json` project files open here.
+- **WaveSimulator2D** by 0x23 - <https://github.com/0x23/WaveSimulator2D>, whose numerical approach Wave Dude 2D
+  followed.
 
 All names and trademarks belong to their respective owners.
 
+## Downloaded codec
+
+MP4 export can use OpenH264, which the program downloads from Cisco at the user's request and which is not part
+of its packages (decision 0005): "OpenH264 Video Codec provided by Cisco Systems, Inc."
 
 ## Bundled fonts
 

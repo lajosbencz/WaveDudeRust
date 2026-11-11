@@ -4,5 +4,5 @@ Read `CONTRIBUTING.md` and `docs/SEED.md` first; `README.md` and `docs/README.md
 
 - Git: commit, push or tag only when asked.
 - Temporary files go outside the repository.
-- `tools/compare-csharp` dumps WaveDude Next's results for comparison with ours.
+- `tools/compare-csharp` dumps WaveDude Next's results for comparison with ours; it finds Next through `WAVEDUDE_NEXT_DIR`.
 - Verify with the commands of `.github/workflows/ci.yml`.

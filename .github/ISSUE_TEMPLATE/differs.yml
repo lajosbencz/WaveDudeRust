@@ -1,0 +1,27 @@
+name: Differs from WaveDude Next
+description: The two programs behave differently and docs/divergences.md does not list it.
+labels: ["alignment"]
+body:
+  - type: markdown
+    attributes:
+      value: A difference listed in `docs/divergences.md` is on purpose; its decision record holds the reasoning.
+  - type: textarea
+    attributes:
+      label: WaveDude Next does
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: WaveDudeRust does
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Project
+      description: The example's name or the `.wdproj` zipped, and the versions of both programs.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Which is right
+      description: The section of `docs/spec` or `docs/ui` that says what should happen, or the literature for physics. If Next is wrong, say so.

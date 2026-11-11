@@ -3,6 +3,22 @@
 What this program does differently from WaveDude Next on purpose, at a glance; each line points to the decision
 that holds the reasoning and the details. Behaviour not listed here is meant to match (spec/, ui/).
 
+## When a divergence is warranted
+
+- The literature has a more accurate or better-bounded technique (absorbers, stencils, time integration, material
+  smoothing): the decision cites it, `physics.md` derives it, a test states the tolerance.
+- Next's behaviour is a bug or a quirk of its implementation (a timer, a race, a stale state): not ported.
+- A Windows-only or WPF-only integration has no cross-platform equivalent: dropped, or replaced by what the
+  packaging gives.
+- The toolkit or a platform cannot do it: the decision says what replaces it.
+- A measured gain with the same results, recorded in `measurements.md`.
+
+Not warranted: taste, convenience, calibrating to Next's output, dropping a feature Next's users rely on, or a
+file written in a way Next cannot read. The process: an issue, a decision (new or a dated section of an existing
+one), the row below, the spec updated, the manual when users see it.
+
+## Divergences
+
 | Area | WaveDude Next | WaveDudeRust | Where |
 |---|---|---|---|
 | Live preview | A scratch runner on a second engine computes the frame looked at; a separate run stores every frame; a 120 ms debounce and 1.5 s of quiet (dropped upstream 2026-11-09) pace them; an edit leaves a "stale" run | One worker, one engine, one store converge on a goal: the frame looked at first, the rest when wanted; no timers; an edit replaces the frames and the pictures keep the last one | decision 0012, ui/60, spec/30 |
@@ -21,6 +37,3 @@ that holds the reasoning and the details. Behaviour not listed here is meant to 
 | Counting detector | A frame's detections are shared evenly over the steps since the last collection, drawn from the frame's mean rate | One count a step from that step's integrated intensity, since every step's readings are at hand; the same Poisson process, so the run's total agrees | spec/30 (Probes) |
 | Updates and releases | Installer with EV signature | GitHub releases with attestation, an in-app updater signed with its own key | decision 0011 |
 | Examples | A File > Examples submenu of its 24 projects, the description as tooltip | A File > Examples... dialog grouped by topic in five tabs with 44 projects (Next's 24 and our own 20), title and description per row, a search | decision 0008, ui/70 |
-
-Adding a divergence: a line here, the details in a decision (a new one or a dated section of an existing one),
-the behaviour in the spec or ui page it changes.

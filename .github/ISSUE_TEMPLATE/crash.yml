@@ -1,0 +1,35 @@
+name: Crash
+description: The program closed by itself or froze.
+labels: ["bug", "crash"]
+body:
+  - type: input
+    attributes:
+      label: Version
+      description: Help > About, or `wavedude-cli --version`.
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Platform
+      options: [Linux, macOS, Windows]
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Log
+      description: |
+        The log of the day holds the panic's backtrace. Attach it or paste its last hundred lines.
+        Linux `~/.config/waveduderust/logs`, macOS `~/Library/Application Support/WaveDudeRust/logs`, Windows `%APPDATA%\WaveDudeRust\config\logs`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What you were doing
+      description: The steps before it, and the project (an example's name or your `.wdproj` zipped).
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: GPU and driver
+      description: As `wavedude-cli info` prints it, or the adapter the log names at start.

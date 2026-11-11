@@ -24,7 +24,7 @@ fn spec(n: usize) -> SinkSpec {
 
 /// C#: in-house 9.8 ms a frame on ten cores, 15 in a sequence job.
 #[test]
-#[ignore]
+#[ignore = "timing for the user: cargo test -p wavedude-export --release --test timing -- --ignored --nocapture"]
 fn jpeg_1080p_444() {
 	let frames = frames(8);
 	encode_jpeg(&frames[0], W, H, 90).unwrap();
@@ -49,7 +49,7 @@ fn jpeg_1080p_444() {
 /// C#: an MP4 job 16 ms a frame.
 #[cfg(feature = "openh264-source")]
 #[test]
-#[ignore]
+#[ignore = "timing for the user: cargo test -p wavedude-export --release --test timing -- --ignored --nocapture"]
 fn mp4_1080p_per_frame() {
 	let frames = frames(8);
 	let n = 60;
@@ -65,7 +65,7 @@ fn mp4_1080p_per_frame() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "timing for the user: cargo test -p wavedude-export --release --test timing -- --ignored --nocapture"]
 fn mpeg1_1080p_per_frame() {
 	let frames = frames(8);
 	let n = 36;
