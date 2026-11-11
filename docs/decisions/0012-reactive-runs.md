@@ -8,7 +8,7 @@ The live preview had two runners mirroring WaveDude Next: a `ScratchRunner` comp
 is now" on a second engine, and the `SimulationRun` storing every frame, with the controller pacing them by a
 120 ms debounce, 1.5 s of quiet before the re-run, and pausing the run while a scratch frame computed. The
 abandon-on-newer-request rule starved drags of heavy frames; the debounce and quiet were constants nobody could
-derive; the two engines and the coordination were half of `live.rs`. WaveDude Next dropped its timers on
+derive; the two engines and the coordination were half of [`live.rs`](../../crates/wavedude-app-state/src/live.rs). WaveDude Next dropped its timers on
 2026-11-09 and kept the two runners.
 
 ## Decision
@@ -21,7 +21,7 @@ state: the frame looked at first, then the rest when every frame is wanted, the 
 before the position still missing. With every frame wanted the pass to the frame looked at captures the frames
 it passes, so one pass from step 0 makes the whole run in timeline order after the frame looked at; with the
 position alone wanted the seek captures that frame alone. Measured, the captures on the way cost a drag nothing
-(docs/measurements.md, The live run).
+([docs/measurements.md](../measurements.md), The live run).
 
 Rules settled here:
 - Work is done for the goal's spec alone: a unit for another spec is left at the next check, 16 steps on. An
@@ -43,12 +43,12 @@ Rules settled here:
 
 ## Consequences
 
-- `run/scratch.rs` is gone; `run/worker.rs` replaces it; `SimulationRun` stays the batch run for exports and
+- `run/scratch.rs` is gone; [`run/worker.rs`](../../crates/wavedude-core/src/run/worker.rs) replaces it; `SimulationRun` stays the batch run for exports and
   the CLI. The store writes by index, tracks presence and clears in place.
 - A probe edit with every frame wanted re-records the whole run (stepping without captures); before, only the
   frame shown was refreshed and the other frames' graphs were stale.
 - The status bar shows the current pass's steps. There is no "edited since": the frames of an edited project
   are gone, not stale.
-- Measured (docs/measurements.md, The live run): Example16 at half resolution on the GPU, 120 edits at 32 a
+- Measured ([docs/measurements.md](../measurements.md), The live run): Example16 at half resolution on the GPU, 120 edits at 32 a
   second: a 25 ms frame per edit, the final frame under a millisecond after the last edit, the same with the
   frames before the position captured on the way; a frame slower than the drag lands once the hand rests.

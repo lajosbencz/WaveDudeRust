@@ -35,7 +35,7 @@ quit?" Yes stops it and quits once it has ended; No keeps both.
 
 ## Memory warning
 
-See `60-live-editing-and-runs.md`.
+See [`60-live-editing-and-runs.md`](60-live-editing-and-runs.md).
 
 ## Startup page (port)
 
@@ -108,7 +108,7 @@ Content top to bottom:
    Wave Dude 2D, Copyright (C) 2026; 0x23 (Diffraction Limited), author of WaveSimulator2D) with five links
    (YouTube channels, websites, GitHub). English regardless of language.
 3. "License": the GPL notice sentence; toggle button "Show the license text" / "Hide the license text" (T).
-   Shown: LICENSE.md rendered as a document (headings, lists, links) in a scrollable box (260 px, min 120);
+   Shown: [LICENSE.md](../../LICENSE.md) rendered as a document (headings, lists, links) in a scrollable box (260 px, min 120);
    a taller window gives its extra height to the document; hidden: window shrinks back.
 4. "System": read-only text box (max 160 px, scrolls), one line each: Program, Runtime, Operating system,
    Processor (+ logical cores), GPU setting (on/off), Engine ("GPU: <wgpu adapter name>" or "CPU (n threads)"),
@@ -131,7 +131,7 @@ the first with one; a 360 px scrolled list, one row per example (`Example:<file 
 description wrapped in the dim text colour; Open and Cancel. Left/Right switch the tab (not while the search box
 has the focus), Up/Down move the row, Enter or Open or a double-click on a row opens it, Esc or Cancel closes,
 Tab cycles the controls. Opening closes the dialog and runs the guarded open (unsaved-changes prompt included).
-Next's 33 projects come from its `Examples` folder, ours from `examples/gates` and `examples/optics`
+Next's 33 projects come from its `Examples` folder, ours from [`examples/gates`](../../examples/gates/) and [`examples/optics`](../../examples/optics/)
 (all `.wdproj`), all embedded.
 
 ## Manual window
@@ -189,7 +189,7 @@ Dock pane (default bottom, hidden at first start).
 
 - Left: the latest log line of level Info and up ("Opened ...", "Saved ...", errors); "Ready" at first. Warnings
   turn the whole bar orange, errors red (theme tokens), until the next Info line.
-- Right: run status (`50-timeline-transport.md`).
+- Right: run status ([`50-timeline-transport.md`](50-timeline-transport.md)).
 - Far right: busy text + 120 px progress bar (export frames determinate; waiting for run / computing a frame
   indeterminate); hidden when idle.
 - Tooltip "Double-click to open the Messages pane"; double-click opens or focuses it.

@@ -24,7 +24,7 @@ column below is a summary; the full text is the `Hint.*` entry (identical to the
   and angle read-outs show at most one decimal ("12 px", "12.5 px").
 - Edits apply live: every keystroke in a name box, every number step, every check box. Number text is applied
   on Enter or focus loss (see Number box). Each edit marks the project dirty and follows the live editing rules
-  (`60-live-editing-and-runs.md`).
+  ([`60-live-editing-and-runs.md`](60-live-editing-and-runs.md)).
 
 ## Editors
 
@@ -89,7 +89,7 @@ to that no scheme has: greyed "<name> (not found)". Two italic action rows at th
 
 ### Colour swatch button (`ColorPickerButton`)
 
-Swatch that opens the picker in a popup below it (`70-dialogs-and-windows.md`, Colour picker).
+Swatch that opens the picker in a popup below it ([`70-dialogs-and-windows.md`](70-dialogs-and-windows.md), Colour picker).
 
 ### Link toggle (chain)
 

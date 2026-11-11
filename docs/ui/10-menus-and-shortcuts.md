@@ -10,7 +10,7 @@ Conventions:
   The port needs an equivalent icon for each.
 - Every entry is 23 px high, shows its shortcut text right-aligned.
 - A disabled entry greys text and icon.
-- Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`wavedude-app` `ui/menus.rs`);
+- Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`wavedude-app` [`ui/menus.rs`](../../crates/wavedude-app/src/ui/menus.rs));
   the ids in this document stay the entries' test ids.
 
 ## File
@@ -20,7 +20,7 @@ Conventions:
 | 1 | New Project | N/N/N/N | Ctrl+N | U+E8A5 | always | Asks about unsaved edits, then a new empty project: blank canvas, open edges, damping rim outside (-32), no sources. Timeline to frame 0. |
 | 2 | Open Project... | O/O-umlaut/O/O | Ctrl+O | U+E8E5 | always | Asks about unsaved edits; file dialog, filter: WaveDude Next projects (*.wdproj), Wave Dude 2D projects (configuration.json; *.json), XML (*.xml), All. A `configuration.json` is imported as a new unsaved project. |
 | 3 | Recent Projects > | R/Z/R/R | - | U+E81C | always (empty submenu when none) | One entry per recent file, newest first, full path as plain text (no mnemonics). Click opens. |
-| 4 | Examples... | P/P/P/V | - | U+E8F1 | always | Opens the Examples dialog (ui/70) of 44 projects; id `file:examples`. An example opens as an unsaved project named after its file (title shows it; Save As proposes it). List: see `MANUAL.md` "Examples". |
+| 4 | Examples... | P/P/P/V | - | U+E8F1 | always | Opens the Examples dialog ([ui/70](70-dialogs-and-windows.md)) of 44 projects; id `file:examples`. An example opens as an unsaved project named after its file (title shows it; Save As proposes it). List: see `MANUAL.md` "Examples". |
 | - | separator | | | | | |
 | 5 | Save | S/S/E/S | Ctrl+S | U+E74E | always | Save; Save As when the project has no file. |
 | 6 | Save As... | A/U/S/A | Ctrl+Shift+S | U+E792 | always | Save dialog, filter: *.wdproj, *.xml. Proposes the suggested name (import/example) beside its origin. |
@@ -43,7 +43,7 @@ Conventions:
 | Export field frame... | R/Z/M/E | Ctrl+Shift+F | U+EB9F | same | The frame shown as one image. |
 | Export intensity frame... | M/X/T/D | Ctrl+Shift+G | U+EB9F | same | Same for the intensity. |
 
-Dialog details: `70-dialogs-and-windows.md`.
+Dialog details: [`70-dialogs-and-windows.md`](70-dialogs-and-windows.md).
 
 ## Edit
 
@@ -78,7 +78,7 @@ All settings here are user settings, persisted, not in the project.
 A change of resolution/frames/samples replaces the frames like a simulation edit. Dithering only redraws.
 
 There is no Display menu. Display settings (handles/labels in the preview etc.) are the project's Display
-row in the tree (`30-properties-pane.md`).
+row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
 
 ## Simulation
 
@@ -101,7 +101,7 @@ row in the tree (`30-properties-pane.md`).
 |---|---|---|---|---|
 | About WaveDude Next | A/U-umlaut/P/O | - | U+E946 | Modal About dialog. |
 | Manual | M/H/M/H | F1 | U+E736 | Opens the manual window, or brings it to the front. |
-| Check for updates (port; builds with the updater) | U/U/J/U | - | none | Looks for a newer release now (docs/ui/70, Updates). |
+| Check for updates (port; builds with the updater) | U/U/J/U | - | none | Looks for a newer release now ([docs/ui/70](70-dialogs-and-windows.md), Updates). |
 | Check for updates at launch (port; builds with the updater) | L/S/L/S | - | none | checkable; setting `CheckForUpdates`. |
 
 ## Context menus
@@ -162,7 +162,7 @@ Same entries on both pictures, parameterised by the layer.
 | Entry | Mn | Gesture text | Icon | Action |
 |---|---|---|---|---|
 | Brightness | B/H/L/H | - | U+E706 | Moves keyboard focus to that picture's brightness box. |
-| Auto brightness | A/A/A/A | - | Draw:AutoBrightness | One-shot fit (`40-preview-pane.md`). |
+| Auto brightness | A/A/A/A | - | Draw:AutoBrightness | One-shot fit ([`40-preview-pane.md`](40-preview-pane.md)). |
 | - separator | | | | |
 | Export this frame... | T/D/E/D | Ctrl+Shift+F (field) / Ctrl+Shift+G (intensity) | U+EB9F | Still of this layer. |
 | - separator | | | | |
@@ -273,7 +273,7 @@ One tab stop on the checked radio; Left/Right check the other.
 ### Number box (focused)
 
 Up/Down one step, PageUp/PageDown ten steps, wheel one step (Shift+wheel ten), Enter commits, Esc reverts.
-Details: `30-properties-pane.md`.
+Details: [`30-properties-pane.md`](30-properties-pane.md).
 
 ### Colour swatch / picker
 

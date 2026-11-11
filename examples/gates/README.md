@@ -12,16 +12,16 @@ length of 5.92 px, and for the coupled pair a 15 px gap with a coupling length o
 
 | File | What it shows |
 |---|---|
-| `01-single-fiber.wdproj` | One thin single-mode fibre. The point probe Inside reads a constant intensity along the fibre; the line probe Across shows the evanescent tail beyond the interfaces. |
-| `02-coupled-fibers-full-transfer.wdproj` | A second fibre B 15 px away: over one coupling length (1056 px) the light of A crosses over to B almost completely. |
-| `03-coupled-fibers-close.wdproj` | The same pair with half the gap (7 px): the coupling length drops to 272 px and the light goes back and forth almost four times. |
-| `04-crossover.wdproj` | The fibres approach, run side by side for one full transfer and bend apart: A alone exits at R, B alone at Q. |
-| `05-or-plain.wdproj` | Half the coupling (a 3 dB coupler): A alone or B alone gives half at Q and half at R; both on give twice that level at Q. |
-| `06-or-neat.wdproj` | The same coupler with B delayed by 30 degrees: Q shows the same level for A, B and both. |
-| `07-xor.wdproj` | B delayed by 90 degrees: with both on, all light goes to R and Q goes dark. |
-| `08-xor-gate-part.wdproj` | The program's XOR gate part, its phase section built into arm B instead of a source delay. |
-| `09-or-gate-part.wdproj` | The OR gate part. |
-| `10-and-gate-part.wdproj` | The AND gate part: Q is A and B, R is A xor B. |
+| [`01-single-fiber.wdproj`](01-single-fiber.wdproj) | One thin single-mode fibre. The point probe Inside reads a constant intensity along the fibre; the line probe Across shows the evanescent tail beyond the interfaces. |
+| [`02-coupled-fibers-full-transfer.wdproj`](02-coupled-fibers-full-transfer.wdproj) | A second fibre B 15 px away: over one coupling length (1056 px) the light of A crosses over to B almost completely. |
+| [`03-coupled-fibers-close.wdproj`](03-coupled-fibers-close.wdproj) | The same pair with half the gap (7 px): the coupling length drops to 272 px and the light goes back and forth almost four times. |
+| [`04-crossover.wdproj`](04-crossover.wdproj) | The fibres approach, run side by side for one full transfer and bend apart: A alone exits at R, B alone at Q. |
+| [`05-or-plain.wdproj`](05-or-plain.wdproj) | Half the coupling (a 3 dB coupler): A alone or B alone gives half at Q and half at R; both on give twice that level at Q. |
+| [`06-or-neat.wdproj`](06-or-neat.wdproj) | The same coupler with B delayed by 30 degrees: Q shows the same level for A, B and both. |
+| [`07-xor.wdproj`](07-xor.wdproj) | B delayed by 90 degrees: with both on, all light goes to R and Q goes dark. |
+| [`08-xor-gate-part.wdproj`](08-xor-gate-part.wdproj) | The program's XOR gate part, its phase section built into arm B instead of a source delay. |
+| [`09-or-gate-part.wdproj`](09-or-gate-part.wdproj) | The OR gate part. |
+| [`10-and-gate-part.wdproj`](10-and-gate-part.wdproj) | The AND gate part: Q is A and B, R is A xor B. |
 
 ### Sources, mirror cup and probes
 
@@ -64,7 +64,7 @@ steps: in A and in B over the upper and lower half of the Input line, Q and R ov
 the Output line. Q and R are relative to their sum with A alone, in A and in B relative to theirs. The expected
 values assume a lossless coupler. A row passes when Q and R each lie within 0.1 of the expectation.
 
-Plain OR (`05-or-plain.wdproj`): Q doubles with both inputs on.
+Plain OR ([`05-or-plain.wdproj`](05-or-plain.wdproj)): Q doubles with both inputs on.
 
 | A | B | in A | in B | Q | R | Q expected | R expected |
 |---|---|---|---|---|---|---|---|
@@ -73,7 +73,7 @@ Plain OR (`05-or-plain.wdproj`): Q doubles with both inputs on.
 | 0 | 1 | 0.005 | 0.995 | 0.531 | 0.469 | 0.500 | 0.500 |
 | 1 | 1 | 1.004 | 1.004 | 0.992 | 0.992 | 1.000 | 1.000 |
 
-Neat OR (`06-or-neat.wdproj`): B at -30 degrees, Q at the same level in the three true rows, a quarter of the light
+Neat OR ([`06-or-neat.wdproj`](06-or-neat.wdproj)): B at -30 degrees, Q at the same level in the three true rows, a quarter of the light
 at Q with both on.
 
 | A | B | in A | in B | Q | R | Q expected | R expected |
@@ -83,7 +83,7 @@ at Q with both on.
 | 0 | 1 | 0.005 | 0.995 | 0.531 | 0.469 | 0.500 | 0.500 |
 | 1 | 1 | 1.004 | 1.002 | 0.496 | 1.490 | 0.500 | 1.500 |
 
-XOR (`07-xor.wdproj`): B at -90 degrees, Q dark with both on.
+XOR ([`07-xor.wdproj`](07-xor.wdproj)): B at -90 degrees, Q dark with both on.
 
 | A | B | in A | in B | Q | R | Q expected | R expected |
 |---|---|---|---|---|---|---|---|
@@ -92,7 +92,7 @@ XOR (`07-xor.wdproj`): B at -90 degrees, Q dark with both on.
 | 0 | 1 | 0.005 | 0.995 | 0.531 | 0.469 | 0.500 | 0.500 |
 | 1 | 1 | 1.002 | 0.998 | 0.005 | 1.994 | 0.000 | 2.000 |
 
-XOR gate part (`08-xor-gate-part.wdproj`): Q is A xor B, R is A and B.
+XOR gate part ([`08-xor-gate-part.wdproj`](08-xor-gate-part.wdproj)): Q is A xor B, R is A and B.
 
 | A | B | in A | in B | Q | R | Q expected | R expected |
 |---|---|---|---|---|---|---|---|
@@ -101,7 +101,7 @@ XOR gate part (`08-xor-gate-part.wdproj`): Q is A xor B, R is A and B.
 | 0 | 1 | 0.001 | 0.914 | 0.479 | 0.449 | 0.500 | 0.500 |
 | 1 | 1 | 1.005 | 0.919 | 0.003 | 1.924 | 0.000 | 2.000 |
 
-OR gate part (`09-or-gate-part.wdproj`): Q is A or B, R the remainder.
+OR gate part ([`09-or-gate-part.wdproj`](09-or-gate-part.wdproj)): Q is A or B, R the remainder.
 
 | A | B | in A | in B | Q | R | Q expected | R expected |
 |---|---|---|---|---|---|---|---|
@@ -110,7 +110,7 @@ OR gate part (`09-or-gate-part.wdproj`): Q is A or B, R the remainder.
 | 0 | 1 | 0.001 | 0.938 | 0.478 | 0.450 | 0.500 | 0.500 |
 | 1 | 1 | 0.998 | 0.936 | 0.464 | 1.464 | 0.500 | 1.500 |
 
-AND gate part (`10-and-gate-part.wdproj`): Q is A and B, R is A xor B.
+AND gate part ([`10-and-gate-part.wdproj`](10-and-gate-part.wdproj)): Q is A and B, R is A xor B.
 
 | A | B | in A | in B | Q | R | Q expected | R expected |
 |---|---|---|---|---|---|---|---|

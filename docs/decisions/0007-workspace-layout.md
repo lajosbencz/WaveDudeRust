@@ -13,4 +13,4 @@ One repository, one Cargo workspace, edition 2024:
 - `wavedude-app`: the desktop application, the Freya views over `wavedude-app-state`.
 - `wavedude-cli`: headless checks, benches, scripted exports (CI without a display).
 
-Docs under `docs/`: `spec/` (core), `ui/` (UI behaviour), `decisions/`.
+Docs under [`docs/`](../): [`spec/`](../spec/) (core), `ui/` (UI behaviour), [`decisions/`](./).

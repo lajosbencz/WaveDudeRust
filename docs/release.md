@@ -5,20 +5,20 @@ Decision 0011 says why; this is how.
 ## Day to day
 
 Commit with conventional commits (`feat:`, `fix:`, `chore:` ...). After each push to the default branch,
-git-cliff (`cliff.toml`) reads the commits since the last `v*` tag. If any ships something (`feat`, `fix`, `perf`,
+git-cliff ([`cliff.toml`](../cliff.toml)) reads the commits since the last `v*` tag. If any ships something (`feat`, `fix`, `perf`,
 `refactor`, `revert`, dependency updates as `fix(deps)` or `chore(deps)`; not `ci`, `docs`, `test`, `style`, `build`
 or other `chore`), the workflow keeps one pull request "chore(release): v<next>" open on the branch `release-pr`: the
-workspace version bumped, `Cargo.lock`, and `CHANGELOG.md` regenerated from all tags, its new section as the PR's
+workspace version bumped, [`Cargo.lock`](../Cargo.lock), and [`CHANGELOG.md`](../CHANGELOG.md) regenerated from all tags, its new section as the PR's
 body. In 0.x a feature bumps the patch and a breaking change (`!`) the minor. The branch is rebuilt as one commit on
 every push, so edits to it are lost; change the commits instead (or the version in the PR, by hand, just before
 merging).
 
 Merging it (squash) releases: the push finds the workspace version without its tag, tags the commit `v<version>` and
-drafts the release with the changelog section as notes. `package.yml`, a reusable workflow without secrets and with
+drafts the release with the changelog section as notes. [`package.yml`](../.github/workflows/package.yml), a reusable workflow without secrets and with
 a read-only token, builds the packages with `cargo auditable` and attests them (build provenance and the CycloneDX
 SBOMs of both programs); `sign` signs the update bundles with the updater key without compiling anything; `publish`
 writes `latest.json` and `SHA256SUMS`, attests them and the signatures, attaches everything, verifies every
-attached file against its attestation (a file not attested by `package.yml` or `release.yml` of this repository
+attached file against its attestation (a file not attested by [`package.yml`](../.github/workflows/package.yml) or [`release.yml`](../.github/workflows/release.yml) of this repository
 stops the release), appends the provenance table to the notes (file, digest, workflow) and publishes the release,
 which the repository's immutable releases then lock; GitHub's own release attestation follows, checked with
 `gh release verify-asset`.
@@ -51,7 +51,7 @@ cargo packager signer generate --path wavedude-updater.key
 The `.pub` file's content is `UPDATER_PUBKEY`, the key file's content `UPDATER_PRIVATE_KEY`.
 
 crates.io publishing is off. `wavedude-core` and `wavedude-export` are ready for it (`wavedude-export` names
-`wavedude-core`'s version, which the release PR keeps in step); turning it on means a job in `release.yml` after
+`wavedude-core`'s version, which the release PR keeps in step); turning it on means a job in [`release.yml`](../.github/workflows/release.yml) after
 `release` running `cargo publish -p wavedude-core` then `-p wavedude-export`, with the repository as their trusted
 publisher (crates.io > crate > Settings > Trusted Publishing; a token only for each crate's first publish).
 
@@ -66,7 +66,7 @@ publisher (crates.io > crate > Settings > Trusted Publishing; a token only for e
 - Settings > Actions > General: actions pinned to a full commit hash; approval before running workflows from every
   outside contributor; the workflow token read-only by default, allowed to create pull requests (the release PR).
 - Settings > Advanced Security: Dependabot alerts and security updates, secret scanning with push protection, private
-  vulnerability reporting (`SECURITY.md`).
+  vulnerability reporting ([`SECURITY.md`](../SECURITY.md)).
 
 ## By hand
 
@@ -80,23 +80,23 @@ environment the build has no updater.
 
 ## Icons
 
-`crates/wavedude-app/assets/icon.svg` is the master; `assets/icons/` holds what is rendered from it, committed beside
-it: the PNG sizes 16 to 512 (the Linux icon theme, the window and the About dialog), `icon.ico` with 16 to 256 (the
-Windows executable through `build.rs`, and the installers) and `icon.icns` with 16 to 512 at 1x and 2x (macOS).
+[`crates/wavedude-app/assets/icon.svg`](../crates/wavedude-app/assets/icon.svg) is the master; [`assets/icons/`](../crates/wavedude-app/assets/icons/) holds what is rendered from it, committed beside
+it: the PNG sizes 16 to 512 (the Linux icon theme, the window and the About dialog), [`icon.ico`](../crates/wavedude-app/assets/icons/icon.ico) with 16 to 256 (the
+Windows executable through [`build.rs`](../crates/wavedude-app/build.rs), and the installers) and [`icon.icns`](../crates/wavedude-app/assets/icons/icon.icns) with 16 to 512 at 1x and 2x (macOS).
 cargo-packager reads them from the source tree, so the build cannot make them: after a change to the SVG, render the
 set again at those sizes and commit it with the SVG.
 
 ## File types and desktop integration
 
 `.wdproj` and `.wdscheme` are declared once per platform, all naming the MIME types of the file associations in
-`crates/wavedude-app/Cargo.toml`:
+[`crates/wavedude-app/Cargo.toml`](../crates/wavedude-app/Cargo.toml):
 
 - Windows: the NSIS installer registers the ProgIds `WaveDudeRust.Project` and `WaveDudeRust.ColorScheme` (the
   associations' `name`). cargo-packager 0.11.8's uninstaller leaves them registered (its template loops over
   `association.ext`, a field that does not exist).
-- macOS: `assets/macos/Info.plist`, merged over cargo-packager's, exports the two types and names them in the document
+- macOS: [`assets/macos/Info.plist`](../crates/wavedude-app/assets/macos/Info.plist), merged over cargo-packager's, exports the two types and names them in the document
   types. The Finder hands a file to the running app as `application:openURLs:`, which the app delegate of
-  `src/ui/open_requests.rs` queues for the window.
-- Linux: `assets/linux/wavedude-rust.xml` (shared-mime-info) maps the globs to the MIME types the `.desktop` file names;
-  the AppImage carries it, and the tarball carries it with `wavedude-app.desktop`, the icon theme PNGs and `install.sh`,
+  [`src/ui/open_requests.rs`](../crates/wavedude-app/src/ui/open_requests.rs) queues for the window.
+- Linux: [`assets/linux/wavedude-rust.xml`](../crates/wavedude-app/assets/linux/wavedude-rust.xml) (shared-mime-info) maps the globs to the MIME types the `.desktop` file names;
+  the AppImage carries it, and the tarball carries it with [`wavedude-app.desktop`](../crates/wavedude-app/assets/linux/wavedude-app.desktop), the icon theme PNGs and [`install.sh`](../crates/wavedude-app/assets/linux/install.sh),
   which installs them under `PREFIX` (default `~/.local`) and removes them with `--uninstall`.

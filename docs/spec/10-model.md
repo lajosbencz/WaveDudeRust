@@ -1,14 +1,14 @@
 # 10 - Model
 
 The project model: every persisted property with its XML name, type, default, range, unit and normalisation.
-Persistence details (element order, omission rules, DTD, migration) are in `60-file-formats.md`.
+Persistence details (element order, omission rules, DTD, migration) are in [`60-file-formats.md`](60-file-formats.md).
 
 Rules for all model objects:
 - Every persisted number has a default and a clamp in `Normalize()`; a `[Range]` beside the default states the same
   bounds unless the bound depends on another value ("dependent" below).
 - `Normalize()` runs after load, after import, before a run, and after every edit. Non-finite numbers become the
   default unless stated.
-- Rust: the bounds are the constants of `model/ranges.rs`, which `normalize` and the painter's limits use; a
+- Rust: the bounds are the constants of [`model/ranges.rs`](../../crates/wavedude-core/src/model/ranges.rs), which `normalize` and the painter's limits use; a
   non-finite number's fallback is the type's `Default` value.
 - Rust: each model type derives `Fields` (`wavedude-model-derive`, decision 0013): a `<Type>Field` enum with one member
   per field, the PascalCase of the field's name (`BoxWidth`, `Ax`, `R1`), a nested field being a member that wraps
@@ -19,7 +19,7 @@ Rules for all model objects:
   project's lists, the scene's image bytes) is `#[field(skip)]` and the adapter and the forms handle it by hand. Enums derive `Word`: member names are the PascalCase names above, `MEMBERS` lists them. The
   model has no serde derives.
 - Positions are integer canvas pixels (origin top-left, y down). Angles in degrees, CCW on screen, normalised into
-  (-180, 180] (see `00-overview.md`).
+  (-180, 180] (see [`00-overview.md`](00-overview.md)).
 - Every change is an observable event carrying (object, property, old value, new value); a simulation edit (scene,
   solver, seed, sources, parts, active-probe set) invalidates a run; a display or probe-presentation edit does not.
 
@@ -113,12 +113,12 @@ Level 100, c = 1, scale 2: 16.0 px. The editor's estimate uses `c = WaveSpeed`; 
 | `OverlayGain` | double | 3 | 3 | 0..5 |
 | `OverlayInExport` | bool | true | true | add glowing edges into exported frames (off until file version 4) |
 
-Brightness (Rust, decision 0010): the source model of docs/physics.md (Sources) swings a source cell of Amplitude
+Brightness (Rust, decision 0010): the source model of [docs/physics.md](../physics.md) (Sources) swings a source cell of Amplitude
 100 % by 1 in free space, the field falling as 1/sqrt(r); its intensity, the EMA of u^2, is about 1/2 there. The
 palette's top is |u| * b = 1 (field) and sqrt(I) * b = 1 (intensity), so field 1 puts the source's swing at the top
 and intensity 1.5 puts sqrt(1/2) * 1.5 = 1.06 just past it. The original's 30 was made for its blended source,
 which radiates 5 to 9 times less. The `.wdproj` adapter converts by a fixed factor of 8 (a power of two, inside the
-measured gain of 4.8 to 9.7, docs/comparison): the file holds the model's value times 8, WaveDude Next's units, and a
+measured gain of 4.8 to 9.7, [docs/comparison](../comparison/)): the file holds the model's value times 8, WaveDude Next's units, and a
 read divides by 8. A missing `Brightness` (and a missing layer element) is 30 in the file, 3.75 in the model, and the
 attribute is written whenever the value times 8 differs from 30. Nothing is fitted on opening.
 
@@ -222,7 +222,7 @@ StableHash(s): h = 2166136261u32; for each UTF-16 code unit c: h = (h ^ c) * 167
 Xorshift32(x): x ^= x << 13; x ^= x >> 17; x ^= x << 5
 ```
 Stream argument for sources is `StableHash(Name)` widened to u64; a diffuser's roughness draws its phases from
-`Pcg32(seed, StableHash(Name) ^ 0x44494646)`, one `NextDouble` per possible component (13) in order (`model/profiled.rs`),
+`Pcg32(seed, StableHash(Name) ^ 0x44494646)`, one `NextDouble` per possible component (13) in order ([`model/profiled.rs`](../../crates/wavedude-core/src/model/profiled.rs)),
 so the seed is part of the scene while a diffuser is enabled (`SceneKey`).
 
 ## Probe (`Model/Probe.cs`)
@@ -235,7 +235,7 @@ so the seed is part of the scene while a diffuser is enabled (`SceneKey`).
 | `Measurement` | enum `Amplitude`/`Value`/`IntegratedValue` | Amplitude | Field forces Amplitude; Intensity + Amplitude -> Value |
 | `Kind` | enum `Point`/`Line` | Point | |
 | `Detector` | enum `Standard`/`Counting`/`Imaging` | Standard | a detector is a line probe of the integrated intensity, whatever the file says (`normalize`) |
-| `Sensitivity` | double | 0.3125 (Rust; original 20) | 0..15625 (original 0..1000000); expected detections per unit of intensity per step at a point of the line; the `.wdproj` holds it times 64 (60-file-formats.md) |
+| `Sensitivity` | double | 0.3125 (Rust; original 20) | 0..15625 (original 0..1000000); expected detections per unit of intensity per step at a point of the line; the `.wdproj` holds it times 64 ([60-file-formats.md](60-file-formats.md)) |
 | `BinSize` | int (px) | 4 | 1..20; an imaging detector's histogram bin along the line |
 | `AX`, `AY` | int | centre | always written; clamped into the canvas when sampled |
 | `BX`, `BY` | int | 0 | line end; written only for Line |
@@ -291,7 +291,7 @@ Shared constants: refractive index range 1..2.55, rounded to 0.01 (round even), 
 | `Diffuser` | Diffuser | Coated shape | shape props; `Length` 50 (>= 1); `Width` 500 (>= 2); `CenterWavelength` 16 (2..10000); `Amplitude` 1 (0..10000); `Sigma` 6 (0..10000). A new one coats its back alone |
 | `InterferenceFilter` | Interference filter | Coated shape | shape props (`BackCoated` alone counts); `Length` 50 (>= 1); `Width` 500 (>= 1); `Layer` children (`Thickness` 2 (0..1000, 0.01), `RefractiveIndex` 1.5), the outermost first. A new one is a quarter-wave stack for 16 px: five pairs 2.00 at 2.00 px then 1.50 at 2.67 px and one more 2.00 |
 | `SimpleGrating` | Grating | Coated shape (the coating is carried for the file and never painted or shown: the dots have no faces) | `Mirror` (a new one is one), `RefractiveIndex`, `Absorption`, `AbsorptionRamp`; `Columns` 1 (>= 1); `Rows` 31 (>= 1); `ColumnSpacing`, `RowSpacing` 16 (>= 2); `Diameter` 2 (1 to half the smaller spacing, clamped in `normalize`) |
-| `MetaLens`, `MetaPrism`, `MetaAxicon` | Meta lens, Meta prism, Meta axicon | Coated shape (`FrontCoated` the ridge tops, `BackCoated` the plate's back; sides not offered) | shape props; `Length` 50 (>= 1); `Width` 500 (>= 2); `DesignFrequency` 50 (1..255); `Pitch` 4 (1..10000); `Height` 32 (1..10000); `PatternIndex` 2 (1..2.55); the lens `FocalLength` 500 (>= 1), `LensType` Converging/Diverging; the prism `Deflection` 20 (-89..89); the axicon `ConeAngle` 10 (0.1..89). Rust: one `MetaSurface` kind with a `design` (`model/meta.rs`) |
+| `MetaLens`, `MetaPrism`, `MetaAxicon` | Meta lens, Meta prism, Meta axicon | Coated shape (`FrontCoated` the ridge tops, `BackCoated` the plate's back; sides not offered) | shape props; `Length` 50 (>= 1); `Width` 500 (>= 2); `DesignFrequency` 50 (1..255); `Pitch` 4 (1..10000); `Height` 32 (1..10000); `PatternIndex` 2 (1..2.55); the lens `FocalLength` 500 (>= 1), `LensType` Converging/Diverging; the prism `Deflection` 20 (-89..89); the axicon `ConeAngle` 10 (0.1..89). Rust: one `MetaSurface` kind with a `design` ([`model/meta.rs`](../../crates/wavedude-core/src/model/meta.rs)) |
 | `FacettedGrating` | Facetted grating | Coated shape | shape props (the coating's `BackCoated` alone counts); `Length` 50; `Width` 500; `Pattern` Sawtooth/SquareWave/Sinusoidal; `Pitch` 32 (2..10000); `Amplitude` 4 (0..10000) |
 | `Fiber` | Fiber | Coated | `CoreIndex` 1.5; `CoreDiameter` 20 (>= 2); `CladdingIndex` 1.45; `CladdingThickness` 10 (>= 0); `Absorption` 0; `AbsorptionRamp` 10; `Ends` Flat/Round (Flat); `Node` children |
 | `BraggReflector` | Bragg reflector | part | `Pairs` 10 (1..200); `Thickness1` 10; `Thickness2` 10; `Index1` 1.5; `Index2` 2.0; `Width` 200 |
@@ -379,7 +379,7 @@ Also readable: the original author's JSON scheme format (keys `name`, `origin`, 
 ## Preview quality (app setting, affects runs; `Runs/PreviewQuality.cs`)
 
 `PreviewQuality(ResolutionDivisor in {1,2,4}, FrameDivisor in {1,2,4}, Format in {Half, Index}, IntensityRoot = true)`.
-`Full = (1, 1, Half, true)`. First-start tiers in `40-frames-store-render.md`.
+`Full = (1, 1, Half, true)`. First-start tiers in [`40-frames-store-render.md`](40-frames-store-render.md).
 
 ## Settings file (app, not project; `WaveDudeNext.WPF/Settings.cs`)
 

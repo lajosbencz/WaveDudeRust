@@ -1,11 +1,11 @@
 # Contributing
 
-Read first: the ground rules in `docs/SEED.md`, the conventions the code follows in `docs/conventions.md`, and
-what differs from WaveDude Next and why in `docs/divergences.md`. `docs/README.md` maps the documentation.
+Read first: the ground rules in [`docs/SEED.md`](docs/SEED.md), the conventions the code follows in [`docs/conventions.md`](docs/conventions.md), and
+what differs from WaveDude Next and why in [`docs/divergences.md`](docs/divergences.md). [`docs/README.md`](docs/README.md) maps the documentation.
 
 ## Issues
 
-Search the open and closed issues first. The forms under `.github/ISSUE_TEMPLATE` ask for what each kind needs:
+Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE/) ask for what each kind needs:
 
 - **Bug**: the version (Help > About, or `wavedude-cli --version`), the platform, the steps, what was expected,
   the project file or the name of the example used, and for a wrong picture or export the output itself.
@@ -13,50 +13,52 @@ Search the open and closed issues first. The forms under `.github/ISSUE_TEMPLATE
   `~/.config/waveduderust/logs` on Linux, `~/Library/Application Support/WaveDudeRust/logs` on macOS and
   `%APPDATA%\WaveDudeRust\config\logs` on Windows.
 - **Feature request**: the problem, not a solution; whether WaveDude Next has the feature (then it is an
-  alignment, say how Next behaves); how it fits the goals of `docs/SEED.md` (a drop-in for WaveDude Next users,
+  alignment, say how Next behaves); how it fits the goals of [`docs/SEED.md`](docs/SEED.md) (a drop-in for WaveDude Next users,
   physics per the literature, one behaviour on three platforms). A feature Next has is accepted; a new one is
   accepted when it keeps `.wdproj` files readable by Next and does not trade accuracy for anything. A request
   nobody plans to build within a year is closed, not parked.
-- **Differs from WaveDude Next**: check `docs/divergences.md` first; a listed difference is on purpose. Otherwise
-  report what each program does, the project file, and the section of `docs/spec` or `docs/ui` that says what
+- **Differs from WaveDude Next**: check [`docs/divergences.md`](docs/divergences.md) first; a listed difference is on purpose. Otherwise
+  report what each program does, the project file, and the section of [`docs/spec`](docs/spec/) or [`docs/ui`](docs/ui/) that says what
   should happen. When Next is the one in the wrong, this program does not imitate the bug; the maintainers decide
   whether and how to pass it on.
-- Vulnerabilities go through `SECURITY.md`, never an issue.
+- Vulnerabilities go through [`SECURITY.md`](SECURITY.md), never an issue.
 
 ## Pull requests
 
-- Open an issue before a feature or a design change; a design accepted there gets a record in `docs/decisions`.
+- Open an issue before a feature or a design change; a design accepted there gets a record in [`docs/decisions`](docs/decisions/).
   A fix for an open issue needs no discussion.
 - One concern per pull request, no unrelated commits. Pull requests are squash-merged and the title becomes the
   commit: write it as a conventional commit (below). The body says what changed, why, and how it was verified.
 - Accepted when all of this holds:
-  - The checks of `.github/workflows/ci.yml` pass: `cargo fmt`, `cargo clippy` with `-D warnings` (the lint
-    policy is the `[workspace.lints]` table of `Cargo.toml`), the tests on Linux, macOS and Windows, `cargo doc`
+  - The checks of [`.github/workflows/ci.yml`](.github/workflows/ci.yml) pass: `cargo fmt`, `cargo clippy` with `-D warnings` (the lint
+    policy is the `[workspace.lints]` table of [`Cargo.toml`](Cargo.toml)), the tests on Linux, macOS and Windows, `cargo doc`
     without warnings, every feature combination (`cargo hack`), no unused dependency (`cargo machete`), and
-    `cargo check` at the workspace's `rust-version`; `.github/workflows/hygiene.yml` runs `typos` and
-    `cargo deny check` (`deny.toml`: advisories, licences, sources). The toolchain is pinned in
-    `rust-toolchain.toml`; bump it there when a new stable is wanted (the CI caches are keyed on it).
+    `cargo check` at the workspace's `rust-version`; [`.github/workflows/hygiene.yml`](.github/workflows/hygiene.yml) runs `typos` and
+    `cargo deny check` ([`deny.toml`](deny.toml): advisories, licences, sources). The toolchain is pinned in
+    [`rust-toolchain.toml`](rust-toolchain.toml); bump it there when a new stable is wanted (the CI caches are keyed on it).
   - A behaviour change comes with a test that failed before it: unit, headless (freya-testing), physics or
-    snapshot, whichever fits (`docs/conventions.md` says where each lives). Snapshot changes (`insta`) are
+    snapshot, whichever fits ([`docs/conventions.md`](docs/conventions.md) says where each lives). Snapshot changes (`insta`) are
     reviewed with `cargo insta review` and explained in the pull request.
-  - The specification follows the behaviour: `docs/spec` for the core and export, `docs/ui` for the application,
-    `crates/wavedude-app/assets/manual.md` for what users see. A new UI string goes into all four tables in
-    `crates/wavedude-app-state/assets/strings`.
-  - A difference from WaveDude Next is warranted by the criteria in `docs/divergences.md` and recorded there,
+  - The specification follows the behaviour: [`docs/spec`](docs/spec/) for the core and export, [`docs/ui`](docs/ui/) for the application,
+    [`crates/wavedude-app/assets/manual.md`](crates/wavedude-app/assets/manual.md) for what users see. A new UI string goes into all four tables in
+    [`crates/wavedude-app-state/assets/strings`](crates/wavedude-app-state/assets/strings/).
+  - A difference from WaveDude Next is warranted by the criteria in [`docs/divergences.md`](docs/divergences.md) and recorded there,
     with its reasoning in a decision record.
-  - Physics is correct per the literature, cited in `docs/physics.md`, with a test that states its tolerance;
+  - Physics is correct per the literature, cited in [`docs/physics.md`](docs/physics.md), with a test that states its tolerance;
     nothing is calibrated to WaveDude Next's output.
-  - A performance claim comes with its measurement in `docs/measurements.md`, including the command.
+  - A performance claim comes with its measurement in [`docs/measurements.md`](docs/measurements.md), including the command.
   - A new dependency is named in the pull request with the reason; the lockfile change is part of the same
     commit.
-  - The code follows `docs/conventions.md`; comments state the present, not the history; ASCII only.
+  - The code follows [`docs/conventions.md`](docs/conventions.md); comments state the present, not the history; ASCII only.
+  - Markdown names a file or folder of the repository as a relative link (`` [`docs/physics.md`](docs/physics.md) ``),
+    never as bare code; the app renders `manual.md`, so it links nothing of the repository.
 - Reviewers may push fixups onto the branch. A pull request that goes quiet for a month is closed and can be
   reopened.
 
 ## Commit messages
 
-[Conventional commits](https://www.conventionalcommits.org/); git-cliff builds `CHANGELOG.md` and the next
-version from them (`cliff.toml`):
+[Conventional commits](https://www.conventionalcommits.org/); git-cliff builds [`CHANGELOG.md`](CHANGELOG.md) and the next
+version from them ([`cliff.toml`](cliff.toml)):
 
 - `feat` is listed under Added, `fix` under Fixed, `perf` under Performance, `refactor` under Changed, `revert`
   under Reverted; `fix(deps)` and `chore(deps)` under Dependencies. `ci`, `docs`, `test`, `style`, `build` and

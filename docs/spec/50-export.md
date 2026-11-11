@@ -198,8 +198,8 @@ Range: the full run (a run is made first if needed).
 ## Burned-in overlays
 
 What colour exports (not OpenEXR) draw over a rendered frame. The behaviour of the same items in the app is in
-`docs/ui/40-preview-pane.md` ("Handles and overlays", "Probe graph box") and the export entries in
-`docs/ui/10-menus-and-shortcuts.md` ("File > Export", the pictures' and graph boxes' context menus). Pointers:
+[`docs/ui/40-preview-pane.md`](../ui/40-preview-pane.md) ("Handles and overlays", "Probe graph box") and the export entries in
+[`docs/ui/10-menus-and-shortcuts.md`](../ui/10-menus-and-shortcuts.md) ("File > Export", the pictures' and graph boxes' context menus). Pointers:
 `WaveDudeNext.WPF/MainWindow.Export.cs`, `Export/ExportJob.cs` (`Finish`), `Export/ProbeMarkers.cs`,
 `WaveDudeNext.WPF/Rendering/SourceMarkerPainter.cs`, `WaveDudeNext.WPF/Rendering/ProbeGraphPainter.cs`,
 `WaveDudeNext.WPF/Controls/ProbeGraphDrawing.cs`, `Probes/ProbeGraph.cs`.

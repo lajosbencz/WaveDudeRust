@@ -41,15 +41,15 @@ Use modern toolings for lineage tracing.
 
 ## Plan
 
-1. Design: Map the original features, model, file formats and guarantees into `docs/spec` without reading its implementation
+1. Design: Map the original features, model, file formats and guarantees into [`docs/spec`](spec/) without reading its implementation
 2. Build: Core library create from that spec, with unit-level analytic physics tests and snapshot tests (dispersion, reflection, absorption, refraction, diffusion, energy conservation)
 3. Compare: The original C# program (headless harness) to find mistakes on either side. Fix ours, report theirs, never calibrate
-4. Design: Map the WPF UI layout and behaviour into `docs/ui`
+4. Design: Map the WPF UI layout and behaviour into [`docs/ui`](ui/)
 5. Build: Missing widgets for which Freya doesn't give a ready solution
 6. Build: Desktop and terminal applications
 
 Steps 1-4 may run in parallel.
-Decisions go to `docs/decisions` as ADRs, measurements to `docs/measurements.md`.
+Decisions go to [`docs/decisions`](decisions/) as ADRs, measurements to [`docs/measurements.md`](measurements.md).
 If something is ambiguous/missing, ask the user instead of assuming.
 
 ## Finish line
@@ -58,6 +58,6 @@ If something is ambiguous/missing, ask the user instead of assuming.
 - `cargo clippy --workspace --all-targets -D warnings` green
 - `cargo test --workspace` green
 - GPU tests skip without an adapter
-- Original example projects open and run, the photonic logic gates from Huygens Optics' video are reproduced in `examples/gates` with measured truth tables.
+- Original example projects open and run, the photonic logic gates from Huygens Optics' video are reproduced in [`examples/gates`](../examples/gates/) with measured truth tables.
 - `cargo build --release -p wavedude-cli -p wavedude-app` produces hand-checked app
 

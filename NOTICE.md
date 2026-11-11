@@ -26,5 +26,5 @@ of its packages (decision 0005): "OpenH264 Video Codec provided by Cisco Systems
 
 - **Selawik** by Microsoft Corporation - <https://github.com/microsoft/Selawik> (release 1.01), a metric-compatible
   stand-in for Segoe UI, used when Segoe UI is not installed. Licensed under the SIL Open Font License 1.1; the
-  license text ships beside the fonts in `crates/wavedude-widgets/assets/fonts/Selawik-OFL.txt`. Selawik is a
+  license text ships beside the fonts in [`crates/wavedude-widgets/assets/fonts/Selawik-OFL.txt`](crates/wavedude-widgets/assets/fonts/Selawik-OFL.txt). Selawik is a
   Reserved Font Name and a trademark of Microsoft Corporation.

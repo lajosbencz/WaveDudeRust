@@ -1,10 +1,10 @@
 # 00 - Overview
 
 Spec of the non-UI behaviour of WaveDude Next (C#, .NET 10 library `WaveDudeNext/`), the source of truth for the
-Rust core and export crates. UI behaviour is specified elsewhere (`docs/ui`).
+Rust core and export crates. UI behaviour is specified elsewhere ([`docs/ui`](../ui/)).
 
 Source tree read: `graealex/WaveDudeNext` at commit `08f9e63` (version 0.1.3). C# names in backticks are pointers for
-verification only (see `80-verification-pointers.md`).
+verification only (see [`80-verification-pointers.md`](80-verification-pointers.md)).
 
 ## What the program is
 
@@ -41,7 +41,7 @@ Preview (8-bit: palette at store size; 16-bit: ScreenRenderer at device size, op
 
 Side paths:
 - The live run: one engine and one store converging on the project as it is now and the frame looked at; the
-  frame looked at comes first, the rest when wanted (spec/30 The live run).
+  frame looked at comes first, the rest when wanted ([spec/30](30-engine.md) The live run).
 - Probe collector: point probes one sample per step, line probes one profile per timeline frame.
 
 ## Crate mapping (proposed)

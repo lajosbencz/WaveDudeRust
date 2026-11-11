@@ -11,8 +11,8 @@ coating depths, brightness units) is converted in the adapter alone, and the sim
 
 The model knows no file format (decision 0013). Files:
 
-- `.wdproj` (XML, versions 1 to 4) read and written; the adapter (`io/wdproj.rs`, `io/fields.rs`) holds every
-  transformation: the 9-point frequency rescale and the brightness units (spec/60, spec/05).
+- `.wdproj` (XML, versions 1 to 4) read and written; the adapter ([`io/wdproj.rs`](../../crates/wavedude-core/src/io/wdproj.rs), [`io/fields.rs`](../../crates/wavedude-core/src/io/fields.rs)) holds every
+  transformation: the 9-point frequency rescale and the brightness units ([spec/60](../spec/60-file-formats.md), [spec/05](../spec/05-deviations.md)).
 - `.wdscheme` colour schemes read and written.
 - Wave Dude 2D `configuration.json` read (import as an unsaved project).
 

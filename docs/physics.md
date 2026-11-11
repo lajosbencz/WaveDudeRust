@@ -2,7 +2,7 @@
 
 What the engine solves, what the literature says about its errors, and what the
 tests therefore measure. The original's quirks are not a target (see
-decisions/0003); its measured figures are the tolerances to beat.
+[decisions/0003](decisions/0003-gpu-wgpu-and-cpu-parity.md)); its measured figures are the tolerances to beat.
 
 ## Equation
 
@@ -34,7 +34,7 @@ modified equation (Dablain 1986) cancels leapfrog's leading temporal error
 `dt^4 u_tttt / 12` through `u_tttt = (c^2 L)^2 u`, so time is 4th order like
 space. The engine evaluates it in two passes over the grid: `w = c2 L u`, then
 `u+ = u + ((u - u-) d + (w + c2 L w / 12) h)`, one extra Laplacian and one
-scratch buffer `w` (engine/cpu.rs, engine/stencil.rs); d and h are the
+scratch buffer `w` ([engine/cpu.rs](../crates/wavedude-core/src/engine/cpu.rs), [engine/stencil.rs](../crates/wavedude-core/src/engine/stencil.rs)); d and h are the
 damping's (below).
 
 Damping. A cell of damping factor d per sub-step (`d^(1/n)` of the scene's d
@@ -101,7 +101,7 @@ Mirror pixels (red 0) are Dirichlet cells: c2 = 0, so a mirror cell never
 moves from 0 (sources on it drive nothing). They are thinner than a 7-point
 stencil's reach, so a tap whose path crosses a mirror cell is dropped (it reads
 0, as the mirror does), by a cut byte per cell (which of the cells 1 and 2 away
-along each axis are mirrors; engine/pml.rs, `cuts`); without it a wave leaked
+along each axis are mirrors; [engine/pml.rs](../crates/wavedude-core/src/engine/pml.rs), `cuts`); without it a wave leaked
 through a 2-pixel mirror. The 9-point's diagonal taps would couple the two cells
 beside a mirror line that is only 8-connected (the painter's centre test makes
 one of any mirror thinner than about 1.41 px at 45 degrees) straight across it:
@@ -111,9 +111,9 @@ the operator stays symmetric. A region the mirrors close off then runs a
 principal submatrix of the Laplacian, negative semi-definite as the whole is
 (Stability).
 
-The original's coefficients (spec/30-engine.md) differ: its 9-point kernel is
+The original's coefficients ([spec/30-engine.md](spec/30-engine.md)) differ: its 9-point kernel is
 0.066 / 0.184 / -1, a Laplacian scaled by 0.316 (phase speed 0.562) with heavier diagonals,
-its 4th order the Taylor one. Not carried over (decisions/0003, 0010): both
+its 4th order the Taylor one. Not carried over ([decisions/0003](decisions/0003-gpu-wgpu-and-cpu-parity.md), 0010): both
 stencils here are unscaled Laplacians, so the wave speed is c under either.
 
 ## Stability (CFL)
@@ -132,7 +132,7 @@ Courant limit is `sqrt(limit / M)`:
     DRP 7-point, modified eq.:    sqrt(12 / 12.6316)  = 0.9747
 
 A step is split into n equal sub-steps,
-`n = max(1, ceil(c_max / (limit * 0.95)))` (engine/substeps.rs), c2 scaled by
+`n = max(1, ceil(c_max / (limit * 0.95)))` ([engine/substeps.rs](../crates/wavedude-core/src/engine/substeps.rs)), c2 scaled by
 `1/n^2` and the damping factor taken as `d^(1/n)`. At index 1 both stencils
 take 2 sub-steps; from index 1.08 the DRP takes 1, the 9-point from 1.22. The
 test drives one sub-step at 0.985 and 1.015 of each limit: bounded below,
@@ -148,7 +148,7 @@ from |u| 0.5 to 7.9 at step 25,000 and 1.4e13 at 60,000. With c2 = 0 the cut
 operator of each closed region is a principal submatrix of L, so its
 eigenvalues interlace L's (largest measured 4e-15); open mirror shapes (a dot,
 a segment, a diagonal line, dashes) stay negative definite as well. Tests
-(tests/physics.rs `mirror_cavity_stays_bounded`, tests/gpu.rs `mirrors_hold`):
+([tests/physics.rs](../crates/wavedude-core/tests/physics.rs) `mirror_cavity_stays_bounded`, [tests/gpu.rs](../crates/wavedude-core/tests/gpu.rs) `mirrors_hold`):
 a 32 x 32 mirror cavity after a burst stays at |u| 0.55 (9-point) and 0.66
 (DRP) over steps 25,000 to 30,000 against 0.78 and 0.91 in the first 1000 on
 the CPU, likewise on the GPU; the reviewer's 96 x 96 cavity stays between 0.23
@@ -185,7 +185,7 @@ The DRP stencil alone (exact in time) along an axis: -0.228 % at 4 cells,
 the axis and +1.01 % on the diagonal at 6 cells. The modified equation's own
 error is about s^2/720 of the frequency, 1.4e-5 at 10 cells a wavelength.
 
-Tests (tests/physics.rs):
+Tests ([tests/physics.rs](../crates/wavedude-core/tests/physics.rs)):
 - A standing wave of 10 and 20 cells a wavelength in a reflective box, started
   as the exact mode of the operator with its wall (the product of the axis
   operators' eigenvectors, by inverse iteration: the wall's zeros are not a
@@ -224,13 +224,13 @@ waves). Several sources on one cell add.
 
 Position. A source's position is in cells: a whole number names a cell (its
 centre), a fraction lies between cells. A source at a fractional position drives
-the 2 x 2 cells around it with bilinear shares, its taps (engine/emitters.rs; a
+the 2 x 2 cells around it with bilinear shares, its taps ([engine/emitters.rs](../crates/wavedude-core/src/engine/emitters.rs); a
 tap off the canvas is dropped, one on a mirror cell drives nothing), the discrete
 form of a point source between grid points, and its Amplitude is the swing of the
 field sampled at the position with the same shares. The response of the spread
 source at its own position is `G = sum_ij w_i w_j G(c_i - c_j)` over its taps,
 the Green's function at the lattice offsets (0, 0), (1, 0), (0, 1) and (1, 1)
-(engine/green.rs: the kx integral gains `(r + xi)^m` per root, the ky integrand
+([engine/green.rs](../crates/wavedude-core/src/engine/green.rs): the kx integral gains `(r + xi)^m` per root, the ky integrand
 `cos(l ky)`), and the forcing is normalised by |G| as a cell's is by |G0| below. A
 source at a whole-number position is the one-cell source, bit for bit. The need:
 a fibre core of an even number of cells has its axis on a cell boundary, where a
@@ -254,7 +254,7 @@ on the stencil, the time scheme, the sub-step count and omega; a source in anoth
 medium than index 1 swings its cell by the ratio of the two media's |G0| (at index
 1.25 about 1.5 times A).
 
-G0 (engine/green.rs). Per sub-step of `dt = 1/n` with `x = dt^2 c^2 sigma` (sigma
+G0 ([engine/green.rs](../crates/wavedude-core/src/engine/green.rs)). Per sub-step of `dt = 1/n` with `x = dt^2 c^2 sigma` (sigma
 the stencil's symbol) and `W = 4 sin^2(omega dt / 2)`, a mode answers to the
 forcing as `U = f0 / (c^2 sigma - n^2 W)` under leapfrog and as
 `U = dt^2 f0 (1 - (omega dt)^2/12)(1 - x/12) / (x - x^2/12 - W)` under the modified
@@ -274,7 +274,7 @@ halved and the nodes doubled; Im R tends to the continuum's 1/4 at low frequency
 |G0| is computed once per sub-step count and frequency and cached.
 
 Each sub-step of `dt = 1/n` adds `F = dt^2 f(t_k)` where the scheme takes `A u`,
-at the time `t_k = t + k/n` of its current field (engine/forcing.rs): leapfrog
+at the time `t_k = t + k/n` of its current field ([engine/forcing.rs](../crates/wavedude-core/src/engine/forcing.rs)): leapfrog
 `u+ = u + d (u - u-) + h (A u + F)`, the modified equation `w = A u + F` before
 its second pass, so the neighbours' `c2 L w / 12` carries `dt^4 c^2 L f / 12`. The
 modified equation's own source term `dt^4 f_tt / 12` is taken as
@@ -290,7 +290,7 @@ In a lossless resonator driven at a resonance the field grows without bound, as
 the equation says; the original's blend `u = 0.9 u + 0.1 v` at its cell damped
 the cell and limited it.
 
-Tests (tests/physics.rs):
+Tests ([tests/physics.rs](../crates/wavedude-core/tests/physics.rs)):
 
 - Amplitude: a continuous source of amplitude 0.5 at levels 20, 50, 100 and 200
   (scale 2) on a 512 x 512 canvas with a 32 px CPML rim swings its cell by 0.5
@@ -354,7 +354,7 @@ pass over the grid, times c2, is
 
     (O_x z~ - D2x z~) + chi D2x delta_y + delta_y
 
-in four stages (engine/pml.rs; on the GPU four kernels over the rim): psi of y,
+in four stages ([engine/pml.rs](../crates/wavedude-core/src/engine/pml.rs); on the GPU four kernels over the rim): psi of y,
 delta_y and xi of y, psi of x on z~, then the x part and the sum. The modified
 equation applies the operator twice per sub-step and keeps a second set of
 psi and xi. Storage: x strips of 2 rim columns over the full height, y strips
@@ -374,7 +374,7 @@ chose these.
 Reflection, CPU engine, DRP: a Gaussian wave packet launched at the edge on a
 240 x 240 canvas, the field near the edge after the packet has gone, against
 a reference run on a canvas wide enough not to reflect; the ratio of the two
-fields' energies in dB (tests/physics.rs, `cpml_reflection`). Long: 27 cells
+fields' energies in dB ([tests/physics.rs](../crates/wavedude-core/tests/physics.rs), `cpml_reflection`). Long: 27 cells
 a wavelength; short: 8.
 
 | packet, incidence | 16 cells | 20 cells | 32 cells | Mur ring alone |
@@ -447,7 +447,7 @@ cells inside gave -39.4 and -28.5 dB and diverged likewise. The wall in the
 correction term is a 4th-order-in-time term and costs nothing measurable;
 the residual reflection is Mur's own first-order error.
 
-Test (tests/physics.rs, tests/gpu.rs): a 64 x 48 open canvas of index
+Test ([tests/physics.rs](../crates/wavedude-core/tests/physics.rs), [tests/gpu.rs](../crates/wavedude-core/tests/gpu.rs)): a 64 x 48 open canvas of index
 1.25 with an inside damping band of 6 (its outer ring d = 0) and without one, a
 continuous source, 1 to 4 sub-steps on both stencils, 5000 steps: bounded;
 Example18 over 3000 steps likewise on both engines.
@@ -455,7 +455,7 @@ Example18 over 3000 steps likewise on both engines.
 ## Intensity
 
 The intensity is a two-stage exponential moving average of u^2, advanced once
-per step after its last sub-step (engine/cpu.rs `accumulate`, step.wgsl
+per step after its last sub-step ([engine/cpu.rs](../crates/wavedude-core/src/engine/cpu.rs) `accumulate`, step.wgsl
 `accumulate`), with alpha the retention weight:
 
     s1 <- alpha s1 + (1 - alpha) u^2
@@ -466,7 +466,7 @@ per step after its last sub-step (engine/cpu.rs `accumulate`, step.wgsl
 L the lowest frequency level in use (image levels and object emitters; 100
 without sources). The blend is made where I is read (captures, probes,
 `prepare_frame`). At a driven cell the stages move with the forced value, so a
-source adds no lag of its own. The 16-bit store keeps sqrt(I) (spec/40) for the
+source adds no lag of its own. The 16-bit store keeps sqrt(I) ([spec/40](spec/40-frames-store-render.md)) for the
 half format's range; that is a storage choice, not physics.
 
 For a steady sinusoid of amplitude A, u^2 has the mean A^2/2 and a ripple at
@@ -487,7 +487,7 @@ meaning, saved projects look as they did, and the CLI's truth table derives its
 settle time from the same rule (wavedude-cli truth.rs); a project wanting a steady
 picture raises TimeDecay.
 
-Test (tests/physics.rs `intensity_settles_on_the_mean_square`): a continuous
+Test ([tests/physics.rs](../crates/wavedude-core/tests/physics.rs) `intensity_settles_on_the_mean_square`): a continuous
 source of amplitude 0.5 at level 100, scale 2, TimeDecay 40 (tau = 40 steps) on
 a 192 x 192 canvas with a 32 px rim; sqrt(I) at the source cell, averaged over a
 period, against the cell's fitted swing over sqrt(2): -1.34 % at 5 tau (the
@@ -529,7 +529,7 @@ does not.
 - Mur: Absorbing boundary conditions for the finite-difference approximation
   of the time-domain electromagnetic-field equations, IEEE Trans. EMC 23 (1981).
 
-## Measured (2026-11-06, after decisions/0010 items 1 to 4; tests/physics.rs and tests/gpu.rs)
+## Measured (2026-11-06, after [decisions/0010](decisions/0010-solver-upgrades.md) items 1 to 4; [tests/physics.rs](../crates/wavedude-core/tests/physics.rs) and [tests/gpu.rs](../crates/wavedude-core/tests/gpu.rs))
 
 - Energy over 10,000 steps: 2.2e-7 (9-point), 2.4e-7 (DRP) relative.
 - Sub-steps at c = 1: 2 for both stencils.
@@ -540,7 +540,7 @@ does not.
   (relation 15.94), 15.94 on the DRP (relation 16.02).
 - Slab guide (core 11 cells of index 1.6, cladding 1.45, 24-cell vacuum
   wavelength) fed by a point source: the phase slope along the core 360 to
-  560 cells out matches the mode solver's beta (scene/modes.rs, for the
+  560 cells out matches the mode solver's beta ([scene/modes.rs](../crates/wavedude-core/src/scene/modes.rs), for the
   engine's stencil, time scheme and sub-steps) within 5.8e-5 (9-point) and
   1.0e-4 (DRP).
 - Mirror cavity (2-pixel walls, mirror cells c2 = 0): after 300 steps the
@@ -552,7 +552,7 @@ does not.
 - Fresnel: a packet of 40 cells a wavelength at normal incidence on a slab of
   index 1.5 whose face lies at x = 200.3 (the boundary pixel the effective
   medium of its 0.7 glass share) reflects 0.19897 (9-point) and 0.19825 (DRP)
-  of its amplitude against Fresnel's 0.2 (tests/physics.rs
+  of its amplitude against Fresnel's 0.2 ([tests/physics.rs](../crates/wavedude-core/tests/physics.rs)
   `slab_reflects_the_fresnel_share`, within 2 % required). At 24 cells a
   wavelength 1.6 % and 2.6 % low: the boundary pixel acts as a thin layer of
   intermediate index, an effect of order (k d)^2.
@@ -570,5 +570,5 @@ does not.
 
   The 4th order now takes two passes of a 13-point stencil per sub-step; the
   CPML costs about 0.5 ms (9-point) and 1.0 ms (DRP) of the CPU's time, the
-  grid passes alone 0.93 and 2.10 ms without a rim. docs/measurements.md
+  grid passes alone 0.93 and 2.10 ms without a rim. [docs/measurements.md](measurements.md)
   compares both engines with the C#'s on the same machine.

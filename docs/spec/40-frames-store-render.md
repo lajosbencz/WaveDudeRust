@@ -26,7 +26,7 @@ active non-Amplitude probe, or an export of the intensity).
 
 Run state progression: Created -> Running -> (Paused) -> Completed | Cancelled | Failed (Rust: the typed error, the
 frame store's, the engine's, a thread that could not start, or a panic with its message). A completed run's frames are
-immutable. A simulation edit replaces the frames (Rust: the live run's store is cleared and refilled, spec/30 The live
+immutable. A simulation edit replaces the frames (Rust: the live run's store is cleared and refilled, [spec/30](30-engine.md) The live
 run); an export needs the frames of the project as it is.
 
 Rust's frame store takes frames by index in any order and tracks which are present (a per-frame flag and the
@@ -77,7 +77,7 @@ Capacity = StoredFrames. Per frame one plane per stored layer in order Field, In
 
 Memory budget:
 ```
-available = min(free physical memory, available commit)        (non-Windows: physical/2)
+available = min(free physical memory, available commit)        (Rust: the OS's available memory, sysinfo)
 budget    = max(0, available + reclaimed - 2 GiB)
 if FrameMemoryPercent > 0: budget = min(physical * pct/100, budget)
 reclaimed = bytes of the outgoing run's store (its release is awaited before allocating)

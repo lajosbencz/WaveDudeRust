@@ -30,7 +30,7 @@ Glowing edges (below) are computed from the composed pixels.
 
 ## Per-part painting
 
-Parts are painted as normalised (spec/10 bounds): the formulas below take each value as stored, with no
+Parts are painted as normalised ([spec/10](10-model.md) bounds): the formulas below take each value as stored, with no
 clamps of their own.
 
 ### Bounds
@@ -207,10 +207,10 @@ The first surface with its steps is the front, the second the back, the rim the 
 ### Profiled plates (diffuser, facetted grating)
 
 The plate of `Length` along x' and `Width` across whose front face is `front[i]`, its x' at y' = i - W/2 for
-i = 0..=W (`model/profiled.rs`): `-L/2 + profile[i]` held at most at `L/2 - 1`. A diffuser's profile is the sum of
+i = 0..=W ([`model/profiled.rs`](../../crates/wavedude-core/src/model/profiled.rs)): `-L/2 + profile[i]` held at most at `L/2 - 1`. A diffuser's profile is the sum of
 its components, `amplitude * sin(2 pi y'/lambda + phase)`; a facetted grating's the pattern over `t = frac((y')/pitch)`:
 sawtooth `2t - 1`, square wave `t < 0.5 ? -1 : 1`, sinusoid `sin(2 pi t)`, times the amplitude. The shape
-(`shapes/profiled.rs`) is the polygon of the face, a vertex per pixel, with the three straight edges; the depth is the
+([`shapes/profiled.rs`](../../crates/wavedude-core/src/scene/shapes/profiled.rs)) is the polygon of the face, a vertex per pixel, with the three straight edges; the depth is the
 exact signed distance to it (inside when `|y'| < W/2`, `x' < L/2` and `x' > front(y')`, the face read between its
 pixels), found by the back and the two ends and then the face's segments outward from the one under the point while
 their span in y' can still come nearer. The face's segments are the front, the back the back, the ends the sides; the
@@ -219,7 +219,7 @@ grating's band lies on the back alone. Without a relief the plate paints byte fo
 ### Interference filter
 
 Two shapes (`shapes_for`), painted in order: the plate, a rectangle `Length x Width` with the material, its
-absorption and the band on the back alone; and the stack (`shapes/stack.rs`), the layers of a thickness above 0
+absorption and the band on the back alone; and the stack ([`shapes/stack.rs`](../../crates/wavedude-core/src/scene/shapes/stack.rs)), the layers of a thickness above 0
 side by side along x' from `-L/2 - sum(thickness)` to the plate's front at `-L/2`, the plate's width across, each
 layer its own index, no band, no absorption. The boundaries between layers are inner edges (as the Bragg stack's),
 so a fractional boundary mixes the two indices in its pixel. A glass plate is painted first and the stack over it,
@@ -228,13 +228,13 @@ the plate alone is painted.
 
 ### Meta surface
 
-The plate as the interference filter's, and the pattern (`shapes/meta.rs`): one ridge per cell across the face,
+The plate as the interference filter's, and the pattern ([`shapes/meta.rs`](../../crates/wavedude-core/src/scene/shapes/meta.rs)): one ridge per cell across the face,
 standing in front of the plate from `x' = -L/2 - H` to `-L/2`, centred in its cell of `pitch` and as wide as the
 cell's fill factor times the pitch; the pattern index, no absorption, the band on the ridges' tops alone (the
 front; the flanks and the foot are bare). The depth is the greatest of the three nearby ridges' rectangle distances
 (the cell under y' and its neighbours), exact since the ridges stay in their cells; without a ridge nearby, at
 least the distance to the pattern's box, -1 at most. The fill of cell j at y'_j (the cells laid from one end,
-centred together on the axis, `model/meta.rs`): the delay the design asks, wrapped to a turn with a full turn kept
+centred together on the axis, [`model/meta.rs`](../../crates/wavedude-core/src/model/meta.rs)): the delay the design asks, wrapped to a turn with a full turn kept
 as one (a converging centre cell is solid); the effective index `n_eff = 1 + (delay / 2 pi) lambda / H`; the fill
 `(n_eff^2 - 1) / (n_p^2 - 1)` clamped to 0..1 (the lamellar mean of n^2). Delays: a lens `2 pi - wrap(phi)`
 (converging) or `wrap(phi)` (diverging) with `phi = (2 pi / lambda)(sqrt(F^2 + y^2) - F)`; a prism
@@ -283,8 +283,8 @@ diameter. Resolved: the mount's share is a block's, see "Absorption profiles" be
 Waveguide arms at angle +-atan(slope) about the x' axis; arm distance `| |y| - offset | * cos(atan(slope))`. End coating
 `round_even(sqrt(n), 2)` within `Coating` of a coated end; side absorbers. The geometry (arm offsets, slope, lengths,
 port spacing minimum) comes from a design routine `LogicGateDesign.For(wavelength, core, cladding, spacing, phase)`
-plus `WaveguideModes` (slab-waveguide mode solver). Resolved: the design is specified in `21-logic-gate-design.md`,
-the solver in `22-waveguide-modes.md`, the gate's absorbers under "Absorption profiles" below.
+plus `WaveguideModes` (slab-waveguide mode solver). Resolved: the design is specified in [`21-logic-gate-design.md`](21-logic-gate-design.md),
+the solver in [`22-waveguide-modes.md`](22-waveguide-modes.md), the gate's absorbers under "Absorption profiles" below.
 
 ## Glowing edges (`Rendering/GlowingEdges.cs`)
 
@@ -443,7 +443,7 @@ Examples:
 ### (d) Logic gate absorbers
 
 Side band in the cladding's outer part and, for a switched-off output, the output ramp; strength 64. Exact formulas
-and an example in `21-logic-gate-design.md` ("Absorbers painted").
+and an example in [`21-logic-gate-design.md`](21-logic-gate-design.md) ("Absorbers painted").
 
 ### (e) Damping band and rim (scene, not a part)
 

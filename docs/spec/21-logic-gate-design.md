@@ -2,13 +2,13 @@
 
 The layout of the three logic gate kinds (`XorGate`, `AndGate`, `OrGate`) as geometry, and how it is painted. The
 layout is computed from the part's properties by a design routine that calls the mode solver of
-`22-waveguide-modes.md`. Pointers: `Parts/LogicGateDesign.cs`, `Model/OpticalPart.cs` (`LogicGatePart` and the three
+[`22-waveguide-modes.md`](22-waveguide-modes.md). Pointers: `Parts/LogicGateDesign.cs`, `Model/OpticalPart.cs` (`LogicGatePart` and the three
 kinds), `Parts/PartShape.cs` (`LogicGateShape`), `Parts/GatePortFollower.cs`.
 
 All lengths are pixels (cells), all angles of the waves radians unless marked deg. The part frame (x', y') has its
 origin at the part's centre (X, Y) (the top-left corner of canvas pixel (X, Y)), x' along the gate's axis from the
 inputs (-x') to the outputs (+x'), y' across it, y' < 0 being "upper" (towards smaller canvas y at Angle 0). Part frame
-to canvas: see rotation in `00-overview.md`. Below, x and y mean x' and y'.
+to canvas: see rotation in [`00-overview.md`](00-overview.md). Below, x and y mean x' and y'.
 
 ## What a gate is
 
@@ -79,7 +79,7 @@ entries), which is not observable.
 
 ## Design procedure
 
-`Omega`, `SingleBeta`, `KappaAt`, `mu(beta)` are defined in `22-waveguide-modes.md`. `(int)` truncates, `round_even`
+`Omega`, `SingleBeta`, `KappaAt`, `mu(beta)` are defined in [`22-waveguide-modes.md`](22-waveguide-modes.md). `(int)` truncates, `round_even`
 is half-to-even, `ceil`/`floor` as usual; all arithmetic f64.
 
 ```
@@ -248,7 +248,7 @@ axis of an input port is moved onto the port's new position after a gate edit (U
 Every length scales with the wavelength, through three channels: directly (`L_in`, `L_lead`, `L_out`, `L_ramp`,
 `a_min`, the core cut-off in `w`), through the mode's confinement `gamma` (cladding `c`, bend radius `R`, start gap),
 and through the solver's `beta`, `kappa`, `dbeta` (phase stretch, coupler length). The solver uses the 4th-order
-stencil with the sub-step count of a scene whose fastest pixel has index 1 (`22-waveguide-modes.md`), so the design
+stencil with the sub-step count of a scene whose fastest pixel has index 1 ([`22-waveguide-modes.md`](22-waveguide-modes.md)), so the design
 holds for `Simulation.FourthOrderLaplacian = true` (the default) on a scene with max c2 = 1. The 9-point stencil, a
 background index > 1 (fewer sub-steps), or a source frequency other than `F` miss the design (no warning is given).
 

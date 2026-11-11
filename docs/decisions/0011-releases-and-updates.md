@@ -3,26 +3,26 @@
 Status: accepted, 2026-11-07
 
 - **Versions** from the conventional commits of the whole repository by [git-cliff](https://git-cliff.org)
-  (`cliff.toml`), in `release.yml`: one version for the workspace, a release PR kept open on the default branch
+  ([`cliff.toml`](../../cliff.toml)), in [`release.yml`](../../.github/workflows/release.yml): one version for the workspace, a release PR kept open on the default branch
   (rebuilt as one commit per push, the pattern of skim-rs/skim), and on its merge the commit tagged `v<version>`
   with a draft GitHub release. Only commits that ship something count, dependency updates included, so a security
-  bump of `Cargo.lock` alone releases too. release-plz did this before and was dropped: it attributes commits to
+  bump of [`Cargo.lock`](../../Cargo.lock) alone releases too. release-plz did this before and was dropped: it attributes commits to
   crates by path, so commits outside the app crate (the engine, the lockfile) never reached the changelog or
   triggered a release. `wavedude-core` and `wavedude-export` are ready for crates.io (the name `wave-core` is taken
-  there, hence the `wavedude-` prefix on every crate) but not published yet, the user's choice; `docs/release.md`
+  there, hence the `wavedude-` prefix on every crate) but not published yet, the user's choice; [`docs/release.md`](../release.md)
   says what turning it on takes. The other crates are `publish = false`.
   Everything runs on the workflow's `GITHUB_TOKEN`, no personal token: CI on each release PR waits once for a
   person's approval on the PR page. A GitHub App's token would start it without the click; not chosen, to keep the
   setup free of an app.
 - **Installers** by [cargo-packager](https://github.com/crabnebula-dev/cargo-packager) in the reusable
-  workflow `.github/workflows/package.yml`, which `release.yml` calls: NSIS on Windows x86_64, a universal app and
+  workflow [`.github/workflows/package.yml`](../../.github/workflows/package.yml), which [`release.yml`](../../.github/workflows/release.yml) calls: NSIS on Windows x86_64, a universal app and
   DMG on macOS (both architectures built on `macos-15` and joined with `lipo`; the Intel runner took twice as long
   for a second bundle), AppImage plus a tarball of both programs on Linux x86_64 (built on Ubuntu 22.04 for an older
   glibc). Both programs are in every package. Not signed by Apple or Microsoft (macOS bundles carry an ad-hoc
   signature, without which Apple silicon reports them as damaged): Gatekeeper and SmartScreen warn,
   accepted. Each file gets GitHub attestations instead (Sigstore; free, verifiable with `gh attestation verify`,
   but no operating system checks it): build provenance and CycloneDX SBOMs (`cargo cyclonedx`), signed as the
-  reusable workflow `package.yml` (SLSA Build L3), which builds with no secrets and a read-only token; the
+  reusable workflow [`package.yml`](../../.github/workflows/package.yml) (SLSA Build L3), which builds with no secrets and a read-only token; the
   binaries embed their dependency list (`cargo auditable`). The updater key is only in a later job that compiles
   nothing, so no dependency's build script sees it. No build cache in releases (cache poisoning): every package is
   built from source, tools included, which costs the release about ten minutes. CI's caches are pruned to the
@@ -42,7 +42,7 @@ Status: accepted, 2026-11-07
   the version in a comment (Dependabot moves both), batched: Cargo checked daily, actions weekly, one pull request for minor
   and patch updates, one for major ones, one for security updates, which come as soon as an advisory appears;
   patch and minor updates, security ones included, merge on their own once CI passes
-  (`dependabot-automerge.yml`), major ones wait for a person (telling a major security update apart needs
+  ([`dependabot-automerge.yml`](../../.github/workflows/dependabot-automerge.yml)), major ones wait for a person (telling a major security update apart needs
   fetch-metadata's alert lookup, which needs a personal token). Renovate was the alternative; Dependabot needs no app installed.
   Cargo updates are titled `chore(deps)`, which git-cliff counts, so they lead to a release; actions updates are
   `ci(deps)`, which it skips.

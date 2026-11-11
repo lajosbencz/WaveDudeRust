@@ -1,21 +1,94 @@
 # Comparison with the C# WaveDudeNext
 
-Six projects run through the C# WaveDudeNext CPU engine (`WaveSimulator`, graealex/WaveDudeNext at 08f9e63,
-version 0.1.3) and through the Rust CPU engine. Run of 2026-11-06, after three fixes: the 9-point import
-factor, the source model and the Mur edge (spec/05-deviations.md). It replaces the run that found those
-three regressions.
+Two runs. The sweep of all 33 example projects (2026-11-12, next section) is the current picture. The sections
+after it are the deep dive of 2026-11-06 into six projects, with their reports in the folders here; their
+numbers predate later changes (Example01's gain was 7.6 then and is 7.8 in the sweep), their explanations stand.
 
-## Method
+## Sweep of the 33 examples (2026-11-12)
+
+[`tools/compare-csharp/sweep.sh`](../../tools/compare-csharp/sweep.sh): both CPU engines, 600 steps, fields dumped every 100, WaveDudeNext at 05a0348
+(2026-11-09), the Rust engine at the commit that added this section. Each program paints its own scene and runs
+its own sub-step rule. Reproduce with `tools/compare-csharp/sweep.sh <out-dir>`; the reports are not kept here.
+
+What agrees:
+
+- **Rendering.** Next's own field and intensity planes through our renderer at the file's brightness: 0 pixels
+  differ in all 198 dumped frames. The probe-graph layouts are the same. Every picture difference comes from the
+  simulation, none from the display.
+- **Where the light goes.** The time-averaged intensity correlates at 0.85 to 1.00 at step 600, 0.97 or more in
+  25 of 33.
+- **Probes that see a wave.** 17 of the 19 comparable probes correlate at 0.85 to 1.00.
+- **Painted scenes.** Identical in 15 of 33; elsewhere up to 1.96 % of the pixels differ, all along index edges
+  (sub-cell smoothing, decision 0010; the mirror rule of [spec/05-deviations.md](../spec/05-deviations.md)).
+
+What does not:
+
+- **Brightness.** Next's field takes 4.1 to 14.2 times our brightness (median 7.8) for the same picture. The
+  adapter's fixed conversion of 8 leaves projects from Next 0.37 to 2.09 times as bright as there (luma, median
+  1.0). The cause is the source model (decision 0014): Next's blended source radiates an amplitude that depends on
+  the frequency, the medium, nearby sources, returning waves and its sub-step count.
+- **The instantaneous field.** At step 600 the field Pearson is below 0.8 in 12 of 33 and below 0.7 in 8 (02, 06,
+  09, 17, 20, 22, 28, 33), while the intensity of the same examples stays at 0.85 to 0.99: the patterns agree, the
+  phases drift apart over time (Example20: 0.985 at step 100, 0.639 at 600, intensity 0.971). Example09 differs
+  by design (the true Laplacian's speed, below). For the rest the causes are the two source models' phase and the
+  different dispersion of the DRP and Taylor stencils; the drift has not been split between them per example, and
+  this comparison cannot say which side is closer to the physics. The analytic tests (Correctness measures) can.
+- **Probes that compare nothing.** 23 of 42 probes record nothing in Next within 600 steps (the wave has not
+  arrived), so they test nothing at this run length. Example28's spectrum line (0.25) is at the arriving front:
+  Next's series is 2e4 times weaker there than ours, so ours arrives earlier or stronger; not isolated.
+  Example32's photon counter line correlates at 0.53 at the expected unit ratio (62 against 64); not isolated.
+- **Detectors.** The tool compares a probe's mean intensity, not the detections; the Sensitivity conversion of
+  the adapter is not checked against Next's counts here.
+- **Example24 and Example33.** One painted pixel where a fibre's edge averages a mirror pixel as index 1 raises
+  Next's sub-steps from 2 to 3, and its source amplitude with them by 22 to 31 % (decision 0014).
+
+| example | painted scene differs | field Pearson step 100 / 600 | intensity Pearson 600 | brightness fit C# / Rust | luma Rust / C# | probe Pearson |
+|---|---|---|---|---|---|---|
+| 01 | identical | 0.980 / 0.955 | 0.999 | 7.8 | 0.99 | 1.000 |
+| 02 | identical | 0.841 / 0.657 | 0.985 | 7.6 | 1.45 | none (1 silent in Next) |
+| 03 | identical | 0.730 / 0.790 | 0.967 | 11.6 | 1.75 | none (2 silent in Next) |
+| 04 | identical | 0.983 / 0.968 | 0.986 | 7.8 | 0.99 | 1.000 |
+| 05 | identical | 0.908 / 0.815 | 0.956 | 8.2 | 1.00 | 0.854, 0.980 |
+| 06 | identical | 0.878 / 0.691 | 0.961 | 9.2 | 1.24 | 0.941, 1.000 |
+| 07 | identical | 0.000 / 0.971 | 0.972 | 7.7 | 1.00 | none (2 silent in Next) |
+| 08 | 0.23 % | 0.999 / 0.997 | 1.000 | 4.1 | 0.37 | 0.997, 0.998 |
+| 09 | identical | -0.206 / 0.209 | 0.873 | 5.9 | 0.92 | no probes |
+| 10 | 0.08 % | 0.733 / 0.803 | 0.995 | 7.9 | 1.01 | no probes |
+| 11 | identical | 0.980 / 0.972 | 0.967 | 7.9 | 0.98 | none (1 silent in Next) |
+| 12 | 0.12 % | 0.816 / 0.794 | 0.977 | 14.2 | 1.18 | no probes |
+| 13 | 1.96 % | 0.949 / 0.921 | 0.998 | 6.8 | 0.85 | 0.998 (1 silent in Next) |
+| 14 | 0.15 % | 0.997 / 0.984 | 0.988 | 6.0 | 0.70 | none (2 silent in Next) |
+| 15 | 0.17 % | 0.756 / 0.805 | 0.983 | 13.4 | 1.11 | no probes |
+| 16 | identical | 0.970 / 0.982 | 0.989 | 4.8 | 0.59 | 0.977, 0.961 |
+| 17 | < 0.01 % | 0.833 / 0.357 | 0.930 | 9.3 | 1.16 | none (2 silent in Next) |
+| 18 | 0.61 % | 0.992 / 0.991 | 0.998 | 6.5 | 0.75 | 0.999 |
+| 19 | identical | 0.948 / 0.805 | 0.996 | 9.7 | 1.22 | 1.000 |
+| 20 | 0.06 % | 0.985 / 0.639 | 0.971 | 10.9 | 1.18 | none (2 silent in Next) |
+| 21 | identical | 0.994 / 0.989 | 0.988 | 6.5 | 0.75 | 1.000 (1 silent in Next) |
+| 22 | identical | 0.837 / 0.659 | 0.985 | 7.5 | 1.55 | 0.996 (1 silent in Next) |
+| 23 | 0.36 % | 0.966 / 0.956 | 0.991 | 8.6 | 1.13 | none (2 silent in Next) |
+| 24 | 0.41 % | 0.979 / 0.872 | 0.998 | 6.9 | 0.97 | 1.000 (1 silent in Next) |
+| 25 | 0.14 % | 0.916 / 0.716 | 0.943 | 10.0 | 1.27 | no probes |
+| 26 | 0.15 % | 0.751 / 0.898 | 0.998 | 8.7 | 1.09 | none (1 silent in Next) |
+| 27 | 1.17 % | 0.959 / 0.941 | 0.983 | 7.4 | 0.84 | no probes |
+| 28 | 0.05 % | 0.561 / 0.652 | 0.993 | 11.0 | 1.47 | 0.247 |
+| 29 | identical | 0.753 / 0.762 | 0.996 | 10.9 | 2.09 | no probes |
+| 30 | 0.33 % | 0.940 / 0.895 | 0.977 | 5.1 | 0.56 | no probes |
+| 31 | 1.16 % | 0.992 / 0.963 | 0.999 | 6.6 | 0.77 | none (2 silent in Next) |
+| 32 | identical | 0.979 / 0.969 | 0.975 | 7.8 | 0.99 | 0.533 |
+| 33 | 0.21 % | 0.919 / 0.533 | 0.846 | 10.4 | 1.35 | none (2 silent in Next) |
+
+## Deep dive of 2026-11-06: method
 
 - **Same inputs.** The projects are the Rust repository's copies of the C# `Examples` files (byte for byte
-  the same); 07-xor is `examples/gates/07-xor.wdproj`. Each program
+  the same); 07-xor is [`examples/gates/07-xor.wdproj`](../../examples/gates/07-xor.wdproj). Each program
   paints its own scene from the project's parts, and the two paintings are compared pixel by pixel.
 - **Same step schedule.** 600 steps with the fields dumped every 100 (07-xor: 2592 steps every 432, its own
   run length), probes sampled every step.
 - **Each engine at its own settings.** The C# engine runs its own sub-step rule (3 sub-steps at index 1 on
   the 4th order, 1 on its 9-point kernel), the Rust engine its CFL rule (2 at index 1 on both stencils, 1 in
   07-xor where the C# takes 2). Nothing is forced to match.
-- **Tools.** `tools/compare-csharp` dumps the C# scene, fields, intensities and probe series;
+- **Tools.** [`tools/compare-csharp`](../../tools/compare-csharp/) dumps the C# scene, fields, intensities and probe series;
   `wavedude-cli compare` runs the Rust engine and writes `report.md` with the pictures (C# | Rust | Rust / gain -
   C#) into each folder below.
 
@@ -89,7 +162,7 @@ Each difference follows from a documented decision; none is unexplained.
 
 1. **Source amplitude (gain 4.8 to 9.7).** The Rust source is an additive forcing normalised by the free-space
    lattice Green's function, so a source's Amplitude is the swing of its own cell in free space at index 1
-   (docs/physics.md, Sources). The C# blends the cell, `u = 0.9 u + 0.1 v`, once per step before its
+   ([docs/physics.md](../physics.md), Sources). The C# blends the cell, `u = 0.9 u + 0.1 v`, once per step before its
    sub-steps, so its cell swings far less than the Amplitude and its radiation grows with its sub-step count.
    The gain is therefore a units difference, not an error: it depends on the frequency, the envelope and the
    C#'s sub-step count (9.4 in 07-xor at the C#'s 2 sub-steps against 6.3 to 7.6 at its 3, the ratio of the
@@ -107,13 +180,13 @@ Each difference follows from a documented decision; none is unexplained.
    step-for-step fields are uncorrelated by construction. Level 240 cannot match: at 3.6 px a wavelength both
    kernels are dominated by their dispersion; the Rust run gives 3.3 px and its front travels at the group
    speed, 384 px at step 600 (0.64 of the long-wave speed). Both runs show the grid's X at that level.
-3. **The CPML rim.** The Rust rim is a CPML (decision 0010; -84 to -104 dB in docs/physics.md) where the C#
+3. **The CPML rim.** The Rust rim is a CPML (decision 0010; -84 to -104 dB in [docs/physics.md](../physics.md)) where the C#
    has its quadratic sponge (0.09 % of a long-wave pulse in the C#'s notes). No edge reflection shows in the difference pictures
    of Example01, Example09, Example21 or 07-xor (rims 64, 32, 90, 32): the residual is the front ring and the
    phase offset, nothing along the edges.
 4. **The DRP dispersion.** The 4th-order projects run the DRP stencil with the modified-equation time scheme in
    the Rust, the Taylor weights with leapfrog in the C#. At the wavelengths here (16 to 40 px) the phase
-   speeds differ slightly (docs/physics.md, Numerical dispersion), which shows as the slow growth of the shape error over time (Example21: 11 %
+   speeds differ slightly ([docs/physics.md](../physics.md), Numerical dispersion), which shows as the slow growth of the shape error over time (Example21: 11 %
    to 15 % at equal steps, 5 % to 11 % at the best offset) and the growing offset in 07-xor's guides, whose
    front columns differ by 5 to 43 px at steps 432 to 1296 (a threshold measure on a slow guided front).
 5. **The additive source's near field against the blended one.** The blended C# cell is a damped oscillator
@@ -128,16 +201,16 @@ Each difference follows from a documented decision; none is unexplained.
 
 The previous run diverged from step 160 at the top edge (x 652 to 674, y 0), growing 40 times every 10 steps,
 in the damping band of 32 at an open edge without a rim at 2 sub-steps. With Mur including the edge cell's
-damping and the second and third rings continued linearly (spec/05-deviations.md), the field stays bounded
+damping and the second and third rings continued linearly ([spec/05-deviations.md](../spec/05-deviations.md)), the field stays bounded
 over the whole run: gain 6.40 to 6.42 and energy ratio 41.5 to 42.0 at every dump from 100 to 600, Pearson
-0.991 to 0.994, the intensity at 0.998 by step 600. docs/physics.md records Example18 bounded over 3000 steps
+0.991 to 0.994, the intensity at 0.998 by step 600. [docs/physics.md](../physics.md) records Example18 bounded over 3000 steps
 on both Rust engines, and a corner model with an inside damping band bounded over 5000 steps at 1 to 4
 sub-steps.
 
 ## Correctness measures
 
 What shows the Rust engine is right is not its agreement with the C#, but the analytic tests of
-docs/physics.md (tests/physics.rs, tests/gpu.rs):
+[docs/physics.md](../physics.md) ([tests/physics.rs](../../crates/wavedude-core/tests/physics.rs), [tests/gpu.rs](../../crates/wavedude-core/tests/gpu.rs)):
 
 - **Transparency**: a wave packet crossing a silent source is the same bit for bit.
 - **Superposition**: crossing a weak continuous source, the field minus the source's own is the packet's

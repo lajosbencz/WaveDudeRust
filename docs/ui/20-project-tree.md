@@ -148,7 +148,7 @@ on the target alone.
 ## Properties pane coupling
 
 Selecting a folder shows its label and the item count ("No entries", "1 entry", "N entries"). Selecting the
-root shows the Project form; settings rows show their forms (`30-properties-pane.md`).
+root shows the Project form; settings rows show their forms ([`30-properties-pane.md`](30-properties-pane.md)).
 
 ## Automation ids (keep as test ids)
 

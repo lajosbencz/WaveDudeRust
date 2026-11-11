@@ -66,7 +66,7 @@ Fixed colours, not themed; preview only, never exported.
 
 ## Zoom
 
-Both pictures share one zoom over the fit (`View` in `wavedude-widgets/src/picture.rs`, `PaneStates.view`): the
+Both pictures share one zoom over the fit (`View` in [`wavedude-widgets/src/picture.rs`](../../crates/wavedude-widgets/src/picture.rs), `PaneStates.view`): the
 wheel over a picture zooms in by a factor of 1.25 a notch, out by the same, never below the fit, up to 64x; the
 canvas point under the pointer stays where it is. A middle-button drag pans a zoomed view. The zoomed picture is
 larger than the cell's area and is held so that no area is left empty; the handles, the graph boxes and the
@@ -151,8 +151,8 @@ positions clamped inside the canvas.
 | Tab | Through the handles; focusing a handle selects its item (the tree mirrors without taking focus). |
 | Arrows / Shift+Arrows on a focused handle | 1 / 10 canvas pixels (group if selected with others); lever: 1 / 10 degrees, Right and Up counter-clockwise. A lens surface handle keeps its rim fixed across a run of key presses. |
 | Del on a focused handle or box | Removes its item, or the selection it belongs to. |
-| Right-click / Apps on the picture | Picture context menu (`10-menus-and-shortcuts.md`). |
-| Drop of objects (from a tree) | Paste and place at the drop pixel (`20-project-tree.md`). |
+| Right-click / Apps on the picture | Picture context menu ([`10-menus-and-shortcuts.md`](10-menus-and-shortcuts.md)). |
+| Drop of objects (from a tree) | Paste and place at the drop pixel ([`20-project-tree.md`](20-project-tree.md)). |
 | Drop of a file | Not claimed; the window opens it. |
 
 Tooltips on handles (format strings `Tip*Format`): "<name>: drag to move; with keyboard focus the arrow keys

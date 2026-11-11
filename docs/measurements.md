@@ -33,7 +33,7 @@ A step is not the same work in both:
 - 4th order: both move the wave 1 px a step. The C# runs the Taylor stencil
   in three leapfrog sub-steps (three grid passes), ours the DRP stencil with
   the modified equation in two sub-steps of two passes each (four passes), for
-  the phase and time errors of docs/physics.md.
+  the phase and time errors of [docs/physics.md](physics.md).
 - Ours runs a CPML on the rim, the C# a damping ramp folded into the grid pass.
   On the GPU the CPML is about a third of the 9-point step, and it is work,
   not pass overhead: fusing its four passes into two (each thread recomputing
@@ -69,7 +69,7 @@ and took 6.9 s.
 
 ## The new parts against WaveDude Next 05a0348
 
-2026-11-10. `tools/compare-csharp` on upstream's one-of-every-kind project (`_tools/ui_check/figures.wdproj` as a
+2026-11-10. [`tools/compare-csharp`](../tools/compare-csharp/) on upstream's one-of-every-kind project (`_tools/ui_check/figures.wdproj` as a
 canvas scene, 800x500, 600 steps) and on four 640x400 projects of a 31-element line source before a 240 px part,
 1200 steps, `wavedude-cli compare` with the Rust dumps it now writes beside the report.
 
@@ -205,7 +205,7 @@ and 2.5 at worst, the wait at the picture 3 ms on average and 8 at worst, the
 worst gap between two presented frames 54 ms (the 16 ms state tick quantises
 the 33 ms frames to 32 or 48 ms).
 
-Solver quality after decision 0010 (docs/physics.md has the tables): CPML
+Solver quality after decision 0010 ([docs/physics.md](physics.md) has the tables): CPML
 reflection -74 to -84 dB at 16 to 20 cells and about -104 dB at 32, at normal
 and 45 degree incidence, long and short packets (the Mur ring alone: -17 to
 -42 dB); DRP phase error at 6 cells per wavelength 0.08 percent on the axis
@@ -219,11 +219,11 @@ reflects 0.199 (9-point) and 0.198 (DRP) of the amplitude against Fresnel's
 to 1.4e13 on the DRP while mirror cells moved); nothing crosses a one-pixel
 diagonal mirror line (10 % without the 9-point's diagonal cuts).
 
-Photonic gate demonstrations (examples/gates, both engines): every truth
+Photonic gate demonstrations ([examples/gates](../examples/gates/), both engines): every truth
 table row within 0.1 of its expectation; the fibre XOR sends 0.005 of one
 input's power to Q with both inputs on, the neat OR 0.497, the plain OR 0.994.
 
-Engine correctness fixes found by the C# comparison (docs/comparison): the
+Engine correctness fixes found by the C# comparison ([docs/comparison](comparison/)): the
 Mur edge inside an in-canvas damping band diverged (Example 18) and is stable
 now at any damping and sub-step count through a centred damped scheme; the
 9-point import factor is 0.562 on the frequency scale; the source is an

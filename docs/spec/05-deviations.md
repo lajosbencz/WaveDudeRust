@@ -2,7 +2,7 @@
 
 The spec files describe WaveDude Next as it is. This file lists where the Rust
 implementation departs from it on purpose (the user's decisions, recorded in
-docs/decisions). Where a spec file and this file disagree, this file wins.
+[docs/decisions](../decisions/)). Where a spec file and this file disagree, this file wins.
 
 ## Engine (30, 70)
 
@@ -13,14 +13,14 @@ docs/decisions). Where a spec file and this file disagree, this file wins.
   per axis is not used). The original's 0.066 / 0.184 / -1 kernel is not used.
 - A mirror pixel (red 0) is a fixed zero (c2 = 0), not a cell of index 1000,
   and a stencil tap across a mirror is dropped, the 9-point's diagonals
-  included (docs/physics.md, Spatial stencils and Stability).
+  included ([docs/physics.md](../physics.md), Spatial stencils and Stability).
 - Sub-steps are derived per stencil from the CFL bound with the scene's
-  largest c2 (docs/physics.md), for both stencils. The original's rule
+  largest c2 ([docs/physics.md](../physics.md)), for both stencils. The original's rule
   (4th order only, `ceil(sqrt(maxC2 * 32/3 / 2))`) is not used.
 - Bit-for-bit equality with the C# engines is not a requirement, nor is a ban
   on fused multiply-add. The guarantees in 70 that say "bit-identical to the
   C# engine" (G-01) become "within documented tolerance" and the analytic
-  tests of docs/physics.md are the correctness proof.
+  tests of [docs/physics.md](../physics.md) are the correctness proof.
 - The CPU and GPU engines of this project agree within a documented
   tolerance (relative 1e-4 on the field after 1000 steps, 1e-3 on sqrt(I)).
 - The GPU engine is wgpu, not OpenCL; its work-group shape is its own.
@@ -35,26 +35,26 @@ docs/decisions). Where a spec file and this file disagree, this file wins.
   whole number is the original's cell, a fraction spreads the drive over the 2 x 2
   cells around it with bilinear shares, normalised by the spread source's own
   response, so a source can sit on a fibre axis that lies on a cell boundary
-  (docs/physics.md, Sources). The `.wdproj` adapter writes a whole number without
+  ([docs/physics.md](../physics.md), Sources). The `.wdproj` adapter writes a whole number without
   a point, as the original does, and a fraction with one, which the original's
   reader does not take.
 - The model keeps its physical domain: a source's position is a decimal in cells (the original's an integer
   pixel) and a coating's depth a decimal. A whole position is the original's cell, a fraction spreads the drive over
-  the 2 x 2 cells around it with bilinear shares, normalised by the spread source's own response (docs/physics.md,
+  the 2 x 2 cells around it with bilinear shares, normalised by the spread source's own response ([docs/physics.md](../physics.md),
   Sources). The `.wdproj` adapter writes both as integers, rounded, with one warning naming the object
-  (60-file-formats.md).
-- Sources are a forcing term (decision 0014; docs/physics.md, Sources): each sub-step adds
+  ([60-file-formats.md](60-file-formats.md)).
+- Sources are a forcing term (decision 0014; [docs/physics.md](../physics.md), Sources): each sub-step adds
   `dt^2 f(t_k)` with `f = A / |G0(omega)| e(t) sin(omega t + phi)` where the scheme
   takes `A u`, G0 the free-space lattice Green's function of the engine's
   operator at the source cell, so a source is transparent to passing waves, its
   radiation does not depend on the sub-step count, and Amplitude A is the
   displacement amplitude a continuous source gives its own cell in free space
   (index 1). The original's `SourceOpacity = 0.9` blend once per step
-  (30-engine.md, Sources) is not used: its radiated amplitude grew with the
+  ([30-engine.md](30-engine.md), Sources) is not used: its radiated amplitude grew with the
   sub-step count. A source on a mirror cell drives nothing.
 - A refractive part takes over a mirror pixel only where it covers the pixel's
   centre; the original averages a partly covered mirror pixel as index 1, which
-  opens a hole of glass in the mirror's edge (20-scene-painting.md).
+  opens a hole of glass in the mirror's edge ([20-scene-painting.md](20-scene-painting.md)).
 - Damping is centred: `u+ = u + d (u - u-) + (1 + d)/2 B u` instead of
   `u+ = u + d (u - u-) + B u`; same decay per sub-step, stable for every d in
   [0, 1] (the original's form diverges at d near 0 at two sub-steps of the
@@ -112,7 +112,7 @@ frame indices), where the spec's rule is kept so pictures match.
 
 ## Solver upgrades (decision 0010, 2026-11-06)
 
-Where 30-engine.md and 70-guarantees.md describe the quadratic rim, the Mur
+Where [30-engine.md](30-engine.md) and [70-guarantees.md](70-guarantees.md) describe the quadratic rim, the Mur
 ring as the absorber of a rim, the Taylor 4th-order weights, leapfrog's
 second order in time, the 9-point fallback ring and the 16-sample mean of n at
 a boundary pixel, this project does instead: CPML in the rim (m = 3,
@@ -121,13 +121,13 @@ a rim; the DRP-optimised 7-point stencil with the modified-equation 4th-order
 time scheme for `Stencil::FourthOrder`; the full stencil everywhere with
 mirror cuts that keep the operator symmetric; the area-weighted average of n^2
 at a boundary pixel (exact coverage of a pixel cut by a straight edge). The
-formulas, coefficients and measurements are in docs/physics.md.
+formulas, coefficients and measurements are in [docs/physics.md](../physics.md).
 
-The source definition of docs/physics.md (Sources) radiates 5 to 9 times the
+The source definition of [docs/physics.md](../physics.md) (Sources) radiates 5 to 9 times the
 original's amplitude, so the display brightness defaults are field 1 and
-intensity 1.5 instead of 30 (10-model.md, DisplayLayer). The `.wdproj` adapter
+intensity 1.5 instead of 30 ([10-model.md](10-model.md), DisplayLayer). The `.wdproj` adapter
 converts: a file's `Brightness` is the model's times 8 (the measured gain is 4.8
-to 9.7, docs/comparison), so a file this program writes looks as intended in
+to 9.7, [docs/comparison](../comparison/)), so a file this program writes looks as intended in
 WaveDude Next to within that spread, and one of WaveDude Next's opens at an
 eighth of its number. A detector's `Sensitivity` converts by 64, the square, since
 detections follow the intensity.

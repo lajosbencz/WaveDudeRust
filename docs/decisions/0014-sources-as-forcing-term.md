@@ -33,7 +33,7 @@ source of antenna FDTD (Luebbers and Langdon 1996), a source with an internal re
 ## Decision
 
 - A source is a soft source normalised by the engine's lattice Green's function at its frequency
-  (docs/physics.md, Sources): transparent, its Amplitude the swing of its cell in free space, independent of the
+  ([docs/physics.md](../physics.md), Sources): transparent, its Amplitude the swing of its cell in free space, independent of the
   sub-step count. This is the transparent source's idea in the frequency domain.
 - Next's blend is not replicated. A replica (closed-loop solve per frequency and cell speed) brought 29 of the 33
   examples within 6 % of Next's brightness, but it copies a discretisation artefact; the comparison verifies, it

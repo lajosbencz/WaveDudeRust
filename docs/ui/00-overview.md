@@ -9,12 +9,12 @@ Top to bottom (`MainWindow.xaml`):
 
 | Area | Content |
 |---|---|
-| Menu bar | File, Edit, View, Simulation, Help. Not in the Tab cycle; F10 or Alt enters it. See `10-menus-and-shortcuts.md`. |
+| Menu bar | File, Edit, View, Simulation, Help. Not in the Tab cycle; F10 or Alt enters it. See [`10-menus-and-shortcuts.md`](10-menus-and-shortcuts.md). |
 | Dock host | Tool panes around one fixed centre area. Centre area = the Preview (pictures, timeline, transport bar). |
 | Status bar | 22 px, padding 4,0,16,0, items padded 4,2: last log line (left), run status while a run exists (right, no frame read-out), busy text + 120 x 12 progress bar (far right; a download first: an update, the codec), 16 px resize grip in the corner. |
 
-No toolbar on the window. The Project pane has its own toolbar (`20-project-tree.md`); the Preview has the
-transport bar (`50-timeline-transport.md`).
+No toolbar on the window. The Project pane has its own toolbar ([`20-project-tree.md`](20-project-tree.md)); the Preview has the
+transport bar ([`50-timeline-transport.md`](50-timeline-transport.md)).
 
 Window title: `WaveDude Next - <file>` with `*` appended for unsaved edits. Without a file the suggested
 name of an unsaved import or example stands in; with neither, `Untitled`. Just `WaveDude Next` when no file
@@ -22,7 +22,7 @@ and nothing to suggest (the app name alone with no project; decision 0008).
 File part = file name by default, the full path by a setting (decision 0008).
 
 Window: min 800 x 500 DIP, default 1280 x 800, centred on first start, resizable with grip. Size, position
-and state (never minimised) are persisted (`80-settings.md`). A window is kept inside its monitor's work
+and state (never minimised) are persisted ([`80-settings.md`](80-settings.md)). A window is kept inside its monitor's work
 area at start and after a zoom change.
 
 ## Panes and default arrangement
@@ -136,5 +136,5 @@ Map or drop in the cross-platform port:
 
 - Optional first argument: a `.wdproj`, `configuration.json` (import) or `.wdscheme` file to open.
 - Switches: `--zoom=<f>`, `--greyscale-text`; unknown `--` switches are logged.
-- First start (no settings file): preview quality chosen from the machine (`70-dialogs-and-windows.md`).
+- First start (no settings file): preview quality chosen from the machine ([`70-dialogs-and-windows.md`](70-dialogs-and-windows.md)).
 - Status bar's first text: "Ready", or the last start-up log line.

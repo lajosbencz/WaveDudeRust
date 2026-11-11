@@ -18,7 +18,7 @@ purpose and documented where it belongs:
 
 - P-3: continuing w into the Mur rings was built, measured and reverted.
   It was no better (-39.5 against -39.9 dB) and diverged at a corner on the
-  DRP stencil. w stays 0 on the rings; physics.md (Open edges) has the
+  DRP stencil. w stays 0 on the rings; [physics.md](../physics.md) (Open edges) has the
   numbers.
 - P-4: tau is not derived from omega; that would change the meaning of
   TimeDecay. The rule and its ripple are documented and tested instead.
@@ -100,7 +100,7 @@ P3, documentation debt
 
 ## Physics (P)
 
-P-1 BUG. engine/pml.rs:142-179, scene/scene_data.rs:23. A mirror is a live
+P-1 BUG. [engine/pml.rs:142-179](../../crates/wavedude-core/src/engine/pml.rs#L142-L179), [scene/scene_data.rs:23](../../crates/wavedude-core/src/scene/scene_data.rs#L23). A mirror is a live
 cell with c2 = 1e-6 that keeps its full taps to both sides; only the taps
 crossing it are cut. Dropping a negative-weight tap (a2 = -0.175) lowers the
 diagonal of -L_cut, and the cut operator becomes indefinite: the largest
@@ -109,12 +109,12 @@ eigenvalue of C^(1/2) L_cut C^(1/2) on a 22x22 grid with a 2 px wall is
 the scene of `mirror_cavity_keeps_the_wave_inside` with reflective edges and
 a 3-cycle burst: 9-point bounded at max|u| 0.2 to 0.45 over 60k steps; DRP
 0.52 at 20k, 7.9 at 25k, 4.4e2 at 30k, 1.4e13 at 60k. The test stops at 300
-steps and cannot see it. physics.md:135 ("mirror cells never limit
+steps and cannot see it. [physics.md:135](../physics.md) ("mirror cells never limit
 stability") is false. Fix: c2 = 0 on mirror cells (or hold u = 0) on both
 engines and keep the cuts; each side is then a principal submatrix of L,
 negative semi-definite by interlacing (measured largest eigenvalue 4e-15).
 
-P-2 INACC. cpu.rs:305-334, step.wgsl:15-21, physics.md:105. The 9-point's
+P-2 INACC. cpu.rs:305-334, step.wgsl:15-21, [physics.md:105](../physics.md). The 9-point's
 diagonal taps couple (i+1,j) and (i,j+1) straight across an 8-connected
 mirror line, which the painter's centre test produces from any mirror
 thinner than about 1.41 px at 45 degrees. Leapfrog model, 600 steps: 2.5 %
@@ -128,13 +128,13 @@ Mur-extrapolated, so at the edge the correction term sees a wall. Fix:
 continue w into the rings as u is (Mur on ring 1, linear on 2 and 3), or
 document and measure Mur's reflection with and without.
 
-P-4 INACC. physics.md:375-379 against cpu.rs:247-248, 417-419, 491-497. The
+P-4 INACC. [physics.md:375-379](../physics.md) against cpu.rs:247-248, 417-419, 491-497. The
 docs give a one-stage EMA; the code runs two stages with alpha as the
 retention weight, shows 0.5 s1 + 0.5 s2, and sets tau = TimeDecay * 100 /
 lowest level, which ignores source_frequency_scale (at level 100, scale 2,
 tau is about 1.25 periods, leaving a few percent of 2-omega ripple). The
 test "converges to A^2/2 after 5 time constants" named in the docs does not
-exist. spec/30-engine.md describes the code correctly. Fix: rewrite the
+exist. [spec/30-engine.md](../spec/30-engine.md) describes the code correctly. Fix: rewrite the
 section, add the test, consider deriving tau from omega.
 
 P-5 INACC. painter.rs:161, 169-171. `existing` reads red 0 as n = 1 and any
@@ -143,7 +143,7 @@ a mirror opens holes in it; red 1..99 is read as red/100 (n < 1) while the
 engine clamps to 1. Fix: keep the mirror unless the part covers most of the
 pixel; `existing = max(1, red/100)`.
 
-P-6 INACC. scene/modes.rs:32-41. The mode solver averages n over 4 samples
+P-6 INACC. [scene/modes.rs:32-41](../../crates/wavedude-core/src/scene/modes.rs#L32-L41). The mode solver averages n over 4 samples
 per row; the painter averages n^2 with exact coverage. Boundary rows of
 odd-width cores can round to a different red level than painted. Fix:
 average n^2 in `rows`.
@@ -161,7 +161,7 @@ P-8 NOTE. cpu.rs:73-76. Mur corner rings use the diagonal cell as "inner"
 with a unit-distance formula; only the 9-point's diagonal tap reads them.
 
 P-9 NOTE, doc slips. modes.rs module doc says A's eigenvalue is -s/S^2 (it
-is -s; the Om formula after it is right). 05-deviations.md:9-11 still lists
+is -s; the Om formula after it is right). [05-deviations.md:9-11](../spec/05-deviations.md) still lists
 the Taylor weights as the 4th order. Decision 0010 says the DRP is optimised
 over 4 to 10 cells per wavelength; the code minimises over k in [0, pi/2].
 Decision 0010 promises a Fresnel slab test at a non-integer interface; it
@@ -178,29 +178,29 @@ temporal dispersion; the n^2 area average is the TM case of Farjadpour
 
 ## wavedude-core (C)
 
-C-1 PERF/DESIGN. engine/mod.rs:40, run/simulation.rs:322, gpu/mod.rs:435,
+C-1 PERF/DESIGN. [engine/mod.rs:40](../../crates/wavedude-core/src/engine/mod.rs#L40), [run/simulation.rs:322](../../crates/wavedude-core/src/run/simulation.rs#L322), [gpu/mod.rs:435](../../crates/wavedude-core/src/engine/gpu/mod.rs#L435),
 965. The trait has only a synchronous `capture_frame`; the GPU's pipelined
 `begin_capture`/`finish_capture` are inherent and used only by tests. Every
 production capture stalls the stepping thread. Fix: a two-phase capture on
 the trait (an opaque token keeps it object-safe); the CPU implements `begin`
 eagerly.
 
-C-2 PERF. capture.rs:98, gpu/mod.rs:503-507, store.rs:247-252. Every frame
+C-2 PERF. capture.rs:98, [gpu/mod.rs:503-507](../../crates/wavedude-core/src/engine/gpu/mod.rs#L503-L507), store.rs:247-252. Every frame
 allocates fresh planes that the writer copies into a store block and drops:
 one allocation and one extra 8 MB copy per full-HD frame; the scratch frame
 does the same. Fix: `capture_into(&mut self, shape, out: &mut Snapshot)` and
 recycle snapshots through a return channel, or hand the store's block to the
 capture.
 
-C-3 DRY, drift risk. capture.rs:14-28 and render/lut.rs:175-190 both define
+C-3 DRY, drift risk. capture.rs:14-28 and [render/lut.rs:175-190](../../crates/wavedude-core/src/render/lut.rs#L175-L190) both define
 `field_index`, `intensity_root_index`, `intensity_index` (f16 vs f32, NaN
 ordering differs); capture.wgsl is a third copy. `capture::plane` and
 `block_means` duplicate `plane_rows` and are only used by tests. Fix: one
 set in `capture` taking f16, lut calls it; `plane` behind `#[cfg(test)]`.
 
-C-4 DRY. io/wdproj.rs names every attribute four times: read (125-325),
+C-4 DRY. [io/wdproj.rs](../../crates/wavedude-core/src/io/wdproj.rs) names every attribute four times: read (125-325),
 write (469-757), `decls()` DTD (879-1080) and the `"Type.Prop"` keys of
-model/ranges.rs; defaults restated on read and write. Fix: one declarative
+[model/ranges.rs](../../crates/wavedude-core/src/model/ranges.rs); defaults restated on read and write. Fix: one declarative
 table per type generating reader, writer and DTD, or at least derive
 `decls()` from the writer on a default-plus-every-optional project.
 
@@ -211,18 +211,18 @@ files silently. Fix: parse to `serde_json::Value`, `migrate(v, from)` per
 version, then `from_value`; explicit `rename` on persisted structs; read
 parts as `Vec<Value>` and skip unknown kinds with a note.
 
-C-6 DRY. cpu.rs:541-548 and gpu/mod.rs:834-840 copy the `try_replace_scene`
-predicate; cpu.rs:525 and gpu/mod.rs:802 the emitter filter; the intensity
+C-6 DRY. cpu.rs:541-548 and [gpu/mod.rs:834-840](../../crates/wavedude-core/src/engine/gpu/mod.rs#L834-L840) copy the `try_replace_scene`
+predicate; cpu.rs:525 and [gpu/mod.rs:802](../../crates/wavedude-core/src/engine/gpu/mod.rs#L802) the emitter filter; the intensity
 blend `(s1*0.5+s2*0.5)*scale` appears four times. Fix:
 `SceneData::same_grid`, `Emitter::inside`, one `blend`.
 
-C-7 PERF/API. engine/types.rs, scratch.rs:200. `RunSpec.scene` is an Arc,
+C-7 PERF/API. [engine/types.rs](../../crates/wavedude-core/src/engine/types.rs), scratch.rs:200. `RunSpec.scene` is an Arc,
 but both constructors take `SceneData` by value and `try_replace_scene`
 clones: every build deep-copies c2 and d (tens of MB at full HD). A failing
 `GpuEngine::new` consumes the scene, so wavedude-app (live.rs:865) clones it
 first for the CPU fallback. Fix: engines hold `Arc<SceneData>`.
 
-C-8 FUTURE. gpu/context.rs:27-33, gpu/mod.rs:1245-1258. Device loss and
+C-8 FUTURE. [gpu/context.rs:27-33](../../crates/wavedude-core/src/engine/gpu/context.rs#L27-L33), [gpu/mod.rs:1245-1258](../../crates/wavedude-core/src/engine/gpu/mod.rs#L1245-L1258). Device loss and
 mapping failure are `expect` panics; the context is a process-wide
 `OnceLock`, so a lost device is never recreated; `GpuError` carries a
 String. Fix: `set_device_lost_callback` sets a flag; context in
@@ -234,7 +234,7 @@ C-9 DESIGN. simulation.rs:278, 31. `step_all -> Result<bool, String>`,
 the typed errors. Fix: `enum RunError { Store, Engine, Panic }` with
 thiserror, `Failed(Arc<RunError>)`.
 
-C-10 DRY. parts.rs:6-9, shapes/mod.rs:31, ranges.rs:42, 78-79: `MAX_COATING`,
+C-10 DRY. parts.rs:6-9, [shapes/mod.rs:31](../../crates/wavedude-core/src/scene/shapes/mod.rs#L31), ranges.rs:42, 78-79: `MAX_COATING`,
 `INDEX_MIN`, `INDEX_MAX`, `MAX_ABSORPTION_RAMP` repeat `ranges`; normalize.rs
 hardcodes fallbacks that duplicate `Default` (Source 100.0 at :102, Scene
 1.0 at :50). Fix: consts from `ranges`, `let d = Source::default()`.
@@ -256,7 +256,7 @@ C-15 IDIOM. types.rs:232, probes.rs:90-95. `Vec<Vec<f32>>` readings and
 profiles: one allocation per profile per frame. Fix: flat Vec plus offsets.
 
 C-16 NOTE. `ProbeCells.cells` exposes the padded layout; the GPU packs
-`c | 1<<31` (gpu/mod.rs:821) with nothing tying it to the size ranges; step
+`c | 1<<31` ([gpu/mod.rs:821](../../crates/wavedude-core/src/engine/gpu/mod.rs#L821)) with nothing tying it to the size ranges; step
 types churn (`u64`, `u32`, `AtomicU64` read as u32). Fix: `u32::try_from`
 or a debug assert; one step type.
 
@@ -266,7 +266,7 @@ it. Fix: a small `SceneEdges` struct; serialise a borrowed view or
 `#[serde(skip)]` on `image_data`.
 
 Done well: immutable Arc-shared RunSpec; WGSL constants generated from the
-Rust `StencilCoefficients` with tests/gpu.rs cross-checking the engines;
+Rust `StencilCoefficients` with [tests/gpu.rs](../../crates/wavedude-core/tests/gpu.rs) cross-checking the engines;
 `plane_rows` with `for_each_init` scratch rows fusing mean, root and
 conversion; the CPU stencil on row slices; FrameStore's single-writer
 many-reader design with testable `Budget`; thiserror at the boundary;
@@ -363,7 +363,7 @@ capabilities; the CLI's tests decode what they export.
 
 ## wavedude-widgets and wavedude-app (A)
 
-A-1 PERF. preview/mod.rs:248-261, 281-285, polled every 4 ms (:537).
+A-1 PERF. [preview/mod.rs:248-261](../../crates/wavedude-app/src/ui/preview/mod.rs#L248-L261), 281-285, polled every 4 ms (:537).
 `SceneInputs::of` clones the whole `Scene`, image bytes included, and all
 parts 250 times a second and compares them: with a 5 MB image about 1.25
 GB/s of copying while idle. Fix: key the watch on scene and parts revision
@@ -382,7 +382,7 @@ image byte, a 5 MB PNG becomes about 160 MB), repeated per playback frame
 while Scene is selected, then cloned twice more (:342, :359). Fix: remove
 `image_data` as commands.rs:599 does; `Snapshot.json` as `Rc<Value>`.
 
-A-4 BUG. preview/mod.rs:184 vs export_dialog.rs:383-386 and
+A-4 BUG. [preview/mod.rs:184](../../crates/wavedude-app/src/ui/preview/mod.rs#L184) vs export_dialog.rs:383-386 and
 properties_forms.rs:69-75. The preview resolves schemes through
 `SchemeStore::default()` (no user schemes), the export loads the user
 folder: a user scheme is grey in the preview and coloured in the export;

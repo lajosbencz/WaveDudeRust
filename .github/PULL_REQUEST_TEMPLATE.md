@@ -12,7 +12,7 @@
 
 - [ ] One concern, no unrelated commits.
 - [ ] A test for the behaviour change (unit, headless, physics or snapshot); `insta` changes explained.
-- [ ] `docs/spec` or `docs/ui` updated; the manual when users see it; new strings in all four tables.
+- [ ] [`docs/spec`](../docs/spec/) or [`docs/ui`](../docs/ui/) updated; the manual when users see it; new strings in all four tables.
 - [ ] A divergence has its row and its decision; a performance claim its measurement; a new dependency its reason.
-- [ ] Code follows `docs/conventions.md`; comments state the present; ASCII only.
+- [ ] Code follows [`docs/conventions.md`](../docs/conventions.md); comments state the present; ASCII only.
 - [ ] An assistant was involved in writing this: yes / no. I understand every line either way.

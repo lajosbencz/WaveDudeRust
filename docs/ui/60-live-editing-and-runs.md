@@ -2,8 +2,8 @@
 
 Pointers: `MainWindow.Live.cs`, `MainWindow.Simulation.cs`, `MainWindow.History.cs`,
 `MainWindow.Clipboard.cs`, `MainWindow.SceneImageWatch.cs`, `Dialogs/MemoryWarningWindow.xaml(.cs)`,
-core: `ProjectWatcher`, `ProjectHistory`, `ProjectClipboard`. Rust: `wavedude-app-state/src/live.rs` (the
-controller), `wavedude-core/src/run/worker.rs` (the live run), decision 0012.
+core: `ProjectWatcher`, `ProjectHistory`, `ProjectClipboard`. Rust: [`wavedude-app-state/src/live.rs`](../../crates/wavedude-app-state/src/live.rs) (the
+controller), [`wavedude-core/src/run/worker.rs`](../../crates/wavedude-core/src/run/worker.rs) (the live run), decision 0012.
 
 ## Edit classes
 
@@ -24,7 +24,7 @@ The status bar's run line says Running while frames are made, Stopped when some 
 
 ## The live run
 
-One worker, one engine, one store (`wavedude-core/src/run/worker.rs`). The app publishes a goal: the project's
+One worker, one engine, one store ([`wavedude-core/src/run/worker.rs`](../../crates/wavedude-core/src/run/worker.rs)). The app publishes a goal: the project's
 spec (scene, sources, parts, probes, quality), the position, how much is wanted (the position's frame alone,
 or every frame) and whether the user paused. The run converges on it, without timers:
 
@@ -115,7 +115,7 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
 - Copy writes objects as their project-file XML fragment, both in the app's own clipboard format and as plain
   text: a source copied can be pasted into a text editor, edited, copied back and pasted into the project.
 - Paste accepts the app format or plain text that parses as such a fragment.
-- A tree drag carries the same text, nothing else (see `20-project-tree.md` for targets).
+- A tree drag carries the same text, nothing else (see [`20-project-tree.md`](20-project-tree.md) for targets).
 - Name clash on paste: " copy" appended. Composite emitters re-derived from the target's seed.
 - Clipboard checked once per clipboard change (cheap enable state for Paste).
 

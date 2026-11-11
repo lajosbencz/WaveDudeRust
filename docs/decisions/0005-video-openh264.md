@@ -33,7 +33,7 @@ built:
 - "OpenH264 Video Codec provided by Cisco Systems, Inc." shown where the user
   controls it: on the startup page, above the export dialog's check box, and by every
   `wavedude-cli openh264` action.
-- Cisco's licence text (`crates/wavedude-export/assets/OpenH264-BINARY_LICENSE.txt`,
+- Cisco's licence text ([`crates/wavedude-export/assets/OpenH264-BINARY_LICENSE.txt`](../../crates/wavedude-export/assets/OpenH264-BINARY_LICENSE.txt),
   verbatim) with the licensing information: the About dialog and `wavedude-cli
   openh264 license`.
 

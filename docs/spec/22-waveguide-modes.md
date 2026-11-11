@@ -5,7 +5,7 @@ callers are in `Parts/LogicGateDesign.cs`. Units: pixels (cells), steps, radians
 
 ## Where it is used
 
-Only by the logic gate design (`21-logic-gate-design.md`): the single-guide propagation constant `beta` (core width
+Only by the logic gate design ([`21-logic-gate-design.md`](21-logic-gate-design.md)): the single-guide propagation constant `beta` (core width
 check, cladding decay `gamma`, bend radius), the phase section's `beta_p`, and the coupling constant `kappa` of two
 guides (straight coupler and S-bends). Nothing else calls it: not the fibre (its core and cladding are painted from
 the part's own diameters, no mode is computed), not the zone plate, not sources, not the engine. A Rust port needs it

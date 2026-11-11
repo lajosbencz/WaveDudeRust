@@ -23,7 +23,7 @@ project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wd
   user looks at; an edit replaces the frames without a stale run or a timer.
 - 53 example projects grouped by topic, among them the photonic logic gates
   from [Huygens Optics](https://www.youtube.com/@HuygensOptics)' video with
-  measured truth tables (`examples/gates`).
+  measured truth tables ([`examples/gates`](examples/gates/)).
 - Self-updating releases with build provenance and SBOM attestations.
 
 ## Workspace
@@ -64,7 +64,7 @@ reasoning; what warrants a new one is in
 ## Releases
 
 Installers for Windows (NSIS), macOS (universal app and DMG) and Linux
-(AppImage, and a tarball with an `install.sh` for the menu entry, icons and
+(AppImage, and a tarball with an [`install.sh`](crates/wavedude-app/assets/linux/install.sh) for the menu entry, icons and
 file types) are on the GitHub releases
 page, unsigned by Apple and Microsoft, so Gatekeeper and SmartScreen warn at
 the first start. Releases are immutable once published. Each package carries
