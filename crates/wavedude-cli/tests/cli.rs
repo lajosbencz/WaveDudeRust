@@ -95,6 +95,18 @@ fn run_writes_pictures_of_both_layers() {
 }
 
 #[test]
+fn steps_outside_the_model_range_are_refused() {
+	let dir = tempfile::tempdir().unwrap();
+	let project = example(dir.path());
+	let out = dir.path().join("out");
+	for (command, steps) in [("probes", "0"), ("export", "0"), ("run", "20000000")] {
+		let output = cli(&[command, project.to_str().unwrap(), "--out", out.to_str().unwrap(), "--steps", steps]);
+		assert!(!output.status.success(), "{command} --steps {steps}");
+		assert!(String::from_utf8_lossy(&output.stderr).contains("is outside 1..=10000000"), "{command}");
+	}
+}
+
+#[test]
 fn probes_write_csv() {
 	let dir = tempfile::tempdir().unwrap();
 	let project = example(dir.path());

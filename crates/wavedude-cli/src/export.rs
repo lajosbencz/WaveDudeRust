@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
+use wavedude_core::sync::lock;
 
 use anyhow::{Result, anyhow, bail};
 use clap::Args as ClapArgs;
@@ -12,7 +13,7 @@ use wavedude_core::run::{FrameStore, PreviewQuality, RunError, RunEvent, Simulat
 use wavedude_export::{ExportFormat, ExportLayers, ExportPlan, ExportState, FrameSource};
 
 use crate::project::load;
-use crate::run::{EngineArgs, simulate_with};
+use crate::run::{EngineArgs, parse_steps, simulate_with};
 
 #[derive(ClapArgs)]
 pub(crate) struct Args {
@@ -28,7 +29,7 @@ pub(crate) struct Args {
 	#[arg(long, value_enum, default_value = "field")]
 	layers: ExportLayers,
 	/// Steps to run instead of the project's.
-	#[arg(long)]
+	#[arg(long, value_parser = parse_steps)]
 	steps: Option<u32>,
 	/// In point in steps (default: the project's).
 	#[arg(long, conflicts_with = "still")]
@@ -79,13 +80,13 @@ struct Signal {
 
 impl Signal {
 	fn notify(&self) {
-		let _guard = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+		let _guard = lock(&self.lock);
 		self.cond.notify_all();
 	}
 
 	/// Waits until `done` holds; the run's events wake it, a timeout covers a write between two events.
 	fn wait_until(&self, mut done: impl FnMut() -> bool) {
-		let mut guard = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+		let mut guard = lock(&self.lock);
 		while !done() {
 			guard = self
 				.cond

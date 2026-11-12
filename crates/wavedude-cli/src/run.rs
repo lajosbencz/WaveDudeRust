@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
 use wavedude_core::engine::{self, SampleFormat, SampleKind, WaveEngine};
 use wavedude_core::io::schemes::SchemeStore;
-use wavedude_core::model::{DisplayLayer, Layer, Project};
+use wavedude_core::model::{DisplayLayer, Layer, Project, ranges};
 use wavedude_core::render::frame::{render_half, render_indexed};
 use wavedude_core::render::lut::{HalfTable, Palette};
 use wavedude_core::run::{Budget, EventSink, FrameStore, PreviewQuality, RunEvent, RunSpec, SimulationRun};
@@ -44,7 +44,7 @@ pub(crate) struct RunArgs {
 	#[arg(long)]
 	out: PathBuf,
 	/// Steps to run instead of the project's.
-	#[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+	#[arg(long, value_parser = parse_steps)]
 	steps: Option<u32>,
 	/// Quality the frames are stored and coloured at.
 	#[arg(long, value_enum, default_value = "default")]
@@ -67,10 +67,21 @@ pub(crate) struct ProbesArgs {
 	#[arg(long)]
 	out: PathBuf,
 	/// Steps to run instead of the project's.
-	#[arg(long)]
+	#[arg(long, value_parser = parse_steps)]
 	steps: Option<u32>,
 	#[command(flatten)]
 	engine: EngineArgs,
+}
+
+/// A step count the model accepts.
+pub(crate) fn parse_steps(text: &str) -> Result<u32, String> {
+	let steps = text.parse::<u32>().map_err(|e| e.to_string())?;
+	let range = ranges::SIM_STEPS;
+	if range.contains(f64::from(steps)) {
+		Ok(steps)
+	} else {
+		Err(format!("{steps} is outside {}..={}", range.min, range.max))
+	}
 }
 
 fn parse_range(text: &str) -> Result<Range<u32>, String> {

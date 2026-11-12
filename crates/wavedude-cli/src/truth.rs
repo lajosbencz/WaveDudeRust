@@ -10,7 +10,7 @@ use wavedude_core::model::{GateKind, Measurement, PartKind, Probe, ProbeKind, Pr
 use wavedude_core::run::PreviewQuality;
 
 use crate::project::load;
-use crate::run::{EngineArgs, finish, simulate};
+use crate::run::{EngineArgs, finish, parse_steps, simulate};
 
 /// Steps averaged at the end of a run: eight periods at level 50 (32 steps a period).
 pub(crate) const DEFAULT_SETTLE: u32 = 256;
@@ -33,7 +33,7 @@ pub(crate) struct Args {
 	/// Project file with sources named A and B (each with an optional `<name> lower` partner) and line probes named Input and Output, A's and Q's arm in the upper half.
 	project: PathBuf,
 	/// Steps of each run (default: derived from the canvas width, the core index and the intensity EMA).
-	#[arg(long)]
+	#[arg(long, value_parser = parse_steps)]
 	steps: Option<u32>,
 	/// Steps averaged at the end of each run.
 	#[arg(long, default_value_t = DEFAULT_SETTLE, value_parser = clap::value_parser!(u32).range(1..))]
