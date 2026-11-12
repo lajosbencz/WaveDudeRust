@@ -10,11 +10,11 @@ const GAP_PX = 4;
 // Height of the layer name above each picture, with room for the edge line under it.
 const CAPTION_PX = 18;
 
-const $ = (id) => document.getElementById(id);
-const ui = {
-	example: $("example"), file: $("file"), tier: $("tier"), gpu: $("gpu"), status: $("status"),
-	stage: $("stage"), play: $("play"), seek: $("seek"), position: $("position"),
-};
+const ui = Object.fromEntries(
+	["about", "example", "file", "tier", "gpu", "status", "stage", "play", "seek", "position"]
+		.map((id) => [id, document.getElementById(id)]),
+);
+ui.about.showModal();
 
 /** The edge line's width in device pixels on a screen of `ratio`: whole, at least one. */
 const hairline = (ratio) => Math.max(1, Math.round(ratio));

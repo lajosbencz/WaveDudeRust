@@ -67,3 +67,10 @@ figcaption { color: var(--muted); font-size: 12px; line-height: 16px; }
 #seek { flex: 1; min-width: 0; }
 #position { min-width: 11ch; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 #position.pending { opacity: 0.55; }
+
+a { color: var(--accent); }
+dialog { max-width: 32em; border: 1px solid var(--line); border-radius: 8px; background: var(--bar); color: inherit; }
+dialog h1 { margin: 0 0 8px; font-size: 20px; }
+dialog form { display: flex; flex-direction: column; }
+dialog button { align-self: flex-end; min-width: 5em; }
+dialog::backdrop { background: rgb(0 0 0 / 0.5); }
