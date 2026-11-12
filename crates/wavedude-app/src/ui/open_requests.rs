@@ -2,7 +2,8 @@
 //! as `application:openURLs:` on the application delegate, never on the command line.
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
+use wavedude_core::sync::lock;
 
 /// Paths waiting for the window; the last one wins, the app holds one project.
 #[derive(Clone, Default)]
@@ -10,12 +11,12 @@ pub struct OpenRequests(Arc<Mutex<Vec<PathBuf>>>);
 
 impl OpenRequests {
 	pub fn push(&self, path: PathBuf) {
-		self.0.lock().unwrap_or_else(PoisonError::into_inner).push(path);
+		lock(&self.0).push(path);
 	}
 
 	/// The last path asked for since the previous call.
 	pub fn take_last(&self) -> Option<PathBuf> {
-		std::mem::take(&mut *self.0.lock().unwrap_or_else(PoisonError::into_inner)).pop()
+		std::mem::take(&mut *lock(&self.0)).pop()
 	}
 }
 

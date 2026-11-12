@@ -5,6 +5,7 @@
 //! while the program runs, then installed by `main` after a restart that goes through the unsaved-edits question
 //! like any exit ([`Pending`]). Threads: the UI thread; the check and the download run on threads of their own.
 
+use anyhow::Context;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -63,17 +64,13 @@ pub fn check(cx: &Cx, quiet: bool) {
 		return;
 	}
 	let (tx, rx) = oneshot::channel();
-	let spawned = std::thread::Builder::new().name("update-check".into()).spawn(move || {
+	let started = std::thread::Builder::new().name("update-check".into()).spawn(move || {
 		let result = config().and_then(|c| check_update(current(), c).map_err(|e| e.to_string()));
 		let _ = tx.send(result);
 	});
-	if let Err(e) = spawned {
-		tracing::error!("the update check could not start: {e}");
-		return;
-	}
 	let cx = cx.clone();
 	spawn_in_window(async move {
-		let Ok(result) = rx.await else { return };
+		let result = answer(started, rx).await;
 		let s = cx.strings();
 		match result {
 			Ok(Some(update)) => {
@@ -122,19 +119,20 @@ impl Pending {
 
 	/// After the window closed: installs a package whose restart was confirmed and starts the new version. The
 	/// Windows installer ends this process itself and starts the program when done.
-	pub fn install(&self) {
-		let Some(ready) = self.0.borrow_mut().take().filter(|r| r.restart) else { return };
+	pub fn install(&self) -> anyhow::Result<()> {
+		let Some(ready) = self.0.borrow_mut().take().filter(|r| r.restart) else { return Ok(()) };
 		let version = ready.update.version.clone();
 		tracing::info!("installing update {version}");
-		if let Err(e) = ready.update.install(ready.bytes) {
-			tracing::error!("the update {version} could not be installed: {e}");
-			return;
-		}
+		ready
+			.update
+			.install(ready.bytes)
+			.map_err(|e| anyhow::anyhow!("the update {version} could not be installed: {e}"))?;
 		tracing::info!("update {version} installed");
 		let program = std::env::var_os("APPIMAGE").map(Into::into).map_or_else(std::env::current_exe, Ok);
-		if let Err(e) = program.and_then(|p| std::process::Command::new(p).spawn()) {
-			tracing::error!("the new version could not be started: {e}");
-		}
+		program
+			.and_then(|p| std::process::Command::new(p).spawn())
+			.with_context(|| format!("the update {version} is installed, but it could not be started"))?;
+		Ok(())
 	}
 }
 
@@ -144,19 +142,15 @@ fn install(cx: &Cx, update: &Update) {
 	let version = update.version.clone();
 	let download = downloads::start(cx, cx.strings().format("StatusDownloadingUpdateFormat", &[&version]));
 	let (tx, rx) = oneshot::channel();
-	let spawned = std::thread::Builder::new().name("update-download".into()).spawn(move || {
+	let started = std::thread::Builder::new().name("update-download".into()).spawn(move || {
 		let bytes = update.download_extended(|bytes, total| download.chunk(bytes, total), || {});
 		let _ = tx.send(bytes.map(|b| (update, b)).map_err(|e| e.to_string()));
 	});
-	if let Err(e) = spawned {
-		tracing::error!("the update download could not start: {e}");
-		return;
-	}
 	tracing::info!("downloading update {version}");
 	let cx = cx.clone();
 	// Not `spawn`: that task would end with the confirm dialog, which closes before the download does.
 	spawn_in_window(async move {
-		let Ok(result) = rx.await else { return };
+		let result = answer(started, rx).await;
 		let s = cx.strings();
 		match result {
 			Ok((update, bytes)) => {
@@ -172,4 +166,13 @@ fn install(cx: &Cx, update: &Update) {
 			}
 		}
 	});
+}
+
+/// What the thread `started` sends on `rx`: its failure to start or to answer is an error like its own.
+async fn answer<T>(
+	started: std::io::Result<std::thread::JoinHandle<()>>,
+	rx: oneshot::Receiver<Result<T, String>>,
+) -> Result<T, String> {
+	started.map_err(|e| format!("the thread could not start: {e}"))?;
+	rx.await.map_err(|_| "the thread ended without an answer".to_owned())?
 }

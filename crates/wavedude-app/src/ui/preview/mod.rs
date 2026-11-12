@@ -15,8 +15,9 @@ pub mod presenter;
 pub mod transport;
 
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use wavedude_core::sync::lock;
 
 use bytes::Bytes;
 use freya::elements::image::ImageHandle;
@@ -377,7 +378,7 @@ fn draw_scenes(cache: &Mutex<SceneCache>, inbox: &Receiver<SceneJob>, outbox: &S
 	while let Ok(job) = inbox.recv() {
 		let job = inbox.try_iter().last().unwrap_or(job);
 		let (image, pixels) = {
-			let mut cache = cache.lock().unwrap_or_else(PoisonError::into_inner);
+			let mut cache = lock(cache);
 			(cache.image(&job.project), job.edges.then(|| cache.pixels(&job.project)).flatten())
 		};
 		let image = image.map(|p| (p.width, p.height, Bytes::from_owner(Rgba(p))));

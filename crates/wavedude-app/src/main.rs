@@ -87,6 +87,5 @@ fn run() -> anyhow::Result<()> {
 		(config.with_event_loop(event_loop), delegate)
 	};
 	launch(config);
-	update.install();
-	Ok(())
+	update.install()
 }

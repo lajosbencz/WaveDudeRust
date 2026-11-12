@@ -4,7 +4,8 @@
 //!
 //! Threads: the plugin runs on the event loop thread, the views on the UI thread; a mutex holds the few fields.
 
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
+use wavedude_core::sync::lock;
 
 use freya::winit::dpi::{LogicalPosition, LogicalSize};
 use freya::winit::window::{Window, WindowId};
@@ -34,7 +35,7 @@ pub struct Placement(Arc<Mutex<Inner>>);
 
 impl Placement {
 	fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
-		self.0.lock().unwrap_or_else(PoisonError::into_inner)
+		lock(&self.0)
 	}
 
 	/// The place last seen.
