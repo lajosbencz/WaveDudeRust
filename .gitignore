@@ -1,3 +1,28 @@
+# Rust: build output, rustfmt backups, insta's pending snapshots, coverage and profiling output.
 /target
+**/*.rs.bk
 **/*.snap.new
+*.pdb
 lcov.info
+*.profraw
+*.profdata
+perf.data*
+
+# Operating systems: Linux, macOS, Windows.
+.directory
+.fuse_hidden*
+.nfs*
+.Trash-*
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Editors and tools: JetBrains, VS Code, Vim, Emacs, Claude Code's local settings, the Playwright MCP server.
+.idea/
+.vscode/
+*.swp
+*~
+.claude/settings.local.json
+.playwright-mcp/
