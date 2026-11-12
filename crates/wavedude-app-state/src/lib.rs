@@ -125,7 +125,7 @@ pub enum Event {
 }
 
 /// What the views must do after an event.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Response {
 	None,
 	/// Ask "Save the changes to {name}?" and answer with [`Event::SaveChoice`].
@@ -136,8 +136,11 @@ pub enum Response {
 	AskSavePath {
 		proposed: Option<PathBuf>,
 	},
-	/// Put this text on the clipboard (app format and plain text).
-	Clipboard(String),
+	/// Put this text on the clipboard (app format and plain text), then apply `then` (a cut's removal).
+	Clipboard {
+		text: String,
+		then: Option<Command>,
+	},
 	/// Show the memory warning ([`AppState::live`]`.warning()`).
 	MemoryWarning,
 	/// A one-line error for the message window (the detail is in the log).
@@ -586,15 +589,12 @@ impl<B: Backend> AppState<B> {
 					Response::None
 				}
 			},
-			Event::Copy => self.copy_text().map_or(Response::None, Response::Clipboard),
+			Event::Copy => self.copy_text().map_or(Response::None, |text| Response::Clipboard { text, then: None }),
 			Event::Cut { target } => {
 				let targets = self.selection.targets(target);
 				let objects: Vec<Copyable> = targets.iter().map(|&i| Copyable::Item(i)).collect();
 				let text = clipboard::write_fragment(&self.document.project, &objects);
-				match self.apply(Command::Remove { target }, now) {
-					Ok(_) => Response::Clipboard(text),
-					Err(e) => Response::Error(e.to_string()),
-				}
+				Response::Clipboard { text, then: Some(Command::Remove { target }) }
 			}
 			Event::Paste { text, target, place_at } => match clipboard::read_fragment(&text) {
 				Ok(fragment) => {

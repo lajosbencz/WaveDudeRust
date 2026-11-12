@@ -120,6 +120,7 @@
 	"AboutCopy": "_Copy system info",
 	"TipAboutCopy": "Copy the system lines to the clipboard, for a bug report",
 	"AboutCopied": "System information copied to the clipboard",
+	"ClipboardFailed": "The clipboard could not be written",
 	"AboutClose": "Close",
 	"ManualTitle": "WaveDude Rust manual",
 	"ManualContents": "Contents",

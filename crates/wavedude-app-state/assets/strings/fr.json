@@ -120,6 +120,7 @@
 	"AboutCopy": "_Copier les infos système",
 	"TipAboutCopy": "Copier les lignes système dans le presse-papiers, pour un rapport de bogue",
 	"AboutCopied": "Informations système copiées dans le presse-papiers",
+	"ClipboardFailed": "Impossible d'écrire dans le presse-papiers",
 	"AboutClose": "Fermer",
 	"ManualTitle": "Manuel de WaveDude Rust",
 	"ManualContents": "Sommaire",

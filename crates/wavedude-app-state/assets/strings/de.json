@@ -120,6 +120,7 @@
 	"AboutCopy": "Systeminfo _kopieren",
 	"TipAboutCopy": "Die Systemzeilen in die Zwischenablage kopieren, für einen Fehlerbericht",
 	"AboutCopied": "Systeminformationen in die Zwischenablage kopiert",
+	"ClipboardFailed": "Die Zwischenablage konnte nicht beschrieben werden",
 	"AboutClose": "Schließen",
 	"ManualTitle": "Handbuch zu WaveDude Rust",
 	"ManualContents": "Inhalt",

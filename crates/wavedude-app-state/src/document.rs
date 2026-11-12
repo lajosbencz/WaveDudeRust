@@ -170,6 +170,7 @@ impl Document {
 		}
 		let folder = self.folder().map(Path::to_owned);
 		let mut path = io::resolve_image_path(folder.as_deref(), &scene.image_path);
+		let mut located = false;
 		if scene.image_path.is_empty()
 			&& let Some(folder) = &folder
 		{
@@ -179,25 +180,41 @@ impl Document {
 			if let Some(found) = found {
 				self.project.scene.image_path = io::stored_image_path(Some(folder), &found.to_string_lossy());
 				path = found;
+				located = true;
 			}
 		}
-		let Ok(bytes) = std::fs::read(&path) else {
-			return false;
-		};
-		if self.project.scene.image_data.as_deref() == Some(&bytes[..]) {
+		let taken = self.changed_image(&path);
+		let adopted = taken.is_some();
+		if let Some((bytes, size)) = taken {
+			self.project.scene.image_data = Some(bytes.into());
+			self.project.scene.image_size = size;
+		}
+		if located || adopted {
+			// Undo goes back to the project as opened, with what was adopted.
+			self.history = History::new(&self.project);
+		}
+		if !adopted {
 			return false;
 		}
-		let Ok(size) = io::image_size(&bytes) else {
-			tracing::warn!("the scene image file '{}' does not decode; the embedded image stays", path.display());
-			return false;
-		};
-		self.project.scene.image_data = Some(bytes.into());
-		self.project.scene.image_size = size;
-		self.history = History::new(&self.project);
 		self.history.forget_saved();
 		self.refresh_dirty();
 		tracing::info!("the scene image was re-embedded from '{}'", path.display());
 		true
+	}
+
+	/// The image file's bytes and size when they decode and differ from the embedded ones.
+	fn changed_image(&self, path: &Path) -> Option<(Vec<u8>, (u32, u32))> {
+		let bytes = std::fs::read(path).ok()?;
+		if self.project.scene.image_data.as_deref() == Some(&bytes[..]) {
+			return None;
+		}
+		match io::image_size(&bytes) {
+			Ok(size) => Some((bytes, size)),
+			Err(_) => {
+				tracing::warn!("the scene image file '{}' does not decode; the embedded image stays", path.display());
+				None
+			}
+		}
 	}
 
 	/// The scene image's file, when the project names one that resolves.
@@ -407,6 +424,22 @@ mod tests {
 		assert_eq!(Path::new(&d.project.scene.image_path), Path::new("scene_images").join("pic.png"));
 		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(200)[..]));
 		assert!(d.dirty);
+	}
+
+	#[test]
+	fn undo_keeps_the_image_path_found_on_opening() {
+		let dir = tempfile::tempdir().unwrap();
+		let path = saved_with_image(dir.path(), &png(10), "");
+		std::fs::write(dir.path().join("pic.png"), png(10)).unwrap();
+		let mut d = opened(&path);
+		assert_eq!(d.project.scene.image_path, "pic.png");
+		assert!(!d.dirty, "the same bytes change nothing");
+		d.project.scene.width += 1;
+		d.edited(Instant::now());
+		d.commit_step();
+		assert!(d.undo());
+		assert_eq!(d.project.scene.image_path, "pic.png", "the opened project is the first step");
+		assert!(!d.dirty);
 	}
 
 	#[test]

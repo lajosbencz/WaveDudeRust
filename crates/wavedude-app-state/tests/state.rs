@@ -178,7 +178,7 @@ fn copy_paste_cut_through_text() {
 	s.handle(Event::Command(Command::AddSource { at: Some(Point::new(9, 9)) }), t);
 	s.selection.select(Row::Item(source(0)));
 	s.selection.toggle(source(1));
-	let Response::Clipboard(text) = s.handle(Event::Copy, t) else { panic!("copy gives text") };
+	let Response::Clipboard { text, then: None } = s.handle(Event::Copy, t) else { panic!("copy gives text") };
 	assert_eq!(text.matches("<Source ").count(), 2);
 	let target = PasteTarget { current: Some(Row::Item(source(0))), before: false };
 	s.handle(Event::Paste { text: text.clone(), target, place_at: None }, t);
@@ -195,8 +195,12 @@ fn copy_paste_cut_through_text() {
 		(59.0, 63.0),
 		"held inside the canvas"
 	);
-	let Response::Clipboard(cut) = s.handle(Event::Cut { target: source(4) }, t) else { panic!("cut gives text") };
+	let Response::Clipboard { text: cut, then: Some(remove) } = s.handle(Event::Cut { target: source(4) }, t) else {
+		panic!("cut gives text and its removal")
+	};
 	assert_eq!(cut.matches("<Source ").count(), 2);
+	assert_eq!(s.document.project.sources.len(), 6, "nothing is removed before the clipboard holds the text");
+	s.handle(Event::Command(remove), t);
 	assert_eq!(s.document.project.sources.len(), 4);
 }
 

@@ -47,11 +47,17 @@ pub fn respond(cx: &Cx, response: Response) {
 		Response::None => {}
 		Response::AskSave { name } => cx.ui.show_modal(Modal::AskSave { name }),
 		Response::AskSavePath { proposed } => save_as(cx, proposed),
-		Response::Clipboard(text) => {
-			if let Err(e) = Clipboard::set(text) {
-				tracing::warn!("the clipboard could not be written: {e:?}");
+		Response::Clipboard { text, then } => match Clipboard::set(text) {
+			Ok(()) => {
+				if let Some(command) = then {
+					cx.send(AppEvent::Command(command));
+				}
 			}
-		}
+			Err(e) => {
+				tracing::warn!("the clipboard could not be written: {e:?}");
+				cx.ui.show_modal(Modal::Error(cx.strings().get("ClipboardFailed").to_owned()));
+			}
+		},
 		Response::MemoryWarning => cx.ui.show_modal(Modal::MemoryWarning),
 		Response::Error(message) => cx.ui.show_modal(Modal::Error(message)),
 		Response::Exit => quit(cx, false),

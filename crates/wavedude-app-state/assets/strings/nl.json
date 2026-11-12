@@ -120,6 +120,7 @@
 	"AboutCopy": "Systeeminfo _kopiëren",
 	"TipAboutCopy": "De systeemregels naar het klembord kopiëren, voor een foutmelding",
 	"AboutCopied": "Systeeminformatie naar het klembord gekopieerd",
+	"ClipboardFailed": "Het klembord kon niet worden beschreven",
 	"AboutClose": "Sluiten",
 	"ManualTitle": "Handleiding bij WaveDude Rust",
 	"ManualContents": "Inhoud",

@@ -224,6 +224,18 @@ impl Edit {
 		})
 	}
 
+	/// The edited field's value in `p`.
+	fn value(&self, p: &Project) -> FieldValue {
+		match self {
+			Self::Project(e) => e.field().get(p),
+			Self::Source(i, e) => p.sources.get(*i).and_then(|o| e.field().get(o)),
+			Self::Part(i, e) => p.parts.get(*i).and_then(|o| e.field().get(o)),
+			Self::Probe(i, e) => p.probes.get(*i).and_then(|o| e.field().get(o)),
+			Self::Scheme(i, e) => p.color_schemes.get(*i).and_then(|o| e.field().get(o)),
+		}
+		.unwrap_or(FieldValue::Absent)
+	}
+
 	/// The label and the path of the innermost object's field.
 	fn subject(&self) -> (&'static str, String) {
 		match self {
@@ -743,21 +755,16 @@ fn rename(project: &mut Project, target: ItemRef, name: String) -> Result<Change
 	Ok(change)
 }
 
-/// Applies `edit`; returns the old and the new value of its field.
-fn apply_model_edit<E: ModelEdit>(edit: &E, to: &mut E::Owner) -> Result<(FieldValue, FieldValue), EditError> {
-	let old = edit.apply(to)?;
-	Ok((old, edit.field().get(to).unwrap_or(FieldValue::Absent)))
-}
-
-fn run_part(part: &mut Part, edit: &PartEdit) -> Result<(FieldValue, FieldValue), EditError> {
+/// Applies `edit` to `part`; the old value.
+fn run_part(part: &mut Part, edit: &PartEdit) -> Result<FieldValue, EditError> {
 	if let PartEdit::Kind(PartKindEdit::Lens(LensEdit::Material(MaterialEdit::Mirror(on)))) = edit
 		&& let PartKind::Lens(lens) = &part.kind
 	{
 		let old = FieldValue::Bool(lens.material.mirror);
 		names::set_lens_mirror(part, *on);
-		return Ok((old, FieldValue::Bool(*on)));
+		return Ok(old);
 	}
-	let result = apply_model_edit(edit, part)?;
+	let old = edit.apply(part)?;
 	match (edit, &mut part.kind) {
 		(
 			PartEdit::Kind(PartKindEdit::Rectangle(RectangleEdit::Width(_))),
@@ -769,7 +776,7 @@ fn run_part(part: &mut Part, edit: &PartEdit) -> Result<(FieldValue, FieldValue)
 		) => *length = *width,
 		_ => {}
 	}
-	Ok(result)
+	Ok(old)
 }
 
 fn project_change(edit: &ProjectEdit) -> ChangeKind {
@@ -794,30 +801,21 @@ fn apply_edit(project: &mut Project, edit: &Edit) -> Result<Change, CommandError
 		check(project, item)?;
 	}
 	let label = edit.describe(project);
-	let (old, new, kind) = match edit {
-		Edit::Project(e) => {
-			let (old, new) = apply_model_edit(e, project)?;
-			(old, new, project_change(e))
-		}
-		Edit::Source(i, e) => {
-			let (old, new) = apply_model_edit(e, &mut project.sources[*i])?;
-			(old, new, ChangeKind::Simulation)
-		}
-		Edit::Part(i, e) => {
-			let (old, new) = run_part(&mut project.parts[*i], e)?;
-			(old, new, ChangeKind::Simulation)
-		}
+	let (old, kind) = match edit {
+		Edit::Project(e) => (e.apply(project)?, project_change(e)),
+		Edit::Source(i, e) => (e.apply(&mut project.sources[*i])?, ChangeKind::Simulation),
+		Edit::Part(i, e) => (run_part(&mut project.parts[*i], e)?, ChangeKind::Simulation),
 		Edit::Probe(i, e) => {
 			let probe = &mut project.probes[*i];
 			let before = probe.clone();
-			let (old, new) = apply_model_edit(e, probe)?;
-			(old, new, probes_change(std::slice::from_ref(&before), std::slice::from_ref(probe)))
+			let old = e.apply(probe)?;
+			(old, probes_change(std::slice::from_ref(&before), std::slice::from_ref(probe)))
 		}
-		Edit::Scheme(i, e) => {
-			let (old, new) = apply_model_edit(e, &mut project.color_schemes[*i])?;
-			(old, new, ChangeKind::Display)
-		}
+		Edit::Scheme(i, e) => (e.apply(&mut project.color_schemes[*i])?, ChangeKind::Display),
 	};
+	// The value the model keeps: normalising may clamp what was asked for.
+	project.normalize();
+	let new = edit.value(project);
 	if old == new {
 		return Ok(Change::of(ChangeKind::None));
 	}
@@ -1089,5 +1087,15 @@ mod tests {
 		p.display.field.color_scheme = "Scheme 1".into();
 		let c = run(&mut p, &mut s, Command::Rename { target: ItemRef::new(ItemKind::Scheme, 0), name: "Mine".into() });
 		assert_eq!((c.kind, p.display.field.color_scheme.as_str()), (ChangeKind::Display, "Mine"));
+	}
+
+	#[test]
+	fn an_edit_normalised_back_to_the_kept_value_changes_nothing() {
+		let mut p = project();
+		p.simulation.steps = 10_000_000;
+		let edit = Edit::Project(ProjectEdit::Simulation(SimulationEdit::Steps(20_000_000)));
+		let change = run(&mut p, &mut Selection::default(), Command::Edit(edit));
+		assert_eq!(change.kind, ChangeKind::None, "the steps are clamped back to their maximum");
+		assert_eq!(p.simulation.steps, 10_000_000);
 	}
 }
