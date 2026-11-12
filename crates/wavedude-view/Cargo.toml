@@ -1,0 +1,19 @@
+[package]
+name = "wavedude-view"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+keywords = ["wave", "simulation", "physics", "optics"]
+categories = ["science", "simulation"]
+# Not on crates.io: the workspace is built and released as one.
+publish = false
+description = "What the preview draws without a UI toolkit: the overlay's handles, the probe graph box, a draw list"
+
+[lints]
+workspace = true
+
+[dependencies]
+wavedude-core = { path = "../wavedude-core", version = "0.2.1", default-features = false }
+serde.workspace = true

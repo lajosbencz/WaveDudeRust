@@ -9,10 +9,10 @@ use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, root};
 use wavedude_app::ui::shared::Shared;
 use wavedude_app_state::commands::{Command, NewPart};
 use wavedude_app_state::log::LogRing;
-use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
+use wavedude_app_state::selection::Row;
 use wavedude_app_state::settings::{AppDirs, Settings};
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
-use wavedude_core::model::{FilterLayer, PartKind, ProbeDetector, ProbeKind, Project};
+use wavedude_core::model::{FilterLayer, ItemKind, ItemRef, PartKind, ProbeDetector, ProbeKind, Project};
 use wavedude_examples::Topic;
 use wavedude_testing::{click_at, click_tagged, count_tagged, find_text, label_areas, settle, tagged, tagged_area};
 

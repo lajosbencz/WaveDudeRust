@@ -38,6 +38,7 @@ browser on the GPU (WebGPU) or the CPU: the simulation only, with a timeline and
 | [`wavedude-core`](crates/wavedude-core) | model, file formats, scene painter with every part kind, CPU and wgpu engines, frame store, runs, renderer |
 | [`wavedude-model-derive`](crates/wavedude-model-derive) | the derives that give every model type typed fields: field and edit enums, accessors, bounds |
 | [`wavedude-export`](crates/wavedude-export) | PNG and JPEG sequences, MPEG-1, AVI, QuickTime (Animation and PNG), H.264 MP4, OpenEXR, probe CSV, burned-in overlays |
+| [`wavedude-view`](crates/wavedude-view) | what the preview draws without a UI toolkit: the handle overlay, the probe graph box's layout, a draw list for the desktop and the browser |
 | [`wavedude-widgets`](crates/wavedude-widgets) | the Freya widgets: dock host, tree, property grid, number box, timeline, pictures, graph boxes, colour tools |
 | [`wavedude-app-state`](crates/wavedude-app-state) | the application state without a UI toolkit: document, history, selection, commands, clipboard, live runs, playback, settings, strings, log |
 | [`wavedude-app`](crates/wavedude-app) | the desktop application: thin Freya views over `wavedude-app-state` |

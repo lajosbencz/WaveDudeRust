@@ -5,13 +5,15 @@ use std::time::{Duration, Instant};
 
 use freya::prelude::*;
 use freya_testing::prelude::*;
-use wavedude_core::model::{OutlineEdit, PartEdit, PartKindEdit, Point, ProbeDetector, SourceArray, SourceEdit};
+use wavedude_core::model::{
+	ItemKind, ItemRef, OutlineEdit, PartEdit, PartKindEdit, Point, ProbeDetector, SourceArray, SourceEdit,
+};
 
 use super::app::{Boot, BootInfo, CloseGate, root};
 use super::shared::{Shared, runs};
 use wavedude_app_state::commands::{Command, Edit, NewPart};
 use wavedude_app_state::log::LogRing;
-use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
+use wavedude_app_state::selection::Row;
 use wavedude_app_state::settings::AppDirs;
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
 

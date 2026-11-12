@@ -7,6 +7,8 @@ One repository, one Cargo workspace, edition 2024:
 - `wavedude-core`: model, scene painter, engines, frame store, probes, renderer.
 - `wavedude-model-derive`: the `Fields` and `Word` derives of the model types (decision 0013).
 - `wavedude-export`: PNG/JPEG sequences, MPEG-1, AVI, MOV, MP4, OpenEXR, CSV.
+- `wavedude-view`: what the preview draws without a UI toolkit: the handle overlay, the probe graph box's layout, a
+  draw list the desktop and the browser execute.
 - `wavedude-widgets`: Freya widgets WaveDude needs.
 - `wavedude-app-state`: the application state without a UI toolkit (document, history, selection, commands, live runs,
   settings, strings, log); no Freya, no rfd, testable headless.

@@ -13,10 +13,12 @@ use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, root};
 use wavedude_app::ui::shared::Shared;
 use wavedude_app_state::commands::{Command, Edit, NewPart};
 use wavedude_app_state::log::LogRing;
-use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
+use wavedude_app_state::selection::Row;
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
-use wavedude_core::model::{DisplayEdit, DisplayLayerEdit, Layer, ProbeDetector, ProjectEdit, SourceArray, SourceEdit};
+use wavedude_core::model::{
+	DisplayEdit, DisplayLayerEdit, ItemKind, ItemRef, Layer, ProbeDetector, ProjectEdit, SourceArray, SourceEdit,
+};
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj";
 

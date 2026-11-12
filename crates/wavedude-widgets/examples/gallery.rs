@@ -7,6 +7,7 @@ use bytes::Bytes;
 use freya::elements::image::ImageHandle;
 use freya::engine::prelude::{AlphaType, Paint, PaintStyle};
 use freya::prelude::*;
+use wavedude_view::graph::GraphLayout;
 use wavedude_widgets::graph_box::GraphBoxEvent;
 use wavedude_widgets::icon::icons;
 use wavedude_widgets::menu::ContextMenuRequest;
@@ -282,8 +283,14 @@ fn app() -> impl IntoElement {
 			let (pw, ph) = (w - 40., h - 30.);
 			let n = values.len().max(2) as f32 - 1.;
 			GraphLayout {
+				width: w,
+				height: h,
+				visible: true,
 				has_plot: true,
-				plot: (32., 20., pw, ph),
+				plot_x: 32.,
+				plot_y: 20.,
+				plot_width: pw,
+				plot_height: ph,
 				line_width: 1.2,
 				curve: values
 					.iter()

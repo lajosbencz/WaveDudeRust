@@ -1,10 +1,13 @@
-//! The probe graph box's layout: axis ranges, ticks, the curve on the pixel grid, the title and the readout.
+//! The probe graph box's layout: axis ranges, ticks, the curve on the pixel grid, the title and the readout; and the
+//! preview's shapes of a laid-out box.
 //!
 //! Pure arithmetic over a probe's settings and its recording, in pixels relative to the box's top-left corner, so a
 //! preview and an export draw the same graph. Numbers are formatted with a decimal point.
 
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::model::{Measurement, Probe, ScaleMode, YScale};
+
+use crate::draw::{Baseline, DeviceGrid, Ink, Pen, Rect, Rgba, Shape, TextMetrics};
 
 /// Smallest box drawn at all, pixels.
 pub const MIN_VISIBLE: (f32, f32) = (40.0, 30.0);
@@ -46,23 +49,20 @@ impl<'a> GraphData<'a> {
 	}
 }
 
-/// Text metrics of the renderer, in the box's pixels.
-pub trait TextMetrics {
-	fn line_height(&self) -> f32;
-	fn width(&self, text: &str) -> f32;
-}
-
 /// One tick: a pixel position along its axis (relative to the box), its label, whether it is the zero line.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tick {
 	pub position: f32,
 	pub label: String,
 	pub zero: bool,
+	/// Top-left of the label relative to the box, (0, 0) without a label.
+	pub label_at: (f32, f32),
 }
 
 /// The geometry of one graph box.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct GraphLayout {
+	/// The box's size, as laid out; the box is drawn at this size.
 	pub width: f32,
 	pub height: f32,
 	/// False under 40 x 30: nothing is drawn.
@@ -75,9 +75,10 @@ pub struct GraphLayout {
 	pub plot_y: f32,
 	pub plot_width: f32,
 	pub plot_height: f32,
-	/// Horizontal grid lines, labels right-aligned in the left margin.
+	/// Horizontal grid lines, labels right-aligned in the left margin, vertically centred on their line and kept
+	/// beside the plot.
 	pub y_ticks: Vec<Tick>,
-	/// Vertical grid lines, labels centred below the plot.
+	/// Vertical grid lines, labels centred below the plot and kept inside the box.
 	pub x_ticks: Vec<Tick>,
 	pub show_labels: bool,
 	/// The curve; one point is a dot. Clip to the plot when stroking.
@@ -394,6 +395,7 @@ pub fn layout(
 			position: axis.pixel(t),
 			label: if show_labels { y_label(t) } else { String::new() },
 			zero: t == 0.0,
+			label_at: (0.0, 0.0),
 		})
 		.collect();
 	for target in [5, 3, 2] {
@@ -403,12 +405,23 @@ pub fn layout(
 				position: (plot_x as f64 + (t - x_min) / (x_max - x_min) * plot_width as f64) as f32,
 				label: if show_labels { format_position(t, x_max - x_min) } else { String::new() },
 				zero: t == 0.0,
+				label_at: (0.0, 0.0),
 			})
 			.collect();
 		let labels: f32 = out.x_ticks.iter().map(|t| text.width(&t.label) + X_LABEL_SPACING).sum();
 		if labels - X_LABEL_SPACING <= plot_width {
 			break;
 		}
+	}
+	let (top, bottom) = (out.plot_y, out.plot_y + out.plot_height);
+	for t in out.y_ticks.iter_mut().filter(|t| !t.label.is_empty()) {
+		let lx = EDGE_PAD.max(out.plot_x - LABEL_GAP - text.width(&t.label));
+		let ly = (t.position - line_height / 2.0).clamp(top - line_height / 2.0, bottom - line_height / 2.0);
+		t.label_at = (lx, ly);
+	}
+	for t in out.x_ticks.iter_mut().filter(|t| !t.label.is_empty()) {
+		let lw = text.width(&t.label);
+		t.label_at = ((t.position - lw / 2.0).clamp(EDGE_PAD, (width - lw - EDGE_PAD).max(EDGE_PAD)), bottom + 2.0);
 	}
 	let columns = plot_width as usize;
 	out.curve = if line {
@@ -444,6 +457,124 @@ pub fn layout(
 	};
 	out.show_labels = show_labels;
 	out.readout = readout(line, &shown);
+	out
+}
+
+/// A graph box's text size: logical pixels in the preview, pixels in an export.
+pub const FONT_SIZE: f32 = 11.;
+/// A graph box's background, in the preview and an export.
+pub const BACKGROUND: Rgba = Rgba::new(14, 16, 22, 235);
+/// A graph box's edge.
+pub const BORDER: Rgba = Rgba::new(200, 200, 210, 170);
+/// The grid lines of the plot.
+pub const GRID: Rgba = Rgba::new(255, 255, 255, 46);
+/// The zero line of the plot.
+pub const ZERO: Rgba = Rgba::new(255, 255, 255, 120);
+/// The plot's frame.
+pub const FRAME: Rgba = Rgba::new(200, 200, 210, 130);
+/// The tick labels.
+pub const LABEL: Rgba = Rgba::new(225, 225, 230, 225);
+/// The title.
+pub const TITLE: Rgba = Rgba::new(240, 240, 245, 240);
+/// The curve and the readout.
+pub const CURVE: Rgba = Rgba::rgb(255, 208, 64);
+/// The preview's edge of a selected box.
+const SELECTED: Rgba = Rgba::rgb(0xFF, 0xE0, 0x00);
+/// The preview's resize grip.
+const GRIP_DOTS: Rgba = Rgba::rgb(0x90, 0x90, 0x90);
+
+/// The shapes of the preview's box laid out as `g`, in device pixels of `grid`: the box and its edge (`focus`, else
+/// yellow when `selected`), the grid, the value and position labels, the frame, the curve clipped to the plot, the
+/// readout and title, and the resize grip's dots. The box is the layout's size (`g.width` x `g.height` logical
+/// pixels). Hairlines are whole device pixels on the device grid and text starts on whole device pixels. `text`
+/// measures the readout in logical pixels at [`FONT_SIZE`], as the layout was measured.
+pub fn box_shapes(
+	g: &GraphLayout,
+	grid: DeviceGrid,
+	selected: bool,
+	focus: Option<Rgba>,
+	text: &dyn TextMetrics,
+) -> Vec<Shape> {
+	let (w, h) = (g.width, g.height);
+	let s = grid.scale;
+	let size = FONT_SIZE * s;
+	let label = |text: &str, at: (f32, f32), color: Rgba| Shape::Text {
+		text: text.to_owned(),
+		at,
+		baseline: Baseline::Top,
+		size,
+		color,
+		halo: None,
+	};
+	let hl = grid.hairline();
+	let hairline = |color| Pen::new(color, hl).aliased();
+	let half = hl / 2.;
+	let (bx0, by0, bx1, by1) = (grid.x(0.).floor(), grid.y(0.).floor(), grid.x(w).floor(), grid.y(h).floor());
+	let mut out = vec![
+		Shape::Rect { rect: Rect::new(bx0, by0, bx1, by1), ink: Ink::Fill { color: BACKGROUND, antialias: false } },
+		Shape::Rect {
+			rect: Rect::new(bx0 + half, by0 + half, bx1 - half, by1 - half),
+			ink: Ink::Stroke(hairline(focus.unwrap_or(if selected { SELECTED } else { BORDER }))),
+		},
+	];
+
+	if g.has_plot {
+		let (px, py, pw, ph) = (g.plot_x, g.plot_y, g.plot_width, g.plot_height);
+		let (left, top, right, bottom) = (grid.x(px), grid.y(py), grid.x(px + pw), grid.y(py + ph));
+		for t in &g.y_ticks {
+			let y = grid.snap(grid.y(t.position));
+			out.push(Shape::Line { from: (left, y), to: (right, y), pen: hairline(if t.zero { ZERO } else { GRID }) });
+			if !t.label.is_empty() {
+				out.push(label(&t.label, (grid.x(t.label_at.0).round(), grid.y(t.label_at.1).round()), LABEL));
+			}
+		}
+		for t in &g.x_ticks {
+			let x = grid.snap(grid.x(t.position));
+			out.push(Shape::Line { from: (x, top), to: (x, bottom), pen: hairline(GRID) });
+			if !t.label.is_empty() {
+				out.push(label(&t.label, (grid.x(t.label_at.0).round(), grid.y(t.label_at.1).round()), LABEL));
+			}
+		}
+		out.push(Shape::Rect {
+			rect: Rect::new(grid.snap(left), grid.snap(top), grid.snap(right), grid.snap(bottom)),
+			ink: Ink::Stroke(hairline(FRAME)),
+		});
+		out.push(Shape::Clip { rect: Rect::new(left, top, right, bottom), antialias: true });
+		out.extend(match g.curve.as_slice() {
+			[] => None,
+			[(x, y)] => Some(Shape::Circle { centre: (grid.x(*x), grid.y(*y)), radius: 2. * s, ink: Ink::fill(CURVE) }),
+			curve => Some(Shape::Path {
+				points: curve.iter().map(|&(x, y)| (grid.x(x), grid.y(y))).collect(),
+				closed: false,
+				pen: Pen::new(CURVE, g.line_width * s).round(),
+			}),
+		});
+		out.push(Shape::Unclip);
+	}
+
+	// the title strip: the readout right-aligned in the curve's colour, the title in what remains
+	let mut readout_width = 0.;
+	if !g.readout.is_empty() {
+		readout_width = text.width(&g.readout);
+		out.push(label(&g.readout, (grid.x(w - readout_width - 8.).round(), grid.y(EDGE_PAD).round()), CURVE));
+	}
+	let title_end = grid.x(EDGE_PAD + 3. + (w - readout_width - 16.).max(10.));
+	out.push(Shape::Clip { rect: Rect::new(bx0, by0, title_end, by1), antialias: false });
+	out.push(label(&g.title, (grid.x(EDGE_PAD + 3.).round(), grid.y(EDGE_PAD).round()), TITLE));
+	out.push(Shape::Unclip);
+
+	let dot = Ink::Fill { color: GRIP_DOTS, antialias: false };
+	for k in 0..3 {
+		let o = grid.width(3.) * k as f32;
+		out.push(Shape::Rect {
+			rect: Rect::new(bx1 - hl * 3. - o, by1 - hl * 3., bx1 - hl * 2. - o, by1 - hl * 2.),
+			ink: dot,
+		});
+		out.push(Shape::Rect {
+			rect: Rect::new(bx1 - hl * 3., by1 - hl * 3. - o, bx1 - hl * 2., by1 - hl * 2. - o),
+			ink: dot,
+		});
+	}
 	out
 }
 
@@ -509,5 +640,84 @@ mod tests {
 	fn tiny_boxes_hide() {
 		let l = layout(&Probe::default(), &GraphData::default(), 10, 30.0, 20.0, &Fixed);
 		assert!(!l.visible && !l.has_plot);
+	}
+
+	#[test]
+	fn a_box_draws_its_frame_grid_curve_and_text_on_device_pixels() {
+		let series = [0.5f32, -0.5, 0.25];
+		let l =
+			layout(&Probe::default(), &GraphData { series: &series, ..GraphData::default() }, 3, 300., 150., &Fixed);
+		assert!(l.has_plot && l.show_labels);
+		let grid = DeviceGrid::new(2., 10.25, 0.);
+		let shapes = box_shapes(&l, grid, true, None, &Fixed);
+		assert_eq!(
+			shapes[0],
+			Shape::Rect { rect: Rect::new(0., 0., 600., 300.), ink: Ink::Fill { color: BACKGROUND, antialias: false } }
+		);
+		assert_eq!(
+			shapes[1],
+			Shape::Rect { rect: Rect::new(1., 1., 599., 299.), ink: Ink::Stroke(Pen::new(SELECTED, 2.).aliased()) },
+			"a selected box's edge, a two-pixel hairline inside the box"
+		);
+		let lines = shapes.iter().filter(|s| matches!(s, Shape::Line { .. })).count();
+		assert_eq!(lines, l.y_ticks.len() + l.x_ticks.len());
+		let first_tick = shapes.iter().find_map(|s| match s {
+			Shape::Line { from, pen, .. } => Some((from.1, pen.width)),
+			_ => None,
+		});
+		assert_eq!(first_tick.map(|(y, w)| (y.fract(), w)), Some((0., 2.)), "on the device grid");
+		let curve = shapes.iter().find_map(|s| match s {
+			Shape::Path { points, pen, .. } => Some((points.len(), pen.color, pen.round, pen.width)),
+			_ => None,
+		});
+		assert_eq!(curve, Some((3, CURVE, true, l.line_width * 2.)));
+		let texts: Vec<(&str, Rgba)> = shapes
+			.iter()
+			.filter_map(|s| match s {
+				Shape::Text { text, color, baseline: Baseline::Top, size: 22., at, .. } => {
+					assert_eq!((at.0.fract(), at.1.fract()), (0., 0.), "{text} starts on a device pixel");
+					Some((text.as_str(), *color))
+				}
+				_ => None,
+			})
+			.collect();
+		assert_eq!(texts.len(), l.y_ticks.len() + l.x_ticks.len() + 2);
+		assert_eq!(texts[texts.len() - 2], ("= 0.25", CURVE));
+		assert_eq!(texts[texts.len() - 1], (l.title.as_str(), TITLE));
+		let clips: Vec<bool> = shapes
+			.iter()
+			.filter_map(|s| match s {
+				Shape::Clip { antialias, .. } => Some(*antialias),
+				_ => None,
+			})
+			.collect();
+		assert_eq!(clips, vec![true, false], "the plot, then the title");
+		assert_eq!(shapes.iter().filter(|s| **s == Shape::Unclip).count(), 2);
+		assert!(shapes.ends_with(&[Shape::Rect {
+			rect: Rect::new(594., 282., 596., 284.),
+			ink: Ink::Fill { color: GRIP_DOTS, antialias: false },
+		}]));
+	}
+
+	#[test]
+	fn a_box_without_a_plot_keeps_its_title_and_focus() {
+		let l = layout(&Probe { name: "P".into(), ..Probe::default() }, &GraphData::default(), 10, 60., 30., &Fixed);
+		assert!(!l.has_plot);
+		let focus = Rgba::rgb(1, 2, 3);
+		let shapes = box_shapes(&l, DeviceGrid::new(1., 0., 0.), true, Some(focus), &Fixed);
+		assert_eq!(
+			shapes[1],
+			Shape::Rect { rect: Rect::new(0.5, 0.5, 59.5, 29.5), ink: Ink::Stroke(Pen::new(focus, 1.).aliased()) }
+		);
+		assert!(shapes.iter().all(|s| !matches!(s, Shape::Line { .. } | Shape::Path { .. })));
+		assert!(shapes.contains(&Shape::Text {
+			text: "P".into(),
+			at: (6., 3.),
+			baseline: Baseline::Top,
+			size: FONT_SIZE,
+			color: TITLE,
+			halo: None,
+		}));
+		assert_eq!(shapes.len(), 2 + 3 + 6, "box, edge, the title in its clip, the grip's dots");
 	}
 }

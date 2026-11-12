@@ -8,7 +8,7 @@ use freya::prelude::*;
 
 use freya::engine::prelude::Weight;
 
-use crate::paint::{DeviceGrid, fill, stroke, text_line, text_width, weighted_text_line};
+use crate::paint::{DeviceGrid, DeviceGridExt, fill, stroke, text_line, text_width, weighted_text_line};
 use crate::picture::Callback;
 use crate::theme::use_wave_theme;
 use crate::util::{TestIdExt, focus_border};

@@ -1,11 +1,11 @@
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::model::{Layer, Measurement, Probe, ProbeKind, Project, Source, SourceArray, YScale};
-use wavedude_export::graph::{self, GraphData};
 use wavedude_export::overlays::{
-	FaceMetrics, GRAPH_TEXT_SIZE, Overlays, arm_length, draw_graph_box, draw_probe_markers, label_origin, label_size,
+	FaceMetrics, Overlays, arm_length, draw_graph_box, draw_probe_markers, label_origin, label_size,
 	source_marker_layer,
 };
 use wavedude_export::raster::{Canvas, typeface};
+use wavedude_view::graph::{self, GraphData};
 
 const GREY: [u8; 4] = [128, 128, 128, 255];
 
@@ -97,7 +97,7 @@ fn graph_boxes_show_background_border_axes_and_the_curve() {
 		series: (0..300).map(|i| ((i as f32) * 0.1).sin() * (i as f32 / 300.0)).collect(),
 		..ProbeTrace::default()
 	};
-	let metrics = FaceMetrics { face: typeface(), size: GRAPH_TEXT_SIZE };
+	let metrics = FaceMetrics { face: typeface(), size: graph::FONT_SIZE };
 	let data = GraphData::at(&trace, 299, 0);
 	let layout = graph::layout(&probe, &data, 300, 200.0, 100.0, &metrics);
 	assert!(layout.has_plot && layout.show_labels);

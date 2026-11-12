@@ -12,7 +12,7 @@ use freya::elements::image::ImageHandle;
 use freya::engine::prelude::{Canvas, ClipOp, Paint, SkRect};
 use freya::prelude::*;
 
-use crate::paint::{DeviceGrid, fill, stroke};
+use crate::paint::{DeviceGrid, DeviceGridExt, fill, stroke};
 use crate::spinner::Spinner;
 use crate::theme::use_wave_theme;
 use crate::util::{TestIdExt, focus_border, use_modifiers};

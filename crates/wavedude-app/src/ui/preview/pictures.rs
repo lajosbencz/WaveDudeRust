@@ -11,16 +11,18 @@ use std::time::Duration;
 
 use freya::engine::prelude::Canvas;
 use freya::prelude::*;
-use wavedude_core::model::{DisplayLayerEdit, Edges, Layer, Scene};
+use wavedude_core::model::{DisplayLayerEdit, Layer};
+use wavedude_view::overlay::{Handle, HandleKind, OverlayModel, edge_color};
 use wavedude_widgets::delay::use_delayed;
 use wavedude_widgets::header_strip::strip_beside;
 use wavedude_widgets::picture::{
 	CanvasTransform, HitTestHook, OverlayHook, PictureEvent, PictureExtent, View, WheelAt,
 };
-use wavedude_widgets::{Callback, CanvasImage, HeaderStrip, StripOrientation, TestIdExt, use_wave_theme};
+use wavedude_widgets::{
+	Callback, CanvasImage, DotCache, HeaderStrip, StripOrientation, TestIdExt, color_of, use_wave_theme,
+};
 
-use super::handles::OverlayModel;
-use super::overlay::{self, DotCache, OverlayFrame};
+use super::overlay::{self, OverlayFrame};
 use super::{PaneStates, auto_brightness, display_edit, graph_boxes, layer_name, open_picture_menu};
 use crate::ui::shared::{Shared, Topics};
 use wavedude_app_state::Event as AppEvent;
@@ -35,8 +37,7 @@ const CELL_MARGIN: f32 = 4.;
 const HOVER_TIP_DELAY: Duration = Duration::from_millis(600);
 
 /// The tooltip of handle `h`: what it is and how to move it.
-pub fn handle_tip(app: &crate::ui::shared::App, h: &super::handles::Handle) -> String {
-	use super::handles::HandleKind;
+pub fn handle_tip(app: &crate::ui::shared::App, h: &Handle) -> String {
 	let s = &app.strings;
 	let name = h.item.name(&app.document.project).unwrap_or_default().to_owned();
 	match h.kind {
@@ -49,18 +50,6 @@ pub fn handle_tip(app: &crate::ui::shared::App, h: &super::handles::Handle) -> S
 		HandleKind::Node(i) => s.format("TipNodeFormat", &[&name, &(i + 1).to_string()]),
 		HandleKind::InHandle(i) => s.format("TipInHandleFormat", &[&name, &(i + 1).to_string()]),
 		HandleKind::OutHandle(i) => s.format("TipOutHandleFormat", &[&name, &(i + 1).to_string()]),
-	}
-}
-
-/// The edge line's colour: pure blue for a damping rim outside the canvas (it wins over a wall), pure red for a
-/// reflective wall, none for open edges or a damping band inside the canvas.
-pub fn edge_color(scene: &Scene) -> Option<Color> {
-	if scene.has_rim() {
-		Some(Color::from_rgb(0, 0, 255))
-	} else if scene.edges == Edges::Reflective {
-		Some(Color::from_rgb(255, 0, 0))
-	} else {
-		None
 	}
 }
 
@@ -168,7 +157,7 @@ impl Component for PictureCell {
 				};
 				(
 					p.canvas_size(),
-					edge_color(&p.scene),
+					edge_color(&p.scene).map(color_of),
 					title,
 					s.label("DisplayLayer", "Brightness"),
 					s.hint("DisplayLayer", "Brightness"),
@@ -336,18 +325,6 @@ impl Component for PictureCell {
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn the_edge_line_names_what_a_wave_meets() {
-		let mut s = Scene { damping_edge: -32, edges: Edges::Reflective, ..Scene::default() };
-		assert_eq!(edge_color(&s), Some(Color::from_rgb(0, 0, 255)), "a rim wins over a wall");
-		s.damping_edge = 0;
-		assert_eq!(edge_color(&s), Some(Color::from_rgb(255, 0, 0)));
-		s.damping_edge = 20;
-		assert_eq!(edge_color(&s), Some(Color::from_rgb(255, 0, 0)), "a band inside keeps the wall");
-		s.edges = Edges::Open;
-		assert_eq!(edge_color(&s), None);
-	}
 
 	#[test]
 	fn canvas_to_screen_round_trips_through_the_fit() {

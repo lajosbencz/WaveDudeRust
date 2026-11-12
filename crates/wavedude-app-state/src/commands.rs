@@ -10,8 +10,8 @@ use wavedude_core::model::names::{self, Named};
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::{
 	BraggReflector, Diffuser, Ellipse, FacettedGrating, Fiber, FresnelLens, GateKind, GrinLens, InterferenceFilter,
-	Lens, LogicGate, MetaAxiconDesign, MetaDesign, MetaLensDesign, MetaPrismDesign, MetaSurface, Outline, PartKind,
-	Point, Polygon, Probe, ProbeDetector, Project, Rectangle, SimpleGrating, Triangle, ZonePlate,
+	ItemKind, ItemRef, Lens, LogicGate, MetaAxiconDesign, MetaDesign, MetaLensDesign, MetaPrismDesign, MetaSurface,
+	Outline, PartKind, Point, Polygon, Probe, ProbeDetector, Project, Rectangle, SimpleGrating, Triangle, ZonePlate,
 };
 use wavedude_core::model::{
 	ColorSchemeEdit, ColorSchemeField, DisplayEdit, DisplayLayerEdit, EditError, EllipseEdit, Field as _, LensEdit,
@@ -23,7 +23,7 @@ use wavedude_core::scene::gate_design::{self, GateDesign};
 
 use super::clipboard::{self, Fragment, PasteTarget};
 use super::log;
-use super::selection::{ItemKind, ItemRef, Row, Selection, move_group};
+use super::selection::{Row, Selection, move_group};
 
 /// The kinds of the Add part menu.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

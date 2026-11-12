@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use wavedude_core::io::schemes::SchemeStore;
-use wavedude_core::model::Point;
+use wavedude_core::model::{ItemKind, ItemRef, Point};
 use wavedude_core::quality::{MachineFacts, PreviewQuality};
 use wavedude_core::run::Levers;
 
@@ -30,7 +30,7 @@ use clipboard::{Copyable, PasteTarget};
 use commands::{Change, ChangeKind, Command, CommandError};
 use document::{Document, DocumentError, Opened};
 use live::{Backend, CoreBackend, LiveController, LiveSettings};
-use selection::{ItemKind, ItemRef, Row, Selection};
+use selection::{Row, Selection};
 use settings::{AppDirs, ExportHint, Settings, Theme};
 use strings::{Language, Strings};
 

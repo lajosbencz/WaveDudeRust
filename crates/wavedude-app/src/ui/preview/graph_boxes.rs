@@ -10,19 +10,17 @@ use std::rc::Rc;
 
 use freya::prelude::*;
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::model::{BoxSize, Layer, Probe, ProbeEdit, Project};
-use wavedude_export::graph;
+use wavedude_core::model::{BoxSize, ItemKind, ItemRef, Layer, Probe, ProbeEdit, Project};
+use wavedude_view::graph;
 use wavedude_widgets::graph_box::GraphBoxEvent;
 use wavedude_widgets::menu::ContextMenuRequest;
 use wavedude_widgets::picture::CanvasTransform;
-use wavedude_widgets::{
-	Callback, GraphBox, GraphData, GraphLayout, GraphTick, MenuItem, MenuModel, TestIdExt, TextMeasure, Tip,
-};
+use wavedude_widgets::{Callback, GraphBox, GraphData, MenuItem, MenuModel, TestIdExt, Tip};
 
 use super::{PaneStates, PictureMenu, PreviewAction, layer_name};
 use crate::ui::shared::{Shared, Topics};
 use wavedude_app_state::commands::{Command, Edit};
-use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
+use wavedude_app_state::selection::Row;
 use wavedude_app_state::{AppState, Event as AppEvent};
 
 /// A box's anchor within this many screen pixels of point A lands on it.
@@ -59,43 +57,6 @@ impl Recording {
 			profile_length: self.length,
 			steps_sampled: self.sampled,
 		}
-	}
-}
-
-/// The box's text metrics for the shared layout.
-struct Metrics<'a>(&'a TextMeasure<'a>);
-
-impl graph::TextMetrics for Metrics<'_> {
-	fn line_height(&self) -> f32 {
-		self.0.line_height
-	}
-
-	fn width(&self, text: &str) -> f32 {
-		(self.0.width)(text)
-	}
-}
-
-/// Probe `probe`'s graph over `recording` in a box `width` x `height`, laid out as an export lays it out.
-fn graph_layout(
-	probe: &Probe,
-	recording: &Recording,
-	steps: u64,
-	text: &TextMeasure<'_>,
-	size: (f32, f32),
-) -> GraphLayout {
-	let g = graph::layout(probe, &recording.data(), steps, size.0, size.1, &Metrics(text));
-	let ticks = |ticks: Vec<graph::Tick>| {
-		ticks.into_iter().map(|t| GraphTick { position: t.position, label: t.label, zero: t.zero }).collect()
-	};
-	GraphLayout {
-		has_plot: g.visible && g.has_plot,
-		plot: (g.plot_x, g.plot_y, g.plot_width, g.plot_height),
-		line_width: g.line_width,
-		y_ticks: ticks(g.y_ticks),
-		x_ticks: ticks(g.x_ticks),
-		curve: g.curve,
-		title: g.title,
-		readout: g.readout,
 	}
 }
 
@@ -208,7 +169,7 @@ fn views<B: wavedude_app_state::live::Backend>(
 			BoxView {
 				index: i,
 				data: GraphData::new(p.name.clone(), move |text, w, h| {
-					graph_layout(&probe, &recording, steps, text, (w, h))
+					graph::layout(&probe, &recording.data(), steps, w, h, text)
 				}),
 				origin: box_origin(p, canvas),
 				size: box_size(p, canvas),
@@ -438,6 +399,19 @@ fn on_box_event(shared: &Shared, states: PaneStates, index: usize, canvas: (u32,
 mod tests {
 	use super::*;
 	use wavedude_core::model::ProbeKind;
+	use wavedude_view::draw::TextMetrics;
+
+	struct Fixed;
+
+	impl TextMetrics for Fixed {
+		fn line_height(&self) -> f32 {
+			13.
+		}
+
+		fn width(&self, text: &str) -> f32 {
+			text.len() as f32 * 6.
+		}
+	}
 
 	#[test]
 	fn a_line_probe_reads_its_maximum_as_next_writes_it() {
@@ -448,9 +422,7 @@ mod tests {
 			length: 80.,
 			sampled: 10,
 		};
-		let width = |t: &str| t.len() as f32 * 6.;
-		let text = TextMeasure { line_height: 13., width: &width };
-		let g = graph_layout(&p, &recording, 100, &text, (300., 150.));
+		let g = graph::layout(&p, &recording.data(), 100, 300., 150., &Fixed);
 		assert_eq!(g.readout, "max 3.08E-05");
 		assert!(g.has_plot);
 		let labels: Vec<&str> = g.x_ticks.iter().map(|t| t.label.as_str()).collect();

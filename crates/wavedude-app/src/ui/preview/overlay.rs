@@ -1,113 +1,30 @@
 //! The handle overlay of a picture: drawing ([`draw`]) and the pointer and key handling that turns presses,
 //! drags and keys on handles into selection changes and model commands (docs/ui/40-preview-pane.md, Interaction).
 //!
-//! Drawing happens in the picture's render callback in the cell's logical pixels, clipped to the picture. The
-//! emitter dots of composite sources are rasterised once per layout into a device-pixel bitmap ([`DotCache`]),
-//! so thousands of dots cost one image draw a frame.
+//! Drawing happens in the picture's render callback in the cell's logical pixels, clipped to the picture: the
+//! overlay's shapes ([`wavedude_view::overlay::shapes`]), then the marquee. The emitter dots of composite sources
+//! go through a [`DotCache`], so thousands of dots cost one image draw a frame.
 //! Threads: the UI thread.
 
-use std::cell::RefCell;
-use std::hash::{DefaultHasher, Hash, Hasher};
-
-use freya::engine::prelude::{
-	Canvas, Font, FontMgr, FontStyle, ISize, Paint, PaintStyle, PathBuilder, PathEffect, SkImage, SkRect,
-	raster_n32_premul,
-};
+use freya::engine::prelude::{Canvas, Paint, PaintStyle, PathEffect, SkRect};
 use freya::prelude::*;
 use wavedude_core::model::{
-	FiberEdit, Layer, OutlineEdit, PartBaseEdit, PartEdit, PartKind, PartKindEdit, ProbeEdit, ProbeKind, Project,
-	SourceArrayEdit, SourceEdit,
+	FiberEdit, ItemKind, ItemRef, Layer, OutlineEdit, PartBaseEdit, PartEdit, PartKind, PartKindEdit, ProbeEdit,
+	ProbeKind, Project, SourceArrayEdit, SourceEdit,
 };
+use wavedude_view::overlay::{self as view, Handle, HandleKind, LABEL_SIZE, OverlayModel};
 use wavedude_widgets::picture::{CanvasTransform, PictureEvent, PointerPhase};
+use wavedude_widgets::{DefaultFontText, DotCache, draw_shapes, rgba_of};
 
 use super::handles::{
-	self, DRAG_THRESHOLD, Handle, HandleKind, MarqueeMode, OverlayModel, drag_delta, grip_edits, lever_angle,
-	marquee_hits, marquee_select, moved_node, moved_point, to_part_frame, turn,
+	DRAG_THRESHOLD, MarqueeMode, drag_delta, grip_edits, lever_angle, marquee_hits, marquee_select, moved_node,
+	moved_point, to_part_frame, turn,
 };
 use super::{PaneStates, open_picture_menu};
 use crate::ui::shared::{App, Shared};
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, Edit};
-use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
-
-/// The handles' fixed colours: light grey over a dark halo, the selection bright yellow.
-pub const HANDLE: Color = Color::from_rgb(0xD8, 0xD8, 0xD8);
-pub const SELECTED: Color = Color::from_rgb(0xFF, 0xE6, 0x00);
-pub const HALO: Color = Color::from_argb(0xB0, 0x00, 0x00, 0x00);
-
-fn pen(color: Color, width: f32) -> Paint {
-	let mut p = Paint::default();
-	p.set_anti_alias(true);
-	p.set_style(PaintStyle::Stroke);
-	p.set_stroke_width(width);
-	p.set_color(color);
-	p
-}
-
-fn brush(color: Color) -> Paint {
-	let mut p = Paint::default();
-	p.set_anti_alias(true);
-	p.set_style(PaintStyle::Fill);
-	p.set_color(color);
-	p
-}
-
-thread_local! {
-	static FONT: Font = {
-		let typeface = FontMgr::default().legacy_make_typeface(None, FontStyle::normal());
-		let mut font = Font::default();
-		if let Some(t) = typeface {
-			font.set_typeface(t);
-		}
-		font.set_size(11.);
-		font
-	};
-}
-
-/// The emitter dots as a bitmap at device pixels, rebuilt when the dots, the fit or the device scale change.
-#[derive(Default)]
-pub struct DotCache(RefCell<Option<(u64, SkImage)>>);
-
-impl DotCache {
-	fn draw(&self, canvas: &Canvas, t: &CanvasTransform, dots: &[(f32, f32)]) {
-		if dots.is_empty() {
-			return;
-		}
-		let device = canvas.local_to_device_as_3x3().scale_x().abs().max(1e-3);
-		let (px, py, pw, ph) = t.picture();
-		let mut h = DefaultHasher::new();
-		for d in dots {
-			(d.0.to_bits(), d.1.to_bits()).hash(&mut h);
-		}
-		(t.scale.to_bits(), px.to_bits(), py.to_bits(), device.to_bits()).hash(&mut h);
-		let key = h.finish();
-		let mut slot = self.0.borrow_mut();
-		if slot.as_ref().is_none_or(|(k, _)| *k != key) {
-			let size = ISize::new((pw * device).ceil().max(1.) as i32, (ph * device).ceil().max(1.) as i32);
-			let Some(mut surface) = raster_n32_premul(size) else { return };
-			let c = surface.canvas();
-			c.scale((device, device));
-			let halo = brush(HALO);
-			let dot = brush(HANDLE);
-			for &(x, y) in dots {
-				let (sx, sy) = (x * t.scale, y * t.scale);
-				c.draw_circle((sx, sy), 2.5, &halo);
-			}
-			for &(x, y) in dots {
-				let (sx, sy) = (x * t.scale, y * t.scale);
-				c.draw_circle((sx, sy), 1.5, &dot);
-			}
-			*slot = Some((key, surface.image_snapshot()));
-		}
-		if let Some((_, image)) = slot.as_ref() {
-			canvas.save();
-			canvas.translate((px, py));
-			canvas.scale((1. / device, 1. / device));
-			canvas.draw_image(image, (0., 0.), None);
-			canvas.restore();
-		}
-	}
-}
+use wavedude_app_state::selection::Row;
 
 /// What one picture's overlay draws besides the model.
 pub struct OverlayFrame<'a> {
@@ -118,127 +35,25 @@ pub struct OverlayFrame<'a> {
 	pub dots: &'a DotCache,
 }
 
-fn handle_color(h: &Handle, focused: bool, accent: Color) -> Color {
-	if focused {
-		accent
-	} else if h.selected {
-		SELECTED
-	} else {
-		HANDLE
-	}
-}
-
-fn glyph(canvas: &Canvas, kind: HandleKind, (x, y): (f32, f32), color: Color) {
-	let halo = pen(HALO, 3.5);
-	let ink = pen(color, 1.5);
-	let both = |f: &dyn Fn(&Paint)| {
-		f(&halo);
-		f(&ink);
-	};
-	let ticks = |inner: f32, outer: f32, p: &Paint| {
-		canvas.draw_line((x - outer, y), (x - inner, y), p);
-		canvas.draw_line((x + inner, y), (x + outer, y), p);
-		canvas.draw_line((x, y - outer), (x, y - inner), p);
-		canvas.draw_line((x, y + inner), (x, y + outer), p);
-	};
-	match kind {
-		HandleKind::Source => both(&|p| {
-			canvas.draw_circle((x, y), 6., p);
-			ticks(7., 10., p);
-		}),
-		HandleKind::PartCentre => both(&|p| {
-			canvas.draw_circle((x, y), 7., p);
-			canvas.draw_circle((x, y), 3., p);
-			ticks(8., 10., p);
-		}),
-		HandleKind::ProbeA | HandleKind::ProbeB => {
-			let r = if kind == HandleKind::ProbeA { 5. } else { 4. };
-			both(&|p| {
-				canvas.draw_rect(SkRect::new(x - r, y - r, x + r, y + r), p);
-				ticks(r + 1., 7., p);
-			});
-		}
-		HandleKind::SourceLever | HandleKind::PartLever => {
-			canvas.draw_circle((x, y), 6., &brush(HALO));
-			canvas.draw_circle((x, y), 4.5, &brush(color));
-		}
-		HandleKind::Grip => {
-			canvas.draw_rect(SkRect::new(x - 5.5, y - 5.5, x + 5.5, y + 5.5), &brush(HALO));
-			canvas.draw_rect(SkRect::new(x - 4., y - 4., x + 4., y + 4.), &brush(color));
-		}
-		HandleKind::Point(_) | HandleKind::Node(_) => both(&|p| {
-			canvas.draw_circle((x, y), 4.5, p);
-		}),
-		HandleKind::InHandle(_) | HandleKind::OutHandle(_) => {
-			canvas.draw_circle((x, y), 4.5, &brush(HALO));
-			canvas.draw_circle((x, y), 3., &brush(color));
-		}
-	}
-}
-
 /// Draws the overlay of one picture in the cell's logical pixels.
 pub fn draw(canvas: &Canvas, t: &CanvasTransform, f: &OverlayFrame<'_>) {
-	let s = |p: (f32, f32)| t.to_screen(p.0, p.1);
-	let m = f.model;
-	for line in &m.lines {
-		let (a, b) = (s(line.a), s(line.b));
-		canvas.draw_line(a, b, &pen(HALO, 3.));
-		let mut dash = pen(if line.selected { SELECTED } else { HANDLE }, 1.5);
-		dash.set_path_effect(PathEffect::dash(&[5., 4.], 0.));
-		canvas.draw_line(a, b, &dash);
-	}
-	f.dots.draw(canvas, t, &m.dots);
-	for outline in &m.outlines {
-		let mut path = PathBuilder::new();
-		for (i, p) in outline.points.iter().enumerate() {
-			let q = s(*p);
-			if i == 0 {
-				path.move_to(q);
-			} else {
-				path.line_to(q);
-			}
-		}
-		if outline.closed {
-			path.close();
-		}
-		let path = path.detach();
-		canvas.draw_path(&path, &pen(HALO, 3.));
-		canvas.draw_path(&path, &pen(SELECTED, 1.));
-	}
-	for (i, h) in m.handles.iter().enumerate() {
-		let at = s(h.at);
-		if let Some(from) = h.from {
-			let from = s(from);
-			canvas.draw_line(from, at, &pen(HALO, 3.));
-			let mut line = pen(handle_color(h, false, f.accent), 1.);
-			if !h.kind.is_lever() {
-				line.set_path_effect(PathEffect::dash(&[2., 2.], 0.));
-			}
-			canvas.draw_line(from, at, &line);
-		}
-		glyph(canvas, h.kind, at, handle_color(h, f.focused == Some(i), f.accent));
-	}
-	let (px, py, pw, ph) = t.picture();
-	FONT.with(|font| {
-		for label in &m.labels {
-			let (x, y) = s(label.at);
-			let (width, _) = font.measure_str(&label.text, None);
-			let (mut lx, mut ly) = if label.below { (x - width / 2., y + 24.) } else { (x + 13., y + 4.) };
-			lx = lx.clamp(px + 2., (px + pw - width - 2.).max(px + 2.));
-			ly = ly.clamp(py + 12., (py + ph - 3.).max(py + 12.));
-			let mut halo = pen(HALO, 3.);
-			halo.set_stroke_join(freya::engine::prelude::PaintJoin::Round);
-			canvas.draw_str(&label.text, (lx, ly), font, &halo);
-			canvas.draw_str(&label.text, (lx, ly), font, &brush(if label.selected { SELECTED } else { HANDLE }));
-		}
-	});
+	let shapes =
+		view::shapes(f.model, t.scale, t.picture(), f.focused, rgba_of(f.accent), &DefaultFontText::new(LABEL_SIZE));
+	draw_shapes(canvas, &shapes, None, Some(f.dots));
 	if let Some((a, b)) = f.marquee {
-		let (a, b) = (s(a), s(b));
+		let (a, b) = (t.to_screen(a.0, a.1), t.to_screen(b.0, b.1));
 		let r = SkRect::new(a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1));
-		let mut fill = brush(f.accent);
+		let mut fill = Paint::default();
+		fill.set_anti_alias(true);
+		fill.set_style(PaintStyle::Fill);
+		fill.set_color(f.accent);
 		fill.set_alpha_f(0.15);
 		canvas.draw_rect(r, &fill);
-		let mut edge = pen(f.accent, 1.);
+		let mut edge = Paint::default();
+		edge.set_anti_alias(true);
+		edge.set_style(PaintStyle::Stroke);
+		edge.set_stroke_width(1.);
+		edge.set_color(f.accent);
 		edge.set_path_effect(PathEffect::dash(&[4., 3.], 0.));
 		canvas.draw_rect(r, &edge);
 	}
@@ -617,7 +432,7 @@ pub fn nudge(shared: &Shared, h: &Handle, dx: i32, dy: i32) {
 /// The overlay model of the picture of `layer` at `scale`.
 pub fn model_of(app: &App, layer: Layer, scale: f32) -> OverlayModel {
 	let d = &app.document.project.display;
-	handles::build(
+	view::build(
 		&app.document.project,
 		app.selection.items(),
 		app.selection.current_item(),

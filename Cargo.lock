@@ -5967,6 +5967,7 @@ dependencies = [
  "wavedude-examples",
  "wavedude-export",
  "wavedude-testing",
+ "wavedude-view",
  "wavedude-widgets",
  "winresource",
 ]
@@ -6006,6 +6007,7 @@ dependencies = [
  "wavedude-app-state",
  "wavedude-core",
  "wavedude-export",
+ "wavedude-view",
 ]
 
 [[package]]
@@ -6065,6 +6067,7 @@ dependencies = [
  "tracing",
  "ureq",
  "wavedude-core",
+ "wavedude-view",
 ]
 
 [[package]]
@@ -6082,6 +6085,14 @@ version = "0.2.2"
 dependencies = [
  "freya",
  "freya-testing",
+]
+
+[[package]]
+name = "wavedude-view"
+version = "0.2.1"
+dependencies = [
+ "serde",
+ "wavedude-core",
 ]
 
 [[package]]
@@ -6108,6 +6119,7 @@ dependencies = [
  "serde",
  "serde_json",
  "wavedude-testing",
+ "wavedude-view",
 ]
 
 [[package]]

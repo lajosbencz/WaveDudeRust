@@ -6,8 +6,9 @@ use wavedude_core::engine::emitters::elements_of;
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::model::normalize::box_in_canvas;
 use wavedude_core::model::{Layer, Probe, ProbeKind, Project, Source};
+use wavedude_view::draw::{Rgba, TextMetrics};
+use wavedude_view::graph::{self, EDGE_PAD, GraphData, GraphLayout};
 
-use crate::graph::{self, EDGE_PAD, GraphData, GraphLayout, LABEL_GAP, TextMetrics};
 use crate::raster::{BLACK, Canvas, Color, IRect, Mask, Typeface, WHITE, argb, typeface};
 
 /// The probe cross's arm: `max(6, h / 120)`.
@@ -230,21 +231,10 @@ fn ink_of(layer: &[u8], width: usize) -> IRect {
 	}
 }
 
-/// The fixed colours of a graph box.
-mod box_colors {
-	use super::{Color, argb};
-	pub(super) const BACKGROUND: Color = argb(235, 14, 16, 22);
-	pub(super) const BORDER: Color = argb(170, 200, 200, 210);
-	pub(super) const GRID: Color = argb(46, 255, 255, 255);
-	pub(super) const ZERO: Color = argb(120, 255, 255, 255);
-	pub(super) const FRAME: Color = argb(130, 200, 200, 210);
-	pub(super) const LABEL: Color = argb(225, 225, 225, 230);
-	pub(super) const TITLE: Color = argb(240, 240, 240, 245);
-	pub(super) const CURVE: Color = argb(255, 255, 208, 64);
+/// A graph box colour in the raster's layout.
+const fn color(c: Rgba) -> Color {
+	argb(c.a, c.r, c.g, c.b)
 }
-
-/// Graph box text size, pixels.
-pub const GRAPH_TEXT_SIZE: f32 = 11.0;
 
 /// [`TextMetrics`] of the embedded typeface at one size.
 pub struct FaceMetrics {
@@ -264,7 +254,6 @@ impl TextMetrics for FaceMetrics {
 
 /// Draws a laid-out graph box with its top-left at `(bx, by)`.
 pub fn draw_graph_box(canvas: &mut Canvas<'_>, layout: &GraphLayout, bx: i32, by: i32) {
-	use box_colors::*;
 	if !layout.visible {
 		return;
 	}
@@ -272,43 +261,39 @@ pub fn draw_graph_box(canvas: &mut Canvas<'_>, layout: &GraphLayout, bx: i32, by
 	let rect = IRect::new(bx, by, w, h);
 	let clip = rect.intersect(&canvas.bounds());
 	let face = typeface();
-	let size = GRAPH_TEXT_SIZE;
-	let line_height = face.line_height(size);
+	let size = graph::FONT_SIZE;
 	let text = |canvas: &mut Canvas<'_>, s: &str, x: f32, y: f32, color: Color| {
 		let mask = face.mask(s, size, bx as f32 + x, by as f32 + y, false, clip);
 		canvas.fill_mask(&mask, color);
 	};
-	canvas.fill_rect(clip, BACKGROUND);
-	canvas.stroke_rect(rect, BORDER);
+	canvas.fill_rect(clip, color(graph::BACKGROUND));
+	canvas.stroke_rect(rect, color(graph::BORDER));
 	if layout.has_plot {
 		let left = layout.plot_x.round() as i32;
 		let top = layout.plot_y.round() as i32;
 		let right = (layout.plot_x + layout.plot_width).round() as i32;
 		let bottom = (layout.plot_y + layout.plot_height).round() as i32;
-		let (pt, pb) = (layout.plot_y, layout.plot_y + layout.plot_height);
 		for tick in &layout.y_ticks {
 			let row = tick.position.round() as i32;
 			canvas.fill_rect(
 				IRect::new(bx + left, by + row, right - left, 1).intersect(&clip),
-				if tick.zero { ZERO } else { GRID },
+				if tick.zero { color(graph::ZERO) } else { color(graph::GRID) },
 			);
 			if !tick.label.is_empty() {
-				let lw = face.measure(&tick.label, size, false);
-				let lx = EDGE_PAD.max(layout.plot_x - LABEL_GAP - lw);
-				let ly = (tick.position - line_height / 2.0).clamp(pt - line_height / 2.0, pb - line_height / 2.0);
-				text(canvas, &tick.label, lx, ly, LABEL);
+				text(canvas, &tick.label, tick.label_at.0, tick.label_at.1, color(graph::LABEL));
 			}
 		}
 		for tick in &layout.x_ticks {
 			let column = tick.position.round() as i32;
-			canvas.fill_rect(IRect::new(bx + column, by + top, 1, bottom - top).intersect(&clip), GRID);
+			canvas.fill_rect(IRect::new(bx + column, by + top, 1, bottom - top).intersect(&clip), color(graph::GRID));
 			if !tick.label.is_empty() {
-				let lw = face.measure(&tick.label, size, false);
-				let lx = (tick.position - lw / 2.0).clamp(EDGE_PAD, EDGE_PAD.max(layout.width - lw - EDGE_PAD));
-				text(canvas, &tick.label, lx, pb + 2.0, LABEL);
+				text(canvas, &tick.label, tick.label_at.0, tick.label_at.1, color(graph::LABEL));
 			}
 		}
-		canvas.stroke_rect(IRect::new(bx + left, by + top, right - left + 1, bottom - top + 1).intersect(&clip), FRAME);
+		canvas.stroke_rect(
+			IRect::new(bx + left, by + top, right - left + 1, bottom - top + 1).intersect(&clip),
+			color(graph::FRAME),
+		);
 		let plot_clip = IRect::new(bx + left, by + top, right - left, bottom - top).intersect(&clip);
 		let mut curve = Mask::new(plot_clip);
 		let points: Vec<(f32, f32)> = layout.curve.iter().map(|&(x, y)| (bx as f32 + x, by as f32 + y)).collect();
@@ -317,15 +302,15 @@ pub fn draw_graph_box(canvas: &mut Canvas<'_>, layout: &GraphLayout, bx: i32, by
 			[p] => curve.disc(p.0, p.1, 2.0),
 			_ => curve.polyline(&points, layout.line_width),
 		}
-		canvas.fill_mask(&curve, CURVE);
+		canvas.fill_mask(&curve, color(graph::CURVE));
 	}
 	let mut readout_width = 0.0;
 	if !layout.readout.is_empty() {
 		readout_width = face.measure(&layout.readout, size, false);
-		text(canvas, &layout.readout, layout.width - readout_width - 8.0, EDGE_PAD, CURVE);
+		text(canvas, &layout.readout, layout.width - readout_width - 8.0, EDGE_PAD, color(graph::CURVE));
 	}
 	let title = face.fit(&layout.title, size, (layout.width - readout_width - 16.0).max(10.0));
-	text(canvas, &title, EDGE_PAD + 3.0, EDGE_PAD, TITLE);
+	text(canvas, &title, EDGE_PAD + 3.0, EDGE_PAD, color(graph::TITLE));
 }
 
 /// One active probe of an export: its 1-based number among the active probes, a copy, its recording.
@@ -417,7 +402,7 @@ impl Overlays {
 			canvas.composite(pixels, *ink);
 		}
 		if self.probe_graphs {
-			let metrics = FaceMetrics { face: typeface(), size: GRAPH_TEXT_SIZE };
+			let metrics = FaceMetrics { face: typeface(), size: graph::FONT_SIZE };
 			let step = frame as u64 * self.visualize_every as u64;
 			for p in of_layer() {
 				let trace = p.trace.as_ref().expect("a trace per active probe when graphs are exported");

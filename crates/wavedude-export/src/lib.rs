@@ -12,7 +12,6 @@ use wavedude_core::model::Layer;
 
 mod bits;
 pub mod csv;
-pub mod graph;
 #[cfg(feature = "mp4")]
 pub mod h264;
 pub mod job;

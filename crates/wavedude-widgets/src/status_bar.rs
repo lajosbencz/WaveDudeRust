@@ -7,7 +7,7 @@ use freya::engine::prelude::SkRect;
 use freya::prelude::*;
 
 use crate::message_list::LogLevel;
-use crate::paint::{DeviceGrid, fill, stroke};
+use crate::paint::{DeviceGrid, DeviceGridExt, fill, stroke};
 use crate::theme::use_wave_theme;
 use crate::tooltip::Tip;
 use crate::util::{TestIdExt, wide_tooltip};

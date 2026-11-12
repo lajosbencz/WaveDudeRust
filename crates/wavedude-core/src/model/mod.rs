@@ -5,6 +5,7 @@
 
 mod display;
 pub mod fields;
+mod items;
 pub mod lens_geometry;
 pub mod meta;
 pub mod names;
@@ -22,6 +23,7 @@ pub mod timeline;
 
 pub use display::*;
 pub use fields::*;
+pub use items::*;
 pub use parts::*;
 pub use probe::*;
 pub use project::*;

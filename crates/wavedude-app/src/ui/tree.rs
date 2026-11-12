@@ -4,7 +4,7 @@
 use std::borrow::Cow;
 
 use freya::prelude::*;
-use wavedude_core::model::{Lens, Part, PartKind, Project};
+use wavedude_core::model::{ItemKind, ItemRef, Lens, Part, PartKind, Project};
 use wavedude_widgets::icon::icons;
 use wavedude_widgets::tree::{DropPosition, RowKind, reorder_index};
 use wavedude_widgets::{
@@ -14,7 +14,7 @@ use wavedude_widgets::{
 
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, NewPart};
-use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
+use wavedude_app_state::selection::Row;
 use wavedude_app_state::strings::Strings;
 
 use super::app::Cx;

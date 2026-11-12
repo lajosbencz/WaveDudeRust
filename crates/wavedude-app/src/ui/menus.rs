@@ -10,12 +10,12 @@ use wavedude_widgets::{Check, MenuEntry, MenuItem, MenuModel, Submenu};
 
 use wavedude_app_state::clipboard::{Copyable, PasteTarget};
 use wavedude_app_state::commands::{Command, NewPart};
-use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
+use wavedude_app_state::selection::Row;
 use wavedude_app_state::settings::{DITHER_BITS, Theme as ThemeSetting};
 use wavedude_app_state::strings::{Language, Strings};
 use wavedude_app_state::{Event as AppEvent, Guarded};
-use wavedude_core::model::ProbeDetector;
 use wavedude_core::model::Word;
+use wavedude_core::model::{ItemKind, ItemRef, ProbeDetector};
 
 use super::app::{Cx, Ui};
 use super::dialogs::{self, Modal};

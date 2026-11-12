@@ -30,13 +30,14 @@ mod paint;
 mod util;
 
 pub use edit::{EditEnd, FocusRequest, PendingEdit, use_focus_on_layout, use_pending_edit};
+pub use paint::{DefaultFontText, DotCache, ElementFonts, color_of, draw_shapes, rgba_of};
 pub use util::{TestIdExt, use_modifiers};
 
 pub use button::Button;
 pub use color_button::{ColorButton, ColorPicker, Hsv, PickerTips, Rgb};
 pub use dock::{DockHost, DockLayout, DockPane, PaneGroup, Side};
 pub use gradient_editor::{Gradient, GradientEditor, GradientStop};
-pub use graph_box::{GraphBox, GraphData, GraphLayout, GraphTick, TextMeasure};
+pub use graph_box::{GraphBox, GraphData};
 pub use header_strip::{HeaderStrip, StripOrientation};
 pub use icon::{Icon, IconView};
 pub use menu::{Check, ContextMenuHost, MenuBar, MenuEntry, MenuItem, MenuModel, Submenu};

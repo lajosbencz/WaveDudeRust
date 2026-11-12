@@ -10,10 +10,10 @@ use wavedude_core::model::ranges;
 use wavedude_core::model::{
 	self as m, BoxSize, BraggReflector, Coating, ColorScheme, Diffuser, Display, DisplayLayer, Ellipse,
 	FacettedGrating, Fiber, FiberNode, Field as _, Fields, FilterLayer, FresnelLens, GrinLens, InterferenceFilter,
-	Layer, Lens, LogicGate, Material, Measurement, MetaAxiconDesign, MetaDesign, MetaLensDesign, MetaPrismDesign,
-	MetaSurface, Number, Outline, Part, PartBase, PartKind, Point, Polygon, Probe, ProbeDetector, ProbeKind, Project,
-	ProjectEdit, Prop, Rectangle, Scene, SceneMode, SchemeKind, SimpleGrating, Simulation, Source, SourceArray,
-	SourceMode, Stencil, Triangle, TriangleType, Video, YScale, ZonePlate,
+	ItemKind, Layer, Lens, LogicGate, Material, Measurement, MetaAxiconDesign, MetaDesign, MetaLensDesign,
+	MetaPrismDesign, MetaSurface, Number, Outline, Part, PartBase, PartKind, Point, Polygon, Probe, ProbeDetector,
+	ProbeKind, Project, ProjectEdit, Prop, Rectangle, Scene, SceneMode, SchemeKind, SimpleGrating, Simulation, Source,
+	SourceArray, SourceMode, Stencil, Triangle, TriangleType, Video, YScale, ZonePlate,
 };
 use wavedude_core::scene::gate_design::{self, GateDesign};
 use wavedude_widgets::icon::{Icon, icons};
@@ -23,7 +23,7 @@ use wavedude_widgets::{
 };
 
 use wavedude_app_state::commands::{Command, Edit, NewPart};
-use wavedude_app_state::selection::{ItemKind, Row};
+use wavedude_app_state::selection::Row;
 use wavedude_app_state::{Event as AppEvent, Guarded};
 
 use super::dialogs;

@@ -57,9 +57,10 @@ cargo packager signer generate --path wavedude-updater.key
 
 The `.pub` file's content is `UPDATER_PUBKEY`, the key file's content `UPDATER_PRIVATE_KEY`.
 
-crates.io publishing is off. `wavedude-core` and `wavedude-export` are ready for it (`wavedude-export` names
-`wavedude-core`'s version, which the release PR keeps in step); turning it on means a job in [`release.yml`](../.github/workflows/release.yml) after
-`release` running `cargo publish -p wavedude-core` then `-p wavedude-export`, with the repository as their trusted
+crates.io publishing is off. `wavedude-model-derive`, `wavedude-core`, `wavedude-view` and `wavedude-export` are ready
+for it (each names the versions of the others it uses, which the release PR keeps in step); turning it on means a job in
+[`release.yml`](../.github/workflows/release.yml) after `release` running `cargo publish -p wavedude-model-derive`, then `-p wavedude-core`,
+`-p wavedude-view` and `-p wavedude-export` in that order, with the repository as their trusted
 publisher (crates.io > crate > Settings > Trusted Publishing; a token only for each crate's first publish).
 
 - Settings > Pages: source GitHub Actions. The environment `github-pages` (Settings > Environments, created by the first

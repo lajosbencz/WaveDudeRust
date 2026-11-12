@@ -33,6 +33,7 @@ wavedude-widgets = { path = "../wavedude-widgets" }
 wavedude-export = { path = "../wavedude-export" }
 wavedude-app-state = { path = "../wavedude-app-state" }
 wavedude-examples = { path = "../wavedude-examples" }
+wavedude-view = { path = "../wavedude-view" }
 bytes = "1"
 mundy = { version = "0.2.3", default-features = false, features = ["async-io", "callback", "color-scheme"] }
 rfd = "0.17"

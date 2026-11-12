@@ -168,7 +168,8 @@ emitter dots the source layer is cached as a bitmap).
   step (or position) labels under it, the curve and a title strip with the probe name and a live readout
   (right-aligned, in the curve's colour): "= <last value>" for a point probe, "max <value>" for a line probe.
   Numbers in three significant digits as Next writes them ("0", "1E-05", "3.08E-05"). Fixed 11 px text: the text
-  does not scale with the box. Laid out by the export's graph layout, so preview and export draw the same graph.
+  does not scale with the box. Laid out by the graph layout the export uses too
+  ([`graph.rs`](../../crates/wavedude-view/src/graph.rs)), so preview and export draw the same graph.
 - Position/size from the probe: Box x/y in canvas pixels; size from Box size (Tiny 200 x 100 ... Extra large,
   Custom = Box width/height). A box larger than the canvas shrinks to fit, aspect kept. Mapped with the picture's
   scale; edges on whole pixels.

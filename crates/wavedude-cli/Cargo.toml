@@ -28,6 +28,7 @@ ctrlc = "3.4"
 png.workspace = true
 tracing-subscriber = "0.3"
 wavedude-core = { path = "../wavedude-core" }
+wavedude-view = { path = "../wavedude-view" }
 wavedude-export = { path = "../wavedude-export", default-features = false, features = ["clap"] }
 wavedude-app-state = { path = "../wavedude-app-state", optional = true }
 

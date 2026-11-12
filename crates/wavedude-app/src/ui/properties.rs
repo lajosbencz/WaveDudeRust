@@ -8,8 +8,8 @@ use wavedude_widgets::Button;
 use freya::prelude::*;
 use wavedude_core::model::ranges::Range;
 use wavedude_core::model::{
-	ColorScheme, Display, Edit as _, Field as _, Fields, Nested, Number, Part, Probe, Project, Prop, Scene, Simulation,
-	Source, Variant, Word,
+	ColorScheme, Display, Edit as _, Field as _, Fields, ItemKind, Nested, Number, Part, Probe, Project, Prop, Scene,
+	Simulation, Source, Variant, Word,
 };
 use wavedude_widgets::icon::icons;
 use wavedude_widgets::{Check, FocusRequest, Gradient, TestIdExt, TextBox};
@@ -19,7 +19,7 @@ use wavedude_widgets::{
 
 use wavedude_app_state::Event as AppEvent;
 use wavedude_app_state::commands::{Command, Edit};
-use wavedude_app_state::selection::{ItemKind, Row};
+use wavedude_app_state::selection::Row;
 use wavedude_app_state::strings::{Language, Strings};
 
 use super::app::Cx;

@@ -133,7 +133,7 @@ jobs:
       - name: Check
         run: cargo +"$MSRV" check --workspace --all-targets
 
-  # The core without runs, with and without the GPU engine, and the wasm package stay buildable for the browser
+  # The core without runs, with and without the GPU engine, the view crate and the wasm package stay buildable for the browser
   # (docs/decisions/0015-core-builds-for-wasm.md, docs/decisions/0016-gpu-engine-in-the-browser.md,
   # docs/decisions/0017-a-wasm-package-and-a-web-demo.md).
   wasm32:
@@ -155,6 +155,8 @@ jobs:
         run: cargo clippy -p wavedude-core --no-default-features --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy with the GPU engine
         run: cargo clippy -p wavedude-core --no-default-features --features gpu --target wasm32-unknown-unknown -- -D warnings
+      - name: Clippy of the view crate
+        run: cargo clippy -p wavedude-view --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy of the wasm package
         run: cargo clippy -p wavedude-wasm --target wasm32-unknown-unknown -- -D warnings
 

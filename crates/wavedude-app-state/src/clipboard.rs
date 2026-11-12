@@ -10,9 +10,11 @@ use quick_xml::Reader;
 use quick_xml::events::Event;
 use wavedude_core::io::wdproj;
 use wavedude_core::model::names::copy_name;
-use wavedude_core::model::{ColorScheme, Display, Part, Point, Probe, Project, Scene, Simulation, Source};
+use wavedude_core::model::{
+	ColorScheme, Display, ItemKind, ItemRef, Part, Point, Probe, Project, Scene, Simulation, Source,
+};
 
-use super::selection::{ItemKind, ItemRef, Row, move_group};
+use super::selection::{Row, move_group};
 
 /// The app's own clipboard format name.
 pub const FORMAT: &str = "WaveDudeNext.Objects";

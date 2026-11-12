@@ -25,7 +25,8 @@ use wavedude_core::quality::PreviewQuality;
 use wavedude_core::render::{HalfTable, fit_brightness, render_half};
 use wavedude_core::scene::pixels::ScenePixels;
 use wavedude_core::spec::RunSpec;
-use wavedude_export::graph::{self, GraphData, TextMetrics};
+use wavedude_view::draw::TextMetrics;
+use wavedude_view::graph::{self, GraphData};
 
 use crate::png_out::{write_grey, write_rgba};
 use crate::project::{load, scene_pixels};
