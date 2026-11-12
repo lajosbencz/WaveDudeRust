@@ -1,5 +1,5 @@
 # typos: spelling in code and docs, run by CI. The translated string tables, the shipped project files and the
-# review notes are not English prose.
+# review notes are not English prose; the NSIS template is cargo-packager's, kept as it is to diff on a bump.
 
 [files]
 extend-exclude = [
@@ -10,6 +10,7 @@ extend-exclude = [
 	"examples/**",
 	"docs/review/**",
 	"CHANGELOG.md",
+	"crates/wavedude-app/assets/windows/installer.nsi",
 	"crates/wavedude-core/tests/snapshots/**",
 ]
 

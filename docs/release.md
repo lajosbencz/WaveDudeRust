@@ -93,9 +93,12 @@ set again at those sizes and commit it with the SVG.
 `.wdproj` and `.wdscheme` are declared once per platform, all naming the MIME types of the file associations in
 [`crates/wavedude-app/Cargo.toml`](../crates/wavedude-app/Cargo.toml):
 
-- Windows: the NSIS installer registers the ProgIds `WaveDudeRust.Project` and `WaveDudeRust.ColorScheme` (the
-  associations' `name`). cargo-packager 0.11.8's uninstaller leaves them registered (its template loops over
-  `association.ext`, a field that does not exist).
+- Windows: the NSIS installer offers the ProgIds `WaveDudeRust.Project` and `WaveDudeRust.ColorScheme` (the
+  associations' `name`) as an unticked component, ticked when an earlier install registered them: an unsigned
+  installer that changes file associations unasked is flagged by Defender. The template is cargo-packager 0.11.8's
+  with that change, [`assets/windows/installer.nsi`](../crates/wavedude-app/assets/windows/installer.nsi); its
+  uninstaller removes the associations still pointing at the app (the stock one loops over `association.ext`, a
+  field that does not exist). A cargo-packager bump means diffing the template again.
 - macOS: [`assets/macos/Info.plist`](../crates/wavedude-app/assets/macos/Info.plist), merged over cargo-packager's, exports the two types and names them in the document
   types. The Finder hands a file to the running app as `application:openURLs:`, which the app delegate of
   [`src/ui/open_requests.rs`](../crates/wavedude-app/src/ui/open_requests.rs) queues for the window.

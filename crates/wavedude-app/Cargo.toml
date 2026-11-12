@@ -79,6 +79,8 @@ file-associations = [
 
 [package.metadata.packager.nsis]
 installer-icon = "assets/icons/icon.ico"
+# The stock template with the file associations opt-in.
+template = "assets/windows/installer.nsi"
 
 # Ad-hoc signature: an unsigned bundle on Apple silicon is reported as damaged instead of unverified.
 [package.metadata.packager.macos]
