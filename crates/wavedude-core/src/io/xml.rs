@@ -40,12 +40,41 @@ pub(crate) fn line_col(text: &str, pos: usize) -> (usize, usize) {
 	(line, column)
 }
 
+/// [`line_col`] of increasing offsets, each byte scanned once.
+struct Cursor<'a> {
+	text: &'a str,
+	pos: usize,
+	at: (usize, usize),
+}
+
+impl<'a> Cursor<'a> {
+	fn new(text: &'a str) -> Self {
+		Self { text, pos: 0, at: (1, 1) }
+	}
+
+	fn at(&mut self, pos: usize) -> (usize, usize) {
+		let Some(span) = self.text.get(self.pos..pos) else { return line_col(self.text, pos) };
+		match span.rfind('\n') {
+			Some(i) => self.at = (self.at.0 + span.matches('\n').count(), span[i + 1..].chars().count() + 1),
+			None => self.at.1 += span.chars().count(),
+		}
+		self.pos = pos;
+		self.at
+	}
+}
+
 fn error_at(text: &str, pos: usize, message: impl fmt::Display) -> FormatError {
 	FormatError { message: message.to_string(), at: Some(line_col(text, pos)) }
 }
 
-fn start_element(text: &str, pos: usize, e: &BytesStart<'_>, version: XmlVersion) -> Result<Element, FormatError> {
-	let mut el = Element { name: e.name().as_ref().to_owned(), at: line_col(text, pos), ..Element::default() };
+fn start_element(
+	text: &str,
+	pos: usize,
+	at: (usize, usize),
+	e: &BytesStart<'_>,
+	version: XmlVersion,
+) -> Result<Element, FormatError> {
+	let mut el = Element { name: e.name().as_ref().to_owned(), at, ..Element::default() };
 	for attr in e.attributes() {
 		let attr = attr.map_err(|err| {
 			let key = match err {
@@ -76,6 +105,7 @@ pub(crate) fn parse(text: &str) -> Result<Document, FormatError> {
 	let mut stack: Vec<Element> = Vec::new();
 	let mut doctype = None;
 	let mut root = None;
+	let mut cursor = Cursor::new(text);
 	loop {
 		let pos = reader.buffer_position() as usize;
 		let event = reader.read_event().map_err(|err| error_at(text, reader.error_position() as usize, err))?;
@@ -83,9 +113,9 @@ pub(crate) fn parse(text: &str) -> Result<Document, FormatError> {
 			Event::Start(_) | Event::Empty(_) if root.is_some() => {
 				return Err(error_at(text, pos, "the document has more than one root element"));
 			}
-			Event::Start(e) => stack.push(start_element(text, pos, &e, version)?),
+			Event::Start(e) => stack.push(start_element(text, pos, cursor.at(pos), &e, version)?),
 			Event::Empty(e) => {
-				let el = start_element(text, pos, &e, version)?;
+				let el = start_element(text, pos, cursor.at(pos), &e, version)?;
 				match stack.last_mut() {
 					Some(parent) => parent.children.push(el),
 					None => root = Some(el),
@@ -375,5 +405,14 @@ mod tests {
 		assert_eq!(err.at.unwrap().0, 2);
 		assert!(parse("<A><B></A>").is_err());
 		assert!(parse("<A>").is_err());
+	}
+
+	#[test]
+	fn the_cursor_agrees_with_line_col() {
+		let text = "<a>\n  <b x=\"\u{e9}\u{e9}\"/>\n\n<c>\u{1f600}</c>\n</a>";
+		let mut cursor = Cursor::new(text);
+		for pos in (0..=text.len()).filter(|&p| text.is_char_boundary(p)) {
+			assert_eq!(cursor.at(pos), line_col(text, pos), "offset {pos}");
+		}
 	}
 }

@@ -83,7 +83,7 @@ fn import_scene(s: Option<&Obj>, scene: &mut Scene, folder: &Path, notes: &mut V
 	scene.height = uint(s, "user_height", 1080);
 	scene.edges = Edges::Reflective;
 	scene.damping_edge =
-		if flag(s, "damping_edge_enabled", false) { int(s, "damping_edge_size_px", 64).abs() } else { 0 };
+		if flag(s, "damping_edge_enabled", false) { int(s, "damping_edge_size_px", 64).saturating_abs() } else { 0 };
 	scene.image_sources = flag(s, "use_sources", false);
 	scene.image_source_scale = double(s, "image_source_scale", 1.0);
 	scene.object_sources = flag(s, "use_object_sources", false);
@@ -309,6 +309,13 @@ pub fn suggested_file_name(path: &Path, project_name: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn the_least_damping_edge_becomes_the_widest_band() {
+		let json = r#"{"scene":{"damping_edge_enabled":true,"damping_edge_size_px":-2147483648}}"#;
+		let p = import_str(json, Path::new("/nowhere")).unwrap().project;
+		assert_eq!(p.scene.damping_edge, ranges::SCENE_DAMPING_EDGE.max as i32);
+	}
 
 	#[test]
 	fn tolerant_readers_and_fallbacks() {

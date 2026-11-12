@@ -7,6 +7,7 @@
 //! the next capture has begun, so the engine's readback overlaps the steps in between. Control (pause, resume, cancel) and the published state may be used from
 //! any thread. Events are delivered on the driver thread; progress at most 30 times a second.
 
+use crate::sync::lock;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{SyncSender, sync_channel};
@@ -49,7 +50,7 @@ impl RunError {
 			.downcast_ref::<String>()
 			.cloned()
 			.or_else(|| payload.downcast_ref::<&str>().map(ToString::to_string))
-			.unwrap_or_default();
+			.unwrap_or_else(|| "a payload that is not text".to_owned());
 		Self::Panic(what, message)
 	}
 }
@@ -123,17 +124,17 @@ impl Shared {
 	}
 
 	fn set_state(&self, state: RunState) {
-		*self.state.lock().unwrap_or_else(PoisonError::into_inner) = state.clone();
+		*lock(&self.state) = state.clone();
 		self.emit(RunEvent::State(state));
 	}
 
 	/// Blocks while paused; false once cancelled.
 	fn gate(&self) -> bool {
-		let mut control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+		let mut control = lock(&self.control);
 		if control.paused && !control.cancelled {
 			drop(control);
 			self.set_state(RunState::Paused);
-			control = self.control.lock().unwrap_or_else(PoisonError::into_inner);
+			control = lock(&self.control);
 			while control.paused && !control.cancelled {
 				control = self.wake.wait(control).unwrap_or_else(PoisonError::into_inner);
 			}
@@ -200,7 +201,7 @@ impl SimulationRun {
 	}
 
 	pub fn state(&self) -> RunState {
-		self.shared.state.lock().unwrap_or_else(PoisonError::into_inner).clone()
+		lock(&self.shared.state).clone()
 	}
 
 	pub fn steps_done(&self) -> u32 {
@@ -219,28 +220,28 @@ impl SimulationRun {
 
 	/// The probe traces in the spec's probe order, up to the last heartbeat (all of them once finished).
 	pub fn traces(&self) -> Vec<ProbeTrace> {
-		self.shared.traces.lock().unwrap_or_else(PoisonError::into_inner).clone()
+		lock(&self.shared.traces).clone()
 	}
 
 	pub fn with_traces<R>(&self, f: impl FnOnce(&[ProbeTrace]) -> R) -> R {
-		f(&self.shared.traces.lock().unwrap_or_else(PoisonError::into_inner))
+		f(&lock(&self.shared.traces))
 	}
 
 	pub fn pause(&self) {
-		self.shared.control.lock().unwrap_or_else(PoisonError::into_inner).paused = true;
+		lock(&self.shared.control).paused = true;
 	}
 
 	pub fn resume(&self) {
-		self.shared.control.lock().unwrap_or_else(PoisonError::into_inner).paused = false;
+		lock(&self.shared.control).paused = false;
 		self.shared.wake.notify_all();
 	}
 
 	pub fn is_pause_requested(&self) -> bool {
-		self.shared.control.lock().unwrap_or_else(PoisonError::into_inner).paused
+		lock(&self.shared.control).paused
 	}
 
 	pub fn cancel(&self) {
-		self.shared.control.lock().unwrap_or_else(PoisonError::into_inner).cancelled = true;
+		lock(&self.shared.control).cancelled = true;
 		self.shared.wake.notify_all();
 	}
 
@@ -268,8 +269,7 @@ impl SimulationRun {
 				Err(panic) => {
 					let error = RunError::panic("the run's driver", panic.as_ref());
 					tracing::error!("{error}");
-					*self.shared.state.lock().unwrap_or_else(PoisonError::into_inner) =
-						RunState::Failed(Arc::new(error));
+					*lock(&self.shared.state) = RunState::Failed(Arc::new(error));
 					self.shared.finished.store(true, Ordering::Release);
 				}
 			}
@@ -321,7 +321,7 @@ fn drive(
 		"run finished"
 	);
 	shared.emit(RunEvent::Progress { steps_done, frames });
-	*shared.state.lock().unwrap_or_else(PoisonError::into_inner) = state.clone();
+	*lock(&shared.state) = state.clone();
 	shared.finished.store(true, Ordering::Release);
 	shared.emit(RunEvent::State(state));
 	engine
@@ -335,8 +335,7 @@ fn step_all(
 	shared: &Shared,
 ) -> Result<bool, RunError> {
 	let mut collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene, spec.seed));
-	*shared.traces.lock().unwrap_or_else(PoisonError::into_inner) =
-		collector.as_ref().map(|c| c.traces.clone()).unwrap_or_default();
+	*lock(&shared.traces) = collector.as_ref().map(|c| c.traces.clone()).unwrap_or_default();
 	engine.set_emitters(&spec.emitters);
 	engine.set_probes(collector.as_ref().map(ProbeCollector::cells).unwrap_or_default());
 	engine.reset();
@@ -388,7 +387,7 @@ fn step_loop(
 	let mut completed = true;
 	for i in 0..spec.steps {
 		// A paused run shows its last capture and its probes so far.
-		if shared.control.lock().unwrap_or_else(PoisonError::into_inner).paused {
+		if lock(&shared.control).paused {
 			if let Some(c) = collector.as_deref_mut() {
 				record(engine, c, &mut recorded, every)?;
 			}
@@ -459,7 +458,7 @@ pub(crate) fn record(
 /// Moves the samples and profiles recorded since the last heartbeat into the shared traces.
 fn publish(shared: &Shared, collector: Option<&mut ProbeCollector>, steps_done: u32) {
 	if let Some(c) = collector {
-		let mut traces = shared.traces.lock().unwrap_or_else(PoisonError::into_inner);
+		let mut traces = lock(&shared.traces);
 		for (out, t) in traces.iter_mut().zip(&mut c.traces) {
 			out.series.append(&mut t.series);
 			out.profiles.append(&mut t.profiles);

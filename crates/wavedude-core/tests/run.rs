@@ -485,6 +485,20 @@ fn the_traces_of_the_frame_kept_through_a_clear_are_held_with_it() {
 }
 
 #[test]
+fn a_panicking_engine_fails_the_live_run() {
+	let dir = tempfile::tempdir().unwrap();
+	let w = RunWorker::new(
+		Box::new(|_, _| -> Box<dyn WaveEngine> { panic!("the engine broke") }),
+		dir.path().to_path_buf(),
+		Arc::default(),
+	)
+	.unwrap();
+	let p = project(64, 48, 100);
+	w.set_goal(goal(&request(&p, PreviewQuality::FULL), 5, Wanted::Position));
+	wait_until(|| matches!(w.status().state, WorkState::Failed(_)));
+}
+
+#[test]
 fn the_engine_is_kept_across_edits_of_the_same_grid() {
 	let dir = tempfile::tempdir().unwrap();
 	let built = Arc::new(std::sync::atomic::AtomicUsize::new(0));

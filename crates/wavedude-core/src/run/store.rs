@@ -691,8 +691,11 @@ fn prepare_blocks(
 	if let Some(release) = release {
 		release();
 	}
-	let pool =
-		rayon::ThreadPoolBuilder::new().num_threads(TOUCH_THREADS).thread_name(|i| format!("frame-touch-{i}")).build();
+	let pool = rayon::ThreadPoolBuilder::new()
+		.num_threads(TOUCH_THREADS)
+		.thread_name(|i| format!("frame-touch-{i}"))
+		.build()
+		.inspect_err(|e| tracing::warn!("the frame-touch pool did not start, pages are touched on one thread: {e}"));
 	let bytes = layout.shape.plane_bytes();
 	let plane = || {
 		let mut plane = Vec::new();

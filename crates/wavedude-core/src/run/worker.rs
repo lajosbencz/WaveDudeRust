@@ -16,6 +16,7 @@
 //! every frame.
 
 use crate::sync::lock;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
@@ -233,7 +234,11 @@ impl RunWorker {
 
 impl Drop for RunWorker {
 	fn drop(&mut self) {
-		self.shared.shutdown.store(true, Ordering::Release);
+		{
+			// Under the goal lock: the worker checks `shutdown` under it before it waits.
+			let _goal = lock(&self.shared.goal);
+			self.shared.shutdown.store(true, Ordering::Release);
+		}
 		self.shared.wake.notify_one();
 		if let Some(t) = self.thread.take() {
 			let _ = t.join();
@@ -312,7 +317,9 @@ impl Worker {
 					g = self.shared.wake.wait(g).unwrap_or_else(PoisonError::into_inner);
 				}
 			};
-			match self.serve(&goal, number) {
+			let served = catch_unwind(AssertUnwindSafe(|| self.serve(&goal, number)))
+				.unwrap_or_else(|payload| Err(Interrupted::Failed(RunError::panic("the live run", payload.as_ref()))));
+			match served {
 				Ok(true) => {}
 				Ok(false) => self.wait_for_change(number),
 				Err(Interrupted::Stop) => {
@@ -640,13 +647,14 @@ impl Worker {
 			let spec = self.current.as_ref().expect("a current spec").spec.clone();
 			self.restart_engine(Some(&spec), &spec);
 		}
-		if self.steps_done == steps {
-			return Ok(());
-		}
 		let (every, capture_every) = {
 			let spec = &self.current.as_ref().expect("a current spec").spec;
 			(spec.visualize_every, spec.capture_every())
 		};
+		if self.steps_done == steps {
+			// Readings queued before an interruption still count for this target.
+			return self.record(every);
+		}
 		self.publish(state.clone());
 		let from = self.steps_done;
 		for i in from..steps {
@@ -885,5 +893,25 @@ mod tests {
 		let after = handle.status();
 		assert_eq!(after.adopted, 2);
 		assert_ne!(after.state, WorkState::Idle, "the traces are recorded anew");
+	}
+
+	#[test]
+	fn a_target_reached_by_an_interrupted_step_still_records_its_probes() {
+		let dir = tempfile::tempdir().unwrap();
+		let factory: EngineFactory = Box::new(|scene, options| Box::new(CpuEngine::new(scene, options)));
+		let mut w = Worker::new(Arc::new(Shared::new()), factory, dir.path().to_path_buf(), Arc::default());
+		let g = goal(1, &project(20));
+		let spec = w.spec_of(g.run.as_ref().unwrap()).unwrap();
+		served(w.adopt(&spec, &g).map(|()| true));
+		let target = 3;
+		// Stepped and queued as advance_to does, left before its final record (a goal change).
+		for _ in 0..spec.capture_every() * target + 1 {
+			let engine = w.engine.as_mut().unwrap();
+			engine.advance_one_step().unwrap();
+			engine.queue_probes().unwrap();
+			w.steps_done += 1;
+		}
+		served(w.step_to(target, false).map(|()| true));
+		assert!(!w.needed(target), "the queued readings are recorded");
 	}
 }
