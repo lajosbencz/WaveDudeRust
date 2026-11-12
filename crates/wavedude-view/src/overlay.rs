@@ -10,7 +10,7 @@ use wavedude_core::engine::emitters::elements_of;
 use wavedude_core::model::{Edges, ItemKind, ItemRef, Layer, Part, PartKind, ProbeKind, Project, Scene};
 use wavedude_core::scene::shapes::{self, Frame, Vec2};
 
-use crate::draw::{Baseline, DeviceGrid, Disc, Halo, Ink, Pen, Rect, Rgba, Shape, TextMetrics};
+use crate::draw::{DeviceGrid, Disc, Halo, Ink, Pen, Rect, Rgba, Shape, TextMetrics, TextStyle};
 
 /// Screen distance of a lever beyond the item's reach, logical pixels.
 pub const LEVER_GAP: f32 = 24.;
@@ -286,6 +286,8 @@ pub const SELECTED: Rgba = Rgba::rgb(0xFF, 0xE6, 0x00);
 pub const HALO: Rgba = Rgba::new(0x00, 0x00, 0x00, 0xB0);
 /// The labels' text size, logical pixels.
 pub const LABEL_SIZE: f32 = 11.;
+/// The labels' text style.
+pub const LABEL_STYLE: TextStyle = TextStyle::Label { halo: Halo { color: HALO, width: 3. } };
 
 fn handle_color(h: &Handle, focused: bool, accent: Rgba) -> Rgba {
 	if focused {
@@ -360,7 +362,7 @@ fn glyph(out: &mut Vec<Shape>, kind: HandleKind, (x, y): (f32, f32), color: Rgba
 
 /// The shapes of `model` over a picture at `picture` (x, y, width, height in the cell's logical pixels) and
 /// `scale`: probe lines, emitter dots, outlines, handles with the `focused` one in `accent`, then the labels,
-/// measured by `text` at [`LABEL_SIZE`] and held inside the picture.
+/// measured by `text` at [`LABEL_SIZE`] in [`LABEL_STYLE`] and held inside the picture.
 pub fn shapes(
 	model: &OverlayModel,
 	scale: f32,
@@ -410,10 +412,9 @@ pub fn shapes(
 		out.push(Shape::Text {
 			text: label.text.clone(),
 			at: (lx, ly),
-			baseline: Baseline::Alphabetic,
+			style: LABEL_STYLE,
 			size: LABEL_SIZE,
 			color: if label.selected { SELECTED } else { HANDLE },
-			halo: Some(Halo { color: HALO, width: 3. }),
 		});
 	}
 	out

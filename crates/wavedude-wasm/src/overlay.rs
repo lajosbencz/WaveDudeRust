@@ -37,8 +37,8 @@ pub(crate) struct Screen {
 	pub(crate) dpr: f32,
 }
 
-/// Text metrics in CSS pixels: of the labels at [`view::LABEL_SIZE`] in the alphabetic baseline's font, of the
-/// graph boxes at [`graph::FONT_SIZE`] in the top-anchored text's font.
+/// Text metrics in CSS pixels: of the labels at [`view::LABEL_SIZE`] in [`view::LABEL_STYLE`], of the graph boxes
+/// at [`graph::FONT_SIZE`] in [`TextStyle::GraphBox`](wavedude_view::draw::TextStyle::GraphBox).
 #[derive(Clone, Copy)]
 pub(crate) struct Fonts<'a> {
 	pub(crate) labels: &'a dyn TextMetrics,

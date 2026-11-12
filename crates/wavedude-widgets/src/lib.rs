@@ -30,7 +30,7 @@ mod paint;
 mod util;
 
 pub use edit::{EditEnd, FocusRequest, PendingEdit, use_focus_on_layout, use_pending_edit};
-pub use paint::{DefaultFontText, DotCache, ElementFonts, color_of, draw_shapes, rgba_of};
+pub use paint::{ElementFonts, LabelText, Painter, color_of, rgba_of};
 pub use util::{TestIdExt, use_modifiers};
 
 pub use button::Button;

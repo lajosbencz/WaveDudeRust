@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use freya::elements::image::ImageHandle;
-use freya::engine::prelude::{AlphaType, Paint, PaintStyle};
+use freya::engine::prelude::{AlphaType, Canvas, Paint, PaintStyle};
 use freya::prelude::*;
 use wavedude_view::graph::GraphLayout;
 use wavedude_widgets::graph_box::GraphBoxEvent;
@@ -227,7 +227,11 @@ fn app() -> impl IntoElement {
 				.child(PropertyRow::new("Gradient", GradientEditor::new(gradient)).full_width()),
 		);
 
-	let overlay = move |canvas: &freya::engine::prelude::Canvas, t: &CanvasTransform, pointer: Option<(f32, f32)>| {
+	let overlay = move |canvas: &Canvas,
+	                    _: &mut Painter,
+	                    _: ElementFonts<'_>,
+	                    t: &CanvasTransform,
+	                    pointer: Option<(f32, f32)>| {
 		let (x, y) = t.to_screen(100., 90.);
 		let mut paint = Paint::default();
 		paint.set_anti_alias(true);

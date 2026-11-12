@@ -652,7 +652,7 @@ mod tests {
 		let curves = groups[2..].iter().filter(|g| kinds(g).contains(&"Path")).count();
 		assert!(curves >= 2, "the integrated probe's and the line's curves");
 		let title = &groups[2]["shapes"].as_array().unwrap().iter().find(|s| s["text"] == "integrated").unwrap();
-		assert_eq!((title["baseline"].as_str(), title["size"].as_f64()), (Some("Top"), Some(22.)));
+		assert_eq!((title["style"]["kind"].as_str(), title["size"].as_f64()), (Some("GraphBox"), Some(22.)));
 		assert!(matches!(
 			session.overlay(5, Layer::Field, Screen { dpr: 0., ..screen }, FONTS),
 			Err(SessionError::Screen { .. })

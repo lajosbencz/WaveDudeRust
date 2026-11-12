@@ -106,14 +106,17 @@ pub struct Halo {
 	pub width: f32,
 }
 
-/// Which line of a text its position names, and with it the font.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-pub enum Baseline {
-	/// The alphabetic baseline, in the platform's default typeface (a generic sans-serif in a browser).
-	Alphabetic,
-	/// The top of the line box, the font's ascent above the alphabetic baseline, in the element's font families.
-	/// Canvas2D draws it with `textBaseline = "alphabetic"` at `y + fontBoundingBoxAscent`, not with `"top"`.
-	Top,
+/// The font of a text and the line its position names.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(tag = "kind")]
+pub enum TextStyle {
+	/// A label over a picture: the platform's default typeface (a generic sans-serif in a browser), the position on
+	/// the alphabetic baseline, the halo stroked under the text.
+	Label { halo: Halo },
+	/// Text of a graph box: the element's font families (the page's in a browser), the position at the top of the
+	/// line box, the font's ascent above the alphabetic baseline. Canvas2D draws it with
+	/// `textBaseline = "alphabetic"` at `y + fontBoundingBoxAscent`, not with `"top"`.
+	GraphBox,
 }
 
 /// A filled antialiased disc.
@@ -147,20 +150,16 @@ pub enum Shape {
 		rect: Rect,
 		ink: Ink,
 	},
-	/// One line of text at `size` in the font of its [`Baseline`], its halo first. The desktop draws a halo under
-	/// [`Baseline::Alphabetic`] text only and panics on a halo under [`Baseline::Top`] text, and on `Top` text
-	/// drawn without the element's fonts.
+	/// One line of text at `size` as its [`TextStyle`] says.
 	Text {
 		text: String,
 		at: (f32, f32),
-		baseline: Baseline,
+		style: TextStyle,
 		size: f32,
 		color: Rgba,
-		halo: Option<Halo>,
 	},
 	/// A `halo` disc under every point, then a `dot` disc on every point; points relative to `origin`, clipped to
-	/// `size` from it. Many dots that change rarely: the desktop draws them through a cached bitmap and panics when
-	/// given none.
+	/// `size` from it. Many dots that change rarely: the executors draw them through a cached bitmap.
 	Dots {
 		origin: (f32, f32),
 		size: (f32, f32),

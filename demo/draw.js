@@ -1,16 +1,16 @@
 // The executor of the engine's draw list (crates/wavedude-view/src/draw.rs) on a Canvas2D, after the desktop's
-// Skia one (crates/wavedude-widgets/src/paint.rs, draw_shapes).
+// Skia one (crates/wavedude-widgets/src/paint.rs, Painter).
 
 const TAU = 2 * Math.PI;
 const SOLID = [];
-// Fonts by text baseline: the platform's sans-serif, and the page's for top-anchored text.
-const FONTS = { Alphabetic: "sans-serif", Top: getComputedStyle(document.body).fontFamily };
+// Fonts by text style kind: the platform's sans-serif for labels, the page's for graph boxes.
+const FONTS = { Label: "sans-serif", GraphBox: getComputedStyle(document.body).fontFamily };
 
 const measurer = document.createElement("canvas").getContext("2d");
 
-/** The `measureText` of `text` at `size` px in the font of `baseline`, for the engine's layout. */
-export function measure(text, size, baseline) {
-	measurer.font = `${size}px ${FONTS[baseline]}`;
+/** The `measureText` of `text` at `size` px in the font of text style kind `style`, for the engine's layout. */
+export function measure(text, size, style) {
+	measurer.font = `${size}px ${FONTS[style]}`;
 	return measurer.measureText(text);
 }
 
@@ -45,14 +45,16 @@ function ascentOf(ctx, font) {
 	return ascent;
 }
 
-/** A text's halo, then the text; "Top" places the line box's top, through the alphabetic baseline. */
-function drawText(ctx, { text, at, baseline, size, color, halo }) {
-	const font = `${size}px ${FONTS[baseline]}`;
+/** A label over its halo on the alphabetic baseline, or graph-box text from the line box's top. */
+function drawText(ctx, { text, at, style, size, color }) {
+	const font = `${size}px ${FONTS[style.kind]}`;
 	ctx.font = font;
-	const y = baseline === "Top" ? at[1] + ascentOf(ctx, font) : at[1];
-	if (halo) {
-		setPen(ctx, { ...halo, round: true });
+	let y = at[1];
+	if (style.kind === "Label") {
+		setPen(ctx, { ...style.halo, round: true });
 		ctx.strokeText(text, at[0], y);
+	} else {
+		y += ascentOf(ctx, font);
 	}
 	ctx.fillStyle = color;
 	ctx.fillText(text, at[0], y);

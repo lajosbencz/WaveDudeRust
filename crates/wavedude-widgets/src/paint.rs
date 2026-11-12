@@ -1,8 +1,7 @@
 //! Skia helpers for the callback-drawn widgets: device-pixel snapping, one-line text, and the executor of
-//! [`Shape`] lists.
+//! [`Shape`] lists, [`Painter`].
 
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use freya::engine::prelude::{
@@ -12,7 +11,7 @@ use freya::engine::prelude::{
 };
 use freya::prelude::{Color, FillRenderContext};
 pub(crate) use wavedude_view::DeviceGrid;
-use wavedude_view::draw::{Baseline, Disc, Ink, Pen, Rect, Rgba, Shape, TextMetrics};
+use wavedude_view::draw::{self, Disc, Ink, Pen, Rect, Rgba, Shape, TextMetrics};
 
 /// A render callback's [`DeviceGrid`] and the canvas switched to it.
 pub(crate) trait DeviceGridExt {
@@ -66,7 +65,7 @@ pub(crate) fn linear_shader(
 
 /// A laid-out single line of text at `size` (canvas units) in the regular weight.
 pub(crate) fn text_line(
-	fonts: &mut FontCollection,
+	fonts: &FontCollection,
 	families: &[Cow<'static, str>],
 	text: &str,
 	size: f32,
@@ -77,7 +76,7 @@ pub(crate) fn text_line(
 
 /// A laid-out single line of text at `size` (canvas units) in `weight`.
 pub(crate) fn weighted_text_line(
-	fonts: &mut FontCollection,
+	fonts: &FontCollection,
 	families: &[Cow<'static, str>],
 	text: &str,
 	size: f32,
@@ -150,8 +149,8 @@ thread_local! {
 	static TYPEFACE: Option<Typeface> = FontMgr::default().legacy_make_typeface(None, FontStyle::normal());
 }
 
-/// The platform's default typeface at `size`: the font of alphabetic-baseline text.
-fn baseline_font(size: f32) -> Font {
+/// The platform's default typeface at `size`: the font of [`draw::TextStyle::Label`] text.
+fn label_font(size: f32) -> Font {
 	let mut font = Font::default();
 	TYPEFACE.with(|t| {
 		if let Some(t) = t {
@@ -162,17 +161,17 @@ fn baseline_font(size: f32) -> Font {
 	font
 }
 
-/// Metrics of text in the platform's default typeface at a size: alphabetic-baseline text as [`draw_shapes`]
+/// Metrics of text in the platform's default typeface at a size: [`draw::TextStyle::Label`] text as [`Painter`]
 /// draws it.
-pub struct DefaultFontText(Font);
+pub struct LabelText(Font);
 
-impl DefaultFontText {
+impl LabelText {
 	pub fn new(size: f32) -> Self {
-		Self(baseline_font(size))
+		Self(label_font(size))
 	}
 }
 
-impl TextMetrics for DefaultFontText {
+impl TextMetrics for LabelText {
 	fn line_height(&self) -> f32 {
 		self.0.spacing()
 	}
@@ -182,20 +181,86 @@ impl TextMetrics for DefaultFontText {
 	}
 }
 
-/// An element's fonts: its collection and the families it inherits, the font of top-anchored text.
+/// An element's fonts, those of [`draw::TextStyle::GraphBox`] text: its collection and the families it inherits.
+#[derive(Clone, Copy)]
 pub struct ElementFonts<'a> {
-	pub collection: &'a FontCollection,
-	pub families: &'a [Cow<'static, str>],
+	collection: &'a FontCollection,
+	families: &'a [Cow<'static, str>],
 }
 
-/// The dots of a [`Shape::Dots`] as a bitmap at device pixels, rebuilt when the dots, their place or the device
-/// scale change, so thousands of dots cost one image draw a frame. One slot: a cache serves one `Dots` shape of a
-/// list; a second would rebuild the bitmap on every draw.
-#[derive(Default)]
-pub struct DotCache(RefCell<Option<(u64, SkImage)>>);
+impl<'a> ElementFonts<'a> {
+	pub(crate) fn new(collection: &'a FontCollection, families: &'a [Cow<'static, str>]) -> Self {
+		Self { collection, families }
+	}
 
-impl DotCache {
-	fn draw(&self, canvas: &Canvas, origin: (f32, f32), size: (f32, f32), points: &[(f32, f32)], discs: [Disc; 2]) {
+	/// A laid-out single line of `text` at `size` (canvas units).
+	pub(crate) fn line(&self, text: &str, size: f32, color: Color) -> SkParagraph {
+		text_line(self.collection, self.families, text, size, color)
+	}
+}
+
+/// Executes [`Shape`] lists on a Skia canvas. Caches the bitmap of the [`Shape::Dots`] it draws at device pixels,
+/// rebuilt when the dots, their place or the device scale change, so thousands of dots cost one image draw a frame.
+/// One bitmap: a second `Dots` shape in a list rebuilds it on every draw.
+#[derive(Default)]
+pub struct Painter {
+	dots: Option<(u64, SkImage)>,
+}
+
+impl Painter {
+	/// Draws `shapes` in order, graph-box text in `fonts`.
+	pub fn paint(&mut self, canvas: &Canvas, fonts: ElementFonts<'_>, shapes: &[Shape]) {
+		for shape in shapes {
+			match shape {
+				Shape::Line { from, to, pen } => {
+					canvas.draw_line(*from, *to, &pen_paint(pen));
+				}
+				Shape::Path { points, closed, pen } => {
+					let mut path = PathBuilder::new();
+					for (i, &p) in points.iter().enumerate() {
+						if i == 0 {
+							path.move_to(p);
+						} else {
+							path.line_to(p);
+						}
+					}
+					if *closed {
+						path.close();
+					}
+					canvas.draw_path(&path.detach(), &pen_paint(pen));
+				}
+				Shape::Circle { centre, radius, ink } => {
+					canvas.draw_circle(*centre, *radius, &ink_paint(ink));
+				}
+				Shape::Rect { rect, ink } => {
+					canvas.draw_rect(sk_rect(rect), &ink_paint(ink));
+				}
+				Shape::Text { text, at, style: draw::TextStyle::Label { halo }, size, color } => {
+					let font = label_font(*size);
+					let mut paint = stroke(color_of(halo.color), halo.width);
+					paint.set_anti_alias(true);
+					paint.set_stroke_join(PaintJoin::Round);
+					canvas.draw_str(text, *at, &font, &paint);
+					canvas.draw_str(text, *at, &font, &ink_paint(&Ink::fill(*color)));
+				}
+				Shape::Text { text, at, style: draw::TextStyle::GraphBox, size, color } => {
+					fonts.line(text, *size, color_of(*color)).paint(canvas, *at);
+				}
+				Shape::Dots { origin, size, points, halo, dot } => {
+					self.dots(canvas, *origin, *size, points, [*halo, *dot]);
+				}
+				Shape::Clip { rect, antialias } => {
+					canvas.save();
+					canvas.clip_rect(sk_rect(rect), ClipOp::Intersect, *antialias);
+				}
+				Shape::Unclip => {
+					canvas.restore();
+				}
+			}
+		}
+	}
+
+	fn dots(&mut self, canvas: &Canvas, origin: (f32, f32), size: (f32, f32), points: &[(f32, f32)], discs: [Disc; 2]) {
 		let device = canvas.local_to_device_as_3x3().scale_x().abs().max(1e-3);
 		let mut h = DefaultHasher::new();
 		for p in points {
@@ -206,8 +271,7 @@ impl DotCache {
 		}
 		(origin.0.to_bits(), origin.1.to_bits(), size.0.to_bits(), size.1.to_bits(), device.to_bits()).hash(&mut h);
 		let key = h.finish();
-		let mut slot = self.0.borrow_mut();
-		if slot.as_ref().is_none_or(|(k, _)| *k != key) {
+		if self.dots.as_ref().is_none_or(|(k, _)| *k != key) {
 			let pixels = ISize::new((size.0 * device).ceil().max(1.) as i32, (size.1 * device).ceil().max(1.) as i32);
 			let Some(mut surface) = raster_n32_premul(pixels) else { return };
 			let c = surface.canvas();
@@ -218,73 +282,14 @@ impl DotCache {
 					c.draw_circle(p, disc.radius, &paint);
 				}
 			}
-			*slot = Some((key, surface.image_snapshot()));
+			self.dots = Some((key, surface.image_snapshot()));
 		}
-		if let Some((_, image)) = slot.as_ref() {
+		if let Some((_, image)) = &self.dots {
 			canvas.save();
 			canvas.translate(origin);
 			canvas.scale((1. / device, 1. / device));
 			canvas.draw_image(image, (0., 0.), None);
 			canvas.restore();
-		}
-	}
-}
-
-/// Draws `shapes` in order. Top-anchored text needs `fonts` and a `Dots` shape needs `dots`; either missing
-/// panics, as does a halo on top-anchored text.
-pub fn draw_shapes(canvas: &Canvas, shapes: &[Shape], fonts: Option<&ElementFonts<'_>>, dots: Option<&DotCache>) {
-	for shape in shapes {
-		match shape {
-			Shape::Line { from, to, pen } => {
-				canvas.draw_line(*from, *to, &pen_paint(pen));
-			}
-			Shape::Path { points, closed, pen } => {
-				let mut path = PathBuilder::new();
-				for (i, &p) in points.iter().enumerate() {
-					if i == 0 {
-						path.move_to(p);
-					} else {
-						path.line_to(p);
-					}
-				}
-				if *closed {
-					path.close();
-				}
-				canvas.draw_path(&path.detach(), &pen_paint(pen));
-			}
-			Shape::Circle { centre, radius, ink } => {
-				canvas.draw_circle(*centre, *radius, &ink_paint(ink));
-			}
-			Shape::Rect { rect, ink } => {
-				canvas.draw_rect(sk_rect(rect), &ink_paint(ink));
-			}
-			Shape::Text { text, at, baseline: Baseline::Alphabetic, size, color, halo } => {
-				let font = baseline_font(*size);
-				if let Some(halo) = halo {
-					let mut paint = stroke(color_of(halo.color), halo.width);
-					paint.set_anti_alias(true);
-					paint.set_stroke_join(PaintJoin::Round);
-					canvas.draw_str(text, *at, &font, &paint);
-				}
-				canvas.draw_str(text, *at, &font, &ink_paint(&Ink::fill(*color)));
-			}
-			Shape::Text { text, at, baseline: Baseline::Top, size, color, halo } => {
-				assert!(halo.is_none(), "a halo is drawn under alphabetic-baseline text only");
-				let fonts = fonts.expect("top-anchored text is drawn in an element's fonts");
-				let mut collection = fonts.collection.clone();
-				text_line(&mut collection, fonts.families, text, *size, color_of(*color)).paint(canvas, *at);
-			}
-			Shape::Dots { origin, size, points, halo, dot } => {
-				let dots = dots.expect("dots are drawn through a cache");
-				dots.draw(canvas, *origin, *size, points, [*halo, *dot]);
-			}
-			Shape::Clip { rect, antialias } => {
-				canvas.save();
-				canvas.clip_rect(sk_rect(rect), ClipOp::Intersect, *antialias);
-			}
-			Shape::Unclip => {
-				canvas.restore();
-			}
 		}
 	}
 }
@@ -297,6 +302,11 @@ mod tests {
 
 	fn pixel(surface: &mut Surface, x: i32, y: i32) -> Rgba {
 		rgba_of(Color::from(surface.peek_pixels().expect("a raster surface").get_color((x, y))))
+	}
+
+	fn paint(painter: &mut Painter, surface: &mut Surface, shapes: &[Shape]) {
+		let collection = FontCollection::new();
+		painter.paint(surface.canvas(), ElementFonts::new(&collection, &[]), shapes);
 	}
 
 	#[test]
@@ -320,7 +330,7 @@ mod tests {
 			},
 		];
 		let mut surface = raster_n32_premul(ISize::new(20, 20)).expect("a raster surface");
-		draw_shapes(surface.canvas(), &shapes, None, Some(&DotCache::default()));
+		paint(&mut Painter::default(), &mut surface, &shapes);
 		assert_eq!(pixel(&mut surface, 3, 3), red);
 		assert_eq!(pixel(&mut surface, 7, 3), red, "the clip keeps the green rectangle right of x 10");
 		assert_eq!(pixel(&mut surface, 12, 3), green);
@@ -328,5 +338,47 @@ mod tests {
 		assert_eq!(pixel(&mut surface, 12, 11), white, "an aliased hairline covers one row");
 		assert_eq!(pixel(&mut surface, 3, 17), red, "a dot over its halo, placed from its origin");
 		assert_eq!(pixel(&mut surface, 10, 17), white);
+	}
+
+	#[test]
+	fn a_label_is_filled_over_its_halo() {
+		let (black, red, blue) = (Rgba::rgb(0, 0, 0), Rgba::rgb(255, 0, 0), Rgba::rgb(0, 0, 255));
+		let shapes = [
+			Shape::Rect { rect: Rect::new(0., 0., 60., 50.), ink: Ink::Fill { color: black, antialias: false } },
+			Shape::Text {
+				text: "M".into(),
+				at: (8., 40.),
+				style: draw::TextStyle::Label { halo: draw::Halo { color: blue, width: 6. } },
+				size: 40.,
+				color: red,
+			},
+		];
+		let mut surface = raster_n32_premul(ISize::new(60, 50)).expect("a raster surface");
+		paint(&mut Painter::default(), &mut surface, &shapes);
+		let pixels: Vec<Rgba> =
+			(0..50).flat_map(|y| (0..60).map(move |x| (x, y))).map(|(x, y)| pixel(&mut surface, x, y)).collect();
+		assert!(pixels.contains(&red), "the glyph's fill");
+		assert!(pixels.contains(&blue), "the halo around it");
+	}
+
+	#[test]
+	fn dots_reuse_their_bitmap_until_they_change() {
+		let dots = |x: f32| Shape::Dots {
+			origin: (0., 0.),
+			size: (10., 10.),
+			points: vec![(x, 5.)],
+			halo: Disc { radius: 2., color: Rgba::rgb(0, 0, 255) },
+			dot: Disc { radius: 1., color: Rgba::rgb(255, 0, 0) },
+		};
+		let mut surface = raster_n32_premul(ISize::new(10, 10)).expect("a raster surface");
+		let mut painter = Painter::default();
+		let bitmap = |p: &Painter| p.dots.as_ref().map(|(_, image)| image.unique_id());
+		paint(&mut painter, &mut surface, &[dots(5.)]);
+		let first = bitmap(&painter);
+		assert!(first.is_some());
+		paint(&mut painter, &mut surface, &[dots(5.)]);
+		assert_eq!(bitmap(&painter), first, "the same dots draw the cached bitmap");
+		paint(&mut painter, &mut surface, &[dots(6.)]);
+		assert_ne!(bitmap(&painter), first, "moved dots rebuild it");
 	}
 }

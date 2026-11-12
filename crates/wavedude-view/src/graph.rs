@@ -7,7 +7,7 @@
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::model::{Layer, Measurement, Probe, ScaleMode, YScale};
 
-use crate::draw::{Baseline, DeviceGrid, Ink, Pen, Rect, Rgba, Shape, TextMetrics};
+use crate::draw::{DeviceGrid, Ink, Pen, Rect, Rgba, Shape, TextMetrics, TextStyle};
 
 /// Smallest box drawn at all, pixels.
 pub const MIN_VISIBLE: (f32, f32) = (40.0, 30.0);
@@ -534,10 +534,9 @@ pub fn box_shapes(
 	let label = |text: &str, at: (f32, f32), color: Rgba| Shape::Text {
 		text: text.to_owned(),
 		at,
-		baseline: Baseline::Top,
+		style: TextStyle::GraphBox,
 		size,
 		color,
-		halo: None,
 	};
 	let hl = grid.hairline();
 	let hairline = |color| Pen::new(color, hl).aliased();
@@ -720,7 +719,7 @@ mod tests {
 		let texts: Vec<(&str, Rgba)> = shapes
 			.iter()
 			.filter_map(|s| match s {
-				Shape::Text { text, color, baseline: Baseline::Top, size: 22., at, .. } => {
+				Shape::Text { text, color, style: TextStyle::GraphBox, size: 22., at } => {
 					assert_eq!((at.0.fract(), at.1.fract()), (0., 0.), "{text} starts on a device pixel");
 					Some((text.as_str(), *color))
 				}
@@ -759,10 +758,9 @@ mod tests {
 		assert!(shapes.contains(&Shape::Text {
 			text: "P".into(),
 			at: (6., 3.),
-			baseline: Baseline::Top,
+			style: TextStyle::GraphBox,
 			size: FONT_SIZE,
 			color: TITLE,
-			halo: None,
 		}));
 		assert_eq!(shapes.len(), 2 + 3 + 6, "box, edge, the title in its clip, the grip's dots");
 	}

@@ -19,7 +19,7 @@ use wavedude_widgets::picture::{
 	CanvasTransform, HitTestHook, OverlayHook, PictureEvent, PictureExtent, View, WheelAt,
 };
 use wavedude_widgets::{
-	Callback, CanvasImage, DotCache, HeaderStrip, StripOrientation, TestIdExt, color_of, use_wave_theme,
+	Callback, CanvasImage, ElementFonts, HeaderStrip, Painter, StripOrientation, TestIdExt, color_of, use_wave_theme,
 };
 
 use super::overlay::{self, OverlayFrame};
@@ -94,17 +94,21 @@ struct Hooks {
 
 fn hooks(inputs: State<OverlayInputs>, states: PaneStates, layer: Layer, canvas: State<(u32, u32)>) -> Hooks {
 	let shared = Shared::get();
-	let dots = Rc::new(DotCache::default());
 	let key_shared = shared.clone();
 	let mut extents = states.extents;
 	let mut view = states.view;
 	Hooks {
-		draw: OverlayHook::from(move |canvas: &Canvas, t: &CanvasTransform, _: Option<(f32, f32)>| {
-			let i = inputs.peek();
-			let frame =
-				OverlayFrame { model: &i.model, focused: i.focused, marquee: i.marquee, accent: i.accent, dots: &dots };
-			overlay::draw(canvas, t, &frame);
-		}),
+		draw: OverlayHook::from(
+			move |canvas: &Canvas,
+			      painter: &mut Painter,
+			      fonts: ElementFonts<'_>,
+			      t: &CanvasTransform,
+			      _: Option<(f32, f32)>| {
+				let i = inputs.peek();
+				let frame = OverlayFrame { model: &i.model, focused: i.focused, marquee: i.marquee, accent: i.accent };
+				overlay::draw(canvas, painter, fonts, t, &frame);
+			},
+		),
 		hit: HitTestHook::from(move |t: &CanvasTransform, p: (f32, f32)| {
 			let c = t.to_canvas(p.0, p.1);
 			super::handles::hit(&inputs.peek().model, c, t.scale).map(|i| i as u64)

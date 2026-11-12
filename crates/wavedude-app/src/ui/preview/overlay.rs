@@ -2,8 +2,7 @@
 //! drags and keys on handles into selection changes and model commands (docs/ui/40-preview-pane.md, Interaction).
 //!
 //! Drawing happens in the picture's render callback in the cell's logical pixels, clipped to the picture: the
-//! overlay's shapes ([`wavedude_view::overlay::shapes`]), then the marquee. The emitter dots of composite sources
-//! go through a [`DotCache`], so thousands of dots cost one image draw a frame.
+//! overlay's shapes ([`wavedude_view::overlay::shapes`]) through the picture's [`Painter`], then the marquee.
 //! Threads: the UI thread.
 
 use freya::engine::prelude::{Canvas, Paint, PaintStyle, PathEffect, SkRect};
@@ -14,7 +13,7 @@ use wavedude_core::model::{
 };
 use wavedude_view::overlay::{self as view, Handle, HandleKind, LABEL_SIZE, OverlayModel};
 use wavedude_widgets::picture::{CanvasTransform, PictureEvent, PointerPhase};
-use wavedude_widgets::{DefaultFontText, DotCache, draw_shapes, rgba_of};
+use wavedude_widgets::{ElementFonts, LabelText, Painter, rgba_of};
 
 use super::handles::{
 	DRAG_THRESHOLD, MarqueeMode, drag_delta, grip_edits, lever_angle, marquee_hits, marquee_select, moved_node,
@@ -32,14 +31,18 @@ pub struct OverlayFrame<'a> {
 	pub focused: Option<usize>,
 	pub marquee: Option<((f32, f32), (f32, f32))>,
 	pub accent: Color,
-	pub dots: &'a DotCache,
 }
 
 /// Draws the overlay of one picture in the cell's logical pixels.
-pub fn draw(canvas: &Canvas, t: &CanvasTransform, f: &OverlayFrame<'_>) {
-	let shapes =
-		view::shapes(f.model, t.scale, t.picture(), f.focused, rgba_of(f.accent), &DefaultFontText::new(LABEL_SIZE));
-	draw_shapes(canvas, &shapes, None, Some(f.dots));
+pub fn draw(
+	canvas: &Canvas,
+	painter: &mut Painter,
+	fonts: ElementFonts<'_>,
+	t: &CanvasTransform,
+	f: &OverlayFrame<'_>,
+) {
+	let shapes = view::shapes(f.model, t.scale, t.picture(), f.focused, rgba_of(f.accent), &LabelText::new(LABEL_SIZE));
+	painter.paint(canvas, fonts, &shapes);
 	if let Some((a, b)) = f.marquee {
 		let (a, b) = (t.to_screen(a.0, a.1), t.to_screen(b.0, b.1));
 		let r = SkRect::new(a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1));

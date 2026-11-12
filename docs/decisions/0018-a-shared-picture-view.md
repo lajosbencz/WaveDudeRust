@@ -17,10 +17,13 @@ the desktop's.
   overlay model and its shapes, the edge line (`edge_color`, `edge_line`), the graph box's layout and shapes, and which
   boxes a picture shows and where (`shows_box`, `box_size`, `box_origin`, `box_on_picture`). The application, the
   widgets and the wasm package use these; none keeps a copy.
-- The shapes are a draw list (`Shape` in [`draw.rs`](../../crates/wavedude-view/src/draw.rs)). The desktop executes it with Skia
-  (`draw_shapes` in [`paint.rs`](../../crates/wavedude-widgets/src/paint.rs)), the page with Canvas2D ([`demo/draw.js`](../../demo/draw.js)), which
-  follows the Skia executor shape for shape. Text is measured through `TextMetrics`: Skia's fonts on the desktop, the
-  page's `measureText` in the browser, passed to the package as a function.
+- The shapes are a draw list (`Shape` in [`draw.rs`](../../crates/wavedude-view/src/draw.rs)). A text's `TextStyle` says its font and
+  where its position lies: a label in the platform's default typeface on the alphabetic baseline over its halo,
+  graph-box text in the element's (the page's) fonts from the top of its line box. The desktop executes the list with
+  Skia (`Painter` in [`paint.rs`](../../crates/wavedude-widgets/src/paint.rs), which caches the dots' bitmap), the page
+  with Canvas2D ([`demo/draw.js`](../../demo/draw.js)), which follows the Skia executor shape for shape. Text is measured through
+  `TextMetrics`: Skia's fonts on the desktop, the page's `measureText` in the browser, passed to the package as a
+  function.
 - Units: the overlay is in logical (CSS) pixels; the edge line and a graph box are in device pixels of a `DeviceGrid`,
   so hairlines and text land on whole device pixels on both. The package returns JSON (serde, colours as `#rrggbbaa`,
   without the desktop's antialias flags): groups of shapes, each with the device pixels per unit and its origin in
@@ -40,7 +43,7 @@ the desktop's.
 - The page draws the JSON on a canvas over each picture and its caption, reaching one hairline past it for the edge
   line; the pictures are fitted to the stage less that room, so the line always shows. It redraws once per frame shown
   and after a resize or a change of the device pixel ratio; a composite source's dots go through a bitmap cached until
-  the picture's size changes, like the desktop's `DotCache`.
+  the picture's size changes, like the desktop's `Painter` does.
 
 ## Consequences
 

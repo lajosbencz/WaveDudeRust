@@ -9,9 +9,9 @@ use std::sync::Arc;
 use js_sys::Uint8ClampedArray;
 use wasm_bindgen::prelude::*;
 use wavedude_core::engine::gpu::GpuContext;
-use wavedude_view::draw::{Baseline, TextMetrics};
+use wavedude_view::draw::{TextMetrics, TextStyle};
 use wavedude_view::graph::FONT_SIZE;
-use wavedude_view::overlay::LABEL_SIZE;
+use wavedude_view::overlay::{LABEL_SIZE, LABEL_STYLE};
 
 mod cache;
 mod overlay;
@@ -41,11 +41,12 @@ extern "C" {
 	fn descent(this: &Measured) -> f64;
 }
 
-/// Text measured by the page's `measure(text, size, baseline)` at `size` x `scale` pixels, reported in pixels
-/// divided by `scale`; each text once. The first exception `measure` throws is kept and the widths read 0.
+/// Text in the font of `style` measured by the page's `measure(text, size, style)` at `size` x `scale` pixels,
+/// reported in pixels divided by `scale`; each text once. The first exception `measure` throws is kept and the
+/// widths read 0.
 struct PageText<'a> {
 	measure: &'a js_sys::Function,
-	baseline: Baseline,
+	style: TextStyle,
 	size: f32,
 	scale: f32,
 	line_height: f32,
@@ -54,10 +55,10 @@ struct PageText<'a> {
 }
 
 impl<'a> PageText<'a> {
-	fn new(measure: &'a js_sys::Function, baseline: Baseline, size: f32, scale: f32) -> Self {
+	fn new(measure: &'a js_sys::Function, style: TextStyle, size: f32, scale: f32) -> Self {
 		let mut text = Self {
 			measure,
-			baseline,
+			style,
 			size,
 			scale,
 			line_height: 0.,
@@ -69,12 +70,12 @@ impl<'a> PageText<'a> {
 	}
 
 	fn measured(&self, text: &str) -> Option<Measured> {
-		let baseline = match self.baseline {
-			Baseline::Alphabetic => "Alphabetic",
-			Baseline::Top => "Top",
+		let style = match self.style {
+			TextStyle::Label { .. } => "Label",
+			TextStyle::GraphBox => "GraphBox",
 		};
 		let size = JsValue::from(self.size * self.scale);
-		match self.measure.call3(&JsValue::NULL, &JsValue::from(text), &size, &JsValue::from(baseline)) {
+		match self.measure.call3(&JsValue::NULL, &JsValue::from(text), &size, &JsValue::from(style)) {
 			Ok(m) => Some(m.unchecked_into()),
 			Err(e) => {
 				self.error.borrow_mut().get_or_insert(e);
@@ -274,9 +275,9 @@ impl Simulation {
 	/// The shapes over the picture of `layer` at `frame` drawn at `width` x `height` CSS pixels on a screen of
 	/// `dpr` device pixels per CSS pixel, as JSON: an array of groups `{scale, origin: [x, y], shapes}` in drawing
 	/// order, whose shapes (`Shape` of the `wavedude-view` crate, colours as `#rrggbbaa`) are in units of `scale`
-	/// device pixels from `origin`, in device pixels from the picture's top-left. `measure(text, size, baseline)`
-	/// returns the page's `measureText` of `text` at `size` CSS pixels in the font of `baseline` ("Alphabetic" or
-	/// "Top").
+	/// device pixels from `origin`, in device pixels from the picture's top-left. `measure(text, size, style)`
+	/// returns the page's `measureText` of `text` at `size` CSS pixels in the font of the `TextStyle` whose `kind`
+	/// is `style` ("Label" or "GraphBox").
 	pub fn overlay(
 		&self,
 		frame: u32,
@@ -286,8 +287,8 @@ impl Simulation {
 		dpr: f32,
 		measure: &js_sys::Function,
 	) -> Result<String, JsValue> {
-		let labels = PageText::new(measure, Baseline::Alphabetic, LABEL_SIZE, 1.);
-		let boxes = PageText::new(measure, Baseline::Top, FONT_SIZE, dpr);
+		let labels = PageText::new(measure, LABEL_STYLE, LABEL_SIZE, 1.);
+		let boxes = PageText::new(measure, TextStyle::GraphBox, FONT_SIZE, dpr);
 		let screen = overlay::Screen { width, height, dpr };
 		let layer = layer_of(layer).map_err(JsError::from)?;
 		let fonts = overlay::Fonts { labels: &labels, boxes: &boxes };

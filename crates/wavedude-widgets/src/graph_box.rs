@@ -13,7 +13,7 @@ use freya::prelude::*;
 use wavedude_view::draw::TextMetrics;
 use wavedude_view::graph::{FONT_SIZE, GraphLayout, box_shapes};
 
-use crate::paint::{DeviceGrid, DeviceGridExt, ElementFonts, draw_shapes, rgba_of, text_line, text_width};
+use crate::paint::{DeviceGrid, DeviceGridExt, ElementFonts, Painter, rgba_of, text_width};
 use crate::picture::Callback;
 use crate::theme::use_wave_theme;
 use crate::tooltip::Tip;
@@ -70,8 +70,7 @@ impl<'a> BoxText<'a> {
 	}
 
 	fn line(&self, text: &str) -> SkParagraph {
-		let mut collection = self.fonts.collection.clone();
-		text_line(&mut collection, self.fonts.families, text, FONT_SIZE * self.scale, Color::BLACK)
+		self.fonts.line(text, FONT_SIZE * self.scale, Color::BLACK)
 	}
 }
 
@@ -164,13 +163,15 @@ impl Component for GraphBox {
 
 		let painter = RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 			let grid = DeviceGrid::from_ctx(ctx);
-			let families = ctx.text_style_state.font_families.clone();
 			let RenderTarget::Background { canvas, font_collection } = &mut ctx.target else { return };
-			let text = BoxText::new(ElementFonts { collection: font_collection, families: &families }, grid.scale);
-			let g = data.layout(&text, w, h);
-			let shapes = box_shapes(&g, grid, selected, focus_ring.map(rgba_of), &text);
+			let fonts = ElementFonts::new(font_collection, &ctx.text_style_state.font_families);
+			let shapes = {
+				let text = BoxText::new(fonts, grid.scale);
+				let g = data.layout(&text, w, h);
+				box_shapes(&g, grid, selected, focus_ring.map(rgba_of), &text)
+			};
 			grid.enter(canvas);
-			draw_shapes(canvas, &shapes, Some(&text.fonts), None);
+			Painter::default().paint(canvas, fonts, &shapes);
 			canvas.restore();
 		});
 

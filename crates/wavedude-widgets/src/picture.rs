@@ -13,7 +13,7 @@ use freya::engine::prelude::{Canvas, ClipOp, Paint, SkRect};
 use freya::prelude::*;
 use wavedude_view::overlay::edge_line;
 
-use crate::paint::{DeviceGrid, DeviceGridExt, draw_shapes, fill, rgba_of, sk_rect};
+use crate::paint::{DeviceGrid, DeviceGridExt, ElementFonts, Painter, fill, rgba_of, sk_rect};
 use crate::spinner::Spinner;
 use crate::theme::use_wave_theme;
 use crate::util::{TestIdExt, focus_border, use_modifiers};
@@ -166,9 +166,9 @@ pub struct PictureExtent {
 	pub window: Option<Rect4>,
 }
 
-/// Draws over the picture: the canvas is in the cell's logical pixels, clipped to the picture; the
-/// pointer is in cell logical pixels when over the cell.
-pub type OverlayFn = dyn Fn(&Canvas, &CanvasTransform, Option<(f32, f32)>);
+/// Draws over the picture: the canvas is in the cell's logical pixels, clipped to the picture, with the picture's
+/// painter and the element's fonts; the pointer is in cell logical pixels when over the cell.
+pub type OverlayFn = dyn Fn(&Canvas, &mut Painter, ElementFonts<'_>, &CanvasTransform, Option<(f32, f32)>);
 
 #[derive(Clone)]
 pub struct OverlayHook(pub Rc<OverlayFn>);
@@ -179,7 +179,9 @@ impl PartialEq for OverlayHook {
 	}
 }
 
-impl<F: Fn(&Canvas, &CanvasTransform, Option<(f32, f32)>) + 'static> From<F> for OverlayHook {
+impl<F: Fn(&Canvas, &mut Painter, ElementFonts<'_>, &CanvasTransform, Option<(f32, f32)>) + 'static> From<F>
+	for OverlayHook
+{
 	fn from(f: F) -> Self {
 		Self(Rc::new(f))
 	}
@@ -430,9 +432,12 @@ impl Component for CanvasImage {
 		let edge = self.edge;
 		let smooth = self.smooth;
 		let hover = *pointer.read();
-		let painter = RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
+		let painter = use_hook(|| Rc::new(RefCell::new(Painter::default())));
+		let render = RenderCallback::new(move |ctx: &mut FillRenderContext<'_>| {
 			let grid = DeviceGrid::from_ctx(ctx);
-			let RenderTarget::Background { canvas, .. } = &mut ctx.target else { return };
+			let RenderTarget::Background { canvas, font_collection } = &mut ctx.target else { return };
+			let fonts = ElementFonts::new(font_collection, &ctx.text_style_state.font_families);
+			let mut painter = painter.borrow_mut();
 			let (px, py, pw, ph) = transform.picture();
 			let (vx, vy, vw, vh) = transform.visible();
 			grid.enter(canvas);
@@ -468,14 +473,14 @@ impl Component for CanvasImage {
 				);
 			}
 			if let Some(color) = edge {
-				draw_shapes(canvas, &[edge_line(grid, (px, py, pw, ph), rgba_of(color))], None, None);
+				painter.paint(canvas, fonts, &[edge_line(grid, (px, py, pw, ph), rgba_of(color))]);
 			}
 			canvas.restore();
 			canvas.restore();
 			if let Some(hook) = &overlay {
 				canvas.save();
 				canvas.clip_rect(SkRect::new(vx, vy, vx + vw, vy + vh), ClipOp::Intersect, true);
-				(hook.0)(canvas, &transform, hover);
+				(hook.0)(canvas, &mut painter, fonts, &transform, hover);
 				canvas.restore();
 			}
 		});
@@ -559,7 +564,7 @@ impl Component for CanvasImage {
 			.a11y_role(AccessibilityRole::Image)
 			.maybe_test_id(self.test_id.clone())
 			.expanded()
-			.background(painter)
+			.background(render)
 			.border(focus_border(focus(), theme.accent))
 			.on_sized(move |e: Event<SizedEventData>| cell.set_if_modified((e.area.width(), e.area.height())))
 			.on_pointer_down(on_down)

@@ -33,14 +33,14 @@ push. What they hold the code to:
 - `wavedude-model-derive`: the proc-macros `Fields` and `Word` of the model types (`syn`, `quote`); core re-exports
   them as `wavedude_core::model::{Fields, Word}`. Depends on no workspace crate.
 - `wavedude-view`: what the preview draws, without a toolkit: the overlay model and its shapes, the probe graph box's
-  layout and shapes, and the draw list (`Shape`, serde-serialisable for the browser). Shapes are in the canvas's units:
-  the overlay's in logical pixels, a graph box's and the edge line's in device pixels of a `DeviceGrid`
-  ([`crates/wavedude-view/src/draw.rs`](../crates/wavedude-view/src/draw.rs)); the browser's executor is [`demo/draw.js`](../demo/draw.js). Placement both the
+  layout and shapes, and the draw list (`Shape`, its text in a `TextStyle`, serde-serialisable for the browser). Shapes
+  are in the canvas's units: the overlay's in logical pixels, a graph box's and the edge line's in device pixels of a
+  `DeviceGrid` ([`crates/wavedude-view/src/draw.rs`](../crates/wavedude-view/src/draw.rs)); the browser's executor is [`demo/draw.js`](../demo/draw.js). Placement both the
   desktop and the browser need (which graph boxes a picture shows, where) lives here too ([decision 0018](decisions/0018-a-shared-picture-view.md)).
   Depends on core without default features; builds for `wasm32-unknown-unknown`.
 - `wavedude-export`: sinks, overlays, CSV, the export job. Depends on core and view (the graph layout).
 - `wavedude-widgets`: Freya widgets. Depends on `freya`, `serde`, `regex` and view (the shapes it draws, executed by
-  `draw_shapes` in [`crates/wavedude-widgets/src/paint.rs`](../crates/wavedude-widgets/src/paint.rs)), not on core itself; no strings: labels and tips come in as data
+  `Painter` in [`crates/wavedude-widgets/src/paint.rs`](../crates/wavedude-widgets/src/paint.rs)), not on core itself; no strings: labels and tips come in as data
   (`MessageLabels`, `PickerTips` in [`crates/wavedude-widgets/src/lib.rs`](../crates/wavedude-widgets/src/lib.rs)).
 - `wavedude-app-state`: document, history, selection, commands, live runs, settings, strings, log. Depends on
   core, export (no default features) and examples; no Freya, no rfd ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
