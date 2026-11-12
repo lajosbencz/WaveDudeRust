@@ -28,3 +28,14 @@ and concatenates the `summary.tsv` files into `<out-root>/summary.tsv` (`STEPS`,
 
 Times both C# engines on the scene and pattern of `wavedude-cli bench` (1920x1080 by default, rim 32 outside, open
 edges, one source at the centre, both planes captured as halves every 2 steps).
+
+## Next's UI on Linux
+
+WaveDude Next's WPF app runs under wine 11 in a fresh 64-bit prefix after `winetricks -q corefonts tahoma` (without
+the fonts WPF fails in `TypefaceMap`). Build it from a copy of the checkout without `.git`, `bin` and `obj`:
+
+    dotnet publish WaveDudeNext.WPF/WaveDudeNext.WPF.csproj -c Release -r win-x64 --self-contained \
+        -p:EnableWindowsTargeting=true -p:PublishSingleFile=false -o <out>
+
+then `wine <out>/WaveDudeNext.WPF.exe Z:/path/to/project.wdproj`; a released `-bundled.exe` runs as is. Side by side
+with this program, both run on a nested `Xvfb` display driven by `xdotool`, never on the desktop in use.

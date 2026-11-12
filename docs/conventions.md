@@ -1,6 +1,7 @@
 # Conventions
 
-What new code follows so that it fits the code already here. Each rule names one place that shows it.
+What new code follows so that it fits the code already here. Each rule names one place that shows it. Of two fixes
+with the same behaviour, the one that deletes or merges code wins over one that adds a guard.
 
 ## Toolchain and checks
 
