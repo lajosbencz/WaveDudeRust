@@ -22,10 +22,10 @@ use wavedude_core::engine::Snapshot;
 pub use wavedude_core::engine::as_halves;
 use wavedude_core::model::Layer;
 use wavedude_core::render::ScreenRenderer;
-use wavedude_core::render::layer::{LayerColours, View, paint, scale_nearest};
+use wavedude_core::render::layer::{LayerColours, View, paint};
 use wavedude_core::render::screen::Window;
 use wavedude_core::run::FrameStore;
-use wavedude_core::scene::glowing_edges;
+use wavedude_core::scene::glowing_edges::{self, EdgeImage};
 
 /// Where a frame's planes come from.
 #[derive(Clone)]
@@ -116,14 +116,6 @@ impl FrameSource {
 			}
 		}
 	}
-}
-
-/// The glowing edges of the composed scene, RGBA8 at the canvas size.
-#[derive(Debug, PartialEq, Eq)]
-pub struct EdgeImage {
-	pub width: u32,
-	pub height: u32,
-	pub rgba: Vec<u8>,
 }
 
 /// The outline blended over a picture: the edges at `gain`.
@@ -301,7 +293,7 @@ impl LayerRenderer {
 				!std::ptr::eq(edges.as_ptr(), Arc::as_ptr(e)) || *size != (width, height) || *win != window
 			});
 			if stale {
-				let scaled = scale_nearest(&e.rgba, (e.width, e.height), window, (width, height));
+				let scaled = e.scaled(window, (width, height));
 				self.outlines.insert(req.layer, (Arc::downgrade(e), (width, height), window, scaled));
 			}
 			if let Some((_, _, _, scaled)) = self.outlines.get(&req.layer) {

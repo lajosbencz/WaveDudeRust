@@ -8,12 +8,12 @@ use freya_testing::prelude::*;
 use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, root};
 use wavedude_app::ui::shared::Shared;
 use wavedude_app_state::commands::{Command, NewPart};
-use wavedude_app_state::examples::{self, Topic};
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::selection::{ItemKind, ItemRef, Row};
 use wavedude_app_state::settings::{AppDirs, Settings};
 use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
 use wavedude_core::model::{FilterLayer, PartKind, ProbeDetector, ProbeKind, Project};
+use wavedude_examples::Topic;
 use wavedude_testing::{click_at, click_tagged, count_tagged, find_text, label_areas, settle, tagged, tagged_area};
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj";
@@ -417,7 +417,7 @@ fn the_examples_search_narrows_the_rows() {
 	assert!(tagged_area(&test, "Example:Example24_Fibre_cross_over").is_some());
 	assert!(tagged_area(&test, "Example:Example01_Source_Mirror_Probe").is_none());
 	let matches = |t: Topic| {
-		examples::all()
+		wavedude_examples::all()
 			.iter()
 			.filter(|e| {
 				e.topic == t

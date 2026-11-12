@@ -100,6 +100,34 @@ pub enum PreviewTier {
 	High,
 }
 
+impl PreviewTier {
+	/// In the order of the first-start dialog.
+	pub const ALL: [Self; 3] = [Self::Low, Self::Middle, Self::High];
+
+	/// The tier's name in files and interfaces: "Low", "Middle" or "High".
+	pub const fn name(self) -> &'static str {
+		match self {
+			Self::Low => "Low",
+			Self::Middle => "Middle",
+			Self::High => "High",
+		}
+	}
+
+	/// The tier named `name` by [`name`](Self::name).
+	pub fn parse(name: &str) -> Option<Self> {
+		Self::ALL.into_iter().find(|t| t.name() == name)
+	}
+
+	/// The string table key of the tier's title in the first-start dialog.
+	pub const fn title_key(self) -> &'static str {
+		match self {
+			Self::Low => "StartupTierLow",
+			Self::Middle => "StartupTierStandard",
+			Self::High => "StartupTierHigh",
+		}
+	}
+}
+
 /// What the first start asks of the machine. `None` is unknown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MachineFacts {

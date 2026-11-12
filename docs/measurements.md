@@ -237,3 +237,23 @@ Open performance items:
   back per heartbeat.
 - The painter's settled runs (one pixel centre settling the next pixels of
   its row) are not implemented.
+
+## The browser demo
+
+2026-11-12, Chrome 158 and Firefox 159 (flatpak, `dom.webgpu.enabled`, with the NVIDIA driver's flatpak GL
+extension; without it Firefox's WebGPU runs on lavapipe), both on Linux. A page beside the built demo
+(`demo/build.sh target/site`, served by `python3 -m http.server`) loads the package and, on Example04 at the
+Standard tier, times frame 200 reached from a fresh session (400 steps and one capture), then frames 201 to 220
+one at a time (two steps and one capture each), then ten renders of one layer at 800x800.
+
+| | Chrome GPU | Firefox GPU | CPU engine, either browser |
+|---|---|---|---|
+| Frame 200 from step 0 | 60 to 65 ms | 75 to 97 ms | |
+| A played frame, before / after the readback nudge | 2.6 / 1.6 ms | 100 / 1.7 ms | 52 to 54 ms |
+| Render 800x800 | 0.5 to 0.6 ms | 0.6 ms | 0.5 ms |
+
+Firefox maps a buffer when it polls the device, on a 100 ms timer, unless the queue is submitted to. A page
+timing `mapAsync` of a 4 MiB copy (nine runs, median): plain 2.2 ms in Chrome, 100 ms in Firefox; with
+`onSubmittedWorkDone` awaited as well, the same; with an empty `queue.submit([])` every turn of the event loop
+while it waits, 4.1 ms in Chrome and 8 ms in Firefox. The package's wait (`crates/wavedude-wasm/src/wait.rs`)
+races the readback against a 1 ms timer that submits an empty batch, so Chrome's readback is not delayed.

@@ -211,9 +211,7 @@ pub fn read_fragment(text: &str) -> Result<Fragment, FragmentError> {
 		inner.join("\n")
 	);
 	let mut project = wdproj::read_str(&wrapped).map_err(|e| FragmentError::Malformed(e.to_string()))?;
-	if let Some(bytes) = &project.scene.image_data {
-		project.scene.image_size = wavedude_core::io::image_size(bytes).map_err(FragmentError::Malformed)?;
-	}
+	wavedude_core::io::read_embedded_image_size(&mut project.scene).map_err(FragmentError::Malformed)?;
 	let named = |n: &str| elements.iter().any(|(e, _)| e == n);
 	Ok(Fragment {
 		scene: named("Scene").then_some(project.scene),

@@ -67,8 +67,8 @@ impl Component for StartupPage {
 
 		let heading = |key: &str| label().text(s.get(key).to_owned()).font_weight(FontWeight::BOLD);
 		let text = |key: &str| paragraph().width(Size::fill()).span(Span::new(s.get(key).to_owned()));
-		let tier = |key: &str, tier: PreviewTier| {
-			button(s.get(key), true, move |_| {
+		let tier = |tier: PreviewTier| {
+			button(s.get(tier.title_key()), true, move |_| {
 				quality.set(PreviewDefaults::quality_of(tier));
 				dither.set(PreviewDefaults::dither_bits_of(tier));
 			})
@@ -95,11 +95,7 @@ impl Component for StartupPage {
 			)
 			.child(heading("StartupPreview"))
 			.child(text("StartupPreviewText"))
-			.child(rect().horizontal().spacing(8.).children([
-				tier("StartupTierLow", PreviewTier::Low),
-				tier("StartupTierStandard", PreviewTier::Middle),
-				tier("StartupTierHigh", PreviewTier::High),
-			]))
+			.child(rect().horizontal().spacing(8.).children(PreviewTier::ALL.map(tier)))
 			.child(lever(
 				&s,
 				"MenuViewResolution",

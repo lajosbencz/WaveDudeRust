@@ -13,8 +13,8 @@ use wavedude_core::sync::lock;
 use wavedude_core::io::{self, FormatError, IoError, legacy, wdproj};
 use wavedude_core::model::Project;
 use wavedude_core::model::normalize::Normalize;
+use wavedude_examples::Example;
 
-use super::examples::Example;
 use super::history::History;
 
 #[derive(Debug, thiserror::Error)]
@@ -148,9 +148,7 @@ impl Document {
 	/// An example as an unsaved project named after its file.
 	pub fn from_example(example: &Example) -> Result<Self, DocumentError> {
 		let mut project = example.load().map_err(|e| DocumentError::Example(example.file_name.to_owned(), e))?;
-		if let Some(bytes) = &project.scene.image_data {
-			project.scene.image_size = io::image_size(bytes).expect("an embedded example's image decodes");
-		}
+		io::read_embedded_image_size(&mut project.scene).expect("an embedded example's image decodes");
 		tracing::info!("opened example '{}'", example.file_name);
 		Ok(Self::with(project, None, Some(PathBuf::from(example.file_name)), false))
 	}
@@ -485,7 +483,7 @@ mod tests {
 		d.project.add_source();
 		d.edited(Instant::now());
 		assert_eq!(d.title("App", "Untitled", false), "App - Untitled*");
-		let mut e = Document::from_example(&crate::examples::all()[0]).unwrap();
+		let mut e = Document::from_example(&wavedude_examples::all()[0]).unwrap();
 		assert_eq!(e.title("App", "Untitled", false), "App - Example01_Source_Mirror_Probe.wdproj");
 		assert_eq!(e.proposed_save_path().unwrap(), Path::new("Example01_Source_Mirror_Probe.wdproj"));
 		e.path = Some(PathBuf::from("/x/y/p.wdproj"));

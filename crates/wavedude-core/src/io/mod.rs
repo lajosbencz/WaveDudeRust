@@ -13,7 +13,7 @@ mod xml;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use crate::model::{Project, Stencil};
+use crate::model::{Project, Scene, Stencil};
 
 /// What a reader found wrong in a text, with its 1-based line and column when known.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -152,13 +152,18 @@ pub fn image_size(bytes: &[u8]) -> std::result::Result<(u32, u32), String> {
 		.map_err(|e| e.to_string())
 }
 
+/// Sets `scene.image_size` from the embedded bytes; unchanged without bytes.
+pub fn read_embedded_image_size(scene: &mut Scene) -> std::result::Result<(), String> {
+	if let Some(bytes) = &scene.image_data {
+		scene.image_size = image_size(bytes)?;
+	}
+	Ok(())
+}
+
 /// Sets `scene.image_size` from the embedded bytes; (0, 0) without bytes.
 pub(crate) fn decode_image_size(project: &mut Project, path: &Path) -> Result<()> {
-	project.scene.image_size = match &project.scene.image_data {
-		Some(bytes) => image_size(bytes).map_err(|message| IoError::Image { path: path.to_owned(), message })?,
-		None => (0, 0),
-	};
-	Ok(())
+	project.scene.image_size = (0, 0);
+	read_embedded_image_size(&mut project.scene).map_err(|message| IoError::Image { path: path.to_owned(), message })
 }
 
 /// The image path as a project in `folder` stores it: relative when the image lies inside the folder.

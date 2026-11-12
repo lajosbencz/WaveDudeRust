@@ -8,7 +8,6 @@
 pub mod clipboard;
 pub mod commands;
 pub mod document;
-pub mod examples;
 pub mod history;
 pub mod live;
 pub mod log;
@@ -445,7 +444,7 @@ impl<B: Backend> AppState<B> {
 			Guarded::Exit => return Response::Exit,
 			Guarded::Restart => return Response::Restart,
 			Guarded::OpenExample(i) => {
-				let example = &examples::all()[i];
+				let example = &wavedude_examples::all()[i];
 				match Document::from_example(example) {
 					Ok(d) => self.replace_document(d, now),
 					Err(e) => return self.error("OpenError", example.file_name, &e),

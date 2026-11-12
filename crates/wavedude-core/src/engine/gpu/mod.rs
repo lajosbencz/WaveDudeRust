@@ -734,6 +734,10 @@ impl WaveEngine for GpuEngine {
 		"GPU"
 	}
 
+	fn is_gpu(&self) -> bool {
+		true
+	}
+
 	fn scene(&self) -> &SceneData {
 		&self.scene
 	}

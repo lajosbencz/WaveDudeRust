@@ -17,6 +17,7 @@ workspace = true
 [dependencies]
 wavedude-core = { path = "../wavedude-core", features = ["gpu"] }
 wavedude-export = { path = "../wavedude-export", default-features = false }
+wavedude-examples = { path = "../wavedude-examples" }
 anyhow.workspace = true
 directories = "6"
 notify.workspace = true

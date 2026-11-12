@@ -2,6 +2,10 @@
 
 use rayon::prelude::*;
 
+use super::pixels::ScenePixels;
+use crate::render::layer::scale_nearest;
+use crate::render::screen::Window;
+
 /// Factor on the Sobel magnitude before the clamp at 255.
 pub const SCALE: f64 = 0.25;
 
@@ -40,6 +44,27 @@ pub fn compute(rgba: &[u8], width: usize, height: usize) -> Vec<u8> {
 		},
 	);
 	out
+}
+
+/// The glowing edges of composed scene pixels, RGBA8 at the canvas size.
+#[derive(Debug, PartialEq, Eq)]
+pub struct EdgeImage {
+	pub width: u32,
+	pub height: u32,
+	pub rgba: Vec<u8>,
+}
+
+impl EdgeImage {
+	/// The [`compute`]d edges of `pixels`.
+	pub fn of(pixels: &ScenePixels) -> Self {
+		let rgba = compute(&pixels.rgba, pixels.width as usize, pixels.height as usize);
+		Self { width: pixels.width, height: pixels.height, rgba }
+	}
+
+	/// The edges, or their `window`, resampled to `to` pixels for [`blend_additive`].
+	pub fn scaled(&self, window: Option<Window>, to: (u32, u32)) -> Vec<u8> {
+		scale_nearest(&self.rgba, (self.width, self.height), window, to)
+	}
 }
 
 /// Adds `edges` times `gain` onto an RGBA8 `frame` of the same size: per channel R, G, B

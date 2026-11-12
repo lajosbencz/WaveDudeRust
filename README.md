@@ -26,6 +26,11 @@ project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wd
   measured truth tables ([`examples/gates`](examples/gates/)).
 - Self-updating releases with build provenance and SBOM attestations.
 
+## Try it in the browser
+
+[The web demo](https://lajosbencz.github.io/WaveDudeRust/) runs the examples, or a `.wdproj` file of yours, in the
+browser on the GPU (WebGPU) or the CPU: the simulation only, with a timeline and the Low, Standard and High qualities.
+
 ## Workspace
 
 | Crate | What it holds |
@@ -37,6 +42,8 @@ project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wd
 | [`wavedude-app-state`](crates/wavedude-app-state) | the application state without a UI toolkit: document, history, selection, commands, clipboard, live runs, playback, settings, strings, log |
 | [`wavedude-app`](crates/wavedude-app) | the desktop application: thin Freya views over `wavedude-app-state` |
 | [`wavedude-cli`](crates/wavedude-cli) | headless checks, benches, dispersion tables, scripted runs and exports |
+| [`wavedude-examples`](crates/wavedude-examples) | the example projects, embedded: the list of the Examples dialog and of the web demo |
+| [`wavedude-wasm`](crates/wavedude-wasm) | the engine for the browser (WebAssembly): open a project, step to a frame, render its layers |
 
 ```sh
 cargo test --workspace --features wavedude-export/openh264-source,wavedude-cli/openh264-source   # GPU tests skip without an adapter

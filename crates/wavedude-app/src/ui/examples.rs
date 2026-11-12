@@ -6,8 +6,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use freya::prelude::*;
-use wavedude_app_state::examples::{self, Example, Topic};
 use wavedude_app_state::{Event as AppEvent, Guarded};
+use wavedude_examples::{Example, Topic};
 use wavedude_widgets::status_bar::is_double_click;
 use wavedude_widgets::{Button, TestIdExt, TextBox, use_wave_theme};
 
@@ -17,10 +17,10 @@ use super::properties::tagged;
 
 const LIST_HEIGHT: f32 = 360.;
 
-/// The indices into [`examples::all`] of the examples of `topic` that match `query`, in list order.
+/// The indices into [`wavedude_examples::all`] of the examples of `topic` that match `query`, in list order.
 fn visible(topic: Topic, query: &str) -> Vec<usize> {
 	let query = query.trim().to_lowercase();
-	examples::all()
+	wavedude_examples::all()
 		.iter()
 		.enumerate()
 		.filter(|(_, e)| {
@@ -147,7 +147,7 @@ impl Component for ExamplesDialog {
 		});
 
 		let list = rows.iter().enumerate().map(|(position, &i)| {
-			let example: &Example = &examples::all()[i];
+			let example: &Example = &wavedude_examples::all()[i];
 			let on = selected == Some(i);
 			let (title_ink, detail_ink) =
 				if on { (theme.selection_text, theme.selection_text) } else { (theme.text, theme.text_dim) };

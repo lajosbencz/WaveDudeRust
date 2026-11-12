@@ -38,6 +38,10 @@ pub enum EngineError {
 pub trait WaveEngine: MaybeSend {
 	/// "CPU" or "GPU", for logs.
 	fn name(&self) -> &'static str;
+	/// Whether the GPU runs the steps.
+	fn is_gpu(&self) -> bool {
+		false
+	}
 	fn scene(&self) -> &SceneData;
 	fn options(&self) -> &EngineOptions;
 	/// Steps simulated so far.

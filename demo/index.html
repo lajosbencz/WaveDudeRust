@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WaveDude in the browser</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="demo.css">
+<script type="module" src="demo.js"></script>
+</head>
+<body>
+<header>
+	<b>WaveDude</b>
+	<select id="example" aria-label="Example"><option value="">Examples</option></select>
+	<label class="button">Open .wdproj<input id="file" type="file" accept=".wdproj,.xml" hidden></label>
+	<select id="tier" aria-label="Quality"></select>
+	<label><input id="gpu" type="checkbox" disabled> GPU</label>
+	<span id="status" role="status">Loading ...</span>
+</header>
+<main id="stage"></main>
+<footer>
+	<button id="play" type="button" disabled>Play</button>
+	<input id="seek" type="range" min="0" max="0" value="0" disabled aria-label="Frame">
+	<output id="position" for="seek"></output>
+</footer>
+</body>
+</html>

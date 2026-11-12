@@ -1,12 +1,12 @@
-//! The example projects of the Examples dialog, embedded: `WaveDude` Next's from the core's fixtures and our own
-//! from the repository's `examples` folder; one entry per file, grouped by [`Topic`].
+//! The example projects of the Examples dialog and of the web demo, embedded: `WaveDude` Next's from the core's
+//! fixtures and our own from the repository's `examples` folder; one entry per file, grouped by [`Topic`].
 
 use std::sync::OnceLock;
 
 use wavedude_core::io::wdproj;
 use wavedude_core::model::Project;
 
-/// The dialog's tabs.
+/// The dialog's tabs; the debug name is the topic's id in the web demo's catalog.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Topic {
 	Sources,
@@ -49,6 +49,11 @@ impl Example {
 	/// The file name without its extension, the widget test id's tail.
 	pub fn stem(&self) -> &'static str {
 		self.file_name.rsplit_once('.').map_or(self.file_name, |(stem, _)| stem)
+	}
+
+	/// The file's content.
+	pub fn bytes(&self) -> &'static [u8] {
+		self.bytes
 	}
 
 	/// The widget test id of the dialog's row, `Example:Example07_Random_emitter_lattice`.
@@ -293,6 +298,8 @@ pub fn all() -> &'static [Example] {
 
 #[cfg(test)]
 mod tests {
+	use std::collections::HashSet;
+
 	use super::*;
 
 	#[test]
@@ -308,5 +315,11 @@ mod tests {
 		assert!(all.iter().any(|e| e.title == "Fibre splitter with 2 PMs" && e.topic == Topic::Detectors));
 		assert!(all.iter().any(|e| e.title == "Single fiber" && e.topic == Topic::Guides));
 		assert!(all.iter().all(|e| !e.description.is_empty()), "every example describes itself");
+	}
+
+	#[test]
+	fn file_names_are_unique() {
+		let names: HashSet<_> = all().iter().map(|e| e.file_name).collect();
+		assert_eq!(names.len(), all().len());
 	}
 }

@@ -36,9 +36,16 @@ push. What they hold the code to:
 - `wavedude-widgets`: Freya widgets. Depends on `freya`, `serde`, `regex` only: no core, no strings; labels and
   tips come in as data (`MessageLabels`, `PickerTips` in [`crates/wavedude-widgets/src/lib.rs`](../crates/wavedude-widgets/src/lib.rs)).
 - `wavedude-app-state`: document, history, selection, commands, live runs, settings, strings, log. Depends on
-  core and export (no default features); no Freya, no rfd ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
+  core, export (no default features) and examples; no Freya, no rfd ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
 - `wavedude-app`: Freya views, file dialogs (`rfd`, [`crates/wavedude-app/src/ui/dialogs.rs:105`](../crates/wavedude-app/src/ui/dialogs.rs#L105)), the updater.
   Depends on all of the above.
+- `wavedude-examples`: the example projects, embedded (the fixtures of core and the repository's `examples`), with their
+  titles, descriptions and topics; the Examples dialog and the web demo's catalog read this one list. The library depends on core
+  without default features alone; the binary adds `anyhow` and `serde_json`
+  ([`crates/wavedude-examples/Cargo.toml`](../crates/wavedude-examples/Cargo.toml)).
+- `wavedude-wasm`: the engine for the browser (wasm-bindgen): a project's text, a tier, stepping, pictures. Core with `gpu`
+  and without `run`; no example, no DOM. `session.rs` and `cache.rs` are plain Rust under native tests, `lib.rs` is the
+  JavaScript surface ([decision 0017](decisions/0017-a-wasm-package-and-a-web-demo.md)).
 - `wavedude-cli`: binary only (no `lib.rs`); core, export, and app-state behind feature `mp4`.
 - `wavedude-testing`: a dev-dependency of widgets and app only: finding and clicking in the headless Freya tests.
   A click goes through its `click`/`click_at`, which assert the target lies inside the window first; a test that
@@ -79,7 +86,7 @@ push. What they hold the code to:
 - Project format quirks (WaveDude Next's units, versions, sparse writing) stay in [`crates/wavedude-core/src/io/`](../crates/wavedude-core/src/io/)
   (`BRIGHTNESS_GAIN`, `SENSITIVITY_GAIN` in [`io/wdproj.rs`](../crates/wavedude-core/src/io/wdproj.rs)); the model holds this program's units.
 - Example projects are `.wdproj` files under `examples/<topic>/` with a numeric prefix
-  ([`examples/gates/07-xor.wdproj`](../examples/gates/07-xor.wdproj)), embedded with `include_bytes!` in [`crates/wavedude-app-state/src/examples.rs`](../crates/wavedude-app-state/src/examples.rs).
+  ([`examples/gates/07-xor.wdproj`](../examples/gates/07-xor.wdproj)), embedded with `include_bytes!` in [`crates/wavedude-examples/src/lib.rs`](../crates/wavedude-examples/src/lib.rs).
 
 ## Naming
 

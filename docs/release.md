@@ -27,6 +27,11 @@ Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened with
 approves the waiting runs on the PR page ("Approve workflows to run"); once approved, later updates of the same PR
 run without asking. The required checks come from those runs alone, so each new release PR needs that one approval.
 
+After `publish` succeeds, the `pages` job calls [`pages.yml`](../.github/workflows/pages.yml), which builds the web demo of the released
+commit (no cache, with [`demo/build.sh`](../demo/build.sh)) and deploys it to GitHub Pages
+(https://lajosbencz.github.io/WaveDudeRust/). The workflow can also be run by hand from the Actions tab. A failed
+deployment leaves the release as it is; rerun the failed jobs.
+
 A failed release is finished by rerunning the failed jobs of its run: tagging and drafting skip what exists. The
 release stays a draft until `publish` succeeds.
 
@@ -57,6 +62,8 @@ crates.io publishing is off. `wavedude-core` and `wavedude-export` are ready for
 `release` running `cargo publish -p wavedude-core` then `-p wavedude-export`, with the repository as their trusted
 publisher (crates.io > crate > Settings > Trusted Publishing; a token only for each crate's first publish).
 
+- Settings > Pages: source GitHub Actions. The environment `github-pages` (Settings > Environments, created by the first
+  deployment) admits the default branch alone.
 - Settings > General: immutable releases on (`gh api -X PUT repos/<owner>/<repo>/immutable-releases`); squash
   merging only, its commit titled by the pull request's title (git-cliff reads conventional commits); allow
   auto-merge; delete head branches; no wiki.

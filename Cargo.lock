@@ -5964,6 +5964,7 @@ dependencies = [
  "tracing-subscriber",
  "wavedude-app-state",
  "wavedude-core",
+ "wavedude-examples",
  "wavedude-export",
  "wavedude-testing",
  "wavedude-widgets",
@@ -5988,6 +5989,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "wavedude-core",
+ "wavedude-examples",
  "wavedude-export",
 ]
 
@@ -6033,6 +6035,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "wavedude-examples"
+version = "0.2.1"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "wavedude-core",
+]
+
+[[package]]
 name = "wavedude-export"
 version = "0.2.2"
 dependencies = [
@@ -6071,6 +6082,19 @@ version = "0.2.2"
 dependencies = [
  "freya",
  "freya-testing",
+]
+
+[[package]]
+name = "wavedude-wasm"
+version = "0.2.1"
+dependencies = [
+ "js-sys",
+ "pollster 1.0.1",
+ "thiserror 2.0.21",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wavedude-core",
+ "wavedude-examples",
 ]
 
 [[package]]

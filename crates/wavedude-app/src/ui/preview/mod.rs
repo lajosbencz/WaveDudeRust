@@ -29,7 +29,7 @@ use wavedude_core::model::{DisplayEdit, DisplayLayerEdit, Layer, ProjectEdit, Sc
 use wavedude_core::render::fit_brightness;
 use wavedude_core::render::layer::LayerColours;
 use wavedude_core::scene::compose::SceneKey;
-use wavedude_core::scene::glowing_edges;
+use wavedude_core::scene::glowing_edges::EdgeImage;
 use wavedude_core::scene::pixels::ScenePixels;
 use wavedude_core::spec::SceneCache;
 use wavedude_widgets::menu::ContextMenuRequest;
@@ -38,9 +38,7 @@ use wavedude_widgets::{ContextMenuHost, MenuItem, MenuModel, TestIdExt, use_wave
 use self::handles::HandleKind;
 use self::overlay::Grab;
 use self::pictures::PictureCell;
-use self::presenter::{
-	EdgeImage, FrameSource, LayerRequest, Outline, Presenter, PresenterStats, Request, SourceKey, as_halves,
-};
+use self::presenter::{FrameSource, LayerRequest, Outline, Presenter, PresenterStats, Request, SourceKey, as_halves};
 use crate::ui::app::{Cx, TICK};
 use crate::ui::export_dialog::{self, ExportKindChoice};
 use crate::ui::shared::{App, Shared, Topics};
@@ -384,10 +382,7 @@ fn draw_scenes(cache: &Mutex<SceneCache>, inbox: &Receiver<SceneJob>, outbox: &S
 			(cache.image(&job.project), job.edges.then(|| cache.pixels(&job.project)).flatten())
 		};
 		let image = image.map(|p| (p.width, p.height, Bytes::from_owner(Rgba(p))));
-		let edges = pixels.map(|p| {
-			let rgba = glowing_edges::compute(&p.rgba, p.width as usize, p.height as usize);
-			Arc::new(EdgeImage { width: p.width, height: p.height, rgba })
-		});
+		let edges = pixels.map(|p| Arc::new(EdgeImage::of(&p)));
 		if outbox.send(SceneArt { generation: job.generation, image, edges }).is_err() {
 			return;
 		}
