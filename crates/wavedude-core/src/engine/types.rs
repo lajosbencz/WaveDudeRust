@@ -1,11 +1,14 @@
 //! Engine input and output types shared by the CPU and GPU engines.
 
 use std::borrow::Cow;
+use std::future::Future;
 use std::num::NonZeroU32;
+use std::sync::Arc;
 
 use half::f16;
 
 use crate::model::{Edges, Layer, PulseShape, Stencil};
+use crate::sync::Readiness;
 
 /// The simulated medium on the grid (canvas plus rim), row-major, no padding.
 #[derive(Clone, Debug, PartialEq)]
@@ -256,6 +259,28 @@ pub struct PendingCapture {
 	/// The engine's staging set.
 	#[cfg_attr(not(feature = "gpu"), allow(dead_code))]
 	pub(crate) slot: usize,
+	/// Ready when the GPU's copy is mapped; `None` for an engine whose capture is done.
+	pub(crate) mapped: Option<Arc<dyn Readiness>>,
+}
+
+impl PendingCapture {
+	/// A capture that is done at once.
+	pub(crate) fn done(snapshot: Snapshot) -> Self {
+		Self { snapshot, slot: 0, mapped: None }
+	}
+
+	/// Resolves when [`WaveEngine::finish_capture`](super::WaveEngine::finish_capture) will not have to wait.
+	/// On wasm32 `finish_capture` before this resolves fails with `GpuError::NotReady` and leaves the engine
+	/// failed. Natively it resolves only once something polls the device, which `finish_capture` does: native
+	/// callers call `finish_capture` instead of awaiting.
+	pub fn ready(&self) -> impl Future<Output = ()> + use<> {
+		let mapped = self.mapped.clone();
+		async move {
+			if let Some(mapped) = mapped {
+				std::future::poll_fn(|cx| mapped.poll_ready(cx)).await;
+			}
+		}
+	}
 }
 
 /// A Half plane's bytes as halves, borrowed when aligned.

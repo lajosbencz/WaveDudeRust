@@ -14,7 +14,7 @@ use wavedude_app_state::settings::Settings;
 use wavedude_app_state::{AppState, Event, ExportKind, Guarded, Response, SaveChoice};
 use wavedude_core::model::ProbeDetector;
 use wavedude_core::model::{Point, SourceEdit};
-use wavedude_core::run::MachineFacts;
+use wavedude_core::quality::MachineFacts;
 use wavedude_core::run::Wanted;
 
 fn app() -> AppState<FakeBackend> {

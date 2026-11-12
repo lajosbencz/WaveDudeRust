@@ -22,6 +22,8 @@ pub use types::*;
 
 use std::sync::Arc;
 
+use crate::sync::MaybeSend;
+
 /// Why an engine call failed.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum EngineError {
@@ -33,7 +35,7 @@ pub enum EngineError {
 /// What every engine does. Positions and sizes are in grid cells, times in steps.
 ///
 /// A GPU failure in a call that returns no `Result` is kept and returned by the next call that does.
-pub trait WaveEngine: Send {
+pub trait WaveEngine: MaybeSend {
 	/// "CPU" or "GPU", for logs.
 	fn name(&self) -> &'static str;
 	fn scene(&self) -> &SceneData;
@@ -73,22 +75,63 @@ pub trait WaveEngine: Send {
 	fn prepare_frame(&mut self) -> Result<(Vec<f32>, Vec<f32>), EngineError>;
 }
 
-/// The engine for `scene`: the GPU's when `prefer_gpu` and one is available, else the CPU's (the fallback is
+/// The GPU a built engine may run on.
+#[cfg(feature = "gpu")]
+pub type GpuHandle = Arc<gpu::GpuContext>;
+
+/// Without the `gpu` feature there is no GPU to hand over.
+#[cfg(not(feature = "gpu"))]
+pub enum GpuHandle {}
+
+#[cfg(feature = "gpu")]
+fn cpu_instead(why: &dyn std::fmt::Display) {
+	tracing::warn!("the GPU engine is not available ({why}); the CPU engine runs instead");
+}
+
+/// The engine for `scene`: the GPU's on `gpu` when given and it builds, else the CPU's (the fallback is
 /// logged).
-pub fn build(scene: Arc<SceneData>, options: EngineOptions, prefer_gpu: bool) -> Box<dyn WaveEngine> {
-	if prefer_gpu {
-		#[cfg(feature = "gpu")]
-		match gpu::GpuEngine::new(scene.clone(), options.clone()) {
+pub async fn build_on(scene: Arc<SceneData>, options: EngineOptions, gpu: Option<GpuHandle>) -> Box<dyn WaveEngine> {
+	#[cfg(feature = "gpu")]
+	if let Some(ctx) = gpu {
+		match gpu::GpuEngine::create(ctx, scene.clone(), options.clone(), gpu::MediumLayout::Compact).await {
 			Ok(e) => return Box::new(e),
-			Err(e) => tracing::warn!("the GPU engine is not available ({e}); the CPU engine runs instead"),
+			Err(e) => cpu_instead(&e),
 		}
-		#[cfg(not(feature = "gpu"))]
-		tracing::warn!("the GPU engine is not built in; the CPU engine runs instead");
+	}
+	#[cfg(not(feature = "gpu"))]
+	if let Some(never) = gpu {
+		match never {}
 	}
 	Box::new(cpu::CpuEngine::new(scene, options))
 }
 
+/// The engine for `scene`, blocking: the GPU's when `prefer_gpu` and one is available, else the CPU's (the
+/// fallback is logged).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build(scene: Arc<SceneData>, options: EngineOptions, prefer_gpu: bool) -> Box<dyn WaveEngine> {
+	#[cfg(feature = "gpu")]
+	{
+		let gpu = match prefer_gpu.then(gpu::context) {
+			Some(Ok(context)) => Some(context),
+			Some(Err(e)) => {
+				cpu_instead(&e);
+				None
+			}
+			None => None,
+		};
+		pollster::block_on(build_on(scene, options, gpu))
+	}
+	#[cfg(not(feature = "gpu"))]
+	{
+		if prefer_gpu {
+			tracing::warn!("the GPU engine is not built in; the CPU engine runs instead");
+		}
+		Box::new(cpu::CpuEngine::new(scene, options))
+	}
+}
+
 /// The GPU adapter's description, or why there is none; `None` when the GPU engine is not built in.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn gpu_adapter() -> Option<Result<String, String>> {
 	#[cfg(feature = "gpu")]
 	return Some(match gpu::context() {

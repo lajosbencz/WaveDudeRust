@@ -20,6 +20,7 @@
 //! while the file is empty, else it stays in memory; the file's frames reuse a few buffers. The file is deleted
 //! on drop.
 
+use crate::spec::RunSpec;
 use crate::sync::lock;
 use std::fs::File;
 use std::io;
@@ -106,6 +107,16 @@ pub struct StoreLayout {
 }
 
 impl StoreLayout {
+	/// The layout of a run of `spec`.
+	pub fn of(spec: &RunSpec) -> Self {
+		Self {
+			shape: spec.shape,
+			layers: spec.layers(),
+			capacity: spec.stored_frames() as usize,
+			capture_every: spec.capture_every(),
+		}
+	}
+
 	/// The same buffers serve: geometry, format, planes, frames and steps agree (the brightness baked into
 	/// index samples does not count, a cleared store takes the next generation's frames).
 	pub fn fits(&self, other: &Self) -> bool {

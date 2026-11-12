@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::Word;
-use wavedude_core::run::{MachineFacts, PreviewDefaults, PreviewQuality};
+use wavedude_core::quality::{MachineFacts, PreviewDefaults, PreviewQuality};
 
 use super::strings::Language;
 
@@ -439,7 +439,7 @@ mod tests {
 		let names: Vec<_> =
 			std::fs::read_dir(path.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name()).collect();
 		assert_eq!(names, [FILE_NAME], "no temporary file is left");
-		assert_eq!(Settings::load(&path, MachineFacts::read).settings, Settings::default());
+		assert_eq!(Settings::load(&path, wavedude_core::run::machine_facts).settings, Settings::default());
 	}
 
 	#[test]

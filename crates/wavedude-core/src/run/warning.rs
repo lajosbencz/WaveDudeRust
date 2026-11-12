@@ -1,8 +1,8 @@
 //! The memory warning's arithmetic: a preview run whose store exceeds the budget asks first, offering the RAM
 //! cache at Auto and three quality levers (spec/40-frames-store-render.md, Memory warning). The UI renders it.
 
-use super::quality::PreviewQuality;
-use super::spec::RunRequest;
+use crate::quality::PreviewQuality;
+use crate::spec::RunRequest;
 
 /// The warning's four checkboxes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

@@ -4,7 +4,7 @@
 
 use freya::prelude::*;
 use wavedude_core::engine::SampleFormat;
-use wavedude_core::run::PreviewQuality;
+use wavedude_core::quality::PreviewQuality;
 use wavedude_widgets::icon::icons;
 use wavedude_widgets::{Check, MenuEntry, MenuItem, MenuModel, Submenu};
 

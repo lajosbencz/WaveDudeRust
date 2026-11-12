@@ -21,9 +21,10 @@ use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::io::wdproj::BRIGHTNESS_GAIN;
 use wavedude_core::model::normalize::box_in_canvas;
 use wavedude_core::model::{DisplayLayer, Probe, Project, Stencil};
+use wavedude_core::quality::PreviewQuality;
 use wavedude_core::render::{HalfTable, fit_brightness, render_half};
-use wavedude_core::run::{PreviewQuality, RunSpec};
 use wavedude_core::scene::pixels::ScenePixels;
+use wavedude_core::spec::RunSpec;
 use wavedude_export::graph::{self, GraphData, TextMetrics};
 
 use crate::png_out::{write_grey, write_rgba};

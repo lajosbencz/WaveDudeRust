@@ -4,7 +4,7 @@
 
 use freya::prelude::*;
 use wavedude_core::engine::SampleFormat;
-use wavedude_core::run::{PreviewDefaults, PreviewQuality, PreviewTier};
+use wavedude_core::quality::{PreviewDefaults, PreviewQuality, PreviewTier};
 use wavedude_export::h264;
 use wavedude_widgets::use_wave_theme;
 

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, ensure};
 use clap::Args as ClapArgs;
 use wavedude_core::model::{GateKind, Measurement, PartKind, Probe, ProbeKind, Project, Source};
-use wavedude_core::run::PreviewQuality;
+use wavedude_core::quality::PreviewQuality;
 
 use crate::project::load;
 use crate::run::{EngineArgs, finish, parse_steps, simulate};

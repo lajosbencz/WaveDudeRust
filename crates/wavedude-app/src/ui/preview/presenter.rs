@@ -17,12 +17,13 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use bytes::{Bytes, BytesMut};
+use wavedude_core::engine::FrameShape;
 use wavedude_core::engine::Snapshot;
 pub use wavedude_core::engine::as_halves;
-use wavedude_core::engine::{FrameShape, SampleFormat};
-use wavedude_core::model::{ColorScheme, Layer};
-use wavedude_core::render::screen::{ScreenColors, Window};
-use wavedude_core::render::{DeepHalfTable, DitherDepth, HalfTable, Palette, ScreenRenderer, render_indexed_into};
+use wavedude_core::model::Layer;
+use wavedude_core::render::ScreenRenderer;
+use wavedude_core::render::layer::{LayerColours, View, paint, scale_nearest};
+use wavedude_core::render::screen::Window;
 use wavedude_core::run::FrameStore;
 use wavedude_core::scene::glowing_edges;
 
@@ -142,10 +143,7 @@ impl PartialEq for Outline {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerRequest {
 	pub layer: Layer,
-	pub scheme: ColorScheme,
-	pub black_level: f64,
-	/// Applies to 16-bit frames; an 8-bit frame carries its own.
-	pub brightness: f64,
+	pub colours: LayerColours,
 	/// The picture's size in device pixels (16-bit frames); `(0, 0)` renders at the stored size.
 	pub device: (u32, u32),
 	/// The part of the canvas the picture shows when zoomed (16-bit frames), in canvas pixels; None is all of it.
@@ -289,36 +287,12 @@ struct LayerRenderer {
 impl LayerRenderer {
 	fn render(&mut self, source: &FrameSource, req: &LayerRequest) -> Option<Picture> {
 		let shape = source.shape();
-		let (sw, sh) = (shape.width(), shape.height());
-		let (width, height) = match shape.format {
-			SampleFormat::Index => (sw, sh),
-			SampleFormat::Half if req.device.0 > 0 && req.device.1 > 0 => req.device,
-			SampleFormat::Half => (sw, sh),
-		};
-		let window = if shape.format == SampleFormat::Half { req.window } else { None };
-		let mut rgba = self.buffer(req.layer, width as usize * height as usize * 4);
-		let screens = &mut self.screens;
-		let drawn = source.with_plane_into(req.layer, &mut self.spill, |bytes| match shape.format {
-			SampleFormat::Index => {
-				let palette = Palette::cached(&req.scheme, req.black_level);
-				render_indexed_into(bytes, &palette, &mut rgba);
-			}
-			SampleFormat::Half => {
-				let halves = as_halves(bytes);
-				let kind = shape.sample_kind(req.layer);
-				let screen = screens.entry(req.layer).or_insert_with(|| ScreenRenderer::new(1, 1, 1, 1));
-				screen.set_view(sw as usize, sh as usize, window, width as usize, height as usize);
-				match DitherDepth::from_bits(req.dither_bits) {
-					Some(depth) => {
-						let deep = DeepHalfTable::cached(&req.scheme, req.black_level, req.brightness as f32, kind);
-						screen.render(&halves, ScreenColors::Dithered(&deep, depth), &mut rgba);
-					}
-					None => {
-						let table = HalfTable::cached(&req.scheme, req.black_level, req.brightness as f32, kind);
-						screen.render(&halves, ScreenColors::Plain(&table), &mut rgba);
-					}
-				}
-			}
+		let view = View::of(&shape, req.device, req.window, req.dither_bits);
+		let (width, height, window) = (view.width, view.height, view.window);
+		let mut rgba = self.buffer(req.layer, view.bytes());
+		let screen = self.screens.entry(req.layer).or_insert_with(|| ScreenRenderer::new(1, 1, 1, 1));
+		let drawn = source.with_plane_into(req.layer, &mut self.spill, |bytes| {
+			paint(bytes, &shape, req.layer, &req.colours, &view, screen, &mut rgba);
 		});
 		drawn?;
 		if let Some(outline) = &req.outline {
@@ -357,27 +331,6 @@ impl LayerRenderer {
 		}
 		BytesMut::zeroed(len)
 	}
-}
-
-/// RGBA8 `src` of `from` pixels, or the `window` of it, resampled to `to` pixels by nearest neighbour (pixel centres).
-pub fn scale_nearest(src: &[u8], from: (u32, u32), window: Option<Window>, to: (u32, u32)) -> Vec<u8> {
-	if from == to && window.is_none() {
-		return src.to_vec();
-	}
-	let (fw, fh) = (from.0 as usize, from.1 as usize);
-	let (tw, th) = (to.0 as usize, to.1 as usize);
-	let (x0, y0, w, h) = window.unwrap_or((0.0, 0.0, fw as f64, fh as f64));
-	let column = |x: usize| ((x0 + (x as f64 + 0.5) * w / tw as f64).floor().max(0.0) as usize).min(fw - 1);
-	let columns: Vec<usize> = (0..tw).map(column).collect();
-	let mut out = Vec::with_capacity(tw * th * 4);
-	for y in 0..th {
-		let sy = ((y0 + (y as f64 + 0.5) * h / th as f64).floor().max(0.0) as usize).min(fh - 1);
-		let row = &src[sy * fw * 4..(sy + 1) * fw * 4];
-		for &sx in &columns {
-			out.extend_from_slice(&row[sx * 4..sx * 4 + 4]);
-		}
-	}
-	out
 }
 
 /// Pictures between two log lines.
@@ -434,20 +387,9 @@ impl PresenterStats {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use wavedude_core::engine::SampleFormat;
 	use wavedude_core::f16;
-
-	#[test]
-	fn nearest_scaling_samples_pixel_centres() {
-		let src: Vec<u8> = (0..4u8).flat_map(|v| [v, v, v, 255]).collect();
-		let up = scale_nearest(&src, (2, 2), None, (4, 4));
-		let reds: Vec<u8> = up.chunks(4).map(|p| p[0]).collect();
-		assert_eq!(reds, vec![0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3]);
-		let down = scale_nearest(&up, (4, 4), None, (2, 2));
-		assert_eq!(down, src);
-		assert_eq!(scale_nearest(&src, (2, 2), None, (2, 2)), src);
-		let corner = scale_nearest(&src, (2, 2), Some((1.0, 1.0, 1.0, 1.0)), (2, 2));
-		assert_eq!(corner, [&src[12..16], &src[12..16], &src[12..16], &src[12..16]].concat());
-	}
+	use wavedude_core::model::ColorScheme;
 
 	#[test]
 	fn halves_read_from_aligned_and_unaligned_bytes() {
@@ -476,9 +418,7 @@ mod tests {
 	fn layer(layer: Layer) -> LayerRequest {
 		LayerRequest {
 			layer,
-			scheme: ColorScheme::default(),
-			black_level: 0.,
-			brightness: 1.,
+			colours: LayerColours { scheme: ColorScheme::default(), black_level: 0., brightness: 1. },
 			device: (0, 0),
 			window: None,
 			dither_bits: 0,

@@ -7,11 +7,9 @@ use std::sync::Arc;
 use crate::engine::emitters::emitters_of;
 use crate::engine::{Emitter, EngineOptions, FrameShape, SampleFormat, SceneData};
 use crate::model::{Frame, Layer, Measurement, Probe, Project, SceneEdges, SceneMode, Timeline};
+use crate::quality::PreviewQuality;
 use crate::scene::compose::{SceneKey, compose_over, decode_image, image_key};
 use crate::scene::pixels::ScenePixels;
-
-use super::quality::PreviewQuality;
-use super::store::StoreLayout;
 
 const FIELD: &[Layer] = &[Layer::Field];
 const BOTH: &[Layer] = &[Layer::Field, Layer::Intensity];
@@ -300,16 +298,6 @@ impl RunSpec {
 	/// The planes of every frame, in store order: the field, then the intensity when tracked.
 	pub fn layers(&self) -> &'static [Layer] {
 		if self.track_intensity() { BOTH } else { FIELD }
-	}
-
-	/// The store layout of a run of this spec.
-	pub fn store_layout(&self) -> StoreLayout {
-		StoreLayout {
-			shape: self.shape,
-			layers: self.layers(),
-			capacity: self.stored_frames() as usize,
-			capture_every: self.capture_every(),
-		}
 	}
 
 	/// Bytes of one stored frame at this quality.

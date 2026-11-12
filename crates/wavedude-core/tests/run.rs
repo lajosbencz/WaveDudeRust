@@ -13,7 +13,9 @@ use wavedude_core::engine::cpu::CpuEngine;
 use wavedude_core::engine::{SampleFormat, Snapshot, WaveEngine};
 use wavedude_core::f16;
 use wavedude_core::model::{Layer, Measurement, Probe, ProbeKind, Project, Source};
+use wavedude_core::quality::PreviewQuality;
 use wavedude_core::run::*;
+use wavedude_core::spec::{RunRequest, RunSpec, RunSpecError, SceneCache};
 
 const GIB: u64 = 1 << 30;
 
@@ -57,7 +59,7 @@ fn engine(spec: &RunSpec) -> Box<dyn WaveEngine> {
 }
 
 fn store(spec: &RunSpec, budget: u64) -> Arc<FrameStore> {
-	Arc::new(FrameStore::new(spec.store_layout(), budget, None).unwrap())
+	Arc::new(FrameStore::new(StoreLayout::of(spec), budget, None).unwrap())
 }
 
 fn events() -> (Option<EventSink>, Receiver<RunEvent>) {
@@ -187,9 +189,9 @@ fn tiered_store() {
 	let dir = tempfile::tempdir().unwrap();
 	let s = spec(&project(40, 30, 20), PreviewQuality::FULL);
 	let frame = s.frame_bytes();
-	let st = FrameStore::in_dir(s.store_layout(), 4 * frame + frame / 2, None, dir.path()).unwrap();
+	let st = FrameStore::in_dir(StoreLayout::of(&s), 4 * frame + frame / 2, None, dir.path()).unwrap();
 	assert_eq!((st.capacity(), st.ram_frames(), st.first_spilled()), (10, 4, 4));
-	assert_eq!(st.spill_bytes(), Some(s.store_layout().file_bytes(6)));
+	assert_eq!(st.spill_bytes(), Some(StoreLayout::of(&s).file_bytes(6)));
 	let written: Vec<Snapshot> = (0..10).map(|k| snapshot_of(&s, k as f32)).collect();
 	for w in &written {
 		st.write(w.clone()).unwrap();
@@ -203,14 +205,14 @@ fn tiered_store() {
 	drop(st);
 	assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0, "the file goes with the store");
 
-	let st = FrameStore::in_dir(s.store_layout(), 10 * frame, None, dir.path()).unwrap();
+	let st = FrameStore::in_dir(StoreLayout::of(&s), 10 * frame, None, dir.path()).unwrap();
 	for w in &written {
 		st.write(w.clone()).unwrap();
 	}
 	assert!(st.spill_bytes().is_none());
 	assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0, "a run within the budget creates no file");
 
-	let st = FrameStore::in_dir(s.store_layout(), 0, None, dir.path()).unwrap();
+	let st = FrameStore::in_dir(StoreLayout::of(&s), 0, None, dir.path()).unwrap();
 	st.write(written[3].clone()).unwrap();
 	assert_eq!(st.copy_layer(0, Layer::Intensity).unwrap(), written[3].intensity);
 	assert_eq!((st.frames_in_memory(), st.frames_on_disk(), st.ram_bytes()), (0, 1, 0));
@@ -220,7 +222,7 @@ fn tiered_store() {
 fn readers_on_other_threads_see_every_written_frame() {
 	let dir = tempfile::tempdir().unwrap();
 	let s = spec(&project(40, 30, 200), PreviewQuality::FULL);
-	let st = Arc::new(FrameStore::in_dir(s.store_layout(), 30 * s.frame_bytes(), None, dir.path()).unwrap());
+	let st = Arc::new(FrameStore::in_dir(StoreLayout::of(&s), 30 * s.frame_bytes(), None, dir.path()).unwrap());
 	let done = Arc::new(AtomicBool::new(false));
 	let readers: Vec<_> = (0..3)
 		.map(|_| {
@@ -257,7 +259,7 @@ fn the_memory_tier_waits_for_the_release() {
 		std::thread::sleep(Duration::from_millis(50));
 		flag.store(true, Ordering::Release);
 	});
-	let st = FrameStore::new(s.store_layout(), GIB, Some(release)).unwrap();
+	let st = FrameStore::new(StoreLayout::of(&s), GIB, Some(release)).unwrap();
 	assert!(!released.load(Ordering::Acquire));
 	let block = st.next_buffer();
 	assert!(released.load(Ordering::Acquire), "the first block came after the release");
@@ -269,7 +271,7 @@ fn the_memory_tier_waits_for_the_release() {
 #[test]
 fn the_release_signal_fires_when_the_last_handle_drops() {
 	let s = spec(&project(40, 30, 4), PreviewQuality::FULL);
-	let st = Arc::new(FrameStore::new(s.store_layout(), GIB, None).unwrap());
+	let st = Arc::new(FrameStore::new(StoreLayout::of(&s), GIB, None).unwrap());
 	let signal = st.release_signal();
 	let reader = st.clone();
 	drop(st);
@@ -763,7 +765,7 @@ fn a_sparse_store_tracks_presence_and_reuses_its_buffers() {
 	let dir = tempfile::tempdir().unwrap();
 	let s = spec(&project(40, 30, 20), PreviewQuality::FULL);
 	let frame = s.frame_bytes();
-	let st = FrameStore::in_dir(s.store_layout(), 4 * frame + frame / 2, None, dir.path()).unwrap();
+	let st = FrameStore::in_dir(StoreLayout::of(&s), 4 * frame + frame / 2, None, dir.path()).unwrap();
 	st.write_at(7, snapshot_of(&s, 7.0)).unwrap();
 	st.write_at(2, snapshot_of(&s, 2.0)).unwrap();
 	assert_eq!((st.count(), st.present_count(), st.has(2), st.has(3)), (0, 2, true, false));
@@ -871,7 +873,7 @@ fn store_write_timing() {
 	}
 	let cold = started.elapsed();
 	let dir = tempfile::tempdir().unwrap();
-	let st3 = FrameStore::in_dir(s.store_layout(), 0, None, dir.path()).unwrap();
+	let st3 = FrameStore::in_dir(StoreLayout::of(&s), 0, None, dir.path()).unwrap();
 	let started = Instant::now();
 	for k in 0..100 {
 		write(&st3, &shots[k % 4]);

@@ -9,7 +9,8 @@ use clap::Args as ClapArgs;
 use wavedude_core::engine::types::FrameShape;
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::Layer;
-use wavedude_core::run::{FrameStore, PreviewQuality, RunError, RunEvent, SimulationRun};
+use wavedude_core::quality::PreviewQuality;
+use wavedude_core::run::{FrameStore, RunError, RunEvent, SimulationRun};
 use wavedude_export::{ExportFormat, ExportLayers, ExportPlan, ExportState, FrameSource};
 
 use crate::project::load;

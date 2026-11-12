@@ -113,17 +113,6 @@ pub struct MachineFacts {
 	pub cache_drive_seek_penalty: Option<bool>,
 }
 
-impl MachineFacts {
-	/// Memory and threads of this machine. The GPU and the drive are left unknown: the GPU is the
-	/// caller's to fill (it owns the GPU engine), and no platform's seek-penalty query is wired yet.
-	pub fn read() -> Self {
-		let mut system = sysinfo::System::new();
-		system.refresh_memory();
-		let threads = std::thread::available_parallelism().map_or(1, |n| n.get() as u32);
-		Self { physical_bytes: system.total_memory(), threads, has_gpu: None, cache_drive_seek_penalty: None }
-	}
-}
-
 /// The table of spec/40 that maps a machine to its first preview quality.
 pub struct PreviewDefaults;
 
@@ -228,12 +217,5 @@ mod tests {
 		assert!(v.is_valid() && (v.resolution_divisor, v.frame_divisor) == (4, 1));
 		let v = PreviewQuality { resolution_divisor: 3, frame_divisor: 3, ..q }.validated();
 		assert_eq!((v.resolution_divisor, v.frame_divisor), (2, 2));
-	}
-
-	#[test]
-	fn reads_this_machine() {
-		let f = MachineFacts::read();
-		assert!(f.physical_bytes > 0 && f.threads >= 1);
-		assert_eq!((f.has_gpu, f.cache_drive_seek_penalty), (None, None));
 	}
 }

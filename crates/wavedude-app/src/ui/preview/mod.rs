@@ -27,10 +27,11 @@ use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::Project;
 use wavedude_core::model::{DisplayEdit, DisplayLayerEdit, Layer, ProjectEdit, SceneMode};
 use wavedude_core::render::fit_brightness;
-use wavedude_core::run::SceneCache;
+use wavedude_core::render::layer::LayerColours;
 use wavedude_core::scene::compose::SceneKey;
 use wavedude_core::scene::glowing_edges;
 use wavedude_core::scene::pixels::ScenePixels;
+use wavedude_core::spec::SceneCache;
 use wavedude_widgets::menu::ContextMenuRequest;
 use wavedude_widgets::{ContextMenuHost, MenuItem, MenuModel, TestIdExt, use_wave_theme};
 
@@ -213,16 +214,17 @@ fn request_of(app: &App, extents: [PictureExtent; 2], edges: Option<&Arc<EdgeIma
 		.into_iter()
 		.filter(|&l| project.display.layer(l).preview)
 		.map(|layer| {
-			let d = project.display.layer(layer);
+			let colours = LayerColours::of(project, layer, &app.schemes);
+			let extent = &extents[layer as usize];
 			LayerRequest {
 				layer,
-				scheme: app.schemes.resolve(&project.color_schemes, &d.color_scheme),
-				black_level: d.black_level,
-				brightness: d.brightness,
-				device: extents[layer as usize].device,
-				window: extents[layer as usize].window.map(|(x, y, w, h)| (x.into(), y.into(), w.into(), h.into())),
+				outline: LayerColours::overlay_gain(project, layer)
+					.zip(edges)
+					.map(|(gain, e)| Outline { edges: e.clone(), gain }),
+				colours,
+				device: extent.device,
+				window: extent.window.map(|(x, y, w, h)| (x.into(), y.into(), w.into(), h.into())),
 				dither_bits,
-				outline: d.overlay.then(|| edges.map(|e| Outline { edges: e.clone(), gain: d.overlay_gain })).flatten(),
 			}
 		})
 		.collect();

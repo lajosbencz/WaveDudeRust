@@ -1,6 +1,6 @@
 # 0015: The core builds for wasm32 without its runs and GPU engine
 
-Status: accepted, 2026-11-12. No WebAssembly package is planned; this keeps one possible.
+Status: accepted, 2026-11-12; amended by [0016](0016-gpu-engine-in-the-browser.md). No WebAssembly package is planned; this keeps one possible.
 
 ## Context
 

@@ -14,8 +14,8 @@ publish = false
 [features]
 default = ["gpu", "run"]
 gpu = ["dep:wgpu", "dep:pollster"]
-# Runs and the frame store: threads, a disk spill and the machine's memory. Without it (and `gpu`) the crate
-# builds for wasm32-unknown-unknown.
+# Runs and the frame store: threads, a disk spill and the machine's memory. Without it the crate builds for
+# wasm32-unknown-unknown, with or without `gpu`.
 run = ["dep:sysinfo", "dep:tempfile"]
 
 [lints]
@@ -38,6 +38,8 @@ sysinfo = { version = "0.38", default-features = false, features = ["system"], o
 tempfile = { version = "3", optional = true }
 web-time = "1.1"
 wgpu = { version = "30", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = { version = "1", optional = true }
 
 [dev-dependencies]

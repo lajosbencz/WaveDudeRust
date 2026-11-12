@@ -26,6 +26,8 @@
 //! something is read; at most [`MAX_IN_FLIGHT`] batches are queued ahead of the card. Probe
 //! readings and `prepare_frame` wait for the card; a capture is submitted with its copy to one of two
 //! staging buffers and collected later, so the card converts and copies while the host steps on.
+//! On wasm32 nothing can wait: the engine supports the capture path only (await
+//! [`PendingCapture::ready`] before `finish_capture`); probe readings and `prepare_frame` are unavailable there.
 //!
 //! Where the GPU may differ from the CPU: the driver may fuse a multiply and an add (the CPU does
 //! not), and may flush subnormals. Both change the last bit of some cells per step; the difference
@@ -36,7 +38,7 @@
 //! nearest even), and the source values are the CPU's bits.
 //!
 //! Threading: one driver thread per engine, no internal locking; the device and queue are shared
-//! by every engine of the process (see [`context`]).
+//! by every engine of the process natively (`context`), or by the engines built on one [`GpuContext`].
 
 mod context;
 mod medium;
@@ -44,11 +46,13 @@ mod medium;
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::num::NonZeroU64;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 
-pub use context::{GpuContext, GpuError, context};
+#[cfg(not(target_arch = "wasm32"))]
+pub use context::context;
+pub use context::{GpuContext, GpuError};
 pub use medium::MediumLayout;
 
 use super::cpu::{blend, centred, mur_chains, sub_step_time};
@@ -62,6 +66,7 @@ use super::types::{
 };
 use super::{EngineError, WaveEngine};
 use crate::model::{Edges, Layer};
+use crate::sync::Notify;
 
 /// Steps recorded per submission at most.
 pub const BATCH_STEPS: u32 = 32;
@@ -176,8 +181,8 @@ struct Kernel {
 	pipeline: wgpu::ComputePipeline,
 }
 
-/// The outcome of a mapping request, set by its callback.
-type MapState = Arc<OnceLock<Result<(), wgpu::BufferAsyncError>>>;
+/// The outcome of a mapping request, set by its callback, which also wakes a waiting future.
+type MapState = Arc<Notify<Result<(), wgpu::BufferAsyncError>>>;
 
 /// A host-mappable buffer, its map state, and the submission that fills it while it is pending.
 struct Readback {
@@ -276,24 +281,36 @@ pub struct GpuEngine {
 }
 
 impl GpuEngine {
-	/// An engine at rest on `scene` on the shared device, with the compact medium.
+	/// An engine at rest on `scene` on the process's device, with the compact medium; blocks until the
+	/// pipelines are built.
+	#[cfg(not(target_arch = "wasm32"))]
 	pub fn new(scene: impl Into<Arc<SceneData>>, options: EngineOptions) -> Result<Self, GpuError> {
 		Self::with_layout(scene, options, MediumLayout::Compact)
 	}
 
 	/// An engine with the medium in `layout` (compact falls back to plain when the scene has too
 	/// many distinct values). For measurements of the two layouts.
+	#[cfg(not(target_arch = "wasm32"))]
 	pub fn with_layout(
 		scene: impl Into<Arc<SceneData>>,
 		options: EngineOptions,
 		layout: MediumLayout,
 	) -> Result<Self, GpuError> {
 		let scene = scene.into();
-		// Cell indices are u32 words, probe cells carry the layer in bit 31.
-		if scene.padded_cells() >= PROBE_INTENSITY as usize {
-			return Err(GpuError::GridTooLarge(scene.padded_cells()));
-		}
-		let ctx = context()?;
+		check_grid(&scene)?;
+		pollster::block_on(Self::create(context()?, scene, options, layout))
+	}
+
+	/// An engine at rest on `scene` on `ctx`, with the medium in `layout` (compact falls back to plain when
+	/// the scene has too many distinct values).
+	pub async fn create(
+		ctx: Arc<GpuContext>,
+		scene: impl Into<Arc<SceneData>>,
+		options: EngineOptions,
+		layout: MediumLayout,
+	) -> Result<Self, GpuError> {
+		let scene = scene.into();
+		check_grid(&scene)?;
 		let device = ctx.device.clone();
 		let device = &device;
 		let n = sub_steps(options.stencil, scene.max_c2());
@@ -314,7 +331,7 @@ impl GpuEngine {
 		let force_kernels = force_pipelines(device, &coefficients, scheme);
 		let probes_kernel = kernel(device, "probes", PROBES, PROBES_SLOTS, &coefficients);
 		let capture_kernel = kernel(device, "capture", CAPTURE, CAPTURE_SLOTS, &coefficients);
-		if let Some(e) = pollster::block_on(scope.pop()) {
+		if let Some(e) = scope.pop().await {
 			return Err(GpuError::Pipeline(e.to_string()));
 		}
 
@@ -1068,14 +1085,15 @@ impl GpuEngine {
 			}
 		};
 		map(&mut readback, submission);
+		let mapped = readback.mapped.clone();
 		self.captures[slot] = Some(readback);
 		into.shape = *shape;
 		into.step = self.time.saturating_sub(1);
-		Ok(PendingCapture { snapshot: into, slot })
+		Ok(PendingCapture { snapshot: into, slot, mapped: Some(mapped) })
 	}
 
 	fn finish(&mut self, pending: PendingCapture) -> Result<Snapshot, GpuError> {
-		let PendingCapture { mut snapshot, slot } = pending;
+		let PendingCapture { mut snapshot, slot, .. } = pending;
 		let readback = self.captures[slot].as_mut().expect("capture slot");
 		let waited = wait_mapped(&self.ctx.device, readback);
 		if let Err(e) = waited {
@@ -1371,9 +1389,15 @@ fn map(readback: &mut Readback, submission: wgpu::SubmissionIndex) {
 	let state = MapState::default();
 	readback.mapped = state.clone();
 	readback.pending = Some(submission);
-	readback.buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-		let _ = state.set(r);
-	});
+	readback.buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| state.set(r));
+}
+
+/// Cell indices are u32 words, probe cells carry the layer in bit 31.
+fn check_grid(scene: &SceneData) -> Result<(), GpuError> {
+	match scene.padded_cells() {
+		n if n >= PROBE_INTENSITY as usize => Err(GpuError::GridTooLarge(n)),
+		_ => Ok(()),
+	}
 }
 
 fn wait(device: &wgpu::Device, index: wgpu::SubmissionIndex) -> Result<(), GpuError> {
@@ -1382,6 +1406,7 @@ fn wait(device: &wgpu::Device, index: wgpu::SubmissionIndex) -> Result<(), GpuEr
 }
 
 /// Waits for the mapping requested by [`map`]; the readback is no longer pending after it.
+#[cfg(not(target_arch = "wasm32"))]
 fn wait_mapped(device: &wgpu::Device, readback: &mut Readback) -> Result<(), GpuError> {
 	if let Some(index) = readback.pending.take() {
 		wait(device, index)?;
@@ -1392,4 +1417,12 @@ fn wait_mapped(device: &wgpu::Device, readback: &mut Readback) -> Result<(), Gpu
 		}
 		device.poll(wgpu::PollType::wait_indefinitely())?;
 	}
+}
+
+/// The mapping requested by [`map`]; nothing can block here, so one not done yet is [`GpuError::NotReady`].
+#[cfg(target_arch = "wasm32")]
+fn wait_mapped(_device: &wgpu::Device, readback: &mut Readback) -> Result<(), GpuError> {
+	let result = readback.mapped.get().ok_or(GpuError::NotReady)?;
+	readback.pending = None;
+	result.clone().map_err(GpuError::Map)
 }

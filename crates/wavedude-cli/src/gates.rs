@@ -19,11 +19,12 @@ use wavedude_core::model::{
 	BoxSize, Edges, Fiber, FiberNode, GateKind, Layer, LogicGate, Material, Measurement, Outline, Part, PartBase,
 	PartKind, Point, Probe, ProbeKind, Project, Rectangle, Scene, SceneMode, Simulation, Source, wavelength,
 };
+use wavedude_core::quality::PreviewQuality;
 use wavedude_core::render::fit_brightness;
-use wavedude_core::run::{PreviewQuality, RunSpec};
 use wavedude_core::scene::compose::compose_scene;
 use wavedude_core::scene::gate_design::{BEND_EXP, GateDesign, ports_of};
 use wavedude_core::scene::modes::ModeSolver;
+use wavedude_core::spec::RunSpec;
 
 use crate::run::EngineArgs;
 use crate::truth::{coupler_tag, run_steps};

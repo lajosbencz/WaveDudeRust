@@ -61,11 +61,11 @@ impl Shots {
 		app.settings.check_for_updates = Some(false);
 		app.settings.warn_when_ram_insufficient = false;
 		app.handle(AppEvent::SetLanguage("en".into()), Instant::now());
-		let quality = wavedude_core::run::PreviewQuality {
+		let quality = wavedude_core::quality::PreviewQuality {
 			resolution_divisor: 2,
 			frame_divisor: 2,
 			format: wavedude_core::engine::SampleFormat::Index,
-			..wavedude_core::run::PreviewQuality::DEFAULT
+			..wavedude_core::quality::PreviewQuality::DEFAULT
 		};
 		app.handle(AppEvent::SetPreviewQuality(quality), Instant::now());
 		app.handle(AppEvent::Guarded(Guarded::Open(example.into())), Instant::now());
@@ -323,11 +323,11 @@ fn readme_animation() {
 		}))))
 	};
 	// Full resolution: the pictures are shown at the scene's own pixels.
-	let full = wavedude_core::run::PreviewQuality {
+	let full = wavedude_core::quality::PreviewQuality {
 		resolution_divisor: 1,
 		frame_divisor: 2,
 		format: wavedude_core::engine::SampleFormat::Index,
-		..wavedude_core::run::PreviewQuality::DEFAULT
+		..wavedude_core::quality::PreviewQuality::DEFAULT
 	};
 	s.shared.send(AppEvent::SetPreviewQuality(full));
 	s.run_to(2000, 0);

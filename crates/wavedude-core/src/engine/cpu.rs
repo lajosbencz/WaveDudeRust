@@ -695,7 +695,7 @@ impl WaveEngine for CpuEngine {
 
 	fn begin_capture(&mut self, shape: &FrameShape, mut into: Snapshot) -> Result<PendingCapture, EngineError> {
 		self.capture_into(shape, &mut into);
-		Ok(PendingCapture { snapshot: into, slot: 0 })
+		Ok(PendingCapture::done(into))
 	}
 
 	fn finish_capture(&mut self, pending: PendingCapture) -> Result<Snapshot, EngineError> {
@@ -746,6 +746,27 @@ mod tests {
 		let mut e = CpuEngine::new(scene, options(stencil));
 		e.set_emitters(&[emitter(20, 15), emitter(-1, 3), emitter(40, 0)]);
 		e
+	}
+
+	#[test]
+	fn a_cpu_capture_is_ready_at_once() {
+		use std::future::Future;
+		use std::task::{Context, Poll, Waker};
+		let mut e = engine(Edges::Open, 0, Stencil::NinePoint);
+		e.advance_one_step();
+		let shape = FrameShape {
+			canvas_width: 40,
+			canvas_height: 30,
+			divisor: 1,
+			format: crate::engine::SampleFormat::Half,
+			field_brightness: 1.0,
+			intensity_brightness: 1.0,
+			intensity_root: false,
+		};
+		let pending = e.begin_capture(&shape, Snapshot::new(shape)).unwrap();
+		let mut ready = std::pin::pin!(pending.ready());
+		assert_eq!(ready.as_mut().poll(&mut Context::from_waker(Waker::noop())), Poll::Ready(()));
+		assert_eq!(e.finish_capture(pending).unwrap().shape, shape);
 	}
 
 	#[test]

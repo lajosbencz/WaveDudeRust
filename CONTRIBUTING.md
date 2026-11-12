@@ -70,7 +70,7 @@ packages of the "Linux packages for Skia and winit" step of [`.github/workflows/
 | [cargo-hack](https://github.com/taiki-e/cargo-hack) | every feature combination compiles | `cargo hack check --workspace --feature-powerset --depth 2` | |
 | [cargo-machete](https://github.com/bnjbvr/cargo-machete) | no unused dependency | `cargo machete` | |
 | MSRV | builds at the workspace's `rust-version` | `rustup toolchain install 1.89`, then `cargo +1.89 check --workspace --all-targets` | `[workspace.package]` of [`Cargo.toml`](Cargo.toml) |
-| wasm32 | the core without `gpu` and `run` builds for the browser | `rustup target add wasm32-unknown-unknown`, then `cargo check -p wavedude-core --no-default-features --target wasm32-unknown-unknown` | `[features]` of [`crates/wavedude-core/Cargo.toml`](crates/wavedude-core/Cargo.toml) |
+| wasm32 | the core without `run`, with and without `gpu`, builds for the browser and is clippy-clean there | `rustup target add wasm32-unknown-unknown`, then `cargo clippy -p wavedude-core --no-default-features --target wasm32-unknown-unknown -- -D warnings` and the same with `--features gpu` | `[features]` of [`crates/wavedude-core/Cargo.toml`](crates/wavedude-core/Cargo.toml) |
 | [typos](https://github.com/crate-ci/typos) | spelling | `typos` | [`_typos.toml`](_typos.toml) |
 | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) | advisories, licences, wildcard versions, sources | `cargo deny check` | [`deny.toml`](deny.toml) |
 | [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) | optional, local only: code no test reaches | `cargo llvm-cov --workspace --features $F --summary-only` | |

@@ -14,10 +14,12 @@ use std::time::Instant;
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::engine::{EngineOptions, SceneData, Snapshot, WaveEngine};
 use wavedude_core::model::{Layer, Project, Step};
+use wavedude_core::quality::PreviewQuality;
 use wavedude_core::run::{
-	Budget, FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, PreviewQuality, RunError, RunRequest,
-	RunSpecError, RunState, RunWorker, SceneCache, Status, Wanted, WorkState,
+	Budget, FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RunError, RunState, RunWorker, Status,
+	Wanted, WorkState,
 };
+use wavedude_core::spec::{RunRequest, RunSpecError, SceneCache};
 
 use super::commands::ChangeKind;
 use super::playback::{Limit, Playback};
@@ -990,7 +992,8 @@ pub mod fake {
 	use wavedude_core::engine::{SampleFormat, Snapshot};
 	use wavedude_core::f16;
 	use wavedude_core::render::{field_index, intensity_root_index};
-	use wavedude_core::run::{FitFrame, FrameStore, Goal, RunSpec, Status, Wanted, WorkState};
+	use wavedude_core::run::{FitFrame, FrameStore, Goal, Status, StoreLayout, Wanted, WorkState};
+	use wavedude_core::spec::RunSpec;
 
 	use super::Backend;
 
@@ -1110,7 +1113,7 @@ pub mod fake {
 				let same_frames = self.spec.as_ref().is_some_and(|s| s.same_frames_as(spec));
 				let same_probes = self.spec.as_ref().is_some_and(|s| s.same_probes_as(spec));
 				if !same_frames {
-					let layout = spec.store_layout();
+					let layout = StoreLayout::of(spec);
 					match &self.store {
 						Some(store) if store.layout().fits(&layout) => store.clear(),
 						_ => self.store = Some(Arc::new(FrameStore::new(layout, 1 << 30, None).unwrap())),

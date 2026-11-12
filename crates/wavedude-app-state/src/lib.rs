@@ -24,7 +24,8 @@ use std::time::Instant;
 
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::Point;
-use wavedude_core::run::{Levers, MachineFacts, PreviewQuality};
+use wavedude_core::quality::{MachineFacts, PreviewQuality};
+use wavedude_core::run::Levers;
 
 use clipboard::{Copyable, PasteTarget};
 use commands::{Change, ChangeKind, Command, CommandError};
@@ -227,7 +228,7 @@ impl AppState<CoreBackend> {
 		let path = dirs.settings_file();
 		let loaded = Settings::load(&path, || MachineFacts {
 			has_gpu: Some(wavedude_core::engine::gpu::context().is_ok()),
-			..MachineFacts::read()
+			..wavedude_core::run::machine_facts()
 		});
 		let mut settings = loaded.settings;
 		if let Some(zoom) = settings::zoom_switch(args) {

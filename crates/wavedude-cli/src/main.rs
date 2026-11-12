@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use tracing_subscriber::filter::LevelFilter;
-use wavedude_core::run::PreviewQuality;
+use wavedude_core::quality::PreviewQuality;
 
 #[derive(Parser)]
 #[command(name = "wavedude-cli", version, about = "Headless checks, benches and scripted exports for WaveDude")]

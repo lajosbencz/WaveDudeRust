@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use wavedude_core::engine::capture;
 use wavedude_core::engine::cpu::CpuEngine;
-use wavedude_core::engine::gpu::{BATCH_STEPS, GpuEngine, MediumLayout, context};
+use wavedude_core::engine::gpu::{BATCH_STEPS, GpuContext, GpuEngine, MediumLayout, context};
 use wavedude_core::engine::{
 	Emitter, EngineOptions, FrameShape, ProbeCells, ProbeReadings, SampleFormat, SceneData, Snapshot, WaveEngine,
 };
@@ -375,6 +375,30 @@ fn captured_planes_match() {
 			}
 		}
 	}
+}
+
+#[test]
+fn a_capture_is_ready_once_the_map_completes() {
+	use std::future::Future;
+	use std::task::{Context, Poll, Waker};
+	if !gpu_available() {
+		return;
+	}
+	let ctx = pollster::block_on(GpuContext::create()).expect("GPU context");
+	let settings = Scene { damping_edge: 0, ..Scene::default() };
+	let data = SceneData::blank(64, 48, &settings);
+	let mut gpu =
+		pollster::block_on(GpuEngine::create(ctx.clone(), data, options(Stencil::NinePoint), MediumLayout::Compact))
+			.expect("GPU engine");
+	run(&mut gpu, 4);
+	let shape = FrameShape { canvas_width: 64, canvas_height: 48, ..shape(1, SampleFormat::Half) };
+	let pending = gpu.begin_capture(&shape, Snapshot::new(shape)).unwrap();
+	let mut ready = std::pin::pin!(pending.ready());
+	let mut cx = Context::from_waker(Waker::noop());
+	assert_eq!(ready.as_mut().poll(&mut cx), Poll::Pending, "the callback runs when the device is polled");
+	ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+	assert_eq!(ready.as_mut().poll(&mut cx), Poll::Ready(()));
+	assert_eq!(gpu.finish_capture(pending).unwrap().field.len(), shape.plane_bytes());
 }
 
 #[test]

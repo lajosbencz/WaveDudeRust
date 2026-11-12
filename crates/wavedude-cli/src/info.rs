@@ -1,8 +1,8 @@
 use anyhow::Result;
-use wavedude_core::run::{MachineFacts, PreviewDefaults};
+use wavedude_core::quality::PreviewDefaults;
 
 pub(crate) fn run() -> Result<()> {
-	let mut facts = MachineFacts::read();
+	let mut facts = wavedude_core::run::machine_facts();
 	let gpu = wavedude_core::engine::gpu_adapter();
 	facts.has_gpu = gpu.as_ref().map(std::result::Result::is_ok);
 	println!("memory:   {:.1} GiB", facts.physical_bytes as f64 / (1u64 << 30) as f64);

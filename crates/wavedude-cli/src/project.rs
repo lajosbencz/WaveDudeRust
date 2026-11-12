@@ -5,10 +5,11 @@ use wavedude_core::engine::substeps::sub_steps;
 use wavedude_core::io::{load_project, save_project};
 use wavedude_core::model::Project;
 use wavedude_core::model::normalize::Normalize;
-use wavedude_core::run::{PreviewQuality, RunSpec};
+use wavedude_core::quality::PreviewQuality;
 use wavedude_core::scene::compose::compose_scene;
 use wavedude_core::scene::glowing_edges;
 use wavedude_core::scene::pixels::ScenePixels;
+use wavedude_core::spec::RunSpec;
 
 use crate::png_out::write_rgba;
 
@@ -90,7 +91,7 @@ pub(crate) fn check(path: &Path) -> Result<()> {
 	println!("steps:        {} (a frame every {})", spec.steps, spec.visualize_every);
 	println!("frames:       {}", spec.frame_count());
 	println!("emitters:     {}, image sources {}", spec.emitters.len(), scene.image_sources.len());
-	let request = wavedude_core::run::RunRequest::new(&project, PreviewQuality::FULL, true);
+	let request = wavedude_core::spec::RunRequest::new(&project, PreviewQuality::FULL, true);
 	println!("store, full:    {}", gib(request.store_bytes_at(PreviewQuality::FULL)));
 	println!("store, default: {}", gib(request.store_bytes_at(PreviewQuality::DEFAULT)));
 	Ok(())

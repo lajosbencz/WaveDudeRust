@@ -28,8 +28,8 @@ use crate::engine::probes::{ProbeCollector, ProbeTrace};
 use crate::engine::{EngineOptions, PendingCapture, SampleFormat, SceneData, Snapshot, WaveEngine};
 
 use super::simulation::{RunError, record};
-use super::spec::{RunRequest, RunSpec, SceneCache};
-use super::store::{Budget, FrameStore};
+use super::store::{Budget, FrameStore, StoreLayout};
+use crate::spec::{RunRequest, RunSpec, SceneCache};
 
 /// Steps between two looks at the pause and shutdown flags.
 pub const CHECK_INTERVAL: u32 = 16;
@@ -403,7 +403,7 @@ impl Worker {
 
 	/// The spec of `request`: the one built last when it is the same request, else built (the scene composed
 	/// when the project's scene changed).
-	fn spec_of(&mut self, request: &RunRequest) -> Result<RunSpec, super::spec::RunSpecError> {
+	fn spec_of(&mut self, request: &RunRequest) -> Result<RunSpec, crate::spec::RunSpecError> {
 		if let Some((r, spec)) = &self.built
 			&& r.same_as(request)
 		{
@@ -433,7 +433,7 @@ impl Worker {
 			}
 		} else {
 			self.finish_pending()?;
-			let layout = spec.store_layout();
+			let layout = StoreLayout::of(spec);
 			let previous = self.current.take();
 			let old_spec = previous.as_ref().map(|c| c.spec.clone());
 			let store = match previous {
@@ -839,7 +839,7 @@ enum Interrupted {
 mod tests {
 	use super::*;
 	use crate::model::{Probe, Project, Source};
-	use crate::run::PreviewQuality;
+	use crate::quality::PreviewQuality;
 
 	fn project(probe_x: i32) -> Project {
 		let mut p = Project::default();

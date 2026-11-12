@@ -12,11 +12,13 @@ extern crate self as wavedude_core;
 pub mod engine;
 pub mod io;
 pub mod model;
+pub mod quality;
 pub mod render;
 pub mod rng;
 #[cfg(feature = "run")]
 pub mod run;
 pub mod scene;
+pub mod spec;
 pub mod sync;
 
 pub use half::f16;

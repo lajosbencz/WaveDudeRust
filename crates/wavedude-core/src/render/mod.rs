@@ -5,6 +5,7 @@
 pub mod brightness;
 pub mod frame;
 pub mod gradient;
+pub mod layer;
 pub mod lut;
 pub mod screen;
 
