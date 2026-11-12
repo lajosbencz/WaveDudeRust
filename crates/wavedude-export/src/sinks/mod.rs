@@ -101,8 +101,8 @@ fn file<S: FrameSink + 'static>(path: &Path, make: impl FnOnce() -> Result<S>) -
 	match make() {
 		Ok(sink) => Ok(Box::new(FileOutput { sink, path: path.to_path_buf() })),
 		Err(e) => {
-			if !existed {
-				remove_if_present(path)?;
+			if !existed && let Err(cleanup) = remove_if_present(path) {
+				tracing::error!(error = %cleanup, "the output that failed to open could not be removed");
 			}
 			Err(e)
 		}

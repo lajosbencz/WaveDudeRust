@@ -4,6 +4,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
+use wavedude_core::sync::lock;
 
 use rayon::{ThreadPool, ThreadPoolBuilder};
 
@@ -18,7 +19,7 @@ pub struct EncoderPool(Arc<Mutex<Option<Arc<ThreadPool>>>>);
 
 impl EncoderPool {
 	pub(crate) fn get(&self) -> Result<Arc<ThreadPool>> {
-		let mut slot = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+		let mut slot = lock(&self.0);
 		if let Some(pool) = slot.as_ref() {
 			return Ok(pool.clone());
 		}

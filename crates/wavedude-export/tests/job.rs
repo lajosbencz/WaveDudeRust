@@ -375,6 +375,38 @@ fn a_plan_builds_one_target_per_layer_with_suffixed_paths() {
 }
 
 #[test]
+fn a_plan_whose_second_layer_cannot_be_drawn_opens_no_output() {
+	let dir = scratch("plan-look");
+	let src = source(2);
+	let mut project = plan_project();
+	project.scene.width = W + 10;
+	project.parts.push(wavedude_core::model::Part::new(
+		wavedude_core::model::PartKind::Rectangle(Default::default()),
+		5,
+		5,
+	));
+	project.display.field.overlay_in_export = false;
+	project.display.intensity.overlay_in_export = true;
+	project.display.intensity.overlay_gain = 1.0;
+	let plan = ExportPlan {
+		project: &project,
+		format: ExportFormat::Avi,
+		layers: ExportLayers::Both,
+		path: dir.join("run.avi"),
+		still: None,
+		frame_count: src.frame_count(),
+		traces: &[],
+		total_steps: 4,
+		keep_partial: false,
+		h264: None,
+	};
+	let error = plan.build_job(&src, &SchemeStore::default()).err().expect("a scene of another size");
+	assert!(matches!(error, ExportError::WrongInput(_)), "{error}");
+	assert!(!dir.join("run_field.avi").exists(), "the field's movie is not opened");
+	std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn a_plan_that_cannot_open_an_output_removes_those_it_opened() {
 	let dir = scratch("plan-fail");
 	std::fs::create_dir_all(dir.join("run_intensity.avi")).unwrap();

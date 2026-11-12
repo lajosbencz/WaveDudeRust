@@ -36,14 +36,20 @@ pub fn probe_label(number: usize, line: bool, end_b: bool) -> String {
 }
 
 /// A line of squares of `(2r + 1)^2` pixels at `steps = max(|dx|, |dy|) + 1` points, point k at
-/// `(x0 + round_even(dx * k / steps), y0 + round_even(dy * k / steps))`, overwriting pixels, clipped.
-pub fn thick_line(canvas: &mut Canvas<'_>, (x0, y0): (i32, i32), (x1, y1): (i32, i32), color: Color, radius: i32) {
+/// `(x0 + round_even(dx * k / steps), y0 + round_even(dy * k / steps))`, overwriting pixels, clipped. Only the
+/// points whose square can reach the canvas are visited, so a far-off end costs nothing.
+pub fn thick_line(canvas: &mut Canvas<'_>, (x0, y0): (i64, i64), (x1, y1): (i64, i64), color: Color, radius: i32) {
 	let steps = (x1 - x0).abs().max((y1 - y0).abs());
-	for k in 0..=steps {
-		let at = |a: i32, b: i32| {
-			if steps == 0 { a } else { a + ((b - a) as f64 * k as f64 / steps as f64).round_ties_even() as i32 }
+	let r = i64::from(radius);
+	let (w, h) = (canvas.width() as i64, canvas.height() as i64);
+	let (xs, xe) = steps_within(x0, x1, steps, -r, w - 1 + r);
+	let (ys, ye) = steps_within(y0, y1, steps, -r, h - 1 + r);
+	for k in xs.max(ys)..=xe.min(ye) {
+		let at = |a: i64, b: i64| {
+			if steps == 0 { a } else { a + ((b - a) as f64 * k as f64 / steps as f64).round_ties_even() as i64 }
 		};
-		let (x, y) = (at(x0, x1), at(y0, y1));
+		// Within a step of the canvas: the coordinates fit i32.
+		let (x, y) = (at(x0, x1) as i32, at(y0, y1) as i32);
 		let r = IRect::new(x - radius, y - radius, 2 * radius + 1, 2 * radius + 1).intersect(&canvas.bounds());
 		for py in r.y..r.bottom() {
 			for px in r.x..r.right() {
@@ -53,16 +59,28 @@ pub fn thick_line(canvas: &mut Canvas<'_>, (x0, y0): (i32, i32), (x1, y1): (i32,
 	}
 }
 
+/// The steps `k` of `0..=steps` whose point along `a..b` rounds into `lo..=hi`, with a step of slack for float
+/// error; empty as `(1, 0)`.
+fn steps_within(a: i64, b: i64, steps: i64, lo: i64, hi: i64) -> (i64, i64) {
+	if a == b {
+		return if (lo..=hi).contains(&a) { (0, steps) } else { (1, 0) };
+	}
+	let t = |v: f64| (v - a as f64) * steps as f64 / (b - a) as f64;
+	let (tl, th) = (t(lo as f64 - 0.5), t(hi as f64 + 0.5));
+	let (t0, t1) = (tl.min(th), tl.max(th));
+	((t0.floor() as i64 - 1).max(0), (t1.ceil() as i64 + 1).min(steps))
+}
+
 /// A probe's strokes: the line A-B (a line probe) and a cross at each end, black at radius 2, then white at 1.
 pub fn draw_probe_strokes(canvas: &mut Canvas<'_>, probe: &Probe) {
-	let arm = arm_length(canvas.height() as u32);
+	let arm = i64::from(arm_length(canvas.height() as u32));
 	let line = probe.kind == ProbeKind::Line;
-	let (a, b) = ((probe.ax, probe.ay), (probe.bx, probe.by));
+	let (a, b) = ((i64::from(probe.ax), i64::from(probe.ay)), (i64::from(probe.bx), i64::from(probe.by)));
 	for (color, radius) in [(BLACK, 2), (WHITE, 1)] {
 		if line {
 			thick_line(canvas, a, b, color, radius);
 		}
-		let ends: &[(i32, i32)] = if line { &[a, b] } else { &[a] };
+		let ends: &[(i64, i64)] = if line { &[a, b] } else { &[a] };
 		for &(x, y) in ends {
 			thick_line(canvas, (x - arm, y), (x + arm, y), color, radius);
 			thick_line(canvas, (x, y - arm), (x, y + arm), color, radius);
@@ -435,5 +453,46 @@ mod tests {
 		assert_eq!(c.get(4, 1), Some(WHITE));
 		assert_eq!(c.get(5, 0), Some([0; 4]));
 		assert_eq!(c.get(0, 2), Some([0; 4]));
+	}
+
+	#[test]
+	fn thick_line_visits_every_point_that_reaches_the_canvas() {
+		let every_point = |c: &mut Canvas<'_>, (x0, y0): (i64, i64), (x1, y1): (i64, i64)| {
+			let steps = (x1 - x0).abs().max((y1 - y0).abs());
+			for k in 0..=steps {
+				let at = |a: i64, b: i64| {
+					if steps == 0 { a } else { a + ((b - a) as f64 * k as f64 / steps as f64).round_ties_even() as i64 }
+				};
+				let (x, y) = (at(x0, x1) as i32, at(y0, y1) as i32);
+				let r = IRect::new(x - 2, y - 2, 5, 5).intersect(&c.bounds());
+				for py in r.y..r.bottom() {
+					for px in r.x..r.right() {
+						c.set(px, py, WHITE);
+					}
+				}
+			}
+		};
+		let lines = [
+			((-300, 5), (500, 17)),
+			((10, -7), (13, 400)),
+			((-50, -50), (-1, -1)),
+			((7, 3), (7, 3)),
+			((0, 25), (31, 26)),
+			((-2, -40), (-3, 60)),
+		];
+		for (a, b) in lines {
+			let (mut want, mut got) = (vec![0u8; 32 * 24 * 4], vec![0u8; 32 * 24 * 4]);
+			every_point(&mut Canvas::new(&mut want, 32, 24), a, b);
+			thick_line(&mut Canvas::new(&mut got, 32, 24), a, b, WHITE, 2);
+			assert!(want == got, "{a:?}-{b:?}");
+		}
+	}
+
+	#[test]
+	fn probe_ends_at_the_integer_limits_draw_at_once() {
+		let mut px = vec![0u8; 32 * 24 * 4];
+		let probe = Probe { kind: ProbeKind::Line, ax: i32::MIN, ay: 3, bx: i32::MAX, by: 20, ..Probe::default() };
+		draw_probe_strokes(&mut Canvas::new(&mut px, 32, 24), &probe);
+		assert!(px.iter().any(|&v| v != 0), "the line crosses the canvas");
 	}
 }

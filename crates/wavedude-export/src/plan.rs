@@ -90,7 +90,22 @@ impl ExportPlan<'_> {
 		let pool = EncoderPool::default();
 		let both = self.layers == ExportLayers::Both;
 		let mut targets: Vec<ExportTarget> = Vec::with_capacity(layers.len());
-		for &layer in layers {
+		// Every look before any sink: a failure here leaves no output behind.
+		let looks = layers
+			.iter()
+			.map(|&layer| {
+				let scheme = schemes.resolve(&self.project.color_schemes, &settings(layer).color_scheme);
+				let look = ExportLayerLook::new(
+					&scheme,
+					settings(layer),
+					source.sample_kind(layer),
+					scene.as_ref(),
+					(width, height),
+				)?;
+				Ok((layer, look))
+			})
+			.collect::<Result<Vec<_>>>()?;
+		for (layer, look) in looks {
 			let path = naming::layer_path(&self.path, layer, both);
 			let sink = match sinks::open(self.format, &path, spec, self.still.is_some(), &pool, self.h264.as_deref()) {
 				Ok(sink) => sink,
@@ -103,14 +118,6 @@ impl ExportPlan<'_> {
 					return Err(e);
 				}
 			};
-			let scheme = schemes.resolve(&self.project.color_schemes, &settings(layer).color_scheme);
-			let look = ExportLayerLook::new(
-				&scheme,
-				settings(layer),
-				source.sample_kind(layer),
-				scene.as_ref(),
-				(width, height),
-			)?;
 			targets.push(ExportTarget { layer, look, sink });
 		}
 		let overlays = Overlays::new(self.project, width, height, self.traces, self.total_steps);
