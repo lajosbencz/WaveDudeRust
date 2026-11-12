@@ -24,10 +24,10 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::engine::cpu::CpuEngine;
-use crate::engine::probes::{ProbeCollector, ProbeTrace};
+use crate::engine::probes::{ProbeCollector, ProbeTrace, record};
 use crate::engine::{EngineOptions, PendingCapture, SampleFormat, SceneData, Snapshot, WaveEngine};
 
-use super::simulation::{RunError, record};
+use super::simulation::RunError;
 use super::store::{Budget, FrameStore, StoreLayout};
 use crate::spec::{RunRequest, RunSpec, SceneCache};
 

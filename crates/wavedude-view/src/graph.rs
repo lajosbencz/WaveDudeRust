@@ -1,11 +1,11 @@
-//! The probe graph box's layout: axis ranges, ticks, the curve on the pixel grid, the title and the readout; and the
-//! preview's shapes of a laid-out box.
+//! The probe graph box's layout: axis ranges, ticks, the curve on the pixel grid, the title and the readout; the
+//! preview's boxes: which a picture shows, where, and the shapes of a laid-out box.
 //!
 //! Pure arithmetic over a probe's settings and its recording, in pixels relative to the box's top-left corner, so a
 //! preview and an export draw the same graph. Numbers are formatted with a decimal point.
 
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::model::{Measurement, Probe, ScaleMode, YScale};
+use wavedude_core::model::{Layer, Measurement, Probe, ScaleMode, YScale};
 
 use crate::draw::{Baseline, DeviceGrid, Ink, Pen, Rect, Rgba, Shape, TextMetrics};
 
@@ -460,6 +460,39 @@ pub fn layout(
 	out
 }
 
+/// Whether the preview's picture of `layer` shows `probe`'s box: an active probe measuring the layer.
+pub fn shows_box(probe: &Probe, layer: Layer) -> bool {
+	probe.active && probe.layer == layer
+}
+
+/// The preview's box size in canvas pixels: the probe's, shrunk with its aspect kept to fit the canvas.
+pub fn box_size(probe: &Probe, canvas: (u32, u32)) -> (f32, f32) {
+	let (w, h) = probe.box_pixels();
+	let (w, h) = (w as f32, h as f32);
+	let f = (canvas.0 as f32 / w).min(canvas.1 as f32 / h).min(1.);
+	(w * f, h * f)
+}
+
+/// The preview box's top-left corner in canvas pixels, held inside the canvas.
+pub fn box_origin(probe: &Probe, canvas: (u32, u32)) -> (f32, f32) {
+	let (w, h) = box_size(probe, canvas);
+	let x = (probe.box_x as f32).clamp(0., (canvas.0 as f32 - w).max(0.));
+	let y = (probe.box_y as f32).clamp(0., (canvas.1 as f32 - h).max(0.));
+	(x, y)
+}
+
+/// A box at `origin` of `size` canvas pixels over a picture whose top-left is at `picture` and which shows
+/// `scale` logical pixels per canvas pixel: its top-left and size in whole logical pixels.
+pub fn box_on_picture(
+	origin: (f32, f32),
+	size: (f32, f32),
+	picture: (f32, f32),
+	scale: f32,
+) -> ((f32, f32), (f32, f32)) {
+	let at = ((picture.0 + origin.0 * scale).round(), (picture.1 + origin.1 * scale).round());
+	(at, ((size.0 * scale).round(), (size.1 * scale).round()))
+}
+
 /// A graph box's text size: logical pixels in the preview, pixels in an export.
 pub const FONT_SIZE: f32 = 11.;
 /// A graph box's background, in the preview and an export.
@@ -580,6 +613,8 @@ pub fn box_shapes(
 
 #[cfg(test)]
 mod tests {
+	use wavedude_core::model::BoxSize;
+
 	use super::*;
 
 	struct Fixed;
@@ -634,6 +669,17 @@ mod tests {
 		assert_eq!(l.readout, "= 0.01");
 		assert_eq!(l.curve.len(), 3);
 		assert_eq!(l.curve[0].1, l.plot_y + l.plot_height, "zero on the bottom line");
+	}
+
+	#[test]
+	fn boxes_fit_the_canvas_on_whole_pixels() {
+		let p = Probe { box_size: BoxSize::Medium, box_x: 350, box_y: -5, ..Probe::default() };
+		assert_eq!(box_size(&p, (1000, 1000)), (400., 200.));
+		assert_eq!(box_size(&p, (200, 400)), (200., 100.), "shrunk with its aspect kept");
+		assert_eq!(box_origin(&p, (600, 300)), (200., 0.));
+		assert_eq!(box_on_picture((200., 0.), (400., 200.), (4.25, 10.), 0.33), ((70., 10.), (132., 66.)));
+		assert!(shows_box(&p, p.layer));
+		assert!(!shows_box(&Probe { active: false, ..p.clone() }, p.layer));
 	}
 
 	#[test]

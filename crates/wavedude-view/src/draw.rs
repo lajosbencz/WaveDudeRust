@@ -4,10 +4,10 @@
 //! The overlay's shapes are in an element's logical pixels; a graph box's are in device pixels of a
 //! [`DeviceGrid`], so its hairlines and text land on whole device pixels.
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
-/// An RGBA8 colour, alpha not premultiplied.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
+/// An RGBA8 colour, alpha not premultiplied; serialised as a CSS colour, `#rrggbbaa`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Rgba {
 	pub r: u8,
 	pub g: u8,
@@ -26,6 +26,12 @@ impl Rgba {
 	}
 }
 
+impl Serialize for Rgba {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serializer.collect_str(&format_args!("#{:02x}{:02x}{:02x}{:02x}", self.r, self.g, self.b, self.a))
+	}
+}
+
 /// An axis-aligned rectangle by its edges.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct Rect {
@@ -41,7 +47,7 @@ impl Rect {
 	}
 }
 
-/// A stroke. `antialias` is the desktop's; a browser always antialiases.
+/// A stroke. `antialias` is the desktop's and not serialised; a browser always antialiases.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct Pen {
 	pub color: Rgba,
@@ -50,6 +56,7 @@ pub struct Pen {
 	pub dash: Option<[f32; 2]>,
 	/// Round joins and caps, else miter joins and butt caps.
 	pub round: bool,
+	#[serde(skip_serializing)]
 	pub antialias: bool,
 }
 
@@ -80,6 +87,7 @@ pub enum Ink {
 	/// `antialias` as on a [`Pen`].
 	Fill {
 		color: Rgba,
+		#[serde(skip_serializing)]
 		antialias: bool,
 	},
 }
@@ -163,6 +171,8 @@ pub enum Shape {
 	/// Clips what follows up to the matching [`Shape::Unclip`].
 	Clip {
 		rect: Rect,
+		/// The desktop's, as on a [`Pen`].
+		#[serde(skip_serializing)]
 		antialias: bool,
 	},
 	Unclip,
@@ -214,6 +224,11 @@ impl DeviceGrid {
 
 	pub fn width(&self, logical: f32) -> f32 {
 		(logical * self.scale).round()
+	}
+
+	/// The rectangle between the logical corners `from` and `to`, its edges on the nearest whole device pixels.
+	pub fn rect(&self, from: (f32, f32), to: (f32, f32)) -> Rect {
+		Rect::new(self.x(from.0).round(), self.y(from.1).round(), self.x(to.0).round(), self.y(to.1).round())
 	}
 }
 

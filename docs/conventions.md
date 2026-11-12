@@ -34,8 +34,10 @@ push. What they hold the code to:
   them as `wavedude_core::model::{Fields, Word}`. Depends on no workspace crate.
 - `wavedude-view`: what the preview draws, without a toolkit: the overlay model and its shapes, the probe graph box's
   layout and shapes, and the draw list (`Shape`, serde-serialisable for the browser). Shapes are in the canvas's units:
-  the overlay's in logical pixels, a graph box's in device pixels of a `DeviceGrid`
-  ([`crates/wavedude-view/src/draw.rs`](../crates/wavedude-view/src/draw.rs)). Depends on core without default features; builds for `wasm32-unknown-unknown`.
+  the overlay's in logical pixels, a graph box's and the edge line's in device pixels of a `DeviceGrid`
+  ([`crates/wavedude-view/src/draw.rs`](../crates/wavedude-view/src/draw.rs)); the browser's executor is [`demo/draw.js`](../demo/draw.js). Placement both the
+  desktop and the browser need (which graph boxes a picture shows, where) lives here too ([decision 0018](decisions/0018-a-shared-picture-view.md)).
+  Depends on core without default features; builds for `wasm32-unknown-unknown`.
 - `wavedude-export`: sinks, overlays, CSV, the export job. Depends on core and view (the graph layout).
 - `wavedude-widgets`: Freya widgets. Depends on `freya`, `serde`, `regex` and view (the shapes it draws, executed by
   `draw_shapes` in [`crates/wavedude-widgets/src/paint.rs`](../crates/wavedude-widgets/src/paint.rs)), not on core itself; no strings: labels and tips come in as data
@@ -48,9 +50,10 @@ push. What they hold the code to:
   titles, descriptions and topics; the Examples dialog and the web demo's catalog read this one list. The library depends on core
   without default features alone; the binary adds `anyhow` and `serde_json`
   ([`crates/wavedude-examples/Cargo.toml`](../crates/wavedude-examples/Cargo.toml)).
-- `wavedude-wasm`: the engine for the browser (wasm-bindgen): a project's text, a tier, stepping, pictures. Core with `gpu`
-  and without `run`; no example, no DOM. `session.rs` and `cache.rs` are plain Rust under native tests, `lib.rs` is the
-  JavaScript surface ([decision 0017](decisions/0017-a-wasm-package-and-a-web-demo.md)).
+- `wavedude-wasm`: the engine for the browser (wasm-bindgen): a project's text, a tier, stepping, probe traces, pictures and
+  the shapes over them as JSON. Core with `gpu` and without `run`, and view; no example, no DOM. `session.rs`, `cache.rs` and
+  `overlay.rs` are plain Rust under native tests, `lib.rs` is the JavaScript surface
+  ([decision 0017](decisions/0017-a-wasm-package-and-a-web-demo.md), [decision 0018](decisions/0018-a-shared-picture-view.md)).
 - `wavedude-cli`: binary only (no `lib.rs`); core, view, export, and app-state behind feature `mp4`.
 - `wavedude-testing`: a dev-dependency of widgets and app only: finding and clicking in the headless Freya tests.
   A click goes through its `click`/`click_at`, which assert the target lies inside the window first; a test that

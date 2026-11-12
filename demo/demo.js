@@ -1,5 +1,6 @@
 // The WaveDude web demo: an example or a dropped project, played on the wasm engine package.
 import init, { Simulation, requestGpu } from "./pkg/wavedude_wasm.js";
+import { DotCache, drawShapes, measure } from "./draw.js";
 
 // Time one stepToward call aims for, so the page stays responsive.
 const STEP_SLICE_MS = 12;
@@ -14,6 +15,8 @@ const ui = {
 	stage: $("stage"), play: $("play"), seek: $("seek"), position: $("position"),
 };
 
+/** The edge line's width in device pixels on a screen of `ratio`: whole, at least one. */
+const hairline = (ratio) => Math.max(1, Math.round(ratio));
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 const message = (error) => error?.message ?? String(error);
 
@@ -98,21 +101,39 @@ class Player {
 			const view = document.createElement("div");
 			view.className = "view";
 			const canvas = document.createElement("canvas");
+			const shapes = document.createElement("canvas");
+			shapes.className = "shapes";
 			const caption = document.createElement("span");
 			caption.textContent = layer;
-			view.append(canvas, caption);
+			view.append(canvas, caption, shapes);
 			ui.stage.append(view);
-			return { layer, view, canvas, context: canvas.getContext("2d") };
+			const overlay = { canvas: shapes, context: shapes.getContext("2d"), dots: new DotCache() };
+			return { layer, view, canvas, context: canvas.getContext("2d"), overlay };
 		});
 		this.resizes = new ResizeObserver(() => this.#layout());
 		this.resizes.observe(ui.stage);
+		this.#watchRatio();
 		this.done = this.#run();
 	}
 
-	/** Stacks the layers or sets them side by side, whichever shows them larger, and fits them to the stage. */
+	/** Lays out again when the device pixel ratio changes, as on a move to another screen. */
+	#watchRatio() {
+		matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener("change", () => {
+			if (this.stopped) return;
+			this.#layout();
+			this.#watchRatio();
+		}, { once: true });
+	}
+
+	/**
+	 * Stacks the layers or sets them side by side, whichever shows them larger, and fits them to the stage with room
+	 * for the edge line around them.
+	 */
 	#layout() {
 		const n = this.views.length;
-		const { clientWidth: w, clientHeight: h } = ui.stage;
+		const ratio = window.devicePixelRatio || 1;
+		const edges = (2 * hairline(ratio)) / ratio;
+		const [w, h] = [ui.stage.clientWidth - edges, ui.stage.clientHeight - edges];
 		const fit = (cellW, cellH) => Math.max(Math.min(cellW / this.width, cellH / this.height), 0);
 		const stacked = fit(w, (h - GAP_PX * (n - 1)) / n);
 		const besides = fit((w - GAP_PX * (n - 1)) / n, h);
@@ -214,15 +235,37 @@ class Player {
 	#show(frame) {
 		if (frame === undefined || frame === this.drawn) return;
 		const ratio = window.devicePixelRatio || 1;
-		for (const { layer, view, canvas, context } of this.views) {
+		for (const { layer, view, canvas, context, overlay } of this.views) {
 			const picture = this.sim.render(frame, layer,
 				Math.max(1, Math.round(view.clientWidth * ratio)), Math.max(1, Math.round(view.clientHeight * ratio)));
 			const { width, height } = picture;
 			if (canvas.width !== width || canvas.height !== height) Object.assign(canvas, { width, height });
 			context.putImageData(new ImageData(picture.data, width, height), 0, 0);
 			picture.free();
+			this.#overlay(overlay, frame, layer, view, ratio);
 		}
 		this.drawn = frame;
+	}
+
+	/** Draws the shapes over a picture; their canvas reaches past it by the edge line's device pixels. */
+	#overlay({ canvas, context, dots }, frame, layer, view, ratio) {
+		const { clientWidth: w, clientHeight: h } = view;
+		const pad = hairline(ratio);
+		const width = Math.round(w * ratio) + 2 * pad;
+		const height = Math.round(h * ratio) + 2 * pad;
+		if (canvas.width !== width || canvas.height !== height) {
+			Object.assign(canvas, { width, height });
+			Object.assign(canvas.style, {
+				left: `${-pad / ratio}px`, top: `${-pad / ratio}px`, width: `${width / ratio}px`, height: `${height / ratio}px`,
+			});
+		}
+		context.setTransform(1, 0, 0, 1, 0, 0);
+		context.clearRect(0, 0, width, height);
+		if (!w || !h) return;
+		for (const { scale, origin, shapes } of JSON.parse(this.sim.overlay(frame, layer, w, h, ratio, measure))) {
+			context.setTransform(scale, 0, 0, scale, pad + origin[0], pad + origin[1]);
+			drawShapes(context, shapes, scale, dots);
+		}
 	}
 }
 

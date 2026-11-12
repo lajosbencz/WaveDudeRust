@@ -16,6 +16,6 @@ One repository, one Cargo workspace, edition 2024:
 - `wavedude-cli`: headless checks, benches, scripted exports (CI without a display).
 - `wavedude-testing`: finding and clicking in the headless Freya tests of widgets and app.
 - `wavedude-examples`: the example projects of the Examples dialog and the web demo (decision 0017).
-- `wavedude-wasm`: the engine for the browser (decision 0017).
+- `wavedude-wasm`: the engine for the browser, with the preview's overlay as a draw list (decisions 0017, 0018).
 
 Docs under [`docs/`](../): [`spec/`](../spec/) (core), `ui/` (UI behaviour), [`decisions/`](./).

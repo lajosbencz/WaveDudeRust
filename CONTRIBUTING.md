@@ -85,7 +85,7 @@ the checks:
   [`docs/measurements.md`](docs/measurements.md) with its command.
 - [`tools/compare-csharp`](tools/compare-csharp/) dumps WaveDude Next's results for `wavedude-cli compare` (.NET 10 SDK,
   `WAVEDUDE_NEXT_DIR`); its [`README.md`](tools/compare-csharp/README.md) has the commands.
-- The web demo ([`demo/`](demo/), decision 0017): `cargo install --locked wasm-bindgen-cli --version <the wasm-bindgen version in Cargo.lock>`,
+- The web demo ([`demo/`](demo/), decisions 0017 and 0018): `cargo install --locked wasm-bindgen-cli --version <the wasm-bindgen version in Cargo.lock>`,
   `rustup target add wasm32-unknown-unknown`, then `demo/build.sh target/site` and
   `python3 -m http.server -d target/site`; open http://127.0.0.1:8000 (WebGPU needs a secure context, and localhost is one).
 - Releases: [git-cliff](https://git-cliff.org) ([`cliff.toml`](cliff.toml)) writes the changelog and the next version from the

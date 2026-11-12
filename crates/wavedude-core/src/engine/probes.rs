@@ -5,6 +5,7 @@
 
 use super::poisson::PoissonProcess;
 use super::types::{ProbeCells, ProbeReadings, SceneData};
+use super::{EngineError, WaveEngine};
 use crate::model::{Layer, Measurement, Probe, ProbeDetector, ProbeKind};
 use crate::rng::stable_hash;
 
@@ -303,6 +304,24 @@ impl ProbeCollector {
 			self.traces[p].steps_sampled = steps_done;
 		}
 	}
+}
+
+/// Records the engine's queued probe readings, the steps after `recorded`, into `collector`: every step's
+/// values, and the line profiles of each frame's step (every `every`-th from the first).
+pub fn record(
+	engine: &mut dyn WaveEngine,
+	collector: &mut ProbeCollector,
+	recorded: &mut u32,
+	every: u32,
+) -> Result<(), EngineError> {
+	engine.drain_probes(&mut |readings| {
+		let step = u64::from(*recorded) + 1;
+		collector.record_step(readings, step);
+		if (*recorded).is_multiple_of(every) {
+			collector.record_frame(readings, step);
+		}
+		*recorded += 1;
+	})
 }
 
 #[cfg(test)]

@@ -15,7 +15,7 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use crate::engine::probes::{ProbeCollector, ProbeTrace};
+use crate::engine::probes::{ProbeCollector, ProbeTrace, record};
 use crate::engine::{EngineError, PendingCapture, Snapshot, WaveEngine};
 
 use super::store::{FrameStore, StoreError};
@@ -435,24 +435,6 @@ fn step_loop(
 		let _ = tx.send(engine.finish_capture(last)?);
 	}
 	Ok(completed)
-}
-
-/// Records the engine's queued probe readings, the steps after `recorded`, into `collector`: every step's
-/// values, and the line profiles of each frame's step.
-pub(crate) fn record(
-	engine: &mut dyn WaveEngine,
-	collector: &mut ProbeCollector,
-	recorded: &mut u32,
-	every: u32,
-) -> Result<(), EngineError> {
-	engine.drain_probes(&mut |readings| {
-		let step = u64::from(*recorded) + 1;
-		collector.record_step(readings, step);
-		if (*recorded).is_multiple_of(every) {
-			collector.record_frame(readings, step);
-		}
-		*recorded += 1;
-	})
 }
 
 /// Moves the samples and profiles recorded since the last heartbeat into the shared traces.

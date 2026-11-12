@@ -118,7 +118,7 @@ pub fn rgba_of(c: Color) -> Rgba {
 	Rgba::new(c.r(), c.g(), c.b(), c.a())
 }
 
-fn sk_rect(r: &Rect) -> SkRect {
+pub(crate) fn sk_rect(r: &Rect) -> SkRect {
 	SkRect::new(r.left, r.top, r.right, r.bottom)
 }
 

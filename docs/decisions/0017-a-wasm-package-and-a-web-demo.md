@@ -1,6 +1,8 @@
 # 0017: A wasm package and a web demo
 
-Status: accepted, 2026-11-12. Builds on [0015](0015-core-builds-for-wasm.md) and [0016](0016-gpu-engine-in-the-browser.md).
+Status: accepted, 2026-11-12. Builds on [0015](0015-core-builds-for-wasm.md) and [0016](0016-gpu-engine-in-the-browser.md); amended by
+[0018](0018-a-shared-picture-view.md): the package records probes and returns the shapes of the preview's overlay and
+graph boxes, which the page draws.
 
 ## Context
 
@@ -12,7 +14,7 @@ application's state, and an engine package must not carry fifty-three projects n
 ## Decision
 
 - [`wavedude-wasm`](../../crates/wavedude-wasm) is the engine and nothing else: `Simulation.open(text, tier)` and `openOn(gpu, text, tier)`,
-  `stepToward`, `render`, `requestGpu`. It opens one `.wdproj` text, builds the run spec through `RunRequest` and `PreviewDefaults`
+  `stepToward`, `render`, `overlay` (0018), `requestGpu`. It opens one `.wdproj` text, builds the run spec through `RunRequest` and `PreviewDefaults`
   as the application does (a tier is the same quality and dither depth in both), and keeps the stored frames of the
   timeline. No example, no file dialog, no DOM: a page or another tool owns those. `session.rs` is plain Rust and tested
   natively on the CPU engine; `lib.rs` is the JavaScript surface.
@@ -21,8 +23,8 @@ application's state, and an engine package must not carry fifty-three projects n
 - Frames are stepped to on demand. The cache is keyed by stored frame, holds 512 MiB by default (`budgetBytes`), and
   evicts the frame farthest from the one stored last. A frame behind the engine's step is run again from step 0, as
   the application's worker does; forward seeks step on from where the engine is.
-- The GPU engine on wasm waits for no readback (0016): the package never reads probes or calls
-  `prepare_frame`, and awaits `PendingCapture::ready()` before `finish_capture`. `requestGpu()` returns one device a page
+- The GPU engine on wasm waits for no readback (0016): the package never calls `prepare_frame` or `sample_probes`,
+  awaits `PendingCapture::ready()` before `finish_capture` and `PendingProbes::ready()` before `drain_probes` (0018). `requestGpu()` returns one device a page
   passes to every `openOn`, which only borrows it, so one device serves every project (wasm-bindgen consumes an optional object
   argument, hence a function apart from the CPU's `open`); without WebGPU, or when the
   engine cannot be built on it, the CPU engine runs, and the engine in use and whether the GPU fell back are getters.
@@ -41,7 +43,7 @@ application's state, and an engine package must not carry fifty-three projects n
 
 ## Consequences
 
-- The demo is the engine and the picture only: no edits, no handles, no export, no save.
+- The demo shows the engine's pictures with the preview's overlay and graph boxes (0018): no edits, no export, no save.
 - A bump of the wasm-bindgen crate needs the same CLI version; the workflow reads it from `Cargo.lock`, so only a local
   install has to follow.
 - No npm package is published. One would be a build step over the same `pkg` folder.

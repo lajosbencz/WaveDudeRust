@@ -61,6 +61,7 @@ label:has(> :disabled) { color: var(--muted); cursor: not-allowed; }
 #stage { display: flex; align-items: center; justify-content: center; gap: 4px; overflow: hidden; }
 .view { position: relative; flex: none; background: #000; }
 .view canvas { display: block; width: 100%; height: 100%; }
+.view .shapes { position: absolute; pointer-events: none; }
 .view span { position: absolute; top: 4px; left: 6px; color: #fff; font-size: 12px; text-shadow: 0 0 3px #000; }
 
 #seek { flex: 1; min-width: 0; }

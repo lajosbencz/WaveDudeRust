@@ -1,6 +1,6 @@
 //! The probe graph boxes over a picture (docs/ui/40-preview-pane.md, Probe graph box): the data at the frame shown
-//! (the run's recording cut at the frame's step), the axes, the box's place and size in
-//! canvas pixels with snap and hysteresis, and the boxes as Freya elements.
+//! (the run's recording cut at the frame's step), the axes, the box's drag and resize in canvas pixels with snap and
+//! hysteresis, and the boxes as Freya elements; where a box shows is [`wavedude_view::graph`]'s.
 //!
 //! Coordinates: box positions and sizes in canvas pixels; screen values in logical pixels of the picture's cell.
 //! Threads: the UI thread.
@@ -9,8 +9,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use freya::prelude::*;
+use wavedude_app_state::commands::{Command, Edit};
+use wavedude_app_state::selection::Row;
+use wavedude_app_state::{AppState, Event as AppEvent};
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::model::{BoxSize, ItemKind, ItemRef, Layer, Probe, ProbeEdit, Project};
+use wavedude_core::model::{BoxSize, ItemKind, ItemRef, Layer, ProbeEdit, Project};
 use wavedude_view::graph;
 use wavedude_widgets::graph_box::GraphBoxEvent;
 use wavedude_widgets::menu::ContextMenuRequest;
@@ -19,9 +22,6 @@ use wavedude_widgets::{Callback, GraphBox, GraphData, MenuItem, MenuModel, TestI
 
 use super::{PaneStates, PictureMenu, PreviewAction, layer_name};
 use crate::ui::shared::{Shared, Topics};
-use wavedude_app_state::commands::{Command, Edit};
-use wavedude_app_state::selection::Row;
-use wavedude_app_state::{AppState, Event as AppEvent};
 
 /// A box's anchor within this many screen pixels of point A lands on it.
 pub const SNAP_RADIUS: f32 = 12.;
@@ -58,22 +58,6 @@ impl Recording {
 			steps_sampled: self.sampled,
 		}
 	}
-}
-
-/// The box's size in canvas pixels: the probe's, shrunk with its aspect kept to fit the canvas.
-pub fn box_size(probe: &Probe, canvas: (u32, u32)) -> (f32, f32) {
-	let (w, h) = probe.box_pixels();
-	let (w, h) = (w as f32, h as f32);
-	let f = (canvas.0 as f32 / w).min(canvas.1 as f32 / h).min(1.);
-	(w * f, h * f)
-}
-
-/// The box's top-left corner in canvas pixels, held inside the canvas.
-pub fn box_origin(probe: &Probe, canvas: (u32, u32)) -> (f32, f32) {
-	let (w, h) = box_size(probe, canvas);
-	let x = (probe.box_x as f32).clamp(0., (canvas.0 as f32 - w).max(0.));
-	let y = (probe.box_y as f32).clamp(0., (canvas.1 as f32 - h).max(0.));
-	(x, y)
 }
 
 /// Where a box dragged by `delta` canvas pixels from `start` lands: held inside the canvas, snapped onto point A
@@ -120,7 +104,7 @@ pub struct BoxView {
 
 /// Whether `layer` shows graph boxes: an active probe measures it.
 pub fn has_boxes(project: &Project, layer: Layer) -> bool {
-	project.probes.iter().any(|p| p.active && p.layer == layer)
+	project.probes.iter().any(|p| graph::shows_box(p, layer))
 }
 
 /// The boxes of the active probes measuring `layer`, with the data of the frame shown.
@@ -158,7 +142,7 @@ fn views<B: wavedude_app_state::live::Backend>(
 		.probes
 		.iter()
 		.enumerate()
-		.filter(|(_, p)| p.active && p.layer == layer)
+		.filter(|(_, p)| graph::shows_box(p, layer))
 		.map(|(i, p)| {
 			let trace = names.iter().position(|n| n.eq_ignore_ascii_case(&p.name)).and_then(|t| traces.get(t));
 			let recording = match (trace, cut) {
@@ -171,8 +155,8 @@ fn views<B: wavedude_app_state::live::Backend>(
 				data: GraphData::new(p.name.clone(), move |text, w, h| {
 					graph::layout(&probe, &recording.data(), steps, w, h, text)
 				}),
-				origin: box_origin(p, canvas),
-				size: box_size(p, canvas),
+				origin: graph::box_origin(p, canvas),
+				size: graph::box_size(p, canvas),
 				selected: selected.contains(&ItemRef::new(ItemKind::Probe, i)),
 			}
 		})
@@ -225,8 +209,7 @@ impl Component for GraphBoxes {
 		};
 		let t = self.transform;
 		let boxes = views.into_iter().map(|view| {
-			let at = t.to_screen(view.origin.0, view.origin.1);
-			let size = ((view.size.0 * t.scale).round(), (view.size.1 * t.scale).round());
+			let (at, size) = graph::box_on_picture(view.origin, view.size, (t.offset_x, t.offset_y), t.scale);
 			ProbeBox {
 				view,
 				canvas: (t.canvas_width, t.canvas_height),
@@ -248,7 +231,7 @@ impl Component for GraphBoxes {
 /// What the boxes' data is cut from.
 type BoxKey = (u64, u64, u64, u64, Option<(u64, usize)>, u32);
 
-/// One box at `at` of `size` (logical pixels); its handler reads the geometry from a state, so it is made once
+/// One box at `at` of `size` (whole logical pixels); its handler reads the geometry from a state, so it is made once
 /// and the box compares equal while its data stays.
 #[derive(Clone, PartialEq)]
 struct ProbeBox {
@@ -289,7 +272,7 @@ impl Component for ProbeBox {
 			)
 		});
 		rect()
-			.position(Position::new_absolute().left(sx.round()).top(sy.round()))
+			.position(Position::new_absolute().left(sx).top(sy))
 			.width(Size::px(w))
 			.height(Size::px(h))
 			.on_pointer_down(move |e: Event<PointerEventData>| {
@@ -347,7 +330,7 @@ fn on_box_event(shared: &Shared, states: PaneStates, index: usize, canvas: (u32,
 					start
 				}
 			};
-			let size = box_size(&probe, canvas);
+			let size = graph::box_size(&probe, canvas);
 			let (bx, by) = if done && grab.peek().is_none() {
 				let x = (start.0 + dx as i32).clamp(0, (canvas.0 as f32 - size.0).max(0.) as i32);
 				let y = (start.1 + dy as i32).clamp(0, (canvas.1 as f32 - size.1).max(0.) as i32);
@@ -398,7 +381,7 @@ fn on_box_event(shared: &Shared, states: PaneStates, index: usize, canvas: (u32,
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use wavedude_core::model::ProbeKind;
+	use wavedude_core::model::{Probe, ProbeKind};
 	use wavedude_view::draw::TextMetrics;
 
 	struct Fixed;
@@ -431,11 +414,7 @@ mod tests {
 	}
 
 	#[test]
-	fn boxes_fit_the_canvas_and_snap_onto_their_probe() {
-		let p = Probe { box_size: BoxSize::Medium, box_x: 350, box_y: -5, ..Probe::default() };
-		assert_eq!(box_size(&p, (1000, 1000)), (400., 200.));
-		assert_eq!(box_size(&p, (200, 400)), (200., 100.), "shrunk with its aspect kept");
-		assert_eq!(box_origin(&p, (600, 300)), (200., 0.));
+	fn boxes_snap_onto_their_probe() {
 		let size = (100., 50.);
 		assert_eq!(dragged_box((0, 0), (40, 40), (35., 38.), 1., (500, 500), size), (40, 40), "within the snap radius");
 		assert_eq!(dragged_box((0, 0), (40, 40), (20., 20.), 1., (500, 500), size), (20, 20));

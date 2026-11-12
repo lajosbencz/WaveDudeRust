@@ -11,8 +11,9 @@ use std::rc::Rc;
 use freya::elements::image::ImageHandle;
 use freya::engine::prelude::{Canvas, ClipOp, Paint, SkRect};
 use freya::prelude::*;
+use wavedude_view::overlay::edge_line;
 
-use crate::paint::{DeviceGrid, DeviceGridExt, fill, stroke};
+use crate::paint::{DeviceGrid, DeviceGridExt, draw_shapes, fill, rgba_of, sk_rect};
 use crate::spinner::Spinner;
 use crate::theme::use_wave_theme;
 use crate::util::{TestIdExt, focus_border, use_modifiers};
@@ -445,15 +446,11 @@ impl Component for CanvasImage {
 			);
 			canvas.save();
 			canvas.clip_rect(clip, ClipOp::Intersect, false);
-			let (x0, y0) = (grid.x(px).round(), grid.y(py).round());
-			let (x1, y1) = (grid.x(px + pw).round(), grid.y(py + ph).round());
-			let full = SkRect::new(x0, y0, x1, y1);
+			let full = sk_rect(&grid.rect((px, py), (px + pw, py + ph)));
 			// A windowed image covers its canvas part alone, the rest of the picture stays black.
 			let dst = match image_window {
 				Some((wx, wy, ww, wh)) => {
-					let (sx, sy) = transform.to_screen(wx, wy);
-					let (ex, ey) = transform.to_screen(wx + ww, wy + wh);
-					SkRect::new(grid.x(sx).round(), grid.y(sy).round(), grid.x(ex).round(), grid.y(ey).round())
+					sk_rect(&grid.rect(transform.to_screen(wx, wy), transform.to_screen(wx + ww, wy + wh)))
 				}
 				None => full,
 			};
@@ -471,8 +468,7 @@ impl Component for CanvasImage {
 				);
 			}
 			if let Some(color) = edge {
-				canvas
-					.draw_rect(SkRect::new(x0 - hl / 2., y0 - hl / 2., x1 + hl / 2., y1 + hl / 2.), &stroke(color, hl));
+				draw_shapes(canvas, &[edge_line(grid, (px, py, pw, ph), rgba_of(color))], None, None);
 			}
 			canvas.restore();
 			canvas.restore();

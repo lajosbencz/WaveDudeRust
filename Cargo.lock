@@ -6101,11 +6101,14 @@ version = "0.2.1"
 dependencies = [
  "js-sys",
  "pollster 1.0.1",
+ "serde",
+ "serde_json",
  "thiserror 2.0.21",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wavedude-core",
  "wavedude-examples",
+ "wavedude-view",
 ]
 
 [[package]]

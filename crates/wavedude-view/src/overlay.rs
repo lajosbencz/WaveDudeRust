@@ -10,7 +10,7 @@ use wavedude_core::engine::emitters::elements_of;
 use wavedude_core::model::{Edges, ItemKind, ItemRef, Layer, Part, PartKind, ProbeKind, Project, Scene};
 use wavedude_core::scene::shapes::{self, Frame, Vec2};
 
-use crate::draw::{Baseline, Disc, Halo, Ink, Pen, Rect, Rgba, Shape, TextMetrics};
+use crate::draw::{Baseline, DeviceGrid, Disc, Halo, Ink, Pen, Rect, Rgba, Shape, TextMetrics};
 
 /// Screen distance of a lever beyond the item's reach, logical pixels.
 pub const LEVER_GAP: f32 = 24.;
@@ -431,6 +431,19 @@ pub fn edge_color(scene: &Scene) -> Option<Rgba> {
 	}
 }
 
+/// The edge line around `picture` (x, y, width, height in the element's logical pixels): an aliased hairline of
+/// `color` just outside the picture's device pixels, in device pixels of `grid`.
+pub fn edge_line(grid: DeviceGrid, picture: (f32, f32, f32, f32), color: Rgba) -> Shape {
+	let hl = grid.hairline();
+	let (x, y, w, h) = picture;
+	let r = grid.rect((x, y), (x + w, y + h));
+	let half = hl / 2.;
+	Shape::Rect {
+		rect: Rect::new(r.left - half, r.top - half, r.right + half, r.bottom + half),
+		ink: Ink::Stroke(Pen::new(color, hl).aliased()),
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use wavedude_core::model::{Probe, Rectangle, Source, SourceArray};
@@ -611,6 +624,17 @@ mod tests {
 		});
 		assert!(lever, "a lever's line is solid");
 		assert_eq!(count(&shapes, |s| matches!(s, Shape::Text { .. })), 2, "the selected items' labels");
+	}
+
+	#[test]
+	fn the_edge_line_hugs_the_picture_on_whole_device_pixels() {
+		let red = Rgba::rgb(255, 0, 0);
+		let line = edge_line(DeviceGrid::new(1.5, 0.5, 0.), (10., 4., 100., 50.), red);
+		assert_eq!(
+			line,
+			Shape::Rect { rect: Rect::new(15., 5., 167., 82.), ink: Ink::Stroke(Pen::new(red, 2.).aliased()) },
+			"a two-pixel hairline around the picture's device rectangle 16, 6 to 166, 81"
+		);
 	}
 
 	#[test]

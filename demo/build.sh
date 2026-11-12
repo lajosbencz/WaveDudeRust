@@ -35,4 +35,4 @@ cargo build -p wavedude-wasm --release --target wasm32-unknown-unknown
 find "$out" -mindepth 1 -delete
 wasm-bindgen --target web --out-dir "$out/pkg" target/wasm32-unknown-unknown/release/wavedude_wasm.wasm
 cargo run -q -p wavedude-examples --release -- "$out/examples"
-cp demo/index.html demo/demo.js demo/demo.css "$out/"
+cp demo/index.html demo/demo.js demo/draw.js demo/demo.css "$out/"

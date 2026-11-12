@@ -23,8 +23,9 @@ fn sleep(ms: i32) -> JsFuture {
 	}))
 }
 
-/// Awaits `ready`, a capture's readback, submitting an empty batch to `gpu`'s queue every [`NUDGE_MS`] until it
-/// resolves: Firefox maps a buffer on a 100 ms timer unless the queue is submitted to (docs/measurements.md).
+/// Awaits `ready`, a capture's or the probe readings' readback, submitting an empty batch to `gpu`'s queue every
+/// [`NUDGE_MS`] until it resolves: Firefox maps a buffer on a 100 ms timer unless the queue is submitted to
+/// (docs/measurements.md).
 pub(crate) async fn readback(ready: impl Future<Output = ()>, gpu: &GpuHandle) {
 	let mut ready = pin!(ready);
 	let mut timer = sleep(NUDGE_MS);

@@ -1,10 +1,17 @@
 //! A project opened for the browser: the run spec the application builds for a tier, its engine, the frames
-//! stepped to so far and the pictures of their layers. Nothing here touches JavaScript.
+//! stepped to so far, the probe traces, the pictures of their layers and the shapes over them. Nothing here
+//! touches JavaScript.
+//!
+//! The traces only grow: a frame behind the engine is run again from step 0, which queues no reading until it
+//! passes the steps recorded, as it reads the same values. A picture's graphs are cut at its frame.
 
+use std::future::Future;
+
+use wavedude_core::engine::probes::{ProbeCollector, ProbeTrace, record};
 use wavedude_core::engine::{self, EngineError, GpuHandle, Snapshot, WaveEngine};
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::io::{self, FormatError, wdproj};
-use wavedude_core::model::{Layer, SceneMode, Word};
+use wavedude_core::model::{Layer, Project, SceneMode, Word};
 use wavedude_core::quality::{PreviewDefaults, PreviewTier};
 use wavedude_core::render::ScreenRenderer;
 use wavedude_core::render::layer::{LayerColours, View, paint};
@@ -12,6 +19,7 @@ use wavedude_core::scene::glowing_edges::{self, EdgeImage};
 use wavedude_core::spec::{RunRequest, RunSpec, RunSpecError, SceneCache};
 
 use crate::cache::FrameCache;
+use crate::overlay::{self, Fonts, Group, Screen};
 
 /// Bytes the frame cache keeps unless asked otherwise.
 pub(crate) const DEFAULT_BUDGET: u64 = 512 << 20;
@@ -40,6 +48,8 @@ pub(crate) enum SessionError {
 	LayerHidden(Layer),
 	#[error("frame {frame} is outside the timeline of {count} frames")]
 	Frame { frame: u32, count: u32 },
+	#[error("a picture of {width} x {height} pixels at {dpr} device pixels per pixel cannot be drawn")]
+	Screen { width: f32, height: f32, dpr: f32 },
 }
 
 pub(crate) fn tier_of(name: &str) -> Result<PreviewTier, SessionError> {
@@ -75,14 +85,18 @@ struct Painter {
 }
 
 pub(crate) struct Session {
+	project: Project,
 	spec: RunSpec,
 	engine: Box<dyn WaveEngine>,
+	/// None without active probes.
+	probes: Option<ProbeCollector>,
+	/// Steps whose probe readings are in `probes`.
+	recorded: u32,
 	frames: FrameCache,
 	painters: Vec<Painter>,
 	edges: Option<EdgeImage>,
 	gpu_fallback: bool,
 	/// The device the engine runs on, for the readback wait.
-	#[cfg(target_arch = "wasm32")]
 	gpu: Option<GpuHandle>,
 	dither_bits: u32,
 	fps: u32,
@@ -106,13 +120,13 @@ impl Session {
 		let mut scenes = SceneCache::default();
 		let spec = request.spec(&mut scenes)?;
 		let gpu_requested = gpu.is_some();
-		#[cfg(target_arch = "wasm32")]
 		let device = gpu.clone();
 		let mut engine = engine::build_on(spec.scene.clone(), spec.options.clone(), gpu).await;
 		let gpu_fallback = gpu_requested && !engine.is_gpu();
-		#[cfg(target_arch = "wasm32")]
 		let gpu = device.filter(|_| engine.is_gpu());
+		let probes = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene, spec.seed));
 		engine.set_emitters(&spec.emitters);
+		engine.set_probes(probes.as_ref().map(ProbeCollector::cells).unwrap_or_default());
 		engine.reset();
 		let schemes = SchemeStore::default();
 		let painters: Vec<Painter> = [Layer::Field, Layer::Intensity]
@@ -135,14 +149,16 @@ impl Session {
 		Ok(Self {
 			spec,
 			engine,
+			probes,
+			recorded: 0,
 			frames: FrameCache::new(budget),
 			painters,
 			edges,
 			gpu_fallback,
-			#[cfg(target_arch = "wasm32")]
 			gpu,
 			dither_bits: PreviewDefaults::dither_bits_of(tier),
 			fps: project.display.video.fps,
+			project,
 		})
 	}
 
@@ -170,6 +186,11 @@ impl Session {
 		self.painters.iter().map(|p| p.layer).collect()
 	}
 
+	/// The probe traces in the spec's probe order, the steps recorded so far.
+	pub(crate) fn traces(&self) -> &[ProbeTrace] {
+		self.probes.as_ref().map_or(&[], |p| &p.traces)
+	}
+
 	/// Stored frames now in the cache.
 	#[cfg(test)]
 	fn cached_frames(&self) -> usize {
@@ -193,8 +214,8 @@ impl Session {
 	}
 
 	/// Steps at most `max_steps` toward the stored frame timeline frame `frame` shows and stores it on
-	/// arriving. A frame behind the engine's step is reached by running again from step 0. True once the frame
-	/// is stored.
+	/// arriving, with the probe readings up to it recorded. A frame behind the engine's step is reached by running
+	/// again from step 0. True once the frame is stored.
 	pub(crate) async fn step_toward(&mut self, frame: u32, max_steps: u32) -> Result<bool, SessionError> {
 		let count = self.spec.frame_count();
 		if frame >= count {
@@ -211,20 +232,47 @@ impl Session {
 		let behind = steps - self.engine.time();
 		for _ in 0..behind.min(max_steps) {
 			self.engine.advance_one_step()?;
+			if self.probes.is_some() && self.engine.time() > self.recorded {
+				self.engine.queue_probes()?;
+			}
 		}
 		if self.engine.time() < steps {
 			return Ok(false);
 		}
 		let pending = self.engine.begin_capture(&self.spec.shape, Snapshot::new(self.spec.shape))?;
-		// Natively finish_capture polls the device itself; a browser resolves the readback between calls.
-		#[cfg(target_arch = "wasm32")]
-		match &self.gpu {
-			Some(gpu) => crate::wait::readback(pending.ready(), gpu).await,
-			None => pending.ready().await,
+		if let Some(collector) = &mut self.probes {
+			let readings = self.engine.pending_probes()?;
+			settle(readings.ready(), self.gpu.as_ref()).await;
+			record(self.engine.as_mut(), collector, &mut self.recorded, self.spec.visualize_every)?;
 		}
+		settle(pending.ready(), self.gpu.as_ref()).await;
 		let snapshot = self.engine.finish_capture(pending)?;
 		self.frames.insert(stored, snapshot);
 		Ok(true)
+	}
+
+	/// The shapes over the picture of `layer` at timeline frame `frame` drawn at `screen`: what the desktop
+	/// preview draws over it with nothing selected, the graphs cut at the stored frame the picture shows.
+	pub(crate) fn overlay(
+		&self,
+		frame: u32,
+		layer: Layer,
+		screen: Screen,
+		fonts: Fonts<'_>,
+	) -> Result<Vec<Group>, SessionError> {
+		let count = self.spec.frame_count();
+		if frame >= count {
+			return Err(SessionError::Frame { frame, count });
+		}
+		if !self.painters.iter().any(|p| p.layer == layer) {
+			return Err(SessionError::LayerHidden(layer));
+		}
+		let Screen { width, height, dpr } = screen;
+		if ![width, height, dpr].iter().all(|v| v.is_finite() && *v > 0.) {
+			return Err(SessionError::Screen { width, height, dpr });
+		}
+		let shown = self.spec.stored_index_of(frame) * self.spec.frame_divisor();
+		Ok(overlay::groups(&self.project, &self.spec, self.traces(), shown, layer, screen, fonts))
 	}
 
 	/// The picture of `layer` at timeline frame `frame`; `None` when its stored frame is not in the cache. An
@@ -259,13 +307,28 @@ impl Session {
 	}
 }
 
+/// Waits for a readback in a browser, on the GPU's queue when there is one; natively the engine's finishing call
+/// waits instead.
+async fn settle(ready: impl Future<Output = ()>, gpu: Option<&GpuHandle>) {
+	#[cfg(target_arch = "wasm32")]
+	match gpu {
+		Some(gpu) => crate::wait::readback(ready, gpu).await,
+		None => ready.await,
+	}
+	#[cfg(not(target_arch = "wasm32"))]
+	let _ = (ready, gpu);
+}
+
 #[cfg(test)]
 mod tests {
 	use std::sync::Arc;
 
 	use pollster::block_on;
 	use wavedude_core::engine::cpu::CpuEngine;
-	use wavedude_core::model::Project;
+	use wavedude_core::model::{Edges, Measurement, Probe, ProbeDetector, ProbeKind, Project};
+	use wavedude_core::run::{FrameStore, RunState, SimulationRun, StoreLayout};
+	use wavedude_view::draw::TextMetrics;
+	use wavedude_view::graph::GraphData;
 
 	use super::*;
 
@@ -466,6 +529,146 @@ mod tests {
 			session.render(1, Layer::Intensity, (0, 0)),
 			Err(SessionError::LayerHidden(Layer::Intensity))
 		));
+	}
+
+	/// Example 1 with point, integrated, line and detector probes near its source, on both layers.
+	fn with_probes(p: &mut Project) {
+		let (x, y) = (p.sources[0].x as i32, p.sources[0].y as i32);
+		let probe = |name: &str, layer| Probe { name: name.into(), layer, ax: x + 6, ay: y, ..Probe::default() };
+		let line = |name: &str| Probe {
+			kind: ProbeKind::Line,
+			ax: x - 8,
+			ay: y + 3,
+			bx: x + 8,
+			by: y + 5,
+			..probe(name, Layer::Intensity)
+		};
+		p.probes = vec![
+			probe("amplitude", Layer::Field),
+			Probe { measurement: Measurement::IntegratedValue, ..probe("integrated", Layer::Intensity) },
+			Probe { measurement: Measurement::Value, ..line("line") },
+			Probe {
+				measurement: Measurement::IntegratedValue,
+				detector: ProbeDetector::Imaging,
+				sensitivity: 1e3,
+				..line("imaging")
+			},
+			Probe {
+				measurement: Measurement::IntegratedValue,
+				detector: ProbeDetector::Counting,
+				sensitivity: 1e3,
+				..line("counting")
+			},
+			Probe { active: false, ..probe("off", Layer::Field) },
+		];
+	}
+
+	/// The traces of a native run of `spec` on the CPU, to its end.
+	fn native_traces(spec: &RunSpec) -> Vec<ProbeTrace> {
+		let store = Arc::new(FrameStore::new(StoreLayout::of(spec), 1 << 30, None).unwrap());
+		let engine = Box::new(CpuEngine::new(spec.scene.clone(), spec.options.clone()));
+		let mut run = SimulationRun::start(spec.clone(), store, engine, None).unwrap();
+		assert_eq!(run.wait(), RunState::Completed);
+		run.traces()
+	}
+
+	/// What the graphs of `traces` show at timeline frame `k`.
+	fn graphs_at(traces: &[ProbeTrace], spec: &RunSpec, k: u32) -> Vec<(Vec<f32>, Option<Vec<f32>>, u64)> {
+		let step = u64::from(spec.step_of(k));
+		traces
+			.iter()
+			.map(|t| {
+				let d = GraphData::at(t, step, k as usize);
+				(d.series.to_vec(), d.profile.map(<[f32]>::to_vec), d.steps_sampled)
+			})
+			.collect()
+	}
+
+	#[test]
+	fn the_graphs_at_a_frame_are_a_native_runs_after_seeking_back_and_forth() {
+		let text = text_with(with_probes);
+		let mut session = block_on(Session::open(&text, PreviewTier::Middle, None, 0)).unwrap();
+		let spec = session.spec().clone();
+		assert_eq!((spec.probes.len(), spec.frame_divisor()), (5, 1));
+		let native = native_traces(&spec);
+		let check = |session: &mut Session, k: u32| {
+			seek(session, k);
+			assert_eq!(graphs_at(session.traces(), &spec, k), graphs_at(&native, &spec, k), "frame {k}");
+			assert!(session.traces()[1].series.iter().any(|&v| v != 0.), "the integrated probe reads the wave");
+		};
+		check(&mut session, 6);
+		assert!(!block_on(session.step_toward(9, 7)).unwrap(), "readings queued, not drained");
+		for k in [2, 9, 4] {
+			check(&mut session, k);
+		}
+		let recorded = spec.step_of(9) as usize + 1;
+		assert_eq!(session.traces()[0].series.len(), recorded, "a rerun records nothing twice");
+		assert_eq!(session.traces()[0].series, native[0].series[..recorded]);
+		assert_eq!(session.traces()[3].profiles.len(), 10);
+	}
+
+	fn kinds(group: &serde_json::Value) -> Vec<&str> {
+		group["shapes"].as_array().unwrap().iter().map(|s| s["kind"].as_str().unwrap()).collect()
+	}
+
+	struct Fixed;
+
+	impl TextMetrics for Fixed {
+		fn line_height(&self) -> f32 {
+			13.
+		}
+
+		fn width(&self, text: &str) -> f32 {
+			text.len() as f32 * 6.
+		}
+	}
+
+	const FONTS: Fonts<'static> = Fonts { labels: &Fixed, boxes: &Fixed };
+
+	#[test]
+	fn the_overlay_is_the_previews_shapes_as_json() {
+		let text = text_with(|p| {
+			with_probes(p);
+			p.scene.edges = Edges::Reflective;
+			p.scene.damping_edge = 0;
+		});
+		let mut session = open(&text, PreviewTier::Middle);
+		seek(&mut session, 5);
+		let screen = Screen { width: 300., height: 200., dpr: 2. };
+		let groups = session.overlay(5, Layer::Intensity, screen, FONTS).unwrap();
+		let text = serde_json::to_string(&groups).unwrap();
+		assert!(!text.contains("antialias"), "the desktop's flags stay out");
+		let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+		let groups = json.as_array().unwrap();
+		assert_eq!(groups.len(), 2 + 4, "the edge line, the overlay, the four active intensity probes' boxes");
+		assert_eq!(kinds(&groups[0]), ["Rect"]);
+		assert_eq!(groups[0]["shapes"][0]["ink"]["color"], "#ff0000ff", "a reflective wall's red");
+		assert_eq!((groups[0]["scale"].as_f64(), groups[1]["scale"].as_f64()), (Some(1.), Some(2.)));
+		let overlay = kinds(&groups[1]);
+		assert_eq!((overlay[0], overlay[overlay.len() - 1]), ("Clip", "Unclip"));
+		for kind in ["Circle", "Line", "Rect", "Text"] {
+			assert!(overlay.contains(&kind), "{kind} in {overlay:?}");
+		}
+		let curves = groups[2..].iter().filter(|g| kinds(g).contains(&"Path")).count();
+		assert!(curves >= 2, "the integrated probe's and the line's curves");
+		let title = &groups[2]["shapes"].as_array().unwrap().iter().find(|s| s["text"] == "integrated").unwrap();
+		assert_eq!((title["baseline"].as_str(), title["size"].as_f64()), (Some("Top"), Some(22.)));
+		assert!(matches!(
+			session.overlay(5, Layer::Field, Screen { dpr: 0., ..screen }, FONTS),
+			Err(SessionError::Screen { .. })
+		));
+	}
+
+	#[test]
+	fn the_graphs_over_a_picture_are_cut_at_the_stored_frame_it_shows() {
+		let mut session = open(&text_with(with_probes), PreviewTier::Low);
+		assert_eq!(session.spec().frame_divisor(), 2);
+		seek(&mut session, 9);
+		let screen = Screen { width: 300., height: 200., dpr: 1. };
+		let json =
+			|frame| serde_json::to_string(&session.overlay(frame, Layer::Intensity, screen, FONTS).unwrap()).unwrap();
+		assert_eq!(json(5), json(4), "frame 5 shows the stored frame 4");
+		assert_ne!(json(6), json(4));
 	}
 
 	#[test]
