@@ -47,7 +47,7 @@ fn paint_shape(pixels: &mut ScenePixels, part: &Part, shape: &dyn PartShape) {
 		tracing::debug!(name = %part.base.name, "part lies outside the canvas");
 		return;
 	};
-	let started = std::time::Instant::now();
+	let started = web_time::Instant::now();
 	let painter = Painter { shape, frame, bounds, stride: pixels.stride() };
 	let rows = &mut pixels.rgba[bounds.y0 * painter.stride..(bounds.y1 + 1) * painter.stride];
 	if shape.absorption() > 0 {

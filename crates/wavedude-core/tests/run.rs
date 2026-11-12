@@ -1,3 +1,4 @@
+#![cfg(feature = "run")]
 #![allow(clippy::print_stdout, reason = "the measurements are printed for the reader")]
 //! Runs, the frame store, the live run and the memory warning (spec/40, spec/30 The live run, spec/70
 //! "Store, frames, quality" and "Probes and graphs"). Canvases are small; every engine is the CPU one.

@@ -131,11 +131,30 @@ jobs:
       - name: Check
         run: cargo +"$MSRV" check --workspace --all-targets
 
+  # The core without runs and the GPU engine stays buildable for the browser (docs/decisions/0015-core-builds-for-wasm.md).
+  wasm32:
+    name: wasm32
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Toolchain with the wasm32 target
+        run: |
+          rustup toolchain install
+          rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref_name == github.event.repository.default_branch }}
+          cache-on-failure: true
+      - name: Check
+        run: cargo check -p wavedude-core --no-default-features --target wasm32-unknown-unknown
+
   # The caches of the default branch: one per key, the newest. rust-cache keys end in the lockfile's hash, so each
   # dependency bump would leave a generation behind until the 10 GB allowance evicts it.
   caches:
     name: Prune caches
-    needs: [test, msrv]
+    needs: [test, msrv, wasm32]
     if: always() && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

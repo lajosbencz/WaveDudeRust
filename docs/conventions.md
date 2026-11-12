@@ -24,7 +24,9 @@ push. What they hold the code to:
 ## Crates and dependency direction
 
 - `wavedude-core`: model, `.wdproj` and scheme IO, scene painter, engines (CPU, wgpu behind feature `gpu`),
-  runs and frame store, renderer. Depends on no workspace crate ([`crates/wavedude-core/Cargo.toml`](../crates/wavedude-core/Cargo.toml)).
+  runs and frame store (feature `run`), renderer. Without `gpu` and `run` it builds for `wasm32-unknown-unknown`:
+  code outside them uses no threads, no `std::time::Instant` (`web_time::Instant` instead) and no machine queries
+  ([decision 0015](decisions/0015-core-builds-for-wasm.md)). Depends on no workspace crate ([`crates/wavedude-core/Cargo.toml`](../crates/wavedude-core/Cargo.toml)).
 - `wavedude-model-derive`: the proc-macros `Fields` and `Word` of the model types (`syn`, `quote`); core re-exports
   them as `wavedude_core::model::{Fields, Word}`. Depends on no workspace crate.
 - `wavedude-export`: sinks, overlays, CSV, the export job. Depends on core alone.

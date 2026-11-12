@@ -14,6 +14,7 @@ pub mod io;
 pub mod model;
 pub mod render;
 pub mod rng;
+#[cfg(feature = "run")]
 pub mod run;
 pub mod scene;
 pub mod sync;

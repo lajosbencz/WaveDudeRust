@@ -23,7 +23,7 @@ clap = ["dep:clap"]
 workspace = true
 
 [dependencies]
-wavedude-core = { path = "../wavedude-core", version = "0.2.1", default-features = false }
+wavedude-core = { path = "../wavedude-core", version = "0.2.1", default-features = false, features = ["run"] }
 anyhow.workspace = true
 thiserror.workspace = true
 half.workspace = true

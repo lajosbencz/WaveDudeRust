@@ -6028,6 +6028,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "wavedude-model-derive",
+ "web-time",
  "wgpu",
 ]
 
