@@ -31,12 +31,8 @@ Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLAT
 - One concern per pull request, no unrelated commits. Pull requests are squash-merged and the title becomes the
   commit: write it as a conventional commit (below). The body says what changed, why, and how it was verified.
 - Accepted when all of this holds:
-  - The checks of [`.github/workflows/ci.yml`](.github/workflows/ci.yml) pass: `cargo fmt`, `cargo clippy` with `-D warnings` (the lint
-    policy is the `[workspace.lints]` table of [`Cargo.toml`](Cargo.toml)), the tests on Linux, macOS and Windows, `cargo doc`
-    without warnings, every feature combination (`cargo hack`), no unused dependency (`cargo machete`), and
-    `cargo check` at the workspace's `rust-version`; [`.github/workflows/hygiene.yml`](.github/workflows/hygiene.yml) runs `typos` and
-    `cargo deny check` ([`deny.toml`](deny.toml): advisories, licences, sources). The toolchain is pinned in
-    [`rust-toolchain.toml`](rust-toolchain.toml); bump it there when a new stable is wanted (the CI caches are keyed on it).
+  - The checks of [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (on Linux, macOS and Windows) and
+    [`.github/workflows/hygiene.yml`](.github/workflows/hygiene.yml) pass; Tools, below, lists them with the commands to run them locally.
   - A behaviour change comes with a test that failed before it: unit, headless (freya-testing), physics or
     snapshot, whichever fits ([`docs/conventions.md`](docs/conventions.md) says where each lives). Snapshot changes (`insta`) are
     reviewed with `cargo insta review` and explained in the pull request.
@@ -55,6 +51,42 @@ Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLAT
     never as bare code; the app renders `manual.md`, so it links nothing of the repository.
 - Reviewers may push fixups onto the branch. A pull request that goes quiet for a month is closed and can be
   reopened.
+
+## Tools
+
+The compiler is pinned in [`rust-toolchain.toml`](rust-toolchain.toml) with clippy and rustfmt; rustup installs it on the
+first `cargo` call. Bump it there when a new stable is wanted (the CI caches are keyed on it). Linux needs the
+packages of the "Linux packages for Skia and winit" step of [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Below,
+`F=wavedude-export/openh264-source,wavedude-cli/openh264-source`.
+
+| Tool | Checks | Run | Configured in |
+|---|---|---|---|
+| rustfmt | formatting | `cargo fmt --all` | [`rustfmt.toml`](rustfmt.toml) |
+| clippy | lints, warnings fail | `cargo clippy --workspace --all-targets --features $F -- -D warnings` | `[workspace.lints]` of [`Cargo.toml`](Cargo.toml) |
+| cargo test | the tests; the export tests decode their output with `ffmpeg` when it is on the `PATH` | `cargo test --workspace --features $F` | |
+| [cargo-insta](https://insta.rs) | text snapshots | `cargo insta review` | `tests/snapshots/` of each crate |
+| rustdoc | docs without warnings | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | |
+| [cargo-hack](https://github.com/taiki-e/cargo-hack) | every feature combination compiles | `cargo hack check --workspace --feature-powerset --depth 2` | |
+| [cargo-machete](https://github.com/bnjbvr/cargo-machete) | no unused dependency | `cargo machete` | |
+| MSRV | builds at the workspace's `rust-version` | `cargo +1.89 check --workspace --all-targets` | `[workspace.package]` of [`Cargo.toml`](Cargo.toml) |
+| [typos](https://github.com/crate-ci/typos) | spelling | `typos` | [`_typos.toml`](_typos.toml) |
+| [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) | advisories, licences, sources | `cargo deny check` | [`deny.toml`](deny.toml) |
+| [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) | optional, local only: code no test reaches | `cargo llvm-cov --workspace --features $F --summary-only` | |
+
+The versions CI uses are pinned in the workflows. Beyond the checks:
+
+- Timings are `#[ignore]` tests, run with
+  `cargo test --release -p <crate> --test <file> -- --ignored --nocapture <name>`; their results go into
+  [`docs/measurements.md`](docs/measurements.md) with the command.
+- [`tools/compare-csharp`](tools/compare-csharp/) dumps WaveDude Next's results for `wavedude-cli compare` (.NET 10 SDK,
+  `WAVEDUDE_NEXT_DIR`); its [`README.md`](tools/compare-csharp/README.md) has the commands.
+- Releases: [git-cliff](https://git-cliff.org) ([`cliff.toml`](cliff.toml)) writes the changelog and the next version from the
+  commits (`git cliff --unreleased` previews it); cargo-packager, cargo-auditable and cargo-cyclonedx build the
+  packages and SBOMs in [`.github/workflows/package.yml`](.github/workflows/package.yml). [`docs/release.md`](docs/release.md) covers the flow, the keys,
+  the icons and the file types.
+- Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) opens grouped updates, daily for crates (`chore(deps)`), weekly for
+  actions (`ci(deps)`); [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml) merges them when CI passes, except a major
+  version.
 
 ## Commit messages
 

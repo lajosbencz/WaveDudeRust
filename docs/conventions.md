@@ -4,30 +4,21 @@ What new code follows so that it fits the code already here. Each rule names one
 
 ## Toolchain and checks
 
+The tools, their commands and their configuration are in [`CONTRIBUTING.md`](../CONTRIBUTING.md), Tools; run them before a
+push. What they hold the code to:
+
 - Edition 2024, resolver 3, MSRV `rust-version = "1.89"`, all in the root [`Cargo.toml`](../Cargo.toml) `[workspace.package]`;
   crates inherit them with `edition.workspace = true` etc. ([`crates/wavedude-core/Cargo.toml`](../crates/wavedude-core/Cargo.toml)).
-- The toolchain is pinned in [`rust-toolchain.toml`](../rust-toolchain.toml) (`channel = "1.99.1"`, clippy and rustfmt); bump it there.
 - [`rustfmt.toml`](../rustfmt.toml): `hard_tabs = true`, `max_width = 120`, `use_small_heuristics = "Max"`. Indent with tabs,
   including in TOML arrays ([`crates/wavedude-app/Cargo.toml`](../crates/wavedude-app/Cargo.toml), `file-associations`).
 - The lint policy is the `[workspace.lints]` table of the root [`Cargo.toml`](../Cargo.toml), inherited by every crate
-  (`[lints] workspace = true`); CI runs clippy with `-D warnings`, so each listed lint fails the build. The cast
-  lints and `missing_docs` are left out on purpose. A needed `#[allow]` carries a `reason`
+  (`[lints] workspace = true`); each listed lint fails the build. The cast lints and `missing_docs` are left out on
+  purpose. A needed `#[allow]` carries a `reason`
   ([`crates/wavedude-widgets/src/picture.rs:275`](../crates/wavedude-widgets/src/picture.rs#L275)).
-- `cargo doc --workspace --no-deps` builds without warnings (`RUSTDOCFLAGS=-D warnings` in CI): a doc comment
-  links only to public items and wraps generic names like `<n>` in backticks.
-- `typos` ([`_typos.toml`](../_typos.toml) holds the exceptions: format and literature terms, the translated string tables) and
-  `cargo deny check` ([`deny.toml`](../deny.toml): advisories of our own dependencies, the licence allow-list, no wildcard or
-  unknown-source dependencies) run on every change in [`.github/workflows/hygiene.yml`](../.github/workflows/hygiene.yml); `cargo hack check
-  --workspace --feature-powerset --depth 2` and `cargo machete` run in the Linux CI job.
-- Before a push, run what [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs:
-  `cargo fmt --all --check`;
-  `cargo clippy --workspace --all-targets --features $F -- -D warnings` and `cargo test --workspace --features $F`
-  with `F=wavedude-export/openh264-source,wavedude-cli/openh264-source`;
-  `cargo check --workspace`, `cargo check -p wavedude-export --no-default-features`,
-  `cargo check -p wavedude-core --no-default-features`; and `cargo +1.89 check --workspace --all-targets` (MSRV job).
-- Coverage is a local map of code no test reaches, never a CI step or a threshold:
-  `cargo llvm-cov --workspace --features $F --summary-only` (`--html` for the per-line view).
-- Commits and pull request titles are conventional commits ([`CONTRIBUTING.md`](../CONTRIBUTING.md), "Commit messages").
+- A doc comment links only to public items and wraps generic names like `<n>` in backticks, so `cargo doc` stays
+  free of warnings.
+- An exception in [`_typos.toml`](../_typos.toml) is a format or literature term, an identifier or a non-English file, named in
+  the comment above it.
 
 ## Crates and dependency direction
 
