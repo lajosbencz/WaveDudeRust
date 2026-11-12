@@ -286,7 +286,8 @@ mod tests {
 		let report = std::fs::read_to_string(dir.path().join(CRASH_FILE)).unwrap();
 		assert!(report.starts_with(&format!("WaveDude Rust {}", env!("CARGO_PKG_VERSION"))), "{report}");
 		assert!(report.contains("thread 'main' panicked at") && report.contains("boom"), "{report}");
-		assert!(report.contains("install_panic_hook"), "a symbolised backtrace: {report}");
+		// With line tables only (CI) the hook frame is a bare `{closure#0}`; its source line is always there.
+		assert!(report.matches("log.rs:").count() > 1, "a symbolised backtrace: {report}");
 	}
 
 	#[test]
