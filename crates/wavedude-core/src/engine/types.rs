@@ -283,6 +283,34 @@ impl PendingCapture {
 	}
 }
 
+/// The readbacks of the queued probe readings, requested by
+/// [`WaveEngine::pending_probes`](super::WaveEngine::pending_probes).
+#[must_use]
+pub struct PendingProbes {
+	/// Ready when each GPU batch's copy is mapped; empty for an engine whose readings are on the host.
+	pub(crate) mapped: Vec<Arc<dyn Readiness>>,
+}
+
+impl PendingProbes {
+	/// Readings that are on the host already.
+	pub(crate) fn done() -> Self {
+		Self { mapped: Vec::new() }
+	}
+
+	/// Resolves when [`WaveEngine::drain_probes`](super::WaveEngine::drain_probes) will not have to wait for the
+	/// readings queued before `pending_probes`. On wasm32 a drain before this resolves fails with
+	/// `GpuError::NotReady` and leaves the engine failed. Natively it resolves only once something polls the
+	/// device, which `drain_probes` does: native callers drain instead of awaiting.
+	pub fn ready(&self) -> impl Future<Output = ()> + use<> {
+		let mapped = self.mapped.clone();
+		async move {
+			for m in mapped {
+				std::future::poll_fn(|cx| m.poll_ready(cx)).await;
+			}
+		}
+	}
+}
+
 /// A Half plane's bytes as halves, borrowed when aligned.
 pub fn as_halves(bytes: &[u8]) -> Cow<'_, [f16]> {
 	match bytemuck::try_cast_slice(bytes) {

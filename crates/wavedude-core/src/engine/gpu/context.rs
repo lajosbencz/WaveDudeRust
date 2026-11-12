@@ -24,7 +24,8 @@ pub enum GpuError {
 	#[error("waiting for the GPU failed")]
 	Poll(#[source] Arc<wgpu::PollError>),
 	#[error(
-		"a GPU readback was waited for before it was mapped (await `PendingCapture::ready` first); the engine is failed"
+		"a GPU readback was waited for before it was mapped (await `PendingCapture::ready` or `PendingProbes::ready` \
+		 first); the engine is failed"
 	)]
 	NotReady,
 	#[error("mapping a GPU readback failed")]

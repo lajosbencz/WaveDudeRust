@@ -21,7 +21,7 @@ application's state, and an engine package must not carry fifty-three projects n
 - Frames are stepped to on demand. The cache is keyed by stored frame, holds 512 MiB by default (`budgetBytes`), and
   evicts the frame farthest from the one stored last. A frame behind the engine's step is run again from step 0, as
   the application's worker does; forward seeks step on from where the engine is.
-- The GPU engine on wasm supports the capture path only (0016): the package never reads probes or calls
+- The GPU engine on wasm waits for no readback (0016): the package never reads probes or calls
   `prepare_frame`, and awaits `PendingCapture::ready()` before `finish_capture`. `requestGpu()` returns one device a page
   passes to every `openOn`, which only borrows it, so one device serves every project (wasm-bindgen consumes an optional object
   argument, hence a function apart from the CPU's `open`); without WebGPU, or when the

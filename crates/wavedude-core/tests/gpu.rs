@@ -508,6 +508,14 @@ fn probes_match() {
 	assert!(worst[1] <= 1e-3 * intensity_peak);
 }
 
+/// A point on the field and a line on the intensity.
+fn probe_set() -> [ProbeCells; 2] {
+	[
+		ProbeCells { layer: Layer::Field, cells: vec![(64, 48)] },
+		ProbeCells { layer: Layer::Intensity, cells: (10..90).map(|x| (x, 60)).collect() },
+	]
+}
+
 #[test]
 fn queued_probes_read_like_sampled_ones() {
 	if !gpu_available() {
@@ -515,10 +523,7 @@ fn queued_probes_read_like_sampled_ones() {
 	}
 	let (_, mut a) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
 	let (_, mut b) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
-	let probes = [
-		ProbeCells { layer: Layer::Field, cells: vec![(64, 48)] },
-		ProbeCells { layer: Layer::Intensity, cells: (10..90).map(|x| (x, 60)).collect() },
-	];
+	let probes = probe_set();
 	a.set_probes(&probes);
 	b.set_probes(&probes);
 	let mut sampled = Vec::new();
@@ -538,6 +543,101 @@ fn queued_probes_read_like_sampled_ones() {
 	b.drain_probes(&mut |r| queued.push(r.clone())).unwrap();
 	assert_eq!(queued, sampled);
 	b.drain_probes(&mut |_| panic!("drained twice")).unwrap();
+}
+
+/// The browser's order: queue every step, then `pending_probes`, its `ready`, `drain_probes`. Partial batches read
+/// back by `pending_probes` stay in flight across steps, two at once; the next full batch collects the one mapped
+/// already without waiting and, natively, waits for the other inside `queue_probes`. The drained readings are the
+/// sampled ones in step order.
+#[test]
+fn pending_probes_drain_like_sampled_ones_once_ready() {
+	use std::future::Future;
+	use std::task::{Context, Poll, Waker};
+	if !gpu_available() {
+		return;
+	}
+	let device = &context().unwrap().device;
+	let (_, mut a) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
+	let (_, mut b) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
+	let probes = probe_set();
+	a.set_probes(&probes);
+	b.set_probes(&probes);
+	let (mut sampled, mut drained, mut r) = (Vec::new(), Vec::new(), ProbeReadings::default());
+	let mut cx = Context::from_waker(Waker::noop());
+	let mut held = Vec::new();
+	let last = BATCH_STEPS * 2 + 9;
+	for step in 1..=last {
+		a.advance_one_step().unwrap();
+		a.sample_probes(&mut r).unwrap();
+		sampled.push(r.clone());
+		b.advance_one_step().unwrap();
+		b.queue_probes().unwrap();
+		if step == 5 || step == 12 {
+			held.push(b.pending_probes().unwrap());
+		}
+		if step == 5 {
+			device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+		}
+		if step == BATCH_STEPS + 18 || step == last {
+			let pending = b.pending_probes().unwrap();
+			let mut ready = std::pin::pin!(pending.ready());
+			assert_eq!(ready.as_mut().poll(&mut cx), Poll::Pending, "the callback runs when the device is polled");
+			device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+			assert_eq!(ready.as_mut().poll(&mut cx), Poll::Ready(()));
+			b.drain_probes(&mut |r| drained.push(r.clone())).unwrap();
+		}
+	}
+	for pending in held {
+		assert_eq!(std::pin::pin!(pending.ready()).poll(&mut cx), Poll::Ready(()));
+	}
+	assert_eq!(drained, sampled);
+	b.drain_probes(&mut |_| panic!("drained twice")).unwrap();
+}
+
+/// Readbacks in flight at a `reset` or `set_probes` are dropped: their `ready` still resolves, and the next drain
+/// yields only the readings queued after it.
+#[test]
+fn a_reset_drops_the_probe_readbacks_in_flight() {
+	use std::future::Future;
+	use std::task::{Context, Poll, Waker};
+	if !gpu_available() {
+		return;
+	}
+	let device = &context().unwrap().device;
+	let (_, mut a) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
+	let (_, mut b) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
+	let probes = probe_set();
+	a.set_probes(&probes);
+	b.set_probes(&probes);
+	let mut cx = Context::from_waker(Waker::noop());
+	let mut r = ProbeReadings::default();
+	for reset in [true, false] {
+		for _ in 0..BATCH_STEPS + 7 {
+			a.advance_one_step().unwrap();
+			b.advance_one_step().unwrap();
+			b.queue_probes().unwrap();
+		}
+		let pending = b.pending_probes().unwrap();
+		if reset {
+			a.reset();
+			b.reset();
+		} else {
+			b.set_probes(&probes);
+		}
+		device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+		assert_eq!(std::pin::pin!(pending.ready()).poll(&mut cx), Poll::Ready(()), "reset {reset}");
+		let mut sampled = Vec::new();
+		for _ in 0..9 {
+			a.advance_one_step().unwrap();
+			a.sample_probes(&mut r).unwrap();
+			sampled.push(r.clone());
+			b.advance_one_step().unwrap();
+			b.queue_probes().unwrap();
+		}
+		let mut drained = Vec::new();
+		b.drain_probes(&mut |r| drained.push(r.clone())).unwrap();
+		assert_eq!(drained, sampled, "reset {reset}");
+	}
 }
 
 #[test]

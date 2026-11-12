@@ -183,7 +183,7 @@ cells the Mur ring reflects almost everything; the default quadratic rim (32 px)
 | TryReplaceScene(scene) | same grid size, edges and image-source count: swaps c2/d/source tables in place, re-derives sub-steps; else returns false (caller rebuilds) |
 | AdvanceOneStep | as above |
 | SampleProbes | reads probe cells after the step (field or blended intensity), at once |
-| QueueProbes / DrainProbes | queues that reading per step; drain hands the queued readings out in order. The GPU engine copies each step's readings into a batch buffer and reads a batch (32 steps) back at once, so recording probes keeps the step batching |
+| QueueProbes / PendingProbes / DrainProbes | queues that reading per step; drain hands the queued readings out in order. The GPU engine copies each step's readings into a batch buffer and a full batch (32 steps) to a readback buffer, so recording probes keeps the step batching; at each full batch it collects the copies already mapped, and natively waits for the rest; drain waits for every copy. PendingProbes copies the partial batch too; its `ready()` resolves when every copy is mapped (at once on the CPU). On wasm32 the copies not mapped yet stay in flight, and a drain before `ready()` resolves fails (NotReady) |
 | CaptureFrame(shape, snapshot) | converts field and/or intensity of the canvas (not the rim) into planes of `FrameShape` (see 40) |
 | PrepareFrame | host-side full float copy of field and blended intensity (tests) |
 

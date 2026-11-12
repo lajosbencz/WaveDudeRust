@@ -19,12 +19,13 @@ disk or machine query, and the per-layer colouring of a picture lived in the app
   device), `GpuEngine::new`, `GpuEngine::with_layout` and `engine::build` block on them with `pollster`, which is a
   dependency of non-wasm targets only. On wasm the caller awaits `create` and owns the `Arc<GpuContext>`.
 - A readback's map callback sets a `sync::Notify`, which wakes a waiting future. `PendingCapture::ready()` resolves
-  when the copy is mapped, at once for the CPU engine. On wasm32 the GPU engine supports the capture path only:
-  `finish_capture` before `ready()` resolves returns `GpuError::NotReady` (a contract violation, which leaves the
-  engine failed like any GPU error), and probe readings and `prepare_frame`, which have no future to await, can only
-  return `NotReady` there. Natively every waiting call blocks as before, and `ready()` resolves once something polls
-  the device (`finish_capture` does). The in-flight throttle in `submit` stays; it waits natively and is a no-op on
-  WebGPU.
+  when the copy is mapped, `PendingProbes::ready()` when every copied batch of queued probe readings is, both at once
+  for the CPU engine. On wasm32 the GPU engine supports these paths only: `finish_capture` or `drain_probes` before
+  `ready()` resolves returns `GpuError::NotReady` (a contract violation, which leaves the engine failed like any GPU
+  error), and `sample_probes` and `prepare_frame`, which have no future to await, can only return `NotReady` there.
+  Natively every waiting call blocks, and `ready()` resolves once something polls the device
+  (`finish_capture` and `drain_probes` do). The in-flight throttle in `submit` stays; it waits natively and is a no-op
+  on WebGPU.
 - `WaveEngine: MaybeSend`, where `MaybeSend` is `Send` on native targets and empty on wasm32. Engines cross threads only
   where threads exist, and `run` (native only) still gets `Send` engines.
 - `RunSpec`, `Schedule`, `RunRequest`, `SceneCache` are in `spec`, `PreviewQuality`, `PreviewTier`, `PreviewDefaults` and
@@ -41,7 +42,8 @@ disk or machine query, and the per-layer colouring of a picture lived in the app
   `begin_capture` and `finish_capture`; it never blocks and never spins.
 - Native behaviour is unchanged: the same blocking calls, the same shared device.
 - A native caller of the async functions must poll the device for a mapping to complete; `finish_capture` does.
-- On wasm32 probe sampling and `prepare_frame` of the GPU engine are unavailable until they get async forms.
+- On wasm32 `sample_probes` and `prepare_frame` of the GPU engine are unavailable; queued probe readings are drained
+  after `pending_probes().ready()`.
 - The check proves the build, not the behaviour in a browser; nothing runs the engine on wasm in CI.
 
 ## Alternatives rejected

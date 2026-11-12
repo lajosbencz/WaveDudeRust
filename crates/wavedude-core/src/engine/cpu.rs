@@ -29,7 +29,8 @@ use super::pml::{self, CpuPml, cut, taps};
 use super::stencil::{PAD, StencilCoefficients, TimeScheme};
 use super::substeps::sub_steps;
 use super::types::{
-	Emitter, EngineOptions, FrameShape, PendingCapture, ProbeCells, ProbeQueue, ProbeReadings, SceneData, Snapshot,
+	Emitter, EngineOptions, FrameShape, PendingCapture, PendingProbes, ProbeCells, ProbeQueue, ProbeReadings,
+	SceneData, Snapshot,
 };
 use super::{EngineError, WaveEngine};
 use crate::model::{Edges, Layer};
@@ -688,6 +689,10 @@ impl WaveEngine for CpuEngine {
 		Ok(())
 	}
 
+	fn pending_probes(&mut self) -> Result<PendingProbes, EngineError> {
+		Ok(PendingProbes::done())
+	}
+
 	fn drain_probes(&mut self, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError> {
 		self.probe_queue.drain(f);
 		Ok(())
@@ -821,6 +826,31 @@ mod tests {
 		let (field, intensity) = e.prepare_frame();
 		assert_eq!(r.probe(0), [field[15 * 40 + 22]]);
 		assert_eq!(r.probe(1), [intensity[15 * 40 + 22]; 2]);
+	}
+
+	#[test]
+	fn pending_probes_are_ready_at_once_and_drain_in_step_order() {
+		use std::future::Future;
+		use std::task::{Context, Poll, Waker};
+		let mut e = engine(Edges::Open, -4, Stencil::FourthOrder);
+		e.set_probes(&[
+			ProbeCells { layer: Layer::Field, cells: vec![(22, 15)] },
+			ProbeCells { layer: Layer::Intensity, cells: vec![(10, 5), (11, 5), (12, 5)] },
+		]);
+		let (mut sampled, mut drained, mut r) = (Vec::new(), Vec::new(), ProbeReadings::default());
+		for step in 1..=40 {
+			e.advance_one_step();
+			e.sample_probes(&mut r);
+			sampled.push(r.clone());
+			e.queue_probes().unwrap();
+			if step % 15 == 0 || step == 40 {
+				let pending = e.pending_probes().unwrap();
+				let mut ready = std::pin::pin!(pending.ready());
+				assert_eq!(ready.as_mut().poll(&mut Context::from_waker(Waker::noop())), Poll::Ready(()));
+				e.drain_probes(&mut |r| drained.push(r.clone())).unwrap();
+			}
+		}
+		assert_eq!(drained, sampled);
 	}
 
 	#[test]
