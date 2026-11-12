@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::engine::{EngineOptions, FrameShape, SceneData, Snapshot, WaveEngine};
+use wavedude_core::engine::{EngineOptions, SceneData, Snapshot, WaveEngine};
 use wavedude_core::model::{Layer, Project, Step};
 use wavedude_core::run::{
 	Budget, FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, PreviewQuality, RunError, RunRequest,
@@ -293,17 +293,6 @@ impl<B: Backend> LiveController<B> {
 		}
 		let (_, generation, snapshot) = store.latest().filter(|(i, ..)| *i == index)?;
 		Some(ShownSource::Snapshot { store: store.clone(), generation, snapshot })
-	}
-
-	/// Calls `f` with the shown frame's shape and its plane of `layer`; `None` without a shown frame or such a plane.
-	pub fn with_shown_plane<R>(&self, layer: Layer, f: impl FnOnce(&FrameShape, &[u8]) -> R) -> Option<R> {
-		match self.shown_source()? {
-			ShownSource::Stored(store, index) => store.with_layer(index, layer, |plane| f(store.shape(), plane)).ok(),
-			ShownSource::Snapshot { snapshot: s, .. } => {
-				let plane = s.plane(layer);
-				(!plane.is_empty()).then(|| f(&s.shape, plane))
-			}
-		}
 	}
 
 	/// The run is stepping (towards any frame or a fit).

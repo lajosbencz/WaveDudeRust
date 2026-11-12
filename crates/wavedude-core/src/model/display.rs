@@ -122,11 +122,4 @@ impl Display {
 			Layer::Intensity => &self.intensity,
 		}
 	}
-
-	pub fn layer_mut(&mut self, layer: Layer) -> &mut DisplayLayer {
-		match layer {
-			Layer::Field => &mut self.field,
-			Layer::Intensity => &mut self.intensity,
-		}
-	}
 }

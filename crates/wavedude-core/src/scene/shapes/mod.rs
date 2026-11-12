@@ -200,11 +200,6 @@ pub trait PartShape: Send + Sync {
 		false
 	}
 
-	/// How far a distance-like depth may jump (a fibre's bent flat end), in pixels.
-	fn skip_allowance(&self) -> f64 {
-		0.0
-	}
-
 	/// Distance to the nearest edge inside the outline where the index steps; +inf without one.
 	fn inner_edge_distance(&self, _p: Vec2) -> f64 {
 		f64::INFINITY

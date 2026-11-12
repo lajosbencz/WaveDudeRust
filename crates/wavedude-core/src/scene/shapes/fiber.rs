@@ -92,7 +92,6 @@ pub(super) struct FiberShape {
 	cell_chords: Vec<usize>,
 	start_zone: usize,
 	end_zone: usize,
-	allowance: f64,
 }
 
 impl FiberShape {
@@ -127,16 +126,6 @@ impl FiberShape {
 		let flat = fiber.ends == FiberEnds::Flat;
 		let hump = (fiber.absorption_ramp as f64).min(cladding / 2.0);
 		let extent = path.iter().map(|v| v.length()).fold(f64::NEG_INFINITY, f64::max) + outer_radius;
-
-		let wedge = |tangent: Vec2, d: Vec2| {
-			let length = d.length();
-			let cos = if length > 0.0 { (tangent.dot(d) / length).clamp(-1.0, 1.0) } else { 1.0 };
-			if cos <= 0.0 {
-				return f64::INFINITY;
-			}
-			(outer_radius + MARGIN) * ((1.0 - cos * cos) / (cos * cos)) / 2.0
-		};
-		let allowance = if flat { wedge(start_tangent, chord_d[1]) + wedge(end_tangent, chord_d[n - 1]) } else { 0.0 };
 
 		let mut start_zone = 1;
 		let mut arc = 0.0;
@@ -211,7 +200,6 @@ impl FiberShape {
 			cell_chords,
 			start_zone,
 			end_zone,
-			allowance,
 		})
 	}
 
@@ -315,10 +303,6 @@ impl PartShape for FiberShape {
 
 	fn depth_is_distance(&self) -> bool {
 		true
-	}
-
-	fn skip_allowance(&self) -> f64 {
-		self.allowance
 	}
 
 	/// The core boundary's distance `|r - core radius|`; +inf without a cladding.

@@ -196,11 +196,6 @@ impl CpuEngine {
 		&self.u
 	}
 
-	/// The padded field one sub-step before [`field_padded`](Self::field_padded).
-	pub fn previous_padded(&self) -> &[f32] {
-		&self.prev
-	}
-
 	/// The time scheme of a sub-step.
 	pub fn scheme(&self) -> TimeScheme {
 		self.scheme
