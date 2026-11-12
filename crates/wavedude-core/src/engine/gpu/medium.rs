@@ -37,40 +37,17 @@ pub(super) struct Medium {
 
 /// The medium of `scene` for `n` sub-steps in `layout`, compact falling back to plain.
 pub(super) fn build(scene: &SceneData, n: u32, layout: MediumLayout) -> Medium {
-	let gw = scene.grid_width() as usize;
 	let cells = scene.padded_cells();
-	let mult = 1.0 / (n as f32 * n as f32);
-	let root = 1.0 / n as f64;
 	let mut c2 = vec![0f32; cells];
 	let mut d = vec![1f32; cells];
-	let mut c2_index: HashMap<u32, u16> = HashMap::new();
-	let mut d_index: HashMap<u32, u16> = HashMap::new();
-	let (mut c2_table, mut d_table) = (Vec::new(), Vec::new());
-	let mut words = vec![0u32; cells];
-	let mut compact = layout == MediumLayout::Compact;
-	for (gy, (rc2, rd)) in scene.c2.chunks_exact(gw).zip(scene.d.chunks_exact(gw)).enumerate() {
-		let at = scene.padded_index(0, gy);
-		for (k, (&c, &dd)) in rc2.iter().zip(rd).enumerate() {
-			let (cv, dv) = (c * mult, if n > 1 { (dd as f64).powf(root) as f32 } else { dd });
-			c2[at + k] = cv;
-			d[at + k] = dv;
-			if compact {
-				let ci = intern(&mut c2_index, &mut c2_table, cv);
-				let di = intern(&mut d_index, &mut d_table, dv);
-				match (ci, di) {
-					(Some(ci), Some(di)) => words[at + k] = ci as u32 | (di as u32) << 16,
-					_ => compact = false,
-				}
-			}
-		}
-	}
-	if compact {
-		let d_base = c2_table.len() as u32;
-		c2_table.extend(d_table);
+	scene.fill_sub_step_medium(n, &mut c2, &mut d);
+	if layout == MediumLayout::Compact
+		&& let Some((words, tables, d_base)) = compact(scene, &c2, &d)
+	{
 		return Medium {
 			layout: MediumLayout::Compact,
 			cells: bytemuck::cast_slice(&words).to_vec(),
-			tables: c2_table,
+			tables,
 			d_base,
 			c2,
 			d,
@@ -85,6 +62,37 @@ pub(super) fn build(scene: &SceneData, n: u32, layout: MediumLayout) -> Medium {
 		c2,
 		d,
 	}
+}
+
+/// The compact words of the grid cells and the tables (c2, then damping from the returned base); `None` above
+/// [`TABLE_LIMIT`] distinct values of either.
+fn compact(scene: &SceneData, c2: &[f32], d: &[f32]) -> Option<(Vec<u32>, Vec<f32>, u32)> {
+	let (gw, gh) = (scene.grid_width() as usize, scene.grid_height() as usize);
+	let mut c2_index: HashMap<u32, u16> = HashMap::new();
+	let mut d_index: HashMap<u32, u16> = HashMap::new();
+	let (mut c2_table, mut d_table) = (Vec::new(), Vec::new());
+	let mut words = vec![0u32; c2.len()];
+	// A scene is runs of equal cells: a run is interned once.
+	let mut last: Option<((u32, u32), u32)> = None;
+	for gy in 0..gh {
+		let at = scene.padded_index(0, gy);
+		for i in at..at + gw {
+			let key = (c2[i].to_bits(), d[i].to_bits());
+			words[i] = match last {
+				Some((k, word)) if k == key => word,
+				_ => {
+					let ci = intern(&mut c2_index, &mut c2_table, c2[i])?;
+					let di = intern(&mut d_index, &mut d_table, d[i])?;
+					let word = ci as u32 | (di as u32) << 16;
+					last = Some((key, word));
+					word
+				}
+			};
+		}
+	}
+	let d_base = c2_table.len() as u32;
+	c2_table.extend(d_table);
+	Some((words, c2_table, d_base))
 }
 
 /// Index of `v` (by bits) in `table`, added when new; `None` once the table is full.

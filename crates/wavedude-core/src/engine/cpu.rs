@@ -280,17 +280,8 @@ impl CpuEngine {
 	/// Copies the scene's maps into the padded buffers at the sub-step scale and builds the source
 	/// table, the cuts, the Mur chains and the PML.
 	fn load_scene(&mut self) {
-		let gw = self.scene.grid_width() as usize;
 		let n = self.sub_steps;
-		let mult = 1.0 / (n as f32 * n as f32);
-		let root = 1.0 / n as f64;
-		for (gy, (c2, d)) in self.scene.c2.chunks_exact(gw).zip(self.scene.d.chunks_exact(gw)).enumerate() {
-			let at = self.scene.padded_index(0, gy);
-			for (k, (&c, &dd)) in c2.iter().zip(d).enumerate() {
-				self.c2[at + k] = c * mult;
-				self.d[at + k] = if n > 1 { (dd as f64).powf(root) as f32 } else { dd };
-			}
-		}
+		self.scene.fill_sub_step_medium(n, &mut self.c2, &mut self.d);
 		self.sources.level_used = [false; IMAGE_LEVELS];
 		for s in &self.scene.image_sources {
 			self.sources.level_used[s.level as usize] = true;

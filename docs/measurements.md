@@ -91,22 +91,22 @@ a 32 px wavelength.
 
 ## The live run
 
-2026-11-09, `cargo test -p wavedude-core --test run --release -- --ignored --nocapture live_run_drag_burst_timing`:
+2026-11-12, `cargo test -p wavedude-core --test run --release -- --ignored --nocapture live_run_drag_burst_timing`:
 Example16 at half resolution, 8-bit samples, on the GPU; the source moved by a pixel 120 times at 32 edits a
 second, the position at frame 100; the position's frame alone wanted, and every frame (the 50 stored frames
 before the position captured on the way).
 
 | | source moved, position alone | source moved, every frame | part moved, every frame |
 |---|---|---|---|
-| one frame from step 0 | 25 ms | 23 ms | 88 ms |
-| frames shown during the 3.8 s burst | 120, one per edit | 120, one per edit | 1 |
-| the final frame after the last edit | under 1 ms | 21 ms (0.9 frame times) | 86 ms (1.0 frame times) |
+| one frame from step 0 | 25 ms | 23 ms | 58 ms |
+| frames shown during the 3.8 s burst | 120, one per edit | 120, one per edit | 120, one per edit |
+| the final frame after the last edit | under 1 ms | 10 ms (0.5 frame times) | 25 ms (0.4 frame times) |
 
-A part edit recomposes the scene and gives the engine the new medium; at 32 edits a second no frame of a mid-drag
-state completes, the picture follows one frame time after the hand rests. Where the time goes
-(`part_edit_cost`, Example16, 1500x900 canvas): composing the scene pixels 5.9 ms, the medium from them 2.7 ms,
-the GPU engine taking the new scene 31.6 ms (the medium's layout built on the CPU and uploaded); the next target
-for a lighter part drag is that upload.
+A part edit recomposes the scene and gives the engine the new medium. Where the time goes
+(`cargo test -p wavedude-core --test run --release -- --ignored --nocapture part_edit_cost`, Example16, 1500x900
+canvas): composing the scene pixels 4.9 ms, the medium from them 2.7 ms, the GPU engine taking the new scene
+7.5 ms. The sub-step medium takes its damping root and its table index once per run of equal cells; taken per
+cell, the GPU engine needed 31.6 ms, a part moved took 88 ms a frame and showed 1 frame of the 120 edits.
 
 Before the engine was kept across edits (rebuilt per edit, 45 to 55 ms): one frame 64 to 70 ms, 59 frames
 shown during the burst.

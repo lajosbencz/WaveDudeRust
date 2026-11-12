@@ -66,6 +66,30 @@ impl SceneData {
 		(gy + super::stencil::PAD) * self.stride() + gx + super::stencil::PAD
 	}
 
+	/// Writes the grid cells of the padded `c2` and `d` at the scale of `n` sub-steps: `c2 / n^2`, `d^(1/n)`.
+	pub(crate) fn fill_sub_step_medium(&self, n: u32, c2: &mut [f32], d: &mut [f32]) {
+		let gw = self.grid_width() as usize;
+		let mult = 1.0 / (n as f32 * n as f32);
+		let root = 1.0 / n as f64;
+		// A scene is runs of equal damping: the root is taken once per run.
+		let mut last: Option<(u32, f32)> = None;
+		for (gy, (rc2, rd)) in self.c2.chunks_exact(gw).zip(self.d.chunks_exact(gw)).enumerate() {
+			let at = self.padded_index(0, gy);
+			for (k, (&c, &dd)) in rc2.iter().zip(rd).enumerate() {
+				let dv = match last {
+					Some((bits, v)) if bits == dd.to_bits() => v,
+					_ => {
+						let v = if n > 1 { (dd as f64).powf(root) as f32 } else { dd };
+						last = Some((dd.to_bits(), v));
+						v
+					}
+				};
+				c2[at + k] = c * mult;
+				d[at + k] = dv;
+			}
+		}
+	}
+
 	/// Whether padded cell `i` is a grid cell painted as a mirror ([`MIRROR_C2`]).
 	pub fn is_mirror_at(&self, i: usize) -> bool {
 		let (s, pad) = (self.stride(), super::stencil::PAD);
