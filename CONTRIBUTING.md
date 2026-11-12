@@ -9,7 +9,8 @@ Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLAT
 
 - **Bug**: the version (Help > About, or `wavedude-cli --version`), the platform, the steps, what was expected,
   the project file or the name of the example used, and for a wrong picture or export the output itself.
-- **Crash**: the same plus the log of the day, which holds the panic's backtrace. The logs folder is
+- **Crash**: the same plus the log of the day, which holds the panic's backtrace; a panic that ended the program
+  also left `crash.txt` beside it, which the next start shows once and renames `last-crash.txt`. The logs folder is
   `~/.config/waveduderust/logs` on Linux, `~/Library/Application Support/WaveDudeRust/logs` on macOS and
   `%APPDATA%\WaveDudeRust\config\logs` on Windows.
 - **Feature request**: the problem, not a solution; whether WaveDude Next has the feature (then it is an
@@ -54,8 +55,8 @@ Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLAT
 
 ## Tools
 
-The compiler is pinned in [`rust-toolchain.toml`](rust-toolchain.toml) with clippy and rustfmt; rustup installs it on the
-first `cargo` call. Bump it there when a new stable is wanted (the CI caches are keyed on it). Linux needs the
+The compiler is pinned in [`rust-toolchain.toml`](rust-toolchain.toml) with clippy and rustfmt; `rustup toolchain install` in
+the repository installs it, as CI does. Bump it there when a new stable is wanted (the CI caches are keyed on it). Linux needs the
 packages of the "Linux packages for Skia and winit" step of [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Below,
 `F=wavedude-export/openh264-source,wavedude-cli/openh264-source`.
 
@@ -64,20 +65,22 @@ packages of the "Linux packages for Skia and winit" step of [`.github/workflows/
 | rustfmt | formatting | `cargo fmt --all` | [`rustfmt.toml`](rustfmt.toml) |
 | clippy | lints, warnings fail | `cargo clippy --workspace --all-targets --features $F -- -D warnings` | `[workspace.lints]` of [`Cargo.toml`](Cargo.toml) |
 | cargo test | the tests; the export tests decode their output with `ffmpeg` when it is on the `PATH` | `cargo test --workspace --features $F` | |
-| [cargo-insta](https://insta.rs) | text snapshots | `cargo insta review` | `tests/snapshots/` of each crate |
+| [cargo-insta](https://insta.rs) | text snapshots | `cargo insta review` | `tests/snapshots/` of core and export |
 | rustdoc | docs without warnings | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | |
 | [cargo-hack](https://github.com/taiki-e/cargo-hack) | every feature combination compiles | `cargo hack check --workspace --feature-powerset --depth 2` | |
 | [cargo-machete](https://github.com/bnjbvr/cargo-machete) | no unused dependency | `cargo machete` | |
-| MSRV | builds at the workspace's `rust-version` | `cargo +1.89 check --workspace --all-targets` | `[workspace.package]` of [`Cargo.toml`](Cargo.toml) |
+| MSRV | builds at the workspace's `rust-version` | `rustup toolchain install 1.89`, then `cargo +1.89 check --workspace --all-targets` | `[workspace.package]` of [`Cargo.toml`](Cargo.toml) |
 | [typos](https://github.com/crate-ci/typos) | spelling | `typos` | [`_typos.toml`](_typos.toml) |
-| [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) | advisories, licences, sources | `cargo deny check` | [`deny.toml`](deny.toml) |
+| [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) | advisories, licences, wildcard versions, sources | `cargo deny check` | [`deny.toml`](deny.toml) |
 | [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) | optional, local only: code no test reaches | `cargo llvm-cov --workspace --features $F --summary-only` | |
 
-The versions CI uses are pinned in the workflows. Beyond the checks:
+The versions CI uses are pinned in the workflows. Coverage is slow: measured on 24 threads, its tests took 43 minutes
+after a build of its own; instrumented, `cli.rs` went from 21 s to 23.5 min and `physics.rs` from 14 s to 17 min. Beyond
+the checks:
 
-- Timings are `#[ignore]` tests, run with
-  `cargo test --release -p <crate> --test <file> -- --ignored --nocapture <name>`; their results go into
-  [`docs/measurements.md`](docs/measurements.md) with the command.
+- Timings: `wavedude-cli bench` (`--help` lists its options) and the `#[ignore]` timing tests, run with
+  `cargo test --release -p <crate> --test <file> -- --ignored --nocapture <name>`; a result goes into
+  [`docs/measurements.md`](docs/measurements.md) with its command.
 - [`tools/compare-csharp`](tools/compare-csharp/) dumps WaveDude Next's results for `wavedude-cli compare` (.NET 10 SDK,
   `WAVEDUDE_NEXT_DIR`); its [`README.md`](tools/compare-csharp/README.md) has the commands.
 - Releases: [git-cliff](https://git-cliff.org) ([`cliff.toml`](cliff.toml)) writes the changelog and the next version from the
@@ -85,8 +88,8 @@ The versions CI uses are pinned in the workflows. Beyond the checks:
   packages and SBOMs in [`.github/workflows/package.yml`](.github/workflows/package.yml). [`docs/release.md`](docs/release.md) covers the flow, the keys,
   the icons and the file types.
 - Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) opens grouped updates, daily for crates (`chore(deps)`), weekly for
-  actions (`ci(deps)`); [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml) merges them when CI passes, except a major
-  version.
+  actions (`ci(deps)`); [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml) enables auto-merge on them, except a major
+  version, so they merge once the required checks pass (the ruleset of [`docs/release.md`](docs/release.md)).
 
 ## Commit messages
 
