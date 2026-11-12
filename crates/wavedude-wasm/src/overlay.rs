@@ -5,7 +5,6 @@
 //!
 //! Coordinates: relative to the picture's top-left; a [`Group`] says how its units map to device pixels.
 
-use serde::Serialize;
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::model::{Layer, Project};
 use wavedude_core::spec::RunSpec;
@@ -13,9 +12,11 @@ use wavedude_view::draw::{DeviceGrid, Rect, Shape, TextMetrics};
 use wavedude_view::graph::{self, GraphData};
 use wavedude_view::overlay::{self as view, HANDLE};
 
+use crate::session::SessionError;
+
 /// Shapes drawn in one coordinate system: `scale` device pixels per unit, the unit origin `origin` device pixels
 /// from the picture's top-left.
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct Group {
 	pub(crate) scale: f32,
 	pub(crate) origin: (f32, f32),
@@ -28,13 +29,41 @@ impl Group {
 	}
 }
 
+/// The longest side of a picture in device pixels, half the 32767 a side Chrome's and Firefox's canvases allow.
+pub(crate) const MAX_SIDE: u32 = 16384;
+
 /// A picture on the page: `width` x `height` CSS pixels on a screen of `dpr` device pixels per CSS pixel, its
 /// top-left on the device grid.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Screen {
-	pub(crate) width: f32,
-	pub(crate) height: f32,
-	pub(crate) dpr: f32,
+	width: f32,
+	height: f32,
+	dpr: f32,
+	device: (u32, u32),
+}
+
+impl Screen {
+	/// Refuses a ratio that is not finite and positive, or a size of fewer than 1 or more than [`MAX_SIDE`] device
+	/// pixels a side.
+	pub(crate) fn new(width: f32, height: f32, dpr: f32) -> Result<Self, SessionError> {
+		let side = |css: f32| Some((css * dpr).round()).filter(|d| (1. ..=MAX_SIDE as f32).contains(d));
+		match (side(width), side(height)) {
+			(Some(w), Some(h)) if dpr.is_finite() && dpr > 0. => {
+				Ok(Self { width, height, dpr, device: (w as u32, h as u32) })
+			}
+			_ => Err(SessionError::Screen { width, height, dpr }),
+		}
+	}
+
+	/// The picture's size in whole device pixels.
+	pub(crate) fn device(&self) -> (u32, u32) {
+		self.device
+	}
+
+	/// Device pixels of the edge line, drawn outside the picture.
+	pub(crate) fn hairline(&self) -> f32 {
+		DeviceGrid::new(self.dpr, 0., 0.).hairline()
+	}
 }
 
 /// Text metrics in CSS pixels: of the labels at [`view::LABEL_SIZE`] in [`view::LABEL_STYLE`], of the graph boxes
@@ -56,7 +85,7 @@ pub(crate) fn groups(
 	screen: Screen,
 	fonts: Fonts<'_>,
 ) -> Vec<Group> {
-	let Screen { width, height, dpr } = screen;
+	let Screen { width, height, dpr, .. } = screen;
 	let canvas = (spec.scene.canvas_width, spec.scene.canvas_height);
 	let scale = (width / canvas.0 as f32).min(height / canvas.1 as f32);
 	let picture = (0., 0., width, height);

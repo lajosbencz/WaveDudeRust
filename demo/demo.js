@@ -1,6 +1,5 @@
 // The WaveDude web demo: an example or a dropped project, played on the wasm engine package.
-import init, { Simulation, requestGpu } from "./pkg/wavedude_wasm.js";
-import { DotCache, drawShapes, measure } from "./draw.js";
+import init, { Simulation, View, requestGpu } from "./pkg/wavedude_wasm.js";
 
 // Time one stepToward call aims for, so the page stays responsive.
 const STEP_SLICE_MS = 12;
@@ -8,6 +7,8 @@ const MAX_STEPS_PER_CALL = 1 << 20;
 // Longest wall time one tick advances playback by, so a stalled page does not jump ahead.
 const MAX_ELAPSED_MS = 100;
 const GAP_PX = 4;
+// Height of the layer name above each picture, with room for the edge line under it.
+const CAPTION_PX = 18;
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -98,17 +99,17 @@ class Player {
 		this.wake = null;
 		this.changed = false;
 		this.views = sim.layers.map((layer) => {
-			const view = document.createElement("div");
-			view.className = "view";
+			const picture = document.createElement("div");
+			picture.className = "picture";
 			const canvas = document.createElement("canvas");
-			const shapes = document.createElement("canvas");
-			shapes.className = "shapes";
-			const caption = document.createElement("span");
+			picture.append(canvas);
+			const cell = document.createElement("figure");
+			const caption = document.createElement("figcaption");
 			caption.textContent = layer;
-			view.append(canvas, caption, shapes);
-			ui.stage.append(view);
-			const overlay = { canvas: shapes, context: shapes.getContext("2d"), dots: new DotCache() };
-			return { layer, view, canvas, context: canvas.getContext("2d"), overlay };
+			caption.style.height = `${CAPTION_PX}px`;
+			cell.append(caption, picture);
+			ui.stage.append(cell);
+			return { layer, cell, picture, canvas, view: new View(canvas), box: "" };
 		});
 		this.resizes = new ResizeObserver(() => this.#layout());
 		this.resizes.observe(ui.stage);
@@ -127,7 +128,7 @@ class Player {
 
 	/**
 	 * Stacks the layers or sets them side by side, whichever shows them larger, and fits them to the stage with room
-	 * for the edge line around them.
+	 * for the edge line around them and their names above them.
 	 */
 	#layout() {
 		const n = this.views.length;
@@ -135,13 +136,13 @@ class Player {
 		const edges = (2 * hairline(ratio)) / ratio;
 		const [w, h] = [ui.stage.clientWidth - edges, ui.stage.clientHeight - edges];
 		const fit = (cellW, cellH) => Math.max(Math.min(cellW / this.width, cellH / this.height), 0);
-		const stacked = fit(w, (h - GAP_PX * (n - 1)) / n);
-		const besides = fit((w - GAP_PX * (n - 1)) / n, h);
+		const stacked = fit(w, (h - GAP_PX * (n - 1)) / n - CAPTION_PX);
+		const besides = fit((w - GAP_PX * (n - 1)) / n, h - CAPTION_PX);
 		const scale = Math.max(stacked, besides);
 		ui.stage.style.flexDirection = stacked >= besides ? "column" : "row";
-		for (const { view } of this.views) {
-			view.style.width = `${Math.floor(this.width * scale)}px`;
-			view.style.height = `${Math.floor(this.height * scale)}px`;
+		for (const { picture } of this.views) {
+			picture.style.width = `${Math.max(1, Math.floor(this.width * scale))}px`;
+			picture.style.height = `${Math.max(1, Math.floor(this.height * scale))}px`;
 		}
 		this.drawn = null;
 		this.poke();
@@ -171,14 +172,17 @@ class Player {
 		invalidate();
 	}
 
-	/** Ends the loop, waits out a call in flight, and frees the simulation. */
+	/** Ends the loop, waits out a call in flight, and frees the simulation and the views. */
 	async stop() {
 		this.stopped = true;
 		this.poke();
 		await this.done;
 		this.resizes.disconnect();
 		this.sim.free();
-		for (const { view } of this.views) view.remove();
+		for (const { cell, view } of this.views) {
+			view.free();
+			cell.remove();
+		}
 	}
 
 	async #run() {
@@ -232,40 +236,23 @@ class Player {
 		return stored;
 	}
 
+	/** Draws `frame` on each canvas, which reaches past its picture by the edge line's device pixels. */
 	#show(frame) {
 		if (frame === undefined || frame === this.drawn) return;
 		const ratio = window.devicePixelRatio || 1;
-		for (const { layer, view, canvas, context, overlay } of this.views) {
-			const picture = this.sim.render(frame, layer,
-				Math.max(1, Math.round(view.clientWidth * ratio)), Math.max(1, Math.round(view.clientHeight * ratio)));
-			const { width, height } = picture;
-			if (canvas.width !== width || canvas.height !== height) Object.assign(canvas, { width, height });
-			context.putImageData(new ImageData(picture.data, width, height), 0, 0);
-			picture.free();
-			this.#overlay(overlay, frame, layer, view, ratio);
-		}
-		this.drawn = frame;
-	}
-
-	/** Draws the shapes over a picture; their canvas reaches past it by the edge line's device pixels. */
-	#overlay({ canvas, context, dots }, frame, layer, view, ratio) {
-		const { clientWidth: w, clientHeight: h } = view;
-		const pad = hairline(ratio);
-		const width = Math.round(w * ratio) + 2 * pad;
-		const height = Math.round(h * ratio) + 2 * pad;
-		if (canvas.width !== width || canvas.height !== height) {
-			Object.assign(canvas, { width, height });
+		for (const entry of this.views) {
+			const { layer, picture, canvas, view } = entry;
+			if (!this.sim.draw(view, frame, layer, picture.clientWidth, picture.clientHeight, ratio)) return;
+			// The canvas's CSS box follows the bitmap draw sized.
+			const box = `${canvas.width} ${canvas.height} ${ratio}`;
+			if (box === entry.box) continue;
+			entry.box = box;
+			const offset = `${-hairline(ratio) / ratio}px`;
 			Object.assign(canvas.style, {
-				left: `${-pad / ratio}px`, top: `${-pad / ratio}px`, width: `${width / ratio}px`, height: `${height / ratio}px`,
+				left: offset, top: offset, width: `${canvas.width / ratio}px`, height: `${canvas.height / ratio}px`,
 			});
 		}
-		context.setTransform(1, 0, 0, 1, 0, 0);
-		context.clearRect(0, 0, width, height);
-		if (!w || !h) return;
-		for (const { scale, origin, shapes } of JSON.parse(this.sim.overlay(frame, layer, w, h, ratio, measure))) {
-			context.setTransform(scale, 0, 0, scale, pad + origin[0], pad + origin[1]);
-			drawShapes(context, shapes, scale, dots);
-		}
+		this.drawn = frame;
 	}
 }
 

@@ -19,16 +19,17 @@ the desktop's.
   widgets and the wasm package use these; none keeps a copy.
 - The shapes are a draw list (`Shape` in [`draw.rs`](../../crates/wavedude-view/src/draw.rs)). A text's `TextStyle` says its font and
   where its position lies: a label in the platform's default typeface on the alphabetic baseline over its halo,
-  graph-box text in the element's (the page's) fonts from the top of its line box. The desktop executes the list with
-  Skia (`Painter` in [`paint.rs`](../../crates/wavedude-widgets/src/paint.rs), which caches the dots' bitmap), the page
-  with Canvas2D ([`demo/draw.js`](../../demo/draw.js)), which follows the Skia executor shape for shape. Text is measured through
-  `TextMetrics`: Skia's fonts on the desktop, the page's `measureText` in the browser, passed to the package as a
-  function.
+  graph-box text in the element's (the page's) fonts from the top of its line box. Both executors are Rust and cache
+  the dots' bitmap: the desktop's with Skia (`Painter` in [`paint.rs`](../../crates/wavedude-widgets/src/paint.rs)), the
+  browser's with Canvas2D through web-sys (`View` in [`canvas.rs`](../../crates/wavedude-wasm/src/canvas.rs)), which
+  follows the Skia one shape for shape. Text is measured through `TextMetrics`: Skia's fonts on the desktop, the
+  canvas's `measureText` in the browser.
 - Units: the overlay is in logical (CSS) pixels; the edge line and a graph box are in device pixels of a `DeviceGrid`,
-  so hairlines and text land on whole device pixels on both. The package returns JSON (serde, colours as `#rrggbbaa`,
-  without the desktop's antialias flags): groups of shapes, each with the device pixels per unit and its origin in
-  device pixels of the picture.
-- `Simulation.overlay(frame, layer, width, height, dpr, measure)` composes a picture as the preview does with nothing
+  so hairlines and text land on whole device pixels on both. The package composes groups of shapes, each with the
+  device pixels per unit and its origin in device pixels of the picture; nothing crosses to the page but the canvas.
+- `new View(canvas)` wraps a canvas in the document: its 2D context, its painter's bitmaps, and its computed font
+  families, read once (a canvas outside the document has none and is refused).
+- `Simulation.draw(view, frame, layer, width, height, dpr)` composes a picture as the preview does with nothing
   selected: the edge line, the overlay under the project's Display settings (handles and labels in the preview)
   clipped to the picture, then the boxes of the active probes measuring the layer. The viewer never edits: no
   selection, focus or pointer handling.
@@ -40,21 +41,24 @@ the desktop's.
   already, so nothing is queued until the engine passes the recorded steps, and the collector's integrals and detector
   draws go on where they stopped. A picture's graphs are cut at the stored frame it shows (`GraphData::at`), so seeking
   either way shows the curves of that frame.
-- The page draws the JSON on a canvas over each picture and its caption, reaching one hairline past it for the edge
-  line; the pictures are fitted to the stage less that room, so the line always shows. It redraws once per frame shown
-  and after a resize or a change of the device pixel ratio; a composite source's dots go through a bitmap cached until
-  the picture's size changes, like the desktop's `Painter` does.
+- `draw` puts the picture's pixels (`putImageData` into a bitmap of the view, scaled onto the canvas) and the groups,
+  each in its own saved state, on one canvas per layer, which reaches one hairline past the picture on each side for
+  the edge line; the page fits the pictures to the stage less that room, so the line always shows, and places the
+  canvas. A picture is 1 to 16384 device pixels a side, half the canvas side Chrome and Firefox allow. It returns
+  false, drawing nothing, while the frame is not stored. The page redraws once per frame shown and after a resize or a
+  change of the device pixel ratio; a composite source's dots go through a bitmap cached until they, their place or
+  the scale change, like the desktop's `Painter` does.
 
 ## Consequences
 
 - What the preview draws changes in one place for the desktop and the browser.
-- The shapes cross as JSON once per frame shown and layer; a composite source's dots are in it each time.
+- No serialisation between the package and the page: the page passes a canvas, the package draws on it.
 - Canvas2D antialiases every shape; the aliased hairlines sit on whole device pixels on both, so they look alike. Text
   differs as the fonts and rasterisers do.
 - With a frame divisor (the Low tier) the curves of a timeline frame between two stored frames end at the stored frame
   the picture shows; the desktop's reach the timeline frame's step.
 - The traces of a long run take memory as the application's do.
-- The page's drawing is checked by hand in a browser; the JSON's structure and the traces against a native run are
+- The page's drawing is checked by hand in a browser; the groups' shapes and the traces against a native run are
   tested natively.
 
 ## Alternatives rejected
@@ -62,5 +66,6 @@ the desktop's.
 - A JavaScript overlay of its own: two implementations of the same pictures.
 - Burning the overlay into the picture's pixels in the package: text needs fonts there, and a hairline would scale
   with the picture instead of the screen.
-- `serde-wasm-bindgen` for the shapes: a new dependency where `serde_json` and `JSON.parse` serve.
+- Shapes as JSON for a JavaScript executor: a second executor to keep in step with the desktop's, and a format
+  between the two.
 - Clearing the traces on a rerun and recording them again: the same values for the work of recording twice.

@@ -1,8 +1,8 @@
 # 0017: A wasm package and a web demo
 
 Status: accepted, 2026-11-12. Builds on [0015](0015-core-builds-for-wasm.md) and [0016](0016-gpu-engine-in-the-browser.md); amended by
-[0018](0018-a-shared-picture-view.md): the package records probes and returns the shapes of the preview's overlay and
-graph boxes, which the page draws.
+[0018](0018-a-shared-picture-view.md): the package records probes and draws a picture with the preview's overlay and
+graph boxes on a canvas the page passes.
 
 ## Context
 
@@ -13,11 +13,13 @@ application's state, and an engine package must not carry fifty-three projects n
 
 ## Decision
 
-- [`wavedude-wasm`](../../crates/wavedude-wasm) is the engine and nothing else: `Simulation.open(text, tier)` and `openOn(gpu, text, tier)`,
-  `stepToward`, `render`, `overlay` (0018), `requestGpu`. It opens one `.wdproj` text, builds the run spec through `RunRequest` and `PreviewDefaults`
-  as the application does (a tier is the same quality and dither depth in both), and keeps the stored frames of the
-  timeline. No example, no file dialog, no DOM: a page or another tool owns those. `session.rs` is plain Rust and tested
-  natively on the CPU engine; `lib.rs` is the JavaScript surface.
+- [`wavedude-wasm`](../../crates/wavedude-wasm) is the engine and nothing else: `Simulation.open(text, tier)` and
+  `openOn(gpu, text, tier)`, `stepToward`, `draw` on a `View` (0018), `requestGpu`. It opens one `.wdproj` text, builds
+  the run spec through `RunRequest` and `PreviewDefaults` as the application does (a tier is the same quality and
+  dither depth in both), and keeps the stored frames of the timeline. No example and no file dialog; of the DOM it
+  touches only the canvas a page passes, that canvas's computed style, and canvases of its own outside the document.
+  A page or another tool owns the rest. `session.rs` is plain Rust and tested natively on the CPU engine; `lib.rs` is
+  the JavaScript surface.
 - A project whose scene image is a file beside the project, not embedded, is refused with a message naming the file:
   a browser has no folder to read it from.
 - Frames are stepped to on demand. The cache is keyed by stored frame, holds 512 MiB by default (`budgetBytes`), and

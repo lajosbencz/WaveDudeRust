@@ -2,23 +2,22 @@
 //!
 //! One call at a time per `Simulation`: wasm-bindgen refuses a second call while `stepToward` runs.
 
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use js_sys::Uint8ClampedArray;
 use wasm_bindgen::prelude::*;
 use wavedude_core::engine::gpu::GpuContext;
-use wavedude_view::draw::{TextMetrics, TextStyle};
 use wavedude_view::graph::FONT_SIZE;
-use wavedude_view::overlay::{LABEL_SIZE, LABEL_STYLE};
+use wavedude_view::overlay::LABEL_SIZE;
 
 mod cache;
+mod canvas;
 mod overlay;
 mod session;
 #[cfg(target_arch = "wasm32")]
 mod wait;
 
+pub use canvas::View;
+use overlay::{Fonts, Screen};
 use session::{DEFAULT_BUDGET, Session, SessionError, layer_name, layer_of, tier_of};
 
 #[wasm_bindgen]
@@ -27,81 +26,6 @@ extern "C" {
 	fn console_warn(message: &str);
 	#[wasm_bindgen(js_namespace = console, js_name = error)]
 	fn console_error(message: &str);
-}
-
-#[wasm_bindgen]
-extern "C" {
-	/// What the page's `measure` returns: a `TextMetrics` of `CanvasRenderingContext2D.measureText`.
-	type Measured;
-	#[wasm_bindgen(method, getter)]
-	fn width(this: &Measured) -> f64;
-	#[wasm_bindgen(method, getter, js_name = fontBoundingBoxAscent)]
-	fn ascent(this: &Measured) -> f64;
-	#[wasm_bindgen(method, getter, js_name = fontBoundingBoxDescent)]
-	fn descent(this: &Measured) -> f64;
-}
-
-/// Text in the font of `style` measured by the page's `measure(text, size, style)` at `size` x `scale` pixels,
-/// reported in pixels divided by `scale`; each text once. The first exception `measure` throws is kept and the
-/// widths read 0.
-struct PageText<'a> {
-	measure: &'a js_sys::Function,
-	style: TextStyle,
-	size: f32,
-	scale: f32,
-	line_height: f32,
-	widths: RefCell<HashMap<String, f32>>,
-	error: RefCell<Option<JsValue>>,
-}
-
-impl<'a> PageText<'a> {
-	fn new(measure: &'a js_sys::Function, style: TextStyle, size: f32, scale: f32) -> Self {
-		let mut text = Self {
-			measure,
-			style,
-			size,
-			scale,
-			line_height: 0.,
-			widths: RefCell::default(),
-			error: RefCell::default(),
-		};
-		text.line_height = text.measured("0").map_or(0., |m| (m.ascent() + m.descent()) as f32 / scale);
-		text
-	}
-
-	fn measured(&self, text: &str) -> Option<Measured> {
-		let style = match self.style {
-			TextStyle::Label { .. } => "Label",
-			TextStyle::GraphBox => "GraphBox",
-		};
-		let size = JsValue::from(self.size * self.scale);
-		match self.measure.call3(&JsValue::NULL, &JsValue::from(text), &size, &JsValue::from(style)) {
-			Ok(m) => Some(m.unchecked_into()),
-			Err(e) => {
-				self.error.borrow_mut().get_or_insert(e);
-				None
-			}
-		}
-	}
-
-	fn into_error(self) -> Option<JsValue> {
-		self.error.into_inner()
-	}
-}
-
-impl TextMetrics for PageText<'_> {
-	fn line_height(&self) -> f32 {
-		self.line_height
-	}
-
-	fn width(&self, text: &str) -> f32 {
-		if let Some(&w) = self.widths.borrow().get(text) {
-			return w;
-		}
-		let w = self.measured(text).map_or(0., |m| m.width() as f32 / self.scale);
-		self.widths.borrow_mut().insert(text.to_owned(), w);
-		w
-	}
 }
 
 #[wasm_bindgen(start)]
@@ -151,30 +75,7 @@ fn open_promise(
 	})
 }
 
-/// One RGBA8 picture of a layer, ready for `new ImageData(data, width, height)`.
-#[wasm_bindgen]
-pub struct Picture(session::Picture);
-
-#[wasm_bindgen]
-impl Picture {
-	#[wasm_bindgen(getter)]
-	pub fn width(&self) -> u32 {
-		self.0.width
-	}
-
-	#[wasm_bindgen(getter)]
-	pub fn height(&self) -> u32 {
-		self.0.height
-	}
-
-	/// A copy of the pixels each time it is read.
-	#[wasm_bindgen(getter)]
-	pub fn data(&self) -> Uint8ClampedArray {
-		Uint8ClampedArray::from(self.0.rgba.as_slice())
-	}
-}
-
-/// A project opened for stepping and rendering.
+/// A project opened for stepping and drawing.
 #[wasm_bindgen]
 pub struct Simulation(Session);
 
@@ -272,37 +173,31 @@ impl Simulation {
 		self.0.latest_before(frame)
 	}
 
-	/// The shapes over the picture of `layer` at `frame` drawn at `width` x `height` CSS pixels on a screen of
-	/// `dpr` device pixels per CSS pixel, as JSON: an array of groups `{scale, origin: [x, y], shapes}` in drawing
-	/// order, whose shapes (`Shape` of the `wavedude-view` crate, colours as `#rrggbbaa`) are in units of `scale`
-	/// device pixels from `origin`, in device pixels from the picture's top-left. `measure(text, size, style)`
-	/// returns the page's `measureText` of `text` at `size` CSS pixels in the font of the `TextStyle` whose `kind`
-	/// is `style` ("Label" or "GraphBox").
-	pub fn overlay(
-		&self,
+	/// Draws the picture of `layer` at `frame` on the canvas of `view` with what the desktop preview draws over it:
+	/// the edge line, the handles and labels, the probe graph boxes. The picture is `width` x `height` CSS pixels on
+	/// a screen of `dpr` device pixels per CSS pixel, `round(width * dpr)` x `round(height * dpr)` device pixels (1 to
+	/// 16384 a side) inset by the edge line's `max(1, round(dpr))` on each side of the canvas, which is sized to fit.
+	/// False, and the canvas untouched, while the frame is not stored. A 16-bit tier renders at the device size, an
+	/// 8-bit one at the stored size, scaled.
+	pub fn draw(
+		&mut self,
+		view: &mut View,
 		frame: u32,
 		layer: &str,
 		width: f32,
 		height: f32,
 		dpr: f32,
-		measure: &js_sys::Function,
-	) -> Result<String, JsValue> {
-		let labels = PageText::new(measure, LABEL_STYLE, LABEL_SIZE, 1.);
-		let boxes = PageText::new(measure, TextStyle::GraphBox, FONT_SIZE, dpr);
-		let screen = overlay::Screen { width, height, dpr };
+	) -> Result<bool, JsValue> {
 		let layer = layer_of(layer).map_err(JsError::from)?;
-		let fonts = overlay::Fonts { labels: &labels, boxes: &boxes };
+		let screen = Screen::new(width, height, dpr).map_err(JsError::from)?;
+		let Some(picture) = self.0.render(frame, layer, screen.device()).map_err(JsError::from)? else {
+			return Ok(false);
+		};
+		let labels = view.label_text(LABEL_SIZE);
+		let boxes = view.box_text(FONT_SIZE, dpr);
+		let fonts = Fonts { labels: &labels, boxes: &boxes };
 		let groups = self.0.overlay(frame, layer, screen, fonts).map_err(JsError::from)?;
-		if let Some(e) = labels.into_error().or_else(|| boxes.into_error()) {
-			return Err(e);
-		}
-		Ok(serde_json::to_string(&groups).expect("shapes serialise to JSON"))
-	}
-
-	/// The picture of `layer` at `frame`; `undefined` while the frame is not stored. A 16-bit tier renders at
-	/// `width` x `height` pixels, an 8-bit one at the stored size.
-	pub fn render(&mut self, frame: u32, layer: &str, width: u32, height: u32) -> Result<Option<Picture>, JsError> {
-		let picture = self.0.render(frame, layer_of(layer)?, (width, height))?;
-		Ok(picture.map(Picture))
+		view.draw(screen, &picture, &groups)?;
+		Ok(true)
 	}
 }

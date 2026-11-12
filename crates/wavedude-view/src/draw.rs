@@ -4,9 +4,7 @@
 //! The overlay's shapes are in an element's logical pixels; a graph box's are in device pixels of a
 //! [`DeviceGrid`], so its hairlines and text land on whole device pixels.
 
-use serde::{Serialize, Serializer};
-
-/// An RGBA8 colour, alpha not premultiplied; serialised as a CSS colour, `#rrggbbaa`.
+/// An RGBA8 colour, alpha not premultiplied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Rgba {
 	pub r: u8,
@@ -26,14 +24,8 @@ impl Rgba {
 	}
 }
 
-impl Serialize for Rgba {
-	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-		serializer.collect_str(&format_args!("#{:02x}{:02x}{:02x}{:02x}", self.r, self.g, self.b, self.a))
-	}
-}
-
 /// An axis-aligned rectangle by its edges.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rect {
 	pub left: f32,
 	pub top: f32,
@@ -47,8 +39,8 @@ impl Rect {
 	}
 }
 
-/// A stroke. `antialias` is the desktop's and not serialised; a browser always antialiases.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+/// A stroke. `antialias` is the desktop's; Canvas2D always antialiases.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Pen {
 	pub color: Rgba,
 	pub width: f32,
@@ -56,7 +48,6 @@ pub struct Pen {
 	pub dash: Option<[f32; 2]>,
 	/// Round joins and caps, else miter joins and butt caps.
 	pub round: bool,
-	#[serde(skip_serializing)]
 	pub antialias: bool,
 }
 
@@ -80,14 +71,12 @@ impl Pen {
 }
 
 /// How a circle or rectangle is painted.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
-#[serde(tag = "kind")]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Ink {
 	Stroke(Pen),
 	/// `antialias` as on a [`Pen`].
 	Fill {
 		color: Rgba,
-		#[serde(skip_serializing)]
 		antialias: bool,
 	},
 }
@@ -100,15 +89,14 @@ impl Ink {
 }
 
 /// The stroke drawn under a text: round joins, antialiased.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Halo {
 	pub color: Rgba,
 	pub width: f32,
 }
 
 /// The font of a text and the line its position names.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
-#[serde(tag = "kind")]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TextStyle {
 	/// A label over a picture: the platform's default typeface (a generic sans-serif in a browser), the position on
 	/// the alphabetic baseline, the halo stroked under the text.
@@ -120,15 +108,14 @@ pub enum TextStyle {
 }
 
 /// A filled antialiased disc.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Disc {
 	pub radius: f32,
 	pub color: Rgba,
 }
 
 /// One drawing operation.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "kind")]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Shape {
 	Line {
 		from: (f32, f32),
@@ -171,7 +158,6 @@ pub enum Shape {
 	Clip {
 		rect: Rect,
 		/// The desktop's, as on a [`Pen`].
-		#[serde(skip_serializing)]
 		antialias: bool,
 	},
 	Unclip,

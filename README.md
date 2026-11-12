@@ -45,7 +45,7 @@ and the Low, Standard and High qualities.
 | [`wavedude-app`](crates/wavedude-app) | the desktop application: thin Freya views over `wavedude-app-state` |
 | [`wavedude-cli`](crates/wavedude-cli) | headless checks, benches, dispersion tables, scripted runs and exports |
 | [`wavedude-examples`](crates/wavedude-examples) | the example projects, embedded: the list of the Examples dialog and of the web demo |
-| [`wavedude-wasm`](crates/wavedude-wasm) | the engine for the browser (WebAssembly): open a project, step to a frame, render its layers and the shapes over them |
+| [`wavedude-wasm`](crates/wavedude-wasm) | the engine for the browser (WebAssembly): open a project, step to a frame, draw its layers and the shapes over them on a canvas |
 
 ```sh
 cargo test --workspace --features wavedude-export/openh264-source,wavedude-cli/openh264-source   # GPU tests skip without an adapter

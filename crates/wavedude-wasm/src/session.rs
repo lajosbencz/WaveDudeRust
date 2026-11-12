@@ -48,7 +48,11 @@ pub(crate) enum SessionError {
 	LayerHidden(Layer),
 	#[error("frame {frame} is outside the timeline of {count} frames")]
 	Frame { frame: u32, count: u32 },
-	#[error("a picture of {width} x {height} pixels at {dpr} device pixels per pixel cannot be drawn")]
+	#[error(
+		"a picture of {width} x {height} pixels at {dpr} device pixels per pixel cannot be drawn: it needs 1 to {} \
+		 device pixels a side",
+		crate::overlay::MAX_SIDE
+	)]
 	Screen { width: f32, height: f32, dpr: f32 },
 }
 
@@ -267,10 +271,6 @@ impl Session {
 		if !self.painters.iter().any(|p| p.layer == layer) {
 			return Err(SessionError::LayerHidden(layer));
 		}
-		let Screen { width, height, dpr } = screen;
-		if ![width, height, dpr].iter().all(|v| v.is_finite() && *v > 0.) {
-			return Err(SessionError::Screen { width, height, dpr });
-		}
 		let shown = self.spec.stored_index_of(frame) * self.spec.frame_divisor();
 		Ok(overlay::groups(&self.project, &self.spec, self.traces(), shown, layer, screen, fonts))
 	}
@@ -327,7 +327,7 @@ mod tests {
 	use wavedude_core::engine::cpu::CpuEngine;
 	use wavedude_core::model::{Edges, Measurement, Probe, ProbeDetector, ProbeKind, Project};
 	use wavedude_core::run::{FrameStore, RunState, SimulationRun, StoreLayout};
-	use wavedude_view::draw::TextMetrics;
+	use wavedude_view::draw::{Ink, Pen, Rgba, Shape, TextMetrics, TextStyle};
 	use wavedude_view::graph::GraphData;
 
 	use super::*;
@@ -607,8 +607,18 @@ mod tests {
 		assert_eq!(session.traces()[3].profiles.len(), 10);
 	}
 
-	fn kinds(group: &serde_json::Value) -> Vec<&str> {
-		group["shapes"].as_array().unwrap().iter().map(|s| s["kind"].as_str().unwrap()).collect()
+	fn kinds(group: &Group) -> Vec<&'static str> {
+		let kind = |s: &Shape| match s {
+			Shape::Line { .. } => "Line",
+			Shape::Path { .. } => "Path",
+			Shape::Circle { .. } => "Circle",
+			Shape::Rect { .. } => "Rect",
+			Shape::Text { .. } => "Text",
+			Shape::Dots { .. } => "Dots",
+			Shape::Clip { .. } => "Clip",
+			Shape::Unclip => "Unclip",
+		};
+		group.shapes.iter().map(kind).collect()
 	}
 
 	struct Fixed;
@@ -626,7 +636,7 @@ mod tests {
 	const FONTS: Fonts<'static> = Fonts { labels: &Fixed, boxes: &Fixed };
 
 	#[test]
-	fn the_overlay_is_the_previews_shapes_as_json() {
+	fn the_overlay_is_the_previews_shapes() {
 		let text = text_with(|p| {
 			with_probes(p);
 			p.scene.edges = Edges::Reflective;
@@ -634,16 +644,16 @@ mod tests {
 		});
 		let mut session = open(&text, PreviewTier::Middle);
 		seek(&mut session, 5);
-		let screen = Screen { width: 300., height: 200., dpr: 2. };
+		let screen = Screen::new(300., 200., 2.).unwrap();
 		let groups = session.overlay(5, Layer::Intensity, screen, FONTS).unwrap();
-		let text = serde_json::to_string(&groups).unwrap();
-		assert!(!text.contains("antialias"), "the desktop's flags stay out");
-		let json: serde_json::Value = serde_json::from_str(&text).unwrap();
-		let groups = json.as_array().unwrap();
 		assert_eq!(groups.len(), 2 + 4, "the edge line, the overlay, the four active intensity probes' boxes");
 		assert_eq!(kinds(&groups[0]), ["Rect"]);
-		assert_eq!(groups[0]["shapes"][0]["ink"]["color"], "#ff0000ff", "a reflective wall's red");
-		assert_eq!((groups[0]["scale"].as_f64(), groups[1]["scale"].as_f64()), (Some(1.), Some(2.)));
+		assert!(
+			matches!(groups[0].shapes[0], Shape::Rect { ink: Ink::Stroke(Pen { color, .. }), .. }
+				if color == Rgba::rgb(255, 0, 0)),
+			"a reflective wall's red"
+		);
+		assert_eq!((groups[0].scale, groups[1].scale), (1., 2.));
 		let overlay = kinds(&groups[1]);
 		assert_eq!((overlay[0], overlay[overlay.len() - 1]), ("Clip", "Unclip"));
 		for kind in ["Circle", "Line", "Rect", "Text"] {
@@ -651,12 +661,16 @@ mod tests {
 		}
 		let curves = groups[2..].iter().filter(|g| kinds(g).contains(&"Path")).count();
 		assert!(curves >= 2, "the integrated probe's and the line's curves");
-		let title = &groups[2]["shapes"].as_array().unwrap().iter().find(|s| s["text"] == "integrated").unwrap();
-		assert_eq!((title["style"]["kind"].as_str(), title["size"].as_f64()), (Some("GraphBox"), Some(22.)));
-		assert!(matches!(
-			session.overlay(5, Layer::Field, Screen { dpr: 0., ..screen }, FONTS),
-			Err(SessionError::Screen { .. })
-		));
+		let title = groups[2].shapes.iter().find_map(|s| match s {
+			Shape::Text { text, style, size, .. } if text == "integrated" => Some((*style, *size)),
+			_ => None,
+		});
+		assert_eq!(title, Some((TextStyle::GraphBox, 22.)));
+		assert!(matches!(Screen::new(300., 200., 0.), Err(SessionError::Screen { .. })));
+		for (w, h, dpr) in [(f32::NAN, 200., 1.), (300., 200., f32::INFINITY), (0.4, 200., 1.), (16385., 1., 1.)] {
+			assert!(matches!(Screen::new(w, h, dpr), Err(SessionError::Screen { .. })), "{w} x {h} at {dpr}");
+		}
+		assert_eq!(Screen::new(0.5, 8192., 2.).unwrap().device(), (1, 16384));
 	}
 
 	#[test]
@@ -664,11 +678,10 @@ mod tests {
 		let mut session = open(&text_with(with_probes), PreviewTier::Low);
 		assert_eq!(session.spec().frame_divisor(), 2);
 		seek(&mut session, 9);
-		let screen = Screen { width: 300., height: 200., dpr: 1. };
-		let json =
-			|frame| serde_json::to_string(&session.overlay(frame, Layer::Intensity, screen, FONTS).unwrap()).unwrap();
-		assert_eq!(json(5), json(4), "frame 5 shows the stored frame 4");
-		assert_ne!(json(6), json(4));
+		let screen = Screen::new(300., 200., 1.).unwrap();
+		let groups = |frame| session.overlay(frame, Layer::Intensity, screen, FONTS).unwrap();
+		assert_eq!(groups(5), groups(4), "frame 5 shows the stored frame 4");
+		assert_ne!(groups(6), groups(4));
 	}
 
 	#[test]
