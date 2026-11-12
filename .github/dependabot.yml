@@ -8,6 +8,10 @@ updates:
     directory: /
     schedule:
       interval: daily
+    # A version is offered once it is a week old, past the days in which a compromised release is usually found and
+    # yanked; security updates do not wait.
+    cooldown:
+      default-days: 7
     # One pull request for minor and patch updates (auto-merged), one for major ones (by hand, they may break the
     # build), one for security updates; an open one is updated in place. The schedule is per ecosystem, not per group.
     groups:
@@ -24,6 +28,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]

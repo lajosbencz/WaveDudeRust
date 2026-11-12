@@ -89,7 +89,7 @@ the checks:
   packages and SBOMs in [`.github/workflows/package.yml`](.github/workflows/package.yml). [`docs/release.md`](docs/release.md) covers the flow, the keys,
   the icons and the file types.
 - Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) opens grouped updates, daily for crates (`chore(deps)`), weekly for
-  actions (`ci(deps)`); [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml) enables auto-merge on them, except a major
+  actions (`ci(deps)`), each version once it is a week old (security updates at once); [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml) enables auto-merge on them, except a major
   version, so they merge once the required checks pass (the ruleset of [`docs/release.md`](docs/release.md)).
 
 ## Commit messages

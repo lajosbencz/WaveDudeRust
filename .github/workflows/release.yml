@@ -188,14 +188,32 @@ jobs:
       version: ${{ needs.release.outputs.version }}
       update-pubkey: ${{ vars.UPDATER_PUBKEY }}
 
-  # The only job holding the updater's private key, which only the signing step sees.
-  sign:
-    needs: package
-    if: vars.UPDATER_PUBKEY != ''
+  # The signer, built apart from the key: its build scripts never share a runner with it.
+  signer:
+    needs: release
+    if: needs.release.outputs.tag != '' && vars.UPDATER_PUBKEY != ''
     runs-on: ubuntu-latest
     steps:
-      - name: cargo-packager
-        run: cargo install --locked cargo-packager@0.11.8
+      - run: cargo install --locked cargo-packager@0.11.8
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signer
+          path: ~/.cargo/bin/cargo-packager
+          if-no-files-found: error
+
+  # The only job holding the updater's private key, which only the signing step sees; the environment admits the
+  # default branch alone.
+  sign:
+    needs: [package, signer]
+    if: vars.UPDATER_PUBKEY != ''
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: signer
+          path: ${{ runner.temp }}/signer
+      - run: chmod +x "$RUNNER_TEMP/signer/cargo-packager" && echo "$RUNNER_TEMP/signer" >> "$GITHUB_PATH"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: update-*
@@ -224,7 +242,8 @@ jobs:
 
   publish:
     needs: [release, package, sign]
-    if: ${{ !cancelled() && needs.package.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.sign.result) }}
+    # Unsigned only when there is no updater key; a skipped sign with one means a failed signer.
+    if: ${{ !cancelled() && needs.package.result == 'success' && (needs.sign.result == 'success' || (vars.UPDATER_PUBKEY == '' && needs.sign.result == 'skipped')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

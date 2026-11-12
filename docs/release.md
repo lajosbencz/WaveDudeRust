@@ -16,7 +16,7 @@ merging).
 Merging it (squash) releases: the push finds the workspace version without its tag, tags the commit `v<version>` and
 drafts the release with the changelog section as notes. [`package.yml`](../.github/workflows/package.yml), a reusable workflow without secrets and with
 a read-only token, builds the packages with `cargo auditable` and attests them (build provenance and the CycloneDX
-SBOMs of both programs); `sign` signs the update bundles with the updater key without compiling anything; `publish`
+SBOMs of both programs); `sign` waits for a maintainer to approve the `release` environment, then signs the update bundles with the updater key and the cargo-packager that `signer` built in a job of its own, compiling nothing; `publish`
 writes `latest.json` and `SHA256SUMS`, attests them and the signatures, attaches everything, verifies every
 attached file against its attestation (a file not attested by [`package.yml`](../.github/workflows/package.yml) or [`release.yml`](../.github/workflows/release.yml) of this repository
 stops the release), appends the provenance table to the notes (file, digest, workflow) and publishes the release,
@@ -32,14 +32,16 @@ release stays a draft until `publish` succeeds.
 
 ## One-time setup of a repository
 
-Settings > Secrets and variables > Actions:
+Settings > Secrets and variables > Actions holds the variables; the secrets belong to the environment `release`
+(Settings > Environments), which admits the default branch alone and waits for a maintainer's approval, so only the
+`sign` job of a release on the default branch reads them:
 
 | Kind | Name | Value |
 |---|---|---|
 | variable | `RELEASE_ENABLED` | `true` (without it the release workflow does nothing) |
 | variable | `UPDATER_PUBKEY` | the updater's public key (below); unset: builds without the updater |
-| secret | `UPDATER_PRIVATE_KEY` | the updater's private key |
-| secret | `UPDATER_PRIVATE_KEY_PASSWORD` | its password |
+| `release` secret | `UPDATER_PRIVATE_KEY` | the updater's private key |
+| `release` secret | `UPDATER_PRIVATE_KEY_PASSWORD` | its password |
 
 The updater key, made once and kept safe (losing it means installed copies cannot update to newer releases):
 
@@ -59,7 +61,7 @@ publisher (crates.io > crate > Settings > Trusted Publishing; a token only for e
   merging only, its commit titled by the pull request's title (git-cliff reads conventional commits); allow
   auto-merge; delete head branches; no wiki.
 - Settings > Rules: a ruleset on the default branch requiring the CI jobs (`ubuntu-latest`, `windows-latest`,
-  `macos-latest`, `MSRV`) and refusing deletion and force pushes; a ruleset on `v*` tags refusing update and deletion
+  `macos-latest`, `MSRV`) and cargo deny (`Dependencies`) and refusing deletion and force pushes; a ruleset on `v*` tags refusing update and deletion
   (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and the release job tags
   through it).
   Administrators bypass both.
