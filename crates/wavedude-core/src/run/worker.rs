@@ -686,8 +686,11 @@ impl Worker {
 	/// Drains the engine's queued readings into the collector.
 	fn record(&mut self, every: u32) -> Result<(), Interrupted> {
 		if let Some(c) = self.collector.as_mut() {
-			let engine = self.engine.as_mut().expect("an engine goes with the current spec");
-			record(engine.as_mut(), c, &mut self.recorded, every).map_err(|e| Interrupted::Failed(e.into()))?;
+			let engine = self.engine.as_mut().expect("an engine goes with the current spec").as_mut();
+			engine
+				.pending_probes()
+				.and_then(|pending| record(engine, pending, c, &mut self.recorded, every))
+				.map_err(|e| Interrupted::Failed(e.into()))?;
 		}
 		Ok(())
 	}

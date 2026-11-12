@@ -34,9 +34,9 @@ the desktop's.
   clipped to the picture, then the boxes of the active probes measuring the layer. The viewer never edits: no
   selection, focus or pointer handling.
 - The package records probes as a native run does: a `ProbeCollector` over the spec's probes, a reading queued after
-  every step, drained by `engine::probes::record` (shared with the runs of `run`) before each capture, once
-  `pending_probes().ready()` resolved, through the same readback wait as the capture on the GPU. Captures and probe
-  readbacks are in flight together.
+  every step, drained by `engine::probes::record` (shared with the runs of `run`) with a `pending_probes()` token before
+  each capture, once the token's `ready()` resolved, through the same readback wait as the capture on the GPU. Captures
+  and probe readbacks are in flight together.
 - Traces only grow. A frame behind the engine is run again from step 0 (0017); that rerun reads the values recorded
   already, so nothing is queued until the engine passes the recorded steps, and the collector's integrals and detector
   draws go on where they stopped. A picture's graphs are cut at the stored frame it shows (`GraphData::at`), so seeking

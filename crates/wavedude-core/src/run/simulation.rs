@@ -389,7 +389,8 @@ fn step_loop(
 		// A paused run shows its last capture and its probes so far.
 		if lock(&shared.control).paused {
 			if let Some(c) = collector.as_deref_mut() {
-				record(engine, c, &mut recorded, every)?;
+				let readings = engine.pending_probes()?;
+				record(engine, readings, c, &mut recorded, every)?;
 			}
 			publish(shared, collector.as_deref_mut(), i);
 			if let Some(last) = pending.take()
@@ -423,13 +424,15 @@ fn step_loop(
 		if last_beat.elapsed() >= HEARTBEAT {
 			last_beat = Instant::now();
 			if let Some(c) = collector.as_deref_mut() {
-				record(engine, c, &mut recorded, every)?;
+				let readings = engine.pending_probes()?;
+				record(engine, readings, c, &mut recorded, every)?;
 			}
 			publish(shared, collector.as_deref_mut(), done);
 		}
 	}
 	if let Some(c) = collector {
-		record(engine, c, &mut recorded, every)?;
+		let readings = engine.pending_probes()?;
+		record(engine, readings, c, &mut recorded, every)?;
 	}
 	if let Some(last) = pending {
 		let _ = tx.send(engine.finish_capture(last)?);

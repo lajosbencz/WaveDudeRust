@@ -26,9 +26,10 @@
 //! something is read; at most [`MAX_IN_FLIGHT`] batches are queued ahead of the card. `sample_probes`
 //! and `prepare_frame` wait for the card; a capture is submitted with its copy to one of two staging buffers and
 //! collected later, so the card converts and copies while the host steps on. Queued probe readings go into a batch
-//! buffer of [`BATCH_STEPS`] readings; a full batch, and the partial one at `pending_probes` or `drain_probes`, is
-//! copied to a pooled readback buffer whose mapping is requested. At a full batch the mapped ones are collected
-//! into the host queue, which bounds the buffers in flight; natively the rest are waited for there too.
+//! buffer of [`BATCH_STEPS`] readings; a full batch, and the partial one at `pending_probes`, is copied to a
+//! pooled readback buffer whose mapping is requested. At a full batch the mapped ones are collected into the host
+//! queue, which bounds the buffers in flight; natively the rest are waited for there too. `drain_probes` collects
+//! the batches its token covers and hands out those readings alone.
 //! On wasm32 nothing can wait: await [`PendingCapture::ready`] before `finish_capture` and
 //! [`PendingProbes::ready`] before `drain_probes`, so the batches read back meanwhile; `sample_probes` and
 //! `prepare_frame` are unavailable there.
@@ -248,8 +249,8 @@ pub struct GpuEngine {
 	probe_slots: u32,
 	/// Free readback buffers of a full batch, for `probe_batch` or `probe_out` alone.
 	probe_pool: Vec<Readback>,
-	/// Batches copied for readback, oldest first, with their bytes.
-	probe_reads: VecDeque<(Readback, u64)>,
+	/// Batches copied for readback, oldest first, with their reading counts.
+	probe_reads: VecDeque<(Readback, u32)>,
 	probe_lengths: Vec<usize>,
 	probe_queue: ProbeQueue,
 	capture_params: wgpu::Buffer,
@@ -783,9 +784,7 @@ impl WaveEngine for GpuEngine {
 		self.cur = 0;
 		self.time = 0;
 		self.sources.reset_pulses();
-		self.probe_slots = 0;
-		self.probe_reads.clear();
-		self.probe_queue.clear();
+		self.drop_probe_readings();
 	}
 
 	fn set_emitters(&mut self, emitters: &[Emitter]) {
@@ -808,10 +807,9 @@ impl WaveEngine for GpuEngine {
 				p.cells.iter().map(move |&(x, y)| scene.padded_index(x as usize + rim, y as usize + rim) as u32 | flag)
 			})
 			.collect();
+		self.drop_probe_readings();
 		self.probe_lengths = probes.iter().map(|p| p.cells.len()).collect();
-		self.probe_queue = ProbeQueue::new(self.probe_lengths.clone());
-		self.probe_slots = 0;
-		self.probe_reads.clear();
+		self.probe_queue.set_lengths(self.probe_lengths.clone());
 		self.params.probe_count = words.len() as u32;
 		self.probe_cells = storage_init(self.device(), "probe cells", bytemuck::cast_slice(&padded(words.clone(), 0)));
 		let bytes = (words.len().max(1) * 4) as u64;
@@ -858,15 +856,13 @@ impl WaveEngine for GpuEngine {
 	fn pending_probes(&mut self) -> Result<PendingProbes, EngineError> {
 		self.guarded(Self::read_back_probe_batch)?;
 		let mapped = self.probe_reads.iter().map(|(r, _)| r.mapped.clone() as Arc<dyn Readiness>).collect();
-		Ok(PendingProbes { mapped })
+		let in_flight: u64 = self.probe_reads.iter().map(|&(_, steps)| u64::from(steps)).sum();
+		Ok(PendingProbes { mapped, end: self.probe_queue.end() + in_flight })
 	}
 
-	fn drain_probes(&mut self, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError> {
-		self.guarded(|e| {
-			e.read_back_probe_batch()?;
-			e.collect_probe_batches(true)
-		})?;
-		self.probe_queue.drain(f);
+	fn drain_probes(&mut self, pending: PendingProbes, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError> {
+		self.guarded(|e| e.collect_probe_batches(pending.end))?;
+		self.probe_queue.drain(pending.end, f);
 		Ok(())
 	}
 
@@ -996,10 +992,8 @@ impl GpuEngine {
 		self.probe_slots += 1;
 		if self.probe_slots == BATCH_STEPS {
 			self.read_back_probe_batch()?;
-			self.collect_probe_batches(false)?;
 			// wasm32 cannot wait.
-			#[cfg(not(target_arch = "wasm32"))]
-			self.collect_probe_batches(true)?;
+			self.collect_probe_batches(if cfg!(target_arch = "wasm32") { 0 } else { u64::MAX })?;
 		}
 		Ok(())
 	}
@@ -1012,6 +1006,13 @@ impl GpuEngine {
 		})
 	}
 
+	/// Drops the queued readings, those on the device included.
+	fn drop_probe_readings(&mut self) {
+		let in_flight: u64 = self.probe_reads.drain(..).map(|(_, steps)| u64::from(steps)).sum();
+		self.probe_queue.skip(in_flight + u64::from(self.probe_slots));
+		self.probe_slots = 0;
+	}
+
 	/// Copies the readings in `probe_batch` to a readback buffer and requests its mapping.
 	fn read_back_probe_batch(&mut self) -> Result<(), GpuError> {
 		if self.probe_slots == 0 {
@@ -1022,20 +1023,22 @@ impl GpuEngine {
 		let (batch, target) = (self.probe_batch.clone(), readback.buffer.clone());
 		let index = self.submit(|encoder| encoder.copy_buffer_to_buffer(&batch, 0, &target, 0, bytes))?;
 		map(&mut readback, index);
-		self.probe_reads.push_back((readback, bytes));
+		self.probe_reads.push_back((readback, self.probe_slots));
 		self.probe_slots = 0;
 		Ok(())
 	}
 
-	/// Moves the read-back batches into the host queue, oldest first; without `wait` only those already mapped.
-	fn collect_probe_batches(&mut self, wait: bool) -> Result<(), GpuError> {
-		while let Some((readback, bytes)) = self.probe_reads.front_mut() {
-			if !wait && readback.mapped.get().is_none() {
+	/// Moves the read-back batches into the host queue, oldest first: those mapped already, and those holding
+	/// readings numbered below `until`, waited for.
+	fn collect_probe_batches(&mut self, until: u64) -> Result<(), GpuError> {
+		while let Some((readback, steps)) = self.probe_reads.front_mut() {
+			if self.probe_queue.end() >= until && readback.mapped.get().is_none() {
 				break;
 			}
 			wait_mapped(&self.ctx.device, readback)?;
 			{
-				let view = readback.buffer.slice(..*bytes).get_mapped_range().map_err(GpuError::MapRange)?;
+				let bytes = u64::from(*steps) * u64::from(self.params.probe_count) * 4;
+				let view = readback.buffer.slice(..bytes).get_mapped_range().map_err(GpuError::MapRange)?;
 				let values: &[f32] = bytemuck::cast_slice(&view);
 				for step in values.chunks_exact(self.probe_queue.width()) {
 					self.probe_queue.push(step);

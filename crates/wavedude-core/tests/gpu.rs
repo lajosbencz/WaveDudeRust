@@ -528,8 +528,8 @@ fn queued_probes_read_like_sampled_ones() {
 	b.set_probes(&probes);
 	let mut sampled = Vec::new();
 	let mut r = ProbeReadings::default();
-	let mut queued = Vec::new();
-	// Past a full batch, drained mid-batch once.
+	let (mut queued, mut held) = (Vec::new(), None);
+	// Past a full batch; a token taken mid-batch is drained a full batch later.
 	for step in 1..=(BATCH_STEPS * 2 + 5) {
 		a.advance_one_step().unwrap();
 		a.sample_probes(&mut r).unwrap();
@@ -537,18 +537,24 @@ fn queued_probes_read_like_sampled_ones() {
 		b.advance_one_step().unwrap();
 		b.queue_probes().unwrap();
 		if step == BATCH_STEPS + 3 {
-			b.drain_probes(&mut |r| queued.push(r.clone())).unwrap();
+			held = Some(b.pending_probes().unwrap());
+		}
+		if step == BATCH_STEPS * 2 + 3 {
+			b.drain_probes(held.take().unwrap(), &mut |r| queued.push(r.clone())).unwrap();
+			assert_eq!(queued.len(), BATCH_STEPS as usize + 3, "the readings queued after the token stay");
 		}
 	}
-	b.drain_probes(&mut |r| queued.push(r.clone())).unwrap();
+	let pending = b.pending_probes().unwrap();
+	b.drain_probes(pending, &mut |r| queued.push(r.clone())).unwrap();
 	assert_eq!(queued, sampled);
-	b.drain_probes(&mut |_| panic!("drained twice")).unwrap();
+	let pending = b.pending_probes().unwrap();
+	b.drain_probes(pending, &mut |_| panic!("drained twice")).unwrap();
 }
 
 /// The browser's order: queue every step, then `pending_probes`, its `ready`, `drain_probes`. Partial batches read
-/// back by `pending_probes` stay in flight across steps, two at once; the next full batch collects the one mapped
-/// already without waiting and, natively, waits for the other inside `queue_probes`. The drained readings are the
-/// sampled ones in step order.
+/// back by `pending_probes` stay in flight across steps, two at once; a token's drain hands out its own readings
+/// while a later batch is still unmapped. The next full batch collects the one mapped already without waiting and,
+/// natively, waits for its own inside `queue_probes`. The drained readings are the sampled ones in step order.
 #[test]
 fn pending_probes_drain_like_sampled_ones_once_ready() {
 	use std::future::Future;
@@ -578,24 +584,29 @@ fn pending_probes_drain_like_sampled_ones_once_ready() {
 		if step == 5 {
 			device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 		}
+		if step == 12 {
+			b.drain_probes(held.remove(0), &mut |r| drained.push(r.clone())).unwrap();
+			assert_eq!(drained.len(), 5, "the step-12 batch is not covered");
+			device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+		}
 		if step == BATCH_STEPS + 18 || step == last {
 			let pending = b.pending_probes().unwrap();
 			let mut ready = std::pin::pin!(pending.ready());
 			assert_eq!(ready.as_mut().poll(&mut cx), Poll::Pending, "the callback runs when the device is polled");
 			device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 			assert_eq!(ready.as_mut().poll(&mut cx), Poll::Ready(()));
-			b.drain_probes(&mut |r| drained.push(r.clone())).unwrap();
+			b.drain_probes(pending, &mut |r| drained.push(r.clone())).unwrap();
 		}
 	}
 	for pending in held {
 		assert_eq!(std::pin::pin!(pending.ready()).poll(&mut cx), Poll::Ready(()));
+		b.drain_probes(pending, &mut |_| panic!("drained twice")).unwrap();
 	}
 	assert_eq!(drained, sampled);
-	b.drain_probes(&mut |_| panic!("drained twice")).unwrap();
 }
 
-/// Readbacks in flight at a `reset` or `set_probes` are dropped: their `ready` still resolves, and the next drain
-/// yields only the readings queued after it.
+/// Readbacks in flight at a `reset` or `set_probes` are dropped: their `ready` still resolves, their token drains
+/// nothing, and the next token yields only the readings queued after it.
 #[test]
 fn a_reset_drops_the_probe_readbacks_in_flight() {
 	use std::future::Future;
@@ -634,8 +645,13 @@ fn a_reset_drops_the_probe_readbacks_in_flight() {
 			b.advance_one_step().unwrap();
 			b.queue_probes().unwrap();
 		}
+		// The new readings are mapped, so a stale drain would collect them.
+		let fresh = b.pending_probes().unwrap();
+		device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+		assert_eq!(std::pin::pin!(fresh.ready()).poll(&mut cx), Poll::Ready(()), "reset {reset}");
+		b.drain_probes(pending, &mut |_| panic!("a dropped reading, reset {reset}")).unwrap();
 		let mut drained = Vec::new();
-		b.drain_probes(&mut |r| drained.push(r.clone())).unwrap();
+		b.drain_probes(fresh, &mut |r| drained.push(r.clone())).unwrap();
 		assert_eq!(drained, sampled, "reset {reset}");
 	}
 }

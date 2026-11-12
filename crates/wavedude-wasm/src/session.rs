@@ -247,7 +247,7 @@ impl Session {
 		if let Some(collector) = &mut self.probes {
 			let readings = self.engine.pending_probes()?;
 			settle(readings.ready(), self.gpu.as_ref()).await;
-			record(self.engine.as_mut(), collector, &mut self.recorded, self.spec.visualize_every)?;
+			record(self.engine.as_mut(), readings, collector, &mut self.recorded, self.spec.visualize_every)?;
 		}
 		settle(pending.ready(), self.gpu.as_ref()).await;
 		let snapshot = self.engine.finish_capture(pending)?;

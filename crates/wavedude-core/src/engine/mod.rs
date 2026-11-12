@@ -62,13 +62,14 @@ pub trait WaveEngine: MaybeSend {
 	/// Queues a reading of the probe cells after the last step; the way to record every step, as an engine
 	/// that batches its steps reads a batch's readings back together.
 	fn queue_probes(&mut self) -> Result<(), EngineError>;
-	/// Starts reading back the queued readings; [`drain_probes`](Self::drain_probes) hands them out without
-	/// waiting once the result's `ready` resolves (several readbacks may be in flight).
+	/// Starts reading back the readings queued so far, which the result covers; several readbacks may be in
+	/// flight.
 	fn pending_probes(&mut self) -> Result<PendingProbes, EngineError>;
-	/// Calls `f` with each queued reading, oldest first, and empties the queue. Natively it waits for the
-	/// readings; on wasm32 the GPU engine fails with `GpuError::NotReady` unless
-	/// [`pending_probes`](Self::pending_probes) came after the last `queue_probes` and its `ready` resolved.
-	fn drain_probes(&mut self, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError>;
+	/// Calls `f` with each reading `pending` covers not handed out yet, oldest first; one queued after `pending`
+	/// was taken stays for a later token's drain, one dropped by `reset` or `set_probes` is not handed out.
+	/// Natively it waits for the readings; on wasm32 the GPU engine fails with `GpuError::NotReady` if `pending`'s
+	/// `ready` has not resolved, which only a native wait could make impossible.
+	fn drain_probes(&mut self, pending: PendingProbes, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError>;
 	/// Starts converting the canvas (rim excluded) after the last step into planes of `shape`, written into
 	/// `into`'s planes (reused when large enough). The engine may step on before `finish_capture`
 	/// (`Self::finish_capture`) collects it; at most two captures may be pending.

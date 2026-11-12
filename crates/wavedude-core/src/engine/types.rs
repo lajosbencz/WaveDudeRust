@@ -283,24 +283,26 @@ impl PendingCapture {
 	}
 }
 
-/// The readbacks of the queued probe readings, requested by
-/// [`WaveEngine::pending_probes`](super::WaveEngine::pending_probes).
+/// The readings queued before [`WaveEngine::pending_probes`](super::WaveEngine::pending_probes), for the same
+/// engine's `drain_probes`.
 #[must_use]
 pub struct PendingProbes {
 	/// Ready when each GPU batch's copy is mapped; empty for an engine whose readings are on the host.
 	pub(crate) mapped: Vec<Arc<dyn Readiness>>,
+	/// Number of the first reading not covered.
+	pub(crate) end: u64,
 }
 
 impl PendingProbes {
-	/// Readings that are on the host already.
-	pub(crate) fn done() -> Self {
-		Self { mapped: Vec::new() }
+	/// Readings that are on the host already, those before `end`.
+	pub(crate) fn done(end: u64) -> Self {
+		Self { mapped: Vec::new(), end }
 	}
 
-	/// Resolves when [`WaveEngine::drain_probes`](super::WaveEngine::drain_probes) will not have to wait for the
-	/// readings queued before `pending_probes`. On wasm32 a drain before this resolves fails with
-	/// `GpuError::NotReady` and leaves the engine failed. Natively it resolves only once something polls the
-	/// device, which `drain_probes` does: native callers drain instead of awaiting.
+	/// Resolves when [`WaveEngine::drain_probes`](super::WaveEngine::drain_probes) will not have to wait. On
+	/// wasm32 a drain before this resolves fails with `GpuError::NotReady` and leaves the engine failed. Natively
+	/// it resolves only once something polls the device, which `drain_probes` does: native callers drain instead
+	/// of awaiting.
 	pub fn ready(&self) -> impl Future<Output = ()> + use<> {
 		let mapped = self.mapped.clone();
 		async move {
@@ -383,57 +385,69 @@ impl ProbeReadings {
 }
 
 /// Probe readings of consecutive steps, kept by an engine until [`WaveEngine`](super::WaveEngine::drain_probes)
-/// hands them out.
+/// hands them out. Readings are numbered in queueing order, dropped ones included.
 #[derive(Clone, Debug, Default)]
-pub struct ProbeQueue {
+pub(crate) struct ProbeQueue {
 	lengths: Vec<usize>,
 	/// Values of one step's readings: the sum of `lengths`.
 	width: usize,
 	values: Vec<f32>,
+	/// Number of the oldest reading held.
+	first: u64,
 	count: usize,
 	reading: ProbeReadings,
 }
 
 impl ProbeQueue {
-	/// A queue of readings of probes with `lengths` cells.
-	pub fn new(lengths: Vec<usize>) -> Self {
-		let width = lengths.iter().sum();
-		Self { lengths, width, ..Self::default() }
+	/// Holds readings of probes with `lengths` cells from now on; the held ones are dropped.
+	pub(crate) fn set_lengths(&mut self, lengths: Vec<usize>) {
+		self.clear();
+		self.width = lengths.iter().sum();
+		self.lengths = lengths;
 	}
 
 	/// Values of one step's readings.
-	pub fn width(&self) -> usize {
+	#[cfg(feature = "gpu")]
+	pub(crate) fn width(&self) -> usize {
 		self.width
 	}
 
-	/// Steps queued.
-	pub fn len(&self) -> usize {
-		self.count
+	/// Number of the next reading pushed.
+	pub(crate) fn end(&self) -> u64 {
+		self.first + self.count as u64
 	}
 
-	pub fn is_empty(&self) -> bool {
-		self.count == 0
-	}
-
-	pub fn clear(&mut self) {
+	/// Drops the held readings.
+	pub(crate) fn clear(&mut self) {
+		self.first = self.end();
 		self.values.clear();
 		self.count = 0;
 	}
 
-	/// Appends the next step's readings, [`width`](Self::width) values.
-	pub fn push(&mut self, values: &[f32]) {
+	/// Drops the held readings and the next `readings`, which are never pushed.
+	#[cfg(feature = "gpu")]
+	pub(crate) fn skip(&mut self, readings: u64) {
+		self.clear();
+		self.first += readings;
+	}
+
+	/// Appends the next step's readings, a value per probe cell.
+	pub(crate) fn push(&mut self, values: &[f32]) {
 		debug_assert_eq!(values.len(), self.width);
 		self.values.extend_from_slice(values);
 		self.count += 1;
 	}
 
-	/// Calls `f` with each step's readings, oldest first, and empties the queue.
-	pub fn drain(&mut self, f: &mut dyn FnMut(&ProbeReadings)) {
-		for i in 0..self.count {
+	/// Calls `f` with each held reading numbered below `end`, oldest first, and drops them.
+	pub(crate) fn drain(&mut self, end: u64, f: &mut dyn FnMut(&ProbeReadings)) {
+		let count = end.saturating_sub(self.first).min(self.count as u64) as usize;
+		for i in 0..count {
 			let at = i * self.width;
 			self.reading.fill(&self.lengths, &self.values[at..at + self.width]);
 			f(&self.reading);
 		}
-		self.clear();
+		self.values.drain(..count * self.width);
+		self.count -= count;
+		self.first += count as u64;
 	}
 }

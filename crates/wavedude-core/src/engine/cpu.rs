@@ -657,7 +657,7 @@ impl WaveEngine for CpuEngine {
 			.iter()
 			.map(|p| (p.layer, p.cells.iter().map(|&(x, y)| self.cell_of_canvas(x as usize, y as usize)).collect()))
 			.collect();
-		self.probe_queue = ProbeQueue::new(probes.iter().map(|p| p.cells.len()).collect());
+		self.probe_queue.set_lengths(probes.iter().map(|p| p.cells.len()).collect());
 	}
 
 	fn try_replace_scene(&mut self, scene: &Arc<SceneData>) -> bool {
@@ -690,11 +690,11 @@ impl WaveEngine for CpuEngine {
 	}
 
 	fn pending_probes(&mut self) -> Result<PendingProbes, EngineError> {
-		Ok(PendingProbes::done())
+		Ok(PendingProbes::done(self.probe_queue.end()))
 	}
 
-	fn drain_probes(&mut self, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError> {
-		self.probe_queue.drain(f);
+	fn drain_probes(&mut self, pending: PendingProbes, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError> {
+		self.probe_queue.drain(pending.end, f);
 		Ok(())
 	}
 
@@ -838,19 +838,46 @@ mod tests {
 			ProbeCells { layer: Layer::Intensity, cells: vec![(10, 5), (11, 5), (12, 5)] },
 		]);
 		let (mut sampled, mut drained, mut r) = (Vec::new(), Vec::new(), ProbeReadings::default());
+		let mut held = None;
 		for step in 1..=40 {
 			e.advance_one_step();
 			e.sample_probes(&mut r);
 			sampled.push(r.clone());
 			e.queue_probes().unwrap();
 			if step % 15 == 0 || step == 40 {
+				if let Some((pending, covered)) = held.take() {
+					e.drain_probes(pending, &mut |r| drained.push(r.clone())).unwrap();
+					assert_eq!(drained.len(), covered, "the readings queued after the token stay");
+				}
 				let pending = e.pending_probes().unwrap();
 				let mut ready = std::pin::pin!(pending.ready());
 				assert_eq!(ready.as_mut().poll(&mut Context::from_waker(Waker::noop())), Poll::Ready(()));
-				e.drain_probes(&mut |r| drained.push(r.clone())).unwrap();
+				held = Some((pending, step));
 			}
 		}
+		let (pending, _) = held.unwrap();
+		e.drain_probes(pending, &mut |r| drained.push(r.clone())).unwrap();
 		assert_eq!(drained, sampled);
+	}
+
+	#[test]
+	fn a_token_taken_before_a_reset_drains_nothing_after_it() {
+		let mut e = engine(Edges::Open, -4, Stencil::FourthOrder);
+		e.set_probes(&[ProbeCells { layer: Layer::Field, cells: vec![(22, 15)] }]);
+		for _ in 0..10 {
+			e.advance_one_step();
+			e.queue_probes().unwrap();
+		}
+		let stale = e.pending_probes().unwrap();
+		e.reset();
+		for _ in 0..5 {
+			e.advance_one_step();
+			e.queue_probes().unwrap();
+		}
+		e.drain_probes(stale, &mut |_| panic!("a reading from before the reset")).unwrap();
+		let (pending, mut drained) = (e.pending_probes().unwrap(), 0);
+		e.drain_probes(pending, &mut |_| drained += 1).unwrap();
+		assert_eq!(drained, 5);
 	}
 
 	#[test]
