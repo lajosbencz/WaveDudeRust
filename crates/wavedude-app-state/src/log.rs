@@ -277,6 +277,19 @@ mod tests {
 	}
 
 	#[test]
+	fn a_main_thread_panic_leaves_a_crash_report_with_its_backtrace() {
+		let dir = tempfile::tempdir().unwrap();
+		install_panic_hook(dir.path());
+		let joined = std::thread::Builder::new().name("main".into()).spawn(|| panic!("boom")).unwrap().join();
+		drop(std::panic::take_hook());
+		assert!(joined.is_err());
+		let report = std::fs::read_to_string(dir.path().join(CRASH_FILE)).unwrap();
+		assert!(report.starts_with(&format!("WaveDude Rust {}", env!("CARGO_PKG_VERSION"))), "{report}");
+		assert!(report.contains("thread 'main' panicked at") && report.contains("boom"), "{report}");
+		assert!(report.contains("install_panic_hook"), "a symbolised backtrace: {report}");
+	}
+
+	#[test]
 	fn layer_formats_message_and_fields() {
 		let ring = LogRing::new();
 		let subscriber = tracing_subscriber::registry().with(RingLayer(ring.clone()));

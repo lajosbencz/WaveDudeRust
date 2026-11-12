@@ -331,6 +331,7 @@ impl Document {
 mod tests {
 	use super::*;
 	use std::time::Duration;
+	use wavedude_core::model::{ColorScheme, Rgb, Stop};
 
 	fn png(value: u8) -> Vec<u8> {
 		let mut out = Vec::new();
@@ -360,6 +361,88 @@ mod tests {
 		assert!(changed, "the change on disk reached the document");
 		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(200)[..]));
 		assert!(d.dirty, "the re-embed is an edit");
+	}
+
+	/// A project saved in `dir` that embeds `embedded` as `pic.png`, its image path `image_path`.
+	fn saved_with_image(dir: &Path, embedded: &[u8], image_path: &str) -> PathBuf {
+		let mut d = Document::new_project();
+		let scene = &mut d.project.scene;
+		scene.image = "pic.png".into();
+		scene.image_path = image_path.into();
+		scene.image_data = Some(embedded.into());
+		scene.image_size = io::image_size(embedded).unwrap();
+		let path = dir.join("p.wdproj");
+		d.save_as(&path).unwrap();
+		path
+	}
+
+	fn opened(path: &Path) -> Document {
+		let Opened::Project(d) = Document::open(path).unwrap() else { panic!("a project") };
+		*d
+	}
+
+	#[test]
+	fn opening_re_embeds_a_scene_image_file_that_differs() {
+		let dir = tempfile::tempdir().unwrap();
+		let path = saved_with_image(dir.path(), &png(10), "pic.png");
+		let d = opened(&path);
+		assert!(!d.dirty, "a missing file changes nothing");
+		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(10)[..]));
+		std::fs::write(dir.path().join("pic.png"), png(10)).unwrap();
+		assert!(!opened(&path).dirty, "the same bytes change nothing");
+		std::fs::write(dir.path().join("pic.png"), png(200)).unwrap();
+		let mut d = opened(&path);
+		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(200)[..]));
+		assert!(d.dirty, "the re-embed is unsaved");
+		assert!(!d.undo(), "the history starts at the re-embedded project");
+	}
+
+	#[test]
+	fn opening_finds_a_named_scene_image_in_scene_images() {
+		let dir = tempfile::tempdir().unwrap();
+		let path = saved_with_image(dir.path(), &png(10), "");
+		std::fs::create_dir(dir.path().join("scene_images")).unwrap();
+		std::fs::write(dir.path().join("scene_images").join("pic.png"), png(200)).unwrap();
+		let d = opened(&path);
+		assert_eq!(Path::new(&d.project.scene.image_path), Path::new("scene_images").join("pic.png"));
+		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(200)[..]));
+		assert!(d.dirty);
+	}
+
+	#[test]
+	fn a_scene_image_file_that_does_not_decode_leaves_the_embedded_one() {
+		let dir = tempfile::tempdir().unwrap();
+		let path = saved_with_image(dir.path(), &png(10), "pic.png");
+		std::fs::write(dir.path().join("pic.png"), b"not an image").unwrap();
+		let d = opened(&path);
+		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(10)[..]));
+		assert!(!d.dirty);
+	}
+
+	#[test]
+	fn open_goes_by_the_extension() {
+		let dir = tempfile::tempdir().unwrap();
+		let scheme_file = dir.path().join("Sunset.wdscheme");
+		let stop = |at, b| Stop { at, color: Rgb { r: 255 - b, g: 0, b } };
+		let scheme =
+			ColorScheme { name: String::new(), stops: vec![stop(0.0, 255), stop(1.0, 0)], ..ColorScheme::default() };
+		io::wdscheme::save(&scheme, &scheme_file).unwrap();
+		let Opened::Scheme(s) = Document::open(&scheme_file).unwrap() else { panic!("a scheme") };
+		assert_eq!(s, ColorScheme { name: "Sunset".into(), ..scheme }, "an unnamed scheme takes the file's name");
+
+		let legacy = Path::new(env!("CARGO_MANIFEST_DIR"))
+			.join("../wavedude-core/tests/fixtures/legacy/Example3_Spherical_mirror/configuration.json");
+		let d = opened(&legacy);
+		assert_eq!(d.path, None, "an import is unsaved");
+		assert_eq!(d.suggested_file_name.unwrap().extension().unwrap(), "wdproj");
+		assert!(!d.project.sources.is_empty());
+
+		let mut p = Document::new_project();
+		p.project.seed = 7;
+		let xml = dir.path().join("p.xml");
+		p.save_as(&xml).unwrap();
+		let d = opened(&xml);
+		assert_eq!((d.path.as_deref(), d.project.seed), (Some(xml.as_path()), 7));
 	}
 
 	#[test]
