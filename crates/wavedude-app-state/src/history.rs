@@ -5,9 +5,9 @@
 //! held arrow key is one step. Undo and redo end a pending step first and write the step back into the same
 //! project object. Threads: plain data on the UI thread; time comes from the caller.
 
-use std::time::{Duration, Instant};
-
 use wavedude_core::model::Project;
+
+use super::platform::{Duration, Instant};
 
 /// Quiet time that ends a step.
 pub const QUIET: Duration = Duration::from_millis(500);

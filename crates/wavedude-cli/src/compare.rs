@@ -25,7 +25,7 @@ use wavedude_core::quality::PreviewQuality;
 use wavedude_core::render::{HalfTable, fit_brightness, render_half};
 use wavedude_core::scene::pixels::ScenePixels;
 use wavedude_core::spec::RunSpec;
-use wavedude_view::draw::TextMetrics;
+use wavedude_view::TextMetrics;
 use wavedude_view::graph::{self, GraphData};
 
 use crate::png_out::{write_grey, write_rgba};
@@ -649,11 +649,11 @@ fn probe_section(report: &mut String, cs: &CSharp, runs: &[RustRun], steps: u32)
 struct Estimate;
 
 impl TextMetrics for Estimate {
-	fn line_height(&self) -> f32 {
+	fn line_height(&mut self) -> f32 {
 		GRAPH_TEXT_SIZE * 1.3
 	}
 
-	fn width(&self, text: &str) -> f32 {
+	fn width(&mut self, text: &str) -> f32 {
 		text.chars().count() as f32 * GRAPH_TEXT_SIZE * 0.6
 	}
 }
@@ -667,7 +667,7 @@ struct GraphView {
 
 fn graph_view(probe: &Probe, data: &GraphData<'_>, steps: u32, (w, h): (u32, u32)) -> GraphView {
 	let b = box_in_canvas(probe, w, h);
-	let layout = graph::layout(probe, data, steps as u64, b.width as f32, b.height as f32, &Estimate);
+	let layout = graph::layout(probe, data, steps as u64, b.width as f32, b.height as f32, &mut Estimate);
 	let ticks =
 		|t: &[graph::Tick]| t.iter().map(|t| format!("{}@{:.2}", t.label, t.position)).collect::<Vec<_>>().join(" ");
 	// a line probe's range is that of what the layout draws: nothing before its start step
@@ -930,6 +930,7 @@ fn scope_section(
 			series: &g.series,
 			profile: (!g.profile.is_empty()).then_some(&g.profile[..]),
 			profile_length: g.profile_length,
+			floor: 0.0,
 			steps_sampled: g.steps_sampled,
 		};
 		let on_theirs = graph_view(probe, &theirs, steps, canvas);

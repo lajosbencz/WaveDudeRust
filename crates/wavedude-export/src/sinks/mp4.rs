@@ -5,8 +5,7 @@
 //! Input: 4:2:0 studio-range BT.601 from `yuv`; an odd size is padded to even by repeating the last column
 //! and row, and the video has the padded size. At most 3840 x 2160 (openh264's limit, either orientation).
 
-use std::fs::File;
-use std::io::{BufWriter, Seek, Write};
+use std::io::{Seek, Write};
 use std::path::Path;
 
 use mp4::{AvcConfig, MediaConfig, Mp4Config, Mp4Sample, TrackConfig, TrackType};
@@ -15,6 +14,7 @@ use openh264::encoder::{
 	UsageType, VuiConfig,
 };
 use openh264::formats::YUVSlices;
+use wavedude_core::sync::MaybeSend;
 
 use super::{FrameSink, SinkSpec, check_size};
 use crate::yuv::Yuv420;
@@ -76,15 +76,6 @@ pub struct Mp4Writer<W: Write + Seek> {
 	track: bool,
 	frames: usize,
 	finished: bool,
-}
-
-impl Mp4Writer<BufWriter<File>> {
-	/// `library`: Cisco's `OpenH264` binary (`crate::h264`), unused in a build with `OpenH264` compiled in.
-	pub fn create(path: &Path, spec: SinkSpec, library: Option<&Path>) -> Result<Self> {
-		Self::check(spec.width, spec.height)?;
-		let api = crate::h264::api(library)?;
-		Self::start(BufWriter::with_capacity(1 << 20, File::create(path)?), spec, api)
-	}
 }
 
 impl<W: Write + Seek> Mp4Writer<W> {
@@ -149,7 +140,7 @@ impl<W: Write + Seek> Mp4Writer<W> {
 	}
 }
 
-impl<W: Write + Seek + Send> FrameSink for Mp4Writer<W> {
+impl<W: Write + Seek + MaybeSend> FrameSink for Mp4Writer<W> {
 	fn write_frame(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<()> {
 		if self.finished {
 			return Err(ExportError::Finished);

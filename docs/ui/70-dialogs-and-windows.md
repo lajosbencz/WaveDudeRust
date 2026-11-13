@@ -16,8 +16,9 @@ closes.
 - Modal, 440 px wide, height to content, not resizable.
 - A 32 px disc: red with "!" for an error (plus the error sound), accent with "?" for a question; the text
   wrapped beside it; buttons right-aligned at the bottom.
-- Button sets: OK (Enter, Esc and close box all = OK); Yes (default) / No (Esc, close box); Save (default) /
-  Don't save / Cancel (Esc, close box).
+- Button sets: OK (Enter, Esc and close box all = OK); Yes (default) / No (Esc, close box), or Yes / No (default,
+  Esc, close box) where Yes destroys something (port: Discard frames); Save (default) / Don't save / Cancel (Esc,
+  close box).
 - Enter = default button, Esc = cancel button, mnemonics work without Alt. Labels from the string tables.
 - Uses: open/save errors ("Could not open '{0}'.", "Could not save '{0}'."), "Save the changes to {0}?",
   "The folder {0} exists and holds files. Replace them?" (Yes/No), "The export failed.", image save error.
@@ -41,7 +42,9 @@ See [`60-live-editing-and-runs.md`](60-live-editing-and-runs.md).
 
 A modal at launch on the first start (no settings file), and later while one of its questions is unanswered
 (`UseOpenH264` absent and OpenH264 not compiled in; `CheckForUpdates` absent in a build with the updater). Every
-section shows; Continue (Enter or Esc) saves every answer. Title "Welcome to WaveDude Rust".
+section shows; OK (Enter or Esc) saves every answer and closes. Title "Welcome to WaveDude Rust". The quality
+selector comes first; the codec and update questions follow it. "Examples..." saves the answers the
+same way, closes the page and opens the Examples window.
 1. "Preview quality": one sentence on what it changes; buttons "Low", "Standard", "High" (the first start's tiers:
    Low = half resolution, every second frame, 8-bit; Standard = full, 8-bit; High = 16-bit, 16-bit dithering), each
    setting the four drop-downs below: Preview resolution, Preview frames, Preview samples, Preview dithering (shown
@@ -50,7 +53,7 @@ section shows; Continue (Enter or Esc) saves every answer. Title "Welcome to Wav
 2. "MP4 video export" (absent when OpenH264 is compiled in): why the codec is needed, Cisco's notice, the check box
    "Use Cisco's OpenH264 codec (downloaded from Cisco at the first MP4 export)", clear unless already enabled.
 3. "Updates" (absent without the updater): check box "Look for a new version at each launch (Help menu)", ticked
-   unless already declined. Ticked, Continue starts the first check.
+   unless already declined. Ticked, OK or Examples... starts the first check.
 
 ## Updates (port, decision 0011)
 
@@ -60,13 +63,18 @@ updater can replace the program (Windows installer, macOS app, Linux AppImage); 
 "Downloading WaveDude Rust x" and its progress in the status bar, and verifies the signature, then asks "WaveDude
 Rust x is downloaded. Restart now to install it?" Yes exits as Exit does (unsaved edits and a running export asked
 about first; Cancel keeps the program running), installs, and starts the new version (on Windows its installer
-does). No drops the download. A plain Linux binary gets "... Download it from <release page>" instead. A launch check says
+does). A failed install starts the old version again and shows the reason. No drops the download. A plain Linux binary,
+and a macOS app run from a disk image, a volume other than the system's or a quarantined (translocated) location, gets
+"... Download it from <release page>" instead, on macOS with "Move WaveDude Rust to the Applications folder to get
+automatic updates." A launch check says
 nothing when there is no update or the check fails (logged); an on-demand one says "WaveDude Rust is up to date."
 or "The update failed." with the reason.
 
 ## Export Save dialog
 
-Native save dialog (port: platform file dialog, e.g. rfd).
+Native save dialog (port: an in-window dialog with the format and the path, its "..." opening the platform save
+dialog, which cannot report its filter; the probe CSV's is the platform's). The browser has no exports: their menu
+entries are hidden.
 
 | Command | Title | Filter list | Proposed name |
 |---|---|---|---|
@@ -122,7 +130,7 @@ Content top to bottom:
 
 ## Examples dialog
 
-Modal (test id `ExamplesDialog`), 860 px wide, from File > Examples; the frame, dimmed backdrop and buttons of the
+Modal (id `ExamplesDialog`), 860 px wide, from File > Examples; the frame, dimmed backdrop and buttons of the
 other dialogs. Title "Examples"; a tab strip of six topics (`ExamplesTab:<n>`: Sources and coherence 8, Lenses and
 imaging 10, Gratings and filters 7, Metasurfaces and diffusers 5, Guides cavities and logic 18, Detectors and
 statistics 5); a search box
@@ -137,16 +145,19 @@ Next's 33 projects come from its `Examples` folder, ours from [`examples/gates`]
 ## Manual window
 
 - Opened by Help > Manual or F1. Not modal, owned by the main window: minimised/restored with it, stays above it,
-  closed with it. Opened once; F1 again brings it to the front. Esc closes even with focus in the text.
+  closed with it. Opened once; F1 again brings it to the front. Esc closes even with focus in the text. (port) In
+  the browser it is a window inside the page, whose keys act while the focus is in it, or while it is on top with
+  nothing focused.
 - Size 1200 x 820 default, min 480 x 300. Title "WaveDude Next manual".
 - Left: "Contents" tree (260 px, min 120) of the headings by level, every branch open; the title (the single `#`)
   is not a row; chapters are roots. Splitter (4 px, tab stop, arrows move it; tooltip "Drag or use the arrow keys
   to resize").
 - Right: the document (min 200 px): MANUAL.md rendered (headings, paragraphs, tight lists, bold, links, code,
   figures). Scrolls by whole pixels; text selectable and copyable.
-- Opens with the text at its top and the first chapter row taken (without scrolling), focus in the tree.
+- Opens with the text at its top and the first chapter row taken (without scrolling); Up/Down take the previous or
+  next row while the window has the keys.
 - Taking a row scrolls so its heading stands at the top (padding below the top edge, previous section hidden).
-  Clicking the already-taken row goes there again. Enter on a row goes there and moves focus into the text.
+  Clicking the already-taken row goes there again. Enter or Space on a focused row goes there; the focus stays.
 - `[x](#anchor)` links go to the heading with GitHub's anchor rules; web links open in the browser.
 - Figures: the SVG's embedded PNG drawn 1:1 when it fits the column (scaled down when wider), each badge a round
   numbered disc at its position with the badge's `<title>` as tooltip.
@@ -201,7 +212,9 @@ program, is also appended to `crash.txt` in the log folder; a worker's panic is 
 export reports an error) or ends that thread alone. At the next start a message window (error disc) says "WaveDude Rust hit an internal error in
 the last session. The report, to attach to a bug report:" and the path; the file is renamed `last-crash.txt` so it
 shows once. Buttons: Copy path (path to the clipboard, the window stays), OK (Enter, Esc). It comes before the
-startup page and the update check, which wait for the next start.
+startup page and the update check, which wait for the next start. In the browser, where every panic ends the program,
+the report is kept in the page's storage; the window shows its text, and Copy report puts the text on the
+clipboard.
 
 ## First start
 

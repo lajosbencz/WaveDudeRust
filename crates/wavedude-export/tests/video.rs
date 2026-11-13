@@ -85,7 +85,7 @@ fn mpeg1_decoded(name: &str, w: u32, h: u32) -> Vec<(Vec<u8>, Vec<u8>)> {
 	let dir = scratch(name);
 	let frames: Vec<Vec<u8>> = (0..14).map(|t| wave_frame(w, h, t)).collect();
 	let path = dir.join("v.mpg");
-	let mut writer = Mpeg1Writer::create(&path, w, h, 60.0, 85).unwrap();
+	let mut writer = Mpeg1Writer::new(file(&path), w, h, 60.0, 85).unwrap();
 	for f in &frames {
 		writer.write_frame(f, w, h).unwrap();
 	}
@@ -252,7 +252,7 @@ fn mp4(path: &std::path::Path, frames: &[Vec<u8>], w: u32, h: u32) {
 		first_frame: 0,
 		frame_count: frames.len(),
 	};
-	let mut writer = Mp4Writer::create(path, spec, None).unwrap();
+	let mut writer = Mp4Writer::new(file(path), spec, None).unwrap();
 	for f in frames {
 		writer.write_frame(f, w, h).unwrap();
 	}
@@ -372,10 +372,10 @@ fn mp4_through_ciscos_downloaded_binary() {
 	let spec =
 		wavedude_export::SinkSpec { width: 640, height: 360, fps: 30, quality: 85, first_frame: 0, frame_count: 10 };
 	let path = dir.join("v.mp4");
-	assert!(matches!(Mp4Writer::create(&path, spec, None), Err(wavedude_export::ExportError::H264Missing)));
+	assert!(matches!(Mp4Writer::new(file(&path), spec, None), Err(wavedude_export::ExportError::H264Missing)));
 	let library = h264::download(&dir.join("codec"), |_, _| {}).unwrap();
 	assert_eq!(h264::installed(&dir.join("codec")), Some(library.clone()));
-	let mut writer = Mp4Writer::create(&path, spec, Some(&library)).unwrap();
+	let mut writer = Mp4Writer::new(file(&path), spec, Some(&library)).unwrap();
 	let frames: Vec<Vec<u8>> = (0..10).map(|t| wave_frame(640, 360, t)).collect();
 	for f in &frames {
 		writer.write_frame(f, 640, 360).unwrap();

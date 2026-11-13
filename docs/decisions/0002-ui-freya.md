@@ -1,6 +1,6 @@
 # 0002 UI with Freya 0.5 and an own widget crate
 
-Status: accepted, 2026-11-05; stack verified 2026-11-06
+Status: superseded by [0019](0019-egui-and-the-platform-layer.md), 2026-11-13; accepted 2026-11-05, stack verified 2026-11-06
 
 Freya (MIT, github.com/marc2332/freya): pure Rust, own reactive and component
 model since 0.4, rsx-style DSL, rendered by Skia (skia-safe), Linux + macOS +

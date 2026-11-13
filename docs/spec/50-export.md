@@ -75,8 +75,9 @@ that takes the stored halves (OpenEXR).
 - Single-file video sinks (MP4, MPEG-1, AVI) run on a thread of their own fed through two recycled frame buffers.
   Image sequences and MOV samples are encoded on one encoder pool per job (at most 16 threads); MOV samples are
   written in frame order.
-- Probe markers are rasterised once per layer into a premultiplied layer, as source markers are; a label's
-  antialiased edge can differ by one level from blending it straight onto the frame.
+- The overlays are epaint shapes (`wavedude-view`), tessellated as the window's and rasterised on the CPU into the
+  coloured frame (`wavedude_export::raster`). Pixels no overlay covers keep their bytes; a frame rasterises to the
+  same bytes every time and on every machine.
 - The CLI cancels on Ctrl+C.
 
 Graph boxes and source markers are drawn by the app's WPF code; their look is in "Burned-in overlays" below (graph
@@ -238,6 +239,10 @@ Source markers are rasterised once (they do not move) into a frame-sized layer; 
 rectangles of their own size (label: `ceil(text width) + 4` x `ceil(text height) + 4`; box: its canvas rectangle).
 Probe strokes (4a) overwrite pixels (no blending; exact algorithm under "Probe markers" above).
 
+Rust: every item is an epaint shape, its mesh's triangles blended with the formula above (premultiplied, in gamma
+space), in the order above; a label is clipped to its rectangle, a box to the frame and its curve to the plot.
+Probe strokes are opaque squares of whole pixels, so they overwrite as specified.
+
 ### Scale
 
 ```
@@ -255,9 +260,10 @@ Graph boxes are not scaled with the frame: the box has its canvas size (`BoxInCa
 | source name | Segoe UI | Normal | `11*k` px | the UI culture for shaping |
 | graph box text (title, readout, tick labels) | Segoe UI | Normal | 11 px, one line | numbers in the current culture |
 
-`TODO(verify)`: Segoe UI is not redistributable outside Windows; the Rust port needs a substitute (user decision) and
-cannot match the WPF rasteriser pixel for pixel. Text pixels are therefore compared by golden image tolerance
-(fixture G-12), not byte for byte.
+Rust: Segoe UI is not redistributable outside Windows; the bundled Selawik, metric-compatible, stands in (Selawik
+Bold for the probe labels; a Noto Sans Math subset after it for the Greek and math signs it lacks), laid out and
+rasterised by epaint, so it cannot match the WPF rasteriser pixel for pixel.
+Text pixels are therefore compared by golden image tolerance (fixture G-12), not byte for byte.
 
 ### Colours and geometry
 
@@ -272,7 +278,8 @@ Source markers (all lengths times `k`; halo = ARGB (191, 0, 0, 0)):
   (10, 17.5)-(10, 20), (0, 10)-(2.5, 10), (17.5, 10)-(20, 10); stroked with a halo pen 3.5 wide, round caps, then a
   white pen 1.5 wide, round caps;
 - centre dot: halo disc radius 2.5, white disc radius 1.5;
-- name (skipped when empty): outline pen halo 3.0 wide with round joins under white text; point source: left edge at
+- name (skipped when empty): outline pen halo 3.0 wide with round joins under white text (Rust: the glyph outlines
+  stroked, `docs/decisions/0018`); point source: left edge at
   `cx + 13`, vertically centred on `cy`; composite source: horizontally centred on `cx`, top at `cy + 13`; clamped so
   the text stays inside the frame (`[0, W - width]`, `[0, H - height]`).
 

@@ -4,9 +4,9 @@
 //! The app's tick loop advances playback; it measures wall-clock time between ticks, so a late or skipped tick
 //! only accumulates. Threads: [`Playback`] lives on the UI thread.
 
-use std::time::Instant;
-
 use wavedude_core::model::{Frame, Step, Timeline};
+
+use super::platform::Instant;
 
 pub const SPEED_RANGE: (f64, f64) = (0.01, 100.0);
 pub const SPEED_PRESETS: [f64; 6] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0];
@@ -252,9 +252,8 @@ impl Playback {
 
 #[cfg(test)]
 mod tests {
-	use std::time::Duration;
-
 	use super::*;
+	use crate::platform::Duration;
 
 	fn timeline(frames: u32) -> Playback {
 		let mut p = Playback::default();

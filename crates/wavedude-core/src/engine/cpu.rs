@@ -209,7 +209,7 @@ impl CpuEngine {
 	pub fn advance_one_step(&mut self) {
 		let n = self.sub_steps;
 		for k in 0..n {
-			self.sources.values(&mut self.values, sub_step_time(self.time, k, n), n, self.scheme);
+			self.sources.values(&mut self.values, self.time, k, n, self.scheme);
 			self.sub_step(self.options.track_intensity && k + 1 == n);
 		}
 		self.time += 1;
@@ -694,7 +694,7 @@ impl WaveEngine for CpuEngine {
 	}
 
 	fn drain_probes(&mut self, pending: PendingProbes, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError> {
-		self.probe_queue.drain(pending.end, f);
+		self.probe_queue.drain(pending.end(), f);
 		Ok(())
 	}
 

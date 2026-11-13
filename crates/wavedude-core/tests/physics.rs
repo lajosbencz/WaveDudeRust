@@ -1059,6 +1059,52 @@ fn source_strength_is_independent_of_the_sub_steps() {
 	}
 }
 
+/// A source turns on without a zero-frequency pedestal: the canvas field's mean, averaged over two
+/// periods after the turn-on, stays within 0.5 % of the field's RMS (0.08 % measured), for an object emitter
+/// at phases 0 and 1 rad and for an image source; an abrupt `sin` drive, which leaves its impulse
+/// `A cos(phi) / omega` behind, gave 6.3 % at phase 0. Level 50 at scale 2 (32 steps a period), 256 x 256 canvas of index 1 with a
+/// 32 px CPML rim, steps 337 to 400, both stencils.
+#[test]
+fn a_continuous_source_leaves_no_pedestal() {
+	let w = 256usize;
+	let c = w as i32 / 2;
+	let settings = Scene { image_sources: true, ..scene(-32, Edges::Open, 1.0) };
+	let image = pixels(w, w, |x, y| if (x, y) == (c as usize, c as usize) { [100, 50, 0] } else { [100, 0, 0] });
+	for stencil in STENCILS {
+		let cases = [
+			("phase 0", SceneData::blank(w as u32, w as u32, &settings), Some(0.0)),
+			("phase 1", SceneData::blank(w as u32, w as u32, &settings), Some(1.0)),
+			("image source", SceneData::from_pixels(&image, w as u32, w as u32, &settings), None),
+		];
+		for (name, data, phase) in cases {
+			let mut e = CpuEngine::new(data, options(stencil, 2.0));
+			if let Some(phase) = phase {
+				e.set_emitters(&[Emitter { phase_radians: phase, ..emitter(c, c, 50.0) }]);
+			}
+			let pedestal = pedestal(|| {
+				e.advance_one_step();
+				field(&mut e)
+			});
+			println!("{stencil:?}, {name}: mean / RMS {pedestal:.2e}");
+			assert!(pedestal.abs() < 5e-3, "{stencil:?}, {name}: {pedestal}");
+		}
+	}
+}
+
+/// The canvas field's mean over its RMS, both averaged over steps 337 to 400 of a run whose steps
+/// `step` advances and returns the field of.
+fn pedestal(mut step: impl FnMut() -> Vec<f32>) -> f64 {
+	let (mut mean, mut square) = (0f64, 0f64);
+	for i in 1..=400 {
+		let f = step();
+		if i > 336 {
+			mean += f.iter().map(|&v| v as f64).sum::<f64>() / f.len() as f64;
+			square += f.iter().map(|&v| (v as f64).powi(2)).sum::<f64>() / f.len() as f64;
+		}
+	}
+	mean / 64.0 / (square / 64.0).sqrt()
+}
+
 /// (12) Sources are transparent: a wave packet crossing the cell of a source of amplitude 0, or of a
 /// pulsed source that is silent until it detaches, is the same bit for bit as without it; crossing a
 /// weak continuous source, the field is the packet's plus the source's own (superposition) within f32

@@ -1,6 +1,6 @@
 # 0006 Testing strategy
 
-Status: accepted, 2026-11-05
+Status: accepted, 2026-11-05; amended 2026-11-13 ([0019](0019-egui-and-the-platform-layer.md), below)
 
 - Unit tests in every crate; analytic physics tests in wavedude-core (0003).
 - Image snapshot tests (`insta`) for the painter, renderer and export frames.
@@ -10,3 +10,9 @@ Status: accepted, 2026-11-05
   idempotently).
 - No end-to-end UI tests; the app state is a headless, testable core with
   thin Freya views.
+
+## The window's tests (added 2026-11-13)
+
+The views are egui over the app state (0019). The window is driven headless with egui_kittest on wgpu: widgets
+found in egui's AccessKit tree by role and label, image snapshots rendered on Mesa's lavapipe, which the tests
+select; without it the snapshots skip, and CI on Linux requires it.

@@ -13,9 +13,9 @@
 //! index (offsets from the segment's `movi` list start), `indx` the super index over the `ix00` chunks, `idx1` the
 //! legacy index of the first segment (offsets from the `movi` fourcc). The headers' counts are rewritten at close.
 
-use std::fs::File;
-use std::io::{BufWriter, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::io::{Seek, SeekFrom, Write};
+
+use wavedude_core::sync::MaybeSend;
 
 use super::counted::Counted;
 use super::{FrameSink, check_size};
@@ -87,13 +87,6 @@ fn check(width: u32, height: u32) -> Result<()> {
 		return Err(ExportError::Size { format: "AVI", width, height, limit: "a frame under 4 GiB" });
 	}
 	Ok(())
-}
-
-impl AviWriter<BufWriter<File>> {
-	pub fn create(path: &Path, width: u32, height: u32, fps: u32) -> Result<Self> {
-		check(width, height)?;
-		Self::new(BufWriter::with_capacity(1 << 20, File::create(path)?), width, height, fps, SEGMENT_LIMIT)
-	}
 }
 
 impl<W: Write + Seek> AviWriter<W> {
@@ -282,7 +275,7 @@ impl<W: Write + Seek> AviWriter<W> {
 	}
 }
 
-impl<W: Write + Seek + Send> FrameSink for AviWriter<W> {
+impl<W: Write + Seek + MaybeSend> FrameSink for AviWriter<W> {
 	fn write_frame(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<()> {
 		if self.finished {
 			return Err(ExportError::Finished);

@@ -22,7 +22,7 @@ Custom-drawn scrub bar:
 - Frames made: shaded bands over the frames the live run holds (accent); they grow from the position outward
   after an edit, from frame 0 after Run. The playhead is bounded by the band it is in for a run the user started
   and follows.
-- Hover: a line and the frame number under the pointer.
+- Hover: a line under the pointer.
 - Frame 0 on the first pixel column inside the outline, the last frame on the last; lines whole device pixels.
 - Tooltip: "Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step
   a frame, PageUp/PageDown ten, Home/End jump to the start/end of the range".
@@ -61,7 +61,7 @@ Exposed to automation as a slider with range value, plus "range <in>..<out>".
 | 11 | Speed: label "Speed" + editable combo (64 px) | "Playback speed: pick a factor or type one" | Presets 0.25, 0.5, 1, 1.5, 2, 4 (current culture's decimal separator); any typed value 0.01..100. Space inside is swallowed. |
 | 12 | Show field (toggle, wave icon) | "Show the field picture" | = Display > Field > Preview. |
 | 13 | Show intensity (toggle, sun icon) | "Show the intensity picture" | = Display > Intensity > Preview. |
-| 14 | Layout radios: side by side / stacked | "Field and intensity side by side" / "Field above intensity" | One tab stop on the checked radio; Left/Right check the other. |
+| 14 | Layout radios: side by side / stacked | "Field and intensity side by side" / "Field above intensity" | Two buttons, each a tab stop; Enter or Space checks the focused one. |
 
 Right-docked items (speed, toggles, radios) sit at the right end. Then the timeline, picture brightness boxes and
 the splitter follow in the pane's Tab order (harness order: play > step back/forward > in > out > loop > speed >

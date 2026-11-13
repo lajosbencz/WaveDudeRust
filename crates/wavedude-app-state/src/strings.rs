@@ -126,36 +126,38 @@ pub fn keys(language: Language) -> impl Iterator<Item = &'static str> {
 	tables()[language.index()].keys().map(String::as_str)
 }
 
-/// The text with the mnemonic marker removed (`_` before a letter; `__` is a literal underscore).
-pub fn strip_mnemonic(text: &str) -> String {
+/// A menu text without its mnemonic marker (`_` before the letter; `__` is a literal underscore) and the byte offset
+/// of the mnemonic letter in it.
+pub fn split_mnemonic(text: &str) -> (String, Option<usize>) {
 	let mut out = String::with_capacity(text.len());
-	let mut chars = text.chars().peekable();
+	let mut at = None;
+	let mut chars = text.chars();
 	while let Some(c) = chars.next() {
-		if c == '_' {
-			if let Some(&next) = chars.peek() {
-				out.push(next);
-				chars.next();
-			}
-		} else {
+		if c != '_' {
 			out.push(c);
+			continue;
+		}
+		match chars.next() {
+			Some('_') => out.push('_'),
+			Some(m) => {
+				at.get_or_insert(out.len());
+				out.push(m);
+			}
+			None => {}
 		}
 	}
-	out
+	(out, at)
+}
+
+/// The text with the mnemonic marker removed.
+pub fn strip_mnemonic(text: &str) -> String {
+	split_mnemonic(text).0
 }
 
 /// The mnemonic letter of a menu text, lower-cased.
 pub fn mnemonic(text: &str) -> Option<char> {
-	let mut chars = text.chars();
-	while let Some(c) = chars.next() {
-		if c == '_' {
-			match chars.next() {
-				Some('_') => {}
-				Some(m) => return m.to_lowercase().next(),
-				None => return None,
-			}
-		}
-	}
-	None
+	let (text, at) = split_mnemonic(text);
+	at.and_then(|i| text[i..].chars().next()).and_then(|c| c.to_lowercase().next())
 }
 
 /// The string lookup in the current language.
@@ -343,6 +345,9 @@ mod tests {
 		assert_eq!(strip_mnemonic("Save _As..."), "Save As...");
 		assert_eq!(mnemonic("Save _As..."), Some('a'));
 		assert_eq!(mnemonic("a__b"), None);
+		assert_eq!(split_mnemonic("a__b_c"), ("a_bc".into(), Some(3)));
+		assert_eq!(split_mnemonic("Projekt _\u{f6}ffnen..."), ("Projekt \u{f6}ffnen...".into(), Some(8)));
+		assert_eq!(mnemonic("_\u{d6}ffnen"), Some('\u{f6}'));
 		assert_eq!(Language::from_code("de_AT.UTF-8"), Some(Language::German));
 		assert_eq!(Language::from_code("pt_BR"), None);
 		assert_eq!(Language::resolve("nl"), Language::Dutch);

@@ -1,4 +1,4 @@
-//! Pulse envelopes and the detach fade of object emitters (spec/30-engine.md, Sources).
+//! Pulse envelopes, the turn-on and the detach fade of sources (spec/30-engine.md, Sources; docs/physics.md, Sources).
 //!
 //! Time `t` is in steps, `omega` in radians per step; pulse widths count cycles of the emitter's
 //! own frequency from t = 0 (the phase is not folded in).
@@ -12,26 +12,40 @@ use crate::rng::xorshift32;
 /// Steps over which a detached emitter fades out.
 pub const DETACH_RAMP_STEPS: f64 = 30.0;
 
+/// Source periods over which every drive turns on from t = 0.
+pub const TURN_ON_PERIODS: f64 = 0.5;
+
 /// Most pulse periods a random-gap emitter advances in one evaluation.
 pub const CYCLE_ADVANCE_GUARD: u32 = 1000;
 
 /// Half-width in cycles of the smoothed square's edges.
 const EDGE_WIDTH: f64 = 0.35;
 
+/// Raised cosine from 0 at `x <= 0` to 1 at `x >= 1`, continuous with its slope.
+pub fn raised_cosine(x: f64) -> f64 {
+	if x <= 0.0 {
+		0.0
+	} else if x >= 1.0 {
+		1.0
+	} else {
+		0.5 - 0.5 * (PI * x).cos()
+	}
+}
+
+/// Turn-on at time `t` (steps) of a drive of angular frequency `omega` (rad/step): a raised cosine over
+/// [`TURN_ON_PERIODS`] of its period; 0 for `omega <= 0`.
+pub fn turn_on(t: f64, omega: f64) -> f64 {
+	raised_cosine(t * omega / (TURN_ON_PERIODS * TAU))
+}
+
 /// Detach fade at time `t`: `None` once the emitter has stopped driving the field, else 1 before
-/// the detach step falling linearly to 0 over [`DETACH_RAMP_STEPS`].
-pub fn detach_fade(emitter: &Emitter, t: f64) -> Option<f32> {
+/// the detach step falling to 0 over [`DETACH_RAMP_STEPS`] as a raised cosine.
+pub fn detach_fade(emitter: &Emitter, t: f64) -> Option<f64> {
 	let Some(after) = emitter.detach_after_step else {
 		return Some(1.0);
 	};
 	let since = t - after as f64;
-	if since >= DETACH_RAMP_STEPS {
-		None
-	} else if since > 0.0 {
-		Some((1.0 - since / DETACH_RAMP_STEPS) as f32)
-	} else {
-		Some(1.0)
-	}
+	(since < DETACH_RAMP_STEPS).then(|| raised_cosine(1.0 - since / DETACH_RAMP_STEPS))
 }
 
 /// Per-emitter pulse state: the random gap's anchor, current gap and xorshift32 state.
@@ -222,13 +236,25 @@ mod tests {
 	}
 
 	#[test]
+	fn turn_on_rises_over_half_a_period_with_its_slope() {
+		let omega = TAU / 32.0;
+		assert_eq!(turn_on(-1.0, omega), 0.0);
+		assert_eq!(turn_on(0.0, omega), 0.0);
+		assert!((turn_on(8.0, omega) - 0.5).abs() < 1e-15);
+		assert_eq!(turn_on(16.0, omega), 1.0);
+		let slope = |x: f64| (raised_cosine(x + 1e-7) - raised_cosine(x - 1e-7)) / 2e-7;
+		assert!(slope(1e-7).abs() < 1e-5 && slope(1.0 - 1e-7).abs() < 1e-5, "C1 at both ends");
+		assert_eq!(turn_on(1e9, 0.0), 0.0);
+	}
+
+	#[test]
 	fn detach_fades_to_zero_over_thirty_steps() {
 		let mut e = emitter(PulseShape::Gaussian, 1, 1, 0);
 		e.detach_after_step = Some(100);
 		assert_eq!(detach_fade(&e, 50.0), Some(1.0));
 		assert_eq!(detach_fade(&e, 100.0), Some(1.0));
-		assert_eq!(detach_fade(&e, 115.0), Some(0.5));
-		assert!(detach_fade(&e, 129.0).unwrap() < 0.04);
+		assert!((detach_fade(&e, 115.0).unwrap() - 0.5).abs() < 1e-15);
+		assert!(detach_fade(&e, 129.0).unwrap() < 0.003);
 		assert_eq!(detach_fade(&e, 130.0), None);
 		e.detach_after_step = None;
 		assert_eq!(detach_fade(&e, 1e9), Some(1.0));

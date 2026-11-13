@@ -287,16 +287,37 @@ impl PendingCapture {
 /// engine's `drain_probes`.
 #[must_use]
 pub struct PendingProbes {
-	/// Ready when each GPU batch's copy is mapped; empty for an engine whose readings are on the host.
-	pub(crate) mapped: Vec<Arc<dyn Readiness>>,
-	/// Number of the first reading not covered.
-	pub(crate) end: u64,
+	/// Each GPU batch's copy, oldest first: ready when mapped, and the number of the first reading after the
+	/// batch. Empty for an engine whose readings are on the host.
+	pub(crate) batches: Vec<(Arc<dyn Readiness>, u64)>,
+	/// Number of the first reading not on the host when the token was taken.
+	pub(crate) on_host: u64,
 }
 
 impl PendingProbes {
 	/// Readings that are on the host already, those before `end`.
 	pub(crate) fn done(end: u64) -> Self {
-		Self { mapped: Vec::new(), end }
+		Self { batches: Vec::new(), on_host: end }
+	}
+
+	/// Number of the first reading not covered.
+	pub(crate) fn end(&self) -> u64 {
+		self.batches.last().map_or(self.on_host, |&(_, end)| end)
+	}
+
+	/// The batches still on their way to the host when the token was taken.
+	#[cfg(feature = "run")]
+	pub(crate) fn batches_in_flight(&self) -> usize {
+		self.batches.len()
+	}
+
+	/// The part of the readings ready now: those on the host and those of the batches mapped before the first
+	/// that is not.
+	#[cfg(feature = "run")]
+	pub(crate) fn ready_part(&self) -> Self {
+		let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+		let ready = self.batches.iter().take_while(|(mapped, _)| mapped.poll_ready(&mut cx).is_ready()).count();
+		Self { batches: self.batches[..ready].to_vec(), on_host: self.on_host }
 	}
 
 	/// Resolves when [`WaveEngine::drain_probes`](super::WaveEngine::drain_probes) will not have to wait. On
@@ -304,7 +325,7 @@ impl PendingProbes {
 	/// it resolves only once something polls the device, which `drain_probes` does: native callers drain instead
 	/// of awaiting.
 	pub fn ready(&self) -> impl Future<Output = ()> + use<> {
-		let mapped = self.mapped.clone();
+		let mapped: Vec<_> = self.batches.iter().map(|(m, _)| m.clone()).collect();
 		async move {
 			for m in mapped {
 				std::future::poll_fn(|cx| m.poll_ready(cx)).await;

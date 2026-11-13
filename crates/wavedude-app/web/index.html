@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WaveDude Rust</title>
+<style>
+html, body { margin: 0; height: 100%; overflow: hidden; background: #2d2d30; color: #f1f1f1; font: 12px sans-serif; }
+#app { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="app"></canvas>
+<script type="module">
+import init from "./pkg/wavedude-app.js";
+init().catch((e) => { document.body.textContent = `WaveDude Rust could not start: ${e}`; });
+</script>
+</body>
+</html>

@@ -1,11 +1,12 @@
 //! The wgpu device shared by the GPU engines.
 //!
-//! [`GpuContext::create`] requests it (adapter request plus device creation take 50 to 200 ms, which every
-//! engine rebuilt for an edit would pay again). Natively [`context`] keeps one per process until the device is
-//! lost; the next engine built after a loss gets a new device. On wasm the caller owns it. An engine on a lost
-//! device keeps failing. Natively `wgpu::Device` and `wgpu::Queue` are `Send + Sync`; engines on different
-//! threads submit to the same queue, which wgpu serialises. Software adapters are refused: the CPU engine is
-//! faster.
+//! [`GpuContext::create`] requests it (adapter request plus device creation take 50 to 200 ms, which every engine
+//! rebuilt for an edit would pay again); [`GpuContext::from_device`] adopts a device requested elsewhere. Natively
+//! [`context`] keeps one per process, or the one given to [`set_context`], until the device is lost; the next engine
+//! built after a loss gets a new device. On wasm the caller owns it. An engine on a lost device keeps failing.
+//! Natively `wgpu::Device` and `wgpu::Queue` are `Send + Sync`; engines on different threads submit to the same
+//! queue, which wgpu serialises. Software adapters, and adapters without compute shaders, are refused: the CPU
+//! engine is faster or the only one.
 
 use crate::sync::lock;
 use std::sync::{Arc, Mutex};
@@ -66,19 +67,27 @@ impl GpuContext {
 			})
 			.await
 			.map_err(|e| GpuError::Unavailable(e.to_string()))?;
-		let info = adapter.get_info();
-		if info.device_type == wgpu::DeviceType::Cpu {
-			return Err(GpuError::Unavailable(format!("{} is a software adapter", info.name)));
-		}
-		let limits = adapter.limits();
+		usable(&adapter)?;
 		let (device, queue) = adapter
 			.request_device(&wgpu::DeviceDescriptor {
 				label: Some("wavedude-core"),
-				required_limits: limits.clone(),
+				required_limits: adapter.limits(),
 				..Default::default()
 			})
 			.await
 			.map_err(|e| GpuError::Unavailable(e.to_string()))?;
+		Self::from_device(&adapter, device, queue)
+	}
+
+	/// Runs on a device requested elsewhere (a UI renderer's) with the limits it was requested with; the device's
+	/// lost callback is replaced.
+	pub fn from_device(
+		adapter: &wgpu::Adapter,
+		device: wgpu::Device,
+		queue: wgpu::Queue,
+	) -> Result<Arc<Self>, GpuError> {
+		let info = usable(adapter)?;
+		let limits = device.limits();
 		let lost = Arc::new(Mutex::new(None));
 		{
 			let lost = lost.clone();
@@ -106,6 +115,18 @@ impl GpuContext {
 	}
 }
 
+/// The adapter's facts, unless it is a software adapter or runs no compute shaders.
+fn usable(adapter: &wgpu::Adapter) -> Result<wgpu::AdapterInfo, GpuError> {
+	let info = adapter.get_info();
+	if info.device_type == wgpu::DeviceType::Cpu {
+		return Err(GpuError::Unavailable(format!("{} is a software adapter", info.name)));
+	}
+	if !adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::COMPUTE_SHADERS) {
+		return Err(GpuError::Unavailable(format!("{} ({:?}) runs no compute shaders", info.name, info.backend)));
+	}
+	Ok(info)
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 static CONTEXT: Mutex<Option<Result<Arc<GpuContext>, GpuError>>> = Mutex::new(None);
 
@@ -121,4 +142,11 @@ pub fn context() -> Result<Arc<GpuContext>, GpuError> {
 		*slot = None;
 	}
 	slot.get_or_insert_with(|| pollster::block_on(GpuContext::create())).clone()
+}
+
+/// Makes `ctx` the process's context for the engines built from now on; after its loss [`context`] requests a
+/// device of its own.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_context(ctx: Arc<GpuContext>) {
+	*lock(&CONTEXT) = Some(Ok(ctx));
 }

@@ -1,0 +1,3 @@
+# web-sys's Web Locks bindings (navigator.locks) are behind its unstable cfg.
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg=web_sys_unstable_apis"]

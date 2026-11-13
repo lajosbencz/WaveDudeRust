@@ -184,7 +184,7 @@ cells the Mur ring reflects almost everything; the default quadratic rim (32 px)
 | AdvanceOneStep | as above |
 | SampleProbes | reads probe cells after the step (field or blended intensity), at once |
 | QueueProbes / PendingProbes / DrainProbes | queues that reading per step; PendingProbes returns a token covering the readings queued so far, and drain takes it and hands those readings out in order. A reading queued after the token was taken stays for a later token's drain; one dropped by a reset or new probes is never handed out. The GPU engine copies each step's readings into a batch buffer and a full batch (32 steps) to a readback buffer, so recording probes keeps the step batching; at each full batch it collects the copies already mapped, and natively waits for the rest. PendingProbes copies the partial batch too; its `ready()` resolves when every copy it covers is mapped (at once on the CPU). Natively drain waits for the copies its token covers; on wasm32 the copies not mapped yet stay in flight, and a drain before `ready()` resolves fails (NotReady) |
-| CaptureFrame(shape, snapshot) | converts field and/or intensity of the canvas (not the rim) into planes of `FrameShape` (see 40) |
+| CaptureFrame(shape, snapshot) | converts field and/or intensity of the canvas (not the rim) into planes of `FrameShape` (see 40). Rust: begun and finished apart, the engine stepping on between; up to the engine's capture capacity may be pending, two on the CPU, on the GPU as many staging buffers as fit in 64 MiB, from 2 to 16 |
 | PrepareFrame | host-side full float copy of field and blended intensity (tests) |
 
 One driver thread per engine; no internal locking.
@@ -198,6 +198,13 @@ One driver thread per engine; no internal locking.
 - Intensity stores s1 and s2; blend at read time.
 - `capture_index` rounds f32 to half with bit-level round-to-nearest-even before indexing, so CPU and GPU index frames
   agree. Build option `-cl-fp32-correctly-rounded-divide-sqrt` when the device supports it.
+- Rust: once asked for its device frames (the live run asks), a capture also copies its planes, as the store gets
+  them, into a slot on the device (one per capture pending, the one tagged last and the one held) in the encoder that converts them; the live run tags the slot with the
+  stored frame (the store's id, its generation, the index) when the capture lands, before the store has it. A reader
+  holds a tag's slot for its render passes until it holds another; a capture never writes the slot held, the one
+  tagged last or one pending, so nothing is read back for the picture and nothing changes under a pass. The frames
+  name the engine's context; a reader uses them only on that context's device (same `Arc`: `wgpu::Device` equality
+  compares ids, which repeat across instances).
 - Subnormals: the card may flush; host blend differs by 1 ulp at 1e-45 in about 1/2000 values.
 - Parity: library_check compares CPU vs GPU within `1e-3 * max(1, max|cpu|)` after N steps. `TODO(verify)`: CLAUDE.md
   claims bit-for-bit captured planes; treat bit-exactness as a stretch goal, the tolerance as the requirement.
@@ -234,12 +241,19 @@ position's frame, or every frame), a pause, a fit request. The worker builds the
 the scene is composed on its thread, never on the UI's; the UI derives what it shows meanwhile (the schedule,
 the store's size, the probes) from the request's project. The project's image bytes are shared, so the copy
 is cheap. Between frames it takes the next
-target: the first stored frame at or after the position that is missing or whose probe traces are not recorded
-(every frame wanted: then the probes' last steps while the engine stands at the traces' end, then the frames
+target: the first stored frame at or after the position that is missing or whose probe readings are not taken
+(recorded, or queued in the engine and on their way to be drained) (every frame wanted: then the probes' last steps
+while the engine stands at the readings' end, then the frames
 before the position still missing, then the probes' last steps from wherever the engine stands). It steps to it, reset to 0 when the engine passed it; `k*CaptureEvery + 1`
 steps for stored frame k, probes queued every step and drained every 256 steps and at the end; with every frame
 wanted the missing stored frames passed on the way are captured too, so one pass makes the run; a capture is
-pipelined with the steps that follow it. A goal change is read every 16 steps: a unit of work for another spec is left; one for the goal's spec goes
+pipelined with the steps that follow it: the captures in flight land in order, each once read back, and natively the
+oldest is waited for when the engine's capture capacity is reached. Pumped (in the browser), the run yields before the
+step that reaches a frame to capture until its capture can begin (the spill has room, the engine has room for another
+capture), so no frame passed is skipped; a drain of the probes on the way and at a target takes the readings read
+back and yields only with 16 batches in flight, so the frames of a run with probes follow one another without waiting
+for their readings. Every reading is drained into the traces before the run goes idle or paused, a fit frame is made
+and the engine or the frames are reset, so the traces are never left part recorded. A goal change is read every 16 steps: a unit of work for another spec is left; one for the goal's spec goes
 on when it is the goal's frame, else while every frame is wanted and the goal's frame is there; a pause with
 another spec leaves the target so the spec is adopted. A fit frame is made in a state of its own (`Fitting`),
 which leaves the run's frames and its completion as they are. A spec with other

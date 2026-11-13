@@ -243,16 +243,34 @@ Amplitude. A source's Amplitude A is the displacement amplitude of the wave it
 radiates, at its own cell, in free space (index 1, an infinite grid), at its
 frequency. A forcing `f0 e^{-i omega t}` at one cell of the infinite grid answers
 there with `f0 G0(omega)`, G0 the lattice Green's function of the engine's discrete
-operator at the source cell, so the forcing is
+operator at the source cell, so the forcing is the rate of change of the impulse
 
-    f(t) = A / |G0(omega)| e(t) sin(omega t + phi)
+    p(t) = -A / |G0(omega)| E(t) cos(omega t + phi) / omega
+    f(t) = dp/dt = A / |G0(omega)| (E sin(omega t + phi) - E' cos(omega t + phi) / omega)
 
 with omega the source's angular frequency per step (from its frequency level), phi
-its phase and e(t) its envelope (pulses, the detach fade). Image sources are the
-same at their level's omega with the scene's image source scale as A. G0 depends
+its phase and E(t) its envelope, the turn-on times the pulse envelope times the
+detach fade (below). While E = 1, `f = A / |G0| sin(omega t + phi)`. Image sources
+are the same at their level's omega and phase 0, with the scene's image source
+scale as A. G0 depends
 on the stencil, the time scheme, the sub-step count and omega; a source in another
 medium than index 1 swings its cell by the ratio of the two media's |G0| (at index
 1.25 about 1.5 times A).
+
+Turn-on ([decisions/0022](decisions/0022-smooth-source-turn-on.md), [engine/envelope.rs](../crates/wavedude-core/src/engine/envelope.rs)). A forcing
+switched on abruptly, `f = H(t) sin(omega t + phi)`, delivers a net impulse
+`A cos(phi) / (|G0| omega)` on top of its oscillation; in 2D an impulse P leaves
+the zero-frequency wake `P / (2 pi sqrt(t^2 - r^2))` behind the front (the 2D
+Green's function), a pedestal that decays as 1/t and adds over the sources of an
+array (Example02's field mean was 0.31 to 0.40 of its RMS). Driving the impulse
+p instead of the force makes the net impulse of any drive `p(end) - p(start)`, 0
+whenever E starts and ends at 0, whatever its phase, frequency or envelope. E rises
+from t = 0 as a raised cosine over half a period of the source,
+`E = (1 - cos(pi t / T)) / 2`, `T = pi / omega`, continuous with its slope; the
+detach fade falls as the mirrored raised cosine over 30 steps. A force ramped
+without the `E'` term keeps a pedestal that depends on phi (a 16-step ramp at
+32 steps a period removes it at phase 0 and leaves 7 % of the local amplitude 60
+cells away at phase 90 degrees); only a ramp of several periods would make it small.
 
 G0 ([engine/green.rs](../crates/wavedude-core/src/engine/green.rs)). Per sub-step of `dt = 1/n` with `x = dt^2 c^2 sigma` (sigma
 the stencil's symbol) and `W = 4 sin^2(omega dt / 2)`, a mode answers to the
@@ -274,7 +292,12 @@ halved and the nodes doubled; Im R tends to the continuum's 1/4 at low frequency
 |G0| is computed once per sub-step count and frequency and cached.
 
 Each sub-step of `dt = 1/n` adds `F = dt^2 f(t_k)` where the scheme takes `A u`,
-at the time `t_k = t + k/n` of its current field ([engine/forcing.rs](../crates/wavedude-core/src/engine/forcing.rs)): leapfrog
+at the time `t_k = t + k/n` of its current field ([engine/forcing.rs](../crates/wavedude-core/src/engine/forcing.rs)), f the difference of
+p over the sub-step scaled to the steady drive,
+`f = A / |G0| (Em sin(theta) - dE cos(theta) / (2 tan(omega dt / 2)))` with Em and dE
+the mean and the difference of E at `t_k -+ dt/2`: exactly `sin(theta)` while E = 1,
+and the sub-steps' impulses telescope, so a drive that ends has delivered none up to
+round-off. Leapfrog
 `u+ = u + d (u - u-) + h (A u + F)`, the modified equation `w = A u + F` before
 its second pass, so the neighbours' `c2 L w / 12` carries `dt^4 c^2 L f / 12`. The
 modified equation's own source term `dt^4 f_tt / 12` is taken as
@@ -298,9 +321,16 @@ Tests ([tests/physics.rs](../crates/wavedude-core/tests/physics.rs)):
   (index 1.25, which one sub-step needs) by the predicted ratio of the media's
   |G0| within 0.1 %.
 - A continuous level-100 source on a 256 x 256 open canvas of index 1.25: the RMS
-  field over the canvas after 600 steps at 1 to 4 sub-steps is 7.197e-2 to
-  7.223e-2 on the 9-point stencil (0.4 %) and 8.409e-2 to 8.450e-2 on the DRP
+  field over the canvas after 600 steps at 1 to 4 sub-steps is 7.171e-2 to
+  7.198e-2 on the 9-point stencil (0.4 %) and 8.379e-2 to 8.419e-2 on the DRP
   (0.5 %).
+- No pedestal: a level-50 source (scale 2) at phases 0 and 1 rad and an image
+  source, 256 x 256 canvas of index 1 with a 32 px CPML rim: the canvas field's
+  mean over its RMS, averaged over steps 337 to 400, stays within 0.5 % (0.08 %
+  measured, both stencils; the GPU engine the same, [tests/gpu.rs](../crates/wavedude-core/tests/gpu.rs)); the
+  abrupt drive gave 6.3 % at phase 0. The sub-step values of a detaching 1-cycle
+  pulse and of a detaching continuous source sum to 0 within f32 round-off
+  ([engine/forcing.rs](../crates/wavedude-core/src/engine/forcing.rs)).
 - Transparency: a wave packet crossing the cell of a source of amplitude 0, or
   of a pulsed source silent until it detaches, is the same bit for bit as
   without it (a value of 0 or a detached one adds nothing); crossing a weak

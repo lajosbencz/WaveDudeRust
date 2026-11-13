@@ -486,6 +486,54 @@ fn the_traces_of_the_frame_kept_through_a_clear_are_held_with_it() {
 	w.with_held_traces(|t| assert!(t.is_empty(), "other probes: nothing fits the frame kept"));
 }
 
+#[cfg(feature = "gpu")]
+#[test]
+fn a_live_run_on_the_gpu_keeps_its_frames_on_the_device_tagged_as_stored() {
+	use wavedude_core::engine::gpu::{FrameTag, GpuEngine, context};
+	let ctx = match context() {
+		Ok(c) => c,
+		Err(e) => {
+			eprintln!("skipped: {e}");
+			return;
+		}
+	};
+	let dir = tempfile::tempdir().unwrap();
+	let w = RunWorker::new(
+		Box::new(|scene, options| Box::new(GpuEngine::new(scene, options).expect("GPU engine"))),
+		dir.path().to_path_buf(),
+		Arc::default(),
+	)
+	.unwrap();
+	let mut p = project(64, 48, 100);
+	p.display.intensity.preview = true;
+	let q = PreviewQuality { format: SampleFormat::Index, ..PreviewQuality::FULL };
+	w.set_goal(goal(&request(&p, q), 20, Wanted::Position));
+	wait_until(|| store_has(&w, 20) && w.status().state == WorkState::Idle);
+	let (status, store) = (w.status(), w.store().unwrap());
+	let frames = status.device_frames.expect("a GPU engine's frames");
+	let tag = |stored| FrameTag { store: store.id(), generation: store.generation(), stored };
+	let frame = frames.hold(tag(20)).expect("the frame stored last");
+	let target = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+		label: None,
+		size: frame.buffer.size(),
+		usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+		mapped_at_creation: false,
+	});
+	let mut encoder = ctx.device.create_command_encoder(&Default::default());
+	encoder.copy_buffer_to_buffer(&frame.buffer, 0, &target, 0, frame.buffer.size());
+	ctx.queue.submit([encoder.finish()]);
+	target.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
+	ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+	let bytes = target.slice(..).get_mapped_range().unwrap().to_vec();
+	for layer in [Layer::Field, Layer::Intensity] {
+		let plane = store.copy_layer(20, layer).unwrap();
+		let first = frame.first_word(layer).expect("the intensity is tracked") as usize * 4;
+		assert_eq!(&bytes[first..first + plane.len()], plane, "{layer:?}");
+	}
+	assert!(frames.hold(tag(19)).is_none(), "a frame not captured");
+	assert!(frames.hold(FrameTag { store: store.id() + 1, ..tag(20) }).is_none(), "another store's frame");
+}
+
 #[test]
 fn a_panicking_engine_fails_the_live_run() {
 	let dir = tempfile::tempdir().unwrap();

@@ -62,9 +62,8 @@ Text box plus a column of two small repeat buttons (up, down) on the right.
 - Typing is free text; the model converts and clamps (typed text is not limited by the box). Parsing and
   writing use the current culture (decimal comma in DE/FR/NL).
 - Drag: press on an unfocused box, move past the drag threshold, then scrub. A press without movement is a
-  normal click that places the caret. A press on an already focused box selects text (no scrub). A drag reaching
-  the monitor's left/right edge wraps the pointer to the opposite edge and continues. Esc during a drag restores
-  the start value.
+  normal click that places the caret. A press on an already focused box selects text (no scrub). The pointer is
+  not wrapped at the monitor's edge. Esc during a drag restores the start value.
 - A non-parsing text counts as 0 for a step. A logarithmic box starts from Minimum (positive) if the value
   is not above zero.
 - Disabled boxes grey out.
@@ -86,6 +85,8 @@ to that no scheme has: greyed "<name> (not found)". Two italic action rows at th
   with many stops is slimmed to its bends.
 - "Edit a copy in the project...": copies the current scheme into the project as editable stops, selects the
   copy on the layer and opens it in the tree.
+- "Remove from my schemes": a third action row, present only while the layer's scheme resolves to a user scheme
+  (no project scheme of that name); removes that user scheme.
 
 ### Colour swatch button (`ColorPickerButton`)
 
@@ -319,6 +320,7 @@ Sections: General, Stops.
 | Name | TB | Renaming repoints every layer that used the old name (pictures keep their colours). Tree row renames live. |
 | Kind | CMB Unspecified, Field, Intensity | pickers list it for that kind only |
 | Description | TB wraps, no newline | |
+| Add to my schemes / Remove from my schemes | BTN, last row of General | Keeps the scheme among the user's schemes, or removes the user scheme of its name; the label follows whether one exists. |
 | Based on | CMB with gradient + name rows (shared schemes and the project's other schemes); first row of Stops | Picking copies stops, kind, category, description into this scheme; the choice stays shown until the next pick. |
 | (gradient) | the scheme's gradient bar with its stop markers, above the stop rows; a marker dragged more than 24 px above or below the bar fades and, released there, its stop is removed; a double-click on a marker removes its stop; the last stop stays |
 | Stop rows | Position NB 0..1 step 0.01, up to 3 decimals (64 px wide); colour swatch button; hex TB "#RRGGBB" (Enter applies); remove BTN | |

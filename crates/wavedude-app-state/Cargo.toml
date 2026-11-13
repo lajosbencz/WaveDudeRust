@@ -16,19 +16,50 @@ workspace = true
 
 [dependencies]
 wavedude-core = { path = "../wavedude-core", features = ["gpu"] }
-wavedude-export = { path = "../wavedude-export", default-features = false }
 wavedude-examples = { path = "../wavedude-examples" }
 anyhow.workspace = true
-directories = "6"
-notify.workspace = true
 quick-xml.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["float_roundtrip"] }
 sys-locale = "0.3"
 thiserror.workspace = true
 tracing.workspace = true
-tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["fmt", "registry", "std"] }
+web-time = "1.1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+wavedude-export = { path = "../wavedude-export", default-features = false }
+directories = "6"
+notify.workspace = true
+tracing-appender = "0.2"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+tracing-web = "0.1"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+	"Blob",
+	"Document",
+	"Element",
+	"FileSystemDirectoryHandle",
+	"FileSystemFileHandle",
+	"FileSystemGetDirectoryOptions",
+	"FileSystemGetFileOptions",
+	"FileSystemRemoveOptions",
+	"FileSystemWritableFileStream",
+	"HtmlAnchorElement",
+	"HtmlElement",
+	"Lock",
+	"LockManager",
+	"LockOptions",
+	"Navigator",
+	"Storage",
+	"StorageEstimate",
+	"StorageManager",
+	"Url",
+	"Window",
+	"WritableStream",
+] }
 
 [dev-dependencies]
 png.workspace = true

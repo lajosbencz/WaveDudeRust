@@ -33,8 +33,8 @@ Use modern toolings for lineage tracing.
 
 ## Stack
 
-- One Cargo workspace: core, export, cli, widgets, app state, app
-- UI: Freya 0.5
+- One Cargo workspace: core, view, export, cli, app state, app, examples
+- UI: egui 0.37 on eframe, natively and in the browser ([decision 0019](decisions/0019-egui-and-the-platform-layer.md))
 - Render: wgpu + CPU fallback
 - Project files: support the WaveDudeNext formats; `.wdproj` is the one project format
 - Export: PNG/JPEG/EXR sequences, MPEG-1, AVI, QuickTime, H.264 MP4 via openh264
@@ -45,7 +45,7 @@ Use modern toolings for lineage tracing.
 2. Build: Core library create from that spec, with unit-level analytic physics tests and snapshot tests (dispersion, reflection, absorption, refraction, diffusion, energy conservation)
 3. Compare: The original C# program (headless harness) to find mistakes on either side. Fix ours, report theirs, never calibrate
 4. Design: Map the WPF UI layout and behaviour into [`docs/ui`](ui/)
-5. Build: Missing widgets for which Freya doesn't give a ready solution
+5. Build: Missing widgets for which egui doesn't give a ready solution
 6. Build: Desktop and terminal applications
 
 Steps 1-4 may run in parallel.

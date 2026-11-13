@@ -13,79 +13,18 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{SyncSender, sync_channel};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use crate::engine::probes::{ProbeCollector, ProbeTrace, record};
-use crate::engine::{EngineError, PendingCapture, Snapshot, WaveEngine};
+use crate::engine::{PendingCapture, Snapshot, WaveEngine};
 
-use super::store::{FrameStore, StoreError};
+use super::store::FrameStore;
+use super::{RunError, RunState};
 use crate::spec::RunSpec;
 
 const HEARTBEAT: Duration = Duration::from_millis(33);
 const WRITE_QUEUE: usize = 2;
-
-/// Why a run failed.
-#[derive(Debug, thiserror::Error)]
-pub enum RunError {
-	#[error("frame store: {0}")]
-	Store(#[from] StoreError),
-	#[error("{0}")]
-	Spec(#[from] crate::spec::RunSpecError),
-	#[error("engine: {0}")]
-	Engine(#[from] EngineError),
-	#[error("could not start a thread: {0}")]
-	Thread(#[source] std::io::Error),
-	#[error("{0} panicked: {1}")]
-	Panic(&'static str, String),
-	#[error("the run was cancelled")]
-	Cancelled,
-	#[error(transparent)]
-	Failed(Arc<RunError>),
-}
-
-impl RunError {
-	/// The panic of `what`, its payload's message when it has one.
-	pub fn panic(what: &'static str, payload: &(dyn std::any::Any + Send)) -> Self {
-		let message = payload
-			.downcast_ref::<String>()
-			.cloned()
-			.or_else(|| payload.downcast_ref::<&str>().map(ToString::to_string))
-			.unwrap_or_else(|| "a payload that is not text".to_owned());
-		Self::Panic(what, message)
-	}
-}
-
-/// Equality compares the variant; two failures are equal when they share the error.
-#[derive(Clone, Debug)]
-pub enum RunState {
-	Created,
-	Running,
-	Paused,
-	Completed,
-	Cancelled,
-	Failed(Arc<RunError>),
-}
-
-impl PartialEq for RunState {
-	fn eq(&self, other: &Self) -> bool {
-		match (self, other) {
-			(Self::Failed(a), Self::Failed(b)) => Arc::ptr_eq(a, b),
-			_ => std::mem::discriminant(self) == std::mem::discriminant(other),
-		}
-	}
-}
-
-impl Eq for RunState {}
-
-impl RunState {
-	pub fn is_finished(&self) -> bool {
-		matches!(self, Self::Completed | Self::Cancelled | Self::Failed(_))
-	}
-
-	pub fn is_active(&self) -> bool {
-		matches!(self, Self::Running | Self::Paused)
-	}
-}
 
 /// What a run reports while it goes.
 #[derive(Clone, Debug, PartialEq, Eq)]

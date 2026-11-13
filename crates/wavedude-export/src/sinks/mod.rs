@@ -1,9 +1,12 @@
 //! Frame sinks: one output (a video file, an image sequence or a still) taking frames in order.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use half::f16;
+use wavedude_core::sync::MaybeSend;
 
+use crate::fs::{OutputFs, SharedFile};
 use crate::{ExportError, ExportFormat, Result};
 
 pub mod avi;
@@ -24,7 +27,7 @@ pub use threaded::Threaded;
 
 /// Where frames go, in order. Rendered frames are RGBA8 at the output's size (alpha ignored); a sink that
 /// [`wants_halves`](FrameSink::wants_halves) takes the stored f16 plane instead.
-pub trait FrameSink: Send {
+pub trait FrameSink: MaybeSend {
 	fn wants_halves(&self) -> bool {
 		false
 	}
@@ -52,10 +55,12 @@ pub trait FrameSink: Send {
 	}
 }
 
-/// A sink writing one file at `path`.
+/// A sink writing one file at `path` of `fs`, closed once the sink finished.
 pub struct FileOutput<S> {
 	sink: S,
+	fs: Arc<dyn OutputFs>,
 	path: PathBuf,
+	file: SharedFile,
 }
 
 impl<S: FrameSink> FrameSink for FileOutput<S> {
@@ -76,7 +81,9 @@ impl<S: FrameSink> FrameSink for FileOutput<S> {
 	}
 
 	fn finish(&mut self) -> Result<()> {
-		self.sink.finish()
+		let finished = self.sink.finish();
+		let closed = self.file.close();
+		finished.and(closed.map_err(Into::into))
 	}
 
 	fn files(&self) -> Vec<PathBuf> {
@@ -84,24 +91,27 @@ impl<S: FrameSink> FrameSink for FileOutput<S> {
 	}
 
 	fn discard(&mut self) -> Result<()> {
-		remove_if_present(&self.path)
+		// the file goes: an error flushing it is moot
+		let _ = self.file.close();
+		Ok(self.fs.remove_file(&self.path)?)
 	}
 }
 
-pub(crate) fn remove_if_present(path: &Path) -> Result<()> {
-	match std::fs::remove_file(path) {
-		Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
-		_ => Ok(()),
-	}
-}
-
-/// Opens the single-file sink `make` creates at `path`; a file it created is removed when it fails.
-fn file<S: FrameSink + 'static>(path: &Path, make: impl FnOnce() -> Result<S>) -> Result<Box<dyn FrameSink>> {
-	let existed = path.exists();
-	match make() {
-		Ok(sink) => Ok(Box::new(FileOutput { sink, path: path.to_path_buf() })),
+/// Opens the single-file sink `make` creates on the file at `path`, which its first write creates; a file it
+/// created is removed when it fails.
+fn file<S: FrameSink + 'static>(
+	fs: &Arc<dyn OutputFs>,
+	path: &Path,
+	make: impl FnOnce(SharedFile) -> Result<S>,
+) -> Result<Box<dyn FrameSink>> {
+	let existed = fs.exists(path);
+	let file = SharedFile::new(fs.clone(), path.to_path_buf());
+	match make(file.clone()) {
+		Ok(sink) => Ok(Box::new(FileOutput { sink, fs: fs.clone(), path: path.to_path_buf(), file })),
 		Err(e) => {
-			if !existed && let Err(cleanup) = remove_if_present(path) {
+			let opened = file.opened();
+			let cleanup = file.close().and_then(|()| if opened && !existed { fs.remove_file(path) } else { Ok(()) });
+			if let Err(cleanup) = cleanup {
 				tracing::error!(error = %cleanup, "the output that failed to open could not be removed");
 			}
 			Err(e)
@@ -132,11 +142,12 @@ pub(crate) fn check_size(spec_w: u32, spec_h: u32, w: u32, h: u32, len: usize, b
 	Ok(())
 }
 
-/// Opens the sink of `format` at `path`: a video file at the path, encoded on a thread of its own (a movie on
+/// Opens the sink of `format` at `path` of `fs`: a video file at the path, encoded on a thread of its own (a movie on
 /// `pool`); for a sequence format a still at the path when `still`, else the folder of
 /// [`crate::naming::sequence_folder`], encoded on `pool`. `h264`: Cisco's `OpenH264` binary for MP4 (`crate::h264`).
 pub fn open(
 	format: ExportFormat,
+	fs: &Arc<dyn OutputFs>,
 	path: &Path,
 	spec: SinkSpec,
 	still: bool,
@@ -151,26 +162,28 @@ pub fn open(
 		} else {
 			Placement::Sequence { chosen: PathBuf::from(path), first: spec.first_frame, planned: spec.frame_count }
 		};
-		Ok(Box::new(ImageSink::new(kind, placement, spec, pool)?))
+		Ok(Box::new(ImageSink::new(kind, fs.clone(), placement, spec, pool)?))
 	};
 	let mov = |codec| {
-		file(path, || {
-			let writer = mov::MovWriter::create(path, w, h, spec.fps, codec, Some(spec.frame_count))?;
+		file(fs, path, |out| {
+			let writer = mov::MovWriter::new(out, w, h, spec.fps, codec, Some(spec.frame_count))?;
 			mov::ParallelMov::new(writer, pool)
 		})
 	};
 	match format {
 		#[cfg(feature = "mp4")]
-		ExportFormat::Mp4 => file(path, || Threaded::new(mp4::Mp4Writer::create(path, spec, h264)?, w, h)),
+		ExportFormat::Mp4 => file(fs, path, |out| Threaded::new(mp4::Mp4Writer::new(out, spec, h264)?, w, h)),
 		#[cfg(not(feature = "mp4"))]
 		ExportFormat::Mp4 => {
 			let _ = h264;
 			Err(ExportError::H264("built without the mp4 feature".into()))
 		}
-		ExportFormat::Mpeg1 => {
-			file(path, || Threaded::new(mpeg1::Mpeg1Writer::create(path, w, h, spec.fps as f64, spec.quality)?, w, h))
+		ExportFormat::Mpeg1 => file(fs, path, |out| {
+			Threaded::new(mpeg1::Mpeg1Writer::new(out, w, h, spec.fps as f64, spec.quality)?, w, h)
+		}),
+		ExportFormat::Avi => {
+			file(fs, path, |out| Threaded::new(avi::AviWriter::new(out, w, h, spec.fps, avi::SEGMENT_LIMIT)?, w, h))
 		}
-		ExportFormat::Avi => file(path, || Threaded::new(avi::AviWriter::create(path, w, h, spec.fps)?, w, h)),
 		ExportFormat::Mov => mov(mov::MovCodec::Animation),
 		ExportFormat::MovPng => mov(mov::MovCodec::Png),
 		ExportFormat::Png => image(ImageKind::Png),

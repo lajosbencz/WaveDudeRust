@@ -1,19 +1,21 @@
-//! The export job: frames of a [`FrameSource`] through colours, glowing edges and overlays into sinks.
+//! The export job: frames of a [`FrameSource`] through colours, glowing edges and overlays
+//! ([`Rasteriser`]) into sinks.
 
 use std::ops::RangeInclusive;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use half::f16;
-use wavedude_core::engine::types::{SampleFormat, SampleKind};
+use wavedude_core::engine::types::{FrameShape, SampleFormat, SampleKind};
 use wavedude_core::model::{ColorScheme, DisplayLayer, Layer};
 use wavedude_core::render::{HalfTable, render_half_into};
 use wavedude_core::scene::glowing_edges;
 use wavedude_core::scene::pixels::ScenePixels;
 
 use crate::overlays::Overlays;
+use crate::raster::Rasteriser;
 use crate::sinks::FrameSink;
 use crate::{ExportError, FrameSource};
 
@@ -71,20 +73,48 @@ pub struct ExportReport {
 	pub state: ExportState,
 	/// Frames written to every target.
 	pub frames_done: usize,
+	/// Wall time since the job was made, idle time between steps included.
 	pub elapsed: Duration,
 	/// Files left on disk: every output when completed or kept partial, none otherwise.
 	pub written: Vec<PathBuf>,
 }
 
-/// An export of `frames` (timeline frames) to every target, frame by frame. The source is borrowed: the job runs
-/// on the caller's thread, which holds the source for its length.
+/// An export of timeline frames to every target, frame by frame, in [steps](Self::step) on the caller's thread.
 pub struct ExportJob<'a> {
-	pub source: &'a dyn FrameSource,
-	pub frames: RangeInclusive<usize>,
-	pub targets: Vec<ExportTarget>,
-	pub overlays: Option<Overlays>,
-	/// Keep the outputs of a failed or cancelled job (finished, so the frames written stay readable).
-	pub keep_partial: bool,
+	source: Arc<dyn FrameSource + 'a>,
+	shape: FrameShape,
+	frames: RangeInclusive<usize>,
+	targets: Vec<ExportTarget>,
+	overlays: Option<Overlays>,
+	keep_partial: bool,
+	/// Frames written to every target.
+	done: usize,
+	/// The targets of the frame after `done` written so far.
+	written: usize,
+	started: Instant,
+	ended: bool,
+	halves: Vec<f16>,
+	rgba: Vec<u8>,
+	raster: Option<Rasteriser>,
+}
+
+/// Where a [step](ExportJob::step) left the job.
+#[derive(Debug)]
+pub enum Step {
+	/// Frames remain.
+	Working,
+	/// A frame is pending ([`FrameSource::poll_layer`]): step again once the event loop ran.
+	Waiting,
+	/// Every sink is finished; the job is not stepped again.
+	Ended(ExportReport),
+}
+
+/// What one frame's turn did.
+enum Advance {
+	Wrote,
+	Pending,
+	Done,
+	Cancelled,
 }
 
 /// Finishes every sink; the first error.
@@ -109,19 +139,129 @@ pub(crate) fn discard_all<'a>(sinks: impl Iterator<Item = &'a mut Box<dyn FrameS
 	first
 }
 
-impl ExportJob<'_> {
-	/// Runs on the caller's thread. `progress(done, total)` follows every frame; `cancel` is read before each frame
-	/// and while waiting for one. Every sink is finished whatever the outcome; the outputs of a job that did not
-	/// complete are then removed unless `keep_partial`.
-	pub fn run(mut self, mut progress: impl FnMut(usize, usize), cancel: &AtomicBool) -> ExportReport {
-		let started = Instant::now();
-		let total = self.frames.clone().count();
-		let mut done = 0;
-		let mut state = match self.render(&mut done, total, &mut progress, cancel) {
-			Ok(true) => ExportState::Completed,
-			Ok(false) => ExportState::Cancelled,
-			Err(e) => ExportState::Failed(e),
+impl<'a> ExportJob<'a> {
+	/// A job writing `frames` of `source` to every target; `keep_partial` keeps the outputs of a failed or cancelled
+	/// job (finished, so the frames written stay readable).
+	pub fn new(
+		source: Arc<dyn FrameSource + 'a>,
+		frames: RangeInclusive<usize>,
+		targets: Vec<ExportTarget>,
+		overlays: Option<Overlays>,
+		keep_partial: bool,
+	) -> Self {
+		let shape = source.shape();
+		let samples = shape.plane_samples();
+		let raster = overlays.as_ref().map(Overlays::rasteriser);
+		Self {
+			source,
+			shape,
+			frames,
+			targets,
+			overlays,
+			keep_partial,
+			done: 0,
+			written: 0,
+			started: Instant::now(),
+			ended: false,
+			halves: vec![f16::ZERO; samples],
+			rgba: vec![0u8; samples * 4],
+			raster,
+		}
+	}
+
+	/// `(done, total)` frames.
+	pub fn progress(&self) -> (usize, usize) {
+		(self.done, (self.frames.end() + 1).saturating_sub(*self.frames.start()))
+	}
+
+	/// Writes frames until `budget` has passed, at least one or the part of one not pending. `cancel` is read
+	/// before each frame and while waiting for one; [`FrameSource::wait_for`] blocks, so a step is short only on a
+	/// complete source. At the end every sink is finished whatever the outcome; the outputs of a job that did not
+	/// complete are then removed unless kept partial. A job dropped before it ended leaves its outputs as they are:
+	/// step it with `cancel` set to clean up.
+	pub fn step(&mut self, budget: Duration, cancel: &AtomicBool) -> Step {
+		assert!(!self.ended, "an ended export job is not stepped");
+		let turn = Instant::now();
+		let state = loop {
+			match self.advance(cancel) {
+				Ok(Advance::Wrote) if turn.elapsed() < budget => {}
+				Ok(Advance::Wrote) => return Step::Working,
+				Ok(Advance::Pending) => return Step::Waiting,
+				Ok(Advance::Done) => break ExportState::Completed,
+				Ok(Advance::Cancelled) => break ExportState::Cancelled,
+				Err(e) => break ExportState::Failed(e),
+			}
 		};
+		Step::Ended(self.end(state))
+	}
+
+	/// Steps a frame at a time to the end, `progress(done, total)` following every frame. A pending frame fails
+	/// the job: nothing settles it while the caller's thread waits here.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn run(mut self, mut progress: impl FnMut(usize, usize), cancel: &AtomicBool) -> ExportReport {
+		loop {
+			match self.step(Duration::ZERO, cancel) {
+				Step::Working => {
+					let (done, total) = self.progress();
+					progress(done, total);
+				}
+				Step::Waiting => {
+					let frame = *self.frames.start() + self.done;
+					let pending = anyhow::anyhow!("frame {frame} is pending, which a blocking export cannot wait for");
+					return self.end(ExportState::Failed(ExportError::Source(pending)));
+				}
+				Step::Ended(report) => return report,
+			}
+		}
+	}
+
+	/// Writes the targets of the next frame not yet written to them.
+	fn advance(&mut self, cancel: &AtomicBool) -> crate::Result<Advance> {
+		if self.shape.format != SampleFormat::Half {
+			return Err(ExportError::IndexedStore);
+		}
+		let frame = *self.frames.start() + self.done;
+		if !self.frames.contains(&frame) {
+			return Ok(Advance::Done);
+		}
+		if cancel.load(Ordering::Relaxed) {
+			return Ok(Advance::Cancelled);
+		}
+		let held = self.source.wait_for(frame).map_err(ExportError::Source)?;
+		if cancel.load(Ordering::Relaxed) {
+			return Ok(Advance::Cancelled);
+		}
+		if !held {
+			return Err(ExportError::FrameMissing { frame, count: self.source.frame_count() });
+		}
+		let (w, h) = (self.shape.width(), self.shape.height());
+		while let Some(target) = self.targets.get_mut(self.written) {
+			let out = bytemuck::cast_slice_mut(&mut self.halves);
+			if self.source.poll_layer(frame, target.layer, out).map_err(ExportError::Source)?.is_pending() {
+				return Ok(Advance::Pending);
+			}
+			if target.sink.wants_halves() {
+				target.sink.write_halves(&self.halves, w, h)?;
+			} else {
+				render_half_into(&self.halves, &target.look.table, &mut self.rgba);
+				if let Some(edges) = &target.look.edges {
+					glowing_edges::blend_additive(&mut self.rgba, edges, target.look.edge_gain);
+				}
+				if let (Some(overlays), Some(raster)) = (&self.overlays, self.raster.as_mut()) {
+					overlays.draw(raster, &mut self.rgba, target.layer, frame)?;
+				}
+				target.sink.write_frame(&self.rgba, w, h)?;
+			}
+			self.written += 1;
+		}
+		self.written = 0;
+		self.done += 1;
+		Ok(Advance::Wrote)
+	}
+
+	/// Finishes every sink and removes the outputs of a job that did not complete unless kept partial.
+	fn end(&mut self, mut state: ExportState) -> ExportReport {
+		self.ended = true;
 		let finished = finish_all(self.targets.iter_mut().map(|t| &mut t.sink));
 		if let (Err(e), false) = (finished, matches!(state, ExportState::Failed(_))) {
 			state = ExportState::Failed(e);
@@ -134,60 +274,12 @@ impl ExportJob<'_> {
 			tracing::error!(error = %e, "the partial export could not be removed");
 			written = self.targets.iter().flat_map(|t| t.sink.files()).collect();
 		}
+		let done = self.done;
 		if let ExportState::Failed(e) = &state {
 			tracing::error!(error = %e, frames = done, "export failed");
 		} else {
-			tracing::debug!(?state, frames = done, elapsed = ?started.elapsed(), "export ended");
+			tracing::debug!(?state, frames = done, elapsed = ?self.started.elapsed(), "export ended");
 		}
-		ExportReport { state, frames_done: done, elapsed: started.elapsed(), written }
-	}
-
-	/// True when every frame was written, false when cancelled.
-	fn render(
-		&mut self,
-		done: &mut usize,
-		total: usize,
-		progress: &mut impl FnMut(usize, usize),
-		cancel: &AtomicBool,
-	) -> crate::Result<bool> {
-		let shape = self.source.shape();
-		if shape.format != SampleFormat::Half {
-			return Err(ExportError::IndexedStore);
-		}
-		let (w, h) = (shape.width(), shape.height());
-		let mut halves = vec![f16::ZERO; shape.plane_samples()];
-		let mut rgba = vec![0u8; shape.plane_samples() * 4];
-		for frame in self.frames.clone() {
-			if cancel.load(Ordering::Relaxed) {
-				return Ok(false);
-			}
-			let held = self.source.wait_for(frame).map_err(ExportError::Source)?;
-			if cancel.load(Ordering::Relaxed) {
-				return Ok(false);
-			}
-			if !held {
-				return Err(ExportError::FrameMissing { frame, count: self.source.frame_count() });
-			}
-			for target in &mut self.targets {
-				self.source
-					.copy_layer(frame, target.layer, bytemuck::cast_slice_mut(&mut halves))
-					.map_err(ExportError::Source)?;
-				if target.sink.wants_halves() {
-					target.sink.write_halves(&halves, w, h)?;
-					continue;
-				}
-				render_half_into(&halves, &target.look.table, &mut rgba);
-				if let Some(edges) = &target.look.edges {
-					glowing_edges::blend_additive(&mut rgba, edges, target.look.edge_gain);
-				}
-				if let Some(overlays) = &self.overlays {
-					overlays.draw(&mut rgba, target.layer, frame);
-				}
-				target.sink.write_frame(&rgba, w, h)?;
-			}
-			*done += 1;
-			progress(*done, total);
-		}
-		Ok(true)
+		ExportReport { state, frames_done: done, elapsed: self.started.elapsed(), written }
 	}
 }

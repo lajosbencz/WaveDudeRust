@@ -136,7 +136,6 @@ drag, the debounce on top once the hand rested.
 | Painter: 400x330 outline | 1.65 ms |
 | Painter: 400 px lens / hexagon | 0.23 / 0.15 ms |
 | Painter: S-bent fibre across the canvas | 2.6 ms |
-| Freya: 1080p frame drawn through Skia with 200 lines | 0.35 ms avg, 1.9 max |
 | JPEG 1080p 4:4:4 q90, one thread / sequence sink with workers | 15.6 / 1.8 ms a frame |
 | MP4 1080p (openh264) | 5.1 ms a frame |
 | MPEG-1 1080p (slices on rayon) | 3.5 ms a frame |
@@ -187,6 +186,27 @@ encoders run on a sink thread (MP4, MPEG-1, AVI) or the job's encoder pool
 (image sequences, MOV samples written in order), and MOV PNG no longer deflates
 on the job's thread.
 
+Burned-in overlays as epaint meshes, 2026-11-13: every overlay on both layers,
+```
+wavedude-cli export crates/wavedude-core/tests/fixtures/examples/Example02_Coherent_source_gaussian_beam.wdproj \
+  --out ex2.avi --steps 1000 --from 600 --to 1000 --layers both --markers --graphs --source-markers
+```
+200 frames of each layer, AVI, the CLI's "ms/frame exporting", alternated with the previous CPU rasteriser (commit
+d377336), three runs each, load average 6 to 14:
+
+| Overlays drawn by | ms a frame |
+|---|---|
+| previous CPU rasteriser (bitmaps and ab_glyph) | 3.1 to 3.4 |
+| epaint meshes rasterised on the CPU (`wavedude_export::raster`) | 3.5 |
+
+The meshes' rasteriser draws bands of rows in parallel; the source markers, which do not move, are tessellated
+once; probe strokes are quads on whole pixels, without feathering. What is left over the previous rasteriser is
+drawing the source markers' triangles every frame (about 0.3 ms a layer here, 16 000 triangles).
+
+Before, 2026-11-12, the meshes were drawn on the GPU by egui-wgpu and read back: 6.0 to 6.6 ms a frame on the RTX
+5070 Ti, 11.0 to 11.2 on lavapipe; uploading and reading back only the rectangles the shapes cover, 4.9 to 5.1 and
+9.5 to 9.9, of which the device setup was 0.2 s an export (the run on the CPU engine leaves no device to share).
+
 Export quality, PSNR against the rendered frame: MPEG-1 41.8 dB at 200x120,
 44.6 at 640x360, 47.9 at 1280x720; MP4 40.2 at 640x360, 44.4 at 1280x720
 (tiny pictures fall under 40 dB through the 300 kbit/s floor). AVI, MOV
@@ -204,6 +224,15 @@ frames in 3.33 s at the 30 fps clock, the presenter 1.3 ms a frame on average
 and 2.5 at worst, the wait at the picture 3 ms on average and 8 at worst, the
 worst gap between two presented frames 54 ms (the 16 ms state tick quantises
 the 33 ms frames to 32 or 48 ms).
+
+Preview colouring, 2026-11-13, a new frame's picture of a 2880x1080 16-bit plane (Example 21's canvas) at
+1600x600 device pixels with the outline, mean of 60:
+`cargo test --release -p wavedude-core --features gpu --test colour -- --ignored --nocapture preview_colouring_time`
+(`VK_ICD_FILENAMES` picks lavapipe). Before, the presenter's paint and outline blend on the CPU: 0.87 ms a
+picture, about 570 frames a second for both pictures, plus the 3.8 MB texture upload each. After, a run on the
+GPU engine: the picture set to the next device frame, drawn, submitted and waited for: 0.066 to 0.075 ms on the
+RTX 5070 Ti, about 7000 frames a second for both; 2.2 to 2.4 ms on lavapipe, where the app runs the CPU engine
+and keeps the presenter. Playback stays at the 30 fps clock either way; the preview's share of a frame shrinks.
 
 Solver quality after decision 0010 ([docs/physics.md](physics.md) has the tables): CPML
 reflection -74 to -84 dB at 16 to 20 cells and about -104 dB at 32, at normal
@@ -240,6 +269,9 @@ Open performance items:
 
 ## The browser demo
 
+The demo page and its package are gone ([decision 0019](decisions/0019-egui-and-the-platform-layer.md)); the numbers are the engines' in
+the browser.
+
 2026-11-12, Chrome 158 and Firefox 159 (flatpak, `dom.webgpu.enabled`, with the NVIDIA driver's flatpak GL
 extension; without it Firefox's WebGPU runs on lavapipe), both on Linux. A page beside the built demo
 (`demo/build.sh target/site`, served by `python3 -m http.server`) loads the package and, on Example04 at the
@@ -257,3 +289,56 @@ timing `mapAsync` of a 4 MiB copy (nine runs, median): plain 2.2 ms in Chrome, 1
 `onSubmittedWorkDone` awaited as well, the same; with an empty `queue.submit([])` every turn of the event loop
 while it waits, 4.1 ms in Chrome and 8 ms in Firefox. The package's wait (`crates/wavedude-wasm/src/wait.rs`)
 races the readback against a 1 ms timer that submits an empty batch, so Chrome's readback is not delayed.
+
+## The browser's frame spill
+
+2026-11-13, Chrome for Testing 158 headless on Linux (Playwright), the app built by `tools/build-web.sh` and served by
+`python3 -m http.server`. `navigator.deviceMemory` set to 0.25 and RAM cache size 10 % (a 25.6 MB budget); a 640x480
+project of 1500 steps, run with F5: 750 frames of 0.61 MB, 43 in memory and 707 (0.43 GB) in the origin private file
+system. The reads are the app's debug lines `spilled frame read back` (request to bytes in Rust); playback is
+F7 from frame 0 for 12 s, frames shown counted by their reads.
+
+| | WebGPU (RTX 5070 Ti) | WebGL2 (SwiftShader, CPU engine) |
+|---|---|---|
+| Run of 1500 steps | 12.5 s | 45.0 s |
+| Read of a spilled frame, median / p95 / worst | 0.7 / 0.9 / 12 ms | 140 / 145 / 222 ms |
+| Playback over spilled frames | 60 frames/s (680 in 11.3 s) | 33 frames/s (373 in 11.2 s) |
+
+The read is a chain of five promises, each resolved in a task of the main thread: under WebGL2 the software
+rasteriser's frames between them make up the latency, not the storage.
+
+## The browser's live run
+
+2026-11-13, Chrome for Testing 158 headless (WebGPU through Vulkan) and Firefox 159 (`dom.webgpu.enabled`) on Linux,
+RTX 5070 Ti, Playwright; the app built by `tools/build-web.sh`, served by `python3 -m http.server`. A new project
+(1920x1080, 2500 steps, no sources or probes), run to its end at the Low preview (625 stored frames, half resolution, 8-bit)
+and in Chrome at High with the memory warning's halved resolution and 8-bit samples (1250 stored frames). Steps/s from
+the app's `Run Completed` line; animation frames counted by a `requestAnimationFrame` loop from the run's start to that
+line. Before: at most two captures in flight, the run yielding while the previous one was not mapped (one capture per
+animation frame); after: a ring of captures by the GPU engine's staging budget (64 MiB, 2 to 16), landed in order at
+each pump.
+
+| | Before: steps/s | animation frames a stored frame | After: steps/s | animation frames a stored frame |
+|---|---|---|---|---|
+| Chrome, Low | 266 | 0.91 | 3500 | 0.07 |
+| Firefox, Low | 200 to 240 | 1.0 to 1.2 | 2100 to 2300 | 0.10 to 0.12 |
+| Chrome, High | 120 | 1.0 | 1900 | 0.06 |
+
+Natively the threaded run waits for the oldest capture only when the ring is full: `cargo test --release -p
+wavedude-core --test run -- --ignored --nocapture live_run_drag_burst_timing`, two runs each, before / after: one frame
+of Example16 25 to 31 / 23 to 25 ms (source moved), 70 to 87 / 60 to 64 ms (part moved); 118 to 120 / 120 of 120 frames
+shown with every frame wanted.
+
+## The idle window
+
+2026-11-13, Ryzen 9 9900X, release build on Xvfb (`DISPLAY=:77`, presented through lavapipe), a fresh settings folder.
+Wakeups are the main thread's voluntary context switches over 10 s without input, read from
+`/proc/<pid>/task/<pid>/status` (`voluntary_ctxt_switches`); CPU is its `utime + stime` over the same 10 s.
+
+| | 240 ms idle tick | Woken by news only |
+|---|---|---|
+| Startup page shown, 30 s after the start | 615 to 620 wakeups, 0.58 s CPU | 0 wakeups, 0 s CPU |
+| Example01 run to its end (2500 steps), then idle | 620 to 630 wakeups | 0 wakeups |
+
+While nothing moves the window requests no repaint; a log line, the scene image file changing, the run's state
+changing kind, an open request from the OS and the OS colour scheme wake it.

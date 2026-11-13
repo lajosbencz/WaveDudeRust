@@ -56,6 +56,10 @@ or every frame) and whether the user paused. The run converges on it, without ti
 - Busy feedback: status bar "Computing frame n" with an indeterminate bar, pictures dim under a spinner after
   150 ms while the position's frame is computed.
 - Opening a project makes frame 0 and nothing more (the engine warms up on it).
+- Simulation > Discard frames (port), after a Yes: a run stops and every frame and trace goes. The run gets a new
+  store, so the old one's memory and spill (the disk file, the browser storage's folder) are freed once the
+  pictures let go of it; the engine starts over and the timeline at frame 0, made again as after opening the
+  project. The project and its undo history stay; refused while an export holds or waits for the run.
 - A part edit repaints the scene in the background, so part outlines on the pictures follow a drag smoothly.
 
 ## Automatic re-run

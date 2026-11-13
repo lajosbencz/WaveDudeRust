@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WaveDude Rust</title>
+<meta name="description" content="A 2D wave-equation simulator for Linux, macOS, Windows and the browser.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root {
+	--bg: #f6f7f9;
+	--fg: #16181d;
+	--muted: #5b6270;
+	--accent: #00558f;
+	--accent-fg: #fff;
+	--line: #d5d9e0;
+	--glow: rgba(0, 85, 143, 0.14);
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #111316;
+		--fg: #eef0f3;
+		--muted: #9aa2b1;
+		--accent: #2f8fd6;
+		--accent-fg: #fff;
+		--line: #2b3038;
+		--glow: rgba(47, 143, 214, 0.18);
+	}
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+	display: grid;
+	place-items: center;
+	padding: 24px 16px;
+	background: radial-gradient(ellipse 60% 45% at 50% 40%, var(--glow), transparent 70%), var(--bg);
+	color: var(--fg);
+	font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 34rem; text-align: center; }
+img { width: 96px; height: 96px; filter: drop-shadow(0 8px 24px var(--glow)); }
+h1 { margin: 20px 0 8px; font-size: clamp(2rem, 7vw, 3rem); font-weight: 650; letter-spacing: -0.02em; }
+p { margin: 0 auto 32px; max-width: 28rem; color: var(--muted); font-size: 1.0625rem; }
+nav { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+a {
+	padding: 10px 22px;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	color: var(--fg);
+	text-decoration: none;
+	font-weight: 550;
+	transition: border-color 0.15s, background 0.15s;
+}
+a:hover, a:focus-visible { border-color: var(--accent); outline: none; }
+a.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+a.primary:hover, a.primary:focus-visible { filter: brightness(1.1); }
+</style>
+</head>
+<body>
+<main>
+	<img src="icon.svg" alt="">
+	<h1>WaveDude Rust</h1>
+	<p>A 2D wave-equation simulator: scenes from images and optical parts, sources, probes with live graphs and video export.
+	For Linux, macOS, Windows and the browser.</p>
+	<nav>
+		<a class="primary" href="app/">Open in the browser</a>
+		<a href="https://github.com/lajosbencz/WaveDudeRust/releases/latest">Download</a>
+		<a href="https://github.com/lajosbencz/WaveDudeRust">Source</a>
+	</nav>
+</main>
+</body>
+</html>

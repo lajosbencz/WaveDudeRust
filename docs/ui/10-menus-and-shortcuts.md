@@ -10,8 +10,17 @@ Conventions:
   The port needs an equivalent icon for each.
 - Every entry is 23 px high, shows its shortcut text right-aligned.
 - A disabled entry greys text and icon.
-- Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`wavedude-app` [`ui/menus.rs`](../../crates/wavedude-app/src/ui/menus.rs));
-  the ids in this document stay the entries' test ids.
+- (port) While a modal shows, the menu bar is greyed and takes no pointer or key.
+- Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`wavedude-app` [`menus.rs`](../../crates/wavedude-app/src/menus.rs));
+  the ids in this document name the entries.
+- Keys in the menus: Alt held underlines the mnemonics, as do keys working the menus. Alt+letter opens that menu
+  of the bar on its first entry; F10 or a lone Alt puts the focus on the bar's first header, where Left/Right walk
+  the headers and Down, Enter, Space or a letter opens one (Up: on its last entry). In an open menu Up/Down walk the
+  enabled entries, Right or Enter opens a submenu, a letter picks its entry (several sharing it take the focus in
+  turn), Home/End reach the ends, Left/Right open the neighbouring menu of the bar, Esc closes one level (from a
+  menu of the bar back to its header, from there out of the bar) and the focus returns to where the keys took it
+  from. The pane title bar's menu takes letters too. The mnemonics are the entries' access keys for assistive
+  technology (port: [`ui/menu_keys.rs`](../../crates/wavedude-app/src/ui/menu_keys.rs)).
 
 ## File
 
@@ -26,9 +35,9 @@ Conventions:
 | 6 | Save As... | A/U/S/A | Ctrl+Shift+S | U+E792 | always | Save dialog, filter: *.wdproj, *.xml. Proposes the suggested name (import/example) beside its origin. |
 | - | separator | | | | | |
 | 7 | Export > | E/E/X/E | - | U+EDE1 | always | Submenu below. |
-| 8 | Export last | L/W/R/H | Ctrl+E | U+E8EE | after the first completed run export since the project was opened | Repeats the session's last completed run export: same layers, format, path; no dialog; existing file or sequence folder replaced without asking. A still, a cancelled or a failed export does not count. |
+| 8 | Export last | L/W/D/H | Ctrl+E | U+E8EE | after the first completed run export since the project was opened | Repeats the session's last completed run export: same layers, format, path; no dialog; existing file or sequence folder replaced without asking. A still, a cancelled or a failed export does not count. |
 | - | separator | | | | | |
-| 9 | Close Project | C/C/F/L | - | U+E711 | when a project is open (`CanFileClose`) | Asks about unsaved edits, then an empty project. |
+| 9 | Close Project | C/C/F/L | - | U+E711 | unless the document is the empty placeholder project of the start or of an earlier Close (`Document::is_placeholder`) | Asks about unsaved edits, then an empty project. A project made by New, Open, an example or an edit enables it. |
 | - | separator | | | | | |
 | 10 | Exit | X/B/Q/F | Alt+F4 | U+E7E8 | always | Asks about unsaved edits, quits. |
 
@@ -44,6 +53,18 @@ Conventions:
 | Export intensity frame... | M/X/T/D | Ctrl+Shift+G | U+EB9F | same | Same for the intensity. |
 
 Dialog details: [`70-dialogs-and-windows.md`](70-dialogs-and-windows.md).
+
+The browser build has no exports: the Export submenu and Export last are absent, their shortcuts inert (decision 0021).
+
+### File dropped on the window
+
+A file dropped on the window, on both targets, is read as follows; the last file of a frame wins, and nothing is taken while a modal window shows.
+
+- An image (the extensions of the scene image picker) becomes the scene image, as the picker's answer does.
+- Any other file goes to the state's `Event::DropFile`: a project (`.wdproj`, `.xml`, `.json`) or a `.wdscheme` opens as File > Open does, after the question about unsaved edits; a file of another type reports the Open error.
+- The tree and the pictures claim a drag of their own objects first (`20-project-tree.md`, Drag and drop).
+
+In the browser the page asks before it is left (closed, reloaded, navigated away) while the project has unsaved edits.
 
 ## Edit
 
@@ -87,6 +108,7 @@ row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
 | Run | R/S/L/S | F5 | U+E768 | no run active and no export running | Run from step 0 with the project as it is; preview follows (Live). May ask the memory warning first. |
 | Pause / Resume | P/P/P/P, Resume R/F/R/H | F6 | U+E769 | a run is active | Toggles pause; header reads Resume while paused. |
 | Stop | T/T/A/T | Shift+F5, Esc | U+E71A | a run or an export is active | Esc/Stop cancels an export when one runs, else stops the run; computed frames stay. |
+| Discard frames (port) | D/V/S/V | - | U+E74D | the run has frames stored and no export holds or waits for it | Asks "Discard the frames of the run?" (Yes / No, No the default); Yes stops a run and drops its frames from RAM and the spill (disk file, browser storage), the timeline starts over at frame 0, which is made again. The project and its history stay. |
 | - separator | | | | | |
 | Play / Pause playback | Y/D/E/L | F7 | U+E768 / U+E769 | `CanPlayPause` | The timeline's Play/Pause from anywhere. Header and icon switch while playing. |
 | - separator | | | | | |

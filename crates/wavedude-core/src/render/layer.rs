@@ -1,5 +1,7 @@
 //! One layer's picture: the colours the project asks for and the choice of renderer for a stored plane.
 
+use std::sync::Arc;
+
 use crate::engine::{FrameShape, SampleFormat, as_halves};
 use crate::io::schemes::SchemeStore;
 use crate::model::{ColorScheme, Layer, Project};
@@ -37,7 +39,7 @@ impl LayerColours {
 pub struct View {
 	pub width: u32,
 	pub height: u32,
-	/// The part of the canvas the picture shows; `None` is all of it.
+	/// The part of the canvas the picture shows, in canvas pixels; `None` is all of it.
 	pub window: Option<Window>,
 	/// 10, 12, 14 or 16 dithers a 16-bit plane; anything else is plain.
 	pub dither_bits: u32,
@@ -57,9 +59,40 @@ impl View {
 		}
 	}
 
+	/// The window in samples of a plane of `shape`.
+	pub fn sample_window(&self, shape: &FrameShape) -> Option<Window> {
+		self.window.map(|w| in_samples(w, shape.divisor))
+	}
+
 	/// Bytes of the RGBA8 picture.
 	pub fn bytes(&self) -> usize {
 		self.width as usize * self.height as usize * 4
+	}
+}
+
+/// The colours a plane of a layer is looked up in: an index plane's palette, a half plane's table, plain or
+/// dithered.
+#[derive(Clone, Debug)]
+pub enum Colouring {
+	Palette(Arc<Palette>),
+	Plain(Arc<HalfTable>),
+	Dithered(Arc<DeepHalfTable>, DitherDepth),
+}
+
+impl Colouring {
+	/// The colours of `layer`'s plane of `shape` in `view` (process-wide cached tables).
+	pub fn of(shape: &FrameShape, layer: Layer, colours: &LayerColours, view: &View) -> Self {
+		let LayerColours { scheme, black_level, brightness } = colours;
+		let kind = shape.sample_kind(layer);
+		match (shape.format, DitherDepth::from_bits(view.dither_bits)) {
+			(SampleFormat::Index, _) => Self::Palette(Palette::cached(scheme, *black_level)),
+			(SampleFormat::Half, Some(depth)) => {
+				Self::Dithered(DeepHalfTable::cached(scheme, *black_level, *brightness as f32, kind), depth)
+			}
+			(SampleFormat::Half, None) => {
+				Self::Plain(HalfTable::cached(scheme, *black_level, *brightness as f32, kind))
+			}
+		}
 	}
 }
 
@@ -74,26 +107,22 @@ pub fn paint(
 	screen: &mut ScreenRenderer,
 	out: &mut [u8],
 ) {
-	let LayerColours { scheme, black_level, brightness } = colours;
-	match shape.format {
-		SampleFormat::Index => render_indexed_into(bytes, &Palette::cached(scheme, *black_level), out),
-		SampleFormat::Half => {
-			let halves = as_halves(bytes);
-			let kind = shape.sample_kind(layer);
-			let (sw, sh) = (shape.width() as usize, shape.height() as usize);
-			screen.set_view(sw, sh, view.window, view.width as usize, view.height as usize);
-			match DitherDepth::from_bits(view.dither_bits) {
-				Some(depth) => {
-					let deep = DeepHalfTable::cached(scheme, *black_level, *brightness as f32, kind);
-					screen.render(&halves, ScreenColors::Dithered(&deep, depth), out);
-				}
-				None => {
-					let table = HalfTable::cached(scheme, *black_level, *brightness as f32, kind);
-					screen.render(&halves, ScreenColors::Plain(&table), out);
-				}
-			}
-		}
-	}
+	let colouring = Colouring::of(shape, layer, colours, view);
+	let colors = match &colouring {
+		Colouring::Palette(palette) => return render_indexed_into(bytes, palette, out),
+		Colouring::Plain(table) => ScreenColors::Plain(table),
+		Colouring::Dithered(table, depth) => ScreenColors::Dithered(table, *depth),
+	};
+	let (sw, sh) = (shape.width() as usize, shape.height() as usize);
+	screen.set_view(sw, sh, view.sample_window(shape), view.width as usize, view.height as usize);
+	screen.render(&as_halves(bytes), colors, out);
+}
+
+/// A `window` of the canvas in samples of a plane stored at `divisor`: stored sample k covers canvas pixels
+/// `[k * divisor, (k + 1) * divisor)`.
+fn in_samples((x, y, w, h): Window, divisor: u32) -> Window {
+	let d = f64::from(divisor);
+	(x / d, y / d, w / d, h / d)
 }
 
 /// RGBA8 `src` of `from` pixels, or the `window` of it, resampled to `to` pixels by nearest neighbour (pixel centres).
@@ -175,6 +204,20 @@ mod tests {
 		let plain_view = View { dither_bits: 0, ..view };
 		paint(plane, &shape, Layer::Field, &colours(), &plain_view, &mut ScreenRenderer::new(1, 1, 1, 1), &mut plain);
 		assert_ne!(dithered, plain);
+	}
+
+	#[test]
+	fn a_zoomed_half_plane_at_a_divisor_shows_the_canvas_part_asked_for() {
+		let shape = FrameShape { canvas_width: 8, canvas_height: 4, divisor: 2, ..shape(SampleFormat::Half) };
+		let halves: Vec<f16> = (0..8).map(|i| f16::from_f32(i as f32 / 8. - 0.5)).collect();
+		let plane: &[u8] = bytemuck::cast_slice(&halves);
+		// The canvas's right half is the stored plane's right half: samples 2 and 3 of each row.
+		let view = View::of(&shape, (4, 4), Some((4., 0., 4., 4.)), 0);
+		let mut out = vec![0; view.bytes()];
+		paint(plane, &shape, Layer::Field, &colours(), &view, &mut ScreenRenderer::new(1, 1, 1, 1), &mut out);
+		let table = HalfTable::cached(&colours().scheme, 0., 2., shape.sample_kind(Layer::Field));
+		let mut screen = ScreenRenderer::windowed(4, 2, Some((2., 0., 2., 2.)), 4, 4);
+		assert_eq!(out, screen.render_to_vec(&halves, ScreenColors::Plain(&table)));
 	}
 
 	#[test]

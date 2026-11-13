@@ -2,6 +2,19 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
+
+use wavedude_export::fs::{OutputFs, StdFs};
+
+/// The platform's file system, as an export takes it.
+pub(crate) fn std_fs() -> Arc<dyn OutputFs> {
+	Arc::new(StdFs)
+}
+
+/// A buffered file created at `path`, for a writer.
+pub(crate) fn file(path: &Path) -> std::io::BufWriter<std::fs::File> {
+	std::io::BufWriter::new(std::fs::File::create(path).unwrap())
+}
 
 /// A fresh, empty scratch folder under cargo's target tmp dir.
 pub(crate) fn scratch(name: &str) -> PathBuf {

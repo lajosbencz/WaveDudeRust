@@ -88,6 +88,13 @@ StoreBytesAt(q) = layers * PlaneBytes(div, format) * ceil(FrameCount / q.FrameDi
 Frames `0..RamFrames-1` live in native memory; the rest in a spill file in `%LOCALAPPDATA%\WaveDudeNext\cache`
 (delete on close; Rust: an unlinked file in the OS cache dir's `frames` folder, so a killed process leaves nothing;
 named `.wdfs` leftovers of earlier builds are removed when the worker starts). No memory mapping.
+In the browser (Rust only) the budget is the frames' memory, min(device memory, 2 GiB) (1 GiB when the browser does
+not tell), or its FrameMemoryPercent share when > 0; the frames past it spill to the origin private file system, one
+file per frame, written and read asynchronously (decision 0020). A spilled frame stays in memory while its write is
+in flight (the run waits while 4 are) and while it is the frame written last; a spilled frame being read back keeps
+the picture shown before until it is there. Spilling is refused, failing the run at its start, when the frames past
+memory exceed the free storage estimated when the page loaded, or the browser has no such file system; a write
+refused for quota fails the run.
 
 Spill file header (64 bytes, little-endian i32 each):
 
@@ -186,6 +193,18 @@ deep channel level L (0..65280): out = (L >> 8) + (((L & 0xFF)*2 >= threshold[py
 ```
 (px, py) are the output pixel's coordinates; the matrix is row-major `[y][x]`; the full low byte is compared.
 Per channel: R from bits 32..47, G from 16..31, B from 0..15.
+
+## Colouring on the GPU (Rust only)
+
+Where a plane lives on the GPU, a render pass colours it there (`render::gpu`): the screen renderer and the frame
+renderer above, then the outline blend, as on the CPU, from the CPU's own tables (half table; deep table and Bayer
+thresholds; palette; each axis's first samples and weights; the outline's additions `min(255, trunc(e * gain))` per
+pixel), uploaded when their inputs change. The plane is read as stored (packed words: two halves or four indices).
+A half plane is coloured per picture pixel: the axes' sums rows first in f32 (squared and rooted for an intensity
+root, the root correctly rounded), the bit-exact f16 rounding of the capture, then the lookup and dithering. An index
+plane's stored samples take the palette plus the outline at the stored size and are scaled bilinearly between
+sample centres, as a texture sampler scales the CPU's picture. A card that fuses the multiply-adds of the
+resampling may pick a neighbouring table entry at an f16 rounding boundary; `tests/colour.rs` states the tolerance.
 
 ## Brightness fit (`Rendering/BrightnessFit.cs`)
 

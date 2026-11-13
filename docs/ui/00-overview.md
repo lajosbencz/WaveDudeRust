@@ -11,7 +11,7 @@ Top to bottom (`MainWindow.xaml`):
 |---|---|
 | Menu bar | File, Edit, View, Simulation, Help. Not in the Tab cycle; F10 or Alt enters it. See [`10-menus-and-shortcuts.md`](10-menus-and-shortcuts.md). |
 | Dock host | Tool panes around one fixed centre area. Centre area = the Preview (pictures, timeline, transport bar). |
-| Status bar | 22 px, padding 4,0,16,0, items padded 4,2: last log line (left), run status while a run exists (right, no frame read-out), busy text + 120 x 12 progress bar (far right; a download first: an update, the codec), 16 px resize grip in the corner. |
+| Status bar | 22 px, padding 4,0,16,0, items padded 4,2: last log line (left), run status while a run exists (right, no frame read-out), busy text + 120 x 12 progress bar (a download first: an update, the codec), the frame cache while a run holds a store (far right: "RAM used / RAM cache", plus "Spill n" once frames spilled, to the cache file natively and to the origin private file system in the browser; tooltip: frames in RAM and spilled, the RAM cache; formatted when its figures change), 16 px resize grip in the corner. |
 
 No toolbar on the window. The Project pane has its own toolbar ([`20-project-tree.md`](20-project-tree.md)); the Preview has the
 transport bar ([`50-timeline-transport.md`](50-timeline-transport.md)).
@@ -48,6 +48,11 @@ Docking behaviour (`Docking/`):
   group = tab into it; side = split next to it. Not into the centre area as a tab; not into own group.
 - Edge drop takes a default share of the host; side drop a share of the hovered pane (exact fractions in
   `DockDropAdorner.cs`, `DockHost.cs`).
+- Port: no indicators; the pointer picks the target. A 40 px strip along an outer edge of the dock drops there (a
+  quarter of the dock); over a group its outer 30 % towards a side splits beside it (a third of the group) and its
+  middle tabs into it; the Preview's group takes its sides only. The drop area is tinted accent with a 2 px accent
+  border, the pane's title follows the pointer on an accent label; Esc cancels the drag
+  ([`ui/dock.rs`](../../crates/wavedude-app/src/ui/dock.rs)).
 - Multiple panes in a group show a tab strip; the active pane's title bar is accent-coloured with white text
   and a light-blue grip, others inactive.
 - Default arrangement: left column a quarter of the window (1 : 3 against the preview), Project over
@@ -58,6 +63,8 @@ Docking behaviour (`Docking/`):
 - Status bar double-click opens the Messages pane, or focuses it when shown.
 - The arrangement (incl. sizes) is saved on close and restored at start; unknown ids in a saved layout are
   ignored.
+- Port: the arrangement is saved as it changes, once the pointer lets go (a drag or a resize writes it once), on
+  both targets ([`ui/mod.rs`](../../crates/wavedude-app/src/ui/mod.rs)).
 - View > Panes lists Preview too (decision 0008); in the WPF code the Preview is the centre area
   and not a registered pane, so only Project, Properties, Messages are listed.
 
@@ -67,7 +74,8 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 
 - Font: Segoe UI 12 DIP (9 pt) everywhere; icons from the platform icon font (Segoe Fluent Icons / MDL2)
   or the app's own 16 px stroked drawings. Rust port: Segoe UI when installed, else the bundled Selawik
-  (Microsoft's metric-compatible stand-in, SIL OFL), 12 px; 16 px icons.
+  (Microsoft's metric-compatible stand-in, SIL OFL; a Noto Sans Math subset after it for the Greek and math
+  signs it lacks), 12 px; 16 px icons.
 - Themes: System (follows OS), Light, Dark; live switch, native title bars follow. Colour tokens live in
   `Themes/Dark.xaml` and `Themes/Light.xaml` (window, menu, status bar normal/warn/error, tool window,
   title bar active/inactive, tabs, tree, scroll bars, splitter, drop indicator, buttons). Dark examples:
@@ -89,8 +97,8 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 - Every menu entry has a unique mnemonic within its menu, in all four languages (incl. shared strings such as
   Cut, Copy, Paste, Select all, the export entries, in every menu they appear in).
 - Commands pressed by automation have an unmodified key.
-- Everything automation needs has a stable id (WPF AutomationId). Rust port: keep the ids as widget test ids
-  (Freya exposes an AccessKit tree, see decision 0002).
+- Everything automation needs has a stable id (WPF AutomationId). Rust port: the ids name the elements; the
+  window's tests find them in egui's AccessKit tree by role and label (decision 0019).
 
 ## UI zoom and DPI
 

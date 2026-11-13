@@ -5,6 +5,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use std::path::Path;
+use std::task::Poll;
 
 use half::f16;
 use wavedude_core::engine::types::{FrameShape, SampleKind};
@@ -12,6 +13,7 @@ use wavedude_core::model::Layer;
 
 mod bits;
 pub mod csv;
+pub mod fs;
 #[cfg(feature = "mp4")]
 pub mod h264;
 pub mod job;
@@ -23,7 +25,7 @@ pub mod raster;
 pub mod sinks;
 mod yuv;
 
-pub use job::{ExportJob, ExportLayerLook, ExportReport, ExportState, ExportTarget};
+pub use job::{ExportJob, ExportLayerLook, ExportReport, ExportState, ExportTarget, Step};
 pub use plan::ExportPlan;
 pub use sinks::{EncoderPool, FrameSink, SinkSpec};
 
@@ -142,8 +144,9 @@ pub trait FrameSource {
 	fn shape(&self) -> FrameShape;
 
 	/// Copies the plane of `layer` at `frame` into `out` (`shape().plane_bytes()` bytes; native-endian f16 for a
-	/// Half store, palette indices for an Index store).
-	fn copy_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<()>;
+	/// Half store, palette indices for an Index store). Pending: the frame is still coming back from a spill;
+	/// ask again after the event loop ran. `out` is untouched.
+	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<Poll<()>>;
 
 	/// Blocks until `frame` is held; false when it never will be (the source is complete or its producer ended).
 	/// A complete source answers at once.
@@ -174,7 +177,7 @@ impl FrameSource for MemoryFrames {
 		self.shape
 	}
 
-	fn copy_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<()> {
+	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<Poll<()>> {
 		let (field, intensity) = self
 			.frames
 			.get(frame)
@@ -184,7 +187,7 @@ impl FrameSource for MemoryFrames {
 			Layer::Intensity => intensity,
 		};
 		out.copy_from_slice(bytemuck::cast_slice(plane));
-		Ok(())
+		Ok(Poll::Ready(()))
 	}
 }
 
@@ -238,9 +241,12 @@ impl FrameSource for wavedude_core::run::store::FrameStore {
 		*wavedude_core::run::store::FrameStore::shape(self)
 	}
 
-	fn copy_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<()> {
-		self.read_layer(frame, layer, out)?;
-		Ok(())
+	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<Poll<()>> {
+		match self.read_layer(frame, layer, out) {
+			Ok(()) => Ok(Poll::Ready(())),
+			Err(wavedude_core::run::store::StoreError::Pending { .. }) => Ok(Poll::Pending),
+			Err(e) => Err(e.into()),
+		}
 	}
 }
 

@@ -1,6 +1,6 @@
 //! The one way to take a mutex: a lock poisoned by a panicking thread is taken anyway, since every guarded value
-//! here is whole between operations and the panic is reported where it happened. Also the bound that is `Send`
-//! only where threads exist, and the flag a callback sets for a future to wait on.
+//! here is whole between operations and the panic is reported where it happened. Also the bounds that are `Send`
+//! and `Sync` only where threads exist, and the flag a callback sets for a future to wait on.
 
 #[cfg(feature = "gpu")]
 use std::sync::OnceLock;
@@ -24,6 +24,18 @@ impl<T: Send> MaybeSend for T {}
 pub trait MaybeSend {}
 #[cfg(target_arch = "wasm32")]
 impl<T> MaybeSend for T {}
+
+/// `Sync` where threads exist; nothing on wasm32, where the browser's types are not `Sync`.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait MaybeSync: Sync {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Sync> MaybeSync for T {}
+
+/// `Sync` where threads exist; nothing on wasm32, where the browser's types are not `Sync`.
+#[cfg(target_arch = "wasm32")]
+pub trait MaybeSync {}
+#[cfg(target_arch = "wasm32")]
+impl<T> MaybeSync for T {}
 
 #[cfg(feature = "gpu")]
 /// A value set once, possibly from a callback on another thread, that a future can wait for.

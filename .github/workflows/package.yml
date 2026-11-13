@@ -22,7 +22,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  LINUX_PACKAGES: libgl1-mesa-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev
 
 jobs:
   package:
@@ -59,11 +58,12 @@ jobs:
         run: rustup toolchain install
       - if: matrix.universal
         run: rustup target add x86_64-apple-darwin
-      - name: Linux packages
+      - name: Bundled libraries
         if: runner.os == 'Linux'
+        # The X11 client libraries winit loads at runtime, which the AppImage carries ([package.metadata.packager.appimage]).
         run: |
           sudo apt-get update
-          sudo apt-get install -y $LINUX_PACKAGES
+          sudo apt-get install -y --no-install-recommends libxkbcommon0 libxkbcommon-x11-0 libxcb-xkb1 libxcursor1 libxi6 libxrandr2
       - name: Tools
         run: cargo install --locked cargo-packager@0.11.8 cargo-auditable@0.7.7 cargo-cyclonedx@0.5.9
       # cargo auditable embeds the dependency list in the binaries (`cargo audit bin`).

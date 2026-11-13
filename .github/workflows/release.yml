@@ -3,7 +3,7 @@
 # - the workspace version has no tag v<version> yet (a release pull request was merged): `release` tags the commit and
 #   drafts the release, package.yml builds and attests the packages without secrets, `sign` signs the update bundles
 #   without compiling anything, and `publish` attaches everything with latest.json and SHA256SUMS and publishes the
-#   release, which is immutable from then on, and `pages` deploys the web demo (pages.yml) from the released commit;
+#   release, which is immutable from then on, and `pages` deploys the browser app (pages.yml) from the released commit;
 # - otherwise `release-pr` computes the next version, CHANGELOG.md and the notes with git-cliff (cliff.toml) from the
 #   commits since the last tag, read-only, and `release-pr-push` keeps one pull request "chore(release): v<next>"
 #   open, rebuilt as a single commit on the branch release-pr.
@@ -332,7 +332,7 @@ jobs:
       - name: Publish the release
         run: gh release edit "$TAG" --draft=false --latest --repo "${{ github.repository }}"
 
-  # The web demo of the released commit (decision 0017); a failure leaves the release as it is.
+  # The browser app of the released commit; a failure leaves the release as it is.
   pages:
     needs: publish
     uses: ./.github/workflows/pages.yml

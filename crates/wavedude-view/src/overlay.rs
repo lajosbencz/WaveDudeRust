@@ -3,14 +3,16 @@
 //!
 //! Coordinates: canvas pixels as continuous values; a pixel (x, y) spans [x, x + 1), so a source or probe at
 //! pixel (x, y) sits at (x + 0.5, y + 0.5) and a part's centre at (x, y), the corner of its pixel. Angles in
-//! degrees, counter-clockwise on screen. `scale` is logical pixels per canvas pixel; the shapes are in the
-//! logical pixels of the picture's cell.
+//! degrees, counter-clockwise on screen. `scale` is logical pixels per canvas pixel; the shapes are epaint shapes in
+//! the window's points.
 
+use epaint::text::{FontId, FontsView};
+use epaint::{Color32, Pos2, Rect, Shape, Stroke, StrokeKind, pos2, vec2};
 use wavedude_core::engine::emitters::elements_of;
 use wavedude_core::model::{Edges, ItemKind, ItemRef, Layer, Part, PartKind, ProbeKind, Project, Scene};
 use wavedude_core::scene::shapes::{self, Frame, Vec2};
 
-use crate::draw::{DeviceGrid, Disc, Halo, Ink, Pen, Rect, Rgba, Shape, TextMetrics, TextStyle};
+use crate::draw::{DeviceGrid, Halo, Outlines, baseline, haloed_text};
 
 /// Screen distance of a lever beyond the item's reach, logical pixels.
 pub const LEVER_GAP: f32 = 24.;
@@ -104,7 +106,7 @@ fn v(p: Vec2) -> (f32, f32) {
 /// Unit vector of `angle` degrees counter-clockwise on screen.
 fn direction(angle: f64) -> (f64, f64) {
 	let r = angle.to_radians();
-	(r.cos(), -r.sin())
+	(libm::cos(r), -libm::sin(r))
 }
 
 /// Items in drawing order: the unselected ones first, the selected ones last.
@@ -281,15 +283,15 @@ fn part_handles(project: &Project, p: &Part, item: ItemRef, gap: f64, out: &mut 
 }
 
 /// The handles' fixed colours: light grey over a dark halo, the selection bright yellow.
-pub const HANDLE: Rgba = Rgba::rgb(0xD8, 0xD8, 0xD8);
-pub const SELECTED: Rgba = Rgba::rgb(0xFF, 0xE6, 0x00);
-pub const HALO: Rgba = Rgba::new(0x00, 0x00, 0x00, 0xB0);
+pub const HANDLE: Color32 = Color32::from_rgb(0xD8, 0xD8, 0xD8);
+pub const SELECTED: Color32 = Color32::from_rgb(0xFF, 0xE6, 0x00);
+pub const HALO: Color32 = Color32::from_rgba_unmultiplied_const(0x00, 0x00, 0x00, 0xB0);
 /// The labels' text size, logical pixels.
 pub const LABEL_SIZE: f32 = 11.;
-/// The labels' text style.
-pub const LABEL_STYLE: TextStyle = TextStyle::Label { halo: Halo { color: HALO, width: 3. } };
+/// The halo under a label: its outline stroked 3 logical pixels wide.
+pub const LABEL_HALO: Halo = Halo { color: HALO, width: 3. };
 
-fn handle_color(h: &Handle, focused: bool, accent: Rgba) -> Rgba {
+fn handle_color(h: &Handle, focused: bool, accent: Color32) -> Color32 {
 	if focused {
 		accent
 	} else if h.selected {
@@ -299,154 +301,156 @@ fn handle_color(h: &Handle, focused: bool, accent: Rgba) -> Rgba {
 	}
 }
 
-fn line(out: &mut Vec<Shape>, from: (f32, f32), to: (f32, f32), pen: Pen) {
-	out.push(Shape::Line { from, to, pen });
+fn line(out: &mut Vec<Shape>, from: Pos2, to: Pos2, stroke: Stroke) {
+	out.push(Shape::line_segment([from, to], stroke));
 }
 
-fn circle(out: &mut Vec<Shape>, centre: (f32, f32), radius: f32, ink: Ink) {
-	out.push(Shape::Circle { centre, radius, ink });
+fn ring(out: &mut Vec<Shape>, centre: Pos2, radius: f32, stroke: Stroke) {
+	out.push(Shape::circle_stroke(centre, radius, stroke));
 }
 
-fn square(out: &mut Vec<Shape>, (x, y): (f32, f32), half: f32, ink: Ink) {
-	out.push(Shape::Rect { rect: Rect::new(x - half, y - half, x + half, y + half), ink });
+fn square(centre: Pos2, half: f32) -> Rect {
+	Rect::from_center_size(centre, vec2(2. * half, 2. * half))
 }
 
-fn glyph(out: &mut Vec<Shape>, kind: HandleKind, (x, y): (f32, f32), color: Rgba) {
-	let pens = [Pen::new(HALO, 3.5), Pen::new(color, 1.5)];
-	let ticks = |out: &mut Vec<Shape>, inner: f32, outer: f32, pen: Pen| {
-		line(out, (x - outer, y), (x - inner, y), pen);
-		line(out, (x + inner, y), (x + outer, y), pen);
-		line(out, (x, y - outer), (x, y - inner), pen);
-		line(out, (x, y + inner), (x, y + outer), pen);
+fn glyph(out: &mut Vec<Shape>, kind: HandleKind, at: Pos2, color: Color32) {
+	let strokes = [Stroke::new(3.5, HALO), Stroke::new(1.5, color)];
+	let ticks = |out: &mut Vec<Shape>, inner: f32, outer: f32, stroke: Stroke| {
+		line(out, at - vec2(outer, 0.), at - vec2(inner, 0.), stroke);
+		line(out, at + vec2(inner, 0.), at + vec2(outer, 0.), stroke);
+		line(out, at - vec2(0., outer), at - vec2(0., inner), stroke);
+		line(out, at + vec2(0., inner), at + vec2(0., outer), stroke);
 	};
 	match kind {
 		HandleKind::Source => {
-			for pen in pens {
-				circle(out, (x, y), 6., Ink::Stroke(pen));
-				ticks(out, 7., 10., pen);
+			for stroke in strokes {
+				ring(out, at, 6., stroke);
+				ticks(out, 7., 10., stroke);
 			}
 		}
 		HandleKind::PartCentre => {
-			for pen in pens {
-				circle(out, (x, y), 7., Ink::Stroke(pen));
-				circle(out, (x, y), 3., Ink::Stroke(pen));
-				ticks(out, 8., 10., pen);
+			for stroke in strokes {
+				ring(out, at, 7., stroke);
+				ring(out, at, 3., stroke);
+				ticks(out, 8., 10., stroke);
 			}
 		}
 		HandleKind::ProbeA | HandleKind::ProbeB => {
 			let r = if kind == HandleKind::ProbeA { 5. } else { 4. };
-			for pen in pens {
-				square(out, (x, y), r, Ink::Stroke(pen));
-				ticks(out, r + 1., 7., pen);
+			for stroke in strokes {
+				out.push(Shape::rect_stroke(square(at, r), 0, stroke, StrokeKind::Middle));
+				ticks(out, r + 1., 7., stroke);
 			}
 		}
 		HandleKind::SourceLever | HandleKind::PartLever => {
-			circle(out, (x, y), 6., Ink::fill(HALO));
-			circle(out, (x, y), 4.5, Ink::fill(color));
+			out.push(Shape::circle_filled(at, 6., HALO));
+			out.push(Shape::circle_filled(at, 4.5, color));
 		}
 		HandleKind::Grip => {
-			square(out, (x, y), 5.5, Ink::fill(HALO));
-			square(out, (x, y), 4., Ink::fill(color));
+			out.push(Shape::rect_filled(square(at, 5.5), 0, HALO));
+			out.push(Shape::rect_filled(square(at, 4.), 0, color));
 		}
 		HandleKind::Point(_) | HandleKind::Node(_) => {
-			for pen in pens {
-				circle(out, (x, y), 4.5, Ink::Stroke(pen));
+			for stroke in strokes {
+				ring(out, at, 4.5, stroke);
 			}
 		}
 		HandleKind::InHandle(_) | HandleKind::OutHandle(_) => {
-			circle(out, (x, y), 4.5, Ink::fill(HALO));
-			circle(out, (x, y), 3., Ink::fill(color));
+			out.push(Shape::circle_filled(at, 4.5, HALO));
+			out.push(Shape::circle_filled(at, 3., color));
 		}
 	}
 }
 
-/// The shapes of `model` over a picture at `picture` (x, y, width, height in the cell's logical pixels) and
-/// `scale`: probe lines, emitter dots, outlines, handles with the `focused` one in `accent`, then the labels,
-/// measured by `text` at [`LABEL_SIZE`] in [`LABEL_STYLE`] and held inside the picture.
+/// The shapes of `model` over `picture` (points of the window) at `scale` points per canvas pixel: probe lines,
+/// emitter dots, outlines, handles with the `focused` one in `accent`, then the labels in Selawik at [`LABEL_SIZE`]
+/// over their halo ([`LABEL_HALO`], from `outlines`), on the alphabetic baseline and held inside the picture. The
+/// caller clips them to the picture.
 pub fn shapes(
 	model: &OverlayModel,
 	scale: f32,
-	picture: (f32, f32, f32, f32),
+	picture: Rect,
 	focused: Option<usize>,
-	accent: Rgba,
-	text: &dyn TextMetrics,
+	accent: Color32,
+	fonts: &mut FontsView<'_>,
+	outlines: &mut Outlines,
 ) -> Vec<Shape> {
-	let (px, py, pw, ph) = picture;
-	let s = |p: (f32, f32)| (px + p.0 * scale, py + p.1 * scale);
+	let s = |p: (f32, f32)| picture.min + vec2(p.0 * scale, p.1 * scale);
 	let mut out = Vec::new();
 	for l in &model.lines {
 		let (a, b) = (s(l.a), s(l.b));
-		line(&mut out, a, b, Pen::new(HALO, 3.));
-		line(&mut out, a, b, Pen::new(if l.selected { SELECTED } else { HANDLE }, 1.5).dashed(5., 4.));
+		line(&mut out, a, b, Stroke::new(3., HALO));
+		out.extend(Shape::dashed_line(&[a, b], Stroke::new(1.5, if l.selected { SELECTED } else { HANDLE }), 5., 4.));
 	}
-	if !model.dots.is_empty() {
-		out.push(Shape::Dots {
-			origin: (px, py),
-			size: (pw, ph),
-			points: model.dots.iter().map(|&(x, y)| (x * scale, y * scale)).collect(),
-			halo: Disc { radius: 2.5, color: HALO },
-			dot: Disc { radius: 1.5, color: HANDLE },
-		});
-	}
+	out.extend(model.dots.iter().map(|&p| Shape::circle_filled(s(p), 2.5, HALO)));
+	out.extend(model.dots.iter().map(|&p| Shape::circle_filled(s(p), 1.5, HANDLE)));
 	for outline in &model.outlines {
-		let points: Vec<(f32, f32)> = outline.points.iter().map(|&p| s(p)).collect();
-		out.push(Shape::Path { points: points.clone(), closed: outline.closed, pen: Pen::new(HALO, 3.) });
-		out.push(Shape::Path { points, closed: outline.closed, pen: Pen::new(SELECTED, 1.) });
+		let points: Vec<Pos2> = outline.points.iter().map(|&p| s(p)).collect();
+		let path = |stroke: Stroke| {
+			if outline.closed {
+				Shape::closed_line(points.clone(), stroke)
+			} else {
+				Shape::line(points.clone(), stroke)
+			}
+		};
+		out.push(path(Stroke::new(3., HALO)));
+		out.push(path(Stroke::new(1., SELECTED)));
 	}
 	for (i, h) in model.handles.iter().enumerate() {
 		let at = s(h.at);
 		if let Some(from) = h.from {
 			let from = s(from);
-			line(&mut out, from, at, Pen::new(HALO, 3.));
-			let pen = Pen::new(handle_color(h, false, accent), 1.);
-			line(&mut out, from, at, if h.kind.is_lever() { pen } else { pen.dashed(2., 2.) });
+			line(&mut out, from, at, Stroke::new(3., HALO));
+			let stroke = Stroke::new(1., handle_color(h, false, accent));
+			if h.kind.is_lever() {
+				line(&mut out, from, at, stroke);
+			} else {
+				out.extend(Shape::dashed_line(&[from, at], stroke, 2., 2.));
+			}
 		}
 		glyph(&mut out, h.kind, at, handle_color(h, focused == Some(i), accent));
 	}
-	for label in &model.labels {
-		let (x, y) = s(label.at);
-		let width = text.width(&label.text);
-		let (mut lx, mut ly) = if label.below { (x - width / 2., y + 24.) } else { (x + 13., y + 4.) };
-		lx = lx.clamp(px + 2., (px + pw - width - 2.).max(px + 2.));
-		ly = ly.clamp(py + 12., (py + ph - 3.).max(py + 12.));
-		out.push(Shape::Text {
-			text: label.text.clone(),
-			at: (lx, ly),
-			style: LABEL_STYLE,
-			size: LABEL_SIZE,
-			color: if label.selected { SELECTED } else { HANDLE },
-		});
+	for label in model.labels.iter().filter(|l| !l.text.is_empty()) {
+		let at = s(label.at);
+		let color = if label.selected { SELECTED } else { HANDLE };
+		let galley = fonts.layout_no_wrap(label.text.clone(), FontId::proportional(LABEL_SIZE), color);
+		let width = galley.size().x;
+		let (mut lx, mut ly) = if label.below { (at.x - width / 2., at.y + 24.) } else { (at.x + 13., at.y + 4.) };
+		lx = lx.clamp(picture.left() + 2., (picture.right() - width - 2.).max(picture.left() + 2.));
+		ly = ly.clamp(picture.top() + 12., (picture.bottom() - 3.).max(picture.top() + 12.));
+		let top = pos2(lx, ly - baseline(&galley));
+		haloed_text(&mut out, outlines, top, galley, LABEL_SIZE, color, LABEL_HALO);
 	}
 	out
 }
 
 /// The edge line's colour: pure blue for a damping rim outside the canvas (it wins over a wall), pure red for a
 /// reflective wall, none for open edges or a damping band inside the canvas.
-pub fn edge_color(scene: &Scene) -> Option<Rgba> {
+pub fn edge_color(scene: &Scene) -> Option<Color32> {
 	if scene.has_rim() {
-		Some(Rgba::rgb(0, 0, 255))
+		Some(Color32::from_rgb(0, 0, 255))
 	} else if scene.edges == Edges::Reflective {
-		Some(Rgba::rgb(255, 0, 0))
+		Some(Color32::from_rgb(255, 0, 0))
 	} else {
 		None
 	}
 }
 
-/// The edge line around `picture` (x, y, width, height in the element's logical pixels): an aliased hairline of
-/// `color` just outside the picture's device pixels, in device pixels of `grid`.
-pub fn edge_line(grid: DeviceGrid, picture: (f32, f32, f32, f32), color: Rgba) -> Shape {
+/// The edge line around `picture` (x, y, width, height in the element's logical pixels, the element's origin that of
+/// `grid`): a hairline of `color` just outside the picture's device pixels.
+pub fn edge_line(grid: DeviceGrid, picture: (f32, f32, f32, f32), color: Color32) -> Shape {
 	let hl = grid.hairline();
 	let (x, y, w, h) = picture;
-	let r = grid.rect((x, y), (x + w, y + h));
+	let [left, top, right, bottom] = grid.snapped((x, y), (x + w, y + h));
 	let half = hl / 2.;
-	Shape::Rect {
-		rect: Rect::new(r.left - half, r.top - half, r.right + half, r.bottom + half),
-		ink: Ink::Stroke(Pen::new(color, hl).aliased()),
-	}
+	let rect = grid.rect((left - half, top - half), (right + half, bottom + half));
+	Shape::rect_stroke(rect, 0, Stroke::new(hl / grid.scale, color), StrokeKind::Middle)
 }
 
 #[cfg(test)]
 mod tests {
+	use epaint::text::{Fonts, TextOptions};
+	use epaint::{ColorMode, PathStroke};
 	use wavedude_core::model::{Probe, Rectangle, Source, SourceArray};
 
 	use super::*;
@@ -538,114 +542,149 @@ mod tests {
 		assert!(m.labels[0].below);
 	}
 
-	struct Fixed;
-	impl TextMetrics for Fixed {
-		fn line_height(&self) -> f32 {
-			14.
-		}
-		fn width(&self, text: &str) -> f32 {
-			text.len() as f32 * 6.
-		}
+	fn fonts() -> Fonts {
+		Fonts::new(TextOptions::default(), crate::fonts::definitions())
 	}
 
 	fn count(shapes: &[Shape], f: impl Fn(&Shape) -> bool) -> usize {
 		shapes.iter().filter(|s| f(s)).count()
 	}
 
-	#[test]
-	fn a_model_draws_its_lines_handles_and_labels_in_order() {
-		let m = build(&project(), &[], None, Layer::Field, 2., true, true);
-		let shapes = shapes(&m, 2., (10., 20., 400., 200.), Some(0), Rgba::rgb(1, 2, 3), &Fixed);
-		assert_eq!(
-			shapes[..2],
-			[
-				Shape::Line { from: (111., 121.), to: (171., 121.), pen: Pen::new(HALO, 3.) },
-				Shape::Line { from: (111., 121.), to: (171., 121.), pen: Pen::new(HANDLE, 1.5).dashed(5., 4.) },
-			],
-			"the probe line, canvas pixels to the cell's"
-		);
-		assert_eq!(
-			shapes[2],
-			Shape::Circle { centre: (31., 61.), radius: 6., ink: Ink::Stroke(Pen::new(HALO, 3.5)) },
-			"the source's halo first"
-		);
-		assert_eq!(
-			shapes[7],
-			Shape::Circle { centre: (31., 61.), radius: 6., ink: Ink::Stroke(Pen::new(Rgba::rgb(1, 2, 3), 1.5)) },
-			"the focused handle in the accent"
-		);
-		let texts: Vec<(&str, (f32, f32))> = shapes
+	/// The top-left and colour of every text drawn in its own colour, not a halo copy.
+	fn texts(shapes: &[Shape]) -> Vec<(String, Pos2, Color32)> {
+		shapes
 			.iter()
 			.filter_map(|s| match s {
-				Shape::Text { text, at, .. } => Some((text.as_str(), *at)),
+				Shape::Text(t) if t.override_text_color != Some(HALO) => {
+					Some((t.galley.text().to_owned(), t.pos, t.override_text_color?))
+				}
 				_ => None,
 			})
-			.collect();
-		assert_eq!(texts, vec![("S", (44., 65.)), ("R", (207., 144.)), ("P", (124., 125.))]);
-		assert!(matches!(shapes.last(), Some(Shape::Text { .. })), "labels over everything");
-		assert_eq!(count(&shapes, |s| matches!(s, Shape::Dots { .. } | Shape::Path { .. })), 0);
+			.collect()
 	}
 
 	#[test]
-	fn labels_stay_inside_the_picture() {
+	fn a_model_draws_its_lines_handles_and_labels_in_order() {
+		let mut fonts = fonts();
+		let mut view = fonts.with_pixels_per_point(2.);
+		let m = build(&project(), &[], None, Layer::Field, 2., true, true);
+		let accent = Color32::from_rgb(1, 2, 3);
+		let picture = Rect::from_min_size(pos2(10., 20.), vec2(400., 200.));
+		let shapes = shapes(&m, 2., picture, Some(0), accent, &mut view, &mut Outlines::new(1.));
+		let (a, b) = (pos2(111., 121.), pos2(171., 121.));
+		assert_eq!(shapes[0], Shape::line_segment([a, b], Stroke::new(3., HALO)), "the probe line, canvas to window");
+		let dash = Stroke::new(1.5, HANDLE);
+		assert_eq!(shapes[1], Shape::line_segment([a, a + vec2(5., 0.)], dash), "dashed over its halo");
+		let dashes =
+			shapes[1..].iter().take_while(|s| matches!(s, Shape::LineSegment { stroke, .. } if *stroke == dash));
+		assert_eq!(dashes.count(), 7, "60 points of 5 on, 4 off");
+		let source = pos2(31., 61.);
+		let rings: Vec<Stroke> = shapes
+			.iter()
+			.filter_map(|s| match s {
+				Shape::Circle(c) if c.center == source => Some(c.stroke),
+				_ => None,
+			})
+			.collect();
+		assert_eq!(
+			rings,
+			[Stroke::new(3.5, HALO), Stroke::new(1.5, accent)],
+			"the halo first, the focused one in the accent"
+		);
+		let texts = texts(&shapes);
+		let names: Vec<&str> = texts.iter().map(|t| t.0.as_str()).collect();
+		assert_eq!(names, ["S", "R", "P"]);
+		assert_eq!(texts[0].1.x, source.x + 13., "a source's name to its right");
+		assert!(matches!(shapes.last(), Some(Shape::Text(_))), "labels over everything");
+		let first_label = shapes.iter().position(|s| matches!(s, Shape::Path(_) | Shape::Text(_)));
+		let halo = first_label.map(|i| &shapes[i]);
+		assert!(
+			matches!(halo, Some(Shape::Path(p)) if p.closed && p.stroke == PathStroke::new(3., HALO)),
+			"no outline unselected: the first path is a label's halo"
+		);
+	}
+
+	#[test]
+	fn labels_stay_inside_the_picture_on_their_baseline() {
+		let mut fonts = fonts();
+		let mut view = fonts.with_pixels_per_point(1.);
 		let mut p = project();
 		p.sources[0].x = 199.;
 		p.sources[0].name = "Long name".into();
 		let m = build(&p, &[], None, Layer::Intensity, 1., false, true);
-		let shapes = shapes(&m, 1., (0., 0., 200., 100.), None, HANDLE, &Fixed);
-		let source = shapes.iter().find_map(|s| match s {
-			Shape::Text { text, at, .. } if text == "Long name" => Some(*at),
-			_ => None,
-		});
-		assert_eq!(source, Some((200. - 54. - 2., 24.5)));
+		let picture = Rect::from_min_size(Pos2::ZERO, vec2(200., 100.));
+		let shapes = shapes(&m, 1., picture, None, HANDLE, &mut view, &mut Outlines::new(1.));
+		let galley = view.layout_no_wrap("Long name".into(), FontId::proportional(LABEL_SIZE), HANDLE);
+		let at = texts(&shapes).into_iter().find(|t| t.0 == "Long name").map(|t| t.1);
+		assert_eq!(at, Some(pos2(200. - galley.size().x - 2., 24.5 - baseline(&galley))));
+		let halos = count(&shapes, |s| matches!(s, Shape::Path(p) if p.stroke == PathStroke::new(3., HALO)));
+		assert!(halos >= 2, "each label over its halo, a path per contour: {halos}");
+		assert_eq!(count(&shapes, |s| matches!(s, Shape::Text(_))), 2, "and no copies of the text");
 	}
 
 	#[test]
 	fn a_selected_composite_draws_dots_an_outline_and_a_lever() {
+		let mut fonts = fonts();
+		let mut view = fonts.with_pixels_per_point(1.);
 		let mut p = project();
 		p.sources[0].array =
 			Some(SourceArray { size_x: 3, size_y: 2, spacing_x: 10, spacing_y: 10, ..SourceArray::default() });
 		let m = build(&p, &[S, R], Some(R), Layer::Field, 1., true, false);
-		let shapes = shapes(&m, 1., (5., 5., 200., 100.), None, HANDLE, &Fixed);
-		let dots = shapes.iter().find_map(|s| match s {
-			Shape::Dots { origin, points, dot, .. } => Some((*origin, points.len(), dot.color)),
-			_ => None,
-		});
-		assert_eq!(dots, Some(((5., 5.), 6, HANDLE)));
-		let outlines: Vec<(usize, bool, Rgba)> = shapes
+		let shapes = shapes(
+			&m,
+			1.,
+			Rect::from_min_size(pos2(5., 5.), vec2(200., 100.)),
+			None,
+			HANDLE,
+			&mut view,
+			&mut Outlines::new(1.),
+		);
+		let dots = |radius: f32, color: Color32| {
+			count(&shapes, |s| matches!(s, Shape::Circle(c) if c.radius == radius && c.fill == color))
+		};
+		assert_eq!((dots(2.5, HALO), dots(1.5, HANDLE)), (6, 6));
+		let outlines: Vec<(usize, bool, ColorMode)> = shapes
 			.iter()
 			.filter_map(|s| match s {
-				Shape::Path { points, closed, pen } => Some((points.len(), *closed, pen.color)),
+				Shape::Path(p) => Some((p.points.len(), p.closed, p.stroke.color.clone())),
 				_ => None,
 			})
+			.take(2)
 			.collect();
-		assert_eq!(outlines, vec![(4, true, HALO), (4, true, SELECTED)]);
-		let lever = shapes.iter().any(|s| {
-			matches!(s, Shape::Line { from: (105., 55.), to, pen } if to.0 > 105. + LEVER_GAP && *pen == Pen::new(SELECTED, 1.))
+		assert_eq!(outlines, vec![(4, true, ColorMode::Solid(HALO)), (4, true, ColorMode::Solid(SELECTED))]);
+		let lever = shapes.iter().any(|s| match s {
+			Shape::LineSegment { points: [from, to], stroke } => {
+				*from == pos2(105., 55.) && to.x > 105. + LEVER_GAP && *stroke == Stroke::new(1., SELECTED)
+			}
+			_ => false,
 		});
 		assert!(lever, "a lever's line is solid");
-		assert_eq!(count(&shapes, |s| matches!(s, Shape::Text { .. })), 2, "the selected items' labels");
+		assert_eq!(texts(&shapes).len(), 2, "the selected items' labels");
 	}
 
 	#[test]
 	fn the_edge_line_hugs_the_picture_on_whole_device_pixels() {
-		let red = Rgba::rgb(255, 0, 0);
+		let red = Color32::from_rgb(255, 0, 0);
 		let line = edge_line(DeviceGrid::new(1.5, 0.5, 0.), (10., 4., 100., 50.), red);
+		let Shape::Rect(r) = line else { panic!("a rectangle") };
+		assert_eq!(r.stroke, Stroke::new(2. / 1.5, red), "a two-pixel hairline");
+		assert_eq!(r.stroke_kind, StrokeKind::Middle);
+		let device = |p: Pos2| (p.x * 1.5, p.y * 1.5);
 		assert_eq!(
-			line,
-			Shape::Rect { rect: Rect::new(15., 5., 167., 82.), ink: Ink::Stroke(Pen::new(red, 2.).aliased()) },
-			"a two-pixel hairline around the picture's device rectangle 16, 6 to 166, 81"
+			(device(r.rect.min), device(r.rect.max)),
+			((15., 5.), (167., 82.)),
+			"around the picture's device rectangle 16, 6 to 166, 81"
 		);
 	}
 
 	#[test]
 	fn the_edge_line_names_what_a_wave_meets() {
 		let mut s = Scene { damping_edge: -32, edges: Edges::Reflective, ..Scene::default() };
-		assert_eq!(edge_color(&s), Some(Rgba::rgb(0, 0, 255)), "a rim wins over a wall");
+		assert_eq!(edge_color(&s), Some(Color32::from_rgb(0, 0, 255)), "a rim wins over a wall");
 		s.damping_edge = 0;
-		assert_eq!(edge_color(&s), Some(Rgba::rgb(255, 0, 0)));
+		assert_eq!(edge_color(&s), Some(Color32::from_rgb(255, 0, 0)));
 		s.damping_edge = 20;
-		assert_eq!(edge_color(&s), Some(Rgba::rgb(255, 0, 0)), "a band inside keeps the wall");
+		assert_eq!(edge_color(&s), Some(Color32::from_rgb(255, 0, 0)), "a band inside keeps the wall");
 		s.edges = Edges::Open;
 		assert_eq!(edge_color(&s), None);
 	}

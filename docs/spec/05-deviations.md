@@ -44,14 +44,19 @@ implementation departs from it on purpose (the user's decisions, recorded in
   Sources). The `.wdproj` adapter writes both as integers, rounded, with one warning naming the object
   ([60-file-formats.md](60-file-formats.md)).
 - Sources are a forcing term (decision 0014; [docs/physics.md](../physics.md), Sources): each sub-step adds
-  `dt^2 f(t_k)` with `f = A / |G0(omega)| e(t) sin(omega t + phi)` where the scheme
-  takes `A u`, G0 the free-space lattice Green's function of the engine's
+  `dt^2 f(t_k)` where the scheme takes `A u`, f the rate of change of the impulse
+  `p = -A / |G0(omega)| E(t) cos(omega t + phi) / omega` (`A / |G0| sin(omega t + phi)`
+  while E = 1), G0 the free-space lattice Green's function of the engine's
   operator at the source cell, so a source is transparent to passing waves, its
   radiation does not depend on the sub-step count, and Amplitude A is the
   displacement amplitude a continuous source gives its own cell in free space
   (index 1). The original's `SourceOpacity = 0.9` blend once per step
   ([30-engine.md](30-engine.md), Sources) is not used: its radiated amplitude grew with the
   sub-step count. A source on a mirror cell drives nothing.
+- Every drive turns on from t = 0 over half a period of its source as a raised
+  cosine, and the detach fade falls over its 30 steps as a raised cosine, not
+  linearly (decision 0022): with the impulse driven, a drive that ends has delivered
+  no net impulse and leaves no zero-frequency pedestal.
 - A refractive part takes over a mirror pixel only where it covers the pixel's
   centre; the original averages a partly covered mirror pixel as index 1, which
   opens a hole of glass in the mirror's edge ([20-scene-painting.md](20-scene-painting.md)).

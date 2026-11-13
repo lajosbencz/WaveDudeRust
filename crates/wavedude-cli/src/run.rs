@@ -12,7 +12,7 @@ use wavedude_core::model::{DisplayLayer, Layer, Project, ranges};
 use wavedude_core::quality::PreviewQuality;
 use wavedude_core::render::frame::{render_half, render_indexed};
 use wavedude_core::render::lut::{HalfTable, Palette};
-use wavedude_core::run::{Budget, EventSink, FrameStore, RunEvent, SimulationRun, StoreLayout};
+use wavedude_core::run::{Budget, EventSink, FrameStore, Memory, RunEvent, SimulationRun, StoreLayout};
 use wavedude_core::scene::compose::compose_scene;
 use wavedude_core::spec::RunSpec;
 
@@ -123,7 +123,7 @@ pub(crate) fn simulate_with(
 	}
 	let pixels = compose_scene(project);
 	let spec = RunSpec::create(project, pixels.as_ref(), quality, track_intensity)?;
-	let store = Arc::new(FrameStore::new(StoreLayout::of(&spec), Budget::compute(0, 0), None)?);
+	let store = Arc::new(FrameStore::new(StoreLayout::of(&spec), Budget::compute(Memory::System, 0, 0), None)?);
 	let engine = engine.build(&spec);
 	let run = SimulationRun::start(spec, store.clone(), engine, Some(events))?;
 	Ok((run, store))

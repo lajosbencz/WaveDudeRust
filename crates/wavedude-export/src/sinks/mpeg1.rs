@@ -7,12 +7,11 @@
 //! quantiser, the default intra matrix, 4:2:0 studio-range BT.601 from `yuv`, the picture padded to whole
 //! macroblocks by edge repetition.
 
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::io::Write;
 use std::sync::OnceLock;
 
 use rayon::prelude::*;
+use wavedude_core::sync::MaybeSend;
 
 use super::{FrameSink, check_size};
 use crate::bits::BitWriter;
@@ -216,13 +215,6 @@ pub struct Mpeg1Writer<W: Write> {
 	es: BitWriter,
 	frames: usize,
 	finished: bool,
-}
-
-impl Mpeg1Writer<BufWriter<File>> {
-	pub fn create(path: &Path, width: u32, height: u32, fps: f64, quality: u32) -> Result<Self> {
-		Self::check(width, height)?;
-		Self::new(BufWriter::with_capacity(1 << 20, File::create(path)?), width, height, fps, quality)
-	}
 }
 
 impl<W: Write> Mpeg1Writer<W> {
@@ -481,7 +473,7 @@ fn write_block(
 	bits.write(0b10, 2);
 }
 
-impl<W: Write + Send> FrameSink for Mpeg1Writer<W> {
+impl<W: Write + MaybeSend> FrameSink for Mpeg1Writer<W> {
 	fn write_frame(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<()> {
 		if self.finished {
 			return Err(ExportError::Finished);

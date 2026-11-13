@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
+use std::task::Poll;
 use std::time::{Duration, Instant};
 use wavedude_core::sync::lock;
 
@@ -117,8 +118,8 @@ impl FrameSource for LiveFrames<'_> {
 		*self.store.shape()
 	}
 
-	fn copy_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<()> {
-		FrameSource::copy_layer(self.store, frame, layer, out)
+	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<Poll<()>> {
+		self.store.poll_layer(frame, layer, out)
 	}
 
 	fn wait_for(&self, frame: usize) -> Result<bool> {
@@ -191,6 +192,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 		project: &project,
 		format,
 		layers: args.layers,
+		fs: Arc::new(wavedude_export::fs::StdFs),
 		path: out.clone(),
 		still: args.still,
 		frame_count: spec.frame_count() as usize,
@@ -199,8 +201,10 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 		keep_partial: args.keep_partial,
 		h264,
 	};
-	let source = LiveFrames { store: &store, run: &run, signal: &signal, cancel: &cancel, waited: AtomicU64::new(0) };
-	let job = plan.build_job(&source, &SchemeStore::default())?;
+	#[allow(clippy::arc_with_non_send_sync, reason = "the job shares the source on this thread")]
+	let source =
+		Arc::new(LiveFrames { store: &store, run: &run, signal: &signal, cancel: &cancel, waited: AtomicU64::new(0) });
+	let job = plan.build_job(source.clone(), &SchemeStore::default())?;
 	let report = job.run(|done, total| eprint!("\rexport frame {done}/{total}"), &cancel);
 	eprintln!();
 	let waited = Duration::from_nanos(source.waited.load(Ordering::Relaxed));

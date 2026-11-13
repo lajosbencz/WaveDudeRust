@@ -1,0 +1,5 @@
+# The wasm32 lint run's (CONTRIBUTING.md, Tools). Natively web_time's clocks are std's, which this would ban too.
+disallowed-types = [
+	{ path = "std::time::Instant", reason = "it panics on wasm32; use web_time::Instant" },
+	{ path = "std::time::SystemTime", reason = "it panics on wasm32; use web_time::SystemTime" },
+]

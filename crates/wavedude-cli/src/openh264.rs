@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::ValueEnum;
+use wavedude_app_state::platform::Store;
 use wavedude_app_state::settings::{AppDirs, Settings};
 use wavedude_export::h264;
 
@@ -28,13 +29,13 @@ fn dirs() -> Result<AppDirs> {
 	AppDirs::platform().context("no user folders on this platform")
 }
 
-fn settings_file() -> Result<PathBuf> {
-	Ok(dirs()?.settings_file())
+fn store() -> Result<Store> {
+	Ok(dirs()?.store())
 }
 
 /// The library an MP4 export loads, per the user's choice in the app's settings file.
 pub(crate) fn library() -> Result<Option<PathBuf>> {
-	let enabled = Settings::read(&settings_file()?)?.use_openh264 == Some(true);
+	let enabled = Settings::read(&store()?)?.use_openh264 == Some(true);
 	h264::library(&dirs()?.codec(), enabled, |_, _| {}).map_err(|e| match e {
 		wavedude_export::ExportError::H264Missing => anyhow::anyhow!("{e}: run `wavedude-cli openh264 enable`"),
 		e => e.into(),
@@ -42,10 +43,10 @@ pub(crate) fn library() -> Result<Option<PathBuf>> {
 }
 
 fn choose(enabled: bool) -> Result<()> {
-	let path = settings_file()?;
-	let mut settings = Settings::read(&path)?;
+	let store = store()?;
+	let mut settings = Settings::read(&store)?;
 	settings.use_openh264 = Some(enabled);
-	settings.save(&path)?;
+	settings.save(&store)?;
 	Ok(())
 }
 
@@ -58,7 +59,7 @@ pub(crate) fn run(action: Action) -> Result<()> {
 	let dir = dirs()?.codec();
 	match action {
 		Action::Status => {
-			let choice = Settings::read(&settings_file()?)?.use_openh264;
+			let choice = Settings::read(&store()?)?.use_openh264;
 			println!(
 				"{}",
 				match choice {

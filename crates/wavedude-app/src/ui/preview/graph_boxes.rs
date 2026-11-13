@@ -1,432 +1,265 @@
-//! The probe graph boxes over a picture (docs/ui/40-preview-pane.md, Probe graph box): the data at the frame shown
-//! (the run's recording cut at the frame's step), the axes, the box's drag and resize in canvas pixels with snap and
-//! hysteresis, and the boxes as Freya elements; where a box shows is [`wavedude_view::graph`]'s.
-//!
-//! Coordinates: box positions and sizes in canvas pixels; screen values in logical pixels of the picture's cell.
-//! Threads: the UI thread.
+//! A picture's probe graph boxes (docs/ui/40-preview-pane.md, Probe graph box): their data, cut again when what it
+//! is cut from moved, laid out again when the scale or the device pixels changed, drawn as the view's shapes on whole
+//! device pixels; a box's drag, its corner grip's resize, their keys and the box's context menu.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use freya::prelude::*;
+use eframe::egui::epaint::ClippedShape;
+use eframe::egui::{
+	CursorIcon, EventFilter, FontId, Id, Key, Modifiers, Rect, Response, Role, Sense, Stroke, StrokeKind, Ui,
+	WidgetInfo, vec2,
+};
+use wavedude_app_state::Event;
 use wavedude_app_state::commands::{Command, Edit};
+use wavedude_app_state::platform::HAS_EXPORTS;
 use wavedude_app_state::selection::Row;
-use wavedude_app_state::{AppState, Event as AppEvent};
-use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::model::{BoxSize, ItemKind, ItemRef, Layer, ProbeEdit, Project};
-use wavedude_view::graph;
-use wavedude_widgets::graph_box::GraphBoxEvent;
-use wavedude_widgets::menu::ContextMenuRequest;
-use wavedude_widgets::picture::CanvasTransform;
-use wavedude_widgets::{Callback, GraphBox, GraphData, MenuItem, MenuModel, TestIdExt, Tip};
+use wavedude_core::model::{ItemKind, ItemRef, Layer};
+use wavedude_view::graph::{self, GraphLayout};
+use wavedude_view::{DeviceGrid, FontMetrics};
 
-use super::{PaneStates, PictureMenu, PreviewAction, layer_name};
-use crate::ui::shared::{Shared, Topics};
+use super::{Preview, pressed_on};
+use crate::App;
+use crate::menus::{MenuAction, On};
+use crate::preview::graph_boxes::{BoxKey, BoxView, box_key, boxes, dragged_box, moved_box_edits, resized_box_edits};
+use crate::preview::view::CanvasTransform;
+use crate::ui::menu_keys;
+use crate::ui::theme::Palette;
 
-/// A box's anchor within this many screen pixels of point A lands on it.
-pub const SNAP_RADIUS: f32 = 12.;
-/// An attached box stays on A until dragged this far, screen pixels.
-pub const RELEASE_DISTANCE: f32 = 24.;
-/// A resized box within this many screen pixels of a fixed size takes it.
-pub const SIZE_SNAP: f32 = 8.;
+/// The corner grip's side.
+const GRIP: f32 = 10.;
+/// A box resized by its grip keeps at least this size, points.
+const MIN_SIZE: (f32, f32) = (60., 30.);
 
-/// A probe's recording as it stood at the frame shown, owned so the box can lay it out at any size.
-#[derive(Clone, Debug, Default)]
-struct Recording {
-	series: Rc<[f32]>,
-	profile: Option<Rc<[f32]>>,
-	length: f64,
-	sampled: u64,
+/// A picture's boxes, their layouts and what both were made from.
+pub(super) struct Boxes {
+	key: BoxKey,
+	views: Vec<BoxView>,
+	/// The scale and the pixels per point the layouts were made at.
+	laid: (u32, u32),
+	layouts: Vec<GraphLayout>,
 }
 
-impl Recording {
-	fn at(trace: &ProbeTrace, step: u64, frame: usize) -> Self {
-		let d = graph::GraphData::at(trace, step, frame);
-		Self {
-			series: d.series.into(),
-			profile: d.profile.map(Rc::from),
-			length: d.profile_length,
-			sampled: d.steps_sampled,
+impl Boxes {
+	fn of(app: &App, layer: Layer, key: BoxKey) -> Self {
+		Self { key, views: boxes(app, layer), laid: (0, 0), layouts: Vec::new() }
+	}
+}
+
+/// A box drag in progress: probe `index`'s box from `start` (canvas pixels), or its size from `size` (points).
+#[derive(Clone, Copy)]
+pub(super) enum BoxDrag {
+	Move { index: usize, start: (i32, i32) },
+	Resize { index: usize, size: (f32, f32) },
+}
+
+/// The id of probe `index`'s box over the picture of `layer`.
+fn box_id(layer: Layer, index: usize) -> Id {
+	Id::unique(("ProbeBox", layer as usize, index))
+}
+
+/// Where a box shows on the picture of `t`, whole points.
+fn on_picture(view: &BoxView, t: &CanvasTransform) -> Rect {
+	let picture = t.picture().min;
+	let ((x, y), (w, h)) = graph::box_on_picture(view.origin, view.size, (picture.x, picture.y), t.scale);
+	Rect::from_min_size((x, y).into(), (w, h).into())
+}
+
+/// The arrow keys pressed, one or ten (Shift) a key, as a step right and down.
+fn arrow_steps(ui: &Ui) -> (f32, f32) {
+	ui.input_mut(|i| {
+		let mut d = (0., 0.);
+		for (modifiers, n) in [(Modifiers::NONE, 1.), (Modifiers::SHIFT, 10.)] {
+			let mut count = |key| i.count_and_consume_key(modifiers, key) as f32 * n;
+			d.0 += count(Key::ArrowRight) - count(Key::ArrowLeft);
+			d.1 += count(Key::ArrowDown) - count(Key::ArrowUp);
 		}
+		d
+	})
+}
+
+fn lock_arrows(ui: &Ui, id: Id) {
+	let filter = EventFilter { horizontal_arrows: true, vertical_arrows: true, ..Default::default() };
+	ui.memory_mut(|m| m.set_focus_lock_filter(id, filter));
+}
+
+fn send_edits(out: &mut Vec<Event>, edits: Vec<Edit>) {
+	out.extend(edits.into_iter().map(|e| Event::Command(Command::Edit(e))));
+}
+
+impl Preview {
+	/// Whether `id` has the focus, given by the keyboard rather than a press.
+	fn keyboard_focus(&self, ui: &Ui, id: Id) -> bool {
+		ui.memory(|m| m.has_focus(id)) && self.pointer_focus != Some(id)
 	}
 
-	fn data(&self) -> graph::GraphData<'_> {
-		graph::GraphData {
-			series: &self.series,
-			profile: self.profile.as_deref(),
-			profile_length: self.length,
-			steps_sampled: self.sampled,
-		}
-	}
-}
-
-/// Where a box dragged by `delta` canvas pixels from `start` lands: held inside the canvas, snapped onto point A
-/// within [`SNAP_RADIUS`] screen pixels, and kept on A while it started there and moved less than
-/// [`RELEASE_DISTANCE`].
-pub fn dragged_box(
-	start: (i32, i32),
-	a: (i32, i32),
-	delta: (f32, f32),
-	scale: f32,
-	canvas: (u32, u32),
-	size: (f32, f32),
-) -> (i32, i32) {
-	let x = (start.0 as f32 + delta.0).round().clamp(0., (canvas.0 as f32 - size.0).max(0.).floor()) as i32;
-	let y = (start.1 as f32 + delta.1).round().clamp(0., (canvas.1 as f32 - size.1).max(0.).floor()) as i32;
-	let screen = |p: (i32, i32)| ((p.0 - a.0) as f32).hypot((p.1 - a.1) as f32) * scale;
-	let attached = start == a;
-	let moved = delta.0.hypot(delta.1) * scale;
-	if (attached && moved < RELEASE_DISTANCE) || screen((x, y)) <= SNAP_RADIUS { a } else { (x, y) }
-}
-
-/// The box size a resize to `w` x `h` canvas pixels gives: a fixed size within [`SIZE_SNAP`] screen pixels, else
-/// Custom at whole pixels.
-pub fn resized_box(w: f32, h: f32, scale: f32) -> (BoxSize, u32, u32) {
-	let tolerance = SIZE_SNAP / scale.max(1e-3);
-	for size in [BoxSize::Tiny, BoxSize::Small, BoxSize::Medium, BoxSize::Large, BoxSize::ExtraLarge] {
-		let (nw, nh) = size.nominal().expect("a fixed size");
-		if (nw as f32 - w).abs() <= tolerance && (nh as f32 - h).abs() <= tolerance {
-			return (size, nw, nh);
-		}
-	}
-	(BoxSize::Custom, w.round().max(1.) as u32, h.round().max(1.) as u32)
-}
-
-/// One box to draw: its probe and graph.
-#[derive(Clone, Debug, PartialEq)]
-pub struct BoxView {
-	pub index: usize,
-	pub data: GraphData,
-	pub origin: (f32, f32),
-	pub size: (f32, f32),
-	pub selected: bool,
-}
-
-/// Whether `layer` shows graph boxes: an active probe measures it.
-pub fn has_boxes(project: &Project, layer: Layer) -> bool {
-	project.probes.iter().any(|p| graph::shows_box(p, layer))
-}
-
-/// The boxes of the active probes measuring `layer`, with the data of the frame shown.
-pub fn boxes<B: wavedude_app_state::live::Backend>(app: &AppState<B>, layer: Layer) -> Vec<BoxView> {
-	if !has_boxes(&app.document.project, layer) {
-		return Vec::new();
-	}
-	let live = &app.live;
-	match (live.shown(), live.run_request()) {
-		(Some(k), Some(request)) => {
-			let names: Vec<&str> = request.probes().map(|p| p.name.as_str()).collect();
-			let cut = (request.schedule().step_of(k) as usize + 1, k as usize);
-			let mut out = Vec::new();
-			live.with_traces(&mut |t| out = views(app, layer, &names, t, Some(cut)));
-			out
-		}
-		_ => views(app, layer, &[], &[], None),
-	}
-}
-
-/// The boxes from `traces`, recorded for the probes `names`; `cut` is the frame shown (samples, profile index)
-/// of a run's traces.
-fn views<B: wavedude_app_state::live::Backend>(
-	app: &AppState<B>,
-	layer: Layer,
-	names: &[&str],
-	traces: &[ProbeTrace],
-	cut: Option<(usize, usize)>,
-) -> Vec<BoxView> {
-	let project = &app.document.project;
-	let canvas = project.canvas_size();
-	let selected = app.selection.items();
-	let steps = u64::from(project.simulation.steps);
-	project
-		.probes
-		.iter()
-		.enumerate()
-		.filter(|(_, p)| graph::shows_box(p, layer))
-		.map(|(i, p)| {
-			let trace = names.iter().position(|n| n.eq_ignore_ascii_case(&p.name)).and_then(|t| traces.get(t));
-			let recording = match (trace, cut) {
-				(Some(t), Some((samples, frame))) => Recording::at(t, samples.saturating_sub(1) as u64, frame),
-				_ => Recording::default(),
-			};
-			let probe = p.clone();
-			BoxView {
-				index: i,
-				data: GraphData::new(p.name.clone(), move |text, w, h| {
-					graph::layout(&probe, &recording.data(), steps, w, h, text)
-				}),
-				origin: graph::box_origin(p, canvas),
-				size: graph::box_size(p, canvas),
-				selected: selected.contains(&ItemRef::new(ItemKind::Probe, i)),
-			}
-		})
-		.collect()
-}
-
-/// A box drag in progress: the probe, its box at the press.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct BoxGrab {
-	pub index: usize,
-	pub start: (i32, i32),
-}
-
-fn set_probe(shared: &Shared, index: usize, edit: ProbeEdit) {
-	shared.send(AppEvent::Command(Command::Edit(Edit::Probe(index, edit))));
-}
-
-/// The boxes of `layer` over the picture's cell mapped by `transform`: the frame shown, its traces, the
-/// probes and the selection redraw them; the picture itself does not.
-#[derive(Clone, PartialEq)]
-pub struct GraphBoxes {
-	pub layer: Layer,
-	pub states: PaneStates,
-	pub transform: CanvasTransform,
-}
-
-impl Component for GraphBoxes {
-	fn render(&self) -> impl IntoElement {
-		let shared = Shared::get();
-		shared.subscribe(Topics::DOCUMENT | Topics::SELECTION | Topics::PLAYBACK | Topics::PROGRESS | Topics::SETTINGS);
-		// The data is rebuilt when what it is cut from moved: the project, the selection, the frame shown, the
-		// run's frames or its traces; a heartbeat that moved none of them reuses it.
-		let (key, layer) = shared.peek(|app| {
-			let r = app.revisions();
-			let live = &app.live;
-			((r.document, r.selection, r.playback, r.settings, live.progress_key(), live.traces_steps()), self.layer)
-		});
-		let built = use_hook(|| Rc::new(RefCell::new(None::<(BoxKey, Vec<BoxView>)>)));
-		let views = {
-			let mut built = built.borrow_mut();
-			match &*built {
-				Some((k, v)) if *k == key => v.clone(),
-				_ => {
-					let mut views = shared.peek(|app| boxes(app, layer));
-					views.sort_by_key(|v| v.selected);
-					*built = Some((key, views.clone()));
-					views
-				}
-			}
+	/// Draws the graph boxes of `layer` clipped to `clip`, the selected ones last.
+	pub(super) fn paint_boxes(&mut self, ui: &Ui, app: &App, layer: Layer, t: &CanvasTransform, clip: Rect) {
+		let key = box_key(app);
+		let b = match self.boxes[layer as usize].take() {
+			Some(b) if b.key == key => b,
+			_ => Boxes::of(app, layer, key),
 		};
-		let t = self.transform;
-		let boxes = views.into_iter().map(|view| {
-			let (at, size) = graph::box_on_picture(view.origin, view.size, (t.offset_x, t.offset_y), t.scale);
-			ProbeBox {
-				view,
-				canvas: (t.canvas_width, t.canvas_height),
-				scale: t.scale,
-				at,
-				size,
-				layer: self.layer,
-				states: self.states,
+		let b = self.boxes[layer as usize].insert(b);
+		if b.views.is_empty() {
+			return;
+		}
+		let ctx = ui.ctx();
+		let ppp = ctx.pixels_per_point();
+		let steps = u64::from(app.document.project.simulation.steps);
+		let accent = Palette::of(ctx.theme()).accent;
+		let focused: Vec<bool> = b.views.iter().map(|v| ui.memory(|m| m.has_focus(box_id(layer, v.index)))).collect();
+		let pointer_focus = self.pointer_focus;
+		let shapes = ctx.fonts_mut(|fonts| {
+			let laid = (t.scale.to_bits(), ppp.to_bits());
+			if b.laid != laid {
+				let mut metrics = FontMetrics { fonts: &mut *fonts, font: FontId::proportional(graph::FONT_SIZE) };
+				b.layouts = (b.views.iter())
+					.map(|v| {
+						let r = on_picture(v, t);
+						graph::layout(&v.probe, &v.recording.data(), steps, r.width(), r.height(), &mut metrics)
+					})
+					.collect();
+				b.laid = laid;
+			}
+			let mut shapes = Vec::new();
+			for ((v, g), focused) in b.views.iter().zip(&b.layouts).zip(focused).filter(|((_, g), _)| g.visible) {
+				let at = on_picture(v, t).min;
+				let grid = DeviceGrid::new(ppp, at.x, at.y);
+				let focus = (focused && pointer_focus != Some(box_id(layer, v.index))).then_some(accent);
+				shapes.extend(graph::box_shapes(g, grid, clip, v.selected, focus, fonts));
+				shapes.extend(graph::grip_shapes(g, grid).into_iter().map(|shape| ClippedShape::new(clip, shape)));
+			}
+			shapes
+		});
+		ctx.graphics_mut(|g| {
+			let list = g.entry(ui.layer_id());
+			for s in shapes {
+				list.add(s.clip_rect, s.shape);
 			}
 		});
-		rect()
-			.position(Position::new_absolute().left(0.).top(0.))
-			.width(Size::px(0.))
-			.height(Size::px(0.))
-			.children(boxes.map(IntoElement::into_element))
 	}
-}
 
-/// What the boxes' data is cut from.
-type BoxKey = (u64, u64, u64, u64, Option<(u64, usize)>, u32);
-
-/// One box at `at` of `size` (whole logical pixels); its handler reads the geometry from a state, so it is made once
-/// and the box compares equal while its data stays.
-#[derive(Clone, PartialEq)]
-struct ProbeBox {
-	view: BoxView,
-	canvas: (u32, u32),
-	scale: f32,
-	at: (f32, f32),
-	size: (f32, f32),
-	layer: Layer,
-	states: PaneStates,
-}
-
-impl Component for ProbeBox {
-	fn render(&self) -> impl IntoElement {
-		let shared = Shared::get();
-		let index = self.view.index;
-		let item = ItemRef::new(ItemKind::Probe, index);
-		let states = self.states;
-		let mut geometry = use_state(|| (index, self.canvas, self.scale));
-		geometry.set_if_modified((index, self.canvas, self.scale));
-		let on_event = use_hook(|| {
-			let shared = shared.clone();
-			Callback::from(move |e: GraphBoxEvent| {
-				let (index, canvas, scale) = *geometry.peek();
-				on_box_event(&shared, states, index, canvas, scale, e);
-			})
-		});
-		let (w, h) = self.size;
-		let (sx, sy) = self.at;
-		let shared_menu = shared.clone();
-		let mut menu = states.menu;
-		let (tip, grip_tip, export_text) = shared.peek(|app| {
+	/// The boxes of `layer` within `clip`: a press focuses a box and selects its probe, a drag moves it (snapping
+	/// onto point A), its grip resizes it (snapping to the fixed sizes), arrows move or resize the focused one, Del
+	/// removes its probe, a right-click opens its menu, whose entry is returned.
+	pub(super) fn edit_boxes(
+		&mut self,
+		ui: &Ui,
+		app: &mut App,
+		layer: Layer,
+		t: &CanvasTransform,
+		clip: Rect,
+		out: &mut Vec<Event>,
+	) -> Option<(MenuAction, On)> {
+		let b = self.boxes[layer as usize].take()?;
+		let mut picked = None;
+		for v in &b.views {
+			let rect = on_picture(v, t);
+			let id = box_id(layer, v.index);
 			let s = &app.strings;
-			(
-				s.format("TipProbeBoxFormat", &[&self.view.data.title]),
-				s.format("TipProbeBoxCornerFormat", &[&self.view.data.title]),
-				s.get("MenuExportProbeCsv").to_owned(),
-			)
-		});
-		rect()
-			.position(Position::new_absolute().left(sx).top(sy))
-			.width(Size::px(w))
-			.height(Size::px(h))
-			.on_pointer_down(move |e: Event<PointerEventData>| {
-				if e.button() == Some(MouseButton::Right) {
-					e.stop_propagation();
-					shared_menu.update(|app| {
-						if !app.selection.contains(item) {
-							app.selection.select(Row::Item(item));
+			let tip = s.format("TipProbeBoxFormat", &[&v.probe.name]);
+			let response = ui.interact(rect.intersect(clip), id, Sense::click_and_drag()).on_hover_text(tip);
+			response.widget_info(|| WidgetInfo::labeled(Role::Figure, true, &v.probe.name));
+			let grip_tip = s.format("TipProbeBoxCornerFormat", &[&v.probe.name]);
+			let grip_rect = Rect::from_min_max(rect.max - vec2(GRIP, GRIP), rect.max);
+			let grip = ui.interact(grip_rect.intersect(clip), id.with("grip"), Sense::drag());
+			let grip = grip.on_hover_cursor(CursorIcon::ResizeNwSe).on_hover_text(grip_tip);
+			super::hold(&response);
+			super::hold(&grip);
+			if self.keyboard_focus(ui, grip.id) {
+				let accent = Palette::of(ui.ctx().theme()).accent;
+				ui.painter().rect_stroke(grip_rect, 0., Stroke::new(1., accent), StrokeKind::Inside);
+			}
+			self.edit_box(ui, app, (v.index, rect), t, (&response, &grip), out);
+			let export_busy = app.live.export_busy();
+			let item = ItemRef::new(ItemKind::Probe, v.index);
+			if response.secondary_clicked() && !app.selection.contains(item) {
+				app.selection.select(Row::Item(item));
+			}
+			if HAS_EXPORTS {
+				response.context_menu(|ui| {
+					ui.add_enabled_ui(!export_busy, |ui| {
+						if menu_keys::item(ui, app.strings.get("MenuExportProbeCsv")).clicked() {
+							picked = Some((MenuAction::ExportProbeCsv, On::Row(Some(Row::Item(item)))));
 						}
 					});
-					let g = e.global_location();
-					menu.set(Some(ContextMenuRequest {
-						at: (g.x, g.y),
-						model: MenuModel::new(vec![
-							MenuItem::with_action(
-								format!("probe-csv:{index}"),
-								export_text.clone(),
-								PictureMenu::Shell(PreviewAction::ExportProbeCsv(index)),
-							)
-							.enabled(!shared_menu.peek(|app| app.live.export_busy()))
-							.into(),
-						]),
-					}));
-				}
-			})
-			.child(
-				Tip::new(tip).child(
-					GraphBox::new(self.view.data.clone(), w, h, on_event)
-						.selected(self.view.selected)
-						.grip_tooltip(grip_tip)
-						.test_id(format!("ProbeGraph:{}:{}", layer_name(self.layer), index)),
-				),
-			)
-			.test_id(format!("ProbeGraphBox:{index}"))
+				});
+			}
+		}
+		self.boxes[layer as usize] = Some(b);
+		picked
 	}
-}
 
-/// What a box's event does to probe `index`: moves and sizes come in logical pixels of a cell at `scale`.
-fn on_box_event(shared: &Shared, states: PaneStates, index: usize, canvas: (u32, u32), scale: f32, e: GraphBoxEvent) {
-	let item = ItemRef::new(ItemKind::Probe, index);
-	let mut grab = states.box_grab;
-	let probe = shared.peek(|app| app.document.project.probes.get(index).cloned());
-	let Some(probe) = probe else { return };
-	match e {
-		GraphBoxEvent::Move { dx, dy, done } => {
-			let held = *grab.peek();
-			let start = match held {
-				Some(g) if g.index == index => g.start,
-				_ => {
-					let start = (probe.box_x, probe.box_y);
-					if !done {
-						grab.set(Some(BoxGrab { index, start }));
-						shared.send(AppEvent::MouseDown);
-					}
-					start
-				}
-			};
-			let size = graph::box_size(&probe, canvas);
-			let (bx, by) = if done && grab.peek().is_none() {
-				let x = (start.0 + dx as i32).clamp(0, (canvas.0 as f32 - size.0).max(0.) as i32);
-				let y = (start.1 + dy as i32).clamp(0, (canvas.1 as f32 - size.1).max(0.) as i32);
-				(x, y)
+	/// Probe `index`'s box at `rect`: its `response` and its `grip`'s.
+	fn edit_box(
+		&mut self,
+		ui: &Ui,
+		app: &mut App,
+		(index, rect): (usize, Rect),
+		t: &CanvasTransform,
+		(response, grip): (&Response, &Response),
+		out: &mut Vec<Event>,
+	) {
+		let item = ItemRef::new(ItemKind::Probe, index);
+		for r in [response, grip] {
+			if pressed_on(r) && !r.has_focus() {
+				r.request_focus();
+				self.pointer_focus = Some(r.id);
+			}
+			if r.lost_focus() && self.pointer_focus == Some(r.id) {
+				self.pointer_focus = None;
+			}
+			if r.gained_focus() && !app.selection.contains(item) {
+				app.selection.select(Row::Item(item));
+			}
+		}
+		let Some(probe) = app.document.project.probes.get(index) else { return };
+		let canvas = app.document.project.canvas_size();
+		let size = graph::box_size(probe, canvas);
+		if response.drag_started() || grip.drag_started() {
+			self.box_drag = Some(if grip.drag_started() {
+				BoxDrag::Resize { index, size: rect.size().into() }
 			} else {
-				dragged_box(start, (probe.ax, probe.ay), (dx / scale, dy / scale), scale, canvas, size)
-			};
-			if (bx, by) != (probe.box_x, probe.box_y) {
-				set_probe(shared, index, ProbeEdit::BoxX(bx));
-				set_probe(shared, index, ProbeEdit::BoxY(by));
-			}
-			if done && grab.peek().is_some() {
-				grab.set(None);
-				shared.send(AppEvent::MouseUp);
-			}
-		}
-		GraphBoxEvent::Resize { width, height, done } => {
-			if grab.peek().is_none() && !done {
-				grab.set(Some(BoxGrab { index, start: (probe.box_x, probe.box_y) }));
-				shared.send(AppEvent::MouseDown);
-			}
-			let (size, bw, bh) = resized_box(width / scale, height / scale, scale);
-			if size != probe.box_size {
-				set_probe(shared, index, ProbeEdit::BoxSize(size));
-			}
-			if size == BoxSize::Custom && (bw, bh) != (probe.box_width, probe.box_height) {
-				set_probe(shared, index, ProbeEdit::BoxWidth(bw));
-				set_probe(shared, index, ProbeEdit::BoxHeight(bh));
-			}
-			if done && grab.peek().is_some() {
-				grab.set(None);
-				shared.send(AppEvent::MouseUp);
-			}
-		}
-		GraphBoxEvent::Delete => {
-			shared.send(AppEvent::Command(Command::Remove { target: item }));
-		}
-		GraphBoxEvent::Focused => {
-			shared.update(|app| {
-				if !app.selection.contains(item) {
-					app.selection.select(Row::Item(item));
-				}
+				BoxDrag::Move { index, start: (probe.box_x, probe.box_y) }
 			});
+			out.push(Event::MouseDown);
 		}
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use wavedude_core::model::{Probe, ProbeKind};
-	use wavedude_view::draw::TextMetrics;
-
-	struct Fixed;
-
-	impl TextMetrics for Fixed {
-		fn line_height(&self) -> f32 {
-			13.
+		let total = |r: &Response| r.total_drag_delta().unwrap_or_default();
+		match self.box_drag {
+			Some(BoxDrag::Move { index: i, start }) if i == index && response.dragged() => {
+				let d = total(response) / t.scale;
+				let to = dragged_box(start, (probe.ax, probe.ay), (d.x, d.y), t.scale, canvas, size);
+				send_edits(out, moved_box_edits(index, probe, to));
+			}
+			Some(BoxDrag::Resize { index: i, size: (w, h) }) if i == index && grip.dragged() => {
+				let d = total(grip);
+				let (w, h) = ((w + d.x).max(MIN_SIZE.0), (h + d.y).max(MIN_SIZE.1));
+				send_edits(out, resized_box_edits(index, probe, w, h, t.scale));
+			}
+			_ => {}
 		}
-
-		fn width(&self, text: &str) -> f32 {
-			text.len() as f32 * 6.
+		if response.drag_stopped() || grip.drag_stopped() {
+			self.box_drag = None;
+			out.push(Event::MouseUp);
 		}
-	}
-
-	#[test]
-	fn a_line_probe_reads_its_maximum_as_next_writes_it() {
-		let p = Probe { kind: ProbeKind::Line, ..Probe::default() };
-		let recording = Recording {
-			series: Rc::from([]),
-			profile: Some(Rc::from([0., 1.2e-5, 3.08e-5, 2e-6])),
-			length: 80.,
-			sampled: 10,
-		};
-		let g = graph::layout(&p, &recording.data(), 100, 300., 150., &Fixed);
-		assert_eq!(g.readout, "max 3.08E-05");
-		assert!(g.has_plot);
-		let labels: Vec<&str> = g.x_ticks.iter().map(|t| t.label.as_str()).collect();
-		assert_eq!(labels, ["0", "20", "40", "60", "80"]);
-		assert!(g.y_ticks.iter().any(|t| t.label == "2E-05"), "{:?}", g.y_ticks);
-	}
-
-	#[test]
-	fn boxes_snap_onto_their_probe() {
-		let size = (100., 50.);
-		assert_eq!(dragged_box((0, 0), (40, 40), (35., 38.), 1., (500, 500), size), (40, 40), "within the snap radius");
-		assert_eq!(dragged_box((0, 0), (40, 40), (20., 20.), 1., (500, 500), size), (20, 20));
-		assert_eq!(dragged_box((40, 40), (40, 40), (15., 0.), 1., (500, 500), size), (40, 40), "held until released");
-		assert_eq!(dragged_box((40, 40), (40, 40), (30., 0.), 1., (500, 500), size), (70, 40));
-		assert_eq!(dragged_box((0, 0), (300, 300), (900., -10.), 1., (500, 500), size), (400, 0), "kept inside");
-	}
-
-	#[test]
-	fn resizing_snaps_to_the_fixed_sizes() {
-		assert_eq!(resized_box(304., 147., 1.), (BoxSize::Small, 300, 150));
-		assert_eq!(resized_box(320., 147., 1.), (BoxSize::Custom, 320, 147));
-		assert_eq!(resized_box(320., 147., 0.25).0, BoxSize::Small, "the tolerance is in screen pixels");
+		if response.has_focus() {
+			lock_arrows(ui, response.id);
+			if ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Delete)) {
+				out.push(Event::Command(Command::Remove { target: item }));
+				return;
+			}
+			let (dx, dy) = arrow_steps(ui);
+			if (dx, dy) != (0., 0.) {
+				let x = (probe.box_x + dx as i32).clamp(0, (canvas.0 as f32 - size.0).max(0.) as i32);
+				let y = (probe.box_y + dy as i32).clamp(0, (canvas.1 as f32 - size.1).max(0.) as i32);
+				send_edits(out, moved_box_edits(index, probe, (x, y)));
+			}
+		}
+		if grip.has_focus() {
+			lock_arrows(ui, grip.id);
+			let (dw, dh) = arrow_steps(ui);
+			if (dw, dh) != (0., 0.) {
+				let (w, h) = ((rect.width() + dw).max(MIN_SIZE.0), (rect.height() + dh).max(MIN_SIZE.1));
+				send_edits(out, resized_box_edits(index, probe, w, h, t.scale));
+			}
+		}
 	}
 }

@@ -67,15 +67,18 @@ impl EdgeImage {
 	}
 }
 
+/// What [`blend_additive`] adds for each edge level at `gain`, `trunc(edge * gain)`; `None` for a gain not above
+/// zero, which adds nothing.
+pub fn additions(gain: f64) -> Option<[u32; 256]> {
+	(gain > 0.0).then(|| std::array::from_fn(|e| (e as f64 * gain) as u32))
+}
+
 /// Adds `edges` times `gain` onto an RGBA8 `frame` of the same size: per channel R, G, B
 /// `min(255, frame + trunc(edge * gain))`, alpha kept; a gain not above zero changes nothing.
 pub fn blend_additive(frame: &mut [u8], edges: &[u8], gain: f64) {
 	assert_eq!(frame.len(), edges.len(), "frame and edges of one size");
-	if gain.is_nan() || gain <= 0.0 {
-		return;
-	}
+	let Some(added) = additions(gain) else { return };
 	const CHUNK: usize = 64 * 1024;
-	let added: [u32; 256] = std::array::from_fn(|e| (e as f64 * gain) as u32);
 	frame.par_chunks_mut(CHUNK).zip(edges.par_chunks(CHUNK)).for_each(|(frame, edges)| {
 		for (f, e) in frame.as_chunks_mut::<4>().0.iter_mut().zip(edges.as_chunks::<4>().0) {
 			for c in 0..3 {

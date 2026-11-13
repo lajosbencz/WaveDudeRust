@@ -7,13 +7,13 @@ version = "0.2.2"
 edition = "2024"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/lajosbencz/WaveDudeRust"
-rust-version = "1.89"
+rust-version = "1.95"
 
 # The lint policy of every crate (`[lints] workspace = true`); CI runs clippy with `-D warnings`, so each of these
 # fails the build. The cast lints and `missing_docs` are left out on purpose: casts are handled by the unit types,
 # and comments state only what the code cannot say.
 [workspace.lints.rust]
-# deny, not forbid: the macOS application delegate (wavedude-app ui/open_requests.rs) allows it
+# deny, not forbid: the macOS application delegate (wavedude-app src/open_requests.rs) allows it
 unsafe_code = "deny"
 rust_2018_idioms = { level = "deny", priority = -1 }
 unreachable_pub = "deny"
@@ -48,6 +48,7 @@ serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 quick-xml = { version = "0.42", features = ["serialize"] }
 tracing = "0.1"
+pollster = "1"
 notify = "8"
 insta = "1"
 proptest = "1"

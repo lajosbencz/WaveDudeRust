@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use wavedude_core::engine::capture;
 use wavedude_core::engine::cpu::CpuEngine;
-use wavedude_core::engine::gpu::{BATCH_STEPS, GpuContext, GpuEngine, MediumLayout, context};
+use wavedude_core::engine::gpu::{BATCH_STEPS, GpuContext, GpuEngine, GpuError, MediumLayout, context};
 use wavedude_core::engine::{
 	Emitter, EngineOptions, FrameShape, ProbeCells, ProbeReadings, SampleFormat, SceneData, Snapshot, WaveEngine,
 };
@@ -377,6 +377,99 @@ fn captured_planes_match() {
 	}
 }
 
+/// The bytes of `buffer` on `device`.
+fn read_buffer(device: &wgpu::Device, queue: &wgpu::Queue, buffer: &wgpu::Buffer) -> Vec<u8> {
+	let target = device.create_buffer(&wgpu::BufferDescriptor {
+		label: None,
+		size: buffer.size(),
+		usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+		mapped_at_creation: false,
+	});
+	let mut encoder = device.create_command_encoder(&Default::default());
+	encoder.copy_buffer_to_buffer(buffer, 0, &target, 0, buffer.size());
+	queue.submit([encoder.finish()]);
+	target.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
+	device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+	target.slice(..).get_mapped_range().unwrap().to_vec()
+}
+
+#[test]
+fn device_frames_hold_the_planes_a_capture_reads_back() {
+	use wavedude_core::engine::gpu::FrameTag;
+	if !gpu_available() {
+		return;
+	}
+	let ctx = context().unwrap();
+	let mut gpu = GpuEngine::new(scene(Edges::Open, 100), options(Stencil::NinePoint)).expect("GPU engine");
+	gpu.set_emitters(&emitters());
+	let frames = gpu.device_frames().expect("the GPU engine keeps its frames on the device");
+	assert!(Arc::ptr_eq(frames.context(), &ctx), "the frames name the engine's context");
+	let tag = |stored| FrameTag { store: 7, generation: 1, stored };
+	let mut snapshots = Vec::new();
+	for (k, format) in
+		[SampleFormat::Half, SampleFormat::Index, SampleFormat::Half, SampleFormat::Half].into_iter().enumerate()
+	{
+		run(&mut gpu, 50);
+		let snapshot = gpu.capture_frame(&shape(1 + k as u32 % 2, format)).unwrap();
+		frames.publish(tag(k));
+		snapshots.push(snapshot);
+		if k == 0 {
+			assert!(frames.hold(tag(0)).is_some());
+		}
+	}
+	for (k, snapshot) in snapshots.iter().enumerate() {
+		let Some(frame) = frames.hold(tag(k)) else {
+			assert!((1..3).contains(&k), "the held frame and the latest stay; frame {k} is gone");
+			continue;
+		};
+		assert!(frame.buffer.size() as usize >= snapshot.shape.plane_bytes());
+		assert_eq!(frame.shape, snapshot.shape);
+		let bytes = read_buffer(&ctx.device, &ctx.queue, &frame.buffer);
+		for layer in [Layer::Field, Layer::Intensity] {
+			let first = frame.first_word(layer).expect("both layers tracked") as usize * 4;
+			let plane = snapshot.plane(layer);
+			assert_eq!(&bytes[first..first + plane.len()], plane, "{layer:?} of frame {k}");
+		}
+		frames.hold(tag(0));
+	}
+	assert!(frames.hold(FrameTag { generation: 2, ..tag(3) }).is_none(), "another generation's frame is not there");
+}
+
+#[test]
+fn a_full_ring_of_captures_lands_each_frame_as_a_capture_alone() {
+	if !gpu_available() {
+		return;
+	}
+	let engine = || {
+		let mut e = GpuEngine::new(scene(Edges::Open, 100), options(Stencil::NinePoint)).expect("GPU engine");
+		e.set_emitters(&emitters());
+		e
+	};
+	let (mut ring, mut alone) = (engine(), engine());
+	let frames = ring.device_frames().expect("device frames");
+	let shape = shape(1, SampleFormat::Half);
+	let capacity = ring.capture_capacity(&shape);
+	assert!(capacity > 2, "a small frame's ring holds more than two: {capacity}");
+	let mut pending = std::collections::VecDeque::new();
+	for _ in 0..capacity {
+		run(&mut ring, 3);
+		pending.push_back(ring.begin_capture(&shape, Snapshot::new(shape)).unwrap());
+	}
+	for k in 0..capacity {
+		run(&mut alone, 3);
+		let expected = alone.capture_frame(&shape).unwrap();
+		let landed = ring.finish_capture(pending.pop_front().unwrap()).unwrap();
+		frames.publish(wavedude_core::engine::gpu::FrameTag { store: 1, generation: 0, stored: k });
+		assert_eq!(
+			(landed.step, &landed.field, &landed.intensity),
+			(expected.step, &expected.field, &expected.intensity)
+		);
+	}
+	run(&mut ring, 3);
+	let again = ring.begin_capture(&shape, Snapshot::new(shape)).unwrap();
+	assert_eq!(ring.finish_capture(again).unwrap().step, alone.time() + 2);
+}
+
 #[test]
 fn a_capture_is_ready_once_the_map_completes() {
 	use std::future::Future;
@@ -399,6 +492,56 @@ fn a_capture_is_ready_once_the_map_completes() {
 	ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 	assert_eq!(ready.as_mut().poll(&mut cx), Poll::Ready(()));
 	assert_eq!(gpu.finish_capture(pending).unwrap().field.len(), shape.plane_bytes());
+}
+
+fn adapter(force_fallback_adapter: bool) -> Option<wgpu::Adapter> {
+	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+	pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+		power_preference: wgpu::PowerPreference::HighPerformance,
+		force_fallback_adapter,
+		..Default::default()
+	}))
+	.ok()
+}
+
+fn device(adapter: &wgpu::Adapter, required_limits: wgpu::Limits) -> (wgpu::Device, wgpu::Queue) {
+	pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_limits, ..Default::default() }))
+		.expect("device")
+}
+
+#[test]
+fn an_adopted_device_runs_engines_with_its_own_limits() {
+	if !gpu_available() {
+		return;
+	}
+	let adapter = adapter(false).expect("adapter");
+	let (device, queue) = device(&adapter, wgpu::Limits::default());
+	let limits = device.limits();
+	assert!(limits.max_buffer_size <= adapter.limits().max_buffer_size);
+	let ctx = GpuContext::from_device(&adapter, device, queue).expect("GPU context");
+	assert_eq!(ctx.limits, limits);
+	let settings = Scene { damping_edge: 0, ..Scene::default() };
+	let mut gpu = pollster::block_on(GpuEngine::create(
+		ctx.clone(),
+		SceneData::blank(64, 48, &settings),
+		options(Stencil::NinePoint),
+		MediumLayout::Compact,
+	))
+	.expect("GPU engine");
+	run(&mut gpu, 4);
+	let shape = FrameShape { canvas_width: 64, canvas_height: 48, ..shape(1, SampleFormat::Half) };
+	assert_eq!(gpu.capture_frame(&shape).unwrap().field.len(), shape.plane_bytes());
+	assert!(ctx.lost().is_none());
+}
+
+#[test]
+fn a_software_adapter_is_refused() {
+	let Some(adapter) = adapter(true).filter(|a| a.get_info().device_type == wgpu::DeviceType::Cpu) else {
+		eprintln!("skipped: no software adapter");
+		return;
+	};
+	let (device, queue) = device(&adapter, wgpu::Limits::downlevel_defaults());
+	assert!(matches!(GpuContext::from_device(&adapter, device, queue), Err(GpuError::Unavailable(_))));
 }
 
 #[test]
@@ -468,6 +611,33 @@ fn runs_are_deterministic() {
 	assert!(first == trace(&mut b), "two engines");
 	a.reset();
 	assert!(first == trace(&mut a), "a reset and replayed engine");
+}
+
+/// A continuous source at phase 0 turns on without a zero-frequency pedestal on the GPU as on the CPU: the
+/// canvas field's mean over its RMS, both averaged over two periods after the turn-on, stays within 0.5 %
+/// (docs/physics.md, Sources). Level 50 at scale 2, 256 x 256 canvas with a 32 px CPML rim, steps 337 to 400.
+#[test]
+fn a_continuous_source_leaves_no_pedestal() {
+	if !gpu_available() {
+		return;
+	}
+	let w = 256u32;
+	let settings = Scene { damping_edge: -32, ..Scene::default() };
+	let options = EngineOptions { source_frequency_scale: 2.0, ..options(Stencil::FourthOrder) };
+	let mut gpu = GpuEngine::new(SceneData::blank(w, w, &settings), options).expect("GPU engine");
+	gpu.set_emitters(&[Emitter { phase_radians: 0.0, ..emitter(128, 128, 50.0) }]);
+	let (mut mean, mut square) = (0f64, 0f64);
+	for step in 1..=400 {
+		gpu.advance_one_step().unwrap();
+		if step > 336 {
+			let f = gpu.prepare_frame().unwrap().0;
+			mean += f.iter().map(|&v| v as f64).sum::<f64>() / f.len() as f64;
+			square += f.iter().map(|&v| (v as f64).powi(2)).sum::<f64>() / f.len() as f64;
+		}
+	}
+	let pedestal = mean / 64.0 / (square / 64.0).sqrt();
+	eprintln!("mean / RMS {pedestal:.2e}");
+	assert!(pedestal.abs() < 5e-3, "{pedestal}");
 }
 
 #[test]
@@ -591,10 +761,7 @@ fn pending_probes_drain_like_sampled_ones_once_ready() {
 		}
 		if step == BATCH_STEPS + 18 || step == last {
 			let pending = b.pending_probes().unwrap();
-			let mut ready = std::pin::pin!(pending.ready());
-			assert_eq!(ready.as_mut().poll(&mut cx), Poll::Pending, "the callback runs when the device is polled");
-			device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-			assert_eq!(ready.as_mut().poll(&mut cx), Poll::Ready(()));
+			wait_ready(device, &pending);
 			b.drain_probes(pending, &mut |r| drained.push(r.clone())).unwrap();
 		}
 	}
@@ -605,12 +772,22 @@ fn pending_probes_drain_like_sampled_ones_once_ready() {
 	assert_eq!(drained, sampled);
 }
 
+/// Polls the device until `pending`'s mappings are signalled: a poll returns once the submissions are done, while
+/// the map callbacks may still be running on another test's poll of the shared device.
+fn wait_ready(device: &wgpu::Device, pending: &wavedude_core::engine::PendingProbes) {
+	use std::future::Future;
+	use std::task::{Context, Waker};
+	let mut cx = Context::from_waker(Waker::noop());
+	let mut ready = std::pin::pin!(pending.ready());
+	while ready.as_mut().poll(&mut cx).is_pending() {
+		device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+	}
+}
+
 /// Readbacks in flight at a `reset` or `set_probes` are dropped: their `ready` still resolves, their token drains
 /// nothing, and the next token yields only the readings queued after it.
 #[test]
 fn a_reset_drops_the_probe_readbacks_in_flight() {
-	use std::future::Future;
-	use std::task::{Context, Poll, Waker};
 	if !gpu_available() {
 		return;
 	}
@@ -620,7 +797,6 @@ fn a_reset_drops_the_probe_readbacks_in_flight() {
 	let probes = probe_set();
 	a.set_probes(&probes);
 	b.set_probes(&probes);
-	let mut cx = Context::from_waker(Waker::noop());
 	let mut r = ProbeReadings::default();
 	for reset in [true, false] {
 		for _ in 0..BATCH_STEPS + 7 {
@@ -635,8 +811,7 @@ fn a_reset_drops_the_probe_readbacks_in_flight() {
 		} else {
 			b.set_probes(&probes);
 		}
-		device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-		assert_eq!(std::pin::pin!(pending.ready()).poll(&mut cx), Poll::Ready(()), "reset {reset}");
+		wait_ready(device, &pending);
 		let mut sampled = Vec::new();
 		for _ in 0..9 {
 			a.advance_one_step().unwrap();
@@ -647,8 +822,7 @@ fn a_reset_drops_the_probe_readbacks_in_flight() {
 		}
 		// The new readings are mapped, so a stale drain would collect them.
 		let fresh = b.pending_probes().unwrap();
-		device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-		assert_eq!(std::pin::pin!(fresh.ready()).poll(&mut cx), Poll::Ready(()), "reset {reset}");
+		wait_ready(device, &fresh);
 		b.drain_probes(pending, &mut |_| panic!("a dropped reading, reset {reset}")).unwrap();
 		let mut drained = Vec::new();
 		b.drain_probes(fresh, &mut |r| drained.push(r.clone())).unwrap();

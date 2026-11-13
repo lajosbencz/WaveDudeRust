@@ -19,7 +19,7 @@ moved aside. An unreadable file is not a first start.
 | WindowLeft | double DIP | NaN (system places, centred) | main window move |
 | WindowTop | double DIP | NaN | main window move |
 | WindowState | Normal / Maximized | Normal (never saved minimised) | maximise/restore |
-| Layout | dock layout tree (unknown pane ids and empty groups dropped, active tab clamped, at load) | null = default arrangement | pane drag, close, View > Panes; saved on close |
+| Layout | dock layout tree (unknown pane ids and empty groups dropped, active tab clamped, at load) | null = default arrangement | pane drag, close, View > Panes; saved on close (port: on change) |
 | Theme | System / Light / Dark | System | View > Theme |
 | Language | "" / en / de / fr / nl | "" (system: the OS's preferred locales, then `LC_ALL`, `LC_MESSAGES`, `LANG`; English fallback) | View > Language |
 | RecentFiles | list of paths, newest first, max 10 | empty | opening/saving a project (also the OS recent list) |

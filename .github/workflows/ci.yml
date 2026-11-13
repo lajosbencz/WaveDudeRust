@@ -14,13 +14,13 @@ on:
       - ".github/workflows/release.yml"
       - ".github/workflows/package.yml"
       - ".github/workflows/hygiene.yml"
+      - ".github/workflows/pages.yml"
       - "cliff.toml"
       - "deny.toml"
       - "_typos.toml"
       - ".gitignore"
       - "tools/**"
-      - "demo/**"
-      - ".github/workflows/pages.yml"
+      - "site/**"
   pull_request:
     paths-ignore: *docs
 
@@ -63,11 +63,6 @@ jobs:
           # a failing test does not cost the next run its build.
           save-if: ${{ github.ref_name == github.event.repository.default_branch }}
           cache-on-failure: true
-      - name: Linux packages for Skia and winit
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgl1-mesa-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev
       # The export tests decode what they wrote with ffmpeg (the programs never need it). A pinned static build,
       # checked against its published digest and cached; the distribution's package pulled in 128 others.
       - name: ffmpeg for the export tests
@@ -85,6 +80,14 @@ jobs:
           tar -xJf ffmpeg.tar.xz --strip-components=2 -C ~/ffmpeg "$FFMPEG_BUILD/bin/ffmpeg" "$FFMPEG_BUILD/bin/ffprobe"
       - if: runner.os == 'Linux'
         run: echo "$HOME/ffmpeg" >> "$GITHUB_PATH"
+      # The window's image snapshots render on Mesa's software Vulkan driver, which the tests select themselves; it is
+      # required here, elsewhere they skip without it.
+      - name: lavapipe for the snapshot tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
+          echo "WAVEDUDE_REQUIRE_LAVAPIPE=1" >> "$GITHUB_ENV"
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
@@ -126,19 +129,17 @@ jobs:
           # a failing test does not cost the next run its build.
           save-if: ${{ github.ref_name == github.event.repository.default_branch }}
           cache-on-failure: true
-      - name: Linux packages for Skia and winit
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgl1-mesa-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev
       - name: Check
         run: cargo +"$MSRV" check --workspace --all-targets
 
-  # The core without runs, with and without the GPU engine, the view crate and the wasm package stay buildable for the browser
-  # (docs/decisions/0015-core-builds-for-wasm.md, docs/decisions/0016-gpu-engine-in-the-browser.md,
-  # docs/decisions/0017-a-wasm-package-and-a-web-demo.md).
+  # The core with and without runs and the GPU engine, the view crate, the app state and the app stay buildable for
+  # the browser, without std's clocks (docs/decisions/0015-core-builds-for-wasm.md,
+  # docs/decisions/0016-gpu-engine-in-the-browser.md, tools/clippy-wasm32/clippy.toml).
   wasm32:
     name: wasm32
     runs-on: ubuntu-latest
+    env:
+      CLIPPY_CONF_DIR: tools/clippy-wasm32
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -155,10 +156,18 @@ jobs:
         run: cargo clippy -p wavedude-core --no-default-features --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy with the GPU engine
         run: cargo clippy -p wavedude-core --no-default-features --features gpu --target wasm32-unknown-unknown -- -D warnings
+      - name: Clippy with runs
+        run: cargo clippy -p wavedude-core --no-default-features --features run --target wasm32-unknown-unknown -- -D warnings
+      - name: Clippy with runs and the GPU engine
+        run: cargo clippy -p wavedude-core --no-default-features --features run,gpu --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy of the view crate
         run: cargo clippy -p wavedude-view --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy of the wasm package
-        run: cargo clippy -p wavedude-wasm --target wasm32-unknown-unknown -- -D warnings
+      - name: Clippy of the app state
+        run: cargo clippy -p wavedude-app-state --target wasm32-unknown-unknown -- -D warnings
+      - name: Clippy of the export crate
+        run: cargo clippy -p wavedude-export --no-default-features --target wasm32-unknown-unknown -- -D warnings
+      - name: Clippy of the app
+        run: cargo clippy -p wavedude-app --target wasm32-unknown-unknown -- -D warnings
 
   # The caches of the default branch: one per key, the newest. rust-cache keys end in the lockfile's hash, so each
   # dependency bump would leave a generation behind until the 10 GB allowance evicts it.

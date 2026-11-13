@@ -29,7 +29,7 @@ Status: accepted, 2026-11-05 (the user's answers; defaults where marked)
     the centre area, since the layout is four side lists around the centre, not a free split tree. A group's
     tab strip sits under its content.
 12. Tree rows are dragged within their list and onto a picture (a copy lands where dropped). Drags into another
-    window or into a text editor are not offered: Freya has no OS drag source; the clipboard text does the same.
+    window or into a text editor are not offered: the toolkit has no OS drag source (Freya then, egui since 0019); the clipboard text does the same.
 13. The Edit menu acts on objects even while a text box has the focus; the keys (Ctrl+Z, X, C, V, A) go to the
     box as before. Opening a menu moves the focus, so the menu cannot tell what had it.
 14. Taskbar progress, the jump list and menu click-through on the title bar are Windows-only integrations and

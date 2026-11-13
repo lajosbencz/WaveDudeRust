@@ -6,12 +6,10 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish = false
-description = "The example projects, embedded: the one list of the Examples dialog and the web demo"
+description = "The example projects, embedded: the one list of the Examples dialog"
 
 [lints]
 workspace = true
 
 [dependencies]
 wavedude-core = { path = "../wavedude-core", default-features = false }
-anyhow.workspace = true
-serde_json.workspace = true

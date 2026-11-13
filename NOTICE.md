@@ -26,5 +26,9 @@ of its packages (decision 0005): "OpenH264 Video Codec provided by Cisco Systems
 
 - **Selawik** by Microsoft Corporation - <https://github.com/microsoft/Selawik> (release 1.01), a metric-compatible
   stand-in for Segoe UI, used when Segoe UI is not installed. Licensed under the SIL Open Font License 1.1; the
-  license text ships beside the fonts in [`crates/wavedude-widgets/assets/fonts/Selawik-OFL.txt`](crates/wavedude-widgets/assets/fonts/Selawik-OFL.txt). Selawik is a
+  license text ships beside the fonts in [`crates/wavedude-view/assets/fonts/Selawik-OFL.txt`](crates/wavedude-view/assets/fonts/Selawik-OFL.txt). Selawik is a
   Reserved Font Name and a trademark of Microsoft Corporation.
+- **Noto Sans Math** by Google LLC - <https://github.com/notofonts/math> (version 3.000), subset to the Greek,
+  super- and subscript, letterlike, arrow and math operator blocks: the glyphs Selawik lacks. Licensed under the SIL
+  Open Font License 1.1; the license text ships beside the fonts in
+  [`crates/wavedude-view/assets/fonts/NotoSansMath-OFL.txt`](crates/wavedude-view/assets/fonts/NotoSansMath-OFL.txt).

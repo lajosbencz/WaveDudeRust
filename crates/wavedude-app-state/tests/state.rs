@@ -6,9 +6,11 @@ use std::time::{Duration, Instant};
 
 use wavedude_app_state::clipboard::PasteTarget;
 use wavedude_app_state::commands::{Command, Edit, NewPart};
+use wavedude_app_state::document::{Source, Target};
 use wavedude_app_state::history::History;
 use wavedude_app_state::live::Notice;
 use wavedude_app_state::live::fake::FakeBackend;
+use wavedude_app_state::platform::Store;
 use wavedude_app_state::selection::Row;
 use wavedude_app_state::settings::Settings;
 use wavedude_app_state::{AppState, Event, ExportKind, Guarded, Response, SaveChoice};
@@ -136,21 +138,42 @@ fn unsaved_edits_are_asked_about() {
 	assert_eq!(s.handle(Event::Guarded(Guarded::New), t), Response::AskSave { name: "Untitled".into() });
 	assert_eq!(s.handle(Event::SaveChoice(SaveChoice::Cancel), t), Response::None);
 	assert_eq!(s.document.project.probes.len(), 1, "Cancel keeps the project");
+	let first = s.document_id();
 	s.handle(Event::Guarded(Guarded::OpenExample(6)), t);
 	let ask = s.handle(Event::SaveChoice(SaveChoice::Save), t);
 	assert_eq!(ask, Response::AskSavePath { proposed: None });
 	let path = dir.path().join("mine.wdproj");
-	assert_eq!(s.handle(Event::SaveAs(path.clone()), t), Response::None);
+	assert_eq!(s.handle(Event::SaveAs(Target::Path(path.clone())), t), Response::None);
+	let example = s.document_id();
+	assert_ne!(example, first, "the opened example kept the document's id");
 	assert!(path.is_file());
 	assert!(s.title().ends_with("Example07_Random_emitter_lattice.wdproj"), "{}", s.title());
 	assert_eq!(s.settings.recent_files[0], path);
 	assert_eq!(s.live.playback.position(), 0);
 	s.handle(Event::Command(Command::AddSource { at: None }), t);
-	assert!(matches!(s.handle(Event::DropFile(dir.path().join("x.txt")), t), Response::Error(_)));
-	assert!(matches!(s.handle(Event::DropFile(path.clone()), t), Response::AskSave { .. }));
+	assert!(matches!(s.handle(Event::DropFile(Source::Path(dir.path().join("x.txt"))), t), Response::Error(_)));
+	assert!(matches!(s.handle(Event::DropFile(Source::Path(path.clone())), t), Response::AskSave { .. }));
 	s.handle(Event::SaveChoice(SaveChoice::DontSave), t);
 	assert_eq!(s.document.path.as_deref(), Some(path.as_path()));
+	assert_ne!(s.document_id(), example, "the reopened file kept the document's id");
+	let reopened = s.document_id();
+	s.handle(Event::SaveAs(Target::Path(dir.path().join("copy.wdproj"))), t);
+	assert_eq!(s.document_id(), reopened, "Save As changed the document's id");
 	assert_eq!(s.document.project.probes.len(), 1);
+	let bytes = std::fs::read(&path).unwrap();
+	assert_eq!(s.document.to_bytes(), bytes, "the bytes are the file's");
+
+	let opened = s.document.project.clone();
+	let source = Source::Bytes { name: "mine.wdproj".into(), bytes: bytes.into() };
+	assert_eq!(s.handle(Event::DropFile(source), t), Response::None);
+	assert_eq!((s.document.path.as_deref(), s.document.dirty), (None, false), "bytes have no file");
+	assert_eq!(s.document.project, opened);
+	let text = Source::Bytes { name: "notes.wdproj".into(), bytes: b"not a project".as_slice().into() };
+	assert!(matches!(s.handle(Event::Guarded(Guarded::Open(text)), t), Response::Error(_)));
+	s.handle(Event::Command(Command::AddSource { at: None }), t);
+	let download = Target::Download("mine.wdproj".into());
+	assert!(matches!(s.handle(Event::SaveAs(download), t), Response::Error(_)), "the desktop has no downloads");
+	assert!(s.document.dirty);
 }
 
 #[test]
@@ -166,7 +189,7 @@ fn a_restart_asks_about_unsaved_edits_like_an_exit() {
 	s.handle(Event::Guarded(Guarded::Restart), t);
 	assert_eq!(s.handle(Event::SaveChoice(SaveChoice::Save), t), Response::AskSavePath { proposed: None });
 	let path = dir.path().join("kept.wdproj");
-	assert_eq!(s.handle(Event::SaveAs(path.clone()), t), Response::Restart, "restarts once saved");
+	assert_eq!(s.handle(Event::SaveAs(Target::Path(path.clone())), t), Response::Restart, "restarts once saved");
 	assert!(path.is_file() && !s.document.dirty);
 }
 
@@ -207,21 +230,22 @@ fn copy_paste_cut_through_text() {
 #[test]
 fn settings_round_trip_and_first_start() {
 	let dir = tempfile::tempdir().unwrap();
+	let store = Store::in_dir(dir.path().join("cfg"));
 	let path = dir.path().join("cfg").join("settings.json");
 	let facts =
 		|| MachineFacts { physical_bytes: 64 << 30, threads: 16, has_gpu: Some(true), cache_drive_seek_penalty: None };
-	let loaded = Settings::load(&path, facts);
+	let loaded = Settings::load(&store, facts);
 	assert!(loaded.first_start && path.is_file());
 	assert_eq!(loaded.settings.preview_sample_bytes, 2);
 	let mut s = loaded.settings;
 	s.language = "de".into();
 	s.push_recent(dir.path());
-	s.save(&path).unwrap();
-	let again = Settings::load(&path, || panic!("not a first start"));
+	s.save(&store).unwrap();
+	let again = Settings::load(&store, || panic!("not a first start"));
 	assert!(!again.first_start);
 	assert_eq!(again.settings, s);
 	std::fs::write(&path, "{ not json").unwrap();
-	let broken = Settings::load(&path, || panic!("an unreadable file is not a first start"));
+	let broken = Settings::load(&store, || panic!("an unreadable file is not a first start"));
 	assert!(broken.unreadable.is_some());
 	assert_eq!(broken.settings, Settings::default());
 }
@@ -234,7 +258,7 @@ fn language_switch_and_export_proposal() {
 	s.handle(Event::SetLanguage("fr".into()), t);
 	assert_eq!(s.strings.language(), wavedude_app_state::strings::Language::French);
 	let project = dir.path().join("p.wdproj");
-	s.handle(Event::SaveAs(project.clone()), t);
+	s.handle(Event::SaveAs(Target::Path(project.clone())), t);
 	assert_eq!(s.export_proposal(ExportKind::Run), dir.path().join("p_field"));
 	let out = dir.path().join("videos").join("p_intensity.mp4");
 	s.export_done(ExportKind::Run, &out);
@@ -245,10 +269,10 @@ fn language_switch_and_export_proposal() {
 
 #[test]
 fn log_reaches_file_and_ring() {
-	use wavedude_app_state::log::{LogRing, init};
+	use wavedude_app_state::log::LogRing;
 	let dir = tempfile::tempdir().unwrap();
 	let ring = LogRing::new();
-	let guard = init(dir.path(), ring.clone()).unwrap();
+	let guard = wavedude_app_state::platform::init_log(&Store::in_dir(dir.path().to_owned()), ring.clone()).unwrap();
 	tracing::info!(frame = 7, "preview frame requested");
 	tracing::trace!("Source 1.frequency: 100.0 -> 120.0");
 	drop(guard);
@@ -257,7 +281,7 @@ fn log_reaches_file_and_ring() {
 	assert_eq!(mine[0].message, "preview frame requested frame=7");
 	assert!(mine[0].reaches_status_bar());
 	assert_eq!(mine.len(), if cfg!(debug_assertions) { 2 } else { 1 }, "Trace only in debug builds");
-	let file = std::fs::read_dir(dir.path()).unwrap().next().unwrap().unwrap().path();
+	let file = std::fs::read_dir(dir.path().join("logs")).unwrap().next().unwrap().unwrap().path();
 	assert!(std::fs::read_to_string(file).unwrap().contains("preview frame requested"));
 }
 
@@ -326,7 +350,7 @@ fn core_backend_round(use_gpu: bool) {
 	use wavedude_core::run::RunState;
 	let dir = tempfile::tempdir().unwrap();
 	let gpu = Arc::new(AtomicBool::new(use_gpu));
-	let backend = CoreBackend::new(gpu.clone(), dir.path().to_path_buf()).unwrap();
+	let backend = CoreBackend::new(gpu.clone(), dir.path().to_path_buf(), wavedude_core::run::Memory::System).unwrap();
 	let mut s = AppState::with_backend(Settings::default(), None, backend, gpu);
 	let t = Instant::now();
 	s.document.project.scene.width = 96;

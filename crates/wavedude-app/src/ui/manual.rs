@@ -1,352 +1,279 @@
-//! The manual window (docs/ui/70): a contents tree of the headings beside the whole document rendered as
-//! Markdown with the figures of `assets/manual`; taking a row scrolls its heading to the top, a 4 px splitter
-//! between them. One window at a time; F1 opens it or brings it forward, Esc closes it. It follows the main
-//! window's theme, language and zoom while open.
+//! The manual window (docs/ui/70): a contents list of the headings beside the manual rendered as Markdown with its
+//! figures; taking a row or following a `#anchor` link puts its heading at the top. A window of its own where the
+//! platform has several, a window inside the page in the browser; F1 brings it forward, Esc closes it.
+//! Sections out of sight are not laid out once their heights are known at the column's width, which they are
+//! measured again for once it stops changing.
 
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::rc::Rc;
+use eframe::egui::{
+	self, Color32, CursorIcon, EventFilter, FontId, Key, LayerId, Modifiers, Order, Rect, RichText, ScrollArea, Sense,
+	TextStyle, Ui, UiBuilder, ViewportBuilder, ViewportCommand, ViewportId, vec2,
+};
+use egui_commonmark::CommonMarkCache;
 
-use freya::prelude::*;
-use freya::winit::window::WindowId;
-use wavedude_widgets::dock::Splitter;
-use wavedude_widgets::{TestIdExt, Theme, Tip, use_init_wave_theme, use_wave_theme};
+use super::markdown::{self, Piece, pieces};
+use super::theme::{FONT_SIZE, Palette};
+use crate::App;
+use crate::manual::{MANUAL, anchor, sections};
 
-use super::about::markdown;
-use super::app::{Cx, theme_kind};
-use wavedude_app_state::strings::Strings;
-
-const MANUAL: &str = include_str!("../../assets/manual.md");
+const SIZE: [f32; 2] = [1200., 820.];
+const MIN_SIZE: [f32; 2] = [480., 300.];
 const CONTENTS_WIDTH: f32 = 260.;
 const CONTENTS_MIN: f32 = 120.;
 const TEXT_MIN: f32 = 200.;
+const TEXT_PADDING: f32 = 16.;
+const SPLITTER: f32 = 4.;
+const SPLITTER_KEY_STEP: f32 = 10.;
+const ROW_INDENT: f32 = 12.;
+/// Seconds the column's width stays put before the sections are measured again.
+const SETTLE: f64 = 0.25;
 
-/// The figures the manual shows, by the name of its `<figure name="..."/>` tags.
-pub mod figures {
-	macro_rules! figures {
-		($($name:literal),* $(,)?) => {
-			/// Every figure: name and PNG bytes.
-			pub const ALL: &[(&str, &[u8])] = &[$(($name, include_bytes!(concat!("../../assets/manual/", $name, ".png")))),*];
-		};
-	}
-	figures!(
-		"main-window",
-		"project-tree",
-		"preview",
-		"timeline",
-		"menu-file",
-		"menu-file-export",
-		"menu-edit",
-		"menu-view",
-		"menu-simulation",
-		"menu-help",
-		"menu-add-part",
-		"menu-add-probe",
-		"properties-project",
-		"properties-scene",
-		"properties-simulation",
-		"properties-display",
-		"properties-source",
-		"properties-composite-source",
-		"properties-lens",
-		"properties-fresnel-lens",
-		"properties-polygon",
-		"properties-rectangle",
-		"properties-ellipse",
-		"properties-triangle",
-		"properties-outline",
-		"properties-fibre",
-		"properties-bragg-reflector",
-		"properties-grin-lens",
-		"properties-zone-plate",
-		"properties-diffuser",
-		"properties-interference-filter",
-		"properties-simple-grating",
-		"properties-facetted-grating",
-		"properties-meta-lens",
-		"properties-meta-prism",
-		"properties-meta-axicon",
-		"properties-xor-gate",
-		"properties-probe",
-		"properties-line-probe",
-		"properties-counting-detector",
-		"properties-imaging-detector",
-		"properties-colour-scheme",
-	);
-
-	pub fn get(name: &str) -> Option<&'static [u8]> {
-		ALL.iter().find(|(n, _)| *n == name).map(|(_, bytes)| *bytes)
-	}
+/// A heading and its text.
+struct Section {
+	level: usize,
+	title: String,
+	pieces: Vec<Piece>,
 }
 
-/// One heading and the text up to the next heading.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Section {
-	pub level: usize,
-	pub title: String,
-	pub body: String,
+/// The window's state while it is open.
+pub(super) struct Manual {
+	/// The title's section first, which is no row.
+	sections: Vec<Section>,
+	/// Each section's `#anchor` link.
+	links: Vec<String>,
+	taken: usize,
+	contents_width: f32,
+	/// A section to bring to the top once its place is known.
+	go: Option<usize>,
+	/// Each section's top and height in the text column, at `width`.
+	places: Vec<(f32, f32)>,
+	width: f32,
+	/// When the column's width last changed, while `places` waits to be measured again.
+	resized: Option<f64>,
+	markdown: CommonMarkCache,
+	/// F1 asked for it again: it comes forward.
+	raise: bool,
 }
 
-/// The manual split at its headings; the title (`#`) is no row.
-pub fn sections(text: &str) -> Vec<Section> {
-	let mut out: Vec<Section> = Vec::new();
-	for line in text.lines() {
-		let level = line.chars().take_while(|&c| c == '#').count();
-		if level > 0 && line[level..].starts_with(' ') {
-			out.push(Section { level, title: line[level..].trim().to_owned(), body: format!("{line}\n") });
-		} else if let Some(last) = out.last_mut() {
-			last.body.push_str(line);
-			last.body.push('\n');
+impl Default for Manual {
+	fn default() -> Self {
+		let sections: Vec<Section> = sections(MANUAL)
+			.into_iter()
+			.map(|s| Section { level: s.level, title: s.title, pieces: pieces(&s.body) })
+			.collect();
+		let links: Vec<String> = sections.iter().map(|s| format!("#{}", anchor(&s.title))).collect();
+		let mut markdown = CommonMarkCache::default();
+		let taken = sections.iter().position(|s| s.level > 1).unwrap_or_default();
+		for link in &links {
+			markdown.add_link_hook(link.as_str());
+		}
+		Self {
+			sections,
+			links,
+			taken,
+			contents_width: CONTENTS_WIDTH,
+			go: None,
+			places: Vec::new(),
+			width: 0.,
+			resized: None,
+			markdown,
+			raise: false,
 		}
 	}
-	out.retain(|s| s.level > 1 || !s.body.lines().skip(1).all(str::is_empty));
-	out
 }
 
-/// The figure names a `<figure name="..."/>` tag names in `html`.
-pub fn figure_name(html: &str) -> Option<&str> {
-	let rest = html.trim().strip_prefix("<figure")?;
-	let start = rest.find("name=\"")? + 6;
-	let end = rest[start..].find('"')? + start;
-	Some(&rest[start..end])
-}
+impl Manual {
+	/// Brings the open window forward.
+	pub(super) fn raise(&mut self) {
+		self.raise = true;
+	}
 
-/// GitHub's anchor of a heading: lower case, spaces as hyphens, punctuation dropped.
-pub fn anchor(title: &str) -> String {
-	title
-		.chars()
-		.filter_map(|c| match c {
-			' ' | '-' => Some('-'),
-			c if c.is_alphanumeric() => Some(c.to_ascii_lowercase()),
-			_ => None,
+	/// Shows the window; false once it was closed.
+	pub(super) fn show(&mut self, ctx: &egui::Context, app: &App) -> bool {
+		let title = app.strings.get("ManualTitle");
+		let mut open = true;
+		if ctx.embed_viewports() {
+			let id = egui::Id::unique("ManualWindow");
+			// keys go to the window with the focus, or on top with nothing focused
+			let layer = LayerId::new(Order::Middle, id);
+			let here = match ctx.memory(egui::Memory::focused).and_then(|f| ctx.read_response(f)) {
+				Some(focused) => focused.layer_id == layer,
+				None => ctx.top_layer_id() == Some(layer),
+			};
+			let window = egui::Window::new(title)
+				.id(id)
+				.open(&mut open)
+				.default_size(SIZE)
+				.min_size(MIN_SIZE)
+				.collapsible(false);
+			if std::mem::take(&mut self.raise) {
+				ctx.move_to_top(layer);
+			}
+			window.show(ctx, |ui| self.body(ui, app, here));
+			return open && !(here && escaped(ctx));
+		}
+		let id = ViewportId::from_hash_of("manual");
+		let builder = ViewportBuilder::default().with_title(title).with_inner_size(SIZE).with_min_inner_size(MIN_SIZE);
+		if std::mem::take(&mut self.raise) {
+			ctx.send_viewport_cmd_to(id, ViewportCommand::Focus);
+		}
+		ctx.show_viewport_immediate(id, builder, |ui, _| {
+			egui::CentralPanel::default().frame(egui::Frame::new()).show(ui, |ui| self.body(ui, app, true));
+			let ctx = ui.ctx();
+			!ctx.input(|i| i.viewport().close_requested()) && !escaped(ctx)
 		})
-		.collect()
-}
-
-#[derive(Clone)]
-struct ManualContext {
-	theme: Theme,
-	strings: Strings,
-}
-
-fn manual_root() -> impl IntoElement {
-	let ctx = consume_context::<ManualContext>();
-	let theme = ctx.theme.clone();
-	use_init_wave_theme(move || theme);
-	ManualView { strings: ctx.strings }
-}
-
-#[derive(PartialEq)]
-struct ManualView {
-	strings: Strings,
-}
-
-impl Component for ManualView {
-	fn render(&self) -> impl IntoElement {
-		let theme = use_wave_theme();
-		let s = self.strings;
-		let all = use_hook(|| Rc::new(sections(MANUAL)));
-		let mut taken = use_state(|| 0usize);
-		let mut contents_width = use_state(|| CONTENTS_WIDTH);
-		let mut window_width = use_state(|| 0f32);
-		let tops: Rc<RefCell<HashMap<usize, f32>>> = use_hook(|| Rc::new(RefCell::new(HashMap::new())));
-		let mut scroll = use_scroll_controller(ScrollConfig::default);
-		let current = *taken.read();
-		let count = all.len();
-
-		let go = {
-			let tops = tops.clone();
-			move |i: usize| {
-				taken.set(i);
-				if let Some(&top) = tops.borrow().get(&i) {
-					scroll.scroll_to_y(-(top as i32));
-				}
-			}
-		};
-		let rows = all.iter().enumerate().map(|(i, sec)| {
-			let selected = i == current;
-			let mut go = go.clone();
-			rect()
-				.width(Size::fill())
-				.padding((3., 6., 3., 6. + 12. * (sec.level.saturating_sub(2)) as f32))
-				.background(if selected { theme.selection } else { Color::TRANSPARENT })
-				.color(if selected { theme.selection_text } else { theme.text })
-				.test_id(format!("ManualRow:{}", anchor(&sec.title)))
-				.on_press(move |_| go(i))
-				.child(label().text(sec.title.clone()).max_lines(1))
-				.into_element()
-		});
-		let figure = move |html: String| -> Option<Element> {
-			let name = figure_name(&html)?;
-			let bytes = figures::get(name)?;
-			let key: &'static str = figures::ALL.iter().find(|(n, _)| *n == name).map(|(n, _)| *n)?;
-			Some(
-				rect()
-					.width(Size::fill())
-					.padding((6., 0., 6., 0.))
-					.child(ImageViewer::new((key, bytes)).width(Size::fill()).aspect_ratio(AspectRatio::Fit))
-					.into_element(),
-			)
-		};
-		// Each section's top within the scrolled column: its area's top less the column's.
-		let column_top = use_state(|| 0f32);
-		let body = all.iter().enumerate().map(|(i, sec)| {
-			let tops = tops.clone();
-			rect()
-				.width(Size::fill())
-				.on_sized(move |e: Event<SizedEventData>| {
-					tops.borrow_mut().insert(i, e.area.min_y() - *column_top.peek() + scroll.position().y);
-				})
-				.child(markdown(sec.body.clone(), &theme).inline_element(figure))
-				.into_element()
-		});
-		let total = *window_width.read();
-		let max_contents = (total - TEXT_MIN - 4.).max(CONTENTS_MIN);
-		rect()
-			.expanded()
-			.horizontal()
-			.content(Content::flex())
-			.background(theme.window_background)
-			.color(theme.text)
-			.font_size(theme.font_size)
-			.on_sized(move |e: Event<SizedEventData>| window_width.set_if_modified(e.area.width()))
-			.on_global_key_down({
-				let mut go = go.clone();
-				move |e: Event<KeyboardEventData>| match e.key {
-					Key::Named(NamedKey::Escape) => Platform::get().close_window(Platform::window_id()),
-					Key::Named(NamedKey::ArrowDown) => go((current + 1).min(count.saturating_sub(1))),
-					Key::Named(NamedKey::ArrowUp) => go(current.saturating_sub(1)),
-					_ => {}
-				}
-			})
-			.child(
-				rect()
-					.width(Size::px(contents_width.read().clamp(CONTENTS_MIN, max_contents)))
-					.height(Size::fill())
-					.background(theme.tool_window_background)
-					.child(label().text(s.get("ManualContents")).font_weight(FontWeight::BOLD).margin(6.))
-					.child(ScrollView::new().expanded().child(rect().width(Size::fill()).children(rows))),
-			)
-			.child(
-				Tip::new(s.get("TipManualSplitter")).child(
-					Splitter::new(false, move |delta: f32| {
-						let w = (*contents_width.peek() + delta).clamp(CONTENTS_MIN, max_contents);
-						contents_width.set(w);
-					})
-					.test_id("ManualSplitter"),
-				),
-			)
-			.child(
-				ScrollView::new_controlled(scroll).width(Size::flex(1.)).height(Size::fill()).child(
-					rect()
-						.width(Size::fill())
-						.padding(16.)
-						.on_sized({
-							let mut column_top = column_top;
-							move |e: Event<SizedEventData>| {
-								column_top.set_if_modified(e.area.min_y() + scroll.position().y);
-							}
-						})
-						.children(body),
-				),
-			)
 	}
-}
 
-/// Watches F1 requests and opens the manual window or brings it forward; a theme, language or zoom change
-/// relaunches it in place.
-#[derive(PartialEq)]
-pub struct ManualLauncher;
-
-impl Component for ManualLauncher {
-	fn render(&self) -> impl IntoElement {
-		let cx = Cx::get();
-		let open: Rc<Cell<Option<WindowId>>> = use_hook(|| Rc::new(Cell::new(None)));
-		let request = *cx.ui.manual_request.read();
-		let seen = use_hook(|| Rc::new(Cell::new(0u64)));
-		let look = cx.shared.read(super::shared::Topics::SETTINGS, |a| {
-			(a.settings.theme, a.settings.language.clone(), a.settings.ui_zoom.to_bits())
+	/// The contents beside the text, a splitter between them; `keys`: the arrows move through the contents.
+	fn body(&mut self, ui: &mut Ui, app: &App, keys: bool) {
+		let palette = Palette::of(ui.ctx().theme());
+		let room = ui.available_rect_before_wrap();
+		let max = (room.width() - TEXT_MIN - SPLITTER).max(CONTENTS_MIN);
+		self.contents_width = self.contents_width.clamp(CONTENTS_MIN, max).round();
+		let (contents, rest) = room.split_left_right_at_x(room.left() + self.contents_width);
+		let (bar, text) = rest.split_left_right_at_x(rest.left() + SPLITTER);
+		ui.painter().rect_filled(contents, 0., palette.tool_window_background);
+		ui.scope_builder(UiBuilder::new().max_rect(contents.shrink2(vec2(0., 6.))), |ui| {
+			ui.label(RichText::new(app.strings.get("ManualContents")).family(wavedude_view::fonts::bold()));
+			ScrollArea::vertical().id_salt("ManualRows").auto_shrink(false).show(ui, |ui| self.rows(ui, palette));
 		});
-		let mut last_look = use_state(|| look.clone());
-		if request != seen.get() {
-			seen.set(request);
-			match open.get() {
-				Some(id) => Platform::get().focus_window(id),
-				None => launch(&cx, open.clone()),
+		self.splitter(ui, bar, app.strings.get("TipManualSplitter"), palette);
+		let (down, up) = ui.input_mut(|i| {
+			(
+				keys && i.consume_key(Modifiers::NONE, Key::ArrowDown),
+				keys && i.consume_key(Modifiers::NONE, Key::ArrowUp),
+			)
+		});
+		let row = |i: &usize| self.sections[*i].level > 1;
+		let step = if down {
+			(self.taken + 1..self.sections.len()).find(row)
+		} else if up {
+			(0..self.taken).rev().find(row)
+		} else {
+			None
+		};
+		if let Some(i) = step {
+			self.take(i);
+		}
+		ui.painter().rect_filled(text, 0., palette.window_background);
+		ui.scope_builder(UiBuilder::new().max_rect(text), |ui| self.text(ui));
+		ui.advance_cursor_after_rect(room);
+	}
+
+	/// The bar between the contents and the text: dragged, or Left and Right with the focus, it moves.
+	fn splitter(&mut self, ui: &mut Ui, bar: Rect, tip: &str, palette: &Palette) {
+		let id = ui.scope_id().with("ManualSplitter");
+		let response = ui.interact(bar, id, Sense::click_and_drag()).on_hover_text(tip);
+		let response = response.on_hover_cursor(CursorIcon::ResizeHorizontal);
+		response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Splitter, true, tip));
+		if response.dragged() {
+			self.contents_width += response.drag_delta().x;
+		}
+		if response.has_focus() {
+			ui.memory_mut(|m| {
+				m.set_focus_lock_filter(id, EventFilter { horizontal_arrows: true, ..Default::default() });
+			});
+			ui.input_mut(|i| {
+				let n = i.count_and_consume_key(Modifiers::NONE, Key::ArrowRight) as f32
+					- i.count_and_consume_key(Modifiers::NONE, Key::ArrowLeft) as f32;
+				self.contents_width += n * SPLITTER_KEY_STEP;
+			});
+		}
+		let color = if response.has_focus() || response.dragged() { palette.accent } else { palette.border };
+		ui.painter().rect_filled(bar, 0., color);
+	}
+
+	fn take(&mut self, i: usize) {
+		self.taken = i;
+		self.go = Some(i);
+	}
+
+	fn rows(&mut self, ui: &mut Ui, palette: &Palette) {
+		ui.spacing_mut().item_spacing.y = 0.;
+		let mut taken = None;
+		for (i, section) in self.sections.iter().enumerate().filter(|(_, s)| s.level > 1) {
+			let on = i == self.taken;
+			let indent = 6. + ROW_INDENT * section.level.saturating_sub(2) as f32;
+			let height = ui.text_style_height(&TextStyle::Body) + 6.;
+			let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
+			if on {
+				ui.painter().rect_filled(rect, 0., palette.selection);
 			}
-		} else if *last_look.peek() != look {
-			last_look.set(look);
-			if let Some(id) = open.get() {
-				Platform::get().close_window(id);
-				open.set(None);
-				launch(&cx, open.clone());
+			let ink = if on { palette.selection_text } else { palette.text };
+			let text = rect.left_center() + vec2(indent, 0.);
+			let galley = ui.painter().layout_no_wrap(section.title.clone(), FontId::proportional(FONT_SIZE), ink);
+			ui.painter().with_clip_rect(rect).galley(
+				text - vec2(0., galley.size().y / 2.),
+				galley,
+				Color32::PLACEHOLDER,
+			);
+			response.widget_info(|| egui::WidgetInfo::selected(egui::Role::ListItem, true, on, &section.title));
+			if response.clicked() {
+				taken = Some(i);
 			}
 		}
-		rect()
-	}
-}
-
-fn launch(cx: &Cx, open: Rc<Cell<Option<WindowId>>>) {
-	let (s, setting, zoom) = cx.shared.peek(|a| (a.strings, a.settings.theme, a.settings.ui_zoom));
-	let ctx = ManualContext { theme: Theme::of(theme_kind(setting)), strings: s };
-	let title: &'static str = Box::leak(s.get("ManualTitle").to_owned().into_boxed_str());
-	let closed = open.clone();
-	let config = WindowConfig::new(manual_root)
-		.with_root_context(ctx)
-		.with_title(title)
-		.with_size(1200. * zoom, 820. * zoom)
-		.with_min_size(480. * zoom, 300. * zoom)
-		.with_custom_scale_factor(zoom)
-		.with_background(Theme::of(theme_kind(setting)).window_background)
-		.with_on_close(move |_, _| {
-			closed.set(None);
-			CloseDecision::Close
-		});
-	spawn_in_window(async move {
-		let id = Platform::get().launch_window(config).await;
-		open.set(Some(id));
-	});
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn manual_splits_at_its_chapters() {
-		let all = sections(MANUAL);
-		let titles: Vec<&str> = all.iter().filter(|s| s.level == 2).map(|s| s.title.as_str()).collect();
-		assert_eq!(titles.first(), Some(&"The main window"));
-		assert!(titles.contains(&"The examples"));
-		assert!(all.iter().all(|s| s.body.starts_with('#')));
-	}
-
-	#[test]
-	fn every_figure_tag_names_a_bundled_figure_and_every_anchor_a_heading() {
-		let all = sections(MANUAL);
-		let anchors: Vec<String> = all.iter().map(|s| anchor(&s.title)).collect();
-		for line in MANUAL.lines() {
-			let mut rest = line;
-			while let Some(start) = rest.find("<figure") {
-				let tag = &rest[start..];
-				let name = figure_name(tag).expect("a figure tag names its figure");
-				assert!(figures::get(name).is_some(), "no figure '{name}'");
-				rest = &tag[1..];
-			}
-			let mut rest = line;
-			while let Some(start) = rest.find("](#") {
-				let target = &rest[start + 3..];
-				let end = target.find(')').expect("a link closes");
-				assert!(anchors.contains(&target[..end].to_owned()), "no heading for #{}", &target[..end]);
-				rest = &target[end..];
-			}
+		if let Some(i) = taken {
+			self.take(i);
 		}
 	}
 
-	#[test]
-	fn anchors_follow_github() {
-		assert_eq!(anchor("The File menu"), "the-file-menu");
-		assert_eq!(anchor("Lens/Mirror"), "lensmirror");
-		assert_eq!(anchor("XOR gate"), "xor-gate");
+	fn text(&mut self, ui: &mut Ui) {
+		let width = ui.available_width() - 2. * TEXT_PADDING;
+		let now = ui.input(|i| i.time);
+		if width != self.width {
+			self.width = width;
+			self.resized = Some(now);
+		}
+		if let Some(since) = self.resized {
+			if self.places.is_empty() || now - since >= SETTLE {
+				self.resized = None;
+				self.places.clear();
+			} else {
+				ui.ctx().request_repaint_after_secs((SETTLE - (now - since)) as f32);
+			}
+		}
+		let measured = self.places.len() == self.sections.len();
+		let mut scroll = ScrollArea::vertical().id_salt("ManualText").auto_shrink(false);
+		if measured && let Some(i) = self.go.take() {
+			scroll = scroll.vertical_scroll_offset(self.places[i].0);
+		}
+		let Self { sections, places, markdown: cache, .. } = self;
+		let mut followed = None;
+		let clicked = ui.input(|i| i.pointer.any_click());
+		scroll.show_viewport(ui, |ui, view| {
+			let followed = &mut followed;
+			ui.add_space(TEXT_PADDING);
+			let origin = ui.min_rect().top();
+			for (i, section) in sections.iter().enumerate() {
+				if measured {
+					let (top, height) = places[i];
+					if top + height < view.min.y || top > view.max.y {
+						ui.allocate_space(vec2(width, height));
+						continue;
+					}
+				}
+				let top = ui.cursor().top() - origin;
+				egui::Frame::new().inner_margin(egui::Margin::symmetric(TEXT_PADDING as i8, 0)).show(ui, |ui| {
+					ui.set_width(width);
+					markdown::show(ui, cache, &section.pieces);
+				});
+				if !measured {
+					places.push((top, ui.cursor().top() - origin - top));
+				}
+				if clicked {
+					*followed = followed
+						.take()
+						.or_else(|| cache.link_hooks().iter().find(|(_, on)| **on).map(|(l, _)| l.clone()));
+				}
+			}
+		});
+		if let Some(link) = followed
+			&& let Some(i) = self.links.iter().position(|l| *l == link)
+		{
+			self.take(i);
+		}
 	}
+}
+
+fn escaped(ctx: &egui::Context) -> bool {
+	ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape))
 }

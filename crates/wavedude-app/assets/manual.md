@@ -18,9 +18,9 @@ The main window with an example project. <figure name="main-window"/>
 6. **Header strip of a picture**: The title, the brightness box and Auto, which fits the brightness to the frame shown; see [The preview](#the-preview).
 7. **Timeline**: Your position in the run. Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step a frame, PageUp/PageDown ten, Home/End jump to the start/end of the range. See [The timeline](#the-timeline).
 8. **Transport controls**: Run, play and pause, frame steps, the in and out points, loop and live, the position as frame and step, the playback speed, and which pictures are shown and how.
-9. **Status bar**: Shows the last entry in the log, the run's state and the position. Double-click opens the Messages pane. Colour changes for warnings and errors.
+9. **Status bar**: Shows the last entry in the log, the run's state and the position, and at the right end the frame cache: the memory its frames take of the RAM cache and, once frames went beyond it, what spilled to the cache file (in the browser, to its storage); its tooltip counts the frames. Double-click opens the Messages pane. Colour changes for warnings and errors.
 
-The panes can be arranged as you like: drag a pane by its title bar or its tab and drop it on an outer edge of the window, onto the middle of another pane to share its place as a tab, or onto an end of another pane to sit beside it; or use the controls at the right of its title to move or close it. View > Panes brings a closed pane back. The arrangement is kept for the next start, as are the theme, the language, the window's size and place and the preview settings of the View menu.
+The panes can be arranged as you like: drag a pane by its title bar or its tab and drop it on an outer edge of the window, onto the middle of another pane to share its place as a tab, or onto an end of another pane to sit beside it; or use the menu at the right of its title bar to move or close it, or the cross on its tab to close it. View > Panes brings a closed pane back. The arrangement is kept for the next start, as are the theme, the language, the window's size and place and the preview settings of the View menu.
 
 Everything can be done from the keyboard: Tab moves through the controls of the panes and the handles on the pictures, the arrow keys move within the tree and along the timeline and nudge a handle, and every menu entry shows its shortcut.
 
@@ -28,7 +28,7 @@ Everything can be done from the keyboard: Tab moves through the controls of the 
 
 The Project pane with the example project. <figure name="project-tree"/>
 
-1. **Pane title**: Drag it to move the pane. The controls on the right move or close the pane.
+1. **Pane title**: Drag it to move the pane. The cross on the tab closes the pane; the menu on the right moves or closes it.
 2. **Add a source**: Add a source to the project. It lands at the centre of the canvas shown; drag it from there or type its position. See [Sources](#sources).
 3. **Add a probe**: Add a probe to the project, at the centre of the canvas as well. See [Probes](#probes).
 4. **Add a part**: Shows a submenu of possible optical parts to add to the project. See [Optical parts](#optical-parts).
@@ -54,7 +54,7 @@ You can select several rows: Ctrl+click adds a row or removes it (Insert or Ctrl
 
 The row's context menu has the same commands as the buttons and more: Add source, Add part and Add probe; Add to or remove from selection and Select all; Enabled, Duplicate (Ctrl+D), Cut, Copy, Paste and Remove; Move up and Move down; and on a probe, Export probe data as CSV.
 
-Objects can be dragged: drag a row within its group to reorder, or onto a picture to put a copy where you drop it. Cut, copy and paste (Ctrl+X, Ctrl+C, Ctrl+V) work on objects too, and the clipboard holds them as text, so a source can be pasted into a text editor and back. A pasted object lands behind the selected row and is renamed only when its name is already taken. A project file dropped anywhere on the window opens it. F2 renames the row in place; Enter on a row moves the keyboard focus into its form.
+Objects can be dragged: drag a row within its group to reorder, or onto a picture to put a copy where you drop it. Cut, copy and paste (Ctrl+X, Ctrl+C, Ctrl+V) work on objects too, and the clipboard holds them as text, so a source can be pasted into a text editor and back. A pasted object lands behind the selected row and is renamed only when its name is already taken. A project file dropped anywhere on the window opens it; see [Dropping files](#dropping-files). F2 renames the row in place; Enter on a row moves the keyboard focus into its form.
 
 Every change can be undone (Ctrl+Z) and redone (Ctrl+Y or Ctrl+Shift+Z) without limit, moves on the pictures included; a text box keeps its own undo while you type in it.
 
@@ -126,7 +126,7 @@ The File menu. <figure name="menu-file"/>
 6. **Save As...**: Saves the project under a new name (Ctrl+Shift+S). The project is written as .wdproj, which WaveDude Next opens too.
 7. **Export**: Videos, image sequences and data of the run; see [Export](#export).
 8. **Export last**: Repeats the last export of a run in this session (Ctrl+E): the same pictures, format and file, without a dialog; an existing file is replaced.
-9. **Close Project**: Closes the project; unsaved changes are asked about first.
+9. **Close Project**: Closes the project; unsaved changes are asked about first. It is available for any project but the empty one the program starts with, or shows after a Close.
 10. **Exit**: Quits the program (Alt+F4); unsaved changes are asked about first.
 
 #### Export
@@ -212,7 +212,7 @@ The View menu. Its settings belong to the program, not to the project, and are k
 7. **Preview samples**: 16-bit float keeps the full values, so the brightness can be changed after a run and every level of a gradient shows; 8-bit palette index stores each pixel as its colour at the brightness of the run's start, half the memory, and a brightness change then needs a new run, which starts by itself; the preview dithering is not available with 8-bit samples.
 8. **Preview dithering**: With 16-bit samples, the pictures can be dithered as if the screen had 10, 12, 14 or 16 bits per channel, which hides the banding of dark gradients; on screen only, never in an export. This option is not available with 8-bit samples, which have nothing finer to dither.
 
-On its first start the program's startup page proposes the preview resolution, the preview frames, the preview samples and the dithering for the machine it runs on (Low, Standard and High set the four at once), and the View menu shows the choice. Each setting can be changed here at any time.
+On its first start the program's startup window, a modal over the main window, opens with the preview quality and proposes the preview resolution, the preview frames, the preview samples and the dithering for the machine it runs on (Low, Standard and High set the four at once); OK keeps the choice, and Examples... keeps it and opens the examples. The View menu shows the choice. Each setting can be changed here at any time.
 
 The three choices differ in memory: a Full HD scene of 1920 x 1080 pixels run for 1500 frames, with the field and the intensity both kept, takes 11.6 GB with 16-bit samples at full resolution and every frame, 5.8 GB with 8-bit samples at full resolution and every frame, and 740 MB at half resolution with every second frame and 8-bit samples. The settings combine: half resolution divides a frame by four, quarter resolution by sixteen, every second or fourth frame divides their number the same way, and 8-bit samples halve each frame against 16-bit.
 
@@ -223,11 +223,12 @@ The Simulation menu. <figure name="menu-simulation"/>
 1. **Run**: Runs the simulation from the start (F5).
 2. **Pause**: Pauses the run, and resumes it (F6).
 3. **Stop**: Stops the run (Shift+F5, or Esc); the frames computed so far stay.
-4. **Play**: Plays the frames at the playback speed, and pauses them (F7): the timeline's Play and Pause.
-5. **Use the GPU**: Computes on the graphics card through Vulkan, Metal or DirectX 12, many times faster than the processor; the results are the same within a documented tolerance. Off, or without a graphics card, the processor is used. On by default.
-6. **Re-run automatically after edits**: Starts a new run by itself a moment after you change the scene, a source or a part; off, you run by hand with F5 or Play. On by default.
-7. **Warn when a run does not fit in RAM**: Asks before a run whose frames would not all fit in the memory the RAM cache may take. Tick the RAM cache size to Auto, half the resolution, half the frames or 8-bit samples, each with its effect shown, and Run applies them in the Simulation and View menus for this and later runs; Cancel leaves everything as it is. "Do not warn me again" switches this off. On by default.
-8. **RAM cache size**: How much of the memory a run's frames may take: Auto decides from the free memory, or a share from 10 to 100 percent caps it; the frames beyond it go to a cache file on disk.
+4. **Discard frames**: After a Yes, stops a run and drops its frames, freeing the memory and the cache they take; the timeline starts over at the first frame. The project and its undo history stay as they are.
+5. **Play**: Plays the frames at the playback speed, and pauses them (F7): the timeline's Play and Pause.
+6. **Use the GPU**: Computes on the graphics card through Vulkan, Metal or DirectX 12, many times faster than the processor; the results are the same within a documented tolerance. Off, or without a graphics card, the processor is used. On by default.
+7. **Re-run automatically after edits**: Starts a new run by itself a moment after you change the scene, a source or a part; off, you run by hand with F5 or Play. On by default.
+8. **Warn when a run does not fit in RAM**: Asks before a run whose frames would not all fit in the memory the RAM cache may take. Tick the RAM cache size to Auto, half the resolution, half the frames or 8-bit samples, each with its effect shown, and Run applies them in the Simulation and View menus for this and later runs; Cancel leaves everything as it is. "Do not warn me again" switches this off. On by default.
+9. **RAM cache size**: How much of the memory a run's frames may take: Auto decides from the free memory, or a share from 10 to 100 percent caps it; the frames beyond it go to a cache file on disk.
 
 ### The Help menu
 
@@ -235,7 +236,7 @@ The Help menu. <figure name="menu-help"/>
 
 1. **About WaveDude Rust**: The version, the people whose work it is based on, the licence, and the system information (processor, the engine in use, the video encoder) with a button that copies it for a bug report.
 2. **Manual**: This manual (F1). F1 brings it to the front again, Esc closes it.
-3. **Check for updates**: Looks for a newer release now; a newer one is downloaded and installed only when you say so, after a restart.
+3. **Check for updates**: Looks for a newer release now; a newer one is downloaded and installed only when you say so, after a restart. On a Mac the app must live in the Applications folder (not run from a disk image) to update itself; otherwise you get the release page.
 4. **Check for updates at launch**: Whether to look at each start.
 
 ## Project settings
@@ -702,17 +703,28 @@ The same form for an imaging detector. The detector sets the layer, the measurem
 
 The pictures are coloured through a colour scheme: a gradient of colour stops mapped onto the values of a picture. The Display settings pick a scheme for each picture from the schemes that ship with the program, your own schemes, saved as .wdscheme files in the ColorSchemes folder of your WaveDude Rust settings, and the schemes of the project, which are saved in its file and listed in the Colour schemes group of the tree. The picker in the Display form also offers Load from file... and Edit a copy in the project..., which makes a project scheme from the chosen one so you can change it. Renaming a project scheme keeps the pictures that use it.
 
+A project scheme can be kept among your own: Add to my schemes, in the scheme's context menu in the tree and at the end of the General section of its form, saves it as a .wdscheme file in your ColorSchemes folder (in the browser, in its storage), and it is offered by the picker in every project. While a picture uses one of your schemes, the picker has a Remove from my schemes row, and the same menu entry and button then read Remove from my schemes. A scheme of yours can have the name of a scheme that ships with the program; it is then the one used.
+
 The form of a project's colour scheme. <figure name="properties-colour-scheme"/>
 
 1. **Name**: Name the display settings refer to.
 2. **Kind**: Field or Intensity, the output the scheme is meant for; the pickers list it for that output only.
 3. **Description**: Free text: what the scheme is, where it comes from.
-4. **Based on**: Copies the stops of an existing scheme into this one, to change them from there.
-5. **The gradient**: The scheme as a bar: drag a stop along it, click between stops to add one. To remove a stop, drag its marker away from the bar, up or down, until it fades, and release it there, or double-click the marker; the last stop stays. Del removes the focused stop.
-6. **A stop**: Its position along the gradient, 0 at the lowest value to 1 at the highest; its colour swatch, which opens the picker (Space opens it, Enter keeps the colour, Escape puts the old one back); the colour as #RRGGBB, applied with Enter; and a button that removes the stop.
-7. **Add a stop**: Inserts a stop in the widest gap, with the gradient's colour there.
+4. **Add to my schemes**: Keeps the scheme among your own, offered in every project; it reads Remove from my schemes while one of yours has its name.
+5. **Based on**: Copies the stops of an existing scheme into this one, to change them from there.
+6. **The gradient**: The scheme as a bar: drag a stop along it, click between stops to add one. To remove a stop, drag its marker away from the bar, up or down, until it fades, and release it there, or double-click the marker; the last stop stays. Del removes the focused stop.
+7. **A stop**: Its position along the gradient, 0 at the lowest value to 1 at the highest; its colour swatch, which opens the picker (Space opens it, Enter keeps the colour, Escape puts the old one back); the colour as #RRGGBB, applied with Enter; and a button that removes the stop.
+8. **Add a stop**: Inserts a stop in the widest gap, with the gradient's colour there.
 
 In the picker, the square sets the saturation (Left, Right) and the brightness (Up, Down) and the bar the hue (Up and Down by a degree); Shift moves by ten steps; the channel boxes take 0 to 255.
+
+## Dropping files
+
+A file dropped on the window is taken by its type. An image becomes the scene image of the project; a project (.wdproj, .xml, or a Wave Dude 2D .json) or a colour scheme (.wdscheme) opens, after unsaved changes are asked about; any other file reports an error. While a message or a question is open, a dropped file is ignored, and of several files dropped together the last one counts.
+
+## The browser version
+
+The program also runs in a browser. It differs from the desktop program as follows: Open and the file buttons upload a file, Save and Save As download one, and the page asks before it is left while the project has unsaved changes. There are no exports of videos, image sequences, stills or probe data, no updates, no recent projects and no watching of the project's files for changes; the window's place is not kept. Settings and your own colour schemes are kept in the browser's storage.
 
 ## The examples
 

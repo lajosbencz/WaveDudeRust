@@ -4,24 +4,36 @@
 //! No timers: the controller publishes a [`Goal`] (the project's spec, the position, how much is wanted, a
 //! pause, a fit) and reads back what the run has ([`Status`], the store's frames, the traces). The run sits
 //! behind [`Backend`]; [`CoreBackend`] is the core's [`RunWorker`], [`fake::FakeBackend`] a scripted one for
-//! tests. Threads: the controller lives on the UI thread; the run works on its own thread and is polled here.
+//! tests. Threads: the controller lives on the UI thread; natively the run works on its own thread and is polled
+//! here, on wasm32 [`LiveController::tick`] pumps it.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
+#[cfg(target_arch = "wasm32")]
+use wavedude_core::engine::GpuHandle;
+use wavedude_core::engine::Snapshot;
+use wavedude_core::engine::gpu::DeviceFrames;
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::engine::{EngineOptions, SceneData, Snapshot, WaveEngine};
+#[cfg(not(target_arch = "wasm32"))]
+use wavedude_core::engine::{EngineOptions, SceneData, WaveEngine};
 use wavedude_core::model::{Layer, Project, Step};
 use wavedude_core::quality::PreviewQuality;
+use wavedude_core::run::Budget;
+#[cfg(not(target_arch = "wasm32"))]
+use wavedude_core::run::Memory;
+#[cfg(target_arch = "wasm32")]
+use wavedude_core::run::{EngineFuture, PumpedFactory};
 use wavedude_core::run::{
-	Budget, FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RunError, RunState, RunWorker, Status,
-	Wanted, WorkState,
+	FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RunError, RunState, RunWorker, Status, Wanted,
+	WorkState,
 };
 use wavedude_core::spec::{RunRequest, RunSpecError, SceneCache};
 
 use super::commands::ChangeKind;
+use super::platform::{Duration, Instant};
 use super::playback::{Limit, Playback};
 
 /// Where the live run is. Called on the UI thread; implementations publish across threads.
@@ -35,11 +47,21 @@ pub trait Backend {
 	fn take_fit(&mut self) -> Option<FitFrame>;
 	/// The engine's device changed: the next work builds the engine anew.
 	fn engine_changed(&mut self);
+	/// The frames and traces go, their memory and spill freed; the run starts over on a new store.
+	fn discard_frames(&mut self);
 	/// The store budget at `ram_percent` and at Auto, counting `reclaimed` bytes as free.
 	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64);
 	/// "CPU (16 threads)" or `GPU: <name>`.
 	fn engine_name(&self) -> String;
+	/// Works on the goal for about `budget` where the caller drives the run (wasm32); whether work is left. A
+	/// run on a thread of its own needs none.
+	fn pump(&mut self, _budget: Duration) -> bool {
+		false
+	}
 }
+
+/// The live run's work per frame where the caller drives it: half a 60 Hz frame, so a slow machine still draws.
+pub const PUMP_BUDGET: Duration = Duration::from_millis(8);
 
 /// The user settings the controller follows.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,6 +109,16 @@ pub struct WarningChoice {
 	pub cache_auto: bool,
 	/// "Do not warn me again".
 	pub mute: bool,
+}
+
+/// The frames of the store the run holds: where they are and the memory it was given.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameCache {
+	pub in_memory: usize,
+	/// In the spill: the file natively, the origin private file system in the browser.
+	pub spilled: usize,
+	pub frame_bytes: u64,
+	pub budget: u64,
 }
 
 /// The export's view of the current run.
@@ -163,6 +195,8 @@ pub struct LiveController<B: Backend> {
 	run_started: Option<Instant>,
 	status: Status,
 	notices: Vec<Notice>,
+	/// The last pump left work: the UI ticks again soon.
+	work_left: bool,
 }
 
 /// The frame the pictures show.
@@ -204,6 +238,7 @@ impl<B: Backend> LiveController<B> {
 			run_started: None,
 			status,
 			notices: Vec::new(),
+			work_left: false,
 		}
 	}
 
@@ -241,6 +276,17 @@ impl<B: Backend> LiveController<B> {
 	fn current_store(&self) -> Option<&Arc<FrameStore>> {
 		self.adopted_request()?;
 		self.status.store.as_ref()
+	}
+
+	/// The frame cache's figures of the store the run holds.
+	pub fn frame_cache(&self) -> Option<FrameCache> {
+		let store = self.current_store()?;
+		Some(FrameCache {
+			in_memory: store.frames_in_memory(),
+			spilled: store.frames_on_disk(),
+			frame_bytes: store.frame_bytes() as u64,
+			budget: store.ram_budget(),
+		})
 	}
 
 	/// The request of this project state.
@@ -295,6 +341,11 @@ impl<B: Backend> LiveController<B> {
 		}
 		let (_, generation, snapshot) = store.latest().filter(|(i, ..)| *i == index)?;
 		Some(ShownSource::Snapshot { store: store.clone(), generation, snapshot })
+	}
+
+	/// Where the GPU engine keeps the frames it captured last; `None` while the run is on the CPU engine.
+	pub fn device_frames(&self) -> Option<&Arc<DeviceFrames>> {
+		self.status.device_frames.as_ref()
 	}
 
 	/// The run is stepping (towards any frame or a fit).
@@ -480,11 +531,9 @@ impl<B: Backend> LiveController<B> {
 	pub fn project_replaced(&mut self, project: &Project, _now: Instant) {
 		self.quality = self.settings.quality;
 		self.track_intensity = false;
-		self.wanted = Wanted::Position;
+		self.end_run();
 		self.ran = false;
 		self.run_started = None;
-		self.user_paused = false;
-		self.live = false;
 		self.shown = None;
 		self.warning = None;
 		self.drop_waiting_export();
@@ -624,6 +673,11 @@ impl<B: Backend> LiveController<B> {
 		spans
 	}
 
+	/// The run has work left for the next tick (wasm32, where the ticks drive it): the UI asks for one.
+	pub fn work_left(&self) -> bool {
+		self.work_left
+	}
+
 	/// Advances the machine: what the run has, playback, the frame shown, the fit, the export.
 	pub fn tick(&mut self, now: Instant, project: &Project) {
 		self.started = true;
@@ -632,6 +686,7 @@ impl<B: Backend> LiveController<B> {
 		{
 			self.on_change(kind, project, None, now);
 		}
+		self.work_left = self.backend.pump(PUMP_BUDGET);
 		self.status = self.backend.status();
 		let adopted = self.status.adopted;
 		if let Some(first) = self.requests.iter().position(|(revision, _)| *revision >= adopted) {
@@ -802,11 +857,41 @@ impl<B: Backend> LiveController<B> {
 			{
 				self.playback.set_position(newest);
 			}
-			self.wanted = Wanted::Position;
-			self.live = false;
-			self.user_paused = false;
+			self.end_run();
 			self.publish();
 		}
+	}
+
+	/// No more frames than the position's are wanted: the run ends, unpaused, Live off.
+	fn end_run(&mut self) {
+		self.wanted = Wanted::Position;
+		self.live = false;
+		self.user_paused = false;
+	}
+
+	/// The run has frames stored, which [`discard_frames`](Self::discard_frames) would drop.
+	pub fn has_frames(&self) -> bool {
+		self.current_store().is_some_and(|s| s.present_count() > 0)
+	}
+
+	/// Discard frames: the run stops and its frames go, their memory and spill freed; the timeline starts over at
+	/// frame 0, which is made again as after opening the project. Nothing while an export holds or waits for the
+	/// run.
+	pub fn discard_frames(&mut self) {
+		if self.export_busy() {
+			return;
+		}
+		self.end_run();
+		self.ran = false;
+		self.run_started = None;
+		self.shown = None;
+		self.fit = None;
+		self.fit_frames = None;
+		self.playback.pause();
+		self.playback.set_position(0);
+		// the goal first: a worker that took up the discard under the old goal would make every frame it wanted
+		self.publish();
+		self.backend.discard_frames();
 	}
 
 	/// F6: pauses or resumes the run.
@@ -910,14 +995,29 @@ impl<B: Backend> LiveController<B> {
 	}
 }
 
-/// The core's live run on the CPU or GPU engine, by the Use the GPU setting.
+/// The core's live run on the CPU or GPU engine, by the Use the GPU setting: on a thread of its own natively,
+/// pumped by the ticks on wasm32.
 pub struct CoreBackend {
 	use_gpu: Arc<AtomicBool>,
 	worker: RunWorker,
 	scene: Arc<Mutex<SceneCache>>,
+	/// Where the budgets' memory readings come from.
+	#[cfg(not(target_arch = "wasm32"))]
+	memory: Memory,
+	/// The device the GPU engine runs on: the UI renderer's.
+	#[cfg(target_arch = "wasm32")]
+	gpu: Option<GpuHandle>,
+	/// The memory a store's frames share by the RAM cache size: the device's, at most [`MAX_WEB_FRAME_BYTES`].
+	#[cfg(target_arch = "wasm32")]
+	frame_memory: u64,
 }
 
+/// The most a store's frames take in the browser: a wasm32 memory holds 4 GiB at most, beside everything else.
+#[cfg(target_arch = "wasm32")]
+pub const MAX_WEB_FRAME_BYTES: u64 = 2 << 30;
+
 /// Builds the engine for a scene: the GPU's when asked for and available (a fallback to the CPU is logged).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn build_engine(scene: Arc<SceneData>, options: EngineOptions, use_gpu: bool) -> Box<dyn WaveEngine> {
 	let e = wavedude_core::engine::build(scene, options, use_gpu);
 	super::log::engine_built(e.name(), e.scene(), e.options(), e.sub_steps());
@@ -925,21 +1025,57 @@ pub fn build_engine(scene: Arc<SceneData>, options: EngineOptions, use_gpu: bool
 }
 
 impl CoreBackend {
-	/// A backend with its spill files in `cache_dir`; the engine follows `use_gpu`, shared with the settings.
-	pub fn new(use_gpu: Arc<AtomicBool>, cache_dir: PathBuf) -> std::io::Result<Self> {
+	/// A backend with its spill files in `cache_dir` and its budgets on `memory`'s readings; the engine follows
+	/// `use_gpu`, shared with the settings.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn new(use_gpu: Arc<AtomicBool>, cache_dir: PathBuf, memory: Memory) -> std::io::Result<Self> {
 		let gpu = use_gpu.clone();
 		let scene: Arc<Mutex<SceneCache>> = Arc::default();
-		let worker = RunWorker::new(
+		let worker = RunWorker::with_memory(
 			Box::new(move |scene, options| build_engine(scene, options, gpu.load(Ordering::Relaxed))),
 			cache_dir,
 			scene.clone(),
+			memory,
 		)?;
-		Ok(Self { use_gpu, worker, scene })
+		worker.set_notify(Box::new(crate::wake::wake));
+		Ok(Self { use_gpu, worker, scene, memory })
+	}
+
+	/// A backend whose stores hold their frames in memory, the RAM cache size's share of the device's memory up
+	/// to [`MAX_WEB_FRAME_BYTES`], and the rest in the origin private file system; the engine runs on `gpu` while
+	/// `use_gpu` holds (a device without compute, as WebGL2's, is none), else on the CPU.
+	#[cfg(target_arch = "wasm32")]
+	pub fn new(use_gpu: Arc<AtomicBool>, gpu: Option<GpuHandle>) -> Self {
+		let (wanted, device) = (use_gpu.clone(), gpu.clone());
+		let factory: PumpedFactory = Box::new(move |scene, options| -> EngineFuture {
+			let gpu = device.clone().filter(|_| wanted.load(Ordering::Relaxed));
+			Box::pin(async move {
+				let e = wavedude_core::engine::build_on(scene, options, gpu).await;
+				super::log::engine_built(e.name(), e.scene(), e.options(), e.sub_steps());
+				e
+			})
+		});
+		let frame_memory = super::platform::machine_facts().physical_bytes.min(MAX_WEB_FRAME_BYTES);
+		let scene: Arc<Mutex<SceneCache>> = Arc::default();
+		let worker = RunWorker::pumped(factory, frame_memory, Box::new(super::platform::Opfs::start()), scene.clone());
+		Self { use_gpu, worker, scene, gpu, frame_memory }
 	}
 
 	/// The scene pixels and medium the specs are built from, shared with whatever else shows the scene.
 	pub fn scene_cache(&self) -> Arc<Mutex<SceneCache>> {
 		self.scene.clone()
+	}
+
+	/// The GPU's name, when there is one.
+	#[cfg(not(target_arch = "wasm32"))]
+	fn gpu_name(&self) -> Option<String> {
+		wavedude_core::engine::gpu::context().ok().map(|ctx| ctx.info.name.clone())
+	}
+
+	/// The GPU's name, when there is one.
+	#[cfg(target_arch = "wasm32")]
+	fn gpu_name(&self) -> Option<String> {
+		self.gpu.as_ref().map(|ctx| ctx.info.name.clone())
 	}
 }
 
@@ -968,18 +1104,33 @@ impl Backend for CoreBackend {
 		self.worker.rebuild_engine();
 	}
 
+	fn discard_frames(&mut self) {
+		self.worker.discard_frames();
+	}
+
+	#[cfg(not(target_arch = "wasm32"))]
 	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64) {
-		(Budget::compute(reclaimed, ram_percent), Budget::compute(reclaimed, 0))
+		(Budget::compute(self.memory, reclaimed, ram_percent), Budget::compute(self.memory, reclaimed, 0))
+	}
+
+	#[cfg(target_arch = "wasm32")]
+	fn budgets(&self, ram_percent: u32, _reclaimed: u64) -> (u64, u64) {
+		(Budget::of_memory(self.frame_memory, ram_percent), Budget::of_memory(self.frame_memory, 0))
 	}
 
 	fn engine_name(&self) -> String {
 		if self.use_gpu.load(Ordering::Relaxed)
-			&& let Ok(ctx) = wavedude_core::engine::gpu::context()
+			&& let Some(name) = self.gpu_name()
 		{
-			return format!("GPU: {}", ctx.info.name);
+			return format!("GPU: {name}");
 		}
 		let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
 		format!("CPU ({threads} threads)")
+	}
+
+	#[cfg(target_arch = "wasm32")]
+	fn pump(&mut self, budget: Duration) -> bool {
+		self.worker.pump(budget)
 	}
 }
 
@@ -1016,6 +1167,8 @@ pub mod fake {
 		/// Set by the caller: the run's traces; a spec with other frames moves them to `held`.
 		pub traces: Vec<ProbeTrace>,
 		held: Vec<ProbeTrace>,
+		/// What the goal in force wanted when the frames were discarded last.
+		pub discarded_under: Option<Wanted>,
 	}
 
 	impl FakeBackend {
@@ -1116,7 +1269,7 @@ pub mod fake {
 					let layout = StoreLayout::of(spec);
 					match &self.store {
 						Some(store) if store.layout().fits(&layout) => store.clear(),
-						_ => self.store = Some(Arc::new(FrameStore::new(layout, 1 << 30, None).unwrap())),
+						_ => self.store = Some(Arc::new(FrameStore::in_memory(layout, 1 << 30))),
 					}
 					self.steps_done = 0;
 					self.failure = None;
@@ -1159,6 +1312,7 @@ pub mod fake {
 				steps_done: self.steps_done,
 				traces_steps: 0,
 				store: self.store.clone(),
+				device_frames: None,
 			}
 		}
 
@@ -1176,6 +1330,16 @@ pub mod fake {
 
 		fn engine_changed(&mut self) {
 			self.engine_changes += 1;
+		}
+
+		fn discard_frames(&mut self) {
+			self.discarded_under = self.goals.last().map(|g| g.wanted);
+			if let Some(old) = self.store.take() {
+				self.store = Some(Arc::new(FrameStore::in_memory(*old.layout(), 1 << 30)));
+			}
+			self.steps_done = 0;
+			self.traces.clear();
+			self.held.clear();
 		}
 
 		fn budgets(&self, _ram_percent: u32, _reclaimed: u64) -> (u64, u64) {
@@ -1297,9 +1461,9 @@ mod tests {
 		assert_eq!(c.run_started, Some(t));
 		assert_eq!(c.run_summary(t, t), None, "under way");
 		c.backend_mut().complete();
-		c.tick(t + std::time::Duration::from_millis(400), &p);
+		c.tick(t + Duration::from_millis(400), &p);
 		assert_eq!(c.run_started, None, "reported on the tick that completed it");
-		let line = c.run_summary(t, t + std::time::Duration::from_millis(400)).expect("a completed run");
+		let line = c.run_summary(t, t + Duration::from_millis(400)).expect("a completed run");
 		assert!(line.starts_with("Run Completed: 200 of 200 steps, "), "{line}");
 		assert!(line.contains(", 0.4 s; ") && line.contains(" in memory ("), "{line}");
 	}
@@ -1442,10 +1606,10 @@ mod tests {
 		assert_eq!(c.backend().wanted(), Wanted::All);
 		assert!(c.playback.is_playing());
 		c.backend_mut().publish(5);
-		c.tick(t + std::time::Duration::from_secs(1), &p);
+		c.tick(t + Duration::from_secs(1), &p);
 		assert_eq!(c.playback.position(), 4);
 		c.backend_mut().complete();
-		c.tick(t + std::time::Duration::from_millis(1100), &p);
+		c.tick(t + Duration::from_millis(1100), &p);
 		assert!(c.playback.position() > 4);
 	}
 
@@ -1655,6 +1819,39 @@ mod tests {
 	}
 
 	#[test]
+	fn discarded_frames_stop_the_run_and_start_the_timeline_over() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert!(c.run_user(&p, t));
+		c.backend_mut().publish(40);
+		c.scrub(20, t);
+		c.tick(t, &p);
+		assert!(c.has_frames() && c.run_is_active());
+		let old = c.backend().store().clone();
+		c.discard_frames();
+		c.tick(t, &p);
+		assert!(!Arc::ptr_eq(&old, c.backend().store()), "the frames went with their store");
+		assert!(!c.has_frames() && !c.run_is_active() && c.run_status().is_none());
+		assert_eq!((c.backend().wanted(), c.backend().goal().position), (Wanted::Position, 0));
+		assert_eq!(c.backend().discarded_under, Some(Wanted::Position), "the discard came before its goal");
+		assert!(c.present_spans().is_empty());
+	}
+
+	#[test]
+	fn an_export_keeps_the_frames_it_holds_or_waits_for() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		c.backend_mut().publish(10);
+		c.tick(t, &p);
+		let old = c.backend().store().clone();
+		c.discard_frames();
+		assert!(Arc::ptr_eq(&old, c.backend().store()) && c.export_busy());
+	}
+
+	#[test]
 	fn stop_drops_the_export_waiting_for_its_run() {
 		let t = Instant::now();
 		let p = project();
@@ -1723,6 +1920,7 @@ mod tests {
 			self.inner.take_fit()
 		}
 		fn engine_changed(&mut self) {}
+		fn discard_frames(&mut self) {}
 		fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64) {
 			self.inner.budgets(ram_percent, reclaimed)
 		}

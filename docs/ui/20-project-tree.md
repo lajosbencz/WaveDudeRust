@@ -113,7 +113,8 @@ on the target alone.
 | Remove (Del) | Removes target or selection; the user stays at the slot of the last removed: the item that took the slot is selected, else the one above it, else the folder of the emptied list; the tree takes the keyboard focus. |
 | Move up / down (Alt+Up/Down) | Within the item's own list; disabled at the ends. Selection kept; the tree takes the keyboard focus. |
 | Cut / Copy / Paste | See below. |
-| Export probe data as CSV | Probe rows, active probes only. |
+| Add to my schemes / Remove from my schemes | Scheme rows only, below a separator. Keeps the project scheme among the user's schemes, or removes the user scheme of that name; the label follows whether a user scheme of the name exists. |
+| Export probe data as CSV | Probe rows, active probes only; absent in the browser build (decision 0021). |
 
 ## Drag and drop
 
@@ -130,7 +131,8 @@ on the target alone.
     become the selection; one undo step. From the own tree this duplicates.
   - A text editor: receives the XML.
 - The tree and the pictures claim a drag only when they take it. Anything else, a file above all, goes to the
-  window: a dropped project file (`.wdproj`, `configuration.json`, `.wdscheme`) opens.
+  window: a dropped image becomes the scene image, a project file (`.wdproj`, `configuration.json`, `.wdscheme`) opens
+  ([`10-menus-and-shortcuts.md`](10-menus-and-shortcuts.md), File dropped on the window).
 - Settings rows (Scene, Simulation, Display) can be dragged (carry their XML); they do not reorder.
 
 ## Clipboard (from the tree's point of view)
@@ -150,7 +152,7 @@ on the target alone.
 Selecting a folder shows its label and the item count ("No entries", "1 entry", "N entries"). Selecting the
 root shows the Project form; settings rows show their forms ([`30-properties-pane.md`](30-properties-pane.md)).
 
-## Automation ids (keep as test ids)
+## Automation ids
 
 Toolbar: `ToolAddSource`, `ToolAddProbe`, `ToolAddPart`, `ToolMoveUp`, `ToolMoveDown`, `ToolRemove`.
 Rows: `Tree:<name>`; check boxes `Enabled:<name>`; selection marker status `InSelection`.

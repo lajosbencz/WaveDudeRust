@@ -1,9 +1,8 @@
 //! Image outputs: PNG, JPEG and `OpenEXR` sequences (one file per frame in a folder) and stills (one file), encoded on
 //! the job's [`EncoderPool`] so a sequence keeps every core busy.
 
-use std::fs::File;
-use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use half::f16;
 
@@ -11,7 +10,8 @@ use super::exr::write_exr_owned;
 use super::jpeg::write_jpeg;
 use super::png::{PngFilter, write_png};
 use super::pool::{Done, EncoderPool, Lanes};
-use super::{FrameSink, SinkSpec, check_size, remove_if_present};
+use super::{FrameSink, SinkSpec, check_size};
+use crate::fs::{OutputFile, OutputFs};
 use crate::naming::{sequence_digits, sequence_file, sequence_folder};
 use crate::{ExportError, Result};
 
@@ -42,6 +42,7 @@ enum Plane {
 /// An image sequence or still.
 pub struct ImageSink {
 	kind: ImageKind,
+	fs: Arc<dyn OutputFs>,
 	placement: Placement,
 	width: u32,
 	height: u32,
@@ -53,51 +54,63 @@ pub struct ImageSink {
 	error: Option<ExportError>,
 }
 
-fn write_file(path: &Path, write: impl FnOnce(&mut BufWriter<File>) -> Result<()>) -> Result<()> {
-	let mut out = BufWriter::with_capacity(1 << 20, File::create(path)?);
-	write(&mut out)?;
-	out.flush()?;
-	Ok(())
-}
-
-fn encode(kind: ImageKind, path: &Path, plane: &mut Plane, width: u32, height: u32) -> Result<()> {
+fn encode(kind: ImageKind, out: &mut dyn OutputFile, plane: &mut Plane, width: u32, height: u32) -> Result<()> {
 	match (kind, plane) {
 		(ImageKind::Exr, Plane::Halves(h)) => {
-			let (written, back) = write_exr_owned(path, std::mem::take(h), width, height);
+			let (written, back) = write_exr_owned(out, std::mem::take(h), width, height);
 			*h = back;
 			written
 		}
-		(ImageKind::Png, Plane::Rgba(p)) => write_file(path, |out| write_png(out, p, width, height, PngFilter::Paeth)),
-		(ImageKind::Jpeg { quality }, Plane::Rgba(p)) => {
-			write_file(path, |out| write_jpeg(out, p, width, height, quality))
-		}
+		(ImageKind::Png, Plane::Rgba(p)) => write_png(out, p, width, height, PngFilter::Paeth),
+		(ImageKind::Jpeg { quality }, Plane::Rgba(p)) => write_jpeg(out, p, width, height, quality),
 		_ => unreachable!("the plane is the kind's"),
 	}
 }
 
+/// Writes the image of `plane` to a file at `path` of `fs`, closed whatever the outcome.
+fn write_file(
+	fs: &dyn OutputFs,
+	path: &Path,
+	kind: ImageKind,
+	plane: &mut Plane,
+	width: u32,
+	height: u32,
+) -> Result<()> {
+	let mut out = fs.create(path)?;
+	let written = encode(kind, &mut *out, plane, width, height);
+	let closed = out.close();
+	written.and(closed.map_err(Into::into))
+}
+
 impl ImageSink {
-	/// Creates the sequence's folder (or the still's) and encodes on `pool`.
-	pub fn new(kind: ImageKind, placement: Placement, spec: SinkSpec, pool: &EncoderPool) -> Result<Self> {
-		let lanes = Lanes::new(pool.get()?);
+	/// Creates the sequence's folder (or the still's) in `fs` and encodes on `pool`.
+	pub fn new(
+		kind: ImageKind,
+		fs: Arc<dyn OutputFs>,
+		placement: Placement,
+		spec: SinkSpec,
+		pool: &EncoderPool,
+	) -> Result<Self> {
+		let lanes = Lanes::new(pool)?;
 		let mut created_folder = None;
 		let digits = match &placement {
 			Placement::Sequence { chosen, first, planned } => {
 				let folder = sequence_folder(chosen);
-				if !folder.is_dir() {
-					std::fs::create_dir_all(&folder)?;
+				if fs.create_dir_all(&folder)? {
 					created_folder = Some(folder);
 				}
 				sequence_digits(*first, *planned)
 			}
 			Placement::Still(path) => {
 				if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
-					std::fs::create_dir_all(dir)?;
+					fs.create_dir_all(dir)?;
 				}
 				4
 			}
 		};
 		Ok(Self {
 			kind,
+			fs,
 			placement,
 			width: spec.width,
 			height: spec.height,
@@ -151,9 +164,9 @@ impl ImageSink {
 			self.take_error()?;
 		};
 		fill(&mut plane);
-		let (kind, width, height) = (self.kind, self.width, self.height);
+		let (kind, width, height, fs) = (self.kind, self.width, self.height, self.fs.clone());
 		self.files.push(path.clone());
-		self.lanes.spawn(plane, move |plane| encode(kind, &path, plane, width, height));
+		self.lanes.spawn(plane, move |plane| write_file(&*fs, &path, kind, plane, width, height));
 		Ok(())
 	}
 
@@ -212,10 +225,10 @@ impl FrameSink for ImageSink {
 
 	fn discard(&mut self) -> Result<()> {
 		for file in self.files.drain(..) {
-			remove_if_present(&file)?;
+			self.fs.remove_file(&file)?;
 		}
 		if let Some(folder) = self.created_folder.take() {
-			std::fs::remove_dir(folder)?;
+			self.fs.remove_dir(&folder)?;
 		}
 		Ok(())
 	}

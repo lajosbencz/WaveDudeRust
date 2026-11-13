@@ -9,10 +9,17 @@ keywords = ["wave", "simulation", "physics", "optics"]
 categories = ["science", "simulation"]
 # Not on crates.io: the workspace is built and released as one.
 publish = false
-description = "What the preview draws without a UI toolkit: the overlay's handles, the probe graph box, a draw list"
+description = "What the preview and the exports draw over a picture as epaint shapes: handles, labels, graph boxes"
 
 [lints]
 workspace = true
 
 [dependencies]
+# The shapes, text layout and fonts the preview and the exports draw with; egui's painting layer without egui.
+epaint = { version = "=0.37.0", default-features = false }
+# The graphs' and handles' logarithms, powers and trig in Rust, so an export's pixels do not depend on the
+# platform's maths library.
+libm = "0.2"
+# The glyph outlines a label's halo strokes: epaint's own font reader, so the outlines are those it rasterises.
+skrifa = { version = "0.44", default-features = false, features = ["std"] }
 wavedude-core = { path = "../wavedude-core", version = "0.2.1", default-features = false }

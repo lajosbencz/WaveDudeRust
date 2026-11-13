@@ -364,6 +364,15 @@ Lookup by name: project schemes first, then built-in (embedded) and user schemes
 (`%LOCALAPPDATA%\WaveDudeNext\ColorSchemes\*.wdscheme`). Legacy names with underscores (e.g. `Default_field`) resolve
 to the spaced name. A missing scheme renders as `Grey` (stops 0: #000000, 1: #FEFEFE).
 
+User schemes (WaveDudeRust, [`user_schemes.rs`](../../crates/wavedude-app-state/src/user_schemes.rs)): a project scheme
+is added to or removed from the user's schemes from the UI ([ui/20](../ui/20-project-tree.md), [ui/30](../ui/30-properties-pane.md)).
+They are `ColorSchemes/<stem>.wdscheme` in the config folder natively and in the page's `localStorage` in the browser;
+`.wdscheme` and Wave Dude 2D `.json` files placed there load too. The scheme's name is the one in the file's text (the
+stem names a scheme whose text has none) and the lookup compares names without regard to case. A user scheme may
+shadow a built-in name. The stem is the name with `/ \ : * ? " < > |`, control characters and `%` percent-encoded
+(UTF-8 bytes, `%XX`), as are trailing dots and spaces and the first letter of a Windows device name (`CON`, `NUL`,
+`COM1`...); the empty name's stem is `%`. Removing deletes every file that holds a scheme of the name.
+
 Built-in schemes (23): Blue to yellow, Bright rainbow, Copper, Default field, Default intensity, Flare inverted,
 Gray scales inverted, Gray scales, Green blue, Green pink, Greens, Hot orange, Ice and fire, Inferno, Magma,
 Orange hot, Orange symmetry, Plasma, Purple rain, Rainbow, Simply red, Turkey brown, Yellow purple. Copy the files

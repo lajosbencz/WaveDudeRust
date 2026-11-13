@@ -2,8 +2,9 @@
 //! with playback, the user settings, the strings and the log. The views send [`Event`]s and call
 //! [`AppState::tick`] about 60 times a second; everything here is testable without a window.
 //!
-//! Threads: `AppState` lives on the UI thread; the live run and the playback clock it drives work
-//! on threads of their own and are polled.
+//! Threads: `AppState` lives on the UI thread; natively the live run works on a thread of its own and is polled,
+//! on wasm32 each tick works it for a slice ([`live::PUMP_BUDGET`]) and asks for the next tick while work is left
+//! ([`live::LiveController::work_left`]).
 
 pub mod clipboard;
 pub mod commands;
@@ -11,15 +12,17 @@ pub mod document;
 pub mod history;
 pub mod live;
 pub mod log;
+pub mod platform;
 pub mod playback;
 pub mod selection;
 pub mod settings;
 pub mod strings;
+pub mod user_schemes;
+pub mod wake;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
 
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::{ItemKind, ItemRef, Point};
@@ -28,17 +31,18 @@ use wavedude_core::run::Levers;
 
 use clipboard::{Copyable, PasteTarget};
 use commands::{Change, ChangeKind, Command, CommandError};
-use document::{Document, DocumentError, Opened};
+use document::{Document, DocumentError, Opened, Source, Target};
 use live::{Backend, CoreBackend, LiveController, LiveSettings};
+use platform::{Instant, Store};
 use selection::{Row, Selection};
-use settings::{AppDirs, ExportHint, Settings, Theme};
+use settings::{ExportHint, Settings, Theme};
 use strings::{Language, Strings};
 
 /// An action that replaces the open project, asked about first when there are unsaved edits.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Guarded {
 	New,
-	Open(PathBuf),
+	Open(Source),
 	OpenExample(usize),
 	Close,
 	Exit,
@@ -72,9 +76,9 @@ pub enum Event {
 	Redo,
 	Guarded(Guarded),
 	/// A file dropped on the window (not claimed by the tree or the pictures).
-	DropFile(PathBuf),
+	DropFile(Source),
 	Save,
-	SaveAs(PathBuf),
+	SaveAs(Target),
 	/// The Save As dialog was cancelled.
 	SaveAsCancelled,
 	SaveChoice(SaveChoice),
@@ -92,6 +96,8 @@ pub enum Event {
 	Run,
 	StopRun,
 	TogglePauseRun,
+	/// Drops the run's frames; the project and its history stay.
+	DiscardFrames,
 	Play,
 	PausePlayback,
 	Scrub(u32),
@@ -122,6 +128,12 @@ pub enum Event {
 	/// Whether to look for a new release at launch.
 	SetCheckForUpdates(bool),
 	SetPreviewOrientation(settings::Orientation),
+	/// The dock's arrangement, as [`Settings::layout`](settings::Settings::layout).
+	SetLayout(String),
+	/// Keeps the project's colour scheme of this index among the user's, or removes the user's of its name.
+	ToggleUserScheme(usize),
+	/// Removes the user's colour scheme of this name.
+	RemoveUserScheme(String),
 }
 
 /// What the views must do after an event.
@@ -165,7 +177,7 @@ pub struct Revisions {
 	pub work: u64,
 	/// The slower live state: the run's state, playing, loop, speed, range, follow.
 	pub run: u64,
-	/// The user settings, the language among them.
+	/// The user settings, the language among them, and the user's colour schemes.
 	pub settings: u64,
 }
 
@@ -189,7 +201,7 @@ type RunObserved =
 /// See the module docs.
 pub struct AppState<B: Backend> {
 	pub settings: Settings,
-	settings_path: Option<PathBuf>,
+	settings_store: Option<Store>,
 	pub strings: Strings,
 	pub document: Document,
 	pub selection: Selection,
@@ -205,6 +217,8 @@ pub struct AppState<B: Backend> {
 	/// Bumped when the tree is to give the current row the keyboard focus: an opened project, a remove, a move,
 	/// an undo that left nothing selected. It moves with the document revision.
 	reveals: u64,
+	/// Bumped when another document replaces the open one (New, Open, Close); a save keeps it.
+	documents: u64,
 	use_gpu: Arc<AtomicBool>,
 	pending: Option<Guarded>,
 	/// The export hint of a project without a file: this session's alone.
@@ -223,31 +237,70 @@ fn live_settings(s: &Settings) -> LiveSettings {
 impl AppState<CoreBackend> {
 	/// The app's state on the core's engines: settings from `dirs` (the first start chooses the preview
 	/// quality from the machine), the empty project, the language and zoom of the settings and `args`.
-	pub fn start<'a>(dirs: &AppDirs, args: impl IntoIterator<Item = &'a str>) -> std::io::Result<Self> {
-		let path = dirs.settings_file();
-		let loaded = Settings::load(&path, || MachineFacts {
-			has_gpu: Some(wavedude_core::engine::gpu::context().is_ok()),
-			..wavedude_core::run::machine_facts()
-		});
-		let mut settings = loaded.settings;
-		if let Some(zoom) = settings::zoom_switch(args) {
-			settings.ui_zoom = zoom;
-		}
-		let use_gpu = Arc::new(AtomicBool::new(settings.use_gpu));
-		let backend = CoreBackend::new(use_gpu.clone(), dirs.cache.join("frames"))?;
-		let mut state = Self::with_backend(settings, Some(path), backend, use_gpu);
-		state.schemes = SchemeStore::with_user_folder(&dirs.schemes()).0;
-		state.first_start = loaded.first_start;
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn start<'a>(dirs: &settings::AppDirs, args: impl IntoIterator<Item = &'a str>) -> std::io::Result<Self> {
+		Self::start_with_memory(dirs, args, wavedude_core::run::Memory::System)
+	}
+
+	/// As [`start`](Self::start), the frame budgets on `memory`'s readings.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn start_with_memory<'a>(
+		dirs: &settings::AppDirs,
+		args: impl IntoIterator<Item = &'a str>,
+		memory: wavedude_core::run::Memory,
+	) -> std::io::Result<Self> {
+		let store = dirs.store();
+		let loaded = load_settings(&store, || wavedude_core::engine::gpu::context().is_ok(), args);
+		let use_gpu = Arc::new(AtomicBool::new(loaded.settings.use_gpu));
+		let backend = CoreBackend::new(use_gpu.clone(), dirs.cache.join("frames"), memory)?;
+		let mut state = Self::started(loaded, store, backend, use_gpu);
 		state.codec_dir = Some(dirs.codec());
 		Ok(state)
 	}
+
+	/// The app's state in the browser: settings from `store` (the first start chooses the preview quality from
+	/// the device), the engines on `gpu` (the UI renderer's device, when it computes), the empty project, the
+	/// language and zoom of the settings and `args`.
+	#[cfg(target_arch = "wasm32")]
+	pub fn start<'a>(
+		store: Store,
+		gpu: Option<wavedude_core::engine::GpuHandle>,
+		args: impl IntoIterator<Item = &'a str>,
+	) -> Self {
+		let loaded = load_settings(&store, || gpu.is_some(), args);
+		let use_gpu = Arc::new(AtomicBool::new(loaded.settings.use_gpu));
+		let backend = CoreBackend::new(use_gpu.clone(), gpu);
+		Self::started(loaded, store, backend, use_gpu)
+	}
+
+	fn started(loaded: settings::Loaded, store: Store, backend: CoreBackend, use_gpu: Arc<AtomicBool>) -> Self {
+		let mut state = Self::with_backend(loaded.settings, Some(store.clone()), backend, use_gpu);
+		state.schemes = user_schemes::load(&store);
+		state.first_start = loaded.first_start;
+		state
+	}
+}
+
+/// The settings of `store`, the first start's chosen from the machine with `has_gpu` (asked then alone), at the
+/// zoom of `args`.
+fn load_settings<'a>(
+	store: &Store,
+	has_gpu: impl FnOnce() -> bool,
+	args: impl IntoIterator<Item = &'a str>,
+) -> settings::Loaded {
+	let facts = || MachineFacts { has_gpu: Some(has_gpu()), ..platform::machine_facts() };
+	let mut loaded = Settings::load(store, facts);
+	if let Some(zoom) = settings::zoom_switch(args) {
+		loaded.settings.ui_zoom = zoom;
+	}
+	loaded
 }
 
 impl<B: Backend> AppState<B> {
-	/// The state on `backend`; `settings_path` is where setting changes are saved (`None`: not saved).
+	/// The state on `backend`; `settings_store` is where setting changes are saved (`None`: not saved).
 	pub fn with_backend(
 		settings: Settings,
-		settings_path: Option<PathBuf>,
+		settings_store: Option<Store>,
 		backend: B,
 		use_gpu: Arc<AtomicBool>,
 	) -> Self {
@@ -257,7 +310,7 @@ impl<B: Backend> AppState<B> {
 		live.project_replaced(&document.project, Instant::now());
 		let mut state = Self {
 			settings,
-			settings_path,
+			settings_store,
 			strings,
 			document,
 			selection: Selection::root(),
@@ -268,6 +321,7 @@ impl<B: Backend> AppState<B> {
 			revisions: Revisions::default(),
 			observed: None,
 			reveals: 0,
+			documents: 0,
 			use_gpu,
 			pending: None,
 			session_hint: ExportHint::default(),
@@ -387,8 +441,8 @@ impl<B: Backend> AppState<B> {
 	}
 
 	fn save_settings(&self) {
-		if let Some(path) = &self.settings_path
-			&& let Err(e) = self.settings.save(path)
+		if let Some(store) = &self.settings_store
+			&& let Err(e) = self.settings.save(store)
 		{
 			tracing::warn!("{e}");
 		}
@@ -430,6 +484,7 @@ impl<B: Backend> AppState<B> {
 			self.save_settings();
 		}
 		self.document = document;
+		self.documents += 1;
 		self.document_changed();
 		self.selection = Selection::root();
 		self.reveals += 1;
@@ -450,11 +505,17 @@ impl<B: Backend> AppState<B> {
 					Err(e) => return self.error("OpenError", example.file_name, &e),
 				}
 			}
-			Guarded::Open(path) => match Document::open(&path) {
-				Ok(Opened::Project(d)) => self.replace_document(*d, now),
-				Ok(Opened::Scheme(scheme)) => self.add_scheme(scheme, now),
-				Err(e) => return self.error("OpenError", &path.display().to_string(), &e),
-			},
+			Guarded::Open(source) => {
+				let opened = match &source {
+					Source::Path(path) => Document::open(path),
+					Source::Bytes { name, bytes } => Document::from_bytes(name, bytes, None),
+				};
+				match opened {
+					Ok(Opened::Project(d)) => self.replace_document(*d, now),
+					Ok(Opened::Scheme(scheme)) => self.add_scheme(scheme, now),
+					Err(e) => return self.error("OpenError", &source.label(), &e),
+				}
+			}
 		}
 		Response::None
 	}
@@ -478,11 +539,11 @@ impl<B: Backend> AppState<B> {
 	/// An action that replaces the project: asked about first when there are unsaved edits.
 	fn guarded(&mut self, action: Guarded, now: Instant) -> Response {
 		let replaces = matches!(action, Guarded::New | Guarded::Close | Guarded::Open(_) | Guarded::OpenExample(_));
-		if replaces && self.live.export_busy() && !matches!(&action, Guarded::Open(p) if is_scheme(p)) {
+		if replaces && self.live.export_busy() && !matches!(&action, Guarded::Open(s) if is_scheme(s)) {
 			tracing::warn!("The project stays while an export runs; finish or cancel the export first.");
 			return Response::None;
 		}
-		if self.document.dirty && !matches!(&action, Guarded::Open(p) if is_scheme(p)) {
+		if self.document.dirty && !matches!(&action, Guarded::Open(s) if is_scheme(s)) {
 			let name = self.document.display_name(self.strings.get("Untitled"));
 			self.pending = Some(action);
 			return Response::AskSave { name };
@@ -490,9 +551,9 @@ impl<B: Backend> AppState<B> {
 		self.perform(action, now)
 	}
 
-	fn save_then_continue(&mut self, path: Option<PathBuf>, now: Instant) -> Response {
-		let result = match &path {
-			Some(p) => self.document.save_as(p),
+	fn save_then_continue(&mut self, target: Option<Target>, now: Instant) -> Response {
+		let result = match &target {
+			Some(t) => self.document.save_to(t),
 			None => self.document.save(),
 		};
 		match result {
@@ -509,8 +570,11 @@ impl<B: Backend> AppState<B> {
 			Err(DocumentError::NoPath) => Response::AskSavePath { proposed: self.document.proposed_save_path() },
 			Err(e) => {
 				self.pending = None;
-				let name = path.or_else(|| self.document.path.clone()).expect("a save without a path is NoPath");
-				self.error("SaveError", &name.display().to_string(), &e)
+				let name = target
+					.map(|t| t.label())
+					.or_else(|| self.document.path.as_ref().map(|p| p.display().to_string()))
+					.expect("a save without a path is NoPath");
+				self.error("SaveError", &name, &e)
 			}
 		}
 	}
@@ -563,17 +627,17 @@ impl<B: Backend> AppState<B> {
 				Response::None
 			}
 			Event::Guarded(action) => self.guarded(action, now),
-			Event::DropFile(path) => {
-				let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-				if ["wdproj", "json", "xml", "wdscheme"].contains(&ext.as_str()) {
-					self.guarded(Guarded::Open(path), now)
+			Event::DropFile(source) => {
+				if ["wdproj", "json", "xml", "wdscheme"].contains(&source.extension().as_str()) {
+					self.guarded(Guarded::Open(source), now)
 				} else {
-					tracing::warn!("'{}' is not a project or colour scheme file", path.display());
-					Response::Error(self.strings.format("OpenError", &[&path.display()]))
+					let label = source.label();
+					tracing::warn!("'{label}' is not a project or colour scheme file");
+					Response::Error(self.strings.format("OpenError", &[&label]))
 				}
 			}
 			Event::Save => self.save_then_continue(None, now),
-			Event::SaveAs(path) => self.save_then_continue(Some(path), now),
+			Event::SaveAs(target) => self.save_then_continue(Some(target), now),
 			Event::SaveAsCancelled => {
 				self.pending = None;
 				Response::None
@@ -622,6 +686,10 @@ impl<B: Backend> AppState<B> {
 			}
 			Event::TogglePauseRun => {
 				self.live.toggle_pause_run();
+				Response::None
+			}
+			Event::DiscardFrames => {
+				self.live.discard_frames();
 				Response::None
 			}
 			Event::PausePlayback => {
@@ -760,6 +828,44 @@ impl<B: Backend> AppState<B> {
 				self.save_settings();
 				Response::None
 			}
+			Event::SetLayout(layout) => {
+				self.settings.layout = Some(layout);
+				self.save_settings();
+				Response::None
+			}
+			Event::ToggleUserScheme(index) => {
+				let Some(scheme) = self.document.project.color_schemes.get(index) else { return Response::None };
+				if self.is_user_scheme(&scheme.name) {
+					let name = scheme.name.clone();
+					self.change_user_schemes("RemoveError", |store| user_schemes::remove(store, &name))
+				} else {
+					let scheme = scheme.clone();
+					self.change_user_schemes("SaveError", |store| user_schemes::add(store, &scheme))
+				}
+			}
+			Event::RemoveUserScheme(name) => {
+				self.change_user_schemes("RemoveError", |store| user_schemes::remove(store, &name))
+			}
+		}
+	}
+
+	/// Whether `name` is one of the user's colour schemes.
+	pub fn is_user_scheme(&self, name: &str) -> bool {
+		user_schemes::has(&self.schemes, name)
+	}
+
+	/// Applies `change` to the user's colour schemes and reads them again; its failure is the message `key` of where.
+	fn change_user_schemes(&mut self, key: &str, change: impl FnOnce(&Store) -> Result<(), String>) -> Response {
+		let Some(store) = &self.settings_store else {
+			tracing::warn!("the user's colour schemes are not kept");
+			return Response::None;
+		};
+		let result = change(store);
+		self.schemes = user_schemes::load(store);
+		self.revisions.settings += 1;
+		match result {
+			Ok(()) => Response::None,
+			Err(at) => Response::Error(self.strings.format(key, &[&at])),
 		}
 	}
 
@@ -835,12 +941,17 @@ impl<B: Backend> AppState<B> {
 		self.reveals
 	}
 
+	/// Which document is open: it changes when another replaces it, not when it is saved under a new path.
+	pub fn document_id(&self) -> u64 {
+		self.documents
+	}
+
 	/// The row the properties pane shows.
 	pub fn current_row(&self) -> Option<Row> {
 		self.selection.current()
 	}
 }
 
-fn is_scheme(path: &Path) -> bool {
-	path.extension().is_some_and(|e| e.eq_ignore_ascii_case(wavedude_core::io::wdscheme::EXTENSION))
+fn is_scheme(source: &Source) -> bool {
+	source.extension() == wavedude_core::io::wdscheme::EXTENSION
 }

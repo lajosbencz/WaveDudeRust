@@ -1,6 +1,7 @@
 # 0014: Sources are a transparent forcing term, not WaveDude Next's blend
 
-Status: accepted, 2026-11-11 (the user's decision). Replicating Next's blend was tried and rejected.
+Status: accepted, 2026-11-11 (the user's decision). Replicating Next's blend was tried and rejected. Amended by
+[0022](0022-smooth-source-turn-on.md): a source drives its impulse and turns on smoothly.
 
 ## Context
 

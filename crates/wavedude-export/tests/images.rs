@@ -58,7 +58,9 @@ fn exr_is_a_version_2_scanline_file_of_one_uncompressed_half_channel() {
 	let (w, h) = (13, 7);
 	let halves: Vec<f16> = (0..w * h).map(|i| f16::from_bits((i * 709 + 1) as u16 & 0x7BFF)).collect();
 	let path = dir.join("name_0001.exr");
-	write_exr(&path, &halves, w, h).unwrap();
+	let mut out = file(&path);
+	write_exr(&mut out, &halves, w, h).unwrap();
+	drop(out);
 	let bytes = std::fs::read(&path).unwrap();
 	assert_eq!(&bytes[..4], &[0x76, 0x2f, 0x31, 0x01]);
 	assert_eq!(&bytes[4..8], &[2, 0, 0, 0], "version 2, single-part scanline");
@@ -96,6 +98,7 @@ fn a_sequence_goes_into_a_folder_of_its_name_and_a_still_is_one_file() {
 	let chosen = dir.join("chosenname.png");
 	let mut sink = ImageSink::new(
 		ImageKind::Png,
+		std_fs(),
 		Placement::Sequence { chosen, first: 5, planned: 3 },
 		spec,
 		&EncoderPool::default(),
@@ -115,9 +118,14 @@ fn a_sequence_goes_into_a_folder_of_its_name_and_a_still_is_one_file() {
 	assert_eq!(second, rgb(&frames[1]), "the second file holds the second frame");
 
 	let still = dir.join("ball_field_0655.jpg");
-	let mut sink =
-		ImageSink::new(ImageKind::Jpeg { quality: 95 }, Placement::Still(still.clone()), spec, &EncoderPool::default())
-			.unwrap();
+	let mut sink = ImageSink::new(
+		ImageKind::Jpeg { quality: 95 },
+		std_fs(),
+		Placement::Still(still.clone()),
+		spec,
+		&EncoderPool::default(),
+	)
+	.unwrap();
 	sink.write_frame(&frames[0], w, h).unwrap();
 	assert!(sink.write_frame(&frames[1], w, h).is_err(), "a still holds one frame");
 	sink.finish().unwrap();

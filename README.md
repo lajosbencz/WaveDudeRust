@@ -28,9 +28,17 @@ project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wd
 
 ## Try it in the browser
 
-[The web demo](https://lajosbencz.github.io/WaveDudeRust/) runs the examples, or a `.wdproj` file of yours, in the
-browser on the GPU (WebGPU) or the CPU: the simulation with the preview's handles, labels and probe graphs, a timeline
-and the Low, Standard and High qualities.
+[The application](https://lajosbencz.github.io/WaveDudeRust/app/) runs in the browser, built by
+[`tools/build-web.sh`](tools/build-web.sh). It is the desktop's window and engines on wasm32 (GPU where the browser
+has WebGPU, else the CPU engine), with the platform differences behind one API
+([decision 0019](docs/decisions/0019-egui-and-the-platform-layer.md)):
+
+- Files: Open and every picker upload a file, a file dropped on the page opens, Save and Save As download, and the
+  page asks before it is left while the project has unsaved edits.
+- App data (settings, colour schemes, the crash report) is kept in `localStorage`; a run's frames past memory spill
+  to the origin private file system ([decision 0020](docs/decisions/0020-browser-frame-spill-in-opfs.md)).
+- Missing against the desktop: exports (parked, [decision 0021](docs/decisions/0021-browser-exports-parked.md)),
+  the updater, recent files, file watching, open requests of the OS and the window's place.
 
 ## Workspace
 
@@ -39,13 +47,11 @@ and the Low, Standard and High qualities.
 | [`wavedude-core`](crates/wavedude-core) | model, file formats, scene painter with every part kind, CPU and wgpu engines, frame store, runs, renderer |
 | [`wavedude-model-derive`](crates/wavedude-model-derive) | the derives that give every model type typed fields: field and edit enums, accessors, bounds |
 | [`wavedude-export`](crates/wavedude-export) | PNG and JPEG sequences, MPEG-1, AVI, QuickTime (Animation and PNG), H.264 MP4, OpenEXR, probe CSV, burned-in overlays |
-| [`wavedude-view`](crates/wavedude-view) | what the preview draws without a UI toolkit: the handle overlay, the probe graph box's layout, a draw list for the desktop and the browser |
-| [`wavedude-widgets`](crates/wavedude-widgets) | the Freya widgets: dock host, tree, property grid, number box, timeline, pictures, graph boxes, colour tools |
+| [`wavedude-view`](crates/wavedude-view) | what the preview and the exports draw over a picture: the handle overlay, the probe graph box, as epaint shapes; the bundled fonts |
 | [`wavedude-app-state`](crates/wavedude-app-state) | the application state without a UI toolkit: document, history, selection, commands, clipboard, live runs, playback, settings, strings, log |
-| [`wavedude-app`](crates/wavedude-app) | the desktop application: thin Freya views over `wavedude-app-state` |
+| [`wavedude-app`](crates/wavedude-app) | the application on egui, natively and in the browser: the window, its panes and dialogs, the updater, exports |
 | [`wavedude-cli`](crates/wavedude-cli) | headless checks, benches, dispersion tables, scripted runs and exports |
-| [`wavedude-examples`](crates/wavedude-examples) | the example projects, embedded: the list of the Examples dialog and of the web demo |
-| [`wavedude-wasm`](crates/wavedude-wasm) | the engine for the browser (WebAssembly): open a project, step to a frame, draw its layers and the shapes over them on a canvas |
+| [`wavedude-examples`](crates/wavedude-examples) | the example projects, embedded: the list of the Examples dialog |
 
 ```sh
 cargo test --workspace --features wavedude-export/openh264-source,wavedude-cli/openh264-source   # GPU tests skip without an adapter

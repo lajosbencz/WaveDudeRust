@@ -72,8 +72,13 @@ pub trait WaveEngine: MaybeSend {
 	fn drain_probes(&mut self, pending: PendingProbes, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError>;
 	/// Starts converting the canvas (rim excluded) after the last step into planes of `shape`, written into
 	/// `into`'s planes (reused when large enough). The engine may step on before `finish_capture`
-	/// (`Self::finish_capture`) collects it; at most two captures may be pending.
+	/// (`Self::finish_capture`) collects it; at most [`capture_capacity`](Self::capture_capacity) captures may be
+	/// pending.
 	fn begin_capture(&mut self, shape: &FrameShape, into: Snapshot) -> Result<PendingCapture, EngineError>;
+	/// How many captures of `shape` may be pending at once; at least two.
+	fn capture_capacity(&self, _shape: &FrameShape) -> usize {
+		2
+	}
 	/// The frame of a capture this engine began.
 	fn finish_capture(&mut self, pending: PendingCapture) -> Result<Snapshot, EngineError>;
 	/// A capture now, into new planes.
@@ -83,6 +88,12 @@ pub trait WaveEngine: MaybeSend {
 	}
 	/// Host copies of the canvas field and blended intensity (tests).
 	fn prepare_frame(&mut self) -> Result<(Vec<f32>, Vec<f32>), EngineError>;
+	/// Where the captures from now on keep their planes on the engine's device, for render passes there; `None`
+	/// for an engine on the host.
+	#[cfg(feature = "gpu")]
+	fn device_frames(&mut self) -> Option<Arc<gpu::DeviceFrames>> {
+		None
+	}
 }
 
 /// The GPU a built engine may run on.

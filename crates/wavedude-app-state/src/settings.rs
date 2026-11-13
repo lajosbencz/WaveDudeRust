@@ -1,5 +1,6 @@
-//! The program's user settings (docs/ui/80-settings.md): one sparse JSON file in the platform config dir,
-//! values at their default omitted, the first start's preview quality chosen once from the machine.
+//! The program's user settings (docs/ui/80-settings.md): one sparse JSON text in the platform's store (a file in
+//! the config dir, the browser's local storage), values at their default omitted, the first start's preview
+//! quality chosen once from the machine.
 //!
 //! Threads: plain data, owned by the UI thread's `AppState`.
 
@@ -11,9 +12,10 @@ use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::Word;
 use wavedude_core::quality::{MachineFacts, PreviewDefaults, PreviewQuality};
 
+use super::platform::Store;
 use super::strings::Language;
 
-/// The settings file's name in the config dir.
+/// The settings file's key in the store.
 pub const FILE_NAME: &str = "settings.json";
 /// The settings file's format version, written in every file.
 pub const VERSION: u32 = 1;
@@ -24,11 +26,15 @@ pub const MENU_ZOOM: (f64, f64) = (0.5, 3.0);
 pub const SWITCH_ZOOM: (f64, f64) = (0.5, 8.0);
 pub const DITHER_BITS: [u32; 5] = [0, 10, 12, 14, 16];
 
+/// The user's colour scheme folder in the store.
+pub const SCHEME_FOLDER: &str = "ColorSchemes";
+
 /// The name of the app's folders in the platform's config, cache and data dirs.
 pub const APP_FOLDER: &str = "WaveDudeRust";
 
 /// The app's folders: settings and log in the config dir, the frame store's spill files in the cache dir,
 /// downloaded codecs in the data dir. The CLI uses the same.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppDirs {
 	pub config: PathBuf,
@@ -36,6 +42,7 @@ pub struct AppDirs {
 	pub data: PathBuf,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AppDirs {
 	/// The platform's folders for [`APP_FOLDER`]; `None` when the platform names no home.
 	pub fn platform() -> Option<Self> {
@@ -57,18 +64,9 @@ impl AppDirs {
 		self.data.join("openh264")
 	}
 
-	/// The rolling log files and the crash report.
-	pub fn logs(&self) -> PathBuf {
-		self.config.join("logs")
-	}
-
-	pub fn settings_file(&self) -> PathBuf {
-		self.config.join(FILE_NAME)
-	}
-
-	/// The user's colour scheme folder.
-	pub fn schemes(&self) -> PathBuf {
-		self.config.join("ColorSchemes")
+	/// The settings, the user's colour schemes, the logs and the crash report.
+	pub fn store(&self) -> Store {
+		Store::in_dir(self.config.clone())
 	}
 }
 
@@ -205,11 +203,11 @@ pub struct Loaded {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
-	#[error("cannot read the settings file '{}': {detail}", path.display())]
-	Read { path: PathBuf, detail: String },
-	#[error("cannot write the settings file '{}': {source}", path.display())]
+	#[error("cannot read the settings file '{location}': {detail}")]
+	Read { location: String, detail: String },
+	#[error("cannot write the settings file '{location}': {source}")]
 	Write {
-		path: PathBuf,
+		location: String,
 		#[source]
 		source: std::io::Error,
 	},
@@ -241,6 +239,7 @@ impl Settings {
 		}
 		self.ui_zoom = if self.ui_zoom.is_finite() { self.ui_zoom.clamp(SWITCH_ZOOM.0, SWITCH_ZOOM.1) } else { 1.0 };
 		self.export_hints.truncate(MAX_EXPORT_HINTS);
+		#[cfg(not(target_arch = "wasm32"))]
 		if self.export_filter_index as usize >= wavedude_export::ExportFormat::ALL.len() {
 			self.export_filter_index = 0;
 		}
@@ -275,45 +274,43 @@ impl Settings {
 		Ok(s)
 	}
 
-	/// Reads `path` for a tool beside the app: the defaults when there is no file, an error when it is unreadable,
-	/// and never the first start's choice.
-	pub fn read(path: &Path) -> Result<Self, SettingsError> {
-		match std::fs::read_to_string(path) {
-			Ok(text) => {
-				Self::from_json(&text).map_err(|e| SettingsError::Read { path: path.to_owned(), detail: e.to_string() })
-			}
-			Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-			Err(e) => Err(SettingsError::Read { path: path.to_owned(), detail: e.to_string() }),
+	/// Reads the store's settings for a tool beside the app: the defaults when there are none, an error when they
+	/// are unreadable, and never the first start's choice.
+	pub fn read(store: &Store) -> Result<Self, SettingsError> {
+		let error = |detail: String| SettingsError::Read { location: store.location(FILE_NAME), detail };
+		match store.read(FILE_NAME) {
+			Ok(Some(text)) => Self::from_json(&text).map_err(|e| error(e.to_string())),
+			Ok(None) => Ok(Self::default()),
+			Err(e) => Err(error(e.to_string())),
 		}
 	}
 
-	/// Reads `path`; with no file, makes the first start's choice from `facts` and writes the file at once.
-	pub fn load(path: &Path, facts: impl FnOnce() -> MachineFacts) -> Loaded {
-		match std::fs::read_to_string(path) {
-			Ok(text) => match Self::from_json(&text) {
+	/// Reads the store's settings; with none, makes the first start's choice from `facts` and writes them at once.
+	pub fn load(store: &Store, facts: impl FnOnce() -> MachineFacts) -> Loaded {
+		match store.read(FILE_NAME) {
+			Ok(Some(text)) => match Self::from_json(&text) {
 				Ok(settings) => Loaded { settings, first_start: false, unreadable: None },
 				Err(e) => {
 					let at = Some((e.line(), e.column()));
 					let quoted = wavedude_core::io::excerpt(&text, at);
+					let location = store.location(FILE_NAME);
 					tracing::error!(
-						"the settings file '{}' could not be read: {e}\n--- the text of '{}' ---\n{quoted}",
-						path.display(),
-						path.display()
+						"the settings file '{location}' could not be read: {e}\n--- the text of '{location}' ---\n{quoted}"
 					);
 					Loaded { settings: Self::default(), first_start: false, unreadable: Some(e.to_string()) }
 				}
 			},
-			Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+			Ok(None) => {
 				let mut settings = Self::default();
 				let facts = facts();
 				settings.apply_first_start(&facts);
-				if let Err(e) = settings.save(path) {
+				if let Err(e) = settings.save(store) {
 					tracing::warn!("{e}");
 				}
 				Loaded { settings, first_start: true, unreadable: None }
 			}
 			Err(e) => {
-				tracing::error!("the settings file '{}' could not be read: {e}", path.display());
+				tracing::error!("the settings file '{}' could not be read: {e}", store.location(FILE_NAME));
 				Loaded { settings: Self::default(), first_start: false, unreadable: Some(e.to_string()) }
 			}
 		}
@@ -339,17 +336,10 @@ impl Settings {
 		);
 	}
 
-	pub fn save(&self, path: &Path) -> Result<(), SettingsError> {
-		let err = |source| SettingsError::Write { path: path.to_owned(), source };
-		if let Some(dir) = path.parent() {
-			std::fs::create_dir_all(dir).map_err(err)?;
-		}
-		// Written beside and renamed over: a crash mid-write leaves the old file whole.
-		let mut temp = path.as_os_str().to_owned();
-		temp.push(".tmp");
-		let temp = PathBuf::from(temp);
-		std::fs::write(&temp, self.to_sparse_json()).map_err(err)?;
-		std::fs::rename(&temp, path).map_err(err)
+	pub fn save(&self, store: &Store) -> Result<(), SettingsError> {
+		store
+			.write(FILE_NAME, &self.to_sparse_json())
+			.map_err(|source| SettingsError::Write { location: store.location(FILE_NAME), source })
 	}
 
 	/// The preview quality of a preview run (the intensity plane as its root); valid once normalised.
@@ -432,14 +422,14 @@ mod tests {
 	#[test]
 	fn save_replaces_the_file_whole() {
 		let dir = tempfile::tempdir().unwrap();
-		let path = dir.path().join("sub").join(FILE_NAME);
+		let store = Store::in_dir(dir.path().join("sub"));
 		let s = Settings { use_gpu: false, ..Settings::default() };
-		s.save(&path).unwrap();
-		Settings::default().save(&path).unwrap();
+		s.save(&store).unwrap();
+		Settings::default().save(&store).unwrap();
 		let names: Vec<_> =
-			std::fs::read_dir(path.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name()).collect();
+			std::fs::read_dir(dir.path().join("sub")).unwrap().map(|e| e.unwrap().file_name()).collect();
 		assert_eq!(names, [FILE_NAME], "no temporary file is left");
-		assert_eq!(Settings::load(&path, wavedude_core::run::machine_facts).settings, Settings::default());
+		assert_eq!(Settings::load(&store, wavedude_core::run::machine_facts).settings, Settings::default());
 	}
 
 	#[test]
@@ -494,13 +484,14 @@ mod tests {
 	#[test]
 	fn a_tool_reads_defaults_without_a_file_and_refuses_a_broken_one() {
 		let dir = tempfile::tempdir().unwrap();
+		let store = Store::in_dir(dir.path().to_owned());
 		let path = dir.path().join(FILE_NAME);
-		assert_eq!(Settings::read(&path).unwrap(), Settings::default());
+		assert_eq!(Settings::read(&store).unwrap(), Settings::default());
 		assert!(!path.exists(), "a tool makes no first start");
 		let s = Settings { use_openh264: Some(false), ..Settings::default() };
-		s.save(&path).unwrap();
-		assert_eq!(Settings::read(&path).unwrap().use_openh264, Some(false));
+		s.save(&store).unwrap();
+		assert_eq!(Settings::read(&store).unwrap().use_openh264, Some(false));
 		std::fs::write(&path, "{").unwrap();
-		assert!(Settings::read(&path).is_err());
+		assert!(Settings::read(&store).is_err());
 	}
 }

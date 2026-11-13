@@ -24,12 +24,13 @@
 //!
 //! Steps are recorded into one command encoder and submitted every [`BATCH_STEPS`] steps or when
 //! something is read; at most [`MAX_IN_FLIGHT`] batches are queued ahead of the card. `sample_probes`
-//! and `prepare_frame` wait for the card; a capture is submitted with its copy to one of two staging buffers and
-//! collected later, so the card converts and copies while the host steps on. Queued probe readings go into a batch
-//! buffer of [`BATCH_STEPS`] readings; a full batch, and the partial one at `pending_probes`, is copied to a
-//! pooled readback buffer whose mapping is requested. At a full batch the mapped ones are collected into the host
-//! queue, which bounds the buffers in flight; natively the rest are waited for there too. `drain_probes` collects
-//! the batches its token covers and hands out those readings alone.
+//! and `prepare_frame` wait for the card; a capture is submitted with its copy to a free staging buffer of a ring
+//! (`capture_capacity` of them, by `CAPTURE_RING_BYTES`) and collected later, so the card converts and copies while the host steps on; once [`DeviceFrames`] are asked for,
+//! a capture also copies its planes into one of their slots, for render passes on the device (frames.rs). Queued
+//! probe readings go into a batch buffer of [`BATCH_STEPS`] readings; a full batch, and the partial one at
+//! `pending_probes`, is copied to a pooled readback buffer whose mapping is requested. At a full batch the mapped ones
+//! are collected into the host queue, which bounds the buffers in flight; natively the rest are waited for there too.
+//! `drain_probes` collects the batches its token covers and hands out those readings alone.
 //! On wasm32 nothing can wait: await [`PendingCapture::ready`] before `finish_capture` and
 //! [`PendingProbes::ready`] before `drain_probes`, so the batches read back meanwhile; `sample_probes` and
 //! `prepare_frame` are unavailable there.
@@ -46,6 +47,7 @@
 //! by every engine of the process natively (`context`), or by the engines built on one [`GpuContext`].
 
 mod context;
+mod frames;
 mod medium;
 
 use std::borrow::Cow;
@@ -55,12 +57,13 @@ use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 
-#[cfg(not(target_arch = "wasm32"))]
-pub use context::context;
 pub use context::{GpuContext, GpuError};
+#[cfg(not(target_arch = "wasm32"))]
+pub use context::{context, set_context};
+pub use frames::{DeviceFrame, DeviceFrames, FrameTag};
 pub use medium::MediumLayout;
 
-use super::cpu::{blend, centred, mur_chains, sub_step_time};
+use super::cpu::{blend, centred, mur_chains};
 use super::forcing::{IMAGE_LEVELS, SourceGroups, Sources};
 use super::pml::{self, Strips, axis_table};
 use super::stencil::{PAD, StencilCoefficients, TimeScheme};
@@ -83,6 +86,13 @@ const LINEAR_GROUP: u32 = 64;
 const CAPTURE_GROUP: u32 = 256;
 /// Bit of a probe cell word selecting the blended intensity.
 const PROBE_INTENSITY: u32 = 1 << 31;
+/// Captures pending at most. Each holds a staging buffer of its frame, and a device frame once those are asked
+/// for; in the browser a readback maps only after the animation frame that began it, so the run steps on while
+/// they map.
+const MAX_CAPTURES: usize = 16;
+/// The staging bytes of the captures pending (as much again in device frames, once asked for): as many captures
+/// as fit, from two to [`MAX_CAPTURES`]; 64 MiB is 16 frames at the Low preview of full HD, 8 at High, 2 of 4K.
+const CAPTURE_RING_BYTES: u64 = 64 << 20;
 
 const COMMON: &str = include_str!("shaders/common.wgsl");
 const STEP: &str = include_str!("shaders/step.wgsl");
@@ -95,6 +105,8 @@ const EDGES: &str = include_str!("shaders/edges.wgsl");
 const FORCE: &str = include_str!("shaders/force.wgsl");
 const PROBES: &str = include_str!("shaders/probes.wgsl");
 const CAPTURE: &str = include_str!("shaders/capture.wgsl");
+/// f16 conversions and the correctly rounded square root, for the capture and the colouring of planes.
+pub(crate) const HALF: &str = include_str!("shaders/half.wgsl");
 
 /// Uniform shared by every kernel; mirrors `Params` in common.wgsl (80 bytes).
 #[repr(C)]
@@ -199,11 +211,7 @@ struct Readback {
 /// Word layout of a capture of `shape` (capture.wgsl): layers, words of samples and words per layer.
 fn capture_words(shape: &FrameShape, track_intensity: bool) -> (u32, u32, u32) {
 	let layers = if track_intensity { 2 } else { 1 };
-	let per_word = match shape.format {
-		SampleFormat::Half => 2,
-		SampleFormat::Index => 4,
-	};
-	let words = (shape.plane_samples() as u32).div_ceil(per_word);
+	let words = frames::plane_words(shape);
 	(layers, words, words.next_multiple_of(64).max(64))
 }
 
@@ -255,8 +263,10 @@ pub struct GpuEngine {
 	probe_queue: ProbeQueue,
 	capture_params: wgpu::Buffer,
 	capture_out: wgpu::Buffer,
-	captures: [Option<Readback>; 2],
-	next_capture: usize,
+	/// Staging buffers of the captures, by slot; a slot is free once its capture was finished.
+	captures: Vec<Readback>,
+	/// Where captures keep their planes on the device, once asked for.
+	frames: Option<Arc<DeviceFrames>>,
 	/// step, `step_intensity` (leapfrog) or inner, outer, `outer_intensity` (modified equation).
 	step_kernels: Vec<Kernel>,
 	/// `pml_psi_y`, `pml_delta_y`, `pml_psi_x`, `pml_correct` at scale 1, `pml_correct` at scale 1/12.
@@ -337,7 +347,7 @@ impl GpuEngine {
 		let edges_kernel = kernel(device, "edges", EDGES, EDGES_SLOTS, &coefficients);
 		let force_kernels = force_pipelines(device, &coefficients, scheme);
 		let probes_kernel = kernel(device, "probes", PROBES, PROBES_SLOTS, &coefficients);
-		let capture_kernel = kernel(device, "capture", CAPTURE, CAPTURE_SLOTS, &coefficients);
+		let capture_kernel = kernel(device, "capture", &format!("{HALF}\n{CAPTURE}"), CAPTURE_SLOTS, &coefficients);
 		if let Some(e) = scope.pop().await {
 			return Err(GpuError::Pipeline(e.to_string()));
 		}
@@ -394,8 +404,8 @@ impl GpuEngine {
 			probe_queue: ProbeQueue::default(),
 			capture_params,
 			capture_out: empty("capture out"),
-			captures: [None, None],
-			next_capture: 0,
+			captures: Vec::new(),
+			frames: None,
 			step_groups: placeholder(device, &step_kernels[0]),
 			psi_groups: [placeholder(device, &pml_kernels[0]), placeholder(device, &pml_kernels[0])],
 			correct_groups: [placeholder(device, &pml_kernels[3]), placeholder(device, &pml_kernels[3])],
@@ -681,14 +691,14 @@ impl GpuEngine {
 	}
 
 	/// The step's source tables, one slot per sub-step at the time of its current field
-	/// ([`sub_step_time`]), computed as the CPU engine does (engine/forcing.rs).
+	/// ([`super::cpu::sub_step_time`]), computed as the CPU engine does (engine/forcing.rs).
 	fn source_values(&mut self) {
 		let n = self.sub_steps;
 		let slot = self.slot_bytes as usize / 4;
 		self.values.clear();
 		self.values.resize(slot * n as usize, 0.0);
 		for (k, values) in self.values.chunks_exact_mut(slot).enumerate() {
-			self.sources.values(values, sub_step_time(self.time, k as u32, n), n, self.scheme);
+			self.sources.values(values, self.time, k as u32, n, self.scheme);
 		}
 	}
 
@@ -855,19 +865,32 @@ impl WaveEngine for GpuEngine {
 
 	fn pending_probes(&mut self) -> Result<PendingProbes, EngineError> {
 		self.guarded(Self::read_back_probe_batch)?;
-		let mapped = self.probe_reads.iter().map(|(r, _)| r.mapped.clone() as Arc<dyn Readiness>).collect();
-		let in_flight: u64 = self.probe_reads.iter().map(|&(_, steps)| u64::from(steps)).sum();
-		Ok(PendingProbes { mapped, end: self.probe_queue.end() + in_flight })
+		let on_host = self.probe_queue.end();
+		let batches = self
+			.probe_reads
+			.iter()
+			.scan(on_host, |end, (r, steps)| {
+				*end += u64::from(*steps);
+				Some((r.mapped.clone() as Arc<dyn Readiness>, *end))
+			})
+			.collect();
+		Ok(PendingProbes { batches, on_host })
 	}
 
 	fn drain_probes(&mut self, pending: PendingProbes, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError> {
-		self.guarded(|e| e.collect_probe_batches(pending.end))?;
-		self.probe_queue.drain(pending.end, f);
+		self.guarded(|e| e.collect_probe_batches(pending.end()))?;
+		self.probe_queue.drain(pending.end(), f);
 		Ok(())
 	}
 
 	fn begin_capture(&mut self, shape: &FrameShape, into: Snapshot) -> Result<PendingCapture, EngineError> {
 		self.guarded(|e| e.begin(shape, into))
+	}
+
+	fn capture_capacity(&self, shape: &FrameShape) -> usize {
+		let (layers, _, layer_words) = capture_words(shape, self.options.track_intensity);
+		let bytes = u64::from(layer_words * layers * 4);
+		usize::try_from(CAPTURE_RING_BYTES / bytes).unwrap_or(MAX_CAPTURES).clamp(2, MAX_CAPTURES)
 	}
 
 	fn finish_capture(&mut self, pending: PendingCapture) -> Result<Snapshot, EngineError> {
@@ -876,6 +899,16 @@ impl WaveEngine for GpuEngine {
 
 	fn prepare_frame(&mut self) -> Result<(Vec<f32>, Vec<f32>), EngineError> {
 		self.guarded(Self::read_frame)
+	}
+
+	fn device_frames(&mut self) -> Option<Arc<DeviceFrames>> {
+		let ctx = &self.ctx;
+		#[cfg_attr(
+			target_arch = "wasm32",
+			allow(clippy::arc_with_non_send_sync, reason = "wgpu's types are not Send there")
+		)]
+		let frames = self.frames.get_or_insert_with(|| Arc::new(DeviceFrames::new(ctx.clone())));
+		Some(frames.clone())
 	}
 }
 
@@ -1084,9 +1117,6 @@ impl GpuEngine {
 
 	fn begin(&mut self, shape: &FrameShape, mut into: Snapshot) -> Result<PendingCapture, GpuError> {
 		assert_eq!((shape.canvas_width, shape.canvas_height), (self.scene.canvas_width, self.scene.canvas_height));
-		let slot = self.next_capture;
-		assert!(self.captures[slot].as_ref().is_none_or(|r| r.pending.is_none()), "more than two captures pending");
-		self.next_capture = 1 - slot;
 		let (layers, words, layer_words) = capture_words(shape, self.options.track_intensity);
 		let bytes = (layer_words * layers * 4) as u64;
 		if self.capture_out.size() < bytes {
@@ -1094,8 +1124,17 @@ impl GpuEngine {
 			self.capture_out = storage(&self.ctx.device, "capture out", bytes);
 			self.bind_capture();
 		}
-		let readback = self.captures[slot].take().filter(|r| r.buffer.size() >= bytes);
-		let mut readback = readback.unwrap_or_else(|| readback_buffer(&self.ctx.device, "capture readback", bytes));
+		let slot = match self.captures.iter().position(|r| r.pending.is_none()) {
+			Some(free) => free,
+			None => {
+				assert!(self.captures.len() < MAX_CAPTURES, "more than {MAX_CAPTURES} captures pending");
+				self.captures.push(readback_buffer(&self.ctx.device, "capture readback", bytes));
+				self.captures.len() - 1
+			}
+		};
+		if self.captures[slot].buffer.size() < bytes {
+			self.captures[slot] = readback_buffer(&self.ctx.device, "capture readback", bytes);
+		}
 		let params = CaptureParams {
 			out_w: shape.width(),
 			divisor: shape.divisor,
@@ -1116,7 +1155,8 @@ impl GpuEngine {
 		let pipeline = self.capture_kernel.pipeline.clone();
 		let group = self.capture_groups[self.cur].clone();
 		let out = self.capture_out.clone();
-		let target = readback.buffer.clone();
+		let target = self.captures[slot].buffer.clone();
+		let kept = self.frames.as_ref().map(|f| f.begin(slot, *shape, layers == 2, layer_words, bytes));
 		let submitted = self.submit(|encoder| {
 			{
 				let mut pass = encoder.begin_compute_pass(&Default::default());
@@ -1125,17 +1165,13 @@ impl GpuEngine {
 				pass.dispatch_workgroups(gx, gy, layers);
 			}
 			encoder.copy_buffer_to_buffer(&out, 0, &target, 0, bytes);
-		});
-		let submission = match submitted {
-			Ok(s) => s,
-			Err(e) => {
-				self.captures[slot] = Some(readback);
-				return Err(e);
+			if let Some(kept) = &kept {
+				encoder.copy_buffer_to_buffer(&out, 0, kept, 0, bytes);
 			}
-		};
-		map(&mut readback, submission);
+		});
+		let readback = &mut self.captures[slot];
+		map(readback, submitted?);
 		let mapped = readback.mapped.clone();
-		self.captures[slot] = Some(readback);
 		into.shape = *shape;
 		into.step = self.time.saturating_sub(1);
 		Ok(PendingCapture { snapshot: into, slot, mapped: Some(mapped) })
@@ -1143,11 +1179,14 @@ impl GpuEngine {
 
 	fn finish(&mut self, pending: PendingCapture) -> Result<Snapshot, GpuError> {
 		let PendingCapture { mut snapshot, slot, .. } = pending;
-		let readback = self.captures[slot].as_mut().expect("capture slot");
+		let readback = &mut self.captures[slot];
 		let waited = wait_mapped(&self.ctx.device, readback);
 		if let Err(e) = waited {
 			readback.pending = None;
 			return Err(e);
+		}
+		if let Some(frames) = &self.frames {
+			frames.finish(slot);
 		}
 		let (layers, _, layer_words) = capture_words(&snapshot.shape, self.options.track_intensity);
 		let (plane, layer_bytes) = (snapshot.shape.plane_bytes(), layer_words as usize * 4);

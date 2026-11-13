@@ -1,10 +1,11 @@
-//! The frame store: a run's captured frames, in memory up to a budget, the rest in a spill file
-//! (spec/40-frames-store-render.md, Frame store and Memory budget).
+//! The frame store: a run's captured frames, in memory up to a budget, the rest spilled: natively to a file, in
+//! the browser to the origin private file system (spec/40-frames-store-render.md, Frame store and Memory budget).
 //!
 //! Layout: frame `f` holds one plane per layer in the order of [`FrameStore::layers`] (the field, then the
 //! intensity when tracked), each `shape.plane_bytes()` bytes, rows top to bottom without padding. Frames
 //! `0..first_spilled` live in memory as the snapshot written, its planes kept; the rest live in the spill file
-//! after its 64-byte header at `64 + (frame - first)*frame_bytes + layer_index*plane_bytes`.
+//! after its 64-byte header at `64 + (frame - first)*frame_bytes + layer_index*plane_bytes`, or, pending
+//! (pending.rs), one frame per entry of its `SpillBackend`.
 //!
 //! Frames are written by index, in any order ([`FrameStore::write_at`]); which are present is tracked per frame
 //! and as the contiguous prefix [`FrameStore::count`]. [`FrameStore::clear`] forgets every frame, keeps the
@@ -14,41 +15,36 @@
 //!
 //! Threads: one writer at a time; any thread may read a present frame meanwhile. The capturing thread asks for
 //! the buffer of a frame ([`FrameStore::buffer_for`]) and the engine captures into it, so a frame in memory is
-//! never copied. The memory frames are allocated and their pages touched ahead of the capture by a producer
-//! thread on a small rayon pool, after the memory the budget counts on has been released; cleared frames'
+//! never copied. Natively the memory frames are allocated and their pages touched ahead of the capture by a
+//! producer thread on a small rayon pool, after the memory the budget counts on has been released; cleared frames'
 //! buffers come back first. A frame that cannot be allocated sends that frame and every later one to the file
 //! while the file is empty, else it stays in memory; the file's frames reuse a few buffers. The file is deleted
-//! on drop.
+//! on drop. A store in memory alone ([`FrameStore::in_memory`]) allocates its frames as they are captured and
+//! refuses the frames past its budget.
+//!
+//! A pending spill (wasm32, `FrameStore::with_spill`) allocates its memory frames as they are captured too. A
+//! spilled frame stays in memory while its write is in flight and, once `FrameStore::settle` saw it written,
+//! while it is the frame written last; a read of a spilled frame that is not back yet starts its read and is
+//! refused with [`StoreError::Pending`] until it is.
 
 use crate::spec::RunSpec;
 use crate::sync::lock;
-use std::fs::File;
 use std::io;
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
-use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
-use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
 
-use rayon::prelude::*;
-
-use crate::engine::{FrameShape, SampleFormat, Snapshot};
+use crate::engine::{FrameShape, Snapshot};
 use crate::model::Layer;
 
-/// Bytes of the spill file's header.
-pub const HEADER_BYTES: u64 = 64;
-const MAGIC: i32 = 0x5346_4457;
-const VERSION: i32 = 3;
-/// Blocks the producer prepares ahead of the writer.
-const PREPARE_DEPTH: usize = 4;
+#[cfg(any(test, target_arch = "wasm32"))]
+use super::pending::{PendingSpill, SpillBackend};
+#[cfg(not(target_arch = "wasm32"))]
+use super::spill::Disk;
+#[cfg(not(target_arch = "wasm32"))]
+pub use super::spill::{HEADER_BYTES, Release, ReleaseSignal, sweep_leftovers};
+
 /// Buffers kept for the frames that go to the file.
 const RECYCLED: usize = 4;
-/// Threads that touch a fresh block's pages.
-const TOUCH_THREADS: usize = 4;
-/// A block under this size is touched on the producer thread alone.
-const TOUCH_PARALLEL_BYTES: usize = 4 << 20;
-const PAGE: usize = 4096;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -60,6 +56,9 @@ pub enum StoreError {
 	NoLayer(Layer),
 	#[error("the snapshot does not fit the store's frames")]
 	ShapeMismatch,
+	/// A spilled frame on its way back; asked again, it is there once its read completed.
+	#[error("frame {frame} is being read back")]
+	Pending { frame: usize },
 	#[error("frame file: {0}")]
 	Io(#[from] io::Error),
 }
@@ -71,28 +70,64 @@ impl Budget {
 	/// Kept free for everything else.
 	pub const MARGIN: u64 = 2 << 30;
 
-	/// The budget on this machine now: `max(0, available + reclaimed - 2 GiB)`, capped by `percent` of the
+	/// The budget on `memory`'s readings now: `max(0, available + reclaimed - 2 GiB)`, capped by `percent` of the
 	/// physical memory when `percent > 0` (Auto at 0). `reclaimed` is the outgoing run's store, which counts as
-	/// free. Available is the OS's estimate of memory a process can take without swapping (sysinfo).
-	pub fn compute(reclaimed_bytes: u64, percent: u32) -> u64 {
-		let mut system = sysinfo::System::new();
-		system.refresh_memory();
-		Self::of(system.available_memory(), system.total_memory(), percent, reclaimed_bytes)
+	/// free.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn compute(memory: Memory, reclaimed_bytes: u64, percent: u32) -> u64 {
+		let (available, physical) = memory.read();
+		Self::of(available, physical, percent, reclaimed_bytes)
 	}
 
 	/// The arithmetic of [`compute`](Self::compute) on given readings.
 	pub fn of(available: u64, physical: u64, percent: u32, reclaimed: u64) -> u64 {
-		let by_available = (available + reclaimed).saturating_sub(Self::MARGIN);
+		Self::share((available + reclaimed).saturating_sub(Self::MARGIN), physical, percent)
+	}
+
+	/// The budget where the frames have `memory` bytes to themselves (the browser): all of it at Auto (0),
+	/// else `percent` of it.
+	pub fn of_memory(memory: u64, percent: u32) -> u64 {
+		Self::share(memory, memory, percent)
+	}
+
+	/// `free` bytes, capped by `percent` of `physical` when `percent > 0` (Auto at 0).
+	fn share(free: u64, physical: u64, percent: u32) -> u64 {
 		if percent == 0 {
-			return by_available;
+			return free;
 		}
 		let by_share = (physical as f64 * percent.min(100) as f64 / 100.0) as u64;
-		by_share.min(by_available)
+		by_share.min(free)
 	}
 
 	/// Frames of `frame_bytes` (not 0) each that fit into `budget`.
 	pub fn frames_in(budget: u64, frame_bytes: u64) -> usize {
 		(budget / frame_bytes).min(usize::MAX as u64) as usize
+	}
+}
+
+/// Where a budget's memory readings come from.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Memory {
+	/// The OS's at each budget: the memory a process can take without swapping, and the physical (sysinfo).
+	#[default]
+	System,
+	/// Fixed readings, so the budgets do not depend on the machine.
+	Fixed { available: u64, physical: u64 },
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Memory {
+	/// (available, physical) bytes.
+	pub fn read(self) -> (u64, u64) {
+		match self {
+			Self::System => {
+				let mut system = sysinfo::System::new();
+				system.refresh_memory();
+				(system.available_memory(), system.total_memory())
+			}
+			Self::Fixed { available, physical } => (available, physical),
+		}
 	}
 }
 
@@ -141,66 +176,20 @@ impl StoreLayout {
 	}
 
 	/// Bytes of a spill file holding `frames` frames.
+	#[cfg(not(target_arch = "wasm32"))]
 	pub fn file_bytes(&self, frames: usize) -> u64 {
 		HEADER_BYTES + frames as u64 * self.frame_bytes() as u64
 	}
 }
 
-/// The spill file: frames `first..capacity`, `first` moved down (the file still empty) when memory runs out
-/// before the budget's frame count.
-struct Spill {
-	/// Unlinked at creation: the OS reclaims it when the last handle closes, a killed process included.
-	file: File,
-	first: AtomicUsize,
-}
-
-/// Waited for on the producer thread before the first block is allocated.
-pub type Release = Box<dyn FnOnce() + Send>;
-
-/// Fires when a store is dropped (its last handle let go), so the next store's producer can wait for the
-/// memory without polling. [`FrameStore::release_signal`].
-pub struct ReleaseSignal {
-	done: Mutex<bool>,
-	fired: Condvar,
-}
-
-impl ReleaseSignal {
-	/// Waits up to `timeout` for the drop; whether it happened.
-	pub fn wait(&self, timeout: Duration) -> bool {
-		let deadline = Instant::now() + timeout;
-		let mut done = lock(&self.done);
-		while !*done {
-			let left = deadline.saturating_duration_since(Instant::now());
-			if left.is_zero() {
-				break;
-			}
-			done = self.fired.wait_timeout(done, left).unwrap_or_else(PoisonError::into_inner).0;
-		}
-		*done
-	}
-}
-
-/// Removes the named `.wdfs` spill files earlier builds left in `dir` when their process died; the bytes freed.
-pub fn sweep_leftovers(dir: &Path) -> io::Result<u64> {
-	let mut freed = 0;
-	let entries = match std::fs::read_dir(dir) {
-		Ok(entries) => entries,
-		Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0),
-		Err(e) => return Err(e),
-	};
-	for entry in entries {
-		let entry = entry?;
-		if entry.path().extension().is_some_and(|e| e == "wdfs") {
-			freed += entry.metadata()?.len();
-			std::fs::remove_file(entry.path())?;
-		}
-	}
-	Ok(freed)
-}
+/// The next store's [`FrameStore::id`].
+static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
 /// See the module docs for layout and threading.
 pub struct FrameStore {
+	id: u64,
 	layout: StoreLayout,
+	ram_budget: u64,
 	ram_frames: usize,
 	/// Shared with readers, so a reader renders without the block's lock; a buffer whose reader is gone is reused.
 	blocks: Box<[Mutex<Option<Arc<Snapshot>>>]>,
@@ -211,8 +200,6 @@ pub struct FrameStore {
 	/// A few buffers for the frames that go to the file.
 	file_buffers: Mutex<Vec<Snapshot>>,
 	first_spilled: AtomicUsize,
-	spill: OnceLock<Spill>,
-	spill_dir: PathBuf,
 	present: Box<[AtomicBool]>,
 	/// Frames `0..prefix` are all present.
 	prefix: AtomicUsize,
@@ -225,39 +212,70 @@ pub struct FrameStore {
 	/// The frame written last before the clear, with its index.
 	/// (stored index, generation it was made in, the frame).
 	latest: Mutex<Option<(usize, u64, Arc<Snapshot>)>>,
-	/// The capturing thread's end of the producer, and the blocks taken from it: all `ram_frames` taken means
-	/// the producer finished, fewer with the channel closed means its memory ran out.
-	prepared: Mutex<Option<(Receiver<Snapshot>, usize)>>,
 	/// Serialises writers and the clear.
 	writing: Mutex<()>,
-	cancel: Arc<AtomicBool>,
-	producer: Mutex<Option<JoinHandle<()>>>,
+	/// Where the frames past memory go; none for a store in memory alone.
+	spill: Option<Spill>,
+	#[cfg(not(target_arch = "wasm32"))]
 	released: Arc<ReleaseSignal>,
 }
 
 impl FrameStore {
 	/// A store in the default cache folder (`<temp>/wavedude`) with `ram_budget` bytes of memory. The file for
 	/// the frames beyond the budget is created now, so a lack of disk space shows at the start.
+	#[cfg(not(target_arch = "wasm32"))]
 	pub fn new(layout: StoreLayout, ram_budget: u64, release: Option<Release>) -> io::Result<Self> {
 		Self::in_dir(layout, ram_budget, release, &std::env::temp_dir().join("wavedude"))
 	}
 
 	/// As [`new`](Self::new) with the spill file in `dir`.
-	pub fn in_dir(layout: StoreLayout, ram_budget: u64, release: Option<Release>, dir: &Path) -> io::Result<Self> {
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn in_dir(
+		layout: StoreLayout,
+		ram_budget: u64,
+		release: Option<Release>,
+		dir: &std::path::Path,
+	) -> io::Result<Self> {
+		let mut store = Self::made(layout, ram_budget, Some(Spill::File(Disk::new(dir))));
+		let ram_frames = store.ram_frames;
+		if ram_frames < layout.capacity {
+			store.start_spill(ram_frames)?;
+		}
+		if ram_frames > 0
+			&& let Some(Spill::File(disk)) = store.spill.as_mut()
+		{
+			disk.produce(ram_frames, layout, release)?;
+		}
+		Ok(store)
+	}
+
+	/// A store holding at most `ram_budget` bytes of frames, in memory: a frame past them is refused
+	/// ([`StoreError::Full`]).
+	pub fn in_memory(layout: StoreLayout, ram_budget: u64) -> Self {
+		Self::made(layout, ram_budget, None)
+	}
+
+	/// A store holding `ram_budget` bytes of frames in memory, the rest in `backend`.
+	#[cfg(any(test, target_arch = "wasm32"))]
+	pub fn with_spill(layout: StoreLayout, ram_budget: u64, backend: Box<dyn SpillBackend>) -> Self {
+		let store = Self::made(layout, ram_budget, Some(Spill::Pending(PendingSpill::new(backend))));
+		store.first_spilled.store(store.ram_frames, Ordering::Release);
+		store
+	}
+
+	fn made(layout: StoreLayout, ram_budget: u64, spill: Option<Spill>) -> Self {
 		assert!(!layout.layers.is_empty(), "a store needs at least one layer");
-		let frame_bytes = layout.frame_bytes();
-		let ram_frames = layout.capacity.min(Budget::frames_in(ram_budget, frame_bytes as u64));
-		let cancel = Arc::new(AtomicBool::new(false));
-		let store = Self {
+		let ram_frames = layout.capacity.min(Budget::frames_in(ram_budget, layout.frame_bytes() as u64));
+		Self {
+			id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
 			layout,
+			ram_budget,
 			ram_frames,
 			blocks: (0..layout.capacity).map(|_| Mutex::new(None)).collect(),
 			memory_end: AtomicUsize::new(ram_frames),
 			recycled: Mutex::new(Vec::new()),
 			file_buffers: Mutex::new(Vec::new()),
 			first_spilled: AtomicUsize::new(layout.capacity),
-			spill: OnceLock::new(),
-			spill_dir: dir.to_path_buf(),
 			present: (0..layout.capacity).map(|_| AtomicBool::new(false)).collect(),
 			prefix: AtomicUsize::new(0),
 			present_count: AtomicUsize::new(0),
@@ -265,27 +283,15 @@ impl FrameStore {
 			generation: AtomicU64::new(0),
 			last_written: AtomicUsize::new(layout.capacity),
 			latest: Mutex::new(None),
-			prepared: Mutex::new(None),
 			writing: Mutex::new(()),
-			cancel: cancel.clone(),
-			producer: Mutex::new(None),
-			released: Arc::new(ReleaseSignal { done: Mutex::new(false), fired: Condvar::new() }),
-		};
-		if ram_frames < layout.capacity {
-			store.start_spill(ram_frames)?;
+			spill,
+			#[cfg(not(target_arch = "wasm32"))]
+			released: Arc::new(ReleaseSignal::new()),
 		}
-		if ram_frames > 0 {
-			let (tx, rx) = sync_channel(PREPARE_DEPTH);
-			*lock(&store.prepared) = Some((rx, 0));
-			let handle = std::thread::Builder::new()
-				.name("frame-blocks".into())
-				.spawn(move || prepare_blocks(ram_frames, layout, release, tx, &cancel))?;
-			*lock(&store.producer) = Some(handle);
-		}
-		Ok(store)
 	}
 
 	/// Fires when this store is dropped.
+	#[cfg(not(target_arch = "wasm32"))]
 	pub fn release_signal(&self) -> Arc<ReleaseSignal> {
 		self.released.clone()
 	}
@@ -346,9 +352,19 @@ impl FrameStore {
 		(frame..self.layout.capacity).find(|&f| !self.has(f))
 	}
 
+	/// Unique among the process's stores.
+	pub fn id(&self) -> u64 {
+		self.id
+	}
+
 	/// Moves at every [`clear`](Self::clear): the frames present belong to this generation.
 	pub fn generation(&self) -> u64 {
 		self.generation.load(Ordering::Acquire)
+	}
+
+	/// The bytes of memory the store was given for its frames.
+	pub fn ram_budget(&self) -> u64 {
+		self.ram_budget
 	}
 
 	/// Frames the budget planned for memory.
@@ -375,9 +391,14 @@ impl FrameStore {
 		self.first_spilled().min(self.ram_frames) as u64 * self.frame_bytes() as u64
 	}
 
-	/// The spill file's size, when the store has one.
+	/// The spill's size, when the store has one: the file's, or the pending spill's frames.
 	pub fn spill_bytes(&self) -> Option<u64> {
-		self.spill.get().map(|s| s.file.metadata().map_or(0, |m| m.len()))
+		match self.spill.as_ref()? {
+			#[cfg(not(target_arch = "wasm32"))]
+			Spill::File(disk) => disk.bytes(),
+			#[cfg(any(test, target_arch = "wasm32"))]
+			Spill::Pending(_) => Some(self.frames_on_disk() as u64 * self.frame_bytes() as u64),
+		}
 	}
 
 	/// The step index stored frame `frame` holds the state after.
@@ -393,24 +414,24 @@ impl FrameStore {
 	/// earlier frame when its memory could not be allocated, which happens while the file is empty.
 	fn start_spill(&self, first: usize) -> io::Result<()> {
 		debug_assert!(self.frames_on_disk() == 0, "the file is empty when its first frame moves");
-		let layout = &self.layout;
-		let spill = match self.spill.get() {
-			Some(spill) => spill,
-			None => {
-				std::fs::create_dir_all(&self.spill_dir)?;
-				let file = tempfile::tempfile_in(&self.spill_dir)?;
-				assert!(
-					self.spill.set(Spill { file, first: AtomicUsize::new(first) }).is_ok(),
-					"the spill is created once"
-				);
-				self.spill.get().expect("set above")
-			}
-		};
-		spill.file.set_len(layout.file_bytes(layout.capacity - first))?;
-		write_at(&spill.file, &header(layout, first), 0)?;
-		spill.first.store(first, Ordering::Release);
+		match self.spill.as_ref().expect("a store with a spill") {
+			#[cfg(not(target_arch = "wasm32"))]
+			Spill::File(disk) => disk.start(&self.layout, first)?,
+			#[cfg(any(test, target_arch = "wasm32"))]
+			Spill::Pending(_) => {}
+		}
 		self.first_spilled.store(first, Ordering::Release);
 		Ok(())
+	}
+
+	/// The producer's next memory frame (store.rs's Threads); none without a producer.
+	fn prepared_block(&self) -> Option<Result<Snapshot, usize>> {
+		match self.spill.as_ref()? {
+			#[cfg(not(target_arch = "wasm32"))]
+			Spill::File(disk) => disk.prepared_block(),
+			#[cfg(any(test, target_arch = "wasm32"))]
+			Spill::Pending(_) => None,
+		}
 	}
 
 	/// The buffer to capture frame `frame` into: a cleared frame's buffer or the next prepared memory frame
@@ -422,21 +443,13 @@ impl FrameStore {
 				return block;
 			}
 			if frame < self.memory_end.load(Ordering::Acquire) {
-				let mut prepared = lock(&self.prepared);
-				if let Some((rx, taken)) = prepared.as_mut() {
-					match rx.recv() {
-						Ok(block) => {
-							*taken += 1;
-							return block;
-						}
-						Err(_) => {
-							let exhausted = *taken < self.ram_frames;
-							*prepared = None;
-							if exhausted {
-								self.memory_end.fetch_min(frame, Ordering::AcqRel);
-							}
-						}
+				// All `ram_frames` taken means the producer finished, fewer means its memory ran out.
+				match self.prepared_block() {
+					Some(Ok(block)) => return block,
+					Some(Err(taken)) if taken < self.ram_frames => {
+						self.memory_end.fetch_min(frame, Ordering::AcqRel);
 					}
+					_ => {}
 				}
 				if frame < self.memory_end.load(Ordering::Acquire) {
 					return Snapshot::new(self.layout.shape);
@@ -459,7 +472,8 @@ impl FrameStore {
 	}
 
 	/// Stores `snapshot` (its planes in the store's shape) as frame `frame`: kept as it is while the frame
-	/// belongs in memory, else written to the file and its buffer recycled. A present frame is left as it is.
+	/// belongs in memory, else written to the file and its buffer recycled. A present frame is left as it is. A
+	/// store in memory alone refuses a frame past its memory.
 	pub fn write_at(&self, frame: usize, mut snapshot: Snapshot) -> Result<(), StoreError> {
 		let _writing = lock(&self.writing);
 		if frame >= self.layout.capacity {
@@ -482,20 +496,29 @@ impl FrameStore {
 		}
 		let memory_end = self.memory_end.load(Ordering::Acquire);
 		if frame >= memory_end && frame < self.first_spilled() && self.frames_on_disk() == 0 {
+			if self.spill.is_none() {
+				return Err(StoreError::Full(memory_end));
+			}
 			tracing::debug!(frame, "frame memory exhausted, the rest goes to the file");
 			self.start_spill(frame)?;
 		}
 		if frame < self.first_spilled() {
 			*lock(&self.blocks[frame]) = Some(Arc::new(snapshot));
 		} else {
-			let spill = self.spill.get().expect("spill file exists past the first spilled frame");
-			let mut at = self.file_offset(spill, frame);
-			for &layer in self.layout.layers {
-				write_at(&spill.file, snapshot.plane(layer), at)?;
-				at += plane as u64;
+			match self.spill.as_ref().expect("a spilled frame has a spill") {
+				#[cfg(not(target_arch = "wasm32"))]
+				Spill::File(disk) => {
+					disk.write(&self.layout, frame, &snapshot)?;
+					self.give_back(frame, snapshot);
+				}
+				#[cfg(any(test, target_arch = "wasm32"))]
+				Spill::Pending(pending) => {
+					let planes: Vec<&[u8]> = self.layout.layers.iter().map(|&l| snapshot.plane(l)).collect();
+					pending.write(self.generation(), frame, &planes);
+					*lock(&self.blocks[frame]) = Some(Arc::new(snapshot));
+				}
 			}
 			self.spilled_count.fetch_add(1, Ordering::AcqRel);
-			self.give_back(frame, snapshot);
 		}
 		self.present[frame].store(true, Ordering::Release);
 		self.present_count.fetch_add(1, Ordering::AcqRel);
@@ -506,6 +529,34 @@ impl FrameStore {
 		}
 		self.prefix.store(prefix, Ordering::Release);
 		Ok(())
+	}
+
+	/// Takes the pending spill's completed writes: a frame written leaves memory unless it is the frame written
+	/// last. A failed write is the error.
+	#[cfg(any(test, target_arch = "wasm32"))]
+	pub fn settle(&self) -> Result<(), StoreError> {
+		let Some(Spill::Pending(pending)) = &self.spill else { return Ok(()) };
+		let _writing = lock(&self.writing);
+		for frame in pending.settle(self.generation(), self.last_written.load(Ordering::Acquire))? {
+			if let Some(snapshot) = lock(&self.blocks[frame]).take()
+				&& let Ok(snapshot) = Arc::try_unwrap(snapshot)
+			{
+				self.give_back(frame, snapshot);
+			}
+		}
+		Ok(())
+	}
+
+	/// The pending spill has as many writes in flight as it takes.
+	#[cfg(any(test, target_arch = "wasm32"))]
+	pub fn spill_busy(&self) -> bool {
+		matches!(&self.spill, Some(Spill::Pending(p)) if p.busy())
+	}
+
+	/// The pending spill has writes in flight.
+	#[cfg(any(test, target_arch = "wasm32"))]
+	pub fn spill_writing(&self) -> bool {
+		matches!(&self.spill, Some(Spill::Pending(p)) if p.writing())
 	}
 
 	/// Returns a buffer [`buffer_for`](Self::buffer_for) handed out for `frame` that was not kept, to the pool
@@ -564,15 +615,15 @@ impl FrameStore {
 		self.present_count.store(0, Ordering::Release);
 		self.spilled_count.store(0, Ordering::Release);
 		self.generation.fetch_add(1, Ordering::AcqRel);
+		#[cfg(any(test, target_arch = "wasm32"))]
+		if let Some(Spill::Pending(pending)) = &self.spill {
+			pending.cleared(from);
+		}
 	}
 
 	/// The frame written last before the last clear, with its index: the picture of the previous project state.
 	pub fn latest(&self) -> Option<(usize, u64, Arc<Snapshot>)> {
 		lock(&self.latest).clone()
-	}
-
-	fn file_offset(&self, spill: &Spill, frame: usize) -> u64 {
-		HEADER_BYTES + (frame - spill.first.load(Ordering::Acquire)) as u64 * self.frame_bytes() as u64
 	}
 
 	/// Calls `f` with the plane of `layer` of present frame `frame`.
@@ -597,8 +648,8 @@ impl FrameStore {
 		Ok(f(buf))
 	}
 
-	/// Reads a spilled frame's plane, refused when the frame is not on the file or a clear ran meanwhile (the
-	/// next generation may have written the same slot).
+	/// Reads a spilled frame's plane, refused when the frame is not spilled or a clear ran meanwhile (the next
+	/// generation may have written the same slot).
 	fn read_spilled_frame(&self, frame: usize, index: usize, out: &mut [u8]) -> Result<(), StoreError> {
 		let not_stored = || StoreError::NotStored { frame, count: self.present_count() };
 		let generation = self.generation();
@@ -638,147 +689,149 @@ impl FrameStore {
 		Ok((self.layer_index(layer)?, self.layout.shape.plane_bytes()))
 	}
 
-	fn read_spilled(&self, frame: usize, index: usize, out: &mut [u8]) -> io::Result<()> {
-		let spill = self.spill.get().expect("a stored frame outside memory is in the file");
-		read_at(&spill.file, out, self.file_offset(spill, frame) + (index * out.len()) as u64)
-	}
-}
-
-impl Drop for FrameStore {
-	fn drop(&mut self) {
-		self.cancel.store(true, Ordering::Relaxed);
-		// The producer may wait on a full channel: dropping the receiver ends it.
-		self.prepared.get_mut().unwrap_or_else(PoisonError::into_inner).take();
-		if let Some(handle) = self.producer.get_mut().unwrap_or_else(PoisonError::into_inner).take() {
-			let _ = handle.join();
-		}
-		*lock(&self.released.done) = true;
-		self.released.fired.notify_all();
-	}
-}
-
-fn header(layout: &StoreLayout, first: usize) -> [u8; HEADER_BYTES as usize] {
-	let s = &layout.shape;
-	let flags = layout.layers.iter().fold(0, |f, l| {
-		f | match l {
-			Layer::Field => 1,
-			Layer::Intensity => 2,
-		}
-	});
-	let fields = [
-		MAGIC,
-		VERSION,
-		s.width() as i32,
-		s.height() as i32,
-		flags,
-		layout.capture_every as i32,
-		layout.capacity as i32,
-		first as i32,
-		match s.format {
-			SampleFormat::Half => 0,
-			SampleFormat::Index => 1,
-		},
-		s.divisor as i32,
-		s.canvas_width as i32,
-		s.canvas_height as i32,
-		s.intensity_root as i32,
-	];
-	let mut out = [0; HEADER_BYTES as usize];
-	for (chunk, v) in out.as_chunks_mut::<4>().0.iter_mut().zip(fields) {
-		*chunk = v.to_le_bytes();
-	}
-	out
-}
-
-/// Allocates `frames` frames of `layout`, touches their pages and hands them over, after `release`.
-/// Stops at a failed allocation, a cancel, or a dropped receiver.
-fn prepare_blocks(
-	frames: usize,
-	layout: StoreLayout,
-	release: Option<Release>,
-	tx: SyncSender<Snapshot>,
-	cancel: &AtomicBool,
-) {
-	if let Some(release) = release {
-		release();
-	}
-	let pool = rayon::ThreadPoolBuilder::new()
-		.num_threads(TOUCH_THREADS)
-		.thread_name(|i| format!("frame-touch-{i}"))
-		.build()
-		.inspect_err(|e| tracing::warn!("the frame-touch pool did not start, pages are touched on one thread: {e}"));
-	let bytes = layout.shape.plane_bytes();
-	let plane = || {
-		let mut plane = Vec::new();
-		plane.try_reserve_exact(bytes).ok()?;
-		match (&pool, bytes >= TOUCH_PARALLEL_BYTES) {
-			(Ok(pool), true) => pool.install(|| {
-				let chunk = bytes.div_ceil(TOUCH_THREADS).next_multiple_of(PAGE);
-				plane.par_extend(rayon::iter::repeat_n(0u8, bytes).with_min_len(chunk));
-			}),
-			_ => plane.resize(bytes, 0),
-		}
-		Some(plane)
-	};
-	for _ in 0..frames {
-		if cancel.load(Ordering::Relaxed) {
-			return;
-		}
-		let mut block = Snapshot::new(layout.shape);
-		for &layer in layout.layers {
-			let Some(p) = plane() else { return };
-			match layer {
-				Layer::Field => block.field = p,
-				Layer::Intensity => block.intensity = p,
+	fn read_spilled(&self, frame: usize, index: usize, out: &mut [u8]) -> Result<(), StoreError> {
+		match self.spill.as_ref().expect("a stored frame outside memory is spilled") {
+			#[cfg(not(target_arch = "wasm32"))]
+			Spill::File(disk) => disk.read(&self.layout, frame, index, out)?,
+			#[cfg(any(test, target_arch = "wasm32"))]
+			Spill::Pending(pending) => {
+				let planes = pending.read(self.generation(), frame).ok_or(StoreError::Pending { frame })??;
+				let plane = out.len();
+				out.copy_from_slice(&planes[index * plane..][..plane]);
 			}
 		}
-		if tx.send(block).is_err() {
-			return;
-		}
+		Ok(())
 	}
 }
 
-#[cfg(unix)]
-fn write_at(file: &File, bytes: &[u8], at: u64) -> io::Result<()> {
-	std::os::unix::fs::FileExt::write_all_at(file, bytes, at)
+/// Where a store's frames past its memory go.
+enum Spill {
+	#[cfg(not(target_arch = "wasm32"))]
+	File(Disk),
+	#[cfg(any(test, target_arch = "wasm32"))]
+	Pending(PendingSpill),
 }
 
-#[cfg(unix)]
-fn read_at(file: &File, bytes: &mut [u8], at: u64) -> io::Result<()> {
-	std::os::unix::fs::FileExt::read_exact_at(file, bytes, at)
-}
-
-#[cfg(windows)]
-fn write_at(file: &File, mut bytes: &[u8], mut at: u64) -> io::Result<()> {
-	use std::os::windows::fs::FileExt;
-	while !bytes.is_empty() {
-		let n = file.seek_write(bytes, at)?;
-		if n == 0 {
-			return Err(io::ErrorKind::WriteZero.into());
+#[cfg(not(target_arch = "wasm32"))]
+impl Drop for FrameStore {
+	fn drop(&mut self) {
+		if let Some(Spill::File(disk)) = self.spill.as_mut() {
+			disk.stop();
 		}
-		bytes = &bytes[n..];
-		at += n as u64;
+		self.released.fire();
 	}
-	Ok(())
-}
-
-#[cfg(windows)]
-fn read_at(file: &File, mut bytes: &mut [u8], mut at: u64) -> io::Result<()> {
-	use std::os::windows::fs::FileExt;
-	while !bytes.is_empty() {
-		let n = file.seek_read(bytes, at)?;
-		if n == 0 {
-			return Err(io::ErrorKind::UnexpectedEof.into());
-		}
-		bytes = &mut bytes[n..];
-		at += n as u64;
-	}
-	Ok(())
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::engine::SampleFormat;
+	use crate::run::pending::fake;
+
+	#[test]
+	fn a_scrub_across_spilled_frames_holds_two_reads_and_two_frames_at_most() {
+		let shape = FrameShape {
+			canvas_width: 4,
+			canvas_height: 2,
+			divisor: 1,
+			format: SampleFormat::Index,
+			field_brightness: 1.0,
+			intensity_brightness: 1.0,
+			intensity_root: false,
+		};
+		let layout = StoreLayout { shape, layers: &[Layer::Field], capacity: 40, capture_every: 1 };
+		let disk = Arc::<Mutex<fake::Disk>>::default();
+		let store = FrameStore::with_spill(layout, 0, Box::new(fake::Backend(disk.clone())));
+		for k in 0..40 {
+			let mut s = Snapshot::new(shape);
+			s.field = vec![k; shape.plane_bytes()];
+			store.write(s).unwrap();
+		}
+		lock(&disk).complete();
+		store.settle().unwrap();
+		let held = || match &store.spill {
+			Some(Spill::Pending(p)) => p.held(),
+			_ => unreachable!("a pending spill"),
+		};
+		for (i, frame) in (0..39).chain((0..39).rev()).enumerate() {
+			match store.copy_layer(frame, Layer::Field) {
+				Ok(plane) => assert_eq!(plane, vec![frame as u8; shape.plane_bytes()]),
+				Err(e) => assert!(matches!(e, StoreError::Pending { .. }), "{e}"),
+			}
+			let (reads, loaded) = held();
+			assert!(reads <= 3 && loaded <= 2, "frame {frame}: {reads} reads, {loaded} kept");
+			assert!(lock(&disk).reads.len() <= 2, "two reads in flight at most");
+			if i % 5 == 4 {
+				lock(&disk).complete();
+			}
+		}
+		lock(&disk).complete();
+		let landed = store.copy_layer(0, Layer::Field);
+		assert!(matches!(landed, Err(StoreError::Pending { frame: 0 })), "the newest frame asked for is read next");
+		lock(&disk).complete();
+		assert_eq!(store.copy_layer(0, Layer::Field).unwrap(), vec![0; shape.plane_bytes()]);
+		assert!(held().1 <= 2);
+	}
+
+	#[test]
+	fn a_pending_spill_holds_its_frames_until_written_and_reads_them_back_later() {
+		let shape = FrameShape {
+			canvas_width: 4,
+			canvas_height: 2,
+			divisor: 1,
+			format: SampleFormat::Index,
+			field_brightness: 1.0,
+			intensity_brightness: 1.0,
+			intensity_root: false,
+		};
+		let layout = StoreLayout { shape, layers: &[Layer::Field], capacity: 6, capture_every: 1 };
+		let disk = Arc::<Mutex<fake::Disk>>::default();
+		let store =
+			FrameStore::with_spill(layout, 2 * layout.frame_bytes() as u64, Box::new(fake::Backend(disk.clone())));
+		let plane = |k: u8| vec![k; shape.plane_bytes()];
+		let frame = |k: u8| {
+			let mut s = Snapshot::new(shape);
+			s.field = plane(k);
+			s
+		};
+		for k in 0..4 {
+			store.write(frame(k)).unwrap();
+		}
+		assert_eq!((store.first_spilled(), store.frames_in_memory(), store.frames_on_disk()), (2, 2, 2));
+		assert_eq!(store.copy_layer(2, Layer::Field).unwrap(), plane(2), "a write in flight reads from memory");
+		assert!(store.spill_writing());
+
+		lock(&disk).complete();
+		store.settle().unwrap();
+		assert!(!store.spill_writing());
+		assert_eq!(store.copy_layer(3, Layer::Field).unwrap(), plane(3), "the frame written last stays in memory");
+		assert!(lock(&disk).reads.is_empty());
+		for _ in 0..2 {
+			assert!(matches!(store.copy_layer(2, Layer::Field), Err(StoreError::Pending { frame: 2 })));
+		}
+		assert_eq!(lock(&disk).reads.len(), 1, "one read in flight per frame");
+		lock(&disk).complete();
+		assert_eq!(store.copy_layer(2, Layer::Field).unwrap(), plane(2));
+		assert_eq!(store.with_layer(2, Layer::Field, |b| b[0]).unwrap(), 2, "kept once read back");
+
+		store.write(frame(4)).unwrap();
+		lock(&disk).complete();
+		store.settle().unwrap();
+		assert!(matches!(store.copy_layer(3, Layer::Field), Err(StoreError::Pending { frame: 3 })), "no longer last");
+
+		store.write(frame(5)).unwrap();
+		store.clear();
+		let (index, _, latest) = store.latest().unwrap();
+		assert_eq!((index, &latest.field), (5, &plane(5)), "the frame in flight is the latest");
+		assert_eq!(lock(&disk).dropped, [0]);
+		lock(&disk).complete();
+		store.settle().unwrap();
+
+		store.write_at(3, frame(7)).unwrap();
+		lock(&disk).fail = Some(io::ErrorKind::QuotaExceeded);
+		lock(&disk).complete();
+		assert!(matches!(store.settle(), Err(StoreError::Io(e)) if e.kind() == io::ErrorKind::QuotaExceeded));
+	}
 
 	#[test]
 	fn budget_arithmetic() {
@@ -788,25 +841,8 @@ mod tests {
 		assert_eq!(Budget::of(10 * G, 64 * G, 10, 3 * G), (6.4 * G as f64) as u64, "the share caps it");
 		assert_eq!(Budget::of(G, 64 * G, 0, 0), 0);
 		assert_eq!(Budget::of(10 * G, 64 * G, 500, 0), 8 * G);
-	}
-
-	#[test]
-	fn header_fields() {
-		let shape = FrameShape {
-			canvas_width: 67,
-			canvas_height: 45,
-			divisor: 2,
-			format: SampleFormat::Index,
-			field_brightness: 1.0,
-			intensity_brightness: 1.0,
-			intensity_root: true,
-		};
-		let layout = StoreLayout { shape, layers: &[Layer::Field, Layer::Intensity], capacity: 9, capture_every: 4 };
-		let h = header(&layout, 3);
-		let at = |i: usize| i32::from_le_bytes(h[i..i + 4].try_into().unwrap());
-		assert_eq!(&h[0..4], b"WDFS");
-		assert_eq!([at(4), at(8), at(12), at(16), at(20), at(24), at(28)], [3, 34, 23, 3, 4, 9, 3]);
-		assert_eq!([at(32), at(36), at(40), at(44), at(48)], [1, 2, 67, 45, 1]);
-		assert!(h[52..].iter().all(|&b| b == 0));
+		assert_eq!(Budget::of_memory(2 * G, 0), 2 * G, "Auto takes the memory");
+		assert_eq!(Budget::of_memory(2 * G, 25), G / 2);
+		assert_eq!(Budget::of_memory(2 * G, 500), 2 * G);
 	}
 }

@@ -4,10 +4,12 @@
 //! Pure arithmetic over a probe's settings and its recording, in pixels relative to the box's top-left corner, so a
 //! preview and an export draw the same graph. Numbers are formatted with a decimal point.
 
+use epaint::text::{FontId, FontsView};
+use epaint::{ClippedShape, Color32, Rect, Shape, Stroke, StrokeKind};
 use wavedude_core::engine::probes::ProbeTrace;
-use wavedude_core::model::{Layer, Measurement, Probe, ScaleMode, YScale};
+use wavedude_core::model::{Display, Layer, Measurement, Probe, ScaleMode, YScale};
 
-use crate::draw::{DeviceGrid, Ink, Pen, Rect, Rgba, Shape, TextMetrics, TextStyle};
+use crate::draw::{DeviceGrid, TextMetrics};
 
 /// Smallest box drawn at all, pixels.
 pub const MIN_VISIBLE: (f32, f32) = (40.0, 30.0);
@@ -32,6 +34,8 @@ pub struct GraphData<'a> {
 	pub profile_length: f64,
 	/// Steps done at the instant.
 	pub steps_sampled: u64,
+	/// Smallest top of a fitted y range, 0 for none; see [`full_scale`].
+	pub floor: f64,
 }
 
 impl<'a> GraphData<'a> {
@@ -45,7 +49,27 @@ impl<'a> GraphData<'a> {
 			profile,
 			profile_length: trace.length,
 			steps_sampled: trace.steps_sampled.min(step + 1),
+			floor: 0.0,
 		}
+	}
+
+	/// The same data with fitted ranges topping at least at `floor`.
+	pub fn with_floor(self, floor: f64) -> Self {
+		Self { floor, ..self }
+	}
+}
+
+/// What the picture shows at the palette's top for `probe`'s measurement (0 for none): below it a fitted range
+/// would draw what the picture renders black.
+pub fn full_scale(probe: &Probe, display: &Display) -> f64 {
+	let brightness = match probe.layer {
+		Layer::Field => display.field.brightness,
+		Layer::Intensity => display.intensity.brightness,
+	};
+	match probe.measurement {
+		Measurement::Amplitude => 1.0 / brightness,
+		Measurement::Value => 1.0 / (brightness * brightness),
+		Measurement::IntegratedValue => 0.0,
 	}
 }
 
@@ -103,17 +127,18 @@ fn extent(values: &[f32]) -> Option<(f32, f32)> {
 	})
 }
 
-/// Fitted y range: an amplitude (or data below zero) symmetric about zero, else 0 up; all zeros keep the range.
-fn auto_range(probe: &Probe, lo: f64, hi: f64, range: &mut (f64, f64)) {
+/// Fitted y range, its top at least `floor`: an amplitude (or data below zero) symmetric about zero, else 0 up; all
+/// zeros keep the range.
+fn auto_range(probe: &Probe, lo: f64, hi: f64, floor: f64, range: &mut (f64, f64)) {
 	let magnitude = lo.abs().max(hi.abs());
 	if magnitude <= 0.0 {
 		return;
 	}
 	*range = if probe.measurement == Measurement::Amplitude || lo < 0.0 {
-		let top = magnitude * (1.0 + MARGIN);
+		let top = magnitude.max(floor) * (1.0 + MARGIN);
 		(-top, top)
 	} else {
-		(0.0, hi * (1.0 + MARGIN))
+		(0.0, hi.max(floor) * (1.0 + MARGIN))
 	};
 }
 
@@ -121,15 +146,15 @@ fn auto_range(probe: &Probe, lo: f64, hi: f64, range: &mut (f64, f64)) {
 fn log_range(probe: &Probe, fitted_hi: Option<f64>) -> (f64, f64) {
 	let decades = probe.decades as f64;
 	if let Some(hi) = fitted_hi.filter(|h| *h > 0.0) {
-		let top = hi.log10() + MARGIN * decades;
-		return (10f64.powf(top - decades), 10f64.powf(top));
+		let top = libm::log10(hi) + MARGIN * decades;
+		return (libm::pow(10.0, top - decades), libm::pow(10.0, top));
 	}
 	let (mut lo, mut hi) = fixed_range(probe);
 	if hi.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
 		hi = 1.0;
 	}
 	if probe.auto_scale_y || lo.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) || lo >= hi {
-		lo = hi / 10f64.powf(decades);
+		lo = hi / libm::pow(10.0, decades);
 	}
 	(lo, hi)
 }
@@ -141,8 +166,8 @@ pub fn ranges(probe: &Probe, data: &GraphData<'_>, total_steps: u64) -> (f64, f6
 	let (x_min, x_max) = if probe.shows_profile() {
 		let x_max = if data.profile.is_some() && data.profile_length > 0.0 { data.profile_length } else { 1.0 };
 		if let Some((lo, hi)) = data.profile.and_then(extent).filter(|_| probe.auto_scale_y) {
-			fitted_hi = Some(hi as f64);
-			auto_range(probe, lo as f64, hi as f64, &mut y);
+			fitted_hi = Some((hi as f64).max(data.floor));
+			auto_range(probe, lo as f64, hi as f64, data.floor, &mut y);
 		}
 		(0.0, x_max)
 	} else {
@@ -162,8 +187,8 @@ pub fn ranges(probe: &Probe, data: &GraphData<'_>, total_steps: u64) -> (f64, f6
 		}
 		let fit = visible_indices(data.series.len(), lo, hi).and_then(|(a, b)| extent(&data.series[a..=b]));
 		if let Some((l, h)) = fit.filter(|_| probe.auto_scale_y) {
-			fitted_hi = Some(h as f64);
-			auto_range(probe, l as f64, h as f64, &mut y);
+			fitted_hi = Some((h as f64).max(data.floor));
+			auto_range(probe, l as f64, h as f64, data.floor, &mut y);
 		}
 		(lo, hi)
 	};
@@ -187,7 +212,7 @@ pub fn nice_ticks(lo: f64, hi: f64, target: usize) -> Vec<f64> {
 		return Vec::new();
 	}
 	let raw = span / target.max(1) as f64;
-	let magnitude = 10f64.powf(raw.log10().floor());
+	let magnitude = libm::pow(10.0, libm::log10(raw).floor());
 	let m = raw / magnitude;
 	let step = magnitude
 		* if m < 1.5 {
@@ -214,15 +239,15 @@ pub fn log_ticks(lo: f64, hi: f64, target: usize) -> Vec<f64> {
 	if lo.is_nan() || hi.is_nan() || lo <= 0.0 || hi <= lo || hi.is_infinite() {
 		return Vec::new();
 	}
-	let first = (lo.log10() - 1e-9).ceil() as i32;
-	let last = (hi.log10() + 1e-9).floor() as i32;
+	let first = (libm::log10(lo) - 1e-9).ceil() as i32;
+	let last = (libm::log10(hi) + 1e-9).floor() as i32;
 	if last - first < 1 {
 		return nice_ticks(lo, hi, target).into_iter().filter(|t| *t > 0.0).collect();
 	}
 	let every = [1, 2, 3, 5].into_iter().find(|c| ((last - first) / c + 1) as usize <= target + 1).unwrap_or(10);
 	(first..=last)
 		.filter(|e| e % every == 0)
-		.map(|e| if e >= 0 { 10f64.powi(e) } else { 1.0 / 10f64.powi(-e) })
+		.map(|e| if e >= 0 { libm::pow(10.0, f64::from(e)) } else { 1.0 / libm::pow(10.0, f64::from(-e)) })
 		.collect()
 }
 
@@ -244,7 +269,7 @@ pub fn format_g3(v: f64) -> String {
 	if (-4..3).contains(&exponent) {
 		let decimals = (2 - exponent).max(0) as usize;
 		let mantissa: f64 = mantissa.parse().expect("a mantissa is a number");
-		trim(format!("{:.*}", decimals, mantissa * 10f64.powi(exponent)))
+		trim(format!("{:.*}", decimals, mantissa * libm::pow(10.0, f64::from(exponent))))
 	} else {
 		let sign = if exponent < 0 { '-' } else { '+' };
 		format!("{}E{sign}{:02}", trim(mantissa.to_owned()), exponent.abs())
@@ -253,8 +278,8 @@ pub fn format_g3(v: f64) -> String {
 
 /// A log tick: a power of ten outside 0.01..100 as `1e<n>`, else [`format_g3`].
 pub fn format_log_tick(v: f64) -> String {
-	let exponent = v.log10().round();
-	if (v / 10f64.powf(exponent) - 1.0).abs() > 1e-6 || exponent.abs() <= 2.0 {
+	let exponent = libm::log10(v).round();
+	if (v / libm::pow(10.0, exponent) - 1.0).abs() > 1e-6 || exponent.abs() <= 2.0 {
 		format_g3(v)
 	} else {
 		format!("1e{exponent}")
@@ -282,14 +307,14 @@ struct ValueAxis {
 
 impl ValueAxis {
 	fn new(min: f64, max: f64, log: bool, top: f32, height: f32) -> Self {
-		let t = |v: f64| if log { v.log10() } else { v };
+		let t = |v: f64| if log { libm::log10(v) } else { v };
 		Self { lo: t(min), hi: t(max), log, top, height }
 	}
 
 	/// Pixel y of a value: bottom edge the minimum; on a log axis values at or below the minimum on the bottom
 	/// edge; clamped to +-30000.
 	fn pixel(&self, v: f64) -> f32 {
-		let t = if self.log { if v > 0.0 { v.log10().max(self.lo) } else { self.lo } } else { v };
+		let t = if self.log { if v > 0.0 { libm::log10(v).max(self.lo) } else { self.lo } } else { v };
 		let py = self.top as f64 + self.height as f64 - (t - self.lo) / (self.hi - self.lo) * self.height as f64;
 		py.clamp(-30000.0, 30000.0) as f32
 	}
@@ -334,7 +359,7 @@ pub fn layout(
 	total_steps: u64,
 	width: f32,
 	height: f32,
-	text: &dyn TextMetrics,
+	text: &mut dyn TextMetrics,
 ) -> GraphLayout {
 	let visible = width >= MIN_VISIBLE.0 && height >= MIN_VISIBLE.1;
 	let line_width = (height / 110.0).max(1.2);
@@ -496,132 +521,144 @@ pub fn box_on_picture(
 /// A graph box's text size: logical pixels in the preview, pixels in an export.
 pub const FONT_SIZE: f32 = 11.;
 /// A graph box's background, in the preview and an export.
-pub const BACKGROUND: Rgba = Rgba::new(14, 16, 22, 235);
+pub const BACKGROUND: Color32 = Color32::from_rgba_unmultiplied_const(14, 16, 22, 235);
 /// A graph box's edge.
-pub const BORDER: Rgba = Rgba::new(200, 200, 210, 170);
+pub const BORDER: Color32 = Color32::from_rgba_unmultiplied_const(200, 200, 210, 170);
 /// The grid lines of the plot.
-pub const GRID: Rgba = Rgba::new(255, 255, 255, 46);
+pub const GRID: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 255, 46);
 /// The zero line of the plot.
-pub const ZERO: Rgba = Rgba::new(255, 255, 255, 120);
+pub const ZERO: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 255, 120);
 /// The plot's frame.
-pub const FRAME: Rgba = Rgba::new(200, 200, 210, 130);
+pub const FRAME: Color32 = Color32::from_rgba_unmultiplied_const(200, 200, 210, 130);
 /// The tick labels.
-pub const LABEL: Rgba = Rgba::new(225, 225, 230, 225);
+pub const LABEL: Color32 = Color32::from_rgba_unmultiplied_const(225, 225, 230, 225);
 /// The title.
-pub const TITLE: Rgba = Rgba::new(240, 240, 245, 240);
+pub const TITLE: Color32 = Color32::from_rgba_unmultiplied_const(240, 240, 245, 240);
 /// The curve and the readout.
-pub const CURVE: Rgba = Rgba::rgb(255, 208, 64);
+pub const CURVE: Color32 = Color32::from_rgb(255, 208, 64);
 /// The preview's edge of a selected box.
-const SELECTED: Rgba = Rgba::rgb(0xFF, 0xE0, 0x00);
+const SELECTED: Color32 = Color32::from_rgb(0xFF, 0xE0, 0x00);
 /// The preview's resize grip.
-const GRIP_DOTS: Rgba = Rgba::rgb(0x90, 0x90, 0x90);
+const GRIP_DOTS: Color32 = Color32::from_rgb(0x90, 0x90, 0x90);
 
-/// The shapes of the preview's box laid out as `g`, in device pixels of `grid`: the box and its edge (`focus`, else
-/// yellow when `selected`), the grid, the value and position labels, the frame, the curve clipped to the plot, the
-/// readout and title, and the resize grip's dots. The box is the layout's size (`g.width` x `g.height` logical
-/// pixels). Hairlines are whole device pixels on the device grid and text starts on whole device pixels. `text`
-/// measures the readout in logical pixels at [`FONT_SIZE`], as the layout was measured.
+/// The box's device rectangle `[left, top, right, bottom]` in units of `grid`.
+fn device_box(g: &GraphLayout, grid: DeviceGrid) -> [f32; 4] {
+	[grid.x(0.).floor(), grid.y(0.).floor(), grid.x(g.width).floor(), grid.y(g.height).floor()]
+}
+
+/// The shapes of the box laid out as `g` at the origin of `grid`, clipped to `clip` (points of the window): the box
+/// and its edge (`focus`, else yellow when `selected`), the grid, the value and position labels, the frame, the curve
+/// clipped to the plot, the readout and the title clipped to the title strip. The box is the layout's size
+/// (`g.width` x `g.height` logical pixels). Hairlines are whole device pixels on the device grid and text starts on
+/// whole device pixels; `fonts` lays the text out at [`FONT_SIZE`] at the grid's scale, as the layout was measured.
 pub fn box_shapes(
 	g: &GraphLayout,
 	grid: DeviceGrid,
+	clip: Rect,
 	selected: bool,
-	focus: Option<Rgba>,
-	text: &dyn TextMetrics,
-) -> Vec<Shape> {
-	let (w, h) = (g.width, g.height);
-	let s = grid.scale;
-	let size = FONT_SIZE * s;
-	let label = |text: &str, at: (f32, f32), color: Rgba| Shape::Text {
-		text: text.to_owned(),
-		at,
-		style: TextStyle::GraphBox,
-		size,
-		color,
+	focus: Option<Color32>,
+	fonts: &mut FontsView<'_>,
+) -> Vec<ClippedShape> {
+	let font = FontId::proportional(FONT_SIZE);
+	let mut text = |text: &str, at: (f32, f32), color: Color32| {
+		let galley = fonts.layout_no_wrap(text.to_owned(), font.clone(), color);
+		Shape::galley(grid.point(grid.x(at.0).round(), grid.y(at.1).round()), galley, color)
 	};
 	let hl = grid.hairline();
-	let hairline = |color| Pen::new(color, hl).aliased();
+	let hairline = |color| Stroke::new(hl / grid.scale, color);
 	let half = hl / 2.;
-	let (bx0, by0, bx1, by1) = (grid.x(0.).floor(), grid.y(0.).floor(), grid.x(w).floor(), grid.y(h).floor());
+	let [bx0, by0, bx1, by1] = device_box(g, grid);
 	let mut out = vec![
-		Shape::Rect { rect: Rect::new(bx0, by0, bx1, by1), ink: Ink::Fill { color: BACKGROUND, antialias: false } },
-		Shape::Rect {
-			rect: Rect::new(bx0 + half, by0 + half, bx1 - half, by1 - half),
-			ink: Ink::Stroke(hairline(focus.unwrap_or(if selected { SELECTED } else { BORDER }))),
-		},
+		Shape::rect_filled(grid.rect((bx0, by0), (bx1, by1)), 0, BACKGROUND),
+		Shape::rect_stroke(
+			grid.rect((bx0 + half, by0 + half), (bx1 - half, by1 - half)),
+			0,
+			hairline(focus.unwrap_or(if selected { SELECTED } else { BORDER })),
+			StrokeKind::Middle,
+		),
 	];
+	let mut clipped = Vec::new();
 
 	if g.has_plot {
 		let (px, py, pw, ph) = (g.plot_x, g.plot_y, g.plot_width, g.plot_height);
 		let (left, top, right, bottom) = (grid.x(px), grid.y(py), grid.x(px + pw), grid.y(py + ph));
 		for t in &g.y_ticks {
 			let y = grid.snap(grid.y(t.position));
-			out.push(Shape::Line { from: (left, y), to: (right, y), pen: hairline(if t.zero { ZERO } else { GRID }) });
+			let color = if t.zero { ZERO } else { GRID };
+			out.push(Shape::line_segment([grid.point(left, y), grid.point(right, y)], hairline(color)));
 			if !t.label.is_empty() {
-				out.push(label(&t.label, (grid.x(t.label_at.0).round(), grid.y(t.label_at.1).round()), LABEL));
+				out.push(text(&t.label, t.label_at, LABEL));
 			}
 		}
 		for t in &g.x_ticks {
 			let x = grid.snap(grid.x(t.position));
-			out.push(Shape::Line { from: (x, top), to: (x, bottom), pen: hairline(GRID) });
+			out.push(Shape::line_segment([grid.point(x, top), grid.point(x, bottom)], hairline(GRID)));
 			if !t.label.is_empty() {
-				out.push(label(&t.label, (grid.x(t.label_at.0).round(), grid.y(t.label_at.1).round()), LABEL));
+				out.push(text(&t.label, t.label_at, LABEL));
 			}
 		}
-		out.push(Shape::Rect {
-			rect: Rect::new(grid.snap(left), grid.snap(top), grid.snap(right), grid.snap(bottom)),
-			ink: Ink::Stroke(hairline(FRAME)),
-		});
-		out.push(Shape::Clip { rect: Rect::new(left, top, right, bottom), antialias: true });
-		out.extend(match g.curve.as_slice() {
+		out.push(Shape::rect_stroke(
+			grid.rect((grid.snap(left), grid.snap(top)), (grid.snap(right), grid.snap(bottom))),
+			0,
+			hairline(FRAME),
+			StrokeKind::Middle,
+		));
+		let plot = grid.rect((left, top), (right, bottom)).intersect(clip);
+		let point = |&(x, y): &(f32, f32)| grid.point(grid.x(x), grid.y(y));
+		let curve = match g.curve.as_slice() {
 			[] => None,
-			[(x, y)] => Some(Shape::Circle { centre: (grid.x(*x), grid.y(*y)), radius: 2. * s, ink: Ink::fill(CURVE) }),
-			curve => Some(Shape::Path {
-				points: curve.iter().map(|&(x, y)| (grid.x(x), grid.y(y))).collect(),
-				closed: false,
-				pen: Pen::new(CURVE, g.line_width * s).round(),
-			}),
-		});
-		out.push(Shape::Unclip);
+			[p] => Some(Shape::circle_filled(point(p), 2., CURVE)),
+			curve => Some(Shape::line(curve.iter().map(point).collect(), Stroke::new(g.line_width, CURVE))),
+		};
+		clipped.extend(curve.map(|shape| ClippedShape::new(plot, shape)));
 	}
 
 	// the title strip: the readout right-aligned in the curve's colour, the title in what remains
 	let mut readout_width = 0.;
 	if !g.readout.is_empty() {
-		readout_width = text.width(&g.readout);
-		out.push(label(&g.readout, (grid.x(w - readout_width - 8.).round(), grid.y(EDGE_PAD).round()), CURVE));
+		let galley = fonts.layout_no_wrap(g.readout.clone(), font.clone(), CURVE);
+		readout_width = galley.size().x;
+		let at = grid.point(grid.x(g.width - readout_width - 8.).round(), grid.y(EDGE_PAD).round());
+		clipped.push(ClippedShape::new(clip, Shape::galley(at, galley, CURVE)));
 	}
-	let title_end = grid.x(EDGE_PAD + 3. + (w - readout_width - 16.).max(10.));
-	out.push(Shape::Clip { rect: Rect::new(bx0, by0, title_end, by1), antialias: false });
-	out.push(label(&g.title, (grid.x(EDGE_PAD + 3.).round(), grid.y(EDGE_PAD).round()), TITLE));
-	out.push(Shape::Unclip);
+	let title_end = grid.x(EDGE_PAD + 3. + (g.width - readout_width - 16.).max(10.));
+	let title = grid.rect((bx0, by0), (title_end, by1)).intersect(clip);
+	let galley = fonts.layout_no_wrap(g.title.clone(), font, TITLE);
+	let at = grid.point(grid.x(EDGE_PAD + 3.).round(), grid.y(EDGE_PAD).round());
+	clipped.push(ClippedShape::new(title, Shape::galley(at, galley, TITLE)));
 
-	let dot = Ink::Fill { color: GRIP_DOTS, antialias: false };
-	for k in 0..3 {
-		let o = grid.width(3.) * k as f32;
-		out.push(Shape::Rect {
-			rect: Rect::new(bx1 - hl * 3. - o, by1 - hl * 3., bx1 - hl * 2. - o, by1 - hl * 2.),
-			ink: dot,
-		});
-		out.push(Shape::Rect {
-			rect: Rect::new(bx1 - hl * 3., by1 - hl * 3. - o, bx1 - hl * 2., by1 - hl * 2. - o),
-			ink: dot,
-		});
-	}
-	out
+	out.into_iter().map(|shape| ClippedShape::new(clip, shape)).chain(clipped).collect()
+}
+
+/// The preview's resize grip of the box laid out as `g` at the origin of `grid`: two rows of dots in its
+/// bottom-right corner.
+pub fn grip_shapes(g: &GraphLayout, grid: DeviceGrid) -> Vec<Shape> {
+	let hl = grid.hairline();
+	let [_, _, bx1, by1] = device_box(g, grid);
+	let dot = |x: f32, y: f32| Shape::rect_filled(grid.rect((x, y), (x + hl, y + hl)), 0, GRIP_DOTS);
+	(0..3)
+		.flat_map(|k| {
+			let o = grid.width(3.) * k as f32;
+			[dot(bx1 - hl * 3. - o, by1 - hl * 3.), dot(bx1 - hl * 3., by1 - hl * 3. - o)]
+		})
+		.collect()
 }
 
 #[cfg(test)]
 mod tests {
+	use epaint::text::{Fonts, TextOptions};
+	use epaint::{Pos2, pos2};
 	use wavedude_core::model::BoxSize;
 
 	use super::*;
+	use crate::draw::FontMetrics;
 
 	struct Fixed;
 	impl TextMetrics for Fixed {
-		fn line_height(&self) -> f32 {
+		fn line_height(&mut self) -> f32 {
 			14.0
 		}
-		fn width(&self, text: &str) -> f32 {
+		fn width(&mut self, text: &str) -> f32 {
 			text.len() as f32 * 6.0
 		}
 	}
@@ -662,12 +699,44 @@ mod tests {
 			Probe { measurement: Measurement::Value, y_scale: YScale::Logarithmic, decades: 4, ..Probe::default() };
 		let series = [0.0f32, 1e-3, 1e-2];
 		let (_, _, lo, hi) = ranges(&log, &GraphData { series: &series, ..GraphData::default() }, 100);
-		assert!(((hi / lo).log10() - 4.0).abs() < 1e-9);
-		let l = layout(&log, &GraphData { series: &series, ..GraphData::default() }, 100, 400.0, 200.0, &Fixed);
+		assert!((libm::log10(hi / lo) - 4.0).abs() < 1e-9);
+		let l = layout(&log, &GraphData { series: &series, ..GraphData::default() }, 100, 400.0, 200.0, &mut Fixed);
 		assert!(l.has_plot && l.show_labels);
 		assert_eq!(l.readout, "= 0.01");
 		assert_eq!(l.curve.len(), 3);
 		assert_eq!(l.curve[0].1, l.plot_y + l.plot_height, "zero on the bottom line");
+	}
+
+	#[test]
+	fn a_series_far_below_the_full_scale_fits_to_it() {
+		let tiny = [1e-20f32, 3e-20];
+		let data = GraphData { series: &tiny, ..GraphData::default() }.with_floor(2.0);
+		let lin = Probe { measurement: Measurement::Value, ..Probe::default() };
+		let (_, _, lo, hi) = ranges(&lin, &data, 100);
+		assert_eq!(lo, 0.0);
+		assert!((hi - 2.0 * (1.0 + MARGIN)).abs() < 1e-9, "{hi}");
+		let amp = Probe::default();
+		let (_, _, lo, hi) = ranges(&amp, &data, 100);
+		assert_eq!(lo, -hi);
+		assert!((hi - 2.0 * (1.0 + MARGIN)).abs() < 1e-9, "{hi}");
+		let log = Probe { y_scale: YScale::Logarithmic, decades: 4, ..lin };
+		let (_, _, lo, hi) = ranges(&log, &data, 100);
+		assert!((libm::log10(hi / lo) - 4.0).abs() < 1e-9);
+		assert!(hi > 2.0 && lo < 2.0, "{lo} {hi}");
+		let (_, _, _, above) = ranges(&log, &GraphData { series: &[5.0], ..GraphData::default() }.with_floor(2.0), 100);
+		assert!(above > 5.0);
+	}
+
+	#[test]
+	fn full_scale_follows_the_layer_brightness() {
+		let mut display = Display::default();
+		display.field.brightness = 4.0;
+		display.intensity.brightness = 2.0;
+		let field = Probe::default();
+		let value = Probe { layer: Layer::Intensity, measurement: Measurement::Value, ..Probe::default() };
+		assert_eq!(full_scale(&field, &display), 0.25);
+		assert_eq!(full_scale(&value, &display), 0.25);
+		assert_eq!(full_scale(&Probe { measurement: Measurement::IntegratedValue, ..value }, &display), 0.0);
 	}
 
 	#[test]
@@ -683,45 +752,55 @@ mod tests {
 
 	#[test]
 	fn tiny_boxes_hide() {
-		let l = layout(&Probe::default(), &GraphData::default(), 10, 30.0, 20.0, &Fixed);
+		let l = layout(&Probe::default(), &GraphData::default(), 10, 30.0, 20.0, &mut Fixed);
 		assert!(!l.visible && !l.has_plot);
 	}
 
 	#[test]
 	fn a_box_draws_its_frame_grid_curve_and_text_on_device_pixels() {
+		let mut fonts = Fonts::new(TextOptions::default(), crate::fonts::definitions());
+		let mut view = fonts.with_pixels_per_point(2.);
 		let series = [0.5f32, -0.5, 0.25];
-		let l =
-			layout(&Probe::default(), &GraphData { series: &series, ..GraphData::default() }, 3, 300., 150., &Fixed);
+		let data = GraphData { series: &series, ..GraphData::default() };
+		let mut metrics = FontMetrics { fonts: &mut view, font: FontId::proportional(FONT_SIZE) };
+		let l = layout(&Probe::default(), &data, 3, 300., 150., &mut metrics);
 		assert!(l.has_plot && l.show_labels);
 		let grid = DeviceGrid::new(2., 10.25, 0.);
-		let shapes = box_shapes(&l, grid, true, None, &Fixed);
+		let shapes = box_shapes(&l, grid, Rect::EVERYTHING, true, None, &mut view);
+		let device = |p: Pos2| (p.x * 2., p.y * 2.);
+		let Shape::Rect(back) = &shapes[0].shape else { panic!("the background first") };
+		assert_eq!((device(back.rect.min), device(back.rect.max), back.fill), ((20., 0.), (620., 300.), BACKGROUND));
+		let Shape::Rect(edge) = &shapes[1].shape else { panic!("then its edge") };
 		assert_eq!(
-			shapes[0],
-			Shape::Rect { rect: Rect::new(0., 0., 600., 300.), ink: Ink::Fill { color: BACKGROUND, antialias: false } }
-		);
-		assert_eq!(
-			shapes[1],
-			Shape::Rect { rect: Rect::new(1., 1., 599., 299.), ink: Ink::Stroke(Pen::new(SELECTED, 2.).aliased()) },
+			(device(edge.rect.min), device(edge.rect.max), edge.stroke),
+			((21., 1.), (619., 299.), Stroke::new(1., SELECTED)),
 			"a selected box's edge, a two-pixel hairline inside the box"
 		);
-		let lines = shapes.iter().filter(|s| matches!(s, Shape::Line { .. })).count();
-		assert_eq!(lines, l.y_ticks.len() + l.x_ticks.len());
-		let first_tick = shapes.iter().find_map(|s| match s {
-			Shape::Line { from, pen, .. } => Some((from.1, pen.width)),
-			_ => None,
-		});
-		assert_eq!(first_tick.map(|(y, w)| (y.fract(), w)), Some((0., 2.)), "on the device grid");
-		let curve = shapes.iter().find_map(|s| match s {
-			Shape::Path { points, pen, .. } => Some((points.len(), pen.color, pen.round, pen.width)),
-			_ => None,
-		});
-		assert_eq!(curve, Some((3, CURVE, true, l.line_width * 2.)));
-		let texts: Vec<(&str, Rgba)> = shapes
+		let lines: Vec<f32> = shapes
 			.iter()
-			.filter_map(|s| match s {
-				Shape::Text { text, color, style: TextStyle::GraphBox, size: 22., at } => {
-					assert_eq!((at.0.fract(), at.1.fract()), (0., 0.), "{text} starts on a device pixel");
-					Some((text.as_str(), *color))
+			.filter_map(|s| match &s.shape {
+				Shape::LineSegment { points, .. } => Some(device(points[0]).1),
+				_ => None,
+			})
+			.collect();
+		assert_eq!(lines.len(), l.y_ticks.len() + l.x_ticks.len());
+		assert_eq!(lines[0].fract(), 0., "a two-pixel hairline's centre on the device grid");
+		let curve = shapes.iter().find_map(|s| match &s.shape {
+			Shape::Path(p) => Some((p.points.len(), p.stroke.width, s.clip_rect)),
+			_ => None,
+		});
+		let plot = grid.rect(
+			(grid.x(l.plot_x), grid.y(l.plot_y)),
+			(grid.x(l.plot_x + l.plot_width), grid.y(l.plot_y + l.plot_height)),
+		);
+		assert_eq!(curve, Some((3, l.line_width, plot)), "clipped to the plot");
+		let texts: Vec<(&str, Color32)> = shapes
+			.iter()
+			.filter_map(|s| match &s.shape {
+				Shape::Text(t) => {
+					let (x, y) = device(t.pos);
+					assert_eq!((x.fract(), y.fract()), (0., 0.), "{} starts on a device pixel", t.galley.text());
+					Some((t.galley.text(), t.fallback_color))
 				}
 				_ => None,
 			})
@@ -729,39 +808,31 @@ mod tests {
 		assert_eq!(texts.len(), l.y_ticks.len() + l.x_ticks.len() + 2);
 		assert_eq!(texts[texts.len() - 2], ("= 0.25", CURVE));
 		assert_eq!(texts[texts.len() - 1], (l.title.as_str(), TITLE));
-		let clips: Vec<bool> = shapes
-			.iter()
-			.filter_map(|s| match s {
-				Shape::Clip { antialias, .. } => Some(*antialias),
-				_ => None,
-			})
-			.collect();
-		assert_eq!(clips, vec![true, false], "the plot, then the title");
-		assert_eq!(shapes.iter().filter(|s| **s == Shape::Unclip).count(), 2);
-		assert!(shapes.ends_with(&[Shape::Rect {
-			rect: Rect::new(594., 282., 596., 284.),
-			ink: Ink::Fill { color: GRIP_DOTS, antialias: false },
-		}]));
+		assert!(shapes.last().is_some_and(|s| s.clip_rect.max.x < 310.), "the title clipped before the readout");
+		let grip = grip_shapes(&l, grid);
+		let Some(Shape::Rect(dot)) = grip.first() else { panic!("the grip's dots") };
+		assert_eq!((grip.len(), device(dot.rect.min), dot.fill), (6, (614., 294.), GRIP_DOTS));
 	}
 
 	#[test]
 	fn a_box_without_a_plot_keeps_its_title_and_focus() {
-		let l = layout(&Probe { name: "P".into(), ..Probe::default() }, &GraphData::default(), 10, 60., 30., &Fixed);
+		let mut fonts = Fonts::new(TextOptions::default(), crate::fonts::definitions());
+		let mut view = fonts.with_pixels_per_point(1.);
+		let l =
+			layout(&Probe { name: "P".into(), ..Probe::default() }, &GraphData::default(), 10, 60., 30., &mut Fixed);
 		assert!(!l.has_plot);
-		let focus = Rgba::rgb(1, 2, 3);
-		let shapes = box_shapes(&l, DeviceGrid::new(1., 0., 0.), true, Some(focus), &Fixed);
+		let focus = Color32::from_rgb(1, 2, 3);
+		let clip = Rect::from_min_max(Pos2::ZERO, pos2(50., 50.));
+		let shapes = box_shapes(&l, DeviceGrid::new(1., 0., 0.), clip, true, Some(focus), &mut view);
+		let Shape::Rect(edge) = &shapes[1].shape else { panic!("the edge") };
 		assert_eq!(
-			shapes[1],
-			Shape::Rect { rect: Rect::new(0.5, 0.5, 59.5, 29.5), ink: Ink::Stroke(Pen::new(focus, 1.).aliased()) }
+			(edge.rect, edge.stroke),
+			(Rect::from_min_max(pos2(0.5, 0.5), pos2(59.5, 29.5)), Stroke::new(1., focus))
 		);
-		assert!(shapes.iter().all(|s| !matches!(s, Shape::Line { .. } | Shape::Path { .. })));
-		assert!(shapes.contains(&Shape::Text {
-			text: "P".into(),
-			at: (6., 3.),
-			style: TextStyle::GraphBox,
-			size: FONT_SIZE,
-			color: TITLE,
-		}));
-		assert_eq!(shapes.len(), 2 + 3 + 6, "box, edge, the title in its clip, the grip's dots");
+		assert!(shapes.iter().all(|s| !matches!(s.shape, Shape::LineSegment { .. } | Shape::Path(_))));
+		assert!(shapes.iter().all(|s| clip.contains_rect(s.clip_rect)), "within the caller's clip");
+		let Some(Shape::Text(title)) = shapes.last().map(|s| &s.shape) else { panic!("the title last") };
+		assert_eq!((title.galley.text(), title.pos, title.fallback_color), ("P", pos2(6., 3.), TITLE));
+		assert_eq!(shapes.len(), 3, "box, edge, the title in its clip");
 	}
 }

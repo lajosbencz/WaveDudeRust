@@ -1,138 +1,120 @@
-//! The memory warning (a run's frames exceed the RAM cache): the need and the budget, four levers pre-ticked
-//! by the model's proposal, a live line with the ticks' result, and "Do not warn me again".
+//! The memory warning (docs/ui/60): a run's frames exceed the RAM cache. The need and the budget, four levers
+//! pre-ticked by the model's proposal (greyed where they gain nothing), a line with the ticks' result, and "Do not
+//! warn me again"; Run applies the ticks, Cancel keeps the frames.
 
-use freya::prelude::*;
+use eframe::egui::{self, Id, RichText, Ui};
+use wavedude_app_state::Event;
+use wavedude_app_state::strings::Strings;
 use wavedude_core::run::Levers;
-use wavedude_widgets::use_wave_theme;
 
-use wavedude_app_state::Event as AppEvent;
-
-use super::app::Cx;
-use super::dialogs::{button, button_row, frame};
+use super::modal::{Choice, Reply, Then, buttons};
 use super::properties::check_box;
+use super::theme::Palette;
+use crate::App;
+
+const WIDTH: f32 = 520.;
 
 /// Bytes as "x.y GiB" or "x MiB", with a decimal point.
-pub fn bytes_text(bytes: u64) -> String {
-	const GIB: f64 = 1024. * 1024. * 1024.;
+pub(super) fn bytes_text(bytes: u64) -> String {
+	const MIB: f64 = 1024. * 1024.;
+	const GIB: f64 = 1024. * MIB;
 	let b = bytes as f64;
-	if b >= GIB { format!("{:.1} GiB", b / GIB) } else { format!("{:.0} MiB", b / (1024. * 1024.)) }
+	if b >= GIB { format!("{:.1} GiB", b / GIB) } else { format!("{:.0} MiB", b / MIB) }
 }
 
-#[derive(Clone, PartialEq)]
-struct Facts {
+/// The dialog's state: the ticks and the texts of the warning it asks about.
+pub(super) struct MemoryWarning {
+	levers: Levers,
 	enabled: Levers,
-	proposal: Levers,
-	need: u64,
-	budget: u64,
-	auto_budget: u64,
+	mute: bool,
+	text: String,
+	cache: String,
+	/// What the ticks give, renewed when they change.
+	result: String,
 }
 
-fn facts(cx: &Cx) -> Option<Facts> {
-	cx.shared.peek(|a| {
-		a.live.warning().map(|w| Facts {
+impl MemoryWarning {
+	/// The dialog for the warning `app` asks; `None` when the warning is gone already.
+	pub(super) fn of(app: &App) -> Option<Self> {
+		let s = &app.strings;
+		let w = app.live.warning()?;
+		let levers = w.proposal();
+		let mut dialog = Self {
+			levers,
 			enabled: w.enabled(),
-			proposal: w.proposal(),
-			need: w.bytes_of(Levers::default()),
-			budget: w.budget,
-			auto_budget: w.auto_budget,
+			mute: false,
+			text: s.format(
+				"MemoryWarningTextFormat",
+				&[&bytes_text(w.bytes_of(Levers::default())), &bytes_text(w.budget)],
+			),
+			cache: s.format("MemoryWarningCacheFormat", &[&bytes_text(w.auto_budget)]),
+			result: String::new(),
+		};
+		dialog.result = dialog.result_of(app)?;
+		Some(dialog)
+	}
+
+	fn result_of(&self, app: &App) -> Option<String> {
+		let (s, l) = (&app.strings, self.levers);
+		let w = app.live.warning()?;
+		Some(if w.fits(l) {
+			s.format("MemoryWarningFitsFormat", &[&bytes_text(w.bytes_of(l))])
+		} else {
+			s.format("MemoryWarningSpillsFormat", &[&bytes_text(w.bytes_of(l)), &bytes_text(w.spill_of(l))])
 		})
-	})
+	}
+
+	pub(super) fn ui(&mut self, ui: &mut Ui, fresh: bool, app: &App) -> Option<Reply> {
+		if app.live.warning().is_none() {
+			// dropped before it was answered
+			return Some(None);
+		}
+		let s: &Strings = &app.strings;
+		let dim = Palette::of(ui.ctx().theme()).text_dim;
+		ui.set_width(WIDTH);
+		ui.add(egui::Label::new(self.text.as_str()).wrap());
+		ui.label(s.get("MemoryWarningChoices"));
+		let (enabled, levers) = (self.enabled, &mut self.levers);
+		let rows: [(&str, bool, &mut bool); 4] = [
+			(&self.cache, enabled.cache_auto, &mut levers.cache_auto),
+			(s.get("MemoryWarningResolution"), enabled.resolution, &mut levers.resolution),
+			(s.get("MemoryWarningFrames"), enabled.frames, &mut levers.frames),
+			(s.get("MemoryWarningSamples"), enabled.samples, &mut levers.samples),
+		];
+		let mut changed = false;
+		for (i, (text, enabled, on)) in rows.into_iter().enumerate() {
+			ui.add_enabled_ui(enabled, |ui| {
+				if let Some(v) = check_box(ui, Id::unique("MemoryWarningLever").with(i), text, *on) {
+					*on = v;
+					changed = true;
+				}
+			});
+		}
+		if changed && let Some(result) = self.result_of(app) {
+			self.result = result;
+		}
+		ui.add(egui::Label::new(RichText::new(self.result.as_str()).color(dim)).wrap());
+		if let Some(v) = check_box(ui, Id::unique("MemoryWarningMute"), s.get("MemoryWarningMute"), self.mute) {
+			self.mute = v;
+		}
+		let choices = [Choice::default(s.get("DialogRun")), Choice::cancel(s.get("DialogCancel"))];
+		buttons(ui, fresh, &choices).map(|i| {
+			Some(Then::Send(if i == 0 {
+				Event::MemoryWarningRun { levers: self.levers, mute: self.mute }
+			} else {
+				Event::MemoryWarningCancel
+			}))
+		})
+	}
 }
 
-/// The memory warning.
-#[derive(PartialEq)]
-pub struct MemoryWarningDialog;
+#[cfg(test)]
+mod tests {
+	use super::bytes_text;
 
-impl Component for MemoryWarningDialog {
-	fn render(&self) -> impl IntoElement {
-		let cx = Cx::get();
-		let theme = use_wave_theme();
-		let s = cx.strings();
-		let facts = use_hook({
-			let cx = cx.clone();
-			move || facts(&cx)
-		});
-		let initial = facts.as_ref().map_or_else(Levers::default, |f| f.proposal);
-		let levers = use_state(move || initial);
-		let mute = use_state(|| false);
-		// the live controller dropped the warning before it showed (a new project, an export)
-		let gone = facts.is_none();
-		let ui = cx.ui;
-		use_side_effect(move || {
-			if gone {
-				ui.close_modal();
-			}
-		});
-		let Some(f) = facts else {
-			return rect().into_element();
-		};
-		let l = *levers.read();
-		let (result_bytes, fits, spill) =
-			cx.shared.peek(|a| a.live.warning().map_or((0, true, 0), |w| (w.bytes_of(l), w.fits(l), w.spill_of(l))));
-		let line = if fits {
-			s.format("MemoryWarningFitsFormat", &[&bytes_text(result_bytes)])
-		} else {
-			s.format("MemoryWarningSpillsFormat", &[&bytes_text(result_bytes), &bytes_text(spill)])
-		};
-		let lever = |text: String, on: bool, enabled: bool, set: fn(&mut Levers, bool)| {
-			if enabled {
-				check_box(text, on, move |v| {
-					let mut levers = levers;
-					set(&mut levers.write(), v);
-				})
-				.into_element()
-			} else {
-				rect().opacity(0.45).child(check_box(text, on, |_| {})).into_element()
-			}
-		};
-		let run = {
-			let cx = cx.clone();
-			move |_: Event<PressEventData>| {
-				cx.ui.close_modal();
-				cx.send(AppEvent::MemoryWarningRun { levers: *levers.peek(), mute: *mute.peek() });
-			}
-		};
-		let cancel = {
-			let cx = cx.clone();
-			move || {
-				cx.ui.close_modal();
-				cx.send(AppEvent::MemoryWarningCancel);
-			}
-		};
-		let cancel_key = cancel.clone();
-		frame(520.)
-			.on_global_key_down(move |e: Event<KeyboardEventData>| {
-				if e.key == Key::Named(NamedKey::Escape) {
-					e.stop_propagation();
-					cancel_key();
-				}
-			})
-			.child(
-				paragraph().width(Size::fill()).span(Span::new(
-					s.format("MemoryWarningTextFormat", &[&bytes_text(f.need), &bytes_text(f.budget)]),
-				)),
-			)
-			.child(label().text(s.get("MemoryWarningChoices").to_owned()))
-			.child(lever(
-				s.format("MemoryWarningCacheFormat", &[&bytes_text(f.auto_budget)]),
-				l.cache_auto,
-				f.enabled.cache_auto,
-				|l, v| l.cache_auto = v,
-			))
-			.child(lever(s.get("MemoryWarningResolution").into(), l.resolution, f.enabled.resolution, |l, v| {
-				l.resolution = v;
-			}))
-			.child(lever(s.get("MemoryWarningFrames").into(), l.frames, f.enabled.frames, |l, v| l.frames = v))
-			.child(lever(s.get("MemoryWarningSamples").into(), l.samples, f.enabled.samples, |l, v| l.samples = v))
-			.child(paragraph().width(Size::fill()).color(theme.text_dim).span(Span::new(line)))
-			.child(check_box(s.get("MemoryWarningMute").into(), *mute.read(), move |v| {
-				let mut mute = mute;
-				mute.set(v);
-			}))
-			.child(button_row(vec![
-				button(s.get("DialogRun"), true, run),
-				button(s.get("DialogCancel"), true, move |_| cancel()),
-			]))
-			.into_element()
+	#[test]
+	fn bytes_read_in_mib_below_a_gib() {
+		assert_eq!(bytes_text(512 << 20), "512 MiB");
+		assert_eq!(bytes_text(3 << 29), "1.5 GiB");
 	}
 }

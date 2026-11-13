@@ -1,6 +1,6 @@
 # 0007 Workspace layout
 
-Status: accepted, 2026-11-05
+Status: accepted, 2026-11-05; revised 2026-11-13 ([0019](0019-egui-and-the-platform-layer.md), below)
 
 One repository, one Cargo workspace, edition 2024:
 
@@ -19,3 +19,9 @@ One repository, one Cargo workspace, edition 2024:
 - `wavedude-wasm`: the engine for the browser, with the preview's overlay as a draw list (decisions 0017, 0018).
 
 Docs under [`docs/`](../): [`spec/`](../spec/) (core), `ui/` (UI behaviour), [`decisions/`](./).
+
+## Crates after the egui migration (added 2026-11-13)
+
+`wavedude-widgets`, `wavedude-testing` and `wavedude-wasm` are gone (0019). `wavedude-view` makes epaint shapes, which
+the window and the exports draw. `wavedude-app` is the application on egui, natively and in the browser, its
+widgets in its `ui` module. `wavedude-examples` serves the Examples dialog alone.

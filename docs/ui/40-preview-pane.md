@@ -42,8 +42,8 @@ what follows.
   picture's aspect (spare room above/below), 4 px over it; otherwise the whole strip, box and button included, is
   turned a quarter clockwise on the picture's left, reading top to bottom, 10 px below the cell's top and ending
   4 px above its bottom, the picture's bottom edge.
-- On its side the box edits upright over its place while it has focus (Freya rotates the drawing, not the hit
-  testing or the text clipping); a click on it, Tab or the context menu focuses it, its arrows and the wheel step
+- On its side the box edits upright over its place while it has focus (the toolkit rotates the drawing, not the
+  hit testing or the text clipping); a click on it, Tab or the context menu focuses it, its arrows and the wheel step
   it, Auto takes clicks, Enter and Space.
 - When short: the caption is dropped first; then the title is trimmed (ellipsis) to what the tools leave.
 - Auto: one-shot fit of the frame shown: the 99.5th percentile of |field| (or sqrt(intensity)) maps to the top
@@ -66,13 +66,13 @@ Fixed colours, not themed; preview only, never exported.
 
 ## Zoom
 
-Both pictures share one zoom over the fit (`View` in [`wavedude-widgets/src/picture.rs`](../../crates/wavedude-widgets/src/picture.rs), `PaneStates.view`): the
+Both pictures share one zoom over the fit (`View` in [`wavedude-app/src/preview/view.rs`](../../crates/wavedude-app/src/preview/view.rs)): the
 wheel over a picture zooms in by a factor of 1.25 a notch, out by the same, never below the fit, up to 64x; the
 canvas point under the pointer stays where it is. A middle-button drag pans a zoomed view. The zoomed picture is
 larger than the cell's area and is held so that no area is left empty; the handles, the graph boxes and the
 marquee follow the transform. A zoomed 16-bit picture is rendered for its visible part alone (a source window of
-the screen renderer, `LayerRequest.window`), at the area's device size, so the cost does not grow with the zoom;
-an 8-bit picture is the canvas-sized bitmap scaled. The zoom is session state, not persisted; opening another
+the screen renderer, `LayerRequest.window` in canvas pixels, divided by the resolution divisor into stored samples),
+at the area's device size, so the cost does not grow with the zoom; an 8-bit picture is the stored bitmap scaled. The zoom is session state, not persisted; opening another
 project keeps it.
 
 ## What a picture shows
@@ -96,6 +96,10 @@ project keeps it.
   changes recolour instantly without a new run; every gradient level shows.
 - Dithering (16-bit only, View menu): colours at 10/12/14/16 bits per channel reduced to 8 through a Bayer
   matrix (2/4/8/16 cells a side), fixed to screen pixels; preview only.
+- A run on the GPU engine is coloured on the GPU, in the UI's render pass, with the same tables (Rust only,
+  docs/spec/40-frames-store-render.md): the frame the engine captured last is drawn from its device copy when the
+  engines run on the renderer's device, any other stored frame is uploaded as stored. Pictures look the same as on the
+  CPU path, which the CPU engine and WebGL2 keep.
 
 ## Handles and overlays
 
@@ -177,8 +181,10 @@ emitter dots the source layer is cached as a bitmap).
   lets the axis follow the recorded samples. Line probe: values along A..B at the frame shown.
 - Value axis: field amplitude always linear and symmetric about zero; intensity linear or logarithmic
   (Decades below the fitted top, powers-of-ten ticks, zero and smaller on the bottom line). Auto-scale values
-  fits to the data, else Value minimum/maximum.
-- Data: the live run's recording cut at the frame shown (series at that step, the frame's profile); after a probe
+  fits to the data, else Value minimum/maximum; the fitted top is never below the layer's display full scale
+  (1/brightness, 1/brightness^2 for an intensity value), so signal the picture renders black is not drawn full height.
+- Data: the live run's recording cut at the frame shown (series at that step, the frame's profile; with a reduced
+  frames notch the stored frame the picture shows, not the timeline frame under the playhead); after a probe
   edit the recording is made anew and the graph follows as it comes.
 - Selected probe's box: accent (selection) border; drawn last.
 - Drag the box to move (kept inside the canvas). Snap: a box whose anchor comes within a radius (screen px)

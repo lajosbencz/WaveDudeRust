@@ -1,25 +1,51 @@
 //! Runs: the frame store, the batch stepping loop, the live run that follows a goal and the memory
 //! warning's arithmetic (spec/40-frames-store-render.md, spec/30-engine.md The live run).
+//!
+//! On wasm32 there is no batch run, no spill file and no machine query: the live run is pumped by its caller and
+//! its stores hold their frames in memory up to the caller's budget, the rest in a pending spill the caller
+//! provides (`SpillFactory`).
 
+mod error;
+#[cfg(any(test, target_arch = "wasm32"))]
+mod pending;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod simulation;
+#[cfg(not(target_arch = "wasm32"))]
+mod spill;
+mod state;
 pub mod store;
 pub mod warning;
 pub mod worker;
 
-pub use simulation::{EventSink, RunError, RunEvent, RunState, SimulationRun};
-pub use store::{Budget, FrameStore, Release, StoreError, StoreLayout, sweep_leftovers};
+pub use error::RunError;
+#[cfg(any(test, target_arch = "wasm32"))]
+pub use pending::{SpillBackend, SpillFactory, Token, WRITES_IN_FLIGHT};
+#[cfg(not(target_arch = "wasm32"))]
+pub use simulation::{EventSink, RunEvent, SimulationRun};
+pub use state::RunState;
+pub use store::{Budget, FrameStore, StoreError, StoreLayout};
+#[cfg(not(target_arch = "wasm32"))]
+pub use store::{Memory, Release, sweep_leftovers};
 pub use warning::{Levers, MemoryWarning};
-pub use worker::{CHECK_INTERVAL, EngineFactory, FitFrame, FitRequest, Goal, RunWorker, Status, Wanted, WorkState};
-
-use crate::quality::MachineFacts;
+#[cfg(not(target_arch = "wasm32"))]
+pub use worker::{BuildEngine, EngineFactory};
+pub use worker::{CHECK_INTERVAL, FitFrame, FitRequest, Goal, RunWorker, Status, Wanted, WorkState};
+#[cfg(any(test, target_arch = "wasm32"))]
+pub use worker::{EngineFuture, PumpedFactory, StartEngine};
 
 /// Memory and threads of this machine. The GPU and the drive are left unknown: the GPU is the
 /// caller's to fill (it owns the GPU engine), and no platform's seek-penalty query is wired yet.
-pub fn machine_facts() -> MachineFacts {
+#[cfg(not(target_arch = "wasm32"))]
+pub fn machine_facts() -> crate::quality::MachineFacts {
 	let mut system = sysinfo::System::new();
 	system.refresh_memory();
 	let threads = std::thread::available_parallelism().map_or(1, |n| n.get() as u32);
-	MachineFacts { physical_bytes: system.total_memory(), threads, has_gpu: None, cache_drive_seek_penalty: None }
+	crate::quality::MachineFacts {
+		physical_bytes: system.total_memory(),
+		threads,
+		has_gpu: None,
+		cache_drive_seek_penalty: None,
+	}
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 # 0017: A wasm package and a web demo
 
-Status: accepted, 2026-11-12. Builds on [0015](0015-core-builds-for-wasm.md) and [0016](0016-gpu-engine-in-the-browser.md); amended by
+Status: superseded by [0019](0019-egui-and-the-platform-layer.md), 2026-11-13: the package and `demo/` are gone, the
+browser runs the application itself. `wavedude-examples` and `pages.yml` stay. Accepted 2026-11-12. Builds on [0015](0015-core-builds-for-wasm.md) and [0016](0016-gpu-engine-in-the-browser.md); amended by
 [0018](0018-a-shared-picture-view.md): the package records probes and draws a picture with the preview's overlay and
 graph boxes on a canvas the page passes.
 
@@ -13,7 +14,7 @@ application's state, and an engine package must not carry fifty-three projects n
 
 ## Decision
 
-- [`wavedude-wasm`](../../crates/wavedude-wasm) is the engine and nothing else: `Simulation.open(text, tier)` and
+- `wavedude-wasm` is the engine and nothing else: `Simulation.open(text, tier)` and
   `openOn(gpu, text, tier)`, `stepToward`, `draw` on a `View` (0018), `requestGpu`. It opens one `.wdproj` text, builds
   the run spec through `RunRequest` and `PreviewDefaults` as the application does (a tier is the same quality and
   dither depth in both), and keeps the stored frames of the timeline. No example and no file dialog; of the DOM it
@@ -36,7 +37,7 @@ application's state, and an engine package must not carry fifty-three projects n
   files), moved from `wavedude-app-state`; the application and the demo build both use it. Its binary writes the files
   and `catalog.json` (topics, examples, tiers with the application's English titles from the string table), so the
   package never contains an example and the page fetches them over HTTP.
-- [`demo/`](../../demo) is a static page of ES modules, no bundler and no npm: [`demo/build.sh`](../../demo/build.sh) builds the package, runs
+- `demo/` is a static page of ES modules, no bundler and no npm: `demo/build.sh` builds the package, runs
   `wasm-bindgen --target web`, writes the examples and copies the page. It refuses a wasm-bindgen CLI whose version
   differs from the crate's in `Cargo.lock`.
 - [`pages.yml`](../../.github/workflows/pages.yml) builds the site and deploys it to GitHub Pages. `release.yml` calls it after `publish`, so the demo

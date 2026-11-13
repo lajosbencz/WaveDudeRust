@@ -1,491 +1,569 @@
-//! The window shell driven headless: the tree, the menu bar and a property edit.
+//! The window's shell driven headless: the menu bar and its keys, a shortcut, the theme and the panes with their
+//! drops; where Mesa's lavapipe is installed the File menu and the dock are also rendered on it and compared with
+//! their snapshots.
 
+mod common;
+
+use std::collections::BTreeMap;
 use std::path::Path;
-use std::time::Instant;
 
-use freya::prelude::*;
-use freya_testing::prelude::*;
-use wavedude_app::ui::app::{Boot, BootInfo, CloseGate, root};
-use wavedude_app::ui::shared::Shared;
-use wavedude_app_state::commands::{Command, NewPart};
+use eframe::egui::{self, Key, Modifiers};
+use egui_kittest::kittest::{NodeT, Queryable};
+use egui_kittest::{Harness, HarnessBuilder};
+use wavedude_app::ui::{Boot, Shell};
+use wavedude_app_state::document::Source;
+use wavedude_app_state::history::History;
 use wavedude_app_state::log::LogRing;
+use wavedude_app_state::platform::Instant;
 use wavedude_app_state::selection::Row;
-use wavedude_app_state::settings::{AppDirs, Settings};
-use wavedude_app_state::{AppState, Event as AppEvent, Guarded};
-use wavedude_core::model::{FilterLayer, ItemKind, ItemRef, PartKind, ProbeDetector, ProbeKind, Project};
-use wavedude_examples::Topic;
-use wavedude_testing::{click_at, click_tagged, count_tagged, find_text, label_areas, settle, tagged, tagged_area};
+use wavedude_app_state::settings::{AppDirs, Theme};
+use wavedude_app_state::strings::{Language, Strings, strip_mnemonic};
+use wavedude_app_state::{AppState, Event, Guarded};
+use wavedude_core::model::{ItemKind, ItemRef};
 
-const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj";
+const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj";
+/// Frames for a click or a key to reach the state and its result to show.
+const SETTLE: usize = 4;
 
-/// A returning user's window: the startup page answered.
-fn shell(dir: &Path) -> (TestingRunner, Shared) {
-	shell_at(dir, true)
-}
-
-fn shell_at(dir: &Path, answered: bool) -> (TestingRunner, Shared) {
-	shell_sized(dir, answered, Size2D::new(1400., 900.))
-}
-
-/// A window tall enough for the whole probe form: its Axes section lies below a 900 px window.
-fn tall_shell(dir: &Path) -> (TestingRunner, Shared) {
-	shell_sized(dir, true, Size2D::new(1400., 1400.))
-}
-
-fn shell_sized(dir: &Path, answered: bool, size: Size2D) -> (TestingRunner, Shared) {
+/// The window on a returning user's settings under `dir`, in `language` and the light theme, with `project` open;
+/// `builder` renders it or not.
+fn shell_with(
+	builder: HarnessBuilder<Shell>,
+	dir: &Path,
+	language: Language,
+	project: Option<&str>,
+) -> Harness<'static, Shell> {
 	let dirs = AppDirs::under(dir);
-	let mut app = AppState::start(&dirs, []).expect("state starts");
-	if answered {
-		app.first_start = false;
-		app.settings.use_openh264 = Some(false);
-		app.settings.check_for_updates = Some(false);
+	let mut app = common::started(&dirs, false);
+	// the empty project's seed is random: the snapshots show it in the Properties pane
+	app.document.project.seed = 1;
+	app.document.history = History::new(&app.document.project);
+	app.live.project_replaced(&app.document.project, Instant::now());
+	for event in [Event::SetLanguage(language.code().into()), Event::SetTheme(Theme::Light)] {
+		app.handle(event, Instant::now());
 	}
-	app.handle(AppEvent::SetLanguage("en".into()), Instant::now());
-	app.handle(AppEvent::Guarded(Guarded::Open(EXAMPLE.into())), Instant::now());
-	let info = BootInfo {
-		ring: LogRing::new(),
-		dirs,
-		close: CloseGate::default(),
+	if let Some(path) = project {
+		app.handle(Event::Guarded(Guarded::Open(Source::Path(path.into()))), Instant::now());
+	}
+	let boot = Boot {
+		store: dirs.store(),
+		gpu: None,
 		open: Default::default(),
+		log: LogRing::new(),
 		update: Default::default(),
-		placement: Default::default(),
 	};
-	let boot = Boot::new(app, info);
-	let handle = boot.clone();
-	let (mut test, ()) =
-		TestingRunner::new(root, size, move |r| drop(r.provide_root_context(move || boot.clone())), 1.0);
-	test.sync_and_update();
-	let shared = handle.shared().expect("the root provided the state");
-	(test, shared)
+	let mut harness = builder.with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
+	harness.run_steps(SETTLE);
+	harness
+}
+
+fn shell(dir: &Path, project: Option<&str>) -> Harness<'static, Shell> {
+	shell_with(Harness::builder(), dir, Language::English, project)
+}
+
+fn settle(harness: &mut Harness<'_, Shell>) {
+	harness.run_steps(SETTLE);
 }
 
 #[test]
-fn a_first_start_shows_the_startup_page_and_continue_saves_it() {
+fn the_file_menu_opens_with_its_entries() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell_at(dir.path(), false);
-	test.poll(std::time::Duration::from_millis(16), std::time::Duration::from_millis(100));
-	assert!(find_text(&test, "Welcome to WaveDude Rust").is_some(), "no startup page");
-	test.press_key(Key::Named(NamedKey::Enter));
-	test.sync_and_update();
-	assert!(find_text(&test, "Welcome to WaveDude Rust").is_none(), "the page stayed");
-	if !wavedude_export::h264::BUILT_IN {
-		assert_eq!(state.peek(|a| a.settings.use_openh264), Some(false), "the codec is never enabled unasked");
-	}
-	// Continue sends the page's answers as settings events, each of which writes the file: read back through the
-	// loader, the file holds what the state holds, and the next start is not a first one
-	let saved = Settings::load(&AppDirs::under(dir.path()).settings_file(), || panic!("the file exists"));
-	assert!(!saved.first_start);
-	assert_eq!(saved.settings, state.peek(|a| a.settings.clone()));
-}
-
-#[test]
-fn tree_lists_the_example_items() {
-	let dir = tempfile::tempdir().unwrap();
-	let (test, _) = shell(dir.path());
-	for name in ["Vertical source", "Horizontal source", "Left box", "Right box"] {
-		assert!(find_text(&test, name).is_some(), "no tree row {name}");
+	let mut harness = shell(dir.path(), None);
+	harness.get_by_label("File").click();
+	settle(&mut harness);
+	for entry in ["New Project", "Open Project...", "Save", "Save As...", "Exit"] {
+		harness.get_by_label(entry);
 	}
 }
 
 #[test]
-fn f10_enters_the_menu_bar_and_down_opens_file() {
+fn the_file_menu_looks_as_its_snapshot() {
+	let Some(builder) = common::lavapipe() else { return };
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, _) = shell(dir.path());
-	assert!(find_text(&test, "New Project").is_none());
-	test.press_key(Key::Named(NamedKey::F10));
-	test.sync_and_update();
-	test.press_key(Key::Named(NamedKey::ArrowDown));
-	test.sync_and_update();
-	assert!(find_text(&test, "New Project").is_some(), "File menu did not open");
+	let mut harness = shell_with(builder, dir.path(), Language::English, None);
+	common::preview_idle(&mut harness);
+	harness.get_by_label("File").click();
+	settle(&mut harness);
+	harness.snapshot("file_menu");
+}
+
+/// The panes' title bars: the active one accent-coloured with a white title and close cross.
+#[test]
+fn the_dock_looks_as_its_snapshot() {
+	let Some(builder) = common::lavapipe() else { return };
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = shell_with(builder, dir.path(), Language::English, None);
+	common::preview_idle(&mut harness);
+	harness.snapshot("dock");
 }
 
 #[test]
-fn a_property_edit_reaches_the_document() {
+fn an_idle_window_asks_for_no_repaint() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
-	let source = ItemRef::new(ItemKind::Source, 0);
-	state.update(|a| a.selection.select(Row::Item(source)));
-	test.sync_and_update();
-	test.sync_and_update();
-	let before = state.peek(|a| a.document.project.sources[0].enabled);
-	let toggle = find_text(&test, "Enabled").expect("the source form shows");
-	let area = toggle.layout().area;
-	click_at(&mut test, &toggle, (f64::from(area.min_x()) + 2., f64::from(area.center().y)), "Enabled");
-	assert_ne!(state.peek(|a| a.document.project.sources[0].enabled), before, "the check box did not edit the source");
+	let mut harness = shell(dir.path(), Some(EXAMPLE));
+	common::preview_idle(&mut harness);
+	harness.run_steps(1);
+	let delay = harness.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay;
+	assert_eq!(delay, std::time::Duration::MAX, "nothing moves, yet the window ticks");
 }
 
-/// A row greyed by another setting takes no edit: the line probe's step axis is a point probe's.
 #[test]
-fn a_disabled_row_takes_no_edit() {
+fn select_all_by_its_shortcut_enables_cut() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = tall_shell(dir.path());
-	let probe = ItemRef::new(ItemKind::Probe, 0);
-	state.update(|a| a.selection.select(Row::Item(probe)));
-	test.sync_and_update();
-	test.sync_and_update();
-	assert_eq!(state.peek(|a| a.document.project.probes[0].kind), ProbeKind::Line);
-	let before = state.peek(|a| a.document.project.probes[0].auto_scale_x);
-	let toggle = find_text(&test, "Auto-scale steps").expect("the probe form shows");
-	let area = toggle.layout().area;
-	click_at(&mut test, &toggle, (f64::from(area.min_x()) + 2., f64::from(area.center().y)), "Auto-scale steps");
-	assert_eq!(state.peek(|a| a.document.project.probes[0].auto_scale_x), before, "a disabled check box toggled");
-	assert!(!open_step_axis_combo(&mut test), "a disabled combo box opened its menu");
+	let mut harness = shell(dir.path(), Some(EXAMPLE));
+	let cut_enabled = |harness: &mut Harness<'_, Shell>| {
+		harness.get_by_label("Edit").click();
+		settle(harness);
+		let enabled = !harness.get_by_label("Cut").accesskit_node().is_disabled();
+		harness.key_press(Key::Escape);
+		settle(harness);
+		enabled
+	};
+	assert!(!cut_enabled(&mut harness), "nothing is selected yet");
+	harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+	settle(&mut harness);
+	assert!(cut_enabled(&mut harness), "Ctrl+A selected no item");
 }
 
-/// Clicks the Step axis combo (the widest "Running": the combo measures its words in a hidden copy) and says
-/// whether its menu opened, which adds a second visible "Full".
-fn open_step_axis_combo(test: &mut TestingRunner) -> bool {
-	let shown = label_areas(test, "Running").into_iter().max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
-	let before = label_areas(test, "Full").len();
-	test.click_cursor((f64::from(shown.center().x), f64::from(shown.center().y)));
-	test.sync_and_update();
-	test.sync_and_update();
-	label_areas(test, "Full").len() > before
-}
-
-/// A counting detector's graph runs over the steps, so its step axis rows take edits although its kind is Line.
 #[test]
-fn a_counting_detectors_step_axis_takes_an_edit() {
+fn view_theme_switches_the_look() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = tall_shell(dir.path());
-	let probe = ItemRef::new(ItemKind::Probe, 0);
-	state.update(|a| {
-		a.document.project.probes[0].detector = ProbeDetector::Counting;
-		a.document.edited(Instant::now());
-		a.selection.select(Row::Item(probe));
-	});
-	test.sync_and_update();
-	test.sync_and_update();
-	assert_eq!(state.peek(|a| a.document.project.probes[0].kind), ProbeKind::Line);
-	let before = state.peek(|a| a.document.project.probes[0].auto_scale_x);
-	let toggle = find_text(&test, "Auto-scale steps").expect("the probe form shows");
-	let area = toggle.layout().area;
-	click_at(&mut test, &toggle, (f64::from(area.min_x()) + 2., f64::from(area.center().y)), "Auto-scale steps");
-	assert_ne!(
-		state.peek(|a| a.document.project.probes[0].auto_scale_x),
-		before,
-		"the check box did not edit the detector"
+	let mut harness = shell(dir.path(), None);
+	assert_eq!(harness.ctx.theme(), egui::Theme::Light);
+	harness.get_by_label("View").click();
+	settle(&mut harness);
+	harness.get_by_label("Theme").hover();
+	settle(&mut harness);
+	harness.get_by_label("Dark").click();
+	settle(&mut harness);
+	assert_eq!(harness.ctx.theme(), egui::Theme::Dark);
+}
+
+#[test]
+fn view_panes_hides_and_shows_a_pane() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = shell(dir.path(), None);
+	let toggle = |harness: &mut Harness<'_, Shell>, pane: &str| {
+		harness.get_by_label("View").click();
+		settle(harness);
+		harness.get_by_label("Panes").hover();
+		settle(harness);
+		harness.get_by_role_and_label(egui::Role::MenuItemCheckBox, pane).click();
+		settle(harness);
+	};
+	assert!(harness.query_by_label("Messages").is_none(), "Messages starts hidden");
+	toggle(&mut harness, "Messages");
+	harness.get_by_role_and_label(egui::Role::List, "Messages");
+	let tab = |harness: &Harness<'_, Shell>| harness.query_by_role_and_label(egui::Role::Button, "Project").is_some();
+	toggle(&mut harness, "Project");
+	assert!(!tab(&harness), "Project stayed");
+	toggle(&mut harness, "Project");
+	assert!(tab(&harness), "Project did not come back");
+}
+
+/// Drags with the primary button from `from` to `to` in steps, pressing Esc before the release if `cancel`.
+fn drag(harness: &mut Harness<'_, Shell>, from: egui::Pos2, to: egui::Pos2, cancel: bool) {
+	let button = |pos, pressed| egui::Event::PointerButton {
+		pos,
+		button: egui::PointerButton::Primary,
+		pressed,
+		modifiers: Modifiers::NONE,
+	};
+	harness.event(egui::Event::PointerMoved(from));
+	harness.event(button(from, true));
+	harness.step();
+	for t in [0.1, 0.5, 1.] {
+		harness.event(egui::Event::PointerMoved(from + (to - from) * t));
+		harness.step();
+	}
+	if cancel {
+		harness.key_press(Key::Escape);
+		harness.step();
+	}
+	harness.event(button(to, false));
+	settle(harness);
+}
+
+#[test]
+fn a_tab_drops_into_a_group_but_not_into_the_preview_nor_after_esc() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = shell(dir.path(), None);
+	let tab = |harness: &Harness<'_, Shell>, pane: &str| harness.get_by_role_and_label(egui::Role::Button, pane).rect();
+	let (project, properties) = (tab(&harness, "Project"), tab(&harness, "Properties"));
+	let window = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280., 800.));
+	drag(&mut harness, project.center(), window.center(), false);
+	assert_eq!(tab(&harness, "Project"), project, "the Preview took a tab");
+	let into_properties = properties.center() + egui::vec2(120., 200.);
+	drag(&mut harness, project.center(), into_properties, true);
+	assert_eq!(tab(&harness, "Project"), project, "Esc did not cancel the drag");
+	drag(&mut harness, project.center(), into_properties, false);
+	let (project, properties) = (tab(&harness, "Project"), tab(&harness, "Properties"));
+	assert!(
+		project.top() == properties.top() && project.left() >= properties.right(),
+		"Project is no tab of Properties"
 	);
-	assert!(open_step_axis_combo(&mut test), "the enabled combo box opens its menu");
 }
 
-/// A drag by a layer's grip moves it through the list: the first layer dragged one row down swaps with the second.
 #[test]
-fn a_layer_dragged_by_its_grip_moves_down_the_list() {
+fn a_group_dragged_by_its_tab_bar_drops_beside_the_preview() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = tall_shell(dir.path());
-	state.update(|a| {
-		drop(a.apply(Command::AddPart { kind: NewPart::InterferenceFilter, at: None }, Instant::now()));
-	});
-	settle(&mut test);
-	let part = state.peek(|a| a.document.project.parts.len() - 1);
-	fn layers_of(project: &Project, part: usize) -> Vec<FilterLayer> {
-		match &project.parts[part].kind {
-			PartKind::InterferenceFilter(f) => f.layers.clone(),
-			_ => unreachable!("the part added is a filter"),
+	let mut harness = shell(dir.path(), None);
+	let properties = harness.get_by_role_and_label(egui::Role::Button, "Properties").rect();
+	drag(&mut harness, properties.right_center() + egui::vec2(60., 0.), egui::pos2(1100., 400.), false);
+	let properties = harness.get_by_role_and_label(egui::Role::Button, "Properties").rect();
+	assert!(properties.left() > 900., "Properties is not beside the Preview: {properties:?}");
+}
+
+#[test]
+fn the_arrangement_is_saved_as_it_changes_and_comes_back_at_the_next_start() {
+	let dir = tempfile::tempdir().unwrap();
+	let layout = || AppState::start(&AppDirs::under(dir.path()), []).unwrap().settings.layout;
+	let mut harness = shell(dir.path(), None);
+	let tab = |harness: &Harness<'_, Shell>, pane: &str| harness.get_by_role_and_label(egui::Role::Button, pane).rect();
+	let (project, properties) = (tab(&harness, "Project"), tab(&harness, "Properties"));
+	harness.get_by_label("Properties").click();
+	settle(&mut harness);
+	assert_eq!(layout(), None, "a click on the active tab changed nothing");
+	drag(&mut harness, project.center(), properties.center() + egui::vec2(120., 200.), false);
+	let saved = layout();
+	assert!(saved.is_some(), "the drop is not saved");
+	let mut harness = shell(dir.path(), None);
+	let (project, properties) = (tab(&harness, "Project"), tab(&harness, "Properties"));
+	assert!(project.top() == properties.top() && project.left() >= properties.right(), "the drop is not restored");
+	assert_eq!(layout(), saved, "the next start rewrote the arrangement");
+	let column = egui::pos2(properties.left() + 320., 400.);
+	drag(&mut harness, column, column + egui::vec2(80., 0.), false);
+	assert_ne!(layout(), saved, "the resize is not saved");
+}
+
+fn is_focused(harness: &Harness<'_, Shell>, label: &str) -> bool {
+	harness.get_by_label(label).is_focused()
+}
+
+#[test]
+fn alt_and_a_letter_open_a_menu_on_its_first_entry() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = shell(dir.path(), None);
+	harness.key_press_modifiers(Modifiers::ALT, Key::F);
+	settle(&mut harness);
+	assert!(is_focused(&harness, "New Project"), "Alt+F left the File menu unfocused");
+}
+
+#[test]
+fn the_arrows_walk_the_menus_and_esc_steps_out() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = shell(dir.path(), None);
+	harness.key_press_modifiers(Modifiers::ALT, Key::F);
+	settle(&mut harness);
+	harness.key_press(Key::ArrowDown);
+	settle(&mut harness);
+	assert!(is_focused(&harness, "Open Project..."));
+	harness.key_press(Key::ArrowLeft);
+	settle(&mut harness);
+	assert!(harness.query_by_label("New Project").is_none(), "File stayed open");
+	assert!(is_focused(&harness, "About WaveDude Rust"), "Left from File opens Help");
+	harness.key_press(Key::ArrowRight);
+	settle(&mut harness);
+	assert!(is_focused(&harness, "New Project"), "Right from Help wraps to File");
+	harness.key_press(Key::Escape);
+	settle(&mut harness);
+	assert!(harness.query_by_label("New Project").is_none(), "Esc left File open");
+	assert!(is_focused(&harness, "File"), "Esc leaves the bar on File");
+	harness.key_press(Key::ArrowRight);
+	harness.run_steps(SETTLE);
+	harness.key_press(Key::Enter);
+	settle(&mut harness);
+	assert!(harness.query_by_label("Undo").is_some(), "Right, Enter opens Edit");
+	harness.key_press(Key::Escape);
+	settle(&mut harness);
+	harness.key_press(Key::Escape);
+	settle(&mut harness);
+	assert!(!is_focused(&harness, "Edit"), "the second Esc leaves the bar");
+}
+
+#[test]
+fn a_lone_alt_enters_the_bar_and_letters_pick_entries() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = shell(dir.path(), None);
+	harness.event(egui::Event::ModifiersChanged(Modifiers::ALT));
+	harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
+	settle(&mut harness);
+	assert!(is_focused(&harness, "File"), "a lone Alt enters the bar on File");
+	for key in [Key::V, Key::T] {
+		harness.key_press(key);
+		settle(&mut harness);
+	}
+	assert!(is_focused(&harness, "System"), "V, T open View > Theme");
+	harness.key_press(Key::Escape);
+	settle(&mut harness);
+	assert!(harness.query_by_label("System").is_none() && is_focused(&harness, "Theme"), "Esc closes the submenu only");
+	harness.key_press(Key::ArrowRight);
+	settle(&mut harness);
+	harness.key_press(Key::End);
+	settle(&mut harness);
+	harness.key_press(Key::Enter);
+	settle(&mut harness);
+	assert_eq!(harness.ctx.theme(), egui::Theme::Dark, "Right, End, Enter picks Dark");
+	assert!(harness.query_by_label("System").is_none(), "picking closes the menus");
+}
+
+/// The menus shown as the pointer opens every menu of the bar and each of their submenus: each menu's mnemonics,
+/// with the entries' texts.
+fn mnemonics(harness: &mut Harness<'_, Shell>, headers: &[String]) -> BTreeMap<u64, Vec<(String, String)>> {
+	let mut menus: BTreeMap<u64, Vec<(String, String)>> = BTreeMap::new();
+	let mut collect = |harness: &Harness<'_, Shell>| {
+		for node in harness.query_all_by(|n| n.data().access_key().is_some()) {
+			let node = node.accesskit_node();
+			let mut menu = node.parent();
+			while let Some(m) = menu.filter(|m| m.role() != egui::Role::Menu) {
+				menu = m.parent();
+			}
+			let entries = menus.entry(menu.map_or(0, |m| m.locate().0.0)).or_default();
+			let entry = (node.data().access_key().unwrap().to_owned(), node.label().unwrap_or_default());
+			if !entries.contains(&entry) {
+				entries.push(entry);
+			}
+		}
+	};
+	for header in headers {
+		harness.get_by_role_and_label(egui::Role::Button, header).click();
+		settle(harness);
+		collect(harness);
+		let submenus: Vec<String> = harness
+			.query_all_by(|n| n.data().has_popup().is_some() && n.role() == egui::Role::MenuItem)
+			.filter_map(|n| n.accesskit_node().label())
+			.collect();
+		for submenu in submenus {
+			harness.get_by_role_and_label(egui::Role::MenuItem, &submenu).hover();
+			settle(harness);
+			collect(harness);
+		}
+		harness.key_press(Key::Escape);
+		settle(harness);
+	}
+	menus
+}
+
+#[test]
+fn every_menu_has_unique_mnemonics_in_every_language() {
+	let mut shared = Vec::new();
+	for language in Language::ALL {
+		let dir = tempfile::tempdir().unwrap();
+		let mut harness = shell_with(Harness::builder(), dir.path(), language, None);
+		let s = Strings::new(language);
+		let headers =
+			["MenuFile", "MenuEdit", "MenuView", "MenuSimulation", "MenuHelp"].map(|k| strip_mnemonic(s.get(k)));
+		let menus = mnemonics(&mut harness, &headers);
+		assert!(menus.len() > headers.len(), "{language:?}: the submenus did not open");
+		for entries in menus.values() {
+			for (i, (letter, text)) in entries.iter().enumerate() {
+				if let Some((_, other)) = entries[i + 1..].iter().find(|(l, _)| l == letter) {
+					shared.push(format!("{language:?} '{letter}': {text} / {other}"));
+				}
+			}
 		}
 	}
-	let before = state.peek(|a| layers_of(&a.document.project, part));
-	assert!(before.len() >= 2 && before[0] != before[1], "a new filter alternates two layers");
-	let first = tagged(&test, "Layer0.Grip").expect("the first layer's grip");
-	let second = tagged_area(&test, "Layer1.Grip").expect("the second layer's grip");
-	wavedude_testing::assert_on_screen(&test, &first, "Layer0.Grip");
-	let start = first.layout().area.center();
-	let pitch = f64::from(second.center().y - start.y);
-	test.press_cursor((f64::from(start.x), f64::from(start.y)));
-	test.move_cursor((f64::from(start.x), f64::from(start.y) + pitch * 0.3));
-	test.move_cursor((f64::from(start.x), f64::from(start.y) + pitch));
-	settle(&mut test);
-	test.release_cursor((f64::from(start.x), f64::from(start.y) + pitch));
-	settle(&mut test);
-	let after = state.peek(|a| layers_of(&a.document.project, part));
-	assert_eq!((&after[0], &after[1]), (&before[1], &before[0]), "the first two layers changed places");
-	assert_eq!(after[2..], before[2..], "the rest stayed");
+	assert!(shared.is_empty(), "mnemonics shared within a menu: {shared:#?}");
+}
+
+fn project_of<'a>(harness: &'a Harness<'_, Shell>) -> &'a wavedude_core::model::Project {
+	&harness.state().app().document.project
+}
+
+fn row(harness: &Harness<'_, Shell>, label: &str) -> egui::Rect {
+	harness.get_by_role_and_label(egui::Role::TreeItem, label).rect()
 }
 
 #[test]
-fn drop_downs_fill_their_column() {
+fn a_click_on_a_row_selects_it_and_ctrl_click_adds_to_it() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
-	state.update(|a| a.selection.select(Row::Scene));
-	for _ in 0..3 {
-		test.sync_and_update();
+	let mut harness = shell(dir.path(), Some(EXAMPLE));
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Source 1").click();
+	settle(&mut harness);
+	let source = ItemRef::new(ItemKind::Source, 0);
+	let part = ItemRef::new(ItemKind::Part, 0);
+	assert_eq!(harness.state().app().selection.current_item(), Some(source));
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Rectangle 1").click_modifiers(Modifiers::COMMAND);
+	settle(&mut harness);
+	let selection = &harness.state().app().selection;
+	assert!(selection.contains(source) && selection.contains(part), "Ctrl+click replaced the selection");
+}
+
+#[test]
+fn the_toolbar_adds_a_source_and_the_keys_rename_and_remove_it() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = shell(dir.path(), Some(EXAMPLE));
+	harness.get_by_role_and_label(egui::Role::Button, "Source").click();
+	settle(&mut harness);
+	assert_eq!(project_of(&harness).sources.len(), 2);
+	let added = ItemRef::new(ItemKind::Source, 1);
+	assert_eq!(harness.state().app().selection.current_item(), Some(added));
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Source 2").click();
+	settle(&mut harness);
+	harness.key_press(Key::F2);
+	settle(&mut harness);
+	harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+	harness.event(egui::Event::Text("Beam".into()));
+	harness.key_press(Key::Enter);
+	settle(&mut harness);
+	assert_eq!(added.name(project_of(&harness)), Some("Beam"));
+	harness.key_press(Key::Delete);
+	settle(&mut harness);
+	assert_eq!(project_of(&harness).sources.len(), 1, "Delete kept the source");
+}
+
+#[test]
+fn alt_and_an_arrow_move_a_part_and_the_row_menu_lists_its_actions() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = shell(dir.path(), Some(EXAMPLE));
+	harness.get_by_role_and_label(egui::Role::Button, "Part").click();
+	settle(&mut harness);
+	harness.get_by_label("Rectangle").click();
+	settle(&mut harness);
+	let names = |harness: &Harness<'_, Shell>| ItemKind::Part.names(project_of(harness)).join(",");
+	assert_eq!(names(&harness), "Rectangle 1,Rectangle 2");
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Rectangle 2").click();
+	settle(&mut harness);
+	harness.key_press_modifiers(Modifiers::ALT, Key::ArrowUp);
+	settle(&mut harness);
+	assert_eq!(names(&harness), "Rectangle 2,Rectangle 1", "Alt+Up left the part");
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Rectangle 1").click_secondary();
+	settle(&mut harness);
+	for entry in ["Cut", "Duplicate", "Move down", "Remove"] {
+		harness.get_by_label(entry);
 	}
-	let words = |w: &str| {
-		test.find_many(|node, element| {
-			Label::try_downcast(element).is_some_and(|l| l.text.as_ref() == w).then_some(node.layout().area)
-		})
-	};
-	// the hidden measuring copy lists every word first
-	let open = words("Open");
-	let (hidden, shown) = (open[0], open[1]);
-	let reflective = words("Reflective")[0];
-	assert!(reflective.width() > hidden.width(), "the measuring copy holds the widest word");
-	assert!(
-		shown.width() > reflective.width() + 40.,
-		"the button fills the column past its widest word: shown {} widest {}",
-		shown.width(),
-		reflective.width()
-	);
-	let column = test
-		.find(|node, element| {
-			Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some("Scene.Width"))?;
-			Some(node.layout().area)
-		})
-		.expect("the width box is drawn");
-	assert!(shown.max_x() < column.max_x(), "the button stays in the editor column: {shown:?} {column:?}");
 }
 
 #[test]
-fn hovering_export_opens_its_submenu_inside_the_window() {
+fn a_row_dropped_on_another_reorders_the_list() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, _) = shell(dir.path());
-	test.press_key(Key::Named(NamedKey::F10));
-	test.sync_and_update();
-	test.press_key(Key::Named(NamedKey::ArrowDown));
-	test.sync_and_update();
-	let export = find_text(&test, "Export").expect("the File menu shows Export").layout().area;
-	test.move_cursor((f64::from(export.center().x), f64::from(export.center().y)));
-	test.sync_and_update();
-	test.sync_and_update();
-	let row = |id: &str| {
-		test.find(|node, element| {
-			Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some(id))?;
-			Some(node.layout().area)
-		})
-		.unwrap_or_else(|| panic!("no menu row {id}"))
-	};
-	let field = row("file:export:field");
-	let new = row("file:new");
-	assert!(field.min_x() >= new.max_x() - 4., "the submenu opens beside its parent: {field:?} vs {new:?}");
-	assert!(field.max_x() <= 1400., "the submenu stays inside the window: {field:?}");
-	assert!(new.width() < 320., "the File menu is {} px wide", new.width());
+	let mut harness = shell(dir.path(), Some(EXAMPLE));
+	harness.get_by_role_and_label(egui::Role::Button, "Source").click();
+	settle(&mut harness);
+	let first = row(&harness, "Source 1");
+	let second = row(&harness, "Source 2");
+	drag(&mut harness, first.center(), egui::pos2(second.center().x, second.bottom() - 2.), false);
+	assert_eq!(ItemKind::Source.names(project_of(&harness)), ["Source 2", "Source 1"]);
 }
 
-/// The brightness box of a strip on its side: a click on its likeness focuses it, typed text and Enter set the value.
 #[test]
-fn the_turned_brightness_box_takes_clicks_and_keys() {
+fn a_long_tree_scrolls_to_the_current_row() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
-	let id = "PreviewFieldImageBrightness";
-	let area = test
-		.find(|node, element| {
-			Rect::try_downcast(element).filter(|r| r.accessibility.builder.author_id() == Some(id))?;
-			Some(node.layout().area)
-		})
-		.expect("the box's stand-in");
-	assert!(area.height() > area.width(), "the strip is on its side: {area:?}");
-	test.click_cursor((f64::from(area.center().x), f64::from(area.center().y)));
-	test.sync_and_update();
-	test.press_key(Key::Named(NamedKey::End));
-	for _ in 0..8 {
-		test.press_key(Key::Named(NamedKey::Backspace));
+	let mut harness = shell(dir.path(), Some(EXAMPLE));
+	for _ in 0..12 {
+		harness.get_by_role_and_label(egui::Role::Button, "Source").click();
+		settle(&mut harness);
 	}
-	test.write_text("42");
-	test.press_key(Key::Named(NamedKey::Enter));
-	test.sync_and_update();
-	test.sync_and_update();
-	assert_eq!(state.peek(|a| a.document.project.display.field.brightness), 42.);
-}
-
-/// Whether the focused element lies inside the element tagged `id`.
-fn focus_in(test: &mut TestingRunner, id: &str) -> bool {
-	let focus = test.sync_and_update().focus;
-	let focused = test.find(|node, element| {
-		let a11y = Rect::try_downcast(element)
-			.map(|r| r.accessibility.a11y_id)
-			.or_else(|| Paragraph::try_downcast(element).map(|p| p.accessibility.a11y_id))?;
-		(a11y == Some(focus)).then(|| node.layout().area)
-	});
-	let tag = tagged_area(test, id).unwrap_or_else(|| panic!("no element {id}"));
-	focused.is_some_and(|f| tag.contains(f.center()))
+	// rounded to whole pixels
+	let tree = harness.get_by_role(egui::Role::Tree).rect().expand(1.);
+	let shown = |harness: &Harness<'_, Shell>, label: &str| {
+		harness.query_by_role_and_label(egui::Role::TreeItem, label).is_some_and(|n| tree.contains_rect(n.rect()))
+	};
+	assert!(shown(&harness, "Source 13"), "the added source is out of sight");
+	assert!(!shown(&harness, "Project"), "the tree is short enough to show all");
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Source 13").click();
+	settle(&mut harness);
+	harness.key_press(Key::Home);
+	settle(&mut harness);
+	assert!(shown(&harness, "Project"), "Home left the root out of sight");
+	harness.key_press(Key::End);
+	settle(&mut harness);
+	assert!(shown(&harness, "Colour schemes"), "End left the last row out of sight");
+	let row = row(&harness, "Colour schemes");
+	harness.hover_at(row.center());
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Colour schemes").click();
+	settle(&mut harness);
+	let current = harness.state().app().selection.current();
+	assert_eq!(current, Some(Row::Folder(ItemKind::Scheme)), "the row drawn there is another");
 }
 
 #[test]
-fn an_opened_project_shows_its_root() {
+fn a_click_on_a_check_box_keeps_the_keys_in_the_tree() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
-	settle(&mut test);
-	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Project));
-	assert!(find_text(&test, "No selection").is_none(), "the Properties pane shows the Project form");
-	assert!(count_tagged(&test, "Project.") > 0, "the Project form's rows are shown");
-	state.update(|a| drop(a.handle(AppEvent::Guarded(Guarded::New), Instant::now())));
-	settle(&mut test);
-	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Project), "a new project too");
-	assert!(focus_in(&mut test, "ProjectTree"), "the tree takes the focus");
+	let mut harness = shell(dir.path(), Some(EXAMPLE));
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Source 1").click();
+	settle(&mut harness);
+	harness.get_by_role_and_label(egui::Role::CheckBox, "Source 1").click();
+	settle(&mut harness);
+	assert!(!project_of(&harness).sources[0].enabled, "the check box left the source on");
+	harness.key_press(Key::Space);
+	settle(&mut harness);
+	assert!(project_of(&harness).sources[0].enabled, "Space after the click left the tree");
 }
 
-/// `KeyboardCheck` step 2: the move and remove buttons are disabled with no item selected and skipped.
 #[test]
-fn tab_walks_the_project_toolbar_into_the_tree() {
+fn a_right_click_in_the_selection_keeps_it_and_its_menu_acts_on_the_row() {
 	let dir = tempfile::tempdir().unwrap();
-	let (mut test, _) = shell(dir.path());
-	settle(&mut test);
-	for _ in 0..40 {
-		if focus_in(&mut test, "ToolAddSource") {
+	let mut harness = shell(dir.path(), Some(EXAMPLE));
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Source 1").click();
+	settle(&mut harness);
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Rectangle 1").click_modifiers(Modifiers::COMMAND);
+	settle(&mut harness);
+	let before = harness.state().app().selection.clone();
+	harness.get_by_role_and_label(egui::Role::TreeItem, "Source 1").click_secondary();
+	settle(&mut harness);
+	assert!(harness.state().app().selection == before, "the right-click changed the selection");
+	harness.get_by_label("Duplicate").click();
+	settle(&mut harness);
+	let project = project_of(&harness);
+	assert_eq!((project.sources.len(), project.parts.len()), (2, 2), "Duplicate left out a selected item");
+}
+
+#[test]
+fn close_is_enabled_on_any_project_but_the_empty_one_of_the_start() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = shell(dir.path(), None);
+	let close_enabled = |harness: &mut Harness<'_, Shell>| {
+		harness.get_by_label("File").click();
+		settle(harness);
+		let enabled = !harness.get_by_label("Close Project").accesskit_node().is_disabled();
+		harness.key_press(Key::Escape);
+		settle(harness);
+		enabled
+	};
+	assert!(!close_enabled(&mut harness), "the empty project closes");
+	harness.get_by_label("File").click();
+	settle(&mut harness);
+	harness.get_by_label("New Project").click();
+	settle(&mut harness);
+	assert!(close_enabled(&mut harness), "a new project without a file does not close");
+}
+
+/// A file dropped on the window, as the platform hands it over.
+#[derive(Debug)]
+struct Dropped(std::path::PathBuf);
+
+impl egui::DroppedFile for Dropped {
+	fn path(&self) -> &Path {
+		&self.0
+	}
+
+	fn bytes(&self) -> Result<Vec<u8>, String> {
+		std::fs::read(&self.0).map_err(|e| e.to_string())
+	}
+}
+
+fn drop_file(harness: &mut Harness<'_, Shell>, path: &str) {
+	let path = std::fs::canonicalize(path).unwrap();
+	harness.input_mut().dropped_files.push(std::sync::Arc::new(Dropped(path)));
+	settle(harness);
+}
+
+#[test]
+fn a_dropped_project_opens_and_a_dropped_image_becomes_the_scene() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = shell(dir.path(), None);
+	drop_file(&mut harness, EXAMPLE);
+	assert_eq!(project_of(&harness).sources.len(), 1, "the dropped project did not open");
+	let image = "../wavedude-core/tests/fixtures/legacy/Example12_Dispersion/scene_images/frequency_race_track (2).png";
+	drop_file(&mut harness, image);
+	// the image is read on a thread of its own
+	for _ in 0..200 {
+		if project_of(&harness).scene.image_data.is_some() {
 			break;
 		}
-		test.press_key(Key::Named(NamedKey::Tab));
+		std::thread::sleep(std::time::Duration::from_millis(10));
+		harness.run_steps(1);
 	}
-	assert!(focus_in(&mut test, "ToolAddSource"), "Tab never reached Add source");
-	assert!(!focus_in(&mut test, "ToolAddPart"));
-	for id in ["ToolAddProbe", "ToolAddPart", "ProjectTree"] {
-		test.press_key(Key::Named(NamedKey::Tab));
-		assert!(focus_in(&mut test, id), "Tab skipped {id}");
-	}
-}
-
-/// `KeyboardCheck` step 3: the new source is selected and its name box has the caret.
-#[test]
-fn an_added_source_is_selected_with_the_caret_in_its_name() {
-	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
-	settle(&mut test);
-	let count = state.peek(|a| a.document.project.sources.len());
-	click_tagged(&mut test, "ToolAddSource");
-	let added = ItemRef::new(ItemKind::Source, count);
-	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Item(added)));
-	assert!(focus_in(&mut test, "Source.Name"), "the name box has no focus");
-	test.write_text("Lamp");
-	settle(&mut test);
-	let name = state.peek(|a| a.document.project.sources[count].name.clone());
-	assert_eq!(name, "Lamp", "the focused name is selected, typing replaces it");
-}
-
-/// `KeyboardCheck` step 7: Remove takes the selected source away and selects its neighbour.
-#[test]
-fn removing_the_last_row_selects_the_one_above() {
-	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
-	let count = state.peek(|a| a.document.project.sources.len());
-	assert!(count >= 2, "the example has two sources");
-	state.update(|a| a.selection.select(Row::Item(ItemRef::new(ItemKind::Source, count - 1))));
-	settle(&mut test);
-	click_tagged(&mut test, "ToolRemove");
-	assert_eq!(state.peek(|a| a.document.project.sources.len()), count - 1);
-	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Item(ItemRef::new(ItemKind::Source, count - 2))));
-	assert!(focus_in(&mut test, "ProjectTree"), "the tree takes the focus from the button");
-}
-
-/// `KeyboardCheck` step 6: a move keeps the selection and gives the tree the focus.
-#[test]
-fn moving_a_row_keeps_it_selected_and_focuses_the_tree() {
-	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
-	let name = state.peek(|a| a.document.project.sources[1].name.clone());
-	state.update(|a| a.selection.select(Row::Item(ItemRef::new(ItemKind::Source, 1))));
-	settle(&mut test);
-	click_tagged(&mut test, "ToolMoveUp");
-	assert_eq!(state.peek(|a| a.document.project.sources[0].name.clone()), name);
-	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Item(ItemRef::new(ItemKind::Source, 0))));
-	assert!(focus_in(&mut test, "ProjectTree"), "the tree takes the focus from the button");
-}
-
-fn open_examples_dialog(test: &mut TestingRunner) {
-	test.press_key(Key::Named(NamedKey::F10));
-	test.sync_and_update();
-	test.press_key(Key::Named(NamedKey::ArrowDown));
-	test.sync_and_update();
-	click_tagged(test, "file:examples");
-	assert!(tagged_area(test, "ExamplesDialog").is_some(), "File > Examples opens the dialog");
-}
-
-#[test]
-fn the_examples_dialog_lists_every_example_by_topic() {
-	let dir = tempfile::tempdir().unwrap();
-	let (mut test, _) = shell(dir.path());
-	open_examples_dialog(&mut test);
-	for (tab, expected) in [8, 10, 7, 5, 18, 5].into_iter().enumerate() {
-		click_tagged(&mut test, &format!("ExamplesTab:{tab}"));
-		let rows = count_tagged(&test, "Example:");
-		assert_eq!(rows, expected, "tab {tab}");
-	}
-	test.press_key(Key::Named(NamedKey::Escape));
-	settle(&mut test);
-	assert!(tagged_area(&test, "ExamplesDialog").is_none(), "Esc closes the dialog");
-}
-
-#[test]
-fn the_examples_search_narrows_the_rows() {
-	let dir = tempfile::tempdir().unwrap();
-	let (mut test, _) = shell(dir.path());
-	open_examples_dialog(&mut test);
-	click_tagged(&mut test, "ExamplesSearch");
-	test.write_text("fibre");
-	settle(&mut test);
-	assert!(tagged_area(&test, "Example:Example23_Fibres").is_some(), "the search follows the matches to their tab");
-	assert!(tagged_area(&test, "Example:Example24_Fibre_cross_over").is_some());
-	assert!(tagged_area(&test, "Example:Example01_Source_Mirror_Probe").is_none());
-	let matches = |t: Topic| {
-		wavedude_examples::all()
-			.iter()
-			.filter(|e| {
-				e.topic == t
-					&& (e.title.to_lowercase().contains("fibre") || e.description.to_lowercase().contains("fibre"))
-			})
-			.count()
-	};
-	// the search lands on the first tab with a match and shows that tab's matches
-	let expected = Topic::ALL.iter().map(|&t| matches(t)).find(|&n| n > 0).unwrap();
-	assert!(expected > 1, "more than one example names a fibre");
-	assert_eq!(count_tagged(&test, "Example:"), expected);
-}
-
-#[test]
-fn enter_opens_the_selected_example() {
-	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
-	open_examples_dialog(&mut test);
-	click_tagged(&mut test, "ExamplesTab:2");
-	click_tagged(&mut test, "Example:Example13_Bragg_reflector");
-	test.press_key(Key::Named(NamedKey::Enter));
-	settle(&mut test);
-	assert!(tagged_area(&test, "ExamplesDialog").is_none(), "opening closes the dialog");
-	let name = state.peek(|a| a.document.display_name(""));
-	assert!(name.contains("Example13_Bragg_reflector"), "{name}");
-}
-
-/// Types `text` into the number box tagged `id` after a click on it, without leaving it.
-fn type_into_number_box(test: &mut TestingRunner, id: &str, text: &str) {
-	let area = tagged_area(test, id).unwrap_or_else(|| panic!("no element {id}"));
-	test.click_cursor((f64::from(area.min_x()) + 6., f64::from(area.center().y)));
-	test.sync_and_update();
-	test.press_key(Key::Named(NamedKey::End));
-	for _ in 0..12 {
-		test.press_key(Key::Named(NamedKey::Backspace));
-	}
-	test.write_text(text);
-	test.sync_and_update();
-}
-
-/// A value typed into a box and not yet confirmed is in the model when a command reads it.
-#[test]
-fn a_typed_value_is_committed_before_a_command_reads_the_model() {
-	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
-	state.update(|a| a.selection.select(Row::Item(ItemRef::new(ItemKind::Source, 0))));
-	test.sync_and_update();
-	test.sync_and_update();
-	type_into_number_box(&mut test, "Source.Frequency", "77");
-	assert_ne!(state.peek(|a| a.document.project.sources[0].frequency), 77., "typing alone does not apply");
-	state.send(AppEvent::SaveAs(dir.path().join("typed.wdproj")));
-	assert_eq!(state.peek(|a| a.document.project.sources[0].frequency), 77.);
-}
-
-/// Focus leaving the box commits its text: a click on another tree row.
-#[test]
-fn a_typed_value_is_committed_when_another_tree_row_is_clicked() {
-	let dir = tempfile::tempdir().unwrap();
-	let (mut test, state) = shell(dir.path());
-	state.update(|a| a.selection.select(Row::Item(ItemRef::new(ItemKind::Source, 0))));
-	test.sync_and_update();
-	test.sync_and_update();
-	type_into_number_box(&mut test, "Source.Frequency", "66");
-	assert_ne!(state.peek(|a| a.document.project.sources[0].frequency), 66.);
-	let other = state.peek(|a| a.document.project.sources[1].name.clone());
-	let row = find_text(&test, &other).expect("the tree row").layout().area;
-	test.click_cursor((f64::from(row.center().x), f64::from(row.center().y)));
-	test.sync_and_update();
-	assert_eq!(state.peek(|a| a.document.project.sources[0].frequency), 66.);
-	assert_eq!(state.peek(|a| a.selection.current()), Some(Row::Item(ItemRef::new(ItemKind::Source, 1))));
+	assert_eq!(project_of(&harness).scene.image, "frequency_race_track (2).png");
 }

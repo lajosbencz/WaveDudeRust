@@ -1,12 +1,11 @@
-//! Colour scheme lookup: project schemes, then the user's folder, then the 23 built-ins embedded
+//! Colour scheme lookup: project schemes, then the user's, then the 23 built-ins embedded
 //! from `schemes/*.wdscheme`; and the Wave Dude 2D JSON scheme reader.
 
-use std::path::Path;
 use std::sync::OnceLock;
 
 use serde_json::Value;
 
-use super::{FormatError, IoError, Result, UnreadableFile, wdscheme};
+use super::{FormatError, wdscheme};
 use crate::model::normalize::Normalize;
 use crate::model::{ColorScheme, Rgb, SchemeKind, Stop};
 
@@ -72,44 +71,11 @@ pub fn find<'a>(schemes: &'a [ColorScheme], name: &str) -> Option<&'a ColorSchem
 /// Resolves scheme names for rendering: the project's schemes, then the user's, then the built-ins.
 #[derive(Clone, Debug, Default)]
 pub struct SchemeStore {
-	/// Schemes from the user's folder.
+	/// The user's schemes.
 	pub user: Vec<ColorScheme>,
 }
 
 impl SchemeStore {
-	/// A store with the user's `.wdscheme` and `.json` schemes from `folder` (missing folder: none).
-	/// Unreadable files, and an unreadable folder, are skipped and returned as errors.
-	pub fn with_user_folder(folder: &Path) -> (Self, Vec<IoError>) {
-		let mut user = Vec::new();
-		let mut errors = Vec::new();
-		let mut files: Vec<_> = match std::fs::read_dir(folder) {
-			Ok(d) => d.filter_map(|e| e.ok().map(|e| e.path())).collect(),
-			Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-			Err(source) => {
-				tracing::warn!("colour scheme folder '{}' not read: {source}", folder.display());
-				errors.push(IoError::Io { path: folder.to_owned(), source });
-				Vec::new()
-			}
-		};
-		files.sort_by_key(|p| p.to_string_lossy().to_lowercase());
-		for path in files {
-			let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-			let loaded = match ext.as_str() {
-				wdscheme::EXTENSION => wdscheme::load(&path),
-				"json" => load_author_json(&path),
-				_ => continue,
-			};
-			match loaded {
-				Ok(s) => user.push(s),
-				Err(e) => {
-					tracing::warn!("colour scheme file '{}' not loaded: {e}", path.display());
-					errors.push(e);
-				}
-			}
-		}
-		(Self { user }, errors)
-	}
-
 	/// The scheme `name` resolves to; [`ColorScheme::grey`] when none matches.
 	pub fn resolve(&self, project_schemes: &[ColorScheme], name: &str) -> ColorScheme {
 		find(project_schemes, name)
@@ -125,7 +91,7 @@ const AUTHOR_ENTRY_COUNT: usize = 255;
 /// Stops of the original's editor form.
 const AUTHOR_STOP_COUNT: usize = 9;
 
-fn colour_list(v: &Value) -> std::result::Result<Vec<Rgb>, FormatError> {
+fn colour_list(v: &Value) -> Result<Vec<Rgb>, FormatError> {
 	let bad = || FormatError::new("expected a list of [r,g,b] triplets");
 	v.as_array()
 		.ok_or_else(bad)?
@@ -136,7 +102,7 @@ fn colour_list(v: &Value) -> std::result::Result<Vec<Rgb>, FormatError> {
 				.ok_or_else(bad)?
 				.iter()
 				.map(|c| c.as_f64().ok_or_else(|| FormatError::new("a colour channel must be a number")))
-				.collect::<std::result::Result<_, _>>()?;
+				.collect::<Result<_, _>>()?;
 			if ch.len() < 3 {
 				return Err(FormatError::new("a colour needs three values [r,g,b]"));
 			}
@@ -197,7 +163,7 @@ fn text_of(v: Option<&Value>) -> Option<String> {
 
 /// Parses a Wave Dude 2D JSON scheme (`name`, `origin`, `scheme_type`, `colors`, `stops`): nine `stops`
 /// are taken when `colors` is missing or is their interpolation, else `colors` become evenly spaced stops.
-pub fn parse_author_json(text: &str, fallback_name: &str) -> std::result::Result<ColorScheme, FormatError> {
+pub fn parse_author_json(text: &str, fallback_name: &str) -> Result<ColorScheme, FormatError> {
 	let root: Value = serde_json::from_str(text)
 		.map_err(|e| FormatError { message: format!("not valid JSON: {e}"), at: Some((e.line(), e.column())) })?;
 	let obj =
@@ -217,13 +183,6 @@ pub fn parse_author_json(text: &str, fallback_name: &str) -> std::result::Result
 	};
 	scheme.normalize();
 	Ok(scheme)
-}
-
-/// Loads a Wave Dude 2D JSON scheme; an unnamed one takes the file's name.
-pub fn load_author_json(path: &Path) -> Result<ColorScheme> {
-	let text = super::read_text(path)?;
-	let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-	parse_author_json(&text, &stem).map_err(|e| UnreadableFile::new(path, &text, e).into())
 }
 
 #[cfg(test)]

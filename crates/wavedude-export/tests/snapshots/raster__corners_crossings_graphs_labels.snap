@@ -1,0 +1,7 @@
+---
+source: crates/wavedude-export/tests/raster.rs
+expression: "prints.join(\"\\n\")"
+---
+9dc5b6b75a0c670e
+7bf4cd42c3c9bea8
+4b0bf9ed8e1fc172

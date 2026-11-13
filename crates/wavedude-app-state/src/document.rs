@@ -4,18 +4,15 @@
 //! Threads: plain data on the UI thread; loading and saving block the caller.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
 
-use notify::Watcher;
-use wavedude_core::sync::lock;
-
-use wavedude_core::io::{self, FormatError, IoError, legacy, wdproj};
+use wavedude_core::io::{self, FormatError, IoError, UnreadableFile, legacy, wdproj};
 use wavedude_core::model::Project;
 use wavedude_core::model::normalize::Normalize;
 use wavedude_examples::Example;
 
 use super::history::History;
+use super::platform::{Duration, FileWatch, Instant};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DocumentError {
@@ -25,6 +22,50 @@ pub enum DocumentError {
 	Example(String, FormatError),
 	#[error("the project has no file yet")]
 	NoPath,
+	#[error("'{0}' cannot be saved: {1}")]
+	Write(String, std::io::Error),
+}
+
+/// A file to open: on disk, or its bytes (a browser's upload or drop).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Source {
+	Path(PathBuf),
+	Bytes { name: String, bytes: Arc<[u8]> },
+}
+
+impl Source {
+	/// The file's name or path, for messages.
+	pub fn label(&self) -> String {
+		match self {
+			Self::Path(p) => p.display().to_string(),
+			Self::Bytes { name, .. } => name.clone(),
+		}
+	}
+
+	/// The lower-case extension.
+	pub fn extension(&self) -> String {
+		match self {
+			Self::Path(p) => extension(p),
+			Self::Bytes { name, .. } => extension(Path::new(name)),
+		}
+	}
+}
+
+/// Where a file is saved: on disk, or handed to the browser as a download of that name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Target {
+	Path(PathBuf),
+	Download(String),
+}
+
+impl Target {
+	/// The file's name or path, for messages.
+	pub fn label(&self) -> String {
+		match self {
+			Self::Path(p) => p.display().to_string(),
+			Self::Download(name) => name.clone(),
+		}
+	}
 }
 
 /// The project being edited and its file.
@@ -41,7 +82,9 @@ pub struct Document {
 	/// The empty project at start or after Close: the title shows the app name alone until it is edited.
 	placeholder: bool,
 	/// The scene image file watched while the project names one.
-	image_watch: Option<ImageWatch>,
+	image_watch: Option<FileWatch>,
+	/// Since when the changed scene image file fails to read.
+	image_unreadable_since: Option<Instant>,
 }
 
 /// What a file opened as: a project, or a colour scheme for the open project.
@@ -55,65 +98,36 @@ fn extension(path: &Path) -> String {
 	path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()
 }
 
-/// How often the scene image's file is checked for a change.
 /// A changed scene image file is re-embedded this long after its last change (docs/ui/60): a writer may still
 /// hold it.
 const IMAGE_DEBOUNCE: Duration = Duration::from_millis(400);
-
-/// The scene image's file, watched while the project names it.
-struct ImageWatch {
-	path: PathBuf,
-	_watcher: notify::RecommendedWatcher,
-	/// When the file last changed on disk; taken once re-embedded.
-	changed: Arc<Mutex<Option<Instant>>>,
-}
-
-impl ImageWatch {
-	/// Watches `path`'s folder for changes to the file (the file itself would be lost to an editor that replaces
-	/// it). None, with a warning, where the platform refuses.
-	fn start(path: PathBuf) -> Option<Self> {
-		let changed = Arc::new(Mutex::new(None));
-		let name = path.file_name()?.to_owned();
-		let mark = changed.clone();
-		let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-			if let Ok(event) = event
-				&& event.paths.iter().any(|p| p.file_name() == Some(&name))
-			{
-				*lock(&mark) = Some(Instant::now());
-			}
-		});
-		let folder = path.parent()?.to_owned();
-		let mut watcher = match watcher {
-			Ok(w) => w,
-			Err(e) => {
-				tracing::warn!("the scene image file '{}' is not watched: {e}", path.display());
-				return None;
-			}
-		};
-		if let Err(e) = watcher.watch(&folder, notify::RecursiveMode::NonRecursive) {
-			tracing::warn!("the scene image file '{}' is not watched: {e}", path.display());
-			return None;
-		}
-		Some(Self { path, _watcher: watcher, changed })
-	}
-}
-
-impl std::fmt::Debug for ImageWatch {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("ImageWatch").field("path", &self.path).finish_non_exhaustive()
-	}
-}
+/// How long a changed scene image file that fails to read is tried again; the watch's next event starts over.
+const IMAGE_RETRY: Duration = Duration::from_secs(2);
 
 impl Document {
 	fn with(mut project: Project, path: Option<PathBuf>, suggested: Option<PathBuf>, placeholder: bool) -> Self {
 		project.normalize();
 		let history = History::new(&project);
-		Self { project, path, suggested_file_name: suggested, dirty: false, history, placeholder, image_watch: None }
+		Self {
+			project,
+			path,
+			suggested_file_name: suggested,
+			dirty: false,
+			history,
+			placeholder,
+			image_watch: None,
+			image_unreadable_since: None,
+		}
 	}
 
 	/// The empty project at start and after Close.
 	pub fn empty() -> Self {
 		Self::with(Project::new_random_seed(), None, None, true)
+	}
+
+	/// Whether this is the empty project of the start or of Close, not yet edited.
+	pub fn is_placeholder(&self) -> bool {
+		self.placeholder
 	}
 
 	/// File > New: the default project with a fresh seed.
@@ -143,6 +157,51 @@ impl Document {
 		doc.adopt_scene_image();
 		tracing::info!("opened '{}'", path.display());
 		Ok(Opened::Project(Box::new(doc)))
+	}
+
+	/// Opens a file's bytes by the extension of `name`, as [`open`](Self::open) a file; `path` is where the file
+	/// lies, when it does (the project's file, the folder its images are looked for in).
+	pub fn from_bytes(name: &str, bytes: &[u8], path: Option<PathBuf>) -> Result<Opened, DocumentError> {
+		let file = path.clone().unwrap_or_else(|| PathBuf::from(name));
+		let unreadable = |text: &str, e: FormatError| DocumentError::Io(UnreadableFile::new(&file, text, e).into());
+		let text = std::str::from_utf8(bytes).map_err(|e| unreadable("", FormatError::new(e.to_string())))?;
+		let image_size = |project: &mut Project| {
+			io::read_embedded_image_size(&mut project.scene)
+				.map_err(|message| IoError::Image { path: file.clone(), message })
+		};
+		let mut doc = match extension(Path::new(name)).as_str() {
+			"json" => {
+				let folder = file.parent().unwrap_or(Path::new(""));
+				let mut imported = legacy::import_str(text, folder).map_err(|e| unreadable(text, e))?;
+				image_size(&mut imported.project)?;
+				for note in &imported.notes {
+					tracing::info!("import of '{name}': {note}");
+				}
+				let suggested = legacy::suggested_file_name(&file, &imported.name);
+				Self::with(imported.project, None, Some(suggested), false)
+			}
+			io::wdscheme::EXTENSION => {
+				let stem = Path::new(name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+				let scheme = io::wdscheme::read_str(text, &stem).map_err(|e| unreadable(text, e))?;
+				return Ok(Opened::Scheme(scheme));
+			}
+			"xml" | wdproj::EXTENSION => {
+				let mut project = wdproj::read_str(text).map_err(|e| unreadable(text, e))?;
+				image_size(&mut project)?;
+				// bytes without a file keep the upload's name for the next save
+				let suggested = path.is_none().then(|| PathBuf::from(name));
+				Self::with(project, path, suggested, false)
+			}
+			_ => return Err(IoError::UnknownType(file).into()),
+		};
+		doc.adopt_scene_image();
+		tracing::info!("opened '{name}'");
+		Ok(Opened::Project(Box::new(doc)))
+	}
+
+	/// The project as `.wdproj` text, image paths relative to its folder.
+	pub fn to_bytes(&self) -> Vec<u8> {
+		wdproj::write_string(&self.project, self.folder()).into_bytes()
 	}
 
 	/// An example as an unsaved project named after its file.
@@ -200,6 +259,16 @@ impl Document {
 		true
 	}
 
+	/// The scene image the project names but holds no bytes of: the file to locate, by its name.
+	pub fn missing_scene_image(&self) -> Option<String> {
+		let scene = &self.project.scene;
+		if scene.image_data.is_some() {
+			return None;
+		}
+		let name = Path::new(&scene.image_path).file_name().map(|n| n.to_string_lossy().into_owned());
+		Some(scene.image.clone()).filter(|n| !n.is_empty()).or(name)
+	}
+
 	/// The image file's bytes and size when they decode and differ from the embedded ones.
 	fn changed_image(&self, path: &Path) -> Option<(Vec<u8>, (u32, u32))> {
 		let bytes = std::fs::read(path).ok()?;
@@ -222,24 +291,38 @@ impl Document {
 	}
 
 	/// Follows the scene image's file while the project names one: a change on disk is re-embedded as an edit
-	/// (undoable, the run starts over) once `IMAGE_DEBOUNCE` has passed since the last change, and tried again
-	/// while the writer still holds the file. Returns whether the image changed.
+	/// (undoable, the run starts over) once `IMAGE_DEBOUNCE` has passed since the last change, and tried again for
+	/// `IMAGE_RETRY` while the writer still holds the file. Returns whether the image changed.
 	pub fn follow_image_file(&mut self, now: Instant) -> bool {
 		let path = self.image_file();
-		if self.image_watch.as_ref().map(|w| &w.path) != path.as_ref() {
-			self.image_watch = path.and_then(ImageWatch::start);
+		if self.image_watch.as_ref().map(FileWatch::path) != path.as_deref() {
+			self.image_watch = path.and_then(FileWatch::start);
 		}
 		let Some(watch) = &self.image_watch else { return false };
-		let Some(at) = *lock(&watch.changed) else { return false };
+		let Some(at) = watch.changed_at() else { return false };
 		if now.saturating_duration_since(at) < IMAGE_DEBOUNCE {
 			return false;
 		}
-		let path = watch.path.clone();
-		let Ok(bytes) = std::fs::read(&path) else {
-			*lock(&watch.changed) = Some(now);
-			return false;
+		let path = watch.path().to_owned();
+		let bytes = match std::fs::read(&path) {
+			Ok(bytes) => bytes,
+			Err(e) => {
+				let since = *self.image_unreadable_since.get_or_insert(now);
+				if e.kind() == std::io::ErrorKind::NotFound || now.saturating_duration_since(since) >= IMAGE_RETRY {
+					tracing::warn!(
+						"the scene image file '{}' cannot be read: {e}; the embedded image stays",
+						path.display()
+					);
+					watch.set_changed_at(None);
+					self.image_unreadable_since = None;
+				} else {
+					watch.set_changed_at(Some(now));
+				}
+				return false;
+			}
 		};
-		*lock(&watch.changed) = None;
+		self.image_unreadable_since = None;
+		watch.set_changed_at(None);
 		if self.project.scene.image_data.as_deref() == Some(&bytes[..]) {
 			return false;
 		}
@@ -252,6 +335,11 @@ impl Document {
 		self.edited(now);
 		tracing::info!("the scene image was re-embedded from '{}': the file changed", path.display());
 		true
+	}
+
+	/// The scene image file changed and waits to be read again.
+	pub fn image_change_pending(&self) -> bool {
+		self.image_watch.as_ref().is_some_and(|w| w.changed_at().is_some())
 	}
 
 	/// An edit happened: the history's step stays open, the project turns dirty.
@@ -311,6 +399,23 @@ impl Document {
 		Ok(())
 	}
 
+	/// Saves to `target`: a file as [`save_as`](Self::save_as), a download as `.wdproj` text, after which the
+	/// project has no file still (Save asks again) and is named after the download.
+	pub fn save_to(&mut self, target: &Target) -> Result<(), DocumentError> {
+		let name = match target {
+			Target::Path(path) => return self.save_as(path),
+			Target::Download(name) => name,
+		};
+		self.history.commit(&self.project);
+		super::platform::write(target, &self.to_bytes()).map_err(|e| DocumentError::Write(name.clone(), e))?;
+		self.suggested_file_name = Some(PathBuf::from(name));
+		self.placeholder = false;
+		self.history.mark_saved();
+		self.refresh_dirty();
+		tracing::info!("saved as the download '{name}'");
+		Ok(())
+	}
+
 	/// The path Save As proposes: the file, else the suggested name as a `.wdproj` beside its origin.
 	pub fn proposed_save_path(&self) -> Option<PathBuf> {
 		self.path.clone().or_else(|| self.suggested_file_name.as_ref().map(|p| p.with_extension(wdproj::EXTENSION)))
@@ -345,7 +450,6 @@ impl Document {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::time::Duration;
 	use wavedude_core::model::{ColorScheme, Rgb, Stop};
 
 	fn png(value: u8) -> Vec<u8> {
@@ -376,6 +480,70 @@ mod tests {
 		assert!(changed, "the change on disk reached the document");
 		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(200)[..]));
 		assert!(d.dirty, "the re-embed is an edit");
+	}
+
+	#[test]
+	fn a_deleted_scene_image_file_stops_the_wait_for_it() {
+		let dir = tempfile::tempdir().unwrap();
+		let file = dir.path().join("scene.png");
+		std::fs::write(&file, png(10)).unwrap();
+		let mut d = Document::new_project();
+		d.project.scene.image_path = file.to_string_lossy().into_owned();
+		d.follow_image_file(Instant::now());
+		std::fs::remove_file(&file).unwrap();
+		let deadline = Instant::now() + Duration::from_secs(5);
+		while !d.image_change_pending() && Instant::now() < deadline {
+			std::thread::sleep(Duration::from_millis(20));
+		}
+		// the events of the same change still on their way
+		std::thread::sleep(Duration::from_millis(200));
+		assert!(d.image_change_pending(), "the deletion reached the watch");
+		assert!(!d.follow_image_file(Instant::now() + IMAGE_DEBOUNCE));
+		assert!(!d.image_change_pending(), "a missing file is waited for until the next event");
+	}
+
+	#[test]
+	fn an_unreadable_scene_image_file_is_tried_again_for_a_while_only() {
+		let dir = tempfile::tempdir().unwrap();
+		let file = dir.path().join("scene.png");
+		// a folder in the file's place: it exists, and reading it fails
+		std::fs::create_dir(&file).unwrap();
+		let mut d = Document::new_project();
+		d.project.scene.image_path = file.to_string_lossy().into_owned();
+		d.follow_image_file(Instant::now());
+		// the change is marked here, as no file event follows the watch's start
+		let now = Instant::now();
+		d.image_watch.as_ref().unwrap().set_changed_at(Some(now));
+		let start = now + IMAGE_DEBOUNCE;
+		assert!(!d.follow_image_file(start));
+		assert!(d.image_change_pending(), "a read failure is tried again");
+		let mut tick = start;
+		while d.image_change_pending() && tick < start + 2 * IMAGE_RETRY {
+			tick += IMAGE_DEBOUNCE;
+			assert!(!d.follow_image_file(tick));
+		}
+		assert!(!d.image_change_pending(), "the retries stop after IMAGE_RETRY");
+	}
+
+	#[test]
+	fn an_uploaded_project_keeps_its_name_for_the_next_save() {
+		let text = Document::new_project().to_bytes();
+		let Opened::Project(d) = Document::from_bytes("mine.xml", &text, None).unwrap() else { panic!("a project") };
+		assert_eq!(d.path, None);
+		assert_eq!(d.display_name("untitled"), "mine.xml");
+		assert_eq!(d.proposed_save_path(), Some(PathBuf::from("mine.wdproj")));
+	}
+
+	#[test]
+	fn a_scene_image_named_without_bytes_is_missing_by_its_name() {
+		let mut d = Document::new_project();
+		assert_eq!(d.missing_scene_image(), None, "no image named");
+		d.project.scene.image_path = "images/pic.png".into();
+		assert_eq!(d.missing_scene_image().as_deref(), Some("pic.png"));
+		d.project.scene.image = "scene.png".into();
+		assert_eq!(d.missing_scene_image().as_deref(), Some("scene.png"));
+		d.project.scene.image_data = Some(png(1).into());
+		assert_eq!(d.missing_scene_image(), None, "the bytes are there");
 	}
 
 	/// A project saved in `dir` that embeds `embedded` as `pic.png`, its image path `image_path`.

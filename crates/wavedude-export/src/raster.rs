@@ -1,439 +1,388 @@
-//! A small antialiased rasteriser over RGBA8 pixels: coverage masks of discs, rings, round-capped segments,
-//! polylines and text (the embedded Noto Sans), blended as premultiplied colour.
+//! The CPU rasteriser of the burned-in overlays: epaint shapes tessellated as the window's are, their triangles
+//! blended over a frame's RGBA8 pixels in place.
 //!
-//! Coordinates are pixels, origin top-left, pixel (x, y) spanning [x, x+1) x [y, y+1); a shape's coverage of a pixel
-//! is taken at the pixel centre from the distance to the shape's edge, a one-pixel ramp.
+//! One pixel per point. A pixel is covered when its centre lies in a triangle, edges in 1/256 pixel fixed point with
+//! a top-left rule, so a pixel on an edge two triangles share is blended once; inside the clip rect rounded to whole
+//! pixels, as egui-wgpu's scissor is. Colours are premultiplied sRGB, interpolated and multiplied by the font atlas,
+//! sampled bilinearly with clamped edges, in gamma space as the window's renderer does, then blended:
+//! `out = min(255, src + (dst*(255 - a) + 127)/255)`. Integers and IEEE f32 without fused operations only, so every
+//! machine draws the same bytes. Pixels no triangle covers are not touched. Bands of rows are drawn in parallel,
+//! each with the triangles reaching it in drawing order.
 
-use std::sync::OnceLock;
+use std::cmp::Ordering;
 
-use ab_glyph::{Font, FontRef, Glyph, GlyphId, PxScale, ScaleFont, point};
+use rayon::prelude::*;
+use wavedude_view::draw::Outlines;
+use wavedude_view::epaint::text::{Fonts, FontsView, TextOptions, ViewportKey};
+use wavedude_view::epaint::{
+	ClippedPrimitive, ClippedShape, Color32, ImageData, ImageDelta, Pos2, Primitive, Rect, TessellationOptions,
+	Tessellator, Vertex, WHITE_UV,
+};
 
-/// A straight-alpha colour `[r, g, b, a]`.
-pub type Color = [u8; 4];
+use crate::{ExportError, Result};
 
-/// A colour from ARGB components, the order the specification lists them in.
-pub const fn argb(a: u8, r: u8, g: u8, b: u8) -> Color {
-	[r, g, b, a]
+/// Fixed-point steps of a pixel.
+const ONE: i64 = 256;
+
+/// Rows of a band drawn by one thread.
+const BAND: usize = 16;
+
+/// The font atlas as the shapes see it: premultiplied texels, row by row.
+#[derive(Default)]
+struct Atlas {
+	texels: Vec<Color32>,
+	size: [usize; 2],
 }
 
-pub const BLACK: Color = [0, 0, 0, 255];
-pub const WHITE: Color = [255, 255, 255, 255];
-
-/// A rectangle of whole pixels.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct IRect {
-	pub x: i32,
-	pub y: i32,
-	pub width: i32,
-	pub height: i32,
-}
-
-impl IRect {
-	pub const fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-		Self { x, y, width, height }
-	}
-
-	pub fn right(&self) -> i32 {
-		self.x + self.width
-	}
-
-	pub fn bottom(&self) -> i32 {
-		self.y + self.height
-	}
-
-	pub fn is_empty(&self) -> bool {
-		self.width <= 0 || self.height <= 0
-	}
-
-	pub fn intersect(&self, other: &IRect) -> IRect {
-		let x = self.x.max(other.x);
-		let y = self.y.max(other.y);
-		IRect::new(x, y, (self.right().min(other.right()) - x).max(0), (self.bottom().min(other.bottom()) - y).max(0))
-	}
-}
-
-/// One source-over blend of a premultiplied channel: `min(255, src + (dst * (255 - a) + 127) / 255)`.
-fn over(src: u32, dst: u8, a: u32) -> u8 {
-	(src + (dst as u32 * (255 - a) + 127) / 255).min(255) as u8
-}
-
-/// Premultiplied `[r, g, b, a]` of a colour at a coverage.
-fn premultiply(c: Color, coverage: f32) -> [u32; 4] {
-	let a = (c[3] as f32 * coverage.clamp(0.0, 1.0)).round() as u32;
-	let p = |v: u8| (v as u32 * a + 127) / 255;
-	[p(c[0]), p(c[1]), p(c[2]), a]
-}
-
-/// RGBA8 pixels to draw on, `width * height * 4` bytes, premultiplied (an opaque frame is its own premultiplied form).
-pub struct Canvas<'a> {
-	pixels: &'a mut [u8],
-	width: usize,
-	height: usize,
-}
-
-impl<'a> Canvas<'a> {
-	pub fn new(pixels: &'a mut [u8], width: usize, height: usize) -> Self {
-		assert_eq!(pixels.len(), width * height * 4, "RGBA8 pixels of the given size");
-		Self { pixels, width, height }
-	}
-
-	pub fn width(&self) -> usize {
-		self.width
-	}
-
-	pub fn height(&self) -> usize {
-		self.height
-	}
-
-	pub fn bounds(&self) -> IRect {
-		IRect::new(0, 0, self.width as i32, self.height as i32)
-	}
-
-	fn index(&self, x: i32, y: i32) -> Option<usize> {
-		(x >= 0 && y >= 0 && (x as usize) < self.width && (y as usize) < self.height)
-			.then(|| (y as usize * self.width + x as usize) * 4)
-	}
-
-	/// Overwrites a pixel; outside the canvas nothing.
-	pub fn set(&mut self, x: i32, y: i32, c: Color) {
-		if let Some(i) = self.index(x, y) {
-			self.pixels[i..i + 4].copy_from_slice(&c);
-		}
-	}
-
-	pub fn get(&self, x: i32, y: i32) -> Option<Color> {
-		self.index(x, y).map(|i| [self.pixels[i], self.pixels[i + 1], self.pixels[i + 2], self.pixels[i + 3]])
-	}
-
-	/// Blends `c` at `coverage` (0..1) over a pixel.
-	pub fn blend(&mut self, x: i32, y: i32, c: Color, coverage: f32) {
-		if let Some(i) = self.index(x, y) {
-			let s = premultiply(c, coverage);
-			if s[3] == 0 {
-				return;
+impl Atlas {
+	/// Takes an update: the whole image, then true, or a patch of it.
+	fn apply(&mut self, delta: &ImageDelta) -> bool {
+		let ImageData::Color(image) = &delta.image;
+		let [w, h] = image.size;
+		match delta.pos {
+			None => {
+				self.texels.clone_from(&image.pixels);
+				self.size = image.size;
+				true
 			}
-			for k in 0..4 {
-				self.pixels[i + k] = over(s[k], self.pixels[i + k], s[3]);
+			Some([x, y]) => {
+				for (row, src) in image.pixels.chunks_exact(w).take(h).enumerate() {
+					let at = (y + row) * self.size[0] + x;
+					self.texels[at..at + w].copy_from_slice(src);
+				}
+				false
 			}
 		}
 	}
 
-	/// Blends `c` over a rectangle of whole pixels, clipped.
-	pub fn fill_rect(&mut self, rect: IRect, c: Color) {
-		let r = rect.intersect(&self.bounds());
-		let s = premultiply(c, 1.0);
-		for y in r.y..r.bottom() {
-			let row = (y as usize * self.width + r.x as usize) * 4;
-			for px in self.pixels[row..row + r.width as usize * 4].as_chunks_mut::<4>().0 {
-				for k in 0..4 {
-					px[k] = over(s[k], px[k], s[3]);
+	/// The texel at texture coordinates `(u, v)`, bilinear, clamped to the edges; premultiplied, 0 to 255.
+	fn sample(&self, u: f32, v: f32) -> [f32; 4] {
+		let [w, h] = self.size;
+		let (fx, fy) = (u * w as f32 - 0.5, v * h as f32 - 0.5);
+		let (x0, y0) = (fx.floor(), fy.floor());
+		let (tx, ty) = (fx - x0, fy - y0);
+		let at = |x: f32, y: f32| {
+			let (x, y) = ((x.max(0.) as usize).min(w - 1), (y.max(0.) as usize).min(h - 1));
+			self.texels[y * w + x].to_array().map(f32::from)
+		};
+		let (a, b, c, d) = (at(x0, y0), at(x0 + 1., y0), at(x0, y0 + 1.), at(x0 + 1., y0 + 1.));
+		let lerp = |p: f32, q: f32, t: f32| p + (q - p) * t;
+		std::array::from_fn(|i| lerp(lerp(a[i], b[i], tx), lerp(c[i], d[i], tx), ty))
+	}
+}
+
+/// A triangle to fill: its vertices, its corners in fixed point, clockwise on screen (y down), and the pixels inside
+/// its clip that its bounds reach, `x0..x1` by `y0..y1`.
+struct Triangle {
+	v: [Vertex; 3],
+	p: [(i64, i64); 3],
+	area: i64,
+	x0: i64,
+	x1: i64,
+	y0: i64,
+	y1: i64,
+}
+
+impl Triangle {
+	/// `None` when it is degenerate or covers nothing of `[x0, y0, x1, y1]`.
+	fn new(v: [Vertex; 3], [cx0, cy0, cx1, cy1]: [u32; 4]) -> Option<Self> {
+		let fixed = |p: Pos2| ((p.x * ONE as f32).round() as i64, (p.y * ONE as f32).round() as i64);
+		let (mut v, mut p) = (v, v.map(|v| fixed(v.pos)));
+		let mut area = edge(p[0], p[1], p[2]);
+		if area < 0 {
+			p.swap(1, 2);
+			v.swap(1, 2);
+			area = -area;
+		}
+		// the pixels `k` whose centre `k + 1/2` can lie between the corners, inside the clip
+		let span = |c: [i64; 3], c0: u32, c1: u32| {
+			let (lo, hi) = (c[0].min(c[1]).min(c[2]), c[0].max(c[1]).max(c[2]));
+			let first = (lo - ONE / 2).div_euclid(ONE).max(i64::from(c0));
+			(first, ((hi - ONE / 2).div_euclid(ONE) + 1).min(i64::from(c1)))
+		};
+		let (x0, x1) = span(p.map(|q| q.0), cx0, cx1);
+		let (y0, y1) = span(p.map(|q| q.1), cy0, cy1);
+		(area > 0 && x0 < x1 && y0 < y1).then_some(Self { v, p, area, x0, x1, y0, y1 })
+	}
+
+	/// Blends the triangle's pixels of rows `first..first + rows.len() / stride` into `rows`.
+	fn fill(&self, atlas: &Atlas, rows: &mut [u8], stride: usize, first: i64) {
+		let v = &self.v;
+		let edges = [(self.p[1], self.p[2]), (self.p[2], self.p[0]), (self.p[0], self.p[1])];
+		let white = v.iter().all(|v| v.uv == WHITE_UV);
+		let flat = white && v.iter().all(|u| u.color == v[0].color);
+		let colours = v.map(|v| v.color.to_array().map(f32::from));
+		let area = self.area as f32;
+		let last = first + (rows.len() / stride) as i64;
+		for y in self.y0.max(first)..self.y1.min(last) {
+			let py = y * ONE + ONE / 2;
+			let (mut from, mut to) = (self.x0, self.x1);
+			for &(a, b) in &edges {
+				// edge(a, b, centre of pixel x) = m*x + q; a centre on the edge counts where the edge is owned
+				let m = -(b.1 - a.1) * ONE;
+				let q = edge(a, b, (ONE / 2, py)) - i64::from(!owns(a, b));
+				match m.cmp(&0) {
+					Ordering::Greater => from = from.max(-q.div_euclid(m)),
+					Ordering::Less => to = to.min(q.div_euclid(-m) + 1),
+					Ordering::Equal if q < 0 => to = from,
+					Ordering::Equal => {}
 				}
 			}
-		}
-	}
-
-	/// Blends the one-pixel outline of a rectangle (each pixel once).
-	pub fn stroke_rect(&mut self, rect: IRect, c: Color) {
-		if rect.is_empty() {
-			return;
-		}
-		self.fill_rect(IRect::new(rect.x, rect.y, rect.width, 1), c);
-		if rect.height > 1 {
-			self.fill_rect(IRect::new(rect.x, rect.bottom() - 1, rect.width, 1), c);
-		}
-		let inner = IRect::new(rect.x, rect.y + 1, 1, rect.height - 2);
-		self.fill_rect(inner, c);
-		if rect.width > 1 {
-			self.fill_rect(IRect { x: rect.right() - 1, ..inner }, c);
-		}
-	}
-
-	/// Blends `c` through a coverage mask.
-	pub fn fill_mask(&mut self, mask: &Mask, c: Color) {
-		let r = mask.bounds().intersect(&self.bounds());
-		for y in r.y..r.bottom() {
-			for x in r.x..r.right() {
-				let cov = mask.at(x, y);
-				if cov > 0.0 {
-					self.blend(x, y, c, cov);
-				}
-			}
-		}
-	}
-
-	/// Blends a premultiplied RGBA8 layer of the canvas's size over it, within `rect` only.
-	pub fn composite(&mut self, layer: &[u8], rect: IRect) {
-		assert_eq!(layer.len(), self.pixels.len(), "a layer of the canvas's size");
-		let r = rect.intersect(&self.bounds());
-		for y in r.y..r.bottom() {
-			let start = (y as usize * self.width + r.x as usize) * 4;
-			let end = start + r.width as usize * 4;
-			for (d, s) in
-				self.pixels[start..end].as_chunks_mut::<4>().0.iter_mut().zip(layer[start..end].as_chunks::<4>().0)
-			{
-				let a = s[3] as u32;
-				if a == 0 {
-					continue;
-				}
-				for k in 0..4 {
-					d[k] = over(s[k] as u32, d[k], a);
-				}
+			let row = &mut rows[(y - first) as usize * stride..][..stride];
+			for x in from..to {
+				let src = if flat {
+					v[0].color.to_array()
+				} else {
+					let px = x * ONE + ONE / 2;
+					let l = edges.map(|(a, b)| edge(a, b, (px, py)) as f32 / area);
+					let texel = if white {
+						[255.; 4]
+					} else {
+						let uv = |c: fn(&Pos2) -> f32| l[0] * c(&v[0].uv) + l[1] * c(&v[1].uv) + l[2] * c(&v[2].uv);
+						atlas.sample(uv(|q| q.x), uv(|q| q.y))
+					};
+					std::array::from_fn(|c| {
+						let colour = l[0] * colours[0][c] + l[1] * colours[1][c] + l[2] * colours[2][c];
+						(colour * texel[c] / 255. + 0.5).clamp(0., 255.) as u8
+					})
+				};
+				blend(&mut row[x as usize * 4..][..4], src);
 			}
 		}
 	}
 }
 
-/// Coverage values (0..1) over a rectangle of pixels; shapes are unioned into it by their maximum, so overlapping
-/// parts of one item are blended once.
-#[derive(Clone, Debug)]
-pub struct Mask {
-	rect: IRect,
-	coverage: Vec<f32>,
+/// Triangles in drawing order and, per band of rows, the indices of those reaching it.
+struct Banded {
+	triangles: Vec<Triangle>,
+	bands: Vec<Vec<u32>>,
 }
 
-impl Mask {
-	pub fn new(rect: IRect) -> Self {
-		let rect = IRect { width: rect.width.max(0), height: rect.height.max(0), ..rect };
-		Self { rect, coverage: vec![0.0; rect.width as usize * rect.height as usize] }
+impl Banded {
+	/// Empty, for a frame of `height` rows.
+	fn new(height: u32) -> Self {
+		Self { triangles: Vec::new(), bands: vec![Vec::new(); (height as usize).div_ceil(BAND)] }
 	}
 
-	pub fn bounds(&self) -> IRect {
-		self.rect
+	fn clear(&mut self) {
+		self.triangles.clear();
+		self.bands.iter_mut().for_each(Vec::clear);
 	}
 
-	/// The coverage of a pixel; 0 outside the mask.
-	pub fn at(&self, x: i32, y: i32) -> f32 {
-		let (mx, my) = (x - self.rect.x, y - self.rect.y);
-		if mx < 0 || my < 0 || mx >= self.rect.width || my >= self.rect.height {
-			return 0.0;
+	fn push(&mut self, t: Triangle) {
+		let i = self.triangles.len() as u32;
+		for band in &mut self.bands[t.y0 as usize / BAND..=(t.y1 as usize - 1) / BAND] {
+			band.push(i);
 		}
-		self.coverage[(my * self.rect.width + mx) as usize]
+		self.triangles.push(t);
 	}
 
-	fn union(&mut self, x: i32, y: i32, c: f32) {
-		let i = ((y - self.rect.y) * self.rect.width + x - self.rect.x) as usize;
-		if c > self.coverage[i] {
-			self.coverage[i] = c.min(1.0);
+	/// The triangles reaching band `i`.
+	fn band(&self, i: usize) -> impl Iterator<Item = &Triangle> {
+		self.bands[i].iter().map(|&t| &self.triangles[t as usize])
+	}
+}
+
+/// Shapes for the fonts and their outlines.
+type Draw<'a> = dyn FnMut(&mut FontsView<'_>, &mut Outlines) -> Vec<ClippedShape> + 'a;
+
+/// The bundled fonts and their outlines, the font atlas as the shapes see it, a frame size, and fixed shapes drawn
+/// under every frame's, tessellated once.
+pub struct Rasteriser {
+	fonts: Fonts,
+	outlines: Outlines,
+	atlas: Atlas,
+	width: u32,
+	height: u32,
+	fixed: Option<Box<Draw<'static>>>,
+	/// The fixed shapes' triangles; `None` until laid out, and again once the atlas is rebuilt.
+	fixed_triangles: Option<Banded>,
+	/// A frame's triangles, kept for their allocation.
+	triangles: Banded,
+}
+
+impl Rasteriser {
+	/// A rasteriser of `width x height` frames.
+	pub fn new(width: u32, height: u32) -> Self {
+		Self {
+			fonts: Fonts::new(TextOptions::default(), wavedude_view::fonts::definitions()),
+			outlines: Outlines::new(1.),
+			atlas: Atlas::default(),
+			width,
+			height,
+			fixed: None,
+			fixed_triangles: None,
+			triangles: Banded::new(height),
 		}
 	}
 
-	/// Every pixel of the mask whose centre lies within the box `[x0, x1] x [y0, y1]` widened by one pixel, with
-	/// its centre.
-	fn for_each_near(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, mut f: impl FnMut(f32, f32) -> f32) {
-		let r = IRect::new(
-			(x0 - 1.0).floor() as i32,
-			(y0 - 1.0).floor() as i32,
-			(x1 - x0 + 3.0).ceil() as i32,
-			(y1 - y0 + 3.0).ceil() as i32,
-		)
-		.intersect(&self.rect);
-		for y in r.y..r.bottom() {
-			for x in r.x..r.right() {
-				let c = f(x as f32 + 0.5, y as f32 + 0.5);
-				if c > 0.0 {
-					self.union(x, y, c);
-				}
+	/// Draws the shapes `draw` makes under every frame's; it is called again when the font atlas is rebuilt.
+	pub fn with_fixed(
+		mut self,
+		draw: impl FnMut(&mut FontsView<'_>, &mut Outlines) -> Vec<ClippedShape> + 'static,
+	) -> Self {
+		self.fixed = Some(Box::new(draw));
+		self
+	}
+
+	/// Draws the fixed shapes, then the shapes `draw` makes with the fonts and their outlines (at one pixel per
+	/// point), over the RGBA8 frame `rgba` of the rasteriser's size, in place.
+	pub fn render(
+		&mut self,
+		rgba: &mut [u8],
+		draw: impl FnOnce(&mut FontsView<'_>, &mut Outlines) -> Vec<ClippedShape>,
+	) -> Result<()> {
+		let (w, h) = (self.width, self.height);
+		if rgba.len() != w as usize * h as usize * 4 {
+			return Err(ExportError::WrongInput("RGBA8 pixels of the rasteriser's size"));
+		}
+		self.fonts.begin_pass(*self.fonts.options(), ViewportKey::default());
+		let (shapes, rebuilt) = lay_out(&mut self.fonts, &mut self.outlines, &mut self.atlas, draw);
+		if rebuilt {
+			self.fixed_triangles = None;
+		}
+		if self.fixed_triangles.is_none()
+			&& let Some(fixed) = self.fixed.as_mut()
+		{
+			let (fixed, _) = lay_out(&mut self.fonts, &mut self.outlines, &mut self.atlas, |f, o| fixed(f, o));
+			let mut triangles = Banded::new(h);
+			self.tessellate(fixed, &mut triangles);
+			self.fixed_triangles = Some(triangles);
+		}
+		let mut triangles = std::mem::replace(&mut self.triangles, Banded::new(0));
+		triangles.clear();
+		self.tessellate(shapes, &mut triangles);
+		let (stride, atlas) = (w as usize * 4, &self.atlas);
+		let fixed = self.fixed_triangles.as_ref();
+		rgba.par_chunks_mut(stride * BAND).enumerate().for_each(|(i, rows)| {
+			for t in fixed.into_iter().flat_map(|f| f.band(i)).chain(triangles.band(i)) {
+				t.fill(atlas, rows, stride, (i * BAND) as i64);
 			}
-		}
-	}
-
-	/// A filled disc of radius `r` about `(cx, cy)`.
-	pub fn disc(&mut self, cx: f32, cy: f32, r: f32) {
-		self.for_each_near(cx - r, cy - r, cx + r, cy + r, |x, y| (r - (x - cx).hypot(y - cy) + 0.5).clamp(0.0, 1.0));
-	}
-
-	/// A circle of radius `r` stroked `width` wide.
-	pub fn ring(&mut self, cx: f32, cy: f32, r: f32, width: f32) {
-		let o = r + width / 2.0;
-		self.for_each_near(cx - o, cy - o, cx + o, cy + o, |x, y| {
-			(width / 2.0 - ((x - cx).hypot(y - cy) - r).abs() + 0.5).clamp(0.0, 1.0)
 		});
+		self.triangles = triangles;
+		Ok(())
 	}
 
-	/// A segment stroked `width` wide with round caps.
-	pub fn segment(&mut self, a: (f32, f32), b: (f32, f32), width: f32) {
-		let h = width / 2.0;
-		let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-		let len2 = dx * dx + dy * dy;
-		self.for_each_near(a.0.min(b.0) - h, a.1.min(b.1) - h, a.0.max(b.0) + h, a.1.max(b.1) + h, |x, y| {
-			let t = if len2 > 0.0 { (((x - a.0) * dx + (y - a.1) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
-			let d = (x - a.0 - t * dx).hypot(y - a.1 - t * dy);
-			(h - d + 0.5).clamp(0.0, 1.0)
-		});
-	}
-
-	/// A polyline stroked `width` wide, round joins and caps.
-	pub fn polyline(&mut self, points: &[(f32, f32)], width: f32) {
-		match points {
-			[] => {}
-			[p] => self.segment(*p, *p, width),
-			_ => points.windows(2).for_each(|w| self.segment(w[0], w[1], width)),
-		}
-	}
-
-	/// The mask grown by `radius`: each pixel the largest coverage within reach, weighted by a one-pixel ramp at
-	/// the reach's edge. A text outline drawn with a pen `2 * radius` wide.
-	pub fn dilate(&self, radius: f32) -> Mask {
-		let reach = (radius + 0.5).ceil() as i32;
-		let mut out = Mask::new(IRect::new(
-			self.rect.x - reach,
-			self.rect.y - reach,
-			self.rect.width + 2 * reach,
-			self.rect.height + 2 * reach,
-		));
-		let offsets: Vec<(i32, i32, f32)> = (-reach..=reach)
-			.flat_map(|dy| (-reach..=reach).map(move |dx| (dx, dy)))
-			.map(|(dx, dy)| (dx, dy, (radius + 0.5 - (dx as f32).hypot(dy as f32)).clamp(0.0, 1.0)))
-			.filter(|o| o.2 > 0.0)
-			.collect();
-		for y in self.rect.y..self.rect.bottom() {
-			for x in self.rect.x..self.rect.right() {
-				let c = self.at(x, y);
-				if c <= 0.0 {
-					continue;
-				}
-				for &(dx, dy, w) in &offsets {
-					out.union(x + dx, y + dy, c * w);
+	/// Appends the triangles of `shapes` inside the frame to `out`, in drawing order.
+	fn tessellate(&self, shapes: Vec<ClippedShape>, out: &mut Banded) {
+		let (w, h) = (self.width, self.height);
+		let mut tessellator = Tessellator::new(
+			1.,
+			TessellationOptions::default(),
+			self.fonts.font_image_size(),
+			self.fonts.texture_atlas().prepared_discs(),
+		);
+		for ClippedPrimitive { clip_rect, primitive } in tessellator.tessellate_shapes(shapes) {
+			let Primitive::Mesh(mesh) = primitive else { continue };
+			let clip = scissor(clip_rect, w, h);
+			for t in mesh.indices.as_chunks::<3>().0 {
+				if let Some(t) = Triangle::new(t.map(|i| mesh.vertices[i as usize]), clip) {
+					out.push(t);
 				}
 			}
 		}
-		out
 	}
 }
 
-/// The embedded Noto Sans Regular (SIL Open Font License) with text measuring and masks.
-pub struct Typeface {
-	font: FontRef<'static>,
+/// `draw`'s shapes and the atlas updated for their glyphs; true when it was rebuilt, which moves the glyphs of shapes
+/// laid out before.
+fn lay_out(
+	fonts: &mut Fonts,
+	outlines: &mut Outlines,
+	atlas: &mut Atlas,
+	draw: impl FnOnce(&mut FontsView<'_>, &mut Outlines) -> Vec<ClippedShape>,
+) -> (Vec<ClippedShape>, bool) {
+	let shapes = draw(&mut fonts.with_pixels_per_point(1.), outlines);
+	let rebuilt = fonts.font_image_delta().is_some_and(|delta| atlas.apply(&delta));
+	(shapes, rebuilt)
 }
 
-static TYPEFACE: OnceLock<Typeface> = OnceLock::new();
-
-/// The process-wide embedded typeface.
-pub fn typeface() -> &'static Typeface {
-	TYPEFACE.get_or_init(|| Typeface {
-		font: FontRef::try_from_slice(include_bytes!("../assets/NotoSans-Regular.ttf")).expect("the embedded font"),
-	})
+/// `out = min(255, src + (dst*(255 - a) + 127)/255)` per channel.
+fn blend(dst: &mut [u8], src: [u8; 4]) {
+	let keep = 255 - u32::from(src[3]);
+	for (d, s) in dst.iter_mut().zip(src) {
+		*d = (u32::from(s) + (u32::from(*d) * keep + 127) / 255).min(255) as u8;
+	}
 }
 
-/// Horizontal offset of the second pass of synthetic bold, in font sizes.
-const BOLD_OFFSET: f32 = 0.05;
+/// Twice the signed area of `(a, b, p)`: positive with `p` right of `a -> b` on screen (y down).
+fn edge(a: (i64, i64), b: (i64, i64), p: (i64, i64)) -> i64 {
+	(b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0)
+}
 
-impl Typeface {
-	/// The glyph scale of an em size in pixels.
-	fn scale(&self, size: f32) -> PxScale {
-		let em = self.font.units_per_em().expect("the embedded font has a head table");
-		PxScale::from(size * self.font.height_unscaled() / em)
-	}
+/// Whether the pixel centres on the edge `a -> b` belong to its triangle; of an edge's two directions exactly one
+/// does, so the two triangles sharing it never both blend those pixels.
+fn owns(a: (i64, i64), b: (i64, i64)) -> bool {
+	let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+	dy < 0 || (dy == 0 && dx > 0)
+}
 
-	/// Distance from the line's top to its baseline, pixels.
-	pub fn ascent(&self, size: f32) -> f32 {
-		self.font.as_scaled(self.scale(size)).ascent()
-	}
-
-	/// Height of one line of text at an em size of `size` pixels: ascent, descent and line gap.
-	pub fn line_height(&self, size: f32) -> f32 {
-		let f = self.font.as_scaled(self.scale(size));
-		f.ascent() - f.descent() + f.line_gap()
-	}
-
-	fn glyphs(&self, text: &str, size: f32, x: f32, baseline: f32) -> (Vec<Glyph>, f32) {
-		let scaled = self.font.as_scaled(self.scale(size));
-		let mut caret = x;
-		let mut previous: Option<GlyphId> = None;
-		let mut glyphs = Vec::with_capacity(text.len());
-		for c in text.chars() {
-			let id = scaled.glyph_id(c);
-			if let Some(p) = previous {
-				caret += scaled.kern(p, id);
-			}
-			glyphs.push(id.with_scale_and_position(scaled.scale(), point(caret, baseline)));
-			caret += scaled.h_advance(id);
-			previous = Some(id);
-		}
-		(glyphs, caret - x)
-	}
-
-	/// Advance width of one line of text, pixels; synthetic bold adds its offset.
-	pub fn measure(&self, text: &str, size: f32, bold: bool) -> f32 {
-		self.glyphs(text, size, 0.0, 0.0).1 + if bold { size * BOLD_OFFSET } else { 0.0 }
-	}
-
-	/// The text cut to `max_width` with an ellipsis, or whole when it fits.
-	pub fn fit(&self, text: &str, size: f32, max_width: f32) -> String {
-		if self.measure(text, size, false) <= max_width {
-			return text.to_owned();
-		}
-		let mut chars: Vec<char> = text.chars().collect();
-		while !chars.is_empty() {
-			chars.pop();
-			let candidate: String = chars.iter().collect::<String>() + "\u{2026}";
-			if self.measure(&candidate, size, false) <= max_width {
-				return candidate;
-			}
-		}
-		String::new()
-	}
-
-	/// The coverage of one line of text whose line box has its top-left at `(x, y)`, clipped to `clip`.
-	pub fn mask(&self, text: &str, size: f32, x: f32, y: f32, bold: bool, clip: IRect) -> Mask {
-		let baseline = y + self.ascent(size);
-		let width = self.measure(text, size, bold);
-		let rect = IRect::new(
-			x.floor() as i32 - 2,
-			y.floor() as i32 - 2,
-			width.ceil() as i32 + 5,
-			self.line_height(size).ceil() as i32 + 5,
-		)
-		.intersect(&clip);
-		let mut mask = Mask::new(rect);
-		let passes: &[f32] = if bold { &[0.0, size * BOLD_OFFSET] } else { &[0.0] };
-		for &dx in passes {
-			for glyph in self.glyphs(text, size, x + dx, baseline).0 {
-				let Some(outline) = self.font.outline_glyph(glyph) else { continue };
-				let b = outline.px_bounds();
-				let (ox, oy) = (b.min.x as i32, b.min.y as i32);
-				outline.draw(|gx, gy, c| {
-					let (px, py) = (ox + gx as i32, oy + gy as i32);
-					if px >= rect.x && py >= rect.y && px < rect.right() && py < rect.bottom() {
-						mask.union(px, py, c);
-					}
-				});
-			}
-		}
-		mask
-	}
+/// `clip` in whole pixels of a `width x height` frame, rounded as egui-wgpu's scissor: `[x0, y0, x1, y1]`.
+fn scissor(clip: Rect, width: u32, height: u32) -> [u32; 4] {
+	let round = |v: f32, size: u32| (v.round().max(0.) as u32).min(size);
+	let (x0, y0) = (round(clip.min.x, width), round(clip.min.y, height));
+	[x0, y0, round(clip.max.x, width).max(x0), round(clip.max.y, height).max(y0)]
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use wavedude_view::epaint::{Mesh, Shape, pos2, vec2};
 
-	#[test]
-	fn premultiplied_over() {
-		let mut px = vec![100, 100, 100, 255];
-		let mut c = Canvas::new(&mut px, 1, 1);
-		c.blend(0, 0, argb(128, 255, 0, 0), 1.0);
-		assert_eq!(px, vec![128 + 50, 50, 50, 255]);
+	const W: u32 = 16;
+	const H: u32 = 8;
+
+	fn grey() -> Vec<u8> {
+		[100, 100, 100, 255].repeat((W * H) as usize)
+	}
+
+	fn everything() -> Rect {
+		Rect::from_min_size(pos2(0., 0.), vec2(W as f32, H as f32))
+	}
+
+	fn at(px: &[u8], x: u32, y: u32) -> [u8; 4] {
+		let i = ((y * W + x) * 4) as usize;
+		[px[i], px[i + 1], px[i + 2], px[i + 3]]
 	}
 
 	#[test]
-	fn disc_coverage_is_symmetric_and_full_inside() {
-		let mut m = Mask::new(IRect::new(0, 0, 11, 11));
-		m.disc(5.5, 5.5, 3.0);
-		assert_eq!(m.at(5, 5), 1.0);
-		assert_eq!(m.at(0, 0), 0.0);
-		assert_eq!(m.at(2, 5), m.at(8, 5));
-		assert!(m.at(2, 5) > 0.0 && m.at(2, 5) < 1.0);
+	fn a_rectangle_on_whole_pixels_covers_exactly_its_pixels_once() {
+		let mut r = Rasteriser::new(W, H);
+		let mut px = grey();
+		let rect = Rect::from_min_max(pos2(2., 1.), pos2(6., 4.));
+		let half = Color32::from_rgba_unmultiplied(255, 255, 255, 128);
+		let mut mesh = Mesh::default();
+		mesh.add_colored_rect(rect, half);
+		r.render(&mut px, |_, _| vec![ClippedShape::new(everything(), Shape::mesh(mesh))]).unwrap();
+		let blended = (128 + (100 * 127 + 127) / 255) as u8;
+		for y in 0..H {
+			for x in 0..W {
+				let inside = (2..6).contains(&x) && (1..4).contains(&y);
+				let want = if inside { [blended, blended, blended, 255] } else { [100, 100, 100, 255] };
+				assert_eq!(at(&px, x, y), want, "({x}, {y}): two triangles, the diagonal blended once");
+			}
+		}
 	}
 
 	#[test]
-	fn text_has_ink_and_width() {
-		let t = typeface();
-		assert!(t.measure("3B", 12.0, true) > t.measure("3B", 12.0, false));
-		let m = t.mask("3B", 12.0, 0.0, 0.0, false, IRect::new(0, 0, 100, 100));
-		let ink: f32 = (0..30).flat_map(|y| (0..30).map(move |x| (x, y))).map(|(x, y)| m.at(x, y)).sum();
-		assert!(ink > 10.0);
-		assert_eq!(t.fit("abcdef", 11.0, 1000.0), "abcdef");
-		assert!(t.fit("abcdefghijkl", 11.0, 30.0).ends_with('\u{2026}'));
+	fn the_clip_rect_rounds_as_the_window_s_scissor() {
+		assert_eq!(scissor(Rect::from_min_max(pos2(1.4, -3.), pos2(5.5, 20.)), W, H), [1, 0, 6, H]);
+		assert_eq!(scissor(Rect::from_min_max(pos2(20., 2.), pos2(30., 3.)), W, H), [W, 2, W, 3]);
+		let mut r = Rasteriser::new(W, H);
+		let mut px = grey();
+		let clip = Rect::from_min_max(pos2(3.4, 0.), pos2(5.6, H as f32));
+		let shape = Shape::rect_filled(everything(), 0, Color32::WHITE);
+		r.render(&mut px, |_, _| vec![ClippedShape::new(clip, shape)]).unwrap();
+		let white: Vec<u32> = (0..W).filter(|&x| at(&px, x, 3) == [255; 4]).collect();
+		assert_eq!(white, [3, 4, 5]);
+	}
+
+	#[test]
+	fn a_pixel_centre_on_an_edge_two_triangles_share_belongs_to_one() {
+		let (a, b, c, d) = ((0, 0), (256, 0), (256, 256), (0, 256));
+		assert_ne!(owns(a, c), owns(c, a));
+		assert_ne!(owns(a, b), owns(b, a));
+		assert_ne!(owns(b, c), owns(c, b));
+		assert_ne!(owns(d, a), owns(a, d));
 	}
 }

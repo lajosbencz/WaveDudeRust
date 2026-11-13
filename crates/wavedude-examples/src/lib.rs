@@ -1,4 +1,4 @@
-//! The example projects of the Examples dialog and of the web demo, embedded: `WaveDude` Next's from the core's
+//! The example projects of the Examples dialog, embedded: `WaveDude` Next's from the core's
 //! fixtures and our own from the repository's `examples` folder; one entry per file, grouped by [`Topic`].
 
 use std::sync::OnceLock;
@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use wavedude_core::io::wdproj;
 use wavedude_core::model::Project;
 
-/// The dialog's tabs; the debug name is the topic's id in the web demo's catalog.
+/// The dialog's tabs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Topic {
 	Sources,

@@ -1,18 +1,21 @@
 //! Sources as a forcing term of the wave equation, shared by both engines (docs/physics.md, Sources).
 //!
-//! A source of amplitude A, angular frequency omega (rad/step), phase phi and envelope e(t) adds
-//! `f(t) = A / |G(omega)| e(t) sin(omega t + phi)` to `u_tt`, G the free-space response of the
-//! engine's discrete operator at the source's position (engine/green.rs), so a continuous source in free
-//! space (index 1) swings its position with amplitude A. A source at a fractional position drives the
-//! 2 x 2 cells around it with bilinear shares (its taps), and G is the response sampled with the same
-//! shares. Each sub-step of `dt = 1/n` takes `F = dt^2 f(t_k)` at the time `t_k` of its
-//! current field where the scheme takes `A u`; the modified equation also takes `dt^4 f_tt / 12` with
-//! `f_tt = -omega^2 f` (the envelope's own derivatives neglected), folded in as
-//! `F (1 - (omega dt)^2 / 12)`.
+//! A source of amplitude A, angular frequency omega (rad/step), phase phi and envelope E(t) adds
+//! `f = dp/dt` to `u_tt`, its impulse `p(t) = -A / |G(omega)| E(t) cos(omega t + phi) / omega`, G the
+//! free-space response of the engine's discrete operator at the source's position (engine/green.rs): while
+//! E = 1, `f = A / |G| sin(omega t + phi)`, so a continuous source in free space (index 1) swings its
+//! position with amplitude A, and a drive whose envelope is back at 0 has delivered no impulse, leaving no
+//! zero-frequency field behind. E is the turn-on times the pulse envelope times the detach fade
+//! (engine/envelope.rs). A source at a fractional position drives the 2 x 2 cells around it with bilinear
+//! shares (its taps), and G is the response sampled with the same shares. Each sub-step of `dt = 1/n` takes
+//! `F = dt^2 f(t_k)` at the time `t_k` of its current field where the scheme takes `A u`, f the difference
+//! of p over the sub-step; the modified equation also takes `dt^4 f_tt / 12` with `f_tt = -omega^2 f` (the
+//! envelope's own derivatives neglected), folded in as `F (1 - (omega dt)^2 / 12)`.
 
 use std::collections::HashMap;
 
-use super::envelope::{Pulse, detach_fade};
+use super::cpu::sub_step_time;
+use super::envelope::{Pulse, detach_fade, turn_on};
 use super::green::spread_response;
 use super::stencil::{StencilCoefficients, TimeScheme};
 use super::types::{Emitter, SceneData};
@@ -145,25 +148,38 @@ impl Sources {
 		})
 	}
 
-	/// The table of one sub-step at time `t` (steps): `F` per image level in use, then per tap its
+	/// The table of sub-step `k` of `n` after `time` steps: `F` per image level in use, then per tap its
 	/// emitter's drive times its share ([`SKIP_VALUE`] once the emitter is detached). Advances the
-	/// pulse states, so `t` must not decrease.
-	pub fn values(&mut self, out: &mut [f32], t: f64, n: u32, scheme: TimeScheme) {
+	/// pulse states, so the sub-steps must come in order.
+	pub fn values(&mut self, out: &mut [f32], time: u32, k: u32, n: u32, scheme: TimeScheme) {
 		assert!(out.len() >= self.table_len());
+		let t = sub_step_time(time, k, n);
+		let dt = 1.0 / n as f64;
+		// Half a sub-step either side, from one integer count so that a sub-step's end is its successor's start.
+		let half = |m: i64| (2 * n as i64 * time as i64 + 2 * k as i64 + m) as f64 / (2 * n) as f64;
+		let (lo, hi) = (half(-1), half(1));
 		for (level, slot) in out[..IMAGE_LEVELS].iter_mut().enumerate() {
 			*slot = 0.0;
 			if self.level_used[level] {
 				let omega = self.level_omega[level];
-				*slot = (self.unit_force(omega, n, scheme, (0.0, 0.0)) * (omega * t).sin() * self.image_scale) as f32;
+				let ramp = (turn_on(lo, omega), turn_on(hi, omega));
+				let drive = impulse_drive(omega, 0.0, t, dt, ramp);
+				*slot = (self.unit_force(omega, n, scheme, (0.0, 0.0)) * drive * self.image_scale) as f32;
 			}
 		}
 		self.drives.clear();
-		for k in 0..self.emitters.len() {
-			let e = self.emitters[k].clone();
-			let drive = detach_fade(&e, t).map(|fade| {
-				let omega = level_omega(e.level, self.frequency_scale);
-				let drive = (e.phase_radians + omega * t).sin() * e.amplitude * self.pulses[k].envelope(&e, omega, t);
-				self.unit_force(omega, n, scheme, e.fraction()) * drive * fade as f64
+		for i in 0..self.emitters.len() {
+			let e = self.emitters[i].clone();
+			let omega = level_omega(e.level, self.frequency_scale);
+			let (fade_lo, fade_hi) = (detach_fade(&e, lo), detach_fade(&e, hi));
+			let drive = (fade_lo.is_some() || fade_hi.is_some()).then(|| {
+				let pulse = &mut self.pulses[i];
+				let envelope = |fade: Option<f64>, at: f64, pulse: &mut Pulse| {
+					fade.unwrap_or(0.0) * turn_on(at, omega) * pulse.envelope(&e, omega, at)
+				};
+				let ends = (envelope(fade_lo, lo, pulse), envelope(fade_hi, hi, pulse));
+				let drive = impulse_drive(omega, e.phase_radians, t, dt, ends);
+				self.unit_force(omega, n, scheme, e.fraction()) * (drive * e.amplitude)
 			});
 			self.drives.push(drive);
 		}
@@ -174,6 +190,22 @@ impl Sources {
 			};
 		}
 	}
+}
+
+/// Drive of unit amplitude at sub-step time `t` of a source whose impulse `-E cos(theta) / omega` follows the
+/// envelope `E`, given at `t -+ dt/2`: the impulse's difference over the sub-step,
+/// `mean(E) sin(theta) - dE cos(theta) / (2 tan(omega dt / 2))`, scaled so a steady drive is `sin(theta)`.
+/// The impulses of the sub-steps telescope, so a drive delivers none once its envelope is back at 0. Past
+/// Nyquist (`omega dt >= pi`) the drive is aliased and the `dE` term is dropped: its `tan` nears 0 at multiples of
+/// `2 pi`.
+fn impulse_drive(omega: f64, phase: f64, t: f64, dt: f64, (lo, hi): (f64, f64)) -> f64 {
+	let theta = phase + omega * t;
+	let mean = (lo + hi) * 0.5;
+	let half = omega * dt / 2.0;
+	if lo == hi || half >= std::f64::consts::FRAC_PI_2 {
+		return mean * theta.sin();
+	}
+	mean * theta.sin() - (hi - lo) * theta.cos() / (2.0 * half.tan())
 }
 
 /// The driven cells, each once in order of first appearance (image sources first, then the emitters'
@@ -233,6 +265,53 @@ mod tests {
 		let g = SourceGroups::new(&scene, [(a, 5), (b, 7), (a, 9), (m, 3)], &[b, c, a, m]);
 		let runs: Vec<(usize, Vec<u32>)> = g.iter().map(|(c, e)| (c, e.to_vec())).collect();
 		assert_eq!(runs, vec![(a, vec![5, 9, 258]), (b, vec![7, 256]), (c, vec![257])]);
+	}
+
+	/// The drives of a 1-cycle Gaussian pulse and of a continuous source at phase 0, both detaching, deliver
+	/// no net impulse: their sub-steps' values sum to 0 within f32 round-off, at two and three sub-steps.
+	#[test]
+	fn a_drive_that_ends_leaves_no_impulse() {
+		use crate::model::{PulseShape, Stencil};
+		let scene = SceneData::blank(16, 16, &crate::model::Scene { damping_edge: 0, ..Default::default() });
+		let continuous = Emitter {
+			x: 4.0,
+			y: 4.0,
+			level: 100.0,
+			amplitude: 1.0,
+			phase_radians: 0.0,
+			pulsed: false,
+			shape: PulseShape::Gaussian,
+			on_width_cycles: 1,
+			off_width_cycles: 3,
+			off_width_base: 3,
+			randomize_off_width: 0,
+			detach_after_step: Some(100),
+			rng_seed: std::num::NonZeroU32::MIN,
+		};
+		let pulsed = Emitter { x: 8.0, pulsed: true, detach_after_step: Some(150), ..continuous.clone() };
+		for n in [2, 3] {
+			let mut sources = Sources::new(StencilCoefficients::of(Stencil::FourthOrder), 2.0, 1.0);
+			sources.set_emitters(&[continuous.clone(), pulsed.clone()], &scene);
+			let mut out = vec![0.0; sources.table_len()];
+			let (mut sum, mut magnitude) = ([0f64; 2], [0f64; 2]);
+			for time in 0..200 {
+				for k in 0..n {
+					sources.values(&mut out, time, k, n, TimeScheme::ModifiedEquation);
+					for (j, &v) in out[IMAGE_LEVELS..].iter().enumerate() {
+						if v.to_bits() != SKIP_VALUE {
+							sum[j] += v as f64;
+							magnitude[j] += (v as f64).abs();
+						}
+					}
+				}
+			}
+			for j in 0..2 {
+				assert!(
+					magnitude[j] > 0.0 && sum[j].abs() < 1e-6 * magnitude[j],
+					"{n} sub-steps, source {j}: {sum:?} of {magnitude:?}"
+				);
+			}
+		}
 	}
 
 	#[test]

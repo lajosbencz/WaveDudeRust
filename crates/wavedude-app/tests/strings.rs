@@ -1,5 +1,5 @@
-//! Every key of the English string table is looked up somewhere in the app, the state, the examples or the core crate,
-//! so a key that nothing shows cannot linger; and every other language holds the same keys.
+//! Every key of the English string table is looked up somewhere in the app, the state, the examples or the core
+//! crate, so a key that nothing shows cannot linger; and every other language holds every English key.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -33,12 +33,12 @@ fn every_english_key_is_used_and_every_language_is_complete() {
 	sources(&root.join("wavedude-examples/src"), &mut text);
 	sources(&root.join("wavedude-core/src"), &mut text);
 	let english: HashSet<&str> = keys(Language::English).collect();
-	// a field or a word names its key at run time: the type's name and the member's
 	let named: HashSet<String> = model_keys().into_iter().collect();
 	let unused: Vec<&str> = english
 		.iter()
 		.copied()
 		.filter(|k| !DYNAMIC_PREFIXES.iter().any(|p| k.starts_with(p)))
+		// a field or a word names its key at run time: the type's name and the member's
 		.filter(|k| !named.contains(*k) && !GATE_OUTPUT.contains(k))
 		.filter(|k| !text.contains(&format!("\"{k}\"")))
 		.collect();

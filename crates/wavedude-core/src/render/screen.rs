@@ -305,7 +305,7 @@ impl ScreenRenderer {
 }
 
 /// The axes of a view: the `window` of the source, or all of it, to the target size.
-fn axes(sw: usize, sh: usize, window: Option<Window>, tw: usize, th: usize) -> (ResampleAxis, ResampleAxis) {
+pub(crate) fn axes(sw: usize, sh: usize, window: Option<Window>, tw: usize, th: usize) -> (ResampleAxis, ResampleAxis) {
 	match window {
 		None => (ResampleAxis::new(sw, tw), ResampleAxis::new(sh, th)),
 		Some((x, y, w, h)) => (ResampleAxis::window(sw, (x, x + w), tw), ResampleAxis::window(sh, (y, y + h), th)),

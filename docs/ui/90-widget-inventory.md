@@ -1,15 +1,13 @@
-# Widget inventory for `wavedude-widgets` (Freya 0.5)
+# Widget inventory of `wavedude-app` (egui)
 
-Derived from files 00..80. Each widget: required behaviours, then the Freya base it can likely start from.
-Every Freya judgement is unchecked: TODO(verify-freya). Judged against Freya's shipped components (Button, Input,
-ScrollView, Dropdown, Tooltip, Popup, Menu, Table, Tree if any, Canvas with direct Skia access, Image), not read
-from docs.
+Derived from files 00..80. Each widget: required behaviours, then what it is built on in
+[`crates/wavedude-app/src/ui`](../../crates/wavedude-app/src/ui/) (decision 0019).
 
 Cross-cutting requirements for every widget:
 - Keyboard first: focusable where interactive, visible focus (accent border), Tab order = visual order.
 - Theme tokens only (no hard-coded colours) except the preview overlays and graph boxes (fixed colours).
 - Re-labels live on a language switch; scales with the UI zoom; lines on whole device pixels.
-- A stable test id per interactive element (AccessKit is available through Freya, but tests target app state).
+- Its role and label in egui's AccessKit tree, through which the window's tests find it.
 - 23 px row height for rows, toolbar buttons, the menu bar and tabs; 22 px for drop-down menu entries, text
   boxes, number boxes and combo boxes; 16 px icons in text colour (greys when disabled).
 - WPF's box model: square corners everywhere; buttons padding 10,3 inside a 1 px border (toolbar text buttons
@@ -31,8 +29,7 @@ Behaviours:
 - Show/hide panes (hide = keep registration); default side for a pane shown without a saved place.
 - Serialize/deserialize the layout by pane id (unknown ids ignored); default layout definition.
 - Sizes survive rebuilds; hosted content keeps its state across re-parenting.
-Freya base: none for docking; ResizableContainer/panel-like layout if shipped, Popup for the drop-down.
-TODO(verify-freya).
+Base: egui_tiles, with the app's title bars, tabs, drop overlay and saved arrangement (`dock.rs`).
 
 ## 2. Menu bar and menus
 
@@ -47,7 +44,8 @@ Behaviours:
 - Keyboard: Esc closes a level; first entry focused when opened by keyboard.
 - A click outside while open closes and still lands on its target (incl. window title bar where the platform
   allows).
-Freya base: Menu / ContextMenu component; mnemonics and shortcut column likely custom. TODO(verify-freya).
+Base: egui's menus and context menus; the icon and shortcut columns, mnemonics and key walk are the app's
+(`menu_bar.rs`, `menu_keys.rs`).
 Port: an entry carries a typed action (the app's `MenuAction`, the preview's `PictureMenu`) beside its string
 test id; activation reports the action, never the id.
 
@@ -66,14 +64,13 @@ Behaviours:
 - Drag source (row, not its buttons) carrying text; drop target with insertion feedback: line above/below a row
   (by half), outline around a folder; claims only drags it accepts.
 - Per-row context menu with the node as target.
-Freya base: Tree if shipped, else VirtualScrollView/ScrollView + custom rows; drag via drag/drop zone helpers if
-shipped. TODO(verify-freya).
+Base: own rows in a ScrollArea, egui's drag and drop payloads (`tree.rs`).
 
 ## 4. Toolbar buttons
 
 Behaviours: flat text+icon button with plus badge; flat 16/18 px glyph button; tooltip; disabled skipped by Tab;
-toggle variant (pressed while checked); radio group variant (one tab stop, Left/Right move the check).
-Freya base: Button. TODO(verify-freya).
+toggle variant (pressed while checked); radio variant (each button a tab stop).
+Base: own painted buttons (`tree.rs`, `preview/transport.rs`).
 
 ## 5. Property form (form panel and rows)
 
@@ -86,18 +83,15 @@ Behaviours:
 - Repeated row lists with per-row remove button and an Add button (points, nodes, stops).
 - Collapsible description header with chevron (Space toggles, persisted).
 - Vertical scroll, never horizontal; caret into the first text box on a new item.
-Freya base: layout primitives + ScrollView; custom form layout. TODO(verify-freya).
+Base: own two-column layout in a ScrollArea (`properties/`).
 
 ## 6. Text box
 
 Behaviours: Enter commits to the bound value and selects all; Esc reverts when changed (consumed only then);
 per-keystroke binding option; multiline option; own undo (Ctrl+Z) and clipboard handled before window commands;
 placeholder text (Messages search); option to select all text when the box gains focus (the object Name box).
-Freya base: `TextField` (widgets/src/text_field.rs on `freya-edit`; the text and number boxes use it) so the box can
-select on focus; multi-line mode lays out one paragraph per line, wraps and scrolls vertically. The focusing click
-selects all, a later click places the caret; caret blink, drag and double-click selection, scrolling to keep the caret
-visible and IME preedit as Input.
-TODO(verify-freya): commit/revert semantics and key precedence over window shortcuts.
+Base: egui's TextEdit with the commit policy of the pending edit (`text_box.rs`, `edit.rs`); the box selects its
+text when it gains the focus.
 
 ## 7. Number box (linear and logarithmic)
 
@@ -105,7 +99,7 @@ Behaviours:
 - Text + two repeat buttons (auto-repeat; clicking focuses).
 - Up/Down step, PageUp/PageDown 10 steps, wheel 1 (Shift 10) while focused.
 - Horizontal drag scrub on an unfocused box past a threshold: per-pixel step, Shift finer x0.1, Ctrl coarser x10;
-  pointer wraps at the monitor edge; Esc restores; press without move = caret click.
+  Esc restores; press without move = caret click.
 - Logarithmic mode: x1.02 per step, 10 steps per page, doubling per N pixels on drag, three significant digits.
 - Min/max clamp on steps; steps and drags round to the increment's decimals; the value shows in its shortest
   form ("120", "1.5", "0.125"); typed text keeps its digits, clamped; culture-aware parse/format.
@@ -113,33 +107,33 @@ Behaviours:
 - Look: 22 px, padding 3,2, 1 px border (hover, focus accent), 14 px spin column with 4 x 2 chevrons, hover and
   pressed backgrounds; disabled: window background, grey text, no spin buttons.
 - Writes through to the bound value on every step; selects text after a step.
-Freya base: `TextField` + custom behaviour; pointer wrap needs platform cursor warp (winit set_cursor_position).
-TODO(verify-freya).
+Base: egui's TextEdit with own steps, drag and spin buttons (`number_box.rs`).
 
 ## 8. Check box, combo box, editable combo
 
 Behaviours: check box with label content; enum combo with localised words; editable combo (speed box) with preset
 list and free typing, swallowing Space; keyboard open/close and arrow selection.
-Freya base: Checkbox, Dropdown; editable combo likely Input + Dropdown/Popup. TODO(verify-freya).
+Base: own check box and combo box over egui's Popup (`properties/mod.rs`); the speed box a number box with a presets
+Popup (`preview/transport.rs`).
 
 ## 9. Colour scheme picker (combo with gradient rows)
 
 Behaviours: rows with gradient strip + name + grey tag; greyed missing name; italic action rows (Load from file...,
 Edit a copy in the project...); list updated in place; value = scheme name.
-Freya base: Dropdown with custom item rendering; gradient via Canvas or linear-gradient fill. TODO(verify-freya).
+Base: the combo box with painted rows, the gradient as a mesh (`properties/`, `gradient_editor.rs`).
 
 ## 10. Colour swatch button and colour picker popup
 
 Behaviours: swatch toggles a popup below it (Space/Enter/Down); SV square + hue strip (Canvas), markers, mouse drag,
 arrow keys with Shift x10; R/G/B number boxes; hex box (Enter applies); live colour commit throttled to 10/s plus on
 drag end; Enter keeps, Esc reverts, click outside closes without reopening; focus returns to the swatch.
-Freya base: Popup + Canvas (Skia) for square/strip. TODO(verify-freya).
+Base: egui's Popup with painted square and strip (`color_picker.rs`).
 
 ## 11. Gradient editor rows (colour scheme form)
 
 Behaviours: gradient bar; stop rows (position number box 0..1, swatch, hex box, remove); Add stop in the widest gap;
 Based-on combo copying stops.
-Freya base: composed from 5, 7, 10. TODO(verify-freya).
+Base: composed from 5, 7, 10 (`gradient_editor.rs`).
 
 ## 12. Canvas image (preview picture)
 
@@ -152,8 +146,8 @@ Behaviours:
 - Context menu; focusable pane for Space.
 - Its hooks and callbacks compare by identity: made once by the parent, with a redraw key that changes with the
   overlay's inputs, the picture does not re-render with its parent. The device size is reported after layout.
-Freya base: Image (static) is likely insufficient for per-frame updates; Canvas with direct Skia access to blit a
-pixel buffer. Decision 0002's verification (1920x1080 at 30+ fps with overlays) applies. TODO(verify-freya).
+Base: a wgpu texture written in place, or the GPU engine's frame coloured in a paint callback (`preview/picture.rs`,
+`preview/texture.rs`, `preview/device.rs`).
 
 ## 13. Scene overlay (handles)
 
@@ -169,7 +163,7 @@ Behaviours:
 - Visibility rules (Handles/Labels settings, current-item-only handles).
 - Drop target for objects (paste at pixel).
 - Hit testing must not walk thousands of dots under a resting pointer.
-Freya base: Canvas (Skia) for drawing + custom hit testing and focus management. TODO(verify-freya).
+Base: the view's epaint shapes, own hit testing and focus (`preview/overlay.rs`).
 
 ## 14. Probe graph box overlay
 
@@ -177,52 +171,52 @@ Behaviours: draws boxes (translucent dark, axes, labels, curve clipped to the pl
 fixed text size; linear and symmetric/logarithmic axes; each box draggable and focusable (arrows, Del), corner grip
 resize snapping to fixed sizes; snap/attach to probe point with hysteresis; selected border; context menu (CSV);
 cached text layout.
-Freya base: Canvas (Skia). TODO(verify-freya).
+Base: the view's epaint shapes (`preview/graph_boxes.rs`).
 
 ## 15. Header strip
 
 Behaviours: title + optional caption + tools (number box, Auto button); caption dropped first, title trimmed when
 short; can be laid out rotated 90 degrees beside the picture (picture frame decides above vs beside by aspect).
-Freya base: custom layout; rotation support in Freya layout unknown. TODO(verify-freya).
+Base: own layout, turned text shapes and an upright editing Area (`preview/header_strip.rs`).
 
 ## 16. Picture splitter / split container
 
 Behaviours: two cells side by side or stacked; 4 px splitter, tab stop, arrows move 10 px, Enter/double-click
 resets to half; collapses when one cell is hidden and restores the split.
-Freya base: ResizableContainer-like component if shipped. TODO(verify-freya).
+Base: own splitter (`preview/mod.rs`).
 
 ## 17. Timeline
 
 Behaviours: custom-drawn bar with tick labels (interval by label width), playhead with frame label, in/out brackets
 and band, available-frames shading (accent or grey when stale), hover line and label; click/drag scrub, bracket
 drag, keys Left/Right/PageUp/PageDown/Home/End, wheel; cached tick drawing; whole-pixel lines; test value exposure.
-Freya base: Canvas (Skia). TODO(verify-freya).
+Base: painted shapes on whole device pixels (`preview/timeline.rs`).
 
 ## 18. Transport bar
 
 Behaviours: glyph buttons and toggles with state-driven glyph/tooltip/command (Run/Stop, Pause/Resume), focus
 handoff Play<->Pause, readout text "frame / last" + dim step, speed editable combo, layout radio group.
-Freya base: Button + composed widgets 4, 8. TODO(verify-freya).
+Base: composed from 4 and 8 (`preview/transport.rs`).
 
 ## 19. Tooltip
 
 Behaviours: on hover after 400 ms (WPF's initial show delay), under the pointer and kept inside the window;
 a press or leaving hides it; localised text, themed, zoomed, square 1 px border, padding 6,3, UI font; on menu
 entries too (shown 400 ms after the entry is highlighted).
-Freya base: none; own widget (`Tip`), since Freya's Tooltip has a fixed rounded look and padding.
+Base: egui's tooltips (`on_hover_text`) in the app's visuals.
 
 ## 20. Busy indicators
 
 Behaviours: dim rectangle (45 % black) + spinner (three-quarter ring, one turn per second) over the pictures after a
 150 ms delay, not hit-testable; status bar progress bar determinate/indeterminate; platform taskbar progress where
 available.
-Freya base: Loader/ProgressBar components, animation hooks; taskbar via platform crate. TODO(verify-freya).
+Base: painted dim and spinner (`preview/picture.rs`), own progress bar (`status_bar.rs`); no taskbar progress.
 
 ## 21. Status bar
 
 Behaviours: left log line with background/foreground switching for warn/error; right run status; far-right busy
 text + bar; tooltip; double-click opens Messages; resize grip corner.
-Freya base: custom row. TODO(verify-freya).
+Base: own row in egui's bottom panel (`status_bar.rs`).
 
 ## 22. Message list (Messages pane)
 
@@ -231,25 +225,25 @@ clear; columns Time/Level/Source/Message with resizable headers; per-level row c
 Copy/Copy all/Clear; 5000-entry ring buffer with batched updates; virtualised rows; row tooltip. The visible
 lines are kept as ids per (log revision, filter), so a hover or a selection change neither copies lines nor
 compiles the search again.
-Freya base: Table (+ VirtualScrollView). TODO(verify-freya).
+Base: own columns and virtualised rows in a ScrollArea (`messages/`).
 
 ## 23. Dialog window
 
 Behaviours: modal owned window with themed title bar, icon disc, wrapped text, button sets with default/cancel,
 mnemonics without Alt; sized to content; zoomed. Also used for the memory warning (check boxes with greyed states,
 live result line) and About (links, collapsible document, read-only text, copy).
-Freya base: separate window launch (multi-window support in Freya 0.5 unknown) or an in-window Popup overlay.
-TODO(verify-freya).
+Base: egui's Modal over the window (`modal.rs`).
 
 ## 24. Document viewer (manual, license)
 
 Behaviours: render Markdown (headings with GitHub anchors, paragraphs, tight lists, emphasis, code, links) and
 figures (PNG with numbered badge discs and tooltips) in a scrolling column; whole-pixel scrolling; text selection
 and copy; scroll-to-heading; contents tree beside it with a splitter; internal anchor links and external links.
-Freya base: ScrollView + rich text paragraphs; Markdown component if shipped. TODO(verify-freya).
+Base: egui_commonmark with own code blocks and figures (`markdown.rs`); the manual a viewport of its own, a
+Window in the browser (`manual.rs`).
 
 ## 25. Icon view
 
 Behaviours: 16 px icon from an icon font glyph or an app vector drawing (stroke + optional fill), text colour,
 optional plus badge; lens profile variants chosen from data.
-Freya base: svg element or Canvas paths. TODO(verify-freya).
+Base: egui_material_icons, and SVG path data flattened into meshes (`icons.rs`).

@@ -1,7 +1,8 @@
 # 0018: A shared picture view: one draw list for Skia and Canvas2D, probes read back in the browser
 
-Status: accepted, 2026-11-12. Builds on [0016](0016-gpu-engine-in-the-browser.md) and amends [0017](0017-a-wasm-package-and-a-web-demo.md):
-the web demo shows the preview's handles, labels, edge line and probe graph boxes.
+Status: accepted, 2026-11-12; shapes as epaint's, 2026-11-12 (below); amended by [0019](0019-egui-and-the-platform-layer.md),
+2026-11-13: the Skia and Canvas2D executors and the wasm package are gone, the window and the browser draw the epaint shapes. Builds on [0016](0016-gpu-engine-in-the-browser.md)
+and amends [0017](0017-a-wasm-package-and-a-web-demo.md): the web demo shows the preview's handles, labels, edge line and probe graph boxes.
 
 ## Context
 
@@ -20,8 +21,8 @@ the desktop's.
 - The shapes are a draw list (`Shape` in [`draw.rs`](../../crates/wavedude-view/src/draw.rs)). A text's `TextStyle` says its font and
   where its position lies: a label in the platform's default typeface on the alphabetic baseline over its halo,
   graph-box text in the element's (the page's) fonts from the top of its line box. Both executors are Rust and cache
-  the dots' bitmap: the desktop's with Skia (`Painter` in [`paint.rs`](../../crates/wavedude-widgets/src/paint.rs)), the
-  browser's with Canvas2D through web-sys (`View` in [`canvas.rs`](../../crates/wavedude-wasm/src/canvas.rs)), which
+  the dots' bitmap: the desktop's with Skia (`Painter` in `paint.rs`), the
+  browser's with Canvas2D through web-sys (`View` in `canvas.rs`), which
   follows the Skia one shape for shape. Text is measured through `TextMetrics`: Skia's fonts on the desktop, the
   canvas's `measureText` in the browser.
 - Units: the overlay is in logical (CSS) pixels; the edge line and a graph box are in device pixels of a `DeviceGrid`,
@@ -69,3 +70,14 @@ the desktop's.
 - Shapes as JSON for a JavaScript executor: a second executor to keep in step with the desktop's, and a format
   between the two.
 - Clearing the traces on a rerun and recording them again: the same values for the work of recording twice.
+
+## Shapes as epaint's (added 2026-11-12)
+
+With the window on egui, the own draw list and its executors are gone: the overlay's and a graph box's shapes are
+epaint shapes in points, their text galleys laid out by epaint's fonts from the bundled Selawik (`fonts.rs`), and
+epaint's tessellator makes them meshes, which the window draws with egui's wgpu renderer and an export rasterises on
+the CPU into its frame (`wavedude_export::raster`): pixels are drawn where they live. `TextMetrics` stays the graph
+layout's measure (epaint's fonts through `FontMetrics`, or an estimate); `DeviceGrid` puts hairlines and text on whole
+device pixels and maps them back to points. epaint strokes no text, so a label's halo is its glyphs' outlines, read by
+skrifa (epaint's font reader) and hinted as epaint hints the glyphs, flattened into closed paths and stroked the halo's
+width in its colour under the text; where two contours' strokes overlap, the halo is darker than its colour.

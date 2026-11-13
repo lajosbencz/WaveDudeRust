@@ -27,11 +27,6 @@ Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened with
 approves the waiting runs on the PR page ("Approve workflows to run"); once approved, later updates of the same PR
 run without asking. The required checks come from those runs alone, so each new release PR needs that one approval.
 
-After `publish` succeeds, the `pages` job calls [`pages.yml`](../.github/workflows/pages.yml), which builds the web demo of the released
-commit (no cache, with [`demo/build.sh`](../demo/build.sh)) and deploys it to GitHub Pages
-(https://lajosbencz.github.io/WaveDudeRust/). The workflow can also be run by hand from the Actions tab. A failed
-deployment leaves the release as it is; rerun the failed jobs.
-
 A failed release is finished by rerunning the failed jobs of its run: tagging and drafting skip what exists. The
 release stays a draft until `publish` succeeds.
 
@@ -109,7 +104,7 @@ set again at those sizes and commit it with the SVG.
   field that does not exist). A cargo-packager bump means diffing the template again.
 - macOS: [`assets/macos/Info.plist`](../crates/wavedude-app/assets/macos/Info.plist), merged over cargo-packager's, exports the two types and names them in the document
   types. The Finder hands a file to the running app as `application:openURLs:`, which the app delegate of
-  [`src/ui/open_requests.rs`](../crates/wavedude-app/src/ui/open_requests.rs) queues for the window.
+  [`src/open_requests.rs`](../crates/wavedude-app/src/open_requests.rs) queues for the window.
 - Linux: [`assets/linux/wavedude-rust.xml`](../crates/wavedude-app/assets/linux/wavedude-rust.xml) (shared-mime-info) maps the globs to the MIME types the `.desktop` file names;
   the AppImage carries it, and the tarball carries it with [`wavedude-app.desktop`](../crates/wavedude-app/assets/linux/wavedude-app.desktop), the icon theme PNGs and [`install.sh`](../crates/wavedude-app/assets/linux/install.sh),
   which installs them under `PREFIX` (default `~/.local`) and removes them with `--uninstall`.

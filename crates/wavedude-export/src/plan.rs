@@ -3,12 +3,14 @@
 
 use std::ops::RangeInclusive;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::{Layer, Project};
 use wavedude_core::scene::compose::compose_scene;
 
+use crate::fs::OutputFs;
 use crate::job::{ExportJob, ExportLayerLook, ExportTarget, discard_all, finish_all};
 use crate::overlays::Overlays;
 use crate::range::frame_range;
@@ -22,7 +24,9 @@ pub struct ExportPlan<'a> {
 	pub project: &'a Project,
 	pub format: ExportFormat,
 	pub layers: ExportLayers,
-	/// The chosen output; [`ExportLayers::Both`] adds each layer's suffix.
+	/// Where the outputs go.
+	pub fs: Arc<dyn OutputFs>,
+	/// The chosen output in `fs`; [`ExportLayers::Both`] adds each layer's suffix.
 	pub path: PathBuf,
 	/// A still of this timeline frame instead of the in-out range.
 	pub still: Option<usize>,
@@ -58,7 +62,7 @@ impl ExportPlan<'_> {
 	/// through `schemes`. The scene is composed only when a layer burns in its glowing edges, the one use of it;
 	/// overlays are dropped for a format that takes the stored halves. When an output cannot be opened, those
 	/// already open are finished and removed.
-	pub fn build_job<'s>(&self, source: &'s dyn FrameSource, schemes: &SchemeStore) -> Result<ExportJob<'s>> {
+	pub fn build_job<'s>(&self, source: Arc<dyn FrameSource + 's>, schemes: &SchemeStore) -> Result<ExportJob<'s>> {
 		if self.still.is_some() && !self.format.supports_still() {
 			return Err(ExportError::WrongInput("an image format for a still"));
 		}
@@ -77,7 +81,7 @@ impl ExportPlan<'_> {
 			.then(|| compose_scene(self.project))
 			.flatten();
 		if let Some(dir) = self.path.parent().filter(|d| !d.as_os_str().is_empty()) {
-			std::fs::create_dir_all(dir)?;
+			self.fs.create_dir_all(dir)?;
 		}
 		let spec = SinkSpec {
 			width,
@@ -107,7 +111,8 @@ impl ExportPlan<'_> {
 			.collect::<Result<Vec<_>>>()?;
 		for (layer, look) in looks {
 			let path = naming::layer_path(&self.path, layer, both);
-			let sink = match sinks::open(self.format, &path, spec, self.still.is_some(), &pool, self.h264.as_deref()) {
+			let still = self.still.is_some();
+			let sink = match sinks::open(self.format, &self.fs, &path, spec, still, &pool, self.h264.as_deref()) {
 				Ok(sink) => sink,
 				Err(e) => {
 					let mut opened: Vec<Box<dyn FrameSink>> = targets.into_iter().map(|t| t.sink).collect();
@@ -121,12 +126,7 @@ impl ExportPlan<'_> {
 			targets.push(ExportTarget { layer, look, sink });
 		}
 		let overlays = Overlays::new(self.project, width, height, self.traces, self.total_steps);
-		Ok(ExportJob {
-			source,
-			frames,
-			targets,
-			overlays: (!self.format.wants_halves() && !overlays.is_empty()).then_some(overlays),
-			keep_partial: self.keep_partial,
-		})
+		let overlays = (!self.format.wants_halves() && !overlays.is_empty()).then_some(overlays);
+		Ok(ExportJob::new(source, frames, targets, overlays, self.keep_partial))
 	}
 }

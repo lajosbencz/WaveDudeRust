@@ -6,9 +6,9 @@
 //! one video track, timescale = fps, each sample one tick, one sample per chunk, offsets in `co64`.
 
 use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::io::{Read, Seek, SeekFrom, Write};
+
+use wavedude_core::sync::MaybeSend;
 
 use super::counted::Counted;
 use super::png::{PngFilter, encode_png_into};
@@ -116,31 +116,17 @@ impl Body {
 	}
 }
 
-impl MovWriter<BufWriter<File>> {
-	fn check(width: u32, height: u32) -> Result<()> {
-		if width == 0 || height == 0 || width > u16::MAX as u32 || height > u16::MAX as u32 {
-			return Err(ExportError::Size { format: "QuickTime", width, height, limit: "up to 65535 x 65535" });
-		}
-		Ok(())
+fn check(width: u32, height: u32) -> Result<()> {
+	if width == 0 || height == 0 || width > u16::MAX as u32 || height > u16::MAX as u32 {
+		return Err(ExportError::Size { format: "QuickTime", width, height, limit: "up to 65535 x 65535" });
 	}
-
-	pub fn create(
-		path: &Path,
-		width: u32,
-		height: u32,
-		fps: u32,
-		codec: MovCodec,
-		frames: Option<usize>,
-	) -> Result<Self> {
-		Self::check(width, height)?;
-		Self::new(BufWriter::with_capacity(1 << 20, File::create(path)?), width, height, fps, codec, frames)
-	}
+	Ok(())
 }
 
 impl<W: Write + Seek> MovWriter<W> {
 	/// A writer; `frames`, when known, reserves room for `moov` ahead of `mdat`.
 	pub fn new(out: W, width: u32, height: u32, fps: u32, codec: MovCodec, frames: Option<usize>) -> Result<Self> {
-		MovWriter::<BufWriter<File>>::check(width, height)?;
+		check(width, height)?;
 		let mut out = Counted::new(out)?;
 		out.write_all(&atom(b"ftyp", &Body::default().bytes(b"qt  ").u32(0x2005_0300).bytes(b"qt  ").0))?;
 		let reserve = match frames {
@@ -331,7 +317,7 @@ pub fn encode_animation_into(rgba: &[u8], width: usize, height: usize, out: &mut
 	out[..4].copy_from_slice(&size.to_be_bytes());
 }
 
-impl<W: Write + Seek + Send> FrameSink for MovWriter<W> {
+impl<W: Write + Seek + MaybeSend> FrameSink for MovWriter<W> {
 	fn write_frame(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<()> {
 		if self.finished {
 			return Err(ExportError::Finished);
@@ -395,7 +381,7 @@ pub struct ParallelMov<W: Write + Seek> {
 
 impl<W: Write + Seek> ParallelMov<W> {
 	pub fn new(writer: MovWriter<W>, pool: &EncoderPool) -> Result<Self> {
-		let lanes = Lanes::new(pool.get()?);
+		let lanes = Lanes::new(pool)?;
 		Ok(Self { writer, lanes, pending: BTreeMap::new(), next: 0, error: None, failed: false })
 	}
 
@@ -430,7 +416,7 @@ impl<W: Write + Seek> ParallelMov<W> {
 	}
 }
 
-impl<W: Write + Seek + Send> FrameSink for ParallelMov<W> {
+impl<W: Write + Seek + MaybeSend> FrameSink for ParallelMov<W> {
 	fn write_frame(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<()> {
 		check_size(self.writer.width, self.writer.height, width, height, rgba.len(), 4)?;
 		if self.writer.finished {

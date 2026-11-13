@@ -35,11 +35,11 @@ png.workspace = true
 clap = { workspace = true, optional = true }
 jpeg-encoder = "0.7"
 exr = "1.74"
-ab_glyph = "0.2"
 openh264 = { version = "0.9", default-features = false, optional = true }
 ureq = { version = "3", optional = true }
 bzip2 = { version = "0.6", optional = true }
 mp4 = { version = "0.14", optional = true }
+web-time = "1.1"
 
 [dev-dependencies]
 insta.workspace = true

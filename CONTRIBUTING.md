@@ -34,9 +34,9 @@ Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLAT
 - Accepted when all of this holds:
   - The checks of [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (on Linux, macOS and Windows) and
     [`.github/workflows/hygiene.yml`](.github/workflows/hygiene.yml) pass; Tools, below, lists them with the commands to run them locally.
-  - A behaviour change comes with a test that failed before it: unit, headless (freya-testing), physics or
-    snapshot, whichever fits ([`docs/conventions.md`](docs/conventions.md) says where each lives). Snapshot changes (`insta`) are
-    reviewed with `cargo insta review` and explained in the pull request.
+  - A behaviour change comes with a test that failed before it: unit, physics or snapshot, whichever fits
+    ([`docs/conventions.md`](docs/conventions.md) says where each lives). Snapshot changes (`insta`) are reviewed with
+    `cargo insta review` and explained in the pull request.
   - The specification follows the behaviour: [`docs/spec`](docs/spec/) for the core and export, [`docs/ui`](docs/ui/) for the application,
     [`crates/wavedude-app/assets/manual.md`](crates/wavedude-app/assets/manual.md) for what users see. A new UI string goes into all four tables in
     [`crates/wavedude-app-state/assets/strings`](crates/wavedude-app-state/assets/strings/).
@@ -56,8 +56,7 @@ Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLAT
 ## Tools
 
 The compiler is pinned in [`rust-toolchain.toml`](rust-toolchain.toml) with clippy and rustfmt; `rustup toolchain install` in
-the repository installs it, as CI does. Bump it there when a new stable is wanted (the CI caches are keyed on it). Linux needs the
-packages of the "Linux packages for Skia and winit" step of [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Below,
+the repository installs it, as CI does. Bump it there when a new stable is wanted (the CI caches are keyed on it). Below,
 `F=wavedude-export/openh264-source,wavedude-cli/openh264-source`.
 
 | Tool | Checks | Run | Configured in |
@@ -66,12 +65,13 @@ packages of the "Linux packages for Skia and winit" step of [`.github/workflows/
 | clippy | lints, warnings fail | `cargo clippy --workspace --all-targets --features $F -- -D warnings` | `[workspace.lints]` of [`Cargo.toml`](Cargo.toml) |
 | cargo test | the tests; the export tests decode their output with `ffmpeg` when it is on the `PATH` | `cargo test --workspace --features $F` | |
 | [cargo-insta](https://insta.rs) | text snapshots | `cargo insta review` | `tests/snapshots/` of core and export |
+| [egui_kittest](https://docs.rs/egui_kittest) | the window's image snapshots, rendered on wgpu on Mesa's lavapipe, which the tests select; without it they skip, unless `WAVEDUDE_REQUIRE_LAVAPIPE` is set (CI on Linux) | `cargo test -p wavedude-app --test shell`; after an intended change `UPDATE_SNAPSHOTS=1` with that command rewrites them, review the PNGs | [`kittest.toml`](kittest.toml), `tests/snapshots/` of the app |
 | rustdoc | docs without warnings | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | |
 | [cargo-hack](https://github.com/taiki-e/cargo-hack) | every feature combination compiles | `cargo hack check --workspace --feature-powerset --depth 2` | |
 | [cargo-machete](https://github.com/bnjbvr/cargo-machete) | no unused dependency | `cargo machete` | |
-| MSRV | builds at the workspace's `rust-version` | `rustup toolchain install 1.89`, then `cargo +1.89 check --workspace --all-targets` | `[workspace.package]` of [`Cargo.toml`](Cargo.toml) |
-| wasm32 | the core without `run`, with and without `gpu`, and the view crate build for the browser and are clippy-clean there | `rustup target add wasm32-unknown-unknown`, then `cargo clippy -p wavedude-core --no-default-features --target wasm32-unknown-unknown -- -D warnings`, the same with `--features gpu`, and `cargo clippy -p wavedude-view --target wasm32-unknown-unknown -- -D warnings` | `[features]` of [`crates/wavedude-core/Cargo.toml`](crates/wavedude-core/Cargo.toml) |
-| wasm package | the wasm package is clippy-clean for the browser | `cargo clippy -p wavedude-wasm --target wasm32-unknown-unknown -- -D warnings` | [`crates/wavedude-wasm/Cargo.toml`](crates/wavedude-wasm/Cargo.toml) |
+| MSRV | builds at the workspace's `rust-version` | `rustup toolchain install 1.95`, then `cargo +1.95 check --workspace --all-targets` | `[workspace.package]` of [`Cargo.toml`](Cargo.toml) |
+| wasm32 | the core with and without `run` and `gpu`, the view crate, the app state, the export crate without MP4 and the app build for the browser and are clippy-clean there, std's clocks banned | `rustup target add wasm32-unknown-unknown`, then with `CLIPPY_CONF_DIR=tools/clippy-wasm32`: `cargo clippy -p wavedude-core --no-default-features --target wasm32-unknown-unknown -- -D warnings`, the same with `--features gpu`, `--features run` and `--features run,gpu`, `cargo clippy -p wavedude-view --target wasm32-unknown-unknown -- -D warnings`, `cargo clippy -p wavedude-app-state --target wasm32-unknown-unknown -- -D warnings`, `cargo clippy -p wavedude-export --no-default-features --target wasm32-unknown-unknown -- -D warnings` and `cargo clippy -p wavedude-app --target wasm32-unknown-unknown -- -D warnings` | `[features]` of [`crates/wavedude-core/Cargo.toml`](crates/wavedude-core/Cargo.toml), [`tools/clippy-wasm32/clippy.toml`](tools/clippy-wasm32/clippy.toml), [`.cargo/config.toml`](.cargo/config.toml) (web-sys's unstable APIs) |
+| web app | the app runs in the browser | `tools/build-web.sh [<out>]` (default `target/web`) with the wasm-bindgen CLI of Cargo.lock's version, then serve the folder over HTTP | [`tools/build-web.sh`](tools/build-web.sh), [`crates/wavedude-app/web/index.html`](crates/wavedude-app/web/index.html) |
 | [typos](https://github.com/crate-ci/typos) | spelling | `typos` | [`_typos.toml`](_typos.toml) |
 | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) | advisories, licences, wildcard versions, sources | `cargo deny check` | [`deny.toml`](deny.toml) |
 | [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) | optional, local only: code no test reaches | `cargo llvm-cov --workspace --features $F --summary-only` | |
@@ -85,9 +85,6 @@ the checks:
   [`docs/measurements.md`](docs/measurements.md) with its command.
 - [`tools/compare-csharp`](tools/compare-csharp/) dumps WaveDude Next's results for `wavedude-cli compare` (.NET 10 SDK,
   `WAVEDUDE_NEXT_DIR`); its [`README.md`](tools/compare-csharp/README.md) has the commands.
-- The web demo ([`demo/`](demo/), decisions 0017 and 0018): `cargo install --locked wasm-bindgen-cli --version <the wasm-bindgen version in Cargo.lock>`,
-  `rustup target add wasm32-unknown-unknown`, then `demo/build.sh target/site` and
-  `python3 -m http.server -d target/site`; open http://127.0.0.1:8000 (WebGPU needs a secure context, and localhost is one).
 - Releases: [git-cliff](https://git-cliff.org) ([`cliff.toml`](cliff.toml)) writes the changelog and the next version from the
   commits (`git cliff --unreleased` previews it); cargo-packager, cargo-auditable and cargo-cyclonedx build the
   packages and SBOMs in [`.github/workflows/package.yml`](.github/workflows/package.yml). [`docs/release.md`](docs/release.md) covers the flow, the keys,
@@ -106,7 +103,7 @@ version from them ([`cliff.toml`](cliff.toml)):
   `chore` stay out of the changelog.
 - A breaking change (a file format, a CLI flag, a library API) carries `!` after the type or a
   `BREAKING CHANGE:` footer. Before 1.0 a feature bumps the patch and a breaking change the minor.
-- The scope is optional: a crate's short name (`core`, `view`, `export`, `widgets`, `state`, `app`, `cli`, `examples`, `wasm`) or an area
+- The scope is optional: a crate's short name (`core`, `view`, `export`, `state`, `app`, `cli`, `examples`) or an area
   (`ui`, `io`, `gpu`); `deps` is reserved for dependency bumps.
 - The subject is one or two sentences in the present tense saying what the change does for the reader of the
   changelog, not how; no issue numbers in it (they go in the body).
