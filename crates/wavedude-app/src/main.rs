@@ -85,7 +85,8 @@ mod native {
 		{
 			let event_loop = winit::event_loop::EventLoop::<eframe::UserEvent>::with_user_event().build()?;
 			let _delegate = wavedude_app::open_requests::install(&finder);
-			event_loop.run_app(&mut eframe::create_native(NAME, options, creator, &event_loop))?;
+			let mut window = eframe::create_native(NAME, options, creator, &event_loop);
+			event_loop.run_app(&mut window)?;
 		}
 		pending.install(guard)
 	}
