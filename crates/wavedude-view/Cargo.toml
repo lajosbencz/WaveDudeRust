@@ -22,4 +22,4 @@ epaint = { version = "=0.37.0", default-features = false }
 libm = "0.2"
 # The glyph outlines a label's halo strokes: epaint's own font reader, so the outlines are those it rasterises.
 skrifa = { version = "0.44", default-features = false, features = ["std"] }
-wavedude-core = { path = "../wavedude-core", version = "0.2.1", default-features = false }
+wavedude-core = { path = "../wavedude-core", version = "0.2.2", default-features = false }
