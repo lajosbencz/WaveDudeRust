@@ -2,6 +2,7 @@
 
 Read [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/SEED.md`](docs/SEED.md) first; [`README.md`](README.md) and [`docs/README.md`](docs/README.md) map the code and docs.
 
+- Commit messages written by agents must contain the standard `Co-Authored-By:` trailer.
 - Git: changes reach master through pull requests ([`CONTRIBUTING.md`](CONTRIBUTING.md)); commit, push or tag only when asked.
 - Temporary files go outside the repository.
 - [`tools/compare-csharp`](tools/compare-csharp/) dumps WaveDude Next's results for comparison with ours; it finds Next through `WAVEDUDE_NEXT_DIR`.
