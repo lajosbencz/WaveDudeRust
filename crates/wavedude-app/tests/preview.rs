@@ -12,23 +12,36 @@ use egui_kittest::kittest::Queryable;
 use egui_kittest::{Harness, HarnessBuilder};
 use wavedude_app::App;
 use wavedude_app::ui::{Boot, Shell};
+use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::document::Source;
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{Event, Guarded};
+use wavedude_core::model::{ProjectEdit, SimulationEdit};
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj";
 /// Frames for an input to reach the state and its result to show.
 const SETTLE: usize = 4;
+/// Steps of a run that completes quickly.
+const SHORT_RUN: u32 = 200;
 
 /// The window on Example01 with nothing run, in the light theme; `builder` renders it or not.
 fn preview_with(builder: HarnessBuilder<Shell>, dir: &Path) -> Harness<'static, Shell> {
+	preview_of(builder, dir, None)
+}
+
+/// As `preview_with`, the project's run cut to `steps` when given.
+fn preview_of(builder: HarnessBuilder<Shell>, dir: &Path, steps: Option<u32>) -> Harness<'static, Shell> {
 	let dirs = AppDirs::under(dir);
 	let mut app = common::started(&dirs, false);
 	let open = Event::Guarded(Guarded::Open(Source::Path(EXAMPLE.into())));
 	for event in [Event::SetTheme(Theme::Light), Event::SetAutoRerun(false), open] {
 		app.handle(event, Instant::now());
+	}
+	if let Some(steps) = steps {
+		let edit = Edit::Project(ProjectEdit::Simulation(SimulationEdit::Steps(steps)));
+		app.handle(Event::Command(Command::Edit(edit)), Instant::now());
 	}
 	let boot = Boot {
 		store: dirs.store(),
@@ -44,6 +57,11 @@ fn preview_with(builder: HarnessBuilder<Shell>, dir: &Path) -> Harness<'static, 
 
 fn preview(dir: &Path) -> Harness<'static, Shell> {
 	preview_with(Harness::builder(), dir)
+}
+
+/// The window on a run short enough to complete quickly yet hold a few frames.
+fn short_preview(dir: &Path) -> Harness<'static, Shell> {
+	preview_of(Harness::builder(), dir, Some(SHORT_RUN))
 }
 
 fn settle(harness: &mut Harness<'_, Shell>) {
@@ -193,7 +211,7 @@ fn run_to_the_end(harness: &mut Harness<'_, Shell>) {
 #[test]
 fn the_status_bar_shows_the_frame_cache_of_a_run() {
 	let dir = tempfile::tempdir().unwrap();
-	let mut harness = preview(dir.path());
+	let mut harness = short_preview(dir.path());
 	run_to_the_end(&mut harness);
 	let cache = app(&harness).live.frame_cache().expect("a run holds a store");
 	assert!(cache.in_memory > 0 && cache.spilled == 0, "the run fits in memory: {cache:?}");
@@ -204,7 +222,7 @@ fn the_status_bar_shows_the_frame_cache_of_a_run() {
 #[test]
 fn discard_frames_asks_first_and_frees_the_runs_frames() {
 	let dir = tempfile::tempdir().unwrap();
-	let mut harness = preview(dir.path());
+	let mut harness = short_preview(dir.path());
 	run_to_the_end(&mut harness);
 	let ran = app(&harness).live.frame_cache().expect("a run holds a store");
 	assert!(ran.in_memory > 1);

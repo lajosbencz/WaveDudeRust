@@ -12,25 +12,34 @@ use eframe::egui::{self, Role, vec2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use wavedude_app::ui::{Boot, Shell};
+use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::document::Source;
 use wavedude_app_state::live::Backend;
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::AppDirs;
 use wavedude_app_state::{Event, Guarded};
+use wavedude_core::model::{ProjectEdit, SimulationEdit};
 use wavedude_core::run::WorkState;
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj";
 
 static WAKES: AtomicUsize = AtomicUsize::new(0);
 
-/// The window on Example01 with nothing run.
+/// The window on Example01 cut to a short run, with nothing run.
 fn window(dir: &Path) -> Harness<'static, Shell> {
 	let dirs = AppDirs::under(dir);
 	let mut app = common::started(&dirs, false);
-	for event in [Event::SetAutoRerun(false), Event::Guarded(Guarded::Open(Source::Path(EXAMPLE.into())))] {
+	let steps = Edit::Project(ProjectEdit::Simulation(SimulationEdit::Steps(200)));
+	for event in [
+		Event::SetAutoRerun(false),
+		Event::Guarded(Guarded::Open(Source::Path(EXAMPLE.into()))),
+		Event::Command(Command::Edit(steps)),
+	] {
 		app.handle(event, Instant::now());
 	}
+	// the edit's undo step stays open, and the window ticking, until the history is quiet
+	std::thread::sleep(wavedude_app_state::history::QUIET);
 	let boot = Boot {
 		store: dirs.store(),
 		gpu: None,

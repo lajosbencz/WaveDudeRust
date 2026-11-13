@@ -257,10 +257,11 @@ fn export_refuses_a_video_still_and_an_unknown_extension() {
 }
 
 #[test]
-fn gates_writes_ten_loadable_projects() {
+fn gates_writes_ten_loadable_projects_and_truth_table_runs_one() {
 	let dir = tempfile::tempdir().unwrap();
-	// The small design of `truth_table_runs_on_a_tiny_project`: the default 1200 px one calibrates for minutes.
-	let text = ok(&["gates", "--out", dir.path().to_str().unwrap(), "--frequency", "100", "--width", "400"]);
+	let out = dir.path().to_str().unwrap();
+	// A small design: the default 1200 px one calibrates for minutes.
+	let text = ok(&["gates", "--out", out, "--frequency", "100", "--width", "400"]);
 	assert!(text.contains("coupling length"), "{text}");
 	let projects = files(dir.path());
 	assert_eq!(projects.len(), 10, "{projects:?}");
@@ -269,13 +270,6 @@ fn gates_writes_ten_loadable_projects() {
 		let report = ok(&["check", path.to_str().unwrap()]);
 		assert!(report.contains("2 probes"), "{}: {report}", path.display());
 	}
-}
-
-#[test]
-fn truth_table_runs_on_a_tiny_project() {
-	let dir = tempfile::tempdir().unwrap();
-	let out = dir.path().to_str().unwrap();
-	ok(&["gates", "--out", out, "--frequency", "100", "--width", "400"]);
 	let project = dir.path().join("07-xor.wdproj");
 	let text = ok(&["truth-table", project.to_str().unwrap(), "--steps", "900", "--settle", "32"]);
 	assert!(text.contains("900 steps a run (given)"), "{text}");
