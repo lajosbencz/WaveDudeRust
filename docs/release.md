@@ -25,7 +25,7 @@ which the repository's immutable releases then lock; GitHub's own release attest
 
 Everything runs on the workflow's own `GITHUB_TOKEN`, whose pushes and pull requests start no workflow; after each
 rebuild of the release PR the workflow dispatches CI and hygiene on its branch, which report the required checks on
-its head commit. Merging it goes through the merge queue like any pull request.
+its head commit.
 
 A failed release is finished by rerunning the failed jobs of its run: tagging and drafting skip what exists. The
 release stays a draft until `publish` succeeds.
@@ -64,11 +64,10 @@ publisher (crates.io > crate > Settings > Trusted Publishing; a token only for e
 - Settings > General: immutable releases on (`gh api -X PUT repos/<owner>/<repo>/immutable-releases`); squash
   merging only, its commit titled by the pull request's title (git-cliff reads conventional commits); allow
   auto-merge; delete head branches; no wiki.
-- Settings > Rules: a ruleset on the default branch requiring a pull request and the merge queue (squash, all
-  entries green), the CI jobs (`ubuntu-latest`, `windows-latest`, `macos-latest`, `MSRV`) and cargo deny
-  (`Dependencies`), and refusing deletion and force pushes; pull requests run Linux and skip the others (a skipped
-  job passes), the queue runs them all on the tree that lands. Administrators bypass it to push docs directly, which
-  only the hygiene checks run on. A ruleset on `v*` tags refusing
+- Settings > Rules: a ruleset on the default branch requiring a pull request, the CI jobs (`ubuntu-latest`,
+  `windows-latest`, `macos-latest`, `MSRV`) and cargo deny (`Dependencies`) on a branch up to date with it, and
+  refusing deletion and force pushes. Administrators bypass it to push docs directly, which only the hygiene checks
+  run on. A merge queue needs an organization-owned repository. A ruleset on `v*` tags refusing
   update and deletion (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and the
   release job tags through it); administrators bypass it.
 - Settings > Actions > General: actions pinned to a full commit hash; approval before running workflows from every

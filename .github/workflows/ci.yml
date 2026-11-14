@@ -1,11 +1,12 @@
 name: CI
 
-# Pull requests (and the release PR's dispatch from release.yml) run Linux; the merge queue runs every platform on the
-# tree that lands, so master is never tested again. A push to master that changes what the caches are keyed on only
-# compiles, saving the caches pull requests and the queue restore (they never save).
+# Pull requests (and the release PR's dispatch from release.yml) run every platform; the ruleset requires them up to
+# date with master, so the tree they tested is the one that lands and master is never tested again. A push to master
+# that changes what the caches are keyed on only compiles, saving the caches pull requests restore (they never save).
+# A merge queue (a `merge_group` trigger, checks on Linux alone for pull requests) needs an organization-owned
+# repository; GitHub refuses the rule on a personal one.
 on:
   pull_request:
-  merge_group:
   workflow_dispatch:
   push:
     branches: [master]
@@ -18,10 +19,10 @@ on:
 permissions:
   contents: read
 
-# A newer commit on the same pull request or branch cancels the run it supersedes; a queue entry's run never.
+# A newer commit on the same pull request or branch cancels the run it supersedes.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -34,7 +35,7 @@ env:
   CARGO_PROFILE_TEST_DEBUG: line-tables-only
 
 jobs:
-  # Whether a pull request or queue entry touches anything a job here reads. A skipped job passes as a required check,
+  # Whether a pull request touches anything a job here reads. A skipped job passes as a required check,
   # so a failure here runs everything.
   changes:
     name: Changes
@@ -51,10 +52,10 @@ jobs:
           EVENT: ${{ github.event_name }}
           DOCS: >-
             ^(docs/|[^/]+\.md$|\.github/(ISSUE_TEMPLATE/|PULL_REQUEST_TEMPLATE\.md$|dependabot\.yml$|workflows/(release|package|hygiene|pages|dependabot-automerge)\.yml$)|cliff\.toml$|deny\.toml$|_typos\.toml$|\.gitignore$|tools/(compare-csharp/|build-web\.sh$)|site/)
-        # Both events check out a commit on top of its base: the merge of the pull request, the queue's squash.
+        # A pull request checks out its merge into the base.
         run: |
           code=true
-          if [ "$EVENT" = pull_request ] || [ "$EVENT" = merge_group ]; then
+          if [ "$EVENT" = pull_request ]; then
             git diff --name-only HEAD^1 HEAD | grep -qvE "$DOCS" || code=false
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
@@ -123,18 +124,17 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
-  # Pull requests skip these (passing the required checks there); the queue runs them.
   windows:
     name: windows-latest
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && contains(fromJSON('["merge_group", "push"]'), github.event_name) }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: windows-latest
     steps: *test
 
   macos:
     name: macos-latest
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && contains(fromJSON('["merge_group", "push"]'), github.event_name) }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-latest
     steps: *test
 

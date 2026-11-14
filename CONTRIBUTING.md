@@ -29,10 +29,10 @@ Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLAT
 
 - Open an issue before a feature or a design change; a design accepted there gets a record in [`docs/decisions`](docs/decisions/).
   A fix for an open issue needs no discussion.
-- One concern per pull request, no unrelated commits. Pull requests are squash-merged through the merge queue and the
+- One concern per pull request, no unrelated commits. Pull requests are squash-merged, up to date with master, and the
   title becomes the commit: write it as a conventional commit (below). The body says what changed, why, and how it was verified.
 - Accepted when all of this holds:
-  - The checks of [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (on Linux; the merge queue adds macOS and Windows) and
+  - The checks of [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (on Linux, macOS and Windows) and
     [`.github/workflows/hygiene.yml`](.github/workflows/hygiene.yml) pass; Tools, below, lists them with the commands to run them locally.
   - A behaviour change comes with a test that failed before it: unit, physics or snapshot, whichever fits
     ([`docs/conventions.md`](docs/conventions.md) says where each lives). Snapshot changes (`insta`) are reviewed with

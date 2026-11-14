@@ -1,5 +1,5 @@
 # Dependabot's patch and minor updates, security ones included, merge on their own once the required checks pass
-# (decision 0011); major ones wait for a person. Needs "Allow auto-merge"; the merge queue merges them.
+# (decision 0011); major ones wait for a person. Needs "Allow auto-merge" and the ruleset's required checks.
 name: Dependabot auto-merge
 
 on: pull_request
