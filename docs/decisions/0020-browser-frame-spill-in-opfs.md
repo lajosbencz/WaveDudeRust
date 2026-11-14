@@ -42,7 +42,7 @@ asynchronous too and ask more of the user or the code.
 - Web Locks need web-sys's unstable APIs: [`.cargo/config.toml`](../../.cargo/config.toml) sets
   `web_sys_unstable_apis` for wasm32.
 - A browser without OPFS or `createWritable` runs what fits in memory and fails a run that would spill.
-- The export, hidden in the browser, would see spilled frames as pending.
+- The export sees spilled frames as pending and waits for them ([0025](0025-browser-exports.md)).
 
 ## Writes in flight (added 2026-11-14)
 

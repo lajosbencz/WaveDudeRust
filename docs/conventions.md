@@ -52,7 +52,8 @@ push. What they hold the code to:
   one API: clocks, the store of settings, schemes and crash report (files in the config dir, local storage), the
   log, file watching, the machine's facts, writing a file (a download in the browser). Files open from a path or
   their bytes (`Source`) and save to a path or a download (`Target`); in the browser the live run is in the run
-  worker and export, codecs, sequences, the updater and recent files are absent (the `HAS_*` constants). Its
+  worker; exports run on the page into the origin private file system (`platform::Spool`; the module `opfs` splits into `session`, `spill`, `queue` and `spool`: the session folder and
+  its lock, the frames past memory, the queue of writes in flight, the exports' files) and leave as downloads, without MP4; codecs, the updater and recent files are absent (the `HAS_*` constants). Its
   `remote` module is the live run in another agent (decision 0024): the postcard messages, the worker's `Host`
   around a pumped `RunWorker` whose stores post every frame, and the page's `Remote`, a `Backend` writing them into
   a mirror store and acknowledging each once held, both over a `Port` (`Loopback` in the tests,
@@ -61,13 +62,16 @@ push. What they hold the code to:
   The browser's `CoreBackend` is a `Remote` on the run worker; a worker that fails to load, crashes, stays
   silent or speaks another protocol version (`protocol::VERSION`) fails every run with its reason (`WorkerGone`)
   until the page is reloaded, and nothing runs on the page. Depends on core
-  (with `serde`), export (no default features, native only) and examples; no egui, no rfd
+  (with `serde`), export (no default features; with MP4 native only) and examples; no egui, no rfd
   ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
 - `wavedude-app`: egui views on eframe, natively and in the browser ([`tools/build-web.sh`](../tools/build-web.sh)),
   on the renderer's wgpu device, which the engines share natively where it computes
   ([`crates/wavedude-app/src/ui/mod.rs`](../crates/wavedude-app/src/ui/mod.rs)); native only: file dialogs (`rfd`,
-  [`crates/wavedude-app/src/ui/files/native.rs`](../crates/wavedude-app/src/ui/files/native.rs)), the updater, exports; in the browser uploads and
-  downloads ([`crates/wavedude-app/src/ui/files/web.rs`](../crates/wavedude-app/src/ui/files/web.rs)). Its widgets are modules of
+  [`crates/wavedude-app/src/ui/files/native.rs`](../crates/wavedude-app/src/ui/files/native.rs)), the updater, the export's thread
+  ([`ui/export/native.rs`](../crates/wavedude-app/src/ui/export/native.rs)); in the browser uploads and
+  downloads ([`crates/wavedude-app/src/ui/files/web.rs`](../crates/wavedude-app/src/ui/files/web.rs)) and the export stepped on the page
+  ([`ui/export/web.rs`](../crates/wavedude-app/src/ui/export/web.rs), [`export/web.rs`](../crates/wavedude-app/src/export/web.rs);
+  [`export/delivery.rs`](../crates/wavedude-app/src/export/delivery.rs) names the downloads). Its widgets are modules of
   [`ui/`](../crates/wavedude-app/src/ui/); what a view computes without a window is in the crate's top-level modules
   (`preview`, `menus`), tested without one. Depends on all of the above ([decision 0019](decisions/0019-egui-and-the-platform-layer.md)).
 - `wavedude-run-worker`: binary only, the browser's run worker (decision 0024): logging to the console, its

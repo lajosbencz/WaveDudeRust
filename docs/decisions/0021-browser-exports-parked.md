@@ -1,6 +1,6 @@
 # 0021: Browser exports are parked, the export crate is prepared for them
 
-Status: accepted, 2026-11-13. The browser build offers no exports until the design below is built; builds on
+Status: superseded by [0025](0025-browser-exports.md), 2026-11-14 (accepted 2026-11-13). The browser build offered no exports until the design below was built; builds on
 [0019](0019-egui-and-the-platform-layer.md) and [0020](0020-browser-frame-spill-in-opfs.md).
 
 ## Context

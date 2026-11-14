@@ -35,7 +35,7 @@ one), the row below, the spec updated, the manual when users see it.
 | File drop | A project or colour scheme dropped on the window opens | An image dropped on the window also becomes the scene image; the last file of a frame wins | [ui/10](ui/10-menus-and-shortcuts.md) |
 | Leaving the browser page | Not applicable | The browser build asks before the page is left while the project has unsaved edits | [ui/10](ui/10-menus-and-shortcuts.md) |
 | User colour schemes | Files placed in a folder by hand | Added to and removed from the user's schemes in the tree, the scheme form and the scheme picker; kept in the config folder or the browser's storage | [spec/10](spec/10-model.md), [ui/20](ui/20-project-tree.md) |
-| Browser | None | The web build has no exports (parked), no updater, no recent files, no file watch | decisions 0019, 0020, 0021 |
+| Browser | None | The web build exports through downloads (no MP4 yet), has no updater, no recent files, no file watch | decisions 0019, 0020, 0025 |
 | Edit menu | Acts on a focused text box | Acts on objects; the keys go to the box | decision 0008 (13) |
 | Windows integrations | Taskbar progress, jump list, title-bar menu click-through | Not ported; file associations come from the packaging | decision 0008 (14) |
 | Manual figures | Numbered badges | Screenshots of this program, controls named in reading order | decision 0008 (15) |

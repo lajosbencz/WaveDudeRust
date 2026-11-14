@@ -74,8 +74,8 @@ or "The update failed." with the reason.
 ## Export Save dialog
 
 Native save dialog (port: an in-window dialog with the format and the path, its "..." opening the platform save
-dialog, which cannot report its filter; the probe CSV's is the platform's). The browser has no exports: their menu
-entries are hidden.
+dialog, which cannot report its filter; the probe CSV's is the platform's). The browser's export dialog is described
+under Browser differences, below.
 
 | Command | Title | Filter list | Proposed name |
 |---|---|---|---|
@@ -104,6 +104,31 @@ entries are hidden.
 - A still renders exactly what a video export would show at that frame, never the preview's frame.
 - CSV: a point probe one row per step ("step;amplitude" header), a line probe one row per frame
   ("frame;step;<distances>"), semicolons, decimal point. Full run first when needed.
+
+Browser differences (decision 0025):
+
+- The path box holds a file name only: what is typed is cut to its last component, and the format's extension is
+  added when it has none. There is no "..." button, no start folder and no question before replacing, as a
+  download replaces nothing. The probe CSV, which uses the platform's save dialog on the desktop, opens this dialog for its
+  name too.
+- MP4 stays selectable but the dialog shows "MP4 is not yet available in the browser." and OK is disabled. A run's
+  export (not a still) shows "This browser has no private file storage to write the export to; frames and probe data
+  still export." and is disabled when the browser has no OPFS. A still and the CSV do not need it.
+- The export is stepped on the page; the status bar shows "Exporting n / N frames", and "Export: packing the
+  archive" while two videos are packed into their ZIP. Esc cancels as on the desktop.
+- Download names, from the typed name `<name>` (extension as chosen):
+
+| Export | Downloaded as |
+|---|---|
+| Frame (still), field or intensity | `<name>.<ext>` as typed, e.g. `run_field_0042.png` |
+| Probe CSV | `<name>.csv` |
+| Image sequence, one layer | `<name>.zip`: the files in a folder named after the output |
+| Image sequence, both layers | `<name>.zip`: a folder per layer (`_field`, `_intensity`) |
+| Video, one layer | `<name>.<ext>` |
+| Videos, both layers | `<name>.zip` holding `<name>_field.<ext>` and `<name>_intensity.<ext>` |
+
+- The export's files wait in the browser's private storage; they are kept until the next export starts and removed
+  at once when an export is cancelled or fails. Folders of closed tabs are removed at the next load.
 
 ## About dialog
 
