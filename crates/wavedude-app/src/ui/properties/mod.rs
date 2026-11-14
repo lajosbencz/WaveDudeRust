@@ -646,6 +646,7 @@ impl<'o, T: Fields, W: Fn(T::Edit) -> Edit> Scope<'o, T, W> {
 				shown: s.enum_word(V::TYPE_NAME, current.name()),
 				word: &|i| word(i).into(),
 				swatch: None,
+				disabled: None,
 				actions: &[],
 			};
 			combo(ui, id, label, &choices)
@@ -702,6 +703,8 @@ pub(super) struct Choices<'c> {
 	pub(super) word: &'c dyn Fn(usize) -> std::borrow::Cow<'c, str>,
 	/// Item `i`'s gradient swatch, if it has one.
 	pub(super) swatch: Option<&'c dyn Fn(usize) -> Option<&'c [Stop]>>,
+	/// Why item `i` cannot be picked, greyed with this as its tooltip.
+	pub(super) disabled: Option<&'c dyn Fn(usize) -> Option<&'c str>>,
 	/// Italic rows after the items; picking one gives `len` plus its index.
 	pub(super) actions: &'c [&'c str],
 }
@@ -747,7 +750,15 @@ pub(super) fn combo(ui: &mut Ui, id: Id, label: &str, c: &Choices<'_>) -> Option
 				}
 				None => None,
 			};
-			if menu_bar::choice_entry(ui, &word, c.current == Some(i), false, swatch).clicked() {
+			let reason = c.disabled.and_then(|f| f(i));
+			let entry = ui
+				.add_enabled_ui(reason.is_none(), |ui| {
+					menu_bar::choice_entry(ui, &word, c.current == Some(i), false, swatch)
+				})
+				.inner;
+			if let Some(reason) = reason {
+				entry.on_disabled_hover_text(reason);
+			} else if entry.clicked() {
 				picked = Some(i);
 			}
 		}

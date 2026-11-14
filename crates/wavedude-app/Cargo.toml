@@ -48,6 +48,8 @@ tracing.workspace = true
 wavedude-app-state = { path = "../wavedude-app-state" }
 wavedude-core = { path = "../wavedude-core", features = ["gpu"] }
 wavedude-examples = { path = "../wavedude-examples" }
+# MP4 natively alone.
+wavedude-export = { path = "../wavedude-export", default-features = false }
 # The bundled fonts and what the preview draws over its pictures.
 wavedude-view = { path = "../wavedude-view" }
 
@@ -60,13 +62,16 @@ mundy = { version = "0.2.3", default-features = false, features = ["async-io", "
 pollster = "1"
 rfd = "0.18"
 semver = "1"
-wavedude-export = { path = "../wavedude-export" }
+wavedude-export = { path = "../wavedude-export", default-features = false, features = ["mp4"] }
 # The window's place and the event loop the macOS application delegate is set on.
 winit = { version = "0.30", default-features = false }
 
-# The page's entry awaits eframe's start; the page itself is reached through eframe's `web_sys`.
+# The page's entry awaits eframe's start and an export packs its archive in a task; the page itself is reached
+# through eframe's `web_sys`.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4"
+# MP4 muxed around the browser's H.264 encoder.
+wavedude-export = { path = "../wavedude-export", default-features = false, features = ["mp4-mux"] }
 
 # The Finder's open requests (src/open_requests.rs).
 [target.'cfg(target_os = "macos")'.dependencies]

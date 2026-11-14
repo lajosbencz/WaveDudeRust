@@ -234,6 +234,7 @@ fn layer_rows<W: Fn(m::DisplayLayerEdit) -> Edit>(
 			shown: &shown,
 			word: &word,
 			swatch: Some(&swatch),
+			disabled: None,
 			actions,
 		};
 		combo(ui, id, label, &choices)
@@ -1144,8 +1145,15 @@ fn scheme(f: &mut Form<'_>, o: &ColorScheme, row: Row, index: usize) {
 		let label = s.get("LabelBasedOn");
 		let picked = f.row(label, s.get("TipBasedOn"), |ui, cx| {
 			let word = |i: usize| -> Cow<'_, str> { r.based_on[i].as_str().into() };
-			let choices =
-				Choices { len: r.based_on.len(), current: None, shown: "", word: &word, swatch: None, actions: &[] };
+			let choices = Choices {
+				len: r.based_on.len(),
+				current: None,
+				shown: "",
+				word: &word,
+				swatch: None,
+				disabled: None,
+				actions: &[],
+			};
 			combo(ui, cx.id("ColorScheme.BasedOn"), label, &choices)
 		});
 		if let Some(source) = picked.and_then(|i| find_scheme(f.cx.app, &r.based_on[i])) {

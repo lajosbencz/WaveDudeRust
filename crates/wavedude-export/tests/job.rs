@@ -10,6 +10,7 @@ use wavedude_core::engine::types::{FrameShape, SampleFormat, SampleKind};
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::{ColorScheme, DisplayLayer, Layer, Probe, Project};
 use wavedude_core::render::render_half;
+use wavedude_export::h264::Profile;
 use wavedude_export::overlays::Overlays;
 use wavedude_export::range::frame_range;
 use wavedude_export::sinks::{self, SinkSpec};
@@ -60,7 +61,15 @@ fn rendered(src: &MemoryFrames, frame: usize, layer: Layer) -> Vec<u8> {
 }
 
 fn spec(first: usize, count: usize) -> SinkSpec {
-	SinkSpec { width: W, height: H, fps: 30, quality: 90, first_frame: first, frame_count: count }
+	SinkSpec {
+		width: W,
+		height: H,
+		fps: 30,
+		quality: 90,
+		profile: Profile::Baseline,
+		first_frame: first,
+		frame_count: count,
+	}
 }
 
 fn target(format: ExportFormat, path: &std::path::Path, layer: Layer, first: usize, count: usize) -> ExportTarget {
@@ -86,6 +95,7 @@ fn a_range_of_a_ten_frame_run_to_png_and_avi() {
 	assert_eq!(range, 2..=7);
 	let job = ExportJob::new(
 		src.clone(),
+		std_fs(),
 		range,
 		vec![
 			target(ExportFormat::Png, &dir.join("field.png"), Layer::Field, 2, 6),
@@ -125,6 +135,7 @@ fn cancel_stops_before_the_next_frame() {
 	let cancel = AtomicBool::new(false);
 	let job = ExportJob::new(
 		src.clone(),
+		std_fs(),
 		0..=9,
 		vec![target(ExportFormat::Png, &dir.join("c.png"), Layer::Field, 0, 10)],
 		None,
@@ -150,6 +161,7 @@ fn a_frame_beyond_the_store_fails_after_the_existing_ones() {
 	let src = Arc::new(source(5));
 	let job = ExportJob::new(
 		src.clone(),
+		std_fs(),
 		2..=7,
 		vec![
 			target(ExportFormat::Png, &dir.join("m.png"), Layer::Field, 2, 6),
@@ -180,6 +192,7 @@ fn exr_takes_the_stored_halves_and_a_still_is_one_frame() {
 	let still = dir.join("ball_intensity_0003.exr");
 	let job = ExportJob::new(
 		src.clone(),
+		std_fs(),
 		3..=3,
 		vec![ExportTarget {
 			layer: Layer::Intensity,
@@ -218,6 +231,7 @@ fn an_indexed_store_is_refused() {
 	let dir = scratch("job-indexed");
 	let job = ExportJob::new(
 		Arc::new(src),
+		std_fs(),
 		0..=1,
 		vec![target(ExportFormat::Png, &dir.join("i.png"), Layer::Field, 0, 2)],
 		None,
@@ -242,6 +256,7 @@ fn overlays_are_burned_into_their_layer_only() {
 	let overlays = Overlays::new(&project, W, H, &[], 6);
 	let job = ExportJob::new(
 		src.clone(),
+		std_fs(),
 		1..=1,
 		vec![
 			target(ExportFormat::Png, &dir.join("f.png"), Layer::Field, 1, 1),
@@ -267,6 +282,7 @@ fn a_cancelled_job_removes_its_outputs_unless_kept() {
 		let cancel = AtomicBool::new(false);
 		let job = ExportJob::new(
 			src.clone(),
+			std_fs(),
 			0..=9,
 			vec![
 				target(ExportFormat::Png, &dir.join("c.png"), Layer::Field, 0, 10),
@@ -337,6 +353,7 @@ fn a_job_waits_for_frames_still_being_made() {
 		});
 		let job = ExportJob::new(
 			src.clone(),
+			std_fs(),
 			0..=5,
 			vec![target(ExportFormat::Png, &dir.join("g.png"), Layer::Field, 0, 6)],
 			None,
@@ -375,6 +392,7 @@ fn a_plan_builds_one_target_per_layer_with_suffixed_paths() {
 		total_steps: 8,
 		keep_partial: false,
 		h264: None,
+		h264_profile: Profile::Baseline,
 	};
 	let job = plan.build_job(src.clone(), &SchemeStore::default()).unwrap();
 	assert_eq!(job.progress(), (0, 4));
@@ -412,6 +430,7 @@ fn a_plan_whose_second_layer_cannot_be_drawn_opens_no_output() {
 		total_steps: 4,
 		keep_partial: false,
 		h264: None,
+		h264_profile: Profile::Baseline,
 	};
 	let error = plan.build_job(src.clone(), &SchemeStore::default()).err().expect("a scene of another size");
 	assert!(matches!(error, ExportError::WrongInput(_)), "{error}");
@@ -437,6 +456,7 @@ fn a_plan_that_cannot_open_an_output_removes_those_it_opened() {
 		total_steps: 4,
 		keep_partial: false,
 		h264: None,
+		h264_profile: Profile::Baseline,
 	};
 	assert!(plan.build_job(src.clone(), &SchemeStore::default()).is_err());
 	assert!(!dir.join("run_field.avi").exists(), "the field's movie is removed");
@@ -501,6 +521,7 @@ fn every_kind(dir: &std::path::Path, src: Arc<dyn FrameSource>) -> ExportJob<'st
 	project.display.probe_graphs_in_export = false;
 	ExportJob::new(
 		src,
+		std_fs(),
 		1..=6,
 		vec![
 			target(ExportFormat::Png, &dir.join("s.png"), Layer::Field, 1, 6),
@@ -519,7 +540,7 @@ fn step_through(mut job: ExportJob<'_>, budget: std::time::Duration) -> (ExportR
 	loop {
 		match job.step(budget, &AtomicBool::new(false)) {
 			Step::Working => {}
-			Step::Waiting => waited += 1,
+			Step::Waiting(_) => waited += 1,
 			Step::Ended(report) => return (report, waited),
 		}
 	}
