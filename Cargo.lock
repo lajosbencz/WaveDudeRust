@@ -5363,7 +5363,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-app"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -5402,7 +5402,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-app-state"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "directories",
@@ -5429,7 +5429,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-cli"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -5445,7 +5445,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-core"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "approx",
  "base64 0.23.1",
@@ -5471,14 +5471,14 @@ dependencies = [
 
 [[package]]
 name = "wavedude-examples"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "wavedude-core",
 ]
 
 [[package]]
 name = "wavedude-export"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -5503,7 +5503,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-model-derive"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5512,7 +5512,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-view"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "epaint",
  "libm",
