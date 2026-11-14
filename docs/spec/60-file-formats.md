@@ -78,7 +78,7 @@ serialized model:
 the same. History snapshots and clipboard fragments carry no DOCTYPE. Requirement: a saved file validates against its
 own DTD; a misspelt attribute, a wrong enum value and a misplaced element are reported by a DTD validator.
 Fixture: the DTD text of a saved `figures.wdproj` (F-02 in 80) is the reference; the Rust writer must emit the same
-declarations (byte equality optional, `TODO(verify)` decide).
+declarations; byte equality is not required (formatting and number rounding may differ).
 
 ### Load and migration
 
