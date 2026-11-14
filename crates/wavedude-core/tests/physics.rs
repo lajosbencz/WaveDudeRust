@@ -986,6 +986,17 @@ fn configurations_stay_bounded() {
 				});
 			}
 		}
+		// an absorber touching the canvas edge runs on into the rim
+		let edge_absorber = pixels(w as usize, h as usize, |_, y| if y < 8 { [100, 0, 255] } else { [100, 0, 0] });
+		cases.push(Bounded {
+			name: format!("{stencil:?} absorber on the edge, rim 16"),
+			stencil,
+			data: SceneData::from_pixels(&edge_absorber, w, h, &scene(-16, Edges::Open, 1.0)),
+			sub_steps: None,
+			emitters: vec![emitter(32, 30, 100.0)],
+			steps: 5000,
+			every: 100,
+		});
 		for band in [6, 0] {
 			for n in 1..=4 {
 				cases.push(Bounded {

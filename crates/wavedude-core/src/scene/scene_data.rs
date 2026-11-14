@@ -58,7 +58,8 @@ impl SceneData {
 		scene: &SceneEdges,
 	) -> Self {
 		let rim = scene.rim();
-		let (c2, mut d) = if rim > 0 { (grow(&c2, w, h, rim), grow(&d, w, h, rim)) } else { (c2, d) };
+		// damping in the rim would turn the PML's stretched operator unstable; the PML alone absorbs there
+		let (c2, mut d) = if rim > 0 { (grow(&c2, w, h, rim), pad(&d, w, h, rim, 1.0)) } else { (c2, d) };
 		let (gw, gh) = (w + 2 * rim, h + 2 * rim);
 		let mut pml = Vec::new();
 		if rim > 0 {
@@ -144,6 +145,17 @@ fn grow(values: &[f32], w: u32, h: u32, rim: u32) -> Vec<f32> {
 	out
 }
 
+/// `values` of a `w` x `h` canvas on a grid `rim` larger on every side, the rim cells `fill`.
+fn pad(values: &[f32], w: u32, h: u32, rim: u32, fill: f32) -> Vec<f32> {
+	let (gw, rim, w) = ((w + 2 * rim) as usize, rim as usize, w as usize);
+	let mut out = vec![fill; gw * (h as usize + 2 * rim)];
+	for (row, line) in values.chunks_exact(w).enumerate() {
+		let start = (row + rim) * gw + rim;
+		out[start..start + w].copy_from_slice(line);
+	}
+	out
+}
+
 /// Writes `value` on ring `i` (0 = the outermost) of a `gw` x `gh` grid.
 fn set_ring(d: &mut [f32], gw: u32, gh: u32, i: u32, value: f32) {
 	let (gw, gh, i) = (gw as usize, gh as usize, i as usize);
@@ -185,6 +197,21 @@ mod tests {
 		let small = SceneData::from_pixels(&pixels(8, 8, [100, 0, 0]), 8, 8, &scene(6));
 		assert_eq!(small.d[0], 0.0, "the band is cut to half the shorter side");
 		assert_eq!(small.d[3 * 8 + 3], 0.75f64.sqrt() as f32);
+	}
+
+	#[test]
+	fn the_rim_repeats_the_edge_speed_without_its_damping() {
+		let (w, h) = (6u32, 4u32);
+		let rgba: Vec<u8> =
+			(0..w * h).flat_map(|i| if i / w == 0 { [200, 0, 255, 255] } else { [100, 0, 0, 255] }).collect();
+		let s = SceneData::from_pixels(&rgba, w, h, &scene(-2));
+		let gw = (w + 4) as usize;
+		let (rim_cell, edge_cell) = (gw + 3, 2 * gw + 3);
+		assert_eq!(s.c2[rim_cell], s.c2[edge_cell], "a guide runs on into the rim");
+		assert!(s.d[edge_cell] < 1.0, "the absorber damps its canvas cells");
+		assert!(
+			s.d.iter().enumerate().all(|(i, &d)| d == 1.0 || (i / gw >= 2 && i / gw < 6 && i % gw >= 2 && i % gw < 8))
+		);
 	}
 
 	#[test]

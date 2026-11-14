@@ -20,8 +20,8 @@ pub struct SceneData {
 	pub edges: Edges,
 	/// Squared wave speed per grid cell, (1/n)^2.
 	pub c2: Vec<f32>,
-	/// Damping factor per grid cell per step, 1 = none (the inside band and blue absorbers; the rim
-	/// repeats the canvas edge, its absorption is the PML's).
+	/// Damping factor per grid cell per step, 1 = none (the inside band and blue absorbers; 1 on the rim,
+	/// whose absorption is the PML's).
 	pub d: Vec<f32>,
 	/// Green pixels that emit, in grid coordinates, row-major order.
 	pub image_sources: Vec<ImageSource>,

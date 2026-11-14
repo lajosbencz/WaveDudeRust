@@ -360,8 +360,9 @@ Three edge kinds:
   linearly from the edge cell through the first (Open edges, below).
 - A rim (damping edge below 0): the rim cells outside the canvas are a CPML
   (Roden & Gedney 2000), backed by the wall u = 0, for either edge kind. The
-  rim carries the nearest canvas cell's c2 and damping, so a guide or an
-  absorber runs on into it.
+  rim carries the nearest canvas cell's c2, so a guide runs on into it, and no
+  damping: a damped cell in the PML grows without bound (an absorber touching
+  the edge on the 9-point stencil diverged after some 2000 steps).
 
 The CPML in second-order form with memory variables for the stretched
 derivatives (Komatitsch & Martin 2007; Pasalic & McGarry 2010). Along x,
