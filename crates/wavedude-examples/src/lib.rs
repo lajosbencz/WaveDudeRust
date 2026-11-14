@@ -171,13 +171,14 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn fifty_three_examples_in_six_topics() {
+	fn examples_carry_title_topic_and_description() {
 		let all = all();
-		assert_eq!(all.len(), 53);
-		let counts: Vec<usize> = Topic::ALL.iter().map(|&t| all.iter().filter(|e| e.topic == t).count()).collect();
-		assert_eq!(counts, [8, 10, 7, 5, 18, 5]);
-		assert_eq!(all[0].title, "Source Mirror Probe");
-		assert_eq!(all[6].test_id(), "Example:Example07_Random_emitter_lattice");
+		for topic in Topic::ALL {
+			assert!(all.iter().any(|e| e.topic == topic), "{topic:?} has no example");
+		}
+		let lattice = all.iter().find(|e| e.file_name == "Example07_Random_emitter_lattice.wdproj").unwrap();
+		assert_eq!(lattice.title, "Random emitter lattice");
+		assert_eq!(lattice.test_id(), "Example:Example07_Random_emitter_lattice");
 		assert!(all.iter().any(|e| e.title == "Fresnel lens lighthouse" && e.topic == Topic::Lenses));
 		assert!(all.iter().any(|e| e.title == "Meta prism" && e.topic == Topic::Metasurfaces));
 		assert!(all.iter().any(|e| e.title == "Fibre splitter with 2 PMs" && e.topic == Topic::Detectors));

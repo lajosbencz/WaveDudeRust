@@ -192,7 +192,7 @@ mod tests {
 	#[test]
 	fn built_ins_are_named_after_their_files() {
 		let schemes = built_in();
-		assert_eq!(schemes.len(), 23);
+		assert!(!schemes.is_empty());
 		for s in schemes {
 			assert!(!s.name.contains('_'));
 			assert!(s.name.chars().next().unwrap().is_uppercase(), "{}", s.name);

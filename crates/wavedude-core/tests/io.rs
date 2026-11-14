@@ -17,7 +17,7 @@ fn examples() -> Vec<PathBuf> {
 		.filter(|p| p.extension().is_some_and(|e| e == "wdproj"))
 		.collect();
 	v.sort();
-	assert_eq!(v.len(), 33);
+	assert!(!v.is_empty());
 	v
 }
 

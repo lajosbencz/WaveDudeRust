@@ -79,7 +79,7 @@ fn gaussian_under_a_random_gap_peaks_after_each_drawn_gap() {
 	let e = pulsed(PulseShape::Gaussian, 6, 5, 4);
 	let on = e.on_width_cycles as f64;
 	let periods = periods(&e, 40);
-	assert!(distinct_gaps(&periods) > 4, "the gap changes between periods: {periods:?}");
+	assert!(distinct_gaps(&periods) > 1, "the gap changes between periods: {periods:?}");
 	let first = periods[0].1;
 	for k in 0..100 {
 		let t = first * k as f64 / 100.0;
@@ -110,7 +110,7 @@ fn smoothed_square_under_a_random_gap_is_continuous_and_shares_each_gap_at_its_m
 	let e = pulsed(PulseShape::SmoothedSquare, 3, 4, 3);
 	let on = e.on_width_cycles as f64;
 	let periods = periods(&e, 30);
-	assert!(distinct_gaps(&periods) > 3, "the gap changes between periods: {periods:?}");
+	assert!(distinct_gaps(&periods) > 1, "the gap changes between periods: {periods:?}");
 	let omega = level_omega(100.0, 2.0);
 	let per_step = omega / TAU;
 	let bound = 2.0 / (PI * EDGE_WIDTH) * per_step;

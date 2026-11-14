@@ -282,9 +282,12 @@ fn frames_in_budget() {
 	let mut p = project(1920, 1080, 2500);
 	p.sources.clear();
 	let full = spec(&p, PreviewQuality::FULL);
-	assert_eq!(Budget::frames_in(GIB, full.frame_bytes()), 129);
+	// Two layers of 2-byte samples at full size; of 1-byte indices at half size.
+	assert_eq!(full.frame_bytes(), 2 * 1920 * 1080 * 2);
+	assert_eq!(Budget::frames_in(GIB, full.frame_bytes()) as u64, GIB / full.frame_bytes());
 	let reduced = full.with_quality(PreviewQuality::new(2, 1, SampleFormat::Index));
-	assert_eq!(Budget::frames_in(GIB, reduced.frame_bytes()), 1035);
+	assert_eq!(reduced.frame_bytes(), 2 * 960 * 540);
+	assert_eq!(Budget::frames_in(GIB, reduced.frame_bytes()) as u64, GIB / reduced.frame_bytes());
 	assert_eq!(Budget::frames_in(0, reduced.frame_bytes()), 0);
 }
 

@@ -131,7 +131,8 @@ fn unsaved_edits_are_asked_about() {
 	assert_eq!(s.handle(Event::SaveChoice(SaveChoice::Cancel), t), Response::None);
 	assert_eq!(s.document.project.probes.len(), 1, "Cancel keeps the project");
 	let first = s.document_id();
-	s.handle(Event::Guarded(Guarded::OpenExample(6)), t);
+	let index = wavedude_examples::all().len() - 1;
+	s.handle(Event::Guarded(Guarded::OpenExample(index)), t);
 	let ask = s.handle(Event::SaveChoice(SaveChoice::Save), t);
 	assert_eq!(ask, Response::AskSavePath { proposed: None });
 	let path = dir.path().join("mine.wdproj");
@@ -139,7 +140,7 @@ fn unsaved_edits_are_asked_about() {
 	let example = s.document_id();
 	assert_ne!(example, first, "the opened example kept the document's id");
 	assert!(path.is_file());
-	assert!(s.title().ends_with("Example07_Random_emitter_lattice.wdproj"), "{}", s.title());
+	assert!(s.title().ends_with(wavedude_examples::all()[index].file_name), "{}", s.title());
 	assert_eq!(s.settings.recent_files[0], path);
 	assert_eq!(s.live.playback.position(), 0);
 	s.handle(Event::Command(Command::AddSource { at: None }), t);
