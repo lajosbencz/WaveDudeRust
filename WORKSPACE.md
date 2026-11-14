@@ -7,6 +7,7 @@
 | [`wavedude-export`](crates/wavedude-export) | PNG and JPEG sequences, MPEG-1, AVI, QuickTime (Animation and PNG), H.264 MP4, OpenEXR, probe CSV, burned-in overlays |
 | [`wavedude-view`](crates/wavedude-view) | what the preview and the exports draw over a picture: the handle overlay, the probe graph box, as epaint shapes; the bundled fonts |
 | [`wavedude-app-state`](crates/wavedude-app-state) | the application state without a UI toolkit: document, history, selection, commands, clipboard, live runs, playback, settings, strings, log |
+| [`wavedude-run-worker`](crates/wavedude-run-worker) | the browser's run worker: the live run's engine in a module worker beside the page, with a WebGPU device of its own |
 | [`wavedude-app`](crates/wavedude-app) | the application on egui, natively and in the browser: the window, its panes and dialogs, the updater, exports |
 | [`wavedude-cli`](crates/wavedude-cli) | headless checks, benches, dispersion tables, scripted runs and exports |
 | [`wavedude-examples`](crates/wavedude-examples) | the example projects, embedded: the list of the Examples dialog |

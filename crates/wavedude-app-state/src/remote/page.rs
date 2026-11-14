@@ -18,7 +18,6 @@ use wavedude_core::sync::lock;
 use super::protocol::{Layout, RunStatus, State, ToPage, ToWorker, Trace};
 use super::{Port, decode, post};
 use crate::live::{Backend, engine_label};
-use crate::platform::Duration;
 
 /// (store, generation, frame).
 type FrameKey = (u64, u64, usize);
@@ -165,7 +164,7 @@ impl<P: Port> Remote<P> {
 		match message {
 			ToPage::Ready { gpu } => {
 				match &gpu {
-					Ok(name) => tracing::info!("the run worker started, GPU {name}"),
+					Ok(name) => tracing::info!("the run worker started, {}", engine_label(Some(name))),
 					Err(why) => tracing::info!("the run worker started without a GPU: {why}"),
 				}
 				self.gpu = Some(gpu);
@@ -384,14 +383,10 @@ impl<P: Port> Backend for Remote<P> {
 		engine_label(gpu.map(String::as_str))
 	}
 
-	/// Handles the messages waiting; whether the run works or frames are on their way.
-	fn pump(&mut self, _budget: Duration) -> bool {
+	/// Handles the messages waiting and the mirror's spill writes done.
+	fn pump(&mut self) {
 		self.receive();
 		self.release();
 		self.settle();
-		self.crashed.is_none()
-			&& (matches!(self.status.state, State::Stepping { .. } | State::Fitting)
-				|| self.waiting.is_some()
-				|| !lock(&self.spill.writes).is_empty())
 	}
 }

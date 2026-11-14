@@ -5,6 +5,8 @@
 //! preview, presenter and status read. The page acknowledges a frame once its mirror holds it, so the worker is
 //! at most the spill's writes in flight ([`WRITES_IN_FLIGHT`]) ahead. Messages arrive in the order posted.
 //!
+//! In the browser the ends are `web::PagePort` and `web::WorkerPort` over `postMessage`.
+//!
 //! Threads: none; each end is driven by its owner's calls (`Host::pump`, `Backend::pump`).
 //!
 //! [`Backend`]: crate::live::Backend
@@ -13,6 +15,8 @@
 mod host;
 mod page;
 pub mod protocol;
+#[cfg(target_arch = "wasm32")]
+pub mod web;
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -63,10 +67,61 @@ impl Port for Loopback {
 }
 
 fn post(port: &impl Port, message: &impl Serialize, buffer: Option<Vec<u8>>) {
-	let message = postcard::to_allocvec(message).expect("a message of the protocol encodes");
-	port.post(Envelope { message, buffer });
+	port.post(envelope(message, buffer));
+}
+
+fn envelope(message: &impl Serialize, buffer: Option<Vec<u8>>) -> Envelope {
+	Envelope { message: postcard::to_allocvec(message).expect("a message of the protocol encodes"), buffer }
 }
 
 fn decode<M: DeserializeOwned>(envelope: &Envelope) -> postcard::Result<M> {
 	postcard::from_bytes(&envelope.message)
+}
+
+/// Queues `envelope` behind `held` for a worker not listening yet. A goal or a rebuild replaces the one held
+/// before, which the worker would take up only to drop; the rest keep their order, so an image stays before the
+/// goal naming it.
+#[cfg(any(test, target_arch = "wasm32"))]
+fn hold(held: &mut Vec<Envelope>, envelope: Envelope) {
+	let replacing = |e: &Envelope| {
+		let message: protocol::ToWorker = decode(e).expect("the page posts messages of the protocol");
+		matches!(message, protocol::ToWorker::Goal { .. } | protocol::ToWorker::Rebuild { .. })
+			.then(|| std::mem::discriminant(&message))
+	};
+	if let Some(kind) = replacing(&envelope) {
+		held.retain(|e| replacing(e) != Some(kind));
+	}
+	held.push(envelope);
+}
+
+#[cfg(test)]
+mod tests {
+	use wavedude_core::run::Goal;
+
+	use super::protocol::ToWorker;
+	use super::*;
+
+	#[test]
+	fn a_held_goal_or_rebuild_replaces_the_one_before_and_the_rest_keep_their_order() {
+		let goal = |revision| ToWorker::Goal { goal: Goal { revision, ..Goal::default() }, image: None };
+		let messages = [
+			ToWorker::Init { use_gpu: true },
+			goal(1),
+			ToWorker::Rebuild { use_gpu: false },
+			ToWorker::Image { key: 7 },
+			goal(2),
+			ToWorker::Discard,
+			ToWorker::Rebuild { use_gpu: true },
+		];
+		let mut held = Vec::new();
+		for message in &messages {
+			hold(&mut held, envelope(message, None));
+		}
+		let held: Vec<String> = held.iter().map(|e| format!("{:?}", decode::<ToWorker>(e).unwrap())).collect();
+		let wanted: Vec<String> = [&messages[0], &messages[3], &messages[4], &messages[5], &messages[6]]
+			.iter()
+			.map(|m| format!("{m:?}"))
+			.collect();
+		assert_eq!(held, wanted);
+	}
 }

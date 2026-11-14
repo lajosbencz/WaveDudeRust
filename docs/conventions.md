@@ -26,8 +26,9 @@ push. What they hold the code to:
 - `wavedude-core`: model, `.wdproj` and scheme IO, scene painter, engines (CPU, wgpu behind feature `gpu`),
   runs and frame store (feature `run`), renderer. It builds for `wasm32-unknown-unknown` with any of its features:
   code there uses no threads, no std clocks (`web_time`'s instead, which the wasm32 lint run enforces) and no machine
-  queries; on wasm32 nothing blocks, the GPU engine is built by an async call, the live run is pumped by its caller
-  (`RunWorker::pump`, which yields while its engine's future is pending) and its frame stores hold their frames in
+  queries; on wasm32 nothing blocks, the GPU engine is built by an async call, the live run is pumped by its caller,
+  the browser's run worker (`RunWorker::pump`, which yields while its engine's future is pending; decision 0024)
+  and its frame stores hold their frames in
   memory up to the caller's budget and spill the rest through the caller's backend (decision 0020); the batch run,
   the spill file and the machine's memory and threads are native only
   ([decision 0015](decisions/0015-core-builds-for-wasm.md), [decision 0016](decisions/0016-gpu-engine-in-the-browser.md)).
@@ -49,21 +50,29 @@ push. What they hold the code to:
   between the desktop and the browser is in its `platform` module, `native` or `web` chosen at compile time with
   one API: clocks, the store of settings, schemes and crash report (files in the config dir, local storage), the
   log, file watching, the machine's facts, writing a file (a download in the browser). Files open from a path or
-  their bytes (`Source`) and save to a path or a download (`Target`); in the browser the live run is pumped by
-  `LiveController::tick` and export, codecs, sequences, the updater and recent files are absent (the `HAS_*`
-  constants). Its `remote` module is the live run in another agent (decision 0024): the postcard messages, the
-  worker's `Host` around a pumped `RunWorker` whose stores post every frame, and the page's `Remote`, a `Backend`
-  writing them into a mirror store and acknowledging each once held, both over a `Port` (`Loopback` in the tests,
-  [`crates/wavedude-app-state/tests/remote.rs`](../crates/wavedude-app-state/tests/remote.rs)). Depends on core
+  their bytes (`Source`) and save to a path or a download (`Target`); in the browser the live run is in the run
+  worker and export, codecs, sequences, the updater and recent files are absent (the `HAS_*` constants). Its
+  `remote` module is the live run in another agent (decision 0024): the postcard messages, the worker's `Host`
+  around a pumped `RunWorker` whose stores post every frame, and the page's `Remote`, a `Backend` writing them into
+  a mirror store and acknowledging each once held, both over a `Port` (`Loopback` in the tests,
+  [`crates/wavedude-app-state/tests/remote.rs`](../crates/wavedude-app-state/tests/remote.rs); in the browser
+  `remote::web`'s `PagePort` and `WorkerPort` over `postMessage`, which wake their owners as messages arrive).
+  The browser's `CoreBackend` is a `Remote` on the run worker; a worker that fails to load, crashes or stays
+  silent fails the run with its reason, and nothing runs on the page. Depends on core
   (with `serde`), export (no default features, native only) and examples; no egui, no rfd
   ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
 - `wavedude-app`: egui views on eframe, natively and in the browser ([`tools/build-web.sh`](../tools/build-web.sh)),
-  on the renderer's wgpu device, which the engines share where it computes
+  on the renderer's wgpu device, which the engines share natively where it computes
   ([`crates/wavedude-app/src/ui/mod.rs`](../crates/wavedude-app/src/ui/mod.rs)); native only: file dialogs (`rfd`,
   [`crates/wavedude-app/src/ui/files/native.rs`](../crates/wavedude-app/src/ui/files/native.rs)), the updater, exports; in the browser uploads and
   downloads ([`crates/wavedude-app/src/ui/files/web.rs`](../crates/wavedude-app/src/ui/files/web.rs)). Its widgets are modules of
   [`ui/`](../crates/wavedude-app/src/ui/); what a view computes without a window is in the crate's top-level modules
   (`preview`, `menus`), tested without one. Depends on all of the above ([decision 0019](decisions/0019-egui-and-the-platform-layer.md)).
+- `wavedude-run-worker`: binary only, the browser's run worker (decision 0024): logging to the console, its
+  panics posted to the page, a WebGPU device of its own and app-state's `Host` on a `WorkerPort`, pumped while the
+  run has work, the event loop turning between pumps, and asleep until a message arrives once it has none
+  ([`crates/wavedude-run-worker/src/worker.rs`](../crates/wavedude-run-worker/src/worker.rs)); `run-worker.js` loads it. Natively the binary only
+  says so. Depends on core and app-state, in the browser only.
 - `wavedude-examples`: the example projects, embedded (the fixtures of core and the repository's `examples`), with their
   titles, descriptions and topics; the Examples dialog reads this one list. The library depends on core
   without default features alone; the binary adds `anyhow` and `serde_json`

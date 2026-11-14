@@ -46,9 +46,11 @@ use native as platform;
 #[cfg(target_arch = "wasm32")]
 use web as platform;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 
 use eframe::egui::{self, ViewportCommand};
+#[cfg(not(target_arch = "wasm32"))]
 use eframe::{egui_wgpu, wgpu};
 use wavedude_app_state::clipboard::PasteTarget;
 use wavedude_app_state::commands::Command;
@@ -58,7 +60,9 @@ use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::{Duration, Instant, Store, take_crash_report};
 use wavedude_app_state::selection::Row;
 use wavedude_app_state::{Event, Guarded, Response};
+#[cfg(not(target_arch = "wasm32"))]
 use wavedude_core::engine::GpuHandle;
+#[cfg(not(target_arch = "wasm32"))]
 use wavedude_core::engine::gpu::GpuContext;
 use wavedude_core::model::{ItemKind, ItemRef};
 use wavedude_core::quality::PreviewQuality;
@@ -95,6 +99,7 @@ pub struct Boot {
 	/// The log's lines, the status bar's among them.
 	pub log: LogRing,
 	/// The renderer's context, when the engines run on it.
+	#[cfg(not(target_arch = "wasm32"))]
 	pub gpu: Option<GpuHandle>,
 	/// Files the command line and the OS ask to open.
 	#[cfg(not(target_arch = "wasm32"))]
@@ -152,7 +157,11 @@ impl Shell {
 		cc.egui_ctx.set_zoom_factor(zoom as f32);
 		let shown = Shown { title: app.title(), zoom, theme: None };
 		let dock = Dock::load(app.settings.layout.as_deref());
+		#[cfg(not(target_arch = "wasm32"))]
 		let preview = Preview::new(cc.wgpu_render_state.clone(), boot.gpu.clone());
+		// the engines run in the run worker, on a device of their own
+		#[cfg(target_arch = "wasm32")]
+		let preview = Preview::new(cc.wgpu_render_state.clone(), None);
 		let project = ProjectPane::default();
 		#[cfg(not(target_arch = "wasm32"))]
 		let updates = Updates::new(boot.update.clone());
@@ -491,8 +500,7 @@ impl Shell {
 		}
 	}
 
-	/// The wait before the next tick: none while a pumped run has work left, short while something moves, else no
-	/// tick.
+	/// The wait before the next tick: short while something moves, else no tick.
 	fn next_tick(&self) -> Option<Duration> {
 		let live = &self.app.live;
 		#[cfg(not(target_arch = "wasm32"))]
@@ -509,7 +517,7 @@ impl Shell {
 			|| live.playback.is_playing()
 			|| self.app.document.history.has_pending()
 			|| self.app.document.image_change_pending();
-		if live.work_left() { Some(Duration::ZERO) } else { moving.then_some(TICK) }
+		moving.then_some(TICK)
 	}
 }
 
@@ -648,6 +656,7 @@ impl eframe::App for Shell {
 
 /// Asks for the renderer's device with the adapter's own limits where it runs compute shaders, so the engines can
 /// share it (large grids need its storage binding size); egui's request otherwise.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn share_device(options: &mut egui_wgpu::WgpuConfiguration) {
 	if let egui_wgpu::WgpuSetup::CreateNew(setup) = &mut options.wgpu_setup {
 		let fallback = setup.device_descriptor.clone();
@@ -666,6 +675,7 @@ pub fn share_device(options: &mut egui_wgpu::WgpuConfiguration) {
 }
 
 /// The engines' GPU: the renderer's device when it can run them; `None` (logged) otherwise.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn renderer_gpu(cc: &eframe::CreationContext<'_>) -> Option<GpuHandle> {
 	let rs = cc.wgpu_render_state.as_ref()?;
 	GpuContext::from_device(&rs.adapter, rs.device.clone(), rs.queue.clone())

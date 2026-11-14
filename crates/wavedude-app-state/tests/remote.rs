@@ -68,7 +68,7 @@ fn drive(remote: &mut Remote<Loopback>, host: &mut Host<Loopback>, mut done: imp
 	let deadline = Instant::now() + Duration::from_secs(60);
 	loop {
 		host.pump(SLICE);
-		remote.pump(SLICE);
+		remote.pump();
 		if done(remote) {
 			return;
 		}
@@ -222,7 +222,7 @@ fn a_mirror_past_its_memory_spills_and_acknowledges_a_frame_once_written() {
 	remote.set_goal(goal(&p, 1, Wanted::All));
 	for _ in 0..50 {
 		host.pump(SLICE);
-		remote.pump(SLICE);
+		remote.pump();
 		assert!(host.frames_in_flight() <= WRITES_IN_FLIGHT);
 	}
 	assert_eq!(lock(&disk).writes.len(), WRITES_IN_FLIGHT, "the frames in memory are acknowledged at once");
@@ -237,7 +237,7 @@ fn a_mirror_past_its_memory_spills_and_acknowledges_a_frame_once_written() {
 	});
 	while host.frames_in_flight() > 0 {
 		lock(&disk).complete();
-		remote.pump(SLICE);
+		remote.pump();
 		host.pump(SLICE);
 	}
 	let mirror = remote.status().store.unwrap();
@@ -337,7 +337,7 @@ fn the_engine_built_and_why_the_gpu_fell_back_reach_the_page() {
 fn stall(remote: &mut Remote<Loopback>, host: &mut Host<Loopback>, n: usize) {
 	for _ in 0..n {
 		host.pump(SLICE);
-		remote.pump(SLICE);
+		remote.pump();
 		assert!(host.frames_in_flight() <= WRITES_IN_FLIGHT);
 	}
 }
@@ -379,7 +379,7 @@ fn spill_writes_stuck_in_a_generation_or_store_left_do_not_hold_the_worker() {
 			break;
 		}
 		lock(&disk).complete();
-		remote.pump(SLICE);
+		remote.pump();
 		host.pump(SLICE);
 	}
 	assert_eq!(host.frames_in_flight(), 0, "every frame acknowledged or released");
@@ -442,7 +442,7 @@ fn a_frame_of_a_store_or_generation_left_is_acknowledged_unwritten() {
 	send(&worker, &ToPage::Frame { store: 7, generation: 1, frame: 0 }, planes());
 	send(&worker, &ToPage::Frame { store: 9, generation: 2, frame: 0 }, planes());
 	send(&worker, &ToPage::Frame { store: 7, generation: 2, frame: 1 }, planes());
-	remote.pump(SLICE);
+	remote.pump();
 	assert_eq!(acks(&worker), [((7, 1, 0), Ok(())), ((9, 2, 0), Ok(())), ((7, 2, 1), Ok(()))]);
 	let mirror = remote.status().store.unwrap();
 	assert!(!mirror.has(0) && mirror.has(1));
@@ -452,11 +452,11 @@ fn a_frame_of_a_store_or_generation_left_is_acknowledged_unwritten() {
 fn a_crashed_worker_fails_the_run_for_good() {
 	let (mut remote, worker) = page();
 	send(&worker, &ToPage::Crashed("the worker ran out of memory".into()), None);
-	assert!(!remote.pump(SLICE));
+	remote.pump();
 	let WorkState::Failed(e) = remote.status().state else { panic!("not failed") };
 	assert_eq!(e.to_string(), "the worker ran out of memory");
 	send(&worker, &ToPage::Status(RunStatus::default()), None);
-	remote.pump(SLICE);
+	remote.pump();
 	assert!(matches!(remote.status().state, WorkState::Failed(_)), "nothing after the crash counts");
 }
 

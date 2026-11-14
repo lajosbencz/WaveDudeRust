@@ -5547,6 +5547,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "wavedude-run-worker"
+version = "0.3.0"
+dependencies = [
+ "js-sys",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-web",
+ "wasm-bindgen-futures",
+ "wavedude-app-state",
+ "wavedude-core",
+ "web-sys",
+]
+
+[[package]]
 name = "wavedude-view"
 version = "0.3.0"
 dependencies = [

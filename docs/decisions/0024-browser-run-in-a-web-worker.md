@@ -12,8 +12,8 @@ the event loop, so the run waited a frame per capture ring, and `Device::poll` d
 paced its submissions. Without cross-origin isolation, which GitHub Pages cannot set (0017), there are no wasm threads.
 
 A spike (Chromium, WebGPU) measured in a module worker: `GpuContext::create` and the GPU engine work, the logging
-works, a transferred 4 MiB buffer posts in 0.02 ms and is detached, the page copies it into wasm in 0.2 ms; a
-worker binary of the core is 0.8 MB (0.2 MB gzipped) against the app's 21 MB.
+works, a transferred 4 MiB buffer posts in 0.02 ms and is detached, the page copies it into wasm in 0.2 ms. The
+worker's binary is 2.1 MB (0.6 MB gzipped) against the app's 21 MB.
 
 ## Decision
 

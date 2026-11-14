@@ -1,0 +1,23 @@
+[package]
+name = "wavedude-run-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "WaveDude's live run in the browser: the engines in a module worker beside the page"
+
+[lints]
+workspace = true
+
+# The worker runs in the browser alone; natively the binary says so and exits.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["fmt", "registry", "std"] }
+tracing-web = "0.1"
+wasm-bindgen-futures = "0.4"
+wavedude-app-state = { path = "../wavedude-app-state" }
+wavedude-core = { path = "../wavedude-core", features = ["gpu"] }
+web-sys = { version = "0.3", features = ["MessageChannel", "MessageEvent", "MessagePort"] }

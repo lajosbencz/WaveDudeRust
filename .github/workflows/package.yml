@@ -208,10 +208,12 @@ jobs:
           tar -czf "dist/$dir.tar.gz" "$dir"
       - name: SBOM
         run: |
-          cargo cyclonedx -q --manifest-path crates/wavedude-app/Cargo.toml -f json --spec-version 1.5 \
-            --target wasm32-unknown-unknown --override-filename sbom
           mkdir sbom
-          cp crates/wavedude-app/sbom.json "sbom/wavedude-app-$VERSION-web.cdx.json"
+          for crate in wavedude-app wavedude-run-worker; do
+            cargo cyclonedx -q --manifest-path "crates/$crate/Cargo.toml" -f json --spec-version 1.5 \
+              --target wasm32-unknown-unknown --override-filename sbom
+            cp "crates/$crate/sbom.json" "sbom/$crate-$VERSION-web.cdx.json"
+          done
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: dist/*
@@ -219,6 +221,10 @@ jobs:
         with:
           subject-path: dist/*
           sbom-path: sbom/wavedude-app-${{ inputs.version }}-web.cdx.json
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/*
+          sbom-path: sbom/wavedude-run-worker-${{ inputs.version }}-web.cdx.json
       - name: Stage
         run: mv sbom/* dist/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -40,8 +40,11 @@ tracing-web = "0.1"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = [
 	"Blob",
+	"DedicatedWorkerGlobalScope",
 	"Document",
 	"Element",
+	"ErrorEvent",
+	"Event",
 	"FileSystemDirectoryHandle",
 	"FileSystemFileHandle",
 	"FileSystemGetDirectoryOptions",
@@ -53,12 +56,16 @@ web-sys = { version = "0.3", features = [
 	"Lock",
 	"LockManager",
 	"LockOptions",
+	"MessageEvent",
 	"Navigator",
 	"Storage",
 	"StorageEstimate",
 	"StorageManager",
 	"Url",
 	"Window",
+	"Worker",
+	"WorkerOptions",
+	"WorkerType",
 	"WritableStream",
 ] }
 

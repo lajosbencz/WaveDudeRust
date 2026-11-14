@@ -2,6 +2,8 @@
 //! `wavedude-spill/<session>/<store>-<generation>/<frame>`, written and read from the main thread
 //! ([`wavedude_core::run::SpillBackend`]).
 //!
+//! The start and each write wake the window as they complete ([`crate::wake`]).
+//!
 //! A tab holds the Web Lock of its session while it lives. At start the sessions whose lock is free (their tab
 //! is gone) are removed, then the free storage is estimated once; a store's spill is refused when its frames do
 //! not fit it.
@@ -48,6 +50,7 @@ impl Opfs {
 				tracing::warn!("frames past memory cannot be spilled: {e}");
 			}
 			done.complete(result);
+			crate::wake::wake();
 		});
 		Self { free, taken: Mutex::new(None) }
 	}
@@ -128,7 +131,10 @@ impl SpillBackend for Spill {
 		writes.retain(|(_, t)| !t.is_done());
 		writes.push((generation, token.clone()));
 		let (done, folder) = (token.clone(), self.folder(generation));
-		spawn_local(async move { done.complete(write_frame(&folder, frame, &data).await) });
+		spawn_local(async move {
+			done.complete(write_frame(&folder, frame, &data).await);
+			crate::wake::wake();
+		});
 		token
 	}
 
