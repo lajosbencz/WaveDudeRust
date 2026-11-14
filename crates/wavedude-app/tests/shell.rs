@@ -38,13 +38,7 @@ fn shell_with(dir: &Path, language: Language, project: Option<&str>) -> Harness<
 	if let Some(path) = project {
 		app.handle(Event::Guarded(Guarded::Open(Source::Path(path.into()))), Instant::now());
 	}
-	let boot = Boot {
-		store: dirs.store(),
-		gpu: None,
-		open: Default::default(),
-		log: LogRing::new(),
-		update: Default::default(),
-	};
+	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
 	let mut harness =
 		Harness::builder().with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);

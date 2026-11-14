@@ -40,7 +40,7 @@ fn window_with(dir: &Path, first_start: bool, project: Option<&Path>, asked: &[&
 	for path in asked {
 		open.push(path.into());
 	}
-	let boot = Boot { store: dirs.store(), gpu: None, open, log: LogRing::new(), update: Default::default() };
+	let boot = Boot { store: dirs.store(), open, log: LogRing::new(), update: Default::default() };
 	let mut harness =
 		Harness::builder().with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);

@@ -72,11 +72,10 @@ mod native {
 		let creator: eframe::AppCreator<'_> = Box::new(move |cc| {
 			let ctx = cc.egui_ctx.clone();
 			wavedude_app_state::wake::set(move || ctx.request_repaint());
-			let gpu = ui::renderer_gpu(cc);
-			if let Some(gpu) = &gpu {
-				wavedude_core::engine::gpu::set_context(gpu.clone());
+			if let Some(gpu) = ui::renderer_gpu(cc) {
+				wavedude_core::engine::gpu::set_context(gpu);
 			}
-			Ok(Box::new(Shell::new(cc, app, Boot { store, log, gpu, open, update })))
+			Ok(Box::new(Shell::new(cc, app, Boot { store, log, open, update })))
 		});
 		#[cfg(not(target_os = "macos"))]
 		eframe::run_native(NAME, options, creator).map_err(|e| anyhow::anyhow!("the window failed: {e}"))?;
@@ -97,7 +96,7 @@ mod native {
 #[cfg(target_arch = "wasm32")]
 fn main() -> Result<(), eframe::wasm_bindgen::JsValue> {
 	use eframe::wasm_bindgen::JsCast as _;
-	use wavedude_app::ui::{Boot, CANVAS, Shell};
+	use wavedude_app::ui::{self, Boot, CANVAS, Shell};
 	use wavedude_app_state::AppState;
 	use wavedude_app_state::log::LogRing;
 	use wavedude_app_state::platform::{Store, init_log, install_panic_hook};
@@ -111,7 +110,8 @@ fn main() -> Result<(), eframe::wasm_bindgen::JsValue> {
 		.and_then(|d| d.get_element_by_id(CANVAS))
 		.and_then(|e| e.dyn_into::<eframe::web_sys::HtmlCanvasElement>().ok())
 		.ok_or("the page has no canvas #app")?;
-	let options = eframe::WebOptions::default();
+	let mut options = eframe::WebOptions::default();
+	ui::share_device(&mut options.wgpu_options);
 	wasm_bindgen_futures::spawn_local(async move {
 		let creator: eframe::AppCreator<'static> = Box::new(move |cc| {
 			let ctx = cc.egui_ctx.clone();

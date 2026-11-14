@@ -356,6 +356,24 @@ with 4 the lighthouse took 2.0 to 2.2 s, with 16 (the GPU engine's largest captu
 bound 1.0 s. The GPU's submissions are paced on `on_submitted_work_done`, two on the card at most; pacing by the steps
 on the card instead, as a capture every second step cuts a submission short, took the same 2.0 to 2.2 s at a bound of 4.
 
+## The browser's preview coloured on the page's GPU
+
+2026-11-14, Chrome 158 (Playwright, WebGPU through Vulkan) on Linux, RTX 5070 Ti, a 144 Hz page; the app built by
+`tools/build-web.sh` into two folders served by `python3 -m http.server`: before (58f6004, the presenter colouring every
+shown frame on the page's thread) and after (the frames uploaded and coloured on the page's renderer device). The
+startup page's High preview (16-bit samples, 16 bits per channel dithering), Example04 (3 sources 3 frequencies) run
+with F5 and the memory warning's halved resolution (1250 stored frames), both pictures shown at 402x402. Main-thread
+time is the change of Chrome's `TaskDuration` (CDP `Performance.getMetrics`) over 10 s of playback from Home, which
+played 600 frames at the 60 fps clock in both; two passes each.
+
+| | Before | After |
+|---|---|---|
+| Main-thread time over 10 s of playback | 2.66 to 2.71 s | 1.20 s |
+| Per played frame | 4.4 to 4.5 ms | 2.0 ms |
+
+The last frame's pictures, screenshotted in both, differ by at most 1 of 255 in 1.6 % of the pixels: the card's fused
+multiply-adds moving the resampling at an f16 rounding boundary (`wavedude_core::render::gpu`).
+
 ## The idle window
 
 2026-11-13, Ryzen 9 9900X, release build on Xvfb (`DISPLAY=:77`, presented through lavapipe), a fresh settings folder.

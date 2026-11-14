@@ -1,8 +1,8 @@
 //! The window over [`App`]: the frame loop that ticks the state, the title, UI zoom and look that follow the
 //! settings, the menu bar and the shortcuts with the one dispatcher of their [`MenuAction`]s, the dock and the status
 //! bar, the modals that the state's responses and notices ask for, the close box that asks about unsaved edits
-//! first, and the renderer's GPU device that the engines share (natively and in the browser).
-//! What differs between the two is in `native` and `web`, chosen at compile time.
+//! first, and the renderer's GPU device that the engines share natively and the preview colours pictures on.
+//! What differs between the desktop and the browser is in `native` and `web`, chosen at compile time.
 //!
 //! Threads: the UI thread; the state's workers are polled on the tick while something moves, and wake the window
 //! through [`wavedude_app_state::wake`] otherwise.
@@ -46,11 +46,9 @@ use native as platform;
 #[cfg(target_arch = "wasm32")]
 use web as platform;
 
-#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 
 use eframe::egui::{self, ViewportCommand};
-#[cfg(not(target_arch = "wasm32"))]
 use eframe::{egui_wgpu, wgpu};
 use wavedude_app_state::clipboard::PasteTarget;
 use wavedude_app_state::commands::Command;
@@ -98,9 +96,6 @@ pub struct Boot {
 	pub store: Store,
 	/// The log's lines, the status bar's among them.
 	pub log: LogRing,
-	/// The renderer's context, when the engines run on it.
-	#[cfg(not(target_arch = "wasm32"))]
-	pub gpu: Option<GpuHandle>,
 	/// Files the command line and the OS ask to open.
 	#[cfg(not(target_arch = "wasm32"))]
 	pub open: crate::open_requests::OpenRequests,
@@ -157,11 +152,7 @@ impl Shell {
 		cc.egui_ctx.set_zoom_factor(zoom as f32);
 		let shown = Shown { title: app.title(), zoom, theme: None };
 		let dock = Dock::load(app.settings.layout.as_deref());
-		#[cfg(not(target_arch = "wasm32"))]
-		let preview = Preview::new(cc.wgpu_render_state.clone(), boot.gpu.clone());
-		// the engines run in the run worker, on a device of their own
-		#[cfg(target_arch = "wasm32")]
-		let preview = Preview::new(cc.wgpu_render_state.clone(), None);
+		let preview = Preview::new(cc.wgpu_render_state.clone());
 		let project = ProjectPane::default();
 		#[cfg(not(target_arch = "wasm32"))]
 		let updates = Updates::new(boot.update.clone());
@@ -654,9 +645,9 @@ impl eframe::App for Shell {
 	}
 }
 
-/// Asks for the renderer's device with the adapter's own limits where it runs compute shaders, so the engines can
-/// share it (large grids need its storage binding size); egui's request otherwise.
-#[cfg(not(target_arch = "wasm32"))]
+/// Asks for the renderer's device with the adapter's own limits where it runs compute shaders: the engines share it
+/// natively, and the preview colours a large run's frames on it (their planes need its storage binding size); egui's
+/// request otherwise.
 pub fn share_device(options: &mut egui_wgpu::WgpuConfiguration) {
 	if let egui_wgpu::WgpuSetup::CreateNew(setup) = &mut options.wgpu_setup {
 		let fallback = setup.device_descriptor.clone();

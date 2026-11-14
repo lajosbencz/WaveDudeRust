@@ -98,8 +98,10 @@ project keeps it.
   matrix (2/4/8/16 cells a side), fixed to screen pixels; preview only.
 - A run on the GPU engine is coloured on the GPU, in the UI's render pass, with the same tables (Rust only,
   docs/spec/40-frames-store-render.md): the frame the engine captured last is drawn from its device copy when the
-  engines run on the renderer's device, any other stored frame is uploaded as stored. Pictures look the same as on the
-  CPU path, which the CPU engine and WebGL2 keep.
+  engines run on the renderer's device, any other stored frame is uploaded as stored. In the browser every frame is
+  uploaded and coloured so, whichever engine the run worker built. Pictures look the same as on the CPU path, which
+  the CPU engine keeps natively; a renderer without storage buffers in fragment shaders (WebGL2) keeps it everywhere,
+  with a warning in the Messages, as does a frame whose plane exceeds the renderer's storage buffer limits.
 
 ## Handles and overlays
 

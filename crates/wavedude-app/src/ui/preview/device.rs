@@ -1,7 +1,7 @@
-//! The pictures of a run on the GPU engine, coloured on the renderer's device (docs/ui/40-preview-pane.md, 8-bit vs
-//! 16-bit): the plane is the frame the engine keeps on the device when it is the one shown, else the stored plane
-//! uploaded; `wavedude_core::render::gpu` colours it in a paint callback inside egui's render pass, so a frame on the
-//! device is never read back to be shown.
+//! The pictures coloured on the renderer's device (docs/ui/40-preview-pane.md, 8-bit vs 16-bit): the plane is the
+//! frame a GPU engine keeps on that device when it is the one shown, else the stored plane uploaded;
+//! `wavedude_core::render::gpu` colours it in a paint callback inside egui's render pass, so a frame on the device is
+//! never read back to be shown.
 //!
 //! Threads: the UI thread; the engine's thread captures into the device frames, which a held frame is safe from.
 
@@ -11,7 +11,7 @@ use eframe::egui::{self, Painter, Rect};
 use eframe::egui_wgpu::{self, CallbackResources, CallbackTrait, RenderState};
 use eframe::wgpu;
 use wavedude_core::engine::gpu::{DeviceFrame, DeviceFrames, FrameTag};
-use wavedude_core::engine::{FrameShape, GpuHandle, SampleFormat};
+use wavedude_core::engine::{FrameShape, SampleFormat};
 use wavedude_core::model::Layer;
 use wavedude_core::render::gpu::{DevicePlane, GpuPicture, PictureInput, PicturePipeline};
 use wavedude_core::render::layer::View;
@@ -42,9 +42,8 @@ impl Shown {
 }
 
 /// See the module docs.
+#[derive(Default)]
 pub(super) struct DevicePictures {
-	/// The renderer's context, when the engines run on it: their frames are drawn from there.
-	renderer: Option<GpuHandle>,
 	/// The frames a frame is held from.
 	held_from: Option<Arc<DeviceFrames>>,
 	/// The engine's frame shown.
@@ -65,22 +64,6 @@ pub(super) struct DevicePictures {
 }
 
 impl DevicePictures {
-	pub(super) fn new(renderer: Option<GpuHandle>) -> Self {
-		Self {
-			renderer,
-			held_from: None,
-			held: None,
-			source: None,
-			uploads: [None, None],
-			uploaded: [false; 2],
-			spill: Vec::new(),
-			padded: Vec::new(),
-			requests: Vec::new(),
-			set: [None, None],
-			pending: false,
-		}
-	}
-
 	/// Shows nothing, holding no frame.
 	pub(super) fn clear(&mut self) {
 		if let Some(frames) = self.held_from.take() {
@@ -99,12 +82,12 @@ impl DevicePictures {
 		self.pending
 	}
 
-	/// Shows `source` with `requests`: the engine's frame of it held when `frames` live on the renderer's context,
+	/// Shows `source` with `requests`: the engine's frame of it held when its `frames` live on the renderer's device,
 	/// else its planes uploaded. A source shown already only takes the requests.
 	pub(super) fn show(
 		&mut self,
 		gpu: &RenderState,
-		frames: &Arc<DeviceFrames>,
+		frames: Option<&Arc<DeviceFrames>>,
 		source: &FrameSource,
 		requests: &[LayerRequest],
 	) {
@@ -115,22 +98,21 @@ impl DevicePictures {
 			return;
 		}
 		let shape = source.shape();
-		let held = match source {
-			FrameSource::Run { store, stored }
-				if self.renderer.as_ref().is_some_and(|r| Arc::ptr_eq(r, frames.context())) =>
-			{
+		let frames = frames.filter(|f| f.context().device == gpu.device);
+		let held = match (source, frames) {
+			(FrameSource::Run { store, stored }, Some(frames)) => {
 				let tag = FrameTag { store: store.id(), generation: store.generation(), stored: *stored };
-				frames.hold(tag)
+				frames.hold(tag).map(|frame| (frames, frame))
 			}
 			_ => None,
 		};
-		if held.is_some() {
+		if let Some((frames, frame)) = held {
 			self.pending = false;
 			self.source = Some((key, shape));
 			if let Some(old) = self.held_from.replace(frames.clone()).filter(|old| !Arc::ptr_eq(old, frames)) {
 				old.release();
 			}
-			self.held = held;
+			self.held = Some(frame);
 			self.uploaded = [false; 2];
 			return;
 		}

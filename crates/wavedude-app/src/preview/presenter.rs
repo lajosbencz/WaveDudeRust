@@ -1,6 +1,6 @@
 //! The presenter: turns the frame the pictures show (a stored frame of the run, or a frame on its own) into RGBA8 pictures,
-//! one per visible layer, on a worker thread of its own (docs/ui/40-preview-pane.md, 8-bit vs 16-bit), for a run on
-//! the CPU engine; the GPU engine's pictures are coloured on the device.
+//! one per visible layer, on a worker thread of its own (docs/ui/40-preview-pane.md, 8-bit vs 16-bit), where the
+//! renderer's device does not colour them.
 //!
 //! 8-bit frames are coloured through the palette at the stored size and scaled by the picture; 16-bit frames go
 //! through the screen renderer at the picture's size in device pixels, plain or dithered. Only the newest request
@@ -35,6 +35,9 @@ use wavedude_core::render::layer::{LayerColours, View, paint};
 use wavedude_core::render::screen::Window;
 use wavedude_core::run::{FrameStore, StoreError};
 use wavedude_core::scene::glowing_edges::{self, EdgeImage};
+
+/// Whether a request is rendered in the call, on the caller's thread.
+pub const IN_CALL: bool = cfg!(target_arch = "wasm32");
 
 /// Where a frame's planes come from.
 #[derive(Clone)]

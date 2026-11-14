@@ -40,13 +40,7 @@ fn window(dir: &Path) -> Harness<'static, Shell> {
 	}
 	// the edit's undo step stays open, and the window ticking, until the history is quiet
 	std::thread::sleep(wavedude_app_state::history::QUIET);
-	let boot = Boot {
-		store: dirs.store(),
-		gpu: None,
-		open: Default::default(),
-		log: LogRing::new(),
-		update: Default::default(),
-	};
+	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
 	Harness::builder().with_size(vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot))
 }
 
