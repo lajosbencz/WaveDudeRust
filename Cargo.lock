@@ -5459,6 +5459,7 @@ dependencies = [
  "wavedude-export",
  "web-sys",
  "web-time",
+ "wgpu",
 ]
 
 [[package]]

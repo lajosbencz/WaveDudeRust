@@ -340,13 +340,16 @@ impl GpuEngine {
 	}
 
 	/// An engine at rest on `scene` on `ctx`, with the medium in `layout` (compact falls back to plain when
-	/// the scene has too many distinct values).
+	/// the scene has too many distinct values); refused on a lost device.
 	pub async fn create(
 		ctx: Arc<GpuContext>,
 		scene: impl Into<Arc<SceneData>>,
 		options: EngineOptions,
 		layout: MediumLayout,
 	) -> Result<Self, GpuError> {
+		if let Some(e) = ctx.lost() {
+			return Err(e);
+		}
 		let scene = scene.into();
 		check_grid(&scene)?;
 		let device = ctx.device.clone();

@@ -25,8 +25,44 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use wavedude_core::sync::lock;
 
-pub use host::Host;
+pub use host::{GpuRequest, Host, RequestGpu};
 pub use page::Remote;
+use protocol::Lost;
+
+use crate::strings::Strings;
+
+/// Why the run worker runs nothing: no run starts until the page is reloaded.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum WorkerGone {
+	#[error("the run worker could not start: {0}")]
+	NotStarted(Lost),
+	#[error("the run worker stopped: {0}")]
+	Stopped(Lost),
+	#[error("the run worker speaks protocol version {worker}, the page {page}")]
+	OtherVersion { page: u32, worker: u32 },
+}
+
+impl WorkerGone {
+	/// What the user is told, in the language of `s`; the technical detail stays as it came.
+	pub fn message(&self, s: &Strings) -> String {
+		match self {
+			Self::NotStarted(lost) => {
+				let reason = match lost {
+					Lost::NotCreated { url, detail } => format!("{}\n{url}: {detail}", s.get("RunWorkerNotCreated")),
+					Lost::Failed { url, detail: Some(detail) } => {
+						format!("{}\n{url}: {detail}", s.get("RunWorkerNotLoaded"))
+					}
+					Lost::Failed { url, detail: None } => format!("{}\n{url}", s.get("RunWorkerNotLoaded")),
+					Lost::Silent { url, secs } => format!("{}\n{url}", s.format("RunWorkerSilentFormat", &[secs])),
+					Lost::Panicked(_) | Lost::Broken(_) => lost.to_string(),
+				};
+				format!("{}\n{reason}", s.get("RunError"))
+			}
+			Self::Stopped(lost) => s.format("RunWorkerStoppedFormat", &[lost]),
+			Self::OtherVersion { .. } => s.get("RunWorkerOtherVersion").to_owned(),
+		}
+	}
+}
 
 /// A message as it crosses: the encoded message and the buffer beside it.
 #[derive(Debug, Default)]
@@ -78,6 +114,13 @@ fn decode<M: DeserializeOwned>(envelope: &Envelope) -> postcard::Result<M> {
 	postcard::from_bytes(&envelope.message)
 }
 
+/// The protocol version of a first message ([`protocol::ToWorker::Init`], [`protocol::ToPage::Ready`]), read in
+/// every version: their variant and version lead; `None` for another message.
+fn version_of(envelope: &Envelope) -> Option<u32> {
+	let ((variant, version), _) = postcard::take_from_bytes::<(u32, u32)>(&envelope.message).ok()?;
+	(variant == 0).then_some(version)
+}
+
 /// Queues `envelope` behind `held` for a worker not listening yet. A goal or a rebuild replaces the one held
 /// before, which the worker would take up only to drop; the rest keep their order, so an image stays before the
 /// goal naming it.
@@ -98,14 +141,14 @@ fn hold(held: &mut Vec<Envelope>, envelope: Envelope) {
 mod tests {
 	use wavedude_core::run::Goal;
 
-	use super::protocol::ToWorker;
+	use super::protocol::{ToPage, ToWorker};
 	use super::*;
 
 	#[test]
 	fn a_held_goal_or_rebuild_replaces_the_one_before_and_the_rest_keep_their_order() {
 		let goal = |revision| ToWorker::Goal { goal: Goal { revision, ..Goal::default() }, image: None };
 		let messages = [
-			ToWorker::Init { use_gpu: true },
+			ToWorker::Init { version: protocol::VERSION, use_gpu: true },
 			goal(1),
 			ToWorker::Rebuild { use_gpu: false },
 			ToWorker::Image { key: 7 },
@@ -123,5 +166,14 @@ mod tests {
 			.map(|m| format!("{m:?}"))
 			.collect();
 		assert_eq!(held, wanted);
+	}
+
+	#[test]
+	fn a_first_message_names_its_version_and_no_other_does() {
+		let init = ToWorker::Init { version: protocol::VERSION, use_gpu: true };
+		assert_eq!(version_of(&envelope(&init, None)), Some(protocol::VERSION));
+		let ready = ToPage::Ready { version: 7, gpu: Err("none".into()) };
+		assert_eq!(version_of(&envelope(&ready, None)), Some(7));
+		assert_eq!(version_of(&envelope(&ToWorker::Discard, None)), None);
 	}
 }

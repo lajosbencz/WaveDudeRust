@@ -3,7 +3,8 @@
 //! [`GpuContext::create`] requests it (adapter request plus device creation take 50 to 200 ms, which every engine
 //! rebuilt for an edit would pay again); [`GpuContext::from_device`] adopts a device requested elsewhere. Natively
 //! [`context`] keeps one per process, or the one given to [`set_context`], until the device is lost; the next engine
-//! built after a loss gets a new device. On wasm the caller owns it. An engine on a lost device keeps failing.
+//! built after a loss gets a new device. On wasm the caller owns it and requests a new one after a loss. An engine on a
+//! lost device keeps failing; none is built on one.
 //! Natively `wgpu::Device` and `wgpu::Queue` are `Send + Sync`; engines on different threads submit to the same
 //! queue, which wgpu serialises. Software adapters, and adapters without compute shaders, are refused: the CPU
 //! engine is faster or the only one.

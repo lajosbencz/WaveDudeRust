@@ -93,8 +93,9 @@ not tell), or its FrameMemoryPercent share when > 0; the frames past it spill to
 file per frame, written and read asynchronously (decision 0020). A spilled frame stays in memory while its write is
 in flight (the run waits while 4 are) and while it is the frame written last; a spilled frame being read back keeps
 the picture shown before until it is there; during playback the frames it reaches next are read back ahead.
-Spilling is refused, failing the run at its start, when the frames past memory exceed the free storage estimated
-when the page loaded, or the browser has no such file system; a write refused for quota fails the run.
+Spilling is refused when the frames past memory exceed the free storage estimated when the page loaded, or the
+browser has no such file system: the page's store refuses each frame, so the run fails at the first frame it makes
+(frame 0 for Run, the position's frame for a scrub). A write refused for quota fails the run.
 
 Spill file header (64 bytes, little-endian i32 each):
 

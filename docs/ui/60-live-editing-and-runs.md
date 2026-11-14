@@ -21,6 +21,8 @@ Edits of two classes at once (an undo, a paste) take the least destructive effec
 with a brightness change keeps the frames unless the preview samples are 8-bit.
 
 The status bar's run line says Running while frames are made, Stopped when some are missing and no more are wanted, Completed when all are there.
+It ends with the engine: "GPU: <adapter>" ("GPU: WebGPU" in the browser), "CPU (1 thread)" or "CPU (n threads)"; in
+the browser "engine starting" until the run worker is ready, "no engine" when it is gone before it built one.
 
 ## The live run
 
@@ -92,7 +94,8 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
   the mildest (largest need that still fits, so the cache comes before any quality loss); ties in order 8-bit,
   half frames, half resolution. When none fits, every available lever is ticked.
 - Live bar under the boxes: the ticks' RAM cache budget is the bar, their need its fill, "{need} / {budget}" beside
-  it; a need beyond the budget fills it whole in the warning colour.
+  it, as wide as the widest of the figures the open ticks give, so the bar keeps its length; a need beyond the
+  budget fills it whole in the warning colour.
 - Live line under the bar: "The frames then need {n} and fit in the RAM cache." or "The frames then need {n};
   {m} of them still go to disk."
 - "Do not warn me again" check box: clears the setting.
@@ -143,3 +146,11 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
 
 "The simulation could not start.", "The scene uses an image, but no image file is set.", "Save the project
 first, so the scene image can be found relative to it."
+
+In the browser the run worker that does not start is "The simulation could not start." with why: "The browser
+could not start the simulation worker.", "The simulation worker could not be loaded." or "The simulation worker did
+not answer within 20 s.", then the script and the browser's message as they came; a panic or broken message as it
+came. A worker that stops once started is "The simulation worker stopped: <why>. Reload the page to run again.", a
+worker of another version than the page "The page and its simulation worker are from different versions; reload
+the page." Either way no run starts until the page is reloaded: the run line says Failed, and Run shows the message
+again.

@@ -53,7 +53,7 @@ use eframe::{egui_wgpu, wgpu};
 use wavedude_app_state::clipboard::PasteTarget;
 use wavedude_app_state::commands::Command;
 use wavedude_app_state::document::Source;
-use wavedude_app_state::live::Notice;
+use wavedude_app_state::live::{Notice, RunFailure};
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::{Duration, Instant, Store, take_crash_report};
 use wavedude_app_state::selection::Row;
@@ -270,15 +270,19 @@ impl Shell {
 			match notice {
 				Notice::AskMemoryWarning => self.ask_memory_warning(),
 				Notice::WarningDropped => self.modals.drop_memory_warning(ctx),
-				Notice::RunFailed { message, no_image } => {
+				Notice::RunFailed(failure) => {
 					// the browser asks to upload the image instead
 					#[cfg(target_arch = "wasm32")]
-					if no_image && self.files.ask_scene_image(&self.app, &mut self.modals) {
+					if failure == RunFailure::NoImage && self.files.ask_scene_image(&self.app, &mut self.modals) {
 						continue;
 					}
 					let s = &self.app.strings;
-					let detail = if no_image { s.get("RunErrorNoImage") } else { &message };
-					self.modals.show(Modal::Error(format!("{}\n{detail}", s.get("RunError"))));
+					let text = match &failure {
+						RunFailure::Failed(message) => format!("{}\n{message}", s.get("RunError")),
+						RunFailure::NoImage => format!("{}\n{}", s.get("RunError"), s.get("RunErrorNoImage")),
+						RunFailure::WorkerGone(gone) => gone.message(s),
+					};
+					self.modals.show(Modal::Error(text));
 				}
 				#[cfg(not(target_arch = "wasm32"))]
 				Notice::ExportReady => self.exports.ready(ctx, &mut self.app, &mut self.modals),

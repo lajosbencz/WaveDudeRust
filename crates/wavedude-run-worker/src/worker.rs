@@ -1,6 +1,7 @@
 //! The worker's loop: [`Host::pump`], then the event loop turns so the page's messages and the GPU's callbacks come
 //! in. With work left a message to itself wakes it again; while the run waits (a readback, the device, the
 //! page's acknowledgements, an engine) what it waits for or a message wakes it; once it has no work, a message.
+//! The engine built after the GPU device was lost requests a new one.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -11,8 +12,9 @@ use tracing_subscriber::util::SubscriberInitExt;
 use wasm_bindgen_futures::spawn_local;
 use wavedude_app_state::log::max_level;
 use wavedude_app_state::platform::Duration;
-use wavedude_app_state::remote::Host;
 use wavedude_app_state::remote::web::{WorkerPort, report_panics};
+use wavedude_app_state::remote::{GpuRequest, Host};
+use wavedude_core::engine::GpuHandle;
 use wavedude_core::engine::gpu::GpuContext;
 use wavedude_core::run::Pump;
 use wavedude_core::sync::lock;
@@ -43,11 +45,11 @@ pub(crate) fn start() {
 		move || wake.raise()
 	});
 	spawn_local(async move {
-		let gpu = GpuContext::create().await.map_err(|e| e.to_string());
+		let gpu = request_gpu().await;
 		if let Err(why) = &gpu {
 			tracing::warn!("the run worker has no GPU: {why}");
 		}
-		let mut host = Host::new(port, gpu);
+		let mut host = Host::new(port, gpu, Box::new(|| -> GpuRequest { Box::pin(request_gpu()) }));
 		let again = Again::new(wake.clone());
 		let waker = Waker::from(wake.clone());
 		loop {
@@ -57,6 +59,10 @@ pub(crate) fn start() {
 			wake.wait().await;
 		}
 	});
+}
+
+async fn request_gpu() -> Result<GpuHandle, String> {
+	GpuContext::create().await.map_err(|e| e.to_string())
 }
 
 /// What wakes the loop: a message arrived, the run goes on, or what it waits for is ready.

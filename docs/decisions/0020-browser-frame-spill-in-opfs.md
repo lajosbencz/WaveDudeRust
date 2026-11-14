@@ -30,7 +30,9 @@ asynchronous too and ask more of the user or the code.
 - Each tab holds a Web Lock named after its session while it lives; at load the session folders whose lock is free
   are removed (their tab is gone), so two tabs keep their own frames.
 - The free storage is estimated once at load (`navigator.storage.estimate`); a store whose frames past memory do not
-  fit fails its run at the start, as a full disk does natively. A write refused for quota fails the run.
+  fit fails its run at the first frame the run makes, which the page's store refuses (natively the store fails at
+  the run's start: the run worker's store opens before the page's, which answers no sooner than its first frame).
+  A write refused for quota fails the run.
 - No Web Worker with synchronous access handles until scrubbing spilled frames proves slow: measured, a read takes
   under 1 ms with WebGPU ([`docs/measurements.md`](../measurements.md), The browser's frame spill).
 

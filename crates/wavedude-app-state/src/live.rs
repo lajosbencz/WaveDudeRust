@@ -14,6 +14,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
+use serde::{Deserialize, Serialize};
 use wavedude_core::engine::Snapshot;
 use wavedude_core::engine::gpu::DeviceFrames;
 use wavedude_core::engine::probes::ProbeTrace;
@@ -33,8 +34,10 @@ use wavedude_core::sync::lock;
 use super::commands::ChangeKind;
 use super::platform::Instant;
 use super::playback::{Limit, Playback};
+use super::remote::WorkerGone;
 #[cfg(target_arch = "wasm32")]
 use super::remote::{Remote, web::PagePort};
+use super::strings::Strings;
 
 /// Where the live run is. Called on the UI thread; implementations publish across threads.
 pub trait Backend {
@@ -51,8 +54,12 @@ pub trait Backend {
 	fn discard_frames(&mut self);
 	/// The store budget at `ram_percent` and at Auto, counting `reclaimed` bytes as free.
 	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64);
-	/// "CPU (16 threads)" or `GPU: <name>`.
-	fn engine_name(&self) -> String;
+	/// The engine built last; before the first, the one asked for.
+	fn engine(&self) -> EngineLabel;
+	/// Why the run in another agent runs nothing until the page is reloaded; `None` while it can run.
+	fn worker_gone(&self) -> Option<WorkerGone> {
+		None
+	}
 	/// Takes what a run in another agent sent; a run on a thread of this program publishes without.
 	fn pump(&mut self) {}
 }
@@ -88,11 +95,19 @@ pub enum Notice {
 	Error(String),
 	/// The memory warning asked is void: its edit was replaced; its dialog closes.
 	WarningDropped,
-	/// A run could not start or failed: `no_image` when the scene's image is missing.
-	RunFailed {
-		message: String,
-		no_image: bool,
-	},
+	/// A run could not start or failed.
+	RunFailed(RunFailure),
+}
+
+/// Why a run could not start or failed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RunFailure {
+	/// The run's error, as its message.
+	Failed(String),
+	/// The scene's image is missing.
+	NoImage,
+	/// The run worker is gone: no run starts until the page is reloaded.
+	WorkerGone(WorkerGone),
 }
 
 /// The choice the memory warning's Run applies to the settings.
@@ -462,8 +477,8 @@ impl<B: Backend> LiveController<B> {
 		self.current_store().cloned()
 	}
 
-	pub fn engine_name(&self) -> String {
-		self.backend.engine_name()
+	pub fn engine(&self) -> EngineLabel {
+		self.backend.engine()
 	}
 
 	/// The memory warning waiting for an answer.
@@ -682,8 +697,12 @@ impl<B: Backend> LiveController<B> {
 			&& self.failed.as_ref().is_none_or(|f| !Arc::ptr_eq(f, e))
 		{
 			self.failed = Some(e.clone());
-			let no_image = matches!(**e, RunError::Spec(RunSpecError::NoImage));
-			self.notices.push(Notice::RunFailed { message: e.to_string(), no_image });
+			let failure = match (self.backend.worker_gone(), &**e) {
+				(Some(gone), _) => RunFailure::WorkerGone(gone),
+				(None, RunError::Spec(RunSpecError::NoImage)) => RunFailure::NoImage,
+				(None, e) => RunFailure::Failed(e.to_string()),
+			};
+			self.notices.push(Notice::RunFailed(failure));
 		}
 		if matches!(self.status.state, WorkState::Failed(_)) {
 			self.drop_waiting_export();
@@ -839,8 +858,11 @@ impl<B: Backend> LiveController<B> {
 		}
 	}
 
-	/// F5 / Run: every frame from frame 0, followed.
+	/// F5 / Run: every frame from frame 0, followed. With the run worker gone, the next tick says so again.
 	pub fn run_user(&mut self, project: &Project, now: Instant) -> bool {
+		if self.backend.worker_gone().is_some() {
+			self.failed = None;
+		}
 		if self.request().is_none() {
 			self.respec(project);
 		}
@@ -1001,7 +1023,7 @@ pub struct CoreBackend {
 	/// Where the budgets' memory readings come from.
 	memory: Memory,
 	/// The label of the engine built last.
-	built: Arc<Mutex<Option<String>>>,
+	built: Arc<Mutex<Option<EngineLabel>>>,
 }
 
 /// The core's live run in the browser's run worker ([`crate::remote`]), on its GPU by the Use the GPU setting.
@@ -1020,14 +1042,54 @@ pub const MAX_WEB_FRAME_BYTES: u64 = 2 << 30;
 #[cfg(target_arch = "wasm32")]
 const RUN_WORKER: &str = "run-worker.js";
 
-/// The label of the engine on the GPU named `gpu`, or of the CPU's. A WebGPU adapter has no name.
-pub fn engine_label(gpu: Option<&str>) -> String {
-	match gpu {
-		Some("") => "GPU: WebGPU".into(),
-		Some(name) => format!("GPU: {name}"),
-		None => {
-			let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
-			format!("CPU ({threads} threads)")
+/// The engine a run uses, as the status bar and About name it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EngineLabel {
+	/// The browser's run worker has not started yet.
+	Starting,
+	/// The browser's run worker is gone before it built one.
+	Missing,
+	/// The GPU's on a WebGPU adapter, which has no name.
+	WebGpu,
+	/// The GPU's on the adapter of this name.
+	Gpu(String),
+	/// The CPU engine on this many threads.
+	Cpu { threads: usize },
+}
+
+impl EngineLabel {
+	/// The engine on the GPU named `gpu`, or the CPU's on the threads this agent has.
+	pub fn of(gpu: Option<&str>) -> Self {
+		match gpu {
+			Some("") => Self::WebGpu,
+			Some(name) => Self::Gpu(name.to_owned()),
+			None => Self::Cpu { threads: std::thread::available_parallelism().map_or(1, std::num::NonZero::get) },
+		}
+	}
+
+	/// The label in the language of `s`.
+	pub fn text(&self, s: &Strings) -> String {
+		match self {
+			Self::Starting => s.get("EngineStarting").to_owned(),
+			Self::Missing => s.get("EngineNone").to_owned(),
+			Self::WebGpu => s.get("EngineWebGpu").to_owned(),
+			Self::Gpu(name) => s.format("EngineGpuFormat", &[name]),
+			Self::Cpu { threads: 1 } => s.get("EngineCpuOne").to_owned(),
+			Self::Cpu { threads } => s.format("EngineCpuManyFormat", &[threads]),
+		}
+	}
+}
+
+/// English, for the log.
+impl std::fmt::Display for EngineLabel {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Starting => write!(f, "engine starting"),
+			Self::Missing => write!(f, "no engine"),
+			Self::WebGpu => write!(f, "GPU: WebGPU"),
+			Self::Gpu(name) => write!(f, "GPU: {name}"),
+			Self::Cpu { threads: 1 } => write!(f, "CPU (1 thread)"),
+			Self::Cpu { threads } => write!(f, "CPU ({threads} threads)"),
 		}
 	}
 }
@@ -1051,13 +1113,13 @@ impl CoreBackend {
 	/// `use_gpu`, shared with the settings.
 	#[cfg(not(target_arch = "wasm32"))]
 	pub fn new(use_gpu: Arc<AtomicBool>, cache_dir: PathBuf, memory: Memory) -> std::io::Result<Self> {
-		let (gpu, built) = (use_gpu.clone(), Arc::<Mutex<Option<String>>>::default());
+		let (gpu, built) = (use_gpu.clone(), Arc::<Mutex<Option<EngineLabel>>>::default());
 		let label = built.clone();
 		let scene: Arc<Mutex<SceneCache>> = Arc::default();
 		let worker = RunWorker::with_memory(
 			Box::new(move |scene, options| {
 				let e = build_engine(scene, options, gpu.load(Ordering::Relaxed));
-				*lock(&label) = Some(engine_label(gpu_name().filter(|_| e.is_gpu()).as_deref()));
+				*lock(&label) = Some(EngineLabel::of(gpu_name().filter(|_| e.is_gpu()).as_deref()));
 				e
 			}),
 			cache_dir,
@@ -1119,12 +1181,11 @@ impl Backend for CoreBackend {
 		(Budget::compute(self.memory, reclaimed, ram_percent), Budget::compute(self.memory, reclaimed, 0))
 	}
 
-	/// The engine built last; before the first, the one asked for.
-	fn engine_name(&self) -> String {
+	fn engine(&self) -> EngineLabel {
 		if let Some(label) = &*lock(&self.built) {
 			return label.clone();
 		}
-		engine_label(gpu_name().filter(|_| self.use_gpu.load(Ordering::Relaxed)).as_deref())
+		EngineLabel::of(gpu_name().filter(|_| self.use_gpu.load(Ordering::Relaxed)).as_deref())
 	}
 }
 
@@ -1162,8 +1223,12 @@ impl Backend for CoreBackend {
 		self.remote.budgets(ram_percent, reclaimed)
 	}
 
-	fn engine_name(&self) -> String {
-		self.remote.engine_name()
+	fn engine(&self) -> EngineLabel {
+		self.remote.engine()
+	}
+
+	fn worker_gone(&self) -> Option<WorkerGone> {
+		self.remote.worker_gone()
 	}
 
 	fn pump(&mut self) {
@@ -1383,8 +1448,8 @@ pub mod fake {
 			self.budgets.unwrap_or((u64::MAX, u64::MAX))
 		}
 
-		fn engine_name(&self) -> String {
-			"fake".into()
+		fn engine(&self) -> super::EngineLabel {
+			super::EngineLabel::Cpu { threads: 1 }
 		}
 	}
 }
@@ -1962,15 +2027,19 @@ mod tests {
 		fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64) {
 			self.inner.budgets(ram_percent, reclaimed)
 		}
-		fn engine_name(&self) -> String {
-			"delayed".into()
+		fn engine(&self) -> EngineLabel {
+			self.inner.engine()
 		}
 	}
 
 	#[test]
-	fn a_gpu_without_a_name_labels_as_webgpu() {
-		assert_eq!(engine_label(Some("")), "GPU: WebGPU");
-		assert_eq!(engine_label(Some("RTX")), "GPU: RTX");
+	fn a_gpu_without_a_name_labels_as_webgpu_and_one_thread_is_singular() {
+		let s = Strings::new(crate::strings::Language::English);
+		assert_eq!(EngineLabel::of(Some("")).text(&s), "GPU: WebGPU");
+		assert_eq!(EngineLabel::of(Some("RTX")).text(&s), "GPU: RTX");
+		assert_eq!(EngineLabel::Cpu { threads: 1 }.text(&s), "CPU (1 thread)");
+		assert_eq!(EngineLabel::Cpu { threads: 8 }.text(&s), "CPU (8 threads)");
+		assert_eq!(EngineLabel::Cpu { threads: 1 }.to_string(), "CPU (1 thread)");
 	}
 
 	#[test]

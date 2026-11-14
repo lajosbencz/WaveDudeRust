@@ -31,6 +31,8 @@ pub(super) struct MemoryWarning {
 	cache: String,
 	/// What the ticks give, renewed when they change.
 	result: String,
+	/// The usage bar's label for each choice of ticks open to the user, so the bar keeps its width.
+	usages: Vec<String>,
 }
 
 impl MemoryWarning {
@@ -49,7 +51,26 @@ impl MemoryWarning {
 			),
 			cache: s.format("MemoryWarningCacheFormat", &[&bytes_text(w.auto_budget)]),
 			result: String::new(),
+			usages: Vec::new(),
 		};
+		let open = |l: Levers| {
+			let fixed = |enabled: bool, on: bool, proposed: bool| enabled || on == proposed;
+			let e = dialog.enabled;
+			fixed(e.cache_auto, l.cache_auto, levers.cache_auto)
+				&& fixed(e.resolution, l.resolution, levers.resolution)
+				&& fixed(e.frames, l.frames, levers.frames)
+				&& fixed(e.samples, l.samples, levers.samples)
+		};
+		dialog.usages = (0..16u8)
+			.map(|bits| Levers {
+				cache_auto: bits & 1 != 0,
+				resolution: bits & 2 != 0,
+				frames: bits & 4 != 0,
+				samples: bits & 8 != 0,
+			})
+			.filter(|&l| open(l))
+			.map(|l| usage(w.bytes_of(l), w.budget_of(l)))
+			.collect();
 		dialog.result = dialog.result_of(app)?;
 		Some(dialog)
 	}
@@ -94,7 +115,7 @@ impl MemoryWarning {
 			self.result = result;
 		}
 		if let Some(w) = app.live.warning() {
-			usage_bar(ui, w.bytes_of(self.levers), w.budget_of(self.levers));
+			usage_bar(ui, w.bytes_of(self.levers), w.budget_of(self.levers), &self.usages);
 		}
 		ui.add(egui::Label::new(RichText::new(self.result.as_str()).color(dim)).wrap());
 		if let Some(v) = check_box(ui, Id::unique("MemoryWarningMute"), s.get("MemoryWarningMute"), self.mute) {
@@ -111,15 +132,25 @@ impl MemoryWarning {
 	}
 }
 
+/// The usage bar's label.
+fn usage(need: u64, budget: u64) -> String {
+	format!("{} / {}", bytes_text(need), bytes_text(budget))
+}
+
 /// The frames' `need` against the RAM cache's `budget`: the bar is the budget, full and in the warning colour when
-/// the need exceeds it.
-fn usage_bar(ui: &mut Ui, need: u64, budget: u64) {
+/// the need exceeds it. The label takes the width of the widest of `labels`.
+fn usage_bar(ui: &mut Ui, need: u64, budget: u64, labels: &[String]) {
 	let palette = Palette::of(ui.ctx().theme());
 	let fill = if need <= budget { palette.accent } else { palette.level_warn };
 	let share = if budget == 0 { 1. } else { (need as f64 / budget as f64).min(1.) as f32 };
 	let row = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+	let font = egui::TextStyle::Body.resolve(ui.style());
+	let width = labels
+		.iter()
+		.map(|l| ui.painter().layout_no_wrap(l.clone(), font.clone(), palette.text).size().x)
+		.fold(0., f32::max);
 	ui.allocate_ui_with_layout(row, egui::Layout::right_to_left(egui::Align::Center), |ui| {
-		ui.label(format!("{} / {}", bytes_text(need), bytes_text(budget)));
+		ui.add_sized([width, row.y], egui::Label::new(usage(need, budget)));
 		ui.add(egui::ProgressBar::new(share).fill(fill));
 	});
 }

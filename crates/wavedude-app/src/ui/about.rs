@@ -52,7 +52,7 @@ fn system_lines(app: &App) -> String {
 		format!("{}: {} {}", s.get("AboutOperatingSystem"), std::env::consts::OS, std::env::consts::ARCH),
 		format!("{}: {threads} {}", s.get("AboutProcessor"), s.get("AboutCores")),
 		format!("{}: {gpu}", s.get("AboutGpuSetting")),
-		format!("{}: {}", s.get("AboutEngine"), app.live.engine_name()),
+		format!("{}: {}", s.get("AboutEngine"), app.live.engine().text(s)),
 	];
 	lines.into_iter().chain(h264).collect::<Vec<_>>().join("\n")
 }

@@ -1,9 +1,12 @@
 //! The run worker's end: a pumped [`RunWorker`] whose stores keep no frame in memory. Their spill ([`PostSpill`])
 //! queues each store opened and each frame written; after each pump the host posts the queue and completes a
-//! frame's write when the page acknowledges it.
+//! frame's write when the page acknowledges it. The engine built after the GPU device was lost gets a new device.
+//! A page of another protocol version is not listened to.
 
 use std::collections::{HashMap, VecDeque};
+use std::future::Future;
 use std::io;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
@@ -16,13 +19,46 @@ use wavedude_core::run::{
 };
 use wavedude_core::sync::lock;
 
-use super::protocol::{Failure, Layout, RunStatus, State, ToPage, ToWorker, Trace};
-use super::{Envelope, Port, decode, post};
-use crate::live::engine_label;
+use super::protocol::{Failure, Layout, RunStatus, State, ToPage, ToWorker, Trace, VERSION};
+use super::{Envelope, Port, decode, post, version_of};
+use crate::live::EngineLabel;
 use crate::platform::{Duration, Instant};
 
 /// The most often progress is posted; a change of state is posted at once.
 const STATUS_EVERY: Duration = Duration::from_millis(33);
+
+/// A GPU device on its way, or why there is none.
+#[cfg(target_arch = "wasm32")]
+pub type GpuRequest = Pin<Box<dyn Future<Output = Result<GpuHandle, String>>>>;
+/// A GPU device on its way, or why there is none.
+#[cfg(not(target_arch = "wasm32"))]
+pub type GpuRequest = Pin<Box<dyn Future<Output = Result<GpuHandle, String>> + Send>>;
+
+/// Requests a new GPU device.
+#[cfg(target_arch = "wasm32")]
+pub type RequestGpu = Box<dyn Fn() -> GpuRequest>;
+/// Requests a new GPU device.
+#[cfg(not(target_arch = "wasm32"))]
+pub type RequestGpu = Box<dyn Fn() -> GpuRequest + Send + Sync>;
+
+/// The engines' GPU device, requested anew once lost.
+struct Gpu {
+	request: RequestGpu,
+	/// The device, or why there is none; a failed request is kept.
+	device: Mutex<Result<GpuHandle, String>>,
+}
+
+impl Gpu {
+	/// The device; a new one when it was lost.
+	async fn device(&self) -> Result<GpuHandle, String> {
+		let held = lock(&self.device).clone();
+		let Some(lost) = held.as_ref().ok().and_then(|ctx| ctx.lost()) else { return held };
+		tracing::warn!("{lost}; a new GPU device is requested");
+		let fresh = (self.request)().await;
+		*lock(&self.device) = fresh.clone();
+		fresh
+	}
+}
 
 /// What the run made since the host last posted, in order.
 type Queue = VecDeque<Item>;
@@ -30,7 +66,7 @@ type Queue = VecDeque<Item>;
 enum Item {
 	Store { id: u64, layout: Layout },
 	Frame { store: u64, generation: u64, frame: usize, planes: Vec<u8>, write: Token<()> },
-	Engine { name: String, fallback: Option<String> },
+	Engine { engine: EngineLabel, fallback: Option<String> },
 }
 
 /// The worker's stores' spills: each frame to the page.
@@ -89,22 +125,28 @@ pub struct Host<P: Port> {
 	/// The run's failure last seen and how many there were.
 	failed: Option<Arc<RunError>>,
 	failures: u64,
-	/// The trace readings posted, (series, profiles) per probe, and what they belong to:
-	/// (revision adopted, store, generation, failures).
+	/// The trace readings posted, (series, profiles) per probe, and the traces' start they belong to.
 	traced: Vec<(usize, usize)>,
-	traced_for: Option<(u64, Option<u64>, u64, u64)>,
+	traced_for: Option<u64>,
+	/// The page speaks another protocol version: its messages are dropped.
+	deaf: bool,
 }
 
 impl<P: Port> Host<P> {
-	/// A host posting to `port`, its GPU engines on `gpu` (or why there is none); posts
-	/// [`ToPage::Ready`].
-	pub fn new(port: P, gpu: Result<GpuHandle, String>) -> Self {
+	/// A host posting to `port`, its GPU engines on `gpu` (or why there is none) and on a device of `request`
+	/// once that is lost; posts [`ToPage::Ready`].
+	pub fn new(port: P, gpu: Result<GpuHandle, String>, request: RequestGpu) -> Self {
 		let queue = Arc::<Mutex<Queue>>::default();
 		let use_gpu = Arc::new(AtomicBool::new(false));
 		let ready = gpu.as_ref().map(|ctx| ctx.info.name.clone()).map_err(Clone::clone);
+		#[cfg_attr(
+			target_arch = "wasm32",
+			allow(clippy::arc_with_non_send_sync, reason = "wgpu's types are not Send there")
+		)]
+		let gpu = Arc::new(Gpu { request, device: Mutex::new(gpu) });
 		let factory = engines(gpu, use_gpu.clone(), queue.clone());
 		let worker = RunWorker::pumped(factory, 0, Box::new(PostSpill(queue.clone())), Arc::default());
-		post(&port, &ToPage::Ready { gpu: ready }, None);
+		post(&port, &ToPage::Ready { version: VERSION, gpu: ready }, None);
 		Self {
 			port,
 			worker,
@@ -118,6 +160,7 @@ impl<P: Port> Host<P> {
 			failures: 0,
 			traced: Vec::new(),
 			traced_for: None,
+			deaf: false,
 		}
 	}
 
@@ -140,9 +183,16 @@ impl<P: Port> Host<P> {
 	}
 
 	fn handle(&mut self, envelope: Envelope) {
+		if let Some(version) = version_of(&envelope).filter(|&v| v != VERSION) {
+			tracing::error!("the page speaks protocol version {version}, this worker {VERSION}: it is not listened to");
+			self.deaf = true;
+		}
+		if self.deaf {
+			return;
+		}
 		let message: ToWorker = decode(&envelope).expect("the page posts messages of the protocol");
 		match message {
-			ToWorker::Init { use_gpu } => self.use_gpu.store(use_gpu, Ordering::Relaxed),
+			ToWorker::Init { version: _, use_gpu } => self.use_gpu.store(use_gpu, Ordering::Relaxed),
 			ToWorker::Image { key } => {
 				self.image = Some((key, envelope.buffer.expect("an image comes with its bytes").into()));
 			}
@@ -200,7 +250,7 @@ impl<P: Port> Host<P> {
 			.as_ref()
 			.is_some_and(|(before, at)| *before != status && (!more || at.elapsed() >= STATUS_EVERY));
 		if urgent || due {
-			self.post_traces(&status);
+			self.post_traces();
 			post(&self.port, &ToPage::Status(status.clone()), None);
 			self.posted = Some((status, Instant::now()));
 		}
@@ -220,7 +270,7 @@ impl<P: Port> Host<P> {
 					post(&self.port, &ToPage::Frame { store, generation, frame }, Some(planes));
 					self.unacked.insert((store, generation, frame), write);
 				}
-				Item::Engine { name, fallback } => post(&self.port, &ToPage::EngineBuilt { name, fallback }, None),
+				Item::Engine { engine, fallback } => post(&self.port, &ToPage::EngineBuilt { engine, fallback }, None),
 			}
 		}
 	}
@@ -249,19 +299,17 @@ impl<P: Port> Host<P> {
 		}
 	}
 
-	/// Posts the readings since the last; everything, with the held traces, when the traces may have started
-	/// over: a new revision, store, generation or failure.
-	fn post_traces(&mut self, status: &RunStatus) {
-		let owner = (status.adopted, status.store, status.generation, self.failures);
-		let restart = self.traced_for != Some(owner);
-		self.traced_for = Some(owner);
-		let traced = &mut self.traced;
-		let tails: Vec<Trace> = self.worker.with_traces(|traces| {
+	/// Posts the readings since the last; everything, with the held traces, when the traces started over.
+	fn post_traces(&mut self) {
+		let (traced, traced_for) = (&mut self.traced, &mut self.traced_for);
+		let (restart, tails): (bool, Vec<Trace>) = self.worker.with_traces_started(|start, traces| {
+			let restart = *traced_for != Some(start);
+			*traced_for = Some(start);
 			if restart {
 				*traced = vec![(0, 0); traces.len()];
 			}
-			debug_assert_eq!(traced.len(), traces.len(), "the probes change with the revision");
-			traces
+			debug_assert_eq!(traced.len(), traces.len(), "the probes change as the traces start over");
+			let tails = traces
 				.iter()
 				.zip(traced.iter_mut())
 				.map(|(t, (series, profiles))| {
@@ -269,7 +317,8 @@ impl<P: Port> Host<P> {
 					(*series, *profiles) = (t.series.len(), t.profiles.len());
 					tail
 				})
-				.collect()
+				.collect();
+			(restart, tails)
 		});
 		let held = restart.then(|| self.worker.with_held_traces(|h| h.iter().map(|t| Trace::tail(t, 0, 0)).collect()));
 		if held.is_some() || !tails.is_empty() {
@@ -278,24 +327,25 @@ impl<P: Port> Host<P> {
 	}
 }
 
-/// Engines on `gpu` while `use_gpu` holds, else the CPU's; each one built is queued for the page.
-fn engines(gpu: Result<GpuHandle, String>, use_gpu: Arc<AtomicBool>, queue: Arc<Mutex<Queue>>) -> PumpedFactory {
+/// Engines on `gpu`'s device while `use_gpu` holds, else the CPU's; each one built is queued for the page, which
+/// logs why the CPU's runs in place of the GPU's.
+fn engines(gpu: Arc<Gpu>, use_gpu: Arc<AtomicBool>, queue: Arc<Mutex<Queue>>) -> PumpedFactory {
 	Box::new(move |scene, options| -> EngineFuture {
 		let (gpu, use_gpu, queue) = (gpu.clone(), use_gpu.load(Ordering::Relaxed), queue.clone());
 		Box::pin(async move {
-			let (device, refused) = match gpu {
-				Ok(ctx) if use_gpu => (Some(ctx), None),
-				Err(why) if use_gpu => {
-					tracing::warn!("the GPU engine is not available ({why}); the CPU engine runs instead");
-					(None, Some(why))
+			let (device, refused) = if use_gpu {
+				match gpu.device().await {
+					Ok(ctx) => (Some(ctx), None),
+					Err(why) => (None, Some(why)),
 				}
-				_ => (None, None),
+			} else {
+				(None, None)
 			};
 			let name = device.as_ref().map(|ctx| ctx.info.name.clone());
 			let Built { engine, fallback } = build_on(scene, options, device).await;
 			crate::log::engine_built(engine.name(), engine.scene(), engine.options(), engine.sub_steps());
 			let item = Item::Engine {
-				name: engine_label(name.filter(|_| engine.is_gpu()).as_deref()),
+				engine: EngineLabel::of(name.filter(|_| engine.is_gpu()).as_deref()),
 				fallback: fallback.map(|f| f.to_string()).or(refused),
 			};
 			lock(&queue).push_back(item);

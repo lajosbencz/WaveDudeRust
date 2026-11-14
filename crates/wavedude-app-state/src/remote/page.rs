@@ -1,7 +1,8 @@
 //! The page's end: a live-run [`Backend`] whose frames land in a mirror of the worker's store, which holds them
 //! in memory up to the budget and spills the rest through the page's [`SpillFactory`]. A frame is acknowledged
 //! once the mirror holds it: at once in memory, when its spill write completed otherwise; a spilled frame of a
-//! store or generation the worker left is acknowledged at once.
+//! store or generation the worker left is acknowledged at once. A worker lost, or of another protocol version,
+//! fails every run until the page is reloaded; nothing is posted to it any more.
 
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,9 +17,9 @@ use wavedude_core::run::{
 use wavedude_core::scene::compose::image_key;
 use wavedude_core::sync::lock;
 
-use super::protocol::{Layout, RunStatus, State, ToPage, ToWorker, Trace};
-use super::{Port, decode, post};
-use crate::live::{Backend, engine_label};
+use super::protocol::{Layout, Lost, RunStatus, State, ToPage, ToWorker, Trace, VERSION};
+use super::{Port, WorkerGone, decode, post, version_of};
+use crate::live::{Backend, EngineLabel};
 
 /// (store, generation, frame).
 type FrameKey = (u64, u64, usize);
@@ -84,6 +85,16 @@ struct Mirror {
 	store: Result<Arc<FrameStore>, String>,
 }
 
+/// Where the page is with its worker.
+enum Worker {
+	/// It has not said [`ToPage::Ready`] yet.
+	Starting,
+	/// Ready: its GPU adapter's name, or why it has none.
+	Ready(Result<String, String>),
+	/// Gone for good: why, and the failure every run reads.
+	Gone(WorkerGone, Arc<RunError>),
+}
+
 /// The live run in the browser's run worker, behind a [`Port`].
 pub struct Remote<P: Port> {
 	port: P,
@@ -91,10 +102,9 @@ pub struct Remote<P: Port> {
 	/// The memory the mirror's frames share by the RAM cache size.
 	frame_memory: u64,
 	spill: Watching,
-	/// The worker's GPU adapter's name, or why it has none.
-	gpu: Option<Result<String, String>>,
+	worker: Worker,
 	/// The label of the engine built last and why the CPU's runs in place of the GPU's.
-	engine: Option<(String, Option<String>)>,
+	engine: Option<(EngineLabel, Option<String>)>,
 	/// The key of the scene image posted last.
 	image: Option<u64>,
 	ram_percent: u32,
@@ -102,7 +112,6 @@ pub struct Remote<P: Port> {
 	status: RunStatus,
 	/// The worker's failure in force, by its number.
 	failure: Option<(u64, Arc<RunError>)>,
-	crashed: Option<Arc<RunError>>,
 	traces: Vec<ProbeTrace>,
 	held: Vec<ProbeTrace>,
 	fit: Option<FitFrame>,
@@ -114,20 +123,19 @@ impl<P: Port> Remote<P> {
 	/// A run behind `port` on the GPU while `use_gpu` holds (shared with the settings), its frames in
 	/// `frame_memory` bytes by the RAM cache size and the rest in a spill of `spill`; posts [`ToWorker::Init`].
 	pub fn new(port: P, use_gpu: Arc<AtomicBool>, frame_memory: u64, spill: Box<dyn SpillFactory>) -> Self {
-		post(&port, &ToWorker::Init { use_gpu: use_gpu.load(Ordering::Relaxed) }, None);
+		post(&port, &ToWorker::Init { version: VERSION, use_gpu: use_gpu.load(Ordering::Relaxed) }, None);
 		Self {
 			port,
 			use_gpu,
 			frame_memory,
 			spill: Watching { spill, writes: Watches::default() },
-			gpu: None,
+			worker: Worker::Starting,
 			engine: None,
 			image: None,
 			ram_percent: 0,
 			mirror: None,
 			status: RunStatus::default(),
 			failure: None,
-			crashed: None,
 			traces: Vec::new(),
 			held: Vec::new(),
 			fit: None,
@@ -135,21 +143,36 @@ impl<P: Port> Remote<P> {
 		}
 	}
 
-	/// Why the engine built last is the CPU's where the GPU's was asked for.
-	pub fn fallback(&self) -> Option<&str> {
-		self.engine.as_ref().and_then(|(_, why)| why.as_deref())
+	/// Why the worker runs nothing until the page is reloaded.
+	pub fn worker_gone(&self) -> Option<WorkerGone> {
+		match &self.worker {
+			Worker::Gone(gone, _) => Some(gone.clone()),
+			_ => None,
+		}
+	}
+
+	/// Posts to the worker, unless it is gone.
+	fn send(&self, message: &ToWorker, buffer: Option<Vec<u8>>) {
+		if !matches!(self.worker, Worker::Gone(..)) {
+			post(&self.port, message, buffer);
+		}
 	}
 
 	/// Handles the messages waiting; a store's opening waits for the spill to answer.
 	fn receive(&mut self) {
-		while self.crashed.is_none() {
+		while !matches!(self.worker, Worker::Gone(..)) {
 			let (message, buffer) = match self.waiting.take() {
 				Some(waiting) => waiting,
 				None => {
 					let Some(envelope) = self.port.receive() else { return };
+					if matches!(self.worker, Worker::Starting)
+						&& let Some(worker) = version_of(&envelope).filter(|&v| v != VERSION)
+					{
+						return self.gone(WorkerGone::OtherVersion { page: VERSION, worker });
+					}
 					match decode(&envelope) {
 						Ok(message) => (message, envelope.buffer),
-						Err(e) => return self.crash(format!("an unreadable message: {e}")),
+						Err(e) => return self.lose(Lost::Broken(format!("an unreadable message: {e}"))),
 					}
 				}
 			};
@@ -166,22 +189,25 @@ impl<P: Port> Remote<P> {
 
 	fn handle(&mut self, message: ToPage, buffer: Option<Vec<u8>>) {
 		match message {
-			ToPage::Ready { gpu } => {
+			ToPage::Ready { version: _, gpu } => {
 				match &gpu {
-					Ok(name) => tracing::info!("the run worker started, {}", engine_label(Some(name))),
+					Ok(name) => tracing::info!("the run worker started, {}", EngineLabel::of(Some(name))),
 					Err(why) => tracing::info!("the run worker started without a GPU: {why}"),
 				}
-				self.gpu = Some(gpu);
+				self.worker = Worker::Ready(gpu);
 			}
-			ToPage::EngineBuilt { name, fallback } => {
-				if let Some(why) = &fallback {
+			ToPage::EngineBuilt { engine, fallback } => {
+				let before = self.engine.as_ref().and_then(|(_, why)| why.as_ref());
+				if let Some(why) = fallback.as_ref().filter(|&why| before != Some(why)) {
 					tracing::warn!("the GPU engine is not available ({why}); the CPU engine runs instead");
 				}
-				self.engine = Some((name, fallback));
+				self.engine = Some((engine, fallback));
 			}
 			ToPage::StoreOpened { id, layout } => self.open(id, layout),
 			ToPage::Frame { store, generation, frame } => {
-				let Some(planes) = buffer else { return self.crash(format!("frame {frame} came without planes")) };
+				let Some(planes) = buffer else {
+					return self.lose(Lost::Broken(format!("frame {frame} came without planes")));
+				};
 				self.land(store, generation, frame, planes);
 			}
 			ToPage::Status(status) => {
@@ -206,13 +232,13 @@ impl<P: Port> Remote<P> {
 			}
 			ToPage::Fit { id, frame, step, shape } => {
 				let Some(mut field) = buffer else {
-					return self.crash(format!("fit frame {frame} came without planes"));
+					return self.lose(Lost::Broken(format!("fit frame {frame} came without planes")));
 				};
 				let intensity = field.split_off(shape.plane_bytes().min(field.len()));
 				let snapshot = Arc::new(Snapshot { shape, step, field, intensity });
 				self.fit = Some(FitFrame { id, frame, snapshot });
 			}
-			ToPage::Crashed(why) => self.crash(why),
+			ToPage::Lost(lost) => self.lose(lost),
 		}
 	}
 
@@ -280,13 +306,22 @@ impl<P: Port> Remote<P> {
 	}
 
 	fn ack(&self, (store, generation, frame): FrameKey, result: Result<(), String>) {
-		post(&self.port, &ToWorker::Ack { store, generation, frame, result }, None);
+		self.send(&ToWorker::Ack { store, generation, frame, result }, None);
 	}
 
-	/// The run is over for good: the worker is gone.
-	fn crash(&mut self, why: String) {
-		tracing::error!("the run worker failed: {why}");
-		self.crashed = Some(Arc::new(RunError::Worker(why)));
+	/// The worker is lost: it did not start, or stopped once ready.
+	fn lose(&mut self, lost: Lost) {
+		self.gone(match self.worker {
+			Worker::Starting => WorkerGone::NotStarted(lost),
+			_ => WorkerGone::Stopped(lost),
+		});
+	}
+
+	/// No run starts again.
+	fn gone(&mut self, gone: WorkerGone) {
+		tracing::error!("{gone}");
+		let failure = Arc::new(RunError::Worker(gone.to_string()));
+		self.worker = Worker::Gone(gone, failure);
 	}
 }
 
@@ -325,21 +360,21 @@ impl<P: Port> Backend for Remote<P> {
 		if let Some(key) = image.filter(|&k| self.image != Some(k)) {
 			let project = &goal.run.as_ref().expect("an image key comes from a run").project;
 			let bytes = project.scene.image_data.as_deref().expect("an image key has its bytes");
-			post(&self.port, &ToWorker::Image { key }, Some(bytes.to_vec()));
+			self.send(&ToWorker::Image { key }, Some(bytes.to_vec()));
 			self.image = Some(key);
 		}
-		post(&self.port, &ToWorker::Goal { goal, image }, None);
+		self.send(&ToWorker::Goal { goal, image }, None);
 	}
 
 	fn status(&self) -> Status {
 		let s = &self.status;
-		let state = match (&self.crashed, &s.state) {
-			(Some(e), _) => WorkState::Failed(e.clone()),
-			(None, State::Idle) => WorkState::Idle,
-			(None, State::Stepping { target }) => WorkState::Stepping { target: *target },
-			(None, State::Fitting) => WorkState::Fitting,
-			(None, State::Paused) => WorkState::Paused,
-			(None, State::Failed { .. }) => {
+		let state = match (&self.worker, &s.state) {
+			(Worker::Gone(_, e), _) => WorkState::Failed(e.clone()),
+			(_, State::Idle) => WorkState::Idle,
+			(_, State::Stepping { target }) => WorkState::Stepping { target: *target },
+			(_, State::Fitting) => WorkState::Fitting,
+			(_, State::Paused) => WorkState::Paused,
+			(_, State::Failed { .. }) => {
 				WorkState::Failed(self.failure.as_ref().expect("a failure is recorded as it arrives").1.clone())
 			}
 		};
@@ -367,24 +402,34 @@ impl<P: Port> Backend for Remote<P> {
 	}
 
 	fn engine_changed(&mut self) {
-		post(&self.port, &ToWorker::Rebuild { use_gpu: self.use_gpu.load(Ordering::Relaxed) }, None);
+		self.send(&ToWorker::Rebuild { use_gpu: self.use_gpu.load(Ordering::Relaxed) }, None);
 	}
 
 	fn discard_frames(&mut self) {
-		post(&self.port, &ToWorker::Discard, None);
+		self.send(&ToWorker::Discard, None);
 	}
 
 	fn budgets(&self, ram_percent: u32, _reclaimed: u64) -> (u64, u64) {
 		(Budget::of_memory(self.frame_memory, ram_percent), Budget::of_memory(self.frame_memory, 0))
 	}
 
-	/// The engine built last; before the first, the one asked for.
-	fn engine_name(&self) -> String {
-		if let Some((name, _)) = &self.engine {
-			return name.clone();
+	/// The engine built last; before the first, the one asked for, once the worker is ready.
+	fn engine(&self) -> EngineLabel {
+		if let Some((engine, _)) = &self.engine {
+			return engine.clone();
 		}
-		let gpu = self.gpu.as_ref().and_then(|g| g.as_ref().ok()).filter(|_| self.use_gpu.load(Ordering::Relaxed));
-		engine_label(gpu.map(String::as_str))
+		match &self.worker {
+			Worker::Starting => EngineLabel::Starting,
+			Worker::Ready(gpu) => {
+				let gpu = gpu.as_ref().ok().filter(|_| self.use_gpu.load(Ordering::Relaxed));
+				EngineLabel::of(gpu.map(String::as_str))
+			}
+			Worker::Gone(..) => EngineLabel::Missing,
+		}
+	}
+
+	fn worker_gone(&self) -> Option<WorkerGone> {
+		Remote::worker_gone(self)
 	}
 
 	/// Handles the messages waiting and the mirror's spill writes done.

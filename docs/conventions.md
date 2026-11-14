@@ -58,8 +58,9 @@ push. What they hold the code to:
   a mirror store and acknowledging each once held, both over a `Port` (`Loopback` in the tests,
   [`crates/wavedude-app-state/tests/remote.rs`](../crates/wavedude-app-state/tests/remote.rs); in the browser
   `remote::web`'s `PagePort` and `WorkerPort` over `postMessage`, which wake their owners as messages arrive).
-  The browser's `CoreBackend` is a `Remote` on the run worker; a worker that fails to load, crashes or stays
-  silent fails the run with its reason, and nothing runs on the page. Depends on core
+  The browser's `CoreBackend` is a `Remote` on the run worker; a worker that fails to load, crashes, stays
+  silent or speaks another protocol version (`protocol::VERSION`) fails every run with its reason (`WorkerGone`)
+  until the page is reloaded, and nothing runs on the page. Depends on core
   (with `serde`), export (no default features, native only) and examples; no egui, no rfd
   ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
 - `wavedude-app`: egui views on eframe, natively and in the browser ([`tools/build-web.sh`](../tools/build-web.sh)),
@@ -70,7 +71,8 @@ push. What they hold the code to:
   [`ui/`](../crates/wavedude-app/src/ui/); what a view computes without a window is in the crate's top-level modules
   (`preview`, `menus`), tested without one. Depends on all of the above ([decision 0019](decisions/0019-egui-and-the-platform-layer.md)).
 - `wavedude-run-worker`: binary only, the browser's run worker (decision 0024): logging to the console, its
-  panics posted to the page, a WebGPU device of its own and app-state's `Host` on a `WorkerPort`, pumped in 8 ms
+  panics posted to the page, a WebGPU device of its own (requested again after a loss) and app-state's `Host` on a
+  `WorkerPort`, pumped in 8 ms
   slices, the event loop turning between pumps: again at once while the run has work, else asleep until what it waits
   for is ready or a message arrives
   ([`crates/wavedude-run-worker/src/worker.rs`](../crates/wavedude-run-worker/src/worker.rs)); `run-worker.js` loads it. Natively the binary only

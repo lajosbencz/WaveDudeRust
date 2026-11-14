@@ -11,7 +11,7 @@ use web_sys::wasm_bindgen::closure::Closure;
 use web_sys::wasm_bindgen::{JsCast, JsValue};
 use web_sys::{DedicatedWorkerGlobalScope, ErrorEvent, Event, MessageEvent, Worker, WorkerOptions, WorkerType};
 
-use super::protocol::ToPage;
+use super::protocol::{Lost, ToPage};
 use super::{Envelope, Port, envelope, hold};
 use crate::platform::Duration;
 
@@ -83,15 +83,15 @@ impl Timer {
 
 impl PagePort {
 	/// Starts the module worker at `url`; `on_message` is called as a message arrives. A worker that cannot be
-	/// made, fails to load, stops, or does not speak within [`READY_WITHIN`] arrives as [`ToPage::Crashed`].
+	/// made, fails to load, stops, or does not speak within [`READY_WITHIN`] arrives as [`ToPage::Lost`].
 	pub fn start(url: &str, on_message: impl Fn() + 'static) -> Self {
 		let options = WorkerOptions::new();
 		options.set_type(WorkerType::Module);
 		let worker = match Worker::new_with_options(url, &options) {
 			Ok(worker) => worker,
 			Err(e) => {
-				let why = format!("{url} could not be started: {e:?}");
-				let inbox = Inbox::new(RefCell::new([envelope(&ToPage::Crashed(why), None)].into()));
+				let lost = Lost::NotCreated { url: url.to_owned(), detail: format!("{e:?}") };
+				let inbox = Inbox::new(RefCell::new([envelope(&ToPage::Lost(lost), None)].into()));
 				return Self { link: Rc::new(RefCell::new(Link::Gone)), inbox, _worker: None };
 			}
 		};
@@ -102,11 +102,11 @@ impl PagePort {
 		let fail = {
 			let (worker, link, inbox, on_message, timer) =
 				(worker.clone(), link.clone(), inbox.clone(), on_message.clone(), timer.clone());
-			move |why: String| {
+			move |lost: Lost| {
 				timer.clear();
 				worker.terminate();
 				*link.borrow_mut() = Link::Gone;
-				inbox.borrow_mut().push_back(envelope(&ToPage::Crashed(why), None));
+				inbox.borrow_mut().push_back(envelope(&ToPage::Lost(lost), None));
 				on_message();
 			}
 		};
@@ -131,10 +131,7 @@ impl PagePort {
 		let onerror = {
 			let (fail, url) = (fail.clone(), url.to_owned());
 			Closure::<dyn FnMut(Event)>::new(move |e: Event| {
-				fail(match e.dyn_ref::<ErrorEvent>() {
-					Some(e) => e.message(),
-					None => format!("{url} could not be loaded"),
-				});
+				fail(Lost::Failed { url: url.clone(), detail: e.dyn_ref::<ErrorEvent>().map(ErrorEvent::message) });
 			})
 		};
 		worker.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
@@ -143,7 +140,7 @@ impl PagePort {
 			let (timer, url) = (timer.clone(), url.to_owned());
 			Closure::once(move || {
 				timer.0.set(None);
-				fail(format!("{url} did not answer within {} s", READY_WITHIN.as_secs()));
+				fail(Lost::Silent { url, secs: READY_WITHIN.as_secs() });
 			})
 		};
 		let handle = web_sys::window()
@@ -226,14 +223,14 @@ fn scope() -> DedicatedWorkerGlobalScope {
 	js_sys::global().dyn_into().expect("the run worker runs in a dedicated worker")
 }
 
-/// Logs each panic of the worker and posts it to the page as [`ToPage::Crashed`]; the worker's program ends
+/// Logs each panic of the worker and posts it to the page as [`ToPage::Lost`]; the worker's program ends
 /// with it.
 pub fn report_panics() {
 	let default = std::panic::take_hook();
 	std::panic::set_hook(Box::new(move |info| {
 		let why = info.to_string();
 		tracing::error!("the run worker panicked: {why}");
-		let (message, transfer) = to_js(envelope(&ToPage::Crashed(why), None));
+		let (message, transfer) = to_js(envelope(&ToPage::Lost(Lost::Panicked(why)), None));
 		if let Err(e) = scope().post_message_with_transfer(&message, &transfer) {
 			tracing::error!("the panic could not be posted to the page: {e:?}");
 		}

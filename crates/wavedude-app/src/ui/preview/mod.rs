@@ -83,6 +83,8 @@ pub(super) struct Preview {
 	shown: [Option<Option<Rect>>; 2],
 	/// The renderer's limits, when it draws pictures with [`PicturePipeline`].
 	limits: Option<wgpu::Limits>,
+	/// Why the renderer draws no pictures with [`PicturePipeline`], until logged as a picture would be.
+	unsupported: Option<String>,
 	/// The shown frame's planes the renderer cannot hold, warned of once.
 	oversize: Option<PlaneTooLarge>,
 	/// The pictures are coloured on the renderer's device, not by the presenter.
@@ -125,12 +127,16 @@ impl Preview {
 				None
 			}
 		};
-		let limits = gpu.as_ref().and_then(|gpu| {
+		let supported = gpu.as_ref().map(|gpu| {
 			PicturePipeline::supported(&gpu.adapter, &gpu.device)
-				.inspect_err(|e| tracing::warn!("the preview colours its pictures on the CPU: {e}"))
-				.ok()
 				.map(|()| gpu.device.limits())
+				.map_err(|e| e.to_string())
 		});
+		let (limits, unsupported) = match supported {
+			Some(Ok(limits)) => (Some(limits), None),
+			Some(Err(e)) => (None, Some(e)),
+			None => (None, None),
+		};
 		Self {
 			gpu,
 			presenter,
@@ -145,6 +151,7 @@ impl Preview {
 			textures: [None, None],
 			shown: [None, None],
 			limits,
+			unsupported,
 			oversize: None,
 			on_device: false,
 			device: DevicePictures::default(),
@@ -216,6 +223,12 @@ impl Preview {
 			}
 		}
 		let frames = app.live.device_frames();
+		if (frames.is_some() || presenter::IN_CALL)
+			&& shown_source(app).is_some()
+			&& let Some(e) = self.unsupported.take()
+		{
+			tracing::warn!("the preview colours its pictures on the CPU: {e}");
+		}
 		let fits =
 			self.limits.as_ref().map(|limits| shown_source(app).map_or(Ok(()), |s| plane_fits(&s.shape(), limits)));
 		let oversize = fits.and_then(Result::err);

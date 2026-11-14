@@ -421,7 +421,7 @@ impl<B: Backend> AppState<B> {
 			wavedude_core::run::RunState::Failed(_) => "RunStateFailed",
 		};
 		let s = &self.strings;
-		s.format("RunStatusFormat", &[&s.get(key), &done, &total, &self.live.engine_name()])
+		s.format("RunStatusFormat", &[&s.get(key), &done, &total, &self.live.engine().text(s)])
 	}
 
 	/// Advances the history's quiet time and the live controller to `now`; true when something a view shows

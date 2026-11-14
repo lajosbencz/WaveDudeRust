@@ -1,6 +1,6 @@
 # 0024: The browser runs the simulation in a Web Worker
 
-Status: accepted, 2026-11-14 (the user's decision). Amends [0015](0015-core-builds-for-wasm.md),
+Status: accepted, 2026-11-14 (the user's decision); losses and versions added 2026-11-14. Amends [0015](0015-core-builds-for-wasm.md),
 [0016](0016-gpu-engine-in-the-browser.md), [0019](0019-egui-and-the-platform-layer.md) and
 [0020](0020-browser-frame-spill-in-opfs.md): the run leaves the page's thread.
 
@@ -50,3 +50,16 @@ worker's binary is 2.1 MB (0.6 MB gzipped) against the app's 21 MB.
 - A fallback to the page's thread: a second run path for a deployment error; the error is shown instead.
 - The spill in the worker through `FileSystemSyncAccessHandle`: the playhead's reads would cross agents and need
   prefetching; deferred until scrubbing measures slow.
+
+## Losses and versions (added 2026-11-14)
+
+- The worker's GPU device lost, the engine built next requests a new one, as natively; a failed request is kept and
+  the CPU engine runs with it as the fallback's reason. No GPU engine is built on a lost device.
+- `ToWorker::Init` and `ToPage::Ready` carry the protocol's `VERSION`, bumped when a message changes; they stay the
+  first variants with the version first, so either end reads the other's version. A page of another version is not
+  listened to; the page reports a worker of another version.
+- A worker that does not start (not made, not loaded, silent), stops once ready, or is of another version fails
+  every run until the page is reloaded, the user told which with a localised message; Run tells it again. The page
+  posts nothing more to it.
+- The traces the worker posts start over by the run's own count of their starts, not by the published status, which
+  can lag behind a goal adopted.

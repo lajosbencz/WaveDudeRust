@@ -8,11 +8,18 @@ use wavedude_core::model::Layer;
 use wavedude_core::run::{Goal, RunError, StoreLayout};
 use wavedude_core::spec::RunSpecError;
 
+use crate::live::EngineLabel;
+
+/// The version of [`ToWorker`] and [`ToPage`], bumped when either changes; a page and a worker of different
+/// versions do not talk.
+pub const VERSION: u32 = 1;
+
 /// From the page to the run worker.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToWorker {
-	/// The first message: whether the engines run on the GPU.
-	Init { use_gpu: bool },
+	/// The first message: the page's [`VERSION`] and whether the engines run on the GPU. Stays the first variant,
+	/// its version first.
+	Init { version: u32, use_gpu: bool },
 	/// The scene image of key `key` (`image_key`), its bytes the buffer; posted before the first goal naming it.
 	Image { key: u64 },
 	/// The goal, its project without the image bytes; `image` is the key of the image to put back.
@@ -28,13 +35,15 @@ pub enum ToWorker {
 /// From the run worker to the page.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToPage {
-	/// The worker started: its GPU adapter's name, or why it has none.
+	/// The worker started: its [`VERSION`] and its GPU adapter's name, or why it has none. Stays the first
+	/// variant, its version first.
 	Ready {
+		version: u32,
 		gpu: Result<String, String>,
 	},
 	/// An engine was built: its label and, when the CPU's runs where the GPU's was asked for, why.
 	EngineBuilt {
-		name: String,
+		engine: EngineLabel,
 		fallback: Option<String>,
 	},
 	/// A store of the run, posted before its frames and the status naming it.
@@ -62,8 +71,28 @@ pub enum ToPage {
 		step: u32,
 		shape: FrameShape,
 	},
-	/// The worker died of this.
-	Crashed(String),
+	/// The worker is lost: it died of this, or the page lost it.
+	Lost(Lost),
+}
+
+/// How the page lost its worker.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
+pub enum Lost {
+	/// The browser did not make the worker at `url`: its reason.
+	#[error("{url} could not be started: {detail}")]
+	NotCreated { url: String, detail: String },
+	/// The worker at `url` did not load or failed, with the browser's message when it gave one.
+	#[error("{url} failed: {}", detail.as_deref().unwrap_or("it could not be loaded"))]
+	Failed { url: String, detail: Option<String> },
+	/// The worker at `url` did not answer within `secs` seconds.
+	#[error("{url} did not answer within {secs} s")]
+	Silent { url: String, secs: u64 },
+	/// The worker panicked: the panic's message.
+	#[error("{0}")]
+	Panicked(String),
+	/// The worker broke the protocol: how.
+	#[error("{0}")]
+	Broken(String),
 }
 
 /// A [`StoreLayout`] on the wire: the layers are the field, with the intensity when `intensity`.

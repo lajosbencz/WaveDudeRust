@@ -199,12 +199,27 @@ struct Shared {
 	shutdown: AtomicBool,
 	/// One lock, so a reader never pairs a revision with another revision's state or store.
 	published: Mutex<Status>,
-	traces: Mutex<Vec<ProbeTrace>>,
+	traces: Mutex<Traces>,
 	/// The traces of the generation before, while its frames are still looked at.
 	held: Mutex<Vec<ProbeTrace>>,
 	fit: Mutex<Option<FitFrame>>,
 	/// Called when the published state changes kind, revision or store, and when a fit frame is served.
 	notify: OnceLock<Notify>,
+}
+
+/// The published probe traces and their start: a number that changes each time they, and the held traces with
+/// them, start over.
+#[derive(Default)]
+struct Traces {
+	start: u64,
+	probes: Vec<ProbeTrace>,
+}
+
+impl Traces {
+	fn restart(&mut self, probes: Vec<ProbeTrace>) {
+		self.start += 1;
+		self.probes = probes;
+	}
 }
 
 /// What a reader of the published state waiting on another thread is woken with.
@@ -229,7 +244,7 @@ impl Shared {
 				#[cfg(feature = "gpu")]
 				device_frames: None,
 			}),
-			traces: Mutex::new(Vec::new()),
+			traces: Mutex::default(),
 			held: Mutex::new(Vec::new()),
 			fit: Mutex::new(None),
 			notify: OnceLock::new(),
@@ -421,7 +436,14 @@ impl RunWorker {
 
 	/// Calls `f` with the probe traces of the spec in force, in its probe order.
 	pub fn with_traces<R>(&self, f: impl FnOnce(&[ProbeTrace]) -> R) -> R {
-		f(&lock(&self.shared.traces))
+		f(&lock(&self.shared.traces).probes)
+	}
+
+	/// [`with_traces`](Self::with_traces) with their start: a number that changes each time they, and the held
+	/// traces with them, start over.
+	pub fn with_traces_started<R>(&self, f: impl FnOnce(u64, &[ProbeTrace]) -> R) -> R {
+		let traces = lock(&self.shared.traces);
+		f(traces.start, &traces.probes)
 	}
 
 	/// Calls `f` with the traces of the generation before the current one when its probes measure the same
@@ -757,8 +779,8 @@ impl Worker {
 			{
 				let mut traces = lock(&self.shared.traces);
 				let mut held = lock(&self.shared.held);
-				*held = if same_probes { std::mem::take(&mut *traces) } else { Vec::new() };
-				traces.clear();
+				*held = if same_probes { std::mem::take(&mut traces.probes) } else { Vec::new() };
+				traces.restart(Vec::new());
 			}
 			self.current = Some(Current { spec: spec.clone(), store });
 			self.restart_traces(spec);
@@ -808,7 +830,7 @@ impl Worker {
 		let collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene, spec.seed));
 		let engine = self.engine.as_mut().expect("an engine goes with the current spec");
 		engine.set_probes(collector.as_ref().map(ProbeCollector::cells).unwrap_or_default());
-		*lock(&self.shared.traces) = collector.as_ref().map(|c| c.traces.clone()).unwrap_or_default();
+		lock(&self.shared.traces).restart(collector.as_ref().map(|c| c.traces.clone()).unwrap_or_default());
 		self.probes = None;
 		self.collector = collector;
 		self.recorded = 0;
@@ -922,7 +944,7 @@ impl Worker {
 		}
 		self.current = None;
 		self.collector = None;
-		lock(&self.shared.traces).clear();
+		lock(&self.shared.traces).restart(Vec::new());
 		lock(&self.shared.held).clear();
 	}
 
@@ -1326,7 +1348,7 @@ impl Worker {
 			return;
 		}
 		let mut traces = lock(&self.shared.traces);
-		for (out, t) in traces.iter_mut().zip(&c.traces) {
+		for (out, t) in traces.probes.iter_mut().zip(&c.traces) {
 			if t.series.len() > out.series.len() {
 				out.series.extend_from_slice(&t.series[out.series.len()..]);
 			}
@@ -1622,6 +1644,28 @@ mod tests {
 
 	fn pumped_to_the_end(w: &RunWorker) {
 		while pump(w, Duration::ZERO) != Pump::Idle {}
+	}
+
+	#[test]
+	fn the_traces_start_changes_as_they_start_over_and_holds_while_they_grow() {
+		let w = RunWorker::pumped(cpu(), GIB, ample(), Arc::default());
+		let start = || w.with_traces_started(|start, _| start);
+		w.set_goal(goal(1, &long(400)));
+		pump(&w, Duration::ZERO);
+		let first = start();
+		pumped_to_the_end(&w);
+		assert_eq!(start(), first, "the traces grew");
+		assert!(w.with_traces(|t| t[0].series.len()) > 0);
+
+		let mut moved = long(400);
+		moved.probes[0].ax += 1;
+		w.set_goal(goal(2, &moved));
+		pumped_to_the_end(&w);
+		let second = start();
+		assert_ne!(second, first, "new probes");
+		w.discard_frames();
+		pumped_to_the_end(&w);
+		assert_ne!(start(), second, "frames discarded");
 	}
 
 	#[test]

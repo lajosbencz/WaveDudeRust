@@ -72,3 +72,5 @@ web-sys = { version = "0.3", features = [
 [dev-dependencies]
 png.workspace = true
 tempfile = "3"
+# Loses a GPU device in the run worker's tests; the version core's `gpu` feature builds on.
+wgpu = "30"
