@@ -3,7 +3,7 @@
 use rayon::prelude::*;
 
 use super::pixels::ScenePixels;
-use crate::render::layer::scale_nearest;
+use crate::render::layer::scale_max;
 use crate::render::screen::Window;
 
 /// Factor on the Sobel magnitude before the clamp at 255.
@@ -61,9 +61,9 @@ impl EdgeImage {
 		Self { width: pixels.width, height: pixels.height, rgba }
 	}
 
-	/// The edges, or their `window`, resampled to `to` pixels for [`blend_additive`].
+	/// The edges, or their `window`, resampled to `to` pixels for [`blend_additive`], every edge kept.
 	pub fn scaled(&self, window: Option<Window>, to: (u32, u32)) -> Vec<u8> {
-		scale_nearest(&self.rgba, (self.width, self.height), window, to)
+		scale_max(&self.rgba, (self.width, self.height), window, to)
 	}
 }
 

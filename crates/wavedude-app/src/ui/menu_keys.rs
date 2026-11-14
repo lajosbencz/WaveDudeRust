@@ -14,8 +14,8 @@ use std::mem;
 use eframe::egui::os::OperatingSystem;
 use eframe::egui::text::{LayoutJob, TextFormat};
 use eframe::egui::{
-	self, Button, Color32, Context, Event, Id, Key, Modifiers, Popup, RawInput, Response, Role, Sense, Stroke,
-	TextStyle, Ui, WidgetInfo, WidgetText, accesskit,
+	self, Color32, Context, Event, Id, Key, Modifiers, Popup, RawInput, Response, Sense, Stroke, TextStyle, Ui,
+	WidgetText, accesskit,
 };
 use wavedude_app_state::strings::{mnemonic, split_mnemonic};
 
@@ -465,19 +465,6 @@ pub(super) fn entry(ui: &Ui, response: &Response, marked: &str, submenu: bool) {
 /// Records a menu shown this pass: its popup and the widget it hangs from.
 pub(super) fn menu(ctx: &Context, popup: Id, anchor: Id) {
 	with(ctx, |k| k.record.menus.push((popup, anchor)));
-}
-
-/// A plain entry of a menu, `marked` its text; clicking it closes the menu.
-pub(super) fn item(ui: &mut Ui, marked: &str) -> Response {
-	let (label, name) = label(ui, marked);
-	let response = ui.add(Button::new(label));
-	let enabled = response.enabled();
-	response.widget_info(|| WidgetInfo::labeled(Role::MenuItem, enabled, &name));
-	entry(ui, &response, marked, false);
-	if response.clicked() {
-		ui.close();
-	}
-	response
 }
 
 #[cfg(test)]

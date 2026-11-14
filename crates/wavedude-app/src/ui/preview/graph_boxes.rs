@@ -7,6 +7,7 @@ use eframe::egui::{
 	CursorIcon, EventFilter, FontId, Id, Key, Modifiers, Rect, Response, Role, Sense, Stroke, StrokeKind, Ui,
 	WidgetInfo, vec2,
 };
+use egui_material_icons::icons::ICON_IOS_SHARE;
 use wavedude_app_state::Event;
 use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::platform::HAS_EXPORTS;
@@ -20,11 +21,9 @@ use crate::App;
 use crate::menus::{MenuAction, On};
 use crate::preview::graph_boxes::{BoxKey, BoxView, box_key, boxes, dragged_box, moved_box_edits, resized_box_edits};
 use crate::preview::view::CanvasTransform;
-use crate::ui::menu_keys;
+use crate::ui::menu_bar::{self, Slot};
 use crate::ui::theme::Palette;
 
-/// The corner grip's side.
-const GRIP: f32 = 10.;
 /// A box resized by its grip keeps at least this size, points.
 const MIN_SIZE: (f32, f32) = (60., 30.);
 
@@ -51,6 +50,11 @@ pub(super) enum BoxDrag {
 }
 
 /// The id of probe `index`'s box over the picture of `layer`.
+/// The corner grip of a box at `rect`.
+fn grip_rect(rect: Rect) -> Rect {
+	Rect::from_min_max(rect.max - vec2(graph::GRIP, graph::GRIP), rect.max)
+}
+
 fn box_id(layer: Layer, index: usize) -> Id {
 	Id::unique(("ProbeBox", layer as usize, index))
 }
@@ -107,6 +111,8 @@ impl Preview {
 		let accent = Palette::of(ctx.theme()).accent;
 		let focused: Vec<bool> = b.views.iter().map(|v| ui.memory(|m| m.has_focus(box_id(layer, v.index)))).collect();
 		let pointer_focus = self.pointer_focus;
+		let pointer = ui.rect_contains_pointer(clip).then(|| ctx.pointer_hover_pos()).flatten();
+		let dragged = ctx.dragged_id();
 		let shapes = ctx.fonts_mut(|fonts| {
 			let laid = (t.scale.to_bits(), ppp.to_bits());
 			if b.laid != laid {
@@ -125,7 +131,9 @@ impl Preview {
 				let grid = DeviceGrid::new(ppp, at.x, at.y);
 				let focus = (focused && pointer_focus != Some(box_id(layer, v.index))).then_some(accent);
 				shapes.extend(graph::box_shapes(g, grid, clip, v.selected, focus, fonts));
-				shapes.extend(graph::grip_shapes(g, grid).into_iter().map(|shape| ClippedShape::new(clip, shape)));
+				let hot = pointer.is_some_and(|p| grip_rect(on_picture(v, t)).contains(p))
+					|| dragged == Some(box_id(layer, v.index).with("grip"));
+				shapes.extend(graph::grip_shapes(g, grid, hot).into_iter().map(|shape| ClippedShape::new(clip, shape)));
 			}
 			shapes
 		});
@@ -159,7 +167,7 @@ impl Preview {
 			let response = ui.interact(rect.intersect(clip), id, Sense::click_and_drag()).on_hover_text(tip);
 			response.widget_info(|| WidgetInfo::labeled(Role::Figure, true, &v.probe.name));
 			let grip_tip = s.format("TipProbeBoxCornerFormat", &[&v.probe.name]);
-			let grip_rect = Rect::from_min_max(rect.max - vec2(GRIP, GRIP), rect.max);
+			let grip_rect = grip_rect(rect);
 			let grip = ui.interact(grip_rect.intersect(clip), id.with("grip"), Sense::drag());
 			let grip = grip.on_hover_cursor(CursorIcon::ResizeNwSe).on_hover_text(grip_tip);
 			super::hold(&response);
@@ -177,7 +185,8 @@ impl Preview {
 			if HAS_EXPORTS {
 				response.context_menu(|ui| {
 					ui.add_enabled_ui(!export_busy, |ui| {
-						if menu_keys::item(ui, app.strings.get("MenuExportProbeCsv")).clicked() {
+						let text = app.strings.get("MenuExportProbeCsv");
+						if menu_bar::entry(ui, Slot::Icon(ICON_IOS_SHARE), text, None, None).clicked() {
 							picked = Some((MenuAction::ExportProbeCsv, On::Row(Some(Row::Item(item)))));
 						}
 					});

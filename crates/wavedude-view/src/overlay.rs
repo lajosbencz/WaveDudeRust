@@ -360,7 +360,7 @@ fn arc_arrow(at: Pos2) -> [Vec<Pos2>; 2] {
 	let arc = (0..=STEPS)
 		.map(|i| {
 			let a = (f32::from(i) * 10.).to_radians();
-			at + 5. * vec2(a.cos(), a.sin())
+			at + 5. * vec2(libm::cosf(a), libm::sinf(a))
 		})
 		.collect::<Vec<_>>();
 	let end = arc[arc.len() - 1];

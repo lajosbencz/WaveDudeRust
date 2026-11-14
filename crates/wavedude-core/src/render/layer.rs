@@ -146,6 +146,48 @@ pub fn scale_nearest(src: &[u8], from: (u32, u32), window: Option<Window>, to: (
 	out
 }
 
+/// RGBA8 `src` of `from` pixels, or the `window` of it, resampled to `to` pixels keeping thin lines: each channel the
+/// maximum over the source pixels a target pixel covers; a target pixel smaller than a source pixel takes the one
+/// under its centre, as [`scale_nearest`].
+pub fn scale_max(src: &[u8], from: (u32, u32), window: Option<Window>, to: (u32, u32)) -> Vec<u8> {
+	if from == to && window.is_none() {
+		return src.to_vec();
+	}
+	let (fw, fh) = (from.0 as usize, from.1 as usize);
+	let (tw, th) = (to.0 as usize, to.1 as usize);
+	let (x0, y0, w, h) = window.unwrap_or((0.0, 0.0, fw as f64, fh as f64));
+	let spans = |origin: f64, extent: f64, to: usize, size: usize| -> Vec<(usize, usize)> {
+		let step = extent / to as f64;
+		(0..to)
+			.map(|i| {
+				let clamp = |v: f64| (v.max(0.0) as usize).min(size - 1);
+				if step < 1.0 {
+					let c = clamp((origin + (i as f64 + 0.5) * step).floor());
+					(c, c + 1)
+				} else {
+					let first = clamp((origin + i as f64 * step).floor());
+					let end = clamp((origin + (i + 1) as f64 * step).ceil() - 1.0) + 1;
+					(first, end.max(first + 1))
+				}
+			})
+			.collect()
+	};
+	let (columns, rows) = (spans(x0, w, tw, fw), spans(y0, h, th, fh));
+	let mut out = vec![0u8; tw * th * 4];
+	for (target, &(ry, ry_end)) in out.chunks_exact_mut(tw * 4).zip(&rows) {
+		for (pixel, &(cx, cx_end)) in target.as_chunks_mut::<4>().0.iter_mut().zip(&columns) {
+			for row in src[ry * fw * 4..ry_end * fw * 4].chunks_exact(fw * 4) {
+				for s in row[cx * 4..cx_end * 4].as_chunks::<4>().0 {
+					for c in 0..4 {
+						pixel[c] = pixel[c].max(s[c]);
+					}
+				}
+			}
+		}
+	}
+	out
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -231,6 +273,24 @@ mod tests {
 		assert_eq!(LayerColours::overlay_gain(&project, Layer::Intensity), Some(3.));
 		let c = LayerColours::of(&project, Layer::Intensity, &schemes);
 		assert_eq!(c.brightness, project.display.intensity.brightness);
+	}
+
+	#[test]
+	fn a_one_pixel_line_survives_a_max_downscale_and_a_zoom_stays_nearest() {
+		let (w, h) = (9u32, 3u32);
+		let mut src = vec![0u8; (w * h * 4) as usize];
+		for y in 0..h as usize {
+			src[(y * w as usize + 3) * 4] = 200;
+		}
+		let down = scale_max(&src, (w, h), None, (3, 1));
+		let reds: Vec<u8> = down.as_chunks::<4>().0.iter().map(|p| p[0]).collect();
+		assert_eq!(reds, [0, 200, 0], "the line in the pixel that covers it");
+		assert!(
+			scale_nearest(&src, (w, h), None, (3, 1)).as_chunks::<4>().0.iter().all(|p| p[0] == 0),
+			"nearest misses it"
+		);
+		let zoom = scale_max(&src, (w, h), Some((3.0, 0.0, 3.0, 3.0)), (6, 6));
+		assert_eq!(zoom, scale_nearest(&src, (w, h), Some((3.0, 0.0, 3.0, 3.0)), (6, 6)));
 	}
 
 	#[test]

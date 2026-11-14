@@ -38,6 +38,7 @@ one), the row below, the spec updated, the manual when users see it.
 | Leaving the browser page | Not applicable | The browser build asks before the page is left while the project has unsaved edits | [ui/10](ui/10-menus-and-shortcuts.md) |
 | User colour schemes | Files placed in a folder by hand | Added to and removed from the user's schemes in the tree, the scheme form and the scheme picker; kept in the config folder or the browser's storage | [spec/10](spec/10-model.md), [ui/20](ui/20-project-tree.md) |
 | Objects off the canvas | Left out or clamped silently | The same, and a warning names them when the run's spec changes them | [ui/60](ui/60-live-editing-and-runs.md) |
+| Scene outline on a shrunk picture | WPF filters the edge layer linearly: thin edges show faint | Each channel's maximum over the canvas pixels a picture pixel covers: every edge at full strength | [spec/40](spec/40-frames-store-render.md) |
 | Scene image file | Taken silently when it differs, at open and while watched | Asked about: Load file or Keep embedded; kept bytes are not asked about again | decision 0008 (19), [ui/60](ui/60-live-editing-and-runs.md) |
 | Browser | None | The web build exports through downloads, has no updater, no recent files, no file watch | decisions 0019, 0020, 0025 |
 | Edit menu | Acts on a focused text box | Acts on objects; the keys go to the box | decision 0008 (13) |

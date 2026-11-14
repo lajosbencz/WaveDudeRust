@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use epaint::text::{FontId, FontsView, Galley};
+use epaint::text::{FontId, FontsView, Galley, LayoutJob, TextWrapping};
 use epaint::{Color32, PathStroke, Pos2, Rect, Shape, Stroke, TextShape, pos2, vec2};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, HintingInstance, OutlinePen, SmoothMode, Target};
@@ -196,6 +196,13 @@ impl OutlinePen for Flattener {
 		}
 		self.current.clear();
 	}
+}
+
+/// `text` on one line, cut to `max_width` logical pixels with an ellipsis when longer.
+pub fn elided(fonts: &mut FontsView<'_>, text: &str, font: FontId, color: Color32, max_width: f32) -> Arc<Galley> {
+	let mut job = LayoutJob::simple_singleline(text.to_owned(), font, color);
+	job.wrap = TextWrapping::truncate_at_width(max_width);
+	fonts.layout_job(job)
 }
 
 /// Pushes `galley` (Selawik Regular with the fallback at `size` points) at `pos`, its top-left, over its `halo`: one closed path per

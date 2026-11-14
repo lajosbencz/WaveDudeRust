@@ -9,7 +9,7 @@ use epaint::{ClippedShape, Color32, Rect, Shape, Stroke, StrokeKind};
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::model::{Display, Layer, Measurement, Probe, ScaleMode, YScale};
 
-use crate::draw::{DeviceGrid, TextMetrics};
+use crate::draw::{DeviceGrid, TextMetrics, elided};
 use crate::overlay::SELECTED;
 
 /// Smallest box drawn at all, pixels.
@@ -537,8 +537,13 @@ pub const LABEL: Color32 = Color32::from_rgba_unmultiplied_const(225, 225, 230, 
 pub const TITLE: Color32 = Color32::from_rgba_unmultiplied_const(240, 240, 245, 240);
 /// The curve and the readout.
 pub const CURVE: Color32 = Color32::from_rgb(255, 208, 64);
-/// The preview's resize grip.
-const GRIP_DOTS: Color32 = Color32::from_rgb(0x90, 0x90, 0x90);
+/// The preview's resize grip: its square cell's side (logical pixels), its colour, and under the pointer.
+pub const GRIP: f32 = 12.;
+const GRIP_FILL: Color32 = Color32::from_rgba_unmultiplied_const(0xFF, 0xFF, 0xFF, 0xA0);
+const GRIP_HOT: Color32 = Color32::WHITE;
+/// The grip's two diagonal bands in its cell.
+const GRIP_BANDS: [[(f32, f32); 4]; 2] =
+	[[(11., 1.), (11., 3.), (3., 11.), (1., 11.)], [(11., 6.), (11., 8.), (8., 11.), (6., 11.)]];
 
 /// The box's device rectangle `[left, top, right, bottom]` in units of `grid`.
 fn device_box(g: &GraphLayout, grid: DeviceGrid) -> [f32; 4] {
@@ -620,25 +625,27 @@ pub fn box_shapes(
 		let at = grid.point(grid.x(g.width - readout_width - 8.).round(), grid.y(EDGE_PAD).round());
 		clipped.push(ClippedShape::new(clip, Shape::galley(at, galley, CURVE)));
 	}
-	let title_end = grid.x(EDGE_PAD + 3. + (g.width - readout_width - 16.).max(10.));
-	let title = grid.rect((bx0, by0), (title_end, by1)).intersect(clip);
-	let galley = fonts.layout_no_wrap(g.title.clone(), font, TITLE);
+	let title_width = (g.width - readout_width - 16.).max(10.);
+	let title = grid.rect((bx0, by0), (grid.x(EDGE_PAD + 3. + title_width), by1)).intersect(clip);
+	let galley = elided(fonts, &g.title, font, TITLE, title_width);
 	let at = grid.point(grid.x(EDGE_PAD + 3.).round(), grid.y(EDGE_PAD).round());
 	clipped.push(ClippedShape::new(title, Shape::galley(at, galley, TITLE)));
 
 	out.into_iter().map(|shape| ClippedShape::new(clip, shape)).chain(clipped).collect()
 }
 
-/// The preview's resize grip of the box laid out as `g` at the origin of `grid`: two rows of dots in its
-/// bottom-right corner.
-pub fn grip_shapes(g: &GraphLayout, grid: DeviceGrid) -> Vec<Shape> {
-	let hl = grid.hairline();
+/// The preview's resize grip of the box laid out as `g` at the origin of `grid`: two diagonal bands in its
+/// bottom-right [`GRIP`] cell, brighter while `hot`.
+pub fn grip_shapes(g: &GraphLayout, grid: DeviceGrid, hot: bool) -> Vec<Shape> {
 	let [_, _, bx1, by1] = device_box(g, grid);
-	let dot = |x: f32, y: f32| Shape::rect_filled(grid.rect((x, y), (x + hl, y + hl)), 0, GRIP_DOTS);
-	(0..3)
-		.flat_map(|k| {
-			let o = grid.width(3.) * k as f32;
-			[dot(bx1 - hl * 3. - o, by1 - hl * 3.), dot(bx1 - hl * 3., by1 - hl * 3. - o)]
+	let side = grid.width(GRIP);
+	let (x0, y0) = (bx1 - side, by1 - side);
+	let fill = if hot { GRIP_HOT } else { GRIP_FILL };
+	GRIP_BANDS
+		.iter()
+		.map(|band| {
+			let points = band.iter().map(|&(x, y)| grid.point(x0 + x * grid.scale, y0 + y * grid.scale)).collect();
+			Shape::convex_polygon(points, fill, Stroke::NONE)
 		})
 		.collect()
 }
@@ -808,9 +815,33 @@ mod tests {
 		assert_eq!(texts[texts.len() - 2], ("= 0.25", CURVE));
 		assert_eq!(texts[texts.len() - 1], (l.title.as_str(), TITLE));
 		assert!(shapes.last().is_some_and(|s| s.clip_rect.max.x < 310.), "the title clipped before the readout");
-		let grip = grip_shapes(&l, grid);
-		let Some(Shape::Rect(dot)) = grip.first() else { panic!("the grip's dots") };
-		assert_eq!((grip.len(), device(dot.rect.min), dot.fill), (6, (614., 294.), GRIP_DOTS));
+		let grip = grip_shapes(&l, grid, false);
+		let [_, _, bx1, by1] = device_box(&l, grid);
+		let cell = (bx1 - grid.width(GRIP), by1 - grid.width(GRIP));
+		for (shape, band) in grip.iter().zip(GRIP_BANDS) {
+			let Shape::Path(p) = shape else { panic!("a band") };
+			let expected: Vec<Pos2> = band.iter().map(|&(x, y)| grid.point(cell.0 + x * 2., cell.1 + y * 2.)).collect();
+			assert_eq!((&p.points, p.fill), (&expected, GRIP_FILL), "a band in the corner cell");
+		}
+		assert_eq!(grip.len(), 2);
+		let Shape::Path(hot) = &grip_shapes(&l, grid, true)[0] else { panic!("a band") };
+		assert_eq!(hot.fill, GRIP_HOT);
+	}
+
+	#[test]
+	fn a_long_title_is_cut_with_an_ellipsis_to_its_strip() {
+		let mut fonts = Fonts::new(TextOptions::default(), crate::fonts::definitions());
+		let mut view = fonts.with_pixels_per_point(1.);
+		let name = "Field amplitude along the diagonal of the left box";
+		let l =
+			layout(&Probe { name: name.into(), ..Probe::default() }, &GraphData::default(), 10, 120., 60., &mut Fixed);
+		let clip = Rect::from_min_max(Pos2::ZERO, pos2(500., 500.));
+		let shapes = box_shapes(&l, DeviceGrid::new(1., 0., 0.), clip, false, None, &mut view);
+		let Some(Shape::Text(title)) = shapes.last().map(|s| &s.shape) else { panic!("the title last") };
+		let shown: String = title.galley.rows.iter().flat_map(|r| r.glyphs.iter().map(|g| g.chr)).collect();
+		let kept = shown.strip_suffix('\u{2026}').expect("an ellipsis at the end");
+		assert!(!kept.is_empty() && name.starts_with(kept), "{shown}");
+		assert!(title.galley.size().x <= l.width - 16., "within its strip");
 	}
 
 	#[test]

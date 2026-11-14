@@ -8,6 +8,8 @@ use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use eframe::egui::{
 	Color32, Id, Painter, PointerButton, Pos2, Rect, Response, Role, Sense, Shape, Stroke, Ui, WidgetInfo, pos2, vec2,
 };
+use egui_material_icons::MaterialIcon;
+use egui_material_icons::icons::{ICON_BRIGHTNESS_6, ICON_BRIGHTNESS_AUTO, ICON_IMAGE, ICON_IOS_SHARE};
 use wavedude_app_state::Event;
 use wavedude_app_state::clipboard::{Copyable, PasteTarget, write_fragment};
 use wavedude_app_state::commands::Command;
@@ -23,8 +25,9 @@ use crate::App;
 use crate::menus::{ExportKindChoice, MenuAction, On};
 use crate::preview::view::{CanvasTransform, View};
 use crate::preview::{PictureExtent, display_edit};
-use crate::ui::menu_keys;
+use crate::ui::menu_bar::{self, Slot};
 use crate::ui::number_box::wheel_notches;
+use crate::ui::shortcuts;
 use crate::ui::tree::DraggedItem;
 
 /// The margin between the picture and its area's edges: the cell's margin on the outer sides, the gap to the header
@@ -78,20 +81,24 @@ fn picture_menu(ui: &mut Ui, s: &Strings, layer: Layer) -> Option<PictureEntry> 
 		Layer::Intensity => ExportKindChoice::IntensityFrame,
 	};
 	let mut picked = None;
-	let mut item = |ui: &mut Ui, key: &str, entry: PictureEntry| {
-		if menu_keys::item(ui, s.get(key)).clicked() {
+	let mut item = |ui: &mut Ui, icon: MaterialIcon, key: &str, entry: PictureEntry| {
+		let shortcut = match entry {
+			PictureEntry::Window(action) => shortcuts::text(ui.ctx(), action),
+			_ => None,
+		};
+		if menu_bar::entry(ui, Slot::Icon(icon), s.get(key), None, shortcut).clicked() {
 			picked = Some(entry);
 		}
 	};
-	item(ui, "MenuBrightness", PictureEntry::Brightness);
-	item(ui, "MenuAutoBrightness", PictureEntry::Auto);
+	item(ui, ICON_BRIGHTNESS_6, "MenuBrightness", PictureEntry::Brightness);
+	item(ui, ICON_BRIGHTNESS_AUTO, "MenuAutoBrightness", PictureEntry::Auto);
 	if HAS_EXPORTS {
 		ui.separator();
 		let export = |kind| PictureEntry::Window(MenuAction::Export(kind));
-		item(ui, "MenuExportThisFrame", export(frame));
-		item(ui, "MenuFileExportField", export(ExportKindChoice::Field));
-		item(ui, "MenuFileExportIntensity", export(ExportKindChoice::Intensity));
-		item(ui, "MenuFileExportBoth", export(ExportKindChoice::Both));
+		item(ui, ICON_IMAGE, "MenuExportThisFrame", export(frame));
+		item(ui, ICON_IOS_SHARE, "MenuFileExportField", export(ExportKindChoice::Field));
+		item(ui, ICON_IOS_SHARE, "MenuFileExportIntensity", export(ExportKindChoice::Intensity));
+		item(ui, ICON_IOS_SHARE, "MenuFileExportBoth", export(ExportKindChoice::Both));
 	}
 	picked
 }

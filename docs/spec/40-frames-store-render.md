@@ -196,6 +196,10 @@ deep channel level L (0..65280): out = (L >> 8) + (((L & 0xFF)*2 >= threshold[py
 (px, py) are the output pixel's coordinates; the matrix is row-major `[y][x]`; the full low byte is compared.
 Per channel: R from bits 32..47, G from 16..31, B from 0..15.
 
+Scene outline on a preview picture (Rust): the glowing edges are scaled to the picture by each channel's maximum over
+the canvas pixels a picture pixel covers, nearest under its centre when a picture pixel is smaller than a canvas
+pixel, then blended additively; every edge shows at any scale. Next lets WPF filter its edge layer linearly.
+
 ## Colouring on the GPU (Rust only)
 
 Where a plane lives on the GPU, a render pass colours it there (`render::gpu`): the screen renderer and the frame

@@ -17,6 +17,7 @@ use egui_tiles::{
 };
 use wavedude_app_state::strings::Strings;
 
+use super::menu_bar::{self, Slot};
 use super::menu_keys;
 use crate::window::Pane;
 
@@ -443,12 +444,12 @@ impl egui_tiles::Behavior<Pane> for Behavior<'_> {
 		let button = egui::Button::new(ICON_ARROW_DROP_DOWN.rich_text().size(ICON_SIZE)).frame(false);
 		let (response, shown) = egui::containers::menu::MenuButton::from_button(button).ui(ui, |ui| {
 			for (side, key) in Side::ALL {
-				if menu_keys::item(ui, s.get(key)).clicked() {
+				if menu_bar::entry(ui, Slot::Empty, s.get(key), None, None).clicked() {
 					self.placing = Some((active, Placing::Move(side)));
 				}
 			}
 			ui.separator();
-			if menu_keys::item(ui, s.get("DockCloseMenu")).clicked() {
+			if menu_bar::entry(ui, Slot::Empty, s.get("DockCloseMenu"), None, None).clicked() {
 				self.placing = Some((active, Placing::Close));
 			}
 		});
