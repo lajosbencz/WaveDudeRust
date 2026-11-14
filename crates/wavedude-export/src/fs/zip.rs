@@ -358,10 +358,20 @@ mod tests {
 	#[test]
 	fn paths_out_of_the_archive_are_refused() {
 		let zip = archive(&MemFs::new(), Path::new("a.zip"));
-		for path in ["/abs", "../up", "", ".", "a:b", "a\\b"] {
+		for path in ["/abs", "../up", "", ".", "a:b"] {
 			assert!(zip.create(Path::new(path)).is_err(), "{path}");
 		}
 		assert!(zip.create(Path::new("./a/b")).is_ok());
+	}
+
+	#[test]
+	fn a_backslash_is_a_separator_on_windows_and_refused_elsewhere() {
+		let name = entry_name(Path::new("a\\b"));
+		if cfg!(windows) {
+			assert_eq!(name.unwrap(), "a/b");
+		} else {
+			assert!(name.is_err());
+		}
 	}
 
 	#[test]
