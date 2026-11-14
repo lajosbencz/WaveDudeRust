@@ -17,7 +17,7 @@ workspace = true
 [dependencies]
 wavedude-core = { path = "../wavedude-core", features = ["gpu", "serde"] }
 wavedude-examples = { path = "../wavedude-examples" }
-wavedude-export = { path = "../wavedude-export", default-features = false }
+wavedude-export = { path = "../wavedude-export", default-features = false, features = ["serde"] }
 anyhow.workspace = true
 postcard.workspace = true
 quick-xml.workspace = true

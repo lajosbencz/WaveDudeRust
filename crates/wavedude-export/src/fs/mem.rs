@@ -92,13 +92,22 @@ impl OutputFs for MemFs {
 mod tests {
 	use super::*;
 	use crate::ExportFormat;
+	use crate::h264::Profile;
 	use crate::sinks::{self, EncoderPool, SinkSpec};
 
 	#[test]
 	fn a_still_written_to_memory_decodes() {
 		let fs = Arc::new(MemFs::new());
 		let path = Path::new("out/still.png");
-		let spec = SinkSpec { width: 3, height: 2, fps: 30, quality: 90, first_frame: 0, frame_count: 1 };
+		let spec = SinkSpec {
+			width: 3,
+			height: 2,
+			fps: 30,
+			quality: 90,
+			profile: Profile::Baseline,
+			first_frame: 0,
+			frame_count: 1,
+		};
 		let dyn_fs: Arc<dyn OutputFs> = fs.clone();
 		let mut sink =
 			sinks::open(ExportFormat::Png, &dyn_fs, path, spec, true, &EncoderPool::default(), None).unwrap();

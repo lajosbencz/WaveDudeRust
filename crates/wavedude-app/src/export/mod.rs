@@ -25,6 +25,7 @@ use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::{Layer, Project};
 use wavedude_core::run::store::FrameStore;
 use wavedude_export::fs::OutputFs;
+use wavedude_export::h264::Profile;
 use wavedude_export::{ExportFormat, ExportLayers, ExportPlan, FrameSource, naming};
 
 use crate::App;
@@ -179,6 +180,7 @@ pub struct Work {
 	pub traces: Vec<ProbeTrace>,
 	pub total_steps: u64,
 	pub schemes: SchemeStore,
+	pub h264_profile: Profile,
 	#[cfg(not(target_arch = "wasm32"))]
 	pub use_openh264: bool,
 	#[cfg(not(target_arch = "wasm32"))]
@@ -197,6 +199,7 @@ impl Work {
 			traces: traces(app),
 			total_steps: u64::from(app.live.run_request().expect("a run with a store has a request").schedule().steps),
 			schemes: app.schemes.clone(),
+			h264_profile: app.settings.h264_profile,
 			#[cfg(not(target_arch = "wasm32"))]
 			use_openh264: app.settings.use_openh264 == Some(true),
 			#[cfg(not(target_arch = "wasm32"))]
@@ -229,6 +232,7 @@ impl Work {
 			total_steps: self.total_steps,
 			keep_partial: false,
 			h264: None,
+			h264_profile: self.h264_profile,
 		}
 	}
 

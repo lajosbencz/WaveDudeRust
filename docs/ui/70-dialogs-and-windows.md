@@ -88,6 +88,9 @@ under Browser differences, below.
   codec (downloaded from Cisco at the first MP4 export)" (setting `UseOpenH264`); OK is disabled while it is
   clear. Once downloaded, a "Delete the downloaded codec" button follows; the choice stays. The download runs on the export's worker before the first frame; a failure ends the export with its reason
   in the error box. A build with OpenH264 compiled in shows neither (decision 0005).
+- MP4 also shows "H.264 profile" (Baseline, Main, High; setting `H264Profile`). A profile the encoder lacks is
+  greyed, its tooltip the reason ("OpenH264 encodes Baseline only"), and the reason shows below while the setting
+  names one; the export then uses the encoder's best profile.
 - The last filter index is remembered (`ExportFilterIndex`); a remembered video means PNG in the still dialog.
 - Start folder rule, per kind (run export, still, probe data) and per project file: the first export after a
   project is opened starts in the project's folder under the project's name; every later one in the last completed

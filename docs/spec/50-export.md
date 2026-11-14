@@ -149,8 +149,15 @@ Label font: see "Burned-in overlays" below.
   (`Quality`), no B-frames, GOP 1 s.
 - Bitrate fallback: `clamp(round_even(W*H*fps*0.01*50^(q/100)), 300000, 200000000)` bit/s.
 - Odd sizes padded to even by repeating the last row/column; maximum 4096 x 2304.
-- Rust: openh264 and the `mp4` crate, decision 0005. The encoder is Cisco's binary loaded at run time
-  (`ExportPlan::h264`, the path from `wavedude_export::h264`); without one the export fails with `H264Missing`.
+- Rust: an H.264 encoder behind `wavedude_export::h264::H264Encoder` (opened by the plan's `H264Factory`,
+  `ExportPlan::h264`) muxed by the `mp4` crate (feature `mp4-mux`, which builds for the browser). The encoder
+  takes 4:2:0 pictures and hands back Annex B access units, possibly later (`poll_ready`, `start_flush`,
+  `poll_flushed`); the sink passes this on as `FrameSink::poll_ready` and `poll_finish`, which the job polls
+  before writing a frame and before finishing (not after a cancel). Natively the encoder is OpenH264 (feature
+  `mp4`, decision 0005), Cisco's binary loaded at run time (`OpenH264Factory`, the path from
+  `wavedude_export::h264::library`); without one the export fails with `H264Missing`.
+- Profile: `ExportPlan::h264_profile` (Baseline, Main or High), the app's `H264Profile` setting; when the encoder
+  lacks it, its best profile is used and a warning logged. OpenH264 encodes Constrained Baseline only.
 
 ## OpenEXR (`Export/ExrWriter.cs`)
 

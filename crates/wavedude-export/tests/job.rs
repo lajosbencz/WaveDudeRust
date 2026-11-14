@@ -10,6 +10,7 @@ use wavedude_core::engine::types::{FrameShape, SampleFormat, SampleKind};
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::{ColorScheme, DisplayLayer, Layer, Probe, Project};
 use wavedude_core::render::render_half;
+use wavedude_export::h264::Profile;
 use wavedude_export::overlays::Overlays;
 use wavedude_export::range::frame_range;
 use wavedude_export::sinks::{self, SinkSpec};
@@ -60,7 +61,15 @@ fn rendered(src: &MemoryFrames, frame: usize, layer: Layer) -> Vec<u8> {
 }
 
 fn spec(first: usize, count: usize) -> SinkSpec {
-	SinkSpec { width: W, height: H, fps: 30, quality: 90, first_frame: first, frame_count: count }
+	SinkSpec {
+		width: W,
+		height: H,
+		fps: 30,
+		quality: 90,
+		profile: Profile::Baseline,
+		first_frame: first,
+		frame_count: count,
+	}
 }
 
 fn target(format: ExportFormat, path: &std::path::Path, layer: Layer, first: usize, count: usize) -> ExportTarget {
@@ -383,6 +392,7 @@ fn a_plan_builds_one_target_per_layer_with_suffixed_paths() {
 		total_steps: 8,
 		keep_partial: false,
 		h264: None,
+		h264_profile: Profile::Baseline,
 	};
 	let job = plan.build_job(src.clone(), &SchemeStore::default()).unwrap();
 	assert_eq!(job.progress(), (0, 4));
@@ -420,6 +430,7 @@ fn a_plan_whose_second_layer_cannot_be_drawn_opens_no_output() {
 		total_steps: 4,
 		keep_partial: false,
 		h264: None,
+		h264_profile: Profile::Baseline,
 	};
 	let error = plan.build_job(src.clone(), &SchemeStore::default()).err().expect("a scene of another size");
 	assert!(matches!(error, ExportError::WrongInput(_)), "{error}");
@@ -445,6 +456,7 @@ fn a_plan_that_cannot_open_an_output_removes_those_it_opened() {
 		total_steps: 4,
 		keep_partial: false,
 		h264: None,
+		h264_profile: Profile::Baseline,
 	};
 	assert!(plan.build_job(src.clone(), &SchemeStore::default()).is_err());
 	assert!(!dir.join("run_field.avi").exists(), "the field's movie is removed");

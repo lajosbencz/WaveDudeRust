@@ -12,6 +12,7 @@ use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::Layer;
 use wavedude_core::quality::PreviewQuality;
 use wavedude_core::run::{FrameStore, RunError, RunEvent, SimulationRun};
+use wavedude_export::h264::Profile;
 use wavedude_export::{ExportFormat, ExportLayers, ExportPlan, ExportState, FrameSource};
 
 use crate::project::load;
@@ -138,7 +139,11 @@ fn run_failure(run: &mut SimulationRun) -> Option<anyhow::Error> {
 pub(crate) fn run(args: &Args) -> Result<()> {
 	let format = format_of(args)?;
 	#[cfg(feature = "mp4")]
-	let h264 = if format == ExportFormat::Mp4 { crate::openh264::library()? } else { None };
+	let h264: Option<Arc<dyn wavedude_export::h264::H264Factory>> = if format == ExportFormat::Mp4 {
+		Some(Arc::new(wavedude_export::h264::OpenH264Factory::new(crate::openh264::library()?)))
+	} else {
+		None
+	};
 	#[cfg(not(feature = "mp4"))]
 	let h264 = None;
 	if args.still.is_some() && !format.supports_still() {
@@ -200,6 +205,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 		total_steps: spec.steps as u64,
 		keep_partial: args.keep_partial,
 		h264,
+		h264_profile: Profile::default(),
 	};
 	#[allow(clippy::arc_with_non_send_sync, reason = "the job shares the source on this thread")]
 	let source =

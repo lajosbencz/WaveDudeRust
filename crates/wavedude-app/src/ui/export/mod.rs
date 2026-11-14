@@ -22,12 +22,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use eframe::egui::{self, Id, Key, RichText, Ui};
 use wavedude_app_state::live::ExportGate;
 use wavedude_app_state::platform::Instant;
+use wavedude_app_state::strings::Strings;
 use wavedude_app_state::{Event, ExportKind};
 use wavedude_export::ExportFormat;
+use wavedude_export::h264::Profile;
 
 use super::modal::{Choice, Modal, Modals, Reply, Then, buttons};
 use super::properties::{Choices, combo};
-use super::theme::FONT_SIZE;
+use super::theme::{FONT_SIZE, Palette};
 use crate::App;
 use crate::dialogs::filters;
 use crate::export::{self, Outcome, Plan};
@@ -340,6 +342,7 @@ impl ExportDialog {
 				shown: &self.names[self.format].0,
 				word: &word,
 				swatch: None,
+				disabled: None,
 				actions: &[],
 			};
 			if let Some(i) = combo(ui, Id::unique("ExportFormat"), title, &choices) {
@@ -358,6 +361,42 @@ impl ExportDialog {
 	}
 }
 
+/// The H.264 profile row: every profile, those not in `supported` greyed with `reason`, which also shows below while
+/// the current one is among them; the profile picked.
+#[cfg_attr(target_arch = "wasm32", expect(dead_code, reason = "the browser's MP4 waits for WebCodecs"))]
+fn profile_row(ui: &mut Ui, s: &Strings, current: Profile, supported: &[Profile], reason: &str) -> Option<Profile> {
+	let label = s.get("ExportH264Profile");
+	let name = |p: Profile| {
+		s.get(match p {
+			Profile::Baseline => "ExportH264ProfileBaseline",
+			Profile::Main => "ExportH264ProfileMain",
+			Profile::High => "ExportH264ProfileHigh",
+		})
+	};
+	let word = |i: usize| Cow::Borrowed(name(Profile::ALL[i]));
+	let disabled = |i: usize| (!supported.contains(&Profile::ALL[i])).then_some(reason);
+	let picked = ui
+		.horizontal(|ui| {
+			ui.label(label);
+			let choices = Choices {
+				len: Profile::ALL.len(),
+				current: Profile::ALL.iter().position(|&p| p == current),
+				shown: name(current),
+				word: &word,
+				swatch: None,
+				disabled: Some(&disabled),
+				actions: &[],
+			};
+			combo(ui, Id::unique("ExportH264Profile"), label, &choices).map(|i| Profile::ALL[i])
+		})
+		.inner;
+	if !supported.contains(&current) {
+		let dim = Palette::of(ui.ctx().theme()).text_dim;
+		ui.add(egui::Label::new(RichText::new(reason).color(dim)).wrap());
+	}
+	picked
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -374,5 +413,38 @@ mod tests {
 		exports.run(&ctx, &mut app, &mut modals, plan);
 		assert!(!exports.exporting() && !app.live.export_busy(), "the export did not end");
 		assert!(modals.is_open(), "the error was not shown");
+	}
+
+	#[test]
+	fn a_profile_the_encoder_lacks_is_greyed_with_the_reason() {
+		use eframe::egui::accesskit::Role;
+		use egui_kittest::kittest::{NodeT as _, Queryable as _};
+		use wavedude_app_state::strings::Language;
+
+		let s = Strings::new(Language::English);
+		let reason = s.get("ExportH264BaselineOnly");
+		let builder = egui_kittest::Harness::builder().with_context_setup(|ctx| {
+			super::super::theme::install(ctx);
+			egui_material_icons::initialize(ctx);
+		});
+		let mut harness = builder.build_ui_state(
+			|ui, picked: &mut Vec<Profile>| {
+				picked.extend(profile_row(ui, &s, Profile::High, &[Profile::Baseline], reason));
+			},
+			Vec::new(),
+		);
+		harness.get_by_label(reason);
+		harness.get_by_role_and_label(Role::ComboBox, s.get("ExportH264Profile")).click();
+		harness.run();
+		assert!(harness.get_by_role_and_label(Role::MenuItemCheckBox, "Main").accesskit_node().is_disabled());
+		assert!(harness.get_by_role_and_label(Role::MenuItemCheckBox, "High").accesskit_node().is_disabled());
+		harness.get_by_role_and_label(Role::MenuItemCheckBox, "Main").click();
+		harness.run();
+		assert!(harness.state().is_empty(), "a greyed profile was picked");
+		harness.get_by_role_and_label(Role::ComboBox, s.get("ExportH264Profile")).click();
+		harness.run();
+		harness.get_by_role_and_label(Role::MenuItemCheckBox, "Baseline").click();
+		harness.run();
+		assert_eq!(harness.state(), &[Profile::Baseline]);
 	}
 }

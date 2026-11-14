@@ -65,7 +65,7 @@ fn export_frames(
 	let mut plan = work.export_plan(choice, format, path.to_path_buf(), frame, Arc::new(StdFs));
 	if format == ExportFormat::Mp4 {
 		match codec(work) {
-			Ok(h264) => plan.h264 = h264,
+			Ok(library) => plan.h264 = Some(Arc::new(h264::OpenH264Factory::new(library))),
 			Err(e) => return Outcome::Failed(e),
 		}
 	}

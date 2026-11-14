@@ -15,7 +15,6 @@ use wavedude_core::model::Layer;
 mod bits;
 pub mod csv;
 pub mod fs;
-#[cfg(feature = "mp4")]
 pub mod h264;
 pub mod job;
 pub mod naming;
@@ -34,7 +33,7 @@ pub use sinks::{EncoderPool, FrameSink, SinkSpec};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum ExportFormat {
-	/// H.264 in MP4 (openh264).
+	/// H.264 in MP4.
 	Mp4,
 	/// MPEG-1 program stream, I-frames only.
 	Mpeg1,

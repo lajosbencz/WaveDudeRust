@@ -184,9 +184,15 @@ impl ExportDialog {
 		Some(if path.extension().is_none() { path.with_extension(self.extension()) } else { path })
 	}
 
-	/// The MP4 codec's notice and choice; whether the export can start.
+	/// MP4's profile, and the codec's notice and choice; whether the export can start.
 	pub(super) fn notes(&mut self, ui: &mut Ui, app: &App, out: &mut Vec<Event>) -> bool {
 		let s = &app.strings;
+		if self.format() == Some(ExportFormat::Mp4) {
+			let (current, supported) = (app.settings.h264_profile, h264::OpenH264Factory::PROFILES);
+			if let Some(profile) = super::profile_row(ui, s, current, supported, s.get("ExportH264BaselineOnly")) {
+				out.push(Event::SetH264Profile(profile));
+			}
+		}
 		let mp4 = self.format() == Some(ExportFormat::Mp4) && !h264::BUILT_IN;
 		let enabled = codec::enabled(app.settings.use_openh264);
 		if mp4 {

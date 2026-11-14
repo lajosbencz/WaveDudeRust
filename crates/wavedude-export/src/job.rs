@@ -116,6 +116,8 @@ pub enum Step {
 /// What the job does at its next step.
 enum Phase {
 	Writing,
+	/// Every frame is written; the sinks complete their encoding ([`FrameSink::poll_finish`]).
+	Finishing,
 	/// Every sink is finished; the outcome waits for the files to be committed.
 	Flushing(ExportState),
 	Ended,
@@ -130,6 +132,10 @@ pub enum Wait {
 	Ready,
 	/// The file store to commit the closed files ([`OutputFs::poll_flushed`]).
 	Flushed,
+	/// A sink to take the next frame ([`FrameSink::poll_ready`]).
+	SinkReady,
+	/// The sinks to complete their encoding ([`FrameSink::poll_finish`]).
+	SinkFinished,
 }
 
 /// What one frame's turn did.
@@ -204,9 +210,10 @@ impl<'a> ExportJob<'a> {
 
 	/// Writes frames until `budget` has passed, at least one or the part of one not pending. `cancel` is read
 	/// before each frame and while waiting for one; [`FrameSource::wait_for`] blocks, so a step is short only on a
-	/// complete source. At the end every sink is finished whatever the outcome and the job waits for the file store
-	/// to commit the files, a cancel turning a completed job into a cancelled one; the outputs of a job that did not
-	/// complete are then removed unless kept partial. A job dropped before it ended leaves its outputs as they are:
+	/// complete source. Once every frame is written the job waits for the sinks to complete their encoding; then
+	/// every sink is finished whatever the outcome and the job waits for the file store to commit the files, a cancel
+	/// during either wait turning a completed job into a cancelled one; the outputs of a job that did not complete are
+	/// then removed unless kept partial. A job dropped before it ended leaves its outputs as they are:
 	/// step it with `cancel` set to clean up.
 	pub fn step(&mut self, budget: Duration, cancel: &AtomicBool) -> Step {
 		if let Phase::Writing = self.phase {
@@ -220,6 +227,18 @@ impl<'a> ExportJob<'a> {
 					Ok(Advance::Cancelled) => break ExportState::Cancelled,
 					Err(e) => break ExportState::Failed(e),
 				}
+			};
+			self.phase = match state {
+				ExportState::Completed => Phase::Finishing,
+				state => Phase::Flushing(self.finish(state)),
+			};
+		}
+		if let Phase::Finishing = self.phase {
+			let state = match self.poll_finish() {
+				Ok(Poll::Ready(())) => ExportState::Completed,
+				Ok(Poll::Pending) if !cancel.load(Ordering::Relaxed) => return Step::Waiting(Wait::SinkFinished),
+				Ok(Poll::Pending) => ExportState::Cancelled,
+				Err(e) => ExportState::Failed(e),
 			};
 			self.phase = Phase::Flushing(self.finish(state));
 		}
@@ -257,9 +276,11 @@ impl<'a> ExportJob<'a> {
 						}
 						Wait::Ready => busy(format!("the file store takes no more yet, {BLOCKING}")),
 						Wait::Flushed => busy(format!("the file store is still writing, {BLOCKING}")),
+						Wait::SinkReady => busy(format!("a sink takes no more yet, {BLOCKING}")),
+						Wait::SinkFinished => busy(format!("a sink is still encoding, {BLOCKING}")),
 					});
 					let state = match std::mem::replace(&mut self.phase, Phase::Ended) {
-						Phase::Writing => self.finish(failed),
+						Phase::Writing | Phase::Finishing => self.finish(failed),
 						_ => failed,
 					};
 					return self.conclude(state);
@@ -296,6 +317,9 @@ impl<'a> ExportJob<'a> {
 		}
 		let (w, h) = (self.shape.width(), self.shape.height());
 		while let Some(target) = self.targets.get_mut(self.written) {
+			if target.sink.poll_ready()?.is_pending() {
+				return Ok(Advance::Waiting(Wait::SinkReady));
+			}
 			let out = bytemuck::cast_slice_mut(&mut self.halves);
 			if self.source.poll_layer(frame, target.layer, out).map_err(ExportError::Source)?.is_pending() {
 				return Ok(Advance::Waiting(Wait::Frame(frame)));
@@ -317,6 +341,17 @@ impl<'a> ExportJob<'a> {
 		self.written = 0;
 		self.done += 1;
 		Ok(Advance::Wrote)
+	}
+
+	/// Polls every sink's [`FrameSink::poll_finish`]; ready once all are, else the first error.
+	fn poll_finish(&mut self) -> crate::Result<Poll<()>> {
+		let mut finished = Poll::Ready(());
+		for target in &mut self.targets {
+			if target.sink.poll_finish()?.is_pending() {
+				finished = Poll::Pending;
+			}
+		}
+		Ok(finished)
 	}
 
 	/// Finishes every sink; `state`, or the failure to finish when it was not failed already.
@@ -361,6 +396,7 @@ mod tests {
 
 	use super::*;
 	use crate::fs::{MemFs, OutputFile};
+	use crate::h264::Profile;
 	use crate::sinks::{self, EncoderPool, SinkSpec};
 	use crate::{ExportFormat, MemoryFrames};
 
@@ -431,7 +467,15 @@ mod tests {
 
 	/// A job writing every frame of `source` as a PNG sequence `seq/seq_NNNN.png` of `fs`.
 	fn job(source: Arc<dyn FrameSource>, fs: Arc<dyn OutputFs>) -> ExportJob<'static> {
-		let spec = SinkSpec { width: W, height: H, fps: 30, quality: 90, first_frame: 0, frame_count: FRAMES };
+		let spec = SinkSpec {
+			width: W,
+			height: H,
+			fps: 30,
+			quality: 90,
+			profile: Profile::Baseline,
+			first_frame: 0,
+			frame_count: FRAMES,
+		};
 		let sink =
 			sinks::open(ExportFormat::Png, &fs, Path::new("seq.png"), spec, false, &EncoderPool::default(), None)
 				.unwrap();
@@ -561,5 +605,152 @@ mod tests {
 		assert_eq!(waited, FRAMES, "each frame pending once");
 		let expected: Vec<_> = (0..FRAMES).flat_map(|k| vec![k..(k + 4).min(FRAMES); 2]).collect();
 		assert_eq!(*src.prefetched.lock().unwrap(), expected, "named again when a pending frame is asked again");
+	}
+
+	#[cfg(feature = "mp4-mux")]
+	mod mp4 {
+		use std::collections::VecDeque;
+		use std::io::Cursor;
+
+		use super::*;
+		use crate::h264::{EncoderSpec, H264Encoder, H264Factory, Yuv420};
+		use crate::sinks::mp4::Mp4Sink;
+
+		/// Polls before an access unit comes out.
+		const LAG: usize = 3;
+		/// Pictures held before the encoder takes no more.
+		const QUEUE: usize = 2;
+		const FPS: u32 = 2;
+
+		/// Opens [`Late`] encoders.
+		#[derive(Debug)]
+		struct Lagging;
+
+		impl H264Factory for Lagging {
+			fn profiles(&self) -> &[Profile] {
+				&Profile::ALL
+			}
+
+			fn open(&self, spec: &EncoderSpec) -> crate::Result<Box<dyn H264Encoder>> {
+				Ok(Box::new(Late { fps: spec.fps as usize, ..Late::default() }))
+			}
+		}
+
+		/// Releases each access unit `LAG` polls after its picture; busy while `QUEUE` pictures are held.
+		#[derive(Default)]
+		struct Late {
+			fps: usize,
+			submitted: usize,
+			/// Access units, whether each is a sync sample, polls left.
+			held: VecDeque<(Vec<u8>, bool, usize)>,
+		}
+
+		impl Late {
+			fn tick(&mut self) {
+				for (_, _, left) in &mut self.held {
+					*left = left.saturating_sub(1);
+				}
+			}
+		}
+
+		impl H264Encoder for Late {
+			fn poll_ready(&mut self) -> crate::Result<Poll<()>> {
+				self.tick();
+				Ok(if self.held.len() < QUEUE { Poll::Ready(()) } else { Poll::Pending })
+			}
+
+			fn submit(&mut self, _: &Yuv420) -> crate::Result<()> {
+				let (n, sync) = (self.submitted, self.submitted.is_multiple_of(self.fps));
+				let mut unit = Vec::new();
+				if n == 0 {
+					unit.extend_from_slice(&[0, 0, 0, 1, 0x67, 0x42, 0xC0, 0x1E, 0xDA]);
+					unit.extend_from_slice(&[0, 0, 0, 1, 0x68, 0xCE, 0x3C, 0x80]);
+				}
+				unit.extend_from_slice(&[0, 0, 0, 1, if sync { 0x65 } else { 0x41 }, n as u8, 0x80]);
+				self.held.push_back((unit, sync, LAG));
+				self.submitted += 1;
+				Ok(())
+			}
+
+			fn drain(&mut self, out: &mut dyn FnMut(&[u8], bool) -> crate::Result<()>) -> crate::Result<()> {
+				while self.held.front().is_some_and(|(_, _, left)| *left == 0) {
+					let (unit, sync, _) = self.held.pop_front().unwrap();
+					out(&unit, sync)?;
+				}
+				Ok(())
+			}
+
+			fn start_flush(&mut self) -> crate::Result<()> {
+				Ok(())
+			}
+
+			fn poll_flushed(&mut self) -> crate::Result<Poll<()>> {
+				self.tick();
+				Ok(if self.held.iter().all(|(_, _, left)| *left == 0) { Poll::Ready(()) } else { Poll::Pending })
+			}
+		}
+
+		/// A job writing every frame of [`frames`] as `v.mp4` of `fs` through [`Late`] encoders.
+		fn job(fs: Arc<MemFs>) -> ExportJob<'static> {
+			let spec = SinkSpec {
+				width: W,
+				height: H,
+				fps: FPS,
+				quality: 90,
+				profile: Profile::High,
+				first_frame: 0,
+				frame_count: FRAMES,
+			};
+			let out: Arc<dyn OutputFs> = fs;
+			let sink = sinks::file(&out, Path::new("v.mp4"), |file| Mp4Sink::new(file, spec, &Lagging)).unwrap();
+			let look = ExportLayerLook::new(
+				&ColorScheme::grey(),
+				&DisplayLayer::field_default(),
+				SampleKind::Field,
+				None,
+				(W, H),
+			)
+			.unwrap();
+			let target = ExportTarget { layer: Layer::Field, look, sink };
+			ExportJob::new(Arc::new(frames()), out, 0..=FRAMES - 1, vec![target], None, false)
+		}
+
+		#[test]
+		fn an_encoder_releasing_its_output_late_makes_a_whole_mp4() {
+			let fs = Arc::new(MemFs::new());
+			let mut job = job(fs.clone());
+			let mut waits = Vec::new();
+			let report = loop {
+				match job.step(Duration::MAX, &AtomicBool::new(false)) {
+					Step::Working => {}
+					Step::Waiting(wait) => waits.push(wait),
+					Step::Ended(report) => break report,
+				}
+			};
+			assert!(matches!(report.state, ExportState::Completed), "{:?}", report.state);
+			assert!(waits.contains(&Wait::SinkReady) && waits.contains(&Wait::SinkFinished), "{waits:?}");
+			let bytes = fs.take(Path::new("v.mp4")).unwrap();
+			let size = bytes.len() as u64;
+			let mut mp4 = ::mp4::Mp4Reader::read_header(Cursor::new(bytes), size).unwrap();
+			assert_eq!(mp4.sample_count(1).unwrap(), FRAMES as u32);
+			for k in 0..FRAMES {
+				let sample = mp4.read_sample(1, k as u32 + 1).unwrap().unwrap();
+				assert_eq!(sample.is_sync, k.is_multiple_of(FPS as usize), "sample {k}");
+				assert_eq!(sample.bytes[5], k as u8, "sample {k} in order");
+			}
+		}
+
+		#[test]
+		fn a_cancel_while_the_encoder_is_busy_ends_the_job() {
+			let fs = Arc::new(MemFs::new());
+			let mut job = job(fs.clone());
+			let cancel = AtomicBool::new(false);
+			while !matches!(job.step(Duration::ZERO, &cancel), Step::Waiting(Wait::SinkReady)) {}
+			cancel.store(true, Ordering::Relaxed);
+			let Step::Ended(report) = job.step(Duration::ZERO, &cancel) else { panic!("ended") };
+			assert!(matches!(report.state, ExportState::Cancelled), "{:?}", report.state);
+			assert_eq!(report.frames_done, QUEUE);
+			assert!(fs.paths().is_empty(), "the output is removed");
+		}
 	}
 }

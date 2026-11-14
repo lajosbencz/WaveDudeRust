@@ -4,7 +4,7 @@ use rayon::prelude::*;
 
 /// Planar Y, Cb, Cr of a padded picture: Y `width x height`, each chroma plane `width/2 x height/2`, row-major.
 #[derive(Clone, Debug)]
-pub(crate) struct Yuv420 {
+pub struct Yuv420 {
 	pub width: usize,
 	pub height: usize,
 	pub y: Vec<u8>,

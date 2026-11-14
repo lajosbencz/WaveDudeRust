@@ -45,7 +45,8 @@ push. What they hold the code to:
   pictures. Placement the preview needs (which graph boxes a picture shows, where) lives here too
   ([decision 0018](decisions/0018-a-shared-picture-view.md)).
   Depends on core without default features and on epaint alone of the egui family; builds for `wasm32-unknown-unknown`.
-- `wavedude-export`: sinks, overlays, CSV, the export job. Depends on core and view (the overlay shapes); rasterises
+- `wavedude-export`: sinks, overlays, CSV, the export job, the H.264 encoder seam (`h264`: the MP4 muxer takes any
+  `H264Encoder`; `mp4-mux` is the muxer alone, `mp4` adds OpenH264). Depends on core and view (the overlay shapes); rasterises
   the overlays' epaint meshes on the CPU into the frame.
 - `wavedude-app-state`: document, history, selection, commands, live runs, settings, strings, log. What differs
   between the desktop and the browser is in its `platform` module, `native` or `web` chosen at compile time with
@@ -62,7 +63,7 @@ push. What they hold the code to:
   The browser's `CoreBackend` is a `Remote` on the run worker; a worker that fails to load, crashes, stays
   silent or speaks another protocol version (`protocol::VERSION`) fails every run with its reason (`WorkerGone`)
   until the page is reloaded, and nothing runs on the page. Depends on core
-  (with `serde`), export (no default features; with MP4 native only) and examples; no egui, no rfd
+  (with `serde`), export (no default features, with `serde`; with MP4 native only) and examples; no egui, no rfd
   ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
 - `wavedude-app`: egui views on eframe, natively and in the browser ([`tools/build-web.sh`](../tools/build-web.sh)),
   on the renderer's wgpu device, which the engines share natively where it computes

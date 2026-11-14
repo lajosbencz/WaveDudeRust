@@ -286,6 +286,7 @@ mod tests {
 			total_steps: 10,
 			keep_partial: false,
 			h264: None,
+			h264_profile: Default::default(),
 		};
 		let job = plan.build_job(Arc::new(source(5)), &wavedude_core::io::schemes::SchemeStore::default()).unwrap();
 		let report = job.run(|_, _| {}, &std::sync::atomic::AtomicBool::new(false));

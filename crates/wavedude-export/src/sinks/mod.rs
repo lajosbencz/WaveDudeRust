@@ -2,11 +2,13 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::task::Poll;
 
 use half::f16;
 use wavedude_core::sync::MaybeSend;
 
 use crate::fs::{OutputFs, SharedFile};
+use crate::h264::{H264Factory, Profile};
 use crate::{ExportError, ExportFormat, Result};
 
 pub mod avi;
@@ -14,7 +16,7 @@ mod counted;
 pub mod exr;
 pub mod jpeg;
 pub mod mov;
-#[cfg(feature = "mp4")]
+#[cfg(feature = "mp4-mux")]
 pub mod mp4;
 pub mod mpeg1;
 pub mod png;
@@ -40,6 +42,17 @@ pub trait FrameSink: MaybeSend {
 
 	/// Frames accepted so far.
 	fn frames_written(&self) -> usize;
+
+	/// Ready when it takes a frame; pending until the event loop ran.
+	fn poll_ready(&mut self) -> Result<Poll<()>> {
+		Ok(Poll::Ready(()))
+	}
+
+	/// Ready once every frame written is encoded, before [`FrameSink::finish`]; no frame is written after it is
+	/// first called. Pending until the event loop ran.
+	fn poll_finish(&mut self) -> Result<Poll<()>> {
+		Ok(Poll::Ready(()))
+	}
 
 	/// Completes the output (indexes, headers, pending files) and flushes it; later calls do nothing.
 	fn finish(&mut self) -> Result<()>;
@@ -80,6 +93,14 @@ impl<S: FrameSink> FrameSink for FileOutput<S> {
 		self.sink.frames_written()
 	}
 
+	fn poll_ready(&mut self) -> Result<Poll<()>> {
+		self.sink.poll_ready()
+	}
+
+	fn poll_finish(&mut self) -> Result<Poll<()>> {
+		self.sink.poll_finish()
+	}
+
 	fn finish(&mut self) -> Result<()> {
 		let finished = self.sink.finish();
 		let closed = self.file.close();
@@ -99,7 +120,7 @@ impl<S: FrameSink> FrameSink for FileOutput<S> {
 
 /// Opens the single-file sink `make` creates on the file at `path`, which its first write creates; a file it
 /// created is removed when it fails.
-fn file<S: FrameSink + 'static>(
+pub(crate) fn file<S: FrameSink + 'static>(
 	fs: &Arc<dyn OutputFs>,
 	path: &Path,
 	make: impl FnOnce(SharedFile) -> Result<S>,
@@ -129,6 +150,8 @@ pub struct SinkSpec {
 	pub fps: u32,
 	/// `Display.Video.Quality`, 1..100.
 	pub quality: u32,
+	/// The H.264 profile asked for.
+	pub profile: Profile,
 	/// Timeline frame of the first frame written (numbers sequence files).
 	pub first_frame: usize,
 	/// Frames planned (pads sequence numbers, reserves a MOV header).
@@ -144,7 +167,8 @@ pub(crate) fn check_size(spec_w: u32, spec_h: u32, w: u32, h: u32, len: usize, b
 
 /// Opens the sink of `format` at `path` of `fs`: a video file at the path, encoded on a thread of its own (a movie on
 /// `pool`); for a sequence format a still at the path when `still`, else the folder of
-/// [`crate::naming::sequence_folder`], encoded on `pool`. `h264`: Cisco's `OpenH264` binary for MP4 (`crate::h264`).
+/// [`crate::naming::sequence_folder`], encoded on `pool`. `h264` opens MP4's encoder; natively the MP4 sink is on a
+/// thread of its own, which polls none of its hooks, so the encoder is to be synchronous there.
 pub fn open(
 	format: ExportFormat,
 	fs: &Arc<dyn OutputFs>,
@@ -152,7 +176,7 @@ pub fn open(
 	spec: SinkSpec,
 	still: bool,
 	pool: &EncoderPool,
-	h264: Option<&Path>,
+	h264: Option<&dyn H264Factory>,
 ) -> Result<Box<dyn FrameSink>> {
 	use sequence::{ImageKind, ImageSink, Placement};
 	let (w, h) = (spec.width, spec.height);
@@ -171,9 +195,12 @@ pub fn open(
 		})
 	};
 	match format {
-		#[cfg(feature = "mp4")]
-		ExportFormat::Mp4 => file(fs, path, |out| Threaded::new(mp4::Mp4Writer::new(out, spec, h264)?, w, h)),
-		#[cfg(not(feature = "mp4"))]
+		#[cfg(feature = "mp4-mux")]
+		ExportFormat::Mp4 => {
+			let h264 = h264.ok_or_else(|| ExportError::H264("no encoder was given".into()))?;
+			file(fs, path, |out| Threaded::new(mp4::Mp4Sink::new(out, spec, h264)?, w, h))
+		}
+		#[cfg(not(feature = "mp4-mux"))]
 		ExportFormat::Mp4 => {
 			let _ = h264;
 			Err(ExportError::H264("built without the mp4 feature".into()))

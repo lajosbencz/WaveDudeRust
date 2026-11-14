@@ -3,6 +3,7 @@ mod common;
 use std::io::Cursor;
 
 use common::*;
+use wavedude_export::h264::Profile;
 use wavedude_export::sinks::FrameSink;
 use wavedude_export::sinks::avi::AviWriter;
 use wavedude_export::sinks::mov::{MovCodec, MovWriter};
@@ -243,16 +244,18 @@ fn mov_decodes_to_identical_frames() {
 
 #[cfg(feature = "openh264-source")]
 fn mp4(path: &std::path::Path, frames: &[Vec<u8>], w: u32, h: u32) {
-	use wavedude_export::sinks::mp4::Mp4Writer;
+	use wavedude_export::h264::OpenH264Factory;
+	use wavedude_export::sinks::mp4::Mp4Sink;
 	let spec = wavedude_export::SinkSpec {
 		width: w,
 		height: h,
 		fps: 60,
 		quality: 85,
+		profile: Profile::Baseline,
 		first_frame: 0,
 		frame_count: frames.len(),
 	};
-	let mut writer = Mp4Writer::new(file(path), spec, None).unwrap();
+	let mut writer = Mp4Sink::new(file(path), spec, &OpenH264Factory::new(None)).unwrap();
 	for f in frames {
 		writer.write_frame(f, w, h).unwrap();
 	}
@@ -262,7 +265,7 @@ fn mp4(path: &std::path::Path, frames: &[Vec<u8>], w: u32, h: u32) {
 #[cfg(feature = "openh264-source")]
 #[test]
 fn mp4_decodes_close_to_the_source_at_the_default_quality() {
-	use wavedude_export::sinks::mp4::bitrate;
+	use wavedude_export::h264::bitrate;
 	assert_eq!(bitrate(1920, 1080, 60, 85), (1920.0 * 1080.0 * 60.0 * 0.01 * 50f64.powf(0.85)).round() as u32);
 	assert_eq!(bitrate(16, 16, 1, 1), 300_000);
 	assert_eq!(bitrate(4096, 2304, 240, 100), 200_000_000);
@@ -366,16 +369,24 @@ fn avi_refuses_a_frame_of_4_gib() {
 #[test]
 #[ignore = "downloads Cisco's OpenH264; run with --ignored"]
 fn mp4_through_ciscos_downloaded_binary() {
-	use wavedude_export::h264;
-	use wavedude_export::sinks::mp4::Mp4Writer;
+	use wavedude_export::h264::{self, OpenH264Factory};
+	use wavedude_export::sinks::mp4::Mp4Sink;
 	let dir = scratch("mp4-cisco");
-	let spec =
-		wavedude_export::SinkSpec { width: 640, height: 360, fps: 30, quality: 85, first_frame: 0, frame_count: 10 };
+	let spec = wavedude_export::SinkSpec {
+		width: 640,
+		height: 360,
+		fps: 30,
+		quality: 85,
+		profile: Profile::Baseline,
+		first_frame: 0,
+		frame_count: 10,
+	};
 	let path = dir.join("v.mp4");
-	assert!(matches!(Mp4Writer::new(file(&path), spec, None), Err(wavedude_export::ExportError::H264Missing)));
+	let missing = Mp4Sink::new(file(&path), spec, &OpenH264Factory::new(None));
+	assert!(matches!(missing, Err(wavedude_export::ExportError::H264Missing)));
 	let library = h264::download(&dir.join("codec"), |_, _| {}).unwrap();
 	assert_eq!(h264::installed(&dir.join("codec")), Some(library.clone()));
-	let mut writer = Mp4Writer::new(file(&path), spec, Some(&library)).unwrap();
+	let mut writer = Mp4Sink::new(file(&path), spec, &OpenH264Factory::new(Some(library))).unwrap();
 	let frames: Vec<Vec<u8>> = (0..10).map(|t| wave_frame(640, 360, t)).collect();
 	for f in &frames {
 		writer.write_frame(f, 640, 360).unwrap();

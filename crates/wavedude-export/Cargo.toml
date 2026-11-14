@@ -13,11 +13,15 @@ publish = false
 
 [features]
 default = ["mp4"]
+# The MP4 muxer alone, the H.264 encoder supplied by the caller: builds for the browser.
+mp4-mux = ["dep:mp4"]
 # MP4 through Cisco's prebuilt OpenH264, downloaded by the user's choice and loaded at run time (decision 0005).
-mp4 = ["dep:openh264", "openh264/libloading", "dep:mp4", "dep:ureq", "dep:bzip2"]
+mp4 = ["mp4-mux", "dep:openh264", "openh264/libloading", "dep:ureq", "dep:bzip2"]
 # OpenH264 compiled into the program instead: for development and tests, not for distributed builds.
 openh264-source = ["mp4", "openh264/source"]
 clap = ["dep:clap"]
+# The H.264 profile serialised, for settings that hold it.
+serde = ["dep:serde"]
 
 [lints]
 workspace = true
@@ -33,6 +37,7 @@ rayon.workspace = true
 tracing.workspace = true
 png.workspace = true
 clap = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 jpeg-encoder = "0.7"
 exr = "1.74"
 openh264 = { version = "0.9", default-features = false, optional = true }
@@ -45,4 +50,5 @@ rawzip = "0.5"
 [dev-dependencies]
 insta.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+sha2 = "0.10"
 zip = { version = "9", default-features = false }
