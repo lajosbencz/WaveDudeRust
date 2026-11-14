@@ -15,12 +15,14 @@ pub fn layer_suffix(layer: Layer) -> &'static str {
 /// The output of `layer` for a chosen path: unchanged for one layer; for both layers the stem without a layer
 /// suffix, then the layer's suffix, the extension kept.
 pub fn layer_path(chosen: &Path, layer: Layer, both: bool) -> PathBuf {
-	if !both {
-		return chosen.to_path_buf();
-	}
+	if both { with_layer_suffix(chosen, Some(layer)) } else { chosen.to_path_buf() }
+}
+
+/// `chosen` with its stem's layer suffix replaced by `layer`'s, or dropped for `None`; the extension kept.
+pub fn with_layer_suffix(chosen: &Path, layer: Option<Layer>) -> PathBuf {
 	let stem = chosen.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
 	let base = ["_field", "_intensity"].iter().find_map(|s| stem.strip_suffix(s)).unwrap_or(&stem);
-	let mut name = format!("{base}{}", layer_suffix(layer));
+	let mut name = format!("{base}{}", layer.map_or("", layer_suffix));
 	if let Some(ext) = chosen.extension() {
 		name.push('.');
 		name.push_str(&ext.to_string_lossy());
@@ -83,6 +85,8 @@ mod tests {
 		assert_eq!(layer_path(chosen, Layer::Field, true), Path::new("out/run_field.mp4"));
 		assert_eq!(layer_path(Path::new("out/run.mp4"), Layer::Field, true), Path::new("out/run_field.mp4"));
 		assert_eq!(layer_path(chosen, Layer::Intensity, false), chosen);
+		assert_eq!(with_layer_suffix(chosen, None), Path::new("out/run.mp4"));
+		assert_eq!(with_layer_suffix(Path::new("out/run"), Some(Layer::Intensity)), Path::new("out/run_intensity"));
 	}
 
 	#[test]

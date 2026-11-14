@@ -105,13 +105,17 @@ pub fn request(app: &App, choice: ExportKindChoice) -> ExportRequest {
 		0
 	};
 	let ext = formats[format].default_extension();
-	let path = if choice.is_still()
-		&& path.file_name().is_none_or(|n| n.is_empty() || Path::new(n) == Path::new(&project_name))
-	{
-		let layer = if choice == ExportKindChoice::FieldFrame { Layer::Field } else { Layer::Intensity };
-		path.with_file_name(naming::still_file_name(&project_name, Some(layer), frame, ext))
+	let layer = match choice.layers() {
+		ExportLayers::Field => Some(Layer::Field),
+		ExportLayers::Intensity => Some(Layer::Intensity),
+		ExportLayers::Both => None,
+	};
+	// A still keeps the last one's folder and is named for its layer and frame; a run keeps the last name, its layer
+	// suffix swapped.
+	let path = if choice.is_still() {
+		path.with_file_name(naming::still_file_name(&project_name, layer, frame, ext))
 	} else {
-		path.with_extension(ext)
+		naming::with_layer_suffix(&path, layer).with_extension(ext)
 	};
 	ExportRequest { choice, path, format }
 }
@@ -129,23 +133,22 @@ pub fn probe_csv_request(app: &App, probe: usize) -> (PathBuf, String) {
 	(start, probe)
 }
 
-/// What an export would replace: a sequence folder holding files, or an existing video or still; `None` when
-/// nothing is in the way or the export repeats the last one (which replaces on purpose).
-pub fn would_replace(plan: &Plan) -> Option<(&'static str, PathBuf)> {
-	let Plan::Frames { format, path, repeat: false, choice, .. } = plan else { return None };
-	if !choice.is_still() && !format.is_video() {
-		let folder = naming::sequence_folder(path);
-		let holds_files = std::fs::read_dir(&folder).is_ok_and(|mut d| d.next().is_some());
-		return holds_files.then_some(("ExportFolderExistsFormat", folder));
-	}
+/// What an export would replace, one question each: a layer's sequence folder holding files, or its existing video or
+/// still; empty when nothing is in the way or the export repeats the last one (which replaces on purpose).
+pub fn would_replace(plan: &Plan) -> Vec<(&'static str, PathBuf)> {
+	let Plan::Frames { format, path, repeat: false, choice, .. } = plan else { return Vec::new() };
 	let both = choice == &ExportKindChoice::Both;
-	choice
-		.layers()
-		.layers()
-		.iter()
-		.map(|&layer| naming::layer_path(path, layer, both))
-		.find(|p| p.is_file())
-		.map(|p| ("ExportFileExistsFormat", p))
+	let sequence = !choice.is_still() && !format.is_video();
+	let outputs = choice.layers().layers().iter().map(move |&layer| naming::layer_path(path, layer, both));
+	if sequence {
+		outputs
+			.map(|p| naming::sequence_folder(&p))
+			.filter(|f| std::fs::read_dir(f).is_ok_and(|mut d| d.next().is_some()))
+			.map(|f| ("ExportFolderExistsFormat", f))
+			.collect()
+	} else {
+		outputs.filter(|p| p.is_file()).map(|p| ("ExportFileExistsFormat", p)).collect()
+	}
 }
 
 /// The plan writes the Intensity layer, which the run must record.
@@ -298,6 +301,30 @@ mod tests {
 	use super::*;
 	use crate::dialogs::filters;
 	use wavedude_app_state::strings::{Language, Strings};
+
+	#[test]
+	fn both_layers_ask_about_each_output_in_the_way() {
+		let dir = tempfile::tempdir().unwrap();
+		let plan = |format| Plan::Frames {
+			choice: ExportKindChoice::Both,
+			format,
+			path: dir.path().join("run.mp4"),
+			frame: 0,
+			repeat: false,
+		};
+		assert!(would_replace(&plan(ExportFormat::Mp4)).is_empty());
+		for name in ["run_field.mp4", "run_intensity.mp4"] {
+			std::fs::write(dir.path().join(name), b"").unwrap();
+		}
+		let asked: Vec<_> = would_replace(&plan(ExportFormat::Mp4)).into_iter().map(|(_, p)| p).collect();
+		assert_eq!(asked, [dir.path().join("run_field.mp4"), dir.path().join("run_intensity.mp4")]);
+		for name in ["run_field", "run_intensity"] {
+			std::fs::create_dir(dir.path().join(name)).unwrap();
+			std::fs::write(dir.path().join(name).join("f.png"), b"").unwrap();
+		}
+		let asked: Vec<_> = would_replace(&plan(ExportFormat::Png)).into_iter().map(|(_, p)| p).collect();
+		assert_eq!(asked, [dir.path().join("run_field"), dir.path().join("run_intensity")]);
+	}
 
 	#[test]
 	fn every_language_names_each_format_once() {

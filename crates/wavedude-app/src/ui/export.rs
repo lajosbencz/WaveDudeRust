@@ -40,8 +40,8 @@ pub(super) enum After {
 pub(super) enum Step {
 	/// The dialog's OK.
 	Chosen(Plan),
-	/// Replacing what is in the way was confirmed.
-	Confirmed(Plan),
+	/// Replacing the first `usize` of what is in the way was confirmed.
+	Confirmed(Plan, usize),
 	/// Stop the export, then do `After`.
 	Stop(After),
 }
@@ -120,7 +120,7 @@ impl Exports {
 			return;
 		}
 		if let Some((Plan::Frames { choice, format, path, frame, .. }, _)) = self.last.clone() {
-			self.begin(ctx, app, modals, Plan::Frames { choice, format, path, frame, repeat: true });
+			self.ask(ctx, app, modals, Plan::Frames { choice, format, path, frame, repeat: true }, 0);
 		}
 	}
 
@@ -150,9 +150,9 @@ impl Exports {
 					let index = ExportFormat::ALL.iter().position(|f| f == format).expect("a run format is listed");
 					app.settings.export_filter_index = index as u32;
 				}
-				self.begin(ctx, app, modals, plan);
+				self.ask(ctx, app, modals, plan, 0);
 			}
-			Step::Confirmed(plan) => self.gate(ctx, app, modals, plan),
+			Step::Confirmed(plan, confirmed) => self.ask(ctx, app, modals, plan, confirmed),
 			Step::Stop(after) => {
 				self.after = Some(after);
 				self.cancel(app);
@@ -160,11 +160,12 @@ impl Exports {
 		}
 	}
 
-	/// Asks before replacing what is in the way.
-	fn begin(&mut self, ctx: &egui::Context, app: &mut App, modals: &mut Modals, plan: Plan) {
-		if let Some((key, target)) = export::would_replace(&plan) {
+	/// Asks before replacing each thing in the way, one at a time, from the `confirmed`th on.
+	fn ask(&mut self, ctx: &egui::Context, app: &mut App, modals: &mut Modals, plan: Plan, confirmed: usize) {
+		if let Some((key, target)) = export::would_replace(&plan).into_iter().nth(confirmed) {
 			let text = app.strings.format(key, &[&target.display()]);
-			modals.show(Modal::Confirm { text, yes: Then::Export(Step::Confirmed(plan)), destroys: false });
+			let yes = Then::Export(Step::Confirmed(plan, confirmed + 1));
+			modals.show(Modal::Confirm { text, yes, destroys: false });
 		} else {
 			self.gate(ctx, app, modals, plan);
 		}
@@ -274,7 +275,7 @@ impl Exports {
 				Msg::Done(outcome) => self.finished(app, modals, outcome),
 				Msg::Csv { document, probe, path } => {
 					if document == app.document_id() && app.document.project.probes.iter().any(|p| p.name == probe) {
-						self.begin(ctx, app, modals, Plan::Csv { probe, path });
+						self.ask(ctx, app, modals, Plan::Csv { probe, path }, 0);
 					}
 				}
 			}
