@@ -4,6 +4,7 @@
 #![deny(clippy::unwrap_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
+use std::ops::Range;
 use std::path::Path;
 use std::task::Poll;
 
@@ -25,7 +26,7 @@ pub mod raster;
 pub mod sinks;
 mod yuv;
 
-pub use job::{ExportJob, ExportLayerLook, ExportReport, ExportState, ExportTarget, Step};
+pub use job::{ExportJob, ExportLayerLook, ExportReport, ExportState, ExportTarget, Step, Wait};
 pub use plan::ExportPlan;
 pub use sinks::{EncoderPool, FrameSink, SinkSpec};
 
@@ -154,6 +155,10 @@ pub trait FrameSource {
 		Ok(frame < self.frame_count())
 	}
 
+	/// Names the frames to be read next, soonest first, so a spilled source can read them ahead; each call
+	/// replaces the last.
+	fn prefetch(&self, _frames: Range<usize>) {}
+
 	/// How the values of a layer's plane are meant.
 	fn sample_kind(&self, layer: Layer) -> SampleKind {
 		self.shape().sample_kind(layer)
@@ -247,6 +252,10 @@ impl FrameSource for wavedude_core::run::store::FrameStore {
 			Err(wavedude_core::run::store::StoreError::Pending { .. }) => Ok(Poll::Pending),
 			Err(e) => Err(e.into()),
 		}
+	}
+
+	fn prefetch(&self, frames: Range<usize>) {
+		wavedude_core::run::store::FrameStore::prefetch(self, frames);
 	}
 }
 

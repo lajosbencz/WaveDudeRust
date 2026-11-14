@@ -127,6 +127,6 @@ impl ExportPlan<'_> {
 		}
 		let overlays = Overlays::new(self.project, width, height, self.traces, self.total_steps);
 		let overlays = (!self.format.wants_halves() && !overlays.is_empty()).then_some(overlays);
-		Ok(ExportJob::new(source, frames, targets, overlays, self.keep_partial))
+		Ok(ExportJob::new(source, self.fs.clone(), frames, targets, overlays, self.keep_partial))
 	}
 }
