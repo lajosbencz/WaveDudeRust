@@ -1,6 +1,6 @@
 //! Exports driven headless on a small project: a run exported through the dialog after its full-quality run,
 //! repeated by Export last and asking before it replaces a file; a waiting export in the status bar, cancelled by
-//! Esc; Exit while an export waits asks first.
+//! Esc; Exit while an export waits asks first; a frame export's proposed name follows the layer.
 
 mod common;
 
@@ -171,4 +171,24 @@ fn esc_in_the_path_box_closes_the_dialog_and_enter_there_exports() {
 		assert!(harness.query_by_role_and_label(Role::Label, "Export the frame").is_none(), "{key:?} left it open");
 		assert_eq!(exporting(&harness), export, "{key:?}");
 	}
+}
+
+#[test]
+fn a_frame_export_proposes_the_other_layers_name_after_one_was_made() {
+	use wavedude_app::export::request;
+	use wavedude_app::menus::ExportKindChoice;
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = window(dir.path(), SHORT);
+	harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::F);
+	settle(&mut harness);
+	ok(&mut harness);
+	exported(&mut harness);
+	let app = harness.state().app();
+	let name = |choice| request(app, choice).path.file_name().unwrap().to_string_lossy().into_owned();
+	assert!(name(ExportKindChoice::FieldFrame).starts_with("example_field_"), "{}", name(ExportKindChoice::FieldFrame));
+	assert!(
+		name(ExportKindChoice::IntensityFrame).starts_with("example_intensity_"),
+		"{}",
+		name(ExportKindChoice::IntensityFrame)
+	);
 }
