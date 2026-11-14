@@ -160,6 +160,7 @@ pub struct ProbeCells {
 
 /// Sample format of a stored plane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SampleFormat {
 	/// f16 per sample.
 	Half,

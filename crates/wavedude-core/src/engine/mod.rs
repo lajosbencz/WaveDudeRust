@@ -104,50 +104,61 @@ pub type GpuHandle = Arc<gpu::GpuContext>;
 #[cfg(not(feature = "gpu"))]
 pub enum GpuHandle {}
 
-#[cfg(feature = "gpu")]
-fn cpu_instead(why: &dyn std::fmt::Display) {
-	tracing::warn!("the GPU engine is not available ({why}); the CPU engine runs instead");
+/// Why the CPU engine runs where the GPU's was asked for.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum Fallback {
+	#[error("not built in")]
+	NotBuiltIn,
+	#[cfg(feature = "gpu")]
+	#[error(transparent)]
+	Gpu(#[from] gpu::GpuError),
 }
 
-/// The engine for `scene`: the GPU's on `gpu` when given and it builds, else the CPU's (the fallback is
-/// logged).
-pub async fn build_on(scene: Arc<SceneData>, options: EngineOptions, gpu: Option<GpuHandle>) -> Box<dyn WaveEngine> {
+/// A built engine and, when it is the CPU's in place of the GPU's asked for, why.
+pub struct Built {
+	pub engine: Box<dyn WaveEngine>,
+	pub fallback: Option<Fallback>,
+}
+
+/// The CPU engine in place of the GPU's, the fallback logged.
+#[cfg(any(feature = "gpu", not(target_arch = "wasm32")))]
+fn cpu_instead(scene: Arc<SceneData>, options: EngineOptions, why: Fallback) -> Built {
+	tracing::warn!("the GPU engine is not available ({why}); the CPU engine runs instead");
+	Built { engine: Box::new(cpu::CpuEngine::new(scene, options)), fallback: Some(why) }
+}
+
+/// The engine for `scene`: the GPU's on `gpu` when given and it builds, else the CPU's.
+pub async fn build_on(scene: Arc<SceneData>, options: EngineOptions, gpu: Option<GpuHandle>) -> Built {
 	#[cfg(feature = "gpu")]
 	if let Some(ctx) = gpu {
-		match gpu::GpuEngine::create(ctx, scene.clone(), options.clone(), gpu::MediumLayout::Compact).await {
-			Ok(e) => return Box::new(e),
-			Err(e) => cpu_instead(&e),
-		}
+		return match gpu::GpuEngine::create(ctx, scene.clone(), options.clone(), gpu::MediumLayout::Compact).await {
+			Ok(e) => Built { engine: Box::new(e), fallback: None },
+			Err(e) => cpu_instead(scene, options, e.into()),
+		};
 	}
 	#[cfg(not(feature = "gpu"))]
 	if let Some(never) = gpu {
 		match never {}
 	}
-	Box::new(cpu::CpuEngine::new(scene, options))
+	Built { engine: Box::new(cpu::CpuEngine::new(scene, options)), fallback: None }
 }
 
-/// The engine for `scene`, blocking: the GPU's when `prefer_gpu` and one is available, else the CPU's (the
-/// fallback is logged).
+/// The engine for `scene`, blocking: the GPU's when `prefer_gpu` and one is available, else the CPU's.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn build(scene: Arc<SceneData>, options: EngineOptions, prefer_gpu: bool) -> Box<dyn WaveEngine> {
+pub fn build(scene: Arc<SceneData>, options: EngineOptions, prefer_gpu: bool) -> Built {
+	if !prefer_gpu {
+		return Built { engine: Box::new(cpu::CpuEngine::new(scene, options)), fallback: None };
+	}
 	#[cfg(feature = "gpu")]
 	{
-		let gpu = match prefer_gpu.then(gpu::context) {
-			Some(Ok(context)) => Some(context),
-			Some(Err(e)) => {
-				cpu_instead(&e);
-				None
-			}
-			None => None,
-		};
-		pollster::block_on(build_on(scene, options, gpu))
+		match gpu::context() {
+			Ok(context) => pollster::block_on(build_on(scene, options, Some(context))),
+			Err(e) => cpu_instead(scene, options, e.into()),
+		}
 	}
 	#[cfg(not(feature = "gpu"))]
 	{
-		if prefer_gpu {
-			tracing::warn!("the GPU engine is not built in; the CPU engine runs instead");
-		}
-		Box::new(cpu::CpuEngine::new(scene, options))
+		cpu_instead(scene, options, Fallback::NotBuiltIn)
 	}
 }
 

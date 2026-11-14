@@ -5,6 +5,7 @@ pub const PROJECT_VERSION: u32 = 4;
 
 /// A whole project: settings, items in their list order, project-local colour schemes.
 #[derive(Clone, Debug, PartialEq, Fields)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Project {
 	/// Seeds every random stream (composite sources, emitter gaps).
 	pub seed: i32,

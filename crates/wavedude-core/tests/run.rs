@@ -463,6 +463,37 @@ fn the_live_run_makes_the_batch_runs_frames_the_positions_first() {
 	assert!(Arc::ptr_eq(&st, &w.store().unwrap()), "one store throughout");
 }
 
+/// A spill never opened: the frames fit in memory.
+struct NoSpill;
+
+impl SpillFactory for NoSpill {
+	fn ready(&self) -> bool {
+		true
+	}
+
+	fn open(&self, _bytes: u64) -> std::io::Result<Box<dyn SpillBackend>> {
+		Err(std::io::Error::other("the frames fit in memory"))
+	}
+}
+
+#[test]
+fn a_pumped_live_run_makes_the_batch_runs_frames() {
+	let p = with_probes(project(64, 48, 40));
+	let s = spec(&p, PreviewQuality::FULL);
+	let r = run(&s, GIB);
+	let start: PumpedFactory = Box::new(|scene, options| -> EngineFuture {
+		Box::pin(async move { Box::new(CpuEngine::new(scene, options)) as Box<dyn WaveEngine> })
+	});
+	let w = RunWorker::pumped(start, GIB, Box::new(NoSpill), Arc::default());
+	w.set_goal(goal(&request(&p, PreviewQuality::FULL), 0, Wanted::All));
+	while w.pump(Duration::from_millis(50)) {}
+	assert_eq!(w.status().state, WorkState::Idle);
+	let st = w.store().unwrap();
+	assert!(st.is_complete());
+	same_frames(&st, r.store(), s.stored_frames());
+	w.with_traces(|t| assert_eq!(t, &r.traces()[..]));
+}
+
 #[test]
 fn the_traces_of_the_frame_kept_through_a_clear_are_held_with_it() {
 	let dir = tempfile::tempdir().unwrap();
@@ -1000,7 +1031,7 @@ fn drag_burst(wanted: Wanted, part: bool) {
 	};
 	let dir = tempfile::tempdir().unwrap();
 	let w = RunWorker::new(
-		Box::new(|scene, options| wavedude_core::engine::build(scene, options, true)),
+		Box::new(|scene, options| wavedude_core::engine::build(scene, options, true).engine),
 		dir.path().to_path_buf(),
 		Arc::default(),
 	)
@@ -1077,7 +1108,7 @@ fn part_edit_cost() {
 	};
 	let mut cache = SceneCache::default();
 	let first = cache.spec(&project, quality, false).unwrap();
-	let mut engine = wavedude_core::engine::build(first.scene.clone(), first.options.clone(), true);
+	let mut engine = wavedude_core::engine::build(first.scene.clone(), first.options.clone(), true).engine;
 	engine.set_emitters(&first.emitters);
 	let mut times = [0f64; 3];
 	let rounds = 10;

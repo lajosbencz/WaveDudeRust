@@ -1019,7 +1019,7 @@ pub const MAX_WEB_FRAME_BYTES: u64 = 2 << 30;
 /// Builds the engine for a scene: the GPU's when asked for and available (a fallback to the CPU is logged).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn build_engine(scene: Arc<SceneData>, options: EngineOptions, use_gpu: bool) -> Box<dyn WaveEngine> {
-	let e = wavedude_core::engine::build(scene, options, use_gpu);
+	let e = wavedude_core::engine::build(scene, options, use_gpu).engine;
 	super::log::engine_built(e.name(), e.scene(), e.options(), e.sub_steps());
 	e
 }
@@ -1050,7 +1050,7 @@ impl CoreBackend {
 		let factory: PumpedFactory = Box::new(move |scene, options| -> EngineFuture {
 			let gpu = device.clone().filter(|_| wanted.load(Ordering::Relaxed));
 			Box::pin(async move {
-				let e = wavedude_core::engine::build_on(scene, options, gpu).await;
+				let e = wavedude_core::engine::build_on(scene, options, gpu).await.engine;
 				super::log::engine_built(e.name(), e.scene(), e.options(), e.sub_steps());
 				e
 			})

@@ -34,7 +34,7 @@ pub(crate) struct EngineArgs {
 impl EngineArgs {
 	/// The engine for `spec`, reset to its start.
 	pub(crate) fn build(self, spec: &RunSpec) -> Box<dyn WaveEngine> {
-		engine::build(spec.scene.clone(), spec.options.clone(), self.gpu)
+		engine::build(spec.scene.clone(), spec.options.clone(), self.gpu).engine
 	}
 }
 

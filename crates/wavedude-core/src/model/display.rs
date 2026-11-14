@@ -2,6 +2,7 @@ use super::{Fields, Word, ranges};
 
 /// Which stored plane a value belongs to.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Layer {
 	#[default]
 	Field,
@@ -10,6 +11,7 @@ pub enum Layer {
 
 /// Presentation of one layer.
 #[derive(Clone, Debug, PartialEq, Fields)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DisplayLayer {
 	pub color_scheme: String,
 	/// Gain to the palette's top: |u| * b (field) or sqrt(I) * b (intensity) at 1 is the gradient's end.
@@ -64,6 +66,7 @@ impl Default for DisplayLayer {
 }
 
 #[derive(Clone, Debug, PartialEq, Fields)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Video {
 	#[field(range = ranges::VIDEO_FPS)]
 	pub fps: u32,
@@ -78,6 +81,7 @@ impl Default for Video {
 }
 
 #[derive(Clone, Debug, PartialEq, Fields)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Display {
 	#[field(nested)]
 	pub field: DisplayLayer,

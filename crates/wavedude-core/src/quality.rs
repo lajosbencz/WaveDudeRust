@@ -7,6 +7,7 @@ use crate::engine::SampleFormat;
 /// What a run captures: resolution divisor (1, 2, 4), every n-th timeline frame (1, 2, 4), the sample format,
 /// and whether an f16 intensity plane holds sqrt(I) (the preview's) or I.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PreviewQuality {
 	pub resolution_divisor: u32,
 	pub frame_divisor: u32,

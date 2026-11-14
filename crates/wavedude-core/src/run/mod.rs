@@ -3,10 +3,9 @@
 //!
 //! On wasm32 there is no batch run, no spill file and no machine query: the live run is pumped by its caller and
 //! its stores hold their frames in memory up to the caller's budget, the rest in a pending spill the caller
-//! provides (`SpillFactory`).
+//! provides (`SpillFactory`). Natively a live run is pumped or works on a thread of its own.
 
 mod error;
-#[cfg(any(test, target_arch = "wasm32"))]
 mod pending;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod simulation;
@@ -18,7 +17,6 @@ pub mod warning;
 pub mod worker;
 
 pub use error::RunError;
-#[cfg(any(test, target_arch = "wasm32"))]
 pub use pending::{SpillBackend, SpillFactory, Token, WRITES_IN_FLIGHT};
 #[cfg(not(target_arch = "wasm32"))]
 pub use simulation::{EventSink, RunEvent, SimulationRun};
@@ -30,7 +28,6 @@ pub use warning::{Levers, MemoryWarning};
 #[cfg(not(target_arch = "wasm32"))]
 pub use worker::{BuildEngine, EngineFactory};
 pub use worker::{CHECK_INTERVAL, FitFrame, FitRequest, Goal, RunWorker, Status, Wanted, WorkState};
-#[cfg(any(test, target_arch = "wasm32"))]
 pub use worker::{EngineFuture, PumpedFactory, StartEngine};
 
 /// Memory and threads of this machine. The GPU and the drive are left unknown: the GPU is the

@@ -75,6 +75,7 @@ impl Schedule {
 /// worker builds the [`RunSpec`] from it; what the UI needs meanwhile (the schedule, the store's size, the
 /// probes) comes from the project itself. Cheap to clone.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RunRequest {
 	pub project: Arc<Project>,
 	pub quality: PreviewQuality,

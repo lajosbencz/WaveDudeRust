@@ -137,8 +137,8 @@ push. What they hold the code to:
 - A mutex is taken through `wavedude_core::sync::lock`, which takes a poisoned lock too: the guarded values
   are whole between operations and the panic was reported where it happened.
 - A missing string key is a bug and panics (`Strings::get`, [`crates/wavedude-app-state/src/strings.rs:190`](../crates/wavedude-app-state/src/strings.rs#L190)).
-- No silent fallbacks: a fallback is logged and stated. The GPU engine falls back to the CPU with a warning
-  ([`crates/wavedude-core/src/engine/mod.rs:104`](../crates/wavedude-core/src/engine/mod.rs#L104)); an unreadable settings file is logged with its text and kept
+- No silent fallbacks: a fallback is logged and stated. The GPU engine falls back to the CPU with a warning and
+  hands back why ([`crates/wavedude-core/src/engine/mod.rs:124`](../crates/wavedude-core/src/engine/mod.rs#L124)); an unreadable settings file is logged with its text and kept
   in `unreadable` ([`settings.rs:201`](../crates/wavedude-app-state/src/settings.rs#L201)); a failed command is logged and returned as `Response::Error` for a modal
   ([`crates/wavedude-app-state/src/lib.rs:528`](../crates/wavedude-app-state/src/lib.rs#L528)).
 - Out-of-range values are clamped by `normalize` after load, import, every edit and before a run; it is

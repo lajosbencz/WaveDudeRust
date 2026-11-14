@@ -13,12 +13,12 @@
 //! let go, and the engine starts over. A goal change is looked at every [`CHECK_INTERVAL`] steps: work goes on
 //! only for the goal's own spec, so an edit means one run.
 //!
-//! Threads: [`RunWorker::set_goal`] and the readers may be called from any thread; natively the work runs on one
-//! thread, which owns the engine and writes the store. On wasm32 the caller works the run in slices with
-//! `RunWorker::pump`: a slice ends at its deadline, at a pause, with as many captures in flight as the
-//! engine takes, with as many probe batches in flight as it lets on its way, at probe readings to be drained whole
-//! (before the run idles, pauses or resets) that are not mapped yet, while an engine is
-//! on its way (the old one freed first, as natively), while the spill has as many writes in flight as it takes
+//! Threads: [`RunWorker::set_goal`] and the readers may be called from any thread; `RunWorker::new` runs the work
+//! on one thread, which owns the engine and writes the store. Of a [`RunWorker::pumped`], the only kind on wasm32,
+//! the caller works the run in slices with [`RunWorker::pump`]: a slice ends at its deadline, at a pause, with as
+//! many captures in flight as the engine takes, with as many probe batches in flight as it lets on its way, at probe
+//! readings to be drained whole (before the run idles, pauses or resets) that are not mapped yet, while an engine is
+//! on its way (the old one freed first, as on a thread), while the spill has as many writes in flight as it takes
 //! and while the free storage a new store's spill is checked against is not known yet; the next goes on from the
 //! steps done. Traces and progress are published at heartbeats and at every frame.
 
@@ -26,7 +26,6 @@ use crate::sync::lock;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-#[cfg(any(test, target_arch = "wasm32"))]
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
@@ -44,7 +43,6 @@ use crate::engine::{
 use crate::sync::MaybeSend;
 
 use super::RunError;
-#[cfg(any(test, target_arch = "wasm32"))]
 use super::pending::SpillFactory;
 use super::store::{FrameStore, StoreLayout};
 use crate::spec::{RunRequest, RunSpec, SceneCache};
@@ -75,30 +73,25 @@ pub type EngineFactory = Box<dyn BuildEngine>;
 #[cfg(target_arch = "wasm32")]
 pub type EngineFuture = Pin<Box<dyn Future<Output = Box<dyn WaveEngine>>>>;
 /// An engine on its way.
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub type EngineFuture = Pin<Box<dyn Future<Output = Box<dyn WaveEngine>> + Send>>;
 
 /// Starts an engine for a scene and options.
-#[cfg(any(test, target_arch = "wasm32"))]
 pub trait StartEngine: Fn(Arc<SceneData>, EngineOptions) -> EngineFuture + MaybeSend {}
 
-#[cfg(any(test, target_arch = "wasm32"))]
 impl<F: Fn(Arc<SceneData>, EngineOptions) -> EngineFuture + MaybeSend> StartEngine for F {}
 
 /// The pumped worker's engines, polled at each pump until built.
-#[cfg(any(test, target_arch = "wasm32"))]
 pub type PumpedFactory = Box<dyn StartEngine>;
 
 /// Where a worker's engines come from.
 enum Factory {
 	#[cfg(not(target_arch = "wasm32"))]
 	Now(EngineFactory),
-	#[cfg(any(test, target_arch = "wasm32"))]
 	Later(PumpedFactory),
 }
 
 /// An engine the pumped worker waits for, and the spec it is for.
-#[cfg(any(test, target_arch = "wasm32"))]
 struct Building {
 	spec: RunSpec,
 	engine: EngineFuture,
@@ -107,6 +100,7 @@ struct Building {
 
 /// How much of the run the goal wants.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Wanted {
 	/// The frame at the position alone.
 	#[default]
@@ -117,6 +111,7 @@ pub enum Wanted {
 
 /// A 16-bit frame of timeline frame `frame`, for a brightness fit; served once per `id`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FitRequest {
 	pub id: u64,
 	pub frame: u32,
@@ -125,6 +120,7 @@ pub struct FitRequest {
 /// What the worker converges on. `revision` moves with every project change; [`Status::adopted`] echoes the
 /// revision whose frames the store holds.
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Goal {
 	pub revision: u64,
 	pub run: Option<RunRequest>,
@@ -249,12 +245,10 @@ pub struct RunWorker {
 	shared: Arc<Shared>,
 	#[cfg(not(target_arch = "wasm32"))]
 	thread: Option<std::thread::JoinHandle<()>>,
-	#[cfg(any(test, target_arch = "wasm32"))]
 	pumped: Option<Mutex<Pumped>>,
 }
 
 /// A worker without a thread, and the goal it failed at.
-#[cfg(any(test, target_arch = "wasm32"))]
 struct Pumped {
 	worker: Worker,
 	failed_at: Option<u64>,
@@ -288,12 +282,7 @@ impl RunWorker {
 		let shared = Arc::new(Shared::new());
 		let worker = Worker::new(shared.clone(), Factory::Now(factory), Frames::Spill(cache_dir, memory), scene);
 		let thread = std::thread::Builder::new().name("live-run".into()).spawn(move || worker.run())?;
-		Ok(Self {
-			shared,
-			thread: Some(thread),
-			#[cfg(test)]
-			pumped: None,
-		})
+		Ok(Self { shared, thread: Some(thread), pumped: None })
 	}
 
 	/// A worker on the CPU engine.
@@ -309,7 +298,6 @@ impl RunWorker {
 	/// A worker that works in [`pump`](Self::pump) alone, whose engines `factory` starts (a pump yields while one is
 	/// on its way), whose stores hold their frames in `ram_bytes` of memory (the goal's RAM share of them) and the
 	/// rest in a spill of `spill`, and whose scenes come from `scene`.
-	#[cfg(any(test, target_arch = "wasm32"))]
 	pub fn pumped(
 		factory: PumpedFactory,
 		ram_bytes: u64,
@@ -334,7 +322,6 @@ impl RunWorker {
 	/// Works on the goal for about `budget` (a unit of work interrupted at the deadline has done at least
 	/// [`CHECK_INTERVAL`] steps or reached its end); whether work is left, spill writes in flight included. False
 	/// until the next goal: the goal is reached, paused or failed.
-	#[cfg(any(test, target_arch = "wasm32"))]
 	pub fn pump(&self, budget: Duration) -> bool {
 		let mut pumped = lock(self.pumped.as_ref().expect("a worker on a thread is not pumped"));
 		let Pumped { worker, failed_at } = &mut *pumped;
@@ -449,7 +436,6 @@ enum Frames {
 	#[cfg(not(target_arch = "wasm32"))]
 	Spill(std::path::PathBuf, super::store::Memory),
 	/// In memory up to the goal's RAM share of `ram_bytes`, the rest in a spill of `spill`.
-	#[cfg(any(test, target_arch = "wasm32"))]
 	Pending { ram_bytes: u64, spill: Box<dyn SpillFactory> },
 }
 
@@ -459,7 +445,6 @@ impl Frames {
 		match self {
 			#[cfg(not(target_arch = "wasm32"))]
 			Self::Spill(..) => true,
-			#[cfg(any(test, target_arch = "wasm32"))]
 			Self::Pending { spill, .. } => spill.ready(),
 		}
 	}
@@ -487,7 +472,6 @@ impl Frames {
 				let budget = super::store::Budget::compute(*memory, reclaimed, ram_percent);
 				FrameStore::in_dir(layout, budget, release, dir)
 			}
-			#[cfg(any(test, target_arch = "wasm32"))]
 			Self::Pending { ram_bytes, spill } => {
 				use super::store::Budget;
 				drop(old);
@@ -513,7 +497,6 @@ struct Current {
 struct Worker {
 	shared: Arc<Shared>,
 	factory: Factory,
-	#[cfg(any(test, target_arch = "wasm32"))]
 	building: Option<Building>,
 	/// An engine change asked for and not done yet.
 	rebuild_due: bool,
@@ -555,7 +538,6 @@ impl Worker {
 		Self {
 			shared,
 			factory,
-			#[cfg(any(test, target_arch = "wasm32"))]
 			building: None,
 			rebuild_due: false,
 			frames,
@@ -637,7 +619,6 @@ impl Worker {
 	/// One step of the loop: adopts the goal's spec and does one unit of work. Ok(false) when nothing is to do.
 	fn serve(&mut self, goal: &Goal, number: u64) -> Result<bool, Interrupted> {
 		self.goal_seen = number;
-		#[cfg(any(test, target_arch = "wasm32"))]
 		if let Some(c) = &self.current {
 			c.store.settle().map_err(|e| Interrupted::Failed(e.into()))?;
 		}
@@ -869,7 +850,6 @@ impl Worker {
 				tracing::debug!(ms = started.elapsed().as_secs_f64() * 1e3, "live run: engine built");
 				Ok(engine)
 			}
-			#[cfg(any(test, target_arch = "wasm32"))]
 			Factory::Later(factory) => {
 				let mut building = match self.building.take() {
 					Some(b) if b.spec.same_scene_as(spec) => b,
@@ -1001,7 +981,6 @@ impl Worker {
 			return Ok(false);
 		}
 		self.land_ready()?;
-		#[cfg(any(test, target_arch = "wasm32"))]
 		if let Some(c) = &self.current {
 			c.store.settle().map_err(|e| Interrupted::Failed(e.into()))?;
 			if self.deadline.is_some() && c.store.spill_busy() {

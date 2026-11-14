@@ -35,6 +35,7 @@ pub use timeline::{Frame, Step, Timeline};
 
 /// Integer canvas position.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Fields)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Point {
 	pub x: i32,
 	pub y: i32,

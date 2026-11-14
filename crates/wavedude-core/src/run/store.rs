@@ -36,7 +36,6 @@ use std::sync::{Arc, Mutex};
 use crate::engine::{FrameShape, Snapshot};
 use crate::model::Layer;
 
-#[cfg(any(test, target_arch = "wasm32"))]
 use super::pending::{PendingSpill, SpillBackend};
 #[cfg(not(target_arch = "wasm32"))]
 use super::spill::Disk;
@@ -256,7 +255,6 @@ impl FrameStore {
 	}
 
 	/// A store holding `ram_budget` bytes of frames in memory, the rest in `backend`.
-	#[cfg(any(test, target_arch = "wasm32"))]
 	pub fn with_spill(layout: StoreLayout, ram_budget: u64, backend: Box<dyn SpillBackend>) -> Self {
 		let store = Self::made(layout, ram_budget, Some(Spill::Pending(PendingSpill::new(backend))));
 		store.first_spilled.store(store.ram_frames, Ordering::Release);
@@ -396,7 +394,6 @@ impl FrameStore {
 		match self.spill.as_ref()? {
 			#[cfg(not(target_arch = "wasm32"))]
 			Spill::File(disk) => disk.bytes(),
-			#[cfg(any(test, target_arch = "wasm32"))]
 			Spill::Pending(_) => Some(self.frames_on_disk() as u64 * self.frame_bytes() as u64),
 		}
 	}
@@ -417,7 +414,6 @@ impl FrameStore {
 		match self.spill.as_ref().expect("a store with a spill") {
 			#[cfg(not(target_arch = "wasm32"))]
 			Spill::File(disk) => disk.start(&self.layout, first)?,
-			#[cfg(any(test, target_arch = "wasm32"))]
 			Spill::Pending(_) => {}
 		}
 		self.first_spilled.store(first, Ordering::Release);
@@ -429,7 +425,6 @@ impl FrameStore {
 		match self.spill.as_ref()? {
 			#[cfg(not(target_arch = "wasm32"))]
 			Spill::File(disk) => disk.prepared_block(),
-			#[cfg(any(test, target_arch = "wasm32"))]
 			Spill::Pending(_) => None,
 		}
 	}
@@ -511,7 +506,6 @@ impl FrameStore {
 					disk.write(&self.layout, frame, &snapshot)?;
 					self.give_back(frame, snapshot);
 				}
-				#[cfg(any(test, target_arch = "wasm32"))]
 				Spill::Pending(pending) => {
 					let planes: Vec<&[u8]> = self.layout.layers.iter().map(|&l| snapshot.plane(l)).collect();
 					pending.write(self.generation(), frame, &planes);
@@ -533,7 +527,6 @@ impl FrameStore {
 
 	/// Takes the pending spill's completed writes: a frame written leaves memory unless it is the frame written
 	/// last. A failed write is the error.
-	#[cfg(any(test, target_arch = "wasm32"))]
 	pub fn settle(&self) -> Result<(), StoreError> {
 		let Some(Spill::Pending(pending)) = &self.spill else { return Ok(()) };
 		let _writing = lock(&self.writing);
@@ -548,13 +541,11 @@ impl FrameStore {
 	}
 
 	/// The pending spill has as many writes in flight as it takes.
-	#[cfg(any(test, target_arch = "wasm32"))]
 	pub fn spill_busy(&self) -> bool {
 		matches!(&self.spill, Some(Spill::Pending(p)) if p.busy())
 	}
 
 	/// The pending spill has writes in flight.
-	#[cfg(any(test, target_arch = "wasm32"))]
 	pub fn spill_writing(&self) -> bool {
 		matches!(&self.spill, Some(Spill::Pending(p)) if p.writing())
 	}
@@ -615,7 +606,6 @@ impl FrameStore {
 		self.present_count.store(0, Ordering::Release);
 		self.spilled_count.store(0, Ordering::Release);
 		self.generation.fetch_add(1, Ordering::AcqRel);
-		#[cfg(any(test, target_arch = "wasm32"))]
 		if let Some(Spill::Pending(pending)) = &self.spill {
 			pending.cleared(from);
 		}
@@ -693,7 +683,6 @@ impl FrameStore {
 		match self.spill.as_ref().expect("a stored frame outside memory is spilled") {
 			#[cfg(not(target_arch = "wasm32"))]
 			Spill::File(disk) => disk.read(&self.layout, frame, index, out)?,
-			#[cfg(any(test, target_arch = "wasm32"))]
 			Spill::Pending(pending) => {
 				let planes = pending.read(self.generation(), frame).ok_or(StoreError::Pending { frame })??;
 				let plane = out.len();
@@ -708,7 +697,6 @@ impl FrameStore {
 enum Spill {
 	#[cfg(not(target_arch = "wasm32"))]
 	File(Disk),
-	#[cfg(any(test, target_arch = "wasm32"))]
 	Pending(PendingSpill),
 }
 

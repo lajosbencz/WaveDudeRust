@@ -155,7 +155,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 		}
 		for &every in &captures {
 			for gpu in [false, true].into_iter().filter(|&gpu| !gpu || args.engine.gpu) {
-				let mut engine = engine::build(scene.clone(), options.clone(), gpu);
+				let mut engine = engine::build(scene.clone(), options.clone(), gpu).engine;
 				if gpu && engine.name() != "GPU" {
 					bail!("no GPU engine to time");
 				}
