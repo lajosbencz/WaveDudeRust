@@ -1,26 +1,32 @@
 //! The worker's loop: [`Host::pump`], then the event loop turns so the page's messages and the GPU's callbacks come
 //! in. With work left a message to itself wakes it again; while the run waits (a readback, the device, the
 //! page's acknowledgements, an engine) what it waits for or a message wakes it; once it has no work, a message.
+//! While it waits and the device, not lost, owes completions, empty submits kick the queue on [`Kicks`]' gaps: Firefox
+//! resolves completions only when it polls the device, on a submit or every 100 ms (decision 0026).
 //! The engine built after the GPU device was lost requests a new one.
 
+use std::cell::{Cell, RefCell};
+use std::future::Future;
+use std::pin::{Pin, pin};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::task::{Poll, Waker};
+use std::task::{Context, Poll, Waker};
 
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use wasm_bindgen_futures::spawn_local;
+use wasm_bindgen_futures::{js_sys, spawn_local};
 use wavedude_app_state::log::max_level;
 use wavedude_app_state::platform::Duration;
 use wavedude_app_state::remote::web::{WorkerPort, report_panics};
 use wavedude_app_state::remote::{GpuRequest, Host};
 use wavedude_core::engine::GpuHandle;
-use wavedude_core::engine::gpu::GpuContext;
+use wavedude_core::engine::gpu::{GpuContext, Kicks};
 use wavedude_core::run::Pump;
 use wavedude_core::sync::lock;
 use web_sys::wasm_bindgen::closure::Closure;
 use web_sys::wasm_bindgen::{JsCast, JsValue};
-use web_sys::{MessageChannel, MessageEvent};
+use web_sys::{MessageChannel, MessageEvent, WorkerGlobalScope};
 
 /// The run's work between two looks at the page's messages: the most a goal waits past the steps to the run's
 /// next check, and a frame made for its post. Half a page frame at 60 Hz.
@@ -53,16 +59,102 @@ pub(crate) fn start() {
 		let again = Again::new(wake.clone());
 		let waker = Waker::from(wake.clone());
 		loop {
-			if host.pump(BUDGET, &waker) == Pump::Work {
+			let left = host.pump(BUDGET, &waker);
+			if left == Pump::Work {
 				again.post();
 			}
-			wake.wait().await;
+			match host.gpu().filter(|gpu| left == Pump::Waiting && gpu.lost().is_none() && gpu.awaits_completions()) {
+				Some(gpu) => first(wake.wait(), kick(&gpu)).await,
+				None => wake.wait().await,
+			}
 		}
 	});
 }
 
 async fn request_gpu() -> Result<GpuHandle, String> {
 	GpuContext::create().await.map_err(|e| e.to_string())
+}
+
+/// Kicks the queue while `gpu` awaits completions and is not lost; pending ever after.
+async fn kick(gpu: &GpuContext) {
+	for gap in Kicks::default() {
+		Sleep::new(gap).await;
+		if gpu.lost().is_some() || !gpu.awaits_completions() {
+			break;
+		}
+		gpu.kick();
+	}
+	std::future::pending::<()>().await;
+}
+
+/// Waits for `wait`, polling `beside` meanwhile.
+async fn first(wait: impl Future<Output = ()>, beside: impl Future<Output = ()>) {
+	let (mut wait, mut beside) = (pin!(wait), pin!(beside));
+	std::future::poll_fn(|cx| {
+		let ready = wait.as_mut().poll(cx);
+		if ready.is_pending() {
+			let _ = beside.as_mut().poll(cx);
+		}
+		ready
+	})
+	.await;
+}
+
+/// A timeout of the worker's, cleared when dropped before it fired.
+struct Sleep {
+	handle: i32,
+	fired: Rc<Fired>,
+	_callback: Closure<dyn FnMut()>,
+}
+
+/// Set by a [`Sleep`]'s timeout, which wakes the task polling it.
+#[derive(Default)]
+struct Fired {
+	done: Cell<bool>,
+	waker: RefCell<Option<Waker>>,
+}
+
+impl Sleep {
+	/// Fires after `gap`, in the whole milliseconds timeouts count, rounded up.
+	fn new(gap: Duration) -> Self {
+		let ms = i32::try_from(gap.as_micros().div_ceil(1000)).unwrap_or(i32::MAX);
+		let fired = Rc::<Fired>::default();
+		let callback = Closure::<dyn FnMut()>::new({
+			let fired = fired.clone();
+			move || {
+				fired.done.set(true);
+				if let Some(waker) = fired.waker.take() {
+					waker.wake();
+				}
+			}
+		});
+		let handle = scope()
+			.set_timeout_with_callback_and_timeout_and_arguments_0(callback.as_ref().unchecked_ref(), ms)
+			.expect("a worker sets timeouts");
+		Self { handle, fired, _callback: callback }
+	}
+}
+
+impl Future for Sleep {
+	type Output = ();
+
+	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+		if self.fired.done.get() {
+			return Poll::Ready(());
+		}
+		*self.fired.waker.borrow_mut() = Some(cx.waker().clone());
+		Poll::Pending
+	}
+}
+
+impl Drop for Sleep {
+	fn drop(&mut self) {
+		scope().clear_timeout_with_handle(self.handle);
+	}
+}
+
+fn scope() -> WorkerGlobalScope {
+	js_sys::global().unchecked_into()
 }
 
 /// What wakes the loop: a message arrived, the run goes on, or what it waits for is ready.

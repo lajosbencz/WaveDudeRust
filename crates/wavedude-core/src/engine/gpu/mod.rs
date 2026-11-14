@@ -63,7 +63,7 @@ use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 
-pub use context::{GpuContext, GpuError};
+pub use context::{FIRST_KICK, GpuContext, GpuError, Kicks, MAX_KICK_GAP};
 #[cfg(not(target_arch = "wasm32"))]
 pub use context::{context, set_context};
 pub use frames::{DeviceFrame, DeviceFrames, FrameTag};
@@ -775,7 +775,7 @@ impl GpuEngine {
 			self.pending.take().unwrap_or_else(|| self.ctx.device.create_command_encoder(&Default::default()));
 		record(&mut encoder);
 		self.batch_steps = 0;
-		let index = self.ctx.queue.submit([encoder.finish()]);
+		let index = self.ctx.submit([encoder.finish()]);
 		#[cfg(test)]
 		{
 			self.submissions += 1;
@@ -783,7 +783,7 @@ impl GpuEngine {
 		let probes = self.probe_reads.iter_mut().map(|(r, _)| r);
 		for readback in self.captures.iter_mut().chain(probes) {
 			if matches!(readback.pending, Some(Fill::Recorded)) {
-				request_map(readback, index.clone());
+				request_map(&self.ctx, readback, index.clone());
 			}
 		}
 		self.pace(index.clone())?;
@@ -834,7 +834,7 @@ impl GpuEngine {
 			}
 		})?;
 		let mut readback = readback;
-		map(&mut readback, index);
+		map(&self.ctx, &mut readback, index);
 		wait_mapped(&self.ctx.device, &mut readback)?;
 		let bytes = readback.buffer.slice(..).get_mapped_range().map_err(GpuError::MapRange)?.to_vec();
 		readback.buffer.unmap();
@@ -1245,7 +1245,7 @@ impl GpuEngine {
 			}
 			encoder.copy_buffer_to_buffer(&probe_out, 0, &target, 0, bytes);
 		})?;
-		map(&mut readback, index);
+		map(&self.ctx, &mut readback, index);
 		wait_mapped(&self.ctx.device, &mut readback)?;
 		{
 			let view = readback.buffer.slice(..bytes).get_mapped_range().map_err(GpuError::MapRange)?;
@@ -1616,16 +1616,20 @@ fn readback_buffer(device: &wgpu::Device, label: &str, bytes: u64) -> Readback {
 }
 
 /// Requests the mapping of `readback` once `submission`, which fills it, is done.
-fn map(readback: &mut Readback, submission: wgpu::SubmissionIndex) {
+fn map(ctx: &GpuContext, readback: &mut Readback, submission: wgpu::SubmissionIndex) {
 	readback.mapped = MapState::default();
-	request_map(readback, submission);
+	request_map(ctx, readback, submission);
 }
 
-/// [`map`] into the map state `readback` has.
-fn request_map(readback: &mut Readback, submission: wgpu::SubmissionIndex) {
+/// [`map`] into the map state `readback` has; awaited on `ctx` until it lands.
+fn request_map(ctx: &GpuContext, readback: &mut Readback, submission: wgpu::SubmissionIndex) {
 	let state = readback.mapped.clone();
+	let awaited = ctx.awaiting();
 	readback.pending = Some(Fill::Submitted(submission));
-	readback.buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| state.set(r));
+	readback.buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+		state.set(r);
+		drop(awaited);
+	});
 }
 
 /// Cell indices are u32 words, probe cells carry the layer in bit 31.
@@ -1674,10 +1678,17 @@ mod tests {
 
 	/// An engine with one emitter on the process's device; `None` without an adapter.
 	fn engine() -> Option<GpuEngine> {
-		if let Err(e) = context() {
-			eprintln!("skipped: {e}");
-			return None;
+		match context() {
+			Ok(ctx) => Some(engine_on(ctx)),
+			Err(e) => {
+				eprintln!("skipped: {e}");
+				None
+			}
 		}
+	}
+
+	/// An engine with one emitter on `ctx`.
+	fn engine_on(ctx: Arc<GpuContext>) -> GpuEngine {
 		let scene = SceneData::blank(SIZE.0, SIZE.1, &Scene { damping_edge: 0, ..Scene::default() });
 		let options = EngineOptions {
 			stencil: Stencil::NinePoint,
@@ -1687,7 +1698,8 @@ mod tests {
 			intensity_scale: 1.0,
 			track_intensity: true,
 		};
-		let mut e = GpuEngine::new(scene, options).expect("GPU engine");
+		let mut e =
+			pollster::block_on(GpuEngine::create(ctx, scene, options, MediumLayout::Compact)).expect("GPU engine");
 		e.set_emitters(&[Emitter {
 			x: 32.0,
 			y: 24.0,
@@ -1703,7 +1715,7 @@ mod tests {
 			detach_after_step: None,
 			rng_seed: std::num::NonZeroU32::MIN,
 		}]);
-		Some(e)
+		e
 	}
 
 	fn shape(divisor: u32, format: SampleFormat, brightness: f32) -> FrameShape {
@@ -1865,5 +1877,38 @@ mod tests {
 			assert!(a.field == b.field && a.intensity == b.intensity, "{:?} differs", a.shape);
 			assert!(a.field.iter().any(|&v| v != 0), "{:?} is blank", a.shape);
 		}
+	}
+
+	#[test]
+	fn the_context_awaits_submitted_batches_and_requested_mappings_until_they_land() {
+		// A context of its own: the other tests submit on the process's.
+		let ctx = match pollster::block_on(GpuContext::create()) {
+			Ok(ctx) => ctx,
+			Err(e) => {
+				eprintln!("skipped: {e}");
+				return;
+			}
+		};
+		let land = || ctx.device.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
+		let mut e = engine_on(ctx.clone());
+		land();
+		assert!(!ctx.awaits_completions(), "an idle engine awaits nothing");
+		steps(&mut e, 3);
+		assert!(!ctx.awaits_completions(), "recorded steps are not submitted");
+		e.submit_pending().unwrap();
+		assert!(ctx.awaits_completions(), "a submitted batch");
+		land();
+		assert!(!ctx.awaits_completions(), "a batch run");
+		let shape = shape(1, SampleFormat::Index, 1.0);
+		steps(&mut e, 2);
+		let capture = e.begin_capture(&shape, Snapshot::new(shape)).unwrap();
+		e.submit_pending().unwrap();
+		assert!(ctx.awaits_completions(), "a requested mapping");
+		land();
+		assert!(!ctx.awaits_completions(), "a mapping landed");
+		e.finish_capture(capture).unwrap();
+		ctx.kick();
+		land();
+		assert!(!ctx.awaits_completions(), "a kick awaits nothing");
 	}
 }

@@ -74,8 +74,8 @@ push. What they hold the code to:
   panics posted to the page, a WebGPU device of its own (requested again after a loss) and app-state's `Host` on a
   `WorkerPort`, pumped in 8 ms
   slices, the event loop turning between pumps: again at once while the run has work, else asleep until what it waits
-  for is ready or a message arrives
-  ([`crates/wavedude-run-worker/src/worker.rs`](../crates/wavedude-run-worker/src/worker.rs)); `run-worker.js` loads it. Natively the binary only
+  for is ready or a message arrives, kicking the GPU queue with empty submits while the device owes completions
+  (decision 0026) ([`crates/wavedude-run-worker/src/worker.rs`](../crates/wavedude-run-worker/src/worker.rs)); `run-worker.js` loads it. Natively the binary only
   says so. Depends on core and app-state, in the browser only.
 - `wavedude-examples`: the example projects, embedded (the fixtures of core and the repository's `examples`), with their
   titles, descriptions and topics; the Examples dialog reads this one list. The library depends on core

@@ -1,6 +1,7 @@
 # 0024: The browser runs the simulation in a Web Worker
 
-Status: accepted, 2026-11-14 (the user's decision); losses and versions added 2026-11-14. Amends [0015](0015-core-builds-for-wasm.md),
+Status: accepted, 2026-11-14 (the user's decision); losses and versions added 2026-11-14; amended by
+[0026](0026-kick-the-gpu-queue-while-waiting.md). Amends [0015](0015-core-builds-for-wasm.md),
 [0016](0016-gpu-engine-in-the-browser.md), [0019](0019-egui-and-the-platform-layer.md) and
 [0020](0020-browser-frame-spill-in-opfs.md): the run leaves the page's thread.
 
