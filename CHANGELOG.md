@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.1...v0.3.2) - 2026-11-14
+
+### Added
+
+- the browser exports stills, probe data, sequences and videos, MP4 through WebCodecs (#29)
+
+### Fixed
+
+- GPU readbacks ride their steps' batch and the browser run kicks the queue while waiting (#32)
+- the browser page reuses its frame buffers across reruns, and the form greys Edges under a rim (#33)
+
 ## [0.3.1](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.0...v0.3.1) - 2026-11-14
 
 ### Fixed
