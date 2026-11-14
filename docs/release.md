@@ -66,8 +66,9 @@ publisher (crates.io > crate > Settings > Trusted Publishing; a token only for e
   auto-merge; delete head branches; no wiki.
 - Settings > Rules: a ruleset on the default branch requiring a pull request and the merge queue (squash, all
   entries green), the CI jobs (`ubuntu-latest`, `windows-latest`, `macos-latest`, `MSRV`) and cargo deny
-  (`Dependencies`), and refusing deletion and force pushes, with no bypass; pull requests run Linux and skip the
-  others (a skipped job passes), the queue runs them all on the tree that lands. A ruleset on `v*` tags refusing
+  (`Dependencies`), and refusing deletion and force pushes; pull requests run Linux and skip the others (a skipped
+  job passes), the queue runs them all on the tree that lands. Administrators bypass it to push docs directly, which
+  only the hygiene checks run on. A ruleset on `v*` tags refusing
   update and deletion (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and the
   release job tags through it); administrators bypass it.
 - Settings > Actions > General: actions pinned to a full commit hash; approval before running workflows from every
