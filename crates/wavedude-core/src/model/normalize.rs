@@ -71,10 +71,7 @@ impl Normalize for Simulation {
 impl DisplayLayer {
 	/// Clamps the layer; an empty scheme name becomes the layer's default.
 	pub fn normalize_as(&mut self, layer: Layer) {
-		let d = match layer {
-			Layer::Field => DisplayLayer::field_default(),
-			Layer::Intensity => DisplayLayer::intensity_default(),
-		};
+		let d = DisplayLayer::default_of(layer);
 		if self.color_scheme.trim().is_empty() {
 			self.color_scheme = d.color_scheme;
 		}

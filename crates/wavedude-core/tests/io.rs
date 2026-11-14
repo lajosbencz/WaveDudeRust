@@ -57,6 +57,7 @@ fn every_example_loads_round_trips_and_validates() {
 /// the `OverlayInExport="false"` version 4 writes out where version 3 left it out are excepted, and where a file
 /// was edited by hand:
 /// Example 6 omits a probe's `BoxX` equal to its `AX` (read back the same, written out here);
+/// Example 10's field `Brightness="1"` is the default, so it is left out here;
 /// Example 11's zone plate names `Coating="0"`, the default since version 4, so it is left out here.
 #[test]
 fn examples_are_rewritten_as_shipped() {
@@ -83,8 +84,8 @@ fn examples_are_rewritten_as_shipped() {
 			}
 		}
 	}
-	assert_eq!(differing.len(), 2, "{}", differing.join("\n"));
-	assert!(differing[0].starts_with("Example06") && differing[1].starts_with("Example11"), "{differing:?}");
+	let files: Vec<_> = differing.iter().map(|d| &d[..9]).collect();
+	assert_eq!(files, ["Example06", "Example10", "Example11"], "{}", differing.join("\n"));
 }
 
 proptest::proptest! {

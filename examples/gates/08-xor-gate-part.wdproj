@@ -500,8 +500,8 @@
 	<Scene Width="950" Height="304" />
 	<Simulation Steps="2496" VisualizeEvery="4" />
 	<Display>
-		<Field ColorScheme="Default field" Brightness="8.24" BlackLevel="-0.05" />
-		<Intensity ColorScheme="Default intensity" Brightness="9.44" />
+		<Field ColorScheme="Default field" Brightness="1.03" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="1.18" />
 	</Display>
 	<Source Name="A" X="24" Y="52" Frequency="50" Amplitude="50" />
 	<Source Name="A lower" X="24" Y="53" Frequency="50" Amplitude="50" />

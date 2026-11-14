@@ -12,7 +12,8 @@ row-major) every K steps, and `probes.csv` (each active probe's mean over its ce
 
 `--render` adds, per dump, `field_<step>.png` and `intensity_<step>.png` (Next's own rendering of the planes: the
 Display layers' scheme, black level and brightness, no edge glow or markers), `fit.txt` (`step field_fit intensity_fit`,
-`BrightnessFit`), and `graph.txt` with each probe's series and profile (`series_<k>.f32`, `profile_<k>.f32`): the graph
+`BrightnessFit`), `brightness.txt` (`field intensity`, the brightness the pictures were painted at: the file's, Next's 30
+where it omits one; `compare` renders C#'s planes at it for the render parity), and `graph.txt` with each probe's series and profile (`series_<k>.f32`, `profile_<k>.f32`): the graph
 layout `ProbeGraph.Layout` gives at the last step. `wavedude-cli compare` then adds the "Rendered frames" section to its
 report. It always writes `summary.tsv` beside it, tab separated, `-` for an undefined ratio:
 `step example step parity_pixels field_fit_ratio intensity_fit_ratio field_luma_ratio intensity_luma_ratio` (one line

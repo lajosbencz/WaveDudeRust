@@ -172,8 +172,8 @@ the first with one; a 360 px scrolled list, one row per example (`Example:<file 
 description wrapped in the dim text colour; Open and Cancel. Left/Right switch the tab (not while the search box
 has the focus), Up/Down move the row, Enter or Open or a double-click on a row opens it, Esc or Cancel closes,
 Tab cycles the controls. Opening closes the dialog and runs the guarded open (unsaved-changes prompt included).
-Next's 33 projects come from its `Examples` folder, ours from [`examples/gates`](../../examples/gates/) and [`examples/optics`](../../examples/optics/)
-(all `.wdproj`), all embedded.
+Every project is a `.wdproj` of [`examples`](../../examples/), embedded: Next's 33 as our tuned copies in
+[`examples/next`](../../examples/next/), ours in [`examples/gates`](../../examples/gates/) and [`examples/optics`](../../examples/optics/).
 
 ## Manual window
 

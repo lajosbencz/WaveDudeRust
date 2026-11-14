@@ -82,10 +82,9 @@ push. What they hold the code to:
   for is ready or a message arrives, kicking the GPU queue with empty submits while the device owes completions
   (decision 0026) ([`crates/wavedude-run-worker/src/worker.rs`](../crates/wavedude-run-worker/src/worker.rs)); `run-worker.js` loads it. Natively the binary only
   says so. Depends on core and app-state, in the browser only.
-- `wavedude-examples`: the example projects, embedded (the fixtures of core and the repository's `examples`), with their
-  titles, descriptions and topics; the Examples dialog reads this one list. The library depends on core
-  without default features alone; the binary adds `anyhow` and `serde_json`
-  ([`crates/wavedude-examples/Cargo.toml`](../crates/wavedude-examples/Cargo.toml)).
+- `wavedude-examples`: the example projects, embedded from the repository's [`examples`](../examples/), with their
+  titles, descriptions and topics; the Examples dialog reads this one list. Depends on core without default
+  features alone ([`crates/wavedude-examples/Cargo.toml`](../crates/wavedude-examples/Cargo.toml)).
 - `wavedude-cli`: binary only (no `lib.rs`); core, view, export, and app-state behind feature `mp4`.
 
 ## Where new things go
@@ -120,10 +119,13 @@ push. What they hold the code to:
 - Widget: one module per widget in [`crates/wavedude-app/src/ui/`](../crates/wavedude-app/src/ui/) named after it
   ([`number_box.rs`](../crates/wavedude-app/src/ui/number_box.rs) -> `number_box`), tested in its module with egui_kittest or in the
   window's tests.
-- Project format quirks (WaveDude Next's units, versions, sparse writing) stay in [`crates/wavedude-core/src/io/`](../crates/wavedude-core/src/io/)
-  (`BRIGHTNESS_GAIN`, `SENSITIVITY_GAIN` in [`io/wdproj.rs`](../crates/wavedude-core/src/io/wdproj.rs)); the model holds this program's units.
+- Project format quirks (9-point frequency units, versions, sparse writing) stay in [`crates/wavedude-core/src/io/`](../crates/wavedude-core/src/io/)
+  ([`io/wdproj.rs`](../crates/wavedude-core/src/io/wdproj.rs)); the model holds this program's units.
 - Example projects are `.wdproj` files under `examples/<topic>/` with a numeric prefix
   ([`examples/gates/07-xor.wdproj`](../examples/gates/07-xor.wdproj)), embedded with `include_bytes!` in [`crates/wavedude-examples/src/lib.rs`](../crates/wavedude-examples/src/lib.rs).
+  [`examples`](../examples/) is all the app and the web build ship; Next's originals in
+  [`crates/wavedude-core/tests/fixtures/examples`](../crates/wavedude-core/tests/fixtures/examples/) are for the tests and the comparison alone, shipped as the copies of
+  [`examples/next`](../examples/next/).
 
 ## Naming
 

@@ -57,6 +57,13 @@ impl DisplayLayer {
 			..Self::field_default()
 		}
 	}
+
+	pub fn default_of(layer: Layer) -> Self {
+		match layer {
+			Layer::Field => Self::field_default(),
+			Layer::Intensity => Self::intensity_default(),
+		}
+	}
 }
 
 impl Default for DisplayLayer {

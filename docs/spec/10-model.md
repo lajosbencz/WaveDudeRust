@@ -106,7 +106,7 @@ Level 100, c = 1, scale 2: 16.0 px. The editor's estimate uses `c = WaveSpeed`; 
 | XML | Type | Field default | Intensity default | Range / notes |
 |---|---|---|---|---|
 | `ColorScheme` | string | "Default field" | "Default intensity" | empty -> the layer's default name |
-| `Brightness` | double | 1 (Rust; original 30) | 1.5 (Rust; original 30) | 1e-4..1e5; changed with the source model (decision 0010): the `.wdproj` holds it times 8, below |
+| `Brightness` | double | 1 (Rust; original 30) | 1.5 (Rust; original 30) | 1e-4..1e5; changed with the source model (decision 0010); the `.wdproj` holds it unconverted, below |
 | `BlackLevel` | double | -0.05 | 0 | -10..1; field always written (`[DefaultValue(0)]` vs initial -0.05) |
 | `Preview` | bool | true | true | layer captured/shown |
 | `Overlay` | bool | true | true | glowing edges on the preview picture |
@@ -117,10 +117,9 @@ Brightness (Rust, decision 0010): the source model of [docs/physics.md](../physi
 100 % by 1 in free space, the field falling as 1/sqrt(r); its intensity, the EMA of u^2, is about 1/2 there. The
 palette's top is |u| * b = 1 (field) and sqrt(I) * b = 1 (intensity), so field 1 puts the source's swing at the top
 and intensity 1.5 puts sqrt(1/2) * 1.5 = 1.06 just past it. The original's 30 was made for its blended source,
-which radiates 5 to 9 times less. The `.wdproj` adapter converts by a fixed factor of 8 (a power of two, inside the
-measured gain of 4.8 to 9.7, [docs/comparison](../comparison/)): the file holds the model's value times 8, WaveDude Next's units, and a
-read divides by 8. A missing `Brightness` (and a missing layer element) is 30 in the file, 3.75 in the model, and the
-attribute is written whenever the value times 8 differs from 30. Nothing is fitted on opening.
+which radiates a scene-dependent amount, 2.8 to 14 times less ([docs/comparison](../comparison/)), so no fixed factor maps
+it. The `.wdproj` holds the model's value; a missing `Brightness` (and a missing layer element) is the layer's default
+above, and the attribute is written whenever the value differs from it. Nothing is fitted on opening.
 
 ### Video
 
@@ -235,7 +234,7 @@ so the seed is part of the scene while a diffuser is enabled (`SceneKey`).
 | `Measurement` | enum `Amplitude`/`Value`/`IntegratedValue` | Amplitude | Field forces Amplitude; Intensity + Amplitude -> Value |
 | `Kind` | enum `Point`/`Line` | Point | |
 | `Detector` | enum `Standard`/`Counting`/`Imaging` | Standard | a detector is a line probe of the integrated intensity, whatever the file says (`normalize`) |
-| `Sensitivity` | double | 0.3125 (Rust; original 20) | 0..15625 (original 0..1000000); expected detections per unit of intensity per step at a point of the line; the `.wdproj` holds it times 64 ([60-file-formats.md](60-file-formats.md)) |
+| `Sensitivity` | double | 0.3125 (Rust; original 20) | 0..1000000; expected detections per unit of intensity per step at a point of the line; the `.wdproj` holds it unconverted ([60-file-formats.md](60-file-formats.md)) |
 | `BinSize` | int (px) | 4 | 1..20; an imaging detector's histogram bin along the line |
 | `AX`, `AY` | int | centre | always written; clamped into the canvas when sampled |
 | `BX`, `BY` | int | 0 | line end; written only for Line |

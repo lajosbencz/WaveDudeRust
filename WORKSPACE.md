@@ -10,7 +10,7 @@
 | [`wavedude-run-worker`](crates/wavedude-run-worker) | the browser's run worker: the live run's engine in a module worker beside the page, with a WebGPU device of its own |
 | [`wavedude-app`](crates/wavedude-app) | the application on egui, natively and in the browser: the window, its panes and dialogs, the updater, exports |
 | [`wavedude-cli`](crates/wavedude-cli) | headless checks, benches, dispersion tables, scripted runs and exports |
-| [`wavedude-examples`](crates/wavedude-examples) | the example projects, embedded: the list of the Examples dialog |
+| [`wavedude-examples`](crates/wavedude-examples) | the example projects of [`examples`](examples), embedded: the list of the Examples dialog |
 
 ```sh
 cargo test --workspace --features wavedude-export/openh264-source,wavedude-cli/openh264-source   # GPU tests skip without an adapter

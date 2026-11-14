@@ -48,6 +48,5 @@ source of antenna FDTD (Luebbers and Langdon 1996), a source with an internal re
   (field Pearson, the fits after normalisation, probe correlation, render parity) are the verification.
 - Next's resonators driven at resonance level off at the source; ours grow until damping or absorbers limit them
   (Example08, 14, 15, 16 differ most over long runs). Arrays are exact superposition.
-- The `.wdproj` adapter converts Next's units with one fixed factor, not a per-project fit: `Brightness` by 8 and a
-  detector's `Sensitivity` by 64 (`BRIGHTNESS_GAIN`, `SENSITIVITY_GAIN`). Projects from Next render 0.5 to 2 times
-  as bright as in Next.
+- No factor maps Next's `Brightness` or a detector's `Sensitivity` to ours: the `.wdproj` holds the model's value
+  unconverted (decision 0004), so a project from Next opens at a different brightness than in Next.

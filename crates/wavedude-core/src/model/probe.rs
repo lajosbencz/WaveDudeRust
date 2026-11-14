@@ -152,7 +152,6 @@ impl Default for Probe {
 			window: 500,
 			start_after: 0,
 			detector: ProbeDetector::Standard,
-			// WaveDude Next's 20 (io::wdproj::SENSITIVITY_GAIN)
 			sensitivity: 0.3125,
 			bin_size: 4,
 		}

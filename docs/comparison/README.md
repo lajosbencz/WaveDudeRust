@@ -37,8 +37,8 @@ What does not:
   arrived), so they test nothing at this run length. Example28's spectrum line (0.25) is at the arriving front:
   Next's series is 2e4 times weaker there than ours, so ours arrives earlier or stronger; not isolated.
   Example32's photon counter line correlates at 0.53 at the expected unit ratio (62 against 64); not isolated.
-- **Detectors.** The tool compares a probe's mean intensity, not the detections; the Sensitivity conversion of
-  the adapter is not checked against Next's counts here.
+- **Detectors.** The tool compares a probe's mean intensity, not the detections; Sensitivity is not checked
+  against Next's counts here.
 - **Example24 and Example33.** One painted pixel where a fibre's edge averages a mirror pixel as index 1 raises
   Next's sub-steps from 2 to 3, and its source amplitude with them by 22 to 31 % (decision 0014).
 

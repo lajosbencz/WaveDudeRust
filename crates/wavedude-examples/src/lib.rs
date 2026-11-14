@@ -1,5 +1,5 @@
-//! The example projects of the Examples dialog, embedded: `WaveDude` Next's from the core's
-//! fixtures and our own from the repository's `examples` folder; one entry per file, grouped by [`Topic`].
+//! The example projects of the Examples dialog, embedded from the repository's `examples` folder: `next` (our
+//! tuned copies of `WaveDude` Next's), `optics` and `gates`; one entry per file, grouped by [`Topic`].
 
 use std::sync::OnceLock;
 
@@ -69,132 +69,99 @@ impl Example {
 const NEXT: [(&str, &[u8]); 33] = [
 	(
 		"Example01_Source_Mirror_Probe.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj"),
+		include_bytes!("../../../examples/next/Example01_Source_Mirror_Probe.wdproj"),
 	),
 	(
 		"Example02_Coherent_source_gaussian_beam.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example02_Coherent_source_gaussian_beam.wdproj"),
+		include_bytes!("../../../examples/next/Example02_Coherent_source_gaussian_beam.wdproj"),
 	),
 	(
 		"Example03_Directional_pulsed_source.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example03_Directional_pulsed_source.wdproj"),
+		include_bytes!("../../../examples/next/Example03_Directional_pulsed_source.wdproj"),
 	),
 	(
 		"Example04_3_sources_3_frequencies.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example04_3_sources_3_frequencies.wdproj"),
+		include_bytes!("../../../examples/next/Example04_3_sources_3_frequencies.wdproj"),
 	),
 	(
 		"Example05_Small_incoherent_source.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example05_Small_incoherent_source.wdproj"),
+		include_bytes!("../../../examples/next/Example05_Small_incoherent_source.wdproj"),
 	),
 	(
 		"Example06_Large_incoherent_source.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example06_Large_incoherent_source.wdproj"),
+		include_bytes!("../../../examples/next/Example06_Large_incoherent_source.wdproj"),
 	),
 	(
 		"Example07_Random_emitter_lattice.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example07_Random_emitter_lattice.wdproj"),
+		include_bytes!("../../../examples/next/Example07_Random_emitter_lattice.wdproj"),
 	),
 	(
 		"Example08_Resonant_wave_in_cavity.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example08_Resonant_wave_in_cavity.wdproj"),
+		include_bytes!("../../../examples/next/Example08_Resonant_wave_in_cavity.wdproj"),
 	),
 	(
 		"Example09_Laplacian_dispersion.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example09_Laplacian_dispersion.wdproj"),
+		include_bytes!("../../../examples/next/Example09_Laplacian_dispersion.wdproj"),
 	),
-	(
-		"Example10_Beam_expansion.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example10_Beam_expansion.wdproj"),
-	),
-	(
-		"Example11_Zone_plate.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example11_Zone_plate.wdproj"),
-	),
-	(
-		"Example12_Pulse_splitter.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example12_Pulse_splitter.wdproj"),
-	),
-	(
-		"Example13_Bragg_reflector.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example13_Bragg_reflector.wdproj"),
-	),
+	("Example10_Beam_expansion.wdproj", include_bytes!("../../../examples/next/Example10_Beam_expansion.wdproj")),
+	("Example11_Zone_plate.wdproj", include_bytes!("../../../examples/next/Example11_Zone_plate.wdproj")),
+	("Example12_Pulse_splitter.wdproj", include_bytes!("../../../examples/next/Example12_Pulse_splitter.wdproj")),
+	("Example13_Bragg_reflector.wdproj", include_bytes!("../../../examples/next/Example13_Bragg_reflector.wdproj")),
 	(
 		"Example14_Resonant_roundabout.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example14_Resonant_roundabout.wdproj"),
+		include_bytes!("../../../examples/next/Example14_Resonant_roundabout.wdproj"),
 	),
-	(
-		"Example15_Top_up_the_tank.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example15_Top_up_the_tank.wdproj"),
-	),
-	(
-		"Example16_Wave_in_2_boxes.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj"),
-	),
+	("Example15_Top_up_the_tank.wdproj", include_bytes!("../../../examples/next/Example15_Top_up_the_tank.wdproj")),
+	("Example16_Wave_in_2_boxes.wdproj", include_bytes!("../../../examples/next/Example16_Wave_in_2_boxes.wdproj")),
 	(
 		"Example17_Hanbury_Brown_Twiss.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example17_Hanbury_Brown_Twiss.wdproj"),
+		include_bytes!("../../../examples/next/Example17_Hanbury_Brown_Twiss.wdproj"),
 	),
-	(
-		"Example18_XOR_AND_OR_logic.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example18_XOR_AND_OR_logic.wdproj"),
-	),
+	("Example18_XOR_AND_OR_logic.wdproj", include_bytes!("../../../examples/next/Example18_XOR_AND_OR_logic.wdproj")),
 	(
 		"Example19_Sources_with_spherical_mirror.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example19_Sources_with_spherical_mirror.wdproj"),
+		include_bytes!("../../../examples/next/Example19_Sources_with_spherical_mirror.wdproj"),
 	),
-	(
-		"Example20_Test_glass.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example20_Test_glass.wdproj"),
-	),
-	(
-		"Example21_Ball_lens.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example21_Ball_lens.wdproj"),
-	),
+	("Example20_Test_glass.wdproj", include_bytes!("../../../examples/next/Example20_Test_glass.wdproj")),
+	("Example21_Ball_lens.wdproj", include_bytes!("../../../examples/next/Example21_Ball_lens.wdproj")),
 	(
 		"Example22_Coherence_and_ball_lens.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example22_Coherence_and_ball_lens.wdproj"),
+		include_bytes!("../../../examples/next/Example22_Coherence_and_ball_lens.wdproj"),
 	),
-	("Example23_Fibres.wdproj", include_bytes!("../../wavedude-core/tests/fixtures/examples/Example23_Fibres.wdproj")),
-	(
-		"Example24_Fibre_cross_over.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example24_Fibre_cross_over.wdproj"),
-	),
+	("Example23_Fibres.wdproj", include_bytes!("../../../examples/next/Example23_Fibres.wdproj")),
+	("Example24_Fibre_cross_over.wdproj", include_bytes!("../../../examples/next/Example24_Fibre_cross_over.wdproj")),
 	(
 		"Example25_Lens_vs_Fresnel_lens.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example25_Lens_vs_Fresnel_lens.wdproj"),
+		include_bytes!("../../../examples/next/Example25_Lens_vs_Fresnel_lens.wdproj"),
 	),
 	(
 		"Example26_Three_diffusers_in_a_row.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example26_Three_diffusers_in_a_row.wdproj"),
+		include_bytes!("../../../examples/next/Example26_Three_diffusers_in_a_row.wdproj"),
 	),
 	(
 		"Example27_Interference_filter.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example27_Interference_filter.wdproj"),
+		include_bytes!("../../../examples/next/Example27_Interference_filter.wdproj"),
 	),
 	(
 		"Example28_Blazed_grating_spectrometer.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example28_Blazed_grating_spectrometer.wdproj"),
+		include_bytes!("../../../examples/next/Example28_Blazed_grating_spectrometer.wdproj"),
 	),
 	(
 		"Example29_Diffraction_on_a_crystal_lattice.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example29_Diffraction_on_a_crystal_lattice.wdproj"),
+		include_bytes!("../../../examples/next/Example29_Diffraction_on_a_crystal_lattice.wdproj"),
 	),
-	(
-		"Example30_Meta_prism.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example30_Meta_prism.wdproj"),
-	),
+	("Example30_Meta_prism.wdproj", include_bytes!("../../../examples/next/Example30_Meta_prism.wdproj")),
 	(
 		"Example31_Meta_lens_with_photomultiplier.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example31_Meta_lens_with_photomultiplier.wdproj"),
+		include_bytes!("../../../examples/next/Example31_Meta_lens_with_photomultiplier.wdproj"),
 	),
 	(
 		"Example32_Multi_Pixel_Photon_Counter.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example32_Multi_Pixel_Photon_Counter.wdproj"),
+		include_bytes!("../../../examples/next/Example32_Multi_Pixel_Photon_Counter.wdproj"),
 	),
 	(
 		"Example33_Fibre_splitter_with_2_PMs.wdproj",
-		include_bytes!("../../wavedude-core/tests/fixtures/examples/Example33_Fibre_splitter_with_2_PMs.wdproj"),
+		include_bytes!("../../../examples/next/Example33_Fibre_splitter_with_2_PMs.wdproj"),
 	),
 ];
 

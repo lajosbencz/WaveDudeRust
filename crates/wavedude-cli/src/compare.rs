@@ -18,7 +18,6 @@ use wavedude_core::engine::types::SampleKind;
 use wavedude_core::f16;
 use wavedude_core::io::nine_point_speed;
 use wavedude_core::io::schemes::SchemeStore;
-use wavedude_core::io::wdproj::BRIGHTNESS_GAIN;
 use wavedude_core::model::normalize::box_in_canvas;
 use wavedude_core::model::{DisplayLayer, Probe, Project, Stencil};
 use wavedude_core::quality::PreviewQuality;
@@ -89,8 +88,11 @@ struct CSharp {
 	render: Option<CsRender>,
 }
 
-/// What the C# dump's `--render` adds: Next's pictures of the planes, the brightness it would fit and its probe graphs.
+/// What the C# dump's `--render` adds: Next's pictures of the planes, the brightness it painted them at and would fit,
+/// and its probe graphs.
 struct CsRender {
+	/// The field's and the intensity's brightness of the pictures.
+	brightness: (f64, f64),
 	/// Per dump, the RGBA pictures of the field and the intensity.
 	pictures: Vec<(Vec<u8>, Vec<u8>)>,
 	/// Per dump, the fitted brightness of the field and the intensity.
@@ -195,6 +197,11 @@ fn read_render(dir: &Path, dumps: &[Dump], (width, height): (usize, usize)) -> R
 		.iter()
 		.map(|d| Ok((picture(format!("field_{}.png", d.step))?, picture(format!("intensity_{}.png", d.step))?)))
 		.collect::<Result<Vec<_>>>()?;
+	let text = fs::read_to_string(dir.join("brightness.txt")).context("reading the C# brightness.txt")?;
+	let brightness = match text.split_whitespace().map(str::parse::<f64>).collect::<Result<Vec<_>, _>>()?[..] {
+		[field, intensity] => (field, intensity),
+		_ => bail!("brightness.txt: expected `field intensity`, got `{}`", text.trim()),
+	};
 	let fit = |cell: &str| (cell != "-").then(|| cell.parse::<f64>()).transpose();
 	let fits = fs::read_to_string(dir.join("fit.txt"))?
 		.lines()
@@ -222,7 +229,7 @@ fn read_render(dir: &Path, dumps: &[Dump], (width, height): (usize, usize)) -> R
 			})
 		})
 		.collect::<Result<Vec<_>>>()?;
-	Ok(CsRender { pictures, fits, graphs })
+	Ok(CsRender { brightness, pictures, fits, graphs })
 }
 
 /// Per probe, (step, value) pairs.
@@ -778,22 +785,20 @@ fn render_section(
 ) -> Result<Vec<StepRow>> {
 	let display = &project.display;
 	let size = (cs.width, cs.height);
-	let file = |b: f64| b * BRIGHTNESS_GAIN;
 	let (field, intensity) = (SampleKind::Field, SampleKind::IntensityRoot);
 	writeln!(report, "## Rendered frames\n")?;
 	writeln!(
 		report,
 		"Next's pictures are its viewport's rendering of its own planes (no edge glow, no markers): the field as halves \
 		 and the intensity as halves of its square root, through the palette and black level of the Display layers at \
-		 the file's brightness. Brightness in the project model is the file's divided by {BRIGHTNESS_GAIN}.\n"
+		 the brightness Next used (brightness.txt; Next's 30 where the file omits it).\n"
 	)?;
 	writeln!(report, "### Render parity\n")?;
 	writeln!(
 		report,
-		"C#'s own planes rendered by our renderer at the file brightness (field {}, intensity {}) against C#'s pictures: \
+		"C#'s own planes rendered by our renderer at Next's brightness (field {}, intensity {}) against C#'s pictures: \
 		 byte identity expected. Fit: `fit_brightness` on C#'s Half planes against Next's `BrightnessFit`.\n",
-		file(display.field.brightness),
-		file(display.intensity.brightness)
+		csr.brightness.0, csr.brightness.1
 	)?;
 	writeln!(
 		report,
@@ -802,8 +807,8 @@ fn render_section(
 	)?;
 	writeln!(report, "|---|---|---|---|---|---|---|")?;
 	let tables = [
-		layer_table(project, &display.field, file(display.field.brightness), field),
-		layer_table(project, &display.intensity, file(display.intensity.brightness), intensity),
+		layer_table(project, &display.field, csr.brightness.0, field),
+		layer_table(project, &display.intensity, csr.brightness.1, intensity),
 	];
 	let mut parity_pixels = Vec::new();
 	let mut details = String::new();
@@ -857,7 +862,7 @@ fn render_section(
 		 intensity fit ratio |"
 	)?;
 	writeln!(report, "|---|---|---|---|---|---|---|")?;
-	let tables = [
+	let model_tables = [
 		layer_table(project, &display.field, display.field.brightness, field),
 		layer_table(project, &display.intensity, display.intensity.brightness, intensity),
 	];
@@ -865,7 +870,7 @@ fn render_section(
 	for (i, (c, r)) in cs.dumps.iter().zip(&run.dumps).enumerate() {
 		let pictures = [&csr.pictures[i].0, &csr.pictures[i].1];
 		let samples = [halves(&r.field, field), halves(&r.intensity, intensity)];
-		let ours = [render_half(&samples[0], &tables[0]), render_half(&samples[1], &tables[1])];
+		let ours = [render_half(&samples[0], &model_tables[0]), render_half(&samples[1], &model_tables[1])];
 		let luma: Vec<(f64, f64)> = (0..2).map(|k| (mean_luma(pictures[k]), mean_luma(&ours[k]))).collect();
 		let diff: Vec<f64> = (0..2).map(|k| mean_channel_diff(pictures[k], &ours[k])).collect();
 		let (cf, ci) = csr.fits[i];

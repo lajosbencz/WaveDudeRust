@@ -128,11 +128,10 @@ mirror cuts that keep the operator symmetric; the area-weighted average of n^2
 at a boundary pixel (exact coverage of a pixel cut by a straight edge). The
 formulas, coefficients and measurements are in [docs/physics.md](../physics.md).
 
-The source definition of [docs/physics.md](../physics.md) (Sources) radiates 5 to 9 times the
-original's amplitude, so the display brightness defaults are field 1 and
-intensity 1.5 instead of 30 ([10-model.md](10-model.md), DisplayLayer). The `.wdproj` adapter
-converts: a file's `Brightness` is the model's times 8 (the measured gain is 4.8
-to 9.7, [docs/comparison](../comparison/)), so a file this program writes looks as intended in
-WaveDude Next to within that spread, and one of WaveDude Next's opens at an
-eighth of its number. A detector's `Sensitivity` converts by 64, the square, since
-detections follow the intensity.
+The source definition of [docs/physics.md](../physics.md) (Sources) radiates 2.8 to 14 times the
+original's amplitude, depending on the scene (decision 0004), so the display brightness defaults are field 1 and
+intensity 1.5 instead of 30 ([10-model.md](10-model.md), DisplayLayer). The `.wdproj` holds
+`Brightness` and a detector's `Sensitivity` as the model does: Next's source
+radiates a scene-dependent amount ([docs/comparison](../comparison/)), so no fixed factor maps its
+numbers, and a project from WaveDude Next opens at a different brightness than
+there.

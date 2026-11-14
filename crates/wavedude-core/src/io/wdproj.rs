@@ -7,9 +7,6 @@
 //! Sources of a 9-point project are stored in the original's frequency units: reading multiplies
 //! the frequency scale is divided by [`super::nine_point_speed`], writing multiplies it back. A file whose `Simulation` carries
 //! `Rescaled="true"` already holds this program's units and is read unscaled.
-//!
-//! `Brightness` and `Sensitivity` are in `WaveDude` Next's units in the file and in this program's in the model
-//! ([`BRIGHTNESS_GAIN`], [`SENSITIVITY_GAIN`]).
 
 use std::path::Path;
 
@@ -183,63 +180,20 @@ impl Table for Simulation {
 	];
 }
 
-/// Factor from this program's brightness to `WaveDude` Next's: this program's source swings its cell 4.8 to 9.7 times
-/// as far (docs/comparison), so the same picture takes that much less gain there. A power of two, so a value
-/// converts both ways exactly.
-pub const BRIGHTNESS_GAIN: f64 = 8.0;
-
-/// The brightness `WaveDude` Next omits from a file, in this program's units.
-pub(super) const ORIGINAL_BRIGHTNESS: f64 = 30.0 / BRIGHTNESS_GAIN;
-
-/// The `Brightness` attribute: `WaveDude` Next's units in the file.
-const BRIGHTNESS: Attr<DisplayLayer> = Attr::custom(
-	DisplayLayerField::Brightness,
-	|l| xml::fmt_f64(l.brightness * BRIGHTNESS_GAIN),
-	|l, text| {
-		l.brightness = xml::parse_f64(text).ok_or("a number")? / BRIGHTNESS_GAIN;
-		Ok(())
-	},
-	AttrType::Cdata,
-);
-
-/// Factor from this program's detector sensitivity to `WaveDude` Next's: detections follow the intensity, the field
-/// squared.
-pub const SENSITIVITY_GAIN: f64 = BRIGHTNESS_GAIN * BRIGHTNESS_GAIN;
-
-/// The `Sensitivity` attribute: `WaveDude` Next's units in the file.
-const SENSITIVITY: Attr<Probe> = Attr::custom(
-	ProbeField::Sensitivity,
-	|p| xml::fmt_f64(p.sensitivity * SENSITIVITY_GAIN),
-	|p, text| {
-		p.sensitivity = xml::parse_f64(text).ok_or("a number")? / SENSITIVITY_GAIN;
-		Ok(())
-	},
-	AttrType::Cdata,
-);
-
-/// A layer's defaults as `WaveDude` Next has them in a file of `version`.
+/// A layer missing from a file of `version`.
 fn original_layer(layer: Layer, version: FileVersion) -> DisplayLayer {
-	let d = match layer {
-		Layer::Field => DisplayLayer::field_default(),
-		Layer::Intensity => DisplayLayer::intensity_default(),
-	};
-	DisplayLayer { brightness: ORIGINAL_BRIGHTNESS, overlay_in_export: version.overlay_in_export(), ..d }
+	DisplayLayer { overlay_in_export: version.overlay_in_export(), ..DisplayLayer::default_of(layer) }
 }
 
 /// A `Field` or `Intensity` element: a missing `ColorScheme` is empty (the layer's default after
-/// normalising), a missing `BlackLevel` is 0 and a missing `Brightness` 30, as `WaveDude` Next reads them.
-fn layer_base() -> DisplayLayer {
-	DisplayLayer {
-		color_scheme: String::new(),
-		brightness: ORIGINAL_BRIGHTNESS,
-		black_level: 0.0,
-		..DisplayLayer::field_default()
-	}
+/// normalising) and a missing `BlackLevel` 0, as `WaveDude` Next reads them.
+fn layer_base(layer: Layer) -> DisplayLayer {
+	DisplayLayer { color_scheme: String::new(), black_level: 0.0, ..DisplayLayer::default_of(layer) }
 }
 
 /// [`layer_base`] as a file of `version` means it.
-fn layer_base_of(version: FileVersion) -> DisplayLayer {
-	DisplayLayer { overlay_in_export: version.overlay_in_export(), ..layer_base() }
+fn layer_base_of(layer: Layer, version: FileVersion) -> DisplayLayer {
+	DisplayLayer { overlay_in_export: version.overlay_in_export(), ..layer_base(layer) }
 }
 
 /// The `Intensity` element; `Field` writes its `BlackLevel` always (`WaveDude` Next's default 0 is not its initial
@@ -247,7 +201,7 @@ fn layer_base_of(version: FileVersion) -> DisplayLayer {
 impl Table for DisplayLayer {
 	const ATTRS: &'static [Attr<Self>] = &[
 		Attr::of(DisplayLayerField::ColorScheme).always(),
-		BRIGHTNESS,
+		Attr::of(DisplayLayerField::Brightness),
 		Attr::of(DisplayLayerField::BlackLevel),
 		Attr::of(DisplayLayerField::Preview),
 		Attr::of(DisplayLayerField::Overlay),
@@ -256,13 +210,13 @@ impl Table for DisplayLayer {
 	];
 
 	fn base() -> Self {
-		layer_base()
+		layer_base(Layer::Intensity)
 	}
 }
 
 const FIELD_LAYER: &[Attr<DisplayLayer>] = &[
 	Attr::of(DisplayLayerField::ColorScheme).always(),
-	BRIGHTNESS,
+	Attr::of(DisplayLayerField::Brightness),
 	Attr::of(DisplayLayerField::BlackLevel).when(|_| true),
 	Attr::of(DisplayLayerField::Preview),
 	Attr::of(DisplayLayerField::Overlay),
@@ -335,7 +289,7 @@ impl Table for Probe {
 		Attr::of(ProbeField::Measurement),
 		Attr::of(ProbeField::Kind),
 		Attr::of(ProbeField::Detector),
-		SENSITIVITY,
+		Attr::of(ProbeField::Sensitivity),
 		Attr::of(ProbeField::BinSize),
 		Attr::of(ProbeField::Ax).named("AX").always(),
 		Attr::of(ProbeField::Ay).named("AY").always(),
@@ -567,7 +521,7 @@ fn read_scene(el: &Element) -> R<Scene> {
 fn read_display(el: &Element, version: FileVersion) -> R<Display> {
 	let mut display: Display = fields::read(el)?;
 	let layer = |name, layer| match el.child(name) {
-		Some(el) => fields::read_onto(el, layer_base_of(version)),
+		Some(el) => fields::read_onto(el, layer_base_of(layer, version)),
 		None => Ok(original_layer(layer, version)),
 	};
 	display.field = layer("Field", Layer::Field)?;
@@ -685,7 +639,7 @@ fn write_scene(s: &Scene, folder: Option<&Path>) -> Element {
 fn write_display(s: &Display) -> Element {
 	let mut el = element("Display", s);
 	let mut field = Element::new("Field");
-	fields::write_against(FIELD_LAYER, &s.field, &layer_base(), &mut field);
+	fields::write_against(FIELD_LAYER, &s.field, &layer_base(Layer::Field), &mut field);
 	el.child_el(field).child_el(element("Intensity", &s.intensity));
 	if s.video != Video::default() {
 		el.child_el(element("Video", &s.video));
@@ -1230,7 +1184,7 @@ mod tests {
 		let body = text.split_once("]>\n").unwrap().1;
 		assert_eq!(
 			body,
-			"<Project Version=\"4\" Seed=\"7\">\n\t<Display>\n\t\t<Field ColorScheme=\"Default field\" Brightness=\"8\" BlackLevel=\"-0.05\" />\n\t\t<Intensity ColorScheme=\"Default intensity\" Brightness=\"12\" />\n\t</Display>\n\t<Source Name=\"Source 1\" X=\"0\" Y=\"0\" />\n\t<Lens Name=\"Lens 1\" X=\"0\" Y=\"0\" />\n\t<Probe Name=\"Probe 1\" AX=\"0\" AY=\"0\" />\n</Project>"
+			"<Project Version=\"4\" Seed=\"7\">\n\t<Display>\n\t\t<Field ColorScheme=\"Default field\" BlackLevel=\"-0.05\" />\n\t\t<Intensity ColorScheme=\"Default intensity\" />\n\t</Display>\n\t<Source Name=\"Source 1\" X=\"0\" Y=\"0\" />\n\t<Lens Name=\"Lens 1\" X=\"0\" Y=\"0\" />\n\t<Probe Name=\"Probe 1\" AX=\"0\" AY=\"0\" />\n</Project>"
 		);
 	}
 
@@ -1252,22 +1206,24 @@ mod tests {
 	}
 
 	#[test]
-	fn brightness_and_sensitivity_are_next_units_in_the_file() {
-		let p = read_str("<Project Version=\"3\"><Display><Field /></Display></Project>").unwrap();
-		assert_eq!((p.display.field.brightness, p.display.intensity.brightness), (3.75, 3.75));
+	fn brightness_and_sensitivity_are_model_values_in_the_file() {
+		let defaults = (FIELD_BRIGHTNESS, INTENSITY_BRIGHTNESS);
+		let p = read_str("<Project Version=\"3\"><Display><Field /><Intensity /></Display></Project>").unwrap();
+		assert_eq!((p.display.field.brightness, p.display.intensity.brightness), defaults);
 		let p = read_str("<Project Version=\"3\" />").unwrap();
-		assert_eq!((p.display.field.brightness, p.display.intensity.brightness), (3.75, 3.75));
+		assert_eq!((p.display.field.brightness, p.display.intensity.brightness), defaults);
 		let text = write_string(&p, None);
 		assert!(!text.split_once("]>\n").unwrap().1.contains("Brightness"), "{text}");
-		let p = read_str("<Project Version=\"4\"><Display><Field Brightness=\"16\" /></Display></Project>").unwrap();
-		assert_eq!(p.display.field.brightness, 2.0);
+		let p = read_str("<Project Version=\"4\"><Display><Field Brightness=\"2.5\" /></Display></Project>").unwrap();
+		assert_eq!(p.display.field.brightness, 2.5);
+		assert!(write_string(&p, None).contains("Brightness=\"2.5\""));
 		let p =
-			read_str("<Project Version=\"4\"><Probe Name=\"P\" /><Probe Name=\"Q\" Sensitivity=\"32\" /></Project>")
+			read_str("<Project Version=\"4\"><Probe Name=\"P\" /><Probe Name=\"Q\" Sensitivity=\"0.5\" /></Project>")
 				.unwrap();
 		assert_eq!((p.probes[0].sensitivity, p.probes[1].sensitivity), (Probe::default().sensitivity, 0.5));
 		let text = write_string(&p, None);
 		assert_eq!(text.matches("Sensitivity=").count(), 1, "{text}");
-		assert!(text.contains("Sensitivity=\"32\""), "{text}");
+		assert!(text.contains("Sensitivity=\"0.5\""), "{text}");
 	}
 
 	#[test]

@@ -501,8 +501,8 @@ Coupler: 1.5706 rad</Description>
 	<Scene Width="1200" Height="272" RefractiveIndex="1.4" />
 	<Simulation Steps="3056" VisualizeEvery="4" />
 	<Display>
-		<Field ColorScheme="Default field" Brightness="6.096" BlackLevel="-0.05" />
-		<Intensity ColorScheme="Default intensity" Brightness="7.472" />
+		<Field ColorScheme="Default field" Brightness="0.762" BlackLevel="-0.05" />
+		<Intensity ColorScheme="Default intensity" Brightness="0.934" />
 	</Display>
 	<Source Name="A" X="24" Y="65" Frequency="50" Amplitude="50" />
 	<Source Name="A lower" X="24" Y="66" Frequency="50" Amplitude="50" />

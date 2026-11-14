@@ -14,6 +14,7 @@ sealed class RenderDump
 	private readonly string _dir;
 	private readonly int _w, _h;
 	private readonly ColorLut _fieldLut, _intensityLut;
+	private readonly double _fieldBrightness, _intensityBrightness;
 	private readonly StringBuilder _fit = new();
 
 	public RenderDump(Project project, string dir, int w, int h)
@@ -26,6 +27,8 @@ sealed class RenderDump
 		List<ColorScheme> builtIn = ColorSchemeStore.LoadBuiltIn(null);
 		_fieldLut = Lut(builtIn, project.Display.Field);
 		_intensityLut = Lut(builtIn, project.Display.Intensity);
+		_fieldBrightness = project.Display.Field.Brightness;
+		_intensityBrightness = project.Display.Intensity.Brightness;
 	}
 
 	private ColorLut Lut(List<ColorScheme> builtIn, DisplayLayer layer)
@@ -38,8 +41,8 @@ sealed class RenderDump
 	{
 		Half[] fieldHalves = Array.ConvertAll(field, v => (Half)v);
 		Half[] rootHalves = Array.ConvertAll(intensity, v => (Half)MathF.Sqrt(v));
-		Paint($"field_{step}.png", fieldHalves, _fieldLut, SampleKind.Field, _project.Display.Field.Brightness);
-		Paint($"intensity_{step}.png", rootHalves, _intensityLut, SampleKind.IntensityRoot, _project.Display.Intensity.Brightness);
+		Paint($"field_{step}.png", fieldHalves, _fieldLut, SampleKind.Field, _fieldBrightness);
+		Paint($"intensity_{step}.png", rootHalves, _intensityLut, SampleKind.IntensityRoot, _intensityBrightness);
 		string Fit(double? f) => f?.ToString("R", CultureInfo.InvariantCulture) ?? "-";
 		_fit.Append(step).Append(' ').Append(Fit(BrightnessFit.For(fieldHalves, SampleKind.Field)))
 			.Append(' ').Append(Fit(BrightnessFit.For(rootHalves, SampleKind.IntensityRoot))).Append('\n');
@@ -53,10 +56,12 @@ sealed class RenderDump
 		PngEncoder.Write(png, pixels, _w, _h);
 	}
 
-	/// <summary>fit.txt, and graph.txt with the series and profile of every probe beside it (see the README).</summary>
+	/// <summary>fit.txt, brightness.txt, and graph.txt with the series and profile of every probe beside it (see the README).</summary>
 	public void Finish(IReadOnlyList<ProbeSpec> probes, ProbeTrace[] traces, int steps, int frame)
 	{
 		File.WriteAllText(Path.Combine(_dir, "fit.txt"), _fit.ToString());
+		File.WriteAllText(Path.Combine(_dir, "brightness.txt"),
+			$"{_fieldBrightness.ToString("R", CultureInfo.InvariantCulture)} {_intensityBrightness.ToString("R", CultureInfo.InvariantCulture)}\n");
 		var graph = new StringBuilder();
 		for (int k = 0; k < probes.Count; k++)
 		{
