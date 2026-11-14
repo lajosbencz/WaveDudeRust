@@ -240,14 +240,22 @@ fn export_writes_a_still() {
 }
 
 #[test]
-fn gates_writes_ten_loadable_projects_and_truth_table_runs_one() {
+fn gates_writes_the_shipped_gate_projects_loadable_and_truth_table_runs_one() {
 	let dir = tempfile::tempdir().unwrap();
 	let out = dir.path().to_str().unwrap();
 	// A small design: the default 1200 px one calibrates for minutes.
 	let text = ok(&["gates", "--out", out, "--frequency", "100", "--width", "400"]);
 	assert!(text.contains("coupling length"), "{text}");
 	let projects = files(dir.path());
-	assert_eq!(projects.len(), 10, "{projects:?}");
+	let names = |paths: &[PathBuf]| -> Vec<String> {
+		paths.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect()
+	};
+	// the shipped copies are this command's output, beside Next's ExampleNN_ files
+	let shipped: Vec<String> = names(&files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/guides")))
+		.into_iter()
+		.filter(|n| !n.starts_with("Example"))
+		.collect();
+	assert_eq!(names(&projects), shipped);
 	for path in &projects {
 		assert_eq!(path.extension().unwrap(), "wdproj");
 		let report = ok(&["check", path.to_str().unwrap()]);

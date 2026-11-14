@@ -1880,7 +1880,7 @@ mod tests {
 	}
 
 	#[test]
-	fn the_context_awaits_submitted_batches_and_requested_mappings_until_they_land() {
+	fn the_context_awaits_each_completion_until_it_is_reported_and_nothing_after() {
 		// A context of its own: the other tests submit on the process's.
 		let ctx = match pollster::block_on(GpuContext::create()) {
 			Ok(ctx) => ctx,
@@ -1895,20 +1895,25 @@ mod tests {
 		assert!(!ctx.awaits_completions(), "an idle engine awaits nothing");
 		steps(&mut e, 3);
 		assert!(!ctx.awaits_completions(), "recorded steps are not submitted");
+		// right after a submit the flag may be down already: a fast card's work is reported done within the submit
 		e.submit_pending().unwrap();
-		assert!(ctx.awaits_completions(), "a submitted batch");
 		land();
 		assert!(!ctx.awaits_completions(), "a batch run");
 		let shape = shape(1, SampleFormat::Index, 1.0);
 		steps(&mut e, 2);
 		let capture = e.begin_capture(&shape, Snapshot::new(shape)).unwrap();
 		e.submit_pending().unwrap();
-		assert!(ctx.awaits_completions(), "a requested mapping");
 		land();
 		assert!(!ctx.awaits_completions(), "a mapping landed");
 		e.finish_capture(capture).unwrap();
 		ctx.kick();
 		land();
 		assert!(!ctx.awaits_completions(), "a kick awaits nothing");
+		let (first, second) = (ctx.awaiting(), ctx.awaiting());
+		assert!(ctx.awaits_completions(), "an outstanding completion");
+		drop(first);
+		assert!(ctx.awaits_completions(), "one more outstanding");
+		drop(second);
+		assert!(!ctx.awaits_completions(), "every completion reported");
 	}
 }

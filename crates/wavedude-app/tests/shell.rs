@@ -175,10 +175,15 @@ fn a_tab_drops_into_a_group_but_not_into_the_preview_nor_after_esc() {
 fn a_group_dragged_by_its_tab_bar_drops_beside_the_preview() {
 	let dir = tempfile::tempdir().unwrap();
 	let mut harness = shell(dir.path(), None);
-	let properties = harness.get_by_role_and_label(egui::Role::Button, "Properties").rect();
-	drag(&mut harness, properties.right_center() + egui::vec2(60., 0.), egui::pos2(1100., 400.), false);
-	let properties = harness.get_by_role_and_label(egui::Role::Button, "Properties").rect();
-	assert!(properties.left() > 900., "Properties is not beside the Preview: {properties:?}");
+	let window = harness.ctx.content_rect();
+	let properties = |h: &Harness<'_, Shell>| h.get_by_role_and_label(egui::Role::Button, "Properties").rect();
+	let before = properties(&harness);
+	assert!(before.right() < window.center().x, "Properties starts on the left: {before:?}");
+	// the Preview fills the middle: its right part docks to the right edge
+	let target = egui::pos2(window.left() + 0.85 * window.width(), window.center().y);
+	drag(&mut harness, before.right_center() + egui::vec2(60., 0.), target, false);
+	let after = properties(&harness);
+	assert!(after.left() > window.center().x, "Properties is not beside the Preview: {after:?}");
 }
 
 #[test]

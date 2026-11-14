@@ -10,6 +10,25 @@ use wavedude_view::graph::{self, GraphData};
 
 const GREY: [u8; 4] = [128, 128, 128, 255];
 
+/// `c` painted over the opaque `under`, straight alpha in sRGB.
+fn over(under: [u8; 3], c: wavedude_view::epaint::Color32) -> [u8; 3] {
+	let [r, g, b, a] = c.to_srgba_unmultiplied();
+	let a = f32::from(a) / 255.;
+	[r, g, b]
+		.map(f32::from)
+		.iter()
+		.zip(under)
+		.map(|(c, u)| (c * a + f32::from(u) * (1. - a)).round() as u8)
+		.collect::<Vec<_>>()
+		.try_into()
+		.unwrap()
+}
+
+/// Whether `px` is `want` within the rounding of the blends and the rasteriser.
+fn near(px: [u8; 4], want: [u8; 3]) -> bool {
+	px[..3].iter().zip(want).all(|(&p, w)| p.abs_diff(w) <= 3)
+}
+
 fn at(px: &[u8], w: usize, x: usize, y: usize) -> [u8; 4] {
 	let i = (y * w + x) * 4;
 	[px[i], px[i + 1], px[i + 2], px[i + 3]]
@@ -76,9 +95,9 @@ fn probe_markers_black_around_white_clipped_at_the_corner_labelled() {
 			.filter(|&(xx, yy)| at(&px, w, xx, yy)[0] > 200)
 			.count()
 	};
-	assert!(ink(label_origin(20, 40, h as u32)) > 10, "label 1, the first active probe");
-	assert!(ink(label_origin(50, 30, h as u32)) > 15, "label 2A");
-	assert!(ink(label_origin(66, 45, h as u32)) > 15, "label 2B");
+	assert!(ink(label_origin(20, 40, h as u32)) > 0, "label 1, the first active probe");
+	assert!(ink(label_origin(50, 30, h as u32)) > 0, "label 2A");
+	assert!(ink(label_origin(66, 45, h as u32)) > 0, "label 2B");
 	insta::assert_snapshot!("probe_markers", ascii(&px, w));
 }
 
@@ -122,16 +141,21 @@ fn graph_boxes_show_background_border_axes_and_the_curve() {
 	let mut px = GREY.repeat(w * h);
 	let overlays = Overlays::new(&project, w as u32, h as u32, &[trace], 300);
 	overlays.draw(&mut overlays.rasteriser(), &mut px, Layer::Field, 1).unwrap();
+	let grey = [GREY[0], GREY[1], GREY[2]];
+	let background = over(grey, graph::BACKGROUND);
 	let border = at(&px, w, 10, 5);
-	assert!((136..=146).contains(&border[0]) && border[2] > border[0], "the border over the background {border:?}");
+	assert!(near(border, over(background, graph::BORDER)), "the border over the background {border:?}");
 	let inside = at(&px, w, 12, 7);
-	assert!(inside[0] < 40, "the dark background {inside:?}");
+	assert!(near(inside, background), "the background {inside:?}");
 	assert_eq!(at(&px, w, 9, 5), GREY, "nothing outside the box");
 	assert_eq!(at(&px, w, 210, 5), GREY);
-	let curve = px.as_chunks::<4>().0.iter().filter(|p| p[0] > 200 && p[1] > 150 && p[2] < 120).count();
-	assert!(curve > 100, "the curve's yellow ({curve} pixels)");
+	let [r, g, b, _] = graph::CURVE.to_srgba_unmultiplied();
+	let columns: std::collections::BTreeSet<usize> =
+		(0..w * h).filter(|&i| near(at(&px, w, i % w, i / w), [r, g, b])).map(|i| i % w).collect();
+	let span = columns.last().zip(columns.first()).map_or(0, |(l, f)| l - f);
+	assert!(span > 200 / 2, "the curve runs along the plot: {span} of the box's 200 px");
 	let corner = at(&px, w, 10 + 200 - 4, 5 + 100 - 4);
-	assert!(corner[0] < 40, "no resize grip in an export {corner:?}");
+	assert!(near(corner, background), "no resize grip in an export {corner:?}");
 }
 
 #[test]

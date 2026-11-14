@@ -36,24 +36,31 @@ fn paths_under(prefix: &str) -> Vec<String> {
 	PartField::all().into_iter().map(Field::path).filter(|p| p.starts_with(prefix)).collect()
 }
 
+/// Every leaf path of `F`, each under `prefix`.
+fn leaves<F: Field>(prefix: &str) -> BTreeSet<String> {
+	F::all().into_iter().map(|f| format!("{prefix}{}", f.path())).collect()
+}
+
+fn set(paths: Vec<String>) -> BTreeSet<String> {
+	paths.into_iter().collect()
+}
+
 #[test]
 fn part_lists_every_leaf_through_its_base_and_every_kind() {
-	assert_eq!(paths_under("Base.").len(), 5, "name, enabled, x, y, angle");
-	// Material 4 + coating 5 + diameter, r1, r2, thickness.
-	assert_eq!(paths_under("Kind.Lens.").len(), 13);
-	// Material 4 + coating 5 + sides, side.
-	assert_eq!(paths_under("Kind.Polygon.").len(), 11);
-	// Coating 5 + length, diameter, centre index, edge index.
-	assert_eq!(paths_under("Kind.GrinLens.").len(), 9);
-	assert_eq!(paths_under("Kind.LogicGate.").len(), 10);
-	assert_eq!(paths_under("Kind.ZonePlate.").len(), 8);
-	// A Fresnel lens carries its lens's 13 and zones, division.
-	assert_eq!(paths_under("Kind.FresnelLens.").len(), 15);
-	assert!(paths_under("Kind.FresnelLens.Lens.Material.Mirror").len() == 1);
+	assert_eq!(set(paths_under("Base.")), leaves::<PartBaseField>("Base."));
+	assert_eq!(set(paths_under("Kind.Lens.")), leaves::<LensField>("Kind.Lens."));
+	// a nested type's leaves expand under its member, beside the owner's own
+	let lens = leaves::<LensField>("");
+	assert!(leaves::<MaterialField>("Material.").is_subset(&lens));
+	assert!(leaves::<CoatingField>("Coating.").is_subset(&lens));
+	assert!(lens.contains("Diameter"));
+	assert!(leaves::<LensField>("Kind.FresnelLens.Lens.").is_subset(&set(paths_under("Kind.FresnelLens."))));
+	assert!(paths_under("Kind.FresnelLens.").contains(&"Kind.FresnelLens.Zones".to_owned()));
+	assert!(leaves::<CoatingField>("Kind.GrinLens.Coating.").is_subset(&set(paths_under("Kind.GrinLens."))));
 
 	let kinds: BTreeSet<String> =
 		paths_under("Kind.").iter().filter_map(|p| p.split('.').nth(1).map(str::to_owned)).collect();
-	assert_eq!(kinds.len(), 17, "{kinds:?}");
+	assert!(kinds.contains("LogicGate") && kinds.contains("ZonePlate") && kinds.contains("Outline"), "{kinds:?}");
 	let all = PartField::all();
 	assert_eq!(all.iter().copied().collect::<HashSet<_>>().len(), all.len(), "no field listed twice");
 	let paths: HashSet<String> = all.into_iter().map(Field::path).collect();

@@ -390,15 +390,29 @@ mod tests {
 		assert_eq!(ports_of(&and, &base)[3], Point::new(1128, 133));
 	}
 
+	/// The design meets its targets within the rounding of a cell: a quarter of the light crossed over in the
+	/// coupler and its bends, and the phase shift `phi` (degrees) in the phase section.
+	fn meets_its_targets(d: &GateDesign, phi: f64) {
+		let crossed = d.coupler_len as f64 * d.kappa + 2.0 * d.bend_kappa;
+		assert!((crossed - (FRAC_PI_4 - COUPLING_EXCESS)).abs() <= d.kappa / 2.0 + 1e-12, "{d:?}");
+		let dbeta = (d.phase_beta - d.beta).abs();
+		let shift = d.phase_len as f64 * dbeta;
+		assert!((shift - phi.abs().to_radians()).abs() <= dbeta / 2.0 + 1e-12, "{d:?}");
+		assert!(d.port_spacing % 2 == 0 && d.coupled % 2 == 0, "{d:?}");
+		let parts = d.input_len + 2 * d.lead_len + d.phase_region + 2 * d.bend_len + d.coupler_len + d.output_len;
+		assert_eq!(d.length, parts, "the sections tile the gate");
+	}
+
 	#[test]
 	fn default_gate_with_this_engines_sub_steps() {
 		let sim = Simulation::default();
 		let d = GateDesign::for_gate(&LogicGate::default(), &sim).unwrap();
-		assert!(d.length < 650, "{d:?}");
-		assert!((d.phase_index, d.phase_on_a) == (2.45, true) && d.port_spacing % 2 == 0 && d.coupled % 2 == 0);
+		meets_its_targets(&d, phase_shift(LogicGate::default().kind));
+		assert_eq!((d.phase_index, d.phase_on_a), (2.45, true), "the phase arm is lowered by PHASE_STEP");
 		let level_100 = LogicGate { design_frequency: 100.0, core_index: 2.0, ..LogicGate::default() };
 		let d = GateDesign::for_gate(&level_100, &sim).unwrap();
-		assert!(d.length < 500 && !d.phase_on_a && d.phase_index == 2.1, "{d:?}");
+		meets_its_targets(&d, phase_shift(level_100.kind));
+		assert!(!d.phase_on_a && d.phase_index == 2.1, "{d:?}");
 		let short = GateDesign::design(12.0, 1.6, 1.45, 64, 90.0, &ModeSolver::for_simulation(&sim)).unwrap();
 		let long = GateDesign::design(32.0, 1.6, 1.45, 64, 90.0, &ModeSolver::for_simulation(&sim)).unwrap();
 		assert!(short.core_width < long.core_width && long.length > short.length && long.port_spacing > 64);
@@ -415,7 +429,7 @@ mod tests {
 	fn nine_point_design_exists() {
 		let s = ModeSolver::new(Stencil::NinePoint, 2);
 		let d = GateDesign::design(32.044, 2.55, 1.45, 2, 90.0, &s).unwrap();
-		assert!(d.coupler_len > 0 && d.port_spacing % 2 == 0 && d.coupled % 2 == 0);
-		assert!(d.length > 300 && d.length < 1500, "{}", d.length);
+		assert!(d.coupler_len > 0);
+		meets_its_targets(&d, 90.0);
 	}
 }

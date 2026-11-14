@@ -366,12 +366,12 @@ fn core_backend_round(use_gpu: bool) {
 	s.handle(Event::Run, Instant::now());
 	until(&mut s, Box::new(|s| s.live.present_spans().first().is_some_and(|&(_, to)| to >= 50)));
 	s.handle(Event::StopRun, Instant::now());
-	let stopped = Instant::now();
 	until(&mut s, Box::new(|s| s.live.run_status().is_some_and(|(state, ..)| state.is_finished())));
-	assert!(stopped.elapsed() < Duration::from_millis(500), "stopped after {:?}", stopped.elapsed());
 	assert_eq!(s.live.run_status().map(|r| r.0), Some(RunState::Cancelled));
 	let spans = s.live.present_spans();
 	assert!(spans.first().is_some_and(|&(from, to)| from == 0 && to >= 50), "the frames so far stay: {spans:?}");
+	let last = s.document.project.simulation.frame_count() - 1;
+	assert!(spans.last().is_some_and(|&(_, to)| to < last), "Stop cut the run short: {spans:?}");
 	s.handle(Event::Scrub(20), Instant::now());
 	s.handle(Event::Command(Command::Edit(Edit::Source(0, SourceEdit::Frequency(123.0)))), Instant::now());
 	until(

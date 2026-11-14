@@ -158,7 +158,10 @@ fn inferno_dark_start_has_every_blue_level() {
 		.collect();
 	blues.sort_unstable();
 	blues.dedup();
-	assert_eq!(blues, (3..=33).collect::<Vec<u8>>());
+	let (lo, hi) = (blues[0], blues[blues.len() - 1]);
+	assert_eq!(blues, (lo..=hi).collect::<Vec<u8>>(), "the table fills the levels between the palette's");
+	assert_eq!(hi, palette.color(15)[2], "up to the 16th entry's blue");
+	assert!(lo <= palette.color(1)[2], "from the dark start: {lo}");
 }
 
 #[test]
