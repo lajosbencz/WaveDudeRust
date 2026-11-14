@@ -442,13 +442,13 @@ impl<B: Backend> LiveController<B> {
 		let (store, request) = (self.current_store()?, self.adopted_request()?);
 		let frames = request.schedule().covered_frames(store.present_count() as u32);
 		let (in_memory, on_disk) = (store.frames_in_memory(), store.frames_on_disk());
-		let gb = |n: usize| (n * store.frame_bytes()) as f64 / f64::from(1u32 << 30);
+		let gib = |n: usize| store.bytes_of(n) as f64 / f64::from(1u32 << 30);
 		Some(format!(
-			"Run {word}: {done} of {steps} steps, {frames} frames, {:.1} s; {} stored, {in_memory} in memory ({:.1} GB) and {on_disk} on disk ({:.1} GB)",
+			"Run {word}: {done} of {steps} steps, {frames} frames, {:.1} s; {} stored, {in_memory} in memory ({:.1} GiB) and {on_disk} on disk ({:.1} GiB)",
 			now.saturating_duration_since(started).as_secs_f64(),
 			in_memory + on_disk,
-			gb(in_memory),
-			gb(on_disk),
+			gib(in_memory),
+			gib(on_disk),
 		))
 	}
 

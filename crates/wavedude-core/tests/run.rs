@@ -301,7 +301,7 @@ fn store_bytes_at_equals_the_store_a_run_allocates() {
 			for format in [SampleFormat::Half, SampleFormat::Index] {
 				let q = PreviewQuality::new(res, frames, format);
 				let st = store(&s.with_quality(q), GIB);
-				assert_eq!(r.store_bytes_at(q), (st.capacity() * st.frame_bytes()) as u64, "{q:?}");
+				assert_eq!(r.store_bytes_at(q), st.bytes_of(st.capacity()), "{q:?}");
 				assert_eq!(r.with_quality(q).store_bytes(), r.store_bytes_at(q));
 			}
 		}

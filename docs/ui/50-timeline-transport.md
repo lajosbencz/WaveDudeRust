@@ -121,8 +121,8 @@ Status bar right item: "<State>: <done> / <total> steps, <engine>"; empty
 with no run. Engine e.g. "CPU (16 threads)" or "GPU: <adapter name>".
 
 A run that completes or is stopped logs its summary, which the status bar's left item shows: "Run Completed:
-<done> of <total> steps, <frames> frames, <seconds> s; <stored> stored, <n> in memory (<GB>) and <n> on disk
-(<GB>)" ("Run Cancelled: ..." for a stopped run; English, as every log line). The time is wall time from
+<done> of <total> steps, <frames> frames, <seconds> s; <stored> stored, <n> in memory (<GiB>) and <n> on disk
+(<GiB>)" ("Run Cancelled: ..." for a stopped run; English, as every log line). The time is wall time from
 the start of the run.
 
 | State word | Meaning | Transport |

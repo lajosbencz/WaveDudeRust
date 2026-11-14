@@ -178,6 +178,11 @@ impl StoreLayout {
 		self.layers.len() * self.shape.plane_bytes()
 	}
 
+	/// Bytes of `frames` frames, which exceed `usize` on wasm32.
+	pub fn bytes_of(&self, frames: usize) -> u64 {
+		frames as u64 * self.frame_bytes() as u64
+	}
+
 	/// Writes in flight at which a pending spill of this layout is busy: [`WRITE_BYTES_IN_FLIGHT`] of frames, at
 	/// least one, at most the GPU engine's largest capture ring.
 	pub fn writes_in_flight(&self) -> usize {
@@ -189,7 +194,7 @@ impl StoreLayout {
 	/// Bytes of a spill file holding `frames` frames.
 	#[cfg(not(target_arch = "wasm32"))]
 	pub fn file_bytes(&self, frames: usize) -> u64 {
-		HEADER_BYTES + frames as u64 * self.frame_bytes() as u64
+		HEADER_BYTES + self.bytes_of(frames)
 	}
 }
 
@@ -348,6 +353,11 @@ impl FrameStore {
 		self.layout.frame_bytes()
 	}
 
+	/// Bytes of `frames` of its frames.
+	pub fn bytes_of(&self, frames: usize) -> u64 {
+		self.layout.bytes_of(frames)
+	}
+
 	/// The contiguous frames from 0: every frame below it is present.
 	pub fn count(&self) -> usize {
 		self.prefix.load(Ordering::Acquire)
@@ -420,7 +430,7 @@ impl FrameStore {
 
 	/// Bytes of memory the store holds or plans to hold.
 	pub fn ram_bytes(&self) -> u64 {
-		self.first_spilled().min(self.ram_frames) as u64 * self.frame_bytes() as u64
+		self.layout.bytes_of(self.first_spilled().min(self.ram_frames))
 	}
 
 	/// The spill's size, when the store has one: the file's, or the pending spill's frames.
@@ -428,7 +438,7 @@ impl FrameStore {
 		match self.spill.as_ref()? {
 			#[cfg(not(target_arch = "wasm32"))]
 			Spill::File(disk) => disk.bytes(),
-			Spill::Pending(_) => Some(self.frames_on_disk() as u64 * self.frame_bytes() as u64),
+			Spill::Pending(_) => Some(self.layout.bytes_of(self.frames_on_disk())),
 		}
 	}
 
