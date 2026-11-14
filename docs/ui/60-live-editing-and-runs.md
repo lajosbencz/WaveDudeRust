@@ -147,6 +147,14 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
 - Unsaved edits are asked about before New, Open, Close, Exit, opening an example and dropping a file
   (a drop asks too, Cancel keeps the project and ignores the drop; decision 0008).
 
+## Objects off the canvas
+
+A new run spec (an open, a simulation edit, a run) whose objects lie off the canvas logs one warning naming them, in
+project order: "off the canvas: Source 2 (left out), Array 1 (3 of 16 elements left out), Lens 1 (left out), Probe 1
+(reads at the edge)". An enabled source drives no cell with the elements named, no shape of an enabled part reaches
+the canvas, an active probe has an end off it (clamped to the edge). The run goes on without them; the warning
+repeats only when the list changes (divergence: Next leaves them out silently).
+
 ## Run start errors (status bar / message)
 
 "The simulation could not start.", "The scene uses an image, but no image file is set.", "Save the project

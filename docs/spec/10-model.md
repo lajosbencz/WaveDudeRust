@@ -134,7 +134,7 @@ above, and the attribute is written whenever the value differs from it. Nothing 
 |---|---|---|---|
 | `Name` | string | "Source n" | |
 | `Enabled` | bool | true | |
-| `X`, `Y` | double (Rust; original int) | centre | always written, rounded to an integer by the `.wdproj` adapter (60); the forms step whole pixels; not clamped (outside emitters are dropped by the engine) `TODO(verify)` |
+| `X`, `Y` | double (Rust; original int) | centre | always written, rounded to an integer by the `.wdproj` adapter (60); the forms step whole pixels; not clamped: emitters off the canvas are dropped by the engine, and the app names them in a warning ([ui/60](../ui/60-live-editing-and-runs.md)) |
 | `Frequency` | double (level) | 100 | 0.01..255; NaN -> 100 |
 | `Amplitude` | double (%) | 100 | 0..100 |
 | `Phase` | double (deg) | 0 | -180..180 |

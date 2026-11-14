@@ -28,7 +28,8 @@ canvas (x, y)             -> grid (x + Rim, y + Rim)
 ```
 Buffers: `u_prev`, `u`, `u_next` (or two swapped), intensity stages `s1`, `s2`, per-cell `c2`, `d` (padded copies).
 The padding ring is 0 for reflective edges and set by the Mur condition for open edges.
-Emitters whose position falls outside the canvas are dropped at SetEmitters.
+Emitters whose position falls outside the canvas are dropped at SetEmitters (`scene::off_canvas` names them for the
+app's warning).
 
 ## Sub-steps
 

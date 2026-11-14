@@ -41,6 +41,13 @@ pub fn paint_part(pixels: &mut ScenePixels, part: &Part, sim: &Simulation, seed:
 	}
 }
 
+/// Whether some shape of the normalised `part` reaches a `w` x `h` canvas; a part without a shape counts as on it.
+pub fn part_on_canvas(part: &Part, sim: &Simulation, seed: i32, w: u32, h: u32) -> bool {
+	let shapes = shapes_for(part, sim, seed);
+	let centre = Frame::of(&part.base).centre();
+	shapes.is_empty() || shapes.iter().any(|s| Bounds::of(s.extent(), centre, w, h).is_some())
+}
+
 fn paint_shape(pixels: &mut ScenePixels, part: &Part, shape: &dyn PartShape) {
 	let frame = Frame::of(&part.base);
 	let Some(bounds) = Bounds::of(shape.extent(), frame.centre(), pixels.width, pixels.height) else {

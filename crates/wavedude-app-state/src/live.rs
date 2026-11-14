@@ -27,6 +27,7 @@ use wavedude_core::run::{Budget, Memory, RunWorker};
 use wavedude_core::run::{
 	FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RunError, RunState, Status, Wanted, WorkState,
 };
+use wavedude_core::scene::off_canvas::{OffCanvas, off_canvas};
 use wavedude_core::spec::{RunRequest, RunSpecError, SceneCache};
 #[cfg(not(target_arch = "wasm32"))]
 use wavedude_core::sync::lock;
@@ -173,6 +174,8 @@ pub struct LiveController<B: Backend> {
 	pub playback: Playback,
 	/// Moves with every spec published.
 	revision: u64,
+	/// The objects off the canvas last warned about.
+	off_canvas: Vec<OffCanvas>,
 	/// The request of each revision from the adopted one on; the last is this project state's.
 	requests: Vec<(u64, RunRequest)>,
 	/// The quality in force: the setting's, or Full for an export until the next simulation edit.
@@ -238,6 +241,7 @@ impl<B: Backend> LiveController<B> {
 			fit_frames: None,
 			next_fit: 0,
 			last_edit: None,
+			off_canvas: Vec::new(),
 			failed: None,
 			edited_during_export: None,
 			published: None,
@@ -524,7 +528,30 @@ impl<B: Backend> LiveController<B> {
 
 	/// A new request for `project` at the quality in force; the worker builds the spec and reports a failure.
 	fn respec(&mut self, project: &Project) {
+		self.warn_off_canvas(project);
 		self.revise(RunRequest::new(project, self.quality, self.track_intensity));
+	}
+
+	/// Warns about the objects off the canvas when they differ from the last warned.
+	fn warn_off_canvas(&mut self, project: &Project) {
+		let found = off_canvas(project);
+		if found == self.off_canvas {
+			return;
+		}
+		if !found.is_empty() {
+			let names: Vec<String> = found
+				.iter()
+				.map(|o| match o {
+					OffCanvas::Source { name, outside, of } if outside < of => {
+						format!("{name} ({outside} of {of} elements left out)")
+					}
+					OffCanvas::Source { name, .. } | OffCanvas::Part(name) => format!("{name} (left out)"),
+					OffCanvas::Probe(name) => format!("{name} (reads at the edge)"),
+				})
+				.collect();
+			tracing::warn!("off the canvas: {}", names.join(", "));
+		}
+		self.off_canvas = found;
 	}
 
 	/// A new revision made from `request`.
@@ -548,6 +575,7 @@ impl<B: Backend> LiveController<B> {
 		self.fit = None;
 		self.fit_frames = None;
 		self.last_edit = None;
+		self.off_canvas.clear();
 		self.playback.pause();
 		self.sync_timeline(project);
 		self.playback.set_position(0);
@@ -1533,6 +1561,21 @@ mod tests {
 		c.tick(t, p);
 		c.take_notices();
 		c
+	}
+
+	#[test]
+	fn the_objects_off_the_canvas_are_tracked_from_spec_to_spec() {
+		let t = Instant::now();
+		let mut p = project();
+		let mut c = controller(&p, t);
+		assert!(c.off_canvas.is_empty());
+		p.sources[0].x = 500.0;
+		c.on_change(ChangeKind::Simulation, &p, None, t);
+		let name = p.sources[0].name.clone();
+		assert_eq!(c.off_canvas, [OffCanvas::Source { name, outside: 1, of: 1 }]);
+		p.sources[0].x = 5.0;
+		c.on_change(ChangeKind::Simulation, &p, None, t);
+		assert!(c.off_canvas.is_empty(), "back on the canvas");
 	}
 
 	#[test]

@@ -14,7 +14,11 @@ const GAP_STREAM: u64 = 0x47415053;
 impl Emitter {
 	/// Whether the emitter drives any cell of the canvas of `scene`; engines drop the others.
 	pub fn inside(&self, scene: &SceneData) -> bool {
-		self.taps(scene).next().is_some()
+		self.on_canvas(scene.canvas_width, scene.canvas_height)
+	}
+
+	fn on_canvas(&self, w: u32, h: u32) -> bool {
+		taps_at(self.x, self.y, w, h).next().is_some()
 	}
 
 	/// Fractional parts of the position, the bilinear offsets of the taps.
@@ -26,15 +30,24 @@ impl Emitter {
 	/// position, up to four around a fractional one; cells off the canvas are dropped, which keeps the
 	/// shares of the rest (a source at the edge drives what is there).
 	pub fn taps(&self, scene: &SceneData) -> impl Iterator<Item = ((usize, usize), f64)> + use<> {
-		let (x0, y0) = (self.x.floor(), self.y.floor());
-		let (fx, fy) = self.fraction();
-		let shares = bilinear(fx, fy);
-		let (w, h) = (scene.canvas_width as i64, scene.canvas_height as i64);
-		[(0, 0), (1, 0), (0, 1), (1, 1)].into_iter().zip(shares).filter_map(move |((dx, dy), share)| {
-			let (x, y) = (x0 as i64 + dx, y0 as i64 + dy);
-			(share > 0.0 && (0..w).contains(&x) && (0..h).contains(&y)).then_some(((x as usize, y as usize), share))
-		})
+		taps_at(self.x, self.y, scene.canvas_width, scene.canvas_height)
 	}
+}
+
+/// Whether an element at `x`, `y` drives any cell of a `w` x `h` canvas.
+pub fn drives_canvas(element: &Element, w: u32, h: u32) -> bool {
+	taps_at(element.x, element.y, w, h).next().is_some()
+}
+
+/// The taps of [`Emitter::taps`] of a position on a `w` x `h` canvas.
+fn taps_at(x: f64, y: f64, w: u32, h: u32) -> impl Iterator<Item = ((usize, usize), f64)> + use<> {
+	let (x0, y0) = (x.floor(), y.floor());
+	let shares = bilinear(x - x0, y - y0);
+	let (w, h) = (i64::from(w), i64::from(h));
+	[(0, 0), (1, 0), (0, 1), (1, 1)].into_iter().zip(shares).filter_map(move |((dx, dy), share)| {
+		let (x, y) = (x0 as i64 + dx, y0 as i64 + dy);
+		(share > 0.0 && (0..w).contains(&x) && (0..h).contains(&y)).then_some(((x as usize, y as usize), share))
+	})
 }
 
 /// Least frequency level of an element.
