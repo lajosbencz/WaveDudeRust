@@ -471,7 +471,7 @@ impl SpillFactory for NoSpill {
 		true
 	}
 
-	fn open(&self, _bytes: u64) -> std::io::Result<Box<dyn SpillBackend>> {
+	fn open(&self, _store: u64, _layout: &StoreLayout, _bytes: u64) -> std::io::Result<Box<dyn SpillBackend>> {
 		Err(std::io::Error::other("the frames fit in memory"))
 	}
 }

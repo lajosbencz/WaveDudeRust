@@ -51,7 +51,12 @@ push. What they hold the code to:
   log, file watching, the machine's facts, writing a file (a download in the browser). Files open from a path or
   their bytes (`Source`) and save to a path or a download (`Target`); in the browser the live run is pumped by
   `LiveController::tick` and export, codecs, sequences, the updater and recent files are absent (the `HAS_*`
-  constants). Depends on core, export (no default features, native only) and examples; no egui, no rfd ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
+  constants). Its `remote` module is the live run in another agent (decision 0024): the postcard messages, the
+  worker's `Host` around a pumped `RunWorker` whose stores post every frame, and the page's `Remote`, a `Backend`
+  writing them into a mirror store and acknowledging each once held, both over a `Port` (`Loopback` in the tests,
+  [`crates/wavedude-app-state/tests/remote.rs`](../crates/wavedude-app-state/tests/remote.rs)). Depends on core
+  (with `serde`), export (no default features, native only) and examples; no egui, no rfd
+  ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
 - `wavedude-app`: egui views on eframe, natively and in the browser ([`tools/build-web.sh`](../tools/build-web.sh)),
   on the renderer's wgpu device, which the engines share where it computes
   ([`crates/wavedude-app/src/ui/mod.rs`](../crates/wavedude-app/src/ui/mod.rs)); native only: file dialogs (`rfd`,

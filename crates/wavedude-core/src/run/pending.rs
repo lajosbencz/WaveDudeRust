@@ -9,6 +9,8 @@ use std::task::{Poll, Waker};
 
 use crate::sync::{MaybeSend, lock};
 
+use super::store::StoreLayout;
+
 /// Writes in flight at which the pumped worker yields before its next capture.
 pub const WRITES_IN_FLIGHT: usize = 4;
 /// Frames read back and kept, for a scrub to and fro.
@@ -88,8 +90,9 @@ pub trait SpillBackend: Send + Sync {
 pub trait SpillFactory: MaybeSend {
 	/// Whether [`open`](Self::open) can answer: the free storage is known.
 	fn ready(&self) -> bool;
-	/// A spill for `bytes` of frames; refused when they do not fit the free storage or there is none.
-	fn open(&self, bytes: u64) -> io::Result<Box<dyn SpillBackend>>;
+	/// A spill for `bytes` of frames of store `store` (its [`FrameStore::id`](super::FrameStore::id)) laid out
+	/// as `layout`; refused when they do not fit the free storage or there is none.
+	fn open(&self, store: u64, layout: &StoreLayout, bytes: u64) -> io::Result<Box<dyn SpillBackend>>;
 }
 
 /// The store's side of a [`SpillBackend`]: the operations in flight and the frames read back.
@@ -302,7 +305,7 @@ pub(crate) mod fake {
 			self.ready.load(std::sync::atomic::Ordering::Acquire)
 		}
 
-		fn open(&self, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {
+		fn open(&self, _store: u64, _layout: &StoreLayout, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {
 			if bytes > self.free {
 				return Err(io::Error::new(io::ErrorKind::StorageFull, format!("{bytes} > {}", self.free)));
 			}

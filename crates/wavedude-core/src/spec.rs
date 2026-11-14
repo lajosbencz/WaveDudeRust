@@ -14,7 +14,8 @@ use crate::scene::pixels::ScenePixels;
 const FIELD: &[Layer] = &[Layer::Field];
 const BOTH: &[Layer] = &[Layer::Field, Layer::Intensity];
 
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RunSpecError {
 	#[error("The scene uses an image, but no image is loaded.")]
 	NoImage,

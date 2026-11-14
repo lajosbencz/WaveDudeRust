@@ -10,11 +10,10 @@ use std::cell::OnceCell;
 use std::collections::BTreeSet;
 use std::io;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use js_sys::{Promise, Reflect, Uint8Array};
 use wasm_bindgen_futures::{JsFuture, spawn_local};
-use wavedude_core::run::{SpillBackend, SpillFactory, Token};
+use wavedude_core::run::{SpillBackend, SpillFactory, StoreLayout, Token};
 use wavedude_core::sync::lock;
 use web_sys::wasm_bindgen::closure::Closure;
 use web_sys::wasm_bindgen::{JsCast, JsValue};
@@ -36,7 +35,6 @@ pub struct Opfs {
 	/// The free storage at start.
 	free: Token<u64>,
 	taken: Mutex<Option<io::Result<u64>>>,
-	next_store: AtomicU64,
 }
 
 impl Opfs {
@@ -51,7 +49,7 @@ impl Opfs {
 			}
 			done.complete(result);
 		});
-		Self { free, taken: Mutex::new(None), next_store: AtomicU64::new(0) }
+		Self { free, taken: Mutex::new(None) }
 	}
 }
 
@@ -60,7 +58,7 @@ impl SpillFactory for Opfs {
 		self.free.is_done()
 	}
 
-	fn open(&self, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {
+	fn open(&self, store: u64, _layout: &StoreLayout, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {
 		let mut taken = lock(&self.taken);
 		if taken.is_none() {
 			*taken = self.free.take();
@@ -78,10 +76,7 @@ impl SpillFactory for Opfs {
 					),
 				))
 			}
-			Ok(_) => {
-				let store = self.next_store.fetch_add(1, Ordering::Relaxed);
-				Ok(Box::new(Spill { store, generations: Mutex::default(), writes: Mutex::default() }))
-			}
+			Ok(_) => Ok(Box::new(Spill { store, generations: Mutex::default(), writes: Mutex::default() })),
 		}
 	}
 }

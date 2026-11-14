@@ -1016,6 +1016,15 @@ pub struct CoreBackend {
 #[cfg(target_arch = "wasm32")]
 pub const MAX_WEB_FRAME_BYTES: u64 = 2 << 30;
 
+/// The label of the engine on the GPU named `gpu`, or of the CPU's.
+pub fn engine_label(gpu: Option<&str>) -> String {
+	if let Some(name) = gpu {
+		return format!("GPU: {name}");
+	}
+	let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+	format!("CPU ({threads} threads)")
+}
+
 /// Builds the engine for a scene: the GPU's when asked for and available (a fallback to the CPU is logged).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn build_engine(scene: Arc<SceneData>, options: EngineOptions, use_gpu: bool) -> Box<dyn WaveEngine> {
@@ -1119,13 +1128,8 @@ impl Backend for CoreBackend {
 	}
 
 	fn engine_name(&self) -> String {
-		if self.use_gpu.load(Ordering::Relaxed)
-			&& let Some(name) = self.gpu_name()
-		{
-			return format!("GPU: {name}");
-		}
-		let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
-		format!("CPU ({threads} threads)")
+		let gpu = if self.use_gpu.load(Ordering::Relaxed) { self.gpu_name() } else { None };
+		engine_label(gpu.as_deref())
 	}
 
 	#[cfg(target_arch = "wasm32")]

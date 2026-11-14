@@ -49,5 +49,5 @@ tempfile = { version = "3", optional = true }
 insta.workspace = true
 proptest.workspace = true
 approx = "0.5"
-postcard = { version = "1.1", default-features = false, features = ["alloc"] }
+postcard.workspace = true
 tempfile = "3"

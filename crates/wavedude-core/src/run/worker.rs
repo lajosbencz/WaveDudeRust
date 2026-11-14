@@ -473,16 +473,8 @@ impl Frames {
 				FrameStore::in_dir(layout, budget, release, dir)
 			}
 			Self::Pending { ram_bytes, spill } => {
-				use super::store::Budget;
 				drop(old);
-				let budget = Budget::of_memory(*ram_bytes, ram_percent);
-				let frame_bytes = layout.frame_bytes() as u64;
-				let ram_frames = layout.capacity.min(Budget::frames_in(budget, frame_bytes));
-				if ram_frames == layout.capacity {
-					return Ok(FrameStore::in_memory(layout, budget));
-				}
-				let backend = spill.open((layout.capacity - ram_frames) as u64 * frame_bytes)?;
-				Ok(FrameStore::with_spill(layout, budget, backend))
+				FrameStore::open(layout, super::store::Budget::of_memory(*ram_bytes, ram_percent), spill.as_ref())
 			}
 		}
 	}

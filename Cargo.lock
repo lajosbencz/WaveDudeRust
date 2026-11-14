@@ -5442,6 +5442,7 @@ dependencies = [
  "js-sys",
  "notify",
  "png",
+ "postcard",
  "quick-xml 0.42.0",
  "serde",
  "serde_json",

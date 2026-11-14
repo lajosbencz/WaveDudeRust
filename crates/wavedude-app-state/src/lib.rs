@@ -14,6 +14,7 @@ pub mod live;
 pub mod log;
 pub mod platform;
 pub mod playback;
+pub mod remote;
 pub mod selection;
 pub mod settings;
 pub mod strings;

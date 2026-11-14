@@ -36,7 +36,7 @@ use std::sync::{Arc, Mutex};
 use crate::engine::{FrameShape, Snapshot};
 use crate::model::Layer;
 
-use super::pending::{PendingSpill, SpillBackend};
+use super::pending::{PendingSpill, SpillBackend, SpillFactory};
 #[cfg(not(target_arch = "wasm32"))]
 use super::spill::Disk;
 #[cfg(not(target_arch = "wasm32"))]
@@ -184,6 +184,10 @@ impl StoreLayout {
 /// The next store's [`FrameStore::id`].
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
+fn next_id() -> u64 {
+	NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
+
 /// See the module docs for layout and threading.
 pub struct FrameStore {
 	id: u64,
@@ -235,7 +239,7 @@ impl FrameStore {
 		release: Option<Release>,
 		dir: &std::path::Path,
 	) -> io::Result<Self> {
-		let mut store = Self::made(layout, ram_budget, Some(Spill::File(Disk::new(dir))));
+		let mut store = Self::made(next_id(), layout, ram_budget, Some(Spill::File(Disk::new(dir))));
 		let ram_frames = store.ram_frames;
 		if ram_frames < layout.capacity {
 			store.start_spill(ram_frames)?;
@@ -251,21 +255,38 @@ impl FrameStore {
 	/// A store holding at most `ram_budget` bytes of frames, in memory: a frame past them is refused
 	/// ([`StoreError::Full`]).
 	pub fn in_memory(layout: StoreLayout, ram_budget: u64) -> Self {
-		Self::made(layout, ram_budget, None)
+		Self::made(next_id(), layout, ram_budget, None)
 	}
 
 	/// A store holding `ram_budget` bytes of frames in memory, the rest in `backend`.
 	pub fn with_spill(layout: StoreLayout, ram_budget: u64, backend: Box<dyn SpillBackend>) -> Self {
-		let store = Self::made(layout, ram_budget, Some(Spill::Pending(PendingSpill::new(backend))));
+		Self::pending(next_id(), layout, ram_budget, backend)
+	}
+
+	/// A store holding `ram_budget` bytes of frames in memory, the rest in a spill `spill` opens for the store's
+	/// [`id`](Self::id), only when some frames do not fit the memory.
+	pub fn open(layout: StoreLayout, ram_budget: u64, spill: &dyn SpillFactory) -> io::Result<Self> {
+		let id = next_id();
+		let frame_bytes = layout.frame_bytes() as u64;
+		let ram_frames = layout.capacity.min(Budget::frames_in(ram_budget, frame_bytes));
+		if ram_frames == layout.capacity {
+			return Ok(Self::made(id, layout, ram_budget, None));
+		}
+		let backend = spill.open(id, &layout, (layout.capacity - ram_frames) as u64 * frame_bytes)?;
+		Ok(Self::pending(id, layout, ram_budget, backend))
+	}
+
+	fn pending(id: u64, layout: StoreLayout, ram_budget: u64, backend: Box<dyn SpillBackend>) -> Self {
+		let store = Self::made(id, layout, ram_budget, Some(Spill::Pending(PendingSpill::new(backend))));
 		store.first_spilled.store(store.ram_frames, Ordering::Release);
 		store
 	}
 
-	fn made(layout: StoreLayout, ram_budget: u64, spill: Option<Spill>) -> Self {
+	fn made(id: u64, layout: StoreLayout, ram_budget: u64, spill: Option<Spill>) -> Self {
 		assert!(!layout.layers.is_empty(), "a store needs at least one layer");
 		let ram_frames = layout.capacity.min(Budget::frames_in(ram_budget, layout.frame_bytes() as u64));
 		Self {
-			id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+			id,
 			layout,
 			ram_budget,
 			ram_frames,
