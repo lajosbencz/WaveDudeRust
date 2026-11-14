@@ -381,7 +381,7 @@ Default field stops (9, at i/8): #FDFDFD, #3020F4, #160BD2, #1A18AA, #000000, #7
 #F04D1D, #FF0000.
 
 Also readable: the original author's JSON scheme format (keys `name`, `origin`, `category`, `scheme_type`,
-`bits_per_channel` 8, `entry_count` 255, `colors`, `stops`). `TODO(verify)`: mapping of `colors` without stops.
+`bits_per_channel` 8, `entry_count` 255, `colors`, `stops`). Nine `stops` are kept when `colors` is missing, shorter than 2 or exactly their interpolation over 255 entries; otherwise `colors` (at least 2) become evenly spaced stops; else the file is refused.
 
 ## Preview quality (app setting, affects runs; `Runs/PreviewQuality.cs`)
 

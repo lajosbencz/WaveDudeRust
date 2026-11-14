@@ -205,7 +205,7 @@ scale), never written: a written file carries the original's scale so WaveDude N
 `Kind` omitted = Unspecified. Same element inside a `.wdproj`. User schemes in
 `%LOCALAPPDATA%\WaveDudeNext\ColorSchemes`; built-ins embedded (23 files in `WaveDudeNext/ColorSchemes`).
 Also importable: the original author's JSON scheme (`name`, `origin`, `category`, `scheme_type`,
-`bits_per_channel` 8, `entry_count` 255, `colors`, `stops`) `TODO(verify)` mapping rules in `ColorSchemeStore.cs`.
+`bits_per_channel` 8, `entry_count` 255, `colors`, `stops`). Nine `stops` are kept when `colors` is missing, shorter than 2 or exactly their interpolation over 255 entries; otherwise `colors` (at least 2) become evenly spaced stops; else the file is refused.
 
 ## Legacy import: Wave Dude 2D `configuration.json` (`Model/LegacyProject.cs`)
 
