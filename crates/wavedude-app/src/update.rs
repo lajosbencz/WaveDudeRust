@@ -28,7 +28,7 @@ const fn set(value: Option<&'static str>) -> Option<&'static str> {
 pub const AVAILABLE: bool = ENDPOINT.is_some() && PUBKEY.is_some();
 
 /// The updater can replace the running program: everywhere but a plain Linux binary (an `AppImage` sets `APPIMAGE`)
-/// and a macOS app that cannot swap itself out, see [`movable`].
+/// and a macOS app on another volume than the temp dir (it cannot swap itself out).
 pub fn installable() -> bool {
 	if cfg!(target_os = "macos") {
 		return movable();
