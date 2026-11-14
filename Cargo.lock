@@ -5396,7 +5396,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-app"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "arboard",
@@ -5435,7 +5435,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-app-state"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "directories",
@@ -5464,7 +5464,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -5480,7 +5480,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "approx",
  "base64 0.23.1",
@@ -5508,14 +5508,14 @@ dependencies = [
 
 [[package]]
 name = "wavedude-examples"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "wavedude-core",
 ]
 
 [[package]]
 name = "wavedude-export"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -5540,7 +5540,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-model-derive"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5549,7 +5549,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-run-worker"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "tracing",
  "tracing-subscriber",
@@ -5562,7 +5562,7 @@ dependencies = [
 
 [[package]]
 name = "wavedude-view"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "epaint",
  "libm",
