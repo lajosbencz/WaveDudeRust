@@ -21,10 +21,10 @@ use crate::sync::Notify;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::sync::lock;
 
-/// The first kick's delay: a short batch lands soon after the card ran it (go-gfx/webgpu #24, supersplat-viewer #359).
+/// The first kick's delay: a short batch lands soon after the card ran it (decision 0026).
 pub const FIRST_KICK: Duration = Duration::from_micros(500);
-/// The longest gap between kicks: a completion lands at most this late instead of Firefox's 100 ms timer, for one
-/// empty submit per gap (the same sources).
+/// The longest gap between kicks: a completion lands at most this late where the device is polled on a timer, for
+/// one empty submit per gap (decision 0026).
 pub const MAX_KICK_GAP: Duration = Duration::from_millis(8);
 
 /// Why no GPU engine can be built, or why a GPU engine failed.

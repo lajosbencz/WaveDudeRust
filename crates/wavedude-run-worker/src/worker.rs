@@ -1,8 +1,8 @@
 //! The worker's loop: [`Host::pump`], then the event loop turns so the page's messages and the GPU's callbacks come
 //! in. With work left a message to itself wakes it again; while the run waits (a readback, the device, the
 //! page's acknowledgements, an engine) what it waits for or a message wakes it; once it has no work, a message.
-//! While it waits and the device, not lost, owes completions, empty submits kick the queue on [`Kicks`]' gaps: Firefox
-//! resolves completions only when it polls the device, on a submit or every 100 ms (decision 0026).
+//! While it waits and the device, not lost, owes completions, empty submits kick the queue on [`Kicks`]' gaps: a
+//! browser may resolve completions only when it polls the device, on a submit or on a timer (decision 0026).
 //! The engine built after the GPU device was lost requests a new one.
 
 use std::cell::{Cell, RefCell};

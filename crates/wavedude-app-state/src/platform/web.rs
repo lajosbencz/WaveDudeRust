@@ -17,7 +17,7 @@ pub const HAS_UPDATER: bool = false;
 /// Exports of videos, image sequences, stills and probe data to files.
 pub const HAS_EXPORTS: bool = false;
 
-/// The memory assumed where the browser does not tell (`navigator.deviceMemory` is Chromium's alone).
+/// The memory assumed where the browser does not tell (`navigator.deviceMemory` is not universal).
 const UNKNOWN_MEMORY: u64 = 1 << 30;
 
 /// `navigator.deviceMemory` (rounded, at most 8 GiB) and `navigator.hardwareConcurrency`; the GPU and the drive
