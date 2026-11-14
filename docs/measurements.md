@@ -307,6 +307,31 @@ F7 from frame 0 for 12 s, frames shown counted by their reads.
 The read is a chain of five promises, each resolved in a task of the main thread: under WebGL2 the software
 rasteriser's frames between them make up the latency, not the storage.
 
+## The browser's frame spill read ahead
+
+2026-11-14, Chrome 158 (Playwright, WebGPU through Vulkan) on Linux, RTX 5070 Ti; the app built by `tools/build-web.sh`
+into two folders served by `python3 -m http.server`: before (8ff9c44, a spilled frame read when the preview asks for it)
+and after (playback names the frames it reaches next, read ahead, then 3 named and 4 kept,
+[`crates/wavedude-core/src/run/pending.rs`](../crates/wavedude-core/src/run/pending.rs)). A temporary counter in
+`FrameSource::with_plane_into` logged each second the frames shown (first plane handed out) and the frames refused as
+pending at least once (shown stale, the picture before held). A new project (1920x1080, 2500 steps) at the welcome
+page's High preview, run with F5, the memory warning's choices unticked: 1250 frames of 8.3 MB, 258 in memory and 992
+spilled to OPFS. Playback from frame 400 (all spilled) with F7, 10 s at speed 1 and 3 s at speed 4, a second each.
+
+| | Before: shown / stale a second | After: shown / stale a second |
+|---|---|---|
+| Speed 1 (60 frames/s due) | 53 to 59 / 59 to 61 | 58 to 60 / 0 to 2 |
+| Speed 4 (240 frames/s due) | 0 / 134 to 139 | 62 to 80 / 43 to 55 |
+
+Before, every spilled frame was shown a pass late; at speed 4 each read was superseded before it landed and the
+picture froze. At speed 4 the stride between ticks varies (3 to 5 frames), so some frames shown were not among those
+read ahead.
+
+Natively a spilled frame is read from the file in the call, on the UI thread when the renderer's device colours it,
+else on the presenter's: a temporary test reading 120 spilled frames of 1920x1080 f16 with the intensity (8.3 MB)
+through `FrameStore::with_layer_into`, release build, Ryzen 9 9900X, NVMe, from the page cache: 0.20 ms median,
+0.53 ms p95, 0.78 ms worst. The file reads nothing ahead.
+
 ## The browser's live run
 
 2026-11-13, Chrome for Testing 158 headless (WebGPU through Vulkan) and Firefox 159 (`dom.webgpu.enabled`) on Linux,

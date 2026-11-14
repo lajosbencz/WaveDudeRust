@@ -704,6 +704,7 @@ impl<B: Backend> LiveController<B> {
 		self.report_run_end(now);
 		self.advance_playback(now);
 		self.show_frame();
+		self.prefetch();
 		self.poll_fit();
 		self.poll_export();
 		self.publish();
@@ -732,6 +733,20 @@ impl<B: Backend> LiveController<B> {
 			self.shown = Some(position);
 			self.notices.push(Notice::ShowFrame(position));
 		}
+	}
+
+	/// Names the stored frames playback shows next to the store, which reads the spilled ones ahead.
+	fn prefetch(&self) {
+		let (Some(store), Some(request)) = (self.current_store(), self.adopted_request()) else { return };
+		let depth = store.read_ahead();
+		if depth == 0 {
+			return;
+		}
+		let schedule = request.schedule();
+		let position = self.playback.position();
+		let ahead = self.playback.ahead(depth * schedule.frame_divisor() as usize, Some(self.play_limit()));
+		let frames = self.playback.is_playing().then_some(position).into_iter().chain(ahead);
+		store.prefetch(frames.map(|frame| schedule.stored_index_of(frame) as usize));
 	}
 
 	fn poll_fit(&mut self) {
@@ -920,11 +935,7 @@ impl<B: Backend> LiveController<B> {
 			self.respec(project);
 		}
 		if self.complete() {
-			let end = match self.play_limit() {
-				Limit::End(end) => Some(end),
-				Limit::Hold(_) => None,
-			};
-			self.playback.play(now, end);
+			self.playback.play(now, self.play_limit().end());
 		} else if self.wanted == Wanted::All {
 			self.playback.play(now, None);
 		} else {

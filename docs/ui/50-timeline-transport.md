@@ -87,6 +87,9 @@ accent border.
   warning may ask first; cancelling it turns playback off again before the clock starts) and plays; when the run
   has not reached the next frame, playback holds at the newest frame and waits (no jump accumulates). A run that
   ended short (stopped or failed) plays to its last frame as to an out point.
+- In the browser the frames playback reaches next, at the stride of its last tick and across a wrap, are read
+  back from the spill ahead of the playhead, so a spilled frame is there when it is due (decision 0020, Reading
+  ahead).
 - Space plays/pauses with focus anywhere in the pane (not text boxes); F7 from anywhere.
 - A click on a picture focuses the pane so Space works afterwards.
 
