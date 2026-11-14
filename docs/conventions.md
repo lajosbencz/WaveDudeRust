@@ -121,11 +121,12 @@ push. What they hold the code to:
   window's tests.
 - Project format quirks (9-point frequency units, versions, sparse writing) stay in [`crates/wavedude-core/src/io/`](../crates/wavedude-core/src/io/)
   ([`io/wdproj.rs`](../crates/wavedude-core/src/io/wdproj.rs)); the model holds this program's units.
-- Example projects are `.wdproj` files under `examples/<topic>/` with a numeric prefix
-  ([`examples/gates/07-xor.wdproj`](../examples/gates/07-xor.wdproj)), embedded with `include_bytes!` in [`crates/wavedude-examples/src/lib.rs`](../crates/wavedude-examples/src/lib.rs).
+- Example projects are `.wdproj` files under `examples/<topic>/`, the folder being the dialog's tab, named with their series prefix
+  ([`examples/guides/07-xor.wdproj`](../examples/guides/07-xor.wdproj)), embedded with `include_bytes!` in [`crates/wavedude-examples/src/lib.rs`](../crates/wavedude-examples/src/lib.rs)
+  ([`EXAMPLES.md`](../EXAMPLES.md)).
   [`examples`](../examples/) is all the app and the web build ship; Next's originals in
-  [`crates/wavedude-core/tests/fixtures/examples`](../crates/wavedude-core/tests/fixtures/examples/) are for the tests and the comparison alone, shipped as the copies of
-  [`examples/next`](../examples/next/).
+  [`crates/wavedude-core/tests/fixtures/examples`](../crates/wavedude-core/tests/fixtures/examples/) are for the tests and the comparison alone, shipped as the copies
+  `ExampleNN_*.wdproj` ([`examples/next.md`](../examples/next.md)).
 
 ## Naming
 

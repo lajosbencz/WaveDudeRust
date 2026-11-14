@@ -58,6 +58,6 @@ If something is ambiguous/missing, ask the user instead of assuming.
 - `cargo clippy --workspace --all-targets -D warnings` green
 - `cargo test --workspace` green
 - GPU tests skip without an adapter
-- Original example projects open and run, the photonic logic gates from Huygens Optics' video are reproduced in [`examples/gates`](../examples/gates/) with measured truth tables.
+- Original example projects open and run, the photonic logic gates from Huygens Optics' video are reproduced in [`examples/gates.md`](../examples/gates.md) with measured truth tables.
 - `cargo build --release -p wavedude-cli -p wavedude-app` produces hand-checked app
 

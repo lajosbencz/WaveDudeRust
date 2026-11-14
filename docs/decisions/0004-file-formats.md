@@ -27,8 +27,8 @@ examples (decision 0014), so Next's numbers are hand-tuned for Next and no fixed
 model's value, a missing `Brightness` is the model's layer default, and the bundled examples were divided by 8 and 64
 once, so they look as before. A project from Next opens at its own number in our units.
 
-The app and the web build ship only what [`examples`](../../examples/) holds. Next's 33 projects ship as our copies in
-[`examples/next`](../../examples/next/): each layer's `Brightness` is our Auto fit of the brighter of the middle and the last frame, a `Sensitivity`
-the original's divided by 64, every other byte Next's ([`examples/next/README.md`](../../examples/next/README.md)).
+The app and the web build ship only what [`examples`](../../examples/) holds. Next's 33 projects ship as our copies
+(`ExampleNN_*.wdproj` in the topic folders): each layer's `Brightness` is our Auto fit of the brighter of the middle and the last frame, a `Sensitivity`
+the original's divided by 64, every other byte Next's ([`examples/next.md`](../../examples/next.md)).
 Next's originals stay in [`crates/wavedude-core/tests/fixtures/examples`](../../crates/wavedude-core/tests/fixtures/examples/), for the tests and the comparison
 with Next alone.

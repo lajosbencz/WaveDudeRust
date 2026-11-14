@@ -248,7 +248,7 @@ reflects 0.199 (9-point) and 0.198 (DRP) of the amplitude against Fresnel's
 to 1.4e13 on the DRP while mirror cells moved); nothing crosses a one-pixel
 diagonal mirror line (10 % without the 9-point's diagonal cuts).
 
-Photonic gate demonstrations ([examples/gates](../examples/gates/), both engines): every truth
+Photonic gate demonstrations ([examples/gates.md](../examples/gates.md), both engines): every truth
 table row within 0.1 of its expectation; the fibre XOR sends 0.005 of one
 input's power to Q with both inputs on, the neat OR 0.497, the plain OR 0.994.
 
@@ -361,7 +361,7 @@ into a folder served by `python3 -m http.server`, before (16c0b44, the worker pu
 left or spill writes in flight posting itself a message) and after (the pump waits on readiness, 8 ms slices). A
 temporary counter in the worker's loop logged the pumps and the self-posted messages each second. The messages between
 page and worker were counted by a Playwright init script wrapping `Worker.prototype.postMessage` and listening on the
-worker. Fresnel lens lighthouse (`examples/optics/01-fresnel-lens-lighthouse.wdproj`) at the High preview, run with F5
+worker. Fresnel lens lighthouse (`examples/lenses/01-fresnel-lens-lighthouse.wdproj`) at the High preview, run with F5
 and the memory warning's 8-bit samples (2000 steps, 1000 stored frames of 1.4 MB); the time is the app's `Run Completed`
 line. Waiting on the page: a new project (1920x1080, 2500 steps) run with the warning's halved resolution, the page's
 thread blocked for 3 s (`while (performance.now() < end) {}` from Playwright) 0.5 s after the run started, so no frame

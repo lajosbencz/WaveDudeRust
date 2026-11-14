@@ -26,10 +26,7 @@ Try it out:
   tests state every tolerance ([`docs/physics.md`](docs/physics.md)).
 - Live editing: one worker, one engine and one store converge on what the
   user looks at; an edit replaces the frames without a stale run or a timer.
-- 53 example projects grouped by topic ([`examples`](examples/)), Next's
-  tuned to this engine, among them the photonic logic gates
-  from [Huygens Optics](https://www.youtube.com/@HuygensOptics)' video with
-  measured truth tables ([`examples/gates`](examples/gates/)).
+- 53 example projects grouped by domain ([`EXAMPLES.md`](EXAMPLES.md)).
 - Self-updating releases with build provenance and SBOM attestations.
 
 ## Differences from WaveDude Next

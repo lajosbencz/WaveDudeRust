@@ -34,4 +34,4 @@ against the 4th-order relation, the DRP phase error table, energy to round-off,
 and a slab's reflection against Fresnel at a non-integer interface position
 ([tests/physics.rs](../../crates/wavedude-core/tests/physics.rs) `slab_reflects_the_fresnel_share`).
 The gate design's mode solver follows the discretisation and the generated
-gates of [examples/gates](../../examples/gates/) are re-measured.
+gates of [examples/gates.md](../../examples/gates.md) are re-measured.
