@@ -6,6 +6,32 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/lajosbencz/WaveDudeRust/compare/v0.2.2...v0.3.0) - 2026-11-14
+
+### Added
+
+- *(app)* the Windows installer registers the file types only when asked
+- *(wasm)* a wasm engine package and a browser demo on GitHub Pages
+- *(core)* probe readings read back without waiting on wasm32
+- *(wasm)* the web demo shows the app's gizmos and probe graph boxes
+- *(wasm)* the web demo links to the source and opens with a note on the desktop releases
+- UI on egui/eframe instead of Freya, natively and in the browser
+- *(app)* the startup page opens at each launch until its new check box turns it off
+- *(app)* File > Welcome Page... opens the startup page
+
+### Fixed
+
+- *(app)* the macOS event loop runs the window it built instead of borrowing itself after the move
+
+### Changed
+
+- *(core)* the GPU engine, the run spec and the preview tiers build for wasm32
+- *(view)* the preview's overlay and probe graph boxes draw from a shared draw list
+- *(view)* text styles and a painter that owns its caches
+- *(wasm)* the page's pictures and overlay are drawn from Rust
+- *(core)* draining probes takes the pending token
+- **Breaking:** the browser app moves to /WaveDudeRust/app/, the Pages root is a landing page
+
 ## [0.2.2](https://github.com/lajosbencz/WaveDudeRust/compare/v0.2.1...v0.2.2) - 2026-11-12
 
 ### Added

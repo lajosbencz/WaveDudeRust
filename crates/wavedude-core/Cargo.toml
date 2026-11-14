@@ -23,7 +23,7 @@ workspace = true
 
 [dependencies]
 thiserror.workspace = true
-wavedude-model-derive = { path = "../wavedude-model-derive", version = "0.2.2" }
+wavedude-model-derive = { path = "../wavedude-model-derive", version = "0.3.0" }
 half.workspace = true
 bytemuck.workspace = true
 rayon.workspace = true
