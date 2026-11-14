@@ -19,7 +19,8 @@ use crate::Result;
 #[cfg(not(target_arch = "wasm32"))]
 const BUFFERS: usize = 2;
 
-/// Runs `S` on its own thread, fed through two recycled frame buffers. Takes rendered frames only.
+/// Runs `S` on its own thread, fed through two recycled frame buffers. Takes rendered frames only. Its readiness
+/// hooks are not polled: `S` is to be ready at every poll.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct Threaded<S: FrameSink + 'static> {
 	width: u32,
@@ -172,6 +173,14 @@ impl<S: FrameSink + 'static> FrameSink for Threaded<S> {
 
 	fn frames_written(&self) -> usize {
 		self.sink.frames_written()
+	}
+
+	fn poll_ready(&mut self) -> Result<std::task::Poll<()>> {
+		self.sink.poll_ready()
+	}
+
+	fn poll_finish(&mut self) -> Result<std::task::Poll<()>> {
+		self.sink.poll_finish()
 	}
 
 	fn finish(&mut self) -> Result<()> {

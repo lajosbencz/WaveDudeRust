@@ -11,6 +11,7 @@ use wavedude_core::model::{Layer, Project};
 use wavedude_core::scene::compose::compose_scene;
 
 use crate::fs::OutputFs;
+use crate::h264::{H264Factory, Profile};
 use crate::job::{ExportJob, ExportLayerLook, ExportTarget, discard_all, finish_all};
 use crate::overlays::Overlays;
 use crate::range::frame_range;
@@ -38,8 +39,10 @@ pub struct ExportPlan<'a> {
 	pub total_steps: u64,
 	/// Keep the outputs of a failed or cancelled job.
 	pub keep_partial: bool,
-	/// Cisco's `OpenH264` binary for MP4 (`crate::h264`); unused when `OpenH264` is compiled in.
-	pub h264: Option<PathBuf>,
+	/// MP4's H.264 encoders.
+	pub h264: Option<Arc<dyn H264Factory>>,
+	/// MP4's H.264 profile; the best `h264` has when it lacks this one.
+	pub h264_profile: Profile,
 }
 
 impl ExportPlan<'_> {
@@ -88,6 +91,7 @@ impl ExportPlan<'_> {
 			height,
 			fps: display.video.fps,
 			quality: display.video.quality,
+			profile: self.h264_profile,
 			first_frame: *frames.start(),
 			frame_count: frames.clone().count(),
 		};
@@ -127,6 +131,6 @@ impl ExportPlan<'_> {
 		}
 		let overlays = Overlays::new(self.project, width, height, self.traces, self.total_steps);
 		let overlays = (!self.format.wants_halves() && !overlays.is_empty()).then_some(overlays);
-		Ok(ExportJob::new(source, frames, targets, overlays, self.keep_partial))
+		Ok(ExportJob::new(source, self.fs.clone(), frames, targets, overlays, self.keep_partial))
 	}
 }

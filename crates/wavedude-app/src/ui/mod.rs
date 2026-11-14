@@ -12,7 +12,6 @@ mod color_picker;
 mod dock;
 mod edit;
 mod examples;
-#[cfg(not(target_arch = "wasm32"))]
 mod export;
 mod files;
 mod gradient_editor;
@@ -68,8 +67,9 @@ use wavedude_core::quality::PreviewQuality;
 use self::about::About;
 use self::dock::Dock;
 use self::examples::Examples;
+use self::export::Exports;
 #[cfg(not(target_arch = "wasm32"))]
-use self::export::{After, Exports, Step};
+use self::export::{After, Step};
 use self::manual::Manual;
 use self::memory_warning::MemoryWarning;
 use self::messages::MessagesPane;
@@ -124,7 +124,6 @@ pub struct Shell {
 	modals: Modals,
 	manual: Option<Manual>,
 	files: files::Files,
-	#[cfg(not(target_arch = "wasm32"))]
 	exports: Exports,
 	#[cfg(not(target_arch = "wasm32"))]
 	updates: Updates,
@@ -178,7 +177,6 @@ impl Shell {
 			modals,
 			manual: None,
 			files: files::Files::default(),
-			#[cfg(not(target_arch = "wasm32"))]
 			exports: Exports::default(),
 			#[cfg(not(target_arch = "wasm32"))]
 			updates,
@@ -231,7 +229,6 @@ impl Shell {
 			Then::Download(update) => self.updates.download(ctx, &self.app.strings, *update),
 			#[cfg(not(target_arch = "wasm32"))]
 			Then::CheckForUpdates => self.updates.check(ctx, true),
-			#[cfg(not(target_arch = "wasm32"))]
 			Then::Export(step) => self.exports.step(ctx, &mut self.app, &mut self.modals, step),
 			#[cfg(target_arch = "wasm32")]
 			Then::LocateSceneImage => self.files.locate_scene_image(ctx, &self.app),
@@ -284,12 +281,8 @@ impl Shell {
 					};
 					self.modals.show(Modal::Error(text));
 				}
-				#[cfg(not(target_arch = "wasm32"))]
 				Notice::ExportReady => self.exports.ready(ctx, &mut self.app, &mut self.modals),
-				#[cfg(not(target_arch = "wasm32"))]
 				Notice::ExportStopped => self.exports.stopped(),
-				#[cfg(target_arch = "wasm32")]
-				Notice::ExportReady | Notice::ExportStopped => {}
 				Notice::ShowFrame(_) | Notice::Info(_) | Notice::Error(_) => {}
 			}
 		}
@@ -366,10 +359,7 @@ impl Shell {
 			MenuAction::Dither(bits) => Some(Event::SetDitherBits(bits)),
 			MenuAction::Run => Some(Event::Run),
 			MenuAction::PauseRun => Some(Event::TogglePauseRun),
-			#[cfg(not(target_arch = "wasm32"))]
 			MenuAction::Stop => (!self.exports.cancel(&mut self.app)).then_some(Event::StopRun),
-			#[cfg(target_arch = "wasm32")]
-			MenuAction::Stop => Some(Event::StopRun),
 			MenuAction::DiscardFrames => {
 				let text = app.strings.get("DiscardFramesQuestion").to_owned();
 				self.modals.show(Modal::Confirm { text, yes: Then::Send(Event::DiscardFrames), destroys: true });
@@ -435,28 +425,22 @@ impl Shell {
 			}
 			#[cfg(target_arch = "wasm32")]
 			MenuAction::CheckForUpdates => None,
-			#[cfg(not(target_arch = "wasm32"))]
 			MenuAction::Export(choice) => {
 				if let Some(dialog) = Exports::dialog(app, choice) {
 					self.modals.show(dialog);
 				}
 				None
 			}
-			#[cfg(not(target_arch = "wasm32"))]
 			MenuAction::ExportLast => {
 				self.exports.export_last(ctx, &mut self.app, &mut self.modals);
 				None
 			}
-			#[cfg(not(target_arch = "wasm32"))]
 			MenuAction::ExportProbeCsv => {
 				if let Some(probe) = target.filter(|t| t.kind == ItemKind::Probe) {
-					self.exports.probe_csv(ctx, app, probe.index);
+					self.exports.probe_csv(ctx, app, &mut self.modals, probe.index);
 				}
 				None
 			}
-			// the browser has no exports
-			#[cfg(target_arch = "wasm32")]
-			MenuAction::Export(_) | MenuAction::ExportLast | MenuAction::ExportProbeCsv => None,
 		};
 		if let Some(event) = event {
 			self.send(ctx, event);
@@ -502,6 +486,7 @@ impl Shell {
 		let downloading = crate::downloads::running();
 		#[cfg(not(target_arch = "wasm32"))]
 		let exporting = self.exports.exporting();
+		// the browser's export repaints while it works and is woken while it waits
 		#[cfg(target_arch = "wasm32")]
 		let (downloading, exporting) = (false, false);
 		let moving = downloading
@@ -535,12 +520,10 @@ impl eframe::App for Shell {
 		}
 		self.app.tick(Instant::now());
 		self.notices(&ctx);
+		self.exports.poll(&ctx, &mut self.app, &mut self.modals);
 		#[cfg(not(target_arch = "wasm32"))]
-		{
-			self.exports.poll(&ctx, &mut self.app, &mut self.modals);
-			if let Some(after) = self.exports.take_after() {
-				self.leave(after);
-			}
+		if let Some(after) = self.exports.take_after() {
+			self.leave(after);
 		}
 		#[cfg(not(target_arch = "wasm32"))]
 		self.updates.take(&self.app.strings, &mut self.modals);
@@ -549,10 +532,7 @@ impl eframe::App for Shell {
 		let modal = self.modals.is_open();
 		let keyboard = (!modal).then(|| Keyboard::before_ui(&ctx));
 		edit::begin_pass(&ctx);
-		#[cfg(not(target_arch = "wasm32"))]
 		let (has_last, export) = (self.exports.has_last(&self.app), self.exports.status());
-		#[cfg(target_arch = "wasm32")]
-		let (has_last, export) = (false, None);
 		let mut picked = None;
 		egui::Panel::top("menu_bar").show(ui, |ui| {
 			ui.add_enabled_ui(!modal, |ui| {

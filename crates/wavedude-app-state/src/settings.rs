@@ -11,6 +11,7 @@ use serde_json::Value;
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::Word;
 use wavedude_core::quality::{MachineFacts, PreviewDefaults, PreviewQuality};
+use wavedude_export::h264::Profile;
 
 use super::platform::Store;
 use super::strings::Language;
@@ -152,6 +153,8 @@ pub struct Settings {
 	/// user answered the launch's question. The CLI shares it.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub use_openh264: Option<bool>,
+	/// The H.264 profile of MP4 export; the encoder's best when it lacks it.
+	pub h264_profile: Profile,
 	/// Look for a new release at launch (GitHub releases); `None` until the user answered the startup page.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub check_for_updates: Option<bool>,
@@ -188,6 +191,7 @@ impl Default for Settings {
 			export_hints: Vec::new(),
 			title_full_path: false,
 			use_openh264: None,
+			h264_profile: Profile::Baseline,
 			check_for_updates: None,
 			show_startup: true,
 		}
@@ -242,7 +246,6 @@ impl Settings {
 		}
 		self.ui_zoom = if self.ui_zoom.is_finite() { self.ui_zoom.clamp(SWITCH_ZOOM.0, SWITCH_ZOOM.1) } else { 1.0 };
 		self.export_hints.truncate(MAX_EXPORT_HINTS);
-		#[cfg(not(target_arch = "wasm32"))]
 		if self.export_filter_index as usize >= wavedude_export::ExportFormat::ALL.len() {
 			self.export_filter_index = 0;
 		}
@@ -482,6 +485,15 @@ mod tests {
 		assert_eq!(s.recent_files[0], Path::new("/p/5.wdproj"));
 		assert_eq!(zoom_switch(["a", "--zoom=12"]), Some(8.0));
 		assert_eq!(zoom_switch(["--zoom=x"]), None);
+	}
+
+	#[test]
+	fn the_h264_profile_is_kept_by_its_name() {
+		let s = Settings { h264_profile: Profile::High, ..Settings::default() };
+		assert!(s.to_sparse_json().contains(r#""H264Profile": "High""#), "{}", s.to_sparse_json());
+		assert!(!Settings::default().to_sparse_json().contains("H264Profile"));
+		let read: Settings = serde_json::from_str(&s.to_sparse_json()).unwrap();
+		assert_eq!(read.h264_profile, Profile::High);
 	}
 
 	#[test]

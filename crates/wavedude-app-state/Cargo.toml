@@ -17,6 +17,7 @@ workspace = true
 [dependencies]
 wavedude-core = { path = "../wavedude-core", features = ["gpu", "serde"] }
 wavedude-examples = { path = "../wavedude-examples" }
+wavedude-export = { path = "../wavedude-export", default-features = false, features = ["serde"] }
 anyhow.workspace = true
 postcard.workspace = true
 quick-xml.workspace = true
@@ -29,7 +30,6 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "registry", "std"] }
 web-time = "1.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-wavedude-export = { path = "../wavedude-export", default-features = false }
 directories = "6"
 notify.workspace = true
 tracing-appender = "0.2"
@@ -40,9 +40,12 @@ tracing-web = "0.1"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = [
 	"Blob",
+	"CodecState",
 	"DedicatedWorkerGlobalScope",
 	"Document",
 	"Element",
+	"EncodedVideoChunk",
+	"EncodedVideoChunkType",
 	"ErrorEvent",
 	"Event",
 	"FileSystemDirectoryHandle",
@@ -51,8 +54,10 @@ web-sys = { version = "0.3", features = [
 	"FileSystemGetFileOptions",
 	"FileSystemRemoveOptions",
 	"FileSystemWritableFileStream",
+	"HardwareAcceleration",
 	"HtmlAnchorElement",
 	"HtmlElement",
+	"LatencyMode",
 	"Lock",
 	"LockManager",
 	"LockOptions",
@@ -62,11 +67,26 @@ web-sys = { version = "0.3", features = [
 	"StorageEstimate",
 	"StorageManager",
 	"Url",
+	"VideoColorPrimaries",
+	"VideoColorSpaceInit",
+	"VideoEncoder",
+	"VideoEncoderBitrateMode",
+	"VideoEncoderConfig",
+	"VideoEncoderEncodeOptions",
+	"VideoEncoderInit",
+	"VideoEncoderSupport",
+	"VideoFrame",
+	"VideoFrameBufferInit",
+	"VideoMatrixCoefficients",
+	"VideoPixelFormat",
+	"VideoTransferCharacteristics",
 	"Window",
 	"Worker",
 	"WorkerOptions",
 	"WorkerType",
 	"WritableStream",
+	"WriteCommandType",
+	"WriteParams",
 ] }
 
 [dev-dependencies]

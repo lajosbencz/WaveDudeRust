@@ -1,13 +1,21 @@
-//! Where an export's files go: the platform's file system ([`StdFs`]), or a store the caller provides (the
-//! browser's). A file's errors surface when it is closed, never in a drop.
+//! Where an export's files go: the platform's file system ([`StdFs`]), memory ([`MemFs`]), a ZIP archive
+//! ([`ZipFs`]), or a store the caller provides (the browser's). A file's errors surface when it is closed, never in a
+//! drop.
 
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{self, BufWriter, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::task::Poll;
 
 use wavedude_core::sync::{MaybeSend, MaybeSync, lock};
+
+pub mod mem;
+pub mod zip;
+
+pub use mem::MemFs;
+pub use zip::ZipFs;
 
 /// A file being written.
 pub trait OutputFile: Write + Seek + MaybeSend {
@@ -30,6 +38,18 @@ pub trait OutputFs: Debug + MaybeSend + MaybeSync {
 
 	/// Removes the empty folder `path`.
 	fn remove_dir(&self, path: &Path) -> io::Result<()>;
+
+	/// Ready while the store takes more writes; Pending while it holds too much unwritten, the caller woken once it
+	/// takes more. An error is the store's first failed write.
+	fn poll_ready(&self) -> io::Result<Poll<()>> {
+		Ok(Poll::Ready(()))
+	}
+
+	/// Ready once every closed file is committed; Pending until then, the caller woken as writes complete. An error
+	/// is the store's first failed write.
+	fn poll_flushed(&self) -> io::Result<Poll<()>> {
+		Ok(Poll::Ready(()))
+	}
 }
 
 /// The platform's file system.

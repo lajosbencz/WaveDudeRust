@@ -125,6 +125,8 @@ pub enum Event {
 	SetTitleFullPath(bool),
 	/// The user's answer whether MP4 export may use Cisco's `OpenH264`.
 	SetUseOpenH264(bool),
+	/// The H.264 profile of MP4 export.
+	SetH264Profile(wavedude_export::h264::Profile),
 	/// Whether to look for a new release at launch.
 	SetCheckForUpdates(bool),
 	/// Whether the startup page opens at each launch.
@@ -823,6 +825,11 @@ impl<B: Backend> AppState<B> {
 			}
 			Event::SetUseOpenH264(on) => {
 				self.settings.use_openh264 = Some(on);
+				self.save_settings();
+				Response::None
+			}
+			Event::SetH264Profile(profile) => {
+				self.settings.h264_profile = profile;
 				self.save_settings();
 				Response::None
 			}

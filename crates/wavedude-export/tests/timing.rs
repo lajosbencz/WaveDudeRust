@@ -4,6 +4,7 @@ mod common;
 use std::time::{Duration, Instant};
 
 use common::*;
+use wavedude_export::h264::Profile;
 use wavedude_export::sinks::{self, SinkSpec, jpeg::encode_jpeg};
 use wavedude_export::{EncoderPool, ExportFormat};
 
@@ -19,7 +20,7 @@ fn per_frame(elapsed: Duration, n: usize) -> f64 {
 }
 
 fn spec(n: usize) -> SinkSpec {
-	SinkSpec { width: W, height: H, fps: 30, quality: 90, first_frame: 0, frame_count: n }
+	SinkSpec { width: W, height: H, fps: 30, quality: 90, profile: Profile::Baseline, first_frame: 0, frame_count: n }
 }
 
 /// C#: in-house 9.8 ms a frame on ten cores, 15 in a sequence job.

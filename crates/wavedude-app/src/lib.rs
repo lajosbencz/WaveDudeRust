@@ -1,12 +1,11 @@
 //! `WaveDude` desktop and browser application: the window ([`ui`]) and the parts its views build on, over
-//! `wavedude_app_state`. Files, exports and the updater are native only.
+//! `wavedude_app_state`. File dialogs and the updater are native only.
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod codec;
 pub mod dialogs;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod downloads;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod export;
 pub mod manual;
 pub mod menus;
