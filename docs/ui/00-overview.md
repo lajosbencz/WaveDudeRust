@@ -134,7 +134,6 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 ## Platform-specific behaviour in the WPF app
 
 Map or drop in the cross-platform port:
-- Taskbar button progress (busy indicator mirror).
 - File type registration per user (`.wdproj`, `.wdscheme`) at start-up; recent files also go to the taskbar
   jump list.
 - A click on the title bar while a menu is open closes the menu and still lands (`Theming/MenuClickThrough.cs`).

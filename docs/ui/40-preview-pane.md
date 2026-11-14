@@ -81,8 +81,7 @@ project keeps it.
   frame first; during a burst of edits each frame made shows until the next). Otherwise the last picture stays;
   never black, never another frame, never a replay.
 - While a frame for the position is computed for longer than 150 ms, both pictures dim (black at 45 %) under a
-  spinner (three-quarter ring turning once a second); not hit-testable. Mirrored on the taskbar button
-  (indeterminate) and the status bar ("Computing frame n", indeterminate bar).
+  spinner (three-quarter ring turning once a second); not hit-testable. Mirrored on the status bar ("Computing frame n", indeterminate bar).
 - Overlays in z-order: picture, scene outline (translucent glowing-edges layer, when enabled for the layer),
   handle overlay (lines, emitter dots, part outlines, labels, handles), probe graph boxes, busy dim.
 
@@ -199,11 +198,10 @@ emitter dots the source layer is cached as a bitmap).
 - Context menu: Export probe data as CSV...
 - Hover and focus show a border on the box.
 
-## Busy, stale and taskbar
+## Busy and stale
 
 - Busy dim + spinner: see above (150 ms delay so fast machines do not strobe).
 - Timeline shades the frames the live run holds (accent).
-- Taskbar progress (platform-specific): export determinate, computing indeterminate, idle none.
 
 ## Automation ids
 

@@ -208,9 +208,8 @@ Base: egui's tooltips (`on_hover_text`) in the app's visuals.
 ## 20. Busy indicators
 
 Behaviours: dim rectangle (45 % black) + spinner (three-quarter ring, one turn per second) over the pictures after a
-150 ms delay, not hit-testable; status bar progress bar determinate/indeterminate; platform taskbar progress where
-available.
-Base: painted dim and spinner (`preview/picture.rs`), own progress bar (`status_bar.rs`); no taskbar progress.
+150 ms delay, not hit-testable; status bar progress bar determinate/indeterminate.
+Base: painted dim and spinner (`preview/picture.rs`), own progress bar (`status_bar.rs`).
 
 ## 21. Status bar
 
