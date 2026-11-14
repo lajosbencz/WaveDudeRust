@@ -21,6 +21,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.app.outputs.ready }}
     permissions:
       contents: read
       attestations: read
@@ -30,25 +32,37 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The bundle package.yml built and attested for the latest release.
+      # The bundle package.yml built and attested for the latest release; a release without one deploys nothing,
+      # so the site already deployed stays.
       - name: Browser app of the latest release
+        id: app
         run: |
           repo="$GITHUB_REPOSITORY"
-          tag=$(gh release view --repo "$repo" --json tagName --jq .tagName)
+          tag=$(gh release view --repo "$repo" --json tagName,assets \
+            --jq 'select(any(.assets[]; .name | endswith("-web.tar.gz"))) | .tagName')
+          if [ -z "$tag" ]; then
+            echo "::notice::the latest release has no browser app; nothing is deployed"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           gh release download "$tag" --repo "$repo" --pattern '*-web.tar.gz' --dir "$RUNNER_TEMP/web"
           bundle=$(ls "$RUNNER_TEMP"/web/*-web.tar.gz)
           gh attestation verify "$bundle" --repo "$repo" --signer-workflow "$repo/.github/workflows/package.yml"
           mkdir -p _site/app
           tar -xzf "$bundle" -C _site/app --strip-components=1
           echo "deploying the browser app of $tag"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
       - name: Site
+        if: steps.app.outputs.ready == 'true'
         run: cp site/index.html crates/wavedude-app/assets/icon.svg _site/
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: steps.app.outputs.ready == 'true'
         with:
           path: _site
 
   deploy:
     needs: build
+    if: needs.build.outputs.ready == 'true'
     runs-on: ubuntu-latest
     permissions:
       pages: write
