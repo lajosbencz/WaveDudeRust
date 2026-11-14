@@ -7,7 +7,7 @@
 //! the window's points.
 
 use epaint::text::{FontId, FontsView};
-use epaint::{Color32, Pos2, Rect, Shape, Stroke, StrokeKind, pos2, vec2};
+use epaint::{CircleShape, Color32, Pos2, Rect, Shape, Stroke, StrokeKind, pos2, vec2};
 use wavedude_core::engine::emitters::elements_of;
 use wavedude_core::model::{Edges, ItemKind, ItemRef, Layer, Part, PartKind, ProbeKind, Project, Scene};
 use wavedude_core::scene::shapes::{self, Frame, Vec2};
@@ -69,6 +69,13 @@ pub struct Label {
 	pub selected: bool,
 }
 
+/// An emitter of a composite source.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Dot {
+	pub at: (f32, f32),
+	pub selected: bool,
+}
+
 /// A line probe's segment.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ProbeLine {
@@ -89,7 +96,7 @@ pub struct PartOutline {
 pub struct OverlayModel {
 	pub lines: Vec<ProbeLine>,
 	/// Emitter dots of composite sources; not focusable.
-	pub dots: Vec<(f32, f32)>,
+	pub dots: Vec<Dot>,
 	pub outlines: Vec<PartOutline>,
 	pub handles: Vec<Handle>,
 	pub labels: Vec<Label>,
@@ -138,7 +145,9 @@ pub fn build(
 		let at = centre_of(s.x, s.y);
 		if handles_shown || sel {
 			if let Some(array) = &s.array {
-				m.dots.extend(elements_of(s, project.seed).iter().map(|e| centre_of(e.x, e.y)));
+				m.dots.extend(
+					elements_of(s, project.seed).iter().map(|e| Dot { at: centre_of(e.x, e.y), selected: sel }),
+				);
 				if current == Some(item) {
 					let half_row =
 						f64::from(array.size_x.saturating_sub(1)) * f64::from(array.spacing_x.unsigned_abs()) / 2.;
@@ -283,107 +292,184 @@ fn part_handles(project: &Project, p: &Part, item: ItemRef, gap: f64, out: &mut 
 }
 
 /// The handles' fixed colours: light grey over a dark halo, the selection bright yellow.
-pub const HANDLE: Color32 = Color32::from_rgb(0xD8, 0xD8, 0xD8);
-pub const SELECTED: Color32 = Color32::from_rgb(0xFF, 0xE6, 0x00);
-pub const HALO: Color32 = Color32::from_rgba_unmultiplied_const(0x00, 0x00, 0x00, 0xB0);
+pub const HANDLE: Color32 = Color32::from_rgb(0xC8, 0xC8, 0xC8);
+pub const SELECTED: Color32 = Color32::from_rgb(0xFF, 0xE0, 0x00);
+pub const HALO: Color32 = Color32::from_rgba_unmultiplied_const(0x00, 0x00, 0x00, 0xC0);
+/// The disc or square behind a glyph.
+const BACKDROP: Color32 = Color32::from_rgba_unmultiplied_const(0x00, 0x00, 0x00, 0x60);
+/// The backdrop's opacity in the accent under keyboard focus.
+const FOCUS_ALPHA: u8 = 0x60;
+/// A glyph's stroke width, and under the pointer or keyboard focus.
+const STROKE: f32 = 1.5;
+const STROKE_ACTIVE: f32 = 2.5;
+/// The halo's width past the stroke, both sides together.
+const HALO_WIDTH: f32 = 2.;
 /// The labels' text size, logical pixels.
 pub const LABEL_SIZE: f32 = 11.;
 /// The halo under a label: its outline stroked 3 logical pixels wide.
 pub const LABEL_HALO: Halo = Halo { color: HALO, width: 3. };
 
-fn handle_color(h: &Handle, focused: bool, accent: Color32) -> Color32 {
-	if focused {
-		accent
-	} else if h.selected {
-		SELECTED
-	} else {
-		HANDLE
-	}
+/// Which handles stand out: the keyboard-focused one (accent backdrop, thicker stroke), the one under the pointer
+/// (thicker stroke).
+#[derive(Clone, Copy, Debug)]
+pub struct Emphasis {
+	pub focused: Option<usize>,
+	pub hovered: Option<usize>,
+	pub accent: Color32,
 }
 
 fn line(out: &mut Vec<Shape>, from: Pos2, to: Pos2, stroke: Stroke) {
 	out.push(Shape::line_segment([from, to], stroke));
 }
 
-fn ring(out: &mut Vec<Shape>, centre: Pos2, radius: f32, stroke: Stroke) {
-	out.push(Shape::circle_stroke(centre, radius, stroke));
-}
-
 fn square(centre: Pos2, half: f32) -> Rect {
 	Rect::from_center_size(centre, vec2(2. * half, 2. * half))
 }
 
-fn glyph(out: &mut Vec<Shape>, kind: HandleKind, at: Pos2, color: Color32) {
-	let strokes = [Stroke::new(3.5, HALO), Stroke::new(1.5, color)];
-	let ticks = |out: &mut Vec<Shape>, inner: f32, outer: f32, stroke: Stroke| {
-		line(out, at - vec2(outer, 0.), at - vec2(inner, 0.), stroke);
-		line(out, at + vec2(inner, 0.), at + vec2(outer, 0.), stroke);
-		line(out, at - vec2(0., outer), at - vec2(0., inner), stroke);
-		line(out, at + vec2(0., inner), at + vec2(0., outer), stroke);
+/// What sits behind a glyph: a disc or a square of the given radius or half side.
+enum Backdrop {
+	Disc(f32),
+	Square(f32),
+}
+
+impl Backdrop {
+	fn shape(&self, at: Pos2, color: Color32) -> Shape {
+		match *self {
+			Self::Disc(r) => Shape::circle_filled(at, r, color),
+			Self::Square(h) => Shape::rect_filled(square(at, h), 0, color),
+		}
+	}
+}
+
+/// A glyph's backdrop, and whether it shows without the focus.
+fn backdrop(kind: HandleKind) -> (Backdrop, bool) {
+	match kind {
+		HandleKind::Source | HandleKind::PartCentre => (Backdrop::Disc(6.5), true),
+		HandleKind::ProbeA | HandleKind::ProbeB => (Backdrop::Square(5.5), true),
+		HandleKind::SourceLever | HandleKind::PartLever => (Backdrop::Disc(7.5), true),
+		HandleKind::Point(_) | HandleKind::Node(_) => (Backdrop::Disc(5.5), true),
+		HandleKind::Grip => (Backdrop::Square(7.5), false),
+		HandleKind::InHandle(_) | HandleKind::OutHandle(_) => (Backdrop::Disc(6.5), false),
+	}
+}
+
+/// The rotation lever's glyph: an arc of radius 5 turning 300 degrees clockwise from the right, an arrowhead at its
+/// end.
+fn arc_arrow(at: Pos2) -> [Vec<Pos2>; 2] {
+	const STEPS: u16 = 30;
+	let arc = (0..=STEPS)
+		.map(|i| {
+			let a = (f32::from(i) * 10.).to_radians();
+			at + 5. * vec2(a.cos(), a.sin())
+		})
+		.collect::<Vec<_>>();
+	let end = arc[arc.len() - 1];
+	[arc, vec![at + vec2(-0.8, -4.7), end, at + vec2(3., -1.)]]
+}
+
+fn glyph(
+	out: &mut Vec<Shape>,
+	kind: HandleKind,
+	at: Pos2,
+	color: Color32,
+	focused: bool,
+	active: bool,
+	accent: Color32,
+) {
+	let (back, always) = backdrop(kind);
+	if focused {
+		out.push(back.shape(at, Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), FOCUS_ALPHA)));
+	} else if always {
+		out.push(back.shape(at, BACKDROP));
+	}
+	let width = if active { STROKE_ACTIVE } else { STROKE };
+	let strokes = [Stroke::new(width + HALO_WIDTH, HALO), Stroke::new(width, color)];
+	let ticks = |out: &mut Vec<Shape>, stroke: Stroke| {
+		for d in [vec2(1., 0.), vec2(-1., 0.), vec2(0., 1.), vec2(0., -1.)] {
+			line(out, at + 7.5 * d, at + 10. * d, stroke);
+		}
+	};
+	let centre_dot = |out: &mut Vec<Shape>, round: bool| {
+		for (half, c) in [(2.5, HALO), (1.5, color)] {
+			out.push(if round {
+				Shape::circle_filled(at, half, c)
+			} else {
+				Shape::rect_filled(square(at, half), 0, c)
+			});
+		}
 	};
 	match kind {
 		HandleKind::Source => {
 			for stroke in strokes {
-				ring(out, at, 6., stroke);
-				ticks(out, 7., 10., stroke);
+				out.push(Shape::circle_stroke(at, 6., stroke));
+				ticks(out, stroke);
 			}
+			centre_dot(out, true);
 		}
 		HandleKind::PartCentre => {
 			for stroke in strokes {
-				ring(out, at, 7., stroke);
-				ring(out, at, 3., stroke);
-				ticks(out, 8., 10., stroke);
+				out.push(Shape::circle_stroke(at, 6., stroke));
+				out.push(Shape::circle_stroke(at, 2.5, stroke));
+				ticks(out, stroke);
 			}
 		}
 		HandleKind::ProbeA | HandleKind::ProbeB => {
-			let r = if kind == HandleKind::ProbeA { 5. } else { 4. };
 			for stroke in strokes {
-				out.push(Shape::rect_stroke(square(at, r), 0, stroke, StrokeKind::Middle));
-				ticks(out, r + 1., 7., stroke);
+				out.push(Shape::rect_stroke(square(at, 5.5), 0, stroke, StrokeKind::Middle));
+				ticks(out, stroke);
 			}
+			centre_dot(out, false);
 		}
 		HandleKind::SourceLever | HandleKind::PartLever => {
-			out.push(Shape::circle_filled(at, 6., HALO));
-			out.push(Shape::circle_filled(at, 4.5, color));
-		}
-		HandleKind::Grip => {
-			out.push(Shape::rect_filled(square(at, 5.5), 0, HALO));
-			out.push(Shape::rect_filled(square(at, 4.), 0, color));
+			for stroke in strokes {
+				out.extend(arc_arrow(at).map(|points| Shape::line(points, stroke)));
+			}
 		}
 		HandleKind::Point(_) | HandleKind::Node(_) => {
 			for stroke in strokes {
-				ring(out, at, 4.5, stroke);
+				out.push(Shape::circle_stroke(at, 5.5, stroke));
 			}
+		}
+		HandleKind::Grip => {
+			out.push(Shape::rect_filled(square(at, 4.5), 0, HALO));
+			out.push(Shape::rect_filled(square(at, 3.5), 0, color));
 		}
 		HandleKind::InHandle(_) | HandleKind::OutHandle(_) => {
 			out.push(Shape::circle_filled(at, 4.5, HALO));
-			out.push(Shape::circle_filled(at, 3., color));
+			out.push(Shape::circle_filled(at, 3.5, color));
 		}
 	}
 }
 
 /// The shapes of `model` over `picture` (points of the window) at `scale` points per canvas pixel: probe lines,
-/// emitter dots, outlines, handles with the `focused` one in `accent`, then the labels in Selawik at [`LABEL_SIZE`]
-/// over their halo ([`LABEL_HALO`], from `outlines`), on the alphabetic baseline and held inside the picture. The
-/// caller clips them to the picture.
+/// emitter dots, outlines, handles with the `emphasis`, then the labels in Selawik at [`LABEL_SIZE`] over their halo
+/// ([`LABEL_HALO`], from `outlines`), on the alphabetic baseline and held inside the picture. The caller clips them
+/// to the picture.
 pub fn shapes(
 	model: &OverlayModel,
 	scale: f32,
 	picture: Rect,
-	focused: Option<usize>,
-	accent: Color32,
+	emphasis: Emphasis,
 	fonts: &mut FontsView<'_>,
 	outlines: &mut Outlines,
 ) -> Vec<Shape> {
 	let s = |p: (f32, f32)| picture.min + vec2(p.0 * scale, p.1 * scale);
+	let color = |selected: bool| if selected { SELECTED } else { HANDLE };
 	let mut out = Vec::new();
 	for l in &model.lines {
 		let (a, b) = (s(l.a), s(l.b));
-		line(&mut out, a, b, Stroke::new(3., HALO));
-		out.extend(Shape::dashed_line(&[a, b], Stroke::new(1.5, if l.selected { SELECTED } else { HANDLE }), 5., 4.));
+		let width = if l.selected { 1.5 } else { 1. };
+		line(&mut out, a, b, Stroke::new(width + 2., HALO));
+		out.extend(Shape::dashed_line(&[a, b], Stroke::new(width, color(l.selected)), 2. * width, 2. * width));
 	}
-	out.extend(model.dots.iter().map(|&p| Shape::circle_filled(s(p), 2.5, HALO)));
-	out.extend(model.dots.iter().map(|&p| Shape::circle_filled(s(p), 1.5, HANDLE)));
+	out.extend(model.dots.iter().map(|d| {
+		Shape::Circle(CircleShape {
+			center: s(d.at),
+			radius: 2.5,
+			fill: color(d.selected),
+			stroke: Stroke::new(1.5, HALO),
+		})
+	}));
 	for outline in &model.outlines {
 		let points: Vec<Pos2> = outline.points.iter().map(|&p| s(p)).collect();
 		let path = |stroke: Stroke| {
@@ -397,18 +483,15 @@ pub fn shapes(
 		if let Some(from) = h.from {
 			let from = s(from);
 			line(&mut out, from, at, Stroke::new(3., HALO));
-			let stroke = Stroke::new(1., handle_color(h, false, accent));
-			if h.kind.is_lever() {
-				line(&mut out, from, at, stroke);
-			} else {
-				out.extend(Shape::dashed_line(&[from, at], stroke, 2., 2.));
-			}
+			out.extend(Shape::dashed_line(&[from, at], Stroke::new(1., color(h.selected)), 2., 2.));
 		}
-		glyph(&mut out, h.kind, at, handle_color(h, focused == Some(i), accent));
+		let focused = emphasis.focused == Some(i);
+		let active = focused || emphasis.hovered == Some(i);
+		glyph(&mut out, h.kind, at, color(h.selected), focused, active, emphasis.accent);
 	}
 	for label in model.labels.iter().filter(|l| !l.text.is_empty()) {
 		let at = s(label.at);
-		let color = if label.selected { SELECTED } else { HANDLE };
+		let color = color(label.selected);
 		let galley = fonts.layout_no_wrap(label.text.clone(), FontId::proportional(LABEL_SIZE), color);
 		let width = galley.size().x;
 		let (mut lx, mut ly) = if label.below { (at.x - width / 2., at.y + 24.) } else { (at.x + 13., at.y + 4.) };
@@ -538,6 +621,10 @@ mod tests {
 		assert!(m.labels[0].below);
 	}
 
+	fn plain() -> Emphasis {
+		Emphasis { focused: None, hovered: None, accent: HANDLE }
+	}
+
 	fn fonts() -> Fonts {
 		Fonts::new(TextOptions::default(), crate::fonts::definitions())
 	}
@@ -566,27 +653,46 @@ mod tests {
 		let m = build(&project(), &[], None, Layer::Field, 2., true, true);
 		let accent = Color32::from_rgb(1, 2, 3);
 		let picture = Rect::from_min_size(pos2(10., 20.), vec2(400., 200.));
-		let shapes = shapes(&m, 2., picture, Some(0), accent, &mut view, &mut Outlines::new(1.));
+		let probe = m.handles.iter().position(|h| h.kind == HandleKind::ProbeA);
+		let emphasis = Emphasis { focused: Some(0), hovered: probe, accent };
+		let shapes = shapes(&m, 2., picture, emphasis, &mut view, &mut Outlines::new(1.));
 		let (a, b) = (pos2(111., 121.), pos2(171., 121.));
 		assert_eq!(shapes[0], Shape::line_segment([a, b], Stroke::new(3., HALO)), "the probe line, canvas to window");
-		let dash = Stroke::new(1.5, HANDLE);
-		assert_eq!(shapes[1], Shape::line_segment([a, a + vec2(5., 0.)], dash), "dashed over its halo");
+		let dash = Stroke::new(1., HANDLE);
+		assert_eq!(shapes[1], Shape::line_segment([a, a + vec2(2., 0.)], dash), "dashed over its halo");
 		let dashes =
 			shapes[1..].iter().take_while(|s| matches!(s, Shape::LineSegment { stroke, .. } if *stroke == dash));
-		assert_eq!(dashes.count(), 7, "60 points of 5 on, 4 off");
+		assert_eq!(dashes.count(), 15, "60 points of 2 on, 2 off");
 		let source = pos2(31., 61.);
-		let rings: Vec<Stroke> = shapes
+		let circles_at = |at: Pos2| -> Vec<(Color32, Stroke)> {
+			shapes
+				.iter()
+				.filter_map(|s| match s {
+					Shape::Circle(c) if c.center == at => Some((c.fill, c.stroke)),
+					_ => None,
+				})
+				.collect()
+		};
+		let focus = Color32::from_rgba_unmultiplied(1, 2, 3, FOCUS_ALPHA);
+		assert_eq!(
+			circles_at(source),
+			[
+				(focus, Stroke::NONE),
+				(Color32::TRANSPARENT, Stroke::new(4.5, HALO)),
+				(Color32::TRANSPARENT, Stroke::new(2.5, HANDLE)),
+				(HALO, Stroke::NONE),
+				(HANDLE, Stroke::NONE),
+			],
+			"the focused one over an accent backdrop, a thicker ring over its halo, the dot on the pixel"
+		);
+		let probe_strokes: Vec<f32> = shapes
 			.iter()
 			.filter_map(|s| match s {
-				Shape::Circle(c) if c.center == source => Some(c.stroke),
+				Shape::Rect(r) if r.rect.center() == a => Some(r.stroke.width),
 				_ => None,
 			})
 			.collect();
-		assert_eq!(
-			rings,
-			[Stroke::new(3.5, HALO), Stroke::new(1.5, accent)],
-			"the halo first, the focused one in the accent"
-		);
+		assert_eq!(probe_strokes, [0., 4.5, 2.5, 0., 0.], "the hovered one thicker, over its plain backdrop");
 		let texts = texts(&shapes);
 		let names: Vec<&str> = texts.iter().map(|t| t.0.as_str()).collect();
 		assert_eq!(names, ["S", "R", "P"]);
@@ -609,7 +715,7 @@ mod tests {
 		p.sources[0].name = "Long name".into();
 		let m = build(&p, &[], None, Layer::Intensity, 1., false, true);
 		let picture = Rect::from_min_size(Pos2::ZERO, vec2(200., 100.));
-		let shapes = shapes(&m, 1., picture, None, HANDLE, &mut view, &mut Outlines::new(1.));
+		let shapes = shapes(&m, 1., picture, plain(), &mut view, &mut Outlines::new(1.));
 		let galley = view.layout_no_wrap("Long name".into(), FontId::proportional(LABEL_SIZE), HANDLE);
 		let at = texts(&shapes).into_iter().find(|t| t.0 == "Long name").map(|t| t.1);
 		assert_eq!(at, Some(pos2(200. - galley.size().x - 2., 24.5 - baseline(&galley))));
@@ -630,15 +736,15 @@ mod tests {
 			&m,
 			1.,
 			Rect::from_min_size(pos2(5., 5.), vec2(200., 100.)),
-			None,
-			HANDLE,
+			plain(),
 			&mut view,
 			&mut Outlines::new(1.),
 		);
-		let dots = |radius: f32, color: Color32| {
-			count(&shapes, |s| matches!(s, Shape::Circle(c) if c.radius == radius && c.fill == color))
-		};
-		assert_eq!((dots(2.5, HALO), dots(1.5, HANDLE)), (6, 6));
+		let dots = count(
+			&shapes,
+			|s| matches!(s, Shape::Circle(c) if c.radius == 2.5 && c.fill == SELECTED && c.stroke == Stroke::new(1.5, HALO)),
+		);
+		assert_eq!(dots, 6, "a selected composite's emitters in the selection colour");
 		let outlines: Vec<(usize, bool, ColorMode)> = shapes
 			.iter()
 			.filter_map(|s| match s {
@@ -650,11 +756,11 @@ mod tests {
 		assert_eq!(outlines, vec![(4, true, ColorMode::Solid(HALO)), (4, true, ColorMode::Solid(SELECTED))]);
 		let lever = shapes.iter().any(|s| match s {
 			Shape::LineSegment { points: [from, to], stroke } => {
-				*from == pos2(105., 55.) && to.x > 105. + LEVER_GAP && *stroke == Stroke::new(1., SELECTED)
+				*from == pos2(105., 55.) && *to == pos2(107., 55.) && *stroke == Stroke::new(1., SELECTED)
 			}
 			_ => false,
 		});
-		assert!(lever, "a lever's line is solid");
+		assert!(lever, "a lever's line is dotted");
 		assert_eq!(texts(&shapes).len(), 2, "the selected items' labels");
 	}
 

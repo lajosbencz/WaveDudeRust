@@ -59,9 +59,14 @@ impl Preview {
 		let ctx = ui.ctx();
 		self.outlines.set_pixels_per_point(ctx.pixels_per_point());
 		let accent = Palette::of(ctx.theme()).accent;
-		let focus = focused(&overlay.model, self.focus[layer as usize]);
+		let hovered = ui
+			.rect_contains_pointer(clip)
+			.then(|| ctx.pointer_hover_pos())
+			.flatten()
+			.and_then(|p| hit(&overlay.model, t.to_canvas(p), t.scale));
+		let emphasis = view::Emphasis { focused: focused(&overlay.model, self.focus[layer as usize]), hovered, accent };
 		let shapes =
-			ctx.fonts_mut(|f| view::shapes(&overlay.model, t.scale, t.picture(), focus, accent, f, &mut self.outlines));
+			ctx.fonts_mut(|f| view::shapes(&overlay.model, t.scale, t.picture(), emphasis, f, &mut self.outlines));
 		let painter = ui.painter().with_clip_rect(clip);
 		painter.extend(shapes);
 		if let Some((l, Grab::Marquee { a, b, .. })) = &self.grab

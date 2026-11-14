@@ -10,6 +10,7 @@ use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::model::{Display, Layer, Measurement, Probe, ScaleMode, YScale};
 
 use crate::draw::{DeviceGrid, TextMetrics};
+use crate::overlay::SELECTED;
 
 /// Smallest box drawn at all, pixels.
 pub const MIN_VISIBLE: (f32, f32) = (40.0, 30.0);
@@ -536,8 +537,6 @@ pub const LABEL: Color32 = Color32::from_rgba_unmultiplied_const(225, 225, 230, 
 pub const TITLE: Color32 = Color32::from_rgba_unmultiplied_const(240, 240, 245, 240);
 /// The curve and the readout.
 pub const CURVE: Color32 = Color32::from_rgb(255, 208, 64);
-/// The preview's edge of a selected box.
-const SELECTED: Color32 = Color32::from_rgb(0xFF, 0xE0, 0x00);
 /// The preview's resize grip.
 const GRIP_DOTS: Color32 = Color32::from_rgb(0x90, 0x90, 0x90);
 

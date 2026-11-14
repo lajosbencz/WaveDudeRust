@@ -111,17 +111,17 @@ pixel; strokes 1.5 px antialiased.
 
 | Handle | Glyph | On | Shown |
 |---|---|---|---|
-| Source position | ring with four crosshair ticks outside, gap at the pixel (21 px) | both pictures | always (subject to Handles setting) |
-| Composite emitters | dots (not focusable) | both | always |
-| Source rotation lever | handle on the array's row axis, a lever line from the centre | both | current item only |
+| Source position | ring with four crosshair ticks outside and a centre dot on the pixel (21 px) | both pictures | always (subject to Handles setting) |
+| Composite emitters | dots, the selected source's in the selection colour (not focusable) | both | always |
+| Source rotation lever | arc-arrow glyph on the array's row axis, a dotted lever line from the centre | both | current item only |
 | Part centre | ring with inner ring + ticks (21 px) | both | always |
 | Part outline | the painted outline in the selection colour | both | selected parts |
-| Part rotation lever | on the part's axis beyond its reach | both | current item only |
+| Part rotation lever | arc-arrow glyph on the part's axis beyond its reach, a dotted lever line from the centre | both | current item only |
 | Part size grip | small filled square (15 px) on a corner/vertex | both | current item only |
 | Lens surface handles | one per surface vertex | both | current item only |
 | Outline point handles | small ring per point | both | current item only |
 | Fibre node handles + Bezier in/out handles | node ring; handle = small filled dot (13 px) at the end of a dotted line from the node | both | current item only (first node's in-handle and last node's out-handle omitted) |
-| Probe point A / end B | square with ticks; line probe: dark line under a dashed light line between A and B | only the picture of the probe's layer | always |
+| Probe point A / end B | square with ticks and a centre dot; line probe: dark line under a dashed light line between A and B | only the picture of the probe's layer | always |
 | Probe graph box | see below | probe's layer | active probes |
 | Label | item name beside the main handle (below it for composites and parts), dark halo under the text, kept inside the picture | | subject to Labels setting |
 
