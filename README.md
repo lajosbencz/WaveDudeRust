@@ -3,18 +3,20 @@
 [![Provenance: GitHub Actions attestations](https://img.shields.io/badge/provenance-GitHub_Actions_attestations-2ea44f?logo=github)](https://github.com/lajosbencz/WaveDudeRust/attestations)
 
 A 2D wave-equation simulator for Linux, macOS and Windows, written in Rust:
-field and intensity views, scenes from images and optical parts, point and
-composite sources, probes with live graphs and video export. It opens the
-project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wdproj`) and of [Wave Dude 2D](https://www.youtube.com/@HuygensOptics)
-(`configuration.json`) and saves `.wdproj`, which WaveDude Next opens too.
+- field and intensity views
+- scenes from images and optical parts
+- point and composite sources
+- probes with live graphs and video export.
 
-**[Open it in the browser](https://lajosbencz.github.io/WaveDudeRust/app/)** (no install) or
-[download a release](https://github.com/lajosbencz/WaveDudeRust/releases/latest).
+Try it out:
+ - **[Open in browser](https://lajosbencz.github.io/WaveDudeRust/app/)**
+ - [Download and install](https://github.com/lajosbencz/WaveDudeRust/releases/latest)
 
 ![Three wave logic gates (XOR, AND, OR) chained: the field and the intensity, played in the application](docs/figures/logic-gates.gif)
 
 ## Highlights
 
+- It opens and saves the project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wdproj`).
 - Runs on Linux, macOS and Windows; GPU through wgpu (Vulkan, Metal, DX12),
   and a CPU engine with the same features.
 - The maths follows the literature, not a reference program: unscaled
@@ -28,42 +30,6 @@ project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wd
   from [Huygens Optics](https://www.youtube.com/@HuygensOptics)' video with
   measured truth tables ([`examples/gates`](examples/gates/)).
 - Self-updating releases with build provenance and SBOM attestations.
-
-## Try it in the browser
-
-[The application](https://lajosbencz.github.io/WaveDudeRust/app/) runs in the browser, built by
-[`tools/build-web.sh`](tools/build-web.sh). It is the desktop's window and engines on wasm32 (GPU where the browser
-has WebGPU, else the CPU engine), with the platform differences behind one API
-([decision 0019](docs/decisions/0019-egui-and-the-platform-layer.md)):
-
-- Files: Open and every picker upload a file, a file dropped on the page opens, Save and Save As download, and the
-  page asks before it is left while the project has unsaved edits.
-- App data (settings, colour schemes, the crash report) is kept in `localStorage`; a run's frames past memory spill
-  to the origin private file system ([decision 0020](docs/decisions/0020-browser-frame-spill-in-opfs.md)).
-- Missing against the desktop: exports (parked, [decision 0021](docs/decisions/0021-browser-exports-parked.md)),
-  the updater, recent files, file watching, open requests of the OS and the window's place.
-
-## Workspace
-
-| Crate | What it holds |
-|---|---|
-| [`wavedude-core`](crates/wavedude-core) | model, file formats, scene painter with every part kind, CPU and wgpu engines, frame store, runs, renderer |
-| [`wavedude-model-derive`](crates/wavedude-model-derive) | the derives that give every model type typed fields: field and edit enums, accessors, bounds |
-| [`wavedude-export`](crates/wavedude-export) | PNG and JPEG sequences, MPEG-1, AVI, QuickTime (Animation and PNG), H.264 MP4, OpenEXR, probe CSV, burned-in overlays |
-| [`wavedude-view`](crates/wavedude-view) | what the preview and the exports draw over a picture: the handle overlay, the probe graph box, as epaint shapes; the bundled fonts |
-| [`wavedude-app-state`](crates/wavedude-app-state) | the application state without a UI toolkit: document, history, selection, commands, clipboard, live runs, playback, settings, strings, log |
-| [`wavedude-app`](crates/wavedude-app) | the application on egui, natively and in the browser: the window, its panes and dialogs, the updater, exports |
-| [`wavedude-cli`](crates/wavedude-cli) | headless checks, benches, dispersion tables, scripted runs and exports |
-| [`wavedude-examples`](crates/wavedude-examples) | the example projects, embedded: the list of the Examples dialog |
-
-```sh
-cargo test --workspace --features wavedude-export/openh264-source,wavedude-cli/openh264-source   # GPU tests skip without an adapter
-cargo run -p wavedude-cli --release -- bench --gpu
-cargo run -p wavedude-cli --release -- dispersion
-cargo run -p wavedude-cli --release -- openh264 enable    # downloads Cisco's OpenH264 for MP4
-cargo run -p wavedude-cli --release -- export project.wdproj --out out.mp4 --layers both
-cargo run -p wavedude-app --release -- project.wdproj
-```
 
 ## Differences from WaveDude Next
 
