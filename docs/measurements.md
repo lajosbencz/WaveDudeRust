@@ -396,6 +396,26 @@ writes in flight before, 8 after, so the frames held past the memory budget drop
 | Lighthouse run, 4 runs each | 1.3 to 1.6 s | 1.2 to 1.4 s |
 | 1920x1080 run at full quality, 4 runs each | 9.5 to 10.8 s | 10.7 to 11.1 s |
 
+## The browser's GPU latency
+
+2026-11-14, Chrome 158 and Firefox 159 (Playwright, WebGPU, Firefox with `dom.webgpu.enabled` and
+`dom.webgpu.workers.enabled`) on Linux, RTX 5070 Ti; each build by `tools/build-web.sh` into its own folder served by
+`python3 -m http.server`. Before: master 76c510a (a capture and a probe readback each end the submission, two
+submissions on the card at most); after: captures and probe readbacks ride their steps' submission, and the worker
+kicks the queue while it waits on completions (decision 0026). Each run on a fresh page with the welcome page's Low
+preview, the example opened from the examples list, run with F5; the time is the app's `Run Completed` line. Firefox
+reports `onSubmittedWorkDone` and `mapAsync` 100 ms after the work, Chrome about 2 ms (a standalone page timing both).
+
+| | Before | After |
+|---|---|---|
+| Lighthouse (2000 steps, 1000 frames), Firefox, 2 runs | 49.0 to 49.5 s | 0.3 s |
+| Example01 (2500 steps, 1250 frames, a probe), Firefox, 2 runs | 61.5 to 61.8 s | 0.4 s |
+| Example01, Chrome, 4 runs | 1.1 to 1.2 s | 0.8 to 0.9 s |
+
+Captures in the submission alone took Example01 in Firefox to 9 to 38 s, probe readbacks in it too to 4.0 s. Native,
+`wavedude-cli bench --gpu --steps 2000` (GPU 9-point, a capture every 2 steps) is unchanged: 0.257 and 0.263 ms per step
+before, 0.259 and 0.248 after.
+
 ## The browser's preview coloured on the page's GPU
 
 2026-11-14, Chrome 158 (Playwright, WebGPU through Vulkan) on Linux, RTX 5070 Ti, a 144 Hz page; the app built by
