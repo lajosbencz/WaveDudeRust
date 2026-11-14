@@ -307,8 +307,7 @@ Size attributes are ints. Lower bounds: Bragg `Thickness1`/`Thickness2` >= 1, `W
 int.MaxValue unless stated. Verify every kind against `[Range]` in `Model/OpticalPart.cs`.
 
 Rectangle/Ellipse `Linked`: while true, setting Length also sets Width and vice versa; switching Linked on sets
-Width = Length. On load the attribute order decides (`TODO(verify)`: whether a loaded Linked=true with Length != Width
-keeps both).
+Width = Length. On load Linked=true sets Width = Length whatever the attribute order (as Next; the stored Width is lost).
 
 Triangle presets (Normalize writes the preset angles): Equilateral (60, 60), RightIsosceles (45, 45),
 ThirtySixtyNinety (90, 30), Isosceles (`a = min(AngleA, 89)`, b = a), Custom (a, `min(AngleB, 179 - a)`).

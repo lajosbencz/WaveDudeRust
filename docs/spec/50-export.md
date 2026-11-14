@@ -80,8 +80,8 @@ that takes the stored halves (OpenEXR).
   same bytes every time and on every machine.
 - The CLI cancels on Ctrl+C.
 
-Graph boxes and source markers are drawn by the app's WPF code; their look is in "Burned-in overlays" below (graph
-box layout still `TODO(verify)` there; golden exports: fixture G-12 in 80).
+Graph boxes and source markers are drawn by the app's WPF code; their look is in "Burned-in overlays" below (golden
+exports: fixture G-12 in 80).
 
 ### Probe markers (`Export/ProbeMarkers.cs`)
 
@@ -311,9 +311,22 @@ Graph boxes (fixed author colours, ARGB):
 | title | (240, 240, 240, 245) |
 | curve and readout | (255, 255, 208, 64); curve width `max(1.2, boxHeight/110)`, round joins, clipped to the plot; a single sample is a disc of radius 2 |
 
-The box shows the run's recording as it stood at the exported frame (step `frame*VisualizeEvery`). `TODO(verify)`:
-the layout (margins, plot rectangle, tick choice and labels, readout text) is computed by `ProbeGraph.Layout` and is
-not yet specified; it must be specified once (core crate) and shared by preview and export.
+The box shows the run's recording as it stood at the exported frame (step `frame*VisualizeEvery`). The layout is
+`ProbeGraph.Layout`'s, ported once as `graph::layout` (wavedude-view) and shared by preview and export; text keeps its
+size at any box size (11 px, line height `h` from the font):
+
+- Visible from 40 x 30. Title row `h + 2*3` high: title at (3, 3) on the left, readout ("= v" for a point probe,
+  "max v" for a line probe's profile, .NET G3) on the right.
+- Plot: x from `3 + widest y label + 4`, y from the title row's bottom, right margin 8, bottom margin `h + 4` for
+  the x labels. Below 20 x 15 the labels go and the margins become 6; below that, no plot.
+- Y ticks: 4 nice values (logarithmic decades on a log axis), fewer (3, then 2) while their labels would overlap
+  (`(n-1) * 1.1h` over the plot height); labels right-aligned 4 px left of the plot, centred on the tick, held within
+  the plot's height. Room above the largest value: 8 % of the range.
+- X ticks: 5 nice values, then 3, then 2, until the labels with 8 px between them fit the plot width; labels centred
+  under the tick, 2 px below the plot, held inside the box (3 px).
+- Curve: a line probe's profile binned to one min/max pair per column when longer than twice the plot width.
+
+`wavedude-cli compare` checks the y range and tick positions against Next's dump (all examples equal).
 
 ### Preview and export
 
