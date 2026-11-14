@@ -572,7 +572,7 @@
 	"Label.Scene.DampingEdge": "Dämpfungsrand",
 	"Hint.Scene.DampingEdge": "Dicke des absorbierenden Rahmens in Pixeln: positiv innerhalb der Leinwand, wo er als dunkler Rand sichtbar ist; negativ außerhalb, simuliert, aber nie gezeigt. 0 schaltet ihn ab.",
 	"Label.Scene.Edges": "Ränder",
-	"Hint.Scene.Edges": "Offen lässt eine Welle das Gitter verlassen, als läge die Leinwand im freien Raum; Reflektierend ist eine harte Wand wie in Wave Dude 2D.",
+	"Hint.Scene.Edges": "Offen lässt eine Welle das Gitter verlassen, als läge die Leinwand im freien Raum; Reflektierend ist eine harte Wand wie in Wave Dude 2D. Ein Rahmen außerhalb der Leinwand (negativer Dämpfungsrand) übernimmt den Rand; die Einstellung wirkt dann nicht.",
 	"Label.Scene.RefractiveIndex": "Brechungsindex",
 	"Hint.Scene.RefractiveIndex": "Brechungsindex einer leeren Leinwand, 1,0 bis 2,55. Die Wellengeschwindigkeit beträgt 1/n Zellen pro Schritt.",
 	"Label.Scene.ImageSources": "Bildquellen",

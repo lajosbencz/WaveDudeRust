@@ -130,7 +130,7 @@ Sections: Canvas, Sources from the image.
 | Embedded image | RO "W x H, N KB" (or "(unreadable)") | hidden in Canvas mode | |
 | Width | NB 8..16384 | disabled in Image mode | |
 | Height | NB 8..16384 | disabled in Image mode | |
-| Edges | CMB Open, Reflective | | |
+| Edges | CMB Open, Reflective | disabled while Damping edge < 0 | the rim ends in the wall for either kind |
 | Damping edge | NB -8192..8192 | | negative = rim outside the canvas |
 | Refractive index | NB 1..2.55 step 0.01 | | blank canvas |
 | Image sources | CB full width | | |

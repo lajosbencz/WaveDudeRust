@@ -572,7 +572,7 @@
 	"Label.Scene.DampingEdge": "Bord amortissant",
 	"Hint.Scene.DampingEdge": "Épaisseur en pixels du cadre absorbant : positive à l'intérieur de la toile, où il apparaît comme une marge sombre ; négative à l'extérieur, simulée mais jamais affichée. 0 le désactive.",
 	"Label.Scene.Edges": "Bords",
-	"Hint.Scene.Edges": "Ouvert laisse l'onde quitter la grille, comme si la toile était dans l'espace libre ; Réfléchissant est un mur dur, comme dans Wave Dude 2D.",
+	"Hint.Scene.Edges": "Ouvert laisse l'onde quitter la grille, comme si la toile était dans l'espace libre ; Réfléchissant est un mur dur, comme dans Wave Dude 2D. Un bord hors de la toile (bord amortissant négatif) prend le relais ; le réglage est alors sans effet.",
 	"Label.Scene.RefractiveIndex": "Indice de réfraction",
 	"Hint.Scene.RefractiveIndex": "Indice de réfraction d'une toile vierge, 1,0 à 2,55. La vitesse d'onde est de 1/n cellules par pas.",
 	"Label.Scene.ImageSources": "Sources de l'image",

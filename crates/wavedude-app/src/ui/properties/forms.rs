@@ -165,7 +165,8 @@ fn scene(f: &mut Form<'_>, o: &Scene) {
 		let (smin, smax) = bounds_of(Scene::WIDTH);
 		sc.number_with(f.on(!image_mode), Scene::WIDTH, NumberSpec::integer(smin, smax));
 		sc.number_with(f.on(!image_mode), Scene::HEIGHT, NumberSpec::integer(smin, smax));
-		sc.combo(f, Scene::EDGES);
+		// a rim outside the canvas ends in the wall for either kind (physics.md, Absorbing boundaries)
+		sc.combo(f.on(o.damping_edge >= 0), Scene::EDGES);
 		sc.number(f, Scene::DAMPING_EDGE, 1.);
 		sc.number(f, Scene::REFRACTIVE_INDEX, 0.01);
 	});
