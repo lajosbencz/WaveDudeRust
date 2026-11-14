@@ -91,7 +91,9 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
 - Pre-tick rule: among combinations of available levers, the fewest ticks that make the run fit; among as many,
   the mildest (largest need that still fits, so the cache comes before any quality loss); ties in order 8-bit,
   half frames, half resolution. When none fits, every available lever is ticked.
-- Live line under the boxes: "The frames then need {n} and fit in the RAM cache." or "The frames then need {n};
+- Live bar under the boxes: the ticks' RAM cache budget is the bar, their need its fill, "{need} / {budget}" beside
+  it; a need beyond the budget fills it whole in the warning colour.
+- Live line under the bar: "The frames then need {n} and fit in the RAM cache." or "The frames then need {n};
   {m} of them still go to disk."
 - "Do not warn me again" check box: clears the setting.
 - Run: applies the ticks to the Simulation and View settings (persisted), then runs. Cancel: nothing changes;

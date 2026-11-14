@@ -1,6 +1,6 @@
 //! The memory warning (docs/ui/60): a run's frames exceed the RAM cache. The need and the budget, four levers
-//! pre-ticked by the model's proposal (greyed where they gain nothing), a line with the ticks' result, and "Do not
-//! warn me again"; Run applies the ticks, Cancel keeps the frames.
+//! pre-ticked by the model's proposal (greyed where they gain nothing), a bar and a line with the ticks' result, and
+//! "Do not warn me again"; Run applies the ticks, Cancel keeps the frames.
 
 use eframe::egui::{self, Id, RichText, Ui};
 use wavedude_app_state::Event;
@@ -93,6 +93,9 @@ impl MemoryWarning {
 		if changed && let Some(result) = self.result_of(app) {
 			self.result = result;
 		}
+		if let Some(w) = app.live.warning() {
+			usage_bar(ui, w.bytes_of(self.levers), w.budget_of(self.levers));
+		}
 		ui.add(egui::Label::new(RichText::new(self.result.as_str()).color(dim)).wrap());
 		if let Some(v) = check_box(ui, Id::unique("MemoryWarningMute"), s.get("MemoryWarningMute"), self.mute) {
 			self.mute = v;
@@ -106,6 +109,19 @@ impl MemoryWarning {
 			}))
 		})
 	}
+}
+
+/// The frames' `need` against the RAM cache's `budget`: the bar is the budget, full and in the warning colour when
+/// the need exceeds it.
+fn usage_bar(ui: &mut Ui, need: u64, budget: u64) {
+	let palette = Palette::of(ui.ctx().theme());
+	let fill = if need <= budget { palette.accent } else { palette.level_warn };
+	let share = if budget == 0 { 1. } else { (need as f64 / budget as f64).min(1.) as f32 };
+	let row = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+	ui.allocate_ui_with_layout(row, egui::Layout::right_to_left(egui::Align::Center), |ui| {
+		ui.label(format!("{} / {}", bytes_text(need), bytes_text(budget)));
+		ui.add(egui::ProgressBar::new(share).fill(fill));
+	});
 }
 
 #[cfg(test)]
