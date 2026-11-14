@@ -65,7 +65,7 @@ the repository installs it, as CI does. Bump it there when a new stable is wante
 | clippy | lints, warnings fail | `cargo clippy --workspace --all-targets --features $F -- -D warnings` | `[workspace.lints]` of [`Cargo.toml`](Cargo.toml) |
 | cargo test | the tests; the export tests decode their output with `ffmpeg` when it is on the `PATH` | `cargo test --workspace --features $F` | |
 | [cargo-insta](https://insta.rs) | text snapshots | `cargo insta review` | `tests/snapshots/` of core and export |
-| [egui_kittest](https://docs.rs/egui_kittest) | the window's image snapshots, rendered on wgpu on Mesa's lavapipe, which the tests select; without it they skip, unless `WAVEDUDE_REQUIRE_LAVAPIPE` is set (CI on Linux) | `cargo test -p wavedude-app --test shell`; after an intended change `UPDATE_SNAPSHOTS=1` with that command rewrites them, review the PNGs | [`kittest.toml`](kittest.toml), `tests/snapshots/` of the app |
+| [egui_kittest](https://docs.rs/egui_kittest) | the window's tests, driven through AccessKit by role and label, with no image snapshots; the manual's figures render on Mesa's lavapipe | `cargo test -p wavedude-app --test shell` | |
 | rustdoc | docs without warnings | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | |
 | [cargo-hack](https://github.com/taiki-e/cargo-hack) | every feature combination compiles | `cargo hack check --workspace --feature-powerset --depth 2` | |
 | [cargo-machete](https://github.com/bnjbvr/cargo-machete) | no unused dependency | `cargo machete` | |

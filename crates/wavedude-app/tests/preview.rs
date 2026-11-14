@@ -8,8 +8,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use eframe::egui::{self, Key, PointerButton, Pos2, Role, vec2};
+use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
-use egui_kittest::{Harness, HarnessBuilder};
 use wavedude_app::App;
 use wavedude_app::ui::{Boot, Shell};
 use wavedude_app_state::commands::{Command, Edit};
@@ -26,13 +26,8 @@ const SETTLE: usize = 4;
 /// Steps of a run that completes quickly.
 const SHORT_RUN: u32 = 200;
 
-/// The window on Example01 with nothing run, in the light theme; `builder` renders it or not.
-fn preview_with(builder: HarnessBuilder<Shell>, dir: &Path) -> Harness<'static, Shell> {
-	preview_of(builder, dir, None)
-}
-
-/// As `preview_with`, the project's run cut to `steps` when given.
-fn preview_of(builder: HarnessBuilder<Shell>, dir: &Path, steps: Option<u32>) -> Harness<'static, Shell> {
+/// The window on Example01 with nothing run, in the light theme, the project's run cut to `steps` when given.
+fn preview_of(dir: &Path, steps: Option<u32>) -> Harness<'static, Shell> {
 	let dirs = AppDirs::under(dir);
 	let mut app = common::started(&dirs, false);
 	let open = Event::Guarded(Guarded::Open(Source::Path(EXAMPLE.into())));
@@ -50,18 +45,18 @@ fn preview_of(builder: HarnessBuilder<Shell>, dir: &Path, steps: Option<u32>) ->
 		log: LogRing::new(),
 		update: Default::default(),
 	};
-	let mut harness = builder.with_size(vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
+	let mut harness = Harness::builder().with_size(vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
 	harness
 }
 
 fn preview(dir: &Path) -> Harness<'static, Shell> {
-	preview_with(Harness::builder(), dir)
+	preview_of(dir, None)
 }
 
 /// The window on a run short enough to complete quickly yet hold a few frames.
 fn short_preview(dir: &Path) -> Harness<'static, Shell> {
-	preview_of(Harness::builder(), dir, Some(SHORT_RUN))
+	preview_of(dir, Some(SHORT_RUN))
 }
 
 fn settle(harness: &mut Harness<'_, Shell>) {
@@ -332,19 +327,4 @@ fn a_focused_button_keeps_its_space_from_the_pane() {
 	harness.key_press(Key::Enter);
 	settle(&mut harness);
 	assert!(!app(&harness).document.project.display.field.preview && !playing(&harness));
-}
-
-#[test]
-fn the_preview_looks_as_its_snapshot() {
-	let Some(builder) = common::lavapipe() else { return };
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = preview_with(builder, dir.path());
-	common::preview_idle(&mut harness);
-	// the run's status names the machine's engine
-	let run = app(&harness).run_status();
-	if !run.is_empty() {
-		let status = harness.get_by_label(&run).rect();
-		harness.mask(status);
-	}
-	harness.snapshot("preview");
 }

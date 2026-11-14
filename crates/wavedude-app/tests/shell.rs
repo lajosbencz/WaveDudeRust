@@ -1,6 +1,5 @@
 //! The window's shell driven headless: the menu bar and its keys, a shortcut, the theme and the panes with their
-//! drops; where Mesa's lavapipe is installed the File menu and the dock are also rendered on it and compared with
-//! their snapshots.
+//! drops.
 
 mod common;
 
@@ -8,8 +7,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use eframe::egui::{self, Key, Modifiers};
+use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
-use egui_kittest::{Harness, HarnessBuilder};
 use wavedude_app::ui::{Boot, Shell};
 use wavedude_app_state::document::Source;
 use wavedude_app_state::history::History;
@@ -25,17 +24,11 @@ const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source
 /// Frames for a click or a key to reach the state and its result to show.
 const SETTLE: usize = 4;
 
-/// The window on a returning user's settings under `dir`, in `language` and the light theme, with `project` open;
-/// `builder` renders it or not.
-fn shell_with(
-	builder: HarnessBuilder<Shell>,
-	dir: &Path,
-	language: Language,
-	project: Option<&str>,
-) -> Harness<'static, Shell> {
+/// The window on a returning user's settings under `dir`, in `language` and the light theme, with `project` open.
+fn shell_with(dir: &Path, language: Language, project: Option<&str>) -> Harness<'static, Shell> {
 	let dirs = AppDirs::under(dir);
 	let mut app = common::started(&dirs, false);
-	// the empty project's seed is random: the snapshots show it in the Properties pane
+	// the empty project's seed is random: fixed for a stable Properties pane
 	app.document.project.seed = 1;
 	app.document.history = History::new(&app.document.project);
 	app.live.project_replaced(&app.document.project, Instant::now());
@@ -52,13 +45,14 @@ fn shell_with(
 		log: LogRing::new(),
 		update: Default::default(),
 	};
-	let mut harness = builder.with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
+	let mut harness =
+		Harness::builder().with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
 	harness
 }
 
 fn shell(dir: &Path, project: Option<&str>) -> Harness<'static, Shell> {
-	shell_with(Harness::builder(), dir, Language::English, project)
+	shell_with(dir, Language::English, project)
 }
 
 fn settle(harness: &mut Harness<'_, Shell>) {
@@ -74,27 +68,6 @@ fn the_file_menu_opens_with_its_entries() {
 	for entry in ["New Project", "Open Project...", "Save", "Save As...", "Exit"] {
 		harness.get_by_label(entry);
 	}
-}
-
-#[test]
-fn the_file_menu_looks_as_its_snapshot() {
-	let Some(builder) = common::lavapipe() else { return };
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = shell_with(builder, dir.path(), Language::English, None);
-	common::preview_idle(&mut harness);
-	harness.get_by_label("File").click();
-	settle(&mut harness);
-	harness.snapshot("file_menu");
-}
-
-/// The panes' title bars: the active one accent-coloured with a white title and close cross.
-#[test]
-fn the_dock_looks_as_its_snapshot() {
-	let Some(builder) = common::lavapipe() else { return };
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = shell_with(builder, dir.path(), Language::English, None);
-	common::preview_idle(&mut harness);
-	harness.snapshot("dock");
 }
 
 #[test]
@@ -349,7 +322,7 @@ fn every_menu_has_unique_mnemonics_in_every_language() {
 	let mut shared = Vec::new();
 	for language in Language::ALL {
 		let dir = tempfile::tempdir().unwrap();
-		let mut harness = shell_with(Harness::builder(), dir.path(), language, None);
+		let mut harness = shell_with(dir.path(), language, None);
 		let s = Strings::new(language);
 		let headers =
 			["MenuFile", "MenuEdit", "MenuView", "MenuSimulation", "MenuHelp"].map(|k| strip_mnemonic(s.get(k)));

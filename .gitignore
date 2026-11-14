@@ -1,11 +1,8 @@
-# Rust: build output, rustfmt backups, insta's pending snapshots, egui_kittest's failed ones, coverage and profiling
+# Rust: build output, rustfmt backups, insta's pending snapshots, coverage and profiling
 # output.
 /target
 **/*.rs.bk
 **/*.snap.new
-**/tests/snapshots/*.new.png
-**/tests/snapshots/*.diff.png
-**/tests/snapshots/*.old.png
 *.pdb
 lcov.info
 *.profraw

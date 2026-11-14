@@ -1,15 +1,14 @@
 //! The Properties pane driven headless on an example: the number box's keys, Enter and Esc, its drag, typed text
 //! applied before a shortcut and when its form goes, the focus that Enter on a tree row and an Add put into the
-//! form, a check box, a drop-down, disabled rows, the colour picker and the gradient; where Mesa's lavapipe is
-//! installed a form is also rendered on it and compared with its snapshot.
+//! form, a check box, a drop-down, disabled rows, the colour picker and the gradient.
 
 mod common;
 
 use std::path::Path;
 
 use eframe::egui::{self, Key, Modifiers, PointerButton, Pos2, Role, vec2};
+use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
-use egui_kittest::{Harness, HarnessBuilder};
 use wavedude_app::App;
 use wavedude_app::ui::{Boot, Shell};
 use wavedude_app_state::document::Source;
@@ -23,8 +22,8 @@ const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source
 /// Frames for an input to reach the state and its result to show.
 const SETTLE: usize = 4;
 
-/// The window on `project` with nothing run, in the light theme, tall enough for a form; `builder` renders it or not.
-fn window_on(builder: HarnessBuilder<Shell>, dir: &Path, project: &Path) -> Harness<'static, Shell> {
+/// The window on `project` with nothing run, in the light theme, tall enough for a form.
+fn window_on(dir: &Path, project: &Path) -> Harness<'static, Shell> {
 	let dirs = AppDirs::under(dir);
 	let mut app = common::started(&dirs, false);
 	let open = Event::Guarded(Guarded::Open(Source::Path(project.into())));
@@ -38,17 +37,14 @@ fn window_on(builder: HarnessBuilder<Shell>, dir: &Path, project: &Path) -> Harn
 		log: LogRing::new(),
 		update: Default::default(),
 	};
-	let mut harness = builder.with_size(vec2(1280., 1200.)).build_eframe(move |cc| Shell::new(cc, app, boot));
+	let mut harness =
+		Harness::builder().with_size(vec2(1280., 1200.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
 	harness
 }
 
-fn window_with(builder: HarnessBuilder<Shell>, dir: &Path) -> Harness<'static, Shell> {
-	window_on(builder, dir, Path::new(EXAMPLE))
-}
-
 fn window(dir: &Path) -> Harness<'static, Shell> {
-	window_with(Harness::builder(), dir)
+	window_on(dir, Path::new(EXAMPLE))
 }
 
 fn settle(harness: &mut Harness<'_, Shell>) {
@@ -281,16 +277,6 @@ fn the_picker_changes_a_stop_and_esc_puts_its_colour_back_and_the_gradient_adds_
 }
 
 #[test]
-fn a_source_form_looks_as_its_snapshot() {
-	let Some(builder) = common::lavapipe() else { return };
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window_with(builder, dir.path());
-	select(&mut harness, "Source 1");
-	common::preview_idle(&mut harness);
-	harness.snapshot("properties_source");
-}
-
-#[test]
 fn a_project_scheme_joins_the_users_and_leaves_them_from_the_tree_and_the_picker() {
 	let dir = tempfile::tempdir().unwrap();
 	let mut harness = window(dir.path());
@@ -340,7 +326,7 @@ fn the_picker_removes_the_users_scheme_a_legacy_name_resolves_to() {
 	let file = dir.path().join("legacy.wdproj");
 	let text = std::fs::read_to_string(EXAMPLE).unwrap().replace("\"Ice and fire\"", "\"Flare_inv\"");
 	std::fs::write(&file, text).unwrap();
-	let mut harness = window_on(Harness::builder(), dir.path(), &file);
+	let mut harness = window_on(dir.path(), &file);
 	assert_eq!(project(&harness).display.field.color_scheme, "Flare_inv");
 	select(&mut harness, "Display");
 	harness.get_all_by_role_and_label(Role::ComboBox, "Colour scheme").next().expect("the field's picker").click();

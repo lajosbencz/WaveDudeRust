@@ -14,5 +14,5 @@ Status: accepted, 2026-11-05; amended 2026-11-13 ([0019](0019-egui-and-the-platf
 ## The window's tests (added 2026-11-13)
 
 The views are egui over the app state (0019). The window is driven headless with egui_kittest on wgpu: widgets
-found in egui's AccessKit tree by role and label, image snapshots rendered on Mesa's lavapipe, which the tests
-select; without it the snapshots skip, and CI on Linux requires it.
+found in egui's AccessKit tree by role and label, with no image snapshots; only the manual's figures render,
+on Mesa's lavapipe.

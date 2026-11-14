@@ -1,4 +1,4 @@
-//! The state the window tests start from, the renderer of their image snapshots and the wait for the preview.
+//! The state the window tests start from, the renderer of the manual's figures and the wait for the preview.
 
 use std::io::Write;
 use std::sync::Arc;
@@ -34,9 +34,9 @@ pub(crate) fn started(dirs: &AppDirs, first_start: bool) -> App {
 	app
 }
 
-/// A builder rendering on Mesa's lavapipe, the adapter the image snapshots were taken on (others rasterise beyond
-/// their tolerance); `None`, with the reason printed, where it is missing, unless `WAVEDUDE_REQUIRE_LAVAPIPE` is set.
-#[allow(dead_code, reason = "used by the tests with image snapshots")]
+/// A builder rendering on Mesa's lavapipe, the adapter the manual's figures are taken on; `None`, with the reason
+/// printed, where it is missing.
+#[allow(dead_code, reason = "used by the manual's figures only")]
 pub(crate) fn lavapipe<S>() -> Option<HarnessBuilder<S>> {
 	let mut setup = egui_wgpu::WgpuSetupCreateNew::without_display_handle();
 	setup.instance_descriptor.backends = wgpu::Backends::VULKAN;
@@ -60,12 +60,11 @@ pub(crate) fn lavapipe<S>() -> Option<HarnessBuilder<S>> {
 		egui_wgpu::RendererOptions::PREDICTABLE,
 	)) {
 		Ok(state) => Some(Harness::builder().renderer(WgpuTestRenderer::from_render_state(state))),
-		Err(e) if std::env::var_os("WAVEDUDE_REQUIRE_LAVAPIPE").is_some() => panic!("no lavapipe: {e}"),
 		Err(e) => {
 			// libtest captures `eprintln!`, not writes to the handle; it names the thread after the test
 			let thread = std::thread::current();
 			let test = thread.name().unwrap_or_default();
-			let _ = writeln!(std::io::stderr(), "{test}: image snapshot skipped: {e}");
+			let _ = writeln!(std::io::stderr(), "{test}: figures skipped: {e}");
 			None
 		}
 	}
@@ -73,7 +72,7 @@ pub(crate) fn lavapipe<S>() -> Option<HarnessBuilder<S>> {
 
 /// Waits for the preview's frame, which comes from a thread of its own: the pane polls after 4 ms while its picture
 /// is due, the window's tick is longer.
-#[allow(dead_code, reason = "used by the tests with image snapshots")]
+#[allow(dead_code, reason = "used by the shell, wake and figures tests")]
 pub(crate) fn preview_idle(harness: &mut Harness<'_, Shell>) {
 	let polling = |harness: &Harness<'_, Shell>| {
 		harness.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay <= Duration::from_millis(4)

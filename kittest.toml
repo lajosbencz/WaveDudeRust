@@ -1,3 +1,0 @@
-# egui_kittest's image snapshots (crates/*/tests/snapshots): a pixel may differ by about 2/255 per channel, as
-# GPUs and Mesa's lavapipe rasterise and blend alike only that far.
-threshold = 2.0

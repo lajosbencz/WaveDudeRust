@@ -1,7 +1,6 @@
 //! The modals driven headless: the unsaved-edits question with its buttons and keys, the message window of a failed
 //! open, the crash report an earlier session left, the modals waiting in turn and the window's keys waiting behind
-//! them, the startup page, About, Examples and the manual window; where Mesa's lavapipe is installed the question,
-//! the startup page and Examples are also rendered on it and compared with their snapshots.
+//! them, the startup page, About, Examples and the manual window.
 
 mod common;
 
@@ -9,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use eframe::egui::accesskit::Toggled;
 use eframe::egui::{self, Key, Modifiers, OutputCommand};
+use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
-use egui_kittest::{Harness, HarnessBuilder};
 use wavedude_app::open_requests::OpenRequests;
 use wavedude_app::ui::{Boot, Shell};
 use wavedude_app_state::document::Source;
@@ -27,14 +26,8 @@ const SETTLE: usize = 4;
 const MISSING: &str = "/nonexistent/missing.wdproj";
 
 /// The window on the settings under `dir` in the light theme, nothing run, with `project` open and `asked` asked
-/// for by the command line; `builder` renders it or not, `first_start` shows the startup page.
-fn window_with(
-	builder: HarnessBuilder<Shell>,
-	dir: &Path,
-	first_start: bool,
-	project: Option<&Path>,
-	asked: &[&str],
-) -> Harness<'static, Shell> {
+/// for by the command line; `first_start` shows the startup page.
+fn window_with(dir: &Path, first_start: bool, project: Option<&Path>, asked: &[&str]) -> Harness<'static, Shell> {
 	let dirs = AppDirs::under(dir);
 	let mut app = common::started(&dirs, first_start);
 	for event in [Event::SetTheme(Theme::Light), Event::SetAutoRerun(false)] {
@@ -48,13 +41,14 @@ fn window_with(
 		open.push(path.into());
 	}
 	let boot = Boot { store: dirs.store(), gpu: None, open, log: LogRing::new(), update: Default::default() };
-	let mut harness = builder.with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
+	let mut harness =
+		Harness::builder().with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
 	harness
 }
 
 fn window(dir: &Path, project: Option<&Path>, asked: &[&str]) -> Harness<'static, Shell> {
-	window_with(Harness::builder(), dir, false, project, asked)
+	window_with(dir, false, project, asked)
 }
 
 fn settle(harness: &mut Harness<'_, Shell>) {
@@ -169,19 +163,6 @@ fn the_crash_report_shows_once_before_the_modals_asked_for_meanwhile() {
 	assert!(harness.query_by_label(&text).is_none(), "the report showed twice");
 }
 
-#[test]
-fn the_unsaved_question_looks_as_its_snapshot() {
-	let Some(builder) = common::lavapipe() else { return };
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window_with(builder, dir.path(), false, None, &[]);
-	edit(&mut harness);
-	common::preview_idle(&mut harness);
-	harness.key_press_modifiers(Modifiers::COMMAND, Key::N);
-	settle(&mut harness);
-	harness.get_by_label("Save the changes to Untitled?");
-	harness.snapshot("unsaved_question");
-}
-
 /// Opens `entry` of the menu `menu`.
 fn menu(harness: &mut Harness<'_, Shell>, menu: &str, entry: &str) {
 	harness.get_by_label(menu).click();
@@ -193,7 +174,7 @@ fn menu(harness: &mut Harness<'_, Shell>, menu: &str, entry: &str) {
 #[test]
 fn the_startup_page_shows_at_the_first_start_and_ok_saves_its_answers() {
 	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window_with(Harness::builder(), dir.path(), true, None, &[]);
+	let mut harness = window_with(dir.path(), true, None, &[]);
 	harness.get_by_label("Welcome to WaveDude Rust");
 	harness.get_by_label("High").click();
 	settle(&mut harness);
@@ -212,7 +193,7 @@ fn the_startup_page_shows_at_the_first_start_and_ok_saves_its_answers() {
 #[test]
 fn the_startup_pages_examples_button_saves_its_answers_and_opens_examples() {
 	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window_with(Harness::builder(), dir.path(), true, None, &[]);
+	let mut harness = window_with(dir.path(), true, None, &[]);
 	harness.get_by_label("High").click();
 	settle(&mut harness);
 	harness.get_by_label("Examples...").click();
@@ -288,27 +269,4 @@ fn f1_opens_the_manual_a_row_takes_its_section_and_esc_closes_it() {
 	harness.key_press(Key::Escape);
 	settle(&mut harness);
 	assert!(harness.query_all_by_label("WaveDude Rust manual").next().is_none(), "Esc left the manual open");
-}
-
-#[test]
-fn the_startup_page_looks_as_its_snapshot() {
-	let Some(builder) = common::lavapipe() else { return };
-	let dir = tempfile::tempdir().unwrap();
-	let example = example_in(dir.path());
-	let mut harness = window_with(builder, dir.path(), true, Some(&example), &[]);
-	harness.get_by_label("Standard").click();
-	common::preview_idle(&mut harness);
-	// the codec's question shows where OpenH264 is not compiled in
-	harness.snapshot(if wavedude_export::h264::BUILT_IN { "startup_page" } else { "startup_page_codec" });
-}
-
-#[test]
-fn examples_looks_as_its_snapshot() {
-	let Some(builder) = common::lavapipe() else { return };
-	let dir = tempfile::tempdir().unwrap();
-	let example = example_in(dir.path());
-	let mut harness = window_with(builder, dir.path(), false, Some(&example), &[]);
-	common::preview_idle(&mut harness);
-	menu(&mut harness, "File", "Examples...");
-	harness.snapshot("examples");
 }

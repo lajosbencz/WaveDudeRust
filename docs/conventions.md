@@ -224,7 +224,7 @@ push. What they hold the code to:
 - App-state tests drive `AppState<FakeBackend>` (`live::fake::FakeBackend`, `live.rs:1153`) with a fake clock
   ([`crates/wavedude-app-state/tests/state.rs:22`](../crates/wavedude-app-state/tests/state.rs#L22)).
 - The window is tested headless with egui_kittest on wgpu: widgets found by role and label, clicked and typed into
-  through AccessKit, image snapshots on lavapipe ([`crates/wavedude-app/tests/common/mod.rs`](../crates/wavedude-app/tests/common/mod.rs),
+  through AccessKit, with no image snapshots ([`crates/wavedude-app/tests/common/mod.rs`](../crates/wavedude-app/tests/common/mod.rs),
   [`crates/wavedude-app/tests/shell.rs`](../crates/wavedude-app/tests/shell.rs)); a widget alone in its module's tests
   ([`crates/wavedude-app/src/ui/number_box.rs`](../crates/wavedude-app/src/ui/number_box.rs)).
 - A behaviour fix lands with the test that failed before it, in the same commit.

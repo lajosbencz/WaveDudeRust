@@ -79,8 +79,8 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 winresource = "0.1"
 
 [dev-dependencies]
-# The window driven headless on wgpu, with image snapshots.
-egui_kittest = { version = "=0.37.0", features = ["eframe", "snapshot", "wgpu"] }
+# The window driven headless on wgpu, through AccessKit.
+egui_kittest = { version = "=0.37.0", features = ["eframe", "wgpu"] }
 # Crops the rendered window into the manual's figures (tests/screenshots.rs).
 image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"

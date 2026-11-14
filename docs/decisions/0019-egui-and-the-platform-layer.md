@@ -41,7 +41,7 @@ overlay with an executor of their own.
   the bundled Selawik (0018, Shapes as epaint's). The window draws their meshes with egui's renderer; an export
   rasterises the same meshes on the CPU into its frame (`wavedude_export::raster`), the same bytes on every machine.
 - The window's tests drive it headless with egui_kittest on wgpu, found through egui's AccessKit tree by role and
-  label, with image snapshots on Mesa's lavapipe, which the tests select.
+  label, with no image snapshots; only the manual's figures render, on Mesa's lavapipe.
 
 ## Consequences
 
