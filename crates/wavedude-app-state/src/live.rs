@@ -687,6 +687,8 @@ impl<B: Backend> LiveController<B> {
 		{
 			self.on_change(kind, project, None, now);
 		}
+		// The store in force lets go here, so a store the pump opens counts this one's memory as free.
+		self.status.store = None;
 		self.backend.pump();
 		self.status = self.backend.status();
 		let adopted = self.status.adopted;

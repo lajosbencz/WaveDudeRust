@@ -1,7 +1,7 @@
 # 0024: The browser runs the simulation in a Web Worker
 
-Status: accepted, 2026-11-14 (the user's decision); losses and versions added 2026-11-14; amended by
-[0026](0026-kick-the-gpu-queue-while-waiting.md). Amends [0015](0015-core-builds-for-wasm.md),
+Status: accepted, 2026-11-14 (the user's decision); losses and versions, the mirror's memory added 2026-11-14;
+amended by [0026](0026-kick-the-gpu-queue-while-waiting.md). Amends [0015](0015-core-builds-for-wasm.md),
 [0016](0016-gpu-engine-in-the-browser.md), [0019](0019-egui-and-the-platform-layer.md) and
 [0020](0020-browser-frame-spill-in-opfs.md): the run leaves the page's thread.
 
@@ -64,3 +64,11 @@ worker's binary is 2.1 MB (0.6 MB gzipped) against the app's 21 MB.
   posts nothing more to it.
 - The traces the worker posts start over by the run's own count of their starts, not by the published status, which
   can lag behind a goal adopted.
+
+## The mirror's memory (added 2026-11-14)
+
+- A frame received stays in its transferred `ArrayBuffer` until the mirror copies its planes into the buffer the
+  store hands out for it, a cleared generation's first: a frame takes the memory the budget counts, and reruns
+  reuse it.
+- A mirror for a new layout lets go of the one before first and takes the whole budget: the outgoing store's
+  memory counts as free, as natively; the live controller lets go of it before the pump that opens the new one.

@@ -541,7 +541,7 @@ fn page() -> (Remote<Loopback>, Loopback) {
 }
 
 fn send(worker: &Loopback, message: &ToPage, buffer: Option<Vec<u8>>) {
-	worker.post(Envelope { message: postcard::to_allocvec(message).unwrap(), buffer });
+	worker.post(Envelope { message: postcard::to_allocvec(message).unwrap(), buffer: buffer.map(Into::into) });
 }
 
 fn acks(worker: &Loopback) -> Vec<(Key, Result<(), String>)> {

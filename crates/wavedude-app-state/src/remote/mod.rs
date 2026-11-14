@@ -19,6 +19,7 @@ pub mod protocol;
 pub mod web;
 
 use std::collections::VecDeque;
+use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
@@ -69,7 +70,59 @@ impl WorkerGone {
 pub struct Envelope {
 	pub message: Vec<u8>,
 	/// Moved, not copied, where the transport allows (a transferred `ArrayBuffer` on the web).
-	pub buffer: Option<Vec<u8>>,
+	pub buffer: Option<Buffer>,
+}
+
+/// The bytes beside a message: on wasm32 a JS `Uint8Array` outside the wasm memory, so a frame received is
+/// copied once, into the planes that keep it.
+#[derive(Debug)]
+pub struct Buffer(#[cfg(target_arch = "wasm32")] js_sys::Uint8Array, #[cfg(not(target_arch = "wasm32"))] Vec<u8>);
+
+impl Buffer {
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	#[cfg(target_arch = "wasm32")]
+	pub fn len(&self) -> usize {
+		self.0.length() as usize
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
+	}
+
+	/// Copies the bytes from `from` on into `out`; panics past the end.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn copy_to(&self, from: usize, out: &mut [u8]) {
+		out.copy_from_slice(&self.0[from..from + out.len()]);
+	}
+
+	/// Copies the bytes from `from` on into `out`; panics past the end.
+	#[cfg(target_arch = "wasm32")]
+	pub fn copy_to(&self, from: usize, out: &mut [u8]) {
+		self.0.subarray(from as u32, (from + out.len()) as u32).copy_to(out);
+	}
+
+	/// A copy of the bytes in `range`; panics past the end.
+	pub fn to_vec(&self, range: Range<usize>) -> Vec<u8> {
+		let mut out = vec![0; range.len()];
+		self.copy_to(range.start, &mut out);
+		out
+	}
+}
+
+impl From<Vec<u8>> for Buffer {
+	#[cfg(not(target_arch = "wasm32"))]
+	fn from(bytes: Vec<u8>) -> Self {
+		Self(bytes)
+	}
+
+	#[cfg(target_arch = "wasm32")]
+	fn from(bytes: Vec<u8>) -> Self {
+		Self(js_sys::Uint8Array::from(&bytes[..]))
+	}
 }
 
 /// One end of the channel between the page and the worker.
@@ -107,7 +160,8 @@ fn post(port: &impl Port, message: &impl Serialize, buffer: Option<Vec<u8>>) {
 }
 
 fn envelope(message: &impl Serialize, buffer: Option<Vec<u8>>) -> Envelope {
-	Envelope { message: postcard::to_allocvec(message).expect("a message of the protocol encodes"), buffer }
+	let message = postcard::to_allocvec(message).expect("a message of the protocol encodes");
+	Envelope { message, buffer: buffer.map(Buffer::from) }
 }
 
 fn decode<M: DeserializeOwned>(envelope: &Envelope) -> postcard::Result<M> {

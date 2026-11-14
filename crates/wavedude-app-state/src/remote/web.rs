@@ -12,7 +12,7 @@ use web_sys::wasm_bindgen::{JsCast, JsValue};
 use web_sys::{DedicatedWorkerGlobalScope, ErrorEvent, Event, MessageEvent, Worker, WorkerOptions, WorkerType};
 
 use super::protocol::{Lost, ToPage};
-use super::{Envelope, Port, envelope, hold};
+use super::{Buffer, Envelope, Port, envelope, hold};
 use crate::platform::Duration;
 
 /// How long the page waits for the worker's first message.
@@ -25,8 +25,8 @@ fn to_js(envelope: Envelope) -> (Array, Array) {
 	let message = Uint8Array::from(&envelope.message[..]).buffer();
 	let transfer = Array::of1(&message);
 	let buffer = match envelope.buffer {
-		Some(bytes) => {
-			let buffer = Uint8Array::from(&bytes[..]).buffer();
+		Some(Buffer(bytes)) => {
+			let buffer = bytes.buffer();
 			transfer.push(&buffer);
 			buffer.into()
 		}
@@ -35,12 +35,12 @@ fn to_js(envelope: Envelope) -> (Array, Array) {
 	(Array::of2(&message, &buffer), transfer)
 }
 
-/// The envelope of a message's data; anything else reads as an empty, undecodable message.
+/// The envelope of a message's data, its buffer left in JS; anything else reads as an empty, undecodable message.
 fn from_js(data: &JsValue) -> Envelope {
-	let bytes = |v: JsValue| Uint8Array::new(&v).to_vec();
 	let parts = Array::from(data);
 	let buffer = parts.get(1);
-	Envelope { message: bytes(parts.get(0)), buffer: (!buffer.is_undefined()).then(|| bytes(buffer)) }
+	let buffer = (!buffer.is_undefined()).then(|| Buffer(Uint8Array::new(&buffer)));
+	Envelope { message: Uint8Array::new(&parts.get(0)).to_vec(), buffer }
 }
 
 /// Where the page's end is with the worker.
