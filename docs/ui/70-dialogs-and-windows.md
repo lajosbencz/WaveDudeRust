@@ -34,6 +34,11 @@ the project, aborts).
 Exit, closing the window and an update's restart during an export (port): "An export is running. Stop it and
 quit?" Yes stops it and quits once it has ended; No keeps both.
 
+## Scene image changed on disk
+
+"The scene image file '<name>' differs from the image embedded in the project. Load the file?" Load file
+(default) / Keep embedded (Esc). See [`60-live-editing-and-runs.md`](60-live-editing-and-runs.md) (Files and drop).
+
 ## Memory warning
 
 See [`60-live-editing-and-runs.md`](60-live-editing-and-runs.md).

@@ -48,3 +48,11 @@ Status: accepted, 2026-11-05 (the user's answers; defaults where marked)
     shown in the row instead of a tooltip. Opening takes the old entry's path (`Guarded::OpenExample`), so the
     unsaved-changes prompt stays. Titles of our examples come from the file slug; descriptions from the
     project's Description, read once at first use.
+
+## Scene image file changed on disk (added 2026-11-14)
+
+19. A scene image file that decodes and differs from the embedded image is asked about, as a text editor asks
+    about a file changed outside it: "Load file" embeds it as an undoable edit (the run starts over), "Keep
+    embedded" (Esc) keeps the embedded image and is not asked again for the same bytes. Asked at open and while
+    the file is watched; Next takes the file silently. The embedded bytes stay authoritative until the answer,
+    so a project never changes without the user's word. A project that embeds no image takes the file silently.

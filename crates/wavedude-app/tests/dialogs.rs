@@ -1,6 +1,6 @@
 //! The modals driven headless: the unsaved-edits question with its buttons and keys, the message window of a failed
 //! open, the crash report an earlier session left, the modals waiting in turn and the window's keys waiting behind
-//! them, the startup page, About, Examples and the manual window.
+//! them, the scene image question, the startup page, About, Examples and the manual window.
 
 mod common;
 
@@ -109,6 +109,52 @@ fn save_in_the_unsaved_question_saves_then_goes_on() {
 	let mut saved = AppState::start(&AppDirs::under(dir.path()), []).unwrap();
 	saved.handle(Event::Guarded(Guarded::Open(Source::Path(path))), Instant::now());
 	assert_eq!(saved.document.project.sources.len(), 2, "the edits were not saved");
+}
+
+/// A 2 x 2 PNG of one grey `value`.
+fn png(value: u8) -> Vec<u8> {
+	let mut out = std::io::Cursor::new(Vec::new());
+	image::GrayImage::from_pixel(2, 2, image::Luma([value])).write_to(&mut out, image::ImageFormat::Png).unwrap();
+	out.into_inner()
+}
+
+/// A project in `dir` embedding one image as `pic.png`, the file there another.
+fn project_with_changed_image(dir: &Path) -> PathBuf {
+	let mut d = wavedude_app_state::document::Document::new_project();
+	let scene = &mut d.project.scene;
+	scene.image = "pic.png".into();
+	scene.image_path = "pic.png".into();
+	scene.image_data = Some(png(10).into());
+	scene.image_size = (2, 2);
+	let path = dir.join("p.wdproj");
+	d.save_as(&path).unwrap();
+	std::fs::write(dir.join("pic.png"), png(200)).unwrap();
+	path
+}
+
+const IMAGE_QUESTION: &str =
+	"The scene image file 'pic.png' differs from the image embedded in the project. Load the file?";
+
+#[test]
+fn a_scene_image_file_that_differs_is_asked_about_keep_on_esc_and_load_on_enter() {
+	let dir = tempfile::tempdir().unwrap();
+	let path = project_with_changed_image(dir.path());
+	let image =
+		|h: &Harness<'_, Shell>| h.state().app().document.project.scene.image_data.as_deref().map(<[u8]>::to_vec);
+	let mut harness = window(dir.path(), Some(&path), &[]);
+	harness.get_by_label(IMAGE_QUESTION);
+	harness.key_press(Key::Escape);
+	settle(&mut harness);
+	assert!(harness.query_by_label(IMAGE_QUESTION).is_none(), "Esc left the question open");
+	assert_eq!(image(&harness), Some(png(10)), "Keep embedded took the file");
+	assert!(!harness.state().app().document.dirty);
+	let mut harness = window(dir.path(), Some(&path), &[]);
+	harness.get_by_label(IMAGE_QUESTION);
+	harness.key_press(Key::Enter);
+	settle(&mut harness);
+	assert!(harness.query_by_label(IMAGE_QUESTION).is_none(), "Enter left the question open");
+	assert_eq!(image(&harness), Some(png(200)), "Load file kept the embedded image");
+	assert!(harness.state().app().document.dirty, "the loaded image is unsaved");
 }
 
 #[test]

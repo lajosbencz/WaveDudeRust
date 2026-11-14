@@ -258,7 +258,7 @@ The Scene form. The canvas is either blank, with its size and a uniform refracti
 
 1. **Mode**: Blank canvas of the given size, or a canvas built from the scene image.
 2. **Scene image**: Image the canvas is built from: red = refractive index (red 0 = a mirror), green = sources, blue = damping. The name of the embedded image, or a path relative to the project folder.
-3. **Image file**: Where the embedded image came from. The embedded image is what is simulated, so a missing file changes nothing; while the project is open, the file is watched and re-embedded when it changes, and on opening the project a changed file replaces the embedded image too.
+3. **Image file**: Where the embedded image came from. The embedded image is what is simulated, so a missing file changes nothing; when the file differs from the embedded image, on opening the project or while it is open, you are asked whether to load the file or keep the embedded image.
 4. **Embedded image**: The size of the embedded scene image; the canvas takes this size.
 5. **Width**: Width of a blank canvas in pixels.
 6. **Height**: Height of a blank canvas in pixels.

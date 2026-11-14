@@ -52,6 +52,8 @@ pub(super) enum Modal {
 		destroys: bool,
 	},
 	MemoryWarning(MemoryWarning),
+	/// "The scene image file changed: take it or keep the embedded one?", formatted.
+	SceneImage(String),
 	Export(ExportDialog),
 	About(About),
 	Examples(Examples),
@@ -76,6 +78,7 @@ impl Modal {
 			Self::Info(_) => "Info",
 			Self::Confirm { .. } => "Confirm",
 			Self::MemoryWarning(_) => "MemoryWarning",
+			Self::SceneImage(_) => "SceneImage",
 			Self::Export(_) => "Export",
 			Self::About(_) => "About",
 			Self::Examples(_) => "Examples",
@@ -123,10 +126,12 @@ impl Modals {
 		self.shown.is_some()
 	}
 
-	/// Shows `modal`, or queues it after the open one; a memory warning shown or waiting is not asked again.
+	/// Shows `modal`, or queues it after the open one; a memory warning or a scene image question shown or waiting
+	/// is not asked again.
 	pub(super) fn show(&mut self, modal: Modal) {
-		let warning = |m: &Modal| matches!(m, Modal::MemoryWarning(_));
-		if warning(&modal) && (self.shown.as_ref().is_some_and(warning) || self.waiting.iter().any(warning)) {
+		let once = |m: &Modal| std::mem::discriminant(m) == std::mem::discriminant(&modal);
+		let single = matches!(modal, Modal::MemoryWarning(_) | Modal::SceneImage(_));
+		if single && (self.shown.as_ref().is_some_and(once) || self.waiting.iter().any(once)) {
 			return;
 		}
 		if self.shown.is_none() {
@@ -218,6 +223,12 @@ impl Modals {
 						}
 					}
 					Modal::MemoryWarning(warning) => warning.ui(ui, fresh, app),
+					Modal::SceneImage(text) => {
+						let choices =
+							[Choice::default(s.get("SceneImageTake")), Choice::cancel(s.get("SceneImageKeep"))];
+						message(ui, fresh, Disc::Question, text, &choices)
+							.map(|i| Some(Then::Send(Event::SceneImageOffer(i == 0))))
+					}
 					Modal::Export(dialog) => dialog.ui(ui, fresh, app, out),
 					Modal::About(about) => about.ui(ui, fresh, app),
 					Modal::Examples(examples) => examples.ui(ui, fresh, app),

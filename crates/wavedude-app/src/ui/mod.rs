@@ -520,6 +520,10 @@ impl eframe::App for Shell {
 		}
 		self.app.tick(Instant::now());
 		self.notices(&ctx);
+		if let Some(path) = self.app.document.scene_image_offer() {
+			let name = path.file_name().map_or_else(|| path.to_string_lossy(), |n| n.to_string_lossy());
+			self.modals.show(Modal::SceneImage(self.app.strings.format("SceneImageChangedFormat", &[&name])));
+		}
 		self.exports.poll(&ctx, &mut self.app, &mut self.modals);
 		#[cfg(not(target_arch = "wasm32"))]
 		if let Some(after) = self.exports.take_after() {

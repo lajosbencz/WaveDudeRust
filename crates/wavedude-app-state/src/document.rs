@@ -85,6 +85,25 @@ pub struct Document {
 	image_watch: Option<FileWatch>,
 	/// Since when the changed scene image file fails to read.
 	image_unreadable_since: Option<Instant>,
+	/// The scene image file's bytes that differ from the embedded ones, until the user takes or keeps.
+	image_offer: Option<ImageOffer>,
+	/// The file and the hash of its bytes last kept out: they are not offered again.
+	image_declined: Option<(PathBuf, u64)>,
+}
+
+/// A scene image file that decodes and differs from the embedded image.
+#[derive(Debug)]
+struct ImageOffer {
+	path: PathBuf,
+	bytes: Vec<u8>,
+	size: (u32, u32),
+}
+
+fn hash(bytes: &[u8]) -> u64 {
+	use std::hash::{Hash, Hasher};
+	let mut h = std::hash::DefaultHasher::new();
+	bytes.hash(&mut h);
+	h.finish()
 }
 
 /// What a file opened as: a project, or a colour scheme for the open project.
@@ -117,6 +136,8 @@ impl Document {
 			placeholder,
 			image_watch: None,
 			image_unreadable_since: None,
+			image_offer: None,
+			image_declined: None,
 		}
 	}
 
@@ -217,9 +238,10 @@ impl Document {
 		self.path.as_deref().and_then(Path::parent)
 	}
 
-	/// Takes the scene image from its file when the file's bytes differ from the embedded ones (the project
-	/// turns dirty); a project without an image path looks for its image by name beside the project file and
-	/// in a `scene_images` folder there. A missing file changes nothing. Returns whether bytes were taken.
+	/// Takes the scene image from its file when the project embeds none (the project turns dirty), offers the
+	/// file ([`scene_image_offer`](Self::scene_image_offer)) when its bytes differ from the embedded ones; a
+	/// project without an image path looks for its image by name beside the project file and in a `scene_images`
+	/// folder there. A missing file changes nothing. Returns whether bytes were taken.
 	pub fn adopt_scene_image(&mut self) -> bool {
 		let scene = &self.project.scene;
 		if scene.image.is_empty() && scene.image_path.is_empty() {
@@ -240,11 +262,15 @@ impl Document {
 				located = true;
 			}
 		}
-		let taken = self.changed_image(&path);
-		let adopted = taken.is_some();
-		if let Some((bytes, size)) = taken {
-			self.project.scene.image_data = Some(bytes.into());
-			self.project.scene.image_size = size;
+		let mut adopted = false;
+		if let Some((bytes, size)) = self.changed_image(&path) {
+			if self.project.scene.image_data.is_some() {
+				self.offer_image(path.clone(), bytes, size);
+			} else {
+				self.project.scene.image_data = Some(bytes.into());
+				self.project.scene.image_size = size;
+				adopted = true;
+			}
 		}
 		if located || adopted {
 			// Undo goes back to the project as opened, with what was adopted.
@@ -290,13 +316,19 @@ impl Document {
 		(!path.as_os_str().is_empty()).then_some(path)
 	}
 
-	/// Follows the scene image's file while the project names one: a change on disk is re-embedded as an edit
-	/// (undoable, the run starts over) once `IMAGE_DEBOUNCE` has passed since the last change, and tried again for
-	/// `IMAGE_RETRY` while the writer still holds the file. Returns whether the image changed.
+	/// Follows the scene image's file while the project names one: a change on disk that decodes and differs
+	/// from the embedded image is offered ([`scene_image_offer`](Self::scene_image_offer)) once `IMAGE_DEBOUNCE`
+	/// has passed since the last change, and tried again for `IMAGE_RETRY` while the writer still holds the
+	/// file. Returns whether the offer changed.
 	pub fn follow_image_file(&mut self, now: Instant) -> bool {
 		let path = self.image_file();
 		if self.image_watch.as_ref().map(FileWatch::path) != path.as_deref() {
+			let gone = self.image_offer.as_ref().is_some_and(|o| Some(o.path.as_path()) != path.as_deref());
 			self.image_watch = path.and_then(FileWatch::start);
+			if gone {
+				self.image_offer = None;
+				return true;
+			}
 		}
 		let Some(watch) = &self.image_watch else { return false };
 		let Some(at) = watch.changed_at() else { return false };
@@ -324,16 +356,46 @@ impl Document {
 		self.image_unreadable_since = None;
 		watch.set_changed_at(None);
 		if self.project.scene.image_data.as_deref() == Some(&bytes[..]) {
-			return false;
+			// changed back: nothing to offer, and a later change is asked about again
+			self.image_declined = None;
+			return self.image_offer.take().is_some();
 		}
 		let Ok(size) = io::image_size(&bytes) else {
 			tracing::warn!("the scene image file '{}' does not decode; the embedded image stays", path.display());
 			return false;
 		};
-		self.project.scene.image_data = Some(bytes.into());
-		self.project.scene.image_size = size;
+		self.offer_image(path, bytes, size)
+	}
+
+	/// Offers the file's bytes unless they were kept out last; returns whether they are offered.
+	fn offer_image(&mut self, path: PathBuf, bytes: Vec<u8>, size: (u32, u32)) -> bool {
+		let hash = hash(&bytes);
+		if self.image_declined.as_ref().is_some_and(|(p, h)| *p == path && *h == hash) {
+			return false;
+		}
+		self.image_offer = Some(ImageOffer { path, bytes, size });
+		true
+	}
+
+	/// The scene image file that differs from the embedded image, waiting for the user's choice.
+	pub fn scene_image_offer(&self) -> Option<&Path> {
+		self.image_offer.as_ref().map(|o| o.path.as_path())
+	}
+
+	/// Answers the offer: `take` embeds the file's image as an edit (undoable, the run starts over), else the
+	/// embedded image stays and these bytes are not offered again. Returns whether the image changed.
+	pub fn answer_scene_image_offer(&mut self, take: bool, now: Instant) -> bool {
+		let Some(offer) = self.image_offer.take() else { return false };
+		if !take {
+			self.image_declined = Some((offer.path.clone(), hash(&offer.bytes)));
+			tracing::info!("the embedded scene image stays; '{}' differs", offer.path.display());
+			return false;
+		}
+		self.image_declined = None;
+		self.project.scene.image_data = Some(offer.bytes.into());
+		self.project.scene.image_size = offer.size;
 		self.edited(now);
-		tracing::info!("the scene image was re-embedded from '{}': the file changed", path.display());
+		tracing::info!("the scene image was re-embedded from '{}'", offer.path.display());
 		true
 	}
 
@@ -461,25 +523,56 @@ mod tests {
 		out
 	}
 
+	/// Writes `bytes` to `file` and ticks `d` past the debounce until the change is offered.
+	fn offered_after_writing(d: &mut Document, file: &Path, bytes: &[u8]) -> bool {
+		std::fs::write(file, bytes).unwrap();
+		let deadline = Instant::now() + Duration::from_secs(5);
+		while Instant::now() < deadline {
+			std::thread::sleep(Duration::from_millis(50));
+			if d.follow_image_file(Instant::now() + IMAGE_DEBOUNCE) && d.scene_image_offer().is_some() {
+				return true;
+			}
+		}
+		false
+	}
+
 	#[test]
-	fn a_changed_scene_image_file_is_re_embedded_after_the_debounce() {
+	fn a_changed_scene_image_file_is_offered_after_the_debounce_and_taken_as_an_edit() {
 		let dir = tempfile::tempdir().unwrap();
 		let file = dir.path().join("scene.png");
 		std::fs::write(&file, png(10)).unwrap();
 		let mut d = Document::new_project();
 		d.project.scene.image_path = file.to_string_lossy().into_owned();
+		d.project.scene.image_data = Some(png(10).into());
+		d.history = History::new(&d.project);
 		assert!(!d.follow_image_file(Instant::now()), "nothing changed yet; the watch is armed");
-		std::fs::write(&file, png(200)).unwrap();
-		let deadline = Instant::now() + Duration::from_secs(5);
-		let mut changed = false;
-		while !changed && Instant::now() < deadline {
-			std::thread::sleep(Duration::from_millis(50));
-			// a tick past the debounce
-			changed = d.follow_image_file(Instant::now() + IMAGE_DEBOUNCE);
-		}
-		assert!(changed, "the change on disk reached the document");
+		assert!(offered_after_writing(&mut d, &file, &png(200)), "the change on disk reached the document");
+		assert_eq!(d.scene_image_offer(), Some(file.as_path()));
+		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(10)[..]), "nothing changes before the answer");
+		assert!(!d.dirty);
+		assert!(d.answer_scene_image_offer(true, Instant::now()));
+		assert_eq!(d.scene_image_offer(), None);
 		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(200)[..]));
 		assert!(d.dirty, "the re-embed is an edit");
+		d.commit_step();
+		assert!(d.undo());
+		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(10)[..]));
+	}
+
+	#[test]
+	fn a_kept_scene_image_is_not_asked_about_again_until_the_file_changes_anew() {
+		let dir = tempfile::tempdir().unwrap();
+		let file = dir.path().join("scene.png");
+		std::fs::write(&file, png(10)).unwrap();
+		let mut d = Document::new_project();
+		d.project.scene.image_path = file.to_string_lossy().into_owned();
+		d.project.scene.image_data = Some(png(10).into());
+		d.follow_image_file(Instant::now());
+		assert!(offered_after_writing(&mut d, &file, &png(200)));
+		assert!(!d.answer_scene_image_offer(false, Instant::now()));
+		assert_eq!((d.scene_image_offer(), d.dirty), (None, false));
+		assert!(!offered_after_writing(&mut d, &file, &png(200)), "the same bytes once kept out");
+		assert!(offered_after_writing(&mut d, &file, &png(90)), "other bytes are asked about");
 	}
 
 	#[test]
@@ -565,7 +658,7 @@ mod tests {
 	}
 
 	#[test]
-	fn opening_re_embeds_a_scene_image_file_that_differs() {
+	fn opening_offers_a_scene_image_file_that_differs() {
 		let dir = tempfile::tempdir().unwrap();
 		let path = saved_with_image(dir.path(), &png(10), "pic.png");
 		let d = opened(&path);
@@ -575,9 +668,14 @@ mod tests {
 		assert!(!opened(&path).dirty, "the same bytes change nothing");
 		std::fs::write(dir.path().join("pic.png"), png(200)).unwrap();
 		let mut d = opened(&path);
+		assert_eq!(d.scene_image_offer(), Some(dir.path().join("pic.png").as_path()));
+		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(10)[..]));
+		assert!(!d.dirty, "only the answer edits");
+		d.follow_image_file(Instant::now());
+		assert!(d.scene_image_offer().is_some(), "arming the watch keeps the offer");
+		assert!(d.answer_scene_image_offer(true, Instant::now()));
 		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(200)[..]));
 		assert!(d.dirty, "the re-embed is unsaved");
-		assert!(!d.undo(), "the history starts at the re-embedded project");
 	}
 
 	#[test]
@@ -588,8 +686,8 @@ mod tests {
 		std::fs::write(dir.path().join("scene_images").join("pic.png"), png(200)).unwrap();
 		let d = opened(&path);
 		assert_eq!(Path::new(&d.project.scene.image_path), Path::new("scene_images").join("pic.png"));
-		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(200)[..]));
-		assert!(d.dirty);
+		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(10)[..]));
+		assert_eq!(d.scene_image_offer(), Some(dir.path().join("scene_images").join("pic.png").as_path()));
 	}
 
 	#[test]

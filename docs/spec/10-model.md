@@ -64,8 +64,8 @@ A new line probe gets `B = A + (100, 0)`.
 
 Derived: `HasRim = DampingEdge < 0`; `Rim = max(0, -DampingEdge)`.
 Removing the image clears Image, ImagePath, ImageData and sets Mode = Canvas, keeping the image's size as W x H.
-If the embedded image cannot be decoded or is missing in Image mode: `TODO(verify)` (UI shows "(not found)" for a
-missing path file; the embedded bytes are authoritative).
+The embedded bytes are authoritative: a missing or undecodable image file changes nothing (the UI shows "(not
+found)" for a missing one), one that decodes and differs is asked about ([ui/60](../ui/60-live-editing-and-runs.md)).
 
 ## Simulation (`Model/Simulation.cs`)
 

@@ -82,6 +82,8 @@ pub enum Event {
 	/// The Save As dialog was cancelled.
 	SaveAsCancelled,
 	SaveChoice(SaveChoice),
+	/// The answer to [`Document::scene_image_offer`]: true takes the file's image, false keeps the embedded one.
+	SceneImageOffer(bool),
 	/// Copy of the selection (or the current settings row).
 	Copy,
 	Cut {
@@ -431,13 +433,9 @@ impl<B: Backend> AppState<B> {
 	/// ticks.
 	pub fn tick(&mut self, now: Instant) -> bool {
 		self.document.tick(now);
-		if self.document.follow_image_file(now) {
-			self.document_changed();
-			let note = Some("the scene image file changed".into());
-			self.live.on_change(ChangeKind::Simulation, &self.document.project, note, now);
-		}
+		let offered = self.document.follow_image_file(now);
 		self.live.tick(now, &self.document.project);
-		self.sync_revisions()
+		self.sync_revisions() || offered
 	}
 
 	fn save_settings(&self) {
@@ -653,6 +651,14 @@ impl<B: Backend> AppState<B> {
 					Response::None
 				}
 			},
+			Event::SceneImageOffer(take) => {
+				if self.document.answer_scene_image_offer(take, now) {
+					self.document_changed();
+					let note = Some("the scene image file was taken".into());
+					self.live.on_change(ChangeKind::Simulation, &self.document.project, note, now);
+				}
+				Response::None
+			}
 			Event::Copy => self.copy_text().map_or(Response::None, |text| Response::Clipboard { text, then: None }),
 			Event::Cut { target } => {
 				let targets = self.selection.targets(target);

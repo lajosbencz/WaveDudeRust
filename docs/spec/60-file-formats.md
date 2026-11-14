@@ -100,8 +100,8 @@ Unknown elements and attributes are ignored. A malformed file fails with the par
 entry quotes the file's text (first 64 K characters, plus the reported line if beyond).
 
 `ImagePath` is written relative to the project's folder when the image lies inside it, else absolute. The embedded
-`ImageData` is authoritative; on load the app follows the file on disk if it exists and differs `TODO(verify)` (UI
-behaviour: "the scene image is embedded and follows its file on disk").
+`ImageData` is authoritative; a file on disk that decodes and differs is asked about on load and while the
+project is open, Next takes it silently ([divergences](../divergences.md)).
 
 ### Annotated example
 

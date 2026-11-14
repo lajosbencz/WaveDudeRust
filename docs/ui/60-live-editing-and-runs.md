@@ -132,10 +132,14 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
 
 - A file dropped anywhere on the window (not claimed by tree or pictures) is opened: `.wdproj`,
   `configuration.json` (import), `.wdscheme` (added to the project's schemes and selected). Other data refused.
-- Opening a project whose scene image file on disk differs from the embedded bytes takes the file (project
-  dirty, status bar says it was re-embedded). While open, the image file is watched; a change on disk is
-  re-embedded after 400 ms debounce (retries while the writer holds it), the picture updates. A missing file
-  shows "(not found)" and changes nothing.
+- Opening a project whose scene image file on disk decodes and differs from the embedded bytes asks "The scene
+  image file '<name>' differs from the image embedded in the project. Load the file?" Load file (Enter) embeds
+  it as an undoable edit (project dirty, the run starts over); Keep embedded (Esc) keeps the project as it is
+  and those bytes are not asked about again. While open, the image file is watched; a change on disk is asked
+  about the same way after 400 ms debounce (retries while the writer holds it); one question shows at a time,
+  answering with the file's latest bytes, and a file changed back to the embedded bytes withdraws it. A
+  project that embeds no image takes the file without asking. A missing or undecodable file shows "(not
+  found)" or a warning in the log and changes nothing (divergence: decision 0008, 19).
 - A project without an image path looks for its image by name beside the project file and in a `scene_images`
   folder next to it, and adopts the found path (relative).
 - An image inside the project folder is stored with a relative path.
