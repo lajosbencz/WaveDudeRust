@@ -15,12 +15,15 @@
 //!
 //! Threads: [`RunWorker::set_goal`] and the readers may be called from any thread; `RunWorker::new` runs the work
 //! on one thread, which owns the engine and writes the store. Of a [`RunWorker::pumped`], the only kind on wasm32,
-//! the caller works the run in slices with [`RunWorker::pump`]: a slice ends at its deadline, at a pause, with as
-//! many captures in flight as the engine takes, with as many probe batches in flight as it lets on its way, at probe
-//! readings to be drained whole (before the run idles, pauses or resets) that are not mapped yet, while an engine is
-//! on its way (the old one freed first, as on a thread), while the spill has as many writes in flight as it takes
-//! and while the free storage a new store's spill is checked against is not known yet; the next goes on from the
-//! steps done. Traces and progress are published at heartbeats and at every frame.
+//! the caller works the run in slices with [`RunWorker::pump`]: a slice ends at its deadline or a pause with work
+//! left ([`Pump::Work`]), or it waits ([`Pump::Waiting`], the pump's waker woken once one of these is ready): with
+//! as many captures in flight as the engine takes, with as many probe batches in flight as it lets on its way, at
+//! probe readings to be drained whole (before the run idles, pauses or resets) that are not mapped yet, while an
+//! engine is on its way (the old one freed first, as on a thread), while the engine has no room for a step, while
+//! the spill has as many writes in flight as it takes (a capture read back lands only below them, so the spill's
+//! writes in flight bound the frames written and not done), and while the free storage a new store's spill is
+//! checked against is not known yet; the next goes on from the steps done. Traces and progress are published at
+//! heartbeats and at every frame.
 
 use crate::sync::lock;
 use std::collections::VecDeque;
@@ -29,7 +32,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
-use std::task::{Context, Waker};
+use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
 use web_time::Instant;
@@ -240,6 +243,18 @@ impl Shared {
 	}
 }
 
+/// What a [`RunWorker::pump`] left.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pump {
+	/// Work that goes on at once: the slice ended at its deadline or a pause.
+	Work,
+	/// Work waiting for a readback, the engine, the device, the spill's writes or the free storage; the pump's waker
+	/// is woken once one of them is ready.
+	Waiting,
+	/// Nothing until the next goal: the goal is reached, paused or failed.
+	Idle,
+}
+
 /// The handle; dropping it stops the worker after its current check and joins its thread.
 pub struct RunWorker {
 	shared: Arc<Shared>,
@@ -320,36 +335,48 @@ impl RunWorker {
 	}
 
 	/// Works on the goal for about `budget` (a unit of work interrupted at the deadline has done at least
-	/// [`CHECK_INTERVAL`] steps or reached its end); whether work is left, spill writes in flight included. False
-	/// until the next goal: the goal is reached, paused or failed.
-	pub fn pump(&self, budget: Duration) -> bool {
+	/// [`CHECK_INTERVAL`] steps or reached its end); what is left. An idle run whose spill writes are in flight
+	/// waits for them, and settles those done in the next pump. `waker` is woken once what a [`Pump::Waiting`]
+	/// waits for is ready.
+	pub fn pump(&self, budget: Duration, waker: &Waker) -> Pump {
 		let mut pumped = lock(self.pumped.as_ref().expect("a worker on a thread is not pumped"));
 		let Pumped { worker, failed_at } = &mut *pumped;
 		let deadline = Instant::now() + budget;
 		worker.deadline = Some(deadline);
+		worker.waker = waker.clone();
 		worker.stepped = false;
-		let more = loop {
+		let left = loop {
 			let (goal, number) = {
 				let g = lock(&self.shared.goal);
 				(g.0.clone(), g.1)
 			};
 			if *failed_at == Some(number) {
-				break false;
+				break Pump::Idle;
 			}
 			match worker.serve_caught(&goal, number) {
-				Ok(true) if Instant::now() >= deadline => break true,
+				Ok(true) if Instant::now() >= deadline => break Pump::Work,
 				Ok(true) | Err(Interrupted::Goal) => {}
-				Ok(false) | Err(Interrupted::Stop) => break false,
-				Err(Interrupted::Yield) => break true,
+				Ok(false) | Err(Interrupted::Stop) => break Pump::Idle,
+				Err(Interrupted::Yield) => break Pump::Work,
+				Err(Interrupted::Wait) => break Pump::Waiting,
 				Err(Interrupted::Failed(e)) => {
 					worker.fail(e);
 					*failed_at = Some(number);
-					break false;
+					break Pump::Idle;
 				}
 			}
 		};
 		worker.deadline = None;
-		more || worker.current.as_ref().is_some_and(|c| c.store.spill_writing())
+		worker.waker = Waker::noop().clone();
+		match &worker.current {
+			Some(c) if left == Pump::Idle && c.store.spill_writing() => {
+				match c.store.poll_spill_write(&mut Context::from_waker(waker)) {
+					Poll::Ready(()) => Pump::Work,
+					Poll::Pending => Pump::Waiting,
+				}
+			}
+			_ => left,
+		}
 	}
 
 	/// Replaces the goal; the worker takes it up at its next look.
@@ -440,12 +467,12 @@ enum Frames {
 }
 
 impl Frames {
-	/// A new store can be made now.
-	fn ready(&self) -> bool {
+	/// Ready once a new store can be made; otherwise `cx`'s waker is woken then.
+	fn poll_ready(&self, cx: &mut Context<'_>) -> Poll<()> {
 		match self {
 			#[cfg(not(target_arch = "wasm32"))]
-			Self::Spill(..) => true,
-			Self::Pending { spill, .. } => spill.ready(),
+			Self::Spill(..) => Poll::Ready(()),
+			Self::Pending { spill, .. } => spill.poll_ready(cx),
 		}
 	}
 
@@ -519,8 +546,10 @@ struct Worker {
 	last_beat: Instant,
 	/// The goal number the unit of work started from.
 	goal_seen: u64,
-	/// Set while pumped: the worker yields at this time once it stepped, at a pause and at a readback not mapped.
+	/// Set while pumped: the worker yields at this time once it stepped, and at a pause.
 	deadline: Option<Instant>,
+	/// The pump's, woken once what the worker waits for is ready; a no-op one between pumps and on a thread.
+	waker: Waker,
 	/// A step was done since the pump began.
 	stepped: bool,
 }
@@ -550,6 +579,7 @@ impl Worker {
 			last_beat: Instant::now(),
 			goal_seen: 0,
 			deadline: None,
+			waker: Waker::noop().clone(),
 			stepped: false,
 		}
 	}
@@ -563,7 +593,7 @@ impl Worker {
 				loop {
 					if self.shared.shutdown.load(Ordering::Acquire) {
 						drop(g);
-						let _ = self.finish_pending();
+						let _ = self.finish_pending(false);
 						return;
 					}
 					if failed_at != Some(g.1) {
@@ -573,10 +603,10 @@ impl Worker {
 				}
 			};
 			match self.serve_caught(&goal, number) {
-				Ok(true) | Err(Interrupted::Goal | Interrupted::Yield) => {}
+				Ok(true) | Err(Interrupted::Goal | Interrupted::Yield | Interrupted::Wait) => {}
 				Ok(false) => self.wait_for_change(number),
 				Err(Interrupted::Stop) => {
-					let _ = self.finish_pending();
+					let _ = self.finish_pending(false);
 					return;
 				}
 				Err(Interrupted::Failed(e)) => {
@@ -615,7 +645,7 @@ impl Worker {
 			c.store.settle().map_err(|e| Interrupted::Failed(e.into()))?;
 		}
 		let Some(request) = &goal.run else {
-			self.finish_pending()?;
+			self.finish_pending(false)?;
 			self.publish(WorkState::Idle);
 			return Ok(false);
 		};
@@ -626,14 +656,14 @@ impl Worker {
 		}
 		self.adopt(&spec, goal)?;
 		if self.shared.discard.load(Ordering::Acquire) {
-			if !self.frames.ready() {
-				return Err(Interrupted::Yield);
+			if self.frames.poll_ready(&mut Context::from_waker(&self.waker)).is_pending() {
+				return Err(Interrupted::Wait);
 			}
 			self.discard(goal)?;
 		}
 		self.rebuild_due |= self.shared.rebuild.swap(false, Ordering::AcqRel);
 		if self.rebuild_due {
-			self.finish_pending()?;
+			self.finish_pending(false)?;
 			self.restart_engine(None, &spec)?;
 		}
 		let fit = goal.fit.filter(|f| self.served_fit != Some(f.id));
@@ -646,7 +676,7 @@ impl Worker {
 				self.step_to(t, false)?;
 				return Ok(true);
 			}
-			self.finish_pending()?;
+			self.finish_pending(false)?;
 			let idle = fit.is_none() && target.is_none();
 			self.publish(if idle { WorkState::Idle } else { WorkState::Paused });
 			return Ok(false);
@@ -671,7 +701,7 @@ impl Worker {
 				Ok(true)
 			}
 			None => {
-				self.finish_pending()?;
+				self.finish_pending(false)?;
 				self.publish(WorkState::Idle);
 				Ok(false)
 			}
@@ -700,7 +730,7 @@ impl Worker {
 			let current = self.current.as_mut().expect("same frames means a current spec");
 			current.spec = spec.clone();
 			if !same_probes {
-				self.finish_pending()?;
+				self.finish_pending(false)?;
 				let engine = self.engine.as_mut().expect("an engine goes with the current spec");
 				engine.reset();
 				self.steps_done = 0;
@@ -709,10 +739,10 @@ impl Worker {
 				tracing::debug!(revision = goal.revision, "live run: new probes");
 			}
 		} else {
-			if !self.frames.ready() {
-				return Err(Interrupted::Yield);
+			if self.frames.poll_ready(&mut Context::from_waker(&self.waker)).is_pending() {
+				return Err(Interrupted::Wait);
 			}
-			self.finish_pending()?;
+			self.finish_pending(true)?;
 			let old_spec = self.current.as_ref().map(|c| c.spec.clone());
 			self.reset_engine(old_spec.as_ref(), spec)?;
 			let layout = StoreLayout::of(spec);
@@ -758,7 +788,7 @@ impl Worker {
 			self.shared.discard.store(false, Ordering::Release);
 			return Ok(());
 		}
-		self.finish_pending()?;
+		self.finish_pending(true)?;
 		let Current { spec, store } = self.current.take().expect("checked above");
 		let store = self.new_store(*store.layout(), Some(store), goal.ram_percent);
 		self.shared.discard.store(false, Ordering::Release);
@@ -851,17 +881,17 @@ impl Worker {
 						started: Instant::now(),
 					},
 				};
-				let polled = building.engine.as_mut().poll(&mut Context::from_waker(Waker::noop()));
+				let polled = building.engine.as_mut().poll(&mut Context::from_waker(&self.waker));
 				match polled {
-					std::task::Poll::Ready(mut engine) => {
+					Poll::Ready(mut engine) => {
 						engine.set_track_intensity(spec.options.track_intensity);
 						let ms = building.started.elapsed().as_secs_f64() * 1e3;
 						tracing::debug!(ms, "live run: engine built");
 						Ok(engine)
 					}
-					std::task::Poll::Pending => {
+					Poll::Pending => {
 						self.building = Some(building);
-						Err(Interrupted::Yield)
+						Err(Interrupted::Wait)
 					}
 				}
 			}
@@ -965,29 +995,37 @@ impl Worker {
 	}
 
 	/// Whether stored frame `j` is to be captured: false when it is there or on its way. The captures read back
-	/// land and the store's spill is settled first; then a capture's room is made in the engine's ring, natively
-	/// by landing the oldest. Pumped, a yield until the capture can begin without waiting: the spill has fewer
-	/// writes in flight than it takes and the ring has room.
+	/// land first; then a capture's room is made in the engine's ring, natively by landing the oldest. Pumped, a
+	/// wait until the capture can begin without waiting: the ring has room, its oldest capture read back and landed
+	/// below the spill's writes in flight.
 	fn ready_to_capture(&mut self, j: u32) -> Result<bool, Interrupted> {
 		if self.has_frame(j) {
 			return Ok(false);
 		}
-		self.land_ready()?;
-		if let Some(c) = &self.current {
-			c.store.settle().map_err(|e| Interrupted::Failed(e.into()))?;
-			if self.deadline.is_some() && c.store.spill_busy() {
-				return Err(Interrupted::Yield);
-			}
-		}
+		self.land_ready(false)?;
 		let shape = self.current.as_ref().expect("a capture needs a current spec").spec.shape;
 		let capacity = self.engine.as_ref().expect("an engine goes with the current spec").capture_capacity(&shape);
 		while self.pending.len() >= capacity {
 			if self.deadline.is_some() {
-				return Err(Interrupted::Yield);
+				return Err(self.wait_to_land());
 			}
 			self.land_oldest()?;
 		}
 		Ok(true)
+	}
+
+	/// Pumped, with a capture in flight that [`land_ready`](Self::land_ready) left: the wait for the oldest
+	/// capture's readback, then for the spill's writes, or a yield when it is ready since.
+	fn wait_to_land(&self) -> Interrupted {
+		let cx = &mut Context::from_waker(&self.waker);
+		let Some((_, front)) = self.pending.front() else { return Interrupted::Yield };
+		let mut ready = std::pin::pin!(front.ready()).poll(cx);
+		if ready.is_ready()
+			&& let Some(c) = &self.current
+		{
+			ready = c.store.poll_spill_write(cx);
+		}
+		if ready.is_ready() { Interrupted::Yield } else { Interrupted::Wait }
 	}
 
 	/// Begins the capture of the engine's state as stored frame `j`, which [`ready_to_capture`](Self::ready_to_capture)
@@ -1014,14 +1052,14 @@ impl Worker {
 		self.advance_to(steps, Unit::Fit(fit), WorkState::Fitting, false)?;
 		self.publish_traces();
 		if !self.pending.iter().any(|(c, _)| *c == Capture::Fit(fit)) {
-			self.finish_pending()?;
+			self.finish_pending(false)?;
 			let engine = self.engine.as_mut().expect("an engine goes with the current spec");
 			let half = FrameShape { format: SampleFormat::Half, ..shape };
 			let pending =
 				engine.begin_capture(&half, Snapshot::new(half)).map_err(|e| Interrupted::Failed(e.into()))?;
 			self.pending.push_back((Capture::Fit(fit), pending));
 		}
-		self.finish_pending()
+		self.finish_pending(false)
 	}
 
 	/// Brings the engine to `steps` steps done (from 0 when it has passed them), recording the probes and, with
@@ -1030,7 +1068,7 @@ impl Worker {
 	/// ([`still_wanted`](Self::still_wanted)), else it is left.
 	fn advance_to(&mut self, steps: u32, unit: Unit, state: WorkState, passed: bool) -> Result<(), Interrupted> {
 		if self.steps_done > steps {
-			self.finish_pending()?;
+			self.finish_pending(false)?;
 			let spec = self.current.as_ref().expect("a current spec").spec.clone();
 			self.restart_engine(Some(&spec), &spec)?;
 		}
@@ -1046,6 +1084,10 @@ impl Worker {
 		for i in from..steps {
 			if (i - from).is_multiple_of(CHECK_INTERVAL) {
 				self.check_goal(unit, &state)?;
+			}
+			let engine = self.engine.as_mut().expect("an engine goes with the current spec");
+			if engine.poll_room(&mut Context::from_waker(&self.waker)).is_pending() {
+				return Err(Interrupted::Wait);
 			}
 			// Decided before the step: a capture left after it would cost a run from step 0.
 			let capturing = passed
@@ -1085,10 +1127,10 @@ impl Worker {
 			Some(pending) => pending,
 			None => engine.pending_probes().map_err(|e| Interrupted::Failed(e.into()))?,
 		};
-		if self.deadline.is_some() && !resolved(pending.ready()) {
+		if self.deadline.is_some() && !resolved(pending.ready(), &self.waker) {
 			if whole || pending.batches_in_flight() >= PROBE_BATCHES_IN_FLIGHT {
 				self.probes = Some(pending);
-				return Err(Interrupted::Yield);
+				return Err(Interrupted::Wait);
 			}
 			pending = pending.ready_part();
 		}
@@ -1157,7 +1199,7 @@ impl Worker {
 		if !self.same_spec(&goal) {
 			return Err(Interrupted::Goal);
 		}
-		self.finish_pending()?;
+		self.finish_pending(false)?;
 		self.publish_traces();
 		self.publish(WorkState::Paused);
 		if self.deadline.is_some() {
@@ -1189,12 +1231,13 @@ impl Worker {
 	}
 
 	/// Lands the captures in flight and records the probe readings queued, all of them, into the published
-	/// traces; pumped, those read back, then a yield while any is left.
-	fn finish_pending(&mut self) -> Result<(), Interrupted> {
-		self.land_ready()?;
+	/// traces; pumped, those [`land_ready`](Self::land_ready) lands, then a wait while any is left. `leaving`: the
+	/// store's frames go next.
+	fn finish_pending(&mut self, leaving: bool) -> Result<(), Interrupted> {
+		self.land_ready(leaving)?;
 		while !self.pending.is_empty() {
 			if self.deadline.is_some() {
-				return Err(Interrupted::Yield);
+				return Err(self.wait_to_land());
 			}
 			self.land_oldest()?;
 		}
@@ -1207,20 +1250,41 @@ impl Worker {
 		Ok(())
 	}
 
-	/// Lands the oldest captures for as long as they are read back.
-	fn land_ready(&mut self) -> Result<(), Interrupted> {
-		while self.pending.front().is_some_and(|(_, p)| resolved(p.ready())) {
-			self.land_oldest()?;
+	/// Settles the store's spill and lands the oldest captures for as long as they are read back, a frame only
+	/// while the spill takes a write; `leaving` (the store's frames go next), a frame it does not take is dropped,
+	/// so the frames written are not waited for.
+	fn land_ready(&mut self, leaving: bool) -> Result<(), Interrupted> {
+		if let Some(c) = &self.current {
+			c.store.settle().map_err(|e| Interrupted::Failed(e.into()))?;
+		}
+		while let Some((capture, pending)) = self.pending.front()
+			&& resolved(pending.ready(), &self.waker)
+		{
+			let busy =
+				matches!(capture, Capture::Frame(_)) && self.current.as_ref().is_some_and(|c| c.store.spill_busy());
+			match (busy, leaving) {
+				(false, _) => self.land_oldest()?,
+				(true, true) => drop(self.finish_oldest()?),
+				(true, false) => break,
+			}
 		}
 		Ok(())
 	}
 
 	/// Lands the oldest capture, waiting for it natively.
 	fn land_oldest(&mut self) -> Result<(), Interrupted> {
-		let Some((capture, pending)) = self.pending.pop_front() else { return Ok(()) };
-		let Some(engine) = self.engine.as_mut() else { return Ok(()) };
+		match self.finish_oldest()? {
+			Some((capture, snapshot)) => self.land(capture, snapshot),
+			None => Ok(()),
+		}
+	}
+
+	/// The oldest capture finished, waiting for it natively; none without an engine.
+	fn finish_oldest(&mut self) -> Result<Option<(Capture, Snapshot)>, Interrupted> {
+		let Some((capture, pending)) = self.pending.pop_front() else { return Ok(None) };
+		let Some(engine) = self.engine.as_mut() else { return Ok(None) };
 		let snapshot = engine.finish_capture(pending).map_err(|e| Interrupted::Failed(e.into()))?;
-		self.land(capture, snapshot)
+		Ok(Some((capture, snapshot)))
 	}
 
 	/// A finished capture into the store, or out as the fit frame.
@@ -1312,9 +1376,9 @@ enum Capture {
 	Fit(FitRequest),
 }
 
-/// Whether `ready` resolved, polled once.
-fn resolved(ready: impl Future<Output = ()>) -> bool {
-	std::pin::pin!(ready).poll(&mut Context::from_waker(Waker::noop())).is_ready()
+/// Whether `ready` resolved, polled once with `waker`.
+fn resolved(ready: impl Future<Output = ()>, waker: &Waker) -> bool {
+	std::pin::pin!(ready).poll(&mut Context::from_waker(waker)).is_ready()
 }
 
 /// A unit of work, for [`Worker::still_wanted`].
@@ -1330,9 +1394,11 @@ enum Interrupted {
 	Stop,
 	/// The goal changed and the unit is no longer wanted.
 	Goal,
-	/// Pumped: the deadline passed, the goal paused, a readback is not mapped yet, the spill is busy or the free
-	/// storage not known yet; the next pump goes on.
+	/// Pumped: the deadline passed or the goal paused; the next pump goes on at once.
 	Yield,
+	/// Pumped: a readback is not mapped yet, the engine is on its way or has no room for a step, the spill is busy
+	/// or the free storage not known yet; the pump's waker is woken once one is ready.
+	Wait,
 	Failed(RunError),
 }
 
@@ -1459,6 +1525,11 @@ mod tests {
 	/// Long enough for any of these runs: a pump given it ends with its goal.
 	const AMPLE: Duration = Duration::from_secs(60);
 
+	/// A pump whose waits wake no one: the tests open the gates and complete the spill's operations between pumps.
+	fn pump(w: &RunWorker, budget: Duration) -> Pump {
+		w.pump(budget, Waker::noop())
+	}
+
 	fn cpu() -> PumpedFactory {
 		Box::new(|scene, options| -> EngineFuture {
 			Box::pin(async move { Box::new(CpuEngine::new(scene, options)) as Box<dyn WaveEngine> })
@@ -1479,13 +1550,13 @@ mod tests {
 			let mut args = Some((scene, options));
 			Box::pin(std::future::poll_fn(move |_| {
 				if !gate.0.load(Ordering::Acquire) {
-					return std::task::Poll::Pending;
+					return Poll::Pending;
 				}
 				let (scene, options) = args.take().expect("polled once ready");
 				let open = || Arc::new(Gate(AtomicBool::new(true)));
 				let inner = Box::new(CpuEngine::new(scene, options));
 				let engine = Gated::new(inner, open(), open(), Some(live.clone()));
-				std::task::Poll::Ready(Box::new(engine) as Box<dyn WaveEngine>)
+				Poll::Ready(Box::new(engine) as Box<dyn WaveEngine>)
 			}))
 		})
 	}
@@ -1497,7 +1568,7 @@ mod tests {
 		let gate_to = |open: bool| {
 			gate.0.store(open, Ordering::Release);
 			if open {
-				while w.pump(AMPLE) {}
+				while pump(&w, AMPLE) != Pump::Idle {}
 			}
 		};
 		// As natively, where the build is within one unit of work: the state published last stands (a store
@@ -1507,7 +1578,7 @@ mod tests {
 			let before = seen(w.status());
 			w.set_goal(goal);
 			for _ in 0..3 {
-				assert!(w.pump(AMPLE), "{why} waits for its engine");
+				assert_eq!(pump(&w, AMPLE), Pump::Waiting, "{why} waits for its engine");
 				assert_eq!(live.now.load(Ordering::Acquire), 0, "{why}: the old engine is freed first");
 				assert_eq!(seen(w.status()), before, "{why}: the status stands");
 			}
@@ -1537,7 +1608,7 @@ mod tests {
 		gate_to(true);
 		assert_eq!((w.status().adopted, w.status().state), (4, WorkState::Paused));
 		w.set_goal(back);
-		while w.pump(AMPLE) {}
+		while pump(&w, AMPLE) != Pump::Idle {}
 		assert_eq!((w.status().adopted, w.status().state), (4, WorkState::Idle));
 		assert_as_threaded(&w, &edited);
 		assert_eq!(live.peak.load(Ordering::Acquire), 1, "never two engines at once");
@@ -1550,7 +1621,7 @@ mod tests {
 	}
 
 	fn pumped_to_the_end(w: &RunWorker) {
-		while w.pump(Duration::ZERO) {}
+		while pump(w, Duration::ZERO) != Pump::Idle {}
 	}
 
 	#[test]
@@ -1560,12 +1631,12 @@ mod tests {
 		let last = RunRequest::new(&p, PreviewQuality::FULL, false).spec(&mut SceneCache::default()).unwrap();
 		let position = last.frame_count() - 1;
 		w.set_goal(Goal { position, wanted: Wanted::Position, ..goal(1, &p) });
-		assert!(w.pump(Duration::ZERO), "the deadline passed with the frame unmade");
+		assert_eq!(pump(&w, Duration::ZERO), Pump::Work, "the deadline passed with the frame unmade");
 		assert_eq!(w.status().steps_done, CHECK_INTERVAL, "one check interval, then the deadline");
 		assert_eq!(w.status().state, WorkState::Stepping { target: last.stored_index_of(position) });
-		assert!(w.pump(Duration::ZERO));
+		assert_eq!(pump(&w, Duration::ZERO), Pump::Work);
 		assert_eq!(w.status().steps_done, 2 * CHECK_INTERVAL);
-		assert!(!w.pump(AMPLE), "the goal is reached");
+		assert_eq!(pump(&w, AMPLE), Pump::Idle, "the goal is reached");
 		let done = w.status();
 		assert_eq!((done.state, done.steps_done), (WorkState::Idle, last.step_of(position) + 1));
 		assert!(done.store.unwrap().has(last.stored_index_of(position) as usize));
@@ -1604,13 +1675,13 @@ mod tests {
 		let w = RunWorker::pumped(cpu(), GIB, ample(), Arc::default());
 		let running = goal(1, &long(400));
 		w.set_goal(running.clone());
-		assert!(w.pump(Duration::ZERO));
+		assert_eq!(pump(&w, Duration::ZERO), Pump::Work);
 		w.set_goal(Goal { paused: true, ..running.clone() });
-		assert!(!w.pump(AMPLE));
+		assert_eq!(pump(&w, AMPLE), Pump::Idle);
 		let paused = w.status();
 		assert_eq!(paused.state, WorkState::Paused);
 		w.set_goal(running);
-		assert!(w.pump(Duration::ZERO));
+		assert_eq!(pump(&w, Duration::ZERO), Pump::Work);
 		assert!(w.status().steps_done > paused.steps_done);
 		pumped_to_the_end(&w);
 		assert!(w.store().unwrap().is_complete());
@@ -1664,7 +1735,7 @@ mod tests {
 
 	/// Pumps to the end, completing the spill's operations after each pump.
 	fn pumped_with_spill(w: &RunWorker, disk: &Mutex<fake::Disk>) {
-		while w.pump(AMPLE) {
+		while pump(w, AMPLE) != Pump::Idle {
 			lock(disk).complete();
 		}
 	}
@@ -1728,21 +1799,21 @@ mod tests {
 	}
 
 	#[test]
-	fn a_busy_spill_yields_before_the_capture_until_its_writes_complete() {
+	fn a_busy_spill_holds_the_captures_read_back_until_its_writes_complete() {
 		let p = long(40);
 		let factory = fake::Factory::ample();
 		let disk = factory.disk.clone();
 		let w = RunWorker::pumped(cpu(), 0, Box::new(factory), Arc::default());
 		w.set_goal(goal(1, &p));
-		assert!(w.pump(AMPLE));
+		assert_eq!(pump(&w, AMPLE), Pump::Waiting);
 		let (steps, writes) = (w.status().steps_done, lock(&disk).writes.len());
 		assert!(writes >= WRITES_IN_FLIGHT, "{writes} writes in flight");
 		for _ in 0..3 {
-			assert!(w.pump(AMPLE), "the run waits for its writes");
+			assert_eq!(pump(&w, AMPLE), Pump::Waiting, "the run waits for its writes");
 			assert_eq!((w.status().steps_done, lock(&disk).writes.len()), (steps, writes));
 		}
 		let mut done = steps;
-		while w.pump(AMPLE) {
+		while pump(&w, AMPLE) != Pump::Idle {
 			lock(&disk).complete();
 			let now = w.status().steps_done;
 			assert!(now >= done, "no capture was left behind for a run from step 0");
@@ -1760,7 +1831,7 @@ mod tests {
 		let factory = fake::Factory { free: frame, ..fake::Factory::ample() };
 		let w = RunWorker::pumped(cpu(), 3 * frame, Box::new(factory), Arc::default());
 		w.set_goal(goal(1, &p));
-		assert!(!w.pump(AMPLE));
+		assert_eq!(pump(&w, AMPLE), Pump::Idle);
 		let WorkState::Failed(e) = w.status().state else { panic!("the frames past memory do not fit") };
 		let RunError::Store(StoreError::Io(io)) = &*e else { panic!("{e}") };
 		assert_eq!(io.kind(), std::io::ErrorKind::StorageFull);
@@ -1775,7 +1846,7 @@ mod tests {
 		let w = RunWorker::pumped(cpu(), GIB, Box::new(factory), Arc::default());
 		w.set_goal(goal(1, &p));
 		for _ in 0..3 {
-			assert!(w.pump(AMPLE));
+			assert_eq!(pump(&w, AMPLE), Pump::Waiting);
 			assert!(w.store().is_none());
 		}
 		ready.store(true, Ordering::Release);
@@ -1854,8 +1925,8 @@ mod tests {
 	struct Gate(AtomicBool);
 
 	impl crate::sync::Readiness for Gate {
-		fn poll_ready(&self, _: &mut Context<'_>) -> std::task::Poll<()> {
-			if self.0.load(Ordering::Acquire) { std::task::Poll::Ready(()) } else { std::task::Poll::Pending }
+		fn poll_ready(&self, _: &mut Context<'_>) -> Poll<()> {
+			if self.0.load(Ordering::Acquire) { Poll::Ready(()) } else { Poll::Pending }
 		}
 	}
 
@@ -1920,7 +1991,7 @@ mod tests {
 			pending: PendingProbes,
 			f: &mut dyn FnMut(&crate::engine::ProbeReadings),
 		) -> Result<(), crate::engine::EngineError> {
-			assert!(resolved(pending.ready()), "drained before mapped");
+			assert!(resolved(pending.ready(), Waker::noop()), "drained before mapped");
 			let end = pending.end();
 			self.inner.drain_probes(pending, f)?;
 			self.drained = self.drained.max(end);
@@ -1948,7 +2019,7 @@ mod tests {
 			self.capacity
 		}
 		fn finish_capture(&mut self, pending: PendingCapture) -> Result<Snapshot, crate::engine::EngineError> {
-			assert!(resolved(pending.ready()), "finished before mapped");
+			assert!(resolved(pending.ready(), Waker::noop()), "finished before mapped");
 			self.inner.finish_capture(pending)
 		}
 		fn prepare_frame(&mut self) -> Result<(Vec<f32>, Vec<f32>), crate::engine::EngineError> {
@@ -1971,13 +2042,13 @@ mod tests {
 		w.set_goal(Goal { fit: Some(FitRequest { id: 7, frame: 10 }), ..goal(1, &long(40)) });
 		for gate in [&probes, &captures] {
 			for _ in 0..3 {
-				assert!(w.pump(AMPLE), "waits for the gate without failing");
+				assert_eq!(pump(&w, AMPLE), Pump::Waiting, "waits for the gate without failing");
 			}
 			assert!(w.take_fit().is_none());
 			assert_eq!(w.store().unwrap().present_count(), 0);
 			gate.0.store(true, Ordering::Release);
 		}
-		assert!(!w.pump(AMPLE));
+		assert_eq!(pump(&w, AMPLE), Pump::Idle);
 		assert_eq!(w.take_fit().map(|f| (f.id, f.frame)), Some((7, 10)));
 		assert!(w.store().unwrap().is_complete());
 		assert_eq!(w.status().traces_steps, 40);
@@ -1997,13 +2068,13 @@ mod tests {
 		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
 		let run = goal(1, &long(40));
 		w.set_goal(run.clone());
-		assert!(w.pump(AMPLE) && w.pump(AMPLE), "frame 0's capture is in flight");
+		assert_eq!([pump(&w, AMPLE), pump(&w, AMPLE)], [Pump::Waiting; 2], "frame 0's capture is in flight");
 		let old = Arc::downgrade(&w.store().unwrap());
 		w.discard_frames();
 		w.set_goal(Goal { wanted: Wanted::Position, ..run });
-		assert!(w.pump(AMPLE), "the discard waits for the capture");
+		assert_eq!(pump(&w, AMPLE), Pump::Waiting, "the discard waits for the capture");
 		captures.0.store(true, Ordering::Release);
-		while w.pump(AMPLE) {}
+		while pump(&w, AMPLE) != Pump::Idle {}
 		assert!(old.upgrade().is_none(), "the discard was not lost to the yield");
 		assert_eq!(w.store().unwrap().present_count(), 1);
 	}
@@ -2023,11 +2094,11 @@ mod tests {
 		let run = goal(1, &long(40));
 		w.set_goal(Goal { fit: Some(FitRequest { id: 7, frame: 10 }), ..run.clone() });
 		for _ in 0..3 {
-			assert!(w.pump(AMPLE));
+			assert_eq!(pump(&w, AMPLE), Pump::Waiting);
 		}
 		w.set_goal(run);
 		captures.0.store(true, Ordering::Release);
-		while w.pump(AMPLE) {}
+		while pump(&w, AMPLE) != Pump::Idle {}
 		assert!(w.take_fit().is_none());
 	}
 
@@ -2052,7 +2123,7 @@ mod tests {
 		w.set_goal(Goal { position, ..goal(1, &p) });
 		let mut last = 0;
 		let mut seen = false;
-		while w.pump(AMPLE) {
+		while pump(&w, AMPLE) != Pump::Idle {
 			// As WebGPU's mapAsync: a readback maps after the pump that began it returned.
 			for gate in lock(&issued).drain(..) {
 				gate.0.store(true, Ordering::Release);
@@ -2086,15 +2157,53 @@ mod tests {
 		let mut p = long(400);
 		p.probes.clear();
 		w.set_goal(goal(1, &p));
-		assert!(w.pump(AMPLE));
+		assert_eq!(pump(&w, AMPLE), Pump::Waiting);
 		assert_eq!(lock(&issued).len(), 4, "the ring is full, then the pump yields");
 		assert_eq!(w.store().unwrap().present_count(), 0);
 		for gate in lock(&issued).iter() {
 			gate.0.store(true, Ordering::Release);
 		}
-		assert!(w.pump(AMPLE));
+		assert_eq!(pump(&w, AMPLE), Pump::Waiting);
 		assert_eq!(w.store().unwrap().present_count(), 4, "the captures read back land in one pump");
 		assert_eq!(lock(&issued).len(), 8);
+	}
+
+	#[test]
+	fn a_full_capture_ring_lands_no_more_frames_than_the_spill_writes() {
+		let issued: Arc<Mutex<Vec<Arc<Gate>>>> = Arc::default();
+		let factory: PumpedFactory = {
+			let issued = issued.clone();
+			Box::new(move |scene, options| -> EngineFuture {
+				let inner = Box::new(CpuEngine::new(scene, options));
+				let mut engine = Gated::new(inner, Arc::new(Gate(AtomicBool::new(true))), Arc::default(), None);
+				engine.each_capture = Some(issued.clone());
+				engine.capacity = 2 * WRITES_IN_FLIGHT;
+				Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
+			})
+		};
+		let spill = fake::Factory::ample();
+		let disk = spill.disk.clone();
+		let w = RunWorker::pumped(factory, 0, Box::new(spill), Arc::default());
+		let mut p = long(400);
+		p.probes.clear();
+		w.set_goal(goal(1, &p));
+		for _ in 0..4 {
+			assert_eq!(pump(&w, AMPLE), Pump::Waiting);
+			for gate in lock(&issued).drain(..) {
+				gate.0.store(true, Ordering::Release);
+			}
+			assert!(lock(&disk).writes.len() <= WRITES_IN_FLIGHT, "{} writes", lock(&disk).writes.len());
+		}
+		assert_eq!(lock(&disk).writes.len(), WRITES_IN_FLIGHT, "the mapped captures wait for the writes");
+		assert_eq!(w.store().unwrap().present_count(), WRITES_IN_FLIGHT);
+		while pump(&w, AMPLE) != Pump::Idle {
+			for gate in lock(&issued).drain(..) {
+				gate.0.store(true, Ordering::Release);
+			}
+			assert!(lock(&disk).writes.len() <= WRITES_IN_FLIGHT);
+			lock(&disk).complete();
+		}
+		assert!(w.store().unwrap().is_complete());
 	}
 
 	#[test]
@@ -2113,12 +2222,12 @@ mod tests {
 		let spec = RunRequest::new(&p, PreviewQuality::FULL, false).spec(&mut SceneCache::default()).unwrap();
 		let position = spec.frame_count() - 1;
 		w.set_goal(Goal { position, wanted: Wanted::Position, ..goal(1, &p) });
-		assert!(w.pump(AMPLE));
+		assert_eq!(pump(&w, AMPLE), Pump::Waiting);
 		let status = w.status();
 		assert!(status.steps_done > PROBE_DRAIN, "stepped past a drain in one pump: {}", status.steps_done);
 		assert_eq!(status.traces_steps, 0, "the target's readings are not read back yet");
 		probes.0.store(true, Ordering::Release);
-		assert!(!w.pump(AMPLE));
+		assert_eq!(pump(&w, AMPLE), Pump::Idle);
 		assert_eq!(w.status().traces_steps, spec.step_of(position) + 1);
 		assert!(w.store().unwrap().has(spec.stored_index_of(position) as usize));
 	}
@@ -2142,7 +2251,7 @@ mod tests {
 	fn pump_mapped(w: &RunWorker, issued: &Mutex<Vec<Arc<Gate>>>, limit: usize) -> usize {
 		let mut last = (w.status().adopted, w.status().steps_done);
 		for pumps in 0..limit {
-			let more = w.pump(AMPLE);
+			let more = pump(w, AMPLE) != Pump::Idle;
 			for gate in lock(issued).drain(..) {
 				gate.0.store(true, Ordering::Release);
 			}

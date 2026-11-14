@@ -12,6 +12,7 @@ use std::cell::OnceCell;
 use std::collections::BTreeSet;
 use std::io;
 use std::sync::Mutex;
+use std::task::{Context, Poll};
 
 use js_sys::{Promise, Reflect, Uint8Array};
 use wasm_bindgen_futures::{JsFuture, spawn_local};
@@ -57,8 +58,8 @@ impl Opfs {
 }
 
 impl SpillFactory for Opfs {
-	fn ready(&self) -> bool {
-		self.free.is_done()
+	fn poll_ready(&self, cx: &mut Context<'_>) -> Poll<()> {
+		self.free.poll_done(cx)
 	}
 
 	fn open(&self, store: u64, _layout: &StoreLayout, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {

@@ -1,7 +1,7 @@
 # 0020: The browser spills frames past memory to the origin private file system
 
-Status: accepted, 2026-11-13. Amends [0015](0015-core-builds-for-wasm.md): on wasm32 a store keeps the frames past
-its memory budget, as natively, instead of refusing them.
+Status: accepted, 2026-11-13; writes in flight changed 2026-11-14. Amends [0015](0015-core-builds-for-wasm.md): on
+wasm32 a store keeps the frames past its memory budget, as natively, instead of refusing them.
 
 ## Context
 
@@ -40,3 +40,15 @@ asynchronous too and ask more of the user or the code.
   `web_sys_unstable_apis` for wasm32.
 - A browser without OPFS or `createWritable` runs what fits in memory and fails a run that would spill.
 - The export, hidden in the browser, would see spilled frames as pending.
+
+## Writes in flight (added 2026-11-14)
+
+The run worker of [0024](0024-browser-run-in-a-web-worker.md) posts every frame to the page, which acknowledges it
+once its mirror holds it. A capture read back lands only below 16 writes in flight (the GPU engine's largest capture
+ring), so at most 16 frames are posted and not acknowledged; at 4 the ring starved and a run took twice as long
+([`docs/measurements.md`](../measurements.md), The browser's live run in a worker).
+
+Those frames are held past the memory budget until written: 16 x width x height x bytes per sample (2 for f16, 1 for a
+palette index) x planes (2 with the intensity), in the worker until acknowledged and as many in the page's OPFS writes.
+A 1920x1080 preview of f16 samples with the intensity is 8.3 MB a frame, 133 MB for 16; at 3840x2160, 33 MB and
+531 MB.

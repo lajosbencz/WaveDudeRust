@@ -5550,7 +5550,6 @@ dependencies = [
 name = "wavedude-run-worker"
 version = "0.3.0"
 dependencies = [
- "js-sys",
  "tracing",
  "tracing-subscriber",
  "tracing-web",

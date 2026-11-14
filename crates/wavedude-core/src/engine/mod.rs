@@ -21,6 +21,7 @@ pub mod types;
 pub use types::*;
 
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use crate::sync::MaybeSend;
 
@@ -56,6 +57,11 @@ pub trait WaveEngine: MaybeSend {
 	fn try_replace_scene(&mut self, scene: &Arc<SceneData>) -> bool;
 	/// Tracks the intensity from the next reset on, or stops.
 	fn set_track_intensity(&mut self, on: bool);
+	/// Ready when a step can be taken without waiting for the device; otherwise `cx`'s waker is woken once it
+	/// can. A step taken before may wait (natively) or queue past the engine's pacing (wasm32).
+	fn poll_room(&mut self, _cx: &mut Context<'_>) -> Poll<()> {
+		Poll::Ready(())
+	}
 	fn advance_one_step(&mut self) -> Result<(), EngineError>;
 	/// Reads the probe cells after the last step, at once.
 	fn sample_probes(&mut self, out: &mut ProbeReadings) -> Result<(), EngineError>;

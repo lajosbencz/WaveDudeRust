@@ -467,8 +467,8 @@ fn the_live_run_makes_the_batch_runs_frames_the_positions_first() {
 struct NoSpill;
 
 impl SpillFactory for NoSpill {
-	fn ready(&self) -> bool {
-		true
+	fn poll_ready(&self, _: &mut std::task::Context<'_>) -> std::task::Poll<()> {
+		std::task::Poll::Ready(())
 	}
 
 	fn open(&self, _store: u64, _layout: &StoreLayout, _bytes: u64) -> std::io::Result<Box<dyn SpillBackend>> {
@@ -486,7 +486,7 @@ fn a_pumped_live_run_makes_the_batch_runs_frames() {
 	});
 	let w = RunWorker::pumped(start, GIB, Box::new(NoSpill), Arc::default());
 	w.set_goal(goal(&request(&p, PreviewQuality::FULL), 0, Wanted::All));
-	while w.pump(Duration::from_millis(50)) {}
+	while w.pump(Duration::from_millis(50), std::task::Waker::noop()) != Pump::Idle {}
 	assert_eq!(w.status().state, WorkState::Idle);
 	let st = w.store().unwrap();
 	assert!(st.is_complete());

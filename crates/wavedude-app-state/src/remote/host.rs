@@ -6,12 +6,13 @@ use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
 
 use wavedude_core::engine::{Built, GpuHandle, build_on};
 use wavedude_core::model::Project;
 use wavedude_core::run::{
-	EngineFuture, Goal, PumpedFactory, RunError, RunWorker, SpillBackend, SpillFactory, Status, StoreLayout, Token,
-	WorkState,
+	EngineFuture, Goal, Pump, PumpedFactory, RunError, RunWorker, SpillBackend, SpillFactory, Status, StoreLayout,
+	Token, WorkState,
 };
 use wavedude_core::sync::lock;
 
@@ -36,8 +37,8 @@ enum Item {
 struct PostSpill(Arc<Mutex<Queue>>);
 
 impl SpillFactory for PostSpill {
-	fn ready(&self) -> bool {
-		true
+	fn poll_ready(&self, _: &mut Context<'_>) -> Poll<()> {
+		Poll::Ready(())
 	}
 
 	/// Never refused: the page's mirror holds the frames, and refuses them when they do not fit.
@@ -120,15 +121,16 @@ impl<P: Port> Host<P> {
 		}
 	}
 
-	/// Handles the messages waiting, works on the goal for about `budget` and posts what the run made; whether
-	/// work is left ([`RunWorker::pump`]).
-	pub fn pump(&mut self, budget: Duration) -> bool {
+	/// Handles the messages waiting, works on the goal for about `budget` and posts what the run made; what is
+	/// left, `waker` woken once what it waits for is ready ([`RunWorker::pump`]). An acknowledgement arrives as a
+	/// message.
+	pub fn pump(&mut self, budget: Duration, waker: &Waker) -> Pump {
 		while let Some(envelope) = self.port.receive() {
 			self.handle(envelope);
 		}
-		let more = self.worker.pump(budget);
-		self.post_made(more);
-		more
+		let left = self.worker.pump(budget, waker);
+		self.post_made(left != Pump::Idle);
+		left
 	}
 
 	/// Frames written and not acknowledged by the page, posted or not.

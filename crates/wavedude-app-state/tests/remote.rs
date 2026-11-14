@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 use wavedude_app_state::live::{Backend, LiveController, LiveSettings, Notice, engine_label};
@@ -15,7 +16,7 @@ use wavedude_core::engine::{GpuHandle, WaveEngine};
 use wavedude_core::model::{Layer, Probe, ProbeKind, Project, SceneMode, Source};
 use wavedude_core::quality::PreviewQuality;
 use wavedude_core::run::{
-	EngineFuture, FrameStore, Goal, PumpedFactory, RunError, RunWorker, SpillBackend, SpillFactory, StoreError,
+	EngineFuture, FrameStore, Goal, Pump, PumpedFactory, RunError, RunWorker, SpillBackend, SpillFactory, StoreError,
 	StoreLayout, Token, WRITES_IN_FLIGHT, Wanted, WorkState,
 };
 use wavedude_core::spec::{RunRequest, RunSpec, RunSpecError};
@@ -67,7 +68,7 @@ fn connect_on(
 fn drive(remote: &mut Remote<Loopback>, host: &mut Host<Loopback>, mut done: impl FnMut(&Remote<Loopback>) -> bool) {
 	let deadline = Instant::now() + Duration::from_secs(60);
 	loop {
-		host.pump(SLICE);
+		host.pump(SLICE, Waker::noop());
 		remote.pump();
 		if done(remote) {
 			return;
@@ -91,7 +92,7 @@ fn direct(p: &Project, wanted: Wanted) -> RunWorker {
 	});
 	let w = RunWorker::pumped(start, GIB, Box::new(Spill::default()), Arc::default());
 	w.set_goal(goal(p, 1, wanted));
-	while w.pump(SLICE) {}
+	while w.pump(SLICE, Waker::noop()) != Pump::Idle {}
 	w
 }
 
@@ -163,8 +164,8 @@ impl Default for Spill {
 }
 
 impl SpillFactory for Spill {
-	fn ready(&self) -> bool {
-		self.ready.load(Ordering::Relaxed)
+	fn poll_ready(&self, _: &mut Context<'_>) -> Poll<()> {
+		if self.ready.load(Ordering::Relaxed) { Poll::Ready(()) } else { Poll::Pending }
 	}
 
 	fn open(&self, store: u64, _layout: &StoreLayout, _bytes: u64) -> io::Result<Box<dyn SpillBackend>> {
@@ -208,7 +209,7 @@ fn the_frames_and_traces_reach_the_page_as_a_direct_run_makes_them() {
 	same_frames(&remote.status().store.unwrap(), &w.store().unwrap(), &Arc::default());
 	assert_eq!(traces(&remote), w.with_traces(<[ProbeTrace]>::to_vec));
 	assert_eq!(remote.status().steps_done, w.status().steps_done);
-	host.pump(SLICE);
+	host.pump(SLICE, Waker::noop());
 	assert_eq!(host.frames_in_flight(), 0, "every frame acknowledged");
 }
 
@@ -221,7 +222,7 @@ fn a_mirror_past_its_memory_spills_and_acknowledges_a_frame_once_written() {
 	let (mut remote, mut host) = connect(2 * layout.frame_bytes() as u64, Box::new(spill));
 	remote.set_goal(goal(&p, 1, Wanted::All));
 	for _ in 0..50 {
-		host.pump(SLICE);
+		host.pump(SLICE, Waker::noop());
 		remote.pump();
 		assert!(host.frames_in_flight() <= WRITES_IN_FLIGHT);
 	}
@@ -238,7 +239,7 @@ fn a_mirror_past_its_memory_spills_and_acknowledges_a_frame_once_written() {
 	while host.frames_in_flight() > 0 {
 		lock(&disk).complete();
 		remote.pump();
-		host.pump(SLICE);
+		host.pump(SLICE, Waker::noop());
 	}
 	let mirror = remote.status().store.unwrap();
 	assert_eq!((mirror.frames_in_memory(), mirror.frames_on_disk()), (2, layout.capacity - 2));
@@ -250,10 +251,11 @@ fn the_worker_is_never_more_than_the_spills_writes_ahead_of_the_page() {
 	let (mut remote, mut host) = connect(GIB, Box::new(Spill::default()));
 	remote.set_goal(goal(&project(60), 1, Wanted::All));
 	for _ in 0..100 {
-		host.pump(SLICE);
+		assert_ne!(host.pump(SLICE, Waker::noop()), Pump::Idle);
 		assert!(host.frames_in_flight() <= WRITES_IN_FLIGHT);
 	}
 	assert_eq!(host.frames_in_flight(), WRITES_IN_FLIGHT, "without acknowledgements the run waits");
+	assert_eq!(host.pump(SLICE, Waker::noop()), Pump::Waiting, "for the acknowledgements, not working");
 	drive(&mut remote, &mut host, finished(1));
 }
 
@@ -303,7 +305,7 @@ fn a_scene_without_its_image_fails_as_one_and_an_image_crosses_with_its_goal() {
 	let deadline = Instant::now() + Duration::from_secs(60);
 	let failed = loop {
 		c.tick(Instant::now(), &p);
-		host.pump(SLICE);
+		host.pump(SLICE, Waker::noop());
 		if let Some(n) = c.take_notices().into_iter().find(|n| matches!(n, Notice::RunFailed { .. })) {
 			break n;
 		}
@@ -336,7 +338,7 @@ fn the_engine_built_and_why_the_gpu_fell_back_reach_the_page() {
 /// Pumps both ends `n` times, the page's spill writes left in flight.
 fn stall(remote: &mut Remote<Loopback>, host: &mut Host<Loopback>, n: usize) {
 	for _ in 0..n {
-		host.pump(SLICE);
+		host.pump(SLICE, Waker::noop());
 		remote.pump();
 		assert!(host.frames_in_flight() <= WRITES_IN_FLIGHT);
 	}
@@ -380,7 +382,7 @@ fn spill_writes_stuck_in_a_generation_or_store_left_do_not_hold_the_worker() {
 		}
 		lock(&disk).complete();
 		remote.pump();
-		host.pump(SLICE);
+		host.pump(SLICE, Waker::noop());
 	}
 	assert_eq!(host.frames_in_flight(), 0, "every frame acknowledged or released");
 	assert_eq!(lock(&disk).writes.len(), 2 * WRITES_IN_FLIGHT, "the stuck writes are still in flight");

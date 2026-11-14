@@ -8,8 +8,12 @@
 //! queue, which wgpu serialises. Software adapters, and adapters without compute shaders, are refused: the CPU
 //! engine is faster or the only one.
 
+use crate::sync::Notify;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::sync::lock;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Mutex;
 
 /// Why no GPU engine can be built, or why a GPU engine failed.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -48,13 +52,18 @@ pub struct GpuContext {
 	pub device: wgpu::Device,
 	pub queue: wgpu::Queue,
 	/// Set by the device-lost callback.
-	lost: Arc<Mutex<Option<GpuError>>>,
+	lost: Arc<Notify<GpuError>>,
 }
 
 impl GpuContext {
 	/// The loss of the device, once it happened.
 	pub fn lost(&self) -> Option<GpuError> {
-		lock(&self.lost).clone()
+		self.lost.get().cloned()
+	}
+
+	/// Set by the device-lost callback, which wakes its waiters.
+	pub(crate) fn lost_notify(&self) -> Arc<Notify<GpuError>> {
+		self.lost.clone()
 	}
 
 	/// Requests the adapter and the device.
@@ -88,12 +97,10 @@ impl GpuContext {
 	) -> Result<Arc<Self>, GpuError> {
 		let info = usable(adapter)?;
 		let limits = device.limits();
-		let lost = Arc::new(Mutex::new(None));
+		let lost = Arc::<Notify<GpuError>>::default();
 		{
 			let lost = lost.clone();
-			device.set_device_lost_callback(move |reason, message| {
-				*lock(&lost) = Some(GpuError::Lost { reason, message });
-			});
+			device.set_device_lost_callback(move |reason, message| lost.set(GpuError::Lost { reason, message }));
 		}
 		tracing::info!(
 			adapter = %info.name,
@@ -149,4 +156,38 @@ pub fn context() -> Result<Arc<GpuContext>, GpuError> {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn set_context(ctx: Arc<GpuContext>) {
 	*lock(&CONTEXT) = Some(Ok(ctx));
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+	use super::*;
+	use crate::sync::Readiness;
+	use std::sync::atomic::{AtomicBool, Ordering};
+	use std::task::{Context, Wake, Waker};
+
+	struct Woken(AtomicBool);
+
+	impl Wake for Woken {
+		fn wake(self: Arc<Self>) {
+			self.0.store(true, Ordering::SeqCst);
+		}
+	}
+
+	#[test]
+	fn a_lost_device_wakes_its_waiters() {
+		let ctx = match pollster::block_on(GpuContext::create()) {
+			Ok(ctx) => ctx,
+			Err(e) => {
+				eprintln!("skipped: {e}");
+				return;
+			}
+		};
+		let woken = Arc::new(Woken(AtomicBool::new(false)));
+		let waker = Waker::from(woken.clone());
+		assert!(ctx.lost_notify().poll_ready(&mut Context::from_waker(&waker)).is_pending());
+		ctx.device.destroy();
+		ctx.device.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
+		assert!(woken.0.load(Ordering::SeqCst));
+		assert!(matches!(ctx.lost(), Some(GpuError::Lost { reason: wgpu::DeviceLostReason::Destroyed, .. })));
+	}
 }

@@ -182,6 +182,7 @@ cells the Mur ring reflects almost everything; the default quadratic rim (32 px)
 | SetProbes(sampler) | sets the probe cell lists |
 | TryReplaceScene(scene) | same grid size, edges and image-source count: swaps c2/d/source tables in place, re-derives sub-steps; else returns false (caller rebuilds) |
 | AdvanceOneStep | as above |
+| PollRoom | Rust: ready when a step can be taken without waiting for the device. Steps go to the card in submissions of up to 32, at most 2 queued ahead of it: natively a submission waits for the oldest beyond them, so it is always ready; the GPU engine on wasm32 is pending while 2 are on the card, woken as one is done (`on_submitted_work_done`) or the device is lost, which the step then reports; a readback waited for is ready on a loss too |
 | SampleProbes | reads probe cells after the step (field or blended intensity), at once |
 | QueueProbes / PendingProbes / DrainProbes | queues that reading per step; PendingProbes returns a token covering the readings queued so far, and drain takes it and hands those readings out in order. A reading queued after the token was taken stays for a later token's drain; one dropped by a reset or new probes is never handed out. The GPU engine copies each step's readings into a batch buffer and a full batch (32 steps) to a readback buffer, so recording probes keeps the step batching; at each full batch it collects the copies already mapped, and natively waits for the rest. PendingProbes copies the partial batch too; its `ready()` resolves when every copy it covers is mapped (at once on the CPU). Natively drain waits for the copies its token covers; on wasm32 the copies not mapped yet stay in flight, and a drain before `ready()` resolves fails (NotReady) |
 | CaptureFrame(shape, snapshot) | converts field and/or intensity of the canvas (not the rim) into planes of `FrameShape` (see 40). Rust: begun and finished apart, the engine stepping on between; up to the engine's capture capacity may be pending, two on the CPU, on the GPU as many staging buffers as fit in 64 MiB, from 2 to 16 |
@@ -248,12 +249,16 @@ before the position still missing, then the probes' last steps from wherever the
 steps for stored frame k, probes queued every step and drained every 256 steps and at the end; with every frame
 wanted the missing stored frames passed on the way are captured too, so one pass makes the run; a capture is
 pipelined with the steps that follow it: the captures in flight land in order, each once read back, and natively the
-oldest is waited for when the engine's capture capacity is reached. Pumped (in the browser), the run yields before the
-step that reaches a frame to capture until its capture can begin (the spill has room, the engine has room for another
-capture), so no frame passed is skipped; a drain of the probes on the way and at a target takes the readings read
-back and yields only with 16 batches in flight, so the frames of a run with probes follow one another without waiting
-for their readings. Every reading is drained into the traces before the run goes idle or paused, a fit frame is made
-and the engine or the frames are reset, so the traces are never left part recorded. A goal change is read every 16 steps: a unit of work for another spec is left; one for the goal's spec goes
+oldest is waited for when the engine's capture capacity is reached. Pumped (in the browser), a slice ends at its
+deadline or a pause with work left, or waits for what it needs, woken once that is ready: before the step that reaches
+a frame to capture until its capture can begin (the engine has room for another capture), so no frame passed is
+skipped; before a step while the engine has no room for it (PollRoom); a capture read back lands only while the
+spill has fewer writes in flight than it takes (16), so those writes bound the frames made and not yet written (a
+frame of a store or generation being left is dropped instead of waiting); a drain of the probes on the way and at a
+target takes the readings read back and waits only with 16 batches in flight, so the frames of a run with probes
+follow one another without waiting for their readings. Every reading is drained into the traces before the run goes idle
+or paused, a fit frame is made and the engine or the frames are reset, so the traces are never left part recorded. A
+goal change is read every 16 steps: a unit of work for another spec is left; one for the goal's spec goes
 on when it is the goal's frame, else while every frame is wanted and the goal's frame is there; a pause with
 another spec leaves the target so the spec is adopted. A fit frame is made in a state of its own (`Fitting`),
 which leaves the run's frames and its completion as they are. A spec with other

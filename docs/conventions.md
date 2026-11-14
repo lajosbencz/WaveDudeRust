@@ -27,7 +27,8 @@ push. What they hold the code to:
   runs and frame store (feature `run`), renderer. It builds for `wasm32-unknown-unknown` with any of its features:
   code there uses no threads, no std clocks (`web_time`'s instead, which the wasm32 lint run enforces) and no machine
   queries; on wasm32 nothing blocks, the GPU engine is built by an async call, the live run is pumped by its caller,
-  the browser's run worker (`RunWorker::pump`, which yields while its engine's future is pending; decision 0024)
+  the browser's run worker (`RunWorker::pump`, which says whether work is left, waits for readiness (an engine, a
+  readback, the device, the spill's writes) or is idle, waking the caller's waker; decision 0024)
   and its frame stores hold their frames in
   memory up to the caller's budget and spill the rest through the caller's backend (decision 0020); the batch run,
   the spill file and the machine's memory and threads are native only
@@ -69,8 +70,9 @@ push. What they hold the code to:
   [`ui/`](../crates/wavedude-app/src/ui/); what a view computes without a window is in the crate's top-level modules
   (`preview`, `menus`), tested without one. Depends on all of the above ([decision 0019](decisions/0019-egui-and-the-platform-layer.md)).
 - `wavedude-run-worker`: binary only, the browser's run worker (decision 0024): logging to the console, its
-  panics posted to the page, a WebGPU device of its own and app-state's `Host` on a `WorkerPort`, pumped while the
-  run has work, the event loop turning between pumps, and asleep until a message arrives once it has none
+  panics posted to the page, a WebGPU device of its own and app-state's `Host` on a `WorkerPort`, pumped in 8 ms
+  slices, the event loop turning between pumps: again at once while the run has work, else asleep until what it waits
+  for is ready or a message arrives
   ([`crates/wavedude-run-worker/src/worker.rs`](../crates/wavedude-run-worker/src/worker.rs)); `run-worker.js` loads it. Natively the binary only
   says so. Depends on core and app-state, in the browser only.
 - `wavedude-examples`: the example projects, embedded (the fixtures of core and the repository's `examples`), with their

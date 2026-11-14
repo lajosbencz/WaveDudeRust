@@ -329,6 +329,33 @@ wavedude-core --test run -- --ignored --nocapture live_run_drag_burst_timing`, t
 of Example16 25 to 31 / 23 to 25 ms (source moved), 70 to 87 / 60 to 64 ms (part moved); 118 to 120 / 120 of 120 frames
 shown with every frame wanted.
 
+## The browser's live run in a worker
+
+2026-11-14, Chrome 158 (Playwright, WebGPU through Vulkan) on Linux, RTX 5070 Ti; the app built by `tools/build-web.sh`
+into a folder served by `python3 -m http.server`, before (16c0b44, the worker pumped in 16 ms slices, a pump with work
+left or spill writes in flight posting itself a message) and after (the pump waits on readiness, 8 ms slices). A
+temporary counter in the worker's loop logged the pumps and the self-posted messages each second. The messages between
+page and worker were counted by a Playwright init script wrapping `Worker.prototype.postMessage` and listening on the
+worker. Fresnel lens lighthouse (`examples/optics/01-fresnel-lens-lighthouse.wdproj`) at the High preview, run with F5
+and the memory warning's 8-bit samples (2000 steps, 1000 stored frames of 1.4 MB); the time is the app's `Run Completed`
+line. Waiting on the page: a new project (1920x1080, 2500 steps) run with the warning's halved resolution, the page's
+thread blocked for 3 s (`while (performance.now() < end) {}` from Playwright) 0.5 s after the run started, so no frame
+is acknowledged meanwhile.
+
+| | Before | After |
+|---|---|---|
+| Lighthouse run | 1.6 s | 1.2 to 1.5 s |
+| Pumps / self-posts a second while running | 161 000 / 161 000 | 1 000 to 1 800 / 0 |
+| Pumps / self-posts a second while the page is blocked | 213 000 to 307 000 / as many | under 300 / 0 |
+| Pumps while idle | 460 a second, as many self-posts | none in 36 s |
+| Messages page to worker / worker to page while idle, after a run | | none / none in 13 s |
+
+After, the run lands a capture read back only below the spill's writes in flight, the frames posted and not
+acknowledged ([`crates/wavedude-core/src/run/pending.rs`](../crates/wavedude-core/src/run/pending.rs), `WRITES_IN_FLIGHT`):
+with 4 the lighthouse took 2.0 to 2.2 s, with 16 (the GPU engine's largest capture ring) 1.2 to 1.5 s, with no
+bound 1.0 s. The GPU's submissions are paced on `on_submitted_work_done`, two on the card at most; pacing by the steps
+on the card instead, as a capture every second step cuts a submission short, took the same 2.0 to 2.2 s at a bound of 4.
+
 ## The idle window
 
 2026-11-13, Ryzen 9 9900X, release build on Xvfb (`DISPLAY=:77`, presented through lavapipe), a fresh settings folder.

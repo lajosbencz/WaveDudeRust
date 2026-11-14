@@ -5,14 +5,16 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::io;
 use std::sync::{Arc, Mutex};
-use std::task::{Poll, Waker};
+use std::task::{Context, Poll, Waker};
 
 use crate::sync::{MaybeSend, lock};
 
 use super::store::StoreLayout;
 
-/// Writes in flight at which the pumped worker yields before its next capture.
-pub const WRITES_IN_FLIGHT: usize = 4;
+/// Writes in flight at which the pumped worker waits before it lands its next capture: the browser's frames posted
+/// to the page and not acknowledged. As many as the GPU engine's capture ring holds at most; fewer starve the ring
+/// (docs/measurements.md, The browser's live run in a worker).
+pub const WRITES_IN_FLIGHT: usize = 16;
 /// Frames read back and kept, for a scrub to and fro.
 const LOADED: usize = 2;
 /// Reads in flight at most; a frame asked for beyond them waits in one slot, the newest asked for.
@@ -62,17 +64,20 @@ impl<T> Token<T> {
 		lock(&self.0).result.take()
 	}
 
+	/// Ready once the operation completed, its outcome left in place; otherwise `cx`'s waker is woken then.
+	pub fn poll_done(&self, cx: &mut Context<'_>) -> Poll<()> {
+		let mut slot = lock(&self.0);
+		if slot.done {
+			return Poll::Ready(());
+		}
+		slot.waker = Some(cx.waker().clone());
+		Poll::Pending
+	}
+
 	/// Resolves when the operation completed, its outcome left in place.
 	pub fn done(&self) -> impl Future<Output = ()> + use<T> {
-		let slot = self.0.clone();
-		std::future::poll_fn(move |cx| {
-			let mut slot = lock(&slot);
-			if slot.done {
-				return Poll::Ready(());
-			}
-			slot.waker = Some(cx.waker().clone());
-			Poll::Pending
-		})
+		let token = self.clone();
+		std::future::poll_fn(move |cx| token.poll_done(cx))
 	}
 }
 
@@ -88,8 +93,8 @@ pub trait SpillBackend: Send + Sync {
 
 /// The pumped worker's spills.
 pub trait SpillFactory: MaybeSend {
-	/// Whether [`open`](Self::open) can answer: the free storage is known.
-	fn ready(&self) -> bool;
+	/// Ready once [`open`](Self::open) can answer: the free storage is known; otherwise `cx`'s waker is woken then.
+	fn poll_ready(&self, cx: &mut Context<'_>) -> Poll<()>;
 	/// A spill for `bytes` of frames of store `store` (its [`FrameStore::id`](super::FrameStore::id)) laid out
 	/// as `layout`; refused when they do not fit the free storage or there is none.
 	fn open(&self, store: u64, layout: &StoreLayout, bytes: u64) -> io::Result<Box<dyn SpillBackend>>;
@@ -132,6 +137,16 @@ impl PendingSpill {
 
 	pub(super) fn writing(&self) -> bool {
 		!lock(&self.state).writes.is_empty()
+	}
+
+	/// Ready once a write in flight completed, or none is; otherwise `cx`'s waker is woken when one completes.
+	pub(super) fn poll_write(&self, cx: &mut Context<'_>) -> Poll<()> {
+		let state = lock(&self.state);
+		let mut done = state.writes.is_empty();
+		for (.., token) in &state.writes {
+			done |= token.poll_done(cx).is_ready();
+		}
+		if done { Poll::Ready(()) } else { Poll::Pending }
 	}
 
 	/// Takes the completed writes; the frames of `generation` written whose memory is free now, all but `last`
@@ -287,7 +302,7 @@ pub(crate) mod fake {
 		}
 	}
 
-	/// Spills into one shared [`Disk`] holding at most `free` bytes; ready once `ready` is set.
+	/// Spills into one shared [`Disk`] holding at most `free` bytes; ready once `ready` is set, which wakes no one.
 	pub(crate) struct Factory {
 		pub(crate) disk: Arc<Mutex<Disk>>,
 		pub(crate) free: u64,
@@ -301,8 +316,8 @@ pub(crate) mod fake {
 	}
 
 	impl SpillFactory for Factory {
-		fn ready(&self) -> bool {
-			self.ready.load(std::sync::atomic::Ordering::Acquire)
+		fn poll_ready(&self, _: &mut Context<'_>) -> Poll<()> {
+			if self.ready.load(std::sync::atomic::Ordering::Acquire) { Poll::Ready(()) } else { Poll::Pending }
 		}
 
 		fn open(&self, _store: u64, _layout: &StoreLayout, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {

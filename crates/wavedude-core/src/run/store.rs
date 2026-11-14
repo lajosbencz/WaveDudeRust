@@ -32,6 +32,7 @@ use crate::sync::lock;
 use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 
 use crate::engine::{FrameShape, Snapshot};
 use crate::model::Layer;
@@ -569,6 +570,15 @@ impl FrameStore {
 	/// The pending spill has writes in flight.
 	pub fn spill_writing(&self) -> bool {
 		matches!(&self.spill, Some(Spill::Pending(p)) if p.writing())
+	}
+
+	/// Ready once a write of the pending spill in flight completed, or none is; otherwise `cx`'s waker is woken
+	/// when one completes.
+	pub fn poll_spill_write(&self, cx: &mut Context<'_>) -> Poll<()> {
+		match &self.spill {
+			Some(Spill::Pending(p)) => p.poll_write(cx),
+			_ => Poll::Ready(()),
+		}
 	}
 
 	/// Returns a buffer [`buffer_for`](Self::buffer_for) handed out for `frame` that was not kept, to the pool

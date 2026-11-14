@@ -6,6 +6,7 @@
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
 
 use wavedude_core::engine::Snapshot;
 use wavedude_core::engine::probes::ProbeTrace;
@@ -41,8 +42,8 @@ struct Watching {
 }
 
 impl SpillFactory for Watching {
-	fn ready(&self) -> bool {
-		self.spill.ready()
+	fn poll_ready(&self, cx: &mut Context<'_>) -> Poll<()> {
+		self.spill.poll_ready(cx)
 	}
 
 	fn open(&self, store: u64, layout: &StoreLayout, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {
@@ -152,7 +153,10 @@ impl<P: Port> Remote<P> {
 					}
 				}
 			};
-			if matches!(message, ToPage::StoreOpened { .. }) && !self.spill.ready() {
+			// A spill not ready yet wakes the window once it is (`crate::wake`); the next pump takes the message.
+			if matches!(message, ToPage::StoreOpened { .. })
+				&& self.spill.poll_ready(&mut Context::from_waker(Waker::noop())).is_pending()
+			{
 				self.waiting = Some((message, buffer));
 				return;
 			}

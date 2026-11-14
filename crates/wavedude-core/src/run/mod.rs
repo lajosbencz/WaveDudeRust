@@ -27,7 +27,7 @@ pub use store::{Memory, Release, sweep_leftovers};
 pub use warning::{Levers, MemoryWarning};
 #[cfg(not(target_arch = "wasm32"))]
 pub use worker::{BuildEngine, EngineFactory};
-pub use worker::{CHECK_INTERVAL, FitFrame, FitRequest, Goal, RunWorker, Status, Wanted, WorkState};
+pub use worker::{CHECK_INTERVAL, FitFrame, FitRequest, Goal, Pump, RunWorker, Status, Wanted, WorkState};
 pub use worker::{EngineFuture, PumpedFactory, StartEngine};
 
 /// Memory and threads of this machine. The GPU and the drive are left unknown: the GPU is the
