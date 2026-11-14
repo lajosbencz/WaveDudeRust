@@ -62,7 +62,7 @@ pub(crate) fn busy_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
 }
 
 /// A rendered field picture as an export makes it: two point sources' circular waves with a 1/sqrt(r) fall-off,
-/// coloured by the default field scheme at the default brightness and black level.
+/// coloured by the default field scheme at the default brightness and black level, spanning the palette.
 pub(crate) fn wave_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
 	use wavedude_core::engine::types::SampleKind;
 	use wavedude_core::model::DisplayLayer;
@@ -82,7 +82,7 @@ pub(crate) fn wave_frame(w: u32, h: u32, t: u32) -> Vec<u8> {
 					(r * 0.35 - t as f32 * 0.4).sin() / r.sqrt()
 				})
 				.sum();
-			half::f16::from_f32(v * 0.01)
+			half::f16::from_f32(v * 0.5)
 		})
 		.collect();
 	render_half(&plane, &table)
@@ -96,6 +96,20 @@ pub(crate) fn rgb(rgba: &[u8]) -> Vec<u8> {
 pub(crate) fn psnr(a: &[u8], b: &[u8]) -> f64 {
 	assert_eq!(a.len(), b.len());
 	let mse = a.iter().zip(b).map(|(x, y)| (*x as f64 - *y as f64).powi(2)).sum::<f64>() / a.len() as f64;
+	if mse == 0.0 { f64::INFINITY } else { 10.0 * (255.0f64 * 255.0 / mse).log10() }
+}
+
+/// The luma PSNR a lossy video keeps at the default quality: visually lossless. RGB is not bounded, as 4:2:0
+/// chroma is a quarter of the picture.
+pub(crate) const LUMA_PSNR: f64 = 42.0;
+
+/// PSNR in dB of the BT.601 luma of two RGB8 pictures: the picture a 4:2:0 encoder keeps at full resolution.
+pub(crate) fn luma_psnr(a: &[u8], b: &[u8]) -> f64 {
+	let luma = |rgb: &[u8]| -> Vec<f64> {
+		rgb.as_chunks::<3>().0.iter().map(|p| 0.299 * p[0] as f64 + 0.587 * p[1] as f64 + 0.114 * p[2] as f64).collect()
+	};
+	let (a, b) = (luma(a), luma(b));
+	let mse = a.iter().zip(&b).map(|(x, y)| (x - y).powi(2)).sum::<f64>() / a.len() as f64;
 	if mse == 0.0 { f64::INFINITY } else { 10.0 * (255.0f64 * 255.0 / mse).log10() }
 }
 

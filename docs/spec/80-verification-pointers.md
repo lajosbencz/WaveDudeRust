@@ -45,8 +45,9 @@ Generate with a small console harness referencing the C# library (pattern: `_too
 | G-15 | Fibre flattening | Flattened point lists for 10 node/handle sets. | 20 |
 
 Comparison rules: G-01 bit-exact for the CPU engine (tolerance only for a GPU path); G-02, G-05, G-07, G-10, G-11,
-G-13 byte-exact; G-12 decoded pixels exact for lossless formats, container structure per 50, lossy formats within a
-PSNR bound `TODO(verify)` (choose, e.g. >= 45 dB vs the C# output).
+G-13 byte-exact; G-12 decoded pixels exact for lossless formats, container structure per 50, lossy video at the
+default quality with a luma PSNR of at least 42 dB against our own lossless picture (4:2:0 chroma is not bounded; the
+C# output is not the reference, its encoders differ).
 
 ## Notes for the fixture harness
 

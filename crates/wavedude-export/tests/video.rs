@@ -96,6 +96,8 @@ fn mpeg1_decoded(name: &str, w: u32, h: u32) -> Vec<(Vec<u8>, Vec<u8>)> {
 	let decoded = ffmpeg_frames(&path, w, h);
 	std::fs::remove_dir_all(&dir).unwrap();
 	assert_eq!(decoded.len(), frames.len());
+	let colours = frames[0].as_chunks::<4>().0.iter().collect::<std::collections::HashSet<_>>().len();
+	assert!(colours > 100, "the test picture has detail: {colours} colours");
 	decoded.into_iter().zip(frames.iter().map(|f| rgb(f))).collect()
 }
 
@@ -105,12 +107,12 @@ fn mpeg1_decodes_close_to_the_source() {
 		return;
 	}
 	for (d, f) in mpeg1_decoded("mpeg1", 200, 120) {
-		let p = psnr(&d, &f);
-		assert!(p >= 40.0, "PSNR {p:.2} dB");
+		let p = luma_psnr(&d, &f);
+		assert!(p >= LUMA_PSNR, "luma PSNR {p:.2} dB");
 	}
 	for (d, f) in mpeg1_decoded("mpeg1-odd", 201, 121) {
-		let p = psnr(&d, &f);
-		assert!(p >= 38.0, "an odd size padded by repetition: PSNR {p:.2} dB");
+		let p = luma_psnr(&d, &f);
+		assert!(p >= LUMA_PSNR, "an odd size padded by repetition: luma PSNR {p:.2} dB");
 	}
 }
 
@@ -280,8 +282,8 @@ fn mp4_decodes_close_to_the_source_at_the_default_quality() {
 	assert_eq!(ffprobe(&path), "h264,640,360,30");
 	let decoded = ffmpeg_frames(&path, w, h);
 	assert_eq!(decoded.len(), frames.len());
-	let worst = decoded.iter().zip(&frames).map(|(d, f)| psnr(d, &rgb(f))).fold(f64::INFINITY, f64::min);
-	assert!(worst >= 40.0, "worst PSNR {worst:.2} dB");
+	let worst = decoded.iter().zip(&frames).map(|(d, f)| luma_psnr(d, &rgb(f))).fold(f64::INFINITY, f64::min);
+	assert!(worst >= LUMA_PSNR, "worst luma PSNR {worst:.2} dB");
 	std::fs::remove_dir_all(&dir).unwrap();
 }
 
