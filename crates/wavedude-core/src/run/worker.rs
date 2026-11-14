@@ -1409,7 +1409,7 @@ mod tests {
 	use crate::model::{Layer, Probe, Project, Source};
 	use crate::quality::PreviewQuality;
 	use crate::run::pending::fake;
-	use crate::run::{Memory, StoreError, WRITES_IN_FLIGHT};
+	use crate::run::{Memory, StoreError, StoreLayout};
 
 	fn project(probe_x: i32) -> Project {
 		let mut p = Project::default();
@@ -1807,7 +1807,7 @@ mod tests {
 		w.set_goal(goal(1, &p));
 		assert_eq!(pump(&w, AMPLE), Pump::Waiting);
 		let (steps, writes) = (w.status().steps_done, lock(&disk).writes.len());
-		assert!(writes >= WRITES_IN_FLIGHT, "{writes} writes in flight");
+		assert!(writes >= w.store().unwrap().layout().writes_in_flight(), "{writes} writes in flight");
 		for _ in 0..3 {
 			assert_eq!(pump(&w, AMPLE), Pump::Waiting, "the run waits for its writes");
 			assert_eq!((w.status().steps_done, lock(&disk).writes.len()), (steps, writes));
@@ -2170,6 +2170,9 @@ mod tests {
 
 	#[test]
 	fn a_full_capture_ring_lands_no_more_frames_than_the_spill_writes() {
+		let mut p = long(400);
+		p.probes.clear();
+		let most = StoreLayout::of(&RunSpec::create(&p, None, PreviewQuality::FULL, false).unwrap()).writes_in_flight();
 		let issued: Arc<Mutex<Vec<Arc<Gate>>>> = Arc::default();
 		let factory: PumpedFactory = {
 			let issued = issued.clone();
@@ -2177,30 +2180,28 @@ mod tests {
 				let inner = Box::new(CpuEngine::new(scene, options));
 				let mut engine = Gated::new(inner, Arc::new(Gate(AtomicBool::new(true))), Arc::default(), None);
 				engine.each_capture = Some(issued.clone());
-				engine.capacity = 2 * WRITES_IN_FLIGHT;
+				engine.capacity = 2 * most;
 				Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
 			})
 		};
 		let spill = fake::Factory::ample();
 		let disk = spill.disk.clone();
 		let w = RunWorker::pumped(factory, 0, Box::new(spill), Arc::default());
-		let mut p = long(400);
-		p.probes.clear();
 		w.set_goal(goal(1, &p));
 		for _ in 0..4 {
 			assert_eq!(pump(&w, AMPLE), Pump::Waiting);
 			for gate in lock(&issued).drain(..) {
 				gate.0.store(true, Ordering::Release);
 			}
-			assert!(lock(&disk).writes.len() <= WRITES_IN_FLIGHT, "{} writes", lock(&disk).writes.len());
+			assert!(lock(&disk).writes.len() <= most, "{} writes", lock(&disk).writes.len());
 		}
-		assert_eq!(lock(&disk).writes.len(), WRITES_IN_FLIGHT, "the mapped captures wait for the writes");
-		assert_eq!(w.store().unwrap().present_count(), WRITES_IN_FLIGHT);
+		assert_eq!(lock(&disk).writes.len(), most, "the mapped captures wait for the writes");
+		assert_eq!(w.store().unwrap().present_count(), most);
 		while pump(&w, AMPLE) != Pump::Idle {
 			for gate in lock(&issued).drain(..) {
 				gate.0.store(true, Ordering::Release);
 			}
-			assert!(lock(&disk).writes.len() <= WRITES_IN_FLIGHT);
+			assert!(lock(&disk).writes.len() <= most);
 			lock(&disk).complete();
 		}
 		assert!(w.store().unwrap().is_complete());

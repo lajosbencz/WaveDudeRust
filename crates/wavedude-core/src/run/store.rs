@@ -37,7 +37,7 @@ use std::task::{Context, Poll};
 use crate::engine::{FrameShape, Snapshot};
 use crate::model::Layer;
 
-use super::pending::{PendingSpill, SpillBackend, SpillFactory};
+use super::pending::{MOST_WRITES_IN_FLIGHT, PendingSpill, SpillBackend, SpillFactory, WRITE_BYTES_IN_FLIGHT};
 #[cfg(not(target_arch = "wasm32"))]
 use super::spill::Disk;
 #[cfg(not(target_arch = "wasm32"))]
@@ -175,6 +175,14 @@ impl StoreLayout {
 		self.layers.len() * self.shape.plane_bytes()
 	}
 
+	/// Writes in flight at which a pending spill of this layout is busy: [`WRITE_BYTES_IN_FLIGHT`] of frames, at
+	/// least one, at most the GPU engine's largest capture ring.
+	pub fn writes_in_flight(&self) -> usize {
+		usize::try_from(WRITE_BYTES_IN_FLIGHT / self.frame_bytes() as u64)
+			.unwrap_or(MOST_WRITES_IN_FLIGHT)
+			.clamp(1, MOST_WRITES_IN_FLIGHT)
+	}
+
 	/// Bytes of a spill file holding `frames` frames.
 	#[cfg(not(target_arch = "wasm32"))]
 	pub fn file_bytes(&self, frames: usize) -> u64 {
@@ -278,7 +286,8 @@ impl FrameStore {
 	}
 
 	fn pending(id: u64, layout: StoreLayout, ram_budget: u64, backend: Box<dyn SpillBackend>) -> Self {
-		let store = Self::made(id, layout, ram_budget, Some(Spill::Pending(PendingSpill::new(backend))));
+		let spill = PendingSpill::new(backend, layout.writes_in_flight());
+		let store = Self::made(id, layout, ram_budget, Some(Spill::Pending(spill)));
 		store.first_spilled.store(store.ram_frames, Ordering::Release);
 		store
 	}
@@ -562,7 +571,7 @@ impl FrameStore {
 		Ok(())
 	}
 
-	/// The pending spill has as many writes in flight as it takes.
+	/// The pending spill has as many writes in flight as it takes ([`StoreLayout::writes_in_flight`]).
 	pub fn spill_busy(&self) -> bool {
 		matches!(&self.spill, Some(Spill::Pending(p)) if p.busy())
 	}
@@ -746,6 +755,28 @@ mod tests {
 	use super::*;
 	use crate::engine::SampleFormat;
 	use crate::run::pending::fake;
+
+	#[test]
+	fn a_spill_takes_writes_in_flight_by_their_bytes() {
+		let layout = |canvas_width, canvas_height| StoreLayout {
+			shape: FrameShape {
+				canvas_width,
+				canvas_height,
+				divisor: 1,
+				format: SampleFormat::Half,
+				field_brightness: 1.0,
+				intensity_brightness: 1.0,
+				intensity_root: false,
+			},
+			layers: &[Layer::Field, Layer::Intensity],
+			capacity: 1,
+			capture_every: 1,
+		};
+		assert_eq!(layout(960, 540).writes_in_flight(), 16, "small frames fill the largest capture ring");
+		assert_eq!(layout(1920, 1080).writes_in_flight(), 8);
+		assert_eq!(layout(3840, 2160).writes_in_flight(), 2);
+		assert_eq!(layout(8192, 4096).writes_in_flight(), 1, "a frame past the budget is written alone");
+	}
 
 	#[test]
 	fn a_scrub_across_spilled_frames_holds_two_reads_and_two_frames_at_most() {

@@ -351,10 +351,25 @@ is acknowledged meanwhile.
 | Messages page to worker / worker to page while idle, after a run | | none / none in 13 s |
 
 After, the run lands a capture read back only below the spill's writes in flight, the frames posted and not
-acknowledged ([`crates/wavedude-core/src/run/pending.rs`](../crates/wavedude-core/src/run/pending.rs), `WRITES_IN_FLIGHT`):
+acknowledged ([`crates/wavedude-core/src/run/pending.rs`](../crates/wavedude-core/src/run/pending.rs)):
 with 4 the lighthouse took 2.0 to 2.2 s, with 16 (the GPU engine's largest capture ring) 1.2 to 1.5 s, with no
 bound 1.0 s. The GPU's submissions are paced on `on_submitted_work_done`, two on the card at most; pacing by the steps
 on the card instead, as a capture every second step cuts a submission short, took the same 2.0 to 2.2 s at a bound of 4.
+
+Writes in flight by bytes, 2026-11-14, same machine and browser: the build of 7c13719 (16 writes in flight for every
+frame size) against a byte budget of 64 MiB, at least one frame, at most 16
+([`crates/wavedude-core/src/run/store.rs`](../crates/wavedude-core/src/run/store.rs), `StoreLayout::writes_in_flight`),
+each built by `tools/build-web.sh` into its own folder and served by `python3 -m http.server` on its own port. Each run
+on a fresh page with the settings cleared (`localStorage.clear()`), the welcome page's High preview kept; the time is
+the app's `Run Completed` line. The lighthouse as above (F5, the warning's 8-bit samples, 1.4 MB frames: 16 writes in
+both). Large frames: a new project (1920x1080, 2500 steps, intensity tracked) run with F5 at full resolution and
+16-bit samples, the warning's choices unticked: 1250 frames of 8.3 MB, 258 in memory and the rest spilled to OPFS; 16
+writes in flight before, 8 after, so the frames held past the memory budget drop from 133 MB to 66 MB on each side.
+
+| | Before (16 writes) | After (64 MiB) |
+|---|---|---|
+| Lighthouse run, 4 runs each | 1.3 to 1.6 s | 1.2 to 1.4 s |
+| 1920x1080 run at full quality, 4 runs each | 9.5 to 10.8 s | 10.7 to 11.1 s |
 
 ## The browser's preview coloured on the page's GPU
 

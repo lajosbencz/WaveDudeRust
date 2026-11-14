@@ -11,10 +11,12 @@ use crate::sync::{MaybeSend, lock};
 
 use super::store::StoreLayout;
 
-/// Writes in flight at which the pumped worker waits before it lands its next capture: the browser's frames posted
-/// to the page and not acknowledged. As many as the GPU engine's capture ring holds at most; fewer starve the ring
+/// Bytes of the writes in flight a spill allows ([`StoreLayout::writes_in_flight`]): the browser's frames posted to
+/// the page and not acknowledged. As many as the GPU engine's capture ring stages
 /// (docs/measurements.md, The browser's live run in a worker).
-pub const WRITES_IN_FLIGHT: usize = 16;
+pub const WRITE_BYTES_IN_FLIGHT: u64 = 64 << 20;
+/// Writes in flight at most: the GPU engine's largest capture ring.
+pub(super) const MOST_WRITES_IN_FLIGHT: usize = 16;
 /// Frames read back and kept, for a scrub to and fro.
 const LOADED: usize = 2;
 /// Reads in flight at most; a frame asked for beyond them waits in one slot, the newest asked for.
@@ -103,6 +105,8 @@ pub trait SpillFactory: MaybeSend {
 /// The store's side of a [`SpillBackend`]: the operations in flight and the frames read back.
 pub(super) struct PendingSpill {
 	backend: Box<dyn SpillBackend>,
+	/// Writes in flight at which the spill is busy.
+	most_writes: usize,
 	state: Mutex<State>,
 }
 
@@ -121,8 +125,8 @@ struct State {
 }
 
 impl PendingSpill {
-	pub(super) fn new(backend: Box<dyn SpillBackend>) -> Self {
-		Self { backend, state: Mutex::default() }
+	pub(super) fn new(backend: Box<dyn SpillBackend>, most_writes: usize) -> Self {
+		Self { backend, most_writes, state: Mutex::default() }
 	}
 
 	pub(super) fn write(&self, generation: u64, frame: usize, planes: &[&[u8]]) {
@@ -130,9 +134,8 @@ impl PendingSpill {
 		lock(&self.state).writes.push((generation, frame, token));
 	}
 
-	/// [`WRITES_IN_FLIGHT`] writes are.
 	pub(super) fn busy(&self) -> bool {
-		lock(&self.state).writes.len() >= WRITES_IN_FLIGHT
+		lock(&self.state).writes.len() >= self.most_writes
 	}
 
 	pub(super) fn writing(&self) -> bool {

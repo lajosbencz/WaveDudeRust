@@ -17,7 +17,7 @@ pub mod warning;
 pub mod worker;
 
 pub use error::RunError;
-pub use pending::{SpillBackend, SpillFactory, Token, WRITES_IN_FLIGHT};
+pub use pending::{SpillBackend, SpillFactory, Token, WRITE_BYTES_IN_FLIGHT};
 #[cfg(not(target_arch = "wasm32"))]
 pub use simulation::{EventSink, RunEvent, SimulationRun};
 pub use state::RunState;

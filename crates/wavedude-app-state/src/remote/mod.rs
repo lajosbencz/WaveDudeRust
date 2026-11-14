@@ -3,14 +3,14 @@
 //!
 //! The worker's stores keep no frames: each frame crosses to the page as one buffer, into a mirror store that the
 //! preview, presenter and status read. The page acknowledges a frame once its mirror holds it, so the worker is
-//! at most the spill's writes in flight ([`WRITES_IN_FLIGHT`]) ahead. Messages arrive in the order posted.
+//! at most the spill's writes in flight ([`StoreLayout::writes_in_flight`]) ahead. Messages arrive in the order posted.
 //!
 //! In the browser the ends are `web::PagePort` and `web::WorkerPort` over `postMessage`.
 //!
 //! Threads: none; each end is driven by its owner's calls (`Host::pump`, `Backend::pump`).
 //!
 //! [`Backend`]: crate::live::Backend
-//! [`WRITES_IN_FLIGHT`]: wavedude_core::run::WRITES_IN_FLIGHT
+//! [`StoreLayout::writes_in_flight`]: wavedude_core::run::StoreLayout::writes_in_flight
 
 mod host;
 mod page;

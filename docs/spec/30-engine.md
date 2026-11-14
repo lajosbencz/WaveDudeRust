@@ -253,7 +253,7 @@ oldest is waited for when the engine's capture capacity is reached. Pumped (in t
 deadline or a pause with work left, or waits for what it needs, woken once that is ready: before the step that reaches
 a frame to capture until its capture can begin (the engine has room for another capture), so no frame passed is
 skipped; before a step while the engine has no room for it (PollRoom); a capture read back lands only while the
-spill has fewer writes in flight than it takes (16), so those writes bound the frames made and not yet written (a
+spill has fewer writes in flight than it takes (64 MiB of frames, at least one, at most 16), so those writes bound the frames made and not yet written (a
 frame of a store or generation being left is dropped instead of waiting); a drain of the probes on the way and at a
 target takes the readings read back and waits only with 16 batches in flight, so the frames of a run with probes
 follow one another without waiting for their readings. Every reading is drained into the traces before the run goes idle

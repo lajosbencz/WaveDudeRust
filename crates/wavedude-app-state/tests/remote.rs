@@ -17,7 +17,7 @@ use wavedude_core::model::{Layer, Probe, ProbeKind, Project, SceneMode, Source};
 use wavedude_core::quality::PreviewQuality;
 use wavedude_core::run::{
 	EngineFuture, FrameStore, Goal, Pump, PumpedFactory, RunError, RunWorker, SpillBackend, SpillFactory, StoreError,
-	StoreLayout, Token, WRITES_IN_FLIGHT, Wanted, WorkState,
+	StoreLayout, Token, Wanted, WorkState,
 };
 use wavedude_core::spec::{RunRequest, RunSpec, RunSpecError};
 use wavedude_core::sync::lock;
@@ -83,6 +83,10 @@ fn finished(revision: u64) -> impl FnMut(&Remote<Loopback>) -> bool {
 		let s = r.status();
 		s.adopted == revision && s.state == WorkState::Idle && s.store.is_some_and(|s| s.is_complete())
 	}
+}
+
+fn layout(p: &Project) -> StoreLayout {
+	StoreLayout::of(&RunSpec::create(p, None, PreviewQuality::FULL, false).unwrap())
 }
 
 /// The same goal run directly on a pumped worker in memory.
@@ -216,18 +220,14 @@ fn the_frames_and_traces_reach_the_page_as_a_direct_run_makes_them() {
 #[test]
 fn a_mirror_past_its_memory_spills_and_acknowledges_a_frame_once_written() {
 	let p = project(60);
-	let layout = StoreLayout::of(&RunSpec::create(&p, None, PreviewQuality::FULL, false).unwrap());
+	let layout = layout(&p);
 	let spill = Spill::default();
 	let disk = spill.disk.clone();
 	let (mut remote, mut host) = connect(2 * layout.frame_bytes() as u64, Box::new(spill));
 	remote.set_goal(goal(&p, 1, Wanted::All));
-	for _ in 0..50 {
-		host.pump(SLICE, Waker::noop());
-		remote.pump();
-		assert!(host.frames_in_flight() <= WRITES_IN_FLIGHT);
-	}
-	assert_eq!(lock(&disk).writes.len(), WRITES_IN_FLIGHT, "the frames in memory are acknowledged at once");
-	assert_eq!(host.frames_in_flight(), WRITES_IN_FLIGHT, "the spilled ones once written");
+	stall(&mut remote, &mut host, 50, layout.writes_in_flight());
+	assert_eq!(lock(&disk).writes.len(), layout.writes_in_flight(), "the frames in memory are acknowledged at once");
+	assert_eq!(host.frames_in_flight(), layout.writes_in_flight(), "the spilled ones once written");
 	let mut pumps = 0;
 	drive(&mut remote, &mut host, |r| {
 		pumps += 1;
@@ -248,13 +248,15 @@ fn a_mirror_past_its_memory_spills_and_acknowledges_a_frame_once_written() {
 
 #[test]
 fn the_worker_is_never_more_than_the_spills_writes_ahead_of_the_page() {
+	let p = project(60);
+	let most = layout(&p).writes_in_flight();
 	let (mut remote, mut host) = connect(GIB, Box::new(Spill::default()));
-	remote.set_goal(goal(&project(60), 1, Wanted::All));
+	remote.set_goal(goal(&p, 1, Wanted::All));
 	for _ in 0..100 {
 		assert_ne!(host.pump(SLICE, Waker::noop()), Pump::Idle);
-		assert!(host.frames_in_flight() <= WRITES_IN_FLIGHT);
+		assert!(host.frames_in_flight() <= most);
 	}
-	assert_eq!(host.frames_in_flight(), WRITES_IN_FLIGHT, "without acknowledgements the run waits");
+	assert_eq!(host.frames_in_flight(), most, "without acknowledgements the run waits");
 	assert_eq!(host.pump(SLICE, Waker::noop()), Pump::Waiting, "for the acknowledgements, not working");
 	drive(&mut remote, &mut host, finished(1));
 }
@@ -335,12 +337,12 @@ fn the_engine_built_and_why_the_gpu_fell_back_reach_the_page() {
 	assert_eq!(remote.engine_name(), engine_label(None));
 }
 
-/// Pumps both ends `n` times, the page's spill writes left in flight.
-fn stall(remote: &mut Remote<Loopback>, host: &mut Host<Loopback>, n: usize) {
+/// Pumps both ends `n` times, the page's spill writes left in flight, at most `most` frames unacknowledged.
+fn stall(remote: &mut Remote<Loopback>, host: &mut Host<Loopback>, n: usize, most: usize) {
 	for _ in 0..n {
 		host.pump(SLICE, Waker::noop());
 		remote.pump();
-		assert!(host.frames_in_flight() <= WRITES_IN_FLIGHT);
+		assert!(host.frames_in_flight() <= most);
 	}
 }
 
@@ -354,19 +356,20 @@ fn stick(remote: &Remote<Loopback>, disk: &Arc<Mutex<Disk>>) -> u64 {
 #[test]
 fn spill_writes_stuck_in_a_generation_or_store_left_do_not_hold_the_worker() {
 	let p = project(60);
-	let layout = StoreLayout::of(&RunSpec::create(&p, None, PreviewQuality::FULL, false).unwrap());
+	let layout = layout(&p);
+	let most = layout.writes_in_flight();
 	let spill = Spill::default();
 	let disk = spill.disk.clone();
 	let (mut remote, mut host) = connect(2 * layout.frame_bytes() as u64, Box::new(spill));
 	remote.set_goal(goal(&p, 1, Wanted::All));
-	stall(&mut remote, &mut host, 50);
-	assert_eq!(host.frames_in_flight(), WRITES_IN_FLIGHT);
+	stall(&mut remote, &mut host, 50, most);
+	assert_eq!(host.frames_in_flight(), most);
 	let first = stick(&remote, &disk);
 
 	remote.discard_frames();
 	remote.set_goal(goal(&p, 2, Wanted::All));
-	stall(&mut remote, &mut host, 50);
-	assert_eq!(host.frames_in_flight(), WRITES_IN_FLIGHT, "the store left is not waited for");
+	stall(&mut remote, &mut host, 50, most);
+	assert_eq!(host.frames_in_flight(), most, "the store left is not waited for");
 	assert_ne!(stick(&remote, &disk), first, "a new mirror");
 
 	let mut q = p.clone();
@@ -385,7 +388,7 @@ fn spill_writes_stuck_in_a_generation_or_store_left_do_not_hold_the_worker() {
 		host.pump(SLICE, Waker::noop());
 	}
 	assert_eq!(host.frames_in_flight(), 0, "every frame acknowledged or released");
-	assert_eq!(lock(&disk).writes.len(), 2 * WRITES_IN_FLIGHT, "the stuck writes are still in flight");
+	assert_eq!(lock(&disk).writes.len(), 2 * most, "the stuck writes are still in flight");
 	same_frames(&remote.status().store.unwrap(), &direct(&q, Wanted::All).store().unwrap(), &disk);
 }
 
@@ -405,11 +408,13 @@ fn a_store_waits_for_the_pages_spill_to_answer() {
 	let spill = Spill::default();
 	spill.ready.store(false, Ordering::Relaxed);
 	let ready = spill.ready.clone();
+	let p = project(40);
+	let most = layout(&p).writes_in_flight();
 	let (mut remote, mut host) = connect(GIB, Box::new(spill));
-	remote.set_goal(goal(&project(40), 1, Wanted::All));
-	stall(&mut remote, &mut host, 50);
+	remote.set_goal(goal(&p, 1, Wanted::All));
+	stall(&mut remote, &mut host, 50, most);
 	assert!(remote.status().store.is_none());
-	assert_eq!(host.frames_in_flight(), WRITES_IN_FLIGHT, "no frame acknowledged before its mirror");
+	assert_eq!(host.frames_in_flight(), most, "no frame acknowledged before its mirror");
 	ready.store(true, Ordering::Relaxed);
 	drive(&mut remote, &mut host, finished(1));
 }
@@ -436,7 +441,7 @@ fn acks(worker: &Loopback) -> Vec<(Key, Result<(), String>)> {
 #[test]
 fn a_frame_of_a_store_or_generation_left_is_acknowledged_unwritten() {
 	let (mut remote, worker) = page();
-	let layout = StoreLayout::of(&RunSpec::create(&project(20), None, PreviewQuality::FULL, false).unwrap());
+	let layout = layout(&project(20));
 	send(&worker, &ToPage::StoreOpened { id: 7, layout: Layout::from(&layout) }, None);
 	let status = RunStatus { store: Some(7), generation: 2, ..RunStatus::default() };
 	send(&worker, &ToPage::Status(status), None);
@@ -475,7 +480,7 @@ fn a_failure_lasts_until_the_next_goal_and_the_next_failure_is_another() {
 	drive(&mut remote, &mut host, |r| failed(r).is_some());
 	let first = failed(&remote).unwrap();
 	assert!(matches!(*first, RunError::Spec(RunSpecError::NoImage)));
-	stall(&mut remote, &mut host, 5);
+	stall(&mut remote, &mut host, 5, 0);
 	assert!(Arc::ptr_eq(&first, &failed(&remote).unwrap()), "one failure while it lasts");
 
 	remote.set_goal(goal(&project(20), 2, Wanted::Position));
