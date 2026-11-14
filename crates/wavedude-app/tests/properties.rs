@@ -187,6 +187,22 @@ fn a_check_box_a_drop_down_and_the_rows_they_enable() {
 	assert_eq!(width.accesskit_node().is_disabled(), !pulsed, "Pulse width does not follow the mode");
 }
 
+#[test]
+fn edges_is_greyed_while_the_damping_edge_makes_a_rim() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = window(dir.path());
+	select(&mut harness, "Scene");
+	for (damping, rim) in [(-16, true), (0, false), (8, false), (-1, true)] {
+		click(&mut harness, Role::SpinButton, "Damping edge");
+		harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+		typed(&mut harness, &damping.to_string());
+		key(&mut harness, Key::Enter);
+		assert_eq!(project(&harness).scene.damping_edge, damping);
+		let edges = harness.get_by_role_and_label(Role::ComboBox, "Edges");
+		assert_eq!(edges.accesskit_node().is_disabled(), rim, "Edges at damping edge {damping}");
+	}
+}
+
 /// The added scheme's first stop.
 fn first_stop(harness: &Harness<'_, Shell>) -> Rgb {
 	project(harness).color_schemes.last().expect("a scheme").stops[0].color
