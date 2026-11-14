@@ -137,7 +137,8 @@ mod tests {
 		assert_eq!(height.round(), 32.0, "a full turn at the default wavelength and index");
 		let lens = MetaSurface { height, ..MetaSurface::default() };
 		assert_eq!(lens.wavelength(SCALE).map(f64::round), Some(32.0));
-		assert_eq!(lens.cell_count(), 125);
+		assert_eq!(lens.cell_count(), (f64::from(lens.width) / lens.guarded_pitch()).floor() as usize);
+		assert_eq!(lens.cell_count() % 2, 1, "a cell on the axis");
 		let fills = lens.fill_factors(SCALE);
 		let centre = lens.cell_count() / 2;
 		assert_eq!(fills[centre], 1.0, "a full turn is kept as one");

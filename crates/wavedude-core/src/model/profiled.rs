@@ -162,22 +162,26 @@ mod tests {
 		assert_eq!(d.components().len(), 1);
 		let d = Diffuser::default();
 		let c = d.components();
-		assert_eq!(c.len(), 11, "13 a half sigma apart, the two below 2 px left out");
+		let reach = SPREAD_SIGMAS * STEPS_PER_SIGMA;
+		let step = d.sigma / f64::from(STEPS_PER_SIGMA);
+		let long_enough = (-reach..=reach).filter(|&k| d.center_wavelength + f64::from(k) * step >= MIN_WAVELENGTH);
+		assert_eq!(c.len(), long_enough.count(), "a component a half sigma apart, those below 2 px left out");
+		assert!(c.len() < (2 * reach + 1) as usize, "the default spread reaches below 2 px");
 		let centre = c.iter().find(|c| c.index == 0).unwrap();
 		assert_eq!((centre.wavelength, centre.amplitude), (16.0, 1.0));
 		assert!((c[0].amplitude - (-2.0f64).exp()).abs() < 1e-12 && c[0].wavelength == 4.0 && c[0].index == -4);
 		let wide = Diffuser { center_wavelength: 40.0, ..Diffuser::default() };
-		assert_eq!(wide.components().len(), 13);
+		assert_eq!(wide.components().len(), (2 * reach + 1) as usize, "every component above 2 px");
 		let narrow = Diffuser { center_wavelength: 4.0, ..Diffuser::default() };
 		assert!(narrow.components().iter().all(|c| c.wavelength >= MIN_WAVELENGTH));
 		let a = d.profile("Diffuser 1", 7);
-		assert_eq!(a.len(), 501);
+		assert_eq!(a.len(), d.width as usize + 1, "a sample at every pixel edge across the plate");
 		assert_eq!(a, d.profile("Diffuser 1", 7), "the same project gives the same face");
 		assert_ne!(a, d.profile("Diffuser 2", 7));
 		assert_ne!(a, d.profile("Diffuser 1", 8));
 		let plate = d.plate("Diffuser 1", 7);
 		assert!(plate.front.iter().all(|&x| x < plate.half_length() - 1.0 + 1e-9));
-		assert_eq!(plate.vertices().len(), 503);
+		assert_eq!(plate.vertices().len(), a.len() + 2, "the face, then the two back corners");
 	}
 
 	#[test]
