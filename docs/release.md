@@ -16,10 +16,11 @@ merging).
 Merging it (squash) releases: the push finds the workspace version without its tag, tags the commit `v<version>` and
 drafts the release with the changelog section as notes. [`package.yml`](../.github/workflows/package.yml), a reusable workflow without secrets and with
 a read-only token, builds the packages with `cargo auditable` and attests them (build provenance and the CycloneDX
-SBOMs of both programs); `sign` waits for a maintainer to approve the `release` environment, then signs the update bundles with the updater key and the cargo-packager that `signer` built in a job of its own, compiling nothing; `publish`
+SBOMs of both programs) and the browser app, `wavedude-rust-<version>-web.tar.gz`; `sign` waits for a maintainer to approve the `release` environment, then signs the update bundles with the updater key and the cargo-packager that `signer` built in a job of its own, compiling nothing; `publish`
 writes `latest.json` and `SHA256SUMS`, attests them and the signatures, attaches everything, verifies every
 attached file against its attestation (a file not attested by [`package.yml`](../.github/workflows/package.yml) or [`release.yml`](../.github/workflows/release.yml) of this repository
-stops the release), appends the provenance table to the notes (file, digest, workflow) and publishes the release,
+stops the release), appends the provenance table to the notes (file, digest, workflow), publishes the release and dispatches
+[`pages.yml`](../.github/workflows/pages.yml), which deploys its browser app,
 which the repository's immutable releases then lock; GitHub's own release attestation follows, checked with
 `gh release verify-asset`.
 
@@ -58,8 +59,8 @@ for it (each names the versions of the others it uses, which the release PR keep
 `-p wavedude-view` and `-p wavedude-export` in that order, with the repository as their trusted
 publisher (crates.io > crate > Settings > Trusted Publishing; a token only for each crate's first publish).
 
-- Settings > Pages: source GitHub Actions; [`pages.yml`](../.github/workflows/pages.yml) deploys from the default
-  branch. The environment `github-pages` (Settings > Environments, created by the first deployment) admits the
+- Settings > Pages: source GitHub Actions; [`pages.yml`](../.github/workflows/pages.yml) deploys `site/` from the default
+  branch with the latest release's browser app ([decision 0023](decisions/0023-browser-app-ships-with-releases.md)). The environment `github-pages` (Settings > Environments, created by the first deployment) admits the
   default branch alone.
 - Settings > General: immutable releases on (`gh api -X PUT repos/<owner>/<repo>/immutable-releases`); squash
   merging only, its commit titled by the pull request's title (git-cliff reads conventional commits); allow
