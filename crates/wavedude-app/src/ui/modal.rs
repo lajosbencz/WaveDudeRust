@@ -126,12 +126,10 @@ impl Modals {
 		self.shown.is_some()
 	}
 
-	/// Shows `modal`, or queues it after the open one; a memory warning or a scene image question shown or waiting
-	/// is not asked again.
+	/// Shows `modal`, or queues it after the open one; a memory warning shown or waiting is not asked again.
 	pub(super) fn show(&mut self, modal: Modal) {
-		let once = |m: &Modal| std::mem::discriminant(m) == std::mem::discriminant(&modal);
-		let single = matches!(modal, Modal::MemoryWarning(_) | Modal::SceneImage(_));
-		if single && (self.shown.as_ref().is_some_and(once) || self.waiting.iter().any(once)) {
+		let warning = |m: &Modal| matches!(m, Modal::MemoryWarning(_));
+		if warning(&modal) && (self.shown.as_ref().is_some_and(warning) || self.waiting.iter().any(warning)) {
 			return;
 		}
 		if self.shown.is_none() {
@@ -144,8 +142,25 @@ impl Modals {
 
 	/// Drops the memory warning, shown or waiting: the run it asked about is gone.
 	pub(super) fn drop_memory_warning(&mut self, ctx: &egui::Context) {
-		self.waiting.retain(|m| !matches!(m, Modal::MemoryWarning(_)));
-		if matches!(self.shown, Some(Modal::MemoryWarning(_))) {
+		self.drop_where(ctx, |m| matches!(m, Modal::MemoryWarning(_)));
+	}
+
+	/// Asks the scene image question `text`, or words the one shown or waiting so: the offer may have changed.
+	pub(super) fn ask_scene_image(&mut self, text: String) {
+		match self.shown.iter_mut().chain(self.waiting.iter_mut()).find(|m| matches!(m, Modal::SceneImage(_))) {
+			Some(Modal::SceneImage(asked)) => *asked = text,
+			_ => self.show(Modal::SceneImage(text)),
+		}
+	}
+
+	/// Drops the scene image question, shown or waiting: the offer it asked about is gone.
+	pub(super) fn drop_scene_image(&mut self, ctx: &egui::Context) {
+		self.drop_where(ctx, |m| matches!(m, Modal::SceneImage(_)));
+	}
+
+	fn drop_where(&mut self, ctx: &egui::Context, gone: impl Fn(&Modal) -> bool) {
+		self.waiting.retain(|m| !gone(m));
+		if self.shown.as_ref().is_some_and(&gone) {
 			self.close(ctx);
 		}
 	}

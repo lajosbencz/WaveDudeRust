@@ -362,16 +362,17 @@ impl Document {
 		}
 		let Ok(size) = io::image_size(&bytes) else {
 			tracing::warn!("the scene image file '{}' does not decode; the embedded image stays", path.display());
-			return false;
+			return self.image_offer.take().is_some();
 		};
 		self.offer_image(path, bytes, size)
 	}
 
-	/// Offers the file's bytes unless they were kept out last; returns whether they are offered.
+	/// Offers the file's bytes unless they were kept out last, which withdraws an earlier offer; returns whether
+	/// the offer changed.
 	fn offer_image(&mut self, path: PathBuf, bytes: Vec<u8>, size: (u32, u32)) -> bool {
 		let hash = hash(&bytes);
 		if self.image_declined.as_ref().is_some_and(|(p, h)| *p == path && *h == hash) {
-			return false;
+			return self.image_offer.take().is_some();
 		}
 		self.image_offer = Some(ImageOffer { path, bytes, size });
 		true
@@ -573,6 +574,11 @@ mod tests {
 		assert_eq!((d.scene_image_offer(), d.dirty), (None, false));
 		assert!(!offered_after_writing(&mut d, &file, &png(200)), "the same bytes once kept out");
 		assert!(offered_after_writing(&mut d, &file, &png(90)), "other bytes are asked about");
+		assert!(!offered_after_writing(&mut d, &file, &png(200)), "the kept bytes again");
+		assert_eq!(d.scene_image_offer(), None, "the file's latest bytes were kept out: the offer is withdrawn");
+		assert!(offered_after_writing(&mut d, &file, &png(90)));
+		assert!(!offered_after_writing(&mut d, &file, b"not an image"));
+		assert_eq!(d.scene_image_offer(), None, "undecodable bytes withdraw the offer");
 	}
 
 	#[test]

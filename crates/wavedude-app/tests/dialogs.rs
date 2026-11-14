@@ -158,6 +158,22 @@ fn a_scene_image_file_that_differs_is_asked_about_keep_on_esc_and_load_on_enter(
 }
 
 #[test]
+fn the_scene_image_question_closes_when_the_file_changes_back() {
+	let dir = tempfile::tempdir().unwrap();
+	let path = project_with_changed_image(dir.path());
+	let mut harness = window(dir.path(), Some(&path), &[]);
+	harness.get_by_label(IMAGE_QUESTION);
+	std::fs::write(dir.path().join("pic.png"), png(10)).unwrap();
+	let deadline = Instant::now() + std::time::Duration::from_secs(5);
+	while harness.query_by_label(IMAGE_QUESTION).is_some() && Instant::now() < deadline {
+		std::thread::sleep(std::time::Duration::from_millis(100));
+		settle(&mut harness);
+	}
+	assert!(harness.query_by_label(IMAGE_QUESTION).is_none(), "the withdrawn offer left its question open");
+	assert!(!harness.state().app().document.dirty);
+}
+
+#[test]
 fn a_failed_open_shows_its_error_and_the_window_keys_wait_behind_it() {
 	let dir = tempfile::tempdir().unwrap();
 	let mut harness = window(dir.path(), Some(&example_in(dir.path())), &[MISSING]);
