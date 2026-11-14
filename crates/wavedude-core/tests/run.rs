@@ -117,7 +117,7 @@ fn spec_snapshot() {
 }
 
 #[test]
-fn empty_store_layout() {
+fn empty_store_layout_and_refused_writes() {
 	let s = spec(&project(64, 48, 20), PreviewQuality::FULL);
 	let st = store(&s, GIB);
 	let layout = st.layout();
@@ -126,10 +126,7 @@ fn empty_store_layout() {
 	assert_eq!(layout.file_bytes(10), 64 + 10 * 2 * 64 * 48 * 2, "SizeOf");
 	assert!(matches!(st.copy_layer(0, Layer::Field), Err(StoreError::NotStored { frame: 0, count: 0 })));
 	assert!(st.spill_bytes().is_none());
-}
-
-#[test]
-fn write_beyond_capacity_and_foreign_snapshots_are_refused() {
+	// writes: beyond the capacity of 3, foreign snapshots
 	let s = spec(&project(64, 48, 6), PreviewQuality::FULL);
 	let st = store(&s, GIB);
 	for k in 0..3 {
@@ -433,7 +430,7 @@ fn same_frames(a: &FrameStore, b: &FrameStore, frames: u32) {
 }
 
 #[test]
-fn the_live_run_makes_the_batch_runs_frames_the_positions_first() {
+fn the_live_run_makes_the_batch_runs_frames_the_positions_first_or_all_on_the_way() {
 	let dir = tempfile::tempdir().unwrap();
 	let s = spec(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
 	let s_run = request(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
@@ -461,6 +458,16 @@ fn the_live_run_makes_the_batch_runs_frames_the_positions_first() {
 	same_frames(&st, r.store(), s.stored_frames());
 	w.with_traces(|t| assert_eq!(t, &run_traces[..], "the traces of the whole run"));
 	assert!(Arc::ptr_eq(&st, &w.store().unwrap()), "one store throughout");
+
+	let dir = tempfile::tempdir().unwrap();
+	let w = worker(dir.path());
+	w.set_goal(goal(&s_run, 20, Wanted::All));
+	wait_until(|| store_has(&w, 20));
+	let st = w.store().unwrap();
+	assert!(st.count() >= 21, "the frames before the position landed on the way to it");
+	wait_until(|| st.is_complete() && w.status().state == WorkState::Idle);
+	assert_eq!(w.status().steps_done, s.steps, "one pass, no wrap");
+	same_frames(&st, r.store(), s.stored_frames());
 }
 
 /// A spill never opened: the frames fit in memory.
@@ -734,21 +741,6 @@ fn a_baked_brightness_edit_keeps_the_store() {
 	wait_until(|| w.status().adopted == 2 && store_has(&w, 5));
 	assert!(Arc::ptr_eq(&st, &w.store().unwrap()), "the same buffers take the frames of the new brightness");
 	assert_eq!(st.generation(), 1);
-}
-
-#[test]
-fn a_pass_with_every_frame_wanted_captures_the_frames_on_the_way() {
-	let dir = tempfile::tempdir().unwrap();
-	let s = spec(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
-	let s_run = request(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
-	let w = worker(dir.path());
-	w.set_goal(goal(&s_run, 20, Wanted::All));
-	wait_until(|| store_has(&w, 20));
-	let st = w.store().unwrap();
-	assert!(st.count() >= 21, "the frames before the position landed on the way to it");
-	wait_until(|| st.is_complete() && w.status().state == WorkState::Idle);
-	assert_eq!(w.status().steps_done, s.steps, "one pass, no wrap");
-	same_frames(&st, run(&s, GIB).store(), s.stored_frames());
 }
 
 #[test]

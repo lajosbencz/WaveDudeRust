@@ -1622,6 +1622,7 @@ mod tests {
 		c.tick(t, &p);
 		assert_eq!(c.playback.position(), 29, "Live follows the newest frame");
 		assert_eq!(c.shown(), Some(29));
+		assert!(c.take_notices().contains(&Notice::ShowFrame(29)), "the followed frame is shown");
 		c.scrub(5, t);
 		assert!(!c.is_live() && !c.playback.is_playing());
 		c.tick(t, &p);

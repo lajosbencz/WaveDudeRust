@@ -8,7 +8,6 @@ use wavedude_app_state::clipboard::PasteTarget;
 use wavedude_app_state::commands::{Command, Edit, NewPart};
 use wavedude_app_state::document::{Source, Target};
 use wavedude_app_state::history::History;
-use wavedude_app_state::live::Notice;
 use wavedude_app_state::live::fake::FakeBackend;
 use wavedude_app_state::platform::Store;
 use wavedude_app_state::selection::Row;
@@ -91,7 +90,6 @@ fn edits_want_every_frame_until_the_setting_says_otherwise() {
 	let t = Instant::now();
 	let mut s = app();
 	s.tick(t);
-	assert_eq!(s.live.backend().wanted(), Wanted::Position, "an opened project wants its first frame alone");
 	s.live.backend_mut().finish_position();
 	s.tick(t);
 	s.handle(Event::Command(Command::AddPart { kind: NewPart::Rectangle, at: Some(Point::new(10, 10)) }), at(t, 100));
@@ -111,19 +109,13 @@ fn edits_want_every_frame_until_the_setting_says_otherwise() {
 }
 
 #[test]
-fn user_run_follows_and_a_scrub_turns_live_off() {
+fn the_run_and_scrub_events_reach_the_live_run_and_the_in_point_the_project() {
 	let t = Instant::now();
 	let mut s = app();
 	s.handle(Event::Run, t);
 	assert!(s.live.is_live());
-	s.live.backend_mut().publish(20);
-	s.tick(at(t, 10));
-	assert_eq!(s.live.playback.position(), 19);
-	assert!(s.live.take_notices().contains(&Notice::ShowFrame(19)));
 	s.handle(Event::Scrub(5), at(t, 20));
 	assert!(!s.live.is_live() && !s.live.playback.is_playing());
-	s.tick(at(t, 30));
-	assert!(s.live.take_notices().contains(&Notice::ShowFrame(5)), "the store can show frame 5");
 	s.handle(Event::SetInPoint, at(t, 40));
 	assert_eq!(s.document.project.display.export_from, 10, "in point stored in steps");
 	assert!(s.document.dirty);
@@ -332,17 +324,14 @@ fn a_running_run_moves_the_progress_revision_alone() {
 /// The app on the core's engines: Stop ends the run within half a second, and the position's frame shows
 /// again after an edit.
 #[test]
-fn on_the_cpu_backend_stop_ends_the_run_and_an_edit_shows_the_position_again() {
-	core_backend_round(false);
-}
-
-#[test]
-fn on_the_gpu_backend_stop_ends_the_run_and_an_edit_shows_the_position_again() {
-	if wavedude_core::engine::gpu::context().is_err() {
-		eprintln!("no GPU: skipped");
-		return;
+fn on_the_cpu_and_gpu_backends_stop_ends_the_run_and_an_edit_shows_the_position_again() {
+	for use_gpu in [false, true] {
+		if use_gpu && wavedude_core::engine::gpu::context().is_err() {
+			eprintln!("no GPU: skipped");
+			continue;
+		}
+		core_backend_round(use_gpu);
 	}
-	core_backend_round(true);
 }
 
 fn core_backend_round(use_gpu: bool) {

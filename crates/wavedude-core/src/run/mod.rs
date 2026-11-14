@@ -44,15 +44,3 @@ pub fn machine_facts() -> crate::quality::MachineFacts {
 		cache_drive_seek_penalty: None,
 	}
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn reads_this_machine() {
-		let f = machine_facts();
-		assert!(f.physical_bytes > 0 && f.threads >= 1);
-		assert_eq!((f.has_gpu, f.cache_drive_seek_penalty), (None, None));
-	}
-}

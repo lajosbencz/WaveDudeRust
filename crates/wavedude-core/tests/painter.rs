@@ -422,27 +422,9 @@ fn shape_faces() {
 			angle,
 		)
 	};
-	let p = paint(&[slab(coated(4.0, CoatingProfile::Layer, false, true, false), 0.0)]);
-	assert_eq!(
-		[red(&p, 82, 60), red(&p, 117, 60), red(&p, 100, 32), red(&p, 100, 87)],
-		[225, 150, 225, 225],
-		"only the back coated"
-	);
-	let p = paint(&[slab(coated(4.0, CoatingProfile::Layer, true, false, true), 0.0)]);
-	assert_eq!(
-		[red(&p, 82, 60), red(&p, 117, 60), red(&p, 100, 32), red(&p, 100, 87)],
-		[150, 225, 150, 150],
-		"front and sides coated, back bare"
-	);
-	let p = paint(&[slab(coated(4.0, CoatingProfile::Layer, true, false, true), 90.0)]);
-	assert_eq!(
-		[red(&p, 100, 78), red(&p, 100, 42), red(&p, 72, 60), red(&p, 127, 60)],
-		[150, 225, 150, 150],
-		"the faces turn with the part"
-	);
 	let disc = Part::new(
 		PartKind::Ellipse(Ellipse {
-			material: glass,
+			material: glass.clone(),
 			coating: coated(4.0, CoatingProfile::Layer, true, true, false),
 			length: 60,
 			width: 60,
@@ -451,12 +433,36 @@ fn shape_faces() {
 		100,
 		60,
 	);
-	let p = paint(&[disc]);
-	assert_eq!(
-		[red(&p, 72, 60), red(&p, 127, 60), red(&p, 100, 32), red(&p, 100, 87)],
-		[150, 150, 225, 225],
-		"a circle with bare sides: the band at the leftmost and rightmost points only"
-	);
+	let table = [
+		(
+			"only the back coated",
+			slab(coated(4.0, CoatingProfile::Layer, false, true, false), 0.0),
+			[(82, 60), (117, 60), (100, 32), (100, 87)],
+			[225, 150, 225, 225],
+		),
+		(
+			"front and sides coated, back bare",
+			slab(coated(4.0, CoatingProfile::Layer, true, false, true), 0.0),
+			[(82, 60), (117, 60), (100, 32), (100, 87)],
+			[150, 225, 150, 150],
+		),
+		(
+			"the faces turn with the part",
+			slab(coated(4.0, CoatingProfile::Layer, true, false, true), 90.0),
+			[(100, 78), (100, 42), (72, 60), (127, 60)],
+			[150, 225, 150, 150],
+		),
+		(
+			"a circle with bare sides: the band at the leftmost and rightmost points only",
+			disc,
+			[(72, 60), (127, 60), (100, 32), (100, 87)],
+			[150, 150, 225, 225],
+		),
+	];
+	for (case, part, at, expected) in table {
+		let p = paint(&[part]);
+		assert_eq!(at.map(|(x, y)| red(&p, x, y)), expected, "{case}");
+	}
 }
 
 #[test]
@@ -482,42 +488,70 @@ fn shape(kind: PartKind) -> Part {
 	Part::new(kind, 100, 60)
 }
 
+/// The area painted (within `tolerance` of `area`) and the red at probed pixels (150 inside, 100 outside).
 #[test]
-fn polygon_shapes() {
-	let p = paint(&[shape(PartKind::Polygon(Polygon { sides: 6, side: 30, ..Polygon::default() }))]);
-	let expected = 3.0 * 3f64.sqrt() / 2.0 * 900.0;
-	assert!((area(&p, 1.5) - expected).abs() < 0.01 * expected);
-	assert_eq!(
-		[red(&p, 124, 60), red(&p, 126, 60), red(&p, 100, 74), red(&p, 100, 90)],
-		[150, 100, 150, 100],
-		"hexagon: flat faces at +-x' 26 px out, vertices at +-y' 30 px"
-	);
-	let hex = vertices(&PartKind::Polygon(Polygon { sides: 6, side: 30, ..Polygon::default() })).unwrap();
+fn painted_shapes_have_their_area_and_edges() {
+	let tri = |kind, a, b| Triangle { base: 60, kind, angle_a: a, angle_b: b, ..Triangle::default() };
+	let hexagon_area = 3.0 * 3f64.sqrt() / 2.0 * 900.0;
+	let ellipse_area = std::f64::consts::PI * 600.0;
+	let table = [
+		(
+			"hexagon: flat faces at +-x' 26 px out, vertices at +-y' 30 px",
+			PartKind::Polygon(Polygon { sides: 6, side: 30, ..Polygon::default() }),
+			hexagon_area,
+			0.01 * hexagon_area,
+			vec![((124, 60), 150), ((126, 60), 100), ((100, 74), 150), ((100, 90), 100)],
+		),
+		(
+			"rectangle 60 x 20 at x 70..129, y 50..69",
+			PartKind::Rectangle(Rectangle { length: 60, width: 20, ..Rectangle::default() }),
+			1200.0,
+			2.0,
+			vec![
+				((70, 60), 150),
+				((69, 60), 100),
+				((129, 60), 150),
+				((130, 60), 100),
+				((100, 50), 150),
+				((100, 49), 100),
+				((100, 69), 150),
+				((100, 70), 100),
+			],
+		),
+		(
+			"ellipse",
+			PartKind::Ellipse(Ellipse { length: 60, width: 40, ..Ellipse::default() }),
+			ellipse_area,
+			0.01 * ellipse_area,
+			vec![((128, 60), 150), ((131, 60), 100), ((100, 78), 150), ((100, 81), 100)],
+		),
+		(
+			"equilateral triangle",
+			PartKind::Triangle(tri(TriangleType::Equilateral, 60.0, 60.0)),
+			1558.8,
+			0.01 * 1558.8,
+			vec![((75, 60), 150), ((73, 60), 100), ((120, 60), 150), ((127, 60), 100)],
+		),
+	];
+	for (case, kind, area_expected, tolerance, probes) in table {
+		let p = paint(&[shape(kind)]);
+		let found = area(&p, 1.5);
+		assert!((found - area_expected).abs() < tolerance, "{case}: area {found} against {area_expected}");
+		for ((x, y), expected) in probes {
+			assert_eq!(red(&p, x, y), expected, "{case}: red at ({x}, {y})");
+		}
+	}
+}
+
+#[test]
+fn polygon_and_ellipse_vertices() {
+	let kind = PartKind::Polygon(Polygon { sides: 6, side: 30, ..Polygon::default() });
+	let hex = vertices(&kind).unwrap();
 	assert!(hex.iter().any(|v| (v.x.abs() < 1e-9) && (v.y + 30.0).abs() < 1e-9));
 	assert!(hex.iter().any(|v| (v.x.abs() < 1e-9) && (v.y - 30.0).abs() < 1e-9));
+	let p = paint(&[shape(kind)]);
 	assert_eq!((p.green(100, 60), p.rgba_at(100, 60)[3], red(&p, 0, 0)), (0, 255, 100));
 
-	let p = paint(&[shape(PartKind::Rectangle(Rectangle { length: 60, width: 20, ..Rectangle::default() }))]);
-	assert!((area(&p, 1.5) - 1200.0).abs() < 2.0);
-	assert_eq!(
-		[
-			red(&p, 70, 60),
-			red(&p, 69, 60),
-			red(&p, 129, 60),
-			red(&p, 130, 60),
-			red(&p, 100, 50),
-			red(&p, 100, 49),
-			red(&p, 100, 69),
-			red(&p, 100, 70)
-		],
-		[150, 100, 150, 100, 150, 100, 150, 100],
-		"rectangle 60 x 20 at x 70..129, y 50..69"
-	);
-
-	let p = paint(&[shape(PartKind::Ellipse(Ellipse { length: 60, width: 40, ..Ellipse::default() }))]);
-	let expected = std::f64::consts::PI * 600.0;
-	assert!((area(&p, 1.5) - expected).abs() < 0.01 * expected);
-	assert_eq!([red(&p, 128, 60), red(&p, 131, 60), red(&p, 100, 78), red(&p, 100, 81)], [150, 100, 150, 100]);
 	let circle = vertices(&PartKind::Ellipse(Ellipse { length: 60, width: 60, ..Ellipse::default() })).unwrap();
 	assert_eq!((circle.len(), ellipse_vertex_count(60, 60)), (63, 63));
 	assert!(circle.iter().all(|v| (v.length() - 30.0).abs() < 1e-9), "circle of 60: 63 vertices all 30 px out");
@@ -545,9 +579,6 @@ fn triangles() {
 		(100.0, 79.0),
 		"custom 100 + 100 becomes 100 + 79"
 	);
-	let p = paint(&[shape(PartKind::Triangle(tri(TriangleType::Equilateral, 60.0, 60.0)))]);
-	assert!((area(&p, 1.5) - 1558.8).abs() < 0.01 * 1558.8);
-	assert_eq!([red(&p, 75, 60), red(&p, 73, 60), red(&p, 120, 60), red(&p, 127, 60)], [150, 100, 150, 100]);
 }
 
 #[test]

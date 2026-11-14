@@ -208,20 +208,12 @@ fn is_focused(harness: &Harness<'_, Shell>, label: &str) -> bool {
 }
 
 #[test]
-fn alt_and_a_letter_open_a_menu_on_its_first_entry() {
+fn alt_and_a_letter_open_a_menu_and_the_arrows_and_esc_walk_it() {
 	let dir = tempfile::tempdir().unwrap();
 	let mut harness = shell(dir.path(), None);
 	harness.key_press_modifiers(Modifiers::ALT, Key::F);
 	settle(&mut harness);
 	assert!(is_focused(&harness, "New Project"), "Alt+F left the File menu unfocused");
-}
-
-#[test]
-fn the_arrows_walk_the_menus_and_esc_steps_out() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = shell(dir.path(), None);
-	harness.key_press_modifiers(Modifiers::ALT, Key::F);
-	settle(&mut harness);
 	harness.key_press(Key::ArrowDown);
 	settle(&mut harness);
 	assert!(is_focused(&harness, "Open Project..."));
