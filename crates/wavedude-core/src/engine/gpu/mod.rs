@@ -26,16 +26,20 @@
 //! at most [`MAX_IN_FLIGHT`] batches are queued ahead of the card: natively a submission waits for the oldest beyond
 //! them; on wasm32 `poll_room` holds the next step back while as many submissions are not run by the card
 //! (`on_submitted_work_done`), so a step and the submissions it brings start below the limit. `sample_probes`
-//! and `prepare_frame` wait for the card; a capture is submitted with its copy to a free staging buffer of a ring
-//! (`capture_capacity` of them, by `CAPTURE_RING_BYTES`) and collected later, so the card converts and copies while the host steps on; once [`DeviceFrames`] are asked for,
-//! a capture also copies its planes into one of their slots, for render passes on the device (frames.rs). Queued
-//! probe readings go into a batch buffer of [`BATCH_STEPS`] readings; a full batch, and the partial one at
-//! `pending_probes`, is copied to a pooled readback buffer whose mapping is requested. At a full batch the mapped ones
-//! are collected into the host queue, which bounds the buffers in flight; natively the rest are waited for there too.
-//! `drain_probes` collects the batches its token covers and hands out those readings alone.
-//! On wasm32 nothing can wait: await [`PendingCapture::ready`] before `finish_capture` and
-//! [`PendingProbes::ready`] before `drain_probes`, so the batches read back meanwhile; `sample_probes` and
-//! `prepare_frame` are unavailable there.
+//! and `prepare_frame` wait for the card. A capture is recorded into the batch with its copy to a free staging
+//! buffer of a ring (`capture_capacity` of them, by `CAPTURE_RING_BYTES`) and its parameters in that slot's part of
+//! a uniform buffer; the submission carrying it requests the mapping, and it is collected later, so the card
+//! converts and copies while the host steps on; `finish_capture` submits the batch of a capture still recorded.
+//! Once [`DeviceFrames`] are asked for, a capture also copies its planes into one of their slots, for render passes
+//! on the device (frames.rs). Queued probe readings go into a batch buffer of [`BATCH_STEPS`] readings; at a full
+//! batch and at `pending_probes`, the copy of the readings not copied yet to a pooled readback buffer is recorded
+//! into the batch, behind those of the last readback while it is unsubmitted and has room, and the submission
+//! carrying it requests the mapping. At a full batch the mapped ones are collected into the host queue, which bounds
+//! the buffers in flight; natively the rest are submitted and waited for there too. `drain_probes` collects the
+//! batches its token covers, those still recorded submitted first, and hands out those readings alone.
+//! On wasm32 nothing can wait: call [`WaveEngine::submit_pending`], then await [`PendingCapture::ready`] before
+//! `finish_capture` and [`PendingProbes::ready`] before `drain_probes`, so the batches read back meanwhile;
+//! `sample_probes` and `prepare_frame` are unavailable there.
 //!
 //! Where the GPU may differ from the CPU: the driver may fuse a multiply and an add (the CPU does
 //! not), and may flush subnormals. Both change the last bit of some cells per step; the difference
@@ -59,7 +63,7 @@ use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 
-pub use context::{GpuContext, GpuError};
+pub use context::{FIRST_KICK, GpuContext, GpuError, Kicks, MAX_KICK_GAP};
 #[cfg(not(target_arch = "wasm32"))]
 pub use context::{context, set_context};
 pub use frames::{DeviceFrame, DeviceFrames, FrameTag};
@@ -188,12 +192,15 @@ const EDGES_SLOTS: &[Slot] = &[Slot::Uniform, Slot::Read, Slot::ReadWrite, Slot:
 const FORCE_SLOTS: &[Slot] =
 	&[Slot::Uniform, Slot::Read, Slot::ReadDynamic, Slot::ReadWrite, Slot::ReadWrite, Slot::ReadWrite];
 const PROBES_SLOTS: &[Slot] = &[Slot::Uniform, Slot::Read, Slot::Read, Slot::Read, Slot::Read, Slot::ReadWrite];
-const CAPTURE_SLOTS: &[Slot] = &[Slot::Uniform, Slot::Uniform, Slot::Read, Slot::Read, Slot::Read, Slot::ReadWrite];
+const CAPTURE_SLOTS: &[Slot] =
+	&[Slot::Uniform, Slot::UniformDynamic, Slot::Read, Slot::Read, Slot::Read, Slot::ReadWrite];
 
 /// Binding kinds of a kernel's bind group, in binding order.
 #[derive(Clone, Copy)]
 enum Slot {
 	Uniform,
+	/// Uniform with a dynamic offset.
+	UniformDynamic,
 	Read,
 	ReadWrite,
 	/// Read-only with a dynamic offset.
@@ -222,11 +229,20 @@ impl Readiness for MappedOrLost {
 	}
 }
 
-/// A host-mappable buffer, its map state, and the submission that fills it while it is pending.
+/// What fills a pending readback.
+enum Fill {
+	/// Copies in the pending encoder; the mapping is requested once it is submitted.
+	Recorded,
+	Submitted(
+		#[cfg_attr(target_arch = "wasm32", allow(dead_code, reason = "waited for natively"))] wgpu::SubmissionIndex,
+	),
+}
+
+/// A host-mappable buffer, its map state, and what fills it while it is pending.
 struct Readback {
 	buffer: wgpu::Buffer,
 	mapped: MapState,
-	pending: Option<wgpu::SubmissionIndex>,
+	pending: Option<Fill>,
 }
 
 /// Word layout of a capture of `shape` (capture.wgsl): layers, words of samples and words per layer.
@@ -274,15 +290,20 @@ pub struct GpuEngine {
 	probe_out: wgpu::Buffer,
 	/// [`BATCH_STEPS`] readings of `probe_out`, queued on the device.
 	probe_batch: wgpu::Buffer,
-	/// Readings in `probe_batch` not read back yet.
+	/// Readings in `probe_batch` since it was last full.
 	probe_slots: u32,
+	/// Of `probe_slots`, those whose copy to a readback is recorded.
+	probe_copied: u32,
 	/// Free readback buffers of a full batch, for `probe_batch` or `probe_out` alone.
 	probe_pool: Vec<Readback>,
-	/// Batches copied for readback, oldest first, with their reading counts.
+	/// Batches copied for readback, oldest first, with their reading counts; the last, while its copies are
+	/// recorded, takes the copies of later readings it has room for.
 	probe_reads: VecDeque<(Readback, u32)>,
 	probe_lengths: Vec<usize>,
 	probe_queue: ProbeQueue,
+	/// [`CaptureParams`] by capture slot, `params_stride` apart: the captures of one submission read their own.
 	capture_params: wgpu::Buffer,
+	params_stride: u64,
 	capture_out: wgpu::Buffer,
 	/// Staging buffers of the captures, by slot; a slot is free once its capture was finished.
 	captures: Vec<Readback>,
@@ -316,6 +337,8 @@ pub struct GpuEngine {
 	time: u32,
 	/// The first failure of a call that returns no `Result`, returned by the next one that does.
 	failed: Option<GpuError>,
+	#[cfg(test)]
+	submissions: usize,
 }
 
 impl GpuEngine {
@@ -386,9 +409,11 @@ impl GpuEngine {
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 			mapped_at_creation: false,
 		});
+		let params_stride = (size_of::<CaptureParams>() as u64)
+			.next_multiple_of(u64::from(ctx.limits.min_uniform_buffer_offset_alignment));
 		let capture_params = device.create_buffer(&wgpu::BufferDescriptor {
 			label: Some("capture params"),
-			size: size_of::<CaptureParams>() as u64,
+			size: params_stride * MAX_CAPTURES as u64,
 			usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 			mapped_at_creation: false,
 		});
@@ -422,11 +447,13 @@ impl GpuEngine {
 			probe_out: empty("probe out"),
 			probe_batch: empty("probe batch"),
 			probe_slots: 0,
+			probe_copied: 0,
 			probe_pool: Vec::new(),
 			probe_reads: VecDeque::new(),
 			probe_lengths: Vec::new(),
 			probe_queue: ProbeQueue::default(),
 			capture_params,
+			params_stride,
 			capture_out: empty("capture out"),
 			captures: Vec::new(),
 			frames: None,
@@ -454,6 +481,8 @@ impl GpuEngine {
 			values: Vec::new(),
 			time: 0,
 			failed: None,
+			#[cfg(test)]
+			submissions: 0,
 			options,
 			scene,
 		};
@@ -712,9 +741,18 @@ impl GpuEngine {
 	fn bind_capture(&mut self) {
 		let device = &self.ctx.device;
 		self.capture_groups = [0, 1].map(|c| {
-			let buffers =
-				[&self.params_buf, &self.capture_params, &self.field[c], &self.s1, &self.s2, &self.capture_out];
-			bind(device, &self.capture_kernel.layout, &buffers)
+			device.create_bind_group(&wgpu::BindGroupDescriptor {
+				label: Some("capture"),
+				layout: &self.capture_kernel.layout,
+				entries: &[
+					entry(0, &self.params_buf, None),
+					entry(1, &self.capture_params, NonZeroU64::new(size_of::<CaptureParams>() as u64)),
+					entry(2, &self.field[c], None),
+					entry(3, &self.s1, None),
+					entry(4, &self.s2, None),
+					entry(5, &self.capture_out, None),
+				],
+			})
 		});
 	}
 
@@ -730,13 +768,24 @@ impl GpuEngine {
 		}
 	}
 
-	/// Runs `record` on the pending encoder (or a new one) and submits everything.
+	/// Runs `record` on the pending encoder (or a new one), submits everything and requests the mappings of the
+	/// captures and probe batches recorded.
 	fn submit(&mut self, record: impl FnOnce(&mut wgpu::CommandEncoder)) -> Result<wgpu::SubmissionIndex, GpuError> {
 		let mut encoder =
 			self.pending.take().unwrap_or_else(|| self.ctx.device.create_command_encoder(&Default::default()));
 		record(&mut encoder);
 		self.batch_steps = 0;
-		let index = self.ctx.queue.submit([encoder.finish()]);
+		let index = self.ctx.submit([encoder.finish()]);
+		#[cfg(test)]
+		{
+			self.submissions += 1;
+		}
+		let probes = self.probe_reads.iter_mut().map(|(r, _)| r);
+		for readback in self.captures.iter_mut().chain(probes) {
+			if matches!(readback.pending, Some(Fill::Recorded)) {
+				request_map(&self.ctx, readback, index.clone());
+			}
+		}
 		self.pace(index.clone())?;
 		Ok(index)
 	}
@@ -785,7 +834,7 @@ impl GpuEngine {
 			}
 		})?;
 		let mut readback = readback;
-		map(&mut readback, index);
+		map(&self.ctx, &mut readback, index);
 		wait_mapped(&self.ctx.device, &mut readback)?;
 		let bytes = readback.buffer.slice(..).get_mapped_range().map_err(GpuError::MapRange)?.to_vec();
 		readback.buffer.unmap();
@@ -927,7 +976,8 @@ impl WaveEngine for GpuEngine {
 	}
 
 	fn pending_probes(&mut self) -> Result<PendingProbes, EngineError> {
-		self.guarded(Self::read_back_probe_batch)?;
+		self.check()?;
+		self.record_probe_copy();
 		let on_host = self.probe_queue.end();
 		let batches = self
 			.probe_reads
@@ -948,6 +998,10 @@ impl WaveEngine for GpuEngine {
 
 	fn begin_capture(&mut self, shape: &FrameShape, into: Snapshot) -> Result<PendingCapture, EngineError> {
 		self.guarded(|e| e.begin(shape, into))
+	}
+
+	fn submit_pending(&mut self) -> Result<(), EngineError> {
+		self.guarded(Self::flush)
 	}
 
 	fn capture_capacity(&self, shape: &FrameShape) -> usize {
@@ -1087,7 +1141,7 @@ impl GpuEngine {
 		self.pending = Some(encoder);
 		self.probe_slots += 1;
 		if self.probe_slots == BATCH_STEPS {
-			self.read_back_probe_batch()?;
+			self.record_probe_copy();
 			// wasm32 cannot wait.
 			self.collect_probe_batches(if cfg!(target_arch = "wasm32") { 0 } else { u64::MAX })?;
 		}
@@ -1105,32 +1159,56 @@ impl GpuEngine {
 	/// Drops the queued readings, those on the device included.
 	fn drop_probe_readings(&mut self) {
 		let in_flight: u64 = self.probe_reads.drain(..).map(|(_, steps)| u64::from(steps)).sum();
-		self.probe_queue.skip(in_flight + u64::from(self.probe_slots));
-		self.probe_slots = 0;
+		self.probe_queue.skip(in_flight + u64::from(self.probe_slots - self.probe_copied));
+		(self.probe_slots, self.probe_copied) = (0, 0);
 	}
 
-	/// Copies the readings in `probe_batch` to a readback buffer and requests its mapping.
-	fn read_back_probe_batch(&mut self) -> Result<(), GpuError> {
-		if self.probe_slots == 0 {
-			return Ok(());
+	/// Records the copy of the readings in `probe_batch` not copied yet behind those of the last batch, while it
+	/// is recorded and has room, else into a new one; the submission carrying it requests the mapping. The
+	/// commands recorded later, which reuse `probe_batch` once it is full, run after the copy.
+	fn record_probe_copy(&mut self) {
+		let new = self.probe_slots - self.probe_copied;
+		if new == 0 {
+			return;
 		}
-		let bytes = u64::from(self.params.probe_count) * 4 * u64::from(self.probe_slots);
-		let mut readback = self.probe_readback();
-		let (batch, target) = (self.probe_batch.clone(), readback.buffer.clone());
-		let index = self.submit(|encoder| encoder.copy_buffer_to_buffer(&batch, 0, &target, 0, bytes))?;
-		map(&mut readback, index);
-		self.probe_reads.push_back((readback, self.probe_slots));
-		self.probe_slots = 0;
-		Ok(())
+		let open = self
+			.probe_reads
+			.back()
+			.is_some_and(|(r, steps)| matches!(r.pending, Some(Fill::Recorded)) && steps + new <= BATCH_STEPS);
+		if !open {
+			let mut readback = self.probe_readback();
+			readback.mapped = MapState::default();
+			readback.pending = Some(Fill::Recorded);
+			self.probe_reads.push_back((readback, 0));
+		}
+		let bytes = u64::from(self.params.probe_count) * 4;
+		let (readback, steps) = self.probe_reads.back_mut().expect("a batch to copy into");
+		let encoder = self.pending.get_or_insert_with(|| self.ctx.device.create_command_encoder(&Default::default()));
+		encoder.copy_buffer_to_buffer(
+			&self.probe_batch,
+			u64::from(self.probe_copied) * bytes,
+			&readback.buffer,
+			u64::from(*steps) * bytes,
+			u64::from(new) * bytes,
+		);
+		*steps += new;
+		self.probe_copied = self.probe_slots;
+		if self.probe_slots == BATCH_STEPS {
+			(self.probe_slots, self.probe_copied) = (0, 0);
+		}
 	}
 
 	/// Moves the read-back batches into the host queue, oldest first: those mapped already, and those holding
-	/// readings numbered below `until`, waited for.
+	/// readings numbered below `until`, submitted and waited for.
 	fn collect_probe_batches(&mut self, until: u64) -> Result<(), GpuError> {
-		while let Some((readback, steps)) = self.probe_reads.front_mut() {
+		while let Some((readback, _)) = self.probe_reads.front() {
 			if self.probe_queue.end() >= until && readback.mapped.get().is_none() {
 				break;
 			}
+			if matches!(readback.pending, Some(Fill::Recorded)) {
+				self.flush()?;
+			}
+			let (readback, steps) = self.probe_reads.front_mut().expect("the batch to read");
 			wait_mapped(&self.ctx.device, readback)?;
 			{
 				let bytes = u64::from(*steps) * u64::from(self.params.probe_count) * 4;
@@ -1167,7 +1245,7 @@ impl GpuEngine {
 			}
 			encoder.copy_buffer_to_buffer(&probe_out, 0, &target, 0, bytes);
 		})?;
-		map(&mut readback, index);
+		map(&self.ctx, &mut readback, index);
 		wait_mapped(&self.ctx.device, &mut readback)?;
 		{
 			let view = readback.buffer.slice(..bytes).get_mapped_range().map_err(GpuError::MapRange)?;
@@ -1211,29 +1289,28 @@ impl GpuEngine {
 			field_b: shape.field_brightness,
 			intensity_b: shape.intensity_brightness,
 		};
-		self.ctx.queue.write_buffer(&self.capture_params, 0, bytemuck::bytes_of(&params));
+		let offset = slot as u64 * self.params_stride;
+		self.ctx.queue.write_buffer(&self.capture_params, offset, bytemuck::bytes_of(&params));
 		let groups = words.div_ceil(CAPTURE_GROUP);
 		let max = self.ctx.limits.max_compute_workgroups_per_dimension;
 		let (gx, gy) = (groups.min(max), groups.div_ceil(max));
-		let pipeline = self.capture_kernel.pipeline.clone();
-		let group = self.capture_groups[self.cur].clone();
-		let out = self.capture_out.clone();
-		let target = self.captures[slot].buffer.clone();
 		let kept = self.frames.as_ref().map(|f| f.begin(slot, *shape, layers == 2, layer_words, bytes));
-		let submitted = self.submit(|encoder| {
-			{
-				let mut pass = encoder.begin_compute_pass(&Default::default());
-				pass.set_pipeline(&pipeline);
-				pass.set_bind_group(0, &group, &[]);
-				pass.dispatch_workgroups(gx, gy, layers);
-			}
-			encoder.copy_buffer_to_buffer(&out, 0, &target, 0, bytes);
-			if let Some(kept) = &kept {
-				encoder.copy_buffer_to_buffer(&out, 0, kept, 0, bytes);
-			}
-		});
+		let mut encoder =
+			self.pending.take().unwrap_or_else(|| self.ctx.device.create_command_encoder(&Default::default()));
+		{
+			let mut pass = encoder.begin_compute_pass(&Default::default());
+			pass.set_pipeline(&self.capture_kernel.pipeline);
+			pass.set_bind_group(0, &self.capture_groups[self.cur], &[offset as u32]);
+			pass.dispatch_workgroups(gx, gy, layers);
+		}
 		let readback = &mut self.captures[slot];
-		map(readback, submitted?);
+		encoder.copy_buffer_to_buffer(&self.capture_out, 0, &readback.buffer, 0, bytes);
+		if let Some(kept) = &kept {
+			encoder.copy_buffer_to_buffer(&self.capture_out, 0, kept, 0, bytes);
+		}
+		self.pending = Some(encoder);
+		readback.mapped = MapState::default();
+		readback.pending = Some(Fill::Recorded);
 		let mapped = self.mapped_or_lost(&self.captures[slot].mapped);
 		into.shape = *shape;
 		into.step = self.time.saturating_sub(1);
@@ -1242,6 +1319,9 @@ impl GpuEngine {
 
 	fn finish(&mut self, pending: PendingCapture) -> Result<Snapshot, GpuError> {
 		let PendingCapture { mut snapshot, slot, .. } = pending;
+		if matches!(self.captures[slot].pending, Some(Fill::Recorded)) {
+			self.flush()?;
+		}
 		let readback = &mut self.captures[slot];
 		let waited = wait_mapped(&self.ctx.device, readback);
 		if let Err(e) = waited {
@@ -1340,11 +1420,11 @@ fn kernel_layout(device: &wgpu::Device, label: &str, slots: &[Slot]) -> wgpu::Bi
 			visibility: wgpu::ShaderStages::COMPUTE,
 			ty: wgpu::BindingType::Buffer {
 				ty: match slot {
-					Slot::Uniform => wgpu::BufferBindingType::Uniform,
+					Slot::Uniform | Slot::UniformDynamic => wgpu::BufferBindingType::Uniform,
 					Slot::Read | Slot::ReadDynamic => wgpu::BufferBindingType::Storage { read_only: true },
 					Slot::ReadWrite => wgpu::BufferBindingType::Storage { read_only: false },
 				},
-				has_dynamic_offset: matches!(slot, Slot::ReadDynamic),
+				has_dynamic_offset: matches!(slot, Slot::ReadDynamic | Slot::UniformDynamic),
 				min_binding_size: None,
 			},
 			count: None,
@@ -1468,7 +1548,7 @@ fn placeholder(device: &wgpu::Device, kernel: &Kernel) -> [wgpu::BindGroup; 2] {
 		.slots
 		.iter()
 		.map(|slot| match slot {
-			Slot::Uniform => device.create_buffer(&wgpu::BufferDescriptor {
+			Slot::Uniform | Slot::UniformDynamic => device.create_buffer(&wgpu::BufferDescriptor {
 				label: Some("placeholder"),
 				size: 64,
 				usage: wgpu::BufferUsages::UNIFORM,
@@ -1536,11 +1616,20 @@ fn readback_buffer(device: &wgpu::Device, label: &str, bytes: u64) -> Readback {
 }
 
 /// Requests the mapping of `readback` once `submission`, which fills it, is done.
-fn map(readback: &mut Readback, submission: wgpu::SubmissionIndex) {
-	let state = MapState::default();
-	readback.mapped = state.clone();
-	readback.pending = Some(submission);
-	readback.buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| state.set(r));
+fn map(ctx: &GpuContext, readback: &mut Readback, submission: wgpu::SubmissionIndex) {
+	readback.mapped = MapState::default();
+	request_map(ctx, readback, submission);
+}
+
+/// [`map`] into the map state `readback` has; awaited on `ctx` until it lands.
+fn request_map(ctx: &GpuContext, readback: &mut Readback, submission: wgpu::SubmissionIndex) {
+	let state = readback.mapped.clone();
+	let awaited = ctx.awaiting();
+	readback.pending = Some(Fill::Submitted(submission));
+	readback.buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+		state.set(r);
+		drop(awaited);
+	});
 }
 
 /// Cell indices are u32 words, probe cells carry the layer in bit 31.
@@ -1559,8 +1648,10 @@ fn wait(device: &wgpu::Device, index: wgpu::SubmissionIndex) -> Result<(), GpuEr
 /// Waits for the mapping requested by [`map`]; the readback is no longer pending after it.
 #[cfg(not(target_arch = "wasm32"))]
 fn wait_mapped(device: &wgpu::Device, readback: &mut Readback) -> Result<(), GpuError> {
-	if let Some(index) = readback.pending.take() {
-		wait(device, index)?;
+	match readback.pending.take() {
+		Some(Fill::Submitted(index)) => wait(device, index)?,
+		Some(Fill::Recorded) => unreachable!("a readback waited for before its submission"),
+		None => {}
 	}
 	loop {
 		if let Some(result) = readback.mapped.get() {
@@ -1576,4 +1667,248 @@ fn wait_mapped(_device: &wgpu::Device, readback: &mut Readback) -> Result<(), Gp
 	let result = readback.mapped.get().ok_or(GpuError::NotReady)?;
 	readback.pending = None;
 	result.clone().map_err(GpuError::Map)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::model::{PulseShape, Scene, Stencil};
+
+	const SIZE: (u32, u32) = (64, 48);
+
+	/// An engine with one emitter on the process's device; `None` without an adapter.
+	fn engine() -> Option<GpuEngine> {
+		match context() {
+			Ok(ctx) => Some(engine_on(ctx)),
+			Err(e) => {
+				eprintln!("skipped: {e}");
+				None
+			}
+		}
+	}
+
+	/// An engine with one emitter on `ctx`.
+	fn engine_on(ctx: Arc<GpuContext>) -> GpuEngine {
+		let scene = SceneData::blank(SIZE.0, SIZE.1, &Scene { damping_edge: 0, ..Scene::default() });
+		let options = EngineOptions {
+			stencil: Stencil::NinePoint,
+			source_frequency_scale: 2.0,
+			image_source_scale: 1.0,
+			time_decay: 10.0,
+			intensity_scale: 1.0,
+			track_intensity: true,
+		};
+		let mut e =
+			pollster::block_on(GpuEngine::create(ctx, scene, options, MediumLayout::Compact)).expect("GPU engine");
+		e.set_emitters(&[Emitter {
+			x: 32.0,
+			y: 24.0,
+			level: 100.0,
+			amplitude: 1.0,
+			phase_radians: 0.0,
+			pulsed: false,
+			shape: PulseShape::Gaussian,
+			on_width_cycles: 10,
+			off_width_cycles: 10,
+			off_width_base: 10,
+			randomize_off_width: 0,
+			detach_after_step: None,
+			rng_seed: std::num::NonZeroU32::MIN,
+		}]);
+		e
+	}
+
+	fn shape(divisor: u32, format: SampleFormat, brightness: f32) -> FrameShape {
+		FrameShape {
+			canvas_width: SIZE.0,
+			canvas_height: SIZE.1,
+			divisor,
+			format,
+			field_brightness: brightness,
+			intensity_brightness: brightness,
+			intensity_root: format == SampleFormat::Half,
+		}
+	}
+
+	/// Two probes, one of each layer.
+	fn probes() -> [ProbeCells; 2] {
+		[
+			ProbeCells { layer: Layer::Field, cells: vec![(30, 24), (10, 5), (33, 20)] },
+			ProbeCells { layer: Layer::Intensity, cells: vec![(31, 25)] },
+		]
+	}
+
+	/// Hands out the readings `pending` covers, appended to `into`.
+	fn drain(e: &mut GpuEngine, pending: PendingProbes, into: &mut Vec<ProbeReadings>) {
+		e.drain_probes(pending, &mut |r| into.push(r.clone())).unwrap();
+	}
+
+	fn steps(e: &mut GpuEngine, n: u32) {
+		for _ in 0..n {
+			e.advance_one_step().unwrap();
+		}
+	}
+
+	#[test]
+	fn captures_ride_the_batch_of_their_steps() {
+		let Some(mut e) = engine() else { return };
+		let shape = shape(1, SampleFormat::Index, 1.0);
+		let capacity = e.capture_capacity(&shape);
+		let before = e.submissions;
+		let mut pending = VecDeque::new();
+		let total = 4 * BATCH_STEPS;
+		for i in 0..total {
+			e.advance_one_step().unwrap();
+			if i % 2 == 0 {
+				if pending.len() == capacity {
+					e.finish_capture(pending.pop_front().unwrap()).unwrap();
+				}
+				pending.push_back(e.begin_capture(&shape, Snapshot::new(shape)).unwrap());
+			}
+		}
+		let submissions = e.submissions - before;
+		assert!(submissions <= (total / BATCH_STEPS + 1) as usize, "{submissions} submissions for {total} steps");
+		for p in pending {
+			e.finish_capture(p).unwrap();
+		}
+	}
+
+	#[test]
+	fn probe_readings_ride_the_batch_of_their_steps() {
+		let Some(mut e) = engine() else { return };
+		e.set_probes(&probes());
+		let shape = shape(1, SampleFormat::Index, 1.0);
+		let capacity = e.capture_capacity(&shape);
+		let before = e.submissions;
+		let (mut pending, mut tokens) = (VecDeque::new(), Vec::new());
+		let total = 4 * BATCH_STEPS;
+		for i in 0..total {
+			e.advance_one_step().unwrap();
+			e.queue_probes().unwrap();
+			if i % 2 == 0 {
+				if pending.len() == capacity {
+					e.finish_capture(pending.pop_front().unwrap()).unwrap();
+				}
+				pending.push_back(e.begin_capture(&shape, Snapshot::new(shape)).unwrap());
+				tokens.push(e.pending_probes().unwrap());
+			}
+		}
+		let submissions = e.submissions - before;
+		// Natively a full probe batch is also submitted, to be waited for.
+		let most = 2 * total / BATCH_STEPS + 1;
+		assert!(submissions <= most as usize, "{submissions} submissions for {total} steps");
+		for p in pending {
+			e.finish_capture(p).unwrap();
+		}
+		let mut readings = Vec::new();
+		for token in tokens {
+			drain(&mut e, token, &mut readings);
+		}
+		assert_eq!(readings.len(), total as usize - 1);
+	}
+
+	#[test]
+	fn probe_readings_drained_in_pieces_are_those_drained_whole_and_those_sampled() {
+		let (Some(mut pieces), Some(mut whole), Some(mut sampled)) = (engine(), engine(), engine()) else { return };
+		for e in [&mut pieces, &mut whole, &mut sampled] {
+			e.set_probes(&probes());
+		}
+		let total = 3 * BATCH_STEPS + 7;
+		let (mut tokens, mut drained) = (VecDeque::new(), Vec::new());
+		for i in 0..total {
+			pieces.advance_one_step().unwrap();
+			pieces.queue_probes().unwrap();
+			if i % 3 == 0 {
+				tokens.push_back(pieces.pending_probes().unwrap());
+			}
+			if i % 7 == 0
+				&& let Some(token) = tokens.pop_front()
+			{
+				drain(&mut pieces, token, &mut drained);
+			}
+			if i % 11 == 0 {
+				pieces.submit_pending().unwrap();
+			}
+		}
+		tokens.push_back(pieces.pending_probes().unwrap());
+		for token in tokens {
+			drain(&mut pieces, token, &mut drained);
+		}
+		let mut at_once = Vec::new();
+		for _ in 0..total {
+			whole.advance_one_step().unwrap();
+			whole.queue_probes().unwrap();
+		}
+		let token = whole.pending_probes().unwrap();
+		drain(&mut whole, token, &mut at_once);
+		let each: Vec<_> = (0..total)
+			.map(|_| {
+				sampled.advance_one_step().unwrap();
+				let mut r = ProbeReadings::default();
+				sampled.sample_probes(&mut r).unwrap();
+				r
+			})
+			.collect();
+		assert_eq!(each.len(), total as usize);
+		assert!(each.iter().any(|r| r.probe(0).iter().any(|&v| v != 0.0)), "the readings are blank");
+		assert!(drained == each, "the readings drained in pieces differ from those sampled");
+		assert!(at_once == each, "the readings drained whole differ from those sampled");
+	}
+
+	#[test]
+	fn captures_of_one_batch_read_their_own_parameters() {
+		let (Some(mut together), Some(mut apart)) = (engine(), engine()) else { return };
+		let shapes = [shape(1, SampleFormat::Index, 1.0), shape(2, SampleFormat::Half, 0.5)];
+		let take = |e: &mut GpuEngine, submit_between: bool| {
+			steps(e, 5);
+			let first = e.begin_capture(&shapes[0], Snapshot::new(shapes[0])).unwrap();
+			if submit_between {
+				e.submit_pending().unwrap();
+			}
+			steps(e, 3);
+			let submissions = e.submissions;
+			let second = e.begin_capture(&shapes[1], Snapshot::new(shapes[1])).unwrap();
+			assert_eq!(e.submissions, submissions, "a capture submitted");
+			[first, second].map(|p| e.finish_capture(p).unwrap())
+		};
+		let (one, two) = (take(&mut together, false), take(&mut apart, true));
+		for (a, b) in one.iter().zip(&two) {
+			assert_eq!((a.shape, a.step), (b.shape, b.step));
+			assert!(a.field == b.field && a.intensity == b.intensity, "{:?} differs", a.shape);
+			assert!(a.field.iter().any(|&v| v != 0), "{:?} is blank", a.shape);
+		}
+	}
+
+	#[test]
+	fn the_context_awaits_submitted_batches_and_requested_mappings_until_they_land() {
+		// A context of its own: the other tests submit on the process's.
+		let ctx = match pollster::block_on(GpuContext::create()) {
+			Ok(ctx) => ctx,
+			Err(e) => {
+				eprintln!("skipped: {e}");
+				return;
+			}
+		};
+		let land = || ctx.device.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
+		let mut e = engine_on(ctx.clone());
+		land();
+		assert!(!ctx.awaits_completions(), "an idle engine awaits nothing");
+		steps(&mut e, 3);
+		assert!(!ctx.awaits_completions(), "recorded steps are not submitted");
+		e.submit_pending().unwrap();
+		assert!(ctx.awaits_completions(), "a submitted batch");
+		land();
+		assert!(!ctx.awaits_completions(), "a batch run");
+		let shape = shape(1, SampleFormat::Index, 1.0);
+		steps(&mut e, 2);
+		let capture = e.begin_capture(&shape, Snapshot::new(shape)).unwrap();
+		e.submit_pending().unwrap();
+		assert!(ctx.awaits_completions(), "a requested mapping");
+		land();
+		assert!(!ctx.awaits_completions(), "a mapping landed");
+		e.finish_capture(capture).unwrap();
+		ctx.kick();
+		land();
+		assert!(!ctx.awaits_completions(), "a kick awaits nothing");
+	}
 }

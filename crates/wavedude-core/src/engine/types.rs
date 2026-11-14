@@ -273,8 +273,9 @@ impl PendingCapture {
 
 	/// Resolves when [`WaveEngine::finish_capture`](super::WaveEngine::finish_capture) will not have to wait.
 	/// On wasm32 `finish_capture` before this resolves fails with `GpuError::NotReady` and leaves the engine
-	/// failed. Natively it resolves only once something polls the device, which `finish_capture` does: native
-	/// callers call `finish_capture` instead of awaiting.
+	/// failed. It resolves only once the capture is submitted ([`WaveEngine::submit_pending`](super::WaveEngine::submit_pending)
+	/// or a batch's end) and, natively, something polls the device, which `finish_capture` does: native callers call
+	/// `finish_capture` instead of awaiting.
 	pub fn ready(&self) -> impl Future<Output = ()> + use<> {
 		let mapped = self.mapped.clone();
 		async move {
@@ -323,9 +324,10 @@ impl PendingProbes {
 	}
 
 	/// Resolves when [`WaveEngine::drain_probes`](super::WaveEngine::drain_probes) will not have to wait. On
-	/// wasm32 a drain before this resolves fails with `GpuError::NotReady` and leaves the engine failed. Natively
-	/// it resolves only once something polls the device, which `drain_probes` does: native callers drain instead
-	/// of awaiting.
+	/// wasm32 a drain before this resolves fails with `GpuError::NotReady` and leaves the engine failed. It
+	/// resolves only once the readbacks are submitted ([`WaveEngine::submit_pending`](super::WaveEngine::submit_pending)
+	/// or a batch's end) and, natively, something polls the device, which `drain_probes` does: native callers drain
+	/// instead of awaiting.
 	pub fn ready(&self) -> impl Future<Output = ()> + use<> {
 		let mapped: Vec<_> = self.batches.iter().map(|(m, _)| m.clone()).collect();
 		async move {

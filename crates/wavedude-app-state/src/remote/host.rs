@@ -113,6 +113,7 @@ impl SpillBackend for Posted {
 pub struct Host<P: Port> {
 	port: P,
 	worker: RunWorker,
+	gpu: Arc<Gpu>,
 	use_gpu: Arc<AtomicBool>,
 	/// The scene image the page posted last: (key, bytes).
 	image: Option<(u64, Arc<[u8]>)>,
@@ -144,12 +145,13 @@ impl<P: Port> Host<P> {
 			allow(clippy::arc_with_non_send_sync, reason = "wgpu's types are not Send there")
 		)]
 		let gpu = Arc::new(Gpu { request, device: Mutex::new(gpu) });
-		let factory = engines(gpu, use_gpu.clone(), queue.clone());
+		let factory = engines(gpu.clone(), use_gpu.clone(), queue.clone());
 		let worker = RunWorker::pumped(factory, 0, Box::new(PostSpill(queue.clone())), Arc::default());
 		post(&port, &ToPage::Ready { version: VERSION, gpu: ready }, None);
 		Self {
 			port,
 			worker,
+			gpu,
 			use_gpu,
 			image: None,
 			project: None,
@@ -174,6 +176,11 @@ impl<P: Port> Host<P> {
 		let left = self.worker.pump(budget, waker);
 		self.post_made(left != Pump::Idle);
 		left
+	}
+
+	/// The engines' GPU device as last requested, unless there is none.
+	pub fn gpu(&self) -> Option<GpuHandle> {
+		lock(&self.gpu.device).as_ref().ok().cloned()
 	}
 
 	/// Frames written and not acknowledged by the page, posted or not.

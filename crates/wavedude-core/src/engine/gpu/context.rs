@@ -8,13 +8,24 @@
 //! Natively `wgpu::Device` and `wgpu::Queue` are `Send + Sync`; engines on different threads submit to the same
 //! queue, which wgpu serialises. Software adapters, and adapters without compute shaders, are refused: the CPU
 //! engine is faster or the only one.
+//! The context counts the completions its engines await (submissions not reported run, mappings requested and not
+//! landed); while some are, a browser's waiting caller kicks the queue on [`Kicks`] (decision 0026).
+
+use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use crate::sync::Notify;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::sync::lock;
-use std::sync::Arc;
-#[cfg(not(target_arch = "wasm32"))]
-use std::sync::Mutex;
+
+/// The first kick's delay: a short batch lands soon after the card ran it (decision 0026).
+pub const FIRST_KICK: Duration = Duration::from_micros(500);
+/// The longest gap between kicks: a completion lands at most this late where the device is polled on a timer, for
+/// one empty submit per gap (decision 0026).
+pub const MAX_KICK_GAP: Duration = Duration::from_millis(8);
 
 /// Why no GPU engine can be built, or why a GPU engine failed.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -54,6 +65,39 @@ pub struct GpuContext {
 	pub queue: wgpu::Queue,
 	/// Set by the device-lost callback.
 	lost: Arc<Notify<GpuError>>,
+	/// Completions awaited: one per [`Awaited`] alive.
+	awaited: Arc<AtomicUsize>,
+}
+
+/// A completion the device owes, counted by its context until dropped with the callback holding it.
+pub(crate) struct Awaited(Arc<AtomicUsize>);
+
+impl Drop for Awaited {
+	fn drop(&mut self) {
+		self.0.fetch_sub(1, Ordering::Relaxed);
+	}
+}
+
+/// The gaps before each kick of a wait: [`FIRST_KICK`], doubling up to [`MAX_KICK_GAP`]; a new wait starts over.
+#[derive(Debug, Clone)]
+pub struct Kicks {
+	next: Duration,
+}
+
+impl Default for Kicks {
+	fn default() -> Self {
+		Self { next: FIRST_KICK }
+	}
+}
+
+impl Iterator for Kicks {
+	type Item = Duration;
+
+	fn next(&mut self) -> Option<Duration> {
+		let gap = self.next;
+		self.next = (gap * 2).min(MAX_KICK_GAP);
+		Some(gap)
+	}
 }
 
 impl GpuContext {
@@ -65,6 +109,30 @@ impl GpuContext {
 	/// Set by the device-lost callback, which wakes its waiters.
 	pub(crate) fn lost_notify(&self) -> Arc<Notify<GpuError>> {
 		self.lost.clone()
+	}
+
+	/// A completion counted as awaited until the returned guard drops.
+	pub(crate) fn awaiting(&self) -> Awaited {
+		self.awaited.fetch_add(1, Ordering::Relaxed);
+		Awaited(self.awaited.clone())
+	}
+
+	/// Submits `buffers`, awaited until the card reports them run.
+	pub(crate) fn submit(&self, buffers: impl IntoIterator<Item = wgpu::CommandBuffer>) -> wgpu::SubmissionIndex {
+		let index = self.queue.submit(buffers);
+		let awaited = self.awaiting();
+		self.queue.on_submitted_work_done(move || drop(awaited));
+		index
+	}
+
+	/// Some submission is not reported run or some mapping requested has not landed.
+	pub fn awaits_completions(&self) -> bool {
+		self.awaited.load(Ordering::Relaxed) > 0
+	}
+
+	/// Submits nothing: a browser that resolves completions only when it polls the device polls it on a submit.
+	pub fn kick(&self) {
+		self.queue.submit([]);
 	}
 
 	/// Requests the adapter and the device.
@@ -118,7 +186,7 @@ impl GpuContext {
 			target_arch = "wasm32",
 			allow(clippy::arc_with_non_send_sync, reason = "wgpu's types are not Send there")
 		)]
-		let context = Arc::new(Self { info, limits, device, queue, lost });
+		let context = Arc::new(Self { info, limits, device, queue, lost, awaited: Arc::default() });
 		Ok(context)
 	}
 }
@@ -190,5 +258,21 @@ mod tests {
 		ctx.device.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
 		assert!(woken.0.load(Ordering::SeqCst));
 		assert!(matches!(ctx.lost(), Some(GpuError::Lost { reason: wgpu::DeviceLostReason::Destroyed, .. })));
+	}
+
+	#[test]
+	fn kicks_start_at_the_first_gap_and_double_up_to_the_cap() {
+		let gaps: Vec<_> = Kicks::default().take(7).collect();
+		let ms = Duration::from_millis;
+		assert_eq!(gaps, [FIRST_KICK, ms(1), ms(2), ms(4), ms(8), ms(8), ms(8)]);
+		assert_eq!(MAX_KICK_GAP, ms(8));
+	}
+
+	#[test]
+	fn a_new_wait_kicks_from_the_first_gap_again() {
+		let mut kicks = Kicks::default();
+		kicks.nth(10);
+		assert_eq!(kicks.next(), Some(MAX_KICK_GAP));
+		assert_eq!(Kicks::default().next(), Some(FIRST_KICK));
 	}
 }

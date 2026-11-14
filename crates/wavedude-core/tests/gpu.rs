@@ -488,6 +488,9 @@ fn a_capture_is_ready_once_the_map_completes() {
 	let pending = gpu.begin_capture(&shape, Snapshot::new(shape)).unwrap();
 	let mut ready = std::pin::pin!(pending.ready());
 	let mut cx = Context::from_waker(Waker::noop());
+	ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+	assert_eq!(ready.as_mut().poll(&mut cx), Poll::Pending, "recorded, not submitted");
+	gpu.submit_pending().unwrap();
 	assert_eq!(ready.as_mut().poll(&mut cx), Poll::Pending, "the callback runs when the device is polled");
 	ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 	assert_eq!(ready.as_mut().poll(&mut cx), Poll::Ready(()));
@@ -721,9 +724,9 @@ fn queued_probes_read_like_sampled_ones() {
 	b.drain_probes(pending, &mut |_| panic!("drained twice")).unwrap();
 }
 
-/// The browser's order: queue every step, then `pending_probes`, its `ready`, `drain_probes`. Partial batches read
-/// back by `pending_probes` stay in flight across steps, two at once; a token's drain hands out its own readings
-/// while a later batch is still unmapped. The next full batch collects the one mapped already without waiting and,
+/// The browser's order: queue every step, then `pending_probes`, its `ready`, `drain_probes`. The readings of
+/// partial batches ride one readback until it is submitted; a token's drain hands out its own readings while a
+/// later batch is still unmapped. The next full batch collects the one mapped already without waiting and,
 /// natively, waits for its own inside `queue_probes`. The drained readings are the sampled ones in step order.
 #[test]
 fn pending_probes_drain_like_sampled_ones_once_ready() {
@@ -761,7 +764,7 @@ fn pending_probes_drain_like_sampled_ones_once_ready() {
 		}
 		if step == BATCH_STEPS + 18 || step == last {
 			let pending = b.pending_probes().unwrap();
-			wait_ready(device, &pending);
+			wait_ready(device, &mut b, &pending);
 			b.drain_probes(pending, &mut |r| drained.push(r.clone())).unwrap();
 		}
 	}
@@ -772,10 +775,12 @@ fn pending_probes_drain_like_sampled_ones_once_ready() {
 	assert_eq!(drained, sampled);
 }
 
-/// Polls the device until `pending`'s mappings are signalled: a poll returns once the submissions are done, while
-/// the map callbacks may still be running on another test's poll of the shared device.
-fn wait_ready(device: &wgpu::Device, pending: &wavedude_core::engine::PendingProbes) {
+/// Submits `engine`'s recorded work and polls the device until `pending`'s mappings are signalled: a poll returns
+/// once the submissions are done, while the map callbacks may still be running on another test's poll of the shared
+/// device.
+fn wait_ready(device: &wgpu::Device, engine: &mut GpuEngine, pending: &wavedude_core::engine::PendingProbes) {
 	use std::future::Future;
+	engine.submit_pending().unwrap();
 	use std::task::{Context, Waker};
 	let mut cx = Context::from_waker(Waker::noop());
 	let mut ready = std::pin::pin!(pending.ready());
@@ -811,7 +816,7 @@ fn a_reset_drops_the_probe_readbacks_in_flight() {
 		} else {
 			b.set_probes(&probes);
 		}
-		wait_ready(device, &pending);
+		wait_ready(device, &mut b, &pending);
 		let mut sampled = Vec::new();
 		for _ in 0..9 {
 			a.advance_one_step().unwrap();
@@ -822,7 +827,7 @@ fn a_reset_drops_the_probe_readbacks_in_flight() {
 		}
 		// The new readings are mapped, so a stale drain would collect them.
 		let fresh = b.pending_probes().unwrap();
-		wait_ready(device, &fresh);
+		wait_ready(device, &mut b, &fresh);
 		b.drain_probes(pending, &mut |_| panic!("a dropped reading, reset {reset}")).unwrap();
 		let mut drained = Vec::new();
 		b.drain_probes(fresh, &mut |r| drained.push(r.clone())).unwrap();

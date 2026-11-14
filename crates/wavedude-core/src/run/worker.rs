@@ -1037,8 +1037,13 @@ impl Worker {
 	}
 
 	/// Pumped, with a capture in flight that [`land_ready`](Self::land_ready) left: the wait for the oldest
-	/// capture's readback, then for the spill's writes, or a yield when it is ready since.
-	fn wait_to_land(&self) -> Interrupted {
+	/// capture's readback, its work submitted, then for the spill's writes, or a yield when it is ready since.
+	fn wait_to_land(&mut self) -> Interrupted {
+		if let Some(engine) = self.engine.as_mut()
+			&& let Err(e) = engine.submit_pending()
+		{
+			return Interrupted::Failed(e.into());
+		}
 		let cx = &mut Context::from_waker(&self.waker);
 		let Some((_, front)) = self.pending.front() else { return Interrupted::Yield };
 		let mut ready = std::pin::pin!(front.ready()).poll(cx);
@@ -1139,8 +1144,8 @@ impl Worker {
 		self.record(every, false)
 	}
 
-	/// Drains the engine's queued readings into the collector, `whole` all of them. Pumped, a yield while they are
-	/// not read back; not `whole`, those read back are drained and it yields only with
+	/// Drains the engine's queued readings into the collector, `whole` all of them. Pumped, a wait while they are
+	/// not read back, their work submitted; not `whole`, those read back are drained and it waits only with
 	/// [`PROBE_BATCHES_IN_FLIGHT`] batches on their way.
 	fn record(&mut self, every: u32, whole: bool) -> Result<(), Interrupted> {
 		let Some(c) = self.collector.as_mut() else { return Ok(()) };
@@ -1151,6 +1156,7 @@ impl Worker {
 		};
 		if self.deadline.is_some() && !resolved(pending.ready(), &self.waker) {
 			if whole || pending.batches_in_flight() >= PROBE_BATCHES_IN_FLIGHT {
+				engine.submit_pending().map_err(|e| Interrupted::Failed(e.into()))?;
 				self.probes = Some(pending);
 				return Err(Interrupted::Wait);
 			}
@@ -1929,6 +1935,10 @@ mod tests {
 		/// Number of the first reading not drained.
 		drained: u64,
 		capacity: usize,
+		/// When set, each capture gets a gate of its own, closed and pushed here until `submit_pending` opens it.
+		unsubmitted: Option<Vec<Arc<Gate>>>,
+		/// `unsubmitted` of the probe batches.
+		unsubmitted_probes: Option<Vec<Arc<Gate>>>,
 	}
 
 	impl Gated {
@@ -1947,7 +1957,23 @@ mod tests {
 				batches: Vec::new(),
 				drained: 0,
 				capacity: 2,
+				unsubmitted: None,
+				unsubmitted_probes: None,
 			}
+		}
+
+		/// A closed gate pushed to `issued`, else to `unsubmitted`; none without either.
+		fn issue(
+			issued: Option<&Mutex<Vec<Arc<Gate>>>>,
+			unsubmitted: Option<&mut Vec<Arc<Gate>>>,
+		) -> Option<Arc<Gate>> {
+			let gate = Arc::new(Gate::default());
+			match (issued, unsubmitted) {
+				(Some(issued), _) => lock(issued).push(gate.clone()),
+				(None, Some(unsubmitted)) => unsubmitted.push(gate.clone()),
+				(None, None) => return None,
+			}
+			Some(gate)
 		}
 
 		/// The readings held are dropped by the engine.
@@ -2018,13 +2044,13 @@ mod tests {
 		}
 		fn pending_probes(&mut self) -> Result<PendingProbes, crate::engine::EngineError> {
 			let end = self.inner.pending_probes()?.end();
-			let Some(issued) = &self.each_probe_batch else {
+			if self.each_probe_batch.is_none() && self.unsubmitted_probes.is_none() {
 				// The readings gated as one batch.
 				return Ok(PendingProbes { batches: vec![(self.probes.clone(), end)], on_host: 0 });
-			};
+			}
 			if end > self.batches.last().map_or(self.drained, |&(_, end)| end) {
-				let gate = Arc::new(Gate::default());
-				lock(issued).push(gate.clone());
+				let gate = Self::issue(self.each_probe_batch.as_deref(), self.unsubmitted_probes.as_mut())
+					.expect("a gate of each batch");
 				self.batches.push((gate, end));
 			}
 			let batches = self.batches.iter().map(|(g, end)| (g.clone() as Arc<dyn crate::sync::Readiness>, *end));
@@ -2048,19 +2074,20 @@ mod tests {
 			into: Snapshot,
 		) -> Result<PendingCapture, crate::engine::EngineError> {
 			let mut pending = self.inner.begin_capture(shape, into)?;
-			let gate = match &self.each_capture {
-				Some(issued) => {
-					let gate = Arc::new(Gate::default());
-					lock(issued).push(gate.clone());
-					gate
-				}
-				None => self.captures.clone(),
-			};
-			pending.mapped = Some(gate);
+			let gate = Self::issue(self.each_capture.as_deref(), self.unsubmitted.as_mut());
+			pending.mapped = Some(gate.unwrap_or_else(|| self.captures.clone()));
 			Ok(pending)
 		}
 		fn capture_capacity(&self, _: &FrameShape) -> usize {
 			self.capacity
+		}
+		fn submit_pending(&mut self) -> Result<(), crate::engine::EngineError> {
+			for unsubmitted in [&mut self.unsubmitted, &mut self.unsubmitted_probes].into_iter().flatten() {
+				for gate in unsubmitted.drain(..) {
+					gate.0.store(true, Ordering::Release);
+				}
+			}
+			Ok(())
 		}
 		fn finish_capture(&mut self, pending: PendingCapture) -> Result<Snapshot, crate::engine::EngineError> {
 			assert!(resolved(pending.ready(), Waker::noop()), "finished before mapped");
@@ -2096,6 +2123,46 @@ mod tests {
 		assert_eq!(w.take_fit().map(|f| (f.id, f.frame)), Some((7, 10)));
 		assert!(w.store().unwrap().is_complete());
 		assert_eq!(w.status().traces_steps, 40);
+	}
+
+	#[test]
+	fn captures_recorded_but_not_submitted_are_submitted_before_the_run_waits_for_them() {
+		let factory: PumpedFactory = Box::new(|scene, options| -> EngineFuture {
+			let inner = Box::new(CpuEngine::new(scene, options));
+			let open = || Arc::new(Gate(AtomicBool::new(true)));
+			let mut engine = Gated::new(inner, open(), open(), None);
+			engine.unsubmitted = Some(Vec::new());
+			engine.capacity = 4;
+			Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
+		});
+		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
+		w.set_goal(Goal { fit: Some(FitRequest { id: 3, frame: 10 }), ..goal(1, &long(400)) });
+		let mut pumps = 0;
+		while pump(&w, AMPLE) != Pump::Idle {
+			pumps += 1;
+			assert!(pumps < 1000, "the run waits for captures never submitted");
+		}
+		assert_eq!(w.take_fit().map(|f| f.id), Some(3));
+		assert!(w.store().unwrap().is_complete());
+	}
+
+	#[test]
+	fn probe_readings_not_submitted_are_submitted_before_the_run_waits_for_them() {
+		let factory: PumpedFactory = Box::new(|scene, options| -> EngineFuture {
+			let inner = Box::new(CpuEngine::new(scene, options));
+			let open = || Arc::new(Gate(AtomicBool::new(true)));
+			let mut engine = Gated::new(inner, open(), open(), None);
+			engine.unsubmitted_probes = Some(Vec::new());
+			Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
+		});
+		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
+		w.set_goal(goal(1, &long(400)));
+		let mut pumps = 0;
+		while pump(&w, AMPLE) != Pump::Idle {
+			pumps += 1;
+			assert!(pumps < 1000, "the run waits for probe readings never submitted");
+		}
+		assert_eq!(w.status().traces_steps, 400);
 	}
 
 	#[test]

@@ -83,6 +83,8 @@ impl Captures {
 		let buffer = self.spare.pop().unwrap_or_else(|| Snapshot::new(self.shape));
 		let next = engine.begin_capture(&self.shape, buffer)?;
 		if let Some(previous) = self.pending.replace(next) {
+			// The card runs the new capture while the previous one is copied out.
+			engine.submit_pending()?;
 			self.spare.push(std::hint::black_box(engine.finish_capture(previous)?));
 		}
 		Ok(())
