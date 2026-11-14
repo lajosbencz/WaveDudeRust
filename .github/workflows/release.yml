@@ -12,7 +12,7 @@ name: Release
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
 
 permissions:
   contents: read

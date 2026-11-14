@@ -4,7 +4,7 @@ name: Hygiene
 # the tree that lands, and master pushes for the docs administrators push directly.
 on:
   push:
-    branches: [master, main]
+    branches: [master]
   pull_request:
   merge_group:
   workflow_dispatch:
