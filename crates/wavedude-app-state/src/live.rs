@@ -3,17 +3,18 @@
 //!
 //! No timers: the controller publishes a [`Goal`] (the project's spec, the position, how much is wanted, a
 //! pause, a fit) and reads back what the run has ([`Status`], the store's frames, the traces). The run sits
-//! behind [`Backend`]; [`CoreBackend`] is the core's [`RunWorker`], [`fake::FakeBackend`] a scripted one for
+//! behind [`Backend`]; [`CoreBackend`] is the core's run, [`fake::FakeBackend`] a scripted one for
 //! tests. Threads: the controller lives on the UI thread; natively the run works on its own thread and is polled
-//! here, on wasm32 [`LiveController::tick`] pumps it.
+//! here, on wasm32 in the run worker and [`LiveController::tick`] takes what it sent ([`crate::remote`]).
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
-#[cfg(target_arch = "wasm32")]
-use wavedude_core::engine::GpuHandle;
+use serde::{Deserialize, Serialize};
 use wavedude_core::engine::Snapshot;
 use wavedude_core::engine::gpu::DeviceFrames;
 use wavedude_core::engine::probes::ProbeTrace;
@@ -21,20 +22,22 @@ use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::engine::{EngineOptions, SceneData, WaveEngine};
 use wavedude_core::model::{Layer, Project, Step};
 use wavedude_core::quality::PreviewQuality;
-use wavedude_core::run::Budget;
 #[cfg(not(target_arch = "wasm32"))]
-use wavedude_core::run::Memory;
-#[cfg(target_arch = "wasm32")]
-use wavedude_core::run::{EngineFuture, PumpedFactory};
+use wavedude_core::run::{Budget, Memory, RunWorker};
 use wavedude_core::run::{
-	FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RunError, RunState, RunWorker, Status, Wanted,
-	WorkState,
+	FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RunError, RunState, Status, Wanted, WorkState,
 };
 use wavedude_core::spec::{RunRequest, RunSpecError, SceneCache};
+#[cfg(not(target_arch = "wasm32"))]
+use wavedude_core::sync::lock;
 
 use super::commands::ChangeKind;
-use super::platform::{Duration, Instant};
+use super::platform::Instant;
 use super::playback::{Limit, Playback};
+use super::remote::WorkerGone;
+#[cfg(target_arch = "wasm32")]
+use super::remote::{Remote, web::PagePort};
+use super::strings::Strings;
 
 /// Where the live run is. Called on the UI thread; implementations publish across threads.
 pub trait Backend {
@@ -51,17 +54,15 @@ pub trait Backend {
 	fn discard_frames(&mut self);
 	/// The store budget at `ram_percent` and at Auto, counting `reclaimed` bytes as free.
 	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64);
-	/// "CPU (16 threads)" or `GPU: <name>`.
-	fn engine_name(&self) -> String;
-	/// Works on the goal for about `budget` where the caller drives the run (wasm32); whether work is left. A
-	/// run on a thread of its own needs none.
-	fn pump(&mut self, _budget: Duration) -> bool {
-		false
+	/// The engine built last; before the first, the one asked for.
+	fn engine(&self) -> EngineLabel;
+	/// Why the run in another agent runs nothing until the page is reloaded; `None` while it can run.
+	fn worker_gone(&self) -> Option<WorkerGone> {
+		None
 	}
+	/// Takes what a run in another agent sent; a run on a thread of this program publishes without.
+	fn pump(&mut self) {}
 }
-
-/// The live run's work per frame where the caller drives it: half a 60 Hz frame, so a slow machine still draws.
-pub const PUMP_BUDGET: Duration = Duration::from_millis(8);
 
 /// The user settings the controller follows.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -94,11 +95,19 @@ pub enum Notice {
 	Error(String),
 	/// The memory warning asked is void: its edit was replaced; its dialog closes.
 	WarningDropped,
-	/// A run could not start or failed: `no_image` when the scene's image is missing.
-	RunFailed {
-		message: String,
-		no_image: bool,
-	},
+	/// A run could not start or failed.
+	RunFailed(RunFailure),
+}
+
+/// Why a run could not start or failed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RunFailure {
+	/// The run's error, as its message.
+	Failed(String),
+	/// The scene's image is missing.
+	NoImage,
+	/// The run worker is gone: no run starts until the page is reloaded.
+	WorkerGone(WorkerGone),
 }
 
 /// The choice the memory warning's Run applies to the settings.
@@ -195,8 +204,6 @@ pub struct LiveController<B: Backend> {
 	run_started: Option<Instant>,
 	status: Status,
 	notices: Vec<Notice>,
-	/// The last pump left work: the UI ticks again soon.
-	work_left: bool,
 }
 
 /// The frame the pictures show.
@@ -238,7 +245,6 @@ impl<B: Backend> LiveController<B> {
 			run_started: None,
 			status,
 			notices: Vec::new(),
-			work_left: false,
 		}
 	}
 
@@ -451,13 +457,13 @@ impl<B: Backend> LiveController<B> {
 		let (store, request) = (self.current_store()?, self.adopted_request()?);
 		let frames = request.schedule().covered_frames(store.present_count() as u32);
 		let (in_memory, on_disk) = (store.frames_in_memory(), store.frames_on_disk());
-		let gb = |n: usize| (n * store.frame_bytes()) as f64 / f64::from(1u32 << 30);
+		let gib = |n: usize| store.bytes_of(n) as f64 / f64::from(1u32 << 30);
 		Some(format!(
-			"Run {word}: {done} of {steps} steps, {frames} frames, {:.1} s; {} stored, {in_memory} in memory ({:.1} GB) and {on_disk} on disk ({:.1} GB)",
+			"Run {word}: {done} of {steps} steps, {frames} frames, {:.1} s; {} stored, {in_memory} in memory ({:.1} GiB) and {on_disk} on disk ({:.1} GiB)",
 			now.saturating_duration_since(started).as_secs_f64(),
 			in_memory + on_disk,
-			gb(in_memory),
-			gb(on_disk),
+			gib(in_memory),
+			gib(on_disk),
 		))
 	}
 
@@ -471,8 +477,8 @@ impl<B: Backend> LiveController<B> {
 		self.current_store().cloned()
 	}
 
-	pub fn engine_name(&self) -> String {
-		self.backend.engine_name()
+	pub fn engine(&self) -> EngineLabel {
+		self.backend.engine()
 	}
 
 	/// The memory warning waiting for an answer.
@@ -673,11 +679,6 @@ impl<B: Backend> LiveController<B> {
 		spans
 	}
 
-	/// The run has work left for the next tick (wasm32, where the ticks drive it): the UI asks for one.
-	pub fn work_left(&self) -> bool {
-		self.work_left
-	}
-
 	/// Advances the machine: what the run has, playback, the frame shown, the fit, the export.
 	pub fn tick(&mut self, now: Instant, project: &Project) {
 		self.started = true;
@@ -686,7 +687,7 @@ impl<B: Backend> LiveController<B> {
 		{
 			self.on_change(kind, project, None, now);
 		}
-		self.work_left = self.backend.pump(PUMP_BUDGET);
+		self.backend.pump();
 		self.status = self.backend.status();
 		let adopted = self.status.adopted;
 		if let Some(first) = self.requests.iter().position(|(revision, _)| *revision >= adopted) {
@@ -696,8 +697,12 @@ impl<B: Backend> LiveController<B> {
 			&& self.failed.as_ref().is_none_or(|f| !Arc::ptr_eq(f, e))
 		{
 			self.failed = Some(e.clone());
-			let no_image = matches!(**e, RunError::Spec(RunSpecError::NoImage));
-			self.notices.push(Notice::RunFailed { message: e.to_string(), no_image });
+			let failure = match (self.backend.worker_gone(), &**e) {
+				(Some(gone), _) => RunFailure::WorkerGone(gone),
+				(None, RunError::Spec(RunSpecError::NoImage)) => RunFailure::NoImage,
+				(None, e) => RunFailure::Failed(e.to_string()),
+			};
+			self.notices.push(Notice::RunFailed(failure));
 		}
 		if matches!(self.status.state, WorkState::Failed(_)) {
 			self.drop_waiting_export();
@@ -718,6 +723,7 @@ impl<B: Backend> LiveController<B> {
 		self.report_run_end(now);
 		self.advance_playback(now);
 		self.show_frame();
+		self.prefetch();
 		self.poll_fit();
 		self.poll_export();
 		self.publish();
@@ -746,6 +752,20 @@ impl<B: Backend> LiveController<B> {
 			self.shown = Some(position);
 			self.notices.push(Notice::ShowFrame(position));
 		}
+	}
+
+	/// Names the stored frames playback shows next to the store, which reads the spilled ones ahead.
+	fn prefetch(&self) {
+		let (Some(store), Some(request)) = (self.current_store(), self.adopted_request()) else { return };
+		let depth = store.read_ahead();
+		if depth == 0 {
+			return;
+		}
+		let schedule = request.schedule();
+		let position = self.playback.position();
+		let ahead = self.playback.ahead(depth * schedule.frame_divisor() as usize, Some(self.play_limit()));
+		let frames = self.playback.is_playing().then_some(position).into_iter().chain(ahead);
+		store.prefetch(frames.map(|frame| schedule.stored_index_of(frame) as usize));
 	}
 
 	fn poll_fit(&mut self) {
@@ -838,8 +858,11 @@ impl<B: Backend> LiveController<B> {
 		}
 	}
 
-	/// F5 / Run: every frame from frame 0, followed.
+	/// F5 / Run: every frame from frame 0, followed. With the run worker gone, the next tick says so again.
 	pub fn run_user(&mut self, project: &Project, now: Instant) -> bool {
+		if self.backend.worker_gone().is_some() {
+			self.failed = None;
+		}
 		if self.request().is_none() {
 			self.respec(project);
 		}
@@ -934,11 +957,7 @@ impl<B: Backend> LiveController<B> {
 			self.respec(project);
 		}
 		if self.complete() {
-			let end = match self.play_limit() {
-				Limit::End(end) => Some(end),
-				Limit::Hold(_) => None,
-			};
-			self.playback.play(now, end);
+			self.playback.play(now, self.play_limit().end());
 		} else if self.wanted == Wanted::All {
 			self.playback.play(now, None);
 		} else {
@@ -995,31 +1014,96 @@ impl<B: Backend> LiveController<B> {
 	}
 }
 
-/// The core's live run on the CPU or GPU engine, by the Use the GPU setting: on a thread of its own natively,
-/// pumped by the ticks on wasm32.
+/// The core's live run on the CPU or GPU engine, by the Use the GPU setting: on a thread of its own natively.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct CoreBackend {
 	use_gpu: Arc<AtomicBool>,
 	worker: RunWorker,
 	scene: Arc<Mutex<SceneCache>>,
 	/// Where the budgets' memory readings come from.
-	#[cfg(not(target_arch = "wasm32"))]
 	memory: Memory,
-	/// The device the GPU engine runs on: the UI renderer's.
-	#[cfg(target_arch = "wasm32")]
-	gpu: Option<GpuHandle>,
-	/// The memory a store's frames share by the RAM cache size: the device's, at most [`MAX_WEB_FRAME_BYTES`].
-	#[cfg(target_arch = "wasm32")]
-	frame_memory: u64,
+	/// The label of the engine built last.
+	built: Arc<Mutex<Option<EngineLabel>>>,
+}
+
+/// The core's live run in the browser's run worker ([`crate::remote`]), on its GPU by the Use the GPU setting.
+#[cfg(target_arch = "wasm32")]
+pub struct CoreBackend {
+	remote: Remote<PagePort>,
+	/// The page's own: the run worker composes the scenes of its runs.
+	scene: Arc<Mutex<SceneCache>>,
 }
 
 /// The most a store's frames take in the browser: a wasm32 memory holds 4 GiB at most, beside everything else.
 #[cfg(target_arch = "wasm32")]
 pub const MAX_WEB_FRAME_BYTES: u64 = 2 << 30;
 
+/// The run worker's script, beside the page.
+#[cfg(target_arch = "wasm32")]
+const RUN_WORKER: &str = "run-worker.js";
+
+/// The engine a run uses, as the status bar and About name it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EngineLabel {
+	/// The browser's run worker has not started yet.
+	Starting,
+	/// The browser's run worker is gone before it built one.
+	Missing,
+	/// The GPU's on a WebGPU adapter, which has no name.
+	WebGpu,
+	/// The GPU's on the adapter of this name.
+	Gpu(String),
+	/// The CPU engine on this many threads.
+	Cpu { threads: usize },
+}
+
+impl EngineLabel {
+	/// The engine on the GPU named `gpu`, or the CPU's on the threads this agent has.
+	pub fn of(gpu: Option<&str>) -> Self {
+		match gpu {
+			Some("") => Self::WebGpu,
+			Some(name) => Self::Gpu(name.to_owned()),
+			None => Self::Cpu { threads: std::thread::available_parallelism().map_or(1, std::num::NonZero::get) },
+		}
+	}
+
+	/// The label in the language of `s`.
+	pub fn text(&self, s: &Strings) -> String {
+		match self {
+			Self::Starting => s.get("EngineStarting").to_owned(),
+			Self::Missing => s.get("EngineNone").to_owned(),
+			Self::WebGpu => s.get("EngineWebGpu").to_owned(),
+			Self::Gpu(name) => s.format("EngineGpuFormat", &[name]),
+			Self::Cpu { threads: 1 } => s.get("EngineCpuOne").to_owned(),
+			Self::Cpu { threads } => s.format("EngineCpuManyFormat", &[threads]),
+		}
+	}
+}
+
+/// English, for the log.
+impl std::fmt::Display for EngineLabel {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Starting => write!(f, "engine starting"),
+			Self::Missing => write!(f, "no engine"),
+			Self::WebGpu => write!(f, "GPU: WebGPU"),
+			Self::Gpu(name) => write!(f, "GPU: {name}"),
+			Self::Cpu { threads: 1 } => write!(f, "CPU (1 thread)"),
+			Self::Cpu { threads } => write!(f, "CPU ({threads} threads)"),
+		}
+	}
+}
+
+/// The name of the GPU the engines run on, when there is one.
+#[cfg(not(target_arch = "wasm32"))]
+fn gpu_name() -> Option<String> {
+	wavedude_core::engine::gpu::context().ok().map(|ctx| ctx.info.name.clone())
+}
+
 /// Builds the engine for a scene: the GPU's when asked for and available (a fallback to the CPU is logged).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn build_engine(scene: Arc<SceneData>, options: EngineOptions, use_gpu: bool) -> Box<dyn WaveEngine> {
-	let e = wavedude_core::engine::build(scene, options, use_gpu);
+	let e = wavedude_core::engine::build(scene, options, use_gpu).engine;
 	super::log::engine_built(e.name(), e.scene(), e.options(), e.sub_steps());
 	e
 }
@@ -1029,56 +1113,41 @@ impl CoreBackend {
 	/// `use_gpu`, shared with the settings.
 	#[cfg(not(target_arch = "wasm32"))]
 	pub fn new(use_gpu: Arc<AtomicBool>, cache_dir: PathBuf, memory: Memory) -> std::io::Result<Self> {
-		let gpu = use_gpu.clone();
+		let (gpu, built) = (use_gpu.clone(), Arc::<Mutex<Option<EngineLabel>>>::default());
+		let label = built.clone();
 		let scene: Arc<Mutex<SceneCache>> = Arc::default();
 		let worker = RunWorker::with_memory(
-			Box::new(move |scene, options| build_engine(scene, options, gpu.load(Ordering::Relaxed))),
+			Box::new(move |scene, options| {
+				let e = build_engine(scene, options, gpu.load(Ordering::Relaxed));
+				*lock(&label) = Some(EngineLabel::of(gpu_name().filter(|_| e.is_gpu()).as_deref()));
+				e
+			}),
 			cache_dir,
 			scene.clone(),
 			memory,
 		)?;
 		worker.set_notify(Box::new(crate::wake::wake));
-		Ok(Self { use_gpu, worker, scene, memory })
+		Ok(Self { use_gpu, worker, scene, memory, built })
 	}
 
-	/// A backend whose stores hold their frames in memory, the RAM cache size's share of the device's memory up
-	/// to [`MAX_WEB_FRAME_BYTES`], and the rest in the origin private file system; the engine runs on `gpu` while
-	/// `use_gpu` holds (a device without compute, as WebGL2's, is none), else on the CPU.
+	/// A backend on the run worker, which it starts; the mirror stores hold their frames in memory, the RAM cache
+	/// size's share of the device's memory up to [`MAX_WEB_FRAME_BYTES`], and the rest in the origin private file
+	/// system. The engine runs on the worker's GPU while `use_gpu` holds, else on the CPU.
 	#[cfg(target_arch = "wasm32")]
-	pub fn new(use_gpu: Arc<AtomicBool>, gpu: Option<GpuHandle>) -> Self {
-		let (wanted, device) = (use_gpu.clone(), gpu.clone());
-		let factory: PumpedFactory = Box::new(move |scene, options| -> EngineFuture {
-			let gpu = device.clone().filter(|_| wanted.load(Ordering::Relaxed));
-			Box::pin(async move {
-				let e = wavedude_core::engine::build_on(scene, options, gpu).await;
-				super::log::engine_built(e.name(), e.scene(), e.options(), e.sub_steps());
-				e
-			})
-		});
+	pub fn new(use_gpu: Arc<AtomicBool>) -> Self {
 		let frame_memory = super::platform::machine_facts().physical_bytes.min(MAX_WEB_FRAME_BYTES);
-		let scene: Arc<Mutex<SceneCache>> = Arc::default();
-		let worker = RunWorker::pumped(factory, frame_memory, Box::new(super::platform::Opfs::start()), scene.clone());
-		Self { use_gpu, worker, scene, gpu, frame_memory }
+		let port = PagePort::start(RUN_WORKER, crate::wake::wake);
+		let remote = Remote::new(port, use_gpu, frame_memory, Box::new(super::platform::Opfs::start()));
+		Self { remote, scene: Arc::default() }
 	}
 
 	/// The scene pixels and medium the specs are built from, shared with whatever else shows the scene.
 	pub fn scene_cache(&self) -> Arc<Mutex<SceneCache>> {
 		self.scene.clone()
 	}
-
-	/// The GPU's name, when there is one.
-	#[cfg(not(target_arch = "wasm32"))]
-	fn gpu_name(&self) -> Option<String> {
-		wavedude_core::engine::gpu::context().ok().map(|ctx| ctx.info.name.clone())
-	}
-
-	/// The GPU's name, when there is one.
-	#[cfg(target_arch = "wasm32")]
-	fn gpu_name(&self) -> Option<String> {
-		self.gpu.as_ref().map(|ctx| ctx.info.name.clone())
-	}
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Backend for CoreBackend {
 	fn set_goal(&mut self, goal: Goal) {
 		self.worker.set_goal(goal);
@@ -1108,29 +1177,62 @@ impl Backend for CoreBackend {
 		self.worker.discard_frames();
 	}
 
-	#[cfg(not(target_arch = "wasm32"))]
 	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64) {
 		(Budget::compute(self.memory, reclaimed, ram_percent), Budget::compute(self.memory, reclaimed, 0))
 	}
 
-	#[cfg(target_arch = "wasm32")]
-	fn budgets(&self, ram_percent: u32, _reclaimed: u64) -> (u64, u64) {
-		(Budget::of_memory(self.frame_memory, ram_percent), Budget::of_memory(self.frame_memory, 0))
-	}
-
-	fn engine_name(&self) -> String {
-		if self.use_gpu.load(Ordering::Relaxed)
-			&& let Some(name) = self.gpu_name()
-		{
-			return format!("GPU: {name}");
+	fn engine(&self) -> EngineLabel {
+		if let Some(label) = &*lock(&self.built) {
+			return label.clone();
 		}
-		let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
-		format!("CPU ({threads} threads)")
+		EngineLabel::of(gpu_name().filter(|_| self.use_gpu.load(Ordering::Relaxed)).as_deref())
+	}
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Backend for CoreBackend {
+	fn set_goal(&mut self, goal: Goal) {
+		self.remote.set_goal(goal);
 	}
 
-	#[cfg(target_arch = "wasm32")]
-	fn pump(&mut self, budget: Duration) -> bool {
-		self.worker.pump(budget)
+	fn status(&self) -> Status {
+		self.remote.status()
+	}
+
+	fn with_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+		self.remote.with_traces(f);
+	}
+
+	fn with_held_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+		self.remote.with_held_traces(f);
+	}
+
+	fn take_fit(&mut self) -> Option<FitFrame> {
+		self.remote.take_fit()
+	}
+
+	fn engine_changed(&mut self) {
+		self.remote.engine_changed();
+	}
+
+	fn discard_frames(&mut self) {
+		self.remote.discard_frames();
+	}
+
+	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64) {
+		self.remote.budgets(ram_percent, reclaimed)
+	}
+
+	fn engine(&self) -> EngineLabel {
+		self.remote.engine()
+	}
+
+	fn worker_gone(&self) -> Option<WorkerGone> {
+		self.remote.worker_gone()
+	}
+
+	fn pump(&mut self) {
+		self.remote.pump();
 	}
 }
 
@@ -1346,8 +1448,8 @@ pub mod fake {
 			self.budgets.unwrap_or((u64::MAX, u64::MAX))
 		}
 
-		fn engine_name(&self) -> String {
-			"fake".into()
+		fn engine(&self) -> super::EngineLabel {
+			super::EngineLabel::Cpu { threads: 1 }
 		}
 	}
 }
@@ -1356,6 +1458,7 @@ pub mod fake {
 mod tests {
 	use super::fake::FakeBackend;
 	use super::*;
+	use crate::platform::Duration;
 	use wavedude_core::engine::SampleFormat;
 
 	fn project() -> Project {
@@ -1519,6 +1622,7 @@ mod tests {
 		c.tick(t, &p);
 		assert_eq!(c.playback.position(), 29, "Live follows the newest frame");
 		assert_eq!(c.shown(), Some(29));
+		assert!(c.take_notices().contains(&Notice::ShowFrame(29)), "the followed frame is shown");
 		c.scrub(5, t);
 		assert!(!c.is_live() && !c.playback.is_playing());
 		c.tick(t, &p);
@@ -1924,9 +2028,19 @@ mod tests {
 		fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64) {
 			self.inner.budgets(ram_percent, reclaimed)
 		}
-		fn engine_name(&self) -> String {
-			"delayed".into()
+		fn engine(&self) -> EngineLabel {
+			self.inner.engine()
 		}
+	}
+
+	#[test]
+	fn a_gpu_without_a_name_labels_as_webgpu_and_one_thread_is_singular() {
+		let s = Strings::new(crate::strings::Language::English);
+		assert_eq!(EngineLabel::of(Some("")).text(&s), "GPU: WebGPU");
+		assert_eq!(EngineLabel::of(Some("RTX")).text(&s), "GPU: RTX");
+		assert_eq!(EngineLabel::Cpu { threads: 1 }.text(&s), "CPU (1 thread)");
+		assert_eq!(EngineLabel::Cpu { threads: 8 }.text(&s), "CPU (8 threads)");
+		assert_eq!(EngineLabel::Cpu { threads: 1 }.to_string(), "CPU (1 thread)");
 	}
 
 	#[test]

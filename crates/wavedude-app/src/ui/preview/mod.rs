@@ -4,7 +4,8 @@
 //! Each frame the pane polls: it hands the frame the live controller shows to the presenter when what is to be drawn
 //! changed, writes the presenter's pictures into their textures, keeps the busy dim, finishes an Auto brightness and
 //! follows the scene's own picture and outline; while a picture is due it asks for the next frame after [`POLL`].
-//! A run on the GPU engine bypasses the presenter: its pictures are coloured on the device ([`device`]).
+//! Where the renderer's device draws pictures, it colours them ([`device`]), bypassing the presenter: those of a run
+//! on the GPU engine, and every frame where the presenter would colour them on the UI thread (the browser).
 //!
 //! Threads: the UI thread; natively the presenter and the scene builder use threads of their own.
 
@@ -19,12 +20,14 @@ mod transport;
 
 use eframe::egui::{self, CursorIcon, EventFilter, Id, Key, Modifiers, Rect, Response, Sense, Ui, pos2, vec2};
 use eframe::egui_wgpu::RenderState;
+use eframe::wgpu;
 use wavedude_app_state::Event;
 use wavedude_app_state::commands::Command;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::Orientation;
-use wavedude_core::engine::{GpuHandle, SampleFormat};
+use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::{DisplayLayerEdit, ItemRef, Layer};
+use wavedude_core::render::gpu::{PicturePipeline, PlaneTooLarge, plane_fits};
 use wavedude_view::overlay::HandleKind;
 
 use wavedude_view::draw::Outlines;
@@ -39,7 +42,7 @@ use super::theme::Palette;
 use crate::App;
 use crate::menus::{MenuAction, On};
 use crate::preview::overlay::Grab;
-use crate::preview::presenter::{FrameSource, LayerRequest, Presenter, PresenterStats, SourceKey};
+use crate::preview::presenter::{self, FrameSource, LayerRequest, Presenter, PresenterStats, SourceKey};
 use crate::preview::view::View;
 use crate::preview::{
 	BUSY_DELAY, POLL, PictureExtent, RequestInputs, SceneWatch, display_edit, layer_name, request_of, shown_source,
@@ -78,7 +81,13 @@ pub(super) struct Preview {
 	textures: [Option<Texture>; 2],
 	/// Each layer's picture shown, with the part of the canvas it covers (None: all of it).
 	shown: [Option<Option<Rect>>; 2],
-	/// A run on the GPU engine: its pictures are coloured on the device, not by the presenter.
+	/// The renderer's limits, when it draws pictures with [`PicturePipeline`].
+	limits: Option<wgpu::Limits>,
+	/// Why the renderer draws no pictures with [`PicturePipeline`], until logged as a picture would be.
+	unsupported: Option<String>,
+	/// The shown frame's planes the renderer cannot hold, warned of once.
+	oversize: Option<PlaneTooLarge>,
+	/// The pictures are coloured on the renderer's device, not by the presenter.
 	on_device: bool,
 	device: DevicePictures,
 	/// An image scene's own picture, shown before the first frame.
@@ -108,8 +117,7 @@ pub(super) struct Preview {
 }
 
 impl Preview {
-	/// `renderer` is the renderer's context when the engines run on it.
-	pub(super) fn new(gpu: Option<RenderState>, renderer: Option<GpuHandle>) -> Self {
+	pub(super) fn new(gpu: Option<RenderState>) -> Self {
 		let presenter = match &gpu {
 			Some(_) => {
 				Presenter::start().inspect_err(|e| tracing::error!("the preview presenter could not start: {e}")).ok()
@@ -118,6 +126,16 @@ impl Preview {
 				tracing::warn!("the preview shows no pictures: the window has no wgpu renderer");
 				None
 			}
+		};
+		let supported = gpu.as_ref().map(|gpu| {
+			PicturePipeline::supported(&gpu.adapter, &gpu.device)
+				.map(|()| gpu.device.limits())
+				.map_err(|e| e.to_string())
+		});
+		let (limits, unsupported) = match supported {
+			Some(Ok(limits)) => (Some(limits), None),
+			Some(Err(e)) => (None, Some(e)),
+			None => (None, None),
 		};
 		Self {
 			gpu,
@@ -132,8 +150,11 @@ impl Preview {
 			fit: None,
 			textures: [None, None],
 			shown: [None, None],
+			limits,
+			unsupported,
+			oversize: None,
 			on_device: false,
-			device: DevicePictures::new(renderer),
+			device: DevicePictures::default(),
 			scene_image: None,
 			scene_shown: false,
 			extents: [PictureExtent::default(); 2],
@@ -201,9 +222,23 @@ impl Preview {
 				self.scene_shown = true;
 			}
 		}
-		let frames = app.live.device_frames().filter(|_| self.gpu.is_some());
-		if self.on_device != frames.is_some() {
-			self.on_device = frames.is_some();
+		let frames = app.live.device_frames();
+		if (frames.is_some() || presenter::IN_CALL)
+			&& shown_source(app).is_some()
+			&& let Some(e) = self.unsupported.take()
+		{
+			tracing::warn!("the preview colours its pictures on the CPU: {e}");
+		}
+		let fits =
+			self.limits.as_ref().map(|limits| shown_source(app).map_or(Ok(()), |s| plane_fits(&s.shape(), limits)));
+		let oversize = fits.and_then(Result::err);
+		if let Some(e) = oversize.filter(|e| self.oversize != Some(*e)) {
+			tracing::warn!("the preview colours this run's pictures on the CPU: {e}");
+		}
+		self.oversize = oversize;
+		let on_device = fits.is_some_and(|f| f.is_ok()) && (frames.is_some() || presenter::IN_CALL);
+		if self.on_device != on_device {
+			self.on_device = on_device;
 			self.inputs = None;
 			self.sent = None;
 			self.awaiting = false;
@@ -216,7 +251,7 @@ impl Preview {
 			self.inputs = Some(inputs);
 			match request_of(app, extents, self.scene.edges()) {
 				Some(request) if self.on_device => {
-					if let (Some(gpu), Some(frames)) = (&self.gpu, frames) {
+					if let Some(gpu) = &self.gpu {
 						self.device.show(gpu, frames, &request.source, &request.layers);
 					}
 				}

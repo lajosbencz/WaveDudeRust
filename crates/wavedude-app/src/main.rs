@@ -72,11 +72,10 @@ mod native {
 		let creator: eframe::AppCreator<'_> = Box::new(move |cc| {
 			let ctx = cc.egui_ctx.clone();
 			wavedude_app_state::wake::set(move || ctx.request_repaint());
-			let gpu = ui::renderer_gpu(cc);
-			if let Some(gpu) = &gpu {
-				wavedude_core::engine::gpu::set_context(gpu.clone());
+			if let Some(gpu) = ui::renderer_gpu(cc) {
+				wavedude_core::engine::gpu::set_context(gpu);
 			}
-			Ok(Box::new(Shell::new(cc, app, Boot { store, log, gpu, open, update })))
+			Ok(Box::new(Shell::new(cc, app, Boot { store, log, open, update })))
 		});
 		#[cfg(not(target_os = "macos"))]
 		eframe::run_native(NAME, options, creator).map_err(|e| anyhow::anyhow!("the window failed: {e}"))?;
@@ -117,9 +116,8 @@ fn main() -> Result<(), eframe::wasm_bindgen::JsValue> {
 		let creator: eframe::AppCreator<'static> = Box::new(move |cc| {
 			let ctx = cc.egui_ctx.clone();
 			wavedude_app_state::wake::set(move || ctx.request_repaint());
-			let gpu = ui::renderer_gpu(cc);
-			let app = AppState::start(store.clone(), gpu.clone(), []);
-			Ok(Box::new(Shell::new(cc, app, Boot { store, log, gpu })))
+			let app = AppState::start(store.clone(), []);
+			Ok(Box::new(Shell::new(cc, app, Boot { store, log })))
 		});
 		if let Err(e) = eframe::WebRunner::new().start(canvas, options, creator).await {
 			let message = format!("WaveDude Rust could not start: {e:?}");

@@ -31,13 +31,7 @@ fn window(dir: &Path, ring: &LogRing) -> Harness<'static, Shell> {
 	ring.push(Level::WARN, "wavedude_app::store", "spilled to disk\nbudget 6 GB".into());
 	ring.push(Level::ERROR, "wavedude_export", "The export failed.".into());
 	ring.push(Level::INFO, "wavedude_app_state::document", "Opened tiny.wdproj".into());
-	let boot = Boot {
-		store: dirs.store(),
-		gpu: None,
-		open: Default::default(),
-		log: ring.clone(),
-		update: Default::default(),
-	};
+	let boot = Boot { store: dirs.store(), open: Default::default(), log: ring.clone(), update: Default::default() };
 	let mut harness = Harness::builder()
 		.with_size(vec2(1280., 800.))
 		.with_step_dt(STEP)

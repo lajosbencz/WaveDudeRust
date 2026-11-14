@@ -724,7 +724,7 @@ A file dropped on the window is taken by its type. An image becomes the scene im
 
 ## The browser version
 
-The program also runs in a browser. It differs from the desktop program as follows: Open and the file buttons upload a file, Save and Save As download one, and the page asks before it is left while the project has unsaved changes. There are no exports of videos, image sequences, stills or probe data, no updates, no recent projects and no watching of the project's files for changes; the window's place is not kept. Settings and your own colour schemes are kept in the browser's storage.
+The program also runs in a browser. It differs from the desktop program as follows: Open and the file buttons upload a file, Save and Save As download one, and the page asks before it is left while the project has unsaved changes. There are no exports of videos, image sequences, stills or probe data, no updates, no recent projects and no watching of the project's files for changes; the window's place is not kept. Settings and your own colour schemes are kept in the browser's storage. The simulation runs in a worker of its own beside the page, on the browser's WebGPU when Use the GPU is on, so playback and editing go on while it runs; the status bar names the engine it runs on (GPU: WebGPU or CPU, "engine starting" while the worker starts), and when the GPU cannot run it, the processor does and the Messages pane says why. When the GPU stops working, the next simulation asks the browser for it again. When the worker cannot start, stops, or is of another version than the page, an error says why and no simulation runs until the page is reloaded; Run shows the error again.
 
 ## The examples
 

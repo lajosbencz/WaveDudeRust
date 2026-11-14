@@ -43,13 +43,7 @@ fn window(builder: HarnessBuilder<Shell>, dir: &Path, size: egui::Vec2) -> Harne
 	{
 		app.handle(event, Instant::now());
 	}
-	let boot = Boot {
-		store: dirs.store(),
-		gpu: None,
-		open: Default::default(),
-		log: LogRing::new(),
-		update: Default::default(),
-	};
+	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
 	let mut harness = builder.with_size(size).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
 	harness

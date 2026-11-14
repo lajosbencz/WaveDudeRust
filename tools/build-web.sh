@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds the browser app into the folder given (default target/web): the release wasm of wavedude-app bound by
-# wasm-bindgen beside crates/wavedude-app/web/index.html. The wasm-bindgen CLI must match Cargo.lock's crate;
+# Builds the browser app into the folder given (default target/web): the release wasm of wavedude-app and of its
+# run worker, wavedude-run-worker, bound by wasm-bindgen into pkg/ beside crates/wavedude-app/web/index.html and
+# run-worker.js. The wasm-bindgen CLI must match Cargo.lock's crate;
 # `tools/build-web.sh --bindgen-version` prints that version.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -19,9 +20,12 @@ if [ "$locked" != "$installed" ]; then
 	echo "wasm-bindgen $installed is installed, Cargo.lock has $locked: cargo install wasm-bindgen-cli --version $locked" >&2
 	exit 1
 fi
-cargo build --release --locked -p wavedude-app --bin wavedude-app \
-	--target wasm32-unknown-unknown
-wasm-bindgen --target web --no-typescript --out-dir "$out/pkg" \
-	"$target/wasm32-unknown-unknown/release/wavedude-app.wasm"
-cp crates/wavedude-app/web/index.html "$out/"
+# one build each: built together, the worker would take the app's features of their shared crates (wgpu's WebGL)
+for bin in wavedude-app wavedude-run-worker; do
+	cargo build --release --locked -p "$bin" --bin "$bin" --target wasm32-unknown-unknown
+	wasm-bindgen --target web --no-typescript --out-dir "$out/pkg" "$target/wasm32-unknown-unknown/release/$bin.wasm"
+done
+cp crates/wavedude-app/web/run-worker.js "$out/"
+# the page's download bar needs the wasm's size, which the compressed response does not give
+sed "s/__WASM_BYTES__/$(wc -c < "$out/pkg/wavedude-app_bg.wasm")/" crates/wavedude-app/web/index.html > "$out/index.html"
 echo "built $out; serve it over HTTP, e.g. python3 -m http.server -d $out"

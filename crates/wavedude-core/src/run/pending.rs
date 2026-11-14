@@ -5,16 +5,25 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::io;
 use std::sync::{Arc, Mutex};
-use std::task::{Poll, Waker};
+use std::task::{Context, Poll, Waker};
 
 use crate::sync::{MaybeSend, lock};
 
-/// Writes in flight at which the pumped worker yields before its next capture.
-pub const WRITES_IN_FLIGHT: usize = 4;
-/// Frames read back and kept, for a scrub to and fro.
-const LOADED: usize = 2;
+use super::store::StoreLayout;
+
+/// Bytes of the writes in flight a spill allows ([`StoreLayout::writes_in_flight`]): the browser's frames posted to
+/// the page and not acknowledged. As many as the GPU engine's capture ring stages
+/// (docs/measurements.md, The browser's live run in a worker).
+pub const WRITE_BYTES_IN_FLIGHT: u64 = 64 << 20;
+/// Writes in flight at most: the GPU engine's largest capture ring.
+pub(super) const MOST_WRITES_IN_FLIGHT: usize = 16;
+/// Frames read back and kept: the frame asked for last and the frames read ahead for playback
+/// ([`PendingSpill::prefetch`]), or for a scrub to and fro.
+const LOADED: usize = 5;
 /// Reads in flight at most; a frame asked for beyond them waits in one slot, the newest asked for.
 const READS_IN_FLIGHT: usize = 2;
+/// Frames read ahead, the playhead's and the 3 after it: the room [`LOADED`] leaves beside the frame asked for last.
+pub(super) const READ_AHEAD: usize = LOADED - 1;
 
 /// An operation in flight: completed once by its backend, polled by the store.
 pub struct Token<T>(Arc<Mutex<Slot<T>>>);
@@ -60,17 +69,20 @@ impl<T> Token<T> {
 		lock(&self.0).result.take()
 	}
 
+	/// Ready once the operation completed, its outcome left in place; otherwise `cx`'s waker is woken then.
+	pub fn poll_done(&self, cx: &mut Context<'_>) -> Poll<()> {
+		let mut slot = lock(&self.0);
+		if slot.done {
+			return Poll::Ready(());
+		}
+		slot.waker = Some(cx.waker().clone());
+		Poll::Pending
+	}
+
 	/// Resolves when the operation completed, its outcome left in place.
 	pub fn done(&self) -> impl Future<Output = ()> + use<T> {
-		let slot = self.0.clone();
-		std::future::poll_fn(move |cx| {
-			let mut slot = lock(&slot);
-			if slot.done {
-				return Poll::Ready(());
-			}
-			slot.waker = Some(cx.waker().clone());
-			Poll::Pending
-		})
+		let token = self.clone();
+		std::future::poll_fn(move |cx| token.poll_done(cx))
 	}
 }
 
@@ -86,15 +98,18 @@ pub trait SpillBackend: Send + Sync {
 
 /// The pumped worker's spills.
 pub trait SpillFactory: MaybeSend {
-	/// Whether [`open`](Self::open) can answer: the free storage is known.
-	fn ready(&self) -> bool;
-	/// A spill for `bytes` of frames; refused when they do not fit the free storage or there is none.
-	fn open(&self, bytes: u64) -> io::Result<Box<dyn SpillBackend>>;
+	/// Ready once [`open`](Self::open) can answer: the free storage is known; otherwise `cx`'s waker is woken then.
+	fn poll_ready(&self, cx: &mut Context<'_>) -> Poll<()>;
+	/// A spill for `bytes` of frames of store `store` (its [`FrameStore::id`](super::FrameStore::id)) laid out
+	/// as `layout`; refused when they do not fit the free storage or there is none.
+	fn open(&self, store: u64, layout: &StoreLayout, bytes: u64) -> io::Result<Box<dyn SpillBackend>>;
 }
 
 /// The store's side of a [`SpillBackend`]: the operations in flight and the frames read back.
 pub(super) struct PendingSpill {
 	backend: Box<dyn SpillBackend>,
+	/// Writes in flight at which the spill is busy.
+	most_writes: usize,
 	state: Mutex<State>,
 }
 
@@ -108,13 +123,19 @@ struct State {
 	reads: Vec<(u64, usize, Token<Vec<u8>>)>,
 	/// The frame asked for while the reads were all in flight: (generation, frame).
 	queued: Option<(u64, usize)>,
+	/// The frame asked for last: (generation, frame).
+	asked: Option<(u64, usize)>,
+	/// The failed read of a frame while it was the one asked for last: (generation, frame), the error.
+	failed: Option<((u64, usize), io::Error)>,
+	/// The frames to read ahead, soonest first, at most [`READ_AHEAD`]: (generation, frame).
+	ahead: Vec<(u64, usize)>,
 	/// (generation, frame, planes), newest last, at most [`LOADED`].
 	loaded: VecDeque<(u64, usize, Arc<Vec<u8>>)>,
 }
 
 impl PendingSpill {
-	pub(super) fn new(backend: Box<dyn SpillBackend>) -> Self {
-		Self { backend, state: Mutex::default() }
+	pub(super) fn new(backend: Box<dyn SpillBackend>, most_writes: usize) -> Self {
+		Self { backend, most_writes, state: Mutex::default() }
 	}
 
 	pub(super) fn write(&self, generation: u64, frame: usize, planes: &[&[u8]]) {
@@ -122,13 +143,22 @@ impl PendingSpill {
 		lock(&self.state).writes.push((generation, frame, token));
 	}
 
-	/// [`WRITES_IN_FLIGHT`] writes are.
 	pub(super) fn busy(&self) -> bool {
-		lock(&self.state).writes.len() >= WRITES_IN_FLIGHT
+		lock(&self.state).writes.len() >= self.most_writes
 	}
 
 	pub(super) fn writing(&self) -> bool {
 		!lock(&self.state).writes.is_empty()
+	}
+
+	/// Ready once a write in flight completed, or none is; otherwise `cx`'s waker is woken when one completes.
+	pub(super) fn poll_write(&self, cx: &mut Context<'_>) -> Poll<()> {
+		let state = lock(&self.state);
+		let mut done = state.writes.is_empty();
+		for (.., token) in &state.writes {
+			done |= token.poll_done(cx).is_ready();
+		}
+		if done { Poll::Ready(()) } else { Poll::Pending }
 	}
 
 	/// Takes the completed writes; the frames of `generation` written whose memory is free now, all but `last`
@@ -167,28 +197,11 @@ impl PendingSpill {
 	pub(super) fn read(&self, generation: u64, frame: usize) -> Option<io::Result<Arc<Vec<u8>>>> {
 		let mut state = lock(&self.state);
 		let wanted = (generation, frame);
-		let mut failed = None;
-		let mut at = 0;
-		while at < state.reads.len() {
-			let (g, f, token) = &state.reads[at];
-			let Some(result) = token.take() else {
-				at += 1;
-				continue;
-			};
-			let key = (*g, *f);
-			state.reads.swap_remove(at);
-			match result {
-				Ok(planes) => {
-					if state.loaded.len() == LOADED {
-						state.loaded.pop_front();
-					}
-					state.loaded.push_back((key.0, key.1, Arc::new(planes)));
-				}
-				Err(e) if key == wanted => failed = Some(e),
-				Err(e) => tracing::debug!(frame = key.1, "a spilled frame no longer asked for was not read back: {e}"),
-			}
-		}
-		if let Some(e) = failed {
+		state.asked = Some(wanted);
+		state.land();
+		if let Some((key, e)) = state.failed.take()
+			&& key == wanted
+		{
 			return Some(Err(e));
 		}
 		if let Some((.., planes)) = state.loaded.iter().find(|(g, f, _)| (*g, *f) == wanted) {
@@ -197,13 +210,32 @@ impl PendingSpill {
 		if !state.reads.iter().any(|(g, f, _)| (*g, *f) == wanted) {
 			state.queued = Some(wanted);
 		}
-		if state.reads.len() < READS_IN_FLIGHT
-			&& let Some((g, f)) = state.queued.take()
-		{
+		self.start_reads(&mut state);
+		None
+	}
+
+	/// Reads the first [`READ_AHEAD`] of `frames` of `generation` ahead, soonest first, after a frame asked for;
+	/// they are kept while ahead, as is the frame asked for last.
+	pub(super) fn prefetch(&self, generation: u64, frames: &[usize]) {
+		let mut state = lock(&self.state);
+		state.ahead = frames.iter().take(READ_AHEAD).map(|&f| (generation, f)).collect();
+		state.land();
+		self.start_reads(&mut state);
+	}
+
+	/// Starts reads up to [`READS_IN_FLIGHT`]: the frame queued first, then the frames ahead not kept or in flight.
+	fn start_reads(&self, state: &mut State) {
+		while state.reads.len() < READS_IN_FLIGHT {
+			let next = state.queued.take().or_else(|| {
+				state.ahead.iter().copied().find(|&key| {
+					!state.reads.iter().any(|(g, f, _)| (*g, *f) == key)
+						&& !state.loaded.iter().any(|(g, f, _)| (*g, *f) == key)
+				})
+			});
+			let Some((g, f)) = next else { return };
 			let token = self.backend.read(g, f);
 			state.reads.push((g, f, token));
 		}
-		None
 	}
 
 	/// Reads in flight or queued, and frames kept.
@@ -219,9 +251,43 @@ impl PendingSpill {
 		state.held = None;
 		state.reads.clear();
 		state.queued = None;
+		state.asked = None;
+		state.failed = None;
+		state.ahead.clear();
 		state.loaded.clear();
 		drop(state);
 		self.backend.drop_generation(generation);
+	}
+}
+
+impl State {
+	/// Keeps the reads completed, each pushing out the oldest frame kept that is neither asked for last nor
+	/// ahead; the failure of the frame asked for last is kept for its next read, others are logged.
+	fn land(&mut self) {
+		let mut at = 0;
+		while at < self.reads.len() {
+			let Some(result) = self.reads[at].2.take() else {
+				at += 1;
+				continue;
+			};
+			let (g, f, _) = self.reads.swap_remove(at);
+			match result {
+				Ok(planes) => {
+					self.loaded.push_back((g, f, Arc::new(planes)));
+					if self.loaded.len() > LOADED {
+						let kept = |key: &(u64, usize)| self.asked == Some(*key) || self.ahead.contains(key);
+						let out = self
+							.loaded
+							.iter()
+							.position(|(g, f, _)| !kept(&(*g, *f)))
+							.expect("the frame asked for last and the frames ahead leave a frame to push out");
+						self.loaded.remove(out);
+					}
+				}
+				Err(e) if self.asked == Some((g, f)) => self.failed = Some(((g, f), e)),
+				Err(e) => tracing::debug!(frame = f, "a spilled frame not asked for was not read back: {e}"),
+			}
+		}
 	}
 }
 
@@ -284,7 +350,7 @@ pub(crate) mod fake {
 		}
 	}
 
-	/// Spills into one shared [`Disk`] holding at most `free` bytes; ready once `ready` is set.
+	/// Spills into one shared [`Disk`] holding at most `free` bytes; ready once `ready` is set, which wakes no one.
 	pub(crate) struct Factory {
 		pub(crate) disk: Arc<Mutex<Disk>>,
 		pub(crate) free: u64,
@@ -298,11 +364,11 @@ pub(crate) mod fake {
 	}
 
 	impl SpillFactory for Factory {
-		fn ready(&self) -> bool {
-			self.ready.load(std::sync::atomic::Ordering::Acquire)
+		fn poll_ready(&self, _: &mut Context<'_>) -> Poll<()> {
+			if self.ready.load(std::sync::atomic::Ordering::Acquire) { Poll::Ready(()) } else { Poll::Pending }
 		}
 
-		fn open(&self, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {
+		fn open(&self, _store: u64, _layout: &StoreLayout, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {
 			if bytes > self.free {
 				return Err(io::Error::new(io::ErrorKind::StorageFull, format!("{bytes} > {}", self.free)));
 			}

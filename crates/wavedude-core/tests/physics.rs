@@ -224,34 +224,14 @@ fn mixed_pixels(w: usize, h: usize) -> Vec<u8> {
 	})
 }
 
-/// (2) Stability: the derived sub-steps keep every configuration bounded for 600 steps; one
-/// sub-step fewer at c = 1 diverges on both stencils (so the check can fail); and at one sub-step a
-/// Courant number 1.5 percent under the derived limit stays bounded while 1.5 percent over diverges,
-/// which pins the limit itself (0.8660 for the 9-point's leapfrog, 0.9747 for the DRP's modified
-/// equation, engine/substeps.rs).
+/// (2) Stability: one sub-step fewer than derived at c = 1 diverges on both stencils (so the check can
+/// fail); and at one sub-step a Courant number 1.5 percent under the derived limit stays bounded while
+/// 1.5 percent over diverges, which pins the limit itself (0.8660 for the 9-point's leapfrog, 0.9747 for
+/// the DRP's modified equation, engine/substeps.rs). `configurations_stay_bounded` covers the derived
+/// sub-steps themselves.
 #[test]
-fn sub_steps_keep_every_configuration_stable() {
+fn the_derived_sub_steps_and_courant_limit_are_the_stability_edge() {
 	let (w, h) = (64u32, 48u32);
-	let mixed = mixed_pixels(w as usize, h as usize);
-	for stencil in STENCILS {
-		for (edges, edge) in [(Edges::Open, -32), (Edges::Open, 0), (Edges::Reflective, 0), (Edges::Reflective, 6)] {
-			for image in [false, true] {
-				let s = scene(edge, edges, 1.0);
-				let data = if image { SceneData::from_pixels(&mixed, w, h, &s) } else { SceneData::blank(w, h, &s) };
-				let mut e = CpuEngine::new(data, options(stencil, 2.0));
-				e.set_emitters(&[emitter(32, 24, 255.0), emitter(5, 5, 1.0), emitter(60, 44, 100.0)]);
-				for _ in 0..600 {
-					e.advance_one_step();
-				}
-				let f = field(&mut e);
-				let p = peak(&f);
-				assert!(
-					f.iter().all(|v| v.is_finite()) && p < 20.0,
-					"{stencil:?} {edges:?} {edge} image {image}: peak {p}"
-				);
-			}
-		}
-	}
 	for stencil in STENCILS {
 		let data = SceneData::blank(w, h, &scene(0, Edges::Reflective, 1.0));
 		let n = sub_steps(stencil, 1.0);
@@ -967,30 +947,75 @@ fn bound(engine: &mut CpuEngine) -> f64 {
 	if f.iter().all(|v| v.is_finite()) { peak(&f) } else { f64::INFINITY }
 }
 
-/// (10a) Open edges stay bounded for every sub-step count and both stencils, behind an inside damping
-/// band (whose outermost ring has d = 0) and without one: a 64 x 48 canvas of index 1.25 (Courant 0.8
-/// at one sub-step, within the CFL bound), a band of 6 or none and a continuous source, 5000 steps.
-/// Before the damped update was centred the band diverged where `d^(1/n)` is small, and before the
-/// outer rings were extrapolated linearly the DRP stencil diverged at the corners at one sub-step.
+/// One run of `configurations_stay_bounded`.
+struct Bounded {
+	name: String,
+	stencil: Stencil,
+	data: SceneData,
+	sub_steps: Option<u32>,
+	emitters: Vec<Emitter>,
+	steps: u32,
+	/// Steps between the samples of the peak.
+	every: u32,
+}
+
+/// (2, 10a) Every configuration stays bounded: the derived sub-steps keep both stencils bounded for 600
+/// steps on open and reflective edges, with and without a damping band, blank and with the mixed image
+/// scene; and open edges stay bounded for every sub-step count behind an inside damping band (whose
+/// outermost ring has d = 0) and without one: a 64 x 48 canvas of index 1.25 (Courant 0.8 at one sub-step,
+/// within the CFL bound), a band of 6 or none and a continuous source, 5000 steps. Before the damped
+/// update was centred the band diverged where `d^(1/n)` is small, and before the outer rings were
+/// extrapolated linearly the DRP stencil diverged at the corners at one sub-step.
 #[test]
-fn open_edges_stay_bounded_at_every_sub_step_count() {
-	for band in [6, 0] {
-		let data = SceneData::blank(64, 48, &scene(band, Edges::Open, 1.25));
-		for stencil in STENCILS {
-			for n in 1..=4 {
-				let mut e = CpuEngine::with_sub_steps(data.clone(), options(stencil, 2.0), n);
-				e.set_emitters(&[emitter(32, 24, 100.0)]);
-				let mut top = 0f64;
-				for step in 1..=5000 {
-					e.advance_one_step();
-					if step % 100 == 0 {
-						top = top.max(bound(&mut e));
-					}
-				}
-				println!("band {band}, {stencil:?}, {n} sub-steps: peak {top:.3}");
-				assert!(top < 10.0, "band {band}, {stencil:?} at {n} sub-steps: peak {top}");
+fn configurations_stay_bounded() {
+	let (w, h) = (64u32, 48u32);
+	let mixed = mixed_pixels(w as usize, h as usize);
+	let mut cases = Vec::new();
+	for stencil in STENCILS {
+		for (edges, edge) in [(Edges::Open, -32), (Edges::Open, 0), (Edges::Reflective, 0), (Edges::Reflective, 6)] {
+			for image in [false, true] {
+				let s = scene(edge, edges, 1.0);
+				cases.push(Bounded {
+					name: format!("{stencil:?} {edges:?} {edge} image {image}"),
+					stencil,
+					data: if image { SceneData::from_pixels(&mixed, w, h, &s) } else { SceneData::blank(w, h, &s) },
+					sub_steps: None,
+					emitters: vec![emitter(32, 24, 255.0), emitter(5, 5, 1.0), emitter(60, 44, 100.0)],
+					steps: 600,
+					every: 600,
+				});
 			}
 		}
+		for band in [6, 0] {
+			for n in 1..=4 {
+				cases.push(Bounded {
+					name: format!("{stencil:?} band {band} at {n} sub-steps"),
+					stencil,
+					data: SceneData::blank(w, h, &scene(band, Edges::Open, 1.25)),
+					sub_steps: Some(n),
+					emitters: vec![emitter(32, 24, 100.0)],
+					steps: 5000,
+					every: 100,
+				});
+			}
+		}
+	}
+	for case in cases {
+		let options = options(case.stencil, 2.0);
+		let mut e = match case.sub_steps {
+			Some(n) => CpuEngine::with_sub_steps(case.data, options, n),
+			None => CpuEngine::new(case.data, options),
+		};
+		e.set_emitters(&case.emitters);
+		let mut top = 0f64;
+		for step in 1..=case.steps {
+			e.advance_one_step();
+			if step % case.every == 0 {
+				top = top.max(bound(&mut e));
+			}
+		}
+		println!("{}: peak {top:.3}", case.name);
+		assert!(top < 10.0, "{}: peak {top}", case.name);
 	}
 }
 
@@ -1162,78 +1187,94 @@ fn fitted_amplitude(samples: &[f64], t0: usize, omega: f64) -> f64 {
 	a.hypot(b)
 }
 
-/// (13) Amplitude is the swing a continuous source gives its own cell in free space: levels 20, 50,
-/// 100 and 200 (scale 2) of amplitude 0.5 on a 320 x 320 canvas with a 32 px CPML rim (the return it lets
-/// through is below the fit's resolution: the same offsets to 0.001 as on 512 x 512), both stencils,
-/// at two sub-steps (index 1, the definition) and at one (index 1.25, which one sub-step needs: there
-/// the cell swings by the ratio of the two media's |G0|, engine/green.rs). The amplitude is fitted over
-/// the last 240 of 520 steps, three periods at level 20 (measured within 0.2 % of the expectation).
-#[test]
-fn source_amplitude_is_the_free_space_swing_of_its_cell() {
-	use wavedude_core::engine::green::source_response;
-	let (w, amplitude, scale) = (320usize, 0.5, 2.0);
-	let c = w as i32 / 2;
-	for stencil in STENCILS {
-		let coefficients = StencilCoefficients::of(stencil);
-		let scheme = TimeScheme::of(stencil);
-		for (n, index) in [(2u32, 1.0), (1, 1.25)] {
-			let data = SceneData::blank(w as u32, w as u32, &scene(-32, Edges::Open, index));
-			for level in [20.0, 50.0, 100.0, 200.0] {
-				let omega = level_omega(level, scale);
-				let c2 = 1.0 / (index * index);
-				let expected = amplitude * source_response(&coefficients, scheme, n, omega, c2)
-					/ source_response(&coefficients, scheme, n, omega, 1.0);
-				let mut e = CpuEngine::with_sub_steps(data.clone(), options(stencil, scale), n);
-				e.set_emitters(&[Emitter { amplitude, ..emitter(c, c, level) }]);
-				let cell = data.padded_index(32 + c as usize, 32 + c as usize);
-				let mut samples = Vec::new();
-				for step in 1..=520 {
-					e.advance_one_step();
-					if step > 280 {
-						samples.push(e.field_padded()[cell] as f64);
-					}
-				}
-				let swing = fitted_amplitude(&samples, 281, omega);
-				let off = swing / expected - 1.0;
-				println!(
-					"{stencil:?}, {n} sub-steps, index {index}, level {level}: swing {swing:.4}, expected {expected:.4}, off {off:+.3}"
-				);
-				assert!(off.abs() < 0.05, "{stencil:?} n {n} level {level}: {swing} against {expected}");
-			}
-		}
-	}
+/// One row of `source_amplitude_is_the_free_space_swing_of_its_cell_or_position`.
+struct Swing {
+	name: &'static str,
+	/// Sub-steps and the medium's index (1 at two sub-steps; 1.25 at one).
+	sub_steps: u32,
+	index: f64,
+	/// Fractional offsets of the source from its cell.
+	fractions: &'static [(f64, f64)],
+	levels: &'static [f64],
+	/// Relative error allowed of the fitted swing.
+	tolerance: f64,
 }
 
-/// A source at a fractional position: its Amplitude is the swing of the field sampled at the position
-/// with the bilinear shares of its taps (engine/green.rs, `spread_response`), at a half-cell offset
-/// along x and at the centre of four cells, level 50 and 100, both stencils, two sub-steps, as in
-/// `source_amplitude_is_the_free_space_swing_of_its_cell`.
+/// (13) Amplitude is the swing a continuous source gives the field at its own position in free space,
+/// sampled with the bilinear shares of the source's taps (engine/green.rs, `spread_response`; one cell
+/// when it sits on one): the cell itself at levels 20, 50, 100 and 200 (scale 2) of amplitude 0.5 on a
+/// 320 x 320 canvas with a 32 px CPML rim (the return it lets through is below the fit's resolution: the
+/// same offsets to 0.001 as on 512 x 512), both stencils, at two sub-steps (index 1, the definition) and
+/// at one (index 1.25, which one sub-step needs: there the cell swings by the ratio of the two media's
+/// |G0|, engine/green.rs); and a half-cell offset along x, the centre of four cells and a quarter offset,
+/// levels 50 and 100, two sub-steps. The amplitude is fitted over the last 240 of 520 steps, three periods
+/// at level 20 (measured within 0.2 % of the expectation).
 #[test]
-fn spread_source_amplitude_is_the_swing_at_its_position() {
+fn source_amplitude_is_the_free_space_swing_of_its_cell_or_position() {
+	use wavedude_core::engine::green::{bilinear, source_response};
+	const SWINGS: &[Swing] = &[
+		Swing {
+			name: "cell",
+			sub_steps: 2,
+			index: 1.0,
+			fractions: &[(0.0, 0.0)],
+			levels: &[20.0, 50.0, 100.0, 200.0],
+			tolerance: 0.05,
+		},
+		Swing {
+			name: "cell at one sub-step",
+			sub_steps: 1,
+			index: 1.25,
+			fractions: &[(0.0, 0.0)],
+			levels: &[20.0, 50.0, 100.0, 200.0],
+			tolerance: 0.05,
+		},
+		Swing {
+			name: "fractional position",
+			sub_steps: 2,
+			index: 1.0,
+			fractions: &[(0.5, 0.0), (0.5, 0.5), (0.25, 0.75)],
+			levels: &[50.0, 100.0],
+			tolerance: 0.05,
+		},
+	];
 	let (w, amplitude, scale) = (320usize, 0.5, 2.0);
 	let c = w / 2;
 	for stencil in STENCILS {
-		let data = SceneData::blank(w as u32, w as u32, &scene(-32, Edges::Open, 1.0));
-		for (fx, fy) in [(0.5, 0.0), (0.5, 0.5), (0.25, 0.75)] {
-			for level in [50.0, 100.0] {
-				let omega = level_omega(level, scale);
-				let mut e = CpuEngine::with_sub_steps(data.clone(), options(stencil, scale), 2);
-				e.set_emitters(&[Emitter { amplitude, x: c as f64 + fx, y: c as f64 + fy, ..emitter(0, 0, level) }]);
-				let shares = wavedude_core::engine::green::bilinear(fx, fy);
+		let coefficients = StencilCoefficients::of(stencil);
+		let scheme = TimeScheme::of(stencil);
+		for row in SWINGS {
+			let data = SceneData::blank(w as u32, w as u32, &scene(-32, Edges::Open, row.index));
+			for &(fx, fy) in row.fractions {
+				let shares = bilinear(fx, fy);
 				let cells =
 					[(0, 0), (1, 0), (0, 1), (1, 1)].map(|(dx, dy)| data.padded_index(32 + c + dx, 32 + c + dy));
-				let mut samples = Vec::new();
-				for step in 1..=520 {
-					e.advance_one_step();
-					if step > 280 {
-						let u = e.field_padded();
-						samples.push(cells.iter().zip(shares).map(|(&i, s)| u[i] as f64 * s).sum());
+				for &level in row.levels {
+					let omega = level_omega(level, scale);
+					let c2 = 1.0 / (row.index * row.index);
+					let expected = amplitude * source_response(&coefficients, scheme, row.sub_steps, omega, c2)
+						/ source_response(&coefficients, scheme, row.sub_steps, omega, 1.0);
+					let mut e = CpuEngine::with_sub_steps(data.clone(), options(stencil, scale), row.sub_steps);
+					e.set_emitters(&[Emitter {
+						amplitude,
+						x: c as f64 + fx,
+						y: c as f64 + fy,
+						..emitter(0, 0, level)
+					}]);
+					let mut samples = Vec::new();
+					for step in 1..=520 {
+						e.advance_one_step();
+						if step > 280 {
+							let u = e.field_padded();
+							samples.push(cells.iter().zip(shares).map(|(&i, s)| u[i] as f64 * s).sum());
+						}
 					}
+					let swing = fitted_amplitude(&samples, 281, omega);
+					let off = swing / expected - 1.0;
+					let case = format!("{} {stencil:?} ({fx}, {fy}) level {level}", row.name);
+					println!("{case}: swing {swing:.4}, expected {expected:.4}, off {off:+.3}");
+					assert!(off.abs() < row.tolerance, "{case}: {swing} against {expected}");
 				}
-				let swing = fitted_amplitude(&samples, 281, omega);
-				let off = swing / amplitude - 1.0;
-				println!("{stencil:?}, fraction ({fx}, {fy}), level {level}: swing {swing:.4}, off {off:+.3}");
-				assert!(off.abs() < 0.05, "{stencil:?} ({fx}, {fy}) level {level}: {swing} against {amplitude}");
 			}
 		}
 	}

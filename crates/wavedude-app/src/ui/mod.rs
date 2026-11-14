@@ -1,8 +1,8 @@
 //! The window over [`App`]: the frame loop that ticks the state, the title, UI zoom and look that follow the
 //! settings, the menu bar and the shortcuts with the one dispatcher of their [`MenuAction`]s, the dock and the status
 //! bar, the modals that the state's responses and notices ask for, the close box that asks about unsaved edits
-//! first, and the renderer's GPU device that the engines share (natively and in the browser).
-//! What differs between the two is in `native` and `web`, chosen at compile time.
+//! first, and the renderer's GPU device that the engines share natively and the preview colours pictures on.
+//! What differs between the desktop and the browser is in `native` and `web`, chosen at compile time.
 //!
 //! Threads: the UI thread; the state's workers are polled on the tick while something moves, and wake the window
 //! through [`wavedude_app_state::wake`] otherwise.
@@ -53,12 +53,14 @@ use eframe::{egui_wgpu, wgpu};
 use wavedude_app_state::clipboard::PasteTarget;
 use wavedude_app_state::commands::Command;
 use wavedude_app_state::document::Source;
-use wavedude_app_state::live::Notice;
+use wavedude_app_state::live::{Notice, RunFailure};
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::{Duration, Instant, Store, take_crash_report};
 use wavedude_app_state::selection::Row;
 use wavedude_app_state::{Event, Guarded, Response};
+#[cfg(not(target_arch = "wasm32"))]
 use wavedude_core::engine::GpuHandle;
+#[cfg(not(target_arch = "wasm32"))]
 use wavedude_core::engine::gpu::GpuContext;
 use wavedude_core::model::{ItemKind, ItemRef};
 use wavedude_core::quality::PreviewQuality;
@@ -94,8 +96,6 @@ pub struct Boot {
 	pub store: Store,
 	/// The log's lines, the status bar's among them.
 	pub log: LogRing,
-	/// The renderer's context, when the engines run on it.
-	pub gpu: Option<GpuHandle>,
 	/// Files the command line and the OS ask to open.
 	#[cfg(not(target_arch = "wasm32"))]
 	pub open: crate::open_requests::OpenRequests,
@@ -152,7 +152,7 @@ impl Shell {
 		cc.egui_ctx.set_zoom_factor(zoom as f32);
 		let shown = Shown { title: app.title(), zoom, theme: None };
 		let dock = Dock::load(app.settings.layout.as_deref());
-		let preview = Preview::new(cc.wgpu_render_state.clone(), boot.gpu.clone());
+		let preview = Preview::new(cc.wgpu_render_state.clone());
 		let project = ProjectPane::default();
 		#[cfg(not(target_arch = "wasm32"))]
 		let updates = Updates::new(boot.update.clone());
@@ -270,15 +270,19 @@ impl Shell {
 			match notice {
 				Notice::AskMemoryWarning => self.ask_memory_warning(),
 				Notice::WarningDropped => self.modals.drop_memory_warning(ctx),
-				Notice::RunFailed { message, no_image } => {
+				Notice::RunFailed(failure) => {
 					// the browser asks to upload the image instead
 					#[cfg(target_arch = "wasm32")]
-					if no_image && self.files.ask_scene_image(&self.app, &mut self.modals) {
+					if failure == RunFailure::NoImage && self.files.ask_scene_image(&self.app, &mut self.modals) {
 						continue;
 					}
 					let s = &self.app.strings;
-					let detail = if no_image { s.get("RunErrorNoImage") } else { &message };
-					self.modals.show(Modal::Error(format!("{}\n{detail}", s.get("RunError"))));
+					let text = match &failure {
+						RunFailure::Failed(message) => format!("{}\n{message}", s.get("RunError")),
+						RunFailure::NoImage => format!("{}\n{}", s.get("RunError"), s.get("RunErrorNoImage")),
+						RunFailure::WorkerGone(gone) => gone.message(s),
+					};
+					self.modals.show(Modal::Error(text));
 				}
 				#[cfg(not(target_arch = "wasm32"))]
 				Notice::ExportReady => self.exports.ready(ctx, &mut self.app, &mut self.modals),
@@ -491,8 +495,7 @@ impl Shell {
 		}
 	}
 
-	/// The wait before the next tick: none while a pumped run has work left, short while something moves, else no
-	/// tick.
+	/// The wait before the next tick: short while something moves, else no tick.
 	fn next_tick(&self) -> Option<Duration> {
 		let live = &self.app.live;
 		#[cfg(not(target_arch = "wasm32"))]
@@ -509,7 +512,7 @@ impl Shell {
 			|| live.playback.is_playing()
 			|| self.app.document.history.has_pending()
 			|| self.app.document.image_change_pending();
-		if live.work_left() { Some(Duration::ZERO) } else { moving.then_some(TICK) }
+		moving.then_some(TICK)
 	}
 }
 
@@ -646,8 +649,9 @@ impl eframe::App for Shell {
 	}
 }
 
-/// Asks for the renderer's device with the adapter's own limits where it runs compute shaders, so the engines can
-/// share it (large grids need its storage binding size); egui's request otherwise.
+/// Asks for the renderer's device with the adapter's own limits where it runs compute shaders: the engines share it
+/// natively, and the preview colours a large run's frames on it (their planes need its storage binding size); egui's
+/// request otherwise.
 pub fn share_device(options: &mut egui_wgpu::WgpuConfiguration) {
 	if let egui_wgpu::WgpuSetup::CreateNew(setup) = &mut options.wgpu_setup {
 		let fallback = setup.device_descriptor.clone();
@@ -666,6 +670,7 @@ pub fn share_device(options: &mut egui_wgpu::WgpuConfiguration) {
 }
 
 /// The engines' GPU: the renderer's device when it can run them; `None` (logged) otherwise.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn renderer_gpu(cc: &eframe::CreationContext<'_>) -> Option<GpuHandle> {
 	let rs = cc.wgpu_render_state.as_ref()?;
 	GpuContext::from_device(&rs.adapter, rs.device.clone(), rs.queue.clone())

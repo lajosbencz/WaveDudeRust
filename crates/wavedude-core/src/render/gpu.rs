@@ -15,7 +15,7 @@ use bytemuck::{Pod, Zeroable};
 
 use super::layer::{Colouring, LayerColours, View};
 use super::screen::{ResampleAxis, Window, axes};
-use crate::engine::gpu::HALF;
+use crate::engine::gpu::{GpuError, HALF};
 use crate::engine::types::SampleKind;
 use crate::engine::{FrameShape, SampleFormat};
 use crate::model::Layer;
@@ -54,6 +54,9 @@ const PLAIN: u32 = 0;
 const DITHERED: u32 = 1;
 const INDEX: u32 = 2;
 
+/// The storage buffers a picture binds in the fragment stage: the plane, the colour table, the axes, the outline.
+const STORAGE_BINDINGS: u32 = 4;
+
 /// The pipeline for one render target format, shared by the pictures drawn into it.
 pub struct PicturePipeline {
 	layout: wgpu::BindGroupLayout,
@@ -64,6 +67,21 @@ pub struct PicturePipeline {
 }
 
 impl PicturePipeline {
+	/// Whether `device` of `adapter` draws pictures, else why not: they read storage buffers in the fragment stage,
+	/// which WebGL2 has none of.
+	pub fn supported(adapter: &wgpu::Adapter, device: &wgpu::Device) -> Result<(), GpuError> {
+		let info = adapter.get_info();
+		if !adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::FRAGMENT_STORAGE)
+			|| device.limits().max_storage_buffers_per_shader_stage < STORAGE_BINDINGS
+		{
+			return Err(GpuError::Unavailable(format!(
+				"{} ({:?}) binds no {STORAGE_BINDINGS} storage buffers in a fragment shader",
+				info.name, info.backend
+			)));
+		}
+		Ok(())
+	}
+
 	/// The pipeline drawing opaque pictures into `target`; an sRGB target gets linear colours, so it stores the
 	/// pictures' bytes.
 	pub fn new(device: &wgpu::Device, target: wgpu::TextureFormat) -> Self {
@@ -74,16 +92,11 @@ impl PicturePipeline {
 			count: None,
 		};
 		let storage = wgpu::BufferBindingType::Storage { read_only: true };
-		let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("picture"),
-			entries: &[
-				entry(0, wgpu::BufferBindingType::Uniform),
-				entry(1, storage),
-				entry(2, storage),
-				entry(3, storage),
-				entry(4, storage),
-			],
-		});
+		let entries: Vec<_> = std::iter::once(entry(0, wgpu::BufferBindingType::Uniform))
+			.chain((1..=STORAGE_BINDINGS).map(|binding| entry(binding, storage)))
+			.collect();
+		let layout = device
+			.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("picture"), entries: &entries });
 		let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
 			label: Some("picture"),
 			source: wgpu::ShaderSource::Wgsl(format!("{HALF}\n{SHADER}").into()),
@@ -121,6 +134,22 @@ impl PicturePipeline {
 		let empty = storage_buffer(device, "picture empty", 16);
 		Self { layout, pipeline, empty, srgb: target.is_srgb() }
 	}
+}
+
+/// A plane larger than a device binds as one storage buffer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("a plane of {bytes} bytes exceeds the device's storage buffer limit of {limit} bytes")]
+pub struct PlaneTooLarge {
+	pub bytes: u64,
+	/// The smaller of the binding and buffer size limits.
+	pub limit: u64,
+}
+
+/// Whether a plane of `shape`, padded to whole words, binds as one storage buffer under `limits`.
+pub fn plane_fits(shape: &FrameShape, limits: &wgpu::Limits) -> Result<(), PlaneTooLarge> {
+	let bytes = (shape.plane_bytes() as u64).next_multiple_of(4);
+	let limit = limits.max_storage_buffer_binding_size.min(limits.max_buffer_size);
+	if bytes > limit { Err(PlaneTooLarge { bytes, limit }) } else { Ok(()) }
 }
 
 /// A plane on the device: packed words as [`DeviceFrame`](crate::engine::gpu::DeviceFrame) describes, the
@@ -401,4 +430,36 @@ fn upload(
 	};
 	queue.write_buffer(&buffer, 0, bytemuck::cast_slice(words));
 	buffer
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn shape(side: u32, format: SampleFormat) -> FrameShape {
+		FrameShape {
+			canvas_width: side,
+			canvas_height: side,
+			divisor: 1,
+			format,
+			field_brightness: 1.,
+			intensity_brightness: 1.,
+			intensity_root: false,
+		}
+	}
+
+	#[test]
+	fn a_plane_fits_up_to_the_smaller_of_the_binding_and_buffer_limits() {
+		let limits = wgpu::Limits::default();
+		assert_eq!(plane_fits(&shape(8192, SampleFormat::Half), &limits), Ok(()));
+		assert_eq!(
+			plane_fits(&shape(8193, SampleFormat::Half), &limits),
+			Err(PlaneTooLarge { bytes: (8193u64 * 8193 * 2).next_multiple_of(4), limit: 128 << 20 })
+		);
+		assert_eq!(plane_fits(&shape(8193, SampleFormat::Index), &limits), Ok(()));
+		let small_buffers = wgpu::Limits { max_buffer_size: 1 << 20, ..limits };
+		assert_eq!(plane_fits(&shape(1024, SampleFormat::Half), &small_buffers).map_err(|e| e.limit), Err(1 << 20));
+		let webgl2 = wgpu::Limits::downlevel_webgl2_defaults();
+		assert!(plane_fits(&shape(8, SampleFormat::Index), &webgl2).is_err());
+	}
 }

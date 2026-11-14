@@ -894,14 +894,18 @@ mod tests {
 	#[test]
 	fn edits_classify_by_what_they_change() {
 		let (mut p, mut s) = (project(), Selection::default());
-		for command in [
-			Command::AddSource { at: None },
-			Command::AddProbe { at: None, detector: ProbeDetector::Standard },
-			Command::AddProbe { at: None, detector: ProbeDetector::Counting },
-			Command::AddPart { kind: NewPart::Rectangle, at: None },
-			Command::AddScheme,
-		] {
-			run(&mut p, &mut s, command);
+		let additions = [
+			(Command::AddSource { at: None }, Some(ChangeKind::Simulation)),
+			(Command::AddProbe { at: None, detector: ProbeDetector::Standard }, Some(ChangeKind::ProbePresentation)),
+			(Command::AddProbe { at: None, detector: ProbeDetector::Counting }, None),
+			(Command::AddPart { kind: NewPart::Rectangle, at: None }, None),
+			(Command::AddScheme, Some(ChangeKind::Display)),
+		];
+		for (command, kind) in additions {
+			let change = run(&mut p, &mut s, command.clone());
+			if let Some(kind) = kind {
+				assert_eq!(change.kind, kind, "{command:?}");
+			}
 		}
 		let preview = !p.display.intensity.preview;
 		let display = |e| Edit::Project(ProjectEdit::Display(e));
@@ -926,6 +930,21 @@ mod tests {
 		];
 		for (e, want) in table {
 			assert_eq!(edit(&mut p, &mut s, e.clone()).kind, want, "{e:?}");
+		}
+		// cumulative: each row's change stays in the next
+		let mut moved = p.clone();
+		let diffs: [(_, fn(&mut Project), _); 3] = [
+			("a probe's box moved", |p| p.probes[0].box_y += 5, ChangeKind::Display),
+			("and its anchor", |p| p.probes[0].ay += 1, ChangeKind::ProbePresentation),
+			(
+				"and the brightness: the frames stay with 16-bit samples",
+				|p| p.display.field.brightness += 1.0,
+				ChangeKind::ProbesAndBrightness,
+			),
+		];
+		for (case, change, want) in diffs {
+			change(&mut moved);
+			assert_eq!(classify(&p, &moved), want, "{case}");
 		}
 	}
 
@@ -1022,24 +1041,6 @@ mod tests {
 		assert_eq!(p, before);
 		let missing = Command::Edit(Edit::Source(3, SourceEdit::Frequency(1.0)));
 		assert_eq!(apply(&mut p, &mut s, missing), Err(CommandError::NoItem(ItemRef::new(ItemKind::Source, 3))));
-	}
-
-	#[test]
-	fn classification() {
-		let (mut p, mut s) = (project(), Selection::default());
-		assert_eq!(run(&mut p, &mut s, Command::AddSource { at: None }).kind, ChangeKind::Simulation);
-		assert_eq!(
-			run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard }).kind,
-			ChangeKind::ProbePresentation
-		);
-		assert_eq!(run(&mut p, &mut s, Command::AddScheme).kind, ChangeKind::Display);
-		let mut moved = p.clone();
-		moved.probes[0].box_y += 5;
-		assert_eq!(classify(&p, &moved), ChangeKind::Display);
-		moved.probes[0].ay += 1;
-		assert_eq!(classify(&p, &moved), ChangeKind::ProbePresentation);
-		moved.display.field.brightness += 1.0;
-		assert_eq!(classify(&p, &moved), ChangeKind::ProbesAndBrightness, "the frames stay with 16-bit samples");
 	}
 
 	#[test]

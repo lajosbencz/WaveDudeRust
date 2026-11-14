@@ -160,6 +160,7 @@ pub struct ProbeCells {
 
 /// Sample format of a stored plane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SampleFormat {
 	/// f16 per sample.
 	Half,
@@ -169,6 +170,7 @@ pub enum SampleFormat {
 
 /// Geometry and format of captured planes.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FrameShape {
 	pub canvas_width: u32,
 	pub canvas_height: u32,

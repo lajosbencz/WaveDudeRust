@@ -1,6 +1,7 @@
 use super::{Fields, Word, ranges};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SourceMode {
 	#[default]
 	Continuous,
@@ -8,6 +9,7 @@ pub enum SourceMode {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PulseShape {
 	#[default]
 	Gaussian,
@@ -16,6 +18,7 @@ pub enum PulseShape {
 
 /// A grid of elements around the source's position; present = composite source.
 #[derive(Clone, Debug, PartialEq, Fields)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SourceArray {
 	#[field(range = ranges::AT_LEAST_1)]
 	pub size_x: u32,
@@ -59,6 +62,7 @@ impl Default for SourceArray {
 
 /// A point or composite source.
 #[derive(Clone, Debug, PartialEq, Fields)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Source {
 	pub name: String,
 	pub enabled: bool,

@@ -25,19 +25,22 @@
 //! A pending spill (wasm32, `FrameStore::with_spill`) allocates its memory frames as they are captured too. A
 //! spilled frame stays in memory while its write is in flight and, once `FrameStore::settle` saw it written,
 //! while it is the frame written last; a read of a spilled frame that is not back yet starts its read and is
-//! refused with [`StoreError::Pending`] until it is.
+//! refused with [`StoreError::Pending`] until it is. Playback names the frames it reaches next
+//! ([`FrameStore::prefetch`]), which are read ahead.
 
 use crate::spec::RunSpec;
 use crate::sync::lock;
 use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 
 use crate::engine::{FrameShape, Snapshot};
 use crate::model::Layer;
 
-#[cfg(any(test, target_arch = "wasm32"))]
-use super::pending::{PendingSpill, SpillBackend};
+use super::pending::{
+	MOST_WRITES_IN_FLIGHT, PendingSpill, READ_AHEAD, SpillBackend, SpillFactory, WRITE_BYTES_IN_FLIGHT,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use super::spill::Disk;
 #[cfg(not(target_arch = "wasm32"))]
@@ -175,15 +178,32 @@ impl StoreLayout {
 		self.layers.len() * self.shape.plane_bytes()
 	}
 
+	/// Bytes of `frames` frames, which exceed `usize` on wasm32.
+	pub fn bytes_of(&self, frames: usize) -> u64 {
+		frames as u64 * self.frame_bytes() as u64
+	}
+
+	/// Writes in flight at which a pending spill of this layout is busy: [`WRITE_BYTES_IN_FLIGHT`] of frames, at
+	/// least one, at most the GPU engine's largest capture ring.
+	pub fn writes_in_flight(&self) -> usize {
+		usize::try_from(WRITE_BYTES_IN_FLIGHT / self.frame_bytes() as u64)
+			.unwrap_or(MOST_WRITES_IN_FLIGHT)
+			.clamp(1, MOST_WRITES_IN_FLIGHT)
+	}
+
 	/// Bytes of a spill file holding `frames` frames.
 	#[cfg(not(target_arch = "wasm32"))]
 	pub fn file_bytes(&self, frames: usize) -> u64 {
-		HEADER_BYTES + frames as u64 * self.frame_bytes() as u64
+		HEADER_BYTES + self.bytes_of(frames)
 	}
 }
 
 /// The next store's [`FrameStore::id`].
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+fn next_id() -> u64 {
+	NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
 
 /// See the module docs for layout and threading.
 pub struct FrameStore {
@@ -236,7 +256,7 @@ impl FrameStore {
 		release: Option<Release>,
 		dir: &std::path::Path,
 	) -> io::Result<Self> {
-		let mut store = Self::made(layout, ram_budget, Some(Spill::File(Disk::new(dir))));
+		let mut store = Self::made(next_id(), layout, ram_budget, Some(Spill::File(Disk::new(dir))));
 		let ram_frames = store.ram_frames;
 		if ram_frames < layout.capacity {
 			store.start_spill(ram_frames)?;
@@ -252,22 +272,39 @@ impl FrameStore {
 	/// A store holding at most `ram_budget` bytes of frames, in memory: a frame past them is refused
 	/// ([`StoreError::Full`]).
 	pub fn in_memory(layout: StoreLayout, ram_budget: u64) -> Self {
-		Self::made(layout, ram_budget, None)
+		Self::made(next_id(), layout, ram_budget, None)
 	}
 
 	/// A store holding `ram_budget` bytes of frames in memory, the rest in `backend`.
-	#[cfg(any(test, target_arch = "wasm32"))]
 	pub fn with_spill(layout: StoreLayout, ram_budget: u64, backend: Box<dyn SpillBackend>) -> Self {
-		let store = Self::made(layout, ram_budget, Some(Spill::Pending(PendingSpill::new(backend))));
+		Self::pending(next_id(), layout, ram_budget, backend)
+	}
+
+	/// A store holding `ram_budget` bytes of frames in memory, the rest in a spill `spill` opens for the store's
+	/// [`id`](Self::id), only when some frames do not fit the memory.
+	pub fn open(layout: StoreLayout, ram_budget: u64, spill: &dyn SpillFactory) -> io::Result<Self> {
+		let id = next_id();
+		let frame_bytes = layout.frame_bytes() as u64;
+		let ram_frames = layout.capacity.min(Budget::frames_in(ram_budget, frame_bytes));
+		if ram_frames == layout.capacity {
+			return Ok(Self::made(id, layout, ram_budget, None));
+		}
+		let backend = spill.open(id, &layout, (layout.capacity - ram_frames) as u64 * frame_bytes)?;
+		Ok(Self::pending(id, layout, ram_budget, backend))
+	}
+
+	fn pending(id: u64, layout: StoreLayout, ram_budget: u64, backend: Box<dyn SpillBackend>) -> Self {
+		let spill = PendingSpill::new(backend, layout.writes_in_flight());
+		let store = Self::made(id, layout, ram_budget, Some(Spill::Pending(spill)));
 		store.first_spilled.store(store.ram_frames, Ordering::Release);
 		store
 	}
 
-	fn made(layout: StoreLayout, ram_budget: u64, spill: Option<Spill>) -> Self {
+	fn made(id: u64, layout: StoreLayout, ram_budget: u64, spill: Option<Spill>) -> Self {
 		assert!(!layout.layers.is_empty(), "a store needs at least one layer");
 		let ram_frames = layout.capacity.min(Budget::frames_in(ram_budget, layout.frame_bytes() as u64));
 		Self {
-			id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+			id,
 			layout,
 			ram_budget,
 			ram_frames,
@@ -314,6 +351,11 @@ impl FrameStore {
 
 	pub fn frame_bytes(&self) -> usize {
 		self.layout.frame_bytes()
+	}
+
+	/// Bytes of `frames` of its frames.
+	pub fn bytes_of(&self, frames: usize) -> u64 {
+		self.layout.bytes_of(frames)
 	}
 
 	/// The contiguous frames from 0: every frame below it is present.
@@ -388,7 +430,7 @@ impl FrameStore {
 
 	/// Bytes of memory the store holds or plans to hold.
 	pub fn ram_bytes(&self) -> u64 {
-		self.first_spilled().min(self.ram_frames) as u64 * self.frame_bytes() as u64
+		self.layout.bytes_of(self.first_spilled().min(self.ram_frames))
 	}
 
 	/// The spill's size, when the store has one: the file's, or the pending spill's frames.
@@ -396,8 +438,7 @@ impl FrameStore {
 		match self.spill.as_ref()? {
 			#[cfg(not(target_arch = "wasm32"))]
 			Spill::File(disk) => disk.bytes(),
-			#[cfg(any(test, target_arch = "wasm32"))]
-			Spill::Pending(_) => Some(self.frames_on_disk() as u64 * self.frame_bytes() as u64),
+			Spill::Pending(_) => Some(self.layout.bytes_of(self.frames_on_disk())),
 		}
 	}
 
@@ -417,7 +458,6 @@ impl FrameStore {
 		match self.spill.as_ref().expect("a store with a spill") {
 			#[cfg(not(target_arch = "wasm32"))]
 			Spill::File(disk) => disk.start(&self.layout, first)?,
-			#[cfg(any(test, target_arch = "wasm32"))]
 			Spill::Pending(_) => {}
 		}
 		self.first_spilled.store(first, Ordering::Release);
@@ -429,7 +469,6 @@ impl FrameStore {
 		match self.spill.as_ref()? {
 			#[cfg(not(target_arch = "wasm32"))]
 			Spill::File(disk) => disk.prepared_block(),
-			#[cfg(any(test, target_arch = "wasm32"))]
 			Spill::Pending(_) => None,
 		}
 	}
@@ -511,7 +550,6 @@ impl FrameStore {
 					disk.write(&self.layout, frame, &snapshot)?;
 					self.give_back(frame, snapshot);
 				}
-				#[cfg(any(test, target_arch = "wasm32"))]
 				Spill::Pending(pending) => {
 					let planes: Vec<&[u8]> = self.layout.layers.iter().map(|&l| snapshot.plane(l)).collect();
 					pending.write(self.generation(), frame, &planes);
@@ -533,7 +571,6 @@ impl FrameStore {
 
 	/// Takes the pending spill's completed writes: a frame written leaves memory unless it is the frame written
 	/// last. A failed write is the error.
-	#[cfg(any(test, target_arch = "wasm32"))]
 	pub fn settle(&self) -> Result<(), StoreError> {
 		let Some(Spill::Pending(pending)) = &self.spill else { return Ok(()) };
 		let _writing = lock(&self.writing);
@@ -547,16 +584,50 @@ impl FrameStore {
 		Ok(())
 	}
 
-	/// The pending spill has as many writes in flight as it takes.
-	#[cfg(any(test, target_arch = "wasm32"))]
+	/// The pending spill has as many writes in flight as it takes ([`StoreLayout::writes_in_flight`]).
 	pub fn spill_busy(&self) -> bool {
 		matches!(&self.spill, Some(Spill::Pending(p)) if p.busy())
 	}
 
 	/// The pending spill has writes in flight.
-	#[cfg(any(test, target_arch = "wasm32"))]
 	pub fn spill_writing(&self) -> bool {
 		matches!(&self.spill, Some(Spill::Pending(p)) if p.writing())
+	}
+
+	/// Ready once a write of the pending spill in flight completed, or none is; otherwise `cx`'s waker is woken
+	/// when one completes.
+	pub fn poll_spill_write(&self, cx: &mut Context<'_>) -> Poll<()> {
+		match &self.spill {
+			Some(Spill::Pending(p)) => p.poll_write(cx),
+			_ => Poll::Ready(()),
+		}
+	}
+
+	/// Spilled frames a pending spill reads ahead ([`prefetch`](Self::prefetch)); 0 for other stores, whose reads
+	/// complete in the call.
+	pub fn read_ahead(&self) -> usize {
+		match &self.spill {
+			Some(Spill::Pending(_)) => READ_AHEAD,
+			_ => 0,
+		}
+	}
+
+	/// The frames to be read next, soonest first: a pending spill reads the first [`read_ahead`](Self::read_ahead)
+	/// spilled ones ahead and keeps them while they stay ahead, beside the frame read last; each call replaces
+	/// the last.
+	pub fn prefetch(&self, frames: impl IntoIterator<Item = usize>) {
+		let Some(Spill::Pending(pending)) = &self.spill else { return };
+		let mut ahead = Vec::with_capacity(READ_AHEAD);
+		for frame in frames {
+			if ahead.len() == READ_AHEAD {
+				break;
+			}
+			let spilled = self.has(frame) && frame >= self.first_spilled() && lock(&self.blocks[frame]).is_none();
+			if spilled && !ahead.contains(&frame) {
+				ahead.push(frame);
+			}
+		}
+		pending.prefetch(self.generation(), &ahead);
 	}
 
 	/// Returns a buffer [`buffer_for`](Self::buffer_for) handed out for `frame` that was not kept, to the pool
@@ -615,7 +686,6 @@ impl FrameStore {
 		self.present_count.store(0, Ordering::Release);
 		self.spilled_count.store(0, Ordering::Release);
 		self.generation.fetch_add(1, Ordering::AcqRel);
-		#[cfg(any(test, target_arch = "wasm32"))]
 		if let Some(Spill::Pending(pending)) = &self.spill {
 			pending.cleared(from);
 		}
@@ -693,7 +763,6 @@ impl FrameStore {
 		match self.spill.as_ref().expect("a stored frame outside memory is spilled") {
 			#[cfg(not(target_arch = "wasm32"))]
 			Spill::File(disk) => disk.read(&self.layout, frame, index, out)?,
-			#[cfg(any(test, target_arch = "wasm32"))]
 			Spill::Pending(pending) => {
 				let planes = pending.read(self.generation(), frame).ok_or(StoreError::Pending { frame })??;
 				let plane = out.len();
@@ -708,7 +777,6 @@ impl FrameStore {
 enum Spill {
 	#[cfg(not(target_arch = "wasm32"))]
 	File(Disk),
-	#[cfg(any(test, target_arch = "wasm32"))]
 	Pending(PendingSpill),
 }
 
@@ -729,7 +797,29 @@ mod tests {
 	use crate::run::pending::fake;
 
 	#[test]
-	fn a_scrub_across_spilled_frames_holds_two_reads_and_two_frames_at_most() {
+	fn a_spill_takes_writes_in_flight_by_their_bytes() {
+		let layout = |canvas_width, canvas_height| StoreLayout {
+			shape: FrameShape {
+				canvas_width,
+				canvas_height,
+				divisor: 1,
+				format: SampleFormat::Half,
+				field_brightness: 1.0,
+				intensity_brightness: 1.0,
+				intensity_root: false,
+			},
+			layers: &[Layer::Field, Layer::Intensity],
+			capacity: 1,
+			capture_every: 1,
+		};
+		assert_eq!(layout(960, 540).writes_in_flight(), 16, "small frames fill the largest capture ring");
+		assert_eq!(layout(1920, 1080).writes_in_flight(), 8);
+		assert_eq!(layout(3840, 2160).writes_in_flight(), 2);
+		assert_eq!(layout(8192, 4096).writes_in_flight(), 1, "a frame past the budget is written alone");
+	}
+
+	#[test]
+	fn a_scrub_across_spilled_frames_holds_two_reads_and_a_few_frames_at_most() {
 		let shape = FrameShape {
 			canvas_width: 4,
 			canvas_height: 2,
@@ -759,7 +849,7 @@ mod tests {
 				Err(e) => assert!(matches!(e, StoreError::Pending { .. }), "{e}"),
 			}
 			let (reads, loaded) = held();
-			assert!(reads <= 3 && loaded <= 2, "frame {frame}: {reads} reads, {loaded} kept");
+			assert!(reads <= 3 && loaded <= READ_AHEAD + 1, "frame {frame}: {reads} reads, {loaded} kept");
 			assert!(lock(&disk).reads.len() <= 2, "two reads in flight at most");
 			if i % 5 == 4 {
 				lock(&disk).complete();
@@ -770,9 +860,129 @@ mod tests {
 		assert!(matches!(landed, Err(StoreError::Pending { frame: 0 })), "the newest frame asked for is read next");
 		lock(&disk).complete();
 		assert_eq!(store.copy_layer(0, Layer::Field).unwrap(), vec![0; shape.plane_bytes()]);
-		assert!(held().1 <= 2);
+		assert!(held().1 <= READ_AHEAD + 1);
 	}
 
+	/// A store of 20 frames filled with `value` of their index: 0 and 1 in memory, 19 held as written last, the rest
+	/// spilled; and its fake disk.
+	fn spilled(value: impl Fn(u8) -> u8) -> (FrameStore, Arc<Mutex<fake::Disk>>) {
+		let shape = FrameShape {
+			canvas_width: 4,
+			canvas_height: 2,
+			divisor: 1,
+			format: SampleFormat::Index,
+			field_brightness: 1.0,
+			intensity_brightness: 1.0,
+			intensity_root: false,
+		};
+		let layout = StoreLayout { shape, layers: &[Layer::Field], capacity: 20, capture_every: 1 };
+		let disk = Arc::<Mutex<fake::Disk>>::default();
+		let store =
+			FrameStore::with_spill(layout, 2 * layout.frame_bytes() as u64, Box::new(fake::Backend(disk.clone())));
+		fill(&store, &disk, value);
+		(store, disk)
+	}
+
+	fn fill(store: &FrameStore, disk: &Arc<Mutex<fake::Disk>>, value: impl Fn(u8) -> u8) {
+		for k in 0..20 {
+			let mut s = Snapshot::new(*store.shape());
+			s.field = vec![value(k); store.shape().plane_bytes()];
+			store.write(s).unwrap();
+		}
+		lock(disk).complete();
+		store.settle().unwrap();
+	}
+
+	fn reading(disk: &Arc<Mutex<fake::Disk>>) -> Vec<usize> {
+		lock(disk).reads.iter().map(|(_, f, _)| *f).collect()
+	}
+
+	fn first_byte(store: &FrameStore, frame: usize) -> Result<u8, StoreError> {
+		store.with_layer(frame, Layer::Field, |b| b[0])
+	}
+
+	#[test]
+	fn the_frames_ahead_are_read_before_they_are_asked_for_and_keep_the_frame_asked_for() {
+		let (store, disk) = spilled(|k| k);
+		assert!(matches!(first_byte(&store, 5), Err(StoreError::Pending { frame: 5 })));
+		lock(&disk).complete();
+		assert_eq!(first_byte(&store, 5).unwrap(), 5);
+		store.prefetch([0, 1, 5, 6, 6, 7, 8, 9, 10]);
+		assert_eq!(reading(&disk), [6, 7], "frames in memory, kept or named twice are not read; two reads in flight");
+		lock(&disk).complete();
+		store.prefetch([6, 7, 8, 9, 10]);
+		assert_eq!(reading(&disk), [8, 9], "{READ_AHEAD} frames named at most");
+		lock(&disk).complete();
+		store.prefetch([6, 7, 8, 9, 10]);
+		assert!(reading(&disk).is_empty());
+		for frame in [6, 7, 8, 9] {
+			assert_eq!(first_byte(&store, frame).unwrap(), frame as u8);
+		}
+		assert!(reading(&disk).is_empty(), "the frames ahead were read before they were asked for");
+
+		for ahead in [[10, 11, 12, 13], [14, 15, 16, 17]] {
+			for _ in 0..3 {
+				store.prefetch(ahead);
+				lock(&disk).complete();
+			}
+			store.prefetch(ahead);
+		}
+		for frame in [9, 14, 15, 16, 17] {
+			assert!(first_byte(&store, frame).is_ok(), "frame {frame} is kept");
+		}
+		assert!(reading(&disk).is_empty(), "the frame asked for last (9) stayed through the reads ahead");
+		assert!(matches!(first_byte(&store, 6), Err(StoreError::Pending { frame: 6 })));
+	}
+
+	#[test]
+	fn a_loop_wrapped_in_the_frames_ahead_reads_the_in_point_ahead() {
+		let (store, disk) = spilled(|k| k);
+		for _ in 0..3 {
+			store.prefetch([17, 18, 2, 3]);
+			lock(&disk).complete();
+		}
+		store.prefetch([17, 18, 2, 3]);
+		for frame in [17, 18, 2, 3] {
+			assert_eq!(first_byte(&store, frame).unwrap(), frame as u8);
+		}
+		assert!(reading(&disk).is_empty(), "the frames past the wrap were read ahead");
+	}
+
+	#[test]
+	fn the_frames_ahead_of_a_cleared_generation_do_not_land_in_the_next() {
+		let (store, disk) = spilled(|k| k);
+		store.prefetch([4, 5]);
+		assert_eq!(reading(&disk), [4, 5]);
+		store.clear();
+		store.prefetch([3]);
+		assert_eq!(reading(&disk), [4, 5], "a cleared store reads ahead no frame it no longer has");
+		fill(&store, &disk, |k| k + 100);
+		store.prefetch([4, 5]);
+		lock(&disk).complete();
+		store.prefetch([4, 5]);
+		for frame in [4, 5] {
+			assert_eq!(first_byte(&store, frame).unwrap(), frame as u8 + 100, "frame {frame} of the new generation");
+		}
+	}
+
+	#[test]
+	fn a_failed_read_of_the_frame_asked_for_is_its_error_though_reads_ahead_land_it() {
+		let (store, disk) = spilled(|k| k);
+		lock(&disk).frames.remove(&(0, 6));
+		assert!(matches!(first_byte(&store, 6), Err(StoreError::Pending { frame: 6 })));
+		store.prefetch([7, 8]);
+		lock(&disk).complete();
+		store.prefetch([7, 8]);
+		assert!(
+			matches!(first_byte(&store, 6), Err(StoreError::Io(e)) if e.kind() == io::ErrorKind::NotFound),
+			"the failure is reported, not read again"
+		);
+		lock(&disk).frames.remove(&(0, 9));
+		store.prefetch([9]);
+		lock(&disk).complete();
+		store.prefetch([9]);
+		assert!(matches!(first_byte(&store, 7), Ok(7)), "a failed read ahead is dropped");
+	}
 	#[test]
 	fn a_pending_spill_holds_its_frames_until_written_and_reads_them_back_later() {
 		let shape = FrameShape {

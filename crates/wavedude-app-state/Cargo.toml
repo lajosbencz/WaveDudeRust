@@ -15,9 +15,10 @@ name = "wavedude_app_state"
 workspace = true
 
 [dependencies]
-wavedude-core = { path = "../wavedude-core", features = ["gpu"] }
+wavedude-core = { path = "../wavedude-core", features = ["gpu", "serde"] }
 wavedude-examples = { path = "../wavedude-examples" }
 anyhow.workspace = true
+postcard.workspace = true
 quick-xml.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["float_roundtrip"] }
@@ -39,8 +40,11 @@ tracing-web = "0.1"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = [
 	"Blob",
+	"DedicatedWorkerGlobalScope",
 	"Document",
 	"Element",
+	"ErrorEvent",
+	"Event",
 	"FileSystemDirectoryHandle",
 	"FileSystemFileHandle",
 	"FileSystemGetDirectoryOptions",
@@ -52,15 +56,21 @@ web-sys = { version = "0.3", features = [
 	"Lock",
 	"LockManager",
 	"LockOptions",
+	"MessageEvent",
 	"Navigator",
 	"Storage",
 	"StorageEstimate",
 	"StorageManager",
 	"Url",
 	"Window",
+	"Worker",
+	"WorkerOptions",
+	"WorkerType",
 	"WritableStream",
 ] }
 
 [dev-dependencies]
 png.workspace = true
 tempfile = "3"
+# Loses a GPU device in the run worker's tests; the version core's `gpu` feature builds on.
+wgpu = "30"

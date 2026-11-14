@@ -3,6 +3,7 @@ use std::sync::Arc;
 use super::{Fields, Word, ranges};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SceneMode {
 	#[default]
 	Canvas,
@@ -10,6 +11,7 @@ pub enum SceneMode {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Edges {
 	/// Mur first-order absorbing ring.
 	#[default]
@@ -20,6 +22,7 @@ pub enum Edges {
 
 /// The simulated area and its border.
 #[derive(Clone, Debug, PartialEq, Fields)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Scene {
 	pub mode: SceneMode,
 	/// Display name of the image file.
@@ -27,8 +30,9 @@ pub struct Scene {
 	/// Where the image came from; relative to the project folder when inside it.
 	pub image_path: String,
 	/// The embedded image file bytes (PNG, JPEG, BMP); authoritative over the path. Shared, so a copy of the
-	/// project is cheap.
+	/// project is cheap. Not serialised: whoever moves a project this way moves its image beside it.
 	#[field(skip)]
+	#[cfg_attr(feature = "serde", serde(skip))]
 	pub image_data: Option<Arc<[u8]>>,
 	/// Decoded size of `image_data`, set by the loader; (0, 0) when none.
 	#[field(skip)]

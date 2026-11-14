@@ -1,6 +1,7 @@
 use super::{Fields, Timeline, Word, ranges};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Stencil {
 	/// Isotropic 9-point Laplacian, second order.
 	NinePoint,
@@ -11,6 +12,7 @@ pub enum Stencil {
 
 /// Solver settings.
 #[derive(Clone, Debug, PartialEq, Fields)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Simulation {
 	#[field(range = ranges::SIM_STEPS)]
 	pub steps: u32,

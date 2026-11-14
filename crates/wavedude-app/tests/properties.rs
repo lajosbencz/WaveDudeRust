@@ -30,13 +30,7 @@ fn window_on(dir: &Path, project: &Path) -> Harness<'static, Shell> {
 	for event in [Event::SetTheme(Theme::Light), Event::SetAutoRerun(false), open] {
 		app.handle(event, Instant::now());
 	}
-	let boot = Boot {
-		store: dirs.store(),
-		gpu: None,
-		open: Default::default(),
-		log: LogRing::new(),
-		update: Default::default(),
-	};
+	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
 	let mut harness =
 		Harness::builder().with_size(vec2(1280., 1200.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);

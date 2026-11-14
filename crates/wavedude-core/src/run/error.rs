@@ -23,6 +23,9 @@ pub enum RunError {
 	Cancelled,
 	#[error(transparent)]
 	Failed(Arc<RunError>),
+	/// A failure of a run in another agent (the browser's run worker), as its message.
+	#[error("{0}")]
+	Worker(String),
 }
 
 impl RunError {

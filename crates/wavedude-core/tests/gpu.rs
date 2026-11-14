@@ -903,3 +903,16 @@ fn timing_full_hd() {
 		}
 	}
 }
+
+#[test]
+fn no_engine_is_built_on_a_lost_device() {
+	if !gpu_available() {
+		return;
+	}
+	let ctx = pollster::block_on(GpuContext::create()).expect("GPU context");
+	ctx.device.destroy();
+	ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+	let data = SceneData::blank(64, 48, &Scene { damping_edge: 0, ..Scene::default() });
+	let built = pollster::block_on(GpuEngine::create(ctx, data, options(Stencil::NinePoint), MediumLayout::Compact));
+	assert!(matches!(built, Err(GpuError::Lost { .. })), "{:?}", built.err());
+}

@@ -1,6 +1,7 @@
 use super::{Fields, Layer, Word, ranges};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Measurement {
 	/// Field value (the field layer's only measurement).
 	#[default]
@@ -12,6 +13,7 @@ pub enum Measurement {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProbeKind {
 	#[default]
 	Point,
@@ -19,6 +21,7 @@ pub enum ProbeKind {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BoxSize {
 	Tiny,
 	Small,
@@ -44,6 +47,7 @@ impl BoxSize {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ScaleMode {
 	/// Last `window` steps.
 	#[default]
@@ -53,6 +57,7 @@ pub enum ScaleMode {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum YScale {
 	#[default]
 	Linear,
@@ -63,6 +68,7 @@ pub enum YScale {
 /// quantised detections, Poisson-distributed about the intensity times the sensitivity, drawn from the
 /// project's seed so a project gives the same detections every time.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Word)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProbeDetector {
 	#[default]
 	Standard,
@@ -75,6 +81,7 @@ pub enum ProbeDetector {
 
 /// A point or line measurement with a graph box.
 #[derive(Clone, Debug, PartialEq, Fields)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Probe {
 	pub name: String,
 	pub active: bool,

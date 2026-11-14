@@ -14,9 +14,11 @@ publish = false
 [features]
 default = ["gpu", "run"]
 gpu = ["dep:wgpu", "dep:pollster"]
-# Runs and the frame store. Natively threads, a disk spill and the machine's memory; on wasm32 a pumped worker and
-# a store in memory.
+# Runs and the frame store. Natively a threaded or pumped worker, a disk spill and the machine's memory; on wasm32 a
+# pumped worker and a store in memory.
 run = ["dep:sysinfo", "dep:tempfile"]
+# Serde for a run's goal and the project it carries; a scene's image bytes are left out.
+serde = ["dep:serde"]
 
 [lints]
 workspace = true
@@ -27,6 +29,7 @@ wavedude-model-derive = { path = "../wavedude-model-derive", version = "0.3.0" }
 half.workspace = true
 bytemuck.workspace = true
 rayon.workspace = true
+serde = { workspace = true, optional = true }
 serde_json.workspace = true
 quick-xml.workspace = true
 tracing.workspace = true
@@ -46,4 +49,5 @@ tempfile = { version = "3", optional = true }
 insta.workspace = true
 proptest.workspace = true
 approx = "0.5"
+postcard.workspace = true
 tempfile = "3"

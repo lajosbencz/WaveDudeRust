@@ -510,9 +510,9 @@ mod tests {
 		std::fs::create_dir(&file).unwrap();
 		let mut d = Document::new_project();
 		d.project.scene.image_path = file.to_string_lossy().into_owned();
-		d.follow_image_file(Instant::now());
-		// the change is marked here, as no file event follows the watch's start
 		let now = Instant::now();
+		d.follow_image_file(now);
+		// the change is marked here, as no file event follows the watch's start
 		d.image_watch.as_ref().unwrap().set_changed_at(Some(now));
 		let start = now + IMAGE_DEBOUNCE;
 		assert!(!d.follow_image_file(start));

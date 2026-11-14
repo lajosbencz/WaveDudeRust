@@ -182,22 +182,26 @@ fn assert_movie(path: &Path, codec: &str, frames: usize) {
 /// 40 steps at Visualize every 2 hold frames 0..=19; the example's in point, step 10, starts at frame 5.
 const FRAMES: usize = 15;
 
+/// Movies by container: the extra arguments, the codec and the layer files written (the file itself without).
 #[test]
-fn export_writes_an_avi() {
+fn export_writes_movies() {
+	const LAYERS: &[&str] = &["field", "intensity"];
+	let table: &[(&str, &[&str], &str, &[&str])] = &[
+		("movie.avi", &["--graphs", "--edges"], "rawvideo", &[]),
+		("anim.mov", &["--format", "mov", "--layers", "both", "--markers"], "qtrle", LAYERS),
+		("png.mov", &["--format", "movpng", "--layers", "both", "--markers"], "png", LAYERS),
+		("m.mpg", &["--format", "mpeg1", "--layers", "both", "--markers"], "mpeg1video", LAYERS),
+		#[cfg(feature = "openh264-source")]
+		("movie.mp4", &["--source-markers"], "h264", &[]),
+	];
 	let dir = tempfile::tempdir().unwrap();
-	let (target, text) = export(dir.path(), "movie.avi", &["--graphs", "--edges"]);
-	assert_movie(&target, "rawvideo", FRAMES);
-	assert!(text.contains(&format!("wrote {}", target.display())), "{text}");
-}
-
-#[test]
-fn export_writes_movies_of_both_layers_overlapping_the_run() {
-	let dir = tempfile::tempdir().unwrap();
-	for (out, format, codec) in
-		[("anim.mov", "mov", "qtrle"), ("png.mov", "movpng", "png"), ("m.mpg", "mpeg1", "mpeg1video")]
-	{
-		let (target, _) = export(dir.path(), out, &["--format", format, "--layers", "both", "--markers"]);
-		for layer in ["field", "intensity"] {
+	for &(out, extra, codec, layers) in table {
+		let (target, text) = export(dir.path(), out, extra);
+		if layers.is_empty() {
+			assert_movie(&target, codec, FRAMES);
+			assert!(text.contains(&format!("wrote {}", target.display())), "{out}: {text}");
+		}
+		for layer in layers {
 			let stem = target.file_stem().unwrap().to_str().unwrap();
 			let ext = target.extension().unwrap().to_str().unwrap();
 			assert_movie(&target.with_file_name(format!("{stem}_{layer}.{ext}")), codec, FRAMES);
@@ -205,37 +209,27 @@ fn export_writes_movies_of_both_layers_overlapping_the_run() {
 	}
 }
 
-#[cfg(feature = "openh264-source")]
-#[test]
-fn export_writes_an_mp4() {
-	let dir = tempfile::tempdir().unwrap();
-	let (target, _) = export(dir.path(), "movie.mp4", &["--source-markers"]);
-	assert_movie(&target, "h264", FRAMES);
-}
-
+/// Exports that fail leave no output behind: the output, its arguments, and what the error says.
 #[test]
 fn a_failed_export_leaves_no_partial_output() {
 	let dir = tempfile::tempdir().unwrap();
 	let project = example(dir.path());
-	let target = dir.path().join("big.avi");
-	let out = cli(&[
-		"export",
-		project.to_str().unwrap(),
-		"--out",
-		target.to_str().unwrap(),
-		"--steps",
-		"40",
-		"--still",
-		"999",
-	]);
-	assert!(!out.status.success());
-	assert!(!target.exists());
-	let png = dir.path().join("beyond.png");
-	let out =
-		cli(&["export", project.to_str().unwrap(), "--out", png.to_str().unwrap(), "--steps", "4", "--still", "50"]);
-	assert!(!out.status.success());
-	assert!(String::from_utf8_lossy(&out.stderr).contains("beyond"), "{}", String::from_utf8_lossy(&out.stderr));
-	assert!(!png.exists());
+	let table: &[(&str, &[&str], &str)] = &[
+		("big.avi", &["--steps", "40", "--still", "999"], ""),
+		("beyond.png", &["--steps", "4", "--still", "50"], "beyond"),
+		("a.avi", &["--still", "1"], ""),
+		("a.xyz", &[], ""),
+	];
+	for &(name, extra, message) in table {
+		let target = dir.path().join(name);
+		let mut args = vec!["export", project.to_str().unwrap(), "--out", target.to_str().unwrap()];
+		args.extend_from_slice(extra);
+		let out = cli(&args);
+		let stderr = String::from_utf8_lossy(&out.stderr);
+		assert!(!out.status.success(), "{name}: succeeded");
+		assert!(stderr.contains(message), "{name}: {stderr}");
+		assert!(!target.exists(), "{name}: left its output");
+	}
 }
 
 #[test]
@@ -243,17 +237,6 @@ fn export_writes_a_still() {
 	let dir = tempfile::tempdir().unwrap();
 	let (target, _) = export(dir.path(), "frame.png", &["--still", "3"]);
 	assert_eq!(decodes(&target), (960, 540));
-}
-
-#[test]
-fn export_refuses_a_video_still_and_an_unknown_extension() {
-	let dir = tempfile::tempdir().unwrap();
-	let project = example(dir.path());
-	let p = project.to_str().unwrap();
-	let avi = dir.path().join("a.avi");
-	assert!(!cli(&["export", p, "--out", avi.to_str().unwrap(), "--still", "1"]).status.success());
-	let odd = dir.path().join("a.xyz");
-	assert!(!cli(&["export", p, "--out", odd.to_str().unwrap()]).status.success());
 }
 
 #[test]

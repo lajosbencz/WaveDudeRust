@@ -7,13 +7,53 @@
 <style>
 html, body { margin: 0; height: 100%; overflow: hidden; background: #2d2d30; color: #f1f1f1; font: 12px sans-serif; }
 #app { display: block; width: 100%; height: 100%; }
+#loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+#loading progress { width: min(320px, 80vw); height: 6px; appearance: none; border: 0; border-radius: 3px; background: #3f3f46; overflow: hidden; }
+#loading progress::-webkit-progress-bar { background: #3f3f46; }
+#loading progress::-webkit-progress-value { background: #007acc; }
+#loading progress::-moz-progress-bar { background: #007acc; }
 </style>
 </head>
 <body>
 <canvas id="app"></canvas>
+<div id="loading"><progress></progress><span>Loading WaveDude Rust</span></div>
 <script type="module">
 import init from "./pkg/wavedude-app.js";
-init().catch((e) => { document.body.textContent = `WaveDude Rust could not start: ${e}`; });
+
+// the uncompressed size, written by tools/build-web.sh; the response's length is the compressed one
+const TOTAL = Number("__WASM_BYTES__");
+const loading = document.getElementById("loading");
+const [bar, text] = loading.children;
+const mb = (n) => (n / 1e6).toFixed(1);
+
+async function download(url) {
+	const response = await fetch(url);
+	if (!response.ok) throw new Error(`${url}: ${response.status}`);
+	const known = Number.isFinite(TOTAL) && TOTAL > 0;
+	if (known) bar.max = TOTAL;
+	const chunks = [];
+	let received = 0;
+	for (const reader = response.body.getReader(); ; ) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		chunks.push(value);
+		received += value.length;
+		if (known) bar.value = Math.min(received, TOTAL);
+		text.textContent = known ? `Downloading ${mb(received)} of ${mb(TOTAL)} MB` : `Downloading ${mb(received)} MB`;
+	}
+	return new Blob(chunks).arrayBuffer();
+}
+
+try {
+	const bytes = await download("./pkg/wavedude-app_bg.wasm");
+	bar.removeAttribute("value");
+	text.textContent = "Starting";
+	await init({ module_or_path: bytes });
+	loading.remove();
+} catch (e) {
+	bar.remove();
+	text.textContent = `WaveDude Rust could not start: ${e}`;
+}
 </script>
 </body>
 </html>

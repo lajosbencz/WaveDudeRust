@@ -44,6 +44,7 @@ impl FileWatch {
 		let mark = changed.clone();
 		let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
 			if let Ok(event) = event
+				&& !event.kind.is_access() // our own reads of the file are no change
 				&& event.paths.iter().any(|p| p.file_name() == Some(&name))
 			{
 				*lock(&mark) = Some(Instant::now());

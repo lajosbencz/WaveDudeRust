@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-11-13. Supersedes [0002](0002-ui-freya.md) and [0017](0017-a-wasm-package-and-a-web-demo.md);
 amends [0006](0006-testing.md), [0007](0007-workspace-layout.md), [0015](0015-core-builds-for-wasm.md) and
-[0018](0018-a-shared-picture-view.md).
+[0018](0018-a-shared-picture-view.md); amended by [0023](0023-browser-app-ships-with-releases.md).
 
 ## Context
 
@@ -48,7 +48,7 @@ overlay with an executor of their own.
 - One code path for both targets; a target difference is a compile error on the other side until both modules
   have it.
 - The browser app is built by [`tools/build-web.sh`](../../tools/build-web.sh) and deployed to GitHub Pages by
-  [`pages.yml`](../../.github/workflows/pages.yml) from master.
+  [`pages.yml`](../../.github/workflows/pages.yml) from the latest release ([0023](0023-browser-app-ships-with-releases.md)).
 - No Skia: no prebuilt download per target and no build from source where none exists.
 - An export's overlays need no GPU and are the same bytes on every machine.
 - The look follows WaveDude Next's box model through egui's visuals and the app's own widgets

@@ -45,6 +45,8 @@ pub struct Playback {
 	playing: bool,
 	last_tick: Option<Instant>,
 	carry: f64,
+	/// Frames the last advance moved by.
+	stride: u32,
 }
 
 impl Default for Playback {
@@ -60,6 +62,7 @@ impl Default for Playback {
 			playing: false,
 			last_tick: None,
 			carry: 0.0,
+			stride: 1,
 		}
 	}
 }
@@ -71,6 +74,16 @@ pub enum Limit {
 	Hold(u32),
 	/// No more frames follow: playback ends here.
 	End(u32),
+}
+
+impl Limit {
+	/// The last frame, when no more follow.
+	pub fn end(self) -> Option<u32> {
+		match self {
+			Self::End(end) => Some(end),
+			Self::Hold(_) => None,
+		}
+	}
 }
 
 impl Playback {
@@ -143,6 +156,7 @@ impl Playback {
 		self.playing = true;
 		self.last_tick = Some(now);
 		self.carry = 0.0;
+		self.stride = 1;
 	}
 
 	pub fn pause(&mut self) {
@@ -166,22 +180,12 @@ impl Playback {
 			return false;
 		}
 		self.carry -= due;
-		let end = match limit {
-			Some(Limit::End(end)) => Some(end),
-			_ => None,
-		};
-		let (from, to) = self.range_until(end);
-		let mut target = self.position as u64 + due as u64;
-		if target > to as u64 {
-			if self.looping {
-				let span = (to - from + 1) as u64;
-				target = from as u64 + (target - to as u64 - 1) % span;
-			} else {
-				target = to as u64;
-				self.pause();
-			}
-		}
-		let mut target = target as u32;
+		self.stride = due as u32;
+		let end = limit.and_then(Limit::end);
+		let mut target = self.landing(self.position, due as u64, end).unwrap_or_else(|to| {
+			self.pause();
+			to
+		});
 		if let Some(Limit::Hold(limit)) = limit
 			&& target > limit
 		{
@@ -191,6 +195,45 @@ impl Playback {
 		let moved = target != self.position;
 		self.position = target;
 		moved
+	}
+
+	/// Where `due` frames past `position` land: wrapped to the in point with Loop on, else the out point (or
+	/// `end`) as the error when past it.
+	fn landing(&self, position: u32, due: u64, end: Option<u32>) -> Result<u32, u32> {
+		let (from, to) = self.range_until(end);
+		let target = position as u64 + due;
+		if target <= to as u64 {
+			return Ok(target as u32);
+		}
+		if !self.looping {
+			return Err(to);
+		}
+		let span = (to - from + 1) as u64;
+		Ok((from as u64 + (target - to as u64 - 1) % span) as u32)
+	}
+
+	/// The frames playback reaches next at the last advance's stride, soonest first, `count` at most: none while
+	/// paused, wrapped to the in point with Loop on, else up to the out point, `limit` as in
+	/// [`advance`](Self::advance).
+	pub fn ahead(&self, count: usize, limit: Option<Limit>) -> Vec<u32> {
+		if !self.playing {
+			return Vec::new();
+		}
+		let end = limit.and_then(Limit::end);
+		let hold = match limit {
+			Some(Limit::Hold(hold)) => hold,
+			_ => u32::MAX,
+		};
+		let mut frames = Vec::with_capacity(count);
+		let mut position = self.position;
+		while frames.len() < count
+			&& let Ok(next) = self.landing(position, self.stride.into(), end)
+			&& next <= hold
+		{
+			frames.push(next);
+			position = next;
+		}
+		frames
 	}
 
 	/// The in and out points as frames; the whole timeline when unset.
@@ -334,6 +377,32 @@ mod tests {
 		p.set_looping(true);
 		play_for(&mut p, start, 1.0, Some(Limit::End(5)));
 		assert!(p.is_playing() && p.position() <= 5);
+	}
+
+	#[test]
+	fn the_frames_ahead_follow_the_stride_and_the_range() {
+		let start = Instant::now();
+		let mut p = timeline(100);
+		assert_eq!(p.ahead(3, None), [] as [u32; 0], "none while paused");
+		p.set_position(10);
+		p.play(start, None);
+		assert_eq!(p.ahead(3, None), [11, 12, 13]);
+		p.set_speed(4.0);
+		p.advance(start + Duration::from_secs_f64(1.0 / 60.0), None);
+		assert_eq!(p.position(), 14);
+		assert_eq!(p.ahead(3, None), [18, 22, 26], "the last advance's stride");
+		assert_eq!(p.ahead(3, Some(Limit::Hold(20))), [18], "not past the frames there are");
+		assert_eq!(p.ahead(3, Some(Limit::End(21))), [18], "not past the end of a partial run");
+
+		let mut p = timeline(100);
+		p.set_position(90);
+		p.set_in_here();
+		p.set_position(97);
+		p.play(start, None);
+		assert_eq!(p.ahead(4, None), [98, 99], "up to the out point");
+		p.set_looping(true);
+		assert_eq!(p.ahead(4, None), [98, 99, 90, 91], "wrapped to the in point");
+		assert_eq!(p.ahead(3, Some(Limit::End(98))), [98, 90, 91], "wrapped at the end of a partial run");
 	}
 
 	#[test]

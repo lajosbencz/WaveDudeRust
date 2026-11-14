@@ -195,6 +195,8 @@ jobs:
         run: cargo clippy -p wavedude-export --no-default-features --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy of the app
         run: cargo clippy -p wavedude-app --target wasm32-unknown-unknown -- -D warnings
+      - name: Clippy of the run worker
+        run: cargo clippy -p wavedude-run-worker --target wasm32-unknown-unknown -- -D warnings
 
   # The caches of the default branch: one per key, the newest. rust-cache keys end in the lockfile's hash, so each
   # dependency bump would leave a generation behind until the 10 GB allowance evicts it.

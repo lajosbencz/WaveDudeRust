@@ -1,17 +1,12 @@
-# Deploys site/ to GitHub Pages with the browser app under app/ from every master commit that changes either, or by
-# hand. No cache: the output runs in visitors' browsers.
+# Deploys site/ to GitHub Pages with the latest release's browser app under app/: from every master commit that
+# changes the site, after each release (release.yml dispatches it), or by hand.
 name: Pages
 
 on:
   push:
     branches: [master]
     paths:
-      - "crates/**"
       - "site/**"
-      - "Cargo.lock"
-      - "Cargo.toml"
-      - "rust-toolchain.toml"
-      - "tools/build-web.sh"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -23,31 +18,31 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Toolchain with the wasm32 target
+      # The bundle package.yml built and attested for the latest release.
+      - name: Browser app of the latest release
         run: |
-          rustup toolchain install
-          rustup target add wasm32-unknown-unknown
-      # The CLI must match the wasm-bindgen crate of Cargo.lock; tools/build-web.sh checks it again.
-      - name: wasm-bindgen version of Cargo.lock
-        id: bindgen
-        run: echo "version=$(tools/build-web.sh --bindgen-version)" >> "$GITHUB_OUTPUT"
-      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
-        with:
-          tool: wasm-bindgen@${{ steps.bindgen.outputs.version }}
-      - name: Build the site
-        run: |
-          tools/build-web.sh _site/app
-          cp site/index.html crates/wavedude-app/assets/icon.svg _site/
+          repo="$GITHUB_REPOSITORY"
+          tag=$(gh release view --repo "$repo" --json tagName --jq .tagName)
+          gh release download "$tag" --repo "$repo" --pattern '*-web.tar.gz' --dir "$RUNNER_TEMP/web"
+          bundle=$(ls "$RUNNER_TEMP"/web/*-web.tar.gz)
+          gh attestation verify "$bundle" --repo "$repo" --signer-workflow "$repo/.github/workflows/package.yml"
+          mkdir -p _site/app
+          tar -xzf "$bundle" -C _site/app --strip-components=1
+          echo "deploying the browser app of $tag"
+      - name: Site
+        run: cp site/index.html crates/wavedude-app/assets/icon.svg _site/
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: _site

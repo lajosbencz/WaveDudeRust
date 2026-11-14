@@ -3,8 +3,7 @@
 //! [`AppState::tick`] about 60 times a second; everything here is testable without a window.
 //!
 //! Threads: `AppState` lives on the UI thread; natively the live run works on a thread of its own and is polled,
-//! on wasm32 each tick works it for a slice ([`live::PUMP_BUDGET`]) and asks for the next tick while work is left
-//! ([`live::LiveController::work_left`]).
+//! on wasm32 it works in the browser's run worker and each tick takes what the worker sent ([`remote`]).
 
 pub mod clipboard;
 pub mod commands;
@@ -14,6 +13,7 @@ pub mod live;
 pub mod log;
 pub mod platform;
 pub mod playback;
+pub mod remote;
 pub mod selection;
 pub mod settings;
 pub mod strings;
@@ -252,7 +252,7 @@ impl AppState<CoreBackend> {
 		memory: wavedude_core::run::Memory,
 	) -> std::io::Result<Self> {
 		let store = dirs.store();
-		let loaded = load_settings(&store, || wavedude_core::engine::gpu::context().is_ok(), args);
+		let loaded = load_settings(&store, || Some(wavedude_core::engine::gpu::context().is_ok()), args);
 		let use_gpu = Arc::new(AtomicBool::new(loaded.settings.use_gpu));
 		let backend = CoreBackend::new(use_gpu.clone(), dirs.cache.join("frames"), memory)?;
 		let mut state = Self::started(loaded, store, backend, use_gpu);
@@ -261,17 +261,13 @@ impl AppState<CoreBackend> {
 	}
 
 	/// The app's state in the browser: settings from `store` (the first start chooses the preview quality from
-	/// the device), the engines on `gpu` (the UI renderer's device, when it computes), the empty project, the
+	/// the device, its GPU unknown until the run worker started), the run worker started, the empty project, the
 	/// language and zoom of the settings and `args`.
 	#[cfg(target_arch = "wasm32")]
-	pub fn start<'a>(
-		store: Store,
-		gpu: Option<wavedude_core::engine::GpuHandle>,
-		args: impl IntoIterator<Item = &'a str>,
-	) -> Self {
-		let loaded = load_settings(&store, || gpu.is_some(), args);
+	pub fn start<'a>(store: Store, args: impl IntoIterator<Item = &'a str>) -> Self {
+		let loaded = load_settings(&store, || None, args);
 		let use_gpu = Arc::new(AtomicBool::new(loaded.settings.use_gpu));
-		let backend = CoreBackend::new(use_gpu.clone(), gpu);
+		let backend = CoreBackend::new(use_gpu.clone());
 		Self::started(loaded, store, backend, use_gpu)
 	}
 
@@ -283,14 +279,14 @@ impl AppState<CoreBackend> {
 	}
 }
 
-/// The settings of `store`, the first start's chosen from the machine with `has_gpu` (asked then alone), at the
-/// zoom of `args`.
+/// The settings of `store`, the first start's chosen from the machine with `has_gpu` (asked then alone; `None`
+/// when unknown), at the zoom of `args`.
 fn load_settings<'a>(
 	store: &Store,
-	has_gpu: impl FnOnce() -> bool,
+	has_gpu: impl FnOnce() -> Option<bool>,
 	args: impl IntoIterator<Item = &'a str>,
 ) -> settings::Loaded {
-	let facts = || MachineFacts { has_gpu: Some(has_gpu()), ..platform::machine_facts() };
+	let facts = || MachineFacts { has_gpu: has_gpu(), ..platform::machine_facts() };
 	let mut loaded = Settings::load(store, facts);
 	if let Some(zoom) = settings::zoom_switch(args) {
 		loaded.settings.ui_zoom = zoom;
@@ -425,7 +421,7 @@ impl<B: Backend> AppState<B> {
 			wavedude_core::run::RunState::Failed(_) => "RunStateFailed",
 		};
 		let s = &self.strings;
-		s.format("RunStatusFormat", &[&s.get(key), &done, &total, &self.live.engine_name()])
+		s.format("RunStatusFormat", &[&s.get(key), &done, &total, &self.live.engine().text(s)])
 	}
 
 	/// Advances the history's quiet time and the live controller to `now`; true when something a view shows

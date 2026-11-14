@@ -38,26 +38,26 @@ pub trait MaybeSync {}
 impl<T> MaybeSync for T {}
 
 #[cfg(feature = "gpu")]
-/// A value set once, possibly from a callback on another thread, that a future can wait for.
+/// A value set once, possibly from a callback on another thread, that futures can wait for.
 pub(crate) struct Notify<T> {
 	value: OnceLock<T>,
-	waker: Mutex<Option<Waker>>,
+	wakers: Mutex<Vec<Waker>>,
 }
 
 #[cfg(feature = "gpu")]
 impl<T> Default for Notify<T> {
 	fn default() -> Self {
-		Self { value: OnceLock::new(), waker: Mutex::new(None) }
+		Self { value: OnceLock::new(), wakers: Mutex::new(Vec::new()) }
 	}
 }
 
 #[cfg(feature = "gpu")]
 impl<T> Notify<T> {
-	/// Keeps the first value and wakes the waiter.
+	/// Keeps the first value and wakes the waiters.
 	pub(crate) fn set(&self, value: T) {
 		let _ = self.value.set(value);
-		let waker = lock(&self.waker).take();
-		if let Some(waker) = waker {
+		let wakers = std::mem::take(&mut *lock(&self.wakers));
+		for waker in wakers {
 			waker.wake();
 		}
 	}
@@ -76,8 +76,15 @@ pub(crate) trait Readiness: Send + Sync {
 #[cfg(feature = "gpu")]
 impl<T: Send + Sync> Readiness for Notify<T> {
 	fn poll_ready(&self, cx: &mut Context<'_>) -> Poll<()> {
-		// The waker goes in before the value is read, so a `set` in between still wakes it.
-		*lock(&self.waker) = Some(cx.waker().clone());
+		if self.value.get().is_some() {
+			return Poll::Ready(());
+		}
+		// The waker goes in before the value is read again, so a `set` in between still wakes it.
+		let mut wakers = lock(&self.wakers);
+		if !wakers.iter().any(|w| w.will_wake(cx.waker())) {
+			wakers.push(cx.waker().clone());
+		}
+		drop(wakers);
 		if self.value.get().is_some() { Poll::Ready(()) } else { Poll::Pending }
 	}
 }
@@ -109,5 +116,17 @@ mod tests {
 		assert_eq!(counter.0.load(Ordering::SeqCst), 1);
 		assert!(notify.poll_ready(&mut cx).is_ready());
 		assert_eq!(notify.get(), Some(&7));
+	}
+
+	#[test]
+	fn a_notify_wakes_every_waiter_once() {
+		let notify = Notify::<()>::default();
+		let (a, b) = (Arc::new(Counter(AtomicUsize::new(0))), Arc::new(Counter(AtomicUsize::new(0))));
+		let (wa, wb) = (Waker::from(a.clone()), Waker::from(b.clone()));
+		for waker in [&wa, &wb, &wa] {
+			assert!(notify.poll_ready(&mut Context::from_waker(waker)).is_pending());
+		}
+		notify.set(());
+		assert_eq!((a.0.load(Ordering::SeqCst), b.0.load(Ordering::SeqCst)), (1, 1));
 	}
 }

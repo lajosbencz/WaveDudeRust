@@ -40,7 +40,7 @@ fn window_with(dir: &Path, first_start: bool, project: Option<&Path>, asked: &[&
 	for path in asked {
 		open.push(path.into());
 	}
-	let boot = Boot { store: dirs.store(), gpu: None, open, log: LogRing::new(), update: Default::default() };
+	let boot = Boot { store: dirs.store(), open, log: LogRing::new(), update: Default::default() };
 	let mut harness =
 		Harness::builder().with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
@@ -171,37 +171,38 @@ fn menu(harness: &mut Harness<'_, Shell>, menu: &str, entry: &str) {
 	settle(harness);
 }
 
+/// The startup page's buttons save its answers and close it; `toggled` turns its launch display off first.
 #[test]
-fn the_startup_page_shows_at_the_first_start_and_ok_saves_its_answers() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window_with(dir.path(), true, None, &[]);
-	harness.get_by_label("Welcome to WaveDude Rust");
-	harness.get_by_label("High").click();
-	settle(&mut harness);
-	harness.get_by_label("Show this page at each launch").click();
-	settle(&mut harness);
-	// Enter would toggle the focused check box again
-	harness.get_by_label("OK").click();
-	settle(&mut harness);
-	assert!(harness.query_by_label("Welcome to WaveDude Rust").is_none(), "OK left the page open");
-	let st = &harness.state().app().settings;
-	assert_eq!(st.preview_quality(), PreviewDefaults::quality_of(PreviewTier::High), "the tier was not saved");
-	assert_eq!(st.preview_dither_bits, PreviewDefaults::dither_bits_of(PreviewTier::High));
-	assert!(!st.show_startup, "the launch display was not turned off");
-}
-
-#[test]
-fn the_startup_pages_examples_button_saves_its_answers_and_opens_examples() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window_with(dir.path(), true, None, &[]);
-	harness.get_by_label("High").click();
-	settle(&mut harness);
-	harness.get_by_label("Examples...").click();
-	settle(&mut harness);
-	assert!(harness.query_by_label("Welcome to WaveDude Rust").is_none(), "Examples... left the page open");
-	harness.get_by_label("Examples");
-	let st = &harness.state().app().settings;
-	assert_eq!(st.preview_quality(), PreviewDefaults::quality_of(PreviewTier::High), "the tier was not saved");
+fn the_startup_page_shows_at_the_first_start_and_its_buttons_save_its_answers() {
+	let table = [("OK", true, None), ("Examples...", false, Some("Examples"))];
+	for (button, toggled, opens) in table {
+		let dir = tempfile::tempdir().unwrap();
+		let mut harness = window_with(dir.path(), true, None, &[]);
+		harness.get_by_label("Welcome to WaveDude Rust");
+		harness.get_by_label("High").click();
+		settle(&mut harness);
+		if toggled {
+			harness.get_by_label("Show this page at each launch").click();
+			settle(&mut harness);
+		}
+		// Enter would toggle the focused check box again
+		harness.get_by_label(button).click();
+		settle(&mut harness);
+		assert!(harness.query_by_label("Welcome to WaveDude Rust").is_none(), "{button} left the page open");
+		if let Some(label) = opens {
+			harness.get_by_label(label);
+		}
+		let st = &harness.state().app().settings;
+		assert_eq!(
+			st.preview_quality(),
+			PreviewDefaults::quality_of(PreviewTier::High),
+			"{button}: the tier was not saved"
+		);
+		if toggled {
+			assert_eq!(st.preview_dither_bits, PreviewDefaults::dither_bits_of(PreviewTier::High), "{button}");
+			assert!(!st.show_startup, "{button}: the launch display was not turned off");
+		}
+	}
 }
 
 #[test]

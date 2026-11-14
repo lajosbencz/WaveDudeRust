@@ -2,6 +2,8 @@
 //! `wavedude-spill/<session>/<store>-<generation>/<frame>`, written and read from the main thread
 //! ([`wavedude_core::run::SpillBackend`]).
 //!
+//! The start and each write wake the window as they complete ([`crate::wake`]).
+//!
 //! A tab holds the Web Lock of its session while it lives. At start the sessions whose lock is free (their tab
 //! is gone) are removed, then the free storage is estimated once; a store's spill is refused when its frames do
 //! not fit it.
@@ -10,11 +12,11 @@ use std::cell::OnceCell;
 use std::collections::BTreeSet;
 use std::io;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::task::{Context, Poll};
 
 use js_sys::{Promise, Reflect, Uint8Array};
 use wasm_bindgen_futures::{JsFuture, spawn_local};
-use wavedude_core::run::{SpillBackend, SpillFactory, Token};
+use wavedude_core::run::{SpillBackend, SpillFactory, StoreLayout, Token};
 use wavedude_core::sync::lock;
 use web_sys::wasm_bindgen::closure::Closure;
 use web_sys::wasm_bindgen::{JsCast, JsValue};
@@ -36,7 +38,6 @@ pub struct Opfs {
 	/// The free storage at start.
 	free: Token<u64>,
 	taken: Mutex<Option<io::Result<u64>>>,
-	next_store: AtomicU64,
 }
 
 impl Opfs {
@@ -50,17 +51,18 @@ impl Opfs {
 				tracing::warn!("frames past memory cannot be spilled: {e}");
 			}
 			done.complete(result);
+			crate::wake::wake();
 		});
-		Self { free, taken: Mutex::new(None), next_store: AtomicU64::new(0) }
+		Self { free, taken: Mutex::new(None) }
 	}
 }
 
 impl SpillFactory for Opfs {
-	fn ready(&self) -> bool {
-		self.free.is_done()
+	fn poll_ready(&self, cx: &mut Context<'_>) -> Poll<()> {
+		self.free.poll_done(cx)
 	}
 
-	fn open(&self, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {
+	fn open(&self, store: u64, _layout: &StoreLayout, bytes: u64) -> io::Result<Box<dyn SpillBackend>> {
 		let mut taken = lock(&self.taken);
 		if taken.is_none() {
 			*taken = self.free.take();
@@ -78,10 +80,7 @@ impl SpillFactory for Opfs {
 					),
 				))
 			}
-			Ok(_) => {
-				let store = self.next_store.fetch_add(1, Ordering::Relaxed);
-				Ok(Box::new(Spill { store, generations: Mutex::default(), writes: Mutex::default() }))
-			}
+			Ok(_) => Ok(Box::new(Spill { store, generations: Mutex::default(), writes: Mutex::default() })),
 		}
 	}
 }
@@ -133,7 +132,10 @@ impl SpillBackend for Spill {
 		writes.retain(|(_, t)| !t.is_done());
 		writes.push((generation, token.clone()));
 		let (done, folder) = (token.clone(), self.folder(generation));
-		spawn_local(async move { done.complete(write_frame(&folder, frame, &data).await) });
+		spawn_local(async move {
+			done.complete(write_frame(&folder, frame, &data).await);
+			crate::wake::wake();
+		});
 		token
 	}
 

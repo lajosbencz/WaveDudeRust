@@ -307,6 +307,31 @@ F7 from frame 0 for 12 s, frames shown counted by their reads.
 The read is a chain of five promises, each resolved in a task of the main thread: under WebGL2 the software
 rasteriser's frames between them make up the latency, not the storage.
 
+## The browser's frame spill read ahead
+
+2026-11-14, Chrome 158 (Playwright, WebGPU through Vulkan) on Linux, RTX 5070 Ti; the app built by `tools/build-web.sh`
+into two folders served by `python3 -m http.server`: before (8ff9c44, a spilled frame read when the preview asks for it)
+and after (playback names the frames it reaches next, read ahead, then 3 named and 4 kept,
+[`crates/wavedude-core/src/run/pending.rs`](../crates/wavedude-core/src/run/pending.rs)). A temporary counter in
+`FrameSource::with_plane_into` logged each second the frames shown (first plane handed out) and the frames refused as
+pending at least once (shown stale, the picture before held). A new project (1920x1080, 2500 steps) at the welcome
+page's High preview, run with F5, the memory warning's choices unticked: 1250 frames of 8.3 MB, 258 in memory and 992
+spilled to OPFS. Playback from frame 400 (all spilled) with F7, 10 s at speed 1 and 3 s at speed 4, a second each.
+
+| | Before: shown / stale a second | After: shown / stale a second |
+|---|---|---|
+| Speed 1 (60 frames/s due) | 53 to 59 / 59 to 61 | 58 to 60 / 0 to 2 |
+| Speed 4 (240 frames/s due) | 0 / 134 to 139 | 62 to 80 / 43 to 55 |
+
+Before, every spilled frame was shown a pass late; at speed 4 each read was superseded before it landed and the
+picture froze. At speed 4 the stride between ticks varies (3 to 5 frames), so some frames shown were not among those
+read ahead.
+
+Natively a spilled frame is read from the file in the call, on the UI thread when the renderer's device colours it,
+else on the presenter's: a temporary test reading 120 spilled frames of 1920x1080 f16 with the intensity (8.3 MB)
+through `FrameStore::with_layer_into`, release build, Ryzen 9 9900X, NVMe, from the page cache: 0.20 ms median,
+0.53 ms p95, 0.78 ms worst. The file reads nothing ahead.
+
 ## The browser's live run
 
 2026-11-13, Chrome for Testing 158 headless (WebGPU through Vulkan) and Firefox 159 (`dom.webgpu.enabled`) on Linux,
@@ -328,6 +353,66 @@ Natively the threaded run waits for the oldest capture only when the ring is ful
 wavedude-core --test run -- --ignored --nocapture live_run_drag_burst_timing`, two runs each, before / after: one frame
 of Example16 25 to 31 / 23 to 25 ms (source moved), 70 to 87 / 60 to 64 ms (part moved); 118 to 120 / 120 of 120 frames
 shown with every frame wanted.
+
+## The browser's live run in a worker
+
+2026-11-14, Chrome 158 (Playwright, WebGPU through Vulkan) on Linux, RTX 5070 Ti; the app built by `tools/build-web.sh`
+into a folder served by `python3 -m http.server`, before (16c0b44, the worker pumped in 16 ms slices, a pump with work
+left or spill writes in flight posting itself a message) and after (the pump waits on readiness, 8 ms slices). A
+temporary counter in the worker's loop logged the pumps and the self-posted messages each second. The messages between
+page and worker were counted by a Playwright init script wrapping `Worker.prototype.postMessage` and listening on the
+worker. Fresnel lens lighthouse (`examples/optics/01-fresnel-lens-lighthouse.wdproj`) at the High preview, run with F5
+and the memory warning's 8-bit samples (2000 steps, 1000 stored frames of 1.4 MB); the time is the app's `Run Completed`
+line. Waiting on the page: a new project (1920x1080, 2500 steps) run with the warning's halved resolution, the page's
+thread blocked for 3 s (`while (performance.now() < end) {}` from Playwright) 0.5 s after the run started, so no frame
+is acknowledged meanwhile.
+
+| | Before | After |
+|---|---|---|
+| Lighthouse run | 1.6 s | 1.2 to 1.5 s |
+| Pumps / self-posts a second while running | 161 000 / 161 000 | 1 000 to 1 800 / 0 |
+| Pumps / self-posts a second while the page is blocked | 213 000 to 307 000 / as many | under 300 / 0 |
+| Pumps while idle | 460 a second, as many self-posts | none in 36 s |
+| Messages page to worker / worker to page while idle, after a run | | none / none in 13 s |
+
+After, the run lands a capture read back only below the spill's writes in flight, the frames posted and not
+acknowledged ([`crates/wavedude-core/src/run/pending.rs`](../crates/wavedude-core/src/run/pending.rs)):
+with 4 the lighthouse took 2.0 to 2.2 s, with 16 (the GPU engine's largest capture ring) 1.2 to 1.5 s, with no
+bound 1.0 s. The GPU's submissions are paced on `on_submitted_work_done`, two on the card at most; pacing by the steps
+on the card instead, as a capture every second step cuts a submission short, took the same 2.0 to 2.2 s at a bound of 4.
+
+Writes in flight by bytes, 2026-11-14, same machine and browser: the build of 7c13719 (16 writes in flight for every
+frame size) against a byte budget of 64 MiB, at least one frame, at most 16
+([`crates/wavedude-core/src/run/store.rs`](../crates/wavedude-core/src/run/store.rs), `StoreLayout::writes_in_flight`),
+each built by `tools/build-web.sh` into its own folder and served by `python3 -m http.server` on its own port. Each run
+on a fresh page with the settings cleared (`localStorage.clear()`), the welcome page's High preview kept; the time is
+the app's `Run Completed` line. The lighthouse as above (F5, the warning's 8-bit samples, 1.4 MB frames: 16 writes in
+both). Large frames: a new project (1920x1080, 2500 steps, intensity tracked) run with F5 at full resolution and
+16-bit samples, the warning's choices unticked: 1250 frames of 8.3 MB, 258 in memory and the rest spilled to OPFS; 16
+writes in flight before, 8 after, so the frames held past the memory budget drop from 133 MB to 66 MB on each side.
+
+| | Before (16 writes) | After (64 MiB) |
+|---|---|---|
+| Lighthouse run, 4 runs each | 1.3 to 1.6 s | 1.2 to 1.4 s |
+| 1920x1080 run at full quality, 4 runs each | 9.5 to 10.8 s | 10.7 to 11.1 s |
+
+## The browser's preview coloured on the page's GPU
+
+2026-11-14, Chrome 158 (Playwright, WebGPU through Vulkan) on Linux, RTX 5070 Ti, a 144 Hz page; the app built by
+`tools/build-web.sh` into two folders served by `python3 -m http.server`: before (58f6004, the presenter colouring every
+shown frame on the page's thread) and after (the frames uploaded and coloured on the page's renderer device). The
+startup page's High preview (16-bit samples, 16 bits per channel dithering), Example04 (3 sources 3 frequencies) run
+with F5 and the memory warning's halved resolution (1250 stored frames), both pictures shown at 402x402. Main-thread
+time is the change of Chrome's `TaskDuration` (CDP `Performance.getMetrics`) over 10 s of playback from Home, which
+played 600 frames at the 60 fps clock in both; two passes each.
+
+| | Before | After |
+|---|---|---|
+| Main-thread time over 10 s of playback | 2.66 to 2.71 s | 1.20 s |
+| Per played frame | 4.4 to 4.5 ms | 2.0 ms |
+
+The last frame's pictures, screenshotted in both, differ by at most 1 of 255 in 1.6 % of the pixels: the card's fused
+multiply-adds moving the resampling at an f16 rounding boundary (`wavedude_core::render::gpu`).
 
 ## The idle window
 

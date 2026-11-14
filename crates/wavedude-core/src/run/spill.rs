@@ -195,7 +195,7 @@ impl Disk {
 }
 
 fn offset(spill: &SpillFile, layout: &StoreLayout, frame: usize) -> u64 {
-	HEADER_BYTES + (frame - spill.first.load(Ordering::Acquire)) as u64 * layout.frame_bytes() as u64
+	HEADER_BYTES + layout.bytes_of(frame - spill.first.load(Ordering::Acquire))
 }
 
 fn header(layout: &StoreLayout, first: usize) -> [u8; HEADER_BYTES as usize] {

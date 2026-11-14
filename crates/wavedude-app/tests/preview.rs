@@ -38,13 +38,7 @@ fn preview_of(dir: &Path, steps: Option<u32>) -> Harness<'static, Shell> {
 		let edit = Edit::Project(ProjectEdit::Simulation(SimulationEdit::Steps(steps)));
 		app.handle(Event::Command(Command::Edit(edit)), Instant::now());
 	}
-	let boot = Boot {
-		store: dirs.store(),
-		gpu: None,
-		open: Default::default(),
-		log: LogRing::new(),
-		update: Default::default(),
-	};
+	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
 	let mut harness = Harness::builder().with_size(vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
 	harness

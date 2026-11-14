@@ -26,7 +26,7 @@ workspace = true
 anyhow.workspace = true
 # The presenter's pictures, whose buffers it draws into again once the textures took them.
 bytes = "1"
-# The window, its widgets and the wgpu renderer whose device the engines share (natively and in the browser).
+# The window, its widgets and the wgpu renderer, whose device the engines share natively and the preview colours on.
 eframe = { version = "=0.37.0", default-features = false, features = ["accesskit", "clipboard", "wayland", "wgpu", "x11"] }
 # The manual and the license texts as Markdown.
 egui_commonmark = { version = "=0.26.0", default-features = false, features = ["pulldown_cmark"] }

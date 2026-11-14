@@ -22,8 +22,10 @@
 //!   add a cell's values in the CPU's order.
 //! - The intensity keeps `s1` and `s2`; their blend is made where it is read.
 //!
-//! Steps are recorded into one command encoder and submitted every [`BATCH_STEPS`] steps or when
-//! something is read; at most [`MAX_IN_FLIGHT`] batches are queued ahead of the card. `sample_probes`
+//! Steps are recorded into one command encoder and submitted every [`BATCH_STEPS`] steps or when something is read;
+//! at most [`MAX_IN_FLIGHT`] batches are queued ahead of the card: natively a submission waits for the oldest beyond
+//! them; on wasm32 `poll_room` holds the next step back while as many submissions are not run by the card
+//! (`on_submitted_work_done`), so a step and the submissions it brings start below the limit. `sample_probes`
 //! and `prepare_frame` wait for the card; a capture is submitted with its copy to a free staging buffer of a ring
 //! (`capture_capacity` of them, by `CAPTURE_RING_BYTES`) and collected later, so the card converts and copies while the host steps on; once [`DeviceFrames`] are asked for,
 //! a capture also copies its planes into one of their slots, for render passes on the device (frames.rs). Queued
@@ -80,6 +82,12 @@ use crate::sync::{Notify, Readiness};
 pub const BATCH_STEPS: u32 = 32;
 /// Submissions queued ahead of the card at most.
 pub const MAX_IN_FLIGHT: usize = 2;
+
+/// A submission the card may not have run yet: natively its index, waited for; on wasm32 set once the card ran it.
+#[cfg(not(target_arch = "wasm32"))]
+type Submitted = wgpu::SubmissionIndex;
+#[cfg(target_arch = "wasm32")]
+type Submitted = Arc<Notify<()>>;
 
 const GRID_GROUP: (u32, u32) = (32, 8);
 const LINEAR_GROUP: u32 = 64;
@@ -201,6 +209,19 @@ struct Kernel {
 /// The outcome of a mapping request, set by its callback, which also wakes a waiting future.
 type MapState = Arc<Notify<Result<(), wgpu::BufferAsyncError>>>;
 
+/// A mapping as a waiter sees it: ready once done or once the device is lost, so a loss, which the engine reports
+/// next, leaves no waiter pending.
+struct MappedOrLost {
+	mapped: MapState,
+	lost: Arc<Notify<GpuError>>,
+}
+
+impl Readiness for MappedOrLost {
+	fn poll_ready(&self, cx: &mut std::task::Context<'_>) -> std::task::Poll<()> {
+		if self.mapped.poll_ready(cx).is_ready() { std::task::Poll::Ready(()) } else { self.lost.poll_ready(cx) }
+	}
+}
+
 /// A host-mappable buffer, its map state, and the submission that fills it while it is pending.
 struct Readback {
 	buffer: wgpu::Buffer,
@@ -287,7 +308,7 @@ pub struct GpuEngine {
 	capture_groups: [wgpu::BindGroup; 2],
 	pending: Option<wgpu::CommandEncoder>,
 	batch_steps: u32,
-	in_flight: VecDeque<wgpu::SubmissionIndex>,
+	in_flight: VecDeque<Submitted>,
 	sources: Sources,
 	/// d^(1/n) per padded cell, for the forcing's h.
 	d: Vec<f32>,
@@ -319,13 +340,16 @@ impl GpuEngine {
 	}
 
 	/// An engine at rest on `scene` on `ctx`, with the medium in `layout` (compact falls back to plain when
-	/// the scene has too many distinct values).
+	/// the scene has too many distinct values); refused on a lost device.
 	pub async fn create(
 		ctx: Arc<GpuContext>,
 		scene: impl Into<Arc<SceneData>>,
 		options: EngineOptions,
 		layout: MediumLayout,
 	) -> Result<Self, GpuError> {
+		if let Some(e) = ctx.lost() {
+			return Err(e);
+		}
 		let scene = scene.into();
 		check_grid(&scene)?;
 		let device = ctx.device.clone();
@@ -491,6 +515,10 @@ impl GpuEngine {
 		wait(&self.ctx.device, index)?;
 		self.in_flight.clear();
 		Ok(())
+	}
+
+	fn mapped_or_lost(&self, mapped: &MapState) -> Arc<dyn Readiness> {
+		Arc::new(MappedOrLost { mapped: mapped.clone(), lost: self.ctx.lost_notify() })
 	}
 
 	/// The kept failure or the device's loss.
@@ -709,12 +737,30 @@ impl GpuEngine {
 		record(&mut encoder);
 		self.batch_steps = 0;
 		let index = self.ctx.queue.submit([encoder.finish()]);
-		self.in_flight.push_back(index.clone());
+		self.pace(index.clone())?;
+		Ok(index)
+	}
+
+	/// Waits for the oldest submissions beyond [`MAX_IN_FLIGHT`].
+	#[cfg(not(target_arch = "wasm32"))]
+	fn pace(&mut self, submitted: wgpu::SubmissionIndex) -> Result<(), GpuError> {
+		self.in_flight.push_back(submitted);
 		while self.in_flight.len() > MAX_IN_FLIGHT {
 			let oldest = self.in_flight.pop_front().expect("in flight");
 			wait(&self.ctx.device, oldest)?;
 		}
-		Ok(index)
+		Ok(())
+	}
+
+	/// Notes the submission, set once the card ran it, for [`WaveEngine::poll_room`].
+	#[cfg(target_arch = "wasm32")]
+	fn pace(&mut self, _submitted: wgpu::SubmissionIndex) -> Result<(), GpuError> {
+		let done = Arc::<Notify<()>>::default();
+		let ran = done.clone();
+		self.ctx.queue.on_submitted_work_done(move || ran.set(()));
+		self.in_flight.retain(|done| done.get().is_none());
+		self.in_flight.push_back(done);
+		Ok(())
 	}
 
 	/// Submits the recorded steps, if any.
@@ -851,6 +897,23 @@ impl WaveEngine for GpuEngine {
 		self.options.track_intensity = on;
 	}
 
+	/// Pending while [`MAX_IN_FLIGHT`] submissions are on the card; ready once the engine failed or the device is
+	/// lost, so the step reports it.
+	#[cfg(target_arch = "wasm32")]
+	fn poll_room(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<()> {
+		self.in_flight.retain(|done| done.get().is_none());
+		match self.in_flight.front() {
+			Some(oldest) if self.in_flight.len() >= MAX_IN_FLIGHT && self.check().is_ok() => {
+				if oldest.poll_ready(cx).is_ready() {
+					std::task::Poll::Ready(())
+				} else {
+					self.ctx.lost_notify().poll_ready(cx)
+				}
+			}
+			_ => std::task::Poll::Ready(()),
+		}
+	}
+
 	fn advance_one_step(&mut self) -> Result<(), EngineError> {
 		self.guarded(Self::step)
 	}
@@ -871,7 +934,7 @@ impl WaveEngine for GpuEngine {
 			.iter()
 			.scan(on_host, |end, (r, steps)| {
 				*end += u64::from(*steps);
-				Some((r.mapped.clone() as Arc<dyn Readiness>, *end))
+				Some((self.mapped_or_lost(&r.mapped), *end))
 			})
 			.collect();
 		Ok(PendingProbes { batches, on_host })
@@ -1171,7 +1234,7 @@ impl GpuEngine {
 		});
 		let readback = &mut self.captures[slot];
 		map(readback, submitted?);
-		let mapped = readback.mapped.clone();
+		let mapped = self.mapped_or_lost(&self.captures[slot].mapped);
 		into.shape = *shape;
 		into.step = self.time.saturating_sub(1);
 		Ok(PendingCapture { snapshot: into, slot, mapped: Some(mapped) })

@@ -2,8 +2,8 @@
 # A push to the default branch either releases or prepares the next release:
 # - the workspace version has no tag v<version> yet (a release pull request was merged): `release` tags the commit and
 #   drafts the release, package.yml builds and attests the packages without secrets, `sign` signs the update bundles
-#   without compiling anything, and `publish` attaches everything with latest.json and SHA256SUMS and publishes the
-#   release, which is immutable from then on;
+#   without compiling anything, and `publish` attaches everything with latest.json and SHA256SUMS, publishes the
+#   release, which is immutable from then on, and dispatches pages.yml to deploy its browser app;
 # - otherwise `release-pr` computes the next version, CHANGELOG.md and the notes with git-cliff (cliff.toml) from the
 #   commits since the last tag, read-only, and `release-pr-push` keeps one pull request "chore(release): v<next>"
 #   open, rebuilt as a single commit on the branch release-pr, and dispatches its checks (events of GITHUB_TOKEN start
@@ -253,6 +253,7 @@ jobs:
     if: ${{ !cancelled() && needs.package.result == 'success' && (needs.sign.result == 'success' || (vars.UPDATER_PUBKEY == '' && needs.sign.result == 'skipped')) }}
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
       id-token: write
       attestations: write
@@ -338,3 +339,6 @@ jobs:
           gh release edit "$TAG" --repo "$repo" --notes-file notes.md
       - name: Publish the release
         run: gh release edit "$TAG" --draft=false --latest --repo "${{ github.repository }}"
+      # Events of GITHUB_TOKEN start no workflow, a dispatch does.
+      - name: Deploy its browser app
+        run: gh workflow run pages.yml --ref "$GITHUB_REF_NAME" --repo "${{ github.repository }}"

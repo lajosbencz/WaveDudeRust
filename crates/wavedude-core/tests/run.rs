@@ -117,7 +117,7 @@ fn spec_snapshot() {
 }
 
 #[test]
-fn empty_store_layout() {
+fn empty_store_layout_and_refused_writes() {
 	let s = spec(&project(64, 48, 20), PreviewQuality::FULL);
 	let st = store(&s, GIB);
 	let layout = st.layout();
@@ -126,10 +126,7 @@ fn empty_store_layout() {
 	assert_eq!(layout.file_bytes(10), 64 + 10 * 2 * 64 * 48 * 2, "SizeOf");
 	assert!(matches!(st.copy_layer(0, Layer::Field), Err(StoreError::NotStored { frame: 0, count: 0 })));
 	assert!(st.spill_bytes().is_none());
-}
-
-#[test]
-fn write_beyond_capacity_and_foreign_snapshots_are_refused() {
+	// writes: beyond the capacity of 3, foreign snapshots
 	let s = spec(&project(64, 48, 6), PreviewQuality::FULL);
 	let st = store(&s, GIB);
 	for k in 0..3 {
@@ -301,7 +298,7 @@ fn store_bytes_at_equals_the_store_a_run_allocates() {
 			for format in [SampleFormat::Half, SampleFormat::Index] {
 				let q = PreviewQuality::new(res, frames, format);
 				let st = store(&s.with_quality(q), GIB);
-				assert_eq!(r.store_bytes_at(q), (st.capacity() * st.frame_bytes()) as u64, "{q:?}");
+				assert_eq!(r.store_bytes_at(q), st.bytes_of(st.capacity()), "{q:?}");
 				assert_eq!(r.with_quality(q).store_bytes(), r.store_bytes_at(q));
 			}
 		}
@@ -433,7 +430,7 @@ fn same_frames(a: &FrameStore, b: &FrameStore, frames: u32) {
 }
 
 #[test]
-fn the_live_run_makes_the_batch_runs_frames_the_positions_first() {
+fn the_live_run_makes_the_batch_runs_frames_the_positions_first_or_all_on_the_way() {
 	let dir = tempfile::tempdir().unwrap();
 	let s = spec(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
 	let s_run = request(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
@@ -461,6 +458,47 @@ fn the_live_run_makes_the_batch_runs_frames_the_positions_first() {
 	same_frames(&st, r.store(), s.stored_frames());
 	w.with_traces(|t| assert_eq!(t, &run_traces[..], "the traces of the whole run"));
 	assert!(Arc::ptr_eq(&st, &w.store().unwrap()), "one store throughout");
+
+	let dir = tempfile::tempdir().unwrap();
+	let w = worker(dir.path());
+	w.set_goal(goal(&s_run, 20, Wanted::All));
+	wait_until(|| store_has(&w, 20));
+	let st = w.store().unwrap();
+	assert!(st.count() >= 21, "the frames before the position landed on the way to it");
+	wait_until(|| st.is_complete() && w.status().state == WorkState::Idle);
+	assert_eq!(w.status().steps_done, s.steps, "one pass, no wrap");
+	same_frames(&st, r.store(), s.stored_frames());
+}
+
+/// A spill never opened: the frames fit in memory.
+struct NoSpill;
+
+impl SpillFactory for NoSpill {
+	fn poll_ready(&self, _: &mut std::task::Context<'_>) -> std::task::Poll<()> {
+		std::task::Poll::Ready(())
+	}
+
+	fn open(&self, _store: u64, _layout: &StoreLayout, _bytes: u64) -> std::io::Result<Box<dyn SpillBackend>> {
+		Err(std::io::Error::other("the frames fit in memory"))
+	}
+}
+
+#[test]
+fn a_pumped_live_run_makes_the_batch_runs_frames() {
+	let p = with_probes(project(64, 48, 40));
+	let s = spec(&p, PreviewQuality::FULL);
+	let r = run(&s, GIB);
+	let start: PumpedFactory = Box::new(|scene, options| -> EngineFuture {
+		Box::pin(async move { Box::new(CpuEngine::new(scene, options)) as Box<dyn WaveEngine> })
+	});
+	let w = RunWorker::pumped(start, GIB, Box::new(NoSpill), Arc::default());
+	w.set_goal(goal(&request(&p, PreviewQuality::FULL), 0, Wanted::All));
+	while w.pump(Duration::from_millis(50), std::task::Waker::noop()) != Pump::Idle {}
+	assert_eq!(w.status().state, WorkState::Idle);
+	let st = w.store().unwrap();
+	assert!(st.is_complete());
+	same_frames(&st, r.store(), s.stored_frames());
+	w.with_traces(|t| assert_eq!(t, &r.traces()[..]));
 }
 
 #[test]
@@ -703,21 +741,6 @@ fn a_baked_brightness_edit_keeps_the_store() {
 	wait_until(|| w.status().adopted == 2 && store_has(&w, 5));
 	assert!(Arc::ptr_eq(&st, &w.store().unwrap()), "the same buffers take the frames of the new brightness");
 	assert_eq!(st.generation(), 1);
-}
-
-#[test]
-fn a_pass_with_every_frame_wanted_captures_the_frames_on_the_way() {
-	let dir = tempfile::tempdir().unwrap();
-	let s = spec(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
-	let s_run = request(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
-	let w = worker(dir.path());
-	w.set_goal(goal(&s_run, 20, Wanted::All));
-	wait_until(|| store_has(&w, 20));
-	let st = w.store().unwrap();
-	assert!(st.count() >= 21, "the frames before the position landed on the way to it");
-	wait_until(|| st.is_complete() && w.status().state == WorkState::Idle);
-	assert_eq!(w.status().steps_done, s.steps, "one pass, no wrap");
-	same_frames(&st, run(&s, GIB).store(), s.stored_frames());
 }
 
 #[test]
@@ -1000,7 +1023,7 @@ fn drag_burst(wanted: Wanted, part: bool) {
 	};
 	let dir = tempfile::tempdir().unwrap();
 	let w = RunWorker::new(
-		Box::new(|scene, options| wavedude_core::engine::build(scene, options, true)),
+		Box::new(|scene, options| wavedude_core::engine::build(scene, options, true).engine),
 		dir.path().to_path_buf(),
 		Arc::default(),
 	)
@@ -1077,7 +1100,7 @@ fn part_edit_cost() {
 	};
 	let mut cache = SceneCache::default();
 	let first = cache.spec(&project, quality, false).unwrap();
-	let mut engine = wavedude_core::engine::build(first.scene.clone(), first.options.clone(), true);
+	let mut engine = wavedude_core::engine::build(first.scene.clone(), first.options.clone(), true).engine;
 	engine.set_emitters(&first.emitters);
 	let mut times = [0f64; 3];
 	let rounds = 10;
