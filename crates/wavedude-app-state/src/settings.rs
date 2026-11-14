@@ -242,7 +242,6 @@ impl Settings {
 		}
 		self.ui_zoom = if self.ui_zoom.is_finite() { self.ui_zoom.clamp(SWITCH_ZOOM.0, SWITCH_ZOOM.1) } else { 1.0 };
 		self.export_hints.truncate(MAX_EXPORT_HINTS);
-		#[cfg(not(target_arch = "wasm32"))]
 		if self.export_filter_index as usize >= wavedude_export::ExportFormat::ALL.len() {
 			self.export_filter_index = 0;
 		}

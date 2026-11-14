@@ -128,13 +128,19 @@ impl Store {
 
 /// Hands `bytes` to the browser as a download of the target's name; a page has no file paths.
 pub fn write(target: &Target, bytes: &[u8]) -> std::io::Result<()> {
-	use web_sys::wasm_bindgen::JsCast;
 	let Target::Download(name) = target else {
 		return Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "no file paths in the browser"));
 	};
 	let parts = js_sys::Array::of1(&js_sys::Uint8Array::from(bytes));
 	let blob = web_sys::Blob::new_with_u8_array_sequence(&parts).map_err(js_error)?;
 	let url = web_sys::Url::create_object_url_with_blob(&blob).map_err(js_error)?;
+	click_download(&url, name)?;
+	web_sys::Url::revoke_object_url(&url).map_err(js_error)
+}
+
+/// Starts the browser's download of object URL `url` as `name`.
+pub(super) fn click_download(url: &str, name: &str) -> std::io::Result<()> {
+	use web_sys::wasm_bindgen::JsCast;
 	let anchor = web_sys::window()
 		.and_then(|w| w.document())
 		.ok_or_else(|| std::io::Error::other("no document"))?
@@ -142,10 +148,10 @@ pub fn write(target: &Target, bytes: &[u8]) -> std::io::Result<()> {
 		.map_err(js_error)?
 		.dyn_into::<web_sys::HtmlAnchorElement>()
 		.map_err(|e| js_error(e.into()))?;
-	anchor.set_href(&url);
+	anchor.set_href(url);
 	anchor.set_download(name);
 	anchor.click();
-	web_sys::Url::revoke_object_url(&url).map_err(js_error)
+	Ok(())
 }
 
 /// Nothing to keep alive: the console writes at once.

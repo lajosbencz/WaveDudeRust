@@ -83,7 +83,7 @@ impl Timer {
 
 impl PagePort {
 	/// Starts the module worker at `url`; `on_message` is called as a message arrives. A worker that cannot be
-	/// made, fails to load, stops, or does not speak within [`READY_WITHIN`] arrives as [`ToPage::Lost`].
+	/// made, fails to load, stops, or does not speak in time arrives as [`ToPage::Lost`].
 	pub fn start(url: &str, on_message: impl Fn() + 'static) -> Self {
 		let options = WorkerOptions::new();
 		options.set_type(WorkerType::Module);

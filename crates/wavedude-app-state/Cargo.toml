@@ -17,6 +17,7 @@ workspace = true
 [dependencies]
 wavedude-core = { path = "../wavedude-core", features = ["gpu", "serde"] }
 wavedude-examples = { path = "../wavedude-examples" }
+wavedude-export = { path = "../wavedude-export", default-features = false }
 anyhow.workspace = true
 postcard.workspace = true
 quick-xml.workspace = true
@@ -29,7 +30,6 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "registry", "std"] }
 web-time = "1.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-wavedude-export = { path = "../wavedude-export", default-features = false }
 directories = "6"
 notify.workspace = true
 tracing-appender = "0.2"
@@ -67,6 +67,8 @@ web-sys = { version = "0.3", features = [
 	"WorkerOptions",
 	"WorkerType",
 	"WritableStream",
+	"WriteCommandType",
+	"WriteParams",
 ] }
 
 [dev-dependencies]

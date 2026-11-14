@@ -754,8 +754,12 @@ impl<B: Backend> LiveController<B> {
 		}
 	}
 
-	/// Names the stored frames playback shows next to the store, which reads the spilled ones ahead.
+	/// Names the stored frames playback shows next to the store, which reads the spilled ones ahead; not while an
+	/// export reads the frames, which names its own.
 	fn prefetch(&self) {
+		if matches!(self.export, Export::Reading) {
+			return;
+		}
 		let (Some(store), Some(request)) = (self.current_store(), self.adopted_request()) else { return };
 		let depth = store.read_ahead();
 		if depth == 0 {
@@ -1239,16 +1243,50 @@ impl Backend for CoreBackend {
 /// A scripted run: the goals are recorded, the frames come when the caller writes them. For tests and headless
 /// tools.
 pub mod fake {
-	use std::sync::Arc;
+	use std::collections::HashMap;
+	use std::sync::{Arc, Mutex};
 
 	use wavedude_core::engine::probes::ProbeTrace;
 	use wavedude_core::engine::{SampleFormat, Snapshot};
 	use wavedude_core::f16;
 	use wavedude_core::render::{field_index, intensity_root_index};
-	use wavedude_core::run::{FitFrame, FrameStore, Goal, Status, StoreLayout, Wanted, WorkState};
+	use wavedude_core::run::{FitFrame, FrameStore, Goal, SpillBackend, Status, StoreLayout, Token, Wanted, WorkState};
 	use wavedude_core::spec::RunSpec;
+	use wavedude_core::sync::lock;
 
 	use super::Backend;
+
+	/// The planes of each (generation, frame).
+	type Frames = HashMap<(u64, usize), Vec<u8>>;
+
+	/// A pending spill whose writes and reads complete at once; it records the frames read.
+	#[derive(Clone, Default)]
+	pub struct FakeSpill {
+		frames: Arc<Mutex<Frames>>,
+		pub reads: Arc<Mutex<Vec<usize>>>,
+	}
+
+	impl SpillBackend for FakeSpill {
+		fn write(&self, generation: u64, frame: usize, planes: &[&[u8]]) -> Token<()> {
+			lock(&self.frames).insert((generation, frame), planes.concat());
+			let token = Token::default();
+			token.complete(Ok(()));
+			token
+		}
+
+		fn read(&self, generation: u64, frame: usize) -> Token<Vec<u8>> {
+			lock(&self.reads).push(frame);
+			let token = Token::default();
+			token.complete(
+				lock(&self.frames).get(&(generation, frame)).cloned().ok_or(std::io::ErrorKind::NotFound.into()),
+			);
+			token
+		}
+
+		fn drop_generation(&self, generation: u64) {
+			lock(&self.frames).retain(|(g, _), _| *g != generation);
+		}
+	}
 
 	/// Records every goal; adopts a spec at once, with a real (small) store whose frames the caller writes.
 	#[derive(Default)]
@@ -1271,9 +1309,18 @@ pub mod fake {
 		held: Vec<ProbeTrace>,
 		/// What the goal in force wanted when the frames were discarded last.
 		pub discarded_under: Option<Wanted>,
+		/// Set by the caller: the stores keep 2 frames in memory, the rest in this spill.
+		pub spill: Option<FakeSpill>,
 	}
 
 	impl FakeBackend {
+		fn new_store(&self, layout: StoreLayout) -> Arc<FrameStore> {
+			Arc::new(match &self.spill {
+				Some(spill) => FrameStore::with_spill(layout, 2 * layout.frame_bytes() as u64, Box::new(spill.clone())),
+				None => FrameStore::in_memory(layout, 1 << 30),
+			})
+		}
+
 		/// The run fails with `message` until the next spec.
 		pub fn fail(&mut self, message: &str) {
 			self.failure = Some(Arc::new(wavedude_core::run::RunError::Panic("fake", message.into())));
@@ -1323,6 +1370,7 @@ pub mod fake {
 			let stored = spec.stored_index_of(frame);
 			let snapshot = Self::uniform(&spec, stored * spec.capture_every(), u, i);
 			self.store().write_at(stored as usize, snapshot).expect("the frame fits the store");
+			self.store().settle().expect("the fake spill's writes succeed");
 			self.steps_done = self.steps_done.max(stored * spec.capture_every() + 1);
 		}
 
@@ -1371,7 +1419,7 @@ pub mod fake {
 					let layout = StoreLayout::of(spec);
 					match &self.store {
 						Some(store) if store.layout().fits(&layout) => store.clear(),
-						_ => self.store = Some(Arc::new(FrameStore::in_memory(layout, 1 << 30))),
+						_ => self.store = Some(self.new_store(layout)),
 					}
 					self.steps_done = 0;
 					self.failure = None;
@@ -1437,7 +1485,7 @@ pub mod fake {
 		fn discard_frames(&mut self) {
 			self.discarded_under = self.goals.last().map(|g| g.wanted);
 			if let Some(old) = self.store.take() {
-				self.store = Some(Arc::new(FrameStore::in_memory(*old.layout(), 1 << 30)));
+				self.store = Some(self.new_store(*old.layout()));
 			}
 			self.steps_done = 0;
 			self.traces.clear();
@@ -1456,7 +1504,7 @@ pub mod fake {
 
 #[cfg(test)]
 mod tests {
-	use super::fake::FakeBackend;
+	use super::fake::{FakeBackend, FakeSpill};
 	use super::*;
 	use crate::platform::Duration;
 	use wavedude_core::engine::SampleFormat;
@@ -1472,7 +1520,11 @@ mod tests {
 	}
 
 	fn controller(p: &Project, t: Instant) -> LiveController<FakeBackend> {
-		let mut c = LiveController::new(FakeBackend::default(), LiveSettings::default());
+		controller_on(FakeBackend::default(), p, t)
+	}
+
+	fn controller_on(backend: FakeBackend, p: &Project, t: Instant) -> LiveController<FakeBackend> {
+		let mut c = LiveController::new(backend, LiveSettings::default());
 		c.project_replaced(p, t);
 		c.tick(t, p);
 		c.backend_mut().finish_position();
@@ -1824,6 +1876,31 @@ mod tests {
 		c.end_export();
 		c.on_change(ChangeKind::Simulation, &p, None, t);
 		assert!(!c.backend().adopted_spec().quality.is_full(), "the next edit's frames are the preview's again");
+	}
+
+	#[test]
+	fn playback_reads_no_frame_ahead_while_an_export_reads_them() {
+		let t = Instant::now();
+		let p = project();
+		let spill = FakeSpill::default();
+		let mut backend = FakeBackend::default();
+		backend.spill = Some(spill.clone());
+		let mut c = controller_on(backend, &p, t);
+		c.run_user(&p, t);
+		c.backend_mut().complete();
+		c.tick(t, &p);
+		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		c.backend_mut().complete();
+		c.tick(t, &p);
+		assert!(c.take_notices().contains(&Notice::ExportReady));
+		c.scrub(20, t);
+		c.play(&p, t);
+		lock(&spill.reads).clear();
+		c.tick(t, &p);
+		assert!(lock(&spill.reads).is_empty(), "the export names the frames it reads next");
+		c.end_export();
+		c.tick(t, &p);
+		assert!(!lock(&spill.reads).is_empty(), "playback reads ahead again");
 	}
 
 	#[test]
