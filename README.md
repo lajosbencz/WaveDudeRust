@@ -8,6 +8,9 @@ composite sources, probes with live graphs and video export. It opens the
 project files of [WaveDude Next](https://github.com/graealex/WaveDudeNext) (`.wdproj`) and of [Wave Dude 2D](https://www.youtube.com/@HuygensOptics)
 (`configuration.json`) and saves `.wdproj`, which WaveDude Next opens too.
 
+**[Open it in the browser](https://lajosbencz.github.io/WaveDudeRust/app/)** (no install) or
+[download a release](https://github.com/lajosbencz/WaveDudeRust/releases/latest).
+
 ![Three wave logic gates (XOR, AND, OR) chained: the field and the intensity, played in the application](docs/figures/logic-gates.gif)
 
 ## Highlights
