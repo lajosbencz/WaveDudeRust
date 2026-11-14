@@ -74,8 +74,8 @@ or "The update failed." with the reason.
 ## Export Save dialog
 
 Native save dialog (port: an in-window dialog with the format and the path, its "..." opening the platform save
-dialog, which cannot report its filter; the probe CSV's is the platform's). The browser has no exports: their menu
-entries are hidden.
+dialog, which cannot report its filter; the probe CSV's is the platform's). The browser's export dialog is described
+under Browser differences, below.
 
 | Command | Title | Filter list | Proposed name |
 |---|---|---|---|
@@ -88,6 +88,9 @@ entries are hidden.
   codec (downloaded from Cisco at the first MP4 export)" (setting `UseOpenH264`); OK is disabled while it is
   clear. Once downloaded, a "Delete the downloaded codec" button follows; the choice stays. The download runs on the export's worker before the first frame; a failure ends the export with its reason
   in the error box. A build with OpenH264 compiled in shows neither (decision 0005).
+- MP4 also shows "H.264 profile" (Baseline, Main, High; setting `H264Profile`). A profile the encoder lacks is
+  greyed, its tooltip the reason ("OpenH264 encodes Baseline only"), and the reason shows below while the setting
+  names one; the export then uses the encoder's best profile.
 - The last filter index is remembered (`ExportFilterIndex`); a remembered video means PNG in the still dialog.
 - Start folder rule, per kind (run export, still, probe data) and per project file: the first export after a
   project is opened starts in the project's folder under the project's name; every later one in the last completed
@@ -104,6 +107,35 @@ entries are hidden.
 - A still renders exactly what a video export would show at that frame, never the preview's frame.
 - CSV: a point probe one row per step ("step;amplitude" header), a line probe one row per frame
   ("frame;step;<distances>"), semicolons, decimal point. Full run first when needed.
+
+Browser differences (decision 0025):
+
+- The path box holds a file name only: what is typed is cut to its last component, and the format's extension is
+  added when it has none. There is no "..." button, no start folder and no question before replacing, as a
+  download replaces nothing. The probe CSV, which uses the platform's save dialog on the desktop, opens this dialog for its
+  name too.
+- MP4 encodes with the browser's WebCodecs encoder: no Cisco notice, no check box. As the dialog opens the browser
+  is asked which H.264 profiles it encodes at the project's canvas size and frame rate; meanwhile MP4 shows "Asking
+  the browser which H.264 profiles it encodes..." and OK is disabled. "H.264 profile" then greys the profiles it
+  lacks, their tooltip and the line below "not supported by this browser". MP4 itself is greyed in the format list,
+  and shows its reason with OK disabled when chosen: "This browser has no video encoder (WebCodecs)." or "This
+  browser encodes no H.264 profile at this picture size and frame rate." A run's export (not a still) shows "This browser has no private file storage to write the export to; frames and probe data
+  still export." and is disabled when the browser has no OPFS. A still and the CSV do not need it.
+- The export is stepped on the page; the status bar shows "Exporting n / N frames", and "Export: packing the
+  archive" while two videos are packed into their ZIP. Esc cancels as on the desktop.
+- Download names, from the typed name `<name>` (extension as chosen):
+
+| Export | Downloaded as |
+|---|---|
+| Frame (still), field or intensity | `<name>.<ext>` as typed, e.g. `run_field_0042.png` |
+| Probe CSV | `<name>.csv` |
+| Image sequence, one layer | `<name>.zip`: the files in a folder named after the output |
+| Image sequence, both layers | `<name>.zip`: a folder per layer (`_field`, `_intensity`) |
+| Video, one layer | `<name>.<ext>` |
+| Videos, both layers | `<name>.zip` holding `<name>_field.<ext>` and `<name>_intensity.<ext>` |
+
+- The export's files wait in the browser's private storage; they are kept until the next export starts and removed
+  at once when an export is cancelled or fails. Folders of closed tabs are removed at the next load.
 
 ## About dialog
 

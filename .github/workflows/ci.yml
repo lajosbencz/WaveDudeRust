@@ -193,6 +193,8 @@ jobs:
         run: cargo clippy -p wavedude-app-state --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy of the export crate
         run: cargo clippy -p wavedude-export --no-default-features --target wasm32-unknown-unknown -- -D warnings
+      - name: Clippy of the export crate with the MP4 muxer
+        run: cargo clippy -p wavedude-export --no-default-features --features mp4-mux --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy of the app
         run: cargo clippy -p wavedude-app --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy of the run worker

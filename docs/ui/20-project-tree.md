@@ -114,7 +114,7 @@ on the target alone.
 | Move up / down (Alt+Up/Down) | Within the item's own list; disabled at the ends. Selection kept; the tree takes the keyboard focus. |
 | Cut / Copy / Paste | See below. |
 | Add to my schemes / Remove from my schemes | Scheme rows only, below a separator. Keeps the project scheme among the user's schemes, or removes the user scheme of that name; the label follows whether a user scheme of the name exists. |
-| Export probe data as CSV | Probe rows, active probes only; absent in the browser build (decision 0021). |
+| Export probe data as CSV | Probe rows, active probes only; in the browser a file-name box asks for the name and the file downloads (decision 0025). |
 
 ## Drag and drop
 

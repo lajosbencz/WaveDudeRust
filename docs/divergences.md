@@ -28,6 +28,7 @@ one), the row below, the spec updated, the manual when users see it.
 | Source start | The source cell is blended towards `sin` from the first step; a single source leaves a slowly decaying zero-frequency wake, an array drains it through the blend | The source drives its impulse, turned on over half a period: no zero-frequency wake from any source; the first periods of a source at phase 0 differ | decision 0022, [physics.md](physics.md) |
 | Display brightness | Tuned to its source, which radiates 4.8 to 9.7 times less | Own units; the `.wdproj` adapter converts by a fixed factor of 8 in both directions | decision 0004, [spec/60](spec/60-file-formats.md), [spec/05](spec/05-deviations.md) |
 | Video | Windows Media Foundation H.264 with a hardware encoder | Cisco's OpenH264 downloaded on consent, quality rate control, no hardware encoder; AVI, MOV, MPEG-1 built in | decision 0005 |
+| Browser MP4 | Not applicable | The browser's WebCodecs H.264 encoder, variable bitrate rate control, the profiles the browser supports; the files differ from the desktop's | decision 0005, [ui/70](ui/70-dialogs-and-windows.md) |
 | Frame store | Memory then a file, frames appended in order | The same tiers, frames written by index in any order, cleared in place between generations | [spec/40](spec/40-frames-store-render.md) |
 | GPU | OpenCL, a transfer queue of its own for captures | wgpu compute, one queue; captures run after the steps ([measurements.md](measurements.md)) | decision 0003 |
 | Docking | Floating windows, a five-way drop cluster | Four side lists around the centre; drops on edges, tabs and ends; no floating windows | decision 0008 (11) |
@@ -35,7 +36,7 @@ one), the row below, the spec updated, the manual when users see it.
 | File drop | A project or colour scheme dropped on the window opens | An image dropped on the window also becomes the scene image; the last file of a frame wins | [ui/10](ui/10-menus-and-shortcuts.md) |
 | Leaving the browser page | Not applicable | The browser build asks before the page is left while the project has unsaved edits | [ui/10](ui/10-menus-and-shortcuts.md) |
 | User colour schemes | Files placed in a folder by hand | Added to and removed from the user's schemes in the tree, the scheme form and the scheme picker; kept in the config folder or the browser's storage | [spec/10](spec/10-model.md), [ui/20](ui/20-project-tree.md) |
-| Browser | None | The web build has no exports (parked), no updater, no recent files, no file watch | decisions 0019, 0020, 0021 |
+| Browser | None | The web build exports through downloads, has no updater, no recent files, no file watch | decisions 0019, 0020, 0025 |
 | Edit menu | Acts on a focused text box | Acts on objects; the keys go to the box | decision 0008 (13) |
 | Windows integrations | Taskbar progress, jump list, title-bar menu click-through | Not ported; file associations come from the packaging | decision 0008 (14) |
 | Manual figures | Numbered badges | Screenshots of this program, controls named in reading order | decision 0008 (15) |

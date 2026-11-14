@@ -18,7 +18,7 @@ asynchronous too and ask more of the user or the code.
   through a clear) is shared; natively the spill is the file, on wasm32 a pending spill whose writes and reads return
   tokens the store settles (`SpillBackend` and `SpillFactory` in
   [`pending.rs`](../../crates/wavedude-core/src/run/pending.rs)). The core takes no browser API: the OPFS backend lives in the app state's platform layer
-  ([`opfs.rs`](../../crates/wavedude-app-state/src/platform/opfs.rs)).
+  ([`spill.rs`](../../crates/wavedude-app-state/src/platform/opfs/spill.rs)).
 - OPFS from the main thread: one file per frame at `wavedude-spill/<session>/<store>-<generation>/<frame>`, written
   whole and closed (`createWritable` copies an existing file at each commit, so frames are not packed into one file),
   read with `getFile`. A generation's folder is removed at a clear, the store's at its drop, after their writes in
@@ -42,7 +42,7 @@ asynchronous too and ask more of the user or the code.
 - Web Locks need web-sys's unstable APIs: [`.cargo/config.toml`](../../.cargo/config.toml) sets
   `web_sys_unstable_apis` for wasm32.
 - A browser without OPFS or `createWritable` runs what fits in memory and fails a run that would spill.
-- The export, hidden in the browser, would see spilled frames as pending.
+- The export sees spilled frames as pending and waits for them ([0025](0025-browser-exports.md)).
 
 ## Writes in flight (added 2026-11-14)
 

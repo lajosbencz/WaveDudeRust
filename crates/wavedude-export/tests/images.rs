@@ -3,6 +3,7 @@ mod common;
 use common::*;
 use exr::prelude::{FlatSamples, ReadChannels, ReadLayers, read};
 use half::f16;
+use wavedude_export::h264::Profile;
 use wavedude_export::sinks::exr::write_exr;
 use wavedude_export::sinks::jpeg::encode_jpeg;
 use wavedude_export::sinks::png::{PngFilter, encode_png};
@@ -94,7 +95,15 @@ fn exr_is_a_version_2_scanline_file_of_one_uncompressed_half_channel() {
 fn a_sequence_goes_into_a_folder_of_its_name_and_a_still_is_one_file() {
 	let dir = scratch("sequence");
 	let (w, h) = (16, 8);
-	let spec = SinkSpec { width: w, height: h, fps: 30, quality: 90, first_frame: 5, frame_count: 3 };
+	let spec = SinkSpec {
+		width: w,
+		height: h,
+		fps: 30,
+		quality: 90,
+		profile: Profile::Baseline,
+		first_frame: 5,
+		frame_count: 3,
+	};
 	let chosen = dir.join("chosenname.png");
 	let mut sink = ImageSink::new(
 		ImageKind::Png,

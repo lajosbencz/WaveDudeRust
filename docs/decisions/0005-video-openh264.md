@@ -1,6 +1,6 @@
 # 0005 H.264 MP4 through Cisco's OpenH264, loaded at run time
 
-Status: accepted, 2026-11-05; amended 2026-11-07 (run-time loading)
+Status: accepted, 2026-11-05; amended 2026-11-07 (run-time loading), 2026-11-14 (the browser)
 
 The original encodes MP4 with Windows Media Foundation, NV12 input, 8-bit
 4:2:0, in quality mode with a bitrate fallback and the hardware encoder when
@@ -46,3 +46,21 @@ H.264 altogether. Lossless paths stay PNG sequences and MOV with the PNG codec.
 The `mp4` crate has had no release since 2023. The in-house MOV writer already
 writes `moov` with `co64` after the samples, so an in-house `avc1`/`avcC` muxer
 would be small; noted for when the crate becomes a problem, not done.
+
+## The browser (2026-11-14)
+
+OpenH264 does not run in the browser, and Cisco's licence covers its binary on the user's device only. The browser
+build encodes H.264 with the browser's own encoder, WebCodecs' `VideoEncoder`
+([`webcodecs`](../../crates/wavedude-app-state/src/platform/webcodecs/mod.rs)), behind the same `H264Encoder` seam and
+MP4 muxer (feature `mp4-mux`). Nothing is downloaded: no Cisco notice, no check box, no `UseOpenH264` question; the
+H.264 royalties are those of the browser's or the operating system's vendor, whose encoder it is.
+
+- The encoder writes Annex B with an IDR every second and no reordering (a picture out of order fails the
+  export), variable bitrate at the bitrate the Quality setting maps to, the codec string's level the lowest of
+  Table A-1 that holds the size and frame rate. Pictures go in as I420 in BT.601 studio range, tagged
+  `smpte170m`.
+- Which of Baseline, Main and High the browser encodes at the export's size and frame rate is asked with
+  `VideoEncoder.isConfigSupported` when the export dialog opens; the dialog greys the others, and MP4 itself when
+  none is encoded or the browser has no WebCodecs.
+- The files differ from the desktop's: another encoder, rate control and, where the browser has one, a hardware
+  encoder.

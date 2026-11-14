@@ -55,7 +55,7 @@ Conventions:
 
 Dialog details: [`70-dialogs-and-windows.md`](70-dialogs-and-windows.md).
 
-The browser build has no exports: the Export submenu and Export last are absent, their shortcuts inert (decision 0021).
+The browser build has the same Export submenu, Export last and shortcuts; its dialog and downloads differ ([`70-dialogs-and-windows.md`](70-dialogs-and-windows.md), decision 0025).
 
 ### File dropped on the window
 

@@ -177,7 +177,8 @@ fn lever(ui: &mut Ui, s: &Strings, label_key: &str, current: Option<usize>, keys
 	};
 	let label = strip_mnemonic(s.get(label_key));
 	let shown = current.map(word).unwrap_or_default();
-	let choices = Choices { len: keys.len(), current, shown: &shown, word: &word, swatch: None, actions: &[] };
+	let choices =
+		Choices { len: keys.len(), current, shown: &shown, word: &word, swatch: None, disabled: None, actions: &[] };
 	ui.horizontal(|ui| {
 		let column = vec2(LABEL_WIDTH, INPUT_HEIGHT);
 		ui.allocate_ui_with_layout(column, Layout::left_to_right(Align::Center), |ui| {
