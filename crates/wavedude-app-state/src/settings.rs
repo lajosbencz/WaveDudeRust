@@ -155,6 +155,8 @@ pub struct Settings {
 	/// Look for a new release at launch (GitHub releases); `None` until the user answered the startup page.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub check_for_updates: Option<bool>,
+	/// The startup page opens at each launch.
+	pub show_startup: bool,
 }
 
 impl Default for Settings {
@@ -187,6 +189,7 @@ impl Default for Settings {
 			title_full_path: false,
 			use_openh264: None,
 			check_for_updates: None,
+			show_startup: true,
 		}
 	}
 }

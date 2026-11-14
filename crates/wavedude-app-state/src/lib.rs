@@ -127,6 +127,8 @@ pub enum Event {
 	SetUseOpenH264(bool),
 	/// Whether to look for a new release at launch.
 	SetCheckForUpdates(bool),
+	/// Whether the startup page opens at each launch.
+	SetShowStartup(bool),
 	SetPreviewOrientation(settings::Orientation),
 	/// The dock's arrangement, as [`Settings::layout`](settings::Settings::layout).
 	SetLayout(String),
@@ -815,6 +817,11 @@ impl<B: Backend> AppState<B> {
 			}
 			Event::SetCheckForUpdates(on) => {
 				self.settings.check_for_updates = Some(on);
+				self.save_settings();
+				Response::None
+			}
+			Event::SetShowStartup(on) => {
+				self.settings.show_startup = on;
 				self.save_settings();
 				Response::None
 			}

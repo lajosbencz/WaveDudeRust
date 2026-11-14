@@ -263,6 +263,7 @@
 	"StartupCodecText": "Der MP4-Export braucht Ciscos OpenH264-Codec, der nicht zu WaveDude Rust gehört. Einmal aktiviert, wird er beim ersten MP4-Export von Cisco heruntergeladen. Der Exportdialog ändert das später.",
 	"StartupUpdates": "Updates",
 	"StartupCheckForUpdates": "Bei jedem Start nach einer neuen Version suchen (Menü Hilfe)",
+	"StartupShowAtLaunch": "Diese Seite bei jedem Start zeigen",
 	"UpdateAvailableFormat": "WaveDude Rust {0} ist verfügbar (dies ist {1}). Herunterladen?",
 	"UpdateDownloadFormat": "WaveDude Rust {0} ist verfügbar (dies ist {1}). Download: {2}",
 	"UpdateMoveHint": "Verschiebe WaveDude Rust in den Programme-Ordner, um automatische Updates zu erhalten.",

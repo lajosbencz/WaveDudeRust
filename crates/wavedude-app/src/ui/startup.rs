@@ -1,4 +1,4 @@
-//! The startup page (docs/ui/70): shown at the first start, and while a question it asks is unanswered. The preview
+//! The startup page (docs/ui/70): shown at each launch unless turned off, and while a question it asks is unanswered. The preview
 //! quality (three tiers that set four levers, pre-set from the settings), Cisco's `OpenH264` for MP4 export
 //! (decision 0005) and the launch's update check (decision 0011); OK saves every answer and Examples... does too, then opens the Examples window.
 
@@ -42,10 +42,13 @@ const ASKS_UPDATES: bool = crate::update::AVAILABLE;
 #[cfg(target_arch = "wasm32")]
 const ASKS_UPDATES: bool = false;
 
-/// The page has a question to ask.
+/// The page opens at this launch.
 pub(super) fn due(app: &App) -> bool {
 	let st = &app.settings;
-	app.first_start || (asks_codec() && st.use_openh264.is_none()) || (ASKS_UPDATES && st.check_for_updates.is_none())
+	app.first_start
+		|| st.show_startup
+		|| (asks_codec() && st.use_openh264.is_none())
+		|| (ASKS_UPDATES && st.check_for_updates.is_none())
 }
 
 /// The page's answers so far.
@@ -54,6 +57,7 @@ pub(super) struct Startup {
 	dither: u32,
 	openh264: bool,
 	updates: bool,
+	show: bool,
 }
 
 impl Startup {
@@ -64,6 +68,7 @@ impl Startup {
 			dither: st.preview_dither_bits,
 			openh264: st.use_openh264 == Some(true),
 			updates: st.check_for_updates.unwrap_or(true),
+			show: st.show_startup,
 		}
 	}
 
@@ -124,10 +129,15 @@ impl Startup {
 				self.updates = on;
 			}
 		}
+		ui.add_space(8.);
+		if let Some(on) = check_box(ui, Id::unique("StartupShow"), s.get("StartupShowAtLaunch"), self.show) {
+			self.show = on;
+		}
 		let choices = [Choice::plain(s.get("MenuFileExamples")), Choice::both(s.get("DialogOk"))];
 		let examples = buttons(ui, fresh, &choices)? == 0;
 		out.push(Event::SetPreviewQuality(self.quality));
 		out.push(Event::SetDitherBits(self.dither));
+		out.push(Event::SetShowStartup(self.show));
 		if asks_codec() {
 			out.push(Event::SetUseOpenH264(self.openh264));
 		}

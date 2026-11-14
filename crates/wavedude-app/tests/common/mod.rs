@@ -17,13 +17,18 @@ use wavedude_core::run::Memory;
 /// The memory the frame budgets are computed from, so the status bar's frame cache reads the same everywhere.
 const MEMORY: Memory = Memory::Fixed { available: 6 << 30, physical: 16 << 30 };
 
-/// The state on the settings under `dirs` with the startup page's questions answered, so the page shows at the
-/// `first_start` only, whether or not OpenH264 is compiled in; runs on the CPU engine, so the pictures do not
-/// depend on the machine's GPU.
+/// The state on the settings under `dirs` with the startup page's questions answered and its launch display on at the
+/// `first_start` only, so the page shows then only, whether or not OpenH264 is compiled in; runs on the CPU engine,
+/// so the pictures do not depend on the machine's GPU.
 pub(crate) fn started(dirs: &AppDirs, first_start: bool) -> App {
 	let mut app = AppState::start_with_memory(dirs, [], MEMORY).expect("the state starts");
 	app.first_start = first_start;
-	for event in [Event::SetUseOpenH264(false), Event::SetCheckForUpdates(false), Event::SetUseGpu(false)] {
+	for event in [
+		Event::SetUseOpenH264(false),
+		Event::SetCheckForUpdates(false),
+		Event::SetShowStartup(first_start),
+		Event::SetUseGpu(false),
+	] {
 		app.handle(event, Instant::now());
 	}
 	app

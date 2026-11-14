@@ -40,8 +40,8 @@ See [`60-live-editing-and-runs.md`](60-live-editing-and-runs.md).
 
 ## Startup page (port)
 
-A modal at launch on the first start (no settings file), and later while one of its questions is unanswered
-(`UseOpenH264` absent and OpenH264 not compiled in; `CheckForUpdates` absent in a build with the updater). Every
+A modal at each launch while `ShowStartup` is on (the default), and regardless while one of its questions is
+unanswered (`UseOpenH264` absent and OpenH264 not compiled in; `CheckForUpdates` absent in a build with the updater). Every
 section shows; OK (Enter or Esc) saves every answer and closes. Title "Welcome to WaveDude Rust". The quality
 selector comes first; the codec and update questions follow it. "Examples..." saves the answers the
 same way, closes the page and opens the Examples window.
@@ -54,6 +54,7 @@ same way, closes the page and opens the Examples window.
    "Use Cisco's OpenH264 codec (downloaded from Cisco at the first MP4 export)", clear unless already enabled.
 3. "Updates" (absent without the updater): check box "Look for a new version at each launch (Help menu)", ticked
    unless already declined. Ticked, OK or Examples... starts the first check.
+4. Check box "Show this page at each launch", ticked unless turned off; OK or Examples... saves it as `ShowStartup`.
 
 ## Updates (port, decision 0011)
 

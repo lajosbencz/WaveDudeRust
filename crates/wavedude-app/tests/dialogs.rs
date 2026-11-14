@@ -197,12 +197,16 @@ fn the_startup_page_shows_at_the_first_start_and_ok_saves_its_answers() {
 	harness.get_by_label("Welcome to WaveDude Rust");
 	harness.get_by_label("High").click();
 	settle(&mut harness);
-	harness.key_press(Key::Enter);
+	harness.get_by_label("Show this page at each launch").click();
+	settle(&mut harness);
+	// Enter would toggle the focused check box again
+	harness.get_by_label("OK").click();
 	settle(&mut harness);
 	assert!(harness.query_by_label("Welcome to WaveDude Rust").is_none(), "OK left the page open");
 	let st = &harness.state().app().settings;
 	assert_eq!(st.preview_quality(), PreviewDefaults::quality_of(PreviewTier::High), "the tier was not saved");
 	assert_eq!(st.preview_dither_bits, PreviewDefaults::dither_bits_of(PreviewTier::High));
+	assert!(!st.show_startup, "the launch display was not turned off");
 }
 
 #[test]
