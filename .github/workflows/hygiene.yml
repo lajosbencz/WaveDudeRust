@@ -1,17 +1,18 @@
 name: Hygiene
 
-# Spelling and the dependency policy: seconds, no build, so every change runs them, docs included.
+# Spelling and the dependency policy: seconds, no build, so every change runs them, docs included; the queue again on
+# the tree that lands.
 on:
-  push:
-    branches: [master, main]
   pull_request:
+  merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
   group: hygiene-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
 
 jobs:
   typos:

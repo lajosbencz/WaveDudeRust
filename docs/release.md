@@ -4,7 +4,7 @@ Decision 0011 says why; this is how.
 
 ## Day to day
 
-Commit with conventional commits (`feat:`, `fix:`, `chore:` ...). After each push to the default branch,
+Commit with conventional commits (`feat:`, `fix:`, `chore:` ...). After each merge to the default branch,
 git-cliff ([`cliff.toml`](../cliff.toml)) reads the commits since the last `v*` tag. If any ships something (`feat`, `fix`, `perf`,
 `refactor`, `revert`, dependency updates as `fix(deps)` or `chore(deps)`; not `ci`, `docs`, `test`, `style`, `build`
 or other `chore`), the workflow keeps one pull request "chore(release): v<next>" open on the branch `release-pr`: the
@@ -23,9 +23,9 @@ stops the release), appends the provenance table to the notes (file, digest, wor
 which the repository's immutable releases then lock; GitHub's own release attestation follows, checked with
 `gh release verify-asset`.
 
-Everything runs on the workflow's own `GITHUB_TOKEN`. A pull request opened with it starts its CI only after someone
-approves the waiting runs on the PR page ("Approve workflows to run"); once approved, later updates of the same PR
-run without asking. The required checks come from those runs alone, so each new release PR needs that one approval.
+Everything runs on the workflow's own `GITHUB_TOKEN`, whose pushes and pull requests start no workflow; after each
+rebuild of the release PR the workflow dispatches CI and hygiene on its branch, which report the required checks on
+its head commit. Merging it goes through the merge queue like any pull request.
 
 A failed release is finished by rerunning the failed jobs of its run: tagging and drafting skip what exists. The
 release stays a draft until `publish` succeeds.
@@ -58,16 +58,18 @@ for it (each names the versions of the others it uses, which the release PR keep
 `-p wavedude-view` and `-p wavedude-export` in that order, with the repository as their trusted
 publisher (crates.io > crate > Settings > Trusted Publishing; a token only for each crate's first publish).
 
-- Settings > Pages: source GitHub Actions. The environment `github-pages` (Settings > Environments, created by the first
-  deployment) admits the default branch alone.
+- Settings > Pages: source GitHub Actions; [`pages.yml`](../.github/workflows/pages.yml) deploys from the default
+  branch. The environment `github-pages` (Settings > Environments, created by the first deployment) admits the
+  default branch alone.
 - Settings > General: immutable releases on (`gh api -X PUT repos/<owner>/<repo>/immutable-releases`); squash
   merging only, its commit titled by the pull request's title (git-cliff reads conventional commits); allow
   auto-merge; delete head branches; no wiki.
-- Settings > Rules: a ruleset on the default branch requiring the CI jobs (`ubuntu-latest`, `windows-latest`,
-  `macos-latest`, `MSRV`) and cargo deny (`Dependencies`) and refusing deletion and force pushes; a ruleset on `v*` tags refusing update and deletion
-  (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and the release job tags
-  through it).
-  Administrators bypass both.
+- Settings > Rules: a ruleset on the default branch requiring a pull request and the merge queue (squash, all
+  entries green), the CI jobs (`ubuntu-latest`, `windows-latest`, `macos-latest`, `MSRV`) and cargo deny
+  (`Dependencies`), and refusing deletion and force pushes, with no bypass; pull requests run Linux and skip the
+  others (a skipped job passes), the queue runs them all on the tree that lands. A ruleset on `v*` tags refusing
+  update and deletion (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and the
+  release job tags through it); administrators bypass it.
 - Settings > Actions > General: actions pinned to a full commit hash; approval before running workflows from every
   outside contributor; the workflow token read-only by default, allowed to create pull requests (the release PR).
 - Settings > Advanced Security: Dependabot alerts and security updates, secret scanning with push protection, private

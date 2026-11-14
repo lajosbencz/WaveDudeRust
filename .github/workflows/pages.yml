@@ -1,15 +1,24 @@
-# Deploys site/ to GitHub Pages with the browser app under app/; called by release.yml after a release is published,
-# or run by hand. No cache: the output runs in visitors' browsers.
+# Deploys site/ to GitHub Pages with the browser app under app/ from every master commit that changes either, or by
+# hand. No cache: the output runs in visitors' browsers.
 name: Pages
 
 on:
-  workflow_call:
+  push:
+    branches: [master, main]
+    paths:
+      - "crates/**"
+      - "site/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+      - "tools/build-web.sh"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# One deployment at a time; a running one finishes.
+# One deployment at a time; a running one finishes, a newer pending one replaces the older.
 concurrency:
   group: pages
   cancel-in-progress: false

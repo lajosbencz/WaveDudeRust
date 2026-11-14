@@ -40,8 +40,8 @@ application's state, and an engine package must not carry fifty-three projects n
 - `demo/` is a static page of ES modules, no bundler and no npm: `demo/build.sh` builds the package, runs
   `wasm-bindgen --target web`, writes the examples and copies the page. It refuses a wasm-bindgen CLI whose version
   differs from the crate's in `Cargo.lock`.
-- [`pages.yml`](../../.github/workflows/pages.yml) builds the site and deploys it to GitHub Pages. `release.yml` calls it after `publish`, so the demo
-  shows the latest release; it can also be run by hand. The build has no cache, like the packages: its output runs in
+- [`pages.yml`](../../.github/workflows/pages.yml) builds the site and deploys it to GitHub Pages on every master commit that changes the
+  app or the site, so the demo shows master; it can also be run by hand. The build has no cache, like the packages: its output runs in
   visitors' browsers. A pull request's CI builds neither the page nor the site; the wasm32 job lints the package.
 
 ## Consequences

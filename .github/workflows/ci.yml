@@ -1,36 +1,27 @@
 name: CI
 
-# Changes to files no step here reads skip the run: a pull request touching nothing else shows its checks
-# pending, and an administrator merges it.
+# Pull requests (and the release PR's dispatch from release.yml) run Linux; the merge queue runs every platform on the
+# tree that lands, so master is never tested again. A push to master that changes what the caches are keyed on only
+# compiles, saving the caches pull requests and the queue restore (they never save).
 on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
   push:
     branches: [master, main]
-    paths-ignore: &docs
-      - "docs/**"
-      - "*.md"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE.md"
-      - ".github/dependabot.yml"
-      - ".github/workflows/release.yml"
-      - ".github/workflows/package.yml"
-      - ".github/workflows/hygiene.yml"
-      - ".github/workflows/pages.yml"
-      - "cliff.toml"
-      - "deny.toml"
-      - "_typos.toml"
-      - ".gitignore"
-      - "tools/**"
-      - "site/**"
-  pull_request:
-    paths-ignore: *docs
+    paths:
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - "rust-toolchain.toml"
+      - ".github/workflows/ci.yml"
 
 permissions:
   contents: read
 
-# A newer commit on the same pull request or branch cancels the run it supersedes.
+# A newer commit on the same pull request or branch cancels the run it supersedes; a queue entry's run never.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -43,14 +34,37 @@ env:
   CARGO_PROFILE_TEST_DEBUG: line-tables-only
 
 jobs:
-  test:
-    name: ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+  # Whether a pull request or queue entry touches anything a job here reads. A skipped job passes as a required check,
+  # so a failure here runs everything.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          DOCS: >-
+            ^(docs/|[^/]+\.md$|\.github/(ISSUE_TEMPLATE/|PULL_REQUEST_TEMPLATE\.md$|dependabot\.yml$|workflows/(release|package|hygiene|pages|dependabot-automerge)\.yml$)|cliff\.toml$|deny\.toml$|_typos\.toml$|\.gitignore$|tools/(compare-csharp/|build-web\.sh$)|site/)
+        # Both events check out a commit on top of its base: the merge of the pull request, the queue's squash.
+        run: |
+          code=true
+          if [ "$EVENT" = pull_request ] || [ "$EVENT" = merge_group ]; then
+            git diff --name-only HEAD^1 HEAD | grep -qvE "$DOCS" || code=false
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+  ubuntu:
+    name: ubuntu-latest
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    steps: &test
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -59,10 +73,7 @@ jobs:
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only the default branch saves (pull requests restore its cache), so the 10 GB limit keeps the useful ones;
-          # a failing test does not cost the next run its build.
-          save-if: ${{ github.ref_name == github.event.repository.default_branch }}
-          cache-on-failure: true
+          save-if: ${{ github.event_name == 'push' }}
       # The export tests decode what they wrote with ffmpeg (the programs never need it). A pinned static build,
       # checked against its published digest and cached; the distribution's package pulled in 128 others.
       - name: ffmpeg for the export tests
@@ -82,35 +93,55 @@ jobs:
         run: echo "$HOME/ffmpeg" >> "$GITHUB_PATH"
       # The GPU tests run on any adapter and skip without one; Mesa's software Vulkan driver gives the runner one.
       - name: Vulkan driver for the GPU tests
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && github.event_name != 'push'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
       - name: Format
+        if: github.event_name != 'push'
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets --features wavedude-export/openh264-source,wavedude-cli/openh264-source -- -D warnings
       - name: Test
-        run: cargo test --workspace --no-fail-fast --features wavedude-export/openh264-source,wavedude-cli/openh264-source
-      - if: runner.os == 'Linux'
+        run: >-
+          cargo test --workspace --no-fail-fast --features wavedude-export/openh264-source,wavedude-cli/openh264-source
+          ${{ github.event_name == 'push' && '--no-run' || '' }}
+      - if: runner.os == 'Linux' && github.event_name != 'push'
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-hack@0.6.46,cargo-machete@0.9.2
       # Every feature combination of every crate compiles; checking is the proof, codegen and linking add nothing.
       - name: Feature checks
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && github.event_name != 'push'
         run: cargo hack check --workspace --feature-powerset --depth 2
       - name: Unused dependencies
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && github.event_name != 'push'
         run: cargo machete
       - name: Docs
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && github.event_name != 'push'
         run: cargo doc --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
 
+  # Pull requests skip these (passing the required checks there); the queue runs them.
+  windows:
+    name: windows-latest
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && contains(fromJSON('["merge_group", "push"]'), github.event_name) }}
+    runs-on: windows-latest
+    steps: *test
+
+  macos:
+    name: macos-latest
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && contains(fromJSON('["merge_group", "push"]'), github.event_name) }}
+    runs-on: macos-latest
+    steps: *test
+
   msrv:
     name: MSRV
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -123,10 +154,7 @@ jobs:
           echo "MSRV=$msrv" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Only the default branch saves (pull requests restore its cache), so the 10 GB limit keeps the useful ones;
-          # a failing test does not cost the next run its build.
-          save-if: ${{ github.ref_name == github.event.repository.default_branch }}
-          cache-on-failure: true
+          save-if: ${{ github.event_name == 'push' }}
       - name: Check
         run: cargo +"$MSRV" check --workspace --all-targets
 
@@ -135,6 +163,8 @@ jobs:
   # docs/decisions/0016-gpu-engine-in-the-browser.md, tools/clippy-wasm32/clippy.toml).
   wasm32:
     name: wasm32
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     env:
       CLIPPY_CONF_DIR: tools/clippy-wasm32
@@ -148,8 +178,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ github.ref_name == github.event.repository.default_branch }}
-          cache-on-failure: true
+          save-if: ${{ github.event_name == 'push' }}
       - name: Clippy
         run: cargo clippy -p wavedude-core --no-default-features --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy with the GPU engine
@@ -171,7 +200,7 @@ jobs:
   # dependency bump would leave a generation behind until the 10 GB allowance evicts it.
   caches:
     name: Prune caches
-    needs: [test, msrv, wasm32]
+    needs: [ubuntu, windows, macos, msrv, wasm32]
     if: always() && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

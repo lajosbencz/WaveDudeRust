@@ -48,7 +48,7 @@ overlay with an executor of their own.
 - One code path for both targets; a target difference is a compile error on the other side until both modules
   have it.
 - The browser app is built by [`tools/build-web.sh`](../../tools/build-web.sh) and deployed to GitHub Pages by
-  [`pages.yml`](../../.github/workflows/pages.yml) after a release.
+  [`pages.yml`](../../.github/workflows/pages.yml) from master.
 - No Skia: no prebuilt download per target and no build from source where none exists.
 - An export's overlays need no GPU and are the same bytes on every machine.
 - The look follows WaveDude Next's box model through egui's visuals and the app's own widgets
