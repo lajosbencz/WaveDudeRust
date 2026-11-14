@@ -1,7 +1,8 @@
 ---
 source: crates/wavedude-export/tests/raster.rs
+assertion_line: 140
 expression: "prints.join(\"\\n\")"
 ---
-9dc5b6b75a0c670e
-7bf4cd42c3c9bea8
-4b0bf9ed8e1fc172
+86e82480fb2fcf8b
+0aab56aa0a4b5073
+9a67f4be012f99d6

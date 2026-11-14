@@ -11,6 +11,7 @@ use eframe::egui::{Color32, Mesh, Pos2, Rect, Shape, Stroke, Ui, pos2, vec2};
 use kurbo::{BezPath, PathEl};
 use wavedude_app_state::commands::NewPart;
 use wavedude_core::model::{GateKind, Lens, Part, PartKind};
+use wavedude_view::draw::closed_line;
 
 /// A drawing: a stroked path, a filled one, or both.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -246,7 +247,7 @@ impl ComputerMut<Placed, Arc<Mesh>> for Placer {
 		let stroke = Stroke::new(scale, placed.color);
 		for (points, closed) in &flat.strokes {
 			let points = place(points);
-			let shape = if *closed { Shape::closed_line(points, stroke) } else { Shape::line(points, stroke) };
+			let shape = if *closed { closed_line(points, stroke) } else { Shape::line(points, stroke) };
 			tessellator.tessellate_shape(shape, &mut mesh);
 		}
 		Arc::new(mesh)

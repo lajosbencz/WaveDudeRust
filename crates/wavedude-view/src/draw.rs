@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use epaint::text::{FontId, FontsView, Galley};
-use epaint::{Color32, Pos2, Rect, Shape, Stroke, TextShape, pos2, vec2};
+use epaint::{Color32, PathStroke, Pos2, Rect, Shape, Stroke, TextShape, pos2, vec2};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, HintingInstance, OutlinePen, SmoothMode, Target};
 use skrifa::{FontRef, MetadataProvider};
@@ -212,12 +212,37 @@ pub fn haloed_text(
 	let stroke = Stroke::new(halo.width, halo.color);
 	let offset = pos.to_vec2();
 	out.extend(
-		outlines
-			.contours(&galley, size)
-			.iter()
-			.map(|c| Shape::closed_line(c.iter().map(|&p| p + offset).collect(), stroke)),
+		outlines.contours(&galley, size).iter().map(|c| closed_line(c.iter().map(|&p| p + offset).collect(), stroke)),
 	);
 	out.push(TextShape::new(pos, galley, color).with_override_text_color(color).into());
+}
+
+/// How far from a corner sharper than a right angle [`closed_line`] cuts it, points.
+const CORNER_CUT: f32 = 0.01;
+
+/// A closed line through `points` whose corners sharper than a right angle are cut, as epaint cuts those of an
+/// open line; epaint mitres a closed line's corners without a limit, so a fold-back or a near-duplicate point of
+/// a hinted glyph outline strokes into a long spike (egui issue 1226).
+pub fn closed_line(mut points: Vec<Pos2>, stroke: impl Into<PathStroke>) -> Shape {
+	points.dedup();
+	while points.len() > 1 && points.first() == points.last() {
+		points.pop();
+	}
+	let n = points.len();
+	if n < 3 {
+		return Shape::closed_line(points, stroke);
+	}
+	let mut cut = Vec::with_capacity(n * 2);
+	for (i, &p) in points.iter().enumerate() {
+		let (into, out) = (p - points[(i + n - 1) % n], points[(i + 1) % n] - p);
+		if into.normalized().dot(out.normalized()) < 0. {
+			let e = CORNER_CUT.min(into.length() / 2.).min(out.length() / 2.);
+			cut.extend([p - into.normalized() * e, p + out.normalized() * e]);
+		} else {
+			cut.push(p);
+		}
+	}
+	Shape::closed_line(cut, stroke)
 }
 
 /// An element's logical pixels (points) mapped onto whole device pixels: `scale` device pixels per point, the
@@ -284,8 +309,57 @@ impl DeviceGrid {
 #[cfg(test)]
 mod tests {
 	use epaint::text::{Fonts, TextOptions};
+	use epaint::{Mesh, TessellationOptions, Tessellator};
 
 	use super::*;
+
+	/// How far the tessellated `shapes` reach past `bounds`, points.
+	fn overshoot(shapes: &[Shape], bounds: Rect, pixels_per_point: f32) -> f32 {
+		let mut tessellator = Tessellator::new(pixels_per_point, TessellationOptions::default(), [1, 1], Vec::new());
+		let mut mesh = Mesh::default();
+		for s in shapes {
+			tessellator.tessellate_shape(s.clone(), &mut mesh);
+		}
+		mesh.vertices
+			.iter()
+			.map(|v| {
+				(bounds.min.x - v.pos.x)
+					.max(v.pos.x - bounds.max.x)
+					.max(bounds.min.y - v.pos.y)
+					.max(v.pos.y - bounds.max.y)
+			})
+			.fold(0., f32::max)
+	}
+
+	#[test]
+	fn a_closed_line_folding_back_strokes_no_spike() {
+		let fold = vec![pos2(0., 0.), pos2(10., 0.), pos2(10., 10.), pos2(10., 4.), pos2(10.001, 4.), pos2(0., 10.)];
+		let bounds = Rect::from_points(&fold);
+		let mitred = overshoot(&[Shape::closed_line(fold.clone(), Stroke::new(3., Color32::BLACK))], bounds, 1.);
+		assert!(mitred > 6., "epaint mitres the fold without a limit: {mitred}");
+		let cut = overshoot(&[closed_line(fold, Stroke::new(3., Color32::BLACK))], bounds, 1.);
+		assert!(cut < 3., "{cut}");
+	}
+
+	#[test]
+	fn a_label_halo_stays_beside_its_glyphs_at_any_scale() {
+		let mut fonts = Fonts::new(TextOptions::default(), fonts::definitions());
+		for text in ["Lighthouse lens", "Mount upper", "Agy Wave Dude 0123456789"] {
+			for ppp in [1., 1.1, 1.25, 1.5, 1.75, 2., 3.] {
+				let galley = fonts.with_pixels_per_point(ppp).layout_no_wrap(
+					text.into(),
+					FontId::proportional(11.),
+					Color32::WHITE,
+				);
+				let (mut out, mut outlines) = (Vec::new(), Outlines::new(ppp));
+				let halo = Halo { color: Color32::BLACK, width: 3. };
+				haloed_text(&mut out, &mut outlines, pos2(100., 100.), galley.clone(), 11., Color32::WHITE, halo);
+				out.pop();
+				let reach = overshoot(&out, galley.mesh_bounds.translate(vec2(100., 100.)), ppp);
+				assert!(reach < 3., "{text} at {ppp}: {reach}");
+			}
+		}
+	}
 
 	#[test]
 	fn snapping_lands_on_pixel_centres() {

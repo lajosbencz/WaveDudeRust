@@ -12,7 +12,7 @@ use wavedude_core::engine::emitters::elements_of;
 use wavedude_core::model::{Edges, ItemKind, ItemRef, Layer, Part, PartKind, ProbeKind, Project, Scene};
 use wavedude_core::scene::shapes::{self, Frame, Vec2};
 
-use crate::draw::{DeviceGrid, Halo, Outlines, baseline, haloed_text};
+use crate::draw::{DeviceGrid, Halo, Outlines, baseline, closed_line, haloed_text};
 
 /// Screen distance of a lever beyond the item's reach, logical pixels.
 pub const LEVER_GAP: f32 = 24.;
@@ -387,11 +387,7 @@ pub fn shapes(
 	for outline in &model.outlines {
 		let points: Vec<Pos2> = outline.points.iter().map(|&p| s(p)).collect();
 		let path = |stroke: Stroke| {
-			if outline.closed {
-				Shape::closed_line(points.clone(), stroke)
-			} else {
-				Shape::line(points.clone(), stroke)
-			}
+			if outline.closed { closed_line(points.clone(), stroke) } else { Shape::line(points.clone(), stroke) }
 		};
 		out.push(path(Stroke::new(3., HALO)));
 		out.push(path(Stroke::new(1., SELECTED)));
