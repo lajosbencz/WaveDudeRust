@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use wavedude_core::quality::MachineFacts;
+use web_sys::wasm_bindgen::JsValue;
 
 use super::Instant;
 use crate::document::Target;
@@ -37,6 +38,15 @@ pub fn machine_facts() -> MachineFacts {
 	}
 }
 
+/// The JS error's name and message.
+pub(super) fn describe(e: &JsValue) -> String {
+	let field = |key: &str| js_sys::Reflect::get(e, &key.into()).ok().and_then(|v| v.as_string());
+	match (field("name"), field("message")) {
+		(Some(name), Some(message)) => format!("{name}: {message}"),
+		_ => format!("{e:?}"),
+	}
+}
+
 /// Never exists: a browser page cannot watch a file.
 #[derive(Debug)]
 pub enum FileWatch {}
@@ -62,7 +72,7 @@ impl FileWatch {
 /// The prefix of the store's keys in the page's local storage.
 const PREFIX: &str = "wavedude/";
 
-fn js_error(e: web_sys::wasm_bindgen::JsValue) -> std::io::Error {
+fn js_error(e: JsValue) -> std::io::Error {
 	std::io::Error::other(format!("{e:?}"))
 }
 

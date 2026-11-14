@@ -24,7 +24,8 @@ use web_sys::{
 };
 
 use super::queue::{Next, Queue};
-use super::session::{awaited, describe, folder, remove_entry, session, storage_error};
+use super::session::{awaited, folder, remove_entry, session, storage_error};
+use crate::platform::web::describe;
 
 /// Bytes queued and not written at which [`OutputFs::poll_ready`] holds the writer back.
 const IN_FLIGHT: u64 = 64 << 20;

@@ -34,8 +34,8 @@ where the export runs, how a file larger than memory reaches the user, and what 
   before replacing, as a download replaces nothing. The probe CSV, which uses the platform's save dialog on the desktop,
   asks for its name in the same box. Run exports are greyed with the reason when the browser has no OPFS; stills and
   the CSV still work.
-- MP4 is not yet available in the browser: OpenH264 does not run there. The plan is an encoder seam with the browser's
-  WebCodecs behind it and the MP4 muxer split from OpenH264.
+- MP4 goes through the browser's WebCodecs encoder behind the export crate's encoder seam, the MP4 muxer split from
+  OpenH264 (feature `mp4-mux`); [0005](0005-video-openh264.md), The browser, has the details.
 - The spool of an export is kept until the next export starts, so its download can be repeated; one that ends
   cancelled or failed is removed at once. Session folders whose tab is gone are removed at load
   ([0020](0020-browser-frame-spill-in-opfs.md)).
@@ -44,7 +44,8 @@ where the export runs, how a file larger than memory reaches the user, and what 
 
 ## Consequences
 
-- The browser writes stills, probe data, image sequences, and AVI, MOV and MPEG-1 videos; MP4 waits for WebCodecs.
+- The browser writes stills, probe data, image sequences, and MP4, AVI, MOV and MPEG-1 videos; MP4 needs a browser
+  with WebCodecs and an H.264 encoder for the export's size and frame rate.
 - An export needs free storage for its output in the origin's quota, besides the frames of the run.
 - Large outputs are bounded by the quota, not by memory.
 - The export steps on the page between frames, so it shares the page's time with the preview.

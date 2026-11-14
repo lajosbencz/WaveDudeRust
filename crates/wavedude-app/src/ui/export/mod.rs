@@ -336,13 +336,14 @@ impl ExportDialog {
 		if let Subject::Frames(choice) = &self.subject {
 			let formats = choice.formats();
 			let word = |i: usize| Cow::Borrowed(self.names[i].0.as_str());
+			let disabled = |i: usize| imp::unavailable(app, formats[i]).map(|key| s.get(key));
 			let choices = Choices {
 				len: formats.len(),
 				current: Some(self.format),
 				shown: &self.names[self.format].0,
 				word: &word,
 				swatch: None,
-				disabled: None,
+				disabled: Some(&disabled),
 				actions: &[],
 			};
 			if let Some(i) = combo(ui, Id::unique("ExportFormat"), title, &choices) {
@@ -363,7 +364,6 @@ impl ExportDialog {
 
 /// The H.264 profile row: every profile, those not in `supported` greyed with `reason`, which also shows below while
 /// the current one is among them; the profile picked.
-#[cfg_attr(target_arch = "wasm32", expect(dead_code, reason = "the browser's MP4 waits for WebCodecs"))]
 fn profile_row(ui: &mut Ui, s: &Strings, current: Profile, supported: &[Profile], reason: &str) -> Option<Profile> {
 	let label = s.get("ExportH264Profile");
 	let name = |p: Profile| {

@@ -7,6 +7,8 @@ mod native;
 mod opfs;
 #[cfg(target_arch = "wasm32")]
 mod web;
+#[cfg(any(target_arch = "wasm32", test))]
+mod webcodecs;
 
 #[cfg(not(target_arch = "wasm32"))]
 use native as imp;
@@ -23,3 +25,6 @@ pub use imp::{
 pub use opfs::{Opfs, Spool, SpoolReader};
 /// `std`'s clocks on native targets, the browser's on wasm32, where `std`'s panic.
 pub use web_time::{Duration, Instant, SystemTime};
+/// The browser's H.264 encoder for MP4 exports.
+#[cfg(target_arch = "wasm32")]
+pub use webcodecs::{Support as H264Support, WebCodecsFactory, support as h264_support};

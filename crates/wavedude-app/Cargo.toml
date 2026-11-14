@@ -70,6 +70,8 @@ winit = { version = "0.30", default-features = false }
 # through eframe's `web_sys`.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4"
+# MP4 muxed around the browser's H.264 encoder.
+wavedude-export = { path = "../wavedude-export", default-features = false, features = ["mp4-mux"] }
 
 # The Finder's open requests (src/open_requests.rs).
 [target.'cfg(target_os = "macos")'.dependencies]

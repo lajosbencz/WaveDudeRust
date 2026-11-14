@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use eframe::egui::{self, Id, RichText, Ui};
 use wavedude_app_state::Event;
-use wavedude_app_state::platform::Spool;
+use wavedude_app_state::platform::{H264Support, Spool};
 use wavedude_export::ExportFormat;
 
 use super::super::modal::{Modal, Modals};
@@ -105,18 +105,45 @@ impl ExportDialog {
 		typed_name(&self.path, self.extension())
 	}
 
-	/// Why the export cannot start in the browser: MP4, or a run's export without the private file system to spool
-	/// it in; whether it can.
-	pub(super) fn notes(&mut self, ui: &mut Ui, app: &App, _: &mut Vec<Event>) -> bool {
+	/// The H.264 profile row of MP4, or why the export cannot start in the browser: a run's export without the private
+	/// file system to spool it in, MP4 without an encoder; whether it can. The browser is asked which profiles it
+	/// encodes as the dialog opens, whatever the format.
+	pub(super) fn notes(&mut self, ui: &mut Ui, app: &App, out: &mut Vec<Event>) -> bool {
+		let s = &app.strings;
 		let reason = match &self.subject {
-			Subject::Frames(_) if self.format() == Some(ExportFormat::Mp4) => Some("ExportNotInBrowser"),
 			Subject::Frames(choice) if !choice.is_still() && Spool::available().is_err() => Some("ExportNeedsStorage"),
+			Subject::Frames(choice) if !choice.is_still() => match export::h264_support(&app.document.project) {
+				_ if self.format() != Some(ExportFormat::Mp4) => None,
+				H264Support::Profiles(profiles) if !profiles.is_empty() => {
+					let (current, reason) = (app.settings.h264_profile, s.get("ExportH264NotInBrowser"));
+					if let Some(profile) = super::profile_row(ui, s, current, &profiles, reason) {
+						out.push(Event::SetH264Profile(profile));
+					}
+					None
+				}
+				H264Support::Probing => Some("ExportH264Probing"),
+				support => mp4_unavailable(&support),
+			},
 			_ => None,
 		};
 		if let Some(key) = reason {
 			let dim = Palette::of(ui.ctx().theme()).text_dim;
-			ui.add(egui::Label::new(RichText::new(app.strings.get(key)).color(dim)).wrap());
+			ui.add(egui::Label::new(RichText::new(s.get(key)).color(dim)).wrap());
 		}
 		reason.is_none()
 	}
+}
+
+/// Why MP4 cannot be exported with `support`.
+fn mp4_unavailable(support: &H264Support) -> Option<&'static str> {
+	match support {
+		H264Support::Unavailable => Some("ExportNoWebCodecs"),
+		H264Support::Profiles(profiles) if profiles.is_empty() => Some("ExportH264NoProfile"),
+		H264Support::Probing | H264Support::Profiles(_) => None,
+	}
+}
+
+/// Why `format` cannot be picked, a string key: MP4 when the browser has no H.264 encoder for the project's videos.
+pub(super) fn unavailable(app: &App, format: ExportFormat) -> Option<&'static str> {
+	(format == ExportFormat::Mp4).then(|| mp4_unavailable(&export::h264_support(&app.document.project))).flatten()
 }

@@ -114,8 +114,12 @@ Browser differences (decision 0025):
   added when it has none. There is no "..." button, no start folder and no question before replacing, as a
   download replaces nothing. The probe CSV, which uses the platform's save dialog on the desktop, opens this dialog for its
   name too.
-- MP4 stays selectable but the dialog shows "MP4 is not yet available in the browser." and OK is disabled. A run's
-  export (not a still) shows "This browser has no private file storage to write the export to; frames and probe data
+- MP4 encodes with the browser's WebCodecs encoder: no Cisco notice, no check box. As the dialog opens the browser
+  is asked which H.264 profiles it encodes at the project's canvas size and frame rate; meanwhile MP4 shows "Asking
+  the browser which H.264 profiles it encodes..." and OK is disabled. "H.264 profile" then greys the profiles it
+  lacks, their tooltip and the line below "not supported by this browser". MP4 itself is greyed in the format list,
+  and shows its reason with OK disabled when chosen: "This browser has no video encoder (WebCodecs)." or "This
+  browser encodes no H.264 profile at this picture size and frame rate." A run's export (not a still) shows "This browser has no private file storage to write the export to; frames and probe data
   still export." and is disabled when the browser has no OPFS. A still and the CSV do not need it.
 - The export is stepped on the page; the status bar shows "Exporting n / N frames", and "Export: packing the
   archive" while two videos are packed into their ZIP. Esc cancels as on the desktop.

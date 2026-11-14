@@ -82,7 +82,8 @@ to enable it and the app downloads it at the first MP4 export, the CLI on
 `wavedude-cli openh264 enable`; both share the choice ([decision 0005](docs/decisions/0005-video-openh264.md)). The `openh264-source`
 feature compiles OpenH264 in for development and tests; a build made with it
 must not be distributed without an H.264 patent licence. `wavedude-export` and
-`wavedude-cli` build without MP4 through `--no-default-features`.
+`wavedude-cli` build without MP4 through `--no-default-features`. The browser build
+encodes MP4 with the browser's own WebCodecs encoder and downloads nothing.
 
 ## Documentation and contributing
 

@@ -210,6 +210,11 @@ impl ExportDialog {
 	}
 }
 
+/// Why `format` cannot be picked, a string key: never, as OpenH264's use is asked for in the dialog.
+pub(super) fn unavailable(_: &App, _: ExportFormat) -> Option<&'static str> {
+	None
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

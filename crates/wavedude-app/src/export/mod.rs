@@ -12,7 +12,7 @@ mod web;
 #[cfg(not(target_arch = "wasm32"))]
 pub use native::{fetches_codec, run, would_replace};
 #[cfg(target_arch = "wasm32")]
-pub use web::{Runner, Started, Status, start};
+pub use web::{Runner, Started, Status, h264_support, start};
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::cell::Cell;

@@ -6,7 +6,7 @@ Order (dialog filter order): Mp4, Mpeg1, Avi, Mov, MovPng, Png, Jpeg, Exr, ExrRo
 
 | Format | Kind | Extensions | Still | Notes |
 |---|---|---|---|---|
-| Mp4 | video | mp4, m4v | no | H.264 via Media Foundation (Windows only); Rust: Cisco's OpenH264 (decision 0005) |
+| Mp4 | video | mp4, m4v | no | H.264 via Media Foundation (Windows only); Rust: Cisco's OpenH264, in the browser WebCodecs (decision 0005) |
 | Mpeg1 | video | mpg, mpeg, m1v | no | in-house, I-frames only |
 | Avi | video | avi | no | uncompressed 24-bit, OpenDML |
 | Mov | video | mov, qt | no | QuickTime Animation (`rle `) |
@@ -155,9 +155,17 @@ Label font: see "Burned-in overlays" below.
   `poll_flushed`); the sink passes this on as `FrameSink::poll_ready` and `poll_finish`, which the job polls
   before writing a frame and before finishing (not after a cancel). Natively the encoder is OpenH264 (feature
   `mp4`, decision 0005), Cisco's binary loaded at run time (`OpenH264Factory`, the path from
-  `wavedude_export::h264::library`); without one the export fails with `H264Missing`.
+  `wavedude_export::h264::library`); without one the export fails with `H264Missing`. In the browser it is
+  WebCodecs' `VideoEncoder` (`wavedude_app_state::platform::WebCodecsFactory`, decision 0005): codec string
+  `avc1.42E0LL` (Baseline), `4D00LL` (Main) or `6400LL` (High) at the lowest level `LL` of Table A-1 whose MaxFS,
+  MaxMBPS and side limit hold the size and frame rate, `avc: {format: "annexb"}`, the bitrate above,
+  `bitrateMode: "variable"`, `latencyMode: "quality"`, `hardwareAcceleration: "no-preference"`; a key frame every
+  fps pictures; I420 frames at `index / fps` s, colour space `smpte170m` limited range. At most 6 pictures are in
+  the encoder: `poll_ready` is pending above that. A picture coming out other than next (dropped or reordered)
+  fails the export, as does the encoder's error callback.
 - Profile: `ExportPlan::h264_profile` (Baseline, Main or High), the app's `H264Profile` setting; when the encoder
-  lacks it, its best profile is used and a warning logged. OpenH264 encodes Constrained Baseline only.
+  lacks it, its best profile is used and a warning logged. OpenH264 encodes Constrained Baseline only; the browser
+  the profiles `VideoEncoder.isConfigSupported` accepts at the export's size and frame rate.
 
 ## OpenEXR (`Export/ExrWriter.cs`)
 

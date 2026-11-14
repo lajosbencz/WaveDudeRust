@@ -12,6 +12,8 @@ use web_sys::{
 	FileSystemDirectoryHandle, FileSystemGetDirectoryOptions, FileSystemRemoveOptions, LockOptions, StorageEstimate,
 };
 
+use crate::platform::web::describe;
+
 const ROOT: &str = "wavedude-spill";
 const LOCK_PREFIX: &str = "wavedude-spill-";
 
@@ -23,15 +25,6 @@ thread_local! {
 /// This tab's session folder; `None` before the start made it or when it failed.
 pub(super) fn session() -> Option<FileSystemDirectoryHandle> {
 	SESSION.with(|s| s.get().cloned())
-}
-
-/// The JS error's name and message.
-pub(super) fn describe(e: &JsValue) -> String {
-	let field = |key: &str| Reflect::get(e, &key.into()).ok().and_then(|v| v.as_string());
-	match (field("name"), field("message")) {
-		(Some(name), Some(message)) => format!("{name}: {message}"),
-		_ => format!("{e:?}"),
-	}
 }
 
 /// A failed storage operation; a full quota as [`io::ErrorKind::QuotaExceeded`], a missing entry as

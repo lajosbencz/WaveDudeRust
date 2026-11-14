@@ -8,11 +8,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use wasm_bindgen_futures::spawn_local;
 use wavedude_app_state::document::Target;
-use wavedude_app_state::platform::{self, Duration, Spool, SystemTime};
+use wavedude_app_state::platform::{self, Duration, H264Support, Spool, SystemTime, WebCodecsFactory};
+use wavedude_core::model::Project;
 use wavedude_core::run::Token;
 use wavedude_export::fs::zip::UtcDateTime;
 use wavedude_export::fs::{MemFs, OutputFs, ZipFs};
-use wavedude_export::{ExportJob, ExportState, Step};
+use wavedude_export::{ExportFormat, ExportJob, ExportState, Step};
 
 use super::delivery::Delivery;
 use super::{Outcome, Plan, Work};
@@ -90,10 +91,26 @@ pub fn start(work: &Work, plan: Plan, cancel: Arc<AtomicBool>) -> Result<Started
 		}
 		Delivery::Video(_) | Delivery::Videos { .. } => (spool.insert(new_spool()?).clone(), Out::Spool),
 	};
-	let job = work.export_plan(choice, format, path, frame, fs).build_job(work.store.clone(), &work.schemes);
-	let job = job.map_err(|e| e.to_string())?;
+	let mut plan = work.export_plan(choice, format, path, frame, fs);
+	if format == ExportFormat::Mp4 {
+		let (width, height, fps) = video_format(&work.project);
+		plan.h264 = Some(Arc::new(WebCodecsFactory::new(width, height, fps)));
+	}
+	let job = plan.build_job(work.store.clone(), &work.schemes).map_err(|e| e.to_string())?;
 	let frames = job.progress();
 	Ok(Started::Running(Runner { delivery, phase: Phase::Stepping(Box::new(job), out), spool, cancel, frames }))
+}
+
+/// The picture size and rate of `project`'s videos: its canvas, which an export's full-quality run keeps.
+fn video_format(project: &Project) -> (u32, u32, u32) {
+	let (width, height) = project.canvas_size();
+	(width, height, project.display.video.fps)
+}
+
+/// The H.264 profiles the browser encodes for `project`'s MP4, asked the first time.
+pub fn h264_support(project: &Project) -> H264Support {
+	let (width, height, fps) = video_format(project);
+	platform::h264_support(width, height, fps)
 }
 
 fn new_spool() -> Result<Arc<Spool>, String> {
