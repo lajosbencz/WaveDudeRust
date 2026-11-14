@@ -85,6 +85,11 @@ pub trait WaveEngine: MaybeSend {
 	fn capture_capacity(&self, _shape: &FrameShape) -> usize {
 		2
 	}
+	/// Submits the work recorded so far, so the readbacks of the captures begun are on their way; for a caller about
+	/// to await one.
+	fn submit_pending(&mut self) -> Result<(), EngineError> {
+		Ok(())
+	}
 	/// The frame of a capture this engine began.
 	fn finish_capture(&mut self, pending: PendingCapture) -> Result<Snapshot, EngineError>;
 	/// A capture now, into new planes.

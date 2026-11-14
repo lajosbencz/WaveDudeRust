@@ -353,11 +353,13 @@ fn step_loop(
 			debug_assert!(captured < store.capacity(), "more captures than the store holds");
 			let next = engine.begin_capture(&spec.shape, store.next_buffer())?;
 			captured += 1;
-			if let Some(previous) = pending.replace(next)
-				&& tx.send(engine.finish_capture(previous)?).is_err()
-			{
-				completed = false;
-				break;
+			if let Some(previous) = pending.replace(next) {
+				// The card runs the new capture while the previous one is copied out.
+				engine.submit_pending()?;
+				if tx.send(engine.finish_capture(previous)?).is_err() {
+					completed = false;
+					break;
+				}
 			}
 		}
 		if last_beat.elapsed() >= HEARTBEAT {

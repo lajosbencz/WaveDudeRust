@@ -488,6 +488,9 @@ fn a_capture_is_ready_once_the_map_completes() {
 	let pending = gpu.begin_capture(&shape, Snapshot::new(shape)).unwrap();
 	let mut ready = std::pin::pin!(pending.ready());
 	let mut cx = Context::from_waker(Waker::noop());
+	ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+	assert_eq!(ready.as_mut().poll(&mut cx), Poll::Pending, "recorded, not submitted");
+	gpu.submit_pending().unwrap();
 	assert_eq!(ready.as_mut().poll(&mut cx), Poll::Pending, "the callback runs when the device is polled");
 	ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 	assert_eq!(ready.as_mut().poll(&mut cx), Poll::Ready(()));
