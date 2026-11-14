@@ -68,8 +68,8 @@ pub trait WaveEngine: MaybeSend {
 	/// Queues a reading of the probe cells after the last step; the way to record every step, as an engine
 	/// that batches its steps reads a batch's readings back together.
 	fn queue_probes(&mut self) -> Result<(), EngineError>;
-	/// Starts reading back the readings queued so far, which the result covers; several readbacks may be in
-	/// flight.
+	/// Reads back the readings queued so far, which the result covers, with the engine's next submission
+	/// ([`submit_pending`](Self::submit_pending)); several readbacks may be in flight.
 	fn pending_probes(&mut self) -> Result<PendingProbes, EngineError>;
 	/// Calls `f` with each reading `pending` covers not handed out yet, oldest first; one queued after `pending`
 	/// was taken stays for a later token's drain, one dropped by `reset` or `set_probes` is not handed out.
@@ -85,8 +85,8 @@ pub trait WaveEngine: MaybeSend {
 	fn capture_capacity(&self, _shape: &FrameShape) -> usize {
 		2
 	}
-	/// Submits the work recorded so far, so the readbacks of the captures begun are on their way; for a caller about
-	/// to await one.
+	/// Submits the work recorded so far, so the readbacks of the captures begun and of the probe readings pending
+	/// are on their way; for a caller about to await one.
 	fn submit_pending(&mut self) -> Result<(), EngineError> {
 		Ok(())
 	}

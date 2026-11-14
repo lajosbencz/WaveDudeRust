@@ -31,10 +31,12 @@
 //! a uniform buffer; the submission carrying it requests the mapping, and it is collected later, so the card
 //! converts and copies while the host steps on; `finish_capture` submits the batch of a capture still recorded.
 //! Once [`DeviceFrames`] are asked for, a capture also copies its planes into one of their slots, for render passes
-//! on the device (frames.rs). Queued probe readings go into a batch buffer of [`BATCH_STEPS`] readings; a full batch,
-//! and the partial one at `pending_probes`, is copied to a pooled readback buffer whose mapping is requested. At a
-//! full batch the mapped ones are collected into the host queue, which bounds the buffers in flight; natively the rest
-//! are waited for there too. `drain_probes` collects the batches its token covers and hands out those readings alone.
+//! on the device (frames.rs). Queued probe readings go into a batch buffer of [`BATCH_STEPS`] readings; at a full
+//! batch and at `pending_probes`, the copy of the readings not copied yet to a pooled readback buffer is recorded
+//! into the batch, behind those of the last readback while it is unsubmitted and has room, and the submission
+//! carrying it requests the mapping. At a full batch the mapped ones are collected into the host queue, which bounds
+//! the buffers in flight; natively the rest are submitted and waited for there too. `drain_probes` collects the
+//! batches its token covers, those still recorded submitted first, and hands out those readings alone.
 //! On wasm32 nothing can wait: call [`WaveEngine::submit_pending`], then await [`PendingCapture::ready`] before
 //! `finish_capture` and [`PendingProbes::ready`] before `drain_probes`, so the batches read back meanwhile;
 //! `sample_probes` and `prepare_frame` are unavailable there.
@@ -288,11 +290,14 @@ pub struct GpuEngine {
 	probe_out: wgpu::Buffer,
 	/// [`BATCH_STEPS`] readings of `probe_out`, queued on the device.
 	probe_batch: wgpu::Buffer,
-	/// Readings in `probe_batch` not read back yet.
+	/// Readings in `probe_batch` since it was last full.
 	probe_slots: u32,
+	/// Of `probe_slots`, those whose copy to a readback is recorded.
+	probe_copied: u32,
 	/// Free readback buffers of a full batch, for `probe_batch` or `probe_out` alone.
 	probe_pool: Vec<Readback>,
-	/// Batches copied for readback, oldest first, with their reading counts.
+	/// Batches copied for readback, oldest first, with their reading counts; the last, while its copies are
+	/// recorded, takes the copies of later readings it has room for.
 	probe_reads: VecDeque<(Readback, u32)>,
 	probe_lengths: Vec<usize>,
 	probe_queue: ProbeQueue,
@@ -442,6 +447,7 @@ impl GpuEngine {
 			probe_out: empty("probe out"),
 			probe_batch: empty("probe batch"),
 			probe_slots: 0,
+			probe_copied: 0,
 			probe_pool: Vec::new(),
 			probe_reads: VecDeque::new(),
 			probe_lengths: Vec::new(),
@@ -763,7 +769,7 @@ impl GpuEngine {
 	}
 
 	/// Runs `record` on the pending encoder (or a new one), submits everything and requests the mappings of the
-	/// captures recorded.
+	/// captures and probe batches recorded.
 	fn submit(&mut self, record: impl FnOnce(&mut wgpu::CommandEncoder)) -> Result<wgpu::SubmissionIndex, GpuError> {
 		let mut encoder =
 			self.pending.take().unwrap_or_else(|| self.ctx.device.create_command_encoder(&Default::default()));
@@ -774,7 +780,8 @@ impl GpuEngine {
 		{
 			self.submissions += 1;
 		}
-		for readback in &mut self.captures {
+		let probes = self.probe_reads.iter_mut().map(|(r, _)| r);
+		for readback in self.captures.iter_mut().chain(probes) {
 			if matches!(readback.pending, Some(Fill::Recorded)) {
 				request_map(readback, index.clone());
 			}
@@ -969,7 +976,8 @@ impl WaveEngine for GpuEngine {
 	}
 
 	fn pending_probes(&mut self) -> Result<PendingProbes, EngineError> {
-		self.guarded(Self::read_back_probe_batch)?;
+		self.check()?;
+		self.record_probe_copy();
 		let on_host = self.probe_queue.end();
 		let batches = self
 			.probe_reads
@@ -1133,7 +1141,7 @@ impl GpuEngine {
 		self.pending = Some(encoder);
 		self.probe_slots += 1;
 		if self.probe_slots == BATCH_STEPS {
-			self.read_back_probe_batch()?;
+			self.record_probe_copy();
 			// wasm32 cannot wait.
 			self.collect_probe_batches(if cfg!(target_arch = "wasm32") { 0 } else { u64::MAX })?;
 		}
@@ -1151,32 +1159,56 @@ impl GpuEngine {
 	/// Drops the queued readings, those on the device included.
 	fn drop_probe_readings(&mut self) {
 		let in_flight: u64 = self.probe_reads.drain(..).map(|(_, steps)| u64::from(steps)).sum();
-		self.probe_queue.skip(in_flight + u64::from(self.probe_slots));
-		self.probe_slots = 0;
+		self.probe_queue.skip(in_flight + u64::from(self.probe_slots - self.probe_copied));
+		(self.probe_slots, self.probe_copied) = (0, 0);
 	}
 
-	/// Copies the readings in `probe_batch` to a readback buffer and requests its mapping.
-	fn read_back_probe_batch(&mut self) -> Result<(), GpuError> {
-		if self.probe_slots == 0 {
-			return Ok(());
+	/// Records the copy of the readings in `probe_batch` not copied yet behind those of the last batch, while it
+	/// is recorded and has room, else into a new one; the submission carrying it requests the mapping. The
+	/// commands recorded later, which reuse `probe_batch` once it is full, run after the copy.
+	fn record_probe_copy(&mut self) {
+		let new = self.probe_slots - self.probe_copied;
+		if new == 0 {
+			return;
 		}
-		let bytes = u64::from(self.params.probe_count) * 4 * u64::from(self.probe_slots);
-		let mut readback = self.probe_readback();
-		let (batch, target) = (self.probe_batch.clone(), readback.buffer.clone());
-		let index = self.submit(|encoder| encoder.copy_buffer_to_buffer(&batch, 0, &target, 0, bytes))?;
-		map(&mut readback, index);
-		self.probe_reads.push_back((readback, self.probe_slots));
-		self.probe_slots = 0;
-		Ok(())
+		let open = self
+			.probe_reads
+			.back()
+			.is_some_and(|(r, steps)| matches!(r.pending, Some(Fill::Recorded)) && steps + new <= BATCH_STEPS);
+		if !open {
+			let mut readback = self.probe_readback();
+			readback.mapped = MapState::default();
+			readback.pending = Some(Fill::Recorded);
+			self.probe_reads.push_back((readback, 0));
+		}
+		let bytes = u64::from(self.params.probe_count) * 4;
+		let (readback, steps) = self.probe_reads.back_mut().expect("a batch to copy into");
+		let encoder = self.pending.get_or_insert_with(|| self.ctx.device.create_command_encoder(&Default::default()));
+		encoder.copy_buffer_to_buffer(
+			&self.probe_batch,
+			u64::from(self.probe_copied) * bytes,
+			&readback.buffer,
+			u64::from(*steps) * bytes,
+			u64::from(new) * bytes,
+		);
+		*steps += new;
+		self.probe_copied = self.probe_slots;
+		if self.probe_slots == BATCH_STEPS {
+			(self.probe_slots, self.probe_copied) = (0, 0);
+		}
 	}
 
 	/// Moves the read-back batches into the host queue, oldest first: those mapped already, and those holding
-	/// readings numbered below `until`, waited for.
+	/// readings numbered below `until`, submitted and waited for.
 	fn collect_probe_batches(&mut self, until: u64) -> Result<(), GpuError> {
-		while let Some((readback, steps)) = self.probe_reads.front_mut() {
+		while let Some((readback, _)) = self.probe_reads.front() {
 			if self.probe_queue.end() >= until && readback.mapped.get().is_none() {
 				break;
 			}
+			if matches!(readback.pending, Some(Fill::Recorded)) {
+				self.flush()?;
+			}
+			let (readback, steps) = self.probe_reads.front_mut().expect("the batch to read");
 			wait_mapped(&self.ctx.device, readback)?;
 			{
 				let bytes = u64::from(*steps) * u64::from(self.params.probe_count) * 4;
@@ -1686,6 +1718,19 @@ mod tests {
 		}
 	}
 
+	/// Two probes, one of each layer.
+	fn probes() -> [ProbeCells; 2] {
+		[
+			ProbeCells { layer: Layer::Field, cells: vec![(30, 24), (10, 5), (33, 20)] },
+			ProbeCells { layer: Layer::Intensity, cells: vec![(31, 25)] },
+		]
+	}
+
+	/// Hands out the readings `pending` covers, appended to `into`.
+	fn drain(e: &mut GpuEngine, pending: PendingProbes, into: &mut Vec<ProbeReadings>) {
+		e.drain_probes(pending, &mut |r| into.push(r.clone())).unwrap();
+	}
+
 	fn steps(e: &mut GpuEngine, n: u32) {
 		for _ in 0..n {
 			e.advance_one_step().unwrap();
@@ -1714,6 +1759,88 @@ mod tests {
 		for p in pending {
 			e.finish_capture(p).unwrap();
 		}
+	}
+
+	#[test]
+	fn probe_readings_ride_the_batch_of_their_steps() {
+		let Some(mut e) = engine() else { return };
+		e.set_probes(&probes());
+		let shape = shape(1, SampleFormat::Index, 1.0);
+		let capacity = e.capture_capacity(&shape);
+		let before = e.submissions;
+		let (mut pending, mut tokens) = (VecDeque::new(), Vec::new());
+		let total = 4 * BATCH_STEPS;
+		for i in 0..total {
+			e.advance_one_step().unwrap();
+			e.queue_probes().unwrap();
+			if i % 2 == 0 {
+				if pending.len() == capacity {
+					e.finish_capture(pending.pop_front().unwrap()).unwrap();
+				}
+				pending.push_back(e.begin_capture(&shape, Snapshot::new(shape)).unwrap());
+				tokens.push(e.pending_probes().unwrap());
+			}
+		}
+		let submissions = e.submissions - before;
+		// Natively a full probe batch is also submitted, to be waited for.
+		let most = 2 * total / BATCH_STEPS + 1;
+		assert!(submissions <= most as usize, "{submissions} submissions for {total} steps");
+		for p in pending {
+			e.finish_capture(p).unwrap();
+		}
+		let mut readings = Vec::new();
+		for token in tokens {
+			drain(&mut e, token, &mut readings);
+		}
+		assert_eq!(readings.len(), total as usize - 1);
+	}
+
+	#[test]
+	fn probe_readings_drained_in_pieces_are_those_drained_whole_and_those_sampled() {
+		let (Some(mut pieces), Some(mut whole), Some(mut sampled)) = (engine(), engine(), engine()) else { return };
+		for e in [&mut pieces, &mut whole, &mut sampled] {
+			e.set_probes(&probes());
+		}
+		let total = 3 * BATCH_STEPS + 7;
+		let (mut tokens, mut drained) = (VecDeque::new(), Vec::new());
+		for i in 0..total {
+			pieces.advance_one_step().unwrap();
+			pieces.queue_probes().unwrap();
+			if i % 3 == 0 {
+				tokens.push_back(pieces.pending_probes().unwrap());
+			}
+			if i % 7 == 0
+				&& let Some(token) = tokens.pop_front()
+			{
+				drain(&mut pieces, token, &mut drained);
+			}
+			if i % 11 == 0 {
+				pieces.submit_pending().unwrap();
+			}
+		}
+		tokens.push_back(pieces.pending_probes().unwrap());
+		for token in tokens {
+			drain(&mut pieces, token, &mut drained);
+		}
+		let mut at_once = Vec::new();
+		for _ in 0..total {
+			whole.advance_one_step().unwrap();
+			whole.queue_probes().unwrap();
+		}
+		let token = whole.pending_probes().unwrap();
+		drain(&mut whole, token, &mut at_once);
+		let each: Vec<_> = (0..total)
+			.map(|_| {
+				sampled.advance_one_step().unwrap();
+				let mut r = ProbeReadings::default();
+				sampled.sample_probes(&mut r).unwrap();
+				r
+			})
+			.collect();
+		assert_eq!(each.len(), total as usize);
+		assert!(each.iter().any(|r| r.probe(0).iter().any(|&v| v != 0.0)), "the readings are blank");
+		assert!(drained == each, "the readings drained in pieces differ from those sampled");
+		assert!(at_once == each, "the readings drained whole differ from those sampled");
 	}
 
 	#[test]
