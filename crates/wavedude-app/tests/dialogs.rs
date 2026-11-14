@@ -231,6 +231,15 @@ fn about_copies_the_system_lines_toggles_the_license_and_closes_on_esc() {
 }
 
 #[test]
+fn the_welcome_page_entry_opens_the_startup_page() {
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = window(dir.path(), None, &[]);
+	assert!(harness.query_by_label("Welcome to WaveDude Rust").is_none(), "the page opened at launch");
+	menu(&mut harness, "File", "Welcome Page...");
+	harness.get_by_label("Welcome to WaveDude Rust");
+}
+
+#[test]
 fn examples_searches_every_topic_and_opens_the_chosen_example() {
 	let dir = tempfile::tempdir().unwrap();
 	let mut harness = window(dir.path(), None, &[]);

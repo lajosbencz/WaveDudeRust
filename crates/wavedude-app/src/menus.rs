@@ -74,6 +74,8 @@ pub enum MenuAction {
 	Recent(usize),
 	/// The Examples dialog.
 	Examples,
+	/// The startup page.
+	Welcome,
 	Save,
 	SaveAs,
 	Export(ExportKindChoice),

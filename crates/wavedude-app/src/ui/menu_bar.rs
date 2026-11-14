@@ -269,6 +269,7 @@ impl Menu<'_> {
 			});
 		}
 		self.item(ui, MenuAction::Examples, ICON_LIST_ALT, "MenuFileExamples", true);
+		self.item(ui, MenuAction::Welcome, ICON_WAVING_HAND, "MenuFileWelcome", true);
 		ui.separator();
 		self.item(ui, MenuAction::Save, ICON_SAVE, "MenuFileSave", true);
 		self.item(ui, MenuAction::SaveAs, ICON_SAVE_AS, "MenuFileSaveAs", true);

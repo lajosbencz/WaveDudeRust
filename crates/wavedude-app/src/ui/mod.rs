@@ -412,6 +412,10 @@ impl Shell {
 				self.modals.show(Modal::Examples(Examples::default()));
 				None
 			}
+			MenuAction::Welcome => {
+				self.modals.show(Modal::Startup(Startup::new(app)));
+				None
+			}
 			MenuAction::About => {
 				self.modals.show(Modal::About(About::new(app)));
 				None

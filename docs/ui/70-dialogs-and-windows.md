@@ -40,7 +40,7 @@ See [`60-live-editing-and-runs.md`](60-live-editing-and-runs.md).
 
 ## Startup page (port)
 
-A modal at each launch while `ShowStartup` is on (the default), and regardless while one of its questions is
+A modal at each launch while `ShowStartup` is on (the default), and from File > Welcome Page..., and regardless while one of its questions is
 unanswered (`UseOpenH264` absent and OpenH264 not compiled in; `CheckForUpdates` absent in a build with the updater). Every
 section shows; OK (Enter or Esc) saves every answer and closes. Title "Welcome to WaveDude Rust". The quality
 selector comes first; the codec and update questions follow it. "Examples..." saves the answers the
