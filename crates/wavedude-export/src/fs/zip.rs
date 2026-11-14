@@ -1,7 +1,8 @@
-//! A ZIP archive as an [`OutputFs`]: each file an entry, stored uncompressed, added whole when closed, so files
-//! written at once on several threads do not interleave. Written as a stream (sizes in data descriptors), so the
-//! archive's file is only appended to. ZIP64 records are written where the sizes or the count of
-//! entries need them. The archive is dropped whole on failure, so removing a file or a folder does nothing.
+//! A ZIP archive as an [`OutputFs`]: each file an entry, stored uncompressed. A file is held in memory, as its
+//! writer may seek, and added whole when closed, so files written at once on several threads do not interleave;
+//! [`ZipFs::write_entry`] streams an entry instead. Sizes go in data descriptors, so the archive's file is only
+//! appended to. ZIP64 records are written where the sizes or the count of entries need them. The archive is
+//! dropped whole on failure, so removing a file or a folder does nothing.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -9,23 +10,56 @@ use std::io::{self, Cursor, Seek, SeekFrom, Write};
 use std::path::{Component, Path};
 use std::sync::{Arc, Mutex};
 
-pub use ::zip::DateTime;
-use ::zip::write::{SimpleFileOptions, StreamWriter};
-use ::zip::{CompressionMethod, ZipWriter};
+use rawzip::ZipArchiveWriter;
+use rawzip::path::ZipFilePath;
+pub use rawzip::time::UtcDateTime;
 use wavedude_core::sync::lock;
 
 use super::{OutputFile, OutputFs};
 
 struct Archive {
-	/// None once finished.
-	writer: Option<ZipWriter<StreamWriter<Box<dyn OutputFile>>>>,
+	/// None once finished or failed.
+	writer: Option<Writer>,
 	names: BTreeSet<String>,
+}
+
+type Writer = ZipArchiveWriter<Box<dyn OutputFile>>;
+
+impl Archive {
+	/// Adds the entry `name`, filled by `write`; a failure leaves the archive failed, as the entry is partly written.
+	fn add<T>(
+		&mut self,
+		name: String,
+		time: UtcDateTime,
+		write: impl FnOnce(&mut dyn Write) -> io::Result<T>,
+	) -> io::Result<T> {
+		// out of the archive while the entry is written, so a failed or panicking entry leaves none to finish
+		let mut writer = self.writer.take().ok_or_else(finished)?;
+		let value = add_stored(&mut writer, &name, time, write)?;
+		self.writer = Some(writer);
+		self.names.insert(name);
+		Ok(value)
+	}
+}
+
+fn add_stored<T>(
+	writer: &mut Writer,
+	name: &str,
+	time: UtcDateTime,
+	write: impl FnOnce(&mut dyn Write) -> io::Result<T>,
+) -> io::Result<T> {
+	let (mut entry, config) = writer.new_file(name).last_modified(time).start().map_err(io::Error::other)?;
+	let mut data = config.wrap(&mut entry);
+	let value = write(&mut data)?;
+	let (_, descriptor) = data.finish().map_err(io::Error::other)?;
+	entry.finish(descriptor).map_err(io::Error::other)?;
+	Ok(value)
 }
 
 /// An [`OutputFs`] writing a ZIP archive to one file; [`finish`](Self::finish) completes it.
 pub struct ZipFs {
 	archive: Arc<Mutex<Archive>>,
-	time: DateTime,
+	time: UtcDateTime,
 }
 
 impl fmt::Debug for ZipFs {
@@ -40,23 +74,30 @@ impl ZipFs {
 		target_arch = "wasm32",
 		allow(clippy::arc_with_non_send_sync, reason = "the browser's files are not Send there")
 	)]
-	pub fn new(file: Box<dyn OutputFile>, time: DateTime) -> Self {
-		let archive = Archive { writer: Some(ZipWriter::new_stream(file)), names: BTreeSet::new() };
+	pub fn new(file: Box<dyn OutputFile>, time: UtcDateTime) -> Self {
+		let archive = Archive { writer: Some(ZipArchiveWriter::new(file)), names: BTreeSet::new() };
 		Self { archive: Arc::new(Mutex::new(archive)), time }
+	}
+
+	/// Adds the file at `path`, its bytes written through to the archive by `write` as they come. The archive is
+	/// locked meanwhile: other files wait to be added, and `write` must not use this archive.
+	pub fn write_entry<T>(&self, path: &Path, write: impl FnOnce(&mut dyn Write) -> io::Result<T>) -> io::Result<T> {
+		let name = entry_name(path)?;
+		lock(&self.archive).add(name, self.time, write)
 	}
 
 	/// Writes the central directory and closes the archive's file; files closed later fail.
 	pub fn finish(&self) -> io::Result<()> {
 		let writer = lock(&self.archive).writer.take().ok_or_else(finished)?;
-		writer.finish()?.into_inner().close()
+		writer.finish().map_err(io::Error::other)?.close()
 	}
 }
 
 fn finished() -> io::Error {
-	io::Error::other("the archive is finished")
+	io::Error::other("the archive is finished or failed")
 }
 
-/// The entry name of `path`: its components joined by `/`.
+/// The entry name of `path`: its components joined by `/`, kept as they are by the archive.
 fn entry_name(path: &Path) -> io::Result<String> {
 	let parts = path
 		.components()
@@ -67,16 +108,18 @@ fn entry_name(path: &Path) -> io::Result<String> {
 		})
 		.collect::<Option<Vec<_>>>()
 		.filter(|parts| !parts.is_empty());
-	let parts = parts.ok_or_else(|| {
-		io::Error::new(io::ErrorKind::InvalidInput, format!("{} is no relative UTF-8 path", path.display()))
-	})?;
-	Ok(parts.join("/"))
+	parts.map(|parts| parts.join("/")).filter(|name| ZipFilePath::from_str(name).as_str() == name).ok_or_else(|| {
+		io::Error::new(
+			io::ErrorKind::InvalidInput,
+			format!("{} is no relative UTF-8 path without `\\` or `:`", path.display()),
+		)
+	})
 }
 
 struct Entry {
 	archive: Arc<Mutex<Archive>>,
 	name: String,
-	time: DateTime,
+	time: UtcDateTime,
 	data: Cursor<Vec<u8>>,
 }
 
@@ -99,16 +142,7 @@ impl Seek for Entry {
 impl OutputFile for Entry {
 	fn close(self: Box<Self>) -> io::Result<()> {
 		let data = self.data.into_inner();
-		let options = SimpleFileOptions::default()
-			.compression_method(CompressionMethod::Stored)
-			.last_modified_time(self.time)
-			.large_file(data.len() as u64 >= u64::from(u32::MAX));
-		let mut archive = lock(&self.archive);
-		let writer = archive.writer.as_mut().ok_or_else(finished)?;
-		writer.start_file(self.name.as_str(), options)?;
-		writer.write_all(&data)?;
-		archive.names.insert(self.name);
-		Ok(())
+		lock(&self.archive).add(self.name, self.time, |out| out.write_all(&data))
 	}
 }
 
@@ -142,7 +176,9 @@ impl OutputFs for ZipFs {
 #[cfg(test)]
 mod tests {
 	use std::io::Read;
+	use std::sync::atomic::{AtomicU64, Ordering};
 
+	use ::zip::CompressionMethod;
 	use half::f16;
 	use wavedude_core::engine::types::{FrameShape, SampleFormat};
 
@@ -153,8 +189,8 @@ mod tests {
 	const W: u32 = 8;
 	const H: u32 = 6;
 
-	fn time() -> DateTime {
-		DateTime::from_date_and_time(2026, 11, 14, 12, 30, 10).unwrap()
+	fn time() -> UtcDateTime {
+		UtcDateTime::from_components(2026, 11, 14, 12, 30, 10, 0).unwrap()
 	}
 
 	/// An archive written to `out` of a [`MemFs`].
@@ -169,7 +205,7 @@ mod tests {
 			.map(|i| {
 				let mut entry = zip.by_index(i).unwrap();
 				assert_eq!(entry.compression(), CompressionMethod::Stored);
-				assert_eq!(entry.last_modified(), Some(time()));
+				assert_eq!(entry.last_modified(), ::zip::DateTime::from_date_and_time(2026, 11, 14, 12, 30, 10).ok());
 				let mut data = Vec::new();
 				entry.read_to_end(&mut data).unwrap();
 				(entry.name().unwrap().into_owned(), entry.crc32(), data)
@@ -286,7 +322,7 @@ mod tests {
 	#[test]
 	fn paths_out_of_the_archive_are_refused() {
 		let zip = archive(&MemFs::new(), Path::new("a.zip"));
-		for path in ["/abs", "../up", "", "."] {
+		for path in ["/abs", "../up", "", ".", "a:b", "a\\b"] {
 			assert!(zip.create(Path::new(path)).is_err(), "{path}");
 		}
 		assert!(zip.create(Path::new("./a/b")).is_ok());
@@ -309,5 +345,72 @@ mod tests {
 		let mut last = Vec::new();
 		read.by_name(&format!("f/{}", count - 1)).unwrap().read_to_end(&mut last).unwrap();
 		assert_eq!(last, (count - 1).to_le_bytes());
+	}
+
+	/// An archive's file counting the bytes it was given.
+	struct Tap {
+		file: Box<dyn OutputFile>,
+		written: Arc<AtomicU64>,
+	}
+
+	impl Write for Tap {
+		fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+			let n = self.file.write(buf)?;
+			self.written.fetch_add(n as u64, Ordering::Relaxed);
+			Ok(n)
+		}
+
+		fn flush(&mut self) -> io::Result<()> {
+			self.file.flush()
+		}
+	}
+
+	impl Seek for Tap {
+		fn seek(&mut self, to: SeekFrom) -> io::Result<u64> {
+			self.file.seek(to)
+		}
+	}
+
+	impl OutputFile for Tap {
+		fn close(self: Box<Self>) -> io::Result<()> {
+			self.file.close()
+		}
+	}
+
+	#[test]
+	fn a_streamed_entry_reaches_the_archive_as_it_is_written() {
+		let mem = MemFs::new();
+		let written = Arc::new(AtomicU64::default());
+		let tap = Tap { file: mem.create(Path::new("big.zip")).unwrap(), written: written.clone() };
+		let zip = ZipFs::new(Box::new(tap), time());
+		zip.create(Path::new("small")).unwrap().close().unwrap();
+		let data: Vec<u8> = (0..4u32 << 20).map(|i| (i % 251) as u8).collect();
+		zip.write_entry(Path::new("v/big.bin"), |out| {
+			for chunk in data.chunks(1 << 16) {
+				out.write_all(chunk)?;
+			}
+			assert!(written.load(Ordering::Relaxed) >= data.len() as u64, "written through, not held");
+			Ok(())
+		})
+		.unwrap();
+		assert!(zip.exists(Path::new("v/big.bin")));
+		assert!(zip.write_entry(Path::new("/abs"), |_| Ok(())).is_err());
+		zip.finish().unwrap();
+		let entries = entries(mem.take(Path::new("big.zip")).unwrap());
+		assert_eq!(entries.len(), 2);
+		let (name, crc, read) = &entries[1];
+		assert_eq!((name.as_str(), *crc), ("v/big.bin", crc32(&data)));
+		assert!(*read == data, "the entry holds the streamed bytes");
+	}
+
+	#[test]
+	fn a_failed_entry_fails_the_archive() {
+		let zip = archive(&MemFs::new(), Path::new("a.zip"));
+		let failed = zip.write_entry(Path::new("half"), |out| {
+			out.write_all(b"part")?;
+			Err::<(), _>(io::Error::other("source gone"))
+		});
+		assert!(failed.is_err());
+		assert!(zip.create(Path::new("next")).unwrap().close().is_err() && zip.finish().is_err());
 	}
 }

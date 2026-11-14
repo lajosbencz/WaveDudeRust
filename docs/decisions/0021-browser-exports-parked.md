@@ -23,7 +23,7 @@ Exports in the browser need a decision on where files go, how video is encoded a
 - The design for the rest:
   - Stills and the probe CSV are written in memory and downloaded; the CSV without a dialog, as Save As does in the
     browser.
-  - Run exports are spooled to OPFS. A sequence streams into one ZIP through the `zip` crate (stored entries,
+  - Run exports are spooled to OPFS. A sequence streams into one ZIP through the `rawzip` crate (stored entries,
     ZIP64). A video of both layers is spooled per layer and zipped at the end; a single video is downloaded
     directly.
   - The export dialog has no Browse and takes a file name only; nothing asks before replacing.
