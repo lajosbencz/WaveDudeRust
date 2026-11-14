@@ -1,7 +1,7 @@
 //! A ZIP archive as an [`OutputFs`]: each file an entry, stored uncompressed. A file is held in memory, as its
 //! writer may seek, and added whole when closed, so files written at once on several threads do not interleave;
-//! [`ZipFs::write_entry`] streams an entry instead. Sizes go in data descriptors, so the archive's file is only
-//! appended to. ZIP64 records are written where the sizes or the count of entries need them. The archive is
+//! [`ZipFs::write_entry`] streams an entry from chunks that come later instead. Sizes go in data descriptors, so
+//! the archive's file is only appended to. ZIP64 records are written where the sizes or the count of entries need them. The archive is
 //! dropped whole on failure, so removing a file or a folder does nothing.
 
 use std::collections::BTreeSet;
@@ -9,6 +9,7 @@ use std::fmt;
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
 use std::path::{Component, Path};
 use std::sync::{Arc, Mutex};
+use std::task::Poll;
 
 use rawzip::ZipArchiveWriter;
 use rawzip::path::ZipFilePath;
@@ -60,6 +61,8 @@ fn add_stored<T>(
 pub struct ZipFs {
 	archive: Arc<Mutex<Archive>>,
 	time: UtcDateTime,
+	/// The store of the archive's file, whose readiness and flushing are the archive's.
+	store: Option<Arc<dyn OutputFs>>,
 }
 
 impl fmt::Debug for ZipFs {
@@ -76,14 +79,37 @@ impl ZipFs {
 	)]
 	pub fn new(file: Box<dyn OutputFile>, time: UtcDateTime) -> Self {
 		let archive = Archive { writer: Some(ZipArchiveWriter::new(file)), names: BTreeSet::new() };
-		Self { archive: Arc::new(Mutex::new(archive)), time }
+		Self { archive: Arc::new(Mutex::new(archive)), time, store: None }
 	}
 
-	/// Adds the file at `path`, its bytes written through to the archive by `write` as they come. The archive is
-	/// locked meanwhile: other files wait to be added, and `write` must not use this archive.
-	pub fn write_entry<T>(&self, path: &Path, write: impl FnOnce(&mut dyn Write) -> io::Result<T>) -> io::Result<T> {
+	/// An empty archive written to the file at `path` of `store`, every entry modified at `time`; the archive takes
+	/// writes and is flushed as `store` is.
+	pub fn in_store(store: Arc<dyn OutputFs>, path: &Path, time: UtcDateTime) -> io::Result<Self> {
+		let file = store.create(path)?;
+		Ok(Self { store: Some(store), ..Self::new(file, time) })
+	}
+
+	/// Adds the file at `path`, its bytes the chunks `next` gives until `None`, each written through to the archive.
+	/// The archive is out of reach until the entry ends: files closed meanwhile fail. A failure, or dropping the
+	/// future, leaves the archive failed.
+	pub async fn write_entry(
+		&mut self,
+		path: &Path,
+		mut next: impl AsyncFnMut() -> io::Result<Option<Vec<u8>>>,
+	) -> io::Result<()> {
 		let name = entry_name(path)?;
-		lock(&self.archive).add(name, self.time, write)
+		let mut writer = lock(&self.archive).writer.take().ok_or_else(finished)?;
+		let (mut entry, config) = writer.new_file(&name).last_modified(self.time).start().map_err(io::Error::other)?;
+		let mut data = config.wrap(&mut entry);
+		while let Some(chunk) = next().await? {
+			data.write_all(&chunk)?;
+		}
+		let (_, descriptor) = data.finish().map_err(io::Error::other)?;
+		entry.finish(descriptor).map_err(io::Error::other)?;
+		let mut archive = lock(&self.archive);
+		archive.writer = Some(writer);
+		archive.names.insert(name);
+		Ok(())
 	}
 
 	/// Writes the central directory and closes the archive's file; files closed later fail.
@@ -171,12 +197,21 @@ impl OutputFs for ZipFs {
 	fn remove_dir(&self, _path: &Path) -> io::Result<()> {
 		Ok(())
 	}
+
+	fn poll_ready(&self) -> io::Result<Poll<()>> {
+		self.store.as_ref().map_or(Ok(Poll::Ready(())), |s| s.poll_ready())
+	}
+
+	fn poll_flushed(&self) -> io::Result<Poll<()>> {
+		self.store.as_ref().map_or(Ok(Poll::Ready(())), |s| s.poll_flushed())
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use std::io::Read;
 	use std::sync::atomic::{AtomicU64, Ordering};
+	use std::task::{Context, Waker};
 
 	use ::zip::CompressionMethod;
 	use half::f16;
@@ -377,24 +412,33 @@ mod tests {
 		}
 	}
 
+	/// The outcome of `future`, which must not wait.
+	fn now<T>(future: impl Future<Output = T>) -> T {
+		match std::pin::pin!(future).poll(&mut Context::from_waker(Waker::noop())) {
+			Poll::Ready(value) => value,
+			Poll::Pending => panic!("the future waited"),
+		}
+	}
+
 	#[test]
 	fn a_streamed_entry_reaches_the_archive_as_it_is_written() {
 		let mem = MemFs::new();
 		let written = Arc::new(AtomicU64::default());
 		let tap = Tap { file: mem.create(Path::new("big.zip")).unwrap(), written: written.clone() };
-		let zip = ZipFs::new(Box::new(tap), time());
+		let mut zip = ZipFs::new(Box::new(tap), time());
 		zip.create(Path::new("small")).unwrap().close().unwrap();
 		let data: Vec<u8> = (0..4u32 << 20).map(|i| (i % 251) as u8).collect();
-		zip.write_entry(Path::new("v/big.bin"), |out| {
-			for chunk in data.chunks(1 << 16) {
-				out.write_all(chunk)?;
-			}
-			assert!(written.load(Ordering::Relaxed) >= data.len() as u64, "written through, not held");
-			Ok(())
-		})
+		let mut chunks = data.chunks(1 << 16);
+		let mut given = 0u64;
+		now(zip.write_entry(Path::new("v/big.bin"), async || {
+			assert!(written.load(Ordering::Relaxed) >= given, "written through, not held");
+			let chunk = chunks.next().map(<[u8]>::to_vec);
+			given += chunk.as_ref().map_or(0, |c| c.len() as u64);
+			Ok(chunk)
+		}))
 		.unwrap();
 		assert!(zip.exists(Path::new("v/big.bin")));
-		assert!(zip.write_entry(Path::new("/abs"), |_| Ok(())).is_err());
+		assert!(now(zip.write_entry(Path::new("/abs"), async || Ok(None))).is_err());
 		zip.finish().unwrap();
 		let entries = entries(mem.take(Path::new("big.zip")).unwrap());
 		assert_eq!(entries.len(), 2);
@@ -405,12 +449,54 @@ mod tests {
 
 	#[test]
 	fn a_failed_entry_fails_the_archive() {
-		let zip = archive(&MemFs::new(), Path::new("a.zip"));
-		let failed = zip.write_entry(Path::new("half"), |out| {
-			out.write_all(b"part")?;
-			Err::<(), _>(io::Error::other("source gone"))
-		});
-		assert!(failed.is_err());
+		let mem = MemFs::new();
+		let mut zip = ZipFs::new(mem.create(Path::new("a.zip")).unwrap(), time());
+		let mut chunks = [Ok(b"part".to_vec()), Err(io::Error::other("source gone"))].into_iter();
+		assert!(now(zip.write_entry(Path::new("half"), async || chunks.next().transpose())).is_err());
 		assert!(zip.create(Path::new("next")).unwrap().close().is_err() && zip.finish().is_err());
+	}
+
+	/// A [`MemFs`] that takes writes while `ready` is set.
+	#[derive(Debug, Default)]
+	struct Gated {
+		mem: MemFs,
+		ready: std::sync::atomic::AtomicBool,
+	}
+
+	impl OutputFs for Gated {
+		fn create(&self, path: &Path) -> io::Result<Box<dyn OutputFile>> {
+			self.mem.create(path)
+		}
+
+		fn create_dir_all(&self, path: &Path) -> io::Result<bool> {
+			self.mem.create_dir_all(path)
+		}
+
+		fn exists(&self, path: &Path) -> bool {
+			self.mem.exists(path)
+		}
+
+		fn remove_file(&self, path: &Path) -> io::Result<()> {
+			self.mem.remove_file(path)
+		}
+
+		fn remove_dir(&self, path: &Path) -> io::Result<()> {
+			self.mem.remove_dir(path)
+		}
+
+		fn poll_ready(&self) -> io::Result<Poll<()>> {
+			Ok(if self.ready.load(Ordering::Relaxed) { Poll::Ready(()) } else { Poll::Pending })
+		}
+	}
+
+	#[test]
+	fn an_archive_in_a_store_takes_writes_as_the_store_does() {
+		let store = Arc::new(Gated::default());
+		let zip = ZipFs::in_store(store.clone(), Path::new("a.zip"), time()).unwrap();
+		assert_eq!(zip.poll_ready().unwrap(), Poll::Pending);
+		store.ready.store(true, Ordering::Relaxed);
+		assert_eq!(zip.poll_ready().unwrap(), Poll::Ready(()));
+		zip.finish().unwrap();
+		assert!(store.mem.take(Path::new("a.zip")).is_some(), "the archive is a file of the store");
 	}
 }

@@ -47,14 +47,17 @@ pub(super) struct Queue {
 	/// Files closed whose task did not finish.
 	unflushed: usize,
 	failure: Option<(io::ErrorKind, String)>,
+	/// The writer waiting at [`poll_room`](Self::poll_room).
+	writer: Option<Waker>,
 }
 
 impl Queue {
 	pub(super) fn new(cap: u64) -> Self {
-		Self { cap, files: BTreeMap::new(), next_id: 0, in_flight: 0, unflushed: 0, failure: None }
+		Self { cap, files: BTreeMap::new(), next_id: 0, in_flight: 0, unflushed: 0, failure: None, writer: None }
 	}
 
-	fn check(&self) -> io::Result<()> {
+	/// The first failure.
+	pub(super) fn check(&self) -> io::Result<()> {
 		match &self.failure {
 			Some((kind, message)) => Err(io::Error::new(*kind, message.clone())),
 			None => Ok(()),
@@ -118,7 +121,7 @@ impl Queue {
 		let Some(file) = self.files.get_mut(&id) else { return Poll::Ready(Next::Abort) };
 		if failed || file.discarded {
 			let dropped: u64 = file.writes.drain(..).map(|(_, data)| data.len() as u64).sum();
-			self.in_flight -= dropped;
+			self.unqueue(dropped);
 			return Poll::Ready(Next::Abort);
 		}
 		if let Some((at, data)) = file.writes.pop_front() {
@@ -134,13 +137,21 @@ impl Queue {
 
 	/// A write of `bytes` handed out by [`poll_next`](Self::poll_next) completed, or failed.
 	pub(super) fn written(&mut self, bytes: usize) {
-		self.in_flight -= bytes as u64;
+		self.unqueue(bytes as u64);
+	}
+
+	/// `bytes` are no longer in flight; the writer waiting for room is woken.
+	fn unqueue(&mut self, bytes: u64) {
+		self.in_flight -= bytes;
+		if let Some(writer) = self.writer.take() {
+			writer.wake();
+		}
 	}
 
 	/// File `id`'s task ended, with `error` when it failed.
 	pub(super) fn finished(&mut self, id: u64, error: Option<&io::Error>) {
 		if let Some(file) = self.files.remove(&id) {
-			self.in_flight -= file.writes.iter().map(|(_, data)| data.len() as u64).sum::<u64>();
+			self.unqueue(file.writes.iter().map(|(_, data)| data.len() as u64).sum());
 			if file.closed {
 				self.unflushed -= 1;
 			}
@@ -159,12 +170,26 @@ impl Queue {
 		for file in self.files.values_mut() {
 			file.wake();
 		}
+		if let Some(writer) = self.writer.take() {
+			writer.wake();
+		}
 	}
 
 	/// Ready while fewer bytes than the cap are not written.
 	pub(super) fn poll_ready(&self) -> io::Result<Poll<()>> {
 		self.check()?;
 		Ok(if self.in_flight < self.cap { Poll::Ready(()) } else { Poll::Pending })
+	}
+
+	/// [`poll_ready`](Self::poll_ready), `writer` woken once bytes in flight are written or the queue fails.
+	pub(super) fn poll_room(&mut self, writer: &Waker) -> Poll<io::Result<()>> {
+		match self.poll_ready() {
+			Ok(Poll::Pending) => {
+				self.writer = Some(writer.clone());
+				Poll::Pending
+			}
+			ready => Poll::Ready(ready.map(drop)),
+		}
 	}
 
 	/// Ready once every closed file is committed.
@@ -295,6 +320,27 @@ mod tests {
 		queue.fail(&io::Error::other("removed"));
 		assert_eq!(count.0.load(Ordering::SeqCst), 2);
 		assert_eq!(queue.poll_next(id, &task), Poll::Ready(Next::Abort));
+	}
+
+	#[test]
+	fn a_writer_waiting_for_room_is_woken_as_writes_complete_or_the_queue_fails() {
+		let mut queue = Queue::new(4);
+		let id = queue.open().unwrap();
+		let (count, writer) = waker();
+		assert!(matches!(queue.poll_room(&writer), Poll::Ready(Ok(()))));
+		queue.write(id, 0, b"abcd").unwrap();
+		assert!(queue.poll_room(&writer).is_pending());
+		assert_eq!(next(&mut queue, id), write(0, b"abcd"));
+		assert_eq!(count.0.load(Ordering::SeqCst), 0, "nothing written yet");
+		queue.written(4);
+		assert_eq!(count.0.load(Ordering::SeqCst), 1);
+		assert!(matches!(queue.poll_room(&writer), Poll::Ready(Ok(()))));
+
+		queue.write(id, 4, b"efgh").unwrap();
+		assert!(queue.poll_room(&writer).is_pending());
+		queue.fail(&io::Error::other("removed"));
+		assert_eq!(count.0.load(Ordering::SeqCst), 2);
+		assert!(matches!(queue.poll_room(&writer), Poll::Ready(Err(_))));
 	}
 
 	#[test]

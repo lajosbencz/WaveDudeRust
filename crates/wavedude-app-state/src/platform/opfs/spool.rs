@@ -24,7 +24,7 @@ use web_sys::{
 };
 
 use super::queue::{Next, Queue};
-use super::session::{awaited, folder, remove_entry, session, storage_error};
+use super::session::{awaited, describe, folder, remove_entry, session, storage_error};
 
 /// Bytes queued and not written at which [`OutputFs::poll_ready`] holds the writer back.
 const IN_FLIGHT: u64 = 64 << 20;
@@ -43,8 +43,7 @@ pub struct Spool {
 	/// `export-<n>`.
 	name: String,
 	queue: Rc<RefCell<Queue>>,
-	/// Each file's task, done once the file is committed or dropped.
-	files: RefCell<BTreeMap<String, Token<()>>>,
+	files: RefCell<BTreeMap<String, Task>>,
 	dirs: RefCell<BTreeSet<String>>,
 	/// The removal queued last; each runs after the one before.
 	removal: RefCell<Token<()>>,
@@ -80,12 +79,23 @@ fn done() -> Token<()> {
 	token
 }
 
+/// A file's task.
+#[derive(Clone, Default)]
+struct Task {
+	/// Done once the file is committed or dropped.
+	ended: Token<()>,
+	committed: Rc<Cell<bool>>,
+}
+
+/// The unsupported-storage error of [`Spool::new`].
+fn unsupported() -> io::Error {
+	io::Error::new(io::ErrorKind::Unsupported, "this browser has no origin private file system to write to")
+}
+
 impl Spool {
 	/// An empty spool; fails when the browser has no origin private file system or the session's start failed.
 	pub fn new() -> io::Result<Self> {
-		let session = session().ok_or_else(|| {
-			io::Error::new(io::ErrorKind::Unsupported, "this browser has no origin private file system to write to")
-		})?;
+		let session = session().ok_or_else(unsupported)?;
 		let n = SPOOLS.with(|n| n.replace(n.get() + 1));
 		Ok(Self {
 			session,
@@ -98,9 +108,36 @@ impl Spool {
 		})
 	}
 
-	/// The task of the file at `parts`, done at once when there is none.
-	fn task(&self, parts: &[String]) -> Token<()> {
-		self.files.borrow().get(&parts.join("/")).cloned().unwrap_or_else(done)
+	/// Whether [`new`](Self::new) can make a spool; the error it would fail with.
+	pub fn available() -> io::Result<()> {
+		session().map(drop).ok_or_else(unsupported)
+	}
+
+	/// The task of the file at `parts`; `None` when no file was created there.
+	fn task(&self, parts: &[String]) -> Option<Task> {
+		self.files.borrow().get(&parts.join("/")).cloned()
+	}
+
+	/// Resolves once the bytes in flight are fewer than the cap of [`OutputFs::poll_ready`]; the spool's first
+	/// failure.
+	pub fn writable(&self) -> impl Future<Output = io::Result<()>> + use<> {
+		let queue = self.queue.clone();
+		std::future::poll_fn(move |cx| queue.borrow_mut().poll_room(cx.waker()))
+	}
+
+	/// Resolves once the file at `parts` is committed; why it was not otherwise.
+	fn committed(&self, parts: &[String]) -> impl Future<Output = io::Result<()>> + use<> {
+		let (task, queue, path) = (self.task(parts), self.queue.clone(), parts.join("/"));
+		async move {
+			let task =
+				task.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("{path} was not written")))?;
+			task.ended.done().await;
+			if task.committed.get() {
+				return Ok(());
+			}
+			queue.borrow().check()?;
+			Err(io::Error::other(format!("{path} was not closed")))
+		}
 	}
 
 	/// Removes the entry at `parts` after the removal queued before and `after`; a missing entry is no error.
@@ -126,8 +163,9 @@ impl Spool {
 		});
 	}
 
-	/// Hands the file at `path` to the browser as a download named `name`, once its task ended; follows
-	/// [`OutputFs::poll_flushed`]. Its URL lives as long as the spool.
+	/// Hands the file at `path` to the browser as a download named `name` once it is committed; follows
+	/// [`OutputFs::poll_flushed`]. Its URL lives as long as the spool. A file that failed or was not closed is the
+	/// error.
 	pub fn download(&self, path: &Path, name: &str) -> Token<()> {
 		let token = Token::default();
 		let parts = match parts(path) {
@@ -137,14 +175,17 @@ impl Spool {
 				return token;
 			}
 		};
-		let (task, session, folder, urls) =
-			(self.task(&parts), self.session.clone(), self.name.clone(), self.urls.clone());
-		let (done, name) = (token.clone(), name.to_owned());
+		let (committed, session, folder) = (self.committed(&parts), self.session.clone(), self.name.clone());
+		let (urls, done, name) = (Rc::downgrade(&self.urls), token.clone(), name.to_owned());
 		spawn_local(async move {
-			task.done().await;
 			let downloaded = async {
+				committed.await?;
 				let blob = blob(&session, &folder, &parts).await?;
 				let url = Url::create_object_url_with_blob(&blob).map_err(|e| storage_error(&e))?;
+				let Some(urls) = urls.upgrade() else {
+					revoke(&url);
+					return Err(io::Error::other("the export's files were removed"));
+				};
 				urls.borrow_mut().push(url.clone());
 				crate::platform::web::click_download(&url, &name)
 			};
@@ -154,7 +195,8 @@ impl Spool {
 		token
 	}
 
-	/// Opens the file at `path` for reading, once its task ended; follows [`OutputFs::poll_flushed`].
+	/// Opens the file at `path` for reading once it is committed; follows [`OutputFs::poll_flushed`]. A file that
+	/// failed or was not closed is the error.
 	pub fn reader(&self, path: &Path) -> Token<SpoolReader> {
 		let token = Token::default();
 		let parts = match parts(path) {
@@ -164,10 +206,14 @@ impl Spool {
 				return token;
 			}
 		};
-		let (task, session, folder, done) = (self.task(&parts), self.session.clone(), self.name.clone(), token.clone());
+		let (committed, session, folder) = (self.committed(&parts), self.session.clone(), self.name.clone());
+		let done = token.clone();
 		spawn_local(async move {
-			task.done().await;
-			done.complete(blob(&session, &folder, &parts).await.map(SpoolReader));
+			let read = async {
+				committed.await?;
+				blob(&session, &folder, &parts).await
+			};
+			done.complete(read.await.map(SpoolReader));
 			crate::wake::wake();
 		});
 		token
@@ -178,11 +224,10 @@ impl Drop for Spool {
 	fn drop(&mut self) {
 		self.queue.borrow_mut().fail(&io::Error::other("the export's files were removed"));
 		for url in self.urls.borrow_mut().drain(..) {
-			if let Err(e) = Url::revoke_object_url(&url) {
-				tracing::warn!("a download's URL could not be revoked: {}", super::session::describe(&e));
-			}
+			revoke(&url);
 		}
-		let mut tasks: Vec<Token<()>> = std::mem::take(&mut *self.files.borrow_mut()).into_values().collect();
+		let mut tasks: Vec<Token<()>> =
+			std::mem::take(&mut *self.files.borrow_mut()).into_values().map(|t| t.ended).collect();
 		tasks.push(self.removal.borrow().clone());
 		let (session, name) = (self.session.clone(), self.name.clone());
 		spawn_local(async move {
@@ -203,8 +248,8 @@ impl OutputFs for Spool {
 	fn create(&self, path: &Path) -> io::Result<Box<dyn OutputFile>> {
 		let parts = parts(path)?;
 		let id = self.queue.borrow_mut().open()?;
-		let task = Token::default();
-		let before = self.files.borrow_mut().insert(parts.join("/"), task.clone()).unwrap_or_else(done);
+		let task = Task::default();
+		let before = self.files.borrow_mut().insert(parts.join("/"), task.clone()).map_or_else(done, |t| t.ended);
 		let after = [before, self.removal.borrow().clone()];
 		let (queue, session, name) = (self.queue.clone(), self.session.clone(), self.name.clone());
 		spawn_local(async move {
@@ -216,7 +261,8 @@ impl OutputFs for Spool {
 				tracing::debug!("{} of an export failed: {e}", parts.join("/"));
 			}
 			queue.borrow_mut().finished(id, result.as_ref().err());
-			task.complete(result);
+			task.committed.set(matches!(result, Ok(true)));
+			task.ended.complete(result.map(drop));
 			crate::wake::wake();
 		});
 		let raw = RawFile { queue: self.queue.clone(), id, at: 0, len: 0, closed: false };
@@ -240,10 +286,11 @@ impl OutputFs for Spool {
 		})
 	}
 
+	/// Removes the file once its task ended: close or drop the file first, or the removal waits for it.
 	fn remove_file(&self, path: &Path) -> io::Result<()> {
 		let parts = parts(path)?;
 		if let Some(task) = self.files.borrow_mut().remove(&parts.join("/")) {
-			self.remove_later(parts, task);
+			self.remove_later(parts, task.ended);
 		}
 		Ok(())
 	}
@@ -327,14 +374,14 @@ async fn blob(session: &FileSystemDirectoryHandle, name: &str, parts: &[String])
 	awaited(handle(session, name, parts, false).await?.get_file()).await
 }
 
-/// Writes file `id` of `queue` at `parts` as its writes come, until its close or an abort.
+/// Writes file `id` of `queue` at `parts` as its writes come, until its close or an abort; whether it was committed.
 async fn drain(
 	queue: &RefCell<Queue>,
 	id: u64,
 	session: &FileSystemDirectoryHandle,
 	name: &str,
 	parts: &[String],
-) -> io::Result<()> {
+) -> io::Result<bool> {
 	let stream: FileSystemWritableFileStream =
 		awaited(handle(session, name, parts, true).await?.create_writable()).await?;
 	let committed = loop {
@@ -355,7 +402,13 @@ async fn drain(
 		// Releases the file's lock and drops its swap file; the stream may have errored already.
 		let _ = JsFuture::from(stream.abort()).await;
 	}
-	committed.map(drop)
+	committed
+}
+
+fn revoke(url: &str) {
+	if let Err(e) = Url::revoke_object_url(url) {
+		tracing::warn!("a download's URL could not be revoked: {}", describe(&e));
+	}
 }
 
 async fn write_at(stream: &FileSystemWritableFileStream, at: u64, data: &[u8]) -> io::Result<()> {

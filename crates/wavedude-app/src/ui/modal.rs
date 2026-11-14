@@ -12,7 +12,6 @@ use wavedude_app_state::{Event, SaveChoice};
 
 use super::about::About;
 use super::examples::Examples;
-#[cfg(not(target_arch = "wasm32"))]
 use super::export::{ExportDialog, Step};
 use super::memory_warning::MemoryWarning;
 use super::menu_keys::letter_of;
@@ -53,7 +52,6 @@ pub(super) enum Modal {
 		destroys: bool,
 	},
 	MemoryWarning(MemoryWarning),
-	#[cfg(not(target_arch = "wasm32"))]
 	Export(ExportDialog),
 	About(About),
 	Examples(Examples),
@@ -78,7 +76,6 @@ impl Modal {
 			Self::Info(_) => "Info",
 			Self::Confirm { .. } => "Confirm",
 			Self::MemoryWarning(_) => "MemoryWarning",
-			#[cfg(not(target_arch = "wasm32"))]
 			Self::Export(_) => "Export",
 			Self::About(_) => "About",
 			Self::Examples(_) => "Examples",
@@ -101,7 +98,6 @@ pub(super) enum Then {
 	/// Looks for a newer release, quietly.
 	#[cfg(not(target_arch = "wasm32"))]
 	CheckForUpdates,
-	#[cfg(not(target_arch = "wasm32"))]
 	Export(Step),
 	/// Uploads the scene image the project lacks.
 	#[cfg(target_arch = "wasm32")]
@@ -222,7 +218,6 @@ impl Modals {
 						}
 					}
 					Modal::MemoryWarning(warning) => warning.ui(ui, fresh, app),
-					#[cfg(not(target_arch = "wasm32"))]
 					Modal::Export(dialog) => dialog.ui(ui, fresh, app, out),
 					Modal::About(about) => about.ui(ui, fresh, app),
 					Modal::Examples(examples) => examples.ui(ui, fresh, app),

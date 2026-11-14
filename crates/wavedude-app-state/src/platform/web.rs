@@ -15,7 +15,7 @@ pub const HAS_PATHS: bool = false;
 /// The program looks for and installs its releases.
 pub const HAS_UPDATER: bool = false;
 /// Exports of videos, image sequences, stills and probe data to files.
-pub const HAS_EXPORTS: bool = false;
+pub const HAS_EXPORTS: bool = true;
 
 /// The memory assumed where the browser does not tell (`navigator.deviceMemory` is Chromium's alone).
 const UNKNOWN_MEMORY: u64 = 1 << 30;
