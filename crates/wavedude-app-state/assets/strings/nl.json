@@ -572,7 +572,7 @@
 	"Label.Scene.DampingEdge": "Dempingsrand",
 	"Hint.Scene.DampingEdge": "Dikte in pixels van de absorberende rand: positief binnen het canvas, waar hij als donkere marge zichtbaar is; negatief erbuiten, gesimuleerd maar nooit getoond. 0 schakelt hem uit.",
 	"Label.Scene.Edges": "Randen",
-	"Hint.Scene.Edges": "Open laat een golf het raster verlaten, alsof het canvas in de vrije ruimte ligt; Reflecterend is een harde wand, zoals in Wave Dude 2D.",
+	"Hint.Scene.Edges": "Open laat een golf het raster verlaten, alsof het canvas in de vrije ruimte ligt; Reflecterend is een harde wand, zoals in Wave Dude 2D. Een rand buiten het canvas (negatieve dempingsrand) neemt de grens over; de instelling heeft dan geen effect.",
 	"Label.Scene.RefractiveIndex": "Brekingsindex",
 	"Hint.Scene.RefractiveIndex": "Brekingsindex van een leeg canvas, 1,0 tot 2,55. De golfsnelheid is 1/n cellen per stap.",
 	"Label.Scene.ImageSources": "Afbeeldingsbronnen",

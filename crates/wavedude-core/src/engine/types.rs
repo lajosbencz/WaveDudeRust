@@ -246,6 +246,13 @@ impl Snapshot {
 		}
 	}
 
+	pub fn plane_mut(&mut self, layer: Layer) -> &mut Vec<u8> {
+		match layer {
+			Layer::Field => &mut self.field,
+			Layer::Intensity => &mut self.intensity,
+		}
+	}
+
 	/// The plane as halves (Half format only). A plane is an owned allocation, which every
 	/// supported allocator aligns to at least 2 bytes; a plane built from an unaligned slice is a bug.
 	pub fn halves(&self, layer: Layer) -> &[f16] {

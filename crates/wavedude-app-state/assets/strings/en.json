@@ -572,7 +572,7 @@
 	"Label.Scene.DampingEdge": "Damping edge",
 	"Hint.Scene.DampingEdge": "Thickness in pixels of the absorbing frame: positive inside the canvas, where it shows as a dark margin; negative outside it, simulated but never shown. 0 turns it off.",
 	"Label.Scene.Edges": "Edges",
-	"Hint.Scene.Edges": "Open lets a wave leave the grid, as if the canvas sat in open space; Reflective is a hard wall, as in Wave Dude 2D.",
+	"Hint.Scene.Edges": "Open lets a wave leave the grid, as if the canvas sat in open space; Reflective is a hard wall, as in Wave Dude 2D. A rim outside the canvas (negative damping edge) takes over the border; the setting then has no effect.",
 	"Label.Scene.RefractiveIndex": "Refractive index",
 	"Hint.Scene.RefractiveIndex": "Refractive index of a blank canvas, 1.0 to 2.55. The wave speed is 1/n cells per step.",
 	"Label.Scene.ImageSources": "Image sources",

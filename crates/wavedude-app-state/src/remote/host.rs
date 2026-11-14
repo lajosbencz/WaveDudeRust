@@ -201,7 +201,8 @@ impl<P: Port> Host<P> {
 		match message {
 			ToWorker::Init { version: _, use_gpu } => self.use_gpu.store(use_gpu, Ordering::Relaxed),
 			ToWorker::Image { key } => {
-				self.image = Some((key, envelope.buffer.expect("an image comes with its bytes").into()));
+				let bytes = envelope.buffer.expect("an image comes with its bytes");
+				self.image = Some((key, bytes.to_vec(0..bytes.len()).into()));
 			}
 			ToWorker::Goal { mut goal, image } => {
 				self.restore(&mut goal, image);

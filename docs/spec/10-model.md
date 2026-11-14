@@ -56,7 +56,7 @@ A new line probe gets `B = A + (100, 0)`.
 | `Width` | int | 1920 | 8..16384 | canvas width (Canvas mode; Image mode takes the image's size) |
 | `Height` | int | 1080 | 8..16384 | canvas height |
 | `DampingEdge` | int | -32 | -8192..8192 | < 0: rim of `-DampingEdge` cells outside the canvas; > 0: band inside; 0: none |
-| `Edges` | enum `Open`/`Reflective` | Open | - | grid border condition |
+| `Edges` | enum `Open`/`Reflective` | Open | - | grid border condition; no effect while `HasRim` (greyed in the form) |
 | `RefractiveIndex` | double | 1.0 | 1..2.55 | background index of a blank canvas |
 | `ImageSources` | bool | false | - | green pixels emit |
 | `ImageSourceScale` | double | 1 | 0..1000 | amplitude of image sources |

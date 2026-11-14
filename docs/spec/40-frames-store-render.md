@@ -30,7 +30,8 @@ immutable. A simulation edit replaces the frames (Rust: the live run's store is 
 run); an export needs the frames of the project as it is.
 
 Rust's frame store takes frames by index in any order and tracks which are present (a per-frame flag and the
-contiguous prefix); a cleared store keeps its buffers for the next generation and the frame written last.
+contiguous prefix); a cleared store keeps the frame written last and its buffers, which the next generation's frames
+take first, in memory or spilled.
 
 Export run rule: an export needs a run with `Full` quality (divisor 1, every frame, f16 samples, current, complete);
 otherwise a fresh full-quality run is made first. `.exr` of I needs a run with `IntensityRoot = false`.

@@ -12,13 +12,14 @@ use std::task::{Context, Poll, Waker};
 use wavedude_core::engine::Snapshot;
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::run::{
-	Budget, FitFrame, FrameStore, Goal, RunError, SpillBackend, SpillFactory, Status, StoreLayout, Token, WorkState,
+	Budget, FitFrame, FrameStore, Goal, RunError, SpillBackend, SpillFactory, Status, StoreError, StoreLayout, Token,
+	WorkState,
 };
 use wavedude_core::scene::compose::image_key;
 use wavedude_core::sync::lock;
 
 use super::protocol::{Layout, Lost, RunStatus, State, ToPage, ToWorker, Trace, VERSION};
-use super::{Port, WorkerGone, decode, post, version_of};
+use super::{Buffer, Port, WorkerGone, decode, post, version_of};
 use crate::live::{Backend, EngineLabel};
 
 /// (store, generation, frame).
@@ -116,7 +117,7 @@ pub struct Remote<P: Port> {
 	held: Vec<ProbeTrace>,
 	fit: Option<FitFrame>,
 	/// A store opened before the spill could answer, and what came after it.
-	waiting: Option<(ToPage, Option<Vec<u8>>)>,
+	waiting: Option<(ToPage, Option<Buffer>)>,
 }
 
 impl<P: Port> Remote<P> {
@@ -187,7 +188,7 @@ impl<P: Port> Remote<P> {
 		}
 	}
 
-	fn handle(&mut self, message: ToPage, buffer: Option<Vec<u8>>) {
+	fn handle(&mut self, message: ToPage, buffer: Option<Buffer>) {
 		match message {
 			ToPage::Ready { version: _, gpu } => {
 				match &gpu {
@@ -231,10 +232,11 @@ impl<P: Port> Remote<P> {
 				}
 			}
 			ToPage::Fit { id, frame, step, shape } => {
-				let Some(mut field) = buffer else {
+				let Some(planes) = buffer else {
 					return self.lose(Lost::Broken(format!("fit frame {frame} came without planes")));
 				};
-				let intensity = field.split_off(shape.plane_bytes().min(field.len()));
+				let split = shape.plane_bytes().min(planes.len());
+				let (field, intensity) = (planes.to_vec(0..split), planes.to_vec(split..planes.len()));
 				let snapshot = Arc::new(Snapshot { shape, step, field, intensity });
 				self.fit = Some(FitFrame { id, frame, snapshot });
 			}
@@ -242,9 +244,11 @@ impl<P: Port> Remote<P> {
 		}
 	}
 
-	/// The mirror of the worker's store `id`: the frames that fit the budget in memory, the rest spilled.
+	/// The mirror of the worker's store `id`: the frames that fit the budget in memory, the rest spilled. The
+	/// mirror lets go of the store before first; like the native run's outgoing store, its memory counts as free.
 	fn open(&mut self, id: u64, layout: Layout) {
 		let layout = StoreLayout::from(layout);
+		self.mirror = None;
 		let budget = Budget::of_memory(self.frame_memory, self.ram_percent);
 		let store = FrameStore::open(layout, budget, &self.spill).map(Arc::new).map_err(|e| {
 			tracing::debug!("the frames of the run do not fit: {e}");
@@ -255,7 +259,7 @@ impl<P: Port> Remote<P> {
 
 	/// Writes a frame of the worker's into the mirror and acknowledges it, once its spill write completed when
 	/// it is spilled. A frame of a store or generation gone is acknowledged unwritten.
-	fn land(&mut self, store: u64, generation: u64, frame: usize, planes: Vec<u8>) {
+	fn land(&mut self, store: u64, generation: u64, frame: usize, planes: Buffer) {
 		let key = (store, generation, frame);
 		let written = match self.mirror.as_mut().filter(|m| m.id == store) {
 			Some(m) if generation >= m.generation => {
@@ -336,12 +340,21 @@ impl Mirror {
 		}
 	}
 
-	/// Stores `planes`, the frame's in layer order, as frame `frame`; the mirror's frame written.
-	fn write(&self, frame: usize, planes: Vec<u8>) -> Result<FrameKey, String> {
+	/// Copies `planes`, the frame's in layer order, into the store's buffer for frame `frame` and stores it; the
+	/// mirror's frame written.
+	fn write(&self, frame: usize, planes: Buffer) -> Result<FrameKey, String> {
 		let store = self.store.as_ref()?;
-		let mut field = planes;
-		let intensity = field.split_off(store.shape().plane_bytes().min(field.len()));
-		let snapshot = Snapshot { shape: *store.shape(), step: store.step_of(frame) as u32, field, intensity };
+		if planes.len() != store.frame_bytes() {
+			return Err(StoreError::ShapeMismatch.to_string());
+		}
+		let plane = store.shape().plane_bytes();
+		let mut snapshot = store.buffer_for(frame);
+		snapshot.step = store.step_of(frame) as u32;
+		for (index, &layer) in store.layers().iter().enumerate() {
+			let out = snapshot.plane_mut(layer);
+			out.resize(plane, 0);
+			planes.copy_to(index * plane, out);
+		}
 		store.write_at(frame, snapshot).map_err(|e| e.to_string())?;
 		Ok((store.id(), store.generation(), frame))
 	}
@@ -437,5 +450,107 @@ impl<P: Port> Backend for Remote<P> {
 		self.receive();
 		self.release();
 		self.settle();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::collections::HashSet;
+
+	use wavedude_core::engine::{FrameShape, SampleFormat};
+	use wavedude_core::model::Layer;
+
+	use super::super::Loopback;
+	use super::*;
+
+	const GIB: u64 = 1 << 30;
+
+	/// No spill; each refused open notes whether the store it watches is still alive.
+	#[derive(Clone, Default)]
+	struct NoSpill(Arc<Mutex<(std::sync::Weak<FrameStore>, Option<bool>)>>);
+
+	impl SpillFactory for NoSpill {
+		fn poll_ready(&self, _: &mut Context<'_>) -> Poll<()> {
+			Poll::Ready(())
+		}
+
+		fn open(&self, _: u64, _: &StoreLayout, _: u64) -> io::Result<Box<dyn SpillBackend>> {
+			let mut probe = lock(&self.0);
+			probe.1 = Some(probe.0.strong_count() > 0);
+			Err(io::Error::other("no spill in the tests"))
+		}
+	}
+
+	fn layout() -> StoreLayout {
+		let shape = FrameShape {
+			canvas_width: 4,
+			canvas_height: 2,
+			divisor: 1,
+			format: SampleFormat::Index,
+			field_brightness: 1.0,
+			intensity_brightness: 1.0,
+			intensity_root: false,
+		};
+		StoreLayout { shape, layers: &[Layer::Field, Layer::Intensity], capacity: 4, capture_every: 1 }
+	}
+
+	/// A mirror in memory and its store.
+	fn mirror() -> (Mirror, Arc<FrameStore>) {
+		let store = Arc::new(FrameStore::in_memory(layout(), GIB));
+		(Mirror { id: 1, generation: 0, store: Ok(store.clone()) }, store)
+	}
+
+	/// A frame's planes as the worker posts them: the field of `value`, the intensity of `value + 1`.
+	fn planes(value: u8) -> Buffer {
+		let plane = layout().shape.plane_bytes();
+		[vec![value; plane], vec![value + 1; plane]].concat().into()
+	}
+
+	#[test]
+	fn a_mirrored_frame_holds_each_plane_in_an_allocation_of_its_size() {
+		let (mirror, store) = mirror();
+		mirror.write(0, planes(1)).unwrap();
+		store.clear();
+		let (_, _, s) = store.latest().unwrap();
+		let plane = store.shape().plane_bytes();
+		assert_eq!((s.field.len(), s.field.capacity()), (plane, plane));
+		assert_eq!((s.intensity.len(), s.intensity.capacity()), (plane, plane));
+		assert_eq!((s.field[0], s.intensity[0]), (1, 2));
+	}
+
+	#[test]
+	fn a_mirror_refilled_after_each_clear_writes_into_the_buffers_it_had() {
+		let (mut mirror, store) = mirror();
+		let mut seen = HashSet::new();
+		for generation in 0..5 {
+			mirror.follow(generation);
+			for frame in 0..store.capacity() {
+				mirror.write(frame, planes(frame as u8)).unwrap();
+				seen.insert(store.with_layer(frame, Layer::Field, |b| b.as_ptr() as usize).unwrap());
+			}
+		}
+		assert!(seen.len() <= store.capacity() + 1, "{} buffers, the latest kept beside the frames", seen.len());
+	}
+
+	#[test]
+	fn a_new_mirror_takes_the_whole_budget_and_lets_go_of_the_one_before_first() {
+		let spill = NoSpill::default();
+		let mut remote =
+			Remote::new(Loopback::pair().0, Arc::new(AtomicBool::new(false)), GIB, Box::new(spill.clone()));
+		let store = |remote: &Remote<Loopback>| match &remote.mirror {
+			Some(Mirror { store: Ok(store), .. }) => store.clone(),
+			_ => unreachable!("the frames fit"),
+		};
+		remote.open(1, Layout::from(&layout()));
+		let held = store(&remote);
+		remote.open(2, Layout::from(&layout()));
+		assert_eq!(store(&remote).ram_budget(), GIB, "a reader holding the store before takes nothing from it");
+		drop(held);
+
+		lock(&spill.0).0 = Arc::downgrade(&store(&remote));
+		let mut past_memory = Layout::from(&layout());
+		past_memory.capacity = (GIB / layout().frame_bytes() as u64) as usize + 1;
+		remote.open(3, past_memory);
+		assert_eq!(lock(&spill.0).1, Some(false), "the store before was let go of before the next opened");
 	}
 }

@@ -16,11 +16,12 @@
 //! Threads: one writer at a time; any thread may read a present frame meanwhile. The capturing thread asks for
 //! the buffer of a frame ([`FrameStore::buffer_for`]) and the engine captures into it, so a frame in memory is
 //! never copied. Natively the memory frames are allocated and their pages touched ahead of the capture by a
-//! producer thread on a small rayon pool, after the memory the budget counts on has been released; cleared frames'
-//! buffers come back first. A frame that cannot be allocated sends that frame and every later one to the file
-//! while the file is empty, else it stays in memory; the file's frames reuse a few buffers. The file is deleted
-//! on drop. A store in memory alone ([`FrameStore::in_memory`]) allocates its frames as they are captured and
-//! refuses the frames past its budget.
+//! producer thread on a small rayon pool, after the memory the budget counts on has been released; a cleared
+//! generation's buffers serve the next generation's frames first, in memory or spilled, so none is left over. A
+//! frame that cannot be allocated sends that frame and every later one to the file while the file is empty, else
+//! it stays in memory; the file's frames reuse a few buffers. The file is deleted on drop. A store in memory
+//! alone ([`FrameStore::in_memory`]) allocates its frames as they are captured and refuses the frames past its
+//! budget.
 //!
 //! A pending spill (wasm32, `FrameStore::with_spill`) allocates its memory frames as they are captured too. A
 //! spilled frame stays in memory while its write is in flight and, once `FrameStore::settle` saw it written,
@@ -215,7 +216,7 @@ pub struct FrameStore {
 	blocks: Box<[Mutex<Option<Arc<Snapshot>>>]>,
 	/// Frames from here on go to the file: `ram_frames`, or the first frame the producer could not allocate.
 	memory_end: AtomicUsize,
-	/// Cleared memory frames' buffers, for the memory frames of the next generation.
+	/// Cleared frames' buffers, for the frames of the next generation.
 	recycled: Mutex<Vec<Snapshot>>,
 	/// A few buffers for the frames that go to the file.
 	file_buffers: Mutex<Vec<Snapshot>>,
@@ -473,26 +474,25 @@ impl FrameStore {
 		}
 	}
 
-	/// The buffer to capture frame `frame` into: a cleared frame's buffer or the next prepared memory frame
-	/// while the frames go to memory (waiting for the producer), else a recycled or new one. Each buffer is
-	/// then written with [`write_at`](Self::write_at).
+	/// The buffer to capture frame `frame` into: a cleared frame's buffer, whichever frame it is for, so they
+	/// are all taken up again; else the next prepared memory frame while the frames go to memory (waiting for the
+	/// producer), else one of the file's few or a new one. Each buffer is then written with
+	/// [`write_at`](Self::write_at).
 	pub fn buffer_for(&self, frame: usize) -> Snapshot {
-		if frame < self.first_spilled() {
-			if let Some(block) = lock(&self.recycled).pop() {
-				return block;
+		if let Some(block) = lock(&self.recycled).pop() {
+			return block;
+		}
+		if frame < self.first_spilled() && frame < self.memory_end.load(Ordering::Acquire) {
+			// All `ram_frames` taken means the producer finished, fewer means its memory ran out.
+			match self.prepared_block() {
+				Some(Ok(block)) => return block,
+				Some(Err(taken)) if taken < self.ram_frames => {
+					self.memory_end.fetch_min(frame, Ordering::AcqRel);
+				}
+				_ => {}
 			}
 			if frame < self.memory_end.load(Ordering::Acquire) {
-				// All `ram_frames` taken means the producer finished, fewer means its memory ran out.
-				match self.prepared_block() {
-					Some(Ok(block)) => return block,
-					Some(Err(taken)) if taken < self.ram_frames => {
-						self.memory_end.fetch_min(frame, Ordering::AcqRel);
-					}
-					_ => {}
-				}
-				if frame < self.memory_end.load(Ordering::Acquire) {
-					return Snapshot::new(self.layout.shape);
-				}
+				return Snapshot::new(self.layout.shape);
 			}
 		}
 		lock(&self.file_buffers).pop().unwrap_or_else(|| Snapshot::new(self.layout.shape))
@@ -630,8 +630,9 @@ impl FrameStore {
 		pending.prefetch(self.generation(), &ahead);
 	}
 
-	/// Returns a buffer [`buffer_for`](Self::buffer_for) handed out for `frame` that was not kept, to the pool
-	/// it came from: the memory frames' below `memory_end`, the file's few above.
+	/// Returns a buffer [`buffer_for`](Self::buffer_for) handed out for `frame` that was not kept: a memory
+	/// frame's (below `memory_end`) to `recycled`, a spilled frame's, whichever pool it came from, to the file's
+	/// few, dropped past [`RECYCLED`] of them.
 	fn give_back(&self, frame: usize, snapshot: Snapshot) {
 		if frame < self.memory_end.load(Ordering::Acquire) {
 			lock(&self.recycled).push(snapshot);
@@ -653,10 +654,7 @@ impl FrameStore {
 			lock(&self.blocks[last]).take().or_else(|| {
 				let mut snapshot = Snapshot::new(self.layout.shape);
 				for (index, &layer) in self.layout.layers.iter().enumerate() {
-					let plane = match layer {
-						Layer::Field => &mut snapshot.field,
-						Layer::Intensity => &mut snapshot.intensity,
-					};
+					let plane = snapshot.plane_mut(layer);
 					plane.resize(self.layout.shape.plane_bytes(), 0);
 					if self.read_spilled(last, index, plane).is_err() {
 						return None;
@@ -1041,6 +1039,70 @@ mod tests {
 		lock(&disk).fail = Some(io::ErrorKind::QuotaExceeded);
 		lock(&disk).complete();
 		assert!(matches!(store.settle(), Err(StoreError::Io(e)) if e.kind() == io::ErrorKind::QuotaExceeded));
+	}
+
+	/// Buffers `store` holds: its frames', the cleared ones', the file's few and the latest.
+	fn buffers(store: &FrameStore) -> usize {
+		let frames = store.blocks.iter().filter(|b| lock(b).is_some()).count();
+		let latest = usize::from(lock(&store.latest).is_some());
+		frames + lock(&store.recycled).len() + lock(&store.file_buffers).len() + latest
+	}
+
+	/// Writes every frame of `store` into the buffer it hands out, as the page's mirror and the worker's capture do,
+	/// the spill's writes completing all but the last `in_flight`; then clears it.
+	fn refill(store: &FrameStore, disk: &Arc<Mutex<fake::Disk>>, in_flight: usize) {
+		for frame in 0..store.capacity() {
+			let mut s = store.buffer_for(frame);
+			s.field.resize(store.shape().plane_bytes(), frame as u8);
+			store.write_at(frame, s).unwrap();
+			if frame + in_flight < store.capacity() {
+				lock(disk).complete();
+				store.settle().unwrap();
+			}
+		}
+		store.clear();
+		lock(disk).complete();
+		store.settle().unwrap();
+	}
+
+	fn twenty_frames() -> StoreLayout {
+		let shape = FrameShape {
+			canvas_width: 4,
+			canvas_height: 2,
+			divisor: 1,
+			format: SampleFormat::Index,
+			field_brightness: 1.0,
+			intensity_brightness: 1.0,
+			intensity_root: false,
+		};
+		StoreLayout { shape, layers: &[Layer::Field], capacity: 20, capture_every: 1 }
+	}
+
+	#[test]
+	fn a_store_refilled_after_each_clear_keeps_the_buffers_it_had() {
+		let layout = twenty_frames();
+		let disk = Arc::<Mutex<fake::Disk>>::default();
+		let store =
+			FrameStore::with_spill(layout, 2 * layout.frame_bytes() as u64, Box::new(fake::Backend(disk.clone())));
+		for cycle in 0..5 {
+			refill(&store, &disk, layout.capacity);
+			let held = buffers(&store);
+			assert!(held <= layout.capacity + 1, "cycle {cycle}: {held} buffers for {} frames", layout.capacity);
+		}
+	}
+
+	#[test]
+	fn a_store_spilling_every_frame_takes_up_its_cleared_buffers_again() {
+		let layout = twenty_frames();
+		let disk = Arc::<Mutex<fake::Disk>>::default();
+		let store = FrameStore::with_spill(layout, 0, Box::new(fake::Backend(disk.clone())));
+		assert_eq!(store.ram_frames(), 0);
+		for cycle in 0..5 {
+			refill(&store, &disk, 3);
+			let recycled = lock(&store.recycled).len();
+			// Frames 16 (written last at the last settle), 17 and 18 in memory at the clear, and the latest before.
+			assert!(recycled <= 4, "cycle {cycle}: {recycled} buffers left over");
+		}
 	}
 
 	#[test]
