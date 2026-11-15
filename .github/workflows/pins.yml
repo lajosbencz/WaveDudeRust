@@ -1,0 +1,78 @@
+name: Pins
+
+# The versions Dependabot cannot see, against their newest release: one open issue lists the stale ones, closed once
+# none is. The 2nd of the month, when the previous month's last ffmpeg build exists.
+on:
+  schedule:
+    - cron: "17 6 2 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pins
+  cancel-in-progress: false
+
+jobs:
+  pins:
+    name: Pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TITLE: Pinned tool versions are behind
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compare and report
+        run: |
+          set -euo pipefail
+          # crates.io refuses requests without a user agent.
+          ua="$GITHUB_REPOSITORY pins check"
+          pinned() { grep -ohP "$1" "${@:2}" | sort -u | paste -sd ' ' -; }
+          crate() { curl -sSf -A "$ua" "https://crates.io/api/v1/crates/$1" | jq -r .crate.max_stable_version; }
+          stale=()
+          check() {
+            if [ -z "$3" ]; then echo "::error::no latest version of $1"; exit 1; fi
+            [ "$2" = "$3" ] || stale+=("| $1 | $2 | $3 | $4 |")
+          }
+
+          W=.github/workflows
+          check git-cliff "$(pinned 'git-cliff@\K[0-9.]+' $W/release.yml)" "$(crate git-cliff)" "$W/release.yml"
+          check cargo-auditable "$(pinned 'cargo-auditable@\K[0-9.]+' $W/package.yml)" "$(crate cargo-auditable)" "$W/package.yml"
+          check cargo-cyclonedx "$(pinned 'cargo-cyclonedx@\K[0-9.]+' $W/package.yml)" "$(crate cargo-cyclonedx)" "$W/package.yml"
+          check cargo-packager "$(pinned 'cargo-packager@\K[0-9.]+' $W/package.yml $W/release.yml)" "$(crate cargo-packager)" \
+            "$W/package.yml, $W/release.yml"
+          check actionlint "$(pinned 'ACTIONLINT_VERSION: \K[0-9.]+' $W/hygiene.yml)" \
+            "$(gh api repos/rhysd/actionlint/releases/latest --jq '.tag_name | ltrimstr("v")')" "$W/hygiene.yml, with the digest"
+          check rustup-init "$(pinned 'RUSTUP_VERSION=\K[0-9.]+' .github/build/linux.Dockerfile)" \
+            "$(curl -sSf https://static.rust-lang.org/rustup/release-stable.toml | grep -oP "^version = [\"']\\K[0-9.]+")" \
+            ".github/build/linux.Dockerfile, with the digest"
+          month=$(date -u -d "$(date -u +%Y-%m-01) -1 day" +%Y-%m)
+          check ffmpeg "$(pinned 'FFMPEG_RELEASE: \K\S+' $W/ci.yml)" \
+            "$(gh api --paginate 'repos/BtbN/FFmpeg-Builds/releases?per_page=100' --jq '.[].tag_name' |
+              grep "^autobuild-$month-" | sort | tail -1)" "$W/ci.yml, with the build name and digest"
+
+          issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"$TITLE\"" \
+            --json number,title --jq ".[] | select(.title == env.TITLE) | .number" | head -1)
+          if [ ${#stale[@]} -eq 0 ]; then
+            echo "every pin is current"
+            [ -z "$issue" ] || gh issue close "$issue" --repo "$GITHUB_REPOSITORY" --comment "Every pin is current."
+            exit 0
+          fi
+          {
+            echo "| Tool | Pinned | Latest | Where |"
+            echo "|---|---|---|---|"
+            printf '%s\n' "${stale[@]}"
+          } > "$RUNNER_TEMP/body.md"
+          cat "$RUNNER_TEMP/body.md"
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
+          fi

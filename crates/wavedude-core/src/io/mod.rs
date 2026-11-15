@@ -134,6 +134,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 		return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "the file is read-only"));
 	}
 	let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+	#[cfg_attr(not(unix), expect(unused_mut))]
 	let mut builder = tempfile::Builder::new();
 	#[cfg(unix)]
 	if old.is_none() {

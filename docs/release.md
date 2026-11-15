@@ -66,10 +66,9 @@ publisher (crates.io > crate > Settings > Trusted Publishing; a token only for e
 - Settings > General: immutable releases on (`gh api -X PUT repos/<owner>/<repo>/immutable-releases`); squash
   merging only, its commit titled by the pull request's title (git-cliff reads conventional commits); allow
   auto-merge; delete head branches; no wiki.
-- Settings > Rules: a ruleset on the default branch requiring a pull request, the CI jobs (`ubuntu-latest`,
-  `windows-latest`, `macos-latest`, `MSRV`, `wasm32`, `glibc`) and the hygiene jobs `Dependencies` and `Workflows` on a branch
-  up to date with it, and
-  refusing deletion and force pushes. Administrators bypass it to push docs directly, which only the hygiene checks
+- Settings > Rules: a ruleset on the default branch requiring a pull request, the checks `CI result` and
+  `Hygiene result` (each its workflow's jobs combined, so a job added there needs no ruleset change) on a branch up
+  to date with it, and refusing deletion and force pushes. Administrators bypass it to push docs directly, which only the hygiene checks
   run on. A merge queue needs an organization-owned repository. A ruleset on `v*` tags refusing
   update and deletion (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and the
   release job tags through it); administrators bypass it.

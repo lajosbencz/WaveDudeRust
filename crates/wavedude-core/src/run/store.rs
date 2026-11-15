@@ -120,11 +120,7 @@ impl Memory {
 	/// (available, physical) bytes.
 	pub fn read(self) -> (u64, u64) {
 		match self {
-			Self::System => {
-				let mut system = sysinfo::System::new();
-				system.refresh_memory();
-				(system.available_memory(), system.total_memory())
-			}
+			Self::System => super::system_memory(),
 			Self::Fixed { available, physical } => (available, physical),
 		}
 	}

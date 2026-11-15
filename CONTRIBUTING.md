@@ -103,6 +103,9 @@ the checks:
 - Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) opens grouped updates, daily for crates (`chore(deps)`), weekly for
   the compiler of [`rust-toolchain.toml`](rust-toolchain.toml) and the Linux build image's base (`chore(deps)`) and actions (`ci(deps)`), each version once it is a week old (security updates at once); [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml) enables auto-merge on them, except a major
   version, so they merge once the required checks pass (the ruleset of [`docs/release.md`](docs/release.md)).
+- The pins Dependabot cannot see (the release path's tools, actionlint, rustup-init, the ffmpeg build) are compared with
+  their newest release monthly by [`.github/workflows/pins.yml`](.github/workflows/pins.yml), which keeps one issue listing the stale
+  ones. The CI-only tools of install-action carry no version and follow its updates.
 
 ## Commit messages
 
