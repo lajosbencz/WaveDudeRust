@@ -21,5 +21,5 @@ epaint = { version = "=0.37.0", default-features = false }
 # platform's maths library.
 libm = "0.2"
 # The glyph outlines a label's halo strokes: epaint's own font reader, so the outlines are those it rasterises.
-skrifa = { version = "0.44", default-features = false, features = ["std"] }
+skrifa = { version = "0.49", default-features = false, features = ["std"] }
 wavedude-core = { path = "../wavedude-core", version = "0.3.3", default-features = false }
