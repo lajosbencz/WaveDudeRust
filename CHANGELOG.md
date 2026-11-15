@@ -6,6 +6,27 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.2...v0.3.3) - 2026-11-15
+
+### Added
+
+- a scene image file that differs from the embedded image is asked about, Load file or Keep embedded, at open and while watched
+- objects off the canvas are named in a warning when the run's spec changes them, sources and parts left out, probes read at the edge
+- preview handles follow Next's glyphs, colours and focus/hover emphasis
+- generic touch support (pinch zoom and two-finger pan, a second finger cancels edits, the tree drag-scrolls, 2x UI zoom on touch-first devices) and the probe graph auto-range keeps its full-scale floor on all-zero data
+
+### Fixed
+
+- closed strokes cut corners sharper than a right angle, so label halos no longer spike
+- the rim carries the canvas edge's wave speed but no damping, so an absorber on the edge no longer diverges in the PML
+- brightness and sensitivity are model values in files, and the shipped examples are our own tuned copies
+- a scene image offer is withdrawn by kept or undecodable bytes, and its question closes or rewords with the offer
+- context menus get icons and shortcuts, graph titles elide, the box grip shows, scene outlines keep thin edges when shrunk, and the lever arrow uses libm
+
+### Changed
+
+- examples live in one folder per domain, the folder being the dialog's tab, indexed by EXAMPLES.md
+
 ## [0.3.2](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.1...v0.3.2) - 2026-11-14
 
 ### Added
