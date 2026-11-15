@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.3...v0.3.4) - 2026-11-15
+
+### Added
+
+- codebase cleanup: crash, data-loss and browser fixes (atomic saves, EXR intensity, memory bounds, export downloads, worker build id), one run worker and one MP4/MOV writer, dead code and the mp4 crate removed, Linux packages on glibc 2.28, and hardened CI
+
+### Fixed
+
+- probe CSV writes values as .NET's invariant float.ToString does (1E-05 style); conventions point at has_ffmpeg's line
+- sysinfo 0.40 and the Windows unused_mut in write_atomic; one result check per workflow, unversioned CI-only tools and a monthly pin check issue
+
 ## [0.3.3](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.2...v0.3.3) - 2026-11-15
 
 ### Added
