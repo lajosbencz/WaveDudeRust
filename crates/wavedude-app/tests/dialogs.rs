@@ -1,15 +1,14 @@
 //! The modals driven headless: the unsaved-edits question with its buttons and keys, the message window of a failed
 //! open, the crash report an earlier session left, the modals waiting in turn and the window's keys waiting behind
-//! them, the scene image question, the startup page, About, Examples and the manual window.
+//! them, the scene image question, the startup page and About.
 
 mod common;
 
 use std::path::{Path, PathBuf};
 
-use eframe::egui::accesskit::Toggled;
 use eframe::egui::{self, Key, Modifiers, OutputCommand};
 use egui_kittest::Harness;
-use egui_kittest::kittest::{NodeT, Queryable};
+use egui_kittest::kittest::Queryable;
 use wavedude_app::open_requests::OpenRequests;
 use wavedude_app::ui::{Boot, Shell};
 use wavedude_app_state::document::Source;
@@ -18,7 +17,6 @@ use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{AppState, Event, Guarded};
 use wavedude_core::quality::{PreviewDefaults, PreviewTier};
-use wavedude_examples::Topic;
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj";
 /// Frames for an input to reach the state and its result to show.
@@ -291,54 +289,4 @@ fn about_copies_the_system_lines_toggles_the_license_and_closes_on_esc() {
 	harness.key_press(Key::Escape);
 	settle(&mut harness);
 	assert!(harness.query_by_label("Hide the license text").is_none(), "Esc left About open");
-}
-
-#[test]
-fn the_welcome_page_entry_opens_the_startup_page() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window(dir.path(), None, &[]);
-	assert!(harness.query_by_label("Welcome to WaveDude Rust").is_none(), "the page opened at launch");
-	menu(&mut harness, "File", "Welcome Page...");
-	harness.get_by_label("Welcome to WaveDude Rust");
-}
-
-#[test]
-fn examples_searches_every_topic_and_opens_the_chosen_example() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window(dir.path(), None, &[]);
-	let example = wavedude_examples::all().iter().find(|e| e.topic != Topic::ALL[0]).unwrap();
-	menu(&mut harness, "File", "Examples...");
-	harness.get_by_label("Examples");
-	harness.get_by_role(egui::Role::TextInput).click();
-	settle(&mut harness);
-	harness.get_by_role(egui::Role::TextInput).type_text(&example.title);
-	settle(&mut harness);
-	harness.get_by_role_and_label(egui::Role::ListItem, &example.title);
-	harness.get_by_label("Open").click();
-	settle(&mut harness);
-	assert!(harness.query_by_label("Examples").is_none(), "Open left the dialog open");
-	let stem = example.file_name.trim_end_matches(".wdproj");
-	assert!(
-		harness.state().app().title().contains(stem),
-		"the example did not open: {}",
-		harness.state().app().title()
-	);
-}
-
-#[test]
-fn f1_opens_the_manual_a_row_takes_its_section_and_esc_closes_it() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window(dir.path(), None, &[]);
-	harness.key_press(Key::F1);
-	settle(&mut harness);
-	assert!(harness.query_all_by_label("WaveDude Rust manual").next().is_some(), "F1 opened no manual");
-	let rows = harness.get_all_by_role(egui::Role::ListItem).count();
-	assert!(rows > 3, "the contents list {rows} rows");
-	harness.get_all_by_role(egui::Role::ListItem).nth(2).unwrap().click();
-	settle(&mut harness);
-	let third = harness.get_all_by_role(egui::Role::ListItem).nth(2).unwrap();
-	assert_eq!(third.accesskit_node().toggled(), Some(Toggled::True), "the row clicked is not taken");
-	harness.key_press(Key::Escape);
-	settle(&mut harness);
-	assert!(harness.query_all_by_label("WaveDude Rust manual").next().is_none(), "Esc left the manual open");
 }

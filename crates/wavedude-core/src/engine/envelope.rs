@@ -19,7 +19,7 @@ pub const TURN_ON_PERIODS: f64 = 0.5;
 pub const CYCLE_ADVANCE_GUARD: u32 = 1000;
 
 /// Half-width in cycles of the smoothed square's edges.
-const EDGE_WIDTH: f64 = 0.35;
+pub const EDGE_WIDTH: f64 = 0.35;
 
 /// Raised cosine from 0 at `x <= 0` to 1 at `x >= 1`, continuous with its slope.
 pub fn raised_cosine(x: f64) -> f64 {

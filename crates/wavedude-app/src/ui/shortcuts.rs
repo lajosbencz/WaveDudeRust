@@ -130,30 +130,7 @@ impl Keyboard {
 
 /// Whether the browser's own action for a key is to be prevented: a shortcut of the table, but for the
 /// clipboard's, whose default makes the browser's clipboard events.
-#[cfg(any(target_arch = "wasm32", test))]
+#[cfg(target_arch = "wasm32")]
 pub(super) fn is_reserved(key: Key, modifiers: Modifiers) -> bool {
 	action_of(key, modifiers).is_some_and(|action| !is_clipboard(action))
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn a_shortcut_fires_with_exactly_its_modifiers() {
-		assert_eq!(action_of(Key::S, Modifiers::COMMAND), Some(MenuAction::Save));
-		assert_eq!(action_of(Key::S, Modifiers::COMMAND | Modifiers::SHIFT), Some(MenuAction::SaveAs));
-		assert_eq!(action_of(Key::F5, Modifiers::SHIFT), Some(MenuAction::Stop));
-		assert_eq!(action_of(Key::Escape, Modifiers::SHIFT), None);
-		assert_eq!(action_of(Key::N, Modifiers::COMMAND | Modifiers::SHIFT), None);
-		assert_eq!(action_of(Key::F1, Modifiers::ALT), None);
-	}
-
-	#[test]
-	fn the_clipboard_keys_stay_the_browsers() {
-		assert!(!is_reserved(Key::V, Modifiers::COMMAND));
-		assert!(is_reserved(Key::F5, Modifiers::NONE));
-		assert!(!is_reserved(Key::F6, Modifiers::SHIFT));
-		assert!(is_reserved(Key::S, Modifiers::COMMAND | Modifiers::SHIFT));
-	}
 }

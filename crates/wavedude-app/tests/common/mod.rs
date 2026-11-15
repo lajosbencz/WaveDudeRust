@@ -72,7 +72,7 @@ pub(crate) fn lavapipe<S>() -> Option<HarnessBuilder<S>> {
 
 /// Waits for the preview's frame, which comes from a thread of its own: the pane polls after 4 ms while its picture
 /// is due, the window's tick is longer.
-#[allow(dead_code, reason = "used by the shell, wake and figures tests")]
+#[allow(dead_code, reason = "used by the wake and figures tests")]
 pub(crate) fn preview_idle(harness: &mut Harness<'_, Shell>) {
 	let polling = |harness: &Harness<'_, Shell>| {
 		harness.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay <= Duration::from_millis(4)

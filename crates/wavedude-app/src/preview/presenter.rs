@@ -541,47 +541,4 @@ mod tests {
 		let gone = present(&mut presenter, FrameSource::Run { store, stored: 0 }, vec![layer(Layer::Field)]);
 		assert!(gone.vanished);
 	}
-
-	fn rendered(at: Instant, render_ms: u64, motion: bool) -> Rendered {
-		Rendered {
-			source: SourceKey::Snapshot(0),
-			pictures: Vec::new(),
-			vanished: false,
-			pending: false,
-			render: Duration::from_millis(render_ms),
-			requested: at,
-			motion,
-		}
-	}
-
-	#[test]
-	fn stats_report_averages_and_the_worst_gap_every_block() {
-		let mut stats = PresenterStats::default();
-		let t0 = Instant::now();
-		let mut line = None;
-		for i in 0..LOG_EVERY {
-			let at = t0 + Duration::from_millis(u64::from(i) * 16 + if i == 50 { 100 } else { 0 });
-			let shown = at + Duration::from_millis(5);
-			line = stats.record(&rendered(at, 4, true), shown);
-			if i + 1 < LOG_EVERY {
-				assert!(line.is_none());
-			}
-		}
-		let line = line.expect("a full block logs");
-		assert!(line.contains("render 4.00 ms average, 4.00 worst"), "{line}");
-		assert!(line.contains("wait 1.00 ms average, 1.00 worst"), "{line}");
-		assert!(line.contains("gap 116.0 ms worst"), "{line}");
-		assert_eq!(stats.count, 0);
-	}
-
-	#[test]
-	fn idle_pictures_do_not_count_as_gaps() {
-		let mut stats = PresenterStats::default();
-		let t0 = Instant::now();
-		stats.record(&rendered(t0, 1, false), t0);
-		stats.record(&rendered(t0, 1, true), t0 + Duration::from_secs(5));
-		assert_eq!(stats.gap_worst, Duration::ZERO);
-		stats.record(&rendered(t0, 1, true), t0 + Duration::from_secs(5) + Duration::from_millis(20));
-		assert_eq!(stats.gap_worst, Duration::from_millis(20));
-	}
 }

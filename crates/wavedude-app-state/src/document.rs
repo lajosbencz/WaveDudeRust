@@ -524,8 +524,8 @@ mod tests {
 		out
 	}
 
-	/// Writes `bytes` to `file` and ticks `d` past the debounce until the change is offered.
-	fn offered_after_writing(d: &mut Document, file: &Path, bytes: &[u8]) -> bool {
+	/// Writes `bytes` to `file` and ticks `d` past the debounce until the watch's change is offered.
+	fn offered_by_the_watch(d: &mut Document, file: &Path, bytes: &[u8]) -> bool {
 		std::fs::write(file, bytes).unwrap();
 		let deadline = Instant::now() + Duration::from_secs(5);
 		while Instant::now() < deadline {
@@ -535,6 +535,15 @@ mod tests {
 			}
 		}
 		false
+	}
+
+	/// Writes `bytes` to `file`, dates the change now and follows it past the debounce: whether it is offered. The
+	/// watch's own events date it no later than the follow, so twice the debounce is past theirs too.
+	fn offered_after_writing(d: &mut Document, file: &Path, bytes: &[u8]) -> bool {
+		std::fs::write(file, bytes).unwrap();
+		let now = Instant::now();
+		d.image_watch.as_ref().unwrap().set_changed_at(Some(now));
+		d.follow_image_file(now + 2 * IMAGE_DEBOUNCE) && d.scene_image_offer().is_some()
 	}
 
 	#[test]
@@ -547,7 +556,7 @@ mod tests {
 		d.project.scene.image_data = Some(png(10).into());
 		d.history = History::new(&d.project);
 		assert!(!d.follow_image_file(Instant::now()), "nothing changed yet; the watch is armed");
-		assert!(offered_after_writing(&mut d, &file, &png(200)), "the change on disk reached the document");
+		assert!(offered_by_the_watch(&mut d, &file, &png(200)), "the change on disk reached the document");
 		assert_eq!(d.scene_image_offer(), Some(file.as_path()));
 		assert_eq!(d.project.scene.image_data.as_deref(), Some(&png(10)[..]), "nothing changes before the answer");
 		assert!(!d.dirty);
@@ -788,23 +797,10 @@ mod tests {
 		d.save_as(&xml).unwrap();
 		let Opened::Project(o) = Document::open(&xml).unwrap() else { panic!("a project") };
 		assert_eq!(o.project.seed, 5);
-	}
-
-	#[test]
-	fn an_edit_after_undo_is_dirty_where_the_saved_step_was() {
-		let dir = tempfile::tempdir().unwrap();
-		let t = Instant::now();
-		let mut d = Document::new_project();
-		for seed in [11, 12] {
-			d.project.seed = seed;
-			d.edited(t);
-			d.commit_step();
-		}
-		d.save_as(&dir.path().join("a.wdproj")).unwrap();
 		assert!(d.undo());
-		d.project.seed = 13;
+		d.project.seed = 6;
 		d.edited(t);
 		d.commit_step();
-		assert!(d.dirty, "the file holds seed 12");
+		assert!(d.dirty, "an edit after undo takes the saved step's place; the file holds seed 5");
 	}
 }

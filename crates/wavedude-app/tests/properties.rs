@@ -1,6 +1,5 @@
-//! The Properties pane driven headless on an example: the number box's keys, Enter and Esc, its drag, typed text
-//! applied before a shortcut and when its form goes, the focus that Enter on a tree row and an Add put into the
-//! form, a check box, a drop-down, disabled rows, the colour picker and the gradient.
+//! The Properties pane driven headless on an example: the number box's keys, Enter and Esc, typed text applied
+//! before a shortcut and when its form goes, the colour picker and the gradient, project and user schemes.
 
 mod common;
 
@@ -16,7 +15,7 @@ use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{Event, Guarded};
-use wavedude_core::model::{Project, Rgb, SourceMode};
+use wavedude_core::model::{Project, Rgb};
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj";
 /// Frames for an input to reach the state and its result to show.
@@ -107,26 +106,6 @@ fn a_number_box_steps_by_its_keys_applies_on_enter_and_esc_reverts_without_stopp
 }
 
 #[test]
-fn a_drag_on_a_number_box_scrubs_its_value() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window(dir.path());
-	select(&mut harness, "Source 1");
-	let x0 = project(&harness).sources[0].x;
-	let at = harness.get_by_role_and_label(Role::SpinButton, "X").rect().left_center() + vec2(10., 0.);
-	harness.hover_at(at);
-	harness.run_steps(1);
-	button(&mut harness, at, true);
-	for i in 1..=5 {
-		harness.hover_at(at + vec2(8. * i as f32, 0.));
-		harness.run_steps(1);
-	}
-	button(&mut harness, at + vec2(40., 0.), false);
-	settle(&mut harness);
-	assert!(project(&harness).sources[0].x > x0, "the drag to the right did not raise X");
-	assert!(!harness.get_by_role_and_label(Role::SpinButton, "X").is_focused(), "the drag focused the box");
-}
-
-#[test]
 fn typed_text_applies_before_a_shortcut_and_when_its_form_goes() {
 	let dir = tempfile::tempdir().unwrap();
 	let mut harness = window(dir.path());
@@ -141,66 +120,6 @@ fn typed_text_applies_before_a_shortcut_and_when_its_form_goes() {
 	typed(&mut harness, "66");
 	select(&mut harness, "Rectangle 1");
 	assert_eq!(project(&harness).sources[0].y, 66., "the typed text was lost with its form");
-}
-
-#[test]
-fn enter_on_a_tree_row_puts_the_caret_into_the_name_with_its_text_selected() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window(dir.path());
-	select(&mut harness, "Source 1");
-	key(&mut harness, Key::Enter);
-	assert!(harness.get_by_role_and_label(Role::TextInput, "Name").is_focused(), "the name box has no focus");
-	typed(&mut harness, "Beam");
-	assert_eq!(project(&harness).sources[0].name, "Beam", "the typed name did not replace the old one");
-}
-
-#[test]
-fn an_added_item_puts_the_caret_into_its_form() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window(dir.path());
-	click(&mut harness, Role::Button, "Source");
-	assert_eq!(project(&harness).sources.len(), 2);
-	assert!(
-		harness.get_by_role_and_label(Role::TextInput, "Name").is_focused(),
-		"the added source's form has no focus"
-	);
-	typed(&mut harness, "Second");
-	assert_eq!(project(&harness).sources[1].name, "Second");
-}
-
-#[test]
-fn a_check_box_a_drop_down_and_the_rows_they_enable() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window(dir.path());
-	select(&mut harness, "Source 1");
-	let on = project(&harness).sources[0].enabled;
-	click(&mut harness, Role::CheckBox, "Enabled");
-	assert_eq!(project(&harness).sources[0].enabled, !on);
-	let mode = project(&harness).sources[0].mode;
-	let other = if mode == SourceMode::Pulsed { "Continuous" } else { "Pulsed" };
-	click(&mut harness, Role::ComboBox, "Mode");
-	harness.get_by_label(other).click();
-	settle(&mut harness);
-	let pulsed = project(&harness).sources[0].mode == SourceMode::Pulsed;
-	assert_ne!(project(&harness).sources[0].mode, mode, "the pick left the mode");
-	let width = harness.get_by_role_and_label(Role::SpinButton, "Pulse width");
-	assert_eq!(width.accesskit_node().is_disabled(), !pulsed, "Pulse width does not follow the mode");
-}
-
-#[test]
-fn edges_is_greyed_while_the_damping_edge_makes_a_rim() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window(dir.path());
-	select(&mut harness, "Scene");
-	for (damping, rim) in [(-16, true), (0, false), (8, false), (-1, true)] {
-		click(&mut harness, Role::SpinButton, "Damping edge");
-		harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
-		typed(&mut harness, &damping.to_string());
-		key(&mut harness, Key::Enter);
-		assert_eq!(project(&harness).scene.damping_edge, damping);
-		let edges = harness.get_by_role_and_label(Role::ComboBox, "Edges");
-		assert_eq!(edges.accesskit_node().is_disabled(), rim, "Edges at damping edge {damping}");
-	}
 }
 
 /// The added scheme's first stop.

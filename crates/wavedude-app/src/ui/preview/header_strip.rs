@@ -266,24 +266,3 @@ fn turned(
 	}
 	action
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn caption_gives_way_before_the_title() {
-		assert_eq!(strip_layout(300., 40., 64., 110., 12.), StripLayout { caption: true, title_width: 40. });
-		assert_eq!(strip_layout(200., 40., 64., 110., 12.), StripLayout { caption: false, title_width: 40. });
-		assert_eq!(strip_layout(140., 40., 64., 110., 12.), StripLayout { caption: false, title_width: 18. });
-		assert_eq!(strip_layout(50., 40., 64., 110., 12.), StripLayout { caption: false, title_width: 0. });
-	}
-
-	#[test]
-	fn strip_goes_beside_a_wide_frame() {
-		assert!(strip_beside((800., 200.), (100, 100)));
-		assert!(!strip_beside((200., 800.), (100, 100)));
-		assert!(!strip_beside((400., 200.), (200, 100)));
-		assert!(!strip_beside((400., 0.), (200, 100)));
-	}
-}

@@ -91,7 +91,7 @@ a 32 px wavelength.
 
 ## The live run
 
-2026-11-12, `cargo test -p wavedude-core --test run --release -- --ignored --nocapture live_run_drag_burst_timing`:
+2026-11-12, `cargo test -p wavedude-core --test run --release -- --ignored --nocapture ignored_timing::live_run_drag_burst_timing`:
 Example16 at half resolution, 8-bit samples, on the GPU; the source moved by a pixel 120 times at 32 edits a
 second, the position at frame 100; the position's frame alone wanted, and every frame (the 50 stored frames
 before the position captured on the way).
@@ -103,7 +103,7 @@ before the position captured on the way).
 | the final frame after the last edit | under 1 ms | 10 ms (0.5 frame times) | 25 ms (0.4 frame times) |
 
 A part edit recomposes the scene and gives the engine the new medium. Where the time goes
-(`cargo test -p wavedude-core --test run --release -- --ignored --nocapture part_edit_cost`, Example16, 1500x900
+(`cargo test -p wavedude-core --test run --release -- --ignored --nocapture ignored_timing::part_edit_cost`, Example16, 1500x900
 canvas): composing the scene pixels 4.9 ms, the medium from them 2.7 ms, the GPU engine taking the new scene
 7.5 ms. The sub-step medium takes its damping root and its table index once per run of equal cells; taken per
 cell, the GPU engine needed 31.6 ms, a part moved took 88 ms a frame and showed 1 frame of the 120 edits.
@@ -227,7 +227,7 @@ the 33 ms frames to 32 or 48 ms).
 
 Preview colouring, 2026-11-13, a new frame's picture of a 2880x1080 16-bit plane (Example 21's canvas) at
 1600x600 device pixels with the outline, mean of 60:
-`cargo test --release -p wavedude-core --features gpu --test colour -- --ignored --nocapture preview_colouring_time`
+`cargo test --release -p wavedude-core --features gpu --test colour -- --ignored --nocapture ignored_timing::preview_colouring_time`
 (`VK_ICD_FILENAMES` picks lavapipe). Before, the presenter's paint and outline blend on the CPU: 0.87 ms a
 picture, about 570 frames a second for both pictures, plus the 3.8 MB texture upload each. After, a run on the
 GPU engine: the picture set to the next device frame, drawn, submitted and waited for: 0.066 to 0.075 ms on the
@@ -350,7 +350,7 @@ each pump.
 | Chrome, High | 120 | 1.0 | 1900 | 0.06 |
 
 Natively the threaded run waits for the oldest capture only when the ring is full: `cargo test --release -p
-wavedude-core --test run -- --ignored --nocapture live_run_drag_burst_timing`, two runs each, before / after: one frame
+wavedude-core --test run -- --ignored --nocapture ignored_timing::live_run_drag_burst_timing`, two runs each, before / after: one frame
 of Example16 25 to 31 / 23 to 25 ms (source moved), 70 to 87 / 60 to 64 ms (part moved); 118 to 120 / 120 of 120 frames
 shown with every frame wanted.
 

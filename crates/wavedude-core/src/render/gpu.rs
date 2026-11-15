@@ -450,16 +450,24 @@ mod tests {
 
 	#[test]
 	fn a_plane_fits_up_to_the_smaller_of_the_binding_and_buffer_limits() {
-		let limits = wgpu::Limits::default();
-		assert_eq!(plane_fits(&shape(8192, SampleFormat::Half), &limits), Ok(()));
+		// odd: the plane pads to a word
+		const SIDE: u32 = 1023;
+		let limits = |binding, buffer| wgpu::Limits {
+			max_storage_buffer_binding_size: binding,
+			max_buffer_size: buffer,
+			..Default::default()
+		};
+		let half_bytes = |side: u64| (side * side * 2).next_multiple_of(4);
+		let binding = half_bytes(SIDE.into());
+		let by_binding = limits(binding, 2 * binding);
+		assert_eq!(plane_fits(&shape(SIDE, SampleFormat::Half), &by_binding), Ok(()));
 		assert_eq!(
-			plane_fits(&shape(8193, SampleFormat::Half), &limits),
-			Err(PlaneTooLarge { bytes: (8193u64 * 8193 * 2).next_multiple_of(4), limit: 128 << 20 })
+			plane_fits(&shape(SIDE + 1, SampleFormat::Half), &by_binding),
+			Err(PlaneTooLarge { bytes: half_bytes((SIDE + 1).into()), limit: binding })
 		);
-		assert_eq!(plane_fits(&shape(8193, SampleFormat::Index), &limits), Ok(()));
-		let small_buffers = wgpu::Limits { max_buffer_size: 1 << 20, ..limits };
-		assert_eq!(plane_fits(&shape(1024, SampleFormat::Half), &small_buffers).map_err(|e| e.limit), Err(1 << 20));
-		let webgl2 = wgpu::Limits::downlevel_webgl2_defaults();
-		assert!(plane_fits(&shape(8, SampleFormat::Index), &webgl2).is_err());
+		assert_eq!(plane_fits(&shape(SIDE + 1, SampleFormat::Index), &by_binding), Ok(()), "a byte a sample");
+		let by_buffer = limits(2 * binding, binding / 2);
+		assert_eq!(plane_fits(&shape(SIDE, SampleFormat::Half), &by_buffer).map_err(|e| e.limit), Err(binding / 2));
+		assert!(plane_fits(&shape(1, SampleFormat::Index), &limits(0, binding)).is_err(), "no storage binding");
 	}
 }

@@ -379,26 +379,31 @@ fn coated(depth: f64, profile: CoatingProfile, front: bool, back: bool, sides: b
 #[test]
 fn lens_coatings() {
 	let lens = |coating| lens_part(Lens { coating, ..biconvex() });
+	let level = |index: f64| (index * 100.0).round_ties_even() as u8;
+	// spec 20, coating band over the canvas' index 1: Layer `round_even(sqrt(n), 2)`; Graded halfway to n at
+	// the band's middle (t = 1/2, 2.5 px in at x = 82 and 117 on row 60 and at y = 107 on column 100)
+	let n = biconvex().material.refractive_index;
+	let (body, layer, middle) = (level(n), level(n.sqrt()), level(1.0 + (n - 1.0) / 2.0));
 	let p = paint(&[lens(coated(5.0, CoatingProfile::Layer, true, true, true))]);
 	assert_eq!(
 		[red(&p, 100, 60), red(&p, 100, 107), red(&p, 100, 13), red(&p, 82, 60), red(&p, 86, 60)],
-		[150, 122, 122, 122, 150]
+		[body, layer, layer, layer, body]
 	);
 	let p = paint(&[lens(coated(5.0, CoatingProfile::Graded, true, true, true))]);
 	let ramp: Vec<u8> = (80..88).map(|x| red(&p, x, 60)).collect();
-	assert!(ramp[0] <= 103 && ramp[2] == 125 && ramp[5] == 150 && ramp[7] == 150, "{ramp:?}");
+	assert!(ramp[0] <= 103 && ramp[2] == middle && ramp[5] == body && ramp[7] == body, "{ramp:?}");
 	assert!(ramp.windows(2).all(|w| w[0] <= w[1]), "{ramp:?}");
 	assert_eq!(
 		(red(&p, 117, 60), red(&p, 100, 107)),
-		(125, 125),
+		(middle, middle),
 		"graded band identical on the second surface and the rim"
 	);
 	let p = paint(&[lens(coated(5.0, CoatingProfile::Layer, false, true, true))]);
-	assert_eq!([red(&p, 82, 60), red(&p, 117, 60), red(&p, 100, 107), red(&p, 100, 13)], [150, 122, 122, 122]);
+	assert_eq!([red(&p, 82, 60), red(&p, 117, 60), red(&p, 100, 107), red(&p, 100, 13)], [body, layer, layer, layer]);
 	let p = paint(&[lens(coated(5.0, CoatingProfile::Layer, true, true, false))]);
 	assert_eq!(
 		[red(&p, 82, 60), red(&p, 117, 60), red(&p, 100, 107), red(&p, 100, 13)],
-		[122, 122, 150, 150],
+		[layer, layer, body, body],
 		"bare sides"
 	);
 }
@@ -1014,12 +1019,10 @@ fn zone_plate() {
 	assert!(first_block(4.0) < first_block(2.0));
 }
 
-/// A compact picture of a painting: a hash of the bytes and 25 x 25 cells of 8 x 8 pixels, each
-/// the mean red change (`.` none, else a digit of |mean - 100| / 16, `-` for a lower index) and
-/// a second grid for blue.
+/// A compact picture of a painting: 25 x 25 cells of 8 x 8 pixels, each the mean red change (`.` none, else a
+/// digit of |mean - 100| / 16, `-` for a lower index) and a second grid for blue.
 fn summary(p: &ScenePixels) -> String {
-	let hash = p.rgba.iter().fold(0xcbf29ce484222325u64, |h, &b| (h ^ b as u64).wrapping_mul(0x100000001b3));
-	let mut out = format!("fnv {hash:016x}\n");
+	let mut out = String::new();
 	for channel in [0usize, 2] {
 		for cy in 0..25u32 {
 			for cx in 0..25u32 {
@@ -1215,47 +1218,51 @@ fn snapshots_of_each_kind() {
 	}
 }
 
-#[test]
-#[ignore = "timing; run with --ignored --nocapture in release"]
-fn timing_full_hd() {
-	let parts = [
-		(
-			"outline 400 x 330",
-			PartKind::Outline(Outline {
-				points: [(-200, -165), (120, -165), (200, -60), (170, 165), (-60, 140), (-200, 90)]
-					.map(|(x, y)| Point::new(x, y))
-					.to_vec(),
-				..Outline::default()
-			}),
-		),
-		(
-			"lens 400 px",
-			PartKind::Lens(Lens { diameter: 400, r1: 600.0, r2: -600.0, thickness: 80, ..Lens::default() }),
-		),
-		("hexagon", PartKind::Polygon(Polygon::default())),
-		(
-			"S-bent fibre",
-			PartKind::Fiber(Fiber {
-				nodes: vec![
-					FiberNode { x: -900, y: -300, out_x: 600, ..FiberNode::default() },
-					FiberNode { x: 900, y: 300, in_x: -600, ..FiberNode::default() },
-				],
-				..Fiber::default()
-			}),
-		),
-	];
-	let blank = ScenePixels::blank(1920, 1080, 1.0);
-	for (name, kind) in parts {
-		let part = normalized(&Part::new(kind, 960, 540));
-		let mut times: Vec<f64> = (0..7)
-			.map(|_| {
-				let mut p = blank.clone();
-				let t = std::time::Instant::now();
-				paint_part(&mut p, &part, &sim(), SEED);
-				t.elapsed().as_secs_f64() * 1e3
-			})
-			.collect();
-		times.sort_by(f64::total_cmp);
-		eprintln!("{name}: median {:.2} ms (min {:.2})", times[3], times[0]);
+mod ignored_timing {
+	use super::*;
+
+	#[test]
+	#[ignore = "timing: cargo test --release -p wavedude-core --test painter -- --ignored ignored_timing:: --nocapture"]
+	fn timing_full_hd() {
+		let parts = [
+			(
+				"outline 400 x 330",
+				PartKind::Outline(Outline {
+					points: [(-200, -165), (120, -165), (200, -60), (170, 165), (-60, 140), (-200, 90)]
+						.map(|(x, y)| Point::new(x, y))
+						.to_vec(),
+					..Outline::default()
+				}),
+			),
+			(
+				"lens 400 px",
+				PartKind::Lens(Lens { diameter: 400, r1: 600.0, r2: -600.0, thickness: 80, ..Lens::default() }),
+			),
+			("hexagon", PartKind::Polygon(Polygon::default())),
+			(
+				"S-bent fibre",
+				PartKind::Fiber(Fiber {
+					nodes: vec![
+						FiberNode { x: -900, y: -300, out_x: 600, ..FiberNode::default() },
+						FiberNode { x: 900, y: 300, in_x: -600, ..FiberNode::default() },
+					],
+					..Fiber::default()
+				}),
+			),
+		];
+		let blank = ScenePixels::blank(1920, 1080, 1.0);
+		for (name, kind) in parts {
+			let part = normalized(&Part::new(kind, 960, 540));
+			let mut times: Vec<f64> = (0..7)
+				.map(|_| {
+					let mut p = blank.clone();
+					let t = std::time::Instant::now();
+					paint_part(&mut p, &part, &sim(), SEED);
+					t.elapsed().as_secs_f64() * 1e3
+				})
+				.collect();
+			times.sort_by(f64::total_cmp);
+			eprintln!("{name}: median {:.2} ms (min {:.2})", times[3], times[0]);
+		}
 	}
 }

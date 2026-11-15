@@ -826,7 +826,7 @@ fn apply_edit(project: &mut Project, edit: &Edit) -> Result<Change, CommandError
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use wavedude_core::model::{SceneEdit, SimulationEdit, VideoEdit};
+	use wavedude_core::model::{SceneEdit, SimulationEdit, VideoEdit, ranges};
 
 	fn project() -> Project {
 		let mut p = Project::default();
@@ -949,19 +949,6 @@ mod tests {
 	}
 
 	#[test]
-	fn a_change_is_noted_with_its_subject_and_the_edit_is_normalised() {
-		let (mut p, mut s) = (project(), Selection::default());
-		let c = edit(&mut p, &mut s, Edit::Project(ProjectEdit::Seed(7)));
-		assert_eq!(c.note.as_deref(), Some("Project.Seed = 7"));
-		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard });
-		let c = edit(&mut p, &mut s, Edit::Probe(0, ProbeEdit::Ax(7)));
-		assert_eq!((c.note.as_deref(), p.probes[0].ax), (Some("Probe 'Probe 1'.Ax = 7"), 7));
-		run(&mut p, &mut s, Command::AddSource { at: None });
-		let c = edit(&mut p, &mut s, Edit::Source(0, SourceEdit::Frequency(9999.0)));
-		assert_eq!((c.kind, p.sources[0].frequency), (ChangeKind::Simulation, 255.0));
-	}
-
-	#[test]
 	fn typed_lens_mirror_renames_and_linked_width() {
 		let (mut p, mut s) = (project(), Selection::default());
 		run(&mut p, &mut s, Command::AddPart { kind: NewPart::Lens, at: None });
@@ -1003,31 +990,44 @@ mod tests {
 	}
 
 	#[test]
-	fn an_edit_describes_its_subject_and_path() {
+	fn an_edit_is_described_by_its_subject_and_path_noted_with_its_value_and_normalised() {
 		let (mut p, mut s) = (project(), Selection::default());
 		run(&mut p, &mut s, Command::AddProbe { at: None, detector: ProbeDetector::Standard });
-		let e = Edit::Probe(0, ProbeEdit::BoxWidth(500));
-		assert_eq!(e.describe(&p), "Probe 'Probe 1'.BoxWidth");
+		let e = Edit::Probe(0, ProbeEdit::Ax(7));
+		assert_eq!(e.describe(&p), "Probe 'Probe 1'.Ax");
 		assert_eq!(e.item(), Some(ItemRef::new(ItemKind::Probe, 0)));
+		let c = edit(&mut p, &mut s, e);
+		assert_eq!((c.note.as_deref(), p.probes[0].ax), (Some("Probe 'Probe 1'.Ax = 7"), 7));
 		let e = Edit::Project(ProjectEdit::Display(DisplayEdit::Intensity(DisplayLayerEdit::Preview(true))));
 		assert_eq!(e.describe(&p), "Display.Intensity.Preview");
 		assert_eq!(e.item(), None);
+		let c = edit(&mut p, &mut s, Edit::Project(ProjectEdit::Seed(7)));
+		assert_eq!(c.note.as_deref(), Some("Project.Seed = 7"));
+		run(&mut p, &mut s, Command::AddSource { at: None });
+		let c = edit(&mut p, &mut s, Edit::Source(0, SourceEdit::Frequency(ranges::LEVEL.max * 2.)));
+		assert_eq!((c.kind, p.sources[0].frequency), (ChangeKind::Simulation, ranges::LEVEL.max));
 	}
 
 	#[test]
-	fn a_name_edit_renames_like_the_command() {
-		let (mut p, mut s) = (project(), Selection::default());
-		run(&mut p, &mut s, Command::AddScheme);
-		p.display.field.color_scheme = "Scheme 1".into();
-		let name = |n: &str| Edit::Scheme(0, ColorSchemeEdit::Name(n.into()));
-		let c = edit(&mut p, &mut s, name("  Mine "));
-		assert_eq!(
-			(c.kind, p.color_schemes[0].name.as_str(), p.display.field.color_scheme.as_str()),
-			(ChangeKind::Display, "Mine", "Mine")
-		);
-		let blank = apply(&mut p, &mut s, Command::Edit(name("  ")));
-		assert_eq!(blank, Err(CommandError::EmptyName));
-		assert_eq!(p.color_schemes[0].name, "Mine");
+	fn a_scheme_renamed_by_the_command_or_a_name_edit_repoints_the_layers() {
+		let renames: [fn(&str) -> Command; 2] = [
+			|n| Command::Rename { target: ItemRef::new(ItemKind::Scheme, 0), name: n.into() },
+			|n| Command::Edit(Edit::Scheme(0, ColorSchemeEdit::Name(n.into()))),
+		];
+		for rename in renames {
+			let (mut p, mut s) = (project(), Selection::default());
+			run(&mut p, &mut s, Command::AddScheme);
+			p.display.field.color_scheme = "Scheme 1".into();
+			let c = run(&mut p, &mut s, rename("  Mine "));
+			assert_eq!(
+				(c.kind, p.color_schemes[0].name.as_str(), p.display.field.color_scheme.as_str()),
+				(ChangeKind::Display, "Mine", "Mine"),
+				"{:?}",
+				rename("Mine")
+			);
+			assert_eq!(apply(&mut p, &mut s, rename("  ")), Err(CommandError::EmptyName));
+			assert_eq!(p.color_schemes[0].name, "Mine");
+		}
 	}
 
 	#[test]
@@ -1082,21 +1082,13 @@ mod tests {
 	}
 
 	#[test]
-	fn scheme_rename_repoints_layers() {
-		let (mut p, mut s) = (project(), Selection::default());
-		run(&mut p, &mut s, Command::AddScheme);
-		p.display.field.color_scheme = "Scheme 1".into();
-		let c = run(&mut p, &mut s, Command::Rename { target: ItemRef::new(ItemKind::Scheme, 0), name: "Mine".into() });
-		assert_eq!((c.kind, p.display.field.color_scheme.as_str()), (ChangeKind::Display, "Mine"));
-	}
-
-	#[test]
 	fn an_edit_normalised_back_to_the_kept_value_changes_nothing() {
 		let mut p = project();
-		p.simulation.steps = 10_000_000;
-		let edit = Edit::Project(ProjectEdit::Simulation(SimulationEdit::Steps(20_000_000)));
+		let max = ranges::SIM_STEPS.max as u32;
+		p.simulation.steps = max;
+		let edit = Edit::Project(ProjectEdit::Simulation(SimulationEdit::Steps(2 * max)));
 		let change = run(&mut p, &mut Selection::default(), Command::Edit(edit));
 		assert_eq!(change.kind, ChangeKind::None, "the steps are clamped back to their maximum");
-		assert_eq!(p.simulation.steps, 10_000_000);
+		assert_eq!(p.simulation.steps, max);
 	}
 }

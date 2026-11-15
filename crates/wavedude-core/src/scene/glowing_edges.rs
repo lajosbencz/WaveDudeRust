@@ -127,22 +127,25 @@ mod tests {
 			.collect()
 	}
 
+	/// A step from black to (200, 40, 0) at column or row 4 of an 8 x 6 image lights the two columns or rows beside
+	/// it with the step's colour (`|g| = 4 * 200`, times 0.25) inside the black outer ring.
 	#[test]
-	fn a_step_lights_the_two_columns_beside_it() {
+	fn a_step_lights_the_two_columns_or_rows_beside_it() {
 		let (w, h) = (8, 6);
-		let mut rgba = vec![0u8; w * h * 4];
-		for y in 0..h {
-			for x in 4..w {
-				rgba[(y * w + x) * 4..][..4].copy_from_slice(&[200, 40, 0, 255]);
-			}
-		}
-		let edges = compute(&rgba, w, h);
-		for y in 0..h {
-			for x in 0..w {
-				let p = &edges[(y * w + x) * 4..][..4];
-				let lit = (1..h - 1).contains(&y) && (x == 3 || x == 4);
-				let expected = if lit { [200, 40, 0, 255] } else { [0, 0, 0, 255] };
-				assert_eq!(p, expected, "({x}, {y})");
+		for vertical in [true, false] {
+			let across = |x: usize, y: usize| if vertical { x } else { y };
+			let rgba: Vec<u8> = (0..w * h)
+				.flat_map(|i| if across(i % w, i / w) >= 4 { [200, 40, 0, 255] } else { [0, 0, 0, 255] })
+				.collect();
+			let edges = compute(&rgba, w, h);
+			for y in 0..h {
+				for x in 0..w {
+					let p = &edges[(y * w + x) * 4..][..4];
+					let inner = (1..w - 1).contains(&x) && (1..h - 1).contains(&y);
+					let lit = inner && matches!(across(x, y), 3 | 4);
+					let expected = if lit { [200, 40, 0, 255] } else { [0, 0, 0, 255] };
+					assert_eq!(p, expected, "vertical {vertical}: ({x}, {y})");
+				}
 			}
 		}
 	}

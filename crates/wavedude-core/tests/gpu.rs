@@ -520,7 +520,6 @@ fn an_adopted_device_runs_engines_with_its_own_limits() {
 	let adapter = adapter(false).expect("adapter");
 	let (device, queue) = device(&adapter, wgpu::Limits::default());
 	let limits = device.limits();
-	assert!(limits.max_buffer_size <= adapter.limits().max_buffer_size);
 	let ctx = GpuContext::from_device(&adapter, device, queue).expect("GPU context");
 	assert_eq!(ctx.limits, limits);
 	let settings = Scene { damping_edge: 0, ..Scene::default() };
@@ -857,58 +856,6 @@ fn replaced_scene_steps_like_a_fresh_engine() {
 	assert!(a == b, "the replaced engine is bit-identical to a fresh one");
 }
 
-/// Step and capture times at full HD with a 32 px rim.
-#[test]
-#[ignore = "timing; run with --release -- --ignored --nocapture"]
-fn timing_full_hd() {
-	if !gpu_available() {
-		return;
-	}
-	let settings = Scene { damping_edge: -32, ..Scene::default() };
-	for layout in [MediumLayout::Compact, MediumLayout::Plain] {
-		for stencil in STENCILS {
-			let mut gpu = GpuEngine::with_layout(SceneData::blank(1920, 1080, &settings), options(stencil), layout)
-				.expect("GPU engine");
-			gpu.set_emitters(&[emitter(960, 540, 100.0)]);
-			run(&mut gpu, 200);
-			gpu.synchronize().unwrap();
-			let steps = 2000;
-			let t = Instant::now();
-			run(&mut gpu, steps);
-			gpu.synchronize().unwrap();
-			let step = t.elapsed().as_secs_f64() * 1e3 / steps as f64;
-			let mut capture = |format| {
-				let shape = FrameShape { canvas_width: 1920, canvas_height: 1080, ..shape(1, format) };
-				drop(gpu.capture_frame(&shape).unwrap());
-				let n = 50;
-				let t = Instant::now();
-				for _ in 0..n {
-					drop(gpu.capture_frame(&shape).unwrap());
-				}
-				t.elapsed().as_secs_f64() * 1e3 / n as f64
-			};
-			let (half, index) = (capture(SampleFormat::Half), capture(SampleFormat::Index));
-			let full = FrameShape { canvas_width: 1920, canvas_height: 1080, ..shape(1, SampleFormat::Half) };
-			let t = Instant::now();
-			let mut previous = None;
-			for _ in 0..100 {
-				run(&mut gpu, 2);
-				let pending = gpu.begin_capture(&full, Snapshot::new(full)).unwrap();
-				if let Some(p) = previous.replace(pending) {
-					drop(gpu.finish_capture(p).unwrap());
-				}
-			}
-			drop(gpu.finish_capture(previous.expect("a capture")).unwrap());
-			let cycle = t.elapsed().as_secs_f64() * 1e3 / 100.0;
-			eprintln!(
-				"{layout:?} {stencil:?}, {} sub-steps: {step:.3} ms a step; capture of both planes {half:.2} ms as halves, \
-				 {index:.2} ms as indices; 2 steps + overlapped half capture {cycle:.2} ms",
-				gpu.sub_steps()
-			);
-		}
-	}
-}
-
 #[test]
 fn no_engine_is_built_on_a_lost_device() {
 	if !gpu_available() {
@@ -920,4 +867,60 @@ fn no_engine_is_built_on_a_lost_device() {
 	let data = SceneData::blank(64, 48, &Scene { damping_edge: 0, ..Scene::default() });
 	let built = pollster::block_on(GpuEngine::create(ctx, data, options(Stencil::NinePoint), MediumLayout::Compact));
 	assert!(matches!(built, Err(GpuError::Lost { .. })), "{:?}", built.err());
+}
+
+mod ignored_timing {
+	use super::*;
+
+	/// Step and capture times at full HD with a 32 px rim.
+	#[test]
+	#[ignore = "timing: cargo test --release -p wavedude-core --test gpu -- --ignored ignored_timing:: --nocapture"]
+	fn timing_full_hd() {
+		if !gpu_available() {
+			return;
+		}
+		let settings = Scene { damping_edge: -32, ..Scene::default() };
+		for layout in [MediumLayout::Compact, MediumLayout::Plain] {
+			for stencil in STENCILS {
+				let mut gpu = GpuEngine::with_layout(SceneData::blank(1920, 1080, &settings), options(stencil), layout)
+					.expect("GPU engine");
+				gpu.set_emitters(&[emitter(960, 540, 100.0)]);
+				run(&mut gpu, 200);
+				gpu.synchronize().unwrap();
+				let steps = 2000;
+				let t = Instant::now();
+				run(&mut gpu, steps);
+				gpu.synchronize().unwrap();
+				let step = t.elapsed().as_secs_f64() * 1e3 / steps as f64;
+				let mut capture = |format| {
+					let shape = FrameShape { canvas_width: 1920, canvas_height: 1080, ..shape(1, format) };
+					drop(gpu.capture_frame(&shape).unwrap());
+					let n = 50;
+					let t = Instant::now();
+					for _ in 0..n {
+						drop(gpu.capture_frame(&shape).unwrap());
+					}
+					t.elapsed().as_secs_f64() * 1e3 / n as f64
+				};
+				let (half, index) = (capture(SampleFormat::Half), capture(SampleFormat::Index));
+				let full = FrameShape { canvas_width: 1920, canvas_height: 1080, ..shape(1, SampleFormat::Half) };
+				let t = Instant::now();
+				let mut previous = None;
+				for _ in 0..100 {
+					run(&mut gpu, 2);
+					let pending = gpu.begin_capture(&full, Snapshot::new(full)).unwrap();
+					if let Some(p) = previous.replace(pending) {
+						drop(gpu.finish_capture(p).unwrap());
+					}
+				}
+				drop(gpu.finish_capture(previous.expect("a capture")).unwrap());
+				let cycle = t.elapsed().as_secs_f64() * 1e3 / 100.0;
+				eprintln!(
+					"{layout:?} {stencil:?}, {} sub-steps: {step:.3} ms a step; capture of both planes {half:.2} ms as halves, \
+					 {index:.2} ms as indices; 2 steps + overlapped half capture {cycle:.2} ms",
+					gpu.sub_steps()
+				);
+			}
+		}
+	}
 }

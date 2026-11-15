@@ -262,10 +262,14 @@ mod tests {
 
 	#[test]
 	fn kicks_start_at_the_first_gap_and_double_up_to_the_cap() {
-		let gaps: Vec<_> = Kicks::default().take(7).collect();
-		let ms = Duration::from_millis;
-		assert_eq!(gaps, [FIRST_KICK, ms(1), ms(2), ms(4), ms(8), ms(8), ms(8)]);
-		assert_eq!(MAX_KICK_GAP, ms(8));
+		let doublings = (MAX_KICK_GAP.as_secs_f64() / FIRST_KICK.as_secs_f64()).log2().ceil() as usize;
+		let gaps: Vec<_> = Kicks::default().take(doublings + 3).collect();
+		assert_eq!(gaps[0], FIRST_KICK);
+		for pair in gaps.windows(2) {
+			let doubled = pair[0] * 2;
+			assert_eq!(pair[1], doubled.min(MAX_KICK_GAP), "{gaps:?}");
+		}
+		assert_eq!(gaps[gaps.len() - 2..], [MAX_KICK_GAP; 2], "held at the cap");
 	}
 
 	#[test]

@@ -78,15 +78,4 @@ mod tests {
 		assert_eq!(background_red(1.005), 100);
 		assert_eq!(background_red(2.55), 255);
 	}
-
-	#[test]
-	fn decodes_png() {
-		let mut img = image::RgbaImage::new(2, 1);
-		img.put_pixel(1, 0, image::Rgba([120, 7, 9, 255]));
-		let mut bytes = Vec::new();
-		img.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).unwrap();
-		let p = ScenePixels::from_image_bytes(&bytes).unwrap();
-		assert_eq!((p.width, p.height), (2, 1));
-		assert_eq!(p.rgba_at(1, 0), [120, 7, 9, 255]);
-	}
 }

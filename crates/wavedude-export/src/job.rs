@@ -732,6 +732,12 @@ mod tests {
 			let bytes = fs.take(Path::new("v.mp4")).unwrap();
 			let size = bytes.len() as u64;
 			let mut mp4 = ::mp4::Mp4Reader::read_header(Cursor::new(bytes), size).unwrap();
+			let track = &mp4.tracks()[&1];
+			let coded = (W.next_multiple_of(2) as u16, H.next_multiple_of(2) as u16);
+			assert_eq!((track.width(), track.height()), coded, "avc1 has the padded size");
+			assert_eq!(track.timescale(), FPS, "one tick per frame");
+			assert_eq!(track.sequence_parameter_set().unwrap()[0] & 0x1F, 7, "avcC holds the SPS");
+			assert_eq!(track.picture_parameter_set().unwrap()[0] & 0x1F, 8, "avcC holds the PPS");
 			assert_eq!(mp4.sample_count(1).unwrap(), FRAMES as u32);
 			for k in 0..FRAMES {
 				let sample = mp4.read_sample(1, k as u32 + 1).unwrap().unwrap();

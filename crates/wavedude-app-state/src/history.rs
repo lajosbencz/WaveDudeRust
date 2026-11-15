@@ -155,17 +155,20 @@ mod tests {
 		p.seed = 2;
 		h.edit_started(start);
 		h.mouse_down();
-		assert!(!h.tick(start + Duration::from_secs(2), &p), "a held button keeps the step open");
-		h.mouse_up(start + Duration::from_secs(2));
-		assert!(!h.tick(start + Duration::from_millis(2400), &p));
-		assert!(h.tick(start + Duration::from_millis(2500), &p));
+		let up = start + 4 * QUIET;
+		assert!(!h.tick(up, &p), "a held button keeps the step open");
+		h.mouse_up(up);
+		let ms = Duration::from_millis(1);
+		assert!(!h.tick(up + QUIET - ms, &p));
+		assert!(h.tick(up + QUIET, &p));
 		assert_eq!(h.len(), 2);
+		let (first, last) = (up + 2 * QUIET, up + 2 * QUIET + QUIET - ms);
 		p.seed = 3;
-		h.edit_started(start + Duration::from_secs(3));
+		h.edit_started(first);
 		p.seed = 4;
-		h.edit_started(start + Duration::from_millis(3400));
-		assert!(!h.tick(start + Duration::from_millis(3800), &p));
-		assert!(h.tick(start + Duration::from_millis(3900), &p));
+		h.edit_started(last);
+		assert!(!h.tick(last + QUIET - ms, &p));
+		assert!(h.tick(last + QUIET, &p));
 		assert_eq!(h.len(), 3, "edits inside the quiet time are one step");
 	}
 

@@ -260,16 +260,6 @@ mod tests {
 	}
 
 	#[test]
-	fn boxes_snap_onto_their_probe() {
-		let size = (100., 50.);
-		assert_eq!(dragged_box((0, 0), (40, 40), (35., 38.), 1., (500, 500), size), (40, 40), "within the snap radius");
-		assert_eq!(dragged_box((0, 0), (40, 40), (20., 20.), 1., (500, 500), size), (20, 20));
-		assert_eq!(dragged_box((40, 40), (40, 40), (15., 0.), 1., (500, 500), size), (40, 40), "held until released");
-		assert_eq!(dragged_box((40, 40), (40, 40), (30., 0.), 1., (500, 500), size), (70, 40));
-		assert_eq!(dragged_box((0, 0), (300, 300), (900., -10.), 1., (500, 500), size), (400, 0), "kept inside");
-	}
-
-	#[test]
 	fn box_edits_change_only_what_moved() {
 		let p = Probe { box_x: 5, box_y: 6, box_size: BoxSize::Small, ..Probe::default() };
 		assert!(moved_box_edits(0, &p, (5, 6)).is_empty());

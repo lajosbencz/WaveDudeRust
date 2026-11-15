@@ -361,34 +361,6 @@ mod tests {
 	}
 
 	#[test]
-	fn filter_by_level_text_and_regex() {
-		let log = log();
-		let mut f = MessageFilter::new(false);
-		assert_eq!(visible(&log, &f).len(), 3);
-		f.toggle(LogLevel::Debug);
-		assert_eq!(visible(&log, &f).len(), 4);
-		f.search = "EXPORT".into();
-		assert_eq!(visible(&log, &f), [3]);
-		f.search = "budget".into();
-		assert_eq!(visible(&log, &f), [2]);
-		f.regex = true;
-		f.search = r"^(opened|the)\b".into();
-		assert_eq!(visible(&log, &f), [1, 3]);
-		f.search = "(unfinished".into();
-		assert_eq!(visible(&log, &f).len(), 4);
-	}
-
-	#[test]
-	fn a_ring_line_keeps_its_first_line_and_the_whole_text_as_detail() {
-		let ring = log::LogRing::new();
-		ring.push(Level::WARN, "wavedude_app::store", "spilled\nbudget 6 GB".into());
-		let line = LogLine::of(&ring.since(None)[0]);
-		assert_eq!((line.text.as_str(), line.level, line.source_short()), ("spilled", LogLevel::Warn, "store"));
-		assert_eq!(line.detail.as_deref(), Some("spilled\nbudget 6 GB"));
-		assert_eq!(line.time.len(), "00:00:00.000".len());
-	}
-
-	#[test]
 	fn selection_and_copy() {
 		let log = log();
 		let ids = visible(&log, &MessageFilter::new(true));

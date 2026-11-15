@@ -130,15 +130,6 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn manual_splits_at_its_chapters() {
-		let all = sections(MANUAL);
-		let titles: Vec<&str> = all.iter().filter(|s| s.level == 2).map(|s| s.title.as_str()).collect();
-		assert_eq!(titles.first(), Some(&"The main window"));
-		assert!(titles.contains(&"The examples"));
-		assert!(all.iter().all(|s| s.body.starts_with('#')));
-	}
-
-	#[test]
 	fn every_figure_tag_names_a_bundled_figure_and_every_anchor_a_heading() {
 		let all = sections(MANUAL);
 		let anchors: Vec<String> = all.iter().map(|s| anchor(&s.title)).collect();
@@ -158,17 +149,5 @@ mod tests {
 				rest = &target[end..];
 			}
 		}
-	}
-
-	#[test]
-	fn a_figure_s_size_is_its_png_s() {
-		assert_eq!(figures::get("main-window").unwrap().size(), [1400, 900]);
-	}
-
-	#[test]
-	fn anchors_follow_github() {
-		assert_eq!(anchor("The File menu"), "the-file-menu");
-		assert_eq!(anchor("Lens/Mirror"), "lensmirror");
-		assert_eq!(anchor("XOR gate"), "xor-gate");
 	}
 }

@@ -65,7 +65,7 @@ the repository installs it, as CI does. Bump it there when a new stable is wante
 | clippy | lints, warnings fail | `cargo clippy --workspace --all-targets --features $F -- -D warnings` | `[workspace.lints]` of [`Cargo.toml`](Cargo.toml) |
 | cargo test | the tests; the export tests decode their output with `ffmpeg` when it is on the `PATH` | `cargo test --workspace --features $F` | |
 | [cargo-insta](https://insta.rs) | text snapshots | `cargo insta review` | `tests/snapshots/` of core and export |
-| [egui_kittest](https://docs.rs/egui_kittest) | the window's tests, driven through AccessKit by role and label, with no image snapshots; the manual's figures render on Mesa's lavapipe | `cargo test -p wavedude-app --test shell` | |
+| [egui_kittest](https://docs.rs/egui_kittest) | the window's tests, driven through AccessKit by role and label, with no image snapshots; the manual's figures render on Mesa's lavapipe | `cargo test -p wavedude-app --tests` | |
 | rustdoc | docs without warnings | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | |
 | [cargo-hack](https://github.com/taiki-e/cargo-hack) | every feature combination compiles | `cargo hack check --workspace --feature-powerset --depth 2` | |
 | [cargo-machete](https://github.com/bnjbvr/cargo-machete) | no unused dependency | `cargo machete` | |
@@ -80,9 +80,16 @@ The versions CI uses are pinned in the workflows. Coverage is slow: measured on 
 after a build of its own; instrumented, `cli.rs` went from 21 s to 23.5 min and `physics.rs` from 14 s to 17 min. Beyond
 the checks:
 
-- Timings: `wavedude-cli bench` (`--help` lists its options) and the `#[ignore]` timing tests, run with
-  `cargo test --release -p <crate> --test <file> -- --ignored --nocapture <name>`; a result goes into
+- Timings: `wavedude-cli bench` (`--help` lists its options) and the `ignored_timing` tests; a result goes into
   [`docs/measurements.md`](docs/measurements.md) with its command.
+- `#[ignore]` tests sit in one of four modules, `ignored_timing`, `ignored_slow`, `ignored_network` and `ignored_tool`, so
+  `-- --ignored ignored_<group>::` runs one group (`cargo test --workspace --features $F -- --ignored ignored_slow::`; a test
+  name after the `::` picks one) and `-- --ignored` all of them. Each ignore text has its test's own command.
+  - `ignored_timing`: prints numbers, asserts little; `cargo test --release -p <crate> --test <file> -- --ignored ignored_timing:: --nocapture`.
+  - `ignored_slow`: correctness tests that take seconds to minutes (the shipped gates).
+  - `ignored_network`: downloads Cisco's OpenH264 (`cargo test -p wavedude-export --test video -- --ignored ignored_network::`,
+    without `openh264-source`).
+  - `ignored_tool`: writes the manual's figures (`WAVEDUDE_FIGURES=$PWD/crates/wavedude-app/assets/manual cargo test -p wavedude-app --test screenshots -- --ignored ignored_tool::`).
 - [`tools/compare-csharp`](tools/compare-csharp/) dumps WaveDude Next's results for `wavedude-cli compare` (.NET 10 SDK,
   `WAVEDUDE_NEXT_DIR`); its [`README.md`](tools/compare-csharp/README.md) has the commands.
 - Releases: [git-cliff](https://git-cliff.org) ([`cliff.toml`](cliff.toml)) writes the changelog and the next version from the

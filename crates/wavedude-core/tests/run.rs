@@ -106,7 +106,8 @@ fn spec_snapshot() {
 	assert_eq!(s.frame_count(), 11, "ceil(21 / 2)");
 	assert_eq!(s.probes.len(), 3, "inactive probes left out");
 	assert_eq!(s.layers(), &[Layer::Field, Layer::Intensity]);
-	assert_eq!((s.shape.field_brightness, s.shape.intensity_brightness), (1.0, 1.5));
+	let brightness = (p.display.field.brightness as f32, p.display.intensity.brightness as f32);
+	assert_eq!((s.shape.field_brightness, s.shape.intensity_brightness), brightness);
 	assert_eq!((s.scene.grid_width(), s.scene.rim), (72, 4));
 	p.display.intensity.preview = false;
 	p.probes.clear();
@@ -284,10 +285,12 @@ fn frames_in_budget() {
 	let full = spec(&p, PreviewQuality::FULL);
 	// Two layers of 2-byte samples at full size; of 1-byte indices at half size.
 	assert_eq!(full.frame_bytes(), 2 * 1920 * 1080 * 2);
-	assert_eq!(Budget::frames_in(GIB, full.frame_bytes()) as u64, GIB / full.frame_bytes());
 	let reduced = full.with_quality(PreviewQuality::new(2, 1, SampleFormat::Index));
 	assert_eq!(reduced.frame_bytes(), 2 * 960 * 540);
-	assert_eq!(Budget::frames_in(GIB, reduced.frame_bytes()) as u64, GIB / reduced.frame_bytes());
+	assert_eq!(full.frame_bytes(), 8 * reduced.frame_bytes());
+	// spec/70 FramesInBudget: 129 full-HD frames of both planes per GiB (spec/70's GB), 1035 half-size index frames
+	assert_eq!(Budget::frames_in(GIB, full.frame_bytes()), 129);
+	assert_eq!(Budget::frames_in(GIB, reduced.frame_bytes()), 1035);
 	assert_eq!(Budget::frames_in(0, reduced.frame_bytes()), 0);
 }
 
@@ -912,58 +915,6 @@ fn memory_warning_levers_and_proposal() {
 	assert_eq!(w.quality_of(Levers { resolution: true, frames: true, samples: true, cache_auto: false }), low.quality);
 }
 
-// ---- timing (release build: cargo test -p wavedude-core --release --test run -- --ignored --nocapture) ----
-
-#[test]
-#[ignore]
-fn store_write_timing() {
-	let mut p = project(1920, 1080, 200);
-	p.sources.clear();
-	let s = spec(&p, PreviewQuality::FULL);
-	let shots: Vec<Snapshot> = (0..4).map(|k| snapshot_of(&s, k as f32)).collect();
-	// A capture writes the frame into the store's buffer; this copy stands in for it.
-	let write = |st: &FrameStore, shot: &Snapshot| {
-		let mut b = st.next_buffer();
-		b.field.clear();
-		b.field.extend_from_slice(&shot.field);
-		b.intensity.clear();
-		b.intensity.extend_from_slice(&shot.intensity);
-		st.write(b).unwrap();
-	};
-	let st = store(&s, 4 * GIB);
-	std::thread::sleep(Duration::from_millis(500));
-	let started = Instant::now();
-	let mut slowest = Duration::ZERO;
-	for k in 0..100 {
-		let t = Instant::now();
-		write(&st, &shots[k % 4]);
-		slowest = slowest.max(t.elapsed());
-	}
-	let steady = started.elapsed();
-	let st2 = store(&s, 4 * GIB);
-	let started = Instant::now();
-	for k in 0..100 {
-		write(&st2, &shots[k % 4]);
-	}
-	let cold = started.elapsed();
-	let dir = tempfile::tempdir().unwrap();
-	let st3 = FrameStore::in_dir(StoreLayout::of(&s), 0, None, dir.path()).unwrap();
-	let started = Instant::now();
-	for k in 0..100 {
-		write(&st3, &shots[k % 4]);
-	}
-	let disk = started.elapsed();
-	let ms = |d: Duration| d.as_secs_f64() * 1e3 / 100.0;
-	println!(
-		"full-HD both planes f16 ({} MB a frame): {:.2} ms a frame after a pause ({:.2} slowest), {:.2} from a cold start, {:.2} to the file",
-		s.frame_bytes() as f64 / 1e6,
-		ms(steady),
-		slowest.as_secs_f64() * 1e3,
-		ms(cold),
-		ms(disk)
-	);
-}
-
 #[test]
 fn specs_of_an_unchanged_scene_share_its_medium() {
 	let mut p = project(64, 32, 20);
@@ -1000,18 +951,6 @@ fn a_frame_for_later_is_left_for_the_frame_looked_at_and_the_tail_comes_before_t
 	assert_eq!(w.status().traces_steps, 4000, "the probes' tail was recorded");
 	let r = run(&s, GIB);
 	w.with_traces(|t| assert_eq!(t, &r.traces()[..]));
-}
-
-/// A burst of edits at 32 a second on the GPU (docs/measurements.md, The live run): frames shown during the
-/// drag and the final frame's lag, with the position's frame alone wanted and with every frame (the frames
-/// before the position captured on the way). Run with `--ignored --nocapture`.
-#[test]
-#[ignore]
-fn live_run_drag_burst_timing() {
-	for wanted in [Wanted::Position, Wanted::All] {
-		drag_burst(wanted, false);
-	}
-	drag_burst(Wanted::All, true);
 }
 
 /// `part`: the first part moves (the scene recomposed per edit) instead of the first source.
@@ -1088,44 +1027,110 @@ fn nudge(project: &mut Project, part: bool) {
 	}
 }
 
-/// Where a part edit's time goes on Example16 at half resolution on the GPU: composing the scene pixels, the
-/// medium from them, the engine taking the new scene. Run with `--ignored --nocapture`.
-#[test]
-#[ignore]
-fn part_edit_cost() {
-	let path = std::path::Path::new("tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj");
-	let mut project = wavedude_core::io::load_project(path).unwrap();
-	let quality = PreviewQuality {
-		resolution_divisor: 2,
-		frame_divisor: 2,
-		format: SampleFormat::Index,
-		..PreviewQuality::DEFAULT
-	};
-	let mut cache = SceneCache::default();
-	let first = cache.spec(&project, quality, false).unwrap();
-	let mut engine = wavedude_core::engine::build(first.scene.clone(), first.options.clone(), true).engine;
-	engine.set_emitters(&first.emitters);
-	let mut times = [0f64; 3];
-	let rounds = 10;
-	for _ in 0..rounds {
-		project.parts[0].base.x += 1;
-		let t = Instant::now();
-		let pixels = cache.pixels(&project).unwrap();
-		times[0] += t.elapsed().as_secs_f64();
-		let t = Instant::now();
-		let scene = Arc::new(RunSpec::scene_of(&project, Some(&pixels)).unwrap());
-		times[1] += t.elapsed().as_secs_f64();
-		let t = Instant::now();
-		assert!(engine.try_replace_scene(&scene));
-		engine.reset();
-		times[2] += t.elapsed().as_secs_f64();
+mod ignored_timing {
+	use super::*;
+
+	#[test]
+	#[ignore = "timing: cargo test --release -p wavedude-core --test run -- --ignored ignored_timing:: --nocapture"]
+	fn store_write_timing() {
+		let mut p = project(1920, 1080, 200);
+		p.sources.clear();
+		let s = spec(&p, PreviewQuality::FULL);
+		let shots: Vec<Snapshot> = (0..4).map(|k| snapshot_of(&s, k as f32)).collect();
+		// A capture writes the frame into the store's buffer; this copy stands in for it.
+		let write = |st: &FrameStore, shot: &Snapshot| {
+			let mut b = st.next_buffer();
+			b.field.clear();
+			b.field.extend_from_slice(&shot.field);
+			b.intensity.clear();
+			b.intensity.extend_from_slice(&shot.intensity);
+			st.write(b).unwrap();
+		};
+		let st = store(&s, 4 * GIB);
+		std::thread::sleep(Duration::from_millis(500));
+		let started = Instant::now();
+		let mut slowest = Duration::ZERO;
+		for k in 0..100 {
+			let t = Instant::now();
+			write(&st, &shots[k % 4]);
+			slowest = slowest.max(t.elapsed());
+		}
+		let steady = started.elapsed();
+		let st2 = store(&s, 4 * GIB);
+		let started = Instant::now();
+		for k in 0..100 {
+			write(&st2, &shots[k % 4]);
+		}
+		let cold = started.elapsed();
+		let dir = tempfile::tempdir().unwrap();
+		let st3 = FrameStore::in_dir(StoreLayout::of(&s), 0, None, dir.path()).unwrap();
+		let started = Instant::now();
+		for k in 0..100 {
+			write(&st3, &shots[k % 4]);
+		}
+		let disk = started.elapsed();
+		let ms = |d: Duration| d.as_secs_f64() * 1e3 / 100.0;
+		println!(
+			"full-HD both planes f16 ({} MB a frame): {:.2} ms a frame after a pause ({:.2} slowest), {:.2} from a cold start, {:.2} to the file",
+			s.frame_bytes() as f64 / 1e6,
+			ms(steady),
+			slowest.as_secs_f64() * 1e3,
+			ms(cold),
+			ms(disk)
+		);
 	}
-	println!(
-		"Example16 part edit, {}x{} canvas: compose {:.1} ms, medium {:.1} ms, scene into the GPU engine {:.1} ms",
-		project.scene.width,
-		project.scene.height,
-		times[0] * 1e3 / rounds as f64,
-		times[1] * 1e3 / rounds as f64,
-		times[2] * 1e3 / rounds as f64
-	);
+
+	/// A burst of edits at 32 a second on the GPU (docs/measurements.md, The live run): frames shown during the
+	/// drag and the final frame's lag, with the position's frame alone wanted and with every frame (the frames
+	/// before the position captured on the way).
+	#[test]
+	#[ignore = "timing: cargo test --release -p wavedude-core --test run -- --ignored ignored_timing:: --nocapture"]
+	fn live_run_drag_burst_timing() {
+		for wanted in [Wanted::Position, Wanted::All] {
+			drag_burst(wanted, false);
+		}
+		drag_burst(Wanted::All, true);
+	}
+
+	/// Where a part edit's time goes on Example16 at half resolution on the GPU: composing the scene pixels, the
+	/// medium from them, the engine taking the new scene.
+	#[test]
+	#[ignore = "timing: cargo test --release -p wavedude-core --test run -- --ignored ignored_timing:: --nocapture"]
+	fn part_edit_cost() {
+		let path = std::path::Path::new("tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj");
+		let mut project = wavedude_core::io::load_project(path).unwrap();
+		let quality = PreviewQuality {
+			resolution_divisor: 2,
+			frame_divisor: 2,
+			format: SampleFormat::Index,
+			..PreviewQuality::DEFAULT
+		};
+		let mut cache = SceneCache::default();
+		let first = cache.spec(&project, quality, false).unwrap();
+		let mut engine = wavedude_core::engine::build(first.scene.clone(), first.options.clone(), true).engine;
+		engine.set_emitters(&first.emitters);
+		let mut times = [0f64; 3];
+		let rounds = 10;
+		for _ in 0..rounds {
+			project.parts[0].base.x += 1;
+			let t = Instant::now();
+			let pixels = cache.pixels(&project).unwrap();
+			times[0] += t.elapsed().as_secs_f64();
+			let t = Instant::now();
+			let scene = Arc::new(RunSpec::scene_of(&project, Some(&pixels)).unwrap());
+			times[1] += t.elapsed().as_secs_f64();
+			let t = Instant::now();
+			assert!(engine.try_replace_scene(&scene));
+			engine.reset();
+			times[2] += t.elapsed().as_secs_f64();
+		}
+		println!(
+			"Example16 part edit, {}x{} canvas: compose {:.1} ms, medium {:.1} ms, scene into the GPU engine {:.1} ms",
+			project.scene.width,
+			project.scene.height,
+			times[0] * 1e3 / rounds as f64,
+			times[1] * 1e3 / rounds as f64,
+			times[2] * 1e3 / rounds as f64
+		);
+	}
 }

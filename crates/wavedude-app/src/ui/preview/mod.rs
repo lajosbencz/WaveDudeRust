@@ -10,8 +10,6 @@
 //! Threads: the UI thread; natively the presenter and the scene builder use threads of their own.
 
 mod device;
-#[cfg(test)]
-mod frames;
 mod graph_boxes;
 mod header_strip;
 mod overlay;

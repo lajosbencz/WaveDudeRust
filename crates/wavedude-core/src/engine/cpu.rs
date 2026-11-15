@@ -927,5 +927,8 @@ mod tests {
 		assert_eq!(e.alpha, (-1.0f64 / 20.0).exp() as f32);
 		e.set_emitters(&[]);
 		assert_eq!(e.alpha, (-1.0f64 / 10.0).exp() as f32);
+		e.sources.level_used[0] = true;
+		e.update_alpha();
+		assert_eq!(e.alpha, (-1.0f64 / 10.0).exp() as f32, "level 0 is not a source level");
 	}
 }

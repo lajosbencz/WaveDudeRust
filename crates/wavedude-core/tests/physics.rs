@@ -2,8 +2,7 @@
 //! Analytic tests of the CPU engine against docs/physics.md.
 //!
 //! Grids are small (64 to 256 cells a side) so most tests run in a few seconds in a debug build; the
-//! CPML's reflection and the slab guide, which need room and many steps, take about 17 s each, the
-//! source amplitude on its 512 x 512 canvas about 40 s.
+//! CPML's reflection, the slab guide and the source amplitude (320 x 320) need room and many steps.
 //! Units: cells and steps (dx = dt = 1); fields are f32, the measures are taken in f64.
 
 use std::f64::consts::PI;
@@ -18,6 +17,26 @@ use wavedude_core::model::{Edges, PulseShape, Scene, Stencil, wavelength};
 use wavedude_core::scene::modes::ModeSolver;
 
 const STENCILS: [Stencil; 2] = [Stencil::NinePoint, Stencil::FourthOrder];
+
+/// A module per `name` holding a `#[test]` per stencil, `nine_point` and `fourth_order`, each calling `check` with
+/// it, so libtest runs the stencils in parallel.
+macro_rules! per_stencil {
+	($($name:ident => $check:expr;)+) => {$(
+		mod $name {
+			use super::*;
+
+			#[test]
+			fn nine_point() {
+				($check)(Stencil::NinePoint)
+			}
+
+			#[test]
+			fn fourth_order() {
+				($check)(Stencil::FourthOrder)
+			}
+		}
+	)+};
+}
 
 fn options(stencil: Stencil, scale: f64) -> EngineOptions {
 	EngineOptions {
@@ -174,32 +193,6 @@ fn energy_of_a_free_pulse_is_conserved() {
 	}
 	for (stencil, first, drift) in drifts {
 		assert!(first > 0.0 && drift < 1e-6, "{stencil:?}: drift {drift}");
-	}
-}
-
-/// Step time on a 1920 x 1080 canvas with a 32 px rim, open edges, two sources, intensity tracked.
-/// Run with `cargo test --release -p wavedude-core --no-default-features --test physics -- --ignored --nocapture`.
-#[test]
-#[ignore]
-fn step_time_full_hd() {
-	for stencil in STENCILS {
-		let data = SceneData::blank(1920, 1080, &scene(-32, Edges::Open, 1.0));
-		let mut e = CpuEngine::new(data, EngineOptions { track_intensity: true, ..options(stencil, 2.0) });
-		e.set_emitters(&[emitter(600, 540, 100.0), emitter(1300, 400, 80.0)]);
-		for _ in 0..20 {
-			e.advance_one_step();
-		}
-		let steps = 200;
-		let start = std::time::Instant::now();
-		for _ in 0..steps {
-			e.advance_one_step();
-		}
-		let per = start.elapsed().as_secs_f64() * 1000.0 / steps as f64;
-		println!(
-			"{stencil:?}: {per:.2} ms a step ({} sub-steps), {} threads",
-			e.sub_steps(),
-			rayon::current_num_threads()
-		);
 	}
 }
 
@@ -737,25 +730,26 @@ fn mirror_ring(n: usize) -> Vec<u8> {
 /// semi-definite; when mirror cells moved (c2 = 1e-6) with their taps cut, the DRP's operator had a
 /// growing mode and the field reached 78 by step 30,000 (from 0.45). The largest |u| from step 25,000
 /// on must stay under twice the largest of the first 1000 steps.
-#[test]
-fn mirror_cavity_stays_bounded() {
+fn mirror_cavity_stays_bounded(stencil: Stencil) {
 	let n = 32usize;
 	let data = SceneData::from_pixels(&mirror_ring(n), n as u32, n as u32, &scene(0, Edges::Reflective, 1.0));
-	for stencil in STENCILS {
-		let mut e = CpuEngine::new(data.clone(), options(stencil, 2.0));
-		e.set_emitters(&[Emitter { detach_after_step: Some(200), ..pulse(15, 18, 100.0, 3) }]);
-		let (mut early, mut late) = (0f64, 0f64);
-		for step in 1..=30_000 {
-			e.advance_one_step();
-			if step <= 1000 && step % 10 == 0 {
-				early = early.max(bound(&mut e));
-			} else if step >= 25_000 && step % 500 == 0 {
-				late = late.max(bound(&mut e));
-			}
+	let mut e = CpuEngine::new(data, options(stencil, 2.0));
+	e.set_emitters(&[Emitter { detach_after_step: Some(200), ..pulse(15, 18, 100.0, 3) }]);
+	let (mut early, mut late) = (0f64, 0f64);
+	for step in 1..=30_000 {
+		e.advance_one_step();
+		if step <= 1000 && step % 10 == 0 {
+			early = early.max(bound(&mut e));
+		} else if step >= 25_000 && step % 500 == 0 {
+			late = late.max(bound(&mut e));
 		}
-		println!("{stencil:?}: largest |u| {early:.3} in the first 1000 steps, {late:.3} from step 25,000");
-		assert!(early > 0.05 && late < 2.0 * early, "{stencil:?}: {early} then {late}");
 	}
+	println!("{stencil:?}: largest |u| {early:.3} in the first 1000 steps, {late:.3} from step 25,000");
+	assert!(early > 0.05 && late < 2.0 * early, "{stencil:?}: {early} then {late}");
+}
+
+per_stencil! {
+	mirror_cavity_stays_bounded => mirror_cavity_stays_bounded;
 }
 
 /// (8c) A mirror line one pixel wide on the diagonal, 8-connected (the painter's centre test gives it
@@ -959,6 +953,27 @@ struct Bounded {
 	every: u32,
 }
 
+impl Bounded {
+	/// Runs the case; its peak stays under 10.
+	fn check(self) {
+		let options = options(self.stencil, 2.0);
+		let mut e = match self.sub_steps {
+			Some(n) => CpuEngine::with_sub_steps(self.data, options, n),
+			None => CpuEngine::new(self.data, options),
+		};
+		e.set_emitters(&self.emitters);
+		let mut top = 0f64;
+		for step in 1..=self.steps {
+			e.advance_one_step();
+			if step % self.every == 0 {
+				top = top.max(bound(&mut e));
+			}
+		}
+		println!("{}: peak {top:.3}", self.name);
+		assert!(top < 10.0, "{}: peak {top}", self.name);
+	}
+}
+
 /// (2, 10a) Every configuration stays bounded: the derived sub-steps keep both stencils bounded for 600
 /// steps on open and reflective edges, with and without a damping band, blank and with the mixed image
 /// scene; and open edges stay bounded for every sub-step count behind an inside damping band (whose
@@ -966,67 +981,73 @@ struct Bounded {
 /// within the CFL bound), a band of 6 or none and a continuous source, 5000 steps. Before the damped
 /// update was centred the band diverged where `d^(1/n)` is small, and before the outer rings were
 /// extrapolated linearly the DRP stencil diverged at the corners at one sub-step.
-#[test]
-fn configurations_stay_bounded() {
-	let (w, h) = (64u32, 48u32);
-	let mixed = mixed_pixels(w as usize, h as usize);
-	let mut cases = Vec::new();
-	for stencil in STENCILS {
+mod configurations_stay_bounded {
+	use super::*;
+
+	const W: u32 = 64;
+	const H: u32 = 48;
+
+	/// The derived sub-steps, 600 steps on open and reflective edges, with and without a damping band, blank and
+	/// with the mixed image scene.
+	fn derived_sub_steps(stencil: Stencil) {
+		let mixed = mixed_pixels(W as usize, H as usize);
 		for (edges, edge) in [(Edges::Open, -32), (Edges::Open, 0), (Edges::Reflective, 0), (Edges::Reflective, 6)] {
 			for image in [false, true] {
 				let s = scene(edge, edges, 1.0);
-				cases.push(Bounded {
+				Bounded {
 					name: format!("{stencil:?} {edges:?} {edge} image {image}"),
 					stencil,
-					data: if image { SceneData::from_pixels(&mixed, w, h, &s) } else { SceneData::blank(w, h, &s) },
+					data: if image { SceneData::from_pixels(&mixed, W, H, &s) } else { SceneData::blank(W, H, &s) },
 					sub_steps: None,
 					emitters: vec![emitter(32, 24, 255.0), emitter(5, 5, 1.0), emitter(60, 44, 100.0)],
 					steps: 600,
 					every: 600,
-				});
+				}
+				.check();
 			}
 		}
-		// an absorber touching the canvas edge runs on into the rim
-		let edge_absorber = pixels(w as usize, h as usize, |_, y| if y < 8 { [100, 0, 255] } else { [100, 0, 0] });
-		cases.push(Bounded {
+	}
+
+	/// An absorber touching the canvas edge runs on into the rim.
+	fn absorber_on_the_edge(stencil: Stencil) {
+		let edge_absorber = pixels(W as usize, H as usize, |_, y| if y < 8 { [100, 0, 255] } else { [100, 0, 0] });
+		Bounded {
 			name: format!("{stencil:?} absorber on the edge, rim 16"),
 			stencil,
-			data: SceneData::from_pixels(&edge_absorber, w, h, &scene(-16, Edges::Open, 1.0)),
+			data: SceneData::from_pixels(&edge_absorber, W, H, &scene(-16, Edges::Open, 1.0)),
 			sub_steps: None,
 			emitters: vec![emitter(32, 30, 100.0)],
 			steps: 5000,
 			every: 100,
-		});
-		for band in [6, 0] {
-			for n in 1..=4 {
-				cases.push(Bounded {
-					name: format!("{stencil:?} band {band} at {n} sub-steps"),
-					stencil,
-					data: SceneData::blank(w, h, &scene(band, Edges::Open, 1.25)),
-					sub_steps: Some(n),
-					emitters: vec![emitter(32, 24, 100.0)],
-					steps: 5000,
-					every: 100,
-				});
-			}
 		}
+		.check();
 	}
-	for case in cases {
-		let options = options(case.stencil, 2.0);
-		let mut e = match case.sub_steps {
-			Some(n) => CpuEngine::with_sub_steps(case.data, options, n),
-			None => CpuEngine::new(case.data, options),
-		};
-		e.set_emitters(&case.emitters);
-		let mut top = 0f64;
-		for step in 1..=case.steps {
-			e.advance_one_step();
-			if step % case.every == 0 {
-				top = top.max(bound(&mut e));
-			}
+
+	/// Open edges behind an inside damping band of `band` px (none at 0) at `n` sub-steps.
+	fn banded(stencil: Stencil, band: i32, n: u32) {
+		Bounded {
+			name: format!("{stencil:?} band {band} at {n} sub-steps"),
+			stencil,
+			data: SceneData::blank(W, H, &scene(band, Edges::Open, 1.25)),
+			sub_steps: Some(n),
+			emitters: vec![emitter(32, 24, 100.0)],
+			steps: 5000,
+			every: 100,
 		}
-		println!("{}: peak {top:.3}", case.name);
-		assert!(top < 10.0, "{}: peak {top}", case.name);
+		.check();
+	}
+
+	per_stencil! {
+		derived_sub_steps => derived_sub_steps;
+		absorber_on_the_edge => absorber_on_the_edge;
+		band_6_at_1_sub_step => |s| banded(s, 6, 1);
+		band_6_at_2_sub_steps => |s| banded(s, 6, 2);
+		band_6_at_3_sub_steps => |s| banded(s, 6, 3);
+		band_6_at_4_sub_steps => |s| banded(s, 6, 4);
+		no_band_at_1_sub_step => |s| banded(s, 0, 1);
+		no_band_at_2_sub_steps => |s| banded(s, 0, 2);
+		no_band_at_3_sub_steps => |s| banded(s, 0, 3);
+		no_band_at_4_sub_steps => |s| banded(s, 0, 4);
 	}
 }
 
@@ -1220,74 +1241,72 @@ struct Swing {
 /// |G0|, engine/green.rs); and a half-cell offset along x, the centre of four cells and a quarter offset,
 /// levels 50 and 100, two sub-steps. The amplitude is fitted over the last 240 of 520 steps, three periods
 /// at level 20 (measured within 0.2 % of the expectation).
-#[test]
-fn source_amplitude_is_the_free_space_swing_of_its_cell_or_position() {
-	use wavedude_core::engine::green::{bilinear, source_response};
-	const SWINGS: &[Swing] = &[
-		Swing {
-			name: "cell",
-			sub_steps: 2,
-			index: 1.0,
-			fractions: &[(0.0, 0.0)],
-			levels: &[20.0, 50.0, 100.0, 200.0],
-			tolerance: 0.05,
-		},
-		Swing {
-			name: "cell at one sub-step",
-			sub_steps: 1,
-			index: 1.25,
-			fractions: &[(0.0, 0.0)],
-			levels: &[20.0, 50.0, 100.0, 200.0],
-			tolerance: 0.05,
-		},
-		Swing {
-			name: "fractional position",
-			sub_steps: 2,
-			index: 1.0,
-			fractions: &[(0.5, 0.0), (0.5, 0.5), (0.25, 0.75)],
-			levels: &[50.0, 100.0],
-			tolerance: 0.05,
-		},
-	];
-	let (w, amplitude, scale) = (320usize, 0.5, 2.0);
-	let c = w / 2;
-	for stencil in STENCILS {
+mod source_amplitude_is_the_free_space_swing_of_its_cell_or_position {
+	use super::*;
+
+	const CELL: Swing = Swing {
+		name: "cell",
+		sub_steps: 2,
+		index: 1.0,
+		fractions: &[(0.0, 0.0)],
+		levels: &[20.0, 50.0, 100.0, 200.0],
+		tolerance: 0.05,
+	};
+	const CELL_AT_ONE_SUB_STEP: Swing = Swing {
+		name: "cell at one sub-step",
+		sub_steps: 1,
+		index: 1.25,
+		fractions: &[(0.0, 0.0)],
+		levels: &[20.0, 50.0, 100.0, 200.0],
+		tolerance: 0.05,
+	};
+	const FRACTIONAL_POSITION: Swing = Swing {
+		name: "fractional position",
+		sub_steps: 2,
+		index: 1.0,
+		fractions: &[(0.5, 0.0), (0.5, 0.5), (0.25, 0.75)],
+		levels: &[50.0, 100.0],
+		tolerance: 0.05,
+	};
+
+	fn swings(stencil: Stencil, row: &Swing) {
+		use wavedude_core::engine::green::{bilinear, source_response};
+		let (w, amplitude, scale) = (320usize, 0.5, 2.0);
+		let c = w / 2;
 		let coefficients = StencilCoefficients::of(stencil);
 		let scheme = TimeScheme::of(stencil);
-		for row in SWINGS {
-			let data = SceneData::blank(w as u32, w as u32, &scene(-32, Edges::Open, row.index));
-			for &(fx, fy) in row.fractions {
-				let shares = bilinear(fx, fy);
-				let cells =
-					[(0, 0), (1, 0), (0, 1), (1, 1)].map(|(dx, dy)| data.padded_index(32 + c + dx, 32 + c + dy));
-				for &level in row.levels {
-					let omega = level_omega(level, scale);
-					let c2 = 1.0 / (row.index * row.index);
-					let expected = amplitude * source_response(&coefficients, scheme, row.sub_steps, omega, c2)
-						/ source_response(&coefficients, scheme, row.sub_steps, omega, 1.0);
-					let mut e = CpuEngine::with_sub_steps(data.clone(), options(stencil, scale), row.sub_steps);
-					e.set_emitters(&[Emitter {
-						amplitude,
-						x: c as f64 + fx,
-						y: c as f64 + fy,
-						..emitter(0, 0, level)
-					}]);
-					let mut samples = Vec::new();
-					for step in 1..=520 {
-						e.advance_one_step();
-						if step > 280 {
-							let u = e.field_padded();
-							samples.push(cells.iter().zip(shares).map(|(&i, s)| u[i] as f64 * s).sum());
-						}
+		let data = SceneData::blank(w as u32, w as u32, &scene(-32, Edges::Open, row.index));
+		for &(fx, fy) in row.fractions {
+			let shares = bilinear(fx, fy);
+			let cells = [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(dx, dy)| data.padded_index(32 + c + dx, 32 + c + dy));
+			for &level in row.levels {
+				let omega = level_omega(level, scale);
+				let c2 = 1.0 / (row.index * row.index);
+				let expected = amplitude * source_response(&coefficients, scheme, row.sub_steps, omega, c2)
+					/ source_response(&coefficients, scheme, row.sub_steps, omega, 1.0);
+				let mut e = CpuEngine::with_sub_steps(data.clone(), options(stencil, scale), row.sub_steps);
+				e.set_emitters(&[Emitter { amplitude, x: c as f64 + fx, y: c as f64 + fy, ..emitter(0, 0, level) }]);
+				let mut samples = Vec::new();
+				for step in 1..=520 {
+					e.advance_one_step();
+					if step > 280 {
+						let u = e.field_padded();
+						samples.push(cells.iter().zip(shares).map(|(&i, s)| u[i] as f64 * s).sum());
 					}
-					let swing = fitted_amplitude(&samples, 281, omega);
-					let off = swing / expected - 1.0;
-					let case = format!("{} {stencil:?} ({fx}, {fy}) level {level}", row.name);
-					println!("{case}: swing {swing:.4}, expected {expected:.4}, off {off:+.3}");
-					assert!(off.abs() < row.tolerance, "{case}: {swing} against {expected}");
 				}
+				let swing = fitted_amplitude(&samples, 281, omega);
+				let off = swing / expected - 1.0;
+				let case = format!("{} {stencil:?} ({fx}, {fy}) level {level}", row.name);
+				println!("{case}: swing {swing:.4}, expected {expected:.4}, off {off:+.3}");
+				assert!(off.abs() < row.tolerance, "{case}: {swing} against {expected}");
 			}
 		}
+	}
+
+	per_stencil! {
+		cell => |s| swings(s, &CELL);
+		cell_at_one_sub_step => |s| swings(s, &CELL_AT_ONE_SUB_STEP);
+		fractional_position => |s| swings(s, &FRACTIONAL_POSITION);
 	}
 }
 
@@ -1324,5 +1343,34 @@ fn a_source_on_a_cell_boundary_radiates_symmetrically() {
 		println!("{stencil:?}: asymmetry {on_boundary:.2e} on the boundary, {off_boundary:.2e} half a cell off");
 		assert!(on_boundary < 1e-5, "{stencil:?}: {on_boundary}");
 		assert!(off_boundary > 1e-2, "{stencil:?}: {off_boundary}");
+	}
+}
+
+mod ignored_timing {
+	use super::*;
+
+	/// Step time on a 1920 x 1080 canvas with a 32 px rim, open edges, two sources, intensity tracked.
+	#[test]
+	#[ignore = "timing: cargo test --release -p wavedude-core --no-default-features --test physics -- --ignored ignored_timing:: --nocapture"]
+	fn step_time_full_hd() {
+		for stencil in STENCILS {
+			let data = SceneData::blank(1920, 1080, &scene(-32, Edges::Open, 1.0));
+			let mut e = CpuEngine::new(data, EngineOptions { track_intensity: true, ..options(stencil, 2.0) });
+			e.set_emitters(&[emitter(600, 540, 100.0), emitter(1300, 400, 80.0)]);
+			for _ in 0..20 {
+				e.advance_one_step();
+			}
+			let steps = 200;
+			let start = std::time::Instant::now();
+			for _ in 0..steps {
+				e.advance_one_step();
+			}
+			let per = start.elapsed().as_secs_f64() * 1000.0 / steps as f64;
+			println!(
+				"{stencil:?}: {per:.2} ms a step ({} sub-steps), {} threads",
+				e.sub_steps(),
+				rayon::current_num_threads()
+			);
+		}
 	}
 }

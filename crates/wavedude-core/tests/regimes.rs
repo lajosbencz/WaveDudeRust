@@ -1,13 +1,13 @@
 //! Second regimes of rules whose first regime is tested beside their code: pulse envelopes under a random gap,
 //! the intensity weight's other lowest levels, lens fits decided by a concave sag or by equal zone depths, the
-//! inverse zone plate, the squeezed fibre hump and the glowing edges' vertical gradient.
+//! inverse zone plate and the squeezed fibre hump.
 
 use std::collections::BTreeSet;
 use std::f64::consts::{PI, TAU};
 use std::num::NonZeroU32;
 
 use wavedude_core::engine::cpu::CpuEngine;
-use wavedude_core::engine::envelope::Pulse;
+use wavedude_core::engine::envelope::{EDGE_WIDTH, Pulse};
 use wavedude_core::engine::forcing::Sources;
 use wavedude_core::engine::stencil::StencilCoefficients;
 use wavedude_core::engine::{Emitter, EngineOptions, ImageSource, SceneData, WaveEngine};
@@ -15,13 +15,9 @@ use wavedude_core::model::lens_geometry::{edge_thickness, fit_radii, fit_radii_z
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::model::*;
 use wavedude_core::rng::xorshift32;
-use wavedude_core::scene::glowing_edges;
 use wavedude_core::scene::painter::paint_part;
 use wavedude_core::scene::pixels::ScenePixels;
 use wavedude_core::scene::shapes::{BLOCK_ABSORPTION, zone_at};
-
-/// Half-width in cycles of the smoothed square's edges (engine/envelope.rs `EDGE_WIDTH`).
-const EDGE_WIDTH: f64 = 0.35;
 
 fn pulsed(shape: PulseShape, on: u32, off: u32, random: u32) -> Emitter {
 	Emitter {
@@ -228,15 +224,11 @@ fn a_small_time_decay_clamps_tau_to_one_step() {
 	assert!(unclamped > 1e-2, "replayed at exp(-2): {unclamped:.2e}, want over 1e-2");
 }
 
-/// Without sources the lowest level is 100: a free Gaussian bump under TimeDecay 10 filters at tau = 10 steps,
-/// within 1e-4 of its peak, and more than 1e-2 off a weight of exp(-1). Level 0 in the table is no source.
+/// Without sources the lowest level is 100 (engine/cpu.rs `alpha_follows_the_lowest_level`): a free Gaussian
+/// bump under TimeDecay 10 filters at tau = 10 steps, within 1e-4 of its peak, and more than 1e-2 off a weight of
+/// exp(-1).
 #[test]
 fn without_sources_the_lowest_level_is_100() {
-	let mut sources = Sources::new(StencilCoefficients::of(Stencil::NinePoint), 2.0, 1.0);
-	assert_eq!(sources.intensity_alpha(10.0), alpha_of(10.0, 100.0));
-	sources.level_used[0] = true;
-	assert_eq!(sources.intensity_alpha(10.0), alpha_of(10.0, 100.0), "level 0 is not a source level");
-
 	let mut engine = CpuEngine::new(canvas(), intensity_options(10.0));
 	let bump: Vec<f32> = (0..64 * 64)
 		.map(|i| {
@@ -369,27 +361,5 @@ fn a_wide_ramp_squeezes_the_fibre_hump_into_the_cladding() {
 	for d in 1..10 {
 		let d = d as f64 + 0.5;
 		assert!((at(peak - d) - at(peak + d)).abs() <= 1, "symmetric about the peak at +-{d} within 1");
-	}
-}
-
-/// A horizontal step from black to (200, 40, 0) at row 4 of an 8 x 6 image lights rows 3 and 4 with the step's
-/// colour (`|gy| = 4 * 200`, times 0.25) inside the black outer ring, as the vertical step lights its columns.
-#[test]
-fn a_horizontal_step_lights_the_two_rows_beside_it() {
-	let (w, h) = (8, 6);
-	let mut rgba = vec![0u8; w * h * 4];
-	for y in 4..h {
-		for x in 0..w {
-			rgba[(y * w + x) * 4..][..4].copy_from_slice(&[200, 40, 0, 255]);
-		}
-	}
-	let edges = glowing_edges::compute(&rgba, w, h);
-	for y in 0..h {
-		for x in 0..w {
-			let p = &edges[(y * w + x) * 4..][..4];
-			let lit = (1..w - 1).contains(&x) && (y == 3 || y == 4);
-			let expected = if lit { [200, 40, 0, 255] } else { [0, 0, 0, 255] };
-			assert_eq!(p, expected, "({x}, {y})");
-		}
 	}
 }

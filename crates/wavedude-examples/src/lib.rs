@@ -176,14 +176,14 @@ mod tests {
 		for topic in Topic::ALL {
 			assert!(all.iter().any(|e| e.topic == topic), "{topic:?} has no example");
 		}
-		let lattice = all.iter().find(|e| e.file_name == "Example07_Random_emitter_lattice.wdproj").unwrap();
-		assert_eq!(lattice.title, "Random emitter lattice");
-		assert_eq!(lattice.test_id(), "Example:Example07_Random_emitter_lattice");
-		assert!(all.iter().any(|e| e.title == "Fresnel lens lighthouse" && e.topic == Topic::Lenses));
-		assert!(all.iter().any(|e| e.title == "Meta prism" && e.topic == Topic::Metasurfaces));
-		assert!(all.iter().any(|e| e.title == "Fibre splitter with 2 PMs" && e.topic == Topic::Detectors));
-		assert!(all.iter().any(|e| e.title == "Single fiber" && e.topic == Topic::Guides));
-		assert!(all.iter().all(|e| !e.description.is_empty()), "every example describes itself");
+		for e in all {
+			assert_eq!(e.title, title(e.file_name), "the title of {}", e.file_name);
+			assert_eq!(format!("{}.wdproj", e.stem()), e.file_name);
+			assert_eq!(e.test_id(), format!("Example:{}", e.stem()));
+			assert!(!e.description.is_empty(), "{} describes itself", e.file_name);
+		}
+		assert_eq!(title("Example07_Random_emitter_lattice.wdproj"), "Random emitter lattice");
+		assert_eq!(title("01-single-fiber.wdproj"), "Single fiber");
 	}
 
 	#[test]

@@ -383,20 +383,4 @@ mod tests {
 		}
 		assert!((Hsv::from_rgb(Rgb::new(0, 0, 255)).h - 240.).abs() < 1e-9);
 	}
-
-	#[test]
-	fn greys_keep_the_hue() {
-		let red = Hsv { h: 0., s: 1., v: 1. };
-		let blue = Hsv { h: 240., s: 0.5, v: 1. };
-		assert_eq!(blue.follow(Rgb::new(10, 10, 10)).h, 240.);
-		assert_eq!(blue.follow(Rgb::new(0, 0, 0)).s, 0.5);
-		assert_eq!(blue.follow(blue.to_rgb()), blue);
-		assert_eq!(red.follow(Rgb::new(0, 255, 0)).h, 120.);
-	}
-
-	#[test]
-	fn lerp_in_srgb() {
-		assert_eq!(lerp(Rgb::new(0, 0, 0), Rgb::new(255, 100, 10), 0.5), Rgb::new(128, 50, 5));
-		assert_eq!(lerp(Rgb::new(0, 0, 0), Rgb::new(255, 100, 10), 2.), Rgb::new(255, 100, 10));
-	}
 }

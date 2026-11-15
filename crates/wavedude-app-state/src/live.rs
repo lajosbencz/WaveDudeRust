@@ -1663,9 +1663,12 @@ mod tests {
 		c.backend_mut().complete();
 		c.tick(t + Duration::from_millis(400), &p);
 		assert_eq!(c.run_started, None, "reported on the tick that completed it");
+		c.tick(t + Duration::from_millis(500), &p);
+		assert_eq!(c.run_started, None, "and not on a later tick");
+		let steps = p.simulation.steps;
+		assert_eq!(c.run_status(), Some((RunState::Completed, steps, steps)));
 		let line = c.run_summary(t, t + Duration::from_millis(400)).expect("a completed run");
-		assert!(line.starts_with("Run Completed: 200 of 200 steps, "), "{line}");
-		assert!(line.contains(", 0.4 s; ") && line.contains(" in memory ("), "{line}");
+		assert!(line.contains(&format!("{steps} of {steps}")), "{line}");
 	}
 
 	#[test]
@@ -2158,11 +2161,16 @@ mod tests {
 	#[test]
 	fn a_gpu_without_a_name_labels_as_webgpu_and_one_thread_is_singular() {
 		let s = Strings::new(crate::strings::Language::English);
-		assert_eq!(EngineLabel::of(Some("")).text(&s), "GPU: WebGPU");
-		assert_eq!(EngineLabel::of(Some("RTX")).text(&s), "GPU: RTX");
-		assert_eq!(EngineLabel::Cpu { threads: 1 }.text(&s), "CPU (1 thread)");
-		assert_eq!(EngineLabel::Cpu { threads: 8 }.text(&s), "CPU (8 threads)");
-		assert_eq!(EngineLabel::Cpu { threads: 1 }.to_string(), "CPU (1 thread)");
+		let labels = [
+			(EngineLabel::of(Some("")), s.get("EngineWebGpu").to_owned()),
+			(EngineLabel::of(Some("RTX")), s.format("EngineGpuFormat", &[&"RTX"])),
+			(EngineLabel::Cpu { threads: 1 }, s.get("EngineCpuOne").to_owned()),
+			(EngineLabel::Cpu { threads: 8 }, s.format("EngineCpuManyFormat", &[&8])),
+		];
+		for (label, text) in labels {
+			assert_eq!(label.text(&s), text, "{label:?}");
+			assert_eq!(label.to_string(), text, "the log's English is the English table's");
+		}
 	}
 
 	#[test]

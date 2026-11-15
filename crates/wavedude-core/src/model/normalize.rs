@@ -560,10 +560,11 @@ mod tests {
 	fn non_finite_becomes_default() {
 		let mut s = Source { frequency: f64::NAN, amplitude: f64::INFINITY, phase: f64::NAN, ..Source::default() };
 		s.normalize();
-		assert_eq!((s.frequency, s.amplitude, s.phase), (100.0, 100.0, 0.0));
+		let d = Source::default();
+		assert_eq!((s.frequency, s.amplitude, s.phase), (d.frequency, d.amplitude, d.phase));
 		let mut sim = Simulation { wave_speed: f64::NAN, ..Simulation::default() };
 		sim.normalize();
-		assert_eq!(sim.wave_speed, 1.0);
+		assert_eq!(sim.wave_speed, Simulation::default().wave_speed);
 	}
 
 	#[test]

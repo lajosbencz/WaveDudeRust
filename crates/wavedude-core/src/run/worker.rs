@@ -1677,7 +1677,8 @@ mod tests {
 	#[test]
 	fn a_pump_yields_at_its_deadline_and_the_next_goes_on_from_the_steps_done() {
 		let w = RunWorker::pumped(cpu(), GIB, ample(), Arc::default());
-		let p = long(4000);
+		// longer than the two check intervals the zero deadlines step
+		let p = long(4 * CHECK_INTERVAL);
 		let last = RunRequest::new(&p, PreviewQuality::FULL, false).spec(&mut SceneCache::default()).unwrap();
 		let position = last.frame_count() - 1;
 		w.set_goal(Goal { position, wanted: Wanted::Position, ..goal(1, &p) });
@@ -2330,7 +2331,8 @@ mod tests {
 			})
 		};
 		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
-		let p = long(4000);
+		// past a drain; the gated readings are one batch in flight, so only the target's end waits
+		let p = long(2 * PROBE_DRAIN);
 		let spec = RunRequest::new(&p, PreviewQuality::FULL, false).spec(&mut SceneCache::default()).unwrap();
 		let position = spec.frame_count() - 1;
 		w.set_goal(Goal { position, wanted: Wanted::Position, ..goal(1, &p) });

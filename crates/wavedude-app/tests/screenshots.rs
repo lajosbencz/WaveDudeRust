@@ -1,7 +1,7 @@
 //! The manual's figures: the window on an example driven headless on Mesa's lavapipe, each figure cropped to the
 //! control it shows.
 //!
-//! `WAVEDUDE_FIGURES=$PWD/crates/wavedude-app/assets/manual cargo test -p wavedude-app --test screenshots -- --ignored`
+//! `WAVEDUDE_FIGURES=$PWD/crates/wavedude-app/assets/manual cargo test -p wavedude-app --test screenshots -- --ignored ignored_tool::`
 
 mod common;
 
@@ -159,158 +159,163 @@ fn set_number(harness: &mut Harness<'_, Shell>, label: &str, value: &str) {
 	settle(harness);
 }
 
-#[test]
-#[ignore = "writes the manual's figures; run with WAVEDUDE_FIGURES set"]
-fn manual_figures() {
-	let Some(dir) = out_dir() else { return };
-	let Some(builder) = common::lavapipe() else { return };
-	let tmp = tempfile::tempdir().unwrap();
-	let mut h = window(builder, tmp.path(), vec2(1400., 900.));
-	h.key_press(Key::F5);
-	wait_for(&mut h, |app| app.live.present_spans().first().is_some_and(|&(from, to)| from == 0 && to >= 400));
-	h.key_press(Key::Escape);
-	settle(&mut h);
-	h.get_by_role_and_label(Role::TreeItem, "Left box").click();
-	settle(&mut h);
-	common::preview_idle(&mut h);
-	figure(&mut h, &dir, "main-window", Rect::from_min_size(pos2(0., 0.), vec2(1400., 900.)), 0.);
-	let project = rect_of(&h, Role::Button, "Project");
-	let properties = rect_of(&h, Role::Button, "Properties");
-	let column = rect_of(&h, Role::Tree, "Project").right();
-	figure(&mut h, &dir, "project-tree", Rect::from_x_y_ranges(0.0..=column, project.top()..=properties.top()), 0.);
-	let timeline = rect_of(
-		&h,
-		Role::Slider,
-		"Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step a frame, PageUp/PageDown ten, Home/End jump to the start/end of the range",
-	);
-	let intensity = rect_of(&h, Role::Image, "Intensity");
-	figure(
-		&mut h,
-		&dir,
-		"preview",
-		Rect::from_x_y_ranges(timeline.x_range(), project.top()..=intensity.bottom() + 4.),
-		0.,
-	);
-	let stacked = rect_of(&h, Role::RadioButton, "Field above intensity");
-	figure(&mut h, &dir, "timeline", timeline.union(stacked), 0.);
-	for (header, name) in [
-		("File", "menu-file"),
-		("Edit", "menu-edit"),
-		("View", "menu-view"),
-		("Simulation", "menu-simulation"),
-		("Help", "menu-help"),
-	] {
-		let before = nodes(&h);
-		h.get_by_role_and_label(Role::Button, header).click();
-		settle(&mut h);
-		let menu = added(&before, &nodes(&h)).union(rect_of(&h, Role::Button, header));
-		figure(&mut h, &dir, name, menu, 2.);
-		if header == "File" {
-			let before = nodes(&h);
-			unfold(&mut h, "Export");
-			let export = h.get_by_label("Export").rect();
-			let menu = added(&before, &nodes(&h)).union(export);
-			figure(&mut h, &dir, "menu-file-export", menu, 2.);
-		}
-		h.key_press(Key::Escape);
-		h.key_press(Key::Escape);
-		settle(&mut h);
-	}
-	for (button, name, submenu) in [("Part", "menu-add-part", None), ("Probe", "menu-add-probe", Some("Probabilistic"))]
-	{
-		let before = nodes(&h);
-		h.get_by_role_and_label(Role::Button, button).click();
-		settle(&mut h);
-		if let Some(submenu) = submenu {
-			unfold(&mut h, submenu);
-		}
-		let menu = added(&before, &nodes(&h)).union(rect_of(&h, Role::Button, button));
-		figure(&mut h, &dir, name, menu, 2.);
-		h.key_press(Key::Escape);
-		h.key_press(Key::Escape);
-		settle(&mut h);
-	}
+mod ignored_tool {
+	use super::*;
 
-	// The forms, in a taller window so each fits.
-	let mut h = window(common::lavapipe().expect("lavapipe was there"), tmp.path(), vec2(1400., 1500.));
-	let form = |h: &Harness<'_, Shell>| {
-		let title = rect_of(h, Role::Button, "Properties");
-		Rect::from_min_size(pos2(0., title.top()), vec2(rect_of(h, Role::Tree, "Project").right(), FORM_HEIGHT))
-	};
-	// without the focus an added item's form takes, as a reader sees a form
-	let shot = |h: &mut Harness<'_, Shell>, name: &str| {
-		h.ctx.memory_mut(|m| {
-			if let Some(id) = m.focused() {
-				m.surrender_focus(id);
-			}
-		});
-		settle(h);
-		let area = form(h);
-		figure(h, &dir, name, area, 0.);
-	};
-	for (row, name) in [
-		("Project", "properties-project"),
-		("Scene", "properties-scene"),
-		("Simulation", "properties-simulation"),
-		("Display", "properties-display"),
-	] {
-		h.get_by_role_and_label(Role::TreeItem, row).click();
+	#[test]
+	#[ignore = "tool: writes the manual's figures; WAVEDUDE_FIGURES=$PWD/crates/wavedude-app/assets/manual cargo test -p wavedude-app --test screenshots -- --ignored ignored_tool::"]
+	fn manual_figures() {
+		let Some(dir) = out_dir() else { return };
+		let Some(builder) = common::lavapipe() else { return };
+		let tmp = tempfile::tempdir().unwrap();
+		let mut h = window(builder, tmp.path(), vec2(1400., 900.));
+		h.key_press(Key::F5);
+		wait_for(&mut h, |app| app.live.present_spans().first().is_some_and(|&(from, to)| from == 0 && to >= 400));
+		h.key_press(Key::Escape);
 		settle(&mut h);
-		shot(&mut h, name);
-	}
-	// the example's source is composite: the plain one first, then a composite of 7 x 3
-	h.get_by_role_and_label(Role::TreeItem, "Vertical source").click();
-	settle(&mut h);
-	h.get_by_role_and_label(Role::CheckBox, "Composite source").click();
-	settle(&mut h);
-	shot(&mut h, "properties-source");
-	h.get_by_role_and_label(Role::CheckBox, "Composite source").click();
-	settle(&mut h);
-	set_number(&mut h, "Columns", "7");
-	set_number(&mut h, "Rows", "3");
-	shot(&mut h, "properties-composite-source");
-	h.get_by_role_and_label(Role::TreeItem, "Left box").click();
-	settle(&mut h);
-	shot(&mut h, "properties-rectangle");
-	h.get_by_role_and_label(Role::TreeItem, "Field amplitude diagonal left box").click();
-	settle(&mut h);
-	shot(&mut h, "properties-line-probe");
-	for (label, name) in [
-		("Standard probe", "properties-probe"),
-		("Counting detector", "properties-counting-detector"),
-		("Imaging detector", "properties-imaging-detector"),
-	] {
-		add_probe(&mut h, label);
-		shot(&mut h, name);
-	}
-	let schemes = h.get_by_label_contains("olour schemes").rect();
-	h.get_all_by_role_and_label(Role::Button, "Add an item to this folder")
-		.find(|b| schemes.contains(b.rect().center()))
-		.expect("the colour schemes' add button")
-		.click();
-	settle(&mut h);
-	shot(&mut h, "properties-colour-scheme");
-	for (submenu, label, name) in [
-		(None, "Lens/Mirror", "properties-lens"),
-		(None, "Fresnel lens", "properties-fresnel-lens"),
-		(None, "Polygon", "properties-polygon"),
-		(None, "Ellipse", "properties-ellipse"),
-		(None, "Triangle", "properties-triangle"),
-		(None, "Outline", "properties-outline"),
-		(None, "Fibre", "properties-fibre"),
-		(None, "Bragg reflector", "properties-bragg-reflector"),
-		(None, "GRIN lens", "properties-grin-lens"),
-		(None, "Zone plate", "properties-zone-plate"),
-		(None, "Diffuser", "properties-diffuser"),
-		(None, "Interference filter", "properties-interference-filter"),
-		(Some("Diffraction gratings"), "Simple 2D grating", "properties-simple-grating"),
-		(Some("Diffraction gratings"), "Facetted grating", "properties-facetted-grating"),
-		(Some("Meta surfaces"), "Meta lens", "properties-meta-lens"),
-		(Some("Meta surfaces"), "Meta prism", "properties-meta-prism"),
-		(Some("Meta surfaces"), "Meta axicon", "properties-meta-axicon"),
-		(Some("Optical logic"), "XOR (Mach-Zehnder)", "properties-xor-gate"),
-	] {
-		add_part(&mut h, submenu, label);
-		shot(&mut h, name);
+		h.get_by_role_and_label(Role::TreeItem, "Left box").click();
+		settle(&mut h);
+		common::preview_idle(&mut h);
+		figure(&mut h, &dir, "main-window", Rect::from_min_size(pos2(0., 0.), vec2(1400., 900.)), 0.);
+		let project = rect_of(&h, Role::Button, "Project");
+		let properties = rect_of(&h, Role::Button, "Properties");
+		let column = rect_of(&h, Role::Tree, "Project").right();
+		figure(&mut h, &dir, "project-tree", Rect::from_x_y_ranges(0.0..=column, project.top()..=properties.top()), 0.);
+		let timeline = rect_of(
+			&h,
+			Role::Slider,
+			"Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step a frame, PageUp/PageDown ten, Home/End jump to the start/end of the range",
+		);
+		let intensity = rect_of(&h, Role::Image, "Intensity");
+		figure(
+			&mut h,
+			&dir,
+			"preview",
+			Rect::from_x_y_ranges(timeline.x_range(), project.top()..=intensity.bottom() + 4.),
+			0.,
+		);
+		let stacked = rect_of(&h, Role::RadioButton, "Field above intensity");
+		figure(&mut h, &dir, "timeline", timeline.union(stacked), 0.);
+		for (header, name) in [
+			("File", "menu-file"),
+			("Edit", "menu-edit"),
+			("View", "menu-view"),
+			("Simulation", "menu-simulation"),
+			("Help", "menu-help"),
+		] {
+			let before = nodes(&h);
+			h.get_by_role_and_label(Role::Button, header).click();
+			settle(&mut h);
+			let menu = added(&before, &nodes(&h)).union(rect_of(&h, Role::Button, header));
+			figure(&mut h, &dir, name, menu, 2.);
+			if header == "File" {
+				let before = nodes(&h);
+				unfold(&mut h, "Export");
+				let export = h.get_by_label("Export").rect();
+				let menu = added(&before, &nodes(&h)).union(export);
+				figure(&mut h, &dir, "menu-file-export", menu, 2.);
+			}
+			h.key_press(Key::Escape);
+			h.key_press(Key::Escape);
+			settle(&mut h);
+		}
+		for (button, name, submenu) in
+			[("Part", "menu-add-part", None), ("Probe", "menu-add-probe", Some("Probabilistic"))]
+		{
+			let before = nodes(&h);
+			h.get_by_role_and_label(Role::Button, button).click();
+			settle(&mut h);
+			if let Some(submenu) = submenu {
+				unfold(&mut h, submenu);
+			}
+			let menu = added(&before, &nodes(&h)).union(rect_of(&h, Role::Button, button));
+			figure(&mut h, &dir, name, menu, 2.);
+			h.key_press(Key::Escape);
+			h.key_press(Key::Escape);
+			settle(&mut h);
+		}
+
+		// The forms, in a taller window so each fits.
+		let mut h = window(common::lavapipe().expect("lavapipe was there"), tmp.path(), vec2(1400., 1500.));
+		let form = |h: &Harness<'_, Shell>| {
+			let title = rect_of(h, Role::Button, "Properties");
+			Rect::from_min_size(pos2(0., title.top()), vec2(rect_of(h, Role::Tree, "Project").right(), FORM_HEIGHT))
+		};
+		// without the focus an added item's form takes, as a reader sees a form
+		let shot = |h: &mut Harness<'_, Shell>, name: &str| {
+			h.ctx.memory_mut(|m| {
+				if let Some(id) = m.focused() {
+					m.surrender_focus(id);
+				}
+			});
+			settle(h);
+			let area = form(h);
+			figure(h, &dir, name, area, 0.);
+		};
+		for (row, name) in [
+			("Project", "properties-project"),
+			("Scene", "properties-scene"),
+			("Simulation", "properties-simulation"),
+			("Display", "properties-display"),
+		] {
+			h.get_by_role_and_label(Role::TreeItem, row).click();
+			settle(&mut h);
+			shot(&mut h, name);
+		}
+		// the example's source is composite: the plain one first, then a composite of 7 x 3
+		h.get_by_role_and_label(Role::TreeItem, "Vertical source").click();
+		settle(&mut h);
+		h.get_by_role_and_label(Role::CheckBox, "Composite source").click();
+		settle(&mut h);
+		shot(&mut h, "properties-source");
+		h.get_by_role_and_label(Role::CheckBox, "Composite source").click();
+		settle(&mut h);
+		set_number(&mut h, "Columns", "7");
+		set_number(&mut h, "Rows", "3");
+		shot(&mut h, "properties-composite-source");
+		h.get_by_role_and_label(Role::TreeItem, "Left box").click();
+		settle(&mut h);
+		shot(&mut h, "properties-rectangle");
+		h.get_by_role_and_label(Role::TreeItem, "Field amplitude diagonal left box").click();
+		settle(&mut h);
+		shot(&mut h, "properties-line-probe");
+		for (label, name) in [
+			("Standard probe", "properties-probe"),
+			("Counting detector", "properties-counting-detector"),
+			("Imaging detector", "properties-imaging-detector"),
+		] {
+			add_probe(&mut h, label);
+			shot(&mut h, name);
+		}
+		let schemes = h.get_by_label_contains("olour schemes").rect();
+		h.get_all_by_role_and_label(Role::Button, "Add an item to this folder")
+			.find(|b| schemes.contains(b.rect().center()))
+			.expect("the colour schemes' add button")
+			.click();
+		settle(&mut h);
+		shot(&mut h, "properties-colour-scheme");
+		for (submenu, label, name) in [
+			(None, "Lens/Mirror", "properties-lens"),
+			(None, "Fresnel lens", "properties-fresnel-lens"),
+			(None, "Polygon", "properties-polygon"),
+			(None, "Ellipse", "properties-ellipse"),
+			(None, "Triangle", "properties-triangle"),
+			(None, "Outline", "properties-outline"),
+			(None, "Fibre", "properties-fibre"),
+			(None, "Bragg reflector", "properties-bragg-reflector"),
+			(None, "GRIN lens", "properties-grin-lens"),
+			(None, "Zone plate", "properties-zone-plate"),
+			(None, "Diffuser", "properties-diffuser"),
+			(None, "Interference filter", "properties-interference-filter"),
+			(Some("Diffraction gratings"), "Simple 2D grating", "properties-simple-grating"),
+			(Some("Diffraction gratings"), "Facetted grating", "properties-facetted-grating"),
+			(Some("Meta surfaces"), "Meta lens", "properties-meta-lens"),
+			(Some("Meta surfaces"), "Meta prism", "properties-meta-prism"),
+			(Some("Meta surfaces"), "Meta axicon", "properties-meta-axicon"),
+			(Some("Optical logic"), "XOR (Mach-Zehnder)", "properties-xor-gate"),
+		] {
+			add_part(&mut h, submenu, label);
+			shot(&mut h, name);
+		}
 	}
 }

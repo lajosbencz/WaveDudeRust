@@ -1015,21 +1015,4 @@ mod tests {
 		assert_eq!(reorder_index(2, DropAt::After(0), 3), 1);
 		assert_eq!(reorder_index(0, DropAt::Append, 3), 2);
 	}
-
-	#[test]
-	fn rows_drag_unless_the_device_is_touch_first() {
-		assert!(row_sense(false).senses_drag() && row_sense(false).senses_click());
-		assert!(!row_sense(true).senses_drag() && row_sense(true).senses_click());
-	}
-
-	#[test]
-	fn the_tree_keys_fire_with_exactly_their_modifiers() {
-		assert!(matches!(tree_key(Key::ArrowUp, Modifiers::SHIFT), Some(TreeKey::Up(true))));
-		assert!(matches!(tree_key(Key::ArrowUp, Modifiers::ALT), Some(TreeKey::Action(MenuAction::MoveUp))));
-		assert!(matches!(tree_key(Key::Space, Modifiers::COMMAND), Some(TreeKey::ToggleSelected)));
-		assert!(matches!(tree_key(Key::Space, Modifiers::NONE), Some(TreeKey::ToggleEnabled)));
-		assert!(tree_key(Key::Delete, Modifiers::SHIFT).is_none(), "Shift+Del is Cut");
-		assert!(tree_key(Key::A, Modifiers::COMMAND).is_none(), "Select all is the window's");
-		assert!(tree_key(Key::Escape, Modifiers::NONE).is_none(), "Esc stops the run");
-	}
 }

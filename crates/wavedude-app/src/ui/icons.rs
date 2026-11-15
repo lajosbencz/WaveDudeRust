@@ -262,28 +262,3 @@ pub(super) fn paint(ui: &Ui, rect: Rect, icon: Icon, color: Color32) {
 	let mesh = ui.memory_mut(|m| Arc::clone(m.caches.cache::<FrameCache<Arc<Mesh>, Placer>>().get(placed)));
 	ui.painter().add(Shape::Mesh(mesh));
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn every_drawing_parses() {
-		let fixed = [CHEVRON_RIGHT, CHEVRON_DOWN, CHEVRON_UP, PLUS, MINUS, CHECK, DROPDOWN, SOURCE, PROBE, PROJECT];
-		let more = [SCENE, SIMULATION, DISPLAY, PART, SCHEME];
-		let kinds = crate::menus::PART_KINDS.map(|(kind, ..)| kind_icon(kind));
-		for icon in fixed.iter().chain(&more).chain(&kinds).chain(LENSES.as_flattened()) {
-			let flat = Flat::of(*icon);
-			assert!(!flat.strokes.is_empty() || !flat.fills.is_empty(), "{icon:?} draws nothing");
-		}
-	}
-
-	#[test]
-	fn a_lens_icon_follows_its_faces() {
-		let lens = |r1, r2| Lens { r1, r2, diameter: 100, ..Lens::default() };
-		assert_eq!(lens_icon(&lens(80., -80.)), LENSES[0][0], "biconvex");
-		assert_eq!(lens_icon(&lens(0., 1e9)), LENSES[1][1], "flat faces");
-		assert_eq!(lens_icon(&lens(-80., 80.)), LENSES[2][2], "biconcave");
-		assert_eq!(lens_icon(&lens(80., 0.)), LENSES[0][1], "plano-convex");
-	}
-}

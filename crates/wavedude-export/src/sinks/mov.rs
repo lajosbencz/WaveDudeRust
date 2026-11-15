@@ -459,12 +459,52 @@ impl<W: Write + Seek + MaybeSend> FrameSink for ParallelMov<W> {
 mod tests {
 	use super::*;
 
+	/// The RGB pixels of an [`encode_animation`] sample, read by the opcodes it documents.
+	fn decode_animation(s: &[u8], width: usize, height: usize) -> Vec<[u8; 3]> {
+		assert_eq!(&s[..4], &(s.len() as u32).to_be_bytes(), "the sample size leads");
+		assert_eq!(&s[4..6], &[0, 0], "header 0: the whole frame");
+		let px = |i: usize| [s[i], s[i + 1], s[i + 2]];
+		let (mut pixels, mut i) = (Vec::new(), 6);
+		for y in 0..height {
+			assert_eq!(s[i], 1, "row {y} skip byte");
+			i += 1;
+			let start = pixels.len();
+			loop {
+				let op = s[i] as i8;
+				i += 1;
+				match op {
+					-1 => break,
+					1..=127 => {
+						pixels.extend((0..op as usize).map(|k| px(i + 3 * k)));
+						i += 3 * op as usize;
+					}
+					-128..=-2 => {
+						pixels.extend(std::iter::repeat_n(px(i), op.unsigned_abs() as usize));
+						i += 3;
+					}
+					0 => panic!("row {y}: a skip code in a full frame"),
+				}
+			}
+			assert_eq!(pixels.len() - start, width, "row {y} width");
+		}
+		assert_eq!(i, s.len(), "nothing follows the last row");
+		pixels
+	}
+
 	#[test]
-	fn animation_rows_take_runs_and_literals() {
-		let px = |c: u8| [c, c, c, 255];
-		let rgba: Vec<u8> = [px(1), px(1), px(1), px(2), px(3)].concat();
-		let s = encode_animation(&rgba, 5, 1);
-		assert_eq!(&s[..4], &(s.len() as u32).to_be_bytes());
-		assert_eq!(&s[4..], &[0, 0, 1, 0xFD, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 0xFF]);
+	fn animation_samples_decode_to_their_pixels_and_runs_shrink_them() {
+		// Past both opcode limits: runs of more than 128, literals of more than 127.
+		let width = 300;
+		let rows: [fn(usize) -> [u8; 3]; 3] = [
+			|_| [9, 8, 7],
+			|x| [x as u8, (x >> 8) as u8, 7],
+			|x| if x % 7 < 4 { [(x / 7) as u8, 1, 2] } else { [x as u8, 3, 4] },
+		];
+		let rgb: Vec<[u8; 3]> = rows.iter().flat_map(|row| (0..width).map(row)).collect();
+		let rgba: Vec<u8> = rgb.iter().flat_map(|&[r, g, b]| [r, g, b, 255]).collect();
+		assert_eq!(decode_animation(&encode_animation(&rgba, width, rows.len()), width, rows.len()), rgb);
+
+		let uniform = encode_animation(&rgba[..width * 4], width, 1);
+		assert!(uniform.len() < width * 3, "a run of one colour takes {} bytes", uniform.len());
 	}
 }

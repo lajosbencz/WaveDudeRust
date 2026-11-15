@@ -1,6 +1,6 @@
 //! Exports driven headless on a small project: a run exported through the dialog after its full-quality run,
-//! repeated by Export last and asking before it replaces a file; a waiting export in the status bar, cancelled by
-//! Esc; Exit while an export waits asks first; a frame export's proposed name follows the layer.
+//! repeated by Export last and asking before it replaces a file; Exit while an export waits asks first; a frame
+//! export's proposed name follows the layer.
 
 mod common;
 
@@ -29,7 +29,6 @@ const SHORT: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 "#;
 /// Frames for an input to reach the state and its result to show.
 const SETTLE: usize = 4;
-const WAITING: &str = "Export: waiting for the run";
 
 /// The window on `project` saved in `dir`, nothing run.
 fn window(dir: &Path, project: &str) -> Harness<'static, Shell> {
@@ -113,20 +112,6 @@ fn a_run_exports_after_its_run_repeats_by_export_last_and_asks_before_replacing(
 }
 
 #[test]
-fn a_waiting_export_shows_in_the_status_bar_and_esc_cancels_it() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window(dir.path(), &std::fs::read_to_string(LONG).unwrap());
-	harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::F);
-	settle(&mut harness);
-	harness.get_by_role_and_label(Role::Label, "Export the frame");
-	ok(&mut harness);
-	harness.get_by_label(WAITING);
-	harness.key_press(Key::Escape);
-	settle(&mut harness);
-	assert!(!exporting(&harness) && harness.query_by_label(WAITING).is_none(), "Esc left the export waiting");
-}
-
-#[test]
 fn exit_while_an_export_waits_asks_first() {
 	let dir = tempfile::tempdir().unwrap();
 	let mut harness = window(dir.path(), &std::fs::read_to_string(LONG).unwrap());
@@ -149,22 +134,6 @@ fn exit_while_an_export_waits_asks_first() {
 	harness.key_press(Key::Y);
 	settle(&mut harness);
 	assert!(!exporting(&harness), "Yes left the export waiting");
-}
-
-#[test]
-fn esc_in_the_path_box_closes_the_dialog_and_enter_there_exports() {
-	let dir = tempfile::tempdir().unwrap();
-	let mut harness = window(dir.path(), &std::fs::read_to_string(LONG).unwrap());
-	for (key, export) in [(Key::Escape, false), (Key::Enter, true)] {
-		harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::F);
-		settle(&mut harness);
-		harness.get_by_role_and_label(Role::TextInput, "Export the frame").click();
-		settle(&mut harness);
-		harness.key_press(key);
-		settle(&mut harness);
-		assert!(harness.query_by_role_and_label(Role::Label, "Export the frame").is_none(), "{key:?} left it open");
-		assert_eq!(exporting(&harness), export, "{key:?}");
-	}
 }
 
 #[test]

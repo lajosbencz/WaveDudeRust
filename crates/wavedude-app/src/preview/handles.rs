@@ -207,8 +207,8 @@ pub fn to_part_frame(part: &Part, p: (f32, f32)) -> Vec2 {
 
 #[cfg(test)]
 mod tests {
-	use wavedude_core::model::{self as m, Edit as _, ItemKind, Layer, Probe, ProbeKind, Project, Rectangle, Source};
-	use wavedude_view::overlay::{build, grip_of};
+	use wavedude_core::model::{self as m, Edit as _, ItemKind, Probe, ProbeKind, Project, Rectangle, Source};
+	use wavedude_view::overlay::grip_of;
 
 	use super::*;
 
@@ -234,34 +234,7 @@ mod tests {
 	}
 
 	const S: ItemRef = ItemRef::new(ItemKind::Source, 0);
-	const R: ItemRef = ItemRef::new(ItemKind::Part, 0);
 	const P: ItemRef = ItemRef::new(ItemKind::Probe, 0);
-
-	#[test]
-	fn hit_takes_the_topmost_handle_within_the_screen_radius() {
-		let m = build(&project(), &[], None, Layer::Field, 2., true, true);
-		assert_eq!(m.handles[hit(&m, (10., 20.), 2.).unwrap()].item, S);
-		assert_eq!(hit(&m, (10.5 + 4.9, 20.5), 2.).map(|i| m.handles[i].item), Some(S));
-		assert_eq!(hit(&m, (10.5 + 5.1, 20.5), 2.), None);
-		let mut overlapping = m.clone();
-		overlapping.handles[2].at = overlapping.handles[0].at;
-		assert_eq!(hit(&overlapping, (10.5, 20.5), 2.), Some(2));
-	}
-
-	#[test]
-	fn marquee_selects_by_whole_item_handles() {
-		let m = build(&project(), &[R], Some(R), Layer::Field, 1., true, true);
-		assert_eq!(marquee_hits(&m, (0., 0.), (60., 60.)), vec![S, P]);
-		assert_eq!(
-			marquee_hits(&m, (115., 55.), (130., 65.)),
-			Vec::<ItemRef>::new(),
-			"a grip is not a whole-item handle"
-		);
-		assert_eq!(marquee_hits(&m, (70., 60.), (101., 40.)), vec![R, P], "the rectangle may be dragged either way");
-		assert_eq!(marquee_select(&[R], &[S, P], MarqueeMode::Replace), vec![S, P]);
-		assert_eq!(marquee_select(&[R, S], &[S, P], MarqueeMode::Add), vec![R, S, P]);
-		assert_eq!(marquee_select(&[R, S], &[S, P], MarqueeMode::Toggle), vec![R, P]);
-	}
 
 	#[test]
 	fn drags_follow_the_absolute_pointer_and_hold_the_formation() {

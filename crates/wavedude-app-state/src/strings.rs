@@ -337,10 +337,12 @@ mod tests {
 
 	#[test]
 	fn lookup_switch_and_fallback() {
+		let table = |l: Language| tables()[l.index()]["MenuFile"].as_str();
 		let mut s = Strings::new(Language::English);
-		assert_eq!(s.get("MenuFile"), "_File");
+		assert_eq!(s.get("MenuFile"), table(Language::English));
 		s.set_language(Language::German);
-		assert_eq!(s.get("MenuFile"), "_Datei");
+		assert_eq!(s.get("MenuFile"), table(Language::German));
+		assert_ne!(table(Language::German), table(Language::English), "the switch shows the other table");
 		assert_eq!(s.try_get("No.Such.Key"), None);
 		assert_eq!(strip_mnemonic("Save _As..."), "Save As...");
 		assert_eq!(mnemonic("Save _As..."), Some('a'));

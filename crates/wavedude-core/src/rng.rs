@@ -67,23 +67,14 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn pcg_is_deterministic_per_stream() {
-		let a: Vec<u32> =
-			(0..4).map(|_| 0).collect::<Vec<_>>().iter().scan(Pcg32::new(42, 54), |r, _| Some(r.next_u32())).collect();
-		let b: Vec<u32> =
-			(0..4).map(|_| 0).collect::<Vec<_>>().iter().scan(Pcg32::new(42, 54), |r, _| Some(r.next_u32())).collect();
-		let c: Vec<u32> =
-			(0..4).map(|_| 0).collect::<Vec<_>>().iter().scan(Pcg32::new(42, 55), |r, _| Some(r.next_u32())).collect();
-		assert_eq!(a, b);
-		assert_ne!(a, c);
-	}
-
-	#[test]
 	fn pcg_reference_sequence() {
+		let sequence = |stream| {
+			let mut r = Pcg32::new(42, stream);
+			(0..6).map(|_| r.next_u32()).collect::<Vec<_>>()
+		};
 		// pcg32_random_r with seed 42, stream 54 (the PCG paper's demo).
-		let mut r = Pcg32::new(42, 54);
-		let got: Vec<u32> = (0..6).map(|_| r.next_u32()).collect();
-		assert_eq!(got, [0xa15c02b7, 0x7b47f409, 0xba1d3330, 0x83d2f293, 0xbfa4784b, 0xcbed606e]);
+		assert_eq!(sequence(54), [0xa15c02b7, 0x7b47f409, 0xba1d3330, 0x83d2f293, 0xbfa4784b, 0xcbed606e]);
+		assert_ne!(sequence(55), sequence(54), "another stream");
 	}
 
 	#[test]
@@ -100,5 +91,9 @@ mod tests {
 	fn hash_is_fnv1a_utf16() {
 		assert_eq!(stable_hash(""), 2166136261);
 		assert_eq!(stable_hash("a"), (2166136261u32 ^ 0x61).wrapping_mul(16777619));
+		// one code unit beyond ASCII, a surrogate pair, and both in a name (reference FNV-1a per UTF-16 code unit, spec 10 StableHash)
+		assert_eq!(stable_hash("\u{e9}"), 0x6c0b_6c44);
+		assert_eq!(stable_hash("\u{1f600}"), 0xcb31_c4b8);
+		assert_eq!(stable_hash("Lens \u{e9}\u{1f600}"), 0xea12_c87f);
 	}
 }

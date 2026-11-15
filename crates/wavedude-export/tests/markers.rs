@@ -5,13 +5,14 @@ use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::model::{BoxSize, Layer, Measurement, Probe, ProbeKind, Project, Source, SourceArray, YScale};
 use wavedude_export::overlays::{Overlays, arm_length, label_origin, label_size};
 use wavedude_view::FontMetrics;
+use wavedude_view::epaint::Color32;
 use wavedude_view::epaint::text::{FontId, Fonts, TextOptions};
 use wavedude_view::graph::{self, GraphData};
 
 const GREY: [u8; 4] = [128, 128, 128, 255];
 
 /// `c` painted over the opaque `under`, straight alpha in sRGB.
-fn over(under: [u8; 3], c: wavedude_view::epaint::Color32) -> [u8; 3] {
+fn over(under: [u8; 3], c: Color32) -> [u8; 3] {
 	let [r, g, b, a] = c.to_srgba_unmultiplied();
 	let a = f32::from(a) / 255.;
 	[r, g, b]
@@ -42,24 +43,54 @@ fn burned(project: &Project, (w, h): (u32, u32), traces: &[ProbeTrace], layer: L
 	px
 }
 
-/// One character per pixel: `#` white, `.` black, ` ` the grey background, `+` lighter, `-` darker.
-fn ascii(px: &[u8], w: usize) -> String {
-	px.chunks_exact(w * 4)
-		.map(|row| {
-			row.as_chunks::<4>()
-				.0
-				.iter()
-				.map(|p| match p[0] {
-					255 => '#',
-					0 => '.',
-					128 => ' ',
-					v if v > 128 => '+',
-					_ => '-',
-				})
-				.collect::<String>()
-		})
-		.collect::<Vec<_>>()
-		.join("\n")
+/// The spec's ThickLine over `px`: a `(2r + 1)^2` square of `c` at each of the `max(|dx|, |dy|) + 1` points, rounded
+/// half to even, clipped to the frame.
+fn thick_line(px: &mut [u8], (w, h): (usize, usize), (x0, y0): (i64, i64), (x1, y1): (i64, i64), c: [u8; 4], r: i64) {
+	let steps = (x1 - x0).abs().max((y1 - y0).abs());
+	for k in 0..=steps {
+		let at = |a: i64, b: i64| {
+			if steps == 0 { a } else { a + ((b - a) as f64 * k as f64 / steps as f64).round_ties_even() as i64 }
+		};
+		let (cx, cy) = (at(x0, x1), at(y0, y1));
+		for y in (cy - r).max(0)..=(cy + r).min(h as i64 - 1) {
+			for x in (cx - r).max(0)..=(cx + r).min(w as i64 - 1) {
+				let i = (y as usize * w + x as usize) * 4;
+				px[i..i + 4].copy_from_slice(&c);
+			}
+		}
+	}
+}
+
+/// The spec's strokes of `probes` over a grey frame: per probe the line A-B and the crosses, black at radius 2, then
+/// white at 1.
+fn strokes<'a>(probes: impl Iterator<Item = &'a Probe>, (w, h): (usize, usize)) -> Vec<u8> {
+	let mut px = GREY.repeat(w * h);
+	let arm = i64::from(arm_length(h as u32));
+	for p in probes {
+		let line = p.kind == ProbeKind::Line;
+		let (a, b) = ((i64::from(p.ax), i64::from(p.ay)), (i64::from(p.bx), i64::from(p.by)));
+		for (c, r) in [([0, 0, 0, 255], 2), ([255; 4], 1)] {
+			if line {
+				thick_line(&mut px, (w, h), a, b, c, r);
+			}
+			let ends: &[(i64, i64)] = if line { &[a, b] } else { &[a] };
+			for &(x, y) in ends {
+				thick_line(&mut px, (w, h), (x - arm, y), (x + arm, y), c, r);
+				thick_line(&mut px, (w, h), (x, y - arm), (x, y + arm), c, r);
+			}
+		}
+	}
+	px
+}
+
+/// The rectangle of the probe label `text` at `(x, y)`: `ceil(text width) + 4 x ceil(text height) + 4`.
+fn label_rect(text: &str, (x, y): (i32, i32), h: u32) -> (std::ops::Range<i32>, std::ops::Range<i32>) {
+	let mut fonts = Fonts::new(TextOptions::default(), wavedude_view::fonts::definitions());
+	let mut view = fonts.with_pixels_per_point(1.);
+	let font = FontId::new(label_size(h), wavedude_view::fonts::bold());
+	let width = view.layout_no_wrap(text.into(), font.clone(), Color32::WHITE).size().x.ceil() as i32 + 4;
+	let height = view.row_height(&font).ceil() as i32 + 4;
+	(x..x + width, y..y + height)
 }
 
 fn markers_only(project: &mut Project) {
@@ -88,17 +119,24 @@ fn probe_markers_black_around_white_clipped_at_the_corner_labelled() {
 	assert_eq!(at(&px, w, 0, 0), [255; 4], "a cross at the corner is drawn clipped");
 	assert_eq!(at(&px, w, arm + 2, 0), [0, 0, 0, 255]);
 	assert_eq!(at(&px, w, 58, 37), [255; 4], "the line A-B is white");
-	let ink = |(x, y): (i32, i32)| {
-		let (lw, lh) = (24, (label_size(h as u32) * 1.4) as usize + 4);
-		(y as usize..(y as usize + lh).min(h))
-			.flat_map(|yy| (x as usize..(x as usize + lw).min(w)).map(move |xx| (xx, yy)))
-			.filter(|&(xx, yy)| at(&px, w, xx, yy)[0] > 200)
+	let labels = [("1", (20, 40)), ("2A", (50, 30)), ("2B", (66, 45)), ("3", (0, 0))]
+		.map(|(text, (x, y))| label_rect(text, label_origin(x, y, h as u32), h as u32));
+	let ink = |(xs, ys): &(std::ops::Range<i32>, std::ops::Range<i32>)| {
+		ys.clone()
+			.flat_map(|y| xs.clone().map(move |x| (x, y)))
+			.filter(|&(x, y)| (0..w as i32).contains(&x) && (0..h as i32).contains(&y))
+			.filter(|&(x, y)| at(&px, w, x as usize, y as usize)[0] > 200)
 			.count()
 	};
-	assert!(ink(label_origin(20, 40, h as u32)) > 0, "label 1, the first active probe");
-	assert!(ink(label_origin(50, 30, h as u32)) > 0, "label 2A");
-	assert!(ink(label_origin(66, 45, h as u32)) > 0, "label 2B");
-	insta::assert_snapshot!("probe_markers", ascii(&px, w));
+	assert!(ink(&labels[0]) > 0, "label 1, the first active probe");
+	assert!(ink(&labels[1]) > 0, "label 2A");
+	assert!(ink(&labels[2]) > 0, "label 2B");
+	let want = strokes(project.probes.iter().filter(|p| p.active), (w, h));
+	let labelled =
+		|x: usize, y: usize| labels.iter().any(|(xs, ys)| xs.contains(&(x as i32)) && ys.contains(&(y as i32)));
+	for (x, y) in (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| !labelled(x, y)) {
+		assert_eq!(at(&px, w, x, y), at(&want, w, x, y), "({x}, {y}): the spec's strokes outside the labels");
+	}
 }
 
 #[test]

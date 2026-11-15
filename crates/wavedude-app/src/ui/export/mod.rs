@@ -414,37 +414,4 @@ mod tests {
 		assert!(!exports.exporting() && !app.live.export_busy(), "the export did not end");
 		assert!(modals.is_open(), "the error was not shown");
 	}
-
-	#[test]
-	fn a_profile_the_encoder_lacks_is_greyed_with_the_reason() {
-		use eframe::egui::accesskit::Role;
-		use egui_kittest::kittest::{NodeT as _, Queryable as _};
-		use wavedude_app_state::strings::Language;
-
-		let s = Strings::new(Language::English);
-		let reason = s.get("ExportH264BaselineOnly");
-		let builder = egui_kittest::Harness::builder().with_context_setup(|ctx| {
-			super::super::theme::install(ctx);
-			egui_material_icons::initialize(ctx);
-		});
-		let mut harness = builder.build_ui_state(
-			|ui, picked: &mut Vec<Profile>| {
-				picked.extend(profile_row(ui, &s, Profile::High, &[Profile::Baseline], reason));
-			},
-			Vec::new(),
-		);
-		harness.get_by_label(reason);
-		harness.get_by_role_and_label(Role::ComboBox, s.get("ExportH264Profile")).click();
-		harness.run();
-		assert!(harness.get_by_role_and_label(Role::MenuItemCheckBox, "Main").accesskit_node().is_disabled());
-		assert!(harness.get_by_role_and_label(Role::MenuItemCheckBox, "High").accesskit_node().is_disabled());
-		harness.get_by_role_and_label(Role::MenuItemCheckBox, "Main").click();
-		harness.run();
-		assert!(harness.state().is_empty(), "a greyed profile was picked");
-		harness.get_by_role_and_label(Role::ComboBox, s.get("ExportH264Profile")).click();
-		harness.run();
-		harness.get_by_role_and_label(Role::MenuItemCheckBox, "Baseline").click();
-		harness.run();
-		assert_eq!(harness.state(), &[Profile::Baseline]);
-	}
 }

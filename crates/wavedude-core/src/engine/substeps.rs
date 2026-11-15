@@ -63,15 +63,10 @@ mod tests {
 	}
 
 	#[test]
-	fn slow_media_and_empty_scenes_take_one() {
-		assert_eq!(sub_steps(Stencil::FourthOrder, 0.25), 1);
-		assert_eq!(sub_steps(Stencil::NinePoint, 0.0), 1);
-	}
-
-	#[test]
 	fn courant_number_stays_under_the_bound_with_margin() {
 		for stencil in [Stencil::NinePoint, Stencil::FourthOrder] {
-			for i in 1..=1000 {
+			// from an empty scene (c2 = 0) through slow media to c2 = 4
+			for i in 0..=1000 {
 				let c2 = i as f32 / 1000.0 * 4.0;
 				let n = sub_steps(stencil, c2);
 				let s = (c2 as f64).sqrt() / n as f64;

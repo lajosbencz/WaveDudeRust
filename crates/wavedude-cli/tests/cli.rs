@@ -1,6 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use wavedude_core::io::load_project;
+use wavedude_core::model::Project;
+use wavedude_core::model::ranges::SIM_STEPS;
+
 const EXAMPLE: &str = "Example01_Source_Mirror_Probe.wdproj";
 
 fn cli(args: &[&str]) -> Output {
@@ -99,10 +103,12 @@ fn steps_outside_the_model_range_are_refused() {
 	let dir = tempfile::tempdir().unwrap();
 	let project = example(dir.path());
 	let out = dir.path().join("out");
-	for (command, steps) in [("probes", "0"), ("export", "0"), ("run", "20000000")] {
+	let outside = format!("is outside {}..={}", SIM_STEPS.min, SIM_STEPS.max);
+	let (below, above) = ((SIM_STEPS.min - 1.).to_string(), (SIM_STEPS.max + 1.).to_string());
+	for (command, steps) in [("probes", &below), ("export", &below), ("run", &above)] {
 		let output = cli(&[command, project.to_str().unwrap(), "--out", out.to_str().unwrap(), "--steps", steps]);
 		assert!(!output.status.success(), "{command} --steps {steps}");
-		assert!(String::from_utf8_lossy(&output.stderr).contains("is outside 1..=10000000"), "{command}");
+		assert!(String::from_utf8_lossy(&output.stderr).contains(&outside), "{command}");
 	}
 }
 
@@ -137,76 +143,87 @@ fn assert_filled(path: &Path) {
 	assert!(std::fs::metadata(path).expect("file exists").len() > 0, "{} is empty", path.display());
 }
 
+/// The u32 little-endian at `at` of `data`.
+fn u32_at(data: &[u8], at: usize) -> u32 {
+	u32::from_le_bytes(data[at..at + 4].try_into().unwrap())
+}
+
+/// Width, height and frame count of an AVI's main header.
+fn avi_header(path: &Path) -> (u32, u32, usize) {
+	let data = std::fs::read(path).unwrap();
+	let avih = data.windows(4).position(|w| w == b"avih").expect("an AVI main header") + 8;
+	(u32_at(&data, avih + 32), u32_at(&data, avih + 36), u32_at(&data, avih + 16) as usize)
+}
+
+/// Sample count of a `QuickTime` or MP4 movie's track: the `stsz` in its top-level `moov` (big-endian atoms).
+fn movie_samples(path: &Path) -> usize {
+	let data = std::fs::read(path).unwrap();
+	let be = |at: usize| u32::from_be_bytes(data[at..at + 4].try_into().unwrap()) as usize;
+	let mut at = 0;
+	let moov = loop {
+		let size = match be(at) {
+			1 => u64::from_be_bytes(data[at + 8..at + 16].try_into().unwrap()) as usize,
+			n => n,
+		};
+		assert!(size >= 8, "an atom before moov runs to the end at {at}");
+		if &data[at + 4..at + 8] == b"moov" {
+			break at..at + size;
+		}
+		at += size;
+	};
+	let stsz = moov.start + data[moov].windows(4).position(|w| w == b"stsz").expect("a sample size table");
+	be(stsz + 12)
+}
+
+/// Timeline frames of `steps` exported from step `from` to step `to` (0: the end), per docs/spec/50-export.md, Range.
+fn exported_frames(project: &Project, steps: u32, from: u32, to: u32) -> usize {
+	let every = project.simulation.visualize_every;
+	let last = steps.div_ceil(every) - 1;
+	let first = (from / every).min(last);
+	let end = if to == 0 { last } else { (to / every).clamp(first, last) };
+	(end - first + 1) as usize
+}
+
+/// Each export of the example at 40 steps: the output, the extra arguments, and what it writes, checked against
+/// the example's canvas and the frames from its in point.
 #[test]
-fn export_writes_a_png_sequence() {
-	let dir = tempfile::tempdir().unwrap();
-	let (target, text) = export(dir.path(), "seq.png", &["--layers", "both", "--markers"]);
-	let field = files(&target.with_file_name("seq_field"));
-	let intensity = files(&target.with_file_name("seq_intensity"));
-	assert!(!field.is_empty() && field.len() == intensity.len(), "{text}");
-	assert_eq!(decodes(&field[0]), decodes(&intensity[0]));
-	assert!(field.iter().chain(&intensity).all(|f| f.metadata().unwrap().len() > 0));
-	assert!(text.contains("ms/frame"), "{text}");
-}
-
-#[test]
-fn export_writes_exr_root_frames() {
-	let dir = tempfile::tempdir().unwrap();
-	let (target, _) =
-		export(dir.path(), "data.exr", &["--format", "exrroot", "--layers", "intensity", "--from", "0", "--to", "10"]);
-	let written = files(&target.with_extension(""));
-	assert!(!written.is_empty());
-	written.iter().for_each(|f| assert_filled(f));
-}
-
-/// Codec, size and frame count of a movie by ffprobe, None without ffprobe.
-fn probe_movie(path: &Path) -> Option<String> {
-	let out = Command::new("ffprobe")
-		.args(["-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries"])
-		.args(["stream=codec_name,width,height,nb_read_frames", "-of", "csv=p=0"])
-		.arg(path)
-		.output()
-		.ok()?;
-	assert!(out.status.success(), "ffprobe {}: {}", path.display(), String::from_utf8_lossy(&out.stderr));
-	Some(String::from_utf8(out.stdout).unwrap().trim().trim_end_matches(',').to_owned())
-}
-
-/// Each frame of a movie decodes; checked when ffprobe is installed.
-fn assert_movie(path: &Path, codec: &str, frames: usize) {
-	assert_filled(path);
-	if let Some(found) = probe_movie(path) {
-		assert_eq!(found, format!("{codec},960,540,{frames}"), "{}", path.display());
-	}
-}
-
-/// 40 steps at Visualize every 2 hold frames 0..=19; the example's in point, step 10, starts at frame 5.
-const FRAMES: usize = 15;
-
-/// Movies by container: the extra arguments, the codec and the layer files written (the file itself without).
-#[test]
-fn export_writes_movies() {
-	const LAYERS: &[&str] = &["field", "intensity"];
-	let table: &[(&str, &[&str], &str, &[&str])] = &[
-		("movie.avi", &["--graphs", "--edges"], "rawvideo", &[]),
-		("anim.mov", &["--format", "mov", "--layers", "both", "--markers"], "qtrle", LAYERS),
-		("png.mov", &["--format", "movpng", "--layers", "both", "--markers"], "png", LAYERS),
-		("m.mpg", &["--format", "mpeg1", "--layers", "both", "--markers"], "mpeg1video", LAYERS),
+fn exports_write_their_outputs_by_format_and_layers() {
+	type Check = fn(&Path, &str, (u32, u32), usize);
+	let table: &[(&str, &[&str], Check)] = &[
+		("seq.png", &["--layers", "both", "--markers"], |target, text, size, frames| {
+			for layer in ["field", "intensity"] {
+				let written = files(&target.with_file_name(format!("seq_{layer}")));
+				assert_eq!(written.len(), frames, "{layer}: {text}");
+				assert!(written.iter().all(|f| decodes(f) == size), "{layer}");
+			}
+			assert!(text.contains("ms/frame"), "{text}");
+		}),
+		("frame.png", &["--still", "3"], |target, _, size, _| assert_eq!(decodes(target), size)),
+		("movie.avi", &["--graphs", "--edges", "--source-markers"], |target, text, (w, h), frames| {
+			assert_eq!(avi_header(target), (w, h, frames));
+			assert!(text.contains(&format!("wrote {}", target.display())), "{text}");
+		}),
+		("anim.mov", &["--format", "mov", "--layers", "both", "--markers"], |target, _, _, frames| {
+			for layer in ["field", "intensity"] {
+				assert_eq!(movie_samples(&target.with_file_name(format!("anim_{layer}.mov"))), frames, "{layer}");
+			}
+		}),
 		#[cfg(feature = "openh264-source")]
-		("movie.mp4", &["--source-markers"], "h264", &[]),
+		("movie.mp4", &[], |target, _, _, frames| assert_eq!(movie_samples(target), frames)),
 	];
 	let dir = tempfile::tempdir().unwrap();
-	for &(out, extra, codec, layers) in table {
+	let project = load_project(&example(dir.path())).unwrap();
+	let size = (project.scene.width, project.scene.height);
+	let frames = exported_frames(&project, 40, project.display.export_from, project.display.export_to);
+	for &(out, extra, check) in table {
 		let (target, text) = export(dir.path(), out, extra);
-		if layers.is_empty() {
-			assert_movie(&target, codec, FRAMES);
-			assert!(text.contains(&format!("wrote {}", target.display())), "{out}: {text}");
-		}
-		for layer in layers {
-			let stem = target.file_stem().unwrap().to_str().unwrap();
-			let ext = target.extension().unwrap().to_str().unwrap();
-			assert_movie(&target.with_file_name(format!("{stem}_{layer}.{ext}")), codec, FRAMES);
-		}
+		check(&target, &text, size, frames);
 	}
+	let exr = ["--format", "exrroot", "--layers", "intensity", "--from", "0", "--to", "10"];
+	let (target, _) = export(dir.path(), "data.exr", &exr);
+	let written = files(&target.with_extension(""));
+	assert_eq!(written.len(), exported_frames(&project, 40, 0, 10), "the range of --from and --to");
+	written.iter().for_each(|f| assert_filled(f));
 }
 
 /// Exports that fail leave no output behind: the output, its arguments, and what the error says.
@@ -232,40 +249,60 @@ fn a_failed_export_leaves_no_partial_output() {
 	}
 }
 
-#[test]
-fn export_writes_a_still() {
-	let dir = tempfile::tempdir().unwrap();
-	let (target, _) = export(dir.path(), "frame.png", &["--still", "3"]);
-	assert_eq!(decodes(&target), (960, 540));
+/// The shipped gate projects of examples/guides, without Next's `ExampleNN_` files.
+fn shipped_gates() -> Vec<PathBuf> {
+	let guides = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/guides");
+	files(&guides).into_iter().filter(|p| !p.file_name().unwrap().to_string_lossy().starts_with("Example")).collect()
+}
+
+fn names(paths: &[PathBuf]) -> Vec<String> {
+	paths.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect()
 }
 
 #[test]
-fn gates_writes_the_shipped_gate_projects_loadable_and_truth_table_runs_one() {
+fn gates_writes_loadable_projects_named_as_the_shipped_ones() {
 	let dir = tempfile::tempdir().unwrap();
-	let out = dir.path().to_str().unwrap();
-	// A small design: the default 1200 px one calibrates for minutes.
-	let text = ok(&["gates", "--out", out, "--frequency", "100", "--width", "400"]);
+	// the smallest design the mode solver lays out: the shipped one calibrates for a minute
+	let text = ok(&["gates", "--out", dir.path().to_str().unwrap(), "--frequency", "255", "--width", "100"]);
 	assert!(text.contains("coupling length"), "{text}");
 	let projects = files(dir.path());
-	let names = |paths: &[PathBuf]| -> Vec<String> {
-		paths.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect()
-	};
-	// the shipped copies are this command's output, beside Next's ExampleNN_ files
-	let shipped: Vec<String> = names(&files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/guides")))
-		.into_iter()
-		.filter(|n| !n.starts_with("Example"))
-		.collect();
-	assert_eq!(names(&projects), shipped);
+	assert_eq!(names(&projects), names(&shipped_gates()));
 	for path in &projects {
-		assert_eq!(path.extension().unwrap(), "wdproj");
 		let report = ok(&["check", path.to_str().unwrap()]);
 		assert!(report.contains("2 probes"), "{}: {report}", path.display());
 	}
-	let project = dir.path().join("07-xor.wdproj");
-	let text = ok(&["truth-table", project.to_str().unwrap(), "--steps", "900", "--settle", "32"]);
-	assert!(text.contains("900 steps a run (given)"), "{text}");
-	assert!(text.contains("| A | B | in A | in B | Q | R | Q expected | R expected | verdict |"), "{text}");
-	for row in ["| 0 | 0 |", "| 1 | 0 |", "| 0 | 1 |", "| 1 | 1 |"] {
-		assert!(text.contains(row), "{row} missing in {text}");
+}
+
+mod ignored_slow {
+	use super::*;
+
+	#[test]
+	#[ignore = "slow: about 8 s; cargo test -p wavedude-cli --test cli -- --ignored ignored_slow::"]
+	fn a_shipped_gate_passes_every_row_of_its_truth_table() {
+		let xor = shipped_gates().into_iter().find(|p| p.ends_with("07-xor.wdproj")).expect("the shipped XOR");
+		let text = ok(&["truth-table", xor.to_str().unwrap()]);
+		let rows: Vec<&str> = text.lines().filter(|l| l.starts_with("| 0 |") || l.starts_with("| 1 |")).collect();
+		assert_eq!(rows.len(), 4, "{text}");
+		assert!(rows.iter().all(|r| r.ends_with("| ok |")), "{text}");
+	}
+
+	#[test]
+	#[ignore = "slow: calibrates for a minute; cargo test -p wavedude-cli --test cli -- --ignored ignored_slow::"]
+	fn the_shipped_gates_are_this_commands_output() {
+		let dir = tempfile::tempdir().unwrap();
+		ok(&["gates", "--out", dir.path().to_str().unwrap()]);
+		for shipped in shipped_gates() {
+			let mut written = load_project(&dir.path().join(shipped.file_name().unwrap())).unwrap();
+			let want = load_project(&shipped).unwrap();
+			// the brightness fits of the CPU and GPU engines differ in the last digit
+			for (got, want) in [
+				(&mut written.display.field.brightness, want.display.field.brightness),
+				(&mut written.display.intensity.brightness, want.display.intensity.brightness),
+			] {
+				assert!((*got - want).abs() <= want * 0.01, "{}: brightness {got} for {want}", shipped.display());
+				*got = want;
+			}
+			assert_eq!(written, want, "{}", shipped.display());
+		}
 	}
 }

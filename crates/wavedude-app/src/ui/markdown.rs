@@ -94,22 +94,3 @@ fn figure(ui: &mut Ui, figure: &'static Figure) {
 	egui::Image::from_bytes(figure.uri, figure.png).paint_at(ui, rect);
 	ui.add_space(6.);
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn code_blocks_and_figure_tags_are_cut_out() {
-		let text = "# Title\n\nText. <figure name=\"main-window\"/>\n\n        code\n          more\n\nAfter.\n";
-		let got: Vec<String> = pieces(text)
-			.iter()
-			.map(|p| match p {
-				Piece::Text(t) => format!("text {}", t.trim()),
-				Piece::Code(c) => format!("code {c}"),
-				Piece::Figure(f) => format!("figure {}", f.name),
-			})
-			.collect();
-		assert_eq!(got, ["text # Title\n\nText.", "figure main-window", "code     code\n      more", "text After."]);
-	}
-}

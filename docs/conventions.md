@@ -133,8 +133,8 @@ push. What they hold the code to:
 - Widgets are immediate-mode functions over a `Ui` that return what was edited, the events going to the caller
   (`number_box(ui, rect, id, ...)`, [`crates/wavedude-app/src/ui/number_box.rs:310`](../crates/wavedude-app/src/ui/number_box.rs#L310)); a pane with state
   across passes is a struct with a `ui` method (`PropertiesPane::ui`, [`ui/properties/mod.rs:89`](../crates/wavedude-app/src/ui/properties/mod.rs#L89)).
-- Test names are snake_case sentences stating the behaviour (`a_drag_on_a_number_box_scrubs_its_value`,
-  [`crates/wavedude-app/tests/properties.rs:116`](../crates/wavedude-app/tests/properties.rs#L116)); mostly, as older ones are short noun phrases
+- Test names are snake_case sentences stating the behaviour (`typed_text_applies_before_a_shortcut_and_when_its_form_goes`,
+  [`crates/wavedude-app/tests/properties.rs:110`](../crates/wavedude-app/tests/properties.rs#L110)); mostly, as older ones are short noun phrases
   (`limits`, `probe_rules`).
 - Tunables are named `const`s with a `///` line (`QUIET`, [`crates/wavedude-app-state/src/history.rs:13`](../crates/wavedude-app-state/src/history.rs#L13); `POLL`,
   [`crates/wavedude-app/src/preview/mod.rs:35`](../crates/wavedude-app/src/preview/mod.rs#L35)).
@@ -246,12 +246,14 @@ push. What they hold the code to:
   stored in `tests/snapshots/`, reviewed with `cargo insta review`.
 - Tests that need hardware or tools return early with an `eprintln!` reason: no GPU adapter (`gpu_available`,
   [`crates/wavedude-core/tests/gpu.rs:25`](../crates/wavedude-core/tests/gpu.rs#L25)), no ffmpeg (`has_ffmpeg`, [`crates/wavedude-export/tests/common/mod.rs:116`](../crates/wavedude-export/tests/common/mod.rs#L116)).
-- Timing tests are `#[ignore = "how to run it"]` ([`crates/wavedude-core/tests/render.rs:281`](../crates/wavedude-core/tests/render.rs#L281)).
+- `#[ignore = "group: how to run it"]` tests live in a module named for the group, `ignored_timing`, `ignored_slow`,
+  `ignored_network` or `ignored_tool`, because `cargo test` filters on the module path: `-- --ignored ignored_timing::` runs
+  one group ([`crates/wavedude-core/tests/render.rs:338`](../crates/wavedude-core/tests/render.rs#L338)).
 - App-state tests drive `AppState<FakeBackend>` (`live::fake::FakeBackend`, `live.rs:1153`) with a fake clock
-  ([`crates/wavedude-app-state/tests/state.rs:22`](../crates/wavedude-app-state/tests/state.rs#L22)).
+  ([`crates/wavedude-app-state/tests/state.rs:20`](../crates/wavedude-app-state/tests/state.rs#L20)).
 - The window is tested headless with egui_kittest on wgpu: widgets found by role and label, clicked and typed into
   through AccessKit, with no image snapshots ([`crates/wavedude-app/tests/common/mod.rs`](../crates/wavedude-app/tests/common/mod.rs),
-  [`crates/wavedude-app/tests/shell.rs`](../crates/wavedude-app/tests/shell.rs)); a widget alone in its module's tests
+  [`crates/wavedude-app/tests/dialogs.rs`](../crates/wavedude-app/tests/dialogs.rs)); a widget alone in its module's tests
   ([`crates/wavedude-app/src/ui/number_box.rs`](../crates/wavedude-app/src/ui/number_box.rs)).
 - A behaviour fix lands with the test that failed before it, in the same commit.
 

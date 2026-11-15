@@ -8,10 +8,13 @@ use wavedude_export::overlays::Overlays;
 use wavedude_export::raster::Rasteriser;
 use wavedude_view::draw::{Halo, Outlines, haloed_text};
 use wavedude_view::epaint::text::{FontId, FontsView};
-use wavedude_view::epaint::{ClippedShape, Color32, Rect, Shape, pos2, vec2};
+use wavedude_view::epaint::{ClippedShape, Color32, Mesh, Rect, Shape, Vertex, WHITE_UV, pos2, vec2};
 
 const W: u32 = 160;
 const H: u32 = 90;
+/// The frame of [`meshes`].
+const MESH_W: u32 = 12;
+const MESH_H: u32 = 8;
 
 /// A frame no two neighbours of which are alike.
 fn picture() -> Vec<u8> {
@@ -110,14 +113,8 @@ fn edge_label(fonts: &mut FontsView<'_>, outlines: &mut Outlines) -> Vec<Clipped
 	out
 }
 
-/// FNV-1a of `bytes`: a frame's fingerprint in a snapshot.
-fn fingerprint(bytes: &[u8]) -> String {
-	let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, &b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3));
-	format!("{hash:016x}")
-}
-
 #[test]
-fn frames_rasterise_to_the_same_bytes_every_time_and_on_every_machine() {
+fn frames_rasterise_to_the_same_bytes_every_time() {
 	let overlays = corners_and_crossings();
 	let render = |(marks, plain): (&mut Rasteriser, &mut Rasteriser)| {
 		let mut frames = Vec::new();
@@ -136,8 +133,52 @@ fn frames_rasterise_to_the_same_bytes_every_time_and_on_every_machine() {
 	let first = render((&mut marks, &mut plain));
 	assert!(render((&mut marks, &mut plain)) == first, "the same rasterisers again");
 	assert!(render((&mut overlays.rasteriser(), &mut Rasteriser::new(W, H))) == first, "fresh ones");
-	let prints: Vec<String> = first.iter().map(|f| fingerprint(f)).collect();
-	insta::assert_snapshot!("corners_crossings_graphs_labels", prints.join("\n"));
+}
+
+/// Two meshes of the atlas's white texel, no glyphs: per-vertex colours with alpha at fractional corners, a quad
+/// split along a shared fractional edge over them, and an opaque fill clipped to a fractional rectangle.
+fn meshes() -> Vec<ClippedShape> {
+	let (w, h) = (MESH_W as f32, MESH_H as f32);
+	let vertex = |x: f32, y: f32, [r, g, b, a]: [u8; 4]| Vertex {
+		pos: pos2(x, y),
+		uv: WHITE_UV,
+		color: Color32::from_rgba_unmultiplied(r, g, b, a),
+	};
+	let mesh = Mesh {
+		vertices: vec![
+			vertex(0.3, 0.6, [255, 0, 0, 255]),
+			vertex(9.7, 1.2, [0, 255, 0, 128]),
+			vertex(2.2, 7.4, [0, 0, 255, 64]),
+			vertex(5.5, 2.25, [255, 255, 255, 100]),
+			vertex(11.75, 3.5, [255, 255, 255, 100]),
+			vertex(10.25, 7.75, [255, 255, 255, 100]),
+			vertex(6.1, 6.6, [255, 255, 255, 100]),
+		],
+		indices: vec![0, 1, 2, 3, 4, 5, 3, 5, 6],
+		..Mesh::default()
+	};
+	let mut fill = Mesh::default();
+	fill.add_colored_rect(Rect::from_min_size(pos2(0., 0.), vec2(w, h)), Color32::YELLOW);
+	let clip = Rect::from_min_max(pos2(7.4, -1.), pos2(9.6, 2.5));
+	vec![
+		ClippedShape::new(Rect::from_min_size(pos2(0., 0.), vec2(w, h)), Shape::mesh(mesh)),
+		ClippedShape::new(clip, Shape::mesh(fill)),
+	]
+}
+
+/// A frame rasterises to the same bytes every time and on every machine (docs/spec/50-export.md, Export
+/// pipeline; decision 0019). Pinned on the rasteriser alone, so only a change to it moves the snapshot.
+#[test]
+fn hand_built_meshes_rasterise_to_the_same_bytes_on_every_machine() {
+	let mut px: Vec<u8> =
+		(0..MESH_W * MESH_H).flat_map(|i| [(i % MESH_W * 20) as u8, (i / MESH_W * 30) as u8, 128, 255]).collect();
+	Rasteriser::new(MESH_W, MESH_H).render(&mut px, |_, _| meshes()).unwrap();
+	assert!(px.chunks(4).all(|p| p[3] == 255), "an opaque frame stays opaque");
+	let rows: Vec<String> = px
+		.chunks(MESH_W as usize * 4)
+		.map(|row| row.chunks(4).map(|p| format!("{:02x}{:02x}{:02x}", p[0], p[1], p[2])).collect::<Vec<_>>().join(" "))
+		.collect();
+	insta::assert_snapshot!("hand_built_meshes", rows.join("\n"));
 }
 
 #[test]

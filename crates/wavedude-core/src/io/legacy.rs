@@ -360,7 +360,8 @@ mod tests {
 		let i = import_str(r#"{"object_sources":{"items":[{"frequency":100}]}}"#, Path::new(".")).unwrap();
 		assert_eq!(i.project.simulation.stencil, Stencil::NinePoint);
 		assert_eq!(i.project.sources[0].frequency, 100.0);
-		assert!((i.project.simulation.source_frequency_scale - 2.0 / 0.316f64.sqrt()).abs() < 1e-12);
+		let scaled = Simulation::default().source_frequency_scale / crate::io::nine_point_speed();
+		assert!((i.project.simulation.source_frequency_scale - scaled).abs() < 1e-12);
 	}
 
 	#[test]

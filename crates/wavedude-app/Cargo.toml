@@ -86,7 +86,7 @@ winresource = "0.1"
 [dev-dependencies]
 # The window driven headless on wgpu, through AccessKit.
 egui_kittest = { version = "=0.37.0", features = ["eframe", "wgpu"] }
-# Crops the rendered window into the manual's figures (tests/screenshots.rs).
+# Crops the rendered window into the manual's figures (tests/screenshots.rs, tests/dialogs.rs).
 image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 

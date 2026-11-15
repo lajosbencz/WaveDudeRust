@@ -13,15 +13,6 @@ pub struct Raw {
 	pub in_x: i32,
 }
 
-#[test]
-fn a_raw_identifier_names_its_member_plainly() {
-	assert_eq!(Raw::TYPE.field.name(), "Type");
-	assert_eq!(Raw::IN_X.field.name(), "InX");
-	let mut raw = Raw { r#type: 1, in_x: 2 };
-	(Raw::TYPE.edit)(5).apply(&mut raw).unwrap();
-	assert_eq!(raw.r#type, 5);
-}
-
 fn hash_of<T: Feed>(v: &T) -> u64 {
 	let mut h = DefaultHasher::new();
 	v.feed(&mut h);
@@ -82,12 +73,21 @@ fn paths_name_every_level_and_names_the_last() {
 
 #[test]
 fn names_are_the_members_in_pascal_case() {
-	assert_eq!(Probe::BOX_WIDTH.field.name(), "BoxWidth");
-	assert_eq!(Probe::AX.field.name(), "Ax");
-	assert_eq!(Lens::R1.field.name(), "R1");
-	assert_eq!(BraggReflector::THICKNESS1.field.name(), "Thickness1");
-	assert_eq!(FiberNode::IN_X.field.name(), "InX");
-	assert_eq!(GrinLens::CENTRE_INDEX.field.name(), "CentreIndex");
+	for (got, want) in [
+		(Probe::BOX_WIDTH.field.name(), "BoxWidth"),
+		(Probe::AX.field.name(), "Ax"),
+		(Lens::R1.field.name(), "R1"),
+		(BraggReflector::THICKNESS1.field.name(), "Thickness1"),
+		(FiberNode::IN_X.field.name(), "InX"),
+		(GrinLens::CENTRE_INDEX.field.name(), "CentreIndex"),
+		(Raw::TYPE.field.name(), "Type"),
+		(Raw::IN_X.field.name(), "InX"),
+	] {
+		assert_eq!(got, want);
+	}
+	let mut raw = Raw { r#type: 1, in_x: 2 };
+	(Raw::TYPE.edit)(5).apply(&mut raw).unwrap();
+	assert_eq!(raw.r#type, 5, "a raw identifier's member edits as any other");
 }
 
 #[test]
@@ -124,14 +124,15 @@ fn round_trip<T: Fields>(owner: &mut T, field: T::Field, old: Value, new: Value)
 #[test]
 fn get_edit_and_apply_round_trip_for_every_kind_of_value() {
 	let mut p = Probe::default();
-	round_trip(&mut p, Probe::NAME.field, Value::Text(String::new()), Value::Text("north".into()));
-	round_trip(&mut p, Probe::AX.field, Value::Int(0), Value::Int(-40));
-	round_trip(&mut p, Probe::BOX_WIDTH.field, Value::Int(400), Value::Int(520));
-	round_trip(&mut p, Probe::Y_MAX.field, Value::Float(1.0), Value::Float(2.5));
-	round_trip(&mut p, Probe::ACTIVE.field, Value::Bool(true), Value::Bool(false));
+	let d = p.clone();
+	round_trip(&mut p, Probe::NAME.field, Value::Text(d.name), Value::Text("north".into()));
+	round_trip(&mut p, Probe::AX.field, Value::Int(d.ax.into()), Value::Int(-40));
+	round_trip(&mut p, Probe::BOX_WIDTH.field, Value::Int(d.box_width.into()), Value::Int(520));
+	round_trip(&mut p, Probe::Y_MAX.field, Value::Float(d.y_max), Value::Float(2.5));
+	round_trip(&mut p, Probe::ACTIVE.field, Value::Bool(d.active), Value::Bool(!d.active));
 	round_trip(&mut p, Probe::LAYER.field, Value::Word("Field"), Value::Word("Intensity"));
 	assert_eq!(p.name, "north");
-	assert_eq!((p.ax, p.box_width, p.y_max, p.active, p.layer), (-40, 520, 2.5, false, Layer::Intensity));
+	assert_eq!((p.ax, p.box_width, p.y_max, p.active, p.layer), (-40, 520, 2.5, !d.active, Layer::Intensity));
 
 	let mut s = Source::default();
 	round_trip(&mut s, Source::DETACH_AFTER.field, Value::Absent, Value::Int(300));
@@ -206,7 +207,7 @@ fn current_is_the_inverse_of_apply() {
 	let original = p.clone();
 	let edit = ProbeEdit::BoxWidth(500);
 	let back = edit.current(&p).unwrap();
-	assert_eq!(back, ProbeEdit::BoxWidth(400));
+	assert_eq!(back, ProbeEdit::BoxWidth(original.box_width));
 	edit.apply(&mut p).unwrap();
 	assert_eq!(p.box_width, 500);
 	back.apply(&mut p).unwrap();

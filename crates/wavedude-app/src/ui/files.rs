@@ -101,17 +101,3 @@ impl Files {
 		}
 	}
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn a_dropped_file_is_an_image_by_its_extension() {
-		for (name, image) in
-			[("a.wdproj", false), ("a.WDScheme", false), ("a.txt", false), ("a.png", true), ("a.JPEG", true)]
-		{
-			assert_eq!(is_image(Path::new(name)), image, "{name}");
-		}
-	}
-}

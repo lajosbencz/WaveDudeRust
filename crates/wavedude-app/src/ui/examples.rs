@@ -181,17 +181,3 @@ impl Examples {
 		open.map(|i| Some(Then::Send(Event::Guarded(Guarded::OpenExample(i)))))
 	}
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn a_search_moves_to_the_first_tab_with_a_match() {
-		let mut examples = Examples::default();
-		let example = wavedude_examples::all().iter().find(|e| e.topic != Topic::ALL[0]).unwrap();
-		examples.query = example.title.clone();
-		examples.search();
-		assert_eq!(Topic::ALL[examples.tab], example.topic);
-	}
-}

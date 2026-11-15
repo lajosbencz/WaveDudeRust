@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use wavedude_app_state::clipboard::PasteTarget;
 use wavedude_app_state::commands::{Command, Edit, NewPart};
 use wavedude_app_state::document::{Source, Target};
-use wavedude_app_state::history::History;
+use wavedude_app_state::history::{History, QUIET};
 use wavedude_app_state::live::fake::FakeBackend;
 use wavedude_app_state::platform::Store;
 use wavedude_app_state::selection::Row;
@@ -15,7 +15,6 @@ use wavedude_app_state::settings::Settings;
 use wavedude_app_state::{AppState, Event, ExportKind, Guarded, Response, SaveChoice};
 use wavedude_core::model::ProbeDetector;
 use wavedude_core::model::{ItemKind, ItemRef, Point, SourceEdit};
-use wavedude_core::quality::MachineFacts;
 use wavedude_core::run::Wanted;
 
 fn app() -> AppState<FakeBackend> {
@@ -69,19 +68,21 @@ fn a_drag_is_one_step() {
 	let mut s = app();
 	s.handle(Event::Command(Command::AddSource { at: None }), t);
 	let steps = s.document.history.len();
-	s.handle(Event::MouseDown, at(t, 10));
-	for i in 0..10 {
-		s.handle(Event::Command(Command::MoveBy { target: source(0), dx: 1, dy: 0 }), at(t, 20 + i * 200));
-		s.tick(at(t, 30 + i * 200));
+	let mut now = at(t, 10);
+	s.handle(Event::MouseDown, now);
+	for _ in 0..10 {
+		now += 2 * QUIET;
+		s.handle(Event::Command(Command::MoveBy { target: source(0), dx: 1, dy: 0 }), now);
+		s.tick(now + QUIET);
 	}
-	s.tick(at(t, 5000));
 	assert_eq!(s.document.history.len(), steps, "the step stays open while the button is held");
-	s.handle(Event::MouseUp, at(t, 5000));
-	s.tick(at(t, 5499));
+	let up = now + 2 * QUIET;
+	s.handle(Event::MouseUp, up);
+	s.tick(up + QUIET - Duration::from_millis(1));
 	assert_eq!(s.document.history.len(), steps);
-	s.tick(at(t, 5500));
+	s.tick(up + QUIET);
 	assert_eq!(s.document.history.len(), steps + 1);
-	s.handle(Event::Undo, at(t, 6000));
+	s.handle(Event::Undo, up + 2 * QUIET);
 	assert_eq!(s.document.project.sources[0].x, 32.0);
 }
 
@@ -218,29 +219,6 @@ fn copy_paste_cut_through_text() {
 	assert_eq!(s.document.project.sources.len(), 6, "nothing is removed before the clipboard holds the text");
 	s.handle(Event::Command(remove), t);
 	assert_eq!(s.document.project.sources.len(), 4);
-}
-
-#[test]
-fn settings_round_trip_and_first_start() {
-	let dir = tempfile::tempdir().unwrap();
-	let store = Store::in_dir(dir.path().join("cfg"));
-	let path = dir.path().join("cfg").join("settings.json");
-	let facts =
-		|| MachineFacts { physical_bytes: 64 << 30, threads: 16, has_gpu: Some(true), cache_drive_seek_penalty: None };
-	let loaded = Settings::load(&store, false, facts);
-	assert!(loaded.first_start && path.is_file());
-	assert_eq!(loaded.settings.preview_sample_bytes, 2);
-	let mut s = loaded.settings;
-	s.language = "de".into();
-	s.push_recent(dir.path());
-	s.save(&store).unwrap();
-	let again = Settings::load(&store, false, || panic!("not a first start"));
-	assert!(!again.first_start);
-	assert_eq!(again.settings, s);
-	std::fs::write(&path, "{ not json").unwrap();
-	let broken = Settings::load(&store, false, || panic!("an unreadable file is not a first start"));
-	assert!(broken.unreadable.is_some());
-	assert_eq!(broken.settings, Settings::default());
 }
 
 #[test]

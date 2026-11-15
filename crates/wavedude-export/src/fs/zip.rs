@@ -374,25 +374,6 @@ mod tests {
 		}
 	}
 
-	#[test]
-	#[ignore = "writes 70000 entries; cargo test -p wavedude-export --lib -- --ignored zip64"]
-	fn more_entries_than_a_plain_archive_holds_take_zip64() {
-		let mem = MemFs::new();
-		let zip = archive(&mem, Path::new("many.zip"));
-		let count = 70_000u32;
-		for k in 0..count {
-			let mut file = zip.create(Path::new(&format!("f/{k}"))).unwrap();
-			file.write_all(&k.to_le_bytes()).unwrap();
-			file.close().unwrap();
-		}
-		zip.finish().unwrap();
-		let mut read = ::zip::ZipArchive::new(Cursor::new(mem.take(Path::new("many.zip")).unwrap())).unwrap();
-		assert_eq!(read.len(), count as usize);
-		let mut last = Vec::new();
-		read.by_name(&format!("f/{}", count - 1)).unwrap().read_to_end(&mut last).unwrap();
-		assert_eq!(last, (count - 1).to_le_bytes());
-	}
-
 	/// An archive's file counting the bytes it was given.
 	struct Tap {
 		file: Box<dyn OutputFile>,

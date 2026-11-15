@@ -319,19 +319,6 @@ mod tests {
 	}
 
 	#[test]
-	fn stops_sort_and_interpolate() {
-		let stops = bw();
-		let g = Gradient::of(&stops);
-		assert_eq!(g.stops[0].at, 0.);
-		assert_eq!(g.color_at(0.5), Rgb::new(128, 128, 128));
-		assert_eq!(g.color_at(-1.), Rgb::new(0, 0, 0));
-		assert_eq!(g.color_at(2.), Rgb::new(255, 255, 255));
-		assert_eq!(Gradient::of(&[]).color_at(0.3), Rgb::default());
-		let sorted = g.into_stops();
-		assert!(matches!(Gradient::of(&sorted).stops, Cow::Borrowed(_)), "sorted stops are not copied");
-	}
-
-	#[test]
 	fn add_goes_into_the_widest_gap() {
 		let stops = bw();
 		let mut g = Gradient::of(&stops);

@@ -100,4 +100,14 @@ mod tests {
 		assert_eq!(Baseline.or_best_of(&[Main, High]), Some(High));
 		assert_eq!(Baseline.or_best_of(&[]), None);
 	}
+
+	#[test]
+	fn a_quality_maps_to_its_bitrate_within_the_bounds() {
+		assert_eq!(
+			bitrate(1920, 1080, 60, 85),
+			(1920.0 * 1080.0 * 60.0 * 0.01 * 50f64.powf(0.85)).round_ties_even() as u32
+		);
+		assert_eq!(bitrate(16, 16, 1, 1), 300_000);
+		assert_eq!(bitrate(4096, 2304, 240, 100), 200_000_000);
+	}
 }

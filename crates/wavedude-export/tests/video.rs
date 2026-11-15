@@ -267,19 +267,16 @@ fn mp4(path: &std::path::Path, frames: &[Vec<u8>], w: u32, h: u32) {
 #[cfg(feature = "openh264-source")]
 #[test]
 fn mp4_decodes_close_to_the_source_at_the_default_quality() {
-	use wavedude_export::h264::bitrate;
-	assert_eq!(bitrate(1920, 1080, 60, 85), (1920.0 * 1080.0 * 60.0 * 0.01 * 50f64.powf(0.85)).round() as u32);
-	assert_eq!(bitrate(16, 16, 1, 1), 300_000);
-	assert_eq!(bitrate(4096, 2304, 240, 100), 200_000_000);
 	if !has_ffmpeg() {
 		return;
 	}
 	let dir = scratch("mp4");
-	let (w, h) = (640, 360);
-	let frames: Vec<Vec<u8>> = (0..30).map(|t| wave_frame(w, h, t)).collect();
+	// above the bitrate's floor, so its bits per pixel are those of any larger picture
+	let (w, h) = (256, 144);
+	let frames: Vec<Vec<u8>> = (0..10).map(|t| wave_frame(w, h, t)).collect();
 	let path = dir.join("v.mp4");
 	mp4(&path, &frames, w, h);
-	assert_eq!(ffprobe(&path), "h264,640,360,30");
+	assert_eq!(ffprobe(&path), format!("h264,{w},{h},{}", frames.len()));
 	let decoded = ffmpeg_frames(&path, w, h);
 	assert_eq!(decoded.len(), frames.len());
 	let worst = decoded.iter().zip(&frames).map(|(d, f)| luma_psnr(d, &rgb(f))).fold(f64::INFINITY, f64::min);
@@ -366,41 +363,45 @@ fn avi_refuses_a_frame_of_4_gib() {
 	assert!(AviWriter::new(Cursor::new(Vec::new()), 1920, 1080, 30, 1 << 30).is_ok());
 }
 
-/// Cisco's binary downloaded, refused when missing, and encoding a video that decodes like the compiled-in one.
 #[cfg(all(feature = "mp4", not(feature = "openh264-source")))]
-#[test]
-#[ignore = "downloads Cisco's OpenH264; run with --ignored"]
-fn mp4_through_ciscos_downloaded_binary() {
-	use wavedude_export::h264::{self, OpenH264Factory};
-	use wavedude_export::sinks::mp4::Mp4Sink;
-	let dir = scratch("mp4-cisco");
-	let spec = wavedude_export::SinkSpec {
-		width: 640,
-		height: 360,
-		fps: 30,
-		quality: 85,
-		profile: Profile::Baseline,
-		first_frame: 0,
-		frame_count: 10,
-	};
-	let path = dir.join("v.mp4");
-	let missing = Mp4Sink::new(file(&path), spec, &OpenH264Factory::new(None));
-	assert!(matches!(missing, Err(wavedude_export::ExportError::H264Missing)));
-	let library = h264::download(&dir.join("codec"), |_, _| {}).unwrap();
-	assert_eq!(h264::installed(&dir.join("codec")), Some(library.clone()));
-	let mut writer = Mp4Sink::new(file(&path), spec, &OpenH264Factory::new(Some(library))).unwrap();
-	let frames: Vec<Vec<u8>> = (0..10).map(|t| wave_frame(640, 360, t)).collect();
-	for f in &frames {
-		writer.write_frame(f, 640, 360).unwrap();
+mod ignored_network {
+	use super::*;
+
+	/// Cisco's binary downloaded, refused when missing, and encoding a video that decodes like the compiled-in one.
+	#[test]
+	#[ignore = "network: downloads Cisco's OpenH264; cargo test -p wavedude-export --test video -- --ignored ignored_network::"]
+	fn mp4_through_ciscos_downloaded_binary() {
+		use wavedude_export::h264::{self, OpenH264Factory};
+		use wavedude_export::sinks::mp4::Mp4Sink;
+		let dir = scratch("mp4-cisco");
+		let spec = wavedude_export::SinkSpec {
+			width: 640,
+			height: 360,
+			fps: 30,
+			quality: 85,
+			profile: Profile::Baseline,
+			first_frame: 0,
+			frame_count: 10,
+		};
+		let path = dir.join("v.mp4");
+		let missing = Mp4Sink::new(file(&path), spec, &OpenH264Factory::new(None));
+		assert!(matches!(missing, Err(wavedude_export::ExportError::H264Missing)));
+		let library = h264::download(&dir.join("codec"), |_, _| {}).unwrap();
+		assert_eq!(h264::installed(&dir.join("codec")), Some(library.clone()));
+		let mut writer = Mp4Sink::new(file(&path), spec, &OpenH264Factory::new(Some(library))).unwrap();
+		let frames: Vec<Vec<u8>> = (0..10).map(|t| wave_frame(640, 360, t)).collect();
+		for f in &frames {
+			writer.write_frame(f, 640, 360).unwrap();
+		}
+		writer.finish().unwrap();
+		if has_ffmpeg() {
+			assert_eq!(ffprobe(&path), "h264,640,360,10");
+			let decoded = ffmpeg_frames(&path, 640, 360);
+			let worst = decoded.iter().zip(&frames).map(|(d, f)| psnr(d, &rgb(f))).fold(f64::INFINITY, f64::min);
+			assert!(worst >= 40.0, "worst PSNR {worst:.2} dB");
+		}
+		h264::delete(&dir.join("codec")).unwrap();
+		assert_eq!(h264::installed(&dir.join("codec")), None);
+		std::fs::remove_dir_all(&dir).unwrap();
 	}
-	writer.finish().unwrap();
-	if has_ffmpeg() {
-		assert_eq!(ffprobe(&path), "h264,640,360,10");
-		let decoded = ffmpeg_frames(&path, 640, 360);
-		let worst = decoded.iter().zip(&frames).map(|(d, f)| psnr(d, &rgb(f))).fold(f64::INFINITY, f64::min);
-		assert!(worst >= 40.0, "worst PSNR {worst:.2} dB");
-	}
-	h264::delete(&dir.join("codec")).unwrap();
-	assert_eq!(h264::installed(&dir.join("codec")), None);
-	std::fs::remove_dir_all(&dir).unwrap();
 }

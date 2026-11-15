@@ -7,9 +7,10 @@
 //! move at most one level between neighbouring entries, and a dithered channel may also land on the other side
 //! of its threshold: at most 2 levels, on at most 1 % of the pixels. A scaled index picture is blended in f32 where
 //! the reference blends in f64: 1 level. Everything else is exact. Every test returns early, with the reason
-//! printed, when no adapter or device is available; a software one (Mesa's lavapipe in CI) is fine.
+//! printed, when no adapter or device is available; a software one (Mesa's lavapipe in CI) is fine. The tests share
+//! one device, never dropped, rather than each creating and tearing down its own on parallel threads.
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use wavedude_core::engine::{FrameShape, SampleFormat};
 use wavedude_core::f16;
@@ -28,28 +29,32 @@ struct Gpu {
 	pipeline: PicturePipeline,
 }
 
-fn gpu() -> Option<Gpu> {
-	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-	let adapter = [false, true].into_iter().find_map(|force_fallback_adapter| {
-		pollster::block_on(
-			instance.request_adapter(&wgpu::RequestAdapterOptions { force_fallback_adapter, ..Default::default() }),
-		)
-		.ok()
-	});
-	let Some(adapter) = adapter else {
-		eprintln!("skipped: no adapter");
-		return None;
+static GPU: LazyLock<Result<Gpu, String>> = LazyLock::new(|| {
+	// no GL unless WGPU_BACKEND asks: on Linux only Vulkan, so Mesa's EGL is never initialised beside lavapipe
+	let descriptor = wgpu::InstanceDescriptor {
+		backends: wgpu::Backends::from_env().unwrap_or(wgpu::Backends::PRIMARY),
+		..wgpu::InstanceDescriptor::new_without_display_handle_from_env()
 	};
+	let instance = wgpu::Instance::new(descriptor);
+	let adapter = [false, true]
+		.into_iter()
+		.find_map(|force_fallback_adapter| {
+			pollster::block_on(
+				instance.request_adapter(&wgpu::RequestAdapterOptions { force_fallback_adapter, ..Default::default() }),
+			)
+			.ok()
+		})
+		.ok_or("no adapter")?;
 	eprintln!("adapter: {} ({:?})", adapter.get_info().name, adapter.get_info().backend);
-	let (device, queue) = match pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())) {
-		Ok(d) => d,
-		Err(e) => {
-			eprintln!("skipped: no device: {e}");
-			return None;
-		}
-	};
+	let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+		.map_err(|e| format!("no device: {e}"))?;
 	let pipeline = PicturePipeline::new(&device, FORMAT);
-	Some(Gpu { device, queue, pipeline })
+	Ok(Gpu { device, queue, pipeline })
+});
+
+/// The process's device, else `None` with the reason printed.
+fn gpu() -> Option<&'static Gpu> {
+	GPU.as_ref().inspect_err(|why| eprintln!("skipped: {why}")).ok()
 }
 
 /// xorshift32 in [0, 1).
@@ -226,72 +231,72 @@ fn assert_close(what: &str, gpu: &[u8], cpu: &[u8], levels: u8, share: f64) {
 	assert!(differing as f64 <= share * pixels as f64, "{what}: {differing} of {pixels} pixels differ");
 }
 
-/// A half plane's case: the GPU's picture against the CPU's.
-#[allow(clippy::too_many_arguments, reason = "one case's inputs")]
-fn half_case(
-	g: &Gpu,
-	what: &str,
+/// A half plane's case.
+struct Half {
+	what: String,
 	shape: FrameShape,
 	layer: Layer,
+	brightness: f64,
 	device: (u32, u32),
 	window: Option<Window>,
 	dither_bits: u32,
-	outline: bool,
-) {
-	let bytes = plane(&shape, layer);
-	let colours = colours(if layer == Layer::Field { 2.0 } else { 3.0 });
-	let view = View::of(&shape, device, window, dither_bits);
-	let edges = outline.then(|| (edges(&shape), 1.5));
-	let expected = cpu(&bytes, &shape, layer, &colours, &view, edges.as_ref().map(|(e, gain)| (e, *gain)));
-	let mut picture = GpuPicture::new(&g.device);
-	let got = render(g, &mut picture, &bytes, &(shape, layer, colours.clone(), view, edges.clone()), device);
-	assert_close(what, &got, &expected, 2, 0.01);
+	/// The outline's gain.
+	outline: Option<f64>,
 }
 
-#[test]
-fn half_planes_shrunk_enlarged_and_zoomed_colour_as_on_the_cpu() {
-	let Some(g) = gpu() else { return };
-	let half = SampleFormat::Half;
-	half_case(&g, "field, shrunk, outline", shape(97, 61, 1, half, true), Layer::Field, (40, 25), None, 0, true);
-	half_case(
-		&g,
-		"intensity, enlarged, zoomed, outline",
-		shape(31, 17, 1, half, false),
-		Layer::Intensity,
-		(80, 50),
-		Some((3.5, 2.0, 20.0, 11.0)),
-		0,
-		true,
-	);
-	half_case(
-		&g,
-		"intensity root at divisor 2, zoomed",
-		shape(120, 70, 2, half, true),
-		Layer::Intensity,
-		(45, 30),
-		Some((10.0, 6.0, 90.0, 50.0)),
-		0,
-		false,
-	);
-	half_case(&g, "field, same size", shape(64, 48, 1, half, true), Layer::Field, (64, 48), None, 0, false);
+impl Half {
+	fn new(what: impl Into<String>, shape: FrameShape, layer: Layer, device: (u32, u32)) -> Self {
+		let brightness = if layer == Layer::Field { 2.0 } else { 3.0 };
+		Self { what: what.into(), shape, layer, brightness, device, window: None, dither_bits: 0, outline: None }
+	}
 }
 
+/// Half planes shrunk, enlarged, zoomed and dithered, through one picture that follows its inputs as they change,
+/// and back: the GPU's picture against the CPU's.
 #[test]
-fn dithered_half_planes_colour_as_on_the_cpu() {
+fn half_planes_colour_as_on_the_cpu() {
 	let Some(g) = gpu() else { return };
+	let half = |w, h, divisor, root| shape(w, h, divisor, SampleFormat::Half, root);
+	let mut cases = vec![
+		Half {
+			outline: Some(1.5),
+			..Half::new("field, shrunk, outline", half(97, 61, 1, true), Layer::Field, (40, 25))
+		},
+		Half {
+			window: Some((3.5, 2.0, 20.0, 11.0)),
+			outline: Some(1.5),
+			..Half::new("intensity, enlarged, zoomed, outline", half(31, 17, 1, false), Layer::Intensity, (80, 50))
+		},
+		Half {
+			window: Some((10.0, 6.0, 90.0, 50.0)),
+			..Half::new("intensity root at divisor 2, zoomed", half(120, 70, 2, true), Layer::Intensity, (45, 30))
+		},
+		Half::new("field, same size", half(64, 48, 1, true), Layer::Field, (64, 48)),
+	];
 	for bits in [10, 12, 14, 16] {
-		let shape = shape(64, 48, 1, SampleFormat::Half, true);
-		half_case(&g, &format!("field dithered at {bits} bits"), shape, Layer::Field, (100, 70), None, bits, true);
-		half_case(
-			&g,
-			&format!("intensity root dithered at {bits} bits"),
-			shape,
-			Layer::Intensity,
-			(50, 31),
-			None,
-			bits,
-			false,
-		);
+		let shape = half(64, 48, 1, true);
+		let field = format!("field dithered at {bits} bits");
+		cases.push(Half { dither_bits: bits, outline: Some(1.5), ..Half::new(field, shape, Layer::Field, (100, 70)) });
+		let intensity = format!("intensity root dithered at {bits} bits");
+		cases.push(Half { dither_bits: bits, ..Half::new(intensity, shape, Layer::Intensity, (50, 31)) });
+	}
+	for (brightness, device, bits, outline) in
+		[(2.0, (40, 30), 0, None), (5.0, (25, 18), 12, Some(1.0)), (2.0, (40, 30), 0, None)]
+	{
+		let what = format!("brightness {brightness}, {device:?}, {bits} bits");
+		let case = Half::new(what, half(40, 30, 1, true), Layer::Field, device);
+		cases.push(Half { brightness, dither_bits: bits, outline, ..case });
+	}
+	let mut picture = GpuPicture::new(&g.device);
+	for case in cases {
+		let bytes = plane(&case.shape, case.layer);
+		let colours = colours(case.brightness);
+		let view = View::of(&case.shape, case.device, case.window, case.dither_bits);
+		let edges = case.outline.map(|gain| (edges(&case.shape), gain));
+		let outline = edges.as_ref().map(|(e, gain)| (e, *gain));
+		let expected = cpu(&bytes, &case.shape, case.layer, &colours, &view, outline);
+		let got = render(g, &mut picture, &bytes, &(case.shape, case.layer, colours, view, edges), case.device);
+		assert_close(&case.what, &got, &expected, 2, 0.01);
 	}
 }
 
@@ -332,118 +337,103 @@ fn index_planes_colour_through_the_palette_as_on_the_cpu() {
 		let expected = cpu(&bytes, &shape, layer, &colours, &view, Some((&e, 2.0)));
 		let mut picture = GpuPicture::new(&g.device);
 		let case = (shape, layer, colours.clone(), view, Some((e.clone(), 2.0)));
-		let got = render(&g, &mut picture, &bytes, &case, stored);
+		let got = render(g, &mut picture, &bytes, &case, stored);
 		assert_close(&format!("{layer:?} /{divisor} index at the stored size"), &got, &expected, 0, 0.0);
-		let got = render(&g, &mut picture, &bytes, &case, (130, 77));
+		let got = render(g, &mut picture, &bytes, &case, (130, 77));
 		let scaled = bilinear(&expected, stored, (130, 77));
 		assert_close(&format!("{layer:?} /{divisor} index scaled"), &got, &scaled, 1, 0.1);
 	}
 }
 
-#[test]
-fn a_picture_follows_its_inputs_as_they_change() {
-	let Some(g) = gpu() else { return };
-	let shape = shape(40, 30, 1, SampleFormat::Half, true);
-	let bytes = plane(&shape, Layer::Field);
-	let mut picture = GpuPicture::new(&g.device);
-	for (brightness, device, bits, outline) in
-		[(2.0, (40, 30), 0, false), (5.0, (25, 18), 12, true), (2.0, (40, 30), 0, false)]
-	{
-		let colours = colours(brightness);
-		let view = View::of(&shape, device, None, bits);
-		let edges = outline.then(|| (edges(&shape), 1.0));
-		let expected = cpu(&bytes, &shape, Layer::Field, &colours, &view, edges.as_ref().map(|(e, gain)| (e, *gain)));
-		let got =
-			render(&g, &mut picture, &bytes, &(shape, Layer::Field, colours.clone(), view, edges.clone()), device);
-		assert_close(&format!("brightness {brightness}, {device:?}, {bits} bits"), &got, &expected, 2, 0.01);
-	}
-}
+mod ignored_timing {
+	use super::*;
 
-/// docs/measurements.md, preview colouring: a new frame's pictures on the CPU (the presenter's paint and outline
-/// blend) against the GPU (a picture set to the next of the device's frames, drawn and waited for).
-#[test]
-#[ignore = "a timing, run in release by hand"]
-fn preview_colouring_time() {
-	use std::time::Instant;
-	const FRAMES: u32 = 60;
-	let Some(g) = gpu() else { return };
-	let shape = shape(2880, 1080, 1, SampleFormat::Half, true);
-	let device = (1600, 600);
-	let view = View::of(&shape, device, None, 0);
-	let e = edges(&shape);
-	for layer in [Layer::Field, Layer::Intensity] {
-		let bytes = plane(&shape, layer);
-		let colours = colours(2.0);
-		let scaled = e.scaled(view.window, (view.width, view.height));
-		let mut screen = ScreenRenderer::new(1, 1, 1, 1);
-		let mut out = vec![0; view.bytes()];
-		let started = Instant::now();
-		for _ in 0..FRAMES {
-			paint(&bytes, &shape, layer, &colours, &view, &mut screen, &mut out);
-			blend_additive(&mut out, &scaled, 1.5);
-		}
-		let cpu = started.elapsed() / FRAMES;
-		let planes: Vec<wgpu::Buffer> = (0..4)
-			.map(|_| {
-				wgpu::util::DeviceExt::create_buffer_init(
-					&g.device,
-					&wgpu::util::BufferInitDescriptor {
-						label: None,
-						contents: &bytes,
-						usage: wgpu::BufferUsages::STORAGE,
-					},
-				)
-			})
-			.collect();
-		let target = g.device.create_texture(&wgpu::TextureDescriptor {
-			label: None,
-			size: wgpu::Extent3d { width: device.0, height: device.1, depth_or_array_layers: 1 },
-			mip_level_count: 1,
-			sample_count: 1,
-			dimension: wgpu::TextureDimension::D2,
-			format: FORMAT,
-			usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-			view_formats: &[],
-		});
-		let target = target.create_view(&Default::default());
-		let mut picture = GpuPicture::new(&g.device);
-		let mut frame = |i: u32| {
-			let input = PictureInput {
-				plane: DevicePlane { buffer: &planes[i as usize % planes.len()], first_word: 0 },
-				shape: &shape,
-				layer,
-				colours: &colours,
-				view: &view,
-				outline: Some((&e, 1.5)),
-			};
-			picture.set(&g.pipeline, &g.device, &g.queue, &input);
-			picture.place(&g.queue, [0.0, 0.0], [device.0 as f32, device.1 as f32]);
-			let mut encoder = g.device.create_command_encoder(&Default::default());
-			{
-				let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-						view: &target,
-						depth_slice: None,
-						resolve_target: None,
-						ops: wgpu::Operations {
-							load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-							store: wgpu::StoreOp::Store,
-						},
-					})],
-					..Default::default()
-				});
-				picture.draw(&g.pipeline, &mut pass);
+	/// docs/measurements.md, preview colouring: a new frame's pictures on the CPU (the presenter's paint and outline
+	/// blend) against the GPU (a picture set to the next of the device's frames, drawn and waited for).
+	#[test]
+	#[ignore = "timing: cargo test --release -p wavedude-core --test colour -- --ignored ignored_timing:: --nocapture"]
+	fn preview_colouring_time() {
+		use std::time::Instant;
+		const FRAMES: u32 = 60;
+		let Some(g) = gpu() else { return };
+		let shape = shape(2880, 1080, 1, SampleFormat::Half, true);
+		let device = (1600, 600);
+		let view = View::of(&shape, device, None, 0);
+		let e = edges(&shape);
+		for layer in [Layer::Field, Layer::Intensity] {
+			let bytes = plane(&shape, layer);
+			let colours = colours(2.0);
+			let scaled = e.scaled(view.window, (view.width, view.height));
+			let mut screen = ScreenRenderer::new(1, 1, 1, 1);
+			let mut out = vec![0; view.bytes()];
+			let started = Instant::now();
+			for _ in 0..FRAMES {
+				paint(&bytes, &shape, layer, &colours, &view, &mut screen, &mut out);
+				blend_additive(&mut out, &scaled, 1.5);
 			}
-			g.queue.submit([encoder.finish()]);
-			g.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
-		};
-		frame(FRAMES);
-		let started = Instant::now();
-		(0..FRAMES).for_each(&mut frame);
-		let gpu = started.elapsed() / FRAMES;
-		eprintln!(
-			"{layer:?} {}x{} at {device:?}: CPU {cpu:?}, GPU {gpu:?} a picture",
-			shape.canvas_width, shape.canvas_height
-		);
+			let cpu = started.elapsed() / FRAMES;
+			let planes: Vec<wgpu::Buffer> = (0..4)
+				.map(|_| {
+					wgpu::util::DeviceExt::create_buffer_init(
+						&g.device,
+						&wgpu::util::BufferInitDescriptor {
+							label: None,
+							contents: &bytes,
+							usage: wgpu::BufferUsages::STORAGE,
+						},
+					)
+				})
+				.collect();
+			let target = g.device.create_texture(&wgpu::TextureDescriptor {
+				label: None,
+				size: wgpu::Extent3d { width: device.0, height: device.1, depth_or_array_layers: 1 },
+				mip_level_count: 1,
+				sample_count: 1,
+				dimension: wgpu::TextureDimension::D2,
+				format: FORMAT,
+				usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+				view_formats: &[],
+			});
+			let target = target.create_view(&Default::default());
+			let mut picture = GpuPicture::new(&g.device);
+			let mut frame = |i: u32| {
+				let input = PictureInput {
+					plane: DevicePlane { buffer: &planes[i as usize % planes.len()], first_word: 0 },
+					shape: &shape,
+					layer,
+					colours: &colours,
+					view: &view,
+					outline: Some((&e, 1.5)),
+				};
+				picture.set(&g.pipeline, &g.device, &g.queue, &input);
+				picture.place(&g.queue, [0.0, 0.0], [device.0 as f32, device.1 as f32]);
+				let mut encoder = g.device.create_command_encoder(&Default::default());
+				{
+					let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+						color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+							view: &target,
+							depth_slice: None,
+							resolve_target: None,
+							ops: wgpu::Operations {
+								load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+								store: wgpu::StoreOp::Store,
+							},
+						})],
+						..Default::default()
+					});
+					picture.draw(&g.pipeline, &mut pass);
+				}
+				g.queue.submit([encoder.finish()]);
+				g.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+			};
+			frame(FRAMES);
+			let started = Instant::now();
+			(0..FRAMES).for_each(&mut frame);
+			let gpu = started.elapsed() / FRAMES;
+			eprintln!(
+				"{layer:?} {}x{} at {device:?}: CPU {cpu:?}, GPU {gpu:?} a picture",
+				shape.canvas_width, shape.canvas_height
+			);
+		}
 	}
 }

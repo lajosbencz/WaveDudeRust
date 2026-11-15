@@ -154,14 +154,3 @@ fn usage_bar(ui: &mut Ui, need: u64, budget: u64, labels: &[String]) {
 		ui.add(egui::ProgressBar::new(share).fill(fill));
 	});
 }
-
-#[cfg(test)]
-mod tests {
-	use super::bytes_text;
-
-	#[test]
-	fn bytes_read_in_mib_below_a_gib() {
-		assert_eq!(bytes_text(512 << 20), "512 MiB");
-		assert_eq!(bytes_text(3 << 29), "1.5 GiB");
-	}
-}

@@ -127,7 +127,7 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 Generic touch support (egui's out-of-the-box input) is in; found in touch emulation on 2026-11-15, still open:
 
 - A second finger during an item or part drag drops the grab but leaves the item moved, as one undo step; Esc
-  reverts it. eframe pushes a primary press on every touchstart, which the unit tests do not replay.
+  reverts it.
 - A slow pinch opens the picture's context menu: the same press restarts egui's long-press timer while the first
   finger rests. No context menu while pinching.
 - A tap does not select a tree row on a touch-first device at 2x; a long press does. Cause not found (click-only
@@ -136,6 +136,14 @@ Generic touch support (egui's out-of-the-box input) is in; found in touch emulat
   reached: bound their width by the screen or let them scroll.
 - The pinch's fixed point drifts about 15 px, likely as the visible rect grows from letterboxed to the whole
   cell once zoomed.
+
+## UI tests: TODO
+
+On 2026-11-15 the UI tests were pruned to the invisible or destructive ones (data loss, edit and undo, what reaches
+the model and the files, resources, strings, non-visual logic) while the UI evolves. The UI tests are to be rebuilt.
+Removed areas: layout and drawing, docking, menus and shortcuts, touch, widget state, the messages pane.
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md)'s rule of a test that failed before the change is suspended for visible UI
+changes until then.
 
 ## Languages
 

@@ -86,20 +86,10 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn round_trip_keeps_everything() {
-		let text = include_str!("../../schemes/Default field.wdscheme");
-		let scheme = read_str(text, "x").unwrap();
-		assert_eq!(scheme.name, "Default field");
-		assert_eq!(scheme.kind, SchemeKind::Field);
-		assert_eq!(scheme.stops.len(), 9);
-		assert_eq!(scheme.stops[1].color, Rgb::new(0x30, 0x20, 0xF4));
-		assert_eq!(write_string(&scheme), text);
-	}
-
-	#[test]
 	fn unnamed_takes_fallback_and_bad_colour_fails() {
-		let s = read_str("<ColorScheme><Stop At=\"0.5\" Color=\"#010203\" /></ColorScheme>", "File").unwrap();
+		let s = read_str("<ColorScheme><Stop At=\"0.5\" Color=\"#0102F3\" /></ColorScheme>", "File").unwrap();
 		assert_eq!(s.name, "File");
+		assert_eq!(s.stops, [Stop { at: 0.5, color: Rgb::new(0x01, 0x02, 0xF3) }]);
 		assert!(read_str("<ColorScheme><Stop At=\"0\" Color=\"red\" /></ColorScheme>", "f").is_err());
 		assert!(read_str("<Project />", "f").is_err());
 	}

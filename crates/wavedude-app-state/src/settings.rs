@@ -444,10 +444,11 @@ mod tests {
 	fn defaults_write_the_version_alone() {
 		let v: Value = serde_json::from_str(&Settings::default().to_sparse_json()).unwrap();
 		assert_eq!(v, serde_json::json!({ "Version": VERSION }));
-		let s = Settings { use_gpu: false, ui_zoom: 1.25, ..Settings::default() };
+		let s = Settings { use_gpu: false, ui_zoom: 1.25, h264_profile: Profile::High, ..Settings::default() };
 		let v: Value = serde_json::from_str(&s.to_sparse_json()).unwrap();
-		assert_eq!(v.as_object().unwrap().len(), 3);
+		assert_eq!(v.as_object().unwrap().len(), 4);
 		assert_eq!(v["UseGpu"], Value::Bool(false));
+		assert_eq!(v["H264Profile"], "High", "the profile by its name");
 		assert_eq!(Settings::from_json("{}", false).unwrap().version, 0, "a file before the field");
 		assert_eq!(Settings::from_json(&s.to_sparse_json(), false).unwrap(), s);
 	}
@@ -466,26 +467,29 @@ mod tests {
 	}
 
 	#[test]
-	fn normalize_clamps() {
-		let mut s = Settings {
-			frame_memory_percent: 5,
-			preview_resolution: 3,
-			preview_frames: 9,
-			preview_sample_bytes: 7,
-			preview_dither_bits: 11,
-			ui_zoom: 20.0,
-			language: "xx".into(),
-			window_left: Some(f64::NAN),
-			export_filter_index: 99,
-			..Settings::default()
-		};
-		s.normalize();
-		assert_eq!(s.export_filter_index, 0);
-		assert_eq!(
-			(s.frame_memory_percent, s.preview_resolution, s.preview_frames, s.preview_sample_bytes),
-			(10, 2, 4, 2)
-		);
-		assert_eq!((s.preview_dither_bits, s.ui_zoom, s.language.as_str(), s.window_left), (0, 8.0, "", None));
+	fn normalize_clamps_each_value_to_its_bounds_or_the_devices_default() {
+		type Set = fn(&mut Settings);
+		let rows: [(&str, Set, Set); 10] = [
+			("frame memory", |s| s.frame_memory_percent = 5, |s| s.frame_memory_percent = 10),
+			("preview resolution", |s| s.preview_resolution = 3, |s| s.preview_resolution = 2),
+			("preview frames", |s| s.preview_frames = 9, |s| s.preview_frames = 4),
+			("sample bytes", |s| s.preview_sample_bytes = 7, |s| s.preview_sample_bytes = 2),
+			("dither bits", |s| s.preview_dither_bits = 11, |s| s.preview_dither_bits = DITHER_BITS[0]),
+			("zoom", |s| s.ui_zoom = 20.0, |s| s.ui_zoom = SWITCH_ZOOM.1),
+			("zoom no number", |s| s.ui_zoom = f64::NAN, |_| {}),
+			("language", |s| s.language = "xx".into(), |s| s.language.clear()),
+			("window left", |s| s.window_left = Some(f64::NAN), |s| s.window_left = None),
+			("export filter", |s| s.export_filter_index = 99, |s| s.export_filter_index = 0),
+		];
+		for touch_first in [false, true] {
+			for (name, bad, want) in rows {
+				let (mut got, mut expected) = (Settings::for_device(touch_first), Settings::for_device(touch_first));
+				bad(&mut got);
+				want(&mut expected);
+				got.normalize();
+				assert_eq!(got, expected, "{name}, touch first {touch_first}");
+			}
+		}
 	}
 
 	#[test]
@@ -540,15 +544,6 @@ mod tests {
 	}
 
 	#[test]
-	fn a_zoom_that_is_no_number_falls_back_to_the_devices_default() {
-		for touch_first in [false, true] {
-			let mut s = Settings { ui_zoom: f64::NAN, ..Settings::for_device(touch_first) };
-			s.normalize();
-			assert_eq!(s.ui_zoom, Settings::for_device(touch_first).ui_zoom);
-		}
-	}
-
-	#[test]
 	fn recent_and_hints() {
 		let mut s = Settings::default();
 		for i in 0..12 {
@@ -562,12 +557,13 @@ mod tests {
 	}
 
 	#[test]
-	fn the_h264_profile_is_kept_by_its_name() {
-		let s = Settings { h264_profile: Profile::High, ..Settings::default() };
-		assert!(s.to_sparse_json().contains(r#""H264Profile": "High""#), "{}", s.to_sparse_json());
-		assert!(!Settings::default().to_sparse_json().contains("H264Profile"));
-		let read: Settings = serde_json::from_str(&s.to_sparse_json()).unwrap();
-		assert_eq!(read.h264_profile, Profile::High);
+	fn an_unreadable_file_is_kept_out_and_no_first_start() {
+		let dir = tempfile::tempdir().unwrap();
+		let store = Store::in_dir(dir.path().to_owned());
+		std::fs::write(dir.path().join(FILE_NAME), "{ not json").unwrap();
+		let broken = Settings::load(&store, false, || panic!("an unreadable file is not a first start"));
+		assert!(broken.unreadable.is_some() && !broken.first_start);
+		assert_eq!(broken.settings, Settings::default());
 	}
 
 	#[test]

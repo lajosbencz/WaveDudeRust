@@ -1291,14 +1291,15 @@ mod tests {
 		let text = "<Project Seed=\"3\"><Simulation FourthOrderLaplacian=\"false\" /><Source Name=\"s\" X=\"0\" Y=\"0\" Frequency=\"30\" /></Project>";
 		let p = read_str(text).unwrap();
 		assert_eq!(p.sources[0].frequency, 30.0);
-		assert!((p.simulation.source_frequency_scale - 2.0 / 0.316f64.sqrt()).abs() < 1e-12);
+		let default = Simulation::default().source_frequency_scale;
+		assert!((p.simulation.source_frequency_scale - default / crate::io::nine_point_speed()).abs() < 1e-12);
 		let out = write_string(&p, None);
 		assert!(
 			out.contains("Frequency=\"30\"") && out.contains("<Simulation FourthOrderLaplacian=\"false\" />"),
 			"{out}"
 		);
 		let marked = text.replace("FourthOrderLaplacian=\"false\"", "FourthOrderLaplacian=\"false\" Rescaled=\"true\"");
-		assert_eq!(read_str(&marked).unwrap().simulation.source_frequency_scale, 2.0);
+		assert_eq!(read_str(&marked).unwrap().simulation.source_frequency_scale, default);
 	}
 
 	#[test]
