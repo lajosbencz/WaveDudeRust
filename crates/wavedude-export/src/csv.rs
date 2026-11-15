@@ -1,5 +1,5 @@
-//! Probe data as CSV: `;` separated, decimal point, a header row, `\n` line ends, UTF-8 without BOM; values in
-//! Rust's shortest round-trip form.
+//! Probe data as CSV: `;` separated, decimal point, a header row, `\n` line ends, UTF-8 without BOM; values as
+//! .NET's invariant `float.ToString()` writes them.
 
 use std::io::{self, Write};
 
@@ -24,6 +24,26 @@ fn three_decimals(v: f64) -> String {
 	if s == "-0" { "0".into() } else { s.into() }
 }
 
+/// `v` as .NET's invariant `float.ToString()`: the shortest round-trip digits, fixed for a decimal exponent in
+/// -4..=8, else `d.dddE+dd`; `NaN`, `Infinity`, `-Infinity`.
+fn dotnet_float(v: f32) -> String {
+	if v.is_nan() {
+		return "NaN".into();
+	}
+	if v.is_infinite() {
+		return if v > 0. { "Infinity" } else { "-Infinity" }.into();
+	}
+	let sci = format!("{v:e}");
+	let (mantissa, exponent) = sci.split_once('e').expect("`{:e}` writes an exponent");
+	let exponent: i32 = exponent.parse().expect("`{:e}` writes an integer exponent");
+	if v == 0. || (-4..=8).contains(&exponent) {
+		format!("{v}")
+	} else {
+		let sign = if exponent < 0 { '-' } else { '+' };
+		format!("{mantissa}E{sign}{:02}", exponent.abs())
+	}
+}
+
 /// Writes a probe's recording and returns the data rows written.
 ///
 /// Point probe or counting detector: `step;<column>` then `i;<value after step i + 1>` per sample. Line probe or
@@ -41,7 +61,7 @@ pub fn write_probe_csv(
 		let column = if probe.is_detector() { "detections" } else { column_name(probe.measurement) };
 		writeln!(out, "step{SEPARATOR}{column}")?;
 		for (i, v) in trace.series.iter().enumerate() {
-			writeln!(out, "{i}{SEPARATOR}{v}")?;
+			writeln!(out, "{i}{SEPARATOR}{}", dotnet_float(*v))?;
 		}
 		return Ok(trace.series.len());
 	}
@@ -55,7 +75,7 @@ pub fn write_probe_csv(
 		let frame = p as u64 * frame_stride as u64;
 		write!(out, "{frame}{SEPARATOR}{}", frame * visualize_every as u64)?;
 		for v in profile {
-			write!(out, "{SEPARATOR}{v}")?;
+			write!(out, "{SEPARATOR}{}", dotnet_float(*v))?;
 		}
 		writeln!(out)?;
 	}
@@ -88,7 +108,7 @@ mod tests {
 	fn point_probe_headers_and_rows() {
 		let trace = ProbeTrace { series: vec![0.5, 1e-5, -2.0], ..ProbeTrace::default() };
 		let integrated = Probe { measurement: Measurement::IntegratedValue, ..Probe::default() };
-		assert_eq!(csv(&integrated, &trace, 2), "step;integrated value\n0;0.5\n1;0.00001\n2;-2\n");
+		assert_eq!(csv(&integrated, &trace, 2), "step;integrated value\n0;0.5\n1;1E-05\n2;-2\n");
 		assert!(csv(&Probe::default(), &trace, 1).starts_with("step;amplitude\n"));
 		let value = Probe { measurement: Measurement::Value, ..Probe::default() };
 		assert!(csv(&value, &trace, 1).starts_with("step;value\n"));
@@ -102,6 +122,47 @@ mod tests {
 		let imaging = Probe { detector: ProbeDetector::Imaging, ..counting };
 		let trace = ProbeTrace { profiles: vec![vec![3.0, 3.0, 1.0]].into(), length: 4.0, ..ProbeTrace::default() };
 		assert_eq!(csv(&imaging, &trace, 2), "frame;step;0;2;4\n0;0;3;3;1\n");
+	}
+
+	/// Bits and what .NET 10's invariant `float.ToString()` writes for them.
+	const DOTNET: [(u32, &str); 30] = [
+		(0x3f00_0000, "0.5"),
+		(0x3727_c5ac, "1E-05"),
+		(0x38d1_b717, "0.0001"),
+		(0x3421_0fb0, "1.5E-07"),
+		(0x4996_b438, "1234567"),
+		(0x4b18_9680, "10000000"),
+		(0x4b3c_614e, "12345678"),
+		(0xc000_0000, "-2"),
+		(0x0000_0000, "0"),
+		(0x8000_0000, "-0"),
+		(0xffc0_0000, "NaN"),
+		(0x7f80_0000, "Infinity"),
+		(0xff80_0000, "-Infinity"),
+		(0x7f7f_ffff, "3.4028235E+38"),
+		(0x0000_0001, "1E-45"),
+		(0x4b18_967f, "9999999"),
+		(0x3dcc_cccd, "0.1"),
+		(0x3eaa_aaab, "0.33333334"),
+		(0x42f6_e979, "123.456"),
+		(0x391d_4951, "0.00014999999"),
+		(0x50ba_43b7, "2.5E+10"),
+		(0x38d1_b1b9, "9.999E-05"),
+		(0x4cbe_bc20, "100000000"),
+		(0x4e6e_6b28, "1E+09"),
+		(0x4ceb_79a3, "123456790"),
+		(0x4f4a_a7e2, "3.4E+09"),
+		(0x4cee_6b28, "125000000"),
+		(0x3851_b717, "5E-05"),
+		(0x3901_64ef, "0.0001234"),
+		(0xb727_c5ac, "-1E-05"),
+	];
+
+	#[test]
+	fn values_are_written_as_dotnet_writes_them() {
+		for (bits, want) in DOTNET {
+			assert_eq!(dotnet_float(f32::from_bits(bits)), want, "{bits:#010x}");
+		}
 	}
 
 	#[test]

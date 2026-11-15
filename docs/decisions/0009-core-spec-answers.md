@@ -22,5 +22,6 @@ Status: accepted, 2026-11-06 (the user's answers)
     quality: PSNR >= 40 dB against the rendered frame at JPEG quality 90 and
     the default video bitrate, and never below the original's measured PSNR
     for the same settings.
-11. Probe CSV: shortest round-trip float formatting, `\n` line endings,
-    semicolons, decimal point, a header row.
+11. Probe CSV: values as .NET's invariant `float.ToString()` writes them
+    (2026-11-15: was Rust's shortest form), `\n` line endings, semicolons,
+    decimal point, a header row.

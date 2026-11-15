@@ -190,9 +190,9 @@ Values are the stored samples: field u, intensity I (Exr) or sqrt(I) (ExrRoot), 
 
 ## Probe CSV (`Export/ProbeCsv.cs`)
 
-Invariant culture, `;` separator, `.` decimal point, f64 values in .NET's default `ToString` (shortest round-trip;
-exponent form `1E-05` style for small/large magnitudes, unlike Rust's `{}`; match .NET's format), UTF-8 without BOM,
-line ending `Environment.NewLine` (`\r\n` on Windows; Rust: choose `\n` or `\r\n` deliberately).
+Invariant culture, `;` separator, `.` decimal point, f32 values in .NET's default `float.ToString` (shortest
+round-trip digits; fixed for a decimal exponent in -4..=8, else `1.5E-05` / `2.5E+10`; `NaN`, `Infinity`,
+`-Infinity`), UTF-8 without BOM, line ending `Environment.NewLine` (`\r\n` on Windows; Rust: choose `\n` or `\r\n` deliberately).
 
 Point probe:
 ```

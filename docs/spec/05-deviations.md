@@ -96,7 +96,7 @@ frame indices), where the spec's rule is kept so pictures match.
   and MOV have no maintained crates and stay in-house.
 - Lossy outputs are measured by PSNR against the rendered frame (0009), not
   against the C# bytes.
-- Probe CSV: shortest round-trip float formatting as Rust prints it, `\n`.
+- Probe CSV: `\n` line endings.
 - The overlay text in exports uses an embedded open font, not Segoe UI.
 
 ## Scene painting (20)

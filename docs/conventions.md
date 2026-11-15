@@ -245,7 +245,7 @@ push. What they hold the code to:
 - Snapshots are text (`insta::assert_snapshot!` of hex or ASCII pictures, [`crates/wavedude-core/tests/render.rs:268`](../crates/wavedude-core/tests/render.rs#L268)),
   stored in `tests/snapshots/`, reviewed with `cargo insta review`.
 - Tests that need hardware or tools return early with an `eprintln!` reason: no GPU adapter (`gpu_available`,
-  [`crates/wavedude-core/tests/gpu.rs:25`](../crates/wavedude-core/tests/gpu.rs#L25)), no ffmpeg (`has_ffmpeg`, [`crates/wavedude-export/tests/common/mod.rs:89`](../crates/wavedude-export/tests/common/mod.rs#L89)).
+  [`crates/wavedude-core/tests/gpu.rs:25`](../crates/wavedude-core/tests/gpu.rs#L25)), no ffmpeg (`has_ffmpeg`, [`crates/wavedude-export/tests/common/mod.rs:116`](../crates/wavedude-export/tests/common/mod.rs#L116)).
 - Timing tests are `#[ignore = "how to run it"]` ([`crates/wavedude-core/tests/render.rs:281`](../crates/wavedude-core/tests/render.rs#L281)).
 - App-state tests drive `AppState<FakeBackend>` (`live::fake::FakeBackend`, `live.rs:1153`) with a fake clock
   ([`crates/wavedude-app-state/tests/state.rs:22`](../crates/wavedude-app-state/tests/state.rs#L22)).
