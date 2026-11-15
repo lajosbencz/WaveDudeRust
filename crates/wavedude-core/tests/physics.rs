@@ -143,16 +143,16 @@ fn widen(v: &[f32]) -> Vec<f64> {
 
 /// (1) The discrete energy of a free pulse in a reflective box without damping, over 10,000 steps.
 ///
-/// Both schemes are `u+ - 2u + u- = B u` with `B = c2 L` or `c2 L + (c2 L)^2 / 12`; at a uniform
-/// c2, `B / c2` is symmetric because the stencil runs on every cell with zeros beyond the wall, so
+/// Both schemes are `u+ - 2u + u- = B u` with `B = c2 L` or `c2 L + (c2 L)^2 / 12`; at a uniform c2, `B / c2` is
+/// symmetric because the stencil runs on every cell with zeros beyond the wall, so
 ///
 /// ```text
 /// E(n + 1/2) = ( |u(n+1) - u(n)|^2 - <u(n+1), B u(n)> ) / (2 c2)
 /// ```
 ///
-/// is conserved exactly (`E(n+1/2) - E(n-1/2) = <B u, u+ - u-> - <u+, B u> + <u, B u-> = 0`) and is
-/// positive while the scheme is stable. Index 2 (c2 = 1/4) keeps one sub-step per step on both
-/// stencils, so consecutive steps are consecutive levels. In f32 the measured drift is round-off.
+/// is conserved exactly (`E(n+1/2) - E(n-1/2) = <B u, u+ - u-> - <u+, B u> + <u, B u-> = 0`) and is positive while the
+/// scheme is stable. Index 2 (c2 = 1/4) keeps one sub-step per step on both stencils, so consecutive steps are
+/// consecutive levels. In f32 the measured drift is round-off.
 #[test]
 fn energy_of_a_free_pulse_is_conserved() {
 	let (w, h) = (72usize, 64usize);
@@ -312,19 +312,17 @@ fn axis_mode(a: [f64; 4], n: usize, k: f64, p: f64) -> (f64, Vec<f64>) {
 	(av, v)
 }
 
-/// (3) Dispersion, temporal and total: a standing wave of 10 and 20 cells per wavelength along x
-/// (the lowest mode along y) in a reflective box. The wall's zeros are not a sine's odd extension
-/// for taps reaching 2 or 3 cells, so the initial field is the exact mode of the operator with its
-/// wall: the product of the axis operators' modes (`axis_mode`, f64 with the engine's f32 weights),
-/// whose symbol is `-(ex + ey) - cross ex ey` from their eigenvalues. Its amplitude a(m) is taken by
-/// projection each step; any sampled sinusoid obeys `a(m+1) + a(m-1) = 2 cos(w) a(m)`, so `cos w`
-/// is the least-squares ratio over 400 steps.
+/// (3) Dispersion, temporal and total: a standing wave of 10 and 20 cells per wavelength along x (the lowest mode
+/// along y) in a reflective box. The wall's zeros are not a sine's odd extension for taps reaching 2 or 3 cells, so
+/// the initial field is the exact mode of the operator with its wall: the product of the axis operators' modes
+/// (`axis_mode`, f64 with the engine's f32 weights), whose symbol is `-(ex + ey) - cross ex ey`. Its amplitude a(m) is
+/// projected each step; a sampled sinusoid obeys `a(m+1) + a(m-1) = 2 cos(w) a(m)`, so `cos w` is the least-squares
+/// ratio over 400 steps.
 ///
-/// Measured against that symbol: the full discrete relation (space and time), which must hold to
-/// f32 round-off, and the semi-discrete one (`w = c sqrt(symbol)`, exact in time), whose difference
-/// is the temporal dispersion: under 1e-4 at 10 cells per wavelength for the modified equation
-/// (leapfrog's is about `s / 24`, 4e-3 there at 2 sub-steps). The free plane wave's phase velocity
-/// from the analytic symbol, space and time together, is within 3e-4 of 1 for the DRP stencil.
+/// Measured against that symbol: the full discrete relation (space and time), which must hold to f32 round-off, and
+/// the semi-discrete one (`w = c sqrt(symbol)`, exact in time), whose difference is the temporal dispersion: under
+/// 1e-4 at 10 cells per wavelength for the modified equation (leapfrog's is about `s / 24`, 4e-3 there at 2
+/// sub-steps). The free plane wave's phase velocity from the analytic symbol is within 3e-4 of 1 for the DRP stencil.
 #[test]
 fn plane_wave_phase_velocity_matches_the_stencil() {
 	let (w, h) = (199usize, 31usize);
@@ -380,6 +378,9 @@ fn plane_wave_phase_velocity_matches_the_stencil() {
 /// 0.3 percent at 6 cells per wavelength; the Taylor 4th order, for comparison, is -0.6 percent.
 #[test]
 fn drp_phase_error_table() {
+	// the Taylor 4th-order Laplacian (-1/12, 4/3, -5/2), the original's
+	const TAYLOR_FOURTH: StencilCoefficients =
+		StencilCoefficients { axis: [-2.5, 4.0 / 3.0, -1.0 / 12.0, 0.0], cross: 0.0 };
 	let c = StencilCoefficients::DRP;
 	let n = sub_steps(Stencil::FourthOrder, 1.0);
 	println!("| cells | axis, space | axis, space and time | diagonal, space and time | Taylor 4th, axis, space |");
@@ -389,7 +390,7 @@ fn drp_phase_error_table() {
 		let space = c.axis_symbol(k).sqrt() / k - 1.0;
 		let full = |kx: f64, ky: f64| discrete_omega(Stencil::FourthOrder, c.symbol(kx, ky), 1.0, n) / k - 1.0;
 		let (axis, diagonal) = (full(k, 0.0), full(k / 2f64.sqrt(), k / 2f64.sqrt()));
-		let taylor = StencilCoefficients::TAYLOR_FOURTH.axis_symbol(k).sqrt() / k - 1.0;
+		let taylor = TAYLOR_FOURTH.axis_symbol(k).sqrt() / k - 1.0;
 		println!(
 			"| {cells} | {:+.4} % | {:+.4} % | {:+.4} % | {:+.4} % |",
 			space * 100.0,
@@ -459,8 +460,7 @@ fn region(f: &[f32], fw: usize, (ox, oy, w, h): (usize, usize, usize, usize)) ->
 /// burst from the centre of a 64 x 48 canvas), the original's measure for it: the largest |u| in the
 /// canvas from step 300 to 700, once the pulse has left, against the largest up to step 150.
 /// Measured: open edges alone 0.014 (9-point) and 0.013 percent (4th order), a 32 px CPML rim
-/// 0.0095 and 0.0090 percent (the old quadratic damping rim: 0.24 and 0.25), the reflective box
-/// keeps it all.
+/// 0.0095 and 0.0090 percent, the reflective box keeps it all.
 #[test]
 fn long_wave_pulse_leaves_through_open_edges() {
 	for stencil in STENCILS {
@@ -827,13 +827,12 @@ fn intensity_settles_on_the_mean_square() {
 	}
 }
 
-/// (8e) A normally incident wave packet on a slab of index 1.5 whose face lies inside a pixel (at
-/// x = 200.3: the pixel takes the effective medium of its 0.7 glass share, as the painter paints it)
-/// reflects the Fresnel share (n - 1)/(n + 1) = 0.2 of its amplitude within 2 %: the reflected
-/// packet's square sum against the incident one's, both in index 1. 400 x 200 canvas with a 32 px
-/// CPML rim, the slab running into the rim; packet of 40 cells a wavelength, envelope 24 along and
-/// 40 across. At 24 cells a wavelength the reflection came out 1.6 % (9-point) and 2.6 % (DRP) low:
-/// the boundary pixel is a thin layer of intermediate index, whose effect grows as k^2.
+/// (8e) A normally incident wave packet on a slab of index 1.5 whose face lies inside a pixel (at x = 200.3: the pixel
+/// takes the effective medium of its 0.7 glass share, as the painter paints it) reflects the Fresnel share
+/// (n - 1)/(n + 1) = 0.2 of its amplitude within 2 %: the reflected packet's square sum against the incident one's,
+/// both in index 1. 400 x 200 canvas with a 32 px CPML rim, the slab running into the rim; packet of 40 cells a
+/// wavelength, envelope 24 along and 40 across. At 24 cells a wavelength the reflection is 1.6 % (9-point) and 2.6 %
+/// (DRP) low: the boundary pixel is a thin layer of intermediate index, whose effect grows as k^2.
 #[test]
 fn slab_reflects_the_fresnel_share() {
 	let (w, h, face) = (400usize, 200usize, 200usize);
@@ -870,13 +869,12 @@ fn slab_reflects_the_fresnel_share() {
 	}
 }
 
-/// (9) A slab guide (core 11 rows of index 1.6, cladding 1.45, open edges with a 32 px PML) fed by a
-/// point source at its axis carries its fundamental mode with the mode solver's beta within 1e-3.
-/// A 24-cell vacuum wavelength makes the guide single-mode (V = 0.97). The beta is the slope of the
-/// phase along the guide, 360 to 560 cells from the source, of the field summed over the core rows
-/// and demodulated at the source's frequency over the last 900 of 3000 steps (Hann window), where
-/// the radiated part has left the core. Measured 5.8e-5 (9-point) and 1.0e-4 (DRP); 160 to 300
-/// cells out the radiation still in the core pulled both to 6.5e-4.
+/// (9) A slab guide (core 11 rows of index 1.6, cladding 1.45, open edges with a 32 px PML) fed by a point source at
+/// its axis carries its fundamental mode with the mode solver's beta within 1e-3. A 24-cell vacuum wavelength makes
+/// the guide single-mode (V = 0.97). The beta is the slope of the phase along the guide, 360 to 560 cells from the
+/// source, of the field summed over the core rows and demodulated at the source's frequency over the last 900 of 3000
+/// steps (Hann window), where the radiated part has left the core. Measured 5.8e-5 (9-point) and 1.0e-4 (DRP); nearer
+/// the source (160 to 300 cells) the radiation still in the core pulls both to 6.5e-4.
 #[test]
 fn slab_guide_carries_the_mode_solvers_beta() {
 	let (w, h, rim) = (700usize, 141usize, 32u32);
@@ -974,13 +972,12 @@ impl Bounded {
 	}
 }
 
-/// (2, 10a) Every configuration stays bounded: the derived sub-steps keep both stencils bounded for 600
-/// steps on open and reflective edges, with and without a damping band, blank and with the mixed image
-/// scene; and open edges stay bounded for every sub-step count behind an inside damping band (whose
-/// outermost ring has d = 0) and without one: a 64 x 48 canvas of index 1.25 (Courant 0.8 at one sub-step,
-/// within the CFL bound), a band of 6 or none and a continuous source, 5000 steps. Before the damped
-/// update was centred the band diverged where `d^(1/n)` is small, and before the outer rings were
-/// extrapolated linearly the DRP stencil diverged at the corners at one sub-step.
+/// (2, 10a) Every configuration stays bounded: the derived sub-steps keep both stencils bounded for 600 steps on open
+/// and reflective edges, with and without a damping band, blank and with the mixed image scene; and open edges stay
+/// bounded for every sub-step count behind an inside damping band (whose outermost ring has d = 0) and without one: a
+/// 64 x 48 canvas of index 1.25 (Courant 0.8 at one sub-step, within the CFL bound), a band of 6 or none and a
+/// continuous source, 5000 steps. Guards the centred damped update (`d^(1/n)` small) and the linearly extrapolated
+/// outer rings (DRP corners at one sub-step).
 mod configurations_stay_bounded {
 	use super::*;
 
@@ -1052,7 +1049,7 @@ mod configurations_stay_bounded {
 }
 
 /// (10b) Example18 (open edges, a damping band of 32 inside the canvas, no rim) stays bounded over
-/// 3000 steps; it diverged from step 160 at the top edge before the damped update was centred.
+/// 3000 steps (guards the centred damped update).
 #[test]
 fn example18_stays_bounded() {
 	use wavedude_core::engine::emitters::emitters_of;
@@ -1232,15 +1229,13 @@ struct Swing {
 	tolerance: f64,
 }
 
-/// (13) Amplitude is the swing a continuous source gives the field at its own position in free space,
-/// sampled with the bilinear shares of the source's taps (engine/green.rs, `spread_response`; one cell
-/// when it sits on one): the cell itself at levels 20, 50, 100 and 200 (scale 2) of amplitude 0.5 on a
-/// 320 x 320 canvas with a 32 px CPML rim (the return it lets through is below the fit's resolution: the
-/// same offsets to 0.001 as on 512 x 512), both stencils, at two sub-steps (index 1, the definition) and
-/// at one (index 1.25, which one sub-step needs: there the cell swings by the ratio of the two media's
-/// |G0|, engine/green.rs); and a half-cell offset along x, the centre of four cells and a quarter offset,
-/// levels 50 and 100, two sub-steps. The amplitude is fitted over the last 240 of 520 steps, three periods
-/// at level 20 (measured within 0.2 % of the expectation).
+/// (13) Amplitude is the swing a continuous source gives the field at its own position in free space, sampled with the
+/// bilinear shares of the source's taps (engine/green.rs, `spread_response`; one cell when it sits on one): the cell
+/// itself at levels 20, 50, 100 and 200 (scale 2) of amplitude 0.5 on a 320 x 320 canvas with a 32 px CPML rim (the
+/// return it lets through is below the fit's resolution), both stencils, at two sub-steps (index 1, the definition) and
+/// at one (index 1.25, where the cell swings by the ratio of the two media's |G0|); and a half-cell offset along x, the
+/// centre of four cells and a quarter offset, levels 50 and 100, two sub-steps. The amplitude is fitted over the last
+/// 240 of 520 steps, three periods at level 20 (within 0.2 % of the expectation).
 mod source_amplitude_is_the_free_space_swing_of_its_cell_or_position {
 	use super::*;
 

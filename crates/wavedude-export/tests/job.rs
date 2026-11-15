@@ -10,13 +10,14 @@ use wavedude_core::engine::types::{FrameShape, SampleFormat, SampleKind};
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::{ColorScheme, DisplayLayer, Layer, Probe, Project};
 use wavedude_core::render::render_half;
+use wavedude_core::run::store::StoreError;
 use wavedude_export::h264::Profile;
 use wavedude_export::overlays::Overlays;
 use wavedude_export::range::frame_range;
 use wavedude_export::sinks::{self, SinkSpec};
 use wavedude_export::{
 	EncoderPool, ExportError, ExportFormat, ExportJob, ExportLayerLook, ExportLayers, ExportPlan, ExportReport,
-	ExportState, ExportTarget, FrameSource, MemoryFrames, Step,
+	ExportState, ExportTarget, FrameSource, MemoryFrames, Step, Wait,
 };
 
 const W: u32 = 24;
@@ -328,12 +329,15 @@ impl FrameSource for Growing {
 		self.frames.shape
 	}
 
-	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<Poll<()>> {
-		anyhow::ensure!(frame < self.frame_count(), "frame {frame} is not held yet");
+	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<Poll<()>, StoreError> {
+		let count = self.frame_count();
+		if frame >= count {
+			return Err(StoreError::NotStored { frame, count });
+		}
 		self.frames.poll_layer(frame, layer, out)
 	}
 
-	fn wait_for(&self, frame: usize) -> anyhow::Result<bool> {
+	fn wait_for(&self, frame: usize) -> Result<bool, StoreError> {
 		let held = self.grown.wait_while(self.held.lock().unwrap(), |held| frame >= *held).unwrap();
 		Ok(frame < *held)
 	}
@@ -464,6 +468,37 @@ fn a_plan_that_cannot_open_an_output_removes_those_it_opened() {
 	std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn a_plan_of_stored_halves_refuses_an_intensity_of_the_other_form() {
+	let dir = scratch("plan-root");
+	let project = plan_project();
+	let plan = |format, layers| ExportPlan {
+		fs: std_fs(),
+		project: &project,
+		format,
+		layers,
+		path: dir.join("run.exr"),
+		still: None,
+		frame_count: 2,
+		traces: &[],
+		total_steps: 4,
+		keep_partial: false,
+		h264: None,
+		h264_profile: Profile::Baseline,
+	};
+	let roots = Arc::new(source(2));
+	let error = plan(ExportFormat::Exr, ExportLayers::Both).build_job(roots.clone(), &SchemeStore::default()).err();
+	assert!(matches!(error, Some(ExportError::WrongInput(_))), "{error:?}");
+	assert!(!dir.join("run_field.exr").exists(), "no output is opened");
+	plan(ExportFormat::Exr, ExportLayers::Field).build_job(roots.clone(), &SchemeStore::default()).unwrap();
+	plan(ExportFormat::ExrRoot, ExportLayers::Intensity).build_job(roots, &SchemeStore::default()).unwrap();
+	let values = Arc::new(MemoryFrames { shape: FrameShape { intensity_root: false, ..shape() }, ..source(2) });
+	let error = plan(ExportFormat::ExrRoot, ExportLayers::Intensity).build_job(values.clone(), &SchemeStore::default());
+	assert!(matches!(error.err(), Some(ExportError::WrongInput(_))));
+	plan(ExportFormat::Exr, ExportLayers::Intensity).build_job(values, &SchemeStore::default()).unwrap();
+	std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// Frames whose planes come back pending `times` times per frame and layer, the intensity's and the odd frames'
 /// only, as frames read back from a spill.
 struct Hesitant {
@@ -481,7 +516,7 @@ impl FrameSource for Hesitant {
 		self.frames.shape
 	}
 
-	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<Poll<()>> {
+	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<Poll<()>, StoreError> {
 		if layer == Layer::Intensity || frame % 2 == 1 {
 			let mut asked = self.asked.lock().unwrap();
 			let asked = asked.entry((frame, layer == Layer::Intensity)).or_default();
@@ -587,7 +622,7 @@ fn a_run_fails_at_a_pending_frame() {
 	let src = Arc::new(Hesitant { frames: source(8), times: 1, asked: Default::default() });
 	let report = every_kind(&dir, src).run(|_, _| {}, &AtomicBool::new(false));
 	match report.state {
-		ExportState::Failed(ExportError::Source(e)) => assert!(e.to_string().contains("frame 1 is pending"), "{e}"),
+		ExportState::Failed(ExportError::Blocked(wait)) => assert_eq!(wait, Wait::Frame(1)),
 		other => panic!("{other:?}"),
 	}
 	assert_eq!(report.frames_done, 0);

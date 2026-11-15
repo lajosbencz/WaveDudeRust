@@ -1,16 +1,14 @@
-//! Paints optical parts into scene pixels (spec 20 "Per-part painting").
+//! Paints optical parts into scene pixels (docs/spec/20-scene-painting.md "Per-part painting").
 //!
-//! Red takes a refractive part's index (`clamp(round_even(n * 100), 1, 255)`) or 0 for a mirror,
-//! blue an absorbing part's absorption (the larger of old and new), green is never touched. A
-//! refractive part takes over a mirror pixel only where it covers at least half of it (its centre
-//! inside), the mirror's own rule; a pixel's previous index is read as the engine does, at least 1.
-//! Pixel (x, y) spans [x, x+1) x [y, y+1); its centre is (x + 0.5, y + 0.5) in canvas pixels.
-//! Pixels are painted one by one (no settled runs), rows in parallel.
+//! Red takes a refractive part's index (`clamp(round_even(n * 100), 1, 255)`) or 0 for a mirror, blue an absorbing
+//! part's absorption (the larger of old and new), green is never touched. A refractive part takes over a mirror pixel
+//! only where it covers at least half of it (its centre inside); a pixel's previous index is read as the engine does,
+//! at least 1. Pixel (x, y) spans [x, x+1) x [y, y+1), centre (x + 0.5, y + 0.5) in canvas pixels. Pixels are painted
+//! one by one, rows in parallel.
 //!
-//! A pixel an edge crosses takes the effective medium of the scalar wave equation, the area-weighted
-//! permittivity `n_eff = sqrt(sum(share * n^2))` (Farjadpour et al. 2006, decision 0010): for kinds
-//! whose depth is a signed distance the shares are the areas a straight edge at the centre's distance
-//! cuts from the pixel ([`coverage`]), otherwise the 16 point samples.
+//! A pixel an edge crosses takes the area-weighted permittivity `n_eff = sqrt(sum(share * n^2))` (Farjadpour et al.
+//! 2006, decision 0010): for kinds whose depth is a signed distance the shares are the areas a straight edge at the
+//! centre's distance cuts from the pixel ([`coverage`]), otherwise 16 point samples.
 
 use rayon::prelude::*;
 
@@ -217,10 +215,9 @@ impl Painter<'_> {
 		if length > 0.0 && length.is_finite() { (gx / length, gy / length) } else { (1.0, 0.0) }
 	}
 
-	/// The effective medium of the pixel centred at canvas (cx, cy), `depth` the centre's signed distance to
-	/// the outline, `inner` to an inner edge: the outline, the inner edge and a layer coating's inner edge
-	/// cut the pixel as straight edges; a graded band takes its index at the centre. None when nothing
-	/// of the part covers the pixel.
+	/// The effective medium of the pixel centred at canvas (cx, cy), `depth` the centre's signed distance to the outline,
+	/// `inner` to an inner edge: the outline, the inner edge and a layer coating's inner edge cut the pixel as straight
+	/// edges; a graded band takes its index at the centre. None when nothing of the part covers the pixel.
 	fn smoothed(&self, cx: f64, cy: f64, depth: f64, inner: f64, existing: f64) -> Option<f64> {
 		let centre = self.at(cx, cy);
 		let band = self.shape.band();

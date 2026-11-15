@@ -1,8 +1,6 @@
-//! Exports (docs/ui/70, Export Save dialog): the dialog picks the format (the platform dialog cannot report its
-//! filter) and the output; a full-quality run is waited for when the current one does not serve; the job then runs,
-//! its progress in the status bar, Esc or Stop cancelling it. Natively (`native`) the output is a path, the job runs
-//! on a worker thread and the probe CSV's path comes from the platform's save dialog; in the browser (`web`) the
-//! output is a file name, downloaded once the job, stepped on the page, has ended.
+//! Exports (docs/ui/70, Export Save dialog). Natively (`native`) the output is a path and the job runs on a worker
+//! thread; in the browser (`web`) the output is a file name, offered for download once the job, stepped on the page,
+//! has ended.
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
@@ -38,7 +36,6 @@ use crate::menus::ExportKindChoice;
 const WIDTH: f32 = 528.;
 
 /// What the window does once the export has ended.
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum After {
 	Exit,
@@ -54,7 +51,6 @@ pub(super) enum Step {
 	#[cfg(not(target_arch = "wasm32"))]
 	Confirmed(Plan, usize),
 	/// Stop the export, then do `After`.
-	#[cfg(not(target_arch = "wasm32"))]
 	Stop(After),
 }
 
@@ -80,7 +76,6 @@ pub(super) struct Exports {
 	progress: Option<Progress>,
 	pending: Option<Plan>,
 	last: Option<Last>,
-	#[cfg(not(target_arch = "wasm32"))]
 	after: Option<After>,
 	/// What the platform's export keeps.
 	running: imp::Running,
@@ -88,7 +83,6 @@ pub(super) struct Exports {
 
 impl Exports {
 	/// An export runs or waits for its run.
-	#[cfg(not(target_arch = "wasm32"))]
 	pub(super) fn exporting(&self) -> bool {
 		self.progress.is_some()
 	}
@@ -111,9 +105,9 @@ impl Exports {
 		(!app.live.export_busy()).then(|| Modal::Export(ExportDialog::new(app, choice)))
 	}
 
-	/// File > Export last: the last run export again, no questions.
+	/// File > Export last: the last run export of the open project again, no questions.
 	pub(super) fn export_last(&mut self, ctx: &egui::Context, app: &mut App, modals: &mut Modals) {
-		if app.live.export_busy() {
+		if app.live.export_busy() || !self.has_last(app) {
 			return;
 		}
 		if let Some((Plan::Frames { choice, format, path, frame, .. }, _)) = self.last.clone() {
@@ -135,7 +129,6 @@ impl Exports {
 			}
 			#[cfg(not(target_arch = "wasm32"))]
 			Step::Confirmed(plan, confirmed) => self.ask(ctx, app, modals, plan, confirmed),
-			#[cfg(not(target_arch = "wasm32"))]
 			Step::Stop(after) => {
 				self.after = Some(after);
 				self.cancel(app);
@@ -144,8 +137,7 @@ impl Exports {
 	}
 
 	fn gate(&mut self, ctx: &egui::Context, app: &mut App, modals: &mut Modals, plan: Plan) {
-		let project = app.document.project.clone();
-		match app.live.request_export(&project, export::needs_intensity(&plan), Instant::now()) {
+		match app.live.request_export(&app.document.project, export::run_needs(&plan), Instant::now()) {
 			ExportGate::Ready => self.run(ctx, app, modals, plan),
 			ExportGate::Waiting => {
 				let (kind, path) = export::plan_kind(&plan);
@@ -225,7 +217,6 @@ impl Exports {
 	}
 
 	/// What waited for the export's end, once it has ended.
-	#[cfg(not(target_arch = "wasm32"))]
 	pub(super) fn take_after(&mut self) -> Option<After> {
 		if self.progress.is_none() { self.after.take() } else { None }
 	}
@@ -277,7 +268,7 @@ pub(super) struct ExportDialog {
 	codec_downloaded: bool,
 	/// The browse dialog's answer.
 	#[cfg(not(target_arch = "wasm32"))]
-	browsed: Option<std::sync::mpsc::Receiver<PathBuf>>,
+	browsed: super::inbox::Inbox<PathBuf>,
 }
 
 impl ExportDialog {
@@ -291,7 +282,7 @@ impl ExportDialog {
 			#[cfg(not(target_arch = "wasm32"))]
 			codec_downloaded: crate::codec::downloaded(app),
 			#[cfg(not(target_arch = "wasm32"))]
-			browsed: None,
+			browsed: super::inbox::Inbox::default(),
 		}
 	}
 
@@ -402,6 +393,19 @@ mod tests {
 	use super::*;
 	use wavedude_app_state::AppState;
 	use wavedude_app_state::settings::AppDirs;
+
+	#[test]
+	fn export_last_repeats_no_export_of_another_project() {
+		let dir = tempfile::tempdir().unwrap();
+		let mut app = AppState::start(&AppDirs::under(dir.path()), []).expect("the state starts");
+		let (ctx, mut modals, mut exports) = (egui::Context::default(), Modals::default(), Exports::default());
+		let path = dir.path().join("field.png");
+		let plan =
+			Plan::Frames { choice: ExportKindChoice::Field, format: ExportFormat::Png, path, frame: 0, repeat: false };
+		exports.last = Some((plan, Some(dir.path().join("other.wdproj"))));
+		exports.export_last(&ctx, &mut app, &mut modals);
+		assert!(!exports.exporting() && !app.live.export_busy(), "the other project's export was repeated");
+	}
 
 	#[test]
 	fn an_export_without_frames_ends_with_its_error() {

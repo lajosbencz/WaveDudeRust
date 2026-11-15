@@ -120,8 +120,8 @@ impl Normalize for Source {
 
 impl Normalize for SourceArray {
 	fn normalize(&mut self) {
-		self.size_x = r::AT_LEAST_1.clamp_u32(self.size_x);
-		self.size_y = r::AT_LEAST_1.clamp_u32(self.size_y);
+		self.size_x = r::ARRAY_SIZE.clamp_u32(self.size_x);
+		self.size_y = r::ARRAY_SIZE.clamp_u32(self.size_y).min(r::ARRAY_ELEMENTS / self.size_x);
 		self.angle = normalize_angle(self.angle);
 		self.random_frequency = r::AT_LEAST_0.clamp_u32(self.random_frequency);
 		self.random_phase = r::AT_LEAST_0.clamp_u32(self.random_phase);
@@ -237,6 +237,7 @@ impl Normalize for InterferenceFilter {
 impl Normalize for SimpleGrating {
 	fn normalize(&mut self) {
 		self.material.normalize();
+		self.coating.normalize();
 		self.columns = r::AT_LEAST_1.clamp_u32(self.columns);
 		self.rows = r::AT_LEAST_1.clamp_u32(self.rows);
 		self.column_spacing = r::GRATING_SPACING.clamp_u32(self.column_spacing);
@@ -590,6 +591,18 @@ mod tests {
 		let mut c = Probe { box_size: BoxSize::Custom, box_width: 10, box_height: 10_000, ..Probe::default() };
 		c.normalize();
 		assert_eq!(c.box_pixels(), (60, 4096));
+	}
+
+	#[test]
+	fn an_array_keeps_its_element_count_bounded() {
+		let mut a = SourceArray { size_x: u32::MAX, size_y: u32::MAX, ..SourceArray::default() };
+		a.normalize();
+		assert_eq!(a.size_x as f64, r::ARRAY_SIZE.max);
+		assert_eq!(a.size_y, r::ARRAY_ELEMENTS / a.size_x);
+		let mut b = SourceArray { size_x: 256, size_y: 1000, ..SourceArray::default() };
+		b.normalize();
+		assert_eq!(b.size_x * b.size_y, r::ARRAY_ELEMENTS);
+		assert_eq!(b.size_x, 256, "rows give way to columns");
 	}
 
 	#[test]

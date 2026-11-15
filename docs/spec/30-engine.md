@@ -194,7 +194,8 @@ One driver thread per engine; no internal locking.
 ## GPU engine (optional in Rust)
 
 - Scene as compact maps: u8 index into a c2 table (<= 256 distinct values), u16 index into a damping table (<= 4096
-  distinct values, else rebuild); tables hold the CPU's f32 values.
+  distinct values, else rebuild); tables hold the CPU's f32 values. Rust: one u32 a cell, a 16-bit index into each
+  table; a scene with more than 65536 distinct values of either is refused by the GPU engine, which leaves the run to the CPU engine.
 - Work groups 32 x 8, global size rounded up to whole groups; kernels: `wave_step`, `apply_sources`,
   `apply_object_sources`, `open_edges`, `capture_half`, `capture_index`.
 - Intensity stores s1 and s2; blend at read time.
@@ -207,6 +208,15 @@ One driver thread per engine; no internal locking.
   tagged last or one pending, so nothing is read back for the picture and nothing changes under a pass. The frames
   name the engine's context; a reader uses them only on that context's device (same `Arc`: `wgpu::Device` equality
   compares ids, which repeat across instances).
+- Rust: a grid the device cannot hold is refused before anything is allocated: 2^31 padded cells or more (cell indices
+  carry a probe's layer in bit 31), or a field, medium or CPML buffer above the smaller of the device's
+  `max_storage_buffer_binding_size` and `max_buffer_size`; a scene swapped in whose medium tables overflow leaves the
+  engine as it was and asks for a new one. The buffers and bind groups of a build and of a swap are made in validation
+  and out-of-memory error scopes (a swap's error fails the engine's next call). Either failure is a `GpuError`, and the
+  CPU engine runs instead with the reason.
+- Rust: a grid whose CPU engine would not fit in memory (`engine::cpu::grid_bytes` above the physical memory, on wasm32
+  above 4 GiB) fails the run on either engine, because the GPU can fall back to the CPU; the failure is logged as
+  `RunError::EngineMemory`.
 - Subnormals: the card may flush; host blend differs by 1 ulp at 1e-45 in about 1/2000 values.
 - Parity: library_check compares CPU vs GPU within `1e-3 * max(1, max|cpu|)` after N steps. The tolerance is the
   requirement; bit-exact planes are not.

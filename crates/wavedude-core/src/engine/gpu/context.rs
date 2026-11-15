@@ -1,13 +1,14 @@
 //! The wgpu device shared by the GPU engines.
 //!
-//! [`GpuContext::create`] requests it (adapter request plus device creation take 50 to 200 ms, which every engine
-//! rebuilt for an edit would pay again); [`GpuContext::from_device`] adopts a device requested elsewhere. Natively
+//! [`GpuContext::create`] requests it (adapter request plus device creation take 50 to 200 ms, paid again by every
+//! engine rebuilt for an edit otherwise); [`GpuContext::from_device`] adopts one requested elsewhere. Natively
 //! [`context`] keeps one per process, or the one given to [`set_context`], until the device is lost; the next engine
-//! built after a loss gets a new device. On wasm the caller owns it and requests a new one after a loss. An engine on a
-//! lost device keeps failing; none is built on one.
+//! gets a new device. On wasm the caller owns it and requests a new one after a loss. An engine on a lost device
+//! keeps failing; none is built on one.
+//!
 //! Natively `wgpu::Device` and `wgpu::Queue` are `Send + Sync`; engines on different threads submit to the same
-//! queue, which wgpu serialises. Software adapters, and adapters without compute shaders, are refused: the CPU
-//! engine is faster or the only one.
+//! queue, which wgpu serialises. Software adapters and adapters without compute shaders are refused.
+//!
 //! The context counts the completions its engines await (submissions not reported run, mappings requested and not
 //! landed); while some are, a browser's waiting caller kicks the queue on [`Kicks`] (decision 0026).
 
@@ -36,6 +37,14 @@ pub enum GpuError {
 	Pipeline(String),
 	#[error("the grid of {0} cells is too large for the GPU engine's 31-bit cell indices")]
 	GridTooLarge(usize),
+	#[error(
+		"the scene has more than {0} distinct wave speeds or dampings, more than the GPU engine's medium tables index"
+	)]
+	MediumTables(usize),
+	#[error("a GPU buffer of {bytes} bytes exceeds the device's storage buffer limit of {limit} bytes")]
+	BufferTooLarge { bytes: u64, limit: u64 },
+	#[error("creating the GPU engine's buffers or bind groups failed: {0}")]
+	Resources(String),
 	#[error("the GPU device was lost ({reason:?}): {message}")]
 	Lost { reason: wgpu::DeviceLostReason, message: String },
 	#[error("waiting for the GPU failed")]
@@ -49,6 +58,17 @@ pub enum GpuError {
 	Map(#[source] wgpu::BufferAsyncError),
 	#[error("reading a mapped GPU buffer failed")]
 	MapRange(#[source] wgpu::MapRangeError),
+}
+
+/// The largest storage buffer `limits` bind whole: the smaller of the binding and buffer size limits.
+pub fn storage_limit(limits: &wgpu::Limits) -> u64 {
+	limits.max_storage_buffer_binding_size.min(limits.max_buffer_size)
+}
+
+/// Whether a storage buffer of `bytes` binds whole under `limits`.
+pub fn check_buffer(bytes: u64, limits: &wgpu::Limits) -> Result<(), GpuError> {
+	let limit = storage_limit(limits);
+	if bytes > limit { Err(GpuError::BufferTooLarge { bytes, limit }) } else { Ok(()) }
 }
 
 impl From<wgpu::PollError> for GpuError {

@@ -48,8 +48,9 @@ pub fn run(work: &Work, plan: Plan, progress: impl FnMut(usize, usize), cancel: 
 }
 
 fn write_csv(work: &Work, probe: &str, path: &Path) -> Result<String, String> {
-	let mut file = std::io::BufWriter::new(std::fs::File::create(path).map_err(|e| e.to_string())?);
-	let written = work.probe_csv(probe, &mut file)?;
+	let mut bytes = Vec::new();
+	let written = work.probe_csv(probe, &mut bytes)?;
+	wavedude_core::io::write_atomic(path, &bytes).map_err(|e| e.to_string())?;
 	Ok(format!("{written} written to {}", path.display()))
 }
 
@@ -78,7 +79,7 @@ fn export_frames(
 		ExportState::Completed => {
 			Outcome::Completed(format!("{} frames exported to {}", report.frames_done, path.display()))
 		}
-		ExportState::Cancelled => Outcome::Cancelled(format!("export cancelled after {} frames", report.frames_done)),
+		ExportState::Cancelled => Outcome::cancelled(report.frames_done),
 		ExportState::Failed(e) => Outcome::Failed(e.to_string()),
 	}
 }

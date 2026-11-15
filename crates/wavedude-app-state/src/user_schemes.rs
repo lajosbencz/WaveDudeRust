@@ -150,9 +150,35 @@ pub fn remove(store: &Store, name: &str) -> Result<(), String> {
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-	use wavedude_core::model::SchemeKind;
+	use tracing_subscriber::layer::SubscriberExt;
+	use wavedude_core::model::{Layer, SchemeKind};
 
 	use super::*;
+	use crate::log::{LogRing, RingLayer};
+
+	#[test]
+	fn an_unknown_scheme_is_drawn_grey_and_said_where_a_layer_is_coloured() {
+		let mut project = wavedude_core::model::Project::default();
+		project.display.intensity.color_scheme = "Nobody's scheme".into();
+		let store = SchemeStore::default();
+		let ring = LogRing::new();
+		let subscriber = tracing_subscriber::registry().with(RingLayer(ring.clone()));
+		tracing::subscriber::with_default(subscriber, || {
+			assert_eq!(store.resolve(&project.color_schemes, "Nobody's scheme"), ColorScheme::grey());
+			assert!(ring.since(None).is_empty(), "a picture's lookup is silent");
+			assert_eq!(store.resolve_layer(&project, Layer::Intensity), ColorScheme::grey());
+			assert_ne!(store.resolve_layer(&project, Layer::Field), ColorScheme::grey());
+			store.check(&project);
+		});
+		let lines = ring.since(None);
+		assert_eq!(lines.len(), 2, "{lines:?}");
+		assert!(
+			lines.iter().all(|l| l.reaches_status_bar()
+				&& l.message.contains("'Nobody's scheme'")
+				&& l.message.contains("intensity")),
+			"{lines:?}"
+		);
+	}
 
 	#[test]
 	fn a_plain_name_is_its_own_stem_and_every_name_comes_back() {

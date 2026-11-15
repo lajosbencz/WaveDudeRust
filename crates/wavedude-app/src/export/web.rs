@@ -1,5 +1,6 @@
 //! The browser's export: the job stepped on the page between frames, its files in memory (a still) or in the spool
-//! ([`Spool`]), then packed when both layers' videos go into one archive, and downloaded ([`Delivery`]).
+//! ([`Spool`]), then packed when both layers' videos go into one archive, and made ready for the download the user
+//! starts ([`Delivery`], [`Download`]).
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -7,8 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use wasm_bindgen_futures::spawn_local;
-use wavedude_app_state::document::Target;
-use wavedude_app_state::platform::{self, Duration, H264Support, Spool, SystemTime, WebCodecsFactory};
+use wavedude_app_state::platform::{self, Download, Duration, H264Support, Spool, SystemTime, WebCodecsFactory};
 use wavedude_core::model::Project;
 use wavedude_core::run::Token;
 use wavedude_export::fs::zip::UtcDateTime;
@@ -23,9 +23,9 @@ const BUDGET: Duration = Duration::from_millis(8);
 /// Bytes of a spooled video read and written into the archive at a time.
 const CHUNK: u64 = 4 << 20;
 
-/// An export started: ended at once (a probe's CSV), or running.
+/// An export started: ended at once (a probe's CSV), with its file when completed, or running.
 pub enum Started {
-	Done(Outcome),
+	Done(Outcome, Option<Download>),
 	Running(Runner),
 }
 
@@ -37,7 +37,8 @@ pub enum Status {
 	Waiting(usize, usize),
 	/// The videos are packed into the archive; poll again once the window is woken.
 	Packaging,
-	Ended(Outcome),
+	/// How it ended, with its file when completed.
+	Ended(Outcome, Option<Download>),
 }
 
 /// Where the job's files go.
@@ -51,12 +52,20 @@ enum Out {
 enum Phase {
 	Stepping(Box<ExportJob<'static>>, Out),
 	Packaging(Token<()>),
-	Downloading(Token<()>),
+	/// The spooled file on its way to its download.
+	Preparing(Token<Download>),
 	Ended,
 }
 
-/// A browser export from its first frame to its download. The spool is removed when the export ends other than
-/// completed, else kept for its download until the next export.
+/// What follows a phase.
+enum Next {
+	Phase(Phase),
+	/// The file is ready for its download.
+	Ready(Download),
+}
+
+/// A browser export from its first frame to its file ready for download. The spool is removed when the export ends
+/// other than completed, else kept for its download until the next export.
 pub struct Runner {
 	delivery: Delivery,
 	phase: Phase,
@@ -73,8 +82,9 @@ pub fn start(work: &Work, plan: Plan, cancel: Arc<AtomicBool>) -> Result<Started
 		Plan::Csv { probe, path } => {
 			let mut bytes = Vec::new();
 			let written = work.probe_csv(&probe, &mut bytes)?;
-			download(&path, &bytes).map_err(|e| e.to_string())?;
-			return Ok(Started::Done(Outcome::Completed(format!("{written} downloaded as {}", path.display()))));
+			let download = Download::of_bytes(&bytes, &path.display().to_string()).map_err(|e| e.to_string())?;
+			let line = format!("{written} exported as {}", path.display());
+			return Ok(Started::Done(Outcome::Completed(line), Some(download)));
 		}
 		Plan::Frames { choice, format, path, frame, .. } => (choice, format, path, frame),
 	};
@@ -123,13 +133,8 @@ fn now() -> UtcDateTime {
 	UtcDateTime::from_unix(since.as_secs() as i64)
 }
 
-/// Downloads `bytes` as the file name `path`.
-fn download(path: &Path, bytes: &[u8]) -> io::Result<()> {
-	platform::write(&Target::Download(path.display().to_string()), bytes)
-}
-
 impl Runner {
-	/// Takes the next step: some frames, or a look at the packing or the download.
+	/// Takes the next step: some frames, or a look at the packing or the file's preparation.
 	pub fn poll(&mut self) -> Status {
 		let phase = std::mem::replace(&mut self.phase, Phase::Ended);
 		let next = match phase {
@@ -148,41 +153,40 @@ impl Runner {
 					}
 					Step::Ended(report) => match report.state {
 						ExportState::Completed => self.deliver(out),
-						ExportState::Cancelled => return self.end(cancelled(done)),
+						ExportState::Cancelled => return self.end(Outcome::cancelled(done), None),
 						ExportState::Failed(e) => Err(e.to_string()),
 					},
 				}
 			}
-			Phase::Packaging(_) | Phase::Downloading(_) if self.cancel.load(Ordering::Relaxed) => {
-				return self.end(cancelled(self.frames.0));
+			Phase::Packaging(_) | Phase::Preparing(_) if self.cancel.load(Ordering::Relaxed) => {
+				return self.end(Outcome::cancelled(self.frames.0), None);
 			}
 			Phase::Packaging(packed) => match packed.take() {
 				None => {
 					self.phase = Phase::Packaging(packed);
 					return Status::Packaging;
 				}
-				Some(packed) => packed.map_err(|e| e.to_string()).map(|()| Some(self.download_spooled())),
+				Some(packed) => packed.map_err(|e| e.to_string()).map(|()| self.prepare_spooled()),
 			},
-			Phase::Downloading(downloaded) => match downloaded.take() {
+			Phase::Preparing(prepared) => match prepared.take() {
 				None => {
-					self.phase = Phase::Downloading(downloaded);
+					self.phase = Phase::Preparing(prepared);
 					return Status::Waiting(self.frames.0, self.frames.1);
 				}
-				Some(downloaded) => downloaded.map_err(|e| e.to_string()).map(|()| None),
+				Some(prepared) => prepared.map_err(|e| e.to_string()).map(Next::Ready),
 			},
 			Phase::Ended => panic!("an ended export is not polled"),
 		};
 		match next {
-			Ok(Some(phase)) => {
+			Ok(Next::Phase(phase)) => {
 				self.phase = phase;
 				self.poll()
 			}
-			Ok(None) => {
-				let line =
-					format!("{} frames exported, downloaded as {}", self.frames.0, self.delivery.download().display());
-				self.end(Outcome::Completed(line))
+			Ok(Next::Ready(download)) => {
+				let line = format!("{} frames exported as {}", self.frames.0, download.name());
+				self.end(Outcome::Completed(line), Some(download))
 			}
-			Err(e) => self.end(Outcome::Failed(e)),
+			Err(e) => self.end(Outcome::Failed(e), None),
 		}
 	}
 
@@ -191,18 +195,17 @@ impl Runner {
 		self.spool.take()
 	}
 
-	/// What follows the job's completion; `None` once downloaded.
-	fn deliver(&mut self, out: Out) -> Result<Option<Phase>, String> {
+	/// What follows the job's completion.
+	fn deliver(&mut self, out: Out) -> Result<Next, String> {
 		match (out, &self.delivery) {
 			(Out::Memory(memory), delivery) => {
 				let path = delivery.download();
 				let bytes = memory.take(path).ok_or_else(|| format!("{} was not written", path.display()))?;
-				download(path, &bytes).map_err(|e| e.to_string())?;
-				Ok(None)
+				Download::of_bytes(&bytes, &path.display().to_string()).map(Next::Ready).map_err(|e| e.to_string())
 			}
 			(Out::Archive(zip), _) => {
 				zip.finish().map_err(|e| e.to_string())?;
-				Ok(Some(self.download_spooled()))
+				Ok(self.prepare_spooled())
 			}
 			(Out::Spool, Delivery::Videos { videos, archive }) => {
 				let spool = self.spool.clone().expect("a spooled export has a spool");
@@ -213,29 +216,25 @@ impl Runner {
 					task.complete(package(&spool, &videos, &archive, &cancel).await);
 					wavedude_app_state::wake::wake();
 				});
-				Ok(Some(Phase::Packaging(packed)))
+				Ok(Next::Phase(Phase::Packaging(packed)))
 			}
-			(Out::Spool, _) => Ok(Some(self.download_spooled())),
+			(Out::Spool, _) => Ok(self.prepare_spooled()),
 		}
 	}
 
-	fn download_spooled(&self) -> Phase {
+	fn prepare_spooled(&self) -> Next {
 		let spool = self.spool.as_ref().expect("a spooled export has a spool");
 		let path = self.delivery.download();
-		Phase::Downloading(spool.download(path, &path.display().to_string()))
+		Next::Phase(Phase::Preparing(spool.download(path, &path.display().to_string())))
 	}
 
-	fn end(&mut self, outcome: Outcome) -> Status {
+	fn end(&mut self, outcome: Outcome, download: Option<Download>) -> Status {
 		self.phase = Phase::Ended;
 		if !matches!(outcome, Outcome::Completed(_)) {
 			self.spool = None;
 		}
-		Status::Ended(outcome)
+		Status::Ended(outcome, download)
 	}
-}
-
-fn cancelled(frames: usize) -> Outcome {
-	Outcome::Cancelled(format!("export cancelled after {frames} frames"))
 }
 
 /// Packs the spooled `videos` into the ZIP archive `archive` of `spool`, chunk by chunk as the spool takes them,

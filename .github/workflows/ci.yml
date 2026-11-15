@@ -26,10 +26,11 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # BtbN/FFmpeg-Builds release and asset (LGPL build) with the digest from its checksums.sha256.
-  FFMPEG_RELEASE: autobuild-2026-11-09-12-42
-  FFMPEG_BUILD: ffmpeg-N-128718-gb2b543c079-linux64-lgpl
-  FFMPEG_SHA256: 728938551177f361c573d249ba70b0265db872d78c6389e1f1da52a41afb3379
+  # BtbN/FFmpeg-Builds release and asset (LGPL build) with the digest from its checksums.sha256. A month's last
+  # build: BtbN keeps those about two years, the daily ones about two weeks.
+  FFMPEG_RELEASE: autobuild-2026-10-31-12-59
+  FFMPEG_BUILD: ffmpeg-N-128227-g4811625b5f-linux64-lgpl
+  FFMPEG_SHA256: f7ce163eca978dc3ab761e6c288f5f764ec4326d17c926c8d4f75ed95e77ee4b
   # File and line in backtraces, without the full debug info that slows linking (PDBs on Windows) and bloats the cache.
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
   CARGO_PROFILE_TEST_DEBUG: line-tables-only
@@ -40,6 +41,7 @@ jobs:
   changes:
     name: Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       code: ${{ steps.diff.outputs.code }}
     steps:
@@ -51,7 +53,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           DOCS: >-
-            ^(docs/|[^/]+\.md$|\.github/(ISSUE_TEMPLATE/|PULL_REQUEST_TEMPLATE\.md$|dependabot\.yml$|workflows/(release|package|hygiene|pages|dependabot-automerge)\.yml$)|cliff\.toml$|deny\.toml$|_typos\.toml$|\.gitignore$|tools/(compare-csharp/|build-web\.sh$)|site/)
+            ^(docs/|[^/]+\.md$|\.github/(ISSUE_TEMPLATE/|PULL_REQUEST_TEMPLATE\.md$|dependabot\.yml$|zizmor\.yml$|workflows/(release|package|hygiene|pages|dependabot-automerge)\.yml$)|cliff\.toml$|deny\.toml$|_typos\.toml$|\.gitignore$|tools/compare-csharp/|site/)
         # A pull request checks out its merge into the base.
         run: |
           code=true
@@ -65,6 +67,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps: &test
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -99,25 +102,29 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
       - name: Format
-        if: github.event_name != 'push'
+        if: runner.os == 'Linux' && github.event_name != 'push'
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets --features wavedude-export/openh264-source,wavedude-cli/openh264-source -- -D warnings
       - name: Test
+        # bash on Windows too, for the parameter expansion
+        shell: bash
         run: >-
           cargo test --workspace --no-fail-fast --features wavedude-export/openh264-source,wavedude-cli/openh264-source
-          ${{ github.event_name == 'push' && '--no-run' || '' }}
+          ${NO_RUN:+--no-run}
+        env:
+          NO_RUN: ${{ github.event_name == 'push' && 'true' || '' }}
       - if: runner.os == 'Linux' && github.event_name != 'push'
         uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
         with:
-          tool: cargo-hack@0.6.46,cargo-machete@0.9.2
+          tool: cargo-hack@0.6.46,cargo-shear@1.14.0
       # Every feature combination of every crate compiles; checking is the proof, codegen and linking add nothing.
       - name: Feature checks
         if: runner.os == 'Linux' && github.event_name != 'push'
         run: cargo hack check --workspace --feature-powerset --depth 2
       - name: Unused dependencies
         if: runner.os == 'Linux' && github.event_name != 'push'
-        run: cargo machete
+        run: cargo shear
       - name: Docs
         if: runner.os == 'Linux' && github.event_name != 'push'
         run: cargo doc --workspace --no-deps
@@ -129,6 +136,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: windows-latest
+    timeout-minutes: 60
     steps: *test
 
   macos:
@@ -136,6 +144,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-latest
+    timeout-minutes: 60
     steps: *test
 
   msrv:
@@ -143,6 +152,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -160,12 +170,14 @@ jobs:
 
   # The core with and without runs and the GPU engine, the view crate, the app state and the app stay buildable for
   # the browser, without std's clocks (docs/decisions/0015-core-builds-for-wasm.md,
-  # docs/decisions/0016-gpu-engine-in-the-browser.md, tools/clippy-wasm32/clippy.toml).
+  # docs/decisions/0016-gpu-engine-in-the-browser.md, tools/clippy-wasm32/clippy.toml), and the browser app builds
+  # as package.yml builds it.
   wasm32:
     name: wasm32
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       CLIPPY_CONF_DIR: tools/clippy-wasm32
     steps:
@@ -199,14 +211,69 @@ jobs:
         run: cargo clippy -p wavedude-app --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy of the run worker
         run: cargo clippy -p wavedude-run-worker --target wasm32-unknown-unknown -- -D warnings
+      # The CLI must match the wasm-bindgen crate of Cargo.lock; tools/build-web.sh checks it again.
+      - name: wasm-bindgen version of Cargo.lock
+        id: bindgen
+        run: echo "version=$(tools/build-web.sh --bindgen-version)" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: wasm-bindgen@${{ steps.bindgen.outputs.version }}
+          fallback: none
+      - name: Browser app
+        run: tools/build-web.sh
+
+  # The Linux release build in its container (.github/build/linux.Dockerfile, decision 0011), without packaging: the
+  # programs build there, need glibc 2.28 at most and start on the image's base without its packages.
+  glibc:
+    name: glibc
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # On the runner for the cache key only; the container installs its own.
+      - name: Toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+      # As the runner's user on the workspace, with the cached registry: rust-cache saves what the build wrote.
+      - name: Build container
+        run: |
+          docker build -t build - < .github/build/linux.Dockerfile
+          mkdir -p ~/.cargo/registry ~/.cargo/git
+          docker run -d --name build --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" \
+            -v "$HOME/.cargo/registry:/usr/local/cargo/registry" -v "$HOME/.cargo/git:/usr/local/cargo/git" \
+            -e CARGO_TERM_COLOR build sleep infinity
+          docker exec build rustup toolchain install
+      - name: Build
+        run: docker exec build cargo build --release -p wavedude-app -p wavedude-cli
+      # Then the check itself: below every version the CLI needs, it has to fail.
+      - name: glibc floor
+        run: |
+          docker exec build .github/build/glibc-floor.sh target/release/wavedude-app target/release/wavedude-cli
+          if docker exec -e GLIBC_FLOOR=2.0 build .github/build/glibc-floor.sh target/release/wavedude-cli 2> /dev/null; then
+            echo "::error::glibc-floor.sh passed with a floor below every version"
+            exit 1
+          fi
+      - name: Smoke test
+        run: |
+          base=$(sed -n 's/^FROM //p' .github/build/linux.Dockerfile)
+          docker run --rm -v "$GITHUB_WORKSPACE/target/release:/release:ro" "$base" \
+            sh -ec '/release/wavedude-cli --version; ! ldd /release/wavedude-app | grep "not found"'
 
   # The caches of the default branch: one per key, the newest. rust-cache keys end in the lockfile's hash, so each
   # dependency bump would leave a generation behind until the 10 GB allowance evicts it.
   caches:
     name: Prune caches
-    needs: [ubuntu, windows, macos, msrv, wasm32]
+    needs: [ubuntu, windows, macos, msrv, wasm32, glibc]
     if: always() && github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       actions: write
     env:

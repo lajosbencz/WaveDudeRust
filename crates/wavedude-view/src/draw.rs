@@ -1,9 +1,8 @@
-//! What the shapes of [`crate::overlay`] and [`crate::graph`] share: text measured and laid out by epaint's fonts,
-//! text over a halo stroked along its glyphs' outlines, and the device grid that puts hairlines and text on whole
-//! device pixels.
+//! What the shapes of [`crate::overlay`] and [`crate::graph`] share: text measured and laid out by epaint's fonts, text
+//! over a halo stroked along its glyphs' outlines, and the device grid that puts hairlines and text on whole device
+//! pixels.
 //!
-//! Shapes are epaint shapes in points; a canvas drawn at one device pixel per point (an export) has its pixels as
-//! points.
+//! Shapes are epaint shapes in points; a canvas drawn at one device pixel per point (an export) has its pixels as points.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -23,9 +22,9 @@ pub trait TextMetrics {
 }
 
 /// [`TextMetrics`] of one font through epaint's fonts, in points.
-pub struct FontMetrics<'a, 'f> {
-	pub fonts: &'a mut FontsView<'f>,
-	pub font: FontId,
+pub(crate) struct FontMetrics<'a, 'f> {
+	pub(crate) fonts: &'a mut FontsView<'f>,
+	pub(crate) font: FontId,
 }
 
 impl TextMetrics for FontMetrics<'_, '_> {
@@ -199,7 +198,13 @@ impl OutlinePen for Flattener {
 }
 
 /// `text` on one line, cut to `max_width` logical pixels with an ellipsis when longer.
-pub fn elided(fonts: &mut FontsView<'_>, text: &str, font: FontId, color: Color32, max_width: f32) -> Arc<Galley> {
+pub(crate) fn elided(
+	fonts: &mut FontsView<'_>,
+	text: &str,
+	font: FontId,
+	color: Color32,
+	max_width: f32,
+) -> Arc<Galley> {
 	let mut job = LayoutJob::simple_singleline(text.to_owned(), font, color);
 	job.wrap = TextWrapping::truncate_at_width(max_width);
 	fonts.layout_job(job)
@@ -253,11 +258,11 @@ pub fn closed_line(mut points: Vec<Pos2>, stroke: impl Into<PathStroke>) -> Shap
 }
 
 /// An element's logical pixels (points) mapped onto whole device pixels: `scale` device pixels per point, the
-/// element's origin `fx`, `fy` of a device pixel past the device grid.
+/// An element's logical pixels (points) mapped onto whole device pixels: `scale` device pixels per point, the element's
+/// origin `fx`, `fy` of a device pixel past the device grid.
 ///
 /// Device units are relative to the device pixel under the element's origin, so integers lie on the screen's pixel
-/// grid; [`DeviceGrid::x`] and [`DeviceGrid::y`] map the element's logical coordinates into them and
-/// [`DeviceGrid::point`] maps device units back to points of the window.
+/// grid; [`DeviceGrid::x`] and [`DeviceGrid::y`] map logical coordinates into them and [`DeviceGrid::point`] maps back.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DeviceGrid {
 	pub scale: f32,

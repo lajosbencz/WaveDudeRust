@@ -358,7 +358,7 @@ enum Press {
 /// One line at `rect`: time, level, short source and message in the level's colour or the selection's. The source
 /// shows its full name and a multi-line message its whole text under the pointer.
 fn row(
-	ui: &mut Ui,
+	ui: &Ui,
 	rect: Rect,
 	line: &LogLine,
 	selected: bool,

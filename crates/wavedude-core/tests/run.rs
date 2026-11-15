@@ -5,11 +5,11 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant};
 
 use wavedude_core::engine::capture::field_index;
 use wavedude_core::engine::cpu::CpuEngine;
+use wavedude_core::engine::probes::{ProbeCollector, ProbeTrace, record};
 use wavedude_core::engine::{SampleFormat, Snapshot, WaveEngine};
 use wavedude_core::f16;
 use wavedude_core::model::{Layer, Measurement, Probe, ProbeKind, Project, Source};
@@ -59,18 +59,31 @@ fn engine(spec: &RunSpec) -> Box<dyn WaveEngine> {
 }
 
 fn store(spec: &RunSpec, budget: u64) -> Arc<FrameStore> {
-	Arc::new(FrameStore::new(StoreLayout::of(spec), budget, None).unwrap())
+	Arc::new(FrameStore::in_dir(StoreLayout::of(spec), budget, None, &FrameStore::default_dir()).unwrap())
 }
 
-fn events() -> (Option<EventSink>, Receiver<RunEvent>) {
-	let (tx, rx) = channel();
-	(Some(Box::new(move |e| drop(tx.send(e)))), rx)
-}
-
-fn run(spec: &RunSpec, budget: u64) -> SimulationRun {
-	let mut r = SimulationRun::start(spec.clone(), store(spec, budget), engine(spec), None).unwrap();
-	assert_eq!(r.wait(), RunState::Completed);
-	r
+/// `spec` stepped straight through, each stored frame captured as it passes and every step's probe readings
+/// recorded: the frames and traces a live run is held to.
+fn batch(spec: &RunSpec) -> (Arc<FrameStore>, Vec<ProbeTrace>) {
+	let st = store(spec, GIB);
+	let mut e = engine(spec);
+	let mut collector = ProbeCollector::new(&spec.probes, &spec.scene, spec.seed);
+	e.set_emitters(&spec.emitters);
+	e.set_probes(collector.cells());
+	e.reset();
+	let mut recorded = 0;
+	for i in 0..spec.schedule.steps {
+		e.advance_one_step().unwrap();
+		if !spec.probes.is_empty() {
+			e.queue_probes().unwrap();
+			let readings = e.pending_probes().unwrap();
+			record(e.as_mut(), readings, &mut collector, &mut recorded, spec.schedule.visualize_every).unwrap();
+		}
+		if i % spec.schedule.capture_every() == 0 {
+			st.write(e.capture_frame(&spec.shape).unwrap()).unwrap();
+		}
+	}
+	(st, collector.traces)
 }
 
 fn halves(bytes: &[u8]) -> Vec<f16> {
@@ -89,21 +102,21 @@ fn snapshot_of(spec: &RunSpec, seed: f32) -> Snapshot {
 fn reduced_run_schedule() {
 	let p = project(64, 48, 200);
 	let s = spec(&p, PreviewQuality::new(2, 2, SampleFormat::Index));
-	assert_eq!((s.frame_count(), s.stored_frames(), s.capture_every()), (100, 50, 4));
+	assert_eq!((s.schedule.frame_count(), s.schedule.stored_frames(), s.schedule.capture_every()), (100, 50, 4));
 	assert_eq!((s.shape.width(), s.shape.height(), s.shape.plane_bytes()), (32, 24, 32 * 24));
-	assert_eq!((s.stored_index_of(98), s.stored_index_of(99)), (49, 49));
-	let r = run(&s, GIB);
-	assert_eq!(r.store().count(), 50);
-	assert_eq!(r.frame_count(), 100);
-	assert_eq!(r.store().copy_layer(49, Layer::Field).unwrap().len(), 32 * 24);
-	assert_eq!(r.store().step_of(49), 196);
+	assert_eq!((s.schedule.stored_index_of(98), s.schedule.stored_index_of(99)), (49, 49));
+	let (st, _) = batch(&s);
+	assert_eq!(st.count(), 50);
+	assert_eq!(s.schedule.covered_frames(50), 100);
+	assert_eq!(st.copy_layer(49, Layer::Field).unwrap().len(), 32 * 24);
+	assert_eq!(st.step_of(49), 196);
 }
 
 #[test]
 fn spec_snapshot() {
 	let mut p = with_probes(project(64, 48, 21));
 	let s = spec(&p, PreviewQuality::FULL);
-	assert_eq!(s.frame_count(), 11, "ceil(21 / 2)");
+	assert_eq!(s.schedule.frame_count(), 11, "ceil(21 / 2)");
 	assert_eq!(s.probes.len(), 3, "inactive probes left out");
 	assert_eq!(s.layers(), &[Layer::Field, Layer::Intensity]);
 	let brightness = (p.display.field.brightness as f32, p.display.intensity.brightness as f32);
@@ -239,7 +252,7 @@ fn readers_on_other_threads_see_every_written_frame() {
 			})
 		})
 		.collect();
-	for k in 0..s.stored_frames() {
+	for k in 0..s.schedule.stored_frames() {
 		st.write(snapshot_of(&s, k as f32)).unwrap();
 	}
 	done.store(true, Ordering::Release);
@@ -257,7 +270,7 @@ fn the_memory_tier_waits_for_the_release() {
 		std::thread::sleep(Duration::from_millis(50));
 		flag.store(true, Ordering::Release);
 	});
-	let st = FrameStore::new(StoreLayout::of(&s), GIB, Some(release)).unwrap();
+	let st = FrameStore::in_dir(StoreLayout::of(&s), GIB, Some(release), &FrameStore::default_dir()).unwrap();
 	assert!(!released.load(Ordering::Acquire));
 	let block = st.next_buffer();
 	assert!(released.load(Ordering::Acquire), "the first block came after the release");
@@ -269,7 +282,7 @@ fn the_memory_tier_waits_for_the_release() {
 #[test]
 fn the_release_signal_fires_when_the_last_handle_drops() {
 	let s = spec(&project(40, 30, 4), PreviewQuality::FULL);
-	let st = Arc::new(FrameStore::new(StoreLayout::of(&s), GIB, None).unwrap());
+	let st = store(&s, GIB);
 	let signal = st.release_signal();
 	let reader = st.clone();
 	drop(st);
@@ -314,72 +327,21 @@ fn store_bytes_at_equals_the_store_a_run_allocates() {
 #[test]
 fn index_frames_are_the_palette_index_of_the_half() {
 	let s = spec(&project(64, 48, 30), PreviewQuality::FULL);
-	let half = run(&s, GIB);
-	let index = run(&s.with_quality(PreviewQuality::new(1, 1, SampleFormat::Index)), GIB);
+	let (half, _) = batch(&s);
+	let (index, _) = batch(&s.with_quality(PreviewQuality::new(1, 1, SampleFormat::Index)));
 	for k in [3, 14] {
-		let h = halves(&half.store().copy_layer(k, Layer::Field).unwrap());
-		let x = index.store().copy_layer(k, Layer::Field).unwrap();
+		let h = halves(&half.copy_layer(k, Layer::Field).unwrap());
+		let x = index.copy_layer(k, Layer::Field).unwrap();
 		assert_eq!(x, h.iter().map(|&v| field_index(v, 1.0)).collect::<Vec<_>>());
 	}
 }
 
-// ---- simulation runs ----
-
-#[test]
-fn a_run_completes() {
-	let s = spec(&project(64, 48, 20), PreviewQuality::FULL);
-	let (sink, rx) = events();
-	let mut r = SimulationRun::start(s.clone(), store(&s, GIB), engine(&s), sink).unwrap();
-	assert_eq!(r.wait(), RunState::Completed);
-	assert!(r.is_finished());
-	let events: Vec<RunEvent> = rx.try_iter().collect();
-	assert_eq!(events.first(), Some(&RunEvent::State(RunState::Running)));
-	assert_eq!(events.last(), Some(&RunEvent::State(RunState::Completed)));
-	assert_eq!(events.iter().filter(|e| matches!(e, RunEvent::State(RunState::Completed))).count(), 1);
-	assert!(events.contains(&RunEvent::Progress { steps_done: 20, frames: 10 }));
-	assert_eq!((r.store().count(), r.frame_count(), r.steps_done()), (10, 10, 20));
-	let last = halves(&r.store().copy_layer(9, Layer::Field).unwrap());
-	let at = |x: usize, y: usize| last[y * 64 + x].to_f32();
-	assert!(at(32, 24) != 0.0, "field at the source");
-	assert_eq!(at(2, 2), 0.0, "18 steps reach no corner");
-	let engine = r.into_engine().unwrap();
-	assert_eq!(engine.time(), 20);
-}
-
-#[test]
-fn pause_resume_and_cancel() {
-	let s = spec(&project(96, 72, 4000), PreviewQuality::new(1, 4, SampleFormat::Index));
-	let (sink, rx) = events();
-	let r = SimulationRun::start(s.clone(), store(&s, GIB), engine(&s), sink).unwrap();
-	r.pause();
-	assert!(r.is_pause_requested());
-	let deadline = Instant::now() + Duration::from_secs(20);
-	while !rx.try_iter().any(|e| e == RunEvent::State(RunState::Paused)) {
-		assert!(Instant::now() < deadline, "no pause");
-		std::thread::sleep(Duration::from_millis(1));
-	}
-	assert_eq!(r.state(), RunState::Paused);
-	let held = r.steps_done();
-	std::thread::sleep(Duration::from_millis(60));
-	assert_eq!(r.steps_done(), held, "paused runs do not step");
-	r.resume();
-	while r.steps_done() == held {
-		assert!(Instant::now() < deadline, "no resume");
-		std::thread::sleep(Duration::from_millis(1));
-	}
-	r.cancel();
-	let mut r = r;
-	assert_eq!(r.wait(), RunState::Cancelled);
-	assert!(r.steps_done() < 4000);
-	assert_eq!(r.frame_count(), s.covered_frames(r.store().count() as u32));
-	assert_eq!(rx.try_iter().last(), Some(RunEvent::State(RunState::Cancelled)));
-}
+// ---- probes ----
 
 #[test]
 fn probe_traces_of_a_run() {
 	let s = spec(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
-	let r = run(&s, GIB);
-	let t = r.traces();
+	let (_, t) = batch(&s);
 	assert_eq!(t.len(), 3);
 	assert_eq!(t[0].series.len(), 100, "one sample per step");
 	assert_eq!(t[1].series.len(), 100);
@@ -389,7 +351,7 @@ fn probe_traces_of_a_run() {
 	assert_eq!(t[2].profiles.first().map(<[f32]>::len), Some(13));
 	assert!((t[2].length - 12f64.hypot(2.0)).abs() < 1e-12);
 	// Graph data at frame 20 / step 40.
-	assert_eq!(t[0].series[..=s.step_of(20) as usize].len(), 41);
+	assert_eq!(t[0].series[..=s.schedule.step_of(20) as usize].len(), 41);
 	assert_eq!((t[0].steps_sampled, t[2].steps_sampled), (100, 99), "the last frame closes at step index 98");
 }
 
@@ -436,18 +398,36 @@ fn same_frames(a: &FrameStore, b: &FrameStore, frames: u32) {
 }
 
 #[test]
+fn a_waiter_wakes_for_the_frames_and_the_end_of_a_run_of_every_frame() {
+	let dir = tempfile::tempdir().unwrap();
+	let p = project(64, 48, 20);
+	let w = worker(dir.path());
+	w.set_goal(goal(&request(&p, PreviewQuality::FULL), 0, Wanted::All));
+	let st = w.wait_until(|s| s.store.is_some()).store.unwrap();
+	for k in 1..=10 {
+		w.wait_until(|_| st.count() >= k);
+	}
+	let done = w.wait_until(|s| s.state == WorkState::Idle && s.adopted == 1);
+	assert_eq!((st.count(), done.steps_done), (10, 19), "the last frame is the state after 19 steps");
+	same_frames(&st, &batch(&spec(&p, PreviewQuality::FULL)).0, 10);
+	let last = halves(&st.copy_layer(9, Layer::Field).unwrap());
+	let at = |x: usize, y: usize| last[y * 64 + x].to_f32();
+	assert!(at(32, 24) != 0.0, "field at the source");
+	assert_eq!(at(2, 2), 0.0, "19 steps reach no corner");
+}
+
+#[test]
 fn the_live_run_makes_the_batch_runs_frames_the_positions_first_or_all_on_the_way() {
 	let dir = tempfile::tempdir().unwrap();
 	let s = spec(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
 	let s_run = request(&with_probes(project(64, 48, 100)), PreviewQuality::FULL);
-	let r = run(&s, GIB);
-	let run_traces = r.traces();
+	let (r, run_traces) = batch(&s);
 	let w = worker(dir.path());
 	w.set_goal(goal(&s_run, 20, Wanted::Position));
 	wait_until(|| store_has(&w, 20));
 	let st = w.store().unwrap();
-	assert_eq!(st.copy_layer(20, Layer::Field).unwrap(), r.store().copy_layer(20, Layer::Field).unwrap());
-	assert_eq!(st.copy_layer(20, Layer::Intensity).unwrap(), r.store().copy_layer(20, Layer::Intensity).unwrap());
+	assert_eq!(st.copy_layer(20, Layer::Field).unwrap(), r.copy_layer(20, Layer::Field).unwrap());
+	assert_eq!(st.copy_layer(20, Layer::Intensity).unwrap(), r.copy_layer(20, Layer::Intensity).unwrap());
 	wait_until(|| w.status().state == WorkState::Idle);
 	assert_eq!((st.present_count(), st.count()), (1, 0), "the position alone, and no prefix");
 	w.with_traces(|t| {
@@ -461,7 +441,7 @@ fn the_live_run_makes_the_batch_runs_frames_the_positions_first_or_all_on_the_wa
 	w.set_goal(goal(&s_run, 20, Wanted::All));
 	wait_until(|| w.store().is_some_and(|s| s.is_complete()));
 	wait_until(|| w.status().state == WorkState::Idle);
-	same_frames(&st, r.store(), s.stored_frames());
+	same_frames(&st, &r, s.schedule.stored_frames());
 	w.with_traces(|t| assert_eq!(t, &run_traces[..], "the traces of the whole run"));
 	assert!(Arc::ptr_eq(&st, &w.store().unwrap()), "one store throughout");
 
@@ -472,8 +452,8 @@ fn the_live_run_makes_the_batch_runs_frames_the_positions_first_or_all_on_the_wa
 	let st = w.store().unwrap();
 	assert!(st.count() >= 21, "the frames before the position landed on the way to it");
 	wait_until(|| st.is_complete() && w.status().state == WorkState::Idle);
-	assert_eq!(w.status().steps_done, s.steps, "one pass, no wrap");
-	same_frames(&st, r.store(), s.stored_frames());
+	assert_eq!(w.status().steps_done, s.schedule.steps, "one pass, no wrap");
+	same_frames(&st, &r, s.schedule.stored_frames());
 }
 
 /// A spill never opened: the frames fit in memory.
@@ -493,18 +473,18 @@ impl SpillFactory for NoSpill {
 fn a_pumped_live_run_makes_the_batch_runs_frames() {
 	let p = with_probes(project(64, 48, 40));
 	let s = spec(&p, PreviewQuality::FULL);
-	let r = run(&s, GIB);
+	let (r, traces) = batch(&s);
 	let start: PumpedFactory = Box::new(|scene, options| -> EngineFuture {
 		Box::pin(async move { Box::new(CpuEngine::new(scene, options)) as Box<dyn WaveEngine> })
 	});
-	let w = RunWorker::pumped(start, GIB, Box::new(NoSpill), Arc::default());
+	let w = RunWorker::pumped(start, GIB, GIB, Box::new(NoSpill), Arc::default());
 	w.set_goal(goal(&request(&p, PreviewQuality::FULL), 0, Wanted::All));
 	while w.pump(Duration::from_millis(50), std::task::Waker::noop()) != Pump::Idle {}
 	assert_eq!(w.status().state, WorkState::Idle);
 	let st = w.store().unwrap();
 	assert!(st.is_complete());
-	same_frames(&st, r.store(), s.stored_frames());
-	w.with_traces(|t| assert_eq!(t, &r.traces()[..]));
+	same_frames(&st, &r, s.schedule.stored_frames());
+	w.with_traces(|t| assert_eq!(t, &traces[..]));
 }
 
 #[test]
@@ -515,7 +495,7 @@ fn the_traces_of_the_frame_kept_through_a_clear_are_held_with_it() {
 	let w = worker(dir.path());
 	w.set_goal(goal(&s_run, 20, Wanted::Position));
 	wait_until(|| store_has(&w, 20) && w.status().state == WorkState::Idle);
-	let before = w.with_traces(<[wavedude_core::engine::probes::ProbeTrace]>::to_vec);
+	let before = w.with_traces(<[ProbeTrace]>::to_vec);
 	w.with_held_traces(|t| assert!(t.is_empty(), "nothing before the first generation"));
 	w.set_goal(Goal { revision: 2, paused: true, ..goal(&s_run, 20, Wanted::Position) });
 	wait_until(|| w.status().adopted == 2 && w.status().state == WorkState::Idle);
@@ -683,13 +663,13 @@ fn a_rebuilt_engine_keeps_the_frames_and_the_traces() {
 	w.set_goal(goal(&request(&p, PreviewQuality::FULL), 20, Wanted::All));
 	wait_until(|| w.store().is_some_and(|s| s.is_complete()) && w.status().state == WorkState::Idle);
 	let st = w.store().unwrap();
-	let traces = w.with_traces(<[wavedude_core::engine::probes::ProbeTrace]>::to_vec);
+	let traces = w.with_traces(<[ProbeTrace]>::to_vec);
 	w.rebuild_engine();
 	w.set_goal(Goal { revision: 2, ..goal(&request(&p, PreviewQuality::FULL), 30, Wanted::All) });
 	wait_until(|| built.load(Ordering::Acquire) == 2 && w.status().state == WorkState::Idle);
 	assert!(st.is_complete(), "the frames stayed");
 	w.with_traces(|t| assert_eq!(t, &traces[..], "the traces stayed"));
-	same_frames(&st, run(&s, GIB).store(), s.stored_frames());
+	same_frames(&st, &batch(&s).0, s.schedule.stored_frames());
 }
 
 #[test]
@@ -697,20 +677,19 @@ fn the_probes_tail_is_recorded_from_wherever_the_engine_stands() {
 	let dir = tempfile::tempdir().unwrap();
 	let s = spec(&with_probes(project(96, 72, 4000)), PreviewQuality::new(1, 4, SampleFormat::Index));
 	let s_run = request(&with_probes(project(96, 72, 4000)), PreviewQuality::new(1, 4, SampleFormat::Index));
-	let last = s.stored_frames() - 1;
+	let last = s.schedule.stored_frames() - 1;
 	let w = worker(dir.path());
-	w.set_goal(goal(&s_run, last * s.frame_divisor(), Wanted::Position));
+	w.set_goal(goal(&s_run, last * s.schedule.frame_divisor(), Wanted::Position));
 	wait_until(|| store_has(&w, last) && w.status().state == WorkState::Idle);
 	w.set_goal(goal(&s_run, 0, Wanted::Position));
 	wait_until(|| store_has(&w, 0) && w.status().state == WorkState::Idle);
-	let to_last = last * s.capture_every() + 1;
+	let to_last = last * s.schedule.capture_every() + 1;
 	assert_eq!(w.status().traces_steps, to_last, "the traces reach the last frame, not the last step");
 	w.set_goal(goal(&s_run, 0, Wanted::All));
 	let st = w.store().unwrap();
 	wait_until(|| st.is_complete() && w.status().state == WorkState::Idle);
 	assert_eq!(w.status().traces_steps, 4000, "the tail was recorded although the engine stood before it");
-	let r = run(&s, GIB);
-	w.with_traces(|t| assert_eq!(t, &r.traces()[..]));
+	w.with_traces(|t| assert_eq!(t, &batch(&s).1[..]));
 }
 
 #[test]
@@ -767,9 +746,9 @@ fn a_probe_change_keeps_the_frames_and_records_anew() {
 	wait_until(|| w.status().adopted == 2);
 	assert!(st.is_complete(), "the frames stay");
 	wait_until(|| w.status().traces_steps == 60 && w.status().state == WorkState::Idle);
-	let r = run(&moved, GIB);
-	w.with_traces(|t| assert_eq!(t, &r.traces()[..]));
-	same_frames(&st, r.store(), moved.stored_frames());
+	let (r, traces) = batch(&moved);
+	w.with_traces(|t| assert_eq!(t, &traces[..]));
+	same_frames(&st, &r, moved.schedule.stored_frames());
 }
 
 #[test]
@@ -788,8 +767,8 @@ fn a_frame_change_starts_over_in_the_same_store() {
 	wait_until(|| w.status().adopted == 2 && store_has(&w, 3) && w.status().state == WorkState::Idle);
 	assert!(Arc::ptr_eq(&st, &w.store().unwrap()), "the same layout keeps the store");
 	assert_eq!((st.present_count(), st.generation()), (1, 1), "cleared once, the position's frame back");
-	let r = run(&other, GIB);
-	assert_eq!(st.copy_layer(3, Layer::Field).unwrap(), r.store().copy_layer(3, Layer::Field).unwrap());
+	let (r, _) = batch(&other);
+	assert_eq!(st.copy_layer(3, Layer::Field).unwrap(), r.copy_layer(3, Layer::Field).unwrap());
 	let index_run = request(&p, PreviewQuality::DEFAULT);
 	w.set_goal(Goal { revision: 3, ..goal(&index_run, 3, Wanted::Position) });
 	wait_until(|| w.status().adopted == 3 && store_has(&w, 3));
@@ -801,7 +780,7 @@ fn the_fit_frame_is_the_positions_frame_in_halves() {
 	let dir = tempfile::tempdir().unwrap();
 	let s_run = request(&project(64, 48, 40), PreviewQuality::DEFAULT);
 	let full = spec(&project(64, 48, 40), PreviewQuality::FULL);
-	let r = run(&full, GIB);
+	let (r, _) = batch(&full);
 	let w = worker(dir.path());
 	let mut g = goal(&s_run, 7, Wanted::Position);
 	g.fit = Some(FitRequest { id: 1, frame: 7 });
@@ -813,7 +792,7 @@ fn the_fit_frame_is_the_positions_frame_in_halves() {
 		std::thread::sleep(Duration::from_millis(2));
 	};
 	assert_eq!((fit.id, fit.frame, fit.snapshot.shape.format, fit.snapshot.step), (1, 7, SampleFormat::Half, 14));
-	assert_eq!(fit.snapshot.field, r.store().copy_layer(7, Layer::Field).unwrap());
+	assert_eq!(fit.snapshot.field, r.copy_layer(7, Layer::Field).unwrap());
 	wait_until(|| store_has(&w, 7) && w.status().state == WorkState::Idle);
 	assert!(w.take_fit().is_none(), "served once");
 }
@@ -949,8 +928,7 @@ fn a_frame_for_later_is_left_for_the_frame_looked_at_and_the_tail_comes_before_t
 	w.set_goal(goal(&s_run, 500, Wanted::All));
 	wait_until(|| st.is_complete() && w.status().state == WorkState::Idle);
 	assert_eq!(w.status().traces_steps, 4000, "the probes' tail was recorded");
-	let r = run(&s, GIB);
-	w.with_traces(|t| assert_eq!(t, &r.traces()[..]));
+	w.with_traces(|t| assert_eq!(t, &batch(&s).1[..]));
 }
 
 /// `part`: the first part moves (the scene recomposed per edit) instead of the first source.

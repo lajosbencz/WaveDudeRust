@@ -82,20 +82,16 @@ fn z_at(j: u32, gx: i32, gy: u32) -> f32 {
 
 // The taps of z~ along x around padded cell i, the taps beyond a mirror dropped.
 fn z_taps(i: u32, gx: u32, gy: u32, bits: u32) -> array<f32, 7> {
-	let m1 = (bits & 1u) != 0u;
-	let m2 = (bits & 2u) != 0u;
-	let p1 = (bits & 4u) != 0u;
-	let p2 = (bits & 8u) != 0u;
 	let x = i32(gx);
-	return array<f32, 7>(
-		select(z_at(i - 3u, x - 3, gy), 0.0, m1 || m2),
-		select(z_at(i - 2u, x - 2, gy), 0.0, m1),
+	return cut_taps(array<f32, 7>(
+		z_at(i - 3u, x - 3, gy),
+		z_at(i - 2u, x - 2, gy),
 		z_at(i - 1u, x - 1, gy),
 		z_at(i, x, gy),
 		z_at(i + 1u, x + 1, gy),
-		select(z_at(i + 2u, x + 2, gy), 0.0, p1),
-		select(z_at(i + 3u, x + 3, gy), 0.0, p1 || p2),
-	);
+		z_at(i + 2u, x + 2, gy),
+		z_at(i + 3u, x + 3, gy),
+	), bits);
 }
 
 fn stretched(tp: array<f32, 7>, c: vec4<f32>, dpsi: f32, k: u32) -> f32 {
@@ -162,9 +158,9 @@ fn pml_correct(@builtin(global_invocation_id) id: vec3<u32>, @builtin(num_workgr
 	var gx: u32;
 	var gy: u32;
 	if t < top {
-		let row = t / p.gw;
-		gx = t % p.gw;
-		gy = select(p.gh - 2u * r + row, row, row < r);
+		let g = y_cell(t);
+		gx = g.x;
+		gy = g.y;
 	} else {
 		let k = t - top;
 		let col = k % (2u * r);

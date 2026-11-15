@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use wavedude_core::engine::capture;
 use wavedude_core::engine::cpu::CpuEngine;
-use wavedude_core::engine::gpu::{BATCH_STEPS, GpuContext, GpuEngine, GpuError, MediumLayout, context};
+use wavedude_core::engine::gpu::{BATCH_STEPS, GpuContext, GpuEngine, GpuError, context};
 use wavedude_core::engine::{
 	Emitter, EngineOptions, FrameShape, ProbeCells, ProbeReadings, SampleFormat, SceneData, Snapshot, WaveEngine,
 };
@@ -117,9 +117,9 @@ fn emitters() -> Vec<Emitter> {
 	]
 }
 
-fn engines(stencil: Stencil, edges: Edges, layout: MediumLayout) -> (CpuEngine, GpuEngine) {
+fn engines(stencil: Stencil, edges: Edges) -> (CpuEngine, GpuEngine) {
 	let mut cpu = CpuEngine::new(scene(edges, 100), options(stencil));
-	let mut gpu = GpuEngine::with_layout(scene(edges, 100), options(stencil), layout).expect("GPU engine");
+	let mut gpu = GpuEngine::new(scene(edges, 100), options(stencil)).expect("GPU engine");
 	cpu.set_emitters(&emitters());
 	gpu.set_emitters(&emitters());
 	(cpu, gpu)
@@ -150,12 +150,9 @@ fn parity_with_the_cpu_engine() {
 	if !gpu_available() {
 		return;
 	}
-	let mut cases: Vec<_> = STENCILS.iter().flat_map(|&s| EDGES.map(|e| (s, e, MediumLayout::Compact))).collect();
-	cases.push((Stencil::FourthOrder, Edges::Open, MediumLayout::Plain));
-	for (stencil, edges, layout) in cases {
-		let (mut cpu, mut gpu) = engines(stencil, edges, layout);
+	for (stencil, edges) in STENCILS.iter().flat_map(|&s| EDGES.map(|e| (s, e))) {
+		let (mut cpu, mut gpu) = engines(stencil, edges);
 		assert_eq!(gpu.sub_steps(), cpu.sub_steps());
-		assert_eq!(gpu.medium_layout(), layout);
 		run(&mut cpu, 1000);
 		run(&mut gpu, 1000);
 		let (cf, ci) = cpu.prepare_frame();
@@ -165,11 +162,40 @@ fn parity_with_the_cpu_engine() {
 		let intensity = relative(&roots(&gi), &roots(&ci));
 		let identical = cf.iter().zip(&gf).filter(|(a, b)| a.to_bits() == b.to_bits()).count();
 		eprintln!(
-			"{stencil:?} {edges:?} {layout:?}: field {field:.2e}, sqrt(I) {intensity:.2e}, {identical} of {} cells bit-identical",
+			"{stencil:?} {edges:?}: field {field:.2e}, sqrt(I) {intensity:.2e}, {identical} of {} cells bit-identical",
 			cf.len()
 		);
 		assert!(field <= 1e-4, "{stencil:?} {edges:?}: field differs by {field:e} of its peak");
 		assert!(intensity <= 1e-3, "{stencil:?} {edges:?}: sqrt(I) differs by {intensity:e} of its peak");
+	}
+}
+
+/// Tracking turned off without a reset leaves no intensity, and turned on again it restarts from zero, as
+/// the CPU's does.
+#[test]
+fn the_intensity_restarts_when_tracking_is_toggled_without_a_reset() {
+	if !gpu_available() {
+		return;
+	}
+	for stencil in STENCILS {
+		let (mut cpu, mut gpu) = engines(stencil, Edges::Open);
+		run(&mut cpu, 200);
+		run(&mut gpu, 200);
+		cpu.set_track_intensity(false);
+		gpu.set_track_intensity(false);
+		run(&mut cpu, 20);
+		run(&mut gpu, 20);
+		let (ci, gi) = (cpu.prepare_frame().1, gpu.prepare_frame().unwrap().1);
+		assert!(ci.iter().all(|&v| v == 0.0), "{stencil:?}: the CPU keeps an untracked intensity");
+		assert!(gi.iter().all(|&v| v == 0.0), "{stencil:?}: the GPU keeps an untracked intensity of {}", peak(&gi));
+		cpu.set_track_intensity(true);
+		gpu.set_track_intensity(true);
+		run(&mut cpu, 100);
+		run(&mut gpu, 100);
+		let (ci, gi) = (cpu.prepare_frame().1, gpu.prepare_frame().unwrap().1);
+		assert!(peak(&ci) > 0.0, "{stencil:?}: the intensity is tracked again");
+		let intensity = relative(&roots(&gi), &roots(&ci));
+		assert!(intensity <= 1e-3, "{stencil:?}: sqrt(I) differs by {intensity:e} of its peak");
 	}
 }
 
@@ -340,7 +366,7 @@ fn captured_planes_match() {
 		return;
 	}
 	for stencil in STENCILS {
-		let (mut cpu, mut gpu) = engines(stencil, Edges::Open, MediumLayout::Compact);
+		let (mut cpu, mut gpu) = engines(stencil, Edges::Open);
 		run(&mut cpu, 400);
 		run(&mut gpu, 400);
 		let (field, intensity) = gpu.prepare_frame().unwrap();
@@ -481,9 +507,10 @@ fn a_capture_is_ready_once_the_map_completes() {
 	let settings = Scene { damping_edge: 0, ..Scene::default() };
 	let data = SceneData::blank(64, 48, &settings);
 	let mut gpu =
-		pollster::block_on(GpuEngine::create(ctx.clone(), data, options(Stencil::NinePoint), MediumLayout::Compact))
-			.expect("GPU engine");
+		pollster::block_on(GpuEngine::create(ctx.clone(), data, options(Stencil::NinePoint))).expect("GPU engine");
 	run(&mut gpu, 4);
+	// nothing else in flight, so pacing the capture's submission polls no device
+	gpu.synchronize().unwrap();
 	let shape = FrameShape { canvas_width: 64, canvas_height: 48, ..shape(1, SampleFormat::Half) };
 	let pending = gpu.begin_capture(&shape, Snapshot::new(shape)).unwrap();
 	let mut ready = std::pin::pin!(pending.ready());
@@ -527,7 +554,6 @@ fn an_adopted_device_runs_engines_with_its_own_limits() {
 		ctx.clone(),
 		SceneData::blank(64, 48, &settings),
 		options(Stencil::NinePoint),
-		MediumLayout::Compact,
 	))
 	.expect("GPU engine");
 	run(&mut gpu, 4);
@@ -607,8 +633,8 @@ fn runs_are_deterministic() {
 		let bits: Vec<u32> = f.iter().chain(&i).map(|v| v.to_bits()).collect();
 		(bits, gpu.capture_frame(&shape).unwrap().field)
 	};
-	let (_, mut a) = engines(Stencil::FourthOrder, Edges::Open, MediumLayout::Compact);
-	let (_, mut b) = engines(Stencil::FourthOrder, Edges::Open, MediumLayout::Compact);
+	let (_, mut a) = engines(Stencil::FourthOrder, Edges::Open);
+	let (_, mut b) = engines(Stencil::FourthOrder, Edges::Open);
 	let first = trace(&mut a);
 	assert!(first == trace(&mut b), "two engines");
 	a.reset();
@@ -647,7 +673,7 @@ fn probes_match() {
 	if !gpu_available() {
 		return;
 	}
-	let (mut cpu, mut gpu) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
+	let (mut cpu, mut gpu) = engines(Stencil::NinePoint, Edges::Open);
 	let cell = |x: u32, y: u32| (x, y);
 	let probes = [
 		ProbeCells { layer: Layer::Field, cells: vec![cell(64, 48)] },
@@ -693,8 +719,8 @@ fn queued_probes_read_like_sampled_ones() {
 	if !gpu_available() {
 		return;
 	}
-	let (_, mut a) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
-	let (_, mut b) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
+	let (_, mut a) = engines(Stencil::NinePoint, Edges::Open);
+	let (_, mut b) = engines(Stencil::NinePoint, Edges::Open);
 	let probes = probe_set();
 	a.set_probes(&probes);
 	b.set_probes(&probes);
@@ -735,8 +761,8 @@ fn pending_probes_drain_like_sampled_ones_once_ready() {
 		return;
 	}
 	let device = &context().unwrap().device;
-	let (_, mut a) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
-	let (_, mut b) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
+	let (_, mut a) = engines(Stencil::NinePoint, Edges::Open);
+	let (_, mut b) = engines(Stencil::NinePoint, Edges::Open);
 	let probes = probe_set();
 	a.set_probes(&probes);
 	b.set_probes(&probes);
@@ -796,8 +822,8 @@ fn a_reset_drops_the_probe_readbacks_in_flight() {
 		return;
 	}
 	let device = &context().unwrap().device;
-	let (_, mut a) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
-	let (_, mut b) = engines(Stencil::NinePoint, Edges::Open, MediumLayout::Compact);
+	let (_, mut a) = engines(Stencil::NinePoint, Edges::Open);
+	let (_, mut b) = engines(Stencil::NinePoint, Edges::Open);
 	let probes = probe_set();
 	a.set_probes(&probes);
 	b.set_probes(&probes);
@@ -840,7 +866,7 @@ fn replaced_scene_steps_like_a_fresh_engine() {
 		return;
 	}
 	let stencil = Stencil::FourthOrder;
-	let (_, mut kept) = engines(stencil, Edges::Open, MediumLayout::Compact);
+	let (_, mut kept) = engines(stencil, Edges::Open);
 	run(&mut kept, 50);
 	let slower = Arc::new(scene(Edges::Open, 200));
 	assert!(!kept.try_replace_scene(&Arc::new(SceneData::blank(W + 1, H, &scene_settings(Edges::Open)))));
@@ -865,7 +891,7 @@ fn no_engine_is_built_on_a_lost_device() {
 	ctx.device.destroy();
 	ctx.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 	let data = SceneData::blank(64, 48, &Scene { damping_edge: 0, ..Scene::default() });
-	let built = pollster::block_on(GpuEngine::create(ctx, data, options(Stencil::NinePoint), MediumLayout::Compact));
+	let built = pollster::block_on(GpuEngine::create(ctx, data, options(Stencil::NinePoint)));
 	assert!(matches!(built, Err(GpuError::Lost { .. })), "{:?}", built.err());
 }
 
@@ -880,47 +906,45 @@ mod ignored_timing {
 			return;
 		}
 		let settings = Scene { damping_edge: -32, ..Scene::default() };
-		for layout in [MediumLayout::Compact, MediumLayout::Plain] {
-			for stencil in STENCILS {
-				let mut gpu = GpuEngine::with_layout(SceneData::blank(1920, 1080, &settings), options(stencil), layout)
-					.expect("GPU engine");
-				gpu.set_emitters(&[emitter(960, 540, 100.0)]);
-				run(&mut gpu, 200);
-				gpu.synchronize().unwrap();
-				let steps = 2000;
+		for stencil in STENCILS {
+			let mut gpu =
+				GpuEngine::new(SceneData::blank(1920, 1080, &settings), options(stencil)).expect("GPU engine");
+			gpu.set_emitters(&[emitter(960, 540, 100.0)]);
+			run(&mut gpu, 200);
+			gpu.synchronize().unwrap();
+			let steps = 2000;
+			let t = Instant::now();
+			run(&mut gpu, steps);
+			gpu.synchronize().unwrap();
+			let step = t.elapsed().as_secs_f64() * 1e3 / steps as f64;
+			let mut capture = |format| {
+				let shape = FrameShape { canvas_width: 1920, canvas_height: 1080, ..shape(1, format) };
+				drop(gpu.capture_frame(&shape).unwrap());
+				let n = 50;
 				let t = Instant::now();
-				run(&mut gpu, steps);
-				gpu.synchronize().unwrap();
-				let step = t.elapsed().as_secs_f64() * 1e3 / steps as f64;
-				let mut capture = |format| {
-					let shape = FrameShape { canvas_width: 1920, canvas_height: 1080, ..shape(1, format) };
+				for _ in 0..n {
 					drop(gpu.capture_frame(&shape).unwrap());
-					let n = 50;
-					let t = Instant::now();
-					for _ in 0..n {
-						drop(gpu.capture_frame(&shape).unwrap());
-					}
-					t.elapsed().as_secs_f64() * 1e3 / n as f64
-				};
-				let (half, index) = (capture(SampleFormat::Half), capture(SampleFormat::Index));
-				let full = FrameShape { canvas_width: 1920, canvas_height: 1080, ..shape(1, SampleFormat::Half) };
-				let t = Instant::now();
-				let mut previous = None;
-				for _ in 0..100 {
-					run(&mut gpu, 2);
-					let pending = gpu.begin_capture(&full, Snapshot::new(full)).unwrap();
-					if let Some(p) = previous.replace(pending) {
-						drop(gpu.finish_capture(p).unwrap());
-					}
 				}
-				drop(gpu.finish_capture(previous.expect("a capture")).unwrap());
-				let cycle = t.elapsed().as_secs_f64() * 1e3 / 100.0;
-				eprintln!(
-					"{layout:?} {stencil:?}, {} sub-steps: {step:.3} ms a step; capture of both planes {half:.2} ms as halves, \
-					 {index:.2} ms as indices; 2 steps + overlapped half capture {cycle:.2} ms",
-					gpu.sub_steps()
-				);
+				t.elapsed().as_secs_f64() * 1e3 / n as f64
+			};
+			let (half, index) = (capture(SampleFormat::Half), capture(SampleFormat::Index));
+			let full = FrameShape { canvas_width: 1920, canvas_height: 1080, ..shape(1, SampleFormat::Half) };
+			let t = Instant::now();
+			let mut previous = None;
+			for _ in 0..100 {
+				run(&mut gpu, 2);
+				let pending = gpu.begin_capture(&full, Snapshot::new(full)).unwrap();
+				if let Some(p) = previous.replace(pending) {
+					drop(gpu.finish_capture(p).unwrap());
+				}
 			}
+			drop(gpu.finish_capture(previous.expect("a capture")).unwrap());
+			let cycle = t.elapsed().as_secs_f64() * 1e3 / 100.0;
+			eprintln!(
+				"{stencil:?}, {} sub-steps: {step:.3} ms a step; capture of both planes {half:.2} ms as halves, \
+				 {index:.2} ms as indices; 2 steps + overlapped half capture {cycle:.2} ms",
+				gpu.sub_steps()
+			);
 		}
 	}
 }

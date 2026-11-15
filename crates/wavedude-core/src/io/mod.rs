@@ -13,7 +13,7 @@ mod xml;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use crate::model::{Project, Scene, Stencil};
+use crate::model::{Project, Scene, Simulation, Stencil};
 
 /// What a reader found wrong in a text, with its 1-based line and column when known.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -114,7 +114,45 @@ pub(crate) fn read_text(path: &Path) -> Result<String> {
 }
 
 pub(crate) fn write_file(path: &Path, bytes: &[u8]) -> Result<()> {
-	std::fs::write(path, bytes).map_err(|source| IoError::Io { path: path.to_owned(), source })
+	#[cfg(not(target_arch = "wasm32"))]
+	let written = write_atomic(path, bytes);
+	#[cfg(target_arch = "wasm32")]
+	let written = std::fs::write(path, bytes);
+	written.map_err(|source| IoError::Io { path: path.to_owned(), source })
+}
+
+/// Writes `bytes` to a new file beside `path`'s target and renames it over: a failed write leaves the old file
+/// whole. The file keeps the old one's permissions, a new one gets those of a plain write (0o666 less the umask); a
+/// read-only file is refused, as an in-place write would be.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+	use std::io::Write as _;
+
+	let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
+	let old = std::fs::metadata(&path).ok().map(|m| m.permissions());
+	if old.as_ref().is_some_and(std::fs::Permissions::readonly) {
+		return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "the file is read-only"));
+	}
+	let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+	let mut builder = tempfile::Builder::new();
+	#[cfg(unix)]
+	if old.is_none() {
+		builder.permissions(std::os::unix::fs::PermissionsExt::from_mode(0o666));
+	}
+	let mut file = builder.tempfile_in(dir)?;
+	if let Some(old) = old {
+		// the umask narrowed the temporary file's
+		file.as_file().set_permissions(old)?;
+	}
+	file.write_all(bytes)?;
+	file.as_file().sync_all()?;
+	file.persist(&path).map_err(|e| e.error)?;
+	// the rename is durable once the folder is; some file systems refuse a folder's sync
+	#[cfg(unix)]
+	if let Err(e) = std::fs::File::open(dir).and_then(|d| d.sync_all()) {
+		tracing::warn!("syncing {} after saving {}: {e}", dir.display(), path.display());
+	}
+	Ok(())
 }
 
 /// Phase speed of the original's 9-point kernel (0.066 diagonals, 0.184 axes, -1 centre) relative to
@@ -125,14 +163,16 @@ pub fn nine_point_speed() -> f64 {
 	0.316f64.sqrt()
 }
 
-/// Divides the simulation's source frequency scale by the original 9-point kernel's speed when the
-/// project uses that stencil (levels stay as typed, so the 255 cap is never hit). Returns whether it did.
-pub(crate) fn scale_nine_point_frequencies(project: &mut Project, speed: f64) -> bool {
-	if project.simulation.stencil != Stencil::NinePoint {
-		return false;
+/// Divides a 9-point simulation's source frequency scale by the original kernel's speed (levels stay as typed, so
+/// the 255 cap is never hit).
+pub(crate) fn scale_nine_point_frequencies(simulation: &mut Simulation) {
+	if simulation.stencil == Stencil::NinePoint {
+		simulation.source_frequency_scale /= nine_point_speed();
+		tracing::info!(
+			"9-point project: the frequency scale is divided by the original kernel's speed {:.4} so the wavelengths stay",
+			nine_point_speed()
+		);
 	}
-	project.simulation.source_frequency_scale /= speed;
-	true
 }
 
 /// The file extensions of the image formats a scene image may come in, as this build decodes them.
@@ -240,5 +280,52 @@ mod tests {
 		assert_eq!(stored_image_path(Some(&folder), &outside.to_string_lossy()), outside.to_string_lossy());
 		assert_eq!(resolve_image_path(Some(&folder), &rel.to_string_lossy()), inside);
 		assert_eq!(resolve_image_path(None, "img/a.png"), PathBuf::new());
+	}
+
+	/// The names in `dir`, sorted.
+	fn names(dir: &Path) -> Vec<String> {
+		let mut names: Vec<String> =
+			std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+		names.sort();
+		names
+	}
+
+	#[test]
+	fn a_write_replaces_the_file_whole_and_leaves_the_old_one_untouched() {
+		let dir = tempfile::tempdir().unwrap();
+		let (path, link) = (dir.path().join("p.wdproj"), dir.path().join("link"));
+		std::fs::write(&path, "old").unwrap();
+		std::fs::hard_link(&path, &link).unwrap();
+		write_file(&path, b"new").unwrap();
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
+		assert_eq!(std::fs::read_to_string(&link).unwrap(), "old", "the old file was written in place");
+		assert_eq!(names(dir.path()), ["link", "p.wdproj"], "no temporary file is left");
+		write_file(&dir.path().join("fresh.wdproj"), b"first").unwrap();
+		assert_eq!(std::fs::read_to_string(dir.path().join("fresh.wdproj")).unwrap(), "first");
+	}
+
+	#[test]
+	fn a_write_keeps_the_permissions_and_refuses_a_read_only_file() {
+		let dir = tempfile::tempdir().unwrap();
+		let path = dir.path().join("p.wdproj");
+		std::fs::write(&path, "old").unwrap();
+		let mut read_only = std::fs::metadata(&path).unwrap().permissions();
+		read_only.set_readonly(true);
+		std::fs::set_permissions(&path, read_only).unwrap();
+		assert!(write_file(&path, b"new").is_err());
+		assert_eq!(std::fs::read_to_string(&path).unwrap(), "old");
+		assert_eq!(names(dir.path()), ["p.wdproj"]);
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+			std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+			write_file(&path, b"new").unwrap();
+			assert_eq!(mode(&path), 0o640);
+			let (fresh, plain) = (dir.path().join("fresh.wdproj"), dir.path().join("plain"));
+			write_file(&fresh, b"new").unwrap();
+			std::fs::write(&plain, "new").unwrap();
+			assert_eq!(mode(&fresh), mode(&plain), "a new file as a plain write makes it");
+		}
 	}
 }

@@ -12,6 +12,7 @@ use crate::h264::{H264Factory, Profile};
 use crate::{ExportError, ExportFormat, Result};
 
 pub mod avi;
+pub(crate) mod bmff;
 mod counted;
 pub mod exr;
 pub mod jpeg;
@@ -158,6 +159,11 @@ pub struct SinkSpec {
 	pub frame_count: usize,
 }
 
+/// The first error of `results`, every one of them taken.
+pub(crate) fn first_error(results: impl IntoIterator<Item = Result<()>>) -> Result<()> {
+	results.into_iter().fold(Ok(()), Result::and)
+}
+
 pub(crate) fn check_size(spec_w: u32, spec_h: u32, w: u32, h: u32, len: usize, bytes_per_pixel: usize) -> Result<()> {
 	if (w, h) != (spec_w, spec_h) || len != w as usize * h as usize * bytes_per_pixel {
 		return Err(ExportError::FrameSize { width: spec_w, height: spec_h, got_width: w, got_height: h });
@@ -197,13 +203,13 @@ pub fn open(
 	match format {
 		#[cfg(feature = "mp4-mux")]
 		ExportFormat::Mp4 => {
-			let h264 = h264.ok_or_else(|| ExportError::H264("no encoder was given".into()))?;
+			let h264 = h264.ok_or(ExportError::NoEncoder)?;
 			file(fs, path, |out| Threaded::new(mp4::Mp4Sink::new(out, spec, h264)?, w, h))
 		}
 		#[cfg(not(feature = "mp4-mux"))]
 		ExportFormat::Mp4 => {
 			let _ = h264;
-			Err(ExportError::H264("built without the mp4 feature".into()))
+			Err(ExportError::NoMuxer)
 		}
 		ExportFormat::Mpeg1 => file(fs, path, |out| {
 			Threaded::new(mpeg1::Mpeg1Writer::new(out, w, h, spec.fps as f64, spec.quality)?, w, h)

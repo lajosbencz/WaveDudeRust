@@ -11,6 +11,7 @@ use std::task::Poll;
 use half::f16;
 use wavedude_core::engine::types::{FrameShape, SampleKind};
 use wavedude_core::model::Layer;
+use wavedude_core::run::store::StoreError;
 
 mod bits;
 pub mod csv;
@@ -146,11 +147,11 @@ pub trait FrameSource {
 	/// Copies the plane of `layer` at `frame` into `out` (`shape().plane_bytes()` bytes; native-endian f16 for a
 	/// Half store, palette indices for an Index store). Pending: the frame is still coming back from a spill;
 	/// ask again after the event loop ran. `out` is untouched.
-	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<Poll<()>>;
+	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<Poll<()>, StoreError>;
 
 	/// Blocks until `frame` is held; false when it never will be (the source is complete or its producer ended).
 	/// A complete source answers at once.
-	fn wait_for(&self, frame: usize) -> anyhow::Result<bool> {
+	fn wait_for(&self, frame: usize) -> Result<bool, StoreError> {
 		Ok(frame < self.frame_count())
 	}
 
@@ -181,11 +182,9 @@ impl FrameSource for MemoryFrames {
 		self.shape
 	}
 
-	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<Poll<()>> {
-		let (field, intensity) = self
-			.frames
-			.get(frame)
-			.ok_or_else(|| anyhow::anyhow!("frame {frame} is not held ({})", self.frames.len()))?;
+	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<Poll<()>, StoreError> {
+		let (field, intensity) =
+			self.frames.get(frame).ok_or(StoreError::NotStored { frame, count: self.frames.len() })?;
 		let plane = match layer {
 			Layer::Field => field,
 			Layer::Intensity => intensity,
@@ -208,10 +207,15 @@ pub enum ExportError {
 	Exr(#[from] exr::error::Error),
 	#[error("H.264 encoding failed: {0}")]
 	H264(String),
+	/// Getting or loading Cisco's library failed.
 	#[error("OpenH264: {0}")]
-	Codec(String),
+	OpenH264(String),
 	#[error("MP4 export needs Cisco's OpenH264 codec, which is not enabled")]
 	H264Missing,
+	#[error("MP4 export needs an H.264 encoder, and none was given")]
+	NoEncoder,
+	#[error("this build writes no MP4")]
+	NoMuxer,
 	#[error("{format} cannot carry a {width} x {height} picture ({limit})")]
 	Size { format: &'static str, width: u32, height: u32, limit: &'static str },
 	#[error("the frame is {got_width} x {got_height}, the output {width} x {height}")]
@@ -227,7 +231,9 @@ pub enum ExportError {
 	#[error("this sink takes {0}")]
 	WrongInput(&'static str),
 	#[error("{0}")]
-	Source(anyhow::Error),
+	Source(#[from] StoreError),
+	#[error("{0}, which a blocking export cannot wait for")]
+	Blocked(Wait),
 	#[error("the output is already finished")]
 	Finished,
 	#[error("an encoder thread panicked: {0}")]
@@ -245,11 +251,11 @@ impl FrameSource for wavedude_core::run::store::FrameStore {
 		*wavedude_core::run::store::FrameStore::shape(self)
 	}
 
-	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<Poll<()>> {
+	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<Poll<()>, StoreError> {
 		match self.read_layer(frame, layer, out) {
 			Ok(()) => Ok(Poll::Ready(())),
-			Err(wavedude_core::run::store::StoreError::Pending { .. }) => Ok(Poll::Pending),
-			Err(e) => Err(e.into()),
+			Err(StoreError::Pending { .. }) => Ok(Poll::Pending),
+			Err(e) => Err(e),
 		}
 	}
 

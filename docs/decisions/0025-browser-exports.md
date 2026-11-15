@@ -1,8 +1,8 @@
 # 0025: The browser exports through its private storage and downloads
 
-Status: accepted, 2026-11-14. Supersedes [0021](0021-browser-exports-parked.md); builds on
-[0019](0019-egui-and-the-platform-layer.md), [0020](0020-browser-frame-spill-in-opfs.md) and
-[0024](0024-browser-run-in-a-web-worker.md).
+Status: accepted, 2026-11-14; the download from the user's click added 2026-11-15. Supersedes
+[0021](0021-browser-exports-parked.md); builds on [0019](0019-egui-and-the-platform-layer.md),
+[0020](0020-browser-frame-spill-in-opfs.md) and [0024](0024-browser-run-in-a-web-worker.md).
 
 ## Context
 
@@ -15,7 +15,7 @@ where the export runs, how a file larger than memory reaches the user, and what 
 - The export runs on the page, stepped from the window's update in 8 ms slices, over the page's mirror store of the
   run worker ([0024](0024-browser-run-in-a-web-worker.md)); the worker takes no part. The job's frames read ahead
   through `FrameSource::prefetch`, and the live controller leaves read-ahead to a running export.
-- A still and the probe CSV are written in memory and downloaded.
+- A still and the probe CSV are written in memory.
 - A run's export is spooled in the origin private file system, in the session folder of
   [0020](0020-browser-frame-spill-in-opfs.md) under `export-<n>/`
   ([`spool.rs`](../../crates/wavedude-app-state/src/platform/opfs/spool.rs); the module is split into `session`,
@@ -25,7 +25,8 @@ where the export runs, how a file larger than memory reaches the user, and what 
   that and the job waits, `OutputFs::poll_flushed` is pending until every closed file is committed, and the job ends
   only then, so a completed export has its files. The first failure is sticky.
 - The download is the spooled file: `getFile`, an object URL, a click on an anchor, as the browser's Save As does.
-  The browser streams it from disk, so a large output is not held in memory.
+  The browser streams it from disk, so a large output is not held in memory. The user starts it (The download from
+  the user's click, below).
 - ZIP archives are written with the `rawzip` crate, entries stored, ZIP64 where sizes or the count need it
   ([`zip.rs`](../../crates/wavedude-export/src/fs/zip.rs)). An image sequence, one or both layers, streams into one
   archive `<name>.zip` with a folder per layer. A video of both layers is spooled per layer and packed afterwards,
@@ -36,10 +37,10 @@ where the export runs, how a file larger than memory reaches the user, and what 
   the CSV still work.
 - MP4 goes through the browser's WebCodecs encoder behind the export crate's encoder seam, the MP4 muxer split from
   OpenH264 (feature `mp4-mux`); [0005](0005-video-openh264.md), The browser, has the details.
-- The spool of an export is kept until the next export starts, so its download can be repeated; one that ends
-  cancelled or failed is removed at once. Session folders whose tab is gone are removed at load
+- The spool of an export is kept until the next export starts, so a download started from it reads it to the end;
+  one that ends cancelled or failed is removed at once. Session folders whose tab is gone are removed at load
   ([0020](0020-browser-frame-spill-in-opfs.md)).
-- `HAS_EXPORTS` is true in both builds; the export crate builds for the browser without default features, and the
+- The export entries show in both builds; the export crate builds for the browser without default features, and the
   `zip` crate is used by its tests only.
 
 ## Consequences
@@ -49,3 +50,22 @@ where the export runs, how a file larger than memory reaches the user, and what 
 - An export needs free storage for its output in the origin's quota, besides the frames of the run.
 - Large outputs are bounded by the quota, not by memory.
 - The export steps on the page between frames, so it shares the page's time with the preview.
+
+## The download from the user's click (added 2026-11-15)
+
+The export's end started its download, long after the click that started the export, and on a phone the download
+was dropped. A browser may refuse a download it deems hostile (HTML,
+[downloading hyperlinks](https://html.spec.whatwg.org/multipage/links.html#downloading-hyperlinks), the user agent
+"may return"), as one a page starts without the user's activation. An activation lasts the browser's transient
+activation duration after a click, a touch's end or a key (HTML,
+[transient activation duration](https://html.spec.whatwg.org/multipage/interaction.html#transient-activation-duration)).
+
+- A completed export's file is made ready (`platform::Download`: its object URL and name) and offered in a modal,
+  "The export is ready: {name}", with Download (default) and Close. Download clicks the anchor in the pass that
+  takes the click: eframe runs the app's logic inside the `pointerup` handler, and after a touch or a key in the next
+  frame, within the activation. Every export ends so, stills and the probe CSV too, as their export may wait for a
+  run.
+- Save and Save As still download at once: they run in the user's action.
+- The object URL of the download started last, an export's or a Save's, is kept until the next download starts: a
+  browser may fetch it after the click returns, so it is not revoked with the click. The spool keeps the file until
+  the next export.

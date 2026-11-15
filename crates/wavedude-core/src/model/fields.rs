@@ -89,6 +89,8 @@ pub trait Field: Copy + Eq + Hash + fmt::Debug + 'static {
 	fn name(self) -> &'static str;
 	/// The names from the owner down: `Kind.Lens.Material.Mirror`.
 	fn path(self) -> String;
+	/// The leaf's `TYPE_NAME` and name in the type that declares it: `("Material", "Mirror")`.
+	fn declared(self) -> (&'static str, &'static str);
 	fn kind(self) -> ValueKind;
 	/// The declared range of a number.
 	fn range(self) -> Option<Range>;

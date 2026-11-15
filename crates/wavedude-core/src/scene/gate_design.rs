@@ -8,16 +8,16 @@
 use crate::sync::lock;
 use std::collections::HashMap;
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, PI, TAU};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, LazyLock, Mutex};
 
-use crate::model::{GateKind, INDEX_MAX, LogicGate, PartBase, Point, Simulation, level_omega};
+use crate::model::{GateKind, LogicGate, PartBase, Point, Simulation, level_omega, ranges};
 use crate::scene::modes::ModeSolver;
 use crate::scene::shapes::{Frame, Vec2, round_digits};
 
 /// Index step of the phase section.
 pub const PHASE_STEP: f64 = 0.1;
 /// Largest part index.
-pub const MAX_INDEX: f64 = INDEX_MAX;
+pub const MAX_INDEX: f64 = ranges::INDEX.max;
 /// Bend radiation exponent: `(2/3) gamma^3 R / beta^2`.
 pub const BEND_EXP: f64 = 11.0;
 /// Narrowest absorbing band, in wavelengths.
@@ -193,8 +193,8 @@ impl GateDesign {
 		let phi = phase_shift(gate.kind);
 		let solver = ModeSolver::for_simulation(sim);
 		let key = (lam.to_bits(), n_c.to_bits(), n_cl.to_bits(), port_in, phi.to_bits(), solver);
-		static CACHE: OnceLock<Mutex<HashMap<DesignKey, Option<Arc<GateDesign>>>>> = OnceLock::new();
-		let cache = CACHE.get_or_init(Default::default);
+		static CACHE: LazyLock<Mutex<HashMap<DesignKey, Option<Arc<GateDesign>>>>> = LazyLock::new(Default::default);
+		let cache = &*CACHE;
 		if let Some(hit) = lock(cache).get(&key) {
 			return hit.clone();
 		}

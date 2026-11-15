@@ -1,10 +1,9 @@
-//! The frames a GPU engine captured last, kept on its device for render passes on the same queue (the live
-//! preview colours them there instead of reading them back).
+//! The frames a GPU engine captured last, kept on its device for render passes on the same queue.
 //!
-//! A capture copies its planes, as the store gets them, into a free slot in the encoder that converts them; the
-//! run tags the slot with the stored frame once the capture landed. A reader holds the slot of a tag until it holds
-//! another or lets go; a capture never writes the slot held, the slot published last or a slot still pending, so
-//! everything a reader's pass reads was submitted before it and nothing submitted after it changes it.
+//! A capture copies its planes, as the store gets them, into a free slot; the run tags the slot with the stored
+//! frame once the capture landed. A reader holds the slot of a tag until it holds another or lets go. A capture never
+//! writes the slot held, the slot published last or a slot still pending, so everything a reader's pass reads was
+//! submitted before it and nothing submitted after it changes it.
 //!
 //! Threads: the engine's thread captures and publishes, any thread holds; one lock over the slots.
 

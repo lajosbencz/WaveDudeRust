@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use wavedude_core::model::Layer;
+use wavedude_core::model::{Layer, Word};
 
 /// The file-name suffix of a layer: `_field` or `_intensity`.
 pub fn layer_suffix(layer: Layer) -> &'static str {
@@ -21,7 +21,7 @@ pub fn layer_path(chosen: &Path, layer: Layer, both: bool) -> PathBuf {
 /// `chosen` with its stem's layer suffix replaced by `layer`'s, or dropped for `None`; the extension kept.
 pub fn with_layer_suffix(chosen: &Path, layer: Option<Layer>) -> PathBuf {
 	let stem = chosen.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-	let base = ["_field", "_intensity"].iter().find_map(|s| stem.strip_suffix(s)).unwrap_or(&stem);
+	let base = Layer::MEMBERS.iter().find_map(|&l| stem.strip_suffix(layer_suffix(l))).unwrap_or(&stem);
 	let mut name = format!("{base}{}", layer.map_or("", layer_suffix));
 	if let Some(ext) = chosen.extension() {
 		name.push('.');

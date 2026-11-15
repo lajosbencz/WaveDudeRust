@@ -6,29 +6,44 @@ Status: accepted, 2026-11-07
   ([`cliff.toml`](../../cliff.toml)), in [`release.yml`](../../.github/workflows/release.yml): one version for the workspace, a release PR kept open on the default branch
   (rebuilt as one commit per push, the pattern of skim-rs/skim), and on its merge the commit tagged `v<version>`
   with a draft GitHub release. Only commits that ship something count, dependency updates included, so a security
-  bump of [`Cargo.lock`](../../Cargo.lock) alone releases too. release-plz did this before and was dropped: it attributes commits to
-  crates by path, so commits outside the app crate (the engine, the lockfile) never reached the changelog or
-  triggered a release. `wavedude-core` and `wavedude-export` are ready for crates.io (the name `wave-core` is taken
-  there, hence the `wavedude-` prefix on every crate) but not published yet, the user's choice; [`docs/release.md`](../release.md)
-  says what turning it on takes. The other crates are `publish = false`.
+  bump of [`Cargo.lock`](../../Cargo.lock) alone releases too. release-plz is not used: it counts a commit for a crate only
+  when the commit changes files the crate packages, so commits outside the crates (`site/`, `tools/`, the
+  workflows) never reach the changelog or trigger a release; it takes its changelog format from a `[changelog]`
+  section of its own (a git-cliff file only through a deprecated key); and it runs cargo in the job holding the
+  write token, while the write job of [`release.yml`](../../.github/workflows/release.yml) only applies and pushes a checked patch. Every crate is `publish = false`;
+  `wavedude-model-derive`, `wavedude-core`, `wavedude-view` and `wavedude-export` are ready for crates.io (the name
+  `wave-core` is taken there, hence the `wavedude-` prefix on every crate) but not published, the user's choice;
+  [`docs/release.md`](../release.md) says what turning it on takes.
   Everything runs on the workflow's `GITHUB_TOKEN`, no personal token: CI on each release PR waits once for a
   person's approval on the PR page. A GitHub App's token would start it without the click; not chosen, to keep the
   setup free of an app.
 - **Installers** by [cargo-packager](https://github.com/crabnebula-dev/cargo-packager) in the reusable
   workflow [`.github/workflows/package.yml`](../../.github/workflows/package.yml), which [`release.yml`](../../.github/workflows/release.yml) calls: NSIS on Windows x86_64, a universal app and
   DMG on macOS (both architectures built on `macos-15` and joined with `lipo`; the Intel runner took twice as long
-  for a second bundle), AppImage plus a tarball of both programs on Linux x86_64 (built on Ubuntu 22.04 for an older
-  glibc). Both programs are in every package. Not signed by Apple or Microsoft (macOS bundles carry an ad-hoc
-  signature, without which Apple silicon reports them as damaged): Gatekeeper and SmartScreen warn,
-  accepted. Each file gets GitHub attestations instead (Sigstore; free, verifiable with `gh attestation verify`,
-  but no operating system checks it): build provenance and CycloneDX SBOMs (`cargo cyclonedx`), signed as the
+  for a second bundle), AppImage plus a tarball of both programs on Linux x86_64 (Linux build, below). Both programs
+  are in every package. Not signed by Apple or Microsoft (macOS bundles carry an ad-hoc signature, without which
+  Apple silicon reports them as damaged): Gatekeeper and SmartScreen warn, accepted. Each file gets GitHub
+  attestations instead (Sigstore; free, verifiable with `gh attestation verify`, but no operating system checks it): build provenance and CycloneDX SBOMs (`cargo cyclonedx`), signed as the
   reusable workflow [`package.yml`](../../.github/workflows/package.yml) (SLSA Build L3), which builds with no secrets and a read-only token; the
   binaries embed their dependency list (`cargo auditable`). The updater key is only in a later job that compiles
   nothing, so no dependency's build script sees it. No build cache in releases (cache poisoning): every package is
-  built from source, tools included, which costs the release about ten minutes. CI's caches are pruned to the
+  built from source. The tools are prebuilt binaries checked against
+  [taiki-e/install-action](https://github.com/taiki-e/install-action)'s checksums, without its fallback to other
+  sources; cargo-packager publishes none and is compiled. CI's caches are pruned to the
   newest per key: each lockfile change leaves a generation behind, and the allowance is 10 GB per repository.
   The release turns public only after every platform's files, `latest.json` and `SHA256SUMS` are attached, and is
   immutable from then on.
+- **Linux build**: in a container of [`.github/build/linux.Dockerfile`](../../.github/build/linux.Dockerfile), AlmaLinux 8 pinned to a
+  digest, on `ubuntu-24.04`: the programs link against its glibc 2.28, so the AppImage and the tarball run on RHEL 8,
+  Debian 10, Ubuntu 18.10 and later. The AppImage carries the X11 client libraries winit loads at run time, from the
+  same image. After the build, [`.github/build/glibc-floor.sh`](../../.github/build/glibc-floor.sh) fails the job when
+  either program or any ELF file inside the AppImage needs a glibc symbol version above 2.28, naming the file and the
+  symbol; the CLI of the tarball and of the AppImage then starts in the plain base image and in Debian 10. CI runs the
+  build and the floor check in the same container on every pull request that changes code (`glibc`), without
+  packaging. A runner's own distribution was the alternative: GitHub retires each one after a few years, so the floor
+  would rise with every move. Dependabot moves the digest within AlmaLinux 8; AlmaLinux 8 ends on 2029-05-31
+  ([AlmaLinux release notes](https://wiki.almalinux.org/release-notes/)), before which the base moves to AlmaLinux 9 by
+  hand, raising the floor to its glibc 2.34.
 - **Updater**: [cargo-packager-updater](https://crates.io/crates/cargo-packager-updater) against
   `releases/latest/download/latest.json`, whose packages are signed with a minisign key (the private key a
   secret, the public key a repository variable compiled in through `WAVEDUDE_UPDATE_PUBKEY`); the endpoint is
@@ -38,14 +53,16 @@ Status: accepted, 2026-11-07
   about unsaved edits like any other, then the new version is started: the program is never replaced or ended
   under the user's work. It replaces the NSIS install, the macOS app and an AppImage; a plain Linux binary is told where
   the release is.
-- **Dependencies**: Dependabot for Cargo and for the workflows' actions, which are pinned to commit hashes with
-  the version in a comment (Dependabot moves both), batched: Cargo checked daily, actions weekly, one pull request for minor
-  and patch updates, one for major ones, one for security updates, which come as soon as an advisory appears;
-  patch and minor updates, security ones included, merge on their own once CI passes
-  ([`dependabot-automerge.yml`](../../.github/workflows/dependabot-automerge.yml)), major ones wait for a person (telling a major security update apart needs
-  fetch-metadata's alert lookup, which needs a personal token). Renovate was the alternative; Dependabot needs no app installed.
-  Cargo updates are titled `chore(deps)`, which git-cliff counts, so they lead to a release; actions updates are
-  `ci(deps)`, which it skips.
+- **Dependencies**: Dependabot for Cargo, for the compiler pinned in [`rust-toolchain.toml`](../../rust-toolchain.toml), for the
+  digest of the Linux build image's base (major versions excluded) and for the workflows' actions, which are pinned
+  to commit hashes with the version in a comment (Dependabot moves both), batched:
+  Cargo checked daily, the compiler, the image and actions weekly, one pull request for minor and patch updates, one for major ones,
+  one for security updates, which come as soon as an advisory appears; patch and minor updates, security ones included,
+  merge on their own once CI passes ([`dependabot-automerge.yml`](../../.github/workflows/dependabot-automerge.yml)), major ones wait for a person;
+  the image's digest updates count as patch updates and merge once the required checks pass. A grouped
+  pull request counts as its highest update, so a security group holding a major one waits too. Renovate was the
+  alternative; Dependabot needs no app installed. Cargo, compiler and image updates are titled `chore(deps)`, which git-cliff
+  counts, so they lead to a release; actions updates are `ci(deps)`, which it skips.
 - **Forks**: CI runs anywhere with no secrets. The release workflow is opt-in through the repository variable
   `RELEASE_ENABLED`; it uses the fork's own repository for tags, releases and the update feed, and the fork's
   own keys (crates.io publishing needs crate names the fork owns).

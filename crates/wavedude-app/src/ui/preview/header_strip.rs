@@ -179,7 +179,7 @@ fn flat(
 /// Turned a quarter clockwise: a length `a` along the strip lies `a` below its top, a row's top edge on the
 /// strip's right.
 fn turned(
-	ui: &mut Ui,
+	ui: &Ui,
 	rect: Rect,
 	strip: &Strip<'_>,
 	along: &Along,

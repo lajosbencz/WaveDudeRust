@@ -56,6 +56,12 @@ pub struct Palette {
 	pub level_info: Color32,
 	pub level_warn: Color32,
 	pub level_error: Color32,
+	/// The status bar's background, while its line is a warning, an error (also a message window's error disc),
+	/// and its text.
+	pub status: Color32,
+	pub status_warn: Color32,
+	pub status_error: Color32,
+	pub status_text: Color32,
 }
 
 impl Palette {
@@ -93,6 +99,10 @@ impl Palette {
 		level_info: Color32::from_rgb(0xF1, 0xF1, 0xF1),
 		level_warn: Color32::from_rgb(0xFF, 0xB0, 0x40),
 		level_error: Color32::from_rgb(0xFF, 0x60, 0x60),
+		status: Color32::from_rgb(0x00, 0x7A, 0xCC),
+		status_warn: Color32::from_rgb(0xCA, 0x51, 0x00),
+		status_error: Color32::from_rgb(0xB4, 0x21, 0x1D),
+		status_text: Color32::WHITE,
 	};
 
 	pub const LIGHT: Self = Self {
@@ -129,6 +139,10 @@ impl Palette {
 		level_info: Color32::from_rgb(0x1E, 0x1E, 0x1E),
 		level_warn: Color32::from_rgb(0xA0, 0x50, 0x00),
 		level_error: Color32::from_rgb(0xC0, 0x10, 0x10),
+		status: Color32::from_rgb(0x00, 0x7A, 0xCC),
+		status_warn: Color32::from_rgb(0xCA, 0x51, 0x00),
+		status_error: Color32::from_rgb(0xB4, 0x21, 0x1D),
+		status_text: Color32::WHITE,
 	};
 
 	/// The palette of `look`.

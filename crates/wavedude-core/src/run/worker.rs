@@ -1,31 +1,18 @@
-//! The live run: one worker thread, one engine and one store that converge on a [`Goal`] (spec/30-engine.md,
-//! The live run).
+//! The live run: one worker, one engine and one store converge on a [`Goal`] (docs/spec/30-engine.md, The live
+//! run; docs/decisions/0012-reactive-runs.md).
 //!
-//! The goal names the project state ([`RunRequest`], whose spec the worker builds, composing the scene off
-//! the UI thread), the timeline position, how much is wanted ([`Wanted`]) and whether the user paused. Between two frames the worker reads the newest goal and derives its next target: the first
-//! stored frame at or after the position that is missing, or whose probe readings are not taken yet; with
-//! [`Wanted::All`], when none follows, the first such frame before it. It steps to the target (from 0 when the
-//! engine has passed it), captures it when missing and, with everything wanted, the missing frames it passes,
-//! records the probes on the way and publishes progress and traces. A spec whose frames differ starts a generation: the store is cleared
-//! (its buffers kept), the engine reused (same scene: new emitters; same grid: the scene swapped in; else
-//! rebuilt). A spec whose probes alone differ clears the traces and keeps the frames. Discarded frames go with
-//! their store: the spec in force gets a new one, so the old one's memory and spill are freed once its readers
-//! let go, and the engine starts over. A goal change is looked at every [`CHECK_INTERVAL`] steps: work goes on
-//! only for the goal's own spec, so an edit means one run.
+//! The goal is the project state ([`RunRequest`]), the timeline position, how much is wanted ([`Wanted`]) and
+//! the pause flag. The worker picks the next missing frame (or one lacking probe readings), steps the engine to
+//! it, captures it and records probes on the way. A spec whose frames differ starts a generation: the store is
+//! replaced and the engine reused or rebuilt; a spec whose probes alone differ clears the traces and keeps the
+//! frames. The goal is re-read every [`CHECK_INTERVAL`] steps.
 //!
-//! Threads: [`RunWorker::set_goal`] and the readers may be called from any thread; `RunWorker::new` runs the work
-//! on one thread, which owns the engine and writes the store. Of a [`RunWorker::pumped`], the only kind on wasm32,
-//! the caller works the run in slices with [`RunWorker::pump`]: a slice ends at its deadline or a pause with work
-//! left ([`Pump::Work`]), or it waits ([`Pump::Waiting`], the pump's waker woken once one of these is ready): with
-//! as many captures in flight as the engine takes, with as many probe batches in flight as it lets on its way, at
-//! probe readings to be drained whole (before the run idles, pauses or resets) that are not mapped yet, while an
-//! engine is on its way (the old one freed first, as on a thread), while the engine has no room for a step, while
-//! the spill has as many writes in flight as it takes (a capture read back lands only below them, so the spill's
-//! writes in flight bound the frames written and not done), and while the free storage a new store's spill is
-//! checked against is not known yet; the next goes on from the steps done. Traces and progress are published at
-//! heartbeats and at every frame.
+//! Threads: [`RunWorker::set_goal`] and the readers are callable from any thread. [`RunWorker::new`] spawns the
+//! one thread that owns the engine and writes the store; readers block in `RunWorker::wait_until`. A
+//! [`RunWorker::pumped`] run, the only kind on wasm32, has no thread: the caller works it in slices with
+//! [`RunWorker::pump`], which returns [`Pump::Work`] at a deadline or pause with work left and [`Pump::Waiting`]
+//! while an engine, capture, probe batch or spill write is in flight.
 
-use crate::sync::lock;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -43,12 +30,12 @@ use crate::engine::probes::{ProbeCollector, ProbeTrace, record};
 use crate::engine::{
 	EngineOptions, FrameShape, PendingCapture, PendingProbes, SampleFormat, SceneData, Snapshot, WaveEngine,
 };
-use crate::sync::MaybeSend;
+use crate::spec::{RunRequest, RunSpec, SceneCache};
+use crate::sync::{MaybeSend, lock};
 
 use super::RunError;
 use super::pending::SpillFactory;
-use super::store::{FrameStore, StoreLayout};
-use crate::spec::{RunRequest, RunSpec, SceneCache};
+use super::store::{FrameStore, StoreError, StoreLayout};
 
 /// Steps between two looks at the pause and shutdown flags.
 pub const CHECK_INTERVAL: u32 = 16;
@@ -199,6 +186,8 @@ struct Shared {
 	shutdown: AtomicBool,
 	/// One lock, so a reader never pairs a revision with another revision's state or store.
 	published: Mutex<Status>,
+	/// Woken under `published`'s lock at every publish and every frame stored (`RunWorker::wait_until`).
+	changed: Condvar,
 	traces: Mutex<Traces>,
 	/// The traces of the generation before, while its frames are still looked at.
 	held: Mutex<Vec<ProbeTrace>>,
@@ -244,6 +233,7 @@ impl Shared {
 				#[cfg(feature = "gpu")]
 				device_frames: None,
 			}),
+			changed: Condvar::new(),
 			traces: Mutex::default(),
 			held: Mutex::new(Vec::new()),
 			fit: Mutex::new(None),
@@ -255,6 +245,12 @@ impl Shared {
 		if let Some(notify) = self.notify.get() {
 			notify();
 		}
+	}
+
+	/// Wakes the [`RunWorker::wait_until`] callers.
+	fn changed(&self) {
+		let _published = lock(&self.published);
+		self.changed.notify_all();
 	}
 }
 
@@ -311,7 +307,19 @@ impl RunWorker {
 		}
 		let shared = Arc::new(Shared::new());
 		let worker = Worker::new(shared.clone(), Factory::Now(factory), Frames::Spill(cache_dir, memory), scene);
-		let thread = std::thread::Builder::new().name("live-run".into()).spawn(move || worker.run())?;
+		let thread = {
+			let shared = shared.clone();
+			std::thread::Builder::new().name("live-run".into()).spawn(move || {
+				// A panic outside a unit of work ends the thread: its waiters learn of it as a failure.
+				if let Err(payload) = catch_unwind(AssertUnwindSafe(|| worker.run())) {
+					let error = RunError::panic("the live run's thread", payload.as_ref());
+					tracing::error!("{error}");
+					lock(&shared.published).state = WorkState::Failed(Arc::new(error));
+					shared.changed();
+					shared.notify();
+				}
+			})?
+		};
 		Ok(Self { shared, thread: Some(thread), pumped: None })
 	}
 
@@ -326,10 +334,11 @@ impl RunWorker {
 	}
 
 	/// A worker that works in [`pump`](Self::pump) alone, whose engines `factory` starts (a pump yields while one is
-	/// on its way), whose stores hold their frames in `ram_bytes` of memory (the goal's RAM share of them) and the
-	/// rest in a spill of `spill`, and whose scenes come from `scene`.
+	/// on its way) within `engine_bytes` of memory, whose stores hold their frames in `ram_bytes` of memory (the
+	/// goal's RAM share of them) and the rest in a spill of `spill`, and whose scenes come from `scene`.
 	pub fn pumped(
 		factory: PumpedFactory,
+		engine_bytes: u64,
 		ram_bytes: u64,
 		spill: Box<dyn SpillFactory>,
 		scene: Arc<Mutex<SceneCache>>,
@@ -339,7 +348,7 @@ impl RunWorker {
 			allow(clippy::arc_with_non_send_sync, reason = "the device frames' wgpu types are not Send there")
 		)]
 		let shared = Arc::new(Shared::new());
-		let frames = Frames::Pending { ram_bytes, spill };
+		let frames = Frames::Pending { engine_bytes, ram_bytes, spill };
 		let worker = Worker::new(shared.clone(), Factory::Later(factory), frames, scene);
 		Self {
 			shared,
@@ -349,10 +358,9 @@ impl RunWorker {
 		}
 	}
 
-	/// Works on the goal for about `budget` (a unit of work interrupted at the deadline has done at least
-	/// [`CHECK_INTERVAL`] steps or reached its end); what is left. An idle run whose spill writes are in flight
-	/// waits for them, and settles those done in the next pump. `waker` is woken once what a [`Pump::Waiting`]
-	/// waits for is ready.
+	/// Works on the goal for about `budget` (a unit interrupted at the deadline has done at least [`CHECK_INTERVAL`]
+	/// steps or reached its end); returns what is left. An idle run with spill writes in flight waits for them. `waker` is
+	/// woken once what a [`Pump::Waiting`] waits for is ready.
 	pub fn pump(&self, budget: Duration, waker: &Waker) -> Pump {
 		let mut pumped = lock(self.pumped.as_ref().expect("a worker on a thread is not pumped"));
 		let Pumped { worker, failed_at } = &mut *pumped;
@@ -430,6 +438,26 @@ impl RunWorker {
 		lock(&self.shared.published).clone()
 	}
 
+	/// Blocks until `done` holds and returns the status it held for; never returns on the thread pumping a
+	/// [`pumped`](Self::pumped) worker. `done` is asked at once, after each publish and frame stored, and at each
+	/// [`waker`](Self::waker) call, with the status locked: it reads what those move and calls none of this worker's readers.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn wait_until(&self, mut done: impl FnMut(&Status) -> bool) -> Status {
+		let mut published = lock(&self.shared.published);
+		while !done(&published) {
+			published = self.shared.changed.wait(published).unwrap_or_else(PoisonError::into_inner);
+		}
+		published.clone()
+	}
+
+	/// Has the [`wait_until`](Self::wait_until) callers ask their condition again, for a flag of theirs that
+	/// changed; it outlives the worker.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn waker(&self) -> impl Fn() + Send + Sync + 'static {
+		let shared = self.shared.clone();
+		move || shared.changed()
+	}
+
 	pub fn store(&self) -> Option<Arc<FrameStore>> {
 		lock(&self.shared.published).store.clone()
 	}
@@ -484,8 +512,9 @@ enum Frames {
 	/// In memory up to the budget on the readings for the goal's RAM share, the rest in a spill file in the folder.
 	#[cfg(not(target_arch = "wasm32"))]
 	Spill(std::path::PathBuf, super::store::Memory),
-	/// In memory up to the goal's RAM share of `ram_bytes`, the rest in a spill of `spill`.
-	Pending { ram_bytes: u64, spill: Box<dyn SpillFactory> },
+	/// In memory up to the goal's RAM share of `ram_bytes`, the rest in a spill of `spill`; an engine within
+	/// `engine_bytes`.
+	Pending { engine_bytes: u64, ram_bytes: u64, spill: Box<dyn SpillFactory> },
 }
 
 impl Frames {
@@ -495,6 +524,15 @@ impl Frames {
 			#[cfg(not(target_arch = "wasm32"))]
 			Self::Spill(..) => Poll::Ready(()),
 			Self::Pending { spill, .. } => spill.poll_ready(cx),
+		}
+	}
+
+	/// The memory an engine may take: the machine's physical memory, or the pumped worker's given.
+	fn memory(&self) -> u64 {
+		match self {
+			#[cfg(not(target_arch = "wasm32"))]
+			Self::Spill(_, memory) => memory.read().1,
+			Self::Pending { engine_bytes, .. } => *engine_bytes,
 		}
 	}
 
@@ -521,13 +559,16 @@ impl Frames {
 				let budget = super::store::Budget::compute(*memory, reclaimed, ram_percent);
 				FrameStore::in_dir(layout, budget, release, dir)
 			}
-			Self::Pending { ram_bytes, spill } => {
+			Self::Pending { ram_bytes, spill, .. } => {
 				drop(old);
 				FrameStore::open(layout, super::store::Budget::of_memory(*ram_bytes, ram_percent), spill.as_ref())
 			}
 		}
 	}
 }
+
+/// The broken invariant of a spec in force without an engine.
+const ENGINE: &str = "an engine goes with the spec in force";
 
 /// The spec in force and its store.
 struct Current {
@@ -664,14 +705,14 @@ impl Worker {
 	fn serve(&mut self, goal: &Goal, number: u64) -> Result<bool, Interrupted> {
 		self.goal_seen = number;
 		if let Some(c) = &self.current {
-			c.store.settle().map_err(|e| Interrupted::Failed(e.into()))?;
+			c.store.settle()?;
 		}
 		let Some(request) = &goal.run else {
 			self.finish_pending(false)?;
 			self.publish(WorkState::Idle);
 			return Ok(false);
 		};
-		let spec = self.spec_of(request).map_err(|e| Interrupted::Failed(e.into()))?;
+		let spec = self.spec_of(request)?;
 		if self.engine.is_none() && self.current.as_ref().is_some_and(|c| c.spec.same_frames_as(&spec)) {
 			// Pumped: the engine of the frames in force was dropped for one still on its way.
 			self.restart_engine(None, &spec)?;
@@ -715,8 +756,8 @@ impl Worker {
 			}
 			Some(Target::End) => {
 				let (steps, last) = {
-					let c = self.current.as_ref().expect("a target needs a current spec");
-					(c.spec.steps, c.spec.stored_frames().saturating_sub(1))
+					let c = self.current();
+					(c.spec.schedule.steps, c.spec.schedule.stored_frames().saturating_sub(1))
 				};
 				self.advance_to(steps, Unit::End, WorkState::Stepping { target: last }, all)?;
 				self.publish_traces();
@@ -753,7 +794,7 @@ impl Worker {
 			current.spec = spec.clone();
 			if !same_probes {
 				self.finish_pending(false)?;
-				let engine = self.engine.as_mut().expect("an engine goes with the current spec");
+				let engine = self.engine();
 				engine.reset();
 				self.steps_done = 0;
 				lock(&self.shared.held).clear();
@@ -784,7 +825,7 @@ impl Worker {
 			}
 			self.current = Some(Current { spec: spec.clone(), store });
 			self.restart_traces(spec);
-			tracing::debug!(revision = goal.revision, steps = spec.steps, "live run: new frames");
+			tracing::debug!(revision = goal.revision, steps = spec.schedule.steps, "live run: new frames");
 		}
 		self.adopted = goal.revision;
 		Ok(())
@@ -798,8 +839,7 @@ impl Worker {
 		ram_percent: u32,
 	) -> Result<Arc<FrameStore>, Interrupted> {
 		lock(&self.shared.published).store = None;
-		let store =
-			self.frames.store(layout, old, ram_percent).map_err(|e| Interrupted::Failed(RunError::Store(e.into())))?;
+		let store = self.frames.store(layout, old, ram_percent).map_err(StoreError::Io)?;
 		Ok(Arc::new(store))
 	}
 
@@ -815,7 +855,7 @@ impl Worker {
 		let store = self.new_store(*store.layout(), Some(store), goal.ram_percent);
 		self.shared.discard.store(false, Ordering::Release);
 		let store = store?;
-		self.engine.as_mut().expect("an engine goes with the current spec").reset();
+		self.engine().reset();
 		self.probes = None;
 		self.steps_done = 0;
 		lock(&self.shared.held).clear();
@@ -828,7 +868,7 @@ impl Worker {
 	/// A collector for `spec`'s probes on a reset engine; the published traces start over.
 	fn restart_traces(&mut self, spec: &RunSpec) {
 		let collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene, spec.seed));
-		let engine = self.engine.as_mut().expect("an engine goes with the current spec");
+		let engine = self.engine();
 		engine.set_probes(collector.as_ref().map(ProbeCollector::cells).unwrap_or_default());
 		lock(&self.shared.traces).restart(collector.as_ref().map(|c| c.traces.clone()).unwrap_or_default());
 		self.probes = None;
@@ -868,7 +908,7 @@ impl Worker {
 			}
 			self.engine = Some(e);
 		}
-		self.engine.as_mut().expect("kept or built").reset();
+		self.engine().reset();
 		self.probes = None;
 		self.steps_done = 0;
 		Ok(())
@@ -886,6 +926,7 @@ impl Worker {
 		self.probes = None;
 		self.steps_done = 0;
 		self.rebuild_due = false;
+		super::engine_fits(&spec.scene, &spec.options, self.frames.memory())?;
 		match &self.factory {
 			#[cfg(not(target_arch = "wasm32"))]
 			Factory::Now(factory) => {
@@ -926,10 +967,20 @@ impl Worker {
 		self.publish_traces();
 		self.reset_engine(old, spec)?;
 		self.collector = (!spec.probes.is_empty()).then(|| ProbeCollector::new(&spec.probes, &spec.scene, spec.seed));
-		let engine = self.engine.as_mut().expect("reset_engine leaves an engine");
+		let engine = self.engine.as_deref_mut().expect(ENGINE);
 		engine.set_probes(self.collector.as_ref().map(ProbeCollector::cells).unwrap_or_default());
 		self.recorded = 0;
 		Ok(())
+	}
+
+	/// The spec in force and its store, which every unit of work has.
+	fn current(&self) -> &Current {
+		self.current.as_ref().expect("a unit of work has a spec in force")
+	}
+
+	/// The engine of the spec in force.
+	fn engine(&mut self) -> &mut dyn WaveEngine {
+		self.engine.as_deref_mut().expect(ENGINE)
 	}
 
 	/// Drops a failed engine and its frames, so the next goal builds anew.
@@ -962,23 +1013,23 @@ impl Worker {
 	/// Stored frame `j` is wanted: missing, or its probe readings not taken.
 	fn needed(&self, j: u32) -> bool {
 		let Some(c) = self.current.as_ref() else { return false };
-		!self.has_frame(j) || (!c.spec.probes.is_empty() && self.probes_taken() < j * c.spec.capture_every() + 1)
+		!self.has_frame(j)
+			|| (!c.spec.probes.is_empty() && self.probes_taken() < j * c.spec.schedule.capture_every() + 1)
 	}
 
 	/// The stored frame `goal` looks at.
 	fn position_of(&self, goal: &Goal) -> u32 {
-		let spec = &self.current.as_ref().expect("a current spec").spec;
-		spec.stored_index_of(goal.position.min(spec.frame_count().saturating_sub(1)))
+		let spec = &self.current().spec;
+		spec.schedule.stored_index_of(goal.position.min(spec.schedule.frame_count().saturating_sub(1)))
 	}
 
-	/// The next target by the module's rule. With everything wanted, the frames after the position come
-	/// first, then the probes' last steps while the engine stands at the readings' end (as a batch run records
-	/// them), then the frames before the position still missing (the pass to the position captures them),
-	/// then the probes' last steps from wherever the engine stands.
+	/// The next target by the module's rule. With everything wanted: frames after the position, then the probes' last
+	/// steps while the engine stands at the readings' end, then the still-missing frames before the position, then the
+	/// probes' last steps from wherever the engine stands.
 	fn next_target(&self, goal: &Goal) -> Option<Target> {
 		let current = self.current.as_ref()?;
 		let spec = &current.spec;
-		let frames = spec.stored_frames();
+		let frames = spec.schedule.stored_frames();
 		if frames == 0 {
 			return None;
 		}
@@ -993,7 +1044,7 @@ impl Worker {
 			return Some(Target::Frame(j));
 		}
 		let taken = self.probes_taken();
-		let tail = !spec.probes.is_empty() && taken < spec.steps;
+		let tail = !spec.probes.is_empty() && taken < spec.schedule.steps;
 		if tail && self.steps_done == taken {
 			return Some(Target::End);
 		}
@@ -1006,7 +1057,7 @@ impl Worker {
 	/// Steps to stored frame `target` and captures it when missing; `passed` captures the missing frames on
 	/// the way too.
 	fn step_to(&mut self, target: u32, passed: bool) -> Result<(), Interrupted> {
-		let steps = self.current.as_ref().expect("a target needs a current spec").spec.capture_every() * target + 1;
+		let steps = self.current().spec.schedule.capture_every() * target + 1;
 		self.advance_to(steps, Unit::Frame(target), WorkState::Stepping { target }, passed)?;
 		if self.ready_to_capture(target)? {
 			self.capture(target)?;
@@ -1016,17 +1067,15 @@ impl Worker {
 		Ok(())
 	}
 
-	/// Whether stored frame `j` is to be captured: false when it is there or on its way. The captures read back
-	/// land first; then a capture's room is made in the engine's ring, natively by landing the oldest. Pumped, a
-	/// wait until the capture can begin without waiting: the ring has room, its oldest capture read back and landed
-	/// below the spill's writes in flight.
+	/// Whether stored frame `j` is to be captured: false when it is there or on its way. Makes room in the engine's
+	/// capture ring first (natively by landing the oldest); pumped, waits until a capture can begin without waiting.
 	fn ready_to_capture(&mut self, j: u32) -> Result<bool, Interrupted> {
 		if self.has_frame(j) {
 			return Ok(false);
 		}
 		self.land_ready(false)?;
-		let shape = self.current.as_ref().expect("a capture needs a current spec").spec.shape;
-		let capacity = self.engine.as_ref().expect("an engine goes with the current spec").capture_capacity(&shape);
+		let shape = self.current().spec.shape;
+		let capacity = self.engine().capture_capacity(&shape);
 		while self.pending.len() >= capacity {
 			if self.deadline.is_some() {
 				return Err(self.wait_to_land());
@@ -1059,12 +1108,12 @@ impl Worker {
 	/// made room for.
 	fn capture(&mut self, j: u32) -> Result<(), Interrupted> {
 		let (store, shape) = {
-			let c = self.current.as_ref().expect("a capture needs a current spec");
+			let c = self.current();
 			(c.store.clone(), c.spec.shape)
 		};
-		let engine = self.engine.as_mut().expect("an engine goes with the current spec");
+		let engine = self.engine();
 		let buffer = store.buffer_for(j as usize);
-		let next = engine.begin_capture(&shape, buffer).map_err(|e| Interrupted::Failed(e.into()))?;
+		let next = engine.begin_capture(&shape, buffer)?;
 		self.pending.push_back((Capture::Frame(j), next));
 		Ok(())
 	}
@@ -1072,36 +1121,34 @@ impl Worker {
 	/// The fit's 16-bit frame of the spec's shape at the fit's timeline frame.
 	fn serve_fit(&mut self, fit: FitRequest) -> Result<(), Interrupted> {
 		let (steps, shape) = {
-			let c = self.current.as_ref().expect("a fit needs a current spec");
-			let frame = fit.frame.min(c.spec.frame_count().saturating_sub(1));
-			(c.spec.step_of(frame) + 1, c.spec.shape)
+			let c = self.current();
+			let frame = fit.frame.min(c.spec.schedule.frame_count().saturating_sub(1));
+			(c.spec.schedule.step_of(frame) + 1, c.spec.shape)
 		};
 		self.advance_to(steps, Unit::Fit(fit), WorkState::Fitting, false)?;
 		self.publish_traces();
 		if !self.pending.iter().any(|(c, _)| *c == Capture::Fit(fit)) {
 			self.finish_pending(false)?;
-			let engine = self.engine.as_mut().expect("an engine goes with the current spec");
+			let engine = self.engine();
 			let half = FrameShape { format: SampleFormat::Half, ..shape };
-			let pending =
-				engine.begin_capture(&half, Snapshot::new(half)).map_err(|e| Interrupted::Failed(e.into()))?;
+			let pending = engine.begin_capture(&half, Snapshot::new(half))?;
 			self.pending.push_back((Capture::Fit(fit), pending));
 		}
 		self.finish_pending(false)
 	}
 
-	/// Brings the engine to `steps` steps done (from 0 when it has passed them), recording the probes and, with
-	/// `passed`, capturing the missing stored frames on the way. Every [`CHECK_INTERVAL`] steps a pause is
-	/// honoured, and a new goal is looked at: the unit goes on when it is still what the goal wants
-	/// ([`still_wanted`](Self::still_wanted)), else it is left.
+	/// Brings the engine to `steps` steps done (from 0 when it has passed them), recording probes and, with `passed`,
+	/// capturing missing stored frames on the way. A pause is honoured and the goal re-read every [`CHECK_INTERVAL`]
+	/// steps; the unit goes on only while [`still_wanted`](Self::still_wanted).
 	fn advance_to(&mut self, steps: u32, unit: Unit, state: WorkState, passed: bool) -> Result<(), Interrupted> {
 		if self.steps_done > steps {
 			self.finish_pending(false)?;
-			let spec = self.current.as_ref().expect("a current spec").spec.clone();
+			let spec = self.current().spec.clone();
 			self.restart_engine(Some(&spec), &spec)?;
 		}
 		let (every, capture_every) = {
-			let spec = &self.current.as_ref().expect("a current spec").spec;
-			(spec.visualize_every, spec.capture_every())
+			let spec = &self.current().spec;
+			(spec.schedule.visualize_every, spec.schedule.capture_every())
 		};
 		if self.steps_done == steps {
 			return self.record(every, false);
@@ -1112,7 +1159,7 @@ impl Worker {
 			if (i - from).is_multiple_of(CHECK_INTERVAL) {
 				self.check_goal(unit, &state)?;
 			}
-			let engine = self.engine.as_mut().expect("an engine goes with the current spec");
+			let engine = self.engine.as_deref_mut().expect(ENGINE);
 			if engine.poll_room(&mut Context::from_waker(&self.waker)).is_pending() {
 				return Err(Interrupted::Wait);
 			}
@@ -1121,10 +1168,11 @@ impl Worker {
 				&& i + 1 < steps
 				&& i.is_multiple_of(capture_every)
 				&& self.ready_to_capture(i / capture_every)?;
-			let engine = self.engine.as_mut().expect("an engine goes with the current spec");
-			engine.advance_one_step().map_err(|e| Interrupted::Failed(e.into()))?;
-			if self.collector.is_some() {
-				engine.queue_probes().map_err(|e| Interrupted::Failed(e.into()))?;
+			let probes = self.collector.is_some();
+			let engine = self.engine();
+			engine.advance_one_step()?;
+			if probes {
+				engine.queue_probes()?;
 			}
 			self.steps_done = i + 1;
 			self.stepped = true;
@@ -1149,20 +1197,20 @@ impl Worker {
 	/// [`PROBE_BATCHES_IN_FLIGHT`] batches on their way.
 	fn record(&mut self, every: u32, whole: bool) -> Result<(), Interrupted> {
 		let Some(c) = self.collector.as_mut() else { return Ok(()) };
-		let engine = self.engine.as_mut().expect("an engine goes with the current spec").as_mut();
+		let engine = self.engine.as_deref_mut().expect(ENGINE);
 		let mut pending = match self.probes.take() {
 			Some(pending) => pending,
-			None => engine.pending_probes().map_err(|e| Interrupted::Failed(e.into()))?,
+			None => engine.pending_probes()?,
 		};
 		if self.deadline.is_some() && !resolved(pending.ready(), &self.waker) {
 			if whole || pending.batches_in_flight() >= PROBE_BATCHES_IN_FLIGHT {
-				engine.submit_pending().map_err(|e| Interrupted::Failed(e.into()))?;
+				engine.submit_pending()?;
 				self.probes = Some(pending);
 				return Err(Interrupted::Wait);
 			}
 			pending = pending.ready_part();
 		}
-		record(engine, pending, c, &mut self.recorded, every).map_err(|e| Interrupted::Failed(e.into()))
+		Ok(record(engine, pending, c, &mut self.recorded, every)?)
 	}
 
 	/// Whether `unit` is still worth finishing under `goal`: only work for the goal's own spec is. Of that, the
@@ -1270,7 +1318,7 @@ impl Worker {
 			self.land_oldest()?;
 		}
 		let every = match (&self.current, &self.engine) {
-			(Some(c), Some(_)) => c.spec.visualize_every,
+			(Some(c), Some(_)) => c.spec.schedule.visualize_every,
 			_ => return Ok(()),
 		};
 		self.record(every, true)?;
@@ -1283,7 +1331,7 @@ impl Worker {
 	/// so the frames written are not waited for.
 	fn land_ready(&mut self, leaving: bool) -> Result<(), Interrupted> {
 		if let Some(c) = &self.current {
-			c.store.settle().map_err(|e| Interrupted::Failed(e.into()))?;
+			c.store.settle()?;
 		}
 		while let Some((capture, pending)) = self.pending.front()
 			&& resolved(pending.ready(), &self.waker)
@@ -1311,7 +1359,7 @@ impl Worker {
 	fn finish_oldest(&mut self) -> Result<Option<(Capture, Snapshot)>, Interrupted> {
 		let Some((capture, pending)) = self.pending.pop_front() else { return Ok(None) };
 		let Some(engine) = self.engine.as_mut() else { return Ok(None) };
-		let snapshot = engine.finish_capture(pending).map_err(|e| Interrupted::Failed(e.into()))?;
+		let snapshot = engine.finish_capture(pending)?;
 		Ok(Some((capture, snapshot)))
 	}
 
@@ -1329,7 +1377,9 @@ impl Worker {
 							stored: frame as usize,
 						});
 					}
-					current.store.write_at(frame as usize, snapshot).map_err(|e| Interrupted::Failed(e.into()))
+					current.store.write_at(frame as usize, snapshot)?;
+					self.shared.changed();
+					Ok(())
 				}
 				None => Ok(()),
 			},
@@ -1382,6 +1432,7 @@ impl Worker {
 		{
 			p.device_frames = self.device_frames.clone();
 		}
+		self.shared.changed.notify_all();
 		drop(p);
 		if changed {
 			self.shared.notify();
@@ -1428,6 +1479,12 @@ enum Interrupted {
 	/// or the free storage not known yet; the pump's waker is woken once one is ready.
 	Wait,
 	Failed(RunError),
+}
+
+impl<E: Into<RunError>> From<E> for Interrupted {
+	fn from(e: E) -> Self {
+		Interrupted::Failed(e.into())
+	}
 }
 
 #[cfg(test)]
@@ -1539,7 +1596,7 @@ mod tests {
 		served(w.adopt(&spec, &g).map(|()| true));
 		let target = 3;
 		// Stepped and queued as advance_to does, left before its final record (a goal change).
-		for _ in 0..spec.capture_every() * target + 1 {
+		for _ in 0..spec.schedule.capture_every() * target + 1 {
 			let engine = w.engine.as_mut().unwrap();
 			engine.advance_one_step().unwrap();
 			engine.queue_probes().unwrap();
@@ -1592,7 +1649,7 @@ mod tests {
 	#[test]
 	fn a_pump_yields_while_its_engine_is_on_its_way_without_the_old_one() {
 		let (gate, live) = (Arc::new(Gate::default()), Arc::new(Live::default()));
-		let w = RunWorker::pumped(gated_cpu(gate.clone(), live.clone()), GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(gated_cpu(gate.clone(), live.clone()), GIB, GIB, ample(), Arc::default());
 		let gate_to = |open: bool| {
 			gate.0.store(open, Ordering::Release);
 			if open {
@@ -1654,7 +1711,7 @@ mod tests {
 
 	#[test]
 	fn the_traces_start_changes_as_they_start_over_and_holds_while_they_grow() {
-		let w = RunWorker::pumped(cpu(), GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(cpu(), GIB, GIB, ample(), Arc::default());
 		let start = || w.with_traces_started(|start, _| start);
 		w.set_goal(goal(1, &long(400)));
 		pump(&w, Duration::ZERO);
@@ -1676,21 +1733,21 @@ mod tests {
 
 	#[test]
 	fn a_pump_yields_at_its_deadline_and_the_next_goes_on_from_the_steps_done() {
-		let w = RunWorker::pumped(cpu(), GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(cpu(), GIB, GIB, ample(), Arc::default());
 		// longer than the two check intervals the zero deadlines step
 		let p = long(4 * CHECK_INTERVAL);
 		let last = RunRequest::new(&p, PreviewQuality::FULL, false).spec(&mut SceneCache::default()).unwrap();
-		let position = last.frame_count() - 1;
+		let position = last.schedule.frame_count() - 1;
 		w.set_goal(Goal { position, wanted: Wanted::Position, ..goal(1, &p) });
 		assert_eq!(pump(&w, Duration::ZERO), Pump::Work, "the deadline passed with the frame unmade");
 		assert_eq!(w.status().steps_done, CHECK_INTERVAL, "one check interval, then the deadline");
-		assert_eq!(w.status().state, WorkState::Stepping { target: last.stored_index_of(position) });
+		assert_eq!(w.status().state, WorkState::Stepping { target: last.schedule.stored_index_of(position) });
 		assert_eq!(pump(&w, Duration::ZERO), Pump::Work);
 		assert_eq!(w.status().steps_done, 2 * CHECK_INTERVAL);
 		assert_eq!(pump(&w, AMPLE), Pump::Idle, "the goal is reached");
 		let done = w.status();
-		assert_eq!((done.state, done.steps_done), (WorkState::Idle, last.step_of(position) + 1));
-		assert!(done.store.unwrap().has(last.stored_index_of(position) as usize));
+		assert_eq!((done.state, done.steps_done), (WorkState::Idle, last.schedule.step_of(position) + 1));
+		assert!(done.store.unwrap().has(last.schedule.stored_index_of(position) as usize));
 	}
 
 	#[test]
@@ -1699,7 +1756,7 @@ mod tests {
 		let mut w = Worker::new(
 			shared.clone(),
 			Factory::Later(cpu()),
-			Frames::Pending { ram_bytes: GIB, spill: ample() },
+			Frames::Pending { engine_bytes: GIB, ram_bytes: GIB, spill: ample() },
 			Arc::default(),
 		);
 		let handle = RunWorker { shared, thread: None, pumped: None };
@@ -1722,8 +1779,30 @@ mod tests {
 	}
 
 	#[test]
+	fn a_grid_beyond_the_memory_fails_the_run_before_its_engine_is_built() {
+		const MEMORY: u64 = 1 << 10;
+		let dir = tempfile::tempdir().unwrap();
+		let now: EngineFactory = Box::new(|_, _| panic!("an engine is built"));
+		let later: PumpedFactory = Box::new(|_, _| panic!("an engine is started"));
+		let memory = Memory::Fixed { available: MEMORY, physical: MEMORY };
+		let workers = [
+			(Factory::Now(now), Frames::Spill(dir.path().to_path_buf(), memory)),
+			(Factory::Later(later), Frames::Pending { engine_bytes: MEMORY, ram_bytes: GIB, spill: ample() }),
+		];
+		for (factory, frames) in workers {
+			let mut w = Worker::new(Arc::new(Shared::new()), factory, frames, Arc::default());
+			match w.serve(&goal(1, &project(20)), 1) {
+				Err(Interrupted::Failed(e)) => {
+					assert!(matches!(e, RunError::EngineMemory { memory: MEMORY, .. }), "{e}");
+				}
+				_ => panic!("the run did not fail"),
+			}
+		}
+	}
+
+	#[test]
 	fn a_paused_goal_ends_the_pump_until_resumed() {
-		let w = RunWorker::pumped(cpu(), GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(cpu(), GIB, GIB, ample(), Arc::default());
 		let running = goal(1, &long(400));
 		w.set_goal(running.clone());
 		assert_eq!(pump(&w, Duration::ZERO), Pump::Work);
@@ -1767,7 +1846,7 @@ mod tests {
 	#[test]
 	fn a_pumped_run_makes_the_threaded_runs_frames_and_traces() {
 		let p = long(300);
-		let pumped = RunWorker::pumped(cpu(), GIB, ample(), Arc::default());
+		let pumped = RunWorker::pumped(cpu(), GIB, GIB, ample(), Arc::default());
 		pumped.set_goal(goal(1, &p));
 		pumped_to_the_end(&pumped);
 		assert_as_threaded(&pumped, &p);
@@ -1807,7 +1886,7 @@ mod tests {
 		let p = long(40);
 		let factory = fake::Factory::ample();
 		let disk = factory.disk.clone();
-		let w = RunWorker::pumped(cpu(), 3 * frame_bytes(&p), Box::new(factory), Arc::default());
+		let w = RunWorker::pumped(cpu(), GIB, 3 * frame_bytes(&p), Box::new(factory), Arc::default());
 		w.set_goal(goal(1, &p));
 		pumped_with_spill(&w, &disk);
 		let store = w.store().unwrap();
@@ -1836,7 +1915,7 @@ mod tests {
 		let p = long(40);
 		let factory = fake::Factory::ample();
 		let disk = factory.disk.clone();
-		let w = RunWorker::pumped(cpu(), 3 * frame_bytes(&p), Box::new(factory), Arc::default());
+		let w = RunWorker::pumped(cpu(), GIB, 3 * frame_bytes(&p), Box::new(factory), Arc::default());
 		w.set_goal(goal(1, &p));
 		pumped_with_spill(&w, &disk);
 		let old = Arc::downgrade(&w.store().unwrap());
@@ -1854,7 +1933,7 @@ mod tests {
 		let p = long(40);
 		let factory = fake::Factory::ample();
 		let disk = factory.disk.clone();
-		let w = RunWorker::pumped(cpu(), 0, Box::new(factory), Arc::default());
+		let w = RunWorker::pumped(cpu(), GIB, 0, Box::new(factory), Arc::default());
 		w.set_goal(goal(1, &p));
 		assert_eq!(pump(&w, AMPLE), Pump::Waiting);
 		let (steps, writes) = (w.status().steps_done, lock(&disk).writes.len());
@@ -1880,7 +1959,7 @@ mod tests {
 		let p = long(40);
 		let frame = frame_bytes(&p);
 		let factory = fake::Factory { free: frame, ..fake::Factory::ample() };
-		let w = RunWorker::pumped(cpu(), 3 * frame, Box::new(factory), Arc::default());
+		let w = RunWorker::pumped(cpu(), GIB, 3 * frame, Box::new(factory), Arc::default());
 		w.set_goal(goal(1, &p));
 		assert_eq!(pump(&w, AMPLE), Pump::Idle);
 		let WorkState::Failed(e) = w.status().state else { panic!("the frames past memory do not fit") };
@@ -1894,7 +1973,7 @@ mod tests {
 		let p = long(40);
 		let factory = fake::Factory { ready: Arc::new(false.into()), ..fake::Factory::ample() };
 		let (ready, disk) = (factory.ready.clone(), factory.disk.clone());
-		let w = RunWorker::pumped(cpu(), GIB, Box::new(factory), Arc::default());
+		let w = RunWorker::pumped(cpu(), GIB, GIB, Box::new(factory), Arc::default());
 		w.set_goal(goal(1, &p));
 		for _ in 0..3 {
 			assert_eq!(pump(&w, AMPLE), Pump::Waiting);
@@ -1911,7 +1990,7 @@ mod tests {
 		let factory = fake::Factory::ample();
 		let disk = factory.disk.clone();
 		lock(&disk).fail = Some(std::io::ErrorKind::QuotaExceeded);
-		let w = RunWorker::pumped(cpu(), 3 * frame_bytes(&p), Box::new(factory), Arc::default());
+		let w = RunWorker::pumped(cpu(), GIB, 3 * frame_bytes(&p), Box::new(factory), Arc::default());
 		w.set_goal(goal(1, &p));
 		pumped_with_spill(&w, &disk);
 		let WorkState::Failed(e) = w.status().state else { panic!("a write failed") };
@@ -2110,7 +2189,7 @@ mod tests {
 				Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
 			})
 		};
-		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(factory, GIB, GIB, ample(), Arc::default());
 		w.set_goal(Goal { fit: Some(FitRequest { id: 7, frame: 10 }), ..goal(1, &long(40)) });
 		for gate in [&probes, &captures] {
 			for _ in 0..3 {
@@ -2136,7 +2215,7 @@ mod tests {
 			engine.capacity = 4;
 			Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
 		});
-		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(factory, GIB, GIB, ample(), Arc::default());
 		w.set_goal(Goal { fit: Some(FitRequest { id: 3, frame: 10 }), ..goal(1, &long(400)) });
 		let mut pumps = 0;
 		while pump(&w, AMPLE) != Pump::Idle {
@@ -2156,7 +2235,7 @@ mod tests {
 			engine.unsubmitted_probes = Some(Vec::new());
 			Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
 		});
-		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(factory, GIB, GIB, ample(), Arc::default());
 		w.set_goal(goal(1, &long(400)));
 		let mut pumps = 0;
 		while pump(&w, AMPLE) != Pump::Idle {
@@ -2177,7 +2256,7 @@ mod tests {
 				Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
 			})
 		};
-		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(factory, GIB, GIB, ample(), Arc::default());
 		let run = goal(1, &long(40));
 		w.set_goal(run.clone());
 		assert_eq!([pump(&w, AMPLE), pump(&w, AMPLE)], [Pump::Waiting; 2], "frame 0's capture is in flight");
@@ -2202,7 +2281,7 @@ mod tests {
 				Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
 			})
 		};
-		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(factory, GIB, GIB, ample(), Arc::default());
 		let run = goal(1, &long(40));
 		w.set_goal(Goal { fit: Some(FitRequest { id: 7, frame: 10 }), ..run.clone() });
 		for _ in 0..3 {
@@ -2226,12 +2305,12 @@ mod tests {
 				Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
 			})
 		};
-		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(factory, GIB, GIB, ample(), Arc::default());
 		let mut p = long(400);
 		p.probes.clear();
 		let spec = RunRequest::new(&p, PreviewQuality::FULL, false).spec(&mut SceneCache::default()).unwrap();
-		let position = spec.frame_count() / 2;
-		let stored = spec.stored_index_of(position) as usize;
+		let position = spec.schedule.frame_count() / 2;
+		let stored = spec.schedule.stored_index_of(position) as usize;
 		w.set_goal(Goal { position, ..goal(1, &p) });
 		let mut last = 0;
 		let mut seen = false;
@@ -2265,7 +2344,7 @@ mod tests {
 				Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
 			})
 		};
-		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(factory, GIB, GIB, ample(), Arc::default());
 		let mut p = long(400);
 		p.probes.clear();
 		w.set_goal(goal(1, &p));
@@ -2298,7 +2377,7 @@ mod tests {
 		};
 		let spill = fake::Factory::ample();
 		let disk = spill.disk.clone();
-		let w = RunWorker::pumped(factory, 0, Box::new(spill), Arc::default());
+		let w = RunWorker::pumped(factory, GIB, 0, Box::new(spill), Arc::default());
 		w.set_goal(goal(1, &p));
 		for _ in 0..4 {
 			assert_eq!(pump(&w, AMPLE), Pump::Waiting);
@@ -2330,11 +2409,11 @@ mod tests {
 				Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
 			})
 		};
-		let w = RunWorker::pumped(factory, GIB, ample(), Arc::default());
+		let w = RunWorker::pumped(factory, GIB, GIB, ample(), Arc::default());
 		// past a drain; the gated readings are one batch in flight, so only the target's end waits
 		let p = long(2 * PROBE_DRAIN);
 		let spec = RunRequest::new(&p, PreviewQuality::FULL, false).spec(&mut SceneCache::default()).unwrap();
-		let position = spec.frame_count() - 1;
+		let position = spec.schedule.frame_count() - 1;
 		w.set_goal(Goal { position, wanted: Wanted::Position, ..goal(1, &p) });
 		assert_eq!(pump(&w, AMPLE), Pump::Waiting);
 		let status = w.status();
@@ -2342,8 +2421,8 @@ mod tests {
 		assert_eq!(status.traces_steps, 0, "the target's readings are not read back yet");
 		probes.0.store(true, Ordering::Release);
 		assert_eq!(pump(&w, AMPLE), Pump::Idle);
-		assert_eq!(w.status().traces_steps, spec.step_of(position) + 1);
-		assert!(w.store().unwrap().has(spec.stored_index_of(position) as usize));
+		assert_eq!(w.status().traces_steps, spec.schedule.step_of(position) + 1);
+		assert!(w.store().unwrap().has(spec.schedule.stored_index_of(position) as usize));
 	}
 
 	/// A pumped CPU engine whose captures and probe batches each map once their gate, pushed to `issued`, opens.
@@ -2357,7 +2436,7 @@ mod tests {
 			engine.capacity = 8;
 			Box::pin(std::future::ready(Box::new(engine) as Box<dyn WaveEngine>))
 		});
-		RunWorker::pumped(factory, GIB, ample(), Arc::default())
+		RunWorker::pumped(factory, GIB, GIB, ample(), Arc::default())
 	}
 
 	/// Pumps up to `limit` times, the readbacks begun mapped after each pump as WebGPU's mapAsync; asserts no

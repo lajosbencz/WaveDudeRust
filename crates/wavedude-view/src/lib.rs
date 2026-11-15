@@ -8,5 +8,5 @@ pub mod fonts;
 pub mod graph;
 pub mod overlay;
 
-pub use draw::{DeviceGrid, FontMetrics, TextMetrics};
+pub use draw::{DeviceGrid, TextMetrics};
 pub use epaint;

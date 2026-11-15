@@ -4,7 +4,6 @@ mod common;
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::model::{BoxSize, Layer, Measurement, Probe, ProbeKind, Project, Source, SourceArray, YScale};
 use wavedude_export::overlays::{Overlays, arm_length, label_origin, label_size};
-use wavedude_view::FontMetrics;
 use wavedude_view::epaint::Color32;
 use wavedude_view::epaint::text::{FontId, Fonts, TextOptions};
 use wavedude_view::graph::{self, GraphData};
@@ -148,9 +147,8 @@ fn graph_boxes_show_background_border_axes_and_the_curve() {
 		..ProbeTrace::default()
 	};
 	let mut fonts = Fonts::new(TextOptions::default(), wavedude_view::fonts::definitions());
-	let mut metrics =
-		FontMetrics { fonts: &mut fonts.with_pixels_per_point(1.), font: FontId::proportional(graph::FONT_SIZE) };
-	let layout = graph::layout(&probe, &GraphData::at(&trace, 299, 0), 300, 200.0, 100.0, &mut metrics);
+	let mut fonts = fonts.with_pixels_per_point(1.);
+	let layout = graph::layout_with(&mut fonts, &probe, &GraphData::at(&trace, 299, 0), 300, 200.0, 100.0);
 	assert!(layout.has_plot && layout.show_labels);
 	assert!(layout.y_ticks.iter().any(|t| t.zero), "a symmetric amplitude axis has its zero line");
 	assert_eq!(layout.readout, format!("= {}", graph::format_g3(trace.series[299] as f64)));
@@ -164,7 +162,7 @@ fn graph_boxes_show_background_border_axes_and_the_curve() {
 	};
 	let positive =
 		ProbeTrace { series: (1..300).map(|i| (i as f32 * 1e-4).powi(2)).collect(), ..ProbeTrace::default() };
-	let layout = graph::layout(&log, &GraphData::at(&positive, 298, 0), 300, 400.0, 200.0, &mut metrics);
+	let layout = graph::layout_with(&mut fonts, &log, &GraphData::at(&positive, 298, 0), 300, 400.0, 200.0);
 	assert!(
 		layout.y_ticks.iter().all(|t| t.label.starts_with("1e") || t.label.starts_with("0.") || t.label == "1"),
 		"{:?}",

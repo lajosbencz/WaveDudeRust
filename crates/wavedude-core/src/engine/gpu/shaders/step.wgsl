@@ -1,7 +1,7 @@
 // The grid passes of a sub-step (engine/cpu.rs): `step` / `step_intensity` the 9-point leapfrog
 // (next = c + ((c - prev) d + c2 L u h), written over prev); `inner` the modified equation's
 // w = c2 L u and `outer` / `outer_intensity` its next = c + ((c - prev) d + (w + c2 L w / 12) h) with
-// the DRP stencil; h = (1 + d) / 2 centres the damping (engine/cpu.rs, `centred`).
+// the DRP stencil (drp.wgsl); h = (1 + d) / 2 centres the damping (engine/stencil.rs, `centred`).
 // The intensity entry points also advance the two EMA stages.
 
 @group(0) @binding(1) var<storage, read> cur: array<f32>;
@@ -11,8 +11,8 @@
 @group(0) @binding(6) var<storage, read> tables: array<f32>;
 @group(0) @binding(7) var<storage, read_write> wbuf: array<f32>;
 
-// Each stencil as weighted sums of differences from the centre (engine/cpu.rs). The 9-point drops a
-// diagonal tap passing an axis neighbour that is a mirror (engine/pml.rs, diagonal_cuts).
+// The 9-point as weighted sums of differences from the centre (engine/cpu.rs), a diagonal tap passing an
+// axis neighbour that is a mirror dropped (engine/pml.rs, diagonal_cuts).
 fn nine_point(i: u32, cut: u32) -> f32 {
 	let s = p.stride;
 	let c = cur[i];
@@ -27,40 +27,6 @@ fn nine_point(i: u32, cut: u32) -> f32 {
 	let diagonals = ((nw - c) + (ne - c)) + ((sw - c) + (se - c));
 	let axes = ((cur[i - s] - c) + (cur[i + s] - c)) + ((cur[i - 1u] - c) + (cur[i + 1u] - c));
 	return K9_DIAGONAL * diagonals + K9_AXIS * axes;
-}
-
-fn drp_cur(i: u32, cut: u32) -> f32 {
-	let s = p.stride;
-	let c = cur[i];
-	if cut == 0u {
-		let near = ((cur[i - 1u] - c) + (cur[i + 1u] - c)) + ((cur[i - s] - c) + (cur[i + s] - c));
-		let mid = ((cur[i - 2u] - c) + (cur[i + 2u] - c)) + ((cur[i - 2u * s] - c) + (cur[i + 2u * s] - c));
-		let far = ((cur[i - 3u] - c) + (cur[i + 3u] - c)) + ((cur[i - 3u * s] - c) + (cur[i + 3u * s] - c));
-		return AX1 * near + AX2 * mid + AX3 * far;
-	}
-	let x = taps_cur(i, 1u, cut & 0xfu);
-	let y = taps_cur(i, s, cut >> 4u);
-	let near = ((x[2] - c) + (x[4] - c)) + ((y[2] - c) + (y[4] - c));
-	let mid = ((x[1] - c) + (x[5] - c)) + ((y[1] - c) + (y[5] - c));
-	let far = ((x[0] - c) + (x[6] - c)) + ((y[0] - c) + (y[6] - c));
-	return AX1 * near + AX2 * mid + AX3 * far;
-}
-
-fn drp_w(i: u32, cut: u32) -> f32 {
-	let s = p.stride;
-	let c = wbuf[i];
-	if cut == 0u {
-		let near = ((wbuf[i - 1u] - c) + (wbuf[i + 1u] - c)) + ((wbuf[i - s] - c) + (wbuf[i + s] - c));
-		let mid = ((wbuf[i - 2u] - c) + (wbuf[i + 2u] - c)) + ((wbuf[i - 2u * s] - c) + (wbuf[i + 2u * s] - c));
-		let far = ((wbuf[i - 3u] - c) + (wbuf[i + 3u] - c)) + ((wbuf[i - 3u * s] - c) + (wbuf[i + 3u * s] - c));
-		return AX1 * near + AX2 * mid + AX3 * far;
-	}
-	let x = taps_wbuf(i, 1u, cut & 0xfu);
-	let y = taps_wbuf(i, s, cut >> 4u);
-	let near = ((x[2] - c) + (x[4] - c)) + ((y[2] - c) + (y[4] - c));
-	let mid = ((x[1] - c) + (x[5] - c)) + ((y[1] - c) + (y[5] - c));
-	let far = ((x[0] - c) + (x[6] - c)) + ((y[0] - c) + (y[6] - c));
-	return AX1 * near + AX2 * mid + AX3 * far;
 }
 
 fn centred(d: f32) -> f32 {
@@ -94,7 +60,7 @@ fn modified(id: vec3<u32>, intensity: bool) {
 	let i = cell(id.x, id.y);
 	let c = cur[i];
 	let m = medium_at(i);
-	let v = c + ((c - nxt[i]) * m.y + (wbuf[i] + m.x * drp_w(i, cut_at(i)) * INV12) * centred(m.y));
+	let v = c + ((c - nxt[i]) * m.y + (wbuf[i] + m.x * drp_wbuf(i, cut_at(i)) * INV12) * centred(m.y));
 	nxt[i] = v;
 	if intensity {
 		accumulate(i, v);

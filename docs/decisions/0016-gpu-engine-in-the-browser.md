@@ -16,7 +16,7 @@ disk or machine query, and the per-layer colouring of a picture lived in the app
 
 - Setup is async: `GpuContext::create`, `GpuEngine::create` and `engine::build_on` (the GPU else the CPU, with its warning)
   await the adapter, the device and the pipeline error scope. On native targets `context()` (the process's cached
-  device), `GpuEngine::new`, `GpuEngine::with_layout` and `engine::build` block on them with `pollster`, which is a
+  device), `GpuEngine::new` and `engine::build` block on them with `pollster`, which is a
   dependency of non-wasm targets only. On wasm the caller awaits `create` and owns the `Arc<GpuContext>`.
 - A readback's map callback sets a `sync::Notify`, which wakes a waiting future. `PendingCapture::ready()` resolves when
   the copy is mapped, `PendingProbes::ready()` when every copied batch of the probe readings it covers is, both at once

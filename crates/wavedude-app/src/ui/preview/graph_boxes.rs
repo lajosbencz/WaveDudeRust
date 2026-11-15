@@ -4,21 +4,19 @@
 
 use eframe::egui::epaint::ClippedShape;
 use eframe::egui::{
-	CursorIcon, EventFilter, FontId, Id, Key, Modifiers, Rect, Response, Role, Sense, Stroke, StrokeKind, Ui,
-	WidgetInfo, vec2,
+	CursorIcon, EventFilter, Id, Key, Modifiers, Rect, Response, Role, Sense, Stroke, StrokeKind, Ui, WidgetInfo, vec2,
 };
 use egui_material_icons::icons::ICON_IOS_SHARE;
 use wavedude_app_state::Event;
 use wavedude_app_state::commands::{Command, Edit};
-use wavedude_app_state::platform::HAS_EXPORTS;
 use wavedude_app_state::selection::Row;
 use wavedude_core::model::{BoxSize, ItemKind, ItemRef, Layer, ProbeEdit};
+use wavedude_view::DeviceGrid;
 use wavedude_view::graph::{self, GraphLayout};
-use wavedude_view::{DeviceGrid, FontMetrics};
 
 use super::{Preview, pressed_on};
 use crate::App;
-use crate::menus::{MenuAction, On};
+use crate::menus::{self, MenuAction, On};
 use crate::preview::graph_boxes::{BoxKey, BoxView, box_key, boxes, dragged_box, moved_box_edits, resized_box_edits};
 use crate::preview::view::CanvasTransform;
 use crate::ui::menu_bar::{self, Slot};
@@ -117,11 +115,10 @@ impl Preview {
 		let shapes = ctx.fonts_mut(|fonts| {
 			let laid = (t.scale.to_bits(), ppp.to_bits());
 			if b.laid != laid {
-				let mut metrics = FontMetrics { fonts: &mut *fonts, font: FontId::proportional(graph::FONT_SIZE) };
 				b.layouts = (b.views.iter())
 					.map(|v| {
 						let r = on_picture(v, t);
-						graph::layout(&v.probe, &v.recording.data(), steps, r.width(), r.height(), &mut metrics)
+						graph::layout_with(fonts, &v.probe, &v.recording.data(), steps, r.width(), r.height())
 					})
 					.collect();
 				b.laid = laid;
@@ -181,21 +178,20 @@ impl Preview {
 				ui.painter().rect_stroke(grip_rect, 0., Stroke::new(1., accent), StrokeKind::Inside);
 			}
 			self.edit_box(ui, app, (v.index, rect), t, (&response, &grip), out);
-			let export_busy = app.live.export_busy();
 			let item = ItemRef::new(ItemKind::Probe, v.index);
 			if response.secondary_clicked() && !app.selection.contains(item) {
 				app.selection.select(Row::Item(item));
 			}
-			if HAS_EXPORTS {
-				response.context_menu(|ui| {
-					ui.add_enabled_ui(!export_busy, |ui| {
-						let text = app.strings.get("MenuExportProbeCsv");
-						if menu_bar::entry(ui, Slot::Icon(ICON_IOS_SHARE), text, None, None).clicked() {
-							picked = Some((MenuAction::ExportProbeCsv, On::Row(Some(Row::Item(item)))));
-						}
-					});
+			let on = On::Row(Some(Row::Item(item)));
+			let csv = menus::enabled(app, MenuAction::ExportProbeCsv, on);
+			response.context_menu(|ui| {
+				ui.add_enabled_ui(csv, |ui| {
+					let text = app.strings.get("MenuExportProbeCsv");
+					if menu_bar::entry(ui, Slot::Icon(ICON_IOS_SHARE), text, None, None).clicked() {
+						picked = Some((MenuAction::ExportProbeCsv, on));
+					}
 				});
-			}
+			});
 		}
 		self.boxes[layer as usize] = Some(b);
 		picked

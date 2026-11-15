@@ -41,7 +41,8 @@ last  = ExportTo <= 0 ? lastFrame : clamp(ExportTo / VE, first, lastFrame)
 
 Export uses the current run only when it is fresh, complete and at Full quality (divisor 1, every frame, Half). Otherwise
 a full-quality run is made first. Exr needs a run whose intensity plane holds I (`IntensityRoot = false`); ExrRoot and
-all colour formats use sqrt(I) planes.
+all colour formats use sqrt(I) planes. A run whose intensity is in the other form does not count as fit (app-state's
+`RunNeeds`), and the export job refuses an Exr or ExrRoot intensity of the other form (`ExportPlan::build_job`).
 
 ## Per-frame rendering (colour formats)
 
@@ -141,7 +142,7 @@ Label font: see "Burned-in overlays" below.
 - `ftyp` brand `qt  `; `moov` reserved up front as a `free` atom of `1024 + 12*frames` bytes when the frame count is
   known (moov written into it at close), else moov at the end; `mdat` with 64-bit size; chunk offsets `co64`.
 - Codec `rle ` (Animation, 24-bit, every frame a key frame, full-frame RLE) or `png ` (each sample a PNG, filter None).
-- Spatial quality 0x3FF (lossless). Timescale = Fps (int), each sample duration 1.
+- Spatial quality 0x3FF (`codecMaxQuality`). Timescale = Fps (int), each sample duration 1.
 
 ## MP4 (`Export/Mp4Writer.cs`)
 
@@ -150,7 +151,7 @@ Label font: see "Burned-in overlays" below.
 - Bitrate fallback: `clamp(round_even(W*H*fps*0.01*50^(q/100)), 300000, 200000000)` bit/s.
 - Odd sizes padded to even by repeating the last row/column; maximum 4096 x 2304.
 - Rust: an H.264 encoder behind `wavedude_export::h264::H264Encoder` (opened by the plan's `H264Factory`,
-  `ExportPlan::h264`) muxed by the `mp4` crate (feature `mp4-mux`, which builds for the browser). The encoder
+  `ExportPlan::h264`) muxed in-house (feature `mp4-mux`, which builds for the browser). The encoder
   takes 4:2:0 pictures and hands back Annex B access units, possibly later (`poll_ready`, `start_flush`,
   `poll_flushed`); the sink passes this on as `FrameSink::poll_ready` and `poll_finish`, which the job polls
   before writing a frame and before finishing (not after a cancel). Natively the encoder is OpenH264 (feature
@@ -163,6 +164,13 @@ Label font: see "Burned-in overlays" below.
   fps pictures; I420 frames at `index / fps` s, colour space `smpte170m` limited range. At most 6 pictures are in
   the encoder: `poll_ready` is pending above that. A picture coming out other than next (dropped or reordered)
   fails the export, as does the encoder's error callback.
+- Rust container (`sinks::bmff`, shared with MOV): `ftyp` `isom`, minor 512, compatible `isom`, `iso2`, `avc1`,
+  `mp41`; `moov` in a `free` box of `1024 + 16*frames` bytes ahead of `mdat` (at the end when it does not fit),
+  `mdat` with 64-bit size; one track, timescale = fps, each sample one tick and a chunk of its own; an `avc1`
+  sample entry of the coded (padded) size whose `avcC` holds the first access unit's SPS and PPS with 4-byte NAL
+  lengths (and the chroma format and bit depths for High profiles), the parameter sets left out of the samples;
+  `stss` lists the IDR pictures; chunk offsets `stco` while they fit 32 bits, else `co64`. Colour is tagged by the
+  SPS's VUI only, no `colr`.
 - Profile: `ExportPlan::h264_profile` (Baseline, Main or High), the app's `H264Profile` setting; when the encoder
   lacks it, its best profile is used and a warning logged. OpenH264 encodes Constrained Baseline only; the browser
   the profiles `VideoEncoder.isConfigSupported` accepts at the export's size and frame rate.
@@ -312,8 +320,8 @@ Graph boxes (fixed author colours, ARGB):
 | curve and readout | (255, 255, 208, 64); curve width `max(1.2, boxHeight/110)`, round joins, clipped to the plot; a single sample is a disc of radius 2 |
 
 The box shows the run's recording as it stood at the exported frame (step `frame*VisualizeEvery`). The layout is
-`ProbeGraph.Layout`'s, ported once as `graph::layout` (wavedude-view) and shared by preview and export; text keeps its
-size at any box size (11 px, line height `h` from the font):
+`ProbeGraph.Layout`'s, ported once as `graph::layout` (wavedude-view), which preview and export call through
+`graph::layout_with`; text keeps its size at any box size (11 px, line height `h` from the font):
 
 - Visible from 40 x 30. Title row `h + 2*3` high: title at (3, 3) on the left, readout ("= v" for a point probe,
   "max v" for a line probe's profile, .NET G3) on the right.

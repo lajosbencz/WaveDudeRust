@@ -1,8 +1,6 @@
-//! The window over [`App`]: the frame loop that ticks the state, the title, UI zoom and look that follow the
-//! settings, the menu bar and the shortcuts with the one dispatcher of their [`MenuAction`]s, the dock and the status
-//! bar, the modals that the state's responses and notices ask for, the close box that asks about unsaved edits
-//! first, and the renderer's GPU device that the engines share natively and the preview colours pictures on.
-//! What differs between the desktop and the browser is in `native` and `web`, chosen at compile time.
+//! The window over [`App`]: the frame loop that ticks the state, the menu bar and shortcuts with the one dispatcher of
+//! their [`MenuAction`]s, the dock, the status bar, the modals, and the renderer's GPU device that the engines share
+//! natively. What differs between the desktop and the browser is in `native` and `web`, chosen at compile time.
 //!
 //! Threads: the UI thread; the state's workers are polled on the tick while something moves, and wake the window
 //! through [`wavedude_app_state::wake`] otherwise.
@@ -16,6 +14,7 @@ mod export;
 mod files;
 mod gradient_editor;
 mod icons;
+mod inbox;
 mod manual;
 mod markdown;
 mod memory_warning;
@@ -61,28 +60,26 @@ use wavedude_app_state::{Event, Guarded, Response};
 use wavedude_core::engine::GpuHandle;
 #[cfg(not(target_arch = "wasm32"))]
 use wavedude_core::engine::gpu::GpuContext;
-use wavedude_core::model::{ItemKind, ItemRef};
+use wavedude_core::model::ItemRef;
 use wavedude_core::quality::PreviewQuality;
 
 use self::about::About;
 use self::dock::Dock;
 use self::examples::Examples;
 use self::export::Exports;
-#[cfg(not(target_arch = "wasm32"))]
 use self::export::{After, Step};
 use self::manual::Manual;
 use self::memory_warning::MemoryWarning;
 use self::messages::MessagesPane;
 use self::modal::{Modal, Modals, Then};
+use self::platform::Updates;
 use self::preview::Preview;
 use self::properties::{PropertiesPane, Request};
 use self::shortcuts::Keyboard;
 use self::startup::Startup;
 use self::tree::ProjectPane;
-#[cfg(not(target_arch = "wasm32"))]
-use self::updates::Updates;
 use crate::App;
-use crate::menus::{MenuAction, On, moves_of};
+use crate::menus::{self, MenuAction, On, moves_of};
 use crate::window::Pane;
 use crate::window::TICK;
 
@@ -125,7 +122,6 @@ pub struct Shell {
 	manual: Option<Manual>,
 	files: files::Files,
 	exports: Exports,
-	#[cfg(not(target_arch = "wasm32"))]
 	updates: Updates,
 	/// The close box was pressed: Exit is asked for once no modal shows.
 	close_asked: bool,
@@ -145,16 +141,14 @@ impl Shell {
 		cc.egui_ctx.add_plugin(menu_keys::MenuKeys::default());
 		egui_material_icons::initialize(&cc.egui_ctx);
 		egui_extras::install_image_loaders(&cc.egui_ctx);
-		#[cfg(target_arch = "wasm32")]
-		web::guard_shortcuts(cc.egui_ctx.os());
+		platform::guard_shortcuts(cc.egui_ctx.os());
 		let zoom = app.settings.ui_zoom;
 		cc.egui_ctx.set_zoom_factor(zoom as f32);
 		let shown = Shown { title: app.title(), zoom, theme: None };
 		let dock = Dock::load(app.settings.layout.as_deref());
 		let preview = Preview::new(cc.wgpu_render_state.clone());
 		let project = ProjectPane::default();
-		#[cfg(not(target_arch = "wasm32"))]
-		let updates = Updates::new(boot.update.clone());
+		let updates = Updates::new(&boot);
 		// the launch asks one thing at most: the crash report, the startup page or (quietly) for an update
 		let mut modals = Modals::default();
 		if let Some(report) = take_crash_report(&boot.store) {
@@ -162,7 +156,6 @@ impl Shell {
 		} else if startup::due(&app) {
 			modals.show(Modal::Startup(Startup::new(&app)));
 		} else if app.settings.check_for_updates == Some(true) {
-			#[cfg(not(target_arch = "wasm32"))]
 			updates.check(&cc.egui_ctx, true);
 		}
 		Self {
@@ -178,7 +171,6 @@ impl Shell {
 			manual: None,
 			files: files::Files::default(),
 			exports: Exports::default(),
-			#[cfg(not(target_arch = "wasm32"))]
 			updates,
 			close_asked: false,
 			exiting: false,
@@ -197,10 +189,7 @@ impl Shell {
 	/// Sends `event` to the state and acts on its response.
 	fn send(&mut self, ctx: &egui::Context, event: Event) {
 		match self.app.handle(event, Instant::now()) {
-			#[cfg(not(target_arch = "wasm32"))]
 			Response::Exit => self.quit(After::Exit),
-			#[cfg(target_arch = "wasm32")]
-			Response::Exit => self.exiting = true,
 			Response::Clipboard { text, then } => {
 				ctx.copy_text(text);
 				if let Some(command) = then {
@@ -211,10 +200,7 @@ impl Shell {
 			Response::AskSavePath { proposed } => self.files.save_as(ctx, &self.app, proposed),
 			Response::MemoryWarning => self.ask_memory_warning(),
 			Response::Error(line) => self.modals.show(Modal::Error(line)),
-			#[cfg(not(target_arch = "wasm32"))]
 			Response::Restart => self.quit(After::Restart),
-			#[cfg(target_arch = "wasm32")]
-			Response::Restart => {}
 			Response::None => {}
 		}
 	}
@@ -227,7 +213,6 @@ impl Shell {
 			Then::Examples => self.modals.show(Modal::Examples(Examples::default())),
 			#[cfg(not(target_arch = "wasm32"))]
 			Then::Download(update) => self.updates.download(ctx, &self.app.strings, *update),
-			#[cfg(not(target_arch = "wasm32"))]
 			Then::CheckForUpdates => self.updates.check(ctx, true),
 			Then::Export(step) => self.exports.step(ctx, &mut self.app, &mut self.modals, step),
 			#[cfg(target_arch = "wasm32")]
@@ -237,7 +222,6 @@ impl Shell {
 
 	/// Ends the program, `after` saying whether it restarts into the downloaded update. A running export is
 	/// stopped first on the user's word, and the end waits for it.
-	#[cfg(not(target_arch = "wasm32"))]
 	fn quit(&mut self, after: After) {
 		if self.exports.exporting() {
 			let text = self.app.strings.get("ExitStopsExport").to_owned();
@@ -247,7 +231,6 @@ impl Shell {
 		}
 	}
 
-	#[cfg(not(target_arch = "wasm32"))]
 	fn leave(&mut self, after: After) {
 		if after == After::Restart {
 			self.updates.restart();
@@ -288,10 +271,14 @@ impl Shell {
 		}
 	}
 
-	/// Runs a menu entry or a shortcut; item actions apply to `on`. `pasted` is the clipboard's text that came with
-	/// a paste.
+	/// Runs a menu entry or a shortcut unless it is disabled; item actions apply to `on`. `pasted` is the clipboard's
+	/// text that came with a paste.
 	fn act(&mut self, ctx: &egui::Context, action: MenuAction, on: On, pasted: Option<String>) {
 		if matches!(on, On::Current) && self.messages.act(ctx, action) {
+			return;
+		}
+		if !menus::enabled(&self.app, action, on) {
+			tracing::debug!("{action:?} refused: disabled");
 			return;
 		}
 		if action == MenuAction::Copy
@@ -302,11 +289,7 @@ impl Shell {
 		}
 		let app = &self.app;
 		let st = &app.settings;
-		let target = match on {
-			On::Current => app.selection.current_item(),
-			On::Row(Some(Row::Item(i))) => Some(i),
-			On::Row(_) => None,
-		};
+		let target = menus::target(app, on);
 		let quality = |f: fn(&mut PreviewQuality, u32), v: u32| {
 			let mut q = st.preview_quality();
 			f(&mut q, v);
@@ -331,15 +314,14 @@ impl Shell {
 			MenuAction::Redo => Some(Event::Redo),
 			MenuAction::Cut => target.map(|target| Event::Cut { target }),
 			MenuAction::Copy => Some(Event::Copy),
-			MenuAction::Paste => pasted.or_else(|| platform::read_clipboard(ctx)).map(|text| {
+			MenuAction::Paste => pasted.or_else(|| platform::read_clipboard(ctx, on)).map(|text| {
 				let row = if let On::Row(row) = on { row } else { None };
 				let target = PasteTarget { current: row.or(app.selection.current()), before: false };
 				Event::Paste { text, target, place_at: None }
 			}),
 			MenuAction::Delete => on_target(|target| Command::Remove { target }),
 			MenuAction::SelectAll => {
-				let project = self.app.document.project.clone();
-				self.app.selection.select_all(&project);
+				self.app.selection.select_all(&self.app.document.project);
 				None
 			}
 			MenuAction::Pane(pane) => {
@@ -365,7 +347,7 @@ impl Shell {
 				self.modals.show(Modal::Confirm { text, yes: Then::Send(Event::DiscardFrames), destroys: true });
 				None
 			}
-			MenuAction::Play => Some(if app.live.playback.is_playing() { Event::PausePlayback } else { Event::Play }),
+			MenuAction::Play => Some(Event::TogglePlayback),
 			MenuAction::UseGpu => Some(Event::SetUseGpu(!st.use_gpu)),
 			MenuAction::AutoRerun => Some(Event::SetAutoRerun(!st.auto_rerun)),
 			MenuAction::WarnMemory => Some(Event::SetWarnWhenRamInsufficient(!st.warn_when_ram_insufficient)),
@@ -381,9 +363,7 @@ impl Shell {
 				None
 			}
 			MenuAction::ToggleEnabled => on_target(|target| Command::ToggleEnabled { target }),
-			MenuAction::ToggleUserScheme => {
-				target.filter(|t| t.kind == ItemKind::Scheme).map(|t| Event::ToggleUserScheme(t.index))
-			}
+			MenuAction::ToggleUserScheme => target.map(|t| Event::ToggleUserScheme(t.index)),
 			MenuAction::Duplicate => on_target(|target| Command::Duplicate { target }),
 			MenuAction::MoveUp | MenuAction::MoveDown => {
 				if let Some(target) = target {
@@ -418,13 +398,10 @@ impl Shell {
 				self.manual.get_or_insert_default().raise();
 				None
 			}
-			#[cfg(not(target_arch = "wasm32"))]
 			MenuAction::CheckForUpdates => {
 				self.updates.check(ctx, false);
 				None
 			}
-			#[cfg(target_arch = "wasm32")]
-			MenuAction::CheckForUpdates => None,
 			MenuAction::Export(choice) => {
 				if let Some(dialog) = Exports::dialog(app, choice) {
 					self.modals.show(dialog);
@@ -436,7 +413,7 @@ impl Shell {
 				None
 			}
 			MenuAction::ExportProbeCsv => {
-				if let Some(probe) = target.filter(|t| t.kind == ItemKind::Probe) {
+				if let Some(probe) = target {
 					self.exports.probe_csv(ctx, app, &mut self.modals, probe.index);
 				}
 				None
@@ -482,15 +459,7 @@ impl Shell {
 	/// The wait before the next tick: short while something moves, else no tick.
 	fn next_tick(&self) -> Option<Duration> {
 		let live = &self.app.live;
-		#[cfg(not(target_arch = "wasm32"))]
-		let downloading = crate::downloads::running();
-		#[cfg(not(target_arch = "wasm32"))]
-		let exporting = self.exports.exporting();
-		// the browser's export repaints while it works and is woken while it waits
-		#[cfg(target_arch = "wasm32")]
-		let (downloading, exporting) = (false, false);
-		let moving = downloading
-			|| exporting
+		let moving = platform::ticks_for(&self.exports)
 			|| live.run_is_progressing()
 			|| live.is_working()
 			|| live.fit_pending()
@@ -528,11 +497,9 @@ impl eframe::App for Shell {
 			None => self.modals.drop_scene_image(&ctx),
 		}
 		self.exports.poll(&ctx, &mut self.app, &mut self.modals);
-		#[cfg(not(target_arch = "wasm32"))]
 		if let Some(after) = self.exports.take_after() {
 			self.leave(after);
 		}
-		#[cfg(not(target_arch = "wasm32"))]
 		self.updates.take(&self.app.strings, &mut self.modals);
 		self.follow_settings(&ctx, frame);
 		// the window's keys wait while a modal shows
@@ -611,8 +578,8 @@ impl eframe::App for Shell {
 		if let Some((action, on)) = picked {
 			self.act(&ctx, action, on, None);
 		}
-		if let Some(text) = pasted {
-			self.act(&ctx, MenuAction::Paste, On::Current, Some(text));
+		if let Some((text, on)) = pasted {
+			self.act(&ctx, MenuAction::Paste, on, Some(text));
 		}
 		// A drag edits the arrangement on every frame: it is saved once the pointer lets go.
 		if !ctx.input(|i| i.pointer.any_down())

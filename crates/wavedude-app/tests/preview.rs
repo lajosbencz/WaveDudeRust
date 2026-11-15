@@ -6,22 +6,21 @@ mod common;
 use std::path::Path;
 use std::time::Duration;
 
-use eframe::egui::{self, Key, PointerButton, Pos2, Role, vec2};
+use eframe::egui::{Key, Pos2, Role, vec2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use wavedude_app::App;
-use wavedude_app::ui::{Boot, Shell};
+use wavedude_app::ui::Shell;
 use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::document::Source;
-use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{Event, Guarded};
 use wavedude_core::model::{ProjectEdit, SimulationEdit};
 
+use common::{SETTLE, app, boot, button, settle};
+
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj";
-/// Frames for an input to reach the state and its result to show.
-const SETTLE: usize = 4;
 /// Steps of a run that completes quickly.
 const SHORT_RUN: u32 = 200;
 
@@ -37,7 +36,7 @@ fn preview_of(dir: &Path, steps: Option<u32>) -> Harness<'static, Shell> {
 		let edit = Edit::Project(ProjectEdit::Simulation(SimulationEdit::Steps(steps)));
 		app.handle(Event::Command(Command::Edit(edit)), Instant::now());
 	}
-	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
+	let boot = boot(&dirs);
 	let mut harness = Harness::builder().with_size(vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
 	harness
@@ -50,20 +49,6 @@ fn preview(dir: &Path) -> Harness<'static, Shell> {
 /// The window on a run short enough to complete quickly yet hold a few frames.
 fn short_preview(dir: &Path) -> Harness<'static, Shell> {
 	preview_of(dir, Some(SHORT_RUN))
-}
-
-fn settle(harness: &mut Harness<'_, Shell>) {
-	harness.run_steps(SETTLE);
-}
-
-fn app<'h>(harness: &'h Harness<'_, Shell>) -> &'h App {
-	harness.state().app()
-}
-
-fn button(harness: &mut Harness<'_, Shell>, pos: Pos2, pressed: bool) {
-	let modifiers = Default::default();
-	harness.event(egui::Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers });
-	harness.run_steps(1);
 }
 
 /// Presses at `from`, moves to `to` in five steps and, unless `hold`, releases there.

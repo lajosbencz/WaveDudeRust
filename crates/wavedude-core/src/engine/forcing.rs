@@ -1,23 +1,22 @@
 //! Sources as a forcing term of the wave equation, shared by both engines (docs/physics.md, Sources).
 //!
-//! A source of amplitude A, angular frequency omega (rad/step), phase phi and envelope E(t) adds
-//! `f = dp/dt` to `u_tt`, its impulse `p(t) = -A / |G(omega)| E(t) cos(omega t + phi) / omega`, G the
-//! free-space response of the engine's discrete operator at the source's position (engine/green.rs): while
-//! E = 1, `f = A / |G| sin(omega t + phi)`, so a continuous source in free space (index 1) swings its
-//! position with amplitude A, and a drive whose envelope is back at 0 has delivered no impulse, leaving no
-//! zero-frequency field behind. E is the turn-on times the pulse envelope times the detach fade
-//! (engine/envelope.rs). A source at a fractional position drives the 2 x 2 cells around it with bilinear
-//! shares (its taps), and G is the response sampled with the same shares. Each sub-step of `dt = 1/n` takes
-//! `F = dt^2 f(t_k)` at the time `t_k` of its current field where the scheme takes `A u`, f the difference
-//! of p over the sub-step; the modified equation also takes `dt^4 f_tt / 12` with `f_tt = -omega^2 f` (the
-//! envelope's own derivatives neglected), folded in as `F (1 - (omega dt)^2 / 12)`.
+//! A source of amplitude A, angular frequency omega (rad/step), phase phi and envelope E(t) adds `f = dp/dt` to
+//! `u_tt`, with impulse `p(t) = -A / |G(omega)| E(t) cos(omega t + phi) / omega`, G the free-space response of the
+//! engine's discrete operator at the source's position (engine/green.rs). While E = 1, `f = A / |G| sin(omega t + phi)`;
+//! a drive whose envelope is back at 0 has delivered no impulse, so no zero-frequency field remains. E is the
+//! turn-on times the pulse envelope times the detach fade (engine/envelope.rs).
+//!
+//! A source at a fractional position drives the 2 x 2 cells around it with bilinear shares (its taps); G is sampled
+//! with the same shares. A sub-step of `dt = 1/n` takes `F = dt^2 f(t_k)` at the time of its current field; the
+//! modified equation also takes `dt^4 f_tt / 12` with `f_tt = -omega^2 f` (envelope derivatives neglected), folded in
+//! as `F (1 - (omega dt)^2 / 12)`.
 
 use std::collections::HashMap;
 
-use super::cpu::sub_step_time;
 use super::envelope::{Pulse, detach_fade, turn_on};
 use super::green::spread_response;
 use super::stencil::{StencilCoefficients, TimeScheme};
+use super::substeps::sub_step_time;
 use super::types::{Emitter, SceneData};
 use crate::model::level_omega;
 
@@ -33,14 +32,11 @@ pub struct Tap {
 	pub share: f64,
 }
 
-/// A value with these bits drives nothing (a detached emitter).
-pub const SKIP_VALUE: u32 = u32::MAX;
-
-/// Whether a table value adds to its cell: not skipped and not zero, so a silent or detached source
-/// leaves the field's bits as they are.
+/// Whether a table value adds to its cell: not zero, so a silent or detached source leaves the field's bits
+/// as they are.
 #[inline]
 pub fn live(v: f32) -> bool {
-	v.to_bits() != SKIP_VALUE && v != 0.0
+	v != 0.0
 }
 
 /// `dt^2` times the scheme's factor for a source of angular frequency `omega` (rad/step) at `n`
@@ -66,6 +62,8 @@ pub struct Sources {
 	pub emitters: Vec<Emitter>,
 	pub taps: Vec<Tap>,
 	pub pulses: Vec<Pulse>,
+	/// Each emitter's [`unit_force`](Self::unit_force) at the sub-step count and scheme it was taken for.
+	emitter_forces: Option<((u32, TimeScheme), Vec<f64>)>,
 	/// Scratch: each emitter's drive of the current sub-step, None once detached.
 	drives: Vec<Option<f64>>,
 }
@@ -82,6 +80,7 @@ impl Sources {
 			emitters: Vec::new(),
 			taps: Vec::new(),
 			pulses: Vec::new(),
+			emitter_forces: None,
 			drives: Vec::new(),
 		}
 	}
@@ -101,24 +100,34 @@ impl Sources {
 		(-1.0 / tau).exp() as f32
 	}
 
+	/// Marks the levels `scene`'s image sources emit at as the ones in use.
+	pub(crate) fn set_image_levels(&mut self, scene: &SceneData) {
+		self.level_used = [false; IMAGE_LEVELS];
+		for s in &scene.image_sources {
+			self.level_used[s.level as usize] = true;
+		}
+	}
+
 	/// Keeps the emitters that drive a cell of `scene`'s canvas, with their taps as padded indices, and
 	/// restarts their pulses.
 	pub fn set_emitters(&mut self, emitters: &[Emitter], scene: &SceneData) {
-		let rim = scene.rim as usize;
 		self.emitters = emitters.iter().filter(|e| e.inside(scene)).cloned().collect();
+		self.emitter_forces = None;
 		self.taps = self
 			.emitters
 			.iter()
 			.enumerate()
 			.flat_map(|(k, e)| {
-				e.taps(scene).map(move |((x, y), share)| Tap {
-					cell: scene.padded_index(x + rim, y + rim),
-					emitter: k,
-					share,
-				})
+				e.taps(scene).map(move |((x, y), share)| Tap { cell: scene.canvas_index(x, y), emitter: k, share })
 			})
 			.collect();
 		self.reset_pulses();
+	}
+
+	/// The driven cells of `scene`'s image sources and of the emitters' taps.
+	pub(crate) fn groups(&self, scene: &SceneData) -> SourceGroups {
+		let image = scene.image_sources.iter().map(|s| (scene.padded_index(s.gx as usize, s.gy as usize), s.level));
+		SourceGroups::new(scene, image, &self.tap_cells())
 	}
 
 	/// The driven cells in tap order (image sources come before them in the value table).
@@ -149,7 +158,7 @@ impl Sources {
 	}
 
 	/// The table of sub-step `k` of `n` after `time` steps: `F` per image level in use, then per tap its
-	/// emitter's drive times its share ([`SKIP_VALUE`] once the emitter is detached). Advances the
+	/// emitter's drive times its share (0 once the emitter is detached). Advances the
 	/// pulse states, so the sub-steps must come in order.
 	pub fn values(&mut self, out: &mut [f32], time: u32, k: u32, n: u32, scheme: TimeScheme) {
 		assert!(out.len() >= self.table_len());
@@ -167,6 +176,16 @@ impl Sources {
 				*slot = (self.unit_force(omega, n, scheme, (0.0, 0.0)) * drive * self.image_scale) as f32;
 			}
 		}
+		if self.emitter_forces.as_ref().is_none_or(|(key, _)| *key != (n, scheme)) {
+			let forces = (0..self.emitters.len())
+				.map(|i| {
+					let e = &self.emitters[i];
+					let (omega, fraction) = (level_omega(e.level, self.frequency_scale), e.fraction());
+					self.unit_force(omega, n, scheme, fraction)
+				})
+				.collect();
+			self.emitter_forces = Some(((n, scheme), forces));
+		}
 		self.drives.clear();
 		for i in 0..self.emitters.len() {
 			let e = self.emitters[i].clone();
@@ -179,13 +198,14 @@ impl Sources {
 				};
 				let ends = (envelope(fade_lo, lo, pulse), envelope(fade_hi, hi, pulse));
 				let drive = impulse_drive(omega, e.phase_radians, t, dt, ends);
-				self.unit_force(omega, n, scheme, e.fraction()) * (drive * e.amplitude)
+				let forces = &self.emitter_forces.as_ref().expect("taken above").1;
+				forces[i] * (drive * e.amplitude)
 			});
 			self.drives.push(drive);
 		}
 		for (k, tap) in self.taps.iter().enumerate() {
 			out[IMAGE_LEVELS + k] = match self.drives[tap.emitter] {
-				None => f32::from_bits(SKIP_VALUE),
+				None => 0.0,
 				Some(drive) => (drive * tap.share) as f32,
 			};
 		}
@@ -298,10 +318,8 @@ mod tests {
 				for k in 0..n {
 					sources.values(&mut out, time, k, n, TimeScheme::ModifiedEquation);
 					for (j, &v) in out[IMAGE_LEVELS..].iter().enumerate() {
-						if v.to_bits() != SKIP_VALUE {
-							sum[j] += v as f64;
-							magnitude[j] += (v as f64).abs();
-						}
+						sum[j] += v as f64;
+						magnitude[j] += (v as f64).abs();
 					}
 				}
 			}
@@ -319,6 +337,6 @@ mod tests {
 		let (omega, n) = (0.4, 2);
 		assert_eq!(force_scale(omega, n, TimeScheme::Leapfrog), 0.25);
 		assert!((force_scale(omega, n, TimeScheme::ModifiedEquation) - 0.25 * (1.0 - 0.04 / 12.0)).abs() < 1e-15);
-		assert!(!live(0.0) && !live(-0.0) && !live(f32::from_bits(SKIP_VALUE)) && live(1e-30));
+		assert!(!live(0.0) && !live(-0.0) && live(1e-30));
 	}
 }

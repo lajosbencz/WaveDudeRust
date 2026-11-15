@@ -25,12 +25,6 @@ pub(crate) struct Element {
 	pub at: (usize, usize),
 }
 
-/// A parsed document: the root element and the DOCTYPE's text when present.
-pub(crate) struct Document {
-	pub root: Element,
-	pub doctype: Option<String>,
-}
-
 /// 1-based line and column of byte offset `pos` in `text`.
 pub(crate) fn line_col(text: &str, pos: usize) -> (usize, usize) {
 	let head = &text.as_bytes()[..pos.min(text.len())];
@@ -98,53 +92,68 @@ fn start_element(
 }
 
 /// Parses `text` into its root element; comments, processing instructions and the DOCTYPE are skipped.
-pub(crate) fn parse(text: &str) -> Result<Document, FormatError> {
+pub(crate) fn parse(text: &str) -> Result<Element, FormatError> {
+	let mut roots = parse_top(text, false)?.into_iter();
+	let root = roots.next().ok_or_else(|| FormatError::new("the document has no root element"))?;
+	match roots.next() {
+		Some(second) => {
+			Err(FormatError { message: "the document has more than one root element".into(), at: Some(second.at) })
+		}
+		None => Ok(root),
+	}
+}
+
+/// Parses `text` into its top-level elements, as [`parse`] does; text between them other than whitespace is
+/// refused.
+pub(crate) fn parse_fragment(text: &str) -> Result<Vec<Element>, FormatError> {
+	parse_top(text, true)
+}
+
+/// The top-level elements of `text`; `strict` refuses text outside them.
+fn parse_top(text: &str, strict: bool) -> Result<Vec<Element>, FormatError> {
 	let mut reader = Reader::from_str(text);
 	reader.config_mut().trim_text(false);
 	let mut version = XmlVersion::Implicit1_0;
 	let mut stack: Vec<Element> = Vec::new();
-	let mut doctype = None;
-	let mut root = None;
+	let mut top = Vec::new();
 	let mut cursor = Cursor::new(text);
 	loop {
 		let pos = reader.buffer_position() as usize;
 		let event = reader.read_event().map_err(|err| error_at(text, reader.error_position() as usize, err))?;
 		match event {
-			Event::Start(_) | Event::Empty(_) if root.is_some() => {
-				return Err(error_at(text, pos, "the document has more than one root element"));
-			}
 			Event::Start(e) => stack.push(start_element(text, pos, cursor.at(pos), &e, version)?),
 			Event::Empty(e) => {
 				let el = start_element(text, pos, cursor.at(pos), &e, version)?;
 				match stack.last_mut() {
 					Some(parent) => parent.children.push(el),
-					None => root = Some(el),
+					None => top.push(el),
 				}
 			}
 			Event::End(_) => {
 				let el = stack.pop().expect("quick-xml checks end names");
 				match stack.last_mut() {
 					Some(parent) => parent.children.push(el),
-					None => root = Some(el),
+					None => top.push(el),
 				}
 			}
-			Event::Text(t) => {
-				if let Some(el) = stack.last_mut() {
-					el.text.push_str(&t.xml_content(version));
+			Event::Text(t) => match stack.last_mut() {
+				Some(el) => el.text.push_str(&t.xml_content(version)),
+				None if strict && !t.trim_ascii().is_empty() => {
+					return Err(error_at(text, pos, "text outside the elements"));
 				}
-			}
-			Event::GeneralRef(r) => {
-				if let Some(el) = stack.last_mut() {
-					resolve_ref(&r, &mut el.text).map_err(|err| error_at(text, pos, err))?;
-				}
-			}
+				None => {}
+			},
+			Event::GeneralRef(r) => match stack.last_mut() {
+				Some(el) => resolve_ref(&r, &mut el.text).map_err(|err| error_at(text, pos, err))?,
+				None if strict => return Err(error_at(text, pos, "text outside the elements")),
+				None => {}
+			},
 			Event::Decl(d) => version = d.xml_version().map_err(|err| error_at(text, pos, err))?,
-			Event::CData(t) => {
-				if let Some(el) = stack.last_mut() {
-					el.text.push_str(&t);
-				}
-			}
-			Event::DocType(t) => doctype = Some(t.to_string()),
+			Event::CData(t) => match stack.last_mut() {
+				Some(el) => el.text.push_str(&t),
+				None if strict => return Err(error_at(text, pos, "text outside the elements")),
+				None => {}
+			},
 			Event::Eof => break,
 			_ => {}
 		}
@@ -155,8 +164,7 @@ pub(crate) fn parse(text: &str) -> Result<Document, FormatError> {
 			at: Some(line_col(text, text.len())),
 		});
 	}
-	let root = root.ok_or_else(|| FormatError { message: "the document has no root element".into(), at: None })?;
-	Ok(Document { root, doctype })
+	Ok(top)
 }
 
 /// Appends the text a character or predefined entity reference stands for.
@@ -387,9 +395,7 @@ mod tests {
 	#[test]
 	fn tree_round_trip() {
 		let text = "<?xml version=\"1.0\"?>\n<!DOCTYPE A [\n<!ELEMENT A ANY>\n]>\n<A x=\"1 &amp; &#xA;2\">\n\t<B>t&lt;</B>\n\t<C />\n</A>";
-		let doc = parse(text).unwrap();
-		assert!(doc.doctype.unwrap().contains("ELEMENT"));
-		let a = doc.root;
+		let a = parse(text).unwrap();
 		assert_eq!(a.get("x"), Some("1 & \n2"));
 		assert_eq!(a.child("B").unwrap().text, "t<");
 		assert_eq!(a.child("C").unwrap().at, (7, 2));

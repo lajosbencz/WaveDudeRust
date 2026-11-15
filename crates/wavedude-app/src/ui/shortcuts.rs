@@ -1,7 +1,6 @@
-//! The window's keys of docs/ui/10 (Global and focus-scoped keys): each maps to a [`MenuAction`] and fires with
-//! exactly its modifiers. An open menu takes every key; a focused text box keeps its editing keys. Copy, cut and
-//! paste arrive as egui's clipboard events (the system's and the browser's gestures alike) and are taken before the
-//! widgets see them; the other keys are taken after the widgets, so Esc stops the run only where no widget used it.
+//! The window's keys (docs/ui/10, Global and focus-scoped keys): each maps to a [`MenuAction`] and fires with exactly
+//! its modifiers. Copy, cut and paste arrive as egui's clipboard events and are taken before the widgets see them; the
+//! other keys are taken after, so Esc stops the run only where no widget used it.
 
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
 

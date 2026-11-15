@@ -2,20 +2,17 @@
 //! while a run exists, the busy work with its progress and the frame cache on the right. A double-click asks for the
 //! Messages pane.
 
-use eframe::egui::{self, Color32, Frame, Label, Margin, Rect, Sense, Stroke, StrokeKind, Vec2};
+use eframe::egui::{self, Frame, Label, Margin, Rect, Sense, Stroke, StrokeKind, Vec2};
 use tracing::Level;
 use wavedude_app_state::live::FrameCache;
 use wavedude_app_state::log::LogRing;
 use wavedude_app_state::strings::Language;
 
 use super::memory_warning::bytes_text;
+use super::theme::Palette;
 use crate::App;
 
 const HEIGHT: f32 = 22.;
-const BACKGROUND: Color32 = Color32::from_rgb(0x00, 0x7A, 0xCC);
-const WARN: Color32 = Color32::from_rgb(0xCA, 0x51, 0x00);
-pub(super) const ERROR: Color32 = Color32::from_rgb(0xB4, 0x21, 0x1D);
-const TEXT: Color32 = Color32::WHITE;
 /// Left, right, top, bottom; the right keeps the resize grip clear.
 const PADDING: Margin = Margin { left: 4, right: 16, top: 0, bottom: 0 };
 const ITEM_PADDING: Margin = Margin::symmetric(4, 2);
@@ -66,11 +63,12 @@ pub(super) fn show(
 	cache: &CacheLine,
 ) -> bool {
 	let s = &app.strings;
+	let palette = Palette::of(ui.ctx().theme());
 	let line = log.status();
 	let fill = match line.as_ref().map(|l| l.level) {
-		Some(Level::ERROR) => ERROR,
-		Some(Level::WARN) => WARN,
-		_ => BACKGROUND,
+		Some(Level::ERROR) => palette.status_error,
+		Some(Level::WARN) => palette.status_warn,
+		_ => palette.status,
 	};
 	let text = line.map_or_else(|| s.get("Ready").to_owned(), |l| l.message);
 	#[cfg(not(target_arch = "wasm32"))]
@@ -92,7 +90,7 @@ pub(super) fn show(
 		.show(ui, |ui| {
 			let clicked =
 				ui.interact(ui.max_rect(), ui.unique_id().with("double_click"), Sense::click()).double_clicked();
-			ui.visuals_mut().override_text_color = Some(TEXT);
+			ui.visuals_mut().override_text_color = Some(palette.status_text);
 			ui.spacing_mut().item_spacing.x = 0.;
 			ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
 				if cache.of.is_some() {
@@ -141,23 +139,26 @@ fn resize_grip(ui: &egui::Ui, bar: Rect) {
 		ui.send_viewport_cmd(egui::ViewportCommand::BeginResize(egui::viewport::ResizeDirection::SouthEast));
 	}
 	response.on_hover_cursor(egui::CursorIcon::ResizeSouthEast);
+	let ink = Palette::of(ui.ctx().theme()).status_text;
 	let origin = rect.min + Vec2::splat(GRIP - 3. - 10.);
 	for (x, y) in [(8., 0.), (8., 4.), (8., 8.), (4., 4.), (4., 8.), (0., 8.)] {
 		let dot = Rect::from_min_size(origin + Vec2::new(x, y), Vec2::splat(2.));
-		ui.painter().rect_filled(dot, 0., TEXT);
+		ui.painter().rect_filled(dot, 0., ink);
 	}
 }
 
 /// A bar filled to `share`.
 fn progress_bar(ui: &mut egui::Ui, share: f32) {
+	let ink = Palette::of(ui.ctx().theme()).status_text;
 	let (rect, _) = ui.allocate_exact_size(BAR, Sense::hover());
 	let painter = ui.painter();
-	painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(share * rect.width(), rect.height())), 0., TEXT);
-	painter.rect_stroke(rect, 0., Stroke::new(1., TEXT), StrokeKind::Inside);
+	painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(share * rect.width(), rect.height())), 0., ink);
+	painter.rect_stroke(rect, 0., Stroke::new(1., ink), StrokeKind::Inside);
 }
 
 /// A bar a chunk sweeps through, left to right.
 fn indeterminate_bar(ui: &mut egui::Ui) {
+	let ink = Palette::of(ui.ctx().theme()).status_text;
 	let (rect, _) = ui.allocate_exact_size(BAR, Sense::hover());
 	let t = (ui.input(|i| i.time) / SWEEP).fract() as f32;
 	let start = rect.left() + (t * (1. + CHUNK) - CHUNK) * rect.width();
@@ -167,7 +168,7 @@ fn indeterminate_bar(ui: &mut egui::Ui) {
 	);
 	let painter = ui.painter();
 	if chunk.width() > 0. {
-		painter.rect_filled(chunk, 0., TEXT);
+		painter.rect_filled(chunk, 0., ink);
 	}
-	painter.rect_stroke(rect, 0., Stroke::new(1., TEXT), StrokeKind::Inside);
+	painter.rect_stroke(rect, 0., Stroke::new(1., ink), StrokeKind::Inside);
 }

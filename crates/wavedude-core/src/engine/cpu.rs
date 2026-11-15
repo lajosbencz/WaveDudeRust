@@ -1,101 +1,44 @@
-//! The CPU wave engine on a padded f32 grid, rows in parallel (spec/30-engine.md with the deviations
-//! of spec/05-deviations.md; docs/physics.md for the scheme).
+//! The CPU wave engine on a padded f32 grid, rows in parallel (docs/spec/30-engine.md, deviations in
+//! docs/spec/05-deviations.md; docs/physics.md for the scheme).
 //!
 //! Buffers are padded by [`PAD`] rings: `stride = grid width + 2 PAD`, grid cell (gx, gy) at index
-//! `(gy + PAD) * stride + gx + PAD`, canvas pixel (x, y) at grid cell (x + rim, y + rim). The rings
-//! stay 0 (the wall) unless the edges are open without a rim, where Mur's first-order condition sets
-//! them in `u` (the modified equation's `w` stays 0 there, docs/physics.md, Open edges). The stencil runs on every grid cell, reading the
-//! rings, so its operator is symmetric. A mirror cell has c2 = 0 and stays 0; taps across a mirror
-//! are dropped (pml.rs, `cuts`).
+//! `(gy + PAD) * stride + gx + PAD`, canvas pixel (x, y) at grid cell (x + rim, y + rim). The rings stay 0 (the
+//! wall) unless the edges are open without a rim, where Mur's first-order condition sets them in `u` (`w` stays 0,
+//! docs/physics.md, Open edges). A mirror cell has c2 = 0 and stays 0; taps across a mirror are dropped (pml.rs,
+//! `cuts`).
 //!
-//! Every stencil is evaluated as weighted sums of differences from the centre, `K sum (u_k - u)`:
-//! for a smooth field each difference is exact in f32 (Sterbenz), so the round-off scales with the
-//! result rather than with the field, and the weights sum to 0 exactly. Summing the taps first left
-//! the 9-point's energy drifting 1.7e-5 over 10,000 steps, a bias (docs/physics.md, Energy).
+//! Stencils are weighted sums of differences from the centre, `K sum (u_k - u)`: each difference is exact in f32
+//! for a smooth field (Sterbenz), so round-off scales with the result and the weights sum to 0 exactly. Summing
+//! the taps first biases the 9-point's energy (docs/physics.md, Energy).
 //!
-//! A sub-step of the 9-point stencil is leapfrog, one pass: `next = u + ((u - prev) d + c2 L u)`. The
-//! 4th-order (DRP) stencil takes the modified equation in two passes over the grid:
-//! `w = c2 L u`, then `next = u + ((u - prev) d + (w + c2 L w / 12))` (stencil.rs). With a rim, the
-//! CPML adds its correction on the rim after each pass (pml.rs). `next` is written over `prev`.
-//! One driver thread; each pass fans out over rows on the rayon pool, reading only its input field.
+//! The 9-point sub-step is one leapfrog pass: `next = u + ((u - prev) d + c2 L u)`. The 4th-order (DRP) stencil is
+//! two passes, `w = c2 L u`, then `next = u + ((u - prev) d + (w + c2 L w / 12))` (stencil.rs); `next` is written
+//! over `prev`. With a rim, the CPML corrects the rim after each pass (pml.rs).
+//!
+//! Threads: one driver thread; each pass fans out over rows on the rayon pool, reading only its input field.
 
 use std::sync::Arc;
 
 use rayon::prelude::*;
 
 use super::capture;
-use super::forcing::{IMAGE_LEVELS, SourceGroups, Sources, live};
+use super::forcing::{IMAGE_LEVELS, SourceGroups, live};
+use super::mur::{MurChain, mur_chains};
 use super::pml::{self, CpuPml, cut, taps};
-use super::stencil::{PAD, StencilCoefficients, TimeScheme};
+use super::shared::{Shared, blend};
+use super::stencil::{INV12, K9_AXIS, K9_DIAGONAL, PAD, StencilCoefficients, TimeScheme, centred};
 use super::substeps::sub_steps;
 use super::types::{
 	Emitter, EngineOptions, FrameShape, PendingCapture, PendingProbes, ProbeCells, ProbeQueue, ProbeReadings,
 	SceneData, Snapshot,
 };
 use super::{EngineError, WaveEngine};
-use crate::model::{Edges, Layer};
-
-const K9_DIAGONAL: f32 = 1.0 / 6.0;
-const K9_AXIS: f32 = 2.0 / 3.0;
-
-/// One column or row of Mur's condition: a grid cell on the edge and the three padding cells
-/// outward of it, with the weights of the first ring's update (`weights`, see [`mur_weights`]).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct MurChain {
-	pub inner: usize,
-	pub rings: [usize; PAD],
-	pub weights: [f32; 3],
-}
-
-/// Weights `[a, b, c]` of Mur's first-order condition at an edge cell of squared Courant number
-/// `c2` and damping `d` per sub-step: `ring+ = a inner + b inner+ + c ring`.
-///
-/// The damped wave equation the centred update solves, `u_tt + gamma u_t = c^2 Lap u` with
-/// `gamma dt = 2g`, `g = (1 - d) / (1 + d)`, factors as `(D_t + gamma/2 - c D_n)(D_t + gamma/2 + c D_n)`
-/// up to `gamma^2 / 4`; its outgoing factor `u_t + gamma/2 u - c u_n = 0` (n the inward normal),
-/// centred between the two cells and the two time levels, gives with `S = sqrt(c2)` (cells a sub-step)
-///
-/// ```text
-/// (1 + S + g/2) ring+ = (1 + S - g/2) inner - (1 - S + g/2) inner+ + (1 - S - g/2) ring
-/// ```
-///
-/// At d = 1 this is Mur's `ring+ = inner + k (inner+ - ring)`, `k = (S - 1)/(S + 1)`. S is the long-wave
-/// phase speed of both schemes (both stencils are consistent Laplacians), so it absorbs a normally
-/// incident long wave exactly whatever the stencil.
-pub(crate) fn mur_weights(c2: f32, d: f32) -> [f32; 3] {
-	let (s, g) = (c2.sqrt() as f64, (1.0 - d as f64) / (1.0 + d as f64));
-	let den = 1.0 + s + g / 2.0;
-	[(1.0 + s - g / 2.0) / den, -(1.0 - s + g / 2.0) / den, (1.0 - s - g / 2.0) / den].map(|w| w as f32)
-}
-
-/// The Mur chains of a padded grid (open edges without a rim): every padding cell once, the top and
-/// bottom rows over the full padded width (the corners from the nearest grid cell), the left and
-/// right columns over the grid's rows. `c2` and `d` per padded cell at the sub-step scale.
-pub(crate) fn mur_chains(scene: &SceneData, c2: &[f32], d: &[f32]) -> Vec<MurChain> {
-	let (gw, gh, s) = (scene.grid_width() as usize, scene.grid_height() as usize, scene.stride());
-	let at = |x: usize, y: usize| y * s + x;
-	let chain =
-		|inner: usize, rings: [usize; PAD]| MurChain { inner, rings, weights: mur_weights(c2[inner], d[inner]) };
-	let mut chains = Vec::with_capacity(2 * (s + gh));
-	for x in 0..s {
-		let ix = x.clamp(PAD, PAD + gw - 1);
-		chains.push(chain(at(ix, PAD), [1, 2, 3].map(|r| at(x, PAD - r))));
-		chains.push(chain(at(ix, PAD + gh - 1), [1, 2, 3].map(|r| at(x, PAD + gh - 1 + r))));
-	}
-	for y in PAD..PAD + gh {
-		chains.push(chain(at(PAD, y), [1, 2, 3].map(|r| at(PAD - r, y))));
-		chains.push(chain(at(PAD + gw - 1, y), [1, 2, 3].map(|r| at(PAD + gw - 1 + r, y))));
-	}
-	chains
-}
+use crate::model::Layer;
 
 /// The reference engine. See the module docs for the grid layout and the scheme.
 pub struct CpuEngine {
-	scene: Arc<SceneData>,
-	options: EngineOptions,
+	shared: Shared,
 	stride: usize,
-	sub_steps: u32,
-	scheme: TimeScheme,
 	/// The axis weights a0..a3 of the stencil.
 	axis: [f32; 4],
 	/// c2 / n^2 per padded cell.
@@ -114,7 +57,6 @@ pub struct CpuEngine {
 	s2: Vec<f32>,
 	mur: Vec<MurChain>,
 	pml: Option<CpuPml>,
-	sources: Sources,
 	groups: SourceGroups,
 	/// The source table of the current sub-step (forcing.rs).
 	values: Vec<f32>,
@@ -123,7 +65,17 @@ pub struct CpuEngine {
 	probes: Vec<(Layer, Vec<usize>)>,
 	probe_queue: ProbeQueue,
 	probe_reading: ProbeReadings,
-	time: u32,
+}
+
+/// The bytes [`CpuEngine`] allocates by the grid of `scene` with `options`: the field, medium and stage planes, the
+/// mirror cuts and the CPML's auxiliary fields.
+pub fn grid_bytes(scene: &SceneData, options: &EngineOptions) -> u64 {
+	let cells = scene.padded_cells() as u64;
+	let modified = TimeScheme::of(options.stencil) == TimeScheme::ModifiedEquation;
+	let planes = 4 + u64::from(modified) + 2 * u64::from(options.track_intensity);
+	let strips = pml::Strips::of(scene);
+	let (psi, xi) = (strips.len() as u64, (strips.len() + strips.y_len()) as u64);
+	cells * (4 * planes + 1) + 2 * 4 * (psi + xi)
 }
 
 impl CpuEngine {
@@ -145,8 +97,6 @@ impl CpuEngine {
 		let stages = if options.track_intensity { cells } else { 0 };
 		let mut engine = Self {
 			stride,
-			sub_steps: n,
-			scheme,
 			axis: StencilCoefficients::of(options.stencil).axis.map(|a| a as f32),
 			c2: vec![0.0; cells],
 			d: vec![1.0; cells],
@@ -159,20 +109,13 @@ impl CpuEngine {
 			s2: vec![0.0; stages],
 			mur: Vec::new(),
 			pml: None,
-			sources: Sources::new(
-				StencilCoefficients::of(options.stencil),
-				options.source_frequency_scale,
-				options.image_source_scale,
-			),
 			groups: SourceGroups::default(),
 			values: vec![0.0; IMAGE_LEVELS],
 			alpha: 0.0,
 			probes: Vec::new(),
 			probe_queue: ProbeQueue::default(),
 			probe_reading: ProbeReadings::default(),
-			time: 0,
-			options,
-			scene,
+			shared: Shared::new(scene, options, n),
 		};
 		engine.load_scene();
 		engine.update_alpha();
@@ -182,11 +125,12 @@ impl CpuEngine {
 	/// Sets the field now and one sub-step before, each grid-sized (no padding), row-major.
 	/// For analytic tests that start from a given state.
 	pub fn set_field(&mut self, now: &[f32], before: &[f32]) {
-		let gw = self.scene.grid_width() as usize;
-		assert_eq!(now.len(), gw * self.scene.grid_height() as usize);
+		let scene = &self.shared.scene;
+		let gw = scene.grid_width() as usize;
+		assert_eq!(now.len(), gw * scene.grid_height() as usize);
 		assert_eq!(before.len(), now.len());
 		for (gy, (a, b)) in now.chunks_exact(gw).zip(before.chunks_exact(gw)).enumerate() {
-			let at = self.cell_of_grid(0, gy);
+			let at = scene.padded_index(0, gy);
 			self.u[at..at + gw].copy_from_slice(a);
 			self.prev[at..at + gw].copy_from_slice(b);
 		}
@@ -197,22 +141,16 @@ impl CpuEngine {
 		&self.u
 	}
 
-	/// The time scheme of a sub-step.
-	pub fn scheme(&self) -> TimeScheme {
-		self.scheme
-	}
-
 	// The inherent calls below take `&mut self` like the trait's, so they win method resolution on a
 	// `CpuEngine`: callers on the concrete type get no `Result`.
 
 	/// [`WaveEngine::advance_one_step`], which cannot fail here.
 	pub fn advance_one_step(&mut self) {
-		let n = self.sub_steps;
-		for k in 0..n {
-			self.sources.values(&mut self.values, self.time, k, n, self.scheme);
-			self.sub_step(self.options.track_intensity && k + 1 == n);
+		for k in 0..self.shared.sub_steps {
+			self.shared.source_values(&mut self.values, k);
+			self.sub_step(self.shared.accumulates(k));
 		}
-		self.time += 1;
+		self.shared.time += 1;
 	}
 
 	/// [`WaveEngine::sample_probes`], which cannot fail here.
@@ -228,15 +166,16 @@ impl CpuEngine {
 
 	/// Converts the canvas after the last step into `out`'s planes in `shape`, their allocations reused.
 	pub fn capture_into(&self, shape: &FrameShape, out: &mut Snapshot) {
-		assert_eq!((shape.canvas_width, shape.canvas_height), (self.scene.canvas_width, self.scene.canvas_height));
+		let (scene, options) = (&self.shared.scene, &self.shared.options);
+		assert_eq!((shape.canvas_width, shape.canvas_height), (scene.canvas_width, scene.canvas_height));
 		capture::plane_rows(shape, Layer::Field, &mut out.field, |y, row| {
-			let at = self.cell_of_canvas(0, y);
+			let at = scene.canvas_index(0, y);
 			row.copy_from_slice(&self.u[at..at + row.len()]);
 		});
-		if self.options.track_intensity {
-			let scale = self.options.intensity_scale as f32;
+		if options.track_intensity {
+			let scale = options.intensity_scale as f32;
 			capture::plane_rows(shape, Layer::Intensity, &mut out.intensity, |y, row| {
-				let at = self.cell_of_canvas(0, y);
+				let at = scene.canvas_index(0, y);
 				let n = row.len();
 				for ((r, &a), &b) in row.iter_mut().zip(&self.s1[at..at + n]).zip(&self.s2[at..at + n]) {
 					*r = blend(a, b, scale);
@@ -246,7 +185,7 @@ impl CpuEngine {
 			out.intensity.clear();
 		}
 		out.shape = *shape;
-		out.step = self.time.saturating_sub(1);
+		out.step = self.shared.time.saturating_sub(1);
 	}
 
 	/// [`WaveEngine::capture_frame`], which cannot fail here.
@@ -258,63 +197,30 @@ impl CpuEngine {
 
 	/// [`WaveEngine::prepare_frame`], which cannot fail here.
 	pub fn prepare_frame(&mut self) -> (Vec<f32>, Vec<f32>) {
-		let (w, h) = (self.scene.canvas_width as usize, self.scene.canvas_height as usize);
-		let mut field = Vec::with_capacity(w * h);
-		let mut intensity = Vec::with_capacity(w * h);
-		for y in 0..h {
-			let at = self.cell_of_canvas(0, y);
-			field.extend_from_slice(&self.u[at..at + w]);
-			intensity.extend((at..at + w).map(|c| self.blended(c)));
-		}
-		(field, intensity)
+		let stages = (!self.s1.is_empty()).then_some((&self.s1[..], &self.s2[..]));
+		self.shared.canvas_frame(&self.u, stages)
 	}
 
-	fn cell_of_grid(&self, gx: usize, gy: usize) -> usize {
-		self.scene.padded_index(gx, gy)
-	}
-
-	fn cell_of_canvas(&self, x: usize, y: usize) -> usize {
-		let rim = self.scene.rim as usize;
-		self.cell_of_grid(x + rim, y + rim)
-	}
-
-	/// Copies the scene's maps into the padded buffers at the sub-step scale and builds the source
-	/// table, the cuts, the Mur chains and the PML.
+	/// Copies the scene's maps into the padded buffers at the sub-step scale and builds the cuts, the Mur
+	/// chains, the PML and the source groups.
 	fn load_scene(&mut self) {
-		let n = self.sub_steps;
-		self.scene.fill_sub_step_medium(n, &mut self.c2, &mut self.d);
-		self.sources.level_used = [false; IMAGE_LEVELS];
-		for s in &self.scene.image_sources {
-			self.sources.level_used[s.level as usize] = true;
-		}
-		self.group_sources();
-		self.cuts = pml::cuts(&self.scene);
+		let (scene, n) = (&self.shared.scene, self.shared.sub_steps);
+		scene.fill_sub_step_medium(n, &mut self.c2, &mut self.d);
+		self.cuts = pml::cuts(scene);
 		self.mirrors = self.cuts.iter().any(|&c| c != 0);
-		self.mur = if self.mur_edges() { mur_chains(&self.scene, &self.c2, &self.d) } else { Vec::new() };
-		let cross = StencilCoefficients::of(self.options.stencil).cross as f32;
-		self.pml = CpuPml::new(&self.scene, n, self.axis, cross);
+		self.mur = mur_chains(scene, &self.c2, &self.d);
+		let cross = StencilCoefficients::of(self.shared.options.stencil).cross as f32;
+		self.pml = CpuPml::new(scene, n, self.axis, cross);
+		self.group_sources();
 	}
 
-	/// Mur's condition holds on open edges without a rim; a rim is a PML backed by the wall.
-	fn mur_edges(&self) -> bool {
-		self.scene.edges == Edges::Open && self.scene.rim == 0
-	}
-
-	/// EMA weight of the intensity from the lowest frequency in use.
 	fn update_alpha(&mut self) {
-		self.alpha = self.sources.intensity_alpha(self.options.time_decay);
+		self.alpha = self.shared.alpha();
 	}
 
-	/// The driven cells of the image sources and the emitters (forcing.rs).
 	fn group_sources(&mut self) {
-		let image: Vec<(usize, u8)> = self
-			.scene
-			.image_sources
-			.iter()
-			.map(|s| (self.cell_of_grid(s.gx as usize, s.gy as usize), s.level))
-			.collect();
-		self.groups = SourceGroups::new(&self.scene, image, &self.sources.tap_cells());
-		self.values.resize(self.sources.table_len(), 0.0);
+		self.groups = self.shared.groups();
+		self.values.resize(self.shared.sources.table_len(), 0.0);
 	}
 
 	/// Adds the sub-step's forcing `F` to `w` at the driven cells, where the modified equation takes
@@ -367,7 +273,7 @@ impl CpuEngine {
 	/// The leapfrog pass of the 9-point stencil: writes the next field over `prev`, and the intensity
 	/// stages when `intensity`.
 	fn leapfrog_pass(&mut self, intensity: bool) {
-		let (s, gw) = (self.stride, self.scene.grid_width() as usize);
+		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
 		let (u, c2, d, cuts, mirrors) = (&self.u, &self.c2, &self.d, &self.cuts, self.mirrors);
 		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
 		grid_rows(&mut self.prev, stages, s, gw, |r, next| {
@@ -397,7 +303,7 @@ impl CpuEngine {
 
 	/// The modified equation's first pass: `w = c2 L u` on every grid cell.
 	fn inner_pass(&mut self) {
-		let (s, gw) = (self.stride, self.scene.grid_width() as usize);
+		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
 		let (u, c2, cuts, axis, mirrors) = (&self.u, &self.c2, &self.cuts, &self.axis, self.mirrors);
 		grid_rows(&mut self.w, None, s, gw, |r, w| {
 			let at = r * s + PAD;
@@ -409,7 +315,7 @@ impl CpuEngine {
 	/// The modified equation's second pass: writes the next field over `prev`, and the intensity
 	/// stages when `intensity`.
 	fn outer_pass(&mut self, intensity: bool) {
-		let (s, gw) = (self.stride, self.scene.grid_width() as usize);
+		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
 		let (u, w, c2, d, cuts, axis, mirrors) =
 			(&self.u, &self.w, &self.c2, &self.d, &self.cuts, &self.axis, self.mirrors);
 		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
@@ -418,14 +324,14 @@ impl CpuEngine {
 			let (uc, wc, c2, d) = (&u[at..][..gw], &w[at..][..gw], &c2[at..][..gw], &d[at..][..gw]);
 			drp_row(w, at, s, gw, axis, row_cuts(cuts, mirrors, at, gw), |x, lw| {
 				let c = uc[x];
-				next[x] = c + ((c - next[x]) * d[x] + (wc[x] + c2[x] * lw * (1.0 / 12.0)) * centred(d[x]));
+				next[x] = c + ((c - next[x]) * d[x] + (wc[x] + c2[x] * lw * INV12) * centred(d[x]));
 			});
 		});
 	}
 
 	/// One sub-step; the next field ends in `u`.
 	fn sub_step(&mut self, intensity: bool) {
-		match self.scheme {
+		match self.shared.scheme {
 			TimeScheme::Leapfrog => {
 				self.leapfrog_pass(intensity);
 				if let Some(p) = &mut self.pml {
@@ -441,7 +347,7 @@ impl CpuEngine {
 				self.force_w();
 				self.outer_pass(intensity);
 				if let Some(p) = &mut self.pml {
-					p.apply(1, &self.w, &self.cuts, &self.c2, &mut self.prev, 1.0 / 12.0);
+					p.apply(1, &self.w, &self.cuts, &self.c2, &mut self.prev, INV12);
 				}
 			}
 		}
@@ -449,10 +355,9 @@ impl CpuEngine {
 		std::mem::swap(&mut self.u, &mut self.prev);
 	}
 
-	/// Mur's condition on the first ring (see [`mur_weights`]); the second and third rings, which only
-	/// the DRP stencil reads, continue the field linearly from the edge cell through the first ring.
-	/// Chaining Mur ring by ring instead let a mode grow where two open edges meet at Courant numbers
-	/// above about 0.75 (docs/physics.md, Open edges).
+	/// Mur's condition on the first ring (mur.rs, `mur_weights`); the second and third rings, which only the DRP stencil
+	/// reads, continue the field linearly from the edge cell through the first ring. Chaining Mur ring by ring grows a
+	/// mode where two open edges meet at Courant numbers above about 0.75 (docs/physics.md, Open edges).
 	fn apply_open_edges(&mut self) {
 		for m in &self.mur {
 			let [a, b, c] = m.weights;
@@ -469,7 +374,7 @@ impl CpuEngine {
 		if self.s1.is_empty() {
 			return 0.0;
 		}
-		blend(self.s1[cell], self.s2[cell], self.options.intensity_scale as f32)
+		blend(self.s1[cell], self.s2[cell], self.shared.options.intensity_scale as f32)
 	}
 }
 
@@ -518,13 +423,6 @@ fn nine_point(u: &[f32], i: usize, s: usize, cut: u8) -> f32 {
 		((tap(i - s - 1, nw) - v) + (tap(i - s + 1, ne) - v)) + ((tap(i + s - 1, sw) - v) + (tap(i + s + 1, se) - v));
 	let axes = ((u[i - s] - v) + (u[i + s] - v)) + ((u[i - 1] - v) + (u[i + 1] - v));
 	K9_DIAGONAL * diagonals + K9_AXIS * axes
-}
-
-/// The displayed intensity from the two EMA stages: their mean times `scale` (docs/physics.md,
-/// Intensity). Both engines' host code reads it so.
-#[inline]
-pub(crate) fn blend(s1: f32, s2: f32, scale: f32) -> f32 {
-	(s1 * 0.5 + s2 * 0.5) * scale
 }
 
 /// The DRP Laplacian at padded cell `i` (row length `s`), the taps beyond a mirror dropped (`cut`):
@@ -580,20 +478,6 @@ fn drp_row(
 	}
 }
 
-/// Time in steps of the current field of sub-step `k` (0-based) of `n` in step `time`.
-#[inline]
-pub(crate) fn sub_step_time(time: u32, k: u32, n: u32) -> f64 {
-	time as f64 + k as f64 / n as f64
-}
-
-/// Weight of the spatial term at a cell of damping `d`: the centred damped update
-/// `(u+ - 2u + u-) + g (u+ - u-) = A u` with `d = (1 - g) / (1 + g)` reads
-/// `u+ = u + d (u - u-) + (1 + d)/2 A u` (docs/physics.md, Damping). 1 for d = 1, exactly.
-#[inline(always)]
-pub(crate) fn centred(d: f32) -> f32 {
-	(1.0 + d) * 0.5
-}
-
 /// Advances the intensity's two EMA stages of one row by the field `v`.
 #[inline]
 fn accumulate(s1: &mut [f32], s2: &mut [f32], v: &[f32], alpha: f32) {
@@ -610,19 +494,19 @@ impl WaveEngine for CpuEngine {
 	}
 
 	fn scene(&self) -> &SceneData {
-		&self.scene
+		&self.shared.scene
 	}
 
 	fn options(&self) -> &EngineOptions {
-		&self.options
+		&self.shared.options
 	}
 
 	fn time(&self) -> u32 {
-		self.time
+		self.shared.time
 	}
 
 	fn sub_steps(&self) -> u32 {
-		self.sub_steps
+		self.shared.sub_steps
 	}
 
 	fn reset(&mut self) {
@@ -632,14 +516,13 @@ impl WaveEngine for CpuEngine {
 		if let Some(p) = &mut self.pml {
 			p.reset();
 		}
-		self.time = 0;
-		self.sources.reset_pulses();
+		self.shared.reset();
 		self.probe_queue.clear();
 	}
 
 	fn set_track_intensity(&mut self, on: bool) {
-		if self.options.track_intensity != on {
-			self.options.track_intensity = on;
+		if self.shared.options.track_intensity != on {
+			self.shared.options.track_intensity = on;
 			let stages = if on { self.u.len() } else { 0 };
 			self.s1 = vec![0.0; stages];
 			self.s2 = vec![0.0; stages];
@@ -647,25 +530,23 @@ impl WaveEngine for CpuEngine {
 	}
 
 	fn set_emitters(&mut self, emitters: &[Emitter]) {
-		self.sources.set_emitters(emitters, &self.scene);
+		self.shared.set_emitters(emitters);
 		self.group_sources();
 		self.update_alpha();
 	}
 
 	fn set_probes(&mut self, probes: &[ProbeCells]) {
+		let scene = &self.shared.scene;
 		self.probes = probes
 			.iter()
-			.map(|p| (p.layer, p.cells.iter().map(|&(x, y)| self.cell_of_canvas(x as usize, y as usize)).collect()))
+			.map(|p| (p.layer, p.cells.iter().map(|&(x, y)| scene.canvas_index(x as usize, y as usize)).collect()))
 			.collect();
 		self.probe_queue.set_lengths(probes.iter().map(|p| p.cells.len()).collect());
 	}
 
 	fn try_replace_scene(&mut self, scene: &Arc<SceneData>) -> bool {
-		if !self.scene.same_grid(scene) {
-			return false;
-		}
-		self.scene = scene.clone();
-		self.sub_steps = sub_steps(self.options.stencil, self.scene.max_c2());
+		let Some(n) = self.shared.replacement(scene) else { return false };
+		self.shared.replace_scene(scene.clone(), n);
 		self.load_scene();
 		self.update_alpha();
 		true
@@ -715,7 +596,7 @@ impl WaveEngine for CpuEngine {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::model::{PulseShape, Scene, Stencil};
+	use crate::model::{Edges, PulseShape, Scene, Stencil};
 
 	fn options(stencil: Stencil) -> EngineOptions {
 		EngineOptions {
@@ -776,7 +657,7 @@ mod tests {
 
 	#[test]
 	fn outside_emitters_are_dropped() {
-		assert_eq!(engine(Edges::Open, 0, Stencil::NinePoint).sources.emitters.len(), 1);
+		assert_eq!(engine(Edges::Open, 0, Stencil::NinePoint).shared.sources.emitters.len(), 1);
 	}
 
 	#[test]
@@ -927,7 +808,7 @@ mod tests {
 		assert_eq!(e.alpha, (-1.0f64 / 20.0).exp() as f32);
 		e.set_emitters(&[]);
 		assert_eq!(e.alpha, (-1.0f64 / 10.0).exp() as f32);
-		e.sources.level_used[0] = true;
+		e.shared.sources.level_used[0] = true;
 		e.update_alpha();
 		assert_eq!(e.alpha, (-1.0f64 / 10.0).exp() as f32, "level 0 is not a source level");
 	}

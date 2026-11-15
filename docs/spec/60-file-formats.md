@@ -192,6 +192,11 @@ intensity 1.5; an omitted `Sensitivity` is 0.3125. Nothing is fitted on opening.
 `Rescaled` on `Simulation` is declared in the DTD and read (a file that already holds this program's frequency
 scale), never written: a written file carries the original's scale so WaveDude Next reads it right.
 
+Writing: a project, a scheme, the settings, a saved scene image and the app's probe CSV are written to a temporary
+file beside the target, synced and renamed over it, the folder synced after (`io::write_atomic`), so a failed or
+interrupted write leaves the old file whole; the file keeps the old one's permissions (a new one gets a plain write's),
+and a read-only file is refused.
+
 ## Colour scheme file `.wdscheme` (`Rendering/ColorScheme.cs`, `ColorSchemeStore.cs`)
 
 ```xml

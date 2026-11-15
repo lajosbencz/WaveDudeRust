@@ -1,7 +1,6 @@
-//! The pictures coloured on the renderer's device (docs/ui/40-preview-pane.md, 8-bit vs 16-bit): the plane is the
-//! frame a GPU engine keeps on that device when it is the one shown, else the stored plane uploaded;
-//! `wavedude_core::render::gpu` colours it in a paint callback inside egui's render pass, so a frame on the device is
-//! never read back to be shown.
+//! The pictures coloured on the renderer's device (docs/ui/40-preview-pane.md, 8-bit vs 16-bit): the plane is the frame
+//! a GPU engine keeps on that device when it is the one shown, else the stored plane uploaded;
+//! `wavedude_core::render::gpu` colours it in a paint callback inside egui's render pass, so it is never read back.
 //!
 //! Threads: the UI thread; the engine's thread captures into the device frames, which a held frame is safe from.
 
@@ -50,12 +49,13 @@ pub(super) struct DevicePictures {
 	held: Option<DeviceFrame>,
 	/// The source of the planes and its shape.
 	source: Option<(SourceKey, FrameShape)>,
-	/// Each layer's uploaded plane: the buffer and whether it holds the source's plane.
+	/// Each layer's uploaded plane: the buffer and, once asked for, whether it holds the source's plane.
 	uploads: [Option<wgpu::Buffer>; 2],
-	uploaded: [bool; 2],
-	/// A spilled frame's plane, and a plane padded to whole words.
+	uploaded: [Option<bool>; 2],
+	/// A spilled frame's plane as read back.
 	spill: Vec<u8>,
-	padded: Vec<u8>,
+	/// Each layer's plane to upload, padded to whole words: written to the device once no layer is pending.
+	staged: [Vec<u8>; 2],
 	/// The requests of the layers shown.
 	requests: Vec<LayerRequest>,
 	set: [Option<Shown>; 2],
@@ -71,7 +71,7 @@ impl DevicePictures {
 		}
 		self.held = None;
 		self.source = None;
-		self.uploaded = [false; 2];
+		self.uploaded = [None; 2];
 		self.requests.clear();
 		self.set = [None, None];
 		self.pending = false;
@@ -83,7 +83,8 @@ impl DevicePictures {
 	}
 
 	/// Shows `source` with `requests`: the engine's frame of it held when its `frames` live on the renderer's device,
-	/// else its planes uploaded. A source shown already only takes the requests.
+	/// else the planes of the requested layers uploaded. A source shown already only takes the requests and uploads
+	/// the planes of layers asked for anew.
 	pub(super) fn show(
 		&mut self,
 		gpu: &RenderState,
@@ -94,13 +95,14 @@ impl DevicePictures {
 		self.requests.clear();
 		self.requests.extend_from_slice(requests);
 		let key = source.key();
-		if self.source.as_ref().is_some_and(|(k, _)| *k == key) {
+		let same = self.source.as_ref().is_some_and(|(k, _)| *k == key);
+		if same && (self.held.is_some() || requests.iter().all(|r| self.uploaded[r.layer as usize].is_some())) {
 			return;
 		}
 		let shape = source.shape();
 		let frames = frames.filter(|f| f.context().device == gpu.device);
 		let held = match (source, frames) {
-			(FrameSource::Run { store, stored }, Some(frames)) => {
+			(FrameSource::Run { store, stored }, Some(frames)) if !same => {
 				let tag = FrameTag { store: store.id(), generation: store.generation(), stored: *stored };
 				frames.hold(tag).map(|frame| (frames, frame))
 			}
@@ -113,39 +115,43 @@ impl DevicePictures {
 				old.release();
 			}
 			self.held = Some(frame);
-			self.uploaded = [false; 2];
+			self.uploaded = [None; 2];
 			return;
 		}
-		let mut uploaded = [false; 2];
-		for layer in [Layer::Field, Layer::Intensity] {
-			let (padded, slot) = (&mut self.padded, &mut self.uploads[layer as usize]);
+		let mut uploaded = if same { self.uploaded } else { [None; 2] };
+		let mut staged = [false; 2];
+		for layer in requests.iter().map(|r| r.layer) {
+			let i = layer as usize;
+			if uploaded[i].is_some() {
+				continue;
+			}
+			let plane = &mut self.staged[i];
 			let written = source.with_plane_into(layer, &mut self.spill, |bytes| {
+				plane.clear();
+				plane.extend_from_slice(bytes);
 				// the buffer's size is a multiple of 4
-				let bytes = if bytes.len() % 4 == 0 {
-					bytes
-				} else {
-					padded.clear();
-					padded.extend_from_slice(bytes);
-					padded.resize(bytes.len().next_multiple_of(4), 0);
-					padded.as_slice()
-				};
-				let buffer = match slot.take() {
-					Some(b) if b.size() >= bytes.len() as u64 => b,
-					_ => gpu.device.create_buffer(&wgpu::BufferDescriptor {
-						label: Some("preview plane"),
-						size: (bytes.len() as u64).max(16),
-						usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-						mapped_at_creation: false,
-					}),
-				};
-				gpu.queue.write_buffer(&buffer, 0, bytes);
-				*slot = Some(buffer);
+				plane.resize(bytes.len().next_multiple_of(4), 0);
 			});
 			if let Err(NoPlane::Pending) = written {
 				self.pending = true;
 				return;
 			}
-			uploaded[layer as usize] = written.is_ok();
+			uploaded[i] = Some(written.is_ok());
+			staged[i] = written.is_ok();
+		}
+		for (i, plane) in self.staged.iter().enumerate().filter(|&(i, _)| staged[i]) {
+			let slot = &mut self.uploads[i];
+			let buffer = match slot.take() {
+				Some(b) if b.size() >= plane.len() as u64 => b,
+				_ => gpu.device.create_buffer(&wgpu::BufferDescriptor {
+					label: Some("preview plane"),
+					size: (plane.len() as u64).max(16),
+					usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+					mapped_at_creation: false,
+				}),
+			};
+			gpu.queue.write_buffer(&buffer, 0, plane);
+			*slot = Some(buffer);
 		}
 		self.pending = false;
 		self.source = Some((key, shape));
@@ -174,7 +180,7 @@ impl DevicePictures {
 	fn plane(&self, layer: Layer) -> Option<DevicePlane<'_>> {
 		match &self.held {
 			Some(frame) => Some(DevicePlane { buffer: &frame.buffer, first_word: frame.first_word(layer)? }),
-			None => self.uploaded[layer as usize]
+			None => (self.uploaded[layer as usize] == Some(true))
 				.then(|| self.uploads[layer as usize].as_ref())
 				.flatten()
 				.map(|buffer| DevicePlane { buffer, first_word: 0 }),

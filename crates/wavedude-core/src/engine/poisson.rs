@@ -1,10 +1,9 @@
 //! A unit-rate Poisson process on the half-line, walked from 0: a probabilistic detector's detections.
 //!
-//! The number of events up to a position is Poisson-distributed with that position as its mean, and the counts
-//! at two positions differ by the events between them. So one process, asked for the count at the detector's
-//! cumulative expectation (intensity integrated over the steps, times the sensitivity), gives the same detections
-//! whether asked once at the end or step by step, and the counts never fall. Seeded from the project's seed and
-//! the probe's name, so a project gives the same detections every time.
+//! The count up to a position is Poisson with that position as its mean, and counts at two positions differ by the
+//! events between them. Asked at the detector's cumulative expectation (intensity integrated over the steps, times
+//! the sensitivity), one process gives the same detections whether asked once or step by step, and counts never fall.
+//! Seeded from the project's seed and the probe's name.
 
 use crate::rng::Pcg32;
 

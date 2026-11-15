@@ -59,7 +59,7 @@ arboard = { version = "3.6", default-features = false }
 cargo-packager-updater = "0.2"
 mundy = { version = "0.2.3", default-features = false, features = ["async-io", "callback", "color-scheme"] }
 # Waits on the file dialogs' futures on their own threads.
-pollster = "1"
+pollster.workspace = true
 rfd = "0.18"
 semver = "1"
 wavedude-export = { path = "../wavedude-export", default-features = false, features = ["mp4"] }
@@ -69,7 +69,7 @@ winit = { version = "0.30", default-features = false }
 # The page's entry awaits eframe's start and an export packs its archive in a task; the page itself is reached
 # through eframe's `web_sys`.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen-futures = "0.4"
+wasm-bindgen-futures.workspace = true
 # MP4 muxed around the browser's H.264 encoder.
 wavedude-export = { path = "../wavedude-export", default-features = false, features = ["mp4-mux"] }
 
@@ -87,8 +87,10 @@ winresource = "0.1"
 # The window driven headless on wgpu, through AccessKit.
 egui_kittest = { version = "=0.37.0", features = ["eframe", "wgpu"] }
 # Crops the rendered window into the manual's figures (tests/screenshots.rs, tests/dialogs.rs).
-image = { version = "0.25", default-features = false, features = ["png"] }
-tempfile = "3"
+image = { workspace = true, features = ["png"] }
+tempfile.workspace = true
+# `AppState` on the fake backend in unit tests.
+wavedude-app-state = { path = "../wavedude-app-state", features = ["test-support"] }
 
 # Installers (decision 0011) of the built programs:
 # `cargo build --release -p wavedude-app -p wavedude-cli && cargo packager --release -p wavedude-app --formats <format>`.
@@ -121,8 +123,15 @@ signing-identity = "-"
 # Merged over cargo-packager's: the exported types and the document types that name them.
 info-plist-path = "assets/macos/Info.plist"
 
-# The MIME types the .desktop file names, for desktop integration of the AppImage.
-[package.metadata.packager.appimage]
-files = { "assets/linux/wavedude-rust.xml" = "usr/share/mime/packages/wavedude-rust.xml" }
-# winit dlopens these X11 client libraries, so linuxdeploy cannot find them; the GPU stack (Vulkan, EGL, GL) stays the host's.
-libs = ["libxkbcommon.so.0", "libxkbcommon-x11.so.0", "libxcb-xkb.so.1", "libXcursor.so.1", "libXi.so.6", "libXrandr.so.2"]
+# The MIME types the .desktop file names, for desktop integration of the AppImage, and the X11 client libraries winit
+# dlopens, which linuxdeploy cannot find; the GPU stack (Vulkan, EGL, GL) stays the host's. The libraries are the
+# build image's (.github/build/linux.Dockerfile), placed in usr/lib, where linuxdeploy bundles their dependencies
+# too; it skips usr/lib64, where `libs` would put them.
+[package.metadata.packager.appimage.files]
+"assets/linux/wavedude-rust.xml" = "usr/share/mime/packages/wavedude-rust.xml"
+"/usr/lib64/libxkbcommon.so.0" = "usr/lib/libxkbcommon.so.0"
+"/usr/lib64/libxkbcommon-x11.so.0" = "usr/lib/libxkbcommon-x11.so.0"
+"/usr/lib64/libxcb-xkb.so.1" = "usr/lib/libxcb-xkb.so.1"
+"/usr/lib64/libXcursor.so.1" = "usr/lib/libXcursor.so.1"
+"/usr/lib64/libXi.so.6" = "usr/lib/libXi.so.6"
+"/usr/lib64/libXrandr.so.2" = "usr/lib/libXrandr.so.2"

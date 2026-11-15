@@ -10,12 +10,13 @@ use std::time::Duration;
 use eframe::egui::{self, Key, Modifiers, Role};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
-use wavedude_app::ui::{Boot, Shell};
+use wavedude_app::ui::Shell;
 use wavedude_app_state::document::Source;
-use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::AppDirs;
 use wavedude_app_state::{Event, Guarded};
+
+use common::{SETTLE, boot, settle};
 
 /// A run far longer than a test waits for.
 const LONG: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj";
@@ -27,8 +28,6 @@ const SHORT: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 	<Source Name="Source 1" X="40" Y="45" />
 </Project>
 "#;
-/// Frames for an input to reach the state and its result to show.
-const SETTLE: usize = 4;
 
 /// The window on `project` saved in `dir`, nothing run.
 fn window(dir: &Path, project: &str) -> Harness<'static, Shell> {
@@ -39,15 +38,11 @@ fn window(dir: &Path, project: &str) -> Harness<'static, Shell> {
 	for event in [Event::SetAutoRerun(false), Event::Guarded(Guarded::Open(Source::Path(path)))] {
 		app.handle(event, Instant::now());
 	}
-	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
+	let boot = boot(&dirs);
 	let mut harness =
 		Harness::builder().with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
 	harness
-}
-
-fn settle(harness: &mut Harness<'_, Shell>) {
-	harness.run_steps(SETTLE);
 }
 
 fn exporting(harness: &Harness<'_, Shell>) -> bool {

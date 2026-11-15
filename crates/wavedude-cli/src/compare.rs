@@ -1,8 +1,7 @@
-//! Physical comparison against the C# `WaveDudeNext`: reads the dump of `tools/compare-csharp`, runs the same
-//! project through the CPU engine on the same step schedule and writes `report.md` with the scene, field and
-//! probe statistics and side-by-side pictures; with a `--render` dump also the rendered frames and the probe
-//! graphs. The solvers differ by design (docs/spec/05-deviations.md), so the figures are correlations and ratios, not
-//! bit equality.
+//! Physical comparison against the C# `WaveDudeNext`: reads the dump of `tools/compare-csharp`, runs the same project
+//! through the CPU engine on the same step schedule and writes `report.md` with scene, field and probe statistics and
+//! side-by-side pictures (with a `--render` dump also rendered frames and probe graphs). The solvers differ by design
+//! (docs/spec/05-deviations.md), so the figures are correlations and ratios, not bit equality.
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -258,7 +257,7 @@ fn run_rust(
 	engine: EngineArgs,
 ) -> Result<RustRun> {
 	let spec = RunSpec::create(project, Some(pixels), PreviewQuality::FULL, true)?;
-	let mut engine = engine.build(&spec);
+	let mut engine = engine.build(&spec)?;
 	let mut collector = ProbeCollector::new(&spec.probes, &spec.scene, spec.seed);
 	engine.set_emitters(&spec.emitters);
 	engine.set_probes(collector.cells());
@@ -738,7 +737,8 @@ fn parity(samples: &[f16], table: &HalfTable, picture: &[u8]) -> Parity {
 	p
 }
 
-/// The colours of `layer`: its scheme through its black level at `brightness`.
+/// The colours of `layer`: its scheme through its black level at `brightness`. The project's and the built-in
+/// schemes alone, as Next's dump is drawn with, so a comparison does not depend on the machine's user schemes.
 fn layer_table(project: &Project, layer: &DisplayLayer, brightness: f64, kind: SampleKind) -> HalfTable {
 	let scheme = SchemeStore::default().resolve(&project.color_schemes, &layer.color_scheme);
 	HalfTable::new(&scheme, layer.black_level, brightness as f32, kind)

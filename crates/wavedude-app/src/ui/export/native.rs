@@ -2,13 +2,14 @@
 //! first; the job runs on a worker thread; the probe CSV's path comes from the platform's save dialog.
 
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::Sender;
 
 use eframe::egui::{self, Align, Id, Layout, RichText, Ui};
 use wavedude_app_state::Event;
 use wavedude_export::{ExportFormat, h264};
 
-use super::super::files::on_thread;
+use super::super::files::wait;
+use super::super::inbox::Inbox;
 use super::super::modal::{Modal, Modals, Then};
 use super::super::properties::{self, check_box};
 use super::super::text_box::{Kind, text_box};
@@ -21,7 +22,7 @@ use crate::{codec, downloads};
 
 const BROWSE: f32 = 28.;
 
-enum Msg {
+pub(super) enum Msg {
 	Progress(usize, usize),
 	Done(Outcome),
 	/// The CSV's save dialog answered for the document `document`.
@@ -32,18 +33,8 @@ enum Msg {
 	},
 }
 
-/// The worker's and the CSV dialog's channel.
-pub(super) struct Running {
-	tx: Sender<Msg>,
-	rx: Receiver<Msg>,
-}
-
-impl Default for Running {
-	fn default() -> Self {
-		let (tx, rx) = channel();
-		Self { tx, rx }
-	}
-}
+/// The worker's and the CSV dialog's answers.
+pub(super) type Running = Inbox<Msg>;
 
 /// The dialog's text of the proposed output.
 pub(super) fn shown(path: &Path) -> String {
@@ -58,13 +49,9 @@ impl Exports {
 		}
 		let (start, probe) = export::probe_csv_request(app, probe);
 		let dialog = file_dialog(app.strings.get("ExportDialogFilterCsv"), Some(&start)).save_file();
-		let (tx, document) = (self.running.tx.clone(), app.document_id());
-		on_thread(ctx, dialog, move |path| {
-			if let Some(path) = path {
-				// the window may have closed meanwhile
-				let _ = tx.send(Msg::Csv { document, probe, path });
-			}
-		});
+		let document = app.document_id();
+		let csv = move |_: &Sender<Msg>| wait(dialog).map(|path| Msg::Csv { document, probe, path });
+		self.running.spawn(ctx, "csv-dialog", csv, |_| None);
 	}
 
 	/// Asks before replacing each thing in the way, one at a time, from the `confirmed`th on.
@@ -88,28 +75,24 @@ impl Exports {
 	/// Starts the worker on `plan`; an export without frames ends as failed.
 	pub(super) fn run(&mut self, ctx: &egui::Context, app: &mut App, modals: &mut Modals, plan: Plan) {
 		let Some(work) = Work::of(app) else {
-			self.finished(app, modals, Outcome::Failed("the run has no frames".into()));
+			self.finished(app, modals, Outcome::no_frames());
 			return;
 		};
 		if export::fetches_codec(&plan, &work, app) {
 			work.codec_download.set(Some(downloads::start(app.strings.get("StatusDownloadingCodec").to_owned())));
 		}
 		let flag = self.started(app, &plan);
-		let mut done = Done { tx: self.running.tx.clone(), ctx: ctx.clone(), outcome: None };
-		let spawned = std::thread::Builder::new().name("export".into()).spawn(move || {
-			let tx = done.tx.clone();
-			let outcome = export::run(&work, plan, |d, total| drop(tx.send(Msg::Progress(d, total))), &flag);
-			done.outcome.replace(outcome);
-		});
-		// the dropped worker's guard tells the end
-		if let Err(e) = spawned {
-			tracing::error!("the export thread could not start: {e}");
-		}
+		let job = move |tx: &Sender<Msg>| {
+			let progress = |done, total| drop(tx.send(Msg::Progress(done, total)));
+			Some(Msg::Done(export::run(&work, plan, progress, &flag)))
+		};
+		self.running.spawn(ctx, "export", job, |why| Some(Msg::Done(Outcome::Failed(why))));
 	}
 
 	/// Takes the worker's progress and end, and the CSV dialog's answer.
 	pub(in super::super) fn poll(&mut self, ctx: &egui::Context, app: &mut App, modals: &mut Modals) {
-		while let Ok(msg) = self.running.rx.try_recv() {
+		let arrived: Vec<Msg> = self.running.try_iter().collect();
+		for msg in arrived {
 			match msg {
 				Msg::Progress(done, total) => self.progressed(app, done, total),
 				Msg::Done(outcome) => self.finished(app, modals, outcome),
@@ -123,28 +106,11 @@ impl Exports {
 	}
 }
 
-/// Sends the worker's outcome when the worker ends, a failure when it unwinds without one.
-struct Done {
-	tx: Sender<Msg>,
-	ctx: egui::Context,
-	outcome: Option<Outcome>,
-}
-
-impl Drop for Done {
-	fn drop(&mut self) {
-		let outcome = self.outcome.take().unwrap_or_else(|| Outcome::Failed("the export thread ended".into()));
-		// the window may have closed meanwhile
-		let _ = self.tx.send(Msg::Done(outcome));
-		self.ctx.request_repaint();
-	}
-}
-
 impl ExportDialog {
 	/// The path box and its browse button; whether the box has the focus.
 	pub(super) fn output_row(&mut self, ui: &mut Ui, title: &str) -> bool {
-		if let Some(path) = self.browsed.as_ref().and_then(|rx| rx.try_recv().ok()) {
+		if let Some(path) = self.browsed.try_iter().last() {
 			self.path = path.display().to_string();
-			self.browsed = None;
 		}
 		let mut typing = false;
 		let row = egui::vec2(ui.available_width(), INPUT_HEIGHT);
@@ -164,18 +130,11 @@ impl ExportDialog {
 	}
 
 	/// The save dialog for the chosen format, at the path typed.
-	fn browse(&mut self, ctx: &egui::Context) {
+	fn browse(&self, ctx: &egui::Context) {
 		let (name, exts) = &self.names[self.format];
 		let spec = format!("{name}|*.{}", exts.join(";*."));
 		let dialog = file_dialog(&spec, Some(&PathBuf::from(&self.path))).save_file();
-		let (tx, rx) = channel();
-		self.browsed = Some(rx);
-		on_thread(ctx, dialog, move |path| {
-			if let Some(path) = path {
-				// the dialog may have closed meanwhile
-				let _ = tx.send(path);
-			}
-		});
+		self.browsed.spawn(ctx, "export-browse", move |_| wait(dialog), |_| None);
 	}
 
 	/// The path typed, with the format's extension when it has none.
@@ -213,21 +172,4 @@ impl ExportDialog {
 /// Why `format` cannot be picked, a string key: never, as OpenH264's use is asked for in the dialog.
 pub(super) fn unavailable(_: &App, _: ExportFormat) -> Option<&'static str> {
 	None
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn a_worker_that_unwinds_ends_its_export_as_failed() {
-		let (tx, rx) = channel();
-		let done = Done { tx, ctx: egui::Context::default(), outcome: None };
-		let worker = std::thread::spawn(move || {
-			let _done = done;
-			panic!("the worker failed");
-		});
-		assert!(worker.join().is_err());
-		assert!(matches!(rx.try_recv(), Ok(Msg::Done(Outcome::Failed(_)))), "no failure was sent");
-	}
 }

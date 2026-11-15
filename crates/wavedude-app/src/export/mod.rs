@@ -20,6 +20,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use wavedude_app_state::ExportKind;
+use wavedude_app_state::live::RunNeeds;
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::{Layer, Project};
@@ -103,6 +104,18 @@ pub enum Outcome {
 	Failed(String),
 }
 
+impl Outcome {
+	/// An export cancelled after `frames` frames.
+	pub fn cancelled(frames: usize) -> Self {
+		Self::Cancelled(format!("export cancelled after {frames} frames"))
+	}
+
+	/// An export of a run without frames.
+	pub fn no_frames() -> Self {
+		Self::Failed("the run has no frames".into())
+	}
+}
+
 /// The export dialog's start for a command: the proposed path and the format preselected.
 pub fn request(app: &App, choice: ExportKindChoice) -> ExportRequest {
 	let kind = if choice.is_still() { ExportKind::Still } else { ExportKind::Run };
@@ -149,11 +162,13 @@ pub fn probe_csv_request(app: &App, probe: usize) -> (PathBuf, String) {
 	(start, probe)
 }
 
-/// The plan writes the Intensity layer, which the run must record.
-pub fn needs_intensity(plan: &Plan) -> bool {
+/// What the plan needs of its run: the Intensity layer recorded when it writes it, in the format's form.
+pub fn run_needs(plan: &Plan) -> RunNeeds {
 	match plan {
-		Plan::Frames { choice, .. } => choice.layers().layers().contains(&Layer::Intensity),
-		Plan::Csv { .. } => false,
+		Plan::Frames { choice, format, .. } => {
+			RunNeeds::new(*format, choice.layers().layers().contains(&Layer::Intensity))
+		}
+		Plan::Csv { .. } => RunNeeds::Field,
 	}
 }
 

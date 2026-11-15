@@ -277,6 +277,19 @@ fn a_playback_tick_moves_the_playback_revision_alone() {
 }
 
 #[test]
+fn toggle_playback_plays_when_paused_and_pauses_when_playing() {
+	let t = Instant::now();
+	let mut s = app();
+	s.handle(Event::Run, t);
+	s.live.backend_mut().complete();
+	s.tick(at(t, 10));
+	s.handle(Event::TogglePlayback, at(t, 20));
+	assert!(s.live.playback.is_playing());
+	s.handle(Event::TogglePlayback, at(t, 30));
+	assert!(!s.live.playback.is_playing());
+}
+
+#[test]
 fn a_running_run_moves_the_progress_revision_alone() {
 	let t = Instant::now();
 	let mut s = app();

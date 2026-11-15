@@ -11,6 +11,10 @@ description = "WaveDude application state without a UI toolkit: document, histor
 [lib]
 name = "wavedude_app_state"
 
+[features]
+# `live::fake`, the scripted run backend, for the integration tests (enabled by the dev-dependency on this crate).
+test-support = []
+
 [lints]
 workspace = true
 
@@ -20,25 +24,24 @@ wavedude-examples = { path = "../wavedude-examples" }
 wavedude-export = { path = "../wavedude-export", default-features = false, features = ["serde"] }
 anyhow.workspace = true
 postcard.workspace = true
-quick-xml.workspace = true
 serde.workspace = true
-serde_json = { workspace = true, features = ["float_roundtrip"] }
+serde_json.workspace = true
 sys-locale = "0.3"
 thiserror.workspace = true
 tracing.workspace = true
-tracing-subscriber = { version = "0.3", features = ["fmt", "registry", "std"] }
-web-time = "1.1"
+tracing-subscriber = { workspace = true, features = ["fmt", "registry", "std"] }
+web-time.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 directories = "6"
-notify.workspace = true
+notify = "8"
 tracing-appender = "0.2"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
-tracing-web = "0.1"
-wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = [
+tracing-web.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys = { workspace = true, features = [
 	"Blob",
 	"CodecState",
 	"DedicatedWorkerGlobalScope",
@@ -91,7 +94,8 @@ web-sys = { version = "0.3", features = [
 ] }
 
 [dev-dependencies]
+wavedude-app-state = { path = ".", features = ["test-support"] }
 png.workspace = true
-tempfile = "3"
+tempfile.workspace = true
 # Loses a GPU device in the run worker's tests; the version core's `gpu` feature builds on.
-wgpu = "30"
+wgpu.workspace = true

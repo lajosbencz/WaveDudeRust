@@ -16,6 +16,6 @@ fn probes(@builtin(global_invocation_id) id: vec3<u32>) {
 	if (c >> 31u) == 0u {
 		out[id.x] = u[i];
 	} else {
-		out[id.x] = (s1[i] * 0.5 + s2[i] * 0.5) * p.intensity_scale;
+		out[id.x] = blend(s1[i], s2[i]);
 	}
 }

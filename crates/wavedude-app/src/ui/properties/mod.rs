@@ -50,7 +50,7 @@ const BUTTON_PADDING: Vec2 = Vec2::new(11., 4.);
 const BUTTON_HEIGHT: f32 = 23.;
 
 /// What the pane asks the window for, beyond the state's events.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Request {
 	Dialog(Dialog),
 	/// The parts' description shows (the setting `part_description_expanded`).
@@ -176,12 +176,7 @@ fn put_left(ui: &mut Ui, rect: Rect, widget: impl egui::Widget) -> Response {
 /// A folder's count: "No entries", "1 entry", "N entries".
 fn folder(f: &mut Form<'_>, kind: ItemKind) {
 	let s = f.cx.s;
-	let key = match kind {
-		ItemKind::Source => "TreeSources",
-		ItemKind::Part => "TreeParts",
-		ItemKind::Probe => "TreeProbes",
-		ItemKind::Scheme => "TreeColorSchemes",
-	};
+	let key = super::tree::folder_of(kind).0;
 	let text = match kind.len(&f.cx.app.document.project) {
 		0 => s.get("ItemCountZero").to_owned(),
 		1 => s.get("ItemCountOne").to_owned(),

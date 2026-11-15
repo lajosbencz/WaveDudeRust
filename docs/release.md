@@ -15,7 +15,8 @@ merging).
 
 Merging it (squash) releases: the push finds the workspace version without its tag, tags the commit `v<version>` and
 drafts the release with the changelog section as notes. [`package.yml`](../.github/workflows/package.yml), a reusable workflow without secrets and with
-a read-only token, builds the packages with `cargo auditable` and attests them (build provenance and the CycloneDX
+a read-only token, builds the packages with `cargo auditable` (the Linux ones in an AlmaLinux 8 container, checked to
+need glibc 2.28 at most) and attests them (build provenance and the CycloneDX
 SBOMs of both programs) and the browser app, `wavedude-rust-<version>-web.tar.gz`; `sign` waits for a maintainer to approve the `release` environment, then signs the update bundles with the updater key and the cargo-packager that `signer` built in a job of its own, compiling nothing; `publish`
 writes `latest.json` and `SHA256SUMS`, attests them and the signatures, attaches everything, verifies every
 attached file against its attestation (a file not attested by [`package.yml`](../.github/workflows/package.yml) or [`release.yml`](../.github/workflows/release.yml) of this repository
@@ -53,8 +54,8 @@ cargo packager signer generate --path wavedude-updater.key
 
 The `.pub` file's content is `UPDATER_PUBKEY`, the key file's content `UPDATER_PRIVATE_KEY`.
 
-crates.io publishing is off. `wavedude-model-derive`, `wavedude-core`, `wavedude-view` and `wavedude-export` are ready
-for it (each names the versions of the others it uses, which the release PR keeps in step); turning it on means a job in
+crates.io publishing is off: every crate is `publish = false`. `wavedude-model-derive`, `wavedude-core`, `wavedude-view` and `wavedude-export` are ready
+for it (each names the versions of the others it uses, which the release PR keeps in step); turning it on means dropping their `publish = false` and a job in
 [`release.yml`](../.github/workflows/release.yml) after `release` running `cargo publish -p wavedude-model-derive`, then `-p wavedude-core`,
 `-p wavedude-view` and `-p wavedude-export` in that order, with the repository as their trusted
 publisher (crates.io > crate > Settings > Trusted Publishing; a token only for each crate's first publish).
@@ -66,7 +67,8 @@ publisher (crates.io > crate > Settings > Trusted Publishing; a token only for e
   merging only, its commit titled by the pull request's title (git-cliff reads conventional commits); allow
   auto-merge; delete head branches; no wiki.
 - Settings > Rules: a ruleset on the default branch requiring a pull request, the CI jobs (`ubuntu-latest`,
-  `windows-latest`, `macos-latest`, `MSRV`) and cargo deny (`Dependencies`) on a branch up to date with it, and
+  `windows-latest`, `macos-latest`, `MSRV`, `wasm32`, `glibc`) and the hygiene jobs `Dependencies` and `Workflows` on a branch
+  up to date with it, and
   refusing deletion and force pushes. Administrators bypass it to push docs directly, which only the hygiene checks
   run on. A merge queue needs an organization-owned repository. A ruleset on `v*` tags refusing
   update and deletion (creation stays open: a personal repository cannot let GitHub Actions bypass a rule, and the
@@ -78,10 +80,30 @@ publisher (crates.io > crate > Settings > Trusted Publishing; a token only for e
 
 ## By hand
 
+On Windows and macOS:
+
 ```sh
 cargo build --release -p wavedude-app -p wavedude-cli
-NO_STRIP=true cargo packager --release -p wavedude-app --formats appimage   # or nsis, app,dmg
+cargo packager --release -p wavedude-app --formats nsis   # or app,dmg
 ```
+
+On Linux, in the release's build container ([`.github/build/linux.Dockerfile`](../.github/build/linux.Dockerfile), [decision 0011](decisions/0011-releases-and-updates.md)),
+whose libraries the AppImage carries, with docker or podman; a target directory of its own keeps out what the host
+compiled against a newer glibc:
+
+```sh
+docker build -t wavedude-build - < .github/build/linux.Dockerfile
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:$PWD" -w "$PWD" -e CARGO_TARGET_DIR=target/linux \
+  -e NO_STRIP=true -e APPIMAGE_EXTRACT_AND_RUN=1 wavedude-build sh -ec '
+    rustup toolchain install
+    cargo install --locked cargo-packager@0.11.8
+    cargo build --release -p wavedude-app -p wavedude-cli
+    cargo packager --release -p wavedude-app --formats appimage
+    .github/build/glibc-floor.sh target/linux/release/wavedude-app target/linux/release/wavedude-cli target/packages/*.AppImage'
+```
+
+Rootless podman takes `--userns=keep-id` in place of `--user`, so the files stay the caller's. The floor check prints
+the highest glibc symbol version and fails above 2.28, naming the file and the symbol.
 
 The packages land in `target/packages`. Without `WAVEDUDE_UPDATE_ENDPOINT` and `WAVEDUDE_UPDATE_PUBKEY` in the
 environment the build has no updater.

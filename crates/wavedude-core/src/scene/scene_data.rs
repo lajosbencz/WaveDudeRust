@@ -75,8 +75,8 @@ impl SceneData {
 	}
 }
 
-/// The CPML profile's parameters (Roden and Gedney 2000; docs/physics.md, Absorbing boundaries).
-/// At relative depth `r = depth / thickness` (0 at the canvas, 1 at the wall):
+/// The CPML profile's parameters (Roden and Gedney 2000; docs/physics.md, Absorbing boundaries). At relative depth
+/// `r = depth / thickness` (0 at the canvas, 1 at the wall):
 ///
 /// ```text
 /// sigma = sigma_max r^m,   sigma_max = -(m + 1) ln(R) c / (2 thickness)
@@ -84,8 +84,8 @@ impl SceneData {
 /// alpha = alpha_max (1 - r)
 /// ```
 ///
-/// R the normal-incidence reflection of the continuum layer backed by the wall, c the fastest
-/// speed in the rim (cells a step).
+/// R is the normal-incidence reflection of the continuum layer backed by the wall, c the fastest speed in the rim
+/// (cells a step).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PmlParams {
 	pub order: i32,

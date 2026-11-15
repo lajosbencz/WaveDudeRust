@@ -1,4 +1,4 @@
-//! Why a run failed, for the batch run and the live run.
+//! Why a run failed.
 
 use std::sync::Arc;
 
@@ -15,14 +15,12 @@ pub enum RunError {
 	Spec(#[from] crate::spec::RunSpecError),
 	#[error("engine: {0}")]
 	Engine(#[from] EngineError),
-	#[error("could not start a thread: {0}")]
-	Thread(#[source] std::io::Error),
 	#[error("{0} panicked: {1}")]
 	Panic(&'static str, String),
-	#[error("the run was cancelled")]
-	Cancelled,
 	#[error(transparent)]
 	Failed(Arc<RunError>),
+	#[error("the grid needs {needs} bytes of memory for the CPU engine, more than the {memory} bytes there are")]
+	EngineMemory { needs: u64, memory: u64 },
 	/// A failure of a run in another agent (the browser's run worker), as its message.
 	#[error("{0}")]
 	Worker(String),

@@ -107,8 +107,8 @@ under Browser differences, below.
 - After the dialog: when there is no run, an incomplete one, a reduced-quality one, or one lacking the intensity plane, a
   full-quality run is started first (status "Export: waiting for the run", indeterminate); then "Exporting n / N
   frames" with a determinate bar (tooltip "Cancel the export (Esc)"). Esc cancels, while waiting too (the run
-  stops). A run that ends without completing while the export waits (Stop, an edit, a failure, F5 or Play
-  replacing it) drops the export with a warning in the status bar. The status bar reports the end.
+  stops). A run that ends without completing while the export waits (Stop, a simulation edit, a failure) drops
+  the export with a warning in the status bar; Play meanwhile plays along the run. The status bar reports the end.
 - A still renders exactly what a video export would show at that frame, never the preview's frame.
 - CSV: a point probe one row per step ("step;amplitude" header), a line probe one row per frame
   ("frame;step;<distances>"), semicolons, decimal point. Full run first when needed.
@@ -139,6 +139,11 @@ Browser differences (decision 0025):
 | Video, one layer | `<name>.<ext>` |
 | Videos, both layers | `<name>.zip` holding `<name>_field.<ext>` and `<name>_intensity.<ext>` |
 
+- A completed export shows a message window (info disc): "The export is ready: <download name>", with Download
+  (default) and Close (Esc). Download starts the browser's download and closes it; a browser may drop a download a
+  page starts without the user's click, so the end of an export never starts one by itself. The status bar reports
+  "n frames exported as <name>". The file stays available to the download it started until the next export or
+  download (Save, Save As) starts.
 - The export's files wait in the browser's private storage; they are kept until the next export starts and removed
   at once when an export is cancelled or fails. Folders of closed tabs are removed at the next load.
 

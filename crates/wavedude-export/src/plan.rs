@@ -12,10 +12,10 @@ use wavedude_core::scene::compose::compose_scene;
 
 use crate::fs::OutputFs;
 use crate::h264::{H264Factory, Profile};
-use crate::job::{ExportJob, ExportLayerLook, ExportTarget, discard_all, finish_all};
+use crate::job::{ExportJob, ExportLayerLook, ExportTarget};
 use crate::overlays::Overlays;
 use crate::range::frame_range;
-use crate::sinks::{self, EncoderPool, FrameSink, SinkSpec};
+use crate::sinks::{self, EncoderPool, FrameSink, SinkSpec, first_error};
 use crate::{ExportError, ExportFormat, ExportLayers, FrameSource, Result, naming};
 
 /// An export of a project's run.
@@ -61,9 +61,9 @@ impl ExportPlan<'_> {
 		}
 	}
 
-	/// Opens every output (the output's folder created) and builds the job reading `source`. Schemes resolve
-	/// through `schemes`. The scene is composed only when a layer burns in its glowing edges, the one use of it;
-	/// overlays are dropped for a format that takes the stored halves. When an output cannot be opened, those
+	/// Opens every output (creating the folder) and builds the job reading `source`; schemes resolve through `schemes`.
+	/// The scene is composed only when a layer burns in its glowing edges. Overlays are dropped for a format that takes the
+	/// stored halves, which refuses a source whose intensity is not in its form. When an output cannot be opened, those
 	/// already open are finished and removed.
 	pub fn build_job<'s>(&self, source: Arc<dyn FrameSource + 's>, schemes: &SchemeStore) -> Result<ExportJob<'s>> {
 		if self.still.is_some() && !self.format.supports_still() {
@@ -71,13 +71,19 @@ impl ExportPlan<'_> {
 		}
 		let frames = self.frames()?;
 		let shape = source.shape();
+		let layers = self.layers.layers();
+		if self.format.wants_halves()
+			&& layers.contains(&Layer::Intensity)
+			&& shape.intensity_root != self.format.intensity_root()
+		{
+			return Err(ExportError::WrongInput("an intensity plane in the format's form (I or its root)"));
+		}
 		let (width, height) = (shape.width(), shape.height());
 		let display = &self.project.display;
 		let settings = |layer| match layer {
 			Layer::Field => &display.field,
 			Layer::Intensity => &display.intensity,
 		};
-		let layers = self.layers.layers();
 		let scene = layers
 			.iter()
 			.any(|&l| !self.format.wants_halves() && settings(l).overlay_in_export && settings(l).overlay_gain > 0.0)
@@ -102,7 +108,7 @@ impl ExportPlan<'_> {
 		let looks = layers
 			.iter()
 			.map(|&layer| {
-				let scheme = schemes.resolve(&self.project.color_schemes, &settings(layer).color_scheme);
+				let scheme = schemes.resolve_layer(self.project, layer);
 				let look = ExportLayerLook::new(
 					&scheme,
 					settings(layer),
@@ -120,8 +126,8 @@ impl ExportPlan<'_> {
 				Ok(sink) => sink,
 				Err(e) => {
 					let mut opened: Vec<Box<dyn FrameSink>> = targets.into_iter().map(|t| t.sink).collect();
-					let finished = finish_all(opened.iter_mut());
-					discard_all(opened.iter_mut()).and(finished).unwrap_or_else(
+					let finished = first_error(opened.iter_mut().map(|s| s.finish()));
+					first_error(opened.iter_mut().map(|s| s.discard())).and(finished).unwrap_or_else(
 						|cleanup| tracing::error!(error = %cleanup, "an export output could not be closed or removed"),
 					);
 					return Err(e);

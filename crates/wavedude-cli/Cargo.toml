@@ -10,7 +10,7 @@ description = "Headless checks, benches and scripted exports"
 
 [features]
 default = ["mp4"]
-mp4 = ["wavedude-export/mp4", "dep:wavedude-app-state"]
+mp4 = ["wavedude-export/mp4"]
 # OpenH264 compiled in instead of Cisco's downloaded binary: for development and tests, not for distributed builds.
 openh264-source = ["mp4", "wavedude-export/openh264-source"]
 
@@ -30,7 +30,7 @@ tracing-subscriber = "0.3"
 wavedude-core = { path = "../wavedude-core" }
 wavedude-view = { path = "../wavedude-view" }
 wavedude-export = { path = "../wavedude-export", default-features = false, features = ["clap"] }
-wavedude-app-state = { path = "../wavedude-app-state", optional = true }
+wavedude-app-state = { path = "../wavedude-app-state" }
 
 [dev-dependencies]
 tempfile = "3"

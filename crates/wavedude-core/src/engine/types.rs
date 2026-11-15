@@ -69,6 +69,12 @@ impl SceneData {
 		(gy + super::stencil::PAD) * self.stride() + gx + super::stencil::PAD
 	}
 
+	/// Index of canvas pixel (x, y) in the engines' padded buffers.
+	pub(crate) fn canvas_index(&self, x: usize, y: usize) -> usize {
+		let rim = self.rim as usize;
+		self.padded_index(x + rim, y + rim)
+	}
+
 	/// Writes the grid cells of the padded `c2` and `d` at the scale of `n` sub-steps: `c2 / n^2`, `d^(1/n)`.
 	pub(crate) fn fill_sub_step_medium(&self, n: u32, c2: &mut [f32], d: &mut [f32]) {
 		let gw = self.grid_width() as usize;
@@ -278,11 +284,10 @@ impl PendingCapture {
 		Self { snapshot, slot: 0, mapped: None }
 	}
 
-	/// Resolves when [`WaveEngine::finish_capture`](super::WaveEngine::finish_capture) will not have to wait.
-	/// On wasm32 `finish_capture` before this resolves fails with `GpuError::NotReady` and leaves the engine
-	/// failed. It resolves only once the capture is submitted ([`WaveEngine::submit_pending`](super::WaveEngine::submit_pending)
-	/// or a batch's end) and, natively, something polls the device, which `finish_capture` does: native callers call
-	/// `finish_capture` instead of awaiting.
+	/// Resolves when [`WaveEngine::finish_capture`](super::WaveEngine::finish_capture) will not have to wait. On wasm32
+	/// `finish_capture` before this resolves fails with `GpuError::NotReady` and leaves the engine failed. It resolves once
+	/// the capture is submitted ([`WaveEngine::submit_pending`](super::WaveEngine::submit_pending) or a batch's end) and,
+	/// natively, something polls the device, which `finish_capture` does.
 	pub fn ready(&self) -> impl Future<Output = ()> + use<> {
 		let mapped = self.mapped.clone();
 		async move {
@@ -330,11 +335,10 @@ impl PendingProbes {
 		Self { batches: self.batches[..ready].to_vec(), on_host: self.on_host }
 	}
 
-	/// Resolves when [`WaveEngine::drain_probes`](super::WaveEngine::drain_probes) will not have to wait. On
-	/// wasm32 a drain before this resolves fails with `GpuError::NotReady` and leaves the engine failed. It
-	/// resolves only once the readbacks are submitted ([`WaveEngine::submit_pending`](super::WaveEngine::submit_pending)
-	/// or a batch's end) and, natively, something polls the device, which `drain_probes` does: native callers drain
-	/// instead of awaiting.
+	/// Resolves when [`WaveEngine::drain_probes`](super::WaveEngine::drain_probes) will not have to wait. On wasm32 a
+	/// drain before this resolves fails with `GpuError::NotReady` and leaves the engine failed. It resolves once the
+	/// readbacks are submitted ([`WaveEngine::submit_pending`](super::WaveEngine::submit_pending) or a batch's end) and,
+	/// natively, something polls the device, which `drain_probes` does.
 	pub fn ready(&self) -> impl Future<Output = ()> + use<> {
 		let mapped: Vec<_> = self.batches.iter().map(|(m, _)| m.clone()).collect();
 		async move {
@@ -436,6 +440,12 @@ impl ProbeQueue {
 		self.clear();
 		self.width = lengths.iter().sum();
 		self.lengths = lengths;
+	}
+
+	/// Cells of each probe.
+	#[cfg(feature = "gpu")]
+	pub(crate) fn lengths(&self) -> &[usize] {
+		&self.lengths
 	}
 
 	/// Values of one step's readings.

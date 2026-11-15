@@ -1,6 +1,7 @@
 //! The export job: frames of a [`FrameSource`] through colours, glowing edges and overlays
 //! ([`Rasteriser`]) into sinks.
 
+use std::fmt;
 use std::ops::RangeInclusive;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -18,7 +19,7 @@ use wavedude_core::scene::pixels::ScenePixels;
 use crate::fs::OutputFs;
 use crate::overlays::Overlays;
 use crate::raster::Rasteriser;
-use crate::sinks::FrameSink;
+use crate::sinks::{FrameSink, first_error};
 use crate::{ExportError, FrameSource};
 
 /// How a layer's frames are coloured: its half table and, when burned in, the scene's glowing edges.
@@ -138,6 +139,18 @@ pub enum Wait {
 	SinkFinished,
 }
 
+impl fmt::Display for Wait {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Wait::Frame(frame) => write!(f, "frame {frame} is pending"),
+			Wait::Ready => f.write_str("the file store takes no more yet"),
+			Wait::Flushed => f.write_str("the file store is still writing"),
+			Wait::SinkReady => f.write_str("a sink takes no more yet"),
+			Wait::SinkFinished => f.write_str("a sink is still encoding"),
+		}
+	}
+}
+
 /// What one frame's turn did.
 enum Advance {
 	Wrote,
@@ -148,28 +161,6 @@ enum Advance {
 
 /// Timeline frames named to [`FrameSource::prefetch`] from the one being written on.
 const PREFETCH: usize = 4;
-
-/// Finishes every sink; the first error.
-pub(crate) fn finish_all<'a>(sinks: impl Iterator<Item = &'a mut Box<dyn FrameSink>>) -> crate::Result<()> {
-	let mut first = Ok(());
-	for sink in sinks {
-		if let (Err(e), Ok(())) = (sink.finish(), &first) {
-			first = Err(e);
-		}
-	}
-	first
-}
-
-/// Removes every sink's files; the first error.
-pub(crate) fn discard_all<'a>(sinks: impl Iterator<Item = &'a mut Box<dyn FrameSink>>) -> crate::Result<()> {
-	let mut first = Ok(());
-	for sink in sinks {
-		if let (Err(e), Ok(())) = (sink.discard(), &first) {
-			first = Err(e);
-		}
-	}
-	first
-}
 
 impl<'a> ExportJob<'a> {
 	/// A job writing `frames` of `source` to every target, whose files are in `fs`; `keep_partial` keeps the
@@ -208,12 +199,11 @@ impl<'a> ExportJob<'a> {
 		(self.done, (self.frames.end() + 1).saturating_sub(*self.frames.start()))
 	}
 
-	/// Writes frames until `budget` has passed, at least one or the part of one not pending. `cancel` is read
-	/// before each frame and while waiting for one; [`FrameSource::wait_for`] blocks, so a step is short only on a
-	/// complete source. Once every frame is written the job waits for the sinks to complete their encoding; then
-	/// every sink is finished whatever the outcome and the job waits for the file store to commit the files, a cancel
-	/// during either wait turning a completed job into a cancelled one; the outputs of a job that did not complete are
-	/// then removed unless kept partial. A job dropped before it ended leaves its outputs as they are:
+	/// Writes frames until `budget` has passed, at least one or the part of one not pending. `cancel` is read before each
+	/// frame and while waiting for one; [`FrameSource::wait_for`] blocks, so a step is short only on a complete source.
+	/// After the last frame the job waits for the sinks to finish encoding, finishes every sink and waits for the file
+	/// store to commit; a cancel during either wait turns a completed job into a cancelled one. The outputs of a job that
+	/// did not complete are removed unless kept partial. A job dropped before it ended leaves its outputs as they are:
 	/// step it with `cancel` set to clean up.
 	pub fn step(&mut self, budget: Duration, cancel: &AtomicBool) -> Step {
 		if let Phase::Writing = self.phase {
@@ -268,17 +258,7 @@ impl<'a> ExportJob<'a> {
 					progress(done, total);
 				}
 				Step::Waiting(wait) => {
-					const BLOCKING: &str = "which a blocking export cannot wait for";
-					let busy = |what| ExportError::Io(std::io::Error::new(std::io::ErrorKind::WouldBlock, what));
-					let failed = ExportState::Failed(match wait {
-						Wait::Frame(frame) => {
-							ExportError::Source(anyhow::anyhow!("frame {frame} is pending, {BLOCKING}"))
-						}
-						Wait::Ready => busy(format!("the file store takes no more yet, {BLOCKING}")),
-						Wait::Flushed => busy(format!("the file store is still writing, {BLOCKING}")),
-						Wait::SinkReady => busy(format!("a sink takes no more yet, {BLOCKING}")),
-						Wait::SinkFinished => busy(format!("a sink is still encoding, {BLOCKING}")),
-					});
+					let failed = ExportState::Failed(ExportError::Blocked(wait));
 					let state = match std::mem::replace(&mut self.phase, Phase::Ended) {
 						Phase::Writing | Phase::Finishing => self.finish(failed),
 						_ => failed,
@@ -305,7 +285,7 @@ impl<'a> ExportJob<'a> {
 		if self.fs.poll_ready()?.is_pending() {
 			return Ok(Advance::Waiting(Wait::Ready));
 		}
-		let held = self.source.wait_for(frame).map_err(ExportError::Source)?;
+		let held = self.source.wait_for(frame)?;
 		if cancel.load(Ordering::Relaxed) {
 			return Ok(Advance::Cancelled);
 		}
@@ -321,7 +301,7 @@ impl<'a> ExportJob<'a> {
 				return Ok(Advance::Waiting(Wait::SinkReady));
 			}
 			let out = bytemuck::cast_slice_mut(&mut self.halves);
-			if self.source.poll_layer(frame, target.layer, out).map_err(ExportError::Source)?.is_pending() {
+			if self.source.poll_layer(frame, target.layer, out)?.is_pending() {
 				return Ok(Advance::Waiting(Wait::Frame(frame)));
 			}
 			if target.sink.wants_halves() {
@@ -356,7 +336,7 @@ impl<'a> ExportJob<'a> {
 
 	/// Finishes every sink; `state`, or the failure to finish when it was not failed already.
 	fn finish(&mut self, state: ExportState) -> ExportState {
-		match (finish_all(self.targets.iter_mut().map(|t| &mut t.sink)), state) {
+		match (first_error(self.targets.iter_mut().map(|t| t.sink.finish())), state) {
 			(Err(e), state) if !matches!(state, ExportState::Failed(_)) => ExportState::Failed(e),
 			(_, state) => state,
 		}
@@ -369,7 +349,7 @@ impl<'a> ExportJob<'a> {
 		let mut written = Vec::new();
 		if completed || self.keep_partial {
 			written = self.targets.iter().flat_map(|t| t.sink.files()).collect();
-		} else if let Err(e) = discard_all(self.targets.iter_mut().map(|t| &mut t.sink)) {
+		} else if let Err(e) = first_error(self.targets.iter_mut().map(|t| t.sink.discard())) {
 			tracing::error!(error = %e, "the partial export could not be removed");
 			written = self.targets.iter().flat_map(|t| t.sink.files()).collect();
 		}
@@ -386,13 +366,13 @@ impl<'a> ExportJob<'a> {
 #[cfg(test)]
 mod tests {
 	use std::io;
+	use std::ops::Range;
 	use std::path::Path;
 	use std::sync::Mutex;
 	use std::sync::atomic::AtomicUsize;
 
 	use wavedude_core::model::{ColorScheme, DisplayLayer};
-
-	use std::ops::Range;
+	use wavedude_core::run::store::StoreError;
 
 	use super::*;
 	use crate::fs::{MemFs, OutputFile};
@@ -560,7 +540,7 @@ mod tests {
 		let fs = Arc::new(Gated { busy: 1, ..Gated::default() });
 		let report = job(Arc::new(frames()), fs.clone()).run(|_, _| {}, &AtomicBool::new(false));
 		match report.state {
-			ExportState::Failed(ExportError::Io(e)) => assert_eq!(e.kind(), io::ErrorKind::WouldBlock, "{e}"),
+			ExportState::Failed(ExportError::Blocked(wait)) => assert_eq!(wait, Wait::Ready),
 			other => panic!("{other:?}"),
 		}
 		assert!(fs.mem.paths().is_empty());
@@ -583,7 +563,7 @@ mod tests {
 			self.frames.as_ref().unwrap().shape
 		}
 
-		fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> anyhow::Result<Poll<()>> {
+		fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<Poll<()>, StoreError> {
 			let mut asked = self.asked.lock().unwrap();
 			if !asked.contains(&frame) {
 				asked.push(frame);
@@ -610,10 +590,10 @@ mod tests {
 	#[cfg(feature = "mp4-mux")]
 	mod mp4 {
 		use std::collections::VecDeque;
-		use std::io::Cursor;
 
 		use super::*;
 		use crate::h264::{EncoderSpec, H264Encoder, H264Factory, Yuv420};
+		use crate::sinks::bmff::read;
 		use crate::sinks::mp4::Mp4Sink;
 
 		/// Polls before an access unit comes out.
@@ -730,19 +710,23 @@ mod tests {
 			assert!(matches!(report.state, ExportState::Completed), "{:?}", report.state);
 			assert!(waits.contains(&Wait::SinkReady) && waits.contains(&Wait::SinkFinished), "{waits:?}");
 			let bytes = fs.take(Path::new("v.mp4")).unwrap();
-			let size = bytes.len() as u64;
-			let mut mp4 = ::mp4::Mp4Reader::read_header(Cursor::new(bytes), size).unwrap();
-			let track = &mp4.tracks()[&1];
-			let coded = (W.next_multiple_of(2) as u16, H.next_multiple_of(2) as u16);
-			assert_eq!((track.width(), track.height()), coded, "avc1 has the padded size");
-			assert_eq!(track.timescale(), FPS, "one tick per frame");
-			assert_eq!(track.sequence_parameter_set().unwrap()[0] & 0x1F, 7, "avcC holds the SPS");
-			assert_eq!(track.picture_parameter_set().unwrap()[0] & 0x1F, 8, "avcC holds the PPS");
-			assert_eq!(mp4.sample_count(1).unwrap(), FRAMES as u32);
-			for k in 0..FRAMES {
-				let sample = mp4.read_sample(1, k as u32 + 1).unwrap().unwrap();
-				assert_eq!(sample.is_sync, k.is_multiple_of(FPS as usize), "sample {k}");
-				assert_eq!(sample.bytes[5], k as u8, "sample {k} in order");
+			let entry = &read::stbl(&bytes, b"stsd").unwrap()[8..];
+			assert_eq!(&entry[4..8], b"avc1");
+			let coded = (W.next_multiple_of(2), H.next_multiple_of(2));
+			let size = (u16::from_be_bytes([entry[32], entry[33]]), u16::from_be_bytes([entry[34], entry[35]]));
+			assert_eq!((u32::from(size.0), u32::from(size.1)), coded, "avc1 has the padded size");
+			let mdhd = read::find(&bytes, &[b"moov", b"trak", b"mdia", b"mdhd"]).unwrap();
+			assert_eq!(read::u32_at(mdhd, 12), FPS, "one tick per frame");
+			let avcc = &entry[86..];
+			assert_eq!(&avcc[4..8], b"avcC");
+			let sps_len = u16::from_be_bytes([avcc[14], avcc[15]]) as usize;
+			assert_eq!(avcc[16] & 0x1F, 7, "avcC holds the SPS");
+			assert_eq!(avcc[16 + sps_len + 3] & 0x1F, 8, "avcC holds the PPS");
+			let samples = read::samples(&bytes);
+			assert_eq!(samples.len(), FRAMES);
+			for (k, (sample, sync)) in samples.into_iter().enumerate() {
+				assert_eq!(sync, k.is_multiple_of(FPS as usize), "sample {k}");
+				assert_eq!(sample[5], k as u8, "sample {k} in order");
 			}
 		}
 

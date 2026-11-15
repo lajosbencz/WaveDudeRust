@@ -1,41 +1,35 @@
-//! The lattice Green's function of the engines' discrete operators at the source cell, which
-//! normalises a source's forcing (docs/physics.md, Sources).
+//! The lattice Green's function of the engines' discrete operators at the source cell, which normalises a source's
+//! forcing (docs/physics.md, Sources).
 //!
-//! A forcing `f0 e^{-i omega t}` at one cell of an infinite grid of speed c answers in the steady
-//! state with `f0 G0(omega)` at that cell. Per sub-step of `dt = 1/n` a mode of symbol sigma
-//! (engine/stencil.rs) with `x = dt^2 c^2 sigma` and `W = 4 sin^2(omega dt / 2)` obeys
+//! A forcing `f0 e^{-i omega t}` at one cell of an infinite grid of speed c answers in the steady state with
+//! `f0 G0(omega)` at that cell. Per sub-step of `dt = 1/n` a mode of symbol sigma (engine/stencil.rs) with
+//! `x = dt^2 c^2 sigma` and `W = 4 sin^2(omega dt / 2)` obeys (F: engine/forcing.rs)
 //!
 //! ```text
 //! leapfrog:           U = F / (dt^2 (c^2 sigma - n^2 W))         F = dt^2 f0
 //! modified equation:  U = F (1 - x/12) / (x - x^2/12 - W)        F = dt^2 f0 (1 - (omega dt)^2 / 12)
 //! ```
 //!
-//! (engine/forcing.rs gives F). The second splits into `sum_i B_i / (x - x_i)` over the roots
-//! `x_i = 6 -+ sqrt(36 - 12 W)`, so both reduce to the resolvent at the source cell,
-//! `R(z) = (2 pi)^-2 int over [-pi, pi]^2 of dk / (c^2 sigma(k) - z)`, taken outgoing: W + i eta.
+//! The second splits into `sum_i B_i / (x - x_i)` over the roots `x_i = 6 -+ sqrt(36 - 12 W)`, so both reduce to the
+//! outgoing resolvent at the source cell, `R(z) = (2 pi)^-2 int over [-pi, pi]^2 of dk / (c^2 sigma(k) - z)`, with
+//! z = W + i eta.
 //!
-//! R is computed as an iterated integral. For fixed ky, `c^2 sigma - z` is a polynomial in `cos kx`
-//! of degree M (the stencil's reach), so the kx integral is exact by partial fractions (`inner`).
-//! The ky integral, over [0, pi] by symmetry, is split where the kx band
-//! `[sigma(0, ky), sigma(pi, ky)]` (both monotone in ky) has an edge at Re z, where the integrand
-//! has an inverse square root singularity; each piece is mapped by `ky = a + (b - a)(3u^2 - 2u^3)`,
-//! which removes it, cut into pieces halving towards both ends (the integrand varies on the scale of
-//! the wave number near ky = 0 and near a singular point) and integrated by Gauss-Legendre. The
-//! error budget: eta = 1e-9 (relative to max(1, |W|)) and the quadrature; against halving eta and
-//! doubling the nodes |G0| moves by less than 1e-5 (tests below), against a direct sum over the
-//! Brillouin zone at a resolvable shift R agrees to 1e-9.
+//! R is an iterated integral. For fixed ky, `c^2 sigma - z` is a polynomial in `cos kx` of degree M (the stencil's
+//! reach), so the kx integral is exact by partial fractions (`inner`). The ky integral over [0, pi] is split where the
+//! kx band `[sigma(0, ky), sigma(pi, ky)]` has an edge at Re z (inverse square root singularity), mapped by
+//! `ky = a + (b - a)(3u^2 - 2u^3)`, cut into pieces halving towards both ends and integrated by Gauss-Legendre.
+//! Error: eta = 1e-9 (relative to max(1, |W|)) plus quadrature; halving eta and doubling the nodes moves |G0| by
+//! less than 1e-5 (tests below), and a direct Brillouin-zone sum at a resolvable shift agrees to 1e-9.
 //!
-//! At a lattice offset (m, l) from the forced cell the response carries `e^{i(m kx + l ky)}`: the kx
-//! integral gains the factor `(r + xi)^m` per root and the ky integrand `cos(l ky)`. A source spread
-//! over the 2 x 2 cells around a fractional position with bilinear shares `w_i` answers at that
-//! position (the field sampled with the same shares) with `sum_ij w_i w_j G(c_i - c_j)`, which
-//! `spread_response` gives.
+//! At a lattice offset (m, l) the response carries `e^{i(m kx + l ky)}`: the kx integral gains `(r + xi)^m` per root
+//! and the ky integrand `cos(l ky)`. A source spread with bilinear shares `w_i` over 2 x 2 cells answers at its
+//! position with `sum_ij w_i w_j G(c_i - c_j)` (`spread_response`).
 
 use std::f64::consts::PI;
 
 use num_complex::Complex64 as C;
 
-use super::stencil::{StencilCoefficients, TimeScheme};
+use super::stencil::{StencilCoefficients, TimeScheme, bisect};
 
 /// Halvings of each half of a ky interval towards its end.
 const GRADING: i32 = 30;
@@ -181,20 +175,12 @@ fn inner(coefficients: &StencilCoefficients, c2: f64, z: C, ky: f64, m: u32) -> 
 
 /// The root of a monotone `f` on [0, pi], if it changes sign there.
 fn crossing(f: impl Fn(f64) -> f64) -> Option<f64> {
-	let (mut lo, mut hi) = (0.0, PI);
+	let (lo, hi) = (0.0, PI);
 	let (flo, fhi) = (f(lo), f(hi));
 	if flo.signum() == fhi.signum() || flo == 0.0 || fhi == 0.0 {
 		return None;
 	}
-	for _ in 0..200 {
-		let mid = 0.5 * (lo + hi);
-		if f(mid).signum() == flo.signum() {
-			lo = mid;
-		} else {
-			hi = mid;
-		}
-	}
-	Some(0.5 * (lo + hi))
+	Some(bisect(lo, hi, 200, |x| f(x).signum() == flo.signum()))
 }
 
 /// Roots of `sum c_k t^k` (c in ascending order, leading coefficient non-zero) by Durand-Kerner,

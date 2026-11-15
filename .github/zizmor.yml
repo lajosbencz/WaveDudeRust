@@ -1,0 +1,7 @@
+# Accepted findings of zizmor (hygiene.yml), each with its reason.
+rules:
+  self-repository:
+    ignore:
+      # A reusable workflow called by ./ resolves at the caller's commit before any step runs; actionlint 1.7.12
+      # rejects the $/ form.
+      - release.yml

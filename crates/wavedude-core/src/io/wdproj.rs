@@ -1,12 +1,12 @@
-//! The `WaveDude` Next `.wdproj` XML: read (versions 1 to 4, DOCTYPE ignored, unknown elements and
-//! attributes ignored) and written sparse with a DOCTYPE that declares every element and attribute.
+//! The `WaveDude` Next `.wdproj` XML: read (versions 1 to 4, DOCTYPE and unknown elements and attributes ignored)
+//! and written sparse with a DOCTYPE that declares every element and attribute.
 //!
-//! A sparse file means its version's defaults where it names no value, so an element is read onto the base
-//! of the file's version (`FileVersion`) and written against the current one.
+//! A sparse file means its version's defaults where it names no value: an element is read onto the base of the
+//! file's version (`FileVersion`) and written against the current one.
 //!
-//! Sources of a 9-point project are stored in the original's frequency units: reading multiplies
-//! the frequency scale is divided by [`super::nine_point_speed`], writing multiplies it back. A file whose `Simulation` carries
-//! `Rescaled="true"` already holds this program's units and is read unscaled.
+//! Sources of a 9-point project are stored in the original's frequency units: reading divides the frequency scale by
+//! [`super::nine_point_speed`], writing multiplies it back. A `Simulation` with `Rescaled="true"` already holds this
+//! program's units and is read unscaled.
 
 use std::path::Path;
 
@@ -55,8 +55,7 @@ type R<T> = std::result::Result<T, FormatError>;
 /// Parses a `.wdproj` text into a normalised project (migrated, 9-point frequencies scaled).
 /// The scene's `image_size` is left at (0, 0); [`load`] decodes it.
 pub fn read_str(text: &str) -> R<Project> {
-	let doc = xml::parse(text)?;
-	let root = &doc.root;
+	let root = &xml::parse(text)?;
 	if root.name != "Project" {
 		return Err(FormatError { message: "the document is not a WaveDude Next project".into(), at: Some(root.at) });
 	}
@@ -71,25 +70,14 @@ pub fn read_str(text: &str) -> R<Project> {
 		..Display::default()
 	};
 	let mut project = Project { seed, display, ..Project::default() };
-	let mut damping_read = false;
-	let mut rescaled = false;
 	for el in &root.children {
 		match el.name.as_str() {
 			"Description" => project.description = el.text.clone(),
-			"Scene" => {
-				damping_read = el.has("DampingEdge");
-				project.scene = read_scene(el)?;
+			name => {
+				if !read_object(&mut project, el, version)? {
+					tracing::warn!("the element '{name}' is unknown and ignored");
+				}
 			}
-			"Simulation" => {
-				rescaled = el.bool("Rescaled", false)?;
-				project.simulation = fields::read(el)?;
-			}
-			"Display" => project.display = read_display(el, version)?,
-			"Source" => project.sources.push(read_source(el)?),
-			"Probe" => project.probes.push(read_probe(el)?),
-			"ColorScheme" => project.color_schemes.push(wdscheme::from_element(el)?),
-			name if PART_ELEMENTS.contains(&name) => project.parts.push(read_part(el, version)?),
-			name => tracing::warn!("the element '{name}' is unknown and ignored"),
 		}
 	}
 	if version.0 > PROJECT_VERSION as i32 {
@@ -101,17 +89,63 @@ pub fn read_str(text: &str) -> R<Project> {
 	if version.0 < 2 {
 		project.scene.edges = Edges::Reflective;
 	}
-	if version.0 < 3 && !damping_read {
+	if version.0 < 3 && !root.children("Scene").last().is_some_and(|el| el.has("DampingEdge")) {
 		project.scene.damping_edge = 0;
-	}
-	if !rescaled && super::scale_nine_point_frequencies(&mut project, super::nine_point_speed()) {
-		tracing::info!(
-			"9-point project: the frequency scale is divided by the original kernel's speed {:.4} so the wavelengths stay",
-			super::nine_point_speed()
-		);
 	}
 	project.normalize();
 	Ok(project)
+}
+
+/// The objects of a `.wdproj` fragment: the elements of a project's objects as the project file writes them,
+/// without the `Project` element around them (Next's `ProjectClipboard`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Fragment {
+	pub scene: Option<Scene>,
+	pub simulation: Option<Simulation>,
+	pub display: Option<Display>,
+	pub sources: Vec<Source>,
+	pub parts: Vec<Part>,
+	pub probes: Vec<Probe>,
+	pub schemes: Vec<ColorScheme>,
+}
+
+impl Fragment {
+	pub fn is_empty(&self) -> bool {
+		self.scene.is_none()
+			&& self.simulation.is_none()
+			&& self.display.is_none()
+			&& self.sources.is_empty()
+			&& self.parts.is_empty()
+			&& self.probes.is_empty()
+			&& self.schemes.is_empty()
+	}
+}
+
+/// Parses a fragment's elements into its objects, normalised as a project's are, the scene's `image_size`
+/// decoded. An element that is no project object refuses the whole fragment.
+pub fn read_fragment(text: &str) -> R<Fragment> {
+	let elements = xml::parse_fragment(text)?;
+	let mut project = Project::default();
+	for el in &elements {
+		if !read_object(&mut project, el, CURRENT)? {
+			return Err(FormatError {
+				message: format!("'{}' is not an object of a project", el.name),
+				at: Some(el.at),
+			});
+		}
+	}
+	project.normalize();
+	super::read_embedded_image_size(&mut project.scene).map_err(FormatError::new)?;
+	let named = |name: &str| elements.iter().any(|el| el.name == name);
+	Ok(Fragment {
+		scene: named("Scene").then_some(project.scene),
+		simulation: named("Simulation").then_some(project.simulation),
+		display: named("Display").then_some(project.display),
+		sources: project.sources,
+		parts: project.parts,
+		probes: project.probes,
+		schemes: project.color_schemes,
+	})
 }
 
 /// The `Version` of the file being read: what its omitted attributes mean.
@@ -518,6 +552,30 @@ fn read_scene(el: &Element) -> R<Scene> {
 	Ok(scene)
 }
 
+/// Reads `el` onto `project` when it is one of a project's objects; `Ok(false)` when it is none.
+fn read_object(project: &mut Project, el: &Element, version: FileVersion) -> R<bool> {
+	match el.name.as_str() {
+		"Scene" => project.scene = read_scene(el)?,
+		"Simulation" => project.simulation = read_simulation(el)?,
+		"Display" => project.display = read_display(el, version)?,
+		"Source" => project.sources.push(read_source(el)?),
+		"Probe" => project.probes.push(read_probe(el)?),
+		"ColorScheme" => project.color_schemes.push(wdscheme::from_element(el)?),
+		name if PART_ELEMENTS.contains(&name) => project.parts.push(read_part(el, version)?),
+		_ => return Ok(false),
+	}
+	Ok(true)
+}
+
+/// A 9-point simulation without `Rescaled="true"` holds the original's units: its frequency scale is divided.
+fn read_simulation(el: &Element) -> R<Simulation> {
+	let mut simulation = fields::read(el)?;
+	if !el.bool("Rescaled", false)? {
+		super::scale_nine_point_frequencies(&mut simulation);
+	}
+	Ok(simulation)
+}
+
 fn read_display(el: &Element, version: FileVersion) -> R<Display> {
 	let mut display: Display = fields::read(el)?;
 	let layer = |name, layer| match el.child(name) {
@@ -773,6 +831,15 @@ fn write_part(p: &Part) -> Element {
 	el
 }
 
+/// A 9-point simulation's frequency scale is written in the original's units.
+fn write_simulation(s: &Simulation) -> Element {
+	let mut stored = s.clone();
+	if stored.stencil == Stencil::NinePoint {
+		stored.source_frequency_scale *= super::nine_point_speed();
+	}
+	element("Simulation", &stored)
+}
+
 /// The `Project` element of a project; `folder` makes an image path inside it relative.
 fn to_element(project: &Project, folder: Option<&Path>) -> Element {
 	let mut root = Element::new("Project");
@@ -785,12 +852,8 @@ fn to_element(project: &Project, folder: Option<&Path>) -> Element {
 	if !scene_is_default(&project.scene) {
 		root.child_el(write_scene(&project.scene, folder));
 	}
-	let mut simulation = project.simulation.clone();
-	if simulation.stencil == Stencil::NinePoint {
-		simulation.source_frequency_scale *= super::nine_point_speed();
-	}
-	if simulation != Simulation::default() {
-		root.child_el(element("Simulation", &simulation));
+	if project.simulation != Simulation::default() {
+		root.child_el(write_simulation(&project.simulation));
 	}
 	root.child_el(write_display(&project.display));
 	root.children.extend(project.sources.iter().map(write_source));
@@ -806,6 +869,31 @@ pub fn write_string(project: &Project, folder: Option<&Path>) -> String {
 	let mut out = format!("{DECLARATION}\n<!DOCTYPE Project [{}]>\n", dtd());
 	to_element(project, folder).write(&mut out, 0);
 	out
+}
+
+/// The fragment text of `fragment`: its elements in project order (settings, sources, parts, probes, schemes),
+/// joined by newlines, without a DOCTYPE; a settings object at its defaults is an empty element.
+pub fn write_fragment(fragment: &Fragment) -> String {
+	let settings = [
+		fragment.scene.as_ref().map(|s| write_scene(s, None)),
+		fragment.simulation.as_ref().map(write_simulation),
+		fragment.display.as_ref().map(write_display),
+	];
+	let elements = settings
+		.into_iter()
+		.flatten()
+		.chain(fragment.sources.iter().map(write_source))
+		.chain(fragment.parts.iter().map(write_part))
+		.chain(fragment.probes.iter().map(|p| element("Probe", p)))
+		.chain(fragment.schemes.iter().map(wdscheme::to_element));
+	elements
+		.map(|el| {
+			let mut out = String::new();
+			el.write(&mut out, 0);
+			out
+		})
+		.collect::<Vec<_>>()
+		.join("\n")
 }
 
 pub fn save(project: &Project, path: &Path) -> Result<()> {
@@ -937,141 +1025,147 @@ pub fn dtd() -> String {
 	out
 }
 
-// ---------------------------------------------------------------- validation
-
-/// A child element model: `name?`, `name*` or `(a|b)*`, in sequence.
-struct Particle {
-	names: Vec<String>,
-	many: bool,
-}
-
-struct DtdElement {
-	content: Option<Vec<Particle>>,
-	text: bool,
-	attrs: Vec<(String, Option<Vec<String>>, bool)>,
-}
-
-fn parse_dtd(subset: &str) -> std::result::Result<std::collections::HashMap<String, DtdElement>, String> {
-	let mut out = std::collections::HashMap::new();
-	for decl in subset.split('<').filter_map(|d| d.trim().strip_prefix('!')) {
-		let decl = decl.trim_end().trim_end_matches('>').trim();
-		if let Some(rest) = decl.strip_prefix("ELEMENT ") {
-			let (name, model) = rest.split_once(' ').ok_or_else(|| format!("bad ELEMENT: {decl}"))?;
-			let model = model.trim();
-			let (content, text) = match model {
-				"EMPTY" => (Some(vec![]), false),
-				"(#PCDATA)" => (Some(vec![]), true),
-				"ANY" => (None, true),
-				m => {
-					let inner = m.strip_prefix('(').and_then(|m| m.strip_suffix(')')).ok_or("bad model")?;
-					let mut particles = Vec::new();
-					let mut depth = 0;
-					let mut item = String::new();
-					for c in inner.chars().chain(std::iter::once(',')) {
-						match c {
-							'(' => depth += 1,
-							')' => depth -= 1,
-							',' if depth == 0 => {
-								let t = item.trim();
-								let many = t.ends_with('*');
-								let t = t.trim_end_matches(['*', '?']).trim_start_matches('(').trim_end_matches(')');
-								particles
-									.push(Particle { names: t.split('|').map(|s| s.trim().into()).collect(), many });
-								item.clear();
-								continue;
-							}
-							_ => {}
-						}
-						item.push(c);
-					}
-					(Some(particles), false)
-				}
-			};
-			out.insert(name.to_string(), DtdElement { content, text, attrs: vec![] });
-		} else if let Some(rest) = decl.strip_prefix("ATTLIST ") {
-			let parts: Vec<&str> = rest.split_whitespace().collect();
-			let [element, attr, ty, presence] = parts[..] else {
-				return Err(format!("bad ATTLIST: {decl}"));
-			};
-			let values =
-				ty.strip_prefix('(').and_then(|t| t.strip_suffix(')')).map(|t| t.split('|').map(Into::into).collect());
-			let el = out.get_mut(element).ok_or_else(|| format!("ATTLIST before ELEMENT: {element}"))?;
-			el.attrs.push((attr.into(), values, presence == "#REQUIRED"));
-		}
-	}
-	Ok(out)
-}
-
-fn validate_element(el: &Element, dtd: &std::collections::HashMap<String, DtdElement>, problems: &mut Vec<String>) {
-	let at = format!("line {}", el.at.0);
-	let Some(decl) = dtd.get(&el.name) else {
-		problems.push(format!("{at}: element '{}' is not declared", el.name));
-		return;
-	};
-	for (k, v) in &el.attrs {
-		match decl.attrs.iter().find(|(a, ..)| a == k) {
-			None => problems.push(format!("{at}: attribute '{k}' is not declared on '{}'", el.name)),
-			Some((_, Some(values), _)) if !values.iter().any(|x| x == v) => {
-				problems.push(format!("{at}: '{v}' is not a value of '{}/@{k}'", el.name));
-			}
-			_ => {}
-		}
-	}
-	for (a, _, required) in &decl.attrs {
-		if *required && !el.has(a) {
-			problems.push(format!("{at}: required attribute '{a}' missing on '{}'", el.name));
-		}
-	}
-	if !decl.text && !el.text.trim().is_empty() && decl.content.is_some() {
-		problems.push(format!("{at}: element '{}' holds text", el.name));
-	}
-	if let Some(model) = &decl.content {
-		let mut i = 0;
-		let mut used = false;
-		for c in &el.children {
-			while i < model.len() && (!model[i].names.contains(&c.name) || (used && !model[i].many)) {
-				i += 1;
-				used = false;
-			}
-			if i == model.len() {
-				problems.push(format!("line {}: element '{}' is not allowed here in '{}'", c.at.0, c.name, el.name));
-				break;
-			}
-			used = true;
-		}
-	}
-	for c in &el.children {
-		validate_element(c, dtd, problems);
-	}
-}
-
-/// Validates a `.wdproj` text against the DTD in its own DOCTYPE: declared elements and attributes,
-/// enumerated values, required attributes and child order. Returns the problems found.
-pub fn validate(text: &str) -> Vec<String> {
-	let doc = match xml::parse(text) {
-		Ok(d) => d,
-		Err(e) => return vec![e.to_string()],
-	};
-	let Some(doctype) = doc.doctype else {
-		return vec!["no DOCTYPE".into()];
-	};
-	let subset = doctype.split_once('[').and_then(|(_, s)| s.rsplit_once(']')).map_or("", |(s, _)| s);
-	let dtd = match parse_dtd(subset) {
-		Ok(d) => d,
-		Err(e) => return vec![e],
-	};
-	let mut problems = Vec::new();
-	if !doctype.trim_start().starts_with(&doc.root.name) {
-		problems.push(format!("the DOCTYPE does not name the root '{}'", doc.root.name));
-	}
-	validate_element(&doc.root, &dtd, &mut problems);
-	problems
-}
-
 #[cfg(test)]
 mod tests {
+	use std::collections::HashMap;
+
 	use super::*;
 	use crate::model::{Field, ValueKind};
+
+	/// A child element model: `name?`, `name*` or `(a|b)*`, in sequence.
+	struct Particle {
+		names: Vec<String>,
+		many: bool,
+	}
+
+	struct DtdElement {
+		content: Option<Vec<Particle>>,
+		text: bool,
+		attrs: Vec<(String, Option<Vec<String>>, bool)>,
+	}
+
+	fn parse_dtd(subset: &str) -> std::result::Result<HashMap<String, DtdElement>, String> {
+		let mut out = HashMap::new();
+		for decl in subset.split('<').filter_map(|d| d.trim().strip_prefix('!')) {
+			let decl = decl.trim_end().trim_end_matches('>').trim();
+			if let Some(rest) = decl.strip_prefix("ELEMENT ") {
+				let (name, model) = rest.split_once(' ').ok_or_else(|| format!("bad ELEMENT: {decl}"))?;
+				let model = model.trim();
+				let (content, text) = match model {
+					"EMPTY" => (Some(vec![]), false),
+					"(#PCDATA)" => (Some(vec![]), true),
+					"ANY" => (None, true),
+					m => {
+						let inner = m.strip_prefix('(').and_then(|m| m.strip_suffix(')')).ok_or("bad model")?;
+						let mut particles = Vec::new();
+						let mut depth = 0;
+						let mut item = String::new();
+						for c in inner.chars().chain(std::iter::once(',')) {
+							match c {
+								'(' => depth += 1,
+								')' => depth -= 1,
+								',' if depth == 0 => {
+									let t = item.trim();
+									let many = t.ends_with('*');
+									let t =
+										t.trim_end_matches(['*', '?']).trim_start_matches('(').trim_end_matches(')');
+									particles.push(Particle {
+										names: t.split('|').map(|s| s.trim().into()).collect(),
+										many,
+									});
+									item.clear();
+									continue;
+								}
+								_ => {}
+							}
+							item.push(c);
+						}
+						(Some(particles), false)
+					}
+				};
+				out.insert(name.to_string(), DtdElement { content, text, attrs: vec![] });
+			} else if let Some(rest) = decl.strip_prefix("ATTLIST ") {
+				let parts: Vec<&str> = rest.split_whitespace().collect();
+				let [element, attr, ty, presence] = parts[..] else {
+					return Err(format!("bad ATTLIST: {decl}"));
+				};
+				let values = ty
+					.strip_prefix('(')
+					.and_then(|t| t.strip_suffix(')'))
+					.map(|t| t.split('|').map(Into::into).collect());
+				let el = out.get_mut(element).ok_or_else(|| format!("ATTLIST before ELEMENT: {element}"))?;
+				el.attrs.push((attr.into(), values, presence == "#REQUIRED"));
+			}
+		}
+		Ok(out)
+	}
+
+	fn validate_element(el: &Element, dtd: &HashMap<String, DtdElement>, problems: &mut Vec<String>) {
+		let at = format!("line {}", el.at.0);
+		let Some(decl) = dtd.get(&el.name) else {
+			problems.push(format!("{at}: element '{}' is not declared", el.name));
+			return;
+		};
+		for (k, v) in &el.attrs {
+			match decl.attrs.iter().find(|(a, ..)| a == k) {
+				None => problems.push(format!("{at}: attribute '{k}' is not declared on '{}'", el.name)),
+				Some((_, Some(values), _)) if !values.iter().any(|x| x == v) => {
+					problems.push(format!("{at}: '{v}' is not a value of '{}/@{k}'", el.name));
+				}
+				_ => {}
+			}
+		}
+		for (a, _, required) in &decl.attrs {
+			if *required && !el.has(a) {
+				problems.push(format!("{at}: required attribute '{a}' missing on '{}'", el.name));
+			}
+		}
+		if !decl.text && !el.text.trim().is_empty() && decl.content.is_some() {
+			problems.push(format!("{at}: element '{}' holds text", el.name));
+		}
+		if let Some(model) = &decl.content {
+			let mut i = 0;
+			let mut used = false;
+			for c in &el.children {
+				while i < model.len() && (!model[i].names.contains(&c.name) || (used && !model[i].many)) {
+					i += 1;
+					used = false;
+				}
+				if i == model.len() {
+					problems
+						.push(format!("line {}: element '{}' is not allowed here in '{}'", c.at.0, c.name, el.name));
+					break;
+				}
+				used = true;
+			}
+		}
+		for c in &el.children {
+			validate_element(c, dtd, problems);
+		}
+	}
+
+	/// Validates a `.wdproj` text against the DTD in its own DOCTYPE: declared elements and attributes,
+	/// enumerated values, required attributes and child order. Returns the problems found.
+	fn validate(text: &str) -> Vec<String> {
+		let root = match xml::parse(text) {
+			Ok(root) => root,
+			Err(e) => return vec![e.to_string()],
+		};
+		let Some((doctype, _)) = text.split_once("<!DOCTYPE").and_then(|(_, t)| t.split_once("]>")) else {
+			return vec!["no DOCTYPE".into()];
+		};
+		let subset = doctype.split_once('[').map_or("", |(_, s)| s);
+		let dtd = match parse_dtd(subset) {
+			Ok(d) => d,
+			Err(e) => return vec![e],
+		};
+		let mut problems = Vec::new();
+		if !doctype.trim_start().starts_with(&root.name) {
+			problems.push(format!("the DOCTYPE does not name the root '{}'", root.name));
+		}
+		validate_element(&root, &dtd, &mut problems);
+		problems
+	}
 
 	/// One of every kind with values off their defaults where it matters.
 	fn every_kind() -> Project {
@@ -1172,6 +1266,21 @@ mod tests {
 		}
 		assert_eq!(back, p);
 		assert_eq!(write_string(&back, None), text);
+	}
+
+	#[test]
+	fn every_example_writes_valid() {
+		let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/examples");
+		let mut checked = 0;
+		for entry in std::fs::read_dir(dir).unwrap() {
+			let path = entry.unwrap().path();
+			if path.extension().is_some_and(|e| e == EXTENSION) {
+				let text = write_string(&load(&path).unwrap(), None);
+				assert_eq!(validate(&text), Vec::<String>::new(), "{}", path.display());
+				checked += 1;
+			}
+		}
+		assert!(checked > 0);
 	}
 
 	#[test]

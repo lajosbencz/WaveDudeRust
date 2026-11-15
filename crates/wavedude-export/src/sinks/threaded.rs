@@ -9,6 +9,8 @@ use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread::JoinHandle;
 
 #[cfg(not(target_arch = "wasm32"))]
+use super::first_error;
+#[cfg(not(target_arch = "wasm32"))]
 use super::pool::panicked;
 use super::{FrameSink, check_size};
 #[cfg(not(target_arch = "wasm32"))]
@@ -59,16 +61,16 @@ impl<S: FrameSink + 'static> Threaded<S> {
 	/// Ends the thread and takes the sink back, with the first error the thread reported.
 	fn join(&mut self) -> Result<()> {
 		self.tx.take();
-		let mut first = Ok(());
-		while let Ok(r) = self.back.recv() {
-			if let (Err(e), Ok(())) = (r, &first) {
-				first = Err(e);
-			}
-		}
+		let first = first_error(self.back.iter().map(|r| r.map(drop)));
 		if let Some(thread) = self.thread.take() {
 			self.sink = thread.join().ok();
 		}
 		first
+	}
+
+	/// After the thread hung up: its first error, else [`ExportError::Finished`].
+	fn hung_up(&mut self) -> Result<()> {
+		self.join().and(Err(ExportError::Finished))
 	}
 }
 
@@ -76,16 +78,21 @@ impl<S: FrameSink + 'static> Threaded<S> {
 impl<S: FrameSink + 'static> FrameSink for Threaded<S> {
 	fn write_frame(&mut self, rgba: &[u8], width: u32, height: u32) -> Result<()> {
 		check_size(self.width, self.height, width, height, rgba.len(), 4)?;
-		let tx = self.tx.as_ref().ok_or(ExportError::Finished)?;
+		let Some(tx) = &self.tx else { return Err(ExportError::Finished) };
 		let mut frame = if self.allocated < BUFFERS {
 			self.allocated += 1;
 			Vec::with_capacity(rgba.len())
 		} else {
-			self.back.recv().map_err(|_| ExportError::Finished)??
+			match self.back.recv() {
+				Ok(buffer) => buffer?,
+				Err(_) => return self.hung_up(),
+			}
 		};
 		frame.clear();
 		frame.extend_from_slice(rgba);
-		tx.send(frame).map_err(|_| ExportError::Finished)?;
+		if tx.send(frame).is_err() {
+			return self.hung_up();
+		}
 		self.submitted += 1;
 		Ok(())
 	}
@@ -135,6 +142,39 @@ mod tests {
 			self.0.store(true, Ordering::Release);
 			Ok(())
 		}
+	}
+
+	struct Full;
+
+	impl FrameSink for Full {
+		fn write_frame(&mut self, _: &[u8], _: u32, _: u32) -> Result<()> {
+			Err(std::io::Error::from(std::io::ErrorKind::StorageFull).into())
+		}
+
+		fn frames_written(&self) -> usize {
+			0
+		}
+
+		fn finish(&mut self) -> Result<()> {
+			Ok(())
+		}
+
+		fn discard(&mut self) -> Result<()> {
+			Ok(())
+		}
+	}
+
+	#[test]
+	fn a_frame_after_the_thread_failed_reports_the_failure() {
+		let mut sink = Threaded::new(Full, 1, 1).unwrap();
+		sink.write_frame(&[0; 4], 1, 1).unwrap();
+		while !sink.thread.as_ref().unwrap().is_finished() {
+			std::thread::yield_now();
+		}
+		let error = sink.write_frame(&[0; 4], 1, 1);
+		assert!(matches!(&error, Err(ExportError::Io(e)) if e.kind() == std::io::ErrorKind::StorageFull), "{error:?}");
+		assert!(matches!(sink.write_frame(&[0; 4], 1, 1), Err(ExportError::Finished)));
+		sink.finish().unwrap();
 	}
 
 	#[test]

@@ -1,11 +1,12 @@
-//! The live controller: what a model change, the transport and the export ask of the live run, and what the
-//! pictures show (docs/ui/60-live-editing-and-runs.md, 50-timeline-transport.md).
+//! The live controller: what a model change, the transport and the export ask of the live run, and what the pictures
+//! show (docs/ui/60-live-editing-and-runs.md, 50-timeline-transport.md).
 //!
-//! No timers: the controller publishes a [`Goal`] (the project's spec, the position, how much is wanted, a
-//! pause, a fit) and reads back what the run has ([`Status`], the store's frames, the traces). The run sits
-//! behind [`Backend`]; [`CoreBackend`] is the core's run, [`fake::FakeBackend`] a scripted one for
-//! tests. Threads: the controller lives on the UI thread; natively the run works on its own thread and is polled
-//! here, on wasm32 in the run worker and [`LiveController::tick`] takes what it sent ([`crate::remote`]).
+//! No timers: the controller publishes a [`Goal`] (spec, position, how much is wanted, pause, fit) and reads back
+//! [`Status`], the store's frames and the traces. The run sits behind [`Backend`]: [`CoreBackend`] is the core's,
+//! `fake::FakeBackend` (feature `test-support`) a scripted one for tests.
+//!
+//! Threads: the controller lives on the UI thread; natively the run works on its own thread and is polled here, on
+//! wasm32 in the run worker and [`LiveController::tick`] takes what it sent ([`crate::remote`]).
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
@@ -31,6 +32,7 @@ use wavedude_core::scene::off_canvas::{OffCanvas, off_canvas};
 use wavedude_core::spec::{RunRequest, RunSpecError, SceneCache};
 #[cfg(not(target_arch = "wasm32"))]
 use wavedude_core::sync::lock;
+use wavedude_export::ExportFormat;
 
 use super::commands::ChangeKind;
 use super::platform::Instant;
@@ -143,6 +145,22 @@ pub enum ExportGate {
 	Busy,
 }
 
+/// What an export needs of its run beyond full quality.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunNeeds {
+	/// The field alone.
+	Field,
+	/// The intensity recorded, its plane holding sqrt(I) when `root`, else I ([`ExportFormat::intensity_root`]).
+	Intensity { root: bool },
+}
+
+impl RunNeeds {
+	/// The run an export of `format` needs, with the intensity when `intensity`.
+	pub fn new(format: ExportFormat, intensity: bool) -> Self {
+		if intensity { Self::Intensity { root: format.intensity_root() } } else { Self::Field }
+	}
+}
+
 /// What asked for every frame, applied once the memory warning lets it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Then {
@@ -163,7 +181,7 @@ struct PendingWarning {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Export {
 	Idle,
-	Waiting { needs_intensity: bool },
+	Waiting(RunNeeds),
 	Reading,
 }
 
@@ -813,24 +831,38 @@ impl<B: Backend> LiveController<B> {
 	}
 
 	fn poll_export(&mut self) {
-		let Export::Waiting { needs_intensity } = self.export else { return };
-		if self.is_full_for_export(needs_intensity) {
+		let Export::Waiting(needs) = self.export else { return };
+		if self.is_full_for_export(needs) {
 			self.export = Export::Reading;
 			self.notices.push(Notice::ExportReady);
 		}
 	}
 
-	/// Every frame of a full-quality spec (with the intensity when needed) is stored and recorded.
-	fn is_full_for_export(&self, needs_intensity: bool) -> bool {
-		self.request()
-			.is_some_and(|r| r.quality.is_full() && (!needs_intensity || r.layers().contains(&Layer::Intensity)))
-			&& self.complete()
+	/// Every frame of a full-quality spec (with the intensity in the form needed, when needed) is stored and
+	/// recorded.
+	fn is_full_for_export(&self, needs: RunNeeds) -> bool {
+		self.request().is_some_and(|r| {
+			r.quality.is_full()
+				&& match needs {
+					RunNeeds::Field => true,
+					RunNeeds::Intensity { root } => {
+						r.layers().contains(&Layer::Intensity) && r.quality.intensity_root == root
+					}
+				}
+		}) && self.complete()
 	}
 
 	/// Auto brightness with 8-bit samples: the frame at the position once more with 16-bit samples, for
 	/// [`take_half_frame`](Self::take_half_frame) alone. Returns whether it was requested.
-	pub fn request_half_frame(&mut self, _project: &Project) -> bool {
-		self.request_fit()
+	pub fn request_half_frame(&mut self) -> bool {
+		if self.request().is_none() {
+			tracing::warn!("no 16-bit frame for the brightness fit: no run");
+			return false;
+		}
+		self.next_fit += 1;
+		self.fit = Some(FitRequest { id: self.next_fit, frame: self.playback.position() });
+		self.publish();
+		true
 	}
 
 	/// The frame [`request_half_frame`](Self::request_half_frame) asked for, once it arrived.
@@ -846,17 +878,6 @@ impl<B: Backend> LiveController<B> {
 	/// A fit frame is on its way.
 	pub fn fit_pending(&self) -> bool {
 		self.fit.is_some()
-	}
-
-	fn request_fit(&mut self) -> bool {
-		if self.request().is_none() {
-			tracing::warn!("no 16-bit frame for the brightness fit: no run");
-			return false;
-		}
-		self.next_fit += 1;
-		self.fit = Some(FitRequest { id: self.next_fit, frame: self.playback.position() });
-		self.publish();
-		true
 	}
 
 	/// The memory warning's Run: the levers' quality and cache for this and later runs (the caller persists
@@ -892,8 +913,12 @@ impl<B: Backend> LiveController<B> {
 		}
 	}
 
-	/// F5 / Run: every frame from frame 0, followed. With the run worker gone, the next tick says so again.
+	/// F5 / Run: every frame from frame 0, followed; nothing while an export holds or waits for the run. With the
+	/// run worker gone, the next tick says so again.
 	pub fn run_user(&mut self, project: &Project, now: Instant) -> bool {
+		if self.export_busy() {
+			return false;
+		}
 		if self.backend.worker_gone().is_some() {
 			self.failed = None;
 		}
@@ -1006,24 +1031,27 @@ impl<B: Backend> LiveController<B> {
 		self.publish();
 	}
 
-	/// An export asks for its run: ready when the current one is fresh, complete and full quality (with the
-	/// intensity when `needs_intensity`), else a full-quality run starts (never with the memory warning).
-	pub fn request_export(&mut self, project: &Project, needs_intensity: bool, now: Instant) -> ExportGate {
+	/// An export asks for its run: ready when the current one is fresh, complete, full quality and as `needs`
+	/// says, else such a run starts (never with the memory warning).
+	pub fn request_export(&mut self, project: &Project, needs: RunNeeds, now: Instant) -> ExportGate {
 		if self.export_busy() {
 			return ExportGate::Busy;
 		}
 		if self.warning.take().is_some() {
 			self.notices.push(Notice::WarningDropped);
 		}
-		if self.is_full_for_export(needs_intensity) {
+		if self.is_full_for_export(needs) {
 			self.export = Export::Reading;
 			return ExportGate::Ready;
 		}
-		self.quality = PreviewQuality::FULL;
-		self.track_intensity = needs_intensity;
+		self.quality = match needs {
+			RunNeeds::Field => PreviewQuality::FULL,
+			RunNeeds::Intensity { root } => PreviewQuality { intensity_root: root, ..PreviewQuality::FULL },
+		};
+		self.track_intensity = needs != RunNeeds::Field;
 		self.respec(project);
 		self.start(Then::Rerun, now);
-		self.export = Export::Waiting { needs_intensity };
+		self.export = Export::Waiting(needs);
 		self.publish();
 		ExportGate::Waiting
 	}
@@ -1068,13 +1096,31 @@ pub struct CoreBackend {
 	scene: Arc<Mutex<SceneCache>>,
 }
 
-/// The most a store's frames take in the browser: a wasm32 memory holds 4 GiB at most, beside everything else.
-#[cfg(target_arch = "wasm32")]
-pub const MAX_WEB_FRAME_BYTES: u64 = 2 << 30;
+/// The share of the device's memory a store's frames take in the browser, as a divisor (decision 0020, The
+/// browser's memory budget).
+pub const WEB_FRAME_SHARE: u64 = 8;
+/// The most a store's frames take in the browser, whatever the device (decision 0020, The browser's memory budget).
+pub const MAX_WEB_FRAME_BYTES: u64 = 512 << 20;
+
+/// The device memory the frame budget assumes where the browser does not tell.
+pub const WEB_UNKNOWN_MEMORY: u64 = 1 << 30;
+
+/// The memory a store's frames take in the browser on a device of `device_bytes` (`navigator.deviceMemory`,
+/// [`WEB_UNKNOWN_MEMORY`] when `None`); the frames past it spill.
+pub fn web_frame_memory(device_bytes: Option<u64>) -> u64 {
+	(device_bytes.unwrap_or(WEB_UNKNOWN_MEMORY) / WEB_FRAME_SHARE).min(MAX_WEB_FRAME_BYTES)
+}
 
 /// The run worker's script, beside the page.
 #[cfg(target_arch = "wasm32")]
 const RUN_WORKER: &str = "run-worker.js";
+
+/// The run worker's URL: [`RUN_WORKER`] with the page's build as its query, which the script passes on to its files, so
+/// the browser's cache never serves the worker of another build.
+#[cfg(target_arch = "wasm32")]
+fn run_worker_url() -> String {
+	format!("{RUN_WORKER}?build={}", js_sys::encode_uri_component(&crate::build_id()))
+}
 
 /// The engine a run uses, as the status bar and About name it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1165,12 +1211,12 @@ impl CoreBackend {
 	}
 
 	/// A backend on the run worker, which it starts; the mirror stores hold their frames in memory, the RAM cache
-	/// size's share of the device's memory up to [`MAX_WEB_FRAME_BYTES`], and the rest in the origin private file
-	/// system. The engine runs on the worker's GPU while `use_gpu` holds, else on the CPU.
+	/// size's share of [`web_frame_memory`], and the rest in the origin private file system. The engine runs on the
+	/// worker's GPU while `use_gpu` holds, else on the CPU.
 	#[cfg(target_arch = "wasm32")]
 	pub fn new(use_gpu: Arc<AtomicBool>) -> Self {
-		let frame_memory = super::platform::machine_facts().physical_bytes.min(MAX_WEB_FRAME_BYTES);
-		let port = PagePort::start(RUN_WORKER, crate::wake::wake);
+		let frame_memory = web_frame_memory(super::platform::device_memory());
+		let port = PagePort::start(&run_worker_url(), crate::wake::wake);
 		let remote = Remote::new(port, use_gpu, frame_memory, Box::new(super::platform::Opfs::start()));
 		Self { remote, scene: Arc::default() }
 	}
@@ -1270,8 +1316,8 @@ impl Backend for CoreBackend {
 	}
 }
 
-/// A scripted run: the goals are recorded, the frames come when the caller writes them. For tests and headless
-/// tools.
+/// A scripted run: the goals are recorded, the frames come when the caller writes them. For tests.
+#[cfg(any(test, feature = "test-support"))]
 pub mod fake {
 	use std::collections::HashMap;
 	use std::sync::{Arc, Mutex};
@@ -1397,11 +1443,11 @@ pub mod fake {
 		/// Writes timeline frame `frame` as uniform samples: the field `u`, the intensity `i`.
 		pub fn finish_frame_uniform(&mut self, frame: u32, u: f32, i: f32) {
 			let spec = self.adopted_spec().clone();
-			let stored = spec.stored_index_of(frame);
-			let snapshot = Self::uniform(&spec, stored * spec.capture_every(), u, i);
+			let stored = spec.schedule.stored_index_of(frame);
+			let snapshot = Self::uniform(&spec, stored * spec.schedule.capture_every(), u, i);
 			self.store().write_at(stored as usize, snapshot).expect("the frame fits the store");
 			self.store().settle().expect("the fake spill's writes succeed");
-			self.steps_done = self.steps_done.max(stored * spec.capture_every() + 1);
+			self.steps_done = self.steps_done.max(stored * spec.schedule.capture_every() + 1);
 		}
 
 		/// Writes the goal's position frame.
@@ -1413,16 +1459,16 @@ pub mod fake {
 		/// Writes the timeline frames below `frames`.
 		pub fn publish(&mut self, frames: u32) {
 			let spec = self.adopted_spec().clone();
-			for stored in 0..spec.stored_frames().min(frames.div_ceil(spec.frame_divisor())) {
-				self.finish_frame_uniform(stored * spec.frame_divisor(), 0.0, 0.0);
+			for stored in 0..spec.schedule.stored_frames().min(frames.div_ceil(spec.schedule.frame_divisor())) {
+				self.finish_frame_uniform(stored * spec.schedule.frame_divisor(), 0.0, 0.0);
 			}
 		}
 
 		/// Writes every frame.
 		pub fn complete(&mut self) {
-			let frames = self.adopted_spec().frame_count();
+			let frames = self.adopted_spec().schedule.frame_count();
 			self.publish(frames);
-			self.steps_done = self.adopted_spec().steps;
+			self.steps_done = self.adopted_spec().schedule.steps;
 		}
 
 		/// Serves the goal's fit with uniform samples in halves.
@@ -1431,7 +1477,7 @@ pub mod fake {
 			let spec = self.adopted_spec().clone();
 			let shape = wavedude_core::engine::FrameShape { format: SampleFormat::Half, ..spec.shape };
 			let half = RunSpec { shape, ..spec.clone() };
-			let snapshot = Self::uniform(&half, spec.step_of(fit.frame), u, i);
+			let snapshot = Self::uniform(&half, spec.schedule.step_of(fit.frame), u, i);
 			self.fits_served.push(fit.id);
 			self.fit = Some(FitFrame { id: fit.id, frame: fit.frame, snapshot: Arc::new(snapshot) });
 		}
@@ -1468,7 +1514,8 @@ pub mod fake {
 			let state = match (&self.failure, self.goals.last(), self.spec.as_ref(), self.store.as_ref()) {
 				(Some(e), ..) => WorkState::Failed(e.clone()),
 				(None, Some(goal), Some(spec), Some(store)) => {
-					let position = spec.stored_index_of(goal.position.min(spec.frame_count().saturating_sub(1)));
+					let position =
+						spec.schedule.stored_index_of(goal.position.min(spec.schedule.frame_count().saturating_sub(1)));
 					let next = if !store.has(position as usize) {
 						Some(position)
 					} else if goal.wanted == Wanted::All {
@@ -1551,6 +1598,21 @@ mod tests {
 
 	fn controller(p: &Project, t: Instant) -> LiveController<FakeBackend> {
 		controller_on(FakeBackend::default(), p, t)
+	}
+
+	#[test]
+	fn the_browser_frame_memory_is_an_eighth_of_the_device_up_to_its_cap() {
+		const GIB: u64 = 1 << 30;
+		const MIB: u64 = 1 << 20;
+		let memory: Vec<u64> = [2, 4, 8, 16, 32].iter().map(|g| web_frame_memory(Some(g * GIB)) / MIB).collect();
+		assert_eq!(memory, [256, 512, 512, 512, 512]);
+		assert_eq!(web_frame_memory(None) / MIB, 128, "a device that does not tell is taken for 1 GiB");
+		assert_eq!(web_frame_memory(Some(u64::MAX)), MAX_WEB_FRAME_BYTES);
+	}
+
+	/// A rendered export's needs.
+	fn needs(intensity: bool) -> RunNeeds {
+		RunNeeds::new(ExportFormat::Png, intensity)
 	}
 
 	fn controller_on(backend: FakeBackend, p: &Project, t: Instant) -> LiveController<FakeBackend> {
@@ -1697,7 +1759,7 @@ mod tests {
 		c.backend_mut().complete();
 		c.scrub(40, t);
 		c.tick(t, &p);
-		assert!(c.request_half_frame(&p));
+		assert!(c.request_half_frame());
 		assert_eq!(c.backend().goal().fit.map(|f| f.frame), Some(40));
 		assert_eq!(c.computing_picture(), None, "the pictures keep the run's frame");
 		c.backend_mut().finish_fit_uniform(0.5, 0.25);
@@ -1761,7 +1823,7 @@ mod tests {
 		c.backend_mut().finish_position();
 		c.tick(t, &p);
 		c.take_notices();
-		assert_eq!((c.playback.last_frame(), c.backend().adopted_spec().stored_frames()), (100, 51));
+		assert_eq!((c.playback.last_frame(), c.backend().adopted_spec().schedule.stored_frames()), (100, 51));
 		(p, c)
 	}
 
@@ -1868,7 +1930,7 @@ mod tests {
 		c.run_user(&p, t);
 		c.backend_mut().complete();
 		c.tick(t, &p);
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Waiting);
 		c.take_notices();
 		c.project_replaced(&p, t);
 		assert!(c.take_notices().contains(&Notice::ExportStopped), "the waiting export is told");
@@ -1876,11 +1938,11 @@ mod tests {
 		c.run_user(&p, t);
 		c.backend_mut().complete();
 		c.tick(t, &p);
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Waiting);
 		c.backend_mut().complete();
 		c.tick(t, &p);
 		c.end_export();
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Ready);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Ready);
 		p.sources[0].frequency = 120.0;
 		c.on_change(ChangeKind::Simulation, &p, None, t);
 		let revision = c.backend().goal().revision;
@@ -1913,17 +1975,43 @@ mod tests {
 		c.run_user(&p, t);
 		c.backend_mut().complete();
 		c.tick(t, &p);
-		assert_eq!(c.request_export(&p, true, t), ExportGate::Waiting, "an 8-bit preview run does not do");
-		assert!(c.backend().adopted_spec().quality.is_full() && c.backend().adopted_spec().track_intensity());
+		assert_eq!(c.request_export(&p, needs(true), t), ExportGate::Waiting, "an 8-bit preview run does not do");
+		assert!(c.backend().adopted_spec().schedule.quality.is_full() && c.backend().adopted_spec().track_intensity());
 		c.backend_mut().complete();
 		c.tick(t, &p);
 		assert!(c.take_notices().contains(&Notice::ExportReady));
-		assert_eq!(c.request_export(&p, true, t), ExportGate::Busy);
+		assert_eq!(c.request_export(&p, needs(true), t), ExportGate::Busy);
 		c.end_export();
-		assert_eq!(c.request_export(&p, true, t), ExportGate::Ready);
+		assert_eq!(c.request_export(&p, needs(true), t), ExportGate::Ready);
 		c.end_export();
 		c.on_change(ChangeKind::Simulation, &p, None, t);
-		assert!(!c.backend().adopted_spec().quality.is_full(), "the next edit's frames are the preview's again");
+		assert!(
+			!c.backend().adopted_spec().schedule.quality.is_full(),
+			"the next edit's frames are the preview's again"
+		);
+	}
+
+	#[test]
+	fn an_exr_export_of_the_intensity_needs_a_run_that_stores_i_not_its_root() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert_eq!(c.request_export(&p, needs(true), t), ExportGate::Waiting);
+		c.backend_mut().complete();
+		c.tick(t, &p);
+		c.end_export();
+		assert!(c.backend().adopted_spec().schedule.quality.intensity_root);
+		let exr = RunNeeds::new(ExportFormat::Exr, true);
+		assert_eq!(c.request_export(&p, exr, t), ExportGate::Waiting, "a complete run of sqrt(I) does not do");
+		assert!(!c.backend().adopted_spec().schedule.quality.intensity_root);
+		c.backend_mut().complete();
+		c.tick(t, &p);
+		c.end_export();
+		assert_eq!(c.request_export(&p, exr, t), ExportGate::Ready);
+		c.end_export();
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Ready, "the field's export takes either");
+		c.end_export();
+		assert_eq!(c.request_export(&p, needs(true), t), ExportGate::Waiting);
 	}
 
 	#[test]
@@ -1937,7 +2025,7 @@ mod tests {
 		c.run_user(&p, t);
 		c.backend_mut().complete();
 		c.tick(t, &p);
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Waiting);
 		c.backend_mut().complete();
 		c.tick(t, &p);
 		assert!(c.take_notices().contains(&Notice::ExportReady));
@@ -1956,11 +2044,11 @@ mod tests {
 		let t = Instant::now();
 		let p = project();
 		let mut c = controller(&p, t);
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Waiting);
 		c.on_change(ChangeKind::Simulation, &p, None, t);
 		assert!(c.take_notices().contains(&Notice::ExportStopped), "an edit replaced the export's run");
 		assert!(!c.export_busy());
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Waiting);
 		c.cancel_export();
 		assert!(!c.export_busy());
 		assert_eq!(c.backend().wanted(), Wanted::Position, "a cancelled export stops its run");
@@ -1974,7 +2062,7 @@ mod tests {
 		let t = Instant::now();
 		let p = project();
 		let mut c = controller(&p, t);
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Waiting);
 		c.backend_mut().fail("boom");
 		c.tick(t, &p);
 		assert!(!c.export_busy(), "nothing waits for a failed run");
@@ -1998,7 +2086,7 @@ mod tests {
 		c.tick(t, &p);
 		assert!(matches!(c.run_status().map(|s| s.0), Some(RunState::Failed(_))));
 		assert!(!c.run_is_active() && !c.run_is_progressing(), "a failed run is over");
-		c.request_half_frame(&p);
+		c.request_half_frame();
 		c.tick(t, &p);
 		assert!(!c.fit_pending(), "no fit comes from a failed run");
 	}
@@ -2011,11 +2099,11 @@ mod tests {
 		c.run_user(&p, t);
 		c.backend_mut().complete();
 		c.tick(t, &p);
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Waiting);
 		c.backend_mut().complete();
 		c.tick(t, &p);
 		c.end_export();
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Ready);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Ready);
 		let revision = c.backend().goal().revision;
 		let generation = c.backend().store().generation();
 		p.sources[0].frequency = 120.0;
@@ -2072,7 +2160,7 @@ mod tests {
 		let t = Instant::now();
 		let p = project();
 		let mut c = controller(&p, t);
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Waiting);
 		c.backend_mut().publish(10);
 		c.tick(t, &p);
 		let old = c.backend().store().clone();
@@ -2085,7 +2173,7 @@ mod tests {
 		let t = Instant::now();
 		let p = project();
 		let mut c = controller(&p, t);
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Waiting);
 		c.tick(t, &p);
 		c.take_notices();
 		c.stop_run();
@@ -2095,14 +2183,14 @@ mod tests {
 	}
 
 	#[test]
-	fn an_export_drops_the_memory_warning_and_a_run_during_its_read_keeps_the_frames() {
+	fn an_export_drops_the_memory_warning_and_refuses_a_run_during_its_read() {
 		let t = Instant::now();
 		let p = project();
 		let mut c = controller(&p, t);
 		c.backend_mut().budgets = Some((1, 1));
 		assert!(!c.run_user(&p, t));
 		c.take_notices();
-		assert_eq!(c.request_export(&p, false, t), ExportGate::Waiting);
+		assert_eq!(c.request_export(&p, needs(false), t), ExportGate::Waiting);
 		assert!(c.take_notices().contains(&Notice::WarningDropped), "the warning's dialog closes");
 		assert!(c.warning().is_none());
 		c.backend_mut().complete();
@@ -2110,10 +2198,10 @@ mod tests {
 		assert!(c.take_notices().contains(&Notice::ExportReady));
 		let revision = c.backend().goal().revision;
 		let generation = c.backend().store().generation();
-		assert!(c.run_user(&p, t), "the export's frames are all there: Run does not ask");
+		assert!(!c.run_user(&p, t), "Run waits for the export");
 		c.tick(t, &p);
 		assert!(!c.take_notices().contains(&Notice::AskMemoryWarning));
-		assert!(c.export_busy());
+		assert!(c.export_busy() && !c.is_live());
 		assert_eq!(c.backend().goal().revision, revision, "the frames stay while the export reads them");
 		assert_eq!(c.backend().store().generation(), generation);
 	}

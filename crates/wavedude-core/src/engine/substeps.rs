@@ -1,25 +1,18 @@
-//! Sub-steps per simulation step from the CFL bound of the stencil and time scheme (docs/physics.md,
-//! Stability).
+//! Sub-steps per simulation step from the CFL bound of the stencil and time scheme (docs/physics.md, Stability).
 //!
-//! A scheme is stable while `s = S^2 symbol` stays under its limit for every mode, S = c dt/dx the
-//! Courant number: `s <= 4` for leapfrog, `s < 12` for the modified-equation scheme (see
-//! [`TimeScheme::stability_limit`]). With the symbol's largest value `M` (16/3 for the 9-point, 12.632
-//! for the DRP stencil, both at (pi, pi)) the Courant limit is `sqrt(limit / M)`:
+//! A scheme is stable while `s = S^2 symbol` stays under its limit for every mode, S = c dt/dx the Courant number:
+//! `s <= 4` for leapfrog, `s < 12` for the modified equation ([`TimeScheme::stability_limit`]). With the symbol's
+//! largest value `M` (16/3 for the 9-point, 12.632 for the DRP stencil, both at (pi, pi)) the Courant limit is
+//! `sqrt(limit / M)`:
 //!
 //! ```text
 //! 9-point, leapfrog:            sqrt(4 / (16/3)) = sqrt(3/4) = 0.8660
 //! DRP 7-point, modified eq.:    sqrt(12 / 12.632)            = 0.9747
 //! ```
 //!
-//! (leapfrog with the DRP stencil would allow 0.5627). A step is split into `n` equal sub-steps of
-//! `dt = 1/n`:
-//!
-//! ```text
-//! n = max(1, ceil(sqrt(max_c2) / (limit * 0.95)))
-//! ```
-//!
-//! the 0.95 keeping a 5 percent margin under the bound. Per sub-step the engine scales c2 by
-//! `1/n^2` and takes the damping factor as `d^(1/n)`, so a whole step loses what one step of `d` does.
+//! A step is split into `n` equal sub-steps of `dt = 1/n`, `n = max(1, ceil(sqrt(max_c2) / (limit * 0.95)))`; the
+//! 0.95 keeps a 5 percent margin. Per sub-step the engine scales c2 by `1/n^2` and takes the damping factor as
+//! `d^(1/n)`, so a whole step loses what one step of `d` does.
 
 use super::stencil::{StencilCoefficients, TimeScheme};
 use crate::model::Stencil;
@@ -39,6 +32,12 @@ pub fn sub_steps(stencil: Stencil, max_c2: f32) -> u32 {
 	}
 	let n = ((max_c2 as f64).sqrt() / (courant_limit(stencil) * CFL_SAFETY)).ceil();
 	(n as u32).max(1)
+}
+
+/// Time in steps of the current field of sub-step `k` (0-based) of `n` in step `time`.
+#[inline]
+pub(crate) fn sub_step_time(time: u32, k: u32, n: u32) -> f64 {
+	time as f64 + k as f64 / n as f64
 }
 
 #[cfg(test)]

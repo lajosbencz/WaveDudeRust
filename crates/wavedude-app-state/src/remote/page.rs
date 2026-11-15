@@ -1,8 +1,8 @@
-//! The page's end: a live-run [`Backend`] whose frames land in a mirror of the worker's store, which holds them
-//! in memory up to the budget and spills the rest through the page's [`SpillFactory`]. A frame is acknowledged
-//! once the mirror holds it: at once in memory, when its spill write completed otherwise; a spilled frame of a
-//! store or generation the worker left is acknowledged at once. A worker lost, or of another protocol version,
-//! fails every run until the page is reloaded; nothing is posted to it any more.
+//! The page's end: a live-run [`Backend`] whose frames land in a mirror of the worker's store, which holds them in
+//! memory up to the budget and spills the rest through the page's [`SpillFactory`]. A frame is acknowledged once the
+//! mirror holds it: at once in memory, when its spill write completed otherwise, and at once for a spilled frame of a
+//! store or generation the worker left. A frame the page's memory refuses lets go of the mirror, whose frames fail
+//! from then on. A worker lost, or of another protocol version or build, fails every run until the page is reloaded.
 
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -124,7 +124,9 @@ impl<P: Port> Remote<P> {
 	/// A run behind `port` on the GPU while `use_gpu` holds (shared with the settings), its frames in
 	/// `frame_memory` bytes by the RAM cache size and the rest in a spill of `spill`; posts [`ToWorker::Init`].
 	pub fn new(port: P, use_gpu: Arc<AtomicBool>, frame_memory: u64, spill: Box<dyn SpillFactory>) -> Self {
-		post(&port, &ToWorker::Init { version: VERSION, use_gpu: use_gpu.load(Ordering::Relaxed) }, None);
+		let init =
+			ToWorker::Init { version: VERSION, build: crate::build_id(), use_gpu: use_gpu.load(Ordering::Relaxed) };
+		post(&port, &init, None);
 		Self {
 			port,
 			use_gpu,
@@ -190,7 +192,11 @@ impl<P: Port> Remote<P> {
 
 	fn handle(&mut self, message: ToPage, buffer: Option<Buffer>) {
 		match message {
-			ToPage::Ready { version: _, gpu } => {
+			ToPage::Ready { version: _, build, gpu } => {
+				let page = crate::build_id();
+				if build != page {
+					return self.gone(WorkerGone::OtherBuild { page, worker: build });
+				}
 				match &gpu {
 					Ok(name) => tracing::info!("the run worker started, {}", EngineLabel::of(Some(name))),
 					Err(why) => tracing::info!("the run worker started without a GPU: {why}"),
@@ -341,14 +347,27 @@ impl Mirror {
 	}
 
 	/// Copies `planes`, the frame's in layer order, into the store's buffer for frame `frame` and stores it; the
-	/// mirror's frame written.
-	fn write(&self, frame: usize, planes: Buffer) -> Result<FrameKey, String> {
+	/// mirror's frame written. A buffer the memory refuses lets go of the store: its frames fail from then on.
+	fn write(&mut self, frame: usize, planes: Buffer) -> Result<FrameKey, String> {
 		let store = self.store.as_ref()?;
+		let plane = store.shape().plane_bytes();
+		let mut snapshot = store.buffer_for(frame);
+		let reserved = store.layers().iter().try_for_each(|&layer| {
+			let out = snapshot.plane_mut(layer);
+			out.try_reserve_exact(plane.saturating_sub(out.len()))
+		});
+		if let Err(e) = reserved {
+			let why = format!(
+				"the browser has no memory for frame {frame} of the run ({plane} bytes a layer: {e}); a lower RAM \
+				 cache size keeps fewer frames in memory"
+			);
+			tracing::error!("{why}");
+			self.store = Err(why.clone());
+			return Err(why);
+		}
 		if planes.len() != store.frame_bytes() {
 			return Err(StoreError::ShapeMismatch.to_string());
 		}
-		let plane = store.shape().plane_bytes();
-		let mut snapshot = store.buffer_for(frame);
 		snapshot.step = store.step_of(frame) as u32;
 		for (index, &layer) in store.layers().iter().enumerate() {
 			let out = snapshot.plane_mut(layer);
@@ -508,7 +527,7 @@ mod tests {
 
 	#[test]
 	fn a_mirrored_frame_holds_each_plane_in_an_allocation_of_its_size() {
-		let (mirror, store) = mirror();
+		let (mut mirror, store) = mirror();
 		mirror.write(0, planes(1)).unwrap();
 		store.clear();
 		let (_, _, s) = store.latest().unwrap();
@@ -530,6 +549,19 @@ mod tests {
 			}
 		}
 		assert!(seen.len() <= store.capacity() + 1, "{} buffers, the latest kept beside the frames", seen.len());
+	}
+
+	#[test]
+	fn a_frame_the_memory_refuses_lets_go_of_the_mirror_and_fails_its_frames() {
+		let mut huge = layout();
+		(huge.shape.canvas_width, huge.shape.canvas_height) = (1 << 31, 1 << 31);
+		(huge.layers, huge.capacity) = (&[Layer::Field], 1);
+		let store = Arc::new(FrameStore::in_memory(huge, u64::MAX));
+		let mut mirror = Mirror { id: 1, generation: 0, store: Ok(store.clone()) };
+		let refused = mirror.write(0, Vec::new().into()).unwrap_err();
+		assert!(refused.contains("no memory for frame 0"), "{refused}");
+		assert!(mirror.store.is_err() && Arc::strong_count(&store) == 1, "the mirror let go of its store");
+		assert_eq!(mirror.write(0, planes(1)), Err(refused), "the frames after fail alike");
 	}
 
 	#[test]

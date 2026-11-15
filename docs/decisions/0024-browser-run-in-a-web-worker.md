@@ -1,6 +1,7 @@
 # 0024: The browser runs the simulation in a Web Worker
 
 Status: accepted, 2026-11-14 (the user's decision); losses and versions, the mirror's memory added 2026-11-14;
+builds added 2026-11-15;
 amended by [0026](0026-kick-the-gpu-queue-while-waiting.md). Amends [0015](0015-core-builds-for-wasm.md),
 [0016](0016-gpu-engine-in-the-browser.md), [0019](0019-egui-and-the-platform-layer.md) and
 [0020](0020-browser-frame-spill-in-opfs.md): the run leaves the page's thread.
@@ -59,11 +60,21 @@ worker's binary is 2.1 MB (0.6 MB gzipped) against the app's 21 MB.
 - `ToWorker::Init` and `ToPage::Ready` carry the protocol's `VERSION`, bumped when a message changes; they stay the
   first variants with the version first, so either end reads the other's version. A page of another version is not
   listened to; the page reports a worker of another version.
-- A worker that does not start (not made, not loaded, silent), stops once ready, or is of another version fails
-  every run until the page is reloaded, the user told which with a localised message; Run tells it again. The page
-  posts nothing more to it.
+- A worker that does not start (not made, not loaded, silent), stops once ready, or is of another version or build
+  fails every run until the page is reloaded, the user told which with a localised message; Run tells it again. The
+  page posts nothing more to it.
 - The traces the worker posts start over by the run's own count of their starts, not by the published status, which
   can lag behind a goal adopted.
+
+## Builds (added 2026-11-15)
+
+- A page and a worker of the same protocol version can still be of different builds: a browser's cache served an
+  old `wavedude-run-worker_bg.wasm` under a new page, which ran it silently. `Init` and `Ready` carry the build
+  (`build_id`: the version and the commit `tools/build-web.sh` passes in `WAVEDUDE_BUILD`, a time beside it when the
+  tree has changes); the page refuses a worker of another build as one of another version, and the worker does not
+  listen to a page of another build.
+- The page starts `run-worker.js?build=<build>`, which loads its files with the same query, and `index.html` loads
+  the app's files with `?build=<commit>`: a new page asks for files no cache holds.
 
 ## The mirror's memory (added 2026-11-14)
 

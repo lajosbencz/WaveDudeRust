@@ -25,41 +25,41 @@ pub(crate) enum Action {
 	License,
 }
 
-fn dirs() -> Result<AppDirs> {
-	AppDirs::platform().context("no user folders on this platform")
+fn known(dirs: Option<&AppDirs>) -> Result<&AppDirs> {
+	dirs.context("no user folders on this platform: pass --config-dir")
 }
 
-fn store() -> Result<Store> {
-	Ok(dirs()?.store())
+fn store(dirs: Option<&AppDirs>) -> Result<Store> {
+	Ok(known(dirs)?.store())
 }
 
-/// The library an MP4 export loads, per the user's choice in the app's settings file.
-pub(crate) fn library() -> Result<Option<PathBuf>> {
-	let enabled = Settings::read(&store()?, touch_first())?.use_openh264 == Some(true);
-	h264::library(&dirs()?.codec(), enabled, |_, _| {}).map_err(|e| match e {
+/// The library an MP4 export loads, per the user's choice in the settings file of the app's folders `dirs`.
+pub(crate) fn library(dirs: Option<&AppDirs>) -> Result<Option<PathBuf>> {
+	let enabled = Settings::read(&store(dirs)?, touch_first())?.use_openh264 == Some(true);
+	h264::library(&known(dirs)?.codec(), enabled, |_, _| {}).map_err(|e| match e {
 		wavedude_export::ExportError::H264Missing => anyhow::anyhow!("{e}: run `wavedude-cli openh264 enable`"),
 		e => e.into(),
 	})
 }
 
-fn choose(enabled: bool) -> Result<()> {
-	let store = store()?;
+fn choose(enabled: bool, dirs: Option<&AppDirs>) -> Result<()> {
+	let store = store(dirs)?;
 	let mut settings = Settings::read(&store, touch_first())?;
 	settings.use_openh264 = Some(enabled);
 	settings.save(&store)?;
 	Ok(())
 }
 
-pub(crate) fn run(action: Action) -> Result<()> {
+pub(crate) fn run(action: Action, dirs: Option<&AppDirs>) -> Result<()> {
 	println!("{}", h264::NOTICE);
 	if h264::BUILT_IN {
 		println!("compiled into this build; nothing to download");
 		return Ok(());
 	}
-	let dir = dirs()?.codec();
+	let dir = known(dirs)?.codec();
 	match action {
 		Action::Status => {
-			let choice = Settings::read(&store()?, touch_first())?.use_openh264;
+			let choice = Settings::read(&store(dirs)?, touch_first())?.use_openh264;
 			println!(
 				"{}",
 				match choice {
@@ -74,11 +74,11 @@ pub(crate) fn run(action: Action) -> Result<()> {
 			}
 		}
 		Action::Enable => {
-			choose(true)?;
+			choose(true, dirs)?;
 			println!("enabled: {}", h264::download(&dir, |_, _| {})?.display());
 		}
 		Action::Disable => {
-			choose(false)?;
+			choose(false, dirs)?;
 			println!("disabled");
 		}
 		Action::Delete => {

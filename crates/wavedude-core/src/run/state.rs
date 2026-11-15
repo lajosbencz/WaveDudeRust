@@ -1,4 +1,4 @@
-//! The state of a run, batch or live.
+//! The state of a run as its controller reports it.
 
 use std::sync::Arc;
 
@@ -7,7 +7,6 @@ use super::RunError;
 /// Equality compares the variant; two failures are equal when they share the error.
 #[derive(Clone, Debug)]
 pub enum RunState {
-	Created,
 	Running,
 	Paused,
 	Completed,
@@ -29,9 +28,5 @@ impl Eq for RunState {}
 impl RunState {
 	pub fn is_finished(&self) -> bool {
 		matches!(self, Self::Completed | Self::Cancelled | Self::Failed(_))
-	}
-
-	pub fn is_active(&self) -> bool {
-		matches!(self, Self::Running | Self::Paused)
 	}
 }

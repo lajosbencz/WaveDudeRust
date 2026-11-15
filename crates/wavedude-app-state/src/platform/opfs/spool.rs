@@ -1,9 +1,9 @@
 //! An export's files at `<session>/export-<n>/<path>` ([`Spool`]), downloaded or read back from there.
 //!
 //! A file is written through a `FileSystemWritableFileStream`, whose swap file the browser moves in place at the
-//! close: its writes are queued ([`super::queue`]) and one task per file posts them in order, each completion
-//! waking the window ([`crate::wake`]). Folders exist in the spool's books at once and in the browser's storage
-//! once a file in them is written.
+//! close: writes are queued ([`super::queue`]) and one task per file posts them in order, each completion waking the
+//! window ([`crate::wake`]). Folders exist in the spool's books at once, in the browser's storage once a file in them
+//! is written.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -19,13 +19,13 @@ use wasm_bindgen_futures::{JsFuture, spawn_local};
 use wavedude_core::run::Token;
 use wavedude_export::fs::{OutputFile, OutputFs};
 use web_sys::{
-	Blob, FileSystemDirectoryHandle, FileSystemFileHandle, FileSystemGetFileOptions, FileSystemWritableFileStream, Url,
+	Blob, FileSystemDirectoryHandle, FileSystemFileHandle, FileSystemGetFileOptions, FileSystemWritableFileStream,
 	WriteCommandType, WriteParams,
 };
 
 use super::queue::{Next, Queue};
 use super::session::{awaited, folder, remove_entry, session, storage_error};
-use crate::platform::web::describe;
+use crate::platform::web::Download;
 
 /// Bytes queued and not written at which [`OutputFs::poll_ready`] holds the writer back.
 const IN_FLIGHT: u64 = 64 << 20;
@@ -37,8 +37,8 @@ thread_local! {
 	static SPOOLS: Cell<u64> = const { Cell::new(0) };
 }
 
-/// An [`OutputFs`] of one export's files in this tab's session folder. Dropping it aborts the writes in flight,
-/// revokes its downloads' URLs and removes its folder.
+/// An [`OutputFs`] of one export's files in this tab's session folder. Dropping it aborts the writes in flight and
+/// removes its folder, so a download of its files must have started before.
 pub struct Spool {
 	session: FileSystemDirectoryHandle,
 	/// `export-<n>`.
@@ -48,8 +48,6 @@ pub struct Spool {
 	dirs: RefCell<BTreeSet<String>>,
 	/// The removal queued last; each runs after the one before.
 	removal: RefCell<Token<()>>,
-	/// Object URLs of the downloads.
-	urls: Rc<RefCell<Vec<String>>>,
 }
 
 impl fmt::Debug for Spool {
@@ -105,7 +103,6 @@ impl Spool {
 			files: RefCell::default(),
 			dirs: RefCell::default(),
 			removal: RefCell::new(done()),
-			urls: Rc::default(),
 		})
 	}
 
@@ -164,10 +161,9 @@ impl Spool {
 		});
 	}
 
-	/// Hands the file at `path` to the browser as a download named `name` once it is committed; follows
-	/// [`OutputFs::poll_flushed`]. Its URL lives as long as the spool. A file that failed or was not closed is the
-	/// error.
-	pub fn download(&self, path: &Path, name: &str) -> Token<()> {
+	/// The file at `path` ready for its download as `name` once it is committed; follows
+	/// [`OutputFs::poll_flushed`]. A file that failed or was not closed is the error.
+	pub fn download(&self, path: &Path, name: &str) -> Token<Download> {
 		let token = Token::default();
 		let parts = match parts(path) {
 			Ok(parts) => parts,
@@ -177,20 +173,13 @@ impl Spool {
 			}
 		};
 		let (committed, session, folder) = (self.committed(&parts), self.session.clone(), self.name.clone());
-		let (urls, done, name) = (Rc::downgrade(&self.urls), token.clone(), name.to_owned());
+		let (done, name) = (token.clone(), name.to_owned());
 		spawn_local(async move {
-			let downloaded = async {
+			let ready = async {
 				committed.await?;
-				let blob = blob(&session, &folder, &parts).await?;
-				let url = Url::create_object_url_with_blob(&blob).map_err(|e| storage_error(&e))?;
-				let Some(urls) = urls.upgrade() else {
-					revoke(&url);
-					return Err(io::Error::other("the export's files were removed"));
-				};
-				urls.borrow_mut().push(url.clone());
-				crate::platform::web::click_download(&url, &name)
+				Download::of_blob(&blob(&session, &folder, &parts).await?, &name)
 			};
-			done.complete(downloaded.await);
+			done.complete(ready.await);
 			crate::wake::wake();
 		});
 		token
@@ -224,9 +213,6 @@ impl Spool {
 impl Drop for Spool {
 	fn drop(&mut self) {
 		self.queue.borrow_mut().fail(&io::Error::other("the export's files were removed"));
-		for url in self.urls.borrow_mut().drain(..) {
-			revoke(&url);
-		}
 		let mut tasks: Vec<Token<()>> =
 			std::mem::take(&mut *self.files.borrow_mut()).into_values().map(|t| t.ended).collect();
 		tasks.push(self.removal.borrow().clone());
@@ -404,12 +390,6 @@ async fn drain(
 		let _ = JsFuture::from(stream.abort()).await;
 	}
 	committed
-}
-
-fn revoke(url: &str) {
-	if let Err(e) = Url::revoke_object_url(url) {
-		tracing::warn!("a download's URL could not be revoked: {}", describe(&e));
-	}
 }
 
 async fn write_at(stream: &FileSystemWritableFileStream, at: u64, data: &[u8]) -> io::Result<()> {

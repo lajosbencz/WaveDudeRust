@@ -1,18 +1,24 @@
-//! The state the window tests start from, the renderer of the manual's figures and the wait for the preview.
+//! The state and the window the window tests start from, the steps that let an input settle, the renderer of the
+//! manual's figures and the wait for the preview.
 
 use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
 
+use eframe::egui::{PointerButton, Pos2};
 use eframe::{egui, egui_wgpu, wgpu};
 use egui_kittest::wgpu::WgpuTestRenderer;
 use egui_kittest::{Harness, HarnessBuilder};
 use wavedude_app::App;
-use wavedude_app::ui::Shell;
+use wavedude_app::ui::{Boot, Shell};
+use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::AppDirs;
 use wavedude_app_state::{AppState, Event};
 use wavedude_core::run::Memory;
+
+/// Frames for an input to reach the state and its result to show.
+pub(crate) const SETTLE: usize = 4;
 
 /// The memory the frame budgets are computed from, so the status bar's frame cache reads the same everywhere.
 const MEMORY: Memory = Memory::Fixed { available: 6 << 30, physical: 16 << 30 };
@@ -32,6 +38,31 @@ pub(crate) fn started(dirs: &AppDirs, first_start: bool) -> App {
 		app.handle(event, Instant::now());
 	}
 	app
+}
+
+/// What the window starts with on the settings under `dirs`: no file asked for, a log of its own.
+pub(crate) fn boot(dirs: &AppDirs) -> Boot {
+	Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() }
+}
+
+/// Runs [`SETTLE`] frames.
+#[allow(dead_code, reason = "not every window test steps by inputs")]
+pub(crate) fn settle(harness: &mut Harness<'_, Shell>) {
+	harness.run_steps(SETTLE);
+}
+
+/// The state the window shows.
+#[allow(dead_code, reason = "not every window test reads the state")]
+pub(crate) fn app<'h>(harness: &'h Harness<'_, Shell>) -> &'h App {
+	harness.state().app()
+}
+
+/// Presses (`pressed`) or releases the primary button at `pos`, one frame.
+#[allow(dead_code, reason = "used by the pointer tests")]
+pub(crate) fn button(harness: &mut Harness<'_, Shell>, pos: Pos2, pressed: bool) {
+	let modifiers = Default::default();
+	harness.event(egui::Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers });
+	harness.run_steps(1);
 }
 
 /// A builder rendering on Mesa's lavapipe, the adapter the manual's figures are taken on; `None`, with the reason

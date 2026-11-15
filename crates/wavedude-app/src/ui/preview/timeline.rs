@@ -11,7 +11,6 @@ use wavedude_app_state::commands::{Command, Edit};
 use wavedude_core::model::{DisplayEdit, ProjectEdit};
 use wavedude_view::DeviceGrid;
 
-use super::transport::play_or_pause;
 use crate::App;
 use crate::preview::timeline::{
 	Bracket, TimelineGeometry, TimelineKey, TimelineModel, bracket_hit, label_step, minor_step,
@@ -54,14 +53,7 @@ pub(super) struct Timeline {
 
 impl Timeline {
 	/// The timeline in `rect`; a press focuses it as `pointer_focus`, which shows no focus ring.
-	pub(super) fn ui(
-		&mut self,
-		ui: &mut Ui,
-		rect: Rect,
-		app: &App,
-		pointer_focus: &mut Option<Id>,
-		out: &mut Vec<Event>,
-	) {
+	pub(super) fn ui(&mut self, ui: &Ui, rect: Rect, app: &App, pointer_focus: &mut Option<Id>, out: &mut Vec<Event>) {
 		let key = app.live.progress_key();
 		if key != self.spans_key {
 			self.spans_key = key;
@@ -115,7 +107,7 @@ impl Timeline {
 			});
 			out.extend(target.map(Event::Scrub));
 			if play {
-				out.push(play_or_pause(app));
+				out.push(Event::TogglePlayback);
 			}
 		}
 		let notches = wheel_notches(ui, rect);

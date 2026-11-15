@@ -1,6 +1,7 @@
 # 0005 H.264 MP4 through Cisco's OpenH264, loaded at run time
 
-Status: accepted, 2026-11-05; amended 2026-11-07 (run-time loading), 2026-11-14 (the browser)
+Status: accepted, 2026-11-05; amended 2026-11-07 (run-time loading), 2026-11-14 (the browser), 2026-11-15 (the
+in-house muxer)
 
 The original encodes MP4 with Windows Media Foundation, NV12 input, 8-bit
 4:2:0, in quality mode with a bitrate fallback and the hardware encoder when
@@ -9,7 +10,9 @@ platform; constrained baseline profile, slightly larger files than Media
 Foundation's Main/High at the same look, quality rate control under the same
 bitrate ceiling the Quality setting maps to. Software only: a hardware encoder
 would mean a platform API per OS and is out of scope. Frames up to 3840 x 2160,
-the encoder's limit. Muxing through the `mp4` crate.
+the encoder's limit. Muxing in-house: the ISO base media writer the MOV export
+uses, with an `avc1` sample entry (`avcC` from the encoder's SPS and PPS) and
+`stss` (spec 50, MP4).
 
 Cisco's AVC patent licence covers only its unmodified binary, downloaded from
 Cisco to the user's device; a build that compiles OpenH264's source carries no
@@ -43,9 +46,9 @@ question, no check box, no Cisco notice; for development and CI, never for distr
 builds. Building `wavedude-export` or `wavedude-cli` without default features drops
 H.264 altogether. Lossless paths stay PNG sequences and MOV with the PNG codec.
 
-The `mp4` crate has had no release since 2023. The in-house MOV writer already
-writes `moov` with `co64` after the samples, so an in-house `avc1`/`avcC` muxer
-would be small; noted for when the crate becomes a problem, not done.
+The muxer is in-house because the MOV writer holds the box code an `avc1` track
+needs, while the `mp4` crate has had no release since 2023 and pulls
+`num-bigint` and `thiserror` 1 into the browser build.
 
 ## The browser (2026-11-14)
 

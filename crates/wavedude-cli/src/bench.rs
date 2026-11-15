@@ -40,6 +40,9 @@ pub(crate) struct Args {
 	/// capture collected after the next has begun, the buffers reused); 0 skips it.
 	#[arg(long, default_value_t = 2)]
 	captures_every: u32,
+	/// Sources in a square array of this side, 4 cells apart, centred.
+	#[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=200))]
+	array: u32,
 	/// Time the GPU engine after the CPU's.
 	#[command(flatten)]
 	engine: EngineArgs,
@@ -140,7 +143,10 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 		intensity_brightness: 30.0,
 		intensity_root: true,
 	};
-	let emitters = [source(args.width as i32 / 2, args.height as i32 / 2)];
+	let side = args.array as i32;
+	let at = |centre: u32, k: i32| centre as i32 / 2 + 4 * k - 2 * (side - 1);
+	let emitters: Vec<Emitter> =
+		(0..side).flat_map(|i| (0..side).map(move |j| source(at(args.width, i), at(args.height, j)))).collect();
 	let mut rows = Vec::new();
 	for &stencil in stencils {
 		let options = EngineOptions {
@@ -174,8 +180,9 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 
 fn print_table(args: &Args, rows: &[Row]) {
 	println!(
-		"{}x{} canvas, rim {}, {} steps after {} warm-up, intensity tracked, captures of both planes as f16",
-		args.width, args.height, args.rim, args.steps, WARMUP_STEPS
+		"{}x{} canvas, rim {}, {} x {} sources, {} steps after {} warm-up, intensity tracked, captures of both planes \
+		 as f16",
+		args.width, args.height, args.rim, args.array, args.array, args.steps, WARMUP_STEPS
 	);
 	println!();
 	println!("| engine | stencil | sub-steps | capture every | ms/step | capture ms |");

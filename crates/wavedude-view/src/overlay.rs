@@ -15,7 +15,7 @@ use wavedude_core::scene::shapes::{self, Frame, Vec2};
 use crate::draw::{DeviceGrid, Halo, Outlines, baseline, closed_line, haloed_text};
 
 /// Screen distance of a lever beyond the item's reach, logical pixels.
-pub const LEVER_GAP: f32 = 24.;
+const LEVER_GAP: f32 = 24.;
 
 /// What a handle edits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -292,8 +292,8 @@ fn part_handles(project: &Project, p: &Part, item: ItemRef, gap: f64, out: &mut 
 }
 
 /// The handles' fixed colours: light grey over a dark halo, the selection bright yellow.
-pub const HANDLE: Color32 = Color32::from_rgb(0xC8, 0xC8, 0xC8);
-pub const SELECTED: Color32 = Color32::from_rgb(0xFF, 0xE0, 0x00);
+const HANDLE: Color32 = Color32::from_rgb(0xC8, 0xC8, 0xC8);
+pub(crate) const SELECTED: Color32 = Color32::from_rgb(0xFF, 0xE0, 0x00);
 pub const HALO: Color32 = Color32::from_rgba_unmultiplied_const(0x00, 0x00, 0x00, 0xC0);
 /// The disc or square behind a glyph.
 const BACKDROP: Color32 = Color32::from_rgba_unmultiplied_const(0x00, 0x00, 0x00, 0x60);
@@ -307,7 +307,7 @@ const HALO_WIDTH: f32 = 2.;
 /// The labels' text size, logical pixels.
 pub const LABEL_SIZE: f32 = 11.;
 /// The halo under a label: its outline stroked 3 logical pixels wide.
-pub const LABEL_HALO: Halo = Halo { color: HALO, width: 3. };
+const LABEL_HALO: Halo = Halo { color: HALO, width: 3. };
 
 /// Which handles stand out: the keyboard-focused one (accent backdrop, thicker stroke), the one under the pointer
 /// (thicker stroke).
@@ -443,8 +443,7 @@ fn glyph(
 
 /// The shapes of `model` over `picture` (points of the window) at `scale` points per canvas pixel: probe lines,
 /// emitter dots, outlines, handles with the `emphasis`, then the labels in Selawik at [`LABEL_SIZE`] over their halo
-/// ([`LABEL_HALO`], from `outlines`), on the alphabetic baseline and held inside the picture. The caller clips them
-/// to the picture.
+/// (`LABEL_HALO`, from `outlines`), held inside the picture. The caller clips them to it.
 pub fn shapes(
 	model: &OverlayModel,
 	scale: f32,

@@ -265,12 +265,7 @@ pub fn import_str(json: &str, folder: &Path) -> std::result::Result<Imported, Fo
 	import_simulation(section(root, "simulation"), &mut project);
 	import_sources(section(root, "object_sources"), &mut project, &mut notes);
 	import_probes(section(root, "probes"), scene, &mut project, &mut notes);
-	if super::scale_nine_point_frequencies(&mut project, super::nine_point_speed()) {
-		tracing::info!(
-			"9-point project: the frequency scale is divided by the original kernel's speed {:.4} so the wavelengths stay",
-			super::nine_point_speed()
-		);
-	}
+	super::scale_nine_point_frequencies(&mut project.simulation);
 	project.normalize();
 	Ok(Imported { project, name: text(Some(root), "project_name", ""), notes })
 }

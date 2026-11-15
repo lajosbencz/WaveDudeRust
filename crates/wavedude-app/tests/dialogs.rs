@@ -12,15 +12,14 @@ use egui_kittest::kittest::Queryable;
 use wavedude_app::open_requests::OpenRequests;
 use wavedude_app::ui::{Boot, Shell};
 use wavedude_app_state::document::Source;
-use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{AppState, Event, Guarded};
 use wavedude_core::quality::{PreviewDefaults, PreviewTier};
 
+use common::{SETTLE, boot, settle};
+
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj";
-/// Frames for an input to reach the state and its result to show.
-const SETTLE: usize = 4;
 const MISSING: &str = "/nonexistent/missing.wdproj";
 
 /// The window on the settings under `dir` in the light theme, nothing run, with `project` open and `asked` asked
@@ -38,7 +37,7 @@ fn window_with(dir: &Path, first_start: bool, project: Option<&Path>, asked: &[&
 	for path in asked {
 		open.push(path.into());
 	}
-	let boot = Boot { store: dirs.store(), open, log: LogRing::new(), update: Default::default() };
+	let boot = Boot { open, ..boot(&dirs) };
 	let mut harness =
 		Harness::builder().with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
@@ -47,10 +46,6 @@ fn window_with(dir: &Path, first_start: bool, project: Option<&Path>, asked: &[&
 
 fn window(dir: &Path, project: Option<&Path>, asked: &[&str]) -> Harness<'static, Shell> {
 	window_with(dir, false, project, asked)
-}
-
-fn settle(harness: &mut Harness<'_, Shell>) {
-	harness.run_steps(SETTLE);
 }
 
 /// A copy of the example in `dir`, which a save may overwrite.

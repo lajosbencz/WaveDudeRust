@@ -11,7 +11,7 @@ use wavedude_view::draw::{Halo, Outlines, haloed_text};
 use wavedude_view::epaint::text::{FontId, FontsView};
 use wavedude_view::epaint::{ClippedShape, Color32, Mesh, Pos2, Rect, Shape, Stroke, pos2, vec2};
 use wavedude_view::graph::{self, GraphData};
-use wavedude_view::{DeviceGrid, FontMetrics, fonts};
+use wavedude_view::{DeviceGrid, fonts};
 
 use crate::Result;
 use crate::raster::Rasteriser;
@@ -297,9 +297,8 @@ impl Overlays {
 				let trace = p.trace.as_ref().expect("a trace per active probe when graphs are exported");
 				let data = GraphData::at(trace, step, frame).with_floor(p.floor);
 				let r = box_in_canvas(&p.probe, self.width, self.height);
-				let mut metrics = FontMetrics { fonts: &mut *fonts, font: FontId::proportional(graph::FONT_SIZE) };
-				let layout =
-					graph::layout(&p.probe, &data, self.total_steps, r.width as f32, r.height as f32, &mut metrics);
+				let (w, h) = (r.width as f32, r.height as f32);
+				let layout = graph::layout_with(fonts, &p.probe, &data, self.total_steps, w, h);
 				if layout.visible {
 					let grid = DeviceGrid::new(1., r.x as f32, r.y as f32);
 					out.extend(graph::box_shapes(&layout, grid, whole, false, None, fonts));

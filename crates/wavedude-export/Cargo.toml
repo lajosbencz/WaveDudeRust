@@ -14,7 +14,7 @@ publish = false
 [features]
 default = ["mp4"]
 # The MP4 muxer alone, the H.264 encoder supplied by the caller: builds for the browser.
-mp4-mux = ["dep:mp4"]
+mp4-mux = []
 # MP4 through Cisco's prebuilt OpenH264, downloaded by the user's choice and loaded at run time (decision 0005).
 mp4 = ["mp4-mux", "dep:openh264", "openh264/libloading", "dep:ureq", "dep:bzip2"]
 # OpenH264 compiled into the program instead: for development and tests, not for distributed builds.
@@ -29,7 +29,6 @@ workspace = true
 [dependencies]
 wavedude-core = { path = "../wavedude-core", version = "0.3.3", default-features = false, features = ["run"] }
 wavedude-view = { path = "../wavedude-view", version = "0.3.3" }
-anyhow.workspace = true
 thiserror.workspace = true
 half.workspace = true
 bytemuck.workspace = true
@@ -43,11 +42,10 @@ exr = "1.74"
 openh264 = { version = "0.9", default-features = false, optional = true }
 ureq = { version = "3", optional = true }
 bzip2 = { version = "0.6", optional = true }
-mp4 = { version = "0.14", optional = true }
-web-time = "1.1"
+web-time.workspace = true
 rawzip = "0.5"
 
 [dev-dependencies]
 insta.workspace = true
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { workspace = true, features = ["png", "jpeg"] }
 zip = { version = "9", default-features = false }

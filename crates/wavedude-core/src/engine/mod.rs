@@ -11,9 +11,11 @@ pub mod forcing;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod green;
+mod mur;
 pub mod pml;
 pub mod poisson;
 pub mod probes;
+mod shared;
 pub mod stencil;
 pub mod substeps;
 pub mod types;
@@ -55,7 +57,7 @@ pub trait WaveEngine: MaybeSend {
 	fn set_probes(&mut self, probes: &[ProbeCells]);
 	/// Swaps in another scene of the same grid, edges and image-source count; false = rebuild needed.
 	fn try_replace_scene(&mut self, scene: &Arc<SceneData>) -> bool;
-	/// Tracks the intensity from the next reset on, or stops.
+	/// Tracks the intensity or stops; a change starts it from zero.
 	fn set_track_intensity(&mut self, on: bool);
 	/// Ready when a step can be taken without waiting for the device; otherwise `cx`'s waker is woken once it
 	/// can. A step taken before may wait (natively) or queue past the engine's pacing (wasm32).
@@ -142,7 +144,7 @@ fn cpu_instead(scene: Arc<SceneData>, options: EngineOptions, why: Fallback) -> 
 pub async fn build_on(scene: Arc<SceneData>, options: EngineOptions, gpu: Option<GpuHandle>) -> Built {
 	#[cfg(feature = "gpu")]
 	if let Some(ctx) = gpu {
-		return match gpu::GpuEngine::create(ctx, scene.clone(), options.clone(), gpu::MediumLayout::Compact).await {
+		return match gpu::GpuEngine::create(ctx, scene.clone(), options.clone()).await {
 			Ok(e) => Built { engine: Box::new(e), fallback: None },
 			Err(e) => cpu_instead(scene, options, e.into()),
 		};

@@ -1,13 +1,13 @@
 //! Colour scheme lookup: project schemes, then the user's, then the 23 built-ins embedded
 //! from `schemes/*.wdscheme`; and the Wave Dude 2D JSON scheme reader.
 
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 
 use serde_json::Value;
 
 use super::{FormatError, wdscheme};
 use crate::model::normalize::Normalize;
-use crate::model::{ColorScheme, Rgb, SchemeKind, Stop};
+use crate::model::{ColorScheme, Layer, Project, Rgb, SchemeKind, Stop, Word};
 
 /// The shipped scheme files, verbatim.
 pub const BUILT_IN_FILES: &[&str] = &[
@@ -38,10 +38,10 @@ pub const BUILT_IN_FILES: &[&str] = &[
 
 /// The built-in schemes, parsed once, in file name order.
 pub fn built_in() -> &'static [ColorScheme] {
-	static SCHEMES: OnceLock<Vec<ColorScheme>> = OnceLock::new();
-	SCHEMES.get_or_init(|| {
+	static SCHEMES: LazyLock<Vec<ColorScheme>> = LazyLock::new(|| {
 		BUILT_IN_FILES.iter().map(|text| wdscheme::read_str(text, "").expect("built-in schemes parse")).collect()
-	})
+	});
+	&SCHEMES
 }
 
 /// Wave Dude 2D names whose spaced form is not their underscores replaced.
@@ -76,13 +76,37 @@ pub struct SchemeStore {
 }
 
 impl SchemeStore {
-	/// The scheme `name` resolves to; [`ColorScheme::grey`] when none matches.
+	/// The scheme `name` resolves to; [`ColorScheme::grey`] when none matches. Silent: a preview resolves per
+	/// frame; [`resolve_layer`](Self::resolve_layer) and [`check`](Self::check) say what is missing.
 	pub fn resolve(&self, project_schemes: &[ColorScheme], name: &str) -> ColorScheme {
-		find(project_schemes, name)
-			.or_else(|| find(&self.user, name))
-			.or_else(|| find(built_in(), name))
-			.cloned()
-			.unwrap_or_else(ColorScheme::grey)
+		self.lookup(project_schemes, name).cloned().unwrap_or_else(ColorScheme::grey)
+	}
+
+	/// The scheme of `project`'s `layer`, as [`resolve`](Self::resolve); one that resolves to none is logged.
+	pub fn resolve_layer(&self, project: &Project, layer: Layer) -> ColorScheme {
+		self.layer_scheme(project, layer).cloned().unwrap_or_else(ColorScheme::grey)
+	}
+
+	/// Logs each layer of `project` whose scheme resolves to none, for a project just loaded.
+	pub fn check(&self, project: &Project) {
+		for &layer in Layer::MEMBERS {
+			self.layer_scheme(project, layer);
+		}
+	}
+
+	fn lookup<'a>(&'a self, project_schemes: &'a [ColorScheme], name: &str) -> Option<&'a ColorScheme> {
+		find(project_schemes, name).or_else(|| find(&self.user, name)).or_else(|| find(built_in(), name))
+	}
+
+	/// The scheme of `layer`; `None`, logged, when its name resolves to none.
+	fn layer_scheme<'a>(&'a self, project: &'a Project, layer: Layer) -> Option<&'a ColorScheme> {
+		let name = &project.display.layer(layer).color_scheme;
+		let found = self.lookup(&project.color_schemes, name);
+		if found.is_none() {
+			let layer = layer.name().to_ascii_lowercase();
+			tracing::warn!("no colour scheme is named '{name}': the {layer} layer is drawn in grey");
+		}
+		found
 	}
 }
 

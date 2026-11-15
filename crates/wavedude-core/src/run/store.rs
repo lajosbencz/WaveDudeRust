@@ -1,36 +1,29 @@
-//! The frame store: a run's captured frames, in memory up to a budget, the rest spilled: natively to a file, in
-//! the browser to the origin private file system (spec/40-frames-store-render.md, Frame store and Memory budget).
+//! The frame store: a run's captured frames, in memory up to a budget, the rest spilled: natively to a file, in the
+//! browser to the origin private file system (docs/spec/40-frames-store-render.md, Frame store and Memory budget).
 //!
-//! Layout: frame `f` holds one plane per layer in the order of [`FrameStore::layers`] (the field, then the
-//! intensity when tracked), each `shape.plane_bytes()` bytes, rows top to bottom without padding. Frames
-//! `0..first_spilled` live in memory as the snapshot written, its planes kept; the rest live in the spill file
-//! after its 64-byte header at `64 + (frame - first)*frame_bytes + layer_index*plane_bytes`, or, pending
-//! (pending.rs), one frame per entry of its `SpillBackend`.
+//! Layout: frame `f` holds one plane per layer in the order of [`FrameStore::layers`] (the field, then the intensity
+//! when tracked), each `shape.plane_bytes()` bytes, rows top to bottom without padding. Frames `0..first_spilled` live
+//! in memory as the snapshot written; the rest live in the spill file after its 64-byte header at
+//! `64 + (frame - first)*frame_bytes + layer_index*plane_bytes`, or, pending (pending.rs), one frame per entry of its
+//! `SpillBackend`.
 //!
-//! Frames are written by index, in any order ([`FrameStore::write_at`]); which are present is tracked per frame
-//! and as the contiguous prefix [`FrameStore::count`]. [`FrameStore::clear`] forgets every frame, keeps the
-//! buffers for the next generation and moves [`FrameStore::generation`], so a reader tells the frames of one
-//! project state from another's; the frame written last stays readable as [`FrameStore::latest`], so a burst of
-//! edits shows each frame made even when the next edit's generation has begun.
+//! Frames are written by index in any order ([`FrameStore::write_at`]); presence is tracked per frame and as the
+//! contiguous prefix [`FrameStore::count`]. [`FrameStore::clear`] forgets every frame, keeps the buffers and moves
+//! [`FrameStore::generation`]; the frame written last stays readable as [`FrameStore::latest`] across the clear.
 //!
-//! Threads: one writer at a time; any thread may read a present frame meanwhile. The capturing thread asks for
-//! the buffer of a frame ([`FrameStore::buffer_for`]) and the engine captures into it, so a frame in memory is
-//! never copied. Natively the memory frames are allocated and their pages touched ahead of the capture by a
-//! producer thread on a small rayon pool, after the memory the budget counts on has been released; a cleared
-//! generation's buffers serve the next generation's frames first, in memory or spilled, so none is left over. A
-//! frame that cannot be allocated sends that frame and every later one to the file while the file is empty, else
-//! it stays in memory; the file's frames reuse a few buffers. The file is deleted on drop. A store in memory
-//! alone ([`FrameStore::in_memory`]) allocates its frames as they are captured and refuses the frames past its
-//! budget.
+//! Threads: one writer at a time; any thread may read a present frame meanwhile. The capturing thread asks for a
+//! frame's buffer ([`FrameStore::buffer_for`]) and the engine captures into it, so a frame in memory is never copied.
+//! Natively the memory frames are allocated and page-touched ahead of the capture by a producer thread on a small
+//! rayon pool, after the budgeted memory has been released; a cleared generation's buffers serve the next one first.
+//! A frame that cannot be allocated sends that frame and every later one to the file while the file is empty, else it
+//! stays in memory. The file is deleted on drop. A store in memory alone ([`FrameStore::in_memory`]) allocates frames
+//! as captured and refuses the frames past its budget.
 //!
-//! A pending spill (wasm32, `FrameStore::with_spill`) allocates its memory frames as they are captured too. A
-//! spilled frame stays in memory while its write is in flight and, once `FrameStore::settle` saw it written,
-//! while it is the frame written last; a read of a spilled frame that is not back yet starts its read and is
-//! refused with [`StoreError::Pending`] until it is. Playback names the frames it reaches next
-//! ([`FrameStore::prefetch`]), which are read ahead.
+//! A pending spill (wasm32, `FrameStore::with_spill`) allocates its memory frames as captured too. A spilled frame
+//! stays in memory while its write is in flight and, once `FrameStore::settle` saw it written, while it is the frame
+//! written last; a read of a spilled frame not back yet starts its read and is refused with [`StoreError::Pending`]
+//! until it is. Playback names the frames it reaches next ([`FrameStore::prefetch`]), which are read ahead.
 
-use crate::spec::RunSpec;
-use crate::sync::lock;
 use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -38,6 +31,8 @@ use std::task::{Context, Poll};
 
 use crate::engine::{FrameShape, Snapshot};
 use crate::model::Layer;
+use crate::spec::RunSpec;
+use crate::sync::lock;
 
 use super::pending::{
 	MOST_WRITES_IN_FLIGHT, PendingSpill, READ_AHEAD, SpillBackend, SpillFactory, WRITE_BYTES_IN_FLIGHT,
@@ -151,8 +146,8 @@ impl StoreLayout {
 		Self {
 			shape: spec.shape,
 			layers: spec.layers(),
-			capacity: spec.stored_frames() as usize,
-			capture_every: spec.capture_every(),
+			capacity: spec.schedule.stored_frames() as usize,
+			capture_every: spec.schedule.capture_every(),
 		}
 	}
 
@@ -242,14 +237,14 @@ pub struct FrameStore {
 }
 
 impl FrameStore {
-	/// A store in the default cache folder (`<temp>/wavedude`) with `ram_budget` bytes of memory. The file for
-	/// the frames beyond the budget is created now, so a lack of disk space shows at the start.
+	/// The default cache folder for spill files: `<temp>/wavedude`.
 	#[cfg(not(target_arch = "wasm32"))]
-	pub fn new(layout: StoreLayout, ram_budget: u64, release: Option<Release>) -> io::Result<Self> {
-		Self::in_dir(layout, ram_budget, release, &std::env::temp_dir().join("wavedude"))
+	pub fn default_dir() -> std::path::PathBuf {
+		std::env::temp_dir().join("wavedude")
 	}
 
-	/// As [`new`](Self::new) with the spill file in `dir`.
+	/// A store with `ram_budget` bytes of memory and the frames beyond it in a spill file in `dir`, created now, so a
+	/// lack of disk space shows at the start.
 	#[cfg(not(target_arch = "wasm32"))]
 	pub fn in_dir(
 		layout: StoreLayout,
@@ -474,9 +469,8 @@ impl FrameStore {
 		}
 	}
 
-	/// The buffer to capture frame `frame` into: a cleared frame's buffer, whichever frame it is for, so they
-	/// are all taken up again; else the next prepared memory frame while the frames go to memory (waiting for the
-	/// producer), else one of the file's few or a new one. Each buffer is then written with
+	/// The buffer to capture frame `frame` into: a cleared frame's buffer first, else the next prepared memory frame while
+	/// frames go to memory (waiting for the producer), else one of the file's few or a new one. Write it back with
 	/// [`write_at`](Self::write_at).
 	pub fn buffer_for(&self, frame: usize) -> Snapshot {
 		if let Some(block) = lock(&self.recycled).pop() {

@@ -27,6 +27,7 @@ jobs:
   package:
     name: package ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
@@ -36,14 +37,21 @@ jobs:
       matrix:
         # `target`: the SBOM's; `update-platforms`: the updater's keys the package serves (`<os>-<arch>` as
         # cargo-packager-updater names the running program). The macOS bundle is universal: one build on the arm
-        # runner for both architectures.
+        # runner for both architectures. `container`: the build runs in the container of that name, built from
+        # .github/build/linux.Dockerfile for glibc 2.28 (decision 0011).
         include:
-          - { os: ubuntu-22.04, platform: linux-x86_64, target: x86_64-unknown-linux-gnu, formats: appimage, update: appimage, update-platforms: linux-x86_64 }
+          - { os: ubuntu-24.04, platform: linux-x86_64, target: x86_64-unknown-linux-gnu, formats: appimage, update: appimage, update-platforms: linux-x86_64, container: wavedude-build }
           - { os: windows-latest, platform: windows-x86_64, target: x86_64-pc-windows-msvc, formats: nsis, update: nsis, update-platforms: windows-x86_64 }
           - { os: macos-15, platform: macos-universal, target: aarch64-apple-darwin, formats: "app,dmg", update: app, update-platforms: "macos-aarch64 macos-x86_64", universal: true }
     env:
       TAG: ${{ inputs.tag }}
       VERSION: ${{ inputs.version }}
+      PACKAGE_PLATFORM: ${{ matrix.platform }}
+      SBOM_TARGET: ${{ matrix.target }}
+      PACKAGE_FORMATS: ${{ matrix.formats }}
+      UPDATE_FORMAT: ${{ matrix.update }}
+      UPDATE_PLATFORMS: ${{ matrix.update-platforms }}
+      CONTAINER: ${{ matrix.container }}
       WAVEDUDE_UPDATE_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
       WAVEDUDE_UPDATE_PUBKEY: ${{ inputs.update-pubkey }}
     defaults:
@@ -54,22 +62,37 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           persist-credentials: false
+      # Prebuilt and checked against the action's checksums; no fallback to other sources. The Linux builds are
+      # static (musl), so the container runs them as they are.
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: cargo-auditable@0.7.7,cargo-cyclonedx@0.5.9
+          fallback: none
+      # The steps that run cargo run it in the container through `${CONTAINER:+docker exec "$CONTAINER"}`, as the
+      # runner's user on the workspace, with the environment the build reads. NO_STRIP: no linuxdeploy strip; the
+      # system libraries come stripped, and our binaries keep their symbol names for backtraces.
+      # APPIMAGE_EXTRACT_AND_RUN: linuxdeploy is an AppImage itself; extract instead of mounting, no FUSE needed.
+      - name: Build container
+        if: matrix.container
+        run: |
+          docker build -t "$CONTAINER" - < .github/build/linux.Dockerfile
+          docker run -d --name "$CONTAINER" --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" \
+            -v "$(command -v cargo-auditable):/usr/local/bin/cargo-auditable:ro" \
+            -v "$(command -v cargo-cyclonedx):/usr/local/bin/cargo-cyclonedx:ro" \
+            -e CARGO_TERM_COLOR -e WAVEDUDE_UPDATE_ENDPOINT -e WAVEDUDE_UPDATE_PUBKEY \
+            -e NO_STRIP=true -e APPIMAGE_EXTRACT_AND_RUN=1 \
+            "$CONTAINER" sleep infinity
       - name: Toolchain
-        run: rustup toolchain install
+        run: ${CONTAINER:+docker exec "$CONTAINER"} rustup toolchain install
       - if: matrix.universal
         run: rustup target add x86_64-apple-darwin
-      - name: Bundled libraries
-        if: runner.os == 'Linux'
-        # The X11 client libraries winit loads at runtime, which the AppImage carries ([package.metadata.packager.appimage]).
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libxkbcommon0 libxkbcommon-x11-0 libxcb-xkb1 libxcursor1 libxi6 libxrandr2
-      - name: Tools
-        run: cargo install --locked cargo-packager@0.11.8 cargo-auditable@0.7.7 cargo-cyclonedx@0.5.9
+      # No prebuilt release exists.
+      - run: ${CONTAINER:+docker exec "$CONTAINER"} cargo install --locked cargo-packager@0.11.8
       # cargo auditable embeds the dependency list in the binaries (`cargo audit bin`).
       - name: Build
         if: '!matrix.universal'
-        run: cargo auditable build --release -p wavedude-app -p wavedude-cli
+        run: ${CONTAINER:+docker exec "$CONTAINER"} cargo auditable build --release -p wavedude-app -p wavedude-cli
       - name: Build universal
         if: matrix.universal
         run: |
@@ -82,19 +105,15 @@ jobs:
           done
       - name: Package
         run: |
-          cargo packager --release -p wavedude-app --formats "${{ matrix.formats }}" \
-            ${{ matrix.universal && '--target universal-apple-darwin' || '' }}
+          ${CONTAINER:+docker exec "$CONTAINER"} cargo packager --release -p wavedude-app --formats "$PACKAGE_FORMATS" \
+            ${UNIVERSAL:+--target universal-apple-darwin}
         env:
-          # linuxdeploy's own strip: the system libraries come stripped, and our binaries keep their symbol names
-          # for backtraces; its old strip also fails on newer distributions' libraries.
-          NO_STRIP: "true"
-          # linuxdeploy is an AppImage itself: extract instead of mounting, no FUSE on the runner needed.
-          APPIMAGE_EXTRACT_AND_RUN: "1"
+          UNIVERSAL: ${{ matrix.universal }}
       - name: Linux tarball
         if: runner.os == 'Linux'
         run: |
           # a prefix tree with its own install.sh: menu entry, icons and file types beside the programs
-          dir="wavedude-rust-$VERSION-${{ matrix.platform }}"
+          dir="wavedude-rust-$VERSION-$PACKAGE_PLATFORM"
           assets=crates/wavedude-app/assets
           mkdir -p "$dir/bin" "$dir/share/applications" "$dir/share/mime/packages"
           cp target/release/wavedude-app target/release/wavedude-cli "$dir/bin"
@@ -105,6 +124,12 @@ jobs:
             install -D -m 644 "$png" "$dir/share/icons/hicolor/$(basename "$png" .png)/apps/wavedude-app.png"
           done
           tar -czf "target/packages/$dir.tar.gz" "$dir"
+      # The programs and every ELF file the AppImage carries need glibc 2.28 at most (decision 0011).
+      - name: glibc floor
+        if: matrix.container
+        run: |
+          docker exec "$CONTAINER" .github/build/glibc-floor.sh \
+            target/release/wavedude-app target/release/wavedude-cli target/packages/*.AppImage
       - name: macOS update archive
         # The updater's format, which cargo-packager makes only while signing: the bundle under its own name.
         if: matrix.update == 'app'
@@ -121,31 +146,48 @@ jobs:
           # Asset names without spaces (URLs in latest.json) and unique per platform (both macOS builds share one name).
           for f in dist/*; do
             name=$(basename "$f" | tr ' ' '-')
-            case "$name" in *${{ matrix.platform }}*) ;; *) name="${{ matrix.platform }}-$name" ;; esac
+            case "$name" in *"$PACKAGE_PLATFORM"*) ;; *) name="$PACKAGE_PLATFORM-$name" ;; esac
             [ "dist/$name" = "$f" ] || mv "$f" "dist/$name"
           done
           ls -l dist
+      # The CLI of the tarball and of the AppImage starts on the build image's base, without its packages, and on
+      # Debian 10, the oldest distribution at the floor; the window's program finds its libraries.
+      - name: Smoke test
+        if: matrix.container
+        run: |
+          appimage=$(realpath dist/*.AppImage)
+          mkdir "$RUNNER_TEMP/smoke"
+          tar -xzf dist/*.tar.gz -C "$RUNNER_TEMP/smoke"
+          (cd "$RUNNER_TEMP/smoke" && "$appimage" --appimage-extract > /dev/null)
+          base=$(sed -n 's/^FROM //p' .github/build/linux.Dockerfile)
+          for image in "$base" debian:10-slim@sha256:bb3dc79fddbca7e8903248ab916bb775c96ec61014b3d02b4f06043b604726dc; do
+            docker run --rm -v "$RUNNER_TEMP/smoke:/smoke:ro" "$image" sh -ec '
+              for cli in /smoke/wavedude-rust-*/bin/wavedude-cli /smoke/squashfs-root/usr/bin/wavedude-cli; do
+                "$cli" --version
+              done
+              ! ldd /smoke/wavedude-rust-*/bin/wavedude-app | grep "not found"'
+          done
       - name: SBOMs
         run: |
-          cargo cyclonedx -q --manifest-path crates/wavedude-app/Cargo.toml -f json --spec-version 1.5 \
-            --target "${{ matrix.target }}" --override-filename sbom
+          ${CONTAINER:+docker exec "$CONTAINER"} cargo cyclonedx -q --manifest-path crates/wavedude-app/Cargo.toml \
+            -f json --spec-version 1.5 --target "$SBOM_TARGET" --override-filename sbom
           mkdir sbom
           for program in wavedude-app wavedude-cli; do
-            cp "crates/$program/sbom.json" "sbom/$program-$VERSION-${{ matrix.platform }}.cdx.json"
+            cp "crates/$program/sbom.json" "sbom/$program-$VERSION-$PACKAGE_PLATFORM.cdx.json"
           done
       - name: Update entry
         if: inputs.update-pubkey != ''
         run: |
-          case "${{ matrix.update }}" in
+          case "$UPDATE_FORMAT" in
             appimage) bundle=$(ls dist/*.AppImage) ;;
             nsis) bundle=$(ls dist/*.exe) ;;
             app) bundle=$(ls dist/*.app.tar.gz) ;;
           esac
           name=$(basename "$bundle")
           mkdir update
-          for platform in ${{ matrix.update-platforms }}; do
-            jq -n --arg platform "$platform" --arg format "${{ matrix.update }}" --arg name "$name" \
-              --arg url "https://github.com/${{ github.repository }}/releases/download/$TAG/$name" \
+          for platform in $UPDATE_PLATFORMS; do
+            jq -n --arg platform "$platform" --arg format "$UPDATE_FORMAT" --arg name "$name" \
+              --arg url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$name" \
               '{($platform): {url: $url, format: $format, name: $name}}' > "update/$platform.json"
           done
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -176,6 +218,7 @@ jobs:
   # The browser app, which pages.yml deploys from the latest release.
   web:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
@@ -191,15 +234,14 @@ jobs:
         run: |
           rustup toolchain install
           rustup target add wasm32-unknown-unknown
-      - name: Tools
-        run: cargo install --locked cargo-cyclonedx@0.5.9
       # The CLI must match the wasm-bindgen crate of Cargo.lock; tools/build-web.sh checks it again.
       - name: wasm-bindgen version of Cargo.lock
         id: bindgen
         run: echo "version=$(tools/build-web.sh --bindgen-version)" >> "$GITHUB_OUTPUT"
       - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
         with:
-          tool: wasm-bindgen@${{ steps.bindgen.outputs.version }}
+          tool: cargo-cyclonedx@0.5.9,wasm-bindgen@${{ steps.bindgen.outputs.version }}
+          fallback: none
       - name: Build
         run: |
           dir="wavedude-rust-$VERSION-web"

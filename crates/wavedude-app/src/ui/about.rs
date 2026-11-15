@@ -47,7 +47,7 @@ fn system_lines(app: &App) -> String {
 	#[cfg(target_arch = "wasm32")]
 	let h264 = None;
 	let lines = [
-		format!("{}: {} {}", s.get("AboutProductLine"), s.get("Title"), env!("CARGO_PKG_VERSION")),
+		format!("{}: {} {}", s.get("AboutProductLine"), s.get("Title"), wavedude_app_state::build_id()),
 		format!("{}: Rust, egui", s.get("AboutRuntime")),
 		format!("{}: {} {}", s.get("AboutOperatingSystem"), std::env::consts::OS, std::env::consts::ARCH),
 		format!("{}: {threads} {}", s.get("AboutProcessor"), s.get("AboutCores")),

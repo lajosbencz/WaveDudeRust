@@ -11,16 +11,17 @@ use std::time::{Duration, Instant as StdInstant};
 use eframe::egui::{self, Role, vec2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
-use wavedude_app::ui::{Boot, Shell};
+use wavedude_app::ui::Shell;
 use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::document::Source;
 use wavedude_app_state::live::Backend;
-use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::AppDirs;
 use wavedude_app_state::{Event, Guarded};
 use wavedude_core::model::{ProjectEdit, SimulationEdit};
 use wavedude_core::run::WorkState;
+
+use common::boot;
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj";
 
@@ -40,7 +41,7 @@ fn window(dir: &Path) -> Harness<'static, Shell> {
 	}
 	// the edit's undo step stays open, and the window ticking, until the history is quiet
 	std::thread::sleep(wavedude_app_state::history::QUIET);
-	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
+	let boot = boot(&dirs);
 	Harness::builder().with_size(vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot))
 }
 

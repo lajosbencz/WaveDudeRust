@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::Word;
 use wavedude_core::quality::{MachineFacts, PreviewDefaults, PreviewQuality};
@@ -166,6 +166,9 @@ pub struct Settings {
 	/// The primary pointer is a finger, decided at the start; not stored. It sets the defaults of a device.
 	#[serde(skip)]
 	pub touch_first: bool,
+	/// The settings this version does not know (another version's), written back as read.
+	#[serde(flatten)]
+	pub unknown: Map<String, Value>,
 }
 
 impl Default for Settings {
@@ -201,6 +204,7 @@ impl Default for Settings {
 			check_for_updates: None,
 			show_startup: true,
 			touch_first: false,
+			unknown: Map::new(),
 		}
 	}
 }
@@ -211,8 +215,6 @@ pub struct Loaded {
 	pub settings: Settings,
 	/// No file existed: the first start's choice was made and the file written.
 	pub first_start: bool,
-	/// The file existed but could not be read: logged with its text, defaults used, not a first start.
-	pub unreadable: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -277,26 +279,32 @@ impl Settings {
 	}
 
 	/// Reads a settings text of a device, the defaults of which fill what it lacks; a file without a version is
-	/// version 0, the format before the field.
+	/// version 0, the format before the field. A value that cannot be read is logged with its key and reads as its
+	/// default; the others are kept, unknown keys among them.
 	pub fn from_json(text: &str, touch_first: bool) -> Result<Self, serde_json::Error> {
-		let mut value: Value = serde_json::from_str(text)?;
-		let versioned = value.get("Version").is_some();
-		if let (Value::Object(file), Ok(Value::Object(mut filled))) =
-			(&mut value, serde_json::to_value(Self::for_device(touch_first)))
-		{
-			filled.append(file);
-			value = Value::Object(filled);
+		let file: Map<String, Value> = serde_json::from_str(text)?;
+		let versioned = file.contains_key("Version");
+		let Value::Object(mut filled) = serde_json::to_value(Self::for_device(touch_first))? else {
+			unreachable!("settings serialise to an object")
+		};
+		// every value before `key` reads, so a failure is the value of `key`
+		for (key, value) in file {
+			let default = filled.insert(key.clone(), value);
+			if let Err(e) = Self::deserialize(&filled) {
+				tracing::warn!("the setting '{key}' cannot be read, its default is used: {e}");
+				match default {
+					Some(d) => filled.insert(key, d),
+					None => filled.remove(&key),
+				};
+			}
 		}
-		let mut s: Self = serde_json::from_value(value)?;
+		let mut s = Self::deserialize(&filled)?;
 		s.touch_first = touch_first;
 		if !versioned {
 			s.version = 0;
 		}
 		if s.version > VERSION {
-			tracing::warn!(
-				"the settings file is of version {}, newer than {VERSION}; unknown values are dropped",
-				s.version
-			);
+			tracing::warn!("the settings file is of version {}, newer than {VERSION}", s.version);
 		}
 		s.normalize();
 		Ok(s)
@@ -316,21 +324,17 @@ impl Settings {
 	/// Reads the store's settings of a device; with none, makes the first start's choice from `facts` and writes
 	/// them at once.
 	pub fn load(store: &Store, touch_first: bool, facts: impl FnOnce() -> MachineFacts) -> Loaded {
+		let location = || store.location(FILE_NAME);
 		match store.read(FILE_NAME) {
 			Ok(Some(text)) => match Self::from_json(&text, touch_first) {
-				Ok(settings) => Loaded { settings, first_start: false, unreadable: None },
+				Ok(settings) => Loaded { settings, first_start: false },
 				Err(e) => {
-					let at = Some((e.line(), e.column()));
-					let quoted = wavedude_core::io::excerpt(&text, at);
-					let location = store.location(FILE_NAME);
+					let quoted = wavedude_core::io::excerpt(&text, Some((e.line(), e.column())));
+					let location = location();
 					tracing::error!(
 						"the settings file '{location}' could not be read: {e}\n--- the text of '{location}' ---\n{quoted}"
 					);
-					Loaded {
-						settings: Self::for_device(touch_first),
-						first_start: false,
-						unreadable: Some(e.to_string()),
-					}
+					Loaded { settings: Self::for_device(touch_first), first_start: false }
 				}
 			},
 			Ok(None) => {
@@ -340,11 +344,11 @@ impl Settings {
 				if let Err(e) = settings.save(store) {
 					tracing::warn!("{e}");
 				}
-				Loaded { settings, first_start: true, unreadable: None }
+				Loaded { settings, first_start: true }
 			}
 			Err(e) => {
-				tracing::error!("the settings file '{}' could not be read: {e}", store.location(FILE_NAME));
-				Loaded { settings: Self::for_device(touch_first), first_start: false, unreadable: Some(e.to_string()) }
+				tracing::error!("the settings file '{}' could not be read: {e}", location());
+				Loaded { settings: Self::for_device(touch_first), first_start: false }
 			}
 		}
 	}
@@ -562,8 +566,38 @@ mod tests {
 		let store = Store::in_dir(dir.path().to_owned());
 		std::fs::write(dir.path().join(FILE_NAME), "{ not json").unwrap();
 		let broken = Settings::load(&store, false, || panic!("an unreadable file is not a first start"));
-		assert!(broken.unreadable.is_some() && !broken.first_start);
+		assert!(!broken.first_start);
 		assert_eq!(broken.settings, Settings::default());
+	}
+
+	#[test]
+	fn an_unreadable_value_reads_as_its_default_and_keeps_the_others() {
+		for touch_first in [false, true] {
+			let text = r#"{"Version": 1, "UiZoom": 1.5, "Theme": "Neon", "UseGpu": "yes", "UiZoomTypo": 3, "AutoRerun": false}"#;
+			let s = Settings::from_json(text, touch_first).unwrap();
+			let expected = Settings {
+				ui_zoom: 1.5,
+				auto_rerun: false,
+				unknown: Map::from_iter([("UiZoomTypo".to_owned(), Value::from(3))]),
+				..Settings::for_device(touch_first)
+			};
+			assert_eq!(s, expected, "touch first {touch_first}");
+		}
+	}
+
+	#[test]
+	fn unknown_settings_survive_a_save() {
+		let dir = tempfile::tempdir().unwrap();
+		let store = Store::in_dir(dir.path().to_owned());
+		let newer = serde_json::json!({ "Version": 2, "UseGpu": false, "Future": { "Kind": "Mode", "Level": [1, 2] } });
+		std::fs::write(dir.path().join(FILE_NAME), newer.to_string()).unwrap();
+		let mut loaded = Settings::load(&store, false, || panic!("not a first start")).settings;
+		assert!(!loaded.use_gpu);
+		loaded.auto_rerun = false;
+		loaded.save(&store).unwrap();
+		let written: Value = serde_json::from_str(&store.read(FILE_NAME).unwrap().unwrap()).unwrap();
+		assert_eq!(written["Future"], newer["Future"]);
+		assert_eq!((written["UseGpu"].clone(), written["AutoRerun"].clone()), (Value::Bool(false), Value::Bool(false)));
 	}
 
 	#[test]

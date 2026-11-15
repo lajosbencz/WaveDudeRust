@@ -1,11 +1,10 @@
-//! The preview pane (docs/ui/40-preview-pane.md): the pictures of the frame shown in their cells with the header
-//! strips and the splitter between them, the timeline and the transport bar below, and the pane's playback keys.
+//! The preview pane (docs/ui/40-preview-pane.md): the pictures of the frame shown, the timeline, the transport bar and
+//! the pane's playback keys.
 //!
-//! Each frame the pane polls: it hands the frame the live controller shows to the presenter when what is to be drawn
-//! changed, writes the presenter's pictures into their textures, keeps the busy dim, finishes an Auto brightness and
-//! follows the scene's own picture and outline; while a picture is due it asks for the next frame after [`POLL`].
-//! Where the renderer's device draws pictures, it colours them ([`device`]), bypassing the presenter: those of a run
-//! on the GPU engine, and every frame where the presenter would colour them on the UI thread (the browser).
+//! Each frame the pane polls: it hands the frame the live controller shows to the presenter when what is drawn
+//! changed, writes the presenter's pictures into their textures and asks for the next frame after [`POLL`] while a
+//! picture is due. Where the renderer's device draws pictures ([`device`]), the presenter is bypassed: runs on the GPU
+//! engine, and every frame in the browser.
 //!
 //! Threads: the UI thread; natively the presenter and the scene builder use threads of their own.
 
@@ -37,12 +36,12 @@ use self::graph_boxes::{BoxDrag, Boxes};
 use self::overlay::Overlay;
 use self::texture::Texture;
 use self::timeline::Timeline;
-use self::transport::{Transport, play_or_pause};
+use self::transport::Transport;
 use super::theme::Palette;
 use crate::App;
 use crate::menus::{MenuAction, On};
 use crate::preview::overlay::Grab;
-use crate::preview::presenter::{self, FrameSource, LayerRequest, Presenter, PresenterStats, SourceKey};
+use crate::preview::presenter::{self, Delivery, FrameSource, Presenter, PresenterStats};
 use crate::preview::view::View;
 use crate::preview::{
 	BUSY_DELAY, POLL, PictureExtent, RequestInputs, SceneWatch, display_edit, layer_name, request_of, shown_source,
@@ -68,9 +67,7 @@ pub(super) struct Preview {
 	presenter: Option<Presenter>,
 	/// What the request was built from last; the same inputs build the same request.
 	inputs: Option<RequestInputs>,
-	sent: Option<(SourceKey, Vec<LayerRequest>)>,
-	/// A request whose pictures have not come back yet.
-	awaiting: bool,
+	delivery: Delivery,
 	stats: PresenterStats,
 	scene: SceneWatch,
 	computing: Option<(u32, Instant)>,
@@ -141,8 +138,7 @@ impl Preview {
 			gpu,
 			presenter,
 			inputs: None,
-			sent: None,
-			awaiting: false,
+			delivery: Delivery::default(),
 			stats: PresenterStats::default(),
 			scene: SceneWatch::default(),
 			computing: None,
@@ -176,7 +172,7 @@ impl Preview {
 	/// Whether a picture is due: the pane then polls after [`POLL`].
 	fn due(&self, app: &App) -> bool {
 		let live = &app.live;
-		self.awaiting
+		self.delivery.awaiting()
 			|| self.device.pending()
 			|| self.scene.building()
 			|| self.computing.is_some()
@@ -189,16 +185,10 @@ impl Preview {
 
 	fn poll(&mut self, app: &mut App, out: &mut Vec<Event>) {
 		let now = Instant::now();
-		// A render of an older request is dropped: the one in flight follows. One whose frame vanished frees the
-		// key, so the same frame made anew is asked for again.
+		// A frame vanished or being read back is asked for again at the next poll, the pictures shown meanwhile kept.
 		if let Some(rendered) = self.presenter.as_mut().and_then(Presenter::latest)
-			&& self.sent.as_ref().is_some_and(|(key, _)| *key == rendered.source)
+			&& self.delivery.take(&rendered)
 		{
-			// A frame being read back is asked for again at the next poll, the pictures shown meanwhile kept.
-			self.awaiting = rendered.pending;
-			if rendered.vanished || rendered.pending {
-				self.sent = None;
-			}
 			if let Some(gpu) = &self.gpu {
 				for p in &rendered.pictures {
 					let layer = p.layer as usize;
@@ -240,14 +230,16 @@ impl Preview {
 		if self.on_device != on_device {
 			self.on_device = on_device;
 			self.inputs = None;
-			self.sent = None;
-			self.awaiting = false;
+			self.delivery.forget();
 			self.shown = [None, None];
 			self.device.clear();
 		}
 		let extents = self.extents;
 		let inputs = RequestInputs::of(app, extents, self.scene.edges());
-		if self.inputs.as_ref() != Some(&inputs) || (self.sent.is_none() && !self.on_device) || self.device.pending() {
+		if self.inputs.as_ref() != Some(&inputs)
+			|| (self.delivery.is_idle() && !self.on_device)
+			|| self.device.pending()
+		{
 			self.inputs = Some(inputs);
 			match request_of(app, extents, self.scene.edges()) {
 				Some(request) if self.on_device => {
@@ -256,20 +248,14 @@ impl Preview {
 					}
 				}
 				Some(request) => {
-					let key = (request.source.key(), request.layers.clone());
-					if let Some(presenter) = &mut self.presenter
-						&& self.sent.as_ref() != Some(&key)
-					{
-						self.sent = Some(key);
-						self.awaiting = true;
-						presenter.request(request);
+					if let Some(presenter) = &mut self.presenter {
+						self.delivery.send(presenter, request);
 					}
 				}
 				None => {
 					if app.live.shown().is_none() {
 						self.device.clear();
-						if self.sent.take().is_some() {
-							self.awaiting = false;
+						if self.delivery.forget() {
 							self.shown = [None, None];
 						}
 					}
@@ -302,7 +288,7 @@ impl Preview {
 		match shown_source(app) {
 			Some(s) if s.shape().format == SampleFormat::Half => fit_now(&s, layer, out),
 			_ => {
-				if app.live.request_half_frame(&app.document.project) {
+				if app.live.request_half_frame() {
 					self.fit = Some(layer);
 				}
 			}
@@ -326,6 +312,7 @@ impl Preview {
 		let shown = [display.field.preview, display.intensity.preview];
 		let vertical = app.settings.preview_orientation == Orientation::Vertical;
 		let mut picked = None;
+		let extents = self.extents;
 		match shown {
 			[true, true] => {
 				let [first, second] = self.split_cells(ui, room, vertical, app.strings.get("TipPreviewSplitter"));
@@ -336,6 +323,10 @@ impl Preview {
 			[false, true] => self.cell(ui, room, Layer::Intensity, app, out, &mut picked),
 			[false, false] => {}
 		}
+		// the poll above asked for the old extents
+		if self.extents != extents {
+			ui.ctx().request_repaint();
+		}
 		let timeline = timeline.shrink2(vec2(TIMELINE_PADDING.0, TIMELINE_PADDING.1));
 		self.timeline.ui(ui, timeline, app, &mut self.pointer_focus, out);
 		self.transport.ui(ui, bar, app, out);
@@ -345,7 +336,7 @@ impl Preview {
 
 	/// The two cells and the splitter between them, which a drag or the arrow keys (10 px a key) move and a
 	/// double-click or Enter puts back to half.
-	fn split_cells(&mut self, ui: &mut Ui, room: Rect, vertical: bool, tip: &str) -> [Rect; 2] {
+	fn split_cells(&mut self, ui: &Ui, room: Rect, vertical: bool, tip: &str) -> [Rect; 2] {
 		let length = if vertical { room.height() } else { room.width() } - SPLITTER;
 		let at = (length * self.split).round();
 		let (first, bar, second) = if vertical {
@@ -412,7 +403,7 @@ fn pane_keys(ui: &Ui, app: &App, out: &mut Vec<Event>) {
 				return true;
 			}
 			out.push(match key {
-				Key::Space => play_or_pause(app),
+				Key::Space => Event::TogglePlayback,
 				Key::Comma => Event::StepFrames(-1),
 				Key::Period => Event::StepFrames(1),
 				Key::I => Event::SetInPoint,

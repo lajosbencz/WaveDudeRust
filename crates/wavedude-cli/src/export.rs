@@ -1,22 +1,22 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, OnceLock};
 use std::task::Poll;
 use std::time::{Duration, Instant};
-use wavedude_core::sync::lock;
 
 use anyhow::{Result, anyhow, bail};
 use clap::Args as ClapArgs;
+use wavedude_app_state::settings::AppDirs;
 use wavedude_core::engine::types::FrameShape;
-use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::Layer;
 use wavedude_core::quality::PreviewQuality;
-use wavedude_core::run::{FrameStore, RunError, RunEvent, SimulationRun};
+use wavedude_core::run::FrameStore;
+use wavedude_core::run::store::StoreError;
 use wavedude_export::h264::Profile;
 use wavedude_export::{ExportFormat, ExportLayers, ExportPlan, ExportState, FrameSource};
 
-use crate::project::load;
-use crate::run::{EngineArgs, parse_steps, simulate_with};
+use crate::project::{load, user_schemes};
+use crate::run::{EngineArgs, Simulation, outcome, parse_steps};
 
 #[derive(ClapArgs)]
 pub(crate) struct Args {
@@ -74,37 +74,10 @@ fn with_extension(out: &Path, format: ExportFormat) -> PathBuf {
 	if out.extension().is_some() { out.to_path_buf() } else { out.with_extension(format.default_extension()) }
 }
 
-/// Wakes waiters on every run event.
-#[derive(Default)]
-struct Signal {
-	lock: Mutex<()>,
-	cond: Condvar,
-}
-
-impl Signal {
-	fn notify(&self) {
-		let _guard = lock(&self.lock);
-		self.cond.notify_all();
-	}
-
-	/// Waits until `done` holds; the run's events wake it, a timeout covers a write between two events.
-	fn wait_until(&self, mut done: impl FnMut() -> bool) {
-		let mut guard = lock(&self.lock);
-		while !done() {
-			guard = self
-				.cond
-				.wait_timeout(guard, Duration::from_millis(50))
-				.unwrap_or_else(std::sync::PoisonError::into_inner)
-				.0;
-		}
-	}
-}
-
 /// The frames of a run still in progress: a frame is waited for until the run stores it, ends or is interrupted.
 struct LiveFrames<'a> {
-	store: &'a FrameStore,
-	run: &'a SimulationRun,
-	signal: &'a Signal,
+	run: &'a Simulation,
+	store: Arc<FrameStore>,
 	cancel: &'a AtomicBool,
 	/// Time spent waiting for the run, nanoseconds.
 	waited: AtomicU64,
@@ -119,28 +92,23 @@ impl FrameSource for LiveFrames<'_> {
 		*self.store.shape()
 	}
 
-	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<Poll<()>> {
+	fn poll_layer(&self, frame: usize, layer: Layer, out: &mut [u8]) -> Result<Poll<()>, StoreError> {
 		self.store.poll_layer(frame, layer, out)
 	}
 
-	fn wait_for(&self, frame: usize) -> Result<bool> {
+	fn wait_for(&self, frame: usize) -> Result<bool, StoreError> {
 		let started = Instant::now();
-		self.signal
-			.wait_until(|| frame < self.store.count() || self.run.is_finished() || self.cancel.load(Ordering::Relaxed));
+		self.run.wait_until(|_| frame < self.store.count() || self.cancel.load(Ordering::Relaxed));
 		self.waited.fetch_add(started.elapsed().as_nanos() as u64, Ordering::Relaxed);
 		Ok(frame < self.store.count())
 	}
 }
 
-fn run_failure(run: &mut SimulationRun) -> Option<anyhow::Error> {
-	run.wait_completed().err().map(|e| anyhow::Error::new(e).context("the run did not complete"))
-}
-
-pub(crate) fn run(args: &Args) -> Result<()> {
+pub(crate) fn run(args: &Args, dirs: Option<&AppDirs>) -> Result<()> {
 	let format = format_of(args)?;
 	#[cfg(feature = "mp4")]
 	let h264: Option<Arc<dyn wavedude_export::h264::H264Factory>> = if format == ExportFormat::Mp4 {
-		Some(Arc::new(wavedude_export::h264::OpenH264Factory::new(crate::openh264::library()?)))
+		Some(Arc::new(wavedude_export::h264::OpenH264Factory::new(crate::openh264::library(dirs)?)))
 	} else {
 		None
 	};
@@ -167,31 +135,32 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 	display.export_from = args.from.unwrap_or(display.export_from);
 	display.export_to = args.to.unwrap_or(display.export_to);
 	let cancel = Arc::new(AtomicBool::new(false));
+	let wake = Arc::new(OnceLock::<Box<dyn Fn() + Send + Sync>>::new());
 	{
-		let cancel = cancel.clone();
-		ctrlc::set_handler(move || cancel.store(true, Ordering::Relaxed))?;
+		let (cancel, wake) = (cancel.clone(), wake.clone());
+		ctrlc::set_handler(move || {
+			cancel.store(true, Ordering::Relaxed);
+			if let Some(wake) = wake.get() {
+				wake();
+			}
+		})?;
 	}
-	let signal = Arc::new(Signal::default());
-	let events = {
-		let signal = signal.clone();
-		Box::new(move |_: RunEvent| signal.notify())
-	};
 	let quality = PreviewQuality { intensity_root: format.intensity_root(), ..PreviewQuality::FULL };
 	let track_intensity = args.layers != ExportLayers::Field;
-	let (mut run, store) = simulate_with(&mut project, args.steps, quality, track_intensity, args.engine, events)?;
+	let run = Simulation::start(&mut project, args.steps, quality, track_intensity, args.engine)?;
+	let _ = wake.set(Box::new(run.waker()));
 	let graphs = project.display.probe_graphs_in_export && project.probes.iter().any(|p| p.active);
 	if graphs {
 		eprintln!("running the simulation first: the probe graphs need its recordings");
-		signal.wait_until(|| run.is_finished() || cancel.load(Ordering::Relaxed));
+		let status = run.wait_until(|_| cancel.load(Ordering::Relaxed));
 		if cancel.load(Ordering::Relaxed) {
 			bail!("interrupted");
 		}
-		if let Some(e) = run_failure(&mut run) {
-			return Err(e);
-		}
+		outcome(&status)?;
 	}
 	let traces = if graphs { run.traces() } else { Vec::new() };
-	let spec = run.spec().clone();
+	let store = run.store()?;
+	let spec = &run.spec;
 	let out = with_extension(&args.out, format);
 	let plan = ExportPlan {
 		project: &project,
@@ -200,17 +169,16 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 		fs: Arc::new(wavedude_export::fs::StdFs),
 		path: out.clone(),
 		still: args.still,
-		frame_count: spec.frame_count() as usize,
+		frame_count: spec.schedule.frame_count() as usize,
 		traces: &traces,
-		total_steps: spec.steps as u64,
+		total_steps: spec.schedule.steps as u64,
 		keep_partial: args.keep_partial,
 		h264,
 		h264_profile: Profile::default(),
 	};
 	#[allow(clippy::arc_with_non_send_sync, reason = "the job shares the source on this thread")]
-	let source =
-		Arc::new(LiveFrames { store: &store, run: &run, signal: &signal, cancel: &cancel, waited: AtomicU64::new(0) });
-	let job = plan.build_job(source.clone(), &SchemeStore::default())?;
+	let source = Arc::new(LiveFrames { run: &run, store: store.clone(), cancel: &cancel, waited: AtomicU64::new(0) });
+	let job = plan.build_job(source.clone(), &user_schemes(dirs))?;
 	let report = job.run(|done, total| eprint!("\rexport frame {done}/{total}"), &cancel);
 	eprintln!();
 	let waited = Duration::from_nanos(source.waited.load(Ordering::Relaxed));
@@ -221,12 +189,7 @@ pub(crate) fn run(args: &Args) -> Result<()> {
 		ExportState::Completed => {}
 		ExportState::Cancelled => bail!("the export was interrupted after {} frames", report.frames_done),
 		ExportState::Failed(e) => {
-			run.cancel();
-			if let Err(e) = run.wait_completed()
-				&& !matches!(e, RunError::Cancelled)
-			{
-				return Err(anyhow::Error::new(e).context("the run did not complete"));
-			}
+			outcome(&run.status())?;
 			bail!("the export failed after {} frames: {e}", report.frames_done)
 		}
 	}

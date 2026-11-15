@@ -2,14 +2,6 @@ use super::{Fields, Point, Word};
 
 use super::ranges;
 
-/// Largest coating depth in pixels.
-pub const MAX_COATING: f64 = ranges::COATING.max;
-/// Refractive index bounds of a part.
-pub const INDEX_MIN: f64 = ranges::INDEX.min;
-pub const INDEX_MAX: f64 = ranges::INDEX.max;
-/// Largest absorption ramp in pixels.
-pub const MAX_ABSORPTION_RAMP: u32 = ranges::ABSORPTION_RAMP.max as u32;
-
 /// What every part has.
 #[derive(Clone, Debug, PartialEq, Fields)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -47,7 +39,7 @@ pub enum CoatingProfile {
 #[derive(Clone, Debug, PartialEq, Fields)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Coating {
-	/// Pixels, `0..MAX_COATING`.
+	/// Pixels.
 	#[field(range = ranges::COATING)]
 	pub depth: f64,
 	pub profile: CoatingProfile,
@@ -132,7 +124,7 @@ pub enum ZoneDivision {
 pub struct FresnelLens {
 	#[field(nested)]
 	pub lens: Lens,
-	/// `1..MAX_ZONES`; 1 is a plain lens.
+	/// 1 is a plain lens.
 	#[field(range = ranges::FRESNEL_ZONES)]
 	pub zones: u32,
 	pub division: ZoneDivision,
@@ -145,8 +137,6 @@ impl Default for FresnelLens {
 }
 
 impl FresnelLens {
-	pub const MAX_ZONES: u32 = 100;
-
 	/// A new Fresnel lens: a plate of 20 px across 500 with radii of 1500, so four zones of equal width fit
 	/// (the lens's defaults would be refit to a far flatter lens).
 	pub fn new_plate() -> Self {
@@ -322,7 +312,7 @@ impl Diffuser {
 #[derive(Clone, Debug, PartialEq, Fields)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FilterLayer {
-	/// Pixels along the axis, `0..MAX_LAYER_THICKNESS` at 0.01; 0 leaves the layer out.
+	/// Pixels along the axis, at 0.01; 0 leaves the layer out.
 	#[field(range = ranges::LAYER_THICKNESS)]
 	pub thickness: f64,
 	#[field(range = ranges::INDEX)]
@@ -360,7 +350,6 @@ impl Default for InterferenceFilter {
 }
 
 impl InterferenceFilter {
-	pub const MAX_LAYER_THICKNESS: f64 = 1000.0;
 	/// The wavelength a new filter's stack is cut for.
 	pub const STACK_WAVELENGTH: f64 = 16.0;
 
@@ -378,7 +367,7 @@ impl InterferenceFilter {
 
 	/// The sum of the layers' thicknesses: how far the stack stands out of the plate's front.
 	pub fn stack_thickness(&self) -> f64 {
-		self.layers.iter().map(|l| l.thickness.clamp(0.0, Self::MAX_LAYER_THICKNESS)).sum()
+		self.layers.iter().map(|l| l.thickness.clamp(0.0, ranges::LAYER_THICKNESS.max)).sum()
 	}
 }
 
@@ -746,7 +735,7 @@ pub struct LogicGate {
 	/// Level 1..255.
 	#[field(range = ranges::DESIGN_LEVEL)]
 	pub design_frequency: f64,
-	/// Pixels, `0..MAX_COATING`.
+	/// Pixels.
 	#[field(range = ranges::COATING)]
 	pub coating: f64,
 	pub input_coated: bool,

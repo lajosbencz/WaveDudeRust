@@ -1,7 +1,7 @@
 // Sources as forcing (engine/forcing.rs, engine/cpu.rs `force_w` and `force_next`): one thread per
 // driven cell adds its live values in order. groups: [(cell, start, len, h bits) * group_count,
 // entries...]; an entry indexes the sub-step's values (0..255 the image level table, 256 + k object
-// emitter k); a value that is zero or has all bits set is not live. `force_w` adds F to the modified
+// emitter k); a zero value is not live. `force_w` adds F to the modified
 // equation's w between its passes; `force` and `force_intensity` add h F to leapfrog's next field,
 // the latter moving the intensity stages to the forced value.
 
@@ -12,7 +12,7 @@
 @group(0) @binding(5) var<storage, read_write> s2: array<f32>;
 
 fn live(s: f32) -> bool {
-	return bitcast<u32>(s) != 0xffffffffu && s != 0.0;
+	return s != 0.0;
 }
 
 @compute @workgroup_size(64)

@@ -10,11 +10,6 @@ pub fn enabled(choice: Option<bool>) -> bool {
 	h264::BUILT_IN || choice == Some(true)
 }
 
-/// The startup page asks for the user's choice.
-pub fn unasked(choice: Option<bool>) -> bool {
-	!h264::BUILT_IN && choice.is_none()
-}
-
 /// Cisco's binary is in the app's codec folder.
 pub fn downloaded(app: &App) -> bool {
 	app.codec_dir.as_deref().and_then(h264::installed).is_some()

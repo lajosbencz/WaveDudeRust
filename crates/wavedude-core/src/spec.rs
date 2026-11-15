@@ -125,16 +125,14 @@ impl RunRequest {
 	}
 
 	pub fn frame_bytes(&self) -> u64 {
-		let canvas = self.project.canvas_size();
-		self.layers().len() as u64 * shape_of(&self.project, canvas, self.quality).plane_bytes() as u64
+		frame_bytes(self.layers(), &shape_of(&self.project, self.project.canvas_size(), self.quality))
 	}
 
 	/// Bytes the store of a run of this request at `quality` takes in memory (no file header).
 	pub fn store_bytes_at(&self, quality: PreviewQuality) -> u64 {
 		debug_assert!(quality.is_valid(), "invalid preview quality {quality:?}");
-		let canvas = self.project.canvas_size();
 		let frames = Schedule { quality, ..self.schedule() }.stored_frames();
-		self.layers().len() as u64 * shape_of(&self.project, canvas, quality).plane_bytes() as u64 * frames as u64
+		frame_bytes(self.layers(), &shape_of(&self.project, self.project.canvas_size(), quality)) * frames as u64
 	}
 
 	pub fn store_bytes(&self) -> u64 {
@@ -154,6 +152,11 @@ fn tracks_intensity(project: &Project, track_intensity: bool) -> bool {
 		|| project.probes.iter().any(|p| p.active && p.measurement != Measurement::Amplitude)
 }
 
+/// Bytes of one stored frame of `layers` planes of `shape`.
+fn frame_bytes(layers: &[Layer], shape: &FrameShape) -> u64 {
+	layers.len() as u64 * shape.plane_bytes() as u64
+}
+
 /// The captured planes' shape for a `canvas` at `quality`, the brightness from the project's Display.
 fn shape_of(project: &Project, canvas: (u32, u32), quality: PreviewQuality) -> FrameShape {
 	FrameShape {
@@ -171,10 +174,7 @@ fn shape_of(project: &Project, canvas: (u32, u32), quality: PreviewQuality) -> F
 #[derive(Clone, Debug)]
 pub struct RunSpec {
 	pub seed: i32,
-	pub steps: u32,
-	/// Steps per timeline frame, at least 1.
-	pub visualize_every: u32,
-	pub quality: PreviewQuality,
+	pub schedule: Schedule,
 	/// Captured planes; brightness from the project's Display (baked into index frames).
 	pub shape: FrameShape,
 	pub options: EngineOptions,
@@ -238,9 +238,7 @@ impl RunSpec {
 		};
 		Self {
 			seed: project.seed,
-			steps: sim.steps,
-			visualize_every: sim.visualize_every,
-			quality,
+			schedule: Schedule { steps: sim.steps, visualize_every: sim.visualize_every, quality },
 			shape,
 			options,
 			scene,
@@ -258,43 +256,11 @@ impl RunSpec {
 			intensity_root: quality.intensity_root,
 			..self.shape
 		};
-		Self { quality, shape, ..self.clone() }
+		Self { schedule: Schedule { quality, ..self.schedule }, shape, ..self.clone() }
 	}
 
 	pub fn track_intensity(&self) -> bool {
 		self.options.track_intensity
-	}
-
-	pub fn schedule(&self) -> Schedule {
-		Schedule { steps: self.steps, visualize_every: self.visualize_every, quality: self.quality }
-	}
-
-	pub fn frame_count(&self) -> u32 {
-		self.schedule().frame_count()
-	}
-
-	pub fn frame_divisor(&self) -> u32 {
-		self.quality.frame_divisor
-	}
-
-	pub fn capture_every(&self) -> u32 {
-		self.schedule().capture_every()
-	}
-
-	pub fn stored_frames(&self) -> u32 {
-		self.schedule().stored_frames()
-	}
-
-	pub fn stored_index_of(&self, k: u32) -> u32 {
-		self.schedule().stored_index_of(k)
-	}
-
-	pub fn step_of(&self, k: u32) -> u32 {
-		self.schedule().step_of(k)
-	}
-
-	pub fn covered_frames(&self, stored: u32) -> u32 {
-		self.schedule().covered_frames(stored)
 	}
 
 	/// The planes of every frame, in store order: the field, then the intensity when tracked.
@@ -304,7 +270,7 @@ impl RunSpec {
 
 	/// Bytes of one stored frame at this quality.
 	pub fn frame_bytes(&self) -> u64 {
-		self.layers().len() as u64 * self.shape.plane_bytes() as u64
+		frame_bytes(self.layers(), &self.shape)
 	}
 
 	/// Same scene and solver, so the same engine (the intensity tracking is switched on it): only emitters,
@@ -329,8 +295,7 @@ impl RunSpec {
 		self.same_scene_as(other)
 			&& self.options.track_intensity == other.options.track_intensity
 			&& self.emitters == other.emitters
-			&& (self.seed, self.steps, self.visualize_every, self.quality)
-				== (other.seed, other.steps, other.visualize_every, other.quality)
+			&& (self.seed, self.schedule) == (other.seed, other.schedule)
 			&& baked(self) == baked(other)
 	}
 

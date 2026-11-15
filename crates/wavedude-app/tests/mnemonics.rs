@@ -8,16 +8,14 @@ use std::path::Path;
 use eframe::egui::{self, Key};
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
-use wavedude_app::ui::{Boot, Shell};
+use wavedude_app::ui::Shell;
 use wavedude_app_state::Event;
 use wavedude_app_state::history::History;
-use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::strings::{Language, Strings, strip_mnemonic};
 
-/// Frames for a click or a key to reach the state and its result to show.
-const SETTLE: usize = 4;
+use common::{SETTLE, boot, settle};
 
 /// The window on a returning user's settings under `dir`, in `language` and the light theme.
 fn shell_with(dir: &Path, language: Language) -> Harness<'static, Shell> {
@@ -30,15 +28,11 @@ fn shell_with(dir: &Path, language: Language) -> Harness<'static, Shell> {
 	for event in [Event::SetLanguage(language.code().into()), Event::SetTheme(Theme::Light)] {
 		app.handle(event, Instant::now());
 	}
-	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
+	let boot = boot(&dirs);
 	let mut harness =
 		Harness::builder().with_size(egui::vec2(1280., 800.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
 	harness
-}
-
-fn settle(harness: &mut Harness<'_, Shell>) {
-	harness.run_steps(SETTLE);
 }
 
 /// The menus shown as the pointer opens every menu of the bar and each of their submenus: each menu's mnemonics,

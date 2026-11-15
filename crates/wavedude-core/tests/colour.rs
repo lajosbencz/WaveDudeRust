@@ -2,13 +2,12 @@
 //! The GPU's colouring of stored planes (render/gpu.rs) against the CPU's (render/layer.rs `paint` and the outline
 //! blend), for every kind of plane and colouring.
 //!
-//! Tolerances: a half picture's pixel may differ where the card fused a multiply-add of the resampling, which moves
-//! the sum by an f32 ulp and, at an f16 rounding boundary, picks the neighbouring table entry; the gradients here
-//! move at most one level between neighbouring entries, and a dithered channel may also land on the other side
-//! of its threshold: at most 2 levels, on at most 1 % of the pixels. A scaled index picture is blended in f32 where
-//! the reference blends in f64: 1 level. Everything else is exact. Every test returns early, with the reason
-//! printed, when no adapter or device is available; a software one (Mesa's lavapipe in CI) is fine. The tests share
-//! one device, never dropped, rather than each creating and tearing down its own on parallel threads.
+//! Tolerances: a half picture's pixel may differ where the card fused a multiply-add of the resampling (an f32 ulp
+//! that, at an f16 rounding boundary, picks the neighbouring table entry): at most 1 level between neighbouring
+//! entries, 2 for a dithered channel on at most 1 % of the pixels. A scaled index picture is blended in f32 where the
+//! reference blends in f64: 1 level. Everything else is exact. Every test returns early, with the reason printed,
+//! when no adapter or device is available; a software one (Mesa's lavapipe in CI) is fine. The tests share one
+//! device, never dropped, rather than each creating and tearing down its own on parallel threads.
 
 use std::sync::{Arc, LazyLock};
 

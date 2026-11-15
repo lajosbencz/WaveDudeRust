@@ -1,7 +1,7 @@
-//! H.264 through the browser's WebCodecs `VideoEncoder` ([`WebCodecsFactory`]): Annex B output, the codec string's
-//! level the lowest that holds the picture size and rate, variable bitrate at the export quality's bitrate, an IDR
-//! every `fps` pictures, I420 pictures in BT.601 studio range. Which profiles the browser encodes at a size and rate
-//! is asked once with `VideoEncoder.isConfigSupported` ([`support`]).
+//! H.264 through the browser's WebCodecs `VideoEncoder` ([`WebCodecsFactory`]): Annex B output, the lowest codec
+//! string level that holds the picture size and rate, variable bitrate at the export quality's bitrate, an IDR every
+//! `fps` pictures, I420 pictures in BT.601 studio range. The supported profiles at a size and rate are asked once with
+//! `VideoEncoder.isConfigSupported` ([`support`]).
 //!
 //! The encoder's output arrives in callbacks, queued ([`Chunks`]) and drained in order; each wakes the window
 //! ([`crate::wake`]).

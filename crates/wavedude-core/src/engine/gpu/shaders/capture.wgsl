@@ -24,7 +24,7 @@ fn sample(layer: u32, x: u32, y: u32) -> f32 {
 	if layer == 0u {
 		return u[i];
 	}
-	return (s1[i] * 0.5 + s2[i] * 0.5) * p.intensity_scale;
+	return blend(s1[i], s2[i]);
 }
 
 fn mean(layer: u32, k: u32) -> f32 {

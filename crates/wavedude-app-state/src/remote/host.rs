@@ -1,7 +1,6 @@
 //! The run worker's end: a pumped [`RunWorker`] whose stores keep no frame in memory. Their spill ([`PostSpill`])
-//! queues each store opened and each frame written; after each pump the host posts the queue and completes a
-//! frame's write when the page acknowledges it. The engine built after the GPU device was lost gets a new device.
-//! A page of another protocol version is not listened to.
+//! queues each store opened and each frame written; after each pump the host posts the queue and completes a frame's
+//! write when the page acknowledges it. A page of another protocol version or build is not listened to.
 
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
@@ -129,14 +128,15 @@ pub struct Host<P: Port> {
 	/// The trace readings posted, (series, profiles) per probe, and the traces' start they belong to.
 	traced: Vec<(usize, usize)>,
 	traced_for: Option<u64>,
-	/// The page speaks another protocol version: its messages are dropped.
+	/// The page speaks another protocol version or is another build: its messages are dropped.
 	deaf: bool,
 }
 
 impl<P: Port> Host<P> {
 	/// A host posting to `port`, its GPU engines on `gpu` (or why there is none) and on a device of `request`
-	/// once that is lost; posts [`ToPage::Ready`].
-	pub fn new(port: P, gpu: Result<GpuHandle, String>, request: RequestGpu) -> Self {
+	/// once that is lost, its CPU engines within the device's `memory` bytes (the address space alone where it is
+	/// unknown); posts [`ToPage::Ready`].
+	pub fn new(port: P, gpu: Result<GpuHandle, String>, request: RequestGpu, memory: Option<u64>) -> Self {
 		let queue = Arc::<Mutex<Queue>>::default();
 		let use_gpu = Arc::new(AtomicBool::new(false));
 		let ready = gpu.as_ref().map(|ctx| ctx.info.name.clone()).map_err(Clone::clone);
@@ -146,8 +146,14 @@ impl<P: Port> Host<P> {
 		)]
 		let gpu = Arc::new(Gpu { request, device: Mutex::new(gpu) });
 		let factory = engines(gpu.clone(), use_gpu.clone(), queue.clone());
-		let worker = RunWorker::pumped(factory, 0, Box::new(PostSpill(queue.clone())), Arc::default());
-		post(&port, &ToPage::Ready { version: VERSION, gpu: ready }, None);
+		let worker = RunWorker::pumped(
+			factory,
+			memory.unwrap_or(u64::MAX),
+			0,
+			Box::new(PostSpill(queue.clone())),
+			Arc::default(),
+		);
+		post(&port, &ToPage::Ready { version: VERSION, build: crate::build_id(), gpu: ready }, None);
 		Self {
 			port,
 			worker,
@@ -199,7 +205,15 @@ impl<P: Port> Host<P> {
 		}
 		let message: ToWorker = decode(&envelope).expect("the page posts messages of the protocol");
 		match message {
-			ToWorker::Init { version: _, use_gpu } => self.use_gpu.store(use_gpu, Ordering::Relaxed),
+			ToWorker::Init { version: _, build, use_gpu } => {
+				let worker = crate::build_id();
+				if build != worker {
+					tracing::error!("the page is build {build}, this worker {worker}: it is not listened to");
+					self.deaf = true;
+					return;
+				}
+				self.use_gpu.store(use_gpu, Ordering::Relaxed);
+			}
 			ToWorker::Image { key } => {
 				let bytes = envelope.buffer.expect("an image comes with its bytes");
 				self.image = Some((key, bytes.to_vec(0..bytes.len()).into()));

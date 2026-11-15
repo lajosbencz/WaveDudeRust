@@ -7,10 +7,13 @@ values at their default omitted). Port: JSON in the platform's config dir under 
 CLI reads and writes the same file for its OpenH264 commands.
 These are the program's settings, never the project's. Written on change (menu choices save at once) and on close.
 The port's file carries a `Version` (written always, 1 now; a file without it is version 0) and is written to a
-temporary file beside it, then renamed over it, so a crash mid-write leaves the old file whole.
+temporary file beside it, then renamed over it, so a crash mid-write leaves the old file whole (as a project is,
+[spec/60](../spec/60-file-formats.md)).
 
-An unreadable settings file: logged with its text quoted (the next save overwrites it with defaults); never
-moved aside. An unreadable file is not a first start.
+A value that cannot be read (a wrong type, another version's choice): logged with its key, read as its default,
+the other values kept. A key this version does not know (another version's setting) is kept and written back. A
+file that is no JSON object: logged with its text quoted (the next save overwrites it with defaults); never moved
+aside. An unreadable file is not a first start.
 
 | Setting | Type | Default | Set where |
 |---|---|---|---|

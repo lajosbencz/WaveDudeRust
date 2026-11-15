@@ -1,8 +1,20 @@
 //! The memory warning's arithmetic: a preview run whose store exceeds the budget asks first, offering the RAM
 //! cache at Auto and three quality levers (spec/40-frames-store-render.md, Memory warning). The UI renders it.
 
+use super::RunError;
+use crate::engine::cpu::grid_bytes;
+use crate::engine::{EngineOptions, SceneData};
 use crate::quality::PreviewQuality;
 use crate::spec::RunRequest;
+
+/// Refuses a grid whose CPU engine needs more than `memory` bytes (on wasm32 at most the 4 GiB address space), so
+/// the run fails instead of the allocation aborting the process. The GPU engine falls back to it at any time.
+pub fn engine_fits(scene: &SceneData, options: &EngineOptions, memory: u64) -> Result<(), RunError> {
+	#[cfg(target_arch = "wasm32")]
+	let memory = memory.min(1 << 32);
+	let needs = grid_bytes(scene, options);
+	if needs > memory { Err(RunError::EngineMemory { needs, memory }) } else { Ok(()) }
+}
 
 /// The warning's four checkboxes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

@@ -14,8 +14,6 @@ use egui_material_icons::icons::{ICON_BRIGHTNESS_6, ICON_BRIGHTNESS_AUTO, ICON_I
 use wavedude_app_state::Event;
 use wavedude_app_state::clipboard::{Copyable, PasteTarget, write_fragment};
 use wavedude_app_state::commands::Command;
-use wavedude_app_state::platform::HAS_EXPORTS;
-use wavedude_app_state::strings::Strings;
 use wavedude_core::model::{DisplayLayerEdit, ItemRef, Layer, Point};
 use wavedude_view::DeviceGrid;
 use wavedude_view::overlay::{edge_color, edge_line};
@@ -23,7 +21,7 @@ use wavedude_view::overlay::{edge_color, edge_line};
 use super::header_strip::{self, CELL_MARGIN, Strip, StripAction, strip_and_area, strip_beside};
 use super::{Preview, pressed_on};
 use crate::App;
-use crate::menus::{ExportKindChoice, MenuAction, On};
+use crate::menus::{self, ExportKindChoice, MenuAction, On};
 use crate::preview::view::{CanvasTransform, View};
 use crate::preview::{PictureExtent, display_edit};
 use crate::ui::menu_bar::{self, Slot};
@@ -76,31 +74,33 @@ enum PictureEntry {
 }
 
 /// The context menu of the picture of `layer` and of its header strip.
-fn picture_menu(ui: &mut Ui, s: &Strings, layer: Layer) -> Option<PictureEntry> {
+fn picture_menu(ui: &mut Ui, app: &App, layer: Layer) -> Option<PictureEntry> {
+	let s = &app.strings;
 	let frame = match layer {
 		Layer::Field => ExportKindChoice::FieldFrame,
 		Layer::Intensity => ExportKindChoice::IntensityFrame,
 	};
 	let mut picked = None;
 	let mut item = |ui: &mut Ui, icon: MaterialIcon, key: &str, entry: PictureEntry| {
-		let shortcut = match entry {
-			PictureEntry::Window(action) => shortcuts::text(ui.ctx(), action),
-			_ => None,
+		let (shortcut, enabled) = match entry {
+			PictureEntry::Window(action) => {
+				(shortcuts::text(ui.ctx(), action), menus::enabled(app, action, On::Current))
+			}
+			_ => (None, true),
 		};
-		if menu_bar::entry(ui, Slot::Icon(icon), s.get(key), None, shortcut).clicked() {
+		let r = ui.add_enabled_ui(enabled, |ui| menu_bar::entry(ui, Slot::Icon(icon), s.get(key), None, shortcut));
+		if r.inner.clicked() {
 			picked = Some(entry);
 		}
 	};
 	item(ui, ICON_BRIGHTNESS_6, "MenuBrightness", PictureEntry::Brightness);
 	item(ui, ICON_BRIGHTNESS_AUTO, "MenuAutoBrightness", PictureEntry::Auto);
-	if HAS_EXPORTS {
-		ui.separator();
-		let export = |kind| PictureEntry::Window(MenuAction::Export(kind));
-		item(ui, ICON_IMAGE, "MenuExportThisFrame", export(frame));
-		item(ui, ICON_IOS_SHARE, "MenuFileExportField", export(ExportKindChoice::Field));
-		item(ui, ICON_IOS_SHARE, "MenuFileExportIntensity", export(ExportKindChoice::Intensity));
-		item(ui, ICON_IOS_SHARE, "MenuFileExportBoth", export(ExportKindChoice::Both));
-	}
+	ui.separator();
+	let export = |kind| PictureEntry::Window(MenuAction::Export(kind));
+	item(ui, ICON_IMAGE, "MenuExportThisFrame", export(frame));
+	item(ui, ICON_IOS_SHARE, "MenuFileExportField", export(ExportKindChoice::Field));
+	item(ui, ICON_IOS_SHARE, "MenuFileExportIntensity", export(ExportKindChoice::Intensity));
+	item(ui, ICON_IOS_SHARE, "MenuFileExportBoth", export(ExportKindChoice::Both));
 	picked
 }
 
@@ -145,7 +145,7 @@ impl Preview {
 		let mut entry = None;
 		for r in [&picture, &strip_area] {
 			r.context_menu(|ui| {
-				if let Some(e) = picture_menu(ui, &s, layer) {
+				if let Some(e) = picture_menu(ui, app, layer) {
 					entry = Some(e);
 				}
 			});

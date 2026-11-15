@@ -15,9 +15,7 @@ use egui_material_icons::icons::{
 	ICON_CONTENT_PASTE, ICON_DELETE, ICON_FILE_COPY, ICON_IOS_SHARE, ICON_SELECT_ALL, ICON_TOGGLE_ON,
 };
 use wavedude_app_state::Event;
-use wavedude_app_state::clipboard::Copyable;
 use wavedude_app_state::commands::{Command, NewPart};
-use wavedude_app_state::platform::HAS_EXPORTS;
 use wavedude_app_state::selection::{Row, Selection};
 use wavedude_app_state::strings::Strings;
 use wavedude_core::model::{ItemKind, ItemRef, ProbeDetector, Project, Stop};
@@ -29,7 +27,7 @@ use super::menu_keys;
 use super::text_box::select_all;
 use super::theme::{Palette, ROW_HEIGHT};
 use crate::App;
-use crate::menus::{MenuAction, On, PART_KINDS, can_move, moves_of};
+use crate::menus::{self, MenuAction, On, PART_KINDS, moves_of};
 
 /// An item dragged out of the tree.
 #[derive(Clone, Copy, Debug)]
@@ -76,7 +74,7 @@ struct Line<'a> {
 }
 
 /// A folder's string key and icon.
-fn folder_of(kind: ItemKind) -> (&'static str, Icon) {
+pub(super) fn folder_of(kind: ItemKind) -> (&'static str, Icon) {
 	match kind {
 		ItemKind::Source => ("TreeSources", icons::SOURCE),
 		ItemKind::Part => ("TreeParts", icons::PART),
@@ -616,19 +614,14 @@ impl ProjectPane {
 				Row::Item(i) => sel.toggle(i),
 				row => sel.select(row),
 			},
-			TreeKey::ToggleEnabled => {
-				return sel
-					.current_item()
-					.filter(|i| enabled_of(project, *i).is_some())
-					.map(|_| MenuAction::ToggleEnabled);
-			}
+			TreeKey::ToggleEnabled => return Some(MenuAction::ToggleEnabled),
 			TreeKey::Activate => self.activated = current.is_some(),
 			TreeKey::Rename => {
 				let item = sel.current_item()?;
 				let text = item.name(project)?.to_owned();
 				self.renaming = Some(Renaming { item, text, started: false });
 			}
-			TreeKey::Action(action) => return sel.current_item().map(|_| action),
+			TreeKey::Action(action) => return Some(action),
 			TreeKey::Menu => {
 				let shown = cursor.filter(|c| self.visible.0.contains(c));
 				let at = shown.map_or(room.min, |c| self.rect_of(c, room).left_bottom()) + vec2(24., 0.);
@@ -797,8 +790,8 @@ fn probe_menu(ui: &mut Ui, s: &Strings) -> Option<ProbeDetector> {
 fn part_menu(ui: &mut Ui, s: &Strings) -> Option<NewPart> {
 	let mut picked = None;
 	let mut entries = |ui: &mut Ui, from: NewPart, to: NewPart| {
-		let at = |kind| PART_KINDS.iter().position(|(k, ..)| *k == kind).expect("a kind of the menu");
-		for &(kind, key, _) in &PART_KINDS[at(from)..=at(to)] {
+		let at = |kind| PART_KINDS.iter().position(|(k, _)| *k == kind).expect("a kind of the menu");
+		for &(kind, key) in &PART_KINDS[at(from)..=at(to)] {
 			let icon = Slot::Drawn(icons::kind_icon(kind));
 			if menu_bar::entry(ui, icon, s.get(key), None, None).on_hover_text(s.kind(kind.type_name())).clicked() {
 				picked = Some(kind);
@@ -839,15 +832,14 @@ fn row_menu(ui: &mut Ui, app: &App, row: Option<Row>, pastable: bool) -> Option<
 		Some(Row::Item(i)) => Some(i),
 		_ => None,
 	};
-	let is_item = item.is_some();
-	let copyable = is_item || row.and_then(Copyable::of_row).is_some();
 	let ctx = ui.ctx().clone();
 	let shortcut = |modifiers, key| Some(ctx.format_shortcut(&KeyboardShortcut::new(modifiers, key)));
-	let entry = |ui: &mut Ui, action, icon: Slot, key: &str, shortcut: Option<String>, enabled: bool| {
+	let entry = |ui: &mut Ui, action, icon: Slot, key: &str, shortcut: Option<String>| {
+		let enabled = menus::enabled(app, action, On::Row(row)) && (action != MenuAction::Paste || pastable);
 		let r = ui.add_enabled_ui(enabled, |ui| menu_bar::entry(ui, icon, s.get(key), None, shortcut)).inner;
 		r.clicked().then_some(action)
 	};
-	let mut picked = entry(ui, MenuAction::AddSource, Slot::Icon(ICON_ADD), "MenuProjectAddSource", None, true);
+	let mut picked = entry(ui, MenuAction::AddSource, Slot::Icon(ICON_ADD), "MenuProjectAddSource", None);
 	menu_bar::submenu(ui, Slot::Icon(ICON_ADD), s.get("MenuProjectAddPart"), true, |ui| {
 		picked = part_menu(ui, s).map(MenuAction::AddPart).or(picked);
 	});
@@ -855,39 +847,35 @@ fn row_menu(ui: &mut Ui, app: &App, row: Option<Row>, pastable: bool) -> Option<
 		picked = probe_menu(ui, s).map(MenuAction::AddProbe).or(picked);
 	});
 	ui.separator();
-	let toggles = item.is_some_and(|i| i.kind != ItemKind::Scheme);
-	let can = |up| item.is_some_and(|i| can_move(app, i, up));
 	let words = |text: &str| Some(text.to_owned());
 	let entries = [
-		(MenuAction::ToggleSelected, Slot::Icon(ICON_CHECK_BOX), "MenuProjectToggleSelected", words("Ins"), is_item),
+		(MenuAction::ToggleSelected, Slot::Icon(ICON_CHECK_BOX), "MenuProjectToggleSelected", words("Ins")),
 		(
 			MenuAction::SelectAll,
 			Slot::Icon(ICON_SELECT_ALL),
 			"MenuProjectSelectAll",
 			shortcut(Modifiers::COMMAND, Key::A),
-			true,
 		),
 	];
-	for (action, icon, key, keys, enabled) in entries {
-		picked = picked.or(entry(ui, action, icon, key, keys, enabled));
+	for (action, icon, key, keys) in entries {
+		picked = picked.or(entry(ui, action, icon, key, keys));
 	}
 	ui.separator();
 	let entries = [
-		(MenuAction::ToggleEnabled, Slot::Icon(ICON_TOGGLE_ON), "MenuProjectToggleEnabled", words("Space"), toggles),
+		(MenuAction::ToggleEnabled, Slot::Icon(ICON_TOGGLE_ON), "MenuProjectToggleEnabled", words("Space")),
 		(
 			MenuAction::Duplicate,
 			Slot::Icon(ICON_FILE_COPY),
 			"MenuProjectDuplicate",
 			shortcut(Modifiers::COMMAND, Key::D),
-			is_item,
 		),
-		(MenuAction::Cut, Slot::Icon(ICON_CONTENT_CUT), "MenuEditCut", None, is_item),
-		(MenuAction::Copy, Slot::Icon(ICON_CONTENT_COPY), "MenuEditCopy", None, copyable),
-		(MenuAction::Paste, Slot::Icon(ICON_CONTENT_PASTE), "MenuEditPaste", None, pastable),
-		(MenuAction::Delete, Slot::Icon(ICON_DELETE), "MenuProjectRemove", words("Del"), is_item),
+		(MenuAction::Cut, Slot::Icon(ICON_CONTENT_CUT), "MenuEditCut", None),
+		(MenuAction::Copy, Slot::Icon(ICON_CONTENT_COPY), "MenuEditCopy", None),
+		(MenuAction::Paste, Slot::Icon(ICON_CONTENT_PASTE), "MenuEditPaste", None),
+		(MenuAction::Delete, Slot::Icon(ICON_DELETE), "MenuProjectRemove", words("Del")),
 	];
-	for (action, icon, key, keys, enabled) in entries {
-		picked = picked.or(entry(ui, action, icon, key, keys, enabled));
+	for (action, icon, key, keys) in entries {
+		picked = picked.or(entry(ui, action, icon, key, keys));
 	}
 	ui.separator();
 	let entries = [
@@ -896,18 +884,16 @@ fn row_menu(ui: &mut Ui, app: &App, row: Option<Row>, pastable: bool) -> Option<
 			Slot::Drawn(icons::CHEVRON_UP),
 			"MenuProjectMoveUp",
 			shortcut(Modifiers::ALT, Key::ArrowUp),
-			can(true),
 		),
 		(
 			MenuAction::MoveDown,
 			Slot::Drawn(icons::CHEVRON_DOWN),
 			"MenuProjectMoveDown",
 			shortcut(Modifiers::ALT, Key::ArrowDown),
-			can(false),
 		),
 	];
-	for (action, icon, key, keys, enabled) in entries {
-		picked = picked.or(entry(ui, action, icon, key, keys, enabled));
+	for (action, icon, key, keys) in entries {
+		picked = picked.or(entry(ui, action, icon, key, keys));
 	}
 	if let Some(scheme) = item.filter(|i| i.kind == ItemKind::Scheme) {
 		ui.separator();
@@ -916,12 +902,11 @@ fn row_menu(ui: &mut Ui, app: &App, row: Option<Row>, pastable: bool) -> Option<
 		} else {
 			(ICON_BOOKMARK_ADD, "MenuSchemeAddToMine")
 		};
-		picked = picked.or(entry(ui, MenuAction::ToggleUserScheme, Slot::Icon(icon), key, None, true));
+		picked = picked.or(entry(ui, MenuAction::ToggleUserScheme, Slot::Icon(icon), key, None));
 	}
-	if let Some(probe) = item.filter(|i| HAS_EXPORTS && i.kind == ItemKind::Probe) {
+	if item.is_some_and(|i| i.kind == ItemKind::Probe) {
 		ui.separator();
-		let active = app.document.project.probes[probe.index].active && !app.live.export_busy();
-		let csv = entry(ui, MenuAction::ExportProbeCsv, Slot::Icon(ICON_IOS_SHARE), "MenuExportProbeCsv", None, active);
+		let csv = entry(ui, MenuAction::ExportProbeCsv, Slot::Icon(ICON_IOS_SHARE), "MenuExportProbeCsv", None);
 		picked = picked.or(csv);
 	}
 	picked
@@ -931,8 +916,6 @@ fn row_menu(ui: &mut Ui, app: &App, row: Option<Row>, pastable: bool) -> Option<
 /// the current item.
 fn toolbar(ui: &mut Ui, app: &App) -> Option<MenuAction> {
 	let s = &app.strings;
-	let current = app.selection.current_item();
-	let can = |up| current.is_some_and(|i| can_move(app, i, up));
 	let mut picked = None;
 	ui.horizontal(|ui| {
 		ui.add_space(TOOLBAR_PADDING);
@@ -959,12 +942,12 @@ fn toolbar(ui: &mut Ui, app: &App) -> Option<MenuAction> {
 		let (sep, _) = ui.allocate_exact_size(SEPARATOR, Sense::hover());
 		ui.painter().rect_filled(sep, 0., Palette::of(ui.ctx().theme()).border);
 		let tools = [
-			(icons::CHEVRON_UP, "TipMoveUp", can(true), MenuAction::MoveUp),
-			(icons::CHEVRON_DOWN, "TipMoveDown", can(false), MenuAction::MoveDown),
-			(icons::MINUS, "TipRemove", current.is_some(), MenuAction::Delete),
+			(icons::CHEVRON_UP, "TipMoveUp", MenuAction::MoveUp),
+			(icons::CHEVRON_DOWN, "TipMoveDown", MenuAction::MoveDown),
+			(icons::MINUS, "TipRemove", MenuAction::Delete),
 		];
-		for (icon, tip, enabled, action) in tools {
-			if button(ui, icon, None, tip, enabled).clicked() {
+		for (icon, tip, action) in tools {
+			if button(ui, icon, None, tip, menus::enabled(app, action, On::Current)).clicked() {
 				picked = Some(action);
 			}
 		}

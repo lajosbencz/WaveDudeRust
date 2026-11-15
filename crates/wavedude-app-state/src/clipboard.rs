@@ -1,43 +1,17 @@
-//! The clipboard and drag text: items and settings objects as a fragment of their `.wdproj` elements, in the
-//! app's format and as plain text, so a text editor can take and give it (docs/ui/60-live-editing-and-runs.md).
-//!
-//! Writing goes through the core's `.wdproj` writer: a temporary project holding only the chosen objects is
-//! written and its top-level elements are cut out (the element writer itself is private to the core). Reading
-//! wraps the fragment's elements in a `Project` element and parses it with the core's reader; an element the
-//! format does not know refuses the whole fragment. Threads: pure functions.
+//! The clipboard and drag text: items and settings objects as a fragment of their `.wdproj` elements
+//! ([`wdproj::write_fragment`]), in the app's format and as plain text, so a text editor can take and give it
+//! (docs/ui/60-live-editing-and-runs.md). Threads: pure functions.
 
-use quick_xml::Reader;
-use quick_xml::events::Event;
-use wavedude_core::io::wdproj;
+use wavedude_core::io::{FormatError, wdproj};
 use wavedude_core::model::names::copy_name;
-use wavedude_core::model::{
-	ColorScheme, Display, ItemKind, ItemRef, Part, Point, Probe, Project, Scene, Simulation, Source,
-};
+use wavedude_core::model::{ItemKind, ItemRef, Point, Project};
+
+pub use wavedude_core::io::wdproj::Fragment;
 
 use super::selection::{Row, move_group};
 
 /// The app's own clipboard format name.
 pub const FORMAT: &str = "WaveDudeNext.Objects";
-
-const SETTINGS: [&str; 3] = ["Scene", "Simulation", "Display"];
-const ITEMS: [&str; 16] = [
-	"Source",
-	"Probe",
-	"ColorScheme",
-	"Lens",
-	"Polygon",
-	"Rectangle",
-	"Ellipse",
-	"Triangle",
-	"Outline",
-	"Fiber",
-	"BraggReflector",
-	"GrinLens",
-	"XorGate",
-	"AndGate",
-	"OrGate",
-	"ZonePlate",
-];
 
 /// What can be copied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -61,89 +35,12 @@ impl Copyable {
 	}
 }
 
-/// Parsed objects of a fragment, normalised.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Fragment {
-	pub scene: Option<Scene>,
-	pub simulation: Option<Simulation>,
-	pub display: Option<Display>,
-	pub sources: Vec<Source>,
-	pub parts: Vec<Part>,
-	pub probes: Vec<Probe>,
-	pub schemes: Vec<ColorScheme>,
-}
-
-impl Fragment {
-	pub fn is_empty(&self) -> bool {
-		self.scene.is_none()
-			&& self.simulation.is_none()
-			&& self.display.is_none()
-			&& self.sources.is_empty()
-			&& self.parts.is_empty()
-			&& self.probes.is_empty()
-			&& self.schemes.is_empty()
-	}
-}
-
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum FragmentError {
 	#[error("the text holds no objects")]
 	Empty,
-	#[error("'{0}' is not an object of a project")]
-	UnknownElement(String),
-	#[error("text outside the objects")]
-	StrayText,
 	#[error("the objects cannot be read: {0}")]
-	Malformed(String),
-}
-
-/// The top-level elements of `text` as (name, byte span).
-fn top_elements(text: &str) -> Result<Vec<(String, std::ops::Range<usize>)>, FragmentError> {
-	let mut reader = Reader::from_str(text);
-	let mut depth = 0usize;
-	let mut start = 0usize;
-	let mut name = String::new();
-	let mut out = Vec::new();
-	loop {
-		let before = reader.buffer_position() as usize;
-		let event = reader.read_event().map_err(|e| FragmentError::Malformed(e.to_string()))?;
-		let after = reader.buffer_position() as usize;
-		match event {
-			Event::Start(e) => {
-				if depth == 0 {
-					start = before;
-					name = e.name().as_ref().to_owned();
-				}
-				depth += 1;
-			}
-			Event::End(_) => {
-				depth = depth.checked_sub(1).ok_or_else(|| FragmentError::Malformed("unbalanced end tag".into()))?;
-				if depth == 0 {
-					out.push((std::mem::take(&mut name), start..after));
-				}
-			}
-			Event::Empty(e) if depth == 0 => {
-				out.push((e.name().as_ref().to_owned(), before..after));
-			}
-			Event::Text(t) if depth == 0 => {
-				if !t.chars().all(|c| c.is_ascii_whitespace()) {
-					return Err(FragmentError::StrayText);
-				}
-			}
-			Event::CData(_) if depth == 0 => return Err(FragmentError::StrayText),
-			Event::Eof => break,
-			_ => {}
-		}
-	}
-	if depth != 0 {
-		return Err(FragmentError::Malformed("an element is not closed".into()));
-	}
-	Ok(out)
-}
-
-/// Cuts each top-level element of `text` out and removes one level of indentation.
-fn dedent(span: &str) -> String {
-	span.lines().map(|l| l.strip_prefix('\t').unwrap_or(l)).collect::<Vec<_>>().join("\n")
+	Malformed(#[from] FormatError),
 }
 
 /// The fragment text of `objects` of `project`, in project order (settings, sources, parts, probes, schemes).
@@ -161,69 +58,24 @@ pub fn write_fragment(project: &Project, objects: &[Copyable]) -> String {
 		v.dedup();
 		v
 	};
-	let temp = Project {
-		seed: project.seed,
-		description: String::new(),
-		scene: if has(Copyable::Scene) { project.scene.clone() } else { Scene::default() },
-		simulation: if has(Copyable::Simulation) { project.simulation.clone() } else { Simulation::default() },
-		display: project.display.clone(),
+	wdproj::write_fragment(&Fragment {
+		scene: has(Copyable::Scene).then(|| project.scene.clone()),
+		simulation: has(Copyable::Simulation).then(|| project.simulation.clone()),
+		display: has(Copyable::Display).then(|| project.display.clone()),
 		sources: pick(ItemKind::Source).into_iter().map(|i| project.sources[i].clone()).collect(),
 		parts: pick(ItemKind::Part).into_iter().map(|i| project.parts[i].clone()).collect(),
 		probes: pick(ItemKind::Probe).into_iter().map(|i| project.probes[i].clone()).collect(),
-		color_schemes: pick(ItemKind::Scheme).into_iter().map(|i| project.color_schemes[i].clone()).collect(),
-	};
-	let text = wdproj::write_string(&temp, None);
-	let body = &text[text.find("<Project ").expect("the writer writes a Project element")..];
-	let root_open = body.find('>').expect("the Project element has a start tag") + 1;
-	let root_close = body.rfind("</Project>").expect("the Project element has an end tag");
-	let inner = &body[root_open..root_close];
-	let elements = top_elements(inner).expect("the writer's elements parse");
-	let mut out: Vec<String> = Vec::new();
-	for (setting, copy) in
-		[("Scene", Copyable::Scene), ("Simulation", Copyable::Simulation), ("Display", Copyable::Display)]
-	{
-		if has(copy) {
-			match elements.iter().find(|(n, _)| n == setting) {
-				Some((_, span)) => out.push(dedent(&inner[span.clone()])),
-				None => out.push(format!("<{setting} />")),
-			}
-		}
-	}
-	out.extend(
-		elements.iter().filter(|(n, _)| !SETTINGS.contains(&n.as_str())).map(|(_, s)| dedent(&inner[s.clone()])),
-	);
-	out.join("\n")
+		schemes: pick(ItemKind::Scheme).into_iter().map(|i| project.color_schemes[i].clone()).collect(),
+	})
 }
 
 /// Parses a fragment (the app's format or plain text). Elements other than a project's objects refuse it all.
 pub fn read_fragment(text: &str) -> Result<Fragment, FragmentError> {
-	let elements = top_elements(text)?;
-	if elements.is_empty() {
+	let fragment = wdproj::read_fragment(text)?;
+	if fragment.is_empty() {
 		return Err(FragmentError::Empty);
 	}
-	if let Some((name, _)) =
-		elements.iter().find(|(n, _)| !SETTINGS.contains(&n.as_str()) && !ITEMS.contains(&n.as_str()))
-	{
-		return Err(FragmentError::UnknownElement(name.clone()));
-	}
-	let inner: Vec<&str> = elements.iter().map(|(_, s)| &text[s.clone()]).collect();
-	let wrapped = format!(
-		"<Project Version=\"{}\" Seed=\"1\">\n{}\n</Project>",
-		wavedude_core::model::PROJECT_VERSION,
-		inner.join("\n")
-	);
-	let mut project = wdproj::read_str(&wrapped).map_err(|e| FragmentError::Malformed(e.to_string()))?;
-	wavedude_core::io::read_embedded_image_size(&mut project.scene).map_err(FragmentError::Malformed)?;
-	let named = |n: &str| elements.iter().any(|(e, _)| e == n);
-	Ok(Fragment {
-		scene: named("Scene").then_some(project.scene),
-		simulation: named("Simulation").then_some(project.simulation),
-		display: named("Display").then_some(project.display),
-		sources: project.sources,
-		parts: project.parts,
-		probes: project.probes,
-		schemes: project.color_schemes,
-	})
+	Ok(fragment)
 }
 
 /// Where a paste lands: the current row and, for a drop on a row's upper half, before it.
@@ -316,7 +168,9 @@ pub fn place_at(project: &mut Project, items: &[ItemRef], at: Point) {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use wavedude_core::model::{PartKind, Rectangle, SourceArray};
+	use wavedude_core::model::{
+		Diffuser, Outline, PartKind, ProbeKind, Rectangle, Simulation, Source, SourceArray, Stencil,
+	};
 
 	fn project() -> Project {
 		let mut p = Project::default();
@@ -327,7 +181,7 @@ mod tests {
 		p.sources[s].frequency = 77.5;
 		p.add_part(PartKind::Rectangle(Rectangle { length: 33, ..Rectangle::default() }));
 		let q = p.add_probe();
-		p.probes[q].kind = wavedude_core::model::ProbeKind::Line;
+		p.probes[q].kind = ProbeKind::Line;
 		p.add_new_color_scheme();
 		p
 	}
@@ -354,15 +208,84 @@ mod tests {
 		assert!(f.scene.is_none() && f.display.is_none());
 	}
 
+	/// The text the clipboard has always written for [`fixed_project`]; every part kind of the format reads back.
+	const FIXED_FRAGMENT: &str = r##"<Simulation FourthOrderLaplacian="false" SourceFrequencyScale="0.8432081593533117" />
+<Display>
+	<Field ColorScheme="Default field" BlackLevel="-0.05" />
+	<Intensity ColorScheme="Default intensity" />
+</Display>
+<Source Name="Source 1" X="200" Y="540" Frequency="77.5">
+	<Array SizeX="3" />
+</Source>
+<Outline Name="Outline 1" X="200" Y="540">
+	<Point X="1" Y="2" />
+	<Point X="30" Y="4" />
+	<Point X="5" Y="60" />
+</Outline>
+<Diffuser Name="Diffuser 1" X="200" Y="540" />
+<Probe Name="Probe 1" Kind="Line" AX="200" AY="540" BX="300" BY="540" BoxX="0" BoxY="0" />
+<ColorScheme Name="Scheme 1">
+	<Stop At="0" Color="#000000" />
+	<Stop At="1" Color="#FEFEFE" />
+</ColorScheme>"##;
+
+	fn fixed_project() -> Project {
+		let mut p = Project::default();
+		p.scene.width = 400;
+		p.simulation.stencil = Stencil::NinePoint;
+		p.simulation.source_frequency_scale = 1.5;
+		let s = p.add_source();
+		p.sources[s].array = Some(SourceArray { size_x: 3, ..SourceArray::default() });
+		p.sources[s].frequency = 77.5;
+		let points = vec![Point::new(1, 2), Point::new(30, 4), Point::new(5, 60)];
+		p.add_part(PartKind::Outline(Outline { points, ..Outline::default() }));
+		p.add_part(PartKind::Diffuser(Diffuser::default()));
+		let q = p.add_probe();
+		p.probes[q].kind = ProbeKind::Line;
+		p.add_new_color_scheme();
+		p
+	}
+
+	#[test]
+	fn the_fragment_format_is_kept() {
+		let p = fixed_project();
+		let all = [
+			Copyable::Simulation,
+			Copyable::Display,
+			Copyable::Item(ItemRef::new(ItemKind::Source, 0)),
+			Copyable::Item(ItemRef::new(ItemKind::Part, 0)),
+			Copyable::Item(ItemRef::new(ItemKind::Part, 1)),
+			Copyable::Item(ItemRef::new(ItemKind::Probe, 0)),
+			Copyable::Item(ItemRef::new(ItemKind::Scheme, 0)),
+		];
+		assert_eq!(write_fragment(&p, &all), FIXED_FRAGMENT);
+		for text in [FIXED_FRAGMENT.to_owned(), FIXED_FRAGMENT.replace('\n', "\r\n")] {
+			let f = read_fragment(&text).unwrap();
+			let simulation = f.simulation.unwrap();
+			assert!(
+				(simulation.source_frequency_scale - 1.5).abs() < 1e-12,
+				"the 9-point scale in this program's units"
+			);
+			assert_eq!(Simulation { source_frequency_scale: 1.5, ..simulation }, p.simulation);
+			assert_eq!(f.display.as_ref(), Some(&p.display));
+			assert_eq!(
+				(f.sources, f.parts, f.probes, f.schemes),
+				(p.sources.clone(), p.parts.clone(), p.probes.clone(), p.color_schemes.clone())
+			);
+			assert!(f.scene.is_none());
+		}
+	}
+
 	#[test]
 	fn refusals() {
+		let refused = |text: &str| match read_fragment(text) {
+			Err(FragmentError::Malformed(e)) => e.message,
+			other => panic!("{text}: {other:?}"),
+		};
 		assert_eq!(read_fragment("  "), Err(FragmentError::Empty));
-		assert_eq!(
-			read_fragment("<Source Name=\"a\" X=\"1\" Y=\"2\"/><Bogus/>"),
-			Err(FragmentError::UnknownElement("Bogus".into()))
-		);
-		assert_eq!(read_fragment("hello <Source Name=\"a\" X=\"1\" Y=\"2\"/>"), Err(FragmentError::StrayText));
-		assert!(matches!(read_fragment("<Source Name=\"a\""), Err(FragmentError::Malformed(_))));
+		assert!(refused("<Source Name=\"a\" X=\"1\" Y=\"2\"/><Bogus/>").contains("'Bogus'"));
+		assert!(refused("hello <Source Name=\"a\" X=\"1\" Y=\"2\"/>").contains("text outside"));
+		refused("<Source Name=\"a\"");
 		assert!(read_fragment("<Source Name=\"typed\" X=\"5\" Y=\"6\" Frequency=\"50\" />").is_ok());
 	}
 
@@ -395,7 +318,7 @@ mod tests {
 	fn place_at_holds_inside() {
 		let mut p = project();
 		p.sources[0].x = 10.0;
-		p.probes[0].kind = wavedude_core::model::ProbeKind::Point;
+		p.probes[0].kind = ProbeKind::Point;
 		p.probes[0].ax = 30;
 		let items = [ItemRef::new(ItemKind::Source, 0), ItemRef::new(ItemKind::Probe, 0)];
 		place_at(&mut p, &items, Point::new(390, 100));

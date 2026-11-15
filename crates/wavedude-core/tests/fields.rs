@@ -109,7 +109,8 @@ fn kinds_and_bounds_follow_the_field() {
 	assert!(both.dependent(), "a dependent field keeps its flag beside a range");
 	assert_eq!(both.range(), Some(ranges::AT_LEAST_1));
 	let size_x = SourceField::Array(SourceArrayField::SizeX);
-	assert_eq!(size_x.range(), Some(ranges::AT_LEAST_1));
+	assert_eq!(size_x.range(), Some(ranges::ARRAY_SIZE));
+	assert_eq!(size_x.declared(), ("SourceArray", "SizeX"), "a nested leaf names the type that declares it");
 }
 
 /// Sets `field` to `new`, expecting `old` there before and the same value back through `get` after.

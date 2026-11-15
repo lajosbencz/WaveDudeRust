@@ -1,13 +1,14 @@
 //! The browser's exports: the output is a file name, downloaded, so nothing is in the way to ask about; the job is
 //! stepped on the page from [`Exports::poll`], at once again while it works, once woken while it waits; the probe
-//! CSV's name comes from the export dialog.
+//! CSV's name comes from the export dialog. A completed export's file is offered in a modal whose Download button
+//! starts the download, in the user's click (decision 0025).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use eframe::egui::{self, Id, RichText, Ui};
 use wavedude_app_state::Event;
-use wavedude_app_state::platform::{H264Support, Spool};
+use wavedude_app_state::platform::{Download, H264Support, Spool};
 use wavedude_export::ExportFormat;
 
 use super::super::modal::{Modal, Modals};
@@ -46,13 +47,13 @@ impl Exports {
 	/// Starts `plan`, the last export's spool removed first; an export without frames ends as failed.
 	pub(super) fn run(&mut self, ctx: &egui::Context, app: &mut App, modals: &mut Modals, plan: Plan) {
 		let Some(work) = Work::of(app) else {
-			self.finished(app, modals, Outcome::Failed("the run has no frames".into()));
+			self.finished(app, modals, Outcome::no_frames());
 			return;
 		};
 		self.running.spool = None;
 		let cancel = self.started(app, &plan);
 		match export::start(&work, plan, cancel) {
-			Ok(Started::Done(outcome)) => self.finished(app, modals, outcome),
+			Ok(Started::Done(outcome, download)) => self.ended(app, modals, outcome, download),
 			Ok(Started::Running(runner)) => {
 				self.running.runner = Some(runner);
 				ctx.request_repaint();
@@ -75,10 +76,18 @@ impl Exports {
 					app.strings.get("ExportStatusPackaging").clone_into(&mut p.text);
 				}
 			}
-			Status::Ended(outcome) => {
+			Status::Ended(outcome, download) => {
 				self.running.spool = self.running.runner.take().and_then(|mut r| r.take_spool());
-				self.finished(app, modals, outcome);
+				self.ended(app, modals, outcome, download);
 			}
+		}
+	}
+
+	/// The export's end; a completed export's file is offered for its download.
+	fn ended(&mut self, app: &mut App, modals: &mut Modals, outcome: Outcome, download: Option<Download>) {
+		self.finished(app, modals, outcome);
+		if let Some(download) = download {
+			modals.show(Modal::Download(download));
 		}
 	}
 }

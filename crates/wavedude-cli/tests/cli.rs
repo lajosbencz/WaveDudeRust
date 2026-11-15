@@ -7,8 +7,19 @@ use wavedude_core::model::ranges::SIM_STEPS;
 
 const EXAMPLE: &str = "Example01_Source_Mirror_Probe.wdproj";
 
+/// The binary on `args` with the app's folders in a new, empty folder, so no test reads the user's.
 fn cli(args: &[&str]) -> Output {
-	Command::new(env!("CARGO_BIN_EXE_wavedude-cli")).args(args).output().expect("the binary starts")
+	let dirs = tempfile::tempdir().unwrap();
+	cli_in(dirs.path(), args)
+}
+
+fn cli_in(dirs: &Path, args: &[&str]) -> Output {
+	Command::new(env!("CARGO_BIN_EXE_wavedude-cli"))
+		.arg("--config-dir")
+		.arg(dirs)
+		.args(args)
+		.output()
+		.expect("the binary starts")
 }
 
 fn ok(args: &[&str]) -> String {
@@ -96,6 +107,38 @@ fn run_writes_pictures_of_both_layers() {
 		assert_eq!(decodes(&target.join("intensity_0000.png")), size);
 		assert!(target.join("field_0005.png").exists(), "{quality}");
 	}
+}
+
+/// The colour of the first pixel of a PNG.
+fn first_pixel(path: &Path) -> [u8; 3] {
+	let decoder = png::Decoder::new(std::io::BufReader::new(std::fs::File::open(path).expect("file exists")));
+	let mut reader = decoder.read_info().expect("PNG header");
+	let mut buffer = vec![0; reader.output_buffer_size().expect("a decodable size")];
+	reader.next_frame(&mut buffer).expect("PNG data");
+	[buffer[0], buffer[1], buffer[2]]
+}
+
+#[test]
+fn run_draws_with_the_users_colour_schemes() {
+	use wavedude_app_state::settings::{AppDirs, SCHEME_FOLDER};
+
+	let dir = tempfile::tempdir().unwrap();
+	let dirs = dir.path().join("app");
+	let schemes = AppDirs::under(&dirs).config.join(SCHEME_FOLDER);
+	std::fs::create_dir_all(&schemes).unwrap();
+	let red = r##"<ColorScheme Name="Mine" Kind="Field"><Stop At="0" Color="#FF0000" /><Stop At="1" Color="#FF0000" /></ColorScheme>"##;
+	std::fs::write(schemes.join("Mine.wdscheme"), red).unwrap();
+	let mut project = Project::default();
+	project.scene.width = 32;
+	project.scene.height = 32;
+	project.display.field.color_scheme = "Mine".into();
+	let path = dir.path().join("p.wdproj");
+	wavedude_core::io::save_project(&project, &path).unwrap();
+	let out = dir.path().join("frames");
+	let args = ["run", path.to_str().unwrap(), "--out", out.to_str().unwrap(), "--steps", "2", "--every", "1"];
+	let run = cli_in(&dirs, &args);
+	assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+	assert_eq!(first_pixel(&out.join("field_0000.png")), [255, 0, 0]);
 }
 
 #[test]

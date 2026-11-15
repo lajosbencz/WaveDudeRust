@@ -32,3 +32,8 @@ struct Params {
 fn cell(gx: u32, gy: u32) -> u32 {
 	return (gy + PAD) * p.stride + gx + PAD;
 }
+
+// The displayed intensity from the two EMA stages (engine/shared.rs, `blend`).
+fn blend(a: f32, b: f32) -> f32 {
+	return (a * 0.5 + b * 0.5) * p.intensity_scale;
+}

@@ -1,12 +1,13 @@
 //! `#[derive(Fields)]`.
 
+use heck::{ToShoutySnakeCase, ToUpperCamelCase};
 use proc_macro2::{Literal, TokenStream};
 use quote::{format_ident, quote};
 use syn::ext::IdentExt;
 use syn::{Data, DeriveInput, Error, Expr, Field, Ident, Result, Type, Variant};
 
 use crate::base;
-use crate::naming::{pascal, screaming, type_name};
+use crate::naming::type_name;
 use crate::shape::{Leaf, Shape, list_element, option_inner};
 
 enum Def {
@@ -55,11 +56,11 @@ pub(crate) fn expand(input: &DeriveInput) -> Result<TokenStream> {
 
 fn member(ident: &Ident, def: Def) -> Member {
 	let text = ident.unraw().to_string();
-	let name = pascal(&text);
+	let name = text.to_upper_camel_case();
 	Member {
 		variant: Ident::new(&name, ident.span()),
 		set: Ident::new(&format!("Set{name}"), ident.span()),
-		konst: Ident::new(&screaming(&text), ident.span()),
+		konst: Ident::new(&text.to_shouty_snake_case(), ident.span()),
 		name,
 		def,
 	}
@@ -139,6 +140,7 @@ fn enum_member(variant: &Variant) -> Result<Member> {
 struct Arms {
 	name: Vec<TokenStream>,
 	path: Vec<TokenStream>,
+	declared: Vec<TokenStream>,
 	kind: Vec<TokenStream>,
 	range: Vec<TokenStream>,
 	dependent: Vec<TokenStream>,
@@ -154,6 +156,7 @@ impl Arms {
 		let (v, n) = (&m.variant, &m.name);
 		self.name.push(quote!(Self::#v(_) => #n));
 		self.path.push(quote!(Self::#v(inner) => format!("{}.{}", #n, #p::Field::path(inner))));
+		self.declared.push(quote!(Self::#v(inner) => #p::Field::declared(inner)));
 		self.kind.push(quote!(Self::#v(inner) => #p::Field::kind(inner)));
 		self.range.push(quote!(Self::#v(inner) => #p::Field::range(inner)));
 		self.dependent.push(quote!(Self::#v(inner) => #p::Field::dependent(inner)));
@@ -299,6 +302,7 @@ impl Gen<'_> {
 	fn field_impl(&self, tf: &Ident, te: &Ident) -> TokenStream {
 		let p = base();
 		let owner = self.owner;
+		let type_name = &self.type_name;
 		let none = quote!(None);
 		let mut a = Arms::default();
 		let mut wrong_used = false;
@@ -308,6 +312,7 @@ impl Gen<'_> {
 				Def::Leaf { field: f, shape, range, dependent } => {
 					a.name.push(quote!(Self::#v => #n));
 					a.path.push(quote!(Self::#v => String::from(#n)));
+					a.declared.push(quote!(Self::#v => (#type_name, #n)));
 					let k = shape.kind();
 					a.kind.push(quote!(Self::#v => #k));
 					a.range.push(match range {
@@ -333,6 +338,7 @@ impl Gen<'_> {
 						wrong_used = true;
 						a.name.push(quote!(Self::#set => #n));
 						a.path.push(quote!(Self::#set => String::from(#n)));
+						a.declared.push(quote!(Self::#set => (#type_name, #n)));
 						a.kind.push(quote!(Self::#set => #p::ValueKind::Nested));
 						a.range.push(quote!(Self::#set => None));
 						a.dependent.push(quote!(Self::#set => false));
@@ -354,7 +360,7 @@ impl Gen<'_> {
 				}
 			}
 		}
-		let Arms { name, path, kind, range, dependent: dependent_arms, get, edit, all } = a;
+		let Arms { name, path, declared, kind, range, dependent: dependent_arms, get, edit, all } = a;
 		let wrong = if wrong_used {
 			quote!(let wrong = || #p::EditError::WrongKind { field: #p::Field::path(self), want: #p::Field::kind(self) };)
 		} else {
@@ -374,6 +380,10 @@ impl Gen<'_> {
 
 				fn path(self) -> String {
 					match self { #(#path,)* }
+				}
+
+				fn declared(self) -> (&'static str, &'static str) {
+					match self { #(#declared,)* }
 				}
 
 				fn kind(self) -> #p::ValueKind {

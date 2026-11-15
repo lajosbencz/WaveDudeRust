@@ -1,8 +1,9 @@
-//! Model edits as commands, applied through one [`apply`] that also leaves the selection the command makes
-//! and classifies the change for the live controller (docs/ui/60-live-editing-and-runs.md, Edit classes).
+//! Model edits as commands, applied through one [`apply`] that also leaves the selection the command makes and
+//! classifies the change for the live controller (docs/ui/60-live-editing-and-runs.md, Edit classes).
 //!
-//! Property edits are typed: [`Command::Edit`] carries an [`Edit`] of the model's generated edit enums, and
-//! every change is logged at Trace as old -> new.
+//! Property edits are typed: [`Command::Edit`] carries an [`Edit`] of the model's generated edit enums; every change
+//! is logged at Trace as old -> new.
+//!
 //! Threads: plain functions on the UI thread.
 
 use wavedude_core::model::Edit as ModelEdit;

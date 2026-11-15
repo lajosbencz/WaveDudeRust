@@ -19,10 +19,6 @@ use crate::settings::AppDirs;
 
 /// Files have paths: recent files, the log folder, saving in place.
 pub const HAS_PATHS: bool = true;
-/// The program looks for and installs its releases.
-pub const HAS_UPDATER: bool = true;
-/// Exports of videos, image sequences, stills and probe data to files.
-pub const HAS_EXPORTS: bool = true;
 
 /// Memory and threads of this machine; the GPU and the drive unknown.
 pub fn machine_facts() -> MachineFacts {
@@ -136,12 +132,7 @@ impl Store {
 		if let Some(dir) = path.parent() {
 			std::fs::create_dir_all(dir)?;
 		}
-		// Written beside and renamed over: a crash mid-write leaves the old file whole.
-		let mut temp = path.as_os_str().to_owned();
-		temp.push(".tmp");
-		let temp = PathBuf::from(temp);
-		std::fs::write(&temp, text)?;
-		std::fs::rename(&temp, path)
+		wavedude_core::io::write_atomic(&path, text.as_bytes())
 	}
 
 	/// Removes `key`; none is no error.
@@ -174,7 +165,7 @@ impl Store {
 /// Writes `bytes` to the target's file; the desktop has no downloads.
 pub fn write(target: &Target, bytes: &[u8]) -> std::io::Result<()> {
 	match target {
-		Target::Path(path) => std::fs::write(path, bytes),
+		Target::Path(path) => wavedude_core::io::write_atomic(path, bytes),
 		Target::Download(_) => Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "no downloads on the desktop")),
 	}
 }
@@ -185,9 +176,8 @@ pub struct LogGuard {
 }
 
 /// Installs the global subscriber: a daily rolling `wavedude.*.log` in the store's log folder (seven kept), `ring`,
-/// and stderr for warnings and errors, so a terminal sees what the log file and the status bar see (where the
-/// process has no console, as a Windows GUI program, the writes go nowhere and nothing is lost: the file holds
-/// every line).
+/// and stderr for warnings and errors (without a console, as a Windows GUI program, those writes go nowhere; the file
+/// holds every line).
 pub fn init_log(store: &Store, ring: LogRing) -> anyhow::Result<LogGuard> {
 	let dir = store.path(LOG_FOLDER);
 	std::fs::create_dir_all(&dir)?;

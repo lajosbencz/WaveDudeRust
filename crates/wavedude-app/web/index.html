@@ -18,7 +18,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #2d2d30; col
 <canvas id="app"></canvas>
 <div id="loading"><progress></progress><span>Loading WaveDude Rust</span></div>
 <script type="module">
-import init from "./pkg/wavedude-app.js";
+// the build, written by tools/build-web.sh, in every URL of the app, so the browser's cache serves no file of another build
+import init from "./pkg/wavedude-app.js?build=__BUILD__";
 
 // the uncompressed size, written by tools/build-web.sh; the response's length is the compressed one
 const TOTAL = Number("__WASM_BYTES__");
@@ -45,7 +46,7 @@ async function download(url) {
 }
 
 try {
-	const bytes = await download("./pkg/wavedude-app_bg.wasm");
+	const bytes = await download("./pkg/wavedude-app_bg.wasm?build=__BUILD__");
 	bar.removeAttribute("value");
 	text.textContent = "Starting";
 	await init({ module_or_path: bytes });

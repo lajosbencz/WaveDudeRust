@@ -43,8 +43,9 @@ Rules settled here:
 
 ## Consequences
 
-- `run/scratch.rs` is gone; [`run/worker.rs`](../../crates/wavedude-core/src/run/worker.rs) replaces it; `SimulationRun` stays the batch run for exports and
-  the CLI. The store writes by index, tracks presence and clears in place.
+- `run/scratch.rs` is gone; [`run/worker.rs`](../../crates/wavedude-core/src/run/worker.rs) replaces it. The batch `SimulationRun` is gone
+  too: the CLI's runs and exports are live runs that want every frame, waited for with `RunWorker::wait_until`.
+  The store writes by index, tracks presence and clears in place.
 - A probe edit with every frame wanted re-records the whole run (stepping without captures); before, only the
   frame shown was refreshed and the other frames' graphs were stale.
 - The status bar shows the current pass's steps. There is no "edited since": the frames of an edited project

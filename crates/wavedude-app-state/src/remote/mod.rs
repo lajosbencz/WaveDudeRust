@@ -1,10 +1,9 @@
-//! The live run in another agent (the browser's run worker, decision 0024): the messages between the page and
-//! the worker ([`protocol`]), the worker's end ([`Host`]) and the page's ([`Remote`], a live-run [`Backend`]).
+//! The live run in another agent (the browser's run worker, decision 0024): the messages between the page and the
+//! worker ([`protocol`]), the worker's end ([`Host`]) and the page's ([`Remote`], a live-run [`Backend`]).
 //!
 //! The worker's stores keep no frames: each frame crosses to the page as one buffer, into a mirror store that the
-//! preview, presenter and status read. The page acknowledges a frame once its mirror holds it, so the worker is
-//! at most the spill's writes in flight ([`StoreLayout::writes_in_flight`]) ahead. Messages arrive in the order posted.
-//!
+//! preview, presenter and status read. The page acknowledges a frame once its mirror holds it, so the worker is at
+//! most the spill's writes in flight ([`StoreLayout::writes_in_flight`]) ahead. Messages arrive in the order posted.
 //! In the browser the ends are `web::PagePort` and `web::WorkerPort` over `postMessage`.
 //!
 //! Threads: none; each end is driven by its owner's calls (`Host::pump`, `Backend::pump`).
@@ -41,6 +40,8 @@ pub enum WorkerGone {
 	Stopped(Lost),
 	#[error("the run worker speaks protocol version {worker}, the page {page}")]
 	OtherVersion { page: u32, worker: u32 },
+	#[error("the run worker is build {worker}, the page {page}")]
+	OtherBuild { page: String, worker: String },
 }
 
 impl WorkerGone {
@@ -60,7 +61,7 @@ impl WorkerGone {
 				format!("{}\n{reason}", s.get("RunError"))
 			}
 			Self::Stopped(lost) => s.format("RunWorkerStoppedFormat", &[lost]),
-			Self::OtherVersion { .. } => s.get("RunWorkerOtherVersion").to_owned(),
+			Self::OtherVersion { .. } | Self::OtherBuild { .. } => s.get("RunWorkerOtherVersion").to_owned(),
 		}
 	}
 }
@@ -202,7 +203,7 @@ mod tests {
 	fn a_held_goal_or_rebuild_replaces_the_one_before_and_the_rest_keep_their_order() {
 		let goal = |revision| ToWorker::Goal { goal: Goal { revision, ..Goal::default() }, image: None };
 		let messages = [
-			ToWorker::Init { version: protocol::VERSION, use_gpu: true },
+			ToWorker::Init { version: protocol::VERSION, build: crate::build_id(), use_gpu: true },
 			goal(1),
 			ToWorker::Rebuild { use_gpu: false },
 			ToWorker::Image { key: 7 },
@@ -224,9 +225,9 @@ mod tests {
 
 	#[test]
 	fn a_first_message_names_its_version_and_no_other_does() {
-		let init = ToWorker::Init { version: protocol::VERSION, use_gpu: true };
+		let init = ToWorker::Init { version: protocol::VERSION, build: crate::build_id(), use_gpu: true };
 		assert_eq!(version_of(&envelope(&init, None)), Some(protocol::VERSION));
-		let ready = ToPage::Ready { version: 7, gpu: Err("none".into()) };
+		let ready = ToPage::Ready { version: 7, build: crate::build_id(), gpu: Err("none".into()) };
 		assert_eq!(version_of(&envelope(&ready, None)), Some(7));
 		assert_eq!(version_of(&envelope(&ToWorker::Discard, None)), None);
 	}

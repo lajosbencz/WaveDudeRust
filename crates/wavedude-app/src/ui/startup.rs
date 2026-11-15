@@ -6,7 +6,6 @@ use std::borrow::Cow;
 
 use eframe::egui::{self, Align, Id, Layout, RichText, Ui, vec2};
 use wavedude_app_state::Event;
-use wavedude_app_state::settings::DITHER_BITS;
 use wavedude_app_state::strings::{Strings, strip_mnemonic};
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::quality::{PreviewDefaults, PreviewQuality, PreviewTier};
@@ -17,14 +16,10 @@ use super::properties::{Choices, check_box, combo};
 use super::theme::Palette;
 use super::theme::{FONT_SIZE, INPUT_HEIGHT};
 use crate::App;
+use crate::menus::{DITHERS, FRAME_STEPS, RESOLUTIONS, SAMPLES};
 
 const WIDTH: f32 = 560.;
 const LABEL_WIDTH: f32 = 180.;
-const DIVISORS: [u32; 3] = [1, 2, 4];
-const DIVISOR_KEYS: [&str; 3] = ["Full", "Half", "Quarter"];
-const DITHER_KEYS: [&str; 5] =
-	["MenuViewDitherOff", "MenuViewDither10", "MenuViewDither12", "MenuViewDither14", "MenuViewDither16"];
-const SAMPLE_KEYS: [&str; 2] = ["MenuViewSamples16", "MenuViewSamples8"];
 
 /// MP4 export asks for the user's word on Cisco's `OpenH264`.
 #[cfg(not(target_arch = "wasm32"))]
@@ -95,22 +90,19 @@ impl Startup {
 			}
 		});
 		let q = self.quality;
-		let divisor_at = |d: u32| DIVISORS.iter().position(|&v| v == d);
-		if let Some(i) = lever(ui, s, "MenuViewResolution", divisor_at(q.resolution_divisor), &DIVISOR_KEYS) {
-			self.set(|q| q.resolution_divisor = DIVISORS[i]);
+		if let Some(d) = lever(ui, s, "MenuViewResolution", &RESOLUTIONS, q.resolution_divisor) {
+			self.set(|q| q.resolution_divisor = d);
 		}
-		if let Some(i) = lever(ui, s, "MenuViewFrames", divisor_at(q.frame_divisor), &DIVISOR_KEYS) {
-			self.set(|q| q.frame_divisor = DIVISORS[i]);
+		if let Some(d) = lever(ui, s, "MenuViewFrames", &FRAME_STEPS, q.frame_divisor) {
+			self.set(|q| q.frame_divisor = d);
 		}
-		let half = q.format == SampleFormat::Half;
-		if let Some(i) = lever(ui, s, "MenuViewSamples", Some(usize::from(!half)), &SAMPLE_KEYS) {
-			self.set(|q| q.format = if i == 0 { SampleFormat::Half } else { SampleFormat::Index });
+		if let Some(format) = lever(ui, s, "MenuViewSamples", &SAMPLES, q.format) {
+			self.set(|q| q.format = format);
 		}
-		if half
-			&& let Some(i) =
-				lever(ui, s, "MenuViewDither", DITHER_BITS.iter().position(|&b| b == self.dither), &DITHER_KEYS)
+		if q.format == SampleFormat::Half
+			&& let Some(bits) = lever(ui, s, "MenuViewDither", &DITHERS, self.dither)
 		{
-			self.dither = DITHER_BITS[i];
+			self.dither = bits;
 		}
 		#[cfg(not(target_arch = "wasm32"))]
 		if asks_codec() {
@@ -145,7 +137,6 @@ impl Startup {
 			out.push(Event::SetCheckForUpdates(self.updates));
 		}
 		let mut then = Vec::new();
-		#[cfg(not(target_arch = "wasm32"))]
 		if ASKS_UPDATES && self.updates {
 			then.push(Then::CheckForUpdates);
 		}
@@ -164,21 +155,14 @@ fn heading(ui: &mut Ui, text: &str) {
 	ui.label(RichText::new(text).family(wavedude_view::fonts::bold()));
 }
 
-/// A drop-down named by `label_key` over the words `keys` (suffixes of `label_key` for the divisors); the index
-/// picked.
-fn lever(ui: &mut Ui, s: &Strings, label_key: &str, current: Option<usize>, keys: &[&str]) -> Option<usize> {
-	let word = |i: usize| -> Cow<'_, str> {
-		let key = keys[i];
-		Cow::Owned(strip_mnemonic(if key.starts_with("Menu") {
-			s.get(key)
-		} else {
-			s.get(&format!("{label_key}{key}"))
-		}))
-	};
+/// A drop-down named by `label_key` over the `(value, key)` words of `table`, `current` shown; the value picked.
+fn lever<T: Copy + PartialEq>(ui: &mut Ui, s: &Strings, label_key: &str, table: &[(T, &str)], current: T) -> Option<T> {
+	let word = |i: usize| -> Cow<'_, str> { Cow::Owned(strip_mnemonic(s.get(table[i].1))) };
 	let label = strip_mnemonic(s.get(label_key));
+	let current = table.iter().position(|&(v, _)| v == current);
 	let shown = current.map(word).unwrap_or_default();
 	let choices =
-		Choices { len: keys.len(), current, shown: &shown, word: &word, swatch: None, disabled: None, actions: &[] };
+		Choices { len: table.len(), current, shown: &shown, word: &word, swatch: None, disabled: None, actions: &[] };
 	ui.horizontal(|ui| {
 		let column = vec2(LABEL_WIDTH, INPUT_HEIGHT);
 		ui.allocate_ui_with_layout(column, Layout::left_to_right(Align::Center), |ui| {
@@ -188,4 +172,5 @@ fn lever(ui: &mut Ui, s: &Strings, label_key: &str, current: Option<usize>, keys
 		combo(ui, Id::unique(("Startup", label_key)), &label, &choices)
 	})
 	.inner
+	.map(|i| table[i].0)
 }

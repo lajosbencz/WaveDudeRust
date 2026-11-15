@@ -8,7 +8,11 @@ use eframe::egui::{
 	Align2, Color32, FontId, Id, Popup, Rect, Response, Role, Sense, Stroke, StrokeKind, Ui, WidgetInfo, pos2, vec2,
 };
 use egui_material_icons::MaterialIcon;
-use egui_material_icons::icons::*;
+use egui_material_icons::icons::{
+	ICON_ARROW_DROP_DOWN, ICON_CLOSE, ICON_LIGHT_MODE, ICON_LINE_END, ICON_LINE_START, ICON_PAUSE, ICON_PAUSE_CIRCLE,
+	ICON_PLAY_ARROW, ICON_PLAY_CIRCLE, ICON_RADIO_BUTTON_CHECKED, ICON_REPEAT, ICON_SKIP_NEXT, ICON_SKIP_PREVIOUS,
+	ICON_STOP_CIRCLE, ICON_VIEW_AGENDA, ICON_VIEW_COLUMN_2, ICON_WAVES,
+};
 use wavedude_app_state::Event;
 use wavedude_app_state::commands::Command;
 use wavedude_app_state::playback::{SPEED_PRESETS, SPEED_RANGE};
@@ -17,6 +21,7 @@ use wavedude_core::model::{DisplayLayerEdit, Layer};
 
 use super::take_activation_keys;
 use crate::App;
+use crate::menus::{self, MenuAction, On};
 use crate::preview::display_edit;
 use crate::ui::menu_bar::check_entry;
 use crate::ui::number_box::{NumberSpec, number_box};
@@ -36,11 +41,6 @@ const SPEED_WIDTH: f32 = 64.;
 const PRESETS_WIDTH: f32 = ICON_SIZE + 4.;
 
 static SPEED: LazyLock<NumberSpec> = LazyLock::new(|| NumberSpec::linear(SPEED_RANGE.0, SPEED_RANGE.1, 0.25));
-
-/// Play when paused, pause when playing.
-pub(super) fn play_or_pause(app: &App) -> Event {
-	if app.live.playback.is_playing() { Event::PausePlayback } else { Event::Play }
-}
 
 /// A tool button's kind: a plain button, a toggle or a radio, the last two with their state.
 #[derive(Clone, Copy)]
@@ -101,8 +101,11 @@ impl Transport {
 			if button(ui, &mut row, "PreviewStop", ICON_STOP_CIRCLE, s.get("TipPreviewStop"), true, Kind::Plain) {
 				out.push(Event::StopRun);
 			}
-		} else if button(ui, &mut row, "PreviewRun", ICON_PLAY_CIRCLE, s.get("TipPreviewRun"), true, Kind::Plain) {
-			out.push(Event::Run);
+		} else {
+			let enabled = menus::enabled(app, MenuAction::Run, On::Current);
+			if button(ui, &mut row, "PreviewRun", ICON_PLAY_CIRCLE, s.get("TipPreviewRun"), enabled, Kind::Plain) {
+				out.push(Event::Run);
+			}
 		}
 		let paused = live.run_paused_by_user();
 		let tip = s.get(if paused { "TipPreviewResumeRun" } else { "TipPreviewPauseRun" });
@@ -168,7 +171,8 @@ impl Transport {
 			+ SPEED_LABEL_MARGIN.1
 			+ SPEED_WIDTH
 			+ PRESETS_WIDTH
-			+ DIVIDER + 4. * (BUTTON + 2.);
+			+ DIVIDER
+			+ 4. * (BUTTON + 2.);
 		row.x = row.x.max(bar.right() - PADDING.0 - right);
 		row.skip(SPEED_LABEL_MARGIN.0);
 		let at = row.take(speed_label.size().x);

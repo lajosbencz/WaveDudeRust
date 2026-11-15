@@ -1,10 +1,6 @@
-//! The dock of docs/ui: the Preview in the centre with the Project, Properties and Messages panes around it. A
-//! pane's close button, its Window position menu and View > Panes hide it in its place, where showing it brings it
-//! back; the arrangement is saved in the settings as it changes.
-//!
-//! A pane dragged by its tab, or a group by its tab bar, lands where docs/ui/00 (Docking behaviour) lets it: at an
-//! outer edge, beside a group or as a tab of one; never into its own group, and beside the Preview only. The drag,
-//! its overlay and the drop are the dock's own; egui_tiles drags nothing.
+//! The dock of docs/ui (docs/ui/00, Docking behaviour): the Preview in the centre with the Project, Properties and
+//! Messages panes around it. The arrangement is saved in the settings as it changes. Drags, overlay and drop are the
+//! dock's own; egui_tiles drags nothing.
 
 use eframe::egui::{
 	self, Color32, CursorIcon, Key, LayerId, Modifiers, Order, Pos2, Rect, Response, Sense, Stroke, StrokeKind,

@@ -38,6 +38,15 @@ use selection::{Row, Selection};
 use settings::{ExportHint, Settings, Theme};
 use strings::{Language, Strings};
 
+/// This build: the version and, after a `+`, the build `tools/build-web.sh` names in `WAVEDUDE_BUILD` (its commit),
+/// so the browser's page and run worker of one build tell each other apart from those of another.
+pub fn build_id() -> String {
+	match option_env!("WAVEDUDE_BUILD") {
+		Some(build) => format!("{}+{build}", env!("CARGO_PKG_VERSION")),
+		None => env!("CARGO_PKG_VERSION").to_owned(),
+	}
+}
+
 /// An action that replaces the open project, asked about first when there are unsaved edits.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Guarded {
@@ -102,6 +111,8 @@ pub enum Event {
 	DiscardFrames,
 	Play,
 	PausePlayback,
+	/// Play while paused, else Pause playback.
+	TogglePlayback,
 	Scrub(u32),
 	StepFrames(i64),
 	SetLive(bool),
@@ -420,7 +431,6 @@ impl<B: Backend> AppState<B> {
 			return String::new();
 		};
 		let key = match state {
-			wavedude_core::run::RunState::Created => "RunStateCreated",
 			wavedude_core::run::RunState::Running => "RunStateRunning",
 			wavedude_core::run::RunState::Paused => "RunStatePaused",
 			wavedude_core::run::RunState::Completed => "RunStateCompleted",
@@ -485,6 +495,7 @@ impl<B: Backend> AppState<B> {
 			self.save_settings();
 		}
 		self.document = document;
+		self.schemes.check(&self.document.project);
 		self.documents += 1;
 		self.document_changed();
 		self.selection = Selection::root();
@@ -682,7 +693,15 @@ impl<B: Backend> AppState<B> {
 				}
 			},
 			Event::Run => self.live_start(LiveController::run_user, now),
-			Event::Play => self.live_start(
+			Event::PausePlayback => {
+				self.live.pause_playback(now);
+				Response::None
+			}
+			Event::TogglePlayback if self.live.playback.is_playing() => {
+				self.live.pause_playback(now);
+				Response::None
+			}
+			Event::Play | Event::TogglePlayback => self.live_start(
 				|live, p, now| {
 					live.play(p, now);
 					true
@@ -699,10 +718,6 @@ impl<B: Backend> AppState<B> {
 			}
 			Event::DiscardFrames => {
 				self.live.discard_frames();
-				Response::None
-			}
-			Event::PausePlayback => {
-				self.live.pause_playback(now);
 				Response::None
 			}
 			Event::Scrub(frame) => {
@@ -881,6 +896,7 @@ impl<B: Backend> AppState<B> {
 		};
 		let result = change(store);
 		self.schemes = user_schemes::load(store);
+		self.schemes.check(&self.document.project);
 		self.revisions.settings += 1;
 		match result {
 			Ok(()) => Response::None,

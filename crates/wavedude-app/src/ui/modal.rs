@@ -17,7 +17,6 @@ use super::memory_warning::MemoryWarning;
 use super::menu_keys::letter_of;
 use super::properties;
 use super::startup::Startup;
-use super::status_bar::ERROR;
 use super::theme::Palette;
 use crate::App;
 
@@ -58,6 +57,10 @@ pub(super) enum Modal {
 	About(About),
 	Examples(Examples),
 	Startup(Startup),
+	/// A completed export's file, downloaded when the user clicks Download: a browser may drop a download a page
+	/// starts on its own.
+	#[cfg(target_arch = "wasm32")]
+	Download(wavedude_app_state::platform::Download),
 }
 
 impl Modal {
@@ -83,6 +86,8 @@ impl Modal {
 			Self::About(_) => "About",
 			Self::Examples(_) => "Examples",
 			Self::Startup(_) => "Startup",
+			#[cfg(target_arch = "wasm32")]
+			Self::Download(_) => "Download",
 		})
 	}
 }
@@ -99,7 +104,6 @@ pub(super) enum Then {
 	#[cfg(not(target_arch = "wasm32"))]
 	Download(Box<cargo_packager_updater::Update>),
 	/// Looks for a newer release, quietly.
-	#[cfg(not(target_arch = "wasm32"))]
 	CheckForUpdates,
 	Export(Step),
 	/// Uploads the scene image the project lacks.
@@ -248,6 +252,18 @@ impl Modals {
 					Modal::About(about) => about.ui(ui, fresh, app),
 					Modal::Examples(examples) => examples.ui(ui, fresh, app),
 					Modal::Startup(startup) => startup.ui(ui, fresh, app, out),
+					#[cfg(target_arch = "wasm32")]
+					Modal::Download(download) => {
+						let text = s.format("ExportReadyFormat", &[&download.name()]);
+						let choices = [Choice::default(s.get("DialogDownload")), Choice::cancel(s.get("DialogClose"))];
+						let answered = message(ui, fresh, Disc::Info, &text, &choices);
+						if answered == Some(0)
+							&& let Err(e) = download.start()
+						{
+							tracing::error!("{} could not be downloaded: {e}", download.name());
+						}
+						answered.map(|_| None)
+					}
 				}
 			});
 		let reply = shown.inner?;
@@ -307,10 +323,11 @@ fn message(ui: &mut Ui, fresh: bool, disc: Disc, text: &str, choices: &[Choice<'
 }
 
 fn paint_disc(ui: &mut Ui, disc: Disc) {
+	let palette = Palette::of(ui.ctx().theme());
 	let (fill, glyph) = match disc {
-		Disc::Error => (ERROR, "!"),
-		Disc::Question => (Palette::of(ui.ctx().theme()).accent, "?"),
-		Disc::Info => (Palette::of(ui.ctx().theme()).accent, "i"),
+		Disc::Error => (palette.status_error, "!"),
+		Disc::Question => (palette.accent, "?"),
+		Disc::Info => (palette.accent, "i"),
 	};
 	let (rect, _) = ui.allocate_exact_size(Vec2::splat(DISC), Sense::hover());
 	let painter = ui.painter();

@@ -841,10 +841,9 @@ struct LayerDrag {
 	current: usize,
 }
 
-/// An interference filter's layers, the outermost first: a row each with a grip, its thickness and index, up,
-/// down and remove; Add layer appends a copy of the last, Remove all empties the list in one step. A drag by a
-/// row's grip moves the layer through the list: the row whose top lies nearest the grip's top plus the drag is
-/// the target, each crossing is one edit, and the mouse held keeps them one undo step.
+/// An interference filter's layers, the outermost first: a row each with a grip, its thickness and index, up, down and
+/// remove. A drag by a row's grip moves the layer to the row whose top lies nearest the grip's top plus the drag; each
+/// crossing is one edit, and the mouse held keeps them one undo step.
 fn layers<W: Fn(m::InterferenceFilterEdit) -> Edit>(
 	f: &mut Form<'_>,
 	list: &List<'_, InterferenceFilter, FilterLayer, W>,

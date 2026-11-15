@@ -1,7 +1,7 @@
 name: Hygiene
 
-# Spelling and the dependency policy: seconds, no build, so every change runs them, docs included, and master pushes
-# for the docs administrators push directly.
+# Spelling, the dependency policy and the workflows' lint: seconds, no build, so every change runs them, docs
+# included, and master pushes for the docs administrators push directly.
 on:
   push:
     branches: [master]
@@ -19,6 +19,7 @@ jobs:
   typos:
     name: Spelling
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -28,6 +29,7 @@ jobs:
   deny:
     name: Dependencies
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,3 +38,35 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
+
+  # actionlint: syntax, expressions, and shellcheck on the run scripts; zizmor: security, exceptions in
+  # .github/zizmor.yml.
+  workflows:
+    name: Workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Prebuilt and checked against the action's checksums; no fallback to other sources.
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: shellcheck@0.11.0,zizmor@1.32.0
+          fallback: none
+      # install-action has no actionlint: its release, checked against the published digest.
+      - name: actionlint
+        run: |
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            -o "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "$ACTIONLINT_SHA256  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
+      # The online audits (impostor commits, known-vulnerable actions) read the API with the token.
+      - name: zizmor
+        run: zizmor .github
+        env:
+          GH_TOKEN: ${{ github.token }}

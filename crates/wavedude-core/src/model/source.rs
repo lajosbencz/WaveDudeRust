@@ -20,9 +20,9 @@ pub enum PulseShape {
 #[derive(Clone, Debug, PartialEq, Fields)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SourceArray {
-	#[field(range = ranges::AT_LEAST_1)]
+	#[field(range = ranges::ARRAY_SIZE)]
 	pub size_x: u32,
-	#[field(range = ranges::AT_LEAST_1)]
+	#[field(range = ranges::ARRAY_SIZE, dependent)]
 	pub size_y: u32,
 	/// Pixels.
 	pub spacing_x: i32,

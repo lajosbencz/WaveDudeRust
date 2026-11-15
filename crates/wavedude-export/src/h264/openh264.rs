@@ -1,9 +1,8 @@
-//! The native H.264 encoder (decision 0005): Cisco's prebuilt `OpenH264`, which Cisco licenses
-//! under the AVC patent pool only when it is downloaded from Cisco to the user's device, the user can
-//! enable and disable it, [`NOTICE`] is shown where they do, and [`LICENSE`] where licensing information
-//! is. The user's choice lives in the program's settings and the folder is the program's to name; [`library`]
-//! downloads the binary there at the first export after it is enabled, [`delete`] removes it, and
-//! [`OpenH264Factory`] loads it at run time. A build with the `openh264-source` feature compiles
+//! The native H.264 encoder (decision 0005): Cisco's prebuilt `OpenH264`, licensed under the AVC patent pool only when
+//! downloaded from Cisco to the user's device, enabled and disabled by the user, with [`NOTICE`] shown where they do
+//! and [`LICENSE`] where licensing information is. The choice lives in the program's settings and the folder is the
+//! program's to name; [`library`] downloads the binary there at the first export after it is enabled, [`delete`]
+//! removes it, and [`OpenH264Factory`] loads it at run time. A build with the `openh264-source` feature compiles
 //! `OpenH264` in instead ([`BUILT_IN`]).
 //!
 //! The encoder: constrained baseline at level 5.2, no B-frames, an IDR every second, quality rate control under the
@@ -74,10 +73,11 @@ pub fn download(dir: &Path, mut on_chunk: impl FnMut(usize, Option<u64>)) -> Res
 	if let Some(path) = installed(dir) {
 		return Ok(path);
 	}
-	let name = file_name().ok_or_else(|| ExportError::Codec("Cisco publishes no OpenH264 for this platform".into()))?;
+	let name =
+		file_name().ok_or_else(|| ExportError::OpenH264("Cisco publishes no OpenH264 for this platform".into()))?;
 	let url = format!("{URL}{name}.bz2");
 	tracing::info!(%url, "downloading OpenH264");
-	let failed = |e: &dyn std::fmt::Display| ExportError::Codec(format!("downloading {url}: {e}"));
+	let failed = |e: &dyn std::fmt::Display| ExportError::OpenH264(format!("downloading {url}: {e}"));
 	let mut response = ureq::get(&url).call().map_err(|e| failed(&e))?;
 	let total = response.body().content_length();
 	let mut reader = response.body_mut().with_config().limit(MAX_DOWNLOAD).reader();
@@ -99,7 +99,7 @@ pub fn download(dir: &Path, mut on_chunk: impl FnMut(usize, Option<u64>)) -> Res
 	let checked = openh264::OpenH264API::from_blob_path(&part);
 	if let Err(e) = checked {
 		std::fs::remove_file(&part)?;
-		return Err(ExportError::Codec(format!("the downloaded OpenH264 was refused: {e}")));
+		return Err(ExportError::OpenH264(format!("the downloaded OpenH264 was refused: {e}")));
 	}
 	drop(checked);
 	let path = dir.join(name);
@@ -126,7 +126,7 @@ fn api(library: Option<&Path>) -> Result<openh264::OpenH264API> {
 	#[cfg(not(feature = "openh264-source"))]
 	{
 		let path = library.ok_or(ExportError::H264Missing)?;
-		openh264::OpenH264API::from_blob_path(path).map_err(|e| ExportError::Codec(e.to_string()))
+		openh264::OpenH264API::from_blob_path(path).map_err(|e| ExportError::OpenH264(e.to_string()))
 	}
 }
 

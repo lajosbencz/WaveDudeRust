@@ -1,10 +1,9 @@
 //! Guided modes of a straight slab waveguide as this project's engine discretises it.
 //!
-//! The engine advances `u+ = 2u - u- + B u` per sub-step, `B = A` (leapfrog) or `A + A^2/12` (the
-//! modified equation), `A = (c2/S^2) L`, S sub-steps a step, c2 = 1/n^2 (engine/stencil.rs). A mode
-//! `u = phi_j exp(i(beta x - omega t))` (x along the guide, rows j across) is an eigenvector of A; its
-//! eigenvalue `-s` follows from the phase per sub-step `omega/S` by the scheme
-//! ([`TimeScheme::symbol_of_phase`]), so `L phi + Om n_j^2 phi = 0` with `Om = S^2 s`:
+//! The engine advances `u+ = 2u - u- + B u` per sub-step, `B = A` (leapfrog) or `A + A^2/12` (the modified equation),
+//! `A = (c2/S^2) L`, S sub-steps a step, c2 = 1/n^2 (engine/stencil.rs). A mode `u = phi_j exp(i(beta x - omega t))`
+//! (x along the guide, rows j across) is an eigenvector of A; its eigenvalue `-s` follows from the phase per sub-step
+//! `omega/S` ([`TimeScheme::symbol_of_phase`]), so `L phi + Om n_j^2 phi = 0` with `Om = S^2 s`:
 //!
 //! ```text
 //! leapfrog:              Om = 4 S^2 sin^2(omega / 2S)
@@ -12,18 +11,17 @@
 //! ```
 //!
 //! - Axis stencils (cross weight 0; the DRP 7-point and the Taylor 4th order): `L = D_x + D_y`,
-//!   `D_x exp(i beta x) = -p(beta) exp(i beta x)` (p the axis symbol), so
-//!   `(D_y + diag(Om n^2)) phi = p(beta) phi`, a symmetric banded eigenproblem (bandwidth the
-//!   stencil's reach) solved by shifted inverse iteration with a banded Cholesky factor; then
+//!   `D_x exp(i beta x) = -p(beta) exp(i beta x)` (p the axis symbol), so `(D_y + diag(Om n^2)) phi = p(beta) phi`, a
+//!   symmetric banded eigenproblem solved by shifted inverse iteration with a banded Cholesky factor; then
 //!   `beta = p^-1(eigenvalue)`.
 //! - 9-point (`D3x + D3y + D3x D3y / 6`): with `c = cos(beta)`, `D3x -> -2(1 - c)`, so
-//!   `(a D3y + diag(Om n^2)) phi = 2(1 - c) phi`, `a = 1 - cross 2(1 - c)`. The largest eigenvalue
-//!   `lambda(c)` of the left side minus `2(1 - c)` rises with c, so c is found by a safeguarded
-//!   Newton iteration (Hellmann-Feynman slope), then `beta = acos(c)`.
+//!   `(a D3y + diag(Om n^2)) phi = 2(1 - c) phi`, `a = 1 - cross 2(1 - c)`. The largest eigenvalue `lambda(c)` of the
+//!   left side minus `2(1 - c)` rises with c, so c is found by a safeguarded Newton iteration (Hellmann-Feynman
+//!   slope), then `beta = acos(c)`.
 //!
-//! S is the engine's sub-step count ([`sub_steps`], the CFL rule of the stencil) for a scene whose
-//! fastest pixel has index 1; the original fixed S = 3, leapfrog and the Taylor 4th order
-//! ([`ModeSolver::original`]). All lengths in cells, f64 throughout.
+//! S is the engine's sub-step count ([`sub_steps`]) for a scene whose fastest pixel has index 1; the tests'
+//! reference for docs/spec/22-waveguide-modes.md's worked examples fixes S = 3 with leapfrog and the Taylor 4th order.
+//! All lengths in cells, f64 throughout.
 
 use crate::engine::stencil::{StencilCoefficients, TimeScheme};
 use crate::engine::substeps::sub_steps;
@@ -35,6 +33,7 @@ pub enum RowMean {
 	/// The root of the mean n^2, the painter's area-weighted permittivity.
 	Permittivity,
 	/// The mean n, the original's rows.
+	#[cfg(test)]
 	Index,
 }
 
@@ -47,6 +46,7 @@ pub fn rows(first: i64, count: usize, mean: RowMean, profile: impl Fn(f64) -> f6
 			let samples = (0..4).map(|k| profile(base + (k as f64 + 0.5) / 4.0));
 			let n = match mean {
 				RowMean::Permittivity => (samples.map(|n| n * n).sum::<f64>() / 4.0).sqrt(),
+				#[cfg(test)]
 				RowMean::Index => samples.sum::<f64>() / 4.0,
 			};
 			crate::scene::shapes::round_digits(n, 2)
@@ -104,7 +104,8 @@ impl ModeSolver {
 	}
 
 	/// The original's solver (spec 22): Taylor 4th order, leapfrog, S = 3, rows of mean n.
-	pub fn original() -> Self {
+	#[cfg(test)]
+	pub(crate) fn original() -> Self {
 		Self {
 			coefficients: StencilCoefficients::TAYLOR_FOURTH,
 			scheme: TimeScheme::Leapfrog,

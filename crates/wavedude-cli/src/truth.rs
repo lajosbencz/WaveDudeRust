@@ -10,17 +10,17 @@ use wavedude_core::model::{GateKind, Measurement, PartKind, Probe, ProbeKind, Pr
 use wavedude_core::quality::PreviewQuality;
 
 use crate::project::load;
-use crate::run::{EngineArgs, finish, parse_steps, simulate};
+use crate::run::{EngineArgs, Simulation, parse_steps};
 
 /// Steps averaged at the end of a run: eight periods at level 50 (32 steps a period).
 pub(crate) const DEFAULT_SETTLE: u32 = 256;
 /// Largest deviation of a normalised output (in units of one input's power) for a row to pass.
 ///
-/// The design rounds every length to whole pixels (a coupler half a pixel off moves the split by
-/// about kappa / 2, under 0.01), the point sources launch radiation besides the mode, part of which
-/// still crosses the probes, the bends' coupling is integrated from the straight-guide solver, and
-/// a half line takes the other arm's evanescent tail beyond the axis. Together these stay well
-/// under a tenth of an input, while a wrong phase convention or coupling length errs by 0.5 or more.
+/// The design rounds every length to whole pixels (a coupler half a pixel off moves the split by about kappa / 2,
+/// under 0.01), the point sources launch radiation besides the mode, part of which still crosses the probes, the bends'
+/// coupling is integrated from the straight-guide solver, and a half line takes the other arm's evanescent tail
+/// beyond the axis. Together these stay well under a tenth of an input; a wrong phase convention or coupling length
+/// errs by 0.5 or more.
 pub(crate) const TOLERANCE: f64 = 0.1;
 /// Factor over the slowest phase speed for the wave front and the mode's group delay.
 const CROSSING_MARGIN: f64 = 1.25;
@@ -148,12 +148,10 @@ fn halves(profile: &[f32]) -> [f64; 2] {
 	[sum(&profile[..half]), sum(&profile[profile.len() - half..])]
 }
 
-/// Mean power over the last `settle` steps of A and B at Input and of Q and R at Output, each the
-/// intensity summed over its half of the line, and the larger change of Q or R between the halves of
-/// those steps relative to Q + R.
-///
-/// Each line becomes an integrated probe summing from `settle` steps before the end, and a copy of it
-/// from half as many; the only other timeline frame is the last step's, so the run stores two frames.
+/// Mean power over the last `settle` steps of A and B at Input and of Q and R at Output, each the intensity summed
+/// over its half of the line, and the larger change of Q or R between the halves of those steps relative to Q + R.
+/// Each line becomes an integrated probe summing from `settle` steps before the end, and a copy from half as many;
+/// the only other timeline frame is the last step's, so the run stores two frames.
 fn measure(project: &Project, steps: u32, settle: u32, engine: EngineArgs) -> Result<([f64; 4], f64)> {
 	let mut project = project.clone();
 	project.simulation.visualize_every = steps - 1;
@@ -171,10 +169,10 @@ fn measure(project: &Project, steps: u32, settle: u32, engine: EngineArgs) -> Re
 		copies.push(Probe { name: format!("{}{LATE}", probe.name), start_after: steps - late + 1, ..probe.clone() });
 	}
 	project.probes.extend(copies);
-	let (mut run, _store) = simulate(&mut project, Some(steps), PreviewQuality::DEFAULT, false, engine)?;
-	finish(&mut run)?;
+	let run = Simulation::start(&mut project, Some(steps), PreviewQuality::DEFAULT, false, engine)?;
+	run.finish()?;
 	let traces = run.traces();
-	let probes = &run.spec().probes;
+	let probes = &run.spec.probes;
 	let sums = |name: &str| -> Result<[f64; 2]> {
 		let trace = &traces[named(probes, name, |p| &p.name, "line probe")?];
 		ensure!(trace.steps_sampled == steps as u64, "probe {name} recorded up to step {}", trace.steps_sampled);

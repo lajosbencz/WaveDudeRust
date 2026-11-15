@@ -1,8 +1,6 @@
-//! The manual window (docs/ui/70): a contents list of the headings beside the manual rendered as Markdown with its
-//! figures; taking a row or following a `#anchor` link puts its heading at the top. A window of its own where the
-//! platform has several, a window inside the page in the browser; F1 brings it forward, Esc closes it.
-//! Sections out of sight are not laid out once their heights are known at the column's width, which they are
-//! measured again for once it stops changing.
+//! The manual window (docs/ui/70): a contents list beside the manual rendered as Markdown with its figures. Sections
+//! out of sight are not laid out once their heights are known at the column's width, and are measured again when it
+//! changes.
 
 use eframe::egui::{
 	self, Color32, CursorIcon, EventFilter, FontId, Key, LayerId, Modifiers, Order, Rect, RichText, ScrollArea, Sense,
@@ -160,7 +158,7 @@ impl Manual {
 	}
 
 	/// The bar between the contents and the text: dragged, or Left and Right with the focus, it moves.
-	fn splitter(&mut self, ui: &mut Ui, bar: Rect, tip: &str, palette: &Palette) {
+	fn splitter(&mut self, ui: &Ui, bar: Rect, tip: &str, palette: &Palette) {
 		let id = ui.scope_id().with("ManualSplitter");
 		let response = ui.interact(bar, id, Sense::click_and_drag()).on_hover_text(tip);
 		let response = response.on_hover_cursor(CursorIcon::ResizeHorizontal);

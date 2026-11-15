@@ -1,9 +1,8 @@
-//! The CPML on the rim (Roden and Gedney 2000) for `u_tt = c^2 lap u`, in the second-order form
-//! with memory variables for the stretched derivatives (as Komatitsch and Martin 2007 and Pasalic and
-//! McGarry 2010 do for the second-order acoustic equation).
+//! The CPML on the rim (Roden and Gedney 2000) for `u_tt = c^2 lap u`, in the second-order form with memory
+//! variables for the stretched derivatives (Komatitsch and Martin 2007; Pasalic and McGarry 2010).
 //!
-//! Along x the PML replaces `d/dx` by `d/dx~ = (1/s) d/dx`, `s = kappa + sigma / (alpha + i omega)`;
-//! `1/s` is `1/kappa` plus a causal kernel whose convolution is advanced recursively per sub-step dt:
+//! Along x the PML replaces `d/dx` by `(1/s) d/dx`, `s = kappa + sigma / (alpha + i omega)`; `1/s` is `1/kappa` plus
+//! a causal kernel whose convolution is advanced recursively per sub-step dt:
 //!
 //! ```text
 //! b = exp(-(sigma/kappa + alpha) dt),   a = sigma (b - 1) / (sigma kappa + kappa^2 alpha)
@@ -13,26 +12,26 @@
 //! O_x f = f_x~x~ = Q / kappa + xi
 //! ```
 //!
-//! D2 the stencil's second derivative along the axis, D1 the 4th-order central first derivative
-//! `(8 (f1 - f-1) - (f2 - f-2)) / 12`, (1/kappa)' the profile's analytic slope. Inside the canvas
-//! sigma = 0 and kappa = 1, so `O = D2`. The y axis is the same.
+//! D2 is the stencil's second derivative along the axis, D1 the 4th-order central first derivative
+//! `(8 (f1 - f-1) - (f2 - f-2)) / 12`, (1/kappa)' the profile's analytic slope. Inside the canvas sigma = 0 and
+//! kappa = 1, so `O = D2`. The y axis is the same.
 //!
-//! Every Laplacian here is `D2x z + D2y u` with `z = u + chi D2y u` (chi the cross weight: 1/6 for
-//! the 9-point, whose D2 is the 3-point difference; 0 for the axis stencils). Stretching both factors,
-//! `lap~ u = O_x z~ + O_y u`, `z~ = u + chi O_y u`; a mixed term left unstretched makes the layer
-//! unstable. With `delta_y = O_y u - D2y u` the rim's correction to the plain stencil is
+//! Every Laplacian is `D2x z + D2y u` with `z = u + chi D2y u` (chi the cross weight: 1/6 for the 9-point, whose D2
+//! is the 3-point difference; 0 for the axis stencils). Both factors are stretched, `lap~ u = O_x z~ + O_y u`,
+//! `z~ = u + chi O_y u`; an unstretched mixed term makes the layer unstable. With `delta_y = O_y u - D2y u` the rim's
+//! correction to the plain stencil is
 //!
 //! ```text
 //! (O_x z~ - D2x z~) + chi D2x delta_y + delta_y
 //! ```
 //!
-//! which the engine adds times c2 after each pass over the grid, in four stages over the rim: psi of
-//! y on u, `delta_y` (stored) and xi of y, psi of x on z~, then the x part and the sum. A time scheme
-//! applying the operator twice (the modified equation) keeps a second set of memory variables.
+//! which the engine adds times c2 after each pass over the grid, in four stages over the rim: psi of y on u,
+//! `delta_y` (stored) and xi of y, psi of x on z~, then the x part and the sum. A scheme applying the operator twice
+//! (the modified equation) keeps a second set of memory variables.
 //!
-//! Storage covers the rim only: `psi` and `xi` of x over the left and right strips (full height, 2 rim
-//! columns a row), of y over the top and bottom strips (2 rim rows of full width), x first; `delta_y`
-//! follows xi over the y strips.
+//! Storage covers the rim only: `psi` and `xi` of x over the left and right strips (full height, 2 rim columns a
+//! row), of y over the top and bottom strips (2 rim rows of full width), x first; `delta_y` follows xi over the y
+//! strips.
 
 use rayon::prelude::*;
 

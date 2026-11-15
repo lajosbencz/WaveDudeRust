@@ -1,70 +1,48 @@
 //! The scene's c2 and damping maps in the GPU's layout, at the sub-step scale.
 //!
-//! Values are the CPU engine's: `c2 / n^2` and `d^(1/n)` in f32 per cell (engine/cpu.rs,
-//! `load_scene`). Both layouts cover the padded grid ([`SceneData::stride`]); the padding's entries
-//! are never read.
+//! Values are the CPU engine's: `c2 / n^2` and `d^(1/n)` in f32 per cell (`SceneData::fill_sub_step_medium`).
+//! One u32 per cell covers the padded grid ([`SceneData::stride`]): a 16-bit index into the c2 table, a 16-bit
+//! index into the damping table. The padding's entries are never read. The mirrors' cut bytes come with them.
 
 use std::collections::HashMap;
 
-use crate::engine::SceneData;
+use super::GpuError;
+use crate::engine::{SceneData, pml};
 
-/// Distinct values a compact table can index (16-bit indices).
+/// Distinct values a table can index (16-bit indices).
 const TABLE_LIMIT: usize = 1 << 16;
-
-/// How the medium reaches the card.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum MediumLayout {
-	/// One u32 per cell: a 16-bit index into the c2 table, a 16-bit index into the damping table
-	/// (4 bytes a cell). Falls back to [`Plain`](Self::Plain) above 65536 distinct values of either.
-	#[default]
-	Compact,
-	/// (c2, d) as two f32 per cell (8 bytes a cell).
-	Plain,
-}
 
 /// One built medium: per-cell words and the tables (c2 first, damping from `d_base`).
 pub(super) struct Medium {
-	pub layout: MediumLayout,
-	/// u32 per cell (compact) or two f32 per cell (plain), as bytes.
-	pub cells: Vec<u8>,
-	/// c2 table then damping table; one zero for the plain layout.
+	pub cells: Vec<u32>,
+	/// c2 table then damping table.
 	pub tables: Vec<f32>,
 	pub d_base: u32,
 	/// Padded c2 and d at the sub-step scale (for the Mur weights).
 	pub c2: Vec<f32>,
 	pub d: Vec<f32>,
+	/// Cut bytes per padded cell (engine/pml.rs, `cuts`); all 0 without mirrors.
+	pub cuts: Vec<u8>,
 }
 
-/// The medium of `scene` for `n` sub-steps in `layout`, compact falling back to plain.
-pub(super) fn build(scene: &SceneData, n: u32, layout: MediumLayout) -> Medium {
+impl Medium {
+	/// Whether the kernels apply the cuts.
+	pub(super) fn mirrors(&self) -> bool {
+		self.cuts.iter().any(|&c| c != 0)
+	}
+}
+
+/// The medium of `scene` for `n` sub-steps; refused above [`TABLE_LIMIT`] distinct values of c2 or damping.
+pub(super) fn build(scene: &SceneData, n: u32) -> Result<Medium, GpuError> {
 	let cells = scene.padded_cells();
 	let mut c2 = vec![0f32; cells];
 	let mut d = vec![1f32; cells];
 	scene.fill_sub_step_medium(n, &mut c2, &mut d);
-	if layout == MediumLayout::Compact
-		&& let Some((words, tables, d_base)) = compact(scene, &c2, &d)
-	{
-		return Medium {
-			layout: MediumLayout::Compact,
-			cells: bytemuck::cast_slice(&words).to_vec(),
-			tables,
-			d_base,
-			c2,
-			d,
-		};
-	}
-	let pairs: Vec<[f32; 2]> = c2.iter().zip(&d).map(|(&c, &d)| [c, d]).collect();
-	Medium {
-		layout: MediumLayout::Plain,
-		cells: bytemuck::cast_slice(&pairs).to_vec(),
-		tables: vec![0.0],
-		d_base: 0,
-		c2,
-		d,
-	}
+	let (cells, tables, d_base) = compact(scene, &c2, &d).ok_or(GpuError::MediumTables(TABLE_LIMIT))?;
+	Ok(Medium { cells, tables, d_base, c2, d, cuts: pml::cuts(scene) })
 }
 
-/// The compact words of the grid cells and the tables (c2, then damping from the returned base); `None` above
+/// The words of the grid cells and the tables (c2, then damping from the returned base); `None` above
 /// [`TABLE_LIMIT`] distinct values of either.
 fn compact(scene: &SceneData, c2: &[f32], d: &[f32]) -> Option<(Vec<u32>, Vec<f32>, u32)> {
 	let (gw, gh) = (scene.grid_width() as usize, scene.grid_height() as usize);
@@ -115,13 +93,11 @@ mod tests {
 	use crate::model::Scene;
 
 	#[test]
-	fn compact_tables_hold_the_sub_step_values() {
+	fn the_tables_hold_the_sub_step_values() {
 		let scene = SceneData::blank(10, 6, &Scene { damping_edge: -4, ..Scene::default() });
-		let m = build(&scene, 2, MediumLayout::Compact);
-		assert_eq!(m.layout, MediumLayout::Compact);
-		let words: &[u32] = bytemuck::cast_slice(&m.cells);
+		let m = build(&scene, 2).unwrap();
 		let first = scene.padded_index(0, 0);
-		for (cell, &w) in words.iter().enumerate().skip(first).take(17) {
+		for (cell, &w) in m.cells.iter().enumerate().skip(first).take(17) {
 			let (c2, d) = (m.tables[(w & 0xffff) as usize], m.tables[m.d_base as usize + (w >> 16) as usize]);
 			assert_eq!(c2, m.c2[cell]);
 			let gx = cell - first;
@@ -131,13 +107,11 @@ mod tests {
 	}
 
 	#[test]
-	fn too_many_values_fall_back_to_plain() {
+	fn too_many_values_are_refused() {
 		let mut scene = SceneData::blank(300, 300, &Scene { damping_edge: 0, ..Scene::default() });
 		for (i, c) in scene.c2.iter_mut().enumerate() {
 			*c = 0.5 + i as f32 * 1e-6;
 		}
-		let m = build(&scene, 1, MediumLayout::Compact);
-		assert_eq!(m.layout, MediumLayout::Plain);
-		assert_eq!(m.cells.len(), 306 * 306 * 8);
+		assert!(matches!(build(&scene, 1), Err(GpuError::MediumTables(TABLE_LIMIT))));
 	}
 }

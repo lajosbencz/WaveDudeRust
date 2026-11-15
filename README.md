@@ -47,7 +47,8 @@ reasoning; what warrants a new one is in
 
 Installers for Windows (NSIS), macOS (universal app and DMG) and Linux
 (AppImage, and a tarball with an [`install.sh`](crates/wavedude-app/assets/linux/install.sh) for the menu entry, icons and
-file types) are on the GitHub releases
+file types; x86_64 with glibc 2.28 or newer: RHEL 8, Debian 10, Ubuntu 18.10 and
+later) are on the GitHub releases
 page, unsigned by Apple and Microsoft, so Gatekeeper and SmartScreen warn at
 the first start. Releases are immutable once published. Each package carries
 build provenance and CycloneDX SBOM attestations made by the release's build

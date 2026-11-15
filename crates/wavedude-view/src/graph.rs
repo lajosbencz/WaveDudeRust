@@ -1,5 +1,5 @@
-//! The probe graph box's layout: axis ranges, ticks, the curve on the pixel grid, the title and the readout; the
-//! preview's boxes: which a picture shows, where, and the shapes of a laid-out box.
+//! The probe graph box's layout: axis ranges, ticks, the curve on the pixel grid, the title and the readout, and the
+//! shapes of a laid-out box.
 //!
 //! Pure arithmetic over a probe's settings and its recording, in pixels relative to the box's top-left corner, so a
 //! preview and an export draw the same graph. Numbers are formatted with a decimal point.
@@ -9,15 +9,15 @@ use epaint::{ClippedShape, Color32, Rect, Shape, Stroke, StrokeKind};
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::model::{Display, Layer, Measurement, Probe, ScaleMode, YScale};
 
-use crate::draw::{DeviceGrid, TextMetrics, elided};
+use crate::draw::{DeviceGrid, FontMetrics, TextMetrics, elided};
 use crate::overlay::SELECTED;
 
 /// Smallest box drawn at all, pixels.
-pub const MIN_VISIBLE: (f32, f32) = (40.0, 30.0);
+const MIN_VISIBLE: (f32, f32) = (40.0, 30.0);
 /// Space between the box edge and its text, pixels.
-pub const EDGE_PAD: f32 = 3.0;
+const EDGE_PAD: f32 = 3.0;
 /// Space between a label and the plot frame, pixels.
-pub const LABEL_GAP: f32 = 4.0;
+const LABEL_GAP: f32 = 4.0;
 const RIGHT_MARGIN: f32 = 8.0;
 const BARE_MARGIN: f32 = 6.0;
 const X_LABEL_SPACING: f32 = 8.0;
@@ -200,7 +200,7 @@ fn visible_indices(count: usize, x_min: f64, x_max: f64) -> Option<(usize, usize
 }
 
 /// "Nice" (1, 2, 5 x 10^n) ticks covering `[lo, hi]`, at most 40, a tick within rounding of 0 snapped to 0.
-pub fn nice_ticks(lo: f64, hi: f64, target: usize) -> Vec<f64> {
+fn nice_ticks(lo: f64, hi: f64, target: usize) -> Vec<f64> {
 	let span = hi - lo;
 	if span.is_nan() || span <= 0.0 || span.is_infinite() {
 		return Vec::new();
@@ -229,7 +229,7 @@ pub fn nice_ticks(lo: f64, hi: f64, target: usize) -> Vec<f64> {
 
 /// Ticks of a log axis: powers of ten every 1, 2, 3, 5 or 10 decades (counted from multiples of the spacing) so at
 /// most `target + 1` remain; an axis with fewer than two powers of ten takes the positive nice ticks.
-pub fn log_ticks(lo: f64, hi: f64, target: usize) -> Vec<f64> {
+fn log_ticks(lo: f64, hi: f64, target: usize) -> Vec<f64> {
 	if lo.is_nan() || hi.is_nan() || lo <= 0.0 || hi <= lo || hi.is_infinite() {
 		return Vec::new();
 	}
@@ -271,7 +271,7 @@ pub fn format_g3(v: f64) -> String {
 }
 
 /// A log tick: a power of ten outside 0.01..100 as `1e<n>`, else [`format_g3`].
-pub fn format_log_tick(v: f64) -> String {
+fn format_log_tick(v: f64) -> String {
 	let exponent = libm::log10(v).round();
 	if (v / libm::pow(10.0, exponent) - 1.0).abs() > 1e-6 || exponent.abs() <= 2.0 {
 		format_g3(v)
@@ -281,7 +281,7 @@ pub fn format_log_tick(v: f64) -> String {
 }
 
 /// An x position: whole when the span is at least 10, else one decimal at most.
-pub fn format_position(v: f64, span: f64) -> String {
+fn format_position(v: f64, span: f64) -> String {
 	if span >= 10.0 {
 		format!("{}", v.round() as i64)
 	} else {
@@ -344,9 +344,22 @@ fn readout(line: bool, data: &GraphData<'_>) -> String {
 	}
 }
 
-/// Lays out a box of `width x height` pixels. The text keeps its size; the left margin fits the widest value label,
-/// a line is kept below; tick counts drop when labels collide, the labels drop before the plot does. A line probe
-/// shows nothing until its start step is reached; a point probe's series is trimmed to the start step instead.
+/// [`layout`] with the box's text in its font of `fonts`.
+pub fn layout_with(
+	fonts: &mut FontsView<'_>,
+	probe: &Probe,
+	data: &GraphData<'_>,
+	total_steps: u64,
+	width: f32,
+	height: f32,
+) -> GraphLayout {
+	let mut metrics = FontMetrics { fonts, font: FontId::proportional(FONT_SIZE) };
+	layout(probe, data, total_steps, width, height, &mut metrics)
+}
+
+/// Lays out a box of `width x height` pixels. The text keeps its size; the left margin fits the widest value label;
+/// tick counts drop when labels collide, and labels drop before the plot does. A line probe shows nothing until its
+/// start step is reached; a point probe's series is trimmed to the start step instead.
 pub fn layout(
 	probe: &Probe,
 	data: &GraphData<'_>,
@@ -519,15 +532,15 @@ pub const BACKGROUND: Color32 = Color32::from_rgba_unmultiplied_const(14, 16, 22
 /// A graph box's edge.
 pub const BORDER: Color32 = Color32::from_rgba_unmultiplied_const(200, 200, 210, 170);
 /// The grid lines of the plot.
-pub const GRID: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 255, 46);
+const GRID: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 255, 46);
 /// The zero line of the plot.
 pub const ZERO: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 255, 120);
 /// The plot's frame.
-pub const FRAME: Color32 = Color32::from_rgba_unmultiplied_const(200, 200, 210, 130);
+const FRAME: Color32 = Color32::from_rgba_unmultiplied_const(200, 200, 210, 130);
 /// The tick labels.
-pub const LABEL: Color32 = Color32::from_rgba_unmultiplied_const(225, 225, 230, 225);
+const LABEL: Color32 = Color32::from_rgba_unmultiplied_const(225, 225, 230, 225);
 /// The title.
-pub const TITLE: Color32 = Color32::from_rgba_unmultiplied_const(240, 240, 245, 240);
+const TITLE: Color32 = Color32::from_rgba_unmultiplied_const(240, 240, 245, 240);
 /// The curve and the readout.
 pub const CURVE: Color32 = Color32::from_rgb(255, 208, 64);
 /// The preview's resize grip: its square cell's side (logical pixels), its colour, and under the pointer.
@@ -543,11 +556,10 @@ fn device_box(g: &GraphLayout, grid: DeviceGrid) -> [f32; 4] {
 	[grid.x(0.).floor(), grid.y(0.).floor(), grid.x(g.width).floor(), grid.y(g.height).floor()]
 }
 
-/// The shapes of the box laid out as `g` at the origin of `grid`, clipped to `clip` (points of the window): the box
-/// and its edge (`focus`, else yellow when `selected`), the grid, the value and position labels, the frame, the curve
-/// clipped to the plot, the readout and the title clipped to the title strip. The box is the layout's size
-/// (`g.width` x `g.height` logical pixels). Hairlines are whole device pixels on the device grid and text starts on
-/// whole device pixels; `fonts` lays the text out at [`FONT_SIZE`] at the grid's scale, as the layout was measured.
+/// The shapes of the box laid out as `g` at the origin of `grid`, clipped to `clip` (points of the window); the box
+/// is the layout's size (`g.width` x `g.height` logical pixels). Hairlines and text sit on whole device pixels of the
+/// grid; `fonts` lays the text out at [`FONT_SIZE`] at the grid's scale, as the layout was measured. The box edge is
+/// `focus`, else yellow when `selected`.
 pub fn box_shapes(
 	g: &GraphLayout,
 	grid: DeviceGrid,

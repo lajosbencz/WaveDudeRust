@@ -77,7 +77,7 @@ With the window on egui, the own draw list and its executors are gone: the overl
 epaint shapes in points, their text galleys laid out by epaint's fonts from the bundled Selawik (`fonts.rs`), and
 epaint's tessellator makes them meshes, which the window draws with egui's wgpu renderer and an export rasterises on
 the CPU into its frame (`wavedude_export::raster`): pixels are drawn where they live. `TextMetrics` stays the graph
-layout's measure (epaint's fonts through `FontMetrics`, or an estimate); `DeviceGrid` puts hairlines and text on whole
+layout's measure (epaint's fonts in the box's font through `graph::layout_with`, or an estimate); `DeviceGrid` puts hairlines and text on whole
 device pixels and maps them back to points. epaint strokes no text, so a label's halo is its glyphs' outlines, read by
 skrifa (epaint's font reader) and hinted as epaint hints the glyphs, flattened into closed paths and stroked the halo's
 width in its colour under the text; where two contours' strokes overlap, the halo is darker than its colour.

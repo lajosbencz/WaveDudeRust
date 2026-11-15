@@ -13,6 +13,10 @@ Conventions:
 - (port) While a modal shows, the menu bar is greyed and takes no pointer or key.
 - Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`wavedude-app` [`menus.rs`](../../crates/wavedude-app/src/menus.rs));
   the ids in this document name the entries.
+- Port: one table, `menus::enabled`, holds the Enabled rules of every menu here, the context menus' included; the menu
+  bar, the context menus, the tree's toolbar, the transport bar's Run and the dispatcher read it, so a shortcut whose
+  entry is disabled does nothing. Paste and Export last also need objects on the clipboard and a last export of the
+  open project, which their entries and their actions check.
 - Keys in the menus: Alt held underlines the mnemonics, as do keys working the menus. Alt+letter opens that menu
   of the bar on its first entry; F10 or a lone Alt puts the focus on the bar's first header, where Left/Right walk
   the headers and Down, Enter, Space or a letter opens one (Up: on its last entry). In an open menu Up/Down walk the
@@ -77,7 +81,7 @@ In the browser the page asks before it is left (closed, reloaded, navigated away
 | Cut | T/A/U/N | Ctrl+X | U+E8C6 | list items selected (sources, parts, probes, schemes) | Copy then remove. Text box first, for its text. |
 | Copy | C/K/P/K | Ctrl+C | U+E8C8 | copyable selection (list items, Scene, Simulation, Display) | Objects to clipboard as XML text + app format. |
 | Paste | P/E/O/P | Ctrl+V | U+E77F | clipboard parses to objects | Paste behind the current item; a settings object replaces on its own row or the project root. |
-| Delete | D/L/S/V | Del | U+E74D | `CanDelete` | In a text box: deletes its selected text. Else removes the selection (as Remove). |
+| Delete | D/L/S/V | Del | U+E74D | as Cut | In a text box: deletes its selected text. Else removes the selection (as Remove). |
 | - separator | | | | | |
 | Select all | A/S/T/A | Ctrl+A | U+E8B3 | project has items | Every source, part and probe; last one becomes current. Works in tree and preview; a text box keeps its own Ctrl+A. |
 
@@ -131,6 +135,10 @@ row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
 
 ### Project tree row (any row, the node is the target)
 
+Enabled: Add to or remove from selection, Duplicate, Cut and Remove on an item row; Enabled on a source, part or
+probe row; Copy on a copyable row (an item, Scene, Simulation, Display); Move up and Move down where the item can
+move; Select all and Paste as in the Edit menu.
+
 | Entry | Mn | Gesture text | Icon | Notes |
 |---|---|---|---|---|
 | Add source | S/Q/R/B | - | U+E710 | |
@@ -150,7 +158,7 @@ row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
 | Move up | U/N/M/H | Alt+Up | U+E74A | |
 | Move down | W/U/E/L | Alt+Down | U+E74B | |
 | - separator (probe rows only) | | | | |
-| Export probe data as CSV... | X/X/V/G | - | U+EDE1 | Probe rows only; enabled for an active probe only. |
+| Export probe data as CSV... | X/X/V/G | - | U+EDE1 | Probe rows only; enabled for an active probe while no export runs. |
 
 ### Add part (tree toolbar "+ Part", Parts folder "+", row menu > Add part)
 
@@ -180,7 +188,7 @@ Order: optics, separator, shapes, separator, logic submenu. Each entry's tooltip
 
 ### Preview picture (right-click or Apps key on a picture cell)
 
-Same entries on both pictures, parameterised by the layer.
+Same entries on both pictures, parameterised by the layer. The export entries are enabled as File > Export's.
 
 | Entry | Mn | Gesture text | Icon | Action |
 |---|---|---|---|---|
@@ -194,6 +202,8 @@ Same entries on both pictures, parameterised by the layer.
 | Export both... | O | Ctrl+Shift+B | U+EDE1 | |
 
 ### Probe graph box (on a picture)
+
+Enabled as on the probe's tree row.
 
 | Entry | Mn | Icon |
 |---|---|---|

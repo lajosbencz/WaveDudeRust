@@ -47,11 +47,11 @@ pub(crate) fn to_element(scheme: &ColorScheme) -> Element {
 
 /// Parses a `.wdscheme` text; an empty name becomes `fallback_name`. Normalised.
 pub fn read_str(text: &str, fallback_name: &str) -> std::result::Result<ColorScheme, FormatError> {
-	let doc = xml::parse(text)?;
-	if doc.root.name != "ColorScheme" {
-		return Err(FormatError { message: "the document is not a colour scheme".into(), at: Some(doc.root.at) });
+	let root = xml::parse(text)?;
+	if root.name != "ColorScheme" {
+		return Err(FormatError { message: "the document is not a colour scheme".into(), at: Some(root.at) });
 	}
-	let mut scheme = from_element(&doc.root)?;
+	let mut scheme = from_element(&root)?;
 	if scheme.name.is_empty() {
 		scheme.name = fallback_name.to_owned();
 	}

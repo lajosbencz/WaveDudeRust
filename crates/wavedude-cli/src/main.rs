@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use tracing_subscriber::filter::LevelFilter;
+use wavedude_app_state::settings::AppDirs;
 use wavedude_core::quality::PreviewQuality;
 
 #[derive(Parser)]
@@ -27,6 +28,9 @@ struct Cli {
 	/// Log verbosity on stderr: -v info, -vv debug, -vvv trace.
 	#[arg(short, long, action = clap::ArgAction::Count, global = true)]
 	verbose: u8,
+	/// The app's folders (settings, the user's colour schemes, `OpenH264`) under this one instead of the platform's.
+	#[arg(long, global = true, value_name = "DIR")]
+	config_dir: Option<PathBuf>,
 	#[command(subcommand)]
 	command: Command,
 }
@@ -108,16 +112,18 @@ fn main() -> Result<()> {
 		_ => LevelFilter::TRACE,
 	};
 	tracing_subscriber::fmt().with_max_level(level).with_writer(std::io::stderr).init();
+	let dirs = cli.config_dir.as_deref().map(AppDirs::under).or_else(AppDirs::platform);
+	let dirs = dirs.as_ref();
 	match cli.command {
 		Command::Info => info::run(),
 		Command::Bench(args) => bench::run(&args),
 		Command::Dispersion(args) => dispersion::run(&args),
 		Command::Paint { project, out, edges } => project::paint(&project, &out, edges),
-		Command::Run(args) => run::frames(&args),
+		Command::Run(args) => run::frames(&args, dirs),
 		Command::Probes(args) => run::probes(&args),
-		Command::Export(args) => export::run(&args),
+		Command::Export(args) => export::run(&args, dirs),
 		#[cfg(feature = "mp4")]
-		Command::Openh264 { action } => openh264::run(action),
+		Command::Openh264 { action } => openh264::run(action, dirs),
 		Command::Gates(args) => gates::run(&args),
 		Command::TruthTable(args) => truth::run(&args),
 		Command::Compare(args) => compare::run(&args),

@@ -1,5 +1,5 @@
 //! The browser's side of the window: the page's colour scheme, the clipboard read for Paste and the browser's own
-//! actions of the shortcuts' and the menus' keys kept off; the page places the canvas.
+//! actions of the shortcuts' and the menus' keys kept off; the page places the canvas and has no updater.
 
 use std::cell::RefCell;
 
@@ -10,10 +10,16 @@ use eframe::wasm_bindgen::closure::Closure;
 use eframe::web_sys::{self, KeyboardEvent};
 use wasm_bindgen_futures::JsFuture;
 use wavedude_app_state::settings::Settings;
+use wavedude_app_state::strings::Strings;
+
+use super::Boot;
+use super::export::Exports;
+use super::modal::Modals;
+use crate::menus::On;
 
 thread_local! {
-	/// The clipboard's text read for the last Paste, until the next frame takes it.
-	static PASTED: RefCell<Option<String>> = const { RefCell::new(None) };
+	/// The clipboard's text read for the last Paste and what it pastes on, until the next frame takes it.
+	static PASTED: RefCell<Option<(String, On)>> = const { RefCell::new(None) };
 }
 
 /// The page's colour scheme, as eframe reads it.
@@ -39,15 +45,15 @@ pub(super) fn pastable() -> bool {
 	true
 }
 
-/// Starts reading the clipboard's text for [`pasted`], asking the user where the browser does.
-pub(super) fn read_clipboard(ctx: &egui::Context) -> Option<String> {
+/// Starts reading the clipboard's text for [`pasted`] on `on`, asking the user where the browser does.
+pub(super) fn read_clipboard(ctx: &egui::Context, on: On) -> Option<String> {
 	let window = web_sys::window()?;
 	let read = window.navigator().clipboard().read_text();
 	let ctx = ctx.clone();
 	wasm_bindgen_futures::spawn_local(async move {
 		match JsFuture::from(read).await {
 			Ok(text) => {
-				PASTED.set(text.as_string());
+				PASTED.set(text.as_string().map(|text| (text, on)));
 				ctx.request_repaint();
 			}
 			Err(e) => tracing::debug!("nothing to paste: {e:?}"),
@@ -56,9 +62,29 @@ pub(super) fn read_clipboard(ctx: &egui::Context) -> Option<String> {
 	None
 }
 
-/// The clipboard's text read since the last frame.
-pub(super) fn pasted() -> Option<String> {
+/// The clipboard's text read since the last frame and what it pastes on.
+pub(super) fn pasted() -> Option<(String, On)> {
 	PASTED.take()
+}
+
+/// The export repaints while it works and is woken while it waits.
+pub(super) fn ticks_for(_exports: &Exports) -> bool {
+	false
+}
+
+/// The page updates with its server.
+pub(super) struct Updates;
+
+impl Updates {
+	pub(super) fn new(_boot: &Boot) -> Self {
+		Self
+	}
+
+	pub(super) fn check(&self, _ctx: &egui::Context, _quiet: bool) {}
+
+	pub(super) fn restart(&self) {}
+
+	pub(super) fn take(&self, _s: &Strings, _modals: &mut Modals) {}
 }
 
 /// Keeps the browser from acting on the shortcuts' keys and Alt+letter (where it lets a page), before eframe sees

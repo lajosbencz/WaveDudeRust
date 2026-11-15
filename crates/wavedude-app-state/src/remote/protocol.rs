@@ -12,14 +12,14 @@ use crate::live::EngineLabel;
 
 /// The version of [`ToWorker`] and [`ToPage`], bumped when either changes; a page and a worker of different
 /// versions do not talk.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// From the page to the run worker.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToWorker {
-	/// The first message: the page's [`VERSION`] and whether the engines run on the GPU. Stays the first variant,
-	/// its version first.
-	Init { version: u32, use_gpu: bool },
+	/// The first message: the page's [`VERSION`], its [`build_id`](crate::build_id) and whether the engines run on
+	/// the GPU. Stays the first variant, its version first.
+	Init { version: u32, build: String, use_gpu: bool },
 	/// The scene image of key `key` (`image_key`), its bytes the buffer; posted before the first goal naming it.
 	Image { key: u64 },
 	/// The goal, its project without the image bytes; `image` is the key of the image to put back.
@@ -35,10 +35,11 @@ pub enum ToWorker {
 /// From the run worker to the page.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToPage {
-	/// The worker started: its [`VERSION`] and its GPU adapter's name, or why it has none. Stays the first
-	/// variant, its version first.
+	/// The worker started: its [`VERSION`], its [`build_id`](crate::build_id) and its GPU adapter's name, or why
+	/// it has none. Stays the first variant, its version first.
 	Ready {
 		version: u32,
+		build: String,
 		gpu: Result<String, String>,
 	},
 	/// An engine was built: its label and, when the CPU's runs where the GPU's was asked for, why.

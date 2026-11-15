@@ -13,26 +13,28 @@ use crate::log::{CRASH_KEY, LogRing, RingLayer, SHOWN_CRASH_KEY, max_level};
 
 /// Files have paths: recent files, the log folder, saving in place.
 pub const HAS_PATHS: bool = false;
-/// The program looks for and installs its releases.
-pub const HAS_UPDATER: bool = false;
-/// Exports of videos, image sequences, stills and probe data to files.
-pub const HAS_EXPORTS: bool = true;
 
-/// The memory assumed where the browser does not tell (`navigator.deviceMemory` is not universal).
+/// The memory the machine's facts assume where the browser does not tell (`navigator.deviceMemory` is not universal).
 const UNKNOWN_MEMORY: u64 = 1 << 30;
 
-/// `navigator.deviceMemory` (rounded, at most 8 GiB) and `navigator.hardwareConcurrency`; the GPU and the drive
+/// A positive number of the navigator of the page or the worker it is called in.
+fn navigator_number(key: &str) -> Option<f64> {
+	let navigator = js_sys::Reflect::get(&js_sys::global(), &"navigator".into()).ok()?;
+	js_sys::Reflect::get(&navigator, &key.into()).ok()?.as_f64().filter(|v| v.is_finite() && *v > 0.0)
+}
+
+/// `navigator.deviceMemory` in bytes (rounded to a power of 2 and clamped by the browser); `None` where the browser
+/// does not tell.
+pub fn device_memory() -> Option<u64> {
+	navigator_number("deviceMemory").map(|gib| (gib * (1u64 << 30) as f64) as u64)
+}
+
+/// [`device_memory`], [`UNKNOWN_MEMORY`] where unknown, and `navigator.hardwareConcurrency`; the GPU and the drive
 /// unknown.
 pub fn machine_facts() -> MachineFacts {
-	let navigator = web_sys::window().map(|w| w.navigator());
-	let threads = navigator.as_ref().map_or(1, |n| n.hardware_concurrency() as u32).max(1);
-	let gib = navigator
-		.and_then(|n| js_sys::Reflect::get(&n, &js_sys::JsString::from("deviceMemory")).ok())
-		.and_then(|v| v.as_f64())
-		.filter(|g| g.is_finite() && *g > 0.0);
 	MachineFacts {
-		physical_bytes: gib.map_or(UNKNOWN_MEMORY, |g| (g * (1u64 << 30) as f64) as u64),
-		threads,
+		physical_bytes: device_memory().unwrap_or(UNKNOWN_MEMORY),
+		threads: navigator_number("hardwareConcurrency").map_or(1, |t| t as u32).max(1),
 		has_gpu: None,
 		cache_drive_seek_penalty: None,
 	}
@@ -143,32 +145,76 @@ impl Store {
 	}
 }
 
-/// Hands `bytes` to the browser as a download of the target's name; a page has no file paths.
+/// Hands `bytes` to the browser as a download of the target's name; a page has no file paths. Called while the
+/// user's action is in force, as a browser may drop a download a page starts on its own (decision 0025).
 pub fn write(target: &Target, bytes: &[u8]) -> std::io::Result<()> {
 	let Target::Download(name) = target else {
 		return Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "no file paths in the browser"));
 	};
-	let parts = js_sys::Array::of1(&js_sys::Uint8Array::from(bytes));
-	let blob = web_sys::Blob::new_with_u8_array_sequence(&parts).map_err(js_error)?;
-	let url = web_sys::Url::create_object_url_with_blob(&blob).map_err(js_error)?;
-	click_download(&url, name)?;
-	web_sys::Url::revoke_object_url(&url).map_err(js_error)
+	Download::of_bytes(bytes, name)?.start()
 }
 
-/// Starts the browser's download of object URL `url` as `name`.
-pub(super) fn click_download(url: &str, name: &str) -> std::io::Result<()> {
-	use web_sys::wasm_bindgen::JsCast;
-	let anchor = web_sys::window()
-		.and_then(|w| w.document())
-		.ok_or_else(|| std::io::Error::other("no document"))?
-		.create_element("a")
-		.map_err(js_error)?
-		.dyn_into::<web_sys::HtmlAnchorElement>()
-		.map_err(|e| js_error(e.into()))?;
-	anchor.set_href(url);
-	anchor.set_download(name);
-	anchor.click();
-	Ok(())
+/// An object URL, revoked when dropped.
+#[derive(Debug)]
+struct ObjectUrl(String);
+
+impl Drop for ObjectUrl {
+	fn drop(&mut self) {
+		if let Err(e) = web_sys::Url::revoke_object_url(&self.0) {
+			tracing::warn!("the URL {} could not be revoked: {}", self.0, describe(&e));
+		}
+	}
+}
+
+thread_local! {
+	/// The URL of the download started last, kept until the next starts: a browser may fetch it after the click
+	/// returns.
+	static STARTED: std::cell::RefCell<Option<std::rc::Rc<ObjectUrl>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// A file ready for the browser's download: an object URL and the name it is saved as. [`start`](Self::start) is for
+/// the user's click (decision 0025).
+#[derive(Debug)]
+pub struct Download {
+	url: std::rc::Rc<ObjectUrl>,
+	name: String,
+}
+
+impl Download {
+	/// `bytes` to be saved as `name`.
+	pub fn of_bytes(bytes: &[u8], name: &str) -> std::io::Result<Self> {
+		let parts = js_sys::Array::of1(&js_sys::Uint8Array::from(bytes));
+		Self::of_blob(&web_sys::Blob::new_with_u8_array_sequence(&parts).map_err(js_error)?, name)
+	}
+
+	/// `blob` to be saved as `name`.
+	pub(super) fn of_blob(blob: &web_sys::Blob, name: &str) -> std::io::Result<Self> {
+		let url = web_sys::Url::create_object_url_with_blob(blob).map_err(js_error)?;
+		Ok(Self { url: std::rc::Rc::new(ObjectUrl(url)), name: name.to_owned() })
+	}
+
+	/// The name the file is saved as.
+	pub fn name(&self) -> &str {
+		&self.name
+	}
+
+	/// Starts the browser's download, by a click on an anchor of the URL; the URL lives until the next download
+	/// starts, whatever becomes of `self`.
+	pub fn start(&self) -> std::io::Result<()> {
+		use web_sys::wasm_bindgen::JsCast;
+		let anchor = web_sys::window()
+			.and_then(|w| w.document())
+			.ok_or_else(|| std::io::Error::other("no document"))?
+			.create_element("a")
+			.map_err(js_error)?
+			.dyn_into::<web_sys::HtmlAnchorElement>()
+			.map_err(|e| js_error(e.into()))?;
+		anchor.set_href(&self.url.0);
+		anchor.set_download(&self.name);
+		anchor.click();
+		STARTED.with_borrow_mut(|started| *started = Some(self.url.clone()));
+		Ok(())
+	}
 }
 
 /// Nothing to keep alive: the console writes at once.
@@ -195,7 +241,7 @@ pub fn install_panic_hook(store: &Store) {
 	let store = store.clone();
 	let default = std::panic::take_hook();
 	std::panic::set_hook(Box::new(move |info| {
-		let report = format!("WaveDude Rust {} in the browser\n{info}\n", env!("CARGO_PKG_VERSION"));
+		let report = format!("WaveDude Rust {} in the browser\n{info}\n", crate::build_id());
 		let before = store.read(CRASH_KEY).ok().flatten().unwrap_or_default();
 		if let Err(e) = store.write(CRASH_KEY, &(before + &report)) {
 			tracing::error!("the crash report could not be kept: {e}");

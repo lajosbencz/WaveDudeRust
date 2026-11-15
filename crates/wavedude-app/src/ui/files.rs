@@ -8,16 +8,16 @@ mod native;
 mod web;
 
 use std::path::Path;
-use std::sync::mpsc::{Receiver, Sender, channel};
 
 use eframe::egui;
 #[cfg(not(target_arch = "wasm32"))]
-pub(super) use native::on_thread;
+pub(super) use native::wait;
 use wavedude_app_state::commands::Command;
 use wavedude_app_state::document::{Source, Target};
 use wavedude_app_state::{Event, Guarded};
 use wavedude_core::io::image_extensions;
 
+use super::inbox::Inbox;
 use super::modal::{Modal, Modals};
 use crate::App;
 
@@ -46,22 +46,15 @@ fn is_image(name: &Path) -> bool {
 }
 
 /// The answers, each with the document it was asked for ([`App::document_id`]).
+#[derive(Default)]
 pub(super) struct Files {
-	tx: Sender<(u64, Picked)>,
-	rx: Receiver<(u64, Picked)>,
-}
-
-impl Default for Files {
-	fn default() -> Self {
-		let (tx, rx) = channel();
-		Self { tx, rx }
-	}
+	answers: Inbox<(u64, Picked)>,
 }
 
 impl Files {
 	/// Sends an answer for the project `app` shows now; the window repaints after.
 	fn reply(&self, ctx: &egui::Context, app: &App) -> impl FnOnce(Picked) + Send + 'static {
-		let (tx, ctx, project) = (self.tx.clone(), ctx.clone(), app.document_id());
+		let (tx, ctx, project) = (self.answers.sender(), ctx.clone(), app.document_id());
 		move |answer| {
 			// the window may have closed meanwhile
 			let _ = tx.send((project, answer));
@@ -79,7 +72,7 @@ impl Files {
 
 	/// The events of the answers that arrived for the project `app` still shows; a failure's message window.
 	pub(super) fn take(&self, app: &App, out: &mut Vec<Event>, modals: &mut Modals) {
-		for (project, picked) in self.rx.try_iter() {
+		for (project, picked) in self.answers.try_iter() {
 			if project != app.document_id()
 				&& !matches!(picked, Picked::Project(_) | Picked::Dropped(_) | Picked::Failed(_))
 			{

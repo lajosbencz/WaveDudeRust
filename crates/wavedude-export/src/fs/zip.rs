@@ -1,8 +1,8 @@
-//! A ZIP archive as an [`OutputFs`]: each file an entry, stored uncompressed. A file is held in memory, as its
-//! writer may seek, and added whole when closed, so files written at once on several threads do not interleave;
-//! [`ZipFs::write_entry`] streams an entry from chunks that come later instead. Sizes go in data descriptors, so
-//! the archive's file is only appended to. ZIP64 records are written where the sizes or the count of entries need them. The archive is
-//! dropped whole on failure, so removing a file or a folder does nothing.
+//! A ZIP archive as an [`OutputFs`]: each file an entry, stored uncompressed. A file is held in memory, as its writer
+//! may seek, and added whole when closed, so files written at once on several threads do not interleave;
+//! [`ZipFs::write_entry`] streams an entry from chunks that come later instead. Sizes go in data descriptors, so the
+//! archive's file is only appended to; ZIP64 records are written where sizes or the entry count need them. The archive
+//! is dropped whole on failure, so removing a file or a folder does nothing.
 
 use std::collections::BTreeSet;
 use std::fmt;

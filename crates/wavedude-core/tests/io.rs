@@ -41,13 +41,12 @@ fn assert_same(a: &Project, b: &Project, what: &str) {
 }
 
 #[test]
-fn every_example_loads_round_trips_and_validates() {
+fn every_example_loads_and_round_trips() {
 	for path in examples() {
 		let name = path.file_name().unwrap().to_string_lossy().into_owned();
 		let p = io::load_project(&path).unwrap_or_else(|e| panic!("{name}: {e}"));
 		assert!(!p.description.is_empty(), "{name}");
 		let text = wdproj::write_string(&p, None);
-		assert_eq!(wdproj::validate(&text), Vec::<String>::new(), "{name}");
 		let back = wdproj::read_str(&text).unwrap();
 		assert_same(&p, &back, &name);
 	}

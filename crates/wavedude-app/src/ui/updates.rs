@@ -1,14 +1,13 @@
 //! The updater's questions and notices (docs/ui/70, Updates): the check and the download run on threads of their
 //! own, their answers are taken on a later frame; a downloaded package waits in [`Pending`] for the restart.
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::mpsc::{Receiver, Sender, channel};
-
 use cargo_packager_updater::Update;
 use eframe::egui;
 use wavedude_app_state::strings::Strings;
 use wavedude_app_state::{Event, Guarded};
 
+use super::Boot;
+use super::inbox::Inbox;
 use super::modal::{Modal, Modals, Then};
 use crate::downloads;
 use crate::update::{self, Pending};
@@ -24,46 +23,23 @@ enum Answer {
 
 /// The threads' answers and the package waiting for the restart.
 pub(super) struct Updates {
-	tx: Sender<Answer>,
-	rx: Receiver<Answer>,
+	answers: Inbox<Answer>,
 	pending: Pending,
 }
 
 impl Updates {
-	pub(super) fn new(pending: Pending) -> Self {
-		let (tx, rx) = channel();
-		Self { tx, rx, pending }
-	}
-
-	/// Runs `work` on a thread of its own; a panic in it answers `failed`.
-	fn spawn(
-		&self,
-		ctx: &egui::Context,
-		name: &str,
-		work: impl FnOnce() -> Answer + Send + 'static,
-		failed: impl FnOnce(String) -> Answer + Send + 'static,
-	) {
-		let (tx, ctx) = (self.tx.clone(), ctx.clone());
-		let started = std::thread::Builder::new().name(name.into()).spawn(move || {
-			let answer =
-				catch_unwind(AssertUnwindSafe(work)).unwrap_or_else(|_| failed("the update thread panicked".into()));
-			// the window may have closed meanwhile
-			let _ = tx.send(answer);
-			ctx.request_repaint();
-		});
-		if let Err(e) = started {
-			tracing::error!("the {name} thread could not start: {e}");
-		}
+	pub(super) fn new(boot: &Boot) -> Self {
+		Self { answers: Inbox::default(), pending: boot.update.clone() }
 	}
 
 	/// Looks for a newer release; `quiet` (the launch's check) says nothing when there is none or the check fails.
 	pub(super) fn check(&self, ctx: &egui::Context, quiet: bool) {
 		if update::AVAILABLE {
-			self.spawn(
+			self.answers.spawn(
 				ctx,
 				"update-check",
-				move || Answer::Checked { result: update::check(), quiet },
-				move |e| Answer::Checked { result: Err(e), quiet },
+				move |_| Some(Answer::Checked { result: update::check(), quiet }),
+				move |e| Some(Answer::Checked { result: Err(e), quiet }),
 			);
 		}
 	}
@@ -73,11 +49,11 @@ impl Updates {
 		let version = update.version.clone();
 		tracing::info!("downloading update {version}");
 		let download = downloads::start(s.format("StatusDownloadingUpdateFormat", &[&version]));
-		self.spawn(
+		self.answers.spawn(
 			ctx,
 			"update-download",
-			move || Answer::Downloaded(update::download(update, |bytes, total| download.chunk(bytes, total))),
-			|e| Answer::Downloaded(Err(e)),
+			move |_| Some(Answer::Downloaded(update::download(update, |bytes, total| download.chunk(bytes, total)))),
+			|e| Some(Answer::Downloaded(Err(e))),
 		);
 	}
 
@@ -90,7 +66,7 @@ impl Updates {
 
 	/// The modals of the answers that arrived.
 	pub(super) fn take(&self, s: &Strings, modals: &mut Modals) {
-		for answer in self.rx.try_iter() {
+		for answer in self.answers.try_iter() {
 			let current = update::current();
 			match answer {
 				Answer::Checked { result: Ok(Some(u)), .. } => {

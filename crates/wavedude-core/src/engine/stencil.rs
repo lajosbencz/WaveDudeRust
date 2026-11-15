@@ -18,11 +18,15 @@ pub const PAD: usize = 3;
 /// +0.025 % at 10.
 pub const DRP_WEIGHTS: [f64; 4] = [-2.8070216503722194, 1.5635995711124977, -0.17543982844499903, 0.015351082518610951];
 
-/// The Taylor 4th-order weights (-1/12, 4/3, -5/2): the original's 4th-order stencil.
-pub const TAYLOR_FOURTH_WEIGHTS: [f64; 4] = [-2.5, 4.0 / 3.0, -1.0 / 12.0, 0.0];
-
 /// The 3-point second difference.
 pub const SECOND_DIFFERENCE_WEIGHTS: [f64; 4] = [-2.0, 1.0, 0.0, 0.0];
+
+/// The 9-point Laplacian as differences from the centre: the weight of the four diagonal taps (the cross
+/// weight of [`StencilCoefficients::NINE_POINT`]) and of the four axis taps (1 less twice it).
+pub(crate) const K9_DIAGONAL: f32 = 1.0 / 6.0;
+pub(crate) const K9_AXIS: f32 = 2.0 / 3.0;
+/// The modified equation's weight of `A (A u)` ([`TimeScheme`]).
+pub(crate) const INV12: f32 = 1.0 / 12.0;
 
 /// A Laplacian's weights (see the module docs).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -38,8 +42,9 @@ impl StencilCoefficients {
 	pub const NINE_POINT: Self = Self { axis: SECOND_DIFFERENCE_WEIGHTS, cross: 1.0 / 6.0 };
 	/// The 7-point-per-axis DRP Laplacian.
 	pub const DRP: Self = Self { axis: DRP_WEIGHTS, cross: 0.0 };
-	/// The Taylor 4th-order 5-point-per-axis Laplacian.
-	pub const TAYLOR_FOURTH: Self = Self { axis: TAYLOR_FOURTH_WEIGHTS, cross: 0.0 };
+	/// The Taylor 4th-order 5-point-per-axis Laplacian (-1/12, 4/3, -5/2): the original's, the tests' reference.
+	#[cfg(test)]
+	pub(crate) const TAYLOR_FOURTH: Self = Self { axis: [-2.5, 4.0 / 3.0, -1.0 / 12.0, 0.0], cross: 0.0 };
 
 	/// The engine's coefficients for `stencil`.
 	pub fn of(stencil: Stencil) -> Self {
@@ -73,16 +78,7 @@ impl StencilCoefficients {
 
 	/// The inverse of [`axis_symbol`](Self::axis_symbol) on [0, pi] by bisection.
 	pub fn axis_wavenumber(&self, symbol: f64) -> f64 {
-		let (mut lo, mut hi) = (0.0, std::f64::consts::PI);
-		for _ in 0..100 {
-			let mid = 0.5 * (lo + hi);
-			if self.axis_symbol(mid) < symbol {
-				lo = mid;
-			} else {
-				hi = mid;
-			}
-		}
-		0.5 * (lo + hi)
+		bisect(0.0, std::f64::consts::PI, 100, |k| self.axis_symbol(k) < symbol)
 	}
 }
 
@@ -93,9 +89,9 @@ impl StencilCoefficients {
 /// ModifiedEquation:   u+ = 2u - u- + A u + A (A u) / 12
 /// ```
 ///
-/// The second (Dablain 1986) cancels leapfrog's leading temporal error `dt^4 u_tttt / 12` by
-/// `u_tttt = (c^2 L)^2 u`, so it is 4th order in time. For a mode of A with eigenvalue `-s` a
-/// sub-step turns `e^{-i theta}` into `4 sin^2(theta/2) = s` (leapfrog) or `s - s^2/12`.
+/// The second (Dablain 1986) cancels leapfrog's leading temporal error `dt^4 u_tttt / 12` by `u_tttt = (c^2 L)^2 u`, so
+/// it is 4th order in time. For a mode of A with eigenvalue `-s` a sub-step turns `e^{-i theta}` into
+/// `4 sin^2(theta/2) = s` (leapfrog) or `s - s^2/12`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TimeScheme {
 	Leapfrog,
@@ -140,6 +136,27 @@ impl TimeScheme {
 			Self::ModifiedEquation => 6.0 * (1.0 - (1.0 - om / 3.0).max(0.0).sqrt()),
 		}
 	}
+}
+
+/// Weight of the spatial term at a cell of damping `d`: the centred damped update
+/// `(u+ - 2u + u-) + g (u+ - u-) = A u` with `d = (1 - g) / (1 + g)` reads
+/// `u+ = u + d (u - u-) + (1 + d)/2 A u` (docs/physics.md, Damping). 1 for d = 1, exactly.
+#[inline(always)]
+pub(crate) fn centred(d: f32) -> f32 {
+	(1.0 + d) * 0.5
+}
+
+/// The point of [lo, hi] where `below` turns false, by `iterations` halvings; `below` holds left of it.
+pub(crate) fn bisect(mut lo: f64, mut hi: f64, iterations: u32, below: impl Fn(f64) -> bool) -> f64 {
+	for _ in 0..iterations {
+		let mid = f64::midpoint(lo, hi);
+		if below(mid) {
+			lo = mid;
+		} else {
+			hi = mid;
+		}
+	}
+	f64::midpoint(lo, hi)
 }
 
 #[cfg(test)]

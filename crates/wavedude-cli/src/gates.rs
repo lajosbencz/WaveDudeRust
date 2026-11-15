@@ -1,10 +1,9 @@
-//! The photonic gate demonstrations of the Huygens Optics video "Creating Logic using Waves:
-//! Photonic Gates" as projects, laid out by this project's mode solver.
+//! The photonic gate demonstrations of the Huygens Optics video "Creating Logic using Waves: Photonic Gates" as
+//! projects, laid out by this project's mode solver.
 //!
-//! Canvas coordinates throughout: x to the right, y down, a fibre node or part centre at the
-//! top-left corner of its pixel. Arm A (input A, output Q) is the upper one (smaller y), arm B
-//! (input B, output R) the lower one. Every pixel feature of arm B is the mirror of arm A's about
-//! the axis between them: row r of A mirrors to row `y_a + y_b - 1 - r`.
+//! Canvas coordinates: x to the right, y down, a fibre node or part centre at the top-left corner of its pixel. Arm A
+//! (input A, output Q) is the upper one (smaller y), arm B (input B, output R) the lower one; every pixel feature of
+//! arm B mirrors arm A's about the axis between them: row r of A to row `y_a + y_b - 1 - r`.
 
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 use std::fs;
@@ -676,10 +675,10 @@ fn projects(args: &Args) -> Result<(FibreDesign, Vec<(&'static str, Project)>)> 
 fn fitted_brightness(project: &Project, engine: EngineArgs) -> Result<[f64; 2]> {
 	let pixels = compose_scene(project);
 	let spec = RunSpec::create(project, pixels.as_ref(), PreviewQuality::FULL, true)?;
-	let mut engine = engine.build(&spec);
+	let mut engine = engine.build(&spec)?;
 	engine.set_emitters(&spec.emitters);
 	let last = project.simulation.frame_count().saturating_sub(1);
-	for _ in 0..=spec.step_of(last) {
+	for _ in 0..=spec.schedule.step_of(last) {
 		engine.advance_one_step()?;
 	}
 	let snapshot = engine.capture_frame(&spec.shape)?;

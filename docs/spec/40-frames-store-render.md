@@ -24,10 +24,11 @@ Frame k holds the state after step index `k*VE` (that is after `k*VE + 1` steps)
 Layers captured: Field always; Intensity when the engine tracks it (`TrackIntensity`: intensity layer previewed, any
 active non-Amplitude probe, or an export of the intensity).
 
-Run state progression: Created -> Running -> (Paused) -> Completed | Cancelled | Failed (Rust: the typed error, the
-frame store's, the engine's, a thread that could not start, or a panic with its message). A completed run's frames are
-immutable. A simulation edit replaces the frames (Rust: the live run's store is cleared and refilled, [spec/30](30-engine.md) The live
-run); an export needs the frames of the project as it is.
+Run state progression: Created -> Running -> (Paused) -> Completed | Cancelled | Failed (Rust: every run is a live run,
+[spec/30](30-engine.md) The live run, which captures these frames; a CLI run wants every frame. Its states have no
+Created; a failure is the typed error, the frame store's, the engine's, or a panic with its message). A completed run's
+frames are immutable. A simulation edit replaces the frames (Rust: the live run's store is cleared and refilled,
+[spec/30](30-engine.md) The live run); an export needs the frames of the project as it is.
 
 Rust's frame store takes frames by index in any order and tracks which are present (a per-frame flag and the
 contiguous prefix); a cleared store keeps the frame written last and its buffers, which the next generation's frames
@@ -89,8 +90,10 @@ StoreBytesAt(q) = layers * PlaneBytes(div, format) * ceil(FrameCount / q.FrameDi
 Frames `0..RamFrames-1` live in native memory; the rest in a spill file in `%LOCALAPPDATA%\WaveDudeNext\cache`
 (delete on close; Rust: an unlinked file in the OS cache dir's `frames` folder, so a killed process leaves nothing;
 named `.wdfs` leftovers of earlier builds are removed when the worker starts). No memory mapping.
-In the browser (Rust only) the budget is the frames' memory, min(device memory, 2 GiB) (1 GiB when the browser does
-not tell), or its FrameMemoryPercent share when > 0; the frames past it spill to the origin private file system, one
+In the browser (Rust only) the budget is the frames' memory, min(device memory / 8, 512 MiB), the device memory being
+`navigator.deviceMemory` (1 GiB when the browser does not tell; decision 0020, The browser's memory budget), or its
+FrameMemoryPercent share when > 0; a frame whose memory the browser refuses fails the run instead of the page; the
+frames past it spill to the origin private file system, one
 file per frame, written and read asynchronously (decision 0020). A spilled frame stays in memory while its write is
 in flight (the run waits while 4 are) and while it is the frame written last; a spilled frame being read back keeps
 the picture shown before until it is there; during playback the frames it reaches next are read back ahead.

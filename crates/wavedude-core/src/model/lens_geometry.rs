@@ -1,10 +1,11 @@
-//! A lens's surfaces as the model and the painter reckon with them: sags, the radii fitted to the diameter
-//! and the centre thickness, and the zones of a Fresnel lens (spec 10 "Lens radius fit", spec 20 "Lens").
+//! A lens's surfaces as the model and the painter reckon with them: sags, the radii fitted to the diameter and
+//! the centre thickness, and the zones of a Fresnel lens (docs/spec/10-model.md "Lens radius fit", 20-scene-painting.md
+//! "Lens").
 //!
-//! A surface of signed radius `R` has its circle's centre at `vertex + R`; `R1 > 0` and `R2 < 0` bulge outward,
-//! 0 is flat. A Fresnel lens cuts a surface into `zones` zones from the axis to the rim, divided by
-//! [`ZoneDivision`]; at each zone's inner edge the arc starts again at the vertex plane, so the deepest zone's
-//! sag is what the centre thickness must hold.
+//! A surface of signed radius `R` has its circle's centre at `vertex + R`; `R1 > 0` and `R2 < 0` bulge outward, 0 is
+//! flat. A Fresnel lens cuts a surface into `zones` zones from the axis to the rim ([`ZoneDivision`]); the arc starts
+//! again at the vertex plane at each zone's inner edge, so the deepest zone's sag is what the centre thickness must
+//! hold.
 
 use super::ZoneDivision;
 

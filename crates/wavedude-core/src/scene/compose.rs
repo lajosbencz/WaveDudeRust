@@ -1,12 +1,12 @@
 //! The scene's composition: the image or a blank canvas with the enabled parts painted in.
 
-use crate::sync::lock;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 use super::painter::paint_part;
 use super::pixels::ScenePixels;
 use crate::model::{Feed, Project, SceneMode, Stencil};
+use crate::sync::lock;
 
 /// The decoded scene image of an image scene, None otherwise or when it does not decode.
 pub fn decode_image(project: &Project) -> Option<ScenePixels> {

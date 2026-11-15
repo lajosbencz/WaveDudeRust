@@ -12,14 +12,15 @@ use eframe::egui::{self, Key, Rect, Role, pos2, vec2};
 use egui_kittest::kittest::{NodeT, Queryable};
 use egui_kittest::{Harness, HarnessBuilder};
 use wavedude_app::App;
-use wavedude_app::ui::{Boot, Shell};
+use wavedude_app::ui::Shell;
 use wavedude_app_state::document::Source;
-use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{Event, Guarded};
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::quality::PreviewQuality;
+
+use common::{app, boot};
 
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example16_Wave_in_2_boxes.wdproj";
 /// Frames for an input to reach the state and its result to show.
@@ -43,7 +44,7 @@ fn window(builder: HarnessBuilder<Shell>, dir: &Path, size: egui::Vec2) -> Harne
 	{
 		app.handle(event, Instant::now());
 	}
-	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
+	let boot = boot(&dirs);
 	let mut harness = builder.with_size(size).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
 	harness
@@ -51,10 +52,6 @@ fn window(builder: HarnessBuilder<Shell>, dir: &Path, size: egui::Vec2) -> Harne
 
 fn settle(harness: &mut Harness<'_, Shell>) {
 	harness.run_steps(SETTLE);
-}
-
-fn app<'h>(harness: &'h Harness<'_, Shell>) -> &'h App {
-	harness.state().app()
 }
 
 /// Steps the window until `done`, at most two minutes.

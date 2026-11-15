@@ -1,7 +1,10 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use wavedude_app_state::settings::AppDirs;
+use wavedude_app_state::user_schemes;
 use wavedude_core::engine::substeps::sub_steps;
+use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::io::{load_project, save_project};
 use wavedude_core::model::Project;
 use wavedude_core::model::normalize::Normalize;
@@ -15,6 +18,17 @@ use crate::png_out::write_rgba;
 
 pub(crate) fn load(path: &Path) -> Result<Project> {
 	load_project(path).with_context(|| format!("loading {}", path.display()))
+}
+
+/// The user's colour schemes in the app's folders `dirs`; none without them (a platform without a home).
+pub(crate) fn user_schemes(dirs: Option<&AppDirs>) -> SchemeStore {
+	match dirs {
+		Some(dirs) => user_schemes::load(&dirs.store()),
+		None => {
+			eprintln!("no user folders on this platform: the user's colour schemes are not loaded");
+			SchemeStore::default()
+		}
+	}
 }
 
 /// The composed scene, or a blank canvas when the project has neither image nor enabled parts.
@@ -88,8 +102,8 @@ pub(crate) fn check(path: &Path) -> Result<()> {
 	println!("stride:       {}", scene.canvas_width + 2 + 2 * scene.rim);
 	println!("stencil:      {:?}", spec.options.stencil);
 	println!("sub-steps:    {}", sub_steps(spec.options.stencil, scene.max_c2()));
-	println!("steps:        {} (a frame every {})", spec.steps, spec.visualize_every);
-	println!("frames:       {}", spec.frame_count());
+	println!("steps:        {} (a frame every {})", spec.schedule.steps, spec.schedule.visualize_every);
+	println!("frames:       {}", spec.schedule.frame_count());
 	println!("emitters:     {}, image sources {}", spec.emitters.len(), scene.image_sources.len());
 	let request = wavedude_core::spec::RunRequest::new(&project, PreviewQuality::FULL, true);
 	println!("store, full:    {}", gib(request.store_bytes_at(PreviewQuality::FULL)));

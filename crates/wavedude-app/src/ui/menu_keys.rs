@@ -1,13 +1,9 @@
-//! Keyboard access to the menus of docs/ui/10 (Conventions, Global keys) and docs/ui/00 (Keyboard first): the
-//! mnemonics the string tables mark with `_` are underlined while Alt is held or keys work the menus. Alt+letter
-//! opens a menu of the bar; F10 or a lone Alt enters the bar, where Left and Right walk the headers and Down, Enter
-//! or a letter opens one; in an open menu a letter picks its entry (several with one letter take the focus in
-//! turn), Home and End reach its ends, Left and Right open the neighbouring menu of the bar and Esc steps out one
-//! level. Up, Down, Enter and Right into a submenu are egui's own focus walk of a menu. Leaving the menus gives the
-//! focus back to where the keys took it from.
+//! Keyboard access to the menus (docs/ui/10, Conventions and Global keys; docs/ui/00, Keyboard first): mnemonics
+//! marked with `_` in the string tables are underlined while Alt is held or keys work the menus. Up, Down, Enter and
+//! Right into a submenu are egui's own focus walk; leaving the menus returns the focus to where the keys took it from.
 //!
-//! The menus record their headers, entries and open popups in every pass; [`MenuKeys`] acts on the keys before
-//! egui sees them, on the record of the pass before.
+//! The menus record their headers, entries and open popups in every pass; [`MenuKeys`] acts on the keys before egui
+//! sees them, on the record of the pass before.
 
 use std::mem;
 

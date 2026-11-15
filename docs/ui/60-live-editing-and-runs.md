@@ -72,7 +72,8 @@ or every frame) and whether the user paused. The run converges on it, without ti
 - With it off, only the position's frame is made; Play or F5 make the rest.
 - An export waiting for its run is dropped by an edit or by Stop (status bar says so). An export reading its run
   holds the frames: a simulation or probe edit made meanwhile is taken up when the export ends; New, Open and
-  Close are refused meanwhile (the status bar says so); F5 and Play use the frames as they are.
+  Close are refused meanwhile (the status bar says so); F5 is refused while an export holds or waits for its run;
+  Play uses the frames as they are.
 - Turning the setting on asks for nothing by itself.
 - Errors go to the status bar and log, no message box.
 

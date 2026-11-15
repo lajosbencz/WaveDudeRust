@@ -49,6 +49,11 @@ pub const SIM_TIME_DECAY: Range = Range::new(1.0, 100.0);
 pub const SIM_SOURCE_FREQUENCY_SCALE: Range = Range::new(0.0, 1000.0);
 pub const SIM_INTENSITY_SCALE: Range = Range::new(1e-7, 1e6);
 
+/// A source array's columns or rows: up to the largest canvas's side.
+pub const ARRAY_SIZE: Range = Range::new(1.0, SCENE_SIZE.max);
+/// A source array's most elements, columns times rows; rows give way to columns.
+pub const ARRAY_ELEMENTS: u32 = 1 << 16;
+
 pub const STEP_POINT: Range = Range::new(0.0, INT_MAX);
 /// A source's position in cells; the canvas edge is not a bound, a source outside drives nothing.
 pub const POSITION: Range = Range::new(-INT_MAX, INT_MAX);
@@ -118,9 +123,6 @@ mod tests {
 	/// Fields (`<TYPE_NAME>.<name>`) that `normalize` wraps into (-180, 180] rather than clamps.
 	const WRAPPED: &[&str] = &["SourceArray.Angle", "Part.Angle"];
 
-	type Set = Box<dyn Fn(&mut Project, f64)>;
-	type Get = Box<dyn Fn(&Project) -> f64>;
-
 	/// One of every part kind, in this order; the triangle is Custom with `AngleA` 1 so `AngleB` may reach 178.
 	fn fixture() -> Project {
 		let mut p = Project::default();
@@ -163,266 +165,81 @@ mod tests {
 		p
 	}
 
-	macro_rules! field {
-		($key:expr, |$p:ident| $place:expr) => {
-			(
-				$key,
-				Box::new(|$p: &mut Project, v: f64| $place = num(v)) as Set,
-				Box::new(|$p: &Project| $place as f64) as Get,
-			)
-		};
+	/// A ranged number of the fixture: its path from a root, its `<TYPE_NAME>.<name>`, its range, and the value it
+	/// holds after being set to a value and normalised.
+	struct Ranged {
+		path: String,
+		key: String,
+		range: Range,
+		round_trip: Box<dyn Fn(f64) -> f64>,
 	}
 
-	macro_rules! array_field {
-		($key:expr, $f:ident) => {
-			(
-				$key,
-				Box::new(|p: &mut Project, v: f64| p.sources[0].array.as_mut().unwrap().$f = num(v)) as Set,
-				Box::new(|p: &Project| p.sources[0].array.as_ref().unwrap().$f as f64) as Get,
-			)
-		};
+	/// The ranged numbers below the root `name`, which `at` reaches in the fixture.
+	fn below<R: Fields>(name: &str, at: impl Fn(&mut Project) -> &mut R + Copy + 'static) -> Vec<Ranged> {
+		let mut p = fixture();
+		let root: &R = at(&mut p);
+		R::Field::all()
+			.into_iter()
+			.filter(|f| is_number(f.kind()) && f.get(root).is_some())
+			.filter_map(|field| {
+				let range = field.range()?;
+				let (type_name, leaf) = field.declared();
+				let round_trip = Box::new(move |v: f64| {
+					let mut p = fixture();
+					edit(field, v).apply(at(&mut p)).unwrap();
+					p.normalize();
+					number(field.get(at(&mut p)).unwrap(), range)
+				});
+				Some(Ranged {
+					path: format!("{name}.{}", field.path()),
+					key: format!("{type_name}.{leaf}"),
+					range,
+					round_trip,
+				})
+			})
+			.collect()
 	}
 
-	/// A field of the meta surface design of part `$i`.
-	macro_rules! design {
-		($key:expr, $i:expr, $variant:ident, |$d:ident| $place:expr) => {
-			(
-				$key,
-				Box::new(|p: &mut Project, v: f64| {
-					if let PartKind::MetaSurface(m) = &mut p.parts[$i].kind
-						&& let MetaDesign::$variant($d) = &mut m.design
-					{
-						$place = num(v);
-					}
-				}) as Set,
-				Box::new(|p: &Project| match &p.parts[$i].kind {
-					PartKind::MetaSurface(m) => match &m.design {
-						MetaDesign::$variant($d) => $place as f64,
-						_ => unreachable!(),
-					},
-					_ => unreachable!(),
-				}) as Get,
-			)
-		};
-	}
-
-	macro_rules! kind {
-		($key:expr, $i:expr, $variant:ident, |$k:ident| $place:expr) => {
-			(
-				$key,
-				Box::new(|p: &mut Project, v: f64| {
-					if let PartKind::$variant($k) = &mut p.parts[$i].kind {
-						$place = num(v);
-					}
-				}) as Set,
-				Box::new(|p: &Project| match &p.parts[$i].kind {
-					PartKind::$variant($k) => $place as f64,
-					_ => unreachable!(),
-				}) as Get,
-			)
-		};
-	}
-
-	/// Converts with saturation into the field's type.
-	fn num<T: FromF64>(v: f64) -> T {
-		T::from_f64(v)
-	}
-
-	trait FromF64 {
-		fn from_f64(v: f64) -> Self;
-	}
-	impl FromF64 for f64 {
-		fn from_f64(v: f64) -> Self {
-			v
+	/// The ranged numbers below the project and every list element of the fixture.
+	fn ranged() -> Vec<Ranged> {
+		let mut ranged = below("Project", |p| p);
+		ranged.extend(below("Source", |p| &mut p.sources[0]));
+		ranged.extend(below("Probe", |p| &mut p.probes[0]));
+		ranged.extend(below("ColorScheme", |p| &mut p.color_schemes[0]));
+		ranged.extend(below("Stop", |p| &mut p.color_schemes[0].stops[0]));
+		for i in 0..fixture().parts.len() {
+			ranged.extend(below(&format!("Part {i}"), move |p| &mut p.parts[i]));
 		}
-	}
-	impl FromF64 for u32 {
-		fn from_f64(v: f64) -> Self {
-			v as u32
-		}
-	}
-	impl FromF64 for i32 {
-		fn from_f64(v: f64) -> Self {
-			v as i32
-		}
+		ranged.extend(below("FilterLayer", |p| {
+			let mut layers = p.parts.iter_mut().filter_map(|part| match &mut part.kind {
+				PartKind::InterferenceFilter(f) => f.layers.first_mut(),
+				_ => None,
+			});
+			layers.next().expect("the fixture has a filter layer")
+		}));
+		ranged
 	}
 
-	fn material(p: &mut Project, i: usize) -> &mut Material {
-		match &mut p.parts[i].kind {
-			PartKind::Lens(k) => &mut k.material,
-			PartKind::FresnelLens(k) => &mut k.lens.material,
-			PartKind::Diffuser(k) => &mut k.material,
-			PartKind::InterferenceFilter(k) => &mut k.material,
-			PartKind::SimpleGrating(k) => &mut k.material,
-			PartKind::MetaSurface(k) => &mut k.material,
-			PartKind::FacettedGrating(k) => &mut k.material,
-			PartKind::Polygon(k) => &mut k.material,
-			PartKind::Rectangle(k) => &mut k.material,
-			PartKind::Ellipse(k) => &mut k.material,
-			PartKind::Triangle(k) => &mut k.material,
-			PartKind::Outline(k) => &mut k.material,
-			_ => unreachable!(),
+	/// The edit setting `field` to `v`, saturated into its type; a negative value empties an optional unsigned
+	/// field (`DetachAfter`, whose -1 is never).
+	fn edit<F: Field>(field: F, v: f64) -> <F::Owner as Fields>::Edit {
+		match field.kind() {
+			ValueKind::UInt if v < 0.0 => field.edit(Value::Absent).or_else(|_| field.edit(Value::Int(0))),
+			ValueKind::UInt => field.edit(Value::Int(i64::from(v as u32))),
+			ValueKind::Int => field.edit(Value::Int(i64::from(v as i32))),
+			_ => field.edit(Value::Float(v)),
 		}
+		.unwrap()
 	}
 
-	fn coating(p: &mut Project, i: usize) -> &mut Coating {
-		match &mut p.parts[i].kind {
-			PartKind::Lens(k) => &mut k.coating,
-			PartKind::FresnelLens(k) => &mut k.lens.coating,
-			PartKind::Diffuser(k) => &mut k.coating,
-			PartKind::InterferenceFilter(k) => &mut k.coating,
-			PartKind::FacettedGrating(k) => &mut k.coating,
-			PartKind::MetaSurface(k) => &mut k.coating,
-			PartKind::Polygon(k) => &mut k.coating,
-			PartKind::Rectangle(k) => &mut k.coating,
-			PartKind::Ellipse(k) => &mut k.coating,
-			PartKind::Triangle(k) => &mut k.coating,
-			PartKind::Outline(k) => &mut k.coating,
-			PartKind::Fiber(k) => &mut k.coating,
-			PartKind::GrinLens(k) => &mut k.coating,
-			_ => unreachable!(),
+	/// A number's value; an absent optional is its range's minimum.
+	fn number(value: Value, range: Range) -> f64 {
+		match value {
+			Value::Int(i) => i as f64,
+			Value::Float(x) => x,
+			Value::Absent => range.min,
+			other => panic!("{other:?} is no number"),
 		}
-	}
-
-	fn accessors() -> Vec<(&'static str, Set, Get)> {
-		let mut v: Vec<(&'static str, Set, Get)> = vec![
-			field!("Scene.Width", |p| p.scene.width),
-			field!("Scene.Height", |p| p.scene.height),
-			field!("Scene.DampingEdge", |p| p.scene.damping_edge),
-			field!("Scene.RefractiveIndex", |p| p.scene.refractive_index),
-			field!("Scene.ImageSourceScale", |p| p.scene.image_source_scale),
-			field!("Simulation.Steps", |p| p.simulation.steps),
-			field!("Simulation.VisualizeEvery", |p| p.simulation.visualize_every),
-			field!("Simulation.WaveSpeed", |p| p.simulation.wave_speed),
-			field!("Simulation.TimeDecay", |p| p.simulation.time_decay),
-			field!("Simulation.SourceFrequencyScale", |p| p.simulation.source_frequency_scale),
-			field!("Simulation.IntensityScale", |p| p.simulation.intensity_scale),
-			field!("Display.ExportFrom", |p| p.display.export_from),
-			field!("Display.ExportTo", |p| p.display.export_to),
-			field!("DisplayLayer.Brightness", |p| p.display.intensity.brightness),
-			field!("DisplayLayer.BlackLevel", |p| p.display.field.black_level),
-			field!("DisplayLayer.OverlayGain", |p| p.display.field.overlay_gain),
-			field!("Video.Fps", |p| p.display.video.fps),
-			field!("Video.Quality", |p| p.display.video.quality),
-			field!("Source.Frequency", |p| p.sources[0].frequency),
-			field!("Source.Amplitude", |p| p.sources[0].amplitude),
-			field!("Source.Phase", |p| p.sources[0].phase),
-			field!("Source.PulseWidth", |p| p.sources[0].pulse_width),
-			field!("Source.OffWidth", |p| p.sources[0].off_width),
-			(
-				"Source.DetachAfter",
-				Box::new(|p: &mut Project, v: f64| p.sources[0].detach_after = (v >= 0.0).then_some(v as u32)),
-				Box::new(|p: &Project| p.sources[0].detach_after.map_or(-1.0, |s| s as f64)),
-			),
-			array_field!("SourceArray.SizeX", size_x),
-			array_field!("SourceArray.SizeY", size_y),
-			array_field!("SourceArray.Angle", angle),
-			array_field!("SourceArray.RandomFrequency", random_frequency),
-			array_field!("SourceArray.RandomPhase", random_phase),
-			array_field!("SourceArray.RandomOffWidth", random_off_width),
-			array_field!("SourceArray.RandomPosition", random_position),
-			field!("Probe.BoxWidth", |p| p.probes[0].box_width),
-			field!("Probe.BoxHeight", |p| p.probes[0].box_height),
-			field!("Probe.Decades", |p| p.probes[0].decades),
-			field!("Probe.Window", |p| p.probes[0].window),
-			field!("Probe.StartAfter", |p| p.probes[0].start_after),
-			field!("Probe.Sensitivity", |p| p.probes[0].sensitivity),
-			field!("Probe.BinSize", |p| p.probes[0].bin_size),
-			field!("Part.X", |p| p.parts[3].base.x),
-			field!("Part.Y", |p| p.parts[7].base.y),
-			field!("Part.Angle", |p| p.parts[9].base.angle),
-			kind!("Lens.Diameter", 0, Lens, |k| k.diameter),
-			kind!("Lens.Thickness", 0, Lens, |k| k.thickness),
-			kind!("Polygon.Sides", 1, Polygon, |k| k.sides),
-			kind!("Polygon.Side", 1, Polygon, |k| k.side),
-			kind!("Rectangle.Length", 2, Rectangle, |k| k.length),
-			kind!("Rectangle.Width", 2, Rectangle, |k| k.width),
-			kind!("Ellipse.Length", 3, Ellipse, |k| k.length),
-			kind!("Ellipse.Width", 3, Ellipse, |k| k.width),
-			kind!("Triangle.Base", 4, Triangle, |k| k.base),
-			kind!("Triangle.AngleA", 4, Triangle, |k| k.angle_a),
-			kind!("Triangle.AngleB", 4, Triangle, |k| k.angle_b),
-			kind!("Fiber.CoreIndex", 6, Fiber, |k| k.core_index),
-			kind!("Fiber.CoreDiameter", 6, Fiber, |k| k.core_diameter),
-			kind!("Fiber.CladdingIndex", 6, Fiber, |k| k.cladding_index),
-			kind!("Fiber.CladdingThickness", 6, Fiber, |k| k.cladding_thickness),
-			kind!("Fiber.Absorption", 6, Fiber, |k| k.absorption),
-			kind!("Fiber.AbsorptionRamp", 6, Fiber, |k| k.absorption_ramp),
-			kind!("BraggReflector.Pairs", 7, BraggReflector, |k| k.pairs),
-			kind!("BraggReflector.Thickness1", 7, BraggReflector, |k| k.thickness1),
-			kind!("BraggReflector.Thickness2", 7, BraggReflector, |k| k.thickness2),
-			kind!("BraggReflector.Index1", 7, BraggReflector, |k| k.index1),
-			kind!("BraggReflector.Index2", 7, BraggReflector, |k| k.index2),
-			kind!("BraggReflector.Width", 7, BraggReflector, |k| k.width),
-			kind!("GrinLens.Length", 8, GrinLens, |k| k.length),
-			kind!("GrinLens.Diameter", 8, GrinLens, |k| k.diameter),
-			kind!("GrinLens.CentreIndex", 8, GrinLens, |k| k.centre_index),
-			kind!("GrinLens.EdgeIndex", 8, GrinLens, |k| k.edge_index),
-			kind!("LogicGate.DesignFrequency", 9, LogicGate, |k| k.design_frequency),
-			kind!("LogicGate.Coating", 9, LogicGate, |k| k.coating),
-			kind!("LogicGate.CoreIndex", 9, LogicGate, |k| k.core_index),
-			kind!("LogicGate.CladdingIndex", 9, LogicGate, |k| k.cladding_index),
-			kind!("LogicGate.PortSpacing", 9, LogicGate, |k| k.port_spacing),
-			kind!("ZonePlate.MountWidth", 10, ZonePlate, |k| k.mount_width),
-			kind!("ZonePlate.Diameter", 10, ZonePlate, |k| k.diameter),
-			kind!("ZonePlate.Thickness", 10, ZonePlate, |k| k.thickness),
-			kind!("ZonePlate.Coating", 10, ZonePlate, |k| k.coating),
-			kind!("ZonePlate.DesignFrequency", 10, ZonePlate, |k| k.design_frequency),
-			kind!("ZonePlate.FocalLength", 10, ZonePlate, |k| k.focal_length),
-			kind!("FresnelLens.Zones", 11, FresnelLens, |k| k.zones),
-			kind!("Diffuser.Length", 12, Diffuser, |k| k.length),
-			kind!("Diffuser.Width", 12, Diffuser, |k| k.width),
-			kind!("Diffuser.CenterWavelength", 12, Diffuser, |k| k.center_wavelength),
-			kind!("Diffuser.Amplitude", 12, Diffuser, |k| k.amplitude),
-			kind!("Diffuser.Sigma", 12, Diffuser, |k| k.sigma),
-			kind!("InterferenceFilter.Length", 14, InterferenceFilter, |k| k.length),
-			kind!("InterferenceFilter.Width", 14, InterferenceFilter, |k| k.width),
-			kind!("FilterLayer.Thickness", 14, InterferenceFilter, |k| k.layers[0].thickness),
-			kind!("FilterLayer.RefractiveIndex", 14, InterferenceFilter, |k| k.layers[0].refractive_index),
-			kind!("SimpleGrating.Columns", 15, SimpleGrating, |k| k.columns),
-			kind!("SimpleGrating.Rows", 15, SimpleGrating, |k| k.rows),
-			kind!("SimpleGrating.ColumnSpacing", 15, SimpleGrating, |k| k.column_spacing),
-			kind!("SimpleGrating.RowSpacing", 15, SimpleGrating, |k| k.row_spacing),
-			kind!("MetaSurface.Length", 16, MetaSurface, |k| k.length),
-			kind!("MetaSurface.Width", 16, MetaSurface, |k| k.width),
-			kind!("MetaSurface.DesignFrequency", 16, MetaSurface, |k| k.design_frequency),
-			kind!("MetaSurface.Pitch", 16, MetaSurface, |k| k.pitch),
-			kind!("MetaSurface.Height", 16, MetaSurface, |k| k.height),
-			kind!("MetaSurface.PatternIndex", 16, MetaSurface, |k| k.pattern_index),
-			design!("MetaLens.FocalLength", 16, Lens, |d| d.focal_length),
-			design!("MetaPrism.Deflection", 17, Prism, |d| d.deflection),
-			design!("MetaAxicon.ConeAngle", 18, Axicon, |d| d.cone_angle),
-			kind!("FacettedGrating.Length", 13, FacettedGrating, |k| k.length),
-			kind!("FacettedGrating.Width", 13, FacettedGrating, |k| k.width),
-			kind!("FacettedGrating.Pitch", 13, FacettedGrating, |k| k.pitch),
-			kind!("FacettedGrating.Amplitude", 13, FacettedGrating, |k| k.amplitude),
-			field!("Stop.At", |p| p.color_schemes[0].stops[0].at),
-		];
-		for i in (0..6).chain([11, 12, 13, 14, 15, 16]) {
-			v.push((
-				"Material.RefractiveIndex",
-				Box::new(move |p: &mut Project, x: f64| material(p, i).refractive_index = x),
-				Box::new(move |p: &Project| material(&mut p.clone(), i).refractive_index),
-			));
-			v.push((
-				"Material.Absorption",
-				Box::new(move |p: &mut Project, x: f64| material(p, i).absorption = num(x)),
-				Box::new(move |p: &Project| material(&mut p.clone(), i).absorption as f64),
-			));
-			v.push((
-				"Material.AbsorptionRamp",
-				Box::new(move |p: &mut Project, x: f64| material(p, i).absorption_ramp = num(x)),
-				Box::new(move |p: &Project| material(&mut p.clone(), i).absorption_ramp as f64),
-			));
-		}
-		for i in [0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 14, 16] {
-			v.push((
-				"Coating.Depth",
-				Box::new(move |p: &mut Project, x: f64| coating(p, i).depth = x),
-				Box::new(move |p: &Project| coating(&mut p.clone(), i).depth),
-			));
-		}
-		v
 	}
 
 	/// Persisted numbers whose bounds depend on another value, with the rule `normalize` applies.
@@ -438,6 +255,7 @@ mod tests {
 		("Ellipse.Width", "equals Length while Linked"),
 		("LogicGate.PortSpacing", "raised to the design's minimum when designed"),
 		("SimpleGrating.Diameter", "1 to half the smaller spacing"),
+		("SourceArray.SizeY", "at most ARRAY_ELEMENTS / SizeX"),
 	];
 
 	fn is_number(kind: ValueKind) -> bool {
@@ -480,34 +298,22 @@ mod tests {
 
 	#[test]
 	fn every_bound_is_enforced_by_normalize() {
-		let accessors = accessors();
-		let walk = walked();
-		for (key, _) in &walk.ranged {
-			assert!(accessors.iter().any(|(k, ..)| k == key), "no accessor for {key}");
+		let ranged = ranged();
+		for (key, _) in &walked().ranged {
+			assert!(ranged.iter().any(|r| &r.key == key), "the fixture has no {key}");
 		}
-		for (key, set, get) in &accessors {
-			let (_, range) =
-				walk.ranged.iter().find(|(k, _)| k == key).unwrap_or_else(|| panic!("{key} has no declared range"));
+		for Ranged { path, key, range, round_trip } in &ranged {
 			let range = *range;
-			if WRAPPED.contains(key) {
-				let mut p = fixture();
-				set(&mut p, 190.0);
-				p.normalize();
-				assert_eq!(get(&p), -170.0, "{key}");
+			if WRAPPED.contains(&key.as_str()) {
+				assert_eq!(round_trip(190.0), -170.0, "{path}");
 				continue;
 			}
 			let delta = range.min.abs().max(range.max.abs()).max(1.0) * 0.5;
 			for (value, want) in [(range.min - delta, range.min), (range.max + delta, range.max)] {
-				let mut p = fixture();
-				set(&mut p, value);
-				p.normalize();
-				assert_eq!(get(&p), want, "{key} set to {value}");
+				assert_eq!(round_trip(value), want, "{path} ({key}) set to {value}");
 			}
 			for value in [range.min, range.max] {
-				let mut p = fixture();
-				set(&mut p, value);
-				p.normalize();
-				assert_eq!(get(&p), value, "{key} at its bound {value}");
+				assert_eq!(round_trip(value), value, "{path} ({key}) at its bound {value}");
 			}
 		}
 	}

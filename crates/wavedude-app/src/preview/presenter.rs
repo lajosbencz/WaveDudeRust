@@ -1,15 +1,15 @@
-//! The presenter: turns the frame the pictures show (a stored frame of the run, or a frame on its own) into RGBA8 pictures,
-//! one per visible layer, on a worker thread of its own (docs/ui/40-preview-pane.md, 8-bit vs 16-bit), where the
-//! renderer's device does not colour them.
+//! The presenter: turns the frame the pictures show (a stored frame of the run, or a frame on its own) into RGBA8
+//! pictures, one per visible layer, where the renderer's device does not colour them (docs/ui/40-preview-pane.md,
+//! 8-bit vs 16-bit).
 //!
-//! 8-bit frames are coloured through the palette at the stored size and scaled by the picture; 16-bit frames go
-//! through the screen renderer at the picture's size in device pixels, plain or dithered. Only the newest request
-//! is rendered: a request waiting in the slot is replaced by a newer one. Results come back through a channel
-//! the pane drains on the UI thread, where [`PresenterStats`] keeps the log line's figures. On wasm32, where
-//! nothing blocks, a request is rendered in the call.
+//! 8-bit frames are coloured through the palette at the stored size and scaled by the picture; 16-bit frames go through
+//! the screen renderer at the picture's size in device pixels, plain or dithered. Only the newest request is rendered:
+//! a request waiting in the slot is replaced. Results come back through a channel the pane drains on the UI thread,
+//! where [`Delivery`] matches them to the newest request and [`PresenterStats`] keeps the log line's figures. On wasm32
+//! a request is rendered in the call.
 //!
-//! Threads: [`Presenter`] is owned by the UI thread; natively, rendering runs on the `preview-presenter` thread
-//! (and the renderers' rayon pool).
+//! Threads: [`Presenter`] is owned by the UI thread; natively, rendering runs on the `preview-presenter` thread (and the
+//! renderers' rayon pool).
 
 use std::collections::{HashMap, VecDeque};
 #[cfg(not(target_arch = "wasm32"))]
@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Weak};
 #[cfg(not(target_arch = "wasm32"))]
-use std::sync::{Condvar, Mutex};
+use std::sync::{Condvar, Mutex, PoisonError};
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread::JoinHandle;
 
@@ -198,6 +198,8 @@ pub struct Picture {
 /// A rendered request.
 #[derive(Clone, Debug)]
 pub struct Rendered {
+	/// The number [`Presenter::request`] gave the request.
+	pub seq: u64,
 	pub source: SourceKey,
 	pub pictures: Vec<Picture>,
 	/// A layer found no frame: the store cleared or dropped it while the request waited.
@@ -212,8 +214,9 @@ pub struct Rendered {
 impl Rendered {
 	/// A request answered with no pictures.
 	#[cfg(not(target_arch = "wasm32"))]
-	fn empty(request: &Request) -> Self {
+	fn empty(seq: u64, request: &Request) -> Self {
 		Self {
+			seq,
 			source: request.source.key(),
 			pictures: Vec::new(),
 			vanished: false,
@@ -226,7 +229,7 @@ impl Rendered {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-type Slot = Arc<(Mutex<Option<Request>>, Condvar)>;
+type Slot = Arc<(Mutex<Option<(u64, Request)>>, Condvar)>;
 
 /// The worker and its newest-request slot. Dropping it stops the thread.
 #[cfg(not(target_arch = "wasm32"))]
@@ -235,6 +238,8 @@ pub struct Presenter {
 	stop: Arc<AtomicBool>,
 	results: Receiver<Rendered>,
 	thread: Option<JoinHandle<()>>,
+	/// The newest request's number.
+	seq: u64,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -248,14 +253,16 @@ impl Presenter {
 			let stop = stop.clone();
 			move || work(&slot, &stop, &tx)
 		})?;
-		Ok(Self { slot, stop, results, thread: Some(thread) })
+		Ok(Self { slot, stop, results, thread: Some(thread), seq: 0 })
 	}
 
-	/// Queues `request`, replacing one not yet started.
-	pub fn request(&mut self, request: Request) {
+	/// Queues `request`, replacing one not yet started; the number its [`Rendered`] carries.
+	pub fn request(&mut self, request: Request) -> u64 {
+		self.seq += 1;
 		let (lock, wake) = &*self.slot;
-		*wavedude_core::sync::lock(lock) = Some(request);
+		*wavedude_core::sync::lock(lock) = Some((self.seq, request));
 		wake.notify_one();
+		self.seq
 	}
 
 	/// The newest finished picture set, older ones dropped.
@@ -279,7 +286,7 @@ impl Drop for Presenter {
 fn work(slot: &Slot, stop: &AtomicBool, tx: &Sender<Rendered>) {
 	let mut renderer = LayerRenderer::default();
 	loop {
-		let request = {
+		let (seq, request) = {
 			let (lock, wake) = &**slot;
 			let mut guard = wavedude_core::sync::lock(lock);
 			loop {
@@ -289,18 +296,19 @@ fn work(slot: &Slot, stop: &AtomicBool, tx: &Sender<Rendered>) {
 				if let Some(r) = guard.take() {
 					break r;
 				}
-				guard = wake.wait(guard).unwrap();
+				guard = wake.wait(guard).unwrap_or_else(PoisonError::into_inner);
 			}
 		};
 		// A panic loses the request's pictures, not the thread; the scratch state it left is dropped.
-		let rendered = catch_unwind(AssertUnwindSafe(|| renderer.present(&request))).unwrap_or_else(|_| {
+		let rendered = catch_unwind(AssertUnwindSafe(|| renderer.present(seq, &request))).unwrap_or_else(|_| {
 			tracing::error!("the preview presenter panicked");
 			renderer = LayerRenderer::default();
-			Rendered::empty(&request)
+			Rendered::empty(seq, &request)
 		});
 		if tx.send(rendered).is_err() {
 			return;
 		}
+		wavedude_app_state::wake::wake();
 	}
 }
 
@@ -309,22 +317,78 @@ fn work(slot: &Slot, stop: &AtomicBool, tx: &Sender<Rendered>) {
 pub struct Presenter {
 	renderer: LayerRenderer,
 	done: Option<Rendered>,
+	seq: u64,
 }
 
 #[cfg(target_arch = "wasm32")]
 impl Presenter {
 	pub fn start() -> std::io::Result<Self> {
-		Ok(Self { renderer: LayerRenderer::default(), done: None })
+		Ok(Self { renderer: LayerRenderer::default(), done: None, seq: 0 })
 	}
 
-	/// Renders `request`.
-	pub fn request(&mut self, request: Request) {
-		self.done = Some(self.renderer.present(&request));
+	/// Renders `request`; the number its [`Rendered`] carries.
+	pub fn request(&mut self, request: Request) -> u64 {
+		self.seq += 1;
+		self.done = Some(self.renderer.present(self.seq, &request));
+		self.seq
 	}
 
 	/// The picture set of the last request, once.
 	pub fn latest(&mut self) -> Option<Rendered> {
 		self.done.take()
+	}
+}
+
+/// The pane's requests to the presenter: the source and layers asked for last, the newest request's number and
+/// whether its answer is still out. A result of an older request for the same source still shows its pictures.
+#[derive(Default)]
+pub struct Delivery {
+	/// `None` until asked, and once the newest answer's frame vanished or is being read back: asked again.
+	asked: Option<(SourceKey, Vec<LayerRequest>)>,
+	newest: u64,
+	awaiting: bool,
+}
+
+impl Delivery {
+	/// The newest request's pictures have not come back yet.
+	pub fn awaiting(&self) -> bool {
+		self.awaiting
+	}
+
+	/// Nothing is asked for.
+	pub fn is_idle(&self) -> bool {
+		self.asked.is_none()
+	}
+
+	/// Hands `request` to `presenter`, unless it asks for the source and layers asked for last.
+	pub fn send(&mut self, presenter: &mut Presenter, request: Request) {
+		let key = (request.source.key(), request.layers.clone());
+		if self.asked.as_ref() != Some(&key) {
+			self.asked = Some(key);
+			self.awaiting = true;
+			self.newest = presenter.request(request);
+		}
+	}
+
+	/// Takes in `rendered`; whether its pictures are of the source asked for. Only the newest request's answer ends
+	/// the wait; a spilled frame being read back keeps it.
+	pub fn take(&mut self, rendered: &Rendered) -> bool {
+		if !self.asked.as_ref().is_some_and(|(key, _)| *key == rendered.source) {
+			return false;
+		}
+		if rendered.seq == self.newest {
+			self.awaiting = rendered.pending;
+			if rendered.vanished || rendered.pending {
+				self.asked = None;
+			}
+		}
+		true
+	}
+
+	/// Drops the request and the wait; whether something was asked for.
+	pub fn forget(&mut self) -> bool {
+		self.awaiting = false;
+		self.asked.take().is_some()
 	}
 }
 
@@ -346,7 +410,7 @@ struct LayerRenderer {
 }
 
 impl LayerRenderer {
-	fn present(&mut self, request: &Request) -> Rendered {
+	fn present(&mut self, seq: u64, request: &Request) -> Rendered {
 		let started = Instant::now();
 		let source = request.source.key();
 		let mut pending = false;
@@ -361,6 +425,7 @@ impl LayerRenderer {
 			.collect();
 		let vanished = !pending && pictures.len() < request.layers.len() && request.source.vanished_since(&source);
 		Rendered {
+			seq,
 			source,
 			pictures,
 			vanished,
@@ -522,6 +587,26 @@ mod tests {
 			assert!(Instant::now() < deadline, "the presenter did not answer");
 			std::thread::sleep(Duration::from_millis(1));
 		}
+	}
+
+	#[test]
+	fn only_the_newest_request_ends_the_wait() {
+		let mut presenter = Presenter::start().unwrap();
+		let source = FrameSource::Snapshot(Arc::new(Snapshot::new(shape())));
+		let mut delivery = Delivery::default();
+		let request = |device| Request {
+			source: source.clone(),
+			layers: vec![LayerRequest { device, ..layer(Layer::Field) }],
+			motion: false,
+			at: Instant::now(),
+		};
+		delivery.send(&mut presenter, request((4, 4)));
+		delivery.send(&mut presenter, request((8, 8)));
+		let answer = |seq| Rendered::empty(seq, &request((0, 0)));
+		assert!(delivery.take(&answer(1)), "an older answer of the same source shows its pictures");
+		assert!(delivery.awaiting(), "the newer request is still out");
+		assert!(delivery.take(&answer(2)));
+		assert!(!delivery.awaiting());
 	}
 
 	#[test]

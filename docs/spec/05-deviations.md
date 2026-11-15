@@ -89,11 +89,12 @@ frame indices), where the spec's rule is kept so pictures match.
 
 ## Export (50)
 
-- MP4 through openh264 and the `mp4` crate (0005), not Media Foundation.
+- MP4 through openh264 (0005), muxed in-house by the ISO base media writer MOV
+  uses, not Media Foundation.
 - PNG, JPEG and OpenEXR through crates (`png`, `jpeg-encoder` at 4:4:4,
   `exr`), not in-house encoders; the output must decode to the same pixels
   and declare the same structure (4:4:4, one HALF channel "Y"). MPEG-1, AVI
-  and MOV have no maintained crates and stay in-house.
+  and MOV have no maintained crates and stay in-house, MP4's container with them.
 - Lossy outputs are measured by PSNR against the rendered frame (0009), not
   against the C# bytes.
 - Probe CSV: `\n` line endings.
@@ -114,6 +115,9 @@ frame indices), where the spec's rule is kept so pictures match.
 - Pcg32, StableHash and xorshift32 are kept exactly, so a project's composite
   sources come out at the same positions as in the original (cheap, and it
   keeps imported scenes identical).
+- A source array has at most 16384 columns or rows (the largest canvas's side) and 65536 elements; rows give way
+  to columns (`ranges::ARRAY_SIZE`, `ARRAY_ELEMENTS`). The original bounds them by `int.MaxValue` alone, where
+  the elements no longer fit in memory.
 
 ## Solver upgrades (decision 0010, 2026-11-06)
 

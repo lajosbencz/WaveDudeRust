@@ -119,6 +119,18 @@ rests, one frame time later.
 Before (scratch frames abandoned for a newer request within 16 steps, a 120 ms debounce): the same during the
 drag, the debounce on top once the hand rested.
 
+## A source array's forcing
+
+2026-11-15, `wavedude-cli bench --gpu --stencil nine --captures-every 0 --steps 400 --array 100`: the default
+1920x1080 canvas with a 100 x 100 source array, 4 cells apart; three runs each, ms a step. The table of source
+values is made on the host for every sub-step, 10000 emitters twice a step.
+
+| | CPU 9-point | GPU 9-point |
+|---|---|---|
+| one source (`--array 1`) | 1.48 to 1.50 | 0.113 |
+| 100 x 100, each emitter's force per unit drive looked up in a map every sub-step | 2.26 to 2.39 | 0.617 to 0.623 |
+| 100 x 100, the force per unit drive kept per emitter for the sub-step count and scheme | 1.94 to 1.99 | 0.264 to 0.266 |
+
 ## Other operations
 
 2026-11-06 unless noted.

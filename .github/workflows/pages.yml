@@ -21,6 +21,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       ready: ${{ steps.app.outputs.ready }}
     permissions:
@@ -64,6 +65,7 @@ jobs:
     needs: build
     if: needs.build.outputs.ready == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       pages: write
       id-token: write

@@ -1,6 +1,7 @@
 # 0020: The browser spills frames past memory to the origin private file system
 
-Status: accepted, 2026-11-13; writes in flight changed 2026-11-14; reading ahead added 2026-11-14.
+Status: accepted, 2026-11-13; writes in flight changed 2026-11-14; reading ahead added 2026-11-14; the browser's
+memory budget added 2026-11-15.
 Amends [0015](0015-core-builds-for-wasm.md): on wasm32 a store keeps the frames past its memory budget, as
 natively, instead of refusing them.
 
@@ -74,3 +75,34 @@ longer named go as later ones land. Played at speed 1 over spilled 1920x1080 fra
 from 59 to at most 2 a second; at speed 4 playback showed 62 to 80 frames a second where it showed none. Natively a
 spilled frame is read from the file in the call (0.2 ms median for 8.3 MB from the page cache), so the file reads
 nothing ahead ([`docs/measurements.md`](../measurements.md), The browser's frame spill read ahead).
+
+## The browser's memory budget (added 2026-11-15)
+
+The frames held in memory were the device's memory up to 2 GiB. A phone's tab died from it: measured, the page's wasm
+heap reached 2.1 GiB and the tab's renderer 2.7 GB and more, beside up to 3 GB of spilled frames. The figures the
+budget can stand on:
+
+- `navigator.deviceMemory` is the device's memory rounded to a power of 2 and clamped by the browser, to 2, 4 or 8
+  GiB on Android and up to 32 GiB elsewhere in the browser that has it
+  ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory),
+  [Chromium's intent to ship](https://groups.google.com/a/chromium.org/g/blink-dev/c/vXtAmrVZeDk/m/kO39WH6NAwAJ));
+  others do not tell: the frame budget then assumes 1 GiB.
+- A wasm32 memory holds 4 GiB at most, the page's and the worker's each.
+- A tab gets far less than the device has. On iOS about 300 to 500 MB of wasm memory were reliably available after a
+  reload on 4 to 6 GB devices ([WebKit bug 269777](https://bugs.webkit.org/show_bug.cgi?id=269777), 2024), and a
+  memory that grows past what the system grants kills the tab instead of failing
+  ([WebKit bug 221530](https://bugs.webkit.org/show_bug.cgi?id=221530), 2021). The same report puts a 32-bit mobile
+  browser at about 500 to 700 MB in practice, its address space fragmented; one 5 GB Android phone got 4 GiB (bug
+  269777).
+
+So the frames take an eighth of the device's memory, at most 512 MiB (`web_frame_memory` in
+[`live.rs`](../../crates/wavedude-app-state/src/live.rs)): 128 MiB where the browser does not tell, 256 MiB at 2 GiB,
+512 MiB from 4 GiB on. The RAM cache size takes its share of that. The frames past it spill as above, so a run is no
+shorter for it; the memory warning asks sooner.
+
+The mirror's planes are reserved fallibly: a frame whose memory the browser refuses lets go of the mirror and fails
+the run with the reason, instead of the allocation aborting the page's module. The run worker checks a grid's CPU
+engine against the device's memory as natively (`engine_fits`), reading `navigator.deviceMemory` in the worker,
+which has it too ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/WorkerNavigator/deviceMemory)); where the
+browser does not tell, against the 4 GiB address space alone, as a grid too large only fails its run, while the
+frames past an assumed memory only spill.

@@ -1,9 +1,13 @@
-//! The desktop's side of the window: the OS colour scheme and the window's place.
+//! The desktop's side of the window: the OS colour scheme, the window's place, the clipboard and the updater.
 
 use eframe::egui;
+use eframe::egui::os::OperatingSystem;
 use wavedude_app_state::clipboard::read_fragment;
 use wavedude_app_state::settings::{Settings, Theme};
 
+use super::export::Exports;
+pub(super) use super::updates::Updates;
+use crate::menus::On;
 use crate::placement::{self, Place};
 use crate::window::MIN_SIZE;
 
@@ -49,13 +53,21 @@ pub(super) fn pastable() -> bool {
 }
 
 /// The clipboard's text for a paste.
-pub(super) fn read_clipboard(_ctx: &egui::Context) -> Option<String> {
+pub(super) fn read_clipboard(_ctx: &egui::Context, _on: On) -> Option<String> {
 	clipboard_text()
 }
 
 /// Read synchronously by [`read_clipboard`].
-pub(super) fn pasted() -> Option<String> {
+pub(super) fn pasted() -> Option<(String, On)> {
 	None
+}
+
+/// The window's keys reach it alone.
+pub(super) fn guard_shortcuts(_os: OperatingSystem) {}
+
+/// Whether a download or an export moves on a thread and the window ticks for its progress.
+pub(super) fn ticks_for(exports: &Exports) -> bool {
+	crate::downloads::running() || exports.exporting()
 }
 
 /// Nothing to listen for: the close box asks about unsaved edits through the state.

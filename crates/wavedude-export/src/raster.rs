@@ -1,13 +1,12 @@
-//! The CPU rasteriser of the burned-in overlays: epaint shapes tessellated as the window's are, their triangles
-//! blended over a frame's RGBA8 pixels in place.
+//! The CPU rasteriser of the burned-in overlays: epaint shapes tessellated as the window's are, their triangles blended
+//! over a frame's RGBA8 pixels in place.
 //!
-//! One pixel per point. A pixel is covered when its centre lies in a triangle, edges in 1/256 pixel fixed point with
-//! a top-left rule, so a pixel on an edge two triangles share is blended once; inside the clip rect rounded to whole
-//! pixels, as egui-wgpu's scissor is. Colours are premultiplied sRGB, interpolated and multiplied by the font atlas,
-//! sampled bilinearly with clamped edges, in gamma space as the window's renderer does, then blended:
-//! `out = min(255, src + (dst*(255 - a) + 127)/255)`. Integers and IEEE f32 without fused operations only, so every
-//! machine draws the same bytes. Pixels no triangle covers are not touched. Bands of rows are drawn in parallel,
-//! each with the triangles reaching it in drawing order.
+//! One pixel per point. A pixel is covered when its centre lies in a triangle (edges in 1/256 pixel fixed point, top-left
+//! rule, so a pixel on a shared edge is blended once), inside the clip rect rounded to whole pixels as egui-wgpu's
+//! scissor is. Colours are premultiplied sRGB, interpolated and multiplied by the font atlas (bilinear, clamped edges),
+//! in gamma space as the window's renderer does, then blended: `out = min(255, src + (dst*(255 - a) + 127)/255)`.
+//! Integers and IEEE f32 without fused operations only, so every machine draws the same bytes. Bands of rows are drawn
+//! in parallel, each with the triangles reaching it in drawing order.
 
 use std::cmp::Ordering;
 

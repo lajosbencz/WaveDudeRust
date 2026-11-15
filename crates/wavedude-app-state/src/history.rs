@@ -1,9 +1,10 @@
-//! Unlimited undo and redo: one clone of the project per step; the scene image's bytes are shared between the
-//! clones (docs/ui/60-live-editing-and-runs.md, Undo and redo).
+//! Unlimited undo and redo: one clone of the project per step; the scene image's bytes are shared between the clones
+//! (docs/ui/60-live-editing-and-runs.md, Undo and redo).
 //!
-//! A step ends after [`QUIET`] without an edit while no mouse button is held, so a drag, a number-box scrub or a
-//! held arrow key is one step. Undo and redo end a pending step first and write the step back into the same
-//! project object. Threads: plain data on the UI thread; time comes from the caller.
+//! A step ends after [`QUIET`] without an edit while no mouse button is held, so a drag, a number-box scrub or a held
+//! arrow key is one step. Undo and redo end a pending step first and write the step back into the same project object.
+//!
+//! Threads: plain data on the UI thread; time comes from the caller.
 
 use wavedude_core::model::Project;
 

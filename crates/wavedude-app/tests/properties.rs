@@ -5,21 +5,19 @@ mod common;
 
 use std::path::Path;
 
-use eframe::egui::{self, Key, Modifiers, PointerButton, Pos2, Role, vec2};
+use eframe::egui::{self, Key, Modifiers, Role, vec2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
-use wavedude_app::App;
-use wavedude_app::ui::{Boot, Shell};
+use wavedude_app::ui::Shell;
 use wavedude_app_state::document::Source;
-use wavedude_app_state::log::LogRing;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{Event, Guarded};
 use wavedude_core::model::{Project, Rgb};
 
+use common::{SETTLE, app, boot, button, settle};
+
 const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source_Mirror_Probe.wdproj";
-/// Frames for an input to reach the state and its result to show.
-const SETTLE: usize = 4;
 
 /// The window on `project` with nothing run, in the light theme, tall enough for a form.
 fn window_on(dir: &Path, project: &Path) -> Harness<'static, Shell> {
@@ -29,7 +27,7 @@ fn window_on(dir: &Path, project: &Path) -> Harness<'static, Shell> {
 	for event in [Event::SetTheme(Theme::Light), Event::SetAutoRerun(false), open] {
 		app.handle(event, Instant::now());
 	}
-	let boot = Boot { store: dirs.store(), open: Default::default(), log: LogRing::new(), update: Default::default() };
+	let boot = boot(&dirs);
 	let mut harness =
 		Harness::builder().with_size(vec2(1280., 1200.)).build_eframe(move |cc| Shell::new(cc, app, boot));
 	harness.run_steps(SETTLE);
@@ -38,14 +36,6 @@ fn window_on(dir: &Path, project: &Path) -> Harness<'static, Shell> {
 
 fn window(dir: &Path) -> Harness<'static, Shell> {
 	window_on(dir, Path::new(EXAMPLE))
-}
-
-fn settle(harness: &mut Harness<'_, Shell>) {
-	harness.run_steps(SETTLE);
-}
-
-fn app<'h>(harness: &'h Harness<'_, Shell>) -> &'h App {
-	harness.state().app()
 }
 
 fn project<'h>(harness: &'h Harness<'_, Shell>) -> &'h Project {
@@ -72,12 +62,6 @@ fn typed(harness: &mut Harness<'_, Shell>, text: &str) {
 fn key(harness: &mut Harness<'_, Shell>, key: Key) {
 	harness.key_press(key);
 	settle(harness);
-}
-
-fn button(harness: &mut Harness<'_, Shell>, pos: Pos2, pressed: bool) {
-	let modifiers = Default::default();
-	harness.event(egui::Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers });
-	harness.run_steps(1);
 }
 
 #[test]

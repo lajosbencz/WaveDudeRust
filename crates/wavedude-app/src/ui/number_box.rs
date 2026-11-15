@@ -1,7 +1,5 @@
-//! The number box of docs/ui/30 (Number box): free text applied on Enter or focus loss (Esc reverts typed text
-//! and keeps the key), Up/Down steps, PageUp/PageDown pages, the wheel steps while it has focus (ten with Shift),
-//! a horizontal drag on an unfocused box scrubs, and spin buttons repeat while held; linear or logarithmic
-//! stepping, clamped to its range with a brief cue on the border.
+//! The number box (docs/ui/30, Number box): linear or logarithmic stepping, clamped to its range with a brief cue on
+//! the border.
 
 use eframe::egui::{
 	self, Align2, Color32, Event, Id, Key, Modifiers, Rect, Response, Role, Sense, Stroke, StrokeKind, Ui, Vec2,

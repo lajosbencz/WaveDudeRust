@@ -56,7 +56,7 @@ Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLAT
 ## Tools
 
 The compiler is pinned in [`rust-toolchain.toml`](rust-toolchain.toml) with clippy and rustfmt; `rustup toolchain install` in
-the repository installs it, as CI does. Bump it there when a new stable is wanted (the CI caches are keyed on it). Below,
+the repository installs it, as CI does. Dependabot bumps it there (the CI caches are keyed on it). Below,
 `F=wavedude-export/openh264-source,wavedude-cli/openh264-source`.
 
 | Tool | Checks | Run | Configured in |
@@ -68,12 +68,15 @@ the repository installs it, as CI does. Bump it there when a new stable is wante
 | [egui_kittest](https://docs.rs/egui_kittest) | the window's tests, driven through AccessKit by role and label, with no image snapshots; the manual's figures render on Mesa's lavapipe | `cargo test -p wavedude-app --tests` | |
 | rustdoc | docs without warnings | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | |
 | [cargo-hack](https://github.com/taiki-e/cargo-hack) | every feature combination compiles | `cargo hack check --workspace --feature-powerset --depth 2` | |
-| [cargo-machete](https://github.com/bnjbvr/cargo-machete) | no unused dependency | `cargo machete` | |
+| [cargo-shear](https://github.com/Boshen/cargo-shear) | no unused dependency, workspace entries and dev-dependencies included | `cargo shear` | |
 | MSRV | builds at the workspace's `rust-version` | `rustup toolchain install 1.95`, then `cargo +1.95 check --workspace --all-targets` | `[workspace.package]` of [`Cargo.toml`](Cargo.toml) |
 | wasm32 | the core with and without `run` and `gpu`, the view crate, the app state, the export crate with and without the MP4 muxer, the app and its run worker build for the browser and are clippy-clean there, std's clocks banned | `rustup target add wasm32-unknown-unknown`, then with `CLIPPY_CONF_DIR=tools/clippy-wasm32`: `cargo clippy -p wavedude-core --no-default-features --target wasm32-unknown-unknown -- -D warnings`, the same with `--features gpu`, `--features run` and `--features run,gpu`, `cargo clippy -p wavedude-view --target wasm32-unknown-unknown -- -D warnings`, `cargo clippy -p wavedude-app-state --target wasm32-unknown-unknown -- -D warnings`, `cargo clippy -p wavedude-export --no-default-features --target wasm32-unknown-unknown -- -D warnings`, the same with `--features mp4-mux`, `cargo clippy -p wavedude-app --target wasm32-unknown-unknown -- -D warnings` and `cargo clippy -p wavedude-run-worker --target wasm32-unknown-unknown -- -D warnings` | `[features]` of [`crates/wavedude-core/Cargo.toml`](crates/wavedude-core/Cargo.toml), [`tools/clippy-wasm32/clippy.toml`](tools/clippy-wasm32/clippy.toml), [`.cargo/config.toml`](.cargo/config.toml) (web-sys's unstable APIs) |
-| web app | the app runs in the browser | `tools/build-web.sh [<out>]` (default `target/web`) with the wasm-bindgen CLI of Cargo.lock's version, then serve the folder over HTTP | [`tools/build-web.sh`](tools/build-web.sh), [`crates/wavedude-app/web/index.html`](crates/wavedude-app/web/index.html) |
+| web app | the app builds for the browser (CI, in the wasm32 job) and runs there | `tools/build-web.sh [<out>]` (default `target/web`) with the wasm-bindgen CLI of Cargo.lock's version, then serve the folder over HTTP | [`tools/build-web.sh`](tools/build-web.sh), [`crates/wavedude-app/web/index.html`](crates/wavedude-app/web/index.html) |
+| glibc floor | the Linux programs build in the release's container and need glibc 2.28 at most (CI, the `glibc` job) | [`docs/release.md`](docs/release.md), By hand, Linux, with docker or podman: in the container, `cargo build` and `glibc-floor.sh` on the two programs | [`.github/build/linux.Dockerfile`](.github/build/linux.Dockerfile), [`.github/build/glibc-floor.sh`](.github/build/glibc-floor.sh) |
 | [typos](https://github.com/crate-ci/typos) | spelling | `typos` | [`_typos.toml`](_typos.toml) |
 | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) | advisories, licences, wildcard versions, sources | `cargo deny check` | [`deny.toml`](deny.toml) |
+| [actionlint](https://github.com/rhysd/actionlint) | the workflows' syntax and expressions, their `run:` scripts through [shellcheck](https://www.shellcheck.net) when it is on the `PATH` | `actionlint` | |
+| [zizmor](https://docs.zizmor.sh) | the workflows' and Dependabot's security: expressions in scripts, credentials, pinning | `zizmor .github` (`GH_TOKEN` set for the online audits) | [`.github/zizmor.yml`](.github/zizmor.yml) (accepted findings with reasons) |
 | [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) | optional, local only: code no test reaches | `cargo llvm-cov --workspace --features $F --summary-only` | |
 
 The versions CI uses are pinned in the workflows. Coverage is slow: measured on 24 threads, its tests took 43 minutes
@@ -94,10 +97,11 @@ the checks:
   `WAVEDUDE_NEXT_DIR`); its [`README.md`](tools/compare-csharp/README.md) has the commands.
 - Releases: [git-cliff](https://git-cliff.org) ([`cliff.toml`](cliff.toml)) writes the changelog and the next version from the
   commits (`git cliff --unreleased` previews it); cargo-packager, cargo-auditable and cargo-cyclonedx build the
-  packages and SBOMs in [`.github/workflows/package.yml`](.github/workflows/package.yml). [`docs/release.md`](docs/release.md) covers the flow, the keys,
-  the icons and the file types.
+  packages and SBOMs in [`.github/workflows/package.yml`](.github/workflows/package.yml), the Linux ones in the container of
+  [`.github/build/linux.Dockerfile`](.github/build/linux.Dockerfile). [`docs/release.md`](docs/release.md) covers the flow, the keys,
+  the icons, the file types and the Linux build with docker or podman.
 - Dependabot ([`.github/dependabot.yml`](.github/dependabot.yml)) opens grouped updates, daily for crates (`chore(deps)`), weekly for
-  actions (`ci(deps)`), each version once it is a week old (security updates at once); [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml) enables auto-merge on them, except a major
+  the compiler of [`rust-toolchain.toml`](rust-toolchain.toml) and the Linux build image's base (`chore(deps)`) and actions (`ci(deps)`), each version once it is a week old (security updates at once); [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml) enables auto-merge on them, except a major
   version, so they merge once the required checks pass (the ruleset of [`docs/release.md`](docs/release.md)).
 
 ## Commit messages

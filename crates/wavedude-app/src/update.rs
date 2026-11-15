@@ -1,9 +1,9 @@
-//! Updates from the project's GitHub releases (decision 0011): the release build names the feed and the public
-//! key its packages are signed with; a build without them has no updater. A newer release is installed on the
-//! user's word where the running program is a package the updater can replace (the Windows installer, the macOS
-//! app, a Linux `AppImage`); a plain Linux binary gets the release's address. The package is downloaded and verified
-//! while the program runs, then installed by `main` after a restart that goes through the unsaved-edits question
-//! like any exit ([`Pending`]). Threads: the UI thread; the check and the download run on threads of their own.
+//! Updates from the project's GitHub releases (decision 0011): the release build names the feed and the public key its
+//! packages are signed with; a build without them has no updater. The package is downloaded and verified while the
+//! program runs, then installed by `main` after a restart that goes through the unsaved-edits question like any exit
+//! ([`Pending`]).
+//!
+//! Threads: the UI thread; the check and the download run on threads of their own.
 
 use anyhow::Context;
 use std::cell::RefCell;

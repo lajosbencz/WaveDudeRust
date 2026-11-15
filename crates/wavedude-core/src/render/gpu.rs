@@ -1,11 +1,11 @@
-//! Colouring a stored plane on the GPU, into a render pass: the picture [`paint`](super::layer::paint) and the
-//! outline blend make on the CPU, from the plane where it lives (a GPU engine's [`DeviceFrame`] or a plane the
-//! caller uploaded), so a picture on the device is never read back to be coloured (shaders/colour.wgsl).
+//! Colouring a stored plane on the GPU into a render pass: the picture [`paint`](super::layer::paint) and the outline
+//! blend make on the CPU, from the plane where it lives (a GPU engine's [`DeviceFrame`] or an uploaded plane), so a
+//! picture on the device is never read back to be coloured (shaders/colour.wgsl).
 //!
-//! The tables are the CPU's: the half table, the deep table with the Bayer thresholds, the palette, the resampling
-//! axes' weights and the outline's additions, uploaded when they change. Where the two differ: the card may fuse
-//! the resampling's multiply-adds, which moves a sum by an f32 ulp and so, at an f16 rounding boundary, picks the
-//! neighbouring table entry; an index picture is scaled bilinearly in f32 where a sampler weighs in fixed point.
+//! The tables are the CPU's (half table, deep table with the Bayer thresholds, palette, resampling weights, outline
+//! additions), uploaded when they change. Differences: the card may fuse the resampling's multiply-adds, which moves a
+//! sum by an f32 ulp and so, at an f16 rounding boundary, picks the neighbouring table entry; an index picture is
+//! scaled bilinearly in f32 where a sampler weighs in fixed point.
 //!
 //! [`DeviceFrame`]: crate::engine::gpu::DeviceFrame
 
@@ -15,7 +15,7 @@ use bytemuck::{Pod, Zeroable};
 
 use super::layer::{Colouring, LayerColours, View};
 use super::screen::{ResampleAxis, Window, axes};
-use crate::engine::gpu::{GpuError, HALF};
+use crate::engine::gpu::{GpuError, HALF, storage_limit};
 use crate::engine::types::SampleKind;
 use crate::engine::{FrameShape, SampleFormat};
 use crate::model::Layer;
@@ -148,7 +148,7 @@ pub struct PlaneTooLarge {
 /// Whether a plane of `shape`, padded to whole words, binds as one storage buffer under `limits`.
 pub fn plane_fits(shape: &FrameShape, limits: &wgpu::Limits) -> Result<(), PlaneTooLarge> {
 	let bytes = (shape.plane_bytes() as u64).next_multiple_of(4);
-	let limit = limits.max_storage_buffer_binding_size.min(limits.max_buffer_size);
+	let limit = storage_limit(limits);
 	if bytes > limit { Err(PlaneTooLarge { bytes, limit }) } else { Ok(()) }
 }
 

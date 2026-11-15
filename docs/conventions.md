@@ -30,8 +30,8 @@ push. What they hold the code to:
   the browser's run worker (`RunWorker::pump`, which says whether work is left, waits for readiness (an engine, a
   readback, the device, the spill's writes) or is idle, waking the caller's waker; decision 0024)
   and its frame stores hold their frames in
-  memory up to the caller's budget and spill the rest through the caller's backend (decision 0020); the batch run,
-  the spill file and the machine's memory and threads are native only
+  memory up to the caller's budget and spill the rest through the caller's backend (decision 0020); the live run on a thread
+  of its own, the spill file and the machine's memory and threads are native only
   ([decision 0015](decisions/0015-core-builds-for-wasm.md), [decision 0016](decisions/0016-gpu-engine-in-the-browser.md)).
   The run spec and the preview tiers are not in `run` ([`spec.rs`](../crates/wavedude-core/src/spec.rs),
   [`quality.rs`](../crates/wavedude-core/src/quality.rs)). Depends on no workspace crate ([`crates/wavedude-core/Cargo.toml`](../crates/wavedude-core/Cargo.toml)).
@@ -54,15 +54,15 @@ push. What they hold the code to:
   log, file watching, the machine's facts, writing a file (a download in the browser). Files open from a path or
   their bytes (`Source`) and save to a path or a download (`Target`); in the browser the live run is in the run
   worker; exports run on the page into the origin private file system (`platform::Spool`; the module `opfs` splits into `session`, `spill`, `queue` and `spool`: the session folder and
-  its lock, the frames past memory, the queue of writes in flight, the exports' files) and leave as downloads, MP4 through the browser's WebCodecs encoder (`platform::WebCodecsFactory`, module `webcodecs`); OpenH264, the updater and recent files are absent (the `HAS_*` constants). Its
+  its lock, the frames past memory, the queue of writes in flight, the exports' files) and leave as downloads, MP4 through the browser's WebCodecs encoder (`platform::WebCodecsFactory`, module `webcodecs`); OpenH264 and the updater are compiled out and recent files are absent (`HAS_PATHS`). Its
   `remote` module is the live run in another agent (decision 0024): the postcard messages, the worker's `Host`
   around a pumped `RunWorker` whose stores post every frame, and the page's `Remote`, a `Backend` writing them into
   a mirror store and acknowledging each once held, both over a `Port` (`Loopback` in the tests,
   [`crates/wavedude-app-state/tests/remote.rs`](../crates/wavedude-app-state/tests/remote.rs); in the browser
   `remote::web`'s `PagePort` and `WorkerPort` over `postMessage`, which wake their owners as messages arrive).
   The browser's `CoreBackend` is a `Remote` on the run worker; a worker that fails to load, crashes, stays
-  silent or speaks another protocol version (`protocol::VERSION`) fails every run with its reason (`WorkerGone`)
-  until the page is reloaded, and nothing runs on the page. Depends on core
+  silent, speaks another protocol version (`protocol::VERSION`) or is of another build (`build_id`) fails every
+  run with its reason (`WorkerGone`) until the page is reloaded, and nothing runs on the page. Depends on core
   (with `serde`), export (no default features, with `serde`; with MP4 native only) and examples; no egui, no rfd
   ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
 - `wavedude-app`: egui views on eframe, natively and in the browser ([`tools/build-web.sh`](../tools/build-web.sh)),
@@ -85,7 +85,9 @@ push. What they hold the code to:
 - `wavedude-examples`: the example projects, embedded from the repository's [`examples`](../examples/), with their
   titles, descriptions and topics; the Examples dialog reads this one list. Depends on core without default
   features alone ([`crates/wavedude-examples/Cargo.toml`](../crates/wavedude-examples/Cargo.toml)).
-- `wavedude-cli`: binary only (no `lib.rs`); core, view, export, and app-state behind feature `mp4`.
+- `wavedude-cli`: binary only (no `lib.rs`); core, view, export and app-state (the app's folders: settings, the user's
+  colour schemes, OpenH264); MP4 behind feature `mp4`. The global `--config-dir <DIR>` puts the app's folders under
+  `DIR` (`AppDirs::under`); its tests pass an empty one, so they never read the user's.
 
 ## Where new things go
 
@@ -111,10 +113,10 @@ push. What they hold the code to:
   ([`crates/wavedude-app/src/ui/properties/mod.rs:537`](../crates/wavedude-app/src/ui/properties/mod.rs#L537)); every other user action is an `Event` variant
   ([`crates/wavedude-app-state/src/lib.rs:70`](../crates/wavedude-app-state/src/lib.rs#L70)) handled in `AppState::handle` (`lib.rs:586`), answered with a `Response`.
 - Export format: a variant of `ExportFormat` with its line in `ALL` and `extensions`
-  ([`crates/wavedude-export/src/lib.rs:33`](../crates/wavedude-export/src/lib.rs#L33)), a module under [`src/sinks/`](../crates/wavedude-export/src/sinks/) implementing `FrameSink`
+  ([`crates/wavedude-export/src/lib.rs:34`](../crates/wavedude-export/src/lib.rs#L34)), a module under [`src/sinks/`](../crates/wavedude-export/src/sinks/) implementing `FrameSink`
   ([`sinks/mod.rs:27`](../crates/wavedude-export/src/sinks/mod.rs#L27)), and its arm in `sinks::open`; the matches are exhaustive, so the compiler lists the rest.
 - CLI subcommand: a variant of `Command` in [`crates/wavedude-cli/src/main.rs:35`](../crates/wavedude-cli/src/main.rs#L35) (clap derive), a module with
-  `pub(crate) struct Args` and `pub(crate) fn run(args: &Args) -> Result<()>` ([`crates/wavedude-cli/src/export.rs:20`](../crates/wavedude-cli/src/export.rs#L20), [`137`](../crates/wavedude-cli/src/export.rs#L137)),
+  `pub(crate) struct Args` and `pub(crate) fn run(args: &Args) -> Result<()>` ([`crates/wavedude-cli/src/export.rs:22`](../crates/wavedude-cli/src/export.rs#L22), [`107`](../crates/wavedude-cli/src/export.rs#L107)),
   and its arm in `main`.
 - Widget: one module per widget in [`crates/wavedude-app/src/ui/`](../crates/wavedude-app/src/ui/) named after it
   ([`number_box.rs`](../crates/wavedude-app/src/ui/number_box.rs) -> `number_box`), tested in its module with egui_kittest or in the
@@ -144,7 +146,7 @@ push. What they hold the code to:
 - Each `lib.rs` opens with a `//!` summary, declares `pub mod`s and re-exports the main types with `pub use`
   ([`crates/wavedude-view/src/lib.rs`](../crates/wavedude-view/src/lib.rs), [`crates/wavedude-export/src/lib.rs`](../crates/wavedude-export/src/lib.rs)).
 - Internal helpers are private modules (`mod modal; mod edit;` in the app's `ui`, `mod bits; mod yuv;` in
-  export) or `pub(crate)` items (`pub(crate) fn mur_weights`, [`crates/wavedude-core/src/engine/cpu.rs:65`](../crates/wavedude-core/src/engine/cpu.rs#L65)).
+  export) or `pub(crate)` items (`pub(crate) fn mur_weights`, [`crates/wavedude-core/src/engine/mur.rs:32`](../crates/wavedude-core/src/engine/mur.rs#L32)).
   app-state has no `pub(crate)`: its modules are the public API. The cli is a binary, so its shared items are `pub(crate)`.
 - Imports: `std`, then external and workspace crates, then `crate::`/`super::`, as blank-line separated groups
   ([`crates/wavedude-core/src/io/wdproj.rs`](../crates/wavedude-core/src/io/wdproj.rs)).
@@ -152,8 +154,8 @@ push. What they hold the code to:
 ## Errors and panics
 
 - Library crates define `thiserror` enums, messages lower-case but for proper nouns (`ExportError`,
-  [`crates/wavedude-export/src/lib.rs:193`](../crates/wavedude-export/src/lib.rs#L193); `CommandError`, [`commands.rs:400`](../crates/wavedude-app-state/src/commands.rs#L400); `IoError`,
-  [`crates/wavedude-core/src/io/mod.rs:95`](../crates/wavedude-core/src/io/mod.rs#L95)) and a `Result` alias ([`io/mod.rs:110`](../crates/wavedude-core/src/io/mod.rs#L110), [`crates/wavedude-export/src/lib.rs:230`](../crates/wavedude-export/src/lib.rs#L230)).
+  [`crates/wavedude-export/src/lib.rs:199`](../crates/wavedude-export/src/lib.rs#L199); `CommandError`, [`commands.rs:400`](../crates/wavedude-app-state/src/commands.rs#L400); `IoError`,
+  [`crates/wavedude-core/src/io/mod.rs:95`](../crates/wavedude-core/src/io/mod.rs#L95)) and a `Result` alias ([`io/mod.rs:110`](../crates/wavedude-core/src/io/mod.rs#L110), [`crates/wavedude-export/src/lib.rs:243`](../crates/wavedude-export/src/lib.rs#L243)).
 - `anyhow` is for binaries and setup: every `wavedude-cli` module, [`crates/wavedude-app/src/main.rs`](../crates/wavedude-app/src/main.rs),
   `platform::init_log` ([`crates/wavedude-app-state/src/platform/native.rs:183`](../crates/wavedude-app-state/src/platform/native.rs#L183)).
 - A broken invariant panics through `expect` whose message states the invariant
@@ -161,14 +163,15 @@ push. What they hold the code to:
   `.expect("an embedded string table is valid JSON")`, `strings.rs:93`). Bare `unwrap()` is for tests:
   `clippy::unwrap_used` is denied in `wavedude-core` and `wavedude-export` outside their tests.
 - A mutex is taken through `wavedude_core::sync::lock`, which takes a poisoned lock too: the guarded values
-  are whole between operations and the panic was reported where it happened.
+  are whole between operations and the panic was reported where it happened. A `Condvar` wait does the same with
+  `.unwrap_or_else(PoisonError::into_inner)` (`RunWorker`, [`crates/wavedude-core/src/run/worker.rs`](../crates/wavedude-core/src/run/worker.rs)).
 - A missing string key is a bug and panics (`Strings::get`, [`crates/wavedude-app-state/src/strings.rs:190`](../crates/wavedude-app-state/src/strings.rs#L190)).
 - No silent fallbacks: a fallback is logged and stated. The GPU engine falls back to the CPU with a warning and
-  hands back why ([`crates/wavedude-core/src/engine/mod.rs:124`](../crates/wavedude-core/src/engine/mod.rs#L124)); an unreadable settings file is logged with its text and kept
-  in `unreadable` ([`settings.rs:201`](../crates/wavedude-app-state/src/settings.rs#L201)); a failed command is logged and returned as `Response::Error` for a modal
+  hands back why ([`crates/wavedude-core/src/engine/mod.rs:124`](../crates/wavedude-core/src/engine/mod.rs#L124)); a settings value that cannot be read is logged with its
+  key and reads as its default ([`settings.rs:284`](../crates/wavedude-app-state/src/settings.rs#L284)); a failed command is logged and returned as `Response::Error` for a modal
   ([`crates/wavedude-app-state/src/lib.rs:528`](../crates/wavedude-app-state/src/lib.rs#L528)).
 - Out-of-range values are clamped by `normalize` after load, import, every edit and before a run; it is
-  idempotent ([`model/normalize.rs`](../crates/wavedude-core/src/model/normalize.rs), `Settings::normalize` at [`settings.rs:218`](../crates/wavedude-app-state/src/settings.rs#L218)).
+  idempotent ([`model/normalize.rs`](../crates/wavedude-core/src/model/normalize.rs), `Settings::normalize` at [`settings.rs:240`](../crates/wavedude-app-state/src/settings.rs#L240)).
 
 ## Logging
 
@@ -187,7 +190,8 @@ push. What they hold the code to:
   ([`crates/wavedude-app/src/main.rs`](../crates/wavedude-app/src/main.rs)). On Windows the app is a GUI program (`windows_subsystem`): no console
   opens, its stdout and stderr lead nowhere, and the file and the box are the record.
 - Panics: the hook (`platform::install_panic_hook`) logs every panic with a backtrace; a worker's panic is caught
-  by its owner (a failed run, a failed export, with a notice); the main thread's ends the program and leaves
+  by its owner (a failed run, a failed export, with a notice; the window's threads answer through an `Inbox`,
+  [`crates/wavedude-app/src/ui/inbox.rs`](../crates/wavedude-app/src/ui/inbox.rs)); the main thread's ends the program and leaves
   `crash.txt` in the logs folder, which the next start shows once.
 
 ## Comments and docs in code
@@ -249,7 +253,7 @@ push. What they hold the code to:
 - `#[ignore = "group: how to run it"]` tests live in a module named for the group, `ignored_timing`, `ignored_slow`,
   `ignored_network` or `ignored_tool`, because `cargo test` filters on the module path: `-- --ignored ignored_timing::` runs
   one group ([`crates/wavedude-core/tests/render.rs:338`](../crates/wavedude-core/tests/render.rs#L338)).
-- App-state tests drive `AppState<FakeBackend>` (`live::fake::FakeBackend`, `live.rs:1153`) with a fake clock
+- App-state tests drive `AppState<FakeBackend>` (`live::fake::FakeBackend`, `live.rs:1298`, feature `test-support`, which app-state's dev-dependency on itself enables) with a fake clock
   ([`crates/wavedude-app-state/tests/state.rs:20`](../crates/wavedude-app-state/tests/state.rs#L20)).
 - The window is tested headless with egui_kittest on wgpu: widgets found by role and label, clicked and typed into
   through AccessKit, with no image snapshots ([`crates/wavedude-app/tests/common/mod.rs`](../crates/wavedude-app/tests/common/mod.rs),
