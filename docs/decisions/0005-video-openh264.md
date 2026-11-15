@@ -1,7 +1,7 @@
 # 0005 H.264 MP4 through Cisco's OpenH264, loaded at run time
 
 Status: accepted, 2026-11-05; amended 2026-11-07 (run-time loading), 2026-11-14 (the browser), 2026-11-15 (the
-in-house muxer)
+in-house muxer, the browser encoder's queue)
 
 The original encodes MP4 with Windows Media Foundation, NV12 input, 8-bit
 4:2:0, in quality mode with a bitrate fallback and the hardware encoder when
@@ -67,3 +67,11 @@ H.264 royalties are those of the browser's or the operating system's vendor, who
   none is encoded or the browser has no WebCodecs.
 - The files differ from the desktop's: another encoder, rate control and, where the browser has one, a hardware
   encoder.
+
+## The browser encoder's queue (added 2026-11-15)
+
+The encoder takes a picture while fewer than 6 encode requests wait for it (`encodeQueueSize`, woken by `dequeue`),
+not while fewer than 6 pictures are not out yet: an encoder "may emit new outputs only when new inputs are provided"
+and must emit them all at a flush ([WebCodecs](https://www.w3.org/TR/webcodecs/), Internal Pending Output). Firefox
+159's emits its first chunk after about 43 pictures, so the count of pictures not out stalled every MP4 export there
+at its sixth picture.

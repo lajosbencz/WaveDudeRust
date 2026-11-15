@@ -11,6 +11,7 @@ use wavedude_app_state::settings::{DITHER_BITS, Theme as ThemeSetting};
 use wavedude_app_state::strings::Language;
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::{ItemKind, ItemRef, ProbeDetector};
+use wavedude_core::run::RamCache;
 
 use crate::window::Pane;
 
@@ -134,8 +135,7 @@ pub enum MenuAction {
 	WarnMemory,
 	CheckForUpdates,
 	CheckAtLaunch,
-	/// 0 is Auto.
-	FrameMemory(i32),
+	FrameMemory(RamCache),
 	About,
 	Manual,
 	AddSource,

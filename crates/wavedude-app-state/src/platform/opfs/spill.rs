@@ -1,23 +1,38 @@
-//! The frames past a store's memory: one file per frame at `<session>/<store>-<generation>/<frame>`
-//! ([`wavedude_core::run::SpillBackend`]).
+//! The frames past a store's memory ([`wavedude_core::run::SpillBackend`]) in the spill worker (decision 0020), which
+//! keeps each store generation in one file of this tab's session folder, `<session>/<store>-<generation>`. The page
+//! posts each write with the frame's planes, each read and each removal ([`wavedude_spill_worker`] has the
+//! messages), and completes an operation's [`Token`] as the worker answers it.
 //!
 //! The start, each write and each read wake the window as they complete ([`crate::wake`]). A store's spill is
-//! refused when its frames do not fit the free storage estimated at the start.
+//! refused when its frames do not fit the free storage estimated at the start. A spill worker that does not start,
+//! stops or speaks another protocol version is ended and fails every operation in flight and after with the reason.
 
-use std::collections::BTreeSet;
+use std::cell::{OnceCell, RefCell};
+use std::collections::HashMap;
 use std::io;
 use std::sync::Mutex;
 use std::task::{Context, Poll};
 
 use js_sys::Uint8Array;
-use wasm_bindgen_futures::{JsFuture, spawn_local};
+use wasm_bindgen_futures::spawn_local;
 use wavedude_core::run::{SpillBackend, SpillFactory, StoreLayout, Token};
 use wavedude_core::sync::lock;
-use web_sys::{
-	Blob, FileSystemDirectoryHandle, FileSystemFileHandle, FileSystemGetFileOptions, FileSystemWritableFileStream,
-};
+use wavedude_spill_worker::{FromSpill, ToSpill, VERSION};
 
-use super::session::{awaited, folder, prepare, remove_entry, session, storage_error};
+use super::session::{prepare, session};
+use crate::platform::Instant;
+use crate::remote::protocol::Lost;
+use crate::remote::web::{PagePort, Wire};
+use crate::remote::{Buffer, Envelope, Port};
+
+/// The spill worker's script, beside the page.
+const SPILL_WORKER: &str = "spill-worker.js";
+
+/// The spill worker's URL: [`SPILL_WORKER`] with the page's build as its query, which the script passes on to its
+/// files, so the browser's cache never serves the worker of another build.
+fn spill_worker_url() -> String {
+	format!("{SPILL_WORKER}?build={}", js_sys::encode_uri_component(&crate::build_id()))
+}
 
 /// The spills of this tab's stores.
 pub struct Opfs {
@@ -27,14 +42,21 @@ pub struct Opfs {
 }
 
 impl Opfs {
-	/// Takes this tab's session and starts removing the sessions of tabs gone, then estimating the free storage.
+	/// Starts the spill worker, takes this tab's session and starts removing the sessions of tabs gone, then
+	/// estimating the free storage; the worker is told the session once it is ready. Once per page: a second start
+	/// panics.
 	pub fn start() -> Self {
+		Link::start();
 		let free = Token::default();
 		let done = free.clone();
 		spawn_local(async move {
 			let result = prepare().await;
-			if let Err(e) = &result {
-				tracing::warn!("frames past memory cannot be spilled: {e}");
+			match &result {
+				Ok(_) => {
+					let name = session().expect("prepared").name();
+					post(&ToSpill::Session { name }, None);
+				}
+				Err(e) => tracing::warn!("frames past memory cannot be spilled: {e}"),
 			}
 			done.complete(result);
 			crate::wake::wake();
@@ -66,7 +88,10 @@ impl SpillFactory for Opfs {
 					),
 				))
 			}
-			Ok(_) => Ok(Box::new(Spill { store, generations: Mutex::default(), writes: Mutex::default() })),
+			Ok(_) => match gone() {
+				Some(why) => Err(io::Error::other(why)),
+				None => Ok(Box::new(Spill { store })),
+			},
 		}
 	}
 }
@@ -74,31 +99,6 @@ impl SpillFactory for Opfs {
 /// One store's frames.
 struct Spill {
 	store: u64,
-	/// Generations with a folder.
-	generations: Mutex<BTreeSet<u64>>,
-	/// (generation, write) in flight.
-	writes: Mutex<Vec<(u64, Token<()>)>>,
-}
-
-impl Spill {
-	fn folder(&self, generation: u64) -> String {
-		format!("{}-{generation}", self.store)
-	}
-
-	/// Removes `generation`'s folder once its writes in flight are done.
-	fn remove(&self, generation: u64) {
-		let writes: Vec<Token<()>> =
-			lock(&self.writes).iter().filter(|(g, _)| *g == generation).map(|(_, t)| t.clone()).collect();
-		let folder = self.folder(generation);
-		spawn_local(async move {
-			for write in writes {
-				write.done().await;
-			}
-			if let Err(e) = remove_entry(&session_folder(), &folder, true).await {
-				tracing::warn!("the spilled frames in {folder} could not be removed: {e}");
-			}
-		});
-	}
 }
 
 impl SpillBackend for Spill {
@@ -110,76 +110,176 @@ impl SpillBackend for Spill {
 			data.subarray(at, end).copy_from(plane);
 			at = end;
 		}
-		lock(&self.generations).insert(generation);
 		let token = Token::default();
-		let mut writes = lock(&self.writes);
-		writes.retain(|(_, t)| !t.is_done());
-		writes.push((generation, token.clone()));
-		let (done, folder) = (token.clone(), self.folder(generation));
-		spawn_local(async move {
-			done.complete(write_frame(&folder, frame, &data).await);
-			crate::wake::wake();
-		});
+		let store = self.store;
+		request(
+			Pending::Write(token.clone()),
+			|id| ToSpill::Write { id, store, generation, frame },
+			Some(Buffer::from(data)),
+		);
 		token
 	}
 
 	fn read(&self, generation: u64, frame: usize) -> Token<Vec<u8>> {
 		let token = Token::default();
-		let (done, folder) = (token.clone(), self.folder(generation));
-		spawn_local(async move {
-			let started = crate::platform::Instant::now();
-			let read = read_frame(&folder, frame).await;
-			tracing::debug!(frame, ms = started.elapsed().as_secs_f64() * 1e3, "spilled frame read back");
-			done.complete(read);
-			crate::wake::wake();
-		});
+		let store = self.store;
+		let pending = Pending::Read { token: token.clone(), frame, started: Instant::now() };
+		request(pending, |id| ToSpill::Read { id, store, generation, frame }, None);
 		token
 	}
 
 	fn drop_generation(&self, generation: u64) {
-		if lock(&self.generations).remove(&generation) {
-			self.remove(generation);
-		}
+		post(&ToSpill::DropGeneration { store: self.store, generation }, None);
 	}
 }
 
 impl Drop for Spill {
 	fn drop(&mut self) {
-		for generation in std::mem::take(&mut *lock(&self.generations)) {
-			self.remove(generation);
+		post(&ToSpill::DropStore { store: self.store }, None);
+	}
+}
+
+/// The spill worker's [`Wire`]: a loss arrives as [`FromSpill::Gone`], and what the page posts before the worker
+/// listens waits in order.
+struct SpillWire;
+
+impl Wire for SpillWire {
+	fn lost(lost: Lost) -> Envelope {
+		envelope(&FromSpill::Gone(lost.to_string()), None)
+	}
+
+	fn hold(held: &mut Vec<Envelope>, envelope: Envelope) {
+		held.push(envelope);
+	}
+}
+
+fn envelope(message: &impl serde::Serialize, buffer: Option<Buffer>) -> Envelope {
+	Envelope { message: postcard::to_allocvec(message).expect("a message of the spill protocol encodes"), buffer }
+}
+
+thread_local! {
+	/// The page's end of the spill worker, once the start made it.
+	static LINK: OnceCell<Link> = const { OnceCell::new() };
+}
+
+/// The spill worker and the operations it has not answered.
+struct Link {
+	port: PagePort<SpillWire>,
+	state: RefCell<Requests>,
+}
+
+#[derive(Default)]
+struct Requests {
+	/// The id of the next operation.
+	next: u64,
+	/// By id.
+	pending: HashMap<u64, Pending>,
+	/// Why the worker answers nothing more.
+	gone: Option<String>,
+}
+
+/// An operation in flight.
+enum Pending {
+	Write(Token<()>),
+	Read { token: Token<Vec<u8>>, frame: usize, started: Instant },
+}
+
+impl Pending {
+	/// Completes the operation with `result`, a read's planes its buffer, and wakes the window.
+	fn settle(self, result: io::Result<Option<Buffer>>) {
+		match self {
+			Self::Write(token) => token.complete(result.map(drop)),
+			Self::Read { token, frame, started } => {
+				let planes = result.and_then(|buffer| {
+					let buffer = buffer.ok_or_else(|| io::Error::other("a spilled frame came back without planes"))?;
+					Ok(buffer.to_vec(0..buffer.len()))
+				});
+				tracing::debug!(frame, ms = started.elapsed().as_secs_f64() * 1e3, "spilled frame read back");
+				token.complete(planes);
+			}
+		}
+		crate::wake::wake();
+	}
+}
+
+impl Link {
+	/// Starts the spill worker; once per tab.
+	fn start() {
+		let port = PagePort::start(&spill_worker_url(), receive);
+		let made = LINK.with(|link| link.set(Self { port, state: RefCell::default() }).is_ok());
+		assert!(made, "one start per tab");
+		// A worker that could not be made is lost already.
+		receive();
+	}
+
+	/// Handles `envelope`: the operations it completes, with their outcomes.
+	fn handle(&self, envelope: Envelope) -> Vec<(Pending, io::Result<Option<Buffer>>)> {
+		let mut state = self.state.borrow_mut();
+		if state.gone.is_some() {
+			return Vec::new();
+		}
+		let why = match postcard::from_bytes::<FromSpill>(&envelope.message) {
+			Ok(FromSpill::Ready { version }) if version == VERSION => return Vec::new(),
+			Ok(FromSpill::Ready { version }) => {
+				format!("the spill worker speaks protocol version {version}, the page {VERSION}")
+			}
+			Ok(FromSpill::Done { id, result }) => match state.pending.remove(&id) {
+				Some(pending) => return vec![(pending, result.map(|()| envelope.buffer).map_err(io::Error::from))],
+				None => format!("the spill worker answered operation {id}, which is not in flight"),
+			},
+			Ok(FromSpill::Gone(why)) => format!("the spill worker stopped: {why}"),
+			Err(e) => format!("the spill worker sent an unreadable message: {e}"),
+		};
+		tracing::warn!("{why}");
+		self.port.stop();
+		let failed = state.pending.drain().map(|(_, pending)| (pending, Err(io::Error::other(why.clone())))).collect();
+		state.gone = Some(why);
+		failed
+	}
+}
+
+fn with_link<T>(f: impl FnOnce(&Link) -> T) -> T {
+	LINK.with(|link| f(link.get().expect("the spill worker is started first")))
+}
+
+/// Why the spill worker answers nothing more.
+fn gone() -> Option<String> {
+	with_link(|link| link.state.borrow().gone.clone())
+}
+
+/// Handles the spill worker's messages waiting.
+fn receive() {
+	while let Some(envelope) = with_link(|link| link.port.receive()) {
+		for (pending, result) in with_link(|link| link.handle(envelope)) {
+			pending.settle(result);
 		}
 	}
 }
 
-fn session_folder() -> FileSystemDirectoryHandle {
-	session().expect("a spill is opened after the start made the session")
+/// Posts `message` with `buffer`, unless the worker is gone.
+fn post(message: &ToSpill, buffer: Option<Buffer>) {
+	with_link(|link| {
+		if link.state.borrow().gone.is_none() {
+			link.port.post(envelope(message, buffer));
+		}
+	});
 }
 
-async fn file(folder_name: &str, frame: usize, create: bool) -> io::Result<FileSystemFileHandle> {
-	let parent = folder(&session_folder(), folder_name, create).await?;
-	let options = FileSystemGetFileOptions::new();
-	options.set_create(create);
-	awaited(parent.get_file_handle_with_options(&frame.to_string(), &options)).await
-}
-
-async fn write_frame(folder_name: &str, frame: usize, data: &Uint8Array) -> io::Result<()> {
-	let handle = file(folder_name, frame, true).await?;
-	let stream: FileSystemWritableFileStream = awaited(handle.create_writable()).await?;
-	let written = async {
-		JsFuture::from(stream.write_with_js_u8_array(data)?).await?;
-		JsFuture::from(stream.close()).await
-	};
-	if let Err(e) = written.await {
-		// Releases the file's lock and drops its swap file; the stream may have errored already.
-		let _ = JsFuture::from(stream.abort()).await;
-		return Err(storage_error(&e));
+/// Starts `pending`: posts `message` of its id with `buffer`, or fails it at once when the worker is gone.
+fn request(pending: Pending, message: impl FnOnce(u64) -> ToSpill, buffer: Option<Buffer>) {
+	let refused = with_link(|link| {
+		let mut state = link.state.borrow_mut();
+		if let Some(why) = &state.gone {
+			return Some((pending, io::Error::other(why.clone())));
+		}
+		let id = state.next;
+		state.next += 1;
+		state.pending.insert(id, pending);
+		drop(state);
+		link.port.post(envelope(&message(id), buffer));
+		None
+	});
+	if let Some((pending, e)) = refused {
+		pending.settle(Err(e));
 	}
-	Ok(())
-}
-
-async fn read_frame(folder_name: &str, frame: usize) -> io::Result<Vec<u8>> {
-	let handle = file(folder_name, frame, false).await?;
-	let blob: Blob = awaited(handle.get_file()).await?;
-	let buffer = JsFuture::from(blob.array_buffer()).await.map_err(|e| storage_error(&e))?;
-	Ok(Uint8Array::new(&buffer).to_vec())
 }

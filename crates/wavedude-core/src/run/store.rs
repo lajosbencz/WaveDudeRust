@@ -62,6 +62,19 @@ pub enum StoreError {
 	Io(#[from] io::Error),
 }
 
+/// The RAM cache size: the memory a store's frames may take before they spill.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum RamCache {
+	/// What the budget has.
+	#[default]
+	Auto,
+	/// This share of the physical memory, at most 100.
+	Percent(u32),
+	/// This many bytes.
+	Bytes(u64),
+}
+
 /// The bytes frames may take in memory.
 pub struct Budget;
 
@@ -69,33 +82,38 @@ impl Budget {
 	/// Kept free for everything else.
 	pub const MARGIN: u64 = 2 << 30;
 
-	/// The budget on `memory`'s readings now: `max(0, available + reclaimed - 2 GiB)`, capped by `percent` of the
-	/// physical memory when `percent > 0` (Auto at 0). `reclaimed` is the outgoing run's store, which counts as
-	/// free.
+	/// The budget on `memory`'s readings now: `max(0, available + reclaimed - 2 GiB)`, capped by `cache`.
+	/// `reclaimed` is the outgoing run's store, which counts as free.
 	#[cfg(not(target_arch = "wasm32"))]
-	pub fn compute(memory: Memory, reclaimed_bytes: u64, percent: u32) -> u64 {
+	pub fn compute(memory: Memory, reclaimed_bytes: u64, cache: RamCache) -> u64 {
 		let (available, physical) = memory.read();
-		Self::of(available, physical, percent, reclaimed_bytes)
+		Self::of(available, physical, cache, reclaimed_bytes)
 	}
 
 	/// The arithmetic of [`compute`](Self::compute) on given readings.
-	pub fn of(available: u64, physical: u64, percent: u32, reclaimed: u64) -> u64 {
-		Self::share((available + reclaimed).saturating_sub(Self::MARGIN), physical, percent)
+	pub fn of(available: u64, physical: u64, cache: RamCache, reclaimed: u64) -> u64 {
+		Self::share((available + reclaimed).saturating_sub(Self::MARGIN), physical, cache)
 	}
 
-	/// The budget where the frames have `memory` bytes to themselves (the browser): all of it at Auto (0),
-	/// else `percent` of it.
-	pub fn of_memory(memory: u64, percent: u32) -> u64 {
-		Self::share(memory, memory, percent)
-	}
-
-	/// `free` bytes, capped by `percent` of `physical` when `percent > 0` (Auto at 0).
-	fn share(free: u64, physical: u64, percent: u32) -> u64 {
-		if percent == 0 {
-			return free;
+	/// The budget where the frames have `memory` bytes to themselves (the browser's estimate): all of it at Auto, a
+	/// share of it, or a size in its place.
+	pub fn of_memory(memory: u64, cache: RamCache) -> u64 {
+		match cache {
+			RamCache::Bytes(bytes) => bytes,
+			cache => Self::share(memory, memory, cache),
 		}
-		let by_share = (physical as f64 * percent.min(100) as f64 / 100.0) as u64;
-		by_share.min(free)
+	}
+
+	/// `free` bytes, capped by `cache`'s share of `physical` or its size.
+	fn share(free: u64, physical: u64, cache: RamCache) -> u64 {
+		match cache {
+			RamCache::Auto => free,
+			RamCache::Percent(percent) => {
+				let by_share = (physical as f64 * percent.min(100) as f64 / 100.0) as u64;
+				by_share.min(free)
+			}
+			RamCache::Bytes(bytes) => bytes.min(free),
+		}
 	}
 
 	/// Frames of `frame_bytes` (not 0) each that fit into `budget`.
@@ -1098,13 +1116,17 @@ mod tests {
 	#[test]
 	fn budget_arithmetic() {
 		const G: u64 = 1 << 30;
-		assert_eq!(Budget::of(10 * G, 64 * G, 0, 0), 8 * G);
-		assert_eq!(Budget::of(10 * G, 64 * G, 0, 3 * G), 11 * G, "the outgoing run counts as free");
-		assert_eq!(Budget::of(10 * G, 64 * G, 10, 3 * G), (6.4 * G as f64) as u64, "the share caps it");
-		assert_eq!(Budget::of(G, 64 * G, 0, 0), 0);
-		assert_eq!(Budget::of(10 * G, 64 * G, 500, 0), 8 * G);
-		assert_eq!(Budget::of_memory(2 * G, 0), 2 * G, "Auto takes the memory");
-		assert_eq!(Budget::of_memory(2 * G, 25), G / 2);
-		assert_eq!(Budget::of_memory(2 * G, 500), 2 * G);
+		let (auto, pct) = (RamCache::Auto, RamCache::Percent);
+		assert_eq!(Budget::of(10 * G, 64 * G, auto, 0), 8 * G);
+		assert_eq!(Budget::of(10 * G, 64 * G, auto, 3 * G), 11 * G, "the outgoing run counts as free");
+		assert_eq!(Budget::of(10 * G, 64 * G, pct(10), 3 * G), (6.4 * G as f64) as u64, "the share caps it");
+		assert_eq!(Budget::of(G, 64 * G, auto, 0), 0);
+		assert_eq!(Budget::of(10 * G, 64 * G, pct(500), 0), 8 * G);
+		assert_eq!(Budget::of(10 * G, 64 * G, RamCache::Bytes(G), 0), G, "the size caps it");
+		assert_eq!(Budget::of(10 * G, 64 * G, RamCache::Bytes(64 * G), 0), 8 * G);
+		assert_eq!(Budget::of_memory(2 * G, auto), 2 * G, "Auto takes the memory");
+		assert_eq!(Budget::of_memory(2 * G, pct(25)), G / 2);
+		assert_eq!(Budget::of_memory(2 * G, pct(500)), 2 * G);
+		assert_eq!(Budget::of_memory(G / 8, RamCache::Bytes(2 * G)), 2 * G, "a size replaces the estimate");
 	}
 }

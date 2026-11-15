@@ -3,8 +3,10 @@
 //! `fps` pictures, I420 pictures in BT.601 studio range. The supported profiles at a size and rate are asked once with
 //! `VideoEncoder.isConfigSupported` ([`support`]).
 //!
-//! The encoder's output arrives in callbacks, queued ([`Chunks`]) and drained in order; each wakes the window
-//! ([`crate::wake`]).
+//! The encoder takes a picture while fewer than [`QUEUED`] encode requests wait for it (`encodeQueueSize`), each
+//! `dequeue` waking the window: an encoder may hold its output until later pictures or a flush come, so the pictures
+//! not out yet do not hold the next back (decision 0005, The browser encoder's queue). Its output arrives in
+//! callbacks, queued ([`Chunks`]) and drained in order; each wakes the window ([`crate::wake`]).
 
 #[cfg(target_arch = "wasm32")]
 mod encoder;
@@ -17,8 +19,8 @@ use std::collections::VecDeque;
 use wavedude_export::h264::{Profile, Yuv420};
 use wavedude_export::{ExportError, Result};
 
-/// Pictures submitted and not yet out of the encoder at which it is not ready.
-const IN_FLIGHT: u64 = 6;
+/// Encode requests waiting for the encoder at which it is not ready.
+const QUEUED: u32 = 6;
 
 /// Of each level of H.264 Table A-1 but 1b: `level_idc`, MaxMBPS (macroblocks/s), MaxFS (macroblocks).
 const LEVELS: [(u8, u64, u64); 19] = [
@@ -130,10 +132,10 @@ impl Chunks {
 		self.queue.push_back((data, sync));
 	}
 
-	/// Takes a picture while fewer than [`IN_FLIGHT`] are in the encoder.
-	fn ready(&self) -> Result<bool> {
+	/// Takes a picture while fewer than [`QUEUED`] encode requests wait for the encoder.
+	fn ready(&self, queued: u32) -> Result<bool> {
 		self.check()?;
-		Ok(self.submitted - self.received < IN_FLIGHT)
+		Ok(queued < QUEUED)
 	}
 
 	/// Hands the queued access units to `out` in order.
@@ -211,14 +213,14 @@ mod tests {
 	}
 
 	#[test]
-	fn pictures_in_the_encoder_hold_the_next_back() {
+	fn pictures_held_by_the_encoder_do_not_hold_the_next_back() {
 		let mut chunks = Chunks::new(2);
 		assert_eq!(chunks.submit(), (0, true));
 		assert_eq!(chunks.submit(), (1, false));
-		submitted(&mut chunks, IN_FLIGHT - 2);
-		assert!(!chunks.ready().unwrap());
+		submitted(&mut chunks, 40);
+		assert!(chunks.ready(0).unwrap(), "42 pictures in the encoder, none out, none waiting for it");
+		assert!(!chunks.ready(QUEUED).unwrap());
 		chunks.push(0, vec![1], true);
-		assert!(chunks.ready().unwrap(), "a picture out of the encoder frees its place");
 		chunks.push(timestamp(1, 2), vec![2], false);
 		let mut got = Vec::new();
 		chunks
@@ -237,7 +239,7 @@ mod tests {
 		submitted(&mut chunks, 3);
 		chunks.push(0, vec![1], true);
 		chunks.push(timestamp(2, 10), vec![3], false);
-		assert!(chunks.ready().is_err());
+		assert!(chunks.ready(0).is_err());
 		assert!(chunks.drain(&mut |_, _| Ok(())).is_err());
 		assert!(chunks.flushed().is_err());
 

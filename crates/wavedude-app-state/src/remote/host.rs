@@ -1,4 +1,5 @@
-//! The run worker's end: a pumped [`RunWorker`] whose stores keep no frame in memory. Their spill ([`PostSpill`])
+//! The run worker's end: a pumped [`RunWorker`] whose stores keep no frame in memory, as the host runs each goal at
+//! [`RamCache::Auto`] on no memory; the page's mirror applies the goal's RAM cache size. Their spill ([`PostSpill`])
 //! queues each store opened and each frame written; after each pump the host posts the queue and completes a frame's
 //! write when the page acknowledges it. A page of another protocol version or build is not listened to.
 
@@ -13,8 +14,8 @@ use std::task::{Context, Poll, Waker};
 use wavedude_core::engine::{Built, GpuHandle, build_on};
 use wavedude_core::model::Project;
 use wavedude_core::run::{
-	EngineFuture, Goal, Pump, PumpedFactory, RunError, RunWorker, SpillBackend, SpillFactory, Status, StoreLayout,
-	Token, WorkState,
+	EngineFuture, Goal, Pump, PumpedFactory, RamCache, RunError, RunWorker, SpillBackend, SpillFactory, Status,
+	StoreLayout, Token, WorkState,
 };
 use wavedude_core::sync::lock;
 
@@ -220,6 +221,7 @@ impl<P: Port> Host<P> {
 			}
 			ToWorker::Goal { mut goal, image } => {
 				self.restore(&mut goal, image);
+				goal.ram_cache = RamCache::Auto;
 				self.worker.set_goal(goal);
 			}
 			ToWorker::Rebuild { use_gpu } => {

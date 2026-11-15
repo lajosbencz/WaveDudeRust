@@ -12,7 +12,7 @@ use crate::live::EngineLabel;
 
 /// The version of [`ToWorker`] and [`ToPage`], bumped when either changes; a page and a worker of different
 /// versions do not talk.
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 
 /// From the page to the run worker.
 #[derive(Debug, Serialize, Deserialize)]
@@ -22,7 +22,8 @@ pub enum ToWorker {
 	Init { version: u32, build: String, use_gpu: bool },
 	/// The scene image of key `key` (`image_key`), its bytes the buffer; posted before the first goal naming it.
 	Image { key: u64 },
-	/// The goal, its project without the image bytes; `image` is the key of the image to put back.
+	/// The goal, its project without the image bytes; `image` is the key of the image to put back. Its RAM cache
+	/// size is the page's mirror's: the worker keeps no frame.
 	Goal { goal: Goal, image: Option<u64> },
 	/// The engine is built anew, on the GPU when `use_gpu`.
 	Rebuild { use_gpu: bool },

@@ -21,11 +21,13 @@ use std::sync::Arc;
 
 use wavedude_app_state::ExportKind;
 use wavedude_app_state::live::RunNeeds;
+use wavedude_app_state::platform::SystemTime;
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::{Layer, Project};
 use wavedude_core::run::store::FrameStore;
 use wavedude_export::fs::OutputFs;
+use wavedude_export::fs::zip::UtcDateTime;
 use wavedude_export::h264::Profile;
 use wavedude_export::{ExportFormat, ExportLayers, ExportPlan, FrameSource, naming};
 
@@ -66,17 +68,23 @@ impl ExportKindChoice {
 		if self.is_still() { &STILL } else { &ExportFormat::ALL }
 	}
 
+	/// Writes more than one file in `format`: both layers, or an image sequence.
+	pub fn writes_many(self, format: ExportFormat) -> bool {
+		self.layers() == ExportLayers::Both || (!self.is_still() && !format.is_video())
+	}
+
 	/// The save dialog's filter list.
 	pub fn filter_key(self) -> &'static str {
 		if self.is_still() { "ExportDialogFilterStill" } else { "ExportDialogFilter" }
 	}
 }
 
-/// The dialog's start: the command, the proposed path and the format preselected.
+/// The dialog's start: the command, each layer's proposed output, the proposed archive and the format preselected.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExportRequest {
 	pub choice: ExportKindChoice,
-	pub path: PathBuf,
+	pub outputs: Vec<(Layer, PathBuf)>,
+	pub archive: PathBuf,
 	pub format: usize,
 }
 
@@ -86,15 +94,15 @@ pub enum Plan {
 	Frames {
 		choice: ExportKindChoice,
 		format: ExportFormat,
-		path: PathBuf,
+		/// Each layer's output: a path, or with `archive` its name in the archive.
+		outputs: Vec<(Layer, PathBuf)>,
+		/// The ZIP archive the outputs go into.
+		archive: Option<PathBuf>,
 		frame: usize,
 		repeat: bool,
 	},
 	/// The probe by name, so a reordered list still finds it.
-	Csv {
-		probe: String,
-		path: PathBuf,
-	},
+	Csv { probe: String, path: PathBuf },
 }
 
 /// How an export ended, with its log line or error.
@@ -116,7 +124,7 @@ impl Outcome {
 	}
 }
 
-/// The export dialog's start for a command: the proposed path and the format preselected.
+/// The export dialog's start for a command: the proposed outputs and archive, and the format preselected.
 pub fn request(app: &App, choice: ExportKindChoice) -> ExportRequest {
 	let kind = if choice.is_still() { ExportKind::Still } else { ExportKind::Run };
 	let project_name = app.document.display_name("").trim_end_matches(".wdproj").to_owned();
@@ -146,7 +154,8 @@ pub fn request(app: &App, choice: ExportKindChoice) -> ExportRequest {
 	} else {
 		naming::with_layer_suffix(&path, layer).with_extension(ext)
 	};
-	ExportRequest { choice, path, format }
+	let archive = naming::with_layer_suffix(&path, None).with_extension("zip");
+	ExportRequest { choice, outputs: naming::layer_outputs(&path, choice.layers()), archive, format }
 }
 
 /// The probe CSV export's proposed path and the probe's name, which finds it in a reordered list.
@@ -172,14 +181,21 @@ pub fn run_needs(plan: &Plan) -> RunNeeds {
 	}
 }
 
-/// The plan's kind of export and its path, for the export hint.
+/// The plan's kind of export and its path, for the export hint: the archive, else the first output.
 pub fn plan_kind(plan: &Plan) -> (ExportKind, PathBuf) {
 	match plan {
-		Plan::Frames { choice, path, .. } => {
-			(if choice.is_still() { ExportKind::Still } else { ExportKind::Run }, path.clone())
+		Plan::Frames { choice, outputs, archive, .. } => {
+			let path = archive.as_ref().unwrap_or(&outputs[0].1).clone();
+			(if choice.is_still() { ExportKind::Still } else { ExportKind::Run }, path)
 		}
 		Plan::Csv { path, .. } => (ExportKind::Probe, path.clone()),
 	}
+}
+
+/// Now, the archive entries' time.
+fn now() -> UtcDateTime {
+	let since = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
+	UtcDateTime::from_unix(since.as_secs() as i64)
 }
 
 fn traces(app: &App) -> Vec<ProbeTrace> {
@@ -224,13 +240,13 @@ impl Work {
 		})
 	}
 
-	/// The frames of `choice` in `format` at `path` of `fs`; a still of timeline frame `frame`, or of the last one
+	/// The frames of `choice` in `format` to `outputs` of `fs`; a still of timeline frame `frame`, or of the last one
 	/// held.
 	fn export_plan(
 		&self,
 		choice: ExportKindChoice,
 		format: ExportFormat,
-		path: PathBuf,
+		outputs: Vec<(Layer, PathBuf)>,
 		frame: usize,
 		fs: Arc<dyn OutputFs>,
 	) -> ExportPlan<'_> {
@@ -238,9 +254,8 @@ impl Work {
 		ExportPlan {
 			project: &self.project,
 			format,
-			layers: choice.layers(),
 			fs,
-			path,
+			outputs,
 			still: choice.is_still().then(|| frame.min(count.saturating_sub(1))),
 			frame_count: count,
 			traces: &self.traces,
@@ -282,6 +297,16 @@ mod tests {
 			for choice in [ExportKindChoice::Field, ExportKindChoice::FieldFrame] {
 				assert_eq!(filters(s.get(choice.filter_key())).len(), choice.formats().len(), "{l:?} {choice:?}");
 			}
+			let zip = filters(s.get("ExportDialogFilterZip"));
+			assert!(zip.len() == 1 && zip[0].1 == ["zip"], "{l:?}");
 		}
+	}
+
+	#[test]
+	fn an_export_writes_several_files_of_both_layers_or_as_a_sequence() {
+		use ExportFormat::{Avi, Png};
+		use ExportKindChoice::{Both, Field, FieldFrame};
+		assert!(Both.writes_many(Avi) && Both.writes_many(Png) && Field.writes_many(Png));
+		assert!(!Field.writes_many(Avi) && !FieldFrame.writes_many(Png));
 	}
 }

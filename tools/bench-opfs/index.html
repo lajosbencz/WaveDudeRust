@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPFS frame writes</title>
+<style>
+body { margin: 16px; font: 14px monospace; }
+</style>
+</head>
+<body>
+<p>Writes 300 frames of 2 MB into the origin private file system three ways, then reads 50 back from the packed
+file (docs/measurements.md, The browser's frame spill writes).</p>
+<button id="run">Run</button>
+<pre id="out"></pre>
+<script id="worker" type="text/plain">
+// The sync access handles, which only a dedicated worker has.
+const at = (offset) => ({ at: offset });
+
+async function filePerFrame(dir, frames, data) {
+	let total = 0;
+	for (let i = 0; i < frames; i++) {
+		const start = performance.now();
+		const file = await dir.getFileHandle(`sync-${i}`, { create: true });
+		const handle = await file.createSyncAccessHandle();
+		handle.write(data, at(0));
+		handle.close();
+		total += performance.now() - start;
+	}
+	return total / frames;
+}
+
+async function packed(dir, frames, reads, data) {
+	const file = await dir.getFileHandle("packed", { create: true });
+	const handle = await file.createSyncAccessHandle();
+	let written = 0;
+	for (let i = 0; i < frames; i++) {
+		const start = performance.now();
+		handle.write(data, at(i * data.length));
+		written += performance.now() - start;
+	}
+	const back = new Uint8Array(data.length);
+	let read = 0;
+	for (let i = 0; i < reads; i++) {
+		const start = performance.now();
+		handle.read(back, at(((i * 7) % frames) * data.length));
+		read += performance.now() - start;
+	}
+	handle.close();
+	return { write: written / frames, read: read / reads };
+}
+
+onmessage = async ({ data: { folder, frames, reads, bytes } }) => {
+	try {
+		const root = await navigator.storage.getDirectory();
+		const dir = await root.getDirectoryHandle(folder);
+		const data = new Uint8Array(bytes).map((_, i) => i);
+		const perFile = await filePerFrame(dir, frames, data);
+		postMessage({ perFile, packed: await packed(dir, frames, reads, data) });
+	} catch (e) {
+		postMessage({ error: String(e) });
+	}
+};
+</script>
+<script type="module">
+const FOLDER = "bench-opfs";
+const FRAMES = 300;
+const READS = 50;
+const BYTES = 2_000_000;
+const IN_FLIGHT = 4;
+
+const out = document.getElementById("out");
+const say = (line) => { out.textContent += `${line}\n`; };
+const row = (what, ms) => say(`${what}: ${ms.toFixed(2)} ms a frame (${(BYTES / 1e3 / ms).toFixed(0)} MB/s)`);
+
+// Each frame from its write's start to its completion, IN_FLIGHT at a time.
+async function writable(dir, data) {
+	let total = 0;
+	let next = 0;
+	const one = async () => {
+		while (next < FRAMES) {
+			const i = next++;
+			const start = performance.now();
+			const file = await dir.getFileHandle(`writable-${i}`, { create: true });
+			const stream = await file.createWritable();
+			await stream.write(data);
+			await stream.close();
+			total += performance.now() - start;
+		}
+	};
+	await Promise.all(Array.from({ length: IN_FLIGHT }, one));
+	return total / FRAMES;
+}
+
+function inWorker() {
+	const source = document.getElementById("worker").textContent;
+	const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+	const worker = new Worker(url);
+	return new Promise((resolve, reject) => {
+		worker.onmessage = ({ data }) => {
+			worker.terminate();
+			URL.revokeObjectURL(url);
+			data.error ? reject(new Error(data.error)) : resolve(data);
+		};
+		worker.onerror = (e) => reject(new Error(e.message));
+		worker.postMessage({ folder: FOLDER, frames: FRAMES, reads: READS, bytes: BYTES });
+	});
+}
+
+async function run() {
+	out.textContent = "";
+	const root = await navigator.storage.getDirectory();
+	await root.removeEntry(FOLDER, { recursive: true }).catch(() => {});
+	const dir = await root.getDirectoryHandle(FOLDER, { create: true });
+	try {
+		say(`${FRAMES} frames of ${BYTES / 1e6} MB, ${navigator.userAgent}`);
+		const data = new Uint8Array(BYTES).map((_, i) => i);
+		row(`page, createWritable, one file a frame, ${IN_FLIGHT} in flight`, await writable(dir, data));
+		const { perFile, packed } = await inWorker();
+		row("worker, createSyncAccessHandle, one file a frame", perFile);
+		row("worker, one sync access handle, at offsets of one file", packed.write);
+		say(`read back from that file: ${packed.read.toFixed(2)} ms a frame (${READS} frames)`);
+	} catch (e) {
+		say(`failed: ${e}`);
+	} finally {
+		await root.removeEntry(FOLDER, { recursive: true });
+	}
+}
+
+document.getElementById("run").onclick = () => run();
+</script>
+</body>
+</html>

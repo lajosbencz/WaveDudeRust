@@ -1,0 +1,38 @@
+[package]
+name = "wavedude-spill-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "WaveDude's frame spill in the browser: the frames past memory in a dedicated worker's files, and its protocol"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+
+# The worker runs in the browser alone; natively the binary says so and exits.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+postcard.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["fmt", "registry", "std"] }
+tracing-web.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys = { workspace = true, features = [
+	"DedicatedWorkerGlobalScope",
+	"FileSystemDirectoryHandle",
+	"FileSystemFileHandle",
+	"FileSystemGetFileOptions",
+	"FileSystemReadWriteOptions",
+	"FileSystemSyncAccessHandle",
+	"MessageEvent",
+	"StorageManager",
+	"WorkerNavigator",
+] }
+
+[dev-dependencies]
+postcard.workspace = true

@@ -41,6 +41,7 @@ tracing-appender = "0.2"
 js-sys = "0.3"
 tracing-web.workspace = true
 wasm-bindgen-futures.workspace = true
+wavedude-spill-worker = { path = "../wavedude-spill-worker" }
 web-sys = { workspace = true, features = [
 	"Blob",
 	"CodecState",

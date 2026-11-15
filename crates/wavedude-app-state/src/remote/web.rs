@@ -1,9 +1,10 @@
-//! The browser's [`Port`]s: the page's over the run worker it starts, a module worker, and the worker's over its
-//! global scope. An envelope posts as `[message, buffer]`, both `ArrayBuffer`s and transferred, the buffer
-//! `undefined` when there is none.
+//! The browser's [`Port`]s: the page's over a module worker it starts (the run worker, the spill worker), and the run
+//! worker's over its global scope. An envelope posts as `[message, buffer]`, both `ArrayBuffer`s and transferred, the
+//! buffer `undefined` when there is none.
 
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 use js_sys::{Array, Uint8Array};
@@ -43,6 +44,27 @@ fn from_js(data: &JsValue) -> Envelope {
 	Envelope { message: Uint8Array::new(&parts.get(0)).to_vec(), buffer }
 }
 
+/// The protocol a [`PagePort`] carries, as far as the port speaks it.
+pub trait Wire: 'static {
+	/// The message the page receives when it lost the worker.
+	fn lost(lost: Lost) -> Envelope;
+	/// Queues `envelope` behind `held` for a worker not listening yet.
+	fn hold(held: &mut Vec<Envelope>, envelope: Envelope);
+}
+
+/// The run worker's [`Wire`]: a loss arrives as [`ToPage::Lost`].
+pub struct RunWire;
+
+impl Wire for RunWire {
+	fn lost(lost: Lost) -> Envelope {
+		envelope(&ToPage::Lost(lost), None)
+	}
+
+	fn hold(held: &mut Vec<Envelope>, envelope: Envelope) {
+		hold(held, envelope);
+	}
+}
+
 /// Where the page's end is with the worker.
 enum Link {
 	/// The worker has not spoken yet: what the page posts waits, as a module worker listens once its module ran.
@@ -52,12 +74,13 @@ enum Link {
 	Gone,
 }
 
-/// The page's end: the run worker it started.
-pub struct PagePort {
+/// The page's end: the worker it started, speaking `W`.
+pub struct PagePort<W: Wire = RunWire> {
 	link: Rc<RefCell<Link>>,
 	inbox: Inbox,
 	/// None when the worker could not be made.
-	_worker: Option<Started>,
+	worker: Option<Started>,
+	_wire: PhantomData<W>,
 }
 
 /// The worker, its listeners and the wait for its first message, which go with it.
@@ -76,14 +99,14 @@ struct Timer(Rc<Cell<Option<i32>>>);
 impl Timer {
 	fn clear(&self) {
 		if let Some(handle) = self.0.take() {
-			web_sys::window().expect("the run worker is started from a page").clear_timeout_with_handle(handle);
+			web_sys::window().expect("a worker is started from a page").clear_timeout_with_handle(handle);
 		}
 	}
 }
 
-impl PagePort {
+impl<W: Wire> PagePort<W> {
 	/// Starts the module worker at `url`; `on_message` is called as a message arrives. A worker that cannot be
-	/// made, fails to load, stops, or does not speak in time arrives as [`ToPage::Lost`].
+	/// made, fails to load, stops, or does not speak in time arrives as [`Wire::lost`].
 	pub fn start(url: &str, on_message: impl Fn() + 'static) -> Self {
 		let options = WorkerOptions::new();
 		options.set_type(WorkerType::Module);
@@ -91,8 +114,8 @@ impl PagePort {
 			Ok(worker) => worker,
 			Err(e) => {
 				let lost = Lost::NotCreated { url: url.to_owned(), detail: format!("{e:?}") };
-				let inbox = Inbox::new(RefCell::new([envelope(&ToPage::Lost(lost), None)].into()));
-				return Self { link: Rc::new(RefCell::new(Link::Gone)), inbox, _worker: None };
+				let inbox = Inbox::new(RefCell::new([W::lost(lost)].into()));
+				return Self { link: Rc::new(RefCell::new(Link::Gone)), inbox, worker: None, _wire: PhantomData };
 			}
 		};
 		let on_message = Rc::new(on_message);
@@ -106,7 +129,7 @@ impl PagePort {
 				timer.clear();
 				worker.terminate();
 				*link.borrow_mut() = Link::Gone;
-				inbox.borrow_mut().push_back(envelope(&ToPage::Lost(lost), None));
+				inbox.borrow_mut().push_back(W::lost(lost));
 				on_message();
 			}
 		};
@@ -144,7 +167,7 @@ impl PagePort {
 			})
 		};
 		let handle = web_sys::window()
-			.expect("the run worker is started from a page")
+			.expect("a worker is started from a page")
 			.set_timeout_with_callback_and_timeout_and_arguments_0(
 				silent.as_ref().unchecked_ref(),
 				READY_WITHIN.as_millis() as i32,
@@ -152,7 +175,16 @@ impl PagePort {
 			.expect("a page sets timeouts");
 		timer.0.set(Some(handle));
 		let started = Started { worker, _onmessage: onmessage, _onerror: onerror, silent: timer, _timeout: silent };
-		Self { link, inbox, _worker: Some(started) }
+		Self { link, inbox, worker: Some(started), _wire: PhantomData }
+	}
+
+	/// Ends the worker; what the page posts after goes nowhere.
+	pub fn stop(&self) {
+		*self.link.borrow_mut() = Link::Gone;
+		if let Some(started) = &self.worker {
+			started.silent.clear();
+			started.worker.terminate();
+		}
 	}
 }
 
@@ -161,10 +193,10 @@ fn post_to(worker: &Worker, envelope: Envelope) {
 	worker.post_message_with_transfer(&message, &transfer).expect("an envelope's buffers transfer");
 }
 
-impl Port for PagePort {
+impl<W: Wire> Port for PagePort<W> {
 	fn post(&self, envelope: Envelope) {
 		match &mut *self.link.borrow_mut() {
-			Link::Starting(held) => hold(held, envelope),
+			Link::Starting(held) => W::hold(held, envelope),
 			Link::Open(worker) => post_to(worker, envelope),
 			Link::Gone => {}
 		}

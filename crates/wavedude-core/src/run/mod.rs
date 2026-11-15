@@ -17,7 +17,7 @@ pub mod worker;
 pub use error::RunError;
 pub use pending::{SpillBackend, SpillFactory, Token, WRITE_BYTES_IN_FLIGHT};
 pub use state::RunState;
-pub use store::{Budget, FrameStore, StoreError, StoreLayout};
+pub use store::{Budget, FrameStore, RamCache, StoreError, StoreLayout};
 #[cfg(not(target_arch = "wasm32"))]
 pub use store::{Memory, Release, sweep_leftovers};
 pub use warning::{Levers, MemoryWarning, engine_fits};

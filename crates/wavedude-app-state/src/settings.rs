@@ -11,8 +11,10 @@ use serde_json::{Map, Value};
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::Word;
 use wavedude_core::quality::{MachineFacts, PreviewDefaults, PreviewQuality};
+use wavedude_core::run::RamCache;
 use wavedude_export::h264::Profile;
 
+use super::live::WEB_RAM_CACHE_SIZES;
 use super::platform::Store;
 use super::strings::Language;
 
@@ -134,6 +136,8 @@ pub struct Settings {
 	pub use_gpu: bool,
 	/// 0 or less is Auto, else a share of the physical memory, 10..100.
 	pub frame_memory_percent: i32,
+	/// The browser's RAM cache size: 0 is Auto, else one of [`WEB_RAM_CACHE_SIZES`].
+	pub frame_memory_bytes: u64,
 	/// 1, 2 or 4.
 	pub preview_resolution: u32,
 	/// 1, 2 or 4.
@@ -147,6 +151,8 @@ pub struct Settings {
 	pub last_export_folder: PathBuf,
 	/// An index of [`wavedude_export::ExportFormat::ALL`], the run export's last format.
 	pub export_filter_index: u32,
+	/// A run export writing several files puts them into one ZIP archive; the browser always does.
+	pub export_archive: bool,
 	pub part_description_expanded: bool,
 	/// Newest project first.
 	pub export_hints: Vec<ExportHint>,
@@ -189,6 +195,7 @@ impl Default for Settings {
 			warn_when_ram_insufficient: true,
 			use_gpu: true,
 			frame_memory_percent: 0,
+			frame_memory_bytes: 0,
 			preview_resolution: 1,
 			preview_frames: 1,
 			preview_sample_bytes: 1,
@@ -196,6 +203,7 @@ impl Default for Settings {
 			ui_zoom: 1.0,
 			last_export_folder: PathBuf::new(),
 			export_filter_index: 0,
+			export_archive: false,
 			part_description_expanded: true,
 			export_hints: Vec::new(),
 			title_full_path: false,
@@ -251,8 +259,19 @@ impl Settings {
 			self.language.clear();
 		}
 		self.recent_files.truncate(MAX_RECENT);
+		if cfg!(target_arch = "wasm32") && self.frame_memory_percent != 0 {
+			tracing::warn!(
+				"the RAM cache share of {} % is not offered in the browser and is cleared: Simulation > RAM cache size \
+				 picks a size",
+				self.frame_memory_percent
+			);
+			self.frame_memory_percent = 0;
+		}
 		self.frame_memory_percent =
 			if self.frame_memory_percent <= 0 { 0 } else { self.frame_memory_percent.clamp(10, 100) };
+		if !WEB_RAM_CACHE_SIZES.contains(&self.frame_memory_bytes) {
+			self.frame_memory_bytes = 0;
+		}
 		self.preview_resolution = PreviewQuality::legal_divisor(self.preview_resolution);
 		self.preview_frames = PreviewQuality::legal_divisor(self.preview_frames);
 		self.preview_sample_bytes = self.preview_sample_bytes.clamp(1, 2);
@@ -394,9 +413,27 @@ impl Settings {
 		self.preview_sample_bytes = if q.format == SampleFormat::Half { 2 } else { 1 };
 	}
 
-	/// The RAM cache share for the store's budget; 0 is Auto.
-	pub fn frame_memory_share(&self) -> u32 {
-		self.frame_memory_percent.max(0) as u32
+	/// The RAM cache size for the store's budget: in the browser Auto or a size, natively Auto or a share.
+	pub fn ram_cache(&self) -> RamCache {
+		if cfg!(target_arch = "wasm32") {
+			return match self.frame_memory_bytes {
+				0 => RamCache::Auto,
+				bytes => RamCache::Bytes(bytes),
+			};
+		}
+		match self.frame_memory_percent {
+			..=0 => RamCache::Auto,
+			percent => RamCache::Percent(percent as u32),
+		}
+	}
+
+	/// Sets the RAM cache size; Auto clears the share and the size.
+	pub fn set_ram_cache(&mut self, cache: RamCache) {
+		match cache {
+			RamCache::Auto => (self.frame_memory_percent, self.frame_memory_bytes) = (0, 0),
+			RamCache::Percent(percent) => self.frame_memory_percent = i32::try_from(percent).unwrap_or(i32::MAX),
+			RamCache::Bytes(bytes) => self.frame_memory_bytes = bytes,
+		}
 	}
 
 	/// Puts `path` at the top of the recent files, at most [`MAX_RECENT`].
@@ -458,6 +495,17 @@ mod tests {
 	}
 
 	#[test]
+	fn the_ram_cache_size_round_trips_and_auto_clears_the_share_and_the_size() {
+		let mut s = Settings::default();
+		s.set_ram_cache(RamCache::Bytes(GIB));
+		s.set_ram_cache(RamCache::Percent(40));
+		let back = Settings::from_json(&s.to_sparse_json(), false).unwrap();
+		assert_eq!((back.frame_memory_bytes, back.ram_cache()), (GIB, RamCache::Percent(40)));
+		s.set_ram_cache(RamCache::Auto);
+		assert_eq!((s.frame_memory_percent, s.frame_memory_bytes, s.ram_cache()), (0, 0, RamCache::Auto));
+	}
+
+	#[test]
 	fn save_replaces_the_file_whole() {
 		let dir = tempfile::tempdir().unwrap();
 		let store = Store::in_dir(dir.path().join("sub"));
@@ -473,8 +521,9 @@ mod tests {
 	#[test]
 	fn normalize_clamps_each_value_to_its_bounds_or_the_devices_default() {
 		type Set = fn(&mut Settings);
-		let rows: [(&str, Set, Set); 10] = [
+		let rows: [(&str, Set, Set); 11] = [
 			("frame memory", |s| s.frame_memory_percent = 5, |s| s.frame_memory_percent = 10),
+			("browser frame memory", |s| s.frame_memory_bytes = 3 << 30, |s| s.frame_memory_bytes = 0),
 			("preview resolution", |s| s.preview_resolution = 3, |s| s.preview_resolution = 2),
 			("preview frames", |s| s.preview_frames = 9, |s| s.preview_frames = 4),
 			("sample bytes", |s| s.preview_sample_bytes = 7, |s| s.preview_sample_bytes = 2),

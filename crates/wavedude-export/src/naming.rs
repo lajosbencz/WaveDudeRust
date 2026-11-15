@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use wavedude_core::model::{Layer, Word};
 
+use crate::ExportLayers;
+
 /// The file-name suffix of a layer: `_field` or `_intensity`.
 pub fn layer_suffix(layer: Layer) -> &'static str {
 	match layer {
@@ -16,6 +18,12 @@ pub fn layer_suffix(layer: Layer) -> &'static str {
 /// suffix, then the layer's suffix, the extension kept.
 pub fn layer_path(chosen: &Path, layer: Layer, both: bool) -> PathBuf {
 	if both { with_layer_suffix(chosen, Some(layer)) } else { chosen.to_path_buf() }
+}
+
+/// Each layer of `layers` with its output for a chosen path, as [`layer_path`] names it.
+pub fn layer_outputs(chosen: &Path, layers: ExportLayers) -> Vec<(Layer, PathBuf)> {
+	let both = layers == ExportLayers::Both;
+	layers.layers().iter().map(|&layer| (layer, layer_path(chosen, layer, both))).collect()
 }
 
 /// `chosen` with its stem's layer suffix replaced by `layer`'s, or dropped for `None`; the extension kept.
@@ -87,6 +95,11 @@ mod tests {
 		assert_eq!(layer_path(chosen, Layer::Intensity, false), chosen);
 		assert_eq!(with_layer_suffix(chosen, None), Path::new("out/run.mp4"));
 		assert_eq!(with_layer_suffix(Path::new("out/run"), Some(Layer::Intensity)), Path::new("out/run_intensity"));
+		assert_eq!(
+			layer_outputs(Path::new("out/run.mp4"), ExportLayers::Both),
+			[(Layer::Field, "out/run_field.mp4".into()), (Layer::Intensity, "out/run_intensity.mp4".into())]
+		);
+		assert_eq!(layer_outputs(chosen, ExportLayers::Intensity), [(Layer::Intensity, chosen.to_path_buf())]);
 	}
 
 	#[test]

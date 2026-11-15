@@ -1,6 +1,7 @@
 # 0025: The browser exports through its private storage and downloads
 
-Status: accepted, 2026-11-14; the download from the user's click added 2026-11-15. Supersedes
+Status: accepted, 2026-11-14; the download from the user's click and a name per output with the archive's added
+2026-11-15. Supersedes
 [0021](0021-browser-exports-parked.md); builds on [0019](0019-egui-and-the-platform-layer.md),
 [0020](0020-browser-frame-spill-in-opfs.md) and [0024](0024-browser-run-in-a-web-worker.md).
 
@@ -29,9 +30,10 @@ where the export runs, how a file larger than memory reaches the user, and what 
   the user's click, below).
 - ZIP archives are written with the `rawzip` crate, entries stored, ZIP64 where sizes or the count need it
   ([`zip.rs`](../../crates/wavedude-export/src/fs/zip.rs)). An image sequence, one or both layers, streams into one
-  archive `<name>.zip` with a folder per layer. A video of both layers is spooled per layer and packed afterwards,
-  its chunks read from the spool and written into the archive; a single video is downloaded as it is.
-- The export dialog has no Browse and takes a file name only (what is typed, down to its last component); nothing asks
+  archive with a folder per layer. A video of both layers is spooled per layer and packed afterwards, its chunks read
+  from the spool and written into the archive; a single video is downloaded as it is. The archive and each output
+  are named in the dialog (A name per output, below).
+- The export dialog has no Browse and takes file names only (what is typed, down to its last component); nothing asks
   before replacing, as a download replaces nothing. The probe CSV, which uses the platform's save dialog on the desktop,
   asks for its name in the same box. Run exports are greyed with the reason when the browser has no OPFS; stills and
   the CSV still work.
@@ -69,3 +71,25 @@ activation duration after a click, a touch's end or a key (HTML,
 - The object URL of the download started last, an export's or a Save's, is kept until the next download starts: a
   browser may fetch it after the click returns, so it is not revoked with the click. The spool keeps the file until
   the next export.
+
+## A name per output (added 2026-11-15)
+
+The dialog took one name and derived the files from it: each layer's by its suffix, and in the browser the archive
+by the extension `.zip`. What lands in the archive and what it is called were not the user's to choose, and the
+desktop could not archive at all.
+
+- The dialog shows one name box per output the export writes, their count derived from the export: one per layer,
+  each a video's file or an image sequence's name (its folder), one for a still or the CSV. Each box is labelled by
+  its layer while there is more than one. They start at the names the suffixes gave.
+- An export of more than one file (both layers, or any image sequence) shows "Archive into one ZIP file". In the
+  browser it is checked and greyed, as an export leaves as one download; on the desktop it is the user's, kept in
+  the settings (`ExportArchive`, clear by default). Checked, a box names the archive (`<project>.zip`) and the
+  outputs' names become the files and folders in it.
+- The app's plan and the export crate's `ExportPlan` carry each layer's output, and the app's plan the archive; the
+  export writes the outputs it is given. The CLI names them from its one `--out` with `naming::layer_outputs`, each
+  layer's with its suffix.
+- The desktop's archive is written by the same `ZipFs`: an image sequence streams into it; videos, which seek, are
+  written into a temporary folder beside the archive and packed afterwards chunk by chunk
+  (`ZipFs::write_entry_sync`, the synchronous form of the browser's streamed entry). The archive is written under a
+  temporary name beside its path and takes its place once complete, so a failed or cancelled export keeps the file it
+  would have replaced. The question before replacing asks about the archive alone.

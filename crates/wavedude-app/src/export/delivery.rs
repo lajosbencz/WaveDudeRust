@@ -1,10 +1,8 @@
 //! How a browser export reaches the user: where its job writes and what is downloaded under which name. The plan's
-//! path is a file name alone; the job's paths are relative to the spool, or to memory for a still.
+//! outputs and archive are file names alone; the job's paths are relative to the spool, the archive, or to memory for
+//! a still.
 
 use std::path::{Path, PathBuf};
-
-use wavedude_core::model::Layer;
-use wavedude_export::naming;
 
 use super::Plan;
 
@@ -19,25 +17,25 @@ pub enum Delivery {
 	Archive(PathBuf),
 	/// One video in the spool.
 	Video(PathBuf),
-	/// Each layer's video in the spool, then packed into the ZIP archive `archive`.
-	Videos { videos: [PathBuf; 2], archive: PathBuf },
+	/// The videos in the spool, then packed into the ZIP archive `archive`.
+	Videos { videos: Vec<PathBuf>, archive: PathBuf },
 }
 
 impl Delivery {
+	/// The delivery of `plan`, which archives an export of several files.
 	pub fn of(plan: &Plan) -> Self {
 		match plan {
 			Plan::Csv { path, .. } => Self::Csv(path.clone()),
-			Plan::Frames { choice, path, .. } if choice.is_still() => Self::Still(path.clone()),
-			Plan::Frames { choice, format, path, .. } => {
-				let both = choice.layers().layers().len() == 2;
-				let archive = path.with_extension("zip");
-				match (format.is_video(), both) {
-					(false, _) => Self::Archive(archive),
-					(true, false) => Self::Video(path.clone()),
-					(true, true) => Self::Videos {
-						videos: [Layer::Field, Layer::Intensity].map(|l| naming::layer_path(path, l, true)),
-						archive,
-					},
+			Plan::Frames { choice, outputs, .. } if choice.is_still() => Self::Still(outputs[0].1.clone()),
+			Plan::Frames { format, outputs, archive: None, .. } if format.is_video() && outputs.len() == 1 => {
+				Self::Video(outputs[0].1.clone())
+			}
+			Plan::Frames { format, outputs, archive, .. } => {
+				let archive = archive.clone().expect("a browser export of several files is archived");
+				if format.is_video() {
+					Self::Videos { videos: outputs.iter().map(|(_, video)| video.clone()).collect(), archive }
+				} else {
+					Self::Archive(archive)
 				}
 			}
 		}
@@ -63,10 +61,13 @@ pub fn typed_name(typed: &str, ext: &str) -> Option<PathBuf> {
 mod tests {
 	use super::*;
 	use crate::menus::ExportKindChoice;
-	use wavedude_export::ExportFormat;
+	use wavedude_export::{ExportFormat, naming};
 
-	fn frames(choice: ExportKindChoice, format: ExportFormat, name: &str) -> Delivery {
-		Delivery::of(&Plan::Frames { choice, format, path: name.into(), frame: 0, repeat: false })
+	/// The delivery of `choice` in `format` named `name`, archived as `archive`.
+	fn frames(choice: ExportKindChoice, format: ExportFormat, name: &str, archive: Option<&str>) -> Delivery {
+		let outputs = naming::layer_outputs(Path::new(name), choice.layers());
+		let archive = archive.map(PathBuf::from);
+		Delivery::of(&Plan::Frames { choice, format, outputs, archive, frame: 0, repeat: false })
 	}
 
 	#[test]
@@ -76,22 +77,22 @@ mod tests {
 		let csv = Delivery::of(&Plan::Csv { probe: "P".into(), path: "run_P.csv".into() });
 		let cases = [
 			(csv, "run_P.csv"),
-			(frames(FieldFrame, Exr, "run_field_0042.exr"), "run_field_0042.exr"),
-			(frames(Field, Png, "run_field.png"), "run_field.zip"),
-			(frames(Both, Png, "run.png"), "run.zip"),
-			(frames(Intensity, Avi, "run_intensity.avi"), "run_intensity.avi"),
-			(frames(Both, Mov, "run.mov"), "run.zip"),
+			(frames(FieldFrame, Exr, "run_field_0042.exr", None), "run_field_0042.exr"),
+			(frames(Field, Png, "run_field.png", Some("seq.zip")), "seq.zip"),
+			(frames(Both, Png, "run.png", Some("run.zip")), "run.zip"),
+			(frames(Intensity, Avi, "run_intensity.avi", None), "run_intensity.avi"),
+			(frames(Both, Mov, "run.mov", Some("movies.zip")), "movies.zip"),
 		];
 		for (delivery, name) in cases {
 			assert_eq!(delivery.download(), Path::new(name), "{delivery:?}");
 		}
-		assert_eq!(frames(FieldFrame, Png, "a.png"), Delivery::Still("a.png".into()));
-		assert_eq!(frames(Field, Png, "run_field.png"), Delivery::Archive("run_field.zip".into()));
-		assert_eq!(frames(Field, Avi, "run_field.avi"), Delivery::Video("run_field.avi".into()));
+		assert_eq!(frames(FieldFrame, Png, "a.png", None), Delivery::Still("a.png".into()));
+		assert_eq!(frames(Field, Png, "run_field.png", Some("run.zip")), Delivery::Archive("run.zip".into()));
+		assert_eq!(frames(Field, Avi, "run_field.avi", None), Delivery::Video("run_field.avi".into()));
 		assert_eq!(
-			frames(Both, Avi, "run.avi"),
+			frames(Both, Avi, "run.avi", Some("run.zip")),
 			Delivery::Videos {
-				videos: ["run_field.avi".into(), "run_intensity.avi".into()],
+				videos: vec!["run_field.avi".into(), "run_intensity.avi".into()],
 				archive: "run.zip".into()
 			}
 		);

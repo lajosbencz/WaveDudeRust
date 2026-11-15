@@ -35,7 +35,7 @@ use crate::sync::{MaybeSend, lock};
 
 use super::RunError;
 use super::pending::SpillFactory;
-use super::store::{FrameStore, StoreError, StoreLayout};
+use super::store::{FrameStore, RamCache, StoreError, StoreLayout};
 
 /// Steps between two looks at the pause and shutdown flags.
 pub const CHECK_INTERVAL: u32 = 16;
@@ -119,8 +119,8 @@ pub struct Goal {
 	pub wanted: Wanted,
 	pub paused: bool,
 	pub fit: Option<FitRequest>,
-	/// The RAM share for a new store, 0 = Auto.
-	pub ram_percent: u32,
+	/// The RAM cache size of a new store.
+	pub ram_cache: RamCache,
 }
 
 /// Equality compares the variant; two failures are equal when they share the error.
@@ -536,13 +536,8 @@ impl Frames {
 		}
 	}
 
-	/// A store for `layout` in place of `old`, with `ram_percent` of the memory (0 = Auto).
-	fn store(
-		&self,
-		layout: StoreLayout,
-		old: Option<Arc<FrameStore>>,
-		ram_percent: u32,
-	) -> std::io::Result<FrameStore> {
+	/// A store for `layout` in place of `old`, its frames in memory by `cache`.
+	fn store(&self, layout: StoreLayout, old: Option<Arc<FrameStore>>, cache: RamCache) -> std::io::Result<FrameStore> {
 		match self {
 			#[cfg(not(target_arch = "wasm32"))]
 			Self::Spill(dir, memory) => {
@@ -556,12 +551,12 @@ impl Frames {
 						signal.wait(RELEASE_WAIT);
 					})
 				});
-				let budget = super::store::Budget::compute(*memory, reclaimed, ram_percent);
+				let budget = super::store::Budget::compute(*memory, reclaimed, cache);
 				FrameStore::in_dir(layout, budget, release, dir)
 			}
 			Self::Pending { ram_bytes, spill, .. } => {
 				drop(old);
-				FrameStore::open(layout, super::store::Budget::of_memory(*ram_bytes, ram_percent), spill.as_ref())
+				FrameStore::open(layout, super::store::Budget::of_memory(*ram_bytes, cache), spill.as_ref())
 			}
 		}
 	}
@@ -815,7 +810,7 @@ impl Worker {
 					c.store.clear();
 					c.store
 				}
-				old => self.new_store(layout, old.map(|c| c.store), goal.ram_percent)?,
+				old => self.new_store(layout, old.map(|c| c.store), goal.ram_cache)?,
 			};
 			{
 				let mut traces = lock(&self.shared.traces);
@@ -836,10 +831,10 @@ impl Worker {
 		&self,
 		layout: StoreLayout,
 		old: Option<Arc<FrameStore>>,
-		ram_percent: u32,
+		cache: RamCache,
 	) -> Result<Arc<FrameStore>, Interrupted> {
 		lock(&self.shared.published).store = None;
-		let store = self.frames.store(layout, old, ram_percent).map_err(StoreError::Io)?;
+		let store = self.frames.store(layout, old, cache).map_err(StoreError::Io)?;
 		Ok(Arc::new(store))
 	}
 
@@ -852,7 +847,7 @@ impl Worker {
 		}
 		self.finish_pending(true)?;
 		let Current { spec, store } = self.current.take().expect("checked above");
-		let store = self.new_store(*store.layout(), Some(store), goal.ram_percent);
+		let store = self.new_store(*store.layout(), Some(store), goal.ram_cache);
 		self.shared.discard.store(false, Ordering::Release);
 		let store = store?;
 		self.engine().reset();

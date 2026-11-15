@@ -7,7 +7,7 @@ use wavedude_core::io::wdproj;
 use wavedude_core::model::Project;
 use wavedude_core::model::normalize::Normalize;
 use wavedude_core::quality::PreviewQuality;
-use wavedude_core::run::{FitRequest, Goal, Wanted};
+use wavedude_core::run::{FitRequest, Goal, RamCache, Wanted};
 use wavedude_core::spec::RunRequest;
 
 /// The example projects: the core's fixtures and the repository's `examples`.
@@ -50,7 +50,7 @@ fn every_examples_goal_round_trips_through_postcard() {
 			wanted: Wanted::All,
 			paused: true,
 			fit: Some(FitRequest { id: 3, frame: 9 }),
-			ram_percent: 40,
+			ram_cache: RamCache::Percent(40),
 		};
 		let bytes = postcard::to_allocvec(&goal).unwrap();
 		let back: Goal = postcard::from_bytes(&bytes).unwrap();
@@ -58,8 +58,8 @@ fn every_examples_goal_round_trips_through_postcard() {
 		assert_eq!(*run.project, project, "{}", path.display());
 		assert_eq!((run.quality, run.track_intensity), (quality, true));
 		assert_eq!(
-			(back.revision, back.position, back.wanted, back.paused, back.fit, back.ram_percent),
-			(goal.revision, goal.position, goal.wanted, goal.paused, goal.fit, goal.ram_percent)
+			(back.revision, back.position, back.wanted, back.paused, back.fit, back.ram_cache),
+			(goal.revision, goal.position, goal.wanted, goal.paused, goal.fit, goal.ram_cache)
 		);
 	}
 }

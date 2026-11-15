@@ -3,6 +3,7 @@
 What the engine solves, what the literature says about its errors, and what the
 tests therefore measure. The original's quirks are not a target (see
 [decisions/0003](decisions/0003-gpu-wgpu-and-cpu-parity.md)); its measured figures are the tolerances to beat.
+The works cited are listed in [`CITATION.cff`](../CITATION.cff), references.
 
 ## Equation
 
@@ -537,28 +538,6 @@ and FMA; the test tolerance between them is relative 1e-4 on the field after
 1.6e-6 and 5.2e-7 on the DRP, with a 16-cell CPML). The original demanded
 bit-for-bit between its engines, which forbade the GPU's FMA; this project
 does not.
-
-## References
-
-- Taflove, Hagness: Computational Electrodynamics, 3rd ed., Artech House 2005.
-- LeVeque: Finite Difference Methods for Ordinary and Partial Differential
-  Equations, SIAM 2007, ch. 10.
-- Patra, Karttunen: Stencils with isotropic discretization error for
-  differential operators, Numer. Methods PDE 22 (2006).
-- Berenger: A perfectly matched layer for the absorption of electromagnetic
-  waves, J. Comput. Phys. 114 (1994).
-- Roden, Gedney: Convolution PML (CPML), Microw. Opt. Technol. Lett. 27 (2000).
-- Komatitsch, Martin: An unsplit convolutional perfectly matched layer
-  improved at grazing incidence for the seismic wave equation, Geophysics 72
-  (2007).
-- Pasalic, McGarry: Convolutional perfectly matched layer for isotropic and
-  anisotropic acoustic wave equations, SEG Expanded Abstracts (2010).
-- Tam, Webb: Dispersion-relation-preserving finite difference schemes for
-  computational acoustics, J. Comput. Phys. 107 (1993).
-- Dablain: The application of high-order differencing to the scalar wave
-  equation, Geophysics 51 (1986).
-- Mur: Absorbing boundary conditions for the finite-difference approximation
-  of the time-domain electromagnetic-field equations, IEEE Trans. EMC 23 (1981).
 
 ## Measured (2026-11-06, after [decisions/0010](decisions/0010-solver-upgrades.md) items 1 to 4; [tests/physics.rs](../crates/wavedude-core/tests/physics.rs) and [tests/gpu.rs](../crates/wavedude-core/tests/gpu.rs))
 

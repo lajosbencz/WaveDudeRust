@@ -1,6 +1,6 @@
 //! The browser's export: the job stepped on the page between frames, its files in memory (a still) or in the spool
-//! ([`Spool`]), then packed when both layers' videos go into one archive, and made ready for the download the user
-//! starts ([`Delivery`], [`Download`]).
+//! ([`Spool`]), then packed when several videos go into one archive, and made ready for the download the user starts
+//! ([`Delivery`], [`Download`]).
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -8,15 +8,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use wasm_bindgen_futures::spawn_local;
-use wavedude_app_state::platform::{self, Download, Duration, H264Support, Spool, SystemTime, WebCodecsFactory};
+use wavedude_app_state::platform::{self, Download, Duration, H264Support, Spool, WebCodecsFactory};
 use wavedude_core::model::Project;
 use wavedude_core::run::Token;
-use wavedude_export::fs::zip::UtcDateTime;
 use wavedude_export::fs::{MemFs, OutputFs, ZipFs};
 use wavedude_export::{ExportFormat, ExportJob, ExportState, Step};
 
 use super::delivery::Delivery;
-use super::{Outcome, Plan, Work};
+use super::{Outcome, Plan, Work, now};
 
 /// How long a step writes frames before the page draws again.
 const BUDGET: Duration = Duration::from_millis(8);
@@ -78,7 +77,7 @@ pub struct Runner {
 #[expect(clippy::arc_with_non_send_sync, reason = "the browser's file stores are not Send; the Arc is the job's type")]
 pub fn start(work: &Work, plan: Plan, cancel: Arc<AtomicBool>) -> Result<Started, String> {
 	let delivery = Delivery::of(&plan);
-	let (choice, format, path, frame) = match plan {
+	let (choice, format, outputs, frame) = match plan {
 		Plan::Csv { probe, path } => {
 			let mut bytes = Vec::new();
 			let written = work.probe_csv(&probe, &mut bytes)?;
@@ -86,7 +85,7 @@ pub fn start(work: &Work, plan: Plan, cancel: Arc<AtomicBool>) -> Result<Started
 			let line = format!("{written} exported as {}", path.display());
 			return Ok(Started::Done(Outcome::Completed(line), Some(download)));
 		}
-		Plan::Frames { choice, format, path, frame, .. } => (choice, format, path, frame),
+		Plan::Frames { choice, format, outputs, frame, .. } => (choice, format, outputs, frame),
 	};
 	let mut spool = None;
 	let (fs, out): (Arc<dyn OutputFs>, Out) = match &delivery {
@@ -101,7 +100,7 @@ pub fn start(work: &Work, plan: Plan, cancel: Arc<AtomicBool>) -> Result<Started
 		}
 		Delivery::Video(_) | Delivery::Videos { .. } => (spool.insert(new_spool()?).clone(), Out::Spool),
 	};
-	let mut plan = work.export_plan(choice, format, path, frame, fs);
+	let mut plan = work.export_plan(choice, format, outputs, frame, fs);
 	if format == ExportFormat::Mp4 {
 		let (width, height, fps) = video_format(&work.project);
 		plan.h264 = Some(Arc::new(WebCodecsFactory::new(width, height, fps)));
@@ -125,12 +124,6 @@ pub fn h264_support(project: &Project) -> H264Support {
 
 fn new_spool() -> Result<Arc<Spool>, String> {
 	Spool::new().map(Arc::new).map_err(|e| e.to_string())
-}
-
-/// Now, the archive entries' time.
-fn now() -> UtcDateTime {
-	let since = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
-	UtcDateTime::from_unix(since.as_secs() as i64)
 }
 
 impl Runner {

@@ -51,7 +51,8 @@ worker's binary is 2.1 MB (0.6 MB gzipped) against the app's 21 MB.
 - The app's own wasm as the worker: 21 MB loaded twice, egui and the examples instantiated for nothing.
 - A fallback to the page's thread: a second run path for a deployment error; the error is shown instead.
 - The spill in the worker through `FileSystemSyncAccessHandle`: the playhead's reads would cross agents and need
-  prefetching; deferred until scrubbing measures slow.
+  prefetching; deferred until scrubbing measures slow. The page's writes measured slow instead: the spill moved to a
+  worker of its own, the page's reads crossing to it (0020, The spill worker).
 
 ## Losses and versions (added 2026-11-14)
 

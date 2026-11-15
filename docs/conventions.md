@@ -54,16 +54,18 @@ push. What they hold the code to:
   log, file watching, the machine's facts, writing a file (a download in the browser). Files open from a path or
   their bytes (`Source`) and save to a path or a download (`Target`); in the browser the live run is in the run
   worker; exports run on the page into the origin private file system (`platform::Spool`; the module `opfs` splits into `session`, `spill`, `queue` and `spool`: the session folder and
-  its lock, the frames past memory, the queue of writes in flight, the exports' files) and leave as downloads, MP4 through the browser's WebCodecs encoder (`platform::WebCodecsFactory`, module `webcodecs`); OpenH264 and the updater are compiled out and recent files are absent (`HAS_PATHS`). Its
+  its lock, the frames past memory posted to the spill worker, the queue of writes in flight, the exports' files) and leave as downloads, MP4 through the browser's WebCodecs encoder (`platform::WebCodecsFactory`, module `webcodecs`); OpenH264 and the updater are compiled out and recent files are absent (`HAS_PATHS`). Its
   `remote` module is the live run in another agent (decision 0024): the postcard messages, the worker's `Host`
   around a pumped `RunWorker` whose stores post every frame, and the page's `Remote`, a `Backend` writing them into
   a mirror store and acknowledging each once held, both over a `Port` (`Loopback` in the tests,
   [`crates/wavedude-app-state/tests/remote.rs`](../crates/wavedude-app-state/tests/remote.rs); in the browser
-  `remote::web`'s `PagePort` and `WorkerPort` over `postMessage`, which wake their owners as messages arrive).
+  `remote::web`'s `PagePort` and `WorkerPort` over `postMessage`, which wake their owners as messages arrive; the
+  page's `PagePort` speaks a `Wire`, the run worker's or the spill worker's).
   The browser's `CoreBackend` is a `Remote` on the run worker; a worker that fails to load, crashes, stays
   silent, speaks another protocol version (`protocol::VERSION`) or is of another build (`build_id`) fails every
   run with its reason (`WorkerGone`) until the page is reloaded, and nothing runs on the page. Depends on core
-  (with `serde`), export (no default features, with `serde`; with MP4 native only) and examples; no egui, no rfd
+  (with `serde`), export (no default features, with `serde`; with MP4 native only), examples and, in the browser, the
+  spill worker's protocol; no egui, no rfd
   ([`crates/wavedude-app-state/Cargo.toml`](../crates/wavedude-app-state/Cargo.toml)).
 - `wavedude-app`: egui views on eframe, natively and in the browser ([`tools/build-web.sh`](../tools/build-web.sh)),
   on the renderer's wgpu device, which the engines share natively where it computes
@@ -82,6 +84,12 @@ push. What they hold the code to:
   for is ready or a message arrives, kicking the GPU queue with empty submits while the device owes completions
   (decision 0026) ([`crates/wavedude-run-worker/src/worker.rs`](../crates/wavedude-run-worker/src/worker.rs)); `run-worker.js` loads it. Natively the binary only
   says so. Depends on core and app-state, in the browser only.
+- `wavedude-spill-worker`: the browser's spill worker (decision 0020): its library is the protocol with the page
+  (`ToSpill`, `FromSpill`, `VERSION`), its binary a dedicated worker logging to the console, its panics posted to the
+  page, that keeps each store generation's spilled frames in one file of the tab's session folder through a
+  synchronous access handle, handling the page's messages in order
+  ([`crates/wavedude-spill-worker/src/worker.rs`](../crates/wavedude-spill-worker/src/worker.rs)); `spill-worker.js` loads it.
+  Natively the binary only says so. Depends on serde, and in the browser on web-sys and postcard; no workspace crate.
 - `wavedude-examples`: the example projects, embedded from the repository's [`examples`](../examples/), with their
   titles, descriptions and topics; the Examples dialog reads this one list. Depends on core without default
   features alone ([`crates/wavedude-examples/Cargo.toml`](../crates/wavedude-examples/Cargo.toml)).

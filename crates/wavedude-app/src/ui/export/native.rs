@@ -1,10 +1,11 @@
-//! The desktop's exports: the output is a path, typed or browsed; what an export would replace is asked about
-//! first; the job runs on a worker thread; the probe CSV's path comes from the platform's save dialog.
+//! The desktop's exports: each output is a path, typed or browsed, and an export of several files goes into one ZIP
+//! archive when the user asks; what an export would replace is asked about first; the job runs on a worker thread;
+//! the probe CSV's path comes from the platform's save dialog.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 
-use eframe::egui::{self, Align, Id, Layout, RichText, Ui};
+use eframe::egui::{self, Id, RichText, Ui};
 use wavedude_app_state::Event;
 use wavedude_export::{ExportFormat, h264};
 
@@ -12,9 +13,8 @@ use super::super::files::wait;
 use super::super::inbox::Inbox;
 use super::super::modal::{Modal, Modals, Then};
 use super::super::properties::{self, check_box};
-use super::super::text_box::{Kind, text_box};
-use super::super::theme::{INPUT_HEIGHT, Palette};
-use super::{ExportDialog, Exports, Step};
+use super::super::theme::Palette;
+use super::{ExportDialog, Exports, Step, Target};
 use crate::App;
 use crate::dialogs::file_dialog;
 use crate::export::{self, Outcome, Plan, Work};
@@ -36,9 +36,24 @@ pub(super) enum Msg {
 /// The worker's and the CSV dialog's answers.
 pub(super) type Running = Inbox<Msg>;
 
-/// The dialog's text of the proposed output.
+/// The user picks whether an export of several files is archived.
+pub(super) const ARCHIVE_CHOSEN: bool = true;
+
+/// The dialog's text of a proposed output.
 pub(super) fn shown(path: &Path) -> String {
 	path.display().to_string()
+}
+
+/// The path typed, with extension `ext` when it has none; `None` without a file name.
+pub(super) fn typed(text: &str, ext: &str) -> Option<PathBuf> {
+	let path = PathBuf::from(text);
+	path.file_name()?;
+	Some(if path.extension().is_none() { path.with_extension(ext) } else { path })
+}
+
+/// An export of several files goes into one archive: the user's choice.
+pub(super) fn archived(app: &App) -> bool {
+	app.settings.export_archive
 }
 
 impl Exports {
@@ -107,40 +122,32 @@ impl Exports {
 }
 
 impl ExportDialog {
-	/// The path box and its browse button; whether the box has the focus.
-	pub(super) fn output_row(&mut self, ui: &mut Ui, title: &str) -> bool {
-		if let Some(path) = self.browsed.try_iter().last() {
-			self.path = path.display().to_string();
+	/// The browse dialogs' answers, into their boxes.
+	pub(super) fn take_browsed(&mut self) {
+		let answers: Vec<(Target, PathBuf)> = self.browsed.try_iter().collect();
+		for (target, path) in answers {
+			*self.text_mut(target) = path.display().to_string();
 		}
-		let mut typing = false;
-		let row = egui::vec2(ui.available_width(), INPUT_HEIGHT);
-		ui.allocate_ui_with_layout(row, Layout::right_to_left(Align::Center), |ui| {
-			ui.spacing_mut().item_spacing.x = 4.;
-			if ui.add(egui::Button::new("...").min_size(egui::vec2(BROWSE, 0.))).clicked() {
-				self.browse(ui.ctx());
-			}
-			let kind = Kind { live: true, ..Kind::default() };
-			let edited = text_box(ui, Id::unique("ExportPath"), &self.path, ui.available_width(), kind, title);
-			if let Some(path) = edited.applied {
-				self.path = path;
-			}
-			typing = edited.response.has_focus();
-		});
-		typing
 	}
 
-	/// The save dialog for the chosen format, at the path typed.
-	fn browse(&self, ctx: &egui::Context) {
-		let (name, exts) = &self.names[self.format];
-		let spec = format!("{name}|*.{}", exts.join(";*."));
-		let dialog = file_dialog(&spec, Some(&PathBuf::from(&self.path))).save_file();
-		self.browsed.spawn(ctx, "export-browse", move |_| wait(dialog), |_| None);
+	/// The browse button of the box of `target`.
+	pub(super) fn browse_button(&self, ui: &mut Ui, target: Target) {
+		if ui.add(egui::Button::new("...").min_size(egui::vec2(BROWSE, 0.))).clicked() {
+			self.browse(ui.ctx(), target);
+		}
 	}
 
-	/// The path typed, with the format's extension when it has none.
-	pub(super) fn output(&self) -> Option<PathBuf> {
-		let path = PathBuf::from(&self.path);
-		Some(if path.extension().is_none() { path.with_extension(self.extension()) } else { path })
+	/// The save dialog for the box of `target`, at the path typed: the chosen format's, or the archive's.
+	fn browse(&self, ctx: &egui::Context, target: Target) {
+		let (spec, start) = match target {
+			Target::Output(i) => {
+				let (name, exts) = &self.names[self.format];
+				(format!("{name}|*.{}", exts.join(";*.")), &self.outputs[i])
+			}
+			Target::Archive => (self.archive_filter.to_owned(), &self.archive),
+		};
+		let dialog = file_dialog(&spec, Some(&PathBuf::from(start))).save_file();
+		self.browsed.spawn(ctx, "export-browse", move |_| wait(dialog).map(|path| (target, path)), |_| None);
 	}
 
 	/// MP4's profile, and the codec's notice and choice; whether the export can start.

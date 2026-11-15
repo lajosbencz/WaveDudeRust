@@ -212,6 +212,8 @@ jobs:
         run: cargo clippy -p wavedude-app --target wasm32-unknown-unknown -- -D warnings
       - name: Clippy of the run worker
         run: cargo clippy -p wavedude-run-worker --target wasm32-unknown-unknown -- -D warnings
+      - name: Clippy of the spill worker
+        run: cargo clippy -p wavedude-spill-worker --target wasm32-unknown-unknown -- -D warnings
       # The CLI must match the wasm-bindgen crate of Cargo.lock; tools/build-web.sh checks it again.
       - name: wasm-bindgen version of Cargo.lock
         id: bindgen

@@ -30,7 +30,8 @@ aside. An unreadable file is not a first start.
 | AutoRerun | bool | true | Simulation > Re-run automatically after edits |
 | WarnWhenRamInsufficient | bool | true | Simulation > Warn when a run does not fit in RAM; memory warning "Do not warn me again" |
 | UseGpu | bool | true | Simulation > Use the GPU |
-| FrameMemoryPercent | int; 0 or less = Auto, else 10..100 | 0 (Auto) | Simulation > RAM cache size; memory warning lever |
+| FrameMemoryPercent | int; 0 or less = Auto, else 10..100 (desktop; the browser logs a stored share as a warning and clears it) | 0 (Auto) | Simulation > RAM cache size; memory warning lever |
+| FrameMemoryBytes | (port) int bytes; 0 = Auto, else 256 MiB, 512 MiB, 1 GiB or 2 GiB, any other value reads as Auto (the browser) | 0 (Auto) | Simulation > RAM cache size; memory warning lever |
 | PreviewResolution | 1 / 2 / 4 | 1 (first start may choose 2) | View > Preview resolution; memory warning |
 | PreviewFrames | 1 / 2 / 4 | 1 (first start may choose 2) | View > Preview frames; memory warning |
 | PreviewSampleBytes | 1 (8-bit index) / 2 (16-bit half) | 1 (first start may choose 2) | View > Preview samples; memory warning |
@@ -38,6 +39,7 @@ aside. An unreadable file is not a first start.
 | UiZoom | double 0.5..3 from the menu, up to 8 from `--zoom=` | 1.0; 2.0 on a touch-first device (only a value that differs from the device's default is stored) | View > UI zoom; command line |
 | LastExportFolder | path | "" | any export (fallback start folder) |
 | ExportFilterIndex | int (index into the run-export filter list; out of range reads as 0) | 0 | export Save dialog |
+| ExportArchive | bool (desktop; the browser always archives) | false | export dialog: Archive into one ZIP file, shown for an export of more than one file |
 | PartDescriptionExpanded | bool | true | description header on any part form |
 | TitleFullPath | bool | false | View > Full path in the title |
 | H264Profile | Baseline / Main / High | Baseline | export dialog, MP4: H.264 profile |

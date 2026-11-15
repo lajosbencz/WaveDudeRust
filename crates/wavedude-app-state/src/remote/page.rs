@@ -12,8 +12,8 @@ use std::task::{Context, Poll, Waker};
 use wavedude_core::engine::Snapshot;
 use wavedude_core::engine::probes::ProbeTrace;
 use wavedude_core::run::{
-	Budget, FitFrame, FrameStore, Goal, RunError, SpillBackend, SpillFactory, Status, StoreError, StoreLayout, Token,
-	WorkState,
+	Budget, FitFrame, FrameStore, Goal, RamCache, RunError, SpillBackend, SpillFactory, Status, StoreError,
+	StoreLayout, Token, WorkState,
 };
 use wavedude_core::scene::compose::image_key;
 use wavedude_core::sync::lock;
@@ -83,7 +83,17 @@ impl SpillBackend for Watched {
 struct Mirror {
 	id: u64,
 	generation: u64,
-	store: Result<Arc<FrameStore>, String>,
+	store: Result<Arc<FrameStore>, NoStore>,
+}
+
+/// Why a mirror holds no store.
+#[derive(Clone, Debug, thiserror::Error)]
+enum NoStore {
+	#[error("{0}")]
+	NotOpened(String),
+	/// The page's memory refused a frame.
+	#[error("{0}")]
+	NoMemory(String),
 }
 
 /// Where the page is with its worker.
@@ -100,7 +110,7 @@ enum Worker {
 pub struct Remote<P: Port> {
 	port: P,
 	use_gpu: Arc<AtomicBool>,
-	/// The memory the mirror's frames share by the RAM cache size.
+	/// The memory the mirror's frames take at Auto, the RAM cache size's share of it or a size in its place.
 	frame_memory: u64,
 	spill: Watching,
 	worker: Worker,
@@ -108,7 +118,7 @@ pub struct Remote<P: Port> {
 	engine: Option<(EngineLabel, Option<String>)>,
 	/// The key of the scene image posted last.
 	image: Option<u64>,
-	ram_percent: u32,
+	ram_cache: RamCache,
 	mirror: Option<Mirror>,
 	status: RunStatus,
 	/// The worker's failure in force, by its number.
@@ -121,8 +131,8 @@ pub struct Remote<P: Port> {
 }
 
 impl<P: Port> Remote<P> {
-	/// A run behind `port` on the GPU while `use_gpu` holds (shared with the settings), its frames in
-	/// `frame_memory` bytes by the RAM cache size and the rest in a spill of `spill`; posts [`ToWorker::Init`].
+	/// A run behind `port` on the GPU while `use_gpu` holds (shared with the settings), its frames in memory by the
+	/// RAM cache size, `frame_memory` bytes at Auto, and the rest in a spill of `spill`; posts [`ToWorker::Init`].
 	pub fn new(port: P, use_gpu: Arc<AtomicBool>, frame_memory: u64, spill: Box<dyn SpillFactory>) -> Self {
 		let init =
 			ToWorker::Init { version: VERSION, build: crate::build_id(), use_gpu: use_gpu.load(Ordering::Relaxed) };
@@ -135,7 +145,7 @@ impl<P: Port> Remote<P> {
 			worker: Worker::Starting,
 			engine: None,
 			image: None,
-			ram_percent: 0,
+			ram_cache: RamCache::Auto,
 			mirror: None,
 			status: RunStatus::default(),
 			failure: None,
@@ -150,6 +160,14 @@ impl<P: Port> Remote<P> {
 	pub fn worker_gone(&self) -> Option<WorkerGone> {
 		match &self.worker {
 			Worker::Gone(gone, _) => Some(gone.clone()),
+			_ => None,
+		}
+	}
+
+	/// Why the page's memory refused a frame of the mirror's store.
+	pub fn memory_refused(&self) -> Option<String> {
+		match self.mirror.as_ref().map(|m| &m.store) {
+			Some(Err(NoStore::NoMemory(why))) => Some(why.clone()),
 			_ => None,
 		}
 	}
@@ -255,10 +273,10 @@ impl<P: Port> Remote<P> {
 	fn open(&mut self, id: u64, layout: Layout) {
 		let layout = StoreLayout::from(layout);
 		self.mirror = None;
-		let budget = Budget::of_memory(self.frame_memory, self.ram_percent);
+		let budget = Budget::of_memory(self.frame_memory, self.ram_cache);
 		let store = FrameStore::open(layout, budget, &self.spill).map(Arc::new).map_err(|e| {
 			tracing::debug!("the frames of the run do not fit: {e}");
-			e.to_string()
+			NoStore::NotOpened(e.to_string())
 		});
 		self.mirror = Some(Mirror { id, generation: 0, store });
 	}
@@ -349,7 +367,7 @@ impl Mirror {
 	/// Copies `planes`, the frame's in layer order, into the store's buffer for frame `frame` and stores it; the
 	/// mirror's frame written. A buffer the memory refuses lets go of the store: its frames fail from then on.
 	fn write(&mut self, frame: usize, planes: Buffer) -> Result<FrameKey, String> {
-		let store = self.store.as_ref()?;
+		let store = self.store.as_ref().map_err(ToString::to_string)?;
 		let plane = store.shape().plane_bytes();
 		let mut snapshot = store.buffer_for(frame);
 		let reserved = store.layers().iter().try_for_each(|&layer| {
@@ -357,12 +375,9 @@ impl Mirror {
 			out.try_reserve_exact(plane.saturating_sub(out.len()))
 		});
 		if let Err(e) = reserved {
-			let why = format!(
-				"the browser has no memory for frame {frame} of the run ({plane} bytes a layer: {e}); a lower RAM \
-				 cache size keeps fewer frames in memory"
-			);
-			tracing::error!("{why}");
-			self.store = Err(why.clone());
+			let why = format!("the browser has no memory for frame {frame} of the run ({plane} bytes a layer: {e})");
+			tracing::error!("{why}; a smaller RAM cache size keeps fewer frames in memory");
+			self.store = Err(NoStore::NoMemory(why.clone()));
 			return Err(why);
 		}
 		if planes.len() != store.frame_bytes() {
@@ -387,7 +402,7 @@ fn trace(t: Trace) -> ProbeTrace {
 
 impl<P: Port> Backend for Remote<P> {
 	fn set_goal(&mut self, goal: Goal) {
-		self.ram_percent = goal.ram_percent;
+		self.ram_cache = goal.ram_cache;
 		let image = goal.run.as_ref().and_then(|r| image_key(&r.project));
 		if let Some(key) = image.filter(|&k| self.image != Some(k)) {
 			let project = &goal.run.as_ref().expect("an image key comes from a run").project;
@@ -441,8 +456,8 @@ impl<P: Port> Backend for Remote<P> {
 		self.send(&ToWorker::Discard, None);
 	}
 
-	fn budgets(&self, ram_percent: u32, _reclaimed: u64) -> (u64, u64) {
-		(Budget::of_memory(self.frame_memory, ram_percent), Budget::of_memory(self.frame_memory, 0))
+	fn budgets(&self, cache: RamCache, _reclaimed: u64) -> (u64, u64) {
+		(Budget::of_memory(self.frame_memory, cache), Budget::of_memory(self.frame_memory, RamCache::Auto))
 	}
 
 	/// The engine built last; before the first, the one asked for, once the worker is ready.
@@ -462,6 +477,10 @@ impl<P: Port> Backend for Remote<P> {
 
 	fn worker_gone(&self) -> Option<WorkerGone> {
 		Remote::worker_gone(self)
+	}
+
+	fn memory_refused(&self) -> Option<String> {
+		Remote::memory_refused(self)
 	}
 
 	/// Handles the messages waiting and the mirror's spill writes done.
@@ -560,7 +579,10 @@ mod tests {
 		let mut mirror = Mirror { id: 1, generation: 0, store: Ok(store.clone()) };
 		let refused = mirror.write(0, Vec::new().into()).unwrap_err();
 		assert!(refused.contains("no memory for frame 0"), "{refused}");
-		assert!(mirror.store.is_err() && Arc::strong_count(&store) == 1, "the mirror let go of its store");
+		assert!(
+			matches!(mirror.store, Err(NoStore::NoMemory(_))) && Arc::strong_count(&store) == 1,
+			"the mirror let go of its store"
+		);
 		assert_eq!(mirror.write(0, planes(1)), Err(refused), "the frames after fail alike");
 	}
 
@@ -584,5 +606,19 @@ mod tests {
 		past_memory.capacity = (GIB / layout().frame_bytes() as u64) as usize + 1;
 		remote.open(3, past_memory);
 		assert_eq!(lock(&spill.0).1, Some(false), "the store before was let go of before the next opened");
+	}
+
+	#[test]
+	fn a_ram_cache_size_replaces_the_frame_memory_and_auto_keeps_it() {
+		let mut remote =
+			Remote::new(Loopback::pair().0, Arc::new(AtomicBool::new(false)), GIB / 8, Box::new(NoSpill::default()));
+		let budget = |remote: &mut Remote<Loopback>, ram_cache| {
+			remote.set_goal(Goal { ram_cache, ..Goal::default() });
+			remote.open(1, Layout::from(&layout()));
+			let store = remote.mirror.as_ref().and_then(|m| m.store.clone().ok()).expect("the frames fit");
+			(store.ram_budget(), remote.budgets(ram_cache, 0))
+		};
+		assert_eq!(budget(&mut remote, RamCache::Bytes(2 * GIB)), (2 * GIB, (2 * GIB, GIB / 8)));
+		assert_eq!(budget(&mut remote, RamCache::Auto), (GIB / 8, (GIB / 8, GIB / 8)));
 	}
 }

@@ -78,17 +78,28 @@ or "The update failed." with the reason.
 
 ## Export Save dialog
 
-Native save dialog (port: an in-window dialog with the format and the path, its "..." opening the platform save
-dialog, which cannot report its filter; the probe CSV's is the platform's). The browser's export dialog is described
-under Browser differences, below.
+Native save dialog (port: an in-window dialog with the format and a path box per output, each box's "..." opening
+the platform save dialog, which cannot report its filter; the probe CSV's is the platform's). The browser's export
+dialog is described under Browser differences, below.
 
 | Command | Title | Filter list | Proposed name |
 |---|---|---|---|
-| Export field / intensity / both | "Export the field" / "Export the intensity" / "Export the field and the intensity" | MP4 video, H.264 (*.mp4); MPEG-1 video (*.mpg); AVI video, uncompressed (*.avi); QuickTime movie, Animation codec, lossless (*.mov); QuickTime movie, PNG codec, lossless (*.mov); PNG image sequence (*.png); JPEG image sequence (*.jpg); OpenEXR image sequence, 16-bit float data, intensity as I (*.exr); OpenEXR image sequence, 16-bit float data, intensity as sqrt(I) (*.exr) | `<project>_field` / `<project>_intensity`; both: the chosen name without suffix, each output gets its own |
+| Export field / intensity / both | "Export the field" / "Export the intensity" / "Export the field and the intensity" | MP4 video, H.264 (*.mp4); MPEG-1 video (*.mpg); AVI video, uncompressed (*.avi); QuickTime movie, Animation codec, lossless (*.mov); QuickTime movie, PNG codec, lossless (*.mov); PNG image sequence (*.png); JPEG image sequence (*.jpg); OpenEXR image sequence, 16-bit float data, intensity as I (*.exr); OpenEXR image sequence, 16-bit float data, intensity as sqrt(I) (*.exr) | `<project>_field` / `<project>_intensity`; both: each in its box; the archive `<project>.zip` |
 | Export field / intensity frame | "Export the frame" | PNG image; JPEG image; OpenEXR image as I; OpenEXR image as sqrt(I) | `<project>_field_0655` (frame number padded like a sequence's files) |
 | Export probe data as CSV | "Export the probe data" | CSV file (*.csv) | the probe's name |
 
-- The chosen filter is the format (the two MOV formats share `.mov`); the extension follows it.
+- The chosen filter is the format (the two MOV formats share `.mov`); the extension follows it in every path box.
+- Port: one path box per output the export writes: one per layer (a video's file, or an image sequence's
+  `<name>.<ext>`, its folder `<name>`), one for a still or the CSV. While there is more than one box, each is
+  labelled left of it by its layer ("Field", "Intensity") or "Archive". OK is disabled while a box has no file name
+  or two outputs share one (a sequence's folder, a video's file). The CLI's `--layers both` keeps one path, each
+  layer's output named with its suffix.
+- Port: an export of more than one file (both layers, or any image sequence) shows the check box "Archive into one
+  ZIP file" (setting `ExportArchive`, default clear). Checked, an "Archive" box follows (`<project>.zip`, its "..."
+  filtering "ZIP archive (*.zip)"), and the outputs' file names become the files and folders in the archive. The
+  archive is written beside its path under a temporary name and takes its place once complete; an image sequence
+  streams into it, videos are written into a temporary folder beside it first and packed afterwards, stored, chunk by
+  chunk. A failed or cancelled export leaves no archive and keeps the one it would have replaced.
 - Port: MP4 shows "OpenH264 Video Codec provided by Cisco Systems, Inc." and the check box "Use Cisco's OpenH264
   codec (downloaded from Cisco at the first MP4 export)" (setting `UseOpenH264`); OK is disabled while it is
   clear. Once downloaded, a "Delete the downloaded codec" button follows; the choice stays. The download runs on the export's worker before the first frame; a failure ends the export with its reason
@@ -102,8 +113,9 @@ under Browser differences, below.
   export's folder (run export: last name with the layer suffix swapped). Kept in user settings (`ExportHints`, 20
   projects, only while their files exist), restored when the project is opened. A project without a file keeps the
   session's alone. Fallback: settings' `LastExportFolder`.
-- A sequence goes into a folder of its own; an existing folder with files asks "Replace them?" (Export last asks
-  nothing).
+- A sequence goes into a folder of its own; an existing folder with files asks "Replace them?", an existing video,
+  still or archive "Replace it?", one question per output, or the archive alone when archived (Export last, which
+  repeats the outputs and the archive, asks nothing).
 - After the dialog: when there is no run, an incomplete one, a reduced-quality one, or one lacking the intensity plane, a
   full-quality run is started first (status "Export: waiting for the run", indeterminate); then "Exporting n / N
   frames" with a determinate bar (tooltip "Cancel the export (Esc)"). Esc cancels, while waiting too (the run
@@ -115,10 +127,12 @@ under Browser differences, below.
 
 Browser differences (decision 0025):
 
-- The path box holds a file name only: what is typed is cut to its last component, and the format's extension is
-  added when it has none. There is no "..." button, no start folder and no question before replacing, as a
-  download replaces nothing. The probe CSV, which uses the platform's save dialog on the desktop, opens this dialog for its
-  name too.
+- Each name box holds a file name only: what is typed is cut to its last component, and the format's (or `.zip`)
+  extension is added when it has none. There is no "..." button, no start folder and no question before replacing,
+  as a download replaces nothing. The probe CSV, which uses the platform's save dialog on the desktop, opens this
+  dialog for its name too.
+- An export of more than one file is always one download: "Archive into one ZIP file" is checked and greyed, and
+  the "Archive" box names it. Both layers show three boxes: the field's, the intensity's and the archive's.
 - MP4 encodes with the browser's WebCodecs encoder: no Cisco notice, no check box. As the dialog opens the browser
   is asked which H.264 profiles it encodes at the project's canvas size and frame rate; meanwhile MP4 shows "Asking
   the browser which H.264 profiles it encodes..." and OK is disabled. "H.264 profile" then greys the profiles it
@@ -128,16 +142,16 @@ Browser differences (decision 0025):
   still export." and is disabled when the browser has no OPFS. A still and the CSV do not need it.
 - The export is stepped on the page; the status bar shows "Exporting n / N frames", and "Export: packing the
   archive" while two videos are packed into their ZIP. Esc cancels as on the desktop.
-- Download names, from the typed name `<name>` (extension as chosen):
+- Download names, from the typed names, `<name>` an output's and `<archive>` the archive's (extension as chosen):
 
 | Export | Downloaded as |
 |---|---|
 | Frame (still), field or intensity | `<name>.<ext>` as typed, e.g. `run_field_0042.png` |
 | Probe CSV | `<name>.csv` |
-| Image sequence, one layer | `<name>.zip`: the files in a folder named after the output |
-| Image sequence, both layers | `<name>.zip`: a folder per layer (`_field`, `_intensity`) |
+| Image sequence, one layer | `<archive>.zip`: the files in the folder `<name>` |
+| Image sequence, both layers | `<archive>.zip`: a folder per layer, each named by its box |
 | Video, one layer | `<name>.<ext>` |
-| Videos, both layers | `<name>.zip` holding `<name>_field.<ext>` and `<name>_intensity.<ext>` |
+| Videos, both layers | `<archive>.zip` holding each layer's `<name>.<ext>` |
 
 - A completed export shows a message window (info disc): "The export is ready: <download name>", with Download
   (default) and Close (Esc). Download starts the browser's download and closes it; a browser may drop a download a

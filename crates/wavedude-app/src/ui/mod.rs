@@ -260,6 +260,9 @@ impl Shell {
 					let text = match &failure {
 						RunFailure::Failed(message) => format!("{}\n{message}", s.get("RunError")),
 						RunFailure::NoImage => format!("{}\n{}", s.get("RunError"), s.get("RunErrorNoImage")),
+						RunFailure::NoMemory(why) => {
+							format!("{}\n{}\n{why}", s.get("RunError"), s.get("RunErrorNoMemory"))
+						}
 						RunFailure::WorkerGone(gone) => gone.message(s),
 					};
 					self.modals.show(Modal::Error(text));
@@ -351,7 +354,7 @@ impl Shell {
 			MenuAction::UseGpu => Some(Event::SetUseGpu(!st.use_gpu)),
 			MenuAction::AutoRerun => Some(Event::SetAutoRerun(!st.auto_rerun)),
 			MenuAction::WarnMemory => Some(Event::SetWarnWhenRamInsufficient(!st.warn_when_ram_insufficient)),
-			MenuAction::FrameMemory(pct) => Some(Event::SetFrameMemoryPercent(pct)),
+			MenuAction::FrameMemory(cache) => Some(Event::SetRamCache(cache)),
 			MenuAction::CheckAtLaunch => Some(Event::SetCheckForUpdates(st.check_for_updates != Some(true))),
 			MenuAction::AddSource => Some(Event::Command(Command::AddSource { at: None })),
 			MenuAction::AddPart(kind) => Some(Event::Command(Command::AddPart { kind, at: None })),

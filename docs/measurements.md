@@ -344,6 +344,30 @@ else on the presenter's: a temporary test reading 120 spilled frames of 1920x108
 through `FrameStore::with_layer_into`, release build, Ryzen 9 9900X, NVMe, from the page cache: 0.20 ms median,
 0.53 ms p95, 0.78 ms worst. The file reads nothing ahead.
 
+## The browser's frame spill writes
+
+2026-11-15, Firefox 159 and Chrome 158 on Linux, the workstation above. A benchmark page writes 2 MB frames into the
+origin private file system three ways and times each frame from its write's start to its completion, then reads them
+back ([decision 0020](decisions/0020-browser-frame-spill-in-opfs.md), The spill worker). The app before the change, an
+export run of Example01 (1186 frames of 2 MB spilled): 15 to 18 s in Firefox, 3.3 s in Chrome.
+
+| A frame of 2 MB | Firefox | Chrome |
+|---|---|---|
+| The page, `createWritable`, one file per frame, 4 in flight | 12.2 ms (164 MB/s) | 1.4 ms |
+| A dedicated worker, `createSyncAccessHandle`, one file per frame | 10.0 ms | 0.7 ms |
+| A dedicated worker, one sync access handle, written at offsets of one file | 0.52 ms (3.8 GB/s) | 0.33 ms |
+
+A frame read back from that file took 0.1 ms. Creating and closing a file is Firefox's cost, not the bytes: the spill
+keeps one file per store generation open in the spill worker.
+
+The benchmark is [`tools/bench-opfs/index.html`](../tools/bench-opfs/index.html), 300 frames each way and 50 read back,
+the sync access handles in a worker made from a `Blob` URL: serve the folder over HTTP (`python3 -m http.server -d
+tools/bench-opfs`), open `http://localhost:8000/` in each browser and press Run; it prints the milliseconds a frame
+of each way and removes its files. The export run of Example01 (Export both, MP4, the
+app built by `tools/build-web.sh` and served by `python3 -m http.server`), its time from the app's `Run Completed`
+line, with temporary counters in the run worker's loop timing each pump's wait by its reason: before, every wait was
+for the spill's writes, 14.8 s; after, 2.3 s in Firefox, the spill's writes a quarter of the waits.
+
 ## The browser's live run
 
 2026-11-13, Chrome for Testing 158 headless (WebGPU through Vulkan) and Firefox 159 (`dom.webgpu.enabled`) on Linux,

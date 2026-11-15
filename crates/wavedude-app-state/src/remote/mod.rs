@@ -126,6 +126,13 @@ impl From<Vec<u8>> for Buffer {
 	}
 }
 
+#[cfg(target_arch = "wasm32")]
+impl From<js_sys::Uint8Array> for Buffer {
+	fn from(bytes: js_sys::Uint8Array) -> Self {
+		Self(bytes)
+	}
+}
+
 /// One end of the channel between the page and the worker.
 pub trait Port {
 	fn post(&self, envelope: Envelope);

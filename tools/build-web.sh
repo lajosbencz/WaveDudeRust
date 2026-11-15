@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Builds the browser app into the folder given (default target/web): the release wasm of wavedude-app and of its
-# run worker, wavedude-run-worker, bound by wasm-bindgen into pkg/ beside crates/wavedude-app/web/index.html and
-# run-worker.js. The wasm-bindgen CLI must match Cargo.lock's crate;
-# `tools/build-web.sh --bindgen-version` prints that version. A tree with changes gets a fresh build id per run
+# workers, wavedude-run-worker and wavedude-spill-worker, bound by wasm-bindgen into pkg/ beside
+# crates/wavedude-app/web/index.html, run-worker.js and spill-worker.js. The wasm-bindgen CLI must match Cargo.lock's
+# crate; `tools/build-web.sh --bindgen-version` prints that version. A tree with changes gets a fresh build id per run
 # (WAVEDUDE_BUILD), which rebuilds app-state, the app and the run worker.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -35,12 +35,12 @@ if ! [[ $WAVEDUDE_BUILD =~ ^[A-Za-z0-9._+-]+$ ]]; then
 	exit 1
 fi
 export WAVEDUDE_BUILD
-# one build each: built together, the worker would take the app's features of their shared crates (wgpu's WebGL)
-for bin in wavedude-app wavedude-run-worker; do
+# one build each: built together, the workers would take the app's features of their shared crates (wgpu's WebGL)
+for bin in wavedude-app wavedude-run-worker wavedude-spill-worker; do
 	cargo build --release --locked -p "$bin" --bin "$bin" --target wasm32-unknown-unknown
 	wasm-bindgen --target web --no-typescript --out-dir "$out/pkg" "$target/wasm32-unknown-unknown/release/$bin.wasm"
 done
-cp crates/wavedude-app/web/run-worker.js "$out/"
+cp crates/wavedude-app/web/run-worker.js crates/wavedude-app/web/spill-worker.js "$out/"
 # the page's download bar needs the wasm's size, which the compressed response does not give
 sed -e "s/__WASM_BYTES__/$(wc -c < "$out/pkg/wavedude-app_bg.wasm")/" -e "s/__BUILD__/$WAVEDUDE_BUILD/g" \
 	crates/wavedude-app/web/index.html > "$out/index.html"

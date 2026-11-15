@@ -174,6 +174,7 @@ impl H264Factory for WebCodecsFactory {
 			queue.borrow_mut().fail(format!("the browser's encoder: {}", describe(&e)));
 			wake::wake();
 		});
+		let on_dequeue = Closure::<dyn FnMut()>::new(wake::wake);
 		let init = VideoEncoderInit::new(error.as_ref().unchecked_ref(), output.as_ref().unchecked_ref());
 		let color = VideoColorSpaceInit::new();
 		color.set_primaries(Some(VideoColorPrimaries::Smpte170m));
@@ -185,11 +186,13 @@ impl H264Factory for WebCodecsFactory {
 			chunks,
 			_output: output,
 			_error: error,
+			on_dequeue,
 			fps: spec.fps,
 			color,
 			planes: Vec::new(),
 			flushed: None,
 		};
+		encoder.encoder.set_ondequeue(Some(encoder.on_dequeue.as_ref().unchecked_ref()));
 		encoder.encoder.configure(&config).map_err(|e| failed(&e))?;
 		tracing::debug!(codec = config.get_codec(), bps = spec.bitrate, "WebCodecs encoder configured");
 		Ok(Box::new(encoder))
@@ -203,6 +206,7 @@ struct WebCodecsEncoder {
 	/// The encoder's callbacks, which it calls until it is closed.
 	_output: Closure<dyn FnMut(EncodedVideoChunk)>,
 	_error: Closure<dyn FnMut(JsValue)>,
+	on_dequeue: Closure<dyn FnMut()>,
 	fps: u32,
 	/// BT.601 studio range, as `yuv` converts.
 	color: VideoColorSpaceInit,
@@ -214,7 +218,8 @@ struct WebCodecsEncoder {
 
 impl H264Encoder for WebCodecsEncoder {
 	fn poll_ready(&mut self) -> Result<Poll<()>> {
-		Ok(if self.chunks.borrow().ready()? { Poll::Ready(()) } else { Poll::Pending })
+		let queued = self.encoder.encode_queue_size();
+		Ok(if self.chunks.borrow().ready(queued)? { Poll::Ready(()) } else { Poll::Pending })
 	}
 
 	fn submit(&mut self, picture: &Yuv420) -> Result<()> {

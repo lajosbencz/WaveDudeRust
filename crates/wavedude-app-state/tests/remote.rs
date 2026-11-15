@@ -19,8 +19,8 @@ use wavedude_core::engine::{GpuHandle, WaveEngine};
 use wavedude_core::model::{Layer, Probe, ProbeKind, Project, SceneMode, Source};
 use wavedude_core::quality::PreviewQuality;
 use wavedude_core::run::{
-	EngineFuture, FrameStore, Goal, Pump, PumpedFactory, RunError, RunWorker, SpillBackend, SpillFactory, StoreError,
-	StoreLayout, Token, Wanted, WorkState,
+	EngineFuture, FrameStore, Goal, Pump, PumpedFactory, RamCache, RunError, RunWorker, SpillBackend, SpillFactory,
+	StoreError, StoreLayout, Token, Wanted, WorkState,
 };
 use wavedude_core::spec::{RunRequest, RunSpec, RunSpecError};
 use wavedude_core::sync::lock;
@@ -223,6 +223,18 @@ fn the_frames_and_traces_reach_the_page_as_a_direct_run_makes_them() {
 	assert_eq!(remote.status().steps_done, w.status().steps_done);
 	host.pump(SLICE, Waker::noop());
 	assert_eq!(host.frames_in_flight(), 0, "every frame acknowledged");
+}
+
+#[test]
+fn a_ram_cache_size_holds_the_frames_on_the_page_and_the_worker_still_posts_each() {
+	let p = project(40);
+	let (mut remote, mut host) = connect(GIB, Box::new(Spill::default()));
+	remote.set_goal(Goal { ram_cache: RamCache::Bytes(GIB), ..goal(&p, 1, Wanted::All) });
+	drive(&mut remote, &mut host, |r| r.status().adopted == 1 && r.status().state == WorkState::Idle);
+	let mirror = remote.status().store.unwrap();
+	assert!(mirror.is_complete(), "every frame reached the page");
+	assert_eq!(mirror.frames_in_memory(), mirror.capacity());
+	same_frames(&mirror, &direct(&p, Wanted::All).store().unwrap(), &Arc::default());
 }
 
 #[test]

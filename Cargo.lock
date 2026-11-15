@@ -5429,6 +5429,7 @@ dependencies = [
  "wavedude-core",
  "wavedude-examples",
  "wavedude-export",
+ "wavedude-spill-worker",
  "web-sys",
  "web-time",
  "wgpu",
@@ -5531,6 +5532,20 @@ dependencies = [
  "wasm-bindgen-futures",
  "wavedude-app-state",
  "wavedude-core",
+ "web-sys",
+]
+
+[[package]]
+name = "wavedude-spill-worker"
+version = "0.3.4"
+dependencies = [
+ "js-sys",
+ "postcard",
+ "serde",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-web",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 

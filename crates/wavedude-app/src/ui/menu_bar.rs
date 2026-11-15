@@ -11,12 +11,17 @@ use egui_material_icons::icons::{
 	ICON_SAVE, ICON_SAVE_AS, ICON_SELECT_ALL, ICON_STAIRS, ICON_STOP, ICON_UNDO, ICON_VIEW_SIDEBAR, ICON_VIEW_WEEK,
 	ICON_WAVING_HAND, ICON_ZOOM_IN,
 };
+#[cfg(target_arch = "wasm32")]
+use wavedude_app_state::live::{WEB_RAM_CACHE_SIZES, detected_web_frame_memory};
 use wavedude_app_state::platform::HAS_PATHS;
 use wavedude_app_state::settings::Theme as ThemeSetting;
 use wavedude_app_state::strings::{Language, Strings};
 use wavedude_core::model::Word;
+use wavedude_core::run::RamCache;
 
 use super::dock::Dock;
+#[cfg(target_arch = "wasm32")]
+use super::memory_warning::bytes_text;
 use super::{icons, menu_keys, shortcuts};
 use crate::App;
 use crate::menus::{self, DITHERS, ExportKindChoice, FRAME_STEPS, MenuAction, On, RESOLUTIONS, SAMPLES, ZOOMS};
@@ -403,13 +408,32 @@ impl Menu<'_> {
 		self.check(ui, MenuAction::UseGpu, s.get("MenuSimulationUseGpu"), st.use_gpu);
 		self.check(ui, MenuAction::AutoRerun, s.get("MenuSimulationAutoRerun"), st.auto_rerun);
 		self.check(ui, MenuAction::WarnMemory, s.get("MenuSimulationWarnMemory"), st.warn_when_ram_insufficient);
-		self.submenu(ui, ICON_MEMORY, "MenuSimulationFrameMemory", true, |m, ui| {
-			let auto = st.frame_memory_percent <= 0;
-			m.check(ui, MenuAction::FrameMemory(0), s.get("MenuSimulationFrameMemoryAuto"), auto);
-			for pct in (10..=100).step_by(10) {
-				m.check(ui, MenuAction::FrameMemory(pct), &format!("{pct} %"), st.frame_memory_percent == pct);
-			}
-		});
+		self.submenu(ui, ICON_MEMORY, "MenuSimulationFrameMemory", true, Self::ram_cache);
+	}
+
+	/// The RAM cache sizes: Auto, then shares of the physical memory.
+	#[cfg(not(target_arch = "wasm32"))]
+	fn ram_cache(&mut self, ui: &mut egui::Ui) {
+		let (current, s) = (self.app.settings.ram_cache(), self.s);
+		let auto = RamCache::Auto;
+		self.check(ui, MenuAction::FrameMemory(auto), s.get("MenuSimulationFrameMemoryAuto"), current == auto);
+		for pct in (10..=100).step_by(10) {
+			let cache = RamCache::Percent(pct);
+			self.check(ui, MenuAction::FrameMemory(cache), &format!("{pct} %"), current == cache);
+		}
+	}
+
+	/// The RAM cache sizes: Auto, the detected memory, then sizes in its place.
+	#[cfg(target_arch = "wasm32")]
+	fn ram_cache(&mut self, ui: &mut egui::Ui) {
+		let (current, s) = (self.app.settings.ram_cache(), self.s);
+		let auto = RamCache::Auto;
+		let label = s.format("MenuSimulationFrameMemoryAutoFormat", &[&bytes_text(detected_web_frame_memory())]);
+		self.check(ui, MenuAction::FrameMemory(auto), &label, current == auto);
+		for bytes in WEB_RAM_CACHE_SIZES {
+			let cache = RamCache::Bytes(bytes);
+			self.check(ui, MenuAction::FrameMemory(cache), &bytes_text(bytes), current == cache);
+		}
 	}
 
 	#[cfg(not(target_arch = "wasm32"))]

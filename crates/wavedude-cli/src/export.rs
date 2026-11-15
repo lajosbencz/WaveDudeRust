@@ -13,7 +13,7 @@ use wavedude_core::quality::PreviewQuality;
 use wavedude_core::run::FrameStore;
 use wavedude_core::run::store::StoreError;
 use wavedude_export::h264::Profile;
-use wavedude_export::{ExportFormat, ExportLayers, ExportPlan, ExportState, FrameSource};
+use wavedude_export::{ExportFormat, ExportLayers, ExportPlan, ExportState, FrameSource, naming};
 
 use crate::project::{load, user_schemes};
 use crate::run::{EngineArgs, Simulation, outcome, parse_steps};
@@ -165,9 +165,8 @@ pub(crate) fn run(args: &Args, dirs: Option<&AppDirs>) -> Result<()> {
 	let plan = ExportPlan {
 		project: &project,
 		format,
-		layers: args.layers,
 		fs: Arc::new(wavedude_export::fs::StdFs),
-		path: out.clone(),
+		outputs: naming::layer_outputs(&out, args.layers),
 		still: args.still,
 		frame_count: spec.schedule.frame_count() as usize,
 		traces: &traces,

@@ -26,7 +26,8 @@ use wavedude_core::quality::PreviewQuality;
 #[cfg(not(target_arch = "wasm32"))]
 use wavedude_core::run::{Budget, Memory, RunWorker};
 use wavedude_core::run::{
-	FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RunError, RunState, Status, Wanted, WorkState,
+	FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RamCache, RunError, RunState, Status, Wanted,
+	WorkState,
 };
 use wavedude_core::scene::off_canvas::{OffCanvas, off_canvas};
 use wavedude_core::spec::{RunRequest, RunSpecError, SceneCache};
@@ -55,12 +56,16 @@ pub trait Backend {
 	fn engine_changed(&mut self);
 	/// The frames and traces go, their memory and spill freed; the run starts over on a new store.
 	fn discard_frames(&mut self);
-	/// The store budget at `ram_percent` and at Auto, counting `reclaimed` bytes as free.
-	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64);
+	/// The store budget at `cache` and at Auto, counting `reclaimed` bytes as free.
+	fn budgets(&self, cache: RamCache, reclaimed: u64) -> (u64, u64);
 	/// The engine built last; before the first, the one asked for.
 	fn engine(&self) -> EngineLabel;
 	/// Why the run in another agent runs nothing until the page is reloaded; `None` while it can run.
 	fn worker_gone(&self) -> Option<WorkerGone> {
+		None
+	}
+	/// Why the memory refused a frame of the run's store; `None` while it took them all.
+	fn memory_refused(&self) -> Option<String> {
 		None
 	}
 	/// Takes what a run in another agent sent; a run on a thread of this program publishes without.
@@ -73,13 +78,17 @@ pub struct LiveSettings {
 	pub auto_rerun: bool,
 	pub warn_when_ram_insufficient: bool,
 	pub quality: PreviewQuality,
-	/// 0 = Auto.
-	pub ram_percent: u32,
+	pub ram_cache: RamCache,
 }
 
 impl Default for LiveSettings {
 	fn default() -> Self {
-		Self { auto_rerun: true, warn_when_ram_insufficient: true, quality: PreviewQuality::DEFAULT, ram_percent: 0 }
+		Self {
+			auto_rerun: true,
+			warn_when_ram_insufficient: true,
+			quality: PreviewQuality::DEFAULT,
+			ram_cache: RamCache::Auto,
+		}
 	}
 }
 
@@ -109,6 +118,8 @@ pub enum RunFailure {
 	Failed(String),
 	/// The scene's image is missing.
 	NoImage,
+	/// The memory refused a frame of the run: why.
+	NoMemory(String),
 	/// The run worker is gone: no run starts until the page is reloaded.
 	WorkerGone(WorkerGone),
 }
@@ -525,8 +536,8 @@ impl<B: Backend> LiveController<B> {
 		let fit = self.fit;
 		let position = self.playback.position();
 		let same = self.published.as_ref().is_some_and(|p| {
-			(p.revision, p.position, p.wanted, p.paused, p.fit, p.ram_percent)
-				== (self.revision, position, self.wanted, self.user_paused, fit, self.settings.ram_percent)
+			(p.revision, p.position, p.wanted, p.paused, p.fit, p.ram_cache)
+				== (self.revision, position, self.wanted, self.user_paused, fit, self.settings.ram_cache)
 		});
 		if same {
 			return;
@@ -538,7 +549,7 @@ impl<B: Backend> LiveController<B> {
 			wanted: self.wanted,
 			paused: self.user_paused,
 			fit,
-			ram_percent: self.settings.ram_percent,
+			ram_cache: self.settings.ram_cache,
 		};
 		self.backend.set_goal(goal.clone());
 		self.published = Some(goal);
@@ -666,7 +677,7 @@ impl<B: Backend> LiveController<B> {
 		let Some(request) = self.request().cloned() else { return false };
 		if self.settings.warn_when_ram_insufficient && !self.export_busy() {
 			let reclaimed = self.status.store.as_ref().map_or(0, |s| s.ram_bytes());
-			let (budget, auto_budget) = self.backend.budgets(self.settings.ram_percent, reclaimed);
+			let (budget, auto_budget) = self.backend.budgets(self.settings.ram_cache, reclaimed);
 			if MemoryWarning::check(&request, budget, auto_budget).is_some() {
 				tracing::debug!(need = request.store_bytes(), budget, "memory warning asks before the run");
 				let asked = self.warning.is_some();
@@ -745,10 +756,11 @@ impl<B: Backend> LiveController<B> {
 			&& self.failed.as_ref().is_none_or(|f| !Arc::ptr_eq(f, e))
 		{
 			self.failed = Some(e.clone());
-			let failure = match (self.backend.worker_gone(), &**e) {
-				(Some(gone), _) => RunFailure::WorkerGone(gone),
-				(None, RunError::Spec(RunSpecError::NoImage)) => RunFailure::NoImage,
-				(None, e) => RunFailure::Failed(e.to_string()),
+			let failure = match (self.backend.worker_gone(), self.backend.memory_refused(), &**e) {
+				(Some(gone), ..) => RunFailure::WorkerGone(gone),
+				(None, Some(why), _) => RunFailure::NoMemory(why),
+				(None, None, RunError::Spec(RunSpecError::NoImage)) => RunFailure::NoImage,
+				(None, None, e) => RunFailure::Failed(e.to_string()),
 			};
 			self.notices.push(Notice::RunFailed(failure));
 		}
@@ -892,7 +904,7 @@ impl<B: Backend> LiveController<B> {
 		self.settings.quality = quality;
 		self.quality = quality;
 		if levers.cache_auto {
-			self.settings.ram_percent = 0;
+			self.settings.ram_cache = RamCache::Auto;
 		}
 		if mute {
 			self.settings.warn_when_ram_insufficient = false;
@@ -1111,6 +1123,17 @@ pub fn web_frame_memory(device_bytes: Option<u64>) -> u64 {
 	(device_bytes.unwrap_or(WEB_UNKNOWN_MEMORY) / WEB_FRAME_SHARE).min(MAX_WEB_FRAME_BYTES)
 }
 
+/// [`web_frame_memory`] of this device: the browser's RAM cache size at Auto.
+#[cfg(target_arch = "wasm32")]
+pub fn detected_web_frame_memory() -> u64 {
+	web_frame_memory(super::platform::device_memory())
+}
+
+/// The sizes the browser's RAM cache size offers in place of [`web_frame_memory`]; a wasm32 memory holds 4 GiB at
+/// most, the page's module and its other buffers beside the frames (decision 0020, The RAM cache size in the
+/// browser).
+pub const WEB_RAM_CACHE_SIZES: [u64; 4] = [256 << 20, 512 << 20, 1 << 30, 2 << 30];
+
 /// The run worker's script, beside the page.
 #[cfg(target_arch = "wasm32")]
 const RUN_WORKER: &str = "run-worker.js";
@@ -1211,11 +1234,11 @@ impl CoreBackend {
 	}
 
 	/// A backend on the run worker, which it starts; the mirror stores hold their frames in memory, the RAM cache
-	/// size's share of [`web_frame_memory`], and the rest in the origin private file system. The engine runs on the
-	/// worker's GPU while `use_gpu` holds, else on the CPU.
+	/// size or at Auto [`detected_web_frame_memory`], and the rest in the origin private file system. The engine
+	/// runs on the worker's GPU while `use_gpu` holds, else on the CPU.
 	#[cfg(target_arch = "wasm32")]
 	pub fn new(use_gpu: Arc<AtomicBool>) -> Self {
-		let frame_memory = web_frame_memory(super::platform::device_memory());
+		let frame_memory = detected_web_frame_memory();
 		let port = PagePort::start(&run_worker_url(), crate::wake::wake);
 		let remote = Remote::new(port, use_gpu, frame_memory, Box::new(super::platform::Opfs::start()));
 		Self { remote, scene: Arc::default() }
@@ -1257,8 +1280,8 @@ impl Backend for CoreBackend {
 		self.worker.discard_frames();
 	}
 
-	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64) {
-		(Budget::compute(self.memory, reclaimed, ram_percent), Budget::compute(self.memory, reclaimed, 0))
+	fn budgets(&self, cache: RamCache, reclaimed: u64) -> (u64, u64) {
+		(Budget::compute(self.memory, reclaimed, cache), Budget::compute(self.memory, reclaimed, RamCache::Auto))
 	}
 
 	fn engine(&self) -> EngineLabel {
@@ -1299,8 +1322,8 @@ impl Backend for CoreBackend {
 		self.remote.discard_frames();
 	}
 
-	fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64) {
-		self.remote.budgets(ram_percent, reclaimed)
+	fn budgets(&self, cache: RamCache, reclaimed: u64) -> (u64, u64) {
+		self.remote.budgets(cache, reclaimed)
 	}
 
 	fn engine(&self) -> EngineLabel {
@@ -1309,6 +1332,10 @@ impl Backend for CoreBackend {
 
 	fn worker_gone(&self) -> Option<WorkerGone> {
 		self.remote.worker_gone()
+	}
+
+	fn memory_refused(&self) -> Option<String> {
+		self.remote.memory_refused()
 	}
 
 	fn pump(&mut self) {
@@ -1326,7 +1353,9 @@ pub mod fake {
 	use wavedude_core::engine::{SampleFormat, Snapshot};
 	use wavedude_core::f16;
 	use wavedude_core::render::{field_index, intensity_root_index};
-	use wavedude_core::run::{FitFrame, FrameStore, Goal, SpillBackend, Status, StoreLayout, Token, Wanted, WorkState};
+	use wavedude_core::run::{
+		FitFrame, FrameStore, Goal, RamCache, SpillBackend, Status, StoreLayout, Token, Wanted, WorkState,
+	};
 	use wavedude_core::spec::RunSpec;
 	use wavedude_core::sync::lock;
 
@@ -1569,7 +1598,7 @@ pub mod fake {
 			self.held.clear();
 		}
 
-		fn budgets(&self, _ram_percent: u32, _reclaimed: u64) -> (u64, u64) {
+		fn budgets(&self, _cache: RamCache, _reclaimed: u64) -> (u64, u64) {
 			self.budgets.unwrap_or((u64::MAX, u64::MAX))
 		}
 
@@ -2238,8 +2267,8 @@ mod tests {
 		}
 		fn engine_changed(&mut self) {}
 		fn discard_frames(&mut self) {}
-		fn budgets(&self, ram_percent: u32, reclaimed: u64) -> (u64, u64) {
-			self.inner.budgets(ram_percent, reclaimed)
+		fn budgets(&self, cache: RamCache, reclaimed: u64) -> (u64, u64) {
+			self.inner.budgets(cache, reclaimed)
 		}
 		fn engine(&self) -> EngineLabel {
 			self.inner.engine()

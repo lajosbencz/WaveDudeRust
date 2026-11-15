@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use wavedude_core::io::schemes::SchemeStore;
 use wavedude_core::model::{ItemKind, ItemRef, Point};
 use wavedude_core::quality::{MachineFacts, PreviewQuality};
-use wavedude_core::run::Levers;
+use wavedude_core::run::{Levers, RamCache};
 
 use clipboard::{Copyable, PasteTarget};
 use commands::{Change, ChangeKind, Command, CommandError};
@@ -133,13 +133,15 @@ pub enum Event {
 	SetDitherBits(u32),
 	SetAutoRerun(bool),
 	SetUseGpu(bool),
-	SetFrameMemoryPercent(i32),
+	SetRamCache(RamCache),
 	SetWarnWhenRamInsufficient(bool),
 	SetTitleFullPath(bool),
 	/// The user's answer whether MP4 export may use Cisco's `OpenH264`.
 	SetUseOpenH264(bool),
 	/// The H.264 profile of MP4 export.
 	SetH264Profile(wavedude_export::h264::Profile),
+	/// Whether a run export writing several files archives them.
+	SetExportArchive(bool),
 	/// Whether to look for a new release at launch.
 	SetCheckForUpdates(bool),
 	/// Whether the startup page opens at each launch.
@@ -247,7 +249,7 @@ fn live_settings(s: &Settings) -> LiveSettings {
 		auto_rerun: s.auto_rerun,
 		warn_when_ram_insufficient: s.warn_when_ram_insufficient,
 		quality: s.preview_quality(),
-		ram_percent: s.frame_memory_share(),
+		ram_cache: s.ram_cache(),
 	}
 }
 
@@ -766,7 +768,7 @@ impl<B: Backend> AppState<B> {
 				if let Some(choice) = self.live.confirm_warning(levers, mute, now) {
 					self.settings.set_preview_quality(choice.quality);
 					if choice.cache_auto {
-						self.settings.frame_memory_percent = 0;
+						self.settings.set_ram_cache(RamCache::Auto);
 					}
 					if choice.mute {
 						self.settings.warn_when_ram_insufficient = false;
@@ -821,8 +823,8 @@ impl<B: Backend> AppState<B> {
 				}
 				Response::None
 			}
-			Event::SetFrameMemoryPercent(pct) => {
-				self.settings.frame_memory_percent = pct;
+			Event::SetRamCache(cache) => {
+				self.settings.set_ram_cache(cache);
 				self.settings.normalize();
 				self.settings_changed(false, now);
 				Response::None
@@ -854,6 +856,11 @@ impl<B: Backend> AppState<B> {
 			}
 			Event::SetH264Profile(profile) => {
 				self.settings.h264_profile = profile;
+				self.save_settings();
+				Response::None
+			}
+			Event::SetExportArchive(on) => {
+				self.settings.export_archive = on;
 				self.save_settings();
 				Response::None
 			}

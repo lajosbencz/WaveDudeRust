@@ -120,7 +120,7 @@ row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
 | Use the GPU | G/G/G/G | - | none | checkable | Engine choice (CPU fallback logged). Default on. |
 | Re-run automatically after edits | A/A/U/A | - | none | checkable | Default on. |
 | Warn when a run does not fit in RAM | W/W/V/W | - | none | checkable | Default on. |
-| RAM cache size > | C/C/C/C | - | Draw:FrameMemory | radio list | Auto (A), 10 %, 20 %, ... 100 % of physical RAM (11 entries), check = current. |
+| RAM cache size > | C/C/C/C | - | Draw:FrameMemory | radio list | Auto (A), 10 %, 20 %, ... 100 % of physical RAM (11 entries), check = current. (port) In the browser: Auto (A) with the detected frame memory, e.g. "Auto (128 MiB)", then 256 MiB, 512 MiB, 1.0 GiB, 2.0 GiB in its place (5 entries; decision 0020, The RAM cache size in the browser). |
 
 ## Help
 

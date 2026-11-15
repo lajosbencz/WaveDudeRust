@@ -12,6 +12,7 @@ use wavedude_core::model::{ColorScheme, DisplayLayer, Layer, Probe, Project};
 use wavedude_core::render::render_half;
 use wavedude_core::run::store::StoreError;
 use wavedude_export::h264::Profile;
+use wavedude_export::naming::layer_outputs;
 use wavedude_export::overlays::Overlays;
 use wavedude_export::range::frame_range;
 use wavedude_export::sinks::{self, SinkSpec};
@@ -388,8 +389,7 @@ fn a_plan_builds_one_target_per_layer_with_suffixed_paths() {
 		fs: std_fs(),
 		project: &project,
 		format: ExportFormat::Avi,
-		layers: ExportLayers::Both,
-		path: dir.join("sub").join("run.avi"),
+		outputs: layer_outputs(&dir.join("sub").join("run.avi"), ExportLayers::Both),
 		still: None,
 		frame_count: src.frame_count(),
 		traces: &[],
@@ -426,8 +426,7 @@ fn a_plan_whose_second_layer_cannot_be_drawn_opens_no_output() {
 		fs: std_fs(),
 		project: &project,
 		format: ExportFormat::Avi,
-		layers: ExportLayers::Both,
-		path: dir.join("run.avi"),
+		outputs: layer_outputs(&dir.join("run.avi"), ExportLayers::Both),
 		still: None,
 		frame_count: src.frame_count(),
 		traces: &[],
@@ -452,8 +451,7 @@ fn a_plan_that_cannot_open_an_output_removes_those_it_opened() {
 		fs: std_fs(),
 		project: &project,
 		format: ExportFormat::Avi,
-		layers: ExportLayers::Both,
-		path: dir.join("run.avi"),
+		outputs: layer_outputs(&dir.join("run.avi"), ExportLayers::Both),
 		still: None,
 		frame_count: src.frame_count(),
 		traces: &[],
@@ -476,8 +474,7 @@ fn a_plan_of_stored_halves_refuses_an_intensity_of_the_other_form() {
 		fs: std_fs(),
 		project: &project,
 		format,
-		layers,
-		path: dir.join("run.exr"),
+		outputs: layer_outputs(&dir.join("run.exr"), layers),
 		still: None,
 		frame_count: 2,
 		traces: &[],

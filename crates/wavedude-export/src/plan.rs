@@ -1,4 +1,4 @@
-//! What an export writes, decided once for the app and the CLI: the frame range, each layer's look and path, the
+//! What an export writes, decided once for the app and the CLI: the frame range, each layer's look and output, the
 //! sinks and the overlays, built into an [`ExportJob`].
 
 use std::ops::RangeInclusive;
@@ -16,7 +16,7 @@ use crate::job::{ExportJob, ExportLayerLook, ExportTarget};
 use crate::overlays::Overlays;
 use crate::range::frame_range;
 use crate::sinks::{self, EncoderPool, FrameSink, SinkSpec, first_error};
-use crate::{ExportError, ExportFormat, ExportLayers, FrameSource, Result, naming};
+use crate::{ExportError, ExportFormat, FrameSource, Result};
 
 /// An export of a project's run.
 #[derive(Clone, Debug)]
@@ -24,11 +24,11 @@ pub struct ExportPlan<'a> {
 	/// Its Display settings give the in and out points, the looks, the video settings and the overlays.
 	pub project: &'a Project,
 	pub format: ExportFormat,
-	pub layers: ExportLayers,
 	/// Where the outputs go.
 	pub fs: Arc<dyn OutputFs>,
-	/// The chosen output in `fs`; [`ExportLayers::Both`] adds each layer's suffix.
-	pub path: PathBuf,
+	/// Each layer written, in this order, with its output in `fs`: a video's file, or a sequence's `dir/name.ext`
+	/// ([`crate::naming::sequence_folder`]); [`crate::naming::layer_outputs`] names them from one chosen path.
+	pub outputs: Vec<(Layer, PathBuf)>,
 	/// A still of this timeline frame instead of the in-out range.
 	pub still: Option<usize>,
 	/// Timeline frames the source holds once its run is complete.
@@ -69,9 +69,12 @@ impl ExportPlan<'_> {
 		if self.still.is_some() && !self.format.supports_still() {
 			return Err(ExportError::WrongInput("an image format for a still"));
 		}
+		if self.outputs.is_empty() {
+			return Err(ExportError::WrongInput("an output"));
+		}
 		let frames = self.frames()?;
 		let shape = source.shape();
-		let layers = self.layers.layers();
+		let layers: Vec<Layer> = self.outputs.iter().map(|&(layer, _)| layer).collect();
 		if self.format.wants_halves()
 			&& layers.contains(&Layer::Intensity)
 			&& shape.intensity_root != self.format.intensity_root()
@@ -89,8 +92,10 @@ impl ExportPlan<'_> {
 			.any(|&l| !self.format.wants_halves() && settings(l).overlay_in_export && settings(l).overlay_gain > 0.0)
 			.then(|| compose_scene(self.project))
 			.flatten();
-		if let Some(dir) = self.path.parent().filter(|d| !d.as_os_str().is_empty()) {
-			self.fs.create_dir_all(dir)?;
+		for (_, path) in &self.outputs {
+			if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+				self.fs.create_dir_all(dir)?;
+			}
 		}
 		let spec = SinkSpec {
 			width,
@@ -102,12 +107,13 @@ impl ExportPlan<'_> {
 			frame_count: frames.clone().count(),
 		};
 		let pool = EncoderPool::default();
-		let both = self.layers == ExportLayers::Both;
 		let mut targets: Vec<ExportTarget> = Vec::with_capacity(layers.len());
 		// Every look before any sink: a failure here leaves no output behind.
-		let looks = layers
+		let looks = self
+			.outputs
 			.iter()
-			.map(|&layer| {
+			.map(|(layer, path)| {
+				let layer = *layer;
 				let scheme = schemes.resolve_layer(self.project, layer);
 				let look = ExportLayerLook::new(
 					&scheme,
@@ -116,13 +122,12 @@ impl ExportPlan<'_> {
 					scene.as_ref(),
 					(width, height),
 				)?;
-				Ok((layer, look))
+				Ok((layer, path, look))
 			})
 			.collect::<Result<Vec<_>>>()?;
-		for (layer, look) in looks {
-			let path = naming::layer_path(&self.path, layer, both);
+		for (layer, path, look) in looks {
 			let still = self.still.is_some();
-			let sink = match sinks::open(self.format, &self.fs, &path, spec, still, &pool, self.h264.as_deref()) {
+			let sink = match sinks::open(self.format, &self.fs, path, spec, still, &pool, self.h264.as_deref()) {
 				Ok(sink) => sink,
 				Err(e) => {
 					let mut opened: Vec<Box<dyn FrameSink>> = targets.into_iter().map(|t| t.sink).collect();

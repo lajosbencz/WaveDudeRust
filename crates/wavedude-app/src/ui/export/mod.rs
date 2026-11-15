@@ -17,23 +17,27 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use eframe::egui::{self, Id, Key, RichText, Ui};
+use eframe::egui::{self, Align, Id, Key, Layout, RichText, Ui};
 use wavedude_app_state::live::ExportGate;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::strings::Strings;
 use wavedude_app_state::{Event, ExportKind};
-use wavedude_export::ExportFormat;
+use wavedude_core::model::{Layer, Word};
 use wavedude_export::h264::Profile;
+use wavedude_export::{ExportFormat, naming};
 
 use super::modal::{Choice, Modal, Modals, Reply, Then, buttons};
-use super::properties::{Choices, combo};
-use super::theme::{FONT_SIZE, Palette};
+use super::properties::{Choices, check_box, combo};
+use super::text_box::{Kind, text_box};
+use super::theme::{FONT_SIZE, INPUT_HEIGHT, Palette};
 use crate::App;
 use crate::dialogs::filters;
 use crate::export::{self, Outcome, Plan};
 use crate::menus::ExportKindChoice;
 
 const WIDTH: f32 = 528.;
+/// Width of a name box's label.
+const LABEL: f32 = 80.;
 
 /// What the window does once the export has ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -110,8 +114,8 @@ impl Exports {
 		if app.live.export_busy() || !self.has_last(app) {
 			return;
 		}
-		if let Some((Plan::Frames { choice, format, path, frame, .. }, _)) = self.last.clone() {
-			self.ask(ctx, app, modals, Plan::Frames { choice, format, path, frame, repeat: true }, 0);
+		if let Some((Plan::Frames { choice, format, outputs, archive, frame, .. }, _)) = self.last.clone() {
+			self.ask(ctx, app, modals, Plan::Frames { choice, format, outputs, archive, frame, repeat: true }, 0);
 		}
 	}
 
@@ -256,19 +260,32 @@ enum Subject {
 	Csv(String),
 }
 
-/// The export dialog: format and output, then the export.
+/// A name box of the export dialog.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+enum Target {
+	/// The output of this index.
+	Output(usize),
+	Archive,
+}
+
+/// The export dialog: format and outputs, then the export.
 pub(super) struct ExportDialog {
 	subject: Subject,
 	format: usize,
-	/// The output as typed: a path natively, a file name in the browser.
-	path: String,
+	/// Each output as typed, in layer order: a path natively, a file name in the browser.
+	outputs: Vec<String>,
+	/// The archive as typed.
+	archive: String,
 	/// The formats' names and extensions, as the filter list gives them.
 	names: Vec<(String, Vec<String>)>,
 	#[cfg(not(target_arch = "wasm32"))]
 	codec_downloaded: bool,
-	/// The browse dialog's answer.
+	/// The browse dialog's answer for a box.
 	#[cfg(not(target_arch = "wasm32"))]
-	browsed: super::inbox::Inbox<PathBuf>,
+	browsed: super::inbox::Inbox<(Target, PathBuf)>,
+	/// The browse dialog's filter of the archive.
+	#[cfg(not(target_arch = "wasm32"))]
+	archive_filter: &'static str,
 }
 
 impl ExportDialog {
@@ -277,12 +294,15 @@ impl ExportDialog {
 		Self {
 			subject: Subject::Frames(choice),
 			format: request.format,
-			path: imp::shown(&request.path),
+			outputs: request.outputs.iter().map(|(_, path)| imp::shown(path)).collect(),
+			archive: imp::shown(&request.archive),
 			names: filters(app.strings.get(choice.filter_key())),
 			#[cfg(not(target_arch = "wasm32"))]
 			codec_downloaded: crate::codec::downloaded(app),
 			#[cfg(not(target_arch = "wasm32"))]
 			browsed: super::inbox::Inbox::default(),
+			#[cfg(not(target_arch = "wasm32"))]
+			archive_filter: app.strings.get("ExportDialogFilterZip"),
 		}
 	}
 
@@ -306,21 +326,66 @@ impl ExportDialog {
 		}
 	}
 
-	fn plan(&self, app: &App, path: PathBuf) -> Plan {
+	/// The layers written, one per output; none for the probe CSV.
+	fn layers(&self) -> &'static [Layer] {
 		match &self.subject {
-			Subject::Frames(choice) => {
-				let format = choice.formats()[self.format];
-				let frame = app.live.playback.position() as usize;
-				Plan::Frames { choice: *choice, format, path, frame, repeat: false }
-			}
-			Subject::Csv(probe) => Plan::Csv { probe: probe.clone(), path },
+			Subject::Frames(choice) => choice.layers().layers(),
+			Subject::Csv(_) => &[],
 		}
+	}
+
+	/// The export writes several files, so the archive is offered.
+	fn writes_many(&self) -> bool {
+		matches!(&self.subject, Subject::Frames(choice) if choice.writes_many(choice.formats()[self.format]))
+	}
+
+	/// The outputs go into one archive.
+	fn archived(&self, app: &App) -> bool {
+		self.writes_many() && imp::archived(app)
+	}
+
+	fn text_mut(&mut self, target: Target) -> &mut String {
+		match target {
+			Target::Output(i) => &mut self.outputs[i],
+			Target::Archive => &mut self.archive,
+		}
+	}
+
+	/// The plan of what is typed; `None` while a name is missing or two outputs share one.
+	fn plan(&self, app: &App) -> Option<Plan> {
+		let ext = self.extension();
+		let choice = match &self.subject {
+			Subject::Frames(choice) => *choice,
+			Subject::Csv(probe) => {
+				return Some(Plan::Csv { probe: probe.clone(), path: imp::typed(&self.outputs[0], ext)? });
+			}
+		};
+		let format = choice.formats()[self.format];
+		let archive = if self.archived(app) { Some(imp::typed(&self.archive, "zip")?) } else { None };
+		let outputs = choice
+			.layers()
+			.layers()
+			.iter()
+			.zip(&self.outputs)
+			.map(|(&layer, typed)| {
+				let path = imp::typed(typed, ext)?;
+				Some((layer, if archive.is_some() { PathBuf::from(path.file_name()?) } else { path }))
+			})
+			.collect::<Option<Vec<_>>>()?;
+		let sequence = !choice.is_still() && !format.is_video();
+		let written: Vec<PathBuf> =
+			outputs.iter().map(|(_, p)| if sequence { naming::sequence_folder(p) } else { p.clone() }).collect();
+		if written.iter().enumerate().any(|(i, p)| written[..i].contains(p)) {
+			return None;
+		}
+		let frame = app.live.playback.position() as usize;
+		Some(Plan::Frames { choice, format, outputs, archive, frame, repeat: false })
 	}
 
 	pub(super) fn ui(&mut self, ui: &mut Ui, fresh: bool, app: &App, out: &mut Vec<Event>) -> Option<Reply> {
 		let s = &app.strings;
 		let title = s.get(self.title_key());
-		// Enter in the path box, which takes the key
+		// Enter in a name box, which takes the key
 		let enter = ui.input(|i| i.key_pressed(Key::Enter));
 		ui.set_width(WIDTH);
 		ui.label(RichText::new(title).family(wavedude_view::fonts::bold()).size(FONT_SIZE * 1.2));
@@ -339,17 +404,69 @@ impl ExportDialog {
 			};
 			if let Some(i) = combo(ui, Id::unique("ExportFormat"), title, &choices) {
 				self.format = i;
-				self.path =
-					PathBuf::from(&self.path).with_extension(formats[i].default_extension()).display().to_string();
+				let ext = formats[i].default_extension();
+				for typed in &mut self.outputs {
+					*typed = PathBuf::from(&*typed).with_extension(ext).display().to_string();
+				}
 			}
 		}
-		let typing = self.output_row(ui, title);
-		let path = self.output();
-		let ready = self.notes(ui, app, out) && path.is_some();
+		let typing = self.name_boxes(ui, app, title, out);
+		let plan = self.plan(app);
+		let ready = self.notes(ui, app, out) && plan.is_some();
 		let choices =
 			[Choice { enabled: ready, ..Choice::default(s.get("DialogOk")) }, Choice::cancel(s.get("DialogCancel"))];
 		let pressed = buttons(ui, fresh, &choices).or((enter && typing && ready).then_some(0));
-		pressed.map(|i| path.filter(|_| i == 0).map(|path| Then::Export(Step::Chosen(self.plan(app, path)))))
+		pressed.map(|i| plan.filter(|_| i == 0).map(|plan| Then::Export(Step::Chosen(plan))))
+	}
+
+	/// The name boxes: each output's, labelled by its layer while there are several boxes, then, for an export of
+	/// several files, the archive's check box and, while checked, the archive's box; whether a box has the focus.
+	fn name_boxes(&mut self, ui: &mut Ui, app: &App, title: &str, out: &mut Vec<Event>) -> bool {
+		let s = &app.strings;
+		self.take_browsed();
+		let archived = self.archived(app);
+		let labelled = self.outputs.len() > 1 || archived;
+		let mut typing = false;
+		for i in 0..self.outputs.len() {
+			let label =
+				self.layers().get(i).filter(|_| labelled).map(|layer| s.enum_word(Layer::TYPE_NAME, layer.name()));
+			typing |= self.name_row(ui, Target::Output(i), label, label.unwrap_or(title));
+		}
+		if self.writes_many() {
+			let text = s.get("ExportArchive");
+			let picked = ui
+				.add_enabled_ui(imp::ARCHIVE_CHOSEN, |ui| check_box(ui, Id::unique("ExportArchive"), text, archived))
+				.inner;
+			if let Some(on) = picked {
+				out.push(Event::SetExportArchive(on));
+			}
+			if archived {
+				let label = s.get("ExportArchiveName");
+				typing |= self.name_row(ui, Target::Archive, Some(label), label);
+			}
+		}
+		typing
+	}
+
+	/// The row of the name box of `target`: `label` left of it when shown, the platform's browse button right of it;
+	/// `name` names the box for assistive technology. Whether the box has the focus.
+	fn name_row(&mut self, ui: &mut Ui, target: Target, label: Option<&str>, name: &str) -> bool {
+		let row = egui::vec2(ui.available_width(), INPUT_HEIGHT);
+		ui.allocate_ui_with_layout(row, Layout::right_to_left(Align::Center), |ui| {
+			ui.spacing_mut().item_spacing.x = 4.;
+			self.browse_button(ui, target);
+			let width = ui.available_width() - label.map_or(0., |_| LABEL + ui.spacing().item_spacing.x);
+			let kind = Kind { live: true, ..Kind::default() };
+			let edited = text_box(ui, Id::unique("ExportPath").with(target), self.text_mut(target), width, kind, name);
+			if let Some(typed) = edited.applied {
+				*self.text_mut(target) = typed;
+			}
+			if let Some(label) = label {
+				ui.with_layout(Layout::left_to_right(Align::Center), |ui| ui.label(label));
+			}
+			edited.response.has_focus()
+		})
+		.inner
 	}
 }
 
@@ -399,12 +516,38 @@ mod tests {
 		let dir = tempfile::tempdir().unwrap();
 		let mut app = AppState::start(&AppDirs::under(dir.path()), []).expect("the state starts");
 		let (ctx, mut modals, mut exports) = (egui::Context::default(), Modals::default(), Exports::default());
-		let path = dir.path().join("field.png");
-		let plan =
-			Plan::Frames { choice: ExportKindChoice::Field, format: ExportFormat::Png, path, frame: 0, repeat: false };
+		let outputs = vec![(Layer::Field, dir.path().join("field.png"))];
+		let (choice, format) = (ExportKindChoice::Field, ExportFormat::Png);
+		let plan = Plan::Frames { choice, format, outputs, archive: None, frame: 0, repeat: false };
 		exports.last = Some((plan, Some(dir.path().join("other.wdproj"))));
 		exports.export_last(&ctx, &mut app, &mut modals);
 		assert!(!exports.exporting() && !app.live.export_busy(), "the other project's export was repeated");
+	}
+
+	#[test]
+	fn the_dialog_names_each_output_and_archives_them_when_asked() {
+		use imp::shown;
+		let dir = tempfile::tempdir().unwrap();
+		let mut app = AppState::start(&AppDirs::under(dir.path()), []).expect("the state starts");
+		let avi = ExportFormat::ALL.iter().position(|&f| f == ExportFormat::Avi).unwrap();
+		let at = |name: &str| dir.path().join(name);
+		let mut dialog = ExportDialog::new(&app, ExportKindChoice::Both);
+		assert_eq!(dialog.outputs.len(), 2, "a box per layer");
+		dialog.format = avi;
+		dialog.outputs = vec![shown(&at("a")), shown(&at("b.avi"))];
+		let Some(Plan::Frames { outputs, archive: None, .. }) = dialog.plan(&app) else { panic!("a plan of files") };
+		assert_eq!(outputs, [(Layer::Field, at("a.avi")), (Layer::Intensity, at("b.avi"))]);
+		dialog.outputs[1] = shown(&at("a.avi"));
+		assert!(dialog.plan(&app).is_none(), "two outputs of one name");
+		dialog.outputs[1] = shown(&at("b.avi"));
+		app.settings.export_archive = true;
+		dialog.archive = shown(&at("both"));
+		let Some(Plan::Frames { outputs, archive, .. }) = dialog.plan(&app) else { panic!("an archived plan") };
+		assert_eq!(outputs, [(Layer::Field, "a.avi".into()), (Layer::Intensity, "b.avi".into())], "names in it");
+		assert_eq!(archive, Some(at("both.zip")));
+		let mut field = ExportDialog::new(&app, ExportKindChoice::Field);
+		field.format = avi;
+		assert!(matches!(field.plan(&app), Some(Plan::Frames { archive: None, .. })), "one video is no archive");
 	}
 
 	#[test]

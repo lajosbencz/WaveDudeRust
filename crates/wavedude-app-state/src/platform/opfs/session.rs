@@ -1,4 +1,5 @@
-//! This tab's session folder and the storage calls the spill and the spool share.
+//! This tab's session folder, in which the spill worker keeps the frames past memory, and the storage calls of the
+//! spool.
 
 use std::cell::OnceCell;
 use std::io;
@@ -12,9 +13,10 @@ use web_sys::{
 	FileSystemDirectoryHandle, FileSystemGetDirectoryOptions, FileSystemRemoveOptions, LockOptions, StorageEstimate,
 };
 
+use wavedude_spill_worker::{FOLDER, FailureKind};
+
 use crate::platform::web::describe;
 
-const ROOT: &str = "wavedude-spill";
 const LOCK_PREFIX: &str = "wavedude-spill-";
 
 thread_local! {
@@ -30,12 +32,8 @@ pub(super) fn session() -> Option<FileSystemDirectoryHandle> {
 /// A failed storage operation; a full quota as [`io::ErrorKind::QuotaExceeded`], a missing entry as
 /// [`io::ErrorKind::NotFound`].
 pub(super) fn storage_error(e: &JsValue) -> io::Error {
-	let kind = match Reflect::get(e, &"name".into()).ok().and_then(|v| v.as_string()).as_deref() {
-		Some("QuotaExceededError") => io::ErrorKind::QuotaExceeded,
-		Some("NotFoundError") => io::ErrorKind::NotFound,
-		_ => io::ErrorKind::Other,
-	};
-	io::Error::new(kind, format!("browser storage: {}", describe(e)))
+	let name = Reflect::get(e, &"name".into()).ok().and_then(|v| v.as_string());
+	io::Error::new(FailureKind::of_name(name.as_deref()).into(), format!("browser storage: {}", describe(e)))
 }
 
 pub(super) async fn awaited<T: JsCast>(promise: Promise) -> io::Result<T> {
@@ -83,7 +81,7 @@ pub(super) async fn prepare() -> io::Result<u64> {
 	hold(&format!("{LOCK_PREFIX}{session}")).await;
 
 	let root: FileSystemDirectoryHandle = awaited(navigator.storage().get_directory()).await?;
-	let spill = folder(&root, ROOT, true).await?;
+	let spill = folder(&root, FOLDER, true).await?;
 	for name in entries(&spill).await? {
 		remove_if_free(&spill, &name).await;
 	}

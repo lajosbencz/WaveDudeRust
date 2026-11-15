@@ -9,7 +9,7 @@ use std::fmt;
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
 use std::path::{Component, Path};
 use std::sync::{Arc, Mutex};
-use std::task::Poll;
+use std::task::{Context, Poll, Waker};
 
 use rawzip::ZipArchiveWriter;
 use rawzip::path::ZipFilePath;
@@ -112,6 +112,19 @@ impl ZipFs {
 		Ok(())
 	}
 
+	/// [`write_entry`](Self::write_entry) of chunks `next` gives at once, as a file read in pieces does.
+	pub fn write_entry_sync(
+		&mut self,
+		path: &Path,
+		mut next: impl FnMut() -> io::Result<Option<Vec<u8>>>,
+	) -> io::Result<()> {
+		let entry = std::pin::pin!(self.write_entry(path, async || next()));
+		match entry.poll(&mut Context::from_waker(Waker::noop())) {
+			Poll::Ready(written) => written,
+			Poll::Pending => unreachable!("chunks given at once never wait"),
+		}
+	}
+
 	/// Writes the central directory and closes the archive's file; files closed later fail.
 	pub fn finish(&self) -> io::Result<()> {
 		let writer = lock(&self.archive).writer.take().ok_or_else(finished)?;
@@ -211,7 +224,6 @@ impl OutputFs for ZipFs {
 mod tests {
 	use std::io::Read;
 	use std::sync::atomic::{AtomicU64, Ordering};
-	use std::task::{Context, Waker};
 
 	use ::zip::CompressionMethod;
 	use half::f16;
@@ -277,9 +289,8 @@ mod tests {
 		let plan = ExportPlan {
 			project: &project,
 			format: ExportFormat::Png,
-			layers: ExportLayers::Both,
 			fs,
-			path: "run/run.png".into(),
+			outputs: crate::naming::layer_outputs(Path::new("run/run.png"), ExportLayers::Both),
 			still: None,
 			frame_count: 5,
 			traces: &[],
@@ -437,6 +448,17 @@ mod tests {
 		let (name, crc, read) = &entries[1];
 		assert_eq!((name.as_str(), *crc), ("v/big.bin", crc32(&data)));
 		assert!(*read == data, "the entry holds the streamed bytes");
+	}
+
+	#[test]
+	fn an_entry_of_chunks_given_at_once_is_written_without_a_runtime() {
+		let mem = MemFs::new();
+		let mut zip = ZipFs::new(mem.create(Path::new("a.zip")).unwrap(), time());
+		let mut chunks = [b"ab".to_vec(), b"cd".to_vec()].into_iter();
+		zip.write_entry_sync(Path::new("v/x.bin"), || Ok(chunks.next())).unwrap();
+		zip.finish().unwrap();
+		let entries = entries(mem.take(Path::new("a.zip")).unwrap());
+		assert_eq!(entries, [("v/x.bin".to_owned(), crc32(b"abcd"), b"abcd".to_vec())]);
 	}
 
 	#[test]

@@ -1,0 +1,217 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+title: "WaveDude Rust"
+type: software
+abstract: >-
+  A cross-platform 2D wave-equation simulator written in Rust:
+  scenes from images and optical parts, point and composite sources,
+  field and intensity views, probes with live graphs, and video export.
+authors:
+  - family-names: Bencz
+    given-names: Lajos
+repository-code: "https://github.com/lajosbencz/WaveDudeRust"
+license: GPL-3.0-or-later
+version: 0.3.4
+date-released: "2026-11-15"
+keywords:
+  - wave equation
+  - wave simulation
+  - finite difference
+  - optics
+  - photonics
+  - Rust
+references:
+  - type: software
+    title: "WaveDude Next"
+    authors:
+      - family-names: Graef
+        given-names: Alexander
+    repository-code: "https://github.com/graealex/WaveDudeNext"
+    license: GPL-3.0-only
+    notes: "Reimplemented; its project files open and save here, and its colour schemes, example projects, UI strings and manual content are carried over (NOTICE.md)."
+  - type: software
+    title: "Wave Dude 2D"
+    authors:
+      - family-names: Vleggaar
+        given-names: Jeroen
+        alias: Huygens Optics
+    url: "https://www.youtube.com/@HuygensOptics"
+    notes: "Predecessor of WaveDude Next; its configuration.json project files open here."
+  - type: software
+    title: "WaveSimulator2D"
+    authors:
+      - alias: "0x23"
+    repository-code: "https://github.com/0x23/WaveSimulator2D"
+    notes: "Numerical approach followed by Wave Dude 2D."
+  - type: article
+    authors:
+      - family-names: Berenger
+        given-names: Jean-Pierre
+    title: "A perfectly matched layer for the absorption of electromagnetic waves"
+    journal: "Journal of Computational Physics"
+    volume: 114
+    issue: 2
+    start: 185
+    end: 200
+    year: 1994
+    doi: "10.1006/jcph.1994.1159"
+  - type: article
+    authors:
+      - family-names: Mur
+        given-names: Gerrit
+    title: "Absorbing boundary conditions for the finite-difference approximation of the time-domain electromagnetic-field equations"
+    journal: "IEEE Transactions on Electromagnetic Compatibility"
+    volume: 23
+    issue: 4
+    start: 377
+    end: 382
+    year: 1981
+    doi: "10.1109/TEMC.1981.303970"
+  - type: article
+    authors:
+      - family-names: Tam
+        given-names: Christopher K. W.
+      - family-names: Webb
+        given-names: Jay C.
+    title: "Dispersion-relation-preserving finite difference schemes for computational acoustics"
+    journal: "Journal of Computational Physics"
+    volume: 107
+    issue: 2
+    start: 262
+    end: 281
+    year: 1993
+    doi: "10.1006/jcph.1993.1142"
+  - type: article
+    authors:
+      - family-names: Dablain
+        given-names: M. A.
+    title: "The application of high-order differencing to the scalar wave equation"
+    journal: "Geophysics"
+    volume: 51
+    issue: 1
+    start: 54
+    end: 66
+    year: 1986
+    doi: "10.1190/1.1442040"
+  - type: article
+    authors:
+      - family-names: Komatitsch
+        given-names: Dimitri
+      - family-names: Martin
+        given-names: Roland
+    title: "An unsplit convolutional perfectly matched layer improved at grazing incidence for the seismic wave equation"
+    journal: "Geophysics"
+    volume: 72
+    issue: 5
+    start: SM155
+    end: SM167
+    year: 2007
+    doi: "10.1190/1.2757586"
+  - type: book
+    authors:
+      - family-names: LeVeque
+        given-names: Randall J.
+    title: "Finite Difference Methods for Ordinary and Partial Differential Equations: Steady-State and Time-Dependent Problems"
+    publisher:
+      name: "Society for Industrial and Applied Mathematics"
+    year: 2007
+    doi: "10.1137/1.9780898717839"
+  - type: book
+    authors:
+      - family-names: Taflove
+        given-names: Allen
+      - family-names: Hagness
+        given-names: Susan C.
+    title: "Computational Electrodynamics: The Finite-Difference Time-Domain Method"
+    edition: "3"
+    publisher:
+      name: "Artech House"
+    year: 2005
+  - type: article
+    authors:
+      - family-names: Patra
+        given-names: Michael
+      - family-names: Karttunen
+        given-names: Mikko
+    title: "Stencils with isotropic discretization error for differential operators"
+    journal: "Numerical Methods for Partial Differential Equations"
+    volume: 22
+    issue: 4
+    start: 936
+    end: 953
+    year: 2006
+    doi: "10.1002/num.20129"
+  - type: article
+    authors:
+      - family-names: Roden
+        given-names: J. Alan
+      - family-names: Gedney
+        given-names: Stephen D.
+    title: "Convolution PML (CPML): An efficient FDTD implementation of the CFS-PML for arbitrary media"
+    journal: "Microwave and Optical Technology Letters"
+    volume: 27
+    issue: 5
+    start: 334
+    end: 339
+    year: 2000
+    url: "https://doi.org/10.1002/1098-2760(20001205)27:5%3C334::AID-MOP14%3E3.0.CO;2-A"
+  - type: conference-paper
+    authors:
+      - family-names: Pasalic
+        given-names: Damir
+      - family-names: McGarry
+        given-names: Ray
+    title: "Convolutional perfectly matched layer for isotropic and anisotropic acoustic wave equations"
+    collection-title: "SEG Technical Program Expanded Abstracts 2010"
+    start: 2925
+    end: 2929
+    year: 2010
+    doi: "10.1190/1.3513453"
+  - type: article
+    authors:
+      - family-names: Schneider
+        given-names: John B.
+      - family-names: Wagner
+        given-names: Christopher L.
+      - family-names: Broschat
+        given-names: Shira L.
+    title: "Implementation of transparent sources embedded in acoustic finite-difference time-domain grids"
+    journal: "The Journal of the Acoustical Society of America"
+    volume: 103
+    issue: 1
+    start: 136
+    end: 142
+    year: 1998
+    doi: "10.1121/1.421084"
+  - type: article
+    authors:
+      - family-names: Schneider
+        given-names: John B.
+      - family-names: Wagner
+        given-names: Christopher L.
+      - family-names: Ramahi
+        given-names: Omar M.
+    title: "Implementation of transparent sources in FDTD simulations"
+    journal: "IEEE Transactions on Antennas and Propagation"
+    volume: 46
+    issue: 8
+    start: 1159
+    end: 1168
+    year: 1998
+    doi: "10.1109/8.718570"
+  - type: article
+    authors:
+      - family-names: Courant
+        given-names: Richard
+      - family-names: Friedrichs
+        given-names: Kurt
+      - family-names: Lewy
+        given-names: Hans
+    title: "Ueber die partiellen Differenzengleichungen der mathematischen Physik"
+    journal: "Mathematische Annalen"
+    volume: 100
+    issue: 1
+    start: 32
+    end: 74
+    year: 1928
+    doi: "10.1007/BF01448839"

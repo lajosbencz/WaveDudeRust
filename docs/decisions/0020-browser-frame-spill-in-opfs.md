@@ -1,7 +1,8 @@
 # 0020: The browser spills frames past memory to the origin private file system
 
 Status: accepted, 2026-11-13; writes in flight changed 2026-11-14; reading ahead added 2026-11-14; the browser's
-memory budget added 2026-11-15.
+memory budget added 2026-11-15; the spill worker added 2026-11-15; the RAM cache size in the browser added
+2026-11-16.
 Amends [0015](0015-core-builds-for-wasm.md): on wasm32 a store keeps the frames past its memory budget, as
 natively, instead of refusing them.
 
@@ -18,12 +19,15 @@ asynchronous too and ask more of the user or the code.
 - One store, two spills: the store logic (budget, which frames spill, bookkeeping, generations, the frame kept
   through a clear) is shared; natively the spill is the file, on wasm32 a pending spill whose writes and reads return
   tokens the store settles (`SpillBackend` and `SpillFactory` in
-  [`pending.rs`](../../crates/wavedude-core/src/run/pending.rs)). The core takes no browser API: the OPFS backend lives in the app state's platform layer
-  ([`spill.rs`](../../crates/wavedude-app-state/src/platform/opfs/spill.rs)).
-- OPFS from the main thread: one file per frame at `wavedude-spill/<session>/<store>-<generation>/<frame>`, written
-  whole and closed (`createWritable` copies an existing file at each commit, so frames are not packed into one file),
-  read with `getFile`. A generation's folder is removed at a clear, the store's at its drop, after their writes in
-  flight.
+  [`pending.rs`](../../crates/wavedude-core/src/run/pending.rs)). The core takes no browser API: the page's backend lives in the app state's platform layer
+  ([`spill.rs`](../../crates/wavedude-app-state/src/platform/opfs/spill.rs)) and posts each write, read and removal
+  to the spill worker, a dedicated worker of its own crate
+  ([`wavedude-spill-worker`](../../crates/wavedude-spill-worker/src/worker.rs)), completing the tokens as it answers.
+- One file per store generation at `wavedude-spill/<session>/<store>-<generation>`, opened at its first write with a
+  synchronous access handle, which only a dedicated worker has. Frames are appended and their places indexed, as the
+  frames held in memory are never written. The worker handles the page's messages in order, so a generation's file
+  is closed and removed at a clear, the store's files at its drop, after the writes posted before (The spill worker,
+  below).
 - A spilled frame stays in memory while its write is in flight; the pumped run yields before a capture while 4
   writes are. A read not back yet is refused as pending: the preview keeps the picture shown and asks again. At most 2
   reads are in flight; a frame asked for beyond them waits in one slot, which the next frame asked for takes over, and
@@ -34,15 +38,14 @@ asynchronous too and ask more of the user or the code.
   fit fails its run at the first frame the run makes, which the page's store refuses (natively the store fails at
   the run's start: the run worker's store opens before the page's, which answers no sooner than its first frame).
   A write refused for quota fails the run.
-- No Web Worker with synchronous access handles until scrubbing spilled frames proves slow: measured, a read takes
-  under 1 ms with WebGPU ([`docs/measurements.md`](../measurements.md), The browser's frame spill).
 
 ## Consequences
 
 - Runs in the browser are bounded by the storage quota, not by memory.
 - Web Locks need web-sys's unstable APIs: [`.cargo/config.toml`](../../.cargo/config.toml) sets
   `web_sys_unstable_apis` for wasm32.
-- A browser without OPFS or `createWritable` runs what fits in memory and fails a run that would spill.
+- A browser without OPFS, `createWritable` (the session's check, for the exports' spool) or synchronous access
+  handles runs what fits in memory and fails a run that would spill.
 - The export sees spilled frames as pending and waits for them ([0025](0025-browser-exports.md)).
 
 ## Writes in flight (added 2026-11-14)
@@ -95,10 +98,11 @@ budget can stand on:
   browser at about 500 to 700 MB in practice, its address space fragmented; one 5 GB Android phone got 4 GiB (bug
   269777).
 
-So the frames take an eighth of the device's memory, at most 512 MiB (`web_frame_memory` in
-[`live.rs`](../../crates/wavedude-app-state/src/live.rs)): 128 MiB where the browser does not tell, 256 MiB at 2 GiB,
-512 MiB from 4 GiB on. The RAM cache size takes its share of that. The frames past it spill as above, so a run is no
-shorter for it; the memory warning asks sooner.
+So the frames take what the platform tells, an eighth of the device's memory, at most 512 MiB (`web_frame_memory` in
+[`live.rs`](../../crates/wavedude-app-state/src/live.rs)): 128 MiB where the browser does not tell (Firefox, Safari),
+256 MiB at 2 GiB, 512 MiB from 4 GiB on. No heuristic stands in where it does not tell. That is the RAM cache size's
+Auto (The RAM cache size in the browser, below). The frames past it spill as above, so a run is no shorter for it;
+the memory warning asks sooner.
 
 The mirror's planes are reserved fallibly: a frame whose memory the browser refuses lets go of the mirror and fails
 the run with the reason, instead of the allocation aborting the page's module. The run worker checks a grid's CPU
@@ -106,3 +110,47 @@ engine against the device's memory as natively (`engine_fits`), reading `navigat
 which has it too ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/WorkerNavigator/deviceMemory)); where the
 browser does not tell, against the 4 GiB address space alone, as a grid too large only fails its run, while the
 frames past an assumed memory only spill.
+
+## The spill worker (added 2026-11-15)
+
+The page wrote one file per frame through `createWritable`, a file created and closed per frame. Firefox charges
+10 to 12 ms for that, whatever the bytes: an export run of Example01, 1186 frames of 2 MB spilled, took 15 to 18 s in
+Firefox against 3.3 s in Chrome. Measured with 2 MB frames (Firefox 159, Chrome 158;
+[`docs/measurements.md`](../measurements.md), The browser's frame spill writes):
+
+| | Firefox | Chrome |
+|---|---|---|
+| The page, `createWritable`, one file per frame, 4 in flight | 12.2 ms (164 MB/s) | 1.4 ms |
+| A worker, `createSyncAccessHandle`, one file per frame | 10.0 ms | 0.7 ms |
+| A worker, one sync access handle, the frames written at offsets of one file | 0.52 ms (3.8 GB/s) | 0.33 ms |
+
+A read from the packed file takes 0.1 ms. The cost is the file, not the writing: only one file per store generation,
+open for its life, makes Firefox's spill fast, and only a dedicated worker can hold its handle.
+
+- `wavedude-spill-worker` is a dedicated module worker, loaded by `spill-worker.js` with the page's build in its
+  query, as the run worker is (0024). Its library is the protocol (`ToSpill`, `FromSpill`, postcard beside a
+  transferred buffer): the page posts a write with the frame's planes copied into one `ArrayBuffer`, a read, or a
+  removal; the worker answers each write and read by its id, a read with its planes transferred back.
+- The page keeps the session: its folder, its Web Lock, the removal of gone tabs' sessions and the free storage
+  estimate. It names the folder to the worker once ready, before `SpillFactory::poll_ready` is; the worker opens
+  nothing before.
+- `Ready` carries the protocol's `VERSION` and stays the first message; the worker has no behaviour but its protocol,
+  so it carries no build. A worker that does not start, fails, panics, sends what the page cannot read or speaks
+  another version fails every operation in flight and every later one with the reason, and a store's spill is
+  refused once the reason is known; the run fails with it. The page ends such a worker; one that cannot read a
+  message closes and removes its files before it says so.
+- The core is unchanged: its bounds on writes and reads in flight and on reading ahead hold as before.
+- The exports' spool stays on the page ([0025](0025-browser-exports.md)): one file per export, written in large
+  appends.
+
+## The RAM cache size in the browser (added 2026-11-16)
+
+The RAM cache size's Auto is the budget above, its size shown in the menu entry; the user may pick a size in its
+place, 256 MiB, 512 MiB, 1 GiB or 2 GiB (`WEB_RAM_CACHE_SIZES`, the `FrameMemoryBytes` setting). The page's wasm32
+memory holds 4 GiB at most, its module and other buffers beside the frames, so 2 GiB is the ceiling. The budget, the
+status bar and the memory warning follow the size; the warning's lever to Auto goes back to the detected memory. A
+frame whose memory the browser refuses fails the run with a message pointing to Simulation > RAM cache size.
+
+- The size is the page's mirror's: the run worker's `Host` runs each goal at Auto on no memory, so its store keeps no
+  frame and posts each to the page ([0024](0024-browser-run-in-a-web-worker.md)).
+- The desktop's share (`FrameMemoryPercent`) is not offered: a stored one is logged and cleared at load.

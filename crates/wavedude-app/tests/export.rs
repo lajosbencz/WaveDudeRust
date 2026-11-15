@@ -142,7 +142,7 @@ fn a_frame_export_proposes_the_other_layers_name_after_one_was_made() {
 	ok(&mut harness);
 	exported(&mut harness);
 	let app = harness.state().app();
-	let name = |choice| request(app, choice).path.file_name().unwrap().to_string_lossy().into_owned();
+	let name = |choice| request(app, choice).outputs[0].1.file_name().unwrap().to_string_lossy().into_owned();
 	assert!(name(ExportKindChoice::FieldFrame).starts_with("example_field_"), "{}", name(ExportKindChoice::FieldFrame));
 	assert!(
 		name(ExportKindChoice::IntensityFrame).starts_with("example_intensity_"),

@@ -1,22 +1,20 @@
-//! The browser's exports: the output is a file name, downloaded, so nothing is in the way to ask about; the job is
-//! stepped on the page from [`Exports::poll`], at once again while it works, once woken while it waits; the probe
-//! CSV's name comes from the export dialog. A completed export's file is offered in a modal whose Download button
-//! starts the download, in the user's click (decision 0025).
+//! The browser's exports: each output is a file name, and an export of several files is one ZIP archive, downloaded,
+//! so nothing is in the way to ask about; the job is stepped on the page from [`Exports::poll`], at once again while
+//! it works, once woken while it waits; the probe CSV's name comes from the export dialog. A completed export's file
+//! is offered in a modal whose Download button starts the download, in the user's click (decision 0025).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use eframe::egui::{self, Id, RichText, Ui};
+use eframe::egui::{self, RichText, Ui};
 use wavedude_app_state::Event;
 use wavedude_app_state::platform::{Download, H264Support, Spool};
 use wavedude_export::ExportFormat;
 
 use super::super::modal::{Modal, Modals};
-use super::super::text_box::{Kind, text_box};
 use super::super::theme::Palette;
-use super::{ExportDialog, Exports, Subject};
+use super::{ExportDialog, Exports, Subject, Target};
 use crate::App;
-use crate::export::delivery::typed_name;
 use crate::export::{self, Outcome, Plan, Runner, Started, Status, Work};
 
 /// The running export, and the spool of the last one, which holds its download until the next export starts.
@@ -26,9 +24,22 @@ pub(super) struct Running {
 	spool: Option<Arc<Spool>>,
 }
 
-/// The dialog's text of the proposed output: its file name.
+/// An export of several files is always archived, as it leaves as one download.
+pub(super) const ARCHIVE_CHOSEN: bool = false;
+
+/// The dialog's text of a proposed output: its file name.
 pub(super) fn shown(path: &Path) -> String {
 	path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+/// The file name typed, with extension `ext` when it has none; `None` without a name.
+pub(super) fn typed(text: &str, ext: &str) -> Option<PathBuf> {
+	export::delivery::typed_name(text, ext)
+}
+
+/// An export of several files goes into one archive: always.
+pub(super) fn archived(_: &App) -> bool {
+	true
 }
 
 impl Exports {
@@ -96,23 +107,15 @@ impl ExportDialog {
 	/// The dialog naming probe `probe`'s CSV.
 	fn csv(app: &App, probe: usize) -> Self {
 		let (start, probe) = export::probe_csv_request(app, probe);
-		Self { subject: Subject::Csv(probe), format: 0, path: shown(&start), names: Vec::new() }
+		let outputs = vec![shown(&start)];
+		Self { subject: Subject::Csv(probe), format: 0, outputs, archive: String::new(), names: Vec::new() }
 	}
 
-	/// The file name box; whether it has the focus.
-	pub(super) fn output_row(&mut self, ui: &mut Ui, title: &str) -> bool {
-		let kind = Kind { live: true, ..Kind::default() };
-		let edited = text_box(ui, Id::unique("ExportPath"), &self.path, ui.available_width(), kind, title);
-		if let Some(path) = edited.applied {
-			self.path = path;
-		}
-		edited.response.has_focus()
-	}
+	/// Nothing: the browser has no browse dialog.
+	pub(super) fn take_browsed(&mut self) {}
 
-	/// The file name typed, with the format's extension when it has none.
-	pub(super) fn output(&self) -> Option<PathBuf> {
-		typed_name(&self.path, self.extension())
-	}
+	/// Nothing: the browser has no browse dialog.
+	pub(super) fn browse_button(&self, _: &mut Ui, _: Target) {}
 
 	/// The H.264 profile row of MP4, or why the export cannot start in the browser: a run's export without the private
 	/// file system to spool it in, MP4 without an encoder; whether it can. The browser is asked which profiles it
