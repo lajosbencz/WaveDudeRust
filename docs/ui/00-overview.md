@@ -102,8 +102,14 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 
 ## UI zoom and DPI
 
-- View > UI zoom: 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x, 2.5x, 3x. Live. Persisted (`UiZoom`, default 1).
+- View > UI zoom: 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x, 2.5x, 3x. Live. Persisted (`UiZoom`, default 1, on a touch-first device 2).
   Command-line `--zoom=<factor>` (0.5..8) sets it at start.
+- A touch-first device is one whose primary pointer is a finger, decided once at start: in the browser the media
+  query `(pointer: coarse)` (phones and tablets, not a touch-screen laptop), natively never. The default zoom is
+  2x there (`TOUCH_ZOOM`) and 1x elsewhere; the setting is stored only when it differs from its device's default,
+  so an explicit 1x on a touch-first device is stored and an explicit 2x elsewhere too, and a file without
+  `UiZoom` gives the device's default. The command-line switch still wins. The same flag takes dragging from the
+  tree's rows ([`20-project-tree.md`](20-project-tree.md), Drag and drop).
 - Zoom scales every window's content (layout scale), including dialogs, popups, menus, tooltips and context
   menus. Window sizes are multiplied by the change; the window is then kept on its monitor.
 - Layout rounds to whole device pixels at the zoomed DPI: a line is 1 or 2 device pixels, never cut.
@@ -115,6 +121,21 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 - `--greyscale-text`: text without subpixel AA (used for manual figures).
 - The manual window reloads its document when a zoom change changes the text rendering mode (text sharpens a
   moment after the change, about 0.5 s).
+
+## Touch: TODO
+
+Generic touch support (egui's out-of-the-box input) is in; found in touch emulation on 2026-11-15, still open:
+
+- A second finger during an item or part drag drops the grab but leaves the item moved, as one undo step; Esc
+  reverts it. eframe pushes a primary press on every touchstart, which the unit tests do not replay.
+- A slow pinch opens the picture's context menu: the same press restarts egui's long-press timer while the first
+  finger rests. No context menu while pinching.
+- A tap does not select a tree row on a touch-first device at 2x; a long press does. Cause not found (click-only
+  row sense with the `hovered() && primary_pressed()` selection).
+- Fixed-width dialogs (first start, 560 points; Examples) are wider than a phone or tablet at 2x and cannot be
+  reached: bound their width by the screen or let them scroll.
+- The pinch's fixed point drifts about 15 px, likely as the visible rect grows from letterboxed to the whole
+  cell once zoomed.
 
 ## Languages
 

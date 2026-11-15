@@ -29,6 +29,11 @@ pub fn machine_facts() -> MachineFacts {
 	wavedude_core::run::machine_facts()
 }
 
+/// Whether the primary pointer is a finger; never on the desktop.
+pub fn touch_first() -> bool {
+	false
+}
+
 /// A file watched for changes through its folder (the file itself would be lost to an editor that replaces it).
 pub struct FileWatch {
 	path: PathBuf,

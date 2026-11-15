@@ -32,7 +32,7 @@ moved aside. An unreadable file is not a first start.
 | PreviewFrames | 1 / 2 / 4 | 1 (first start may choose 2) | View > Preview frames; memory warning |
 | PreviewSampleBytes | 1 (8-bit index) / 2 (16-bit half) | 1 (first start may choose 2) | View > Preview samples; memory warning |
 | PreviewDitherBits | 0 / 10 / 12 / 14 / 16 | 0 (first start may choose 16) | View > Preview dithering |
-| UiZoom | double 0.5..3 from the menu, up to 8 from `--zoom=` | 1.0 | View > UI zoom; command line |
+| UiZoom | double 0.5..3 from the menu, up to 8 from `--zoom=` | 1.0; 2.0 on a touch-first device (only a value that differs from the device's default is stored) | View > UI zoom; command line |
 | LastExportFolder | path | "" | any export (fallback start folder) |
 | ExportFilterIndex | int (index into the run-export filter list; out of range reads as 0) | 0 | export Save dialog |
 | PartDescriptionExpanded | bool | true | description header on any part form |

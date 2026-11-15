@@ -25,6 +25,8 @@ pub const MAX_EXPORT_HINTS: usize = 20;
 /// UI zoom bounds from the menu and from `--zoom=`.
 pub const MENU_ZOOM: (f64, f64) = (0.5, 3.0);
 pub const SWITCH_ZOOM: (f64, f64) = (0.5, 8.0);
+/// The default UI zoom of a touch-first device; 1 elsewhere.
+pub const TOUCH_ZOOM: f64 = 2.0;
 pub const DITHER_BITS: [u32; 5] = [0, 10, 12, 14, 16];
 
 /// The user's colour scheme folder in the store.
@@ -140,6 +142,7 @@ pub struct Settings {
 	pub preview_sample_bytes: u32,
 	/// One of [`DITHER_BITS`]; 0 is off.
 	pub preview_dither_bits: u32,
+	/// Defaults to [`TOUCH_ZOOM`] on a touch-first device, else 1.
 	pub ui_zoom: f64,
 	pub last_export_folder: PathBuf,
 	/// An index of [`wavedude_export::ExportFormat::ALL`], the run export's last format.
@@ -160,6 +163,9 @@ pub struct Settings {
 	pub check_for_updates: Option<bool>,
 	/// The startup page opens at each launch.
 	pub show_startup: bool,
+	/// The primary pointer is a finger, decided at the start; not stored. It sets the defaults of a device.
+	#[serde(skip)]
+	pub touch_first: bool,
 }
 
 impl Default for Settings {
@@ -194,6 +200,7 @@ impl Default for Settings {
 			h264_profile: Profile::Baseline,
 			check_for_updates: None,
 			show_startup: true,
+			touch_first: false,
 		}
 	}
 }
@@ -221,9 +228,15 @@ pub enum SettingsError {
 }
 
 impl Settings {
+	/// The defaults of a device, touch-first or not.
+	pub fn for_device(touch_first: bool) -> Self {
+		let ui_zoom = if touch_first { TOUCH_ZOOM } else { Self::default().ui_zoom };
+		Self { ui_zoom, touch_first, ..Self::default() }
+	}
+
 	/// Brings every value into its valid set.
 	pub fn normalize(&mut self) {
-		let d = Self::default();
+		let d = Self::for_device(self.touch_first);
 		if !self.window_width.is_finite() || self.window_width < 100.0 {
 			self.window_width = d.window_width;
 		}
@@ -244,29 +257,38 @@ impl Settings {
 		if !DITHER_BITS.contains(&self.preview_dither_bits) {
 			self.preview_dither_bits = 0;
 		}
-		self.ui_zoom = if self.ui_zoom.is_finite() { self.ui_zoom.clamp(SWITCH_ZOOM.0, SWITCH_ZOOM.1) } else { 1.0 };
+		self.ui_zoom =
+			if self.ui_zoom.is_finite() { self.ui_zoom.clamp(SWITCH_ZOOM.0, SWITCH_ZOOM.1) } else { d.ui_zoom };
 		self.export_hints.truncate(MAX_EXPORT_HINTS);
 		if self.export_filter_index as usize >= wavedude_export::ExportFormat::ALL.len() {
 			self.export_filter_index = 0;
 		}
 	}
 
-	/// The sparse JSON text: the version and the values that differ from the defaults.
+	/// The sparse JSON text: the version and the values that differ from the device's defaults.
 	pub fn to_sparse_json(&self) -> String {
 		let current = Self { version: VERSION, ..self.clone() };
 		let mut value = serde_json::to_value(current).expect("settings serialise");
-		let defaults = serde_json::to_value(Self::default()).expect("settings serialise");
+		let defaults = serde_json::to_value(Self::for_device(self.touch_first)).expect("settings serialise");
 		if let (Value::Object(map), Value::Object(d)) = (&mut value, &defaults) {
 			map.retain(|k, v| k == "Version" || d.get(k) != Some(v));
 		}
 		serde_json::to_string_pretty(&value).expect("settings serialise")
 	}
 
-	/// Reads a settings text; a file without a version is version 0, the format before the field.
-	pub fn from_json(text: &str) -> Result<Self, serde_json::Error> {
-		let value: Value = serde_json::from_str(text)?;
+	/// Reads a settings text of a device, the defaults of which fill what it lacks; a file without a version is
+	/// version 0, the format before the field.
+	pub fn from_json(text: &str, touch_first: bool) -> Result<Self, serde_json::Error> {
+		let mut value: Value = serde_json::from_str(text)?;
 		let versioned = value.get("Version").is_some();
+		if let (Value::Object(file), Ok(Value::Object(mut filled))) =
+			(&mut value, serde_json::to_value(Self::for_device(touch_first)))
+		{
+			filled.append(file);
+			value = Value::Object(filled);
+		}
 		let mut s: Self = serde_json::from_value(value)?;
+		s.touch_first = touch_first;
 		if !versioned {
 			s.version = 0;
 		}
@@ -282,19 +304,20 @@ impl Settings {
 
 	/// Reads the store's settings for a tool beside the app: the defaults when there are none, an error when they
 	/// are unreadable, and never the first start's choice.
-	pub fn read(store: &Store) -> Result<Self, SettingsError> {
+	pub fn read(store: &Store, touch_first: bool) -> Result<Self, SettingsError> {
 		let error = |detail: String| SettingsError::Read { location: store.location(FILE_NAME), detail };
 		match store.read(FILE_NAME) {
-			Ok(Some(text)) => Self::from_json(&text).map_err(|e| error(e.to_string())),
-			Ok(None) => Ok(Self::default()),
+			Ok(Some(text)) => Self::from_json(&text, touch_first).map_err(|e| error(e.to_string())),
+			Ok(None) => Ok(Self::for_device(touch_first)),
 			Err(e) => Err(error(e.to_string())),
 		}
 	}
 
-	/// Reads the store's settings; with none, makes the first start's choice from `facts` and writes them at once.
-	pub fn load(store: &Store, facts: impl FnOnce() -> MachineFacts) -> Loaded {
+	/// Reads the store's settings of a device; with none, makes the first start's choice from `facts` and writes
+	/// them at once.
+	pub fn load(store: &Store, touch_first: bool, facts: impl FnOnce() -> MachineFacts) -> Loaded {
 		match store.read(FILE_NAME) {
-			Ok(Some(text)) => match Self::from_json(&text) {
+			Ok(Some(text)) => match Self::from_json(&text, touch_first) {
 				Ok(settings) => Loaded { settings, first_start: false, unreadable: None },
 				Err(e) => {
 					let at = Some((e.line(), e.column()));
@@ -303,11 +326,15 @@ impl Settings {
 					tracing::error!(
 						"the settings file '{location}' could not be read: {e}\n--- the text of '{location}' ---\n{quoted}"
 					);
-					Loaded { settings: Self::default(), first_start: false, unreadable: Some(e.to_string()) }
+					Loaded {
+						settings: Self::for_device(touch_first),
+						first_start: false,
+						unreadable: Some(e.to_string()),
+					}
 				}
 			},
 			Ok(None) => {
-				let mut settings = Self::default();
+				let mut settings = Self::for_device(touch_first);
 				let facts = facts();
 				settings.apply_first_start(&facts);
 				if let Err(e) = settings.save(store) {
@@ -317,7 +344,7 @@ impl Settings {
 			}
 			Err(e) => {
 				tracing::error!("the settings file '{}' could not be read: {e}", store.location(FILE_NAME));
-				Loaded { settings: Self::default(), first_start: false, unreadable: Some(e.to_string()) }
+				Loaded { settings: Self::for_device(touch_first), first_start: false, unreadable: Some(e.to_string()) }
 			}
 		}
 	}
@@ -421,8 +448,8 @@ mod tests {
 		let v: Value = serde_json::from_str(&s.to_sparse_json()).unwrap();
 		assert_eq!(v.as_object().unwrap().len(), 3);
 		assert_eq!(v["UseGpu"], Value::Bool(false));
-		assert_eq!(Settings::from_json("{}").unwrap().version, 0, "a file before the field");
-		assert_eq!(Settings::from_json(&s.to_sparse_json()).unwrap(), s);
+		assert_eq!(Settings::from_json("{}", false).unwrap().version, 0, "a file before the field");
+		assert_eq!(Settings::from_json(&s.to_sparse_json(), false).unwrap(), s);
 	}
 
 	#[test]
@@ -435,7 +462,7 @@ mod tests {
 		let names: Vec<_> =
 			std::fs::read_dir(dir.path().join("sub")).unwrap().map(|e| e.unwrap().file_name()).collect();
 		assert_eq!(names, [FILE_NAME], "no temporary file is left");
-		assert_eq!(Settings::load(&store, wavedude_core::run::machine_facts).settings, Settings::default());
+		assert_eq!(Settings::load(&store, false, wavedude_core::run::machine_facts).settings, Settings::default());
 	}
 
 	#[test]
@@ -474,6 +501,53 @@ mod tests {
 		assert_eq!(middle.preview_quality(), PreviewQuality::DEFAULT);
 	}
 
+	fn stores_zoom(s: &Settings) -> bool {
+		let stored: Value = serde_json::from_str(&s.to_sparse_json()).unwrap();
+		stored.get("UiZoom").is_some()
+	}
+
+	#[test]
+	fn the_ui_zoom_defaults_by_device_and_only_a_differing_zoom_is_stored() {
+		assert!(Settings::for_device(true).ui_zoom > Settings::for_device(false).ui_zoom);
+		assert!((MENU_ZOOM.0..=MENU_ZOOM.1).contains(&TOUCH_ZOOM));
+		let dir = tempfile::tempdir().unwrap();
+		for touch_first in [false, true] {
+			let default = Settings::for_device(touch_first);
+			let unzoomed = Settings::from_json("{}", touch_first).unwrap();
+			assert_eq!(
+				(unzoomed.ui_zoom, unzoomed.touch_first),
+				(default.ui_zoom, touch_first),
+				"a file without a zoom"
+			);
+			assert!(!stores_zoom(&default), "a default is not written");
+			let default_zoom = default.ui_zoom;
+			let other = Settings::for_device(!touch_first).ui_zoom;
+			let chosen = Settings { ui_zoom: other, ..default };
+			assert!(stores_zoom(&chosen), "a zoom that differs from the device's default is");
+			assert_eq!(Settings::from_json(&chosen.to_sparse_json(), touch_first).unwrap(), chosen);
+
+			let store = Store::in_dir(dir.path().join(format!("touch-first-{touch_first}")));
+			let first = Settings::load(&store, touch_first, || facts(20, 16));
+			assert!(first.first_start);
+			assert_eq!(first.settings.ui_zoom, Settings::for_device(touch_first).ui_zoom, "the first start");
+			let existing = Settings::load(&store, touch_first, || panic!("not a first start"));
+			assert_eq!(existing.settings.ui_zoom, default_zoom, "a file without a zoom");
+			assert!(existing.settings.touch_first == touch_first);
+			chosen.save(&store).unwrap();
+			let again = Settings::load(&store, touch_first, || panic!("not a first start"));
+			assert_eq!(again.settings.ui_zoom, other, "an explicit zoom is kept");
+		}
+	}
+
+	#[test]
+	fn a_zoom_that_is_no_number_falls_back_to_the_devices_default() {
+		for touch_first in [false, true] {
+			let mut s = Settings { ui_zoom: f64::NAN, ..Settings::for_device(touch_first) };
+			s.normalize();
+			assert_eq!(s.ui_zoom, Settings::for_device(touch_first).ui_zoom);
+		}
+	}
+
 	#[test]
 	fn recent_and_hints() {
 		let mut s = Settings::default();
@@ -501,12 +575,12 @@ mod tests {
 		let dir = tempfile::tempdir().unwrap();
 		let store = Store::in_dir(dir.path().to_owned());
 		let path = dir.path().join(FILE_NAME);
-		assert_eq!(Settings::read(&store).unwrap(), Settings::default());
+		assert_eq!(Settings::read(&store, false).unwrap(), Settings::default());
 		assert!(!path.exists(), "a tool makes no first start");
 		let s = Settings { use_openh264: Some(false), ..Settings::default() };
 		s.save(&store).unwrap();
-		assert_eq!(Settings::read(&store).unwrap().use_openh264, Some(false));
+		assert_eq!(Settings::read(&store, false).unwrap().use_openh264, Some(false));
 		std::fs::write(&path, "{").unwrap();
-		assert!(Settings::read(&store).is_err());
+		assert!(Settings::read(&store, false).is_err());
 	}
 }

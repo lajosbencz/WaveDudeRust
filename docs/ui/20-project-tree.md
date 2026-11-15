@@ -134,6 +134,8 @@ on the target alone.
   window: a dropped image becomes the scene image, a project file (`.wdproj`, `configuration.json`, `.wdscheme`) opens
   ([`10-menus-and-shortcuts.md`](10-menus-and-shortcuts.md), File dropped on the window).
 - Settings rows (Scene, Simulation, Display) can be dragged (carry their XML); they do not reorder.
+- On a touch-first device ([`00-overview.md`](00-overview.md), UI zoom and DPI) rows sense clicks alone, so that a
+  finger's drag scrolls the tree; dragging from the tree is unavailable there and Cut, Copy and Paste replace it.
 
 ## Clipboard (from the tree's point of view)
 

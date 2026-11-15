@@ -17,7 +17,7 @@ use web as imp;
 
 pub use imp::{
 	FileWatch, HAS_EXPORTS, HAS_PATHS, HAS_UPDATER, LogGuard, Store, init_log, install_panic_hook, machine_facts,
-	take_crash_report, write,
+	take_crash_report, touch_first, write,
 };
 /// The browser's spill of the frames past memory, natively the core's spill file; the browser's store of an
 /// export's files.

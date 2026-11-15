@@ -54,7 +54,7 @@ You can select several rows: Ctrl+click adds a row or removes it (Insert or Ctrl
 
 The row's context menu has the same commands as the buttons and more: Add source, Add part and Add probe; Add to or remove from selection and Select all; Enabled, Duplicate (Ctrl+D), Cut, Copy, Paste and Remove; Move up and Move down; and on a probe, Export probe data as CSV.
 
-Objects can be dragged: drag a row within its group to reorder, or onto a picture to put a copy where you drop it. Cut, copy and paste (Ctrl+X, Ctrl+C, Ctrl+V) work on objects too, and the clipboard holds them as text, so a source can be pasted into a text editor and back. A pasted object lands behind the selected row and is renamed only when its name is already taken. A project file dropped anywhere on the window opens it; see [Dropping files](#dropping-files). F2 renames the row in place; Enter on a row moves the keyboard focus into its form.
+Objects can be dragged: drag a row within its group to reorder, or onto a picture to put a copy where you drop it. On a phone or tablet the rows do not drag, so that your finger scrolls the tree; use Cut and Paste instead. Cut, copy and paste (Ctrl+X, Ctrl+C, Ctrl+V) work on objects too, and the clipboard holds them as text, so a source can be pasted into a text editor and back. A pasted object lands behind the selected row and is renamed only when its name is already taken. A project file dropped anywhere on the window opens it; see [Dropping files](#dropping-files). F2 renames the row in place; Enter on a row moves the keyboard focus into its form.
 
 Every change can be undone (Ctrl+Z) and redone (Ctrl+Y or Ctrl+Shift+Z) without limit, moves on the pictures included; a text box keeps its own undo while you type in it.
 
@@ -76,7 +76,7 @@ The preview: the field and intensity pictures of the example project. <figure na
 
 Click a handle to select its object; the tree and the Properties pane follow. Click on empty space to deselect, or drag there to select everything inside the rectangle, Shift adding to the selection and Ctrl toggling it; Ctrl+click adds or removes a single object. Del removes the selected objects. Esc during a drag puts everything back where it was. A pointer resting on a handle shows what the handle is and how to move it. The Display settings have Handles in the preview and Labels in the preview, which hide the handles or the names of everything but the selected object.
 
-The mouse wheel over a picture zooms both pictures in on the point under the pointer, and out again down to the whole canvas; drag with the middle button to move a zoomed view.
+The mouse wheel over a picture zooms both pictures in on the point under the pointer, and out again down to the whole canvas; drag with the middle button to move a zoomed view. On a touch screen, pinch to zoom and drag with two fingers to move a zoomed view. A second finger on the screen puts back whatever the first was dragging, so a pinch never changes your project.
 
 A picture changes only when a frame for your position is ready; until then the last picture stays. When you edit the scene, a source or a part, every frame is made again with your change, the one you are on first (Simulation > Re-run automatically after edits); during a drag the pictures hold the last frame made until a new one is ready. A long wait dims the pictures under a spinner. Moving a probe or changing its graph needs no new run.
 
@@ -205,7 +205,7 @@ The View menu. Its settings belong to the program, not to the project, and are k
 
 1. **Panes**: Shows or hides the Project, Properties, Preview and Messages panes. The Messages pane lists the program's log with a search box, a filter per level and Copy for a bug report.
 2. **Theme**: System, Light or Dark; System follows the operating system's choice, and follows it while the program runs.
-3. **UI zoom**: 0.5x to 3x: the size of the program's windows, menus and text, for a large or a very sharp screen; 1x is the screen's own scale. It applies at once, the window grows or shrinks with it and stays on its monitor, and it is kept. The preview pictures keep the screen's pixels at any zoom.
+3. **UI zoom**: 0.5x to 3x: the size of the program's windows, menus and text, for a large or a very sharp screen; 1x is the screen's own scale. It applies at once, the window grows or shrinks with it and stays on its monitor, and it is kept. The preview pictures keep the screen's pixels at any zoom. On a phone or tablet, whose main pointer is a finger, it starts at 2x instead of 1x; a zoom you choose is kept, 1x included.
 4. **Language**: System, English, Deutsch, Francais or Nederlands; the program switches at once.
 5. **Preview resolution**: Full, Half or Quarter: the preview's run computes the canvas at a reduced size, faster and with less memory, for a weaker machine. An export always uses the full size.
 6. **Preview frames**: Full, every second or every fourth frame kept by the preview's run; the timeline does not change.
@@ -681,7 +681,7 @@ The form of a point probe of the field. <figure name="properties-probe"/>
 19. **Step axis**: Running, a sliding window of the last steps, or Full, the whole run; point probes and counting detectors only.
 20. **Window**: Width of the sliding step window, in steps.
 21. **Auto-scale steps**: Lets the step axis follow the samples recorded so far; point probes and counting detectors only.
-22. **Auto-scale values**: Fits the value axis to the data instead of the fixed minimum and maximum.
+22. **Auto-scale values**: Fits the value axis to the data instead of the fixed minimum and maximum, but its top is never below the value the picture shows brightest, so a signal the picture renders black stays small.
 23. **Value axis**: A linear or a logarithmic value axis; intensity probes only, the field is always linear, its amplitude axis symmetric about zero.
 24. **Decades**: Decades a logarithmic value axis spans below its top; smaller values, zero included, sit on the bottom line.
 25. **Value minimum**: Lower bound of the value axis when it is not auto-scaled.

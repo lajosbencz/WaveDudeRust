@@ -68,7 +68,12 @@ Fixed colours, not themed; preview only, never exported.
 
 Both pictures share one zoom over the fit (`View` in [`wavedude-app/src/preview/view.rs`](../../crates/wavedude-app/src/preview/view.rs)): the
 wheel over a picture zooms in by a factor of 1.25 a notch, out by the same, never below the fit, up to 64x; the
-canvas point under the pointer stays where it is. A middle-button drag pans a zoomed view. The zoomed picture is
+canvas point under the pointer stays where it is. A middle-button drag pans a zoomed view. On a touch screen a pinch
+that begins over a picture (not over a popup or dialog) zooms about the fingers' centre by the same rules, and a
+two-finger drag pans a zoomed view (egui's `InputState::multi_touch`, which reports real touches alone, so it works
+on any device); the wheel is ignored meanwhile. A second finger on the screen cancels what the first started: it
+presses nothing on the pictures, a handle being dragged goes back as with Esc, a graph box goes back to where and as
+large as it was, and a marquee is dropped, so a pinch never edits. The zoomed picture is
 larger than the cell's area and is held so that no area is left empty; the handles, the graph boxes and the
 marquee follow the transform. A zoomed 16-bit picture is rendered for its visible part alone (a source window of
 the screen renderer, `LayerRequest.window` in canvas pixels, divided by the resolution divisor into stored samples),
@@ -150,7 +155,7 @@ positions clamped inside the canvas.
 | Drag a lens surface handle | Along the axis: outward bulges, inward flattens then hollows; the rim and the other vertex stay. |
 | Drag a fibre node | Moves the node with its handles. Drag a Bezier handle: shapes the segment; a smooth node turns the opposite handle keeping its length. |
 | Drag a probe A onto its detached graph box | Picks the box up (attaches). |
-| Esc during a drag | Puts the item or group back. |
+| Esc during a drag | Puts the item or group back. A second finger down does the same for a handle, and for a graph box. |
 | Click on empty picture space | Deselects (unless Shift/Ctrl held); focuses the pane so Space plays. |
 | Drag on empty space | Marquee (faint accent fill, dashed accent edge): selects items whose whole-item handles lie inside; Shift adds, Ctrl toggles, else replaces; last becomes current. |
 | Tab | Through the handles; focusing a handle selects its item (the tree mirrors without taking focus). |
@@ -182,8 +187,21 @@ emitter dots the source layer is cached as a bitmap).
   lets the axis follow the recorded samples. Line probe: values along A..B at the frame shown.
 - Value axis: field amplitude always linear and symmetric about zero; intensity linear or logarithmic
   (Decades below the fitted top, powers-of-ten ticks, zero and smaller on the bottom line). Auto-scale values
-  fits to the data, else Value minimum/maximum; the fitted top is never below the layer's display full scale
-  (1/brightness, 1/brightness^2 for an intensity value), so signal the picture renders black is not drawn full height.
+  fits to the data, else Value minimum/maximum. The fitted top is the data's largest magnitude but no lower than
+  the floor, the picture's full scale (table), so signal the picture renders black is not drawn full height. Data
+  that is all zero, not recorded yet, or a line probe before its start step fits like one tiny sample: the axis
+  stays put from before the run until the signal exceeds the floor. With floor 0, all-zero or missing data keeps the
+  fixed range (log: Value maximum and the Decades below it). A linear axis spans 0 to the top (symmetric about zero for an amplitude or data below zero); the
+  top is drawn 1.08 times higher (log axis: 0.08 of the Decades above it). The comparison CLI uses floor 0, Next's
+  fit.
+
+  | Measurement | Floor |
+  |---|---|
+  | Amplitude | 1/brightness |
+  | Value | 1/brightness^2 |
+  | Integrated value | 1/brightness^2, one step's full scale: the total soon exceeds it, a precursor stays below |
+
+  brightness is the Display brightness of the probe's layer.
 - Data: the live run's recording cut at the frame shown (series at that step, the frame's profile; with a reduced
   frames notch the stored frame the picture shows, not the timeline frame under the playhead); after a probe
   edit the recording is made anew and the graph follows as it comes.

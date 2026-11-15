@@ -256,7 +256,8 @@ impl AppState<CoreBackend> {
 		memory: wavedude_core::run::Memory,
 	) -> std::io::Result<Self> {
 		let store = dirs.store();
-		let loaded = load_settings(&store, || Some(wavedude_core::engine::gpu::context().is_ok()), args);
+		let touch_first = platform::touch_first();
+		let loaded = load_settings(&store, touch_first, || Some(wavedude_core::engine::gpu::context().is_ok()), args);
 		let use_gpu = Arc::new(AtomicBool::new(loaded.settings.use_gpu));
 		let backend = CoreBackend::new(use_gpu.clone(), dirs.cache.join("frames"), memory)?;
 		let mut state = Self::started(loaded, store, backend, use_gpu);
@@ -269,7 +270,8 @@ impl AppState<CoreBackend> {
 	/// language and zoom of the settings and `args`.
 	#[cfg(target_arch = "wasm32")]
 	pub fn start<'a>(store: Store, args: impl IntoIterator<Item = &'a str>) -> Self {
-		let loaded = load_settings(&store, || None, args);
+		let touch_first = platform::touch_first();
+		let loaded = load_settings(&store, touch_first, || None, args);
 		let use_gpu = Arc::new(AtomicBool::new(loaded.settings.use_gpu));
 		let backend = CoreBackend::new(use_gpu.clone());
 		Self::started(loaded, store, backend, use_gpu)
@@ -284,14 +286,15 @@ impl AppState<CoreBackend> {
 }
 
 /// The settings of `store`, the first start's chosen from the machine with `has_gpu` (asked then alone; `None`
-/// when unknown), at the zoom of `args`.
+/// when unknown), at the zoom of `args`; `touch_first` sets the device's defaults.
 fn load_settings<'a>(
 	store: &Store,
+	touch_first: bool,
 	has_gpu: impl FnOnce() -> Option<bool>,
 	args: impl IntoIterator<Item = &'a str>,
 ) -> settings::Loaded {
 	let facts = || MachineFacts { has_gpu: has_gpu(), ..platform::machine_facts() };
-	let mut loaded = Settings::load(store, facts);
+	let mut loaded = Settings::load(store, touch_first, facts);
 	if let Some(zoom) = settings::zoom_switch(args) {
 		loaded.settings.ui_zoom = zoom;
 	}

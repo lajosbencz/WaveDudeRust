@@ -44,6 +44,16 @@ impl View {
 		}
 		Self { centre: (self.centre.0 - delta.x / scale, self.centre.1 - delta.y / scale), ..self }
 	}
+
+	/// A pinch's frame: zoomed by `factor` about the canvas point `at` (under the fingers' centre before the frame),
+	/// then moved by the fingers' `drag` points,
+	/// `scale` points per canvas pixel before the zoom. Fingers on one spot give a factor of 0/0, taken as 1.
+	pub fn pinched(self, factor: f32, at: (f32, f32), drag: Vec2, scale: f32, canvas: (u32, u32)) -> Self {
+		let factor = if factor.is_finite() && factor > 0. { factor } else { 1. };
+		let from = self.normalised(canvas);
+		let zoomed = from.zoomed(factor, at, canvas);
+		zoomed.panned(drag, scale * zoomed.zoom / from.zoom)
+	}
 }
 
 impl Default for View {
@@ -164,6 +174,29 @@ mod tests {
 		let panned = View { zoom: 2., centre: (200., 100.) }.panned(vec2(-50., 0.), 1.);
 		assert_eq!(panned.centre, (250., 100.));
 		assert_eq!(fit.panned(vec2(-50., 0.), 1.), fit);
+	}
+
+	#[test]
+	fn a_pinch_carries_the_point_between_the_fingers_along_with_them() {
+		let canvas = (400, 200);
+		let at = |view| CanvasTransform::new(area(200., 100.), canvas, view);
+		// the fingers' centre before the frame, and how far they carried it
+		let (centre, drag) = (pos2(104., 54.), vec2(10., -6.));
+		for from in [View::fit(canvas), View { zoom: 3., centre: (200., 100.) }] {
+			let before = at(from);
+			let point = before.to_canvas(centre);
+			for factor in [1.5, 1.] {
+				let after = at(from.pinched(factor, point, drag, before.scale, canvas));
+				let moved = after.to_screen(point.0, point.1);
+				let wanted = if from.zoom * factor > 1. { centre + drag } else { centre };
+				assert!((moved - wanted).length() < 1e-3, "zoom {} by {factor}: {moved:?} for {wanted:?}", from.zoom);
+			}
+		}
+		let fit = View::fit(canvas);
+		assert_eq!(fit.pinched(0.5, (10., 10.), vec2(5., 5.), 0.5, canvas), fit, "no zooming out past the fit");
+		let zoomed = View { zoom: 2., centre: (200., 100.) };
+		assert_eq!(zoomed.pinched(f32::NAN, (10., 10.), Vec2::ZERO, 1., canvas), zoomed, "fingers on one spot");
+		assert!(zoomed.pinched(1., (0., 0.), vec2(20., 0.), 1., canvas).centre.0 < zoomed.centre.0, "content follows");
 	}
 
 	#[test]

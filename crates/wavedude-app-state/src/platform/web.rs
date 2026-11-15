@@ -38,6 +38,13 @@ pub fn machine_facts() -> MachineFacts {
 	}
 }
 
+/// Whether the primary pointer is a finger (`(pointer: coarse)`: phones and tablets, not touchscreen laptops).
+pub fn touch_first() -> bool {
+	web_sys::window()
+		.and_then(|w| w.match_media("(pointer: coarse)").ok().flatten())
+		.is_some_and(|query| query.matches())
+}
+
 /// The JS error's name and message.
 pub(super) fn describe(e: &JsValue) -> String {
 	let field = |key: &str| js_sys::Reflect::get(e, &key.into()).ok().and_then(|v| v.as_string());

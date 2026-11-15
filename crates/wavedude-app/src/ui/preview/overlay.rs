@@ -99,7 +99,12 @@ impl Preview {
 		});
 		let at = pointer.map(|p| t.to_canvas(p));
 		let grabbed = self.grab.as_ref().is_some_and(|(l, _)| *l == layer);
-		if let Some(c) = at {
+		let pinching = super::pinching(ui);
+		if pinching {
+			if grabbed {
+				self.cancel(app, out);
+			}
+		} else if let Some(c) = at {
 			if pressed && response.hovered() {
 				self.press(app, layer, model, t.scale, (c, modifiers), out);
 			} else if grabbed && moving {
@@ -223,7 +228,7 @@ impl Preview {
 		}
 	}
 
-	/// Esc during a drag: puts the item, the group or the fields back.
+	/// Esc or a second finger during a drag: puts the item, the group or the fields back.
 	fn cancel(&mut self, app: &App, out: &mut Vec<Event>) {
 		match self.grab.take().map(|(_, g)| g) {
 			Some(Grab::Items { item, origin, .. }) => {
@@ -309,5 +314,54 @@ impl Preview {
 				None => out.push(Event::Command(Command::MoveBy { target: h.item, dx, dy })),
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use eframe::egui::{self, Sense, TouchPhase, pos2, vec2};
+	use wavedude_core::model::{ItemKind, ProjectEdit, SimulationEdit};
+
+	use super::super::frames::{Frames, press, touch};
+	use super::*;
+
+	/// A frame of the field picture's handles.
+	fn run(frames: &mut Frames, events: Vec<egui::Event>) -> Vec<Event> {
+		frames.run(events, |preview, ui, app, t, out| {
+			let response = ui.interact(t.visible(), egui::Id::unique("picture"), Sense::click_and_drag());
+			preview.edit_handles(ui, &response, app, Layer::Field, t, out);
+		})
+	}
+
+	#[test]
+	fn a_second_finger_cancels_a_press_and_starts_none() {
+		let at = pos2(150., 100.);
+		let (first, second) = (touch(0, TouchPhase::Start, at), touch(1, TouchPhase::Start, at + vec2(40., 0.)));
+		let mut frames = Frames::new();
+		run(&mut frames, vec![]);
+		run(&mut frames, vec![egui::Event::PointerMoved(at), press(at), first.clone()]);
+		assert!(frames.preview.grab.is_some(), "one finger presses");
+		run(&mut frames, vec![second.clone()]);
+		assert!(frames.preview.grab.is_none(), "the second finger cancels the press");
+
+		let mut frames = Frames::new();
+		run(&mut frames, vec![]);
+		run(&mut frames, vec![egui::Event::PointerMoved(at)]);
+		run(&mut frames, vec![press(at), first, second]);
+		assert!(frames.preview.grab.is_none(), "two fingers down together press nothing");
+	}
+
+	#[test]
+	fn a_second_finger_puts_the_edited_fields_back() {
+		let edit = Edit::Project(ProjectEdit::Simulation(SimulationEdit::Steps(7)));
+		let before = vec![edit.clone()];
+		let mut frames = Frames::new();
+		let item = ItemRef::new(ItemKind::Source, 0);
+		frames.preview.grab = Some((Layer::Field, Grab::Edit { item, kind: HandleKind::SourceLever, before }));
+		let at = pos2(150., 100.);
+		run(&mut frames, vec![egui::Event::PointerMoved(at), press(at), touch(0, TouchPhase::Start, at)]);
+		let out = run(&mut frames, vec![touch(1, TouchPhase::Start, at + vec2(40., 0.))]);
+		assert!(frames.preview.grab.is_none());
+		assert!(matches!(out.as_slice(), [Event::Command(Command::Edit(e)), Event::MouseUp] if *e == edit), "{out:?}");
 	}
 }

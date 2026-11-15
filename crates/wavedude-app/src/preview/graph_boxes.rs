@@ -154,11 +154,13 @@ fn views(app: &App, layer: Layer, names: &[&str], traces: &[ProbeTrace], cut: Op
 		.filter(|(_, p)| graph::shows_box(p, layer))
 		.map(|(i, p)| {
 			let trace = names.iter().position(|n| n.eq_ignore_ascii_case(&p.name)).and_then(|t| traces.get(t));
-			let recording = match (trace, cut) {
-				(Some(t), Some((step, frame))) => {
-					Recording { floor: graph::full_scale(p, &project.display), ..Recording::at(t, step, frame) }
+			let floor = graph::full_scale(p, &project.display);
+			let recording = Recording {
+				floor,
+				..match (trace, cut) {
+					(Some(t), Some((step, frame))) => Recording::at(t, step, frame),
+					_ => Recording::default(),
 				}
-				_ => Recording::default(),
 			};
 			BoxView {
 				index: i,
@@ -196,7 +198,8 @@ pub fn resized_box_edits(index: usize, probe: &Probe, w: f32, h: f32, scale: f32
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use wavedude_core::model::{Probe, ProbeKind};
+	use wavedude_app_state::settings::AppDirs;
+	use wavedude_core::model::{Measurement, Probe, ProbeKind};
 	use wavedude_core::quality::PreviewQuality;
 	use wavedude_view::TextMetrics;
 
@@ -220,6 +223,22 @@ mod tests {
 		assert_eq!(shown_cut(&schedule, 8), (40, 8));
 		let whole = Schedule { quality: PreviewQuality::default(), ..schedule };
 		assert_eq!(shown_cut(&whole, 11), (55, 11));
+	}
+
+	#[test]
+	fn a_box_without_a_trace_keeps_the_probes_floor() {
+		let dir = tempfile::tempdir().unwrap();
+		let mut app = App::start(&AppDirs::under(dir.path()), []).expect("state starts");
+		let probes = [Measurement::Amplitude, Measurement::Value, Measurement::IntegratedValue]
+			.map(|measurement| Probe { measurement, ..Probe::default() });
+		app.document.project.probes = probes.to_vec();
+		let boxes = boxes(&app, Layer::Field);
+		assert_eq!(boxes.len(), probes.len());
+		for view in boxes {
+			let floor = graph::full_scale(&view.probe, &app.document.project.display);
+			assert!(floor > 0.0);
+			assert_eq!(view.recording.floor, floor, "{:?}", view.probe.measurement);
+		}
 	}
 
 	#[test]

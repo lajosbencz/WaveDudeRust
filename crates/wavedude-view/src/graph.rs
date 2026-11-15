@@ -60,8 +60,9 @@ impl<'a> GraphData<'a> {
 	}
 }
 
-/// What the picture shows at the palette's top for `probe`'s measurement (0 for none): below it a fitted range
-/// would draw what the picture renders black.
+/// What the picture shows at the palette's top for `probe`'s measurement: below it a fitted range would draw what
+/// the picture renders black. An integrated value gets one step's full scale: its total soon exceeds it, a precursor
+/// stays far below.
 pub fn full_scale(probe: &Probe, display: &Display) -> f64 {
 	let brightness = match probe.layer {
 		Layer::Field => display.field.brightness,
@@ -69,8 +70,7 @@ pub fn full_scale(probe: &Probe, display: &Display) -> f64 {
 	};
 	match probe.measurement {
 		Measurement::Amplitude => 1.0 / brightness,
-		Measurement::Value => 1.0 / (brightness * brightness),
-		Measurement::IntegratedValue => 0.0,
+		Measurement::Value | Measurement::IntegratedValue => 1.0 / (brightness * brightness),
 	}
 }
 
@@ -128,25 +128,25 @@ fn extent(values: &[f32]) -> Option<(f32, f32)> {
 	})
 }
 
-/// Fitted y range, its top at least `floor`: an amplitude (or data below zero) symmetric about zero, else 0 up; all
-/// zeros keep the range.
-fn auto_range(probe: &Probe, lo: f64, hi: f64, floor: f64, range: &mut (f64, f64)) {
-	let magnitude = lo.abs().max(hi.abs());
-	if magnitude <= 0.0 {
-		return;
-	}
-	*range = if probe.measurement == Measurement::Amplitude || lo < 0.0 {
-		let top = magnitude.max(floor) * (1.0 + MARGIN);
-		(-top, top)
-	} else {
-		(0.0, hi.max(floor) * (1.0 + MARGIN))
-	};
+/// What an auto-scaled axis fits to: the data's lowest value and the top, its largest magnitude but at least
+/// `floor`. None when not auto-scaled or the top is 0 (floor 0 and no data or all zeros): the fixed range stays.
+fn fitted(probe: &Probe, data: Option<(f32, f32)>, floor: f64) -> Option<(f64, f64)> {
+	let (lo, hi) = data.map_or((0.0, 0.0), |(lo, hi)| (f64::from(lo), f64::from(hi)));
+	let top = lo.abs().max(hi.abs()).max(floor);
+	(probe.auto_scale_y && top > 0.0).then_some((lo, top))
+}
+
+/// The linear y range fitted to `(lowest value, top)`: an amplitude (or data below zero) symmetric about zero, else
+/// 0 up.
+fn linear_range(probe: &Probe, (lo, top): (f64, f64)) -> (f64, f64) {
+	let top = top * (1.0 + MARGIN);
+	if probe.measurement == Measurement::Amplitude || lo < 0.0 { (-top, top) } else { (0.0, top) }
 }
 
 /// A log axis: `decades` below the fitted top, or below the fixed maximum.
-fn log_range(probe: &Probe, fitted_hi: Option<f64>) -> (f64, f64) {
+fn log_range(probe: &Probe, fitted_top: Option<f64>) -> (f64, f64) {
 	let decades = probe.decades as f64;
-	if let Some(hi) = fitted_hi.filter(|h| *h > 0.0) {
+	if let Some(hi) = fitted_top {
 		let top = libm::log10(hi) + MARGIN * decades;
 		return (libm::pow(10.0, top - decades), libm::pow(10.0, top));
 	}
@@ -162,15 +162,9 @@ fn log_range(probe: &Probe, fitted_hi: Option<f64>) -> (f64, f64) {
 
 /// `(x_min, x_max, y_min, y_max)` of a probe's graph; x in steps (a series) or line pixels (a profile).
 pub fn ranges(probe: &Probe, data: &GraphData<'_>, total_steps: u64) -> (f64, f64, f64, f64) {
-	let mut y = fixed_range(probe);
-	let mut fitted_hi = None;
-	let (x_min, x_max) = if probe.shows_profile() {
+	let ((x_min, x_max), shown) = if probe.shows_profile() {
 		let x_max = if data.profile.is_some() && data.profile_length > 0.0 { data.profile_length } else { 1.0 };
-		if let Some((lo, hi)) = data.profile.and_then(extent).filter(|_| probe.auto_scale_y) {
-			fitted_hi = Some((hi as f64).max(data.floor));
-			auto_range(probe, lo as f64, hi as f64, data.floor, &mut y);
-		}
-		(0.0, x_max)
+		((0.0, x_max), data.profile.and_then(extent))
 	} else {
 		let start = probe.start_after as f64;
 		let samples = data.series.len() as f64;
@@ -186,16 +180,15 @@ pub fn ranges(probe: &Probe, data: &GraphData<'_>, total_steps: u64) -> (f64, f6
 		if hi <= lo {
 			hi = lo + 1.0;
 		}
-		let fit = visible_indices(data.series.len(), lo, hi).and_then(|(a, b)| extent(&data.series[a..=b]));
-		if let Some((l, h)) = fit.filter(|_| probe.auto_scale_y) {
-			fitted_hi = Some((h as f64).max(data.floor));
-			auto_range(probe, l as f64, h as f64, data.floor, &mut y);
-		}
-		(lo, hi)
+		let shown = visible_indices(data.series.len(), lo, hi).and_then(|(a, b)| extent(&data.series[a..=b]));
+		((lo, hi), shown)
 	};
-	if log_axis(probe) {
-		y = log_range(probe, fitted_hi);
-	}
+	let fit = fitted(probe, shown, data.floor);
+	let y = if log_axis(probe) {
+		log_range(probe, fit.map(|(_, top)| top))
+	} else {
+		fit.map_or_else(|| fixed_range(probe), |f| linear_range(probe, f))
+	};
 	(x_min, x_max, y.0, y.1)
 }
 
@@ -368,7 +361,7 @@ pub fn layout(
 	let title_height = line_height + 2.0 * EDGE_PAD;
 	let line = probe.shows_profile();
 	let started = probe.start_after == 0 || data.steps_sampled >= probe.start_after as u64;
-	let shown = if line && !started { GraphData::default() } else { *data };
+	let shown = if line && !started { GraphData::default().with_floor(data.floor) } else { *data };
 	let (x_min, x_max, y_min, y_max) = ranges(probe, if line { &shown } else { data }, total_steps);
 	let log = log_axis(probe);
 	let y_values = |target| if log { log_ticks(y_min, y_max, target) } else { nice_ticks(y_min, y_max, target) };
@@ -654,7 +647,7 @@ pub fn grip_shapes(g: &GraphLayout, grid: DeviceGrid, hot: bool) -> Vec<Shape> {
 mod tests {
 	use epaint::text::{Fonts, TextOptions};
 	use epaint::{Pos2, pos2};
-	use wavedude_core::model::BoxSize;
+	use wavedude_core::model::{BoxSize, ProbeKind};
 
 	use super::*;
 	use crate::draw::FontMetrics;
@@ -733,6 +726,116 @@ mod tests {
 		assert!(above > 5.0);
 	}
 
+	const PRECURSOR: f32 = 1e-37;
+
+	fn every_probe() -> Vec<Probe> {
+		[Measurement::Amplitude, Measurement::Value, Measurement::IntegratedValue]
+			.into_iter()
+			.flat_map(|measurement| {
+				[YScale::Linear, YScale::Logarithmic].map(|y_scale| Probe {
+					measurement,
+					y_scale,
+					decades: 4,
+					..Probe::default()
+				})
+			})
+			.collect()
+	}
+
+	#[test]
+	fn all_zero_data_fits_like_a_precursor_under_the_floor() {
+		let display = Display::default();
+		for probe in every_probe() {
+			let floor = full_scale(&probe, &display);
+			assert!(floor > 0.0, "{:?}", probe.measurement);
+			let zeros = [0.0f32; 4];
+			let precursor = [0.0, PRECURSOR, 0.0, 0.0];
+			let cases = [
+				(
+					GraphData { series: &zeros, ..GraphData::default() },
+					GraphData { series: &precursor, ..GraphData::default() },
+				),
+				(
+					GraphData { profile: Some(&zeros), profile_length: 80.0, ..GraphData::default() },
+					GraphData { profile: Some(&precursor), profile_length: 80.0, ..GraphData::default() },
+				),
+			];
+			for (i, (zero, small)) in cases.into_iter().enumerate() {
+				let probe = Probe { kind: if i == 0 { ProbeKind::Point } else { ProbeKind::Line }, ..probe.clone() };
+				let (zero, small) = (zero.with_floor(floor), small.with_floor(floor));
+				let fitted = ranges(&probe, &zero, 100);
+				assert_eq!(fitted, ranges(&probe, &small, 100), "{:?} {:?} {i}", probe.measurement, probe.y_scale);
+				assert_ne!((fitted.2, fitted.3), fixed_range(&probe));
+				assert!(fitted.3 >= floor, "{fitted:?}");
+			}
+		}
+	}
+
+	#[test]
+	fn an_empty_range_under_the_floor_fits_as_all_zero_data() {
+		let probe = Probe { measurement: Measurement::Value, ..Probe::default() };
+		let floor = 0.5;
+		let zeros = [0.0f32; 3];
+		let with = GraphData { series: &zeros, ..GraphData::default() }.with_floor(floor);
+		let y = |data: &GraphData<'_>| {
+			let (_, _, lo, hi) = ranges(&probe, data, 100);
+			(lo, hi)
+		};
+		assert_eq!(y(&GraphData::default().with_floor(floor)), y(&with));
+		assert_eq!(y(&with), (0.0, floor * (1.0 + MARGIN)));
+	}
+
+	#[test]
+	fn without_a_floor_all_zero_data_keeps_the_fixed_range() {
+		let zeros = [0.0f32; 4];
+		let data = GraphData { series: &zeros, ..GraphData::default() };
+		let y = |probe: &Probe| {
+			let (_, _, lo, hi) = ranges(probe, &data, 100);
+			(lo, hi)
+		};
+		for probe in every_probe() {
+			assert_eq!(y(&probe), y(&Probe { auto_scale_y: false, ..probe.clone() }), "{:?}", probe.measurement);
+		}
+		let linear = Probe::default();
+		assert_eq!(y(&linear), fixed_range(&linear));
+	}
+
+	#[test]
+	fn a_line_probe_keeps_one_axis_from_before_its_start_until_the_signal_passes_the_floor() {
+		let floor = 2.0;
+		let probe =
+			Probe { kind: ProbeKind::Line, measurement: Measurement::Value, start_after: 10, ..Probe::default() };
+		let ticks = |profile: Option<&[f32]>, steps_sampled| {
+			let data = GraphData { profile, profile_length: 80.0, steps_sampled, floor, ..GraphData::default() };
+			let l = layout(&probe, &data, 100, 400.0, 200.0, &mut Fixed);
+			l.y_ticks.into_iter().map(|t| (t.label, t.position)).collect::<Vec<_>>()
+		};
+		let before = ticks(None, 0);
+		assert!(before.len() > 1);
+		assert_eq!(before, ticks(Some(&[0.0; 8]), probe.start_after as u64), "a started all-zero profile");
+		assert_eq!(before, ticks(Some(&[PRECURSOR; 8]), probe.start_after as u64), "a started precursor");
+		assert_eq!(before, ticks(Some(&[PRECURSOR; 8]), 3), "a precursor before the start step");
+		assert_ne!(before, ticks(Some(&[2.0 * floor as f32; 8]), probe.start_after as u64), "a signal above the floor");
+	}
+
+	#[test]
+	fn an_all_zero_profile_draws_the_curve_of_a_precursor() {
+		let display = Display::default();
+		for probe in every_probe().into_iter().map(|p| Probe { kind: ProbeKind::Line, ..p }) {
+			let floor = full_scale(&probe, &display);
+			let curve = |value: f32| {
+				let profile = [value; 6];
+				let data = GraphData { profile: Some(&profile), profile_length: 60.0, ..GraphData::default() };
+				layout(&probe, &data.with_floor(floor), 100, 400.0, 200.0, &mut Fixed).curve
+			};
+			let (zero, small) = (curve(0.0), curve(PRECURSOR));
+			assert_eq!(zero.len(), small.len());
+			for (a, b) in zero.iter().zip(&small) {
+				assert!((a.1 - b.1).abs() < 1e-3, "{:?} {:?}: {a:?} {b:?}", probe.measurement, probe.y_scale);
+			}
+		}
+	}
+
 	#[test]
 	fn full_scale_follows_the_layer_brightness() {
 		let mut display = Display::default();
@@ -742,7 +845,8 @@ mod tests {
 		let value = Probe { layer: Layer::Intensity, measurement: Measurement::Value, ..Probe::default() };
 		assert_eq!(full_scale(&field, &display), 0.25);
 		assert_eq!(full_scale(&value, &display), 0.25);
-		assert_eq!(full_scale(&Probe { measurement: Measurement::IntegratedValue, ..value }, &display), 0.0);
+		let integrated = Probe { measurement: Measurement::IntegratedValue, ..value.clone() };
+		assert_eq!(full_scale(&integrated, &display), full_scale(&value, &display), "one step's reading");
 	}
 
 	#[test]

@@ -227,18 +227,18 @@ fn settings_round_trip_and_first_start() {
 	let path = dir.path().join("cfg").join("settings.json");
 	let facts =
 		|| MachineFacts { physical_bytes: 64 << 30, threads: 16, has_gpu: Some(true), cache_drive_seek_penalty: None };
-	let loaded = Settings::load(&store, facts);
+	let loaded = Settings::load(&store, false, facts);
 	assert!(loaded.first_start && path.is_file());
 	assert_eq!(loaded.settings.preview_sample_bytes, 2);
 	let mut s = loaded.settings;
 	s.language = "de".into();
 	s.push_recent(dir.path());
 	s.save(&store).unwrap();
-	let again = Settings::load(&store, || panic!("not a first start"));
+	let again = Settings::load(&store, false, || panic!("not a first start"));
 	assert!(!again.first_start);
 	assert_eq!(again.settings, s);
 	std::fs::write(&path, "{ not json").unwrap();
-	let broken = Settings::load(&store, || panic!("an unreadable file is not a first start"));
+	let broken = Settings::load(&store, false, || panic!("an unreadable file is not a first start"));
 	assert!(broken.unreadable.is_some());
 	assert_eq!(broken.settings, Settings::default());
 }

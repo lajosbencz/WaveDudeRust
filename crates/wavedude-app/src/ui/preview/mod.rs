@@ -10,6 +10,8 @@
 //! Threads: the UI thread; natively the presenter and the scene builder use threads of their own.
 
 mod device;
+#[cfg(test)]
+mod frames;
 mod graph_boxes;
 mod header_strip;
 mod overlay;
@@ -455,6 +457,11 @@ fn take_activation_keys(r: &Response) {
 /// Whether a button went down on `r` this frame; a press and its release can come in one.
 fn pressed_on(r: &Response) -> bool {
 	r.hovered() && r.ctx.input(|i| i.pointer.any_pressed())
+}
+
+/// Whether a second finger is down: the touches are a pinch or a pan, no longer a press.
+fn pinching(ui: &Ui) -> bool {
+	ui.input(|i| i.multi_touch().is_some())
 }
 
 /// Fits `layer`'s brightness to the 16-bit frame `source`.

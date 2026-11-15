@@ -12,7 +12,7 @@ use wavedude_app_state::Event;
 use wavedude_app_state::commands::{Command, Edit};
 use wavedude_app_state::platform::HAS_EXPORTS;
 use wavedude_app_state::selection::Row;
-use wavedude_core::model::{ItemKind, ItemRef, Layer};
+use wavedude_core::model::{BoxSize, ItemKind, ItemRef, Layer, ProbeEdit};
 use wavedude_view::graph::{self, GraphLayout};
 use wavedude_view::{DeviceGrid, FontMetrics};
 
@@ -42,11 +42,12 @@ impl Boxes {
 	}
 }
 
-/// A box drag in progress: probe `index`'s box from `start` (canvas pixels), or its size from `size` (points).
+/// A box drag in progress: probe `index`'s box from `start` (canvas pixels), or its size from `size` (points),
+/// which `from` holds as the probe's fields.
 #[derive(Clone, Copy)]
 pub(super) enum BoxDrag {
 	Move { index: usize, start: (i32, i32) },
-	Resize { index: usize, size: (f32, f32) },
+	Resize { index: usize, size: (f32, f32), from: (BoxSize, u32, u32) },
 }
 
 /// The id of probe `index`'s box over the picture of `layer`.
@@ -159,6 +160,9 @@ impl Preview {
 	) -> Option<(MenuAction, On)> {
 		let b = self.boxes[layer as usize].take()?;
 		let mut picked = None;
+		if super::pinching(ui) {
+			self.cancel_box_drag(app, out);
+		}
 		for v in &b.views {
 			let rect = on_picture(v, t);
 			let id = box_id(layer, v.index);
@@ -197,6 +201,25 @@ impl Preview {
 		picked
 	}
 
+	/// A second finger during a box drag: puts the box back where and as large as it was.
+	fn cancel_box_drag(&mut self, app: &App, out: &mut Vec<Event>) {
+		let Some(drag) = self.box_drag.take() else { return };
+		let probes = &app.document.project.probes;
+		let edits = match drag {
+			BoxDrag::Move { index, start } => probes.get(index).map(|p| moved_box_edits(index, p, start)),
+			BoxDrag::Resize { index, from: (size, width, height), .. } => probes.get(index).map(|p| {
+				let fields = [
+					(p.box_size != size).then_some(ProbeEdit::BoxSize(size)),
+					(p.box_width != width).then_some(ProbeEdit::BoxWidth(width)),
+					(p.box_height != height).then_some(ProbeEdit::BoxHeight(height)),
+				];
+				fields.into_iter().flatten().map(|e| Edit::Probe(index, e)).collect()
+			}),
+		};
+		send_edits(out, edits.unwrap_or_default());
+		out.push(Event::MouseUp);
+	}
+
 	/// Probe `index`'s box at `rect`: its `response` and its `grip`'s.
 	fn edit_box(
 		&mut self,
@@ -223,9 +246,13 @@ impl Preview {
 		let Some(probe) = app.document.project.probes.get(index) else { return };
 		let canvas = app.document.project.canvas_size();
 		let size = graph::box_size(probe, canvas);
-		if response.drag_started() || grip.drag_started() {
+		if (response.drag_started() || grip.drag_started()) && !super::pinching(ui) {
 			self.box_drag = Some(if grip.drag_started() {
-				BoxDrag::Resize { index, size: rect.size().into() }
+				BoxDrag::Resize {
+					index,
+					size: rect.size().into(),
+					from: (probe.box_size, probe.box_width, probe.box_height),
+				}
 			} else {
 				BoxDrag::Move { index, start: (probe.box_x, probe.box_y) }
 			});
@@ -238,15 +265,14 @@ impl Preview {
 				let to = dragged_box(start, (probe.ax, probe.ay), (d.x, d.y), t.scale, canvas, size);
 				send_edits(out, moved_box_edits(index, probe, to));
 			}
-			Some(BoxDrag::Resize { index: i, size: (w, h) }) if i == index && grip.dragged() => {
+			Some(BoxDrag::Resize { index: i, size: (w, h), .. }) if i == index && grip.dragged() => {
 				let d = total(grip);
 				let (w, h) = ((w + d.x).max(MIN_SIZE.0), (h + d.y).max(MIN_SIZE.1));
 				send_edits(out, resized_box_edits(index, probe, w, h, t.scale));
 			}
 			_ => {}
 		}
-		if response.drag_stopped() || grip.drag_stopped() {
-			self.box_drag = None;
+		if (response.drag_stopped() || grip.drag_stopped()) && self.box_drag.take().is_some() {
 			out.push(Event::MouseUp);
 		}
 		if response.has_focus() {
@@ -270,5 +296,133 @@ impl Preview {
 				send_edits(out, resized_box_edits(index, probe, w, h, t.scale));
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use eframe::egui::{self, TouchPhase, pos2};
+	use wavedude_core::model::{Measurement, Probe};
+
+	use super::super::frames::{Frames, PICTURE, press, release, touch};
+	use super::*;
+	use crate::preview::view::View;
+
+	/// A frame of the field picture's graph boxes, which `frames` holds one of.
+	fn run(frames: &mut Frames, events: Vec<egui::Event>) -> Vec<Event> {
+		frames.run(events, |preview, ui, app, t, out| {
+			preview.edit_boxes(ui, app, Layer::Field, t, PICTURE, out);
+		})
+	}
+
+	fn with_probe(probe: Probe) -> Frames {
+		let mut frames = Frames::new();
+		frames.app.document.project.probes = vec![Probe { measurement: Measurement::Amplitude, ..probe }];
+		let boxes = Boxes::of(&frames.app, Layer::Field, box_key(&frames.app));
+		assert_eq!(boxes.views.len(), 1);
+		frames.preview.boxes[Layer::Field as usize] = Some(boxes);
+		frames
+	}
+
+	/// Where the only box lies in the frames' picture.
+	fn box_rect(frames: &Frames) -> Rect {
+		let t = CanvasTransform::new(PICTURE, frames.app.document.project.canvas_size(), View::default());
+		on_picture(&frames.preview.boxes[Layer::Field as usize].as_ref().unwrap().views[0], &t)
+	}
+
+	/// The second finger's events, the first finger at `at`.
+	fn two_fingers(at: egui::Pos2) -> Vec<egui::Event> {
+		vec![touch(0, TouchPhase::Start, at), touch(1, TouchPhase::Start, at + vec2(40., 0.))]
+	}
+
+	/// The events a second finger makes while `drag` is in progress.
+	fn pinch_during(mut frames: Frames, drag: BoxDrag) -> (Frames, Vec<Event>) {
+		frames.preview.box_drag = Some(drag);
+		let at = pos2(150., 100.);
+		run(&mut frames, vec![]);
+		run(&mut frames, vec![egui::Event::PointerMoved(at)]);
+		let out = run(&mut frames, two_fingers(at));
+		(frames, out)
+	}
+
+	fn downs_and_ups(out: &[Event]) -> (usize, usize) {
+		let count = |wanted: fn(&Event) -> bool| out.iter().filter(|e| wanted(e)).count();
+		(count(|e| matches!(e, Event::MouseDown)), count(|e| matches!(e, Event::MouseUp)))
+	}
+
+	#[test]
+	fn a_second_finger_puts_a_dragged_box_back() {
+		let start = (5, 6);
+		let frames = with_probe(Probe { box_x: 50, box_y: 40, ..Probe::default() });
+		let (frames, out) = pinch_during(frames, BoxDrag::Move { index: 0, start });
+		assert!(frames.preview.box_drag.is_none());
+		let probe = &frames.app.document.project.probes[0];
+		let edits = moved_box_edits(0, probe, start);
+		assert!(!edits.is_empty());
+		let wanted: Vec<Event> =
+			edits.into_iter().map(|e| Event::Command(Command::Edit(e))).chain([Event::MouseUp]).collect();
+		assert_eq!(out.len(), wanted.len(), "{out:?}");
+		for (got, want) in out.iter().zip(&wanted) {
+			match (got, want) {
+				(Event::Command(Command::Edit(a)), Event::Command(Command::Edit(b))) => assert_eq!(a, b),
+				(Event::MouseUp, Event::MouseUp) => {}
+				_ => panic!("{out:?}"),
+			}
+		}
+	}
+
+	#[test]
+	fn a_second_finger_leaves_an_untouched_resize_alone_and_restores_a_changed_one() {
+		let custom = Probe { box_size: BoxSize::Custom, box_width: 101, box_height: 77, ..Probe::default() };
+		let drag =
+			|p: &Probe| BoxDrag::Resize { index: 0, size: (16., 12.), from: (p.box_size, p.box_width, p.box_height) };
+		let (frames, out) = pinch_during(with_probe(custom.clone()), drag(&custom));
+		assert!(frames.preview.box_drag.is_none());
+		assert!(matches!(out.as_slice(), [Event::MouseUp]), "an untouched box makes no undo step: {out:?}");
+
+		let resized = Probe { box_size: BoxSize::Small, box_width: 300, box_height: 150, ..custom.clone() };
+		let (_, out) = pinch_during(with_probe(resized), drag(&custom));
+		let wanted = [
+			Edit::Probe(0, ProbeEdit::BoxSize(BoxSize::Custom)),
+			Edit::Probe(0, ProbeEdit::BoxWidth(101)),
+			Edit::Probe(0, ProbeEdit::BoxHeight(77)),
+		];
+		assert_eq!(out.len(), wanted.len() + 1, "{out:?}");
+		for (got, want) in out.iter().zip(&wanted) {
+			assert!(matches!(got, Event::Command(Command::Edit(e)) if e == want), "{out:?}");
+		}
+		assert!(matches!(out.last(), Some(Event::MouseUp)));
+	}
+
+	#[test]
+	fn a_drag_cancelled_by_a_second_finger_sends_one_press_and_one_release() {
+		let mut frames = with_probe(Probe::default());
+		let (grab, to) = (box_rect(&frames).center(), box_rect(&frames).center() + vec2(20., 0.));
+		let mut out = Vec::new();
+		for events in [vec![], vec![egui::Event::PointerMoved(grab)], vec![press(grab)]] {
+			out.extend(run(&mut frames, events));
+		}
+		out.extend(run(&mut frames, vec![egui::Event::PointerMoved(to)]));
+		assert!(frames.preview.box_drag.is_some(), "the drag began");
+		out.extend(run(&mut frames, two_fingers(to)));
+		assert!(frames.preview.box_drag.is_none(), "the second finger ended it");
+		out.extend(run(&mut frames, vec![release(to)]));
+		assert_eq!(downs_and_ups(&out), (1, 1), "{out:?}");
+	}
+
+	#[test]
+	fn a_box_drag_does_not_begin_while_two_fingers_are_down() {
+		let mut frames = with_probe(Probe::default());
+		let (grab, to) = (box_rect(&frames).center(), box_rect(&frames).center() + vec2(20., 0.));
+		let mut out = Vec::new();
+		for events in [vec![], vec![egui::Event::PointerMoved(grab)], vec![press(grab)]] {
+			out.extend(run(&mut frames, events));
+		}
+		let mut both = two_fingers(grab);
+		both.push(egui::Event::PointerMoved(to));
+		out.extend(run(&mut frames, both));
+		out.extend(run(&mut frames, vec![release(to)]));
+		assert!(frames.preview.box_drag.is_none());
+		assert_eq!(downs_and_ups(&out), (0, 0), "{out:?}");
 	}
 }

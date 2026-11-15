@@ -6,7 +6,8 @@
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
 use eframe::egui::{
-	Color32, Id, Painter, PointerButton, Pos2, Rect, Response, Role, Sense, Shape, Stroke, Ui, WidgetInfo, pos2, vec2,
+	Color32, Id, InputState, Painter, PointerButton, Pos2, Rect, Response, Role, Sense, Shape, Stroke, Ui, WidgetInfo,
+	pos2, vec2,
 };
 use egui_material_icons::MaterialIcon;
 use egui_material_icons::icons::{ICON_BRIGHTNESS_6, ICON_BRIGHTNESS_AUTO, ICON_IMAGE, ICON_IOS_SHARE};
@@ -217,7 +218,7 @@ impl Preview {
 	}
 
 	/// The picture's pointer: a press focuses it, the wheel zooms about the point under the pointer, a middle-button
-	/// drag pans a zoomed view.
+	/// drag pans a zoomed view, and a pinch zooms about and a two-finger drag pans with the fingers' centre.
 	fn input(&mut self, ui: &Ui, layer: Layer, t: &CanvasTransform, title: &str) -> Response {
 		let response =
 			ui.interact(t.visible(), ui.scope_id().with(("PreviewPicture", layer as usize)), Sense::click_and_drag());
@@ -226,14 +227,121 @@ impl Preview {
 		if pressed_on(&response) && !response.has_focus() {
 			response.request_focus();
 		}
-		let notches = wheel_notches(ui, t.visible());
-		if let Some(p) = response.hover_pos().filter(|_| notches != 0) {
-			let factor = View::STEP.powi(notches);
-			self.view = self.view.normalised(t.canvas).zoomed(factor, t.to_canvas(p), t.canvas);
+		// not `zoom_delta`, which counts the wheel's Ctrl-zoom
+		match ui.input(InputState::multi_touch) {
+			Some(m) => {
+				// a gesture that began over the picture itself, not over a popup or beside it
+				let began_here =
+					t.visible().contains(m.start_pos) && ui.ctx().layer_id_at(m.start_pos) == Some(ui.layer_id());
+				if began_here {
+					let before = m.center_pos - m.translation_delta;
+					self.view =
+						self.view.pinched(m.zoom_delta, t.to_canvas(before), m.translation_delta, t.scale, t.canvas);
+				}
+			}
+			None => {
+				let notches = wheel_notches(ui, t.visible());
+				if let Some(p) = response.hover_pos().filter(|_| notches != 0) {
+					let factor = View::STEP.powi(notches);
+					self.view = self.view.normalised(t.canvas).zoomed(factor, t.to_canvas(p), t.canvas);
+				}
+			}
 		}
 		if response.dragged_by(PointerButton::Middle) {
 			self.view = self.view.panned(response.drag_delta(), t.scale);
 		}
 		response
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use eframe::egui::{self, Area, Order, TouchPhase};
+
+	use super::super::frames::{Frames, PICTURE, touch};
+	use super::*;
+
+	/// A frame of the field picture's pointer input, a popup over all of it when `covered`.
+	fn run(frames: &mut Frames, events: Vec<egui::Event>, covered: bool) {
+		frames.run(events, |preview, ui, _, t, _| {
+			if covered {
+				Area::new(Id::unique("popup")).order(Order::Foreground).fixed_pos(PICTURE.min).show(ui.ctx(), |ui| {
+					ui.allocate_exact_size(PICTURE.size(), Sense::click());
+				});
+			}
+			preview.input(ui, Layer::Field, t, "Field");
+		});
+	}
+
+	fn fingers(centre: Pos2, half_gap: f32, phase: TouchPhase) -> Vec<egui::Event> {
+		[(0, -half_gap), (1, half_gap)].map(|(id, dx)| touch(id, phase, centre + vec2(dx, 0.))).into()
+	}
+
+	/// The zoom after two fingers begin about `from` and spread about `to`; with `extra` events as they begin.
+	fn zoom_after(from: Pos2, to: Pos2, covered: bool, extra: Vec<egui::Event>) -> f32 {
+		let mut frames = Frames::new();
+		run(&mut frames, vec![], covered);
+		run(&mut frames, vec![egui::Event::PointerMoved(from)], covered);
+		run(&mut frames, [fingers(from, 10., TouchPhase::Start), extra].concat(), covered);
+		run(&mut frames, fingers(to, 30., TouchPhase::Move), covered);
+		frames.preview.view.zoom
+	}
+
+	fn picture() -> Rect {
+		let frames = Frames::new();
+		CanvasTransform::new(PICTURE, frames.app.document.project.canvas_size(), View::default()).visible()
+	}
+
+	#[test]
+	fn a_pinch_zooms_the_picture_it_began_on() {
+		let on = picture().center();
+		assert!(zoom_after(on, on, false, vec![]) > 1.);
+	}
+
+	#[test]
+	fn a_pinch_is_the_pictures_by_where_it_began() {
+		let (on, off) = (picture().center(), pos2(picture().center().x, PICTURE.min.y + 1.));
+		assert!(!picture().contains(off));
+		assert_eq!(zoom_after(off, on, false, vec![]), 1., "begun beside the picture, drifted onto it");
+		assert!(zoom_after(on, off, false, vec![]) > 1., "begun on the picture, drifted off it");
+		assert_eq!(zoom_after(on, on, true, vec![]), 1., "begun under a popup");
+	}
+
+	#[test]
+	fn the_point_between_the_fingers_stays_between_them() {
+		let (from, to) = (picture().center() - vec2(40., 0.), picture().center() + vec2(20., 10.));
+		let mut frames = Frames::new();
+		let canvas = frames.app.document.project.canvas_size();
+		let fit = CanvasTransform::new(PICTURE, canvas, View::default());
+		run(&mut frames, vec![], false);
+		run(&mut frames, vec![egui::Event::PointerMoved(from)], false);
+		run(&mut frames, fingers(from, 10., TouchPhase::Start), false);
+		run(&mut frames, fingers(to, 30., TouchPhase::Move), false);
+		let zoomed = CanvasTransform::new(PICTURE, canvas, frames.preview.view);
+		assert!(frames.preview.view.zoom > 1.);
+		let point = fit.to_canvas(from);
+		let moved = zoomed.to_screen(point.0, point.1);
+		assert!((moved - to).length() < 1e-2, "{moved:?} for {to:?}");
+	}
+
+	#[test]
+	fn the_wheel_waits_while_two_fingers_are_down() {
+		let on = picture().center();
+		let wheel = egui::Event::MouseWheel {
+			unit: egui::MouseWheelUnit::Line,
+			delta: vec2(0., 1.),
+			phase: TouchPhase::Move,
+			source: egui::MouseWheelSource::Wheel,
+			modifiers: Default::default(),
+		};
+		let mut frames = Frames::new();
+		run(&mut frames, vec![], false);
+		run(&mut frames, vec![egui::Event::PointerMoved(on), wheel.clone()], false);
+		assert!(frames.preview.view.zoom > 1., "the wheel zooms alone");
+		let mut frames = Frames::new();
+		run(&mut frames, vec![], false);
+		run(&mut frames, vec![egui::Event::PointerMoved(on)], false);
+		run(&mut frames, [fingers(on, 10., TouchPhase::Start), vec![wheel]].concat(), false);
+		assert_eq!(frames.preview.view.zoom, 1., "the fingers' frame takes no wheel");
 	}
 }

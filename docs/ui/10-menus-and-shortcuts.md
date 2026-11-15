@@ -283,6 +283,7 @@ Left/Right one frame, PageUp/PageDown ten frames, Home/End in/out point, mouse w
 | Esc | During a drag: put everything back. |
 | Wheel | Zoom the pictures in or out about the pointer, never below the fit. |
 | Middle drag | Pan a zoomed picture. |
+| Pinch / two-finger drag | Begun over a picture: zoom about the fingers' centre / pan a zoomed picture; the second finger puts back a drag of the first. |
 | Tab | Next handle; focusing a handle selects its item. |
 
 ### Picture splitter (focused)

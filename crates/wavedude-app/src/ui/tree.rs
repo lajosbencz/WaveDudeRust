@@ -452,7 +452,7 @@ impl ProjectPane {
 		let line = look.line;
 		let s = look.s;
 		let id = ui.scope_id().with(("TreeRow", line.row));
-		let response = ui.interact(rect, id, Sense::click_and_drag());
+		let response = ui.interact(rect, id, row_sense(app.settings.touch_first));
 		let sel = &app.selection;
 		let current = sel.current() == Some(line.row);
 		let selected = current || matches!(line.row, Row::Item(i) if sel.contains(i));
@@ -672,6 +672,11 @@ struct Shown {
 	depth: u8,
 	/// It has rows under it, shown or folded.
 	parent: bool,
+}
+
+/// What a row senses: a finger's drag scrolls the tree, so a touch-first device gives up dragging rows.
+fn row_sense(touch_first: bool) -> Sense {
+	if touch_first { Sense::click() } else { Sense::click_and_drag() }
 }
 
 /// How a row draws.
@@ -1009,6 +1014,12 @@ mod tests {
 		assert_eq!(reorder_index(0, DropAt::Before(2), 3), 1);
 		assert_eq!(reorder_index(2, DropAt::After(0), 3), 1);
 		assert_eq!(reorder_index(0, DropAt::Append, 3), 2);
+	}
+
+	#[test]
+	fn rows_drag_unless_the_device_is_touch_first() {
+		assert!(row_sense(false).senses_drag() && row_sense(false).senses_click());
+		assert!(!row_sense(true).senses_drag() && row_sense(true).senses_click());
 	}
 
 	#[test]
