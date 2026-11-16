@@ -27,8 +27,8 @@ serde = ["dep:serde"]
 workspace = true
 
 [dependencies]
-wavedude-core = { path = "../wavedude-core", version = "0.3.6", default-features = false, features = ["run"] }
-wavedude-view = { path = "../wavedude-view", version = "0.3.6" }
+wavedude-core = { path = "../wavedude-core", version = "0.3.7", default-features = false, features = ["run"] }
+wavedude-view = { path = "../wavedude-view", version = "0.3.7" }
 thiserror.workspace = true
 half.workspace = true
 bytemuck.workspace = true
