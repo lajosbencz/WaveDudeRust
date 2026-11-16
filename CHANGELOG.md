@@ -6,6 +6,22 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.6...v0.3.7) - 2026-11-16
+
+### Added
+
+- the in-app manual is gone (decision 0028), Help opens the GitHub project page through a platform opener that reports failures; the browser download drops from 7.5 to 5.7 MB
+- undo keeps at most UndoSteps steps (Settings > General, default 1000, decision 0030); whole-number logarithmic boxes step by at least one
+- the welcome page opens a project, a random example or Examples from the bottom right, without Close; Run needs an enabled source; About links WaveDude Next as not affiliated
+
+### Fixed
+
+- the live run keeps the adopted and 256 newest requests, not one per edit; a failed OpenH264 install removes its part file
+
+### Dependencies
+
+- bump the cargo-minor group with 2 updates (#40)
+
 ## [0.3.6](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.5...v0.3.6) - 2026-11-16
 
 ### Added
