@@ -335,7 +335,7 @@ pub fn enabled<B: Backend>(app: &AppState<B>, action: MenuAction, on: On) -> boo
 			(on == On::Current && !app.selection.items().is_empty()) || row.and_then(Copyable::of_row).is_some()
 		}
 		MenuAction::SelectAll => !(project.sources.is_empty() && project.parts.is_empty() && project.probes.is_empty()),
-		MenuAction::Run => !live.run_is_active() && !live.export_busy(),
+		MenuAction::Run => !live.run_is_active() && !live.export_busy() && project.sources.iter().any(|s| s.enabled),
 		MenuAction::PauseRun => live.run_is_active(),
 		MenuAction::Stop => live.run_is_active() || live.export_busy(),
 		MenuAction::DiscardFrames => live.has_frames() && !live.export_busy(),
@@ -443,6 +443,9 @@ mod tests {
 	#[test]
 	fn an_export_refuses_a_run_and_what_needs_its_frames_but_stops() {
 		let mut app = app();
+		assert!(!enabled(&app, MenuAction::Run, On::Current), "an empty project has nothing to run");
+		app.handle(Event::Command(Command::AddSource { at: None }), Instant::now());
+		app.handle(Event::StopRun, Instant::now());
 		let project = app.document.project.clone();
 		assert!(enabled(&app, MenuAction::Run, On::Current) && !enabled(&app, MenuAction::Stop, On::Current));
 		app.live.request_export(&project, RunNeeds::new(ExportFormat::Png, false), Instant::now());

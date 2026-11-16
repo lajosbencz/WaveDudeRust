@@ -104,7 +104,7 @@ row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
 
 | Entry | Mn | Shortcut | Icon | Enabled | Action |
 |---|---|---|---|---|---|
-| Run | R/S/L/S | F5 | U+E768 | no run active and no export running | Run from step 0 with the project as it is; preview follows (Live). May ask the memory warning first. |
+| Run | R/S/L/S | F5 | U+E768 | no run active, no export running and an enabled source (an empty project has nothing to run) | Run from step 0 with the project as it is; preview follows (Live). May ask the memory warning first. |
 | Pause / Resume | P/P/P/P, Resume U/F/R/H | F6 | U+E769 | a run is active | Toggles pause; header reads Resume while paused. |
 | Stop | T/T/A/T | Shift+F5, Esc | U+E71A | a run or an export is active | Esc/Stop cancels an export when one runs, else stops the run; computed frames stay. |
 | Discard frames (port) | D/V/S/V | - | U+E74D | the run has frames stored and no export holds or waits for it | Asks "Discard the frames of the run?" (Yes / No, No the default); Yes stops a run and drops its frames from RAM and the spill (disk file, browser storage), the timeline starts over at frame 0, which is made again. The project and its history stay. |

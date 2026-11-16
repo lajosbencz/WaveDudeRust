@@ -45,7 +45,7 @@ Exposed to automation as a slider with range value, plus "range <in>..<out>".
 
 | # | Control | Tooltip / key | Behaviour |
 |---|---|---|---|
-| 0 | Run / Stop button (ring + triangle; ring + square while a run is active) | "Run the simulation from the start (F5)" / "Stop the simulation; the frames so far stay (Esc)" | Run starts a full run from step 0 and follows it; while active the same button stops. Run is disabled while an export runs, as Simulation > Run. |
+| 0 | Run / Stop button (ring + triangle; ring + square while a run is active) | "Run the simulation from the start (F5)" / "Stop the simulation; the frames so far stay (Esc)" | Run starts a full run from step 0 and follows it; while active the same button stops. Run is disabled while an export runs and without an enabled source, as Simulation > Run. |
 | 1 | Pause run (ring + two bars) | "Pause the simulation (F6)" / "Resume the simulation (F6)" | Toggles the run's pause. Disabled without an active run. |
 | - | divider | | |
 | 2 | Play | "Play (Space)" | Disabled while playing. |

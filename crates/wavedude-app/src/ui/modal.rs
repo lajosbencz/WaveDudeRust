@@ -105,6 +105,8 @@ pub(super) enum Then {
 	Settings,
 	/// Opens the welcome page.
 	Welcome,
+	/// Asks for a project file to open.
+	Open,
 	/// Downloads the update and asks to restart into it.
 	#[cfg(not(target_arch = "wasm32"))]
 	Download(Box<cargo_packager_updater::Update>),
@@ -300,11 +302,13 @@ pub(super) struct Choice<'a> {
 	pub(super) cancel: bool,
 	pub(super) enabled: bool,
 	pub(super) tip: Option<&'a str>,
+	/// Drawn in the accent colour.
+	pub(super) primary: bool,
 }
 
 impl<'a> Choice<'a> {
 	pub(super) fn plain(text: &'a str) -> Self {
-		Self { text, default: false, cancel: false, enabled: true, tip: None }
+		Self { text, default: false, cancel: false, enabled: true, tip: None, primary: false }
 	}
 
 	pub(super) fn default(text: &'a str) -> Self {
@@ -354,13 +358,24 @@ pub(super) fn button(ui: &mut Ui, text: &str, enabled: bool) -> Response {
 	ui.add_enabled(enabled, egui::Button::new(strip_mnemonic(text)).min_size(BUTTON))
 }
 
+/// A button in the accent colour.
+fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> Response {
+	let accent = Palette::of(ui.ctx().theme()).accent;
+	let label = egui::RichText::new(strip_mnemonic(text)).color(Color32::WHITE);
+	ui.add_enabled(enabled, egui::Button::new(label).fill(accent).min_size(BUTTON))
+}
+
 /// The row of `choices` at the bottom right; the index of the one pressed by the pointer or a key. The default one
 /// takes the focus when the dialog is `fresh`.
 pub(super) fn buttons(ui: &mut Ui, fresh: bool, choices: &[Choice<'_>]) -> Option<usize> {
 	let mut pressed = None;
 	ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
 		for (i, choice) in choices.iter().enumerate().rev() {
-			let mut response = button(ui, choice.text, choice.enabled);
+			let mut response = if choice.primary {
+				primary_button(ui, choice.text, choice.enabled)
+			} else {
+				button(ui, choice.text, choice.enabled)
+			};
 			if let Some(tip) = choice.tip {
 				response = response.on_hover_text(tip);
 			}

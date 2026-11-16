@@ -52,11 +52,13 @@ Page.... Title "Welcome to WaveDude Rust". Top to bottom:
 2. The RAM row of Settings (below): read-only natively, Auto or a size in the browser.
 3. Buttons "Low", "Medium", "High", "Auto": the presets of Settings; below them one dim line naming the levers as
    they are, e.g. "Full resolution, every frame, 8-bit samples".
-4. "Settings..." and "Examples...": close the page and open that window.
+4. "Settings...": closes the page and opens Settings.
 5. Check box "Show this page at each launch" (`ShowStartup`), saved as it changes.
-6. "Close" (default and cancel; Enter or Esc).
+6. At the bottom right "Open Project...", "Random Example" and "Examples..." (default, accent colour; Enter): each
+   closes the page; Open Project asks for a file, Random Example runs the guarded open of an example picked at
+   random, Examples opens the Examples dialog. No Close button; Esc closes the page.
 
-A preset button applies at once, as in Settings; Close changes nothing more.
+A preset button applies at once, as in Settings; Esc changes nothing more.
 
 ## Settings (port, decision 0027)
 
@@ -211,9 +213,11 @@ Content top to bottom:
    seven chars), tagline "A 2D wave simulator", copyright line.
 2. "Based on the work of": credits word for word as the source header (Jeroen Vleggaar, Huygens Optics, author of
    Wave Dude 2D, Copyright (C) 2026; 0x23 (Diffraction Limited), author of WaveSimulator2D) with five links
-   (YouTube channels, websites, GitHub). English regardless of language.
+   (YouTube channels, websites, GitHub). English regardless of language. (port) The WaveDude Next credit comes
+   first, followed on its line by a small link "GitHub (a separate project, not affiliated with WaveDude Rust)" to
+   `github.com/wavedudenext/WaveDudeNext`, opened through `platform::open`; a failure shows below the credits.
 3. "License": the GPL notice sentence; toggle button "Show the license text" / "Hide the license text" (T).
-   Shown: [LICENSE.md](../../LICENSE.md) rendered as a document (headings, lists, links) in a scrollable box (260 px, min 120);
+   Shown: [LICENSE.md](../../LICENSE.md) rendered as a document (headings, lists, links) in a scrollable box (260 px, at most 30% of the window's height, min 120);
    a taller window gives its extra height to the document; hidden: window shrinks back.
 4. "System": read-only text box (max 160 px, scrolls), one line each: Program, Runtime, Operating system,
    Processor (+ logical cores), GPU setting (on/off), Engine ("GPU: <wgpu adapter name>" or "CPU (n threads)"),

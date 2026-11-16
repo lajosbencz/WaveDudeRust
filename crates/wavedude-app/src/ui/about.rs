@@ -1,8 +1,9 @@
-//! The About dialog (docs/ui/70): name, version, credits, the license notice and text, Cisco's `OpenH264` notice and
-//! license where MP4 export downloads it, and the system lines for a bug report.
+//! The About dialog (docs/ui/70): name, version, credits with a link to WaveDude Next, the license notice and text,
+//! Cisco's `OpenH264` notice and license where MP4 export downloads it, and the system lines for a bug report.
 
 use eframe::egui::{self, Frame, RichText, ScrollArea, Stroke, Ui, vec2};
 use egui_commonmark::CommonMarkCache;
+use wavedude_app_state::platform::{Opened, open};
 use wavedude_app_state::strings::Strings;
 
 use super::markdown::{self, Piece, pieces};
@@ -21,7 +22,11 @@ const CREDITS: [&str; 3] = [
 	"Jeroen Vleggaar, Huygens Optics, author of Wave Dude 2D, Copyright (C) 2026",
 	"0x23 (Diffraction Limited), author of WaveSimulator2D",
 ];
+/// WaveDude Next's repository, linked from its credit, the first.
+const NEXT_REPOSITORY: &str = "https://github.com/wavedudenext/WaveDudeNext";
 const LICENSE_HEIGHT: f32 = 260.;
+/// The share of the window's height a license box takes at most, so the buttons stay on a short screen.
+const LICENSE_SHARE: f32 = 0.3;
 const SYSTEM_HEIGHT: f32 = 160.;
 
 /// The MP4 encoder as the export would load it.
@@ -62,6 +67,8 @@ pub(super) struct About {
 	system: String,
 	/// The license's text, while it shows.
 	license: Option<Vec<Piece>>,
+	/// Why the last link could not be opened.
+	link_error: Option<String>,
 	#[cfg(not(target_arch = "wasm32"))]
 	openh264: bool,
 	markdown: CommonMarkCache,
@@ -72,6 +79,7 @@ impl About {
 		Self {
 			system: system_lines(app),
 			license: None,
+			link_error: None,
 			#[cfg(not(target_arch = "wasm32"))]
 			openh264: false,
 			markdown: CommonMarkCache::default(),
@@ -81,6 +89,7 @@ impl About {
 	pub(super) fn ui(&mut self, ui: &mut Ui, fresh: bool, app: &App) -> Option<Reply> {
 		let s = &app.strings;
 		let palette = Palette::of(ui.ctx().theme());
+		let license_height = LICENSE_HEIGHT.min(ui.ctx().content_rect().height() * LICENSE_SHARE);
 		ui.set_width(WIDTH);
 		ui.horizontal(|ui| {
 			ui.add(egui::Image::from_bytes("bytes://about-icon.png", ICON).fit_to_exact_size(vec2(64., 64.)));
@@ -95,8 +104,22 @@ impl About {
 		heading(ui, s.get("AboutCredits"));
 		ui.vertical(|ui| {
 			ui.spacing_mut().item_spacing.y = 2.;
-			for credit in CREDITS {
+			let [next, rest @ ..] = CREDITS;
+			ui.horizontal(|ui| {
+				ui.label(next);
+				let link = RichText::new(s.get("AboutNextLink")).small();
+				if ui.link(link).on_hover_text(NEXT_REPOSITORY).clicked() {
+					self.link_error = open(Opened::Url(NEXT_REPOSITORY)).err().map(|e| {
+						tracing::error!("{NEXT_REPOSITORY} could not be opened: {e}");
+						format!("{} {e}", s.format("OpenError", &[&NEXT_REPOSITORY]))
+					});
+				}
+			});
+			for credit in rest {
 				ui.label(credit);
+			}
+			if let Some(error) = &self.link_error {
+				ui.label(RichText::new(error).small().color(palette.level_error));
 			}
 		});
 		heading(ui, s.get("AboutLicense"));
@@ -104,7 +127,7 @@ impl About {
 		let mut shown = self.license.is_some();
 		if toggle(ui, s, &mut shown, "AboutShowLicense", "AboutHideLicense") {
 			let (cache, license) = (&mut self.markdown, self.license.get_or_insert_with(|| pieces(LICENSE)));
-			text_box(ui, palette, "AboutLicenseText", LICENSE_HEIGHT, |ui| markdown::show(ui, cache, license));
+			text_box(ui, palette, "AboutLicenseText", license_height, |ui| markdown::show(ui, cache, license));
 		} else {
 			self.license = None;
 		}
@@ -113,7 +136,7 @@ impl About {
 			heading(ui, "OpenH264");
 			ui.label(wavedude_export::h264::NOTICE);
 			if toggle(ui, s, &mut self.openh264, "AboutShowOpenH264License", "AboutHideOpenH264License") {
-				text_box(ui, palette, "AboutOpenH264Text", LICENSE_HEIGHT, |ui| {
+				text_box(ui, palette, "AboutOpenH264Text", license_height, |ui| {
 					ui.add(egui::Label::new(wavedude_export::h264::LICENSE).wrap());
 				});
 			}

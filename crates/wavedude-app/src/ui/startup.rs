@@ -1,11 +1,11 @@
 //! The welcome page (docs/ui/70, Welcome page; decision 0027): the RAM row and the presets of Settings with a line
-//! naming the levers, Settings... and Examples..., and whether the page opens at each launch. A change applies and
-//! is saved at once.
+//! naming the levers, Settings..., whether the page opens at each launch, and Open Project..., Random example and
+//! Examples... at the bottom right. A change applies and is saved at once.
 
 use eframe::egui::{self, Id, Key, Modifiers, RichText, Ui};
-use wavedude_app_state::Event;
 use wavedude_app_state::settings::Settings as UserSettings;
 use wavedude_app_state::strings::Strings;
+use wavedude_app_state::{Event, Guarded};
 use wavedude_core::engine::SampleFormat;
 
 use super::modal::{self, Choice, Reply, Then, buttons, mnemonic_pressed};
@@ -50,6 +50,12 @@ fn levers_line(s: &Strings, st: &UserSettings) -> String {
 	.join(", ")
 }
 
+/// An index into the examples, picked anew at each call.
+fn random_example() -> usize {
+	let n = wavedude_examples::all().len();
+	wavedude_core::model::Project::new_random_seed().seed as usize % n
+}
+
 /// The page's state.
 pub(super) struct Startup {
 	machine: Machine,
@@ -69,14 +75,8 @@ impl Startup {
 		ui.add(egui::Label::new(s.get("StartupPreviewText")).wrap());
 		settings::rows(ui, app, out, self.machine, &["SettingsRam", "SettingsPreset"]);
 		ui.label(RichText::new(levers_line(s, &app.settings)).color(dim));
-		let (settings_key, examples_key) = (s.get("MenuFileSettings"), s.get("MenuFileExamples"));
-		let then = ui
-			.horizontal(|ui| {
-				let settings = modal::button(ui, settings_key, true).clicked() || mnemonic_pressed(ui, settings_key);
-				let examples = modal::button(ui, examples_key, true).clicked() || mnemonic_pressed(ui, examples_key);
-				(settings.then_some(Then::Settings)).or(examples.then_some(Then::Examples))
-			})
-			.inner;
+		let settings_key = s.get("MenuFileSettings");
+		let settings = modal::button(ui, settings_key, true).clicked() || mnemonic_pressed(ui, settings_key);
 		let show = app.settings.show_startup;
 		if let Some(on) = check_box(ui, Id::unique("StartupShow"), s.get("StartupShowAtLaunch"), show) {
 			out.push(Event::SetShowStartup(on));
@@ -88,8 +88,20 @@ impl Startup {
 				i.consume_key(Modifiers::NONE, Key::Escape);
 			});
 		}
-		let closed = buttons(ui, fresh, &[Choice::both(s.get("DialogClose"))]);
-		then.map_or_else(|| closed.map(|_| None), |t| Some(Some(t)))
+		let choices = [
+			Choice::plain(s.get("MenuFileOpen")),
+			Choice::plain(s.get("StartupRandomExample")),
+			Choice { primary: true, ..Choice::default(s.get("MenuFileExamples")) },
+		];
+		let then = match buttons(ui, fresh, &choices) {
+			_ if settings => Then::Settings,
+			Some(0) => Then::Open,
+			Some(1) => Then::Send(Event::Guarded(Guarded::OpenExample(random_example()))),
+			Some(_) => Then::Examples,
+			None if ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) => return Some(None),
+			None => return None,
+		};
+		Some(Some(then))
 	}
 }
 

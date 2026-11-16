@@ -210,6 +210,7 @@ impl Shell {
 			Then::Examples => self.modals.show(Modal::Examples(Examples::default())),
 			Then::Settings => self.modals.show(Modal::Settings(Settings::new())),
 			Then::Welcome => self.modals.show(Modal::Startup(Startup::new())),
+			Then::Open => self.files.open_project(ctx, &self.app),
 			#[cfg(not(target_arch = "wasm32"))]
 			Then::Download(update) => self.updates.download(ctx, &self.app.strings, *update),
 			Then::CheckForUpdates { quiet } => self.updates.check(ctx, quiet),
