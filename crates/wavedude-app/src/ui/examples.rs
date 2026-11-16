@@ -1,5 +1,6 @@
 //! The Examples dialog (docs/ui/70): the example projects in tabs by topic, a search over titles and descriptions
-//! that dims the tabs without a match, a scrolled list; Open runs the guarded open of any project.
+//! that dims the tabs without a match, a scrolled list; Open runs the guarded open of any project, Welcome page...
+//! goes back to the welcome page.
 
 use eframe::egui::{
 	self, FontId, Key, Modifiers, RichText, Role, ScrollArea, Sense, Stroke, TextEdit, Ui, WidgetInfo, vec2,
@@ -170,11 +171,13 @@ impl Examples {
 			self.show_tab(self.tab.saturating_add_signed(beside).min(Topic::ALL.len() - 1));
 		}
 		let choices = [
+			Choice::plain(s.get("ExamplesWelcome")),
 			Choice { enabled: selected.is_some(), ..Choice::default(s.get("ExamplesOpen")) },
 			Choice::cancel(s.get("DialogCancel")),
 		];
 		let open = match buttons(ui, fresh, &choices) {
-			Some(0) => selected,
+			Some(0) => return Some(Some(Then::Welcome)),
+			Some(1) => selected,
 			Some(_) => return Some(None),
 			None => open,
 		};

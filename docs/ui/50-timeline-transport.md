@@ -6,7 +6,7 @@ Pointers: `Controls/TimelineBar.cs`, `Panes/PreviewPane.xaml(.cs)` (transport, p
 
 Units: the timeline is in frames. Frame k = state after step k x VisualizeEvery. Frames planned =
 ceil(Steps / VisualizeEvery). The in/out points are stored as steps (Display > From step / To step) and shown in
-frames. A reduced preview (View > Preview frames) never changes the timeline: a stored frame stands in for the
+frames. A reduced preview (Settings, Preview frames) never changes the timeline: a stored frame stands in for the
 ones left out.
 
 ## Timeline (full width, above the transport bar)

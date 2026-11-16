@@ -76,8 +76,8 @@ How a release is made: [`docs/release.md`](docs/release.md)
 
 MP4 export uses Cisco's prebuilt OpenH264, which Cisco's H.264 patent licence
 covers only when it is downloaded from Cisco to the user's device. Release
-builds therefore carry no H.264 encoder: the app's startup page asks whether
-to enable it and the app downloads it at the first MP4 export, the CLI on
+builds therefore carry no H.264 encoder: it is off until enabled in Settings
+or the MP4 export dialog, and the app downloads it at the first MP4 export, the CLI on
 `wavedude-cli openh264 enable`; both share the choice ([decision 0005](docs/decisions/0005-video-openh264.md)). The `openh264-source`
 feature compiles OpenH264 in for development and tests; a build made with it
 must not be distributed without an H.264 patent licence. `wavedude-export` and

@@ -7,7 +7,8 @@ use std::sync::mpsc::Sender;
 
 use eframe::egui::{self, Id, RichText, Ui};
 use wavedude_app_state::Event;
-use wavedude_export::{ExportFormat, h264};
+use wavedude_export::ExportFormat;
+use wavedude_export::h264::{self, Profile};
 
 use super::super::files::wait;
 use super::super::inbox::Inbox;
@@ -154,8 +155,8 @@ impl ExportDialog {
 	pub(super) fn notes(&mut self, ui: &mut Ui, app: &App, out: &mut Vec<Event>) -> bool {
 		let s = &app.strings;
 		if self.format() == Some(ExportFormat::Mp4) {
-			let (current, supported) = (app.settings.h264_profile, h264::OpenH264Factory::PROFILES);
-			if let Some(profile) = super::profile_row(ui, s, current, supported, s.get("ExportH264BaselineOnly")) {
+			let (supported, reason) = h264_profiles(app);
+			if let Some(profile) = super::profile_row(ui, s, app.settings.h264_profile, &supported, s.get(reason)) {
 				out.push(Event::SetH264Profile(profile));
 			}
 		}
@@ -174,6 +175,11 @@ impl ExportDialog {
 		}
 		!mp4 || enabled
 	}
+}
+
+/// The H.264 profiles MP4 export encodes, and the string key of why the others cannot be picked.
+pub(in crate::ui) fn h264_profiles(_: &App) -> (Vec<Profile>, &'static str) {
+	(h264::OpenH264Factory::PROFILES.to_vec(), "ExportH264BaselineOnly")
 }
 
 /// Why `format` cannot be picked, a string key: never, as OpenH264's use is asked for in the dialog.

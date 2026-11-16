@@ -1,6 +1,6 @@
 # 0011 Releases, installers, dependency updates and the updater
 
-Status: accepted, 2026-11-07
+Status: accepted, 2026-11-07; the startup question gone 2026-11-16 ([0027](0027-unified-settings.md))
 
 - **Versions** from the conventional commits of the whole repository by [git-cliff](https://git-cliff.org)
   ([`cliff.toml`](../../cliff.toml)), in [`release.yml`](../../.github/workflows/release.yml): one version for the workspace, a release PR kept open on the default branch
@@ -48,7 +48,7 @@ Status: accepted, 2026-11-07
   `releases/latest/download/latest.json`, whose packages are signed with a minisign key (the private key a
   secret, the public key a repository variable compiled in through `WAVEDUDE_UPDATE_PUBKEY`); the endpoint is
   derived from the repository the workflow runs in. A build without both has no updater, no menu entries and no
-  startup question. The check runs at launch only if the user agreed on the startup page; installing asks
+  update settings. The check runs at launch only if the user turned it on in Settings (off by default); installing asks
   each time. The package is downloaded and verified while the program runs and installed after an exit that asks
   about unsaved edits like any other, then the new version is started: the program is never replaced or ended
   under the user's work. It replaces the NSIS install, the macOS app and an AppImage; a plain Linux binary is told where

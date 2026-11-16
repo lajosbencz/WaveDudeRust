@@ -81,7 +81,7 @@ Memory budget:
 ```
 available = min(free physical memory, available commit)        (Rust: the OS's available memory, sysinfo)
 budget    = max(0, available + reclaimed - 2 GiB)
-if FrameMemoryPercent > 0: budget = min(physical * pct/100, budget)
+if FrameMemoryPercent > 0: budget = min(physical * pct/100, budget)   (Rust: no share; decision 0027)
 reclaimed = bytes of the outgoing run's store (its release is awaited before allocating)
 FrameBytes = layers * PlaneBytes
 RamFrames  = min(Capacity, budget / FrameBytes)
@@ -141,6 +141,8 @@ RAM cache to Auto and three quality steps (resolution / 2, frames / 2, 8-bit).
 | Middle | otherwise | (1, 1, Index) | 0 |
 
 Evaluated once when no settings file exists. Fixed defaults otherwise: (1, 1, Index), dither 0.
+Rust: the tiers are the presets Low, Medium and High of Settings, and its Auto preset evaluates the table again
+on the machine as read then, the browser's picked RAM size standing in for its memory (decision 0027).
 
 ## Colour lookup (`Rendering/ColorLut.cs`, `ColorScheme.cs`)
 

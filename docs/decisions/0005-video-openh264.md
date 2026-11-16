@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-11-05; amended 2026-11-07 (run-time loading), 2026-11-14 (the browser), 2026-11-15 (the
 in-house muxer, the browser encoder's queue), 2026-11-16 (B-frames and the MP4 muxer: `shiguredo_mp4` replaces the
-in-house muxer)
+in-house muxer); the launch question gone 2026-11-16 ([0027](0027-unified-settings.md))
 
 The original encodes MP4 with Windows Media Foundation, NV12 input, 8-bit
 4:2:0, in quality mode with a bitrate fallback and the hardware encoder when
@@ -25,18 +25,19 @@ folder (`<data dir>/WaveDudeRust/openh264`, `AppDirs::codec`), the crate checks 
 Cisco's builds, and the MP4 sink loads it at run time. Cisco's conditions, as
 built:
 
-- Downloaded by the user's choice: the startup page asks until answered (the
-  check box "Use Cisco's OpenH264 codec", clear unless ticked); the answer is
+- Downloaded by the user's choice: off until the user ticks "Use Cisco's
+  OpenH264 codec" in Settings or in the export dialog, whose OK stays disabled
+  under MP4 while it is clear ([0027](0027-unified-settings.md)); the choice is
   the `UseOpenH264` setting in the app's settings file, which the CLI reads and
   writes too, so both agree. The binary is downloaded at the first MP4 export
   after it is enabled, and at once by `wavedude-cli openh264 enable`.
-- Enabled and disabled by the user: the launch question, the export dialog's
+- Enabled and disabled by the user: Settings > Export, the export dialog's
   check box "Use Cisco's OpenH264 codec" under MP4, and `wavedude-cli openh264
   enable|disable`. Disabling keeps the download; "Delete the downloaded codec"
   in the export dialog and `wavedude-cli openh264 delete` remove it, and an
   enabled codec is downloaded again at the next MP4 export.
 - "OpenH264 Video Codec provided by Cisco Systems, Inc." shown where the user
-  controls it: on the startup page, above the export dialog's check box, and by every
+  controls it: in Settings and above the export dialog's check box, and by every
   `wavedude-cli openh264` action.
 - Cisco's licence text ([`crates/wavedude-export/assets/OpenH264-BINARY_LICENSE.txt`](../../crates/wavedude-export/assets/OpenH264-BINARY_LICENSE.txt),
   verbatim) with the licensing information: the About dialog and `wavedude-cli

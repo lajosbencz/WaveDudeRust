@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-11-13; writes in flight changed 2026-11-14; reading ahead added 2026-11-14; the browser's
 memory budget added 2026-11-15; the spill worker added 2026-11-15; the RAM cache size in the browser added
-2026-11-16.
+2026-11-16; set in Settings since 2026-11-16 ([0027](0027-unified-settings.md)).
 Amends [0015](0015-core-builds-for-wasm.md): on wasm32 a store keeps the frames past its memory budget, as
 natively, instead of refusing them.
 
@@ -145,12 +145,12 @@ open for its life, makes Firefox's spill fast, and only a dedicated worker can h
 
 ## The RAM cache size in the browser (added 2026-11-16)
 
-The RAM cache size's Auto is the budget above, its size shown in the menu entry; the user may pick a size in its
+The RAM cache size's Auto is the budget above, its size shown beside it in Settings; the user may pick a size in its
 place, 256 MiB, 512 MiB, 1 GiB or 2 GiB (`WEB_RAM_CACHE_SIZES`, the `FrameMemoryBytes` setting). The page's wasm32
 memory holds 4 GiB at most, its module and other buffers beside the frames, so 2 GiB is the ceiling. The budget, the
 status bar and the memory warning follow the size; the warning's lever to Auto goes back to the detected memory. A
-frame whose memory the browser refuses fails the run with a message pointing to Simulation > RAM cache size.
+frame whose memory the browser refuses fails the run with a message pointing to Settings, RAM.
 
 - The size is the page's mirror's: the run worker's `Host` runs each goal at Auto on no memory, so its store keeps no
   frame and posts each to the page ([0024](0024-browser-run-in-a-web-worker.md)).
-- The desktop's share (`FrameMemoryPercent`) is not offered: a stored one is logged and cleared at load.
+- The desktop's share (`FrameMemoryPercent`) is gone on both targets (0027): a stored one is logged and dropped at load.

@@ -1,52 +1,23 @@
-//! The tables of the menus of docs/ui/10-menus-and-shortcuts.md: the UI zooms, the preview levers, the part kinds,
-//! the [`MenuAction`]s that the menu bar, the context menus and the shortcuts share, when each is enabled, and Move up
-//! and Move down.
+//! The tables of the menus of docs/ui/10-menus-and-shortcuts.md: the menu bar, the part kinds, the [`MenuAction`]s
+//! that the menu bar, the context menus and the shortcuts share, when each is enabled, and Move up and Move down.
 
+use egui_material_icons::MaterialIcon;
+use egui_material_icons::icons::{
+	ICON_CLOSE, ICON_CONTENT_COPY, ICON_CONTENT_CUT, ICON_CONTENT_PASTE, ICON_DELETE, ICON_DELETE_SWEEP,
+	ICON_FOLDER_OPEN, ICON_HISTORY, ICON_IMAGE, ICON_INFO, ICON_IOS_SHARE, ICON_LIST_ALT, ICON_LOGOUT, ICON_MENU_BOOK,
+	ICON_NOTE_ADD, ICON_PAUSE, ICON_PLAY_ARROW, ICON_REDO, ICON_SAVE, ICON_SAVE_AS, ICON_SELECT_ALL, ICON_SETTINGS,
+	ICON_STOP, ICON_UNDO, ICON_VIEW_SIDEBAR, ICON_WAVING_HAND,
+};
 use wavedude_app_state::AppState;
 use wavedude_app_state::clipboard::Copyable;
 use wavedude_app_state::commands::NewPart;
 use wavedude_app_state::live::Backend;
+use wavedude_app_state::platform::HAS_PATHS;
 use wavedude_app_state::selection::Row;
-use wavedude_app_state::settings::{DITHER_BITS, Theme as ThemeSetting};
-use wavedude_app_state::strings::Language;
-use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::{ItemKind, ItemRef, ProbeDetector};
-use wavedude_core::run::RamCache;
 
+use crate::App;
 use crate::window::Pane;
-
-/// The UI zoom entries of View > UI zoom: factor and string key.
-pub const ZOOMS: [(f64, &str); 8] = [
-	(0.5, "MenuViewUiZoom50"),
-	(0.75, "MenuViewUiZoom75"),
-	(1.0, "MenuViewUiZoom100"),
-	(1.25, "MenuViewUiZoom125"),
-	(1.5, "MenuViewUiZoom150"),
-	(2.0, "MenuViewUiZoom200"),
-	(2.5, "MenuViewUiZoom250"),
-	(3.0, "MenuViewUiZoom300"),
-];
-
-/// View > Resolution and the startup page's lever: divisor and string key.
-pub const RESOLUTIONS: [(u32, &str); 3] =
-	[(1, "MenuViewResolutionFull"), (2, "MenuViewResolutionHalf"), (4, "MenuViewResolutionQuarter")];
-
-/// View > Frames and the startup page's lever: divisor and string key.
-pub const FRAME_STEPS: [(u32, &str); 3] =
-	[(1, "MenuViewFramesFull"), (2, "MenuViewFramesHalf"), (4, "MenuViewFramesQuarter")];
-
-/// View > Samples and the startup page's lever: format and string key.
-pub const SAMPLES: [(SampleFormat, &str); 2] =
-	[(SampleFormat::Half, "MenuViewSamples16"), (SampleFormat::Index, "MenuViewSamples8")];
-
-/// View > Dither and the startup page's lever: bits and string key.
-pub const DITHERS: [(u32, &str); DITHER_BITS.len()] = [
-	(DITHER_BITS[0], "MenuViewDitherOff"),
-	(DITHER_BITS[1], "MenuViewDither10"),
-	(DITHER_BITS[2], "MenuViewDither12"),
-	(DITHER_BITS[3], "MenuViewDither14"),
-	(DITHER_BITS[4], "MenuViewDither16"),
-];
 
 /// The Add part menu's entries: kind, string key.
 pub const PART_KINDS: [(NewPart, &str); 21] = [
@@ -83,6 +54,15 @@ pub enum ExportKindChoice {
 	IntensityFrame,
 }
 
+/// A step of the UI zoom.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ZoomStep {
+	In,
+	Out,
+	/// The device's default.
+	Reset,
+}
+
 /// What an item action applies to: the current item, or the row a context menu opened on (none: the empty tree).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum On {
@@ -99,8 +79,10 @@ pub enum MenuAction {
 	Recent(usize),
 	/// The Examples dialog.
 	Examples,
-	/// The startup page.
+	/// The welcome page.
 	Welcome,
+	/// The Settings window.
+	Settings,
 	Save,
 	SaveAs,
 	Export(ExportKindChoice),
@@ -116,26 +98,14 @@ pub enum MenuAction {
 	SelectAll,
 	/// Shows or hides a pane.
 	Pane(Pane),
-	Theme(ThemeSetting),
-	Zoom(f64),
-	/// `None` follows the system.
-	Language(Option<Language>),
-	Resolution(u32),
-	Frames(u32),
-	Samples(SampleFormat),
-	/// One of [`wavedude_app_state::settings::DITHER_BITS`].
-	Dither(u32),
+	/// The UI zoom, by its keys.
+	Zoom(ZoomStep),
 	Run,
 	PauseRun,
 	Stop,
 	DiscardFrames,
 	Play,
-	UseGpu,
-	AutoRerun,
-	WarnMemory,
 	CheckForUpdates,
-	CheckAtLaunch,
-	FrameMemory(RamCache),
 	About,
 	Manual,
 	AddSource,
@@ -150,6 +120,189 @@ pub enum MenuAction {
 	/// Adds a project colour scheme to the user's, or removes the user's of its name.
 	ToggleUserScheme,
 }
+
+/// When an entry of the menu bar shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Show {
+	Always,
+	/// The desktop only.
+	Native,
+	/// Where files have paths.
+	Paths,
+	/// Builds with the updater.
+	Updater,
+}
+
+impl Show {
+	/// Whether this build shows the entry.
+	pub fn now(self) -> bool {
+		match self {
+			Self::Always => true,
+			Self::Native => cfg!(not(target_arch = "wasm32")),
+			Self::Paths => HAS_PATHS,
+			#[cfg(not(target_arch = "wasm32"))]
+			Self::Updater => crate::update::AVAILABLE,
+			#[cfg(target_arch = "wasm32")]
+			Self::Updater => false,
+		}
+	}
+}
+
+/// What the window holds for an entry beyond [`enabled`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Needs {
+	Nothing,
+	/// Objects on the clipboard.
+	Pastable,
+	/// A last export of the open project.
+	LastExport,
+}
+
+/// The label an entry shows in place of its own while `when` holds.
+#[derive(Clone, Copy)]
+pub struct Alt {
+	pub key: &'static str,
+	pub icon: MaterialIcon,
+	pub when: fn(&App) -> bool,
+}
+
+/// An entry of the menu bar: its action, the string key of its label (with its mnemonic) and its icon. Its shortcut
+/// is the action's in `ui::shortcuts`.
+#[derive(Clone, Copy)]
+pub struct Item {
+	pub action: MenuAction,
+	pub key: &'static str,
+	pub icon: Option<MaterialIcon>,
+	pub show: Show,
+	pub needs: Needs,
+	pub alt: Option<Alt>,
+}
+
+impl Item {
+	const fn new(action: MenuAction, key: &'static str, icon: Option<MaterialIcon>) -> Self {
+		Self { action, key, icon, show: Show::Always, needs: Needs::Nothing, alt: None }
+	}
+
+	const fn show(self, show: Show) -> Self {
+		Self { show, ..self }
+	}
+
+	const fn needs(self, needs: Needs) -> Self {
+		Self { needs, ..self }
+	}
+
+	const fn alt(self, key: &'static str, icon: MaterialIcon, when: fn(&App) -> bool) -> Self {
+		Self { alt: Some(Alt { key, icon, when }), ..self }
+	}
+}
+
+/// A row of a menu of the bar.
+#[derive(Clone, Copy)]
+pub enum Entry {
+	Item(Item),
+	/// Enabled while one of its items is.
+	Submenu {
+		key: &'static str,
+		icon: MaterialIcon,
+		show: Show,
+		entries: &'static [Entry],
+	},
+	/// Dropped at either end of a menu and after another.
+	Separator,
+	/// The recent files, their paths without mnemonics.
+	Recent,
+	/// One checked entry per pane, its title without a mnemonic.
+	Panes,
+}
+
+const fn item(action: MenuAction, key: &'static str, icon: MaterialIcon) -> Entry {
+	Entry::Item(Item::new(action, key, Some(icon)))
+}
+
+const fn export(choice: ExportKindChoice, key: &'static str, icon: MaterialIcon) -> Entry {
+	item(MenuAction::Export(choice), key, icon)
+}
+
+fn run_paused(app: &App) -> bool {
+	app.live.run_paused_by_user()
+}
+
+fn playing(app: &App) -> bool {
+	app.live.playback.is_playing()
+}
+
+const FILE: &[Entry] = &[
+	item(MenuAction::New, "MenuFileNew", ICON_NOTE_ADD),
+	item(MenuAction::Open, "MenuFileOpen", ICON_FOLDER_OPEN),
+	Entry::Submenu { key: "MenuFileRecent", icon: ICON_HISTORY, show: Show::Paths, entries: &[Entry::Recent] },
+	item(MenuAction::Examples, "MenuFileExamples", ICON_LIST_ALT),
+	item(MenuAction::Welcome, "MenuFileWelcome", ICON_WAVING_HAND),
+	item(MenuAction::Settings, "MenuFileSettings", ICON_SETTINGS),
+	Entry::Separator,
+	item(MenuAction::Save, "MenuFileSave", ICON_SAVE),
+	item(MenuAction::SaveAs, "MenuFileSaveAs", ICON_SAVE_AS),
+	Entry::Separator,
+	Entry::Submenu {
+		key: "MenuFileExport",
+		icon: ICON_IOS_SHARE,
+		show: Show::Always,
+		entries: &[
+			export(ExportKindChoice::Field, "MenuFileExportField", ICON_IOS_SHARE),
+			export(ExportKindChoice::Intensity, "MenuFileExportIntensity", ICON_IOS_SHARE),
+			export(ExportKindChoice::Both, "MenuFileExportBoth", ICON_IOS_SHARE),
+			Entry::Separator,
+			export(ExportKindChoice::FieldFrame, "MenuFileExportFieldFrame", ICON_IMAGE),
+			export(ExportKindChoice::IntensityFrame, "MenuFileExportIntensityFrame", ICON_IMAGE),
+		],
+	},
+	Entry::Item(Item::new(MenuAction::ExportLast, "MenuFileExportLast", Some(ICON_IOS_SHARE)).needs(Needs::LastExport)),
+	Entry::Separator,
+	item(MenuAction::Close, "MenuFileClose", ICON_CLOSE),
+	Entry::Separator,
+	Entry::Item(Item::new(MenuAction::Exit, "MenuFileExit", Some(ICON_LOGOUT)).show(Show::Native)),
+];
+
+const EDIT: &[Entry] = &[
+	item(MenuAction::Undo, "MenuEditUndo", ICON_UNDO),
+	item(MenuAction::Redo, "MenuEditRedo", ICON_REDO),
+	Entry::Separator,
+	item(MenuAction::Cut, "MenuEditCut", ICON_CONTENT_CUT),
+	item(MenuAction::Copy, "MenuEditCopy", ICON_CONTENT_COPY),
+	Entry::Item(Item::new(MenuAction::Paste, "MenuEditPaste", Some(ICON_CONTENT_PASTE)).needs(Needs::Pastable)),
+	item(MenuAction::Delete, "MenuEditDelete", ICON_DELETE),
+	Entry::Separator,
+	item(MenuAction::SelectAll, "MenuProjectSelectAll", ICON_SELECT_ALL),
+];
+
+const VIEW: &[Entry] =
+	&[Entry::Submenu { key: "MenuViewPanes", icon: ICON_VIEW_SIDEBAR, show: Show::Always, entries: &[Entry::Panes] }];
+
+const SIMULATION: &[Entry] = &[
+	item(MenuAction::Run, "MenuSimulationRun", ICON_PLAY_ARROW),
+	Entry::Item(Item::new(MenuAction::PauseRun, "MenuSimulationPause", Some(ICON_PAUSE)).alt(
+		"MenuSimulationResume",
+		ICON_PLAY_ARROW,
+		run_paused,
+	)),
+	item(MenuAction::Stop, "MenuSimulationStop", ICON_STOP),
+	item(MenuAction::DiscardFrames, "MenuSimulationDiscardFrames", ICON_DELETE_SWEEP),
+	Entry::Separator,
+	Entry::Item(Item::new(MenuAction::Play, "MenuSimulationPlay", Some(ICON_PLAY_ARROW)).alt(
+		"MenuSimulationPausePlayback",
+		ICON_PAUSE,
+		playing,
+	)),
+];
+
+const HELP: &[Entry] = &[
+	item(MenuAction::About, "MenuHelpAbout", ICON_INFO),
+	item(MenuAction::Manual, "MenuHelpManual", ICON_MENU_BOOK),
+	Entry::Item(Item::new(MenuAction::CheckForUpdates, "MenuHelpCheckNow", None).show(Show::Updater)),
+];
+
+/// The menu bar (docs/ui/10): each menu's header key and its entries.
+pub const MENU_BAR: [(&str, &[Entry]); 5] =
+	[("MenuFile", FILE), ("MenuEdit", EDIT), ("MenuView", VIEW), ("MenuSimulation", SIMULATION), ("MenuHelp", HELP)];
 
 /// The item an item action on `on` applies to: the current item, or the context menu's row when it is an item.
 pub fn target<B: Backend>(app: &AppState<B>, on: On) -> Option<ItemRef> {
@@ -182,7 +335,6 @@ pub fn enabled<B: Backend>(app: &AppState<B>, action: MenuAction, on: On) -> boo
 			(on == On::Current && !app.selection.items().is_empty()) || row.and_then(Copyable::of_row).is_some()
 		}
 		MenuAction::SelectAll => !(project.sources.is_empty() && project.parts.is_empty() && project.probes.is_empty()),
-		MenuAction::Dither(_) => app.settings.preview_quality().format == SampleFormat::Half,
 		MenuAction::Run => !live.run_is_active() && !live.export_busy(),
 		MenuAction::PauseRun => live.run_is_active(),
 		MenuAction::Stop => live.run_is_active() || live.export_busy(),
@@ -201,24 +353,15 @@ pub fn enabled<B: Backend>(app: &AppState<B>, action: MenuAction, on: On) -> boo
 		| MenuAction::Recent(_)
 		| MenuAction::Examples
 		| MenuAction::Welcome
+		| MenuAction::Settings
 		| MenuAction::Save
 		| MenuAction::SaveAs
 		| MenuAction::Exit
 		| MenuAction::Paste
 		| MenuAction::Pane(_)
-		| MenuAction::Theme(_)
 		| MenuAction::Zoom(_)
-		| MenuAction::Language(_)
-		| MenuAction::Resolution(_)
-		| MenuAction::Frames(_)
-		| MenuAction::Samples(_)
 		| MenuAction::Play
-		| MenuAction::UseGpu
-		| MenuAction::AutoRerun
-		| MenuAction::WarnMemory
 		| MenuAction::CheckForUpdates
-		| MenuAction::CheckAtLaunch
-		| MenuAction::FrameMemory(_)
 		| MenuAction::About
 		| MenuAction::Manual
 		| MenuAction::AddSource
@@ -263,6 +406,7 @@ mod tests {
 	use wavedude_app_state::live::fake::FakeBackend;
 	use wavedude_app_state::platform::Instant;
 	use wavedude_app_state::settings::Settings;
+	use wavedude_app_state::strings::{Language, Strings, mnemonic};
 	use wavedude_export::ExportFormat;
 
 	use super::*;
@@ -312,6 +456,57 @@ mod tests {
 			assert!(!enabled(&app, action, On::Current), "{action:?} during an export");
 		}
 		assert!(enabled(&app, MenuAction::Stop, On::Current));
+	}
+
+	/// The labels of `entries` by menu, the submenus' after: each entry's key and its alternative's.
+	fn menus_of(entries: &'static [Entry], out: &mut Vec<Vec<(&'static str, Option<&'static str>)>>) {
+		let mut menu = Vec::new();
+		for entry in entries {
+			match *entry {
+				Entry::Item(item) => menu.push((item.key, item.alt.map(|a| a.key))),
+				Entry::Submenu { key, entries, .. } => {
+					menu.push((key, None));
+					menus_of(entries, out);
+				}
+				Entry::Separator | Entry::Recent | Entry::Panes => {}
+			}
+		}
+		out.push(menu);
+	}
+
+	/// Every entry of every build, whatever it shows; an alternative label may share its entry's letter.
+	#[test]
+	fn every_menu_entry_has_a_mnemonic_unique_in_its_menu_in_every_language() {
+		let mut menus = vec![MENU_BAR.iter().map(|&(key, _)| (key, None)).collect()];
+		for (_, entries) in MENU_BAR {
+			menus_of(entries, &mut menus);
+		}
+		let mut faults = Vec::new();
+		for language in Language::ALL {
+			let s = Strings::new(language);
+			for menu in &menus {
+				let letters: Vec<Vec<(&str, Option<char>)>> = menu
+					.iter()
+					.map(|&(key, alt)| {
+						[Some(key), alt].into_iter().flatten().map(|k| (k, mnemonic(s.get(k)))).collect()
+					})
+					.collect();
+				for (i, labels) in letters.iter().enumerate() {
+					for &(key, letter) in labels {
+						let Some(letter) = letter else {
+							faults.push(format!("{language:?} {key}: no mnemonic"));
+							continue;
+						};
+						let mut later = letters[i + 1..].iter().flatten();
+						let clash = later.find(|&&(_, l)| l == Some(letter));
+						if let Some((other, _)) = clash {
+							faults.push(format!("{language:?} '{letter}': {key} / {other}"));
+						}
+					}
+				}
+			}
+		}
+		assert!(faults.is_empty(), "{faults:#?}");
 	}
 
 	#[test]

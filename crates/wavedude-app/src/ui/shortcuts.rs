@@ -4,7 +4,7 @@
 
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
 
-use crate::menus::{ExportKindChoice, MenuAction};
+use crate::menus::{ExportKindChoice, MenuAction, ZoomStep};
 
 const fn key(modifiers: Modifiers, key: Key) -> KeyboardShortcut {
 	KeyboardShortcut::new(modifiers, key)
@@ -15,11 +15,12 @@ const CMD_SHIFT: Modifiers = Modifiers::COMMAND.plus(Modifiers::SHIFT);
 const NONE: Modifiers = Modifiers::NONE;
 
 /// The shortcuts; the first of an action is the one its menu entry shows.
-const SHORTCUTS: [(KeyboardShortcut, MenuAction); 26] = [
+const SHORTCUTS: [(KeyboardShortcut, MenuAction); 32] = [
 	(key(CMD, Key::N), MenuAction::New),
 	(key(CMD, Key::O), MenuAction::Open),
 	(key(CMD_SHIFT, Key::S), MenuAction::SaveAs),
 	(key(CMD, Key::S), MenuAction::Save),
+	(key(CMD, Key::Comma), MenuAction::Settings),
 	(key(CMD_SHIFT, Key::E), MenuAction::Export(ExportKindChoice::Field)),
 	(key(CMD_SHIFT, Key::I), MenuAction::Export(ExportKindChoice::Intensity)),
 	(key(CMD_SHIFT, Key::B), MenuAction::Export(ExportKindChoice::Both)),
@@ -42,6 +43,12 @@ const SHORTCUTS: [(KeyboardShortcut, MenuAction); 26] = [
 	(key(NONE, Key::F6), MenuAction::PauseRun),
 	(key(NONE, Key::F7), MenuAction::Play),
 	(key(NONE, Key::Escape), MenuAction::Stop),
+	// Ctrl+Plus is Ctrl+Shift+= on some layouts.
+	(key(CMD, Key::Equals), MenuAction::Zoom(ZoomStep::In)),
+	(key(CMD, Key::Plus), MenuAction::Zoom(ZoomStep::In)),
+	(key(CMD_SHIFT, Key::Plus), MenuAction::Zoom(ZoomStep::In)),
+	(key(CMD, Key::Minus), MenuAction::Zoom(ZoomStep::Out)),
+	(key(CMD, Key::Num0), MenuAction::Zoom(ZoomStep::Reset)),
 ];
 
 /// A focused text box's own keys.
@@ -127,8 +134,8 @@ impl Keyboard {
 	}
 }
 
-/// Whether the browser's own action for a key is to be prevented: a shortcut of the table, but for the
-/// clipboard's, whose default makes the browser's clipboard events.
+/// Whether the browser's own action for a key is to be prevented: a shortcut of the table, the zoom keys' page zoom
+/// included (decision 0027), but for the clipboard's, whose default makes the browser's clipboard events.
 #[cfg(target_arch = "wasm32")]
 pub(super) fn is_reserved(key: Key, modifiers: Modifiers) -> bool {
 	action_of(key, modifiers).is_some_and(|action| !is_clipboard(action))

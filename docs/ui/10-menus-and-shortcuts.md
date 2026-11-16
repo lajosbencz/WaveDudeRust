@@ -13,6 +13,8 @@ Conventions:
 - (port) While a modal shows, the menu bar is greyed and takes no pointer or key.
 - Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`wavedude-app` [`menus.rs`](../../crates/wavedude-app/src/menus.rs));
   the ids in this document name the entries.
+- Port: the menu bar is the table `menus::MENU_BAR`, whose unit test checks the mnemonics of every menu in every
+  language; the recent files and the panes carry none.
 - Port: one table, `menus::enabled`, holds the Enabled rules of every menu here, the context menus' included; the menu
   bar, the context menus, the tree's toolbar, the transport bar's Run and the dispatcher read it, so a shortcut whose
   entry is disabled does nothing. Paste and Export last also need objects on the clipboard and a last export of the
@@ -34,7 +36,8 @@ Conventions:
 | 2 | Open Project... | O/O-umlaut/O/O | Ctrl+O | U+E8E5 | always | Asks about unsaved edits; file dialog, filter: WaveDude Next projects (*.wdproj), Wave Dude 2D projects (configuration.json; *.json), XML (*.xml), All. A `configuration.json` is imported as a new unsaved project. |
 | 3 | Recent Projects > | R/Z/R/R | - | U+E81C | always (empty submenu when none) | One entry per recent file, newest first, full path as plain text (no mnemonics). Click opens. |
 | 4 | Examples... | P/P/P/V | - | U+E8F1 | always | Opens the Examples dialog ([ui/70](70-dialogs-and-windows.md)) of 44 projects; id `file:examples`. An example opens as an unsaved project named after its file (title shows it; Save As proposes it). List: see `MANUAL.md` "Examples". |
-| 4a | Welcome Page... | W/K/A/W | - | U+E766 | always | Opens the startup page ([ui/70](70-dialogs-and-windows.md)) with the current settings. |
+| 4a | Welcome Page... | W/K/A/W | - | U+E766 | always | Opens the welcome page ([ui/70](70-dialogs-and-windows.md)). |
+| 4b | Settings... (port) | T/I/M/I | Ctrl+, | U+E713 | always | Opens the Settings window ([ui/70](70-dialogs-and-windows.md); decision 0027). |
 | - | separator | | | | | |
 | 5 | Save | S/S/E/S | Ctrl+S | U+E74E | always | Save; Save As when the project has no file. |
 | 6 | Save As... | A/U/S/A | Ctrl+Shift+S | U+E792 | always | Save dialog, filter: *.wdproj, *.xml. Proposes the suggested name (import/example) beside its origin. |
@@ -87,21 +90,12 @@ In the browser the page asks before it is left (closed, reloaded, navigated away
 
 ## View
 
-All settings here are user settings, persisted, not in the project.
-
 | Entry | Mn | Icon | Kind | Action |
 |---|---|---|---|---|
 | Panes > | P/F/P/P | U+E8A0 | checkable list | One entry per pane (Preview, Project, Properties, Messages; decision 0008), check = shown; click toggles. Pane title as header. |
-| Theme > | T/D/T/T | U+E790 | radio list | System, Light, Dark. |
-| UI zoom > | Z/Z/Z/Z | U+E8A3 | radio list | 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x, 2.5x, 3x (no mnemonics). |
-| Language > | L/S/L/L | U+E774 | radio list | System (in current language), English, Deutsch, Francais, Nederlands (own names). |
-| - separator | | | | |
-| Preview resolution > | R/A/R/R | Draw:PreviewResolution | radio | Full (F/V/C/V), Half (H/H/M/H), Quarter (Q/I/Q/K). Divisor 1/2/4. |
-| Preview frames > | F/B/I/F | Draw:PreviewFrames | radio | Full, Half (every second frame), Quarter (every fourth frame). |
-| Preview samples > | S/W/H/S | Draw:PreviewSamples | radio | 16-bit float (1), 8-bit palette index (brightness fixed when the run starts) (8). |
-| Preview dithering > | D/H/M/D | Draw:PreviewDither | radio; whole submenu disabled unless samples = 16-bit | Off, 10, 12, 14, 16 bits per channel (mnemonics O,1,2,4,6). |
 
-A change of resolution/frames/samples replaces the frames like a simulation edit. Dithering only redraws.
+(port) Theme, UI zoom, language, the full path in the title and the preview levers are set in File > Settings... (decision 0027); UI zoom also
+by Ctrl+=, Ctrl+- and Ctrl+0 (Global and focus-scoped keys).
 
 There is no Display menu. Display settings (handles/labels in the preview etc.) are the project's Display
 row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
@@ -111,16 +105,14 @@ row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
 | Entry | Mn | Shortcut | Icon | Enabled | Action |
 |---|---|---|---|---|---|
 | Run | R/S/L/S | F5 | U+E768 | no run active and no export running | Run from step 0 with the project as it is; preview follows (Live). May ask the memory warning first. |
-| Pause / Resume | P/P/P/P, Resume R/F/R/H | F6 | U+E769 | a run is active | Toggles pause; header reads Resume while paused. |
+| Pause / Resume | P/P/P/P, Resume U/F/R/H | F6 | U+E769 | a run is active | Toggles pause; header reads Resume while paused. |
 | Stop | T/T/A/T | Shift+F5, Esc | U+E71A | a run or an export is active | Esc/Stop cancels an export when one runs, else stops the run; computed frames stay. |
 | Discard frames (port) | D/V/S/V | - | U+E74D | the run has frames stored and no export holds or waits for it | Asks "Discard the frames of the run?" (Yes / No, No the default); Yes stops a run and drops its frames from RAM and the spill (disk file, browser storage), the timeline starts over at frame 0, which is made again. The project and its history stay. |
 | - separator | | | | | |
 | Play / Pause playback | Y/D/E/L | F7 | U+E768 / U+E769 | `CanPlayPause` | The timeline's Play/Pause from anywhere. Header and icon switch while playing. |
-| - separator | | | | | |
-| Use the GPU | G/G/G/G | - | none | checkable | Engine choice (CPU fallback logged). Default on. |
-| Re-run automatically after edits | A/A/U/A | - | none | checkable | Default on. |
-| Warn when a run does not fit in RAM | W/W/V/W | - | none | checkable | Default on. |
-| RAM cache size > | C/C/C/C | - | Draw:FrameMemory | radio list | Auto (A), 10 %, 20 %, ... 100 % of physical RAM (11 entries), check = current. (port) In the browser: Auto (A) with the detected frame memory, e.g. "Auto (128 MiB)", then 256 MiB, 512 MiB, 1.0 GiB, 2.0 GiB in its place (5 entries; decision 0020, The RAM cache size in the browser). |
+
+(port) Use the GPU, automatic re-run, the memory warning and the RAM size are set in File > Settings... (decision
+0027).
 
 ## Help
 
@@ -129,7 +121,6 @@ row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
 | About WaveDude Next | A/U-umlaut/P/O | - | U+E946 | Modal About dialog. |
 | Manual | M/H/M/H | F1 | U+E736 | Opens the manual window, or brings it to the front. |
 | Check for updates (port; builds with the updater) | U/U/J/U | - | none | Looks for a newer release now ([docs/ui/70](70-dialogs-and-windows.md), Updates). |
-| Check for updates at launch (port; builds with the updater) | L/S/L/S | - | none | checkable; setting `CheckForUpdates`. |
 
 ## Context menus
 
@@ -240,6 +231,8 @@ No own context menu; right-click or Apps on the strip opens the picture's menu (
 | Ctrl+Shift+E / I / B | Export field / intensity / both. |
 | Ctrl+Shift+F / G | Export field frame / intensity frame. |
 | F1 | Manual (open or bring to front). |
+| Ctrl+, (port) | Settings. |
+| Ctrl+= or Ctrl+Plus / Ctrl+- / Ctrl+0 (port) | UI zoom one step up / one step down the zooms 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x, 2.5x, 3x / back to the device's default. The browser's own page zoom does not take them. |
 | F5 | Run. |
 | F6 | Pause / resume the run. |
 | Shift+F5 | Stop the run. |

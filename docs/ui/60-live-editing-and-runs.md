@@ -11,7 +11,7 @@ Every model change is observed. Its class decides what follows.
 
 | Class | Examples | Effect |
 |---|---|---|
-| Simulation edit | scene (size, edges, damping, index, image, image sources), simulation settings, seed, any source, any optical part (incl. points, nodes, list changes), View > preview resolution/frames/samples, brightness while preview samples are 8-bit | the frames go (the pictures keep the last one); playback stops; the live run makes the position's frame first, then every frame when Re-run automatically is on, else nothing more |
+| Simulation edit | scene (size, edges, damping, index, image, image sources), simulation settings, seed, any source, any optical part (incl. points, nodes, list changes), the preview resolution/frames/samples (Settings), brightness while preview samples are 8-bit | the frames go (the pictures keep the last one); playback stops; the live run makes the position's frame first, then every frame when Re-run automatically is on, else nothing more |
 | Probe edit | probe moved, measurement/layer changed, start step changed, switched on or off, added or removed | the frames stay; the recordings are made anew from step 0 (up to the position, or the whole run when every frame is wanted); the graphs follow as they come; never clears the pictures |
 | Display edit | colour scheme, brightness (16-bit), black level, outline, Preview on/off, handles/labels, export settings, a probe's graph box (place, size, axes, window) | redraw only; no stale run |
 | Colour scheme edit | stops, colours, rename (layers repoint) | recolour the frame shown |
@@ -43,7 +43,7 @@ or every frame) and whether the user paused. The run converges on it, without ti
 - A pause with an edited project adopts the edit at once: the old frames go, the new run waits paused. A
   pause with nothing left to do is no pause: the run reads Completed. A pause holds the fill, not the frame
   looked at: a scrub while paused still shows its frame.
-- Switching the device (Simulation > Use the GPU) builds the engine anew at its next work; frames and traces
+- Switching the device (Settings, Use the GPU) builds the engine anew at its next work; frames and traces
   stay. Showing the intensity picture makes the run track it, so the frames are made again.
 - A goal change is looked at every 16 steps. Work goes on for the project as it is now alone: an edit leaves
   the frame being made and starts one run of the edited project; a frame for later or the probes' tail is
@@ -66,7 +66,7 @@ or every frame) and whether the user paused. The run converges on it, without ti
 
 ## Automatic re-run
 
-- Setting: Simulation > Re-run automatically after edits (default on).
+- Setting: Settings > Simulation, Re-run automatically after edits (default on).
 - With it on, a simulation edit wants every frame at once: the position's frame first, with the frames before
   it made on the way, then the frames after it. Never moves the preview, never followed.
 - With it off, only the position's frame is made; Play or F5 make the rest.
@@ -79,7 +79,7 @@ or every frame) and whether the user paused. The run converges on it, without ti
 
 ## Memory warning
 
-Setting: Simulation > Warn when a run does not fit in RAM (default on). Asked before any preview run (F5, Play,
+Setting: Settings > Simulation, Warn when a run does not fit in RAM (default on). Asked before any preview run (F5, Play,
 automatic re-run) whose frames exceed the RAM cache budget. Never for an export's run (always full quality), nor
 while an export waits for or reads its run. An export closes a warning still asked.
 
@@ -87,10 +87,11 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
 - Text: "The run's frames need {need} of memory, and the RAM cache has {budget}. The frames beyond that go to the
   cache file on disk, which is slower."
 - "Settings to change for this and later runs:" then four check boxes:
-  1. "RAM cache size to Auto: {budget} for the frames (Simulation menu)" - greyed when Auto gains less than a frame.
-  2. "Halve the resolution: a quarter of the memory (View menu)" - greyed at Quarter already.
-  3. "Store half the frames: half the memory (View menu)" - greyed at every fourth frame already.
-  4. "8-bit samples: half the memory (View menu)" - greyed when already 8-bit.
+  1. "RAM cache size to Auto: {budget} for the frames (Settings)" - greyed when Auto gains less than a frame; (port)
+     shown in the browser only, where a size can be picked in place of Auto (decision 0027).
+  2. "Halve the resolution: a quarter of the memory (Settings)" - greyed at Quarter already.
+  3. "Store half the frames: half the memory (Settings)" - greyed at every fourth frame already.
+  4. "8-bit samples: half the memory (Settings)" - greyed when already 8-bit.
 - Pre-tick rule: among combinations of available levers, the fewest ticks that make the run fit; among as many,
   the mildest (largest need that still fits, so the cache comes before any quality loss); ties in order 8-bit,
   half frames, half resolution. When none fits, every available lever is ticked.
@@ -100,7 +101,7 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
 - Live line under the bar: "The frames then need {n} and fit in the RAM cache." or "The frames then need {n};
   {m} of them still go to disk."
 - "Do not warn me again" check box: clears the setting.
-- Run: applies the ticks to the Simulation and View settings (persisted), then runs. Cancel: nothing changes;
+- Run: applies the ticks to the settings (persisted), then runs. Cancel: nothing changes;
   the frames it has stay; an Info line says so; playback turned off again.
 - Asked every time; no remembered answer.
 

@@ -66,8 +66,11 @@ fn mnemonics(harness: &mut Harness<'_, Shell>, headers: &[String]) -> BTreeMap<u
 			settle(harness);
 			collect(harness);
 		}
-		harness.key_press(Key::Escape);
-		settle(harness);
+		// Esc closes one level: the hovered submenu, then the menu.
+		while egui::Popup::is_any_open(&harness.ctx) {
+			harness.key_press(Key::Escape);
+			settle(harness);
+		}
 	}
 	menus
 }
@@ -82,7 +85,8 @@ fn every_menu_has_unique_mnemonics_in_every_language() {
 		let headers =
 			["MenuFile", "MenuEdit", "MenuView", "MenuSimulation", "MenuHelp"].map(|k| strip_mnemonic(s.get(k)));
 		let menus = mnemonics(&mut harness, &headers);
-		assert!(menus.len() > headers.len(), "{language:?}: the submenus did not open");
+		// the bar, its menus and File > Export
+		assert_eq!(menus.len(), headers.len() + 2, "{language:?}: a menu or File > Export did not open");
 		for entries in menus.values() {
 			for (i, (letter, text)) in entries.iter().enumerate() {
 				if let Some((_, other)) = entries[i + 1..].iter().find(|(l, _)| l == letter) {

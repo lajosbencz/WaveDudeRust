@@ -144,7 +144,7 @@ pub enum Event {
 	SetExportArchive(bool),
 	/// Whether to look for a new release at launch.
 	SetCheckForUpdates(bool),
-	/// Whether the startup page opens at each launch.
+	/// Whether the welcome page opens at each launch.
 	SetShowStartup(bool),
 	SetPreviewOrientation(settings::Orientation),
 	/// The dock's arrangement, as [`Settings::layout`](settings::Settings::layout).
@@ -227,7 +227,7 @@ pub struct AppState<B: Backend> {
 	pub live: LiveController<B>,
 	/// The user's colour schemes beside the project's and the built-in ones.
 	pub schemes: SchemeStore,
-	/// No settings file existed at the start: the startup page shows.
+	/// No settings file existed at the start: the welcome page shows.
 	pub first_start: bool,
 	/// Cisco's `OpenH264` folder (`AppDirs::codec`); `None` without one.
 	pub codec_dir: Option<PathBuf>,

@@ -92,13 +92,13 @@ project keeps it.
 
 ### 8-bit vs 16-bit (user's view)
 
-- 8-bit samples (View > Preview samples, default): stored palette indices at the store's resolution, scaled to
+- 8-bit samples (Settings, Preview samples, default): stored palette indices at the store's resolution, scaled to
   the picture. Brightness is baked in when the run starts; a brightness change is a simulation edit (the frames are made again,
   re-run). Dithering unavailable.
 - 16-bit samples: stored half floats; the picture is rendered at its exact size in device pixels (value-space
   resampling: box mean when shrinking, bilinear when enlarging, then the colour table), drawn 1:1. Brightness
   changes recolour instantly without a new run; every gradient level shows.
-- Dithering (16-bit only, View menu): colours at 10/12/14/16 bits per channel reduced to 8 through a Bayer
+- Dithering (16-bit only, Settings): colours at 10/12/14/16 bits per channel reduced to 8 through a Bayer
   matrix (2/4/8/16 cells a side), fixed to screen pixels; preview only.
 - A run on the GPU engine is coloured on the GPU, in the UI's render pass, with the same tables (Rust only,
   docs/spec/40-frames-store-render.md): the frame the engine captured last is drawn from its device copy when the

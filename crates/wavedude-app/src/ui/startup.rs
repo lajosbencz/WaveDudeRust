@@ -1,176 +1,131 @@
-//! The startup page (docs/ui/70): shown at each launch unless turned off, and while a question it asks is unanswered. The preview
-//! quality (three tiers that set four levers, pre-set from the settings), Cisco's `OpenH264` for MP4 export
-//! (decision 0005) and the launch's update check (decision 0011); OK saves every answer and Examples... does too, then opens the Examples window.
+//! The welcome page (docs/ui/70, Welcome page; decision 0027): the RAM row and the presets of Settings with a line
+//! naming the levers, Settings... and Examples..., and whether the page opens at each launch. A change applies and
+//! is saved at once.
 
-use std::borrow::Cow;
-
-use eframe::egui::{self, Align, Id, Layout, RichText, Ui, vec2};
+use eframe::egui::{self, Id, Key, Modifiers, RichText, Ui};
 use wavedude_app_state::Event;
-use wavedude_app_state::strings::{Strings, strip_mnemonic};
+use wavedude_app_state::settings::Settings as UserSettings;
+use wavedude_app_state::strings::Strings;
 use wavedude_core::engine::SampleFormat;
-use wavedude_core::quality::{PreviewDefaults, PreviewQuality, PreviewTier};
 
-use super::modal::{Choice, Reply, Then, buttons};
-use super::properties::{Choices, check_box, combo};
-#[cfg(not(target_arch = "wasm32"))]
-use super::theme::Palette;
-use super::theme::{FONT_SIZE, INPUT_HEIGHT};
+use super::modal::{self, Choice, Reply, Then, buttons, mnemonic_pressed};
+use super::properties::check_box;
+use super::settings::{self, Machine};
+use super::theme::{FONT_SIZE, Palette};
 use crate::App;
-use crate::menus::{DITHERS, FRAME_STEPS, RESOLUTIONS, SAMPLES};
 
 const WIDTH: f32 = 560.;
-const LABEL_WIDTH: f32 = 180.;
 
-/// MP4 export asks for the user's word on Cisco's `OpenH264`.
-#[cfg(not(target_arch = "wasm32"))]
-fn asks_codec() -> bool {
-	!wavedude_export::h264::BUILT_IN
-}
+/// The lever line's words: resolution divisor and string key.
+const RESOLUTIONS: [(u32, &str); 3] = [(1, "StartupResolution1"), (2, "StartupResolution2"), (4, "StartupResolution4")];
 
-#[cfg(target_arch = "wasm32")]
-fn asks_codec() -> bool {
-	false
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-const ASKS_UPDATES: bool = crate::update::AVAILABLE;
-#[cfg(target_arch = "wasm32")]
-const ASKS_UPDATES: bool = false;
+/// The lever line's words: frame divisor and string key.
+const FRAME_STEPS: [(u32, &str); 3] = [(1, "StartupFrames1"), (2, "StartupFrames2"), (4, "StartupFrames4")];
 
 /// The page opens at this launch.
 pub(super) fn due(app: &App) -> bool {
-	let st = &app.settings;
-	app.first_start
-		|| st.show_startup
-		|| (asks_codec() && st.use_openh264.is_none())
-		|| (ASKS_UPDATES && st.check_for_updates.is_none())
+	app.first_start || app.settings.show_startup
 }
 
-/// The page's answers so far.
+/// The levers as they are, e.g. "Full resolution, every frame, 8-bit samples".
+fn levers_line(s: &Strings, st: &UserSettings) -> String {
+	let q = st.preview_quality();
+	let word =
+		|table: &[(u32, &'static str)], v: u32| table.iter().find(|&&(d, _)| d == v).map(|&(_, k)| s.get(k).to_owned());
+	let samples = match q.format {
+		SampleFormat::Half => "StartupSamples16",
+		SampleFormat::Index => "StartupSamples8",
+	};
+	let dither = (q.format == SampleFormat::Half && st.preview_dither_bits > 0)
+		.then(|| s.format("StartupDitherFormat", &[&st.preview_dither_bits]));
+	[
+		word(&RESOLUTIONS, q.resolution_divisor),
+		word(&FRAME_STEPS, q.frame_divisor),
+		Some(s.get(samples).to_owned()),
+		dither,
+	]
+	.into_iter()
+	.flatten()
+	.collect::<Vec<_>>()
+	.join(", ")
+}
+
+/// The page's state.
 pub(super) struct Startup {
-	quality: PreviewQuality,
-	dither: u32,
-	openh264: bool,
-	updates: bool,
-	show: bool,
+	machine: Machine,
 }
 
 impl Startup {
-	pub(super) fn new(app: &App) -> Self {
-		let st = &app.settings;
-		Self {
-			quality: st.preview_quality(),
-			dither: st.preview_dither_bits,
-			openh264: st.use_openh264 == Some(true),
-			updates: st.check_for_updates.unwrap_or(true),
-			show: st.show_startup,
-		}
+	pub(super) fn new() -> Self {
+		Self { machine: Machine::read() }
 	}
 
-	fn set(&mut self, f: impl FnOnce(&mut PreviewQuality)) {
-		f(&mut self.quality);
-		self.quality = self.quality.validated();
-		if self.quality.format == SampleFormat::Index {
-			self.dither = 0;
-		}
-	}
-
-	pub(super) fn ui(&mut self, ui: &mut Ui, fresh: bool, app: &App, out: &mut Vec<Event>) -> Option<Reply> {
+	pub(super) fn ui(&self, ui: &mut Ui, fresh: bool, app: &App, out: &mut Vec<Event>) -> Option<Reply> {
 		let s = &app.strings;
+		let dim = Palette::of(ui.ctx().theme()).text_dim;
 		ui.set_width(WIDTH);
 		ui.label(RichText::new(s.get("StartupTitle")).size(FONT_SIZE * 1.4).family(wavedude_view::fonts::bold()));
-		heading(ui, s.get("StartupPreview"));
+		ui.label(RichText::new(s.get("StartupPreview")).family(wavedude_view::fonts::bold()));
 		ui.add(egui::Label::new(s.get("StartupPreviewText")).wrap());
-		ui.horizontal(|ui| {
-			for tier in PreviewTier::ALL {
-				if super::modal::button(ui, s.get(tier.title_key()), true).clicked() {
-					self.quality = PreviewDefaults::quality_of(tier);
-					self.dither = PreviewDefaults::dither_bits_of(tier);
-				}
-			}
-		});
-		let q = self.quality;
-		if let Some(d) = lever(ui, s, "MenuViewResolution", &RESOLUTIONS, q.resolution_divisor) {
-			self.set(|q| q.resolution_divisor = d);
+		settings::rows(ui, app, out, self.machine, &["SettingsRam", "SettingsPreset"]);
+		ui.label(RichText::new(levers_line(s, &app.settings)).color(dim));
+		let (settings_key, examples_key) = (s.get("MenuFileSettings"), s.get("MenuFileExamples"));
+		let then = ui
+			.horizontal(|ui| {
+				let settings = modal::button(ui, settings_key, true).clicked() || mnemonic_pressed(ui, settings_key);
+				let examples = modal::button(ui, examples_key, true).clicked() || mnemonic_pressed(ui, examples_key);
+				(settings.then_some(Then::Settings)).or(examples.then_some(Then::Examples))
+			})
+			.inner;
+		let show = app.settings.show_startup;
+		if let Some(on) = check_box(ui, Id::unique("StartupShow"), s.get("StartupShowAtLaunch"), show) {
+			out.push(Event::SetShowStartup(on));
 		}
-		if let Some(d) = lever(ui, s, "MenuViewFrames", &FRAME_STEPS, q.frame_divisor) {
-			self.set(|q| q.frame_divisor = d);
+		// Enter and Esc in the RAM row's open drop-down are the drop-down's
+		if egui::Popup::is_any_open(ui.ctx()) {
+			ui.input_mut(|i| {
+				i.consume_key(Modifiers::NONE, Key::Enter);
+				i.consume_key(Modifiers::NONE, Key::Escape);
+			});
 		}
-		if let Some(format) = lever(ui, s, "MenuViewSamples", &SAMPLES, q.format) {
-			self.set(|q| q.format = format);
-		}
-		if q.format == SampleFormat::Half
-			&& let Some(bits) = lever(ui, s, "MenuViewDither", &DITHERS, self.dither)
-		{
-			self.dither = bits;
-		}
-		#[cfg(not(target_arch = "wasm32"))]
-		if asks_codec() {
-			heading(ui, s.get("StartupCodec"));
-			ui.add(egui::Label::new(s.get("StartupCodecText")).wrap());
-			let dim = Palette::of(ui.ctx().theme()).text_dim;
-			ui.label(RichText::new(wavedude_export::h264::NOTICE).color(dim));
-			if let Some(on) = check_box(ui, Id::unique("StartupOpenH264"), s.get("ExportUseOpenH264"), self.openh264) {
-				self.openh264 = on;
-			}
-		}
-		if ASKS_UPDATES {
-			heading(ui, s.get("StartupUpdates"));
-			let text = s.get("StartupCheckForUpdates");
-			if let Some(on) = check_box(ui, Id::unique("StartupUpdates"), text, self.updates) {
-				self.updates = on;
-			}
-		}
-		ui.add_space(8.);
-		if let Some(on) = check_box(ui, Id::unique("StartupShow"), s.get("StartupShowAtLaunch"), self.show) {
-			self.show = on;
-		}
-		let choices = [Choice::plain(s.get("MenuFileExamples")), Choice::both(s.get("DialogOk"))];
-		let examples = buttons(ui, fresh, &choices)? == 0;
-		out.push(Event::SetPreviewQuality(self.quality));
-		out.push(Event::SetDitherBits(self.dither));
-		out.push(Event::SetShowStartup(self.show));
-		if asks_codec() {
-			out.push(Event::SetUseOpenH264(self.openh264));
-		}
-		if ASKS_UPDATES {
-			out.push(Event::SetCheckForUpdates(self.updates));
-		}
-		let mut then = Vec::new();
-		if ASKS_UPDATES && self.updates {
-			then.push(Then::CheckForUpdates);
-		}
-		if examples {
-			then.push(Then::Examples);
-		}
-		Some(match then.len() {
-			0 => None,
-			1 => then.pop(),
-			_ => Some(Then::All(then)),
-		})
+		let closed = buttons(ui, fresh, &[Choice::both(s.get("DialogClose"))]);
+		then.map_or_else(|| closed.map(|_| None), |t| Some(Some(t)))
 	}
 }
 
-fn heading(ui: &mut Ui, text: &str) {
-	ui.label(RichText::new(text).family(wavedude_view::fonts::bold()));
-}
+#[cfg(test)]
+mod tests {
+	use wavedude_app_state::strings::Language;
+	use wavedude_core::quality::PreviewTier;
 
-/// A drop-down named by `label_key` over the `(value, key)` words of `table`, `current` shown; the value picked.
-fn lever<T: Copy + PartialEq>(ui: &mut Ui, s: &Strings, label_key: &str, table: &[(T, &str)], current: T) -> Option<T> {
-	let word = |i: usize| -> Cow<'_, str> { Cow::Owned(strip_mnemonic(s.get(table[i].1))) };
-	let label = strip_mnemonic(s.get(label_key));
-	let current = table.iter().position(|&(v, _)| v == current);
-	let shown = current.map(word).unwrap_or_default();
-	let choices =
-		Choices { len: table.len(), current, shown: &shown, word: &word, swatch: None, disabled: None, actions: &[] };
-	ui.horizontal(|ui| {
-		let column = vec2(LABEL_WIDTH, INPUT_HEIGHT);
-		ui.allocate_ui_with_layout(column, Layout::left_to_right(Align::Center), |ui| {
-			ui.set_min_width(LABEL_WIDTH);
-			ui.label(label.as_str());
-		});
-		combo(ui, Id::unique(("Startup", label_key)), &label, &choices)
-	})
-	.inner
-	.map(|i| table[i].0)
+	use super::*;
+
+	fn at(tier: PreviewTier) -> UserSettings {
+		let mut st = UserSettings::for_device(false);
+		st.apply_preset(tier);
+		st
+	}
+
+	#[test]
+	fn the_line_names_the_levers() {
+		let s = Strings::new(Language::English);
+		assert_eq!(levers_line(&s, &at(PreviewTier::Medium)), "Full resolution, every frame, 8-bit samples");
+		assert_eq!(levers_line(&s, &at(PreviewTier::Low)), "Half resolution, every second frame, 8-bit samples");
+		assert_eq!(
+			levers_line(&s, &at(PreviewTier::High)),
+			"Full resolution, every frame, 16-bit samples, dithering to 16 bits"
+		);
+	}
+
+	#[test]
+	fn every_word_is_in_every_language() {
+		let words = RESOLUTIONS.iter().chain(&FRAME_STEPS).map(|&(_, k)| k);
+		let keys: Vec<_> = words.chain(["StartupSamples16", "StartupSamples8", "StartupDitherFormat"]).collect();
+		for language in Language::ALL {
+			let have: Vec<_> = wavedude_app_state::strings::keys(language).collect();
+			for key in &keys {
+				assert!(have.contains(key), "{key} in {language:?}");
+			}
+		}
+	}
 }

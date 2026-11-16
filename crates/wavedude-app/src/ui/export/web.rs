@@ -10,6 +10,7 @@ use eframe::egui::{self, RichText, Ui};
 use wavedude_app_state::Event;
 use wavedude_app_state::platform::{Download, H264Support, Spool};
 use wavedude_export::ExportFormat;
+use wavedude_export::h264::Profile;
 
 use super::super::modal::{Modal, Modals};
 use super::super::theme::Palette;
@@ -144,6 +145,16 @@ impl ExportDialog {
 		}
 		reason.is_none()
 	}
+}
+
+/// The H.264 profiles the browser encodes for the project's MP4, every one while that is unknown, and the string key
+/// of why the others cannot be picked.
+pub(in crate::ui) fn h264_profiles(app: &App) -> (Vec<Profile>, &'static str) {
+	let profiles = match export::h264_support(&app.document.project) {
+		H264Support::Profiles(profiles) if !profiles.is_empty() => profiles,
+		_ => Profile::ALL.to_vec(),
+	};
+	(profiles, "ExportH264NotInBrowser")
 }
 
 /// Why MP4 cannot be exported with `support`.

@@ -1,4 +1,4 @@
-//! Preview quality and the first-start defaults (spec/40-frames-store-render.md, Preview quality defaults).
+//! Preview quality and its presets (spec/40-frames-store-render.md, Preview quality defaults).
 //!
 //! The quality never changes the simulation, only what a run captures and stores.
 
@@ -20,7 +20,7 @@ impl PreviewQuality {
 	pub const FULL: Self =
 		Self { resolution_divisor: 1, frame_divisor: 1, format: SampleFormat::Half, intensity_root: true };
 
-	/// The fixed default when the machine was not asked (and the Middle tier).
+	/// The fixed default when the machine was not asked (and the Medium tier).
 	pub const DEFAULT: Self = Self { format: SampleFormat::Index, ..Self::FULL };
 
 	/// The lowest notch of both divisors.
@@ -93,23 +93,23 @@ impl Default for PreviewQuality {
 	}
 }
 
-/// The first start's choice of preview quality.
+/// A preview preset: one fill of the four preview levers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PreviewTier {
 	Low,
-	Middle,
+	Medium,
 	High,
 }
 
 impl PreviewTier {
-	/// In the order of the first-start dialog.
-	pub const ALL: [Self; 3] = [Self::Low, Self::Middle, Self::High];
+	/// In the order the presets are offered.
+	pub const ALL: [Self; 3] = [Self::Low, Self::Medium, Self::High];
 
-	/// The tier's name in files and interfaces: "Low", "Middle" or "High".
+	/// The tier's name in files and interfaces: "Low", "Medium" or "High".
 	pub const fn name(self) -> &'static str {
 		match self {
 			Self::Low => "Low",
-			Self::Middle => "Middle",
+			Self::Medium => "Medium",
 			Self::High => "High",
 		}
 	}
@@ -119,17 +119,17 @@ impl PreviewTier {
 		Self::ALL.into_iter().find(|t| t.name() == name)
 	}
 
-	/// The string table key of the tier's title in the first-start dialog.
+	/// The string table key of the preset's title.
 	pub const fn title_key(self) -> &'static str {
 		match self {
 			Self::Low => "StartupTierLow",
-			Self::Middle => "StartupTierStandard",
+			Self::Medium => "StartupTierMedium",
 			Self::High => "StartupTierHigh",
 		}
 	}
 }
 
-/// What the first start asks of the machine. `None` is unknown.
+/// What the Auto preset reads of the machine. `None` is unknown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MachineFacts {
 	/// Installed physical memory in bytes.
@@ -142,7 +142,7 @@ pub struct MachineFacts {
 	pub cache_drive_seek_penalty: Option<bool>,
 }
 
-/// The table of spec/40 that maps a machine to its first preview quality.
+/// The table of spec/40 that maps a machine to its preset.
 pub struct PreviewDefaults;
 
 impl PreviewDefaults {
@@ -155,7 +155,7 @@ impl PreviewDefaults {
 	pub const HIGH_DITHER_BITS: u32 = 16;
 
 	/// First match of: High at 30 GiB or more; Low under 15 GiB, with a seek penalty, without a GPU or with
-	/// at most four threads; else Middle.
+	/// at most four threads; else Medium.
 	pub fn tier(facts: &MachineFacts) -> PreviewTier {
 		if facts.physical_bytes >= Self::HIGH_BYTES {
 			return PreviewTier::High;
@@ -164,14 +164,14 @@ impl PreviewDefaults {
 			|| facts.cache_drive_seek_penalty == Some(true)
 			|| facts.has_gpu == Some(false)
 			|| facts.threads <= Self::LOW_THREADS;
-		if weak { PreviewTier::Low } else { PreviewTier::Middle }
+		if weak { PreviewTier::Low } else { PreviewTier::Medium }
 	}
 
 	pub fn quality_of(tier: PreviewTier) -> PreviewQuality {
 		match tier {
 			PreviewTier::High => PreviewQuality::FULL,
 			PreviewTier::Low => PreviewQuality::new(2, 2, SampleFormat::Index),
-			PreviewTier::Middle => PreviewQuality::DEFAULT,
+			PreviewTier::Medium => PreviewQuality::DEFAULT,
 		}
 	}
 
@@ -201,7 +201,7 @@ mod tests {
 	fn every_row_of_the_table() {
 		let high = (PreviewQuality::FULL, 16);
 		let low = (PreviewQuality::new(2, 2, SampleFormat::Index), 0);
-		let middle = (PreviewQuality::new(1, 1, SampleFormat::Index), 0);
+		let medium = (PreviewQuality::new(1, 1, SampleFormat::Index), 0);
 		// High wins over every weakness.
 		for gpu in [None, Some(false), Some(true)] {
 			for seek in [None, Some(false), Some(true)] {
@@ -214,19 +214,19 @@ mod tests {
 		// Windows reports a nominal 32 GB machine at about 31.9 GiB and a 16 GB one at about 15.9.
 		assert_eq!(PreviewDefaults::tier_of(&facts(30, 8, Some(true), None)), high);
 		let just_under_high = MachineFacts { physical_bytes: 30 * GIB - 1, ..facts(0, 8, Some(true), None) };
-		assert_eq!(PreviewDefaults::tier_of(&just_under_high), middle);
+		assert_eq!(PreviewDefaults::tier_of(&just_under_high), medium);
 		let just_under_low = MachineFacts { physical_bytes: 15 * GIB - 1, ..facts(0, 8, Some(true), None) };
 		assert_eq!(PreviewDefaults::tier_of(&just_under_low), low);
-		assert_eq!(PreviewDefaults::tier_of(&facts(15, 8, Some(true), Some(false))), middle);
+		assert_eq!(PreviewDefaults::tier_of(&facts(15, 8, Some(true), Some(false))), medium);
 		// Each weakness alone makes Low.
 		assert_eq!(PreviewDefaults::tier_of(&facts(8, 8, Some(true), Some(false))), low);
 		assert_eq!(PreviewDefaults::tier_of(&facts(16, 8, Some(true), Some(true))), low);
 		assert_eq!(PreviewDefaults::tier_of(&facts(16, 8, Some(false), Some(false))), low);
 		assert_eq!(PreviewDefaults::tier_of(&facts(16, 4, Some(true), Some(false))), low);
-		assert_eq!(PreviewDefaults::tier_of(&facts(16, 5, Some(true), Some(false))), middle);
+		assert_eq!(PreviewDefaults::tier_of(&facts(16, 5, Some(true), Some(false))), medium);
 		// Unknown drive counts as no penalty, unknown GPU as present.
-		assert_eq!(PreviewDefaults::tier_of(&facts(16, 8, None, None)), middle);
-		assert_eq!(PreviewDefaults::tier_of(&facts(16, 8, Some(true), None)), middle);
+		assert_eq!(PreviewDefaults::tier_of(&facts(16, 8, None, None)), medium);
+		assert_eq!(PreviewDefaults::tier_of(&facts(16, 8, Some(true), None)), medium);
 	}
 
 	#[test]

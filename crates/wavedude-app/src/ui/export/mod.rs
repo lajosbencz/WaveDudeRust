@@ -12,6 +12,8 @@ use native as imp;
 #[cfg(target_arch = "wasm32")]
 use web as imp;
 
+pub(super) use imp::h264_profiles;
+
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -473,7 +475,25 @@ impl ExportDialog {
 /// The H.264 profile row: every profile, those not in `supported` greyed with `reason`, which also shows below while
 /// the current one is among them; the profile picked.
 fn profile_row(ui: &mut Ui, s: &Strings, current: Profile, supported: &[Profile], reason: &str) -> Option<Profile> {
-	let label = s.get("ExportH264Profile");
+	let picked = ui
+		.horizontal(|ui| {
+			ui.label(s.get("ExportH264Profile"));
+			profile_combo(ui, Id::unique("ExportH264Profile"), s, current, supported, reason)
+		})
+		.inner;
+	profile_note(ui, current, supported, reason);
+	picked
+}
+
+/// The H.264 profile drop-down: every profile, those not in `supported` greyed with `reason`; the profile picked.
+pub(super) fn profile_combo(
+	ui: &mut Ui,
+	id: Id,
+	s: &Strings,
+	current: Profile,
+	supported: &[Profile],
+	reason: &str,
+) -> Option<Profile> {
 	let name = |p: Profile| {
 		s.get(match p {
 			Profile::Baseline => "ExportH264ProfileBaseline",
@@ -483,26 +503,24 @@ fn profile_row(ui: &mut Ui, s: &Strings, current: Profile, supported: &[Profile]
 	};
 	let word = |i: usize| Cow::Borrowed(name(Profile::ALL[i]));
 	let disabled = |i: usize| (!supported.contains(&Profile::ALL[i])).then_some(reason);
-	let picked = ui
-		.horizontal(|ui| {
-			ui.label(label);
-			let choices = Choices {
-				len: Profile::ALL.len(),
-				current: Profile::ALL.iter().position(|&p| p == current),
-				shown: name(current),
-				word: &word,
-				swatch: None,
-				disabled: Some(&disabled),
-				actions: &[],
-			};
-			combo(ui, Id::unique("ExportH264Profile"), label, &choices).map(|i| Profile::ALL[i])
-		})
-		.inner;
+	let choices = Choices {
+		len: Profile::ALL.len(),
+		current: Profile::ALL.iter().position(|&p| p == current),
+		shown: name(current),
+		word: &word,
+		swatch: None,
+		disabled: Some(&disabled),
+		actions: &[],
+	};
+	combo(ui, id, s.get("ExportH264Profile"), &choices).map(|i| Profile::ALL[i])
+}
+
+/// `reason`, dimmed, while `current` is not `supported`.
+pub(super) fn profile_note(ui: &mut Ui, current: Profile, supported: &[Profile], reason: &str) {
 	if !supported.contains(&current) {
 		let dim = Palette::of(ui.ctx().theme()).text_dim;
 		ui.add(egui::Label::new(RichText::new(reason).color(dim)).wrap());
 	}
-	picked
 }
 
 #[cfg(test)]

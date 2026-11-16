@@ -1,30 +1,16 @@
-//! The menu bar of docs/ui/10 (Menu bar): File, Edit, View, Simulation and Help, each entry a [`MenuAction`] with
-//! its icon (or check mark) in a 24 px column and its shortcut on the right.
+//! The menu bar of docs/ui/10 (Menu bar), drawn from [`MENU_BAR`]: each entry a [`MenuAction`] with its icon (or
+//! check mark) in a 24 px column and its shortcut on the right.
 
 use eframe::egui::containers::menu::{MenuButton, SubMenu, SubMenuButton};
 use eframe::egui::{self, Atom, AtomExt, Button, IdSalt, Rect, Role, Vec2, WidgetInfo};
 use egui_material_icons::MaterialIcon;
-use egui_material_icons::icons::{
-	ICON_CHECK, ICON_CLOSE, ICON_CONTENT_COPY, ICON_CONTENT_CUT, ICON_CONTENT_PASTE, ICON_CONTRAST, ICON_DELETE,
-	ICON_DELETE_SWEEP, ICON_FOLDER_OPEN, ICON_GRAIN, ICON_GRID_ON, ICON_HISTORY, ICON_IMAGE, ICON_INFO, ICON_IOS_SHARE,
-	ICON_LANGUAGE, ICON_LIST_ALT, ICON_MEMORY, ICON_MENU_BOOK, ICON_NOTE_ADD, ICON_PAUSE, ICON_PLAY_ARROW, ICON_REDO,
-	ICON_SAVE, ICON_SAVE_AS, ICON_SELECT_ALL, ICON_STAIRS, ICON_STOP, ICON_UNDO, ICON_VIEW_SIDEBAR, ICON_VIEW_WEEK,
-	ICON_WAVING_HAND, ICON_ZOOM_IN,
-};
-#[cfg(target_arch = "wasm32")]
-use wavedude_app_state::live::{WEB_RAM_CACHE_SIZES, detected_web_frame_memory};
-use wavedude_app_state::platform::HAS_PATHS;
-use wavedude_app_state::settings::Theme as ThemeSetting;
-use wavedude_app_state::strings::{Language, Strings};
-use wavedude_core::model::Word;
-use wavedude_core::run::RamCache;
+use egui_material_icons::icons::ICON_CHECK;
+use wavedude_app_state::strings::Strings;
 
 use super::dock::Dock;
-#[cfg(target_arch = "wasm32")]
-use super::memory_warning::bytes_text;
 use super::{icons, menu_keys, shortcuts};
 use crate::App;
-use crate::menus::{self, DITHERS, ExportKindChoice, FRAME_STEPS, MenuAction, On, RESOLUTIONS, SAMPLES, ZOOMS};
+use crate::menus::{self, Entry, Item, MENU_BAR, MenuAction, Needs, On};
 use crate::window::Pane;
 
 const ICON_SLOT: f32 = 24.;
@@ -32,8 +18,8 @@ const ICON_SIZE: f32 = 16.;
 const ENTRY_HEIGHT: f32 = 22.;
 const MIN_PANEL_WIDTH: f32 = 200.;
 
-/// The menu bar; the action of the entry clicked this frame. `pastable` is read when the Edit menu opens and
-/// forgotten when it closes; `has_last` enables File > Export last.
+/// The menu bar; the action of the entry clicked this frame. `pastable` is read when the Paste entry shows and
+/// forgotten when it does not; `has_last` enables File > Export last.
 pub(super) fn show(
 	ui: &mut egui::Ui,
 	app: &App,
@@ -41,31 +27,14 @@ pub(super) fn show(
 	pastable: &mut Option<bool>,
 	has_last: bool,
 ) -> Option<MenuAction> {
-	let mut menu = Menu { app, s: &app.strings, picked: None };
-	let mut edit_open = false;
+	let mut menu = Menu { app, s: &app.strings, dock, pastable, paste_shown: false, has_last, picked: None };
 	egui::MenuBar::new().ui(ui, |ui| {
-		menu.top(ui, "MenuFile", |m, ui| {
-			m.file(ui);
-			m.export(ui, has_last);
-			m.exit(ui);
-		});
-		menu.top(ui, "MenuEdit", |m, ui| {
-			edit_open = true;
-			m.edit(ui, *pastable.get_or_insert_with(super::platform::pastable));
-		});
-		menu.top(ui, "MenuView", |m, ui| m.view(ui, dock));
-		menu.top(ui, "MenuSimulation", Menu::simulation);
-		menu.top(ui, "MenuHelp", |m, ui| {
-			m.item(ui, MenuAction::About, ICON_INFO, "MenuHelpAbout");
-			m.item(ui, MenuAction::Manual, ICON_MENU_BOOK, "MenuHelpManual");
-			#[cfg(not(target_arch = "wasm32"))]
-			if crate::update::AVAILABLE {
-				m.updater(ui);
-			}
-		});
+		for (key, entries) in MENU_BAR {
+			menu.top(ui, key, entries);
+		}
 	});
-	if !edit_open {
-		*pastable = None;
+	if !menu.paste_shown {
+		*menu.pastable = None;
 	}
 	menu.picked
 }
@@ -212,21 +181,77 @@ pub(super) fn submenu(
 	.inner
 }
 
+/// Whether this build shows `entry`.
+fn shows(entry: &Entry) -> bool {
+	match entry {
+		Entry::Item(item) => item.show.now(),
+		Entry::Submenu { show, .. } => show.now(),
+		Entry::Separator | Entry::Recent | Entry::Panes => true,
+	}
+}
+
 struct Menu<'a> {
 	app: &'a App,
 	s: &'a Strings,
+	dock: &'a Dock,
+	pastable: &'a mut Option<bool>,
+	paste_shown: bool,
+	has_last: bool,
 	picked: Option<MenuAction>,
 }
 
 impl Menu<'_> {
-	fn top(&mut self, ui: &mut egui::Ui, key: &str, content: impl FnOnce(&mut Self, &mut egui::Ui)) {
+	fn top(&mut self, ui: &mut egui::Ui, key: &str, entries: &[Entry]) {
 		let marked = self.s.get(key);
 		let button = Button::new(menu_keys::label(ui, marked).0).sense(menu_keys::header_sense(ui.ctx()));
 		let (response, shown) = MenuButton::from_button(button).ui(ui, |ui| {
 			ui.set_min_width(MIN_PANEL_WIDTH);
-			content(self, ui);
+			self.entries(ui, entries);
 		});
 		menu_keys::header(&response, marked, shown.is_some());
+	}
+
+	/// The shown `entries`, without a separator at either end or after another.
+	fn entries(&mut self, ui: &mut egui::Ui, entries: &[Entry]) {
+		let shown: Vec<&Entry> = entries.iter().filter(|e| shows(e)).collect();
+		let mut after_entry = false;
+		for (i, entry) in shown.iter().enumerate() {
+			match **entry {
+				Entry::Separator => {
+					if after_entry && shown.get(i + 1).is_some_and(|e| !matches!(e, Entry::Separator)) {
+						ui.separator();
+					}
+					after_entry = false;
+					continue;
+				}
+				Entry::Item(item) => self.item(ui, item),
+				Entry::Submenu { key, icon, entries, .. } => {
+					let enabled = self.enabled(entry);
+					submenu(ui, Slot::Icon(icon), self.s.get(key), enabled, |ui| self.entries(ui, entries));
+				}
+				Entry::Recent => {
+					for (i, path) in self.app.settings.recent_files.iter().enumerate() {
+						// A path has no mnemonic: its underscores are literal.
+						let text = path.display().to_string().replace('_', "__");
+						self.button(ui, MenuAction::Recent(i), None, &text, None);
+					}
+				}
+				Entry::Panes => {
+					let s = self.s;
+					for pane in Pane::ALL {
+						let on = self.dock.is_shown(pane);
+						self.button(
+							ui,
+							MenuAction::Pane(pane),
+							on.then_some(ICON_CHECK),
+							s.get(pane.title_key()),
+							Some(on),
+						);
+					}
+				}
+			}
+			after_entry = true;
+		}
 	}
 
 	/// An entry, `marked` its text with its mnemonic; `checked` is its check mark's state, for one that has it.
@@ -243,204 +268,36 @@ impl Menu<'_> {
 		}
 	}
 
-	/// An entry named by string `key`, enabled as [`menus::enabled`] says.
-	fn item(&mut self, ui: &mut egui::Ui, action: MenuAction, icon: MaterialIcon, key: &str) {
-		self.item_if(ui, action, icon, key, true);
-	}
-
-	/// [`item`](Self::item), also disabled unless `ready`: what the window holds for it.
-	fn item_if(&mut self, ui: &mut egui::Ui, action: MenuAction, icon: MaterialIcon, key: &str, ready: bool) {
+	/// `item`, its alternative's label while that holds; enabled as [`menus::enabled`] and its needs say.
+	fn item(&mut self, ui: &mut egui::Ui, item: Item) {
+		let (key, icon) = match item.alt {
+			Some(alt) if (alt.when)(self.app) => (alt.key, Some(alt.icon)),
+			_ => (item.key, item.icon),
+		};
+		let enabled = self.ready(item.needs) && menus::enabled(self.app, item.action, On::Current);
 		let marked = self.s.get(key);
-		let enabled = ready && self.enabled(action);
-		ui.add_enabled_ui(enabled, |ui| self.button(ui, action, Some(icon), marked, None));
+		ui.add_enabled_ui(enabled, |ui| self.button(ui, item.action, icon, marked, None));
 	}
 
-	fn enabled(&self, action: MenuAction) -> bool {
-		menus::enabled(self.app, action, On::Current)
-	}
-
-	/// An entry with a check mark (or radio dot) while `on`.
-	fn check(&mut self, ui: &mut egui::Ui, action: MenuAction, marked: &str, on: bool) {
-		self.button(ui, action, on.then_some(ICON_CHECK), marked, Some(on));
-	}
-
-	fn submenu(
-		&mut self,
-		ui: &mut egui::Ui,
-		icon: MaterialIcon,
-		key: &str,
-		enabled: bool,
-		content: impl FnOnce(&mut Self, &mut egui::Ui),
-	) {
-		submenu(ui, Slot::Icon(icon), self.s.get(key), enabled, |ui| content(self, ui));
-	}
-
-	fn file(&mut self, ui: &mut egui::Ui) {
-		self.item(ui, MenuAction::New, ICON_NOTE_ADD, "MenuFileNew");
-		self.item(ui, MenuAction::Open, ICON_FOLDER_OPEN, "MenuFileOpen");
-		if HAS_PATHS {
-			let app = self.app;
-			self.submenu(ui, ICON_HISTORY, "MenuFileRecent", true, |m, ui| {
-				for (i, path) in app.settings.recent_files.iter().enumerate() {
-					// A path has no mnemonic: its underscores are literal.
-					let text = path.display().to_string().replace('_', "__");
-					m.button(ui, MenuAction::Recent(i), None, &text, None);
-				}
-			});
-		}
-		self.item(ui, MenuAction::Examples, ICON_LIST_ALT, "MenuFileExamples");
-		self.item(ui, MenuAction::Welcome, ICON_WAVING_HAND, "MenuFileWelcome");
-		ui.separator();
-		self.item(ui, MenuAction::Save, ICON_SAVE, "MenuFileSave");
-		self.item(ui, MenuAction::SaveAs, ICON_SAVE_AS, "MenuFileSaveAs");
-	}
-
-	/// File's exports; Export last while `has_last`.
-	fn export(&mut self, ui: &mut egui::Ui, has_last: bool) {
-		ui.separator();
-		let exports = self.enabled(MenuAction::Export(ExportKindChoice::Field));
-		self.submenu(ui, ICON_IOS_SHARE, "MenuFileExport", exports, |m, ui| {
-			let export = |m: &mut Self, ui: &mut egui::Ui, choice, icon, key| {
-				m.item(ui, MenuAction::Export(choice), icon, key);
-			};
-			export(m, ui, ExportKindChoice::Field, ICON_IOS_SHARE, "MenuFileExportField");
-			export(m, ui, ExportKindChoice::Intensity, ICON_IOS_SHARE, "MenuFileExportIntensity");
-			export(m, ui, ExportKindChoice::Both, ICON_IOS_SHARE, "MenuFileExportBoth");
-			ui.separator();
-			export(m, ui, ExportKindChoice::FieldFrame, ICON_IMAGE, "MenuFileExportFieldFrame");
-			export(m, ui, ExportKindChoice::IntensityFrame, ICON_IMAGE, "MenuFileExportIntensityFrame");
-		});
-		self.item_if(ui, MenuAction::ExportLast, ICON_IOS_SHARE, "MenuFileExportLast", has_last);
-	}
-
-	fn exit(&mut self, ui: &mut egui::Ui) {
-		ui.separator();
-		self.item(ui, MenuAction::Close, ICON_CLOSE, "MenuFileClose");
-		#[cfg(not(target_arch = "wasm32"))]
-		{
-			ui.separator();
-			self.item(ui, MenuAction::Exit, egui_material_icons::icons::ICON_LOGOUT, "MenuFileExit");
-		}
-	}
-
-	fn edit(&mut self, ui: &mut egui::Ui, pastable: bool) {
-		self.item(ui, MenuAction::Undo, ICON_UNDO, "MenuEditUndo");
-		self.item(ui, MenuAction::Redo, ICON_REDO, "MenuEditRedo");
-		ui.separator();
-		self.item(ui, MenuAction::Cut, ICON_CONTENT_CUT, "MenuEditCut");
-		self.item(ui, MenuAction::Copy, ICON_CONTENT_COPY, "MenuEditCopy");
-		self.item_if(ui, MenuAction::Paste, ICON_CONTENT_PASTE, "MenuEditPaste", pastable);
-		self.item(ui, MenuAction::Delete, ICON_DELETE, "MenuEditDelete");
-		ui.separator();
-		self.item(ui, MenuAction::SelectAll, ICON_SELECT_ALL, "MenuProjectSelectAll");
-	}
-
-	fn view(&mut self, ui: &mut egui::Ui, dock: &Dock) {
-		let st = &self.app.settings;
-		let s = self.s;
-		self.submenu(ui, ICON_VIEW_SIDEBAR, "MenuViewPanes", true, |m, ui| {
-			for pane in Pane::ALL {
-				m.check(ui, MenuAction::Pane(pane), s.get(pane.title_key()), dock.is_shown(pane));
+	/// Whether the window holds what `needs` asks for.
+	fn ready(&mut self, needs: Needs) -> bool {
+		match needs {
+			Needs::Nothing => true,
+			Needs::Pastable => {
+				self.paste_shown = true;
+				*self.pastable.get_or_insert_with(super::platform::pastable)
 			}
-		});
-		self.submenu(ui, ICON_CONTRAST, "MenuViewTheme", true, |m, ui| {
-			for &t in ThemeSetting::MEMBERS {
-				m.check(ui, MenuAction::Theme(t), s.enum_word(ThemeSetting::TYPE_NAME, t.name()), st.theme == t);
-			}
-		});
-		self.submenu(ui, ICON_ZOOM_IN, "MenuViewUiZoom", true, |m, ui| {
-			for &(z, key) in &ZOOMS {
-				m.check(ui, MenuAction::Zoom(z), s.get(key), (st.ui_zoom - z).abs() < 1e-6);
-			}
-		});
-		self.submenu(ui, ICON_LANGUAGE, "MenuViewLanguage", true, |m, ui| {
-			m.check(ui, MenuAction::Language(None), s.get("LanguageSystem"), st.language.is_empty());
-			for l in Language::ALL {
-				m.check(ui, MenuAction::Language(Some(l)), l.native_name(), st.language == l.code());
-			}
-		});
-		ui.separator();
-		let q = st.preview_quality();
-		self.submenu(ui, ICON_GRID_ON, "MenuViewResolution", true, |m, ui| {
-			m.choices(ui, MenuAction::Resolution, &RESOLUTIONS, q.resolution_divisor);
-		});
-		self.submenu(ui, ICON_VIEW_WEEK, "MenuViewFrames", true, |m, ui| {
-			m.choices(ui, MenuAction::Frames, &FRAME_STEPS, q.frame_divisor);
-		});
-		self.submenu(ui, ICON_STAIRS, "MenuViewSamples", true, |m, ui| {
-			m.choices(ui, MenuAction::Samples, &SAMPLES, q.format);
-		});
-		let dithers = self.enabled(MenuAction::Dither(DITHERS[0].0));
-		self.submenu(ui, ICON_GRAIN, "MenuViewDither", dithers, |m, ui| {
-			m.choices(ui, MenuAction::Dither, &DITHERS, st.preview_dither_bits);
-		});
-	}
-
-	/// One checked entry per `(value, key)` of `table`, the one of `current` marked.
-	fn choices<T: Copy + PartialEq>(
-		&mut self,
-		ui: &mut egui::Ui,
-		action: fn(T) -> MenuAction,
-		table: &[(T, &str)],
-		current: T,
-	) {
-		let s = self.s;
-		for &(value, key) in table {
-			self.check(ui, action(value), s.get(key), value == current);
+			Needs::LastExport => self.has_last,
 		}
 	}
 
-	fn simulation(&mut self, ui: &mut egui::Ui) {
-		let app = self.app;
-		let (st, s, live) = (&app.settings, self.s, &app.live);
-		let (paused, playing) = (live.run_paused_by_user(), live.playback.is_playing());
-		self.item(ui, MenuAction::Run, ICON_PLAY_ARROW, "MenuSimulationRun");
-		let (icon, key) =
-			if paused { (ICON_PLAY_ARROW, "MenuSimulationResume") } else { (ICON_PAUSE, "MenuSimulationPause") };
-		self.item(ui, MenuAction::PauseRun, icon, key);
-		self.item(ui, MenuAction::Stop, ICON_STOP, "MenuSimulationStop");
-		self.item(ui, MenuAction::DiscardFrames, ICON_DELETE_SWEEP, "MenuSimulationDiscardFrames");
-		ui.separator();
-		let (icon, key) =
-			if playing { (ICON_PAUSE, "MenuSimulationPausePlayback") } else { (ICON_PLAY_ARROW, "MenuSimulationPlay") };
-		self.item(ui, MenuAction::Play, icon, key);
-		ui.separator();
-		self.check(ui, MenuAction::UseGpu, s.get("MenuSimulationUseGpu"), st.use_gpu);
-		self.check(ui, MenuAction::AutoRerun, s.get("MenuSimulationAutoRerun"), st.auto_rerun);
-		self.check(ui, MenuAction::WarnMemory, s.get("MenuSimulationWarnMemory"), st.warn_when_ram_insufficient);
-		self.submenu(ui, ICON_MEMORY, "MenuSimulationFrameMemory", true, Self::ram_cache);
-	}
-
-	/// The RAM cache sizes: Auto, then shares of the physical memory.
-	#[cfg(not(target_arch = "wasm32"))]
-	fn ram_cache(&mut self, ui: &mut egui::Ui) {
-		let (current, s) = (self.app.settings.ram_cache(), self.s);
-		let auto = RamCache::Auto;
-		self.check(ui, MenuAction::FrameMemory(auto), s.get("MenuSimulationFrameMemoryAuto"), current == auto);
-		for pct in (10..=100).step_by(10) {
-			let cache = RamCache::Percent(pct);
-			self.check(ui, MenuAction::FrameMemory(cache), &format!("{pct} %"), current == cache);
+	/// Whether `entry` can be picked as [`menus::enabled`] says, a submenu while one of its entries can.
+	fn enabled(&self, entry: &Entry) -> bool {
+		match entry {
+			Entry::Item(item) => menus::enabled(self.app, item.action, On::Current),
+			Entry::Submenu { entries, .. } => entries.iter().any(|e| self.enabled(e)),
+			Entry::Recent | Entry::Panes => true,
+			Entry::Separator => false,
 		}
-	}
-
-	/// The RAM cache sizes: Auto, the detected memory, then sizes in its place.
-	#[cfg(target_arch = "wasm32")]
-	fn ram_cache(&mut self, ui: &mut egui::Ui) {
-		let (current, s) = (self.app.settings.ram_cache(), self.s);
-		let auto = RamCache::Auto;
-		let label = s.format("MenuSimulationFrameMemoryAutoFormat", &[&bytes_text(detected_web_frame_memory())]);
-		self.check(ui, MenuAction::FrameMemory(auto), &label, current == auto);
-		for bytes in WEB_RAM_CACHE_SIZES {
-			let cache = RamCache::Bytes(bytes);
-			self.check(ui, MenuAction::FrameMemory(cache), &bytes_text(bytes), current == cache);
-		}
-	}
-
-	#[cfg(not(target_arch = "wasm32"))]
-	fn updater(&mut self, ui: &mut egui::Ui) {
-		let s = self.s;
-		self.button(ui, MenuAction::CheckForUpdates, None, s.get("MenuHelpCheckNow"), None);
-		let on = self.app.settings.check_for_updates == Some(true);
-		self.check(ui, MenuAction::CheckAtLaunch, s.get("MenuHelpCheckAtLaunch"), on);
 	}
 }

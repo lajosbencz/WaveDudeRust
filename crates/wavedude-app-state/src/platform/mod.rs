@@ -19,6 +19,8 @@ pub use imp::{
 	FileWatch, HAS_PATHS, LogGuard, Store, init_log, install_panic_hook, machine_facts, take_crash_report, touch_first,
 	write,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use native::memory_readings;
 /// The browser's spill of the frames past memory, natively the core's spill file; the browser's store of an
 /// export's files and a file ready for its download.
 #[cfg(target_arch = "wasm32")]

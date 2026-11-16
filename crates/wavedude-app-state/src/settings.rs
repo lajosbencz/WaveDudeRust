@@ -10,18 +10,20 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::Word;
-use wavedude_core::quality::{MachineFacts, PreviewDefaults, PreviewQuality};
+use wavedude_core::quality::{MachineFacts, PreviewDefaults, PreviewQuality, PreviewTier};
 use wavedude_core::run::RamCache;
 use wavedude_export::h264::Profile;
 
-use super::live::WEB_RAM_CACHE_SIZES;
+use super::live::{WEB_FRAME_SHARE, WEB_RAM_CACHE_SIZES};
 use super::platform::Store;
 use super::strings::Language;
 
 /// The settings file's key in the store.
 pub const FILE_NAME: &str = "settings.json";
 /// The settings file's format version, written in every file.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
+/// The RAM cache share of version 1, dropped at load.
+const DROPPED_PERCENT: &str = "FrameMemoryPercent";
 pub const MAX_RECENT: usize = 10;
 pub const MAX_EXPORT_HINTS: usize = 20;
 /// UI zoom bounds from the menu and from `--zoom=`.
@@ -134,8 +136,6 @@ pub struct Settings {
 	pub auto_rerun: bool,
 	pub warn_when_ram_insufficient: bool,
 	pub use_gpu: bool,
-	/// 0 or less is Auto, else a share of the physical memory, 10..100.
-	pub frame_memory_percent: i32,
 	/// The browser's RAM cache size: 0 is Auto, else one of [`WEB_RAM_CACHE_SIZES`].
 	pub frame_memory_bytes: u64,
 	/// 1, 2 or 4.
@@ -164,10 +164,10 @@ pub struct Settings {
 	pub use_openh264: Option<bool>,
 	/// The H.264 profile of MP4 export; the encoder's best when it lacks it.
 	pub h264_profile: Profile,
-	/// Look for a new release at launch (GitHub releases); `None` until the user answered the startup page.
+	/// Look for a new release at launch (GitHub releases); `None` (never set) reads as off.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub check_for_updates: Option<bool>,
-	/// The startup page opens at each launch.
+	/// The welcome page opens at each launch.
 	pub show_startup: bool,
 	/// The primary pointer is a finger, decided at the start; not stored. It sets the defaults of a device.
 	#[serde(skip)]
@@ -194,7 +194,6 @@ impl Default for Settings {
 			auto_rerun: true,
 			warn_when_ram_insufficient: true,
 			use_gpu: true,
-			frame_memory_percent: 0,
 			frame_memory_bytes: 0,
 			preview_resolution: 1,
 			preview_frames: 1,
@@ -259,16 +258,6 @@ impl Settings {
 			self.language.clear();
 		}
 		self.recent_files.truncate(MAX_RECENT);
-		if cfg!(target_arch = "wasm32") && self.frame_memory_percent != 0 {
-			tracing::warn!(
-				"the RAM cache share of {} % is not offered in the browser and is cleared: Simulation > RAM cache size \
-				 picks a size",
-				self.frame_memory_percent
-			);
-			self.frame_memory_percent = 0;
-		}
-		self.frame_memory_percent =
-			if self.frame_memory_percent <= 0 { 0 } else { self.frame_memory_percent.clamp(10, 100) };
 		if !WEB_RAM_CACHE_SIZES.contains(&self.frame_memory_bytes) {
 			self.frame_memory_bytes = 0;
 		}
@@ -299,9 +288,14 @@ impl Settings {
 
 	/// Reads a settings text of a device, the defaults of which fill what it lacks; a file without a version is
 	/// version 0, the format before the field. A value that cannot be read is logged with its key and reads as its
-	/// default; the others are kept, unknown keys among them.
+	/// default; the others are kept, unknown keys among them. A RAM cache share is logged and dropped.
 	pub fn from_json(text: &str, touch_first: bool) -> Result<Self, serde_json::Error> {
-		let file: Map<String, Value> = serde_json::from_str(text)?;
+		let mut file: Map<String, Value> = serde_json::from_str(text)?;
+		if let Some(percent) = file.remove(DROPPED_PERCENT).filter(|v| v.as_f64().is_some_and(|p| p > 0.0)) {
+			tracing::warn!(
+				"the RAM cache share of {percent} % ({DROPPED_PERCENT}) is dropped: the frames take the available memory"
+			);
+		}
 		let versioned = file.contains_key("Version");
 		let Value::Object(mut filled) = serde_json::to_value(Self::for_device(touch_first))? else {
 			unreachable!("settings serialise to an object")
@@ -372,12 +366,11 @@ impl Settings {
 		}
 	}
 
-	/// The first start's preview quality and dithering for the machine (`PreviewDefaults`), logged at Info.
+	/// The first start's preset for the machine (`PreviewDefaults`), logged at Info.
 	pub fn apply_first_start(&mut self, facts: &MachineFacts) {
 		let tier = PreviewDefaults::tier(facts);
-		let (quality, dither) = PreviewDefaults::tier_of(facts);
-		self.set_preview_quality(quality);
-		self.preview_dither_bits = dither;
+		self.apply_preset(tier);
+		let (quality, dither) = (self.preview_quality(), self.preview_dither_bits);
 		tracing::info!(
 			"first start: {:.1} GiB memory, {} threads, GPU {}, cache drive seek penalty {}: {tier:?} preview \
 			 (resolution 1/{}, every {}. frame, {}-bit samples, dithering {})",
@@ -390,6 +383,18 @@ impl Settings {
 			if quality.format == SampleFormat::Half { 16 } else { 8 },
 			dither
 		);
+	}
+
+	/// Sets the four preview levers to `tier`'s.
+	pub fn apply_preset(&mut self, tier: PreviewTier) {
+		self.set_preview_quality(PreviewDefaults::quality_of(tier));
+		self.preview_dither_bits = PreviewDefaults::dither_bits_of(tier);
+	}
+
+	/// The Auto preset: the tier of `facts`; in the browser a picked RAM cache size stands in for the device memory.
+	pub fn auto_preset(&self, facts: MachineFacts) -> PreviewTier {
+		let picked = if cfg!(target_arch = "wasm32") { self.frame_memory_bytes } else { 0 };
+		PreviewDefaults::tier(&preset_facts(facts, picked))
 	}
 
 	pub fn save(&self, store: &Store) -> Result<(), SettingsError> {
@@ -413,26 +418,20 @@ impl Settings {
 		self.preview_sample_bytes = if q.format == SampleFormat::Half { 2 } else { 1 };
 	}
 
-	/// The RAM cache size for the store's budget: in the browser Auto or a size, natively Auto or a share.
+	/// The RAM cache size for the store's budget: in the browser Auto or a size, natively Auto.
 	pub fn ram_cache(&self) -> RamCache {
-		if cfg!(target_arch = "wasm32") {
-			return match self.frame_memory_bytes {
-				0 => RamCache::Auto,
-				bytes => RamCache::Bytes(bytes),
-			};
-		}
-		match self.frame_memory_percent {
-			..=0 => RamCache::Auto,
-			percent => RamCache::Percent(percent as u32),
+		match self.frame_memory_bytes {
+			bytes if cfg!(target_arch = "wasm32") && bytes != 0 => RamCache::Bytes(bytes),
+			_ => RamCache::Auto,
 		}
 	}
 
-	/// Sets the RAM cache size; Auto clears the share and the size.
+	/// Sets the RAM cache size; Auto clears the size, a share is no setting.
 	pub fn set_ram_cache(&mut self, cache: RamCache) {
 		match cache {
-			RamCache::Auto => (self.frame_memory_percent, self.frame_memory_bytes) = (0, 0),
-			RamCache::Percent(percent) => self.frame_memory_percent = i32::try_from(percent).unwrap_or(i32::MAX),
+			RamCache::Auto => self.frame_memory_bytes = 0,
 			RamCache::Bytes(bytes) => self.frame_memory_bytes = bytes,
+			RamCache::Percent(percent) => tracing::debug!("the RAM cache share of {percent} % is ignored"),
 		}
 	}
 
@@ -454,11 +453,20 @@ impl Settings {
 		self.export_hints.truncate(MAX_EXPORT_HINTS);
 	}
 
-	/// Sets the UI zoom from the View menu (0.5..3).
+	/// Sets the UI zoom from Settings or the zoom keys (0.5..3).
 	pub fn set_menu_zoom(&mut self, zoom: f64) {
 		if zoom.is_finite() {
 			self.ui_zoom = zoom.clamp(MENU_ZOOM.0, MENU_ZOOM.1);
 		}
+	}
+}
+
+/// `facts` with a picked RAM cache size (0 is none) in place of the memory, of which the size is the
+/// [`WEB_FRAME_SHARE`]th part.
+fn preset_facts(facts: MachineFacts, picked_bytes: u64) -> MachineFacts {
+	match picked_bytes {
+		0 => facts,
+		bytes => MachineFacts { physical_bytes: bytes.saturating_mul(WEB_FRAME_SHARE), ..facts },
 	}
 }
 
@@ -495,14 +503,32 @@ mod tests {
 	}
 
 	#[test]
-	fn the_ram_cache_size_round_trips_and_auto_clears_the_share_and_the_size() {
+	fn the_ram_cache_size_round_trips_auto_clears_it_and_a_share_is_ignored() {
 		let mut s = Settings::default();
 		s.set_ram_cache(RamCache::Bytes(GIB));
 		s.set_ram_cache(RamCache::Percent(40));
 		let back = Settings::from_json(&s.to_sparse_json(), false).unwrap();
-		assert_eq!((back.frame_memory_bytes, back.ram_cache()), (GIB, RamCache::Percent(40)));
+		assert_eq!(back.frame_memory_bytes, GIB);
+		assert_eq!(back.ram_cache(), RamCache::Auto, "natively always Auto");
 		s.set_ram_cache(RamCache::Auto);
-		assert_eq!((s.frame_memory_percent, s.frame_memory_bytes, s.ram_cache()), (0, 0, RamCache::Auto));
+		assert_eq!((s.frame_memory_bytes, s.ram_cache()), (0, RamCache::Auto));
+	}
+
+	#[test]
+	fn a_version_1_share_is_dropped_at_load_and_not_written_back() {
+		let dir = tempfile::tempdir().unwrap();
+		let store = Store::in_dir(dir.path().to_owned());
+		let v1 = serde_json::json!({ "Version": 1, "FrameMemoryPercent": 40, "UseGpu": false });
+		std::fs::write(dir.path().join(FILE_NAME), v1.to_string()).unwrap();
+		let loaded = Settings::load(&store, false, || panic!("not a first start")).settings;
+		assert_eq!(loaded.version, 1);
+		assert!(loaded.unknown.is_empty(), "{:?}", loaded.unknown);
+		assert!(!loaded.use_gpu);
+		loaded.save(&store).unwrap();
+		let written: Value = serde_json::from_str(&store.read(FILE_NAME).unwrap().unwrap()).unwrap();
+		assert_eq!(written, serde_json::json!({ "Version": 2, "UseGpu": false }));
+		let auto = Settings::from_json(r#"{"Version": 1, "FrameMemoryPercent": 0}"#, false).unwrap();
+		assert!(auto.unknown.is_empty(), "Auto is dropped too");
 	}
 
 	#[test]
@@ -521,8 +547,7 @@ mod tests {
 	#[test]
 	fn normalize_clamps_each_value_to_its_bounds_or_the_devices_default() {
 		type Set = fn(&mut Settings);
-		let rows: [(&str, Set, Set); 11] = [
-			("frame memory", |s| s.frame_memory_percent = 5, |s| s.frame_memory_percent = 10),
+		let rows: [(&str, Set, Set); 10] = [
 			("browser frame memory", |s| s.frame_memory_bytes = 3 << 30, |s| s.frame_memory_bytes = 0),
 			("preview resolution", |s| s.preview_resolution = 3, |s| s.preview_resolution = 2),
 			("preview frames", |s| s.preview_frames = 9, |s| s.preview_frames = 4),
@@ -546,6 +571,33 @@ mod tests {
 	}
 
 	#[test]
+	fn each_preset_sets_the_four_levers() {
+		let levers =
+			|s: &Settings| (s.preview_resolution, s.preview_frames, s.preview_sample_bytes, s.preview_dither_bits);
+		let rows =
+			[(PreviewTier::Low, (2, 2, 1, 0)), (PreviewTier::Medium, (1, 1, 1, 0)), (PreviewTier::High, (1, 1, 2, 16))];
+		for (tier, want) in rows {
+			let mut s =
+				Settings { preview_resolution: 4, preview_frames: 4, preview_dither_bits: 12, ..Settings::default() };
+			s.apply_preset(tier);
+			assert_eq!(levers(&s), want, "{tier:?}");
+			assert_eq!(s.preview_quality(), PreviewDefaults::quality_of(tier), "{tier:?}");
+		}
+	}
+
+	#[test]
+	fn a_picked_size_stands_in_for_the_memory() {
+		let machine = facts(64, 16);
+		assert_eq!(preset_facts(machine, 0), machine, "Auto keeps the machine");
+		let picked = preset_facts(machine, 256 << 20);
+		assert_eq!((picked.physical_bytes, picked.threads), (2 * GIB, 16));
+		assert_eq!(PreviewDefaults::tier(&picked), PreviewTier::Low);
+		assert_eq!(PreviewDefaults::tier(&preset_facts(facts(8, 16), 2 * GIB)), PreviewTier::Medium);
+		let s = Settings { frame_memory_bytes: 256 << 20, ..Settings::default() };
+		assert_eq!(s.auto_preset(machine), PreviewTier::High, "natively the size is unused");
+	}
+
+	#[test]
 	fn first_start_tiers() {
 		let mut high = Settings::default();
 		high.apply_first_start(&facts(64, 16));
@@ -553,9 +605,9 @@ mod tests {
 		let mut low = Settings::default();
 		low.apply_first_start(&facts(8, 16));
 		assert_eq!((low.preview_resolution, low.preview_frames, low.preview_sample_bytes), (2, 2, 1));
-		let mut middle = Settings::default();
-		middle.apply_first_start(&facts(20, 16));
-		assert_eq!(middle.preview_quality(), PreviewQuality::DEFAULT);
+		let mut medium = Settings::default();
+		medium.apply_first_start(&facts(20, 16));
+		assert_eq!(medium.preview_quality(), PreviewQuality::DEFAULT);
 	}
 
 	fn stores_zoom(s: &Settings) -> bool {
@@ -622,7 +674,7 @@ mod tests {
 	#[test]
 	fn an_unreadable_value_reads_as_its_default_and_keeps_the_others() {
 		for touch_first in [false, true] {
-			let text = r#"{"Version": 1, "UiZoom": 1.5, "Theme": "Neon", "UseGpu": "yes", "UiZoomTypo": 3, "AutoRerun": false}"#;
+			let text = r#"{"Version": 2, "UiZoom": 1.5, "Theme": "Neon", "UseGpu": "yes", "UiZoomTypo": 3, "AutoRerun": false}"#;
 			let s = Settings::from_json(text, touch_first).unwrap();
 			let expected = Settings {
 				ui_zoom: 1.5,
@@ -638,7 +690,7 @@ mod tests {
 	fn unknown_settings_survive_a_save() {
 		let dir = tempfile::tempdir().unwrap();
 		let store = Store::in_dir(dir.path().to_owned());
-		let newer = serde_json::json!({ "Version": 2, "UseGpu": false, "Future": { "Kind": "Mode", "Level": [1, 2] } });
+		let newer = serde_json::json!({ "Version": 3, "UseGpu": false, "Future": { "Kind": "Mode", "Level": [1, 2] } });
 		std::fs::write(dir.path().join(FILE_NAME), newer.to_string()).unwrap();
 		let mut loaded = Settings::load(&store, false, || panic!("not a first start")).settings;
 		assert!(!loaded.use_gpu);

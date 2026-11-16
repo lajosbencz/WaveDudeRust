@@ -16,6 +16,7 @@ use super::export::{ExportDialog, Step};
 use super::memory_warning::MemoryWarning;
 use super::menu_keys::letter_of;
 use super::properties;
+use super::settings::Settings;
 use super::startup::Startup;
 use super::theme::Palette;
 use crate::App;
@@ -57,6 +58,7 @@ pub(super) enum Modal {
 	About(About),
 	Examples(Examples),
 	Startup(Startup),
+	Settings(Settings),
 	/// A completed export's file, downloaded when the user clicks Download: a browser may drop a download a page
 	/// starts on its own.
 	#[cfg(target_arch = "wasm32")]
@@ -86,6 +88,7 @@ impl Modal {
 			Self::About(_) => "About",
 			Self::Examples(_) => "Examples",
 			Self::Startup(_) => "Startup",
+			Self::Settings(_) => "SettingsDialog",
 			#[cfg(target_arch = "wasm32")]
 			Self::Download(_) => "Download",
 		})
@@ -98,13 +101,17 @@ pub(super) enum Then {
 	Send(Event),
 	/// Opens the Examples window.
 	Examples,
-	/// Each in turn.
-	All(Vec<Then>),
+	/// Opens the Settings window.
+	Settings,
+	/// Opens the welcome page.
+	Welcome,
 	/// Downloads the update and asks to restart into it.
 	#[cfg(not(target_arch = "wasm32"))]
 	Download(Box<cargo_packager_updater::Update>),
-	/// Looks for a newer release, quietly.
-	CheckForUpdates,
+	/// Looks for a newer release; `quiet` says nothing when there is none or the check fails.
+	CheckForUpdates {
+		quiet: bool,
+	},
 	Export(Step),
 	/// Uploads the scene image the project lacks.
 	#[cfg(target_arch = "wasm32")]
@@ -252,6 +259,7 @@ impl Modals {
 					Modal::About(about) => about.ui(ui, fresh, app),
 					Modal::Examples(examples) => examples.ui(ui, fresh, app),
 					Modal::Startup(startup) => startup.ui(ui, fresh, app, out),
+					Modal::Settings(settings) => settings.ui(ui, fresh, app, out),
 					#[cfg(target_arch = "wasm32")]
 					Modal::Download(download) => {
 						let text = s.format("ExportReadyFormat", &[&download.name()]);

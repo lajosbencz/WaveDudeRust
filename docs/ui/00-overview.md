@@ -102,7 +102,7 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 
 ## UI zoom and DPI
 
-- View > UI zoom: 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x, 2.5x, 3x. Live. Persisted (`UiZoom`, default 1, on a touch-first device 2).
+- UI zoom (Settings > General; Ctrl+=, Ctrl+-, Ctrl+0): 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x, 2.5x, 3x. Live. Persisted (`UiZoom`, default 1, on a touch-first device 2).
   Command-line `--zoom=<factor>` (0.5..8) sets it at start.
 - A touch-first device is one whose primary pointer is a finger, decided once at start: in the browser the media
   query `(pointer: coarse)` (phones and tablets, not a touch-screen laptop), natively never. The default zoom is
@@ -145,6 +145,8 @@ Removed areas: layout and drawing, docking, menus and shortcuts, touch, widget s
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md)'s rule of a test that failed before the change is suspended for visible UI
 changes until then.
 
+- The welcome page (presets, launch check box, Settings... / Examples... and back) has no UI test since decision 0027.
+
 ## Turned brightness box: TODO
 
 On its side a picture's brightness box ([`40-preview-pane.md`](40-preview-pane.md), Header strip) is a click area
@@ -166,7 +168,7 @@ typing, caret and drag selection along the strip.
 ## Languages
 
 - English, Deutsch, Francais, Nederlands, plus System (OS display language, English fallback).
-- View > Language switches live: menus, tooltips, property labels and hints, tree folder names, pane titles,
+- The language (Settings > General) switches live: menus, tooltips, property labels and hints, tree folder names, pane titles,
   status words, enum words. Persisted (`Language`, "" = System).
 - Spelling: British in the UI, except "license".
 - Four string tables `Strings/Strings.{EN,DE,FR,NL}.xaml`: menu headers carry their mnemonic underscore;

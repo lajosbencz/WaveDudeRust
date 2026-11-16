@@ -1,6 +1,6 @@
 //! The modals driven headless: the unsaved-edits question with its buttons and keys, the message window of a failed
 //! open, the crash report an earlier session left, the modals waiting in turn and the window's keys waiting behind
-//! them, the scene image question, the startup page and About.
+//! them, the scene image question, the welcome page and About.
 
 mod common;
 
@@ -15,7 +15,6 @@ use wavedude_app_state::document::Source;
 use wavedude_app_state::platform::Instant;
 use wavedude_app_state::settings::{AppDirs, Theme};
 use wavedude_app_state::{AppState, Event, Guarded};
-use wavedude_core::quality::{PreviewDefaults, PreviewTier};
 
 use common::{SETTLE, boot, settle};
 
@@ -23,7 +22,7 @@ const EXAMPLE: &str = "../wavedude-core/tests/fixtures/examples/Example01_Source
 const MISSING: &str = "/nonexistent/missing.wdproj";
 
 /// The window on the settings under `dir` in the light theme, nothing run, with `project` open and `asked` asked
-/// for by the command line; `first_start` shows the startup page.
+/// for by the command line; `first_start` shows the welcome page.
 fn window_with(dir: &Path, first_start: bool, project: Option<&Path>, asked: &[&str]) -> Harness<'static, Shell> {
 	let dirs = AppDirs::under(dir);
 	let mut app = common::started(&dirs, first_start);
@@ -224,40 +223,6 @@ fn menu(harness: &mut Harness<'_, Shell>, menu: &str, entry: &str) {
 	settle(harness);
 	harness.get_by_label(entry).click();
 	settle(harness);
-}
-
-/// The startup page's buttons save its answers and close it; `toggled` turns its launch display off first.
-#[test]
-fn the_startup_page_shows_at_the_first_start_and_its_buttons_save_its_answers() {
-	let table = [("OK", true, None), ("Examples...", false, Some("Examples"))];
-	for (button, toggled, opens) in table {
-		let dir = tempfile::tempdir().unwrap();
-		let mut harness = window_with(dir.path(), true, None, &[]);
-		harness.get_by_label("Welcome to WaveDude Rust");
-		harness.get_by_label("High").click();
-		settle(&mut harness);
-		if toggled {
-			harness.get_by_label("Show this page at each launch").click();
-			settle(&mut harness);
-		}
-		// Enter would toggle the focused check box again
-		harness.get_by_label(button).click();
-		settle(&mut harness);
-		assert!(harness.query_by_label("Welcome to WaveDude Rust").is_none(), "{button} left the page open");
-		if let Some(label) = opens {
-			harness.get_by_label(label);
-		}
-		let st = &harness.state().app().settings;
-		assert_eq!(
-			st.preview_quality(),
-			PreviewDefaults::quality_of(PreviewTier::High),
-			"{button}: the tier was not saved"
-		);
-		if toggled {
-			assert_eq!(st.preview_dither_bits, PreviewDefaults::dither_bits_of(PreviewTier::High), "{button}");
-			assert!(!st.show_startup, "{button}: the launch display was not turned off");
-		}
-	}
 }
 
 #[test]

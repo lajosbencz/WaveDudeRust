@@ -43,27 +43,65 @@ quit?" Yes stops it and quits once it has ended; No keeps both.
 
 See [`60-live-editing-and-runs.md`](60-live-editing-and-runs.md).
 
-## Startup page (port)
+## Welcome page (port, decision 0027)
 
-A modal at each launch while `ShowStartup` is on (the default), and from File > Welcome Page..., and regardless while one of its questions is
-unanswered (`UseOpenH264` absent and OpenH264 not compiled in; `CheckForUpdates` absent in a build with the updater). Every
-section shows; OK (Enter or Esc) saves every answer and closes. Title "Welcome to WaveDude Rust". The quality
-selector comes first; the codec and update questions follow it. "Examples..." saves the answers the
-same way, closes the page and opens the Examples window.
-1. "Preview quality": one sentence on what it changes; buttons "Low", "Standard", "High" (the first start's tiers:
-   Low = half resolution, every second frame, 8-bit; Standard = full, 8-bit; High = 16-bit, 16-bit dithering), each
-   setting the four drop-downs below: Preview resolution, Preview frames, Preview samples, Preview dithering (shown
-   with 16-bit samples only), the View menu's words. Pre-set from the settings, so the first start's choice for the
-   machine.
-2. "MP4 video export" (absent when OpenH264 is compiled in): why the codec is needed, Cisco's notice, the check box
-   "Use Cisco's OpenH264 codec (downloaded from Cisco at the first MP4 export)", clear unless already enabled.
-3. "Updates" (absent without the updater): check box "Look for a new version at each launch (Help menu)", ticked
-   unless already declined. Ticked, OK or Examples... starts the first check.
-4. Check box "Show this page at each launch", ticked unless turned off; OK or Examples... saves it as `ShowStartup`.
+A modal at the first start and at each launch while `ShowStartup` is on (the default), and from File > Welcome
+Page.... Title "Welcome to WaveDude Rust". Top to bottom:
+1. "Preview quality": one sentence on what it changes and that the frames past the RAM go to disk.
+2. The RAM row of Settings (below): read-only natively, Auto or a size in the browser.
+3. Buttons "Low", "Medium", "High", "Auto": the presets of Settings; below them one dim line naming the levers as
+   they are, e.g. "Full resolution, every frame, 8-bit samples".
+4. "Settings..." and "Examples...": close the page and open that window.
+5. Check box "Show this page at each launch" (`ShowStartup`), saved as it changes.
+6. "Close" (default and cancel; Enter or Esc).
+
+A preset button applies at once, as in Settings; Close changes nothing more.
+
+## Settings (port, decision 0027)
+
+Modal (id `SettingsDialog`), 760 px wide, from File > Settings... or Ctrl+,; the frame, dimmed backdrop and buttons
+of the other dialogs. Title "Settings". A search box (`SettingsSearch`, focused on open) above a section list on the
+left and the section's rows on the right; one "Close" button (default and cancel; Enter outside a control or Esc).
+Each row is a label column and its control; a change applies and is saved at once, as every setting
+([`80-settings.md`](80-settings.md)).
+
+| Section | Row | Control | Setting |
+|---|---|---|---|
+| General | Theme | drop-down System, Light, Dark | `Theme` |
+| General | Language | drop-down System (in the current language), then each language by its own name | `Language` |
+| General | UI zoom | drop-down 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x, 2.5x, 3x; a zoom from `--zoom=` outside it shows as its factor | `UiZoom` |
+| General | Full path in the title | check box | `TitleFullPath` |
+| General | Show the welcome page at each launch | check box | `ShowStartup` |
+| Preview and memory | RAM | natively read-only: "{available} available of {physical}" (the frames take the available less 2 GiB); in the browser a drop-down "Auto ({detected})", 256 MiB, 512 MiB, 1.0 GiB, 2.0 GiB (decision 0020) | `FrameMemoryBytes` (browser) |
+| Preview and memory | Preset | buttons Low, Medium, High, Auto | none: fills the four rows below |
+| Preview and memory | Preview resolution | drop-down Full, Half, Quarter | `PreviewResolution` |
+| Preview and memory | Preview frames | drop-down Full, Half (every second frame), Quarter (every fourth frame) | `PreviewFrames` |
+| Preview and memory | Preview samples | drop-down 16-bit float, 8-bit palette index (brightness fixed when the run starts) | `PreviewSampleBytes` |
+| Preview and memory | Preview dithering | drop-down Off, 10, 12, 14, 16 bits per channel; disabled unless samples are 16-bit | `PreviewDitherBits` |
+| Preview and memory | Use the GPU | check box (CPU fallback logged) | `UseGpu` |
+| Simulation | Re-run automatically after edits | check box | `AutoRerun` |
+| Simulation | Warn when a run does not fit in RAM | check box | `WarnWhenRamInsufficient` |
+| Export | Use Cisco's OpenH264 codec (downloaded from Cisco at the first MP4 export) | check box with Cisco's notice; natively, absent when OpenH264 is compiled in | `UseOpenH264` |
+| Export | H.264 profile | drop-down Baseline, Main, High; greyed entries as in the export dialog | `H264Profile` |
+| Export | Archive several files into one ZIP file | check box; natively | `ExportArchive` |
+| Updates | Look for a new version at each launch | check box; builds with the updater | `CheckForUpdates` |
+| Updates | Check now | button: Help > Check for updates | none |
+
+Presets: Low = half resolution, every second frame, 8-bit, no dithering; Medium = full resolution, every frame,
+8-bit; High = 16-bit samples, 16-bit dithering; Auto = the preset of the machine now, by the first start's table
+([`spec/40`](../spec/40-frames-store-render.md), Preview quality defaults), in the browser the picked RAM size
+standing in for the device memory. A preset only sets the four levers; none is stored.
+
+A change of resolution, frames or samples replaces the frames like a simulation edit; dithering only redraws.
+
+Search: case-insensitive substring of a row's label in the current language, of its English label and of its
+section's name. While the box holds text the section list is replaced by every matching row under its section's
+name; "No setting matches" when none does. Clearing the box returns to the section last shown. Keys: Tab cycles the
+search box, the section list and the rows; Up/Down walk the section list.
 
 ## Updates (port, decision 0011)
 
-With "Check for updates at launch" on, a check runs in the background at each launch; Help > Check for updates
+With "Look for a new version at each launch" (Settings > Updates) on, a check runs in the background at each launch; Help > Check for updates
 runs one on demand. A newer release asks "WaveDude Rust x is available (this is y). Download it?" where the
 updater can replace the program (Windows installer, macOS app, Linux AppImage); Yes downloads it, with
 "Downloading WaveDude Rust x" and its progress in the status bar, and verifies the signature, then asks "WaveDude
@@ -187,13 +225,14 @@ Content top to bottom:
 
 ## Examples dialog
 
-Modal (id `ExamplesDialog`), 860 px wide, from File > Examples; the frame, dimmed backdrop and buttons of the
+Modal (id `ExamplesDialog`), 860 px wide, from File > Examples or the welcome page; the frame, dimmed backdrop and buttons of the
 other dialogs. Title "Examples"; a tab strip of six topics (`ExamplesTab:<n>`: Sources and coherence 8, Lenses and
 imaging 10, Gratings and filters 7, Metasurfaces and diffusers 5, Guides cavities and logic 18, Detectors and
 statistics 5); a search box
 (`ExamplesSearch`) filtering every tab by title and description, dimming the tabs without a match and moving to
 the first with one; a 360 px scrolled list, one row per example (`Example:<file stem>`): the title, below it the
-description wrapped in the dim text colour; Open and Cancel. Left/Right switch the tab (not while the search box
+description wrapped in the dim text colour; (port) Welcome page..., Open and Cancel. Welcome page... closes the
+dialog and opens the welcome page. Left/Right switch the tab (not while the search box
 has the focus), Up/Down move the row, Enter or Open or a double-click on a row opens it, Esc or Cancel closes,
 Tab cycles the controls. Opening closes the dialog and runs the guarded open (unsaved-changes prompt included).
 Every project is a `.wdproj` of [`examples`](../../examples/), embedded, the folder being its tab: Next's 33 as our
@@ -269,7 +308,7 @@ program, is also appended to `crash.txt` in the log folder; a worker's panic is 
 export reports an error) or ends that thread alone. At the next start a message window (error disc) says "WaveDude Rust hit an internal error in
 the last session. The report, to attach to a bug report:" and the path; the file is renamed `last-crash.txt` so it
 shows once. Buttons: Copy path (path to the clipboard, the window stays), OK (Enter, Esc). It comes before the
-startup page and the update check, which wait for the next start. In the browser, where every panic ends the program,
+welcome page and the update check, which wait for the next start. In the browser, where every panic ends the program,
 the report is kept in the page's storage; the window shows its text, and Copy report puts the text on the
 clipboard.
 
@@ -281,6 +320,7 @@ When no settings file exists:
   - Under 16 GB, or a cache drive that is a hard disk, or no GPU, or 4 threads or fewer: half resolution, every
     second frame, 8-bit samples.
   - Otherwise: full resolution, every frame, 8-bit samples.
+  - (port) These are the presets High, Low and Medium of Settings; the welcome page opens.
 - Write the settings file at once (deleting it redoes the choice); log one Info line naming facts and choice
   (shown in the status bar).
 - Default dock layout, window 1280 x 800 centred, theme System, language System.

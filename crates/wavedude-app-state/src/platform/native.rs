@@ -25,6 +25,11 @@ pub fn machine_facts() -> MachineFacts {
 	wavedude_core::run::machine_facts()
 }
 
+/// (available, physical) bytes of memory now, as the frame budget reads them.
+pub fn memory_readings() -> (u64, u64) {
+	wavedude_core::run::Memory::System.read()
+}
+
 /// Whether the primary pointer is a finger; never on the desktop.
 pub fn touch_first() -> bool {
 	false

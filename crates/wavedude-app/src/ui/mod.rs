@@ -25,6 +25,7 @@ mod modal;
 mod number_box;
 mod preview;
 mod properties;
+mod settings;
 mod shortcuts;
 mod startup;
 mod status_bar;
@@ -61,7 +62,6 @@ use wavedude_core::engine::GpuHandle;
 #[cfg(not(target_arch = "wasm32"))]
 use wavedude_core::engine::gpu::GpuContext;
 use wavedude_core::model::ItemRef;
-use wavedude_core::quality::PreviewQuality;
 
 use self::about::About;
 use self::dock::Dock;
@@ -75,6 +75,7 @@ use self::modal::{Modal, Modals, Then};
 use self::platform::Updates;
 use self::preview::Preview;
 use self::properties::{PropertiesPane, Request};
+use self::settings::Settings;
 use self::shortcuts::Keyboard;
 use self::startup::Startup;
 use self::tree::ProjectPane;
@@ -149,13 +150,14 @@ impl Shell {
 		let preview = Preview::new(cc.wgpu_render_state.clone());
 		let project = ProjectPane::default();
 		let updates = Updates::new(&boot);
-		// the launch asks one thing at most: the crash report, the startup page or (quietly) for an update
+		// the launch shows the crash report or the welcome page; an update found queues behind it
 		let mut modals = Modals::default();
 		if let Some(report) = take_crash_report(&boot.store) {
 			modals.show(Modal::crash(&app.strings, report));
 		} else if startup::due(&app) {
-			modals.show(Modal::Startup(Startup::new(&app)));
-		} else if app.settings.check_for_updates == Some(true) {
+			modals.show(Modal::Startup(Startup::new()));
+		}
+		if app.settings.check_for_updates == Some(true) {
 			updates.check(&cc.egui_ctx, true);
 		}
 		Self {
@@ -209,11 +211,12 @@ impl Shell {
 	fn then(&mut self, ctx: &egui::Context, then: Then) {
 		match then {
 			Then::Send(event) => self.send(ctx, event),
-			Then::All(all) => all.into_iter().for_each(|then| self.then(ctx, then)),
 			Then::Examples => self.modals.show(Modal::Examples(Examples::default())),
+			Then::Settings => self.modals.show(Modal::Settings(Settings::new())),
+			Then::Welcome => self.modals.show(Modal::Startup(Startup::new())),
 			#[cfg(not(target_arch = "wasm32"))]
 			Then::Download(update) => self.updates.download(ctx, &self.app.strings, *update),
-			Then::CheckForUpdates => self.updates.check(ctx, true),
+			Then::CheckForUpdates { quiet } => self.updates.check(ctx, quiet),
 			Then::Export(step) => self.exports.step(ctx, &mut self.app, &mut self.modals, step),
 			#[cfg(target_arch = "wasm32")]
 			Then::LocateSceneImage => self.files.locate_scene_image(ctx, &self.app),
@@ -293,11 +296,6 @@ impl Shell {
 		let app = &self.app;
 		let st = &app.settings;
 		let target = menus::target(app, on);
-		let quality = |f: fn(&mut PreviewQuality, u32), v: u32| {
-			let mut q = st.preview_quality();
-			f(&mut q, v);
-			Event::SetPreviewQuality(q)
-		};
 		let on_target = |f: fn(ItemRef) -> Command| target.map(|t| Event::Command(f(t)));
 		// an added or duplicated item's form takes the focus
 		if matches!(action, MenuAction::AddSource | MenuAction::AddPart(_) | MenuAction::AddProbe(_))
@@ -331,17 +329,7 @@ impl Shell {
 				self.dock.toggle(pane);
 				None
 			}
-			MenuAction::Theme(theme) => Some(Event::SetTheme(theme)),
-			MenuAction::Zoom(z) => Some(Event::SetMenuZoom(z)),
-			MenuAction::Language(l) => Some(Event::SetLanguage(l.map_or_else(String::new, |l| l.code().to_owned()))),
-			MenuAction::Resolution(d) => Some(quality(|q, d| q.resolution_divisor = d, d)),
-			MenuAction::Frames(d) => Some(quality(|q, d| q.frame_divisor = d, d)),
-			MenuAction::Samples(format) => {
-				let mut q = st.preview_quality();
-				q.format = format;
-				Some(Event::SetPreviewQuality(q))
-			}
-			MenuAction::Dither(bits) => Some(Event::SetDitherBits(bits)),
+			MenuAction::Zoom(step) => settings::zoom_step(st, step).map(Event::SetMenuZoom),
 			MenuAction::Run => Some(Event::Run),
 			MenuAction::PauseRun => Some(Event::TogglePauseRun),
 			MenuAction::Stop => (!self.exports.cancel(&mut self.app)).then_some(Event::StopRun),
@@ -351,11 +339,6 @@ impl Shell {
 				None
 			}
 			MenuAction::Play => Some(Event::TogglePlayback),
-			MenuAction::UseGpu => Some(Event::SetUseGpu(!st.use_gpu)),
-			MenuAction::AutoRerun => Some(Event::SetAutoRerun(!st.auto_rerun)),
-			MenuAction::WarnMemory => Some(Event::SetWarnWhenRamInsufficient(!st.warn_when_ram_insufficient)),
-			MenuAction::FrameMemory(cache) => Some(Event::SetRamCache(cache)),
-			MenuAction::CheckAtLaunch => Some(Event::SetCheckForUpdates(st.check_for_updates != Some(true))),
 			MenuAction::AddSource => Some(Event::Command(Command::AddSource { at: None })),
 			MenuAction::AddPart(kind) => Some(Event::Command(Command::AddPart { kind, at: None })),
 			MenuAction::AddProbe(detector) => Some(Event::Command(Command::AddProbe { at: None, detector })),
@@ -390,7 +373,11 @@ impl Shell {
 				None
 			}
 			MenuAction::Welcome => {
-				self.modals.show(Modal::Startup(Startup::new(app)));
+				self.modals.show(Modal::Startup(Startup::new()));
+				None
+			}
+			MenuAction::Settings => {
+				self.modals.show(Modal::Settings(Settings::new()));
 				None
 			}
 			MenuAction::About => {
