@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.4...v0.3.5) - 2026-11-16
+
+### Added
+
+- browser export and spill fixes: the encoder is gated on encodeQueueSize, frames spill through a dedicated worker into one file per store, the export dialog names every output plus its archive, and the RAM cache size is user-selectable in the browser; CITATION.cff lists the software and literature the project builds on
+
+### Fixed
+
+- a click on a turned brightness box focuses its upright editor with the text selected, as does the context menu on either strip; a turned editor is a TODO
+
 ## [0.3.4](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.3...v0.3.4) - 2026-11-15
 
 ### Added
