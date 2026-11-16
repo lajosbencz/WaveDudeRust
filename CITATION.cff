@@ -11,8 +11,8 @@ authors:
     given-names: Lajos
 repository-code: "https://github.com/lajosbencz/WaveDudeRust"
 license: GPL-3.0-or-later
-version: 0.3.4
-date-released: "2026-11-15"
+version: 0.3.5
+date-released: "2026-11-16"
 keywords:
   - wave equation
   - wave simulation
