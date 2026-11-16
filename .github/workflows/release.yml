@@ -127,7 +127,7 @@ jobs:
       - name: Release commit
         run: |
           git apply "$RUNNER_TEMP/release-pr/release.patch"
-          unexpected=$(git diff --name-only | grep -Ev '^(CHANGELOG\.md|Cargo\.lock|Cargo\.toml|crates/[^/]+/Cargo\.toml)$' || true)
+          unexpected=$(git diff --name-only | grep -Ev '^(CHANGELOG\.md|CITATION\.cff|Cargo\.lock|Cargo\.toml|crates/[^/]+/Cargo\.toml)$' || true)
           [ -z "$unexpected" ] || { echo "::error::the release patch touches $unexpected"; exit 1; }
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -q -a -m "chore(release): v$VERSION"
