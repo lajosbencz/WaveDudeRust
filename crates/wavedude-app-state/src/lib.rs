@@ -146,6 +146,8 @@ pub enum Event {
 	SetCheckForUpdates(bool),
 	/// Whether the welcome page opens at each launch.
 	SetShowStartup(bool),
+	/// The steps that can be undone; the oldest beyond them go as the next step is recorded.
+	SetUndoSteps(u32),
 	SetPreviewOrientation(settings::Orientation),
 	/// The dock's arrangement, as [`Settings::layout`](settings::Settings::layout).
 	SetLayout(String),
@@ -323,7 +325,8 @@ impl<B: Backend> AppState<B> {
 		use_gpu: Arc<AtomicBool>,
 	) -> Self {
 		let strings = Strings::new(Language::resolve(&settings.language));
-		let document = Document::empty();
+		let mut document = Document::empty();
+		document.history.set_limit(settings.undo_steps as usize);
 		let mut live = LiveController::new(backend, live_settings(&settings));
 		live.project_replaced(&document.project, Instant::now());
 		let mut state = Self {
@@ -497,6 +500,7 @@ impl<B: Backend> AppState<B> {
 			self.save_settings();
 		}
 		self.document = document;
+		self.document.history.set_limit(self.settings.undo_steps as usize);
 		self.schemes.check(&self.document.project);
 		self.documents += 1;
 		self.document_changed();
@@ -846,6 +850,13 @@ impl<B: Backend> AppState<B> {
 			}
 			Event::SetShowStartup(on) => {
 				self.settings.show_startup = on;
+				self.save_settings();
+				Response::None
+			}
+			Event::SetUndoSteps(steps) => {
+				self.settings.undo_steps = steps;
+				self.settings.normalize();
+				self.document.history.set_limit(self.settings.undo_steps as usize);
 				self.save_settings();
 				Response::None
 			}

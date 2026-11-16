@@ -73,6 +73,7 @@ Each row is a label column and its control; a change applies and is saved at onc
 | General | UI zoom | drop-down 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x, 2.5x, 3x; a zoom from `--zoom=` outside it shows as its factor | `UiZoom` |
 | General | Full path in the title | check box | `TitleFullPath` |
 | General | Show the welcome page at each launch | check box | `ShowStartup` |
+| General | Undo steps | number box 10..100000, two percent a step; tooltip (decision 0030) | `UndoSteps` |
 | Preview and memory | RAM | natively read-only: "{available} available of {physical}" (the frames take the available less 2 GiB); in the browser a drop-down "Auto ({detected})", 256 MiB, 512 MiB, 1.0 GiB, 2.0 GiB (decision 0020) | `FrameMemoryBytes` (browser) |
 | Preview and memory | Preset | buttons Low, Medium, High, Auto | none: fills the four rows below |
 | Preview and memory | Preview resolution | drop-down Full, Half, Quarter | `PreviewResolution` |

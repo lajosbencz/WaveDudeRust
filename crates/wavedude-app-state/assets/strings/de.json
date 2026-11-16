@@ -302,6 +302,8 @@
 	"SettingsExport": "Export",
 	"SettingsTitleFullPath": "Vollständiger Pfad im Titel",
 	"SettingsShowStartup": "Die Willkommensseite bei jedem Start zeigen",
+	"SettingsUndoSteps": "Rückgängig-Schritte",
+	"TipSettingsUndoSteps": "Wie viele Bearbeitungen Rückgängig zurücknehmen kann, 10 bis 100000; jeder Schritt behält eine Kopie des Projekts. Eine kleinere Zahl verwirft die ältesten Schritte bei der nächsten Bearbeitung.",
 	"SettingsRam": "RAM",
 	"SettingsRamFormat": "{0} von {1} verfügbar",
 	"SettingsPreset": "Voreinstellung",

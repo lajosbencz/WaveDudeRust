@@ -93,7 +93,8 @@ property the Rust core must prove in its test suite. Items marked (G) need golde
       pulsed 5/20 cycles, detach after 2000; use_probes honoured; Example 11 lattice without position enabled at
       (100, 100) with a note; a newer format version is refused.
 - [ ] Clipboard fragments (if ported): parse back into items; unknown element refuses the whole fragment.
-- [ ] History (if ported): one snapshot per step; undo restores the file and the image bytes.
+- [ ] History (if ported): one snapshot per step, at most the Undo steps setting back (decision 0030); undo
+      restores the file and the image bytes.
 
 ## Parts and painter
 

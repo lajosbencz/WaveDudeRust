@@ -1,5 +1,5 @@
-//! Unlimited undo and redo: one clone of the project per step; the scene image's bytes are shared between the clones
-//! (docs/ui/60-live-editing-and-runs.md, Undo and redo).
+//! Undo and redo up to a number of steps (the setting `UndoSteps`, decision 0030): one clone of the project per step;
+//! the scene image's bytes are shared between the clones (docs/ui/60-live-editing-and-runs.md, Undo and redo).
 //!
 //! A step ends after [`QUIET`] without an edit while no mouse button is held, so a drag, a number-box scrub or a held
 //! arrow key is one step. Undo and redo end a pending step first and write the step back into the same project object.
@@ -12,6 +12,8 @@ use super::platform::{Duration, Instant};
 
 /// Quiet time that ends a step.
 pub const QUIET: Duration = Duration::from_millis(500);
+/// The steps a new history can undo.
+pub const DEFAULT_LIMIT: usize = 1000;
 
 /// The steps of one project's editing session.
 #[derive(Clone, Debug)]
@@ -22,14 +24,43 @@ pub struct History {
 	saved: Option<usize>,
 	pending_since: Option<Instant>,
 	mouse_held: bool,
+	/// The steps that can be undone; the oldest beyond it are dropped.
+	limit: usize,
 }
 
 impl History {
-	/// A history whose first step is `project` as it is, saved.
+	/// A history whose first step is `project` as it is, saved, keeping [`DEFAULT_LIMIT`] steps.
 	pub fn new(project: &Project) -> Self {
-		let mut h = Self { steps: Vec::new(), current: 0, saved: Some(0), pending_since: None, mouse_held: false };
-		h.steps.push(project.clone());
-		h
+		Self {
+			steps: vec![project.clone()],
+			current: 0,
+			saved: Some(0),
+			pending_since: None,
+			mouse_held: false,
+			limit: DEFAULT_LIMIT,
+		}
+	}
+
+	/// Starts over at `project`, saved, keeping the limit.
+	pub fn restart(&mut self, project: &Project) {
+		*self = Self { limit: self.limit, ..Self::new(project) };
+	}
+
+	/// At most `steps` (at least 1) can be undone; the steps beyond it are dropped as the next step is recorded.
+	pub fn set_limit(&mut self, steps: usize) {
+		self.limit = steps.max(1);
+	}
+
+	pub fn limit(&self) -> usize {
+		self.limit
+	}
+
+	/// Drops the oldest steps down to the limit; the current step is the last. A dropped saved step leaves none saved.
+	fn trim(&mut self) {
+		let old = self.steps.len().saturating_sub(self.limit + 1);
+		self.steps.drain(..old);
+		self.current -= old;
+		self.saved = self.saved.and_then(|s| s.checked_sub(old));
 	}
 
 	/// An edit happened at `now`; the step stays open until [`QUIET`] passes without another.
@@ -72,6 +103,7 @@ impl History {
 		}
 		self.steps.push(project.clone());
 		self.current += 1;
+		self.trim();
 		true
 	}
 
@@ -219,6 +251,85 @@ mod tests {
 		h.commit(&p);
 		assert_eq!(h.current(), 2, "the new step takes the saved step's index");
 		assert!(!h.at_saved(), "the step the file held is gone");
+	}
+
+	/// A history of steps with seeds `0..=n` (seed 0 the first), at the last.
+	fn seeded(n: i32, limit: usize) -> (History, Project) {
+		let mut p = Project { seed: 0, ..Project::default() };
+		let mut h = History::new(&p);
+		h.set_limit(limit);
+		for seed in 1..=n {
+			p.seed = seed;
+			h.edit_started(t0());
+			h.commit(&p);
+		}
+		(h, p)
+	}
+
+	fn seeds(h: &History) -> Vec<i32> {
+		h.steps.iter().map(|s| s.seed).collect()
+	}
+
+	#[test]
+	fn the_oldest_steps_beyond_the_limit_are_dropped() {
+		let (mut h, mut p) = seeded(5, 3);
+		assert_eq!(seeds(&h), [2, 3, 4, 5]);
+		assert_eq!(h.current(), 3);
+		for _ in 0..3 {
+			assert!(h.undo(&mut p));
+		}
+		assert_eq!(p.seed, 2);
+		assert!(!h.undo(&mut p), "no step left beyond the limit");
+		assert!(!h.can_undo());
+	}
+
+	#[test]
+	fn a_dropped_saved_step_leaves_the_project_dirty_for_good() {
+		let (mut h, mut p) = seeded(2, 2);
+		assert!(!h.at_saved());
+		assert!(h.undo(&mut p) && h.undo(&mut p));
+		assert!(h.at_saved(), "the saved step is still held");
+		assert!(h.redo(&mut p) && h.redo(&mut p));
+		p.seed = 3;
+		h.edit_started(t0());
+		h.commit(&p);
+		assert_eq!(seeds(&h), [1, 2, 3]);
+		while h.undo(&mut p) {}
+		assert!(!h.at_saved(), "the step the file holds is gone");
+		h.mark_saved();
+		assert!(h.at_saved());
+	}
+
+	#[test]
+	fn a_saved_step_kept_by_the_trim_moves_with_it() {
+		let (mut h, mut p) = seeded(3, 10);
+		h.mark_saved();
+		for seed in [4, 5] {
+			p.seed = seed;
+			h.edit_started(t0());
+			h.commit(&p);
+			h.set_limit(3);
+		}
+		assert_eq!(seeds(&h), [2, 3, 4, 5]);
+		assert!(h.undo(&mut p) && h.undo(&mut p));
+		assert_eq!(p.seed, 3);
+		assert!(h.at_saved());
+	}
+
+	#[test]
+	fn a_lower_limit_trims_as_the_next_step_is_recorded() {
+		let (mut h, mut p) = seeded(20, 100);
+		h.set_limit(5);
+		assert_eq!(h.len(), 21, "steps are kept until the next one");
+		assert!(h.undo(&mut p) && h.undo(&mut p) && h.redo(&mut p));
+		p.seed = 99;
+		h.edit_started(t0());
+		h.commit(&p);
+		assert_eq!(seeds(&h), [15, 16, 17, 18, 19, 99], "the redo branch ends first, then the oldest go");
+		assert_eq!(h.current(), 5);
+		assert!(!h.at_saved());
+		h.restart(&p);
+		assert_eq!((h.len(), h.limit(), h.at_saved()), (1, 5, true), "a restart keeps the limit");
 	}
 
 	#[test]

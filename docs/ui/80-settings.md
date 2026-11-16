@@ -46,6 +46,7 @@ aside. An unreadable file is not a first start. Version 2 drops `FrameMemoryPerc
 | UseOpenH264 | bool or absent (never set; reads as false) | absent | Settings > Export; export dialog, MP4: Use Cisco's OpenH264 codec; `wavedude-cli openh264 enable/disable` |
 | CheckForUpdates | bool or absent (never set; reads as false) | absent | Settings > Updates (builds with the updater) |
 | ShowStartup | bool | true | Settings > General; welcome page check box |
+| UndoSteps | (port) int 10..100000, the steps Undo can go back; out of range clamps, logged (decision 0030) | 1000 | Settings > General |
 | ExportHints | list of {Project path, Run path, Still path, Probe path}, newest project first, max 20, only existing project files | empty | each export; restored when the project is opened |
 
 Not persisted (session or project state): playback speed (resets to 1 each start; decision 0008),

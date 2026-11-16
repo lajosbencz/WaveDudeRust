@@ -274,7 +274,7 @@ impl Document {
 		}
 		if located || adopted {
 			// Undo goes back to the project as opened, with what was adopted.
-			self.history = History::new(&self.project);
+			self.history.restart(&self.project);
 		}
 		if !adopted {
 			return false;

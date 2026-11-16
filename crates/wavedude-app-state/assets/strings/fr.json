@@ -302,6 +302,8 @@
 	"SettingsExport": "Export",
 	"SettingsTitleFullPath": "Chemin complet dans le titre",
 	"SettingsShowStartup": "Afficher la page d'accueil à chaque lancement",
+	"SettingsUndoSteps": "Étapes d'annulation",
+	"TipSettingsUndoSteps": "Nombre de modifications qu'Annuler peut défaire, de 10 à 100000 ; chaque étape garde une copie du projet. Un nombre plus petit supprime les étapes les plus anciennes à la prochaine modification.",
 	"SettingsRam": "RAM",
 	"SettingsRamFormat": "{0} disponibles sur {1}",
 	"SettingsPreset": "Préréglage",

@@ -14,6 +14,7 @@ use wavedude_core::quality::{MachineFacts, PreviewDefaults, PreviewQuality, Prev
 use wavedude_core::run::RamCache;
 use wavedude_export::h264::Profile;
 
+use super::history;
 use super::live::{WEB_FRAME_SHARE, WEB_RAM_CACHE_SIZES};
 use super::platform::Store;
 use super::strings::Language;
@@ -32,6 +33,8 @@ pub const SWITCH_ZOOM: (f64, f64) = (0.5, 8.0);
 /// The default UI zoom of a touch-first device; 1 elsewhere.
 pub const TOUCH_ZOOM: f64 = 2.0;
 pub const DITHER_BITS: [u32; 5] = [0, 10, 12, 14, 16];
+/// The bounds of the steps that can be undone (decision 0030).
+pub const UNDO_STEPS: (u32, u32) = (10, 100_000);
 
 /// The user's colour scheme folder in the store.
 pub const SCHEME_FOLDER: &str = "ColorSchemes";
@@ -169,6 +172,8 @@ pub struct Settings {
 	pub check_for_updates: Option<bool>,
 	/// The welcome page opens at each launch.
 	pub show_startup: bool,
+	/// The steps that can be undone, within [`UNDO_STEPS`].
+	pub undo_steps: u32,
 	/// The primary pointer is a finger, decided at the start; not stored. It sets the defaults of a device.
 	#[serde(skip)]
 	pub touch_first: bool,
@@ -210,6 +215,7 @@ impl Default for Settings {
 			h264_profile: Profile::Baseline,
 			check_for_updates: None,
 			show_startup: true,
+			undo_steps: history::DEFAULT_LIMIT as u32,
 			touch_first: false,
 			unknown: Map::new(),
 		}
@@ -272,6 +278,11 @@ impl Settings {
 		self.export_hints.truncate(MAX_EXPORT_HINTS);
 		if self.export_filter_index as usize >= wavedude_export::ExportFormat::ALL.len() {
 			self.export_filter_index = 0;
+		}
+		let undo_steps = self.undo_steps.clamp(UNDO_STEPS.0, UNDO_STEPS.1);
+		if undo_steps != self.undo_steps {
+			tracing::warn!("the undo steps {} are out of {UNDO_STEPS:?}, {undo_steps} are used", self.undo_steps);
+			self.undo_steps = undo_steps;
 		}
 	}
 
@@ -493,9 +504,16 @@ mod tests {
 	fn defaults_write_the_version_alone() {
 		let v: Value = serde_json::from_str(&Settings::default().to_sparse_json()).unwrap();
 		assert_eq!(v, serde_json::json!({ "Version": VERSION }));
-		let s = Settings { use_gpu: false, ui_zoom: 1.25, h264_profile: Profile::High, ..Settings::default() };
+		let s = Settings {
+			use_gpu: false,
+			ui_zoom: 1.25,
+			h264_profile: Profile::High,
+			undo_steps: 50,
+			..Settings::default()
+		};
 		let v: Value = serde_json::from_str(&s.to_sparse_json()).unwrap();
-		assert_eq!(v.as_object().unwrap().len(), 4);
+		assert_eq!(v.as_object().unwrap().len(), 5);
+		assert_eq!(v["UndoSteps"], 50);
 		assert_eq!(v["UseGpu"], Value::Bool(false));
 		assert_eq!(v["H264Profile"], "High", "the profile by its name");
 		assert_eq!(Settings::from_json("{}", false).unwrap().version, 0, "a file before the field");
@@ -547,7 +565,7 @@ mod tests {
 	#[test]
 	fn normalize_clamps_each_value_to_its_bounds_or_the_devices_default() {
 		type Set = fn(&mut Settings);
-		let rows: [(&str, Set, Set); 10] = [
+		let rows: [(&str, Set, Set); 12] = [
 			("browser frame memory", |s| s.frame_memory_bytes = 3 << 30, |s| s.frame_memory_bytes = 0),
 			("preview resolution", |s| s.preview_resolution = 3, |s| s.preview_resolution = 2),
 			("preview frames", |s| s.preview_frames = 9, |s| s.preview_frames = 4),
@@ -558,6 +576,8 @@ mod tests {
 			("language", |s| s.language = "xx".into(), |s| s.language.clear()),
 			("window left", |s| s.window_left = Some(f64::NAN), |s| s.window_left = None),
 			("export filter", |s| s.export_filter_index = 99, |s| s.export_filter_index = 0),
+			("undo steps low", |s| s.undo_steps = 0, |s| s.undo_steps = UNDO_STEPS.0),
+			("undo steps high", |s| s.undo_steps = u32::MAX, |s| s.undo_steps = UNDO_STEPS.1),
 		];
 		for touch_first in [false, true] {
 			for (name, bad, want) in rows {

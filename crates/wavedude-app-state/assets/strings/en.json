@@ -302,6 +302,8 @@
 	"SettingsExport": "Export",
 	"SettingsTitleFullPath": "Full path in the title",
 	"SettingsShowStartup": "Show the welcome page at each launch",
+	"SettingsUndoSteps": "Undo steps",
+	"TipSettingsUndoSteps": "How many edits Undo can go back, 10 to 100000; each step keeps a copy of the project. A lower number drops the oldest steps at the next edit.",
 	"SettingsRam": "RAM",
 	"SettingsRamFormat": "{0} available of {1}",
 	"SettingsPreset": "Preset",

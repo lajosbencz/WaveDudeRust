@@ -302,6 +302,8 @@
 	"SettingsExport": "Export",
 	"SettingsTitleFullPath": "Volledig pad in de titel",
 	"SettingsShowStartup": "De welkomstpagina bij elke start tonen",
+	"SettingsUndoSteps": "Stappen ongedaan maken",
+	"TipSettingsUndoSteps": "Hoeveel bewerkingen Ongedaan maken kan terugdraaien, 10 tot 100000; elke stap bewaart een kopie van het project. Een lager getal verwijdert de oudste stappen bij de volgende bewerking.",
 	"SettingsRam": "RAM",
 	"SettingsRamFormat": "{0} van {1} beschikbaar",
 	"SettingsPreset": "Voorinstelling",

@@ -12,7 +12,7 @@ use wavedude_app_state::Event;
 #[cfg(target_arch = "wasm32")]
 use wavedude_app_state::live::{WEB_RAM_CACHE_SIZES, detected_web_frame_memory};
 use wavedude_app_state::platform::machine_facts;
-use wavedude_app_state::settings::{DITHER_BITS, Settings as UserSettings, Theme as ThemeSetting};
+use wavedude_app_state::settings::{DITHER_BITS, Settings as UserSettings, Theme as ThemeSetting, UNDO_STEPS};
 use wavedude_app_state::strings::{Language, Strings, strip_mnemonic};
 use wavedude_core::engine::SampleFormat;
 use wavedude_core::model::Word;
@@ -23,6 +23,7 @@ use wavedude_core::run::RamCache;
 use super::export::{h264_profiles, profile_combo, profile_note};
 use super::memory_warning::bytes_text;
 use super::modal::{self, Choice, Reply, Then, buttons};
+use super::number_box::{NumberSpec, number_box};
 use super::properties::{Choices, check_box, combo};
 use super::theme::{FONT_SIZE, INPUT_HEIGHT, Palette};
 use crate::App;
@@ -78,6 +79,7 @@ const LABEL_WIDTH: f32 = 180.;
 const SECTIONS_WIDTH: f32 = 170.;
 const SECTION_HEIGHT: f32 = 26.;
 const BODY_HEIGHT: f32 = 380.;
+const NUMBER_WIDTH: f32 = 100.;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Section {
@@ -163,12 +165,13 @@ const fn row(section: Section, label: &'static str, need: Need, control: fn(&mut
 	Row { section, label, need, control }
 }
 
-const ROWS: [Row; 19] = [
+const ROWS: [Row; 20] = [
 	row(Section::General, "MenuViewTheme", Need::Always, theme),
 	row(Section::General, "MenuViewLanguage", Need::Always, language),
 	row(Section::General, "MenuViewUiZoom", Need::Always, zoom),
 	row(Section::General, "SettingsTitleFullPath", Need::Always, title_full_path),
 	row(Section::General, "SettingsShowStartup", Need::Always, show_startup),
+	row(Section::General, "SettingsUndoSteps", Need::Always, undo_steps),
 	row(Section::Preview, "SettingsRam", Need::Always, ram),
 	row(Section::Preview, "SettingsPreset", Need::Always, preset),
 	row(Section::Preview, "MenuViewResolution", Need::Always, resolution),
@@ -482,6 +485,23 @@ fn show_startup(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {
 	toggle(ui, cx, name, |st| st.show_startup, Event::SetShowStartup);
 }
 
+/// A number box over [`UNDO_STEPS`], two percent a step.
+fn undo_steps(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {
+	let now = f64::from(cx.settings().undo_steps);
+	let spec = NumberSpec::logarithmic_whole(f64::from(UNDO_STEPS.0), f64::from(UNDO_STEPS.1));
+	let id = name.id();
+	let edited = labelled(ui, name.text, |ui| {
+		let (rect, _) = ui.allocate_exact_size(vec2(NUMBER_WIDTH, INPUT_HEIGHT), Sense::hover());
+		number_box(ui, rect, id, now, &spec, false, Some(name.text))
+	});
+	let event = |v: f64| Event::SetUndoSteps(v.round() as u32);
+	edited.offer(ui.ctx(), id, event);
+	edited.response.on_hover_text(cx.strings().get("TipSettingsUndoSteps"));
+	if let Some(v) = edited.applied.filter(|&v| v != now) {
+		cx.out.push(event(v));
+	}
+}
+
 /// The memory the frames take from: what is available of the physical memory.
 #[cfg(not(target_arch = "wasm32"))]
 fn ram(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {
@@ -666,6 +686,8 @@ mod tests {
 	fn the_search_reads_labels_in_both_languages_and_section_names() {
 		let (en, de) = (Strings::new(Language::English), Strings::new(Language::German));
 		assert_eq!(labels(&found("gpu", &en, NATIVE)), ["MenuSimulationUseGpu"]);
+		assert_eq!(labels(&found("undo", &en, NATIVE)), ["SettingsUndoSteps"]);
+		assert_eq!(labels(&found("undo", &de, NATIVE)), ["SettingsUndoSteps"], "English in German");
 		assert_eq!(labels(&found("preview res", &en, NATIVE)), ["MenuViewResolution"], "mnemonics are no text");
 		assert_eq!(labels(&found("sprache", &de, NATIVE)), ["MenuViewLanguage"]);
 		assert_eq!(labels(&found("language", &de, NATIVE)), ["MenuViewLanguage"], "English in German");

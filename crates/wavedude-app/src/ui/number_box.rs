@@ -70,6 +70,8 @@ pub(super) struct NumberSpec {
 	/// Logical pixels of drag that double (or halve) a logarithmic box's value.
 	doubling_pixels: f64,
 	decimal_separator: char,
+	/// A logarithmic box of whole numbers: rounds to integers and steps by at least one.
+	whole: bool,
 }
 
 impl NumberSpec {
@@ -84,6 +86,7 @@ impl NumberSpec {
 			drag_step: step / 4.,
 			doubling_pixels: 100.,
 			decimal_separator: '.',
+			whole: false,
 		}
 	}
 
@@ -94,6 +97,11 @@ impl NumberSpec {
 	/// Two percent a step, ten steps a page, a doubling per 100 px of drag.
 	pub(super) fn logarithmic(min: f64, max: f64) -> Self {
 		Self { stepping: Stepping::Logarithmic(1.02), decimals: 0, drag_step: 0., ..Self::linear(min, max, 1.) }
+	}
+
+	/// [`Self::logarithmic`] over whole numbers.
+	pub(super) fn logarithmic_whole(min: f64, max: f64) -> Self {
+		Self { whole: true, ..Self::logarithmic(min, max) }
 	}
 
 	pub(super) fn with_decimals(mut self, decimals: u32) -> Self {
@@ -121,6 +129,7 @@ impl NumberSpec {
 	fn round(&self, value: f64) -> f64 {
 		match self.stepping {
 			Stepping::Linear(_) => round_to(value, self.decimals),
+			Stepping::Logarithmic(_) if self.whole => round_significant(value, 3).round(),
 			Stepping::Logarithmic(_) => round_significant(value, 3),
 		}
 	}
@@ -134,7 +143,11 @@ impl NumberSpec {
 				base * factor.powi(steps)
 			}
 		};
-		self.clamp(self.round(raw))
+		let mut v = self.round(raw);
+		if self.whole && (v - value).abs() < f64::from(steps.unsigned_abs()) {
+			v = value + f64::from(steps);
+		}
+		self.clamp(v)
 	}
 
 	/// The value after a horizontal drag of `dx` logical pixels from `start`.
@@ -571,5 +584,15 @@ mod tests {
 		assert_eq!(s.step_text("x", 1).value, 0.1);
 		assert_eq!(s.commit("12"), Some(Stepped { value: 10., clamped: true }));
 		assert_eq!(s.commit("abc"), None);
+	}
+
+	#[test]
+	fn a_whole_logarithmic_box_steps_by_at_least_one() {
+		let s = NumberSpec::logarithmic_whole(10., 100_000.);
+		assert_eq!(s.step(10., 1).value, 11.);
+		assert_eq!(s.step(24., 1).value, 25.);
+		assert_eq!(s.step(11., -1).value, 10.);
+		assert_eq!(s.step(1000., 1).value, 1020.);
+		assert_eq!(s.step(10., -1).value, 10.);
 	}
 }
