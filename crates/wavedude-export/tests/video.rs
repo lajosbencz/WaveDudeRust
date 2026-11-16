@@ -311,6 +311,259 @@ fn mp4_pads_an_odd_size_to_even() {
 	std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// An MP4 whose encoder gives its pictures out of display order, as a browser's coding B-frames does.
+#[cfg(feature = "mp4-mux")]
+mod reordered {
+	use std::collections::VecDeque;
+	use std::process::Command;
+	use std::task::Poll;
+
+	use wavedude_export::h264::{AccessUnit, EncoderSpec, H264Encoder, H264Factory, Yuv420};
+	use wavedude_export::sinks::mp4::Mp4Sink;
+
+	use super::*;
+
+	/// Most significant bit first, Exp-Golomb included (ITU-T H.264 9.1).
+	#[derive(Default)]
+	struct Bits {
+		bytes: Vec<u8>,
+		/// Bits used of the last byte, 0 when it is full.
+		used: u32,
+	}
+
+	impl Bits {
+		fn bit(&mut self, bit: bool) {
+			if self.used == 0 {
+				self.bytes.push(0);
+			}
+			if bit {
+				*self.bytes.last_mut().unwrap() |= 0x80 >> self.used;
+			}
+			self.used = (self.used + 1) % 8;
+		}
+
+		fn u(&mut self, value: u32, bits: u32) {
+			for k in (0..bits).rev() {
+				self.bit(value >> k & 1 == 1);
+			}
+		}
+
+		fn golomb(&mut self, value: u32) {
+			let len = 32 - (value + 1).leading_zeros();
+			self.u(value + 1, 2 * len - 1);
+		}
+
+		fn align(&mut self) {
+			while self.used != 0 {
+				self.bit(false);
+			}
+		}
+
+		/// `rbsp_trailing_bits`, then the NAL unit of `header` with emulation prevention, after a start code.
+		fn nal(mut self, header: u8) -> Vec<u8> {
+			self.bit(true);
+			self.align();
+			let mut out = vec![0, 0, 0, 1, header];
+			let mut zeros = 0;
+			for b in self.bytes {
+				if zeros == 2 && b <= 3 {
+					out.push(3);
+					zeros = 0;
+				}
+				zeros = if b == 0 { zeros + 1 } else { 0 };
+				out.push(b);
+			}
+			out
+		}
+	}
+
+	/// Codes each picture as I_PCM macroblocks, an IDR then I pictures numbered by `pic_order_cnt_lsb`, and gives
+	/// them out in the order a browser's B-frame pyramid does: 0, then 4 2 1 3, 8 6 5 7, ..., the rest in order at
+	/// the flush.
+	#[derive(Default)]
+	struct Pyramid {
+		held: Vec<(u64, Yuv420)>,
+		coded: VecDeque<(Vec<u8>, bool, u64)>,
+		submitted: u64,
+		decoded: u64,
+	}
+
+	impl Pyramid {
+		fn parameter_sets(p: &Yuv420) -> Vec<u8> {
+			let mut sps = Bits::default();
+			sps.u(66, 8);
+			sps.u(0xC0, 8);
+			sps.u(30, 8);
+			// sps id, log2_max_frame_num_minus4, pic_order_cnt_type, log2_max_pic_order_cnt_lsb_minus4 (6 bits),
+			// max_num_ref_frames
+			[0, 0, 0, 2, 1].into_iter().for_each(|v| sps.golomb(v));
+			sps.bit(false);
+			sps.golomb(p.width.div_ceil(16) as u32 - 1);
+			sps.golomb(p.height.div_ceil(16) as u32 - 1);
+			// frame_mbs_only, direct_8x8_inference, no cropping, a VUI of bitstream_restriction alone (8 flags clear),
+			// motion vectors over picture boundaries
+			sps.u(0b1101, 4);
+			sps.u(0, 8);
+			sps.u(0b11, 2);
+			// max_bytes_per_pic_denom, max_bits_per_mb_denom, log2_max_mv_length, max_num_reorder_frames,
+			// max_dec_frame_buffering
+			[0, 0, 15, 15, 3, 4].into_iter().for_each(|v| sps.golomb(v));
+			let mut pps = Bits::default();
+			// pps id, sps id, CAVLC, no bottom field order, one slice group, one reference each
+			pps.golomb(0);
+			pps.golomb(0);
+			pps.u(0, 2);
+			[0, 0, 0].into_iter().for_each(|v| pps.golomb(v));
+			// no weighted prediction, QP offsets 0, deblocking control present
+			pps.u(0, 3);
+			[0, 0, 0].into_iter().for_each(|v| pps.golomb(v));
+			pps.u(0b100, 3);
+			[sps.nal(0x67), pps.nal(0x68)].concat()
+		}
+
+		/// The access unit of picture `index` coded as the `decoded`-th.
+		fn code(index: u64, p: &Yuv420, decoded: u64) -> Vec<u8> {
+			assert!(p.width.is_multiple_of(16) && p.height.is_multiple_of(16), "whole macroblocks");
+			let idr = decoded == 0;
+			let mut slice = Bits::default();
+			// first_mb_in_slice, slice_type I (all), pps id
+			[0, 7, 0].into_iter().for_each(|v| slice.golomb(v));
+			slice.u((decoded % 16) as u32, 4);
+			if idr {
+				slice.golomb(0);
+			}
+			slice.u((2 * index % 64) as u32, 6);
+			// dec_ref_pic_marking: no_output_of_prior_pics and long_term_reference, or a sliding window
+			slice.u(0, if idr { 2 } else { 1 });
+			// slice_qp_delta 0, deblocking off
+			slice.golomb(0);
+			slice.golomb(1);
+			let (w, cw) = (p.width, p.width / 2);
+			for my in 0..p.height / 16 {
+				for mx in 0..w / 16 {
+					slice.golomb(25);
+					slice.align();
+					for y in 0..16 {
+						slice.bytes.extend_from_slice(&p.y[(my * 16 + y) * w + mx * 16..][..16]);
+					}
+					for plane in [&p.cb, &p.cr] {
+						for y in 0..8 {
+							slice.bytes.extend_from_slice(&plane[(my * 8 + y) * cw + mx * 8..][..8]);
+						}
+					}
+				}
+			}
+			let head = if idr { Self::parameter_sets(p) } else { Vec::new() };
+			[head, slice.nal(if idr { 0x65 } else { 0x21 })].concat()
+		}
+
+		/// Codes the held pictures `order` in that order.
+		fn release(&mut self, order: impl IntoIterator<Item = u64>) {
+			for index in order {
+				let at = self.held.iter().position(|h| h.0 == index).unwrap();
+				let (_, picture) = self.held.remove(at);
+				self.coded.push_back((Self::code(index, &picture, self.decoded), self.decoded == 0, index));
+				self.decoded += 1;
+			}
+		}
+	}
+
+	impl H264Encoder for Pyramid {
+		fn poll_ready(&mut self) -> wavedude_export::Result<Poll<()>> {
+			Ok(Poll::Ready(()))
+		}
+
+		fn submit(&mut self, picture: &Yuv420) -> wavedude_export::Result<()> {
+			let index = self.submitted;
+			self.submitted += 1;
+			self.held.push((index, picture.clone()));
+			match index {
+				0 => self.release([0]),
+				i if i.is_multiple_of(4) => self.release([i, i - 2, i - 3, i - 1]),
+				_ => {}
+			}
+			Ok(())
+		}
+
+		fn drain(
+			&mut self,
+			out: &mut dyn FnMut(AccessUnit<'_>) -> wavedude_export::Result<()>,
+		) -> wavedude_export::Result<()> {
+			while let Some((stream, sync, picture)) = self.coded.pop_front() {
+				out(AccessUnit { stream: &stream, sync, picture })?;
+			}
+			Ok(())
+		}
+
+		fn start_flush(&mut self) -> wavedude_export::Result<()> {
+			let rest: Vec<u64> = self.held.iter().map(|h| h.0).collect();
+			self.release(rest);
+			Ok(())
+		}
+
+		fn poll_flushed(&mut self) -> wavedude_export::Result<Poll<()>> {
+			Ok(Poll::Ready(()))
+		}
+	}
+
+	#[derive(Debug)]
+	struct Pyramids;
+
+	impl H264Factory for Pyramids {
+		fn profiles(&self) -> &[Profile] {
+			&[Profile::Baseline]
+		}
+
+		fn open(&self, _: &EncoderSpec) -> wavedude_export::Result<Box<dyn H264Encoder>> {
+			Ok(Box::<Pyramid>::default())
+		}
+	}
+
+	#[test]
+	fn pictures_coded_out_of_display_order_present_in_it() {
+		if !has_ffmpeg() {
+			return;
+		}
+		let dir = scratch("mp4-reordered");
+		let (w, h, n) = (32, 32, 10);
+		// a grey level a picture, far enough apart that a picture out of place fails the PSNR bound
+		let frames: Vec<Vec<u8>> =
+			(0..n).map(|k| [20 + 20 * k as u8, 20 + 20 * k as u8, 20 + 20 * k as u8, 255].repeat(w * h)).collect();
+		let spec = wavedude_export::SinkSpec {
+			width: w as u32,
+			height: h as u32,
+			fps: 25,
+			quality: 85,
+			profile: Profile::Baseline,
+			first_frame: 0,
+			frame_count: n,
+		};
+		let path = dir.join("v.mp4");
+		let mut writer = Mp4Sink::new(file(&path), spec, &Pyramids).unwrap();
+		for f in &frames {
+			writer.write_frame(f, w as u32, h as u32).unwrap();
+		}
+		while writer.poll_finish().unwrap().is_pending() {}
+		writer.finish().unwrap();
+		drop(writer);
+		let probe = Command::new("ffprobe")
+			.args(["-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pts", "-of", "csv=p=0"])
+			.arg(&path)
+			.output()
+			.expect("ffprobe runs");
+		let pts: Vec<String> = String::from_utf8_lossy(&probe.stdout).lines().map(str::to_owned).collect();
+		let expected: Vec<String> = (0..n).map(|k| k.to_string()).collect();
+		assert_eq!(pts, expected, "each picture presented once, at its own time, in order");
+		let decoded = ffmpeg_frames(&path, w as u32, h as u32);
+		assert_eq!(decoded.len(), n);
+		for (k, (d, f)) in decoded.iter().zip(&frames).enumerate() {
+			let p = luma_psnr(d, &rgb(f));
+			assert!(p >= LUMA_PSNR, "picture {k} at its place: luma PSNR {p:.2} dB");
+		}
+		std::fs::remove_dir_all(&dir).unwrap();
+	}
+}
+
 #[test]
 fn a_parallel_mov_writes_the_serial_bytes() {
 	use wavedude_export::EncoderPool;

@@ -19,7 +19,7 @@ use openh264::encoder::{
 };
 use openh264::formats::YUVSlices;
 
-use super::{EncoderSpec, H264Encoder, H264Factory, Profile, Yuv420};
+use super::{AccessUnit, EncoderSpec, H264Encoder, H264Factory, Profile, Yuv420};
 use crate::{ExportError, Result};
 
 /// The `OpenH264` release whose binaries the `openh264` crate accepts (it checks their SHA-256).
@@ -177,7 +177,7 @@ impl H264Factory for OpenH264Factory {
 			.intra_frame_period(IntraFramePeriod::from_num_frames(spec.fps))
 			.vui(VuiConfig::bt601());
 		let encoder = Encoder::with_api_config(api, config).map_err(h264_error)?;
-		Ok(Box::new(OpenH264Encoder { encoder, stream: Vec::new(), held: None }))
+		Ok(Box::new(OpenH264Encoder { encoder, stream: Vec::new(), held: None, pictures: 0 }))
 	}
 }
 
@@ -191,6 +191,8 @@ struct OpenH264Encoder {
 	stream: Vec<u8>,
 	/// `stream` is not drained yet; whether it is a sync sample.
 	held: Option<bool>,
+	/// Pictures submitted; `OpenH264` never reorders them.
+	pictures: u64,
 }
 
 impl H264Encoder for OpenH264Encoder {
@@ -204,12 +206,13 @@ impl H264Encoder for OpenH264Encoder {
 		self.held = Some(matches!(encoded.frame_type(), FrameType::IDR | FrameType::I));
 		self.stream.clear();
 		encoded.write_vec(&mut self.stream);
+		self.pictures += 1;
 		Ok(())
 	}
 
-	fn drain(&mut self, out: &mut dyn FnMut(&[u8], bool) -> Result<()>) -> Result<()> {
+	fn drain(&mut self, out: &mut dyn FnMut(AccessUnit<'_>) -> Result<()>) -> Result<()> {
 		match self.held.take() {
-			Some(sync) => out(&self.stream, sync),
+			Some(sync) => out(AccessUnit { stream: &self.stream, sync, picture: self.pictures - 1 }),
 			None => Ok(()),
 		}
 	}

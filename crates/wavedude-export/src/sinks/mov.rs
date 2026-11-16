@@ -1,14 +1,14 @@
 //! `QuickTime` movies with the Animation codec (`rle `, 24-bit, every sample a full-frame key frame) or PNG samples
 //! (`png `, filter None).
 //!
-//! The container is the ISO base media writer of `sinks::bmff`, brand `qt  `.
+//! The container is the `QuickTime` writer of `sinks::bmff`.
 
 use std::collections::BTreeMap;
 use std::io::{Seek, Write};
 
 use wavedude_core::sync::MaybeSend;
 
-use super::bmff::{Brand, SampleEntry, Track};
+use super::bmff::{SampleEntry, Track};
 use super::png::{PngFilter, encode_png_into};
 use super::pool::{Done, EncoderPool, Lanes};
 use super::{FrameSink, check_size};
@@ -60,7 +60,7 @@ pub struct MovWriter<W: Write + Seek> {
 impl<W: Write + Seek> MovWriter<W> {
 	/// A writer; `frames`, when known, reserves room for `moov` ahead of `mdat`.
 	pub fn new(out: W, width: u32, height: u32, fps: u32, codec: MovCodec, frames: Option<usize>) -> Result<Self> {
-		let track = Track::new(out, Brand::QuickTime, width, height, fps, frames)?;
+		let track = Track::new(out, width, height, fps, frames)?;
 		Ok(Self { track, codec, sample: Vec::new() })
 	}
 
@@ -150,7 +150,7 @@ impl<W: Write + Seek + MaybeSend> FrameSink for MovWriter<W> {
 	}
 
 	fn finish(&mut self) -> Result<()> {
-		let entry = SampleEntry { format: self.codec.fourcc(), compressor: self.codec.name(), config: &[] };
+		let entry = SampleEntry { format: self.codec.fourcc(), compressor: self.codec.name() };
 		self.track.finish(Some(&entry))
 	}
 }

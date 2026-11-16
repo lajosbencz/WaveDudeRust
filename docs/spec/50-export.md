@@ -151,26 +151,30 @@ Label font: see "Burned-in overlays" below.
 - Bitrate fallback: `clamp(round_even(W*H*fps*0.01*50^(q/100)), 300000, 200000000)` bit/s.
 - Odd sizes padded to even by repeating the last row/column; maximum 4096 x 2304.
 - Rust: an H.264 encoder behind `wavedude_export::h264::H264Encoder` (opened by the plan's `H264Factory`,
-  `ExportPlan::h264`) muxed in-house (feature `mp4-mux`, which builds for the browser). The encoder
-  takes 4:2:0 pictures and hands back Annex B access units, possibly later (`poll_ready`, `start_flush`,
-  `poll_flushed`); the sink passes this on as `FrameSink::poll_ready` and `poll_finish`, which the job polls
-  before writing a frame and before finishing (not after a cancel). Natively the encoder is OpenH264 (feature
-  `mp4`, decision 0005), Cisco's binary loaded at run time (`OpenH264Factory`, the path from
-  `wavedude_export::h264::library`); without one the export fails with `H264Missing`. In the browser it is
-  WebCodecs' `VideoEncoder` (`wavedude_app_state::platform::WebCodecsFactory`, decision 0005): codec string
-  `avc1.42E0LL` (Baseline), `4D00LL` (Main) or `6400LL` (High) at the lowest level `LL` of Table A-1 whose MaxFS,
-  MaxMBPS and side limit hold the size and frame rate, `avc: {format: "annexb"}`, the bitrate above,
-  `bitrateMode: "variable"`, `latencyMode: "quality"`, `hardwareAcceleration: "no-preference"`; a key frame every
-  fps pictures; I420 frames at `index / fps` s, colour space `smpte170m` limited range. At most 6 pictures are in
-  the encoder: `poll_ready` is pending above that. A picture coming out other than next (dropped or reordered)
-  fails the export, as does the encoder's error callback.
-- Rust container (`sinks::bmff`, shared with MOV): `ftyp` `isom`, minor 512, compatible `isom`, `iso2`, `avc1`,
-  `mp41`; `moov` in a `free` box of `1024 + 16*frames` bytes ahead of `mdat` (at the end when it does not fit),
-  `mdat` with 64-bit size; one track, timescale = fps, each sample one tick and a chunk of its own; an `avc1`
-  sample entry of the coded (padded) size whose `avcC` holds the first access unit's SPS and PPS with 4-byte NAL
-  lengths (and the chroma format and bit depths for High profiles), the parameter sets left out of the samples;
-  `stss` lists the IDR pictures; chunk offsets `stco` while they fit 32 bits, else `co64`. Colour is tagged by the
-  SPS's VUI only, no `colr`.
+  `ExportPlan::h264`) muxed by `shiguredo_mp4` (feature `mp4-mux`, which builds for the browser). The encoder takes
+  4:2:0 pictures and hands back Annex B access units in decode order, each with its picture's index in display order
+  (`AccessUnit`), possibly later (`poll_ready`, `start_flush`, `poll_flushed`); the sink passes this on as
+  `FrameSink::poll_ready` and `poll_finish`, which the job polls before writing a frame and before finishing (not
+  after a cancel). Natively the encoder is OpenH264 (feature `mp4`, decision 0005), Cisco's binary loaded at run time
+  (`OpenH264Factory`, the path from `wavedude_export::h264::library`); without one the export fails with
+  `H264Missing`. In the browser it is WebCodecs' `VideoEncoder` (`wavedude_app_state::platform::WebCodecsFactory`,
+  decision 0005): codec string `avc1.42E0LL` (Baseline), `4D00LL` (Main) or `6400LL` (High) at the lowest level `LL`
+  of Table A-1 whose MaxFS, MaxMBPS and side limit hold the size and frame rate, `avc: {format: "annexb"}`, the
+  bitrate above, `bitrateMode: "variable"`, `latencyMode: "quality"`, `hardwareAcceleration: "no-preference"`; a key
+  frame every fps pictures; I420 frames at `index / fps` s, colour space `smpte170m` limited range. At most 6 pictures
+  are in the encoder: `poll_ready` is pending above that. Chunks may come out of display order (B-frames at Main and
+  High, decision 0005, B-frames and the MP4 muxer); each chunk's timestamp names its picture. A time no submitted
+  picture is at, a picture given twice, one missing after the flush, or the encoder's error callback fails the export.
+- Rust container (`shiguredo_mp4`'s `Mp4FileMuxer`): `ftyp` `isom`, minor 0, compatible `isom`, `iso2`, `mp41`,
+  `avc1`; `moov` in the room of a `free` box of `1536 + 16*frames + 64` bytes of payload ahead of `mdat`, the rest
+  left `free` (at the end when it does not fit, the room all `free`), `mdat` with 64-bit size; one track, enabled and
+  in the movie, timescale = fps, each sample one tick, all samples in one chunk, in decode order; composition offsets
+  `ctts` (version 1, display index - decode index ticks) when a picture is reordered, no `ctts` otherwise, no edit
+  list; an `avc1` sample entry of the SPS's cropped size, which is the coded (padded) size, whose `avcC` holds the
+  first access unit's SPS and PPS with 4-byte NAL lengths (and the chroma format and bit depths for profiles other
+  than Baseline, Main and Extended), the parameter sets left out of the samples; a later access unit with other
+  parameter sets fails the export; `stss` lists the IDR pictures; chunk offsets `stco` while the file is under 4 GiB,
+  else `co64`. Colour is tagged by the SPS's VUI only, no `colr`.
 - Profile: `ExportPlan::h264_profile` (Baseline, Main or High), the app's `H264Profile` setting; when the encoder
   lacks it, its best profile is used and a warning logged. OpenH264 encodes Constrained Baseline only; the browser
   the profiles `VideoEncoder.isConfigSupported` accepts at the export's size and frame rate.

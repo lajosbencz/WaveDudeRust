@@ -9,7 +9,7 @@ use std::task::Poll;
 use js_sys::{Object, Reflect};
 use wasm_bindgen_futures::spawn_local;
 use wavedude_core::run::Token;
-use wavedude_export::h264::{EncoderSpec, H264Encoder, H264Factory, Profile, Yuv420};
+use wavedude_export::h264::{AccessUnit, EncoderSpec, H264Encoder, H264Factory, Profile, Yuv420};
 use wavedude_export::{ExportError, Result};
 use web_sys::wasm_bindgen::closure::Closure;
 use web_sys::wasm_bindgen::{JsCast, JsValue};
@@ -243,7 +243,7 @@ impl H264Encoder for WebCodecsEncoder {
 		encoded.map_err(|e| failed(&e))
 	}
 
-	fn drain(&mut self, out: &mut dyn FnMut(&[u8], bool) -> Result<()>) -> Result<()> {
+	fn drain(&mut self, out: &mut dyn FnMut(AccessUnit<'_>) -> Result<()>) -> Result<()> {
 		self.chunks.borrow_mut().drain(out)
 	}
 

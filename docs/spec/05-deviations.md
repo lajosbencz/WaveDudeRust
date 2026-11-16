@@ -89,12 +89,12 @@ frame indices), where the spec's rule is kept so pictures match.
 
 ## Export (50)
 
-- MP4 through openh264 (0005), muxed in-house by the ISO base media writer MOV
-  uses, not Media Foundation.
+- MP4 through openh264 (0005), muxed by the `shiguredo_mp4` crate, not Media
+  Foundation.
 - PNG, JPEG and OpenEXR through crates (`png`, `jpeg-encoder` at 4:4:4,
   `exr`), not in-house encoders; the output must decode to the same pixels
   and declare the same structure (4:4:4, one HALF channel "Y"). MPEG-1, AVI
-  and MOV have no maintained crates and stay in-house, MP4's container with them.
+  and MOV have no maintained crates and stay in-house.
 - Lossy outputs are measured by PSNR against the rendered frame (0009), not
   against the C# bytes.
 - Probe CSV: `\n` line endings.

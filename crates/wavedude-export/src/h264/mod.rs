@@ -50,8 +50,20 @@ pub struct EncoderSpec {
 	pub profile: Profile,
 }
 
-/// An H.264 encoder: pictures in, their access units out in the same order, an IDR every `fps` pictures starting
-/// with the first, no B-frames. The first access unit carries the SPS and PPS.
+/// One encoded picture.
+#[derive(Clone, Copy, Debug)]
+pub struct AccessUnit<'a> {
+	/// Annex B bytes.
+	pub stream: &'a [u8],
+	/// A sync sample.
+	pub sync: bool,
+	/// The picture's index in submission order, which is display order; each submitted picture comes once.
+	pub picture: u64,
+}
+
+/// An H.264 encoder: pictures in, their access units out in decode order, which differs from display order when
+/// it codes B-frames; an IDR every `fps` pictures starting with the first. The first access unit carries the SPS
+/// and PPS.
 pub trait H264Encoder: MaybeSend {
 	/// Ready when it takes a picture.
 	fn poll_ready(&mut self) -> Result<Poll<()>>;
@@ -59,9 +71,8 @@ pub trait H264Encoder: MaybeSend {
 	/// Encodes the next picture.
 	fn submit(&mut self, picture: &Yuv420) -> Result<()>;
 
-	/// Hands each access unit encoded since the last call to `out`, in order: its Annex B bytes and whether it is
-	/// a sync sample.
-	fn drain(&mut self, out: &mut dyn FnMut(&[u8], bool) -> Result<()>) -> Result<()>;
+	/// Hands each access unit encoded since the last call to `out`, in decode order.
+	fn drain(&mut self, out: &mut dyn FnMut(AccessUnit<'_>) -> Result<()>) -> Result<()>;
 
 	/// Ends the input: what is held is encoded.
 	fn start_flush(&mut self) -> Result<()>;

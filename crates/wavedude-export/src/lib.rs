@@ -216,6 +216,8 @@ pub enum ExportError {
 	NoEncoder,
 	#[error("this build writes no MP4")]
 	NoMuxer,
+	#[error("MP4 writing failed: {0}")]
+	Mp4(String),
 	#[error("{format} cannot carry a {width} x {height} picture ({limit})")]
 	Size { format: &'static str, width: u32, height: u32, limit: &'static str },
 	#[error("the frame is {got_width} x {got_height}, the output {width} x {height}")]

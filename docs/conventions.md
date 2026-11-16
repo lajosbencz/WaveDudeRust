@@ -46,7 +46,7 @@ push. What they hold the code to:
   ([decision 0018](decisions/0018-a-shared-picture-view.md)).
   Depends on core without default features and on epaint alone of the egui family; builds for `wasm32-unknown-unknown`.
 - `wavedude-export`: sinks, overlays, CSV, the export job, the H.264 encoder seam (`h264`: the MP4 muxer takes any
-  `H264Encoder`; `mp4-mux` is the muxer alone, `mp4` adds OpenH264). Depends on core and view (the overlay shapes); rasterises
+  `H264Encoder`; `mp4-mux` is the muxer alone, on `shiguredo_mp4`, `mp4` adds OpenH264). Depends on core and view (the overlay shapes); rasterises
   the overlays' epaint meshes on the CPU into the frame.
 - `wavedude-app-state`: document, history, selection, commands, live runs, settings, strings, log. What differs
   between the desktop and the browser is in its `platform` module, `native` or `web` chosen at compile time with

@@ -592,9 +592,10 @@ mod tests {
 		use std::collections::VecDeque;
 
 		use super::*;
-		use crate::h264::{EncoderSpec, H264Encoder, H264Factory, Yuv420};
+		use crate::h264::{AccessUnit, EncoderSpec, H264Encoder, H264Factory, Yuv420};
 		use crate::sinks::bmff::read;
 		use crate::sinks::mp4::Mp4Sink;
+		use crate::sinks::mp4::tests::sps;
 
 		/// Polls before an access unit comes out.
 		const LAG: usize = 3;
@@ -621,6 +622,7 @@ mod tests {
 		struct Late {
 			fps: usize,
 			submitted: usize,
+			drained: u64,
 			/// Access units, whether each is a sync sample, polls left.
 			held: VecDeque<(Vec<u8>, bool, usize)>,
 		}
@@ -643,7 +645,8 @@ mod tests {
 				let (n, sync) = (self.submitted, self.submitted.is_multiple_of(self.fps));
 				let mut unit = Vec::new();
 				if n == 0 {
-					unit.extend_from_slice(&[0, 0, 0, 1, 0x67, 0x42, 0xC0, 0x1E, 0xDA]);
+					unit.extend_from_slice(&[0, 0, 0, 1]);
+					unit.extend_from_slice(&sps(W.next_multiple_of(2), H.next_multiple_of(2)));
 					unit.extend_from_slice(&[0, 0, 0, 1, 0x68, 0xCE, 0x3C, 0x80]);
 				}
 				unit.extend_from_slice(&[0, 0, 0, 1, if sync { 0x65 } else { 0x41 }, n as u8, 0x80]);
@@ -652,10 +655,11 @@ mod tests {
 				Ok(())
 			}
 
-			fn drain(&mut self, out: &mut dyn FnMut(&[u8], bool) -> crate::Result<()>) -> crate::Result<()> {
+			fn drain(&mut self, out: &mut dyn FnMut(AccessUnit<'_>) -> crate::Result<()>) -> crate::Result<()> {
 				while self.held.front().is_some_and(|(_, _, left)| *left == 0) {
-					let (unit, sync, _) = self.held.pop_front().unwrap();
-					out(&unit, sync)?;
+					let (stream, sync, _) = self.held.pop_front().unwrap();
+					out(AccessUnit { stream: &stream, sync, picture: self.drained })?;
+					self.drained += 1;
 				}
 				Ok(())
 			}

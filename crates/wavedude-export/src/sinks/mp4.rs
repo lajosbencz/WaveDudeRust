@@ -1,183 +1,135 @@
-//! H.264 in MP4: an [`H264Encoder`]'s access units as one `avc1` track (ISO/IEC 14496-15 5.4) of the ISO base media
-//! writer of `sinks::bmff` (timescale = fps, one tick per sample, the SPS and PPS of the first access unit in `avcC`,
-//! `stss` for the IDR pictures).
+//! H.264 in MP4: an [`H264Encoder`]'s access units as one `avc1` track (ISO/IEC 14496-15 5.4) muxed by
+//! `shiguredo_mp4`'s `Mp4FileMuxer`: timescale = fps, one tick per sample, samples in decode order with their
+//! composition offsets in `ctts` when the encoder reorders pictures, the SPS and PPS of the first access unit in
+//! `avcC`, `stss` for the IDR pictures. Samples are written as they come; `moov` goes into the room reserved for the
+//! frame count ahead of `mdat`, after `mdat` when it does not fit.
 //!
 //! Input: 4:2:0 studio-range BT.601 from `yuv`; an odd size is padded to even by repeating the last column
 //! and row, and the video has the padded size.
 
-use std::io::{Seek, Write};
+use std::io::{Seek, SeekFrom, Write};
+use std::num::NonZeroU32;
 use std::task::Poll;
 
+use shiguredo_mp4::TrackKind;
+use shiguredo_mp4::bitstream::h264::{self, H264NalUnitType, H264SampleEntryConfig, LengthSize};
+use shiguredo_mp4::boxes::SampleEntry;
+use shiguredo_mp4::mux::{Mp4FileMuxer, Mp4FileMuxerOptions, MuxError, Sample, estimate_maximum_moov_box_size};
 use wavedude_core::sync::MaybeSend;
 
-use super::bmff::{Body, Brand, SampleEntry, Track, atom};
 use super::{FrameSink, SinkSpec, check_size};
-use crate::h264::{EncoderSpec, H264Encoder, H264Factory, bitrate};
+use crate::h264::{AccessUnit, EncoderSpec, H264Encoder, H264Factory, bitrate};
 use crate::yuv::Yuv420;
 use crate::{ExportError, Result};
 
-/// The NAL units of an Annex B stream, start codes removed.
-fn nal_units(stream: &[u8]) -> Vec<&[u8]> {
-	let mut starts = Vec::new();
-	let mut i = 0;
-	while i + 3 <= stream.len() {
-		if stream[i] == 0 && stream[i + 1] == 0 && stream[i + 2] == 1 {
-			starts.push(i + 3);
-			i += 3;
-		} else {
-			i += 1;
-		}
-	}
-	starts
-		.iter()
-		.enumerate()
-		.map(|(k, &s)| {
-			let mut end = starts.get(k + 1).map_or(stream.len(), |&n| n - 3);
-			while end > s && stream[end - 1] == 0 {
-				end -= 1;
-			}
-			&stream[s..end]
-		})
-		.filter(|n| !n.is_empty())
-		.collect()
+/// `e` in the export's words: the crate's reason for a box it cannot encode; the rest break the sink's invariants.
+fn mux_error(e: MuxError) -> ExportError {
+	ExportError::Mp4(match e {
+		MuxError::EncodeError(e) => e.reason,
+		MuxError::NoSyncSamples { .. } => "the video has no key frame".into(),
+		MuxError::Overflow => "the video has too many frames for MP4".into(),
+		other => format!("the muxer refused a sample: {other:?}"),
+	})
 }
 
-/// The RBSP of a NAL unit's payload: emulation prevention bytes (`00 00 03`) removed.
-fn rbsp(payload: &[u8]) -> Vec<u8> {
-	let mut out = Vec::with_capacity(payload.len());
-	let mut zeros = 0;
-	for &b in payload {
-		if zeros >= 2 && b == 3 {
-			zeros = 0;
-			continue;
-		}
-		zeros = if b == 0 { zeros + 1 } else { 0 };
-		out.push(b);
-	}
-	out
-}
-
-/// Exp-Golomb reading (ITU-T H.264 9.1), most significant bit first.
-struct Bits<'a> {
-	bytes: &'a [u8],
-	at: usize,
-}
-
-impl Bits<'_> {
-	fn bit(&mut self) -> Option<u32> {
-		let byte = *self.bytes.get(self.at / 8)?;
-		let bit = (byte >> (7 - self.at % 8)) & 1;
-		self.at += 1;
-		Some(u32::from(bit))
-	}
-
-	fn golomb(&mut self) -> Option<u32> {
-		let mut zeros = 0;
-		while self.bit()? == 0 {
-			zeros += 1;
-			if zeros > 31 {
-				return None;
-			}
-		}
-		let mut value = 0u64;
-		for _ in 0..zeros {
-			value = value << 1 | u64::from(self.bit()?);
-		}
-		u32::try_from((1u64 << zeros) - 1 + value).ok()
-	}
-}
-
-/// `chroma_format_idc`, `bit_depth_luma_minus8` and `bit_depth_chroma_minus8` of the SPS NAL unit `sps` (ITU-T
-/// H.264 7.3.2.1.1, plus 144 of its 2005 edition, which `avcC` still lists; the defaults 1, 0, 0 for profiles that
-/// do not code them).
-fn sps_format(sps: &[u8]) -> Option<(u8, u8, u8)> {
-	let profile = *sps.get(1)?;
-	if !matches!(profile, 100 | 110 | 122 | 244 | 44 | 83 | 86 | 118 | 128 | 138 | 139 | 134 | 135 | 144) {
-		return Some((1, 0, 0));
-	}
-	let payload = rbsp(sps.get(4..)?);
-	let mut bits = Bits { bytes: &payload, at: 0 };
-	bits.golomb()?; // seq_parameter_set_id
-	let chroma = bits.golomb()?;
-	if chroma == 3 {
-		bits.bit()?; // separate_colour_plane_flag
-	}
-	let (luma, chroma_depth) = (bits.golomb()?, bits.golomb()?);
-	Some((u8::try_from(chroma).ok()?, u8::try_from(luma).ok()?, u8::try_from(chroma_depth).ok()?))
-}
-
-/// The `avcC` box (`AVCDecoderConfigurationRecord`, ISO/IEC 14496-15 5.3.3.1) of the parameter sets `sps` and
-/// `pps` (NAL units), NAL unit lengths in 4 bytes.
-fn avc_config(sps: &[&[u8]], pps: &[&[u8]]) -> Result<Vec<u8>> {
-	let invalid = |what: &str| ExportError::H264(format!("the encoder's parameter sets are unusable: {what}"));
-	let first = match sps.first() {
-		Some(first) if first.len() >= 4 && !pps.is_empty() => first,
-		_ => return Err(ExportError::H264("the first frame carries no SPS and PPS".into())),
-	};
-	if sps.len() > 31 || pps.len() > 255 || sps.iter().chain(pps).any(|n| n.len() > u16::MAX as usize) {
-		return Err(invalid("too many or too long"));
-	}
-	let sets = |body: Body, sets: &[&[u8]]| sets.iter().fold(body, |b, s| b.u16(s.len() as u16).bytes(s));
-	// configurationVersion, profile, compatibility and level from the SPS, lengthSizeMinusOne 3
-	let body = Body::default().u8(1).bytes(&first[1..4]).u8(0xFC | 3).u8(0xE0 | sps.len() as u8);
-	let mut body = sets(sets(body, sps).u8(pps.len() as u8), pps);
-	// the profiles of 14496-15 5.3.3.1.2 whose record carries the format fields
-	if matches!(first[1], 100 | 110 | 122 | 144) {
-		let (chroma, luma, chroma_depth) = sps_format(first).ok_or_else(|| invalid("the SPS is truncated"))?;
-		// chroma_format, bit depths less 8, under reserved 1 bits; no SPS extensions
-		body = body.u8(0xFC | chroma).u8(0xF8 | luma).u8(0xF8 | chroma_depth).u8(0);
-	}
-	Ok(atom(b"avcC", &body.0))
-}
-
-/// The `avc1` track of an MP4, one sample per access unit, the parameter sets of the first in `avcC`.
+/// The `avc1` track of an MP4 written to `out` from its start, one sample per access unit.
 struct Muxer<W: Write + Seek> {
-	track: Track<W>,
-	/// The first access unit's SPS and PPS NAL units and the `avcC` box made of them.
-	config: Option<(Vec<Vec<u8>>, Vec<u8>)>,
+	out: W,
+	mux: Mp4FileMuxer,
+	timescale: NonZeroU32,
+	/// Where the next sample goes.
+	position: u64,
+	/// The first access unit's SPS and PPS NAL units.
+	sets: Option<Vec<Vec<u8>>>,
+	/// Samples written.
+	samples: u64,
 	/// The last sample, its allocation reused.
 	sample: Vec<u8>,
 }
 
 impl<W: Write + Seek> Muxer<W> {
-	/// Adds the access unit `stream` (Annex B) as the next sample, its NAL units length-prefixed; parameter sets go
-	/// to `avcC`, and a later one unlike the first fails, `avc1` holding one set for the whole track.
-	fn write(&mut self, stream: &[u8], sync: bool) -> Result<()> {
+	/// Writes the header, with room for the `moov` of `frames` samples.
+	fn new(mut out: W, fps: u32, frames: usize) -> Result<Self> {
+		let timescale = NonZeroU32::new(fps).ok_or_else(|| ExportError::Mp4("the frame rate is 0".into()))?;
+		let options = Mp4FileMuxerOptions {
+			reserved_moov_box_size: estimate_maximum_moov_box_size(&[frames]),
+			..Mp4FileMuxerOptions::default()
+		};
+		let mux = Mp4FileMuxer::with_options(options).map_err(mux_error)?;
+		out.write_all(mux.initial_boxes_bytes())?;
+		let position = mux.initial_boxes_bytes().len() as u64;
+		Ok(Self { out, mux, timescale, position, sets: None, samples: 0, sample: Vec::new() })
+	}
+
+	/// Adds `unit` as the next sample, its NAL units length-prefixed and its composition offset the distance of its
+	/// picture from its place in decode order; parameter sets go to `avcC`, and a later one unlike the first fails,
+	/// `avc1` holding one set for the whole track.
+	fn write(&mut self, unit: AccessUnit<'_>) -> Result<()> {
+		let nals = h264::parse_annexb_nal_units(unit.stream)
+			.map_err(|e| ExportError::H264(format!("the encoder's access unit is not Annex B: {}", e.reason)))?;
 		let (mut sps, mut pps) = (Vec::new(), Vec::new());
 		self.sample.clear();
-		for nal in nal_units(stream) {
-			match nal[0] & 0x1F {
-				kind @ (7 | 8) => {
-					if let Some((sets, _)) = &self.config {
-						if !sets.iter().any(|s| s == nal) {
-							let name = if kind == 7 { "SPS" } else { "PPS" };
+		for nal in nals {
+			match nal.nal_unit_type {
+				kind @ (H264NalUnitType::Sps | H264NalUnitType::Pps) => {
+					if let Some(sets) = &self.sets {
+						if !sets.iter().any(|s| s == nal.data) {
+							let name = if kind == H264NalUnitType::Sps { "SPS" } else { "PPS" };
 							return Err(ExportError::H264(format!(
 								"the encoder changed its {name} in sample {}; an avc1 track holds one",
-								self.track.samples() + 1
+								self.samples + 1
 							)));
 						}
-					} else if kind == 7 {
-						sps.push(nal);
+					} else if kind == H264NalUnitType::Sps {
+						sps.push(nal.data.to_vec());
 					} else {
-						pps.push(nal);
+						pps.push(nal.data.to_vec());
 					}
 				}
 				_ => {
-					self.sample.extend_from_slice(&(nal.len() as u32).to_be_bytes());
-					self.sample.extend_from_slice(nal);
+					self.sample.extend_from_slice(&(nal.data.len() as u32).to_be_bytes());
+					self.sample.extend_from_slice(nal.data);
 				}
 			}
 		}
-		if self.config.is_none() {
-			let avcc = avc_config(&sps, &pps)?;
-			self.config = Some((sps.iter().chain(&pps).map(|n| n.to_vec()).collect(), avcc));
-		}
-		self.track.write_sample(&self.sample, sync)
+		let entry = match self.sets {
+			Some(_) => None,
+			None => {
+				let config = H264SampleEntryConfig { length_size: LengthSize::FourBytes };
+				let avc1 = h264::build_avc1_box(&sps, &pps, &config).map_err(|e| {
+					ExportError::H264(format!("the encoder's parameter sets are unusable: {}", e.reason))
+				})?;
+				self.sets = Some([sps, pps].concat());
+				Some(SampleEntry::Avc1(avc1))
+			}
+		};
+		self.out.write_all(&self.sample)?;
+		let offset = unit.picture as i64 - self.samples as i64;
+		let sample = Sample {
+			track_kind: TrackKind::Video,
+			sample_entry: entry,
+			keyframe: unit.sync,
+			timescale: self.timescale,
+			duration: 1,
+			composition_time_offset: (offset != 0).then_some(offset),
+			data_offset: self.position,
+			data_size: self.sample.len(),
+		};
+		self.mux.append_sample(&sample).map_err(mux_error)?;
+		self.position += self.sample.len() as u64;
+		self.samples += 1;
+		Ok(())
 	}
 
+	/// Writes the index and the final header, and flushes the output.
 	fn finish(&mut self) -> Result<()> {
-		let entry = self.config.as_ref().map(|(_, config)| SampleEntry { format: b"avc1", compressor: "", config });
-		self.track.finish(entry.as_ref())
+		let finalized = self.mux.finalize().map_err(mux_error)?;
+		for (offset, bytes) in finalized.offset_and_bytes_pairs() {
+			self.out.seek(SeekFrom::Start(offset))?;
+			self.out.write_all(bytes)?;
+		}
+		self.out.flush()?;
+		Ok(())
 	}
 }
 
@@ -209,8 +161,7 @@ impl<W: Write + Seek> Mp4Sink<W> {
 		let (width, height) = (planes.width as u32, planes.height as u32);
 		let bps = bitrate(spec.width, spec.height, spec.fps, spec.quality);
 		let encoder = h264.open(&EncoderSpec { width, height, fps: spec.fps, bitrate: bps, profile })?;
-		let track = Track::new(out, Brand::Mp4, width, height, spec.fps, Some(spec.frame_count))?;
-		let muxer = Muxer { track, config: None, sample: Vec::new() };
+		let muxer = Muxer::new(out, spec.fps, spec.frame_count)?;
 		tracing::debug!(width = spec.width, height = spec.height, fps = spec.fps, bps, ?profile, "MP4 writer opened");
 		Ok(Self {
 			muxer,
@@ -227,7 +178,7 @@ impl<W: Write + Seek> Mp4Sink<W> {
 	/// Muxes what the encoder has encoded.
 	fn drain(&mut self) -> Result<()> {
 		let muxer = &mut self.muxer;
-		self.encoder.drain(&mut |stream, sync| muxer.write(stream, sync))
+		self.encoder.drain(&mut |unit| muxer.write(unit))
 	}
 }
 
@@ -274,62 +225,143 @@ impl<W: Write + Seek + MaybeSend> FrameSink for Mp4Sink<W> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
+	use std::io::Cursor;
+
 	use super::*;
 	use crate::bits::BitWriter;
+	use crate::sinks::bmff::read::{boxes, find, stbl, u32_at};
 
-	/// An SPS NAL unit of `profile` whose coded fields are the Exp-Golomb `fields` (from `seq_parameter_set_id`).
-	fn sps(profile: u8, fields: &[u32]) -> Vec<u8> {
-		let mut bits = BitWriter::default();
-		bits.write_bytes(&[0x67, profile, 0, 40]);
-		for &v in fields {
+	/// A Constrained Baseline SPS NAL unit of a `width x height` picture (both even), cropped from whole
+	/// macroblocks.
+	pub(crate) fn sps(width: u32, height: u32) -> Vec<u8> {
+		fn golomb(bits: &mut BitWriter, v: u32) {
 			let len = 32 - (v + 1).leading_zeros();
 			bits.write(v + 1, 2 * len - 1);
 		}
-		bits.write(1, 1);
+		let mut bits = BitWriter::default();
+		bits.write_bytes(&[0x67, 66, 0xC0, 30]);
+		// seq_parameter_set_id, log2_max_frame_num_minus4, pic_order_cnt_type, log2_max_pic_order_cnt_lsb_minus4,
+		// max_num_ref_frames
+		for v in [0, 0, 0, 0, 1] {
+			golomb(&mut bits, v);
+		}
+		bits.write(0, 1);
+		let (mbs_w, mbs_h) = (width.div_ceil(16), height.div_ceil(16));
+		golomb(&mut bits, mbs_w - 1);
+		golomb(&mut bits, mbs_h - 1);
+		// frame_mbs_only_flag, direct_8x8_inference_flag, frame_cropping_flag
+		bits.write(0b111, 3);
+		for v in [0, (mbs_w * 16 - width) / 2, 0, (mbs_h * 16 - height) / 2] {
+			golomb(&mut bits, v);
+		}
+		// no VUI, the stop bit
+		bits.write(0b01, 2);
 		bits.align_zero();
 		bits.bytes().to_vec()
 	}
 
-	/// The `avcC` body after the parameter sets.
-	fn extension(sps: &[u8], pps: &[u8]) -> Vec<u8> {
-		let avcc = avc_config(&[sps], &[pps]).unwrap();
-		assert_eq!(&avcc[4..8], b"avcC");
-		assert_eq!(&avcc[8..12], &[1, sps[1], sps[2], sps[3]], "version, profile, compatibility, level");
-		assert_eq!(&avcc[12..14], &[0xFF, 0xE1], "4-byte lengths, one SPS");
-		avcc[14 + 2 + sps.len() + 1 + 2 + pps.len()..].to_vec()
+	const PPS: [u8; 4] = [0x68, 0xCE, 0x3C, 0x80];
+
+	/// An access unit of one slice NAL unit of `kind` and `tag`, after `sets`.
+	fn unit(sets: &[&[u8]], kind: u8, tag: u8) -> Vec<u8> {
+		let mut unit: Vec<u8> = sets.iter().flat_map(|s| [&[0, 0, 0, 1][..], s].concat()).collect();
+		unit.extend_from_slice(&[0, 0, 0, 1, kind, tag, 0x80]);
+		unit
+	}
+
+	/// An MP4 of the access units of `pictures`, in decode order, room reserved for `frames`; the first a sync
+	/// sample.
+	fn mp4(pictures: &[u64], frames: usize) -> Vec<u8> {
+		let mut muxer = Muxer::new(Cursor::new(Vec::new()), 25, frames).unwrap();
+		let sps = sps(32, 18);
+		for (k, &picture) in pictures.iter().enumerate() {
+			let stream = if k == 0 { unit(&[&sps, &PPS], 0x65, 0) } else { unit(&[], 0x41, picture as u8) };
+			muxer.write(AccessUnit { stream: &stream, sync: k == 0, picture }).unwrap();
+		}
+		muxer.finish().unwrap();
+		muxer.out.into_inner()
+	}
+
+	fn top(data: &[u8]) -> Vec<[u8; 4]> {
+		boxes(data, 0, data.len()).into_iter().map(|b| b.0).collect()
+	}
+
+	/// `ctts`'s version and its entries expanded to one offset per sample.
+	fn ctts(data: &[u8]) -> Option<(u8, Vec<i32>)> {
+		let ctts = stbl(data, b"ctts")?;
+		let entries = (0..u32_at(ctts, 4) as usize).map(|k| (u32_at(ctts, 8 + 8 * k), u32_at(ctts, 12 + 8 * k)));
+		Some((ctts[0], entries.flat_map(|(n, offset)| vec![offset as i32; n as usize]).collect()))
 	}
 
 	#[test]
-	fn avcc_declares_the_chroma_format_and_bit_depths_of_high_profiles() {
-		let pps = [0x68, 0xCE, 0x3C, 0x80];
-		assert_eq!(extension(&sps(66, &[0]), &pps), [] as [u8; 0], "Baseline: no extension");
-		assert_eq!(extension(&sps(100, &[0, 1, 0, 0]), &pps), [0xFD, 0xF8, 0xF8, 0], "High: 4:2:0, 8-bit");
-		assert_eq!(extension(&sps(122, &[3, 2, 2, 2]), &pps), [0xFE, 0xFA, 0xFA, 0], "High 4:2:2: 10-bit");
-		assert!(avc_config(&[&sps(100, &[0])[..5]], &[&pps]).is_err(), "a truncated SPS");
-		assert!(avc_config(&[], &[&pps]).is_err(), "no SPS");
+	fn reordered_pictures_get_composition_offsets_and_no_edit_list() {
+		let data = mp4(&[0, 4, 2, 1, 3, 8, 6, 5, 7, 9], 10);
+		assert_eq!(ctts(&data), Some((1, vec![0, 3, 0, -2, -1, 3, 0, -2, -1, 0])), "display - decode index");
+		assert!(find(&data, &[b"moov", b"trak", b"edts"]).is_none(), "picture 0 presents at 0 unedited");
+		let stts = stbl(&data, b"stts").unwrap();
+		assert_eq!((u32_at(stts, 4), u32_at(stts, 8), u32_at(stts, 12)), (1, 10, 1), "one tick a sample");
+	}
+
+	#[test]
+	fn pictures_in_order_need_no_ctts() {
+		let data = mp4(&[0, 1, 2, 3], 4);
+		assert_eq!(ctts(&data), None);
+		let entry = &stbl(&data, b"stsd").unwrap()[8..];
+		assert_eq!(&entry[4..8], b"avc1");
+		let size = (u16::from_be_bytes([entry[32], entry[33]]), u16::from_be_bytes([entry[34], entry[35]]));
+		assert_eq!(size, (32, 18), "the SPS's cropped size");
+		let avcc = &entry[86..];
+		assert_eq!(&avcc[4..8], b"avcC");
+		assert_eq!(&avcc[8..12], &[1, 66, 0xC0, 30], "version, profile, compatibility, level");
+		assert_eq!(&avcc[12..14], &[0xFF, 0xE1], "4-byte lengths, one SPS");
+		let stss = stbl(&data, b"stss").unwrap();
+		assert_eq!((u32_at(stss, 4), u32_at(stss, 8)), (1, 1), "the first sample the only sync sample");
+	}
+
+	#[test]
+	fn moov_goes_ahead_of_mdat_when_its_room_holds_it() {
+		let ahead = mp4(&[0, 1, 2], 3);
+		assert_eq!(top(&ahead), [*b"ftyp", *b"moov", *b"free", *b"mdat"]);
+		let ftyp = find(&ahead, &[b"ftyp"]).unwrap();
+		assert_eq!(&ftyp[..4], b"isom");
+		assert!(ftyp[8..].chunks(4).any(|b| b == b"avc1"), "compatible with avc1");
+		let pictures: Vec<u64> = (0..1000).collect();
+		let behind = mp4(&pictures, 0);
+		assert_eq!(top(&behind), [*b"ftyp", *b"free", *b"mdat", *b"moov"], "no room: moov last");
 	}
 
 	#[test]
 	fn a_parameter_set_unlike_the_first_fails_the_track() {
-		let track = Track::new(std::io::Cursor::new(Vec::new()), Brand::Mp4, 16, 16, 2, None).unwrap();
-		let mut muxer = Muxer { track, config: None, sample: Vec::new() };
-		let unit = |sps: &[u8], pps: &[u8], slice: u8| {
-			[&[0, 0, 0, 1][..], sps, &[0, 0, 0, 1], pps, &[0, 0, 0, 1, slice, 0x80]].concat()
+		let mut muxer = Muxer::new(Cursor::new(Vec::new()), 2, 4).unwrap();
+		let first = sps(16, 16);
+		let write = |muxer: &mut Muxer<_>, sets: &[&[u8]], picture| {
+			let stream = unit(sets, 0x65, 0);
+			muxer.write(AccessUnit { stream: &stream, sync: true, picture })
 		};
-		let (first, pps) = (sps(66, &[0]), [0x68, 0xCE, 0x3C, 0x80]);
-		muxer.write(&unit(&first, &pps, 0x65), true).unwrap();
-		muxer.write(&unit(&first, &pps, 0x65), true).expect("the same parameter sets repeated");
-		let error = muxer.write(&unit(&first, &[0x68, 0xCE, 0x38, 0x80], 0x65), true).unwrap_err();
+		write(&mut muxer, &[&first, &PPS], 0).unwrap();
+		write(&mut muxer, &[&first, &PPS], 1).expect("the same parameter sets repeated");
+		let error = write(&mut muxer, &[&first, &[0x68, 0xCE, 0x38, 0x80]], 2).unwrap_err();
 		assert!(error.to_string().contains("PPS in sample 3"), "{error}");
-		let error = muxer.write(&unit(&sps(66, &[1]), &pps, 0x65), true).unwrap_err();
+		let error = write(&mut muxer, &[&sps(32, 16), &PPS], 2).unwrap_err();
 		assert!(error.to_string().contains("SPS in sample 3"), "{error}");
-		assert_eq!(muxer.track.samples(), 2, "nothing written after the change");
+		assert_eq!(muxer.samples, 2, "nothing written after the change");
 	}
 
 	#[test]
-	fn rbsp_drops_emulation_prevention_bytes() {
-		assert_eq!(rbsp(&[0, 0, 3, 1, 0, 0, 3, 0, 0, 3]), [0, 0, 1, 0, 0, 0, 0]);
-		assert_eq!(rbsp(&[0, 3, 0, 0, 0, 3]), [0, 3, 0, 0, 0]);
+	fn a_first_access_unit_without_parameter_sets_fails() {
+		let mut muxer = Muxer::new(Cursor::new(Vec::new()), 2, 1).unwrap();
+		let stream = unit(&[], 0x65, 0);
+		let error = muxer.write(AccessUnit { stream: &stream, sync: true, picture: 0 }).unwrap_err();
+		assert!(error.to_string().contains("parameter sets are unusable"), "{error}");
+	}
+
+	#[test]
+	fn an_mp4_without_a_sample_has_no_trak() {
+		let mut muxer = Muxer::new(Cursor::new(Vec::new()), 25, 3).unwrap();
+		muxer.finish().unwrap();
+		let data = muxer.out.into_inner();
+		let moov = find(&data, &[b"moov"]).unwrap();
+		assert_eq!(boxes(moov, 0, moov.len()).into_iter().map(|b| b.0).collect::<Vec<_>>(), [*b"mvhd"]);
 	}
 }

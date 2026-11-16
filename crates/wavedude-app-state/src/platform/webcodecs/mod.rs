@@ -6,7 +6,9 @@
 //! The encoder takes a picture while fewer than [`QUEUED`] encode requests wait for it (`encodeQueueSize`), each
 //! `dequeue` waking the window: an encoder may hold its output until later pictures or a flush come, so the pictures
 //! not out yet do not hold the next back (decision 0005, The browser encoder's queue). Its output arrives in
-//! callbacks, queued ([`Chunks`]) and drained in order; each wakes the window ([`crate::wake`]).
+//! callbacks, queued ([`Chunks`]) and drained in the order it came, which is decode order: an encoder coding B-frames
+//! gives its pictures out of display order (decision 0005, B-frames and the MP4 muxer), so each chunk's timestamp
+//! names its picture. Each callback wakes the window ([`crate::wake`]).
 
 #[cfg(target_arch = "wasm32")]
 mod encoder;
@@ -14,9 +16,9 @@ mod encoder;
 #[cfg(target_arch = "wasm32")]
 pub use encoder::{Support, WebCodecsFactory, support};
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 
-use wavedude_export::h264::{Profile, Yuv420};
+use wavedude_export::h264::{AccessUnit, Profile, Yuv420};
 use wavedude_export::{ExportError, Result};
 
 /// Encode requests waiting for the encoder at which it is not ready.
@@ -77,6 +79,12 @@ fn timestamp(index: u64, fps: u32) -> i64 {
 	((index * 1_000_000 + fps / 2) / fps) as i64
 }
 
+/// The index of the picture whose [`timestamp`] is `time`; `None` when no picture is at that time.
+fn picture_at(time: i64, fps: u32) -> Option<u64> {
+	let index = u64::try_from(time).ok()?.checked_mul(u64::from(fps))?.checked_add(500_000)? / 1_000_000;
+	(timestamp(index, fps) == time).then_some(index)
+}
+
 /// `picture`'s planes one after the other, as an I420 `VideoFrame` without a layout takes them.
 fn pack_i420(picture: &Yuv420, out: &mut Vec<u8>) {
 	out.clear();
@@ -87,21 +95,24 @@ fn pack_i420(picture: &Yuv420, out: &mut Vec<u8>) {
 }
 
 /// What came out of the encoder and was not drained, the pictures still in it and its first failure, which every
-/// later call returns. A chunk is checked to be the next picture by its timestamp, so a dropped or reordered
-/// picture fails the encoding.
+/// later call returns. A chunk's timestamp names its picture, one of those submitted; a time no picture has or a
+/// picture given twice fails the encoding.
 #[derive(Debug)]
 struct Chunks {
 	fps: u32,
-	/// Annex B access units and whether each is a sync sample.
-	queue: VecDeque<(Vec<u8>, bool)>,
+	/// Annex B access units, whether each is a sync sample, and its picture's index.
+	queue: VecDeque<(Vec<u8>, bool, u64)>,
 	submitted: u64,
-	received: u64,
+	/// Every picture below came out.
+	through: u64,
+	/// The pictures from `through + 1` on that came out.
+	ahead: BTreeSet<u64>,
 	failure: Option<String>,
 }
 
 impl Chunks {
 	fn new(fps: u32) -> Self {
-		Self { fps, queue: VecDeque::new(), submitted: 0, received: 0, failure: None }
+		Self { fps, queue: VecDeque::new(), submitted: 0, through: 0, ahead: BTreeSet::new(), failure: None }
 	}
 
 	/// The first failure.
@@ -121,15 +132,28 @@ impl Chunks {
 		(index, is_key(index, self.fps))
 	}
 
+	/// Pictures that came out.
+	fn received(&self) -> u64 {
+		self.through + self.ahead.len() as u64
+	}
+
 	/// Queues the access unit `data` of the picture at `time` microseconds.
 	fn push(&mut self, time: i64, data: Vec<u8>, sync: bool) {
-		let expected = timestamp(self.received, self.fps);
-		if time != expected {
-			self.fail(format!("the browser's encoder gave the picture at {time} us where {expected} us was next"));
+		let Some(index) = picture_at(time, self.fps).filter(|&i| i < self.submitted) else {
+			self.fail(format!(
+				"the browser's encoder gave a picture at {time} us, where none of the {} submitted is",
+				self.submitted
+			));
+			return;
+		};
+		if index < self.through || !self.ahead.insert(index) {
+			self.fail(format!("the browser's encoder gave the picture at {time} us twice"));
 			return;
 		}
-		self.received += 1;
-		self.queue.push_back((data, sync));
+		while self.ahead.remove(&self.through) {
+			self.through += 1;
+		}
+		self.queue.push_back((data, sync, index));
 	}
 
 	/// Takes a picture while fewer than [`QUEUED`] encode requests wait for the encoder.
@@ -138,11 +162,11 @@ impl Chunks {
 		Ok(queued < QUEUED)
 	}
 
-	/// Hands the queued access units to `out` in order.
-	fn drain(&mut self, out: &mut dyn FnMut(&[u8], bool) -> Result<()>) -> Result<()> {
+	/// Hands the queued access units to `out` in the order they came.
+	fn drain(&mut self, out: &mut dyn FnMut(AccessUnit<'_>) -> Result<()>) -> Result<()> {
 		self.check()?;
-		while let Some((data, sync)) = self.queue.pop_front() {
-			out(&data, sync)?;
+		while let Some((stream, sync, picture)) = self.queue.pop_front() {
+			out(AccessUnit { stream: &stream, sync, picture })?;
 		}
 		Ok(())
 	}
@@ -150,12 +174,13 @@ impl Chunks {
 	/// Every picture submitted came out, after the flush.
 	fn flushed(&self) -> Result<()> {
 		self.check()?;
-		if self.received == self.submitted {
+		if self.received() == self.submitted {
 			Ok(())
 		} else {
 			Err(ExportError::H264(format!(
 				"the browser's encoder gave {} of {} pictures",
-				self.received, self.submitted
+				self.received(),
+				self.submitted
 			)))
 		}
 	}
@@ -199,6 +224,18 @@ mod tests {
 	}
 
 	#[test]
+	fn a_time_names_the_picture_there_and_no_other() {
+		for fps in [1, 24, 30, 60, 144, 240] {
+			for index in [0, 1, 2, 7, 59, 1_000, 216_000] {
+				assert_eq!(picture_at(timestamp(index, fps), fps), Some(index), "{index} at {fps} fps");
+			}
+		}
+		assert_eq!(picture_at(33_334, 30), None, "a microsecond late");
+		assert_eq!(picture_at(-1, 30), None);
+		assert_eq!(picture_at(i64::MAX, 240), None);
+	}
+
+	#[test]
 	fn i420_is_the_three_planes_in_a_row() {
 		let picture = Yuv420 { width: 4, height: 2, y: (0..8).collect(), cb: vec![20, 21], cr: vec![30, 31] };
 		let mut out = vec![99; 3];
@@ -212,6 +249,16 @@ mod tests {
 		}
 	}
 
+	/// The drained access units' bytes, sync flags and pictures.
+	fn drained(chunks: &mut Chunks) -> Result<Vec<(Vec<u8>, bool, u64)>> {
+		let mut got = Vec::new();
+		chunks.drain(&mut |unit| {
+			got.push((unit.stream.to_vec(), unit.sync, unit.picture));
+			Ok(())
+		})?;
+		Ok(got)
+	}
+
 	#[test]
 	fn pictures_held_by_the_encoder_do_not_hold_the_next_back() {
 		let mut chunks = Chunks::new(2);
@@ -222,26 +269,46 @@ mod tests {
 		assert!(!chunks.ready(QUEUED).unwrap());
 		chunks.push(0, vec![1], true);
 		chunks.push(timestamp(1, 2), vec![2], false);
-		let mut got = Vec::new();
-		chunks
-			.drain(&mut |data, sync| {
-				got.push((data.to_vec(), sync));
-				Ok(())
-			})
-			.unwrap();
-		assert_eq!(got, [(vec![1], true), (vec![2], false)]);
+		assert_eq!(drained(&mut chunks).unwrap(), [(vec![1], true, 0), (vec![2], false, 1)]);
 		assert!(chunks.flushed().is_err(), "pictures are still in the encoder");
 	}
 
 	#[test]
-	fn a_dropped_picture_or_an_error_fails_every_later_call() {
+	fn pictures_out_of_display_order_keep_their_indices() {
+		let mut chunks = Chunks::new(60);
+		submitted(&mut chunks, 5);
+		for index in [0, 4, 2, 1, 3] {
+			chunks.push(timestamp(index, 60), vec![index as u8], index == 0);
+		}
+		let pictures: Vec<u64> = drained(&mut chunks).unwrap().into_iter().map(|(_, _, p)| p).collect();
+		assert_eq!(pictures, [0, 4, 2, 1, 3], "decode order, each naming its picture");
+		assert!(chunks.flushed().is_ok());
+	}
+
+	#[test]
+	fn a_picture_given_twice_or_at_an_unknown_time_fails_every_later_call() {
 		let mut chunks = Chunks::new(10);
 		submitted(&mut chunks, 3);
 		chunks.push(0, vec![1], true);
 		chunks.push(timestamp(2, 10), vec![3], false);
+		assert!(chunks.ready(0).is_ok(), "picture 1 may come later");
+		chunks.push(timestamp(2, 10), vec![3], false);
 		assert!(chunks.ready(0).is_err());
-		assert!(chunks.drain(&mut |_, _| Ok(())).is_err());
+		assert!(chunks.drain(&mut |_| Ok(())).is_err());
 		assert!(chunks.flushed().is_err());
+
+		let mut chunks = Chunks::new(10);
+		submitted(&mut chunks, 3);
+		chunks.push(0, vec![1], true);
+		chunks.push(0, vec![1], true);
+		assert!(chunks.check().is_err(), "a picture below every one still out given again");
+
+		for time in [timestamp(3, 10), 50_000, -100_000] {
+			let mut chunks = Chunks::new(10);
+			submitted(&mut chunks, 3);
+			chunks.push(time, vec![1], true);
+			assert!(chunks.check().is_err(), "no picture submitted at {time} us");
+		}
 
 		let mut chunks = Chunks::new(10);
 		chunks.fail("first".into());
@@ -252,8 +319,10 @@ mod tests {
 	#[test]
 	fn a_flush_completes_once_every_picture_came_out() {
 		let mut chunks = Chunks::new(1);
-		submitted(&mut chunks, 2);
+		submitted(&mut chunks, 3);
 		chunks.push(0, vec![1], true);
+		chunks.push(2_000_000, vec![3], true);
+		assert!(chunks.flushed().is_err(), "picture 1 is missing");
 		chunks.push(1_000_000, vec![2], true);
 		assert!(chunks.flushed().is_ok());
 	}
