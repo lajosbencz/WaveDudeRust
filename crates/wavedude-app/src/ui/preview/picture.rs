@@ -160,16 +160,13 @@ impl Preview {
 			id: brightness_id(layer),
 			event: &|v| Event::Command(Command::Edit(display_edit(layer, DisplayLayerEdit::Brightness(v)))),
 		};
-		match header_strip::show(ui, strip_rect, beside, &strip, &mut self.editing[layer as usize]) {
+		match header_strip::show(ui, strip_rect, beside, &strip, &mut self.box_focus[layer as usize]) {
 			Some(StripAction::Brightness(v)) => out.push((strip.event)(v)),
 			Some(StripAction::Auto) => self.auto_brightness(app, layer, out),
 			None => {}
 		}
 		match entry {
-			Some(PictureEntry::Brightness) => {
-				self.editing[layer as usize] = true;
-				ui.memory_mut(|m| m.request_focus(brightness_id(layer)));
-			}
+			Some(PictureEntry::Brightness) => self.box_focus[layer as usize] = header_strip::BoxFocus::Asked,
 			Some(PictureEntry::Auto) => self.auto_brightness(app, layer, out),
 			Some(PictureEntry::Window(action)) => *picked = Some((action, On::Current)),
 			None => {}

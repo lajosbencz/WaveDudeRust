@@ -95,8 +95,8 @@ pub(super) struct Preview {
 	view: View,
 	/// The first picture's share of the split, session state.
 	split: f32,
-	/// Each turned header strip's box edits upright.
-	editing: [bool; 2],
+	/// Each header strip's brightness box focus.
+	box_focus: [header_strip::BoxFocus; 2],
 	/// Each picture's overlay model and graph boxes, kept while what they show stays.
 	overlays: [Option<Overlay>; 2],
 	boxes: [Option<Boxes>; 2],
@@ -156,7 +156,7 @@ impl Preview {
 			extents: [PictureExtent::default(); 2],
 			view: View::default(),
 			split: 0.5,
-			editing: [false; 2],
+			box_focus: [header_strip::BoxFocus::Idle; 2],
 			overlays: [None, None],
 			boxes: [None, None],
 			outlines: Outlines::new(1.),

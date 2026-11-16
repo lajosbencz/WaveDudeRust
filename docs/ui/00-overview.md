@@ -145,6 +145,24 @@ Removed areas: layout and drawing, docking, menus and shortcuts, touch, widget s
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md)'s rule of a test that failed before the change is suspended for visible UI
 changes until then.
 
+## Turned brightness box: TODO
+
+On its side a picture's brightness box ([`40-preview-pane.md`](40-preview-pane.md), Header strip) is a click area
+drawn turned; a click opens an upright `TextEdit` in an `Area` over it, focused a pass later (`BoxFocus` in
+[`header_strip.rs`](../../crates/wavedude-app/src/ui/preview/header_strip.rs)). egui rotates drawing only, not hit
+testing or text editing, and keeps `Memory::request_focus_next_frame` crate-private. Wanted: the box edits turned,
+typing, caret and drag selection along the strip.
+
+- Split [`number_box.rs`](../../crates/wavedude-app/src/ui/number_box.rs): the number logic (parse, Enter/Esc, steps,
+  wheel, drag scrub, pending edit) apart from its text editor, `TextEdit` flat and a turned editor on the side.
+- The turned editor maps the pointer into the galley's frame (`Galley::cursor_from_pos`), uses egui's
+  `text_selection` (`TextCursorState::pointer_interaction`, `CCursorRange::on_key_press`, `paint_text_selection`,
+  `paint_text_cursor`, `update_accesskit_for_text_widget`) and paints the galley turned (`TextShape::with_angle`).
+- Its text edits (insert, Backspace/Delete, word deletes, cut/copy/paste, select all) are its own, `TextEdit`'s being
+  private; a number needs no IME or multi-line.
+- A drag scrubs an unfocused box and selects in a focused one, along the strip.
+- The overlay, its `AreaState` check and `BoxFocus::Upright` go.
+
 ## Languages
 
 - English, Deutsch, Francais, Nederlands, plus System (OS display language, English fallback).

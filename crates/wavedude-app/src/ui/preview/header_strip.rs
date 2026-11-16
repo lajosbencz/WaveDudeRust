@@ -2,6 +2,7 @@
 //! and its Auto button at the far end, and a caption just before them that gives way first, then the title
 //! (trimmed with an ellipsis). Above a picture the strip lies flat; beside one it is turned a quarter clockwise,
 //! reading top to bottom, its box and button drawn turned and the box editing upright over its place while focused.
+//! A focus asked of the box is given in a later pass, before the box is drawn ([`BoxFocus`]).
 
 use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
@@ -9,8 +10,8 @@ use std::sync::Arc;
 use eframe::egui::epaint::TextShape;
 use eframe::egui::text::{LayoutJob, TextWrapping};
 use eframe::egui::{
-	self, Button, Color32, FontId, Galley, Id, Label, Order, Rect, RichText, Role, Sense, Stroke, StrokeKind, Ui,
-	WidgetInfo, pos2, vec2,
+	self, AreaState, Button, Color32, FontId, Galley, Id, Label, Order, Rect, RichText, Role, Sense, Stroke,
+	StrokeKind, SurrenderFocusOn, Ui, WidgetInfo, pos2, vec2,
 };
 use wavedude_app_state::Event;
 
@@ -83,6 +84,29 @@ pub(super) struct Strip<'a> {
 	pub(super) event: &'a dyn Fn(f64) -> Event,
 }
 
+/// The brightness box's focus. A focus asked for is given before the box is drawn in a pass egui keeps it in: egui
+/// takes it back from a widget it did not hover in the pass before when the pointer presses or clicks (as its options
+/// say), lays an area out disabled the first time, and selects the text only on a focus gained before the drawing.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(super) enum BoxFocus {
+	#[default]
+	Idle,
+	/// Asked for; a turned strip shows its upright box meanwhile.
+	Asked,
+	/// The turned strip's upright box, open while it has the focus.
+	Upright,
+}
+
+/// Whether egui takes back a focus given in this pass from a widget it did not hover in the pass before.
+fn focus_taken_back(ui: &Ui) -> bool {
+	let on = ui.ctx().options(|o| o.input_options.surrender_focus_on);
+	ui.input(|i| match on {
+		SurrenderFocusOn::Presses => i.pointer.any_pressed(),
+		SurrenderFocusOn::Clicks => i.pointer.any_click(),
+		SurrenderFocusOn::Never => false,
+	})
+}
+
 /// What the user did on a strip.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum StripAction {
@@ -115,13 +139,13 @@ fn galley(ui: &Ui, text: &str, font: FontId, width: f32) -> Arc<Galley> {
 	ui.painter().layout_job(job)
 }
 
-/// The strip in `rect`; `editing` keeps whether its turned box edits upright.
+/// The strip in `rect`; `focus` keeps its box's focus.
 pub(super) fn show(
 	ui: &mut Ui,
 	rect: Rect,
 	beside: bool,
 	strip: &Strip<'_>,
-	editing: &mut bool,
+	focus: &mut BoxFocus,
 ) -> Option<StripAction> {
 	let bold = FontId::new(FONT_SIZE, wavedude_view::fonts::bold());
 	let regular = FontId::proportional(FONT_SIZE);
@@ -132,9 +156,9 @@ pub(super) fn show(
 	let along = Along::new(length, &title, &caption, &auto);
 	let spec = NumberSpec::logarithmic(BRIGHTNESS.0, BRIGHTNESS.1);
 	if !beside {
-		return flat(ui, rect, strip, &along, &spec, &bold, &caption);
+		return flat(ui, rect, strip, &along, &spec, focus, (&bold, &caption));
 	}
-	turned(ui, rect, strip, &along, &spec, editing, (&bold, &caption, &auto))
+	turned(ui, rect, strip, &along, &spec, focus, (&bold, &caption, &auto))
 }
 
 fn flat(
@@ -143,8 +167,8 @@ fn flat(
 	strip: &Strip<'_>,
 	along: &Along,
 	spec: &NumberSpec,
-	bold: &FontId,
-	caption: &Galley,
+	focus: &mut BoxFocus,
+	(bold, caption): (&FontId, &Galley),
 ) -> Option<StripAction> {
 	let text = ui.visuals().text_color();
 	let x = |a: f32| rect.left() + a;
@@ -156,6 +180,15 @@ fn flat(
 	if along.layout.caption {
 		let at = pos2(x(along.box_start - CAPTION_MARGIN), rect.center().y);
 		ui.painter().galley(at - vec2(caption.size().x, caption.size().y / 2.), caption.clone().into(), text);
+	}
+	match *focus {
+		BoxFocus::Asked if !focus_taken_back(ui) => {
+			ui.memory_mut(|m| m.request_focus(strip.id));
+			*focus = BoxFocus::Idle;
+		}
+		BoxFocus::Asked => ui.ctx().request_repaint(),
+		BoxFocus::Upright => *focus = BoxFocus::Idle,
+		BoxFocus::Idle => {}
 	}
 	let at = row(along.box_start, BOX_WIDTH, INPUT_HEIGHT);
 	let edited = number_box::number_box(ui, at, strip.id, strip.brightness, spec, false, Some(strip.caption));
@@ -184,7 +217,7 @@ fn turned(
 	strip: &Strip<'_>,
 	along: &Along,
 	spec: &NumberSpec,
-	editing: &mut bool,
+	focus: &mut BoxFocus,
 	(bold, caption, auto): (&FontId, &Arc<Galley>, &Arc<Galley>),
 ) -> Option<StripAction> {
 	let palette = Palette::of(ui.ctx().theme());
@@ -213,7 +246,7 @@ fn turned(
 	let up = ui.interact(up_rect, strip.id.with("turned up"), Sense::CLICK);
 	let down = ui.interact(down_rect, strip.id.with("turned down"), Sense::CLICK);
 	painter.rect(face, 0., palette.input_background, Stroke::new(1., palette.border), StrokeKind::Inside);
-	if !*editing {
+	if *focus == BoxFocus::Idle {
 		let value = galley(ui, &spec.format(strip.brightness), FontId::proportional(FONT_SIZE), f32::INFINITY);
 		write(value, along.box_start + 3., text);
 	}
@@ -234,8 +267,7 @@ fn turned(
 	}
 	box_response.widget_info(|| WidgetInfo::labeled(Role::SpinButton, true, strip.caption));
 	if box_response.clicked() || up.clicked() || down.clicked() {
-		*editing = true;
-		ui.memory_mut(|m| m.request_focus(strip.id));
+		*focus = BoxFocus::Asked;
 	}
 
 	let auto_rect = span(along.auto_start, along.auto_width);
@@ -249,9 +281,14 @@ fn turned(
 		action = Some(StripAction::Auto);
 	}
 
-	if *editing {
+	let area_id = strip.id.with("upright");
+	if *focus == BoxFocus::Asked && AreaState::load(ui.ctx(), area_id).is_some() && !focus_taken_back(ui) {
+		ui.memory_mut(|m| m.request_focus(strip.id));
+		*focus = BoxFocus::Upright;
+	}
+	if *focus != BoxFocus::Idle {
 		let at = Rect::from_center_size(face.center(), vec2(BOX_WIDTH, INPUT_HEIGHT));
-		let area = egui::Area::new(strip.id.with("upright")).order(Order::Foreground).fixed_pos(at.min);
+		let area = egui::Area::new(area_id).order(Order::Foreground).fixed_pos(at.min);
 		let edited = area
 			.show(ui.ctx(), |ui| {
 				number_box::number_box(ui, at, strip.id, strip.brightness, spec, false, Some(strip.caption))
@@ -260,8 +297,12 @@ fn turned(
 		edited.offer(ui.ctx(), strip.id, strip.event);
 		let response = edited.response;
 		action = action.or(edited.applied.map(StripAction::Brightness));
-		if !response.has_focus() && !ui.memory(|m| m.has_focus(strip.id)) {
-			*editing = false;
+		match *focus {
+			BoxFocus::Asked => ui.ctx().request_repaint(),
+			BoxFocus::Upright if !response.has_focus() && !ui.memory(|m| m.has_focus(strip.id)) => {
+				*focus = BoxFocus::Idle;
+			}
+			BoxFocus::Upright | BoxFocus::Idle => {}
 		}
 	}
 	action

@@ -43,8 +43,8 @@ what follows.
   turned a quarter clockwise on the picture's left, reading top to bottom, 10 px below the cell's top and ending
   4 px above its bottom, the picture's bottom edge.
 - On its side the box edits upright over its place while it has focus (the toolkit rotates the drawing, not the
-  hit testing or the text clipping); a click on it, Tab or the context menu focuses it, its arrows and the wheel step
-  it, Auto takes clicks, Enter and Space.
+  hit testing or the text clipping); a click on it, Tab or the context menu focuses it with its text selected, its
+  arrows and the wheel step it, Auto takes clicks, Enter and Space.
 - When short: the caption is dropped first; then the title is trimmed (ellipsis) to what the tools leave.
 - Auto: one-shot fit of the frame shown: the 99.5th percentile of |field| (or sqrt(intensity)) maps to the top
   of the colour scheme. The brightness then stays. With 8-bit samples the frame is computed once more in 16-bit
