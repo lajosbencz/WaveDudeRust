@@ -6,6 +6,18 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.5...v0.3.6) - 2026-11-16
+
+### Added
+
+- one Settings window (File > Settings..., Ctrl+,) holds every user setting with search and Low/Medium/High/Auto presets; setting submenus leave the menu bar, the welcome page shows RAM, presets, Settings and Examples, and OpenH264 and the update check default off (decision 0027)
+
+### Fixed
+
+- MP4 export muxes through shiguredo_mp4 and accepts B-frames in decode order, so Main and High exports from Firefox no longer fail
+- the Settings rows stack top-down beside the section list, and section names show without their mnemonic marks
+- closing the window while a modal is open closes the modal and exits, asking to save first when the project changed
+
 ## [0.3.5](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.4...v0.3.5) - 2026-11-16
 
 ### Added
