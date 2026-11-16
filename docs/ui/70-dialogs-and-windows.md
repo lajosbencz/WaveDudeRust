@@ -8,8 +8,9 @@ Pointers: `Help/AboutWindow.xaml(.cs)`, `Help/AboutInfo.cs`, `Help/ManualWindow.
 All windows use the theme (brushes, title bar), the UI zoom and the current language. Modal dialogs are owned by
 the main window and not shown in the taskbar. (port) One modal shows at a time; one asked for while another is open
 (an update check's result, the memory warning of an automatic re-run) waits and shows when it closes, so no answer
-is lost; the memory warning waits once. The window's close box pressed while a modal is open takes effect when it
-closes.
+is lost; the memory warning waits once. The window's close box pressed while a modal is open (port) closes the modals,
+shown and waiting, but a save or confirm question, then exits as File > Exit; an open save or confirm question is
+answered first.
 
 ## Message window (app's own message box)
 

@@ -472,6 +472,7 @@ impl eframe::App for Shell {
 		if ctx.input(|i| i.viewport().close_requested()) && !self.closing {
 			ctx.send_viewport_cmd(ViewportCommand::CancelClose);
 			self.close_asked = true;
+			self.modals.drop_for_exit(&ctx);
 		}
 		if self.close_asked && !self.modals.is_open() {
 			self.close_asked = false;

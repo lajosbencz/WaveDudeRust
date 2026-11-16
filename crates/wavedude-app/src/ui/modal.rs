@@ -151,6 +151,11 @@ impl Modals {
 		}
 	}
 
+	/// Drops every modal, shown or waiting, but the questions whose answer the exit needs (save, confirm).
+	pub(super) fn drop_for_exit(&mut self, ctx: &egui::Context) {
+		self.drop_where(ctx, |m| !matches!(m, Modal::AskSave(_) | Modal::Confirm { .. }));
+	}
+
 	/// Drops the memory warning, shown or waiting: the run it asked about is gone.
 	pub(super) fn drop_memory_warning(&mut self, ctx: &egui::Context) {
 		self.drop_where(ctx, |m| matches!(m, Modal::MemoryWarning(_)));
