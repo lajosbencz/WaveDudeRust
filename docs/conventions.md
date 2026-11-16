@@ -183,6 +183,8 @@ push. What they hold the code to:
 
 ## Logging
 
+- The UI is translated, the log is not: window, menu and dialog text comes from the string tables in every language;
+  log lines (file, status bar, Messages pane) are English. A dialog may append an error's own text untranslated.
 - `tracing` macros, always path-qualified (`tracing::warn!`), messages lower-case clauses naming the file or
   value ([`crates/wavedude-app-state/src/document.rs:276`](../crates/wavedude-app-state/src/document.rs#L276)).
 - Levels: `error` for a failed user action, `warn` for a fallback or a dropped request, `info` for what the
@@ -208,7 +210,7 @@ push. What they hold the code to:
   are involved ([`crates/wavedude-app-state/src/lib.rs:1`](../crates/wavedude-app-state/src/lib.rs#L1), [`crates/wavedude-app/src/ui/mod.rs`](../crates/wavedude-app/src/ui/mod.rs)); mostly, the
   `model` and [`scene/shapes`](../crates/wavedude-core/src/scene/shapes/) files and CLI modules have none.
 - `///` on public items is a terse noun phrase for types (`/// What the views send.`, `lib.rs:68`) and a
-  third-person clause for functions (`/// Brings the open window forward.`, [`ui/manual.rs:85`](../crates/wavedude-app/src/ui/manual.rs#L85)); present state
+  third-person clause for functions (`/// Draws \`pieces\`.`, [`ui/markdown.rs`](../crates/wavedude-app/src/ui/markdown.rs)); present state
   only; references the spec by path (`(docs/ui/60-live-editing-and-runs.md, Edit classes)`, [`commands.rs:2`](../crates/wavedude-app-state/src/commands.rs#L2)).
 - Inline `//` comments are rare and explain a non-obvious why; no TODO or FIXME is left in `src/`.
 - Source and docs are ASCII (`->`, `...`, `x`, `deg`); only the translated string tables hold other characters.
@@ -258,8 +260,8 @@ push. What they hold the code to:
   stored in `tests/snapshots/`, reviewed with `cargo insta review`.
 - Tests that need hardware or tools return early with an `eprintln!` reason: no GPU adapter (`gpu_available`,
   [`crates/wavedude-core/tests/gpu.rs:25`](../crates/wavedude-core/tests/gpu.rs#L25)), no ffmpeg (`has_ffmpeg`, [`crates/wavedude-export/tests/common/mod.rs:116`](../crates/wavedude-export/tests/common/mod.rs#L116)).
-- `#[ignore = "group: how to run it"]` tests live in a module named for the group, `ignored_timing`, `ignored_slow`,
-  `ignored_network` or `ignored_tool`, because `cargo test` filters on the module path: `-- --ignored ignored_timing::` runs
+- `#[ignore = "group: how to run it"]` tests live in a module named for the group, `ignored_timing`, `ignored_slow`
+  or `ignored_network`, because `cargo test` filters on the module path: `-- --ignored ignored_timing::` runs
   one group ([`crates/wavedude-core/tests/render.rs:338`](../crates/wavedude-core/tests/render.rs#L338)).
 - App-state tests drive `AppState<FakeBackend>` (`live::fake::FakeBackend`, `live.rs:1298`, feature `test-support`, which app-state's dev-dependency on itself enables) with a fake clock
   ([`crates/wavedude-app-state/tests/state.rs:20`](../crates/wavedude-app-state/tests/state.rs#L20)).
@@ -271,8 +273,7 @@ push. What they hold the code to:
 
 ## Docs duties
 
-- A behaviour change updates [`docs/spec`](spec/) or [`docs/ui`](ui/) in the same commit; a user-visible one also
-  [`crates/wavedude-app/assets/manual.md`](../crates/wavedude-app/assets/manual.md).
+- A behaviour change updates [`docs/spec`](spec/) or [`docs/ui`](ui/) in the same commit.
 - A design decision is a numbered ADR `docs/decisions/NNNN-slug.md`: `# NNNN Title`, a `Status: accepted, <date>`
   line, the decision, later changes as `## Topic (added <date>)` sections and noted on the Status line
   ([`docs/decisions/0004-file-formats.md`](decisions/0004-file-formats.md)); mostly, `0012` has `Date: ... Status: ...` and Context, Decision,
