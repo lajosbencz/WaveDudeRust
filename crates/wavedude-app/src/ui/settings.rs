@@ -328,7 +328,7 @@ impl Settings {
 				ui.spacing_mut().item_spacing.y = 0.;
 				for &sec in &shown {
 					let active = sec == self.section;
-					if section_item(ui, item_id(sec), s.get(sec.title_key()), active).clicked() {
+					if section_item(ui, item_id(sec), &strip_mnemonic(s.get(sec.title_key())), active).clicked() {
 						self.section = sec;
 					}
 				}
@@ -353,7 +353,9 @@ fn results(ui: &mut Ui, cx: &mut Cx<'_>, found: &[usize]) {
 		for &i in found {
 			let section = ROWS[i].section;
 			if last != Some(section) {
-				ui.label(RichText::new(s.get(section.title_key())).family(wavedude_view::fonts::bold()));
+				ui.label(
+					RichText::new(strip_mnemonic(s.get(section.title_key()))).family(wavedude_view::fonts::bold()),
+				);
 				last = Some(section);
 			}
 			show_row(ui, cx, i);
@@ -364,7 +366,8 @@ fn results(ui: &mut Ui, cx: &mut Cx<'_>, found: &[usize]) {
 /// The scrolled area of the rows, of one height whatever it shows.
 fn body_area(ui: &mut Ui, salt: &str, content: impl FnOnce(&mut Ui)) {
 	let area = ScrollArea::vertical().id_salt(salt).auto_shrink(false);
-	area.max_height(BODY_HEIGHT).min_scrolled_height(BODY_HEIGHT).show(ui, content);
+	// a scroll area's content takes its parent's layout, here the horizontal row beside the sections
+	area.max_height(BODY_HEIGHT).min_scrolled_height(BODY_HEIGHT).show(ui, |ui| ui.vertical(content));
 }
 
 /// The rows labelled `labels` as this window draws them, for another window; a row's [`Then`] is dropped.
