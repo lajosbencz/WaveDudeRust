@@ -28,7 +28,7 @@ references:
         given-names: Alexander
     repository-code: "https://github.com/graealex/WaveDudeNext"
     license: GPL-3.0-only
-    notes: "Reimplemented; its project files open and save here, and its colour schemes, example projects, UI strings and manual content are carried over (NOTICE.md)."
+    notes: "Reimplemented; its project files open and save here, and its colour schemes, example projects and UI strings are carried over (NOTICE.md)."
   - type: software
     title: "Wave Dude 2D"
     authors:

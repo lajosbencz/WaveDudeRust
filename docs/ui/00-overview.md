@@ -120,7 +120,7 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 - Handle glyphs, dashed probe lines and the marquee are antialiased by design.
 - `--greyscale-text`: text without subpixel AA (used for manual figures).
 - The manual window reloads its document when a zoom change changes the text rendering mode (text sharpens a
-  moment after the change, about 0.5 s).
+  moment after the change, about 0.5 s). (port) No manual in the app (decision 0028).
 
 ## Touch: TODO
 
@@ -146,6 +146,17 @@ Removed areas: layout and drawing, docking, menus and shortcuts, touch, widget s
 changes until then.
 
 - The welcome page (presets, launch check box, Settings... / Examples... and back) has no UI test since decision 0027.
+
+## Release size: TODO
+
+- Subset the Material Symbols icon font (egui_material_icons, outline, 1.2 MB, embedded in the native and the browser
+  builds) to the icons the app uses, as `NotoSansMath-Subset.ttf` is; about 1.2 MB less per build.
+
+## Open with the system: TODO
+
+`platform::open` opens a URL, and natively a file or folder, with the system's handler; only the project page uses it.
+Candidates: show an export's output in its folder, open the log folder from the crash report, open a recent
+project's folder.
 
 ## Turned brightness box: TODO
 
@@ -178,7 +189,7 @@ typing, caret and drag selection along the strip.
   key.
 - Converter output that contains words (run status, item counts, RAM cache entries) re-evaluates on a switch.
 - Log messages are not localised; numbers in log lines use a decimal point always.
-- The manual itself is English only.
+- The manual itself is English only. (port) No manual in the app (decision 0028).
 
 ## Platform-specific behaviour in the WPF app
 

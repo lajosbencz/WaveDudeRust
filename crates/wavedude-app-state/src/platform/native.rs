@@ -35,6 +35,30 @@ pub fn touch_first() -> bool {
 	false
 }
 
+/// Opens `what` with the system's handler (`xdg-open`, `open`, `explorer`); a thread reaps the opener.
+pub fn open(what: super::Opened<'_>) -> std::io::Result<()> {
+	let program = if cfg!(target_os = "macos") {
+		"open"
+	} else if cfg!(windows) {
+		"explorer"
+	} else {
+		"xdg-open"
+	};
+	let mut command = std::process::Command::new(program);
+	match what {
+		super::Opened::Url(url) => command.arg(url),
+		super::Opened::Path(path) => command.arg(path),
+	};
+	let mut child = command.spawn()?;
+	std::thread::spawn(move || match child.wait() {
+		// explorer exits with 1 after a successful open
+		Ok(status) if !status.success() && !cfg!(windows) => tracing::error!("{program} failed: {status}"),
+		Ok(_) => {}
+		Err(e) => tracing::error!("{program} could not be waited for: {e}"),
+	});
+	Ok(())
+}
+
 /// A file watched for changes through its folder (the file itself would be lost to an editor that replaces it).
 pub struct FileWatch {
 	path: PathBuf,

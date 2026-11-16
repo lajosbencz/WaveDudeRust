@@ -7,7 +7,6 @@ pub mod dialogs;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod downloads;
 pub mod export;
-pub mod manual;
 pub mod menus;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod open_requests;

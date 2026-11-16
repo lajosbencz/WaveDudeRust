@@ -28,9 +28,9 @@ anyhow.workspace = true
 bytes = "1"
 # The window, its widgets and the wgpu renderer, whose device the engines share natively and the preview colours on.
 eframe = { version = "=0.37.0", default-features = false, features = ["accesskit", "clipboard", "wayland", "wgpu", "x11"] }
-# The manual and the license texts as Markdown.
+# The license texts as Markdown.
 egui_commonmark = { version = "=0.26.0", default-features = false, features = ["pulldown_cmark"] }
-# The image loader of the bundled PNGs (the manual's figures, the About icon); eframe enables `image`'s PNG decoder.
+# The image loader of the bundled PNGs (the About icon); eframe enables `image`'s PNG decoder.
 egui_extras = { version = "=0.37.0", default-features = false, features = ["image"] }
 # The menus' icons.
 egui_material_icons = { version = "=0.9.0", default-features = false, features = ["outline"] }
@@ -38,7 +38,7 @@ egui_material_icons = { version = "=0.9.0", default-features = false, features =
 egui_tiles = "=0.18.0"
 # The drawn icons' SVG path data, flattened for epaint (epaint's own dependency).
 kurbo = "0.13"
-# The Markdown's code blocks and figure tags, cut out of what egui_commonmark draws.
+# The Markdown's code blocks, cut out of what egui_commonmark draws.
 pulldown-cmark = { version = "0.13", default-features = false }
 # The Messages pane's search as a regular expression.
 regex = "1"
@@ -88,7 +88,7 @@ winresource = "0.1"
 [dev-dependencies]
 # The window driven headless on wgpu, through AccessKit.
 egui_kittest = { version = "=0.37.0", features = ["eframe", "wgpu"] }
-# Crops the rendered window into the manual's figures (tests/screenshots.rs, tests/dialogs.rs).
+# Writes the scene images of tests/dialogs.rs.
 image = { workspace = true, features = ["png"] }
 tempfile.workspace = true
 # `AppState` on the fake backend in unit tests.

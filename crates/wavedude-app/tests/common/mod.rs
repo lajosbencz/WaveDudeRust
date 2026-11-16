@@ -1,14 +1,10 @@
-//! The state and the window the window tests start from, the steps that let an input settle, the renderer of the
-//! manual's figures and the wait for the preview.
+//! The state and the window the window tests start from, the steps that let an input settle and the wait for the
+//! preview.
 
-use std::io::Write;
-use std::sync::Arc;
 use std::time::Duration;
 
-use eframe::egui::{PointerButton, Pos2};
-use eframe::{egui, egui_wgpu, wgpu};
-use egui_kittest::wgpu::WgpuTestRenderer;
-use egui_kittest::{Harness, HarnessBuilder};
+use eframe::egui::{self, PointerButton, Pos2};
+use egui_kittest::Harness;
 use wavedude_app::App;
 use wavedude_app::ui::{Boot, Shell};
 use wavedude_app_state::log::LogRing;
@@ -65,45 +61,9 @@ pub(crate) fn button(harness: &mut Harness<'_, Shell>, pos: Pos2, pressed: bool)
 	harness.run_steps(1);
 }
 
-/// A builder rendering on Mesa's lavapipe, the adapter the manual's figures are taken on; `None`, with the reason
-/// printed, where it is missing.
-#[allow(dead_code, reason = "used by the manual's figures only")]
-pub(crate) fn lavapipe<S>() -> Option<HarnessBuilder<S>> {
-	let mut setup = egui_wgpu::WgpuSetupCreateNew::without_display_handle();
-	setup.instance_descriptor.backends = wgpu::Backends::VULKAN;
-	setup.native_adapter_selector = Some(Arc::new(|adapters, _| {
-		adapters
-			.iter()
-			.find(|a| {
-				let info = a.get_info();
-				info.device_type == wgpu::DeviceType::Cpu && info.driver == "llvmpipe"
-			})
-			.cloned()
-			.ok_or_else(|| "no lavapipe among the Vulkan adapters".to_owned())
-	}));
-	let setup = egui_wgpu::WgpuSetup::CreateNew(setup);
-	let instance = pollster::block_on(setup.new_instance());
-	let config = egui_wgpu::WgpuConfiguration { wgpu_setup: setup, ..Default::default() };
-	match pollster::block_on(egui_wgpu::RenderState::create(
-		&config,
-		&instance,
-		None,
-		egui_wgpu::RendererOptions::PREDICTABLE,
-	)) {
-		Ok(state) => Some(Harness::builder().renderer(WgpuTestRenderer::from_render_state(state))),
-		Err(e) => {
-			// libtest captures `eprintln!`, not writes to the handle; it names the thread after the test
-			let thread = std::thread::current();
-			let test = thread.name().unwrap_or_default();
-			let _ = writeln!(std::io::stderr(), "{test}: figures skipped: {e}");
-			None
-		}
-	}
-}
-
 /// Waits for the preview's frame, which comes from a thread of its own: the pane polls after 4 ms while its picture
 /// is due, the window's tick is longer.
-#[allow(dead_code, reason = "used by the wake and figures tests")]
+#[allow(dead_code, reason = "used by the wake tests")]
 pub(crate) fn preview_idle(harness: &mut Harness<'_, Shell>) {
 	let polling = |harness: &Harness<'_, Shell>| {
 		harness.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay <= Duration::from_millis(4)

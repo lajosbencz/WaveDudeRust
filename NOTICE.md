@@ -2,8 +2,7 @@
 
 WaveDudeRust is written from scratch: no code of WaveDude Next or Wave Dude 2D is carried over. It is a modified
 work of WaveDude Next in the sense of the GNU General Public License, carrying its non-code material under the
-same licence (GPL-3.0-or-later): the colour schemes, the example projects, the user interface strings and the
-manual's content.
+same licence (GPL-3.0-or-later): the colour schemes, the example projects and the user interface strings.
 
 ## Upstream projects
 

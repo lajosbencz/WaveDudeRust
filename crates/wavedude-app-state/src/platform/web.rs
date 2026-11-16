@@ -47,6 +47,17 @@ pub fn touch_first() -> bool {
 		.is_some_and(|query| query.matches())
 }
 
+/// Opens `what` in a new tab.
+pub fn open(what: super::Opened<'_>) -> std::io::Result<()> {
+	let super::Opened::Url(url) = what;
+	let window = web_sys::window().ok_or_else(|| std::io::Error::other("no window"))?;
+	match window.open_with_url_and_target(url, "_blank") {
+		Ok(Some(_)) => Ok(()),
+		Ok(None) => Err(std::io::Error::other("the browser blocked the new tab")),
+		Err(e) => Err(std::io::Error::other(describe(&e))),
+	}
+}
+
 /// The JS error's name and message.
 pub(super) fn describe(e: &JsValue) -> String {
 	let field = |key: &str| js_sys::Reflect::get(e, &key.into()).ok().and_then(|v| v.as_string());

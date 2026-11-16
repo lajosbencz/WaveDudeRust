@@ -2,7 +2,8 @@
 
 Status: accepted, 2026-11-13. Supersedes [0002](0002-ui-freya.md) and [0017](0017-a-wasm-package-and-a-web-demo.md);
 amends [0006](0006-testing.md), [0007](0007-workspace-layout.md), [0015](0015-core-builds-for-wasm.md) and
-[0018](0018-a-shared-picture-view.md); amended by [0023](0023-browser-app-ships-with-releases.md).
+[0018](0018-a-shared-picture-view.md); amended by [0023](0023-browser-app-ships-with-releases.md) and [0028](0028-no-manual-in-the-app.md) (no manual,
+no figures).
 
 ## Context
 

@@ -16,9 +16,17 @@ use native as imp;
 use web as imp;
 
 pub use imp::{
-	FileWatch, HAS_PATHS, LogGuard, Store, init_log, install_panic_hook, machine_facts, take_crash_report, touch_first,
-	write,
+	FileWatch, HAS_PATHS, LogGuard, Store, init_log, install_panic_hook, machine_facts, open, take_crash_report,
+	touch_first, write,
 };
+
+/// What [`open`] hands to the system: a web address, or natively a file or folder.
+#[derive(Clone, Copy, Debug)]
+pub enum Opened<'a> {
+	Url(&'a str),
+	#[cfg(not(target_arch = "wasm32"))]
+	Path(&'a std::path::Path),
+}
 #[cfg(not(target_arch = "wasm32"))]
 pub use native::memory_readings;
 /// The browser's spill of the frames past memory, natively the core's spill file; the browser's store of an

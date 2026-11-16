@@ -233,13 +233,11 @@ mnemonics without Alt; sized to content; zoomed. Also used for the memory warnin
 live result line) and About (links, collapsible document, read-only text, copy).
 Base: egui's Modal over the window (`modal.rs`).
 
-## 24. Document viewer (manual, license)
+## 24. Document viewer (license)
 
-Behaviours: render Markdown (headings with GitHub anchors, paragraphs, tight lists, emphasis, code, links) and
-figures (PNG with numbered badge discs and tooltips) in a scrolling column; whole-pixel scrolling; text selection
-and copy; scroll-to-heading; contents tree beside it with a splitter; internal anchor links and external links.
-Base: egui_commonmark with own code blocks and figures (`markdown.rs`); the manual a viewport of its own, a
-Window in the browser (`manual.rs`).
+Behaviours: render Markdown (headings, paragraphs, tight lists, emphasis, code, links) in a scrolling column; text
+selection and copy; external links. The manual's viewer is gone (decision 0028).
+Base: egui_commonmark with own code blocks (`markdown.rs`).
 
 ## 25. Icon view
 

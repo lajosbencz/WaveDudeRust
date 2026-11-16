@@ -1,6 +1,7 @@
 # 0008 UI behaviour answers to the UI map's open questions
 
-Status: accepted, 2026-11-05 (the user's answers; defaults where marked)
+Status: accepted, 2026-11-05 (the user's answers; defaults where marked); 15 void since 2026-11-16, no manual in the
+app ([0028](0028-no-manual-in-the-app.md))
 
 1. View > Panes lists Preview as well as Project, Properties and Messages:
    follow the manual, the broadest set that makes sense.

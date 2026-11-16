@@ -37,7 +37,7 @@ const SHORTCUTS: [(KeyboardShortcut, MenuAction); 32] = [
 	(key(CMD, Key::V), MenuAction::Paste),
 	(key(Modifiers::SHIFT, Key::Insert), MenuAction::Paste),
 	(key(CMD, Key::A), MenuAction::SelectAll),
-	(key(NONE, Key::F1), MenuAction::Manual),
+	(key(NONE, Key::F1), MenuAction::ProjectPage),
 	(key(Modifiers::SHIFT, Key::F5), MenuAction::Stop),
 	(key(NONE, Key::F5), MenuAction::Run),
 	(key(NONE, Key::F6), MenuAction::PauseRun),

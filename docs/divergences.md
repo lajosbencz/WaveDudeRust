@@ -15,7 +15,7 @@ that holds the reasoning and the details. Behaviour not listed here is meant to 
 
 Not warranted: taste, convenience, calibrating to Next's output, dropping a feature Next's users rely on, or a
 file written in a way Next cannot read. The process: an issue, a decision (new or a dated section of an existing
-one), the row below, the spec updated, the manual when users see it.
+one), the row below, the spec updated.
 
 ## Divergences
 
@@ -44,7 +44,7 @@ one), the row below, the spec updated, the manual when users see it.
 | Export names | One save dialog; both layers get their files from the one name by suffix | A name box per output, labelled by layer; an export of several files may go into one ZIP archive named in its own box (always in the browser) | decision 0025, [ui/70](ui/70-dialogs-and-windows.md) |
 | Edit menu | Acts on a focused text box | Acts on objects; the keys go to the box | decision 0008 (13) |
 | Windows integrations | Taskbar progress, jump list, title-bar menu click-through | Not ported; file associations come from the packaging | decision 0008 (14) |
-| Manual figures | Numbered badges | Screenshots of this program, controls named in reading order | decision 0008 (15) |
+| Manual | A window with the manual and its figures (F1) | No manual in the app; Help > Project page on GitHub (F1) opens the project's page | decision 0028 |
 | Counting detector | A frame's detections are shared evenly over the steps since the last collection, drawn from the frame's mean rate | One count a step from that step's integrated intensity, since every step's readings are at hand; the same Poisson process, so the run's total agrees | [spec/30](spec/30-engine.md) (Probes) |
 | Probe graph range | A fitted range tops at the data's maximum, so a precursor the picture renders black fills the graph | A fitted range tops no lower than the probe layer's display full scale (1/brightness for an amplitude, 1/brightness^2 for a value and for one step of an integrated value), all-zero data included, so the axis stays put from before the run; the comparison CLI keeps Next's fit (floor 0) | [ui/40](ui/40-preview-pane.md) |
 | Updates and releases | Installer with EV signature | GitHub releases with attestation, an in-app updater signed with its own key | decision 0011 |

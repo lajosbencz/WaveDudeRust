@@ -98,8 +98,8 @@ WaveDudeRust reimplements [WaveDude Next](https://github.com/graealex/WaveDudeNe
 by Alexander Graef, itself the successor of Wave Dude 2D by Jeroen Vleggaar
 ([Huygens Optics](https://www.youtube.com/@HuygensOptics)), whose numerics followed 0x23's
 [WaveSimulator2D](https://github.com/0x23/WaveSimulator2D). No code is carried
-over; the colour schemes, the example projects, the user interface strings and
-the manual's content are ([`NOTICE.md`](NOTICE.md)).
+over; the colour schemes, the example projects and the user interface
+strings are ([`NOTICE.md`](NOTICE.md)).
 
 ## Copyright and license
 
@@ -108,8 +108,7 @@ Copyright (C) 2026 Lajos Bencz.
 WaveDudeRust is a modified work, written in 2026, of WaveDude Next, Copyright
 (C) 2026 Alexander Graef, itself based on Wave Dude 2D, Copyright (C) 2026
 Jeroen Vleggaar (Huygens Optics). It carries material of WaveDude Next: the
-colour schemes, the example projects, the user interface strings and the
-manual's content.
+colour schemes, the example projects and the user interface strings.
 
 WaveDudeRust is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software

@@ -15,7 +15,6 @@ mod files;
 mod gradient_editor;
 mod icons;
 mod inbox;
-mod manual;
 mod markdown;
 mod memory_warning;
 mod menu_bar;
@@ -54,7 +53,7 @@ use wavedude_app_state::commands::Command;
 use wavedude_app_state::document::Source;
 use wavedude_app_state::live::{Notice, RunFailure};
 use wavedude_app_state::log::LogRing;
-use wavedude_app_state::platform::{Duration, Instant, Store, take_crash_report};
+use wavedude_app_state::platform::{Duration, Instant, Opened, Store, open, take_crash_report};
 use wavedude_app_state::selection::Row;
 use wavedude_app_state::{Event, Guarded, Response};
 #[cfg(not(target_arch = "wasm32"))]
@@ -68,7 +67,6 @@ use self::dock::Dock;
 use self::examples::Examples;
 use self::export::Exports;
 use self::export::{After, Step};
-use self::manual::Manual;
 use self::memory_warning::MemoryWarning;
 use self::messages::MessagesPane;
 use self::modal::{Modal, Modals, Then};
@@ -120,7 +118,6 @@ pub struct Shell {
 	properties: PropertiesPane,
 	messages: MessagesPane,
 	modals: Modals,
-	manual: Option<Manual>,
 	files: files::Files,
 	exports: Exports,
 	updates: Updates,
@@ -170,7 +167,6 @@ impl Shell {
 			properties: PropertiesPane::default(),
 			messages: MessagesPane::default(),
 			modals,
-			manual: None,
 			files: files::Files::default(),
 			exports: Exports::default(),
 			updates,
@@ -384,8 +380,12 @@ impl Shell {
 				self.modals.show(Modal::About(About::new(app)));
 				None
 			}
-			MenuAction::Manual => {
-				self.manual.get_or_insert_default().raise();
+			MenuAction::ProjectPage => {
+				let url = env!("CARGO_PKG_REPOSITORY");
+				if let Err(e) = open(Opened::Url(url)) {
+					tracing::error!("{url} could not be opened: {e}");
+					self.modals.show(Modal::Error(format!("{}\n{e}", app.strings.format("OpenError", &[&url]))));
+				}
 				None
 			}
 			MenuAction::CheckForUpdates => {
@@ -538,11 +538,6 @@ impl eframe::App for Shell {
 			self.properties.focus_form();
 		}
 		let then = self.modals.ui(&ctx, &self.app, &mut asked);
-		if let Some(manual) = &mut self.manual
-			&& !manual.show(&ctx, &self.app)
-		{
-			self.manual = None;
-		}
 		if !modal {
 			self.files.drop_in(&ctx, &self.app);
 		}

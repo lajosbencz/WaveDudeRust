@@ -241,26 +241,8 @@ tuned copies, ours the gates and the optics series ([`EXAMPLES.md`](../../EXAMPL
 
 ## Manual window
 
-- Opened by Help > Manual or F1. Not modal, owned by the main window: minimised/restored with it, stays above it,
-  closed with it. Opened once; F1 again brings it to the front. Esc closes even with focus in the text. (port) In
-  the browser it is a window inside the page, whose keys act while the focus is in it, or while it is on top with
-  nothing focused.
-- Size 1200 x 820 default, min 480 x 300. Title "WaveDude Next manual".
-- Left: "Contents" tree (260 px, min 120) of the headings by level, every branch open; the title (the single `#`)
-  is not a row; chapters are roots. Splitter (4 px, tab stop, arrows move it; tooltip "Drag or use the arrow keys
-  to resize").
-- Right: the document (min 200 px): MANUAL.md rendered (headings, paragraphs, tight lists, bold, links, code,
-  figures). Scrolls by whole pixels; text selectable and copyable.
-- Opens with the text at its top and the first chapter row taken (without scrolling); Up/Down take the previous or
-  next row while the window has the keys.
-- Taking a row scrolls so its heading stands at the top (padding below the top edge, previous section hidden).
-  Clicking the already-taken row goes there again. Enter or Space on a focused row goes there; the focus stays.
-- `[x](#anchor)` links go to the heading with GitHub's anchor rules; web links open in the browser.
-- Figures: the SVG's embedded PNG drawn 1:1 when it fits the column (scaled down when wider), each badge a round
-  numbered disc at its position with the badge's `<title>` as tooltip.
-- A UI zoom change that changes text rendering reloads the document keeping the scroll position as a share of
-  the height (text sharpens about 0.5 s later).
-- Opening cost about 1-2 s in WPF; acceptable, but aim lower.
+Removed (port): Help > Project page on GitHub (F1) opens the project's GitHub page instead; no manual in the
+app ([decision 0028](../decisions/0028-no-manual-in-the-app.md)).
 
 ## Colour picker (popup of a colour swatch)
 

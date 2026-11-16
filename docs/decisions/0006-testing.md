@@ -1,6 +1,7 @@
 # 0006 Testing strategy
 
-Status: accepted, 2026-11-05; amended 2026-11-13 ([0019](0019-egui-and-the-platform-layer.md), below)
+Status: accepted, 2026-11-05; amended 2026-11-13 ([0019](0019-egui-and-the-platform-layer.md), below); no figures render
+since 2026-11-16 ([0028](0028-no-manual-in-the-app.md))
 
 - Unit tests in every crate; analytic physics tests in wavedude-core (0003).
 - Image snapshot tests (`insta`) for the painter, renderer and export frames.

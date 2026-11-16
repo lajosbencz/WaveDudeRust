@@ -4,8 +4,8 @@
 use egui_material_icons::MaterialIcon;
 use egui_material_icons::icons::{
 	ICON_CLOSE, ICON_CONTENT_COPY, ICON_CONTENT_CUT, ICON_CONTENT_PASTE, ICON_DELETE, ICON_DELETE_SWEEP,
-	ICON_FOLDER_OPEN, ICON_HISTORY, ICON_IMAGE, ICON_INFO, ICON_IOS_SHARE, ICON_LIST_ALT, ICON_LOGOUT, ICON_MENU_BOOK,
-	ICON_NOTE_ADD, ICON_PAUSE, ICON_PLAY_ARROW, ICON_REDO, ICON_SAVE, ICON_SAVE_AS, ICON_SELECT_ALL, ICON_SETTINGS,
+	ICON_FOLDER_OPEN, ICON_HISTORY, ICON_IMAGE, ICON_INFO, ICON_IOS_SHARE, ICON_LIST_ALT, ICON_LOGOUT, ICON_NOTE_ADD,
+	ICON_OPEN_IN_NEW, ICON_PAUSE, ICON_PLAY_ARROW, ICON_REDO, ICON_SAVE, ICON_SAVE_AS, ICON_SELECT_ALL, ICON_SETTINGS,
 	ICON_STOP, ICON_UNDO, ICON_VIEW_SIDEBAR, ICON_WAVING_HAND,
 };
 use wavedude_app_state::AppState;
@@ -107,7 +107,7 @@ pub enum MenuAction {
 	Play,
 	CheckForUpdates,
 	About,
-	Manual,
+	ProjectPage,
 	AddSource,
 	AddPart(NewPart),
 	AddProbe(ProbeDetector),
@@ -296,7 +296,7 @@ const SIMULATION: &[Entry] = &[
 
 const HELP: &[Entry] = &[
 	item(MenuAction::About, "MenuHelpAbout", ICON_INFO),
-	item(MenuAction::Manual, "MenuHelpManual", ICON_MENU_BOOK),
+	item(MenuAction::ProjectPage, "MenuHelpProjectPage", ICON_OPEN_IN_NEW),
 	Entry::Item(Item::new(MenuAction::CheckForUpdates, "MenuHelpCheckNow", None).show(Show::Updater)),
 ];
 
@@ -363,7 +363,7 @@ pub fn enabled<B: Backend>(app: &AppState<B>, action: MenuAction, on: On) -> boo
 		| MenuAction::Play
 		| MenuAction::CheckForUpdates
 		| MenuAction::About
-		| MenuAction::Manual
+		| MenuAction::ProjectPage
 		| MenuAction::AddSource
 		| MenuAction::AddPart(_)
 		| MenuAction::AddProbe(_) => true,
