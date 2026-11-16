@@ -53,6 +53,9 @@ jobs:
           check rustup-init "$(pinned 'RUSTUP_VERSION=\K[0-9.]+' .github/build/linux.Dockerfile)" \
             "$(curl -sSf https://static.rust-lang.org/rustup/release-stable.toml | grep -oP "^version = [\"']\\K[0-9.]+")" \
             ".github/build/linux.Dockerfile, with the digest"
+          check binaryen "$(pinned 'BINARYEN_VERSION: "\K[0-9]+' $W/ci.yml $W/package.yml)" \
+            "$(gh api repos/WebAssembly/binaryen/releases/latest --jq '.tag_name | ltrimstr("version_")')" \
+            "$W/ci.yml, $W/package.yml, with the digest"
           month=$(date -u -d "$(date -u +%Y-%m-01) -1 day" +%Y-%m)
           check ffmpeg "$(pinned 'FFMPEG_RELEASE: \K\S+' $W/ci.yml)" \
             "$(gh api --paginate 'repos/BtbN/FFmpeg-Builds/releases?per_page=100' --jq '.[].tag_name' |

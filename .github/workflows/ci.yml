@@ -31,6 +31,9 @@ env:
   FFMPEG_RELEASE: autobuild-2026-10-31-12-59
   FFMPEG_BUILD: ffmpeg-N-128227-g4811625b5f-linux64-lgpl
   FFMPEG_SHA256: f7ce163eca978dc3ab761e6c288f5f764ec4326d17c926c8d4f75ed95e77ee4b
+  # WebAssembly/binaryen release (wasm-opt) with the digest of its x86_64-linux tarball.
+  BINARYEN_VERSION: "133"
+  BINARYEN_SHA256: 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
   # File and line in backtraces, without the full debug info that slows linking (PDBs on Windows) and bloats the cache.
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
   CARGO_PROFILE_TEST_DEBUG: line-tables-only
@@ -222,6 +225,14 @@ jobs:
         with:
           tool: wasm-bindgen@${{ steps.bindgen.outputs.version }}
           fallback: none
+      # wasm-opt of the browser build: a pinned release, checked against its published digest.
+      - name: binaryen
+        run: |
+          curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/version_$BINARYEN_VERSION/binaryen-version_$BINARYEN_VERSION-x86_64-linux.tar.gz" -o binaryen.tar.gz
+          echo "$BINARYEN_SHA256  binaryen.tar.gz" | sha256sum -c -
+          mkdir -p ~/binaryen
+          tar -xzf binaryen.tar.gz --strip-components=1 -C ~/binaryen
+          echo "$HOME/binaryen/bin" >> "$GITHUB_PATH"
       - name: Browser app
         run: tools/build-web.sh
 
