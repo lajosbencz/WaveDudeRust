@@ -94,18 +94,33 @@ pub fn download(dir: &Path, mut on_chunk: impl FnMut(usize, Option<u64>)) -> Res
 	let mut bytes = Vec::new();
 	bzip2::read::BzDecoder::new(packed.as_slice()).read_to_end(&mut bytes).map_err(|e| failed(&e))?;
 	std::fs::create_dir_all(dir)?;
-	let part = dir.join(format!("{name}.part"));
-	std::fs::write(&part, &bytes)?;
-	let checked = openh264::OpenH264API::from_blob_path(&part);
-	if let Err(e) = checked {
-		std::fs::remove_file(&part)?;
-		return Err(ExportError::OpenH264(format!("the downloaded OpenH264 was refused: {e}")));
-	}
-	drop(checked);
 	let path = dir.join(name);
-	std::fs::rename(&part, &path)?;
+	install(&bytes, &dir.join(format!("{name}.part")), &path)?;
 	tracing::info!(path = %path.display(), "OpenH264 installed");
 	Ok(path)
+}
+
+/// Removes its file on drop; a file already gone is fine.
+struct Part<'a>(&'a Path);
+
+impl Drop for Part<'_> {
+	fn drop(&mut self) {
+		if let Err(e) = std::fs::remove_file(self.0)
+			&& e.kind() != std::io::ErrorKind::NotFound
+		{
+			tracing::warn!(path = %self.0.display(), "removing the partial OpenH264 download failed: {e}");
+		}
+	}
+}
+
+/// Writes `bytes` to `part`, checks them as a binary and renames `part` to `path`; `part` is gone on every exit.
+fn install(bytes: &[u8], part: &Path, path: &Path) -> Result<()> {
+	let _part = Part(part);
+	std::fs::write(part, bytes)?;
+	openh264::OpenH264API::from_blob_path(part)
+		.map_err(|e| ExportError::OpenH264(format!("the downloaded OpenH264 was refused: {e}")))?;
+	std::fs::rename(part, path)?;
+	Ok(())
 }
 
 /// Deletes the downloaded binary from `dir`, if there.
@@ -236,5 +251,23 @@ mod tests {
 			assert!(name.contains(VERSION));
 		}
 		assert!(LICENSE.contains(NOTICE));
+	}
+
+	#[test]
+	fn a_refused_binary_leaves_no_part_file() {
+		let dir = std::env::temp_dir().join(format!("wavedude-openh264-{}", std::process::id()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let (part, path) = (dir.join("lib.part"), dir.join("lib"));
+		assert!(matches!(install(b"not a library", &part, &path), Err(ExportError::OpenH264(_))));
+		assert!(!part.exists() && !path.exists());
+		std::fs::remove_dir_all(&dir).unwrap();
+	}
+
+	#[test]
+	fn a_failed_write_is_an_error_and_leaves_nothing() {
+		let dir = std::env::temp_dir().join(format!("wavedude-openh264-missing-{}", std::process::id()));
+		let part = dir.join("lib.part");
+		assert!(matches!(install(b"x", &part, &dir.join("lib")), Err(ExportError::Io(_))));
+		assert!(!part.exists());
 	}
 }

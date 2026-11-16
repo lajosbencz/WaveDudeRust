@@ -196,6 +196,11 @@ enum Export {
 	Reading,
 }
 
+/// The newest revisions kept besides the adopted one: the backend may still report any of them as adopted; a drag
+/// makes one per frame while a rebuild can lag many frames. A request is a project clone (images shared). A revision
+/// adopted after leaving the window shows no pictures until the next adoption.
+const IN_FLIGHT: u64 = 256;
+
 /// See the module docs.
 pub struct LiveController<B: Backend> {
 	backend: B,
@@ -205,7 +210,7 @@ pub struct LiveController<B: Backend> {
 	revision: u64,
 	/// The objects off the canvas last warned about.
 	off_canvas: Vec<OffCanvas>,
-	/// The request of each revision from the adopted one on; the last is this project state's.
+	/// The adopted request and the newest few; the last is this project state's.
 	requests: Vec<(u64, RunRequest)>,
 	/// The quality in force: the setting's, or Full for an export until the next simulation edit.
 	quality: PreviewQuality,
@@ -587,6 +592,8 @@ impl<B: Backend> LiveController<B> {
 	fn revise(&mut self, request: RunRequest) {
 		self.revision += 1;
 		self.requests.push((self.revision, request));
+		let (adopted, newest) = (self.status.adopted, self.revision);
+		self.requests.retain(|(r, _)| *r == adopted || newest - *r < IN_FLIGHT);
 	}
 
 	/// A new, opened, imported or closed project: nothing is wanted but frame 0, which warms the engine up.
@@ -1652,6 +1659,20 @@ mod tests {
 		c.tick(t, p);
 		c.take_notices();
 		c
+	}
+
+	#[test]
+	fn the_requests_stay_bounded_while_nothing_is_adopted() {
+		let t = Instant::now();
+		let mut p = project();
+		let mut c = controller(&p, t);
+		for i in 0..600 {
+			p.sources[0].x = f64::from(i);
+			c.on_change(ChangeKind::Simulation, &p, None, t);
+		}
+		assert!(c.requests.len() as u64 <= IN_FLIGHT + 1, "{} requests", c.requests.len());
+		assert_eq!(c.requests.last().map(|(r, _)| *r), Some(c.revision));
+		assert!(c.adopted_request().is_some(), "the adopted request is kept");
 	}
 
 	#[test]
