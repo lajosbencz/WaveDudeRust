@@ -28,7 +28,7 @@ mod native {
 	use wavedude_app_state::AppState;
 	use wavedude_app_state::log::LogRing;
 	use wavedude_app_state::platform::{init_log, install_panic_hook};
-	use wavedude_app_state::settings::{APP_FOLDER, AppDirs};
+	use wavedude_app_state::settings::AppDirs;
 
 	const NAME: &str = "WaveDude Rust";
 	const ICON: &[u8] = include_bytes!("../assets/icons/256x256.png");
@@ -36,13 +36,12 @@ mod native {
 	/// Logging, settings, the state and the window; an error here is one the user has to be told of.
 	pub(super) fn run() -> anyhow::Result<()> {
 		let args: Vec<String> = std::env::args().skip(1).collect();
-		let platform = AppDirs::platform();
-		let dirs = platform.clone().unwrap_or_else(|| AppDirs::under(&std::env::temp_dir().join(APP_FOLDER)));
+		let dirs = AppDirs::current();
 		let store = dirs.store();
 		let log = LogRing::new();
 		let guard = init_log(&store, log.clone())?;
 		install_panic_hook(&store);
-		if platform.is_none() {
+		if AppDirs::platform().is_none() {
 			tracing::warn!("the platform names no home folder: settings and logs go to '{}'", dirs.config.display());
 		}
 		for unknown in args.iter().filter(|a| a.starts_with("--") && !a.starts_with("--zoom=")) {

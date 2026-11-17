@@ -35,6 +35,7 @@ web-time.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 directories = "6"
 notify = "8"
+opener = "0.9"
 tracing-appender = "0.2"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

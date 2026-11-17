@@ -64,6 +64,11 @@ impl AppDirs {
 		})
 	}
 
+	/// [`platform`](Self::platform)'s, else all three in the temp folder's [`APP_FOLDER`].
+	pub fn current() -> Self {
+		Self::platform().unwrap_or_else(|| Self::under(&std::env::temp_dir().join(APP_FOLDER)))
+	}
+
 	/// All three in one folder: tests, and a platform without a home.
 	pub fn under(dir: &Path) -> Self {
 		Self { config: dir.join("config"), cache: dir.join("cache"), data: dir.join("data") }
@@ -559,7 +564,7 @@ mod tests {
 		let names: Vec<_> =
 			std::fs::read_dir(dir.path().join("sub")).unwrap().map(|e| e.unwrap().file_name()).collect();
 		assert_eq!(names, [FILE_NAME], "no temporary file is left");
-		assert_eq!(Settings::load(&store, false, wavedude_core::run::machine_facts).settings, Settings::default());
+		assert_eq!(Settings::load(&store, false, crate::platform::machine_facts).settings, Settings::default());
 	}
 
 	#[test]

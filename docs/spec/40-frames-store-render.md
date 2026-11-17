@@ -142,7 +142,9 @@ RAM cache to Auto and three quality steps (resolution / 2, frames / 2, 8-bit).
 
 Evaluated once when no settings file exists. Fixed defaults otherwise: (1, 1, Index), dither 0.
 Rust: the tiers are the presets Low, Medium and High of Settings, and its Auto preset evaluates the table again
-on the machine as read then, the browser's picked RAM size standing in for its memory (decision 0027).
+on the machine as read then, the browser's picked RAM size standing in for its memory (decision 0027). The cache
+drive is the one holding the frame cache folder, a hard disk as the system reports it (`sysinfo`); unknown counts as
+no seek penalty, and always in the browser.
 
 ## Colour lookup (`Rendering/ColorLut.cs`, `ColorScheme.cs`)
 

@@ -20,9 +20,9 @@ use crate::settings::AppDirs;
 /// Files have paths: recent files, the log folder, saving in place.
 pub const HAS_PATHS: bool = true;
 
-/// Memory and threads of this machine; the GPU and the drive unknown.
+/// Memory, threads and the frame cache's drive of this machine; the GPU unknown.
 pub fn machine_facts() -> MachineFacts {
-	wavedude_core::run::machine_facts()
+	wavedude_core::run::machine_facts(&AppDirs::current().cache)
 }
 
 /// (available, physical) bytes of memory now, as the frame budget reads them.
@@ -35,28 +35,13 @@ pub fn touch_first() -> bool {
 	false
 }
 
-/// Opens `what` with the system's handler (`xdg-open`, `open`, `explorer`); a thread reaps the opener.
+/// Opens `what` with the system's handler, a web address in the default browser.
 pub fn open(what: super::Opened<'_>) -> std::io::Result<()> {
-	let program = if cfg!(target_os = "macos") {
-		"open"
-	} else if cfg!(windows) {
-		"explorer"
-	} else {
-		"xdg-open"
-	};
-	let mut command = std::process::Command::new(program);
 	match what {
-		super::Opened::Url(url) => command.arg(url),
-		super::Opened::Path(path) => command.arg(path),
-	};
-	let mut child = command.spawn()?;
-	std::thread::spawn(move || match child.wait() {
-		// explorer exits with 1 after a successful open
-		Ok(status) if !status.success() && !cfg!(windows) => tracing::error!("{program} failed: {status}"),
-		Ok(_) => {}
-		Err(e) => tracing::error!("{program} could not be waited for: {e}"),
-	});
-	Ok(())
+		super::Opened::Url(url) => opener::open_browser(url),
+		super::Opened::Path(path) => opener::open(path),
+	}
+	.map_err(std::io::Error::other)
 }
 
 /// A file watched for changes through its folder (the file itself would be lost to an editor that replaces it).

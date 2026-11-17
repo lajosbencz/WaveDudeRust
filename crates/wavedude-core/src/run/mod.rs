@@ -41,15 +41,32 @@ pub(crate) fn system_memory() -> (u64, u64) {
 	}
 }
 
-/// Memory and threads of this machine. The GPU and the drive are left unknown: the GPU is the
-/// caller's to fill (it owns the GPU engine), and no platform's seek-penalty query is wired yet.
+/// Memory, threads and whether `cache`'s drive is a hard disk. The GPU is left unknown: it is the caller's to fill
+/// (it owns the GPU engine).
 #[cfg(not(target_arch = "wasm32"))]
-pub fn machine_facts() -> crate::quality::MachineFacts {
+pub fn machine_facts(cache: &std::path::Path) -> crate::quality::MachineFacts {
 	let threads = std::thread::available_parallelism().map_or(1, |n| n.get() as u32);
 	crate::quality::MachineFacts {
 		physical_bytes: system_memory().1,
 		threads,
 		has_gpu: None,
-		cache_drive_seek_penalty: None,
+		cache_drive_seek_penalty: seek_penalty(cache),
+	}
+}
+
+/// Whether the drive holding `path` (or its nearest existing ancestor) is a hard disk; `None` when the system
+/// does not tell.
+#[cfg(not(target_arch = "wasm32"))]
+fn seek_penalty(path: &std::path::Path) -> Option<bool> {
+	let path = path.ancestors().find_map(|p| p.canonicalize().ok())?;
+	let disks = sysinfo::Disks::new_with_refreshed_list_specifics(sysinfo::DiskRefreshKind::nothing().with_kind())
+		.inspect_err(|e| tracing::warn!("reading the disks: {e}"))
+		.ok()?;
+	let disk =
+		disks.iter().filter(|d| path.starts_with(d.mount_point())).max_by_key(|d| d.mount_point().as_os_str().len())?;
+	match disk.kind() {
+		sysinfo::DiskKind::HDD => Some(true),
+		sysinfo::DiskKind::SSD => Some(false),
+		sysinfo::DiskKind::Unknown(_) => None,
 	}
 }

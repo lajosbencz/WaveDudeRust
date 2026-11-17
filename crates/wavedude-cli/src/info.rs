@@ -2,11 +2,15 @@ use anyhow::Result;
 use wavedude_core::quality::PreviewDefaults;
 
 pub(crate) fn run() -> Result<()> {
-	let mut facts = wavedude_core::run::machine_facts();
+	let mut facts = wavedude_core::run::machine_facts(&wavedude_core::run::FrameStore::default_dir());
 	let gpu = wavedude_core::engine::gpu_adapter();
 	facts.has_gpu = gpu.as_ref().map(std::result::Result::is_ok);
 	println!("memory:   {:.1} GiB", facts.physical_bytes as f64 / (1u64 << 30) as f64);
 	println!("threads:  {}", facts.threads);
+	println!(
+		"cache:    {}",
+		facts.cache_drive_seek_penalty.map_or("drive kind unknown", |s| if s { "hard disk" } else { "solid state" })
+	);
 	match gpu {
 		None => println!("gpu:      not built in (wavedude-core's gpu feature is off)"),
 		Some(Ok(name)) => println!("gpu:      {name}"),
