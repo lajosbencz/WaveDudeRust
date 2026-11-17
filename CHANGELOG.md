@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.8](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.7...v0.3.8) - 2026-11-17
+
+### Added
+
+- the first start and the Auto preset read whether the frame cache's drive is a hard disk (sysinfo), and links open through the opener crate instead of a hand-picked command
+
 ## [0.3.7](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.6...v0.3.7) - 2026-11-16
 
 ### Added
