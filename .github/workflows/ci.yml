@@ -118,7 +118,7 @@ jobs:
         env:
           NO_RUN: ${{ github.event_name == 'push' && 'true' || '' }}
       - if: runner.os == 'Linux' && github.event_name != 'push'
-        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
         with:
           tool: cargo-hack,cargo-shear
           fallback: none
@@ -221,7 +221,7 @@ jobs:
       - name: wasm-bindgen version of Cargo.lock
         id: bindgen
         run: echo "version=$(tools/build-web.sh --bindgen-version)" >> "$GITHUB_OUTPUT"
-      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+      - uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
         with:
           tool: wasm-bindgen@${{ steps.bindgen.outputs.version }}
           fallback: none
