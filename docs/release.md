@@ -132,3 +132,12 @@ set again at those sizes and commit it with the SVG.
 - Linux: [`assets/linux/wavedude-rust.xml`](../frontends/classic/assets/linux/wavedude-rust.xml) (shared-mime-info) maps the globs to the MIME types the `.desktop` file names;
   the AppImage carries it, and the tarball carries it with [`wavedude-app.desktop`](../frontends/classic/assets/linux/wavedude-app.desktop), the icon theme PNGs and [`install.sh`](../frontends/classic/assets/linux/install.sh),
   which installs them under `PREFIX` (default `~/.local`) and removes them with `--uninstall`.
+
+## Blockers
+
+Upstream bugs worked around in CI; drop the workaround once fixed.
+
+- cargo-packager 0.11.8 packs the AppImage with `AppRun` 0744 (downloaded as 0764, `src/package/appimage/mod.rs:63`)
+  and 0700 directories, so a user other than the builder gets "Permission denied" (the AppImage catalog's firejail
+  test, appimage.github.io#12254). `package.yml`, step "AppImage file modes", extracts it, sets `u=rwX,go=rX` and
+  `AppRun` 755, and repacks with the cached linuxdeploy appimage plugin. To report to tauri-apps/cargo-packager.

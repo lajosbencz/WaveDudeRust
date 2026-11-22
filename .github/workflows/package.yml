@@ -109,6 +109,19 @@ jobs:
             ${UNIVERSAL:+--target universal-apple-darwin}
         env:
           UNIVERSAL: ${{ matrix.universal }}
+      # Blocker (docs/release.md): cargo-packager 0.11.8 packs AppRun 0744 and 0700 dirs; another user cannot run it.
+      - name: AppImage file modes
+        if: runner.os == 'Linux'
+        run: |
+          docker exec "$CONTAINER" bash -euo pipefail -c '
+            img=$(realpath target/packages/*.AppImage)
+            tool=$(find / -xdev -name "linuxdeploy-plugin-appimage-*.AppImage" -print -quit 2>/dev/null)
+            rm -rf target/appimage-fix && mkdir target/appimage-fix && cd target/appimage-fix
+            "$img" --appimage-extract >/dev/null
+            chmod -R u=rwX,go=rX squashfs-root && chmod 755 squashfs-root/AppRun
+            rm "$img"
+            OUTPUT="$img" ARCH=x86_64 "$tool" --appimage-extract-and-run --appdir squashfs-root
+            test -x "$img"'
       - name: Linux tarball
         if: runner.os == 'Linux'
         run: |
