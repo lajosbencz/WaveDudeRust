@@ -1,2 +1,5 @@
 # LF in every checkout: tests compare shipped files byte for byte, and builds embed them.
 * text=auto eol=lf
+# Language stats
+tools/** linguist-vendored
+site/** linguist-vendored
