@@ -19,7 +19,7 @@ muxer, below).
 Cisco's AVC patent licence covers only its unmodified binary, downloaded from
 Cisco to the user's device; a build that compiles OpenH264's source carries no
 such licence and leaves the H.264 royalties to the distributor. So the default
-`mp4` feature uses the crate's `libloading` feature: `wavedude_export::h264`
+`mp4` feature uses the crate's `libloading` feature: `waveduderust::unstable::export::h264`
 downloads OpenH264 2.6.0 from `ciscobinary.openh264.org` into the user's data
 folder (`<data dir>/WaveDudeRust/openh264`, `AppDirs::codec`), the crate checks its SHA-256 against
 Cisco's builds, and the MP4 sink loads it at run time. Cisco's conditions, as
@@ -39,14 +39,14 @@ built:
 - "OpenH264 Video Codec provided by Cisco Systems, Inc." shown where the user
   controls it: in Settings and above the export dialog's check box, and by every
   `wavedude-cli openh264` action.
-- Cisco's licence text ([`crates/wavedude-export/assets/OpenH264-BINARY_LICENSE.txt`](../../crates/wavedude-export/assets/OpenH264-BINARY_LICENSE.txt),
+- Cisco's licence text ([`crates/waveduderust/assets/OpenH264-BINARY_LICENSE.txt`](../../crates/waveduderust/assets/OpenH264-BINARY_LICENSE.txt),
   verbatim) with the licensing information: the About dialog and `wavedude-cli
   openh264 license`.
 
-The `openh264-source` feature (on `wavedude-export`, `wavedude-cli` and `wavedude-app`)
+The `openh264-source` feature (on `waveduderust`, `wavedude-cli` and `wavedude-app`)
 compiles OpenH264 in instead (`OpenH264API::from_source`): no download, no
 question, no check box, no Cisco notice; for development and CI, never for distributed
-builds. Building `wavedude-export` or `wavedude-cli` without default features drops
+builds. Building `waveduderust` or `wavedude-cli` without the `mp4` feature drops
 H.264 altogether. Lossless paths stay PNG sequences and MOV with the PNG codec.
 
 The muxer is `shiguredo_mp4` (B-frames and the MP4 muxer, below); the MOV
@@ -56,7 +56,7 @@ writer stays in-house.
 
 OpenH264 does not run in the browser, and Cisco's licence covers its binary on the user's device only. The browser
 build encodes H.264 with the browser's own encoder, WebCodecs' `VideoEncoder`
-([`webcodecs`](../../crates/wavedude-app-state/src/platform/webcodecs/mod.rs)), behind the same `H264Encoder` seam and
+([`webcodecs`](../../crates/waveduderust_app/src/platform/webcodecs/mod.rs)), behind the same `H264Encoder` seam and
 MP4 muxer (feature `mp4-mux`). Nothing is downloaded: no Cisco notice, no check box, no `UseOpenH264` question; the
 H.264 royalties are those of the browser's or the operating system's vendor, whose encoder it is.
 

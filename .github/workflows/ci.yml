@@ -56,7 +56,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           DOCS: >-
-            ^(docs/|[^/]+\.md$|\.github/(ISSUE_TEMPLATE/|PULL_REQUEST_TEMPLATE\.md$|dependabot\.yml$|zizmor\.yml$|workflows/(release|package|hygiene|pages|pins|dependabot-automerge)\.yml$)|cliff\.toml$|deny\.toml$|_typos\.toml$|\.gitignore$|tools/compare-csharp/|site/)
+            ^(docs/|[^/]+\.md$|\.github/(ISSUE_TEMPLATE/|PULL_REQUEST_TEMPLATE\.md$|dependabot\.yml$|zizmor\.yml$|workflows/(release|package|hygiene|pages|pins|dependabot-automerge)\.yml$)|cliff\.toml$|deny\.toml$|_typos\.toml$|\.gitignore$|tools/compare-csharp/|site/|sgconfig\.yml$|lints/|\.editorconfig$)
         # A pull request checks out its merge into the base.
         run: |
           code=true
@@ -104,36 +104,57 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
+      # The checks are the justfile's recipes; the tool pins are its variables.
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just@1.59.0
+          fallback: none
+      - id: pins
+        shell: bash
+        run: |
+          {
+            echo "nextest=$(just --evaluate nextest_version)"
+            echo "hack=$(just --evaluate hack_version)"
+            echo "shear=$(just --evaluate shear_version)"
+          } >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-nextest@${{ steps.pins.outputs.nextest }}
+          fallback: none
       - name: Format
         if: runner.os == 'Linux' && github.event_name != 'push'
-        run: cargo fmt --all --check
+        run: just fmt
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --features wavedude-export/openh264-source,wavedude-cli/openh264-source -- -D warnings
+        run: just clippy-native
       - name: Test
         # bash on Windows too, for the parameter expansion
         shell: bash
-        run: >-
-          cargo test --workspace --no-fail-fast --features wavedude-export/openh264-source,wavedude-cli/openh264-source
-          ${NO_RUN:+--no-run}
+        run: just test --profile ci --no-fail-fast ${NO_RUN:+--no-run}
         env:
           NO_RUN: ${{ github.event_name == 'push' && 'true' || '' }}
+      # nextest runs no doctests.
+      - name: Doctests
+        if: github.event_name != 'push'
+        run: just doctest
       - if: runner.os == 'Linux' && github.event_name != 'push'
         uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
         with:
-          tool: cargo-hack,cargo-shear
+          tool: cargo-hack@${{ steps.pins.outputs.hack }},cargo-shear@${{ steps.pins.outputs.shear }}
           fallback: none
-      # Every feature combination of every crate compiles; checking is the proof, codegen and linking add nothing.
+      # Every feature pair of every crate compiles; checking is the proof, codegen and linking add nothing.
       - name: Feature checks
         if: runner.os == 'Linux' && github.event_name != 'push'
-        run: cargo hack check --workspace --feature-powerset --depth 2
+        run: just features
       - name: Unused dependencies
         if: runner.os == 'Linux' && github.event_name != 'push'
-        run: cargo shear
+        run: just shear
       - name: Docs
         if: runner.os == 'Linux' && github.event_name != 'push'
-        run: cargo doc --workspace --no-deps
-        env:
-          RUSTDOCFLAGS: -D warnings
+        run: just doc
+      # No headless crate reaches a UI toolkit, MAJOR.MINOR aligned, toolchain == MSRV, subsecond off the default graph.
+      - name: Guards
+        if: runner.os == 'Linux' && github.event_name != 'push'
+        run: just layers versions-check hotpatch-guard
 
   windows:
     name: windows-latest
@@ -172,18 +193,15 @@ jobs:
       - name: Check
         run: cargo +"$MSRV" check --workspace --all-targets
 
-  # The core with and without runs and the GPU engine, the view crate, the app state and the app stay buildable for
-  # the browser, without std's clocks (docs/decisions/0015-core-builds-for-wasm.md,
-  # docs/decisions/0016-gpu-engine-in-the-browser.md, tools/clippy-wasm32/clippy.toml), and the browser app builds
-  # as package.yml builds it.
+  # The browser crates (the justfile's wasm_crates) stay buildable for the browser, without std's clocks
+  # (docs/decisions/0015-core-builds-for-wasm.md, docs/decisions/0016-gpu-engine-in-the-browser.md,
+  # tools/clippy-wasm32/clippy.toml), and the browser app builds as package.yml builds it.
   wasm32:
     name: wasm32
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    env:
-      CLIPPY_CONF_DIR: tools/clippy-wasm32
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -195,28 +213,19 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.event_name == 'push' }}
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just@1.59.0
+          fallback: none
+      - id: pins
+        run: echo "hack=$(just --evaluate hack_version)" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-hack@${{ steps.pins.outputs.hack }}
+          fallback: none
+      # Each feature alone, the default set and none, per browser crate.
       - name: Clippy
-        run: cargo clippy -p wavedude-core --no-default-features --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy with the GPU engine
-        run: cargo clippy -p wavedude-core --no-default-features --features gpu --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy with runs
-        run: cargo clippy -p wavedude-core --no-default-features --features run --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy with runs and the GPU engine
-        run: cargo clippy -p wavedude-core --no-default-features --features run,gpu --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy of the view crate
-        run: cargo clippy -p wavedude-view --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy of the app state
-        run: cargo clippy -p wavedude-app-state --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy of the export crate
-        run: cargo clippy -p wavedude-export --no-default-features --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy of the export crate with the MP4 muxer
-        run: cargo clippy -p wavedude-export --no-default-features --features mp4-mux --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy of the app
-        run: cargo clippy -p wavedude-app --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy of the run worker
-        run: cargo clippy -p wavedude-run-worker --target wasm32-unknown-unknown -- -D warnings
-      - name: Clippy of the spill worker
-        run: cargo clippy -p wavedude-spill-worker --target wasm32-unknown-unknown -- -D warnings
+        run: just clippy-wasm
       # The CLI must match the wasm-bindgen crate of Cargo.lock; tools/build-web.sh checks it again.
       - name: wasm-bindgen version of Cargo.lock
         id: bindgen
@@ -265,7 +274,7 @@ jobs:
             -e CARGO_TERM_COLOR build sleep infinity
           docker exec build rustup toolchain install
       - name: Build
-        run: docker exec build cargo build --release -p wavedude-app -p wavedude-cli
+        run: docker exec build cargo build --release -p waveduderust_classic -p waveduderust_cli
       # Then the check itself: below every version the CLI needs, it has to fail.
       - name: glibc floor
         run: |

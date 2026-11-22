@@ -14,7 +14,7 @@ tolerance. All field arithmetic is f32 unless stated. No FMA contraction.
 | `SourceFrequencyScale` | `Simulation` |
 | `ImageSourceScale` | `Scene` (image source amplitude) |
 | `TimeDecay`, `IntensityScale` | `Simulation` |
-| `TrackIntensity` | intensity layer previewed, or any active non-Amplitude probe, or an export needs it |
+| `TrackIntensity` | intensity layer previewed, or any active non-Amplitude probe, or an export needs it; a live run tracking it keeps tracking when it is hidden |
 | Emitters | from sources (see 10); positions in canvas px, shifted by +Rim into the grid |
 | Probe sampler | probe cell indices (see Probes) |
 
@@ -235,7 +235,7 @@ Collection during a run:
 | Point, IntegratedValue | running sum of the intensity, held at 0 while `step < StartAfter`; sample j of a batch belongs to step `batchStart + j + 1` |
 | Line, Amplitude/Value | the live profile at each timeline frame (when `i % VisualizeEvery == 0`) |
 | Line, IntegratedValue | per-pixel f64 totals, added each step once `round(time) >= StartAfter`; profile per timeline frame |
-| Counting detector | one value per step: the events of the probe's Poisson process ([`engine/poisson.rs`](../../crates/wavedude-core/src/engine/poisson.rs), seed `project.seed`, stream `StableHash(Name) << 24`) up to the line's integrated intensity summed over its pixels times `Sensitivity`, less those counted before (a series, as a point probe's; 0 before `StartAfter`) |
+| Counting detector | one value per step: the events of the probe's Poisson process ([`engine/poisson.rs`](../../crates/waveduderust/src/engine/poisson.rs), seed `project.seed`, stream `StableHash(Name) << 24`) up to the line's integrated intensity summed over its pixels times `Sensitivity`, less those counted before (a series, as a point probe's; 0 before `StartAfter`) |
 | Imaging detector | a profile per timeline frame: at every pixel the events of that pixel's process (stream `(StableHash(Name) << 24) ^ pixel`) up to its integrated intensity times `Sensitivity`, so the image only grows; the detections of a bin of `BinSize` pixels added up and shown at each of them, the last bin shorter |
 
 A Poisson process is unit-rate on the half-line, walked from 0 with exponential gaps `-ln(1 - NextDouble)`: the count

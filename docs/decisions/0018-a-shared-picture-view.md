@@ -14,11 +14,11 @@ the desktop's.
 
 ## Decision
 
-- [`wavedude-view`](../../crates/wavedude-view) holds what a picture shows besides its pixels, without a toolkit: the
+- [`waveduderust::unstable::view`](../../crates/waveduderust/src/view) holds what a picture shows besides its pixels, without a toolkit: the
   overlay model and its shapes, the edge line (`edge_color`, `edge_line`), the graph box's layout and shapes, and which
   boxes a picture shows and where (`shows_box`, `box_size`, `box_origin`, `box_on_picture`). The application, the
   widgets and the wasm package use these; none keeps a copy.
-- The shapes are a draw list (`Shape` in [`draw.rs`](../../crates/wavedude-view/src/draw.rs)). A text's `TextStyle` says its font and
+- The shapes are a draw list (`Shape` in [`draw.rs`](../../crates/waveduderust/src/view/draw.rs)). A text's `TextStyle` says its font and
   where its position lies: a label in the platform's default typeface on the alphabetic baseline over its halo,
   graph-box text in the element's (the page's) fonts from the top of its line box. Both executors are Rust and cache
   the dots' bitmap: the desktop's with Skia (`Painter` in `paint.rs`), the
@@ -76,7 +76,7 @@ the desktop's.
 With the window on egui, the own draw list and its executors are gone: the overlay's and a graph box's shapes are
 epaint shapes in points, their text galleys laid out by epaint's fonts from the bundled Selawik (`fonts.rs`), and
 epaint's tessellator makes them meshes, which the window draws with egui's wgpu renderer and an export rasterises on
-the CPU into its frame (`wavedude_export::raster`): pixels are drawn where they live. `TextMetrics` stays the graph
+the CPU into its frame (`waveduderust::unstable::export::raster`): pixels are drawn where they live. `TextMetrics` stays the graph
 layout's measure (epaint's fonts in the box's font through `graph::layout_with`, or an estimate); `DeviceGrid` puts hairlines and text on whole
 device pixels and maps them back to points. epaint strokes no text, so a label's halo is its glyphs' outlines, read by
 skrifa (epaint's font reader) and hinted as epaint hints the glyphs, flattened into closed paths and stroked the halo's

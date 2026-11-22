@@ -15,11 +15,11 @@ the `gpu` feature (`pollster` blocks on readbacks) use what a browser lacks, plu
 
 ## Decision
 
-- `run` is a default feature of `wavedude-core`, as `gpu` is; `sysinfo` and `tempfile` are its optional
-  dependencies. Every crate that uses `wavedude_core::run` gets it by default features or names it (`wavedude-export`).
+- `run` is a default feature of `waveduderust`, as `gpu` is; `sysinfo` and `tempfile` are its optional
+  dependencies. Every crate that uses `waveduderust::run` names it, or `export`, which enables it.
 - Code outside `run` and `gpu` uses nothing a browser lacks; time is `web_time::Instant`, which is `std`'s on
   native targets.
-- CI checks `cargo check -p wavedude-core --no-default-features --target wasm32-unknown-unknown` (job `wasm32`).
+- CI checks `cargo check -p waveduderust --no-default-features --target wasm32-unknown-unknown` (job `wasm32`).
 
 ## Consequences
 

@@ -2,8 +2,8 @@
 
 Status: accepted, 2026-11-13. Supersedes [0002](0002-ui-freya.md) and [0017](0017-a-wasm-package-and-a-web-demo.md);
 amends [0006](0006-testing.md), [0007](0007-workspace-layout.md), [0015](0015-core-builds-for-wasm.md) and
-[0018](0018-a-shared-picture-view.md); amended by [0023](0023-browser-app-ships-with-releases.md) and [0028](0028-no-manual-in-the-app.md) (no manual,
-no figures).
+[0018](0018-a-shared-picture-view.md); amended by [0023](0023-browser-app-ships-with-releases.md), [0028](0028-no-manual-in-the-app.md) (no manual,
+no figures) and [0031](0031-modular-core-and-frontends.md) (crates; the looks on egui-mineral).
 
 ## Context
 
@@ -21,7 +21,7 @@ overlay with an executor of their own.
   crate, the headless test crate, the wasm package and the demo page are gone.
 - One UI, per-target platform modules: what differs between the desktop and the browser is a module chosen at
   compile time with one API on both targets, `native` or `web`, no runtime switch and no trait object.
-  [`wavedude-app-state`](../../crates/wavedude-app-state)'s `platform` holds the clocks (`web_time`), the store of
+  [`waveduderust_app`](../../crates/waveduderust_app)'s `platform` holds the clocks (`web_time`), the store of
   settings, colour schemes and the crash report, the log and the panic hook, writing a file, file watching and the
   machine's facts; the app's `ui/native.rs`, `ui/web.rs` and `ui/files/{native,web}.rs` hold the OS colour scheme, the
   window's place and the file pickers. A browser feature is built on standard web APIs behind that API.
@@ -35,12 +35,12 @@ overlay with an executor of their own.
   before building the next.
 - The engines share the renderer's wgpu device (`GpuContext::from_device`), requested with the adapter's limits where
   it runs compute shaders. A device without compute (WebGL2) runs the CPU engine.
-- A run on the GPU engine colours its pictures on that device in a paint callback (`wavedude_core::render::gpu`, the
+- A run on the GPU engine colours its pictures on that device in a paint callback (`waveduderust::unstable::render::gpu`, the
   CPU's tables, outline, dithering and palette), from the frames the engine keeps there, without a readback; a run
   on the CPU engine keeps the presenter thread and uploads RGBA8 textures written in place.
-- What a picture shows besides its pixels is epaint shapes made by [`wavedude-view`](../../crates/wavedude-view) in
+- What a picture shows besides its pixels is epaint shapes made by [`waveduderust::unstable::view`](../../crates/waveduderust/src/view) in
   the bundled Selawik (0018, Shapes as epaint's). The window draws their meshes with egui's renderer; an export
-  rasterises the same meshes on the CPU into its frame (`wavedude_export::raster`), the same bytes on every machine.
+  rasterises the same meshes on the CPU into its frame (`waveduderust::unstable::export::raster`), the same bytes on every machine.
 - The window's tests drive it headless with egui_kittest on wgpu, found through egui's AccessKit tree by role and
   label, with no image snapshots; only the manual's figures render, on Mesa's lavapipe.
 

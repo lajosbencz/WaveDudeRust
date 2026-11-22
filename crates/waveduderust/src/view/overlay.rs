@@ -1,0 +1,526 @@
+//! The overlay of a picture (docs/ui/40-preview-pane.md, Handles and overlays): which handles, dots, lines,
+//! outlines and labels it shows, built from the project and the selection, and the shapes that draw them.
+//!
+//! Coordinates: canvas pixels as continuous values; a pixel (x, y) spans [x, x + 1), so a source or probe at
+//! pixel (x, y) sits at (x + 0.5, y + 0.5) and a part's centre at (x, y), the corner of its pixel. Angles in
+//! degrees, counter-clockwise on screen. `scale` is logical pixels per canvas pixel; the shapes are epaint shapes in
+//! the window's points.
+
+use crate::engine::emitters::elements_of;
+use crate::model::{Edges, ItemKind, ItemRef, Layer, Part, PartKind, ProbeKind, Project, Scene};
+use crate::scene::shapes::{self, Frame, Vec2};
+use epaint::text::{FontId, FontsView};
+use epaint::{CircleShape, Color32, Pos2, Rect, Shape, Stroke, StrokeKind, pos2, vec2};
+
+use crate::view::draw::{DeviceGrid, Halo, Outlines, baseline, closed_line, haloed_text};
+
+/// Screen distance of a lever beyond the item's reach, logical pixels.
+const LEVER_GAP: f32 = 24.;
+
+/// What a handle edits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HandleKind {
+	Source,
+	SourceLever,
+	PartCentre,
+	PartLever,
+	/// The size grip of a rectangle, ellipse, polygon, lens or GRIN lens.
+	Grip,
+	/// Point `i` of an outline.
+	Point(usize),
+	/// Node `i` of a fibre, and its Bezier handles.
+	Node(usize),
+	InHandle(usize),
+	OutHandle(usize),
+	ProbeA,
+	ProbeB,
+}
+
+impl HandleKind {
+	/// A handle that moves its whole item (and a group with it).
+	pub fn moves_item(self) -> bool {
+		matches!(self, Self::Source | Self::PartCentre | Self::ProbeA | Self::ProbeB)
+	}
+
+	pub fn is_lever(self) -> bool {
+		matches!(self, Self::SourceLever | Self::PartLever)
+	}
+}
+
+/// One handle over a picture.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Handle {
+	pub item: ItemRef,
+	pub kind: HandleKind,
+	/// Canvas position.
+	pub at: (f32, f32),
+	/// A lever's pivot or a Bezier handle's node: a line is drawn from it.
+	pub from: Option<(f32, f32)>,
+	pub selected: bool,
+}
+
+/// A name beside an item's main handle.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Label {
+	pub text: String,
+	pub at: (f32, f32),
+	/// Below the handle (composites and parts) rather than to its right.
+	pub below: bool,
+	pub selected: bool,
+}
+
+/// An emitter of a composite source.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Dot {
+	pub at: (f32, f32),
+	pub selected: bool,
+}
+
+/// A line probe's segment.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ProbeLine {
+	pub a: (f32, f32),
+	pub b: (f32, f32),
+	pub selected: bool,
+}
+
+/// A selected part's painted outline (closed) or a fibre's centre line (open).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PartOutline {
+	pub points: Vec<(f32, f32)>,
+	pub closed: bool,
+}
+
+/// Everything a picture's overlay draws, in drawing order within each list.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OverlayModel {
+	pub lines: Vec<ProbeLine>,
+	/// Emitter dots of composite sources; not focusable.
+	pub dots: Vec<Dot>,
+	pub outlines: Vec<PartOutline>,
+	pub handles: Vec<Handle>,
+	pub labels: Vec<Label>,
+}
+
+fn centre_of(x: f64, y: f64) -> (f32, f32) {
+	((x + 0.5) as f32, (y + 0.5) as f32)
+}
+
+fn v(p: Vec2) -> (f32, f32) {
+	(p.x as f32, p.y as f32)
+}
+
+/// Unit vector of `angle` degrees counter-clockwise on screen.
+fn direction(angle: f64) -> (f64, f64) {
+	let r = angle.to_radians();
+	(libm::cos(r), -libm::sin(r))
+}
+
+/// Items in drawing order: the unselected ones first, the selected ones last.
+fn order(len: usize, selected: impl Fn(usize) -> bool) -> Vec<usize> {
+	let (mut on, off): (Vec<usize>, Vec<usize>) = (0..len).partition(|&i| !selected(i));
+	on.extend(off);
+	on
+}
+
+/// The overlay of the picture of `layer`: sources and parts on both pictures, probes on their own layer's.
+/// `handles_shown` and `labels_shown` are the Display settings; a selected item shows both either way.
+pub fn build(
+	project: &Project,
+	selected: &[ItemRef],
+	current: Option<ItemRef>,
+	layer: Layer,
+	scale: f32,
+	handles_shown: bool,
+	labels_shown: bool,
+) -> OverlayModel {
+	let mut m = OverlayModel::default();
+	let is_selected = |i: ItemRef| selected.contains(&i);
+	let gap = f64::from(LEVER_GAP / scale.max(1e-3));
+
+	for i in order(project.sources.len(), |i| is_selected(ItemRef::Source(project.sources[i].id()))) {
+		let s = &project.sources[i];
+		let item = ItemRef::Source(s.id());
+		let sel = is_selected(item);
+		let at = centre_of(s.x, s.y);
+		if handles_shown || sel {
+			if let Some(array) = &s.array {
+				m.dots.extend(
+					elements_of(s, project.seed).iter().map(|e| Dot { at: centre_of(e.x, e.y), selected: sel }),
+				);
+				if current == Some(item) {
+					let half_row =
+						f64::from(array.size_x.saturating_sub(1)) * f64::from(array.spacing_x.unsigned_abs()) / 2.;
+					let (dx, dy) = direction(array.angle);
+					let reach = half_row + gap;
+					let tip = (at.0 + (dx * reach) as f32, at.1 + (dy * reach) as f32);
+					m.handles.push(Handle {
+						item,
+						kind: HandleKind::SourceLever,
+						at: tip,
+						from: Some(at),
+						selected: sel,
+					});
+				}
+			}
+			m.handles.push(Handle { item, kind: HandleKind::Source, at, from: None, selected: sel });
+		}
+		if labels_shown || sel {
+			m.labels.push(Label { text: s.name.clone(), at, below: s.array.is_some(), selected: sel });
+		}
+	}
+
+	for i in order(project.parts.len(), |i| is_selected(ItemRef::Part(project.parts[i].id()))) {
+		let p = &project.parts[i];
+		let item = ItemRef::Part(p.id());
+		let sel = is_selected(item);
+		let at = (p.base.x as f32, p.base.y as f32);
+		if sel && let Some(outline) = part_outline(p, project.seed) {
+			m.outlines.push(outline);
+		}
+		if handles_shown || sel {
+			if current == Some(item) {
+				part_handles(project, p, item, gap, &mut m.handles);
+			}
+			m.handles.push(Handle { item, kind: HandleKind::PartCentre, at, from: None, selected: sel });
+		}
+		if labels_shown || sel {
+			m.labels.push(Label { text: p.base.name.clone(), at, below: true, selected: sel });
+		}
+	}
+
+	for i in order(project.probes.len(), |i| is_selected(ItemRef::Probe(project.probes[i].id()))) {
+		let p = &project.probes[i];
+		if p.layer != layer {
+			continue;
+		}
+		let item = ItemRef::Probe(p.id());
+		let sel = is_selected(item);
+		let a = centre_of(p.ax.into(), p.ay.into());
+		if handles_shown || sel {
+			if p.kind == ProbeKind::Line {
+				let b = centre_of(p.bx.into(), p.by.into());
+				m.lines.push(ProbeLine { a, b, selected: sel });
+				m.handles.push(Handle { item, kind: HandleKind::ProbeB, at: b, from: None, selected: sel });
+			}
+			m.handles.push(Handle { item, kind: HandleKind::ProbeA, at: a, from: None, selected: sel });
+		}
+		if labels_shown || sel {
+			m.labels.push(Label { text: p.name.clone(), at: a, below: false, selected: sel });
+		}
+	}
+	m
+}
+
+/// The outline drawn for a selected part: the vertices of a polygon-type kind or a profiled plate, a fibre's
+/// centre line.
+fn part_outline(p: &Part, seed: i32) -> Option<PartOutline> {
+	let frame = Frame::of(&p.base);
+	if let Some(vertices) = shapes::vertices(&p.kind).or_else(|| shapes::outline_of(p, seed)) {
+		return Some(PartOutline {
+			points: vertices.into_iter().map(|q| v(frame.to_canvas(q))).collect(),
+			closed: true,
+		});
+	}
+	if let PartKind::Fiber(f) = &p.kind {
+		let path = shapes::flatten(&f.nodes);
+		return (!path.is_empty())
+			.then(|| PartOutline { points: path.into_iter().map(|q| v(frame.to_canvas(q))).collect(), closed: false });
+	}
+	None
+}
+
+/// The grip's part-frame position of the kinds that have one.
+pub fn grip_of(kind: &PartKind) -> Option<Vec2> {
+	match kind {
+		PartKind::Rectangle(r) => Some(Vec2::new(f64::from(r.length) / 2., f64::from(r.width) / 2.)),
+		PartKind::Ellipse(e) => Some(Vec2::new(f64::from(e.length) / 2., f64::from(e.width) / 2.)),
+		PartKind::Polygon(_) => shapes::vertices(kind).and_then(|v| v.first().copied()),
+		PartKind::Lens(l) => Some(Vec2::new(0., f64::from(l.diameter) / 2.)),
+		PartKind::FresnelLens(f) => Some(Vec2::new(0., f64::from(f.lens.diameter) / 2.)),
+		PartKind::Diffuser(d) => Some(Vec2::new(f64::from(d.length) / 2., f64::from(d.width) / 2.)),
+		PartKind::InterferenceFilter(f) => Some(Vec2::new(f64::from(f.length) / 2., f64::from(f.width) / 2.)),
+		PartKind::MetaSurface(m) => Some(Vec2::new(f64::from(m.length) / 2., f64::from(m.width) / 2.)),
+		PartKind::FacettedGrating(g) => Some(Vec2::new(f64::from(g.length) / 2., f64::from(g.width) / 2.)),
+		PartKind::GrinLens(g) => Some(Vec2::new(f64::from(g.length) / 2., f64::from(g.diameter) / 2.)),
+		_ => None,
+	}
+}
+
+fn part_handles(project: &Project, p: &Part, item: ItemRef, gap: f64, out: &mut Vec<Handle>) {
+	let frame = Frame::of(&p.base);
+	let centre = (p.base.x as f32, p.base.y as f32);
+	let handle =
+		|kind, at: Vec2, from: Option<Vec2>| Handle { item, kind, at: v(at), from: from.map(v), selected: true };
+	let shapes = shapes::shapes_for(p, &project.simulation, project.seed);
+	let extent = shapes.iter().map(|s| s.extent()).reduce(f64::max).unwrap_or(20.);
+	let (dx, dy) = direction(p.base.angle);
+	let reach = extent + gap;
+	out.push(Handle {
+		item,
+		kind: HandleKind::PartLever,
+		at: (centre.0 + (dx * reach) as f32, centre.1 + (dy * reach) as f32),
+		from: Some(centre),
+		selected: true,
+	});
+	if let Some(g) = grip_of(&p.kind) {
+		out.push(handle(HandleKind::Grip, frame.to_canvas(g), None));
+	}
+	match &p.kind {
+		PartKind::Outline(o) => {
+			for (i, q) in o.points.iter().enumerate() {
+				out.push(handle(HandleKind::Point(i), frame.to_canvas(Vec2::new(q.x.into(), q.y.into())), None));
+			}
+		}
+		PartKind::Fiber(f) => {
+			let last = f.nodes.len().saturating_sub(1);
+			for (i, n) in f.nodes.iter().enumerate() {
+				let node = Vec2::new(n.x.into(), n.y.into());
+				if i > 0 {
+					let h = Vec2::new(f64::from(n.x + n.in_x), f64::from(n.y + n.in_y));
+					out.push(handle(HandleKind::InHandle(i), frame.to_canvas(h), Some(frame.to_canvas(node))));
+				}
+				if i < last {
+					let h = Vec2::new(f64::from(n.x + n.out_x), f64::from(n.y + n.out_y));
+					out.push(handle(HandleKind::OutHandle(i), frame.to_canvas(h), Some(frame.to_canvas(node))));
+				}
+				out.push(handle(HandleKind::Node(i), frame.to_canvas(node), None));
+			}
+		}
+		_ => {}
+	}
+}
+
+/// The handles' fixed colours: light grey over a dark halo, the selection bright yellow.
+const HANDLE: Color32 = Color32::from_rgb(0xC8, 0xC8, 0xC8);
+pub(crate) const SELECTED: Color32 = Color32::from_rgb(0xFF, 0xE0, 0x00);
+pub const HALO: Color32 = Color32::from_rgba_unmultiplied_const(0x00, 0x00, 0x00, 0xC0);
+/// The disc or square behind a glyph.
+const BACKDROP: Color32 = Color32::from_rgba_unmultiplied_const(0x00, 0x00, 0x00, 0x60);
+/// The backdrop's opacity in the accent under keyboard focus.
+const FOCUS_ALPHA: u8 = 0x60;
+/// A glyph's stroke width, and under the pointer or keyboard focus.
+const STROKE: f32 = 1.5;
+const STROKE_ACTIVE: f32 = 2.5;
+/// The halo's width past the stroke, both sides together.
+const HALO_WIDTH: f32 = 2.;
+/// The labels' text size, logical pixels.
+pub const LABEL_SIZE: f32 = 11.;
+/// The halo under a label: its outline stroked 3 logical pixels wide.
+const LABEL_HALO: Halo = Halo { color: HALO, width: 3. };
+
+/// Which handles stand out: the keyboard-focused one (accent backdrop, thicker stroke), the one under the pointer
+/// (thicker stroke).
+#[derive(Clone, Copy, Debug)]
+pub struct Emphasis {
+	pub focused: Option<usize>,
+	pub hovered: Option<usize>,
+	pub accent: Color32,
+}
+
+fn line(out: &mut Vec<Shape>, from: Pos2, to: Pos2, stroke: Stroke) {
+	out.push(Shape::line_segment([from, to], stroke));
+}
+
+fn square(centre: Pos2, half: f32) -> Rect {
+	Rect::from_center_size(centre, vec2(2. * half, 2. * half))
+}
+
+/// What sits behind a glyph: a disc or a square of the given radius or half side.
+enum Backdrop {
+	Disc(f32),
+	Square(f32),
+}
+
+impl Backdrop {
+	fn shape(&self, at: Pos2, color: Color32) -> Shape {
+		match *self {
+			Self::Disc(r) => Shape::circle_filled(at, r, color),
+			Self::Square(h) => Shape::rect_filled(square(at, h), 0, color),
+		}
+	}
+}
+
+/// A glyph's backdrop, and whether it shows without the focus.
+fn backdrop(kind: HandleKind) -> (Backdrop, bool) {
+	match kind {
+		HandleKind::Source | HandleKind::PartCentre => (Backdrop::Disc(6.5), true),
+		HandleKind::ProbeA | HandleKind::ProbeB => (Backdrop::Square(5.5), true),
+		HandleKind::SourceLever | HandleKind::PartLever => (Backdrop::Disc(7.5), true),
+		HandleKind::Point(_) | HandleKind::Node(_) => (Backdrop::Disc(5.5), true),
+		HandleKind::Grip => (Backdrop::Square(7.5), false),
+		HandleKind::InHandle(_) | HandleKind::OutHandle(_) => (Backdrop::Disc(6.5), false),
+	}
+}
+
+/// The rotation lever's glyph: an arc of radius 5 turning 300 degrees clockwise from the right, an arrowhead at its
+/// end.
+fn arc_arrow(at: Pos2) -> [Vec<Pos2>; 2] {
+	const STEPS: u16 = 30;
+	let arc = (0..=STEPS)
+		.map(|i| {
+			let a = (f32::from(i) * 10.).to_radians();
+			at + 5. * vec2(libm::cosf(a), libm::sinf(a))
+		})
+		.collect::<Vec<_>>();
+	let end = arc[arc.len() - 1];
+	[arc, vec![at + vec2(-0.8, -4.7), end, at + vec2(3., -1.)]]
+}
+
+fn glyph(
+	out: &mut Vec<Shape>,
+	kind: HandleKind,
+	at: Pos2,
+	color: Color32,
+	focused: bool,
+	active: bool,
+	accent: Color32,
+) {
+	let (back, always) = backdrop(kind);
+	if focused {
+		out.push(back.shape(at, Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), FOCUS_ALPHA)));
+	} else if always {
+		out.push(back.shape(at, BACKDROP));
+	}
+	let width = if active { STROKE_ACTIVE } else { STROKE };
+	let strokes = [Stroke::new(width + HALO_WIDTH, HALO), Stroke::new(width, color)];
+	let ticks = |out: &mut Vec<Shape>, stroke: Stroke| {
+		for d in [vec2(1., 0.), vec2(-1., 0.), vec2(0., 1.), vec2(0., -1.)] {
+			line(out, at + 7.5 * d, at + 10. * d, stroke);
+		}
+	};
+	let centre_dot = |out: &mut Vec<Shape>, round: bool| {
+		for (half, c) in [(2.5, HALO), (1.5, color)] {
+			out.push(if round {
+				Shape::circle_filled(at, half, c)
+			} else {
+				Shape::rect_filled(square(at, half), 0, c)
+			});
+		}
+	};
+	match kind {
+		HandleKind::Source => {
+			for stroke in strokes {
+				out.push(Shape::circle_stroke(at, 6., stroke));
+				ticks(out, stroke);
+			}
+			centre_dot(out, true);
+		}
+		HandleKind::PartCentre => {
+			for stroke in strokes {
+				out.push(Shape::circle_stroke(at, 6., stroke));
+				out.push(Shape::circle_stroke(at, 2.5, stroke));
+				ticks(out, stroke);
+			}
+		}
+		HandleKind::ProbeA | HandleKind::ProbeB => {
+			for stroke in strokes {
+				out.push(Shape::rect_stroke(square(at, 5.5), 0, stroke, StrokeKind::Middle));
+				ticks(out, stroke);
+			}
+			centre_dot(out, false);
+		}
+		HandleKind::SourceLever | HandleKind::PartLever => {
+			for stroke in strokes {
+				out.extend(arc_arrow(at).map(|points| Shape::line(points, stroke)));
+			}
+		}
+		HandleKind::Point(_) | HandleKind::Node(_) => {
+			for stroke in strokes {
+				out.push(Shape::circle_stroke(at, 5.5, stroke));
+			}
+		}
+		HandleKind::Grip => {
+			out.push(Shape::rect_filled(square(at, 4.5), 0, HALO));
+			out.push(Shape::rect_filled(square(at, 3.5), 0, color));
+		}
+		HandleKind::InHandle(_) | HandleKind::OutHandle(_) => {
+			out.push(Shape::circle_filled(at, 4.5, HALO));
+			out.push(Shape::circle_filled(at, 3.5, color));
+		}
+	}
+}
+
+/// The shapes of `model` over `picture` (points of the window) at `scale` points per canvas pixel: probe lines,
+/// emitter dots, outlines, handles with the `emphasis`, then the labels in Selawik at [`LABEL_SIZE`] over their halo
+/// (`LABEL_HALO`, from `outlines`), held inside the picture. The caller clips them to it.
+pub fn shapes(
+	model: &OverlayModel,
+	scale: f32,
+	picture: Rect,
+	emphasis: Emphasis,
+	fonts: &mut FontsView<'_>,
+	outlines: &mut Outlines,
+) -> Vec<Shape> {
+	let s = |p: (f32, f32)| picture.min + vec2(p.0 * scale, p.1 * scale);
+	let color = |selected: bool| if selected { SELECTED } else { HANDLE };
+	let mut out = Vec::new();
+	for l in &model.lines {
+		let (a, b) = (s(l.a), s(l.b));
+		let width = if l.selected { 1.5 } else { 1. };
+		line(&mut out, a, b, Stroke::new(width + 2., HALO));
+		out.extend(Shape::dashed_line(&[a, b], Stroke::new(width, color(l.selected)), 2. * width, 2. * width));
+	}
+	out.extend(model.dots.iter().map(|d| {
+		Shape::Circle(CircleShape {
+			center: s(d.at),
+			radius: 2.5,
+			fill: color(d.selected),
+			stroke: Stroke::new(1.5, HALO),
+		})
+	}));
+	for outline in &model.outlines {
+		let points: Vec<Pos2> = outline.points.iter().map(|&p| s(p)).collect();
+		let path = |stroke: Stroke| {
+			if outline.closed { closed_line(points.clone(), stroke) } else { Shape::line(points.clone(), stroke) }
+		};
+		out.push(path(Stroke::new(3., HALO)));
+		out.push(path(Stroke::new(1., SELECTED)));
+	}
+	for (i, h) in model.handles.iter().enumerate() {
+		let at = s(h.at);
+		if let Some(from) = h.from {
+			let from = s(from);
+			line(&mut out, from, at, Stroke::new(3., HALO));
+			out.extend(Shape::dashed_line(&[from, at], Stroke::new(1., color(h.selected)), 2., 2.));
+		}
+		let focused = emphasis.focused == Some(i);
+		let active = focused || emphasis.hovered == Some(i);
+		glyph(&mut out, h.kind, at, color(h.selected), focused, active, emphasis.accent);
+	}
+	for label in model.labels.iter().filter(|l| !l.text.is_empty()) {
+		let at = s(label.at);
+		let color = color(label.selected);
+		let galley = fonts.layout_no_wrap(label.text.clone(), FontId::proportional(LABEL_SIZE), color);
+		let width = galley.size().x;
+		let (mut lx, mut ly) = if label.below { (at.x - width / 2., at.y + 24.) } else { (at.x + 13., at.y + 4.) };
+		lx = lx.clamp(picture.left() + 2., (picture.right() - width - 2.).max(picture.left() + 2.));
+		ly = ly.clamp(picture.top() + 12., (picture.bottom() - 3.).max(picture.top() + 12.));
+		let top = pos2(lx, ly - baseline(&galley));
+		haloed_text(&mut out, outlines, top, galley, LABEL_SIZE, color, LABEL_HALO);
+	}
+	out
+}
+
+/// The edge line's colour: pure blue for a damping rim outside the canvas (it wins over a wall), pure red for a
+/// reflective wall, none for open edges or a damping band inside the canvas.
+pub fn edge_color(scene: &Scene) -> Option<Color32> {
+	if scene.has_rim() {
+		Some(Color32::from_rgb(0, 0, 255))
+	} else if scene.edges == Edges::Reflective {
+		Some(Color32::from_rgb(255, 0, 0))
+	} else {
+		None
+	}
+}
+
+/// The edge line around `picture` (x, y, width, height in the element's logical pixels, the element's origin that of
+/// `grid`): a hairline of `color` just outside the picture's device pixels.
+pub fn edge_line(grid: DeviceGrid, picture: (f32, f32, f32, f32), color: Color32) -> Shape {
+	let hl = grid.hairline();
+	let (x, y, w, h) = picture;
+	let [left, top, right, bottom] = grid.snapped((x, y), (x + w, y + h));
+	let half = hl / 2.;
+	let rect = grid.rect((left - half, top - half), (right + half, bottom + half));
+	Shape::rect_stroke(rect, 0, Stroke::new(hl / grid.scale, color), StrokeKind::Middle)
+}

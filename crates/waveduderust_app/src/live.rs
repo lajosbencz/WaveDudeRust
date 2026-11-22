@@ -1,0 +1,2367 @@
+//! The live controller: what a model change, the transport and the export ask of the live run, and what the pictures
+//! show (docs/ui/60-live-editing-and-runs.md, 50-timeline-transport.md).
+//!
+//! No timers: the controller publishes a [`Goal`] (spec, position, how much is wanted, pause, fit) and reads back
+//! [`Status`], the store's frames and the traces. The run sits behind [`Backend`]: [`CoreBackend`] is the core's,
+//! `fake::FakeBackend` (feature `test-support`) a scripted one for tests.
+//!
+//! Threads: the controller lives on the UI thread; natively the run works on its own thread and is polled here, on
+//! wasm32 in the run worker and [`LiveController::tick`] takes what it sent ([`crate::remote`]).
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
+
+use serde::{Deserialize, Serialize};
+use waveduderust::model::{Layer, Project, Step, View};
+use waveduderust::quality::PreviewQuality;
+#[cfg(not(target_arch = "wasm32"))]
+use waveduderust::run::{Budget, Memory, RunWorker};
+use waveduderust::run::{
+	FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RamCache, RunError, RunState, Status, Wanted,
+	WorkState,
+};
+use waveduderust::unstable::engine::Snapshot;
+use waveduderust::unstable::engine::gpu::DeviceFrames;
+use waveduderust::unstable::engine::probes::ProbeTrace;
+#[cfg(not(target_arch = "wasm32"))]
+use waveduderust::unstable::engine::{EngineOptions, SceneData, WaveEngine};
+use waveduderust::unstable::export::ExportFormat;
+use waveduderust::unstable::scene::off_canvas::{OffCanvas, off_canvas};
+use waveduderust::unstable::spec::{RunRequest, RunSpecError, SceneCache};
+#[cfg(not(target_arch = "wasm32"))]
+use waveduderust::unstable::sync::lock;
+
+use super::commands::ChangeKind;
+use super::platform::Instant;
+use super::playback::{Limit, Playback};
+use super::remote::WorkerGone;
+#[cfg(target_arch = "wasm32")]
+use super::remote::{Remote, web::PagePort};
+use super::strings::Strings;
+
+/// Where the live run is. Called on the UI thread; implementations publish across threads.
+pub trait Backend {
+	fn set_goal(&mut self, goal: Goal);
+	fn status(&self) -> Status;
+	/// Calls `f` with the probe traces recorded so far, in the spec's probe order.
+	fn with_traces(&self, f: &mut dyn FnMut(&[ProbeTrace]));
+	/// Calls `f` with the traces that go with the frame kept through the last clear (empty when none fit).
+	fn with_held_traces(&self, f: &mut dyn FnMut(&[ProbeTrace]));
+	fn take_fit(&mut self) -> Option<FitFrame>;
+	/// The engine's device changed: the next work builds the engine anew.
+	fn engine_changed(&mut self);
+	/// The frames and traces go, their memory and spill freed; the run starts over on a new store.
+	fn discard_frames(&mut self);
+	/// The store budget at `cache` and at Auto, counting `reclaimed` bytes as free.
+	fn budgets(&self, cache: RamCache, reclaimed: u64) -> (u64, u64);
+	/// The engine built last; before the first, the one asked for.
+	fn engine(&self) -> EngineLabel;
+	/// Why the run in another agent runs nothing until the page is reloaded; `None` while it can run.
+	fn worker_gone(&self) -> Option<WorkerGone> {
+		None
+	}
+	/// Why the memory refused a frame of the run's store; `None` while it took them all.
+	fn memory_refused(&self) -> Option<String> {
+		None
+	}
+	/// Takes what a run in another agent sent; a run on a thread of this program publishes without.
+	fn pump(&mut self) {}
+}
+
+/// The user settings the controller follows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LiveSettings {
+	pub auto_rerun: bool,
+	pub warn_when_ram_insufficient: bool,
+	pub quality: PreviewQuality,
+	pub ram_cache: RamCache,
+}
+
+impl Default for LiveSettings {
+	fn default() -> Self {
+		Self {
+			auto_rerun: true,
+			warn_when_ram_insufficient: true,
+			quality: PreviewQuality::DEFAULT,
+			ram_cache: RamCache::Auto,
+		}
+	}
+}
+
+/// What the UI should do or show; drained with [`LiveController::take_notices`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Notice {
+	/// Show the frame at this timeline position: the store has it now.
+	ShowFrame(u32),
+	/// The memory warning asks ([`LiveController::warning`]).
+	AskMemoryWarning,
+	/// The export's run is complete and fresh.
+	ExportReady,
+	/// The waiting export's run was replaced or stopped: the export is dropped.
+	ExportStopped,
+	Info(String),
+	Error(String),
+	/// The memory warning asked is void: its edit was replaced; its dialog closes.
+	WarningDropped,
+	/// A run could not start or failed.
+	RunFailed(RunFailure),
+}
+
+/// Why a run could not start or failed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RunFailure {
+	/// The run's error, as its message.
+	Failed(String),
+	/// The scene's image is missing.
+	NoImage,
+	/// The memory refused a frame of the run: why.
+	NoMemory(String),
+	/// The storage refused the frames past memory: why.
+	StorageFull(String),
+	/// The run worker is gone: no run starts until the page is reloaded.
+	WorkerGone(WorkerGone),
+}
+
+impl RunFailure {
+	/// The message window's text, in the language of `s`.
+	pub fn message(&self, s: &Strings) -> String {
+		match self {
+			Self::Failed(message) => format!("{}\n{message}", s.get("RunError")),
+			Self::NoImage => format!("{}\n{}", s.get("RunError"), s.get("RunErrorNoImage")),
+			Self::NoMemory(why) => format!("{}\n{}\n{why}", s.get("RunError"), s.get("RunErrorNoMemory")),
+			Self::StorageFull(why) => format!("{}\n{}\n{why}", s.get("RunError"), s.get("StorageFull")),
+			Self::WorkerGone(gone) => gone.message(s),
+		}
+	}
+}
+
+/// The choice the memory warning's Run applies to the settings.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WarningChoice {
+	pub quality: PreviewQuality,
+	/// The RAM cache size to Auto.
+	pub cache_auto: bool,
+	/// "Do not warn me again".
+	pub mute: bool,
+}
+
+/// The frames of the store the run holds: where they are and the memory it was given.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameCache {
+	pub in_memory: usize,
+	/// In the spill: the file natively, the origin private file system in the browser.
+	pub spilled: usize,
+	pub frame_bytes: u64,
+	pub budget: u64,
+}
+
+/// The export's view of the current run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExportGate {
+	/// The run is fresh, complete and full quality: export now (the run is held until `end_export`).
+	Ready,
+	/// A full-quality run was started; [`Notice::ExportReady`] follows, or [`Notice::ExportStopped`] when the
+	/// run fails or is replaced.
+	Waiting,
+	/// Another export holds or waits for the run; nothing changed.
+	Busy,
+}
+
+/// What an export needs of its run beyond full quality.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunNeeds {
+	/// The field alone.
+	Field,
+	/// The intensity recorded, its plane holding sqrt(I) when `root`, else I ([`ExportFormat::intensity_root`]).
+	Intensity { root: bool },
+}
+
+impl RunNeeds {
+	/// The run an export of `format` needs, with the intensity when `intensity`.
+	pub fn new(format: ExportFormat, intensity: bool) -> Self {
+		if intensity { Self::Intensity { root: format.intensity_root() } } else { Self::Field }
+	}
+}
+
+/// What asked for every frame, applied once the memory warning lets it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Then {
+	/// The re-run after an edit: nothing else moves.
+	Rerun,
+	/// F5: from frame 0, followed.
+	Run,
+	/// Play: plays as the frames arrive.
+	Play,
+}
+
+struct PendingWarning {
+	budget: u64,
+	auto_budget: u64,
+	then: Then,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Export {
+	Idle,
+	Waiting(RunNeeds),
+	Reading,
+}
+
+/// The newest revisions kept besides the adopted one: the backend may still report any of them as adopted; a drag
+/// makes one per frame while a rebuild can lag many frames. A request is a project clone (images shared). A revision
+/// adopted after leaving the window shows no pictures until the next adoption.
+const IN_FLIGHT: u64 = 256;
+
+/// See the module docs.
+pub struct LiveController<B: Backend> {
+	backend: B,
+	settings: LiveSettings,
+	pub playback: Playback,
+	/// Moves with every spec published.
+	revision: u64,
+	/// The objects off the canvas last warned about.
+	off_canvas: Vec<OffCanvas>,
+	/// The adopted request and the newest few; the last is this project state's.
+	requests: Vec<(u64, RunRequest)>,
+	/// The quality in force: the setting's, or Full for an export until the next simulation edit.
+	quality: PreviewQuality,
+	/// The export's intensity, tracked until the next simulation edit.
+	track_intensity: bool,
+	wanted: Wanted,
+	/// Every frame was asked for at least once for this project: the status bar has a run to describe.
+	ran: bool,
+	user_paused: bool,
+	live: bool,
+	/// The timeline frame the pictures show.
+	shown: Option<u32>,
+	warning: Option<PendingWarning>,
+	export: Export,
+	fit: Option<FitRequest>,
+	fit_frames: Option<FitFrame>,
+	next_fit: u64,
+	last_edit: Option<String>,
+	/// The failure reported last.
+	failed: Option<Arc<RunError>>,
+	/// An edit arrived while an export read the frames; applied when the export ends.
+	edited_during_export: Option<ChangeKind>,
+	published: Option<Goal>,
+	/// The first tick came: the UI is up, so the run may build its engine (a GPU context made beside the
+	/// window's own graphics start crashes the driver).
+	started: bool,
+	/// When every frame was last asked for; cleared once the run's end is reported.
+	run_started: Option<Instant>,
+	status: Status,
+	notices: Vec<Notice>,
+}
+
+/// The frame the pictures show.
+#[derive(Clone)]
+pub enum ShownSource {
+	/// Stored frame `stored` of the run's store.
+	Stored(Arc<FrameStore>, usize),
+	/// The frame the store kept through its last clear ([`FrameStore::latest`]), of `generation`.
+	/// The frame made last for the position, of the project state before the edits in flight.
+	Snapshot { store: Arc<FrameStore>, generation: u64, snapshot: Arc<Snapshot> },
+}
+
+impl<B: Backend> LiveController<B> {
+	pub fn new(backend: B, settings: LiveSettings) -> Self {
+		let status = backend.status();
+		Self {
+			backend,
+			settings,
+			playback: Playback::default(),
+			revision: 0,
+			requests: Vec::new(),
+			quality: settings.quality,
+			track_intensity: false,
+			wanted: Wanted::Position,
+			ran: false,
+			user_paused: false,
+			live: false,
+			shown: None,
+			warning: None,
+			export: Export::Idle,
+			fit: None,
+			fit_frames: None,
+			next_fit: 0,
+			last_edit: None,
+			off_canvas: Vec::new(),
+			failed: None,
+			edited_during_export: None,
+			published: None,
+			started: false,
+			run_started: None,
+			status,
+			notices: Vec::new(),
+		}
+	}
+
+	pub fn backend(&self) -> &B {
+		&self.backend
+	}
+
+	pub fn backend_mut(&mut self) -> &mut B {
+		&mut self.backend
+	}
+
+	pub fn settings(&self) -> LiveSettings {
+		self.settings
+	}
+
+	/// New settings; a changed preview quality is a simulation edit, published by the caller through
+	/// [`on_change`](Self::on_change).
+	pub fn set_settings(&mut self, settings: LiveSettings) {
+		self.settings = settings;
+		self.publish();
+	}
+
+	pub fn take_notices(&mut self) -> Vec<Notice> {
+		std::mem::take(&mut self.notices)
+	}
+
+	/// The timeline frame the pictures show; `None` before the first frame of a project.
+	pub fn shown(&self) -> Option<u32> {
+		self.shown
+	}
+
+	/// The frames of the spec the run holds: the newest one it adopted, which trails this project state by the
+	/// edits still in flight during a burst. The pictures, the band and the graphs show them as they land; what
+	/// needs this project state exactly asks [`is_current`](Self::is_current) too.
+	fn current_store(&self) -> Option<&Arc<FrameStore>> {
+		self.adopted_request()?;
+		self.status.store.as_ref()
+	}
+
+	/// The frame cache's figures of the store the run holds.
+	pub fn frame_cache(&self) -> Option<FrameCache> {
+		let store = self.current_store()?;
+		Some(FrameCache {
+			in_memory: store.frames_in_memory(),
+			spilled: store.frames_on_disk(),
+			frame_bytes: store.frame_bytes() as u64,
+			budget: store.ram_budget(),
+		})
+	}
+
+	/// The request of this project state.
+	fn request(&self) -> Option<&RunRequest> {
+		self.requests.last().map(|(_, r)| r)
+	}
+
+	/// The request whose frames the store holds.
+	fn adopted_request(&self) -> Option<&RunRequest> {
+		self.requests.iter().find(|(revision, _)| *revision == self.status.adopted).map(|(_, r)| r)
+	}
+
+	/// The run holds this project state's spec.
+	fn is_current(&self) -> bool {
+		self.status.adopted == self.revision && self.request().is_some()
+	}
+
+	/// The store's index of timeline frame `frame`.
+	fn stored_index(&self, frame: u32) -> Option<usize> {
+		self.adopted_request().map(|r| r.schedule().stored_index_of(frame) as usize)
+	}
+
+	fn store_has(&self, frame: u32) -> bool {
+		match (self.current_store(), self.stored_index(frame)) {
+			(Some(store), Some(index)) => store.has(index),
+			_ => false,
+		}
+	}
+
+	/// The newest timeline frame of the present run that holds `frame`.
+	fn present_through(&self, frame: u32) -> Option<u32> {
+		let (store, index) = (self.current_store()?, self.stored_index(frame)?);
+		let schedule = self.adopted_request()?.schedule();
+		let last = store.present_through(index)? as u32;
+		Some(schedule.covered_frames(last + 1).saturating_sub(1).max(frame))
+	}
+
+	/// Every frame of this project state is stored and the run has nothing left to do.
+	fn complete(&self) -> bool {
+		self.is_current()
+			&& self.current_store().is_some_and(|s| s.is_complete())
+			&& matches!(self.status.state, WorkState::Idle | WorkState::Fitting)
+	}
+
+	/// The frame shown, for the presenter: the position's stored frame, else the frame made last for the
+	/// position (the state before the edits in flight, so a drag shows every frame made).
+	pub fn shown_source(&self) -> Option<ShownSource> {
+		let frame = self.shown?;
+		let (store, index) = (self.current_store()?, self.stored_index(frame)?);
+		if store.has(index) {
+			return Some(ShownSource::Stored(store.clone(), index));
+		}
+		let (_, generation, snapshot) = store.latest().filter(|(i, ..)| *i == index)?;
+		Some(ShownSource::Snapshot { store: store.clone(), generation, snapshot })
+	}
+
+	/// Where the GPU engine keeps the frames it captured last; `None` while the run is on the CPU engine.
+	pub fn device_frames(&self) -> Option<&Arc<DeviceFrames>> {
+		self.status.device_frames.as_ref()
+	}
+
+	/// The run is stepping (towards any frame or a fit).
+	pub fn is_working(&self) -> bool {
+		matches!(self.status.state, WorkState::Stepping { .. } | WorkState::Fitting)
+	}
+
+	/// The timeline frame the run is stepping towards.
+	pub fn computing_frame(&self) -> Option<u32> {
+		let (WorkState::Stepping { target }, Some(request)) = (&self.status.state, self.adopted_request()) else {
+			return None;
+		};
+		let schedule = request.schedule();
+		let position = self.playback.position();
+		Some(if schedule.stored_index_of(position) == *target { position } else { target * schedule.frame_divisor() })
+	}
+
+	/// The position, while the run is stepping towards its frame and the pictures wait for it.
+	pub fn computing_picture(&self) -> Option<u32> {
+		let position = self.playback.position();
+		let target = self.stored_index(position)?;
+		match self.status.state {
+			WorkState::Stepping { target: t } if t as usize == target && !self.store_has(position) => Some(position),
+			_ => None,
+		}
+	}
+
+	/// Calls `f` with the traces of the frame shown: the run's while the position's frame is stored, the
+	/// previous generation's while its frame is still shown (so the graphs hold with the picture), else none.
+	pub fn with_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+		match self.shown_source() {
+			Some(ShownSource::Stored(..)) => self.backend.with_traces(f),
+			Some(ShownSource::Snapshot { .. }) => self.backend.with_held_traces(f),
+			None => f(&[]),
+		}
+	}
+
+	/// Live follow of a run.
+	pub fn is_live(&self) -> bool {
+		self.live
+	}
+
+	/// Every frame is wanted and not every frame is there yet: a run is in progress (paused or not).
+	pub fn run_is_active(&self) -> bool {
+		self.wanted == Wanted::All
+			&& !self.complete()
+			&& self.warning.is_none()
+			&& !matches!(self.status.state, WorkState::Failed(_))
+	}
+
+	/// Whether frames keep arriving: a run is active and the user did not pause it.
+	pub fn run_is_progressing(&self) -> bool {
+		self.run_is_active() && !self.user_paused
+	}
+
+	pub fn run_paused_by_user(&self) -> bool {
+		self.user_paused
+	}
+
+	/// (state, steps done, total steps) of the run, for the status bar; `None` before the first run.
+	pub fn run_status(&self) -> Option<(RunState, u32, u32)> {
+		let steps = self.request()?.schedule().steps;
+		if !self.ran {
+			return None;
+		}
+		let state = match &self.status.state {
+			WorkState::Failed(e) => RunState::Failed(e.clone()),
+			WorkState::Paused => RunState::Paused,
+			WorkState::Stepping { .. } => RunState::Running,
+			WorkState::Idle | WorkState::Fitting if self.complete() => RunState::Completed,
+			// Every frame wanted and the run not yet at it: between the goal and the worker's wake-up.
+			WorkState::Idle | WorkState::Fitting if self.wanted == Wanted::All => RunState::Running,
+			WorkState::Idle | WorkState::Fitting => RunState::Cancelled,
+		};
+		let done = if state == RunState::Completed { steps } else { self.status.steps_done.min(steps) };
+		Some((state, done, steps))
+	}
+
+	/// Logs the summary of a run that completed or was stopped since it started, once.
+	fn report_run_end(&mut self, now: Instant) {
+		let Some(started) = self.run_started else { return };
+		match self.run_status() {
+			Some((RunState::Completed | RunState::Cancelled, ..)) => {
+				self.run_started = None;
+				if let Some(line) = self.run_summary(started, now) {
+					tracing::info!("{line}");
+				}
+			}
+			Some((RunState::Failed(_), ..)) => self.run_started = None,
+			_ => {}
+		}
+	}
+
+	/// "Run <state>: <done> of <steps> steps, ..." for a run started at `started` and ended by `now`; `None`
+	/// while it is under way or without one.
+	fn run_summary(&self, started: Instant, now: Instant) -> Option<String> {
+		let (state, done, steps) = self.run_status()?;
+		let word = match state {
+			RunState::Completed => "Completed",
+			RunState::Cancelled => "Cancelled",
+			_ => return None,
+		};
+		let (store, request) = (self.current_store()?, self.adopted_request()?);
+		let frames = request.schedule().covered_frames(store.present_count() as u32);
+		let (in_memory, on_disk) = (store.frames_in_memory(), store.frames_on_disk());
+		let gib = |n: usize| store.bytes_of(n) as f64 / f64::from(1u32 << 30);
+		Some(format!(
+			"Run {word}: {done} of {steps} steps, {frames} frames, {:.1} s; {} stored, {in_memory} in memory ({:.1} GiB) and {on_disk} on disk ({:.1} GiB)",
+			now.saturating_duration_since(started).as_secs_f64(),
+			in_memory + on_disk,
+			gib(in_memory),
+			gib(on_disk),
+		))
+	}
+
+	/// What the run is made from: the project state, quality and tracking the worker builds its spec from.
+	pub fn run_request(&self) -> Option<&RunRequest> {
+		self.request()
+	}
+
+	/// The frames of this project state, for the export.
+	pub fn run_store(&self) -> Option<Arc<FrameStore>> {
+		self.current_store().cloned()
+	}
+
+	pub fn engine(&self) -> EngineLabel {
+		self.backend.engine()
+	}
+
+	/// The memory warning waiting for an answer.
+	pub fn warning(&self) -> Option<MemoryWarning<'_>> {
+		let request = self.request()?;
+		self.warning.as_ref().map(|w| MemoryWarning { request, budget: w.budget, auto_budget: w.auto_budget })
+	}
+
+	/// Keeps the timeline in step with the project and its view (planned frames, steps per frame, frame rate,
+	/// range).
+	pub fn sync_timeline(&mut self, project: &Project, view: &View) {
+		let d = view;
+		// the file's 0 is "to the end"
+		let out = (d.export_to != 0).then_some(Step(d.export_to));
+		self.playback.set_timeline(project.simulation.timeline(), d.video.fps, Step(d.export_from), out);
+	}
+
+	/// Publishes the goal when it differs from the one published; nothing before the first tick.
+	fn publish(&mut self) {
+		if !self.started {
+			return;
+		}
+		let fit = self.fit;
+		let position = self.playback.position();
+		let same = self.published.as_ref().is_some_and(|p| {
+			(p.revision, p.position, p.wanted, p.paused, p.fit, p.ram_cache)
+				== (self.revision, position, self.wanted, self.user_paused, fit, self.settings.ram_cache)
+		});
+		if same {
+			return;
+		}
+		let goal = Goal {
+			revision: self.revision,
+			run: self.request().cloned(),
+			position,
+			wanted: self.wanted,
+			paused: self.user_paused,
+			fit,
+			ram_cache: self.settings.ram_cache,
+		};
+		self.backend.set_goal(goal.clone());
+		self.published = Some(goal);
+	}
+
+	/// A new request for `project` at the quality in force and `view`'s brightness, the intensity tracked when the
+	/// view shows it; the worker builds the spec and reports a failure.
+	fn respec(&mut self, project: &Project, view: &View) {
+		self.warn_off_canvas(project);
+		let track = self.track_intensity || view.intensity.preview;
+		self.revise(RunRequest::new(project, self.quality, view.into(), track));
+	}
+
+	/// Warns about the objects off the canvas when they differ from the last warned.
+	fn warn_off_canvas(&mut self, project: &Project) {
+		let found = off_canvas(project);
+		if found == self.off_canvas {
+			return;
+		}
+		if !found.is_empty() {
+			let names: Vec<String> = found
+				.iter()
+				.map(|o| match o {
+					OffCanvas::Source { name, outside, of } if outside < of => {
+						format!("{name} ({outside} of {of} elements left out)")
+					}
+					OffCanvas::Source { name, .. } | OffCanvas::Part(name) => format!("{name} (left out)"),
+					OffCanvas::Probe(name) => format!("{name} (reads at the edge)"),
+				})
+				.collect();
+			tracing::warn!("off the canvas: {}", names.join(", "));
+		}
+		self.off_canvas = found;
+	}
+
+	/// A new revision made from `request`.
+	fn revise(&mut self, request: RunRequest) {
+		self.revision += 1;
+		self.requests.push((self.revision, request));
+		let (adopted, newest) = (self.status.adopted, self.revision);
+		self.requests.retain(|(r, _)| *r == adopted || newest - *r < IN_FLIGHT);
+	}
+
+	/// A new, opened, imported or closed project: nothing is wanted but frame 0, which warms the engine up.
+	pub fn project_replaced(&mut self, project: &Project, view: &View, _now: Instant) {
+		self.quality = self.settings.quality;
+		self.track_intensity = false;
+		self.end_run();
+		self.ran = false;
+		self.run_started = None;
+		self.shown = None;
+		self.warning = None;
+		self.drop_waiting_export();
+		self.export = Export::Idle;
+		self.edited_during_export = None;
+		self.fit = None;
+		self.fit_frames = None;
+		self.last_edit = None;
+		self.off_canvas.clear();
+		self.playback.pause();
+		self.sync_timeline(project, view);
+		self.playback.set_position(0);
+		self.respec(project, view);
+		self.publish();
+	}
+
+	fn drop_waiting_export(&mut self) {
+		if let Export::Waiting { .. } = self.export {
+			self.export = Export::Idle;
+			tracing::warn!("the export was dropped: its run stopped before the last frame");
+			self.notices.push(Notice::ExportStopped);
+		}
+	}
+
+	/// A model change of class `kind`; `note` names the newest edit with its value.
+	pub fn on_change(&mut self, kind: ChangeKind, project: &Project, view: &View, note: Option<String>, now: Instant) {
+		let kind = match kind {
+			ChangeKind::Brightness if self.settings.quality.samples_at_lowest() => ChangeKind::Simulation,
+			ChangeKind::Brightness => ChangeKind::Display,
+			ChangeKind::ProbesAndBrightness if self.settings.quality.samples_at_lowest() => ChangeKind::Simulation,
+			ChangeKind::ProbesAndBrightness => ChangeKind::Respec,
+			k => k,
+		};
+		if note.is_some() {
+			self.last_edit = note;
+		}
+		self.sync_timeline(project, view);
+		if matches!(kind, ChangeKind::Simulation | ChangeKind::Respec) && matches!(self.export, Export::Reading) {
+			self.edited_during_export = Some(self.edited_during_export.map_or(kind, |k| k.merge(kind)));
+			return;
+		}
+		match kind {
+			ChangeKind::Simulation => {
+				self.quality = self.settings.quality;
+				self.track_intensity = false;
+				self.live = false;
+				self.user_paused = false;
+				self.playback.pause();
+				self.drop_waiting_export();
+				if self.warning.take().is_some() {
+					self.notices.push(Notice::WarningDropped);
+				}
+				self.respec(project, view);
+				tracing::debug!(
+					revision = self.revision,
+					"edit: {}",
+					self.last_edit.take().as_deref().unwrap_or("unnamed")
+				);
+				self.wanted = Wanted::Position;
+				if self.settings.auto_rerun {
+					self.want_all(Then::Rerun, now);
+				}
+			}
+			ChangeKind::Respec => self.respec(project, view),
+			ChangeKind::Display
+			| ChangeKind::Metadata
+			| ChangeKind::None
+			| ChangeKind::Brightness
+			| ChangeKind::ProbesAndBrightness => {}
+		}
+		self.publish();
+	}
+
+	/// Asks for every frame, after the memory warning when the frames do not fit; false when the warning asks or
+	/// there is no spec. An export's run never asks: its frames are wanted already.
+	fn want_all(&mut self, then: Then, now: Instant) -> bool {
+		let Some(request) = self.request().cloned() else { return false };
+		if self.settings.warn_when_ram_insufficient && !self.export_busy() {
+			let reclaimed = self.status.store.as_ref().map_or(0, |s| s.ram_bytes());
+			let (budget, auto_budget) = self.backend.budgets(self.settings.ram_cache, reclaimed);
+			if MemoryWarning::check(&request, budget, auto_budget).is_some() {
+				tracing::debug!(need = request.store_bytes(), budget, "memory warning asks before the run");
+				let asked = self.warning.is_some();
+				self.warning = Some(PendingWarning { budget, auto_budget, then });
+				if !asked {
+					self.notices.push(Notice::AskMemoryWarning);
+				}
+				return false;
+			}
+		}
+		self.start(then, now);
+		true
+	}
+
+	/// Every frame wanted, with what `then` asks beside.
+	fn start(&mut self, then: Then, now: Instant) {
+		self.wanted = Wanted::All;
+		self.ran = true;
+		self.run_started = Some(now);
+		self.user_paused = false;
+		match then {
+			Then::Run => {
+				self.playback.pause();
+				self.playback.set_position(0);
+				self.live = true;
+			}
+			Then::Play => {
+				self.live = false;
+				self.playback.play(now, None);
+			}
+			Then::Rerun => {}
+		}
+		tracing::debug!(?then, "every frame wanted");
+	}
+
+	/// Moves whenever [`present_spans`](Self::present_spans) would: a store only gains frames within a generation.
+	pub fn progress_key(&self) -> Option<(u64, usize)> {
+		self.current_store().map(|s| (s.generation(), s.present_count()))
+	}
+
+	/// The present frames as timeline spans, for the timeline's band.
+	pub fn present_spans(&self) -> Vec<(u32, u32)> {
+		let (Some(store), Some(request)) = (self.current_store(), self.adopted_request()) else { return Vec::new() };
+		let spec = request.schedule();
+		let mut spans = Vec::new();
+		let mut j = 0;
+		while j < spec.stored_frames() {
+			if let Some(last) = store.present_through(j as usize) {
+				let last = last as u32;
+				spans.push((j * spec.frame_divisor(), spec.covered_frames(last + 1) - 1));
+				j = last + 1;
+			} else {
+				j += 1;
+			}
+		}
+		spans
+	}
+
+	/// Advances the machine: what the run has, playback, the frame shown, the fit, the export.
+	pub fn tick(&mut self, now: Instant, project: &Project, view: &View) {
+		self.started = true;
+		if !matches!(self.export, Export::Reading)
+			&& let Some(kind) = self.edited_during_export.take()
+		{
+			self.on_change(kind, project, view, None, now);
+		}
+		// The store in force lets go here, so a store the pump opens counts this one's memory as free.
+		self.status.store = None;
+		self.backend.pump();
+		self.status = self.backend.status();
+		let adopted = self.status.adopted;
+		if let Some(first) = self.requests.iter().position(|(revision, _)| *revision >= adopted) {
+			self.requests.drain(..first);
+		}
+		if let WorkState::Failed(e) = &self.status.state
+			&& self.failed.as_ref().is_none_or(|f| !Arc::ptr_eq(f, e))
+		{
+			self.failed = Some(e.clone());
+			let failure = match (self.backend.worker_gone(), self.backend.memory_refused(), &**e) {
+				(Some(gone), ..) => RunFailure::WorkerGone(gone),
+				(None, Some(why), _) => RunFailure::NoMemory(why),
+				(None, None, RunError::Spec(RunSpecError::NoImage)) => RunFailure::NoImage,
+				(None, None, e) if e.storage_full() => RunFailure::StorageFull(e.to_string()),
+				(None, None, e) => RunFailure::Failed(e.to_string()),
+			};
+			self.notices.push(Notice::RunFailed(failure));
+		}
+		if matches!(self.status.state, WorkState::Failed(_)) {
+			self.drop_waiting_export();
+		}
+		if self.fit.is_some() && (self.request().is_none() || matches!(self.status.state, WorkState::Failed(_))) {
+			self.fit = None;
+		}
+		// the store fills from another thread, so a run can complete between the follow's look and this check:
+		// a completed run ends on its last frame, never on the frame the follow last saw
+		if self.live && self.complete() {
+			self.playback.set_position(self.playback.last_frame());
+			self.live = false;
+		} else if self.live
+			&& let Some(newest) = self.present_through(self.playback.position())
+		{
+			self.playback.set_position(newest);
+		}
+		self.report_run_end(now);
+		self.advance_playback(now);
+		self.show_frame();
+		self.prefetch();
+		self.poll_fit();
+		self.poll_export();
+		self.publish();
+	}
+
+	fn advance_playback(&mut self, now: Instant) {
+		if !self.playback.is_playing() {
+			return;
+		}
+		let limit = self.play_limit();
+		self.playback.advance(now, Some(limit));
+	}
+
+	/// The newest frame playback may reach: the present run from the position while frames keep coming, its end
+	/// once nothing more comes.
+	fn play_limit(&self) -> Limit {
+		let position = self.playback.position();
+		let through = self.present_through(position).unwrap_or(position);
+		if self.run_is_active() { Limit::Hold(through) } else { Limit::End(through) }
+	}
+
+	/// A picture changes only when a frame for its position arrives.
+	fn show_frame(&mut self) {
+		let position = self.playback.position();
+		if self.store_has(position) && self.shown != Some(position) {
+			self.shown = Some(position);
+			self.notices.push(Notice::ShowFrame(position));
+		}
+	}
+
+	/// Names the stored frames playback shows next to the store, which reads the spilled ones ahead; not while an
+	/// export reads the frames, which names its own.
+	fn prefetch(&self) {
+		if matches!(self.export, Export::Reading) {
+			return;
+		}
+		let (Some(store), Some(request)) = (self.current_store(), self.adopted_request()) else { return };
+		let depth = store.read_ahead();
+		if depth == 0 {
+			return;
+		}
+		let schedule = request.schedule();
+		let position = self.playback.position();
+		let ahead = self.playback.ahead(depth * schedule.frame_divisor() as usize, Some(self.play_limit()));
+		let frames = self.playback.is_playing().then_some(position).into_iter().chain(ahead);
+		store.prefetch(frames.map(|frame| schedule.stored_index_of(frame) as usize));
+	}
+
+	fn poll_fit(&mut self) {
+		let Some(frame) = self.backend.take_fit() else { return };
+		if let Some(request) = self.fit
+			&& request.id == frame.id
+		{
+			self.fit = None;
+			self.fit_frames = Some(frame);
+		}
+	}
+
+	fn poll_export(&mut self) {
+		let Export::Waiting(needs) = self.export else { return };
+		if self.is_full_for_export(needs) {
+			self.export = Export::Reading;
+			self.notices.push(Notice::ExportReady);
+		}
+	}
+
+	/// Every frame of a full-quality spec (with the intensity in the form needed, when needed) is stored and
+	/// recorded.
+	fn is_full_for_export(&self, needs: RunNeeds) -> bool {
+		self.request().is_some_and(|r| {
+			r.quality.is_full()
+				&& match needs {
+					RunNeeds::Field => true,
+					RunNeeds::Intensity { root } => {
+						r.layers().contains(&Layer::Intensity) && r.quality.intensity_root == root
+					}
+				}
+		}) && self.complete()
+	}
+
+	/// Auto brightness with 8-bit samples: the frame at the position once more with 16-bit samples, for
+	/// [`take_half_frame`](Self::take_half_frame) alone. Returns whether it was requested.
+	pub fn request_half_frame(&mut self) -> bool {
+		if self.request().is_none() {
+			tracing::warn!("no 16-bit frame for the brightness fit: no run");
+			return false;
+		}
+		self.next_fit += 1;
+		self.fit = Some(FitRequest { id: self.next_fit, frame: self.playback.position() });
+		self.publish();
+		true
+	}
+
+	/// The frame [`request_half_frame`](Self::request_half_frame) asked for, once it arrived.
+	pub fn take_half_frame(&mut self) -> Option<FitFrame> {
+		self.fit_frames.take()
+	}
+
+	/// Steps whose probe readings the traces hold.
+	pub fn traces_steps(&self) -> u32 {
+		self.status.traces_steps
+	}
+
+	/// A fit frame is on its way.
+	pub fn fit_pending(&self) -> bool {
+		self.fit.is_some()
+	}
+
+	/// The memory warning's Run: the levers' quality and cache for this and later runs (the caller persists
+	/// the returned choice), then the run.
+	pub fn confirm_warning(&mut self, levers: Levers, mute: bool, now: Instant) -> Option<WarningChoice> {
+		let w = self.warning.take()?;
+		let request = self.request()?;
+		let warning = MemoryWarning { request, budget: w.budget, auto_budget: w.auto_budget };
+		let quality = warning.quality_of(levers);
+		let next = request.with_quality(quality);
+		let choice = WarningChoice { quality, cache_auto: levers.cache_auto, mute };
+		self.settings.quality = quality;
+		self.quality = quality;
+		if levers.cache_auto {
+			self.settings.ram_cache = RamCache::Auto;
+		}
+		if mute {
+			self.settings.warn_when_ram_insufficient = false;
+		}
+		self.revise(next);
+		self.start(w.then, now);
+		self.publish();
+		Some(choice)
+	}
+
+	/// The memory warning's Cancel: nothing changes, the frames stay, playback is off.
+	pub fn cancel_warning(&mut self) {
+		if self.warning.take().is_some() {
+			self.playback.pause();
+			tracing::info!("The run was not started; the preview keeps the frames it has.");
+			self.notices.push(Notice::Info("The run was not started.".into()));
+			self.publish();
+		}
+	}
+
+	/// F5 / Run: every frame from frame 0, followed; nothing while an export holds or waits for the run. With the
+	/// run worker gone, the next tick says so again.
+	pub fn run_user(&mut self, project: &Project, view: &View, now: Instant) -> bool {
+		if self.export_busy() {
+			return false;
+		}
+		if self.backend.worker_gone().is_some() {
+			self.failed = None;
+		}
+		if self.request().is_none() {
+			self.respec(project, view);
+		}
+		let started = self.want_all(Then::Run, now);
+		self.publish();
+		started
+	}
+
+	/// Stop / Esc: the frames so far stay, the preview on the newest one, Live off; a waiting export is dropped.
+	pub fn stop_run(&mut self) {
+		self.drop_waiting_export();
+		if self.run_is_active() {
+			if self.live
+				&& let Some(newest) = self.present_through(self.playback.position())
+			{
+				self.playback.set_position(newest);
+			}
+			self.end_run();
+			self.publish();
+		}
+	}
+
+	/// No more frames than the position's are wanted: the run ends, unpaused, Live off.
+	fn end_run(&mut self) {
+		self.wanted = Wanted::Position;
+		self.live = false;
+		self.user_paused = false;
+	}
+
+	/// The run has frames stored, which [`discard_frames`](Self::discard_frames) would drop.
+	pub fn has_frames(&self) -> bool {
+		self.current_store().is_some_and(|s| s.present_count() > 0)
+	}
+
+	/// Discard frames: the run stops and its frames go, their memory and spill freed; the timeline starts over at
+	/// frame 0, which is made again as after opening the project. Nothing while an export holds or waits for the
+	/// run.
+	pub fn discard_frames(&mut self) {
+		if self.export_busy() {
+			return;
+		}
+		self.end_run();
+		self.ran = false;
+		self.run_started = None;
+		self.shown = None;
+		self.fit = None;
+		self.fit_frames = None;
+		self.playback.pause();
+		self.playback.set_position(0);
+		// the goal first: a worker that took up the discard under the old goal would make every frame it wanted
+		self.publish();
+		self.backend.discard_frames();
+	}
+
+	/// F6: pauses or resumes the run.
+	pub fn toggle_pause_run(&mut self) {
+		if self.run_is_active() {
+			self.user_paused = !self.user_paused;
+			self.publish();
+		}
+	}
+
+	/// F or the Live button: only while a run is active.
+	pub fn set_live(&mut self, on: bool) {
+		self.live = on && self.run_is_active();
+		if self.live {
+			self.playback.pause();
+		}
+	}
+
+	/// A click or drag on the timeline: the position only; playback pauses, Live turns off. The run follows.
+	pub fn scrub(&mut self, frame: u32, _now: Instant) {
+		self.playback.pause();
+		self.live = false;
+		self.playback.set_position(frame);
+		self.publish();
+	}
+
+	/// Arrows, PageUp/PageDown, Home/End as a frame delta; scrub rules.
+	pub fn step_frames(&mut self, delta: i64, now: Instant) {
+		self.playback.step_by(delta);
+		self.scrub(self.playback.position(), now);
+	}
+
+	/// Play: "show me the simulation". Asks for every frame when some are missing, and plays as they arrive.
+	pub fn play(&mut self, project: &Project, view: &View, now: Instant) {
+		if self.playback.is_playing() {
+			return;
+		}
+		self.live = false;
+		if self.request().is_none() {
+			self.respec(project, view);
+		}
+		if self.complete() {
+			self.playback.play(now, self.play_limit().end());
+		} else if self.wanted == Wanted::All {
+			self.playback.play(now, None);
+		} else {
+			self.want_all(Then::Play, now);
+		}
+		self.publish();
+	}
+
+	/// Pause: the position's frame is wanted either way.
+	pub fn pause_playback(&mut self, _now: Instant) {
+		self.playback.pause();
+		self.publish();
+	}
+
+	/// An export asks for its run: ready when the current one is fresh, complete, full quality and as `needs`
+	/// says, else such a run starts (never with the memory warning).
+	pub fn request_export(&mut self, project: &Project, view: &View, needs: RunNeeds, now: Instant) -> ExportGate {
+		if self.export_busy() {
+			return ExportGate::Busy;
+		}
+		if self.warning.take().is_some() {
+			self.notices.push(Notice::WarningDropped);
+		}
+		if self.is_full_for_export(needs) {
+			self.export = Export::Reading;
+			return ExportGate::Ready;
+		}
+		self.quality = match needs {
+			RunNeeds::Field => PreviewQuality::FULL,
+			RunNeeds::Intensity { root } => PreviewQuality { intensity_root: root, ..PreviewQuality::FULL },
+		};
+		self.track_intensity = needs != RunNeeds::Field;
+		self.respec(project, view);
+		self.start(Then::Rerun, now);
+		self.export = Export::Waiting(needs);
+		self.publish();
+		ExportGate::Waiting
+	}
+
+	/// An export holds or waits for the run.
+	pub fn export_busy(&self) -> bool {
+		!matches!(self.export, Export::Idle)
+	}
+
+	/// The export finished or was cancelled; the run may be replaced again.
+	pub fn end_export(&mut self) {
+		self.export = Export::Idle;
+	}
+
+	/// Cancels an export waiting for its run; the run stops, its frames so far stay.
+	pub fn cancel_export(&mut self) {
+		if let Export::Waiting { .. } = self.export {
+			self.export = Export::Idle;
+			self.wanted = Wanted::Position;
+			self.publish();
+		}
+	}
+}
+
+/// The core's live run on the CPU or GPU engine, by the Use the GPU setting: on a thread of its own natively.
+#[cfg(not(target_arch = "wasm32"))]
+pub struct CoreBackend {
+	use_gpu: Arc<AtomicBool>,
+	worker: RunWorker,
+	scene: Arc<Mutex<SceneCache>>,
+	/// Where the budgets' memory readings come from.
+	memory: Memory,
+	/// The label of the engine built last.
+	built: Arc<Mutex<Option<EngineLabel>>>,
+}
+
+/// The core's live run in the browser's run worker ([`crate::remote`]), on its GPU by the Use the GPU setting.
+#[cfg(target_arch = "wasm32")]
+pub struct CoreBackend {
+	remote: Remote<PagePort>,
+	/// The page's own: the run worker composes the scenes of its runs.
+	scene: Arc<Mutex<SceneCache>>,
+}
+
+/// The share of the device's memory a store's frames take in the browser, as a divisor (decision 0020, The
+/// browser's memory budget).
+pub const WEB_FRAME_SHARE: u64 = 8;
+/// The most a store's frames take in the browser, whatever the device (decision 0020, The browser's memory budget).
+pub const MAX_WEB_FRAME_BYTES: u64 = 512 << 20;
+
+/// The device memory the browser's budgets assume where it does not tell (`navigator.deviceMemory` is Chromium's
+/// only): a wasm32 memory's 4 GiB (decision 0020, The browser's memory budget).
+pub const WEB_UNKNOWN_MEMORY: u64 = 4 << 30;
+
+/// The memory a store's frames take in the browser on a device of `device_bytes` (`navigator.deviceMemory`,
+/// [`WEB_UNKNOWN_MEMORY`] when `None`); the frames past it spill.
+pub fn web_frame_memory(device_bytes: Option<u64>) -> u64 {
+	(device_bytes.unwrap_or(WEB_UNKNOWN_MEMORY) / WEB_FRAME_SHARE).min(MAX_WEB_FRAME_BYTES)
+}
+
+/// [`web_frame_memory`] of this device: the browser's RAM cache size at Auto.
+#[cfg(target_arch = "wasm32")]
+pub fn detected_web_frame_memory() -> u64 {
+	web_frame_memory(super::platform::device_memory())
+}
+
+/// The sizes the browser's RAM cache size offers in place of [`web_frame_memory`]; a wasm32 memory holds 4 GiB at
+/// most, the page's module and its other buffers beside the frames (decision 0020, The RAM cache size in the
+/// browser).
+pub const WEB_RAM_CACHE_SIZES: [u64; 4] = [256 << 20, 512 << 20, 1 << 30, 2 << 30];
+
+/// The run worker's script, beside the page.
+#[cfg(target_arch = "wasm32")]
+const RUN_WORKER: &str = "run-worker.js";
+
+/// The run worker's URL: [`RUN_WORKER`] with the page's build as its query, which the script passes on to its files, so
+/// the browser's cache never serves the worker of another build.
+#[cfg(target_arch = "wasm32")]
+fn run_worker_url() -> String {
+	format!("{RUN_WORKER}?build={}", js_sys::encode_uri_component(&crate::build_id()))
+}
+
+/// The engine a run uses, as the status bar and About name it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EngineLabel {
+	/// The browser's run worker has not started yet.
+	Starting,
+	/// The browser's run worker is gone before it built one.
+	Missing,
+	/// The GPU's on a WebGPU adapter, which has no name.
+	WebGpu,
+	/// The GPU's on the adapter of this name.
+	Gpu(String),
+	/// The CPU engine on this many threads.
+	Cpu { threads: usize },
+}
+
+impl EngineLabel {
+	/// The engine on the GPU named `gpu`, or the CPU's on the threads this agent has.
+	pub fn of(gpu: Option<&str>) -> Self {
+		match gpu {
+			Some("") => Self::WebGpu,
+			Some(name) => Self::Gpu(name.to_owned()),
+			None => Self::Cpu { threads: std::thread::available_parallelism().map_or(1, std::num::NonZero::get) },
+		}
+	}
+
+	/// The label in the language of `s`.
+	pub fn text(&self, s: &Strings) -> String {
+		match self {
+			Self::Starting => s.get("EngineStarting").to_owned(),
+			Self::Missing => s.get("EngineNone").to_owned(),
+			Self::WebGpu => s.get("EngineWebGpu").to_owned(),
+			Self::Gpu(name) => s.format("EngineGpuFormat", &[name]),
+			Self::Cpu { threads: 1 } => s.get("EngineCpuOne").to_owned(),
+			Self::Cpu { threads } => s.format("EngineCpuManyFormat", &[threads]),
+		}
+	}
+}
+
+/// English, for the log.
+impl std::fmt::Display for EngineLabel {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Starting => write!(f, "engine starting"),
+			Self::Missing => write!(f, "no engine"),
+			Self::WebGpu => write!(f, "GPU: WebGPU"),
+			Self::Gpu(name) => write!(f, "GPU: {name}"),
+			Self::Cpu { threads: 1 } => write!(f, "CPU (1 thread)"),
+			Self::Cpu { threads } => write!(f, "CPU ({threads} threads)"),
+		}
+	}
+}
+
+/// The name of the GPU the engines run on, when there is one.
+#[cfg(not(target_arch = "wasm32"))]
+fn gpu_name() -> Option<String> {
+	waveduderust::unstable::engine::gpu::context().ok().map(|ctx| ctx.info.name.clone())
+}
+
+/// Builds the engine for a scene: the GPU's when asked for and available (a fallback to the CPU is logged).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_engine(scene: Arc<SceneData>, options: EngineOptions, use_gpu: bool) -> Box<dyn WaveEngine> {
+	let e = waveduderust::unstable::engine::build(scene, options, use_gpu).engine;
+	super::log::engine_built(e.name(), e.scene(), e.options(), e.sub_steps());
+	e
+}
+
+impl CoreBackend {
+	/// A backend with its spill files in `cache_dir` and its budgets on `memory`'s readings; the engine follows
+	/// `use_gpu`, shared with the settings.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub fn new(use_gpu: Arc<AtomicBool>, cache_dir: PathBuf, memory: Memory) -> std::io::Result<Self> {
+		let (gpu, built) = (use_gpu.clone(), Arc::<Mutex<Option<EngineLabel>>>::default());
+		let label = built.clone();
+		let scene: Arc<Mutex<SceneCache>> = Arc::default();
+		let worker = RunWorker::with_memory(
+			Box::new(move |scene, options| {
+				let e = build_engine(scene, options, gpu.load(Ordering::Relaxed));
+				*lock(&label) = Some(EngineLabel::of(gpu_name().filter(|_| e.is_gpu()).as_deref()));
+				e
+			}),
+			cache_dir,
+			scene.clone(),
+			memory,
+		)?;
+		worker.set_notify(Box::new(crate::wake::wake));
+		Ok(Self { use_gpu, worker, scene, memory, built })
+	}
+
+	/// A backend on the run worker, which it starts; the mirror stores hold their frames in memory, the RAM cache
+	/// size or at Auto [`detected_web_frame_memory`], and the rest in the origin private file system. The engine
+	/// runs on the worker's GPU while `use_gpu` holds, else on the CPU.
+	#[cfg(target_arch = "wasm32")]
+	pub fn new(use_gpu: Arc<AtomicBool>) -> Self {
+		let frame_memory = detected_web_frame_memory();
+		let port = PagePort::start(&run_worker_url(), crate::wake::wake);
+		let remote = Remote::new(port, use_gpu, frame_memory, Box::new(super::platform::Opfs::start()));
+		Self { remote, scene: Arc::default() }
+	}
+
+	/// The scene pixels and medium the specs are built from, shared with whatever else shows the scene.
+	pub fn scene_cache(&self) -> Arc<Mutex<SceneCache>> {
+		self.scene.clone()
+	}
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Backend for CoreBackend {
+	fn set_goal(&mut self, goal: Goal) {
+		self.worker.set_goal(goal);
+	}
+
+	fn status(&self) -> Status {
+		self.worker.status()
+	}
+
+	fn with_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+		self.worker.with_traces(|t| f(t));
+	}
+
+	fn with_held_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+		self.worker.with_held_traces(|t| f(t));
+	}
+
+	fn take_fit(&mut self) -> Option<FitFrame> {
+		self.worker.take_fit()
+	}
+
+	fn engine_changed(&mut self) {
+		self.worker.rebuild_engine();
+	}
+
+	fn discard_frames(&mut self) {
+		self.worker.discard_frames();
+	}
+
+	fn budgets(&self, cache: RamCache, reclaimed: u64) -> (u64, u64) {
+		(Budget::compute(self.memory, reclaimed, cache), Budget::compute(self.memory, reclaimed, RamCache::Auto))
+	}
+
+	fn engine(&self) -> EngineLabel {
+		if let Some(label) = &*lock(&self.built) {
+			return label.clone();
+		}
+		EngineLabel::of(gpu_name().filter(|_| self.use_gpu.load(Ordering::Relaxed)).as_deref())
+	}
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Backend for CoreBackend {
+	fn set_goal(&mut self, goal: Goal) {
+		self.remote.set_goal(goal);
+	}
+
+	fn status(&self) -> Status {
+		self.remote.status()
+	}
+
+	fn with_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+		self.remote.with_traces(f);
+	}
+
+	fn with_held_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+		self.remote.with_held_traces(f);
+	}
+
+	fn take_fit(&mut self) -> Option<FitFrame> {
+		self.remote.take_fit()
+	}
+
+	fn engine_changed(&mut self) {
+		self.remote.engine_changed();
+	}
+
+	fn discard_frames(&mut self) {
+		self.remote.discard_frames();
+	}
+
+	fn budgets(&self, cache: RamCache, reclaimed: u64) -> (u64, u64) {
+		self.remote.budgets(cache, reclaimed)
+	}
+
+	fn engine(&self) -> EngineLabel {
+		self.remote.engine()
+	}
+
+	fn worker_gone(&self) -> Option<WorkerGone> {
+		self.remote.worker_gone()
+	}
+
+	fn memory_refused(&self) -> Option<String> {
+		self.remote.memory_refused()
+	}
+
+	fn pump(&mut self) {
+		self.remote.pump();
+	}
+}
+
+/// A scripted run: the goals are recorded, the frames come when the caller writes them. For tests.
+#[cfg(any(test, feature = "test-support"))]
+pub mod fake {
+	use std::collections::HashMap;
+	use std::sync::{Arc, Mutex};
+
+	use waveduderust::f16;
+	use waveduderust::run::{
+		FitFrame, FrameStore, Goal, RamCache, SpillBackend, Status, StoreLayout, Token, Wanted, WorkState,
+	};
+	use waveduderust::unstable::engine::probes::ProbeTrace;
+	use waveduderust::unstable::engine::{SampleFormat, Snapshot};
+	use waveduderust::unstable::render::{field_index, intensity_root_index};
+	use waveduderust::unstable::spec::RunSpec;
+	use waveduderust::unstable::sync::lock;
+
+	use super::Backend;
+
+	/// The planes of each (generation, frame).
+	type Frames = HashMap<(u64, usize), Vec<u8>>;
+
+	/// A pending spill whose writes and reads complete at once; it records the frames read.
+	#[derive(Clone, Default)]
+	pub struct FakeSpill {
+		frames: Arc<Mutex<Frames>>,
+		pub reads: Arc<Mutex<Vec<usize>>>,
+	}
+
+	impl SpillBackend for FakeSpill {
+		fn write(&self, generation: u64, frame: usize, planes: &[&[u8]]) -> Token<()> {
+			lock(&self.frames).insert((generation, frame), planes.concat());
+			let token = Token::default();
+			token.complete(Ok(()));
+			token
+		}
+
+		fn read(&self, generation: u64, frame: usize) -> Token<Vec<u8>> {
+			lock(&self.reads).push(frame);
+			let token = Token::default();
+			token.complete(
+				lock(&self.frames).get(&(generation, frame)).cloned().ok_or(std::io::ErrorKind::NotFound.into()),
+			);
+			token
+		}
+
+		fn drop_generation(&self, generation: u64) {
+			lock(&self.frames).retain(|(g, _), _| *g != generation);
+		}
+	}
+
+	/// Records every goal; adopts a spec at once, with a real (small) store whose frames the caller writes.
+	#[derive(Default)]
+	pub struct FakeBackend {
+		pub goals: Vec<Goal>,
+		store: Option<Arc<FrameStore>>,
+		spec: Option<RunSpec>,
+		adopted: u64,
+		/// Set by the caller: the run stepped this far.
+		pub steps_done: u32,
+		/// (budget, budget at Auto); unlimited when unset.
+		pub budgets: Option<(u64, u64)>,
+		pub fits_served: Vec<u64>,
+		pub engine_changes: usize,
+		fit: Option<FitFrame>,
+		/// The run failed, until the next spec.
+		failure: Option<Arc<waveduderust::run::RunError>>,
+		/// Set by the caller: the run's traces; a spec with other frames moves them to `held`.
+		pub traces: Vec<ProbeTrace>,
+		held: Vec<ProbeTrace>,
+		/// What the goal in force wanted when the frames were discarded last.
+		pub discarded_under: Option<Wanted>,
+		/// Set by the caller: the stores keep 2 frames in memory, the rest in this spill.
+		pub spill: Option<FakeSpill>,
+	}
+
+	impl FakeBackend {
+		fn new_store(&self, layout: StoreLayout) -> Arc<FrameStore> {
+			Arc::new(match &self.spill {
+				Some(spill) => FrameStore::with_spill(layout, 2 * layout.frame_bytes() as u64, Box::new(spill.clone())),
+				None => FrameStore::in_memory(layout, 1 << 30),
+			})
+		}
+
+		/// The run fails with `message` until the next spec.
+		pub fn fail(&mut self, message: &str) {
+			self.failure = Some(Arc::new(waveduderust::run::RunError::Panic("fake", message.into())));
+		}
+
+		pub fn goal(&self) -> &Goal {
+			self.goals.last().expect("a goal was published")
+		}
+
+		pub fn wanted(&self) -> Wanted {
+			self.goals.last().map_or(Wanted::Position, |g| g.wanted)
+		}
+
+		/// Goals published that wanted every frame.
+		pub fn fills(&self) -> usize {
+			self.goals.iter().filter(|g| g.wanted == Wanted::All).count()
+		}
+
+		pub fn store(&self) -> &Arc<FrameStore> {
+			self.store.as_ref().expect("a spec was adopted")
+		}
+
+		pub fn adopted_spec(&self) -> &RunSpec {
+			self.spec.as_ref().expect("a spec was adopted")
+		}
+
+		fn uniform(spec: &RunSpec, step: u32, u: f32, i: f32) -> Snapshot {
+			let shape = spec.shape;
+			let n = shape.plane_samples();
+			let (field, intensity) = match shape.format {
+				SampleFormat::Half => {
+					let root = if shape.intensity_root { i.sqrt() } else { i };
+					let plane = |v: f32| f16::from_f32(v).to_ne_bytes().repeat(n);
+					(plane(u), plane(root))
+				}
+				SampleFormat::Index => (
+					vec![field_index(f16::from_f32(u), shape.field_brightness); n],
+					vec![intensity_root_index(f16::from_f32(i.sqrt()), shape.intensity_brightness); n],
+				),
+			};
+			Snapshot { shape, step, field, intensity }
+		}
+
+		/// Writes timeline frame `frame` as uniform samples: the field `u`, the intensity `i`.
+		pub fn finish_frame_uniform(&mut self, frame: u32, u: f32, i: f32) {
+			let spec = self.adopted_spec().clone();
+			let stored = spec.schedule.stored_index_of(frame);
+			let snapshot = Self::uniform(&spec, stored * spec.schedule.capture_every(), u, i);
+			self.store().write_at(stored as usize, snapshot).expect("the frame fits the store");
+			self.store().settle().expect("the fake spill's writes succeed");
+			self.steps_done = self.steps_done.max(stored * spec.schedule.capture_every() + 1);
+		}
+
+		/// Writes the goal's position frame.
+		pub fn finish_position(&mut self) {
+			let position = self.goal().position;
+			self.finish_frame_uniform(position, 0.0, 0.0);
+		}
+
+		/// Writes the timeline frames below `frames`.
+		pub fn publish(&mut self, frames: u32) {
+			let spec = self.adopted_spec().clone();
+			for stored in 0..spec.schedule.stored_frames().min(frames.div_ceil(spec.schedule.frame_divisor())) {
+				self.finish_frame_uniform(stored * spec.schedule.frame_divisor(), 0.0, 0.0);
+			}
+		}
+
+		/// Writes every frame.
+		pub fn complete(&mut self) {
+			let frames = self.adopted_spec().schedule.frame_count();
+			self.publish(frames);
+			self.steps_done = self.adopted_spec().schedule.steps;
+		}
+
+		/// Serves the goal's fit with uniform samples in halves.
+		pub fn finish_fit_uniform(&mut self, u: f32, i: f32) {
+			let Some(fit) = self.goal().fit else { return };
+			let spec = self.adopted_spec().clone();
+			let shape = waveduderust::unstable::engine::FrameShape { format: SampleFormat::Half, ..spec.shape };
+			let half = RunSpec { shape, ..spec.clone() };
+			let snapshot = Self::uniform(&half, spec.schedule.step_of(fit.frame), u, i);
+			self.fits_served.push(fit.id);
+			self.fit = Some(FitFrame { id: fit.id, frame: fit.frame, snapshot: Arc::new(snapshot) });
+		}
+	}
+
+	impl Backend for FakeBackend {
+		fn set_goal(&mut self, goal: Goal) {
+			if let Some(request) = &goal.run {
+				let r = request;
+				let spec = RunSpec::create(&r.project, None, r.quality, r.brightness, r.track_intensity)
+					.expect("the fake builds every spec");
+				let spec = match &self.spec {
+					Some(current) if current.covers(&spec) => spec.tracking_as(current),
+					_ => spec,
+				};
+				let spec = &spec;
+				let same_frames = self.spec.as_ref().is_some_and(|s| s.same_frames_as(spec));
+				let same_probes = self.spec.as_ref().is_some_and(|s| s.same_probes_as(spec));
+				if !same_frames {
+					let layout = StoreLayout::of(spec);
+					match &self.store {
+						Some(store) if store.layout().fits(&layout) => store.clear(),
+						_ => self.store = Some(self.new_store(layout)),
+					}
+					self.steps_done = 0;
+					self.failure = None;
+					self.held = if same_probes { std::mem::take(&mut self.traces) } else { Vec::new() };
+				} else if !same_probes {
+					self.traces.clear();
+					self.held.clear();
+				}
+				self.spec = Some(spec.clone());
+				self.adopted = goal.revision;
+			}
+			self.goals.push(goal);
+		}
+
+		fn status(&self) -> Status {
+			let state = match (&self.failure, self.goals.last(), self.spec.as_ref(), self.store.as_ref()) {
+				(Some(e), ..) => WorkState::Failed(e.clone()),
+				(None, Some(goal), Some(spec), Some(store)) => {
+					let position =
+						spec.schedule.stored_index_of(goal.position.min(spec.schedule.frame_count().saturating_sub(1)));
+					let next = if !store.has(position as usize) {
+						Some(position)
+					} else if goal.wanted == Wanted::All {
+						store.first_missing_from(0).map(|j| j as u32)
+					} else {
+						None
+					};
+					let fitting = goal.fit.is_some_and(|f| !self.fits_served.contains(&f.id));
+					match next {
+						_ if fitting => WorkState::Fitting,
+						Some(_) if goal.paused => WorkState::Paused,
+						Some(target) => WorkState::Stepping { target },
+						None => WorkState::Idle,
+					}
+				}
+				_ => WorkState::Idle,
+			};
+			Status {
+				adopted: self.adopted,
+				state,
+				steps_done: self.steps_done,
+				traces_steps: 0,
+				store: self.store.clone(),
+				device_frames: None,
+			}
+		}
+
+		fn with_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+			f(&self.traces);
+		}
+
+		fn with_held_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+			f(&self.held);
+		}
+
+		fn take_fit(&mut self) -> Option<FitFrame> {
+			self.fit.take()
+		}
+
+		fn engine_changed(&mut self) {
+			self.engine_changes += 1;
+		}
+
+		fn discard_frames(&mut self) {
+			self.discarded_under = self.goals.last().map(|g| g.wanted);
+			if let Some(old) = self.store.take() {
+				self.store = Some(self.new_store(*old.layout()));
+			}
+			self.steps_done = 0;
+			self.traces.clear();
+			self.held.clear();
+		}
+
+		fn budgets(&self, _cache: RamCache, _reclaimed: u64) -> (u64, u64) {
+			self.budgets.unwrap_or((u64::MAX, u64::MAX))
+		}
+
+		fn engine(&self) -> super::EngineLabel {
+			super::EngineLabel::Cpu { threads: 1 }
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::fake::{FakeBackend, FakeSpill};
+	use super::*;
+	use crate::platform::Duration;
+	use waveduderust::unstable::engine::SampleFormat;
+
+	/// The view of every test: a default one, which shows the intensity.
+	static V: std::sync::LazyLock<View> = std::sync::LazyLock::new(View::default);
+
+	fn project() -> Project {
+		let mut p = Project::default();
+		p.scene.width = 64;
+		p.scene.height = 48;
+		p.simulation.steps = 200;
+		p.simulation.visualize_every = 2;
+		p.add_source();
+		p
+	}
+
+	fn controller(p: &Project, t: Instant) -> LiveController<FakeBackend> {
+		controller_on(FakeBackend::default(), p, t)
+	}
+
+	#[test]
+	fn the_browser_frame_memory_is_an_eighth_of_the_device_up_to_its_cap() {
+		const GIB: u64 = 1 << 30;
+		const MIB: u64 = 1 << 20;
+		let memory: Vec<u64> = [2, 4, 8, 16, 32].iter().map(|g| web_frame_memory(Some(g * GIB)) / MIB).collect();
+		assert_eq!(memory, [256, 512, 512, 512, 512]);
+		assert_eq!(web_frame_memory(None) / MIB, 512, "a device that does not tell is taken for 4 GiB");
+		assert_eq!(web_frame_memory(Some(u64::MAX)), MAX_WEB_FRAME_BYTES);
+	}
+
+	/// A rendered export's needs.
+	fn needs(intensity: bool) -> RunNeeds {
+		RunNeeds::new(ExportFormat::Png, intensity)
+	}
+
+	fn controller_on(backend: FakeBackend, p: &Project, t: Instant) -> LiveController<FakeBackend> {
+		let mut c = LiveController::new(backend, LiveSettings::default());
+		c.project_replaced(p, &V, t);
+		c.tick(t, p, &V);
+		c.backend_mut().finish_position();
+		c.tick(t, p, &V);
+		c.take_notices();
+		c
+	}
+
+	#[test]
+	fn the_requests_stay_bounded_while_nothing_is_adopted() {
+		let t = Instant::now();
+		let mut p = project();
+		let mut c = controller(&p, t);
+		for i in 0..600 {
+			p.sources[0].x = f64::from(i);
+			c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		}
+		assert!(c.requests.len() as u64 <= IN_FLIGHT + 1, "{} requests", c.requests.len());
+		assert_eq!(c.requests.last().map(|(r, _)| *r), Some(c.revision));
+		assert!(c.adopted_request().is_some(), "the adopted request is kept");
+	}
+
+	#[test]
+	fn the_objects_off_the_canvas_are_tracked_from_spec_to_spec() {
+		let t = Instant::now();
+		let mut p = project();
+		let mut c = controller(&p, t);
+		assert!(c.off_canvas.is_empty());
+		p.sources[0].x = 500.0;
+		c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		let name = p.sources[0].name.clone();
+		assert_eq!(c.off_canvas, [OffCanvas::Source { name, outside: 1, of: 1 }]);
+		p.sources[0].x = 5.0;
+		c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		assert!(c.off_canvas.is_empty(), "back on the canvas");
+	}
+
+	#[test]
+	fn a_replaced_project_wants_frame_zero_alone() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = LiveController::new(FakeBackend::default(), LiveSettings::default());
+		c.project_replaced(&p, &V, t);
+		assert!(c.backend().goals.is_empty(), "nothing before the first tick: the UI is not up");
+		c.tick(t, &p, &V);
+		assert_eq!((c.backend().goal().position, c.backend().wanted()), (0, Wanted::Position));
+		assert_eq!(c.run_status(), None, "opening never runs");
+		c.tick(t, &p, &V);
+		assert_eq!(c.computing_picture(), Some(0), "the run is stepping towards it");
+		c.backend_mut().finish_position();
+		c.tick(t, &p, &V);
+		assert_eq!(c.shown(), Some(0));
+		assert!(c.take_notices().contains(&Notice::ShowFrame(0)));
+		assert!(!c.is_working());
+	}
+
+	#[test]
+	fn an_edit_wants_every_frame_and_the_picture_waits_for_its_own() {
+		let t = Instant::now();
+		let mut p = project();
+		let mut c = controller(&p, t);
+		c.scrub(10, t);
+		c.tick(t, &p, &V);
+		c.backend_mut().finish_position();
+		c.tick(t, &p, &V);
+		assert_eq!(c.shown(), Some(10));
+		c.backend_mut().traces.push(ProbeTrace::default());
+		let revision = c.backend().goal().revision;
+		p.sources[0].frequency = 120.0;
+		c.on_change(ChangeKind::Simulation, &p, &V, Some("Source 1.frequency = 120".into()), t);
+		let goal = c.backend().goal();
+		assert_eq!((goal.wanted, goal.position), (Wanted::All, 10));
+		assert!(goal.revision > revision, "a new spec");
+		c.tick(t, &p, &V);
+		assert_eq!(c.shown(), Some(10), "the last picture stays");
+		assert!(
+			matches!(c.shown_source(), Some(ShownSource::Snapshot { .. })),
+			"the frame made last stays until the new state's frame lands"
+		);
+		c.with_traces(&mut |t| assert_eq!(t.len(), 1, "the graphs hold with the picture"));
+		assert_eq!(c.computing_picture(), Some(10));
+		assert!(c.run_is_active());
+		c.backend_mut().finish_position();
+		c.tick(t, &p, &V);
+		assert!(matches!(c.shown_source(), Some(ShownSource::Stored(_, 10))));
+		c.with_traces(&mut |t| assert!(t.is_empty(), "the new state's traces with its frame"));
+		assert!(c.take_notices().contains(&Notice::ShowFrame(10)));
+		assert_eq!(c.run_status().map(|s| s.0), Some(RunState::Running));
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert_eq!(c.run_status().map(|s| (s.0, s.1)), Some((RunState::Completed, 200)));
+		assert!(!c.run_is_active());
+	}
+
+	#[test]
+	fn with_auto_rerun_off_only_the_position_is_wanted() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.set_settings(LiveSettings { auto_rerun: false, ..c.settings() });
+		c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		assert_eq!(c.backend().wanted(), Wanted::Position);
+		assert_eq!(c.run_status(), None, "no run to describe");
+		c.set_settings(LiveSettings { auto_rerun: true, ..c.settings() });
+		c.tick(t, &p, &V);
+		assert_eq!(c.backend().wanted(), Wanted::Position, "turning it on asks for nothing by itself");
+	}
+
+	/// The summary is checked through `run_summary`: a test subscriber can miss the log line, since tracing caches
+	/// each callsite's interest process-wide while other tests run.
+	#[test]
+	fn a_finished_run_is_summed_up_once() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.run_user(&p, &V, t);
+		c.tick(t, &p, &V);
+		assert_eq!(c.run_started, Some(t));
+		assert_eq!(c.run_summary(t, t), None, "under way");
+		c.backend_mut().complete();
+		c.tick(t + Duration::from_millis(400), &p, &V);
+		assert_eq!(c.run_started, None, "reported on the tick that completed it");
+		c.tick(t + Duration::from_millis(500), &p, &V);
+		assert_eq!(c.run_started, None, "and not on a later tick");
+		let steps = p.simulation.steps;
+		assert_eq!(c.run_status(), Some((RunState::Completed, steps, steps)));
+		let line = c.run_summary(t, t + Duration::from_millis(400)).expect("a completed run");
+		assert!(line.contains(&format!("{steps} of {steps}")), "{line}");
+	}
+
+	#[test]
+	fn a_probe_edit_keeps_the_frames() {
+		let t = Instant::now();
+		let mut p = project();
+		p.add_probe();
+		let mut c = controller(&p, t);
+		c.run_user(&p, &V, t);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		let store = c.backend().store().clone();
+		c.on_change(ChangeKind::Respec, &p, &V, None, t);
+		c.tick(t, &p, &V);
+		assert!(Arc::ptr_eq(&store, c.backend().store()) && store.is_complete(), "the frames stay");
+		assert!(c.shown_source().is_some(), "the picture is a frame of the current state");
+		assert_eq!(c.backend().wanted(), Wanted::All, "a run in force stays in force");
+	}
+
+	#[test]
+	fn the_fit_frame_is_served_once() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.run_user(&p, &V, t);
+		c.backend_mut().complete();
+		c.scrub(40, t);
+		c.tick(t, &p, &V);
+		assert!(c.request_half_frame());
+		assert_eq!(c.backend().goal().fit.map(|f| f.frame), Some(40));
+		assert_eq!(c.computing_picture(), None, "the pictures keep the run's frame");
+		c.backend_mut().finish_fit_uniform(0.5, 0.25);
+		c.tick(t, &p, &V);
+		assert_eq!(c.shown(), Some(40));
+		let frame = c.take_half_frame().expect("the 16-bit frame");
+		assert_eq!((frame.frame, frame.snapshot.shape.format, frame.snapshot.step), (40, SampleFormat::Half, 80));
+		assert!(c.take_half_frame().is_none());
+		assert!(c.backend().goal().fit.is_none(), "served, so no longer asked for");
+	}
+
+	#[test]
+	fn a_user_run_follows_the_newest_frame_and_a_scrub_turns_live_off() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.scrub(50, t);
+		assert!(c.run_user(&p, &V, t));
+		assert!(c.is_live() && c.playback.position() == 0);
+		assert_eq!(c.run_status().map(|s| s.0), Some(RunState::Running));
+		c.backend_mut().publish(30);
+		c.tick(t, &p, &V);
+		assert_eq!(c.playback.position(), 29, "Live follows the newest frame");
+		assert_eq!(c.shown(), Some(29));
+		assert!(c.take_notices().contains(&Notice::ShowFrame(29)), "the followed frame is shown");
+		c.scrub(5, t);
+		assert!(!c.is_live() && !c.playback.is_playing());
+		c.tick(t, &p, &V);
+		assert_eq!(c.shown(), Some(5), "the store can show frame 5");
+		c.stop_run();
+		assert!(!c.run_is_active());
+		assert_eq!(c.backend().wanted(), Wanted::Position);
+		c.tick(t, &p, &V);
+		assert_eq!(c.run_status().map(|s| s.0), Some(RunState::Cancelled), "stopped, the frames so far stay");
+	}
+
+	#[test]
+	fn a_run_completing_between_ticks_ends_on_its_last_frame() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert!(c.run_user(&p, &V, t));
+		c.backend_mut().publish(30);
+		c.tick(t, &p, &V);
+		assert_eq!(c.playback.position(), 29);
+		// the rest of the run lands before the next tick
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert_eq!(c.playback.position(), c.playback.last_frame(), "a followed run ends on its last frame");
+		assert!(!c.is_live());
+	}
+
+	/// Half frames over an odd frame count: 101 timeline frames, 51 stored, the last stored frame covering one.
+	fn half_frames_controller(t: Instant) -> (Project, LiveController<FakeBackend>) {
+		let mut p = project();
+		p.simulation.steps = 202;
+		let settings = LiveSettings { quality: PreviewQuality::DEFAULT.halve_frames(), ..LiveSettings::default() };
+		let mut c = LiveController::new(FakeBackend::default(), settings);
+		c.project_replaced(&p, &V, t);
+		c.tick(t, &p, &V);
+		c.backend_mut().finish_position();
+		c.tick(t, &p, &V);
+		c.take_notices();
+		assert_eq!((c.playback.last_frame(), c.backend().adopted_spec().schedule.stored_frames()), (100, 51));
+		(p, c)
+	}
+
+	#[test]
+	fn a_followed_run_with_half_frames_stays_live_until_its_last_frame() {
+		let t = Instant::now();
+		let (p, mut c) = half_frames_controller(t);
+		assert!(c.run_user(&p, &V, t));
+		c.tick(t, &p, &V);
+		let mut followed = vec![c.playback.position()];
+		// frames land out of order: a gap holds the follow at the newest contiguous frame
+		for frame in [60, 2, 4, 6, 30, 8, 10] {
+			c.backend_mut().finish_frame_uniform(frame, 0.0, 0.0);
+			c.tick(t, &p, &V);
+			assert!(c.is_live(), "Live holds while frames are missing (after frame {frame})");
+			followed.push(c.playback.position());
+		}
+		assert_eq!(followed, [1, 1, 3, 5, 7, 7, 9, 11], "the newest contiguous frame, both halves of a stored frame");
+		assert_eq!(c.shown(), Some(11));
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert_eq!(c.playback.position(), 100, "the last frame, not the end of the newest contiguous span seen");
+		assert_eq!(c.shown(), Some(100));
+		assert!(!c.is_live() && !c.run_is_active());
+		assert_eq!(c.run_status().map(|s| s.0), Some(RunState::Completed));
+	}
+
+	#[test]
+	fn a_followed_run_that_completes_before_its_first_tick_ends_on_its_last_frame() {
+		let t = Instant::now();
+		let (p, mut c) = half_frames_controller(t);
+		assert!(c.run_user(&p, &V, t));
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert_eq!((c.playback.position(), c.shown()), (100, Some(100)));
+		assert!(!c.is_live());
+		assert!(c.take_notices().contains(&Notice::ShowFrame(100)));
+	}
+
+	#[test]
+	fn play_starts_a_run_and_holds_at_the_newest_frame() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.play(&p, &V, t);
+		assert_eq!(c.backend().wanted(), Wanted::All);
+		assert!(c.playback.is_playing());
+		c.backend_mut().publish(5);
+		c.tick(t + Duration::from_secs(1), &p, &V);
+		assert_eq!(c.playback.position(), 4);
+		c.backend_mut().complete();
+		c.tick(t + Duration::from_millis(1100), &p, &V);
+		assert!(c.playback.position() > 4);
+	}
+
+	#[test]
+	fn pause_and_resume_reach_the_goal() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.run_user(&p, &V, t);
+		c.toggle_pause_run();
+		assert!(c.run_paused_by_user() && c.backend().goal().paused);
+		c.tick(t, &p, &V);
+		assert_eq!(c.run_status().map(|s| s.0), Some(RunState::Paused));
+		c.toggle_pause_run();
+		assert!(!c.backend().goal().paused);
+		c.toggle_pause_run();
+		c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		assert!(!c.backend().goal().paused, "an edit's run is not paused");
+	}
+
+	#[test]
+	fn memory_warning_run_and_cancel() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		let need = RunRequest::new(&p, PreviewQuality::DEFAULT, (&*V).into(), true).store_bytes();
+		c.backend_mut().budgets = Some((need / 2, need / 2));
+		assert!(!c.run_user(&p, &V, t));
+		assert!(c.take_notices().contains(&Notice::AskMemoryWarning));
+		assert_eq!(c.backend().wanted(), Wanted::Position, "nothing more until the answer");
+		let proposal = c.warning().unwrap().proposal();
+		assert!(proposal.frames || proposal.resolution);
+		let choice = c.confirm_warning(proposal, false, t).unwrap();
+		assert_ne!(choice.quality, PreviewQuality::DEFAULT);
+		assert_eq!(c.backend().wanted(), Wanted::All);
+		assert!(c.is_live(), "the warning's Run is still F5's run");
+		assert_eq!(c.settings().quality, choice.quality);
+		c.backend_mut().budgets = Some((0, 0));
+		c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		assert!(c.warning().is_some(), "the re-run asks too");
+		c.play(&p, &V, t);
+		c.cancel_warning();
+		assert!(!c.playback.is_playing(), "a cancelled warning turns playback off");
+		assert_eq!(c.backend().wanted(), Wanted::Position);
+	}
+
+	#[test]
+	fn a_replaced_project_ends_what_an_export_waited_for() {
+		let t = Instant::now();
+		let mut p = project();
+		let mut c = controller(&p, t);
+		c.run_user(&p, &V, t);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Waiting);
+		c.take_notices();
+		c.project_replaced(&p, &V, t);
+		assert!(c.take_notices().contains(&Notice::ExportStopped), "the waiting export is told");
+		assert!(!c.export_busy());
+		c.run_user(&p, &V, t);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Waiting);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		c.end_export();
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Ready);
+		p.sources[0].frequency = 120.0;
+		c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		let revision = c.backend().goal().revision;
+		c.project_replaced(&p, &V, t);
+		c.tick(t, &p, &V);
+		assert_eq!(c.backend().wanted(), Wanted::Position, "the deferred edit died with the project");
+		assert!(c.backend().goal().revision > revision);
+	}
+
+	#[test]
+	fn the_memory_warning_runs_the_project_as_it_is_now() {
+		let t = Instant::now();
+		let mut p = project();
+		let mut c = controller(&p, t);
+		let need = RunRequest::new(&p, PreviewQuality::DEFAULT, (&*V).into(), true).store_bytes();
+		c.backend_mut().budgets = Some((need / 2, need / 2));
+		assert!(!c.run_user(&p, &V, t));
+		p.add_probe();
+		c.on_change(ChangeKind::Respec, &p, &V, None, t);
+		let proposal = c.warning().unwrap().proposal();
+		c.confirm_warning(proposal, false, t).unwrap();
+		assert_eq!(c.backend().adopted_spec().probes.len(), 1, "the run has the probe added meanwhile");
+	}
+
+	#[test]
+	fn export_needs_a_full_quality_run() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.run_user(&p, &V, t);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert_eq!(c.request_export(&p, &V, needs(true), t), ExportGate::Waiting, "an 8-bit preview run does not do");
+		assert!(c.backend().adopted_spec().schedule.quality.is_full() && c.backend().adopted_spec().track_intensity());
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert!(c.take_notices().contains(&Notice::ExportReady));
+		assert_eq!(c.request_export(&p, &V, needs(true), t), ExportGate::Busy);
+		c.end_export();
+		assert_eq!(c.request_export(&p, &V, needs(true), t), ExportGate::Ready);
+		c.end_export();
+		c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		assert!(
+			!c.backend().adopted_spec().schedule.quality.is_full(),
+			"the next edit's frames are the preview's again"
+		);
+	}
+
+	#[test]
+	fn an_exr_export_of_the_intensity_needs_a_run_that_stores_i_not_its_root() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert_eq!(c.request_export(&p, &V, needs(true), t), ExportGate::Waiting);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		c.end_export();
+		assert!(c.backend().adopted_spec().schedule.quality.intensity_root);
+		let exr = RunNeeds::new(ExportFormat::Exr, true);
+		assert_eq!(c.request_export(&p, &V, exr, t), ExportGate::Waiting, "a complete run of sqrt(I) does not do");
+		assert!(!c.backend().adopted_spec().schedule.quality.intensity_root);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		c.end_export();
+		assert_eq!(c.request_export(&p, &V, exr, t), ExportGate::Ready);
+		c.end_export();
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Ready, "the field's export takes either");
+		c.end_export();
+		assert_eq!(c.request_export(&p, &V, needs(true), t), ExportGate::Waiting);
+	}
+
+	#[test]
+	fn playback_reads_no_frame_ahead_while_an_export_reads_them() {
+		let t = Instant::now();
+		let p = project();
+		let spill = FakeSpill::default();
+		let mut backend = FakeBackend::default();
+		backend.spill = Some(spill.clone());
+		let mut c = controller_on(backend, &p, t);
+		c.run_user(&p, &V, t);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Waiting);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert!(c.take_notices().contains(&Notice::ExportReady));
+		c.scrub(20, t);
+		c.play(&p, &V, t);
+		lock(&spill.reads).clear();
+		c.tick(t, &p, &V);
+		assert!(lock(&spill.reads).is_empty(), "the export names the frames it reads next");
+		c.end_export();
+		c.tick(t, &p, &V);
+		assert!(!lock(&spill.reads).is_empty(), "playback reads ahead again");
+	}
+
+	#[test]
+	fn a_waiting_export_never_outlives_its_run() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Waiting);
+		c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		assert!(c.take_notices().contains(&Notice::ExportStopped), "an edit replaced the export's run");
+		assert!(!c.export_busy());
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Waiting);
+		c.cancel_export();
+		assert!(!c.export_busy());
+		assert_eq!(c.backend().wanted(), Wanted::Position, "a cancelled export stops its run");
+		c.tick(t, &p, &V);
+		let notices = c.take_notices();
+		assert!(!notices.contains(&Notice::ExportReady) && !notices.contains(&Notice::ExportStopped));
+	}
+
+	#[test]
+	fn a_waiting_export_is_dropped_when_its_run_fails() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Waiting);
+		c.backend_mut().fail("boom");
+		c.tick(t, &p, &V);
+		assert!(!c.export_busy(), "nothing waits for a failed run");
+		let notices = c.take_notices();
+		assert!(notices.contains(&Notice::ExportStopped), "{notices:?}");
+		assert!(notices.iter().any(|n| matches!(n, Notice::RunFailed { .. })));
+	}
+
+	#[test]
+	fn a_failed_run_is_reported_once() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.backend_mut().fail("boom");
+		c.tick(t, &p, &V);
+		c.tick(t, &p, &V);
+		let errors = c.take_notices().into_iter().filter(|n| matches!(n, Notice::RunFailed { .. })).count();
+		assert_eq!(errors, 1);
+		assert!(c.run_status().is_none(), "no run was asked for");
+		c.run_user(&p, &V, t);
+		c.tick(t, &p, &V);
+		assert!(matches!(c.run_status().map(|s| s.0), Some(RunState::Failed(_))));
+		assert!(!c.run_is_active() && !c.run_is_progressing(), "a failed run is over");
+		c.request_half_frame();
+		c.tick(t, &p, &V);
+		assert!(!c.fit_pending(), "no fit comes from a failed run");
+	}
+
+	#[test]
+	fn an_edit_while_an_export_reads_waits_for_it() {
+		let t = Instant::now();
+		let mut p = project();
+		let mut c = controller(&p, t);
+		c.run_user(&p, &V, t);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Waiting);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		c.end_export();
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Ready);
+		let revision = c.backend().goal().revision;
+		let generation = c.backend().store().generation();
+		p.sources[0].frequency = 120.0;
+		c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		c.tick(t, &p, &V);
+		assert_eq!(c.backend().goal().revision, revision, "the frames stay while the export reads them");
+		assert_eq!(c.backend().store().generation(), generation);
+		c.end_export();
+		c.tick(t, &p, &V);
+		assert!(c.backend().goal().revision > revision, "the edit is taken up when the export ends");
+		assert_eq!(c.backend().wanted(), Wanted::All);
+	}
+
+	#[test]
+	fn a_probe_and_brightness_edit_keeps_16_bit_frames() {
+		let t = Instant::now();
+		let mut p = project();
+		p.add_probe();
+		let settings = LiveSettings { quality: PreviewQuality::FULL, ..LiveSettings::default() };
+		let mut c = LiveController::new(FakeBackend::default(), settings);
+		c.project_replaced(&p, &V, t);
+		c.tick(t, &p, &V);
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		let generation = c.backend().store().generation();
+		c.on_change(ChangeKind::ProbesAndBrightness, &p, &V, None, t);
+		c.tick(t, &p, &V);
+		assert_eq!(c.backend().store().generation(), generation, "the brightness is not baked into the frames");
+		assert!(c.backend().store().is_complete());
+	}
+
+	#[test]
+	fn discarded_frames_stop_the_run_and_start_the_timeline_over() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert!(c.run_user(&p, &V, t));
+		c.backend_mut().publish(40);
+		c.scrub(20, t);
+		c.tick(t, &p, &V);
+		assert!(c.has_frames() && c.run_is_active());
+		let old = c.backend().store().clone();
+		c.discard_frames();
+		c.tick(t, &p, &V);
+		assert!(!Arc::ptr_eq(&old, c.backend().store()), "the frames went with their store");
+		assert!(!c.has_frames() && !c.run_is_active() && c.run_status().is_none());
+		assert_eq!((c.backend().wanted(), c.backend().goal().position), (Wanted::Position, 0));
+		assert_eq!(c.backend().discarded_under, Some(Wanted::Position), "the discard came before its goal");
+		assert!(c.present_spans().is_empty());
+	}
+
+	#[test]
+	fn an_export_keeps_the_frames_it_holds_or_waits_for() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Waiting);
+		c.backend_mut().publish(10);
+		c.tick(t, &p, &V);
+		let old = c.backend().store().clone();
+		c.discard_frames();
+		assert!(Arc::ptr_eq(&old, c.backend().store()) && c.export_busy());
+	}
+
+	#[test]
+	fn stop_drops_the_export_waiting_for_its_run() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Waiting);
+		c.tick(t, &p, &V);
+		c.take_notices();
+		c.stop_run();
+		assert!(c.take_notices().contains(&Notice::ExportStopped), "the waiting export is told");
+		assert!(!c.export_busy());
+		assert_eq!(c.backend().wanted(), Wanted::Position, "nobody wants the export's run any more");
+	}
+
+	#[test]
+	fn an_export_drops_the_memory_warning_and_refuses_a_run_during_its_read() {
+		let t = Instant::now();
+		let p = project();
+		let mut c = controller(&p, t);
+		c.backend_mut().budgets = Some((1, 1));
+		assert!(!c.run_user(&p, &V, t));
+		c.take_notices();
+		assert_eq!(c.request_export(&p, &V, needs(false), t), ExportGate::Waiting);
+		assert!(c.take_notices().contains(&Notice::WarningDropped), "the warning's dialog closes");
+		assert!(c.warning().is_none());
+		c.backend_mut().complete();
+		c.tick(t, &p, &V);
+		assert!(c.take_notices().contains(&Notice::ExportReady));
+		let revision = c.backend().goal().revision;
+		let generation = c.backend().store().generation();
+		assert!(!c.run_user(&p, &V, t), "Run waits for the export");
+		c.tick(t, &p, &V);
+		assert!(!c.take_notices().contains(&Notice::AskMemoryWarning));
+		assert!(c.export_busy() && !c.is_live());
+		assert_eq!(c.backend().goal().revision, revision, "the frames stay while the export reads them");
+		assert_eq!(c.backend().store().generation(), generation);
+	}
+
+	/// Holds every goal until [`deliver`](Self::deliver): a worker that has not adopted yet.
+	struct Delayed {
+		inner: FakeBackend,
+		queued: Option<Goal>,
+	}
+
+	impl Delayed {
+		fn deliver(&mut self) {
+			if let Some(goal) = self.queued.take() {
+				self.inner.set_goal(goal);
+			}
+		}
+	}
+
+	impl Backend for Delayed {
+		fn set_goal(&mut self, goal: Goal) {
+			self.queued = Some(goal);
+		}
+		fn status(&self) -> Status {
+			self.inner.status()
+		}
+		fn with_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+			self.inner.with_traces(f);
+		}
+		fn with_held_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+			self.inner.with_held_traces(f);
+		}
+		fn take_fit(&mut self) -> Option<FitFrame> {
+			self.inner.take_fit()
+		}
+		fn engine_changed(&mut self) {}
+		fn discard_frames(&mut self) {}
+		fn budgets(&self, cache: RamCache, reclaimed: u64) -> (u64, u64) {
+			self.inner.budgets(cache, reclaimed)
+		}
+		fn engine(&self) -> EngineLabel {
+			self.inner.engine()
+		}
+	}
+
+	#[test]
+	fn a_gpu_without_a_name_labels_as_webgpu_and_one_thread_is_singular() {
+		let s = Strings::new(crate::strings::Language::English);
+		let labels = [
+			(EngineLabel::of(Some("")), s.get("EngineWebGpu").to_owned()),
+			(EngineLabel::of(Some("RTX")), s.format("EngineGpuFormat", &[&"RTX"])),
+			(EngineLabel::Cpu { threads: 1 }, s.get("EngineCpuOne").to_owned()),
+			(EngineLabel::Cpu { threads: 8 }, s.format("EngineCpuManyFormat", &[&8])),
+		];
+		for (label, text) in labels {
+			assert_eq!(label.text(&s), text, "{label:?}");
+			assert_eq!(label.to_string(), text, "the log's English is the English table's");
+		}
+	}
+
+	#[test]
+	fn the_store_is_indexed_by_the_schedule_of_the_revision_it_holds() {
+		let t = Instant::now();
+		let p = project();
+		let mut settings = LiveSettings { quality: PreviewQuality::FULL, ..LiveSettings::default() };
+		let mut c = LiveController::new(Delayed { inner: FakeBackend::default(), queued: None }, settings);
+		c.project_replaced(&p, &V, t);
+		c.tick(t, &p, &V);
+		c.backend_mut().deliver();
+		c.backend_mut().inner.complete();
+		c.scrub(80, t);
+		c.backend_mut().deliver();
+		c.tick(t, &p, &V);
+		assert!(matches!(c.shown_source(), Some(ShownSource::Stored(_, 80))));
+		settings.quality = PreviewQuality { frame_divisor: 2, ..PreviewQuality::FULL };
+		c.set_settings(settings);
+		c.on_change(ChangeKind::Simulation, &p, &V, None, t);
+		c.tick(t, &p, &V);
+		assert!(
+			matches!(c.shown_source(), Some(ShownSource::Stored(_, 80))),
+			"the old store's frame 80 until the half frames are adopted"
+		);
+		assert_eq!(c.present_spans(), [(0, 99)]);
+		c.backend_mut().deliver();
+		c.tick(t, &p, &V);
+		assert_eq!(c.present_spans(), [], "the new store is empty");
+	}
+}

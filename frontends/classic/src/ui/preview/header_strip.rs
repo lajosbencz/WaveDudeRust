@@ -1,0 +1,284 @@
+//! A picture's header strip (docs/ui/40-preview-pane.md, Header strip): the title at the start, the brightness box
+//! and its Auto button at the far end, and a caption just before them that gives way first, then the title
+//! (trimmed with an ellipsis). Above a picture the strip lies flat; beside one it is turned a quarter clockwise,
+//! reading top to bottom, its box and button drawn turned and the box editing upright over its place while focused.
+//! A focus asked of the box is given in a later pass, before the box is drawn ([`BoxFocus`]).
+
+use std::f32::consts::FRAC_PI_2;
+use std::sync::Arc;
+
+use eframe::egui::epaint::TextShape;
+use eframe::egui::text::{LayoutJob, TextWrapping};
+use eframe::egui::{
+	self, AreaState, Button, Color32, FontId, Galley, Id, Label, Order, Rect, RichText, Role, Sense, StrokeKind,
+	SurrenderFocusOn, Ui, WidgetInfo, pos2, vec2,
+};
+use waveduderust_app::Event;
+use waveduderust_app::number::NumberSpec;
+
+use crate::kit::{FONT_SIZE, INPUT_HEIGHT, ROW_HEIGHT};
+use crate::ui::number_box;
+
+/// Which parts fit along a strip's length.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct StripLayout {
+	pub(super) caption: bool,
+	/// Room for the title; it is trimmed with an ellipsis below its natural width.
+	pub(super) title_width: f32,
+}
+
+/// Lengths along the strip; `caption` includes its trailing margin, `spacing` is the least space after the title.
+pub(super) fn strip_layout(length: f32, title: f32, caption: f32, tools: f32, spacing: f32) -> StripLayout {
+	let caption_shown = title + spacing + caption + tools <= length;
+	let others = tools + if caption_shown { caption } else { 0. };
+	StripLayout { caption: caption_shown, title_width: title.min((length - spacing - others).max(0.)) }
+}
+
+/// Whether the strip goes beside the picture: the frame (the cell inside its margins) is wider than the picture's
+/// aspect, so the spare room is at the sides.
+pub(super) fn strip_beside(frame: (f32, f32), canvas: (u32, u32)) -> bool {
+	let (cw, ch) = (canvas.0.max(1) as f32, canvas.1.max(1) as f32);
+	frame.1 > 0. && frame.0 * ch > frame.1 * cw
+}
+
+/// The brightness box's range.
+pub(super) const BRIGHTNESS: (f64, f64) = (0.0001, 100_000.);
+const SPACING: f32 = 12.;
+const CAPTION_MARGIN: f32 = 4.;
+const AUTO_GAP: f32 = 4.;
+const AUTO_PADDING: f32 = 7.;
+const BOX_WIDTH: f32 = 64.;
+/// The cell's margin around the strip.
+pub(super) const CELL_MARGIN: f32 = 4.;
+/// Margin before the strip's start when it is on its side.
+const SIDE_START: f32 = 10.;
+/// Margin after the strip: below it when flat, before its end when on its side.
+const END_MARGIN: f32 = 4.;
+
+/// The strip of `cell` beside or above its picture, and the room left for the picture.
+pub(super) fn strip_and_area(cell: Rect, beside: bool) -> (Rect, Rect) {
+	let inner = cell.shrink(CELL_MARGIN);
+	if beside {
+		let strip = Rect::from_min_max(
+			pos2(inner.left(), inner.top() + SIDE_START),
+			pos2(inner.left() + ROW_HEIGHT, inner.bottom() - END_MARGIN),
+		);
+		(strip, Rect::from_min_max(pos2(strip.right(), cell.top()), cell.max))
+	} else {
+		let strip = Rect::from_min_size(inner.min, vec2(inner.width(), ROW_HEIGHT));
+		(strip, Rect::from_min_max(pos2(cell.left(), strip.bottom() + END_MARGIN), cell.max))
+	}
+}
+
+/// What a strip shows.
+pub(super) struct Strip<'a> {
+	pub(super) title: &'a str,
+	pub(super) caption: &'a str,
+	/// The brightness box's tooltip.
+	pub(super) hint: &'a str,
+	pub(super) auto: &'a str,
+	pub(super) auto_tip: &'a str,
+	pub(super) brightness: f64,
+	/// The brightness box's text.
+	pub(super) id: Id,
+	/// The event of a brightness, for the box's pending edit.
+	pub(super) event: &'a dyn Fn(f64) -> Option<Event>,
+}
+
+/// The brightness box's focus. A focus asked for is given before the box is drawn in a pass egui keeps it in: egui
+/// takes it back from a widget it did not hover in the pass before when the pointer presses or clicks (as its options
+/// say), lays an area out disabled the first time, and selects the text only on a focus gained before the drawing.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(super) enum BoxFocus {
+	#[default]
+	Idle,
+	/// Asked for; a turned strip shows its upright box meanwhile.
+	Asked,
+	/// The turned strip's upright box, open while it has the focus.
+	Upright,
+}
+
+/// Whether egui takes back a focus given in this pass from a widget it did not hover in the pass before.
+fn focus_taken_back(ui: &Ui) -> bool {
+	let on = ui.ctx().options(|o| o.input_options.surrender_focus_on);
+	ui.input(|i| match on {
+		SurrenderFocusOn::Presses => i.pointer.any_pressed(),
+		SurrenderFocusOn::Clicks => i.pointer.any_click(),
+		SurrenderFocusOn::Never => false,
+	})
+}
+
+/// What the user did on a strip.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum StripAction {
+	Brightness(f64),
+	Auto,
+}
+
+/// Lengths along a strip `length` long: the title's and caption's room, where the box and the button start.
+struct Along {
+	layout: StripLayout,
+	box_start: f32,
+	auto_start: f32,
+	auto_width: f32,
+}
+
+impl Along {
+	fn new(length: f32, title: &Galley, caption: &Galley, auto: &Galley) -> Self {
+		let auto_width = auto.size().x + 2. * AUTO_PADDING;
+		let tools = BOX_WIDTH + AUTO_GAP + auto_width;
+		let layout = strip_layout(length, title.size().x, caption.size().x + CAPTION_MARGIN, tools, SPACING);
+		let auto_start = length - auto_width;
+		Self { layout, box_start: auto_start - AUTO_GAP - BOX_WIDTH, auto_start, auto_width }
+	}
+}
+
+/// `text` in `font` on one line, trimmed with an ellipsis to `width`.
+fn galley(ui: &Ui, text: &str, font: FontId, width: f32) -> Arc<Galley> {
+	let mut job = LayoutJob::simple_singleline(text.to_owned(), font, Color32::PLACEHOLDER);
+	job.wrap = TextWrapping::truncate_at_width(width);
+	ui.painter().layout_job(job)
+}
+
+/// The strip in `rect`; `focus` keeps its box's focus.
+pub(super) fn show(
+	ui: &mut Ui,
+	rect: Rect,
+	beside: bool,
+	strip: &Strip<'_>,
+	focus: &mut BoxFocus,
+) -> Option<StripAction> {
+	let bold = FontId::new(FONT_SIZE, waveduderust::unstable::view::fonts::bold());
+	let regular = FontId::proportional(FONT_SIZE);
+	let title = galley(ui, strip.title, bold.clone(), f32::INFINITY);
+	let caption = galley(ui, strip.caption, regular.clone(), f32::INFINITY);
+	let auto = galley(ui, strip.auto, regular, f32::INFINITY);
+	let length = if beside { rect.height() } else { rect.width() };
+	let along = Along::new(length, &title, &caption, &auto);
+	let spec = NumberSpec::logarithmic(BRIGHTNESS.0, BRIGHTNESS.1);
+	if !beside {
+		return flat(ui, rect, strip, &along, &spec, focus, (&bold, &caption));
+	}
+	turned(ui, rect, strip, &along, &spec, focus, (&bold, &caption, &auto))
+}
+
+fn flat(
+	ui: &mut Ui,
+	rect: Rect,
+	strip: &Strip<'_>,
+	along: &Along,
+	spec: &NumberSpec,
+	focus: &mut BoxFocus,
+	(bold, caption): (&FontId, &Galley),
+) -> Option<StripAction> {
+	let text = ui.visuals().text_color();
+	let x = |a: f32| rect.left() + a;
+	let row = |from: f32, width: f32, height: f32| {
+		Rect::from_center_size(pos2(x(from) + width / 2., rect.center().y), vec2(width, height))
+	};
+	let title = Label::new(RichText::new(strip.title).font(bold.clone())).truncate().selectable(false);
+	ui.put(row(0., along.layout.title_width, ROW_HEIGHT), title);
+	if along.layout.caption {
+		let at = pos2(x(along.box_start - CAPTION_MARGIN), rect.center().y);
+		ui.painter().galley(at - vec2(caption.size().x, caption.size().y / 2.), caption.clone().into(), text);
+	}
+	match *focus {
+		BoxFocus::Asked if !focus_taken_back(ui) => {
+			ui.memory_mut(|m| m.request_focus(strip.id));
+			*focus = BoxFocus::Idle;
+		}
+		BoxFocus::Asked => ui.ctx().request_repaint(),
+		BoxFocus::Upright => *focus = BoxFocus::Idle,
+		BoxFocus::Idle => {}
+	}
+	let at = row(along.box_start, BOX_WIDTH, INPUT_HEIGHT);
+	let edited = number_box::number_box(ui, at, strip.id, strip.brightness, spec, false, strip.caption);
+	edited.offer_opt(ui.ctx(), strip.id, strip.event);
+	let value = edited.applied;
+	edited.response.on_hover_text(strip.hint);
+	let auto = ui
+		.scope(|ui| {
+			ui.spacing_mut().button_padding.x = AUTO_PADDING;
+			ui.put(row(along.auto_start, along.auto_width, INPUT_HEIGHT), Button::new(strip.auto))
+		})
+		.inner;
+	let auto = auto.on_hover_text(strip.auto_tip);
+	super::take_activation_keys(&auto);
+	if auto.clicked() {
+		return Some(StripAction::Auto);
+	}
+	value.map(StripAction::Brightness)
+}
+
+/// Turned a quarter clockwise: a length `a` along the strip lies `a` below its top, a row's top edge on the
+/// strip's right.
+fn turned(
+	ui: &Ui,
+	rect: Rect,
+	strip: &Strip<'_>,
+	along: &Along,
+	spec: &NumberSpec,
+	focus: &mut BoxFocus,
+	(bold, caption, auto): (&FontId, &Arc<Galley>, &Arc<Galley>),
+) -> Option<StripAction> {
+	let visuals = ui.visuals().clone();
+	let text = visuals.text_color();
+	let painter = ui.painter_at(rect);
+	let span = |from: f32, length: f32| {
+		Rect::from_min_max(pos2(rect.left(), rect.top() + from), pos2(rect.right(), rect.top() + from + length))
+	};
+	// a text at `from` along, centred across the strip
+	let write = |galley: Arc<Galley>, from: f32, color: Color32| {
+		let across = (ROW_HEIGHT - galley.size().y) / 2.;
+		let at = pos2(rect.right() - across, rect.top() + from);
+		painter.add(TextShape::new(at, galley, color).with_angle(FRAC_PI_2));
+	};
+	write(galley(ui, strip.title, bold.clone(), along.layout.title_width), 0., text);
+	if along.layout.caption {
+		write(caption.clone(), along.box_start - CAPTION_MARGIN - caption.size().x, text);
+	}
+
+	let face = span(along.box_start, BOX_WIDTH).shrink2(vec2((ROW_HEIGHT - INPUT_HEIGHT) / 2., 0.));
+	let turned =
+		number_box::turned(ui, face, strip.id, strip.brightness, spec, strip.caption, *focus != BoxFocus::Idle);
+	turned.response.clone().on_hover_text(strip.hint);
+	let mut action = turned.applied.map(StripAction::Brightness);
+	if turned.open {
+		*focus = BoxFocus::Asked;
+	}
+
+	let auto_rect = span(along.auto_start, along.auto_width);
+	let auto_response = ui.interact(auto_rect, strip.id.with("auto"), Sense::click()).on_hover_text(strip.auto_tip);
+	let look = visuals.widgets.style(&auto_response);
+	painter.rect(auto_rect, 0., look.weak_bg_fill, look.bg_stroke, StrokeKind::Inside);
+	write(auto.clone(), along.auto_start + AUTO_PADDING, look.text_color());
+	auto_response.widget_info(|| WidgetInfo::labeled(Role::Button, true, strip.auto));
+	super::take_activation_keys(&auto_response);
+	if auto_response.clicked() {
+		action = Some(StripAction::Auto);
+	}
+
+	let area_id = strip.id.with("upright");
+	if *focus == BoxFocus::Asked && AreaState::load(ui.ctx(), area_id).is_some() && !focus_taken_back(ui) {
+		ui.memory_mut(|m| m.request_focus(strip.id));
+		*focus = BoxFocus::Upright;
+	}
+	if *focus != BoxFocus::Idle {
+		let at = Rect::from_center_size(face.center(), vec2(BOX_WIDTH, INPUT_HEIGHT));
+		let area = egui::Area::new(area_id).order(Order::Foreground).fixed_pos(at.min);
+		let edited = area
+			.show(ui.ctx(), |ui| number_box::number_box(ui, at, strip.id, strip.brightness, spec, false, strip.caption))
+			.inner;
+		edited.offer_opt(ui.ctx(), strip.id, strip.event);
+		let response = edited.response;
+		action = action.or(edited.applied.map(StripAction::Brightness));
+		match *focus {
+			BoxFocus::Asked => ui.ctx().request_repaint(),
+			BoxFocus::Upright if !response.has_focus() && !ui.memory(|m| m.has_focus(strip.id)) => {
+				*focus = BoxFocus::Idle;
+			}
+			BoxFocus::Upright | BoxFocus::Idle => {}
+		}
+	}
+	action
+}

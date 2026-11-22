@@ -27,7 +27,7 @@ program next to its releases and issues and needs no rebuild to change.
 ## Consequences
 
 - The browser wasm went from 22.0 MB raw / 7.5 MB gzip to 19.0 MB / 5.7 MB (`tools/build-web.sh`, `gzip -9`).
-- Links open through `platform::open` (`wavedude-app-state`): natively the system's handler through the `opener`
+- Links open through `platform::open` (`waveduderust_app`): natively the system's handler through the `opener`
   crate, in the browser a new tab.
 - egui_commonmark stays for the About dialog's license text; egui_extras' image loader for the About icon.
 - The docs no longer ask for a manual update with a user-visible change.

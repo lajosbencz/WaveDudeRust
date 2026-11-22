@@ -8,9 +8,9 @@ Rules for all model objects:
   bounds unless the bound depends on another value ("dependent" below).
 - `Normalize()` runs after load, after import, before a run, and after every edit. Non-finite numbers become the
   default unless stated.
-- Rust: the bounds are the constants of [`model/ranges.rs`](../../crates/wavedude-core/src/model/ranges.rs), which `normalize` and the painter's limits use; a
+- Rust: the bounds are the constants of [`model/ranges.rs`](../../crates/waveduderust/src/model/ranges.rs), which `normalize` and the painter's limits use; a
   non-finite number's fallback is the type's `Default` value.
-- Rust: each model type derives `Fields` (`wavedude-model-derive`, decision 0013): a `<Type>Field` enum with one member
+- Rust: each model type derives `Fields` (`waveduderust_macros`, decision 0013): a `<Type>Field` enum with one member
   per field, the PascalCase of the field's name (`BoxWidth`, `Ax`, `R1`), a nested field being a member that wraps
   the nested type's (`Material(MaterialField)`), and a `<Type>Edit` enum with the same members carrying the new
   value. `Field::all()` lists every leaf of a type and is the model's table: forms, labels, hints, bounds and the
@@ -87,6 +87,8 @@ Level 100, c = 1, scale 2: 16.0 px. The editor's estimate uses `c = WaveSpeed`; 
 `c = 1` with their `DesignFrequency`.
 
 ## Display (`Model/Display.cs`)
+
+In Rust `model::View`, beside the `Project`: io loads and saves the two together.
 
 | XML | Type | Default | Range / notes |
 |---|---|---|---|
@@ -221,7 +223,7 @@ StableHash(s): h = 2166136261u32; for each UTF-16 code unit c: h = (h ^ c) * 167
 Xorshift32(x): x ^= x << 13; x ^= x >> 17; x ^= x << 5
 ```
 Stream argument for sources is `StableHash(Name)` widened to u64; a diffuser's roughness draws its phases from
-`Pcg32(seed, StableHash(Name) ^ 0x44494646)`, one `NextDouble` per possible component (13) in order ([`model/profiled.rs`](../../crates/wavedude-core/src/model/profiled.rs)),
+`Pcg32(seed, StableHash(Name) ^ 0x44494646)`, one `NextDouble` per possible component (13) in order ([`model/profiled.rs`](../../crates/waveduderust/src/model/profiled.rs)),
 so the seed is part of the scene while a diffuser is enabled (`SceneKey`).
 
 ## Probe (`Model/Probe.cs`)
@@ -290,7 +292,7 @@ Shared constants: refractive index range 1..2.55, rounded to 0.01 (round even), 
 | `Diffuser` | Diffuser | Coated shape | shape props; `Length` 50 (>= 1); `Width` 500 (>= 2); `CenterWavelength` 16 (2..10000); `Amplitude` 1 (0..10000); `Sigma` 6 (0..10000). A new one coats its back alone |
 | `InterferenceFilter` | Interference filter | Coated shape | shape props (`BackCoated` alone counts); `Length` 50 (>= 1); `Width` 500 (>= 1); `Layer` children (`Thickness` 2 (0..1000, 0.01), `RefractiveIndex` 1.5), the outermost first. A new one is a quarter-wave stack for 16 px: five pairs 2.00 at 2.00 px then 1.50 at 2.67 px and one more 2.00 |
 | `SimpleGrating` | Grating | Coated shape (the coating is carried for the file and never painted or shown: the dots have no faces) | `Mirror` (a new one is one), `RefractiveIndex`, `Absorption`, `AbsorptionRamp`; `Columns` 1 (>= 1); `Rows` 31 (>= 1); `ColumnSpacing`, `RowSpacing` 16 (>= 2); `Diameter` 2 (1 to half the smaller spacing, clamped in `normalize`) |
-| `MetaLens`, `MetaPrism`, `MetaAxicon` | Meta lens, Meta prism, Meta axicon | Coated shape (`FrontCoated` the ridge tops, `BackCoated` the plate's back; sides not offered) | shape props; `Length` 50 (>= 1); `Width` 500 (>= 2); `DesignFrequency` 50 (1..255); `Pitch` 4 (1..10000); `Height` 32 (1..10000); `PatternIndex` 2 (1..2.55); the lens `FocalLength` 500 (>= 1), `LensType` Converging/Diverging; the prism `Deflection` 20 (-89..89); the axicon `ConeAngle` 10 (0.1..89). Rust: one `MetaSurface` kind with a `design` ([`model/meta.rs`](../../crates/wavedude-core/src/model/meta.rs)) |
+| `MetaLens`, `MetaPrism`, `MetaAxicon` | Meta lens, Meta prism, Meta axicon | Coated shape (`FrontCoated` the ridge tops, `BackCoated` the plate's back; sides not offered) | shape props; `Length` 50 (>= 1); `Width` 500 (>= 2); `DesignFrequency` 50 (1..255); `Pitch` 4 (1..10000); `Height` 32 (1..10000); `PatternIndex` 2 (1..2.55); the lens `FocalLength` 500 (>= 1), `LensType` Converging/Diverging; the prism `Deflection` 20 (-89..89); the axicon `ConeAngle` 10 (0.1..89). Rust: one `MetaSurface` kind with a `design` ([`model/meta.rs`](../../crates/waveduderust/src/model/meta.rs)) |
 | `FacettedGrating` | Facetted grating | Coated shape | shape props (the coating's `BackCoated` alone counts); `Length` 50; `Width` 500; `Pattern` Sawtooth/SquareWave/Sinusoidal; `Pitch` 32 (2..10000); `Amplitude` 4 (0..10000) |
 | `Fiber` | Fiber | Coated | `CoreIndex` 1.5; `CoreDiameter` 20 (>= 2); `CladdingIndex` 1.45; `CladdingThickness` 10 (>= 0); `Absorption` 0; `AbsorptionRamp` 10; `Ends` Flat/Round (Flat); `Node` children |
 | `BraggReflector` | Bragg reflector | part | `Pairs` 10 (1..200); `Thickness1` 10; `Thickness2` 10; `Index1` 1.5; `Index2` 2.0; `Width` 200 |
@@ -364,7 +366,7 @@ to the spaced name. A missing scheme renders as `Grey` (stops 0: #000000, 1: #FE
 and the layer when a project is opened, the user's schemes change, an export or a CLI run colours the layer
 (`SchemeStore::check`, `resolve_layer`), never per picture.
 
-User schemes (WaveDudeRust, [`user_schemes.rs`](../../crates/wavedude-app-state/src/user_schemes.rs)): a project scheme
+User schemes (WaveDudeRust, [`user_schemes.rs`](../../crates/waveduderust_app/src/user_schemes.rs)): a project scheme
 is added to or removed from the user's schemes from the UI ([ui/20](../ui/20-project-tree.md), [ui/30](../ui/30-properties-pane.md)).
 They are `ColorSchemes/<stem>.wdscheme` in the config folder natively and in the page's `localStorage` in the browser;
 `.wdscheme` and Wave Dude 2D `.json` files placed there load too. The CLI's `run` and `export` load the same folder

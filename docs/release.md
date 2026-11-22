@@ -54,10 +54,10 @@ cargo packager signer generate --path wavedude-updater.key
 
 The `.pub` file's content is `UPDATER_PUBKEY`, the key file's content `UPDATER_PRIVATE_KEY`.
 
-crates.io publishing is off: every crate is `publish = false`. `wavedude-model-derive`, `wavedude-core`, `wavedude-view` and `wavedude-export` are ready
-for it (each names the versions of the others it uses, which the release PR keeps in step); turning it on means dropping their `publish = false` and a job in
-[`release.yml`](../.github/workflows/release.yml) after `release` running `cargo publish -p wavedude-model-derive`, then `-p wavedude-core`,
-`-p wavedude-view` and `-p wavedude-export` in that order, with the repository as their trusted
+crates.io publishing is off: every crate is `publish = false`. The library's API is not ready
+([decision 0031](decisions/0031-modular-core-and-frontends.md)); once it is, turning publishing on means dropping `publish = false` and a job in
+[`release.yml`](../.github/workflows/release.yml) after `release` running `cargo publish -p waveduderust_macros`, then `-p waveduderust`,
+in that order, with the repository as their trusted
 publisher (crates.io > crate > Settings > Trusted Publishing; a token only for each crate's first publish).
 
 - Settings > Pages: source GitHub Actions; [`pages.yml`](../.github/workflows/pages.yml) deploys `site/` from the default
@@ -82,8 +82,8 @@ publisher (crates.io > crate > Settings > Trusted Publishing; a token only for e
 On Windows and macOS:
 
 ```sh
-cargo build --release -p wavedude-app -p wavedude-cli
-cargo packager --release -p wavedude-app --formats nsis   # or app,dmg
+cargo build --release -p waveduderust_classic -p waveduderust_cli
+cargo packager --release -p waveduderust_classic --formats nsis   # or app,dmg
 ```
 
 On Linux, in the release's build container ([`.github/build/linux.Dockerfile`](../.github/build/linux.Dockerfile), [decision 0011](decisions/0011-releases-and-updates.md)),
@@ -96,8 +96,8 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:$PWD" -w "$PWD" -e CARGO_TAR
   -e NO_STRIP=true -e APPIMAGE_EXTRACT_AND_RUN=1 wavedude-build sh -ec '
     rustup toolchain install
     cargo install --locked cargo-packager@0.11.8
-    cargo build --release -p wavedude-app -p wavedude-cli
-    cargo packager --release -p wavedude-app --formats appimage
+    cargo build --release -p waveduderust_classic -p waveduderust_cli
+    cargo packager --release -p waveduderust_classic --formats appimage
     .github/build/glibc-floor.sh target/linux/release/wavedude-app target/linux/release/wavedude-cli target/packages/*.AppImage'
 ```
 
@@ -109,26 +109,26 @@ environment the build has no updater.
 
 ## Icons
 
-[`crates/wavedude-app/assets/icon.svg`](../crates/wavedude-app/assets/icon.svg) is the master; [`assets/icons/`](../crates/wavedude-app/assets/icons/) holds what is rendered from it, committed beside
-it: the PNG sizes 16 to 512 (the Linux icon theme, the window and the About dialog), [`icon.ico`](../crates/wavedude-app/assets/icons/icon.ico) with 16 to 256 (the
-Windows executable through [`build.rs`](../crates/wavedude-app/build.rs), and the installers) and [`icon.icns`](../crates/wavedude-app/assets/icons/icon.icns) with 16 to 512 at 1x and 2x (macOS).
+[`frontends/classic/assets/icon.svg`](../frontends/classic/assets/icon.svg) is the master; [`assets/icons/`](../frontends/classic/assets/icons/) holds what is rendered from it, committed beside
+it: the PNG sizes 16 to 512 (the Linux icon theme, the window and the About dialog), [`icon.ico`](../frontends/classic/assets/icons/icon.ico) with 16 to 256 (the
+Windows executable through [`build.rs`](../frontends/classic/build.rs), and the installers) and [`icon.icns`](../frontends/classic/assets/icons/icon.icns) with 16 to 512 at 1x and 2x (macOS).
 cargo-packager reads them from the source tree, so the build cannot make them: after a change to the SVG, render the
 set again at those sizes and commit it with the SVG.
 
 ## File types and desktop integration
 
 `.wdproj` and `.wdscheme` are declared once per platform, all naming the MIME types of the file associations in
-[`crates/wavedude-app/Cargo.toml`](../crates/wavedude-app/Cargo.toml):
+[`frontends/classic/Cargo.toml`](../frontends/classic/Cargo.toml):
 
 - Windows: the NSIS installer offers the ProgIds `WaveDudeRust.Project` and `WaveDudeRust.ColorScheme` (the
   associations' `name`) as an unticked component, ticked when an earlier install registered them: an unsigned
   installer that changes file associations unasked is flagged by Defender. The template is cargo-packager 0.11.8's
-  with that change, [`assets/windows/installer.nsi`](../crates/wavedude-app/assets/windows/installer.nsi); its
+  with that change, [`assets/windows/installer.nsi`](../frontends/classic/assets/windows/installer.nsi); its
   uninstaller removes the associations still pointing at the app (the stock one loops over `association.ext`, a
   field that does not exist). A cargo-packager bump means diffing the template again.
-- macOS: [`assets/macos/Info.plist`](../crates/wavedude-app/assets/macos/Info.plist), merged over cargo-packager's, exports the two types and names them in the document
+- macOS: [`assets/macos/Info.plist`](../frontends/classic/assets/macos/Info.plist), merged over cargo-packager's, exports the two types and names them in the document
   types. The Finder hands a file to the running app as `application:openURLs:`, which the app delegate of
-  [`src/open_requests.rs`](../crates/wavedude-app/src/open_requests.rs) queues for the window.
-- Linux: [`assets/linux/wavedude-rust.xml`](../crates/wavedude-app/assets/linux/wavedude-rust.xml) (shared-mime-info) maps the globs to the MIME types the `.desktop` file names;
-  the AppImage carries it, and the tarball carries it with [`wavedude-app.desktop`](../crates/wavedude-app/assets/linux/wavedude-app.desktop), the icon theme PNGs and [`install.sh`](../crates/wavedude-app/assets/linux/install.sh),
+  [`open_requests.rs`](../crates/waveduderust_app/src/open_requests.rs) queues for the window.
+- Linux: [`assets/linux/wavedude-rust.xml`](../frontends/classic/assets/linux/wavedude-rust.xml) (shared-mime-info) maps the globs to the MIME types the `.desktop` file names;
+  the AppImage carries it, and the tarball carries it with [`wavedude-app.desktop`](../frontends/classic/assets/linux/wavedude-app.desktop), the icon theme PNGs and [`install.sh`](../frontends/classic/assets/linux/install.sh),
   which installs them under `PREFIX` (default `~/.local`) and removes them with `--uninstall`.

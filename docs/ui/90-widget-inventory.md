@@ -1,7 +1,7 @@
-# Widget inventory of `wavedude-app` (egui)
+# Widget inventory of `waveduderust_classic` (egui)
 
 Derived from files 00..80. Each widget: required behaviours, then what it is built on in
-[`crates/wavedude-app/src/ui`](../../crates/wavedude-app/src/ui/) (decision 0019).
+[`frontends/classic/src/ui`](../../frontends/classic/src/ui/) (decision 0019).
 
 Cross-cutting requirements for every widget:
 - Keyboard first: focusable where interactive, visible focus (accent border), Tab order = visual order.
@@ -44,8 +44,8 @@ Behaviours:
 - Keyboard: Esc closes a level; first entry focused when opened by keyboard.
 - A click outside while open closes and still lands on its target (incl. window title bar where the platform
   allows).
-Base: egui's menus and context menus; the icon and shortcut columns, mnemonics and key walk are the app's
-(`menu_bar.rs`, `menu_keys.rs`).
+Base: the classic kit's menus (`kit/menu.rs`) over egui_mineral's menubar, mnemonic and anchor models; the
+bar's entries come from `menu_bar.rs`.
 Port: an entry carries a typed action (the app's `MenuAction`, the preview's `PictureMenu`) beside its string
 test id; activation reports the action, never the id.
 
@@ -64,7 +64,9 @@ Behaviours:
 - Drag source (row, not its buttons) carrying text; drop target with insertion feedback: line above/below a row
   (by half), outline around a folder; claims only drags it accepts.
 - Per-row context menu with the node as target.
-Base: own rows in a ScrollArea, egui's drag and drop payloads (`tree.rs`).
+Base: the classic kit's tree (`kit/tree.rs`) over egui_mineral's tree model (rows, keys, move validity, reveal),
+with Next's drop slots (a folder row takes the whole drop); the rows' content, the selection and the drop rule come
+from `tree.rs`.
 
 ## 4. Toolbar buttons
 
@@ -75,15 +77,16 @@ Base: own painted buttons (`tree.rs`, `preview/transport.rs`).
 ## 5. Property form (form panel and rows)
 
 Behaviours:
-- Two-column layout: label column as wide as the widest label (min width), editors fill the rest; full-width rows.
-- Rows at a 28 px pitch (24 px row, 4 px spacing) as WPF lays out its 23 px editors.
+- Two-column layout per section: label column as wide as the section's widest label (min width), editors fill
+  the rest; full-width rows.
+- Rows as high as their editors (at least 22 px, a line for read-outs), 4 px apart.
 - Section headers (name over a rule); gaps after groups.
 - Conditional enable (greyed) and visibility per row.
 - Read-out rows (text bound to several inputs).
 - Repeated row lists with per-row remove button and an Add button (points, nodes, stops).
 - Collapsible description header with chevron (Space toggles, persisted).
 - Vertical scroll, never horizontal; caret into the first text box on a new item.
-Base: own two-column layout in a ScrollArea (`properties/`).
+Base: the kit's form grid on egui-mineral's `LabelColumn` (`kit/form.rs`) in a ScrollArea (`properties/`).
 
 ## 6. Text box
 
@@ -107,7 +110,8 @@ Behaviours:
 - Look: 22 px, padding 3,2, 1 px border (hover, focus accent), 14 px spin column with 4 x 2 chevrons, hover and
   pressed backgrounds; disabled: window background, grey text, no spin buttons.
 - Writes through to the bound value on every step; selects text after a step.
-Base: egui's TextEdit with own steps, drag and spin buttons (`number_box.rs`).
+Base: the kit's box (`kit/number.rs`) on egui-mineral's `NumberEdit` and `RangeModel` (stepping, scrub, parse,
+clamp), egui's TextEdit for the text; `ui/number_box.rs` adapts a `NumberSpec` and the pending edit.
 
 ## 8. Check box, combo box, editable combo
 
@@ -183,7 +187,7 @@ Base: own layout, turned text shapes and an upright editing Area (`preview/heade
 
 Behaviours: two cells side by side or stacked; 4 px splitter, tab stop, arrows move 10 px, Enter/double-click
 resets to half; collapses when one cell is hidden and restores the split.
-Base: own splitter (`preview/mod.rs`).
+Base: the kit's splitter (`kit/split.rs`) on egui-mineral's `Splitter` (drag, limits, reset).
 
 ## 17. Timeline
 
@@ -209,13 +213,14 @@ Base: egui's tooltips (`on_hover_text`) in the app's visuals.
 
 Behaviours: dim rectangle (45 % black) + spinner (three-quarter ring, one turn per second) over the pictures after a
 150 ms delay, not hit-testable; status bar progress bar determinate/indeterminate.
-Base: painted dim and spinner (`preview/picture.rs`), own progress bar (`status_bar.rs`).
+Base: painted dim and spinner (`preview/picture.rs`), the kit's status bar progress (`kit/status.rs`).
 
 ## 21. Status bar
 
 Behaviours: left log line with background/foreground switching for warn/error; right run status; far-right busy
 text + bar; tooltip; double-click opens Messages; resize grip corner.
-Base: own row in egui's bottom panel (`status_bar.rs`).
+Base: the kit's bar (`kit/status.rs`) on egui-mineral's `StatusItem`, strip placement, `Tone` and window grip, in
+egui's bottom panel (`status_bar.rs`).
 
 ## 22. Message list (Messages pane)
 
@@ -224,14 +229,15 @@ clear; columns Time/Level/Source/Message with resizable headers; per-level row c
 Copy/Copy all/Clear; 5000-entry ring buffer with batched updates; virtualised rows; row tooltip. The visible
 lines are kept as ids per (log revision, filter), so a hover or a selection change neither copies lines nor
 compiles the search again.
-Base: own columns and virtualised rows in a ScrollArea (`messages/`).
+Base: the kit's table (`kit/table.rs`) on egui-mineral's `ColumnWidths`, `VirtualList` and `RowStyle` (`messages/`).
 
 ## 23. Dialog window
 
 Behaviours: modal owned window with themed title bar, icon disc, wrapped text, button sets with default/cancel,
 mnemonics without Alt; sized to content; zoomed. Also used for the memory warning (check boxes with greyed states,
 live result line) and About (links, collapsible document, read-only text, copy).
-Base: egui's Modal over the window (`modal.rs`).
+Base: egui-mineral's modal layer with the kit's frame, title, message body and button row (`kit/dialog.rs`); the
+queue and focus give-back in `modal.rs`.
 
 ## 24. Document viewer (license)
 

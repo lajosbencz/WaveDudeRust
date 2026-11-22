@@ -91,7 +91,7 @@ a 32 px wavelength.
 
 ## The live run
 
-2026-11-12, `cargo test -p wavedude-core --test run --release -- --ignored --nocapture ignored_timing::live_run_drag_burst_timing`:
+2026-11-12, `cargo test -p waveduderust --test run --release -- --ignored --nocapture ignored_timing::live_run_drag_burst_timing`:
 Example16 at half resolution, 8-bit samples, on the GPU; the source moved by a pixel 120 times at 32 edits a
 second, the position at frame 100; the position's frame alone wanted, and every frame (the 50 stored frames
 before the position captured on the way).
@@ -103,7 +103,7 @@ before the position captured on the way).
 | the final frame after the last edit | under 1 ms | 10 ms (0.5 frame times) | 25 ms (0.4 frame times) |
 
 A part edit recomposes the scene and gives the engine the new medium. Where the time goes
-(`cargo test -p wavedude-core --test run --release -- --ignored --nocapture ignored_timing::part_edit_cost`, Example16, 1500x900
+(`cargo test -p waveduderust --test run --release -- --ignored --nocapture ignored_timing::part_edit_cost`, Example16, 1500x900
 canvas): composing the scene pixels 4.9 ms, the medium from them 2.7 ms, the GPU engine taking the new scene
 7.5 ms. The sub-step medium takes its damping root and its table index once per run of equal cells; taken per
 cell, the GPU engine needed 31.6 ms, a part moved took 88 ms a frame and showed 1 frame of the 120 edits.
@@ -200,7 +200,7 @@ on the job's thread.
 
 Burned-in overlays as epaint meshes, 2026-11-13: every overlay on both layers,
 ```
-wavedude-cli export crates/wavedude-core/tests/fixtures/examples/Example02_Coherent_source_gaussian_beam.wdproj \
+wavedude-cli export crates/waveduderust/tests/fixtures/examples/Example02_Coherent_source_gaussian_beam.wdproj \
   --out ex2.avi --steps 1000 --from 600 --to 1000 --layers both --markers --graphs --source-markers
 ```
 200 frames of each layer, AVI, the CLI's "ms/frame exporting", alternated with the previous CPU rasteriser (commit
@@ -209,7 +209,7 @@ d377336), three runs each, load average 6 to 14:
 | Overlays drawn by | ms a frame |
 |---|---|
 | previous CPU rasteriser (bitmaps and ab_glyph) | 3.1 to 3.4 |
-| epaint meshes rasterised on the CPU (`wavedude_export::raster`) | 3.5 |
+| epaint meshes rasterised on the CPU (`waveduderust::unstable::export::raster`) | 3.5 |
 
 The meshes' rasteriser draws bands of rows in parallel; the source markers, which do not move, are tessellated
 once; probe strokes are quads on whole pixels, without feathering. What is left over the previous rasteriser is
@@ -239,7 +239,7 @@ the 33 ms frames to 32 or 48 ms).
 
 Preview colouring, 2026-11-13, a new frame's picture of a 2880x1080 16-bit plane (Example 21's canvas) at
 1600x600 device pixels with the outline, mean of 60:
-`cargo test --release -p wavedude-core --features gpu --test colour -- --ignored --nocapture ignored_timing::preview_colouring_time`
+`cargo test --release -p waveduderust --features gpu --test colour -- --ignored --nocapture ignored_timing::preview_colouring_time`
 (`VK_ICD_FILENAMES` picks lavapipe). Before, the presenter's paint and outline blend on the CPU: 0.87 ms a
 picture, about 570 frames a second for both pictures, plus the 3.8 MB texture upload each. After, a run on the
 GPU engine: the picture set to the next device frame, drawn, submitted and waited for: 0.066 to 0.075 ms on the
@@ -324,7 +324,7 @@ rasteriser's frames between them make up the latency, not the storage.
 2026-11-14, Chrome 158 (Playwright, WebGPU through Vulkan) on Linux, RTX 5070 Ti; the app built by `tools/build-web.sh`
 into two folders served by `python3 -m http.server`: before (8ff9c44, a spilled frame read when the preview asks for it)
 and after (playback names the frames it reaches next, read ahead, then 3 named and 4 kept,
-[`crates/wavedude-core/src/run/pending.rs`](../crates/wavedude-core/src/run/pending.rs)). A temporary counter in
+[`crates/waveduderust/src/run/pending.rs`](../crates/waveduderust/src/run/pending.rs)). A temporary counter in
 `FrameSource::with_plane_into` logged each second the frames shown (first plane handed out) and the frames refused as
 pending at least once (shown stale, the picture before held). A new project (1920x1080, 2500 steps) at the welcome
 page's High preview, run with F5, the memory warning's choices unticked: 1250 frames of 8.3 MB, 258 in memory and 992
@@ -386,7 +386,7 @@ each pump.
 | Chrome, High | 120 | 1.0 | 1900 | 0.06 |
 
 Natively the threaded run waits for the oldest capture only when the ring is full: `cargo test --release -p
-wavedude-core --test run -- --ignored --nocapture ignored_timing::live_run_drag_burst_timing`, two runs each, before / after: one frame
+waveduderust --test run -- --ignored --nocapture ignored_timing::live_run_drag_burst_timing`, two runs each, before / after: one frame
 of Example16 25 to 31 / 23 to 25 ms (source moved), 70 to 87 / 60 to 64 ms (part moved); 118 to 120 / 120 of 120 frames
 shown with every frame wanted.
 
@@ -412,14 +412,14 @@ is acknowledged meanwhile.
 | Messages page to worker / worker to page while idle, after a run | | none / none in 13 s |
 
 After, the run lands a capture read back only below the spill's writes in flight, the frames posted and not
-acknowledged ([`crates/wavedude-core/src/run/pending.rs`](../crates/wavedude-core/src/run/pending.rs)):
+acknowledged ([`crates/waveduderust/src/run/pending.rs`](../crates/waveduderust/src/run/pending.rs)):
 with 4 the lighthouse took 2.0 to 2.2 s, with 16 (the GPU engine's largest capture ring) 1.2 to 1.5 s, with no
 bound 1.0 s. The GPU's submissions are paced on `on_submitted_work_done`, two on the card at most; pacing by the steps
 on the card instead, as a capture every second step cuts a submission short, took the same 2.0 to 2.2 s at a bound of 4.
 
 Writes in flight by bytes, 2026-11-14, same machine and browser: the build of 7c13719 (16 writes in flight for every
 frame size) against a byte budget of 64 MiB, at least one frame, at most 16
-([`crates/wavedude-core/src/run/store.rs`](../crates/wavedude-core/src/run/store.rs), `StoreLayout::writes_in_flight`),
+([`crates/waveduderust/src/run/store.rs`](../crates/waveduderust/src/run/store.rs), `StoreLayout::writes_in_flight`),
 each built by `tools/build-web.sh` into its own folder and served by `python3 -m http.server` on its own port. Each run
 on a fresh page with the settings cleared (`localStorage.clear()`), the welcome page's High preview kept; the time is
 the app's `Run Completed` line. The lighthouse as above (F5, the warning's 8-bit samples, 1.4 MB frames: 16 writes in
@@ -468,7 +468,7 @@ played 600 frames at the 60 fps clock in both; two passes each.
 | Per played frame | 4.4 to 4.5 ms | 2.0 ms |
 
 The last frame's pictures, screenshotted in both, differ by at most 1 of 255 in 1.6 % of the pixels: the card's fused
-multiply-adds moving the resampling at an f16 rounding boundary (`wavedude_core::render::gpu`).
+multiply-adds moving the resampling at an f16 rounding boundary (`waveduderust::unstable::render::gpu`).
 
 ## The idle window
 

@@ -1,0 +1,37 @@
+[package]
+name = "waveduderust_egui_platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "WaveDude egui start-up and OS integration: keys, input, clipboard, theme, window place, menu icons, number ranges, file dialogs and tasks"
+
+[lints]
+workspace = true
+
+[dependencies]
+# egui and the wgpu renderer, whose device the engines share natively and the pictures are coloured on; winit's
+# backends so the crate builds on its own.
+eframe = { version = "=0.37.0", default-features = false, features = ["wayland", "wgpu", "x11"] }
+# The menus' icons.
+egui_material_icons = { version = "=0.9.0", default-features = false, features = ["outline"] }
+# The tasks' bus, the file pickers, the runtime whose theme and locale follow the settings, the number boxes' range model.
+egui_mineral = { version = "0.12.0", default-features = false, features = ["icu", "platform-pickers"] }
+tracing.workspace = true
+waveduderust_app = { path = "../waveduderust_app" }
+waveduderust = { path = "../waveduderust", default-features = false, features = ["unstable-engine", "unstable-reflect", "unstable-view", "gpu", "run", "view"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Reads the clipboard for Paste's enabled state and its menu entry; egui reads it only for its paste key.
+arboard = { version = "3.6", default-features = false }
+# Runs each task on a thread of its own.
+pollster.workspace = true
+mundy = { version = "0.2.3", default-features = false, features = ["async-io", "callback", "color-scheme"] }
+# The window's place.
+winit = { version = "0.30", default-features = false }
+
+# The clipboard read for Paste awaits the browser.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures.workspace = true

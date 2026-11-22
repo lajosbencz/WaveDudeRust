@@ -1,0 +1,119 @@
+[package]
+name = "waveduderust_classic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "A 2D wave simulator, with the classic egui window"
+
+[[bin]]
+name = "wavedude-app"
+path = "src/main.rs"
+
+[features]
+# OpenH264 compiled in instead of Cisco's downloaded binary: for development and tests, not for distributed builds.
+openh264-source = ["waveduderust/openh264-source"]
+# Live patching under `dx serve --hotpatch` (`just hot classic`) through egui-mineral's runtime pass: not in any
+# default graph.
+hotpatch = ["egui_mineral/unstable-hotpatch"]
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+# The window, its widgets and the wgpu renderer, whose device the engines share natively and the preview colours on.
+eframe = { version = "=0.37.0", default-features = false, features = ["accesskit", "clipboard", "wayland", "wgpu", "x11"] }
+# The license texts as Markdown.
+egui_commonmark = { version = "=0.26.0", default-features = false, features = ["pulldown_cmark"] }
+# The UI runtime the classic kit (src/kit) is a stylekit of.
+egui_mineral = { version = "0.12.0", default-features = false, features = ["icu", "platform-pickers"] }
+# The image loader of the bundled PNGs (the About icon); eframe enables `image`'s PNG decoder.
+egui_extras = { version = "=0.37.0", default-features = false, features = ["image"] }
+# The menus' icons.
+egui_material_icons = { version = "=0.9.0", default-features = false, features = ["outline"] }
+# The dock of panes around the Preview; its arrangement saves as JSON in the settings.
+egui_tiles = "=0.18.0"
+# The drawn icons' SVG path data, flattened for epaint (epaint's own dependency).
+# The Markdown's code blocks, cut out of what egui_commonmark draws.
+pulldown-cmark = { version = "0.13", default-features = false }
+serde_json.workspace = true
+tracing.workspace = true
+waveduderust_app = { path = "../../crates/waveduderust_app" }
+waveduderust = { path = "../../crates/waveduderust", default-features = false, features = ["unstable-engine", "unstable-export", "unstable-reflect", "unstable-run", "unstable-scene", "gpu", "run", "export"] }
+waveduderust_egui_platform = { path = "../../crates/waveduderust_egui_platform" }
+waveduderust_egui_preview = { path = "../../crates/waveduderust_egui_preview" }
+waveduderust_examples = { path = "../../crates/waveduderust_examples" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rfd = "0.18"
+
+# The event loop the macOS application delegate is set on.
+[target.'cfg(target_os = "macos")'.dependencies]
+winit = { version = "0.30", default-features = false }
+
+# The page's entry awaits eframe's start; the page itself is reached through eframe's `web_sys`.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures.workspace = true
+
+[build-dependencies]
+waveduderust_icon_subset = { path = "../../crates/waveduderust_icon_subset" }
+
+# The executable's icon and names in Explorer (build.rs); cargo-packager does not embed them.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[dev-dependencies]
+# The window driven headless on wgpu, through AccessKit.
+egui_kittest = { version = "=0.37.0", features = ["eframe", "wgpu"] }
+# Writes the scene images of tests/dialogs.rs.
+image = { workspace = true, features = ["png"] }
+tempfile.workspace = true
+# `AppState` on the fake backend in unit tests.
+waveduderust_app = { path = "../../crates/waveduderust_app", features = ["test-support"] }
+
+# Installers (decision 0011) of the built programs:
+# `cargo build --release -p waveduderust_classic -p waveduderust_cli && cargo packager --release -p waveduderust_classic --formats <format>`.
+[package.metadata.packager]
+product-name = "WaveDude Rust"
+identifier = "io.github.lajosbencz.wavedude-rust"
+category = "Education"
+authors = ["Lajos Bencz"]
+publisher = "Lajos Bencz"
+homepage = "https://github.com/lajosbencz/WaveDudeRust"
+copyright = "Copyright (C) 2026 Lajos Bencz"
+license-file = "../../LICENSE.md"
+icons = ["assets/icons/*"]
+out-dir = "../../target/packages"
+binaries = [{ path = "wavedude-app", main = true }, { path = "wavedude-cli" }]
+# `name` is the Windows ProgId (no spaces); macOS takes its document types from assets/macos/Info.plist.
+file-associations = [
+	{ extensions = ["wdproj"], mime-type = "application/x-wavedude-project+xml", description = "WaveDude project", name = "WaveDudeRust.Project", role = "editor" },
+	{ extensions = ["wdscheme"], mime-type = "application/x-wavedude-scheme+xml", description = "WaveDude colour scheme", name = "WaveDudeRust.ColorScheme", role = "editor" },
+]
+
+[package.metadata.packager.nsis]
+installer-icon = "assets/icons/icon.ico"
+# The stock template with the file associations opt-in.
+template = "assets/windows/installer.nsi"
+
+# Ad-hoc signature: an unsigned bundle on Apple silicon is reported as damaged instead of unverified.
+[package.metadata.packager.macos]
+signing-identity = "-"
+# Merged over cargo-packager's: the exported types and the document types that name them.
+info-plist-path = "assets/macos/Info.plist"
+
+# The MIME types the .desktop file names, for desktop integration of the AppImage, and the X11 client libraries winit
+# dlopens, which linuxdeploy cannot find; the GPU stack (Vulkan, EGL, GL) stays the host's. The libraries are the
+# build image's (.github/build/linux.Dockerfile), placed in usr/lib, where linuxdeploy bundles their dependencies
+# too; it skips usr/lib64, where `libs` would put them.
+[package.metadata.packager.appimage.files]
+"assets/linux/wavedude-rust.xml" = "usr/share/mime/packages/wavedude-rust.xml"
+"/usr/lib64/libxkbcommon.so.0" = "usr/lib/libxkbcommon.so.0"
+"/usr/lib64/libxkbcommon-x11.so.0" = "usr/lib/libxkbcommon-x11.so.0"
+"/usr/lib64/libxcb-xkb.so.1" = "usr/lib/libxcb-xkb.so.1"
+"/usr/lib64/libXcursor.so.1" = "usr/lib/libXcursor.so.1"
+"/usr/lib64/libXi.so.6" = "usr/lib/libXi.so.6"
+"/usr/lib64/libXrandr.so.2" = "usr/lib/libXrandr.so.2"

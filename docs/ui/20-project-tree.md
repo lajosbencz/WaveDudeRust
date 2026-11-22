@@ -52,7 +52,8 @@ Sources, Parts, Probes, Colour schemes); item rows show the item's Name.
 ### Item row
 
 Left to right: Enabled check box (sources, parts; Active for probes; none for schemes), kind icon, name,
-then right-aligned glyph buttons Move up, Move down, Remove (18 x 18 px).
+then right-aligned glyph buttons Move up, Move down, Remove (18 x 18 px); Move up and Move down are greyed and
+inert where the item cannot move.
 - Row check box and row buttons are not focusable and not tab stops (toolbar, keys and context menu cover
   them). Tooltips: "Include the source in runs (Space on the row toggles it)", "Paint the part into the scene
   (Space on the row toggles it)", "Sample this probe (Space on the row toggles it)", Move up/down, Remove.
@@ -90,14 +91,15 @@ always a member of the list. Properties shows the current item.
 | Shift+click, Shift+arrows | Range from the anchor (last plain selection) to the row, in tree order (sources, parts, probes as one sequence). |
 | Insert, Ctrl+Space | Toggle the focused row; when the current item is taken out, the current moves to the last one left. |
 | Ctrl+A | Every source, part and probe; the last becomes current. |
-| Selection made on the pictures | Mirrored in the tree; the tree row does not take focus (the handle keeps it, so Tab continues through handles). |
+| Selection made on the pictures | Mirrored in the tree, its row revealed (folders above it expand, it scrolls into view); the tree row does not take focus (the handle keeps it, so Tab continues through handles). |
 | Click on empty preview space | Deselects; the tree lets go too. |
 | A project opened (New, Open, an example, start-up) | The root row alone: the Properties pane shows the Project form; the tree takes the keyboard focus (requested by the tree once its rows are laid out, no timer). |
 
-Highlight: current row = selection colour (inactive-selection colour when the tree lacks focus, standard
-behaviour); other selected rows = inactive-selection colours. Groups, the root and settings rows can be
-current; sources, parts, probes and colour schemes join a multi-selection (schemes for cut, copy, delete,
-duplicate; a group move ignores them; decision 0008).
+Highlight (from the row's header, after its expander, to the right edge): a row under the pointer = hover colour;
+current row = selection colour with white selection text while the tree has the focus, else the inactive-selection
+colour and text; other selected rows = inactive-selection colour and text; a disabled item's text stays grey.
+Groups, the root and settings rows can be current; sources, parts, probes and colour schemes join a multi-selection
+(schemes for cut, copy, delete, duplicate; a group move ignores them; decision 0008).
 
 ## Commands on the selection
 

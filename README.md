@@ -46,7 +46,7 @@ reasoning; what warrants a new one is in
 ## Releases
 
 Installers for Windows (NSIS), macOS (universal app and DMG) and Linux
-(AppImage, and a tarball with an [`install.sh`](crates/wavedude-app/assets/linux/install.sh) for the menu entry, icons and
+(AppImage, and a tarball with an [`install.sh`](frontends/classic/assets/linux/install.sh) for the menu entry, icons and
 file types; x86_64 with glibc 2.28 or newer: RHEL 8, Debian 10, Ubuntu 18.10 and
 later) are on the GitHub releases
 page, unsigned by Apple and Microsoft, so Gatekeeper and SmartScreen warn at
@@ -80,7 +80,7 @@ builds therefore carry no H.264 encoder: it is off until enabled in Settings
 or the MP4 export dialog, and the app downloads it at the first MP4 export, the CLI on
 `wavedude-cli openh264 enable`; both share the choice ([decision 0005](docs/decisions/0005-video-openh264.md)). The `openh264-source`
 feature compiles OpenH264 in for development and tests; a build made with it
-must not be distributed without an H.264 patent licence. `wavedude-export` and
+must not be distributed without an H.264 patent licence. `waveduderust::unstable::export` and
 `wavedude-cli` build without MP4 through `--no-default-features`. The browser build
 encodes MP4 with the browser's own WebCodecs encoder and downloads nothing.
 
@@ -88,7 +88,7 @@ encodes MP4 with the browser's own WebCodecs encoder and downloads nothing.
 
 [`docs/spec`](docs/spec) is what the core must do, [`docs/ui`](docs/ui) what the application must do,
 [`docs/decisions`](docs/decisions) why, [`docs/measurements.md`](docs/measurements.md) how fast,
-[`docs/conventions.md`](docs/conventions.md) how the code is written.
+[`docs/conventions.md`](docs/conventions.md) how the code is written, [`WORKSPACE.md`](WORKSPACE.md) the crates.
 Issues, pull requests and the acceptance criteria: [`CONTRIBUTING.md`](CONTRIBUTING.md);
 vulnerabilities: [`SECURITY.md`](SECURITY.md).
 

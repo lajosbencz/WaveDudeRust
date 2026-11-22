@@ -1,6 +1,6 @@
 # 0007 Workspace layout
 
-Status: accepted, 2026-11-05; revised 2026-11-13 ([0019](0019-egui-and-the-platform-layer.md), below)
+Status: superseded by [0031](0031-modular-core-and-frontends.md), 2026-11-21; accepted 2026-11-05, revised 2026-11-13 ([0019](0019-egui-and-the-platform-layer.md), below)
 
 One repository, one Cargo workspace, edition 2024:
 

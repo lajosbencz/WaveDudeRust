@@ -61,7 +61,7 @@ Frame rate = `Display.Video.Fps`; quality = `Display.Video.Quality` (1..100).
 
 ### Export pipeline (Rust)
 
-`wavedude_export::ExportPlan::build_job` is the one place the app and the CLI decide an export: the frame range (a still
+`waveduderust::unstable::export::ExportPlan::build_job` is the one place the app and the CLI decide an export: the frame range (a still
 beyond the run is an error; the app clamps it first), each layer's scheme (from a `SchemeStore` the caller loads),
 look and path (`_field`/`_intensity` for Both), the sinks and the overlays. The scene is composed only when a layer
 burns in its glowing edges, its one use, so the output equals always composing it. Overlays are dropped for a format
@@ -76,8 +76,8 @@ that takes the stored halves (OpenEXR).
 - Single-file video sinks (MP4, MPEG-1, AVI) run on a thread of their own fed through two recycled frame buffers.
   Image sequences and MOV samples are encoded on one encoder pool per job (at most 16 threads); MOV samples are
   written in frame order.
-- The overlays are epaint shapes (`wavedude-view`), tessellated as the window's and rasterised on the CPU into the
-  coloured frame (`wavedude_export::raster`). Pixels no overlay covers keep their bytes; a frame rasterises to the
+- The overlays are epaint shapes (`waveduderust::unstable::view`), tessellated as the window's and rasterised on the CPU into the
+  coloured frame (`waveduderust::unstable::export::raster`). Pixels no overlay covers keep their bytes; a frame rasterises to the
   same bytes every time and on every machine.
 - The CLI cancels on Ctrl+C.
 
@@ -150,14 +150,14 @@ Label font: see "Burned-in overlays" below.
   (`Quality`), no B-frames, GOP 1 s.
 - Bitrate fallback: `clamp(round_even(W*H*fps*0.01*50^(q/100)), 300000, 200000000)` bit/s.
 - Odd sizes padded to even by repeating the last row/column; maximum 4096 x 2304.
-- Rust: an H.264 encoder behind `wavedude_export::h264::H264Encoder` (opened by the plan's `H264Factory`,
+- Rust: an H.264 encoder behind `waveduderust::unstable::export::h264::H264Encoder` (opened by the plan's `H264Factory`,
   `ExportPlan::h264`) muxed by `shiguredo_mp4` (feature `mp4-mux`, which builds for the browser). The encoder takes
   4:2:0 pictures and hands back Annex B access units in decode order, each with its picture's index in display order
   (`AccessUnit`), possibly later (`poll_ready`, `start_flush`, `poll_flushed`); the sink passes this on as
   `FrameSink::poll_ready` and `poll_finish`, which the job polls before writing a frame and before finishing (not
   after a cancel). Natively the encoder is OpenH264 (feature `mp4`, decision 0005), Cisco's binary loaded at run time
-  (`OpenH264Factory`, the path from `wavedude_export::h264::library`); without one the export fails with
-  `H264Missing`. In the browser it is WebCodecs' `VideoEncoder` (`wavedude_app_state::platform::WebCodecsFactory`,
+  (`OpenH264Factory`, the path from `waveduderust_app::codec::library`, which downloads Cisco's binary); without one the export fails with
+  `H264Missing`. In the browser it is WebCodecs' `VideoEncoder` (`waveduderust_app::platform::WebCodecsFactory`,
   decision 0005): codec string `avc1.42E0LL` (Baseline), `4D00LL` (Main) or `6400LL` (High) at the lowest level `LL`
   of Table A-1 whose MaxFS, MaxMBPS and side limit hold the size and frame rate, `avc: {format: "annexb"}`, the
   bitrate above, `bitrateMode: "variable"`, `latencyMode: "quality"`, `hardwareAcceleration: "no-preference"`; a key
@@ -324,7 +324,7 @@ Graph boxes (fixed author colours, ARGB):
 | curve and readout | (255, 255, 208, 64); curve width `max(1.2, boxHeight/110)`, round joins, clipped to the plot; a single sample is a disc of radius 2 |
 
 The box shows the run's recording as it stood at the exported frame (step `frame*VisualizeEvery`). The layout is
-`ProbeGraph.Layout`'s, ported once as `graph::layout` (wavedude-view), which preview and export call through
+`ProbeGraph.Layout`'s, ported once as `graph::layout` (waveduderust::unstable::view), which preview and export call through
 `graph::layout_with`; text keeps its size at any box size (11 px, line height `h` from the font):
 
 - Visible from 40 x 30. Title row `h + 2*3` high: title at (3, 3) on the left, readout ("= v" for a point probe,

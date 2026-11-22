@@ -24,7 +24,7 @@ Pointers: `Panes/PreviewPane.xaml(.cs)`, `Controls/SceneOverlay.cs`, `Controls/P
 
 - Two picture cells: Field and Intensity. Split: side by side (columns) or stacked (rows, field above).
   User setting `PreviewOrientation`, default stacked (`Vertical`). Toggled by the transport bar's two radios.
-- Splitter between the cells: a tab stop; drag or arrow keys (10 px per key) resize; double-click or Enter
+- Splitter between the cells: a tab stop; drag or arrow keys resize; double-click or Enter
   resets to half. Tooltip "Drag or use the arrow keys to resize; double-click or Enter resets to half".
 - A hidden picture (Display layer's Preview off, or the transport toggle) gives all its room to the other; the
   splitter collapses; showing it again restores the previous split.
@@ -44,7 +44,8 @@ what follows.
   4 px above its bottom, the picture's bottom edge.
 - On its side the box edits upright over its place while it has focus (the toolkit rotates the drawing, not the
   hit testing or the text clipping); a click on it, Tab or the context menu focuses it with its text selected, its
-  arrows and the wheel step it, Auto takes clicks, Enter and Space.
+  arrows and the wheel step it, Auto takes clicks, Enter and Space. Unfocused, its turned arrows step it and a drag
+  along the strip scrubs it, as flat.
 - When short: the caption is dropped first; then the title is trimmed (ellipsis) to what the tools leave.
 - Auto: one-shot fit of the frame shown: the 99.5th percentile of |field| (or sqrt(intensity)) maps to the top
   of the colour scheme. The brightness then stays. With 8-bit samples the frame is computed once more in 16-bit
@@ -66,7 +67,7 @@ Fixed colours, not themed; preview only, never exported.
 
 ## Zoom
 
-Both pictures share one zoom over the fit (`View` in [`wavedude-app/src/preview/view.rs`](../../crates/wavedude-app/src/preview/view.rs)): the
+Both pictures share one zoom over the fit (`View` in [`waveduderust_app/src/preview/view.rs`](../../crates/waveduderust_app/src/preview/view.rs)): the
 wheel over a picture zooms in by a factor of 1.25 a notch, out by the same, never below the fit, up to 64x; the
 canvas point under the pointer stays where it is. A middle-button drag pans a zoomed view. On a touch screen a pinch
 that begins over a picture (not over a popup or dialog) zooms about the fingers' centre by the same rules, and a
@@ -179,7 +180,7 @@ emitter dots the source layer is cached as a bitmap).
   (right-aligned, in the curve's colour): "= <last value>" for a point probe, "max <value>" for a line probe.
   Numbers in three significant digits as Next writes them ("0", "1E-05", "3.08E-05"). Fixed 11 px text: the text
   does not scale with the box. Laid out by the graph layout the export uses too
-  ([`graph.rs`](../../crates/wavedude-view/src/graph.rs)), so preview and export draw the same graph.
+  ([`graph.rs`](../../crates/waveduderust/src/view/graph.rs)), so preview and export draw the same graph.
 - Position/size from the probe: Box x/y in canvas pixels; size from Box size (Tiny 200 x 100 ... Extra large,
   Custom = Box width/height). A box larger than the canvas shrinks to fit, aspect kept. Mapped with the picture's
   scale; edges on whole pixels.

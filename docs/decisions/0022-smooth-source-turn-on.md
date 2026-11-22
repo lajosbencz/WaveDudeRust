@@ -28,7 +28,7 @@ rejects.
   period of the source, `(1 - cos(pi t / T)) / 2`, `T = pi / omega`; the detach fade keeps its 30 steps and falls
   as the mirrored raised cosine instead of linearly. Both are continuous with their slope. Every drive starts at
   t = 0: an edit resets the engine.
-- The table of values is computed once on the CPU for both engines ([engine/forcing.rs](../../crates/wavedude-core/src/engine/forcing.rs)); the
+- The table of values is computed once on the CPU for both engines ([engine/forcing.rs](../../crates/waveduderust/src/engine/forcing.rs)); the
   shaders add it as before.
 
 The length. With the impulse driven, the pedestal is gone at any turn-on length; the length shapes only the

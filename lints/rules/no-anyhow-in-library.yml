@@ -1,0 +1,20 @@
+id: no-anyhow-in-library
+language: rust
+severity: error
+message: the library reports typed errors (decision 0031); anyhow belongs to programs
+files:
+  - crates/waveduderust/**/*.rs
+rule:
+  any:
+    - all:
+        - any:
+            - kind: scoped_identifier
+            - kind: scoped_type_identifier
+        - regex: '^anyhow::'
+        - not:
+            inside:
+              any:
+                - kind: scoped_identifier
+                - kind: scoped_type_identifier
+    - pattern: anyhow!($$$)
+    - pattern: bail!($$$)

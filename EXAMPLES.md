@@ -1,7 +1,7 @@
 # Examples
 
 53 example projects, which the app and the web build ship through
-[`crates/wavedude-examples`](crates/wavedude-examples/). [`examples`](examples/) has one folder per domain, and each
+[`crates/waveduderust_examples`](crates/waveduderust_examples/). [`examples`](examples/) has one folder per domain, and each
 folder is one tab of the Examples dialog:
 
 | Folder | Tab |

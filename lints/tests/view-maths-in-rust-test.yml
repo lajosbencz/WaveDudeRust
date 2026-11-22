@@ -1,0 +1,6 @@
+id: view-maths-in-rust
+valid:
+  - "fn f(a: f32) -> f32 { libm::sinf(a) + a.abs() }"
+invalid:
+  - "fn f(a: f32) -> f32 { a.sin() }"
+  - "fn f(a: f64) -> f64 { f64::powf(a, 2.0) }"

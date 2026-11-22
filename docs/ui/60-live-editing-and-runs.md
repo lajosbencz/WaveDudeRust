@@ -2,8 +2,8 @@
 
 Pointers: `MainWindow.Live.cs`, `MainWindow.Simulation.cs`, `MainWindow.History.cs`,
 `MainWindow.Clipboard.cs`, `MainWindow.SceneImageWatch.cs`, `Dialogs/MemoryWarningWindow.xaml(.cs)`,
-core: `ProjectWatcher`, `ProjectHistory`, `ProjectClipboard`. Rust: [`wavedude-app-state/src/live.rs`](../../crates/wavedude-app-state/src/live.rs) (the
-controller), [`wavedude-core/src/run/worker.rs`](../../crates/wavedude-core/src/run/worker.rs) (the live run), decision 0012.
+core: `ProjectWatcher`, `ProjectHistory`, `ProjectClipboard`. Rust: [`waveduderust_app/src/live.rs`](../../crates/waveduderust_app/src/live.rs) (the
+controller), [`waveduderust/src/run/worker.rs`](../../crates/waveduderust/src/run/worker.rs) (the live run), decision 0012.
 
 ## Edit classes
 
@@ -26,7 +26,7 @@ the browser "engine starting" until the run worker is ready, "no engine" when it
 
 ## The live run
 
-One worker, one engine, one store ([`wavedude-core/src/run/worker.rs`](../../crates/wavedude-core/src/run/worker.rs)). The app publishes a goal: the project's
+One worker, one engine, one store ([`waveduderust/src/run/worker.rs`](../../crates/waveduderust/src/run/worker.rs)). The app publishes a goal: the project's
 spec (scene, sources, parts, probes, quality), the position, how much is wanted (the position's frame alone,
 or every frame) and whether the user paused. The run converges on it, without timers:
 

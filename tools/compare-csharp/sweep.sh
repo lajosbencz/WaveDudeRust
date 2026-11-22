@@ -7,11 +7,11 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 out=${1:?usage: sweep.sh <out-root> [examples...]}
 shift
-examples=$root/crates/wavedude-core/tests/fixtures/examples
+examples=$root/crates/waveduderust/tests/fixtures/examples
 steps=${STEPS:-600}
 every=${EVERY:-100}
 
-cargo build --release -p wavedude-cli --manifest-path "$root/Cargo.toml"
+cargo build --release -p waveduderust_cli --manifest-path "$root/Cargo.toml"
 cli=${CARGO_TARGET_DIR:-$root/target}/release/wavedude-cli
 [ $# -gt 0 ] || set -- ""
 

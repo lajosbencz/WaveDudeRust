@@ -1,0 +1,22 @@
+[package]
+name = "waveduderust_macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Derives of the model's typed fields (Fields) and enum members (Word)"
+# Not on crates.io: the workspace is built and released as one.
+publish = true
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true
+
+[dependencies]
+syn = { version = "3", default-features = false, features = ["derive", "parsing", "printing", "proc-macro", "clone-impls"] }
+quote = "1"
+proc-macro2 = "1"
+heck = "0.5"

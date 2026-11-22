@@ -7,7 +7,7 @@ Read [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/SEED.md`](docs/SEED.md) fir
 - Temporary files go outside the repository.
 - [`tools/compare-csharp`](tools/compare-csharp/) dumps WaveDude Next's results for comparison with ours; it finds Next through `WAVEDUDE_NEXT_DIR`.
   The comparison verifies, it never calibrates ([`docs/divergences.md`](docs/divergences.md)).
-- WaveDude Next is ported by hand when asked: diff `graealex/WaveDudeNext` from the last reviewed commit, `b4ed850`, triage
+- WaveDude Next is ported by hand when asked: diff `wavedudenext/WaveDudeNext` from the last reviewed commit, `1f198c0`, triage
   each commit, port features, not code, one commit per feature, then update that commit here.
 - Input is never injected on the desktop in use: UI comparisons run on a nested display
   ([`tools/compare-csharp/README.md`](tools/compare-csharp/README.md), Next's UI on Linux).

@@ -1,7 +1,7 @@
 # 0017: A wasm package and a web demo
 
 Status: superseded by [0019](0019-egui-and-the-platform-layer.md), 2026-11-13: the package and `demo/` are gone, the
-browser runs the application itself. `wavedude-examples` and `pages.yml` stay. Accepted 2026-11-12. Builds on [0015](0015-core-builds-for-wasm.md) and [0016](0016-gpu-engine-in-the-browser.md); amended by
+browser runs the application itself. `waveduderust_examples` and `pages.yml` stay. Accepted 2026-11-12. Builds on [0015](0015-core-builds-for-wasm.md) and [0016](0016-gpu-engine-in-the-browser.md); amended by
 [0018](0018-a-shared-picture-view.md): the package records probes and draws a picture with the preview's overlay and
 graph boxes on a canvas the page passes.
 
@@ -9,7 +9,7 @@ graph boxes on a canvas the page passes.
 
 With the core and its GPU engine building for wasm32, a page can run a project in the visitor's browser, which is the
 quickest way to try the program and a check that the engine runs on a second platform. The Examples dialog's list lived
-in `wavedude-app-state`, with the fixtures embedded in the application; a demo needs the same list and files without the
+in `waveduderust_app`, with the fixtures embedded in the application; a demo needs the same list and files without the
 application's state, and an engine package must not carry fifty-three projects nobody asked for.
 
 ## Decision
@@ -33,8 +33,8 @@ application's state, and an engine package must not carry fifty-three projects n
   engine cannot be built on it, the CPU engine runs, and the engine in use and whether the GPU fell back are getters.
 - Rayon has no threads in the browser here: its loops run on the calling thread. Threads would need shared memory and
   cross-origin isolation, which GitHub Pages cannot set.
-- [`wavedude-examples`](../../crates/wavedude-examples) owns the example list (titles, topics, descriptions, the embedded
-  files), moved from `wavedude-app-state`; the application and the demo build both use it. Its binary writes the files
+- [`waveduderust_examples`](../../crates/waveduderust_examples) owns the example list (titles, topics, descriptions, the embedded
+  files), moved from `waveduderust_app`; the application and the demo build both use it. Its binary writes the files
   and `catalog.json` (topics, examples, tiers with the application's English titles from the string table), so the
   package never contains an example and the page fetches them over HTTP.
 - `demo/` is a static page of ES modules, no bundler and no npm: `demo/build.sh` builds the package, runs

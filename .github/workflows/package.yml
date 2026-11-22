@@ -92,11 +92,11 @@ jobs:
       # cargo auditable embeds the dependency list in the binaries (`cargo audit bin`).
       - name: Build
         if: '!matrix.universal'
-        run: ${CONTAINER:+docker exec "$CONTAINER"} cargo auditable build --release -p wavedude-app -p wavedude-cli
+        run: ${CONTAINER:+docker exec "$CONTAINER"} cargo auditable build --release -p waveduderust_classic -p waveduderust_cli
       - name: Build universal
         if: matrix.universal
         run: |
-          cargo auditable build --release -p wavedude-app -p wavedude-cli \
+          cargo auditable build --release -p waveduderust_classic -p waveduderust_cli \
             --target aarch64-apple-darwin --target x86_64-apple-darwin
           mkdir -p target/universal-apple-darwin/release
           for program in wavedude-app wavedude-cli; do
@@ -105,7 +105,7 @@ jobs:
           done
       - name: Package
         run: |
-          ${CONTAINER:+docker exec "$CONTAINER"} cargo packager --release -p wavedude-app --formats "$PACKAGE_FORMATS" \
+          ${CONTAINER:+docker exec "$CONTAINER"} cargo packager --release -p waveduderust_classic --formats "$PACKAGE_FORMATS" \
             ${UNIVERSAL:+--target universal-apple-darwin}
         env:
           UNIVERSAL: ${{ matrix.universal }}
@@ -114,7 +114,7 @@ jobs:
         run: |
           # a prefix tree with its own install.sh: menu entry, icons and file types beside the programs
           dir="wavedude-rust-$VERSION-$PACKAGE_PLATFORM"
-          assets=crates/wavedude-app/assets
+          assets=frontends/classic/assets
           mkdir -p "$dir/bin" "$dir/share/applications" "$dir/share/mime/packages"
           cp target/release/wavedude-app target/release/wavedude-cli "$dir/bin"
           cp LICENSE.md NOTICE.md README.md "$assets/linux/install.sh" "$dir"
@@ -169,12 +169,11 @@ jobs:
           done
       - name: SBOMs
         run: |
-          ${CONTAINER:+docker exec "$CONTAINER"} cargo cyclonedx -q --manifest-path crates/wavedude-app/Cargo.toml \
+          ${CONTAINER:+docker exec "$CONTAINER"} cargo cyclonedx -q --manifest-path frontends/classic/Cargo.toml \
             -f json --spec-version 1.5 --target "$SBOM_TARGET" --override-filename sbom
           mkdir sbom
-          for program in wavedude-app wavedude-cli; do
-            cp "crates/$program/sbom.json" "sbom/$program-$VERSION-$PACKAGE_PLATFORM.cdx.json"
-          done
+          cp frontends/classic/sbom.json "sbom/wavedude-app-$VERSION-$PACKAGE_PLATFORM.cdx.json"
+          cp crates/waveduderust_cli/sbom.json "sbom/wavedude-cli-$VERSION-$PACKAGE_PLATFORM.cdx.json"
       - name: Update entry
         if: inputs.update-pubkey != ''
         run: |
@@ -262,10 +261,12 @@ jobs:
       - name: SBOM
         run: |
           mkdir sbom
-          for crate in wavedude-app wavedude-run-worker wavedude-spill-worker; do
-            cargo cyclonedx -q --manifest-path "crates/$crate/Cargo.toml" -f json --spec-version 1.5 \
+          # The workers are one package, waveduderust_workers.
+          for entry in frontends/classic:wavedude-app crates/waveduderust_workers:waveduderust_workers; do
+            dir=${entry%%:*} crate=${entry##*:}
+            cargo cyclonedx -q --manifest-path "$dir/Cargo.toml" -f json --spec-version 1.5 \
               --target wasm32-unknown-unknown --override-filename sbom
-            cp "crates/$crate/sbom.json" "sbom/$crate-$VERSION-web.cdx.json"
+            cp "$dir/sbom.json" "sbom/$crate-$VERSION-web.cdx.json"
           done
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -277,11 +278,7 @@ jobs:
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: dist/*
-          sbom-path: sbom/wavedude-run-worker-${{ inputs.version }}-web.cdx.json
-      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: dist/*
-          sbom-path: sbom/wavedude-spill-worker-${{ inputs.version }}-web.cdx.json
+          sbom-path: sbom/waveduderust_workers-${{ inputs.version }}-web.cdx.json
       - name: Stage
         run: mv sbom/* dist/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

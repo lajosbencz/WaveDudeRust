@@ -1,0 +1,7 @@
+id: no-anyhow-in-library
+valid:
+  - "fn f() -> Result<(), Error> { Err(Error::Missing) }"
+invalid:
+  - "fn f() -> anyhow::Result<()> { Ok(()) }"
+  - "use anyhow::Context;"
+  - "fn f() -> Result<()> { bail!(\"no\") }"

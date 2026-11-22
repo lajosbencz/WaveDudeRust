@@ -19,9 +19,9 @@ where the export runs, how a file larger than memory reaches the user, and what 
 - A still and the probe CSV are written in memory.
 - A run's export is spooled in the origin private file system, in the session folder of
   [0020](0020-browser-frame-spill-in-opfs.md) under `export-<n>/`
-  ([`spool.rs`](../../crates/wavedude-app-state/src/platform/opfs/spool.rs); the module is split into `session`,
+  ([`spool.rs`](../../crates/waveduderust_app/src/platform/opfs/spool.rs); the module is split into `session`,
   `spill`, `queue` and `spool`). A file is written through a `FileSystemWritableFileStream`; its writes are queued
-  ([`queue.rs`](../../crates/wavedude-app-state/src/platform/opfs/queue.rs)) and one task per file posts them in
+  ([`queue.rs`](../../crates/waveduderust_app/src/platform/opfs/queue.rs)) and one task per file posts them in
   order, each completion waking the window. At most 64 MiB are in flight: `OutputFs::poll_ready` is pending above
   that and the job waits, `OutputFs::poll_flushed` is pending until every closed file is committed, and the job ends
   only then, so a completed export has its files. The first failure is sticky.
@@ -29,7 +29,7 @@ where the export runs, how a file larger than memory reaches the user, and what 
   The browser streams it from disk, so a large output is not held in memory. The user starts it (The download from
   the user's click, below).
 - ZIP archives are written with the `rawzip` crate, entries stored, ZIP64 where sizes or the count need it
-  ([`zip.rs`](../../crates/wavedude-export/src/fs/zip.rs)). An image sequence, one or both layers, streams into one
+  ([`zip.rs`](../../crates/waveduderust/src/export/fs/zip.rs)). An image sequence, one or both layers, streams into one
   archive with a folder per layer. A video of both layers is spooled per layer and packed afterwards, its chunks read
   from the spool and written into the archive; a single video is downloaded as it is. The archive and each output
   are named in the dialog (A name per output, below).

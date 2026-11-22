@@ -282,7 +282,7 @@ Dock pane (default bottom, hidden at first start).
 
 ## Status bar
 
-- Left: the latest log line of level Info and up ("Opened ...", "Saved ...", errors); "Ready" at first. Warnings
+- Left: the latest WaveDude log line (not a dependency's) of level Info and up ("Opened ...", "Saved ...", errors); "Ready" at first. Warnings
   turn the whole bar orange, errors red (theme tokens), until the next Info line.
 - Right: run status ([`50-timeline-transport.md`](50-timeline-transport.md)).
 - Far right: busy text + 120 px progress bar (export frames determinate; waiting for run / computing a frame

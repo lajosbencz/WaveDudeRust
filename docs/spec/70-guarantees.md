@@ -12,7 +12,7 @@ property the Rust core must prove in its test suite. Items marked (G) need golde
       with two sources; 9-point and 4th order).
 - [ ] GPU vs CPU within `1e-3 * max(1, max|cpu|)` after N steps; captured index bytes identical (optional GPU).
 - [x] Probe sampling: the live run's series and profiles equal those of the spec stepped straight through bit for bit,
-      after a wrap to the frames before the position too ([tests/run.rs](../../crates/wavedude-core/tests/run.rs)).
+      after a wrap to the frames before the position too ([tests/run.rs](../../crates/waveduderust/tests/run.rs)).
 - [ ] Emitters: one for a single source; disabled source none; `Amplitude/100`, phase in radians; randomized composite
       gives non-zero seeds; another project seed gives other emitter seeds; decimal frequency/amplitude/phase reach the
       emitter as typed; level 120.5 differs from 120; a level of 0 becomes the least level (0.01).

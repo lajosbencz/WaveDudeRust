@@ -36,7 +36,7 @@ Project @Version @Seed
 
 Attribute order within an element = declaration order in 10-model tables.
 
-The Rust adapter ([`io/fields.rs`](../../crates/wavedude-core/src/io/fields.rs), the tables in [`io/wdproj.rs`](../../crates/wavedude-core/src/io/wdproj.rs)) lists the attributes of each element as a typed
+The Rust adapter ([`io/fields.rs`](../../crates/waveduderust/src/io/fields.rs), the tables in [`io/wdproj.rs`](../../crates/waveduderust/src/io/wdproj.rs)) lists the attributes of each element as a typed
 `Attr` over the model's field (`Attr::of(ProbeField::Ax)`), in the order above; the attribute name is the field's
 member name unless the table names it. The ten names that differ:
 
@@ -92,7 +92,7 @@ if Version > 4: warning, load anyway
 Version = 4
 Normalize()
 ```
-The Rust adapter reads each element onto the base its file's version means (`FileVersion` in [`io/wdproj.rs`](../../crates/wavedude-core/src/io/wdproj.rs)) and
+The Rust adapter reads each element onto the base its file's version means (`FileVersion` in [`io/wdproj.rs`](../../crates/waveduderust/src/io/wdproj.rs)) and
 writes against the current defaults, so a migrated value is written out.
 A missing `Scene` element means a default Scene, then the migration above applies (a version-1 file without Scene gets
 Reflective and DampingEdge 0; a version-3 file without Scene gets Open and -32).
@@ -172,7 +172,7 @@ Note: real files put each element's attributes on one line.
 
 ### Rust adapter
 
-The attribute tables are typed tables in the adapter ([`io/wdproj.rs`](../../crates/wavedude-core/src/io/wdproj.rs) on [`io/fields.rs`](../../crates/wavedude-core/src/io/fields.rs)): one list of `Attr` per model
+The attribute tables are typed tables in the adapter ([`io/wdproj.rs`](../../crates/waveduderust/src/io/wdproj.rs) on [`io/fields.rs`](../../crates/waveduderust/src/io/fields.rs)): one list of `Attr` per model
 type, each naming a typed field of the model, in Next's order. An attribute takes its name from the field unless it is
 renamed (`AX`, `Coating`, `Type`, ...), reads and writes by the field's kind (a decimal field can be `whole`, a value
 with a text of its own is custom) and has a presence: sparse against the type's base, always, or conditional. The reader

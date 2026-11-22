@@ -13,10 +13,10 @@ Exports in the browser need a decision on where files go, how video is encoded a
 
 - The browser build offers no exports: the File > Export submenu and Export last, the probe CSV entry of the tree
   and of the graph box and the picture's export entries are hidden through `HAS_EXPORTS`
-  ([`web.rs`](../../crates/wavedude-app-state/src/platform/web.rs)); their shortcuts do nothing. The desktop
+  ([`web.rs`](../../crates/waveduderust_app/src/platform/web.rs)); their shortcuts do nothing. The desktop
   exports are unchanged.
-- Already in place: `wavedude-export` builds for wasm32 without default features (a CI clippy line); its output
-  files go through the `OutputFs` seam ([`fs.rs`](../../crates/wavedude-export/src/fs.rs), `StdFs` natively), closed
+- Already in place: `waveduderust::unstable::export` builds for wasm32 without `mp4` (a CI clippy line); its output
+  files go through the `OutputFs` seam ([`fs.rs`](../../crates/waveduderust/src/export/fs.rs), `StdFs` natively), closed
   explicitly; encoders run inline on wasm32; `ExportJob::step(budget, cancel)` runs over an `Arc<dyn FrameSource>`
   whose `poll_layer` answers Pending for a spilled frame not read back yet, and the blocking run steps a frame at a
   time.

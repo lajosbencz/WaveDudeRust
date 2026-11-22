@@ -8,7 +8,7 @@ The live preview had two runners mirroring WaveDude Next: a `ScratchRunner` comp
 is now" on a second engine, and the `SimulationRun` storing every frame, with the controller pacing them by a
 120 ms debounce, 1.5 s of quiet before the re-run, and pausing the run while a scratch frame computed. The
 abandon-on-newer-request rule starved drags of heavy frames; the debounce and quiet were constants nobody could
-derive; the two engines and the coordination were half of [`live.rs`](../../crates/wavedude-app-state/src/live.rs). WaveDude Next dropped its timers on
+derive; the two engines and the coordination were half of [`live.rs`](../../crates/waveduderust_app/src/live.rs). WaveDude Next dropped its timers on
 2026-11-09 and kept the two runners.
 
 ## Decision
@@ -43,7 +43,7 @@ Rules settled here:
 
 ## Consequences
 
-- `run/scratch.rs` is gone; [`run/worker.rs`](../../crates/wavedude-core/src/run/worker.rs) replaces it. The batch `SimulationRun` is gone
+- `run/scratch.rs` is gone; [`run/worker.rs`](../../crates/waveduderust/src/run/worker.rs) replaces it. The batch `SimulationRun` is gone
   too: the CLI's runs and exports are live runs that want every frame, waited for with `RunWorker::wait_until`.
   The store writes by index, tracks presence and clears in place.
 - A probe edit with every frame wanted re-records the whole run (stepping without captures); before, only the
@@ -53,3 +53,10 @@ Rules settled here:
 - Measured ([docs/measurements.md](../measurements.md), The live run): Example16 at half resolution on the GPU, 120 edits at 32 a
   second: a 25 ms frame per edit, the final frame under a millisecond after the last edit, the same with the
   frames before the position captured on the way; a frame slower than the drag lands once the hand rests.
+
+## 2026-11-20: hiding the intensity keeps the run
+
+A run that tracks the intensity serves a request without it (`RunSpec::covers`): the worker keeps the run and its
+tracking, so hiding the intensity is a `Respec` (as in Next, where the preview flags are no simulation edit), and
+showing it again while that run lasts costs nothing. Showing it on a run that never tracked it stays a simulation
+edit: those frames have no intensity.

@@ -18,7 +18,7 @@ correct technique from the literature, replacing the original where needed.
 3. **Dispersion-relation-preserving stencil coefficients** (Tam and Webb 1993)
    for the 7-point-per-axis Laplacian replace the Taylor 4th-order weights:
    the one free weight minimises the squared relative phase error over wave
-   numbers 0 to pi/2 (4 cells a wavelength and longer; [engine/stencil.rs](../../crates/wavedude-core/src/engine/stencil.rs)). The
+   numbers 0 to pi/2 (4 cells a wavelength and longer; [engine/stencil.rs](../../crates/waveduderust/src/engine/stencil.rs)). The
    isotropic 9-point stays as the cheap stencil.
 4. **A symmetric operator everywhere**: the full stencil runs through the
    whole grid including the PML; the outermost ring is the wall. Energy is
@@ -32,6 +32,6 @@ The analytic physics tests of [docs/physics.md](../physics.md) are extended for 
 reflection coefficient below -60 dB at 20 cells, temporal dispersion measured
 against the 4th-order relation, the DRP phase error table, energy to round-off,
 and a slab's reflection against Fresnel at a non-integer interface position
-([tests/physics.rs](../../crates/wavedude-core/tests/physics.rs) `slab_reflects_the_fresnel_share`).
+([tests/physics.rs](../../crates/waveduderust/tests/physics.rs) `slab_reflects_the_fresnel_share`).
 The gate design's mode solver follows the discretisation and the generated
 gates of [examples/gates.md](../../examples/gates.md) are re-measured.

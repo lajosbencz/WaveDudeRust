@@ -35,7 +35,7 @@ disk or machine query, and the per-layer colouring of a picture lived in the app
 - `render::layer` holds what colours a layer's plane (`LayerColours::of`, `paint`, `scale_nearest`), shared by the
   application and a browser package.
 - `Project::new_random_seed` takes the time from `web_time`; the process id only exists off wasm32.
-- CI runs clippy with `-D warnings` for `wavedude-core --no-default-features` with and without `--features gpu` on `wasm32-unknown-unknown`.
+- CI runs clippy with `-D warnings` for `waveduderust --no-default-features` with and without `--features gpu` on `wasm32-unknown-unknown`.
 
 ## Consequences
 

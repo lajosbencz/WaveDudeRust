@@ -4,16 +4,15 @@
 
 [files]
 extend-exclude = [
-	"crates/wavedude-app-state/assets/strings/de.json",
-	"crates/wavedude-app-state/assets/strings/fr.json",
-	"crates/wavedude-app-state/assets/strings/nl.json",
-	"crates/wavedude-core/tests/fixtures/**",
+	"crates/waveduderust_app/assets/strings/de.json",
+	"crates/waveduderust_app/assets/strings/fr.json",
+	"crates/waveduderust_app/assets/strings/nl.json",
+	"crates/waveduderust/tests/fixtures/**",
 	"examples/**",
 	"docs/review/**",
 	"CHANGELOG.md",
-	"crates/wavedude-app/assets/windows/installer.nsi",
-	"crates/wavedude-core/tests/snapshots/**",
-	"crates/wavedude-export/tests/snapshots/**",
+	"frontends/classic/assets/windows/installer.nsi",
+	"crates/waveduderust/tests/snapshots/**",
 ]
 
 [default]

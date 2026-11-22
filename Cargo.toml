@@ -1,19 +1,19 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "frontends/*"]
 
 [workspace.package]
 version = "0.3.7"
 edition = "2024"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/lajosbencz/WaveDudeRust"
-rust-version = "1.95"
+rust-version = "1.100"
 
 # The lint policy of every crate (`[lints] workspace = true`); CI runs clippy with `-D warnings`, so each of these
 # fails the build. The cast lints and `missing_docs` are left out on purpose: casts are handled by the unit types,
 # and comments state only what the code cannot say.
 [workspace.lints.rust]
-# deny, not forbid: the macOS application delegate (wavedude-app src/open_requests.rs) allows it
+# deny, not forbid: the macOS application delegate (waveduderust_app src/open_requests.rs) allows it
 unsafe_code = "deny"
 rust_2018_idioms = { level = "deny", priority = -1 }
 unreachable_pub = "deny"
@@ -67,5 +67,5 @@ opt-level = 2
 
 # The engines, painter and renderer are too slow unoptimised for the tests that run them (the CLI's gate
 # demonstrations took over 15 minutes); set 0 locally to step through them.
-[profile.dev.package.wavedude-core]
+[profile.dev.package.waveduderust]
 opt-level = 2

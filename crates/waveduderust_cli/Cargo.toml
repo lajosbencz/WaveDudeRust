@@ -1,0 +1,34 @@
+[package]
+name = "waveduderust_cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Headless checks, benches and scripted exports"
+
+[features]
+default = ["mp4"]
+mp4 = ["waveduderust/mp4"]
+# OpenH264 compiled in instead of Cisco's downloaded binary: for development and tests, not for distributed builds.
+openh264-source = ["mp4", "waveduderust/openh264-source"]
+
+[[bin]]
+name = "wavedude-cli"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+ctrlc = "3.4"
+png.workspace = true
+tracing-subscriber = "0.3"
+waveduderust = { path = "../waveduderust", default-features = false, features = ["unstable-engine", "unstable-scene", "unstable-run", "unstable-export", "gpu", "run", "export", "clap"] }
+waveduderust_app = { path = "../waveduderust_app" }
+
+[dev-dependencies]
+tempfile = "3"

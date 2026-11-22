@@ -16,9 +16,12 @@ column below is a summary; the full text is the `Hint.*` entry (identical to the
 - When a form is built for a newly added item, the caret goes into its first text box with the text selected; the
   box requests the focus when it is laid out, no timer.
 - Each form scrolls vertically; never horizontally.
-- Layout: `FormPanel`, two columns: labels left (column as wide as the widest label, a minimum width), editors
-  right filling the rest; a check box or block marked full-width spans both columns. Section headers: name over
-  a rule across the width; the gap comes after a group's rows.
+- Layout: `FormPanel`, one per section, two columns: labels left (the section's column as wide as its widest
+  label, at least 110 px), editors right filling the rest; a check box or block marked full-width spans both
+  columns. A row is as high as its editor or its label (at least 22 px, the editors' MinHeight; read-outs a
+  line), 4 px apart; a multiline box's label sits at its top. Section headers: name over a
+  rule across the width; the gap comes after a group's rows. A secondary value (the project's format version,
+  a folder's count) is grey.
 - Read-outs (computed values) are plain text, bound to every input they depend on. Estimates carry a "~ "
   prefix and one decimal ("~ 32.0 px": wavelengths, the quarter-wave coating, the outermost zone); other pixel
   and angle read-outs show at most one decimal ("12 px", "12.5 px").

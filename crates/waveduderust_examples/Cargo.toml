@@ -1,0 +1,15 @@
+[package]
+name = "waveduderust_examples"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "The example projects, embedded: the one list of the Examples dialog"
+
+[lints]
+workspace = true
+
+[dependencies]
+waveduderust = { path = "../waveduderust", default-features = false }

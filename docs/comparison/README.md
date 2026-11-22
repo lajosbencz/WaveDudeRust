@@ -210,7 +210,7 @@ sub-steps.
 ## Correctness measures
 
 What shows the Rust engine is right is not its agreement with the C#, but the analytic tests of
-[docs/physics.md](../physics.md) ([tests/physics.rs](../../crates/wavedude-core/tests/physics.rs), [tests/gpu.rs](../../crates/wavedude-core/tests/gpu.rs)):
+[docs/physics.md](../physics.md) ([tests/physics.rs](../../crates/waveduderust/tests/physics.rs), [tests/gpu.rs](../../crates/waveduderust/tests/gpu.rs)):
 
 - **Transparency**: a wave packet crossing a silent source is the same bit for bit.
 - **Superposition**: crossing a weak continuous source, the field minus the source's own is the packet's
@@ -255,9 +255,9 @@ kernel's phase speed 0.5621, so Example09's wavelengths come out 29.9 / 14.9 / 7
 ```sh
 WAVEDUDE_NEXT_DIR=<checkout of graealex/WaveDudeNext> \
   tools/compare-csharp/run.sh <project.wdproj> <dump-dir> --steps 600 --every 100 --probe-steps
-cargo run -p wavedude-cli --release -- compare <project.wdproj> <dump-dir> --out docs/comparison/<name> --steps 600 --every 100
+cargo run -p waveduderust_cli --release -- compare <project.wdproj> <dump-dir> --out docs/comparison/<name> --steps 600 --every 100
 cp examples/guides/07-xor.wdproj <dir>/07-xor.wdproj   # then --steps 2592 --every 432
 ```
 
-The projects are `crates/wavedude-core/tests/fixtures/examples/<name>.wdproj`. The C# side's requirements are in
+The projects are `crates/waveduderust/tests/fixtures/examples/<name>.wdproj`. The C# side's requirements are in
 [`tools/compare-csharp/README.md`](../../tools/compare-csharp/README.md).

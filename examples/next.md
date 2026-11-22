@@ -1,12 +1,12 @@
 # WaveDude Next's examples
 
 The 33 example projects of WaveDude Next, as the Examples dialog ships them. Next's originals are
-[`crates/wavedude-core/tests/fixtures/examples`](../crates/wavedude-core/tests/fixtures/examples/), kept for the tests and
+[`crates/waveduderust/tests/fixtures/examples`](../crates/waveduderust/tests/fixtures/examples/), kept for the tests and
 [`tools/compare-csharp`](../tools/compare-csharp/). Each `ExampleNN_*.wdproj` of the domain folders is its original with
 the same name, byte for byte, except:
 
 - `Brightness` of the `Field` and `Intensity` layers: the app's Auto brightness (`fit_brightness` of
-  `wavedude_core::render`, the 99.5th percentile magnitude at the palette's top, three significant digits) of that
+  `waveduderust::unstable::render`, the 99.5th percentile magnitude at the palette's top, three significant digits) of that
   layer at the run's middle timeline frame (`(frames - 1) / 2`) and at its last, the smaller of the two, so the
   brighter of the two frames sets it. The run is the project as saved (its steps, stencil and sources) on this
   program's engine at full quality (`PreviewQuality::FULL`, half samples), as an export runs it. The attribute is

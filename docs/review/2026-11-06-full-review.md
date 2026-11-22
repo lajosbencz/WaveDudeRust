@@ -2,7 +2,7 @@
 
 Scope: the whole workspace, reviewed for physical correctness, idiomatic and
 DRY Rust, modularity, future-proofing and performance. Four reviewers read
-one slice each (physics; wavedude-core code; wavedude-export and wavedude-cli;
+one slice each (physics; waveduderust code; waveduderust::export and wavedude-cli;
 wavedude-widgets and wavedude-app). Claims below were verified by reading the code
 and, where it says so, by running it. Baseline: clippy clean at default
 lints, 433 tests passing, fmt clean.
@@ -32,7 +32,7 @@ steps in a mirror cavity (was 1e13); diagonal mirror leak 0 (was 2.5 %);
 full-HD capture 0.20 ms on the GPU (was 0.48) and 0.9 ms on the CPU (was
 1.3); MP4 export 3.2 ms a frame (was 12), MOV PNG 3.2 (was 36); idle app
 CPU 1.15 % (was 1.9 %); playback unchanged at 30 fps, 1.3 ms a frame. The
-state layer is now the `wavedude-app-state` crate with no UI dependency. The
+state layer is now the `waveduderust_app` crate with no UI dependency. The
 workspace is clean under fmt, clippy with warnings denied, and all tests,
 which now finish in about 90 s.
 
@@ -83,8 +83,8 @@ P1, performance and API
 
 P2, structure
 
-- [x] X-1 Export orchestration into wavedude-export (`ExportPlan`, `build_job`).
-- [x] X-4 One engine factory in wavedude-core, one `EngineArgs` in the CLI.
+- [x] X-1 Export orchestration into waveduderust::export (`ExportPlan`, `build_job`).
+- [x] X-4 One engine factory in waveduderust, one `EngineArgs` in the CLI.
 - [x] C-5 `.wdr` migration through `serde_json::Value`; explicit renames;
       tolerate unknown part kinds.
 - [x] C-4 One declarative field table for the `.wdproj` reader, writer, DTD
@@ -100,7 +100,7 @@ P3, documentation debt
 
 ## Physics (P)
 
-P-1 BUG. [engine/pml.rs:142-179](../../crates/wavedude-core/src/engine/pml.rs#L142-L179), [scene/scene_data.rs:23](../../crates/wavedude-core/src/scene/scene_data.rs#L23). A mirror is a live
+P-1 BUG. [engine/pml.rs:142-179](../../crates/waveduderust/src/engine/pml.rs#L142-L179), [scene/scene_data.rs:23](../../crates/waveduderust/src/scene/scene_data.rs#L23). A mirror is a live
 cell with c2 = 1e-6 that keeps its full taps to both sides; only the taps
 crossing it are cut. Dropping a negative-weight tap (a2 = -0.175) lowers the
 diagonal of -L_cut, and the cut operator becomes indefinite: the largest
@@ -143,7 +143,7 @@ a mirror opens holes in it; red 1..99 is read as red/100 (n < 1) while the
 engine clamps to 1. Fix: keep the mirror unless the part covers most of the
 pixel; `existing = max(1, red/100)`.
 
-P-6 INACC. [scene/modes.rs:32-41](../../crates/wavedude-core/src/scene/modes.rs#L32-L41). The mode solver averages n over 4 samples
+P-6 INACC. [scene/modes.rs:32-41](../../crates/waveduderust/src/scene/modes.rs#L32-L41). The mode solver averages n over 4 samples
 per row; the painter averages n^2 with exact coverage. Boundary rows of
 odd-width cores can round to a different red level than painted. Fix:
 average n^2 in `rows`.
@@ -176,31 +176,31 @@ Green's function is that of the discrete operator and time scheme including
 temporal dispersion; the n^2 area average is the TM case of Farjadpour
 2006, right for this equation; Mur at d = 1 reduces to Mur 1981.
 
-## wavedude-core (C)
+## waveduderust (C)
 
-C-1 PERF/DESIGN. [engine/mod.rs:40](../../crates/wavedude-core/src/engine/mod.rs#L40), [run/simulation.rs:322](../../crates/wavedude-core/src/run/simulation.rs#L322), [gpu/mod.rs:435](../../crates/wavedude-core/src/engine/gpu/mod.rs#L435),
+C-1 PERF/DESIGN. [engine/mod.rs:40](../../crates/waveduderust/src/engine/mod.rs#L40), [run/simulation.rs:322](../../crates/waveduderust/src/run/simulation.rs#L322), [gpu/mod.rs:435](../../crates/waveduderust/src/engine/gpu/mod.rs#L435),
 965. The trait has only a synchronous `capture_frame`; the GPU's pipelined
 `begin_capture`/`finish_capture` are inherent and used only by tests. Every
 production capture stalls the stepping thread. Fix: a two-phase capture on
 the trait (an opaque token keeps it object-safe); the CPU implements `begin`
 eagerly.
 
-C-2 PERF. capture.rs:98, [gpu/mod.rs:503-507](../../crates/wavedude-core/src/engine/gpu/mod.rs#L503-L507), store.rs:247-252. Every frame
+C-2 PERF. capture.rs:98, [gpu/mod.rs:503-507](../../crates/waveduderust/src/engine/gpu/mod.rs#L503-L507), store.rs:247-252. Every frame
 allocates fresh planes that the writer copies into a store block and drops:
 one allocation and one extra 8 MB copy per full-HD frame; the scratch frame
 does the same. Fix: `capture_into(&mut self, shape, out: &mut Snapshot)` and
 recycle snapshots through a return channel, or hand the store's block to the
 capture.
 
-C-3 DRY, drift risk. capture.rs:14-28 and [render/lut.rs:175-190](../../crates/wavedude-core/src/render/lut.rs#L175-L190) both define
+C-3 DRY, drift risk. capture.rs:14-28 and [render/lut.rs:175-190](../../crates/waveduderust/src/render/lut.rs#L175-L190) both define
 `field_index`, `intensity_root_index`, `intensity_index` (f16 vs f32, NaN
 ordering differs); capture.wgsl is a third copy. `capture::plane` and
 `block_means` duplicate `plane_rows` and are only used by tests. Fix: one
 set in `capture` taking f16, lut calls it; `plane` behind `#[cfg(test)]`.
 
-C-4 DRY. [io/wdproj.rs](../../crates/wavedude-core/src/io/wdproj.rs) names every attribute four times: read (125-325),
+C-4 DRY. [io/wdproj.rs](../../crates/waveduderust/src/io/wdproj.rs) names every attribute four times: read (125-325),
 write (469-757), `decls()` DTD (879-1080) and the `"Type.Prop"` keys of
-[model/ranges.rs](../../crates/wavedude-core/src/model/ranges.rs); defaults restated on read and write. Fix: one declarative
+[model/ranges.rs](../../crates/waveduderust/src/model/ranges.rs); defaults restated on read and write. Fix: one declarative
 table per type generating reader, writer and DTD, or at least derive
 `decls()` from the writer on a default-plus-every-optional project.
 
@@ -211,18 +211,18 @@ files silently. Fix: parse to `serde_json::Value`, `migrate(v, from)` per
 version, then `from_value`; explicit `rename` on persisted structs; read
 parts as `Vec<Value>` and skip unknown kinds with a note.
 
-C-6 DRY. cpu.rs:541-548 and [gpu/mod.rs:834-840](../../crates/wavedude-core/src/engine/gpu/mod.rs#L834-L840) copy the `try_replace_scene`
-predicate; cpu.rs:525 and [gpu/mod.rs:802](../../crates/wavedude-core/src/engine/gpu/mod.rs#L802) the emitter filter; the intensity
+C-6 DRY. cpu.rs:541-548 and [gpu/mod.rs:834-840](../../crates/waveduderust/src/engine/gpu/mod.rs#L834-L840) copy the `try_replace_scene`
+predicate; cpu.rs:525 and [gpu/mod.rs:802](../../crates/waveduderust/src/engine/gpu/mod.rs#L802) the emitter filter; the intensity
 blend `(s1*0.5+s2*0.5)*scale` appears four times. Fix:
 `SceneData::same_grid`, `Emitter::inside`, one `blend`.
 
-C-7 PERF/API. [engine/types.rs](../../crates/wavedude-core/src/engine/types.rs), scratch.rs:200. `RunSpec.scene` is an Arc,
+C-7 PERF/API. [engine/types.rs](../../crates/waveduderust/src/engine/types.rs), scratch.rs:200. `RunSpec.scene` is an Arc,
 but both constructors take `SceneData` by value and `try_replace_scene`
 clones: every build deep-copies c2 and d (tens of MB at full HD). A failing
 `GpuEngine::new` consumes the scene, so wavedude-app (live.rs:865) clones it
 first for the CPU fallback. Fix: engines hold `Arc<SceneData>`.
 
-C-8 FUTURE. [gpu/context.rs:27-33](../../crates/wavedude-core/src/engine/gpu/context.rs#L27-L33), [gpu/mod.rs:1245-1258](../../crates/wavedude-core/src/engine/gpu/mod.rs#L1245-L1258). Device loss and
+C-8 FUTURE. [gpu/context.rs:27-33](../../crates/waveduderust/src/engine/gpu/context.rs#L27-L33), [gpu/mod.rs:1245-1258](../../crates/waveduderust/src/engine/gpu/mod.rs#L1245-L1258). Device loss and
 mapping failure are `expect` panics; the context is a process-wide
 `OnceLock`, so a lost device is never recreated; `GpuError` carries a
 String. Fix: `set_device_lost_callback` sets a flag; context in
@@ -234,7 +234,7 @@ C-9 DESIGN. simulation.rs:278, 31. `step_all -> Result<bool, String>`,
 the typed errors. Fix: `enum RunError { Store, Engine, Panic }` with
 thiserror, `Failed(Arc<RunError>)`.
 
-C-10 DRY. parts.rs:6-9, [shapes/mod.rs:31](../../crates/wavedude-core/src/scene/shapes/mod.rs#L31), ranges.rs:42, 78-79: `MAX_COATING`,
+C-10 DRY. parts.rs:6-9, [shapes/mod.rs:31](../../crates/waveduderust/src/scene/shapes/mod.rs#L31), ranges.rs:42, 78-79: `MAX_COATING`,
 `INDEX_MIN`, `INDEX_MAX`, `MAX_ABSORPTION_RAMP` repeat `ranges`; normalize.rs
 hardcodes fallbacks that duplicate `Default` (Source 100.0 at :102, Scene
 1.0 at :50). Fix: consts from `ranges`, `let d = Source::default()`.
@@ -246,7 +246,7 @@ C-12 PERF. compose.rs:46-58. `SceneKey::of` hashes the whole image and
 serialises every part to JSON per call. Fix: derive Hash on parts with a
 float-bits newtype; image hash computed once when `image_data` changes.
 
-C-13 NOTE. Cargo.toml: `wide` and `anyhow` are unused in wavedude-core.
+C-13 NOTE. Cargo.toml: `wide` and `anyhow` are unused in waveduderust.
 
 C-14 PERF. cpu.rs:150-152. `s1`, `s2` allocated full-grid even without
 intensity tracking, and the passes zip over them. Fix: allocate only when
@@ -256,7 +256,7 @@ C-15 IDIOM. types.rs:232, probes.rs:90-95. `Vec<Vec<f32>>` readings and
 profiles: one allocation per profile per frame. Fix: flat Vec plus offsets.
 
 C-16 NOTE. `ProbeCells.cells` exposes the padded layout; the GPU packs
-`c | 1<<31` ([gpu/mod.rs:821](../../crates/wavedude-core/src/engine/gpu/mod.rs#L821)) with nothing tying it to the size ranges; step
+`c | 1<<31` ([gpu/mod.rs:821](../../crates/waveduderust/src/engine/gpu/mod.rs#L821)) with nothing tying it to the size ranges; step
 types churn (`u64`, `u32`, `AtomicU64` read as u32). Fix: `u32::try_from`
 or a debug assert; one step type.
 
@@ -266,20 +266,20 @@ it. Fix: a small `SceneEdges` struct; serialise a borrowed view or
 `#[serde(skip)]` on `image_data`.
 
 Done well: immutable Arc-shared RunSpec; WGSL constants generated from the
-Rust `StencilCoefficients` with [tests/gpu.rs](../../crates/wavedude-core/tests/gpu.rs) cross-checking the engines;
+Rust `StencilCoefficients` with [tests/gpu.rs](../../crates/waveduderust/tests/gpu.rs) cross-checking the engines;
 `plane_rows` with `for_each_init` scratch rows fusing mean, root and
 conversion; the CPU stencil on row slices; FrameStore's single-writer
 many-reader design with testable `Budget`; thiserror at the boundary;
 bounded colour-table caches; a clean `gpu` feature gate.
 
-## wavedude-export and wavedude-cli (X)
+## waveduderust::export and wavedude-cli (X)
 
 X-1 DRY/DESIGN. wavedude-cli/export.rs:120-193 and wavedude-app export_dialog.rs:
 361-421 both orchestrate an export (range, schemes, looks, paths, sinks,
 overlays, job) and already differ: the app always composes the scene and
 filters overlays on `wants_halves`; the CLI composes only when needed and
 uses the default SchemeStore. Fix: `ExportPlan` and `build_job` in
-wavedude-export.
+waveduderust::export.
 
 X-2 BUG. wavedude-cli/png_out.rs:9-13, 20-24. `write_header()?.write_image_data()`
 never calls `finish()`; IEND and the flush happen in Drop where errors are
@@ -298,7 +298,7 @@ X-4 DESIGN/DRY. run.rs:65-80, bench.rs:150-165, wavedude-app live.rs:863. The
 engine factory exists three times; `wavedude-cli --gpu` fails at runtime unless
 wavedude-cli's own `gpu` feature is on; `run` and `probes` hardcode CPU while
 export, bench, truth and gates take the flag. Fix: `engine::build(scene,
-opts, prefer_gpu)` in wavedude-core; one `#[derive(Args)] EngineArgs` flattened
+opts, prefer_gpu)` in waveduderust; one `#[derive(Args)] EngineArgs` flattened
 into every running subcommand.
 
 X-5 PERF. job.rs:375-399, mov.rs:596. Copy, render, overlays and encode run
@@ -328,14 +328,14 @@ little-endian but the code is native-endian.
 
 X-9 DRY. wavedude-cli/export.rs:20-64 mirrors `ExportFormat` and `ExportLayers`
 in clap enums. Fix: `cfg_attr(feature = "clap", derive(ValueEnum))` on the
-wavedude-export enums.
+waveduderust::export enums.
 
 X-10 DRY. The wait-and-match on RunState repeats in export.rs:145, run.rs:106
 and 186 (ignores Cancelled), truth.rs:166. Fix: `SimulationRun::
 wait_completed()`. run.rs:171 builds `Colouring` per frame per layer.
 
 X-11 FUTURE, CI. `rust-version = "1.87"` but wavedude-app uses let-chains
-(1.88). CI never builds `wavedude-export --no-default-features` nor `wavedude-cli
+(1.88). CI never builds `waveduderust::export --no-default-features` nor `wavedude-cli
 --features gpu`; no MSRV job.
 
 X-12 FUTURE, deps. Two `png` versions (0.17 in the CLI, 0.18 in export). The
@@ -363,7 +363,7 @@ capabilities; the CLI's tests decode what they export.
 
 ## wavedude-widgets and wavedude-app (A)
 
-A-1 PERF. [preview/mod.rs:248-261](../../crates/wavedude-app/src/ui/preview/mod.rs#L248-L261), 281-285, polled every 4 ms (:537).
+A-1 PERF. [preview/mod.rs:248-261](../../frontends/classic/src/ui/preview/mod.rs#L248-L261), 281-285, polled every 4 ms (:537).
 `SceneInputs::of` clones the whole `Scene`, image bytes included, and all
 parts 250 times a second and compares them: with a 5 MB image about 1.25
 GB/s of copying while idle. Fix: key the watch on scene and parts revision
@@ -382,7 +382,7 @@ image byte, a 5 MB PNG becomes about 160 MB), repeated per playback frame
 while Scene is selected, then cloned twice more (:342, :359). Fix: remove
 `image_data` as commands.rs:599 does; `Snapshot.json` as `Rc<Value>`.
 
-A-4 BUG. [preview/mod.rs:184](../../crates/wavedude-app/src/ui/preview/mod.rs#L184) vs export_dialog.rs:383-386 and
+A-4 BUG. [preview/mod.rs:184](../../frontends/classic/src/ui/preview/mod.rs#L184) vs export_dialog.rs:383-386 and
 properties_forms.rs:69-75. The preview resolves schemes through
 `SchemeStore::default()` (no user schemes), the export loads the user
 folder: a user scheme is grey in the preview and coloured in the export;
@@ -458,7 +458,7 @@ loop always run, about 310 wakeups a second idle; the tick loop has an idle
 divisor, the poll does not.
 
 A-19 FUTURE. `state/**` is Freya-free but lives in the UI crate, so it
-cannot be built or reused without Freya and rfd. Fix: a `wavedude-app-state`
+cannot be built or reused without Freya and rfd. Fix: a `waveduderust_app`
 crate.
 
 Checked and fine: the four language tables have identical key sets (a test

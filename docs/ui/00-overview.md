@@ -52,7 +52,7 @@ Docking behaviour (`Docking/`):
   quarter of the dock); over a group its outer 30 % towards a side splits beside it (a third of the group) and its
   middle tabs into it; the Preview's group takes its sides only. The drop area is tinted accent with a 2 px accent
   border, the pane's title follows the pointer on an accent label; Esc cancels the drag
-  ([`ui/dock.rs`](../../crates/wavedude-app/src/ui/dock.rs)).
+  ([`ui/dock.rs`](../../frontends/classic/src/ui/dock.rs)).
 - Multiple panes in a group show a tab strip; the active pane's title bar is accent-coloured with white text
   and a light-blue grip, others inactive.
 - Default arrangement: left column a quarter of the window (1 : 3 against the preview), Project over
@@ -64,7 +64,7 @@ Docking behaviour (`Docking/`):
 - The arrangement (incl. sizes) is saved on close and restored at start; unknown ids in a saved layout are
   ignored.
 - Port: the arrangement is saved as it changes, once the pointer lets go (a drag or a resize writes it once), on
-  both targets ([`ui/mod.rs`](../../crates/wavedude-app/src/ui/mod.rs)).
+  both targets ([`ui/mod.rs`](../../frontends/classic/src/ui/mod.rs)).
 - View > Panes lists Preview too (decision 0008); in the WPF code the Preview is the centre area
   and not a registered pane, so only Project, Properties, Messages are listed.
 
@@ -118,7 +118,6 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 - The 16-bit preview pictures are rendered at their device-pixel size and drawn 1:1 at any zoom; 8-bit
   pictures are scaled bitmaps.
 - Handle glyphs, dashed probe lines and the marquee are antialiased by design.
-- `--greyscale-text`: text without subpixel AA (used for manual figures).
 - The manual window reloads its document when a zoom change changes the text rendering mode (text sharpens a
   moment after the change, about 0.5 s). (port) No manual in the app (decision 0028).
 
@@ -126,16 +125,13 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 
 Generic touch support (egui's out-of-the-box input) is in; found in touch emulation on 2026-11-15, still open:
 
-- A second finger during an item or part drag drops the grab but leaves the item moved, as one undo step; Esc
-  reverts it.
-- A slow pinch opens the picture's context menu: the same press restarts egui's long-press timer while the first
-  finger rests. No context menu while pinching.
-- A tap does not select a tree row on a touch-first device at 2x; a long press does. Cause not found (click-only
-  row sense with the `hovered() && primary_pressed()` selection).
-- Fixed-width dialogs (first start, 560 points; Examples) are wider than a phone or tablet at 2x and cannot be
-  reached: bound their width by the screen or let them scroll.
 - The pinch's fixed point drifts about 15 px, likely as the visible rect grows from letterboxed to the whole
   cell once zoomed.
+
+## Drag out of the window: TODO
+
+A tree drag stays inside the window ([`20-project-tree.md`](20-project-tree.md), Drag and drop): winit starts no
+operating-system drag, so no XML text reaches a text editor or another window (PARITY TREE-24).
 
 ## UI tests: TODO
 
@@ -147,33 +143,23 @@ changes until then.
 
 - The welcome page (presets, launch check box, Settings... / Examples... and back) has no UI test since decision 0027.
 
-## Release size: TODO
-
-- Subset the Material Symbols icon font (egui_material_icons, outline, 1.2 MB, embedded in the native and the browser
-  builds) to the icons the app uses, as `NotoSansMath-Subset.ttf` is; about 1.2 MB less per build.
-
-## Open with the system: TODO
-
-`platform::open` opens a URL, and natively a file or folder, with the system's handler; only the project page uses it.
-Candidates: show an export's output in its folder, open the log folder from the crash report, open a recent
-project's folder.
-
 ## Turned brightness box: TODO
 
-On its side a picture's brightness box ([`40-preview-pane.md`](40-preview-pane.md), Header strip) is a click area
-drawn turned; a click opens an upright `TextEdit` in an `Area` over it, focused a pass later (`BoxFocus` in
-[`header_strip.rs`](../../crates/wavedude-app/src/ui/preview/header_strip.rs)). egui rotates drawing only, not hit
+On its side a picture's brightness box ([`40-preview-pane.md`](40-preview-pane.md), Header strip) is the kit's
+turned box ([`kit/number.rs`](../../frontends/classic/src/kit/number.rs), `turned`: arrows and a scrub along the
+strip); a click opens the flat box, an upright `TextEdit`, in an `Area` over it, focused a pass later (`BoxFocus` in
+[`header_strip.rs`](../../frontends/classic/src/ui/preview/header_strip.rs)). egui rotates drawing only, not hit
 testing or text editing, and keeps `Memory::request_focus_next_frame` crate-private. Wanted: the box edits turned,
 typing, caret and drag selection along the strip.
 
-- Split [`number_box.rs`](../../crates/wavedude-app/src/ui/number_box.rs): the number logic (parse, Enter/Esc, steps,
-  wheel, drag scrub, pending edit) apart from its text editor, `TextEdit` flat and a turned editor on the side.
+- The number logic is egui-mineral's `NumberEdit`, shared by the flat and the turned box; the turned box gets a text
+  editor of its own.
 - The turned editor maps the pointer into the galley's frame (`Galley::cursor_from_pos`), uses egui's
   `text_selection` (`TextCursorState::pointer_interaction`, `CCursorRange::on_key_press`, `paint_text_selection`,
   `paint_text_cursor`, `update_accesskit_for_text_widget`) and paints the galley turned (`TextShape::with_angle`).
 - Its text edits (insert, Backspace/Delete, word deletes, cut/copy/paste, select all) are its own, `TextEdit`'s being
   private; a number needs no IME or multi-line.
-- A drag scrubs an unfocused box and selects in a focused one, along the strip.
+- A drag selects in a focused box, along the strip.
 - The overlay, its `AreaState` check and `BoxFocus::Upright` go.
 
 ## Languages
@@ -202,6 +188,6 @@ Map or drop in the cross-platform port:
 ## Startup
 
 - Optional first argument: a `.wdproj`, `configuration.json` (import) or `.wdscheme` file to open.
-- Switches: `--zoom=<f>`, `--greyscale-text`; unknown `--` switches are logged.
+- Switches: `--zoom=<f>`; unknown `--` switches are logged.
 - First start (no settings file): preview quality chosen from the machine ([`70-dialogs-and-windows.md`](70-dialogs-and-windows.md)).
 - Status bar's first text: "Ready", or the last start-up log line.

@@ -19,10 +19,10 @@ asynchronous too and ask more of the user or the code.
 - One store, two spills: the store logic (budget, which frames spill, bookkeeping, generations, the frame kept
   through a clear) is shared; natively the spill is the file, on wasm32 a pending spill whose writes and reads return
   tokens the store settles (`SpillBackend` and `SpillFactory` in
-  [`pending.rs`](../../crates/wavedude-core/src/run/pending.rs)). The core takes no browser API: the page's backend lives in the app state's platform layer
-  ([`spill.rs`](../../crates/wavedude-app-state/src/platform/opfs/spill.rs)) and posts each write, read and removal
+  [`pending.rs`](../../crates/waveduderust/src/run/pending.rs)). The core takes no browser API: the page's backend lives in the app state's platform layer
+  ([`spill.rs`](../../crates/waveduderust_app/src/platform/opfs/spill.rs)) and posts each write, read and removal
   to the spill worker, a dedicated worker of its own crate
-  ([`wavedude-spill-worker`](../../crates/wavedude-spill-worker/src/worker.rs)), completing the tokens as it answers.
+  ([`wavedude-spill-worker`](../../crates/waveduderust_workers/src/bin/wavedude-spill-worker/worker.rs)), completing the tokens as it answers.
 - One file per store generation at `wavedude-spill/<session>/<store>-<generation>`, opened at its first write with a
   synchronous access handle, which only a dedicated worker has. Frames are appended and their places indexed, as the
   frames held in memory are never written. The worker handles the page's messages in order, so a generation's file
@@ -34,10 +34,13 @@ asynchronous too and ask more of the user or the code.
   the frames read back are kept 5 at a time, so a fast scrub holds no more (Reading ahead, below).
 - Each tab holds a Web Lock named after its session while it lives; at load the session folders whose lock is free
   are removed (their tab is gone), so two tabs keep their own frames.
-- The free storage is estimated once at load (`navigator.storage.estimate`); a store whose frames past memory do not
+- The free storage is asked for as each store opens: the worker answers `navigator.storage.estimate`'s free bytes
+  plus the bytes of this tab's spill files, which the new store replaces. The quota is the site's, shared by every
+  tab and by the exports' files, so a load-time estimate goes stale. A store whose frames past memory do not
   fit fails its run at the first frame the run makes, which the page's store refuses (natively the store fails at
   the run's start: the run worker's store opens before the page's, which answers no sooner than its first frame).
-  A write refused for quota fails the run.
+  A write refused for quota (Firefox writes short instead of throwing) fails the run; a full storage, in a run or an
+  export, says so in one message (`StorageFull`) above the error.
 
 ## Consequences
 
@@ -54,7 +57,7 @@ The run worker of [0024](0024-browser-run-in-a-web-worker.md) posts every frame 
 once its mirror holds it. A capture read back lands only below the spill's writes in flight, so they bound the frames
 posted and not acknowledged. A spill takes 64 MiB of frames in flight (`WRITE_BYTES_IN_FLIGHT`, the GPU engine's
 capture ring bytes), at least one frame and at most 16, the engine's largest capture ring
-(`StoreLayout::writes_in_flight` in [`store.rs`](../../crates/wavedude-core/src/run/store.rs)): small frames keep all 16,
+(`StoreLayout::writes_in_flight` in [`store.rs`](../../crates/waveduderust/src/run/store.rs)): small frames keep all 16,
 as fewer starved the ring and a run took twice as long at 4; a 1920x1080 preview of f16 samples with the intensity
 (8.3 MB a frame) takes 8, 3840x2160 takes 2.
 
@@ -68,7 +71,7 @@ A read completes in a later task of the page's event loop, after the pass that a
 playback reached was shown a pass late, the picture before it held meanwhile. Playback names the frames it shows next:
 each tick the live controller hands the store the position and the frames after it at the stride of the last tick,
 wrapped to the in point with Loop on, never past the out point or the newest frame of a run still going
-(`Playback::ahead` in [`playback.rs`](../../crates/wavedude-app-state/src/playback.rs), `FrameStore::prefetch`). The
+(`Playback::ahead` in [`playback.rs`](../../crates/waveduderust_app/src/playback.rs), `FrameStore::prefetch`). The
 position is named too: a tick moves it past the frame asked for last before the pass asks for it. The pending spill
 reads the first 4 of them that are spilled (the position and 3 after it), within the 2 reads in flight, a frame asked
 for going first; a frame read back is kept while it is named, and the frame asked for last always, so 5 are kept, at
@@ -89,7 +92,7 @@ budget can stand on:
   GiB on Android and up to 32 GiB elsewhere in the browser that has it
   ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory),
   [Chromium's intent to ship](https://groups.google.com/a/chromium.org/g/blink-dev/c/vXtAmrVZeDk/m/kO39WH6NAwAJ));
-  others do not tell: the frame budget then assumes 1 GiB.
+  others do not tell: the budgets then assume a wasm32 memory's 4 GiB (`WEB_UNKNOWN_MEMORY`), the frames 512 MiB.
 - A wasm32 memory holds 4 GiB at most, the page's and the worker's each.
 - A tab gets far less than the device has. On iOS about 300 to 500 MB of wasm memory were reliably available after a
   reload on 4 to 6 GB devices ([WebKit bug 269777](https://bugs.webkit.org/show_bug.cgi?id=269777), 2024), and a
@@ -99,7 +102,7 @@ budget can stand on:
   269777).
 
 So the frames take what the platform tells, an eighth of the device's memory, at most 512 MiB (`web_frame_memory` in
-[`live.rs`](../../crates/wavedude-app-state/src/live.rs)): 128 MiB where the browser does not tell (Firefox, Safari),
+[`live.rs`](../../crates/waveduderust_app/src/live.rs)): 128 MiB where the browser does not tell (Firefox, Safari),
 256 MiB at 2 GiB, 512 MiB from 4 GiB on. No heuristic stands in where it does not tell. That is the RAM cache size's
 Auto (The RAM cache size in the browser, below). The frames past it spill as above, so a run is no shorter for it;
 the memory warning asks sooner.
@@ -130,9 +133,8 @@ open for its life, makes Firefox's spill fast, and only a dedicated worker can h
 - `wavedude-spill-worker` is a dedicated module worker, loaded by `spill-worker.js` with the page's build in its
   query, as the run worker is (0024). Its library is the protocol (`ToSpill`, `FromSpill`, postcard beside a
   transferred buffer): the page posts a write with the frame's planes copied into one `ArrayBuffer`, a read, or a
-  removal; the worker answers each write and read by its id, a read with its planes transferred back.
-- The page keeps the session: its folder, its Web Lock, the removal of gone tabs' sessions and the free storage
-  estimate. It names the folder to the worker once ready, before `SpillFactory::poll_ready` is; the worker opens
+  removal, or asks for the free storage; the worker answers each write, read and ask by its id, a read with its planes transferred back.
+- The page keeps the session: its folder, its Web Lock and the removal of gone tabs' sessions. It names the folder to the worker once ready, before `SpillFactory::poll_ready` is; the worker opens
   nothing before.
 - `Ready` carries the protocol's `VERSION` and stays the first message; the worker has no behaviour but its protocol,
   so it carries no build. A worker that does not start, fails, panics, sends what the page cannot read or speaks

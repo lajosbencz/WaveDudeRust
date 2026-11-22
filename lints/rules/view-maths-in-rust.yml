@@ -1,0 +1,14 @@
+id: view-maths-in-rust
+language: rust
+severity: error
+message: what the preview and an export draw is computed alike on every platform; use libm's, std's float maths calls the platform's library
+files:
+  - crates/waveduderust/src/view/**/*.rs
+rule:
+  any:
+    - pattern: $X.$M($$$)
+    - pattern: f32::$M($$$)
+    - pattern: f64::$M($$$)
+constraints:
+  M:
+    regex: ^(sin|cos|tan|sin_cos|asin|acos|atan|atan2|exp|exp2|ln|log|log2|log10|powf|powi|cbrt|hypot)$

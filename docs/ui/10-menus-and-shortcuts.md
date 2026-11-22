@@ -11,7 +11,7 @@ Conventions:
 - Every entry is 23 px high, shows its shortcut text right-aligned.
 - A disabled entry greys text and icon.
 - (port) While a modal shows, the menu bar is greyed and takes no pointer or key.
-- Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`wavedude-app` [`menus.rs`](../../crates/wavedude-app/src/menus.rs));
+- Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`waveduderust_app` [`menus.rs`](../../crates/waveduderust_app/src/menus.rs));
   the ids in this document name the entries.
 - Port: the menu bar is the table `menus::MENU_BAR`, whose unit test checks the mnemonics of every menu in every
   language; the recent files and the panes carry none.
@@ -26,7 +26,7 @@ Conventions:
   turn), Home/End reach the ends, Left/Right open the neighbouring menu of the bar, Esc closes one level (from a
   menu of the bar back to its header, from there out of the bar) and the focus returns to where the keys took it
   from. The pane title bar's menu takes letters too. The mnemonics are the entries' access keys for assistive
-  technology (port: [`ui/menu_keys.rs`](../../crates/wavedude-app/src/ui/menu_keys.rs)).
+  technology (port: [`kit/menu.rs`](../../frontends/classic/src/kit/menu.rs)).
 
 ## File
 

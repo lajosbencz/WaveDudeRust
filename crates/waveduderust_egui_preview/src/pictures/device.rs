@@ -1,0 +1,240 @@
+//! The pictures coloured on the renderer's device (docs/ui/40-preview-pane.md, 8-bit vs 16-bit): the plane is the frame
+//! a GPU engine keeps on that device when it is the one shown, else the stored plane uploaded;
+//! `waveduderust::unstable::render::gpu` colours it in a paint callback inside egui's render pass, so it is never read back.
+//!
+//! Threads: the UI thread; the engine's thread captures into the device frames, which a held frame is safe from.
+
+use std::sync::Arc;
+
+use eframe::egui::{self, Painter, Rect};
+use eframe::egui_wgpu::{self, CallbackResources, CallbackTrait, RenderState};
+use eframe::wgpu;
+use waveduderust::model::Layer;
+use waveduderust::unstable::engine::gpu::{DeviceFrame, DeviceFrames, FrameTag};
+use waveduderust::unstable::engine::{FrameShape, SampleFormat};
+use waveduderust::unstable::render::gpu::{DevicePlane, GpuPicture, PictureInput, PicturePipeline};
+use waveduderust::unstable::render::layer::View;
+use waveduderust_app::preview::presenter::{FrameSource, LayerRequest, NoPlane, SourceKey};
+
+/// The pipeline and the two pictures, in the renderer's callback resources.
+struct Pictures {
+	pipeline: PicturePipeline,
+	pictures: [GpuPicture; 2],
+}
+
+/// What a picture was set to: its plane and request.
+struct Shown {
+	buffer: wgpu::Buffer,
+	first_word: u32,
+	shape: FrameShape,
+	request: LayerRequest,
+}
+
+impl Shown {
+	fn is(&self, plane: &DevicePlane<'_>, shape: &FrameShape, request: &LayerRequest) -> bool {
+		self.buffer == *plane.buffer
+			&& self.first_word == plane.first_word
+			&& self.shape == *shape
+			&& self.request == *request
+	}
+}
+
+/// See the module docs.
+#[derive(Default)]
+pub(super) struct DevicePictures {
+	/// The frames a frame is held from.
+	held_from: Option<Arc<DeviceFrames>>,
+	/// The engine's frame shown.
+	held: Option<DeviceFrame>,
+	/// The source of the planes and its shape.
+	source: Option<(SourceKey, FrameShape)>,
+	/// Each layer's uploaded plane: the buffer and, once asked for, whether it holds the source's plane.
+	uploads: [Option<wgpu::Buffer>; 2],
+	uploaded: [Option<bool>; 2],
+	/// A spilled frame's plane as read back.
+	spill: Vec<u8>,
+	/// Each layer's plane to upload, padded to whole words: written to the device once no layer is pending.
+	staged: [Vec<u8>; 2],
+	/// The requests of the layers shown.
+	requests: Vec<LayerRequest>,
+	set: [Option<Shown>; 2],
+	/// The source asked for last is being read back from the spill; the frame shown before stays.
+	pending: bool,
+}
+
+impl DevicePictures {
+	/// Shows nothing, holding no frame.
+	pub(super) fn clear(&mut self) {
+		if let Some(frames) = self.held_from.take() {
+			frames.release();
+		}
+		self.held = None;
+		self.source = None;
+		self.uploaded = [None; 2];
+		self.requests.clear();
+		self.set = [None, None];
+		self.pending = false;
+	}
+
+	/// The source asked for last waits for its read back: [`show`](Self::show) it again.
+	pub(super) fn pending(&self) -> bool {
+		self.pending
+	}
+
+	/// Shows `source` with `requests`: the engine's frame of it held when its `frames` live on the renderer's device,
+	/// else the planes of the requested layers uploaded. A source shown already only takes the requests and uploads
+	/// the planes of layers asked for anew.
+	pub(super) fn show(
+		&mut self,
+		gpu: &RenderState,
+		frames: Option<&Arc<DeviceFrames>>,
+		source: &FrameSource,
+		requests: &[LayerRequest],
+	) {
+		self.requests.clear();
+		self.requests.extend_from_slice(requests);
+		let key = source.key();
+		let same = self.source.as_ref().is_some_and(|(k, _)| *k == key);
+		if same && (self.held.is_some() || requests.iter().all(|r| self.uploaded[r.layer as usize].is_some())) {
+			return;
+		}
+		let shape = source.shape();
+		let frames = frames.filter(|f| f.context().device == gpu.device);
+		let held = match (source, frames) {
+			(FrameSource::Run { store, stored }, Some(frames)) if !same => {
+				let tag = FrameTag { store: store.id(), generation: store.generation(), stored: *stored };
+				frames.hold(tag).map(|frame| (frames, frame))
+			}
+			_ => None,
+		};
+		if let Some((frames, frame)) = held {
+			self.pending = false;
+			self.source = Some((key, shape));
+			if let Some(old) = self.held_from.replace(frames.clone()).filter(|old| !Arc::ptr_eq(old, frames)) {
+				old.release();
+			}
+			self.held = Some(frame);
+			self.uploaded = [None; 2];
+			return;
+		}
+		let mut uploaded = if same { self.uploaded } else { [None; 2] };
+		let mut staged = [false; 2];
+		for layer in requests.iter().map(|r| r.layer) {
+			let i = layer as usize;
+			if uploaded[i].is_some() {
+				continue;
+			}
+			let plane = &mut self.staged[i];
+			let written = source.with_plane_into(layer, &mut self.spill, |bytes| {
+				plane.clear();
+				plane.extend_from_slice(bytes);
+				// the buffer's size is a multiple of 4
+				plane.resize(bytes.len().next_multiple_of(4), 0);
+			});
+			if let Err(NoPlane::Pending) = written {
+				self.pending = true;
+				return;
+			}
+			uploaded[i] = Some(written.is_ok());
+			staged[i] = written.is_ok();
+		}
+		for (i, plane) in self.staged.iter().enumerate().filter(|&(i, _)| staged[i]) {
+			let slot = &mut self.uploads[i];
+			let buffer = match slot.take() {
+				Some(b) if b.size() >= plane.len() as u64 => b,
+				_ => gpu.device.create_buffer(&wgpu::BufferDescriptor {
+					label: Some("preview plane"),
+					size: (plane.len() as u64).max(16),
+					usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+					mapped_at_creation: false,
+				}),
+			};
+			gpu.queue.write_buffer(&buffer, 0, plane);
+			*slot = Some(buffer);
+		}
+		self.pending = false;
+		self.source = Some((key, shape));
+		if let Some(old) = self.held_from.take() {
+			old.release();
+		}
+		self.held = None;
+		self.uploaded = uploaded;
+	}
+
+	/// Whether `layer` has a picture.
+	pub(super) fn has(&self, layer: Layer) -> bool {
+		self.plane(layer).is_some()
+	}
+
+	/// The part of the canvas `layer`'s picture covers; `None` is all of it (an 8-bit picture is whole).
+	pub(super) fn window(&self, layer: Layer) -> Option<Rect> {
+		let (_, shape) = self.source.as_ref()?;
+		if shape.format != SampleFormat::Half {
+			return None;
+		}
+		let (x, y, w, h) = self.requests.iter().find(|r| r.layer == layer)?.window?;
+		Some(Rect::from_min_size(egui::pos2(x as f32, y as f32), egui::vec2(w as f32, h as f32)))
+	}
+
+	fn plane(&self, layer: Layer) -> Option<DevicePlane<'_>> {
+		match &self.held {
+			Some(frame) => Some(DevicePlane { buffer: &frame.buffer, first_word: frame.first_word(layer)? }),
+			None => (self.uploaded[layer as usize] == Some(true))
+				.then(|| self.uploads[layer as usize].as_ref())
+				.flatten()
+				.map(|buffer| DevicePlane { buffer, first_word: 0 }),
+		}
+	}
+
+	/// Draws `layer`'s picture into `rect` with `painter`, its buffers brought to the request first.
+	pub(super) fn paint(&mut self, gpu: &RenderState, painter: &Painter, layer: Layer, rect: Rect) {
+		let (Some(plane), Some((_, shape))) = (self.plane(layer), &self.source) else { return };
+		let Some(request) = self.requests.iter().find(|r| r.layer == layer) else { return };
+		let mut renderer = gpu.renderer.write();
+		let resources = &mut renderer.callback_resources;
+		if resources.get::<Pictures>().is_none() {
+			let pipeline = PicturePipeline::new(&gpu.device, gpu.target_format);
+			let pictures = [GpuPicture::new(&gpu.device), GpuPicture::new(&gpu.device)];
+			resources.insert(Pictures { pipeline, pictures });
+		}
+		let Pictures { pipeline, pictures } = resources.get_mut::<Pictures>().expect("inserted above");
+		let picture = &mut pictures[layer as usize];
+		if !self.set[layer as usize].as_ref().is_some_and(|s| s.is(&plane, shape, request)) {
+			let view = View::of(shape, request.device, request.window, request.dither_bits);
+			let input = PictureInput {
+				plane,
+				shape,
+				layer,
+				colours: &request.colours,
+				view: &view,
+				outline: request.outline.as_ref().map(|o| (&o.edges, o.gain)),
+			};
+			picture.set(pipeline, &gpu.device, &gpu.queue, &input);
+			self.set[layer as usize] = Some(Shown {
+				buffer: plane.buffer.clone(),
+				first_word: plane.first_word,
+				shape: *shape,
+				request: request.clone(),
+			});
+		}
+		let ppp = painter.ctx().pixels_per_point();
+		picture.place(&gpu.queue, [rect.min.x * ppp, rect.min.y * ppp], [rect.width() * ppp, rect.height() * ppp]);
+		painter.add(egui_wgpu::Callback::new_paint_callback(rect, PictureCallback(layer as usize)));
+	}
+}
+
+/// Draws the picture of the layer it holds (the index into [`Pictures::pictures`]).
+struct PictureCallback(usize);
+
+impl CallbackTrait for PictureCallback {
+	fn paint(
+		&self,
+		_info: egui::PaintCallbackInfo,
+		pass: &mut wgpu::RenderPass<'static>,
+		resources: &CallbackResources,
+	) {
+		if let Some(Pictures { pipeline, pictures }) = resources.get::<Pictures>() {
+			pictures[self.0].draw(pipeline, pass);
+		}
+	}
+}
