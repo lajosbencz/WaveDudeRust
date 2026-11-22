@@ -8,6 +8,9 @@ name: CI
 on:
   pull_request:
   workflow_dispatch:
+  # Auto-merged PRs land through GITHUB_TOKEN, which triggers no push run; this keeps master's caches current.
+  schedule:
+    - cron: "23 3 * * *"
   push:
     branches: [master]
     paths:
@@ -80,7 +83,7 @@ jobs:
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ github.event_name == 'push' }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
       # The export tests decode what they wrote with ffmpeg (the programs never need it). A pinned static build,
       # checked against its published digest and cached; the distribution's package pulled in 128 others.
       - name: ffmpeg for the export tests
@@ -189,7 +192,7 @@ jobs:
           echo "MSRV=$msrv" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ github.event_name == 'push' }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
       - name: Check
         run: cargo +"$MSRV" check --workspace --all-targets
 
@@ -212,7 +215,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ github.event_name == 'push' }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: just@1.59.0
@@ -262,7 +265,7 @@ jobs:
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ github.event_name == 'push' }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
       # As the runner's user on the workspace, with the cached registry: rust-cache saves what the build wrote.
       - name: Build container
         run: |
@@ -305,7 +308,7 @@ jobs:
   caches:
     name: Prune caches
     needs: [ubuntu, windows, macos, msrv, wasm32, glibc]
-    if: always() && github.event_name == 'push'
+    if: always() && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
