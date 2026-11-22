@@ -115,7 +115,8 @@ jobs:
         run: |
           docker exec "$CONTAINER" bash -euo pipefail -c '
             img=$(realpath target/packages/*.AppImage)
-            tool=$(find / -xdev -name "linuxdeploy-plugin-appimage-*.AppImage" -print -quit 2>/dev/null)
+            tool=$(echo "${XDG_CACHE_HOME:-$HOME/.cache}"/.cargo-packager/AppImage/linuxdeploy-plugin-appimage-*.AppImage)
+            test -x "$tool"
             rm -rf target/appimage-fix && mkdir target/appimage-fix && cd target/appimage-fix
             "$img" --appimage-extract >/dev/null
             chmod -R u=rwX,go=rX squashfs-root && chmod 755 squashfs-root/AppRun
