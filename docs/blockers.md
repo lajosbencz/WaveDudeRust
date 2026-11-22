@@ -16,7 +16,8 @@ Classic frontend (0.12.x):
 - egui cancels a drag on Esc, so a scrub never sees it; `kit/number.rs` `hold_escape`. Ask:
   `NumberPass::cancel_scrub_on_escape(ctx)`.
 - `apply_text` parses only through `LocaleFormat`; `kit/number.rs` keeps a parse adapter. Ask: `apply_text_with(parse)`.
-- No modal focus scope in core; `kit/dialog.rs` `focus_outside`. Ask: `overlay::ModalFocus::scope`.
+- No modal focus scope in core; `kit/dialog.rs` `focus_outside`. Fixed in 0.12.2 (`overlay::ModalFocus`,
+  `kit::layer::default_action_pressed_with`); adopting it, with `ui/modal.rs`'s focus give-back, is pending.
 - No per-widget splitter `min_target`; `kit/mod.rs` overrides it for the whole kit. Ask: `Splitter::min_target`.
 - `MenuNav` has no target for the level itself; `kit/menu.rs` keeps a panel-focus flag.
 
