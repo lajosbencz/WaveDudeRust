@@ -6,8 +6,11 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Derives of the model's typed fields (Fields) and enum members (Word)"
-# Not on crates.io: the workspace is built and released as one.
 publish = true
+readme = "README.md"
+documentation = "https://docs.rs/waveduderust_macros"
+keywords = ["waveduderust", "derive"]
+categories = ["development-tools::procedural-macro-helpers"]
 
 [lib]
 proc-macro = true

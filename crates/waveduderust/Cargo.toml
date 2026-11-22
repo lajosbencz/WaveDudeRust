@@ -9,6 +9,11 @@ keywords = ["wave", "simulation", "physics", "optics"]
 categories = ["science", "simulation"]
 description = "2D wave simulation: model, file formats, scene painter, CPU and wgpu engines, runs, renderer, overlays, exports"
 publish = true
+readme = "README.md"
+documentation = "https://docs.rs/waveduderust"
+
+[package.metadata.docs.rs]
+features = ["serde", "clap", "unstable-engine", "unstable-scene", "unstable-run", "unstable-export", "unstable-view", "unstable-reflect"]
 
 [features]
 default = ["gpu", "run", "export", "mp4"]
