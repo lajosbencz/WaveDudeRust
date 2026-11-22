@@ -113,15 +113,15 @@ jobs:
       - name: AppImage file modes
         if: runner.os == 'Linux'
         run: |
-          docker exec "$CONTAINER" bash -euo pipefail -c '
+          docker exec "$CONTAINER" bash -xeuo pipefail -c '
             img=$(realpath target/packages/*.AppImage)
-            tool=$(echo "${XDG_CACHE_HOME:-$HOME/.cache}"/.cargo-packager/AppImage/linuxdeploy-plugin-appimage-*.AppImage)
+            tool=${XDG_CACHE_HOME:-$HOME/.cache}/.cargo-packager/AppImage/linuxdeploy-plugin-appimage.AppImage
             test -x "$tool"
             rm -rf target/appimage-fix && mkdir target/appimage-fix && cd target/appimage-fix
             "$img" --appimage-extract >/dev/null
             chmod -R u=rwX,go=rX squashfs-root && chmod 755 squashfs-root/AppRun
             rm "$img"
-            OUTPUT="$img" ARCH=x86_64 "$tool" --appimage-extract-and-run --appdir squashfs-root
+            LDAI_OUTPUT="$img" OUTPUT="$img" ARCH=x86_64 "$tool" --appimage-extract-and-run --appdir squashfs-root
             test -x "$img"'
       - name: Linux tarball
         if: runner.os == 'Linux'
