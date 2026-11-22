@@ -1,6 +1,5 @@
 //! Next's dialog windows (docs/ui/70; Dialogs/MessageWindow.xaml) on egui-mineral's modal layer: the frame and title,
-//! the message body, the button row with Enter (default), Esc (cancel) and mnemonics with or without Alt, and the
-//! focus trap.
+//! the message body, the button row with Enter (default), Esc (cancel) and mnemonics with or without Alt.
 
 use eframe::egui::{
 	self, Align, Align2, Color32, FontId, Frame, Id, Key, Layout, Margin, Modifiers, Rect, Response, ScrollArea, Sense,
@@ -143,7 +142,7 @@ fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> Response {
 }
 
 /// The row of `choices` at the bottom right; the index of the one pressed by the pointer or a key. The default one
-/// takes the focus when the dialog is `fresh`, and whenever the focus is outside the dialog.
+/// takes the focus when the dialog is `fresh`.
 pub(crate) fn buttons(ui: &mut Ui, fresh: bool, choices: &[Choice<'_>]) -> Option<usize> {
 	let mut pressed = None;
 	ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
@@ -156,7 +155,7 @@ pub(crate) fn buttons(ui: &mut Ui, fresh: bool, choices: &[Choice<'_>]) -> Optio
 			if let Some(tip) = choice.tip {
 				response = response.on_hover_text(tip);
 			}
-			if choice.default && (fresh || focus_outside(ui)) {
+			if choice.default && fresh {
 				response.request_focus();
 			}
 			if response.clicked() {
@@ -165,16 +164,6 @@ pub(crate) fn buttons(ui: &mut Ui, fresh: bool, choices: &[Choice<'_>]) -> Optio
 		}
 	});
 	pressed.or_else(|| pressed_key(ui, choices))
-}
-
-/// The focus trap: egui's modal layer keeps Tab inside; focus left on a widget below it comes back. Popups the
-/// dialog opens sit above it and keep theirs.
-fn focus_outside(ui: &Ui) -> bool {
-	let ctx = ui.ctx();
-	let Some(layer) = ctx.memory(egui::Memory::focused).and_then(|id| ctx.read_response(id)).map(|r| r.layer_id) else {
-		return false;
-	};
-	!ctx.memory(|m| m.is_above_modal_layer(layer))
 }
 
 /// The letter or digit a key types, lower-cased.
@@ -196,13 +185,17 @@ pub(crate) fn escape_pressed(ui: &Ui) -> bool {
 	egui_mineral::kit::layer::consume_escape(ui.ctx())
 }
 
-/// The choice a key picks: Enter, Esc or a mnemonic letter; the key is taken.
+/// The choice a key picks: Enter outside a control, Esc or a mnemonic letter; the key is taken.
 fn pressed_key(ui: &Ui, choices: &[Choice<'_>]) -> Option<usize> {
+	let find = |f: &dyn Fn(&Choice<'_>) -> bool| choices.iter().position(|c| c.enabled && f(c));
+	if let Some(i) = find(&|c| c.default)
+		&& egui_mineral::kit::layer::default_action_pressed(ui)
+	{
+		return Some(i);
+	}
 	let typing = ui.ctx().text_edit_focused();
 	let pick = |key: Key| -> Option<usize> {
-		let find = |f: &dyn Fn(&Choice<'_>) -> bool| choices.iter().position(|c| c.enabled && f(c));
 		match key {
-			Key::Enter => find(&|c| c.default),
 			Key::Escape => find(&|c| c.cancel),
 			key if !typing => letter_of(key).and_then(|l| find(&|c| mnemonic(c.text) == Some(l))),
 			_ => None,

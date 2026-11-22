@@ -1,7 +1,8 @@
 //! The shell's modals over the window (docs/ui/70), drawn one at a time as the kit's dialog windows
 //! ([`crate::kit::dialog`]), the secondary windows among them; the focus they took goes back after the last.
 
-use eframe::egui::{self, Id};
+use eframe::egui::Id;
+use egui_mineral::overlay::ModalFocus;
 use egui_mineral::runtime::Core;
 use waveduderust_app::menus::MenuAction;
 use waveduderust_app::modal::{Modal, Modals, Reply, Window};
@@ -89,31 +90,32 @@ fn frame_of(modal: &Modal, s: &Strings) -> (String, f32) {
 	}
 }
 
-/// What the window keeps beside the shell's modals: the focus they took and the secondary window shown.
+/// What the window keeps beside the shell's modals: the secondary window shown.
 #[derive(Default)]
 pub(super) struct ModalWindows {
-	/// The focus before the first modal took it.
-	focus: Option<Option<Id>>,
 	open: Option<Open>,
 }
 
 impl ModalWindows {
 	/// Draws the shown modal of `modals`; once answered it closes, events its answer sends go to `out`, and what the
 	/// window does then is returned. A shown modal's default button takes the focus on its first frame; after the
-	/// last, the focus goes back.
+	/// last, the focus goes back to where it was before the first.
 	pub(super) fn ui(&mut self, core: &Core, modals: &mut Modals, app: &App, out: &mut Vec<Event>) -> Option<Then> {
+		let mut open = modals.is_open();
+		ModalFocus::scope(core.ctx(), Id::unique("ModalWindows"), &mut open, None, |_, open| {
+			let then = self.show(core, modals, app, out);
+			*open = modals.is_open();
+			then
+		})
+	}
+
+	fn show(&mut self, core: &Core, modals: &mut Modals, app: &App, out: &mut Vec<Event>) -> Option<Then> {
 		let ctx = core.ctx();
 		let fresh = modals.take_fresh();
 		if fresh {
 			self.open = None;
 		}
-		let Some(modal) = modals.shown_mut() else {
-			self.give_focus_back(ctx);
-			return None;
-		};
-		if fresh && self.focus.is_none() {
-			self.focus = Some(ctx.memory(egui::Memory::focused));
-		}
+		let modal = modals.shown_mut()?;
 		if let Modal::Window(window) = modal
 			&& self.open.is_none()
 		{
@@ -210,20 +212,6 @@ impl ModalWindows {
 		});
 		let Some(answer) = answer else { return stays };
 		modals.close();
-		if !modals.is_open() {
-			self.give_focus_back(ctx);
-		}
 		answer
-	}
-
-	/// The focus goes back to where it was before the first modal.
-	fn give_focus_back(&mut self, ctx: &egui::Context) {
-		if let Some(focus) = self.focus.take() {
-			ctx.memory_mut(|m| match (focus, m.focused()) {
-				(Some(id), _) => m.request_focus(id),
-				(None, Some(now)) => m.surrender_focus(now),
-				(None, None) => {}
-			});
-		}
 	}
 }
