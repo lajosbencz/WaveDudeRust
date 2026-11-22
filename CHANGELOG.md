@@ -6,6 +6,31 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.7...v0.4.0) - 2026-11-22
+
+### Added
+
+- the first start and the Auto preset read whether the frame cache's drive is a hard disk (sysinfo), and links open through the opener crate instead of a hand-picked command
+- **Breaking:** modular workspace (ADR 0031): the waveduderust library with typed ids, non_exhaustive model and View split from Project, a headless app crate with the shared shell, and two egui frontends, classic on its own egui-mineral kit and material
+- **Breaking:** the programs are waveduderust, waveduderust-material and waveduderust-cli; updates restart the macOS bundle and the installers drop the 0.3 names
+
+### Fixed
+
+- *(icon_subset)* cargo metadata runs online, since it needs the dev-dependencies a plain build never downloads
+
+### Changed
+
+- *(classic)* dialogs adopt egui_mineral's ModalFocus and default_action_pressed, replacing focus_outside and the focus give-back
+
+### Dependencies
+
+- bump openh264 from 0.9.9 to 0.9.10 in the cargo-minor group (#43)
+- bump ureq from 3.5.1 to 3.5.2 in the cargo-minor group (#44)
+- bump wgpu from 30.0.1 to 30.0.2 in the cargo-minor group (#45)
+- wgpu 30.0.2 and openh264 0.9.10, the Dependabot bumps after the rebase
+- url 2.5.9 for RUSTSEC-2026-0592
+- bump the cargo-minor group with 2 updates (#48)
+
 ## [0.3.7](https://github.com/lajosbencz/WaveDudeRust/compare/v0.3.6...v0.3.7) - 2026-11-16
 
 ### Added
