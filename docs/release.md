@@ -17,7 +17,7 @@ Merging it (squash) releases: the push finds the workspace version without its t
 drafts the release with the changelog section as notes. [`package.yml`](../.github/workflows/package.yml), a reusable workflow without secrets and with
 a read-only token, builds the packages with `cargo auditable` (the Linux ones in an AlmaLinux 8 container, checked to
 need glibc 2.28 at most) and attests them (build provenance and the CycloneDX
-SBOMs of both programs) and the browser app, `wavedude-rust-<version>-web.tar.gz`; `sign` waits for a maintainer to approve the `release` environment, then signs the update bundles with the updater key and the cargo-packager that `signer` built in a job of its own, compiling nothing; `publish`
+SBOMs of both programs) and the browser app, `WaveDude_Rust-<version>-web.tar.gz`; `sign` waits for a maintainer to approve the `release` environment, then signs the update bundles with the updater key and the cargo-packager that `signer` built in a job of its own, compiling nothing; `publish`
 writes `latest.json` and `SHA256SUMS`, attests them and the signatures, attaches everything, verifies every
 attached file against its attestation (a file not attested by [`package.yml`](../.github/workflows/package.yml) or [`release.yml`](../.github/workflows/release.yml) of this repository
 stops the release), appends the provenance table to the notes (file, digest, workflow), publishes the release and dispatches

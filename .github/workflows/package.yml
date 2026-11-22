@@ -113,7 +113,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           # a prefix tree with its own install.sh: menu entry, icons and file types beside the programs
-          dir="wavedude-rust-$VERSION-$PACKAGE_PLATFORM"
+          dir="WaveDude_Rust-$VERSION-$PACKAGE_PLATFORM"
           assets=frontends/classic/assets
           mkdir -p "$dir/bin" "$dir/share/applications" "$dir/share/mime/packages"
           cp target/release/wavedude-app target/release/wavedude-cli "$dir/bin"
@@ -143,10 +143,15 @@ jobs:
           mkdir dist
           find target/packages -maxdepth 1 -type f \( -name '*.AppImage' -o -name '*.tar.gz' -o -name '*.exe' -o -name '*.dmg' \) \
             -exec cp {} dist/ \;
-          # Asset names without spaces (URLs in latest.json) and unique per platform (both macOS builds share one name).
+          # Canonical names, as the AppImage catalog asks: WaveDude_Rust-<version>-<arch>; latest.json takes them from here.
           for f in dist/*; do
-            name=$(basename "$f" | tr ' ' '-')
-            case "$name" in *"$PACKAGE_PLATFORM"*) ;; *) name="$PACKAGE_PLATFORM-$name" ;; esac
+            case "$f" in
+              *.AppImage) name="WaveDude_Rust-$VERSION-x86_64.AppImage" ;;
+              *.exe) name="WaveDude_Rust-$VERSION-x86_64-setup.exe" ;;
+              *.dmg) name="WaveDude_Rust-$VERSION-universal.dmg" ;;
+              *.app.tar.gz) name="WaveDude_Rust-$VERSION-universal.app.tar.gz" ;;
+              *.tar.gz) name=$(basename "$f") ;;
+            esac
             [ "dist/$name" = "$f" ] || mv "$f" "dist/$name"
           done
           ls -l dist
@@ -162,10 +167,10 @@ jobs:
           base=$(sed -n 's/^FROM //p' .github/build/linux.Dockerfile)
           for image in "$base" debian:10-slim@sha256:bb3dc79fddbca7e8903248ab916bb775c96ec61014b3d02b4f06043b604726dc; do
             docker run --rm -v "$RUNNER_TEMP/smoke:/smoke:ro" "$image" sh -ec '
-              for cli in /smoke/wavedude-rust-*/bin/wavedude-cli /smoke/squashfs-root/usr/bin/wavedude-cli; do
+              for cli in /smoke/WaveDude_Rust-*/bin/wavedude-cli /smoke/squashfs-root/usr/bin/wavedude-cli; do
                 "$cli" --version
               done
-              ! ldd /smoke/wavedude-rust-*/bin/wavedude-app | grep "not found"'
+              ! ldd /smoke/WaveDude_Rust-*/bin/wavedude-app | grep "not found"'
           done
       - name: SBOMs
         run: |
@@ -254,7 +259,7 @@ jobs:
           echo "$HOME/binaryen/bin" >> "$GITHUB_PATH"
       - name: Build
         run: |
-          dir="wavedude-rust-$VERSION-web"
+          dir="WaveDude_Rust-$VERSION-web"
           tools/build-web.sh "$dir"
           mkdir dist
           tar -czf "dist/$dir.tar.gz" "$dir"

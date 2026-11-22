@@ -12,7 +12,7 @@ build had none of the release's provenance.
 ## Decision
 
 - [`package.yml`](../../.github/workflows/package.yml) builds the browser app of each release with
-  [`tools/build-web.sh`](../../tools/build-web.sh) into `wavedude-rust-<version>-web.tar.gz`, attests it with its SBOM, and the release
+  [`tools/build-web.sh`](../../tools/build-web.sh) into `WaveDude_Rust-<version>-web.tar.gz`, attests it with its SBOM, and the release
   attaches it beside the desktop packages.
 - [`pages.yml`](../../.github/workflows/pages.yml) downloads that bundle from the latest release, verifies its attestation against
   `package.yml`, and deploys it under `app/` with `site/`. It runs when `site/` changes on master, when
