@@ -84,7 +84,7 @@ jobs:
         run: |
           sed -i -E '/^\[workspace\.package\]/,/^\[/ s/^version = "[^"]*"/version = "'"$VERSION"'"/' Cargo.toml
           # Internal dependencies that name a version (crates.io needs one).
-          sed -i -E 's/^(wavedude-[a-z-]+ = \{ path = "[^"]+", version = ")[^"]*"/\1'"$VERSION"'"/' crates/*/Cargo.toml
+          sed -i -E 's/^(waveduderust[a-z_]* = \{ path = "[^"]+", version = ")[^"]*"/\1'"$VERSION"'"/' crates/*/Cargo.toml frontends/*/Cargo.toml
           cargo update --workspace
           sed -i -E -e 's/^version: .*/version: '"$VERSION"'/' -e 's/^date-released: .*/date-released: "'"$(date -u +%F)"'"/' CITATION.cff
           git cliff --tag "v$VERSION" -o CHANGELOG.md
