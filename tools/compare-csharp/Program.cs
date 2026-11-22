@@ -1,4 +1,4 @@
-// Runs a canvas-mode .wdproj through the C# WaveDudeNext CPU engine and dumps what `wavedude-cli compare` reads.
+// Runs a canvas-mode .wdproj through the C# WaveDudeNext CPU engine and dumps what `waveduderust-cli compare` reads.
 // Usage: compare-csharp <project.wdproj> <out-dir> --steps N [--every K] [--probe-steps] [--render]
 //        compare-csharp bench [w h] [steps]
 

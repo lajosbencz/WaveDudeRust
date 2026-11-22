@@ -6,7 +6,7 @@ driver).
 
 ## Engine against WaveDude Next, same machine
 
-2026-11-07. `wavedude-cli bench --gpu --steps 2000` against the C# library's own
+2026-11-07. `waveduderust-cli bench --gpu --steps 2000` against the C# library's own
 engines through `tools/compare-csharp/run.sh bench 1920 1080 2000`: a 1920x1080
 canvas, a 32-cell rim outside, open edges, one source at the centre, intensity
 tracked; with captures, both planes as f16 every 2 steps, pipelined. Best of
@@ -48,7 +48,7 @@ A step is not the same work in both:
 
 ### Re-measured 2026-11-08
 
-`wavedude-cli bench --gpu --steps 2000` after the UI and format work: GPU 9-point 0.112 ms, 4th order 0.211 ms,
+`waveduderust-cli bench --gpu --steps 2000` after the UI and format work: GPU 9-point 0.112 ms, 4th order 0.211 ms,
 with captures 0.243 and 0.334 ms; CPU 1.54 / 3.35 ms, with captures 1.89 / 3.76 ms. Unchanged within the run-to-run
 spread. The gap to the C# is the work described above (two sub-steps, four passes, the CPML, one queue), not
 overhead; nothing cheaper than those was found, so the figures stand.
@@ -71,7 +71,7 @@ and took 6.9 s.
 
 2026-11-10. [`tools/compare-csharp`](../tools/compare-csharp/) on upstream's one-of-every-kind project (`_tools/ui_check/figures.wdproj` as a
 canvas scene, 800x500, 600 steps) and on four 640x400 projects of a 31-element line source before a 240 px part,
-1200 steps, `wavedude-cli compare` with the Rust dumps it now writes beside the report.
+1200 steps, `waveduderust-cli compare` with the Rust dumps it now writes beside the report.
 
 Painted scene of every kind: 1.05 % of the pixels differ, all in red, 99.3 % of them within 2 px of an index edge,
 none by more than 16 levels (0.16 in index), the blue and green channels equal everywhere; the rectangle and the
@@ -121,7 +121,7 @@ drag, the debounce on top once the hand rested.
 
 ## A source array's forcing
 
-2026-11-15, `wavedude-cli bench --gpu --stencil nine --captures-every 0 --steps 400 --array 100`: the default
+2026-11-15, `waveduderust-cli bench --gpu --stencil nine --captures-every 0 --steps 400 --array 100`: the default
 1920x1080 canvas with a 100 x 100 source array, 4 cells apart; three runs each, ms a step. The table of source
 values is made on the host for every sub-step, 10000 emitters twice a step.
 
@@ -157,7 +157,7 @@ each capture into a buffer the frame store hands out (its prepared memory frame,
 or a recycled one for the spill file) and collects it after the next has begun,
 so the GPU's conversion and readback overlap the steps between captures, and a
 frame in memory is neither allocated per capture nor copied by the writer.
-`wavedude-cli bench --gpu` (1920x1080, rim 32, both planes as f16 every 2 steps,
+`waveduderust-cli bench --gpu` (1920x1080, rim 32, both planes as f16 every 2 steps,
 200 steps), ms a capture over the steps alone; before: a synchronous capture
 into new planes per frame; after: the run's pipelined capture with two reused
 buffers. Two runs each, machine quiet.
@@ -174,7 +174,7 @@ GPU two steps plus a capture: 0.402 to 0.406 ms before, 0.255 to 0.258 after
 write of a memory frame is now a move; the copy it made (0.86 to 0.94 ms a
 full-HD frame) is gone.
 
-Export pipeline (review X-5 to X-8), `wavedude-cli export` of Example02 (1920x1080),
+Export pipeline (review X-5 to X-8), `waveduderust-cli export` of Example02 (1920x1080),
 `--steps 1000 --from 600 --to 1000 --markers`, 200 field frames, CPU engine,
 release build, the job's time per frame. Before: the run first, then the
 export, every sink on the job's thread (MOV samples encoded there too). After:
@@ -200,7 +200,7 @@ on the job's thread.
 
 Burned-in overlays as epaint meshes, 2026-11-13: every overlay on both layers,
 ```
-wavedude-cli export crates/waveduderust/tests/fixtures/examples/Example02_Coherent_source_gaussian_beam.wdproj \
+waveduderust-cli export crates/waveduderust/tests/fixtures/examples/Example02_Coherent_source_gaussian_beam.wdproj \
   --out ex2.avi --steps 1000 --from 600 --to 1000 --layers both --markers --graphs --source-markers
 ```
 200 frames of each layer, AVI, the CLI's "ms/frame exporting", alternated with the previous CPU rasteriser (commit
@@ -449,7 +449,7 @@ reports `onSubmittedWorkDone` and `mapAsync` 100 ms after the work, Chrome about
 | Example01, Chrome, 4 runs | 1.1 to 1.2 s | 0.8 to 0.9 s |
 
 Captures in the submission alone took Example01 in Firefox to 9 to 38 s, probe readbacks in it too to 4.0 s. Native,
-`wavedude-cli bench --gpu --steps 2000` (GPU 9-point, a capture every 2 steps) is unchanged: 0.257 and 0.263 ms per step
+`waveduderust-cli bench --gpu --steps 2000` (GPU 9-point, a capture every 2 steps) is unchanged: 0.257 and 0.263 ms per step
 before, 0.259 and 0.248 after.
 
 ## The browser's preview coloured on the page's GPU

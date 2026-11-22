@@ -1,5 +1,5 @@
 #!/bin/sh
-# Dumps each example through the C# engine (--render) and compares it with `wavedude-cli compare`; the summary.tsv
+# Dumps each example through the C# engine (--render) and compares it with `waveduderust-cli compare`; the summary.tsv
 # files are concatenated into <out-root>/summary.tsv. Examples are name prefixes of the fixtures (default: all).
 # STEPS and EVERY set the schedule (600 and 100).
 set -e
@@ -12,7 +12,7 @@ steps=${STEPS:-600}
 every=${EVERY:-100}
 
 cargo build --release -p waveduderust_cli --manifest-path "$root/Cargo.toml"
-cli=${CARGO_TARGET_DIR:-$root/target}/release/wavedude-cli
+cli=${CARGO_TARGET_DIR:-$root/target}/release/waveduderust-cli
 [ $# -gt 0 ] || set -- ""
 
 mkdir -p "$out"

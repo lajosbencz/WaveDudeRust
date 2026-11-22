@@ -9,7 +9,7 @@ publish = false
 description = "A 2D wave simulator, with a Material Design window on egui-mineral (experimental)"
 
 [[bin]]
-name = "wavedude-mineral"
+name = "waveduderust-material"
 path = "src/main.rs"
 
 [lints]

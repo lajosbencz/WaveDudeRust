@@ -89,7 +89,7 @@ What does not:
   the 4th order, 1 on its 9-point kernel), the Rust engine its CFL rule (2 at index 1 on both stencils, 1 in
   07-xor where the C# takes 2). Nothing is forced to match.
 - **Tools.** [`tools/compare-csharp`](../../tools/compare-csharp/) dumps the C# scene, fields, intensities and probe series;
-  `wavedude-cli compare` runs the Rust engine and writes `report.md` with the pictures (C# | Rust | Rust / gain -
+  `waveduderust-cli compare` runs the Rust engine and writes `report.md` with the pictures (C# | Rust | Rust / gain -
   C#) into each folder below.
 
 Measures in the tables:
@@ -120,7 +120,7 @@ shape error of 5 to 17 % (table below), which is what is left of the solvers' di
 says which program is right; the analytic tests below do.
 
 Time offset that best matches the two fields (Rust step against the C# step; scratch probe, the fields of
-`wavedude-cli compare` at neighbouring steps):
+`waveduderust-cli compare` at neighbouring steps):
 
 | scene | C# step | best Rust step | Pearson there | shape error there | same with 30 px around each source left out |
 |---|---|---|---|---|---|
@@ -151,7 +151,7 @@ leapfrog at 2 sub-steps against the Rust's modified equation at 1, in fibre guid
   for Example16's two; the input probe of 07-xor (0.870) sits next to the sources, where the two source models
   differ most.
 - **Gate logic.** 07-xor with both inputs on: the C# dump puts 0.2 % of the output into Q (previous run; the C#
-  side is unchanged), the Rust truth table 0.25 % (`wavedude-cli truth-table examples/guides/07-xor.wdproj`: 4 of 4
+  side is unchanged), the Rust truth table 0.25 % (`waveduderust-cli truth-table examples/guides/07-xor.wdproj`: 4 of 4
   rows within tolerance; one input alone 0.468 / 0.532).
 - **9-point wavelengths.** Example09 as loaded (the importer divides the frequency scale by 0.562): 29.9 /
   29.8 px at level 30, 14.9 / 14.9 px at level 60, 7.4 / 7.4 px at level 120, at every dump.
@@ -242,7 +242,7 @@ What shows the Rust engine is right is not its agreement with the C#, but the an
   error of the set (34 %) is 10 % at a 2-step offset, the rest the source phase and the different dispersion
   at the C#'s 2 and the Rust's 1 sub-step.
 
-## The 9-point runs of `wavedude-cli compare`
+## The 9-point runs of `waveduderust-cli compare`
 
 A 9-point project is compared twice: as loaded (the importer divides the frequency scale by the original
 kernel's phase speed 0.5621, so Example09's wavelengths come out 29.9 / 14.9 / 7.4 px against the C#'s

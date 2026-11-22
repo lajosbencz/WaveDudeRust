@@ -123,8 +123,7 @@ impl Pending {
 			drop(log);
 		}
 		let installed = ready.update.install(ready.bytes);
-		let program = std::env::var_os("APPIMAGE").map(Into::into).map_or_else(std::env::current_exe, Ok);
-		let started = program.and_then(|p| std::process::Command::new(p).spawn());
+		let started = start_installed();
 		if let Err(e) = installed {
 			tracing::error!("the update {version} could not be installed: {e}");
 			if let Err(e) = started {
@@ -136,6 +135,21 @@ impl Pending {
 		started.with_context(|| format!("the update {version} is installed, but it could not be started"))?;
 		Ok(())
 	}
+}
+
+/// Starts the installed program: the `AppImage`, the macOS bundle (an update may rename its executable), else this
+/// executable. The Windows installer starts the program itself.
+fn start_installed() -> std::io::Result<std::process::Child> {
+	use std::process::Command;
+	if let Some(appimage) = std::env::var_os("APPIMAGE") {
+		return Command::new(appimage).spawn();
+	}
+	let exe = std::env::current_exe()?;
+	#[cfg(target_os = "macos")]
+	if let Some(bundle) = exe.ancestors().nth(3).filter(|b| b.extension().is_some_and(|e| e == "app")) {
+		return Command::new("/usr/bin/open").arg("-n").arg(bundle).spawn();
+	}
+	Command::new(exe).spawn()
 }
 
 enum Answer {

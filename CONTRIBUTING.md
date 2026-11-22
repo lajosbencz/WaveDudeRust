@@ -7,7 +7,7 @@ what differs from WaveDude Next and why in [`docs/divergences.md`](docs/divergen
 
 Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE/) ask for what each kind needs:
 
-- **Bug**: the version (Help > About, or `wavedude-cli --version`), the platform, the steps, what was expected,
+- **Bug**: the version (Help > About, or `waveduderust-cli --version`), the platform, the steps, what was expected,
   the project file or the name of the example used, and for a wrong picture or export the output itself.
 - **Crash**: the same plus the log of the day, which holds the panic's backtrace; a panic that ended the program
   also left `crash.txt` beside it, which the next start shows once and renames `last-crash.txt`. The logs folder is
@@ -91,7 +91,7 @@ The tool versions are pinned in the justfile (`just --evaluate <name>`); the act
 after a build of its own; instrumented, `cli.rs` went from 21 s to 23.5 min and `physics.rs` from 14 s to 17 min. Beyond
 the checks:
 
-- Timings: `wavedude-cli bench` (`--help` lists its options) and the `ignored_timing` tests; a result goes into
+- Timings: `waveduderust-cli bench` (`--help` lists its options) and the `ignored_timing` tests; a result goes into
   [`docs/measurements.md`](docs/measurements.md) with its command.
 - `#[ignore]` tests sit in one of three modules, `ignored_timing`, `ignored_slow` and `ignored_network`, so
   `-- --ignored ignored_<group>::` runs one group (`cargo test --workspace --features $F -- --ignored ignored_slow::`; a test
@@ -101,7 +101,7 @@ the checks:
   - `ignored_network`: Cisco's OpenH264, without `openh264-source`: the download
     (`cargo test -p waveduderust_app -- --ignored ignored_network::`) and an MP4 through the downloaded binary
     (`OPENH264_LIBRARY=<path> cargo test -p waveduderust --test video -- --ignored ignored_network::`).
-- [`tools/compare-csharp`](tools/compare-csharp/) dumps WaveDude Next's results for `wavedude-cli compare` (.NET 10 SDK,
+- [`tools/compare-csharp`](tools/compare-csharp/) dumps WaveDude Next's results for `waveduderust-cli compare` (.NET 10 SDK,
   `WAVEDUDE_NEXT_DIR`); its [`README.md`](tools/compare-csharp/README.md) has the commands.
 - Releases: [git-cliff](https://git-cliff.org) ([`cliff.toml`](cliff.toml)) writes the changelog and the next version from the
   commits (`git cliff --unreleased` previews it); cargo-packager, cargo-auditable and cargo-cyclonedx build the

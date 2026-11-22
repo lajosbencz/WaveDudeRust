@@ -502,6 +502,10 @@ Section -Install
     File /a "/oname={{this}}" "{{@key}}"
   {{/each}}
 
+  ; The programs' names up to 0.3
+  Delete "$INSTDIR\wavedude-app.exe"
+  Delete "$INSTDIR\wavedude-cli.exe"
+
   ; Register deep links
   {{#each deep_link_protocols as |protocol| ~}}
     WriteRegStr SHCTX "Software\Classes\\{{protocol}}" "URL Protocol" ""
@@ -616,6 +620,8 @@ Section Uninstall
   {{#each binaries}}
     Delete "$INSTDIR\\{{this}}"
   {{/each}}
+  Delete "$INSTDIR\wavedude-app.exe"
+  Delete "$INSTDIR\wavedude-cli.exe"
 
   ; Delete app associations: an extension is handed back only while it still opens with this app
   {{#each file_associations as |association| ~}}

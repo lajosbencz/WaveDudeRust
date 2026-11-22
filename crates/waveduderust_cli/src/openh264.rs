@@ -39,7 +39,7 @@ pub(crate) fn library(dirs: Option<&AppDirs>) -> Result<Option<PathBuf>> {
 	let enabled = Settings::read(&store(dirs)?, touch_first())?.use_openh264 == Some(true);
 	codec::library(&known(dirs)?.codec(), enabled, |_, _| {}).map_err(|e| match e {
 		waveduderust::unstable::export::ExportError::H264Missing => {
-			anyhow::anyhow!("{e}: run `wavedude-cli openh264 enable`")
+			anyhow::anyhow!("{e}: run `waveduderust-cli openh264 enable`")
 		}
 		e => e.into(),
 	})

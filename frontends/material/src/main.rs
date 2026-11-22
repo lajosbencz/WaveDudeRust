@@ -218,7 +218,7 @@ mod native {
 		let mut options = eframe::NativeOptions {
 			viewport: placement::viewport(&app.settings, MIN_SIZE)
 				.with_title(app.title())
-				.with_app_id("wavedude-mineral")
+				.with_app_id("waveduderust-material")
 				.with_icon(icon),
 			centered: app.settings.window_left.is_none(),
 			..Default::default()

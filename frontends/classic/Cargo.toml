@@ -9,8 +9,10 @@ publish = false
 description = "A 2D wave simulator, with the classic egui window"
 
 [[bin]]
-name = "wavedude-app"
+name = "waveduderust"
 path = "src/main.rs"
+# its docs would land on the library's, which has the same name (rust-lang/cargo#6313)
+doc = false
 
 [features]
 # OpenH264 compiled in instead of Cisco's downloaded binary: for development and tests, not for distributed builds.
@@ -87,7 +89,7 @@ copyright = "Copyright (C) 2026 Lajos Bencz"
 license-file = "../../LICENSE.md"
 icons = ["assets/icons/*"]
 out-dir = "../../target/packages"
-binaries = [{ path = "wavedude-app", main = true }, { path = "wavedude-cli" }]
+binaries = [{ path = "waveduderust", main = true }, { path = "waveduderust-cli" }]
 # `name` is the Windows ProgId (no spaces); macOS takes its document types from assets/macos/Info.plist.
 file-associations = [
 	{ extensions = ["wdproj"], mime-type = "application/x-wavedude-project+xml", description = "WaveDude project", name = "WaveDudeRust.Project", role = "editor" },

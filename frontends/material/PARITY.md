@@ -1,4 +1,4 @@
-# Feature parity: wavedude-mineral vs wavedude-app
+# Feature parity: waveduderust-material vs waveduderust
 
 Yardstick of every user-visible feature of the Next-based app (`frontends/classic`, spec `docs/ui`).
 Ref = `docs/ui` file number and section. Status: `todo`, `done`, `changed: <note>`, `dropped: <note>`;
@@ -365,11 +365,11 @@ gallery as the start surface, Settings and About as pages over the workspace.
 
 | ID | Feature | Ref | Status |
 |---|---|---|---|
-| PLAT-01 | Native build on Linux, macOS, Windows; icon, app id, single binary | 00 | changed: native launcher verified on Linux; app id wavedude-mineral |
-| PLAT-02 | Browser build (wasm32): page, run worker, spill worker | 00, 60 | done: `WAVEDUDE_WEB_APP=wavedude-mineral tools/build-web.sh`, the page and the workers of wavedude-app |
+| PLAT-01 | Native build on Linux, macOS, Windows; icon, app id, single binary | 00 | changed: native launcher verified on Linux; app id waveduderust-material |
+| PLAT-02 | Browser build (wasm32): page, run worker, spill worker | 00, 60 | done: `WAVEDUDE_WEB_APP=waveduderust-material tools/build-web.sh`, the page and the workers of waveduderust |
 | PLAT-03 | Settings in browser storage; spill to the origin private file system | 80, 00 | done: app-state's `Store` and spill worker |
 | PLAT-04 | Browser open by upload, save / export by download | 70 Browser differences | done |
-| PLAT-05 | Engines share the renderer's GPU device natively; WebGPU in the browser; WebGL2 fallback warning | 40 8-bit vs 16-bit | done: as wavedude-app (`waveduderust_egui_platform::share_device`) |
+| PLAT-05 | Engines share the renderer's GPU device natively; WebGPU in the browser; WebGL2 fallback warning | 40 8-bit vs 16-bit | done: as waveduderust (`waveduderust_egui_platform::share_device`) |
 | PLAT-06 | Logs to file natively (log folder), panic hook | 70 Crash report | done |
 | PLAT-07 | Updater (cargo-packager) native only | 70 Updates | done (`waveduderust_app::shell`, native only) |
 | PLAT-08 | Native file dialogs off the UI thread | 70 Export Save dialog | done |

@@ -90,7 +90,7 @@ push. What they hold the code to:
   `waveduderust_app::shell` and runs its tasks through `waveduderust_egui_platform::jobs`. Its widgets and look are modules of
   [`ui/`](../frontends/classic/src/ui/). Depends on frontend, egui and the crates below them
   ([decision 0019](decisions/0019-egui-and-the-platform-layer.md)).
-- `waveduderust_material` (program `wavedude-mineral`, in `frontends/material`): a second window on egui-mineral's Material stylekit over `waveduderust_app`, `waveduderust_egui_preview` and `waveduderust_egui_platform`
+- `waveduderust_material` (program `waveduderust-material`, in `frontends/material`): a second window on egui-mineral's Material stylekit over `waveduderust_app`, `waveduderust_egui_preview` and `waveduderust_egui_platform`
   ([`frontends/material/DESIGN.md`](../frontends/material/DESIGN.md)); it depends on no other window.
 - `wavedude-run-worker`: binary only, the browser's run worker (decision 0024): logging to the console, its
   panics posted to the page, a WebGPU device of its own (requested again after a loss) and app-state's `Host` on a
@@ -108,7 +108,7 @@ push. What they hold the code to:
 - `waveduderust_examples`: the example projects, embedded from the repository's [`examples`](../examples/), with their
   titles, descriptions and topics; the Examples dialog reads this one list. Depends on core without default
   features alone ([`crates/waveduderust_examples/Cargo.toml`](../crates/waveduderust_examples/Cargo.toml)).
-- `wavedude-cli`: binary only (no `lib.rs`); core, view, export and app-state (the app's folders: settings, the user's
+- `waveduderust-cli`: binary only (no `lib.rs`); core, view, export and app-state (the app's folders: settings, the user's
   colour schemes, OpenH264); MP4 behind feature `mp4`. The global `--config-dir <DIR>` puts the app's folders under
   `DIR` (`AppDirs::under`); its tests pass an empty one, so they never read the user's.
 
@@ -179,7 +179,7 @@ push. What they hold the code to:
 - Library crates define `thiserror` enums, messages lower-case but for proper nouns (`ExportError`,
   [`crates/waveduderust/src/export/mod.rs:199`](../crates/waveduderust/src/export/mod.rs#L199); `CommandError`, [`commands.rs:400`](../crates/waveduderust_app/src/commands.rs#L400); `IoError`,
   [`crates/waveduderust/src/io/mod.rs:95`](../crates/waveduderust/src/io/mod.rs#L95)) and a `Result` alias ([`io/mod.rs:110`](../crates/waveduderust/src/io/mod.rs#L110), [`crates/waveduderust/src/export/mod.rs:243`](../crates/waveduderust/src/export/mod.rs#L243)).
-- `anyhow` is for binaries and setup: every `wavedude-cli` module, [`frontends/classic/src/main.rs`](../frontends/classic/src/main.rs),
+- `anyhow` is for binaries and setup: every `waveduderust-cli` module, [`frontends/classic/src/main.rs`](../frontends/classic/src/main.rs),
   `platform::init_log` ([`crates/waveduderust_app/src/platform/native.rs:183`](../crates/waveduderust_app/src/platform/native.rs#L183)).
 - A broken invariant panics through `expect` whose message states the invariant
   (`.expect("a rectangle has sides")`, [`frontends/classic/src/ui/dock.rs:267`](../frontends/classic/src/ui/dock.rs#L267);

@@ -278,8 +278,8 @@ jobs:
       # Then the check itself: below every version the CLI needs, it has to fail.
       - name: glibc floor
         run: |
-          docker exec build .github/build/glibc-floor.sh target/release/wavedude-app target/release/wavedude-cli
-          if docker exec -e GLIBC_FLOOR=2.0 build .github/build/glibc-floor.sh target/release/wavedude-cli 2> /dev/null; then
+          docker exec build .github/build/glibc-floor.sh target/release/waveduderust target/release/waveduderust-cli
+          if docker exec -e GLIBC_FLOOR=2.0 build .github/build/glibc-floor.sh target/release/waveduderust-cli 2> /dev/null; then
             echo "::error::glibc-floor.sh passed with a floor below every version"
             exit 1
           fi
@@ -287,7 +287,7 @@ jobs:
         run: |
           base=$(sed -n 's/^FROM //p' .github/build/linux.Dockerfile)
           docker run --rm -v "$GITHUB_WORKSPACE/target/release:/release:ro" "$base" \
-            sh -ec '/release/wavedude-cli --version; ! ldd /release/wavedude-app | grep "not found"'
+            sh -ec '/release/waveduderust-cli --version; ! ldd /release/waveduderust | grep "not found"'
 
   # The one required check: a skipped job passes, a failed or cancelled one fails.
   result:

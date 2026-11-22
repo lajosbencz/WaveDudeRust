@@ -154,7 +154,7 @@ property the Rust core must prove in its test suite. Items marked (G) need golde
 ## Performance
 
 The engine is compared with the C# library's engines on the same machine (`tools/compare-csharp/run.sh bench`
-beside `wavedude-cli bench --gpu`); the figures and what makes a step differ are in [docs/measurements.md](../measurements.md). The C#'s
+beside `waveduderust-cli bench --gpu`); the figures and what makes a step differ are in [docs/measurements.md](../measurements.md). The C#'s
 published figures were taken on other hardware and are not targets.
 
 Constraints: the store's writer is bandwidth-bound; do not parallelise the per-frame copy into the store (measured

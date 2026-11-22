@@ -1,6 +1,6 @@
 # compare-csharp
 
-Dumps the C# WaveDudeNext CPU engine's composed scene, fields and probe series for `wavedude-cli compare`.
+Dumps the C# WaveDudeNext CPU engine's composed scene, fields and probe series for `waveduderust-cli compare`.
 Needs the .NET 10 SDK and `WAVEDUDE_NEXT_DIR` set to a checkout of
 [graealex/WaveDudeNext](https://github.com/graealex/WaveDudeNext); the checkout stays untouched.
 
@@ -14,7 +14,7 @@ row-major) every K steps, and `probes.csv` (each active probe's mean over its ce
 Display layers' scheme, black level and brightness, no edge glow or markers), `fit.txt` (`step field_fit intensity_fit`,
 `BrightnessFit`), `brightness.txt` (`field intensity`, the brightness the pictures were painted at: the file's, Next's 30
 where it omits one; `compare` renders C#'s planes at it for the render parity), and `graph.txt` with each probe's series and profile (`series_<k>.f32`, `profile_<k>.f32`): the graph
-layout `ProbeGraph.Layout` gives at the last step. `wavedude-cli compare` then adds the "Rendered frames" section to its
+layout `ProbeGraph.Layout` gives at the last step. `waveduderust-cli compare` then adds the "Rendered frames" section to its
 report. It always writes `summary.tsv` beside it, tab separated, `-` for an undefined ratio:
 `step example step parity_pixels field_fit_ratio intensity_fit_ratio field_luma_ratio intensity_luma_ratio` (one line
 per dump step, with `--render` only) and `probe example name pearson amplitude_ratio` (one line per probe). Fit ratio =
@@ -27,7 +27,7 @@ and concatenates the `summary.tsv` files into `<out-root>/summary.tsv` (`STEPS`,
 
     ./run.sh bench [w h] [steps]
 
-Times both C# engines on the scene and pattern of `wavedude-cli bench` (1920x1080 by default, rim 32 outside, open
+Times both C# engines on the scene and pattern of `waveduderust-cli bench` (1920x1080 by default, rim 32 outside, open
 edges, one source at the centre, both planes captured as halves every 2 steps).
 
 ## Next's UI on Linux

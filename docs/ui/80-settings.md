@@ -43,7 +43,7 @@ aside. An unreadable file is not a first start. Version 2 drops `FrameMemoryPerc
 | PartDescriptionExpanded | bool | true | description header on any part form |
 | TitleFullPath | bool | false | Settings > General |
 | H264Profile | Baseline / Main / High | Baseline | Settings > Export; export dialog, MP4: H.264 profile |
-| UseOpenH264 | bool or absent (never set; reads as false) | absent | Settings > Export; export dialog, MP4: Use Cisco's OpenH264 codec; `wavedude-cli openh264 enable/disable` |
+| UseOpenH264 | bool or absent (never set; reads as false) | absent | Settings > Export; export dialog, MP4: Use Cisco's OpenH264 codec; `waveduderust-cli openh264 enable/disable` |
 | CheckForUpdates | bool or absent (never set; reads as false) | absent | Settings > Updates (builds with the updater) |
 | ShowStartup | bool | true | Settings > General; welcome page check box |
 | UndoSteps | (port) int 10..100000, the steps Undo can go back; out of range clamps, logged (decision 0030) | 1000 | Settings > General |

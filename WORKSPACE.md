@@ -11,10 +11,10 @@ names where each goes.
 | [`waveduderust_workers`](crates/waveduderust_workers) | the browser's workers, one binary each: `wavedude-run-worker`, the live run's engine in a module worker beside the page with a WebGPU device of its own; `wavedude-spill-worker`, the frames past memory in a dedicated worker's files (its protocol is `waveduderust_app::spill`) | in place |
 | [`waveduderust_egui_preview`](crates/waveduderust_egui_preview) | what draws the simulation in the egui windows: the pictures, handle overlay, graph boxes and timeline, the gradient editor, drawn icons | split from `waveduderust_egui` |
 | [`waveduderust_egui_platform`](crates/waveduderust_egui_platform) | egui start-up and the OS integration: keys, input, clipboard, theme, window place, menu icons, the settings shown on the runtime, file dialogs and tasks | split from `waveduderust_egui` |
-| [`waveduderust_classic`](frontends/classic) | the classic window on egui, natively and in the browser: its panes, dialogs and look | the classic look of `frontends/material`, bin-only, so `just hot classic` patches it live |
-| [`waveduderust_material`](frontends/material) | the `wavedude-mineral` program: the Material window on egui-mineral, natively and in the browser; bin-only, so `just hot material` patches it live | in place; becomes the egui app with the looks as modules |
+| [`waveduderust_classic`](frontends/classic) | the `waveduderust` program: the classic window on egui, natively and in the browser: its panes, dialogs and look | the classic look of `frontends/material`, bin-only, so `just hot classic` patches it live |
+| [`waveduderust_material`](frontends/material) | the `waveduderust-material` program: the Material window on egui-mineral, natively and in the browser; bin-only, so `just hot material` patches it live | in place; becomes the egui app with the looks as modules |
 | [`waveduderust_icon_subset`](crates/waveduderust_icon_subset) | the build step both windows share: the Material Symbols fonts subset to the icons their sources use | in place |
-| [`waveduderust_cli`](crates/waveduderust_cli) | the `wavedude-cli` program: headless checks, benches, dispersion tables, scripted runs and exports | in place; the program becomes `waveduderust-cli` with the packaging |
+| [`waveduderust_cli`](crates/waveduderust_cli) | the `waveduderust-cli` program: headless checks, benches, dispersion tables, scripted runs and exports | in place |
 | [`waveduderust_examples`](crates/waveduderust_examples) | the example projects of [`examples`](examples), embedded: the list of the Examples dialog | in place |
 
 ```sh

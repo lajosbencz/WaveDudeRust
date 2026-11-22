@@ -338,7 +338,7 @@ The box shows the run's recording as it stood at the exported frame (step `frame
   under the tick, 2 px below the plot, held inside the box (3 px).
 - Curve: a line probe's profile binned to one min/max pair per column when longer than twice the plot width.
 
-`wavedude-cli compare` checks the y range and tick positions against Next's dump (all examples equal).
+`waveduderust-cli compare` checks the y range and tick positions against Next's dump (all examples equal).
 
 ### Preview and export
 

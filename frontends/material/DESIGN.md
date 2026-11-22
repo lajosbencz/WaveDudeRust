@@ -1,4 +1,4 @@
-# wavedude-mineral: design
+# waveduderust-material: design
 
 A new WaveDude UI on egui-mineral (`egui_mineral` core and `egui_mineral_material`, the MD3 stylekit), over the
 UI-free state of `waveduderust_app`. Parity yardstick: [PARITY.md](PARITY.md) (ids below). Library:
@@ -516,7 +516,7 @@ The window depends on no other window: what it shares with `waveduderust_classic
 
 ## 15. Crate and dependencies
 
-[`Cargo.toml`](Cargo.toml) (bin-only `wavedude-mineral`, unit tests in its modules):
+[`Cargo.toml`](Cargo.toml) (bin-only `waveduderust-material`, unit tests in its modules):
 
 - `egui_mineral` without `platform-native` (file dialogs and clipboard stay WaveDude's) and without `persist-fs`; ICU
   for locale number formats. Icons from `egui_mineral_material::icons` (`bundled-icons`, the same

@@ -5,7 +5,7 @@ body:
   - type: input
     attributes:
       label: Version
-      description: Help > About, or `wavedude-cli --version`.
+      description: Help > About, or `waveduderust-cli --version`.
     validations:
       required: true
   - type: dropdown
@@ -32,4 +32,4 @@ body:
   - type: input
     attributes:
       label: GPU and driver
-      description: As `wavedude-cli info` prints it, or the adapter the log names at start.
+      description: As `waveduderust-cli info` prints it, or the adapter the log names at start.

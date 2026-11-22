@@ -14,7 +14,7 @@ fn cli(args: &[&str]) -> Output {
 }
 
 fn cli_in(dirs: &Path, args: &[&str]) -> Output {
-	Command::new(env!("CARGO_BIN_EXE_wavedude-cli"))
+	Command::new(env!("CARGO_BIN_EXE_waveduderust-cli"))
 		.arg("--config-dir")
 		.arg(dirs)
 		.args(args)

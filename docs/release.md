@@ -98,7 +98,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:$PWD" -w "$PWD" -e CARGO_TAR
     cargo install --locked cargo-packager@0.11.8
     cargo build --release -p waveduderust_classic -p waveduderust_cli
     cargo packager --release -p waveduderust_classic --formats appimage
-    .github/build/glibc-floor.sh target/linux/release/wavedude-app target/linux/release/wavedude-cli target/packages/*.AppImage'
+    .github/build/glibc-floor.sh target/linux/release/waveduderust target/linux/release/waveduderust-cli target/packages/*.AppImage'
 ```
 
 Rootless podman takes `--userns=keep-id` in place of `--user`, so the files stay the caller's. The floor check prints
@@ -106,6 +106,12 @@ the highest glibc symbol version and fails above 2.28, naming the file and the s
 
 The packages land in `target/packages`. Without `WAVEDUDE_UPDATE_ENDPOINT` and `WAVEDUDE_UPDATE_PUBKEY` in the
 environment the build has no updater.
+
+The programs were `wavedude-app` and `wavedude-cli` up to 0.3. An update from 0.3 keeps working: the AppImage is
+replaced at its path; the Windows installer starts the new program (`/R`) and deletes the old ones; the tarball's
+`install.sh` removes the old files. On macOS 0.3 restarts the executable it ran from, gone from the new bundle, so
+the update installs but the app is started by hand once; later versions restart the bundle
+([`update.rs`](../crates/waveduderust_app/src/update.rs)).
 
 ## Icons
 
@@ -125,10 +131,10 @@ set again at those sizes and commit it with the SVG.
   installer that changes file associations unasked is flagged by Defender. The template is cargo-packager 0.11.8's
   with that change, [`assets/windows/installer.nsi`](../frontends/classic/assets/windows/installer.nsi); its
   uninstaller removes the associations still pointing at the app (the stock one loops over `association.ext`, a
-  field that does not exist). A cargo-packager bump means diffing the template again.
+  field that does not exist); installer and uninstaller delete the programs of the names up to 0.3. A cargo-packager bump means diffing the template again.
 - macOS: [`assets/macos/Info.plist`](../frontends/classic/assets/macos/Info.plist), merged over cargo-packager's, exports the two types and names them in the document
   types. The Finder hands a file to the running app as `application:openURLs:`, which the app delegate of
   [`open_requests.rs`](../crates/waveduderust_app/src/open_requests.rs) queues for the window.
 - Linux: [`assets/linux/wavedude-rust.xml`](../frontends/classic/assets/linux/wavedude-rust.xml) (shared-mime-info) maps the globs to the MIME types the `.desktop` file names;
-  the AppImage carries it, and the tarball carries it with [`wavedude-app.desktop`](../frontends/classic/assets/linux/wavedude-app.desktop), the icon theme PNGs and [`install.sh`](../frontends/classic/assets/linux/install.sh),
+  the AppImage carries it, and the tarball carries it with [`waveduderust.desktop`](../frontends/classic/assets/linux/waveduderust.desktop), the icon theme PNGs and [`install.sh`](../frontends/classic/assets/linux/install.sh),
   which installs them under `PREFIX` (default `~/.local`) and removes them with `--uninstall`.

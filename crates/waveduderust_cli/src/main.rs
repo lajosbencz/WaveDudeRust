@@ -23,7 +23,7 @@ use waveduderust::quality::PreviewQuality;
 use waveduderust_app::settings::AppDirs;
 
 #[derive(Parser)]
-#[command(name = "wavedude-cli", version, about = "Headless checks, benches and scripted exports for WaveDude")]
+#[command(name = "waveduderust-cli", version, about = "Headless checks, benches and scripted exports for WaveDude")]
 struct Cli {
 	/// Log verbosity on stderr: -v info, -vv debug, -vvv trace.
 	#[arg(short, long, action = clap::ArgAction::Count, global = true)]

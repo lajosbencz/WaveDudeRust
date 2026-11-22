@@ -622,7 +622,7 @@ fn avi_refuses_a_frame_of_4_gib() {
 mod ignored_network {
 	use super::*;
 
-	/// Cisco's binary at `OPENH264_LIBRARY` (`wavedude-cli openh264 enable` downloads it), refused when missing,
+	/// Cisco's binary at `OPENH264_LIBRARY` (`waveduderust-cli openh264 enable` downloads it), refused when missing,
 	/// encoding a video that decodes like the compiled-in one.
 	#[test]
 	#[ignore = "Cisco's binary: OPENH264_LIBRARY=<path> cargo test -p waveduderust --test video -- --ignored ignored_network::"]

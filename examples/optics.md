@@ -106,5 +106,5 @@ blazed beam. Finer pitches (3 and 1.5 wavelengths) were tried and blaze less cle
 ## Figures
 
 The `figures` folder holds the intensity at the last frame of every project, with the glowing edges, the probe
-markers and their graphs (`wavedude-cli export --still --markers --graphs --edges`), and the painted scenes of the
+markers and their graphs (`waveduderust-cli export --still --markers --graphs --edges`), and the painted scenes of the
 Fresnel lens, the spectrometer, the filter and the blazed grating, all reduced to 640 px wide.

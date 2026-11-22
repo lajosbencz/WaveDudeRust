@@ -8,7 +8,7 @@ body:
   - type: input
     attributes:
       label: Version
-      description: Help > About, or `wavedude-cli --version`.
+      description: Help > About, or `waveduderust-cli --version`.
       placeholder: 0.2.1
     validations:
       required: true

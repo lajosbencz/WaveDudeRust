@@ -63,7 +63,7 @@ mod native {
 			viewport: placement::viewport(&app.settings, MIN_SIZE)
 				.with_title(app.title())
 				// the name of the .desktop file cargo-packager installs, so Wayland and X11 find the icon
-				.with_app_id("wavedude-app")
+				.with_app_id("waveduderust")
 				.with_icon(icon),
 			centered: app.settings.window_left.is_none(),
 			..Default::default()
