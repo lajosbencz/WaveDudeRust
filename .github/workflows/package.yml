@@ -109,7 +109,7 @@ jobs:
             ${UNIVERSAL:+--target universal-apple-darwin}
         env:
           UNIVERSAL: ${{ matrix.universal }}
-      # Blocker (docs/release.md): cargo-packager 0.11.8 packs AppRun 0744 and 0700 dirs; another user cannot run it.
+      # Blocker (docs/blockers.md): cargo-packager 0.11.8 packs AppRun 0744 and 0700 dirs; another user cannot run it.
       - name: AppImage file modes
         if: runner.os == 'Linux'
         run: |
