@@ -68,7 +68,7 @@ pub fn subset_icon_fonts(fonts: &[&str]) -> Res<()> {
 
 fn metadata() -> Res<Value> {
 	let out = Command::new(env::var("CARGO")?)
-		.args(["metadata", "--format-version", "1", "--offline", "--filter-platform", &env::var("TARGET")?])
+		.args(["metadata", "--format-version", "1", "--filter-platform", &env::var("TARGET")?])
 		.arg("--manifest-path")
 		.arg(Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("Cargo.toml"))
 		.output()?;

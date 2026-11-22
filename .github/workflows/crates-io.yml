@@ -1,0 +1,39 @@
+# Publishes the library crates to crates.io through Trusted Publishing (OIDC, environment `crates-io`).
+# Manual until the crates are release-ready (per-crate README, docs.rs metadata, public-api baseline); then also
+# `release: types: [published]`.
+name: crates-io
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, e.g. v0.4.0
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: crates-io
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+        id: auth
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          cargo publish --locked -p waveduderust_macros
+          cargo publish --locked -p waveduderust
