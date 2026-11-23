@@ -354,3 +354,5 @@ jobs:
       # Events of GITHUB_TOKEN start no workflow, a dispatch does.
       - name: Deploy its browser app
         run: gh workflow run pages.yml --ref "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"
+      - name: Publish its crates
+        run: gh workflow run crates-io.yml --ref "$TAG" --repo "$GITHUB_REPOSITORY"
