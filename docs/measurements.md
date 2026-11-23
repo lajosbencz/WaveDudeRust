@@ -131,6 +131,34 @@ values is made on the host for every sub-step, 10000 emitters twice a step.
 | 100 x 100, each emitter's force per unit drive looked up in a map every sub-step | 2.26 to 2.39 | 0.617 to 0.623 |
 | 100 x 100, the force per unit drive kept per emitter for the sub-step count and scheme | 1.94 to 1.99 | 0.264 to 0.266 |
 
+## The CPML on the CPU
+
+2026-11-23, not the workstation above: a VirtualBox guest with 8 vCPUs, so the ranges are wide.
+`RAYON_NUM_THREADS=<n> waveduderust-cli bench --steps 200 --rim <rim>` on the default 1920x1080 canvas, no captures,
+the build of c83dfdb (before) and the CPML's stages over contiguous spans of a row with the mirror test hoisted to
+the span (after), alternated, two runs each, ms a step, 9-point / 4th order:
+
+| Rim, threads | Before | After |
+|---|---|---|
+| 32, 1 | 16.0 to 16.6 / 31.0 to 32.0 | 13.2 to 13.4 / 24.3 to 25.4 |
+| 32, 8 | 8.0 to 8.2 / 15.1 to 15.6 | 7.2 to 8.2 / 13.1 to 13.2 |
+| 64, 1 | 23.2 to 24.1 / 45.7 to 46.8 | 18.5 to 19.0 / 33.4 to 34.4 |
+| 64, 8 | 10.3 to 10.5 / 19.0 to 19.6 | 8.9 to 9.2 / 17.6 to 17.7 |
+
+Without a rim the 9-point step takes 5.9 to 6.4 ms on 8 threads and 9.5 on one. The CPML's four stages, timed in
+place by a temporary counter, rim 32, 9-point, microseconds a sub-step, before / after:
+
+| Stage | 1 thread | 8 threads |
+|---|---|---|
+| psi of y | 213 / 252 | 303 / 167 |
+| `delta_y` and xi of y | 977 / 344 | 419 / 158 |
+| psi of x | 936 / 717 | 475 / 208 |
+| the correction | 2030 / 1294 | 866 / 362 |
+
+The fields are bit for bit the same: a temporary test hashing the field and both intensity stages every 50 of 700
+steps, both stencils, rims of 16 and 5 with mirror lines inside them, gave the same hashes before and after. What is
+left of psi of x and the correction is their reach into the two ends of every grid row.
+
 ## Other operations
 
 2026-11-06 unless noted.
