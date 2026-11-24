@@ -208,6 +208,28 @@ with `-C target-feature=+simd128`; after: the branch, simd128 in [`.cargo/config
 A CPU profile of the run worker (DevTools, 15 s, before) had it busy throughout: the per-cell `drp` and `pml::taps`,
 not inlined in the wasm, took 37 % of it.
 
+## The CPU engine's 9-point loop vectorised
+
+The 9-point leapfrog's row loop indexed `c2` and `d` by the row's offset, so its bounds checks stayed in the loop and it
+ran scalar: the release binary's disassembly (`objdump -d`) had no packed `mulps`/`addps`/`subps` in it, against 81 and
+108 in the 4th order's passes. With every slice cut to the span (after) it has 25.
+
+2026-11-24, the VirtualBox guest above, `RAYON_NUM_THREADS=<n> waveduderust-cli bench --stencil nine --steps 200
+--captures-every 0 --width <w> --height <h> --rim <rim>`, the branch before and after, alternated, two runs each, ms a
+step:
+
+| Canvas, rim, threads | Before | After |
+|---|---|---|
+| 256x256, 0, 1 | 0.58 to 0.60 | 0.17 to 0.24 |
+| 256x256, 0, 8 | 0.19 to 0.22 | 0.11 to 0.15 |
+| 1920x1080, 0, 1 | 16.1 | 8.9 |
+| 1920x1080, 0, 8 | 6.2 to 6.4 | 5.9 |
+| 1920x1080, 32, 1 | 21.9 | 13.8 to 14.4 |
+| 1920x1080, 32, 8 | 8.3 to 8.8 | 8.0 to 8.2 |
+
+On 8 threads the full canvas is bound by the memory's bandwidth. The probe series of Example01 with
+`FourthOrderLaplacian="false"`, with and without its mirror, 600 steps, are byte for byte the same before and after.
+
 ## Other operations
 
 2026-11-06 unless noted.

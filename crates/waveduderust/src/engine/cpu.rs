@@ -283,18 +283,21 @@ impl CpuEngine {
 			let update = |x: usize, next: &mut f32, v: f32, lap: f32| {
 				*next = v + ((v - *next) * d[x] + lap * c2[x] * centred(d[x]));
 			};
-			// The cells of `span` with no cut, on row slices, as `nine_point` in the same order.
+			// The cells of `span` with no cut, on row slices, as `nine_point` and `update` in the same order. Every
+			// slice has the span's length, so the loop has no bounds checks and vectorises.
 			let uncut = |span: Range<usize>, next: &mut [f32]| {
-				let x0 = span.start;
-				let tap = |k: isize| &u[(at + x0).wrapping_add_signed(k)..][..span.len()];
+				let len = span.len();
+				let tap = |k: isize| &u[(at + span.start).wrapping_add_signed(k)..][..len];
 				let (si, one) = (s as isize, 1isize);
 				let (c, w, e, n, so) = (tap(0), tap(-one), tap(one), tap(-si), tap(si));
 				let (nw, ne, sw, se) = (tap(-si - 1), tap(-si + 1), tap(si - 1), tap(si + 1));
-				for (x, next) in next[span].iter_mut().enumerate() {
+				let (c2, d, next) = (&c2[span.clone()], &d[span.clone()], &mut next[span]);
+				for x in 0..len {
 					let v = c[x];
 					let diagonals = ((nw[x] - v) + (ne[x] - v)) + ((sw[x] - v) + (se[x] - v));
 					let axes = ((n[x] - v) + (so[x] - v)) + ((w[x] - v) + (e[x] - v));
-					update(x0 + x, next, v, K9_DIAGONAL * diagonals + K9_AXIS * axes);
+					let lap = K9_DIAGONAL * diagonals + K9_AXIS * axes;
+					next[x] = v + ((v - next[x]) * d[x] + lap * c2[x] * centred(d[x]));
 				}
 			};
 			match row_cuts(cuts, mirrors, at, gw) {
