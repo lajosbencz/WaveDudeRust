@@ -84,6 +84,10 @@ msgstr "&Ongedaan maken"
 msgid "&View"
 msgstr "Beel&d"
 
+#. ItemCountOne
+msgid "1 entry"
+msgstr "1 item"
+
 #. MenuAddAndGate
 msgid "AND"
 msgstr "AND"
@@ -284,6 +288,10 @@ msgstr "Help"
 msgid "Imaging detector"
 msgstr "Beeldvormende detector"
 
+#. TipSourceEnabled
+msgid "Include the source in runs (Space on the row toggles it)"
+msgstr "Bron meenemen in runs (spatie op de rij schakelt om)"
+
 #. SectionIntensity
 msgid "Intensity"
 msgstr "Intensiteit"
@@ -340,6 +348,10 @@ msgstr "Nieuw project"
 msgid "Next frame (.)"
 msgstr "Volgend beeld (.)"
 
+#. ItemCountZero
+msgid "No entries"
+msgstr "Geen items"
+
 #. MenuAddOrGate
 msgid "OR"
 msgstr "OR"
@@ -359,6 +371,10 @@ msgstr "Optische logica"
 #. MenuAddOutline
 msgid "Outline"
 msgstr "Omtrek"
+
+#. TipPartEnabled
+msgid "Paint the part into the scene (Space on the row toggles it)"
+msgstr "Onderdeel in de scène tekenen (spatie op de rij schakelt om)"
 
 #. MenuViewPanes
 msgid "Panes"
@@ -464,6 +480,10 @@ msgstr "Simulatie vanaf het begin starten (F5)"
 msgid "S&top"
 msgstr "S&toppen"
 
+#. TipProbeActive
+msgid "Sample this probe (Space on the row toggles it)"
+msgstr "Deze sonde bemonsteren (spatie op de rij schakelt om)"
+
 #. MenuFileSave
 msgid "Save"
 msgstr "Opslaan"
@@ -539,3 +559,7 @@ msgstr "XOR (Mach-Zehnder)"
 #. MenuAddZonePlate
 msgid "Zone plate"
 msgstr "Zoneplaat"
+
+#. ItemCountMany
+msgid "{} entries"
+msgstr "{} items"

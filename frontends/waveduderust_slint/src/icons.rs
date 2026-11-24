@@ -162,6 +162,21 @@ pub(crate) fn tree(project: &Project, node: Node) -> Image {
 	})
 }
 
+/// Width and height of a colour scheme's strip in the tree (Next's 36 x 10 rectangle).
+const STRIP: (u32, u32) = (36, 10);
+
+/// The gradient of `scheme` as the tree row's strip.
+pub(crate) fn strip(scheme: &waveduderust::model::ColorScheme) -> Image {
+	use waveduderust::unstable::render::gradient::Gradient;
+	let colours = Gradient::new(&scheme.stops).interpolate(STRIP.0 as usize);
+	let mut buffer = slint::SharedPixelBuffer::<slint::Rgb8Pixel>::new(STRIP.0, STRIP.1);
+	for (i, pixel) in buffer.make_mut_slice().iter_mut().enumerate() {
+		let c = colours[i % STRIP.0 as usize];
+		*pixel = slint::Rgb8Pixel { r: c.r, g: c.g, b: c.b };
+	}
+	Image::from_rgb8(buffer)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

@@ -19,6 +19,8 @@ export struct PropRow {
 // The properties pane (docs/ui/30): one labelled editor per field of the selected object.
 export component Properties inherits Rectangle {
     in property <string> heading;
+    // a folder's item count (Next's CollectionView); -1 for an object
+    in property <int> entries: -1;
     in property <[PropRow]> rows;
     in property <string> error;
     // Sets row `row` of form `form`; whether the field took the text.
@@ -38,6 +40,10 @@ export component Properties inherits Rectangle {
             Text {
                 text: root.heading;
                 font-weight: 700;
+                color: Theme.text;
+            }
+            if root.entries >= 0: Text {
+                text: root.entries == 0 ? @tr("No entries") : root.entries == 1 ? @tr("1 entry") : @tr("{} entries", root.entries);
                 color: Theme.text;
             }
             for row[i] in root.rows: HorizontalLayout {

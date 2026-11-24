@@ -58,6 +58,7 @@ export component AppWindow inherits Window {
     // the row and how: 0 alone, 1 toggled (Ctrl), 2 range (Shift)
     callback tree-select(int, int);
     callback tree-toggle(int);
+    callback tree-expand(int);
     callback tree-shift(int, int);
     callback tree-remove(int);
     in property <image> field;
@@ -95,6 +96,8 @@ export component AppWindow inherits Window {
     callback transport-action(string);
     callback transport-speed(string);
     in property <string> props-heading;
+    // a folder's item count; -1 for other rows
+    in property <int> props-entries: -1;
     in property <[PropRow]> props-rows;
     in property <string> props-error;
     callback props-set(form: int, row: int, text: string) -> bool;
@@ -248,6 +251,7 @@ export component AppWindow inherits Window {
                             rows: root.tree-rows;
                             select(i, pick) => { root.tree-select(i, pick); }
                             toggle(i) => { root.tree-toggle(i); }
+                            expand(i) => { root.tree-expand(i); }
                             shift(i, by) => { root.tree-shift(i, by); }
                             remove(i) => { root.tree-remove(i); }
                             can-move-up: root.commands.can-move-up;
@@ -270,6 +274,7 @@ export component AppWindow inherits Window {
                         close => { root.properties-shown = false; }
                         Properties {
                             heading: root.props-heading;
+                            entries: root.props-entries;
                             rows: root.props-rows;
                             error: root.props-error;
                             set(form, i, v) => { return root.props-set(form, i, v); }

@@ -55,6 +55,8 @@ struct State {
 	doc: Document,
 	nodes: Vec<Node>,
 	selection: Selection,
+	/// Tree rows whose children are hidden.
+	collapsed: Vec<Node>,
 	live: Live,
 	playback: Playback,
 	messages: Messages,
@@ -178,7 +180,10 @@ impl State {
 	/// Pushes the state into the window's properties.
 	fn show(&mut self, app: &AppWindow) {
 		self.selection.retain(&self.doc.project);
-		let (nodes, rows) = tree::rows(&self.doc.project, &self.selection);
+		// a row selected elsewhere (an add, a paste) shows its folder
+		let current = self.selection.current();
+		self.collapsed.retain(|&n| n == current || !tree::within(current, n));
+		let (nodes, rows) = tree::rows(&self.doc.project, &self.selection, &self.collapsed);
 		self.nodes = nodes;
 		app.set_tree_rows(ModelRc::new(VecModel::from(rows)));
 		app.set_window_title(self.doc.title().into());
@@ -197,8 +202,13 @@ impl State {
 			self.ran = self.doc.generation;
 			self.live.edited(&self.doc.project, &self.doc.view);
 		}
-		let (heading, rows) = form::of_selected(&self.doc.project, &self.doc.view, self.selection.current());
+		let (mut heading, rows) = form::of_selected(&self.doc.project, &self.doc.view, self.selection.current());
+		let folder = tree::folder(&self.doc.project, self.selection.current());
+		if let Some((label, _)) = folder {
+			heading = label.into();
+		}
 		app.set_props_heading(heading.into());
+		app.set_props_entries(folder.map_or(-1, |(_, n)| i32::try_from(n).unwrap_or(i32::MAX)));
 		if self.doc.generation != self.form_seen {
 			self.form_seen = self.doc.generation;
 			self.form_base = self.doc.generation;
@@ -728,6 +738,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		doc: Document::new(UNDO_STEPS),
 		nodes: Vec::new(),
 		selection: Selection::default(),
+		collapsed: Vec::new(),
 		live,
 		playback: Playback::default(),
 		messages: Messages::new(ring),
@@ -794,6 +805,21 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		}
 	});
 	app.on_tree_toggle(move |row| toggle(row, 0));
+	let expand = on(|s, _, row, _| {
+		if let Some(node) = s.node(row) {
+			match s.collapsed.iter().position(|&n| n == node) {
+				Some(i) => drop(s.collapsed.remove(i)),
+				None => {
+					s.collapsed.push(node);
+					// a selection it hides moves up to it (WPF's TreeView)
+					if s.selection.group().iter().any(|&n| n != node && tree::within(n, node)) {
+						s.selection.set(node);
+					}
+				}
+			}
+		}
+	});
+	app.on_tree_expand(move |row| expand(row, 0));
 	app.on_tree_shift(on(|s, _, row, by| {
 		if let Some(node) = s.node(row) {
 			let mut to = node;

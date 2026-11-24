@@ -42,11 +42,23 @@ impl Node {
 	}
 }
 
-/// The rows of `project` in tree order, with their nodes.
-pub(crate) fn rows(project: &Project, selection: &Selection) -> (Vec<Node>, Vec<TreeRow>) {
+/// The rows of `project` in tree order, with their nodes; the children of `collapsed` rows are left out.
+pub(crate) fn rows(project: &Project, selection: &Selection, collapsed: &[Node]) -> (Vec<Node>, Vec<TreeRow>) {
 	let mut nodes = Vec::new();
 	let mut rows = Vec::new();
+	let shut = |node: Node| collapsed.contains(&node) || (node != Node::Project && collapsed.contains(&Node::Project));
 	let mut push = |node: Node, depth: i32, label: &str, enabled: Option<bool>| {
+		if parent(node).is_some_and(shut) {
+			return;
+		}
+		let children = match node {
+			Node::Project => 1,
+			Node::Sources => project.sources.len(),
+			Node::Parts => project.parts.len(),
+			Node::Probes => project.probes.len(),
+			Node::Schemes => project.color_schemes.len(),
+			_ => 0,
+		};
 		nodes.push(node);
 		rows.push(TreeRow {
 			kind: node.kind(),
@@ -56,6 +68,12 @@ pub(crate) fn rows(project: &Project, selection: &Selection) -> (Vec<Node>, Vec<
 			checked: enabled.unwrap_or(true),
 			selected: selection.contains(node),
 			icon: crate::icons::tree(project, node),
+			expandable: children > 0,
+			expanded: !collapsed.contains(&node),
+			strip: match node {
+				Node::Scheme(i) => crate::icons::strip(&project.color_schemes[i]),
+				_ => slint::Image::default(),
+			},
 			add: match node {
 				Node::Sources => "source",
 				Node::Parts => "part",
@@ -70,19 +88,19 @@ pub(crate) fn rows(project: &Project, selection: &Selection) -> (Vec<Node>, Vec<
 	push(Node::Scene, 1, "Scene", None);
 	push(Node::Simulation, 1, "Simulation", None);
 	push(Node::Display, 1, "Display", None);
-	push(Node::Sources, 1, "Sources", None);
+	push(Node::Sources, 1, folder(project, Node::Sources).expect("a folder").0, None);
 	for (i, s) in project.sources.iter().enumerate() {
 		push(Node::Source(i), 2, &s.name, Some(s.enabled));
 	}
-	push(Node::Parts, 1, "Parts", None);
+	push(Node::Parts, 1, folder(project, Node::Parts).expect("a folder").0, None);
 	for (i, p) in project.parts.iter().enumerate() {
 		push(Node::Part(i), 2, &p.base.name, Some(p.base.enabled));
 	}
-	push(Node::Probes, 1, "Probes", None);
+	push(Node::Probes, 1, folder(project, Node::Probes).expect("a folder").0, None);
 	for (i, p) in project.probes.iter().enumerate() {
 		push(Node::Probe(i), 2, &p.name, Some(p.active));
 	}
-	push(Node::Schemes, 1, "Colour schemes", None);
+	push(Node::Schemes, 1, folder(project, Node::Schemes).expect("a folder").0, None);
 	for (i, s) in project.color_schemes.iter().enumerate() {
 		push(Node::Scheme(i), 2, &s.name, None);
 	}
@@ -148,6 +166,34 @@ pub(crate) fn remove_all(project: &mut Project, nodes: &[Node]) -> Option<Node> 
 		_ => return None,
 	};
 	Some(if len > 0 { item(i.min(len - 1)) } else { folder })
+}
+
+/// The row `node` sits under.
+pub(crate) fn parent(node: Node) -> Option<Node> {
+	match node {
+		Node::Project => None,
+		Node::Source(_) => Some(Node::Sources),
+		Node::Part(_) => Some(Node::Parts),
+		Node::Probe(_) => Some(Node::Probes),
+		Node::Scheme(_) => Some(Node::Schemes),
+		_ => Some(Node::Project),
+	}
+}
+
+/// Whether `node` is `ancestor` or sits under it.
+pub(crate) fn within(node: Node, ancestor: Node) -> bool {
+	std::iter::successors(Some(node), |&n| parent(n)).any(|n| n == ancestor)
+}
+
+/// A folder row's label and item count.
+pub(crate) fn folder(project: &Project, node: Node) -> Option<(&'static str, usize)> {
+	Some(match node {
+		Node::Sources => ("Sources", project.sources.len()),
+		Node::Parts => ("Parts", project.parts.len()),
+		Node::Probes => ("Probes", project.probes.len()),
+		Node::Schemes => ("Colour schemes", project.color_schemes.len()),
+		_ => return None,
+	})
 }
 
 /// Whether `node` is a list item's row.

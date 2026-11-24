@@ -132,6 +132,11 @@ export struct TreeRow {
     icon: image,
     // a folder's plus: "source", "part", "probe" or "scheme"; empty for other rows
     add: string,
+    // has children, and shows them
+    expandable: bool,
+    expanded: bool,
+    // a colour scheme's gradient
+    strip: image,
 }
 
 // The project tree (docs/ui/20): fixed rows, folders and item rows with their check box and row buttons.
@@ -140,6 +145,7 @@ export component ProjectTree inherits Rectangle {
     // the row and how: 0 alone, 1 toggled (Ctrl), 2 range (Shift)
     callback select(int, int);
     callback toggle(int);
+    callback expand(int);
     callback shift(int, int);
     callback remove(int);
     in property <bool> can-move-up;
@@ -225,6 +231,17 @@ export component ProjectTree inherits Rectangle {
                         padding-left: 4px + row.depth * 16px;
                         padding-right: 4px;
                         spacing: 4px;
+                        // the expander column (Next's TreeView chevron); all rows expanded at first
+                        Rectangle {
+                            width: 10px;
+                            if row.expandable: Icon {
+                                source: row.expanded ? @image-url("icons/next/chevron-down.svg") : @image-url("icons/next/chevron-right.svg");
+                                ink: row.selected && root.focused ? Theme.selection-text : Theme.text;
+                            }
+                            if row.expandable: TouchArea {
+                                clicked => { root.expand(i); }
+                            }
+                        }
                         if row.checkable: Rectangle {
                             width: 13px;
                             height: 13px;
@@ -238,8 +255,20 @@ export component ProjectTree inherits Rectangle {
                             TouchArea {
                                 clicked => { root.toggle(i); }
                             }
+                            Tooltip {
+                                text: @markdown("\{row.kind == TreeKind.source ? @tr("Include the source in runs (Space on the row toggles it)") : row.kind == TreeKind.part ? @tr("Paint the part into the scene (Space on the row toggles it)") : @tr("Sample this probe (Space on the row toggles it)")}");
+                            }
                         }
-                        Icon {
+                        // a colour scheme's gradient (Next's 36 x 10 strip)
+                        if row.kind == TreeKind.scheme: Rectangle {
+                            width: 36px;
+                            height: 10px;
+                            y: (parent.height - self.height) / 2;
+                            Image { source: row.strip; width: parent.width; height: parent.height; image-fit: fill; }
+                            // Next's 0.5 px stroke, over the gradient
+                            Rectangle { border-width: 0.5px; border-color: Theme.border; }
+                        }
+                        if row.kind != TreeKind.scheme: Icon {
                             source: row.icon;
                             ink: row.selected && root.focused ? Theme.selection-text : row.checked ? Theme.text : Theme.text-disabled;
                         }

@@ -84,6 +84,10 @@ msgstr "&Annuler"
 msgid "&View"
 msgstr "&Affichage"
 
+#. ItemCountOne
+msgid "1 entry"
+msgstr "1 entrée"
+
 #. MenuAddAndGate
 msgid "AND"
 msgstr "AND (ET)"
@@ -284,6 +288,10 @@ msgstr "Aide"
 msgid "Imaging detector"
 msgstr "Détecteur imageur"
 
+#. TipSourceEnabled
+msgid "Include the source in runs (Space on the row toggles it)"
+msgstr "Inclure la source dans les exécutions (Espace sur la ligne bascule)"
+
 #. SectionIntensity
 msgid "Intensity"
 msgstr "Intensité"
@@ -340,6 +348,10 @@ msgstr "Nouveau projet"
 msgid "Next frame (.)"
 msgstr "Image suivante (.)"
 
+#. ItemCountZero
+msgid "No entries"
+msgstr "Aucune entrée"
+
 #. MenuAddOrGate
 msgid "OR"
 msgstr "OR (OU)"
@@ -359,6 +371,10 @@ msgstr "Logique optique"
 #. MenuAddOutline
 msgid "Outline"
 msgstr "Contour"
+
+#. TipPartEnabled
+msgid "Paint the part into the scene (Space on the row toggles it)"
+msgstr "Peindre le composant dans la scène (Espace sur la ligne bascule)"
 
 #. MenuViewPanes
 msgid "Panes"
@@ -464,6 +480,10 @@ msgstr "Lancer la simulation depuis le début (F5)"
 msgid "S&top"
 msgstr "&Arrêter"
 
+#. TipProbeActive
+msgid "Sample this probe (Space on the row toggles it)"
+msgstr "Échantillonner cette sonde (Espace sur la ligne bascule)"
+
 #. MenuFileSave
 msgid "Save"
 msgstr "Enregistrer"
@@ -539,3 +559,7 @@ msgstr "XOR (Mach-Zehnder)"
 #. MenuAddZonePlate
 msgid "Zone plate"
 msgstr "Lame à zones"
+
+#. ItemCountMany
+msgid "{} entries"
+msgstr "{} entrées"

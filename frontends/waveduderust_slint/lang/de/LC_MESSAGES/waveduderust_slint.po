@@ -84,6 +84,10 @@ msgstr "&Rückgängig"
 msgid "&View"
 msgstr "&Ansicht"
 
+#. ItemCountOne
+msgid "1 entry"
+msgstr "1 Eintrag"
+
 #. MenuAddAndGate
 msgid "AND"
 msgstr "AND"
@@ -284,6 +288,10 @@ msgstr "Hilfe"
 msgid "Imaging detector"
 msgstr "Bildgebender Detektor"
 
+#. TipSourceEnabled
+msgid "Include the source in runs (Space on the row toggles it)"
+msgstr "Quelle in Läufe einbeziehen (Leertaste auf der Zeile schaltet um)"
+
 #. SectionIntensity
 msgid "Intensity"
 msgstr "Intensität"
@@ -340,6 +348,10 @@ msgstr "Neues Projekt"
 msgid "Next frame (.)"
 msgstr "Nächstes Bild (.)"
 
+#. ItemCountZero
+msgid "No entries"
+msgstr "Keine Einträge"
+
 #. MenuAddOrGate
 msgid "OR"
 msgstr "OR"
@@ -359,6 +371,10 @@ msgstr "Optische Logik"
 #. MenuAddOutline
 msgid "Outline"
 msgstr "Umriss"
+
+#. TipPartEnabled
+msgid "Paint the part into the scene (Space on the row toggles it)"
+msgstr "Bauteil in die Szene zeichnen (Leertaste auf der Zeile schaltet um)"
 
 #. MenuViewPanes
 msgid "Panes"
@@ -464,6 +480,10 @@ msgstr "Simulation von vorn starten (F5)"
 msgid "S&top"
 msgstr "S&topp"
 
+#. TipProbeActive
+msgid "Sample this probe (Space on the row toggles it)"
+msgstr "Diese Sonde abtasten (Leertaste auf der Zeile schaltet um)"
+
 #. MenuFileSave
 msgid "Save"
 msgstr "Speichern"
@@ -539,3 +559,7 @@ msgstr "XOR (Mach-Zehnder)"
 #. MenuAddZonePlate
 msgid "Zone plate"
 msgstr "Zonenplatte"
+
+#. ItemCountMany
+msgid "{} entries"
+msgstr "{} Einträge"

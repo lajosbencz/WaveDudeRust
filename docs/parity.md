@@ -16,13 +16,13 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
-| T | Project tree | 19 | 21 | 29 | 32 | 0 |
+| T | Project tree | 25 | 19 | 25 | 32 | 0 |
 | P | Properties | 3 | 114 | 206 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 156 | 319 | 530 | 84 | 6 |
+| | All | 162 | 317 | 526 | 84 | 6 |
 
 ## Cross-cutting
 
@@ -543,22 +543,22 @@ Not-in-spec rows are marked in the Spec column.
 | T-33 | Root row Project (icon Draw:Project) | ProjectTree.xaml:292-308 | 20 Tree structure | partial | row present; no icon |
 | T-34 | Fixed rows Scene, Simulation, Display (icons EB9F/E916/E7F4) | ProjectTree.xaml:310-327 | 20 Tree structure | partial | rows present, selectable; no icons |
 | T-35 | Folder rows Sources/Parts/Probes/Colour schemes (icons) | ProjectTree.xaml:329-370 | 20 Tree structure | partial | rows present; no icons |
-| T-36 | Folder expand/collapse chevron, all expanded by default | ProjectTree.xaml:240-244 (TreeView) | 20 Tree structure | missing | always expanded, no chevron |
+| T-36 | Folder expand/collapse chevron, all expanded by default | ProjectTree.xaml:240-244 (TreeView) | 20 Tree structure | partial | tree.slint expander column: the root and folders with items, all expanded at first; a click collapses (State.collapsed, kept until restart); Left/Right keys come with 3e |
 | T-37 | Row height 23 px | ProjectTree.xaml | 20 Tree structure; 00 overview | done | Theme.row-height (verify =23px) |
 | T-38 | Localised fixed row names and folder labels | Strings/* | 20 Tree structure; 00 language | partial | English literals in tree.rs; no @tr |
 | T-39 | Item rows show item Name, live rename from Name box | ProjectTree.xaml:383-455 | 20 Item row | done | label from project each refresh |
 | T-40 | Folder row: right-aligned plus button (tooltip 'Add an item to this folder') | ProjectTree.xaml:333-336 | 20 Item row | done | tree.slint folder rows: right-aligned plus, 'Add an item to this folder' |
 | T-41 | Parts folder plus opens Add part menu | ProjectTree.xaml:330-370 | 20 Item row | done | Parts and Probes folder plus open their menus of kinds under the plus |
 | T-42 | Colour schemes folder plus adds a project scheme with default stops | ProjectTree.xaml:362 | 20 Commands (Add on folder plus) | done | Project::add_new_color_scheme (grey stops), selected |
-| T-43 | Source row: Enabled check box, source icon, name | ProjectTree.xaml:383-390 | 20 Item row | partial | check box + name; no icon; check mark is a UTF glyph, no tooltip |
-| T-44 | Part row: Enabled check box, kind icon (per kind), name | ProjectTree.xaml:399-410 | 20 Item row; Row icons | partial | no kind icons |
-| T-45 | Probe row: Active check box, probe icon, name | ProjectTree.xaml:453-460 | 20 Item row | partial | no icon |
-| T-46 | Colour scheme row: 36x10 gradient strip + name, no check box | ProjectTree.xaml:431-445 | 20 Item row | missing | name only |
+| T-43 | Source row: Enabled check box, source icon, name | ProjectTree.xaml:383-390 | 20 Item row | done | check box (Next's check drawing) with its tooltip, the source drawing, the name |
+| T-44 | Part row: Enabled check box, kind icon (per kind), name | ProjectTree.xaml:399-410 | 20 Item row; Row icons | done | check box with its tooltip, the kind's drawing (a lens's from its radii, icons.rs), the name |
+| T-45 | Probe row: Active check box, probe icon, name | ProjectTree.xaml:453-460 | 20 Item row | done | check box with its tooltip, the probe's or detector's drawing, the name |
+| T-46 | Colour scheme row: 36x10 gradient strip + name, no check box | ProjectTree.xaml:431-445 | 20 Item row | done | 36 x 10 strip of the scheme's gradient (icons.rs strip, the core's Gradient), no check box or icon |
 | T-47 | Row glyph buttons Move up / Move down / Remove, 18x18 | ProjectTree.xaml:376-381 | 20 Item row | partial | present on depth-2 rows (all four lists) |
 | T-48 | Move up/down greyed and inert where item cannot move | ProjectTree.xaml:378-381 | 20 Item row | partial | inert at ends (shift no-op) but not greyed |
 | T-49 | Row check box and buttons not focusable / not tab stops | ProjectTree.xaml:383 | 20 Item row | partial | TouchArea, not focusable; fine |
-| T-50 | Row tooltips (include in runs, paint part, sample probe, move, remove) | ProjectTree.xaml:384,400,454 | 20 Item row | missing |  |
-| T-51 | Disabled item greys icon and name | ProjectTree.xaml:383-455 | 20 Item row | partial | name greyed; no icon |
+| T-50 | Row tooltips (include in runs, paint part, sample probe, move, remove) | ProjectTree.xaml:384,400,454 | 20 Item row | done | check boxes: include in runs / paint the part / sample this probe; move and remove buttons: Next's tips |
+| T-51 | Disabled item greys icon and name | ProjectTree.xaml:383-455 | 20 Item row | done | a disabled item's icon and name in the disabled text colour |
 | T-52 | Part icons: Lens profile icon from R1,R2,diameter (9 variants, follows edits) | Converters/LensIconConverter.cs | 20 Row icons | missing |  |
 | T-53 | Part icons: non-lens kinds drawings (FresnelLens..OrGate) | Controls/IconView.cs | 20 Row icons | missing |  |
 | T-54 | Add menu Lens/Mirror entry fixed icon | Controls/MenuIcon.cs | 20 Row icons | done | Lens/Mirror entry shows the fixed lens drawing |
@@ -573,7 +573,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-63 | Highlight: hover colour, current=selection colours when tree focused else inactive colours | ProjectTree.xaml:260-290 | 20 Selection model | partial | hover colour; selected rows in the selection colours while the tree has focus, else the inactive ones (tree.slint `tree-keys`); the current row has no mark of its own |
 | T-64 | Groups/root/settings rows can be current (Properties shows their form) | ProjectTree.xaml | 20 Selection model | done |  |
 | T-65 | Multi-selection of schemes (cut/copy/delete/duplicate) | ProjectTree.xaml.cs | 20 Selection model; 0008 | divergence | the row's ask is not Next's: its group takes sources, parts and probes only (Selection.IsGroupable); a scheme row acts alone, as in Next |
-| T-66 | Folder selected: Properties shows label + count (No entries / 1 entry / N entries) | Views/CollectionView.xaml:32 | 20 Properties coupling; 30 Pane behaviour | missing | heading shows debug name, no rows/count |
+| T-66 | Folder selected: Properties shows label + count (No entries / 1 entry / N entries) | Views/CollectionView.xaml:32 | 20 Properties coupling; 30 Pane behaviour | partial | Properties shows the folder's label and No entries / 1 entry / N entries; the label is not translated (T-38) |
 | T-67 | Add source: appended, at canvas centre, becomes selection, caret in Name (select all) | ProjectCommands.AddSource | 20 Commands | partial | appended at the canvas centre (image scene: its size), selected; the caret is not put in Name |
 | T-68 | Add probe: line end B 100 px right of A; selection + caret in Name | ProjectCommands.AddProbe | 20 Commands | partial | line end 100 px right of A, selected; the caret is not put in Name |
 | T-69 | Add part: placed at canvas centre of shown preview (image scene: its size) | ProjectCommands.AddPart | 20 Commands | done | Project::canvas_centre: the image's size for an image scene |
