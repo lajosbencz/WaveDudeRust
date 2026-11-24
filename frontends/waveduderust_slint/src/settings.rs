@@ -14,7 +14,8 @@ struct Row {
 	section: usize,
 	label: &'static str,
 	choices: &'static [&'static str],
-	int: bool,
+	/// A whole number's range; `None` for a choice or a switch.
+	range: Option<(u32, u32)>,
 	get: fn(&Settings) -> String,
 	set: fn(&mut Settings, &str),
 }
@@ -38,7 +39,7 @@ const ROWS: &[Row] = &[
 		section: 0,
 		label: "Theme",
 		choices: &["System", "Light", "Dark"],
-		int: false,
+		range: None,
 		get: |s| format!("{:?}", s.theme),
 		set: |s, v| {
 			s.theme = match v {
@@ -52,7 +53,7 @@ const ROWS: &[Row] = &[
 		section: 0,
 		label: "Full path in the title",
 		choices: &[],
-		int: false,
+		range: None,
 		get: |s| flag(s.title_full_path),
 		set: |s, v| s.title_full_path = v == "true",
 	},
@@ -60,7 +61,7 @@ const ROWS: &[Row] = &[
 		section: 0,
 		label: "Show the welcome page at each launch",
 		choices: &[],
-		int: false,
+		range: None,
 		get: |s| flag(s.show_startup),
 		set: |s, v| s.show_startup = v == "true",
 	},
@@ -68,7 +69,7 @@ const ROWS: &[Row] = &[
 		section: 0,
 		label: "Undo steps",
 		choices: &[],
-		int: true,
+		range: Some(waveduderust_platform::settings::UNDO_STEPS),
 		get: |s| s.undo_steps.to_string(),
 		set: |s, v| {
 			if let Ok(n) = v.trim().parse::<u32>() {
@@ -80,7 +81,7 @@ const ROWS: &[Row] = &[
 		section: 1,
 		label: "Preview resolution",
 		choices: &SCALES,
-		int: false,
+		range: None,
 		get: |s| scale_name(s.preview_resolution),
 		set: |s, v| s.preview_resolution = scale_divisor(v),
 	},
@@ -88,7 +89,7 @@ const ROWS: &[Row] = &[
 		section: 1,
 		label: "Preview frames",
 		choices: &SCALES,
-		int: false,
+		range: None,
 		get: |s| scale_name(s.preview_frames),
 		set: |s, v| s.preview_frames = scale_divisor(v),
 	},
@@ -96,7 +97,7 @@ const ROWS: &[Row] = &[
 		section: 1,
 		label: "Use the GPU",
 		choices: &[],
-		int: false,
+		range: None,
 		get: |s| flag(s.use_gpu),
 		set: |s, v| s.use_gpu = v == "true",
 	},
@@ -104,7 +105,7 @@ const ROWS: &[Row] = &[
 		section: 2,
 		label: "Re-run automatically after edits",
 		choices: &[],
-		int: false,
+		range: None,
 		get: |s| flag(s.auto_rerun),
 		set: |s, v| s.auto_rerun = v == "true",
 	},
@@ -112,7 +113,7 @@ const ROWS: &[Row] = &[
 		section: 2,
 		label: "Warn when the RAM cache is too small",
 		choices: &[],
-		int: false,
+		range: None,
 		get: |s| flag(s.warn_when_ram_insufficient),
 		set: |s, v| s.warn_when_ram_insufficient = v == "true",
 	},
@@ -120,7 +121,7 @@ const ROWS: &[Row] = &[
 		section: 3,
 		label: "Check for updates at start",
 		choices: &[],
-		int: false,
+		range: None,
 		get: |s| flag(s.check_for_updates == Some(true)),
 		set: |s, v| s.check_for_updates = Some(v == "true"),
 	},
@@ -137,7 +138,7 @@ pub(crate) fn rows(settings: &Settings, section: usize) -> Vec<PropRow> {
 			let value = (r.get)(settings);
 			let kind = if !r.choices.is_empty() {
 				PropKind::Choice
-			} else if r.int {
+			} else if r.range.is_some() {
 				PropKind::Int
 			} else {
 				PropKind::Bool
@@ -149,6 +150,8 @@ pub(crate) fn rows(settings: &Settings, section: usize) -> Vec<PropRow> {
 				current: r.choices.iter().position(|c| *c == value).map_or(-1, |i| i as i32),
 				value: value.into(),
 				choices: slint::ModelRc::from(choices.as_slice()),
+				spec: r.range.map_or_else(Default::default, |(min, max)| crate::number::whole(min as f32, max as f32)),
+				form: 0,
 			}
 		})
 		.collect()

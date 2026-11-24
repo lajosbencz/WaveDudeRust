@@ -17,6 +17,7 @@ import { SettingsLayer } from "settings.slint";
 import { WelcomeLayer } from "welcome.slint";
 import { ExamplesLayer, ExampleRow } from "examples.slint";
 
+export { NumberLogic, NumberSpec } from "number-box.slint";
 export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle, Modal, ModalKind, ExampleRow }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
@@ -55,7 +56,7 @@ export component AppWindow inherits Window {
     in property <int> settings-section;
     in property <[PropRow]> settings-rows;
     callback settings-pick(int);
-    callback settings-set(int, string);
+    callback settings-set(int, string) -> bool;
     callback modal-answer(int);
     in property <[LogRow]> log-rows;
     in property <[LevelToggle]> log-levels;
@@ -68,7 +69,8 @@ export component AppWindow inherits Window {
     in property <string> props-heading;
     in property <[PropRow]> props-rows;
     in property <string> props-error;
-    callback props-set(int, string);
+    callback props-set(form: int, row: int, text: string) -> bool;
+    callback props-typed(form: int, row: int, text: string);
     in-out property <bool> project-shown: true;
     in-out property <bool> properties-shown: true;
     in-out property <bool> messages-shown: false;
@@ -226,7 +228,8 @@ export component AppWindow inherits Window {
                             heading: root.props-heading;
                             rows: root.props-rows;
                             error: root.props-error;
-                            set(i, v) => { root.props-set(i, v); }
+                            set(form, i, v) => { return root.props-set(form, i, v); }
+                            typed(form, i, v) => { root.props-typed(form, i, v); }
                         }
                     }
                 }
@@ -355,7 +358,7 @@ export component AppWindow inherits Window {
         section: root.settings-section;
         rows: root.settings-rows;
         pick(i) => { root.settings-pick(i); }
-        set(i, v) => { root.settings-set(i, v); }
+        set(i, v) => { return root.settings-set(i, v); }
     }
     ModalLayer {
         // an overlay: its frame sets no bounds on the window

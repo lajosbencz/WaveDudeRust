@@ -81,4 +81,5 @@ row. Each phase is one coding pass, then a separate verification of the diff, th
 6. Timeline, transport, status bar (L-), live editing and runs (R-), Messages pane (G-).
 7. Dialogs and settings (D-, S-), then docking and window persistence (X-).
 
-Known bugs: the run status overwrites the export progress in the status bar; the title ignores `TitleFullPath`.
+Known bugs: the run status overwrites the export progress in the status bar; the title ignores `TitleFullPath`;
+field edits ignore the declared ranges, where Next's setters clamp (P-32).

@@ -1,0 +1,181 @@
+import { LineEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Icon } from "icons.slint";
+
+// A number box's settings (Next's NumberBox properties); `decimals` -1 takes the increment's, `drag-step` 0 the
+// increment's half per pixel.
+export struct NumberSpec {
+    min: float,
+    max: float,
+    increment: float,
+    decimals: int,
+    log: bool,
+    drag-step: float,
+}
+
+// The arithmetic, in src/number.rs.
+export global NumberLogic {
+    pure callback step(spec: NumberSpec, text: string, steps: int) -> string;
+    pure callback scrub(spec: NumberSpec, start: string, dx: float, scale: float) -> string;
+}
+
+// One of the spin column's halves: steps once on press, then every 60 ms after 400 ms (Next's SpinButton).
+component SpinButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> enabled;
+    callback step();
+
+    property <bool> repeating;
+    width: 14px;
+    background: !enabled ? transparent : area.pressed ? Theme.accent : area.has-hover ? Theme.button-hover : transparent;
+    Icon {
+        source: root.icon;
+        ink: area.pressed ? Theme.selection-text : Theme.text;
+    }
+    area := TouchArea {
+        enabled: root.enabled;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                root.repeating = false;
+                root.step();
+            }
+        }
+    }
+    Timer {
+        interval: root.repeating ? 60ms : 400ms;
+        running: area.pressed;
+        triggered => {
+            root.repeating = true;
+            root.step();
+        }
+    }
+}
+
+// The number box (docs/ui/30, Number box): a line edit and a spin column. Up/Down step, PageUp/PageDown step ten
+// times, the wheel steps while focused (Shift ten times), dragging an unfocused box sideways scrubs (Shift slower,
+// Ctrl faster; Esc restores). A step, a scrub, Enter or leaving the box hands the text to `edited`; Esc restores
+// `value` and is left to others when the text already shows it (Next's EditBehavior).
+export component NumberBox inherits FocusScope {
+    in property <string> value;
+    in property <NumberSpec> spec: { min: -1000000000, max: 1000000000, increment: 1, decimals: -1 };
+    // Hands a commit to the field; true when it took the text, which then shows the field's value.
+    callback edited(text: string) -> bool;
+    // The text as typed, before a commit.
+    callback typed(text: string);
+
+    property <bool> scrubbing;
+    property <length> grabbed;
+    property <string> start;
+
+    changed value => { edit.text = root.value; }
+    function write(text: string) {
+        edit.text = text;
+        root.commit();
+    }
+    function commit() {
+        if (root.edited(edit.text)) {
+            edit.text = root.value;
+        }
+        edit.select-all();
+    }
+    function step(steps: int) {
+        if (root.enabled) {
+            if (!edit.has-focus) {
+                edit.focus();
+            }
+            root.write(NumberLogic.step(root.spec, edit.text, steps));
+        }
+    }
+
+    // the line edit inside takes the focus
+    focus-on-click: false;
+    focus-on-tab-navigation: false;
+    min-width: 40px;
+    horizontal-stretch: 1;
+    capture-key-pressed(e) => {
+        if (e.text == Key.Escape) {
+            if (root.scrubbing) {
+                root.scrubbing = false;
+                root.write(root.start);
+                return accept;
+            }
+            if (edit.text == root.value) {
+                return reject;
+            }
+            edit.text = root.value;
+            edit.select-all();
+            root.typed(root.value);
+            return accept;
+        }
+        if (e.text == Key.UpArrow) { root.step(1); return accept; }
+        if (e.text == Key.DownArrow) { root.step(-1); return accept; }
+        if (e.text == Key.PageUp) { root.step(10); return accept; }
+        if (e.text == Key.PageDown) { root.step(-10); return accept; }
+        reject
+    }
+    TouchArea {
+        scroll-event(e) => {
+            if (!edit.has-focus || e.delta-y == 0) {
+                return reject;
+            }
+            root.step((e.delta-y > 0 ? 1 : -1) * (e.modifiers.shift ? 10 : 1));
+            accept
+        }
+        HorizontalLayout {
+            edit := LineEdit {
+                enabled: root.enabled;
+                text: root.value;
+                input-type: InputType.decimal;
+                accepted => { root.commit(); }
+                edited(t) => { root.typed(t); }
+                changed has-focus => {
+                    if (!self.has-focus && self.text != root.value && root.edited(self.text)) {
+                        self.text = root.value;
+                    }
+                }
+            }
+            if root.enabled: VerticalLayout {
+                SpinButton {
+                    icon: @image-url("icons/next/chevron-up.svg");
+                    enabled: root.enabled;
+                    step => { root.step(1); }
+                }
+                SpinButton {
+                    icon: @image-url("icons/next/chevron-down.svg");
+                    enabled: root.enabled;
+                    step => { root.step(-1); }
+                }
+            }
+        }
+        // Over the line edit while it has no focus, and through a scrub, which focuses it for Esc: a press and a
+        // sideways drag scrubs, a click focuses.
+        if root.enabled && (!edit.has-focus || root.scrubbing): TouchArea {
+            x: edit.x;
+            width: edit.width;
+            mouse-cursor: root.scrubbing ? MouseCursor.ew-resize : MouseCursor.text;
+            pointer-event(e) => {
+                if (e.button != PointerEventButton.left && e.kind != PointerEventKind.move && e.kind != PointerEventKind.cancel) {
+                    return;
+                }
+                if (e.kind == PointerEventKind.down) {
+                    root.grabbed = self.absolute-position.x + self.mouse-x;
+                    root.start = edit.text;
+                } else if (e.kind == PointerEventKind.move && self.pressed) {
+                    let dx = self.absolute-position.x + self.mouse-x - root.grabbed;
+                    if (root.scrubbing || abs(dx) >= 4px) {
+                        if (!root.scrubbing) {
+                            root.scrubbing = true;
+                            edit.focus();
+                        }
+                        root.write(NumberLogic.scrub(root.spec, root.start, dx / 1px, e.modifiers.shift ? 0.1 : e.modifiers.control ? 10 : 1));
+                    }
+                } else if (e.kind == PointerEventKind.up) {
+                    root.scrubbing = false;
+                    edit.focus();
+                } else if (e.kind == PointerEventKind.cancel) {
+                    root.scrubbing = false;
+                }
+            }
+        }
+    }
+}

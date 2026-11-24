@@ -12,17 +12,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 5 | 19 | 11 | 5 | 0 |
-| M | Menus and shortcuts | 22 | 31 | 74 | 13 | 0 |
+| M | Menus and shortcuts | 23 | 31 | 73 | 13 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 11 | 15 | 0 | 0 |
 | I | Icons | 11 | 30 | 24 | 18 | 0 |
 | T | Project tree | 4 | 17 | 76 | 4 | 0 |
-| P | Properties | 3 | 107 | 215 | 0 | 0 |
+| P | Properties | 3 | 114 | 206 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 127 | 312 | 605 | 45 | 6 |
+| | All | 128 | 319 | 595 | 47 | 6 |
 
 ## Cross-cutting
 
@@ -265,7 +265,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-132 | Pictures: wheel zoom about pointer, middle drag pan, pinch/two-finger zoom+pan | PP / CanvasImage.cs | ui/10 Handles | missing | Picture uses image-fit contain only |
 | M-133 | Picture splitter: arrows move, Enter/double-click reset to half | PP | ui/10 Splitter | missing | |
 | M-134 | Layout radio group (side by side / stacked): one tab stop, Left/Right switch | PP:485-490 | ui/10 Layout radio | partial | two Tool buttons (timeline.slint:241-242); no radio keys |
-| M-135 | Number box: Up/Down step, PageUp/PageDown x10, wheel (Shift x10), Enter commit, Esc revert | WPF/Controls/NumberBox.cs | ui/10 Number box, ui/30 | missing | properties.slint uses LineEdit |
+| M-135 | Number box: Up/Down step, PageUp/PageDown x10, wheel (Shift x10), Enter commit, Esc revert | WPF/Controls/NumberBox.cs | ui/10 Number box, ui/30 | done | ui/number-box.slint, src/number.rs; Enter and leaving commit (a tree action commits the typed text first, src/main.rs `draft`), Esc restores and passes on when unchanged (Next's EditBehavior) |
 | M-136 | Colour swatch: Space/Enter/Down open picker; square/strip/channel keys; Enter keeps, Esc reverts | WPF/Controls/ColorPicker*.cs | ui/10 Colour picker | missing | no colour editor |
 | M-137 | Dialogs: Enter default, Esc cancel, mnemonics w/o Alt; About Esc/Enter close | MessageWindow.xaml.cs | ui/10 Dialogs | partial | modal.slint:25-27 Enter/Esc done; mnemonics without Alt missing |
 | M-138 | File drop on window: image becomes scene image; other file to open flow (.wdproj .xml .json .wdscheme); nothing while modal | MW:12-13 (AllowDrop, OnDrop) | ui/10 File dropped | missing | no drop handler in main.rs/app.slint |
@@ -637,16 +637,16 @@ Not-in-spec rows are marked in the Spec column.
 | P-21 | Widget press flushes pending edit first (tree row, check, button, picker, dock tab) | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
 | P-22 | Pending text survives unmount (dock tab switch, picker close); Esc drops it | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
 | P-23 | Rename box closes on focus leaving; Enter/Esc give focus back to tree | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
-| P-24 | Number box: text + up/down repeat buttons column | Controls/NumberBox.cs | 30 Number box | missing | plain LineEdit with number input-type, no spin buttons |
-| P-25 | Number box: Up/Down key +/- Increment (log: x/ / 1.02) | Controls/NumberBox.cs | 30 Number box | missing |  |
-| P-26 | Number box: PageUp/PageDown 10 increments (log 10 steps) | Controls/NumberBox.cs | 30 Number box | missing |  |
-| P-27 | Number box: wheel while focused (Shift x10) | Controls/NumberBox.cs | 30 Number box | missing |  |
-| P-28 | Number box: repeat buttons auto-repeat and focus the box | Controls/NumberBox.cs | 30 Number box | missing |  |
-| P-29 | Number box: horizontal drag scrub on unfocused box (Shift x0.1, Ctrl x10, log doubling), Esc restores | Controls/NumberBox.cs | 30 Number box | missing |  |
-| P-30 | Number box: rounding to Decimals / three significant digits (log) | Controls/NumberBox.cs | 30 Number box | missing | value string shown as model prints it |
-| P-31 | Number box: step clamps to Min..Max, writes immediately, selects text | Controls/NumberBox.cs | 30 Number box | missing |  |
-| P-32 | Typed text free; model converts and clamps; culture decimal comma | Controls/NumberBox.cs | 30 Number box | partial | parse f64/i64 with '.'; model validates range and error shown; no culture; no silent clamp |
-| P-33 | Non-parsing text counts as 0 for a step; log box starts from Minimum | Controls/NumberBox.cs | 30 Number box | missing | non-parsing text rejected with error |
+| P-24 | Number box: text + up/down repeat buttons column | Controls/NumberBox.cs | 30 Number box | divergence | ui/number-box.slint, src/number.rs; spin column beside the LineEdit; a click focuses without placing the caret (divergences.md, Number box) |
+| P-25 | Number box: Up/Down key +/- Increment (log: x/ / 1.02) | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
+| P-26 | Number box: PageUp/PageDown 10 increments (log 10 steps) | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
+| P-27 | Number box: wheel while focused (Shift x10) | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
+| P-28 | Number box: repeat buttons auto-repeat and focus the box | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
+| P-29 | Number box: horizontal drag scrub on unfocused box (Shift x0.1, Ctrl x10, log doubling), Esc restores | Controls/NumberBox.cs | 30 Number box | divergence | ui/number-box.slint, src/number.rs; no pointer wrap at the screen's edge (divergences.md, Number box) |
+| P-30 | Number box: rounding to Decimals / three significant digits (log) | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
+| P-31 | Number box: step clamps to Min..Max, writes immediately, selects text | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
+| P-32 | Typed text free; model converts and clamps; culture decimal comma | Controls/NumberBox.cs | 30 Number box | partial | a decimal comma reads as a point when typed, stepped or scrubbed; numbers are written with a point; typed values are not clamped: field edits ignore the declared ranges (Scene width takes 99999999) |
+| P-33 | Non-parsing text counts as 0 for a step; log box starts from Minimum | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
 | P-34 | Disabled boxes grey out; row disabled by other setting greys label, no pointer/focus | Themes/Editors.xaml | 30 Number box | missing | no per-row enabled state; dependent fields are hidden from the form instead |
 | P-35 | Validation message for bad input | n/a (Rust) | 30 not itemised | partial | single red error line below form: 'x is no number', EditError text |
 | P-36 | Check box (live toggle) | Themes/Editors.xaml | 30 Check box | done | CheckBox row |

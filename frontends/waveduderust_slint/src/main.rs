@@ -10,6 +10,7 @@ mod icons;
 mod live;
 mod log;
 mod messages;
+mod number;
 mod playback;
 mod settings;
 mod tree;
@@ -73,9 +74,103 @@ struct State {
 	/// The desktop's colour scheme once a forced theme has written the palette's, which ends its system binding
 	/// (docs/blockers.md, Slint's system colour scheme).
 	system_scheme: Option<slint::language::ColorScheme>,
+	/// The forms the Properties pane and the settings show, for [`sync`].
+	props: Shown,
+	settings_rows: Shown,
+	/// The generation the Properties form last saw, and the one its object was last placed at: a change not made
+	/// through the form (undo, a removal, a reorder, another project) may put another object under the same node.
+	form_seen: u64,
+	form_base: u64,
+	draft: Option<Draft>,
+}
+
+/// Text typed into a Properties row and not committed: the tree commits it before it acts, since the editor's own
+/// commit on losing the focus comes after the rows changed (Slint runs `changed` handlers late).
+struct Draft {
+	token: i32,
+	row: usize,
+	text: String,
+	/// The row's value the text was typed over.
+	over: slint::SharedString,
+}
+
+/// A form the Properties pane or the settings show: its key and the token its rows carry.
+#[derive(Default)]
+struct Shown {
+	key: Option<String>,
+	token: i32,
+}
+
+/// Shows `rows` of the form `key`. The same form's rows are updated in place, and only those that changed, so the
+/// editors, and the focus and typing in one, survive an edit; another form gets a new model and token, so no editor
+/// carries text over to it and a late commit from a dropped editor is told apart.
+fn sync(
+	model: &ModelRc<ui::PropRow>,
+	shown: &mut Shown,
+	key: String,
+	mut rows: Vec<ui::PropRow>,
+	set: impl FnOnce(ModelRc<ui::PropRow>),
+) {
+	use slint::Model;
+	let model = model.as_any().downcast_ref::<VecModel<ui::PropRow>>();
+	let same = |a: &ui::PropRow, b: &ui::PropRow| a.label == b.label && a.kind == b.kind;
+	match model {
+		Some(model)
+			if shown.key.as_ref() == Some(&key)
+				&& model.row_count() == rows.len()
+				&& rows.iter().zip(model.iter()).all(|(a, b)| same(a, &b)) =>
+		{
+			for (i, mut row) in rows.into_iter().enumerate() {
+				let old = model.row_data(i).unwrap_or_default();
+				row.form = shown.token;
+				if old.choices.iter().eq(row.choices.iter()) {
+					row.choices = old.choices.clone();
+				}
+				if row != old {
+					model.set_row_data(i, row);
+				}
+			}
+		}
+		_ => {
+			shown.key = Some(key);
+			shown.token = shown.token.wrapping_add(1);
+			for row in &mut rows {
+				row.form = shown.token;
+			}
+			set(ModelRc::new(VecModel::from(rows)));
+		}
+	}
 }
 
 impl State {
+	/// Sets row `row` of the selected object's form to `text`.
+	fn set_prop(&mut self, row: usize, text: &str) -> Result<(), String> {
+		self.draft = None;
+		let node = self.selected;
+		let mut result = Ok(());
+		if node == Node::Display {
+			let doc = &mut self.doc;
+			result = form::set_selected(&mut doc.project, &mut doc.view, node, row, text);
+		} else {
+			let view = &mut self.doc.view.clone();
+			self.doc.edit(|p| result = form::set_selected(p, view, node, row, text));
+		}
+		// the form's own edit keeps it
+		self.form_seen = self.doc.generation;
+		result
+	}
+
+	/// Commits the [`State::draft`] while its editor is still the one shown.
+	fn commit_draft(&mut self, app: &AppWindow) {
+		use slint::Model;
+		let Some(draft) = self.draft.take() else { return };
+		let shown = app.get_props_rows().row_data(draft.row).map(|r| r.value);
+		if draft.token == self.props.token && shown.is_some_and(|v| v == draft.over) {
+			// the form leaves the view, so would its error
+			let _ = self.set_prop(draft.row, &draft.text);
+		}
+	}
+
 	/// Pushes the state into the window's properties.
 	fn show(&mut self, app: &AppWindow) {
 		let (nodes, rows) = tree::rows(&self.doc.project, self.selected);
@@ -91,7 +186,14 @@ impl State {
 		app.set_run_active(self.live.active());
 		let (heading, rows) = form::of_selected(&self.doc.project, &self.doc.view, self.selected);
 		app.set_props_heading(heading.into());
-		app.set_props_rows(ModelRc::new(VecModel::from(rows)));
+		if self.doc.generation != self.form_seen {
+			self.form_seen = self.doc.generation;
+			self.form_base = self.doc.generation;
+		}
+		let key = format!("{:?}@{}", self.selected, self.form_base);
+		sync(&app.get_props_rows(), &mut self.props, key, rows, |m| {
+			app.set_props_rows(m);
+		});
 	}
 
 	/// A project replaced the one shown: the selection and the timeline start over, frame 0 is made.
@@ -298,11 +400,15 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 }
 
 /// Pushes the Settings window's sections and rows.
-fn show_settings(state: &State, app: &AppWindow) {
+fn show_settings(state: &mut State, app: &AppWindow) {
 	let sections: Vec<slint::SharedString> = settings::SECTIONS.iter().map(|s| (*s).into()).collect();
 	app.set_settings_sections(ModelRc::from(sections.as_slice()));
 	app.set_settings_section(i32::try_from(state.settings_section).unwrap_or_default());
-	app.set_settings_rows(ModelRc::new(VecModel::from(settings::rows(&state.settings, state.settings_section))));
+	let rows = settings::rows(&state.settings, state.settings_section);
+	let key = state.settings_section.to_string();
+	sync(&app.get_settings_rows(), &mut state.settings_rows, key, rows, |m| {
+		app.set_settings_rows(m);
+	});
 }
 
 /// A message window's content (docs/ui/70, Message window).
@@ -462,6 +568,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	let ring = log::init();
 	let context = gpu::select().await?;
 	let app = AppWindow::new()?;
+	let numbers = app.global::<ui::NumberLogic<'_>>();
+	numbers.on_step(|spec, text, steps| number::step(&spec, &text, steps).into());
+	numbers.on_scrub(|spec, start, dx, scale| number::scrub(&spec, &start, f64::from(dx), f64::from(scale)).into());
 	let live = Live::new(&context)?;
 	let store = waveduderust_platform::store::Store::open();
 	let facts = waveduderust_platform::machine::machine_facts();
@@ -488,6 +597,11 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		last_export: None,
 		ran: 0,
 		system_scheme: None,
+		props: Shown::default(),
+		settings_rows: Shown::default(),
+		form_seen: 0,
+		form_base: 0,
+		draft: None,
 	}));
 	apply_settings(&mut state.borrow_mut(), &app);
 	follow_desktop_scheme(&state, &app);
@@ -507,6 +621,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		move |row: i32, arg: i32| {
 			if let Some(app) = weak.upgrade() {
 				let mut s = state.borrow_mut();
+				s.commit_draft(&app);
 				f(&mut s, &app, row, arg);
 				s.show(&app);
 			}
@@ -535,22 +650,27 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	});
 	app.on_tree_remove(move |row| remove(row, 0));
 	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_props_set(move |row, text| {
+	app.on_props_set(move |form, row, text| {
 		if let Some(app) = weak.upgrade() {
 			let mut s = st.borrow_mut();
-			let node = s.selected;
-			let mut result = Ok(());
-			let row = usize::try_from(row).unwrap_or(usize::MAX);
-			if node == Node::Display {
-				let doc = &mut s.doc;
-				result = form::set_selected(&mut doc.project, &mut doc.view, node, row, &text);
-			} else {
-				let view = &mut s.doc.view.clone();
-				s.doc.edit(|p| result = form::set_selected(p, view, node, row, &text));
+			if form != s.props.token {
+				// from an editor of a form no longer shown
+				return false;
 			}
+			let result = s.set_prop(usize::try_from(row).unwrap_or(usize::MAX), &text);
+			let took = result.is_ok();
 			app.set_props_error(result.err().unwrap_or_default().into());
 			s.show(&app);
+			return took;
 		}
+		false
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_props_typed(move |token, row, text| {
+		use slint::Model;
+		let (Some(app), Ok(row)) = (weak.upgrade(), usize::try_from(row)) else { return };
+		let over = app.get_props_rows().row_data(row).map_or_else(Default::default, |r| r.value);
+		st.borrow_mut().draft = Some(Draft { token, row, text: text.into(), over });
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_menu(move |id| {
@@ -629,7 +749,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			settings::set_row(&mut s.settings, s.store.as_ref(), s.settings_section, row, &value);
 			apply_settings(s, &app);
 			show_settings(s, &app);
+			return true;
 		}
+		false
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_modal_answer(move |button| {

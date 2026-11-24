@@ -9,7 +9,7 @@ export component SettingsLayer inherits Rectangle {
     in property <int> section;
     in property <[PropRow]> rows;
     callback pick(int);
-    callback set(int, string);
+    callback set(int, string) -> bool;
 
     visible: shown;
     background: #00000080;
@@ -57,7 +57,7 @@ export component SettingsLayer inherits Rectangle {
                 Properties {
                     heading: root.sections[root.section];
                     rows: root.rows;
-                    set(i, v) => { root.set(i, v); }
+                    set(form, i, v) => { return root.set(i, v); }
                 }
             }
             HorizontalLayout {

@@ -49,6 +49,18 @@ pub(crate) fn rows<T: Fields>(of: &T) -> Vec<PropRow> {
 				_ => (PropKind::Text, &[]),
 			};
 			let value = f.get(of).map_or_else(String::new, |v| v.to_string());
+			let range = f.range().map_or((f32::MIN, f32::MAX), |r| (r.min as f32, r.max as f32));
+			let spec = match kind {
+				PropKind::Int => crate::number::whole(range.0, range.1),
+				PropKind::Float => crate::number::NumberSpec {
+					min: range.0,
+					max: range.1,
+					increment: 1.0,
+					decimals: -1,
+					..Default::default()
+				},
+				_ => Default::default(),
+			};
 			let current = choices.iter().position(|c| *c == value).map_or(-1, |i| i as i32);
 			PropRow {
 				label: label(&f.path()).into(),
@@ -58,6 +70,8 @@ pub(crate) fn rows<T: Fields>(of: &T) -> Vec<PropRow> {
 					choices.iter().map(|c| slint::SharedString::from(*c)).collect::<Vec<_>>().as_slice(),
 				),
 				current,
+				spec,
+				form: 0,
 			}
 		})
 		.collect()
@@ -71,7 +85,7 @@ pub(crate) fn set<T: Fields>(of: &mut T, row: usize, text: &str) -> Result<(), S
 		ValueKind::Int | ValueKind::UInt => {
 			Value::Int(text.trim().parse().map_err(|_| format!("{text} is no whole number"))?)
 		}
-		ValueKind::Float => Value::Float(text.trim().parse().map_err(|_| format!("{text} is no number"))?),
+		ValueKind::Float => Value::Float(crate::number::parse(text).ok_or_else(|| format!("{text} is no number"))?),
 		ValueKind::Word(names) => Value::Word(names.iter().find(|n| **n == text).ok_or("unknown choice")?),
 		_ => Value::Text(text.into()),
 	};

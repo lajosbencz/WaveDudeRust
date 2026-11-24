@@ -1,5 +1,6 @@
 import { LineEdit, CheckBox, ComboBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { NumberBox, NumberSpec } from "number-box.slint";
 
 export enum PropKind { text, int, float, bool, choice }
 
@@ -9,6 +10,10 @@ export struct PropRow {
     value: string,
     choices: [string],
     current: int,
+    spec: NumberSpec,
+    // The shown form's token (src/main.rs, sync), handed back with an edit: a commit when an editor loses the
+    // focus may come after its form was replaced.
+    form: int,
 }
 
 // The properties pane (docs/ui/30): one labelled editor per field of the selected object.
@@ -16,7 +21,10 @@ export component Properties inherits Rectangle {
     in property <string> heading;
     in property <[PropRow]> rows;
     in property <string> error;
-    callback set(int, string);
+    // Sets row `row` of form `form`; whether the field took the text.
+    callback set(form: int, row: int, text: string) -> bool;
+    // The text typed into row `row` of form `form`, not yet committed.
+    callback typed(form: int, row: int, text: string);
 
     background: Theme.tool-window-background;
     scroll := ScrollView {
@@ -44,21 +52,35 @@ export component Properties inherits Rectangle {
                 }
                 if row.kind == PropKind.bool: CheckBox {
                     checked: row.value == "true";
-                    toggled => { root.set(i, self.checked ? "true" : "false"); }
+                    toggled => { root.set(row.form, i, self.checked ? "true" : "false"); }
                 }
                 if row.kind == PropKind.choice: ComboBox {
                     min-width: 40px;
                     horizontal-stretch: 1;
                     model: row.choices;
                     current-index: row.current;
-                    selected(v) => { root.set(i, v); }
+                    selected(v) => { root.set(row.form, i, v); }
                 }
-                if row.kind == PropKind.text || row.kind == PropKind.int || row.kind == PropKind.float: LineEdit {
+                if row.kind == PropKind.int || row.kind == PropKind.float: NumberBox {
+                    value: row.value;
+                    spec: row.spec;
+                    edited(t) => { return root.set(row.form, i, t); }
+                    typed(t) => { root.typed(row.form, i, t); }
+                }
+                if row.kind == PropKind.text: LineEdit {
                     min-width: 40px;
                     horizontal-stretch: 1;
                     text: row.value;
-                    input-type: row.kind == PropKind.text ? InputType.text : row.kind == PropKind.int ? InputType.number : InputType.decimal;
-                    accepted(t) => { root.set(i, t); }
+                    // typing breaks the binding above
+                    property <string> value: row.value;
+                    changed value => { self.text = self.value; }
+                    accepted(t) => { root.set(row.form, i, t); }
+                    edited(t) => { root.typed(row.form, i, t); }
+                    changed has-focus => {
+                        if (!self.has-focus && self.text != row.value) {
+                            root.set(row.form, i, self.text);
+                        }
+                    }
                 }
             }
             if root.error != "": Text {
