@@ -107,7 +107,7 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
 ## Undo and redo
 
 - (port) Up to Undo steps (Settings > General, default 1000, 10..100000; decision 0030) steps back. One snapshot
-  per step (a project clone; the scene image's bytes are shared between the clones). Recording a step beyond the
+  per step (a project clone, the Display settings included; the scene image's bytes are shared between the clones). Recording a step beyond the
   limit drops the oldest; a lower limit takes effect as the next step is recorded, so a scrub of the number box
   drops nothing. Once the saved step is dropped, no undo clears the title asterisk; a save does.
 - A step ends after 0.5 s of quiet with no mouse button held: a drag, a number-box scrub or a held arrow key is

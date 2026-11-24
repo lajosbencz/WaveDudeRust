@@ -309,7 +309,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-31 | Settings: section list left (General, Preview and memory, Simulation, Export, Updates), Up/Down walk, Tab cycles | not in Next | ui/70 Settings | partial | sections General/Preview and memory/Simulation/Updates (settings.rs:11); no Export section; mouse only |
 | D-32 | Settings: rows = label column + control; change applies and saves at once | not in Next | ui/70 Settings | done | set_row -> save (settings.rs:164) |
 | D-33 | Settings: one "Close" button, default and cancel (Enter outside a control, Esc) | not in Next | ui/70 Settings | partial | Close + Esc done (settings.slint:20-23,67); Enter not bound |
-| D-34 | Settings: Preset buttons row (Low, Medium, High, Auto) in Preview and memory | not in Next | ui/70 Settings table | missing | only on Welcome; PropKind has no button kind |
+| D-34 | Settings: Preset buttons row (Low, Medium, High, Auto) in Preview and memory | not in Next | ui/70 Settings table | missing | only on Welcome |
 | D-35 | Settings: RAM row read-only "{available} available of {physical}" native; browser drop-down | not in Next | ui/70 Settings table | missing | |
 | D-36 | Settings: Updates > "Check now" button | not in Next | ui/70 Settings table | missing | |
 | D-37 | Updates flow: launch check, "WaveDude Rust x is available (this is y). Download it?", progress "Downloading WaveDude Rust x", signature verify, "Restart now to install it?", failure/up-to-date messages, non-replaceable builds link to release page | not in Next | ui/70 Updates, decision 0011 | missing | no updater code in slint crate |

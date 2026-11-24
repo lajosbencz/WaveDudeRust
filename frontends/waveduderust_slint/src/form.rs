@@ -747,11 +747,19 @@ pub(crate) fn layer_schemes<'a>(
 	let mut schemes: Vec<(&m::ColorScheme, bool)> = project.color_schemes.iter().map(|s| (s, true)).collect();
 	let shared = user.user.iter().chain(waveduderust::io::schemes::built_in());
 	for s in shared.filter(|s| s.kind == kind || s.kind == m::SchemeKind::Unspecified) {
-		if !schemes.iter().any(|(t, own)| !own && t.name.eq_ignore_ascii_case(&s.name)) {
+		if !schemes.iter().any(|(t, own)| !own && t.name.to_lowercase() == s.name.to_lowercase()) {
 			schemes.push((s, false));
 		}
 	}
 	schemes
+}
+
+/// The display settings of `layer`.
+pub(crate) fn layer_settings(view: &mut View, layer: ui::Layer) -> &mut m::DisplayLayer {
+	match layer {
+		ui::Layer::Field => &mut view.field,
+		_ => &mut view.intensity,
+	}
 }
 
 /// What a layer picker shows: its schemes and the layer's scheme name.
@@ -778,8 +786,10 @@ pub(crate) fn show_layer_schemes(
 	}) {
 		return;
 	}
+	// the first row of the name, else the one a legacy name resolves to
 	let resolved = find_scheme(project, user, name).map(|(s, _)| s);
-	let mut current = now.iter().position(|(s, _)| resolved.is_some_and(|r| std::ptr::eq(*s, r)));
+	let mut current = now.iter().position(|(s, _)| s.name.to_lowercase() == name.to_lowercase());
+	current = current.or_else(|| now.iter().position(|(s, _)| resolved.is_some_and(|r| std::ptr::eq(*s, r))));
 	let mut choices: Vec<ui::SchemeChoice> = now
 		.iter()
 		.map(|(s, own)| ui::SchemeChoice {

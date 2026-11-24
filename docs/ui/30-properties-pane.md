@@ -91,7 +91,8 @@ to that no scheme has: greyed "<name> (not found)". Two italic action rows at th
 - "Remove from my schemes": a third action row, present only while the layer's scheme resolves to a user scheme
   (no project scheme of that name); removes that user scheme.
 
-A shared name is listed once, the user's scheme before a shipped one of that name. Up and Down on the closed picker
+A shared name is listed once, the user's scheme before a shipped one of that name. The row shown is the first of the layer's
+name; a legacy name with underscores shows the scheme it resolves to. Up and Down on the closed picker
 step through the schemes only, never onto the missing name or an action.
 
 ### Colour swatch button (`ColorPickerButton`)

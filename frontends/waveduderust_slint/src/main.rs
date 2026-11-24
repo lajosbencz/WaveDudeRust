@@ -81,9 +81,9 @@ struct State {
 	/// The desktop's colour scheme once a forced theme has written the palette's, which ends its system binding
 	/// (docs/blockers.md, Slint's system colour scheme).
 	system_scheme: Option<slint::language::ColorScheme>,
-	/// The generation the Properties form last saw, and the one its object was last placed at: a change not made
-	/// through the form (undo, a removal, a reorder, another project) may put another object under the same node.
-	form_seen: u64,
+	/// The project's and the view's generations the Properties form last saw, and the count of changes made not
+	/// through it (undo, a removal, a reorder, another project), which may put another object under the same node.
+	form_seen: (u64, u64),
 	form_base: u64,
 	/// The typed form shown: its object's identity and the token that drops text typed for another.
 	typed_form: Shown,
@@ -110,13 +110,13 @@ impl State {
 	/// into one undo step.
 	fn edit_form(&mut self, form: &ui::Form<'_>, typing: bool) {
 		let node = self.selection.current();
+		let key = typing.then(|| format!("{node:?}"));
 		if node == Node::Display {
-			form::apply_view(form, &mut self.doc.view);
+			self.doc.edit_view_merging(key.as_deref(), |v| form::apply_view(form, v));
 		} else {
-			let key = typing.then(|| format!("{node:?}"));
 			self.doc.edit_merging(key.as_deref(), |p| form::apply(form, p, node));
 		}
-		self.form_seen = self.doc.generation;
+		self.form_seen = (self.doc.generation, self.doc.view_generation);
 	}
 
 	/// Expands `node`'s row or collapses it; a selection it hides moves up to it (WPF's TreeView).
@@ -165,9 +165,10 @@ impl State {
 		app.set_props_heading(tree::name(&self.doc.project, node).into());
 		let folder = tree::folder(&self.doc.project, node);
 		app.set_props_entries(folder.map_or(-1, |n| i32::try_from(n).unwrap_or(i32::MAX)));
-		if self.doc.generation != self.form_seen {
-			self.form_seen = self.doc.generation;
-			self.form_base = self.doc.generation;
+		let seen = (self.doc.generation, self.doc.view_generation);
+		if seen != self.form_seen {
+			self.form_seen = seen;
+			self.form_base = self.form_base.wrapping_add(1);
 		}
 		let key = format!("{:?}@{}", self.selection.current(), self.form_base);
 		let g = app.global::<ui::Form<'_>>();
@@ -269,7 +270,7 @@ fn shift(state: &mut State, by: isize) {
 	state.selection.set(to);
 }
 
-/// A tree row's handler: `f` on the row's node with the callback's argument, typed text committed first and the
+/// A tree row's handler: `f` on the row's node with the callback's argument and the
 /// window refreshed after.
 fn on_row<A: 'static>(
 	state: &Rc<RefCell<State>>,
@@ -502,10 +503,9 @@ fn paste(state: &mut State) {
 	for text in texts {
 		match waveduderust::io::wdproj::read_fragment(&text) {
 			Ok(fragment) if !fragment.is_empty() => {
-				let (current, view) = (state.selection.current(), &mut state.doc.view.clone());
+				let current = state.selection.current();
 				let mut last = None;
-				state.doc.edit(|p| last = clipboard::paste(p, view, fragment, current));
-				state.doc.view = view.clone();
+				state.doc.edit_both(|p, v| last = clipboard::paste(p, v, fragment, current));
 				state.selection.set(last.unwrap_or(current));
 			}
 			_ => tracing::info!("the clipboard holds no project objects"),
@@ -771,7 +771,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		last_export: None,
 		ran: 0,
 		system_scheme: None,
-		form_seen: 0,
+		form_seen: (0, 0),
 		form_base: 0,
 		typed_form: Shown::default(),
 	}));
@@ -964,29 +964,24 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.global::<ui::Form<'_>>().on_edit_scheme_copy(move |layer| {
 		let Some(app) = weak.upgrade() else { return };
 		let s = &mut *st.borrow_mut();
-		let view = &mut s.doc.view;
-		let settings = if layer == ui::Layer::Field { &mut view.field } else { &mut view.intensity };
-		let Some((scheme, own)) = form::find_scheme(&s.doc.project, &s.schemes, &settings.color_scheme) else {
-			return;
-		};
+		let name = form::layer_settings(&mut s.doc.view, layer).color_scheme.clone();
+		let Some((scheme, own)) = form::find_scheme(&s.doc.project, &s.schemes, &name) else { return };
 		let mut copy = scheme.clone();
 		if own {
 			copy.description = format!("copy of project scheme '{}'", scheme.name);
 		}
 		copy.name = format!("{} copy", scheme.name);
 		let mut at = 0;
-		s.doc.edit(|p| {
+		s.doc.edit_both(|p, v| {
 			p.add_color_scheme(copy);
 			at = p.color_schemes.len() - 1;
+			form::layer_settings(v, layer).color_scheme.clone_from(&p.color_schemes[at].name);
 		});
-		let name = s.doc.project.color_schemes[at].name.clone();
-		tracing::info!("Colour scheme '{name}' copied into the project for editing");
-		let view = &mut s.doc.view;
-		let settings = if layer == ui::Layer::Field { &mut view.field } else { &mut view.intensity };
-		settings.color_scheme = name;
+		tracing::info!("Colour scheme '{}' copied into the project for editing", s.doc.project.color_schemes[at].name);
 		s.selection.set(Node::Scheme(at));
 		s.show(&app);
 	});
+
 	let weak = app.as_weak();
 	bar.on_marker_at(move |at, reach, selected| {
 		weak.upgrade().map_or(-1, |app| form::marker_at(&app.global::<ui::Form<'_>>().get_stops(), at, reach, selected))

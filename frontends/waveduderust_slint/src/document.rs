@@ -12,14 +12,23 @@ pub(crate) struct Document {
 	pub(crate) path: Option<PathBuf>,
 	/// The name an example suggests while there is no file.
 	pub(crate) suggested: Option<String>,
-	saved: Project,
-	undo: Vec<Project>,
-	redo: Vec<Project>,
+	saved: Snapshot,
+	undo: Vec<Snapshot>,
+	redo: Vec<Snapshot>,
 	limit: usize,
 	/// The key of the run of edits the last undo step holds (typing into one field).
 	merging: Option<String>,
 	/// Counts the project's changes, for whoever follows it.
 	pub(crate) generation: u64,
+	/// Counts the view's changes.
+	pub(crate) view_generation: u64,
+}
+
+/// What an undo step restores and the saved state is compared by: the Display settings belong to the project file.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Snapshot {
+	project: Project,
+	view: View,
 }
 
 impl Document {
@@ -33,7 +42,7 @@ impl Document {
 	pub(crate) fn open(&mut self, path: &Path) -> waveduderust::io::Result<()> {
 		let (project, view) = waveduderust::io::load_project(path)?;
 		*self = Self {
-			saved: project.clone(),
+			saved: Snapshot { project: project.clone(), view: view.clone() },
 			project,
 			view,
 			path: Some(path.to_owned()),
@@ -46,7 +55,7 @@ impl Document {
 	/// `project` with no file, `name` suggested for it, replacing this one and its history.
 	pub(crate) fn adopt(&mut self, project: Project, view: View, name: &str) {
 		*self = Self {
-			saved: project.clone(),
+			saved: Snapshot { project: project.clone(), view: view.clone() },
 			project,
 			view,
 			suggested: Some(name.to_owned()),
@@ -83,7 +92,7 @@ impl Document {
 	pub(crate) fn save_as(&mut self, path: &Path) -> waveduderust::io::Result<()> {
 		waveduderust::io::save_project(&self.project, &self.view, path)?;
 		self.path = Some(path.to_owned());
-		self.saved = self.project.clone();
+		self.saved = self.snapshot();
 		Ok(())
 	}
 
@@ -94,14 +103,28 @@ impl Document {
 
 	/// Applies `edit`, joining the last undo step when it was made under the same `key` and nothing came between.
 	pub(crate) fn edit_merging(&mut self, key: Option<&str>, edit: impl FnOnce(&mut Project)) {
+		self.change(key, |project, _| edit(project));
+	}
+
+	/// Applies `edit` to the view as [`Document::edit_merging`] does to the project.
+	pub(crate) fn edit_view_merging(&mut self, key: Option<&str>, edit: impl FnOnce(&mut View)) {
+		self.change(key, |_, view| edit(view));
+	}
+
+	/// Applies `edit` to the project and the view as one undo step.
+	pub(crate) fn edit_both(&mut self, edit: impl FnOnce(&mut Project, &mut View)) {
+		self.change(None, edit);
+	}
+
+	fn change(&mut self, key: Option<&str>, edit: impl FnOnce(&mut Project, &mut View)) {
 		let joins = key.is_some() && self.merging.as_deref() == key && !self.undo.is_empty();
-		let before = self.project.clone();
-		edit(&mut self.project);
-		if self.project != before && joins {
-			self.generation += 1;
-		} else if self.project != before {
+		let before = self.snapshot();
+		edit(&mut self.project, &mut self.view);
+		if !self.counted(&before) {
+			return;
+		}
+		if !joins {
 			self.merging = key.map(str::to_owned);
-			self.generation += 1;
 			self.undo.push(before);
 			if self.undo.len() > self.limit {
 				self.undo.remove(0);
@@ -110,19 +133,42 @@ impl Document {
 		}
 	}
 
+	fn snapshot(&self) -> Snapshot {
+		Snapshot { project: self.project.clone(), view: self.view.clone() }
+	}
+
+	/// Counts the changes since `before`; whether there were any.
+	fn counted(&mut self, before: &Snapshot) -> bool {
+		let project = self.project != before.project;
+		let view = self.view != before.view;
+		self.generation += u64::from(project);
+		self.view_generation += u64::from(view);
+		project || view
+	}
+
+	/// Replaces the project and the view with `to`, handing back what they were.
+	fn restore(&mut self, to: Snapshot) -> Snapshot {
+		let was = Snapshot {
+			project: std::mem::replace(&mut self.project, to.project),
+			view: std::mem::replace(&mut self.view, to.view),
+		};
+		self.counted(&was);
+		was
+	}
+
 	pub(crate) fn undo(&mut self) {
 		self.merging = None;
-		if let Some(p) = self.undo.pop() {
-			self.generation += 1;
-			self.redo.push(std::mem::replace(&mut self.project, p));
+		if let Some(step) = self.undo.pop() {
+			let was = self.restore(step);
+			self.redo.push(was);
 		}
 	}
 
 	pub(crate) fn redo(&mut self) {
 		self.merging = None;
-		if let Some(p) = self.redo.pop() {
-			self.generation += 1;
-			self.undo.push(std::mem::replace(&mut self.project, p));
+		if let Some(step) = self.redo.pop() {
+			let was = self.restore(step);
+			self.undo.push(was);
 		}
 	}
 
@@ -141,13 +187,13 @@ impl Document {
 		self.undo.drain(..over);
 	}
 
-	/// Takes the project as saved: its edits are kept or given up.
+	/// Takes the project and the view as saved: their edits are kept or given up.
 	pub(crate) fn mark_saved(&mut self) {
-		self.saved = self.project.clone();
+		self.saved = self.snapshot();
 	}
 
 	pub(crate) fn dirty(&self) -> bool {
-		self.project != self.saved
+		self.project != self.saved.project || self.view != self.saved.view
 	}
 
 	/// The file's name or the suggested one; `None` for an untitled project.
@@ -190,6 +236,27 @@ mod tests {
 		assert_eq!(d.project.seed, Project::default().seed);
 		d.redo();
 		assert_eq!(d.project.seed, 7);
+	}
+
+	#[test]
+	fn a_display_edit_is_undone_and_dirties_without_counting_as_a_project_change() {
+		let mut d = Document::new(10);
+		d.edit_view_merging(Some("Display"), |v| v.field.brightness = 3.0);
+		d.edit_view_merging(Some("Display"), |v| v.field.brightness = 4.0);
+		assert!(d.dirty());
+		assert_eq!((d.generation, d.view_generation), (0, 2));
+		d.edit_both(|p, v| {
+			p.seed = 9;
+			v.field.color_scheme = "Copy".into();
+		});
+		d.undo();
+		assert_eq!(
+			(d.project.seed, d.view.field.color_scheme.as_str()),
+			(Project::default().seed, View::default().field.color_scheme.as_str())
+		);
+		d.undo();
+		assert_eq!(d.view.field.brightness, View::default().field.brightness);
+		assert!(!d.dirty());
 	}
 
 	#[test]

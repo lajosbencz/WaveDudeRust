@@ -114,7 +114,11 @@ impl Selection {
 	pub(crate) fn retain(&mut self, project: &Project) {
 		let all = all(project);
 		self.items.retain(|n| all.contains(n));
-		if groupable(self.current) && !all.contains(&self.current) {
+		let gone = match self.current {
+			Node::Scheme(i) => i >= project.color_schemes.len(),
+			node => groupable(node) && !all.contains(&node),
+		};
+		if gone {
 			self.set(Node::Project);
 		}
 	}
@@ -129,6 +133,19 @@ impl Selection {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn a_scheme_gone_selects_the_project() {
+		let mut p = Project::default();
+		p.add_new_color_scheme();
+		let mut s = Selection::default();
+		s.set(Node::Scheme(0));
+		s.retain(&p);
+		assert_eq!(s.current(), Node::Scheme(0));
+		p.color_schemes.clear();
+		s.retain(&p);
+		assert_eq!(s.current(), Node::Project);
+	}
 
 	fn project() -> Project {
 		let mut p = Project::default();
