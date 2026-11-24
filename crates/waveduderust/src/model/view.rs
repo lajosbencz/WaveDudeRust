@@ -141,10 +141,33 @@ impl Default for View {
 }
 
 impl View {
+	/// A project scheme renamed from `old` to `new`: the layers that named it (ignoring case) name it by `new`.
+	pub fn rename_scheme(&mut self, old: &str, new: &str) {
+		for layer in [&mut self.field, &mut self.intensity] {
+			if layer.color_scheme.to_lowercase() == old.to_lowercase() {
+				new.clone_into(&mut layer.color_scheme);
+			}
+		}
+	}
+
 	pub fn layer(&self, layer: Layer) -> &DisplayLayer {
 		match layer {
 			Layer::Field => &self.field,
 			Layer::Intensity => &self.intensity,
 		}
+	}
+}
+
+#[cfg(test)]
+mod rename_tests {
+	use super::*;
+
+	#[test]
+	fn a_renamed_scheme_takes_the_layers_naming_it() {
+		let mut v = View::default();
+		v.field.color_scheme = "Mine".into();
+		v.intensity.color_scheme = "Other".into();
+		v.rename_scheme("MINE", "Yours");
+		assert_eq!((v.field.color_scheme.as_str(), v.intensity.color_scheme.as_str()), ("Yours", "Other"));
 	}
 }

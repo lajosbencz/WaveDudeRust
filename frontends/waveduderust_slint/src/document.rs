@@ -111,9 +111,9 @@ impl Document {
 		self.change(key, |_, view| edit(view));
 	}
 
-	/// Applies `edit` to the project and the view as one undo step.
-	pub(crate) fn edit_both(&mut self, edit: impl FnOnce(&mut Project, &mut View)) {
-		self.change(None, edit);
+	/// Applies `edit` to the project and the view as [`Document::edit_merging`] does to the project.
+	pub(crate) fn edit_both(&mut self, key: Option<&str>, edit: impl FnOnce(&mut Project, &mut View)) {
+		self.change(key, edit);
 	}
 
 	fn change(&mut self, key: Option<&str>, edit: impl FnOnce(&mut Project, &mut View)) {
@@ -245,7 +245,7 @@ mod tests {
 		d.edit_view_merging(Some("Display"), |v| v.field.brightness = 4.0);
 		assert!(d.dirty());
 		assert_eq!((d.generation, d.view_generation), (0, 2));
-		d.edit_both(|p, v| {
+		d.edit_both(None, |p, v| {
 			p.seed = 9;
 			v.field.color_scheme = "Copy".into();
 		});

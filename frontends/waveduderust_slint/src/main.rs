@@ -113,6 +113,15 @@ impl State {
 		let key = typing.then(|| format!("{node:?}"));
 		if node == Node::Display {
 			self.doc.edit_view_merging(key.as_deref(), |v| form::apply_view(form, v));
+		} else if let Node::Scheme(i) = node {
+			// a renamed scheme takes its layers along, in the same step
+			self.doc.edit_both(key.as_deref(), |p, v| {
+				let old = p.color_schemes.get(i).map(|s| s.name.clone());
+				form::apply(form, p, node);
+				if let (Some(old), Some(new)) = (old, p.color_schemes.get(i).map(|s| &s.name)) {
+					v.rename_scheme(&old, new);
+				}
+			});
 		} else {
 			self.doc.edit_merging(key.as_deref(), |p| form::apply(form, p, node));
 		}
@@ -505,7 +514,7 @@ fn paste(state: &mut State) {
 			Ok(fragment) if !fragment.is_empty() => {
 				let current = state.selection.current();
 				let mut last = None;
-				state.doc.edit_both(|p, v| last = clipboard::paste(p, v, fragment, current));
+				state.doc.edit_both(None, |p, v| last = clipboard::paste(p, v, fragment, current));
 				state.selection.set(last.unwrap_or(current));
 			}
 			_ => tracing::info!("the clipboard holds no project objects"),
@@ -972,7 +981,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		}
 		copy.name = format!("{} copy", scheme.name);
 		let mut at = 0;
-		s.doc.edit_both(|p, v| {
+		s.doc.edit_both(None, |p, v| {
 			p.add_color_scheme(copy);
 			at = p.color_schemes.len() - 1;
 			form::layer_settings(v, layer).color_scheme.clone_from(&p.color_schemes[at].name);

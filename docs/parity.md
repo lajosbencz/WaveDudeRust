@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 7 | 11 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 282 | 28 | 13 | 2 | 0 |
+| P | Properties | 283 | 27 | 13 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 455 | 227 | 309 | 98 | 6 |
+| | All | 456 | 226 | 309 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -923,7 +923,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-311 | Probe: Value maximum NB step 0.1 | Views/ProbeView.xaml:206 | 30 Probe | done | number box step 0.1 |
 | P-312 | Probe: sections General/Measurement/Position/Graph/Axes | Views/ProbeView.xaml:105-206 | 30 Probe | done | FormSection General, Measurement, Position, Graph, Axes |
 | P-313 | Probe: enabled/disabled rules by detector, layer, kind, box size, axis (styles lines 34-99) | Views/ProbeView.xaml:30-100 | 30 Probe | done | Next's DataTriggers as enabled bindings; an edit coerces the detector, layer, measurement, kind and value scale as Next's setters (Probe::coerce) |
-| P-314 | Scheme: Name TB (renaming repoints layers; tree row live) | Views/ColorSchemeView.xaml:71-72 | 30 Colour scheme | partial | forms.slint SchemeForm: Name per keystroke, the tree row live; renaming does not repoint the layers |
+| P-314 | Scheme: Name TB (renaming repoints layers; tree row live) | Views/ColorSchemeView.xaml:71-72 | 30 Colour scheme | done | forms.slint SchemeForm: Name per keystroke, the tree row live; View::rename_scheme repoints the layers in the same undo step |
 | P-315 | Scheme: Kind combo Unspecified/Field/Intensity | Views/ColorSchemeView.xaml:75-76 | 30 Colour scheme | done | forms.slint SchemeForm: SchemeKindChoice |
 | P-316 | Scheme: Description TB wraps, no newline | Views/ColorSchemeView.xaml:79-80 | 30 Colour scheme | partial | single-line FormText per keystroke; no wrapping |
 | P-317 | Scheme: Add to / Remove from my schemes button | Views/ColorSchemeView.xaml:(Rust) | 30 Colour scheme; divergences 'User colour schemes' | partial | the user's schemes load at the start, render, export and list in Based on; the button is missing |
