@@ -7,8 +7,9 @@ import { Timeline, TransportBar, Transport } from "timeline.slint";
 import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
 import { ModalLayer, Modal, ModalKind } from "modal.slint";
 import { SettingsLayer } from "settings.slint";
+import { ExamplesLayer, ExampleRow } from "examples.slint";
 
-export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle, Modal, ModalKind }
+export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle, Modal, ModalKind, ExampleRow }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 export component AppWindow inherits Window {
@@ -27,6 +28,13 @@ export component AppWindow inherits Window {
     in property <string> run-status;
     in property <Transport> transport;
     in property <Modal> modal;
+    in-out property <bool> examples-shown;
+    in property <[string]> example-topics;
+    in property <int> example-topic;
+    in property <[ExampleRow]> example-rows;
+    callback example-topic-picked(int);
+    callback example-search(string);
+    callback example-open(int);
     in-out property <bool> settings-shown;
     in property <[string]> settings-sections;
     in property <int> settings-section;
@@ -218,6 +226,17 @@ export component AppWindow inherits Window {
                 }
             }
         }
+    }
+    ExamplesLayer {
+        width: 100%;
+        height: 100%;
+        shown <=> root.examples-shown;
+        topics: root.example-topics;
+        topic: root.example-topic;
+        rows: root.example-rows;
+        pick-topic(i) => { root.example-topic-picked(i); }
+        search(t) => { root.example-search(t); }
+        open(i) => { root.example-open(i); }
     }
     SettingsLayer {
         width: 100%;

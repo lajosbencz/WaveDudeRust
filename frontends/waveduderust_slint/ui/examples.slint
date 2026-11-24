@@ -1,0 +1,104 @@
+import { LineEdit, Button, ListView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export struct ExampleRow {
+    title: string,
+    description: string,
+}
+
+// The Examples dialog (docs/ui/70, Examples dialog): topic tabs, search, the topic's examples, Open and Cancel.
+export component ExamplesLayer inherits Rectangle {
+    in-out property <bool> shown;
+    in property <[string]> topics;
+    in property <int> topic;
+    in property <[ExampleRow]> rows;
+    in-out property <int> current: 0;
+    callback pick-topic(int);
+    callback search(string);
+    callback open(int);
+
+    visible: shown;
+    background: #00000080;
+    TouchArea { }
+    FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) { root.shown = false; return accept; }
+            if (e.text == Key.Return) { root.open(root.current); return accept; }
+            if (e.text == Key.UpArrow) { root.current = max(0, root.current - 1); return accept; }
+            if (e.text == Key.DownArrow) { root.current = min(root.rows.length - 1, root.current + 1); return accept; }
+            if (e.text == Key.LeftArrow) { root.pick-topic(max(0, root.topic - 1)); return accept; }
+            if (e.text == Key.RightArrow) { root.pick-topic(min(root.topics.length - 1, root.topic + 1)); return accept; }
+            reject
+        }
+    }
+    Rectangle {
+        width: min(860px, root.width - 40px);
+        height: min(560px, root.height - 40px);
+        background: Theme.window-background;
+        border-width: 1px;
+        border-color: Theme.accent;
+        VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+            Text {
+                text: @tr("Examples");
+                font-weight: 700;
+                color: Theme.text;
+            }
+            HorizontalLayout {
+                spacing: 2px;
+                for name[i] in root.topics: Rectangle {
+                    height: Theme.row-height;
+                    width: label.preferred-width + 16px;
+                    background: i == root.topic ? Theme.accent : tab.has-hover ? Theme.hover-background : transparent;
+                    label := Text {
+                        text: name;
+                        color: i == root.topic ? Theme.selection-text : Theme.text;
+                    }
+                    tab := TouchArea {
+                        clicked => { root.pick-topic(i); root.current = 0; }
+                    }
+                }
+            }
+            LineEdit {
+                placeholder-text: @tr("Search");
+                edited(t) => { root.search(t); root.current = 0; }
+            }
+            ListView {
+                for row[i] in root.rows: Rectangle {
+                    background: i == root.current ? Theme.selection : area.has-hover ? Theme.row-hover : transparent;
+                    VerticalLayout {
+                        padding: 4px;
+                        Text {
+                            text: row.title;
+                            color: i == root.current ? Theme.selection-text : Theme.text;
+                        }
+                        Text {
+                            text: row.description;
+                            wrap: word-wrap;
+                            color: i == root.current ? Theme.selection-text : Theme.text-dim;
+                        }
+                    }
+                    area := TouchArea {
+                        clicked => { root.current = i; }
+                        double-clicked => { root.open(i); }
+                    }
+                }
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: 6px;
+                Button {
+                    text: @tr("Open");
+                    primary: true;
+                    enabled: root.rows.length > 0;
+                    clicked => { root.open(root.current); }
+                }
+                Button {
+                    text: @tr("Cancel");
+                    clicked => { root.shown = false; }
+                }
+            }
+        }
+    }
+}

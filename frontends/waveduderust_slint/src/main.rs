@@ -1,6 +1,7 @@
 //! WaveDude Rust's app: the Slint window over the core (decision 0032).
 
 mod document;
+mod examples;
 mod export;
 mod form;
 mod gpu;
@@ -54,6 +55,10 @@ struct State {
 	store: Option<waveduderust_platform::store::Store>,
 	settings_section: usize,
 	exporting: Option<export::Exporting>,
+	example_topic: usize,
+	example_search: String,
+	/// The examples the dialog lists, by index into [`examples::all`].
+	example_rows: Vec<usize>,
 	/// The last run export, for Export last.
 	last_export: Option<export::Kind>,
 	/// The document generation the run started from.
@@ -104,7 +109,25 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			state.live.stop();
 			state.playback.live = false;
 		}
-		"new" | "open" | "close" | "exit" if state.doc.dirty() => {
+		"examples" => {
+			show_examples(state, app);
+			app.set_examples_shown(true);
+		}
+		id if id.starts_with("example:") && !state.doc.dirty() => {
+			let file = &id["example:".len()..];
+			if let Some(e) = examples::all().iter().find(|e| e.file == file) {
+				match waveduderust::io::wdproj::read_str(e.text) {
+					Ok((project, view)) => {
+						state.doc.adopt(project, view, &format!("{}.wdproj", e.title));
+						state.selected = Node::Project;
+						state.playback.reset();
+						tracing::info!("opened the example {}", e.title);
+					}
+					Err(err) => tracing::error!("the example {file} does not parse: {err}"),
+				}
+			}
+		}
+		id if (matches!(id, "new" | "open" | "close" | "exit") || id.starts_with("example:")) && state.doc.dirty() => {
 			state.pending = Some(id.to_owned());
 			let name = state.doc.path.as_deref().and_then(std::path::Path::file_name).map_or_else(|| "Untitled".into(), |n| n.to_string_lossy().into_owned());
 			app.set_modal(modal(ui::ModalKind::Question, "WaveDude Rust", &format!("Save the changes to {name}?"), &["Save", "Don't save", "Cancel"], 0, 2));
@@ -171,6 +194,32 @@ fn remember(state: &mut State, path: &std::path::Path) {
 	}
 }
 
+/// Pushes the Examples dialog's topics and the rows of the topic, filtered by the search.
+fn show_examples(state: &mut State, app: &AppWindow) {
+	let topics: Vec<slint::SharedString> = examples::TOPICS.iter().map(|t| (*t).into()).collect();
+	app.set_example_topics(ModelRc::from(topics.as_slice()));
+	let query = state.example_search.to_lowercase();
+	let matches = |e: &examples::Example| {
+		query.is_empty() || e.title.to_lowercase().contains(&query) || e.description.to_lowercase().contains(&query)
+	};
+	if !query.is_empty() && !examples::all().iter().any(|e| e.topic == state.example_topic && matches(e)) {
+		state.example_topic = examples::all().iter().find(|e| matches(e)).map_or(state.example_topic, |e| e.topic);
+	}
+	state.example_rows = (0..examples::all().len())
+		.filter(|&i| examples::all()[i].topic == state.example_topic && matches(&examples::all()[i]))
+		.collect();
+	let rows: Vec<ui::ExampleRow> = state
+		.example_rows
+		.iter()
+		.map(|&i| ui::ExampleRow {
+			title: examples::all()[i].title.as_str().into(),
+			description: examples::all()[i].description.as_str().into(),
+		})
+		.collect();
+	app.set_example_topic(i32::try_from(state.example_topic).unwrap_or_default());
+	app.set_example_rows(ModelRc::new(VecModel::from(rows)));
+}
+
 /// Applies the settings to the window, the history and the run.
 fn apply_settings(state: &mut State, app: &AppWindow) {
 	let s = &state.settings;
@@ -204,13 +253,9 @@ fn modal(kind: ui::ModalKind, title: &str, text: &str, buttons: &[&str], default
 
 /// Saves the project, to a picked file for Save As or without a file; `false` when cancelled or failed.
 fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
-	let Some(path) = state
-		.doc
-		.path
-		.clone()
-		.filter(|_| !pick)
-		.or_else(|| project_dialog().set_file_name("Untitled.wdproj").save_file())
-	else {
+	let Some(path) = state.doc.path.clone().filter(|_| !pick).or_else(|| {
+		project_dialog().set_file_name(state.doc.suggested.as_deref().unwrap_or("Untitled.wdproj")).save_file()
+	}) else {
 		return false;
 	};
 	match state.doc.save_as(&path) {
@@ -333,6 +378,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		store,
 		settings_section: 0,
 		exporting: None,
+		example_topic: 0,
+		example_search: String::new(),
+		example_rows: Vec::new(),
 		last_export: None,
 		ran: 0,
 	}));
@@ -396,6 +444,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	app.on_menu(move |id| {
 		if let Some(app) = weak.upgrade() {
 			menu(&mut st.borrow_mut(), &app, &id);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_example_topic_picked(move |i| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			s.example_topic = usize::try_from(i).unwrap_or_default();
+			show_examples(s, &app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_example_search(move |t| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			s.example_search = t.into();
+			show_examples(s, &app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_example_open(move |row| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			if let Some(&i) = usize::try_from(row).ok().and_then(|r| s.example_rows.get(r)) {
+				app.set_examples_shown(false);
+				menu(s, &app, &format!("example:{}", examples::all()[i].file));
+			}
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());

@@ -10,6 +10,8 @@ pub(crate) struct Document {
 	pub(crate) project: Project,
 	pub(crate) view: View,
 	pub(crate) path: Option<PathBuf>,
+	/// The name an example suggests while there is no file.
+	pub(crate) suggested: Option<String>,
 	saved: Project,
 	undo: Vec<Project>,
 	redo: Vec<Project>,
@@ -36,6 +38,19 @@ impl Document {
 			..Self::default()
 		};
 		Ok(())
+	}
+
+	/// `project` with no file, `name` suggested for it, replacing this one and its history.
+	pub(crate) fn adopt(&mut self, project: Project, view: View, name: &str) {
+		*self = Self {
+			saved: project.clone(),
+			project,
+			view,
+			suggested: Some(name.to_owned()),
+			limit: self.limit,
+			generation: self.generation + 1,
+			..Self::default()
+		};
 	}
 
 	/// Writes the project to `path`, which becomes its file.
@@ -104,7 +119,9 @@ impl Document {
 			.path
 			.as_deref()
 			.and_then(Path::file_name)
-			.map_or_else(|| "Untitled".into(), |n| n.to_string_lossy().into_owned());
+			.map(|n| n.to_string_lossy().into_owned())
+			.or_else(|| self.suggested.clone())
+			.unwrap_or_else(|| "Untitled".into());
 		format!("WaveDude Rust - {name}{}", if self.dirty() { "*" } else { "" })
 	}
 }
