@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 7 | 11 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 277 | 31 | 15 | 2 | 0 |
+| P | Properties | 282 | 26 | 15 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 450 | 230 | 311 | 98 | 6 |
+| | All | 455 | 225 | 311 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -495,13 +495,9 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 
 ## Project tree and properties
 
-Slint code: frontends/waveduderust_slint/ui/tree.slint, ui/properties.slint, src/tree.rs, src/form.rs, src/main.rs (tree_*/props_set/menu).
+Slint code: frontends/waveduderust_slint/ui/tree.slint, ui/properties.slint, src/tree.rs, src/form.rs, src/main.rs (tree_*/menu).
 Next paths are relative to WaveDudeNext.WPF (Panes/ProjectTree.xaml etc). Spec files are docs/ui/20 and docs/ui/30.
 Status words: done / partial / missing / divergence.
-Legend G (generic row): the Slint form is built by reflection from model fields (rows.rs): a label from the field path
-(English, no hints), a plain LineEdit (text/int/float; Enter commits), CheckBox or ComboBox; no spin buttons, step, drag, wheel,
-clamp, units, tooltips, sections, enable/disable rules, per-keystroke apply; a rejected value shows one red error line at the
-bottom. Fields marked dependent, lists and nested objects are not shown. Part forms edit parts[i].base only.
 Not-in-spec rows are marked in the Spec column.
 
 ### Tree (T)
@@ -615,20 +611,20 @@ Not-in-spec rows are marked in the Spec column.
 | ID | Feature | Next source (file:line) | Spec (docs/ui file, section) | Slint | Note |
 |---|---|---|---|---|---|
 | P-01 | Pane shows form of the current item; 'No selection' grey when none | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | missing | heading + empty list |
-| P-02 | Pane heading / form selected by node type | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | partial | Project, Scene, Simulation and Display show Next's forms (ui/forms.slint), without a heading as Next; items keep the generic rows until their forms (piece 4) |
+| P-02 | Pane heading / form selected by node type | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | done | every node shows its typed form (ui/forms.slint), without a heading as Next; a folder shows its name and entry count |
 | P-03 | Folder row: label header + count (No entries/1 entry/N entries), grey | Views/CollectionView.xaml:32 | 30 Pane behaviour | missing |  |
 | P-04 | Caret into first text box with text selected on newly added item | Panes/PropertiesPane.xaml.cs:83-88 | 30 Pane behaviour | missing |  |
 | P-05 | Form scrolls vertically, never horizontally | Panes/PropertiesPane.xaml | 30 Pane behaviour | done | ScrollView |
-| P-06 | FormPanel two columns: label column = widest label (>=110 px), editors fill rest | Controls/FormPanel.cs | 30 Pane behaviour | partial | ui/form.slint FormPanel: a grid, the label column its widest label, 110 px at least, editors fill the rest; items keep the generic rows until their forms (piece 4) |
-| P-07 | Full-width check boxes carry label as content | Controls/FormPanel.cs | 30 Pane/Check box | partial | FormCheck spans both columns with the label as its text; items keep the generic rows until their forms (piece 4) |
-| P-08 | Row height >=22 px, 4 px apart; multiline label at top | Controls/FormPanel.cs | 30 Pane behaviour | partial | rows {Theme.row-height} at least, 4 px apart; the Description label sits at its row's centre, not its top; items keep the generic rows until their forms (piece 4) |
-| P-09 | Section headers: name over a rule; gap after group | Themes/Editors.xaml (FormSection) | 30 Pane behaviour | partial | FormSection: semibold name over a 1 px rule, 10 px after each FormPanel; items keep the generic rows until their forms (piece 4) |
+| P-06 | FormPanel two columns: label column = widest label (>=110 px), editors fill rest | Controls/FormPanel.cs | 30 Pane behaviour | done | ui/form.slint FormPanel: a grid, the label column its widest label, 110 px at least, editors fill the rest |
+| P-07 | Full-width check boxes carry label as content | Controls/FormPanel.cs | 30 Pane/Check box | done | FormCheck spans both columns with the label as its text |
+| P-08 | Row height >=22 px, 4 px apart; multiline label at top | Controls/FormPanel.cs | 30 Pane behaviour | partial | rows {Theme.row-height} at least, 4 px apart; the Description label sits at its row's centre, not its top |
+| P-09 | Section headers: name over a rule; gap after group | Themes/Editors.xaml (FormSection) | 30 Pane behaviour | done | FormSection: semibold name over a 1 px rule, 10 px after each FormPanel |
 | P-10 | Secondary values (format version, folder count) grey | Views/ProjectView.xaml:37 | 30 Pane behaviour | partial | FormValue in the dim text colour: Format version; the folder count is plain (T-66) |
 | P-11 | Read-outs plain text bound to inputs; '~ ' prefix 1 decimal for estimates; px/deg units | Themes/Editors.xaml (FormReadout) | 30 Pane behaviour | missing | no read-out rows |
 | P-12 | Edits apply live (every keystroke in name, step, check box) | Panes/PropertiesPane.xaml.cs | 30 Pane behaviour | partial | check box/combo live; text applies on Enter only (accepted), no per-keystroke name rename |
 | P-13 | Each edit marks dirty, follows live-editing rules / undo | MainWindow.Live.cs | 30 Pane behaviour; 60 | done | doc.edit per set |
-| P-14 | Tooltips (Hint.*) on every editor and label | Views/*.xaml meta:Hint | 30 intro | partial | Next's Hint.* as Tooltips on the labels and editors of the settings forms; items keep the generic rows until their forms (piece 4) |
-| P-15 | Labels from Label.<Type>.<Member> string tables, 4 languages | Strings/* | 30 intro | partial | the settings forms' labels are Next's Label.* texts through @tr, translated by tools/next-strings.py; items keep the generic rows until their forms (piece 4) |
+| P-14 | Tooltips (Hint.*) on every editor and label | Views/*.xaml meta:Hint | 30 intro | partial | Next's Hint.* as Tooltips on the labels and editors of the settings forms |
+| P-15 | Labels from Label.<Type>.<Member> string tables, 4 languages | Strings/* | 30 intro | partial | the settings forms' labels are Next's Label.* texts through @tr, translated by tools/next-strings.py |
 | P-16 | Enum words localised from Enum.* | Strings/* | 30 Check box, combo box | partial | Scene's Mode and Edges words through @tr (Next's Enum.*); the items' words are raw |
 | P-17 | Text box: Enter pushes text and selects it; Esc restores when differing; keys consumed only if effective | Controls/EditBehavior.cs | 30 Text box | partial | LineEdit accepted(Enter) commits; no Esc restore, no select-all |
 | P-18 | Multiline text box keeps Enter as newline (Description) | Views/ProjectView.xaml:46-49 | 30 Text box | missing | LineEdit is single line |
@@ -645,7 +641,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-29 | Number box: horizontal drag scrub on unfocused box (Shift x0.1, Ctrl x10, log doubling), Esc restores | Controls/NumberBox.cs | 30 Number box | divergence | ui/number-box.slint, src/number.rs; no pointer wrap at the screen's edge (divergences.md, Number box) |
 | P-30 | Number box: rounding to Decimals / three significant digits (log) | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
 | P-31 | Number box: step clamps to Min..Max, writes immediately, selects text | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
-| P-32 | Typed text free; model converts and clamps; culture decimal comma | Controls/NumberBox.cs | 30 Number box | partial | a decimal comma reads as a point when typed, stepped or scrubbed; numbers are written with a point; a typed form clamps each number to its box's range; the generic rows do not clamp |
+| P-32 | Typed text free; model converts and clamps; culture decimal comma | Controls/NumberBox.cs | 30 Number box | partial | a decimal comma reads as a point when typed, stepped or scrubbed; numbers are written with a point; a typed form clamps each number to its box's range |
 | P-33 | Non-parsing text counts as 0 for a step; log box starts from Minimum | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
 | P-34 | Disabled boxes grey out; row disabled by other setting greys label, no pointer/focus | Themes/Editors.xaml | 30 Number box | missing | no per-row enabled state; dependent fields are hidden from the form instead |
 | P-35 | Validation message for bad input | n/a (Rust) | 30 not itemised | partial | single red error line below form: 'x is no number', EditError text |
@@ -743,7 +739,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-127 | Part: X NB min 0 | Views/PartCommonView.xaml:64-65 | 30 Part common | done | PartCommon number box from 0 |
 | P-128 | Part: Y NB min 0 | Views/PartCommonView.xaml:67-68 | 30 Part common | done | PartCommon number box from 0 |
 | P-129 | Part: Angle NB -180..180 step 5 drag 0.5 1 dec | Views/PartCommonView.xaml:70-71 | 30 Part common | done | PartCommon number box -180..180 step 5, drag 0.5, 1 decimal |
-| P-130 | Part: kind-specific forms shown after shared rows (form dispatch per kind) | Panes/PropertiesPane.xaml:117 | 30 Forms | partial | form::kind by PartKind, a typed form per kind (ui/data.slint), rules in edited::Edited; rectangle, ellipse, triangle, polygon, lens, Fresnel lens, outline so far, other kinds show the generic rows |
+| P-130 | Part: kind-specific forms shown after shared rows (form dispatch per kind) | Panes/PropertiesPane.xaml:117 | 30 Forms | done | form::kind by PartKind, a typed form per kind (ui/forms.slint), rules in edited::Edited |
 | P-131 | Material: Mirror CB | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | ShapeMaterial FormCheck |
 | P-132 | Material: Refractive index NB 1..2.55 step 0.01 (off when Mirror) | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | number box 1..2.55 step 0.01, off for a mirror |
 | P-133 | Material: AR coating NB 0..50 (off when Mirror) | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | number box 0..50, off for a mirror; hidden where the kind takes no coating |

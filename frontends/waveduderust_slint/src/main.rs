@@ -13,7 +13,6 @@ mod log;
 mod messages;
 mod number;
 mod playback;
-mod rows;
 mod selection;
 mod settings;
 mod tree;
@@ -82,28 +81,15 @@ struct State {
 	/// The desktop's colour scheme once a forced theme has written the palette's, which ends its system binding
 	/// (docs/blockers.md, Slint's system colour scheme).
 	system_scheme: Option<slint::language::ColorScheme>,
-	/// The generic rows the Properties pane shows, for [`sync`].
-	props: Shown,
 	/// The generation the Properties form last saw, and the one its object was last placed at: a change not made
 	/// through the form (undo, a removal, a reorder, another project) may put another object under the same node.
 	form_seen: u64,
 	form_base: u64,
-	draft: Option<Draft>,
 	/// The typed form shown: its object's identity and the token that drops text typed for another.
 	typed_form: Shown,
 }
 
-/// Text typed into a Properties row and not committed: the tree commits it before it acts, since the editor's own
-/// commit on losing the focus comes after the rows changed (Slint runs `changed` handlers late).
-struct Draft {
-	token: i32,
-	row: usize,
-	text: String,
-	/// The row's value the text was typed over.
-	over: slint::SharedString,
-}
-
-/// A form the Properties pane or the settings show: its key and the token its rows carry.
+/// The typed form shown: its key, the token its editors carry and the lists it caches.
 #[derive(Default)]
 struct Shown {
 	key: Option<String>,
@@ -119,65 +105,7 @@ struct Shown {
 	intensity_schemes: Option<form::LayerPicker>,
 }
 
-/// Shows `rows` of the form `key`. The same form's rows are updated in place, and only those that changed, so the
-/// editors, and the focus and typing in one, survive an edit; another form gets a new model and token, so no editor
-/// carries text over to it and a late commit from a dropped editor is told apart.
-fn sync(
-	model: &ModelRc<ui::PropRow>,
-	shown: &mut Shown,
-	key: String,
-	mut rows: Vec<ui::PropRow>,
-	set: impl FnOnce(ModelRc<ui::PropRow>),
-) {
-	use slint::Model;
-	let model = model.as_any().downcast_ref::<VecModel<ui::PropRow>>();
-	let same = |a: &ui::PropRow, b: &ui::PropRow| a.label == b.label && a.kind == b.kind;
-	match model {
-		Some(model)
-			if shown.key.as_ref() == Some(&key)
-				&& model.row_count() == rows.len()
-				&& rows.iter().zip(model.iter()).all(|(a, b)| same(a, &b)) =>
-		{
-			for (i, mut row) in rows.into_iter().enumerate() {
-				let old = model.row_data(i).unwrap_or_default();
-				row.form = shown.token;
-				if old.choices.iter().eq(row.choices.iter()) {
-					row.choices = old.choices.clone();
-				}
-				if row != old {
-					model.set_row_data(i, row);
-				}
-			}
-		}
-		_ => {
-			shown.key = Some(key);
-			shown.token = shown.token.wrapping_add(1);
-			for row in &mut rows {
-				row.form = shown.token;
-			}
-			set(ModelRc::new(VecModel::from(rows)));
-		}
-	}
-}
-
 impl State {
-	/// Sets row `row` of the selected object's form to `text`.
-	fn set_prop(&mut self, row: usize, text: &str) -> Result<(), String> {
-		self.draft = None;
-		let node = self.selection.current();
-		let mut result = Ok(());
-		if node == Node::Display {
-			let doc = &mut self.doc;
-			result = rows::set_selected(&mut doc.project, &mut doc.view, node, row, text);
-		} else {
-			let view = &mut self.doc.view.clone();
-			self.doc.edit(|p| result = rows::set_selected(p, view, node, row, text));
-		}
-		// the form's own edit keeps it
-		self.form_seen = self.doc.generation;
-		result
-	}
-
 	/// Applies the edits of the selected object's typed form; `typing`: a keystroke, joining the run of keystrokes
 	/// into one undo step.
 	fn edit_form(&mut self, form: &ui::Form<'_>, typing: bool) {
@@ -189,17 +117,6 @@ impl State {
 			self.doc.edit_merging(key.as_deref(), |p| form::apply(form, p, node));
 		}
 		self.form_seen = self.doc.generation;
-	}
-
-	/// Commits the [`State::draft`] while its editor is still the one shown.
-	fn commit_draft(&mut self, app: &AppWindow) {
-		use slint::Model;
-		let Some(draft) = self.draft.take() else { return };
-		let shown = app.get_props_rows().row_data(draft.row).map(|r| r.value);
-		if draft.token == self.props.token && shown.is_some_and(|v| v == draft.over) {
-			// the form leaves the view, so would its error
-			let _ = self.set_prop(draft.row, &draft.text);
-		}
 	}
 
 	/// Expands `node`'s row or collapses it; a selection it hides moves up to it (WPF's TreeView).
@@ -244,11 +161,6 @@ impl State {
 		}
 		let node = self.selection.current();
 		let kind = form::kind(&self.doc.project, node);
-		let rows = if kind == ui::FormKind::None {
-			rows::of_selected(&self.doc.project, &self.doc.view, node)
-		} else {
-			Vec::new()
-		};
 		app.set_props_kind(node.kind());
 		app.set_props_heading(tree::name(&self.doc.project, node).into());
 		let folder = tree::folder(&self.doc.project, node);
@@ -293,9 +205,6 @@ impl State {
 			}
 			self.typed_form.bar_edited = false;
 		}
-		sync(&app.get_props_rows(), &mut self.props, key, rows, |m| {
-			app.set_props_rows(m);
-		});
 	}
 
 	/// A project replaced the one shown: the selection and the timeline start over, frame 0 is made.
@@ -372,7 +281,6 @@ fn on_row<A: 'static>(
 		let Some(app) = weak.upgrade() else { return };
 		let s = &mut *state.borrow_mut();
 		let Some(node) = s.node(row) else { return };
-		s.commit_draft(&app);
 		f(s, node, arg);
 		s.show(&app);
 	}
@@ -863,10 +771,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		last_export: None,
 		ran: 0,
 		system_scheme: None,
-		props: Shown::default(),
 		form_seen: 0,
 		form_base: 0,
-		draft: None,
 		typed_form: Shown::default(),
 	}));
 	app.set_native_access_keys(cfg!(windows));
@@ -920,7 +826,6 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			else {
 				return;
 			};
-			s.commit_draft(&app);
 			let mut moved = node;
 			s.doc.edit(|p| moved = tree::move_to(p, node, to));
 			s.selection.set(moved);
@@ -934,7 +839,6 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			let s = &mut *s;
 			match tree::navigate(&s.doc.project, &s.nodes, &s.collapsed, s.selection.current(), key) {
 				Some(tree::Step::To(node)) => {
-					s.commit_draft(&app);
 					s.selection.pick(&s.doc.project, node, if extend { Pick::Range } else { Pick::Alone });
 				}
 				Some(tree::Step::Expand(node, open)) => s.expand(node, open),
@@ -950,29 +854,6 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	}));
 	let remove_row = on_row(&state, &app, |s, node, ()| remove(s, &s.selection.group_of(node)));
 	app.on_tree_remove(move |row| remove_row(row, ()));
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_props_set(move |form, row, text| {
-		if let Some(app) = weak.upgrade() {
-			let mut s = st.borrow_mut();
-			if form != s.props.token {
-				// from an editor of a form no longer shown
-				return false;
-			}
-			let result = s.set_prop(usize::try_from(row).unwrap_or(usize::MAX), &text);
-			let took = result.is_ok();
-			app.set_props_error(result.err().unwrap_or_default().into());
-			s.show(&app);
-			return took;
-		}
-		false
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_props_typed(move |token, row, text| {
-		use slint::Model;
-		let (Some(app), Ok(row)) = (weak.upgrade(), usize::try_from(row)) else { return };
-		let over = app.get_props_rows().row_data(row).map_or_else(Default::default, |r| r.value);
-		st.borrow_mut().draft = Some(Draft { token, row, text: text.into(), over });
-	});
 	let parse = app.global::<ui::NumberParse<'_>>();
 	parse.on_int(|spec, text| {
 		let value = number::commit(&spec, &text);

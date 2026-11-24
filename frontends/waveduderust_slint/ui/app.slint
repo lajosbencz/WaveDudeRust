@@ -12,7 +12,7 @@ import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
 import { Form, NumberParse } from "form.slint";
 export { Form, NumberParse }
 export { Words, ExportFileFormat } from "words.slint";
-import { Properties, PropRow, PropKind } from "properties.slint";
+import { Properties } from "properties.slint";
 import { Preview } from "preview.slint";
 import { Timeline, TransportBar, Transport } from "timeline.slint";
 import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
@@ -27,7 +27,7 @@ import { NumberSpec } from "number-box.slint";
 export { NumberLogic, NumberSpec } from "number-box.slint";
 export { ColorLogic, Hsv } from "color-picker.slint";
 export { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
-export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
+export { Theme, TreeRow, TreeKind, Transport, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 // Which menu commands can run (Next's CanExecute rules, docs/ui/10).
@@ -117,10 +117,6 @@ export component AppWindow inherits Window {
     in property <string> props-heading;
     // a folder's item count; -1 for other rows
     in property <int> props-entries: -1;
-    in property <[PropRow]> props-rows;
-    in property <string> props-error;
-    callback props-set(form: int, row: int, text: string) -> bool;
-    callback props-typed(form: int, row: int, text: string);
     in-out property <bool> project-shown: true;
     in-out property <bool> properties-shown: true;
     in-out property <bool> messages-shown: false;
@@ -306,10 +302,6 @@ export component AppWindow inherits Window {
                         Properties {
                             heading: TreeWords.label(root.props-kind, root.props-heading);
                             entries: root.props-entries;
-                            rows: root.props-rows;
-                            error: root.props-error;
-                            set(form, i, v) => { return root.props-set(form, i, v); }
-                            typed(form, i, v) => { root.props-typed(form, i, v); }
                         }
                     }
                 }
