@@ -103,7 +103,7 @@ impl ColorScheme {
 	/// The stops sorted by position (stable); the grey ramp without any.
 	pub fn sorted_stops(&self) -> Vec<Stop> {
 		if self.stops.is_empty() {
-			return Self::grey().stops;
+			return Self::grey_ramp().stops;
 		}
 		let mut stops = self.stops.clone();
 		stops.sort_by(|a, b| a.at.total_cmp(&b.at));
@@ -180,6 +180,18 @@ impl ColorScheme {
 		removed
 	}
 
+	/// A new scheme's stops, and those of one without: nine greys spread evenly from black to white.
+	pub fn grey_ramp() -> Self {
+		const STOPS: u32 = 9;
+		let stops = (0..STOPS)
+			.map(|k| {
+				let level = (f64::from(k) * 255.0 / f64::from(STOPS - 1)).round_ties_even() as u8;
+				Stop { at: f64::from(k) / f64::from(STOPS - 1), color: Rgb::new(level, level, level) }
+			})
+			.collect();
+		Self { name: "Grey".into(), stops, ..Self::default() }
+	}
+
 	/// The fallback for a missing scheme.
 	pub fn grey() -> Self {
 		Self {
@@ -223,6 +235,13 @@ pub(crate) fn round_channel(c: f64) -> u8 {
 mod stop_tests {
 	use super::*;
 
+	#[test]
+	fn the_grey_ramp_has_nine_levels_rounded_to_even() {
+		let levels: Vec<u8> = ColorScheme::grey_ramp().stops.iter().map(|s| s.color.r).collect();
+		assert_eq!(levels, [0, 32, 64, 96, 128, 159, 191, 223, 255]);
+		assert_eq!(ColorScheme::default().sorted_stops(), ColorScheme::grey_ramp().stops);
+	}
+
 	fn scheme(ats: &[f64]) -> ColorScheme {
 		let stops = ats.iter().map(|&at| Stop::new(at, Rgb::new((at * 200.0) as u8, 0, 0))).collect();
 		ColorScheme { stops, ..ColorScheme::default() }
@@ -243,7 +262,7 @@ mod stop_tests {
 		assert_eq!(ats(&one), [0.0, 1.0]);
 		let mut none = ColorScheme::default();
 		none.add_stop();
-		assert_eq!(none.stops, [Stop::new(1.0, Rgb::new(0xFE, 0xFE, 0xFE))]);
+		assert_eq!(none.stops, [Stop::new(1.0, Rgb::new(255, 255, 255))]);
 	}
 
 	#[test]

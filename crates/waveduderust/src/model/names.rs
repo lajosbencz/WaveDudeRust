@@ -161,7 +161,7 @@ impl Project {
 	/// Appends a grey scheme named `"Scheme n"`.
 	pub fn add_new_color_scheme(&mut self) -> SchemeId {
 		let name = numbered_name(SCHEME_STEM, names(&self.color_schemes));
-		insert(&mut self.color_schemes, usize::MAX, ColorScheme { name, ..ColorScheme::grey() })
+		insert(&mut self.color_schemes, usize::MAX, ColorScheme { name, ..ColorScheme::grey_ramp() })
 	}
 
 	/// Appends a scheme under a fresh id, renamed to a copy name when its name is taken.

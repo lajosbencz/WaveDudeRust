@@ -358,7 +358,7 @@ Shape class for icons and naming: a surface is flat when its sag at the rim < 0.
 | `Name` | string | lookup key, case-insensitive |
 | `Kind` | enum `Unspecified`/`Field`/`Intensity` | which layer it is meant for |
 | `Description` | string | |
-| `Stop` * | `At` (double 0..1), `Color` "#RRGGBB" | file order kept; rendering uses a stable sort by `At`; no stops renders as Grey |
+| `Stop` * | `At` (double 0..1), `Color` "#RRGGBB" | file order kept; rendering uses a stable sort by `At`; no stops (and a new scheme) is the grey ramp: 9 stops spread evenly, levels `round_ties_even(k * 255 / 8)` |
 
 Lookup by name: project schemes first, then built-in (embedded) and user schemes
 (`%LOCALAPPDATA%\WaveDudeNext\ColorSchemes\*.wdscheme`). Legacy names with underscores (e.g. `Default_field`) resolve

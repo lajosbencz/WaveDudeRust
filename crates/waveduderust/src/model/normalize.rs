@@ -148,10 +148,10 @@ impl Normalize for Probe {
 }
 
 impl Normalize for ColorScheme {
-	/// No stops become the grey ramp; positions clamp to 0..1 (non-finite 0); unsorted stops are sorted (stable).
+	/// No stops become the grey ramp ([`ColorScheme::grey_ramp`]); positions clamp to 0..1 (non-finite 0); unsorted stops are sorted (stable).
 	fn normalize(&mut self) {
 		if self.stops.is_empty() {
-			self.stops = ColorScheme::grey().stops;
+			self.stops = ColorScheme::grey_ramp().stops;
 			return;
 		}
 		for s in &mut self.stops {
@@ -562,7 +562,7 @@ mod tests {
 	fn scheme_rules() {
 		let mut s = ColorScheme { name: "a".into(), ..ColorScheme::default() };
 		s.normalize();
-		assert_eq!(s.stops, ColorScheme::grey().stops);
+		assert_eq!(s.stops, ColorScheme::grey_ramp().stops);
 		let c = Rgb::new(1, 2, 3);
 		let mut s = ColorScheme {
 			stops: vec![Stop { at: 2.0, color: c }, Stop { at: 0.5, color: c }, Stop { at: -1.0, color: c }],
