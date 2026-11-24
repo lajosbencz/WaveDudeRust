@@ -369,7 +369,8 @@ fn transport(state: &mut State, app: &AppWindow, id: &str) {
 		"pause-run" => state.live.toggle_pause(),
 		"layout" => {
 			use waveduderust_platform::settings::Orientation;
-			state.settings.preview_orientation = if app.get_preview_stacked() { Orientation::Vertical } else { Orientation::Horizontal };
+			state.settings.preview_orientation =
+				if app.get_preview_stacked() { Orientation::Vertical } else { Orientation::Horizontal };
 			if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
 				tracing::error!("{e}");
 			}
