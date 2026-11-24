@@ -14,12 +14,13 @@ export component SettingsLayer inherits Rectangle {
     visible: shown;
     background: #00000080;
     TouchArea { }
-    FocusScope {
+    focus := FocusScope {
         key-pressed(e) => {
             if (e.text == Key.Escape) { root.shown = false; return accept; }
             reject
         }
     }
+    changed visible => { if (self.visible) { focus.focus(); } }
     Rectangle {
         width: min(760px, root.width - 40px);
         height: min(520px, root.height - 40px);

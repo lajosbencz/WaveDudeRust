@@ -1,0 +1,97 @@
+import { Button, CheckBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// The Welcome page (docs/ui/70, Welcome page).
+export component WelcomeLayer inherits Rectangle {
+    in-out property <bool> shown;
+    in property <string> ram;
+    in property <string> levers;
+    in property <bool> show-startup;
+    callback preset(int);
+    callback action(string);
+    callback show-startup-toggled(bool);
+
+    visible: shown;
+    background: #00000080;
+    TouchArea { }
+    focus := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) { root.shown = false; return accept; }
+            if (e.text == Key.Return) { root.action("examples"); return accept; }
+            reject
+        }
+    }
+    changed visible => { if (self.visible) { focus.focus(); } }
+    Rectangle {
+        width: min(560px, root.width - 40px);
+        height: box.preferred-height;
+        background: Theme.window-background;
+        border-width: 1px;
+        border-color: Theme.accent;
+        box := VerticalLayout {
+            padding: 16px;
+            spacing: 10px;
+            Text {
+                text: @tr("Welcome to WaveDude Rust");
+                font-size: 16px;
+                font-weight: 700;
+                color: Theme.text;
+            }
+            Text {
+                text: @tr("Preview quality");
+                font-weight: 700;
+                color: Theme.text;
+            }
+            Text {
+                text: @tr("It sets the resolution, frames and samples of the preview runs; the frames past the RAM cache go to disk.");
+                wrap: word-wrap;
+                color: Theme.text;
+            }
+            Text {
+                text: @tr("RAM: {}", root.ram);
+                color: Theme.text;
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                for name[i] in [@tr("Low"), @tr("Medium"), @tr("High"), @tr("Auto")]: Button {
+                    text: name;
+                    clicked => { root.preset(i); }
+                }
+            }
+            Text {
+                text: root.levers;
+                color: Theme.text-dim;
+            }
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: @tr("Settings...");
+                    clicked => { root.action("settings"); }
+                }
+            }
+            CheckBox {
+                text: @tr("Show this page at each launch");
+                checked: root.show-startup;
+                toggled => { root.show-startup-toggled(self.checked); }
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: 6px;
+                Button {
+                    text: @tr("Open Project...");
+                    clicked => { root.action("open"); }
+                }
+                Button {
+                    text: @tr("Random Example");
+                    clicked => { root.action("random"); }
+                }
+                Button {
+                    text: @tr("Examples...");
+                    primary: true;
+                    clicked => { root.action("examples"); }
+                }
+            }
+        }
+    }
+}

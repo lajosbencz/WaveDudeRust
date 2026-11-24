@@ -20,7 +20,7 @@ export component ExamplesLayer inherits Rectangle {
     visible: shown;
     background: #00000080;
     TouchArea { }
-    FocusScope {
+    focus := FocusScope {
         key-pressed(e) => {
             if (e.text == Key.Escape) { root.shown = false; return accept; }
             if (e.text == Key.Return) { root.open(root.current); return accept; }
@@ -31,6 +31,7 @@ export component ExamplesLayer inherits Rectangle {
             reject
         }
     }
+    changed visible => { if (self.visible) { focus.focus(); } }
     Rectangle {
         width: min(860px, root.width - 40px);
         height: min(560px, root.height - 40px);

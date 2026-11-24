@@ -54,6 +54,7 @@ struct State {
 	settings: waveduderust_platform::settings::Settings,
 	store: Option<waveduderust_platform::store::Store>,
 	settings_section: usize,
+	facts: waveduderust::quality::MachineFacts,
 	exporting: Option<export::Exporting>,
 	example_topic: usize,
 	example_search: String,
@@ -108,6 +109,15 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			}
 			state.live.stop();
 			state.playback.live = false;
+		}
+		"welcome" => {
+			show_welcome(state, app);
+			app.set_welcome_shown(true);
+		}
+		"random-example" => {
+			let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
+			let e = &examples::all()[nanos as usize % examples::all().len()];
+			menu(state, app, &format!("example:{}", e.file));
 		}
 		"examples" => {
 			show_examples(state, app);
@@ -218,6 +228,13 @@ fn show_examples(state: &mut State, app: &AppWindow) {
 		.collect();
 	app.set_example_topic(i32::try_from(state.example_topic).unwrap_or_default());
 	app.set_example_rows(ModelRc::new(VecModel::from(rows)));
+}
+
+/// Pushes the Welcome page's RAM, levers and check box.
+fn show_welcome(state: &State, app: &AppWindow) {
+	app.set_welcome_ram(format!("{:.1} GiB", state.facts.physical_bytes as f64 / f64::from(1u32 << 30)).into());
+	app.set_welcome_levers(settings::levers(&state.settings).into());
+	app.set_welcome_show_startup(state.settings.show_startup);
 }
 
 /// Applies the settings to the window, the history and the run.
@@ -360,11 +377,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let app = AppWindow::new()?;
 	let live = Live::new(device, queue)?;
 	let store = waveduderust_platform::settings::AppDirs::platform().map(|d| d.store());
+	let facts = waveduderust::run::machine_facts(&waveduderust::run::FrameStore::default_dir());
 	let settings = store.as_ref().map_or_else(Default::default, |s| {
-		waveduderust_platform::settings::Settings::load(s, false, || {
-			waveduderust::run::machine_facts(&waveduderust::run::FrameStore::default_dir())
-		})
-		.settings
+		waveduderust_platform::settings::Settings::load(s, false, || facts).settings
 	});
 	let state = Rc::new(RefCell::new(State {
 		doc: Document::new(UNDO_STEPS),
@@ -377,6 +392,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		settings,
 		store,
 		settings_section: 0,
+		facts,
 		exporting: None,
 		example_topic: 0,
 		example_search: String::new(),
@@ -385,6 +401,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		ran: 0,
 	}));
 	apply_settings(&mut state.borrow_mut(), &app);
+	if state.borrow().settings.show_startup && std::env::args_os().nth(1).is_none() {
+		show_welcome(&state.borrow(), &app);
+		app.set_welcome_shown(true);
+	}
 	if let Some(path) = std::env::args_os().nth(1) {
 		open(&mut state.borrow_mut(), &app, path.into());
 	}
@@ -473,6 +493,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_welcome_preset(move |i| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			let facts = s.facts;
+			settings::preset(&mut s.settings, s.store.as_ref(), usize::try_from(i).unwrap_or_default(), facts);
+			apply_settings(s, &app);
+			show_welcome(s, &app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_welcome_show_startup_toggled(move |on| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			s.settings.show_startup = on;
+			if let Some(Err(e)) = s.store.as_ref().map(|store| s.settings.save(store)) {
+				tracing::error!("{e}");
+			}
+			show_welcome(s, &app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_welcome_action(move |action| {
+		if let Some(app) = weak.upgrade() {
+			app.set_welcome_shown(false);
+			let id = if action == "random" { "random-example" } else { action.as_str() };
+			menu(&mut st.borrow_mut(), &app, id);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_settings_pick(move |i| {
 		if let Some(app) = weak.upgrade() {
 			let s = &mut *st.borrow_mut();
@@ -485,7 +534,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		if let Some(app) = weak.upgrade() {
 			let s = &mut *st.borrow_mut();
 			let row = usize::try_from(row).unwrap_or(usize::MAX);
-			settings::set(&mut s.settings, s.store.as_ref(), s.settings_section, row, &value);
+			settings::set_row(&mut s.settings, s.store.as_ref(), s.settings_section, row, &value);
 			apply_settings(s, &app);
 			show_settings(s, &app);
 		}

@@ -1,5 +1,7 @@
 //! The Settings window's rows (docs/ui/70, Settings; decision 0027): each change applies and is saved at once.
 
+use waveduderust::quality::MachineFacts;
+use waveduderust::quality::PreviewTier;
 use waveduderust_platform::settings::{Settings, Theme};
 use waveduderust_platform::store::Store;
 
@@ -153,13 +155,38 @@ pub(crate) fn rows(settings: &Settings, section: usize) -> Vec<PropRow> {
 }
 
 /// Sets row `row` of `section` and saves the settings.
-pub(crate) fn set(settings: &mut Settings, store: Option<&Store>, section: usize, row: usize, value: &str) {
+pub(crate) fn set_row(settings: &mut Settings, store: Option<&Store>, section: usize, row: usize, value: &str) {
 	if let Some(r) = in_section(section).nth(row) {
 		(r.set)(settings, value);
 		settings.normalize();
-		if let Some(Err(e)) = store.map(|s| settings.save(s)) {
-			tracing::error!("{e}");
-		}
+		save(settings, store);
+	}
+}
+
+/// The preview levers as they are, e.g. "Full resolution, every frame, 8-bit samples".
+pub(crate) fn levers(settings: &Settings) -> String {
+	let resolution = match settings.preview_resolution {
+		1 => "Full resolution".to_owned(),
+		d => format!("1/{d} resolution"),
+	};
+	let frames = match settings.preview_frames {
+		1 => "every frame".to_owned(),
+		2 => "every 2nd frame".to_owned(),
+		d => format!("every {d}th frame"),
+	};
+	format!("{resolution}, {frames}, {}-bit samples", if settings.preview_sample_bytes >= 2 { 16 } else { 8 })
+}
+
+/// Applies preset `index`: Low, Medium, High, then Auto from `facts`; saves the settings.
+pub(crate) fn preset(settings: &mut Settings, store: Option<&Store>, index: usize, facts: MachineFacts) {
+	let tier = PreviewTier::ALL.get(index).copied().unwrap_or_else(|| settings.auto_preset(facts));
+	settings.apply_preset(tier);
+	save(settings, store);
+}
+
+fn save(settings: &Settings, store: Option<&Store>) {
+	if let Some(Err(e)) = store.map(|s| settings.save(s)) {
+		tracing::error!("{e}");
 	}
 }
 
@@ -179,10 +206,10 @@ mod tests {
 	#[test]
 	fn a_choice_row_reads_and_writes_its_setting() {
 		let mut s = Settings::default();
-		set(&mut s, None, 0, 0, "Dark");
+		set_row(&mut s, None, 0, 0, "Dark");
 		assert_eq!(s.theme, Theme::Dark);
 		let rows = rows(&s, 1);
-		set(&mut s, None, 1, 0, "Half");
+		set_row(&mut s, None, 1, 0, "Half");
 		assert_eq!((rows[0].kind, s.preview_resolution), (PropKind::Choice, 2));
 	}
 }

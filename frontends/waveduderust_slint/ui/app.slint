@@ -7,6 +7,7 @@ import { Timeline, TransportBar, Transport } from "timeline.slint";
 import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
 import { ModalLayer, Modal, ModalKind } from "modal.slint";
 import { SettingsLayer } from "settings.slint";
+import { WelcomeLayer } from "welcome.slint";
 import { ExamplesLayer, ExampleRow } from "examples.slint";
 
 export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle, Modal, ModalKind, ExampleRow }
@@ -35,6 +36,13 @@ export component AppWindow inherits Window {
     callback example-topic-picked(int);
     callback example-search(string);
     callback example-open(int);
+    in-out property <bool> welcome-shown;
+    in property <string> welcome-ram;
+    in property <string> welcome-levers;
+    in property <bool> welcome-show-startup;
+    callback welcome-preset(int);
+    callback welcome-action(string);
+    callback welcome-show-startup-toggled(bool);
     in-out property <bool> settings-shown;
     in property <[string]> settings-sections;
     in property <int> settings-section;
@@ -226,6 +234,17 @@ export component AppWindow inherits Window {
                 }
             }
         }
+    }
+    WelcomeLayer {
+        width: 100%;
+        height: 100%;
+        shown <=> root.welcome-shown;
+        ram: root.welcome-ram;
+        levers: root.welcome-levers;
+        show-startup: root.welcome-show-startup;
+        preset(i) => { root.welcome-preset(i); }
+        action(a) => { root.welcome-action(a); }
+        show-startup-toggled(b) => { root.welcome-show-startup-toggled(b); }
     }
     ExamplesLayer {
         width: 100%;
