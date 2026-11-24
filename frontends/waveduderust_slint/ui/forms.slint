@@ -233,7 +233,9 @@ component DisplayLayerForm inherits FormPanel {
                 let choice = root.schemes[i];
                 if (choice.entry == SchemeEntry.edit-copy) {
                     Form.edit-scheme-copy(root.output);
-                } else if (choice.entry != SchemeEntry.missing) {
+                } else if (choice.entry == SchemeEntry.remove-mine) {
+                    Form.remove-my-scheme(root.output);
+                } else if (choice.entry == SchemeEntry.scheme || choice.entry == SchemeEntry.project) {
                     root.layer.color-scheme = choice.name;
                     Form.edited(false);
                 }
@@ -2665,6 +2667,16 @@ export component SchemeForm inherits VerticalLayout {
         Row {
             FormLabel { text: @tr("Label.ColorScheme.Description" => "Description"); tip: @tr("Free text: what the scheme is, where it comes from."); }
             FormText { text <=> Form.scheme.description; tip: @tr("Free text: what the scheme is, where it comes from."); }
+        }
+        if Form.mine >= 0: Row {
+            Rectangle { }
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: Form.mine == 1 ? @tr("Remove from my schemes") : @tr("Add to my schemes");
+                    clicked => { Form.toggle-mine(); }
+                }
+            }
         }
     }
     FormSection { text: @tr("Stops"); }

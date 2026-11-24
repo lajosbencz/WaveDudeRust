@@ -201,6 +201,7 @@ impl State {
 			form::show_layer_schemes(&g, project, user, view, ui::Layer::Intensity, &mut shown.intensity_schemes);
 		}
 		// a pick names a base by its index, which another list makes another's
+		g.set_mine(self.mine());
 		if let Node::Scheme(i) = node {
 			if form::show_bases(&g, &self.doc.project, &self.schemes, i, &mut self.typed_form.bases) {
 				g.set_based_on(-1);
@@ -227,6 +228,35 @@ impl State {
 		self.ran = self.doc.generation;
 	}
 
+	/// Whether the current scheme is among the user's: -1 for another row or no store to keep them, 0 not, 1 it is.
+	fn mine(&self) -> i32 {
+		match (self.selection.current(), &self.store) {
+			(Node::Scheme(i), Some(_)) => self
+				.doc
+				.project
+				.color_schemes
+				.get(i)
+				.map_or(-1, |s| i32::from(waveduderust_platform::user_schemes::has(&self.schemes, &s.name))),
+			_ => -1,
+		}
+	}
+
+	/// Keeps the current scheme among the user's, or removes the user's of its name.
+	fn toggle_mine(&mut self) {
+		use waveduderust_platform::user_schemes;
+		let (Node::Scheme(i), Some(store)) = (self.selection.current(), &self.store) else { return };
+		let Some(scheme) = self.doc.project.color_schemes.get(i) else { return };
+		let (done, what) = if user_schemes::has(&self.schemes, &scheme.name) {
+			(user_schemes::remove(store, &scheme.name), "removed from")
+		} else {
+			(user_schemes::add(store, scheme), "added to")
+		};
+		if done.is_ok() {
+			tracing::info!("Colour scheme '{}' {what} my schemes", scheme.name);
+		}
+		self.schemes = user_schemes::load(store);
+	}
+
 	/// Which menu commands can run (Next's CanExecute rules).
 	fn commands(&self) -> ui::Commands {
 		let exporting = self.exporting.is_some();
@@ -243,6 +273,7 @@ impl State {
 			can_move_down: tree::can_shift(&self.doc.project, self.selection.current(), 1),
 			can_copy: matches!(self.selection.current(), Node::Scene | Node::Simulation | Node::Display)
 				|| self.node_exists(),
+			mine: self.mine(),
 			can_run: !self.live.active() && !exporting,
 			run_active: self.live.active(),
 			paused: self.live.paused(),
@@ -471,6 +502,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		Command::Delete if state.commands().can_delete => remove(state, &state.selection.group()),
 		Command::MoveUp if state.commands().can_move_up => shift(state, -1),
 		Command::MoveDown if state.commands().can_move_down => shift(state, 1),
+		Command::ToggleMine => state.toggle_mine(),
 		Command::Duplicate if state.commands().can_delete => {
 			let (group, mut copies) = (state.selection.group(), Vec::new());
 			state.doc.edit(|p| copies = tree::duplicate_all(p, &group));
@@ -968,6 +1000,25 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			}
 			k
 		});
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.global::<ui::Form<'_>>().on_toggle_mine(move || {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		s.toggle_mine();
+		s.show(&app);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.global::<ui::Form<'_>>().on_remove_my_scheme(move |layer| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		let Some(store) = &s.store else { return };
+		let name = form::layer_settings(&mut s.doc.view, layer).color_scheme.clone();
+		if waveduderust_platform::user_schemes::remove(store, &name).is_ok() {
+			tracing::info!("Colour scheme '{name}' removed from my schemes");
+		}
+		s.schemes = waveduderust_platform::user_schemes::load(store);
+		s.show(&app);
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.global::<ui::Form<'_>>().on_edit_scheme_copy(move |layer| {

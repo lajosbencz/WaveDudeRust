@@ -808,6 +808,9 @@ pub(crate) fn show_layer_schemes(
 	if resolved.is_some() {
 		choices.push(ui::SchemeChoice { entry: ui::SchemeEntry::EditCopy, ..Default::default() });
 	}
+	if resolved.is_some_and(|r| user.user.iter().any(|u| std::ptr::eq(u, r))) {
+		choices.push(ui::SchemeChoice { entry: ui::SchemeEntry::RemoveMine, ..Default::default() });
+	}
 	let current = current.map_or(-1, index);
 	let model = ModelRc::new(VecModel::from(choices));
 	match layer {

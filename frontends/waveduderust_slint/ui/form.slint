@@ -53,6 +53,12 @@ export global Form {
     in property <int> intensity-scheme: -1;
     // copies the layer's scheme into the project, points the layer at the copy and selects it
     callback edit-scheme-copy(layer: Layer);
+    // removes the user's scheme the layer names
+    callback remove-my-scheme(layer: Layer);
+    // the scheme shown among the user's: -1 no store to keep them, 0 not, 1 it is
+    in property <int> mine: -1;
+    // keeps the scheme shown among the user's, or removes the user's of its name
+    callback toggle-mine();
     callback base-on(index: int);
     // the scheme Based on copied last, shown until another object is; -1 for none
     in property <int> based-on: -1;

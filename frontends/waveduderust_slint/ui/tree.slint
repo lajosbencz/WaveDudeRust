@@ -203,6 +203,8 @@ export component ProjectTree inherits Rectangle {
     in property <bool> can-select-all;
     // the current row can be switched on and off and join a group
     in property <bool> can-toggle;
+    // the current scheme among the user's: -1 not a scheme row, 0 not, 1 it is
+    in property <int> mine: -1;
     // a command on the current row
     callback act(Command);
     callback add-item(NewItem);
@@ -353,6 +355,11 @@ export component ProjectTree inherits Rectangle {
                         MenuSeparator { }
                         MenuItem { title: @tr("Move up"); icon: MenuIcons.arrow-upward; enabled: root.can-move-up; activated => { root.run(Command.move-up); } }
                         MenuItem { title: @tr("Move down"); icon: MenuIcons.arrow-downward; enabled: root.can-move-down; activated => { root.run(Command.move-down); } }
+                        if root.mine >= 0: MenuSeparator { }
+                        if root.mine >= 0: MenuItem {
+                            title: root.mine == 1 ? @tr("Remove from my schemes") : @tr("Add to my schemes");
+                            activated => { root.run(Command.toggle-mine); }
+                        }
                     }
                 }
             }

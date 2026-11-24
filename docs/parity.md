@@ -16,13 +16,13 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | D | Dialogs and windows | 18 | 29 | 27 | 5 | 0 |
 | S | Settings | 7 | 11 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
-| T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 283 | 27 | 13 | 2 | 0 |
+| T | Project tree | 33 | 18 | 13 | 37 | 0 |
+| P | Properties | 285 | 26 | 12 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 456 | 226 | 309 | 98 | 6 |
+| | All | 459 | 225 | 307 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -582,7 +582,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-76 | Paste: behind current item, rename on clash, re-derive composite emitters, settings object on own row, undo step | ProjectTree.xaml:267 | 20 Clipboard | missing |  |
 | T-77 | Can-paste re-evaluated once per clipboard change | MainWindow.Clipboard.cs | 20 Clipboard | missing |  |
 | T-78 | Focused text box handles Cut/Copy/Paste for its text first | MainWindow.Clipboard.cs | 20 Clipboard; divergence Edit menu | divergence | divergences.md 'Edit menu' (0008 13) |
-| T-79 | Add to my schemes / Remove from my schemes (scheme rows, label follows existence) | n/a (Rust only) | 20 Commands | missing | divergences.md 'User colour schemes' (spec'd addition) |
+| T-79 | Add to my schemes / Remove from my schemes (scheme rows, label follows existence) | n/a (Rust only) | 20 Commands | done | tree.slint rows menu, scheme rows below a separator, label by Commands.mine; Command.toggle-mine |
 | T-80 | Export probe data as CSV (probe rows, active probes only; browser file-name box) | ProjectTree.xaml:273-275 | 20 Commands | missing | decision 0025 for browser |
 | T-81 | Context menu on any row (Add Source/Part/Probe submenus) | ProjectTree.xaml:248-259 | 20 (Commands) not itemised | divergence | tree.slint rows-menu on every row: Add source, Add part, Add probe submenus; no access keys or key hints (divergences.md Row menu) |
 | T-82 | Context menu: Toggle selected (Ins), Select all (Ctrl+A) with automation ids | ProjectTree.xaml:260-261 | 20 Automation ids | divergence | tree.slint rows-menu: Add to or remove from selection, Select all; no automation ids (decision 0032); no access keys or key hints (divergences.md Row menu) |
@@ -651,7 +651,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-39 | Colour scheme picker: '<name> (not found)' greyed | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | SchemeEntry.missing, first row |
 | P-40 | Colour scheme picker action: Load from file... (.wdscheme/.json), slims sampled tables | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing |  |
 | P-41 | Colour scheme picker action: Edit a copy in the project... | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | form.rs find_scheme; main.rs on_edit_scheme_copy |
-| P-42 | Colour scheme picker action: Remove from my schemes (user scheme only) | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing |  |
+| P-42 | Colour scheme picker action: Remove from my schemes (user scheme only) | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | SchemeEntry.remove-mine after the copy action while the layer's scheme resolves to a user scheme; main.rs on_remove_my_scheme |
 | P-43 | Colour swatch button opens picker popup below | Controls/ColorPickerButton.cs | 30 Colour swatch button; 70 | done | color-picker.slint ColorSwatch |
 | P-44 | Link toggle (chain) between two number boxes, accent underline on focus | Themes/Editors.xaml | 30 Link toggle | done | FormLink: chain-linked/chain-parted icons, accent while linked, accent border on focus, Space toggles; centred across both rows |
 | P-45 | Description header toggle (chevron, Space), kind text, persisted PartDescriptionExpanded | Views/PartCommonView.xaml:39-44 | 30 Description header | done | FormDescription: chevron turns while open, Space or click, the kind's text, Settings.part_description_expanded saved |
@@ -926,7 +926,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-314 | Scheme: Name TB (renaming repoints layers; tree row live) | Views/ColorSchemeView.xaml:71-72 | 30 Colour scheme | done | forms.slint SchemeForm: Name per keystroke, the tree row live; View::rename_scheme repoints the layers in the same undo step |
 | P-315 | Scheme: Kind combo Unspecified/Field/Intensity | Views/ColorSchemeView.xaml:75-76 | 30 Colour scheme | done | forms.slint SchemeForm: SchemeKindChoice |
 | P-316 | Scheme: Description TB wraps, no newline | Views/ColorSchemeView.xaml:79-80 | 30 Colour scheme | partial | single-line FormText per keystroke; no wrapping |
-| P-317 | Scheme: Add to / Remove from my schemes button | Views/ColorSchemeView.xaml:(Rust) | 30 Colour scheme; divergences 'User colour schemes' | partial | the user's schemes load at the start, render, export and list in Based on; the button is missing |
+| P-317 | Scheme: Add to / Remove from my schemes button | Views/ColorSchemeView.xaml:(Rust) | 30 Colour scheme; divergences 'User colour schemes' | done | SchemeForm button below Description, label by Form.mine; State::toggle_mine; hidden without a store |
 | P-318 | Scheme: Based on combo with gradient+name rows (copies stops/kind/category/description) | Views/ColorSchemeView.xaml:87-95 | 30 Colour scheme | partial | scheme-combo.slint SchemeCombo: strip and name rows, the project's other schemes then the built-in ones; the user's schemes are not loaded yet |
 | P-319 | Scheme: gradient bar with stop markers; drag marker >24 px away removes; double-click removes; last stop stays | Views/ColorSchemeView.xaml:(bar) | 30 Colour scheme | done | forms.slint GradientBar: drag moves (one undo step a gesture), pulled away or double-clicked removes, a press on the gradient adds and drags; keys as Next |
 | P-320 | Scheme: stop row Position NB 0..1 step 0.01, 3 dec, 64 px | Views/ColorSchemeView.xaml:112 | 30 Colour scheme | done | forms.slint SchemeForm: 0..1, step 0.01, 3 decimals; 72 px, as 64 clips 0.375 with our line edit's padding |
