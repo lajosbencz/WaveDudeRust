@@ -1,6 +1,7 @@
 //! WaveDude Rust's app: the Slint window over the core (decision 0032).
 
 mod document;
+mod form;
 mod tree;
 
 #[allow(
@@ -45,6 +46,9 @@ impl State {
 		app.set_window_title(self.doc.title().into());
 		app.set_can_undo(self.doc.can_undo());
 		app.set_can_redo(self.doc.can_redo());
+		let (heading, rows) = form::of_selected(&self.doc.project, &self.doc.view, self.selected);
+		app.set_props_heading(heading.into());
+		app.set_props_rows(ModelRc::new(VecModel::from(rows)));
 	}
 
 	fn node(&self, row: i32) -> Option<Node> {
@@ -149,6 +153,24 @@ fn main() -> Result<(), slint::PlatformError> {
 		}
 	});
 	app.on_tree_remove(move |row| remove(row, 0));
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_props_set(move |row, text| {
+		if let Some(app) = weak.upgrade() {
+			let mut s = st.borrow_mut();
+			let node = s.selected;
+			let mut result = Ok(());
+			let row = usize::try_from(row).unwrap_or(usize::MAX);
+			if node == Node::Display {
+				let doc = &mut s.doc;
+				result = form::set_selected(&mut doc.project, &mut doc.view, node, row, &text);
+			} else {
+				let view = &mut s.doc.view.clone();
+				s.doc.edit(|p| result = form::set_selected(p, view, node, row, &text));
+			}
+			app.set_props_error(result.err().unwrap_or_default().into());
+			s.show(&app);
+		}
+	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_menu(move |id| {
 		if let Some(app) = weak.upgrade() {

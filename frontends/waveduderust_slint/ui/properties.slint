@@ -1,0 +1,64 @@
+import { LineEdit, CheckBox, ComboBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export enum PropKind { text, int, float, bool, choice }
+
+export struct PropRow {
+    label: string,
+    kind: PropKind,
+    value: string,
+    choices: [string],
+    current: int,
+}
+
+// The properties pane (docs/ui/30): one labelled editor per field of the selected object.
+export component Properties inherits Rectangle {
+    in property <string> heading;
+    in property <[PropRow]> rows;
+    in property <string> error;
+    callback set(int, string);
+
+    background: Theme.tool-window-background;
+    ScrollView {
+        VerticalLayout {
+            padding: 6px;
+            spacing: 2px;
+            alignment: start;
+            Text {
+                text: root.heading;
+                font-weight: 700;
+                color: Theme.text;
+            }
+            for row[i] in root.rows: HorizontalLayout {
+                spacing: 6px;
+                min-height: Theme.row-height;
+                Text {
+                    text: row.label;
+                    width: 120px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    color: Theme.text;
+                }
+                if row.kind == PropKind.bool: CheckBox {
+                    checked: row.value == "true";
+                    toggled => { root.set(i, self.checked ? "true" : "false"); }
+                }
+                if row.kind == PropKind.choice: ComboBox {
+                    model: row.choices;
+                    current-index: row.current;
+                    selected(v) => { root.set(i, v); }
+                }
+                if row.kind == PropKind.text || row.kind == PropKind.int || row.kind == PropKind.float: LineEdit {
+                    text: row.value;
+                    input-type: row.kind == PropKind.text ? InputType.text : row.kind == PropKind.int ? InputType.number : InputType.decimal;
+                    accepted(t) => { root.set(i, t); }
+                }
+            }
+            if root.error != "": Text {
+                text: root.error;
+                color: Theme.status-error;
+                wrap: word-wrap;
+            }
+        }
+    }
+}

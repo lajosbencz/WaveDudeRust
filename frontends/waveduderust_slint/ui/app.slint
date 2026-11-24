@@ -1,8 +1,9 @@
 import { Theme } from "theme.slint";
 import { Pane } from "pane.slint";
 import { ProjectTree, TreeRow, TreeKind } from "tree.slint";
+import { Properties, PropRow, PropKind } from "properties.slint";
 
-export { Theme, TreeRow, TreeKind }
+export { Theme, TreeRow, TreeKind, PropRow, PropKind }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 export component AppWindow inherits Window {
@@ -16,6 +17,10 @@ export component AppWindow inherits Window {
     callback tree-toggle(int);
     callback tree-shift(int, int);
     callback tree-remove(int);
+    in property <string> props-heading;
+    in property <[PropRow]> props-rows;
+    in property <string> props-error;
+    callback props-set(int, string);
     in-out property <bool> project-shown: true;
     in-out property <bool> properties-shown: true;
     in-out property <bool> messages-shown: false;
@@ -120,6 +125,12 @@ export component AppWindow inherits Window {
                     title: @tr("Properties");
                     vertical-stretch: 2;
                     close => { root.properties-shown = false; }
+                    Properties {
+                        heading: root.props-heading;
+                        rows: root.props-rows;
+                        error: root.props-error;
+                        set(i, v) => { root.props-set(i, v); }
+                    }
                 }
             }
             VerticalLayout {
