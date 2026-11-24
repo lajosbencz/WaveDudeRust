@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use slint::{Model, ModelRc, VecModel};
 use waveduderust::model::edited::Edited;
-use waveduderust::model::{ItemRef, Layer, Part, PartKind, ProbeKind, Project, View};
+use waveduderust::model::{BoxSize, ItemRef, Layer, Part, PartKind, ProbeKind, Project, View, ranges};
 use waveduderust::unstable::view::handles;
 use waveduderust::unstable::view::overlay::{self, HandleKind, OverlayModel};
 
@@ -66,7 +66,19 @@ enum Target {
 	Lever(ItemRef),
 	/// A part's size grip, an outline point or a fibre node or Bezier handle.
 	Shape(ItemRef, HandleKind),
+	/// A probe's graph box from its corner; whether it sits on A (attached), screen pixels per canvas pixel.
+	GraphBox { item: ItemRef, start: (i32, i32), attached: bool, scale: f64 },
+	/// A graph box's corner grip from the box's size.
+	GraphSize { item: ItemRef, start: (u32, u32), scale: f64 },
 }
+
+/// Screen pixels within which a graph box's corner lands on its probe's A, and beyond which it leaves it.
+const BOX_SNAP: f64 = 14.;
+const BOX_RELEASE: f64 = 28.;
+/// Screen pixels within which a resized box takes a fixed size.
+const SIZE_SNAP: f64 = 10.;
+/// A graph box's resize grip: the side of its bottom-right cell, logical pixels.
+const BOX_GRIP: f32 = 12.;
 
 /// A handle drag under way, one undo step.
 pub(crate) struct Drag {
@@ -255,19 +267,44 @@ impl Overlays {
 		}
 	}
 
-	/// A press at canvas pixel `at` of `layer`'s picture. On a handle (the topmost within reach): selects as a
-	/// click does (Ctrl toggles, Shift adds, neither drags) and starts a drag of what the handle moves. Elsewhere: a
-	/// marquee.
+	/// A press on a picture. On a graph box (they lie over the handles): selects its probe and drags the box, or
+	/// from its corner grip sizes it. On a handle (the topmost within reach): selects as a click does (Ctrl toggles,
+	/// Shift adds, neither drags) and starts a drag of what the handle moves. Elsewhere: a marquee.
 	pub(crate) fn press(
 		&mut self,
 		project: &Project,
 		selection: &mut Selection,
-		layer: ui::Layer,
-		at: (f32, f32),
-		(control, shift): (bool, bool),
+		Press { layer, at, control, shift }: Press,
 		gesture: u64,
+		boxes: &[crate::graphs::Placed],
 	) -> Option<Gesture> {
 		let shown = &self.shown[index(layer)];
+		let scale = shown.scale();
+		let inside = |b: &&crate::graphs::Placed| {
+			(b.at.0..=b.at.0 + b.size.0).contains(&at.0) && (b.at.1..=b.at.1 + b.size.1).contains(&at.1)
+		};
+		// the boxes lie over every handle
+		if let Some(b) = boxes.iter().rev().find(inside) {
+			let node = Node::Probe(b.probe);
+			let probe = project.probes.get(b.probe)?;
+			let item = ItemRef::Probe(probe.id());
+			self.set_focus(None);
+			if control {
+				selection.toggle(node);
+				return None;
+			}
+			selection.set(node);
+			let grip = BOX_GRIP / scale;
+			let corner = at.0 >= b.at.0 + b.size.0 - grip && at.1 >= b.at.1 + b.size.1 - grip;
+			let scale = f64::from(scale);
+			let target = if corner {
+				Target::GraphSize { item, start: probe.box_pixels(), scale }
+			} else {
+				Target::GraphBox { item, start: (probe.box_x, probe.box_y), attached: probe.box_attached(), scale }
+			};
+			let from = (f64::from(at.0), f64::from(at.1));
+			return Some(Gesture::Handle(Drag { key: format!("drag {gesture}"), node, target, from, by: (0., 0.) }));
+		}
 		let Some(handle) = hit(&shown.model, at, HIT_REACH / shown.scale()).cloned() else {
 			self.set_focus(None);
 			return Some(Gesture::Marquee(Marquee { layer, from: at, to: at, control, shift }));
@@ -496,6 +533,14 @@ impl Marquee {
 	}
 }
 
+/// A left press on `layer`'s picture at canvas pixel `at`, the keys held.
+pub(crate) struct Press {
+	pub(crate) layer: ui::Layer,
+	pub(crate) at: (f32, f32),
+	pub(crate) control: bool,
+	pub(crate) shift: bool,
+}
+
 /// What a press on a picture starts.
 pub(crate) enum Gesture {
 	Handle(Drag),
@@ -563,9 +608,9 @@ impl Drag {
 	pub(crate) fn apply(&mut self, project: &mut Project, (dx, dy): (f32, f32), snap: bool) {
 		let d = (f64::from(dx).round(), f64::from(dy).round());
 		let at = (self.from.0 + f64::from(dx), self.from.1 + f64::from(dy));
-		match &self.target {
+		match &mut self.target {
 			Target::Items(starts) => self.by = move_items(project, starts, d),
-			&Target::Lever(item) => {
+			&mut Target::Lever(item) => {
 				self.by = d;
 				match node_of(project, item) {
 					Some(Node::Source(i)) => {
@@ -580,7 +625,35 @@ impl Drag {
 					_ => {}
 				}
 			}
-			&Target::Shape(item, kind) => {
+			&mut Target::GraphBox { item, start, ref mut attached, scale } => {
+				self.by = d;
+				let Some(Node::Probe(i)) = node_of(project, item) else { return };
+				let (w, h) = project.canvas_size();
+				let p = &mut project.probes[i];
+				let (bw, bh) = p.box_pixels();
+				let x = (f64::from(start.0) + d.0).clamp(0., (f64::from(w) - f64::from(bw)).max(0.));
+				let y = (f64::from(start.1) + d.1).clamp(0., (f64::from(h) - f64::from(bh)).max(0.));
+				let off = (x - f64::from(p.ax)).hypot(y - f64::from(p.ay)) * scale;
+				*attached = if *attached { off <= BOX_RELEASE } else { off < BOX_SNAP };
+				(p.box_x, p.box_y) = if *attached { (p.ax, p.ay) } else { (x as i32, y as i32) };
+			}
+			&mut Target::GraphSize { item, start, scale } => {
+				self.by = d;
+				let Some(Node::Probe(i)) = node_of(project, item) else { return };
+				let p = &mut project.probes[i];
+				let w = ranges::PROBE_BOX_WIDTH.clamp_or(f64::from(start.0) + d.0, f64::from(start.0));
+				let h = ranges::PROBE_BOX_HEIGHT.clamp_or(f64::from(start.1) + d.1, f64::from(start.1));
+				let near = |(pw, ph): (u32, u32)| {
+					(f64::from(pw) - w).abs() * scale < SIZE_SNAP && (f64::from(ph) - h).abs() * scale < SIZE_SNAP
+				};
+				const FIXED: [BoxSize; 5] =
+					[BoxSize::Tiny, BoxSize::Small, BoxSize::Medium, BoxSize::Large, BoxSize::ExtraLarge];
+				match FIXED.into_iter().find(|s| s.nominal().is_some_and(near)) {
+					Some(size) => p.box_size = size,
+					None => (p.box_size, p.box_width, p.box_height) = (BoxSize::Custom, w as u32, h as u32),
+				}
+			}
+			&mut Target::Shape(item, kind) => {
 				self.by = d;
 				let Some(Node::Part(i)) = node_of(project, item) else { return };
 				edit_part(&mut project.parts[i], |p| {
@@ -691,5 +764,24 @@ mod tests {
 		let mut drag = items(Node::Probe(0), vec![(ItemRef::Probe(pr.id()), start)]);
 		drag.apply(&mut p, (5., -3.), false);
 		assert_eq!(((p.probes[0].ax, p.probes[0].ay), (p.probes[0].bx, p.probes[0].by)), (a, b));
+	}
+
+	#[test]
+	fn a_graph_box_lands_on_a_and_leaves_it_past_the_release() {
+		let mut p = Project::default();
+		p.add_probe();
+		let pr = &mut p.probes[0];
+		(pr.ax, pr.ay, pr.box_x, pr.box_y) = (100, 100, 150, 100);
+		let target = Target::GraphBox { item: ItemRef::Probe(pr.id()), start: (150, 100), attached: false, scale: 1. };
+		let mut drag = Drag { key: String::new(), node: Node::Probe(0), target, from: (0., 0.), by: (0., 0.) };
+		let at = |p: &Project| (p.probes[0].box_x, p.probes[0].box_y);
+		drag.apply(&mut p, (-30., 0.), false);
+		assert_eq!(at(&p), (120, 100), "outside the snap radius");
+		drag.apply(&mut p, (-45., 5.), false);
+		assert_eq!(at(&p), (100, 100), "within it: attached");
+		drag.apply(&mut p, (-30., 0.), false);
+		assert_eq!(at(&p), (100, 100), "held until the release distance");
+		drag.apply(&mut p, (-5., 0.), false);
+		assert_eq!(at(&p), (145, 100), "past it: free");
 	}
 }

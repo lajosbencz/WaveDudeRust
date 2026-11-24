@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 52 | 1 | 10 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 70 | 6 | 31 | 4 | 1 |
+| V | Preview | 72 | 8 | 27 | 4 | 1 |
 | L | Timeline, transport, status | 40 | 20 | 20 | 7 | 3 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 658 | 81 | 211 | 139 | 6 |
+| | All | 660 | 83 | 207 | 139 | 6 |
 
 ## Cross-cutting
 
@@ -1045,12 +1045,12 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-97 | Floor rule (1/brightness, 1/brightness^2, integrated), 1.08 headroom | ProbeGraphDrawing.cs | 40 Probe graph box; divergences.md:49 | done | full_scale floor |
 | V-98 | Graph data: live run recording cut at frame shown; remake after probe edit | ProbeGraphOverlay.cs | 40 Probe graph box | done | Live::traces at the stored frame of the position; laid out again each poll while running and on every show |
 | V-99 | Selected probe's box accent border, drawn last | ProbeGraphOverlay.cs | 40 Probe graph box | done | selected boxes last, accent edge |
-| V-100 | Drag box (kept in canvas); snap to probe A within radius 14, release at 28 (hysteresis) | ProbeGraphOverlay.cs:102,105,495-502 | 40 Probe graph box | missing | |
-| V-101 | Box bottom-right corner grip resize, snaps to fixed sizes else Custom; arrows 1/10 px | ProbeGraphOverlay.cs:478-484 | 40 Probe graph box | missing | |
-| V-102 | Arrows on box move 1/10 px (no snap); Tab reaches boxes; focus selects probe | ProbeGraphOverlay.cs:540-561 | 40 Probe graph box | missing | |
-| V-103 | Moving box never touches run; moving probe keeps frames, retraces | ProbeGraphOverlay.cs | 40 Probe graph box | missing | |
+| V-100 | Drag box (kept in canvas); snap to probe A within radius 14, release at 28 (hysteresis) | ProbeGraphOverlay.cs:102,105,495-502 | 40 Probe graph box | done | canvas::Target::GraphBox: kept in the canvas; lands on A within 14 screen px, leaves past 28 |
+| V-101 | Box bottom-right corner grip resize, snaps to fixed sizes else Custom; arrows 1/10 px | ProbeGraphOverlay.cs:478-484 | 40 Probe graph box | partial | Target::GraphSize: the corner grip (two bands, view::graph) sizes the box, a fixed size within 10 screen px, else Custom; arrows on the grip not yet |
+| V-102 | Arrows on box move 1/10 px (no snap); Tab reaches boxes; focus selects probe | ProbeGraphOverlay.cs:540-561 | 40 Probe graph box | missing | Tab and arrows on boxes not yet |
+| V-103 | Moving box never touches run; moving probe keeps frames, retraces | ProbeGraphOverlay.cs | 40 Probe graph box | done | a box move edits the probe's box fields only, not its recording key |
 | V-104 | Graph box context menu "Export probe data as CSV..." | ProbeGraphOverlay.cs:273-278 | 40 Probe graph box | missing | |
-| V-105 | Box hover and focus border | ProbeGraphOverlay.cs | 40 Probe graph box | missing | |
+| V-105 | Box hover and focus border | ProbeGraphOverlay.cs | 40 Probe graph box | partial | hover: a brighter edge and the grip; focus not yet |
 | V-106 | Busy status "Computing frame n" + indeterminate bar mirrored on status bar | MainWindow.Live.cs | 40 Busy; 70 Status bar | missing | see L-50 |
 | V-107 | Timeline shades frames held by live run | TimelineBar.cs:315 | 40 Busy and stale | done | see L-08 |
 | V-108 | Show/hide each picture toggle (transport) feeds Display > Preview | PreviewPane.xaml:497-506 | 50 Transport #12,13 | missing | see L-37 |

@@ -1413,7 +1413,9 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		let Some(app) = weak.upgrade() else { return };
 		let s = &mut *st.borrow_mut();
 		s.drags += 1;
-		s.gesture = s.overlays.press(&s.doc.project, &mut s.selection, layer, (x, y), (control, shift), s.drags);
+		let boxes = s.graphs.placed(layer);
+		let press = canvas::Press { layer, at: (x, y), control, shift };
+		s.gesture = s.overlays.press(&s.doc.project, &mut s.selection, press, s.drags, boxes);
 		app.global::<ui::Canvas<'_>>().set_dragging(s.gesture.is_some());
 		s.show(&app);
 	});

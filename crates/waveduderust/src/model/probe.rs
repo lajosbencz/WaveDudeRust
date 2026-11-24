@@ -241,7 +241,7 @@ impl Probe {
 	}
 
 	/// Whether the graph box sits on point A, so it moves with A.
-	pub(crate) fn box_attached(&self) -> bool {
+	pub fn box_attached(&self) -> bool {
 		self.box_x == self.ax && self.box_y == self.ay
 	}
 

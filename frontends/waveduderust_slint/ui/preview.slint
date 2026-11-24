@@ -95,13 +95,14 @@ component Spinner inherits Rectangle {
 component GraphBoxView inherits Rectangle {
     in property <GraphBox> graph;
     in property <float> scale;
+    in property <bool> hovered;
     x: round(root.graph.x * root.scale) * 1px;
     y: round(root.graph.y * root.scale) * 1px;
     width: root.graph.width * 1px;
     height: root.graph.height * 1px;
     background: #0e1016eb;
     border-width: 1px;
-    border-color: root.graph.selected ? Theme.picture-selection : #c8c8d2aa;
+    border-color: root.graph.selected ? Theme.picture-selection : root.hovered ? #ffffffe0 : #c8c8d2aa;
     clip: true;
     if root.graph.has-plot: Path {
         viewbox-width: root.graph.width;
@@ -138,6 +139,17 @@ component GraphBoxView inherits Rectangle {
     }
     for t in root.graph.y-ticks: Text { x: t.x * 1px; y: t.y * 1px; text: t.label; font-size: 11px; color: #e1e1e6e1; }
     for t in root.graph.x-ticks: Text { x: t.x * 1px; y: t.y * 1px; text: t.label; font-size: 11px; color: #e1e1e6e1; }
+    // the resize grip: two diagonal bands in the bottom-right 12 px cell (view::graph GRIP_BANDS)
+    if root.hovered || root.graph.selected: Path {
+        x: root.width - 12px;
+        y: root.height - 12px;
+        width: 12px;
+        height: 12px;
+        viewbox-width: 12;
+        viewbox-height: 12;
+        commands: "M 11 1 L 11 3 L 3 11 L 1 11 Z M 11 6 L 11 8 L 8 11 L 6 11 Z";
+        fill: root.hovered ? #ffffff : #ffffffa0;
+    }
     // the title strip: the readout right-aligned in the curve's colour, the title elided in what remains
     HorizontalLayout {
         x: 6px;
@@ -247,7 +259,12 @@ component Picture inherits VerticalLayout {
             if root.art.outlines != "": Art { commands: root.art.outlines; stroke: Theme.picture-selection; stroke-width: 1px; }
             for label in root.labels: LabelView { label: label; scale: cell.scale; }
             for handle in root.handles: HandleView { handle: handle; scale: cell.scale; focus-shown: keys.has-focus; }
-            for graph in root.graphs: GraphBoxView { graph: graph; scale: cell.scale; }
+            for graph in root.graphs: GraphBoxView {
+                graph: graph;
+                scale: cell.scale;
+                hovered: touch.has-hover && touch.mouse-x >= cell.left + self.x && touch.mouse-x < cell.left + self.x + self.width
+                    && touch.mouse-y >= cell.top + self.y && touch.mouse-y < cell.top + self.y + self.height;
+            }
             if Canvas.marquee-shown && Canvas.marquee-layer == root.layer: Rectangle {
                 x: Canvas.marquee.x * cell.scale * 1px;
                 y: Canvas.marquee.y * cell.scale * 1px;
@@ -324,7 +341,7 @@ component Picture inherits VerticalLayout {
                     MenuItem { title: @tr("Export both..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-both); } }
                 }
                 // one area for the whole picture: the drawings take no pointer, the app finds the handle under a press
-                TouchArea {
+                touch := TouchArea {
                     property <length> from-x;
                     property <length> from-y;
                     // a middle-button pan: where it started and the centre then

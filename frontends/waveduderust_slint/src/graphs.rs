@@ -22,15 +22,29 @@ pub(crate) struct Traces<'a> {
 	pub(crate) total_steps: u64,
 }
 
+/// A box as a picture shows it, for hit-testing: its probe (index), corner and size in canvas pixels.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Placed {
+	pub(crate) probe: usize,
+	pub(crate) at: (f32, f32),
+	pub(crate) size: (f32, f32),
+}
+
 pub(crate) struct Graphs {
 	/// Measures the text as an export lays it out.
 	fonts: Fonts,
 	rows: [Rc<VecModel<ui::GraphBox>>; 2],
+	/// The boxes of each picture, bottom first.
+	placed: [Vec<Placed>; 2],
 }
 
 impl Default for Graphs {
 	fn default() -> Self {
-		Self { fonts: Fonts::new(TextOptions::default(), fonts::definitions()), rows: Default::default() }
+		Self {
+			fonts: Fonts::new(TextOptions::default(), fonts::definitions()),
+			rows: Default::default(),
+			placed: Default::default(),
+		}
 	}
 }
 
@@ -92,6 +106,11 @@ fn row(g: &GraphLayout, at: (f32, f32), selected: bool) -> ui::GraphBox {
 }
 
 impl Graphs {
+	/// The boxes of `layer`'s picture, bottom first.
+	pub(crate) fn placed(&self, layer: ui::Layer) -> &[Placed] {
+		&self.placed[usize::from(layer == ui::Layer::Intensity)]
+	}
+
 	pub(crate) fn wire(&self, canvas: &ui::Canvas<'_>) {
 		canvas.set_field_graphs(ModelRc::from(self.rows[0].clone()));
 		canvas.set_intensity_graphs(ModelRc::from(self.rows[1].clone()));
@@ -110,8 +129,9 @@ impl Graphs {
 		let canvas = project.canvas_size();
 		let total_steps = data.map_or(0, |d| d.total_steps);
 		let mut fonts = self.fonts.with_pixels_per_point(1.);
-		for (layer, (rows, scale)) in [Layer::Field, Layer::Intensity].into_iter().zip(self.rows.iter().zip(scales)) {
-			let mut boxes: Vec<(bool, ui::GraphBox)> = Vec::new();
+		let pictures = self.rows.iter().zip(self.placed.iter_mut()).zip(scales);
+		for (layer, ((rows, placed), scale)) in [Layer::Field, Layer::Intensity].into_iter().zip(pictures) {
+			let mut boxes: Vec<(bool, ui::GraphBox, Placed)> = Vec::new();
 			for (n, (i, probe)) in project.probes.iter().enumerate().filter(|(_, p)| p.active).enumerate() {
 				if !graph::shows_box(probe, layer) {
 					continue;
@@ -123,12 +143,15 @@ impl Graphs {
 				let g = graph::layout_with(&mut fonts, probe, &shown, total_steps, w * scale, h * scale);
 				if g.visible {
 					let picked = selected.contains(&i);
-					boxes.push((picked, row(&g, graph::box_origin(probe, canvas), picked)));
+					let at = graph::box_origin(probe, canvas);
+					let size = (g.width / scale, g.height / scale);
+					boxes.push((picked, row(&g, at, picked), Placed { probe: i, at, size }));
 				}
 			}
 			// the selected boxes over the rest
-			boxes.sort_by_key(|(picked, _)| *picked);
-			crate::canvas::update(rows, boxes.into_iter().map(|(_, b)| b).collect());
+			boxes.sort_by_key(|(picked, ..)| *picked);
+			*placed = boxes.iter().map(|(.., p)| *p).collect();
+			crate::canvas::update(rows, boxes.into_iter().map(|(_, b, _)| b).collect());
 		}
 	}
 }
