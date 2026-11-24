@@ -1,0 +1,180 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Icon } from "icons.slint";
+import { SchemeChoice } from "data.slint";
+
+// A scheme's gradient strip and name.
+component SchemeRow inherits HorizontalLayout {
+    in property <SchemeChoice> scheme;
+    spacing: 6px;
+    Rectangle {
+        width: 56px;
+        height: 12px;
+        y: (parent.height - self.height) / 2;
+        border-width: 0.5px;
+        border-color: Theme.border;
+        Image {
+            width: parent.width;
+            height: parent.height;
+            source: root.scheme.strip;
+            image-fit: fill;
+        }
+    }
+    Text {
+        text: root.scheme.name;
+        vertical-alignment: center;
+        overflow: elide;
+        color: Theme.text;
+    }
+}
+
+// The open list: the pointer or the keys move the hot row, which it keeps in view; Enter or a click picks it.
+component SchemeList inherits Rectangle {
+    in property <[SchemeChoice]> choices;
+    in property <int> current;
+    callback picked(index: int);
+    callback close();
+    property <int> hot: max(0, root.current);
+    property <int> page: max(1, floor(list.visible-height / Theme.row-height));
+    function go(i: int) {
+        root.hot = clamp(i, 0, root.choices.length - 1);
+        let top = root.hot * Theme.row-height;
+        if (top < -list.content-y) {
+            list.content-y = -top;
+        } else if (top + Theme.row-height > -list.content-y + list.visible-height) {
+            list.content-y = -(top + Theme.row-height - list.visible-height);
+        }
+    }
+    background: Theme.input-background;
+    border-width: 1px;
+    border-color: Theme.border;
+    keys := FocusScope {
+        init => {
+            self.focus();
+            root.go(root.hot);
+        }
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                root.close();
+            } else if (e.text == Key.UpArrow) {
+                root.go(root.hot - 1);
+            } else if (e.text == Key.DownArrow) {
+                root.go(root.hot + 1);
+            } else if (e.text == Key.PageUp) {
+                root.go(root.hot - root.page);
+            } else if (e.text == Key.PageDown) {
+                root.go(root.hot + root.page);
+            } else if (e.text == Key.Home) {
+                root.go(0);
+            } else if (e.text == Key.End) {
+                root.go(root.choices.length - 1);
+            } else if (e.text == Key.Return || e.text == " ") {
+                root.picked(root.hot);
+            } else {
+                return reject;
+            }
+            accept
+        }
+    }
+    list := ScrollView {
+        VerticalLayout {
+            for choice[i] in root.choices: Rectangle {
+                height: Theme.row-height;
+                background: i == root.hot ? Theme.button-hover : i == root.current ? Theme.inactive-selection : transparent;
+                SchemeRow {
+                    x: 6px;
+                    width: parent.width - 24px;
+                    scheme: choice;
+                }
+                TouchArea {
+                    changed has-hover => {
+                        if (self.has-hover) {
+                            root.hot = i;
+                        }
+                    }
+                    clicked => { root.picked(i); }
+                }
+            }
+        }
+    }
+}
+
+// A combo box of schemes, each a gradient strip and a name; `current` -1 shows none. Space, Enter or Alt+Down opens
+// it, Up and Down step through the schemes while it is closed.
+export component SchemeCombo inherits FocusScope {
+    in property <[SchemeChoice]> choices;
+    in property <int> current: -1;
+    in property <string> tip;
+    callback picked(index: int);
+    function open() {
+        if (root.choices.length > 0) {
+            popup.show();
+        }
+    }
+    function pick(i: int) {
+        if (i >= 0 && i < root.choices.length) {
+            root.picked(i);
+        }
+    }
+
+    horizontal-stretch: 1;
+    min-width: 40px;
+    min-height: Theme.row-height;
+    accessible-role: combobox;
+    accessible-value: root.current >= 0 ? root.choices[root.current].name : "";
+    key-pressed(e) => {
+        if (e.text == " " || e.text == Key.Return || (e.text == Key.DownArrow && e.modifiers.alt)) {
+            root.open();
+            return accept;
+        }
+        if (e.text == Key.UpArrow) {
+            root.pick(max(0, root.current - 1));
+            return accept;
+        }
+        if (e.text == Key.DownArrow) {
+            root.pick(min(root.choices.length - 1, root.current + 1));
+            return accept;
+        }
+        reject
+    }
+    Rectangle {
+        background: Theme.input-background;
+        border-width: 1px;
+        border-color: root.has-focus ? Theme.accent : area.has-hover ? Theme.check-border : Theme.border;
+        HorizontalLayout {
+            padding-left: 6px;
+            padding-right: 6px;
+            spacing: 6px;
+            if root.current >= 0: SchemeRow { horizontal-stretch: 1; scheme: root.choices[root.current]; }
+            if root.current < 0: Rectangle { horizontal-stretch: 1; }
+            Icon {
+                width: 10px;
+                source: @image-url("icons/next/chevron-down.svg");
+                ink: Theme.text;
+            }
+        }
+    }
+    area := TouchArea {
+        clicked => {
+            root.focus();
+            root.open();
+        }
+    }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+    popup := PopupWindow {
+        x: 0;
+        y: root.height;
+        width: root.width;
+        height: min(320px, root.choices.length * Theme.row-height + 2px);
+        close-policy: close-on-click-outside;
+        SchemeList {
+            choices: root.choices;
+            current: root.current;
+            picked(i) => {
+                root.pick(i);
+                popup.close();
+            }
+            close => { popup.close(); }
+        }
+    }
+}

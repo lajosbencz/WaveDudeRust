@@ -268,6 +268,10 @@ msgstr "Sonde toevoegen"
 msgid "Add source"
 msgstr "Bron toevoegen"
 
+#. ButtonAddStop
+msgid "Add stop"
+msgstr "Punt toevoegen"
+
 #. MenuProjectToggleSelected
 msgid "Add to or remove from selection"
 msgstr "Aan selectie toevoegen of eruit verwijderen"
@@ -384,6 +388,10 @@ msgstr "Basishoek aan het eerste uiteinde van de basis, in graden. Getypt bij ge
 msgid "Base angle at the second end of the base, in degrees. Typed for the custom type; the others fix it."
 msgstr "Basishoek aan het tweede uiteinde van de basis, in graden. Getypt bij eigen hoeken; de andere typen leggen hem vast."
 
+#. LabelBasedOn
+msgid "Based on"
+msgstr "Gebaseerd op"
+
 #. Label.Probe.BinSize
 msgid "Bin size"
 msgstr "Binbreedte"
@@ -496,6 +504,10 @@ msgstr "Zijkanten coaten"
 msgid "Coating profile"
 msgstr "Coatingprofiel"
 
+#. TipStopColor
+msgid "Colour as #RRGGBB; Enter applies it"
+msgstr "Kleur als #RRGGBB; Enter past hem toe"
+
 #. Label.DisplayLayer.ColorScheme
 msgid "Colour scheme"
 msgstr "Kleurenschema"
@@ -547,6 +559,10 @@ msgstr "Bollend, de vulling het grootst in het midden en naar buiten afnemend bi
 #. MenuEditCopy
 msgid "Copy"
 msgstr "Kopiëren"
+
+#. TipBasedOn
+msgid "Copy the stops of an existing scheme into this one, then change them"
+msgstr "Neemt de punten van een bestaand schema over; daarna aanpassen"
 
 #. SectionCore
 msgid "Core"
@@ -1028,6 +1044,10 @@ msgstr "Beeldsnelheid"
 msgid "Frames per second of the exported video."
 msgstr "Beelden per seconde van de geëxporteerde video."
 
+#. Hint.ColorScheme.Description
+msgid "Free text: what the scheme is, where it comes from."
+msgstr "Vrije tekst: wat het schema is, waar het vandaan komt."
+
 #. Hint.Project.Description
 msgid "Free-text notes about the project."
 msgstr "Vrije notities bij het project."
@@ -1195,6 +1215,10 @@ msgstr "Ingang A"
 #. LabelInputB
 msgid "Input B"
 msgstr "Ingang B"
+
+#. TipAddStop
+msgid "Insert a stop in the widest gap, with the gradient's colour there"
+msgstr "Een punt invoegen in de grootste tussenruimte, met de kleur van het verloop op die plek"
 
 #. Enum.ProbeMeasurement.IntegratedValue
 msgid "Integrated value"
@@ -1472,6 +1496,10 @@ msgstr "Naam in de projectboom en in de grafiektitel."
 msgid "Name shown in the project tree and on the canvas."
 msgstr "Naam in de projectboom en op het canvas."
 
+#. Hint.ColorScheme.Name
+msgid "Name the display settings refer to."
+msgstr "Naam waarnaar de weergave-instellingen verwijzen."
+
 #. MenuFileNew
 msgid "New Project"
 msgstr "Nieuw project"
@@ -1612,6 +1640,10 @@ msgstr "Omtrek in het voorbeeld"
 msgid "Output the probe samples and is drawn on."
 msgstr "Uitvoer die de sonde bemonstert en waarop ze wordt getekend."
 
+#. Hint.ColorScheme.Kind
+msgid "Output the scheme is meant for; the pickers list it for that output only."
+msgstr "Uitvoer waarvoor het schema bedoeld is; de keuzelijsten tonen het alleen daar."
+
 #. SectionOutputs
 msgid "Outputs active"
 msgstr "Actieve uitgangen"
@@ -1731,6 +1763,10 @@ msgstr "Poorten"
 #. SectionPosition
 msgid "Position"
 msgstr "Positie"
+
+#. TipStopPosition
+msgid "Position along the gradient: 0 at the lowest value, 1 at the highest"
+msgstr "Positie in het verloop: 0 bij de laagste waarde, 1 bij de hoogste"
 
 #. PanePreview
 msgid "Preview"
@@ -1954,6 +1990,10 @@ msgstr "Dit knooppunt verwijderen"
 
 #. TipRemovePoint
 msgid "Remove this point"
+msgstr "Dit punt verwijderen"
+
+#. TipRemoveStop
+msgid "Remove this stop"
 msgstr "Dit punt verwijderen"
 
 #. Hint.Simulation.VisualizeEvery
@@ -2208,6 +2248,10 @@ msgstr "Simulatie stoppen; de berekende beelden blijven (Esc)"
 msgid "Stopped"
 msgstr "Gestopt"
 
+#. SectionStops
+msgid "Stops"
+msgstr "Kleurpunten"
+
 #. Hint.ZonePlatePart.Mount
 msgid "Surround the plate with an absorbing mount, so no light passes outside its diameter. Without it, that light meets the focused light on the axis and moves the focus further out, the more so the fewer zones the plate has."
 msgstr "Omgeef de plaat met een absorberende houder, zodat er geen licht buiten de diameter langs gaat. Zonder houder ontmoet dat licht het gefocuste licht op de as en schuift het brandpunt verder weg, sterker naarmate de plaat minder zones heeft."
@@ -2411,6 +2455,10 @@ msgstr "Type"
 #. MenuEditUndo
 msgid "Undo"
 msgstr "Ongedaan maken"
+
+#. Enum.ColorSchemeKind.Unspecified
+msgid "Unspecified"
+msgstr "Niet opgegeven"
 
 #. Untitled
 msgid "Untitled"
@@ -2635,6 +2683,21 @@ msgstr "Schuivend"
 msgctxt "Enum.TriangleType.Custom"
 msgid "Custom"
 msgstr "Eigen hoeken"
+
+#. Label.ColorScheme.Description
+msgctxt "Label.ColorScheme.Description"
+msgid "Description"
+msgstr "Beschrijving"
+
+#. Label.ColorScheme.Kind
+msgctxt "Label.ColorScheme.Kind"
+msgid "Kind"
+msgstr "Soort"
+
+#. Label.ColorScheme.Name
+msgctxt "Label.ColorScheme.Name"
+msgid "Name"
+msgstr "Naam"
 
 #. Label.FiberNode.X
 msgctxt "Label.FiberNode.X"

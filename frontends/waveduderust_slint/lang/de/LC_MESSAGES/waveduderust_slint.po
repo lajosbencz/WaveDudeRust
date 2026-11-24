@@ -268,6 +268,10 @@ msgstr "Sonde hinzufügen"
 msgid "Add source"
 msgstr "Quelle hinzufügen"
 
+#. ButtonAddStop
+msgid "Add stop"
+msgstr "Stützpunkt hinzufügen"
+
 #. MenuProjectToggleSelected
 msgid "Add to or remove from selection"
 msgstr "Zur Auswahl hinzufügen oder entfernen"
@@ -384,6 +388,10 @@ msgstr "Grundwinkel am ersten Ende der Grundseite in Grad. Eingabe bei gleichsch
 msgid "Base angle at the second end of the base, in degrees. Typed for the custom type; the others fix it."
 msgstr "Grundwinkel am zweiten Ende der Grundseite in Grad. Eingabe nur bei eigenen Winkeln; die anderen Typen legen ihn fest."
 
+#. LabelBasedOn
+msgid "Based on"
+msgstr "Vorlage"
+
 #. Label.Probe.BinSize
 msgid "Bin size"
 msgstr "Bin-Breite"
@@ -496,6 +504,10 @@ msgstr "Seiten entspiegeln"
 msgid "Coating profile"
 msgstr "Profil der Entspiegelung"
 
+#. TipStopColor
+msgid "Colour as #RRGGBB; Enter applies it"
+msgstr "Farbe als #RRGGBB; Eingabe übernimmt sie"
+
 #. Label.DisplayLayer.ColorScheme
 msgid "Colour scheme"
 msgstr "Farbschema"
@@ -547,6 +559,10 @@ msgstr "Sammelnd, die Füllung in der Mitte am größten und in jeder Zone nach 
 #. MenuEditCopy
 msgid "Copy"
 msgstr "Kopieren"
+
+#. TipBasedOn
+msgid "Copy the stops of an existing scheme into this one, then change them"
+msgstr "Übernimmt die Stützpunkte eines vorhandenen Schemas; danach anpassen"
 
 #. SectionCore
 msgid "Core"
@@ -1028,6 +1044,10 @@ msgstr "Bildrate"
 msgid "Frames per second of the exported video."
 msgstr "Bilder pro Sekunde des exportierten Videos."
 
+#. Hint.ColorScheme.Description
+msgid "Free text: what the scheme is, where it comes from."
+msgstr "Freier Text: was das Schema ist, woher es stammt."
+
 #. Hint.Project.Description
 msgid "Free-text notes about the project."
 msgstr "Freie Notizen zum Projekt."
@@ -1195,6 +1215,10 @@ msgstr "Eingang A"
 #. LabelInputB
 msgid "Input B"
 msgstr "Eingang B"
+
+#. TipAddStop
+msgid "Insert a stop in the widest gap, with the gradient's colour there"
+msgstr "Stützpunkt in die größte Lücke einfügen, mit der Farbe des Verlaufs an dieser Stelle"
 
 #. Enum.ProbeMeasurement.IntegratedValue
 msgid "Integrated value"
@@ -1472,6 +1496,10 @@ msgstr "Name im Projektbaum und im Diagrammtitel."
 msgid "Name shown in the project tree and on the canvas."
 msgstr "Name im Projektbaum und auf der Leinwand."
 
+#. Hint.ColorScheme.Name
+msgid "Name the display settings refer to."
+msgstr "Name, auf den sich die Darstellungseinstellungen beziehen."
+
 #. MenuFileNew
 msgid "New Project"
 msgstr "Neues Projekt"
@@ -1612,6 +1640,10 @@ msgstr "Umriss in der Vorschau"
 msgid "Output the probe samples and is drawn on."
 msgstr "Ausgabe, die die Sonde abtastet und auf der sie gezeichnet wird."
 
+#. Hint.ColorScheme.Kind
+msgid "Output the scheme is meant for; the pickers list it for that output only."
+msgstr "Ausgabe, für die das Schema gedacht ist; die Auswahllisten führen es nur dort auf."
+
 #. SectionOutputs
 msgid "Outputs active"
 msgstr "Aktive Ausgänge"
@@ -1731,6 +1763,10 @@ msgstr "Anschlüsse"
 #. SectionPosition
 msgid "Position"
 msgstr "Position"
+
+#. TipStopPosition
+msgid "Position along the gradient: 0 at the lowest value, 1 at the highest"
+msgstr "Position im Verlauf: 0 beim kleinsten Wert, 1 beim größten"
 
 #. PanePreview
 msgid "Preview"
@@ -1955,6 +1991,10 @@ msgstr "Diesen Knoten entfernen"
 #. TipRemovePoint
 msgid "Remove this point"
 msgstr "Diesen Punkt entfernen"
+
+#. TipRemoveStop
+msgid "Remove this stop"
+msgstr "Diesen Stützpunkt entfernen"
 
 #. Hint.Simulation.VisualizeEvery
 msgid "Render a frame, export it and sample the probes every this many steps."
@@ -2208,6 +2248,10 @@ msgstr "Simulation stoppen; die bisherigen Bilder bleiben (Esc)"
 msgid "Stopped"
 msgstr "Gestoppt"
 
+#. SectionStops
+msgid "Stops"
+msgstr "Farbstützpunkte"
+
 #. Hint.ZonePlatePart.Mount
 msgid "Surround the plate with an absorbing mount, so no light passes outside its diameter. Without it, that light meets the focused light on the axis and moves the focus further out, the more so the fewer zones the plate has."
 msgstr "Die Platte mit einer absorbierenden Fassung umgeben, damit kein Licht außerhalb ihres Durchmessers vorbeigeht. Ohne sie trifft dieses Licht auf der Achse das fokussierte Licht und schiebt den Brennpunkt weiter hinaus, umso mehr, je weniger Zonen die Platte hat."
@@ -2411,6 +2455,10 @@ msgstr "Typ"
 #. MenuEditUndo
 msgid "Undo"
 msgstr "Rückgängig"
+
+#. Enum.ColorSchemeKind.Unspecified
+msgid "Unspecified"
+msgstr "Unbestimmt"
 
 #. Untitled
 msgid "Untitled"
@@ -2635,6 +2683,21 @@ msgstr "Gleitend"
 msgctxt "Enum.TriangleType.Custom"
 msgid "Custom"
 msgstr "Eigene Winkel"
+
+#. Label.ColorScheme.Description
+msgctxt "Label.ColorScheme.Description"
+msgid "Description"
+msgstr "Beschreibung"
+
+#. Label.ColorScheme.Kind
+msgctxt "Label.ColorScheme.Kind"
+msgid "Kind"
+msgstr "Art"
+
+#. Label.ColorScheme.Name
+msgctxt "Label.ColorScheme.Name"
+msgid "Name"
+msgstr "Name"
 
 #. Label.FiberNode.X
 msgctxt "Label.FiberNode.X"

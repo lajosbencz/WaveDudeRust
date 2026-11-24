@@ -2,7 +2,7 @@
 import { CheckBox } from "std-widgets.slint";
 import { Form, FormChoice } from "form.slint";
 import { Theme } from "theme.slint";
-import { Stencil, BoxSize, CoatingProfile, Edges, Layer, Measurement, ProbeDetector, ProbeKind, PulseShape, ScaleMode, SceneMode, SourceMode, TriangleType, YScale, ZoneDivision, FacetPattern, MetaLensType, FiberEnds } from "data.slint";
+import { Stencil, BoxSize, CoatingProfile, Edges, Layer, Measurement, ProbeDetector, ProbeKind, PulseShape, ScaleMode, SceneMode, SourceMode, TriangleType, YScale, ZoneDivision, FacetPattern, MetaLensType, FiberEnds, SchemeKind } from "data.slint";
 
 export component SceneModeChoice inherits FormChoice {
     in-out property <SceneMode> value;
@@ -143,6 +143,13 @@ export component FiberEndsChoice inherits FormChoice {
     titles: [@tr("Flat"), @tr("Round")];
     index: root.value == FiberEnds.flat ? 0 : 1;
     picked(i) => { root.value = i == 0 ? FiberEnds.flat : FiberEnds.round; }
+}
+
+export component SchemeKindChoice inherits FormChoice {
+    in-out property <SchemeKind> value;
+    titles: [@tr("Unspecified"), @tr("Field"), @tr("Intensity")];
+    index: root.value == SchemeKind.unspecified ? 0 : root.value == SchemeKind.field ? 1 : 2;
+    picked(i) => { root.value = i == 0 ? SchemeKind.unspecified : i == 1 ? SchemeKind.field : SchemeKind.intensity; }
 }
 
 export component MetaLensTypeChoice inherits FormChoice {

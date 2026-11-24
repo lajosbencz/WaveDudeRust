@@ -268,6 +268,10 @@ msgstr "Ajouter une sonde"
 msgid "Add source"
 msgstr "Ajouter une source"
 
+#. ButtonAddStop
+msgid "Add stop"
+msgstr "Ajouter un point"
+
 #. MenuProjectToggleSelected
 msgid "Add to or remove from selection"
 msgstr "Ajouter à la sélection ou en retirer"
@@ -384,6 +388,10 @@ msgstr "Angle à la première extrémité de la base, en degrés. Saisi pour les
 msgid "Base angle at the second end of the base, in degrees. Typed for the custom type; the others fix it."
 msgstr "Angle à la seconde extrémité de la base, en degrés. Saisi pour le type personnalisé ; les autres le fixent."
 
+#. LabelBasedOn
+msgid "Based on"
+msgstr "Modèle"
+
 #. Label.Probe.BinSize
 msgid "Bin size"
 msgstr "Largeur de classe"
@@ -496,6 +504,10 @@ msgstr "Traiter les côtés"
 msgid "Coating profile"
 msgstr "Profil du traitement"
 
+#. TipStopColor
+msgid "Colour as #RRGGBB; Enter applies it"
+msgstr "Couleur en #RRGGBB ; Entrée l'applique"
+
 #. Label.DisplayLayer.ColorScheme
 msgid "Colour scheme"
 msgstr "Palette de couleurs"
@@ -547,6 +559,10 @@ msgstr "Convergente, le remplissage maximal au centre et décroissant vers l'ext
 #. MenuEditCopy
 msgid "Copy"
 msgstr "Copier"
+
+#. TipBasedOn
+msgid "Copy the stops of an existing scheme into this one, then change them"
+msgstr "Copie les points d'une palette existante dans celle-ci, à adapter ensuite"
 
 #. SectionCore
 msgid "Core"
@@ -1028,6 +1044,10 @@ msgstr "Fréquence d'images"
 msgid "Frames per second of the exported video."
 msgstr "Images par seconde de la vidéo exportée."
 
+#. Hint.ColorScheme.Description
+msgid "Free text: what the scheme is, where it comes from."
+msgstr "Texte libre : ce qu'est la palette, d'où elle vient."
+
 #. Hint.Project.Description
 msgid "Free-text notes about the project."
 msgstr "Notes libres sur le projet."
@@ -1195,6 +1215,10 @@ msgstr "Entrée A"
 #. LabelInputB
 msgid "Input B"
 msgstr "Entrée B"
+
+#. TipAddStop
+msgid "Insert a stop in the widest gap, with the gradient's colour there"
+msgstr "Insérer un point dans le plus grand intervalle, avec la couleur du dégradé à cet endroit"
 
 #. Enum.ProbeMeasurement.IntegratedValue
 msgid "Integrated value"
@@ -1472,6 +1496,10 @@ msgstr "Nom affiché dans l'arborescence du projet et dans le titre du graphique
 msgid "Name shown in the project tree and on the canvas."
 msgstr "Nom affiché dans l'arborescence du projet et sur la toile."
 
+#. Hint.ColorScheme.Name
+msgid "Name the display settings refer to."
+msgstr "Nom auquel les réglages d'affichage se réfèrent."
+
 #. MenuFileNew
 msgid "New Project"
 msgstr "Nouveau projet"
@@ -1612,6 +1640,10 @@ msgstr "Contour dans l'aperçu"
 msgid "Output the probe samples and is drawn on."
 msgstr "Sortie que la sonde échantillonne et sur laquelle elle est tracée."
 
+#. Hint.ColorScheme.Kind
+msgid "Output the scheme is meant for; the pickers list it for that output only."
+msgstr "Sortie à laquelle la palette est destinée ; les sélecteurs ne la listent que pour celle-ci."
+
 #. SectionOutputs
 msgid "Outputs active"
 msgstr "Sorties actives"
@@ -1731,6 +1763,10 @@ msgstr "Ports"
 #. SectionPosition
 msgid "Position"
 msgstr "Position"
+
+#. TipStopPosition
+msgid "Position along the gradient: 0 at the lowest value, 1 at the highest"
+msgstr "Position dans le dégradé : 0 à la valeur la plus basse, 1 à la plus haute"
 
 #. PanePreview
 msgid "Preview"
@@ -1954,6 +1990,10 @@ msgstr "Supprimer ce nœud"
 
 #. TipRemovePoint
 msgid "Remove this point"
+msgstr "Supprimer ce point"
+
+#. TipRemoveStop
+msgid "Remove this stop"
 msgstr "Supprimer ce point"
 
 #. Hint.Simulation.VisualizeEvery
@@ -2208,6 +2248,10 @@ msgstr "Arrêter la simulation ; les images calculées restent (Échap)"
 msgid "Stopped"
 msgstr "Arrêtée"
 
+#. SectionStops
+msgid "Stops"
+msgstr "Points de couleur"
+
 #. Hint.ZonePlatePart.Mount
 msgid "Surround the plate with an absorbing mount, so no light passes outside its diameter. Without it, that light meets the focused light on the axis and moves the focus further out, the more so the fewer zones the plate has."
 msgstr "Entourer la lame d'une monture absorbante, pour qu'aucune lumière ne passe hors de son diamètre. Sans elle, cette lumière rencontre la lumière focalisée sur l'axe et repousse le foyer, d'autant plus que la lame a peu de zones."
@@ -2411,6 +2455,10 @@ msgstr "Type"
 #. MenuEditUndo
 msgid "Undo"
 msgstr "Annuler"
+
+#. Enum.ColorSchemeKind.Unspecified
+msgid "Unspecified"
+msgstr "Non précisé"
 
 #. Untitled
 msgid "Untitled"
@@ -2635,6 +2683,21 @@ msgstr "Glissant"
 msgctxt "Enum.TriangleType.Custom"
 msgid "Custom"
 msgstr "Personnalisé"
+
+#. Label.ColorScheme.Description
+msgctxt "Label.ColorScheme.Description"
+msgid "Description"
+msgstr "Description"
+
+#. Label.ColorScheme.Kind
+msgctxt "Label.ColorScheme.Kind"
+msgid "Kind"
+msgstr "Type"
+
+#. Label.ColorScheme.Name
+msgctxt "Label.ColorScheme.Name"
+msgid "Name"
+msgstr "Nom"
 
 #. Label.FiberNode.X
 msgctxt "Label.FiberNode.X"

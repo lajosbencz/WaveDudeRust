@@ -1,8 +1,9 @@
 // The forms Properties shows per kind of object, bound to the Form global's data.
-import { Button } from "std-widgets.slint";
+import { Button, LineEdit } from "std-widgets.slint";
+import { SchemeCombo } from "scheme-combo.slint";
 import { Theme } from "theme.slint";
 import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, Check, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
-import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice, MetaLensTypeChoice, FiberEndsChoice } from "choices.slint";
+import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice, MetaLensTypeChoice, FiberEndsChoice, SchemeKindChoice } from "choices.slint";
 import { FormKind, GateKind, PointData, SceneMode, SourceMode, ProbeDetector, ProbeKind, Layer, BoxSize, YScale, TriangleType, LayerData } from "data.slint";
 import { Icon, IconButton } from "icons.slint";
 
@@ -2416,4 +2417,146 @@ export component FiberForm inherits VerticalLayout {
         }
     }
     NodeList { }
+}
+
+// A colour as #RRGGBB, applied on Enter or when the box loses the focus.
+component HexField inherits Rectangle {
+    in-out property <string> text;
+    in property <string> tip;
+    horizontal-stretch: 1;
+    min-height: max(Theme.row-height, edit.min-height);
+    min-width: 60px;
+    edit := LineEdit {
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        // typing breaks the binding above
+        property <string> shown: root.text;
+        changed shown => { self.text = self.shown; }
+        accepted => { root.commit(); }
+        changed has-focus => {
+            if (!self.has-focus && self.text != root.text) {
+                root.commit();
+            }
+        }
+    }
+    function commit() {
+        root.text = edit.text;
+        Form.edited(false);
+    }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// A colour scheme's gradient with a marker under each stop, half a marker's room left and right of it.
+component GradientBar inherits Rectangle {
+    // room left and right of the gradient for half a marker
+    property <length> inset: 8px;
+    property <length> gradient-height: 18px;
+    height: root.gradient-height + 10px;
+    Rectangle {
+        x: root.inset;
+        y: 0;
+        width: root.width - 2 * root.inset;
+        height: root.gradient-height;
+        border-width: 1px;
+        border-color: Theme.border;
+        Image {
+            x: 1px;
+            y: 1px;
+            width: parent.width - 2px;
+            height: parent.height - 2px;
+            source: Form.gradient;
+            image-fit: fill;
+        }
+    }
+    for stop in Form.stops: Path {
+        x: root.inset + clamp(stop.at, 0, 1) * (root.width - 2 * root.inset) - 6px;
+        y: root.gradient-height;
+        width: 12px;
+        height: 8px;
+        viewbox-width: 12;
+        viewbox-height: 8;
+        commands: "M 6 0 L 12 8 L 0 8 Z";
+        fill: stop.color;
+        stroke: Theme.text;
+        stroke-width: 1px;
+    }
+}
+
+export component SchemeForm inherits VerticalLayout {
+    alignment: start;
+    FormSection { text: @tr("General"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Label.ColorScheme.Name" => "Name"); tip: @tr("Name the display settings refer to."); }
+            FormText { text <=> Form.scheme.name; tip: @tr("Name the display settings refer to."); }
+        }
+        Row {
+            FormLabel { text: @tr("Label.ColorScheme.Kind" => "Kind"); tip: @tr("Output the scheme is meant for; the pickers list it for that output only."); }
+            SchemeKindChoice { value <=> Form.scheme.kind; tip: @tr("Output the scheme is meant for; the pickers list it for that output only."); }
+        }
+        Row {
+            FormLabel { text: @tr("Label.ColorScheme.Description" => "Description"); tip: @tr("Free text: what the scheme is, where it comes from."); }
+            FormText { text <=> Form.scheme.description; tip: @tr("Free text: what the scheme is, where it comes from."); }
+        }
+    }
+    FormSection { text: @tr("Stops"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Based on"); tip: @tr("Copy the stops of an existing scheme into this one, then change them"); }
+            SchemeCombo {
+                choices: Form.bases;
+                current: Form.based-on;
+                tip: @tr("Copy the stops of an existing scheme into this one, then change them");
+                picked(i) => { Form.base-on(i); }
+            }
+        }
+    }
+    // as wide as the fields with the markers' room outside them
+    Rectangle {
+        height: bar.height;
+        bar := GradientBar { x: -8px; width: parent.width + 16px; }
+    }
+    for stop[k] in Form.stops: HorizontalLayout {
+        padding-bottom: 4px;
+        spacing: 4px;
+        FormFloat {
+            width: 72px;
+            horizontal-stretch: 0;
+            value <=> stop.at;
+            spec: { min: 0, max: 1, increment: 0.01, decimals: 3 };
+            tip: @tr("Position along the gradient: 0 at the lowest value, 1 at the highest");
+        }
+        Rectangle {
+            width: 36px;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: stop.color;
+        }
+        HexField { text <=> stop.hex; tip: @tr("Colour as #RRGGBB; Enter applies it"); }
+        Rectangle {
+            width: 22px;
+            IconButton {
+                size: 18px;
+                icon: @image-url("icons/next/tree-minus.svg");
+                enabled: Form.stops.length > 1;
+                tip: @tr("Remove this stop");
+                clicked => { Form.remove-row(k); }
+            }
+        }
+    }
+    HorizontalLayout {
+        padding-top: 2px;
+        padding-bottom: 10px;
+        alignment: start;
+        Rectangle {
+            width: add.preferred-width;
+            height: add.preferred-height;
+            add := Button {
+                text: @tr("Add stop");
+                clicked => { Form.add-row(); }
+            }
+            Tooltip { text: @markdown("\{@tr("Insert a stop in the widest gap, with the gradient's colour there")}"); }
+        }
+    }
 }

@@ -8,6 +8,7 @@ use waveduderust::model::{
 	self as m, Coating, Lens, Material, PROJECT_VERSION, Part, PartKind, Point, Project, Stencil, View, wavelength,
 };
 
+use waveduderust::unstable::render::gradient::Gradient;
 use waveduderust::unstable::scene::gate_design::{GateDesign, ports_of};
 
 use crate::tree::Node;
@@ -120,6 +121,7 @@ words! {
 	FiberEnds = FiberEnds { Flat, Round }
 	MetaLensType = MetaLensType { Converging, Diverging }
 	GateKind = GateKind { Xor, And, Or }
+	SchemeKind = SchemeKind { Unspecified, Field, Intensity }
 }
 
 /// A form's data of a model type: its fields of the same names, the rest left to the caller.
@@ -197,6 +199,7 @@ data! {
 	FilterData = m::InterferenceFilter { length, width }
 	FiberData = m::Fiber { core_index, core_diameter, cladding_index, cladding_thickness, absorption, absorption_ramp, ends }
 	FiberNodeData = m::FiberNode { x, y, in_x, in_y, out_x, out_y, smooth }
+	SchemeData = m::ColorScheme { name, kind, description }
 }
 
 /// An ellipse's sides are a rectangle's.
@@ -246,7 +249,8 @@ pub(crate) fn kind(project: &Project, node: Node) -> FormKind {
 		Node::Display => FormKind::Display,
 		Node::Source(_) => FormKind::Source,
 		Node::Probe(_) => FormKind::Probe,
-		Node::Sources | Node::Parts | Node::Probes | Node::Schemes | Node::Scheme(_) => FormKind::None,
+		Node::Scheme(_) => FormKind::Scheme,
+		Node::Sources | Node::Parts | Node::Probes | Node::Schemes => FormKind::None,
 	}
 }
 
@@ -434,7 +438,8 @@ pub(crate) fn show(form: &Form<'_>, project: &Project, view: &View, node: Node) 
 		}
 		Node::Probe(i) => put(form.get_probe(), probe_data(&project.probes[i]), |d| form.set_probe(d)),
 		Node::Part(i) => show_part(form, project, &project.parts[i]),
-		Node::Sources | Node::Parts | Node::Probes | Node::Schemes | Node::Scheme(_) => {}
+		Node::Scheme(i) => show_scheme(form, project, i),
+		Node::Sources | Node::Parts | Node::Probes | Node::Schemes => {}
 	}
 }
 
@@ -551,7 +556,12 @@ pub(crate) fn apply(form: &Form<'_>, project: &mut Project, node: Node) {
 			apply_part(form, part, &project.simulation);
 			part.edited(&before);
 		}
-		Node::Display | Node::Sources | Node::Parts | Node::Probes | Node::Schemes | Node::Scheme(_) => {}
+		Node::Scheme(i) => {
+			let Some(scheme) = project.color_schemes.get_mut(i) else { return };
+			form.get_scheme().apply(&Data::show(&*scheme), scheme);
+			apply_rows(&form.get_stops(), &mut scheme.stops);
+		}
+		Node::Display | Node::Sources | Node::Parts | Node::Probes | Node::Schemes => {}
 	}
 }
 
@@ -618,6 +628,77 @@ pub(crate) fn apply_view(form: &Form<'_>, view: &mut View) {
 	form.get_video().apply(&Data::show(&view.video), &mut view.video);
 }
 
+impl Bridge<m::Rgb> for slint::Color {
+	fn show(model: &m::Rgb) -> Self {
+		Self::from_rgb_u8(model.r, model.g, model.b)
+	}
+	fn model(&self) -> m::Rgb {
+		m::Rgb::new(self.red(), self.green(), self.blue())
+	}
+}
+
+impl Data<m::Stop> for ui::StopData {
+	fn show(model: &m::Stop) -> Self {
+		Self { at: Bridge::show(&model.at), color: Bridge::show(&model.color), hex: model.color.to_hex().into() }
+	}
+	fn apply(&self, shown: &Self, model: &mut m::Stop) {
+		if self.at != shown.at {
+			model.at = self.at.model();
+		}
+		// text that does not read as #RRGGBB leaves the colour, which the row then shows again
+		if self.hex != shown.hex {
+			model.color = m::Rgb::parse_hex(&self.hex).unwrap_or(model.color);
+		} else if self.color != shown.color {
+			model.color = self.color.model();
+		}
+	}
+}
+
+/// `scheme`'s gradient, a strip a pixel tall to stretch.
+fn strip(scheme: &m::ColorScheme) -> slint::Image {
+	const WIDTH: u32 = 256;
+	let colours = Gradient::new(&scheme.sorted_stops()).interpolate(WIDTH as usize);
+	let mut pixels = slint::SharedPixelBuffer::<slint::Rgb8Pixel>::new(WIDTH, 1);
+	for (pixel, c) in pixels.make_mut_slice().iter_mut().zip(colours) {
+		*pixel = slint::Rgb8Pixel::new(c.r, c.g, c.b);
+	}
+	slint::Image::from_rgb8(pixels)
+}
+
+/// The schemes a scheme can be based on: the project's others, then the built-in ones.
+pub(crate) fn bases(project: &Project, i: usize) -> Vec<&m::ColorScheme> {
+	let others = project.color_schemes.iter().enumerate().filter(|&(k, _)| k != i).map(|(_, s)| s);
+	others.chain(waveduderust::io::schemes::built_in()).collect()
+}
+
+fn show_scheme(form: &Form<'_>, project: &Project, i: usize) {
+	let scheme = &project.color_schemes[i];
+	put(form.get_scheme(), Data::show(scheme), |d| form.set_scheme(d));
+	put_rows(&form.get_stops(), &scheme.stops, |m| form.set_stops(m));
+	form.set_gradient(strip(scheme));
+}
+
+/// Shows the schemes scheme `i` can be based on, rebuilt only when they differ from `shown`, the last ones shown;
+/// whether they did.
+pub(crate) fn show_bases(form: &Form<'_>, project: &Project, i: usize, shown: &mut Vec<m::ColorScheme>) -> bool {
+	let now = bases(project, i);
+	if shown.len() == now.len() && shown.iter().zip(&now).all(|(a, b)| a == *b) {
+		return false;
+	}
+	let choices: Vec<ui::SchemeChoice> =
+		now.iter().map(|s| ui::SchemeChoice { name: s.name.as_str().into(), strip: strip(s) }).collect();
+	form.set_bases(ModelRc::new(VecModel::from(choices)));
+	*shown = now.into_iter().cloned().collect();
+	true
+}
+
+/// Copies `base`'s stops and kind into `scheme`, its description naming it.
+pub(crate) fn base_on(scheme: &mut m::ColorScheme, base: &m::ColorScheme) {
+	scheme.stops.clone_from(&base.stops);
+	scheme.kind = base.kind;
+	scheme.description = format!("copy of scheme '{}'", base.name);
+}
+
 /// Shows `rows` in the list model `shown`, in place: a row's box keeps text typed into it while another row is
 /// added or removed.
 fn put_rows<M, U>(shown: &ModelRc<U>, rows: &[M], set: impl FnOnce(ModelRc<U>))
@@ -656,8 +737,29 @@ pub(crate) enum RowEdit {
 	Clear,
 }
 
-/// Applies `edit` to the list `kind` keeps: an outline's points, a filter's layers, a fibre's nodes.
-pub(crate) fn edit_rows(kind: &mut PartKind, edit: RowEdit) {
+/// Applies `edit` to the list `node` keeps: an outline's points, a filter's layers, a fibre's nodes, a scheme's stops.
+pub(crate) fn edit_rows(project: &mut Project, node: Node, edit: RowEdit) {
+	let kind = match node {
+		Node::Part(i) => match project.parts.get_mut(i) {
+			Some(part) => &mut part.kind,
+			None => return,
+		},
+		Node::Scheme(i) => {
+			if let Some(scheme) = project.color_schemes.get_mut(i) {
+				match edit {
+					RowEdit::Add => {
+						scheme.add_stop();
+					}
+					RowEdit::Remove(k) => {
+						scheme.remove_stop(k);
+					}
+					RowEdit::Move { .. } | RowEdit::Clear => {}
+				}
+			}
+			return;
+		}
+		_ => return,
+	};
 	match kind {
 		PartKind::Outline(o) => edit.on(&mut o.points, add_point),
 		PartKind::InterferenceFilter(f) => edit.on(&mut f.layers, |l| l.push(l.last().cloned().unwrap_or_default())),
@@ -717,10 +819,11 @@ mod tests {
 		RowEdit::Remove(3).on(&mut rows, |_| {});
 		assert_eq!(rows, [2, 3, 1]);
 		let mut filter = m::InterferenceFilter::default();
-		let mut kind = PartKind::InterferenceFilter(filter.clone());
-		edit_rows(&mut kind, RowEdit::Add);
+		let mut project = Project::default();
+		project.parts.push(Part::new(PartKind::InterferenceFilter(filter.clone()), 0, 0));
+		edit_rows(&mut project, Node::Part(0), RowEdit::Add);
 		filter.layers.push(m::FilterLayer::default());
-		assert_eq!(kind, PartKind::InterferenceFilter(filter));
+		assert_eq!(project.parts[0].kind, PartKind::InterferenceFilter(filter));
 	}
 
 	#[test]

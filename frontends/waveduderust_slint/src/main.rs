@@ -106,6 +106,9 @@ struct Draft {
 struct Shown {
 	key: Option<String>,
 	token: i32,
+	node: Option<Node>,
+	// the schemes Based on lists
+	bases: Vec<waveduderust::model::ColorScheme>,
 }
 
 /// Shows `rows` of the form `key`. The same form's rows are updated in place, and only those that changed, so the
@@ -249,6 +252,10 @@ impl State {
 		let key = format!("{:?}@{}", self.selection.current(), self.form_base);
 		let g = app.global::<ui::Form<'_>>();
 		g.set_kind(kind);
+		if self.typed_form.node != Some(node) {
+			self.typed_form.node = Some(node);
+			g.set_based_on(-1);
+		}
 		if self.typed_form.key.as_ref() != Some(&key) {
 			self.typed_form.key = Some(key.clone());
 			self.typed_form.token = self.typed_form.token.wrapping_add(1);
@@ -256,6 +263,12 @@ impl State {
 			g.set_invalid("".into());
 		}
 		form::show(&g, &self.doc.project, &self.doc.view, node);
+		// a pick names a base by its index, which another list makes another's
+		if let Node::Scheme(i) = node
+			&& form::show_bases(&g, &self.doc.project, i, &mut self.typed_form.bases)
+		{
+			g.set_based_on(-1);
+		}
 		sync(&app.get_props_rows(), &mut self.props, key, rows, |m| {
 			app.set_props_rows(m);
 		});
@@ -973,13 +986,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		move |edit: form::RowEdit| {
 			let Some(app) = weak.upgrade() else { return };
 			let mut s = st.borrow_mut();
-			if let Node::Part(i) = s.selection.current() {
-				s.doc.edit(|p| {
-					if let Some(part) = p.parts.get_mut(i) {
-						form::edit_rows(&mut part.kind, edit);
-					}
-				});
-			}
+			let node = s.selection.current();
+			s.doc.edit(|p| form::edit_rows(p, node, edit));
 			s.show(&app);
 		}
 	};
@@ -998,6 +1006,23 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		move |from, to| edit(form::RowEdit::Move { from: index(from), to: index(to) })
 	});
 	rows.on_clear_rows(move || edit_rows(form::RowEdit::Clear));
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.global::<ui::Form<'_>>().on_base_on(move |picked| {
+		let Some(app) = weak.upgrade() else { return };
+		let mut s = st.borrow_mut();
+		if let (Node::Scheme(i), Ok(k)) = (s.selection.current(), usize::try_from(picked)) {
+			let base = form::bases(&s.doc.project, i).get(k).map(|&b| b.clone());
+			if let Some(base) = base {
+				s.doc.edit(|p| {
+					if let Some(scheme) = p.color_schemes.get_mut(i) {
+						form::base_on(scheme, &base);
+					}
+				});
+				app.global::<ui::Form<'_>>().set_based_on(picked);
+			}
+		}
+		s.show(&app);
+	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_command(move |c| {
 		if let Some(app) = weak.upgrade() {

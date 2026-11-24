@@ -17,11 +17,12 @@ export enum TriangleType { equilateral, right-isosceles, thirty-sixty-ninety, is
 export enum ZoneDivision { equal-width, equal-depth }
 export enum FacetPattern { sawtooth, square-wave, sinusoidal }
 export enum FiberEnds { flat, round }
+export enum SchemeKind { unspecified, field, intensity }
 export enum MetaLensType { converging, diverging }
 export enum GateKind { xor, and, or }
 
 // Which form Properties shows; `none` for the generic rows.
-export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens, simple-grating, facetted-grating, meta-lens, meta-prism, meta-axicon, logic-gate, interference-filter, fiber }
+export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens, simple-grating, facetted-grating, meta-lens, meta-prism, meta-axicon, logic-gate, interference-filter, fiber, scheme }
 
 export struct ProjectData {
     seed: int,
@@ -288,6 +289,25 @@ export struct MetaData {
     zone-width: float,
     line-length: float,
     zones: int,
+}
+
+export struct SchemeData {
+    name: string,
+    kind: SchemeKind,
+    description: string,
+}
+
+// A stop and its colour as #RRGGBB, which an edit of either follows.
+export struct StopData {
+    at: float,
+    color: color,
+    hex: string,
+}
+
+// A scheme to pick: its name and its gradient as a strip.
+export struct SchemeChoice {
+    name: string,
+    strip: image,
 }
 
 export struct FiberData {

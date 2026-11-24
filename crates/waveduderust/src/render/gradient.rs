@@ -1,6 +1,6 @@
 //! Gradient evaluation of a colour scheme's stops.
 
-use crate::model::{Rgb, Stop};
+use crate::model::{Rgb, Stop, gradient_at, round_channel};
 
 /// A normalised scheme's stops, ready for evaluation.
 #[derive(Clone, Debug, PartialEq)]
@@ -24,21 +24,7 @@ impl Gradient {
 	/// at or beyond the last: the last colour. Between, the segment ends at the first stop at or beyond `pos`, so at
 	/// the position of duplicate stops the first of them holds.
 	pub fn evaluate(&self, pos: f64) -> [f64; 3] {
-		let stops = &self.stops;
-		let first = &stops[0];
-		let last = &stops[stops.len() - 1];
-		if pos.is_nan() || pos <= first.at {
-			return channels(first.color);
-		}
-		if pos >= last.at {
-			return channels(last.color);
-		}
-		let hi = stops.partition_point(|s| s.at < pos);
-		let (a, b) = (&stops[hi - 1], &stops[hi]);
-		let t = (pos - a.at) / (b.at - a.at);
-		let [ar, ag, ab] = channels(a.color);
-		let [br, bg, bb] = channels(b.color);
-		[ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t]
+		gradient_at(&self.stops, pos)
 	}
 
 	/// `count` colours at i / (count - 1), each channel rounded half away from zero.
@@ -57,14 +43,6 @@ impl Gradient {
 /// `clamp(c / 255 * (1 - bl) + bl, 0, 1)`.
 pub fn level(c: f64, bl: f64) -> f64 {
 	(c / 255.0 * (1.0 - bl) + bl).clamp(0.0, 1.0)
-}
-
-fn channels(c: Rgb) -> [f64; 3] {
-	[c.r as f64, c.g as f64, c.b as f64]
-}
-
-fn round_channel(c: f64) -> u8 {
-	c.round().clamp(0.0, 255.0) as u8
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@ import { CheckBox, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
 import { Icon } from "icons.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
-import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, FiberData, FiberNodeData, PointData } from "data.slint";
+import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, FiberData, FiberNodeData, SchemeData, StopData, SchemeChoice, PointData } from "data.slint";
 
 // The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
 export global Form {
@@ -40,12 +40,21 @@ export global Form {
     in property <[FilterLayerData]> layers;
     in-out property <FiberData> fiber;
     in property <[FiberNodeData]> nodes;
+    in-out property <SchemeData> scheme;
+    in property <[StopData]> stops;
+    // the scheme's gradient as a strip
+    in property <image> gradient;
+    // the schemes Based on offers
+    in property <[SchemeChoice]> bases;
+    callback base-on(index: int);
+    // the scheme Based on copied last, shown until another object is; -1 for none
+    in property <int> based-on: -1;
     // text a number box could not read, shown until the next edit or another object
     in-out property <string> invalid;
     // the data changed; `typing`: a keystroke in a text box, one undo step with the next ones
     callback edited(typing: bool);
     callback new-seed();
-    // the shown part's list: an outline's points, a filter's layers, a fibre's nodes
+    // the shown object's list: an outline's points, a filter's layers, a fibre's nodes, a scheme's stops
     callback add-row();
     callback remove-row(index: int);
     callback move-row(from: int, to: int);
