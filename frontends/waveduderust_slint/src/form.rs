@@ -283,6 +283,10 @@ fn source_data(source: &m::Source, sim: &m::Simulation) -> ui::SourceData {
 	}
 }
 
+fn probe_data(probe: &m::Probe) -> ui::ProbeData {
+	ui::ProbeData { shows_profile: probe.shows_profile(), ..Data::show(probe) }
+}
+
 /// Hands the form of `node` its object's data.
 pub(crate) fn show(form: &Form<'_>, project: &Project, view: &View, node: Node) {
 	match node {
@@ -305,7 +309,7 @@ pub(crate) fn show(form: &Form<'_>, project: &Project, view: &View, node: Node) 
 			let array = source.array.clone().unwrap_or_default();
 			put(form.get_array(), Data::show(&array), |d| form.set_array(d));
 		}
-		Node::Probe(i) => put(form.get_probe(), Data::show(&project.probes[i]), |d| form.set_probe(d)),
+		Node::Probe(i) => put(form.get_probe(), probe_data(&project.probes[i]), |d| form.set_probe(d)),
 		Node::Part(i) => show_part(form, &project.parts[i]),
 		Node::Sources | Node::Parts | Node::Probes | Node::Schemes | Node::Scheme(_) => {}
 	}
@@ -384,7 +388,7 @@ pub(crate) fn apply(form: &Form<'_>, project: &mut Project, node: Node) {
 		Node::Probe(i) => {
 			let Some(probe) = project.probes.get_mut(i) else { return };
 			let before = probe.clone();
-			form.get_probe().apply(&Data::show(&before), probe);
+			form.get_probe().apply(&probe_data(&before), probe);
 			probe.edited(&before);
 		}
 		Node::Part(i) => {

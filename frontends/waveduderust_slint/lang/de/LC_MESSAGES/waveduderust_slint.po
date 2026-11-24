@@ -88,6 +88,10 @@ msgstr "&Ansicht"
 msgid "(nominal)"
 msgstr "(nominell)"
 
+#. ImageUnreadable
+msgid "(unreadable)"
+msgstr "(nicht lesbar)"
+
 #. ItemCountOne
 msgid "1 entry"
 msgstr "1 Eintrag"
@@ -227,6 +231,10 @@ msgstr "Winkel B"
 #. LabelApexAngle
 msgid "Apex angle"
 msgstr "Winkel an der Spitze"
+
+#. TipAddPoint
+msgid "Append a point after the last one"
+msgstr "Punkt nach dem letzten anfügen"
 
 #. SectionArray
 msgid "Array"
@@ -905,8 +913,8 @@ msgid "Let the green channel of the scene image emit waves; the pixel value is t
 msgstr "Den Grünkanal des Szenenbilds Wellen abstrahlen lassen; der Pixelwert ist die Frequenzstufe."
 
 #. Hint.Probe.AutoScaleX
-msgid "Let the step axis follow the samples recorded so far; point probes only."
-msgstr "Die Schrittachse den bisher aufgezeichneten Messwerten folgen lassen; nur Punktsonden."
+msgid "Let the step axis follow the samples recorded so far; point probes and counting detectors only."
+msgstr "Die Schrittachse den bisher aufgezeichneten Messwerten folgen lassen; nur Punktsonden und zählende Detektoren."
 
 #. Enum.ProbeKind.Line
 msgid "Line"
@@ -1449,8 +1457,8 @@ msgid "Size of the embedded scene image; the canvas takes this size"
 msgstr "Größe des eingebetteten Szenenbilds; die Leinwand übernimmt diese Größe"
 
 #. Hint.Probe.ScaleMode
-msgid "Sliding window of the last steps, or the whole run; point probes only."
-msgstr "Gleitendes Fenster der letzten Schritte oder der ganze Lauf; nur Punktsonden."
+msgid "Sliding window of the last steps, or the whole run; point probes and counting detectors only."
+msgstr "Gleitendes Fenster der letzten Schritte oder der ganze Lauf; nur Punktsonden und zählende Detektoren."
 
 #. Enum.ProbeBoxSize.Small
 msgid "Small"

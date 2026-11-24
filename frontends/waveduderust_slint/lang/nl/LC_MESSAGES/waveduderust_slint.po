@@ -88,6 +88,10 @@ msgstr "Beel&d"
 msgid "(nominal)"
 msgstr "(nominaal)"
 
+#. ImageUnreadable
+msgid "(unreadable)"
+msgstr "(onleesbaar)"
+
 #. ItemCountOne
 msgid "1 entry"
 msgstr "1 item"
@@ -227,6 +231,10 @@ msgstr "Hoek B"
 #. LabelApexAngle
 msgid "Apex angle"
 msgstr "Tophoek"
+
+#. TipAddPoint
+msgid "Append a point after the last one"
+msgstr "Punt na het laatste toevoegen"
 
 #. SectionArray
 msgid "Array"
@@ -905,8 +913,8 @@ msgid "Let the green channel of the scene image emit waves; the pixel value is t
 msgstr "Het groene kanaal van de scèneafbeelding golven laten uitzenden; de pixelwaarde is het frequentieniveau."
 
 #. Hint.Probe.AutoScaleX
-msgid "Let the step axis follow the samples recorded so far; point probes only."
-msgstr "De stappenas de tot nu toe opgenomen monsters laten volgen; alleen puntsondes."
+msgid "Let the step axis follow the samples recorded so far; point probes and counting detectors only."
+msgstr "De stappenas de tot nu toe opgenomen monsters laten volgen; alleen puntsondes en tellende detectoren."
 
 #. Enum.ProbeKind.Line
 msgid "Line"
@@ -1449,8 +1457,8 @@ msgid "Size of the embedded scene image; the canvas takes this size"
 msgstr "Grootte van de ingebedde scèneafbeelding; het canvas neemt deze grootte over"
 
 #. Hint.Probe.ScaleMode
-msgid "Sliding window of the last steps, or the whole run; point probes only."
-msgstr "Schuivend venster van de laatste stappen, of de hele run; alleen puntsondes."
+msgid "Sliding window of the last steps, or the whole run; point probes and counting detectors only."
+msgstr "Schuivend venster van de laatste stappen, of de hele run; alleen puntsondes en tellende detectoren."
 
 #. Enum.ProbeBoxSize.Small
 msgid "Small"

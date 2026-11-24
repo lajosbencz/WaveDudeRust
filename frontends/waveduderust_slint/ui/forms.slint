@@ -751,11 +751,11 @@ export component ProbeForm inherits VerticalLayout {
     FormSection { text: @tr("Axes"); }
     FormPanel {
         Row {
-            FormLabel { text: @tr("Step axis"); tip: @tr("Sliding window of the last steps, or the whole run; point probes only."); }
+            FormLabel { text: @tr("Step axis"); tip: @tr("Sliding window of the last steps, or the whole run; point probes and counting detectors only."); }
             ScaleModeChoice {
                 value <=> Form.probe.scale-mode;
-                enabled: !root.line;
-                tip: @tr("Sliding window of the last steps, or the whole run; point probes only.");
+                enabled: !Form.probe.shows-profile;
+                tip: @tr("Sliding window of the last steps, or the whole run; point probes and counting detectors only.");
             }
         }
         Row {
@@ -767,8 +767,8 @@ export component ProbeForm inherits VerticalLayout {
                 checked <=> Form.probe.auto-scale-x;
                 colspan: 2;
                 text: @tr("Auto-scale steps");
-                enabled: !root.line;
-                tip: @tr("Let the step axis follow the samples recorded so far; point probes only.");
+                enabled: !Form.probe.shows-profile;
+                tip: @tr("Let the step axis follow the samples recorded so far; point probes and counting detectors only.");
             }
         }
         Row {

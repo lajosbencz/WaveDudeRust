@@ -917,9 +917,9 @@ Not-in-spec rows are marked in the Spec column.
 | P-301 | Probe: Box y NB min 0 | Views/ProbeView.xaml:172 | 30 Probe | done | number box from 0 |
 | P-302 | Probe: Box width NB 60..4096 step 10 (custom) | Views/ProbeView.xaml:175 | 30 Probe | done | number box 60..4096 step 10, Custom only |
 | P-303 | Probe: Box height NB 30..4096 step 10 (custom) | Views/ProbeView.xaml:178 | 30 Probe | done | number box 30..4096 step 10, Custom only |
-| P-304 | Probe: Step axis combo Running/Full (point probe or counting) | Views/ProbeView.xaml:184 | 30 Probe | done | FormChoice Running, Full, off for a line (Next's PointOnlyCombo by Kind, a detector's line included); contexts keep Next's enum words apart from the menus' |
+| P-304 | Probe: Step axis combo Running/Full (point probe or counting) | Views/ProbeView.xaml:184 | 30 Probe | done | ScaleModeChoice Running, Full, off while the probe shows a profile (Probe::shows_profile: a line but a counting detector's); contexts keep Next's enum words apart from the menus' |
 | P-305 | Probe: Window NB 10..1e6 step 10 | Views/ProbeView.xaml:188 | 30 Probe | done | number box 10..1e6 step 10 |
-| P-306 | Probe: Auto-scale steps CB (point/counting) | Views/ProbeView.xaml:190 | 30 Probe | done | FormCheck, off for a line |
+| P-306 | Probe: Auto-scale steps CB (point/counting) | Views/ProbeView.xaml:190 | 30 Probe | done | FormCheck, off while the probe shows a profile |
 | P-307 | Probe: Auto-scale values CB | Views/ProbeView.xaml:192 | 30 Probe | done | FormCheck |
 | P-308 | Probe: Value axis combo Linear/Logarithmic (intensity layer) | Views/ProbeView.xaml:196 | 30 Probe | done | FormChoice Linear, Logarithmic, off on the field layer |
 | P-309 | Probe: Decades NB 1..12 (log axis) | Views/ProbeView.xaml:200 | 30 Probe | done | number box 1..12, a logarithmic axis on the intensity only (Next's IsLogarithmic) |
