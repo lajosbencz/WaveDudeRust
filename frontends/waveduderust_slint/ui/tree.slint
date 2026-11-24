@@ -382,6 +382,8 @@ export component ProjectTree inherits Rectangle {
                                 property <Pick> pick;
                                 pointer-event(e) => {
                                     if (e.kind == PointerEventKind.down) {
+                                        // on the press, as WPF: an editor losing the focus commits before the release selects
+                                        tree-keys.focus();
                                         self.pick = e.modifiers.control ? Pick.toggle : e.modifiers.shift ? Pick.range : Pick.alone;
                                         if (e.button == PointerEventButton.right) {
                                             tree-keys.focus();
