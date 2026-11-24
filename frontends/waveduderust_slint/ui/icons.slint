@@ -40,15 +40,10 @@ export component IconButton inherits Rectangle {
         source: root.icon;
         ink: !root.enabled ? Theme.text-disabled : root.lit ? Theme.selection-text : root.ink;
     }
-    area := TouchArea {
-        enabled: root.enabled;
-        clicked => { root.clicked(); }
-    }
-    if root.tip != "": Tooltip {
-        text: @markdown("\{root.tip}");
-    }
+    // under the touch area, which would not see the press it takes for focus; reached by Tab
     focus := FocusScope {
         enabled: root.focusable && root.enabled;
+        focus-on-click: false;
         key-pressed(e) => {
             if (e.text == " " || e.text == Key.Return) {
                 root.clicked();
@@ -56,5 +51,12 @@ export component IconButton inherits Rectangle {
             }
             reject
         }
+    }
+    area := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+    if root.tip != "": Tooltip {
+        text: @markdown("\{root.tip}");
     }
 }

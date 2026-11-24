@@ -208,6 +208,8 @@ impl Probe {
 	}
 
 	pub const NAME_STEM: &'static str = "Probe";
+	/// Name stem of a new probabilistic detector.
+	pub const DETECTOR_STEM: &'static str = "Detector";
 
 	pub const MAX_BIN_SIZE: u32 = 20;
 

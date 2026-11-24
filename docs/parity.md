@@ -12,17 +12,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 5 | 20 | 9 | 6 | 0 |
-| M | Menus and shortcuts | 28 | 31 | 61 | 20 | 0 |
+| M | Menus and shortcuts | 28 | 31 | 60 | 21 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
-| I | Icons | 11 | 30 | 24 | 18 | 0 |
-| T | Project tree | 4 | 17 | 76 | 4 | 0 |
+| I | Icons | 13 | 28 | 24 | 18 | 0 |
+| T | Project tree | 16 | 20 | 36 | 29 | 0 |
 | P | Properties | 3 | 114 | 206 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 133 | 321 | 580 | 55 | 6 |
+| | All | 147 | 322 | 539 | 81 | 6 |
 
 ## Cross-cutting
 
@@ -203,7 +203,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-86 | Separator, then shapes: Polygon, Rectangle, Ellipse, Triangle, Outline (Mn P/R/E/T/O) | PT:135-140, SE:157-161 | ui/10 | missing | 5 entries |
 | M-87 | Optical logic > submenu, Mn I/O/I/I | PT:143, SE:175 | ui/10 | missing | |
 | M-88 | Optical logic > XOR (Mach-Zehnder), AND, OR (Mn X/A/O) | PT:144-146, SE:176-178 | ui/10 | missing | 3 entries |
-| M-89 | Add probe menu: Standard probe (S), Probabilistic > Counting detector (C), Imaging detector (I); tooltips Detector.* | PT:150-157, SE:150-153 | ui/20 l.19,165 (not in ui/10) | missing | |
+| M-89 | Add probe menu: Standard probe (S), Probabilistic > Counting detector (C), Imaging detector (I); tooltips Detector.* | PT:150-157, SE:150-153 | ui/20 l.19,165 (not in ui/10) | divergence | tree.slint ProbeMenu; no access keys or tooltips (divergences.md Add menus) |
 | M-90 | "+ Part" keyboard: Space opens menu, arrows walk, Enter picks | PT:194-208 | ui/10 Add part | missing | |
 
 #### M Preview picture context menu (both pictures, parameterised by layer)
@@ -446,8 +446,8 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 |---|---|---|---|---|---|
 | I-40 | IconSource: tree Sources folder/row, "+ Source" button | CX:248 | ui/20 | partial | tree rows (icons.rs); toolbar and add menus not yet |
 | I-41 | IconProbe: tree Probes folder/row, "+ Probe", Standard probe entry | CX:249 | ui/20, ui/10 | partial | tree rows (icons.rs); toolbar and add menus not yet |
-| I-42 | IconCountingDetector: Probabilistic/Counting detector entries and rows | CX:251 | ui/20 | partial | tree rows (icons.rs); toolbar and add menus not yet |
-| I-43 | IconImagingDetector: Imaging detector entry/rows | CX:253 | ui/20 | partial | tree rows (icons.rs); toolbar and add menus not yet |
+| I-42 | IconCountingDetector: Probabilistic/Counting detector entries and rows | CX:251 | ui/20 | done | tree rows (icons.rs) and the add menus (MenuIcons.next-counting-detector) |
+| I-43 | IconImagingDetector: Imaging detector entry/rows | CX:253 | ui/20 | done | tree rows (icons.rs) and the add menus (MenuIcons.next-imaging-detector) |
 | I-44 | IconPart: tree Parts folder, "+ Part" | CX:254 | ui/20 | partial | tree rows (icons.rs); toolbar and add menus not yet |
 | I-45 | IconPlusBadge (+ IconPlusBadgeStyle): add plus on toolbar icons | CX:258-259 | ui/20 | missing | SVG generated, not used yet |
 | I-46 | IconProject: tree root row | CX:273 | ui/20 | done | tree root row (icons.rs) |
@@ -508,38 +508,38 @@ Not-in-spec rows are marked in the Spec column.
 
 | ID | Feature | Next source (file:line) | Spec (docs/ui file, section) | Slint | Note |
 |---|---|---|---|---|---|
-| T-01 | Toolbar: Add source button (+Source, icon+badge) | ProjectTree.xaml:186 | 20 Layout/Toolbar | missing | no toolbar in Slint pane; no add path in main.rs |
-| T-02 | Toolbar: Add probe button with drop-down caret | ProjectTree.xaml:193 | 20 Toolbar | missing |  |
-| T-03 | Add probe menu: Standard probe | ProjectTree.xaml:152 | 20 Toolbar; Automation AddProbe:Standard | missing |  |
-| T-04 | Add probe menu: Probabilistic > Counting detector | ProjectTree.xaml:153-154 | 20 Toolbar | missing |  |
-| T-05 | Add probe menu: Probabilistic > Imaging detector | ProjectTree.xaml:155 | 20 Toolbar | missing |  |
-| T-06 | Toolbar: Add part button with drop-down caret | ProjectTree.xaml:201 | 20 Toolbar | missing |  |
-| T-07 | Add part menu entry: Lens/Mirror (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | missing |  |
-| T-08 | Add part menu entry: Fresnel lens (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | missing |  |
-| T-09 | Add part menu entry: Fibre (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | missing |  |
-| T-10 | Add part menu entry: Bragg reflector (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | missing |  |
-| T-11 | Add part menu entry: GRIN lens (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | missing |  |
-| T-12 | Add part menu entry: Zone plate (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | missing |  |
-| T-13 | Add part menu entry: Diffuser (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | missing |  |
-| T-14 | Add part menu entry: Interference filter (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | missing |  |
-| T-15 | Add part menu: Diffraction gratings > Simple 2D grating | ProjectTree.xaml:125-126 | 20 Automation | missing |  |
-| T-16 | Add part menu: Diffraction gratings > Facetted grating | ProjectTree.xaml:127 | 20 Automation | missing |  |
-| T-17 | Add part menu: Meta surfaces > Meta lens | ProjectTree.xaml:130-133 | 20 Automation | missing |  |
-| T-18 | Add part menu: Meta surfaces > Meta prism | ProjectTree.xaml:130-133 | 20 Automation | missing |  |
-| T-19 | Add part menu: Meta surfaces > Meta axicon | ProjectTree.xaml:130-133 | 20 Automation | missing |  |
-| T-20 | Add part menu entry: Polygon | ProjectTree.xaml:136-140 | 20 Automation | missing |  |
-| T-21 | Add part menu entry: Rectangle | ProjectTree.xaml:136-140 | 20 Automation | missing |  |
-| T-22 | Add part menu entry: Ellipse | ProjectTree.xaml:136-140 | 20 Automation | missing |  |
-| T-23 | Add part menu entry: Triangle | ProjectTree.xaml:136-140 | 20 Automation | missing |  |
-| T-24 | Add part menu entry: Outline | ProjectTree.xaml:136-140 | 20 Automation | missing |  |
-| T-25 | Add part menu: Optical logic > XOR gate | ProjectTree.xaml:143-146 | 20 Automation | missing |  |
-| T-26 | Add part menu: Optical logic > AND gate | ProjectTree.xaml:143-146 | 20 Automation | missing |  |
-| T-27 | Add part menu: Optical logic > OR gate | ProjectTree.xaml:143-146 | 20 Automation | missing |  |
-| T-28 | Toolbar: Move up button (Alt+Up tooltip, disabled when n/a) | ProjectTree.xaml:210 | 20 Toolbar | missing | row-level up button exists (T row buttons) |
-| T-29 | Toolbar: Move down button | ProjectTree.xaml:212 | 20 Toolbar | missing |  |
-| T-30 | Toolbar: Remove button (minus, Del tooltip) | ProjectTree.xaml:214 | 20 Toolbar | missing | row minus exists; keys Del works |
-| T-31 | Toolbar: flat buttons, hover bg, plus badge, tab order Source>Probe>Part>move/remove>tree | ProjectTree.xaml:180-215 | 20 Toolbar | missing |  |
-| T-32 | Toolbar buttons: tooltips and automation ids ToolAdd*/ToolMove*/ToolRemove | ProjectTree.xaml:186-215 | 20 Automation ids | missing | no tooltips anywhere in tree |
+| T-01 | Toolbar: Add source button (+Source, icon+badge) | ProjectTree.xaml:186 | 20 Layout/Toolbar | done | tree.slint AddButton: source drawing with the plus badge, Next's tip; appends at the canvas centre |
+| T-02 | Toolbar: Add probe button with drop-down caret | ProjectTree.xaml:193 | 20 Toolbar | done | tree.slint AddButton with the drop-down arrow; a click or a right click opens ProbeMenu under it |
+| T-03 | Add probe menu: Standard probe | ProjectTree.xaml:152 | 20 Toolbar; Automation AddProbe:Standard | divergence | tree.slint ProbeMenu (ContextMenuArea.show) with Next's drawing; no tooltip (divergences.md Add menus) |
+| T-04 | Add probe menu: Probabilistic > Counting detector | ProjectTree.xaml:153-154 | 20 Toolbar | divergence | tree.slint ProbeMenu > Probabilistic, Next's drawing; no tooltip (divergences.md Add menus); named Detector n, a line probe of the integrated intensity (Project::add_detector_at) |
+| T-05 | Add probe menu: Probabilistic > Imaging detector | ProjectTree.xaml:155 | 20 Toolbar | divergence | tree.slint ProbeMenu > Probabilistic, Next's drawing; no tooltip (divergences.md Add menus); named Detector n, a line probe of the integrated intensity (Project::add_detector_at) |
+| T-06 | Toolbar: Add part button with drop-down caret | ProjectTree.xaml:201 | 20 Toolbar | done | tree.slint AddButton with the drop-down arrow; opens PartMenu under it |
+| T-07 | Add part menu entry: Lens/Mirror (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-08 | Add part menu entry: Fresnel lens (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-09 | Add part menu entry: Fibre (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-10 | Add part menu entry: Bragg reflector (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-11 | Add part menu entry: GRIN lens (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-12 | Add part menu entry: Zone plate (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-13 | Add part menu entry: Diffuser (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-14 | Add part menu entry: Interference filter (kind icon, kind tooltip) | ProjectTree.xaml:116-123 | 20 Automation AddPart:* | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-15 | Add part menu: Diffraction gratings > Simple 2D grating | ProjectTree.xaml:125-126 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-16 | Add part menu: Diffraction gratings > Facetted grating | ProjectTree.xaml:127 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-17 | Add part menu: Meta surfaces > Meta lens | ProjectTree.xaml:130-133 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-18 | Add part menu: Meta surfaces > Meta prism | ProjectTree.xaml:130-133 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-19 | Add part menu: Meta surfaces > Meta axicon | ProjectTree.xaml:130-133 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-20 | Add part menu entry: Polygon | ProjectTree.xaml:136-140 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-21 | Add part menu entry: Rectangle | ProjectTree.xaml:136-140 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-22 | Add part menu entry: Ellipse | ProjectTree.xaml:136-140 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-23 | Add part menu entry: Triangle | ProjectTree.xaml:136-140 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-24 | Add part menu entry: Outline | ProjectTree.xaml:136-140 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-25 | Add part menu: Optical logic > XOR gate | ProjectTree.xaml:143-146 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-26 | Add part menu: Optical logic > AND gate | ProjectTree.xaml:143-146 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-27 | Add part menu: Optical logic > OR gate | ProjectTree.xaml:143-146 | 20 Automation | divergence | tree.slint PartMenu (ContextMenuArea.show) with Next's drawing (tools/next-icons.py MENU_DRAWINGS); no tooltip (divergences.md Add menus); new parts as Next prepares them (tree.rs new_part) |
+| T-28 | Toolbar: Move up button (Alt+Up tooltip, disabled when n/a) | ProjectTree.xaml:210 | 20 Toolbar | done | toolbar IconButton, greyed when the current row cannot move up (tree::can_shift) |
+| T-29 | Toolbar: Move down button | ProjectTree.xaml:212 | 20 Toolbar | done | toolbar IconButton, greyed when the current row cannot move down |
+| T-30 | Toolbar: Remove button (minus, Del tooltip) | ProjectTree.xaml:214 | 20 Toolbar | done | toolbar IconButton, greyed unless an item row is current |
+| T-31 | Toolbar: flat buttons, hover bg, plus badge, tab order Source>Probe>Part>move/remove>tree | ProjectTree.xaml:180-215 | 20 Toolbar | done | flat buttons with hover background, plus badge, tab order Source>Probe>Part>move/remove; Space or Enter on a focused add button opens its menu |
+| T-32 | Toolbar buttons: tooltips and automation ids ToolAdd*/ToolMove*/ToolRemove | ProjectTree.xaml:186-215 | 20 Automation ids | divergence | Next's tooltips (Slint Tooltip); no automation ids (Slint has no AccessKit ids; decision 0032) |
 | T-33 | Root row Project (icon Draw:Project) | ProjectTree.xaml:292-308 | 20 Tree structure | partial | row present; no icon |
 | T-34 | Fixed rows Scene, Simulation, Display (icons EB9F/E916/E7F4) | ProjectTree.xaml:310-327 | 20 Tree structure | partial | rows present, selectable; no icons |
 | T-35 | Folder rows Sources/Parts/Probes/Colour schemes (icons) | ProjectTree.xaml:329-370 | 20 Tree structure | partial | rows present; no icons |
@@ -547,9 +547,9 @@ Not-in-spec rows are marked in the Spec column.
 | T-37 | Row height 23 px | ProjectTree.xaml | 20 Tree structure; 00 overview | done | Theme.row-height (verify =23px) |
 | T-38 | Localised fixed row names and folder labels | Strings/* | 20 Tree structure; 00 language | partial | English literals in tree.rs; no @tr |
 | T-39 | Item rows show item Name, live rename from Name box | ProjectTree.xaml:383-455 | 20 Item row | done | label from project each refresh |
-| T-40 | Folder row: right-aligned plus button (tooltip 'Add an item to this folder') | ProjectTree.xaml:333-336 | 20 Item row | missing |  |
-| T-41 | Parts folder plus opens Add part menu | ProjectTree.xaml:330-370 | 20 Item row | missing |  |
-| T-42 | Colour schemes folder plus adds a project scheme with default stops | ProjectTree.xaml:362 | 20 Commands (Add on folder plus) | missing |  |
+| T-40 | Folder row: right-aligned plus button (tooltip 'Add an item to this folder') | ProjectTree.xaml:333-336 | 20 Item row | done | tree.slint folder rows: right-aligned plus, 'Add an item to this folder' |
+| T-41 | Parts folder plus opens Add part menu | ProjectTree.xaml:330-370 | 20 Item row | done | Parts and Probes folder plus open their menus of kinds under the plus |
+| T-42 | Colour schemes folder plus adds a project scheme with default stops | ProjectTree.xaml:362 | 20 Commands (Add on folder plus) | done | Project::add_new_color_scheme (grey stops), selected |
 | T-43 | Source row: Enabled check box, source icon, name | ProjectTree.xaml:383-390 | 20 Item row | partial | check box + name; no icon; check mark is a UTF glyph, no tooltip |
 | T-44 | Part row: Enabled check box, kind icon (per kind), name | ProjectTree.xaml:399-410 | 20 Item row; Row icons | partial | no kind icons |
 | T-45 | Probe row: Active check box, probe icon, name | ProjectTree.xaml:453-460 | 20 Item row | partial | no icon |
@@ -561,7 +561,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-51 | Disabled item greys icon and name | ProjectTree.xaml:383-455 | 20 Item row | partial | name greyed; no icon |
 | T-52 | Part icons: Lens profile icon from R1,R2,diameter (9 variants, follows edits) | Converters/LensIconConverter.cs | 20 Row icons | missing |  |
 | T-53 | Part icons: non-lens kinds drawings (FresnelLens..OrGate) | Controls/IconView.cs | 20 Row icons | missing |  |
-| T-54 | Add menu Lens/Mirror entry fixed icon | Controls/MenuIcon.cs | 20 Row icons | missing |  |
+| T-54 | Add menu Lens/Mirror entry fixed icon | Controls/MenuIcon.cs | 20 Row icons | done | Lens/Mirror entry shows the fixed lens drawing |
 | T-55 | Click / arrows select a row alone | ProjectTree.xaml.cs | 20 Selection model | partial | click only; no arrow-key nav, anchor missing |
 | T-56 | Ctrl+click toggles row in selection | ProjectTree.xaml.cs:41 | 20 Selection model | missing | single selection only |
 | T-57 | Shift+click / Shift+arrows range select in tree order | ProjectTree.xaml.cs:41 | 20 Selection model | missing |  |
@@ -574,13 +574,13 @@ Not-in-spec rows are marked in the Spec column.
 | T-64 | Groups/root/settings rows can be current (Properties shows their form) | ProjectTree.xaml | 20 Selection model | done |  |
 | T-65 | Multi-selection of schemes (cut/copy/delete/duplicate) | ProjectTree.xaml.cs | 20 Selection model; 0008 | missing |  |
 | T-66 | Folder selected: Properties shows label + count (No entries / 1 entry / N entries) | Views/CollectionView.xaml:32 | 20 Properties coupling; 30 Pane behaviour | missing | heading shows debug name, no rows/count |
-| T-67 | Add source: appended, at canvas centre, becomes selection, caret in Name (select all) | ProjectCommands.AddSource | 20 Commands | missing |  |
-| T-68 | Add probe: line end B 100 px right of A; selection + caret in Name | ProjectCommands.AddProbe | 20 Commands | missing |  |
-| T-69 | Add part: placed at canvas centre of shown preview (image scene: its size) | ProjectCommands.AddPart | 20 Commands | missing |  |
+| T-67 | Add source: appended, at canvas centre, becomes selection, caret in Name (select all) | ProjectCommands.AddSource | 20 Commands | partial | appended at the canvas centre (image scene: its size), selected; the caret is not put in Name |
+| T-68 | Add probe: line end B 100 px right of A; selection + caret in Name | ProjectCommands.AddProbe | 20 Commands | partial | line end 100 px right of A, selected; the caret is not put in Name |
+| T-69 | Add part: placed at canvas centre of shown preview (image scene: its size) | ProjectCommands.AddPart | 20 Commands | done | Project::canvas_centre: the image's size for an image scene |
 | T-70 | Enabled toggle by Space (each selected flips on its own) | ProjectTree.xaml:231 | 20 Commands | partial | check box click toggles one item; Space key missing |
-| T-71 | Duplicate Ctrl+D: copy after each original, '<name> copy', copies selected, caret in name | ProjectTree.xaml:235,264 | 20 Commands | missing |  |
-| T-72 | Remove Del: removes target or selection; selection lands on slot/above/folder; tree takes focus | ProjectTree.xaml:230,268 | 20 Commands | partial | Del + row minus remove one item; selection then jumps to Project root, not neighbour; no multi |
-| T-73 | Move up/down Alt+Up/Alt+Down within own list, selection kept, tree takes focus | ProjectTree.xaml:236-237,270-271 | 20 Commands | partial | row buttons only; selection follows item; no Alt keys |
+| T-71 | Duplicate Ctrl+D: copy after each original, '<name> copy', copies selected, caret in name | ProjectTree.xaml:235,264 | 20 Commands | partial | Ctrl+D while the tree has focus (tree.slint tree-keys): the copy after the original as '<name> copy', selected; one object until multi-selection (3b); the caret is not put in Name |
+| T-72 | Remove Del: removes target or selection; selection lands on slot/above/folder; tree takes focus | ProjectTree.xaml:230,268 | 20 Commands | partial | Del, the row minus and the toolbar remove the current item; the selection lands on the slot, else above, else the folder (tree::remove); one object until 3b |
+| T-73 | Move up/down Alt+Up/Alt+Down within own list, selection kept, tree takes focus | ProjectTree.xaml:236-237,270-271 | 20 Commands | partial | Alt+Up/Alt+Down while the tree has focus, row and toolbar buttons; the selection follows the item, the tree takes focus from the toolbar; one object until 3b |
 | T-74 | Cut (list items only) = Copy + Remove | ProjectTree.xaml:265 | 20 Clipboard | missing | menu 'cut' only logs |
 | T-75 | Copy as app format + plain XML text (items or Scene/Simulation/Display) | ProjectTree.xaml:266 | 20 Clipboard | missing | menu 'copy' only logs |
 | T-76 | Paste: behind current item, rename on clash, re-derive composite emitters, settings object on own row, undo step | ProjectTree.xaml:267 | 20 Clipboard | missing |  |

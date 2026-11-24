@@ -84,9 +84,33 @@ msgstr "&Rückgängig"
 msgid "&View"
 msgstr "&Ansicht"
 
+#. MenuAddAndGate
+msgid "AND"
+msgstr "AND"
+
+#. TipAddProbe
+msgid "Add a probe: a standard probe, or a probabilistic detector (appended at the end)"
+msgstr "Sonde hinzufügen: eine Standardsonde oder ein probabilistischer Detektor (am Ende angefügt)"
+
+#. TipAddSource
+msgid "Add a source (appended at the end)"
+msgstr "Quelle hinzufügen (am Ende angefügt)"
+
+#. TipAdd
+msgid "Add an item to this folder"
+msgstr "Eintrag zu diesem Ordner hinzufügen"
+
+#. TipAddPart
+msgid "Add an optical part (a menu of kinds; appended at the end)"
+msgstr "Optisches Bauteil hinzufügen (Menü der Arten; am Ende angefügt)"
+
 #. ButtonAutoBrightness
 msgid "Auto"
 msgstr "Auto"
+
+#. MenuAddBraggReflector
+msgid "Bragg reflector"
+msgstr "Bragg-Reflektor"
 
 #. DialogCancel
 msgid "Cancel"
@@ -112,6 +136,10 @@ msgstr "Projekt schließen"
 msgid "Copy"
 msgstr "Kopieren"
 
+#. MenuAddCountingDetector
+msgid "Counting detector"
+msgstr "Zählender Detektor"
+
 #. MenuEditCut
 msgid "Cu&t"
 msgstr "&Ausschneiden"
@@ -124,6 +152,14 @@ msgstr "Ausschneiden"
 msgid "Delete"
 msgstr "Löschen"
 
+#. MenuAddDiffractionGratings
+msgid "Diffraction gratings"
+msgstr "Beugungsgitter"
+
+#. MenuAddDiffuser
+msgid "Diffuser"
+msgstr "Diffusor"
+
 #. MenuFileExit
 msgid "E&xit"
 msgstr "&Beenden"
@@ -131,6 +167,10 @@ msgstr "&Beenden"
 #. MenuEdit
 msgid "Edit"
 msgstr "Bearbeiten"
+
+#. MenuAddEllipse
+msgid "Ellipse"
+msgstr "Ellipse"
 
 #. TipPreviewSetOut
 msgid "End the export range at this frame (O)"
@@ -200,6 +240,14 @@ msgstr "Intensität exportieren..."
 msgid "Export last"
 msgstr "Letzten Export wiederholen"
 
+#. MenuAddFacettedGrating
+msgid "Facetted grating"
+msgstr "Facettengitter"
+
+#. MenuAddFiber
+msgid "Fibre"
+msgstr "Faser"
+
 #. SectionField
 msgid "Field"
 msgstr "Feld"
@@ -220,13 +268,33 @@ msgstr "Datei"
 msgid "Follow the newest frame while the run is in progress (F)"
 msgstr "Dem neuesten Bild folgen, solange der Lauf läuft (F)"
 
+#. MenuAddFresnelLens
+msgid "Fresnel lens"
+msgstr "Fresnel-Linse"
+
+#. MenuAddGrinLens
+msgid "GRIN lens"
+msgstr "GRIN-Linse"
+
 #. MenuHelp
 msgid "Help"
 msgstr "Hilfe"
 
+#. MenuAddImagingDetector
+msgid "Imaging detector"
+msgstr "Bildgebender Detektor"
+
 #. SectionIntensity
 msgid "Intensity"
 msgstr "Intensität"
+
+#. MenuAddInterferenceFilter
+msgid "Interference filter"
+msgstr "Interferenzfilter"
+
+#. MenuAddLens
+msgid "Lens/Mirror"
+msgstr "Linse/Spiegel"
 
 #. TipPreviewLoop
 msgid "Loop playback over the export range (L)"
@@ -239,6 +307,22 @@ msgstr "Mittel"
 #. PaneMessages
 msgid "Messages"
 msgstr "Meldungen"
+
+#. MenuAddMetaAxicon
+msgid "Meta axicon"
+msgstr "Meta-Axicon"
+
+#. MenuAddMetaLens
+msgid "Meta lens"
+msgstr "Metalinse"
+
+#. MenuAddMetaPrism
+msgid "Meta prism"
+msgstr "Metaprisma"
+
+#. MenuAddMetaSurfaces
+msgid "Meta surfaces"
+msgstr "Metaoberflächen"
 
 #. TipMoveDown
 msgid "Move down (Alt+Down); drag to reorder"
@@ -256,6 +340,10 @@ msgstr "Neues Projekt"
 msgid "Next frame (.)"
 msgstr "Nächstes Bild (.)"
 
+#. MenuAddOrGate
+msgid "OR"
+msgstr "OR"
+
 #. Enum.EdgeMode.Open
 msgid "Open"
 msgstr "Offen"
@@ -264,9 +352,21 @@ msgstr "Offen"
 msgid "Open Project..."
 msgstr "Projekt öffnen..."
 
+#. MenuAddOpticalLogic
+msgid "Optical logic"
+msgstr "Optische Logik"
+
+#. MenuAddOutline
+msgid "Outline"
+msgstr "Umriss"
+
 #. MenuViewPanes
 msgid "Panes"
 msgstr "Fenster"
+
+#. ToolAddPart
+msgid "Part"
+msgstr "Bauteil"
 
 #. MenuEditPaste
 msgid "Paste"
@@ -304,6 +404,10 @@ msgstr "Wiedergabe"
 msgid "Play (Space)"
 msgstr "Wiedergabe (Leertaste)"
 
+#. MenuAddPolygon
+msgid "Polygon"
+msgstr "Polygon"
+
 #. PanePreview
 msgid "Preview"
 msgstr "Vorschau"
@@ -311,6 +415,14 @@ msgstr "Vorschau"
 #. TipPreviewStepBack
 msgid "Previous frame (,)"
 msgstr "Vorheriges Bild (,)"
+
+#. MenuAddProbabilistic
+msgid "Probabilistic"
+msgstr "Probabilistisch"
+
+#. ToolAddProbe
+msgid "Probe"
+msgstr "Sonde"
 
 #. PaneProject
 msgid "Project"
@@ -323,6 +435,10 @@ msgstr "Eigenschaften"
 #. MenuFileRecent
 msgid "Recent Projects"
 msgstr "Zuletzt geöffnet"
+
+#. MenuAddRectangle
+msgid "Rectangle"
+msgstr "Rechteck"
 
 #. MenuEditRedo
 msgid "Redo"
@@ -372,13 +488,25 @@ msgstr "Alles au&swählen"
 msgid "Select all"
 msgstr "Alles auswählen"
 
+#. MenuAddSimpleGrating
+msgid "Simple 2D grating"
+msgstr "Einfaches 2D-Gitter"
+
 #. MenuSimulation
 msgid "Simulation"
 msgstr "Simulation"
 
+#. ToolAddSource
+msgid "Source"
+msgstr "Quelle"
+
 #. LabelPreviewSpeed
 msgid "Speed"
 msgstr "Tempo"
+
+#. MenuAddStandardProbe
+msgid "Standard probe"
+msgstr "Standardsonde"
 
 #. TipPreviewSetIn
 msgid "Start the export range at this frame (I)"
@@ -392,6 +520,10 @@ msgstr "Stopp"
 msgid "Stop the simulation; the frames so far stay (Esc)"
 msgstr "Simulation stoppen; die bisherigen Bilder bleiben (Esc)"
 
+#. MenuAddTriangle
+msgid "Triangle"
+msgstr "Dreieck"
+
 #. MenuEditUndo
 msgid "Undo"
 msgstr "Rückgängig"
@@ -399,3 +531,11 @@ msgstr "Rückgängig"
 #. MenuView
 msgid "View"
 msgstr "Ansicht"
+
+#. MenuAddXorGate
+msgid "XOR (Mach-Zehnder)"
+msgstr "XOR (Mach-Zehnder)"
+
+#. MenuAddZonePlate
+msgid "Zone plate"
+msgstr "Zonenplatte"

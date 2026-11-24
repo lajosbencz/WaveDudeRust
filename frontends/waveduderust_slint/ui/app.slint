@@ -27,6 +27,8 @@ export struct Commands {
     can-redo: bool,
     // an object row is selected
     can-delete: bool,
+    can-move-up: bool,
+    can-move-down: bool,
     // an object or a settings row is selected
     can-copy: bool,
     can-run: bool,
@@ -241,11 +243,14 @@ export component AppWindow inherits Window {
                         close => { root.project-shown = false; }
                         ProjectTree {
                             rows: root.tree-rows;
-                            focused: true;
-                            select(i) => { keys.focus(); root.tree-select(i); }
+                            select(i) => { root.tree-select(i); }
                             toggle(i) => { root.tree-toggle(i); }
                             shift(i, by) => { root.tree-shift(i, by); }
                             remove(i) => { root.tree-remove(i); }
+                            can-move-up: root.commands.can-move-up;
+                            can-move-down: root.commands.can-move-down;
+                            can-remove: root.commands.can-delete;
+                            act(id) => { root.menu(id); }
                         }
                     }
                     if root.project-shown && root.properties-shown: Splitter {

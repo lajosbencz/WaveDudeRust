@@ -1,6 +1,124 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icon, IconButton } from "icons.slint";
+import { MenuIcons } from "menu-icons.slint";
+
+// Next's menu of part kinds (ProjectTree.xaml, PartKindMenu): a click on its owner or a right click opens it under
+// the owner. Slint's menu entries take no tooltip, so the kinds' descriptions are not shown (docs/divergences.md).
+component PartMenu {
+    // off: no right click opens it
+    in property <bool> enabled: true;
+    callback add(string);
+    public function open() { menu.show({ x: 0, y: root.height }); }
+    menu := ContextMenuArea {
+        enabled: root.enabled;
+        Menu {
+            MenuItem { title: @tr("Lens/Mirror"); icon: MenuIcons.next-lens; activated => { root.add("part:lens"); } }
+            MenuItem { title: @tr("Fresnel lens"); icon: MenuIcons.next-fresnel-lens; activated => { root.add("part:fresnel-lens"); } }
+            MenuItem { title: @tr("Fibre"); icon: MenuIcons.next-fiber; activated => { root.add("part:fiber"); } }
+            MenuItem { title: @tr("Bragg reflector"); icon: MenuIcons.next-bragg-reflector; activated => { root.add("part:bragg-reflector"); } }
+            MenuItem { title: @tr("GRIN lens"); icon: MenuIcons.next-grin-lens; activated => { root.add("part:grin-lens"); } }
+            MenuItem { title: @tr("Zone plate"); icon: MenuIcons.next-zone-plate; activated => { root.add("part:zone-plate"); } }
+            MenuItem { title: @tr("Diffuser"); icon: MenuIcons.next-diffuser; activated => { root.add("part:diffuser"); } }
+            MenuItem { title: @tr("Interference filter"); icon: MenuIcons.next-interference-filter; activated => { root.add("part:interference-filter"); } }
+            Menu {
+                title: @tr("Diffraction gratings");
+                icon: MenuIcons.next-diffraction-gratings;
+                MenuItem { title: @tr("Simple 2D grating"); icon: MenuIcons.next-simple-grating; activated => { root.add("part:simple-grating"); } }
+                MenuItem { title: @tr("Facetted grating"); icon: MenuIcons.next-facetted-grating; activated => { root.add("part:facetted-grating"); } }
+            }
+            Menu {
+                title: @tr("Meta surfaces");
+                icon: MenuIcons.next-meta-surfaces;
+                MenuItem { title: @tr("Meta lens"); icon: MenuIcons.next-meta-lens; activated => { root.add("part:meta-lens"); } }
+                MenuItem { title: @tr("Meta prism"); icon: MenuIcons.next-meta-prism; activated => { root.add("part:meta-prism"); } }
+                MenuItem { title: @tr("Meta axicon"); icon: MenuIcons.next-meta-axicon; activated => { root.add("part:meta-axicon"); } }
+            }
+            MenuSeparator { }
+            MenuItem { title: @tr("Polygon"); icon: MenuIcons.next-polygon; activated => { root.add("part:polygon"); } }
+            MenuItem { title: @tr("Rectangle"); icon: MenuIcons.next-rectangle; activated => { root.add("part:rectangle"); } }
+            MenuItem { title: @tr("Ellipse"); icon: MenuIcons.next-ellipse; activated => { root.add("part:ellipse"); } }
+            MenuItem { title: @tr("Triangle"); icon: MenuIcons.next-triangle; activated => { root.add("part:triangle"); } }
+            MenuItem { title: @tr("Outline"); icon: MenuIcons.next-outline; activated => { root.add("part:outline"); } }
+            MenuSeparator { }
+            Menu {
+                title: @tr("Optical logic");
+                icon: MenuIcons.next-optical-logic;
+                MenuItem { title: @tr("XOR (Mach-Zehnder)"); icon: MenuIcons.next-xor-gate; activated => { root.add("part:xor-gate"); } }
+                MenuItem { title: @tr("AND"); icon: MenuIcons.next-and-gate; activated => { root.add("part:and-gate"); } }
+                MenuItem { title: @tr("OR"); icon: MenuIcons.next-or-gate; activated => { root.add("part:or-gate"); } }
+            }
+        }
+    }
+}
+
+// Next's menu of probe kinds (ProbeKindMenu), opened as the parts' is.
+component ProbeMenu {
+    // off: no right click opens it
+    in property <bool> enabled: true;
+    callback add(string);
+    public function open() { menu.show({ x: 0, y: root.height }); }
+    menu := ContextMenuArea {
+        enabled: root.enabled;
+        Menu {
+            MenuItem { title: @tr("Standard probe"); icon: MenuIcons.next-probe; activated => { root.add("probe:standard"); } }
+            Menu {
+                title: @tr("Probabilistic");
+                icon: MenuIcons.next-counting-detector;
+                MenuItem { title: @tr("Counting detector"); icon: MenuIcons.next-counting-detector; activated => { root.add("probe:counting"); } }
+                MenuItem { title: @tr("Imaging detector"); icon: MenuIcons.next-imaging-detector; activated => { root.add("probe:imaging"); } }
+            }
+        }
+    }
+}
+
+// A toolbar's add button (Next's TextButton): the folder's drawing with the plus badge, the label, and the drop-down
+// arrow when it opens a menu of kinds.
+component AddButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <string> tip;
+    in property <bool> drop-down;
+    callback clicked();
+
+    height: 22px;
+    background: area.has-hover ? Theme.button-hover : transparent;
+    border-width: 1px;
+    border-color: focus.has-focus ? Theme.accent : transparent;
+    accessible-role: button;
+    accessible-label: tip;
+    accessible-action-default => { root.clicked(); }
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 4px;
+        spacing: 4px;
+        Rectangle {
+            width: 16px;
+            Icon { source: root.icon; }
+            Icon { source: @image-url("icons/next/plus-badge.svg"); }
+        }
+        Text { text: root.text; vertical-alignment: center; color: Theme.text; }
+        if root.drop-down: Icon {
+            source: @image-url("icons/next/drop-down.svg");
+            width: 7px;
+        }
+    }
+    // under the touch area, as IconButton's
+    focus := FocusScope {
+        focus-on-click: false;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+    area := TouchArea {
+        clicked => { root.clicked(); }
+    }
+    Tooltip { text: @markdown("\{root.tip}"); }
+}
 
 export enum TreeKind { project, settings, folder, source, part, probe, scheme }
 
@@ -12,58 +130,132 @@ export struct TreeRow {
     checked: bool,
     selected: bool,
     icon: image,
+    // a folder's plus: "source", "part", "probe" or "scheme"; empty for other rows
+    add: string,
 }
 
 // The project tree (docs/ui/20): fixed rows, folders and item rows with their check box and row buttons.
 export component ProjectTree inherits Rectangle {
     in property <[TreeRow]> rows;
-    in property <bool> focused;
     callback select(int);
     callback toggle(int);
     callback shift(int, int);
     callback remove(int);
+    in property <bool> can-move-up;
+    in property <bool> can-move-down;
+    in property <bool> can-remove;
+    // a command on the current row ("move-up", "move-down", "delete") or an add ("add:<what>")
+    callback act(string);
+
+    // the tree takes the focus with a command on it (Next's rule)
+    function run(id: string) {
+        tree-keys.focus();
+        root.act(id);
+    }
+    property <bool> focused: tree-keys.has-focus;
 
     background: Theme.tool-window-background;
-    ListView {
-        for row[i] in root.rows: Rectangle {
-            height: Theme.row-height;
-            background: row.selected ? (root.focused ? Theme.selection : Theme.inactive-selection) : area.has-hover ? Theme.row-hover : transparent;
-            area := TouchArea {
-                clicked => { root.select(i); }
-            }
+    VerticalLayout {
+        // Next's pane toolbar: source, probe, then part; move and remove act on the current row
+        Rectangle {
+            border-width: 0px;
             HorizontalLayout {
-                padding-left: 4px + row.depth * 16px;
-                padding-right: 4px;
-                spacing: 4px;
-                if row.checkable: Rectangle {
-                    width: 13px;
-                    height: 13px;
-                    y: (parent.height - self.height) / 2;
-                    border-width: 1px;
-                    border-color: Theme.check-border;
-                    background: Theme.input-background;
-                    if row.checked: Icon {
-                        source: @image-url("icons/next/check.svg");
+                padding: 2px;
+                alignment: start;
+                AddButton {
+                    icon: @image-url("icons/next/source.svg");
+                    text: @tr("Source");
+                    tip: @tr("Add a source (appended at the end)");
+                    clicked => { root.run("add:source"); }
+                }
+                AddButton {
+                    icon: @image-url("icons/next/probe.svg");
+                    text: @tr("Probe");
+                    tip: @tr("Add a probe: a standard probe, or a probabilistic detector (appended at the end)");
+                    drop-down: true;
+                    clicked => { probes.open(); }
+                    probes := ProbeMenu { add(id) => { root.run("add:" + id); } }
+                }
+                AddButton {
+                    icon: @image-url("icons/next/part.svg");
+                    text: @tr("Part");
+                    tip: @tr("Add an optical part (a menu of kinds; appended at the end)");
+                    drop-down: true;
+                    clicked => { parts.open(); }
+                    parts := PartMenu { add(id) => { root.run("add:" + id); } }
+                }
+                Rectangle { width: 9px; Rectangle { x: 4px; width: 1px; height: parent.height - 4px; background: Theme.border; } }
+                IconButton { icon: @image-url("icons/next/tree-chevron-up.svg"); tip: @tr("Move up (Alt+Up); drag to reorder"); enabled: root.can-move-up; clicked => { root.run("move-up"); } }
+                IconButton { icon: @image-url("icons/next/tree-chevron-down.svg"); tip: @tr("Move down (Alt+Down); drag to reorder"); enabled: root.can-move-down; clicked => { root.run("move-down"); } }
+                IconButton { icon: @image-url("icons/next/tree-minus.svg"); tip: @tr("Remove (Del)"); enabled: root.can-remove; clicked => { root.run("delete"); } }
+            }
+            Rectangle { y: parent.height - 1px; height: 1px; background: Theme.border; }
+        }
+        // Next's TreeView keys, only while the tree has focus
+        tree-keys := FocusScope {
+            key-pressed(e) => {
+                if (e.modifiers.alt && !e.modifiers.control && e.text == Key.UpArrow) { root.act("move-up"); return accept; }
+                if (e.modifiers.alt && !e.modifiers.control && e.text == Key.DownArrow) { root.act("move-down"); return accept; }
+                if (e.modifiers.control && !e.modifiers.alt && e.text == "d") { root.act("duplicate"); return accept; }
+                reject
+            }
+            ListView {
+                for row[i] in root.rows: Rectangle {
+                    height: Theme.row-height;
+                    background: row.selected ? (root.focused ? Theme.selection : Theme.inactive-selection) : area.has-hover ? Theme.row-hover : transparent;
+                    area := TouchArea {
+                        clicked => {
+                            tree-keys.focus();
+                            root.select(i);
+                        }
                     }
-                    TouchArea {
-                        clicked => { root.toggle(i); }
+                    HorizontalLayout {
+                        padding-left: 4px + row.depth * 16px;
+                        padding-right: 4px;
+                        spacing: 4px;
+                        if row.checkable: Rectangle {
+                            width: 13px;
+                            height: 13px;
+                            y: (parent.height - self.height) / 2;
+                            border-width: 1px;
+                            border-color: Theme.check-border;
+                            background: Theme.input-background;
+                            if row.checked: Icon {
+                                source: @image-url("icons/next/check.svg");
+                            }
+                            TouchArea {
+                                clicked => { root.toggle(i); }
+                            }
+                        }
+                        Icon {
+                            source: row.icon;
+                            ink: row.selected && root.focused ? Theme.selection-text : row.checked ? Theme.text : Theme.text-disabled;
+                        }
+                        Text {
+                            text: row.label;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            color: row.selected && root.focused ? Theme.selection-text : row.checked ? Theme.text : Theme.text-disabled;
+                        }
+                        if row.add != "": IconButton {
+                            size: 18px;
+                            focusable: false;
+                            y: (parent.height - self.height) / 2;
+                            icon: @image-url("icons/next/tree-plus.svg");
+                            tip: @tr("Add an item to this folder");
+                            clicked => {
+                                if (row.add == "part") { kinds.open(); } else if (row.add == "probe") { probe-kinds.open(); } else { root.run("add:" + row.add); }
+                            }
+                            kinds := PartMenu { enabled: row.add == "part"; add(id) => { root.run("add:" + id); } }
+                            probe-kinds := ProbeMenu { enabled: row.add == "probe"; add(id) => { root.run("add:" + id); } }
+                        }
+                        if row.depth == 2: HorizontalLayout {
+                            spacing: 0px;
+                            IconButton { size: 18px; focusable: false; y: (parent.height - self.height) / 2; icon: @image-url("icons/next/tree-chevron-up.svg"); tip: @tr("Move up (Alt+Up); drag to reorder"); clicked => { root.shift(i, -1); } }
+                            IconButton { size: 18px; focusable: false; y: (parent.height - self.height) / 2; icon: @image-url("icons/next/tree-chevron-down.svg"); tip: @tr("Move down (Alt+Down); drag to reorder"); clicked => { root.shift(i, 1); } }
+                            IconButton { size: 18px; focusable: false; y: (parent.height - self.height) / 2; icon: @image-url("icons/next/tree-minus.svg"); tip: @tr("Remove (Del)"); clicked => { root.remove(i); } }
+                        }
                     }
-                }
-                Icon {
-                    source: row.icon;
-                    ink: row.selected && root.focused ? Theme.selection-text : row.checked ? Theme.text : Theme.text-disabled;
-                }
-                Text {
-                    text: row.label;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                    color: row.selected && root.focused ? Theme.selection-text : row.checked ? Theme.text : Theme.text-disabled;
-                }
-                if row.depth == 2: HorizontalLayout {
-                    spacing: 0px;
-                    IconButton { size: 18px; focusable: false; y: (parent.height - self.height) / 2; icon: @image-url("icons/next/tree-chevron-up.svg"); tip: @tr("Move up (Alt+Up); drag to reorder"); clicked => { root.shift(i, -1); } }
-                    IconButton { size: 18px; focusable: false; y: (parent.height - self.height) / 2; icon: @image-url("icons/next/tree-chevron-down.svg"); tip: @tr("Move down (Alt+Down); drag to reorder"); clicked => { root.shift(i, 1); } }
-                    IconButton { size: 18px; focusable: false; y: (parent.height - self.height) / 2; icon: @image-url("icons/next/tree-minus.svg"); tip: @tr("Remove (Del)"); clicked => { root.remove(i); } }
                 }
             }
         }

@@ -107,6 +107,7 @@ export component NumberBox inherits FocusScope {
             root.typed(root.value);
             return accept;
         }
+        if (e.modifiers.alt || e.modifiers.control) { return reject; }
         if (e.text == Key.UpArrow) { root.step(1); return accept; }
         if (e.text == Key.DownArrow) { root.step(-1); return accept; }
         if (e.text == Key.PageUp) { root.step(10); return accept; }

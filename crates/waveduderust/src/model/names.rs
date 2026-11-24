@@ -4,7 +4,8 @@
 //! Names are compared case-insensitively within one list.
 
 use super::items::{Identified, insert, position};
-use super::{ColorScheme, Part, PartId, PartKind, Probe, ProbeId, Project, SchemeId, Source, SourceId};
+use super::normalize::Normalize;
+use super::{ColorScheme, Part, PartId, PartKind, Probe, ProbeDetector, ProbeId, Project, SchemeId, Source, SourceId};
 
 /// An item with a user-visible name unique within its list.
 pub trait Named {
@@ -156,8 +157,17 @@ impl Project {
 	}
 
 	pub fn add_probe_at(&mut self, x: i32, y: i32) -> ProbeId {
-		let name = numbered_name(Probe::NAME_STEM, names(&self.probes));
-		let probe = Probe { name, ax: x, ay: y, bx: x + 100, by: y, ..Probe::default() };
+		self.add_detector_at(x, y, ProbeDetector::Standard)
+	}
+
+	/// Appends a probe of `detector` at (`x`, `y`), its line end 100 px to the right: `"Probe n"`, or
+	/// `"Detector n"` for a probabilistic one.
+	pub fn add_detector_at(&mut self, x: i32, y: i32, detector: ProbeDetector) -> ProbeId {
+		let stem = if detector == ProbeDetector::Standard { Probe::NAME_STEM } else { Probe::DETECTOR_STEM };
+		let name = numbered_name(stem, names(&self.probes));
+		let mut probe = Probe { name, ax: x, ay: y, bx: x + 100, by: y, detector, ..Probe::default() };
+		// a detector is a line probe of the integrated intensity
+		probe.normalize();
 		insert(&mut self.probes, usize::MAX, probe)
 	}
 
@@ -227,7 +237,7 @@ fn duplicate<T: Identified>(items: &mut Vec<T>, id: T::Id) -> Option<T::Id> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::model::{Lens, Material, Rectangle};
+	use crate::model::{Layer, Lens, Material, Measurement, ProbeKind, Rectangle};
 
 	#[test]
 	fn numbered_takes_lowest_free_case_insensitive() {
@@ -246,6 +256,17 @@ mod tests {
 		p.sources.clear();
 		p.paste_source(0, copy.clone());
 		assert_eq!(p.sources[0].name, copy.name);
+	}
+
+	#[test]
+	fn a_detector_is_named_detector() {
+		let mut p = Project::default();
+		p.add_probe_at(0, 0);
+		let d = p.add_detector_at(0, 0, ProbeDetector::Counting);
+		assert_eq!(p.probe(d).unwrap().name, "Detector 1");
+		let d = p.probe(d).unwrap();
+		assert_eq!(d.detector, ProbeDetector::Counting);
+		assert_eq!((d.kind, d.layer, d.measurement), (ProbeKind::Line, Layer::Intensity, Measurement::IntegratedValue));
 	}
 
 	#[test]

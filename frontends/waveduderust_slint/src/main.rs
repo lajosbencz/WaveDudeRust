@@ -224,6 +224,8 @@ impl State {
 			can_undo: self.doc.can_undo(),
 			can_redo: self.doc.can_redo(),
 			can_delete: self.node_exists(),
+			can_move_up: tree::can_shift(&self.doc.project, self.selected, -1),
+			can_move_down: tree::can_shift(&self.doc.project, self.selected, 1),
 			can_copy: matches!(self.selected, Node::Scene | Node::Simulation | Node::Display) || self.node_exists(),
 			can_run: !self.live.active() && !exporting,
 			run_active: self.live.active(),
@@ -262,6 +264,14 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			let id = format!("open-file:{}", path.to_string_lossy());
 			menu(state, app, &id);
 		}
+		return;
+	}
+	// an add menu's entry or a folder's plus, at the centre of the canvas
+	if let Some(what) = id.strip_prefix("add:") {
+		let (centre, mut to) = (state.doc.project.canvas_centre(), None);
+		state.doc.edit(|p| to = tree::add(p, what, centre));
+		state.selected = to.unwrap_or(state.selected);
+		state.show(app);
 		return;
 	}
 	match id {
@@ -369,8 +379,9 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 				.map(|f| clipboard::write(waveduderust::io::wdproj::write_fragment(&f)));
 			match copied {
 				Some(Ok(())) if id == "cut" && state.commands().can_delete => {
-					state.doc.edit(|p| tree::remove(p, node));
-					state.selected = Node::Project;
+					let mut to = node;
+					state.doc.edit(|p| to = tree::remove(p, node));
+					state.selected = to;
 				}
 				Some(Err(e)) => tracing::error!("clipboard: {e}"),
 				_ => {}
@@ -381,9 +392,19 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			paste(state);
 		}
 		"delete" if state.commands().can_delete => {
-			let node = state.selected;
-			state.doc.edit(|p| tree::remove(p, node));
-			state.selected = Node::Project;
+			let (node, mut to) = (state.selected, state.selected);
+			state.doc.edit(|p| to = tree::remove(p, node));
+			state.selected = to;
+		}
+		"move-up" | "move-down" if state.commands().can_delete => {
+			let (node, mut to) = (state.selected, state.selected);
+			state.doc.edit(|p| to = tree::shift(p, node, if id == "move-up" { -1 } else { 1 }));
+			state.selected = to;
+		}
+		"duplicate" if state.commands().can_delete => {
+			let (node, mut to) = (state.selected, None);
+			state.doc.edit(|p| to = tree::duplicate(p, node));
+			state.selected = to.unwrap_or(node);
 		}
 		"exit" => {
 			let _ = app.hide();
@@ -746,8 +767,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	}));
 	let remove = on(|s, _, row, _| {
 		if let Some(node) = s.node(row) {
-			s.doc.edit(|p| tree::remove(p, node));
-			s.selected = Node::Project;
+			let mut to = node;
+			s.doc.edit(|p| to = tree::remove(p, node));
+			s.selected = to;
 		}
 	});
 	app.on_tree_remove(move |row| remove(row, 0));
