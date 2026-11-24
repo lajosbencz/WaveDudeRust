@@ -66,6 +66,7 @@ export component AppWindow inherits Window {
     in-out property <bool> properties-shown: true;
     in-out property <bool> messages-shown: false;
     // A menu entry's action, by its id (docs/ui/10).
+    in-out property <bool> preview-stacked: true;
     callback menu(string);
     // The main area takes the keys back once the last overlay closed.
     function overlays-closed() {
@@ -81,6 +82,8 @@ export component AppWindow inherits Window {
     title: root.window-title;
     min-width: 800px;
     min-height: 500px;
+    max-width: 100000px;
+    max-height: 100000px;
     preferred-width: 1280px;
     preferred-height: 800px;
     background: Theme.window-background;
@@ -168,6 +171,7 @@ export component AppWindow inherits Window {
             reject
         }
         VerticalLayout {
+
             HorizontalLayout {
                 spacing: 4px;
                 padding: 4px;
@@ -214,6 +218,7 @@ export component AppWindow inherits Window {
                             Preview {
                                 field: root.field;
                                 intensity: root.intensity;
+                                stacked: root.preview-stacked;
                             }
                             Timeline {
                                 t: root.transport;
@@ -222,6 +227,7 @@ export component AppWindow inherits Window {
                             }
                             TransportBar {
                                 t: root.transport;
+                                stacked <=> root.preview-stacked;
                                 action(a) => { root.transport-action(a); }
                                 speed(v) => { root.transport-speed(v); }
                             }
@@ -254,8 +260,11 @@ export component AppWindow inherits Window {
                         text: root.status-text;
                         color: Theme.selection-text;
                         vertical-alignment: center;
-                        horizontal-stretch: 1;
+                        overflow: elide;
+                        min-width: 0px;
                     }
+                    // a Text's width bounds its row; the spacer leaves the window free
+                    Rectangle { horizontal-stretch: 1; min-width: 12px; }
                     Text {
                         text: root.run-status;
                         color: Theme.selection-text;

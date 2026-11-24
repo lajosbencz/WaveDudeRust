@@ -5,9 +5,11 @@ use std::sync::Arc;
 use waveduderust::io::schemes::SchemeStore;
 use waveduderust::model::{Layer, Project, View};
 
-use waveduderust::unstable::engine::gpu::{DeviceFrame, GpuContext};
+use waveduderust::unstable::engine::gpu::GpuContext;
+use waveduderust::unstable::engine::types::FrameShape;
 use waveduderust::unstable::render::gpu::{DevicePlane, GpuPicture, PictureInput, PicturePipeline};
 use waveduderust::unstable::render::layer::{self, LayerColours};
+use waveduderust::unstable::scene::glowing_edges::EdgeImage;
 
 /// Creates the device with the adapter's limits and hands it to the engine and to Slint (whose own choice would take
 /// WebGL2's limits).
@@ -35,6 +37,14 @@ pub(crate) async fn select() -> Result<Arc<GpuContext>, Box<dyn std::error::Erro
 	Ok(context)
 }
 
+/// What a picture is drawn with: the project's colours, the view's layer settings and the scene's glowing edges.
+#[derive(Clone, Copy)]
+pub(crate) struct Look<'a> {
+	pub(crate) project: &'a Project,
+	pub(crate) view: &'a View,
+	pub(crate) edges: Option<&'a Arc<EdgeImage>>,
+}
+
 /// A layer's picture: the pipeline's draw into a texture of the frame's size.
 pub(crate) struct Picture {
 	layer: Layer,
@@ -53,11 +63,12 @@ impl Picture {
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
 		pipeline: &PicturePipeline,
-		frame: &DeviceFrame,
-		project: &Project,
-		view: &View,
+		plane: DevicePlane<'_>,
+		shape: &FrameShape,
+		look: &Look<'_>,
 	) -> Option<slint::Image> {
-		let (w, h) = (frame.shape.width(), frame.shape.height());
+		let Look { project, view, edges } = *look;
+		let (w, h) = (shape.width(), shape.height());
 		let texture = match &self.texture {
 			Some(t) if t.width() == w && t.height() == h => t.clone(),
 			_ => {
@@ -80,18 +91,18 @@ impl Picture {
 			_ => &view.intensity,
 		};
 		let colours = LayerColours::of(presentation, &project.color_schemes, &SchemeStore::default());
-		let fit = layer::View::of(&frame.shape, (w, h), None, 0);
+		let fit = layer::View::of(shape, (w, h), None, 0);
 		self.picture.set(
 			pipeline,
 			device,
 			queue,
 			&PictureInput {
-				plane: DevicePlane { buffer: &frame.buffer, first_word: frame.first_word(self.layer)? },
-				shape: &frame.shape,
+				plane,
+				shape,
 				layer: self.layer,
 				colours: &colours,
 				view: &fit,
-				outline: None,
+				outline: LayerColours::overlay_gain(presentation).zip(edges).map(|(gain, e)| (e, gain)),
 			},
 		);
 		self.picture.place(queue, [0.0, 0.0], [w as f32, h as f32]);

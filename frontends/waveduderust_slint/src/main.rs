@@ -140,7 +140,7 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 					Ok((project, view)) => {
 						state.doc.adopt(project, view, &format!("{}.wdproj", e.title));
 						state.opened();
-						tracing::info!("opened the example {}", e.title);
+						tracing::info!("Opened the example {}", e.title);
 					}
 					Err(err) => tracing::error!("the example {file} does not parse: {err}"),
 				}
@@ -253,6 +253,7 @@ fn show_welcome(state: &State, app: &AppWindow) {
 fn apply_settings(state: &mut State, app: &AppWindow) {
 	let s = &state.settings;
 	app.global::<ui::Theme<'_>>().set_mode(settings::theme_mode(s));
+	app.set_preview_stacked(s.preview_orientation == waveduderust_platform::settings::Orientation::Vertical);
 	state.doc.set_limit(s.undo_steps as usize);
 	state.live.quality = s.preview_quality();
 	state.live.auto_rerun = s.auto_rerun;
@@ -354,7 +355,10 @@ fn transport(state: &mut State, app: &AppWindow, id: &str) {
 	let p = &mut state.playback;
 	match id {
 		"play" if p.playing => p.pause(),
-		"play" => p.play(),
+		"play" => {
+			p.play();
+			state.live.fill();
+		}
 		"prev" => p.seek(i64::from(p.position) - 1),
 		"next" => p.seek(i64::from(p.position) + 1),
 		"in" => p.set_in(),
@@ -363,6 +367,13 @@ fn transport(state: &mut State, app: &AppWindow, id: &str) {
 		"loop" => p.looping ^= true,
 		"live" => p.live ^= true,
 		"pause-run" => state.live.toggle_pause(),
+		"layout" => {
+			use waveduderust_platform::settings::Orientation;
+			state.settings.preview_orientation = if true { Orientation::Vertical } else { Orientation::Horizontal };
+			if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
+				tracing::error!("{e}");
+			}
+		}
 		other => menu(state, app, other),
 	}
 }
@@ -391,7 +402,7 @@ fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 		Ok(()) => {
 			state.opened();
 			remember(state, &path);
-			tracing::info!("opened {}", path.display());
+			tracing::info!("Opened {}", path.display());
 		}
 		Err(e) => {
 			tracing::error!("cannot open {}: {e}", path.display());
@@ -496,7 +507,6 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				let view = &mut s.doc.view.clone();
 				s.doc.edit(|p| result = form::set_selected(p, view, node, row, &text));
 			}
-			tracing::debug!("set {node:?} row {row} to {text:?}: {result:?}");
 			app.set_props_error(result.err().unwrap_or_default().into());
 			s.show(&app);
 		}
@@ -676,7 +686,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				match s.doc.open_text(&name, &text) {
 					Ok(()) => {
 						s.opened();
-						tracing::info!("opened {name}");
+						tracing::info!("Opened {name}");
 					}
 					Err(e) => {
 						tracing::error!("cannot open {name}: {e}");

@@ -4,12 +4,14 @@ use slint::wgpu_30::wgpu;
 use waveduderust::model::normalize::Normalize;
 use waveduderust::model::{Layer, Project, View};
 use waveduderust::quality::PreviewQuality;
-use waveduderust::run::{Goal, RunWorker, Wanted, WorkState};
-use waveduderust::unstable::engine::gpu::{FrameTag, GpuContext};
-use waveduderust::unstable::render::gpu::PicturePipeline;
-use waveduderust::unstable::spec::RunRequest;
 
-use crate::gpu::Picture;
+use waveduderust::run::{FrameStore, Goal, RunWorker, Wanted, WorkState};
+use waveduderust::unstable::engine::gpu::{FrameTag, GpuContext};
+use waveduderust::unstable::render::gpu::{DevicePlane, PicturePipeline};
+use waveduderust::unstable::scene::glowing_edges::EdgeImage;
+use waveduderust::unstable::spec::{RunRequest, SceneCache};
+
+use crate::gpu::{Look, Picture};
 
 /// The run and the pictures it feeds.
 pub(crate) struct Live {
@@ -27,12 +29,27 @@ pub(crate) struct Live {
 	pub(crate) auto_rerun: bool,
 	/// Frames of the planned run.
 	pub(crate) frames: u32,
-	drawn: Option<(u64, usize)>,
+	/// The frame the pictures show.
+	drawn: Option<FrameTag>,
+	/// When the run the user asked for (Run, Play) began; `None` with no run.
+	started: Option<web_time::Instant>,
+	/// Its summary is logged.
+	summarised: bool,
+	/// Steps of the planned run.
+	steps: u32,
+	/// The engine as the status bar names it.
+	engine: String,
+	/// The layers of a stored frame the device no longer holds.
+	uploads: Uploads,
 	last_state: Option<std::mem::Discriminant<WorkState>>,
 	device: wgpu::Device,
 	queue: wgpu::Queue,
 	pipeline: PicturePipeline,
 	field: Picture,
+	/// The scene the edges are made from.
+	scene: SceneCache,
+	/// The scene's glowing edges, drawn over a picture whose layer shows the outline.
+	edges: Option<std::sync::Arc<EdgeImage>>,
 	intensity: Picture,
 }
 
@@ -74,11 +91,18 @@ impl Live {
 			auto_rerun: true,
 			frames: 0,
 			drawn: None,
+			started: None,
+			summarised: false,
+			steps: 0,
+			engine: format!("GPU: {}", context.info.name),
+			uploads: Uploads::default(),
 			last_state: None,
 			device,
 			queue,
 			pipeline,
 			field,
+			scene: SceneCache::default(),
+			edges: None,
 			intensity,
 		})
 	}
@@ -91,6 +115,7 @@ impl Live {
 	/// A project opened: its frame at the position alone (docs/ui/60, The live run).
 	pub(crate) fn load(&mut self, project: &Project, view: &View) {
 		self.active = false;
+		self.started = None;
 		self.wanted = Wanted::Position;
 		self.paused = false;
 		self.request(project, view);
@@ -98,18 +123,41 @@ impl Live {
 
 	/// Every frame (Run).
 	pub(crate) fn run(&mut self, project: &Project, view: &View) {
+		self.begin();
 		self.active = true;
 		self.wanted = Wanted::All;
 		self.paused = false;
 		self.request(project, view);
 	}
 
+	/// Every frame of the project as it is, from the position on (Play with frames missing, docs/ui/50).
+	pub(crate) fn fill(&mut self) {
+		if !self.active {
+			self.begin();
+			self.active = true;
+			self.wanted = Wanted::All;
+			self.paused = false;
+			self.publish();
+		}
+	}
+
+	fn begin(&mut self) {
+		self.started = Some(web_time::Instant::now());
+		self.summarised = false;
+	}
+
 	fn request(&mut self, project: &Project, view: &View) {
 		let mut project = project.clone();
 		project.normalize();
 		self.revision += 1;
+		self.edges = self.scene.pixels(&project).map(|p| std::sync::Arc::new(EdgeImage::of(&p)));
+		self.drawn = None;
 		let request = RunRequest::new(&project, self.quality, view.into(), false);
-		self.frames = request.schedule().frame_count();
+		let schedule = request.schedule();
+		(self.frames, self.steps) = (schedule.frame_count(), schedule.steps);
+		if self.active {
+			self.begin();
+		}
 		self.request = Some(request);
 		self.publish();
 	}
@@ -167,12 +215,44 @@ impl Live {
 		let state = std::mem::discriminant(&status.state);
 		if self.last_state != Some(state) {
 			self.last_state = Some(state);
-			tracing::info!("run: {}", state_text(&status.state, status.steps_done));
+			if let WorkState::Failed(e) = &status.state {
+				tracing::error!("the run failed: {e}");
+			}
+		}
+		let word = self.started.map(|_| match &status.state {
+			WorkState::Stepping { .. } | WorkState::Fitting => "Running",
+			WorkState::Paused => "Paused",
+			WorkState::Failed(_) => "Failed",
+			WorkState::Idle if status.store.as_ref().is_some_and(|s| s.is_complete()) => "Completed",
+			WorkState::Idle => "Stopped",
+		});
+		if let (Some(started), Some(word @ ("Completed" | "Stopped")), Some(store)) =
+			(self.started, word, status.store.as_ref())
+			&& !matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting)
+			&& !self.summarised
+		{
+			self.summarised = true;
+			let gib = |b: u64| b as f64 / f64::from(1u32 << 30);
+			tracing::info!(
+				"Run {}: {} of {} steps, {} frames, {:.1} s; {} stored, {} in memory ({:.1} GB) and {} on disk ({:.1} GB)",
+				if word == "Completed" { "Completed" } else { "Cancelled" },
+				status.steps_done,
+				self.steps,
+				self.frames,
+				started.elapsed().as_secs_f64(),
+				store.present_count(),
+				store.frames_in_memory(),
+				gib(store.ram_bytes()),
+				store.frames_on_disk(),
+				gib(store.spill_bytes().unwrap_or(0)),
+			);
 		}
 		let mut shown = Shown {
 			field: None,
 			intensity: None,
-			status: state_text(&status.state, status.steps_done),
+			status: word.map_or_else(String::new, |w| {
+				format!("{w}: {} / {} steps, {}", status.steps_done, self.steps, self.engine)
+			}),
 			made: None,
 			step: None,
 			running: matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting),
@@ -182,26 +262,76 @@ impl Live {
 			shown.made = store.count().checked_sub(1).and_then(|m| u32::try_from(m).ok());
 			shown.step = store.has(stored).then(|| store.step_of(stored));
 		}
-		if let (Some(frames), Some(store)) = (status.device_frames, status.store)
+		if let Some(store) = status.store
 			&& store.has(stored)
-			&& self.drawn != Some((store.id(), stored))
-			&& let Some(frame) = frames.hold(FrameTag { store: store.id(), generation: store.generation(), stored })
 		{
-			self.drawn = Some((store.id(), stored));
-			shown.field = self.field.draw(&self.device, &self.queue, &self.pipeline, &frame, project, view);
-			shown.intensity = self.intensity.draw(&self.device, &self.queue, &self.pipeline, &frame, project, view);
+			let tag = FrameTag { store: store.id(), generation: store.generation(), stored };
+			if self.drawn != Some(tag) {
+				let look = Look { project, view, edges: self.edges.as_ref() };
+				let pictures = [(&mut self.field, Layer::Field), (&mut self.intensity, Layer::Intensity)];
+				if let Some(frame) = status.device_frames.and_then(|frames| frames.hold(tag)) {
+					self.drawn = Some(tag);
+					let [field, intensity] = pictures.map(|(picture, layer)| {
+						let plane = DevicePlane { buffer: &frame.buffer, first_word: frame.first_word(layer)? };
+						picture.draw(&self.device, &self.queue, &self.pipeline, plane, &frame.shape, &look)
+					});
+					(shown.field, shown.intensity) = (field, intensity);
+				} else {
+					self.uploads.stage(&self.device, &self.queue, &store, stored);
+					self.drawn = Some(tag);
+					let shape = *store.shape();
+					let [field, intensity] = pictures.map(|(picture, layer)| {
+						let plane = DevicePlane { buffer: self.uploads.buffer(layer)?, first_word: 0 };
+						picture.draw(&self.device, &self.queue, &self.pipeline, plane, &shape, &look)
+					});
+					(shown.field, shown.intensity) = (field, intensity);
+				}
+			}
 		}
 		shown
 	}
 }
 
-/// The run state as the status bar says it (docs/ui/50, Run states).
-fn state_text(state: &WorkState, steps: u32) -> String {
-	match state {
-		WorkState::Idle => format!("Ready, {steps} steps"),
-		WorkState::Stepping { target } => format!("Running: step {steps}, frame {target}"),
-		WorkState::Fitting => "Fitting brightness".into(),
-		WorkState::Paused => format!("Paused at step {steps}"),
-		WorkState::Failed(e) => format!("Run failed: {e}"),
+/// A stored frame's layer planes, read from the store into device buffers for a frame the device no longer holds.
+#[derive(Default)]
+struct Uploads {
+	buffers: [Option<wgpu::Buffer>; 2],
+}
+
+impl Uploads {
+	/// Uploads frame `stored`'s planes.
+	fn stage(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, store: &FrameStore, stored: usize) {
+		for layer in [Layer::Field, Layer::Intensity] {
+			let slot = &mut self.buffers[layer as usize];
+			if !store.layers().contains(&layer) {
+				*slot = None;
+				continue;
+			}
+			let mut bytes = match store.copy_layer(stored, layer) {
+				Ok(bytes) => bytes,
+				Err(e) => {
+					tracing::warn!("frame {stored} could not be read: {e}");
+					*slot = None;
+					continue;
+				}
+			};
+			// a storage buffer's size is a multiple of 4
+			bytes.resize(bytes.len().next_multiple_of(4), 0);
+			let buffer = match slot.take() {
+				Some(b) if b.size() >= bytes.len() as u64 => b,
+				_ => device.create_buffer(&wgpu::BufferDescriptor {
+					label: Some("stored plane"),
+					size: (bytes.len() as u64).max(16),
+					usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+					mapped_at_creation: false,
+				}),
+			};
+			queue.write_buffer(&buffer, 0, &bytes);
+			*slot = Some(buffer);
+		}
+	}
+
+	fn buffer(&self, layer: Layer) -> Option<&wgpu::Buffer> {
+		self.buffers[layer as usize].as_ref()
 	}
 }

@@ -117,6 +117,7 @@ component Divider inherits Rectangle {
 // The transport bar (docs/ui/50, Transport bar).
 export component TransportBar inherits Rectangle {
     in property <Transport> t;
+    in-out property <bool> stacked;
     callback action(string);
     callback speed(string);
 
@@ -161,5 +162,8 @@ export component TransportBar inherits Rectangle {
             current-index: 2;
             selected(v) => { root.speed(v); }
         }
+        Divider { }
+        Tool { glyph: "||"; tip: "Field and intensity side by side"; checked: !root.stacked; clicked => { root.stacked = false; root.action("layout"); } }
+        Tool { glyph: "="; tip: "Field above intensity"; checked: root.stacked; clicked => { root.stacked = true; root.action("layout"); } }
     }
 }

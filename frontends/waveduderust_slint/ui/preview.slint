@@ -4,6 +4,7 @@ component Picture inherits VerticalLayout {
     in property <string> title;
     in property <image> source;
     horizontal-stretch: 1;
+    vertical-stretch: 1;
     Rectangle {
         height: Theme.row-height;
         background: Theme.window-background;
@@ -25,11 +26,19 @@ component Picture inherits VerticalLayout {
     }
 }
 
-// The preview's pictures (docs/ui/40): field and intensity side by side.
-export component Preview inherits HorizontalLayout {
+// The preview's pictures (docs/ui/40): field above intensity, or side by side.
+export component Preview inherits Rectangle {
     in property <image> field;
     in property <image> intensity;
-    spacing: 2px;
-    Picture { title: @tr("Field"); source: root.field; }
-    Picture { title: @tr("Intensity"); source: root.intensity; }
+    in property <bool> stacked: true;
+    if root.stacked: VerticalLayout {
+        spacing: 4px;
+        Picture { title: @tr("Field"); source: root.field; }
+        Picture { title: @tr("Intensity"); source: root.intensity; }
+    }
+    if !root.stacked: HorizontalLayout {
+        spacing: 4px;
+        Picture { title: @tr("Field"); source: root.field; }
+        Picture { title: @tr("Intensity"); source: root.intensity; }
+    }
 }
