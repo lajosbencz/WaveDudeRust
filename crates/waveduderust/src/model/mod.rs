@@ -26,6 +26,7 @@ mod simulation;
 mod source;
 pub mod timeline;
 mod view;
+mod zone_plate;
 
 pub use fields::*;
 pub use ids::{PartId, ProbeId, SchemeId, SourceId};
@@ -39,6 +40,7 @@ pub use simulation::*;
 pub use source::*;
 pub use timeline::{Frame, Step, Timeline};
 pub use view::*;
+pub use zone_plate::zone_at;
 
 use derive_setters::Setters;
 

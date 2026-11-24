@@ -175,6 +175,8 @@ data! {
 	PolygonData = m::Polygon { sides, side }
 	LensData = Lens { diameter, r1, r2, thickness }
 	FresnelData = m::FresnelLens { zones, division }
+	DiffuserData = m::Diffuser { length, width, center_wavelength, amplitude, sigma }
+	ZonePlateData = m::ZonePlate { mount, mount_width, diameter, thickness, coating, design_frequency, focal_length, inverse }
 	PointData = Point { x, y }
 }
 
@@ -202,6 +204,8 @@ pub(crate) fn kind(project: &Project, node: Node) -> FormKind {
 			Some(PartKind::Lens(_)) => FormKind::Lens,
 			Some(PartKind::FresnelLens(_)) => FormKind::FresnelLens,
 			Some(PartKind::Outline(_)) => FormKind::Outline,
+			Some(PartKind::Diffuser(_)) => FormKind::Diffuser,
+			Some(PartKind::ZonePlate(_)) => FormKind::ZonePlate,
 			_ => FormKind::None,
 		},
 		Node::Project => FormKind::Project,
@@ -232,6 +236,7 @@ fn shape(kind: &PartKind) -> Option<(&Material, &Coating)> {
 		PartKind::Lens(p) => Some((&p.material, &p.coating)),
 		PartKind::FresnelLens(p) => Some((&p.lens.material, &p.lens.coating)),
 		PartKind::Outline(p) => Some((&p.material, &p.coating)),
+		PartKind::Diffuser(p) => Some((&p.material, &p.coating)),
 		_ => None,
 	}
 }
@@ -245,6 +250,7 @@ fn shape_mut(kind: &mut PartKind) -> Option<(&mut Material, &mut Coating)> {
 		PartKind::Lens(p) => Some((&mut p.material, &mut p.coating)),
 		PartKind::FresnelLens(p) => Some((&mut p.lens.material, &mut p.lens.coating)),
 		PartKind::Outline(p) => Some((&mut p.material, &mut p.coating)),
+		PartKind::Diffuser(p) => Some((&mut p.material, &mut p.coating)),
 		_ => None,
 	}
 }
@@ -310,12 +316,12 @@ pub(crate) fn show(form: &Form<'_>, project: &Project, view: &View, node: Node) 
 			put(form.get_array(), Data::show(&array), |d| form.set_array(d));
 		}
 		Node::Probe(i) => put(form.get_probe(), probe_data(&project.probes[i]), |d| form.set_probe(d)),
-		Node::Part(i) => show_part(form, &project.parts[i]),
+		Node::Part(i) => show_part(form, project, &project.parts[i]),
 		Node::Sources | Node::Parts | Node::Probes | Node::Schemes | Node::Scheme(_) => {}
 	}
 }
 
-fn show_part(form: &Form<'_>, part: &Part) {
+fn show_part(form: &Form<'_>, project: &Project, part: &Part) {
 	put(form.get_part(), Data::show(&part.base), |d| form.set_part(d));
 	if let Some((material, coating)) = shape(&part.kind) {
 		put(form.get_material(), Data::show(material), |d| form.set_material(d));
@@ -334,6 +340,27 @@ fn show_part(form: &Form<'_>, part: &Part) {
 		PartKind::FresnelLens(f) => {
 			put(form.get_lens(), lens_data(&f.lens, f.zones, f.division), |d| form.set_lens(d));
 			put(form.get_fresnel(), Data::show(f), |d| form.set_fresnel(d));
+		}
+		PartKind::Diffuser(d) => {
+			let profile = d.profile(&part.base.name, project.seed);
+			let (low, high) =
+				profile.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), &p| (l.min(p), h.max(p)));
+			let data = ui::DiffuserData {
+				profile_height: (high - low) as f32,
+				ripples: i32::try_from(d.components().len()).unwrap_or(i32::MAX),
+				..Data::show(d)
+			};
+			put(form.get_diffuser(), data, |d| form.set_diffuser(d));
+		}
+		PartKind::ZonePlate(z) => {
+			let scale = project.simulation.source_frequency_scale;
+			let data = ui::ZonePlateData {
+				wavelength: z.wavelength(scale).unwrap_or_default() as f32,
+				zones: i32::try_from(z.zone_count(scale)).unwrap_or(i32::MAX),
+				outer_zone: z.outer_zone_width(scale).unwrap_or_default() as f32,
+				..Data::show(z)
+			};
+			put(form.get_zone_plate(), data, |d| form.set_zone_plate(d));
 		}
 		PartKind::Outline(o) => {
 			// in place: a row's box keeps text typed into it while another row is added or removed
@@ -417,6 +444,8 @@ fn apply_part(form: &Form<'_>, part: &mut Part) {
 			apply_lens(&form.get_lens(), &mut f.lens, f.zones, f.division);
 			form.get_fresnel().apply(&Data::show(&*f), f);
 		}
+		PartKind::Diffuser(d) => form.get_diffuser().apply(&Data::show(&*d), d),
+		PartKind::ZonePlate(z) => form.get_zone_plate().apply(&Data::show(&*z), z),
 		PartKind::Outline(o) => {
 			for (point, data) in o.points.iter_mut().zip(form.get_points().iter()) {
 				data.apply(&Data::show(&*point), point);

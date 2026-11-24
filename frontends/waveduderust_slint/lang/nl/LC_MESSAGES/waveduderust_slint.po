@@ -112,6 +112,10 @@ msgstr "Een 2D-golfsimulator"
 msgid "A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, equal in width or in depth, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and their division; a flat surface stays flat."
 msgstr "Een fresnellens: een lens waarvan de gekromde oppervlakken in zones zijn geknipt, van de as tot de rand, even breed of even diep, waarbij de boog van elke zone opnieuw begint op het topvlak, zodat een dunne plaat het licht buigt als een dikke lens. De instellingen zijn die van de lens, met het aantal zones en hun verdeling; een vlak oppervlak blijft vlak."
 
+#. Kind.DiffuserPart
+msgid "A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects."
+msgstr "Een diffusor: een plaat van glas of als spiegel met een ruw voorvlak en een vlakke achterkant. De ruwheid is een spreiding van rimpels rond een centrale golflengte, met willekeurige fasen uit het zaad van het project; hij verstrooit wat erdoorheen gaat of erop weerkaatst."
+
 #. Kind.OutlinePart
 msgid "A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing."
 msgstr "Een vrije omtrek van glas of als spiegel: een gesloten vorm door de punten die u plaatst en sleept; minder dan drie tekenen niets."
@@ -151,6 +155,10 @@ msgstr "A x"
 #. Label.Probe.AY
 msgid "A y"
 msgstr "A y"
+
+#. Kind.ZonePlatePart
+msgid "A zone plate: Fresnel zones cut for a design frequency and a focal length, every second zone an absorbing block, the central zone open or, inverted, a block. It focuses by diffraction; an optional mount stops light passing outside the diameter."
+msgstr "Een zoneplaat: Fresnelzones gesneden voor een ontwerpfrequentie en een brandpuntsafstand, elke tweede zone een absorberend blok, de middelste zone open of, omgekeerd, een blok. Hij focust door buiging; een optionele vatting houdt licht tegen dat buiten de diameter passeert."
 
 #. MenuAddAndGate
 msgid "AND"
@@ -231,6 +239,10 @@ msgstr "Hoek A"
 #. Label.TrianglePart.AngleB
 msgid "Angle B"
 msgstr "Hoek B"
+
+#. Label.ZonePlatePart.Coating
+msgid "Anti-reflection"
+msgstr "Antireflectie"
 
 #. LabelApexAngle
 msgid "Apex angle"
@@ -339,6 +351,10 @@ msgstr "Canvas"
 #. Label.LensPart.Thickness
 msgid "Centre thickness"
 msgstr "Middendikte"
+
+#. Label.DiffuserPart.CenterWavelength
+msgid "Centre wavelength"
+msgstr "Centrale golflengte"
 
 #. MessagesClear
 msgid "Clear"
@@ -452,6 +468,10 @@ msgstr "Decaden die een logaritmische waardenas onder zijn bovenkant toont; klei
 msgid "Delete"
 msgstr "Verwijderen"
 
+#. Hint.ZonePlatePart.Coating
+msgid "Depth in pixels over which a block's absorption rises from nothing at its faces to its full strength, so the blocks reflect little; at most half the thickness takes effect."
+msgstr "Diepte in pixels waarover de absorptie van een blok oploopt van niets aan de zijvlakken tot de volle sterkte, zodat de blokken weinig reflecteren; hoogstens de halve dikte telt."
+
 #. Hint.LensPart.AbsorptionRamp
 msgid "Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle."
 msgstr "Diepte in pixels waarover de absorptie van nul bij de omtrek tot haar volle waarde stijgt; hoe langer, hoe minder van een golf wordt teruggekaatst. Een onderdeel dunner dan twee keer de helling bereikt zijn volle absorptie in het midden."
@@ -459,6 +479,10 @@ msgstr "Diepte in pixels waarover de absorptie van nul bij de omtrek tot haar vo
 #. SectionDescription
 msgid "Description"
 msgstr "Beschrijving"
+
+#. SectionDesign
+msgid "Design"
+msgstr "Ontwerp"
 
 #. Label.Source.DetachAfter
 msgid "Detach after step"
@@ -507,6 +531,10 @@ msgstr "Afstand tussen naburige rijen in canvaspixels."
 #. Hint.LensPart.Thickness
 msgid "Distance between the two surfaces on the axis in pixels."
 msgstr "Afstand tussen de twee oppervlakken op de as in pixels."
+
+#. Hint.ZonePlatePart.FocalLength
+msgid "Distance in pixels from the plate to its focus, for a plane wave arriving along the axis."
+msgstr "Afstand in pixels van de plaat tot het brandpunt, voor een vlakke golf die langs de as binnenkomt."
 
 #. DialogDiscard
 msgid "Don't save"
@@ -620,6 +648,10 @@ msgstr "&Voorbeelden"
 msgid "Examples"
 msgstr "Voorbeelden"
 
+#. Hint.ZonePlatePart.Inverse
+msgid "Exchange the zones: the central zone becomes a block, the first ring open, and so on. The focus stays where it is."
+msgstr "Wissel de zones om: de middelste zone wordt een blok, de eerste ring open, enzovoort. Het brandpunt blijft op zijn plaats."
+
 #. MenuFileExit
 msgid "Exit"
 msgstr "Afsluiten"
@@ -684,9 +716,25 @@ msgstr "Laatste export herhalen"
 msgid "Extent across the axis in pixels."
 msgstr "Afmeting dwars op de as in pixels."
 
+#. Hint.DiffuserPart.Width
+msgid "Extent across the axis in pixels: the width of the rough face."
+msgstr "Afmeting dwars op de as in pixels: de breedte van het ruwe vlak."
+
+#. Hint.ZonePlatePart.Diameter
+msgid "Extent across the axis in pixels; the zones fill it."
+msgstr "Afmeting dwars op de as in pixels; de zones vullen die."
+
 #. Hint.RectanglePart.Length
 msgid "Extent along the axis in pixels."
 msgstr "Afmeting langs de as in pixels."
+
+#. Hint.ZonePlatePart.Thickness
+msgid "Extent along the axis in pixels: the depth of the blocks. It should leave room for the anti-reflection rise on both faces."
+msgstr "Afmeting langs de as in pixels: de diepte van de blokken. Laat ruimte voor de antireflectie-oploop aan beide zijden."
+
+#. Hint.DiffuserPart.Length
+msgid "Extent along the axis in pixels: the plate's thickness at the mean of its rough face."
+msgstr "Afmeting langs de as in pixels: de dikte van de plaat bij het gemiddelde van het ruwe vlak."
 
 #. Enum.ProbeBoxSize.ExtraLarge
 msgid "Extra large"
@@ -727,6 +775,10 @@ msgstr "Eerste simulatiestap van het geëxporteerde bereik; 0 is het begin van d
 #. Hint.Probe.AutoScaleY
 msgid "Fit the value axis to the data instead of the fixed minimum and maximum."
 msgstr "De waardenas aan de gegevens aanpassen in plaats van aan het vaste minimum en maximum."
+
+#. Label.MetaLensPart.FocalLength
+msgid "Focal length"
+msgstr "Brandpuntsafstand"
 
 #. TipPreviewLive
 msgid "Follow the newest frame while the run is in progress (F)"
@@ -820,6 +872,10 @@ msgstr "Help"
 msgid "Horizontal spacing"
 msgstr "Horizontale afstand"
 
+#. TipComponentCount
+msgid "How many wavelengths make up the roughness: one at sigma 0, thirteen otherwise, those below two pixels left out"
+msgstr "Uit hoeveel golflengten de ruwheid bestaat: één bij sigma 0, anders dertien, die onder twee pixels weggelaten"
+
 #. Hint.LensPart.Absorption
 msgid "How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it."
 msgstr "Hoe sterk het onderdeel golven absorbeert, 0 (helemaal niet) tot 255, zoals het blauwe kanaal van de scèneafbeelding. Ze stijgt vanaf nul bij de omtrek over de absorptiehelling, zodat een golf het onderdeel binnengaat in plaats van te worden teruggekaatst. Een spiegel negeert haar."
@@ -887,6 +943,10 @@ msgstr "Tijdverval intensiteit"
 #. MenuAddInterferenceFilter
 msgid "Interference filter"
 msgstr "Interferentiefilter"
+
+#. Label.ZonePlatePart.Inverse
+msgid "Inverse"
+msgstr "Omgekeerd"
 
 #. Enum.TriangleType.Isosceles
 msgid "Isosceles"
@@ -1036,6 +1096,14 @@ msgstr "Spiegel"
 msgid "Mode"
 msgstr "Modus"
 
+#. Label.ZonePlatePart.Mount
+msgid "Mount"
+msgstr "Houder"
+
+#. Label.ZonePlatePart.MountWidth
+msgid "Mount width"
+msgstr "Breedte van de houder"
+
 #. MenuProjectMoveDown
 msgid "Move down"
 msgstr "Omlaag"
@@ -1120,6 +1188,10 @@ msgstr "Aantal zijden"
 msgid "Number of sides, 3 to 64."
 msgstr "Aantal zijden, 3 tot 64."
 
+#. LabelZoneCount
+msgid "Number of zones"
+msgstr "Aantal zones"
+
 #. Hint.FresnelLensPart.Zones
 msgid "Number of zones each curved surface is cut into, from the axis to the rim, equal in width or in depth as the zone division says. At each zone's inner edge the arc starts again at the vertex plane, so the plate stays thin; 1 is a plain lens."
 msgstr "Aantal zones waarin elk gekromd oppervlak wordt geknipt, van de as tot de rand, even breed of even diep zoals de zoneverdeling zegt. Aan de binnenrand van elke zone begint de boog opnieuw op het topvlak, zodat de plaat dun blijft; 1 is een gewone lens."
@@ -1159,6 +1231,10 @@ msgstr "Open laat een golf het raster verlaten, alsof het canvas in de vrije rui
 #. MenuAddOpticalLogic
 msgid "Optical logic"
 msgstr "Optische logica"
+
+#. LabelOuterZone
+msgid "Outermost zone"
+msgstr "Buitenste zone"
 
 #. MenuAddOutline
 msgid "Outline"
@@ -1308,6 +1384,10 @@ msgstr "Sondemarkeringen in de export"
 msgid "Probes"
 msgstr "Sondes"
 
+#. LabelProfileHeight
+msgid "Profile height"
+msgstr "Profielhoogte"
+
 #. PaneProject
 msgid "Project"
 msgstr "Project"
@@ -1432,6 +1512,10 @@ msgstr "Hervatten"
 msgid "Right isosceles (45°)"
 msgstr "Rechthoekig-gelijkbenig (45°)"
 
+#. LabelComponentCount
+msgid "Ripples"
+msgstr "Rimpels"
+
 #. Label.SourceArray.Angle
 msgid "Rotation"
 msgstr "Rotatie"
@@ -1443,6 +1527,10 @@ msgstr "Rotatie om het middelpunt in graden, tegen de klok in op het scherm. 0 r
 #. Hint.SourceArray.Angle
 msgid "Rotation of the grid about the source position in degrees, counter-clockwise on the screen. 0 keeps the rows horizontal."
 msgstr "Rotatie van het raster om de bronpositie in graden, tegen de klok in op het scherm. 0 houdt de rijen horizontaal."
+
+#. SectionRoughness
+msgid "Roughness"
+msgstr "Ruwheid"
 
 #. Label.SourceArray.SizeY
 msgid "Rows"
@@ -1535,6 +1623,10 @@ msgstr "Deze uitvoer in het live-voorbeeld tonen."
 #. Label.PolygonPart.Side
 msgid "Side length"
 msgstr "Zijdelengte"
+
+#. Label.DiffuserPart.Sigma
+msgid "Sigma"
+msgstr "Sigma"
 
 #. MenuAddSimpleGrating
 msgid "Simple 2D grating"
@@ -1632,9 +1724,21 @@ msgstr "Simulatie stoppen; de berekende beelden blijven (Esc)"
 msgid "Stopped"
 msgstr "Gestopt"
 
+#. Hint.ZonePlatePart.Mount
+msgid "Surround the plate with an absorbing mount, so no light passes outside its diameter. Without it, that light meets the focused light on the axis and moves the focus further out, the more so the fewer zones the plate has."
+msgstr "Omgeef de plaat met een absorberende houder, zodat er geen licht buiten de diameter langs gaat. Zonder houder ontmoet dat licht het gefocuste licht op de as en schuift het brandpunt verder weg, sterker naarmate de plaat minder zones heeft."
+
 #. LanguageSystem
 msgid "System"
 msgstr "Systeem"
+
+#. Label.MetaSurfacePart.DesignFrequency
+msgid "Target frequency"
+msgstr "Doelfrequentie"
+
+#. Hint.DiffuserPart.Amplitude
+msgid "The amplitude in pixels of the ripple at the centre wavelength. The other wavelengths of the spread get less, by their distance from the centre, and the face carries the sum of them all; 0 makes the face flat."
+msgstr "De amplitude in pixels van de rimpel bij de centrale golflengte. De andere golflengten van de spreiding krijgen minder, naar hun afstand tot het midden, en het vlak draagt de som van alle; 0 maakt het vlak glad."
 
 #. TipApexAngle
 msgid "The angle at the apex: 180° minus the two base angles"
@@ -1644,9 +1748,37 @@ msgstr "De hoek aan de top: 180° min de twee basishoeken"
 msgid "The export failed."
 msgstr "De export is mislukt."
 
+#. TipProfileHeight
+msgid "The rough face from its highest point to its lowest: what the ripples add up to"
+msgstr "Het ruwe vlak van zijn hoogste punt tot zijn laagste: wat de rimpels samen opleveren"
+
+#. Hint.ZonePlatePart.DesignFrequency
+msgid "The source frequency the plate is designed for, on the same scale as a source's frequency. The zones follow from the wavelength it gives, so the plate focuses this frequency at the focal length; other frequencies focus elsewhere."
+msgstr "De bronfrequentie waarvoor de plaat is ontworpen, op dezelfde schaal als de frequentie van een bron. De zones volgen uit de golflengte die ze geeft, dus de plaat focust deze frequentie op de brandpuntsafstand; andere frequenties elders."
+
+#. Hint.DiffuserPart.CenterWavelength
+msgid "The spatial wavelength in pixels at the middle of the roughness's spectrum: the ripple along the face that has the full amplitude. Two pixels at least."
+msgstr "De ruimtelijke golflengte in pixels in het midden van het spectrum van de ruwheid: de rimpel langs het vlak die de volle amplitude heeft. Minstens twee pixels."
+
+#. Hint.DiffuserPart.Sigma
+msgid "The spread of the roughness's wavelengths about the centre wavelength, in pixels: a wavelength gets the amplitude times the bell e^(−(λ − centre)² / 2σ²). 0 leaves the centre wavelength alone, a single regular ripple; the larger, the more wavelengths join in and the less regular the face."
+msgstr "De spreiding van de golflengten van de ruwheid rond de centrale golflengte, in pixels: een golflengte krijgt de amplitude maal de klok e^(−(λ − centrum)² / 2σ²). 0 laat alleen de centrale golflengte over, één regelmatige rimpel; hoe groter, hoe meer golflengten meedoen en hoe onregelmatiger het vlak."
+
+#. TipGateWavelength
+msgid "The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale"
+msgstr "De golflengte die de ontwerpfrequentie geeft in een medium met index 1, bij de bronfrequentieschaal van de simulatie"
+
+#. TipZones
+msgid "The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)"
+msgstr "De zones die de plaat binnen zijn diameter krijgt, en de breedte van de buitenste hele zone, die het rooster moet kunnen oplossen (minstens een paar pixels)"
+
 #. MenuViewTheme
 msgid "Theme"
 msgstr "Thema"
+
+#. Label.FilterLayer.Thickness
+msgid "Thickness"
+msgstr "Dikte"
 
 #. TipEdgeThickness
 msgid "Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim"
@@ -1771,6 +1903,10 @@ msgstr "Of de lens divergeert, dus de oppervlakken naar binnen gekromd zijn. Aan
 #. Label.Scene.Width
 msgid "Width"
 msgstr "Breedte"
+
+#. Hint.ZonePlatePart.MountWidth
+msgid "Width in pixels of the absorbing mount on either side, beyond the diameter."
+msgstr "Breedte in pixels van de absorberende houder aan elke kant, buiten de diameter."
 
 #. Hint.Scene.Width
 msgid "Width of a blank canvas in pixels."

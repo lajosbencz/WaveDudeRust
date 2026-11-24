@@ -2,7 +2,7 @@ import { CheckBox, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
 import { Icon } from "icons.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
-import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, PointData } from "data.slint";
+import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, PointData } from "data.slint";
 
 // The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
 export global Form {
@@ -27,6 +27,8 @@ export global Form {
     in-out property <PolygonData> polygon;
     in-out property <LensData> lens;
     in-out property <FresnelData> fresnel;
+    in-out property <DiffuserData> diffuser;
+    in-out property <ZonePlateData> zone-plate;
     in property <[PointData]> points;
     // text a number box could not read, shown until the next edit or another object
     in-out property <string> invalid;
@@ -87,6 +89,16 @@ export component FormValue inherits Text {
     vertical-alignment: center;
     overflow: elide;
     color: Theme.text-dim;
+}
+
+// A computed value in the text colour, its tip on the value.
+export component FormReadout inherits Rectangle {
+    in property <string> text;
+    in property <string> tip;
+    horizontal-stretch: 1;
+    min-height: Theme.row-height;
+    FormValue { x: 0; color: Theme.text; text: root.text; }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
 }
 
 // The number box's parsing (src/number.rs): text to a value clamped and rounded to the box's spec.

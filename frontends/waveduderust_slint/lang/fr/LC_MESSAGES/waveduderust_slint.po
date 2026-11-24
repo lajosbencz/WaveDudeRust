@@ -112,6 +112,10 @@ msgstr "Un simulateur d'ondes 2D"
 msgid "A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, equal in width or in depth, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and their division; a flat surface stays flat."
 msgstr "Une lentille de Fresnel : une lentille dont les surfaces courbes sont découpées en zones de l'axe au bord, de largeur ou de profondeur égale, l'arc de chaque zone repartant du plan du sommet, de sorte qu'une lame mince dévie la lumière comme une lentille épaisse. Les réglages sont ceux de la lentille, avec le nombre de zones et leur division ; une surface plane reste plane."
 
+#. Kind.DiffuserPart
+msgid "A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects."
+msgstr "Un diffuseur : une plaque de verre ou en miroir dont la face avant est rugueuse et le dos plan. La rugosité est un étalement d'ondulations autour d'une longueur d'onde centrale, leurs phases tirées au hasard de la graine du projet ; il disperse ce qui le traverse ou s'y réfléchit."
+
 #. Kind.OutlinePart
 msgid "A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing."
 msgstr "Un contour libre de verre ou en miroir : une forme fermée passant par les points que vous placez et déplacez ; moins de trois ne peignent rien."
@@ -151,6 +155,10 @@ msgstr "A x"
 #. Label.Probe.AY
 msgid "A y"
 msgstr "A y"
+
+#. Kind.ZonePlatePart
+msgid "A zone plate: Fresnel zones cut for a design frequency and a focal length, every second zone an absorbing block, the central zone open or, inverted, a block. It focuses by diffraction; an optional mount stops light passing outside the diameter."
+msgstr "Une plaque zonée : des zones de Fresnel taillées pour une fréquence de conception et une distance focale, une zone sur deux étant un bloc absorbant, la zone centrale ouverte ou, inversée, un bloc. Elle focalise par diffraction ; une monture optionnelle arrête la lumière qui passe hors du diamètre."
 
 #. MenuAddAndGate
 msgid "AND"
@@ -231,6 +239,10 @@ msgstr "Angle A"
 #. Label.TrianglePart.AngleB
 msgid "Angle B"
 msgstr "Angle B"
+
+#. Label.ZonePlatePart.Coating
+msgid "Anti-reflection"
+msgstr "Antireflet"
 
 #. LabelApexAngle
 msgid "Apex angle"
@@ -339,6 +351,10 @@ msgstr "Toile"
 #. Label.LensPart.Thickness
 msgid "Centre thickness"
 msgstr "Épaisseur au centre"
+
+#. Label.DiffuserPart.CenterWavelength
+msgid "Centre wavelength"
+msgstr "Longueur d'onde centrale"
 
 #. MessagesClear
 msgid "Clear"
@@ -452,6 +468,10 @@ msgstr "Décades couvertes par un axe logarithmique sous son sommet ; les valeur
 msgid "Delete"
 msgstr "Supprimer"
 
+#. Hint.ZonePlatePart.Coating
+msgid "Depth in pixels over which a block's absorption rises from nothing at its faces to its full strength, so the blocks reflect little; at most half the thickness takes effect."
+msgstr "Profondeur en pixels sur laquelle l'absorption d'un bloc monte de rien sur ses faces à sa pleine force, pour que les blocs réfléchissent peu ; au plus la moitié de l'épaisseur compte."
+
 #. Hint.LensPart.AbsorptionRamp
 msgid "Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle."
 msgstr "Profondeur en pixels sur laquelle l'absorption croît de zéro au contour jusqu'à sa pleine valeur ; plus elle est longue, moins une onde est réfléchie. Un composant plus mince que deux fois la rampe atteint sa pleine absorption en son milieu."
@@ -459,6 +479,10 @@ msgstr "Profondeur en pixels sur laquelle l'absorption croît de zéro au contou
 #. SectionDescription
 msgid "Description"
 msgstr "Description"
+
+#. SectionDesign
+msgid "Design"
+msgstr "Conception"
 
 #. Label.Source.DetachAfter
 msgid "Detach after step"
@@ -507,6 +531,10 @@ msgstr "Distance entre lignes voisines en pixels de toile."
 #. Hint.LensPart.Thickness
 msgid "Distance between the two surfaces on the axis in pixels."
 msgstr "Distance entre les deux surfaces sur l'axe en pixels."
+
+#. Hint.ZonePlatePart.FocalLength
+msgid "Distance in pixels from the plate to its focus, for a plane wave arriving along the axis."
+msgstr "Distance en pixels de la lame à son foyer, pour une onde plane arrivant le long de l'axe."
 
 #. DialogDiscard
 msgid "Don't save"
@@ -620,6 +648,10 @@ msgstr "Exem&ples"
 msgid "Examples"
 msgstr "Exemples"
 
+#. Hint.ZonePlatePart.Inverse
+msgid "Exchange the zones: the central zone becomes a block, the first ring open, and so on. The focus stays where it is."
+msgstr "Échanger les zones : la zone centrale devient un bloc, le premier anneau ouvert, et ainsi de suite. Le foyer reste en place."
+
 #. MenuFileExit
 msgid "Exit"
 msgstr "Quitter"
@@ -684,9 +716,25 @@ msgstr "Répéter le dernier export"
 msgid "Extent across the axis in pixels."
 msgstr "Étendue perpendiculaire à l'axe en pixels."
 
+#. Hint.DiffuserPart.Width
+msgid "Extent across the axis in pixels: the width of the rough face."
+msgstr "Étendue perpendiculaire à l'axe en pixels : la largeur de la face rugueuse."
+
+#. Hint.ZonePlatePart.Diameter
+msgid "Extent across the axis in pixels; the zones fill it."
+msgstr "Étendue perpendiculaire à l'axe en pixels ; les zones la remplissent."
+
 #. Hint.RectanglePart.Length
 msgid "Extent along the axis in pixels."
 msgstr "Étendue le long de l'axe en pixels."
+
+#. Hint.ZonePlatePart.Thickness
+msgid "Extent along the axis in pixels: the depth of the blocks. It should leave room for the anti-reflection rise on both faces."
+msgstr "Étendue le long de l'axe en pixels : la profondeur des blocs. Elle doit laisser la place à la montée antireflet sur les deux faces."
+
+#. Hint.DiffuserPart.Length
+msgid "Extent along the axis in pixels: the plate's thickness at the mean of its rough face."
+msgstr "Étendue le long de l'axe en pixels : l'épaisseur de la plaque à la moyenne de sa face rugueuse."
 
 #. Enum.ProbeBoxSize.ExtraLarge
 msgid "Extra large"
@@ -727,6 +775,10 @@ msgstr "Premier pas de simulation de la plage exportée ; 0 est le début de l'e
 #. Hint.Probe.AutoScaleY
 msgid "Fit the value axis to the data instead of the fixed minimum and maximum."
 msgstr "Ajuster l'axe des valeurs aux données au lieu du minimum et du maximum fixes."
+
+#. Label.MetaLensPart.FocalLength
+msgid "Focal length"
+msgstr "Distance focale"
 
 #. TipPreviewLive
 msgid "Follow the newest frame while the run is in progress (F)"
@@ -820,6 +872,10 @@ msgstr "Aide"
 msgid "Horizontal spacing"
 msgstr "Espacement horizontal"
 
+#. TipComponentCount
+msgid "How many wavelengths make up the roughness: one at sigma 0, thirteen otherwise, those below two pixels left out"
+msgstr "De combien de longueurs d'onde la rugosité est faite : une à sigma 0, treize sinon, celles sous deux pixels omises"
+
 #. Hint.LensPart.Absorption
 msgid "How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it."
 msgstr "Force avec laquelle le composant absorbe les ondes, de 0 (pas du tout) à 255, comme le canal bleu de l'image de la scène. Elle croît depuis zéro au contour le long de la rampe d'absorption, pour qu'une onde entre dans le composant au lieu d'être réfléchie. Un miroir l'ignore."
@@ -887,6 +943,10 @@ msgstr "Décroissance temporelle de l'intensité"
 #. MenuAddInterferenceFilter
 msgid "Interference filter"
 msgstr "Filtre interférentiel"
+
+#. Label.ZonePlatePart.Inverse
+msgid "Inverse"
+msgstr "Inversée"
 
 #. Enum.TriangleType.Isosceles
 msgid "Isosceles"
@@ -1036,6 +1096,14 @@ msgstr "Miroir"
 msgid "Mode"
 msgstr "Mode"
 
+#. Label.ZonePlatePart.Mount
+msgid "Mount"
+msgstr "Monture"
+
+#. Label.ZonePlatePart.MountWidth
+msgid "Mount width"
+msgstr "Largeur de la monture"
+
 #. MenuProjectMoveDown
 msgid "Move down"
 msgstr "Descendre"
@@ -1120,6 +1188,10 @@ msgstr "Nombre de côtés"
 msgid "Number of sides, 3 to 64."
 msgstr "Nombre de côtés, de 3 à 64."
 
+#. LabelZoneCount
+msgid "Number of zones"
+msgstr "Nombre de zones"
+
 #. Hint.FresnelLensPart.Zones
 msgid "Number of zones each curved surface is cut into, from the axis to the rim, equal in width or in depth as the zone division says. At each zone's inner edge the arc starts again at the vertex plane, so the plate stays thin; 1 is a plain lens."
 msgstr "Nombre de zones en lesquelles chaque surface courbe est découpée, de l'axe au bord, de largeur ou de profondeur égale selon la division des zones. Au bord intérieur de chaque zone l'arc repart du plan du sommet, de sorte que la lame reste mince ; 1 est une lentille ordinaire."
@@ -1159,6 +1231,10 @@ msgstr "Ouvert laisse l'onde quitter la grille, comme si la toile était dans l'
 #. MenuAddOpticalLogic
 msgid "Optical logic"
 msgstr "Logique optique"
+
+#. LabelOuterZone
+msgid "Outermost zone"
+msgstr "Zone la plus externe"
 
 #. MenuAddOutline
 msgid "Outline"
@@ -1308,6 +1384,10 @@ msgstr "Marqueurs des sondes dans l'export"
 msgid "Probes"
 msgstr "Sondes"
 
+#. LabelProfileHeight
+msgid "Profile height"
+msgstr "Hauteur du profil"
+
 #. PaneProject
 msgid "Project"
 msgstr "Projet"
@@ -1432,6 +1512,10 @@ msgstr "Reprendre"
 msgid "Right isosceles (45°)"
 msgstr "Rectangle isocèle (45°)"
 
+#. LabelComponentCount
+msgid "Ripples"
+msgstr "Ondulations"
+
 #. Label.SourceArray.Angle
 msgid "Rotation"
 msgstr "Rotation"
@@ -1443,6 +1527,10 @@ msgstr "Rotation autour du centre en degrés, dans le sens antihoraire à l'écr
 #. Hint.SourceArray.Angle
 msgid "Rotation of the grid about the source position in degrees, counter-clockwise on the screen. 0 keeps the rows horizontal."
 msgstr "Rotation de la grille autour de la position de la source en degrés, dans le sens antihoraire à l'écran. 0 garde les lignes horizontales."
+
+#. SectionRoughness
+msgid "Roughness"
+msgstr "Rugosité"
 
 #. Label.SourceArray.SizeY
 msgid "Rows"
@@ -1535,6 +1623,10 @@ msgstr "Afficher cette sortie dans l'aperçu en direct."
 #. Label.PolygonPart.Side
 msgid "Side length"
 msgstr "Longueur de côté"
+
+#. Label.DiffuserPart.Sigma
+msgid "Sigma"
+msgstr "Sigma"
 
 #. MenuAddSimpleGrating
 msgid "Simple 2D grating"
@@ -1632,9 +1724,21 @@ msgstr "Arrêter la simulation ; les images calculées restent (Échap)"
 msgid "Stopped"
 msgstr "Arrêtée"
 
+#. Hint.ZonePlatePart.Mount
+msgid "Surround the plate with an absorbing mount, so no light passes outside its diameter. Without it, that light meets the focused light on the axis and moves the focus further out, the more so the fewer zones the plate has."
+msgstr "Entourer la lame d'une monture absorbante, pour qu'aucune lumière ne passe hors de son diamètre. Sans elle, cette lumière rencontre la lumière focalisée sur l'axe et repousse le foyer, d'autant plus que la lame a peu de zones."
+
 #. LanguageSystem
 msgid "System"
 msgstr "Système"
+
+#. Label.MetaSurfacePart.DesignFrequency
+msgid "Target frequency"
+msgstr "Fréquence cible"
+
+#. Hint.DiffuserPart.Amplitude
+msgid "The amplitude in pixels of the ripple at the centre wavelength. The other wavelengths of the spread get less, by their distance from the centre, and the face carries the sum of them all; 0 makes the face flat."
+msgstr "L'amplitude en pixels de l'ondulation à la longueur d'onde centrale. Les autres longueurs d'onde de l'étalement en reçoivent moins, selon leur distance au centre, et la face porte la somme de toutes ; 0 rend la face plane."
 
 #. TipApexAngle
 msgid "The angle at the apex: 180° minus the two base angles"
@@ -1644,9 +1748,37 @@ msgstr "L'angle au sommet : 180° moins les deux angles à la base"
 msgid "The export failed."
 msgstr "L'export a échoué."
 
+#. TipProfileHeight
+msgid "The rough face from its highest point to its lowest: what the ripples add up to"
+msgstr "La face rugueuse de son point le plus haut au plus bas : ce que les ondulations donnent ensemble"
+
+#. Hint.ZonePlatePart.DesignFrequency
+msgid "The source frequency the plate is designed for, on the same scale as a source's frequency. The zones follow from the wavelength it gives, so the plate focuses this frequency at the focal length; other frequencies focus elsewhere."
+msgstr "La fréquence de source pour laquelle la lame est conçue, sur la même échelle que la fréquence d'une source. Les zones découlent de la longueur d'onde qu'elle donne ; la lame focalise donc cette fréquence à la distance focale, les autres ailleurs."
+
+#. Hint.DiffuserPart.CenterWavelength
+msgid "The spatial wavelength in pixels at the middle of the roughness's spectrum: the ripple along the face that has the full amplitude. Two pixels at least."
+msgstr "La longueur d'onde spatiale en pixels au milieu du spectre de la rugosité : l'ondulation le long de la face qui a la pleine amplitude. Deux pixels au moins."
+
+#. Hint.DiffuserPart.Sigma
+msgid "The spread of the roughness's wavelengths about the centre wavelength, in pixels: a wavelength gets the amplitude times the bell e^(−(λ − centre)² / 2σ²). 0 leaves the centre wavelength alone, a single regular ripple; the larger, the more wavelengths join in and the less regular the face."
+msgstr "L'étalement des longueurs d'onde de la rugosité autour de la longueur d'onde centrale, en pixels : une longueur d'onde reçoit l'amplitude fois la cloche e^(−(λ − centre)² / 2σ²). 0 ne laisse que la longueur d'onde centrale, une seule ondulation régulière ; plus il est grand, plus de longueurs d'onde s'y joignent et moins la face est régulière."
+
+#. TipGateWavelength
+msgid "The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale"
+msgstr "La longueur d'onde que donne la fréquence de conception dans un milieu d'indice 1, avec l'échelle de fréquence des sources de la simulation"
+
+#. TipZones
+msgid "The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)"
+msgstr "Les zones que la lame reçoit dans son diamètre, et la largeur de la dernière zone entière, que la grille doit résoudre (au moins quelques pixels)"
+
 #. MenuViewTheme
 msgid "Theme"
 msgstr "Thème"
+
+#. Label.FilterLayer.Thickness
+msgid "Thickness"
+msgstr "Épaisseur"
 
 #. TipEdgeThickness
 msgid "Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim"
@@ -1771,6 +1903,10 @@ msgstr "Si la lentille est divergente, ses surfaces courbées vers l'intérieur.
 #. Label.Scene.Width
 msgid "Width"
 msgstr "Largeur"
+
+#. Hint.ZonePlatePart.MountWidth
+msgid "Width in pixels of the absorbing mount on either side, beyond the diameter."
+msgstr "Largeur en pixels de la monture absorbante de chaque côté, au-delà du diamètre."
 
 #. Hint.Scene.Width
 msgid "Width of a blank canvas in pixels."

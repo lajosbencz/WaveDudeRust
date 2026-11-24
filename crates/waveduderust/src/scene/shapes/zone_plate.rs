@@ -1,17 +1,9 @@
 use super::{PartShape, Vec2, absorption_profile};
-use crate::model::{Simulation, ZonePlate, wavelength};
+pub use crate::model::zone_at;
+use crate::model::{Simulation, ZonePlate};
 
 /// Blue level in the middle of a block.
 pub const BLOCK_ABSORPTION: u32 = 96;
-
-/// The zone, from 0 at the axis, that the distance `r` falls in: the n with `r_n <= r < r_(n+1)`,
-/// `r_n^2 = n lam f + (n lam/2)^2`, for a finite positive wavelength. Pixels.
-pub fn zone_at(r: f64, lambda: f64, focal_length: u32) -> i64 {
-	debug_assert!(lambda.is_finite() && lambda > 0.0, "wavelength {lambda}");
-	let a = lambda * lambda / 4.0;
-	let b = lambda * focal_length as f64;
-	((-b + (b * b + 4.0 * a * r * r).sqrt()) / (2.0 * a)).floor() as i64
-}
 
 /// A Fresnel zone plate: every second zone an absorbing block (blue only), the optional mount a
 /// block beyond the diameter. The block's share rises as t^2 from the faces across the axis over the ramp.
@@ -28,10 +20,7 @@ pub(super) struct ZonePlateShape {
 impl ZonePlateShape {
 	/// None when the design frequency gives no finite positive wavelength.
 	pub(super) fn new(z: &ZonePlate, sim: &Simulation) -> Option<Self> {
-		let lambda = wavelength(z.design_frequency, 1.0, sim.source_frequency_scale);
-		if !lambda.is_finite() || lambda <= 0.0 {
-			return None;
-		}
+		let lambda = z.wavelength(sim.source_frequency_scale)?;
 		let half_thickness = z.thickness as f64 / 2.0;
 		let half_diameter = z.diameter as f64 / 2.0;
 		Some(Self {

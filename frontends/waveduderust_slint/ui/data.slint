@@ -17,7 +17,7 @@ export enum TriangleType { equilateral, right-isosceles, thirty-sixty-ninety, is
 export enum ZoneDivision { equal-width, equal-depth }
 
 // Which form Properties shows; `none` for the generic rows.
-export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline }
+export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate }
 
 export struct ProjectData {
     seed: int,
@@ -203,6 +203,33 @@ export struct LensData {
 export struct FresnelData {
     zones: int,
     division: ZoneDivision,
+}
+
+export struct DiffuserData {
+    length: int,
+    width: int,
+    center-wavelength: float,
+    amplitude: float,
+    sigma: float,
+    // read-outs: the rough face's peak to valley in pixels, the number of ripples
+    profile-height: float,
+    ripples: int,
+}
+
+export struct ZonePlateData {
+    mount: bool,
+    mount-width: int,
+    diameter: int,
+    thickness: int,
+    coating: int,
+    design-frequency: float,
+    focal-length: int,
+    inverse: bool,
+    // read-outs, 0 without a wavelength: the design frequency's wavelength in pixels, the zones within the diameter,
+    // the outermost whole zone's width
+    wavelength: float,
+    zones: int,
+    outer-zone: float,
 }
 
 export struct PointData {

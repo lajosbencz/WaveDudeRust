@@ -783,13 +783,13 @@ Not-in-spec rows are marked in the Spec column.
 | P-167 | Outline: Per point X NB, Y NB | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | number box per coordinate, by Points.<index>.X/Y |
 | P-168 | Outline: Per point remove button (tab cycle) | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | IconButton (minus, 18 px) per row, a tab stop |
 | P-169 | Outline: Add point button (appends after last) | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | Add point: a step of 20 right of the last, at the centre for none (Next's NewPointStep) |
-| P-170 | Diffuser: Length NB min 1 step 10 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-171 | Diffuser: Width NB min 2 step 10 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-172 | Diffuser: Centre wavelength NB 2..10000 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-173 | Diffuser: Amplitude NB 0..10000 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-174 | Diffuser: Sigma NB 0..10000 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-175 | Diffuser: Profile height RO | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-176 | Diffuser: Ripples RO | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-170 | Diffuser: Length NB min 1 step 10 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | done | forms.slint DiffuserForm |
+| P-171 | Diffuser: Width NB min 2 step 10 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | done | forms.slint DiffuserForm |
+| P-172 | Diffuser: Centre wavelength NB 2..10000 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | done | forms.slint DiffuserForm |
+| P-173 | Diffuser: Amplitude NB 0..10000 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | done | forms.slint DiffuserForm |
+| P-174 | Diffuser: Sigma NB 0..10000 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | done | forms.slint DiffuserForm |
+| P-175 | Diffuser: Profile height RO | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | done | forms.slint DiffuserForm |
+| P-176 | Diffuser: Ripples RO | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | done | forms.slint DiffuserForm |
 | P-177 | Interference filter: Coating rows (back box alone) | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-178 | Interference filter: Length NB min 1 step 10 | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-179 | Interference filter: Width NB min 1 step 10 | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
@@ -869,17 +869,17 @@ Not-in-spec rows are marked in the Spec column.
 | P-253 | GRIN lens: Coat front/back/sides CB | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-254 | GRIN lens: Length NB min 1 step 10 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-255 | GRIN lens: Diameter NB min 2 step 10 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-256 | Zone plate: Target frequency NB 1..255 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-257 | Zone plate: Wavelength RO | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-258 | Zone plate: Focal length NB min 1 step 10 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-259 | Zone plate: Inverse CB | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-260 | Zone plate: Diameter NB min 2 step 10 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-261 | Zone plate: Thickness NB min 1 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-262 | Zone plate: Anti-reflection NB 0..400 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-263 | Zone plate: Mount CB | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-264 | Zone plate: Mount width NB min 1 step 10 (on when Mount) | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-265 | Zone plate: Number of zones RO | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-266 | Zone plate: Outermost zone RO | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-256 | Zone plate: Target frequency NB 1..255 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
+| P-257 | Zone plate: Wavelength RO | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
+| P-258 | Zone plate: Focal length NB min 1 step 10 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
+| P-259 | Zone plate: Inverse CB | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
+| P-260 | Zone plate: Diameter NB min 2 step 10 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
+| P-261 | Zone plate: Thickness NB min 1 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
+| P-262 | Zone plate: Anti-reflection NB 0..400 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
+| P-263 | Zone plate: Mount CB | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
+| P-264 | Zone plate: Mount width NB min 1 step 10 (on when Mount) | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
+| P-265 | Zone plate: Number of zones RO | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
+| P-266 | Zone plate: Outermost zone RO | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
 | P-267 | XOR/AND/OR gate: Design frequency NB 1..255 | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-268 | XOR/AND/OR gate: Wavelength RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-269 | XOR/AND/OR gate: Core index NB 1..2.55 | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |

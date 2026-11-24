@@ -1,7 +1,7 @@
 // The forms Properties shows per kind of object, bound to the Form global's data.
 import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { Form, FormSection, FormPanel, FormLabel, FormValue, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
+import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
 import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice } from "choices.slint";
 import { SceneMode, SourceMode, ProbeDetector, ProbeKind, Layer, BoxSize, YScale, TriangleType, LayerData } from "data.slint";
 import { IconButton } from "icons.slint";
@@ -1159,12 +1159,9 @@ component LensShape inherits VerticalLayout {
                 text: @tr("Edge thickness");
                 tip: @tr("Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim");
             }
-            Rectangle {
-                horizontal-stretch: 1;
-                FormValue { x: 0; color: Theme.text; text: "\{round(Form.lens.edge * 10) / 10} px"; }
-                Tooltip {
-                    text: @markdown("\{@tr("Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim")}");
-                }
+            FormReadout {
+                text: "\{round(Form.lens.edge * 10) / 10} px";
+                tip: @tr("Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim");
             }
         }
     }
@@ -1253,4 +1250,195 @@ export component OutlineForm inherits VerticalLayout {
     }
     ShapeMaterial { }
     PointList { hint: @tr("Vertices of the outline relative to the centre, before rotation. Empty: the regular polygon above is used."); }
+}
+
+export component DiffuserForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects.");
+    }
+    ShapeMaterial { }
+    FormSection { text: @tr("Shape"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Length"); tip: @tr("Extent along the axis in pixels: the plate's thickness at the mean of its rough face."); }
+            FormInt {
+                value <=> Form.diffuser.length;
+                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                tip: @tr("Extent along the axis in pixels: the plate's thickness at the mean of its rough face.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Width"); tip: @tr("Extent across the axis in pixels: the width of the rough face."); }
+            FormInt {
+                value <=> Form.diffuser.width;
+                spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 };
+                tip: @tr("Extent across the axis in pixels: the width of the rough face.");
+            }
+        }
+    }
+    FormSection { text: @tr("Roughness"); }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Centre wavelength");
+                tip: @tr("The spatial wavelength in pixels at the middle of the roughness's spectrum: the ripple along the face that has the full amplitude. Two pixels at least.");
+            }
+            FormFloat {
+                value <=> Form.diffuser.center-wavelength;
+                spec: { min: 2, max: 10000, increment: 1, decimals: 2, drag-step: 0.1 };
+                tip: @tr("The spatial wavelength in pixels at the middle of the roughness's spectrum: the ripple along the face that has the full amplitude. Two pixels at least.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Amplitude");
+                tip: @tr("The amplitude in pixels of the ripple at the centre wavelength. The other wavelengths of the spread get less, by their distance from the centre, and the face carries the sum of them all; 0 makes the face flat.");
+            }
+            FormFloat {
+                value <=> Form.diffuser.amplitude;
+                spec: { min: 0, max: 10000, increment: 1, decimals: 2, drag-step: 0.1 };
+                tip: @tr("The amplitude in pixels of the ripple at the centre wavelength. The other wavelengths of the spread get less, by their distance from the centre, and the face carries the sum of them all; 0 makes the face flat.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Sigma");
+                tip: @tr("The spread of the roughness's wavelengths about the centre wavelength, in pixels: a wavelength gets the amplitude times the bell e^(\u{2212}(\u{3BB} \u{2212} centre)\u{B2} / 2\u{3C3}\u{B2}). 0 leaves the centre wavelength alone, a single regular ripple; the larger, the more wavelengths join in and the less regular the face.");
+            }
+            FormFloat {
+                value <=> Form.diffuser.sigma;
+                spec: { min: 0, max: 10000, increment: 1, decimals: 2, drag-step: 0.1 };
+                tip: @tr("The spread of the roughness's wavelengths about the centre wavelength, in pixels: a wavelength gets the amplitude times the bell e^(\u{2212}(\u{3BB} \u{2212} centre)\u{B2} / 2\u{3C3}\u{B2}). 0 leaves the centre wavelength alone, a single regular ripple; the larger, the more wavelengths join in and the less regular the face.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Profile height"); tip: @tr("The rough face from its highest point to its lowest: what the ripples add up to"); }
+            FormReadout { text: "\{round(Form.diffuser.profile-height * 10) / 10} px"; tip: @tr("The rough face from its highest point to its lowest: what the ripples add up to"); }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Ripples");
+                tip: @tr("How many wavelengths make up the roughness: one at sigma 0, thirteen otherwise, those below two pixels left out");
+            }
+            FormReadout { text: Form.diffuser.ripples; tip: @tr("How many wavelengths make up the roughness: one at sigma 0, thirteen otherwise, those below two pixels left out"); }
+        }
+    }
+}
+
+export component ZonePlateForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A zone plate: Fresnel zones cut for a design frequency and a focal length, every second zone an absorbing block, the central zone open or, inverted, a block. It focuses by diffraction; an optional mount stops light passing outside the diameter.");
+    }
+    FormSection { text: @tr("Design"); }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Target frequency");
+                tip: @tr("The source frequency the plate is designed for, on the same scale as a source's frequency. The zones follow from the wavelength it gives, so the plate focuses this frequency at the focal length; other frequencies focus elsewhere.");
+            }
+            FormFloat {
+                value <=> Form.zone-plate.design-frequency;
+                spec: { min: 1, max: 255, increment: 1, decimals: 2, drag-step: 0.1 };
+                tip: @tr("The source frequency the plate is designed for, on the same scale as a source's frequency. The zones follow from the wavelength it gives, so the plate focuses this frequency at the focal length; other frequencies focus elsewhere.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Wavelength");
+                tip: @tr("The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale");
+            }
+            FormReadout {
+                text: Form.zone-plate.wavelength == 0 ? "\u{2013}" : "\u{2248} \{Form.zone-plate.wavelength.to-fixed(1)} px";
+                tip: @tr("The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Focal length"); tip: @tr("Distance in pixels from the plate to its focus, for a plane wave arriving along the axis."); }
+            FormInt {
+                value <=> Form.zone-plate.focal-length;
+                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                tip: @tr("Distance in pixels from the plate to its focus, for a plane wave arriving along the axis.");
+            }
+        }
+        Row {
+            FormCheck {
+                checked <=> Form.zone-plate.inverse;
+                colspan: 2;
+                text: @tr("Inverse");
+                tip: @tr("Exchange the zones: the central zone becomes a block, the first ring open, and so on. The focus stays where it is.");
+            }
+        }
+    }
+    FormSection { text: @tr("Shape"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Diameter"); tip: @tr("Extent across the axis in pixels; the zones fill it."); }
+            FormInt {
+                value <=> Form.zone-plate.diameter;
+                spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 };
+                tip: @tr("Extent across the axis in pixels; the zones fill it.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Thickness");
+                tip: @tr("Extent along the axis in pixels: the depth of the blocks. It should leave room for the anti-reflection rise on both faces.");
+            }
+            FormInt {
+                value <=> Form.zone-plate.thickness;
+                spec: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
+                tip: @tr("Extent along the axis in pixels: the depth of the blocks. It should leave room for the anti-reflection rise on both faces.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Anti-reflection");
+                tip: @tr("Depth in pixels over which a block's absorption rises from nothing at its faces to its full strength, so the blocks reflect little; at most half the thickness takes effect.");
+            }
+            FormInt {
+                value <=> Form.zone-plate.coating;
+                spec: { min: 0, max: 400, increment: 1, decimals: 0 };
+                tip: @tr("Depth in pixels over which a block's absorption rises from nothing at its faces to its full strength, so the blocks reflect little; at most half the thickness takes effect.");
+            }
+        }
+        Row {
+            FormCheck {
+                checked <=> Form.zone-plate.mount;
+                colspan: 2;
+                text: @tr("Mount");
+                tip: @tr("Surround the plate with an absorbing mount, so no light passes outside its diameter. Without it, that light meets the focused light on the axis and moves the focus further out, the more so the fewer zones the plate has.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Mount width"); tip: @tr("Width in pixels of the absorbing mount on either side, beyond the diameter."); }
+            FormInt {
+                value <=> Form.zone-plate.mount-width;
+                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                enabled: Form.zone-plate.mount;
+                tip: @tr("Width in pixels of the absorbing mount on either side, beyond the diameter.");
+            }
+        }
+    }
+    FormSection { text: @tr("Zones"); }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Number of zones");
+                tip: @tr("The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)");
+            }
+            FormReadout { text: Form.zone-plate.zones == 0 ? "\u{2013}" : Form.zone-plate.zones; tip: @tr("The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)"); }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Outermost zone");
+                tip: @tr("The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)");
+            }
+            FormReadout {
+                text: Form.zone-plate.zones == 0 ? "\u{2013}" : "\u{2248} \{Form.zone-plate.outer-zone.to-fixed(1)} px";
+                tip: @tr("The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)");
+            }
+        }
+    }
 }
