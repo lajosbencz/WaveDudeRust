@@ -1,0 +1,140 @@
+import { Theme } from "theme.slint";
+import { Pane } from "pane.slint";
+
+export { Theme }
+
+// The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
+export component AppWindow inherits Window {
+    in property <string> window-title: "WaveDude Rust";
+    in property <string> status-text;
+    in property <bool> can-undo;
+    in property <bool> can-redo;
+    in property <bool> run-active;
+    in-out property <bool> project-shown: true;
+    in-out property <bool> properties-shown: true;
+    in-out property <bool> messages-shown: false;
+    // A menu entry's action, by its id (docs/ui/10).
+    callback menu(string);
+
+    title: root.window-title;
+    min-width: 800px;
+    min-height: 500px;
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    background: Theme.window-background;
+    default-font-size: Theme.font-size;
+
+    MenuBar {
+        Menu {
+            title: @tr("File");
+            MenuItem { title: @tr("New Project"); shortcut: @keys(Control + N); activated => { root.menu("new"); } }
+            MenuItem { title: @tr("Open Project..."); shortcut: @keys(Control + O); activated => { root.menu("open"); } }
+            Menu { title: @tr("Recent Projects"); }
+            MenuItem { title: @tr("Examples..."); activated => { root.menu("examples"); } }
+            MenuItem { title: @tr("Welcome Page..."); activated => { root.menu("welcome"); } }
+            MenuItem { title: @tr("Settings..."); shortcut: @keys(Control + ","); activated => { root.menu("settings"); } }
+            MenuSeparator { }
+            MenuItem { title: @tr("Save"); shortcut: @keys(Control + S); activated => { root.menu("save"); } }
+            MenuItem { title: @tr("Save As..."); shortcut: @keys(Control + Shift + S); activated => { root.menu("save-as"); } }
+            MenuSeparator { }
+            Menu {
+                title: @tr("Export");
+                MenuItem { title: @tr("Export field..."); shortcut: @keys(Control + Shift + E); activated => { root.menu("export-field"); } }
+                MenuItem { title: @tr("Export intensity..."); shortcut: @keys(Control + Shift + I); activated => { root.menu("export-intensity"); } }
+                MenuItem { title: @tr("Export both..."); shortcut: @keys(Control + Shift + B); activated => { root.menu("export-both"); } }
+                MenuSeparator { }
+                MenuItem { title: @tr("Export field frame..."); shortcut: @keys(Control + Shift + F); activated => { root.menu("export-field-frame"); } }
+                MenuItem { title: @tr("Export intensity frame..."); shortcut: @keys(Control + Shift + G); activated => { root.menu("export-intensity-frame"); } }
+            }
+            MenuItem { title: @tr("Export last"); shortcut: @keys(Control + E); activated => { root.menu("export-last"); } }
+            MenuSeparator { }
+            MenuItem { title: @tr("Close Project"); activated => { root.menu("close"); } }
+            MenuSeparator { }
+            MenuItem { title: @tr("Exit"); activated => { root.menu("exit"); } }
+        }
+        Menu {
+            title: @tr("Edit");
+            MenuItem { title: @tr("Undo"); enabled: root.can-undo; shortcut: @keys(Control + Z); activated => { root.menu("undo"); } }
+            MenuItem { title: @tr("Redo"); enabled: root.can-redo; shortcut: @keys(Control + Y); activated => { root.menu("redo"); } }
+            MenuSeparator { }
+            MenuItem { title: @tr("Cut"); shortcut: @keys(Control + X); activated => { root.menu("cut"); } }
+            MenuItem { title: @tr("Copy"); shortcut: @keys(Control + C); activated => { root.menu("copy"); } }
+            MenuItem { title: @tr("Paste"); shortcut: @keys(Control + V); activated => { root.menu("paste"); } }
+            MenuItem { title: @tr("Delete"); shortcut: @keys(Delete); activated => { root.menu("delete"); } }
+            MenuSeparator { }
+            MenuItem { title: @tr("Select all"); shortcut: @keys(Control + A); activated => { root.menu("select-all"); } }
+        }
+        Menu {
+            title: @tr("View");
+            Menu {
+                title: @tr("Panes");
+                MenuItem { title: @tr("Project"); checkable: true; checked: root.project-shown; activated => { root.project-shown = !root.project-shown; } }
+                MenuItem { title: @tr("Properties"); checkable: true; checked: root.properties-shown; activated => { root.properties-shown = !root.properties-shown; } }
+                MenuItem { title: @tr("Messages"); checkable: true; checked: root.messages-shown; activated => { root.messages-shown = !root.messages-shown; } }
+            }
+        }
+        Menu {
+            title: @tr("Simulation");
+            MenuItem { title: @tr("Run"); enabled: !root.run-active; shortcut: @keys(F5); activated => { root.menu("run"); } }
+            MenuItem { title: @tr("Pause"); enabled: root.run-active; shortcut: @keys(F6); activated => { root.menu("pause"); } }
+            MenuItem { title: @tr("Stop"); enabled: root.run-active; shortcut: @keys(Shift + F5); activated => { root.menu("stop"); } }
+            MenuItem { title: @tr("Discard frames"); activated => { root.menu("discard"); } }
+            MenuSeparator { }
+            MenuItem { title: @tr("Play / Pause playback"); shortcut: @keys(F7); activated => { root.menu("play"); } }
+        }
+        Menu {
+            title: @tr("Help");
+            MenuItem { title: @tr("About WaveDude Rust"); activated => { root.menu("about"); } }
+            MenuItem { title: @tr("Project page on GitHub"); shortcut: @keys(F1); activated => { root.menu("github"); } }
+            MenuItem { title: @tr("Check for updates"); activated => { root.menu("updates"); } }
+        }
+    }
+
+    VerticalLayout {
+        HorizontalLayout {
+            spacing: 4px;
+            padding: 4px;
+            if root.project-shown || root.properties-shown: VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 4px;
+                if root.project-shown: Pane {
+                    title: @tr("Project");
+                    vertical-stretch: 1;
+                    close => { root.project-shown = false; }
+                }
+                if root.properties-shown: Pane {
+                    title: @tr("Properties");
+                    vertical-stretch: 2;
+                    close => { root.properties-shown = false; }
+                }
+            }
+            VerticalLayout {
+                horizontal-stretch: 3;
+                spacing: 4px;
+                Pane {
+                    title: @tr("Preview");
+                    active: true;
+                    vertical-stretch: 3;
+                }
+                if root.messages-shown: Pane {
+                    title: @tr("Messages");
+                    vertical-stretch: 1;
+                    close => { root.messages-shown = false; }
+                }
+            }
+        }
+        Rectangle {
+            height: Theme.status-height;
+            background: Theme.status;
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 16px;
+                Text {
+                    text: root.status-text;
+                    color: Theme.selection-text;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

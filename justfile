@@ -18,17 +18,16 @@ ast_grep_version := "0.51.2"
 ast_grep_sha256 := "40604c21c38d4c7581c56bdddeef277c56bf3c0113620aa96e78ae87e82366df"
 zizmor_version := "1.32.0"
 public_api_version := "0.52.0"
-dx_version := "0.7.10"
 
 # OpenH264 compiled in, for the tests and clippy (never for distributed builds).
 features := "waveduderust/openh264-source,waveduderust_cli/openh264-source"
 
 # Crates built for the browser.
-wasm_crates := "waveduderust waveduderust_app waveduderust_egui_preview waveduderust_egui_platform waveduderust_classic waveduderust_material waveduderust_workers"
+wasm_crates := "waveduderust waveduderust_platform"
 
 # Crates without a UI toolkit, and the toolkits they must not reach.
-headless_crates := "waveduderust waveduderust_macros waveduderust_app waveduderust_cli waveduderust_examples waveduderust_workers"
-toolkits := "egui eframe egui_mineral gtk4 libadwaita cxx-qt"
+headless_crates := "waveduderust waveduderust_macros waveduderust_platform waveduderust_cli"
+toolkits := "slint egui eframe gtk4 libadwaita cxx-qt"
 
 # The library crates whose public API the diff guards.
 api_crates := "waveduderust"
@@ -40,7 +39,7 @@ default:
 # Installs the check tools at the pinned versions, and the nightly toolchain
 tools:
     cargo install --locked cargo-nextest@{{ nextest_version }} cargo-hack@{{ hack_version }} cargo-shear@{{ shear_version }} cargo-deny@{{ deny_version }} typos-cli@{{ typos_version }}
-    cargo install --locked ast-grep@{{ ast_grep_version }} zizmor@{{ zizmor_version }} cargo-public-api@{{ public_api_version }} dioxus-cli@{{ dx_version }}
+    cargo install --locked ast-grep@{{ ast_grep_version }} zizmor@{{ zizmor_version }} cargo-public-api@{{ public_api_version }}
     rustup toolchain install {{ nightly_version }} --profile minimal
     rustup target add wasm32-unknown-unknown
     @command -v actionlint >/dev/null || echo "actionlint is not on crates.io: https://github.com/rhysd/actionlint"
@@ -58,7 +57,7 @@ fix:
     cargo clippy --fix --allow-dirty --workspace --all-targets --features {{ features }}
 
 # The CI job "ubuntu-latest" without the platforms
-check: fmt clippy test doctest doc features shear layers versions-check hotpatch-guard
+check: fmt clippy test doctest doc features shear layers versions-check
 
 fmt:
     cargo fmt --all --check
@@ -78,7 +77,6 @@ clippy-wasm:
         case $c in
         # Downloaded or compiled OpenH264 and its CLI flags are native only.
         waveduderust) ex=(--exclude-features default,mp4,openh264-source,clap) ;;
-        waveduderust_classic) ex=(--exclude-features openh264-source) ;;
         *) ex=() ;;
         esac
         cargo hack clippy -p "$c" --each-feature "${ex[@]}" --target wasm32-unknown-unknown -- -D warnings
@@ -132,15 +130,6 @@ versions-check:
     [ -n "$channel" ] && [ "$channel" = "$msrv" ] \
         || { echo "rust-toolchain.toml channel (${channel:-unset}) must match workspace rust-version (${msrv:-unset})"; exit 1; }
 
-# `hotpatch` (classic, forwarding to egui-mineral's) and `egui_mineral/unstable-hotpatch` (material) stay command-line features: subsecond is in no default graph
-hotpatch-guard:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if cargo tree --workspace -e normal --prefix none | grep -q '^subsecond '; then
-        echo "subsecond is in the default dependency graph: unstable-hotpatch leaked"
-        exit 1
-    fi
-
 # Public API of the library crates against <base> (a git ref); `unstable-*` features are left off
 api-diff base="origin/master":
     #!/usr/bin/env bash
@@ -171,15 +160,6 @@ lint:
 web out="":
     tools/build-web.sh {{ out }}
 
-# Live-patching run of a frontend, `classic` or `material` (native, Linux X11 or Wayland)
-hot frontend:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    case {{ frontend }} in
-    classic) package=waveduderust_classic feature=hotpatch ;;
-    material) package=waveduderust_material feature=egui_mineral/unstable-hotpatch ;;
-    *) echo "frontend: classic or material" >&2; exit 1 ;;
-    esac
-    # dx 0.7.10 misses cargo's build-dir fingerprints: force the relink it captures linker args from.
-    touch frontends/{{ frontend }}/src/main.rs
-    dx serve --hotpatch --interactive false --platform linux --package "$package" --features "$feature"
+# The app with its `.slint` files reloaded on save (Slint live preview); Rust changes need a rerun
+hot:
+    SLINT_LIVE_PREVIEW=1 cargo run -p waveduderust_slint --features slint/live-preview

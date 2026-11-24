@@ -1,0 +1,23 @@
+[package]
+name = "waveduderust_slint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "WaveDude Rust's app on Slint"
+
+[[bin]]
+name = "waveduderust"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[build-dependencies]
+slint-build = "1.19"
+
+[dependencies]
+slint = { version = "1.19", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-30", "accessibility"] }
+tracing.workspace = true

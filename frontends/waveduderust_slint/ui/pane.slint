@@ -1,0 +1,44 @@
+import { Theme } from "theme.slint";
+
+// A dock pane: title bar over its content (docs/ui/00, Panes and default arrangement).
+export component Pane inherits Rectangle {
+    in property <string> title;
+    in property <bool> active;
+    callback close();
+
+    background: Theme.tool-window-background;
+    VerticalLayout {
+        Rectangle {
+            height: Theme.row-height;
+            background: root.active ? Theme.accent : Theme.window-background;
+            HorizontalLayout {
+                padding-left: 6px;
+                padding-right: 2px;
+                spacing: 4px;
+                Text {
+                    text: root.title;
+                    vertical-alignment: center;
+                    font-size: Theme.font-size;
+                    color: root.active ? Theme.selection-text : Theme.text;
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 4px;
+                    y: (parent.height - self.height) / 2;
+                    border-width: 1px;
+                    border-color: root.active ? #9fd0f5 : Theme.title-grip;
+                }
+                close-area := TouchArea {
+                    width: 16px;
+                    clicked => { root.close(); }
+                    Text {
+                        text: "x";
+                        font-size: Theme.font-size;
+                        color: close-area.has-hover ? Theme.text : Theme.text-dim;
+                    }
+                }
+            }
+        }
+        @children
+    }
+}
