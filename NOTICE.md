@@ -2,8 +2,9 @@
 
 WaveDudeRust is written from scratch: no code of WaveDude Next or Wave Dude 2D is carried over. It is a modified
 work of WaveDude Next in the sense of the GNU General Public License, carrying its non-code material under the
-same licence (GPL-3.0-or-later): the colour schemes, the example projects, the user interface strings and the
-drawn icons (converted from its XAML by [`tools/next-icons.py`](tools/next-icons.py)).
+same licence (GPL-3.0-or-later): the colour schemes, the example projects, the user interface strings in its four
+languages (converted to gettext by [`tools/next-strings.py`](tools/next-strings.py)) and the drawn icons (converted
+from its XAML by [`tools/next-icons.py`](tools/next-icons.py)).
 
 ## Upstream projects
 

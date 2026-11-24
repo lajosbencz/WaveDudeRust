@@ -34,6 +34,20 @@ fn flag(b: bool) -> String {
 	b.to_string()
 }
 
+/// The string tables' languages by their own names (Next's `LanguageController`).
+const LANGUAGE_NAMES: [(&str, &str); 4] =
+	[("en", "English"), ("de", "Deutsch"), ("fr", "Fran\u{e7}ais"), ("nl", "Nederlands")];
+
+/// The language `settings` pick: theirs, else the system's when a table has it, else English.
+pub(crate) fn language(settings: &Settings) -> String {
+	if !settings.language.is_empty() {
+		return settings.language.clone();
+	}
+	let system = sys_locale::get_locale().unwrap_or_default();
+	let base = system.split(['-', '_']).next().unwrap_or_default().to_lowercase();
+	if waveduderust_platform::settings::LANGUAGES.contains(&base.as_str()) { base } else { "en".into() }
+}
+
 const ROWS: &[Row] = &[
 	Row {
 		section: 0,
@@ -47,6 +61,18 @@ const ROWS: &[Row] = &[
 				"Dark" => Theme::Dark,
 				_ => Theme::System,
 			}
+		},
+	},
+	Row {
+		section: 0,
+		label: "Language",
+		choices: &["System", "English", "Deutsch", "Fran\u{e7}ais", "Nederlands"],
+		range: None,
+		get: |s| {
+			LANGUAGE_NAMES.iter().find(|(code, _)| *code == s.language).map_or("System", |(_, name)| name).to_owned()
+		},
+		set: |s, v| {
+			s.language = LANGUAGE_NAMES.iter().find(|(_, name)| *name == v).map_or("", |(code, _)| code).to_owned();
 		},
 	},
 	Row {

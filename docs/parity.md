@@ -11,7 +11,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 5 | 19 | 11 | 5 | 0 |
+| X | Cross-cutting | 5 | 20 | 10 | 5 | 0 |
 | M | Menus and shortcuts | 23 | 31 | 73 | 13 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 11 | 15 | 0 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 128 | 319 | 595 | 47 | 6 |
+| | All | 128 | 320 | 594 | 47 | 6 |
 
 ## Cross-cutting
 
@@ -61,7 +61,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-31 | UI zoom 0.5x..3x: Ctrl+=, Ctrl+-, Ctrl+0, Settings > General; persisted `UiZoom`; touch default 2x | Theming/WindowZoom.cs | 00, UI zoom | missing | |
 | X-32 | `--zoom=<f>` switch; unknown `--` switches logged | App.xaml.cs | 00, Startup | missing | |
 | X-33 | Per-monitor DPI; lines on whole device pixels | App.manifest | 00, UI zoom | partial | Slint scale factor; not verified |
-| X-34 | Languages EN/DE/FR/NL + System; live switch; persisted `Language` | Strings/Strings.*.xaml | 00, Languages | missing | `@tr` markers only, no translations bundled, no setting row |
+| X-34 | Languages EN/DE/FR/NL + System; live switch; persisted `Language` | Strings/Strings.*.xaml | 00, Languages | partial | `@tr` with Slint's bundled gettext tables from Next's (tools/next-strings.py, lang/); live switch and the system language through the Settings row Language (decision 0027); our texts Next lacks (welcome page, Settings window) and strings made in Rust (property and settings labels, tree names, status words) stay English; on the web System reads the browser's language |
 | X-35 | British spelling except "license" | Strings.EN.xaml | 00, Languages | partial | not audited |
 | X-36 | First argument opens .wdproj, configuration.json (import) or .wdscheme | App.xaml.cs | 00, Startup | partial | .wdproj and json; .wdscheme not handled |
 | X-37 | File type registration (.wdproj, .wdscheme), jump list | App.xaml.cs | 00, Platform-specific | divergence | divergences.md "Windows integrations": file types from packaging, no jump list |

@@ -113,7 +113,7 @@ export component AppWindow inherits Window {
             MenuItem { title: @tr("New Project"); icon: MenuIcons.note-add; shortcut: @keys(Control + N); activated => { root.menu("new"); } }
             MenuItem { title: @tr("Open Project..."); icon: MenuIcons.folder-open; shortcut: @keys(Control + O); activated => { root.menu("open"); } }
             Menu { title: @tr("Recent Projects"); icon: MenuIcons.history; }
-            MenuItem { title: @tr("Examples..."); icon: MenuIcons.list-alt; activated => { root.menu("examples"); } }
+            MenuItem { title: @tr("Examples"); icon: MenuIcons.list-alt; activated => { root.menu("examples"); } }
             MenuItem { title: @tr("Welcome Page..."); icon: MenuIcons.waving-hand; activated => { root.menu("welcome"); } }
             MenuItem { title: @tr("Settings..."); icon: MenuIcons.settings; shortcut: @keys(Control + ","); activated => { root.menu("settings"); } }
             MenuSeparator { }

@@ -392,6 +392,9 @@ fn apply_theme(state: &mut State, app: &AppWindow) {
 /// Applies the settings to the window, the history and the run.
 fn apply_settings(state: &mut State, app: &AppWindow) {
 	apply_theme(state, app);
+	if let Err(e) = slint::select_bundled_translation(&settings::language(&state.settings)) {
+		tracing::warn!("language: {e}");
+	}
 	let s = &state.settings;
 	app.set_preview_stacked(s.preview_orientation == waveduderust_platform::settings::Orientation::Vertical);
 	state.doc.set_limit(s.undo_steps as usize);

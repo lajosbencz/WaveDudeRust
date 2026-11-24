@@ -108,7 +108,7 @@ export component TransportBar inherits Rectangle {
     HorizontalLayout {
         padding: 3px;
         spacing: 1px;
-        IconButton { icon: t.running ? @image-url("icons/next/stop.svg") : @image-url("icons/next/run.svg"); tip: @tr("Run (F5) / Stop (Esc)"); clicked => { root.action(t.running ? "stop" : "run"); } }
+        IconButton { icon: t.running ? @image-url("icons/next/stop.svg") : @image-url("icons/next/run.svg"); tip: t.running ? @tr("Stop the simulation; the frames so far stay (Esc)") : @tr("Run the simulation from the start (F5)"); clicked => { root.action(t.running ? "stop" : "run"); } }
         IconButton { icon: @image-url("icons/next/pause-run.svg"); tip: @tr("Pause the simulation (F6)"); enabled: t.running; clicked => { root.action("pause-run"); } }
         Divider { }
         IconButton { icon: @image-url("icons/next/play.svg"); tip: @tr("Play (Space)"); enabled: !t.playing; clicked => { root.action("play"); } }
@@ -118,9 +118,9 @@ export component TransportBar inherits Rectangle {
         Divider { }
         IconButton { icon: @image-url("icons/next/set-in.svg"); tip: @tr("Start the export range at this frame (I)"); clicked => { root.action("in"); } }
         IconButton { icon: @image-url("icons/next/set-out.svg"); tip: @tr("End the export range at this frame (O)"); clicked => { root.action("out"); } }
-        IconButton { icon: @image-url("icons/next/clear-range.svg"); tip: @tr("Clear the export range (X)"); enabled: t.ranged; clicked => { root.action("clear-range"); } }
+        IconButton { icon: @image-url("icons/next/clear-range.svg"); tip: @tr("Clear the export range: the whole run is exported (X)"); enabled: t.ranged; clicked => { root.action("clear-range"); } }
         IconButton { icon: @image-url("icons/next/loop.svg"); tip: @tr("Loop playback over the export range (L)"); checked: t.looping; clicked => { root.action("loop"); } }
-        IconButton { icon: @image-url("icons/next/live.svg"); tip: @tr("Follow the newest frame (F)"); checked: t.live; enabled: t.running; clicked => { root.action("live"); } }
+        IconButton { icon: @image-url("icons/next/live.svg"); tip: @tr("Follow the newest frame while the run is in progress (F)"); checked: t.live; enabled: t.running; clicked => { root.action("live"); } }
         Divider { }
         Text {
             text: t.position + " / " + max(0, t.frames - 1);
