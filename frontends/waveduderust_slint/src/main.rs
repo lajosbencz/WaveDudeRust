@@ -3,6 +3,7 @@
 mod document;
 mod examples;
 mod export;
+mod files;
 mod form;
 mod gpu;
 mod live;
@@ -11,6 +12,8 @@ mod messages;
 mod playback;
 mod settings;
 mod tree;
+#[cfg(target_arch = "wasm32")]
+mod web;
 
 #[allow(
 	unused_qualifications,
@@ -26,6 +29,7 @@ mod ui {
 }
 
 use std::cell::RefCell;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -56,6 +60,7 @@ struct State {
 	settings_section: usize,
 	facts: waveduderust::quality::MachineFacts,
 	exporting: Option<export::Exporting>,
+	inbox: files::Inbox,
 	example_topic: usize,
 	example_search: String,
 	/// The examples the dialog lists, by index into [`examples::all`].
@@ -90,10 +95,6 @@ impl State {
 	}
 }
 
-fn project_dialog() -> rfd::FileDialog {
-	rfd::FileDialog::new().add_filter("WaveDude project", &["wdproj", "xml"]).add_filter("Wave Dude 2D", &["json"])
-}
-
 /// Runs a menu action by its id (docs/ui/10).
 fn menu(state: &mut State, app: &AppWindow, id: &str) {
 	match id {
@@ -115,7 +116,7 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			app.set_welcome_shown(true);
 		}
 		"random-example" => {
-			let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
+			let nanos = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
 			let e = &examples::all()[nanos as usize % examples::all().len()];
 			menu(state, app, &format!("example:{}", e.file));
 		}
@@ -139,20 +140,23 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 		}
 		id if (matches!(id, "new" | "open" | "close" | "exit") || id.starts_with("example:")) && state.doc.dirty() => {
 			state.pending = Some(id.to_owned());
-			let name = state.doc.path.as_deref().and_then(std::path::Path::file_name).map_or_else(|| "Untitled".into(), |n| n.to_string_lossy().into_owned());
+			let name = state.doc.name();
 			app.set_modal(modal(ui::ModalKind::Question, "WaveDude Rust", &format!("Save the changes to {name}?"), &["Save", "Don't save", "Cancel"], 0, 2));
 		}
 		"new" | "close" => {
 			state.playback.reset();
 			let generation = state.doc.generation + 1;
-			state.doc = Document::new(UNDO_STEPS);
+			state.doc = Document::new(state.settings.undo_steps as usize);
 			state.doc.generation = generation;
 			state.selected = Node::Project;
 		}
 		"open" => {
-			if let Some(path) = project_dialog().pick_file() {
+			#[cfg(not(target_arch = "wasm32"))]
+			if let Some(path) = files::dialog().pick_file() {
 				open(state, app, path);
 			}
+			#[cfg(target_arch = "wasm32")]
+			files::pick(&state.inbox);
 		}
 		"save" | "save-as" => {
 			save(state, app, id == "save-as");
@@ -197,6 +201,7 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 }
 
 /// Puts `path` first in the recent files and saves the settings.
+#[cfg(not(target_arch = "wasm32"))]
 fn remember(state: &mut State, path: &std::path::Path) {
 	state.settings.push_recent(path);
 	if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
@@ -269,9 +274,34 @@ fn modal(kind: ui::ModalKind, title: &str, text: &str, buttons: &[&str], default
 }
 
 /// Saves the project, to a picked file for Save As or without a file; `false` when cancelled or failed.
+#[cfg(target_arch = "wasm32")]
+fn save(state: &mut State, app: &AppWindow, _: bool) -> bool {
+	let name = state.doc.name();
+	match files::download(&name, &state.doc.text()) {
+		Ok(()) => {
+			state.doc.mark_saved();
+			tracing::info!("saved {name} as a download");
+			true
+		}
+		Err(e) => {
+			tracing::error!("cannot save {name}: {e}");
+			app.set_modal(modal(
+				ui::ModalKind::Error,
+				"WaveDude Rust",
+				&format!("Could not save '{name}'."),
+				&["OK"],
+				0,
+				0,
+			));
+			false
+		}
+	}
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
 	let Some(path) = state.doc.path.clone().filter(|_| !pick).or_else(|| {
-		project_dialog().set_file_name(state.doc.suggested.as_deref().unwrap_or("Untitled.wdproj")).save_file()
+		files::dialog().set_file_name(state.doc.suggested.as_deref().unwrap_or("Untitled.wdproj")).save_file()
 	}) else {
 		return false;
 	};
@@ -348,6 +378,7 @@ fn transport_state(p: &Playback, shown: &live::Shown) -> ui::Transport {
 	}
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 	match state.doc.open(&path) {
 		Ok(()) => {
@@ -371,13 +402,13 @@ fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 	state.show(app);
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	let ring = log::init();
-	let (device, queue) = gpu::select()?;
+	let context = gpu::select().await?;
 	let app = AppWindow::new()?;
-	let live = Live::new(device, queue)?;
-	let store = waveduderust_platform::settings::AppDirs::platform().map(|d| d.store());
-	let facts = waveduderust::run::machine_facts(&waveduderust::run::FrameStore::default_dir());
+	let live = Live::new(&context)?;
+	let store = waveduderust_platform::store::Store::open();
+	let facts = waveduderust_platform::machine::machine_facts();
 	let settings = store.as_ref().map_or_else(Default::default, |s| {
 		waveduderust_platform::settings::Settings::load(s, false, || facts).settings
 	});
@@ -394,6 +425,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		settings_section: 0,
 		facts,
 		exporting: None,
+		inbox: files::Inbox::default(),
 		example_topic: 0,
 		example_search: String::new(),
 		example_rows: Vec::new(),
@@ -405,6 +437,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		show_welcome(&state.borrow(), &app);
 		app.set_welcome_shown(true);
 	}
+	#[cfg(not(target_arch = "wasm32"))]
 	if let Some(path) = std::env::args_os().nth(1) {
 		open(&mut state.borrow_mut(), &app, path.into());
 	}
@@ -606,7 +639,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				s.playback.position = shown.made.unwrap_or_default();
 				s.playback.live = false;
 			}
-			s.playback.tick(std::time::Instant::now(), s.doc.view.video.fps, shown.made);
+			s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
 			app.set_transport(transport_state(&s.playback, &shown));
 			if let Some(e) = &mut s.exporting {
 				match e.poll() {
@@ -630,6 +663,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 					}
 				}
 			}
+			let picked: Vec<_> = s.inbox.borrow_mut().drain(..).collect();
+			for (name, text) in picked {
+				match s.doc.open_text(&name, &text) {
+					Ok(()) => {
+						s.selected = Node::Project;
+						s.playback.reset();
+						tracing::info!("opened {name}");
+					}
+					Err(e) => {
+						tracing::error!("cannot open {name}: {e}");
+						app.set_modal(modal(
+							ui::ModalKind::Error,
+							"WaveDude Rust",
+							&format!("Could not open '{name}'."),
+							&["OK"],
+							0,
+							0,
+						));
+					}
+				}
+			}
 			if s.messages.take() {
 				s.messages.show(&app);
 			}
@@ -642,6 +696,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 			app.set_run_status(shown.status.into());
 		}
 	});
+	#[cfg(target_arch = "wasm32")]
+	{
+		// The browser's event loop outlives this function.
+		std::mem::forget(timer);
+		std::mem::forget(app.clone_strong());
+	}
 	app.run()?;
 	Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+	pollster::block_on(start())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn main() {
+	std::panic::set_hook(Box::new(|info| web_sys::console::error_1(&info.to_string().into())));
+	wasm_bindgen_futures::spawn_local(async {
+		if let Err(e) = start().await {
+			web_sys::console::error_1(&format!("WaveDude Rust could not start: {e}").into());
+		}
+	});
 }

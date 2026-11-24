@@ -1,30 +1,38 @@
 //! One wgpu device for the engine and the window; the layers drawn into textures the window shows, no CPU readback.
 
 use slint::wgpu_30::{WGPUConfiguration, wgpu};
+use std::sync::Arc;
 use waveduderust::io::schemes::SchemeStore;
 use waveduderust::model::{Layer, Project, View};
-use waveduderust::unstable::engine::gpu::{DeviceFrame, GpuContext, set_context};
+
+use waveduderust::unstable::engine::gpu::{DeviceFrame, GpuContext};
 use waveduderust::unstable::render::gpu::{DevicePlane, GpuPicture, PictureInput, PicturePipeline};
 use waveduderust::unstable::render::layer::{self, LayerColours};
 
 /// Creates the device with the adapter's limits and hands it to the engine and to Slint (whose own choice would take
 /// WebGL2's limits).
-pub(crate) fn select() -> Result<(wgpu::Device, wgpu::Queue), Box<dyn std::error::Error>> {
+pub(crate) async fn select() -> Result<Arc<GpuContext>, Box<dyn std::error::Error>> {
 	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-	let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-		power_preference: wgpu::PowerPreference::HighPerformance,
-		..Default::default()
-	}))?;
-	let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-		label: Some("waveduderust"),
-		required_limits: adapter.limits(),
-		..Default::default()
-	}))?;
-	set_context(GpuContext::from_device(&adapter, device.clone(), queue.clone())?);
+	let adapter = instance
+		.request_adapter(&wgpu::RequestAdapterOptions {
+			power_preference: wgpu::PowerPreference::HighPerformance,
+			..Default::default()
+		})
+		.await?;
+	let (device, queue) = adapter
+		.request_device(&wgpu::DeviceDescriptor {
+			label: Some("waveduderust"),
+			required_limits: adapter.limits(),
+			..Default::default()
+		})
+		.await?;
+	let context = GpuContext::from_device(&adapter, device.clone(), queue.clone())?;
+	#[cfg(not(target_arch = "wasm32"))]
+	waveduderust::unstable::engine::gpu::set_context(context.clone());
 	slint::BackendSelector::new()
-		.require_wgpu_30(WGPUConfiguration::Manual { instance, adapter, device: device.clone(), queue: queue.clone() })
+		.require_wgpu_30(WGPUConfiguration::Manual { instance, adapter, device, queue })
 		.select()?;
-	Ok((device, queue))
+	Ok(context)
 }
 
 /// A layer's picture: the pipeline's draw into a texture of the frame's size.

@@ -27,6 +27,7 @@ impl Document {
 	}
 
 	/// The project of `path`, replacing this one and its history.
+	#[cfg(not(target_arch = "wasm32"))]
 	pub(crate) fn open(&mut self, path: &Path) -> waveduderust::io::Result<()> {
 		let (project, view) = waveduderust::io::load_project(path)?;
 		*self = Self {
@@ -53,7 +54,30 @@ impl Document {
 		};
 	}
 
+	/// Opens a project file's `text` named `name` with no path: a `.json` is a Wave Dude 2D project.
+	pub(crate) fn open_text(&mut self, name: &str, text: &str) -> Result<(), String> {
+		let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
+		let (project, view) = if name.to_ascii_lowercase().ends_with(".json") {
+			let imported = waveduderust::io::legacy::import_str(text, Path::new("")).map_err(|e| e.to_string())?;
+			for note in &imported.notes {
+				tracing::info!("import of '{name}': {note}");
+			}
+			(imported.project, imported.view)
+		} else {
+			waveduderust::io::wdproj::read_str(text).map_err(|e| e.to_string())?
+		};
+		self.adopt(project, view, &format!("{stem}.wdproj"));
+		Ok(())
+	}
+
+	/// The project as `.wdproj` text.
+	#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code, reason = "the browser saves by download"))]
+	pub(crate) fn text(&self) -> String {
+		waveduderust::io::wdproj::write_string(&self.project, &self.view, None)
+	}
+
 	/// Writes the project to `path`, which becomes its file.
+	#[cfg(not(target_arch = "wasm32"))]
 	pub(crate) fn save_as(&mut self, path: &Path) -> waveduderust::io::Result<()> {
 		waveduderust::io::save_project(&self.project, &self.view, path)?;
 		self.path = Some(path.to_owned());
@@ -114,14 +138,18 @@ impl Document {
 	}
 
 	/// The window title (docs/ui/00, Main window): the file name, `*` for unsaved edits, `Untitled` without a file.
-	pub(crate) fn title(&self) -> String {
-		let name = self
-			.path
+	/// The file's name, the suggested one or "Untitled.wdproj".
+	pub(crate) fn name(&self) -> String {
+		self.path
 			.as_deref()
 			.and_then(Path::file_name)
 			.map(|n| n.to_string_lossy().into_owned())
 			.or_else(|| self.suggested.clone())
-			.unwrap_or_else(|| "Untitled".into());
+			.unwrap_or_else(|| "Untitled.wdproj".into())
+	}
+
+	pub(crate) fn title(&self) -> String {
+		let name = self.name();
 		format!("WaveDude Rust - {name}{}", if self.dirty() { "*" } else { "" })
 	}
 }

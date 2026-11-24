@@ -22,12 +22,20 @@ slint-build = "1.19"
 slint = { version = "1.19", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-30", "accessibility"] }
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "ansi", "registry"] }
-waveduderust = { path = "../../crates/waveduderust", features = ["unstable-engine", "unstable-reflect", "unstable-run", "unstable-scene"] }
-pollster.workspace = true
+waveduderust = { path = "../../crates/waveduderust", default-features = false, features = ["gpu", "run", "unstable-engine", "unstable-reflect", "unstable-run", "unstable-scene"] }
+web-time.workspace = true
+rfd = "0.18"
 waveduderust_platform = { path = "../../crates/waveduderust_platform" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rfd = "0.18"
+pollster.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+tracing-web = "0.1"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { workspace = true, features = ["Blob", "BlobPropertyBag", "Document", "Element", "HtmlAnchorElement", "Url", "Window", "console"] }
 
 [package.metadata.packager]
 product-name = "WaveDude Rust"

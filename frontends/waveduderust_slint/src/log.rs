@@ -63,7 +63,7 @@ impl<S: Subscriber> Layer<S> for Ring {
 		event.record(&mut message);
 		let meta = event.metadata();
 		let source = meta.target().rsplit("::").next().unwrap_or_default().to_owned();
-		let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+		let secs = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
 		let time = format!("{:02}:{:02}:{:02}", secs / 3600 % 24, secs / 60 % 60, secs % 60);
 		let mut l = self.0.lock().unwrap_or_else(PoisonError::into_inner);
 		if l.lines.len() == KEPT {
@@ -74,7 +74,20 @@ impl<S: Subscriber> Layer<S> for Ring {
 	}
 }
 
-/// Logs to stderr and into the returned ring; Debug and up in debug builds, Info and up in release.
+#[cfg(not(target_arch = "wasm32"))]
+fn console<S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>>() -> impl Layer<S> {
+	tracing_subscriber::fmt::layer().with_writer(std::io::stderr)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn console<S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>>() -> impl Layer<S> {
+	tracing_subscriber::fmt::layer()
+		.with_ansi(false)
+		.without_time()
+		.with_writer(tracing_web::MakeWebConsoleWriter::new())
+}
+
+/// Logs to stderr (the browser's console) and into the returned ring; Debug and up in debug builds, Info and up in release.
 pub(crate) fn init() -> Ring {
 	let ring = Ring::default();
 	let level = if cfg!(debug_assertions) { Level::DEBUG } else { Level::INFO };
@@ -82,7 +95,7 @@ pub(crate) fn init() -> Ring {
 		*m.level() <= level && (m.target().starts_with("waveduderust") || *m.level() <= Level::WARN)
 	});
 	tracing_subscriber::registry()
-		.with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr).with_filter(filter.clone()))
+		.with(console().with_filter(filter.clone()))
 		.with(ring.clone().with_filter(filter))
 		.init();
 	ring

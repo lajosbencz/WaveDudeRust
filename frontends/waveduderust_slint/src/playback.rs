@@ -1,7 +1,7 @@
 //! Playback (docs/ui/50, Playback, Live follow, Position rules): the position on the timeline in frames, speed, loop,
 //! the in/out range and following the run.
 
-use std::time::Instant;
+use web_time::Instant;
 
 /// The playback state of the timeline.
 #[derive(Debug)]

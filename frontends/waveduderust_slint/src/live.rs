@@ -4,8 +4,8 @@ use slint::wgpu_30::wgpu;
 use waveduderust::model::normalize::Normalize;
 use waveduderust::model::{Layer, Project, View};
 use waveduderust::quality::PreviewQuality;
-use waveduderust::run::{Goal, RunWorker, Wanted, WorkState, engines};
-use waveduderust::unstable::engine::gpu::FrameTag;
+use waveduderust::run::{Goal, RunWorker, Wanted, WorkState};
+use waveduderust::unstable::engine::gpu::{FrameTag, GpuContext};
 use waveduderust::unstable::render::gpu::PicturePipeline;
 use waveduderust::unstable::spec::RunRequest;
 
@@ -48,8 +48,16 @@ pub(crate) struct Shown {
 }
 
 impl Live {
-	pub(crate) fn new(device: wgpu::Device, queue: wgpu::Queue) -> std::io::Result<Self> {
-		let worker = RunWorker::new(engines(waveduderust::Backend::Gpu), std::env::temp_dir(), Default::default())?;
+	pub(crate) fn new(context: &std::sync::Arc<GpuContext>) -> std::io::Result<Self> {
+		let (device, queue) = (context.device.clone(), context.queue.clone());
+		#[cfg(not(target_arch = "wasm32"))]
+		let worker = RunWorker::new(
+			waveduderust::run::engines(waveduderust::Backend::Gpu),
+			std::env::temp_dir(),
+			Default::default(),
+		)?;
+		#[cfg(target_arch = "wasm32")]
+		let worker = crate::web::worker(context.clone());
 		let pipeline = PicturePipeline::new(&device, wgpu::TextureFormat::Rgba8Unorm);
 		let (field, intensity) = (Picture::new(&device, Layer::Field), Picture::new(&device, Layer::Intensity));
 		Ok(Self {
@@ -134,6 +142,8 @@ impl Live {
 
 	/// The newest stored frame drawn, when it changed, and the run's state.
 	pub(crate) fn poll(&mut self, project: &Project, view: &View) -> Shown {
+		#[cfg(target_arch = "wasm32")]
+		self.worker.pump(std::time::Duration::from_millis(10), std::task::Waker::noop());
 		let status = self.worker.status();
 		let state = std::mem::discriminant(&status.state);
 		if self.last_state != Some(state) {

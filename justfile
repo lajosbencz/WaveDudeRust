@@ -23,7 +23,7 @@ public_api_version := "0.52.0"
 features := "waveduderust/openh264-source,waveduderust_cli/openh264-source"
 
 # Crates built for the browser.
-wasm_crates := "waveduderust waveduderust_platform"
+wasm_crates := "waveduderust waveduderust_platform waveduderust_slint"
 
 # Crates without a UI toolkit, and the toolkits they must not reach.
 headless_crates := "waveduderust waveduderust_macros waveduderust_platform waveduderust_cli"
