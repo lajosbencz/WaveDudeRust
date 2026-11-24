@@ -1,5 +1,6 @@
 //! WaveDude Rust's app: the Slint window over the core (decision 0032).
 
+mod clipboard;
 mod document;
 mod examples;
 mod export;
@@ -63,6 +64,7 @@ struct State {
 	facts: waveduderust::quality::MachineFacts,
 	exporting: Option<export::Exporting>,
 	inbox: files::Inbox,
+	pasted: clipboard::Pasted,
 	example_topic: usize,
 	example_search: String,
 	/// The examples the dialog lists, by index into [`examples::all`].
@@ -221,7 +223,8 @@ impl State {
 		ui::Commands {
 			can_undo: self.doc.can_undo(),
 			can_redo: self.doc.can_redo(),
-			can_delete: matches!(self.selected, Node::Source(_) | Node::Part(_) | Node::Probe(_) | Node::Scheme(_)),
+			can_delete: self.node_exists(),
+			can_copy: matches!(self.selected, Node::Scene | Node::Simulation | Node::Display) || self.node_exists(),
 			can_run: !self.live.active() && !exporting,
 			run_active: self.live.active(),
 			paused: self.live.paused(),
@@ -231,6 +234,18 @@ impl State {
 			can_close: self.doc.path.is_some() || self.doc.suggested.is_some() || self.doc.dirty(),
 			can_play: self.playback.frames > 1,
 			playing: self.playback.playing,
+		}
+	}
+
+	/// Whether the selected node is a list item that exists.
+	fn node_exists(&self) -> bool {
+		let p = &self.doc.project;
+		match self.selected {
+			Node::Source(i) => i < p.sources.len(),
+			Node::Part(i) => i < p.parts.len(),
+			Node::Probe(i) => i < p.probes.len(),
+			Node::Scheme(i) => i < p.color_schemes.len(),
+			_ => false,
 		}
 	}
 
@@ -346,6 +361,23 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 		)),
 		"undo" => state.doc.undo(),
 		"redo" => state.doc.redo(),
+		"copy" | "cut" => {
+			let node = state.selected;
+			let copied = clipboard::copy(&state.doc.project, &state.doc.view, node)
+				.map(|f| clipboard::write(waveduderust::io::wdproj::write_fragment(&f)));
+			match copied {
+				Some(Ok(())) if id == "cut" && state.commands().can_delete => {
+					state.doc.edit(|p| tree::remove(p, node));
+					state.selected = Node::Project;
+				}
+				Some(Err(e)) => tracing::error!("clipboard: {e}"),
+				_ => {}
+			}
+		}
+		"paste" => {
+			clipboard::read(&state.pasted);
+			paste(state);
+		}
 		"delete" if state.commands().can_delete => {
 			let node = state.selected;
 			state.doc.edit(|p| tree::remove(p, node));
@@ -357,6 +389,23 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 		other => tracing::info!("menu: {other}"),
 	}
 	state.show(app);
+}
+
+/// Pastes the clipboard text read for it; text that holds no objects is logged.
+fn paste(state: &mut State) {
+	let texts: Vec<String> = state.pasted.borrow_mut().drain(..).collect();
+	for text in texts {
+		match waveduderust::io::wdproj::read_fragment(&text) {
+			Ok(fragment) if !fragment.is_empty() => {
+				let (current, view) = (state.selected, &mut state.doc.view.clone());
+				let mut last = None;
+				state.doc.edit(|p| last = clipboard::paste(p, view, fragment, current));
+				state.doc.view = view.clone();
+				state.selected = last.unwrap_or(current);
+			}
+			_ => tracing::info!("the clipboard holds no project objects"),
+		}
+	}
 }
 
 /// Puts `path` first in the recent files and saves the settings.
@@ -640,6 +689,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		facts,
 		exporting: None,
 		inbox: files::Inbox::default(),
+		pasted: clipboard::Pasted::default(),
 		example_topic: 0,
 		example_search: String::new(),
 		example_rows: Vec::new(),
@@ -894,6 +944,10 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 						}
 					}
 				}
+			}
+			if !s.pasted.borrow().is_empty() {
+				paste(s);
+				s.show(&app);
 			}
 			let picked: Vec<_> = s.inbox.borrow_mut().drain(..).collect();
 			for (name, text) in picked {

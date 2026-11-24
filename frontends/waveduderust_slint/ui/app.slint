@@ -27,6 +27,8 @@ export struct Commands {
     can-redo: bool,
     // an object row is selected
     can-delete: bool,
+    // an object or a settings row is selected
+    can-copy: bool,
     can-run: bool,
     run-active: bool,
     paused: bool,
@@ -169,9 +171,9 @@ export component AppWindow inherits Window {
             MenuItem { title: root.menu-text(@tr("&Undo"), @tr("Undo")); icon: MenuIcons.undo; enabled: root.commands.can-undo; activated => { root.menu("undo"); } }
             MenuItem { title: root.menu-text(@tr("&Redo"), @tr("Redo")); icon: MenuIcons.redo; enabled: root.commands.can-redo; activated => { root.menu("redo"); } }
             MenuSeparator { }
-            MenuItem { title: root.menu-text(@tr("Cu&t"), @tr("Cut")); icon: MenuIcons.content-cut; enabled: false; activated => { root.menu("cut"); } }
-            MenuItem { title: root.menu-text(@tr("&Copy"), @tr("Copy")); icon: MenuIcons.content-copy; enabled: false; activated => { root.menu("copy"); } }
-            MenuItem { title: root.menu-text(@tr("&Paste"), @tr("Paste")); icon: MenuIcons.content-paste; enabled: false; activated => { root.menu("paste"); } }
+            MenuItem { title: root.menu-text(@tr("Cu&t"), @tr("Cut")); icon: MenuIcons.content-cut; enabled: root.commands.can-delete; activated => { root.menu("cut"); } }
+            MenuItem { title: root.menu-text(@tr("&Copy"), @tr("Copy")); icon: MenuIcons.content-copy; enabled: root.commands.can-copy; activated => { root.menu("copy"); } }
+            MenuItem { title: root.menu-text(@tr("&Paste"), @tr("Paste")); icon: MenuIcons.content-paste; enabled: true; activated => { root.menu("paste"); } }
             MenuItem { title: root.menu-text(@tr("&Delete"), @tr("Delete")); icon: MenuIcons.delete; enabled: root.commands.can-delete; activated => { root.menu("delete"); } }
             MenuSeparator { }
             MenuItem { title: root.menu-text(@tr("Select &all"), @tr("Select all")); icon: MenuIcons.select-all; enabled: false; activated => { root.menu("select-all"); } }

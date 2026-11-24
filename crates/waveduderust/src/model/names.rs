@@ -191,6 +191,30 @@ impl Project {
 	pub fn duplicate_color_scheme(&mut self, id: SchemeId) -> Option<SchemeId> {
 		duplicate(&mut self.color_schemes, id)
 	}
+
+	/// Inserts a pasted source at `at` under a fresh id, renamed to a copy name when its name is taken.
+	pub fn paste_source(&mut self, at: usize, source: Source) -> SourceId {
+		paste(&mut self.sources, at, source)
+	}
+
+	pub fn paste_part(&mut self, at: usize, part: Part) -> PartId {
+		paste(&mut self.parts, at, part)
+	}
+
+	pub fn paste_probe(&mut self, at: usize, probe: Probe) -> ProbeId {
+		paste(&mut self.probes, at, probe)
+	}
+
+	pub fn paste_color_scheme(&mut self, at: usize, scheme: ColorScheme) -> SchemeId {
+		paste(&mut self.color_schemes, at, scheme)
+	}
+}
+
+fn paste<T: Identified>(items: &mut Vec<T>, at: usize, mut item: T) -> T::Id {
+	if is_taken(item.name(), names(items)) {
+		item.set_name(copy_name(item.name(), names(items)));
+	}
+	insert(items, at, item)
 }
 
 fn duplicate<T: Identified>(items: &mut Vec<T>, id: T::Id) -> Option<T::Id> {
@@ -209,6 +233,19 @@ mod tests {
 	fn numbered_takes_lowest_free_case_insensitive() {
 		assert_eq!(numbered_name("Source", ["source 1", "Source 3"]), "Source 2");
 		assert_eq!(numbered_name("Probe", []), "Probe 1");
+	}
+
+	#[test]
+	fn a_paste_renames_a_taken_name_only() {
+		let mut p = Project::default();
+		let a = p.add_source();
+		let copy = p.source(a).unwrap().clone();
+		p.paste_source(1, copy.clone());
+		assert_eq!(p.sources[1].name, format!("{} copy", p.sources[0].name));
+		assert_ne!(p.sources[1].id, p.sources[0].id);
+		p.sources.clear();
+		p.paste_source(0, copy.clone());
+		assert_eq!(p.sources[0].name, copy.name);
 	}
 
 	#[test]

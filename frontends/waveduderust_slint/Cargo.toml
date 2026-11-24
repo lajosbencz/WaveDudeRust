@@ -30,6 +30,8 @@ rfd = "0.18"
 waveduderust_platform = { path = "../../crates/waveduderust_platform" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Slint's clipboard serves its text fields only; already in its winit backend's tree
+arboard = { version = "3.6", default-features = false }
 pollster.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -39,7 +41,7 @@ tracing-web = "0.1"
 sys-locale = { version = "0.3", features = ["js"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-web-sys = { workspace = true, features = ["Blob", "BlobPropertyBag", "Document", "Element", "HtmlAnchorElement", "Url", "Window", "console"] }
+web-sys = { workspace = true, features = ["Blob", "BlobPropertyBag", "Document", "Element", "Clipboard", "HtmlAnchorElement", "Navigator", "Url", "Window", "console"] }
 
 [package.metadata.packager]
 product-name = "WaveDude Rust"

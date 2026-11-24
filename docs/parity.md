@@ -12,7 +12,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 5 | 20 | 9 | 6 | 0 |
-| M | Menus and shortcuts | 23 | 28 | 70 | 19 | 0 |
+| M | Menus and shortcuts | 23 | 31 | 66 | 20 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 11 | 30 | 24 | 18 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 128 | 318 | 589 | 54 | 6 |
+| | All | 128 | 321 | 585 | 55 | 6 |
 
 ## Cross-cutting
 
@@ -119,9 +119,9 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | M-23 | Undo, Ctrl+Z, enabled when a step exists; a focused text box keeps its own Ctrl+Z | MW:282, SE:51, EditCommands.cs:37 | ui/10 Edit | partial | enabled can-undo; Ctrl+Z is a window key a focused text field takes first, no shortcut text (divergences.md Menus) |
 | M-24 | Redo, Ctrl+Y and Ctrl+Shift+Z | MW:283, SE:52, EditCommands.cs:41 | ui/10 Edit | partial | enabled can-redo; Ctrl+Y and Ctrl+Shift+Z as M-23 |
 | M-25 | Separator | MW:284 | ui/10 Edit | done | app:124 |
-| M-26 | Cut, Ctrl+X, enabled when list items selected, copies then removes | MW:285, SE:53 | ui/10 Edit | missing | entry disabled until the clipboard commands (piece 2b) |
-| M-27 | Copy, Ctrl+C, objects to clipboard as XML text + app format | MW:286, SE:54 | ui/10 Edit | missing | entry disabled until the clipboard commands (piece 2b) |
-| M-28 | Paste, Ctrl+V, enabled when clipboard parses; paste behind current; settings object replaces | MW:287, SE:55 | ui/10 Edit | missing | entry disabled until the clipboard commands (piece 2b) |
+| M-26 | Cut, Ctrl+X, enabled when list items selected, copies then removes | MW:285, SE:53 | ui/10 Edit | partial | copies then removes the selected list item (src/clipboard.rs); one object until multi-selection (piece 3) |
+| M-27 | Copy, Ctrl+C, objects to clipboard as XML text + app format | MW:286, SE:54 | ui/10 Edit | partial | the selected list item or settings object as `.wdproj` fragment text (arboard; navigator.clipboard on the web); no app format (divergences.md Clipboard); one object until piece 3 |
+| M-28 | Paste, Ctrl+V, enabled when clipboard parses; paste behind current; settings object replaces | MW:287, SE:55 | ui/10 Edit | divergence | after the current item of its list, else at the end, under a copy name when the name is taken and a fresh id (Project::paste_*); a settings object replaces on its row or the root; always enabled (divergences.md Clipboard); the last pasted becomes current |
 | M-29 | Delete, Del, enabled as Cut, removes selection (text box: its text) | MW:288, SE:56, InputGestureText "Del" | ui/10 Edit | partial | enabled when an object row is selected; Del as a window key; one object, no multi-selection (piece 3) |
 | M-30 | Separator before Select all | MW:289 | ui/10 Edit | done | app:129 |
 | M-31 | Select all, Ctrl+A, enabled when project has items; every source/part/probe, last current; tree and preview | MW:291, SE:184 (MenuProjectSelectAll), ProjectCommands.cs:57 | ui/10 Edit | missing | app:130; main.rs has no "select-all" arm (single selection only, tree.rs) |
@@ -231,7 +231,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-102 | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S | MW:144-149,209-211 | ui/10 window-wide | done | app:95-103 |
 | M-103 | Alt+F4 exit | MW:32-36 | ui/10 | partial | OS-level; see M-20 |
 | M-104 | Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z undo/redo (text box: own) | EditCommands.cs:37,41 | ui/10 | partial | FocusScope app:166-168; behaviour while a LineEdit has focus not verified (FocusScope only receives unhandled keys) |
-| M-105 | Ctrl+X / Ctrl+C / Ctrl+V cut/copy/paste objects (text box: text) | ApplicationCommands | ui/10 | missing | keys call menu() which does nothing |
+| M-105 | Ctrl+X / Ctrl+C / Ctrl+V cut/copy/paste objects (text box: text) | ApplicationCommands | ui/10 | partial | window keys a focused text field takes first; act on the one selected object |
 | M-106 | Ctrl+A select all objects (text box: text) | ProjectCommands.cs:57 | ui/10 | missing | |
 | M-107 | Ctrl+E export last | ExportCommands.cs:59 | ui/10 | partial | M-18 |
 | M-108 | Ctrl+Shift+E / I / B, Ctrl+Shift+F / G | ExportCommands.cs:35-51 | ui/10 | partial | M-12..17 |
