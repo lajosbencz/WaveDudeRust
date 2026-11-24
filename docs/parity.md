@@ -622,7 +622,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-10 | Secondary values (format version, folder count) grey | Views/ProjectView.xaml:37 | 30 Pane behaviour | partial | FormValue in the dim text colour: Format version; the folder count is plain (T-66) |
 | P-11 | Read-outs plain text bound to inputs; '~ ' prefix 1 decimal for estimates; px/deg units | Themes/Editors.xaml (FormReadout) | 30 Pane behaviour | missing | no read-out rows |
 | P-12 | Edits apply live (every keystroke in name, step, check box) | Panes/PropertiesPane.xaml.cs | 30 Pane behaviour | partial | check box/combo live; text applies on Enter only (accepted), no per-keystroke name rename |
-| P-13 | Each edit marks dirty, follows live-editing rules / undo | MainWindow.Live.cs | 30 Pane behaviour; 60 | done | doc.edit per set |
+| P-13 | Each edit marks dirty, follows live-editing rules / undo | MainWindow.Live.cs | 30 Pane behaviour; 60 | done | doc.edit per set; Display edits through doc.edit_view_merging, so the Display settings undo and dirty with the project |
 | P-14 | Tooltips (Hint.*) on every editor and label | Views/*.xaml meta:Hint | 30 intro | partial | Next's Hint.* as Tooltips on the labels and editors of the settings forms |
 | P-15 | Labels from Label.<Type>.<Member> string tables, 4 languages | Strings/* | 30 intro | partial | the settings forms' labels are Next's Label.* texts through @tr, translated by tools/next-strings.py |
 | P-16 | Enum words localised from Enum.* | Strings/* | 30 Check box, combo box | partial | Scene's Mode and Edges words through @tr (Next's Enum.*); the items' words are raw |
