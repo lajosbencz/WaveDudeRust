@@ -222,7 +222,7 @@ def read(path):
 def main():
 	if not NEXT:
 		sys.exit("set WAVEDUDE_NEXT_DIR to WaveDude Next's source tree")
-	wpf = os.path.join(NEXT, "src/WaveDudeNext.WPF")
+	wpf = os.path.join(NEXT, "WaveDudeNext.WPF")
 	os.makedirs(OUT, exist_ok=True)
 	sources = {}
 	for file, key, name, style, box in ICONS:

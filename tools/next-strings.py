@@ -48,7 +48,7 @@ def unescape(literal):
 
 
 def table(lang):
-	path = os.path.join(NEXT, "src/WaveDudeNext.WPF/Strings", f"Strings.{lang.upper()}.xaml")
+	path = os.path.join(NEXT, "WaveDudeNext.WPF/Strings", f"Strings.{lang.upper()}.xaml")
 	return {e.get(X + "Key"): e.text or "" for e in ET.parse(path).getroot() if e.get(X + "Key")}
 
 
