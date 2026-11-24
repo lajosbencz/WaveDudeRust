@@ -91,13 +91,20 @@ component Picture inherits VerticalLayout {
     cell := Rectangle {
         background: #000000;
         clip: true;
-        // logical pixels per canvas pixel
-        property <float> scale: max(0.001, min(self.width / (Canvas.width * 1px), self.height / (Canvas.height * 1px)));
+        // logical pixels per canvas pixel: fitted, then zoomed
+        property <float> fit: max(0.001, min(self.width / (Canvas.width * 1px), self.height / (Canvas.height * 1px)));
+        property <float> scale: self.fit * Canvas.zoom;
+        // the picture's corner in the cell: centred while it fits, else around the shared centre, no empty area
+        property <length> left: self.place(self.width, Canvas.width * self.scale * 1px, Canvas.centre-x);
+        property <length> top: self.place(self.height, Canvas.height * self.scale * 1px, Canvas.centre-y);
+        pure function place(room: length, size: length, centre: float) -> length {
+            size <= room ? (room - size) / 2 : clamp(room / 2 - centre * self.scale * 1px, room - size, 0px)
+        }
         changed scale => { Canvas.rescaled(root.layer, self.scale); }
         init => { Canvas.rescaled(root.layer, self.scale); }
         Rectangle {
-            x: (cell.width - self.width) / 2;
-            y: (cell.height - self.height) / 2;
+            x: cell.left;
+            y: cell.top;
             width: Canvas.width * cell.scale * 1px;
             height: Canvas.height * cell.scale * 1px;
             Image {
@@ -119,25 +126,68 @@ component Picture inherits VerticalLayout {
             if root.art.outlines != "": Art { commands: root.art.outlines; stroke: Theme.picture-selection; stroke-width: 1px; }
             for label in root.labels: LabelView { label: label; scale: cell.scale; }
             for handle in root.handles: HandleView { handle: handle; scale: cell.scale; }
+            if Canvas.marquee-shown && Canvas.marquee-layer == root.layer: Rectangle {
+                x: Canvas.marquee.x * cell.scale * 1px;
+                y: Canvas.marquee.y * cell.scale * 1px;
+                width: Canvas.marquee.width * cell.scale * 1px;
+                height: Canvas.marquee.height * cell.scale * 1px;
+                background: Theme.selection.with-alpha(0.15);
+                border-width: 1px;
+                border-color: Theme.selection;
+            }
         }
         // one area for the whole picture: the drawings take no pointer, the app finds the handle under a press
         TouchArea {
-            property <length> left: (cell.width - Canvas.width * cell.scale * 1px) / 2;
-            property <length> top: (cell.height - Canvas.height * cell.scale * 1px) / 2;
             property <length> from-x;
             property <length> from-y;
+            // a middle-button pan: where it started and the centre then
+            property <bool> panning;
+            property <length> pan-x;
+            property <length> pan-y;
+            property <float> centre-x;
+            property <float> centre-y;
+            scroll-event(e) => {
+                // a zoom mid-gesture would move what the gesture measures from
+                if (e.delta-y == 0 || self.pressed || self.panning) {
+                    return reject;
+                }
+                // the canvas point under the pointer stays there
+                let at-x = (self.mouse-x - cell.left) / (cell.scale * 1px);
+                let at-y = (self.mouse-y - cell.top) / (cell.scale * 1px);
+                Canvas.zoom = clamp(Canvas.zoom * (e.delta-y > 0 ? 1.25 : 0.8), 1, 64);
+                let s = cell.fit * Canvas.zoom * 1px;
+                Canvas.centre-x = at-x - (self.mouse-x - cell.width / 2) / s;
+                Canvas.centre-y = at-y - (self.mouse-y - cell.height / 2) / s;
+                accept
+            }
             pointer-event(e) => {
                 if (e.kind == PointerEventKind.cancel) {
-                    Canvas.release();
+                    self.panning = false;
+                    Canvas.cancel();
                     return;
                 }
                 if (e.kind == PointerEventKind.move) {
-                    if (self.pressed) {
+                    if (self.panning) {
+                        // held where the picture's edge stops it, so a drag back moves it at once
+                        let half-x = cell.width / 2 / (cell.scale * 1px);
+                        let half-y = cell.height / 2 / (cell.scale * 1px);
+                        Canvas.centre-x = clamp(self.centre-x - (self.mouse-x - self.pan-x) / (cell.scale * 1px), half-x, max(half-x, Canvas.width - half-x));
+                        Canvas.centre-y = clamp(self.centre-y - (self.mouse-y - self.pan-y) / (cell.scale * 1px), half-y, max(half-y, Canvas.height - half-y));
+                    } else if (self.pressed) {
                         Canvas.drag(
                             (self.mouse-x - self.from-x) / (cell.scale * 1px),
                             (self.mouse-y - self.from-y) / (cell.scale * 1px),
                             e.modifiers.shift);
                     }
+                    return;
+                }
+                if (e.button == PointerEventButton.middle) {
+                    self.panning = e.kind == PointerEventKind.down && Canvas.zoom > 1 && !self.pressed;
+                    self.pan-x = self.mouse-x;
+                    self.pan-y = self.mouse-y;
+                    // the centre shown, which a fitted picture does not hold
+                    self.centre-x = (cell.width / 2 - cell.left) / (cell.scale * 1px);
+                    self.centre-y = (cell.height / 2 - cell.top) / (cell.scale * 1px);
                     return;
                 }
                 if (e.button != PointerEventButton.left) {
@@ -148,8 +198,8 @@ component Picture inherits VerticalLayout {
                     self.from-y = self.mouse-y;
                     Canvas.press(
                         root.layer,
-                        (self.mouse-x - self.left) / (cell.scale * 1px),
-                        (self.mouse-y - self.top) / (cell.scale * 1px),
+                        (self.mouse-x - cell.left) / (cell.scale * 1px),
+                        (self.mouse-y - cell.top) / (cell.scale * 1px),
                         e.modifiers.control,
                         e.modifiers.shift);
                 } else if (e.kind == PointerEventKind.up) {

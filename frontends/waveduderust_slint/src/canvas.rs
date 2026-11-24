@@ -225,8 +225,8 @@ impl Overlays {
 	}
 
 	/// A press at canvas pixel `at` of `layer`'s picture. On a handle (the topmost within reach): selects as a
-	/// click does (Ctrl toggles, Shift adds, neither drags) and starts a drag of what the handle moves. Elsewhere:
-	/// deselects unless Ctrl or Shift is held.
+	/// click does (Ctrl toggles, Shift adds, neither drags) and starts a drag of what the handle moves. Elsewhere: a
+	/// marquee.
 	pub(crate) fn press(
 		&self,
 		project: &Project,
@@ -235,13 +235,10 @@ impl Overlays {
 		at: (f32, f32),
 		(control, shift): (bool, bool),
 		gesture: u64,
-	) -> Option<Drag> {
+	) -> Option<Gesture> {
 		let shown = &self.shown[index(layer)];
 		let Some(handle) = hit(&shown.model, at, HIT_REACH / shown.scale()) else {
-			if !control && !shift {
-				selection.set(Node::Project);
-			}
-			return None;
+			return Some(Gesture::Marquee(Marquee { layer, from: at, to: at, control, shift }));
 		};
 		let node = node_of(project, handle.item)?;
 		let drag = |target: Target| Drag {
@@ -275,13 +272,81 @@ impl Overlays {
 				HandleKind::ProbeA => Which::A,
 				HandleKind::ProbeB => Which::B,
 				HandleKind::Source | HandleKind::PartCentre => Which::Both,
-				HandleKind::SourceLever | HandleKind::PartLever => return Some(drag(Target::Lever(handle.item))),
-				kind => return Some(drag(Target::Shape(handle.item, kind))),
+				HandleKind::SourceLever | HandleKind::PartLever => {
+					return Some(Gesture::Handle(drag(Target::Lever(handle.item))));
+				}
+				kind => return Some(Gesture::Handle(drag(Target::Shape(handle.item, kind)))),
 			};
 			Target::Items(start(project, node, which).into_iter().collect())
 		};
-		Some(drag(target))
+		Some(Gesture::Handle(drag(target)))
 	}
+}
+
+/// A marquee drag on a picture: where it started, the corner now, and the keys held at the press.
+pub(crate) struct Marquee {
+	layer: ui::Layer,
+	from: (f32, f32),
+	to: (f32, f32),
+	control: bool,
+	shift: bool,
+}
+
+impl Marquee {
+	pub(crate) fn stretch(&mut self, (dx, dy): (f32, f32)) {
+		self.to = (self.from.0 + dx, self.from.1 + dy);
+	}
+
+	/// The marquee as the picture draws it.
+	pub(crate) fn rect(&self) -> ui::Rect {
+		let (x, y) = (self.from.0.min(self.to.0), self.from.1.min(self.to.1));
+		ui::Rect { x, y, width: (self.from.0 - self.to.0).abs(), height: (self.from.1 - self.to.1).abs() }
+	}
+
+	pub(crate) fn layer(&self) -> ui::Layer {
+		self.layer
+	}
+
+	/// Selects the items whose whole-item handles lie inside: Shift adds them, Ctrl toggles them, else they replace
+	/// the selection, the last one current. A marquee that never opened is a click: it deselects unless a key is held.
+	pub(crate) fn select(&self, overlays: &Overlays, project: &Project, selection: &mut Selection) {
+		let r = self.rect();
+		if r.width < 1. && r.height < 1. {
+			if !self.control && !self.shift {
+				selection.set(Node::Project);
+			}
+			return;
+		}
+		let mut hits = Vec::new();
+		for h in overlays.shown[index(self.layer)].model.handles.iter().filter(|h| h.kind.moves_item()) {
+			let inside = (r.x..=r.x + r.width).contains(&h.at.0) && (r.y..=r.y + r.height).contains(&h.at.1);
+			if let Some(node) = node_of(project, h.item).filter(|n| inside && !hits.contains(n)) {
+				hits.push(node);
+			}
+		}
+		if self.shift {
+			for &n in &hits {
+				if !selection.contains(n) {
+					selection.toggle(n);
+				}
+			}
+			if let Some(&last) = hits.last() {
+				selection.pick(project, last, ui::Pick::Focus);
+			}
+		} else if self.control {
+			hits.into_iter().for_each(|n| selection.toggle(n));
+		} else if hits.is_empty() {
+			selection.set(Node::Project);
+		} else {
+			selection.set_group(hits);
+		}
+	}
+}
+
+/// What a press on a picture starts.
+pub(crate) enum Gesture {
+	Handle(Drag),
+	Marquee(Marquee),
 }
 
 /// Logical pixels from a handle's point that still press it.

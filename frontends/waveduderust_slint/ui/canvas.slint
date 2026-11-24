@@ -3,6 +3,8 @@
 
 import { Layer } from "data.slint";
 
+export struct Rect { x: float, y: float, width: float, height: float }
+
 export enum HandleGlyph { source, lever, part, grip, point, bezier, probe }
 
 export struct HandleData {
@@ -40,6 +42,17 @@ export global Canvas {
     in property <[HandleData]> intensity-handles;
     in property <[LabelData]> intensity-labels;
     in property <OverlayArt> intensity-art;
+    // the pictures' zoom over fitting (1..64) and the canvas point at their centres; kept across projects
+    in-out property <float> zoom: 1;
+    in-out property <float> centre-x;
+    in-out property <float> centre-y;
+    // a marquee drag, in canvas pixels
+    in property <bool> marquee-shown;
+    in property <Layer> marquee-layer;
+    in property <Rect> marquee;
+    // a handle drag or a marquee is under way: Esc cancels it
+    in property <bool> dragging;
+    callback cancel();
     // logical pixels per canvas pixel of a layer's picture
     callback rescaled(layer: Layer, scale: float);
     // a press at canvas pixel (x, y)

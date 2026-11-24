@@ -12,17 +12,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 13 | 5 | 2 | 20 | 0 |
-| M | Menus and shortcuts | 60 | 8 | 38 | 34 | 0 |
+| M | Menus and shortcuts | 61 | 8 | 37 | 34 | 0 |
 | D | Dialogs and windows | 34 | 13 | 24 | 8 | 0 |
 | S | Settings | 10 | 7 | 12 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 52 | 1 | 10 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 36 | 6 | 65 | 4 | 1 |
+| V | Preview | 41 | 7 | 59 | 4 | 1 |
 | L | Timeline, transport, status | 40 | 20 | 20 | 7 | 3 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 623 | 81 | 246 | 139 | 6 |
+| | All | 629 | 82 | 239 | 139 | 6 |
 
 ## Cross-cutting
 
@@ -262,7 +262,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-129 | Timeline focused: Left/Right 1 frame, PageUp/PageDown 10, Home/End in/out, wheel 1 frame | TimelineBar.cs | ui/10 Timeline | done | timeline.slint:33-38, scroll-event :77 |
 | M-130 | Handles on pictures: arrows 1 px, Shift+arrows 10 px, rotation lever 1/10 degree, grip resize | PreviewPane handles | ui/10 Handles | missing | no handles (preview is a plain Image) |
 | M-131 | Handles: Del removes item/selection; Esc undoes drag; Tab next handle selects item | PP | ui/10 Handles | missing | |
-| M-132 | Pictures: wheel zoom about pointer, middle drag pan, pinch/two-finger zoom+pan | PP / CanvasImage.cs | ui/10 Handles | missing | Picture uses image-fit contain only |
+| M-132 | Pictures: wheel zoom about pointer, middle drag pan, pinch/two-finger zoom+pan | PP / CanvasImage.cs | ui/10 Handles | done | wheel zoom about the pointer, middle drag pan; touch dropped (decision 0033) |
 | M-133 | Picture splitter: arrows move, Enter/double-click reset to half | PP | ui/10 Splitter | missing | |
 | M-134 | Layout radio group (side by side / stacked): one tab stop, Left/Right switch | PP:485-490 | ui/10 Layout radio | done | two toggles; rest matched in general (decision 0033) |
 | M-135 | Number box: Up/Down step, PageUp/PageDown x10, wheel (Shift x10), Enter commit, Esc revert | WPF/Controls/NumberBox.cs | ui/10 Number box, ui/30 | done | ui/number-box.slint, src/number.rs; Enter and leaving commit (a tree action commits the typed text first, src/main.rs `draft`), Esc restores and passes on when unchanged (Next's EditBehavior) |
@@ -974,11 +974,11 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-26 | Edge line red #FF0000 for reflective edges (rim wins over wall) | PreviewPane.xaml:602-610 | 40 Edge line | missing | |
 | V-27 | Edge line none for open edges / damping band inside | PreviewPane.xaml:602 | 40 Edge line | done | nothing drawn (trivially) |
 | V-28 | Edge line preview only, never exported | PreviewPane.xaml | 40 Edge line | done | nothing drawn |
-| V-29 | Zoom: wheel 1.25x per notch, min fit, max 64x, point under pointer fixed, shared by both pictures | none (no zoom in Next) | 40 Zoom | missing | (port) addition |
-| V-30 | Pan: middle-button drag on zoomed view, no empty area | none | 40 Zoom | missing | (port) |
+| V-29 | Zoom: wheel 1.25x per notch, min fit, max 64x, point under pointer fixed, shared by both pictures | none (no zoom in Next) | 40 Zoom | done | Canvas.zoom 1..64, 1.25x per notch about the pointer, centred while the picture fits; one view for both pictures |
+| V-30 | Pan: middle-button drag on zoomed view, no empty area | none | 40 Zoom | done | middle drag moves Canvas.centre; the picture keeps no empty area |
 | V-31 | Touch: pinch zoom, two-finger pan, second finger cancels drag/marquee | none | 40 Zoom | divergence | decision 0033, dropped |
-| V-32 | Zoomed 16-bit picture rendered for visible window only | none | 40 Zoom | missing | (port) |
-| V-33 | Zoom is session state, kept across projects | none | 40 Zoom | missing | (port) |
+| V-32 | Zoomed 16-bit picture rendered for visible window only | none | 40 Zoom | partial | the frame texture is scaled; not re-rendered for the visible window |
+| V-33 | Zoom is session state, kept across projects | none | 40 Zoom | done | zoom and centre live in the Canvas global, kept across projects |
 | V-34 | Picture changes only when frame for position arrives; never black/other frame | PreviewPane.xaml.cs:716 | 40 What a picture shows | done | live.rs poll draws stored frame only on tag change; request() resets `drawn` but images persist in window |
 | V-35 | Busy dim (black 45 pct) after 150 ms of frame computation | PreviewPane.xaml.cs:250,385; xaml:~655 | 40 What a picture shows | missing | |
 | V-36 | Busy spinner (3/4 ring, 1 turn/s), not hit-testable | PreviewPane.xaml Spinner | 40 What a picture shows | missing | |
@@ -1020,9 +1020,9 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-72 | Drag lens surface handle (bulge/flatten/hollow, rim fixed) | SceneOverlay.cs | 40 Interaction | missing | |
 | V-73 | Drag fibre node (with handles) / Bezier handle (smooth node mirrors length) | SceneOverlay.cs MirrorLength | 40 Interaction | done | canvas::Target::Shape with Node/InHandle/OutHandle |
 | V-74 | Drag probe A onto detached graph box picks it up | SceneOverlay.cs:952 | 40 Interaction | missing | |
-| V-75 | Esc during drag puts item/group back; second finger likewise | SceneOverlay.cs:1507-1517 | 40 Interaction | missing | |
+| V-75 | Esc during drag puts item/group back; second finger likewise | SceneOverlay.cs:1507-1517 | 40 Interaction | done | Esc while a drag is held: Document::cancel drops its step; the second finger dropped (decision 0033) |
 | V-76 | Click empty space deselects (unless Shift/Ctrl), focuses pane | PreviewPane.xaml.cs:1289 | 40 Interaction | partial | a press off the handles selects the root unless Ctrl/Shift; the pane takes no focus yet |
-| V-77 | Marquee on empty drag (faint accent fill, dashed edge); Shift add, Ctrl toggle, else replace | SceneOverlay.cs:1256-1365 | 40 Interaction | missing | |
+| V-77 | Marquee on empty drag (faint accent fill, dashed edge); Shift add, Ctrl toggle, else replace | SceneOverlay.cs:1256-1365 | 40 Interaction | done | canvas::Marquee: a press off the handles; whole-item handles inside; Shift adds, Ctrl toggles, else replaces |
 | V-78 | Tab through handles; focusing selects item, tree mirrors without focus | SceneOverlay.cs | 40 Interaction | missing | |
 | V-79 | Arrows / Shift+Arrows on focused handle: 1 / 10 px (group), lever 1 / 10 deg (Right/Up ccw) | SceneOverlay.cs:1527-1565 | 40 Interaction | missing | |
 | V-80 | Lens surface handle keeps rim fixed across key presses | SceneOverlay.cs:1560 (DragAnchors) | 40 Interaction | missing | |

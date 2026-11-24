@@ -18,6 +18,8 @@ pub(crate) struct Document {
 	limit: usize,
 	/// The key of the run of edits the last undo step holds (typing into one field).
 	merging: Option<String>,
+	/// What starting that step dropped: the redo steps and the oldest undo step over the limit, for a cancel.
+	dropped: (Vec<Snapshot>, Option<Snapshot>),
 	/// Counts the project's changes, for whoever follows it.
 	pub(crate) generation: u64,
 	/// Counts the view's changes.
@@ -132,10 +134,24 @@ impl Document {
 		if !joins {
 			self.merging = key.map(str::to_owned);
 			self.undo.push(before);
-			if self.undo.len() > self.limit {
-				self.undo.remove(0);
+			let evicted = (self.undo.len() > self.limit).then(|| self.undo.remove(0));
+			self.dropped = (std::mem::take(&mut self.redo), evicted);
+		}
+	}
+
+	/// Takes back the merged step of `key` while it is the last one, as if it had not been made: the redo steps and
+	/// the oldest step it dropped come back. An edit of another key since then leaves it as it is.
+	pub(crate) fn cancel(&mut self, key: &str) {
+		if self.merging.as_deref() == Some(key)
+			&& let Some(before) = self.undo.pop()
+		{
+			self.restore(before);
+			self.merging = None;
+			let (redo, evicted) = std::mem::take(&mut self.dropped);
+			self.redo = redo;
+			if let Some(oldest) = evicted {
+				self.undo.insert(0, oldest);
 			}
-			self.redo.clear();
 		}
 	}
 
@@ -230,6 +246,32 @@ mod tests {
 	}
 
 	use super::*;
+
+	#[test]
+	fn a_cancelled_gesture_leaves_no_step() {
+		let mut d = Document::new(10);
+		let seed = d.project.seed;
+		d.edit_merging(Some("g"), |p| p.seed = seed + 1);
+		d.edit_merging(Some("g"), |p| p.seed = seed + 2);
+		d.cancel("g");
+		assert_eq!(d.project.seed, seed);
+		assert!(!d.can_undo() && !d.can_redo());
+		d.cancel("g");
+		assert_eq!(d.project.seed, seed);
+	}
+
+	#[test]
+	fn a_cancelled_gesture_keeps_the_redo_steps() {
+		let mut d = Document::new(10);
+		let seed = d.project.seed;
+		d.edit(|p| p.seed = seed + 1);
+		d.undo();
+		d.edit_merging(Some("g"), |p| p.seed = seed + 5);
+		d.cancel("g");
+		assert!(d.can_redo());
+		d.redo();
+		assert_eq!(d.project.seed, seed + 1);
+	}
 
 	#[test]
 	fn a_merged_step_back_where_it_began_is_dropped() {

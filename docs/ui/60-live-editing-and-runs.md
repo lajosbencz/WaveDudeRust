@@ -111,7 +111,7 @@ Window (message-window look, question disc, 500 px wide, not resizable, Run defa
   limit drops the oldest; a lower limit takes effect as the next step is recorded, so a scrub of the number box
   drops nothing. Once the saved step is dropped, no undo clears the title asterisk; a save does.
 - A step ends after 0.5 s of quiet with no mouse button held: a drag, a number-box scrub or a held arrow key is
-  one step. Undo/Redo end a pending step first. A step that ends where it began (a drag brought back) is no step.
+  one step. Undo/Redo end a pending step first. A step that ends where it began (a drag brought back) is no step; Esc during a drag takes its step back, the redo steps kept.
 - Undo (Ctrl+Z), Redo (Ctrl+Y, Ctrl+Shift+Z); Edit menu entries enabled when a step exists. A focused text box
   keeps its own undo.
 - A restored step is written into the same project object; it counts as an edit for the live rules (new

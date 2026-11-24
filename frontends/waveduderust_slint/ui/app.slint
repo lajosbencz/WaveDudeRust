@@ -14,6 +14,7 @@ export { Form, NumberParse }
 export { Words, ExportFileFormat } from "words.slint";
 import { Properties } from "properties.slint";
 import { Preview } from "preview.slint";
+import { Canvas } from "canvas.slint";
 import { Timeline, TransportBar, Transport } from "timeline.slint";
 import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
 import { ModalLayer, Modal, Message, Answer } from "modal.slint";
@@ -26,7 +27,7 @@ import { ExamplesLayer, ExampleRow, ExampleTopic } from "examples.slint";
 import { NumberSpec } from "number-box.slint";
 export { NumberLogic, NumberSpec } from "number-box.slint";
 export { ColorLogic, Hsv } from "color-picker.slint";
-export { Canvas, HandleData, HandleGlyph, LabelData, OverlayArt } from "canvas.slint";
+export { Canvas, HandleData, HandleGlyph, LabelData, OverlayArt, Rect } from "canvas.slint";
 export { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
 export { Theme, TreeRow, TreeKind, Transport, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
 
@@ -242,6 +243,7 @@ export component AppWindow inherits Window {
     keys := FocusScope {
         init => { self.focus(); }
         key-pressed(e) => {
+            if (e.text == Key.Escape && Canvas.dragging) { Canvas.cancel(); return accept; }
             if (e.text == Key.Escape && root.commands.can-stop) { root.command(Command.stop); return accept; }
             if (e.text == Key.Delete && !e.modifiers.control && !e.modifiers.shift) { root.command(Command.delete); return accept; }
             if (!e.modifiers.control || e.modifiers.alt) { return reject; }

@@ -89,8 +89,8 @@ struct State {
 	/// The typed form shown: its object's identity and the token that drops text typed for another.
 	typed_form: Shown,
 	overlays: canvas::Overlays,
-	/// A handle drag under way.
-	drag: Option<canvas::Drag>,
+	/// A handle drag or a marquee under way.
+	gesture: Option<canvas::Gesture>,
 	/// Presses on the pictures so far; each drag's undo key.
 	drags: u64,
 }
@@ -261,6 +261,17 @@ impl State {
 			form::layer_settings(v, layer).color_scheme.clone_from(&added);
 		});
 		tracing::info!("Colour scheme '{added}' loaded from '{name}' into the project");
+	}
+
+	/// Ends a picture gesture as its release does.
+	fn finish_gesture(&mut self, app: &AppWindow) {
+		end_gesture(app);
+		match self.gesture.take() {
+			// a drag that ends where it began makes its item the selection
+			Some(canvas::Gesture::Handle(drag)) if !drag.moved() => self.selection.set(drag.node()),
+			Some(canvas::Gesture::Marquee(m)) => m.select(&self.overlays, &self.doc.project, &mut self.selection),
+			_ => {}
+		}
 	}
 
 	/// Keeps the current scheme among the user's, or removes the user's of its name.
@@ -755,6 +766,8 @@ fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
 		TransportAction::PauseRun => state.live.toggle_pause(),
 		TransportAction::Layout => {
 			use waveduderust_platform::settings::Orientation;
+			// the pictures are made anew: a gesture on them gets no release
+			state.finish_gesture(app);
 			state.settings.preview_orientation =
 				if app.get_preview_stacked() { Orientation::Vertical } else { Orientation::Horizontal };
 			if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
@@ -838,7 +851,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		form_base: 0,
 		typed_form: Shown::default(),
 		overlays: canvas::Overlays::default(),
-		drag: None,
+		gesture: None,
 		drags: 0,
 	}));
 	app.set_native_access_keys(cfg!(windows));
@@ -1341,27 +1354,51 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		let Some(app) = weak.upgrade() else { return };
 		let s = &mut *st.borrow_mut();
 		s.drags += 1;
-		s.drag = s.overlays.press(&s.doc.project, &mut s.selection, layer, (x, y), (control, shift), s.drags);
+		s.gesture = s.overlays.press(&s.doc.project, &mut s.selection, layer, (x, y), (control, shift), s.drags);
+		app.global::<ui::Canvas<'_>>().set_dragging(s.gesture.is_some());
 		s.show(&app);
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	canvas.on_drag(move |dx, dy, shift| {
 		let Some(app) = weak.upgrade() else { return };
 		let s = &mut *st.borrow_mut();
-		let Some(drag) = &mut s.drag else { return };
-		let key = drag.key().to_owned();
-		s.doc.edit_merging(Some(&key), |p| drag.apply(p, (dx, dy), shift));
-		s.show(&app);
+		match &mut s.gesture {
+			Some(canvas::Gesture::Handle(drag)) => {
+				let key = drag.key().to_owned();
+				s.doc.edit_merging(Some(&key), |p| drag.apply(p, (dx, dy), shift));
+				s.show(&app);
+			}
+			Some(canvas::Gesture::Marquee(m)) => {
+				m.stretch((dx, dy));
+				let canvas = app.global::<ui::Canvas<'_>>();
+				canvas.set_marquee(m.rect());
+				canvas.set_marquee_layer(m.layer());
+				canvas.set_marquee_shown(true);
+			}
+			None => {}
+		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	canvas.on_release(move || {
 		let Some(app) = weak.upgrade() else { return };
 		let s = &mut *st.borrow_mut();
-		let Some(drag) = s.drag.take() else { return };
-		// a drag that ends where it began makes its item the selection
-		if !drag.moved() {
-			s.selection.set(drag.node());
+		s.finish_gesture(&app);
+		s.show(&app);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	canvas.on_cancel(move || {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		end_gesture(&app);
+		if let Some(canvas::Gesture::Handle(drag)) = s.gesture.take() {
+			s.doc.cancel(drag.key());
 		}
 		s.show(&app);
 	});
+}
+
+fn end_gesture(app: &AppWindow) {
+	let canvas = app.global::<ui::Canvas<'_>>();
+	canvas.set_dragging(false);
+	canvas.set_marquee_shown(false);
 }
