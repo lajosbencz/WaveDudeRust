@@ -3,7 +3,7 @@ import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
 import { Form } from "form.slint";
 import { FormKind } from "data.slint";
-import { ProjectForm, SceneForm, SimulationForm, DisplayForm, SourceForm, ProbeForm, RectangleForm, EllipseForm, TriangleForm, PolygonForm, LensForm, FresnelLensForm, OutlineForm, DiffuserForm, ZonePlateForm, BraggReflectorForm, GrinLensForm, SimpleGratingForm, FacettedGratingForm, MetaSurfaceForm, LogicGateForm } from "forms.slint";
+import { ProjectForm, SceneForm, SimulationForm, DisplayForm, SourceForm, ProbeForm, RectangleForm, EllipseForm, TriangleForm, PolygonForm, LensForm, FresnelLensForm, OutlineForm, DiffuserForm, ZonePlateForm, BraggReflectorForm, GrinLensForm, SimpleGratingForm, FacettedGratingForm, MetaSurfaceForm, LogicGateForm, InterferenceFilterForm } from "forms.slint";
 
 export enum PropKind { text, int, float, bool, choice }
 
@@ -59,6 +59,7 @@ export component Properties inherits Rectangle {
             if Form.kind == FormKind.grin-lens: GrinLensForm { }
             if Form.kind == FormKind.simple-grating: SimpleGratingForm { }
             if Form.kind == FormKind.facetted-grating: FacettedGratingForm { }
+            if Form.kind == FormKind.interference-filter: InterferenceFilterForm { }
             if Form.kind == FormKind.logic-gate: LogicGateForm { }
             if Form.kind == FormKind.meta-lens || Form.kind == FormKind.meta-prism || Form.kind == FormKind.meta-axicon: MetaSurfaceForm { }
             if Form.kind == FormKind.none: Text {

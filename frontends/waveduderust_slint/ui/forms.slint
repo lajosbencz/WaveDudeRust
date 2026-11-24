@@ -4,7 +4,7 @@ import { Theme } from "theme.slint";
 import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
 import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice, MetaLensTypeChoice } from "choices.slint";
 import { FormKind, GateKind, PointData, SceneMode, SourceMode, ProbeDetector, ProbeKind, Layer, BoxSize, YScale, TriangleType, LayerData } from "data.slint";
-import { IconButton } from "icons.slint";
+import { Icon, IconButton } from "icons.slint";
 
 export component ProjectForm inherits VerticalLayout {
     alignment: start;
@@ -1239,7 +1239,7 @@ component PointList inherits VerticalLayout {
                 size: 18px;
                 icon: @image-url("icons/next/tree-minus.svg");
                 tip: @tr("Remove this point");
-                clicked => { Form.remove-point(k); }
+                clicked => { Form.remove-row(k); }
             }
         }
     }
@@ -1252,7 +1252,7 @@ component PointList inherits VerticalLayout {
             height: add.preferred-height;
             add := Button {
                 text: @tr("Add point");
-                clicked => { Form.add-point(); }
+                clicked => { Form.add-row(); }
             }
             Tooltip { text: @markdown("\{@tr("Append a point after the last one")}"); }
         }
@@ -2059,4 +2059,193 @@ export component LogicGateForm inherits VerticalLayout {
             PortReadout { port: Form.gate.lower-out; }
         }
     }
+}
+
+// An interference filter's layers, the outermost first: a row each with a grip to drag it by, its number, thickness
+// and index, up, down and remove. A drag moves the row on release, one undo step.
+component LayerList inherits VerticalLayout {
+    // the row a grip drags and where it would land; -1 while none is dragged
+    property <int> dragged: -1;
+    property <int> target: -1;
+    // the row an arrow moved a layer to, which takes the focus on that arrow (the other at a list end)
+    property <int> refocus: -1;
+    property <bool> refocus-up;
+    function move(k: int, to: int) {
+        root.refocus = to;
+        root.refocus-up = to < k;
+        Form.move-row(k, to);
+    }
+    FormSection { text: @tr("Layers"); }
+    Text {
+        text: @tr("The layers lie on the plate's front, the first in the list outermost. Drag a row by its grip or move it with the arrows.");
+        wrap: word-wrap;
+        color: Theme.text-dim;
+    }
+    Rectangle { height: 4px; }
+    HorizontalLayout {
+        padding-bottom: 2px;
+        spacing: 4px;
+        Rectangle { width: 38px; }
+        Text { horizontal-stretch: 1; text: @tr("Thickness"); color: Theme.text; }
+        Text { horizontal-stretch: 1; text: @tr("Index"); color: Theme.text; }
+        Rectangle { width: 66px; }
+    }
+    for layer[k] in Form.layers: Rectangle {
+        property <bool> refocused: root.refocus == k;
+        changed refocused => {
+            if (self.refocused) {
+                root.refocus = -1;
+                if (root.refocus-up == (k > 0) || k == Form.layers.length - 1) {
+                    up.take-focus();
+                } else {
+                    down.take-focus();
+                }
+            }
+        }
+        background: root.dragged == k ? Theme.button-hover : transparent;
+        HorizontalLayout {
+            padding-bottom: 4px;
+            spacing: 4px;
+            Rectangle {
+                width: 14px;
+                Icon {
+                    width: 10px;
+                    height: 9px;
+                    source: @image-url("icons/next/grip.svg");
+                    ink: Theme.text-dim;
+                }
+                grip := TouchArea {
+                    mouse-cursor: MouseCursor.ns-resize;
+                    // rows are the height of this one
+                    pointer-event(e) => {
+                        if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                            root.dragged = k;
+                            root.target = k;
+                        } else if (e.kind == PointerEventKind.up && e.button == PointerEventButton.left && root.dragged == k) {
+                            if (root.target != k) {
+                                Form.move-row(k, root.target);
+                            }
+                            root.dragged = -1;
+                            root.target = -1;
+                        } else if (e.kind == PointerEventKind.cancel) {
+                            root.dragged = -1;
+                            root.target = -1;
+                        }
+                    }
+                    moved => {
+                        if (root.dragged == k) {
+                            root.target = clamp(k + round((self.mouse-y - self.pressed-y) / (parent.height + 4px)), 0, Form.layers.length - 1);
+                        }
+                    }
+                }
+                Tooltip { text: @markdown("\{@tr("Drag to move this layer through the list")}"); }
+            }
+            Text {
+                width: 20px;
+                text: "\{k + 1}";
+                vertical-alignment: center;
+                color: Theme.text-dim;
+            }
+            FormFloat {
+                value <=> layer.thickness;
+                spec: { min: 0, max: 1000, increment: 1, decimals: 2, drag-step: 0.1 };
+                tip: @tr("The layer's thickness in pixels, to two decimals: a quarter wave is the wavelength divided by four times the index. A layer under half a pixel hardly shows on the grid; 0 leaves it out.");
+            }
+            FormFloat {
+                value <=> layer.refractive-index;
+                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                tip: @tr("The layer's refractive index, 1 to 2.55.");
+            }
+            HorizontalLayout {
+                width: 66px;
+                alignment: start;
+                up := IconButton {
+                    size: 22px;
+                    icon: @image-url("icons/next/chevron-up.svg");
+                    enabled: k > 0;
+                    tip: @tr("Move this layer up, outwards");
+                    clicked => { root.move(k, k - 1); }
+                }
+                down := IconButton {
+                    size: 22px;
+                    icon: @image-url("icons/next/chevron-down.svg");
+                    enabled: k < Form.layers.length - 1;
+                    tip: @tr("Move this layer down, towards the plate");
+                    clicked => { root.move(k, k + 1); }
+                }
+                IconButton {
+                    size: 22px;
+                    icon: @image-url("icons/next/tree-minus.svg");
+                    tip: @tr("Remove this layer");
+                    clicked => { Form.remove-row(k); }
+                }
+            }
+        }
+        // where the dragged row lands: above this row going up, below it going down
+        if root.dragged >= 0 && root.target == k && root.target != root.dragged: Rectangle {
+            y: root.target < root.dragged ? -3px : parent.height - 3px;
+            height: 2px;
+            background: Theme.accent;
+        }
+    }
+    HorizontalLayout {
+        padding-top: 2px;
+        padding-bottom: 10px;
+        spacing: 6px;
+        alignment: start;
+        Rectangle {
+            width: add.preferred-width;
+            height: add.preferred-height;
+            add := Button {
+                text: @tr("Add layer");
+                clicked => { Form.add-row(); }
+            }
+            Tooltip { text: @markdown("\{@tr("Append a copy of the last layer")}"); }
+        }
+        Rectangle {
+            width: clear.preferred-width;
+            height: clear.preferred-height;
+            clear := Button {
+                text: @tr("Remove all");
+                enabled: Form.layers.length > 0;
+                clicked => { Form.clear-rows(); }
+            }
+            Tooltip { text: @markdown("\{@tr("Remove every layer, to build another stack from nothing; Undo brings them back")}"); }
+        }
+    }
+}
+
+export component InterferenceFilterForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("An interference filter: a plate of glass or mirror with a stack of thin layers on its front, each with its own thickness and index. Waves reflected at the layers' boundaries interfere, so the stack reflects some wavelengths and passes others; a new filter is a quarter-wave stack for a wavelength of 16 pixels.");
+    }
+    ShapeMaterial { back-only: true; }
+    FormSection { text: @tr("Shape"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Length"); tip: @tr("Extent of the plate along the axis in pixels, without the layers, which lie on its front."); }
+            FormInt {
+                value <=> Form.filter.length;
+                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                tip: @tr("Extent of the plate along the axis in pixels, without the layers, which lie on its front.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Width"); tip: @tr("Extent across the axis in pixels, of the plate and the layers alike."); }
+            FormInt {
+                value <=> Form.filter.width;
+                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                tip: @tr("Extent across the axis in pixels, of the plate and the layers alike.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Stack thickness"); tip: @tr("The layers' thicknesses added up: how far the stack stands out of the plate's front"); }
+            FormReadout {
+                text: "\{Form.filter.stack-thickness} px";
+                tip: @tr("The layers' thicknesses added up: how far the stack stands out of the plate's front");
+            }
+        }
+    }
+    LayerList { }
 }

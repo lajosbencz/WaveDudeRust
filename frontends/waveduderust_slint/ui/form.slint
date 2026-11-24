@@ -2,7 +2,7 @@ import { CheckBox, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
 import { Icon } from "icons.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
-import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, PointData } from "data.slint";
+import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, PointData } from "data.slint";
 
 // The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
 export global Form {
@@ -35,14 +35,19 @@ export global Form {
     in-out property <FacetData> facets;
     in-out property <MetaData> meta;
     in-out property <GateData> gate;
+    in-out property <FilterData> filter;
     in property <[PointData]> points;
+    in property <[FilterLayerData]> layers;
     // text a number box could not read, shown until the next edit or another object
     in-out property <string> invalid;
     // the data changed; `typing`: a keystroke in a text box, one undo step with the next ones
     callback edited(typing: bool);
     callback new-seed();
-    callback add-point();
-    callback remove-point(index: int);
+    // the shown part's list: an outline's points, a filter's layers
+    callback add-row();
+    callback remove-row(index: int);
+    callback move-row(from: int, to: int);
+    callback clear-rows();
     // whether a part's form shows its kind's description, one setting for every kind
     in-out property <bool> described: true;
     callback describe(open: bool);

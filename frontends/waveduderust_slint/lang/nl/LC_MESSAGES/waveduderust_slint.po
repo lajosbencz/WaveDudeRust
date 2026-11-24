@@ -236,6 +236,10 @@ msgstr "Item aan deze map toevoegen"
 msgid "Add an optical part (a menu of kinds; appended at the end)"
 msgstr "Optisch onderdeel toevoegen (menu met soorten; achteraan)"
 
+#. ButtonAddLayer
+msgid "Add layer"
+msgstr "Laag toevoegen"
+
 #. MenuProjectAddPart
 msgid "Add part"
 msgstr "Onderdeel toevoegen"
@@ -268,6 +272,10 @@ msgstr "Amplitude in procent, 0 tot 100, decimalen toegestaan."
 msgid "An ellipse of glass or mirror, by the length and width of its box; linked, a circle."
 msgstr "Een ellips van glas of als spiegel, naar de lengte en breedte van zijn kader; gekoppeld een cirkel."
 
+#. Kind.InterferenceFilterPart
+msgid "An interference filter: a plate of glass or mirror with a stack of thin layers on its front, each with its own thickness and index. Waves reflected at the layers' boundaries interfere, so the stack reflects some wavelengths and passes others; a new filter is a quarter-wave stack for a wavelength of 16 pixels."
+msgstr "Een interferentiefilter: een plaat van glas of spiegel met een stapel dunne lagen op de voorkant, elk met een eigen dikte en index. Golven die aan de grenzen van de lagen weerkaatsen interfereren, zodat de stapel sommige golflengten weerkaatst en andere doorlaat; een nieuw filter is een kwartgolfstapel voor een golflengte van 16 pixels."
+
 #. Kind.AndGatePart
 msgid "An optical AND gate: the same coupler with the lower input a quarter period behind, so the upper output carries the sum. It is brightest with both inputs lit, about four times a single one; a passive linear gate has no truer AND."
 msgstr "Een optische AND-poort: dezelfde koppelaar met de onderste ingang een kwart periode achter, zodat de bovenste uitgang de som draagt. Het helderst met beide ingangen, ongeveer viermaal één; een passieve lineaire poort heeft geen echtere AND."
@@ -299,6 +307,10 @@ msgstr "Antireflectie"
 #. LabelApexAngle
 msgid "Apex angle"
 msgstr "Tophoek"
+
+#. TipAddLayer
+msgid "Append a copy of the last layer"
+msgstr "Een kopie van de laatste laag achteraan toevoegen"
 
 #. TipAddPoint
 msgid "Append a point after the last one"
@@ -680,6 +692,10 @@ msgstr "Niet opslaan"
 msgid "Dot diameter"
 msgstr "Puntdiameter"
 
+#. TipDragLayer
+msgid "Drag to move this layer through the list"
+msgstr "Slepen om deze laag in de lijst te verplaatsen"
+
 #. Hint.Display.SourceMarkersInExport
 msgid "Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos."
 msgstr "De ingeschakelde bronnen (de markering, de emitterpunten van een samengestelde bron, de naam) over geëxporteerde beelden en video's tekenen."
@@ -856,6 +872,10 @@ msgstr "Intensiteit exporteren..."
 msgid "Export last"
 msgstr "Laatste export herhalen"
 
+#. Hint.InterferenceFilterPart.Width
+msgid "Extent across the axis in pixels, of the plate and the layers alike."
+msgstr "Afmeting dwars op de as in pixels, van de plaat en de lagen gelijk."
+
 #. Hint.LensPart.Diameter
 msgid "Extent across the axis in pixels."
 msgstr "Afmeting dwars op de as in pixels."
@@ -887,6 +907,10 @@ msgstr "Afmeting langs de as in pixels: de dikte van de plaat bij het gemiddelde
 #. Hint.DiffuserPart.Length
 msgid "Extent along the axis in pixels: the plate's thickness at the mean of its rough face."
 msgstr "Afmeting langs de as in pixels: de dikte van de plaat bij het gemiddelde van het ruwe vlak."
+
+#. Hint.InterferenceFilterPart.Length
+msgid "Extent of the plate along the axis in pixels, without the layers, which lie on its front."
+msgstr "Afmeting van de plaat langs de as in pixels, zonder de lagen, die op de voorkant liggen."
 
 #. Hint.BraggReflectorPart.Width
 msgid "Extent of the stack across the axis in pixels."
@@ -1091,6 +1115,10 @@ msgstr "Bron meenemen in runs (spatie op de rij schakelt om)"
 #. Hint.Source.Enabled
 msgid "Include the source in simulation runs."
 msgstr "De bron meenemen in simulatieruns."
+
+#. Label.FilterLayer.RefractiveIndex
+msgid "Index"
+msgstr "Index"
 
 #. Label.BraggReflectorPart.Index1
 msgid "Index 1"
@@ -1335,6 +1363,14 @@ msgstr "Omlaag"
 #. TipMoveDown
 msgid "Move down (Alt+Down); drag to reorder"
 msgstr "Omlaag (Alt+Omlaag); slepen om te herschikken"
+
+#. TipLayerDown
+msgid "Move this layer down, towards the plate"
+msgstr "Deze laag omlaag, naar de plaat toe"
+
+#. TipLayerUp
+msgid "Move this layer up, outwards"
+msgstr "Deze laag omhoog, naar buiten"
 
 #. MenuProjectMoveUp
 msgid "Move up"
@@ -1808,6 +1844,18 @@ msgstr "Verwijderen"
 msgid "Remove (Del)"
 msgstr "Verwijderen (Del)"
 
+#. ButtonRemoveAllLayers
+msgid "Remove all"
+msgstr "Alles verwijderen"
+
+#. TipRemoveAllLayers
+msgid "Remove every layer, to build another stack from nothing; Undo brings them back"
+msgstr "Alle lagen verwijderen, om een andere stapel vanaf niets op te bouwen; Ongedaan maken brengt ze terug"
+
+#. TipRemoveLayer
+msgid "Remove this layer"
+msgstr "Deze laag verwijderen"
+
 #. TipRemovePoint
 msgid "Remove this point"
 msgstr "Dit punt verwijderen"
@@ -2012,6 +2060,10 @@ msgstr "Snelheid"
 msgid "Square wave"
 msgstr "Blokgolf"
 
+#. LabelStackThickness
+msgid "Stack thickness"
+msgstr "Dikte van de stapel"
+
 #. Enum.ProbeDetector.Standard
 msgid "Standard"
 msgstr "Standaard"
@@ -2091,6 +2143,22 @@ msgstr "De vorm van de facetten per steek: een zaagtand, een helling en dan een 
 #. Hint.MetaSurfacePart.Height
 msgid "The height of the ridges in front of the plate in pixels. A full turn of phase, which the zones need, takes a height of the wavelength over the pattern index less one; a lower pattern cannot delay enough and its fill saturates."
 msgstr "De hoogte van de richels vóór de plaat in pixels. Een volle fasedraai, die de zones nodig hebben, vergt een hoogte van de golflengte gedeeld door de patroonindex min één; een lager patroon vertraagt te weinig en zijn vulling verzadigt."
+
+#. Hint.FilterLayer.RefractiveIndex
+msgid "The layer's refractive index, 1 to 2.55."
+msgstr "De brekingsindex van de laag, 1 tot 2,55."
+
+#. Hint.FilterLayer.Thickness
+msgid "The layer's thickness in pixels, to two decimals: a quarter wave is the wavelength divided by four times the index. A layer under half a pixel hardly shows on the grid; 0 leaves it out."
+msgstr "De dikte van de laag in pixels, op twee decimalen: een kwartgolf is de golflengte gedeeld door vier keer de index. Een laag onder een halve pixel is op het rooster nauwelijks te zien; 0 laat hem weg."
+
+#. HintFilterLayers
+msgid "The layers lie on the plate's front, the first in the list outermost. Drag a row by its grip or move it with the arrows."
+msgstr "De lagen liggen op de voorkant van de plaat, de eerste in de lijst het buitenst. Sleep een rij aan zijn greep of verplaats hem met de pijlen."
+
+#. TipStackThickness
+msgid "The layers' thicknesses added up: how far the stack stands out of the plate's front"
+msgstr "De diktes van de lagen opgeteld: hoe ver de stapel uit de voorkant van de plaat steekt"
 
 #. TipFullTurnHeight
 msgid "The pattern height at which a filled cell delays by a whole turn, the wavelength over the pattern index less one; a lower pattern saturates"

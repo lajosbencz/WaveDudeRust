@@ -790,21 +790,21 @@ Not-in-spec rows are marked in the Spec column.
 | P-174 | Diffuser: Sigma NB 0..10000 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | done | forms.slint DiffuserForm |
 | P-175 | Diffuser: Profile height RO | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | done | forms.slint DiffuserForm |
 | P-176 | Diffuser: Ripples RO | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | done | forms.slint DiffuserForm |
-| P-177 | Interference filter: Coating rows (back box alone) | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-178 | Interference filter: Length NB min 1 step 10 | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-179 | Interference filter: Width NB min 1 step 10 | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-180 | Interference filter: Stack thickness RO | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-181 | Interference filter: Layers hint text | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-182 | Interference filter: Layers heading row (Thickness, Index) | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-183 | Interference filter: Layer grip: drag reorders, one undo for held mouse | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-184 | Interference filter: Layer ordinal | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-185 | Interference filter: Layer Thickness NB 0..1000 2 dec | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-186 | Interference filter: Layer Index NB 1..2.55 | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-187 | Interference filter: Layer up button | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-188 | Interference filter: Layer down button | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-189 | Interference filter: Layer remove button | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-190 | Interference filter: Add layer button (copy of last) | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-191 | Interference filter: Remove all button | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-177 | Interference filter: Coating rows (back box alone) | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-178 | Interference filter: Length NB min 1 step 10 | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-179 | Interference filter: Width NB min 1 step 10 | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-180 | Interference filter: Stack thickness RO | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-181 | Interference filter: Layers hint text | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-182 | Interference filter: Layers heading row (Thickness, Index) | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-183 | Interference filter: Layer grip: drag reorders, one undo for held mouse | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-184 | Interference filter: Layer ordinal | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-185 | Interference filter: Layer Thickness NB 0..1000 2 dec | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-186 | Interference filter: Layer Index NB 1..2.55 | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-187 | Interference filter: Layer up button | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-188 | Interference filter: Layer down button | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-189 | Interference filter: Layer remove button | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-190 | Interference filter: Add layer button (copy of last) | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
+| P-191 | Interference filter: Remove all button | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | done | forms.slint InterferenceFilterForm |
 | P-192 | Simple 2D grating: Mirror/Refractive index/Absorption/Absorption ramp (no coating rows) | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
 | P-193 | Simple 2D grating: Columns NB min 1 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
 | P-194 | Simple 2D grating: Rows NB min 1 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |

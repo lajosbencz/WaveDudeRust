@@ -47,7 +47,6 @@ use crate::playback::Playback;
 use crate::selection::{Pick, Selection};
 use crate::tree::Node;
 use crate::ui::{Command, TransportAction};
-use waveduderust::model::PartKind;
 
 /// Undo steps until the settings arrive (decision 0030).
 const UNDO_STEPS: usize = 1000;
@@ -969,34 +968,36 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		s.doc.edit(|p| p.seed = seed);
 		s.show(&app);
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.global::<ui::Form<'_>>().on_add_point(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let mut s = st.borrow_mut();
-		if let Node::Part(i) = s.selection.current() {
-			s.doc.edit(|p| {
-				if let Some(PartKind::Outline(o)) = p.parts.get_mut(i).map(|p| &mut p.kind) {
-					form::add_point(&mut o.points);
-				}
-			});
+	let edit_rows = {
+		let (st, weak) = (state.clone(), app.as_weak());
+		move |edit: form::RowEdit| {
+			let Some(app) = weak.upgrade() else { return };
+			let mut s = st.borrow_mut();
+			if let Node::Part(i) = s.selection.current() {
+				s.doc.edit(|p| {
+					if let Some(part) = p.parts.get_mut(i) {
+						form::edit_rows(&mut part.kind, edit);
+					}
+				});
+			}
+			s.show(&app);
 		}
-		s.show(&app);
+	};
+	let index = |k: i32| usize::try_from(k).unwrap_or(usize::MAX);
+	let rows = app.global::<ui::Form<'_>>();
+	rows.on_add_row({
+		let edit = edit_rows.clone();
+		move || edit(form::RowEdit::Add)
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.global::<ui::Form<'_>>().on_remove_point(move |k| {
-		let Some(app) = weak.upgrade() else { return };
-		let mut s = st.borrow_mut();
-		if let (Node::Part(i), Ok(k)) = (s.selection.current(), usize::try_from(k)) {
-			s.doc.edit(|p| {
-				if let Some(PartKind::Outline(o)) = p.parts.get_mut(i).map(|p| &mut p.kind)
-					&& k < o.points.len()
-				{
-					o.points.remove(k);
-				}
-			});
-		}
-		s.show(&app);
+	rows.on_remove_row({
+		let edit = edit_rows.clone();
+		move |k| edit(form::RowEdit::Remove(index(k)))
 	});
+	rows.on_move_row({
+		let edit = edit_rows.clone();
+		move |from, to| edit(form::RowEdit::Move { from: index(from), to: index(to) })
+	});
+	rows.on_clear_rows(move || edit_rows(form::RowEdit::Clear));
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_command(move |c| {
 		if let Some(app) = weak.upgrade() {

@@ -192,6 +192,8 @@ data! {
 	DiffuserData = m::Diffuser { length, width, center_wavelength, amplitude, sigma }
 	ZonePlateData = m::ZonePlate { mount, mount_width, diameter, thickness, coating, design_frequency, focal_length, inverse }
 	PointData = Point { x, y }
+	FilterLayerData = m::FilterLayer { thickness, refractive_index }
+	FilterData = m::InterferenceFilter { length, width }
 }
 
 /// An ellipse's sides are a rectangle's.
@@ -219,6 +221,7 @@ pub(crate) fn kind(project: &Project, node: Node) -> FormKind {
 			Some(PartKind::FresnelLens(_)) => FormKind::FresnelLens,
 			Some(PartKind::Outline(_)) => FormKind::Outline,
 			Some(PartKind::Diffuser(_)) => FormKind::Diffuser,
+			Some(PartKind::InterferenceFilter(_)) => FormKind::InterferenceFilter,
 			Some(PartKind::ZonePlate(_)) => FormKind::ZonePlate,
 			Some(PartKind::BraggReflector(_)) => FormKind::BraggReflector,
 			Some(PartKind::GrinLens(_)) => FormKind::GrinLens,
@@ -262,6 +265,7 @@ fn shape(kind: &PartKind) -> Option<(&Material, &Coating)> {
 		PartKind::FresnelLens(p) => Some((&p.lens.material, &p.lens.coating)),
 		PartKind::Outline(p) => Some((&p.material, &p.coating)),
 		PartKind::Diffuser(p) => Some((&p.material, &p.coating)),
+		PartKind::InterferenceFilter(p) => Some((&p.material, &p.coating)),
 		PartKind::SimpleGrating(p) => Some((&p.material, &p.coating)),
 		PartKind::FacettedGrating(p) => Some((&p.material, &p.coating)),
 		PartKind::MetaSurface(p) => Some((&p.material, &p.coating)),
@@ -279,6 +283,7 @@ fn shape_mut(kind: &mut PartKind) -> Option<(&mut Material, &mut Coating)> {
 		PartKind::FresnelLens(p) => Some((&mut p.lens.material, &mut p.lens.coating)),
 		PartKind::Outline(p) => Some((&mut p.material, &mut p.coating)),
 		PartKind::Diffuser(p) => Some((&mut p.material, &mut p.coating)),
+		PartKind::InterferenceFilter(p) => Some((&mut p.material, &mut p.coating)),
 		PartKind::SimpleGrating(p) => Some((&mut p.material, &mut p.coating)),
 		PartKind::FacettedGrating(p) => Some((&mut p.material, &mut p.coating)),
 		PartKind::MetaSurface(p) => Some((&mut p.material, &mut p.coating)),
@@ -486,25 +491,14 @@ fn show_part(form: &Form<'_>, project: &Project, part: &Part) {
 			};
 			put(form.get_zone_plate(), data, |d| form.set_zone_plate(d));
 		}
-		PartKind::Outline(o) => {
-			// in place: a row's box keeps text typed into it while another row is added or removed
-			let points: Vec<ui::PointData> = o.points.iter().map(Data::show).collect();
-			let shown = form.get_points();
-			match shown.as_any().downcast_ref::<VecModel<ui::PointData>>() {
-				Some(model) => {
-					while model.row_count() > points.len() {
-						model.remove(model.row_count() - 1);
-					}
-					for (k, point) in points.into_iter().enumerate() {
-						match model.row_data(k) {
-							Some(old) if old == point => {}
-							Some(_) => model.set_row_data(k, point),
-							None => model.push(point),
-						}
-					}
-				}
-				None => form.set_points(ModelRc::new(VecModel::from(points))),
-			}
+		PartKind::Outline(o) => put_rows(&form.get_points(), &o.points, |m| form.set_points(m)),
+		PartKind::InterferenceFilter(f) => {
+			let data = ui::FilterData {
+				stack_thickness: ((f.stack_thickness() * 10.0).round() / 10.0) as f32,
+				..Data::show(f)
+			};
+			put(form.get_filter(), data, |d| form.set_filter(d));
+			put_rows(&form.get_layers(), &f.layers, |m| form.set_layers(m));
 		}
 		_ => {}
 	}
@@ -579,10 +573,10 @@ fn apply_part(form: &Form<'_>, part: &mut Part, sim: &m::Simulation) {
 			form.get_grin().apply(&Data::show(&*g), g);
 		}
 		PartKind::ZonePlate(z) => form.get_zone_plate().apply(&Data::show(&*z), z),
-		PartKind::Outline(o) => {
-			for (point, data) in o.points.iter_mut().zip(form.get_points().iter()) {
-				data.apply(&Data::show(&*point), point);
-			}
+		PartKind::Outline(o) => apply_rows(&form.get_points(), &mut o.points),
+		PartKind::InterferenceFilter(f) => {
+			form.get_filter().apply(&Data::show(&*f), f);
+			apply_rows(&form.get_layers(), &mut f.layers);
 		}
 		_ => {}
 	}
@@ -604,8 +598,72 @@ pub(crate) fn apply_view(form: &Form<'_>, view: &mut View) {
 	form.get_video().apply(&Data::show(&view.video), &mut view.video);
 }
 
+/// Shows `rows` in the list model `shown`, in place: a row's box keeps text typed into it while another row is
+/// added or removed.
+fn put_rows<M, U>(shown: &ModelRc<U>, rows: &[M], set: impl FnOnce(ModelRc<U>))
+where
+	U: Data<M> + PartialEq + Clone + 'static,
+{
+	let rows: Vec<U> = rows.iter().map(Data::show).collect();
+	let Some(model) = shown.as_any().downcast_ref::<VecModel<U>>() else {
+		set(ModelRc::new(VecModel::from(rows)));
+		return;
+	};
+	while model.row_count() > rows.len() {
+		model.remove(model.row_count() - 1);
+	}
+	for (k, row) in rows.into_iter().enumerate() {
+		match model.row_data(k) {
+			Some(old) if old == row => {}
+			Some(_) => model.set_row_data(k, row),
+			None => model.push(row),
+		}
+	}
+}
+
+fn apply_rows<M, U: Data<M>>(shown: &ModelRc<U>, rows: &mut [M]) {
+	for (row, data) in rows.iter_mut().zip(shown.iter()) {
+		data.apply(&Data::show(&*row), row);
+	}
+}
+
+/// An edit of a part's list, by row index.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum RowEdit {
+	Add,
+	Remove(usize),
+	Move { from: usize, to: usize },
+	Clear,
+}
+
+/// Applies `edit` to the list `kind` keeps: an outline's points, a filter's layers.
+pub(crate) fn edit_rows(kind: &mut PartKind, edit: RowEdit) {
+	match kind {
+		PartKind::Outline(o) => edit.on(&mut o.points, add_point),
+		PartKind::InterferenceFilter(f) => edit.on(&mut f.layers, |l| l.push(l.last().cloned().unwrap_or_default())),
+		_ => {}
+	}
+}
+
+impl RowEdit {
+	fn on<T>(self, rows: &mut Vec<T>, add: impl FnOnce(&mut Vec<T>)) {
+		match self {
+			Self::Add => add(rows),
+			Self::Remove(k) if k < rows.len() => {
+				rows.remove(k);
+			}
+			Self::Move { from, to } if from < rows.len() && to < rows.len() => {
+				let row = rows.remove(from);
+				rows.insert(to, row);
+			}
+			Self::Clear => rows.clear(),
+			Self::Remove(_) | Self::Move { .. } => {}
+		}
+	}
+}
+
 /// Appends a point to an outline a step right of its last one.
-pub(crate) fn add_point(points: &mut Vec<Point>) {
+fn add_point(points: &mut Vec<Point>) {
 	const STEP: i32 = 20;
 	let last = points.last().copied();
 	points.push(last.map_or(Point::new(0, 0), |p| Point::new(p.x + STEP, p.y)));
@@ -626,6 +684,21 @@ mod tests {
 		// a decimal as typed, not as f32 holds it
 		ui::SimulationData { time_decay: 0.1, ..shown.clone() }.apply(&shown, &mut sim);
 		assert_eq!(sim.time_decay, 0.1);
+	}
+
+	#[test]
+	fn row_edits_move_add_and_ignore_rows_out_of_range() {
+		let mut rows = vec![1, 2, 3];
+		RowEdit::Move { from: 0, to: 2 }.on(&mut rows, |_| {});
+		assert_eq!(rows, [2, 3, 1]);
+		RowEdit::Move { from: 2, to: 3 }.on(&mut rows, |_| {});
+		RowEdit::Remove(3).on(&mut rows, |_| {});
+		assert_eq!(rows, [2, 3, 1]);
+		let mut filter = m::InterferenceFilter::default();
+		let mut kind = PartKind::InterferenceFilter(filter.clone());
+		edit_rows(&mut kind, RowEdit::Add);
+		filter.layers.push(m::FilterLayer::default());
+		assert_eq!(kind, PartKind::InterferenceFilter(filter));
 	}
 
 	#[test]

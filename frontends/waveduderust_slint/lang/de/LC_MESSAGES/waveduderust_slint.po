@@ -236,6 +236,10 @@ msgstr "Eintrag zu diesem Ordner hinzufügen"
 msgid "Add an optical part (a menu of kinds; appended at the end)"
 msgstr "Optisches Bauteil hinzufügen (Menü der Arten; am Ende angefügt)"
 
+#. ButtonAddLayer
+msgid "Add layer"
+msgstr "Schicht hinzufügen"
+
 #. MenuProjectAddPart
 msgid "Add part"
 msgstr "Bauteil hinzufügen"
@@ -268,6 +272,10 @@ msgstr "Amplitude in Prozent, 0 bis 100, Dezimalstellen erlaubt."
 msgid "An ellipse of glass or mirror, by the length and width of its box; linked, a circle."
 msgstr "Eine Ellipse aus Glas oder als Spiegel, nach Länge und Breite ihres Kastens; verkettet ein Kreis."
 
+#. Kind.InterferenceFilterPart
+msgid "An interference filter: a plate of glass or mirror with a stack of thin layers on its front, each with its own thickness and index. Waves reflected at the layers' boundaries interfere, so the stack reflects some wavelengths and passes others; a new filter is a quarter-wave stack for a wavelength of 16 pixels."
+msgstr "Ein Interferenzfilter: eine Platte aus Glas oder Spiegel mit einem Stapel dünner Schichten auf der Vorderseite, jede mit eigener Dicke und eigenem Index. An den Grenzen der Schichten reflektierte Wellen interferieren, sodass der Stapel manche Wellenlängen reflektiert und andere durchlässt; ein neues Filter ist ein Viertelwellenstapel für eine Wellenlänge von 16 Pixeln."
+
 #. Kind.AndGatePart
 msgid "An optical AND gate: the same coupler with the lower input a quarter period behind, so the upper output carries the sum. It is brightest with both inputs lit, about four times a single one; a passive linear gate has no truer AND."
 msgstr "Ein optisches AND-Gatter: derselbe Koppler mit dem unteren Eingang eine Viertelperiode zurück, sodass der obere Ausgang die Summe führt. Am hellsten mit beiden Eingängen, etwa viermal so hell wie mit einem; ein passives lineares Gatter hat kein echteres AND."
@@ -299,6 +307,10 @@ msgstr "Entspiegelung"
 #. LabelApexAngle
 msgid "Apex angle"
 msgstr "Winkel an der Spitze"
+
+#. TipAddLayer
+msgid "Append a copy of the last layer"
+msgstr "Eine Kopie der letzten Schicht anhängen"
 
 #. TipAddPoint
 msgid "Append a point after the last one"
@@ -680,6 +692,10 @@ msgstr "Nicht speichern"
 msgid "Dot diameter"
 msgstr "Punktdurchmesser"
 
+#. TipDragLayer
+msgid "Drag to move this layer through the list"
+msgstr "Ziehen, um diese Schicht in der Liste zu verschieben"
+
 #. Hint.Display.SourceMarkersInExport
 msgid "Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos."
 msgstr "Die aktiven Quellen (die Markierung, die Emitterpunkte einer zusammengesetzten Quelle, den Namen) in exportierte Bilder und Videos zeichnen."
@@ -856,6 +872,10 @@ msgstr "Intensität exportieren..."
 msgid "Export last"
 msgstr "Letzten Export wiederholen"
 
+#. Hint.InterferenceFilterPart.Width
+msgid "Extent across the axis in pixels, of the plate and the layers alike."
+msgstr "Ausdehnung quer zur Achse in Pixeln, für die Platte und die Schichten gleich."
+
 #. Hint.LensPart.Diameter
 msgid "Extent across the axis in pixels."
 msgstr "Ausdehnung quer zur Achse in Pixeln."
@@ -887,6 +907,10 @@ msgstr "Ausdehnung entlang der Achse in Pixeln: die Dicke der Platte am Mittel i
 #. Hint.DiffuserPart.Length
 msgid "Extent along the axis in pixels: the plate's thickness at the mean of its rough face."
 msgstr "Ausdehnung entlang der Achse in Pixeln: die Dicke der Platte am Mittel ihrer rauen Fläche."
+
+#. Hint.InterferenceFilterPart.Length
+msgid "Extent of the plate along the axis in pixels, without the layers, which lie on its front."
+msgstr "Ausdehnung der Platte entlang der Achse in Pixeln, ohne die Schichten, die auf ihrer Vorderseite liegen."
 
 #. Hint.BraggReflectorPart.Width
 msgid "Extent of the stack across the axis in pixels."
@@ -1091,6 +1115,10 @@ msgstr "Quelle in Läufe einbeziehen (Leertaste auf der Zeile schaltet um)"
 #. Hint.Source.Enabled
 msgid "Include the source in simulation runs."
 msgstr "Die Quelle in Simulationsläufe einbeziehen."
+
+#. Label.FilterLayer.RefractiveIndex
+msgid "Index"
+msgstr "Index"
 
 #. Label.BraggReflectorPart.Index1
 msgid "Index 1"
@@ -1335,6 +1363,14 @@ msgstr "Nach unten"
 #. TipMoveDown
 msgid "Move down (Alt+Down); drag to reorder"
 msgstr "Nach unten (Alt+Pfeil runter); zum Umordnen ziehen"
+
+#. TipLayerDown
+msgid "Move this layer down, towards the plate"
+msgstr "Diese Schicht nach unten, zur Platte hin"
+
+#. TipLayerUp
+msgid "Move this layer up, outwards"
+msgstr "Diese Schicht nach oben, nach außen"
 
 #. MenuProjectMoveUp
 msgid "Move up"
@@ -1808,6 +1844,18 @@ msgstr "Entfernen"
 msgid "Remove (Del)"
 msgstr "Entfernen (Entf)"
 
+#. ButtonRemoveAllLayers
+msgid "Remove all"
+msgstr "Alle entfernen"
+
+#. TipRemoveAllLayers
+msgid "Remove every layer, to build another stack from nothing; Undo brings them back"
+msgstr "Alle Schichten entfernen, um einen anderen Stapel von vorn aufzubauen; Rückgängig bringt sie zurück"
+
+#. TipRemoveLayer
+msgid "Remove this layer"
+msgstr "Diese Schicht entfernen"
+
 #. TipRemovePoint
 msgid "Remove this point"
 msgstr "Diesen Punkt entfernen"
@@ -2012,6 +2060,10 @@ msgstr "Tempo"
 msgid "Square wave"
 msgstr "Rechteckwelle"
 
+#. LabelStackThickness
+msgid "Stack thickness"
+msgstr "Dicke des Stapels"
+
 #. Enum.ProbeDetector.Standard
 msgid "Standard"
 msgstr "Standard"
@@ -2091,6 +2143,22 @@ msgstr "Die Form der Facetten je Teilung: ein Sägezahn, eine Rampe und dann ein
 #. Hint.MetaSurfacePart.Height
 msgid "The height of the ridges in front of the plate in pixels. A full turn of phase, which the zones need, takes a height of the wavelength over the pattern index less one; a lower pattern cannot delay enough and its fill saturates."
 msgstr "Die Höhe der Stege vor der Platte in Pixeln. Eine volle Phasendrehung, die die Zonen brauchen, verlangt eine Höhe von der Wellenlänge geteilt durch den Musterindex weniger eins; ein niedrigeres Muster verzögert zu wenig und seine Füllung sättigt."
+
+#. Hint.FilterLayer.RefractiveIndex
+msgid "The layer's refractive index, 1 to 2.55."
+msgstr "Die Brechzahl der Schicht, 1 bis 2,55."
+
+#. Hint.FilterLayer.Thickness
+msgid "The layer's thickness in pixels, to two decimals: a quarter wave is the wavelength divided by four times the index. A layer under half a pixel hardly shows on the grid; 0 leaves it out."
+msgstr "Die Dicke der Schicht in Pixeln, auf zwei Dezimalen: eine Viertelwelle ist die Wellenlänge geteilt durch das Vierfache des Index. Eine Schicht unter einem halben Pixel ist auf dem Gitter kaum zu sehen; 0 lässt sie weg."
+
+#. HintFilterLayers
+msgid "The layers lie on the plate's front, the first in the list outermost. Drag a row by its grip or move it with the arrows."
+msgstr "Die Schichten liegen auf der Vorderseite der Platte, die erste der Liste zuäußerst. Eine Zeile an ihrem Griff ziehen oder mit den Pfeilen verschieben."
+
+#. TipStackThickness
+msgid "The layers' thicknesses added up: how far the stack stands out of the plate's front"
+msgstr "Die Dicken der Schichten zusammengezählt: wie weit der Stapel aus der Vorderseite der Platte ragt"
 
 #. TipFullTurnHeight
 msgid "The pattern height at which a filled cell delays by a whole turn, the wavelength over the pattern index less one; a lower pattern saturates"
