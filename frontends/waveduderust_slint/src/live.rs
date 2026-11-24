@@ -80,6 +80,8 @@ pub(crate) struct Shown {
 	pub(crate) step: Option<u64>,
 	/// The run is stepping or fitting.
 	pub(crate) running: bool,
+	/// The run's state changed kind since the last poll.
+	pub(crate) changed: bool,
 	/// The run is computing the frame of the position, which is not stored yet.
 	pub(crate) computing: bool,
 	/// A pending Auto's layer and brightness (`None`: nothing to fit).
@@ -204,14 +206,29 @@ impl Live {
 	/// Calls `f` with the probe traces at the frame of the position, when it is stored.
 	pub(crate) fn traces<R>(&self, f: impl FnOnce(&crate::graphs::Traces<'_>) -> R) -> Option<R> {
 		let store = self.worker.status().store?;
-		let frame = self.position as usize;
+		let frame = self.stored();
 		if !store.has(frame) {
 			return None;
 		}
 		let step = store.step_of(frame);
+		let probes = self.request.as_ref()?.probes().map(waveduderust::model::Probe::id).collect();
 		Some(self.worker.with_traces(|traces| {
-			f(&crate::graphs::Traces { traces, step, frame, total_steps: u64::from(self.steps) })
+			f(&crate::graphs::Traces { traces, probes, step, frame, total_steps: u64::from(self.steps) })
 		}))
+	}
+
+	/// The recording of `probe` in the run, as CSV (docs/ui/70, CSV).
+	pub(crate) fn probe_csv(&self, probe: &waveduderust::model::Probe) -> Option<Vec<u8>> {
+		let request = self.request.as_ref()?;
+		let n = request.probes().position(|p| p.id() == probe.id())?;
+		let schedule = request.schedule();
+		self.worker.with_traces(|traces| {
+			let mut out = Vec::new();
+			let (every, divisor) = (schedule.visualize_every, schedule.frame_divisor());
+			waveduderust::unstable::export::csv::write_probe_csv(&mut out, probe, traces.get(n)?, every, divisor)
+				.ok()?;
+			Some(out)
+		})
 	}
 
 	/// Draws the shown frame again for a changed look; frames of baked brightness (8-bit) are made again when it
@@ -226,7 +243,7 @@ impl Live {
 
 	/// Auto brightness of `layer` for the frame shown (docs/ui/40, Header strip).
 	pub(crate) fn auto(&mut self, layer: Layer) -> Fit {
-		let stored = self.position as usize;
+		let stored = self.stored();
 		let Some(store) = self.worker.status().store.filter(|s| s.has(stored) && s.layers().contains(&layer)) else {
 			return Fit::Done(None);
 		};
@@ -260,9 +277,33 @@ impl Live {
 
 	/// Starts over after an edit, keeping what is wanted.
 	pub(crate) fn edited(&mut self, project: &Project, view: &View) {
-		if self.auto_rerun {
+		if self.auto_rerun && !self.runs_as_before(project, view) {
 			self.request(project, view);
 		}
+	}
+
+	/// Whether `project` runs as the request in force: it differs at most in what no run reads (graph boxes and
+	/// axes, which the probes' recording keys leave out).
+	fn runs_as_before(&self, project: &Project, view: &View) -> bool {
+		let Some(r) = &self.request else { return false };
+		let mut project = project.clone();
+		project.normalize();
+		let keys = |p: &Project| p.probes.iter().map(|p| (p.id(), p.recording_key())).collect::<Vec<_>>();
+		let without_probes = |p: &Project| {
+			let mut p = p.clone();
+			p.probes.clear();
+			p
+		};
+		r.quality == self.quality
+			&& r.brightness == Brightness::from(view)
+			&& keys(&r.project) == keys(&project)
+			&& without_probes(&r.project) == without_probes(&project)
+	}
+
+	/// The stored frame of the position.
+	fn stored(&self) -> usize {
+		let position = self.request.as_ref().map_or(self.position, |r| r.schedule().stored_index_of(self.position));
+		position as usize
 	}
 
 	/// No more frames than the position's.
@@ -290,7 +331,8 @@ impl Live {
 		}
 		let status = self.worker.status();
 		let state = std::mem::discriminant(&status.state);
-		if self.last_state != Some(state) {
+		let changed = self.last_state != Some(state);
+		if changed {
 			self.last_state = Some(state);
 			if let WorkState::Failed(e) = &status.state {
 				self.fit = None;
@@ -338,9 +380,10 @@ impl Live {
 			step: None,
 			running: matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting),
 			computing: false,
+			changed,
 			fitted,
 		};
-		let stored = self.position as usize;
+		let stored = self.stored();
 		shown.computing = shown.running && !status.store.as_ref().is_some_and(|s| s.has(stored));
 		if let Some(store) = &status.store {
 			shown.made = store.count().checked_sub(1).and_then(|m| u32::try_from(m).ok());

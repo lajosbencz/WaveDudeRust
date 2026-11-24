@@ -944,6 +944,14 @@ msgstr "Intensität exportieren..."
 msgid "Export last"
 msgstr "Letzten Export wiederholen"
 
+#. MenuExportProbeCsv
+msgid "Export probe data as CSV..."
+msgstr "Sondendaten als CSV exportieren..."
+
+#. ExportDialogTitleProbeCsv
+msgid "Export the probe data"
+msgstr "Sondendaten exportieren"
+
 #. MenuExportThisFrame
 msgid "Export this frame..."
 msgstr "Dieses Bild exportieren..."

@@ -48,6 +48,8 @@ export struct Commands {
     can-copy: bool,
     // the current scheme among the user's: -1 no scheme row (or no store), 0 not, 1 it is
     mine: int,
+    // the current probe's recording can go to a CSV file
+    can-export-csv: bool,
     can-run: bool,
     run-active: bool,
     paused: bool,
@@ -283,6 +285,8 @@ export component AppWindow inherits Window {
                             can-remove: root.commands.can-delete;
                             can-copy: root.commands.can-copy;
                             mine: root.commands.mine;
+                            can-export-csv: root.commands.can-export-csv;
+                            probe-row: root.props-kind == TreeKind.probe;
                             can-select-all: root.commands.can-select-all;
                             can-toggle: root.commands.can-toggle;
                             act(c) => { root.command(c); }

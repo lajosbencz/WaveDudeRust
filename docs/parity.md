@@ -12,17 +12,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 13 | 5 | 2 | 20 | 0 |
-| M | Menus and shortcuts | 61 | 8 | 37 | 34 | 0 |
-| D | Dialogs and windows | 34 | 13 | 24 | 8 | 0 |
+| M | Menus and shortcuts | 63 | 8 | 35 | 34 | 0 |
+| D | Dialogs and windows | 35 | 13 | 23 | 8 | 0 |
 | S | Settings | 10 | 7 | 12 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
-| T | Project tree | 52 | 1 | 10 | 38 | 0 |
+| T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 72 | 8 | 27 | 4 | 1 |
+| V | Preview | 73 | 8 | 26 | 4 | 1 |
 | L | Timeline, transport, status | 40 | 20 | 20 | 7 | 3 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 660 | 83 | 207 | 139 | 6 |
+| | All | 666 | 83 | 201 | 139 | 6 |
 
 ## Cross-cutting
 
@@ -177,7 +177,7 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | M-65 | Tree row menu: Cut / Copy / Paste (no gesture text) | PT:265-267 | ui/10 Tree row | done | tree.slint rows-menu: Cut / Copy / Paste, no gesture text, as Next |
 | M-66 | Tree row menu: Remove, Del, U+E738 | PT:268, SE:181 | ui/10 Tree row | divergence | tree.slint rows-menu: Remove the group (tree::remove_all); no access keys or key hints (divergences.md Row menu) |
 | M-67 | Tree row menu: Move up Alt+Up U+E74A / Move down Alt+Down U+E74B, enabled where item can move | PT:270-271, SE:182-183 | ui/10 Tree row | divergence | tree.slint rows-menu: Move up / Move down, enabled where the item can move; no access keys or key hints (divergences.md Row menu) |
-| M-68 | Tree probe row: Export probe data as CSV..., Mn X/X/V/G, active probe and no export running | PT:274-275, SE:48, ExportCommands ProbeCsv | ui/10 Tree row | missing | the live run keeps no probe recordings yet (probe graphs piece); the core writes them (export/csv.rs) |
+| M-68 | Tree probe row: Export probe data as CSV..., Mn X/X/V/G, active probe and no export running | PT:274-275, SE:48, ExportCommands ProbeCsv | ui/10 Tree row | done | tree probe row: Export probe data as CSV..., enabled on an active probe with no export running |
 | M-69 | Tree toolbar "+ Source", "+ Probe v", "+ Part v" buttons with icon+plus badge and drop-down arrow; Probe/Part open kind menu | PT:178-208, SE tips TipAddSource etc | ui/10 Add part, ui/20 | done | tree.slint AddButton x3 with the folder drawing and plus badge; Probe and Part open their menus of kinds (T-01..T-06) |
 | M-70 | Tree folder "+" buttons (Parts, Probes open kind menus) | PT:333-345 | ui/10 Add part, ui/20 | done | tree.slint row add button: Sources adds, Parts and Probes open their kind menus |
 
@@ -214,7 +214,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-93 | Auto brightness, Draw:AutoBrightness, Mn A | PP:737,763, SE:45, DisplayCommands AutoBrightness | ui/10 | missing | |
 | M-94 | Export this frame..., Ctrl+Shift+F (field) / Ctrl+Shift+G (intensity), U+EB9F, Mn T/D/E/D | PP:739,765, SE:43 | ui/10 | missing | |
 | M-95 | Export field... / intensity... / both... (Ctrl+Shift+E/I/B), U+EDE1 | PP:741-743,767-769 | ui/10 | missing | same actions exist in File menu |
-| M-96 | Probe graph box menu: Export probe data as CSV... (X/X/V/G, U+EDE1), enabled as tree row | PreviewPane probe overlay, SE:48 | ui/10 Probe graph box | missing | |
+| M-96 | Probe graph box menu: Export probe data as CSV... (X/X/V/G, U+EDE1), enabled as tree row | PreviewPane probe overlay, SE:48 | ui/10 Probe graph box | done | the picture menu over a box (Rust hit-tests the hover) holds only this entry |
 | M-97 | Header strip has no own menu; right-click/Apps opens the picture's menu | n/a | ui/10 Header strip | missing | |
 
 #### M Dock title bar and Messages menus
@@ -325,7 +325,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-47 | Export: starts a full-quality run first when none/incomplete/reduced/no intensity; status "Export: waiting for the run" | MainWindow.Export.cs | ui/70, ui/60 | missing | export.rs starts platform export directly |
 | D-48 | Export progress: "Exporting n / N frames", 120 px determinate bar, tooltip "Cancel the export (Esc)", indeterminate while waiting | MW:450-468, SE (TipExportCancel) | ui/70, status bar | partial | "Exporting d/t" (ExportProgress) over the run's status while an export runs; no progress bar |
 | D-49 | Export: Esc cancels (also while waiting); completed export reports in status bar | MW:464 | ui/70 | partial | Stop menu/F5 cancels via "stop"; Esc unbound; completion only logged |
-| D-50 | Probe data CSV export (point: step;amplitude; line: frame;step;distances; semicolons) | ExportCommands.ProbeCsv | ui/70 CSV | missing | |
+| D-50 | Probe data CSV export (point: step;amplitude; line: frame;step;distances; semicolons) | ExportCommands.ProbeCsv | ui/70 CSV | done | core export::csv::write_probe_csv with the run schedule (visualize every, frame divisor), as the CLI |
 | D-51 | Browser export dialog (names only, always ZIP, WebCodecs MP4, "export is ready" Download/Close window, OPFS) | n/a | ui/70 Browser differences, decision 0025 | missing | export.rs web mod: "exports are not in the browser build yet" |
 | D-52 | About window: modal 600 px wide (min 480x620), Esc/Enter close, focus on Close | WPF/Help/AboutWindow.xaml:21-28 | ui/70 About | done | modal About; rest matched in general (decision 0033) |
 | D-53 | About: app icon 64 px, product name, "Version x.y.z (hash7)", tagline "A 2D wave simulator", copyright line | AboutWindow.xaml:44-53, SE:115-117 | ui/70 About 1 | done | version and tagline; rest matched in general (decision 0033) |
@@ -583,11 +583,11 @@ Not-in-spec rows are marked in the Spec column.
 | T-77 | Can-paste re-evaluated once per clipboard change | MainWindow.Clipboard.cs | 20 Clipboard | missing |  |
 | T-78 | Focused text box handles Cut/Copy/Paste for its text first | MainWindow.Clipboard.cs | 20 Clipboard; divergence Edit menu | divergence | divergences.md 'Edit menu' (0008 13) |
 | T-79 | Add to my schemes / Remove from my schemes (scheme rows, label follows existence) | n/a (Rust only) | 20 Commands | done | tree.slint rows menu, scheme rows below a separator, label by Commands.mine; Command.toggle-mine |
-| T-80 | Export probe data as CSV (probe rows, active probes only; browser file-name box) | ProjectTree.xaml:273-275 | 20 Commands | missing | decision 0025 for browser |
+| T-80 | Export probe data as CSV (probe rows, active probes only; browser file-name box) | ProjectTree.xaml:273-275 | 20 Commands | done | save dialog: title Export the probe data, CSV file filter, the probe name; browser: a download |
 | T-81 | Context menu on any row (Add Source/Part/Probe submenus) | ProjectTree.xaml:248-259 | 20 (Commands) not itemised | divergence | tree.slint rows-menu on every row: Add source, Add part, Add probe submenus; no access keys or key hints (divergences.md Row menu) |
 | T-82 | Context menu: Toggle selected (Ins), Select all (Ctrl+A) with automation ids | ProjectTree.xaml:260-261 | 20 Automation ids | divergence | tree.slint rows-menu: Add to or remove from selection, Select all; no automation ids (decision 0032); no access keys or key hints (divergences.md Row menu) |
 | T-83 | Context menu: Enabled (Space), Duplicate (Ctrl+D), Cut/Copy/Paste, Remove (Del), Move up/down (Alt+Up/Down) with glyphs | ProjectTree.xaml:263-271 | 20 Commands | divergence | tree.slint rows-menu: Enabled, Duplicate, Cut/Copy/Paste, Remove, Move up/down with icons; no access keys or key hints (divergences.md Row menu) |
-| T-84 | Context menu: Export probe CSV only on probe rows, own separator | ProjectTree.xaml:272-275 | 20 Commands | missing | waits for probe recordings in the live run (M-68) |
+| T-84 | Context menu: Export probe CSV only on probe rows, own separator | ProjectTree.xaml:272-275 | 20 Commands | done | own separator, probe rows only |
 | T-85 | Right-click row acts on selection or target (Explorer rule) | ProjectTree.xaml:252-254 | 20 Commands | divergence | a right click on a row outside the selection selects it, then the menu acts on the selection (Explorer's rule); Next acts on the clicked row's group without moving the selection (divergences.md Row menu) |
 | T-86 | TreeView native keyboard: Up/Down/Left/Right/Home/End, expand/collapse by arrows | WPF TreeView | not in spec | done | tree.slint tree-keys: Up/Down/Home/End move the current row (Shift a range), Left folds or goes to the parent, Right unfolds or goes to the first child (tree::navigate); the current row scrolls into view |
 | T-87 | Tree-row Tab order / focus ring of tree | ProjectTree.xaml:240 | 20 Toolbar (Tab order) | missing |  |
@@ -1049,8 +1049,8 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-101 | Box bottom-right corner grip resize, snaps to fixed sizes else Custom; arrows 1/10 px | ProbeGraphOverlay.cs:478-484 | 40 Probe graph box | partial | Target::GraphSize: the corner grip (two bands, view::graph) sizes the box, a fixed size within 10 screen px, else Custom; arrows on the grip not yet |
 | V-102 | Arrows on box move 1/10 px (no snap); Tab reaches boxes; focus selects probe | ProbeGraphOverlay.cs:540-561 | 40 Probe graph box | missing | Tab and arrows on boxes not yet |
 | V-103 | Moving box never touches run; moving probe keeps frames, retraces | ProbeGraphOverlay.cs | 40 Probe graph box | done | a box move edits the probe's box fields only, not its recording key |
-| V-104 | Graph box context menu "Export probe data as CSV..." | ProbeGraphOverlay.cs:273-278 | 40 Probe graph box | missing | |
-| V-105 | Box hover and focus border | ProbeGraphOverlay.cs | 40 Probe graph box | partial | hover: a brighter edge and the grip; focus not yet |
+| V-104 | Graph box context menu "Export probe data as CSV..." | ProbeGraphOverlay.cs:273-278 | 40 Probe graph box | done | as M-96 |
+| V-105 | Box hover and focus border | ProbeGraphOverlay.cs | 40 Probe graph box | partial | hover: a brighter edge and the grip (hit-tested in Rust); focus not yet |
 | V-106 | Busy status "Computing frame n" + indeterminate bar mirrored on status bar | MainWindow.Live.cs | 40 Busy; 70 Status bar | missing | see L-50 |
 | V-107 | Timeline shades frames held by live run | TimelineBar.cs:315 | 40 Busy and stale | done | see L-08 |
 | V-108 | Show/hide each picture toggle (transport) feeds Display > Preview | PreviewPane.xaml:497-506 | 50 Transport #12,13 | missing | see L-37 |

@@ -17,6 +17,8 @@ use crate::ui;
 /// of the run.
 pub(crate) struct Traces<'a> {
 	pub(crate) traces: &'a [ProbeTrace],
+	/// The run's active probes, the traces' order.
+	pub(crate) probes: Vec<waveduderust::model::ProbeId>,
 	pub(crate) step: u64,
 	pub(crate) frame: usize,
 	pub(crate) total_steps: u64,
@@ -28,6 +30,12 @@ pub(crate) struct Placed {
 	pub(crate) probe: usize,
 	pub(crate) at: (f32, f32),
 	pub(crate) size: (f32, f32),
+}
+
+impl Placed {
+	pub(crate) fn contains(&self, at: (f32, f32)) -> bool {
+		(self.at.0..=self.at.0 + self.size.0).contains(&at.0) && (self.at.1..=self.at.1 + self.size.1).contains(&at.1)
+	}
 }
 
 pub(crate) struct Graphs {
@@ -66,7 +74,7 @@ fn ticks(ticks: &[graph::Tick]) -> ModelRc<ui::GraphTick> {
 }
 
 /// A laid-out box as the picture draws it, at canvas pixel `at`.
-fn row(g: &GraphLayout, at: (f32, f32), selected: bool) -> ui::GraphBox {
+fn row(g: &GraphLayout, probe: usize, at: (f32, f32), selected: bool) -> ui::GraphBox {
 	let (px, py, pw, ph) = (g.plot_x, g.plot_y, g.plot_width, g.plot_height);
 	let horizontal = |zero: bool| {
 		path_of(g.y_ticks.iter().filter(|t| t.zero == zero).map(|t| ((px, t.position), (px + pw, t.position))))
@@ -86,6 +94,7 @@ fn row(g: &GraphLayout, at: (f32, f32), selected: bool) -> ui::GraphBox {
 		}
 	}
 	ui::GraphBox {
+		probe: i32::try_from(probe).unwrap_or(-1),
 		x: at.0,
 		y: at.1,
 		width: g.width,
@@ -106,6 +115,11 @@ fn row(g: &GraphLayout, at: (f32, f32), selected: bool) -> ui::GraphBox {
 }
 
 impl Graphs {
+	/// The probe (index) of the topmost box of `layer`'s picture under canvas pixel `at`.
+	pub(crate) fn under(&self, layer: ui::Layer, at: (f32, f32)) -> Option<usize> {
+		self.placed(layer).iter().rev().find(|b| b.contains(at)).map(|b| b.probe)
+	}
+
 	/// The boxes of `layer`'s picture, bottom first.
 	pub(crate) fn placed(&self, layer: ui::Layer) -> &[Placed] {
 		&self.placed[usize::from(layer == ui::Layer::Intensity)]
@@ -132,12 +146,15 @@ impl Graphs {
 		let pictures = self.rows.iter().zip(self.placed.iter_mut()).zip(scales);
 		for (layer, ((rows, placed), scale)) in [Layer::Field, Layer::Intensity].into_iter().zip(pictures) {
 			let mut boxes: Vec<(bool, ui::GraphBox, Placed)> = Vec::new();
-			for (n, (i, probe)) in project.probes.iter().enumerate().filter(|(_, p)| p.active).enumerate() {
+			for (i, probe) in project.probes.iter().enumerate().filter(|(_, p)| p.active) {
 				if !graph::shows_box(probe, layer) {
 					continue;
 				}
 				let floor = graph::full_scale(probe, view.into());
-				let trace = data.and_then(|d| d.traces.get(n).map(|t| GraphData::at(t, d.step, d.frame)));
+				let trace = data.and_then(|d| {
+					let n = d.probes.iter().position(|&id| id == probe.id())?;
+					d.traces.get(n).map(|t| GraphData::at(t, d.step, d.frame))
+				});
 				let shown = trace.unwrap_or_default().with_floor(floor);
 				let (w, h) = graph::box_size(probe, canvas);
 				let g = graph::layout_with(&mut fonts, probe, &shown, total_steps, w * scale, h * scale);
@@ -145,7 +162,7 @@ impl Graphs {
 					let picked = selected.contains(&i);
 					let at = graph::box_origin(probe, canvas);
 					let size = (g.width / scale, g.height / scale);
-					boxes.push((picked, row(&g, at, picked), Placed { probe: i, at, size }));
+					boxes.push((picked, row(&g, i, at, picked), Placed { probe: i, at, size }));
 				}
 			}
 			// the selected boxes over the rest

@@ -12,6 +12,8 @@ export struct GraphTick { label: string, x: float, y: float }
 
 // a probe graph box (docs/ui/40): its corner in canvas pixels, the rest in logical pixels of the box
 export struct GraphBox {
+    // the probe's index
+    probe: int,
     x: float,
     y: float,
     width: float,
@@ -94,6 +96,12 @@ export global Canvas {
     callback drag(dx: float, dy: float, shift: bool);
     callback release();
     in property <EdgeLine> edge;
+    // the graph box under the pointer: its probe's index (-1: none) and picture
+    in property <int> hover-box: -1;
+    in property <Layer> hover-layer;
+    // the pointer over a picture at canvas pixel (x, y)
+    callback hover(layer: Layer, x: float, y: float);
+    callback export-probe-csv(probe: int);
     in property <[GraphBox]> field-graphs;
     in property <[GraphBox]> intensity-graphs;
     // the run computes the frame wanted, not stored yet

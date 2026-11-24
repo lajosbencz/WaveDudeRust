@@ -283,6 +283,11 @@ impl State {
 		tracing::info!("Colour scheme '{added}' loaded from '{name}' into the project");
 	}
 
+	/// Whether `node` is an active probe, which a run records.
+	fn active_probe(&self, node: Node) -> bool {
+		matches!(node, Node::Probe(i) if self.doc.project.probes.get(i).is_some_and(|p| p.active))
+	}
+
 	/// Lays out the probe graph boxes at the frame shown.
 	fn show_graphs(&mut self) {
 		let scales = [self.overlays.scale(ui::Layer::Field), self.overlays.scale(ui::Layer::Intensity)];
@@ -355,6 +360,7 @@ impl State {
 			can_copy: matches!(self.selection.current(), Node::Scene | Node::Simulation | Node::Display)
 				|| self.node_exists(),
 			mine: self.mine(),
+			can_export_csv: !exporting && self.active_probe(self.selection.current()),
 			can_run: !self.live.active() && !exporting,
 			run_active: self.live.active(),
 			paused: self.live.paused(),
@@ -584,6 +590,11 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		Command::MoveUp if state.commands().can_move_up => shift(state, -1),
 		Command::MoveDown if state.commands().can_move_down => shift(state, 1),
 		Command::ToggleMine => state.toggle_mine(),
+		Command::ExportProbeCsv => {
+			if let Node::Probe(i) = state.selection.current() {
+				export_probe_csv(state, app, i);
+			}
+		}
 		Command::Duplicate if state.commands().can_delete => {
 			let (group, mut copies) = (state.selection.group(), Vec::new());
 			state.doc.edit(|p| copies = tree::duplicate_all(p, &group));
@@ -740,7 +751,7 @@ fn tell(app: &AppWindow, message: ui::Message, arg: &str) {
 #[cfg(target_arch = "wasm32")]
 fn save(state: &mut State, app: &AppWindow, _: bool) -> bool {
 	let name = file_name(state, app);
-	match files::download(&name, &state.doc.text()) {
+	match files::download(&name, &state.doc.text(), "application/xml") {
 		Ok(()) => {
 			state.doc.mark_saved();
 			tracing::info!("saved {name} as a download");
@@ -1353,7 +1364,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				s.fitted(layer, fit);
 				s.show(&app);
 			}
-			if shown.running || shown.field.is_some() || shown.intensity.is_some() {
+			if shown.running || shown.changed || shown.field.is_some() || shown.intensity.is_some() {
 				s.show_graphs();
 			}
 			if let Some(image) = shown.field {
@@ -1464,6 +1475,25 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		s.show(&app);
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
+	canvas.on_hover(move |layer, x, y| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = st.borrow();
+		let canvas = app.global::<ui::Canvas<'_>>();
+		let under = s.graphs.under(layer, (x, y)).map_or(-1, |i| i32::try_from(i).unwrap_or(-1));
+		canvas.set_hover_layer(layer);
+		canvas.set_hover_box(under);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	canvas.on_export_probe_csv(move |probe| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		if let Ok(i) = usize::try_from(probe) {
+			s.selection.set(Node::Probe(i));
+			export_probe_csv(s, &app, i);
+			s.show(&app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
 	canvas.on_key(move |layer, key, shift| {
 		use ui::HandleKey;
 		let Some(app) = weak.upgrade() else { return false };
@@ -1500,6 +1530,39 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		}
 		s.show(&app);
 	});
+}
+
+/// Writes probe `i`'s recording to a CSV file the user names (the browser: a download).
+fn export_probe_csv(state: &State, app: &AppWindow, i: usize) {
+	let Some(probe) = state.doc.project.probes.get(i) else { return };
+	let Some(csv) = state.live.probe_csv(probe) else {
+		tracing::info!("{}: no recording to export yet", probe.name);
+		return;
+	};
+	let name = format!("{}.csv", probe.name);
+	#[cfg(not(target_arch = "wasm32"))]
+	{
+		let words = app.global::<ui::Words<'_>>();
+		let Some(path) = rfd::FileDialog::new()
+			.set_title(words.get_export_probe_data().as_str())
+			.add_filter(words.get_csv_files().as_str(), &["csv"])
+			.set_file_name(name)
+			.save_file()
+		else {
+			return;
+		};
+		match std::fs::write(&path, csv) {
+			Ok(()) => tracing::info!("Exported {} to {}", probe.name, path.display()),
+			Err(e) => tracing::error!("{}: {e}", path.display()),
+		}
+	}
+	#[cfg(target_arch = "wasm32")]
+	{
+		let _ = app;
+		if let Err(e) = files::download(&name, &String::from_utf8_lossy(&csv), "text/csv") {
+			tracing::error!("{e}");
+		}
+	}
 }
 
 fn end_gesture(app: &AppWindow) {

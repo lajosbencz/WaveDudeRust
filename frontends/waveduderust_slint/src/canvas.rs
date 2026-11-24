@@ -7,8 +7,8 @@ use std::rc::Rc;
 use slint::{Model, ModelRc, VecModel};
 use waveduderust::model::edited::Edited;
 use waveduderust::model::{BoxSize, ItemRef, Layer, Part, PartKind, ProbeKind, Project, View, ranges};
-use waveduderust::unstable::view::handles;
 use waveduderust::unstable::view::overlay::{self, HandleKind, OverlayModel};
+use waveduderust::unstable::view::{graph, handles};
 
 use crate::selection::{Selection, groupable};
 use crate::tree::Node;
@@ -280,11 +280,8 @@ impl Overlays {
 	) -> Option<Gesture> {
 		let shown = &self.shown[index(layer)];
 		let scale = shown.scale();
-		let inside = |b: &&crate::graphs::Placed| {
-			(b.at.0..=b.at.0 + b.size.0).contains(&at.0) && (b.at.1..=b.at.1 + b.size.1).contains(&at.1)
-		};
 		// the boxes lie over every handle
-		if let Some(b) = boxes.iter().rev().find(inside) {
+		if let Some(b) = boxes.iter().rev().find(|b| b.contains(at)) {
 			let node = Node::Probe(b.probe);
 			let probe = project.probes.get(b.probe)?;
 			let item = ItemRef::Probe(probe.id());
@@ -297,10 +294,12 @@ impl Overlays {
 			let grip = BOX_GRIP / scale;
 			let corner = at.0 >= b.at.0 + b.size.0 - grip && at.1 >= b.at.1 + b.size.1 - grip;
 			let scale = f64::from(scale);
+			// from the box as drawn: placed in the canvas, shrunk to fit it
+			let start = (b.at.0.round() as i32, b.at.1.round() as i32);
 			let target = if corner {
-				Target::GraphSize { item, start: probe.box_pixels(), scale }
+				Target::GraphSize { item, start: (b.size.0.round() as u32, b.size.1.round() as u32), scale }
 			} else {
-				Target::GraphBox { item, start: (probe.box_x, probe.box_y), attached: probe.box_attached(), scale }
+				Target::GraphBox { item, start, attached: probe.box_attached(), scale }
 			};
 			let from = (f64::from(at.0), f64::from(at.1));
 			return Some(Gesture::Handle(Drag { key: format!("drag {gesture}"), node, target, from, by: (0., 0.) }));
@@ -628,21 +627,26 @@ impl Drag {
 			&mut Target::GraphBox { item, start, ref mut attached, scale } => {
 				self.by = d;
 				let Some(Node::Probe(i)) = node_of(project, item) else { return };
-				let (w, h) = project.canvas_size();
+				let canvas = project.canvas_size();
 				let p = &mut project.probes[i];
-				let (bw, bh) = p.box_pixels();
-				let x = (f64::from(start.0) + d.0).clamp(0., (f64::from(w) - f64::from(bw)).max(0.));
-				let y = (f64::from(start.1) + d.1).clamp(0., (f64::from(h) - f64::from(bh)).max(0.));
+				let (bw, bh) = graph::box_size(p, canvas);
+				// the corner wanted, before the canvas holds it: A off the reachable area still attaches
+				let (x, y) = (f64::from(start.0) + d.0, f64::from(start.1) + d.1);
 				let off = (x - f64::from(p.ax)).hypot(y - f64::from(p.ay)) * scale;
 				*attached = if *attached { off <= BOX_RELEASE } else { off < BOX_SNAP };
+				let x = x.clamp(0., (f64::from(canvas.0) - f64::from(bw)).max(0.));
+				let y = y.clamp(0., (f64::from(canvas.1) - f64::from(bh)).max(0.));
 				(p.box_x, p.box_y) = if *attached { (p.ax, p.ay) } else { (x as i32, y as i32) };
 			}
 			&mut Target::GraphSize { item, start, scale } => {
 				self.by = d;
 				let Some(Node::Probe(i)) = node_of(project, item) else { return };
+				let (cw, ch) = project.canvas_size();
 				let p = &mut project.probes[i];
-				let w = ranges::PROBE_BOX_WIDTH.clamp_or(f64::from(start.0) + d.0, f64::from(start.0));
-				let h = ranges::PROBE_BOX_HEIGHT.clamp_or(f64::from(start.1) + d.1, f64::from(start.1));
+				let w =
+					ranges::PROBE_BOX_WIDTH.clamp_or(f64::from(start.0) + d.0, f64::from(start.0)).min(f64::from(cw));
+				let h =
+					ranges::PROBE_BOX_HEIGHT.clamp_or(f64::from(start.1) + d.1, f64::from(start.1)).min(f64::from(ch));
 				let near = |(pw, ph): (u32, u32)| {
 					(f64::from(pw) - w).abs() * scale < SIZE_SNAP && (f64::from(ph) - h).abs() * scale < SIZE_SNAP
 				};

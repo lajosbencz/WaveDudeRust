@@ -179,6 +179,7 @@ component Picture inherits VerticalLayout {
     in property <OverlayArt> art;
     in property <[GraphBox]> graphs;
     in property <bool> can-export;
+    property <bool> over-box: touch.has-hover && Canvas.hover-box >= 0 && Canvas.hover-layer == root.layer;
     // dimmed, a frame being computed for a while
     in property <bool> busy;
     callback command(Command);
@@ -262,8 +263,7 @@ component Picture inherits VerticalLayout {
             for graph in root.graphs: GraphBoxView {
                 graph: graph;
                 scale: cell.scale;
-                hovered: touch.has-hover && touch.mouse-x >= cell.left + self.x && touch.mouse-x < cell.left + self.x + self.width
-                    && touch.mouse-y >= cell.top + self.y && touch.mouse-y < cell.top + self.y + self.height;
+                hovered: touch.has-hover && Canvas.hover-layer == root.layer && Canvas.hover-box == graph.probe;
             }
             if Canvas.marquee-shown && Canvas.marquee-layer == root.layer: Rectangle {
                 x: Canvas.marquee.x * cell.scale * 1px;
@@ -326,19 +326,26 @@ component Picture inherits VerticalLayout {
             // Next's picture menu (PreviewPane.xaml ContextMenu)
             menu := ContextMenuArea {
                 Menu {
-                    MenuItem { title: @tr("Brightness"); icon: MenuIcons.brightness-6; activated => { brightness.focus(); } }
-                    MenuItem { title: @tr("Auto brightness"); icon: MenuIcons.brightness-6; activated => { Canvas.auto(root.layer); } }
-                    MenuSeparator { }
-                    MenuItem {
+                    // over a graph box: the box's menu (docs/ui/10, Probe graph box)
+                    if root.over-box: MenuItem {
+                        title: @tr("Export probe data as CSV...");
+                        icon: MenuIcons.ios-share;
+                        enabled: root.can-export;
+                        activated => { Canvas.export-probe-csv(Canvas.hover-box); }
+                    }
+                    if !root.over-box: MenuItem { title: @tr("Brightness"); icon: MenuIcons.brightness-6; activated => { brightness.focus(); } }
+                    if !root.over-box: MenuItem { title: @tr("Auto brightness"); icon: MenuIcons.brightness-6; activated => { Canvas.auto(root.layer); } }
+                    if !root.over-box: MenuSeparator { }
+                    if !root.over-box: MenuItem {
                         title: @tr("Export this frame...");
                         icon: MenuIcons.image;
                         enabled: root.can-export;
                         activated => { root.command(root.layer == Layer.field ? Command.export-field-frame : Command.export-intensity-frame); }
                     }
-                    MenuSeparator { }
-                    MenuItem { title: @tr("Export field..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-field); } }
-                    MenuItem { title: @tr("Export intensity..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-intensity); } }
-                    MenuItem { title: @tr("Export both..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-both); } }
+                    if !root.over-box: MenuSeparator { }
+                    if !root.over-box: MenuItem { title: @tr("Export field..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-field); } }
+                    if !root.over-box: MenuItem { title: @tr("Export intensity..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-intensity); } }
+                    if !root.over-box: MenuItem { title: @tr("Export both..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-both); } }
                 }
                 // one area for the whole picture: the drawings take no pointer, the app finds the handle under a press
                 touch := TouchArea {
@@ -371,6 +378,12 @@ component Picture inherits VerticalLayout {
                             return;
                         }
                         if (e.kind == PointerEventKind.move) {
+                            if (!self.pressed) {
+                                Canvas.hover(
+                                    root.layer,
+                                    (self.mouse-x - cell.left) / (cell.scale * 1px),
+                                    (self.mouse-y - cell.top) / (cell.scale * 1px));
+                            }
                             if (self.panning) {
                                 // held where the picture's edge stops it, so a drag back moves it at once
                                 let half-x = cell.width / 2 / (cell.scale * 1px);

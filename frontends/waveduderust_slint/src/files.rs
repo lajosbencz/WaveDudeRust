@@ -54,14 +54,14 @@ fn pick_into(inbox: &Inbox, dialog: rfd::AsyncFileDialog, what: Option<Layer>) {
 	});
 }
 
-/// Hands `text` to the browser as a download named `name`.
+/// Hands `text` of media type `mime` to the browser as a download named `name`.
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn download(name: &str, text: &str) -> Result<(), String> {
+pub(crate) fn download(name: &str, text: &str, mime: &str) -> Result<(), String> {
 	use wasm_bindgen::JsCast;
 	let fail = |e: wasm_bindgen::JsValue| format!("{e:?}");
 	let parts = js_sys::Array::of1(&text.into());
 	let options = web_sys::BlobPropertyBag::new();
-	options.set_type("application/xml");
+	options.set_type(mime);
 	let blob = web_sys::Blob::new_with_str_sequence_and_options(&parts, &options).map_err(fail)?;
 	let url = web_sys::Url::create_object_url_with_blob(&blob).map_err(fail)?;
 	let document = web_sys::window().and_then(|w| w.document()).ok_or("no document")?;
