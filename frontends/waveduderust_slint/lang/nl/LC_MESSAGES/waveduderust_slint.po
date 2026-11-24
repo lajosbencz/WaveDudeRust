@@ -124,6 +124,10 @@ msgstr "Een diffusor: een plaat van glas of als spiegel met een ruw voorvlak en 
 msgid "A facetted grating: a plate of glass or mirror whose front face carries a periodic relief, a sawtooth, a square wave or a sinusoid repeated every pitch, the back flat. A diffuser of one wavelength: the pitch and the wavelength set the angles the orders leave at."
 msgstr "Een facetrooster: een plaat van glas of spiegel waarvan de voorkant een periodiek reliëf draagt, een zaagtand, een blokgolf of een sinus herhaald per steek, de achterkant vlak. Een diffusor van één golflengte: de steek en de golflengte bepalen de hoeken waaronder de ordes vertrekken."
 
+#. Kind.FiberPart
+msgid "A fibre: a core of higher index inside a cladding, along a smooth path of Bézier segments through its nodes, with flat or round ends. A wave coupled into the core is guided along the path; the cladding can absorb stray light at its rim."
+msgstr "Een vezel: een kern met hogere index in een mantel, langs een glad pad van Bézier-segmenten door zijn knopen, met vlakke of ronde uiteinden. Een in de kern gekoppelde golf wordt langs het pad geleid; de mantel kan strooilicht aan zijn rand absorberen."
+
 #. Kind.OutlinePart
 msgid "A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing."
 msgstr "Een vrije omtrek van glas of als spiegel: een gesloten vorm door de punten die u plaatst en sleept; minder dan drie tekenen niets."
@@ -212,6 +216,10 @@ msgstr "AR aan uitgangszijde"
 msgid "Absorption"
 msgstr "Absorptie"
 
+#. Label.FiberPart.AbsorptionRamp
+msgid "Absorption band"
+msgstr "Absorptieband"
+
 #. Label.LensPart.AbsorptionRamp
 msgid "Absorption ramp"
 msgstr "Absorptiehelling"
@@ -239,6 +247,10 @@ msgstr "Optisch onderdeel toevoegen (menu met soorten; achteraan)"
 #. ButtonAddLayer
 msgid "Add layer"
 msgstr "Laag toevoegen"
+
+#. ButtonAddNode
+msgid "Add node"
+msgstr "Knooppunt toevoegen"
 
 #. MenuProjectAddPart
 msgid "Add part"
@@ -311,6 +323,10 @@ msgstr "Tophoek"
 #. TipAddLayer
 msgid "Append a copy of the last layer"
 msgstr "Een kopie van de laatste laag achteraan toevoegen"
+
+#. TipAddNode
+msgid "Append a node beyond the last one, continuing the path"
+msgstr "Knooppunt na het laatste toevoegen, in het verlengde van het pad"
 
 #. TipAddPoint
 msgid "Append a point after the last one"
@@ -432,9 +448,21 @@ msgstr "Middendikte"
 msgid "Centre wavelength"
 msgstr "Centrale golflengte"
 
+#. SectionCladding
+msgid "Cladding"
+msgstr "Mantel"
+
+#. Label.FiberPart.Absorption
+msgid "Cladding absorption"
+msgstr "Absorptie van de mantel"
+
 #. Label.FiberPart.CladdingIndex
 msgid "Cladding index"
 msgstr "Mantelindex"
+
+#. Label.FiberPart.CladdingThickness
+msgid "Cladding thickness"
+msgstr "Manteldikte"
 
 #. MessagesClear
 msgid "Clear"
@@ -519,6 +547,14 @@ msgstr "Bollend, de vulling het grootst in het midden en naar buiten afnemend bi
 #. MenuEditCopy
 msgid "Copy"
 msgstr "Kopiëren"
+
+#. SectionCore
+msgid "Core"
+msgstr "Kern"
+
+#. Label.FiberPart.CoreDiameter
+msgid "Core diameter"
+msgstr "Kerndiameter"
 
 #. Label.FiberPart.CoreIndex
 msgid "Core index"
@@ -635,6 +671,10 @@ msgstr "Diameter langs de as in pixels."
 #. Hint.SimpleGratingPart.Diameter
 msgid "Diameter of each dot in pixels, at most half the smaller spacing. A dot of 2 pixels on a whole-pixel position covers a square of 2 × 2 pixels; a mirror dot under 2 pixels covers no pixel centre and paints nothing."
 msgstr "Diameter van elke punt in pixels, hoogstens de helft van de kleinste afstand. Een punt van 2 pixels op een hele pixelpositie bedekt een vierkant van 2 × 2 pixels; een spiegelpunt onder 2 pixels bedekt geen pixelcentrum en tekent niets."
+
+#. Hint.FiberPart.CoreDiameter
+msgid "Diameter of the core in pixels."
+msgstr "Diameter van de kern in pixels."
 
 #. MenuAddDiffractionGratings
 msgid "Diffraction gratings"
@@ -775,6 +815,10 @@ msgstr "Encoderkwaliteit, 1 tot 100."
 #. TipPreviewSetOut
 msgid "End the export range at this frame (O)"
 msgstr "Exportbereik bij dit beeld laten eindigen (O)"
+
+#. Label.FiberPart.Ends
+msgid "Ends"
+msgstr "Uiteinden"
 
 #. Hint.Source.PulseShape
 msgid "Envelope of each burst; pulsed mode only."
@@ -960,6 +1004,10 @@ msgstr "Eerste simulatiestap van het geëxporteerde bereik; 0 is het begin van d
 msgid "Fit the value axis to the data instead of the fixed minimum and maximum."
 msgstr "De waardenas aan de gegevens aanpassen in plaats van aan het vaste minimum en maximum."
 
+#. Enum.FiberEnds.Flat
+msgid "Flat"
+msgstr "Vlak"
+
 #. Label.MetaLensPart.FocalLength
 msgid "Focal length"
 msgstr "Brandpuntsafstand"
@@ -1036,6 +1084,10 @@ msgstr "Grafiek"
 msgid "Half"
 msgstr "Half"
 
+#. Hint.FiberPart.AbsorptionRamp
+msgid "Half the absorbing band's width in pixels: the absorption rises over this many pixels to its peak and falls over as many to the outer edge. A band wider than the cladding is squeezed into it."
+msgstr "De halve breedte van de absorberende band in pixels: de absorptie stijgt over zoveel pixels naar haar piek en daalt over evenveel naar de buitenrand. Een band breder dan de mantel wordt erin samengedrukt."
+
 #. Label.Display.HandlesInPreview
 msgid "Handles in the preview"
 msgstr "Grepen in het voorbeeld"
@@ -1076,6 +1128,10 @@ msgstr "Hoe sterk het onderdeel golven absorbeert, 0 (helemaal niet) tot 255, zo
 msgid "How the index runs through the band: a layer at √n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for."
 msgstr "Hoe de index door de band loopt: een laag met √n, het kwartgolfidee, of een geleidelijke stijging van het medium buiten naar het glas. Een geleidelijke band reflecteert minder dan een laag zodra hij een golflengte of dikker is, bij elke golflengte; een laag alleen bij de golflengte waarvoor hij is gesneden."
 
+#. Hint.FiberPart.Ends
+msgid "How the two ends are cut: flat, straight across the path like a cleaved fibre, or rounded with the outer radius. The AR coating follows a flat end face."
+msgstr "Hoe de twee uiteinden zijn afgesneden: vlak, recht dwars op het pad zoals een gekliefde vezel, of afgerond met de buitenstraal. De AR-coating volgt een vlak eindvlak."
+
 #. Hint.FresnelLensPart.Division
 msgid "How the zones are divided from the axis to the rim: equal in width, the outer zone the deepest; or equal in depth, each zone cut to the same depth and the zones narrowing outward, as the elements of a lighthouse lens are."
 msgstr "Hoe de zones van de as tot de rand verdeeld zijn: even breed, de buitenste zone het diepst; of even diep, elke zone tot dezelfde diepte gesneden en de zones naar buiten toe smaller, zoals de elementen van een vuurtorenlens."
@@ -1107,6 +1163,10 @@ msgstr "Beeldvormend"
 #. MenuAddImagingDetector
 msgid "Imaging detector"
 msgstr "Beeldvormende detector"
+
+#. LabelNodeIn
+msgid "In"
+msgstr "In"
 
 #. TipSourceEnabled
 msgid "Include the source in runs (Space on the row toggles it)"
@@ -1163,6 +1223,10 @@ msgstr "Omgekeerd"
 #. Enum.TriangleType.Isosceles
 msgid "Isosceles"
 msgstr "Gelijkbenig"
+
+#. Hint.FiberNode.Smooth
+msgid "Keep the two handles opposite each other through the node, so the path runs smoothly through it. Switching it on lines them up at once; afterwards moving or typing one handle turns the other with it, keeping its length. Off, the node may be a corner."
+msgstr "De twee grepen tegenover elkaar door het knooppunt houden, zodat het pad er glad doorheen loopt. Bij het inschakelen worden ze meteen uitgelijnd; daarna draait bij het verplaatsen of intypen van een greep de andere mee, met behoud van zijn lengte. Uit, kan het knooppunt een hoek zijn."
 
 #. Hint.EllipsePart.Linked
 msgid "Keep the width equal to the length: a circle."
@@ -1424,6 +1488,18 @@ msgstr "Volgend beeld (.)"
 msgid "No entries"
 msgstr "Geen items"
 
+#. LabelNodePoint
+msgid "Node"
+msgstr "Knoop"
+
+#. SectionNodes
+msgid "Nodes"
+msgstr "Knooppunten"
+
+#. HintFiberNodes
+msgid "Nodes of the path relative to the centre, before rotation, each with the in- and out-handle of the segments meeting there, as offsets from the node. Fewer than two nodes paint nothing."
+msgstr "Knooppunten van het pad ten opzichte van het middelpunt, vóór rotatie, elk met de ingaande en uitgaande greep van de segmenten die daar samenkomen, als verschuiving ten opzichte van het knooppunt. Minder dan twee knooppunten tekenen niets."
+
 #. Hint.Probe.BoxSize
 msgid "Nominal size of the graph box drawn over the output; a box larger than the canvas is shrunk to fit it, aspect kept."
 msgstr "Nominale grootte van het grafiekkader over de uitvoer; een kader groter dan het canvas wordt met behoud van de verhouding tot het canvas verkleind."
@@ -1508,6 +1584,10 @@ msgstr "Open laat een golf het raster verlaten, alsof het canvas in de vrije rui
 msgid "Optical logic"
 msgstr "Optische logica"
 
+#. LabelNodeOut
+msgid "Out"
+msgstr "Uit"
+
 #. LabelOuterZone
 msgid "Outermost zone"
 msgstr "Buitenste zone"
@@ -1591,6 +1671,10 @@ msgstr "Simulatie pauzeren (F6)"
 #. RunStatePaused
 msgid "Paused"
 msgstr "Gepauzeerd"
+
+#. Hint.FiberPart.Absorption
+msgid "Peak absorption of the cladding's absorbing band, 0 (not at all) to 255, as the scene image's blue channel: a hump in the outer part of the cladding, rising over the band width from nothing, peaking, and falling to nothing at the outer edge, so the guided wave's tail stays untouched and stray light is absorbed from either side. Nothing on a bare core."
+msgstr "Piekabsorptie van de absorberende band in de mantel, 0 (geen) tot 255, als het blauwe kanaal van de scèneafbeelding: een bult in het buitenste deel van de mantel, die over de bandbreedte vanaf niets stijgt, piekt en naar de buitenrand weer tot niets daalt, zodat de staart van de geleide golf onaangeroerd blijft en strooilicht van beide kanten wordt opgenomen. Niets bij een kale kern."
 
 #. Hint.Scene.ImageSourceScale
 msgid "Peak amplitude of the image sources."
@@ -1808,6 +1892,14 @@ msgstr "Brekingsindex van een leeg canvas, 1,0 tot 2,55. De golfsnelheid is 1/n 
 msgid "Refractive index of the cladding around the cores, 1.00 to 2.55 in steps of 0.01."
 msgstr "Brekingsindex van de mantel rond de kernen, 1,00 tot 2,55 in stappen van 0,01."
 
+#. Hint.FiberPart.CladdingIndex
+msgid "Refractive index of the cladding, 1.00 to 2.55 in steps of 0.01. Below the core's index, the fibre guides."
+msgstr "Brekingsindex van de mantel, 1,00 tot 2,55 in stappen van 0,01. Onder de kernindex geleidt de vezel."
+
+#. Hint.FiberPart.CoreIndex
+msgid "Refractive index of the core, 1.00 to 2.55 in steps of 0.01."
+msgstr "Brekingsindex van de kern, 1,00 tot 2,55 in stappen van 0,01."
+
 #. Hint.BraggReflectorPart.Index1
 msgid "Refractive index of the first layer of each pair, 1.00 to 2.55 in steps of 0.01."
 msgstr "Brekingsindex van de eerste laag van elk paar, 1,00 tot 2,55 in stappen van 0,01."
@@ -1856,6 +1948,10 @@ msgstr "Alle lagen verwijderen, om een andere stapel vanaf niets op te bouwen; O
 msgid "Remove this layer"
 msgstr "Deze laag verwijderen"
 
+#. TipRemoveNode
+msgid "Remove this node"
+msgstr "Dit knooppunt verwijderen"
+
 #. TipRemovePoint
 msgid "Remove this point"
 msgstr "Dit punt verwijderen"
@@ -1891,6 +1987,10 @@ msgstr "Rotatie van het raster om de bronpositie in graden, tegen de klok in op 
 #. SectionRoughness
 msgid "Roughness"
 msgstr "Ruwheid"
+
+#. Enum.FiberEnds.Round
+msgid "Round"
+msgstr "Rond"
 
 #. Label.SimpleGratingPart.RowSpacing
 msgid "Row spacing"
@@ -2023,6 +2123,10 @@ msgstr "Schuivend venster van de laatste stappen, of de hele run; alleen puntson
 #. Enum.ProbeBoxSize.Small
 msgid "Small"
 msgstr "Klein"
+
+#. Label.FiberNode.Smooth
+msgid "Smooth"
+msgstr "Glad"
 
 #. Enum.PulseShape.SmoothedSquare
 msgid "Smoothed square"
@@ -2248,6 +2352,10 @@ msgstr "Dikte in pixels van de absorberende rand: positief binnen het canvas, wa
 msgid "Thickness in pixels of the anti-reflection band at the ends ticked below, with the index √n of the core and of the cladding; 0 for none. A quarter-wave band, the least reflecting, is λ / (4 √n) pixels thick; the form shows it for the core."
 msgstr "Dikte in pixels van de antireflectieband aan de hieronder aangevinkte uiteinden, met index √n van de kern en van de mantel; 0 voor geen. Een kwartgolfband, de minst reflecterende, is λ / (4 √n) pixels dik; het formulier toont die voor de kern."
 
+#. Hint.FiberPart.Coating
+msgid "Thickness in pixels of the anti-reflection band just inside the outer boundary and the end faces; 0 for none. A quarter-wave layer is λ / (4 √n) pixels thick, λ being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on."
+msgstr "Dikte in pixels van de antireflectieband net binnen de buitengrens en de eindvlakken; 0 voor geen. Een kwartgolflaag is λ / (4 √n) pixels dik, λ de golflengte die het bronformulier toont; een geleidelijke band is vanaf een golflengte beter naarmate hij dikker is."
+
 #. Hint.LensPart.Coating
 msgid "Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is λ / (4 √n) pixels thick, λ being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on."
 msgstr "Dikte in pixels van de antireflectieband net binnen de omtrek; 0 voor geen. Een kwartgolflaag is λ / (4 √n) pixels dik, λ de golflengte die het bronformulier toont; een geleidelijke band is vanaf een golflengte beter naarmate hij dikker is."
@@ -2255,6 +2363,10 @@ msgstr "Dikte in pixels van de antireflectieband net binnen de omtrek; 0 voor ge
 #. Hint.MetaSurfacePart.Length
 msgid "Thickness of the carrier plate along the axis in pixels; the pattern stands on its front, outside it."
 msgstr "Dikte van de dragerplaat langs de as in pixels; het patroon staat op de voorkant, erbuiten."
+
+#. Hint.FiberPart.CladdingThickness
+msgid "Thickness of the cladding around the core in pixels; 0 for a bare core."
+msgstr "Dikte van de mantel om de kern in pixels; 0 voor een kale kern."
 
 #. Hint.BraggReflectorPart.Thickness1
 msgid "Thickness of the first layer of each pair in pixels. A quarter-wave layer is λ / (4 n) pixels thick."
@@ -2420,6 +2532,14 @@ msgstr "X van de emitter, of van het rastercentrum, in canvaspixels."
 msgid "X of the end of the line in canvas pixels; line probes only."
 msgstr "X van het einde van de lijn in canvaspixels; alleen lijnsondes."
 
+#. Hint.FiberNode.InX
+msgid "X of the in-handle relative to the node, in canvas pixels before rotation. It shapes the segment arriving from the previous node; zero makes that segment straight at this end."
+msgstr "X van de ingaande greep ten opzichte van het knooppunt, in canvaspixels vóór rotatie. Hij vormt het segment dat van het vorige knooppunt komt; nul maakt het aan dit uiteinde recht."
+
+#. Hint.FiberNode.OutX
+msgid "X of the out-handle relative to the node, in canvas pixels before rotation. It shapes the segment leaving to the next node; zero makes that segment straight at this end."
+msgstr "X van de uitgaande greep ten opzichte van het knooppunt, in canvaspixels vóór rotatie. Hij vormt het segment dat naar het volgende knooppunt gaat; nul maakt het aan dit uiteinde recht."
+
 #. Hint.OpticalPart.X
 msgid "X of the part's centre in canvas pixels."
 msgstr "X van het middelpunt in canvaspixels."
@@ -2451,6 +2571,14 @@ msgstr "Y van de emitter, of van het rastercentrum, in canvaspixels."
 #. Hint.Probe.BY
 msgid "Y of the end of the line in canvas pixels; line probes only."
 msgstr "Y van het einde van de lijn in canvaspixels; alleen lijnsondes."
+
+#. Hint.FiberNode.InY
+msgid "Y of the in-handle relative to the node, in canvas pixels before rotation."
+msgstr "Y van de ingaande greep ten opzichte van het knooppunt, in canvaspixels vóór rotatie."
+
+#. Hint.FiberNode.OutY
+msgid "Y of the out-handle relative to the node, in canvas pixels before rotation."
+msgstr "Y van de uitgaande greep ten opzichte van het knooppunt, in canvaspixels vóór rotatie."
 
 #. Hint.OpticalPart.Y
 msgid "Y of the part's centre in canvas pixels."
@@ -2507,6 +2635,16 @@ msgstr "Schuivend"
 msgctxt "Enum.TriangleType.Custom"
 msgid "Custom"
 msgstr "Eigen hoeken"
+
+#. Label.FiberNode.X
+msgctxt "Label.FiberNode.X"
+msgid "X"
+msgstr "X"
+
+#. Label.FiberNode.Y
+msgctxt "Label.FiberNode.Y"
+msgid "Y"
+msgstr "Y"
 
 #. Label.OpticalPart.Enabled
 msgctxt "Label.OpticalPart.Enabled"

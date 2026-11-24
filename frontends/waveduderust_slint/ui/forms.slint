@@ -1,8 +1,8 @@
 // The forms Properties shows per kind of object, bound to the Form global's data.
 import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
-import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice, MetaLensTypeChoice } from "choices.slint";
+import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, Check, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
+import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice, MetaLensTypeChoice, FiberEndsChoice } from "choices.slint";
 import { FormKind, GateKind, PointData, SceneMode, SourceMode, ProbeDetector, ProbeKind, Layer, BoxSize, YScale, TriangleType, LayerData } from "data.slint";
 import { Icon, IconButton } from "icons.slint";
 
@@ -864,17 +864,15 @@ component MaterialPanel inherits FormPanel {
     in property <bool> back-only;
     in property <bool> sides-hidden;
     in property <bool> absorption-shown;
+    in property <string> coating-tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
     @children
     if root.coating-shown: Row {
-        FormLabel {
-            text: @tr("AR coating");
-            tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
-        }
+        FormLabel { text: @tr("AR coating"); tip: root.coating-tip; }
         FormFloat {
             value <=> Form.coating.depth;
             spec: { min: 0, max: 50, increment: 1, decimals: -1 };
             enabled: root.enabled;
-            tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
+            tip: root.coating-tip;
         }
     }
     if root.coating-shown: Row {
@@ -2248,4 +2246,174 @@ export component InterferenceFilterForm inherits VerticalLayout {
         }
     }
     LayerList { }
+}
+
+// A fibre's path nodes: a block each of the node, its in- and out-handle, with Smooth and remove; Add node below.
+component NodeList inherits VerticalLayout {
+    FormSection { text: @tr("Nodes"); }
+    Text {
+        text: @tr("Nodes of the path relative to the centre, before rotation, each with the in- and out-handle of the segments meeting there, as offsets from the node. Fewer than two nodes paint nothing.");
+        wrap: word-wrap;
+        color: Theme.text-dim;
+    }
+    Rectangle { height: 4px; }
+    HorizontalLayout {
+        padding-bottom: 2px;
+        spacing: 4px;
+        Rectangle { width: 36px; }
+        Text { horizontal-stretch: 1; text: @tr("Label.FiberNode.X" => "X"); color: Theme.text; }
+        Text { horizontal-stretch: 1; text: @tr("Label.FiberNode.Y" => "Y"); color: Theme.text; }
+        Rectangle { width: smooth-width.preferred-width; }
+    }
+    for node[k] in Form.nodes: GridLayout {
+        spacing-horizontal: 4px;
+        spacing-vertical: 2px;
+        padding-bottom: 6px;
+        Row {
+            Text { width: 36px; overflow: elide; text: @tr("Node"); vertical-alignment: center; color: Theme.text; }
+            FormInt { value <=> node.x; tip: @tr("X relative to the part's centre in canvas pixels, before rotation."); }
+            FormInt { value <=> node.y; tip: @tr("Y relative to the part's centre in canvas pixels, before rotation."); }
+            HorizontalLayout {
+                horizontal-stretch: 0;
+                spacing: 4px;
+                FormCheck {
+                    checked <=> node.smooth;
+                    text: @tr("Smooth");
+                    tip: @tr("Keep the two handles opposite each other through the node, so the path runs smoothly through it. Switching it on lines them up at once; afterwards moving or typing one handle turns the other with it, keeping its length. Off, the node may be a corner.");
+                }
+                Rectangle {
+                    width: 22px;
+                    IconButton {
+                        size: 18px;
+                        icon: @image-url("icons/next/tree-minus.svg");
+                        tip: @tr("Remove this node");
+                        clicked => { Form.remove-row(k); }
+                    }
+                }
+            }
+        }
+        Row {
+            Text { width: 36px; overflow: elide; text: @tr("In"); vertical-alignment: center; color: Theme.text; }
+            FormInt {
+                value <=> node.in-x;
+                tip: @tr("X of the in-handle relative to the node, in canvas pixels before rotation. It shapes the segment arriving from the previous node; zero makes that segment straight at this end.");
+            }
+            FormInt { value <=> node.in-y; tip: @tr("Y of the in-handle relative to the node, in canvas pixels before rotation."); }
+        }
+        Row {
+            Text { width: 36px; overflow: elide; text: @tr("Out"); vertical-alignment: center; color: Theme.text; }
+            FormInt {
+                value <=> node.out-x;
+                tip: @tr("X of the out-handle relative to the node, in canvas pixels before rotation. It shapes the segment leaving to the next node; zero makes that segment straight at this end.");
+            }
+            FormInt { value <=> node.out-y; tip: @tr("Y of the out-handle relative to the node, in canvas pixels before rotation."); }
+        }
+    }
+    // the Smooth column's width, for the heading
+    smooth-width := HorizontalLayout {
+        visible: false;
+        height: 0;
+        spacing: 4px;
+        Check { text: @tr("Smooth"); }
+        Rectangle { width: 22px; }
+    }
+    HorizontalLayout {
+        padding-top: 2px;
+        padding-bottom: 10px;
+        alignment: start;
+        Rectangle {
+            width: add.preferred-width;
+            height: add.preferred-height;
+            add := Button {
+                text: @tr("Add node");
+                clicked => { Form.add-row(); }
+            }
+            Tooltip { text: @markdown("\{@tr("Append a node beyond the last one, continuing the path")}"); }
+        }
+    }
+}
+
+export component FiberForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A fibre: a core of higher index inside a cladding, along a smooth path of B\u{E9}zier segments through its nodes, with flat or round ends. A wave coupled into the core is guided along the path; the cladding can absorb stray light at its rim.");
+    }
+    FormSection { text: @tr("Core"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Core index"); tip: @tr("Refractive index of the core, 1.00 to 2.55 in steps of 0.01."); }
+            FormFloat {
+                value <=> Form.fiber.core-index;
+                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                tip: @tr("Refractive index of the core, 1.00 to 2.55 in steps of 0.01.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Core diameter"); tip: @tr("Diameter of the core in pixels."); }
+            FormInt {
+                value <=> Form.fiber.core-diameter;
+                spec: { min: 2, max: 2147483647, increment: 1, decimals: -1 };
+                tip: @tr("Diameter of the core in pixels.");
+            }
+        }
+    }
+    FormSection { text: @tr("Cladding"); }
+    MaterialPanel {
+        coating-tip: @tr("Thickness in pixels of the anti-reflection band just inside the outer boundary and the end faces; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
+        Row {
+            FormLabel {
+                text: @tr("Cladding index");
+                tip: @tr("Refractive index of the cladding, 1.00 to 2.55 in steps of 0.01. Below the core's index, the fibre guides.");
+            }
+            FormFloat {
+                value <=> Form.fiber.cladding-index;
+                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                tip: @tr("Refractive index of the cladding, 1.00 to 2.55 in steps of 0.01. Below the core's index, the fibre guides.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Cladding thickness"); tip: @tr("Thickness of the cladding around the core in pixels; 0 for a bare core."); }
+            FormInt {
+                value <=> Form.fiber.cladding-thickness;
+                spec: { min: 0, max: 2147483647, increment: 1, decimals: -1 };
+                tip: @tr("Thickness of the cladding around the core in pixels; 0 for a bare core.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Cladding absorption");
+                tip: @tr("Peak absorption of the cladding's absorbing band, 0 (not at all) to 255, as the scene image's blue channel: a hump in the outer part of the cladding, rising over the band width from nothing, peaking, and falling to nothing at the outer edge, so the guided wave's tail stays untouched and stray light is absorbed from either side. Nothing on a bare core.");
+            }
+            FormInt {
+                value <=> Form.fiber.absorption;
+                spec: { min: 0, max: 255, increment: 5, decimals: -1 };
+                tip: @tr("Peak absorption of the cladding's absorbing band, 0 (not at all) to 255, as the scene image's blue channel: a hump in the outer part of the cladding, rising over the band width from nothing, peaking, and falling to nothing at the outer edge, so the guided wave's tail stays untouched and stray light is absorbed from either side. Nothing on a bare core.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Absorption band");
+                tip: @tr("Half the absorbing band's width in pixels: the absorption rises over this many pixels to its peak and falls over as many to the outer edge. A band wider than the cladding is squeezed into it.");
+            }
+            FormInt {
+                value <=> Form.fiber.absorption-ramp;
+                spec: { min: 1, max: 400, increment: 1, decimals: -1 };
+                tip: @tr("Half the absorbing band's width in pixels: the absorption rises over this many pixels to its peak and falls over as many to the outer edge. A band wider than the cladding is squeezed into it.");
+            }
+        }
+    }
+    FormSection { text: @tr("Shape"); }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Ends");
+                tip: @tr("How the two ends are cut: flat, straight across the path like a cleaved fibre, or rounded with the outer radius. The AR coating follows a flat end face.");
+            }
+            FiberEndsChoice {
+                value <=> Form.fiber.ends;
+                tip: @tr("How the two ends are cut: flat, straight across the path like a cleaved fibre, or rounded with the outer radius. The AR coating follows a flat end face.");
+            }
+        }
+    }
+    NodeList { }
 }

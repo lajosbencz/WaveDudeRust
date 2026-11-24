@@ -16,11 +16,12 @@ export enum CoatingProfile { layer, graded }
 export enum TriangleType { equilateral, right-isosceles, thirty-sixty-ninety, isosceles, custom }
 export enum ZoneDivision { equal-width, equal-depth }
 export enum FacetPattern { sawtooth, square-wave, sinusoidal }
+export enum FiberEnds { flat, round }
 export enum MetaLensType { converging, diverging }
 export enum GateKind { xor, and, or }
 
 // Which form Properties shows; `none` for the generic rows.
-export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens, simple-grating, facetted-grating, meta-lens, meta-prism, meta-axicon, logic-gate, interference-filter }
+export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens, simple-grating, facetted-grating, meta-lens, meta-prism, meta-axicon, logic-gate, interference-filter, fiber }
 
 export struct ProjectData {
     seed: int,
@@ -287,6 +288,27 @@ export struct MetaData {
     zone-width: float,
     line-length: float,
     zones: int,
+}
+
+export struct FiberData {
+    core-index: float,
+    core-diameter: int,
+    cladding-index: float,
+    cladding-thickness: int,
+    absorption: int,
+    absorption-ramp: int,
+    ends: FiberEnds,
+}
+
+// A path node and its handles, offsets from it.
+export struct FiberNodeData {
+    x: int,
+    y: int,
+    in-x: int,
+    in-y: int,
+    out-x: int,
+    out-y: int,
+    smooth: bool,
 }
 
 // The stack thickness in pixels to 0.1, a read-out.

@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 7 | 11 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 211 | 32 | 80 | 2 | 0 |
+| P | Properties | 263 | 32 | 28 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 382 | 231 | 378 | 98 | 6 |
+| | All | 434 | 231 | 326 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -838,24 +838,24 @@ Not-in-spec rows are marked in the Spec column.
 | P-222 | Facetted grating: Pattern combo Sawtooth/Square wave/Sinusoidal | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
 | P-223 | Facetted grating: Pitch NB 2..10000 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
 | P-224 | Facetted grating: Amplitude NB 0..10000 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
-| P-225 | Fibre core: Core index NB 1..2.55 step 0.01 | Views/FiberPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-226 | Fibre core: Core diameter NB min 2 | Views/FiberPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-227 | Fibre cladding: Cladding index NB 1..2.55 | Views/FiberPartView.xaml | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-228 | Fibre cladding: Cladding thickness NB min 0 | Views/FiberPartView.xaml | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-229 | Fibre cladding: Cladding absorption NB 0..255 step 5 | Views/FiberPartView.xaml | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-230 | Fibre cladding: Absorption band NB 1..400 | Views/FiberPartView.xaml | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-231 | Fibre cladding: AR coating NB 0..50 | Views/FiberPartView.xaml | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-232 | Fibre cladding: Coating profile combo | Views/FiberPartView.xaml | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-233 | Fibre cladding: Coat front/back/sides CB | Views/FiberPartView.xaml | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-234 | Fibre shape: Ends combo Flat/Round | Views/FiberPartView.xaml | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-235 | Fibre nodes: Hint text | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-236 | Fibre nodes: Heading row X,Y | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-237 | Fibre nodes: Node X NB, Y NB | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-238 | Fibre nodes: Node Smooth CB (aligns handles, keeps length) | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-239 | Fibre nodes: Node remove button | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-240 | Fibre nodes: In InX NB, InY NB | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-241 | Fibre nodes: Out OutX NB, OutY NB | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-242 | Fibre nodes: Add node button (continues path) | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-225 | Fibre core: Core index NB 1..2.55 step 0.01 | Views/FiberPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-226 | Fibre core: Core diameter NB min 2 | Views/FiberPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-227 | Fibre cladding: Cladding index NB 1..2.55 | Views/FiberPartView.xaml | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-228 | Fibre cladding: Cladding thickness NB min 0 | Views/FiberPartView.xaml | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-229 | Fibre cladding: Cladding absorption NB 0..255 step 5 | Views/FiberPartView.xaml | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-230 | Fibre cladding: Absorption band NB 1..400 | Views/FiberPartView.xaml | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-231 | Fibre cladding: AR coating NB 0..50 | Views/FiberPartView.xaml | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-232 | Fibre cladding: Coating profile combo | Views/FiberPartView.xaml | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-233 | Fibre cladding: Coat front/back/sides CB | Views/FiberPartView.xaml | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-234 | Fibre shape: Ends combo Flat/Round | Views/FiberPartView.xaml | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-235 | Fibre nodes: Hint text | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-236 | Fibre nodes: Heading row X,Y | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-237 | Fibre nodes: Node X NB, Y NB | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-238 | Fibre nodes: Node Smooth CB (aligns handles, keeps length) | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-239 | Fibre nodes: Node remove button | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-240 | Fibre nodes: In InX NB, InY NB | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-241 | Fibre nodes: Out OutX NB, OutY NB | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | done | forms.slint FiberForm |
+| P-242 | Fibre nodes: Add node button (continues path) | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | done | forms.slint FiberForm |
 | P-243 | Bragg reflector: Layer pairs NB 1..200 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint BraggReflectorForm |
 | P-244 | Bragg reflector: Thickness 1 NB min 1 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint BraggReflectorForm |
 | P-245 | Bragg reflector: Index 1 NB 1..2.55 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint BraggReflectorForm |

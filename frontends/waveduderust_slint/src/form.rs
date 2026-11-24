@@ -117,6 +117,7 @@ words! {
 	TriangleType = TriangleType { Equilateral, RightIsosceles, ThirtySixtyNinety, Isosceles, Custom }
 	ZoneDivision = ZoneDivision { EqualWidth, EqualDepth }
 	FacetPattern = FacetPattern { Sawtooth, SquareWave, Sinusoidal }
+	FiberEnds = FiberEnds { Flat, Round }
 	MetaLensType = MetaLensType { Converging, Diverging }
 	GateKind = GateKind { Xor, And, Or }
 }
@@ -194,6 +195,8 @@ data! {
 	PointData = Point { x, y }
 	FilterLayerData = m::FilterLayer { thickness, refractive_index }
 	FilterData = m::InterferenceFilter { length, width }
+	FiberData = m::Fiber { core_index, core_diameter, cladding_index, cladding_thickness, absorption, absorption_ramp, ends }
+	FiberNodeData = m::FiberNode { x, y, in_x, in_y, out_x, out_y, smooth }
 }
 
 /// An ellipse's sides are a rectangle's.
@@ -222,6 +225,7 @@ pub(crate) fn kind(project: &Project, node: Node) -> FormKind {
 			Some(PartKind::Outline(_)) => FormKind::Outline,
 			Some(PartKind::Diffuser(_)) => FormKind::Diffuser,
 			Some(PartKind::InterferenceFilter(_)) => FormKind::InterferenceFilter,
+			Some(PartKind::Fiber(_)) => FormKind::Fiber,
 			Some(PartKind::ZonePlate(_)) => FormKind::ZonePlate,
 			Some(PartKind::BraggReflector(_)) => FormKind::BraggReflector,
 			Some(PartKind::GrinLens(_)) => FormKind::GrinLens,
@@ -492,6 +496,11 @@ fn show_part(form: &Form<'_>, project: &Project, part: &Part) {
 			put(form.get_zone_plate(), data, |d| form.set_zone_plate(d));
 		}
 		PartKind::Outline(o) => put_rows(&form.get_points(), &o.points, |m| form.set_points(m)),
+		PartKind::Fiber(f) => {
+			put(form.get_coating(), Data::show(&f.coating), |d| form.set_coating(d));
+			put(form.get_fiber(), Data::show(f), |d| form.set_fiber(d));
+			put_rows(&form.get_nodes(), &f.nodes, |m| form.set_nodes(m));
+		}
 		PartKind::InterferenceFilter(f) => {
 			let data = ui::FilterData {
 				stack_thickness: ((f.stack_thickness() * 10.0).round() / 10.0) as f32,
@@ -574,6 +583,17 @@ fn apply_part(form: &Form<'_>, part: &mut Part, sim: &m::Simulation) {
 		}
 		PartKind::ZonePlate(z) => form.get_zone_plate().apply(&Data::show(&*z), z),
 		PartKind::Outline(o) => apply_rows(&form.get_points(), &mut o.points),
+		PartKind::Fiber(f) => {
+			form.get_coating().apply(&Data::show(&f.coating), &mut f.coating);
+			form.get_fiber().apply(&Data::show(&*f), f);
+			let before = f.nodes.clone();
+			apply_rows(&form.get_nodes(), &mut f.nodes);
+			for (i, node) in before.iter().enumerate() {
+				if f.nodes.get(i) != Some(node) {
+					f.node_edited(i, node);
+				}
+			}
+		}
 		PartKind::InterferenceFilter(f) => {
 			form.get_filter().apply(&Data::show(&*f), f);
 			apply_rows(&form.get_layers(), &mut f.layers);
@@ -636,11 +656,13 @@ pub(crate) enum RowEdit {
 	Clear,
 }
 
-/// Applies `edit` to the list `kind` keeps: an outline's points, a filter's layers.
+/// Applies `edit` to the list `kind` keeps: an outline's points, a filter's layers, a fibre's nodes.
 pub(crate) fn edit_rows(kind: &mut PartKind, edit: RowEdit) {
 	match kind {
 		PartKind::Outline(o) => edit.on(&mut o.points, add_point),
 		PartKind::InterferenceFilter(f) => edit.on(&mut f.layers, |l| l.push(l.last().cloned().unwrap_or_default())),
+		PartKind::Fiber(f) if matches!(edit, RowEdit::Add) => f.add_node(),
+		PartKind::Fiber(f) => edit.on(&mut f.nodes, |_| {}),
 		_ => {}
 	}
 }

@@ -4,6 +4,7 @@
 //! the bounds live in `ranges` so tests can prove each clamp.
 
 pub mod edited;
+mod fiber;
 #[cfg(feature = "unstable-reflect")]
 pub mod fields;
 #[cfg(not(feature = "unstable-reflect"))]
