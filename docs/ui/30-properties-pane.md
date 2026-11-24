@@ -325,7 +325,7 @@ Sections: General, Stops.
 | Description | TB wraps, no newline | |
 | Add to my schemes / Remove from my schemes | BTN, last row of General | Keeps the scheme among the user's schemes, or removes the user scheme of its name; the label follows whether one exists. |
 | Based on | CMB with gradient + name rows (shared schemes and the project's other schemes); first row of Stops | Picking copies stops, kind, category, description into this scheme; the choice stays shown until the next pick. |
-| (gradient) | the scheme's gradient bar with its stop markers, above the stop rows; a marker dragged more than 24 px above or below the bar fades and, released there, its stop is removed; a double-click on a marker removes its stop; the last stop stays |
+| (gradient) | the scheme's gradient bar with its stop markers, above the stop rows; a marker dragged more than 24 px above or below the bar fades and, released there, its stop is removed; a double-click on a marker removes its stop; the last stop stays. A press on the gradient adds a stop there and drags it. With the focus Left and Right move the selected stop by 0.01 (0.1 with Shift), Page Up and Page Down select the stop before or after it, Del removes it. A press and its drag, or the arrow moves while the bar keeps the focus, are one undo step |
 | Stop rows | Position NB 0..1 step 0.01, up to 3 decimals (64 px wide); colour swatch button; hex TB "#RRGGBB" (Enter applies); remove BTN | |
 | Add stop | BTN | Inserts a stop in the widest gap with the gradient's colour there. |
 
