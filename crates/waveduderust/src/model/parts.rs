@@ -946,29 +946,6 @@ impl Lens {
 }
 
 impl PartKind {
-	/// Carries an edit of the field at `path` (below the kind) to the fields tied to it, as Next's setters: a linked
-	/// rectangle's or ellipse's other side, a triangle preset's angles, an isosceles triangle's second angle.
-	pub fn follow(&mut self, path: &str) {
-		match self {
-			PartKind::Rectangle(Rectangle { length, width, linked, .. })
-			| PartKind::Ellipse(Ellipse { length, width, linked, .. })
-				if *linked =>
-			{
-				match path {
-					"Width" => *length = *width,
-					"Length" | "Linked" => *width = *length,
-					_ => {}
-				}
-			}
-			PartKind::Triangle(t) => match path {
-				"Kind" => (t.angle_a, t.angle_b) = t.effective_angles(),
-				"AngleA" if t.kind == TriangleType::Isosceles => t.angle_b = t.angle_a,
-				_ => {}
-			},
-			_ => {}
-		}
-	}
-
 	/// Name stem for new parts of this kind.
 	pub fn name_stem(&self) -> &'static str {
 		match self {

@@ -3,6 +3,7 @@
 //! Every numeric property has a default and a clamp applied by `normalize`;
 //! the bounds live in `ranges` so tests can prove each clamp.
 
+pub mod edited;
 #[cfg(feature = "unstable-reflect")]
 pub mod fields;
 #[cfg(not(feature = "unstable-reflect"))]

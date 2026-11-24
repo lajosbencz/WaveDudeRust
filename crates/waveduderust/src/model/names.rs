@@ -5,10 +5,7 @@
 
 use super::items::{Identified, insert, position};
 use super::normalize::Normalize;
-use super::{
-	ColorScheme, FresnelLens, Part, PartId, PartKind, Probe, ProbeDetector, ProbeId, Project, SchemeId, Source,
-	SourceId,
-};
+use super::{ColorScheme, Part, PartId, PartKind, Probe, ProbeDetector, ProbeId, Project, SchemeId, Source, SourceId};
 
 /// An item with a user-visible name unique within its list.
 pub trait Named {
@@ -85,19 +82,6 @@ fn replace_word(text: &str, from: &str, to: &str) -> String {
 /// "Mirror" and back. Called by the editor's command, never on load.
 pub fn mirror_name(name: &str, mirror: bool) -> String {
 	if mirror { replace_word(name, "Lens", "Mirror") } else { replace_word(name, "Mirror", "Lens") }
-}
-
-/// Sets a lens or Fresnel lens part's mirror flag as the editor does, renaming it by [`mirror_name`].
-/// Returns false for a part that is neither.
-pub fn set_lens_mirror(part: &mut Part, mirror: bool) -> bool {
-	let (PartKind::Lens(lens) | PartKind::FresnelLens(FresnelLens { lens, .. })) = &mut part.kind else {
-		return false;
-	};
-	if lens.material.mirror != mirror {
-		lens.material.mirror = mirror;
-		part.base.name = mirror_name(&part.base.name, mirror);
-	}
-	true
 }
 
 /// Gives every empty name a numbered one and every repeated name (case-insensitive) a copy name,
@@ -240,7 +224,7 @@ fn duplicate<T: Identified>(items: &mut Vec<T>, id: T::Id) -> Option<T::Id> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::model::{Layer, Lens, Material, Measurement, ProbeKind, Rectangle};
+	use crate::model::{Layer, Lens, Material, Measurement, ProbeKind};
 
 	#[test]
 	fn numbered_takes_lowest_free_case_insensitive() {
@@ -286,19 +270,6 @@ mod tests {
 		assert_eq!(mirror_name("Lenses Lens", true), "Lenses Mirror");
 		assert_eq!(mirror_name("My Lens 2 Lens", true), "My Mirror 2 Mirror");
 		assert_eq!(mirror_name("GRIN lens 1", true), "GRIN lens 1");
-	}
-
-	#[test]
-	fn set_mirror_renames_once() {
-		let mut p = Project::default();
-		p.add_part(PartKind::Lens(Lens::default()));
-		assert_eq!(p.parts[0].base.name, "Lens 1");
-		assert!(set_lens_mirror(&mut p.parts[0], true));
-		assert_eq!(p.parts[0].base.name, "Mirror 1");
-		assert!(set_lens_mirror(&mut p.parts[0], true));
-		assert_eq!(p.parts[0].base.name, "Mirror 1");
-		let j = p.add_part(PartKind::Rectangle(Rectangle::default()));
-		assert!(!set_lens_mirror(p.part_mut(j).unwrap(), true));
 	}
 
 	#[test]

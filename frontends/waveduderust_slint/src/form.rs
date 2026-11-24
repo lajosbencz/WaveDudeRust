@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use waveduderust::model::fields::{Edit, EditError, Field, Fields, Value, ValueKind};
 
+use waveduderust::model::edited::Edited;
 use waveduderust::model::lens_geometry::{edge_thickness, fit_radii_zoned};
-use waveduderust::model::names::set_lens_mirror;
 use waveduderust::model::{
 	Lens, PROJECT_VERSION, Part, PartKind, Point, Project, Stencil, View, ZoneDivision, wavelength,
 };
@@ -295,38 +295,22 @@ pub(crate) fn set_at(project: &mut Project, view: &mut View, node: Node, path: &
 		return Ok(());
 	}
 	if let Node::Probe(i) = node {
-		// Next's probe setters: the box on A moves with it; the detector and layer settings agree
 		let probe = project.probes.get_mut(i).ok_or("no such probe")?;
-		let attached = probe.box_attached();
+		let before = probe.clone();
 		set_path(probe, path, text)?;
-		if attached {
-			(probe.box_x, probe.box_y) = (probe.ax, probe.ay);
-		}
-		probe.coerce();
+		probe.edited(&before);
 		return Ok(());
 	}
 	if let Node::Part(i) = node {
 		let part = project.parts.get_mut(i).ok_or("no such part")?;
-		if path.starts_with("Base.") {
-			return set_path(part, path, text);
-		}
+		let before = part.clone();
 		match (&mut part.kind, path) {
-			(PartKind::Outline(o), _) if path.starts_with("Points.") => {
-				return set_point(&mut o.points, &path[7..], text);
-			}
-			(PartKind::Lens(l), "IsConcave") => {
-				l.set_concave(text == "true");
-				return Ok(());
-			}
-			// Next's MirrorToggled: the name follows, Lens 1 to Mirror 1 and back
-			(PartKind::Lens(_) | PartKind::FresnelLens(_), "Material.Mirror" | "Lens.Material.Mirror") => {
-				set_lens_mirror(part, text == "true");
-				return Ok(());
-			}
-			_ => {}
+			(_, _) if path.starts_with("Base.") => set_path(part, path, text)?,
+			(PartKind::Outline(o), _) if path.starts_with("Points.") => set_point(&mut o.points, &path[7..], text)?,
+			(PartKind::Lens(l), "IsConcave") => l.set_concave(text == "true"),
+			_ => set_path(part, &format!("{}{path}", kind_prefix(part)), text)?,
 		}
-		set_path(part, &format!("{}{path}", kind_prefix(part)), text)?;
-		part.kind.follow(path);
+		part.edited(&before);
 		return Ok(());
 	}
 	with_object!(project, view, node, |of| set_path(of, path, text), Err("nothing to edit".into()), mut)

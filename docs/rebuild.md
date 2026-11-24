@@ -76,7 +76,18 @@ row. Each phase is one coding pass, then a separate verification of the diff, th
    splitters (X-07), UI strings through `@tr` with the four languages (X-34).
 2. Menus and shortcuts (M-): every entry, shortcut text, mnemonic, enabled rule, icons.
 3. Project tree (T-): toolbar and add menus, context menus, multi-selection, keys, drag and drop.
-4. Properties (P-): sections, editors, every kind-specific form.
+4. Properties (P-): sections, editors, every kind-specific form. Next is the feature spec, never the etalon: its
+   features become our model's rules and idiomatic Slint, not its setters, converters or styles. After the forms of
+   settings, sources, probes and shape, lens and outline parts, a rework before the remaining kinds:
+   1. An edit rule per model type in the core: an edited object is told what it was before and makes its fields agree
+      (a detector's layer, a linked side, a triangle's preset, a lens's name with its mirror box).
+   2. Typed forms: a Slint struct per form, Slint enums for the model's words, editors bound two-way to the struct's
+      fields, actions as typed callbacks, a list as a model of structs. Rust converts between model and struct by
+      exhaustive matches and applies the shown form before any selection or model change. No string paths, index or
+      `-1` conventions, no integer codes. A compact form row component: label, hint once, editor.
+   3. Typed boundary elsewhere: commands, tree picks and drop places, run states as Slint enums.
+   4. UI text only in `.slint`: Rust sends data (node kinds, states, message codes and arguments); words Rust needs for
+      native dialogs are read from a Slint global; numbers use `Platform.decimal-separator`. Logs stay untranslated.
 5. Preview (V-): header strips, overlays, handles and drag editing, graph boxes, zoom.
 6. Timeline, transport, status bar (L-), live editing and runs (R-), Messages pane (G-).
 7. Dialogs and settings (D-, S-), then docking and window persistence (X-).

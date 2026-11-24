@@ -224,7 +224,7 @@ impl Probe {
 	/// Makes the detector, layer, measurement, kind and value scale agree, as an edit of one of them must: a detector
 	/// is a line probe of the integrated intensity; the field offers its amplitude on a linear axis only; the
 	/// intensity no amplitude.
-	pub fn coerce(&mut self) {
+	pub(crate) fn coerce(&mut self) {
 		if self.is_detector() {
 			self.kind = ProbeKind::Line;
 			self.layer = Layer::Intensity;
@@ -241,7 +241,7 @@ impl Probe {
 	}
 
 	/// Whether the graph box sits on point A, so it moves with A.
-	pub fn box_attached(&self) -> bool {
+	pub(crate) fn box_attached(&self) -> bool {
 		self.box_x == self.ax && self.box_y == self.ay
 	}
 
