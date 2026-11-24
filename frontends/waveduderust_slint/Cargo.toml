@@ -21,3 +21,7 @@ slint-build = "1.19"
 [dependencies]
 slint = { version = "1.19", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-30", "accessibility"] }
 tracing.workspace = true
+waveduderust = { path = "../../crates/waveduderust" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rfd = "0.18"

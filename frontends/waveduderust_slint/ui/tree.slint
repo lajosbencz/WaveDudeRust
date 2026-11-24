@@ -1,0 +1,79 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export enum TreeKind { project, settings, folder, source, part, probe, scheme }
+
+export struct TreeRow {
+    kind: TreeKind,
+    depth: int,
+    label: string,
+    checkable: bool,
+    checked: bool,
+    selected: bool,
+}
+
+component GlyphButton inherits TouchArea {
+    in property <string> glyph;
+    width: 18px;
+    height: 18px;
+    Rectangle {
+        background: root.has-hover ? Theme.hover-background : transparent;
+        Text {
+            text: root.glyph;
+            color: Theme.text;
+        }
+    }
+}
+
+// The project tree (docs/ui/20): fixed rows, folders and item rows with their check box and row buttons.
+export component ProjectTree inherits Rectangle {
+    in property <[TreeRow]> rows;
+    in property <bool> focused;
+    callback select(int);
+    callback toggle(int);
+    callback shift(int, int);
+    callback remove(int);
+
+    background: Theme.tool-window-background;
+    ListView {
+        for row[i] in root.rows: Rectangle {
+            height: Theme.row-height;
+            background: row.selected ? (root.focused ? Theme.selection : Theme.inactive-selection) : area.has-hover ? Theme.row-hover : transparent;
+            area := TouchArea {
+                clicked => { root.select(i); }
+            }
+            HorizontalLayout {
+                padding-left: 4px + row.depth * 16px;
+                padding-right: 4px;
+                spacing: 4px;
+                if row.checkable: Rectangle {
+                    width: 13px;
+                    height: 13px;
+                    y: (parent.height - self.height) / 2;
+                    border-width: 1px;
+                    border-color: Theme.check-border;
+                    background: Theme.input-background;
+                    Text {
+                        text: row.checked ? "✓" : "";
+                        color: Theme.text;
+                    }
+                    TouchArea {
+                        clicked => { root.toggle(i); }
+                    }
+                }
+                Text {
+                    text: row.label;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    color: row.selected && root.focused ? Theme.selection-text : row.checked ? Theme.text : Theme.text-disabled;
+                }
+                if row.depth == 2: HorizontalLayout {
+                    spacing: 0px;
+                    GlyphButton { glyph: "▲"; clicked => { root.shift(i, -1); } }
+                    GlyphButton { glyph: "▼"; clicked => { root.shift(i, 1); } }
+                    GlyphButton { glyph: "-"; clicked => { root.remove(i); } }
+                }
+            }
+        }
+    }
+}

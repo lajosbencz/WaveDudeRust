@@ -63,3 +63,10 @@ Look (docs/ui/00, Look): the original's colours and layout; menus and shortcuts 
 
 Settings and other documented divergences stand: docs/divergences.md, decisions 0010 (solver), 0027 (settings), 0028
 (no manual), 0030 (undo cap).
+
+## Progress
+
+| Phase | Done | Left |
+|---|---|---|
+| Skeleton | window, theme tokens, menus with shortcuts, pane layout, status bar, `just hot` | splitters, docking, Selawik font, icons |
+| Document | open/save (`.wdproj`, Wave Dude 2D import), title, undo/redo, tree rows, check, move, remove, select | multi-selection, toolbar, add items, drag and drop, clipboard, recent files, unsaved edits prompt |

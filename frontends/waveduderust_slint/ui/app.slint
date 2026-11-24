@@ -1,7 +1,8 @@
 import { Theme } from "theme.slint";
 import { Pane } from "pane.slint";
+import { ProjectTree, TreeRow, TreeKind } from "tree.slint";
 
-export { Theme }
+export { Theme, TreeRow, TreeKind }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 export component AppWindow inherits Window {
@@ -10,6 +11,11 @@ export component AppWindow inherits Window {
     in property <bool> can-undo;
     in property <bool> can-redo;
     in property <bool> run-active;
+    in property <[TreeRow]> tree-rows;
+    callback tree-select(int);
+    callback tree-toggle(int);
+    callback tree-shift(int, int);
+    callback tree-remove(int);
     in-out property <bool> project-shown: true;
     in-out property <bool> properties-shown: true;
     in-out property <bool> messages-shown: false;
@@ -101,6 +107,14 @@ export component AppWindow inherits Window {
                     title: @tr("Project");
                     vertical-stretch: 1;
                     close => { root.project-shown = false; }
+                    ProjectTree {
+                        rows: root.tree-rows;
+                        focused: true;
+                        select(i) => { root.tree-select(i); }
+                        toggle(i) => { root.tree-toggle(i); }
+                        shift(i, by) => { root.tree-shift(i, by); }
+                        remove(i) => { root.tree-remove(i); }
+                    }
                 }
                 if root.properties-shown: Pane {
                     title: @tr("Properties");
