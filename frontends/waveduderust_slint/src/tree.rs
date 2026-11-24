@@ -50,6 +50,7 @@ pub(crate) fn rows(project: &Project, selected: Node) -> (Vec<Node>, Vec<TreeRow
 			checkable: enabled.is_some(),
 			checked: enabled.unwrap_or(true),
 			selected: node == selected,
+			icon: crate::icons::tree(project, node),
 		});
 	};
 	push(Node::Project, 0, "Project", None);

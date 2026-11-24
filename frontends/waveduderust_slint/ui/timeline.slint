@@ -1,5 +1,6 @@
 import { ComboBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { IconButton } from "icons.slint";
 
 // The playback state the timeline and transport bar show.
 export struct Transport {
@@ -90,25 +91,6 @@ export component Timeline inherits Rectangle {
     }
 }
 
-component Tool inherits Rectangle {
-    in property <string> glyph;
-    in property <string> tip;
-    in property <bool> enabled: true;
-    in property <bool> checked;
-    callback clicked();
-    width: 22px;
-    height: 22px;
-    background: checked ? Theme.accent.transparentize(0.5) : area.has-hover && enabled ? Theme.hover-background : transparent;
-    Text {
-        text: root.glyph;
-        color: root.enabled ? Theme.text : Theme.text-disabled;
-    }
-    area := TouchArea {
-        enabled: root.enabled;
-        clicked => { root.clicked(); }
-    }
-}
-
 component Divider inherits Rectangle {
     width: 1px;
     background: Theme.border;
@@ -126,19 +108,19 @@ export component TransportBar inherits Rectangle {
     HorizontalLayout {
         padding: 3px;
         spacing: 1px;
-        Tool { glyph: t.running ? "[]" : ">"; tip: "Run (F5) / Stop (Esc)"; clicked => { root.action(t.running ? "stop" : "run"); } }
-        Tool { glyph: "||"; tip: "Pause the simulation (F6)"; enabled: t.running; clicked => { root.action("pause-run"); } }
+        IconButton { icon: t.running ? @image-url("icons/next/stop.svg") : @image-url("icons/next/run.svg"); tip: @tr("Run (F5) / Stop (Esc)"); clicked => { root.action(t.running ? "stop" : "run"); } }
+        IconButton { icon: @image-url("icons/next/pause-run.svg"); tip: @tr("Pause the simulation (F6)"); enabled: t.running; clicked => { root.action("pause-run"); } }
         Divider { }
-        Tool { glyph: ">"; tip: "Play (Space)"; enabled: !t.playing; clicked => { root.action("play"); } }
-        Tool { glyph: "||"; tip: "Pause (Space)"; enabled: t.playing; clicked => { root.action("play"); } }
-        Tool { glyph: "|<"; tip: "Previous frame (,)"; clicked => { root.action("prev"); } }
-        Tool { glyph: ">|"; tip: "Next frame (.)"; clicked => { root.action("next"); } }
+        IconButton { icon: @image-url("icons/next/play.svg"); tip: @tr("Play (Space)"); enabled: !t.playing; clicked => { root.action("play"); } }
+        IconButton { icon: @image-url("icons/next/pause.svg"); tip: @tr("Pause (Space)"); enabled: t.playing; clicked => { root.action("play"); } }
+        IconButton { icon: @image-url("icons/next/step-back.svg"); tip: @tr("Previous frame (,)"); clicked => { root.action("prev"); } }
+        IconButton { icon: @image-url("icons/next/step-forward.svg"); tip: @tr("Next frame (.)"); clicked => { root.action("next"); } }
         Divider { }
-        Tool { glyph: "["; tip: "Start the export range at this frame (I)"; clicked => { root.action("in"); } }
-        Tool { glyph: "]"; tip: "End the export range at this frame (O)"; clicked => { root.action("out"); } }
-        Tool { glyph: "x"; tip: "Clear the export range (X)"; enabled: t.ranged; clicked => { root.action("clear-range"); } }
-        Tool { glyph: "L"; tip: "Loop playback over the export range (L)"; checked: t.looping; clicked => { root.action("loop"); } }
-        Tool { glyph: "o"; tip: "Follow the newest frame (F)"; checked: t.live; enabled: t.running; clicked => { root.action("live"); } }
+        IconButton { icon: @image-url("icons/next/set-in.svg"); tip: @tr("Start the export range at this frame (I)"); clicked => { root.action("in"); } }
+        IconButton { icon: @image-url("icons/next/set-out.svg"); tip: @tr("End the export range at this frame (O)"); clicked => { root.action("out"); } }
+        IconButton { icon: @image-url("icons/next/clear-range.svg"); tip: @tr("Clear the export range (X)"); enabled: t.ranged; clicked => { root.action("clear-range"); } }
+        IconButton { icon: @image-url("icons/next/loop.svg"); tip: @tr("Loop playback over the export range (L)"); checked: t.looping; clicked => { root.action("loop"); } }
+        IconButton { icon: @image-url("icons/next/live.svg"); tip: @tr("Follow the newest frame (F)"); checked: t.live; enabled: t.running; clicked => { root.action("live"); } }
         Divider { }
         Text {
             text: t.position + " / " + max(0, t.frames - 1);
@@ -163,7 +145,7 @@ export component TransportBar inherits Rectangle {
             selected(v) => { root.speed(v); }
         }
         Divider { }
-        Tool { glyph: "||"; tip: "Field and intensity side by side"; checked: !root.stacked; clicked => { root.stacked = false; root.action("layout"); } }
-        Tool { glyph: "="; tip: "Field above intensity"; checked: root.stacked; clicked => { root.stacked = true; root.action("layout"); } }
+        IconButton { icon: @image-url("icons/next/side-by-side.svg"); tip: @tr("Field and intensity side by side"); checked: !root.stacked; clicked => { root.stacked = false; root.action("layout"); } }
+        IconButton { icon: @image-url("icons/next/stacked.svg"); tip: @tr("Field above intensity"); checked: root.stacked; clicked => { root.stacked = true; root.action("layout"); } }
     }
 }

@@ -6,6 +6,7 @@ mod export;
 mod files;
 mod form;
 mod gpu;
+mod icons;
 mod live;
 mod log;
 mod messages;
@@ -69,6 +70,8 @@ struct State {
 	last_export: Option<export::Kind>,
 	/// The document generation the run started from.
 	ran: u64,
+	/// The desktop's colour scheme at start, for the System theme: writing the palette's scheme ends its system binding.
+	system_scheme: slint::language::ColorScheme,
 }
 
 impl State {
@@ -252,7 +255,7 @@ fn show_welcome(state: &State, app: &AppWindow) {
 /// Applies the settings to the window, the history and the run.
 fn apply_settings(state: &mut State, app: &AppWindow) {
 	let s = &state.settings;
-	app.global::<ui::Theme<'_>>().set_mode(settings::theme_mode(s));
+	app.global::<ui::Palette<'_>>().set_color_scheme(settings::color_scheme(s, state.system_scheme));
 	app.set_preview_stacked(s.preview_orientation == waveduderust_platform::settings::Orientation::Vertical);
 	state.doc.set_limit(s.undo_steps as usize);
 	state.live.quality = s.preview_quality();
@@ -449,6 +452,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		example_rows: Vec::new(),
 		last_export: None,
 		ran: 0,
+		system_scheme: app.global::<ui::Palette<'_>>().get_color_scheme(),
 	}));
 	apply_settings(&mut state.borrow_mut(), &app);
 	state.borrow_mut().opened();

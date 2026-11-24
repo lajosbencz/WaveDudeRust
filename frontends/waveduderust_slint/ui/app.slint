@@ -1,4 +1,6 @@
 import { Theme } from "theme.slint";
+export { Palette } from "std-widgets.slint";
+import { MenuIcons } from "menu-icons.slint";
 import { Pane } from "pane.slint";
 import { ProjectTree, TreeRow, TreeKind } from "tree.slint";
 import { Properties, PropRow, PropKind } from "properties.slint";
@@ -80,6 +82,7 @@ export component AppWindow inherits Window {
     changed modal => { self.overlays-closed(); }
 
     title: root.window-title;
+    icon: @image-url("../assets/icon.svg");
     min-width: 800px;
     min-height: 500px;
     max-width: 100000px;
@@ -92,47 +95,47 @@ export component AppWindow inherits Window {
     MenuBar {
         Menu {
             title: @tr("File");
-            MenuItem { title: @tr("New Project"); shortcut: @keys(Control + N); activated => { root.menu("new"); } }
-            MenuItem { title: @tr("Open Project..."); shortcut: @keys(Control + O); activated => { root.menu("open"); } }
-            Menu { title: @tr("Recent Projects"); }
-            MenuItem { title: @tr("Examples..."); activated => { root.menu("examples"); } }
-            MenuItem { title: @tr("Welcome Page..."); activated => { root.menu("welcome"); } }
-            MenuItem { title: @tr("Settings..."); shortcut: @keys(Control + ","); activated => { root.menu("settings"); } }
+            MenuItem { title: @tr("New Project"); icon: MenuIcons.note-add; shortcut: @keys(Control + N); activated => { root.menu("new"); } }
+            MenuItem { title: @tr("Open Project..."); icon: MenuIcons.folder-open; shortcut: @keys(Control + O); activated => { root.menu("open"); } }
+            Menu { title: @tr("Recent Projects"); icon: MenuIcons.history; }
+            MenuItem { title: @tr("Examples..."); icon: MenuIcons.list-alt; activated => { root.menu("examples"); } }
+            MenuItem { title: @tr("Welcome Page..."); icon: MenuIcons.waving-hand; activated => { root.menu("welcome"); } }
+            MenuItem { title: @tr("Settings..."); icon: MenuIcons.settings; shortcut: @keys(Control + ","); activated => { root.menu("settings"); } }
             MenuSeparator { }
-            MenuItem { title: @tr("Save"); shortcut: @keys(Control + S); activated => { root.menu("save"); } }
-            MenuItem { title: @tr("Save As..."); shortcut: @keys(Control + Shift + S); activated => { root.menu("save-as"); } }
+            MenuItem { title: @tr("Save"); icon: MenuIcons.save; shortcut: @keys(Control + S); activated => { root.menu("save"); } }
+            MenuItem { title: @tr("Save As..."); icon: MenuIcons.save-as; shortcut: @keys(Control + Shift + S); activated => { root.menu("save-as"); } }
             MenuSeparator { }
             Menu {
-                title: @tr("Export");
-                MenuItem { title: @tr("Export field..."); shortcut: @keys(Control + Shift + E); activated => { root.menu("export-field"); } }
-                MenuItem { title: @tr("Export intensity..."); shortcut: @keys(Control + Shift + I); activated => { root.menu("export-intensity"); } }
-                MenuItem { title: @tr("Export both..."); shortcut: @keys(Control + Shift + B); activated => { root.menu("export-both"); } }
+                title: @tr("Export"); icon: MenuIcons.ios-share;
+                MenuItem { title: @tr("Export field..."); icon: MenuIcons.ios-share; shortcut: @keys(Control + Shift + E); activated => { root.menu("export-field"); } }
+                MenuItem { title: @tr("Export intensity..."); icon: MenuIcons.ios-share; shortcut: @keys(Control + Shift + I); activated => { root.menu("export-intensity"); } }
+                MenuItem { title: @tr("Export both..."); icon: MenuIcons.ios-share; shortcut: @keys(Control + Shift + B); activated => { root.menu("export-both"); } }
                 MenuSeparator { }
-                MenuItem { title: @tr("Export field frame..."); shortcut: @keys(Control + Shift + F); activated => { root.menu("export-field-frame"); } }
-                MenuItem { title: @tr("Export intensity frame..."); shortcut: @keys(Control + Shift + G); activated => { root.menu("export-intensity-frame"); } }
+                MenuItem { title: @tr("Export field frame..."); icon: MenuIcons.image; shortcut: @keys(Control + Shift + F); activated => { root.menu("export-field-frame"); } }
+                MenuItem { title: @tr("Export intensity frame..."); icon: MenuIcons.image; shortcut: @keys(Control + Shift + G); activated => { root.menu("export-intensity-frame"); } }
             }
-            MenuItem { title: @tr("Export last"); shortcut: @keys(Control + E); activated => { root.menu("export-last"); } }
+            MenuItem { title: @tr("Export last"); icon: MenuIcons.repeat; shortcut: @keys(Control + E); activated => { root.menu("export-last"); } }
             MenuSeparator { }
-            MenuItem { title: @tr("Close Project"); activated => { root.menu("close"); } }
+            MenuItem { title: @tr("Close Project"); icon: MenuIcons.close; activated => { root.menu("close"); } }
             MenuSeparator { }
-            MenuItem { title: @tr("Exit"); activated => { root.menu("exit"); } }
+            MenuItem { title: @tr("Exit"); icon: MenuIcons.logout; activated => { root.menu("exit"); } }
         }
         Menu {
             title: @tr("Edit");
-            MenuItem { title: @tr("Undo"); enabled: root.can-undo; activated => { root.menu("undo"); } }
-            MenuItem { title: @tr("Redo"); enabled: root.can-redo; activated => { root.menu("redo"); } }
+            MenuItem { title: @tr("Undo"); icon: MenuIcons.undo; enabled: root.can-undo; activated => { root.menu("undo"); } }
+            MenuItem { title: @tr("Redo"); icon: MenuIcons.redo; enabled: root.can-redo; activated => { root.menu("redo"); } }
             MenuSeparator { }
-            MenuItem { title: @tr("Cut"); activated => { root.menu("cut"); } }
-            MenuItem { title: @tr("Copy"); activated => { root.menu("copy"); } }
-            MenuItem { title: @tr("Paste"); activated => { root.menu("paste"); } }
-            MenuItem { title: @tr("Delete"); activated => { root.menu("delete"); } }
+            MenuItem { title: @tr("Cut"); icon: MenuIcons.content-cut; activated => { root.menu("cut"); } }
+            MenuItem { title: @tr("Copy"); icon: MenuIcons.content-copy; activated => { root.menu("copy"); } }
+            MenuItem { title: @tr("Paste"); icon: MenuIcons.content-paste; activated => { root.menu("paste"); } }
+            MenuItem { title: @tr("Delete"); icon: MenuIcons.delete; activated => { root.menu("delete"); } }
             MenuSeparator { }
-            MenuItem { title: @tr("Select all"); activated => { root.menu("select-all"); } }
+            MenuItem { title: @tr("Select all"); icon: MenuIcons.select-all; activated => { root.menu("select-all"); } }
         }
         Menu {
             title: @tr("View");
             Menu {
-                title: @tr("Panes");
+                title: @tr("Panes"); icon: MenuIcons.view-sidebar;
                 MenuItem { title: @tr("Project"); checkable: true; checked: root.project-shown; activated => { root.project-shown = !root.project-shown; } }
                 MenuItem { title: @tr("Properties"); checkable: true; checked: root.properties-shown; activated => { root.properties-shown = !root.properties-shown; } }
                 MenuItem { title: @tr("Messages"); checkable: true; checked: root.messages-shown; activated => { root.messages-shown = !root.messages-shown; } }
@@ -140,17 +143,17 @@ export component AppWindow inherits Window {
         }
         Menu {
             title: @tr("Simulation");
-            MenuItem { title: @tr("Run"); enabled: !root.transport.running; shortcut: @keys(F5); activated => { root.menu("run"); } }
-            MenuItem { title: @tr("Pause / Resume"); enabled: root.run-active; shortcut: @keys(F6); activated => { root.menu("pause"); } }
-            MenuItem { title: @tr("Stop"); enabled: root.transport.running; shortcut: @keys(Shift + F5); activated => { root.menu("stop"); } }
-            MenuItem { title: @tr("Discard frames"); activated => { root.menu("discard"); } }
+            MenuItem { title: @tr("Run"); icon: MenuIcons.play-arrow; enabled: !root.transport.running; shortcut: @keys(F5); activated => { root.menu("run"); } }
+            MenuItem { title: @tr("Pause / Resume"); icon: MenuIcons.pause; enabled: root.run-active; shortcut: @keys(F6); activated => { root.menu("pause"); } }
+            MenuItem { title: @tr("Stop"); icon: MenuIcons.stop; enabled: root.transport.running; shortcut: @keys(Shift + F5); activated => { root.menu("stop"); } }
+            MenuItem { title: @tr("Discard frames"); icon: MenuIcons.delete-sweep; activated => { root.menu("discard"); } }
             MenuSeparator { }
-            MenuItem { title: @tr("Play / Pause playback"); shortcut: @keys(F7); activated => { root.transport-action("play"); } }
+            MenuItem { title: @tr("Play / Pause playback"); icon: MenuIcons.play-arrow; shortcut: @keys(F7); activated => { root.transport-action("play"); } }
         }
         Menu {
             title: @tr("Help");
-            MenuItem { title: @tr("About WaveDude Rust"); activated => { root.menu("about"); } }
-            MenuItem { title: @tr("Project page on GitHub"); shortcut: @keys(F1); activated => { root.menu("github"); } }
+            MenuItem { title: @tr("About WaveDude Rust"); icon: MenuIcons.info; activated => { root.menu("about"); } }
+            MenuItem { title: @tr("Project page on GitHub"); icon: MenuIcons.open-in-new; shortcut: @keys(F1); activated => { root.menu("github"); } }
             MenuItem { title: @tr("Check for updates"); activated => { root.menu("updates"); } }
         }
     }

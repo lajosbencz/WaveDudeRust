@@ -2,7 +2,8 @@
 
 WaveDudeRust is written from scratch: no code of WaveDude Next or Wave Dude 2D is carried over. It is a modified
 work of WaveDude Next in the sense of the GNU General Public License, carrying its non-code material under the
-same licence (GPL-3.0-or-later): the colour schemes, the example projects and the user interface strings.
+same licence (GPL-3.0-or-later): the colour schemes, the example projects, the user interface strings and the
+drawn icons (converted from its XAML by [`tools/next-icons.py`](tools/next-icons.py)).
 
 ## Upstream projects
 
@@ -31,3 +32,9 @@ of its packages (decision 0005): "OpenH264 Video Codec provided by Cisco Systems
   super- and subscript, letterlike, arrow and math operator blocks: the glyphs Selawik lacks. Licensed under the SIL
   Open Font License 1.1; the license text ships beside the fonts in
   [`crates/waveduderust/assets/fonts/NotoSansMath-OFL.txt`](crates/waveduderust/assets/fonts/NotoSansMath-OFL.txt).
+
+## Bundled icons
+
+- **Material Symbols** by Google LLC - <https://github.com/google/material-design-icons> (Outlined, 24 px SVG), standing in
+  for the Segoe Fluent Icons glyphs of WaveDude Next's menus, which are not redistributable. Licensed under the Apache
+  License 2.0; in [`frontends/waveduderust_slint/ui/icons/symbols`](frontends/waveduderust_slint/ui/icons/symbols/).

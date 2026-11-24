@@ -1,0 +1,57 @@
+import { Theme } from "theme.slint";
+
+// A drawn icon at its own size, in the text colour (docs/ui/00, Look).
+export component Icon inherits Image {
+    in property <brush> ink: Theme.text;
+    colorize: ink;
+    image-fit: contain;
+}
+
+// A glyph button (Next's TransportButton, TransportToggle and GlyphButton): the icon centred in a square that
+// takes the hover colour, the accent while pressed or checked, an accent border on keyboard focus; greyed and half
+// transparent when disabled.
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> tip;
+    in property <bool> enabled: true;
+    in property <bool> checked;
+    in property <length> size: 22px;
+    in property <brush> ink: Theme.text;
+    in property <brush> hover-background: Theme.button-hover;
+    // Pane headers' buttons have no pressed look.
+    in property <bool> pressable: true;
+    // Toolbar and transport buttons are tab stops; the tree rows' buttons are not.
+    in property <bool> focusable: true;
+    callback clicked();
+
+    width: size;
+    height: size;
+    accessible-role: button;
+    accessible-label: tip;
+    accessible-enabled: enabled;
+    accessible-checked: checked;
+    accessible-action-default => { if (enabled) { clicked(); } }
+    property <bool> lit: enabled && ((pressable && area.pressed) || checked);
+    background: lit ? Theme.accent : area.has-hover && enabled ? root.hover-background : transparent;
+    border-width: 1px;
+    border-color: focus.has-focus ? Theme.accent : transparent;
+    opacity: enabled ? 1 : 0.5;
+    Icon {
+        source: root.icon;
+        ink: !root.enabled ? Theme.text-disabled : root.lit ? Theme.selection-text : root.ink;
+    }
+    area := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+    focus := FocusScope {
+        enabled: root.focusable && root.enabled;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+}

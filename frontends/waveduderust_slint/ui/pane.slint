@@ -1,4 +1,5 @@
 import { Theme } from "theme.slint";
+import { IconButton } from "icons.slint";
 
 // A dock pane: title bar over its content (docs/ui/00, Panes and default arrangement).
 export component Pane inherits Rectangle {
@@ -28,14 +29,16 @@ export component Pane inherits Rectangle {
                     border-width: 1px;
                     border-color: root.active ? #9fd0f5 : Theme.title-grip;
                 }
-                close-area := TouchArea {
-                    width: 16px;
+                IconButton {
+                    size: 16px;
+                    focusable: false;
+                    y: (parent.height - self.height) / 2;
+                    icon: @image-url("icons/next/close.svg");
+                    ink: root.active ? Theme.selection-text : Theme.text;
+                    pressable: false;
+                    hover-background: root.active ? #1c97ea : Theme.dark ? #3e3e40 : #f7f7f9;
+                    tip: @tr("Close");
                     clicked => { root.close(); }
-                    Text {
-                        text: "x";
-                        font-size: Theme.font-size;
-                        color: close-area.has-hover ? Theme.text : Theme.text-dim;
-                    }
                 }
             }
         }

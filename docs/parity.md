@@ -11,18 +11,18 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 4 | 19 | 15 | 2 | 0 |
+| X | Cross-cutting | 4 | 20 | 14 | 2 | 0 |
 | M | Menus and shortcuts | 22 | 31 | 74 | 13 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 11 | 15 | 0 | 0 |
-| I | Icons | 0 | 12 | 71 | 0 | 0 |
+| I | Icons | 11 | 30 | 24 | 18 | 0 |
 | T | Project tree | 4 | 17 | 76 | 4 | 0 |
 | P | Properties | 3 | 107 | 215 | 0 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 115 | 294 | 656 | 24 | 6 |
+| | All | 126 | 313 | 608 | 42 | 6 |
 
 ## Cross-cutting
 
@@ -52,7 +52,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-22 | Themes System/Light/Dark, live switch, native title bar follows | Theming/ThemeController.cs | 00, Look | partial | live switch done; native title bar not verified |
 | X-23 | Font Segoe UI 12 px, else bundled Selawik + Noto Sans Math subset | App.xaml | 00, Look | missing | Slint default font; no font bundled |
 | X-24 | Row 23 px (tree rows, toolbar buttons, menu bar, tabs); drop-down entries 22 px | Themes/Controls.xaml | 00, Look; 90 | partial | rows 23 px; Slint menus are native/Slint style |
-| X-25 | Icons: 16 px stroked drawings in text colour, grey when disabled | Themes/Controls.xaml, Assets | 00, Look | missing | text glyphs ("||", "=", "x") instead; see I-rows |
+| X-25 | Icons: 16 px stroked drawings in text colour, grey when disabled | Themes/Controls.xaml, Assets | 00, Look | partial | ui/icons.slint: transport, tree rows and buttons, pane close, menus; see I-rows |
 | X-26 | Keyboard focus = accent border everywhere | Themes/Controls.xaml | 00, Look; 90 | partial | std widgets' own focus look |
 | X-27 | Square corners; WPF box model paddings (buttons 10,3; toolbar 6,1,6,0; text 3,2) | Themes/Controls.xaml, Editors.xaml | 90, cross-cutting | partial | std-widgets (fluent) rounded corners |
 | X-28 | Tooltips on every toolbar/transport button | Themes/Controls.xaml ToolTip style | 90, cross-cutting | missing | `tip` property unused for display |
@@ -396,40 +396,40 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 
 ### I: icons
 
-Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe Fluent Icons / Segoe MDL2 Assets), set by `MenuIcon.Glyph` / `IconView.Glyph` (WPF/Controls/MenuIcon.cs:24-60, IconView.cs, font style CX:227); (b) the app's own 16 px stroked StreamGeometry named `Icon<Name>` (and `Icon<Name>Fill` for solid parts), `MenuIcon.Drawing` / `IconView.Drawing` (IconView.cs:49-58). Non-Windows port needs an equivalent per icon (ui/10 Conventions). Slint: NO icons anywhere: every Tool uses ASCII text ("||", "|<", ">", "[]", "[", "]", "x", "L", "o", "=", timeline.slint:129-242), tree uses text glyphs for row buttons and the check mark (tree.slint), pane close is "x" (pane.slint:36). Slint has no @image-url, Path or Image-from-svg. Every row below is therefore missing unless stated.
+Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe Fluent Icons / Segoe MDL2 Assets), set by `MenuIcon.Glyph` / `IconView.Glyph` (WPF/Controls/MenuIcon.cs:24-60, IconView.cs, font style CX:227); (b) the app's own 16 px stroked StreamGeometry named `Icon<Name>` (and `Icon<Name>Fill` for solid parts), `MenuIcon.Drawing` / `IconView.Drawing` (IconView.cs:49-58). Non-Windows port needs an equivalent per icon (ui/10 Conventions). Slint: (b) are converted to SVG by tools/next-icons.py into ui/icons/next; (a) are Material Symbols in ui/icons/symbols (docs/divergences.md, Icons). `Icon`/`IconButton` (ui/icons.slint) draw them; tree rows get theirs from src/icons.rs, menus from ui/menu-icons.slint.
 
 #### I Icon font glyphs (U+code point), spec ui/10 Icon column
 | ID | Feature (icon, glyph) and use | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| I-01 | File>New Project U+E8A5 | MW:251 | ui/10 File #1 | missing | |
-| I-02 | File>Open Project U+E8E5 | MW:252 | ui/10 File #2 | missing | |
-| I-03 | File>Recent Projects U+E81C | MW:255 | ui/10 File #3 | missing | |
-| I-04 | File>Examples U+E8F1 | MW:259 | ui/10 File #4 | missing | |
-| I-05 | File>Welcome Page U+E766 (port) | not in Next | ui/10 File #4a | missing | |
-| I-06 | File>Settings U+E713 (port) | not in Next | ui/10 File #4b | missing | |
-| I-07 | File>Save U+E74E (also scene image Save, SceneView.xaml:86) | MW:261 | ui/10 File #5 | missing | |
-| I-08 | File>Save As U+E792 | MW:262 | ui/10 File #6 | missing | |
-| I-09 | File>Export and field/intensity/both entries, tree probe CSV, picture menu export entries U+EDE1 | MW:265-268; PT:275; PP:741-743,767-769 | ui/10 | missing | one icon, many uses |
-| I-10 | Export last U+E8EE | MW:275 | ui/10 File #8 | missing | |
-| I-11 | Export frame entries / tree Scene row U+EB9F (MW:271-272; PP:739,765; PT:313) | MW:271 | ui/10 | missing | spec lists U+EB9F for frame export; tree Scene row also uses it |
-| I-12 | File>Close Project U+E711 | MW:277 | ui/10 | missing | |
-| I-13 | File>Exit U+E7E8 | MW:279 | ui/10 | missing | |
-| I-14 | Edit>Undo U+E7A7 / Redo U+E7A6 | MW:282-283 | ui/10 Edit | missing | 2 glyphs |
-| I-15 | Cut U+E8C6 (MW:285, PT:265) | MW:285 | ui/10 Edit | missing | |
-| I-16 | Copy U+E8C8 (MW:286, PT:266, MP:186-187 Copy/Copy all) | MW:286 | ui/10 Edit | missing | |
-| I-17 | Paste U+E77F (MW:287, PT:267) | MW:287 | ui/10 Edit | missing | |
-| I-18 | Edit>Delete U+E74D | MW:288 | ui/10 Edit | missing | spec also lists U+E74D for Discard frames |
-| I-19 | Select all U+E8B3 (MW:291, PT:261) | MW:291 | ui/10 | missing | |
-| I-20 | View>Panes U+E8A0 | MW:294 | ui/10 View | missing | |
-| I-21 | View>Theme U+E790 (also tree ColorSchemes folder PT:~366) | MW:297 | not in spec (menu moved) | missing | not in spec; folder use ui/20 |
+| I-01 | File>New Project U+E8A5 | MW:251 | ui/10 File #1 | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-02 | File>Open Project U+E8E5 | MW:252 | ui/10 File #2 | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-03 | File>Recent Projects U+E81C | MW:255 | ui/10 File #3 | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-04 | File>Examples U+E8F1 | MW:259 | ui/10 File #4 | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-05 | File>Welcome Page U+E766 (port) | not in Next | ui/10 File #4a | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-06 | File>Settings U+E713 (port) | not in Next | ui/10 File #4b | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-07 | File>Save U+E74E (also scene image Save, SceneView.xaml:86) | MW:261 | ui/10 File #5 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); scene image Save not yet |
+| I-08 | File>Save As U+E792 | MW:262 | ui/10 File #6 | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-09 | File>Export and field/intensity/both entries, tree probe CSV, picture menu export entries U+EDE1 | MW:265-268; PT:275; PP:741-743,767-769 | ui/10 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree probe CSV and picture menu not yet |
+| I-10 | Export last U+E8EE | MW:275 | ui/10 File #8 | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-11 | Export frame entries / tree Scene row U+EB9F (MW:271-272; PP:739,765; PT:313) | MW:271 | ui/10 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); picture menu not yet |
+| I-12 | File>Close Project U+E711 | MW:277 | ui/10 | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-13 | File>Exit U+E7E8 | MW:279 | ui/10 | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-14 | Edit>Undo U+E7A7 / Redo U+E7A6 | MW:282-283 | ui/10 Edit | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-15 | Cut U+E8C6 (MW:285, PT:265) | MW:285 | ui/10 Edit | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree and Messages menus not yet |
+| I-16 | Copy U+E8C8 (MW:286, PT:266, MP:186-187 Copy/Copy all) | MW:286 | ui/10 Edit | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree and Messages menus not yet |
+| I-17 | Paste U+E77F (MW:287, PT:267) | MW:287 | ui/10 Edit | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree and Messages menus not yet |
+| I-18 | Edit>Delete U+E74D | MW:288 | ui/10 Edit | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-19 | Select all U+E8B3 (MW:291, PT:261) | MW:291 | ui/10 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree and Messages menus not yet |
+| I-20 | View>Panes U+E8A0 | MW:294 | ui/10 View | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-21 | View>Theme U+E790 (also tree ColorSchemes folder PT:~366) | MW:297 | not in spec (menu moved) | partial | tree ColorSchemes folder (Material Symbols stand-in); other uses not yet |
 | I-22 | View>UI zoom U+E8A3 | MW:302 | not in spec (moved) | missing | not in spec |
 | I-23 | View>Language U+E774 | MW:330 | not in spec (moved) | missing | not in spec |
-| I-24 | Simulation>Run U+E768, Play (while paused) U+E768 | MW:386,408 | ui/10 Simulation | missing | |
-| I-25 | Simulation>Pause U+E769, Pause playback U+E769 | MW:388,412 | ui/10 | missing | |
-| I-26 | Simulation>Stop U+E71A | MW:400 | ui/10 | missing | |
-| I-27 | Discard frames U+E74D (port) | not in Next | ui/10 Simulation | missing | |
-| I-28 | Help>About U+E946 | MW:438 | ui/10 Help | missing | |
-| I-29 | Help>Manual U+E736 (Next); port uses "open_in_new" for Project page | MW:439 | ui/10 Help, decision 0028 | missing | spec names a Material-like name `open_in_new` |
+| I-24 | Simulation>Run U+E768, Play (while paused) U+E768 | MW:386,408 | ui/10 Simulation | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); play/pause swap not yet |
+| I-25 | Simulation>Pause U+E769, Pause playback U+E769 | MW:388,412 | ui/10 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); play/pause swap not yet |
+| I-26 | Simulation>Stop U+E71A | MW:400 | ui/10 | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-27 | Discard frames U+E74D (port) | not in Next | ui/10 Simulation | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-28 | Help>About U+E946 | MW:438 | ui/10 Help | divergence | Material Symbols stand-in (divergences.md, Icons) |
+| I-29 | Help>Manual U+E736 (Next); port uses "open_in_new" for Project page | MW:439 | ui/10 Help, decision 0028 | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-30 | Add source/part/probe U+E710 (tree row menu) | PT:256-258 | ui/10 Tree row | missing | |
 | I-31 | Add/remove from selection U+E762 | PT:260 | ui/10 Tree row | missing | |
 | I-32 | Enabled toggle U+E73A | PT:263 | ui/10 | missing | |
@@ -438,34 +438,34 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-35 | Move up U+E74A / Move down U+E74B | PT:270-271 | ui/10 | missing | |
 | I-36 | Brightness U+E706 | PP:736,762 | ui/10 Preview menu | missing | |
 | I-37 | Clear (messages) U+E894 | MP:189 | ui/10 Messages (not given in spec) | missing | not in spec |
-| I-38 | Tree Simulation row U+E916 / Display row U+E7F4 | PT:319,325 | ui/20 | missing | check ui/20 for equivalents |
+| I-38 | Tree Simulation row U+E916 / Display row U+E7F4 | PT:319,325 | ui/20 | divergence | Material Symbols stand-in (divergences.md, Icons); tree rows |
 | I-39 | Welcome / Settings / Check-for-updates / Discard glyphs in port | not in Next | ui/10 | missing | see I-05, I-06, I-27; Check for updates has none |
 
 #### I App drawings (Icon<Name> StreamGeometry, 16 px grid), file CX = WaveDudeNext.WPF/Themes/Controls.xaml
 | ID | Feature (name) and where used | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| I-40 | IconSource: tree Sources folder/row, "+ Source" button | CX:248 | ui/20 | missing | |
-| I-41 | IconProbe: tree Probes folder/row, "+ Probe", Standard probe entry | CX:249 | ui/20, ui/10 | missing | |
-| I-42 | IconCountingDetector: Probabilistic/Counting detector entries and rows | CX:251 | ui/20 | missing | not in ui/10 |
-| I-43 | IconImagingDetector: Imaging detector entry/rows | CX:253 | ui/20 | missing | not in ui/10 |
-| I-44 | IconPart: tree Parts folder, "+ Part" | CX:254 | ui/20 | missing | |
-| I-45 | IconPlusBadge (+ IconPlusBadgeStyle): add plus on toolbar icons | CX:258-259 | ui/20 | missing | |
-| I-46 | IconProject: tree root row | CX:273 | ui/20 | missing | |
-| I-47 | IconLens (Lens/Mirror entry, biconvex + concave mirror) | CX:279 | ui/10 | missing | |
-| I-48 | IconLens<Left><Right> variants (ConvexConvex, ConvexFlat, ConvexConcave, FlatConvex, FlatFlat, FlatConcave, ConcaveConvex, ConcaveFlat, ConcaveConcave): tree lens rows follow surface shapes | CX:285-293, LensIconConverter.cs:37 | ui/20 | missing | 9 icons, not in ui/10 |
-| I-49 | IconFresnelLens | CX:295 | ui/20 | missing | not in ui/10 |
-| I-50 | IconFiber | CX:297 | ui/10 | missing | |
-| I-51 | IconBraggReflector (Fill geometry) | CX:299 | ui/10 | missing | |
-| I-52 | IconGrinLens | CX:301 | ui/10 | missing | |
-| I-53 | IconZonePlate (Fill) | CX:303 | ui/10 | missing | |
-| I-54 | IconDiffuser | CX:305 | ui/20 | missing | not in ui/10 |
-| I-55 | IconInterferenceFilter | CX:307 | ui/20 | missing | not in ui/10 |
-| I-56 | IconDiffractionGratings (Fill) | CX:309 | ui/20 | missing | not in ui/10 |
-| I-57 | IconMetaSurfaces | CX:311 | ui/20 | missing | not in ui/10 |
-| I-58 | IconMetaLens / IconMetaPrism / IconMetaAxicon | CX:313,315,317 | ui/20 | missing | 3 icons |
-| I-59 | IconFacettedGrating / IconSimpleGrating (Fill) | CX:319,321 | ui/20 | missing | 2 icons |
-| I-60 | IconPolygon / Rectangle / Ellipse / Triangle / Outline | CX:323,325,327,329,331 | ui/10 | missing | 5 icons |
-| I-61 | IconOpticalLogic, IconXorGate, IconAndGate, IconOrGate | CX:333,335,337,339 | ui/10 | missing | 4 icons |
+| I-40 | IconSource: tree Sources folder/row, "+ Source" button | CX:248 | ui/20 | partial | tree rows (icons.rs); toolbar and add menus not yet |
+| I-41 | IconProbe: tree Probes folder/row, "+ Probe", Standard probe entry | CX:249 | ui/20, ui/10 | partial | tree rows (icons.rs); toolbar and add menus not yet |
+| I-42 | IconCountingDetector: Probabilistic/Counting detector entries and rows | CX:251 | ui/20 | partial | tree rows (icons.rs); toolbar and add menus not yet |
+| I-43 | IconImagingDetector: Imaging detector entry/rows | CX:253 | ui/20 | partial | tree rows (icons.rs); toolbar and add menus not yet |
+| I-44 | IconPart: tree Parts folder, "+ Part" | CX:254 | ui/20 | partial | tree rows (icons.rs); toolbar and add menus not yet |
+| I-45 | IconPlusBadge (+ IconPlusBadgeStyle): add plus on toolbar icons | CX:258-259 | ui/20 | missing | SVG generated, not used yet |
+| I-46 | IconProject: tree root row | CX:273 | ui/20 | done | tree root row (icons.rs) |
+| I-47 | IconLens (Lens/Mirror entry, biconvex + concave mirror) | CX:279 | ui/10 | missing | SVG generated, not used yet |
+| I-48 | IconLens<Left><Right> variants (ConvexConvex, ConvexFlat, ConvexConcave, FlatConvex, FlatFlat, FlatConcave, ConcaveConvex, ConcaveFlat, ConcaveConcave): tree lens rows follow surface shapes | CX:285-293, LensIconConverter.cs:37 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-49 | IconFresnelLens | CX:295 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-50 | IconFiber | CX:297 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-51 | IconBraggReflector (Fill geometry) | CX:299 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-52 | IconGrinLens | CX:301 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-53 | IconZonePlate (Fill) | CX:303 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-54 | IconDiffuser | CX:305 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-55 | IconInterferenceFilter | CX:307 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-56 | IconDiffractionGratings (Fill) | CX:309 | ui/20 | missing | SVG generated, not used yet |
+| I-57 | IconMetaSurfaces | CX:311 | ui/20 | missing | SVG generated, not used yet |
+| I-58 | IconMetaLens / IconMetaPrism / IconMetaAxicon | CX:313,315,317 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-59 | IconFacettedGrating / IconSimpleGrating (Fill) | CX:319,321 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-60 | IconPolygon / Rectangle / Ellipse / Triangle / Outline | CX:323,325,327,329,331 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-61 | IconOpticalLogic, IconXorGate, IconAndGate, IconOrGate | CX:333,335,337,339 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
 | I-62 | IconAutoBrightness (+Fill): picture menu Auto brightness | CX:341-342 | ui/10 | missing | |
 | I-63 | IconPreviewResolution / IconPreviewFrames / IconPreviewSamples / IconPreviewDither (+Fill): View preview-quality menus | CX:344-351 | not in spec (menus moved) | missing | not in spec |
 | I-64 | IconFrameMemory: Simulation>RAM cache size | CX:353 | not in spec | missing | not in spec |
@@ -473,25 +473,25 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 #### I Interface geometries (transport, markers, glyph buttons)
 | ID | Feature (name) and where used | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| I-65 | RunGeometry (ring+triangle) Run button | PP:38, used PP:416 | ui/50 | partial | text glyph ">" (timeline.slint:129) |
-| I-66 | StopGeometry (ring+square) | PP:42, PP:422 | ui/50 | partial | text "[]" |
-| I-67 | PauseRunGeometry (ring+bars) pause the run | PP:40, PP:433 | ui/50 | partial | text "||" |
-| I-68 | PlayGeometry / PauseGeometry playback | PP:46-47, PP:448,451 | ui/50 | partial | text ">" and "||" |
-| I-69 | StepBackGeometry / StepForwardGeometry | PP:52-53, PP:455,458 | ui/50 | partial | text "|<" ">|" |
-| I-70 | SetInGeometry / SetOutGeometry / ClearRangeGeometry | PP:54-56, PP:462-468 | ui/50 | partial | text "[" "]" "x" |
-| I-71 | LoopGeometry | PP:58, PP:471 | ui/50 | partial | text "L" |
-| I-72 | LiveGeometry | PP:60, PP:474 | ui/50 | partial | text "o" |
-| I-73 | SideBySideGeometry / StackedGeometry layout radios | PP:48-49, PP:485,490 | ui/50 | partial | text "||" "=" |
+| I-65 | RunGeometry (ring+triangle) Run button | PP:38, used PP:416 | ui/50 | done | transport bar (timeline.slint) |
+| I-66 | StopGeometry (ring+square) | PP:42, PP:422 | ui/50 | done | transport bar (timeline.slint) |
+| I-67 | PauseRunGeometry (ring+bars) pause the run | PP:40, PP:433 | ui/50 | done | transport bar (timeline.slint) |
+| I-68 | PlayGeometry / PauseGeometry playback | PP:46-47, PP:448,451 | ui/50 | done | transport bar (timeline.slint) |
+| I-69 | StepBackGeometry / StepForwardGeometry | PP:52-53, PP:455,458 | ui/50 | done | transport bar (timeline.slint) |
+| I-70 | SetInGeometry / SetOutGeometry / ClearRangeGeometry | PP:54-56, PP:462-468 | ui/50 | done | transport bar (timeline.slint) |
+| I-71 | LoopGeometry | PP:58, PP:471 | ui/50 | done | transport bar (timeline.slint) |
+| I-72 | LiveGeometry | PP:60, PP:474 | ui/50 | done | transport bar (timeline.slint) |
+| I-73 | SideBySideGeometry / StackedGeometry layout radios | PP:48-49, PP:485,490 | ui/50 | done | transport bar (timeline.slint) |
 | I-74 | FieldGeometry / IntensityGeometry picture header icons | PP:44-45, PP:497,502 | ui/40 | missing | headers are text only (preview.slint:12-18) |
 | I-75 | SpinnerGeometry busy spinner | PP:64-66 | ui/40 | missing | |
 | I-76 | SourceGlyph / ProbeGlyph / PartGlyph (21 px picture handles) and SourceMarkerPainter.cs:45 | PP:177-179; Rendering/SourceMarkerPainter.cs:45 | ui/40 | missing | no handles |
 | I-77 | AngleGlyph rotation lever, ResizeGripGlyph graph box grip | PP:277,329 | ui/40 | missing | |
-| I-78 | PlusGeometry (folder +), MinusGeometry (row remove), ChevronUp/Down (row move) | PT:40-43, uses PT:210-214,333,376-397; Editors.xaml:532 | ui/20 | partial | tree rows use text glyphs (tree.slint:73-75, non-ASCII chars in source); no folder + |
+| I-78 | PlusGeometry (folder +), MinusGeometry (row remove), ChevronUp/Down (row move) | PT:40-43, uses PT:210-214,333,376-397; Editors.xaml:532 | ui/20 | partial | row minus and chevrons done; folder plus not yet |
 | I-79 | ClearGeometry (messages Clear button icon) | MP:29, MP:128 | ui/70 | missing | text button "Clear" |
-| I-80 | Menu/combos/checkbox arrows: ArrowUp/Down/Left/Right, SubmenuArrow, Check, ChevronRight/Down/Up, Close, DropDown | CX:45-55 | ui/10 Conventions | partial | std-widgets draw their own; tree check uses text mark |
+| I-80 | Menu/combos/checkbox arrows: ArrowUp/Down/Left/Right, SubmenuArrow, Check, ChevronRight/Down/Up, Close, DropDown | CX:45-55 | ui/10 Conventions | partial | check mark at native size (Next: Uniform, margin 2 in the box); menu, combo and scroll glyphs are std-widgets' |
 | I-81 | GripGeometry, ChainLinked/ChainParted (linked-values toggle), pane title drag handle brushes | Themes/Editors.xaml:589,623-624; CX:59-64 | ui/30, 00 | missing | pane title grip drawn as border (pane.slint:27-34) |
-| I-82 | App icon: App.ico / App.png / App.svg (window, About 64 px, taskbar) | WPF/App.ico, App.png, App.svg; AboutWindow.xaml:44 | ui/70 About | partial | assets/icons/*.png, icon.ico/icns/svg exist for packaging; not set as window icon, not in About |
-| I-83 | Menu-item icon slot: 16 px icon, greys with text | MenuIcon.cs, IconView.cs | ui/10 Conventions | missing | |
+| I-82 | App icon: App.ico / App.png / App.svg (window, About 64 px, taskbar) | WPF/App.ico, App.png, App.svg; AboutWindow.xaml:44 | ui/70 About | partial | window icon from assets/icon.svg; About not checked |
+| I-83 | Menu-item icon slot: 16 px icon, greys with text | MenuIcon.cs, IconView.cs | ui/10 Conventions | done | Slint MenuItem icon, per-theme copies in the menu text colour (menu-icons.slint) |
 
 ## Project tree and properties
 
