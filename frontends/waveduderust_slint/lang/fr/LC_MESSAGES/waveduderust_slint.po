@@ -84,6 +84,10 @@ msgstr "&Annuler"
 msgid "&View"
 msgstr "&Affichage"
 
+#. WavelengthNominal
+msgid "(nominal)"
+msgstr "(nominale)"
+
 #. ItemCountOne
 msgid "1 entry"
 msgstr "1 entrée"
@@ -127,6 +131,18 @@ msgstr "Ajouter une source"
 #. MenuProjectToggleSelected
 msgid "Add to or remove from selection"
 msgstr "Ajouter à la sélection ou en retirer"
+
+#. Label.Source.Amplitude
+msgid "Amplitude"
+msgstr "Amplitude"
+
+#. Hint.Source.Amplitude
+msgid "Amplitude in percent, 0 to 100, decimals allowed."
+msgstr "Amplitude en pour cent, 0 à 100, décimales admises."
+
+#. SectionArray
+msgid "Array"
+msgstr "Réseau"
 
 #. ButtonAutoBrightness
 msgid "Auto"
@@ -184,6 +200,18 @@ msgstr "Fermer le projet"
 msgid "Colour scheme"
 msgstr "Palette de couleurs"
 
+#. Label.SourceArray.SizeX
+msgid "Columns"
+msgstr "Colonnes"
+
+#. Label.Source.IsComposite
+msgid "Composite source"
+msgstr "Source composite"
+
+#. Enum.SourceMode.Continuous
+msgid "Continuous"
+msgstr "Continu"
+
 #. MenuEditCopy
 msgid "Copy"
 msgstr "Copier"
@@ -212,6 +240,10 @@ msgstr "Supprimer"
 msgid "Description"
 msgstr "Description"
 
+#. Label.Source.DetachAfter
+msgid "Detach after step"
+msgstr "Détacher après le pas"
+
 #. MenuAddDiffractionGratings
 msgid "Diffraction gratings"
 msgstr "Réseaux de diffraction"
@@ -219,6 +251,14 @@ msgstr "Réseaux de diffraction"
 #. MenuAddDiffuser
 msgid "Diffuser"
 msgstr "Diffuseur"
+
+#. Hint.SourceArray.SpacingX
+msgid "Distance between neighbouring columns in canvas pixels."
+msgstr "Distance entre colonnes voisines en pixels de toile."
+
+#. Hint.SourceArray.SpacingY
+msgid "Distance between neighbouring rows in canvas pixels."
+msgstr "Distance entre lignes voisines en pixels de toile."
 
 #. Hint.Display.SourceMarkersInExport
 msgid "Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos."
@@ -240,6 +280,22 @@ msgstr "Dupliquer"
 msgid "E&xit"
 msgstr "&Quitter"
 
+#. Hint.SourceArray.RandomPosition
+msgid "Each emitter is moved by up to ± this many pixels in X and in Y. 0 turns it off."
+msgstr "Chaque émetteur est déplacé d'au plus ± ce nombre de pixels en X et en Y. 0 désactive."
+
+#. Hint.SourceArray.RandomFrequency
+msgid "Each emitter's level is offset by up to ± this amount. 0 turns it off."
+msgstr "Le niveau de chaque émetteur est décalé d'au plus ± cette valeur. 0 désactive."
+
+#. Hint.SourceArray.RandomPhase
+msgid "Each emitter's phase is offset by up to ± this many degrees. 0 turns it off."
+msgstr "La phase de chaque émetteur est décalée d'au plus ± ce nombre de degrés. 0 désactive."
+
+#. Hint.SourceArray.RandomOffWidth
+msgid "Each gap between bursts is offset by up to ± this many cycles, re-drawn every period. 0 turns it off."
+msgstr "Chaque intervalle entre impulsions est décalé d'au plus ± ce nombre de périodes, retiré à chaque période. 0 désactive."
+
 #. Label.Scene.Edges
 msgid "Edges"
 msgstr "Bords"
@@ -256,6 +312,14 @@ msgstr "Ellipse"
 msgid "Embedded image"
 msgstr "Image intégrée"
 
+#. Hint.Source.Mode
+msgid "Emit continuously or in bursts."
+msgstr "Émettre en continu ou par impulsions."
+
+#. Hint.Source.IsComposite
+msgid "Emit from an array of emitters instead of a single point."
+msgstr "Émettre depuis un réseau d'émetteurs au lieu d'un point unique."
+
 #. MenuProjectToggleEnabled
 msgid "Enabled"
 msgstr "Activé"
@@ -267,6 +331,14 @@ msgstr "Qualité de l'encodeur, 1 à 100."
 #. TipPreviewSetOut
 msgid "End the export range at this frame (O)"
 msgstr "Terminer la plage d'export à cette image (O)"
+
+#. Hint.Source.PulseShape
+msgid "Envelope of each burst; pulsed mode only."
+msgstr "Enveloppe de chaque impulsion ; mode pulsé seulement."
+
+#. TipWavelength
+msgid "Estimated from the wave speed and the frequency (λ = c / f): emitters one wavelength apart radiate in phase along that direction. Holds for the 4th-order Laplacian; the 9-point stencil's speed varies with the frequency"
+msgstr "Estimée à partir de la vitesse d'onde et de la fréquence (λ = c / f) : des émetteurs espacés d'une longueur d'onde rayonnent en phase dans cette direction. Valable pour le laplacien du 4e ordre ; avec le schéma à 9 points la vitesse dépend de la fréquence"
 
 #. MenuFileExamples
 msgid "Exam&ples"
@@ -380,6 +452,14 @@ msgstr "Images par seconde de la vidéo exportée."
 msgid "Free-text notes about the project."
 msgstr "Notes libres sur le projet."
 
+#. Label.Source.Frequency
+msgid "Frequency"
+msgstr "Fréquence"
+
+#. Hint.Source.Frequency
+msgid "Frequency as a level up to 255, decimals allowed, the same scale as the green channel of image sources. Above 255 the grid cannot sample the wave."
+msgstr "Fréquence sous forme de niveau jusqu'à 255, décimales admises, la même échelle que le canal vert des sources d'image. Au-delà de 255, la grille ne peut plus échantillonner l'onde."
+
 #. MenuAddFresnelLens
 msgid "Fresnel lens"
 msgstr "Lentille de Fresnel"
@@ -395,6 +475,10 @@ msgstr "Lentille GRIN"
 #. Hint.DisplayLayer.Brightness
 msgid "Gain applied to the values before the colour lookup."
 msgstr "Gain appliqué aux valeurs avant la correspondance des couleurs."
+
+#. Enum.PulseShape.Gaussian
+msgid "Gaussian"
+msgstr "Gaussienne"
 
 #. SectionGeneral
 msgid "General"
@@ -415,6 +499,10 @@ msgstr "Hauteur d'une toile vierge en pixels."
 #. MenuHelp
 msgid "Help"
 msgstr "Aide"
+
+#. Label.SourceArray.SpacingX
+msgid "Horizontal spacing"
+msgstr "Espacement horizontal"
 
 #. Enum.SceneMode.Image
 msgid "Image"
@@ -444,6 +532,10 @@ msgstr "Détecteur imageur"
 msgid "Include the source in runs (Space on the row toggles it)"
 msgstr "Inclure la source dans les exécutions (Espace sur la ligne bascule)"
 
+#. Hint.Source.Enabled
+msgid "Include the source in simulation runs."
+msgstr "Inclure la source dans les exécutions."
+
 #. SectionIntensity
 msgid "Intensity"
 msgstr "Intensité"
@@ -471,6 +563,14 @@ msgstr "Dernier pas de simulation de la plage exportée ; 0 signifie la fin de l
 #. Hint.DisplayLayer.Overlay
 msgid "Lay the scene image's glowing-edges outline over this output in the preview."
 msgstr "Superposer le contour « bords lumineux » de l'image de scène à cette sortie dans l'aperçu."
+
+#. Hint.Source.PulseWidth
+msgid "Length of each burst in cycles of the source frequency; pulsed mode only."
+msgstr "Durée de chaque impulsion en périodes de la fréquence de la source ; mode pulsé seulement."
+
+#. Hint.Source.OffWidth
+msgid "Length of the gap between bursts in cycles; pulsed mode only."
+msgstr "Durée de l'intervalle entre impulsions en périodes ; mode pulsé seulement."
 
 #. MenuAddLens
 msgid "Lens/Mirror"
@@ -540,9 +640,17 @@ msgstr "Multiplicateur de la correspondance niveau-fréquence : ω = niveau / 25
 msgid "Multiplier of the outline: 1 as computed, higher lifts faint edges, 0 hides it."
 msgstr "Multiplicateur du contour : 1 tel que calculé, plus haut relève les bords faibles, 0 le masque."
 
+#. Label.Probe.Name
+msgid "Name"
+msgstr "Nom"
+
 #. Hint.DisplayLayer.ColorScheme
 msgid "Name of the colour scheme mapped onto the values."
 msgstr "Nom de la palette appliquée aux valeurs."
+
+#. Hint.Source.Name
+msgid "Name shown in the project tree and on the canvas."
+msgstr "Nom affiché dans l'arborescence du projet et sur la toile."
 
 #. MenuFileNew
 msgid "New Project"
@@ -564,6 +672,14 @@ msgstr "Aucune entrée"
 msgid "Nominal wave speed in pixels per step; only used to estimate wavelengths in the editor."
 msgstr "Vitesse d'onde nominale en pixels par pas ; sert seulement à estimer les longueurs d'onde dans l'éditeur."
 
+#. Hint.SourceArray.SizeX
+msgid "Number of emitters across. Odd counts keep the centre emitter on the source position."
+msgstr "Nombre d'émetteurs en largeur. Un nombre impair garde l'émetteur central sur la position de la source."
+
+#. Hint.SourceArray.SizeY
+msgid "Number of emitters down."
+msgstr "Nombre d'émetteurs en hauteur."
+
 #. MenuAddOrGate
 msgid "OR"
 msgstr "OR (OU)"
@@ -571,6 +687,10 @@ msgstr "OR (OU)"
 #. Label.Scene.ObjectSources
 msgid "Object sources"
 msgstr "Sources objets"
+
+#. Label.Source.OffWidth
+msgid "Off width"
+msgstr "Largeur de pause"
 
 #. Hint.DisplayLayer.BlackLevel
 msgid "Offset applied before the colour lookup; values at or below it map to the first colour."
@@ -648,6 +768,14 @@ msgstr "Mettre la simulation en pause (F6)"
 msgid "Peak amplitude of the image sources."
 msgstr "Amplitude de crête des sources de l'image."
 
+#. Label.Source.Phase
+msgid "Phase"
+msgstr "Phase"
+
+#. Hint.Source.Phase
+msgid "Phase offset in degrees, -180 to 180."
+msgstr "Décalage de phase en degrés, -180 à 180."
+
 #. MenuSimulationPlay
 msgid "Pla&y"
 msgstr "L&ecture"
@@ -663,6 +791,10 @@ msgstr "Lecture (Espace)"
 #. MenuAddPolygon
 msgid "Polygon"
 msgstr "Polygone"
+
+#. SectionPosition
+msgid "Position"
+msgstr "Position"
 
 #. PanePreview
 msgid "Preview"
@@ -696,9 +828,25 @@ msgstr "Projet"
 msgid "Properties"
 msgstr "Propriétés"
 
+#. Label.Source.PulseShape
+msgid "Pulse shape"
+msgstr "Forme d'impulsion"
+
+#. Label.Source.PulseWidth
+msgid "Pulse width"
+msgstr "Largeur d'impulsion"
+
+#. Enum.SourceMode.Pulsed
+msgid "Pulsed"
+msgstr "Pulsé"
+
 #. Label.Video.Quality
 msgid "Quality"
 msgstr "Qualité"
+
+#. SectionRandom
+msgid "Random offsets, added per emitter"
+msgstr "Écarts aléatoires, ajoutés par émetteur"
 
 #. Label.Project.Seed
 msgid "Random seed"
@@ -743,6 +891,18 @@ msgstr "Rendre une image, l'exporter et échantillonner les sondes tous les ce n
 #. MenuSimulationResume
 msgid "Resume"
 msgstr "Reprendre"
+
+#. Label.SourceArray.Angle
+msgid "Rotation"
+msgstr "Rotation"
+
+#. Hint.SourceArray.Angle
+msgid "Rotation of the grid about the source position in degrees, counter-clockwise on the screen. 0 keeps the rows horizontal."
+msgstr "Rotation de la grille autour de la position de la source en degrés, dans le sens antihoraire à l'écran. 0 garde les lignes horizontales."
+
+#. Label.SourceArray.SizeY
+msgid "Rows"
+msgstr "Lignes"
 
 #. MenuSimulationRun
 msgid "Run"
@@ -812,9 +972,17 @@ msgstr "Réseau 2D simple"
 msgid "Simulation"
 msgstr "Simulation"
 
+#. Hint.Source.DetachAfter
+msgid "Simulation step at which the source fades out; -1 keeps it on for the whole run."
+msgstr "Pas de simulation auquel la source s'éteint ; -1 la garde active toute l'exécution."
+
 #. TipEmbeddedImage
 msgid "Size of the embedded scene image; the canvas takes this size"
 msgstr "Taille de l'image de scène intégrée ; la toile prend cette taille"
+
+#. Enum.PulseShape.SmoothedSquare
+msgid "Smoothed square"
+msgstr "Carré lissé"
 
 #. SectionSolver
 msgid "Solver"
@@ -864,6 +1032,10 @@ msgstr "Arrêter la simulation ; les images calculées restent (Échap)"
 msgid "Thickness in pixels of the absorbing frame: positive inside the canvas, where it shows as a dark margin; negative outside it, simulated but never shown. 0 turns it off."
 msgstr "Épaisseur en pixels du cadre absorbant : positive à l'intérieur de la toile, où il apparaît comme une marge sombre ; négative à l'extérieur, simulée mais jamais affichée. 0 le désactive."
 
+#. SectionTiming
+msgid "Timing"
+msgstr "Chronologie"
+
 #. Label.Display.ExportTo
 msgid "To step"
 msgstr "Au pas"
@@ -892,6 +1064,10 @@ msgstr "Utiliser les sources définies dans le projet."
 msgid "Version of the project file format."
 msgstr "Version du format de fichier de projet."
 
+#. Label.SourceArray.SpacingY
+msgid "Vertical spacing"
+msgstr "Espacement vertical"
+
 #. SectionVideo
 msgid "Video export"
 msgstr "Export vidéo"
@@ -904,9 +1080,17 @@ msgstr "Affichage"
 msgid "Visualize every"
 msgstr "Visualiser tous les"
 
+#. SectionWave
+msgid "Wave"
+msgstr "Onde"
+
 #. Label.Simulation.WaveSpeed
 msgid "Wave speed"
 msgstr "Vitesse d'onde"
+
+#. LabelWavelength
+msgid "Wavelength"
+msgstr "Longueur d'onde"
 
 #. Hint.Scene.ImagePath
 msgid "Where the embedded image came from; the embedded image is what is simulated, a missing file changes nothing. The file is watched while the project is open and re-embedded when it changes; on opening the project a changed file replaces the embedded image too."
@@ -920,9 +1104,25 @@ msgstr "Largeur"
 msgid "Width of a blank canvas in pixels."
 msgstr "Largeur d'une toile vierge en pixels."
 
+#. Label.Source.X
+msgid "X"
+msgstr "X"
+
+#. Hint.Source.X
+msgid "X of the emitter, or of the array centre, in canvas pixels."
+msgstr "X de l'émetteur, ou du centre du réseau, en pixels de toile."
+
 #. MenuAddXorGate
 msgid "XOR (Mach-Zehnder)"
 msgstr "XOR (Mach-Zehnder)"
+
+#. Label.Source.Y
+msgid "Y"
+msgstr "Y"
+
+#. Hint.Source.Y
+msgid "Y of the emitter, or of the array centre, in canvas pixels."
+msgstr "Y de l'émetteur, ou du centre du réseau, en pixels de toile."
 
 #. MenuAddZonePlate
 msgid "Zone plate"
@@ -931,6 +1131,11 @@ msgstr "Lame à zones"
 #. ItemCountMany
 msgid "{} entries"
 msgstr "{} entrées"
+
+#. Label.Source.Enabled
+msgctxt "Label.Source.Enabled"
+msgid "Enabled"
+msgstr "Activée"
 
 #. SectionExportRange
 msgctxt "SectionExportRange"

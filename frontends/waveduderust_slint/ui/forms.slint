@@ -356,3 +356,221 @@ export component DisplayForm inherits VerticalLayout {
         }
     }
 }
+
+// Next's SourceView.
+export component SourceForm inherits VerticalLayout {
+    property <bool> pulsed: Form.value(Form.revision, "Mode") == "Pulsed";
+    property <bool> composite: Form.value(Form.revision, "IsComposite") == "true";
+    property <string> wavelength: Form.value(Form.revision, "Wavelength");
+    alignment: start;
+    FormSection { text: @tr("General"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Name"); tip: @tr("Name shown in the project tree and on the canvas."); }
+            FormText { path: "Name"; tip: @tr("Name shown in the project tree and on the canvas."); }
+        }
+        Row {
+            FormCheck { colspan: 2; path: "Enabled"; text: @tr("Label.Source.Enabled" => "Enabled"); tip: @tr("Include the source in simulation runs."); }
+        }
+    }
+    FormSection { text: @tr("Position"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("X"); tip: @tr("X of the emitter, or of the array centre, in canvas pixels."); }
+            FormNumber { path: "X"; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("X of the emitter, or of the array centre, in canvas pixels."); }
+        }
+        Row {
+            FormLabel { text: @tr("Y"); tip: @tr("Y of the emitter, or of the array centre, in canvas pixels."); }
+            FormNumber { path: "Y"; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("Y of the emitter, or of the array centre, in canvas pixels."); }
+        }
+    }
+    FormSection { text: @tr("Wave"); }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Frequency");
+                tip: @tr("Frequency as a level up to 255, decimals allowed, the same scale as the green channel of image sources. Above 255 the grid cannot sample the wave.");
+            }
+            FormNumber {
+                path: "Frequency";
+                spec: { min: 0.01, max: 255, increment: 1, decimals: 2, drag-step: 0.1 };
+                tip: @tr("Frequency as a level up to 255, decimals allowed, the same scale as the green channel of image sources. Above 255 the grid cannot sample the wave.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Amplitude"); tip: @tr("Amplitude in percent, 0 to 100, decimals allowed."); }
+            FormNumber {
+                path: "Amplitude";
+                spec: { min: 0, max: 100, increment: 1, decimals: 2, drag-step: 0.1 };
+                tip: @tr("Amplitude in percent, 0 to 100, decimals allowed.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Phase"); tip: @tr("Phase offset in degrees, -180 to 180."); }
+            FormNumber { path: "Phase"; spec: { min: -180, max: 180, increment: 1, decimals: 2, drag-step: 0.5 }; tip: @tr("Phase offset in degrees, -180 to 180."); }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Wavelength");
+                tip: @tr("Estimated from the wave speed and the frequency (\u{3BB} = c / f): emitters one wavelength apart radiate in phase along that direction. Holds for the 4th-order Laplacian; the 9-point stencil's speed varies with the frequency");
+            }
+            // Next's WavelengthConverter: the 9-point stencil's figure is nominal
+            Rectangle {
+                horizontal-stretch: 1;
+                FormValue {
+                    x: 0;
+                    color: Theme.text;
+                    text: root.wavelength == "" ? "\u{2013}" : "\u{2248} \{root.wavelength} px" + (Form.value(Form.revision, "NinePoint") == "true" ? " " + @tr("(nominal)") : "");
+                }
+                Tooltip {
+                    text: @markdown("\{@tr("Estimated from the wave speed and the frequency (\u{3BB} = c / f): emitters one wavelength apart radiate in phase along that direction. Holds for the 4th-order Laplacian; the 9-point stencil's speed varies with the frequency")}");
+                }
+            }
+        }
+    }
+    FormSection { text: @tr("Timing"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Mode"); tip: @tr("Emit continuously or in bursts."); }
+            FormChoice { path: "Mode"; words: ["Continuous", "Pulsed"]; titles: [@tr("Continuous"), @tr("Pulsed")]; tip: @tr("Emit continuously or in bursts."); }
+        }
+        Row {
+            FormLabel { text: @tr("Pulse shape"); tip: @tr("Envelope of each burst; pulsed mode only."); enabled: root.pulsed; }
+            FormChoice {
+                path: "PulseShape";
+                words: ["Gaussian", "SmoothedSquare"];
+                titles: [@tr("Gaussian"), @tr("Smoothed square")];
+                enabled: root.pulsed;
+                tip: @tr("Envelope of each burst; pulsed mode only.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Pulse width"); tip: @tr("Length of each burst in cycles of the source frequency; pulsed mode only."); enabled: root.pulsed; }
+            FormNumber {
+                path: "PulseWidth";
+                spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
+                enabled: root.pulsed;
+                tip: @tr("Length of each burst in cycles of the source frequency; pulsed mode only.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Off width"); tip: @tr("Length of the gap between bursts in cycles; pulsed mode only."); enabled: root.pulsed; }
+            FormNumber {
+                path: "OffWidth";
+                spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
+                enabled: root.pulsed;
+                tip: @tr("Length of the gap between bursts in cycles; pulsed mode only.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Detach after step");
+                tip: @tr("Simulation step at which the source fades out; -1 keeps it on for the whole run.");
+            }
+            FormNumber {
+                path: "DetachAfter";
+                spec: { min: -1, max: 1000000000, increment: 1, decimals: -1 };
+                tip: @tr("Simulation step at which the source fades out; -1 keeps it on for the whole run.");
+            }
+        }
+    }
+    FormSection { text: @tr("Array"); }
+    FormCheck {
+        path: "IsComposite";
+        text: @tr("Composite source");
+        tip: @tr("Emit from an array of emitters instead of a single point.");
+    }
+    Rectangle { height: 4px; }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Columns");
+                tip: @tr("Number of emitters across. Odd counts keep the centre emitter on the source position.");
+                enabled: root.composite;
+            }
+            FormNumber {
+                path: "Array.SizeX";
+                spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
+                enabled: root.composite;
+                tip: @tr("Number of emitters across. Odd counts keep the centre emitter on the source position.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Rows"); tip: @tr("Number of emitters down."); enabled: root.composite; }
+            FormNumber {
+                path: "Array.SizeY";
+                spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
+                enabled: root.composite;
+                tip: @tr("Number of emitters down.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Horizontal spacing"); tip: @tr("Distance between neighbouring columns in canvas pixels."); enabled: root.composite; }
+            FormNumber { path: "Array.SpacingX"; enabled: root.composite; tip: @tr("Distance between neighbouring columns in canvas pixels."); }
+        }
+        Row {
+            FormLabel { text: @tr("Vertical spacing"); tip: @tr("Distance between neighbouring rows in canvas pixels."); enabled: root.composite; }
+            FormNumber { path: "Array.SpacingY"; enabled: root.composite; tip: @tr("Distance between neighbouring rows in canvas pixels."); }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Rotation");
+                tip: @tr("Rotation of the grid about the source position in degrees, counter-clockwise on the screen. 0 keeps the rows horizontal.");
+                enabled: root.composite;
+            }
+            FormNumber {
+                path: "Array.Angle";
+                spec: { min: -180, max: 180, increment: 5, decimals: 1, drag-step: 0.5 };
+                enabled: root.composite;
+                tip: @tr("Rotation of the grid about the source position in degrees, counter-clockwise on the screen. 0 keeps the rows horizontal.");
+            }
+        }
+        Row {
+            FormSection { colspan: 2; text: @tr("Random offsets, added per emitter"); }
+        }
+        Row {
+            FormLabel { text: @tr("Frequency"); tip: @tr("Each emitter's level is offset by up to \u{B1} this amount. 0 turns it off."); enabled: root.composite; }
+            FormNumber {
+                path: "Array.RandomFrequency";
+                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                enabled: root.composite;
+                tip: @tr("Each emitter's level is offset by up to \u{B1} this amount. 0 turns it off.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Phase"); tip: @tr("Each emitter's phase is offset by up to \u{B1} this many degrees. 0 turns it off."); enabled: root.composite; }
+            FormNumber {
+                path: "Array.RandomPhase";
+                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                enabled: root.composite;
+                tip: @tr("Each emitter's phase is offset by up to \u{B1} this many degrees. 0 turns it off.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Off width");
+                tip: @tr("Each gap between bursts is offset by up to \u{B1} this many cycles, re-drawn every period. 0 turns it off.");
+                enabled: root.composite;
+            }
+            FormNumber {
+                path: "Array.RandomOffWidth";
+                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                enabled: root.composite;
+                tip: @tr("Each gap between bursts is offset by up to \u{B1} this many cycles, re-drawn every period. 0 turns it off.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Position");
+                tip: @tr("Each emitter is moved by up to \u{B1} this many pixels in X and in Y. 0 turns it off.");
+                enabled: root.composite;
+            }
+            FormNumber {
+                path: "Array.RandomPosition";
+                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                enabled: root.composite;
+                tip: @tr("Each emitter is moved by up to \u{B1} this many pixels in X and in Y. 0 turns it off.");
+            }
+        }
+    }
+}

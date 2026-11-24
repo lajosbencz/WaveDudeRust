@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 49 | 82 | 192 | 2 | 0 |
+| P | Properties | 73 | 62 | 188 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 218 | 283 | 490 | 98 | 6 |
+| | All | 242 | 263 | 486 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -632,7 +632,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-16 | Enum words localised from Enum.* | Strings/* | 30 Check box, combo box | partial | Scene's Mode and Edges words through @tr (Next's Enum.*); the items' words are raw |
 | P-17 | Text box: Enter pushes text and selects it; Esc restores when differing; keys consumed only if effective | Controls/EditBehavior.cs | 30 Text box | partial | LineEdit accepted(Enter) commits; no Esc restore, no select-all |
 | P-18 | Multiline text box keeps Enter as newline (Description) | Views/ProjectView.xaml:46-49 | 30 Text box | missing | LineEdit is single line |
-| P-19 | Name boxes update per keystroke (tree row renames live) | Views/SourceView.xaml:54 | 30 Text box | missing | commits on Enter only |
+| P-19 | Name boxes update per keystroke (tree row renames live) | Views/SourceView.xaml:54 | 30 Text box | partial | FormText applies per keystroke, the tree row renaming live, the keystrokes one undo step; sources now, parts and probes with their forms |
 | P-20 | Commit policy: commit on Enter, on focus loss; flush before Save/Run/Undo/selection change (PendingEdit) | Controls/EditBehavior.cs | 30 Text box commit policy | missing | LineEdit accepted only; focus loss drops text; selecting another row loses typed value |
 | P-21 | Widget press flushes pending edit first (tree row, check, button, picker, dock tab) | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
 | P-22 | Pending text survives unmount (dock tab switch, picker close); Esc drops it | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
@@ -713,31 +713,31 @@ Not-in-spec rows are marked in the Spec column.
 | P-97 | Display: Video export Frame rate NB 1..240 | Views/DisplayView.xaml:63-64 | 30 Display | done | FormNumber 1..240 |
 | P-98 | Display: Video export Quality NB 1..100 | Views/DisplayView.xaml:66-67 | 30 Display | done | FormNumber 1..100 |
 | P-99 | Display: sections Field/Intensity/Preview/Export/Video export and on-screen order | Views/DisplayView.xaml:28-62 | 30 Display | done | Field, Intensity, Preview, Export (key SectionExportRange), Video export, in Next's order |
-| P-100 | Source: Name TB | Views/SourceView.xaml:54 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-101 | Source: Enabled CB | Views/SourceView.xaml:56 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-102 | Source: X NB integer (min 0) | Views/SourceView.xaml:63 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-103 | Source: Y NB integer (min 0) | Views/SourceView.xaml:66 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-104 | Source: Frequency NB 0.01..255 drag 0.1 2 dec | Views/SourceView.xaml:72 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-105 | Source: Amplitude NB 0..100 drag 0.1 2 dec | Views/SourceView.xaml:75 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-106 | Source: Phase NB -180..180 drag 0.5 2 dec | Views/SourceView.xaml:78 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-107 | Source: Mode combo Continuous/Pulsed | Views/SourceView.xaml:100 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-108 | Source: Pulse shape combo Gaussian/Smoothed square (off when Continuous) | Views/SourceView.xaml:104 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-109 | Source: Pulse width NB min 1 (off when Continuous) | Views/SourceView.xaml:108 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-110 | Source: Off width NB min 1 (off when Continuous) | Views/SourceView.xaml:111 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-111 | Source: Detach after step NB min -1 | Views/SourceView.xaml:114 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-112 | Source: Composite source CB | Views/SourceView.xaml:118 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-113 | Source: Columns NB min 1 (array, on when Composite) | Views/SourceView.xaml:124 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-114 | Source: Rows NB min 1 | Views/SourceView.xaml:127 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-115 | Source: Horizontal spacing NB | Views/SourceView.xaml:130 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-116 | Source: Vertical spacing NB | Views/SourceView.xaml:133 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-117 | Source: Rotation NB -180..180 step 5 drag 0.5 1 dec | Views/SourceView.xaml:136 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-118 | Source: Frequency (random) NB min 0 | Views/SourceView.xaml:142 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-119 | Source: Phase (random) NB min 0 | Views/SourceView.xaml:145 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-120 | Source: Off width (random) NB min 0 | Views/SourceView.xaml:148 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-121 | Source: Position (random) NB min 0 | Views/SourceView.xaml:151 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
-| P-122 | Source: Wavelength RO '~ N.N px' (+ '(nominal)' with 9-point stencil), tooltip | Views/SourceView.xaml:81-84 | 30 Source | missing |  |
-| P-123 | Source: sections General/Position/Wave/Timing/Array/Random offsets | Views/SourceView.xaml:49-150 | 30 Source | missing |  |
-| P-124 | Source: array rows disabled unless Composite | Views/SourceView.xaml:122 | 30 Source | missing |  |
+| P-100 | Source: Name TB | Views/SourceView.xaml:54 | 30 Source | done | SourceForm FormText, per keystroke |
+| P-101 | Source: Enabled CB | Views/SourceView.xaml:56 | 30 Source | done | FormCheck, Next's Label.Source.Enabled through a @tr context |
+| P-102 | Source: X NB integer (min 0) | Views/SourceView.xaml:63 | 30 Source | done | FormNumber from 0, whole steps |
+| P-103 | Source: Y NB integer (min 0) | Views/SourceView.xaml:66 | 30 Source | done | FormNumber from 0, whole steps |
+| P-104 | Source: Frequency NB 0.01..255 drag 0.1 2 dec | Views/SourceView.xaml:72 | 30 Source | done | FormNumber 0.01..255, drag 0.1, 2 decimals |
+| P-105 | Source: Amplitude NB 0..100 drag 0.1 2 dec | Views/SourceView.xaml:75 | 30 Source | done | FormNumber 0..100, drag 0.1, 2 decimals |
+| P-106 | Source: Phase NB -180..180 drag 0.5 2 dec | Views/SourceView.xaml:78 | 30 Source | done | FormNumber -180..180, drag 0.5, 2 decimals |
+| P-107 | Source: Mode combo Continuous/Pulsed | Views/SourceView.xaml:100 | 30 Source | done | FormChoice Continuous, Pulsed |
+| P-108 | Source: Pulse shape combo Gaussian/Smoothed square (off when Continuous) | Views/SourceView.xaml:104 | 30 Source | done | FormChoice Gaussian, Smoothed square, off when Continuous |
+| P-109 | Source: Pulse width NB min 1 (off when Continuous) | Views/SourceView.xaml:108 | 30 Source | done | FormNumber from 1, off when Continuous |
+| P-110 | Source: Off width NB min 1 (off when Continuous) | Views/SourceView.xaml:111 | 30 Source | done | FormNumber from 1, off when Continuous |
+| P-111 | Source: Detach after step NB min -1 | Views/SourceView.xaml:114 | 30 Source | done | FormNumber from -1 (-1 = no detach) |
+| P-112 | Source: Composite source CB | Views/SourceView.xaml:118 | 30 Source | done | FormCheck IsComposite: adds the array (its defaults) or drops it |
+| P-113 | Source: Columns NB min 1 (array, on when Composite) | Views/SourceView.xaml:124 | 30 Source | done | FormNumber from 1 |
+| P-114 | Source: Rows NB min 1 | Views/SourceView.xaml:127 | 30 Source | done | FormNumber from 1 |
+| P-115 | Source: Horizontal spacing NB | Views/SourceView.xaml:130 | 30 Source | done | FormNumber |
+| P-116 | Source: Vertical spacing NB | Views/SourceView.xaml:133 | 30 Source | done | FormNumber |
+| P-117 | Source: Rotation NB -180..180 step 5 drag 0.5 1 dec | Views/SourceView.xaml:136 | 30 Source | done | FormNumber -180..180 step 5, drag 0.5, 1 decimal |
+| P-118 | Source: Frequency (random) NB min 0 | Views/SourceView.xaml:142 | 30 Source | done | FormNumber from 0 |
+| P-119 | Source: Phase (random) NB min 0 | Views/SourceView.xaml:145 | 30 Source | done | FormNumber from 0 |
+| P-120 | Source: Off width (random) NB min 0 | Views/SourceView.xaml:148 | 30 Source | done | FormNumber from 0 |
+| P-121 | Source: Position (random) NB min 0 | Views/SourceView.xaml:151 | 30 Source | done | FormNumber from 0 |
+| P-122 | Source: Wavelength RO '~ N.N px' (+ '(nominal)' with 9-point stencil), tooltip | Views/SourceView.xaml:81-84 | 30 Source | done | '~ N.N px' (U+2248) from model::wavelength, '(nominal)' with the 9-point stencil, '-' when none; Next's tip; the figure takes a decimal point in every language |
+| P-123 | Source: sections General/Position/Wave/Timing/Array/Random offsets | Views/SourceView.xaml:49-150 | 30 Source | done | General, Position, Wave, Timing, Array, the random offsets' heading inside the array panel |
+| P-124 | Source: array rows disabled unless Composite | Views/SourceView.xaml:122 | 30 Source | done | array labels and boxes disabled unless Composite |
 | P-125 | Part: Name TB (section General, per keystroke) | Views/PartCommonView.xaml:55-56 | 30 Part common | partial | G; p.base fields |
 | P-126 | Part: Enabled CB | Views/PartCommonView.xaml:58 | 30 Part common | partial | G |
 | P-127 | Part: X NB min 0 | Views/PartCommonView.xaml:64-65 | 30 Part common | partial | G |

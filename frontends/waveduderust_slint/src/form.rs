@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use waveduderust::model::fields::{Edit, EditError, Field, Fields, Value, ValueKind};
 
-use waveduderust::model::{PROJECT_VERSION, Project, View};
+use waveduderust::model::{PROJECT_VERSION, Project, Stencil, View, wavelength};
 
 use crate::tree::Node;
 use crate::ui::{PropKind, PropRow};
@@ -118,6 +118,7 @@ pub(crate) fn kind(node: Node) -> &'static str {
 		Node::Scene => "scene",
 		Node::Simulation => "simulation",
 		Node::Display => "display",
+		Node::Source(_) => "source",
 		_ => "",
 	}
 }
@@ -126,7 +127,9 @@ pub(crate) fn kind(node: Node) -> &'static str {
 fn paths<T: Fields>(of: &T) -> HashMap<String, String> {
 	let mut values = HashMap::new();
 	for f in T::Field::all() {
-		let Some(value) = f.get(of).map(|v| v.to_string()) else { continue };
+		let Some(value) = f.get(of) else { continue };
+		// an absent optional step reads as Next's -1
+		let value = if value == Value::Absent { "-1".to_owned() } else { value.to_string() };
 		// a word's index among its kind's, for a combo box
 		if let ValueKind::Word(names) = f.kind() {
 			let index = names.iter().position(|n| *n == value).map_or(-1, |i| i as i32);
@@ -152,6 +155,14 @@ pub(crate) fn values(project: &Project, view: &View, node: Node) -> HashMap<Stri
 			});
 			values.insert("EmbeddedImage".into(), info.unwrap_or_default());
 		}
+		Node::Source(i) => {
+			let source = &project.sources[i];
+			values.insert("IsComposite".into(), source.array.is_some().to_string());
+			let sim = &project.simulation;
+			let lambda = wavelength(source.frequency, sim.wave_speed, sim.source_frequency_scale);
+			values.insert("Wavelength".into(), if lambda.is_finite() { format!("{lambda:.1}") } else { String::new() });
+			values.insert("NinePoint".into(), (sim.stencil == Stencil::NinePoint).to_string());
+		}
 		_ => {}
 	}
 	values
@@ -171,8 +182,12 @@ fn set_path<T: Fields>(of: &mut T, path: &str, text: &str) -> Result<(), String>
 			} else {
 				(f64::from(i32::MIN), f64::from(i32::MAX))
 			};
-			let (min, max) = field.range().map_or((min, max), |r| (r.min.max(min), r.max.min(max)));
-			Value::Int(v.clamp(min, max) as i64)
+			let (min, max) = field.range().map_or((min, max), |r| (r.min, r.max));
+			match v.clamp(min, max) {
+				// -1 of an optional step (its range's minimum) is no step
+				v if v < 0.0 && field.kind() == ValueKind::UInt => Value::Absent,
+				v => Value::Int(v as i64),
+			}
 		}
 		ValueKind::Float => Value::Float(crate::number::parse(text).ok_or_else(|| format!("{text} is no number"))?),
 		ValueKind::Word(names) => Value::Word(names.iter().find(|n| **n == text).ok_or("unknown choice")?),
@@ -183,6 +198,11 @@ fn set_path<T: Fields>(of: &mut T, path: &str, text: &str) -> Result<(), String>
 
 /// Sets the field at `path` of the object `node` stands for.
 pub(crate) fn set_at(project: &mut Project, view: &mut View, node: Node, path: &str, text: &str) -> Result<(), String> {
+	if let (Node::Source(i), "IsComposite") = (node, path) {
+		let array = &mut project.sources.get_mut(i).ok_or("no such source")?.array;
+		*array = (text == "true").then(|| array.take().unwrap_or_default());
+		return Ok(());
+	}
 	with_object!(project, view, node, |of| set_path(of, path, text), Err("nothing to edit".into()), mut)
 }
 
@@ -251,5 +271,12 @@ mod path_tests {
 		assert_eq!(v.video.fps, 30);
 		assert!(set_at(&mut p, &mut v, Node::Scene, "Width", "1.5").is_err());
 		assert_eq!(super::values(&p, &v, Node::Project)["Version"], PROJECT_VERSION.to_string());
+		// -1 is no detach step, both ways
+		p.sources.push(Default::default());
+		set_at(&mut p, &mut v, Node::Source(0), "DetachAfter", "30").unwrap();
+		assert_eq!(p.sources[0].detach_after, Some(30));
+		set_at(&mut p, &mut v, Node::Source(0), "DetachAfter", "-1").unwrap();
+		assert_eq!(p.sources[0].detach_after, None);
+		assert_eq!(super::values(&p, &v, Node::Source(0))["DetachAfter"], "-1");
 	}
 }
