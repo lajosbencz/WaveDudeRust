@@ -66,6 +66,9 @@ Settings and other documented divergences stand: docs/divergences.md, decisions 
 
 ## Progress
 
+What is done is measured against [`parity.md`](parity.md), the feature list of WaveDude Next; the table below is the
+history of the phases.
+
 | Phase | Done | Left |
 |---|---|---|
 | Skeleton | window, theme tokens, menus with shortcuts, pane layout, status bar, `just hot` | splitters, docking, Selawik font, icons |

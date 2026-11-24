@@ -7,6 +7,6 @@
 - [`divergences.md`](divergences.md): what differs from WaveDude Next on purpose, one line each, pointing to the decisions.
 - [`conventions.md`](conventions.md): how the code is written, each rule with a place in the code that shows it.
 - The crates are listed in [`WORKSPACE.md`](../WORKSPACE.md); the layout they move to is [decision 0031](decisions/0031-modular-core-and-frontends.md).
-- The frontend is rebuilt on Slint ([decision 0032](decisions/0032-slint-single-frontend.md)); [`rebuild.md`](rebuild.md) maps the app it replaces.
+- The frontend is rebuilt on Slint ([decision 0032](decisions/0032-slint-single-frontend.md)); [`rebuild.md`](rebuild.md) maps the app it replaces. [`parity.md`](parity.md) lists every feature of WaveDude Next and its state in the Slint app.
 - [`physics.md`](physics.md): discretisation, stability, dispersion and absorbers per the literature the engine tests follow.
 - [`figures/`](figures/): pictures the README shows.
