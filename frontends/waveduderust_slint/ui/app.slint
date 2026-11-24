@@ -269,8 +269,8 @@ export component AppWindow inherits Window {
         // an overlay: its frame sets no bounds on the window
         min-width: 0px;
         max-width: 100000px;
-        width: 100%;
-        height: 100%;
+        min-height: 0px;
+        max-height: 100000px;
         shown <=> root.welcome-shown;
         ram: root.welcome-ram;
         levers: root.welcome-levers;
@@ -283,8 +283,8 @@ export component AppWindow inherits Window {
         // an overlay: its frame sets no bounds on the window
         min-width: 0px;
         max-width: 100000px;
-        width: 100%;
-        height: 100%;
+        min-height: 0px;
+        max-height: 100000px;
         shown <=> root.examples-shown;
         topics: root.example-topics;
         topic: root.example-topic;
@@ -297,8 +297,8 @@ export component AppWindow inherits Window {
         // an overlay: its frame sets no bounds on the window
         min-width: 0px;
         max-width: 100000px;
-        width: 100%;
-        height: 100%;
+        min-height: 0px;
+        max-height: 100000px;
         shown <=> root.settings-shown;
         sections: root.settings-sections;
         section: root.settings-section;
@@ -310,8 +310,8 @@ export component AppWindow inherits Window {
         // an overlay: its frame sets no bounds on the window
         min-width: 0px;
         max-width: 100000px;
-        width: 100%;
-        height: 100%;
+        min-height: 0px;
+        max-height: 100000px;
         modal: root.modal;
         answer(i) => { root.modal-answer(i); }
     }
