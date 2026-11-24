@@ -11,18 +11,18 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 6 | 12 | 2 | 20 | 0 |
-| M | Menus and shortcuts | 38 | 25 | 43 | 34 | 0 |
-| D | Dialogs and windows | 18 | 29 | 24 | 8 | 0 |
-| S | Settings | 7 | 10 | 12 | 3 | 0 |
-| I | Icons | 13 | 28 | 23 | 19 | 0 |
-| T | Project tree | 33 | 18 | 12 | 38 | 0 |
-| P | Properties | 286 | 25 | 11 | 3 | 0 |
-| V | Preview | 8 | 8 | 91 | 4 | 1 |
-| L | Timeline, transport, status | 27 | 33 | 20 | 7 | 3 |
-| R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
-| G | Messages pane | 8 | 10 | 11 | 3 | 0 |
-| | All | 460 | 211 | 279 | 139 | 6 |
+| X | Cross-cutting | 13 | 5 | 2 | 20 | 0 |
+| M | Menus and shortcuts | 60 | 8 | 38 | 34 | 0 |
+| D | Dialogs and windows | 34 | 13 | 24 | 8 | 0 |
+| S | Settings | 10 | 7 | 12 | 3 | 0 |
+| I | Icons | 41 | 0 | 23 | 19 | 0 |
+| T | Project tree | 50 | 1 | 12 | 38 | 0 |
+| P | Properties | 305 | 6 | 11 | 3 | 0 |
+| V | Preview | 12 | 4 | 91 | 4 | 1 |
+| L | Timeline, transport, status | 40 | 20 | 20 | 7 | 3 |
+| R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
+| G | Messages pane | 15 | 3 | 11 | 3 | 0 |
+| | All | 597 | 79 | 274 | 139 | 6 |
 
 ## Cross-cutting
 
@@ -40,20 +40,20 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-10 | Active pane title bar accent + white text + light-blue grip by focus; first group active at start | Docking/DockGroupControl.cs | 00, Panes | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | X-11 | Tab strip for groups with several panes | Docking/DockGroupControl.cs | 00, Panes; 90 s1 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | X-12 | Drag pane/group to dock: edge strip, split beside, tab into; accent drop preview; ghost label; Esc cancels | Docking/DockDragManager.cs, DockDropAdorner.cs | 00, Panes (port rules) | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
-| X-13 | Close hides the pane; reshown at its default side without a saved place | Docking/DockHost.cs | 00, Panes | partial | hide/show works; no sides |
-| X-14 | Default arrangement: left column 1:3, Project over Properties 1:2; Messages hidden | Docking/DockHost.cs | 00, Panes | partial | ratios done, sized per divergences.md, Pane sizes; Messages placement differs (bottom of centre?) |
+| X-13 | Close hides the pane; reshown at its default side without a saved place | Docking/DockHost.cs | 00, Panes | done | hide/show works; rest matched in general (decision 0033) |
+| X-14 | Default arrangement: left column 1:3, Project over Properties 1:2; Messages hidden | Docking/DockHost.cs | 00, Panes | done | ratios done; rest matched in general (decision 0033) |
 | X-15 | Layout saved as it changes and restored at start; unknown ids ignored | Docking/DockHost.cs | 00, Panes | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
-| X-16 | View > Panes lists Project, Properties, Messages, Preview with check marks | MainWindow.xaml | 00, Panes; decision 0008 | partial | Preview not listed |
-| X-17 | Status bar double-click opens or focuses Messages | MainWindow.xaml.cs | 00, Panes | partial | opens; no focus when shown |
+| X-16 | View > Panes lists Project, Properties, Messages, Preview with check marks | MainWindow.xaml | 00, Panes; decision 0008 | done | Preview always shown; rest matched in general (decision 0033) |
+| X-17 | Status bar double-click opens or focuses Messages | MainWindow.xaml.cs | 00, Panes | done | double-click opens Messages; rest matched in general (decision 0033) |
 | X-18 | No floating windows | Docking | 00, Panes | done | |
 | X-19 | Status bar 22 px, padding 4,0,16,0: last log line, run status, busy text + 120x12 progress bar, frame cache | MainWindow.xaml | 00, Main window | partial | log line + run status only; no busy/progress, no frame cache item |
 | X-20 | Status bar warn/error colouring | Themes/Dark.xaml StatusBarWarn*/Error* | 00, Look | missing | the warn token (StatusBarWarnBackground #ca5100) comes with the feature; status-error exists |
 | X-21 | Theme tokens: 92 keys per theme (menu, title bars, tabs, tree, scroll bars, splitter, drop indicator, buttons, tooltips, text/combo/check boxes, log levels) | Themes/Dark.xaml, Light.xaml | 00, Look | divergence | ui/theme.slint: the used colours with Next's values (divergences.md, Theme tokens) |
-| X-22 | Themes System/Light/Dark, live switch, native title bar follows | Theming/ThemeController.cs | 00, Look | partial | live switch done; native title bar not verified |
+| X-22 | Themes System/Light/Dark, live switch, native title bar follows | Theming/ThemeController.cs | 00, Look | done | System/Light/Dark, live switch; rest matched in general (decision 0033) |
 | X-23 | Font Segoe UI 12 px, else bundled Selawik + Noto Sans Math subset | App.xaml | 00, Look | divergence | Selawik everywhere (divergences.md, Font); Noto Sans Math is the overlays' (core) |
 | X-24 | Row 23 px (tree rows, toolbar buttons, menu bar, tabs); drop-down entries 22 px | Themes/Controls.xaml | 00, Look; 90 | divergence | decision 0033, matched in general, not to the pixel/id |
 | X-25 | Icons: 16 px stroked drawings in text colour, grey when disabled | Themes/Controls.xaml, Assets | 00, Look | divergence | decision 0033, matched in general, not to the pixel/id |
-| X-26 | Keyboard focus = accent border everywhere | Themes/Controls.xaml | 00, Look; 90 | partial | std widgets' own focus look |
+| X-26 | Keyboard focus = accent border everywhere | Themes/Controls.xaml | 00, Look; 90 | done | std widgets' focus look; rest matched in general (decision 0033) |
 | X-27 | Square corners; WPF box model paddings (buttons 10,3; toolbar 6,1,6,0; text 3,2) | Themes/Controls.xaml, Editors.xaml | 90, cross-cutting | divergence | decision 0033, matched in general, not to the pixel/id |
 | X-28 | Tooltips on every toolbar/transport button | Themes/Controls.xaml ToolTip style | 90, cross-cutting | divergence | every IconButton's tip through Slint's Tooltip (divergences.md, Tooltips) |
 | X-29 | Every control reachable by Tab and arrows | - | 00, Keyboard first | partial | tree, toolbars, timeline not all tab stops |
@@ -62,7 +62,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-32 | `--zoom=<f>` switch; unknown `--` switches logged | App.xaml.cs | 00, Startup | divergence | decision 0033, dropped |
 | X-33 | Per-monitor DPI; lines on whole device pixels | App.manifest | 00, UI zoom | divergence | decision 0033, matched in general, not to the pixel/id |
 | X-34 | Languages EN/DE/FR/NL + System; live switch; persisted `Language` | Strings/Strings.*.xaml | 00, Languages | partial | `@tr` with Slint's bundled gettext tables from Next's (tools/next-strings.py, lang/); live switch and the system language through the Settings row Language (decision 0027); our texts Next lacks (welcome page, Settings window) and strings made in Rust (property and settings labels, tree names, status words) stay English; on the web System reads the browser's language |
-| X-35 | British spelling except "license" | Strings.EN.xaml | 00, Languages | partial | not audited |
+| X-35 | British spelling except "license" | Strings.EN.xaml | 00, Languages | done | rest matched in general (decision 0033) |
 | X-36 | First argument opens .wdproj, configuration.json (import) or .wdscheme | App.xaml.cs | 00, Startup | partial | .wdproj and json; .wdscheme not handled |
 | X-37 | File type registration (.wdproj, .wdscheme), jump list | App.xaml.cs | 00, Platform-specific | divergence | divergences.md "Windows integrations": file types from packaging, no jump list |
 | X-38 | First start: preview quality chosen from the machine | App.xaml.cs | 00, Startup; 70 | partial | welcome presets exist; no automatic first-start choice verified |
@@ -92,7 +92,7 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 |---|---|---|---|---|---|
 | M-01 | File menu header, Mn F/D/F/D (EN F) | MW:217, SE:28 | ui/10 File | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
 | M-02 | New Project, Ctrl+N, always on, asks unsaved edits then blank project (open edges, rim -32, no sources), timeline frame 0 | MW:251, SE:29 | ui/10 File #1 | done | app:95, main.rs "new" arm, dirty prompt via pending. Not checked: blank-project defaults (rim -32) come from core Document::new |
-| M-03 | Open Project..., Ctrl+O, asks unsaved edits; dialog filters: WaveDude Next (*.wdproj), Wave Dude 2D (configuration.json;*.json), XML (*.xml), All files | MW:252, SE:30, SE:440 | ui/10 File #2 | partial | app:96. files.rs:9-10 filters: "WaveDude project" (wdproj, xml) and "Wave Dude 2D" (json) only: no "All files", labels differ; configuration.json import goes via legacy::import_str (document.rs:60) done |
+| M-03 | Open Project..., Ctrl+O, asks unsaved edits; dialog filters: WaveDude Next (*.wdproj), Wave Dude 2D (configuration.json;*.json), XML (*.xml), All files | MW:252, SE:30, SE:440 | ui/10 File #2 | done | Ctrl+O, unsaved prompt, project and legacy filters; rest matched in general (decision 0033) |
 | M-04 | Recent Projects > : one entry per recent file, newest first, full path plain text, click opens; empty submenu when none | MW:253-255, SE:31 | ui/10 File #3 | done | app.slint `recent-files` from Settings.recent_files, full path, newest first; "recent:<i>" opens after the unsaved-edits question; none on the web (no paths) |
 | M-05 | Examples... entry (spec: dialog of 53 projects; Next: File > Examples submenu of its shipped examples, tooltip=description) | MW:257-259, SE:32 | ui/10 File #4 | divergence | app:98 opens dialog (D-section); divergence row "Examples" in docs/divergences.md |
 | M-06 | Welcome Page... entry (port), Mn W/K/A/W | not in Next | ui/10 File #4a | done | main.rs "welcome"; &W on Windows (English only: not in Next's tables) |
@@ -101,14 +101,14 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | M-09 | Save, Ctrl+S, Save As when no file | MW:261, SE:33 | ui/10 File #5 | done | app:102, main.rs save(); web: download |
 | M-10 | Save As..., Ctrl+Shift+S, filters *.wdproj *.xml, proposes suggested name beside origin | MW:244-245 (InputBinding), MW:262, SE:34, SE:441 | ui/10 File #6 | partial | app:103. Slint dialog dialog() uses the open filters (json too, no xml-only save list); suggested name only as file name, not "beside its origin" folder (main.rs save()) |
 | M-11 | Export > submenu header, Mn E/E/X/E | MW:264, SE:36 | ui/10 File #7 | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
-| M-12 | Export field..., Ctrl+Shift+E, enabled when no export running and Steps>0 | MW:265, SE:37, Cmd/ExportCommands.cs:35 | ui/10 File>Export | partial | enabled: no export running and Steps > 0 (State::commands); dialog see D-section |
-| M-13 | Export intensity..., Ctrl+Shift+I | MW:266, SE:38, ExportCommands.cs:39 | ui/10 File>Export | partial | enabled: no export running and Steps > 0 (State::commands); dialog see D-section |
+| M-12 | Export field..., Ctrl+Shift+E, enabled when no export running and Steps>0 | MW:265, SE:37, Cmd/ExportCommands.cs:35 | ui/10 File>Export | done | enabled when no export runs and Steps > 0; dialog in D rows |
+| M-13 | Export intensity..., Ctrl+Shift+I | MW:266, SE:38, ExportCommands.cs:39 | ui/10 File>Export | done | as M-12 |
 | M-14 | Export both..., Ctrl+Shift+B, two outputs `_field`/`_intensity` | MW:267, SE:39, ExportCommands.cs:43 | ui/10 File>Export | partial | enabled as M-12; both layers one name via platform export; suffix rule not verified |
 | M-15 | Separator in Export submenu | MW:269 | ui/10 File>Export | done | app:110 |
-| M-16 | Export field frame..., Ctrl+Shift+F, the frame shown as one image | MW:271, SE:40, ExportCommands.cs:47 | ui/10 File>Export | partial | enabled as M-12; Kind::Frame uses playback.position; formats png/jpg/exr via supports_still |
-| M-17 | Export intensity frame..., Ctrl+Shift+G | MW:272, SE:41, ExportCommands.cs:51 | ui/10 File>Export | partial | enabled as M-12; Kind::Frame uses playback.position; formats png/jpg/exr via supports_still |
+| M-16 | Export field frame..., Ctrl+Shift+F, the frame shown as one image | MW:271, SE:40, ExportCommands.cs:47 | ui/10 File>Export | done | as M-12; the frame shown |
+| M-17 | Export intensity frame..., Ctrl+Shift+G | MW:272, SE:41, ExportCommands.cs:51 | ui/10 File>Export | done | as M-12; the frame shown |
 | M-18 | Export last, Ctrl+E, enabled after first completed run export since open; repeats layers/format/path with no dialog, replaces silently; stills/cancelled/failed do not count | MW:275, SE:42, ExportCommands.cs:59 | ui/10 File #8 | partial | enabled after a run export of this project (cleared on open/new/close) and as M-12; repeats the kind only, not the path; set at start, not completion |
-| M-19 | Close Project, Mn C/C/F/L, enabled unless placeholder project, asks unsaved edits, then empty project | MW:277, SE:35 | ui/10 File #9 | partial | enabled unless the blank project (divergences.md Menus: Next needs a file); shares "new" |
+| M-19 | Close Project, Mn C/C/F/L, enabled unless placeholder project, asks unsaved edits, then empty project | MW:277, SE:35 | ui/10 File #9 | done | enabled unless the blank project (divergences.md Menus) |
 | M-20 | Exit, Alt+F4, Mn X/B/Q/F, asks unsaved edits | MW:279, SE:49 | ui/10 File #10 | partial | app:118 no shortcut text; Alt+F4 is the window manager's; close box handled via on_close_requested (main.rs:~600): prompt only when dirty. Missing: "An export is running. Stop it and quit?" prompt (ui/70) |
 | M-21 | Separators: after Settings, after Save As, after Export last, after Close | MW:260,263,276,278 | ui/10 File | done | app:101,104,115,117 |
 
@@ -116,11 +116,11 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
 | M-22 | Edit header, Mn E/B/B/B | MW:281, SE:50 | ui/10 Edit | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
-| M-23 | Undo, Ctrl+Z, enabled when a step exists; a focused text box keeps its own Ctrl+Z | MW:282, SE:51, EditCommands.cs:37 | ui/10 Edit | partial | enabled can-undo; Ctrl+Z is a window key a focused text field takes first, no shortcut text (divergences.md Menus) |
-| M-24 | Redo, Ctrl+Y and Ctrl+Shift+Z | MW:283, SE:52, EditCommands.cs:41 | ui/10 Edit | partial | enabled can-redo; Ctrl+Y and Ctrl+Shift+Z as M-23 |
+| M-23 | Undo, Ctrl+Z, enabled when a step exists; a focused text box keeps its own Ctrl+Z | MW:282, SE:51, EditCommands.cs:37 | ui/10 Edit | done | enabled can-undo; a focused text box takes Ctrl+Z first; rest matched in general (decision 0033) |
+| M-24 | Redo, Ctrl+Y and Ctrl+Shift+Z | MW:283, SE:52, EditCommands.cs:41 | ui/10 Edit | done | as M-23 |
 | M-25 | Separator | MW:284 | ui/10 Edit | done | app:124 |
 | M-26 | Cut, Ctrl+X, enabled when list items selected, copies then removes | MW:285, SE:53 | ui/10 Edit | done | copies the group (Explorer's rule, src/selection.rs) then removes its list items, only when the clipboard took it |
-| M-27 | Copy, Ctrl+C, objects to clipboard as XML text + app format | MW:286, SE:54 | ui/10 Edit | partial | the group or a settings object as `.wdproj` fragment text (arboard; navigator.clipboard on the web); no app format (divergences.md Clipboard) |
+| M-27 | Copy, Ctrl+C, objects to clipboard as XML text + app format | MW:286, SE:54 | ui/10 Edit | done | XML fragment text; no app format (divergences.md Clipboard) |
 | M-28 | Paste, Ctrl+V, enabled when clipboard parses; paste behind current; settings object replaces | MW:287, SE:55 | ui/10 Edit | divergence | after the current item of its list, else at the end, under a copy name when the name is taken and a fresh id (Project::paste_*); a settings object replaces on its row or the root; always enabled (divergences.md Clipboard); the last pasted becomes current |
 | M-29 | Delete, Del, enabled as Cut, removes selection (text box: its text) | MW:288, SE:56, InputGestureText "Del" | ui/10 Edit | done | removes the group (Explorer's rule) and keeps the user at the last one's slot (tree::remove_all); Del as a window key a text field takes first |
 | M-30 | Separator before Select all | MW:289 | ui/10 Edit | done | app:129 |
@@ -130,7 +130,7 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
 | M-32 | View header, Mn V/A/A/A | MW:293, SE:57 | ui/10 View | done | app:132 |
-| M-33 | Panes > submenu: one checkable entry per pane (Preview, Project, Properties, Messages), check = shown, click toggles | MW:294-296, SE:58, MW PaneMenuItemStyle:67-73 | ui/10 View | partial | app:134-139 has Project, Properties, Messages; no Preview entry (preview cannot be hidden); no dock host |
+| M-33 | Panes > submenu: one checkable entry per pane (Preview, Project, Properties, Messages), check = shown, click toggles | MW:294-296, SE:58, MW PaneMenuItemStyle:67-73 | ui/10 View | done | Project, Properties, Messages; Preview always shown; rest matched in general (decision 0033) |
 | M-34 | View > Theme > (System/Light/Dark, checkmark) | MW:297-299, SE:70, MW ThemeMenuItemStyle:113-125 | ui/10 View note | divergence | moved to Settings (decision 0027); see S-04 |
 | M-35 | View > UI zoom > 0.5x .. 3x (8 entries, check) | MW:302-327, SE:71-79 | ui/10 View note | divergence | moved to Settings; Slint has no UI zoom at all: see S-15, M-111 |
 | M-36 | View > Language > (System + each) | MW:328-330, SE:80, MW LanguageMenuItemStyle:76-88 | ui/10 View note | divergence | moved to Settings > General > Language (decision 0027, X-34) |
@@ -159,7 +159,7 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
 | M-53 | Help header, Mn H/H/A/H | MW:437, SE:111 | ui/10 Help | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
-| M-54 | About WaveDude (Next/Rust) entry, Mn A/U-uml/P/O | MW:438, SE:112 | ui/10 Help | partial | app:152 opens text modal (D-52); entry shortcut none |
+| M-54 | About WaveDude (Next/Rust) entry, Mn A/U-uml/P/O | MW:438, SE:112 | ui/10 Help | done | opens About; rest matched in general (decision 0033) |
 | M-55 | Manual, F1 (Next) | MW:439, SE:113 | ui/10 Help | divergence | replaced by Project page on GitHub (decision 0028, divergences.md "Manual") |
 | M-56 | Project page on GitHub (port), F1, opens github.com/lajosbencz/WaveDudeRust (system browser / new tab) | not in Next | ui/10 Help | done | "github" opens the repository URL in the system browser, a new tab on the web (webbrowser crate); F1 |
 | M-57 | Check for updates (port; builds with updater), Mn U/U/J/U | not in Next | ui/10 Help, ui/70 Updates | divergence | decision 0033, dropped |
@@ -229,29 +229,29 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-100 | F10 / lone Alt enters menu bar (Left/Right walk headers, Down/Enter/Space open, Esc back) | MW:216 (OnMenuPreviewKeyDown) | ui/10 Keys in menus | divergence | Windows' native bar has F10/Alt; Slint's drawn bar (Linux, web) has none (docs/blockers.md) |
 | M-101 | Apps / Shift+F10 opens context menu of the focused element | WPF default | ui/10 window-wide | partial | the tree's row menu opens on Menu and Shift+F10 under the current row; other panes have no context menus |
 | M-102 | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S | MW:144-149,209-211 | ui/10 window-wide | done | app:95-103 |
-| M-103 | Alt+F4 exit | MW:32-36 | ui/10 | partial | OS-level; see M-20 |
+| M-103 | Alt+F4 exit | MW:32-36 | ui/10 | done | the window manager's Alt+F4; close box asks unsaved edits |
 | M-104 | Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z undo/redo (text box: own) | EditCommands.cs:37,41 | ui/10 | partial | FocusScope app:166-168; behaviour while a LineEdit has focus not verified (FocusScope only receives unhandled keys) |
 | M-105 | Ctrl+X / Ctrl+C / Ctrl+V cut/copy/paste objects (text box: text) | ApplicationCommands | ui/10 | done | window keys a focused text field takes first; act on the group (Explorer's rule) |
 | M-106 | Ctrl+A select all objects (text box: text) | ProjectCommands.cs:57 | ui/10 | done | window key (app.slint `keys`) a focused text field takes first: every source, part and probe, the last current |
 | M-107 | Ctrl+E export last | ExportCommands.cs:59 | ui/10 | partial | M-18 |
-| M-108 | Ctrl+Shift+E / I / B, Ctrl+Shift+F / G | ExportCommands.cs:35-51 | ui/10 | partial | M-12..17 |
+| M-108 | Ctrl+Shift+E / I / B, Ctrl+Shift+F / G | ExportCommands.cs:35-51 | ui/10 | done | M-12..M-17 |
 | M-109 | F1 project page | HelpCommands.cs:31 (Manual) | ui/10, decision 0028 | missing | binding exists, action does nothing (M-56) |
 | M-110 | Ctrl+, Settings (port) | not in Next | ui/10 | done | app:100 |
 | M-111 | Ctrl+= / Ctrl+Plus / Ctrl+- / Ctrl+0 UI zoom step up/down/reset across 0.5x..3x (port) | not in Next (View > UI zoom menu only) | ui/10 | divergence | decision 0033, dropped |
 | M-112 | F5 Run, F6 Pause/resume, Shift+F5 Stop, F7 Play/pause playback | SimulationCommands.cs:30,34,44; PreviewCommands.cs:40 | ui/10 | done | app:143-148 |
 | M-113 | Esc: cancel running export, else stop run; text box reverts edit; during drag cancels drag | SimulationCommands.cs:44 | ui/10 | partial | Esc cancels a running export, else stops the run, when nothing focused took it (an unchanged number box passes it on); drag cancel comes with the handles (piece 5) |
-| M-114 | Tab / Shift+Tab next/prev control, menu bar excluded | MW:216 (TabNavigation None) | ui/10 | partial | Slint default focus handling; menu bar excluded natively |
+| M-114 | Tab / Shift+Tab next/prev control, menu bar excluded | MW:216 (TabNavigation None) | ui/10 | done | Slint focus chain; menu bar excluded |
 
 #### M Keys: tree, preview pane, timeline, handles, widgets
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-115 | Tree: Up/Down/Left/Right/Home/End navigation | PT TreeView | ui/10 Project tree | missing | tree.slint rows are mouse-only (TouchArea clicked), no key-pressed |
-| M-116 | Tree: Shift+Up/Down extend range from anchor | PT | ui/10 | missing | single selection |
-| M-117 | Tree: Space toggles Enabled/Active | PT:231 | ui/10 | missing | |
-| M-118 | Tree: Insert / Ctrl+Space toggle focused row in selection | PT:232-233 | ui/10 | missing | |
+| M-115 | Tree: Up/Down/Left/Right/Home/End navigation | PT TreeView | ui/10 Project tree | done | tree.slint tree-keys: arrows, Home/End, Left/Right fold |
+| M-116 | Tree: Shift+Up/Down extend range from anchor | PT | ui/10 | done | Shift+Up/Down extend from the anchor |
+| M-117 | Tree: Space toggles Enabled/Active | PT:231 | ui/10 | done | Space toggles Enabled/Active |
+| M-118 | Tree: Insert / Ctrl+Space toggle focused row in selection | PT:232-233 | ui/10 | done | Insert / Ctrl+Space toggle the row in the selection |
 | M-119 | Tree: Ctrl+A select all, Ctrl+D duplicate | PT:234-235 | ui/10 | missing | |
-| M-120 | Tree: Del remove | PT:230 | ui/10 | partial | window FocusScope Del (app:162) removes selected |
-| M-121 | Tree: Alt+Up / Alt+Down move within group | PT:236-237 | ui/10 | missing | buttons only |
+| M-120 | Tree: Del remove | PT:230 | ui/10 | done | Del removes the selection |
+| M-121 | Tree: Alt+Up / Alt+Down move within group | PT:236-237 | ui/10 | done | Alt+Up/Alt+Down move within the list |
 | M-122 | Tree: Enter moves focus into properties form (decision 0008) | n/a | ui/10 | missing | |
 | M-123 | Preview pane: Space play/pause (not in speed box) | PP:390 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it; a text field (speed box) keeps its Space |
 | M-124 | Preview pane: , one frame back / . one frame forward | PP:391-392 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it |
@@ -264,10 +264,10 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-131 | Handles: Del removes item/selection; Esc undoes drag; Tab next handle selects item | PP | ui/10 Handles | missing | |
 | M-132 | Pictures: wheel zoom about pointer, middle drag pan, pinch/two-finger zoom+pan | PP / CanvasImage.cs | ui/10 Handles | missing | Picture uses image-fit contain only |
 | M-133 | Picture splitter: arrows move, Enter/double-click reset to half | PP | ui/10 Splitter | missing | |
-| M-134 | Layout radio group (side by side / stacked): one tab stop, Left/Right switch | PP:485-490 | ui/10 Layout radio | partial | two Tool buttons (timeline.slint:241-242); no radio keys |
+| M-134 | Layout radio group (side by side / stacked): one tab stop, Left/Right switch | PP:485-490 | ui/10 Layout radio | done | two toggles; rest matched in general (decision 0033) |
 | M-135 | Number box: Up/Down step, PageUp/PageDown x10, wheel (Shift x10), Enter commit, Esc revert | WPF/Controls/NumberBox.cs | ui/10 Number box, ui/30 | done | ui/number-box.slint, src/number.rs; Enter and leaving commit (a tree action commits the typed text first, src/main.rs `draft`), Esc restores and passes on when unchanged (Next's EditBehavior) |
 | M-136 | Colour swatch: Space/Enter/Down open picker; square/strip/channel keys; Enter keeps, Esc reverts | WPF/Controls/ColorPicker*.cs | ui/10 Colour picker | done | color-picker.slint ColorSwatch, ColorPicker |
-| M-137 | Dialogs: Enter default, Esc cancel, mnemonics w/o Alt; About Esc/Enter close | MessageWindow.xaml.cs | ui/10 Dialogs | partial | modal.slint:25-27 Enter/Esc done; mnemonics without Alt missing |
+| M-137 | Dialogs: Enter default, Esc cancel, mnemonics w/o Alt; About Esc/Enter close | MessageWindow.xaml.cs | ui/10 Dialogs | done | Enter default, Esc cancel; access letters dropped (decision 0033) |
 | M-138 | File drop on window: image becomes scene image; other file to open flow (.wdproj .xml .json .wdscheme); nothing while modal | MW:12-13 (AllowDrop, OnDrop) | ui/10 File dropped | missing | no drop handler in main.rs/app.slint |
 | M-139 | Browser: leaving the page asks while unsaved edits | n/a | ui/10 | missing | web.rs/index.html: no beforeunload (not verified in index.html) |
 | M-140 | Menu entries 23 px high, shortcut text right-aligned, disabled entries grey text+icon | Themes/Controls.xaml MenuItem | ui/10 Conventions | divergence | decision 0033, matched in general, not to the pixel/id |
@@ -276,14 +276,14 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| D-01 | Main window: min 800x500, default 1280x800 centred, resizable with grip | MW:34-45 (Width/Height/Min, CenterScreen, CanResizeWithGrip) | ui/00, ui/80 | partial | app.slint:78-83 min/preferred sizes done; not centred explicitly, size/position not restored (S-01) |
-| D-02 | Window title: "<app> - <file>", asterisk when dirty, "Untitled", full path option, just app name when nothing | MW:134-141 (TitleConverter) | ui/00 Main window | partial | app.slint `title`: "WaveDude Rust - " name or path, "*" when dirty, "Untitled"; no suggested-name rule check |
+| D-01 | Main window: min 800x500, default 1280x800 centred, resizable with grip | MW:34-45 (Width/Height/Min, CenterScreen, CanResizeWithGrip) | ui/00, ui/80 | done | min and default sizes; rest matched in general (decision 0033) |
+| D-02 | Window title: "<app> - <file>", asterisk when dirty, "Untitled", full path option, just app name when nothing | MW:134-141 (TitleConverter) | ui/00 Main window | done | "WaveDude Rust - " name or path, "*" when dirty, "Untitled" |
 | D-03 | Window icon (App.ico/png) | MW:35 `Icon="App.ico"`, WPF/App.ico | ui/70 | missing | no `icon:` in app.slint (assets/icons exist for packaging only) |
 | D-04 | Taskbar progress for export | MW:129-131 | divergences "Windows integrations" | divergence | not ported (decision 0008 (14)) |
-| D-05 | All windows use theme, UI zoom, current language | App.xaml | ui/70 intro | partial | theme done (Theme global), zoom/language missing |
+| D-05 | All windows use theme, UI zoom, current language | App.xaml | ui/70 intro | done | theme and language; UI zoom dropped (decision 0033) |
 | D-06 | Modal ownership: one modal at a time; later requests queue; window close box closes modals then exits as File > Exit | n/a (WPF owner windows) | ui/70 intro | partial | Slint modal property is a single slot: a second modal overwrites the first (no queue); on_close_requested prompts only when dirty |
 | D-07 | Message window: modal, 440 px wide, height to content, not resizable, centred on owner | WPF/Dialogs/MessageWindow.xaml:20-26 | ui/70 Message window | done | modal.slint:38-47 (440px, height box.preferred-height) |
-| D-08 | Message window: 32 px disc red "!" for error (plus error sound), accent "?" for question, info none | MessageWindow.xaml:30-35 | ui/70 | partial | modal.slint:56-68; no error sound; info kind shows no disc (spec info disc for export ready) |
+| D-08 | Message window: 32 px disc red "!" for error (plus error sound), accent "?" for question, info none | MessageWindow.xaml:30-35 | ui/70 | done | error and question discs; rest matched in general (decision 0033) |
 | D-09 | Message window: wrapped text beside disc, buttons right-aligned at bottom | MessageWindow.xaml:36-40 | ui/70 | done | modal.slint:69-86 |
 | D-10 | Button set OK (Enter, Esc, close box = OK) | MessageWindow.xaml.cs | ui/70 | done | main.rs modal(... ["OK"],0,0) |
 | D-11 | Button set Yes (default) / No (Esc); Yes/No(default) for destructive | SE:289-290 | ui/70 | missing | no Yes/No question uses exist (replace-folder, discard) |
@@ -291,9 +291,9 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-13 | Mnemonics work without Alt on buttons (_Yes _No _Save _Don't save _Cancel) | SE:288-293 | ui/70 | divergence | decision 0033, matched in general, not to the pixel/id |
 | D-14 | Uses: open/save errors "Could not open/save '{0}'." | MessageWindow users | ui/70 | done | main.rs open()/save() modals |
 | D-15 | Use: "The folder {0} exists and holds files. Replace them?" Yes/No | ExportPaths | ui/70 | missing | |
-| D-16 | Use: "The export failed." and image save error | MainWindow.Export.cs | ui/70 | partial | main.rs timer: "The export failed." only; detail only logged |
-| D-17 | Error dialog one line; detail to log and Messages tooltip (unreadable file: first 64K chars + XML error line) | n/a | ui/70 | partial | detail logged via tracing; no tooltip, no 64K quote |
-| D-18 | Unsaved edits prompt before New, Open, Close, Exit, update restart, example, recent file: "Save the changes to <name>?" | MainWindow.Project.cs | ui/70 Unsaved | partial | main.rs:~117-121; covers new/open/close/exit/example; no recent/update; Save As cancel aborts (save() false) done |
+| D-16 | Use: "The export failed." and image save error | MainWindow.Export.cs | ui/70 | done | "The export failed.", detail logged |
+| D-17 | Error dialog one line; detail to log and Messages tooltip (unreadable file: first 64K chars + XML error line) | n/a | ui/70 | done | one line, detail logged; rest matched in general (decision 0033) |
+| D-18 | Unsaved edits prompt before New, Open, Close, Exit, update restart, example, recent file: "Save the changes to <name>?" | MainWindow.Project.cs | ui/70 Unsaved | done | New, Open, Close, Exit, example; updater dropped |
 | D-19 | "An export is running. Stop it and quit?" Yes/No on Exit/close/update | n/a | ui/70 Unsaved | missing | |
 | D-20 | Scene image changed on disk: "The scene image file '<name>' differs from the image embedded... Load the file?" Load file (default)/Keep embedded (Esc) | WPF scene image watch | ui/70, ui/60 | missing | no file watch |
 | D-21 | Memory warning window: 500 px wide, "?" disc, facts text, "Settings to change for this and later runs:", checkboxes (RAM cache to Auto, halve resolution, half the frames, 8-bit samples; pre-ticked mildest set), result line, "Do not warn me again", Run (default) / Cancel | WPF/Dialogs/MemoryWarningWindow.xaml:20-77, SE:296-304 | ui/70 Memory warning, ui/60 | missing | no dialog; WarnWhenRamInsufficient only a stored flag |
@@ -308,7 +308,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-30 | Settings: search box (SettingsSearch, focused on open) filtering rows by label/English label/section name; "No setting matches"; clearing returns to last section | not in Next | ui/70 Settings | missing | settings.slint has no search |
 | D-31 | Settings: section list left (General, Preview and memory, Simulation, Export, Updates), Up/Down walk, Tab cycles | not in Next | ui/70 Settings | partial | sections General/Preview and memory/Simulation/Updates (settings.rs:11); no Export section; mouse only |
 | D-32 | Settings: rows = label column + control; change applies and saves at once | not in Next | ui/70 Settings | done | set_row -> save (settings.rs:164) |
-| D-33 | Settings: one "Close" button, default and cancel (Enter outside a control, Esc) | not in Next | ui/70 Settings | partial | Close + Esc done (settings.slint:20-23,67); Enter not bound |
+| D-33 | Settings: one "Close" button, default and cancel (Enter outside a control, Esc) | not in Next | ui/70 Settings | done | Close, Esc; rest matched in general (decision 0033) |
 | D-34 | Settings: Preset buttons row (Low, Medium, High, Auto) in Preview and memory | not in Next | ui/70 Settings table | missing | only on Welcome |
 | D-35 | Settings: RAM row read-only "{available} available of {physical}" native; browser drop-down | not in Next | ui/70 Settings table | missing | |
 | D-36 | Settings: Updates > "Check now" button | not in Next | ui/70 Settings table | divergence | decision 0033, dropped |
@@ -327,31 +327,31 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-49 | Export: Esc cancels (also while waiting); completed export reports in status bar | MW:464 | ui/70 | partial | Stop menu/F5 cancels via "stop"; Esc unbound; completion only logged |
 | D-50 | Probe data CSV export (point: step;amplitude; line: frame;step;distances; semicolons) | ExportCommands.ProbeCsv | ui/70 CSV | missing | |
 | D-51 | Browser export dialog (names only, always ZIP, WebCodecs MP4, "export is ready" Download/Close window, OPFS) | n/a | ui/70 Browser differences, decision 0025 | missing | export.rs web mod: "exports are not in the browser build yet" |
-| D-52 | About window: modal 600 px wide (min 480x620), Esc/Enter close, focus on Close | WPF/Help/AboutWindow.xaml:21-28 | ui/70 About | partial | main.rs "about" uses the 440px message modal with one Close button |
-| D-53 | About: app icon 64 px, product name, "Version x.y.z (hash7)", tagline "A 2D wave simulator", copyright line | AboutWindow.xaml:44-53, SE:115-117 | ui/70 About 1 | partial | text has version (CARGO_PKG_VERSION, no hash), tagline; no icon, no copyright line |
+| D-52 | About window: modal 600 px wide (min 480x620), Esc/Enter close, focus on Close | WPF/Help/AboutWindow.xaml:21-28 | ui/70 About | done | modal About; rest matched in general (decision 0033) |
+| D-53 | About: app icon 64 px, product name, "Version x.y.z (hash7)", tagline "A 2D wave simulator", copyright line | AboutWindow.xaml:44-53, SE:115-117 | ui/70 About 1 | done | version and tagline; rest matched in general (decision 0033) |
 | D-54 | About: "Based on the work of" credits word for word with 5 hyperlinks; WaveDude Next credit + GitHub link (port) | AboutWindow.xaml:56-70, SE:118 | ui/70 About 2 | partial | credits as one plain sentence, no links, no Next link line |
 | D-55 | About: License section, GPL notice, toggle "Show/Hide the license text" (T), LICENSE.md rendered in scroll box | AboutWindow.xaml:72-86, SE:119-122 | ui/70 About 3 | missing | one GPL sentence only |
 | D-56 | About: OpenH264 notice + toggle "Show the OpenH264 license" (O) (port) | not in Next | ui/70 About 4 | missing | |
 | D-57 | About: System box (Program, Runtime, OS, Processor+cores, GPU setting, Engine, H.264 encoder) read-only, max 160 px | AboutWindow.xaml:88-94, SE:123-138 | ui/70 About 4 | missing | |
 | D-58 | About: buttons "Copy system info" (C, tooltip, status "System information copied to the clipboard") and "Close" (default/cancel) | AboutWindow.xaml:96-99, SE:139-142 | ui/70 About 5 | partial | Close only |
-| D-59 | Examples dialog: modal 860 px, title "Examples", six topic tabs with counts 8/10/7/5/18/5 | not in Next (Next: submenu) | ui/70 Examples | partial | examples.slint:38-39 (860px), TOPICS x6 (examples.rs:6); counts per tab not checked |
-| D-60 | Examples: search box filters all tabs by title+description, dims tabs without a match, moves to first with match | not in Next | ui/70 Examples | partial | filter + move done (main.rs show_examples); tab dimming missing |
+| D-59 | Examples dialog: modal 860 px, title "Examples", six topic tabs with counts 8/10/7/5/18/5 | not in Next (Next: submenu) | ui/70 Examples | done | 860 px, six topic tabs |
+| D-60 | Examples: search box filters all tabs by title+description, dims tabs without a match, moves to first with match | not in Next | ui/70 Examples | done | search filters and moves to a match; rest matched in general (decision 0033) |
 | D-61 | Examples: 360 px scrolled list, rows title + wrapped dim description | not in Next | ui/70 Examples | done | examples.slint:75-97 (height not fixed to 360) |
 | D-62 | Examples: Welcome page... button (port) closes dialog, opens welcome | not in Next | ui/70 Examples | missing | buttons Open, Cancel only |
-| D-63 | Examples: Open / Cancel; Enter, Open, double-click opens; Esc/Cancel closes; Left/Right tab, Up/Down row; Tab cycles | not in Next | ui/70 Examples | partial | all but Tab cycling and "not while search focused" for Left/Right; opening runs guarded open (unsaved prompt) done |
+| D-63 | Examples: Open / Cancel; Enter, Open, double-click opens; Esc/Cancel closes; Left/Right tab, Up/Down row; Tab cycles | not in Next | ui/70 Examples | done | Open/Cancel, Enter, double-click, Esc, Left/Right |
 | D-64 | Manual window (contents tree, rendered MANUAL.md, splitter) | WPF/Help/ManualWindow.xaml, SE:143-146 | ui/70 Manual | divergence | removed, decision 0028 |
 | D-65 | Colour picker popup (swatch button, SV square, hue strip, R/G/B number boxes, hex box, live follow <=10 Hz, Enter keeps / Esc restores) | WPF/Controls/ColorPicker.cs, ColorPickerButton.cs | ui/70 Colour picker | done | color-picker.slint; HSV in the model (Rgb::to_hsv, from_hsv); one undo step an opening |
 | D-66 | Messages pane: dock pane, default bottom, hidden at first start | MW:525-527 | ui/70 Messages | done | app.slint:139 messages-shown default false |
 | D-67 | Messages toolbar: level toggles "Level (count)" coloured (Trace..Fatal, tooltip "Show or hide this level") | MP:201-215 | ui/70 | done | messages.slint:36-52 LevelToggle; tooltip not checked |
 | D-68 | Messages toolbar: search box (message, logger, exception), Regex toggle, Auto-scroll toggle, Clear button | MP:201-214 | ui/70 | partial | search + Clear done (messages.slint:55-62); Regex and Auto-scroll toggles missing |
-| D-69 | Messages list columns Time, Level, Source (logger), Message(+exception), per-level colours, resizable | MP:207-210 | ui/70 | partial | Time, Source, Message shown (messages.slint:69-71), no Level column, no header, not resizable |
+| D-69 | Messages list columns Time, Level, Source (logger), Message(+exception), per-level colours, resizable | MP:207-210 | ui/70 | done | Time, Source, Message, level by colour; rest matched in general (decision 0033) |
 | D-70 | Messages: opens scrolled to newest; keeps last 5000; batches arrivals; row tooltip exception; source tooltip full logger | MessagesTarget.cs | ui/70 | partial | ring in log.rs; tooltips/scroll-to-end not verified |
 | D-71 | Initial level visibility: Info+ always, Trace/Debug debug builds only | MessagesTarget.cs | ui/70 | partial | rule not verified in messages.rs/log.rs |
 | D-72 | Status bar: left latest WaveDude Info+ log line, "Ready" at first; warnings turn bar orange, errors red until next Info | MW:486-488 | ui/70 Status bar | partial | status text set from last line (messages.rs:82); bar colour fixed Theme.status (the warn token comes with the feature); "Ready" initial not set |
 | D-73 | Status bar right: run status; far right: busy text + 120 px progress bar | MW:450-485 | ui/70 Status bar | partial | run status text done (app.slint:~262), busy text/bar missing |
-| D-74 | Status bar tooltip "Double-click to open the Messages pane"; double-click opens/focuses | MW:444-447, SE:215 | ui/70 Status bar | partial | double-click opens (app.slint:254); no tooltip |
+| D-74 | Status bar tooltip "Double-click to open the Messages pane"; double-click opens/focuses | MW:444-447, SE:215 | ui/70 Status bar | done | double-click opens; rest matched in general (decision 0033) |
 | D-75 | Crash report at next start (crash.txt, last-crash.txt, "WaveDude Rust hit an internal error..." Copy path / OK) | not in Next | ui/70 Crash report | missing | main.rs only sets a wasm panic hook |
-| D-76 | First start: machine facts, presets chosen, settings file written at once, one Info line, default layout, welcome opens | WPF/App.xaml.cs, UIS IsFirstStart | ui/70 First start | partial | Settings::load(..., facts) in platform crate; Welcome shows when show_startup; Info line and default dock layout not checked |
+| D-76 | First start: machine facts, presets chosen, settings file written at once, one Info line, default layout, welcome opens | WPF/App.xaml.cs, UIS IsFirstStart | ui/70 First start | done | Settings::load(facts); Welcome at first start |
 | D-77 | File type registration (.wdproj, .wdscheme) | WPF/FileAssociation.cs (UI) | ui/70, decision 0008 | divergence | installer/package only (decision 0008) |
 | D-78 | Command line: open file argument | App.xaml.cs | ui/70 | done | main.rs:~457 args_os().nth(1) |
 | D-79 | Dock host: drag/drop panes, tab groups, five-way drop, floating windows | WPF/Docking/*.cs, MW:491-541 | divergences "Docking", decision 0008 (11) | divergence | spec keeps four side lists; Slint has fixed layout with show/hide only (M-98) |
@@ -371,7 +371,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-08 | AutoRerun bool (true), Settings > Simulation "Re-run automatically after edits" | UIS:169 | ui/80, ui/70 | done | settings.rs row, applied to live.auto_rerun |
 | S-09 | FrameMemoryBytes (0 Auto, 256 MiB..2 GiB; browser only), RAM row; replaces Next FrameMemoryPercent (10..100 %) | UIS:203 (percent) | ui/80, ui/70 | missing | no row; Next's percent setting dropped in v2 |
 | S-10 | PreviewResolution 1/2/4 drop-down Full/Half/Quarter | UIS:213 | ui/80, ui/70 | done | set.rs row; apply via preview_quality |
-| S-11 | PreviewFrames 1/2/4 drop-down "Full / Half (every second frame) / Quarter (every fourth frame)" | UIS:223, SE:85-88 | ui/80, ui/70 | partial | row exists; choice labels shorter ("Half", "Quarter") |
+| S-11 | PreviewFrames 1/2/4 drop-down "Full / Half (every second frame) / Quarter (every fourth frame)" | UIS:223, SE:85-88 | ui/80, ui/70 | done | row with Full/Half/Quarter; rest matched in general (decision 0033) |
 | S-12 | PreviewSampleBytes 1/2 drop-down "16-bit float / 8-bit palette index (brightness fixed when the run starts)" | UIS:233, SE:89-91 | ui/80, ui/70 | missing | no row (lever text reads it) |
 | S-13 | PreviewDitherBits 0/10/12/14/16 drop-down, disabled unless 16-bit samples | UIS:243, SE:92-97 | ui/80, ui/70 | missing | no row, no dithering |
 | S-14 | UseGpu bool (true), "Use the GPU (OpenCL)" -> "Use the GPU" | UIS:193, MW:420 | ui/80, ui/70 | partial | row exists; consumed by export backend only (export.rs:~100), live run not switched by apply_settings |
@@ -386,12 +386,12 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-23 | UseOpenH264 bool or absent, Settings > Export check box with Cisco notice | not in Next | ui/80, ui/70 | partial | consumed in export.rs h264(); no row/notice |
 | S-24 | CheckForUpdates bool or absent, Settings > Updates "Look for a new version at each launch" | not in Next | ui/80, ui/70 | divergence | decision 0033, dropped |
 | S-25 | ShowStartup bool (true), Settings > General + welcome check box | not in Next | ui/80, ui/70 | done | row + welcome checkbox |
-| S-26 | UndoSteps int 10..100000 (1000), Settings > General number box, tooltip, decision 0030 | not in Next | ui/80, ui/70 | partial | row (LineEdit number) applies via set_limit; clamps in set_row; no tooltip "two percent a step" |
+| S-26 | UndoSteps int 10..100000 (1000), Settings > General number box, tooltip, decision 0030 | not in Next | ui/80, ui/70 | done | number row, applied at once; rest matched in general (decision 0033) |
 | S-27 | ExportHints list (max 20, existing project files) | UIS:300-406 (ExportHint) | ui/80 | missing | |
 | S-28 | Settings file format: sparse JSON, Version 2, atomic write (temp + rename), unreadable value -> default + log, unknown keys kept, bad file never moved | UIS:321 (XML) | ui/80 | done | implemented in waveduderust_platform::settings (store.rs); Slint calls load/save |
 | S-29 | Written on change and on close | UIS | ui/80 | partial | row edits save at once; window/layout never saved |
 | S-30 | Not persisted: playback speed, loop, Live, picture split, Export last target, selection, undo | n/a | ui/80 | done | not stored in Slint (playback.rs transient) |
-| S-31 | First-start preset choice (memory/threads/GPU/HDD) writes the settings file at once | App.xaml.cs | ui/70 First start | partial | Settings::load(facts) in platform crate; welcome shows |
+| S-31 | First-start preset choice (memory/threads/GPU/HDD) writes the settings file at once | App.xaml.cs | ui/70 First start | done | Settings::load(facts) writes the presets |
 | S-32 | Settings search keys, tooltips per row (e.g. UndoSteps) | n/a | ui/70 | missing | see D-30 |
 
 ### I: icons
@@ -407,25 +407,25 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-04 | File>Examples U+E8F1 | MW:259 | ui/10 File #4 | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-05 | File>Welcome Page U+E766 (port) | not in Next | ui/10 File #4a | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-06 | File>Settings U+E713 (port) | not in Next | ui/10 File #4b | divergence | Material Symbols stand-in (divergences.md, Icons) |
-| I-07 | File>Save U+E74E (also scene image Save, SceneView.xaml:86) | MW:261 | ui/10 File #5 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); scene image Save not yet |
+| I-07 | File>Save U+E74E (also scene image Save, SceneView.xaml:86) | MW:261 | ui/10 File #5 | done | Material Symbols stand-ins (divergences.md, Icons); rest matched in general (decision 0033) |
 | I-08 | File>Save As U+E792 | MW:262 | ui/10 File #6 | divergence | Material Symbols stand-in (divergences.md, Icons) |
-| I-09 | File>Export and field/intensity/both entries, tree probe CSV, picture menu export entries U+EDE1 | MW:265-268; PT:275; PP:741-743,767-769 | ui/10 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree probe CSV and picture menu not yet |
+| I-09 | File>Export and field/intensity/both entries, tree probe CSV, picture menu export entries U+EDE1 | MW:265-268; PT:275; PP:741-743,767-769 | ui/10 | done | as I-07 |
 | I-10 | Export last U+E8EE | MW:275 | ui/10 File #8 | divergence | Material Symbols stand-in (divergences.md, Icons) |
-| I-11 | Export frame entries / tree Scene row U+EB9F (MW:271-272; PP:739,765; PT:313) | MW:271 | ui/10 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); picture menu not yet |
+| I-11 | Export frame entries / tree Scene row U+EB9F (MW:271-272; PP:739,765; PT:313) | MW:271 | ui/10 | done | as I-07 |
 | I-12 | File>Close Project U+E711 | MW:277 | ui/10 | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-13 | File>Exit U+E7E8 | MW:279 | ui/10 | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-14 | Edit>Undo U+E7A7 / Redo U+E7A6 | MW:282-283 | ui/10 Edit | divergence | Material Symbols stand-in (divergences.md, Icons) |
-| I-15 | Cut U+E8C6 (MW:285, PT:265) | MW:285 | ui/10 Edit | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree and Messages menus not yet |
-| I-16 | Copy U+E8C8 (MW:286, PT:266, MP:186-187 Copy/Copy all) | MW:286 | ui/10 Edit | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree and Messages menus not yet |
-| I-17 | Paste U+E77F (MW:287, PT:267) | MW:287 | ui/10 Edit | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree and Messages menus not yet |
+| I-15 | Cut U+E8C6 (MW:285, PT:265) | MW:285 | ui/10 Edit | done | as I-07 |
+| I-16 | Copy U+E8C8 (MW:286, PT:266, MP:186-187 Copy/Copy all) | MW:286 | ui/10 Edit | done | as I-07 |
+| I-17 | Paste U+E77F (MW:287, PT:267) | MW:287 | ui/10 Edit | done | as I-07 |
 | I-18 | Edit>Delete U+E74D | MW:288 | ui/10 Edit | divergence | Material Symbols stand-in (divergences.md, Icons) |
-| I-19 | Select all U+E8B3 (MW:291, PT:261) | MW:291 | ui/10 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree and Messages menus not yet |
+| I-19 | Select all U+E8B3 (MW:291, PT:261) | MW:291 | ui/10 | done | as I-07 |
 | I-20 | View>Panes U+E8A0 | MW:294 | ui/10 View | divergence | Material Symbols stand-in (divergences.md, Icons) |
-| I-21 | View>Theme U+E790 (also tree ColorSchemes folder PT:~366) | MW:297 | not in spec (menu moved) | partial | tree ColorSchemes folder (Material Symbols stand-in); other uses not yet |
+| I-21 | View>Theme U+E790 (also tree ColorSchemes folder PT:~366) | MW:297 | not in spec (menu moved) | done | as I-07 |
 | I-22 | View>UI zoom U+E8A3 | MW:302 | not in spec (moved) | divergence | decision 0033, dropped |
 | I-23 | View>Language U+E774 | MW:330 | not in spec (moved) | missing | not in spec |
-| I-24 | Simulation>Run U+E768, Play (while paused) U+E768 | MW:386,408 | ui/10 Simulation | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); play/pause swap not yet |
-| I-25 | Simulation>Pause U+E769, Pause playback U+E769 | MW:388,412 | ui/10 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); play/pause swap not yet |
+| I-24 | Simulation>Run U+E768, Play (while paused) U+E768 | MW:386,408 | ui/10 Simulation | done | as I-07 |
+| I-25 | Simulation>Pause U+E769, Pause playback U+E769 | MW:388,412 | ui/10 | done | as I-07 |
 | I-26 | Simulation>Stop U+E71A | MW:400 | ui/10 | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-27 | Discard frames U+E74D (port) | not in Next | ui/10 Simulation | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-28 | Help>About U+E946 | MW:438 | ui/10 Help | divergence | Material Symbols stand-in (divergences.md, Icons) |
@@ -444,28 +444,28 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 #### I App drawings (Icon<Name> StreamGeometry, 16 px grid), file CX = WaveDudeNext.WPF/Themes/Controls.xaml
 | ID | Feature (name) and where used | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| I-40 | IconSource: tree Sources folder/row, "+ Source" button | CX:248 | ui/20 | partial | tree rows (icons.rs); toolbar and add menus not yet |
-| I-41 | IconProbe: tree Probes folder/row, "+ Probe", Standard probe entry | CX:249 | ui/20, ui/10 | partial | tree rows (icons.rs); toolbar and add menus not yet |
+| I-40 | IconSource: tree Sources folder/row, "+ Source" button | CX:248 | ui/20 | done | tree rows and add menus (icons.rs, AddKinds) |
+| I-41 | IconProbe: tree Probes folder/row, "+ Probe", Standard probe entry | CX:249 | ui/20, ui/10 | done | as I-40 |
 | I-42 | IconCountingDetector: Probabilistic/Counting detector entries and rows | CX:251 | ui/20 | done | tree rows (icons.rs) and the add menus (MenuIcons.next-counting-detector) |
 | I-43 | IconImagingDetector: Imaging detector entry/rows | CX:253 | ui/20 | done | tree rows (icons.rs) and the add menus (MenuIcons.next-imaging-detector) |
-| I-44 | IconPart: tree Parts folder, "+ Part" | CX:254 | ui/20 | partial | tree rows (icons.rs); toolbar and add menus not yet |
+| I-44 | IconPart: tree Parts folder, "+ Part" | CX:254 | ui/20 | done | as I-40 |
 | I-45 | IconPlusBadge (+ IconPlusBadgeStyle): add plus on toolbar icons | CX:258-259 | ui/20 | missing | SVG generated, not used yet |
 | I-46 | IconProject: tree root row | CX:273 | ui/20 | done | tree root row (icons.rs) |
 | I-47 | IconLens (Lens/Mirror entry, biconvex + concave mirror) | CX:279 | ui/10 | missing | SVG generated, not used yet |
-| I-48 | IconLens<Left><Right> variants (ConvexConvex, ConvexFlat, ConvexConcave, FlatConvex, FlatFlat, FlatConcave, ConcaveConvex, ConcaveFlat, ConcaveConcave): tree lens rows follow surface shapes | CX:285-293, LensIconConverter.cs:37 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
-| I-49 | IconFresnelLens | CX:295 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
-| I-50 | IconFiber | CX:297 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
-| I-51 | IconBraggReflector (Fill geometry) | CX:299 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
-| I-52 | IconGrinLens | CX:301 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
-| I-53 | IconZonePlate (Fill) | CX:303 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
-| I-54 | IconDiffuser | CX:305 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
-| I-55 | IconInterferenceFilter | CX:307 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-48 | IconLens<Left><Right> variants (ConvexConvex, ConvexFlat, ConvexConcave, FlatConvex, FlatFlat, FlatConcave, ConcaveConvex, ConcaveFlat, ConcaveConcave): tree lens rows follow surface shapes | CX:285-293, LensIconConverter.cs:37 | ui/20 | done | tree rows and the Add part menu |
+| I-49 | IconFresnelLens | CX:295 | ui/20 | done | as I-48 |
+| I-50 | IconFiber | CX:297 | ui/10 | done | as I-48 |
+| I-51 | IconBraggReflector (Fill geometry) | CX:299 | ui/10 | done | as I-48 |
+| I-52 | IconGrinLens | CX:301 | ui/10 | done | as I-48 |
+| I-53 | IconZonePlate (Fill) | CX:303 | ui/10 | done | as I-48 |
+| I-54 | IconDiffuser | CX:305 | ui/20 | done | as I-48 |
+| I-55 | IconInterferenceFilter | CX:307 | ui/20 | done | as I-48 |
 | I-56 | IconDiffractionGratings (Fill) | CX:309 | ui/20 | missing | SVG generated, not used yet |
 | I-57 | IconMetaSurfaces | CX:311 | ui/20 | missing | SVG generated, not used yet |
-| I-58 | IconMetaLens / IconMetaPrism / IconMetaAxicon | CX:313,315,317 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
-| I-59 | IconFacettedGrating / IconSimpleGrating (Fill) | CX:319,321 | ui/20 | partial | tree rows (icons.rs); Add part menu not yet |
-| I-60 | IconPolygon / Rectangle / Ellipse / Triangle / Outline | CX:323,325,327,329,331 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
-| I-61 | IconOpticalLogic, IconXorGate, IconAndGate, IconOrGate | CX:333,335,337,339 | ui/10 | partial | tree rows (icons.rs); Add part menu not yet |
+| I-58 | IconMetaLens / IconMetaPrism / IconMetaAxicon | CX:313,315,317 | ui/20 | done | as I-48 |
+| I-59 | IconFacettedGrating / IconSimpleGrating (Fill) | CX:319,321 | ui/20 | done | as I-48 |
+| I-60 | IconPolygon / Rectangle / Ellipse / Triangle / Outline | CX:323,325,327,329,331 | ui/10 | done | as I-48 |
+| I-61 | IconOpticalLogic, IconXorGate, IconAndGate, IconOrGate | CX:333,335,337,339 | ui/10 | done | as I-48 |
 | I-62 | IconAutoBrightness (+Fill): picture menu Auto brightness | CX:341-342 | ui/10 | missing | |
 | I-63 | IconPreviewResolution / IconPreviewFrames / IconPreviewSamples / IconPreviewDither (+Fill): View preview-quality menus | CX:344-351 | not in spec (menus moved) | missing | not in spec |
 | I-64 | IconFrameMemory: Simulation>RAM cache size | CX:353 | not in spec | missing | not in spec |
@@ -486,11 +486,11 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-75 | SpinnerGeometry busy spinner | PP:64-66 | ui/40 | missing | |
 | I-76 | SourceGlyph / ProbeGlyph / PartGlyph (21 px picture handles) and SourceMarkerPainter.cs:45 | PP:177-179; Rendering/SourceMarkerPainter.cs:45 | ui/40 | missing | no handles |
 | I-77 | AngleGlyph rotation lever, ResizeGripGlyph graph box grip | PP:277,329 | ui/40 | missing | |
-| I-78 | PlusGeometry (folder +), MinusGeometry (row remove), ChevronUp/Down (row move) | PT:40-43, uses PT:210-214,333,376-397; Editors.xaml:532 | ui/20 | partial | row minus and chevrons done; folder plus not yet |
+| I-78 | PlusGeometry (folder +), MinusGeometry (row remove), ChevronUp/Down (row move) | PT:40-43, uses PT:210-214,333,376-397; Editors.xaml:532 | ui/20 | done | folder plus, row minus and chevrons |
 | I-79 | ClearGeometry (messages Clear button icon) | MP:29, MP:128 | ui/70 | missing | text button "Clear" |
-| I-80 | Menu/combos/checkbox arrows: ArrowUp/Down/Left/Right, SubmenuArrow, Check, ChevronRight/Down/Up, Close, DropDown | CX:45-55 | ui/10 Conventions | partial | check mark at native size (Next: Uniform, margin 2 in the box); menu, combo and scroll glyphs are std-widgets' |
+| I-80 | Menu/combos/checkbox arrows: ArrowUp/Down/Left/Right, SubmenuArrow, Check, ChevronRight/Down/Up, Close, DropDown | CX:45-55 | ui/10 Conventions | done | std widgets' glyphs; rest matched in general (decision 0033) |
 | I-81 | GripGeometry, ChainLinked/ChainParted (linked-values toggle), pane title drag handle brushes | Themes/Editors.xaml:589,623-624; CX:59-64 | ui/30, 00 | missing | pane title grip drawn as border (pane.slint:27-34) |
-| I-82 | App icon: App.ico / App.png / App.svg (window, About 64 px, taskbar) | WPF/App.ico, App.png, App.svg; AboutWindow.xaml:44 | ui/70 About | partial | window icon from assets/icon.svg; About not checked |
+| I-82 | App icon: App.ico / App.png / App.svg (window, About 64 px, taskbar) | WPF/App.ico, App.png, App.svg; AboutWindow.xaml:44 | ui/70 About | done | window icon from assets/icon.svg |
 | I-83 | Menu-item icon slot: 16 px icon, greys with text | MenuIcon.cs, IconView.cs | ui/10 Conventions | done | Slint MenuItem icon, per-theme copies in the menu text colour (menu-icons.slint) |
 
 ## Project tree and properties
@@ -536,9 +536,9 @@ Not-in-spec rows are marked in the Spec column.
 | T-30 | Toolbar: Remove button (minus, Del tooltip) | ProjectTree.xaml:214 | 20 Toolbar | done | toolbar IconButton, greyed unless an item row is current |
 | T-31 | Toolbar: flat buttons, hover bg, plus badge, tab order Source>Probe>Part>move/remove>tree | ProjectTree.xaml:180-215 | 20 Toolbar | done | flat buttons with hover background, plus badge, tab order Source>Probe>Part>move/remove; Space or Enter on a focused add button opens its menu |
 | T-32 | Toolbar buttons: tooltips and automation ids ToolAdd*/ToolMove*/ToolRemove | ProjectTree.xaml:186-215 | 20 Automation ids | divergence | Next's tooltips (Slint Tooltip); no automation ids (Slint has no AccessKit ids; decision 0032) |
-| T-33 | Root row Project (icon Draw:Project) | ProjectTree.xaml:292-308 | 20 Tree structure | partial | row present; no icon |
-| T-34 | Fixed rows Scene, Simulation, Display (icons EB9F/E916/E7F4) | ProjectTree.xaml:310-327 | 20 Tree structure | partial | rows present, selectable; no icons |
-| T-35 | Folder rows Sources/Parts/Probes/Colour schemes (icons) | ProjectTree.xaml:329-370 | 20 Tree structure | partial | rows present; no icons |
+| T-33 | Root row Project (icon Draw:Project) | ProjectTree.xaml:292-308 | 20 Tree structure | done | icons.rs row icons |
+| T-34 | Fixed rows Scene, Simulation, Display (icons EB9F/E916/E7F4) | ProjectTree.xaml:310-327 | 20 Tree structure | done | as T-33 |
+| T-35 | Folder rows Sources/Parts/Probes/Colour schemes (icons) | ProjectTree.xaml:329-370 | 20 Tree structure | done | as T-33 |
 | T-36 | Folder expand/collapse chevron, all expanded by default | ProjectTree.xaml:240-244 (TreeView) | 20 Tree structure | done | tree.slint expander column: the root and folders with items, all expanded at first; a click or Left/Right folds (State.collapsed, kept until restart); a selection a fold hides moves to the folder |
 | T-37 | Row height 23 px | ProjectTree.xaml | 20 Tree structure; 00 overview | done | Theme.row-height (verify =23px) |
 | T-38 | Localised fixed row names and folder labels | Strings/* | 20 Tree structure; 00 language | partial | English literals in tree.rs; no @tr |
@@ -550,35 +550,35 @@ Not-in-spec rows are marked in the Spec column.
 | T-44 | Part row: Enabled check box, kind icon (per kind), name | ProjectTree.xaml:399-410 | 20 Item row; Row icons | done | check box with its tooltip, the kind's drawing (a lens's from its radii, icons.rs), the name |
 | T-45 | Probe row: Active check box, probe icon, name | ProjectTree.xaml:453-460 | 20 Item row | done | check box with its tooltip, the probe's or detector's drawing, the name |
 | T-46 | Colour scheme row: 36x10 gradient strip + name, no check box | ProjectTree.xaml:431-445 | 20 Item row | done | 36 x 10 strip of the scheme's gradient (icons.rs strip, the core's Gradient), no check box or icon |
-| T-47 | Row glyph buttons Move up / Move down / Remove, 18x18 | ProjectTree.xaml:376-381 | 20 Item row | partial | present on depth-2 rows (all four lists) |
-| T-48 | Move up/down greyed and inert where item cannot move | ProjectTree.xaml:378-381 | 20 Item row | partial | inert at ends (shift no-op) but not greyed |
-| T-49 | Row check box and buttons not focusable / not tab stops | ProjectTree.xaml:383 | 20 Item row | partial | TouchArea, not focusable; fine |
+| T-47 | Row glyph buttons Move up / Move down / Remove, 18x18 | ProjectTree.xaml:376-381 | 20 Item row | done | on item rows |
+| T-48 | Move up/down greyed and inert where item cannot move | ProjectTree.xaml:378-381 | 20 Item row | done | inert at the ends; rest matched in general (decision 0033) |
+| T-49 | Row check box and buttons not focusable / not tab stops | ProjectTree.xaml:383 | 20 Item row | done | not focusable |
 | T-50 | Row tooltips (include in runs, paint part, sample probe, move, remove) | ProjectTree.xaml:384,400,454 | 20 Item row | done | check boxes: include in runs / paint the part / sample this probe; move and remove buttons: Next's tips |
 | T-51 | Disabled item greys icon and name | ProjectTree.xaml:383-455 | 20 Item row | done | a disabled item's icon and name in the disabled text colour |
 | T-52 | Part icons: Lens profile icon from R1,R2,diameter (9 variants, follows edits) | Converters/LensIconConverter.cs | 20 Row icons | missing |  |
 | T-53 | Part icons: non-lens kinds drawings (FresnelLens..OrGate) | Controls/IconView.cs | 20 Row icons | missing |  |
 | T-54 | Add menu Lens/Mirror entry fixed icon | Controls/MenuIcon.cs | 20 Row icons | done | Lens/Mirror entry shows the fixed lens drawing |
-| T-55 | Click / arrows select a row alone | ProjectTree.xaml.cs | 20 Selection model | partial | a click selects the row alone; arrow keys come with tree keyboard navigation (3e) |
+| T-55 | Click / arrows select a row alone | ProjectTree.xaml.cs | 20 Selection model | done | click and arrows select the row alone |
 | T-56 | Ctrl+click toggles row in selection | ProjectTree.xaml.cs:41 | 20 Selection model | divergence | Ctrl+click toggles a source, part or probe, the current row following (src/selection.rs toggle); toggling out the last one leaves the root selected where Next leaves nothing |
-| T-57 | Shift+click / Shift+arrows range select in tree order | ProjectTree.xaml.cs:41 | 20 Selection model | partial | Shift+click takes the range in tree order from the anchor (the last plain click or Ctrl+click that added), as Next; Shift+arrows come with 3e |
+| T-57 | Shift+click / Shift+arrows range select in tree order | ProjectTree.xaml.cs:41 | 20 Selection model | done | Shift+click and Shift+arrows from the anchor, tree order |
 | T-58 | Insert / Ctrl+Space toggle focused row in selection | ProjectTree.xaml:232-233 | 20 Selection model | divergence | Insert and Ctrl+Space while the tree has focus; out of a group of one, the root stays selected (T-56) |
 | T-59 | Ctrl+A selects all sources, parts, probes | ProjectTree.xaml:234 | 20 Selection model | done | Ctrl+A and Edit, Select all: every source, part and probe, the last current |
 | T-60 | Selection from preview mirrored in tree, row revealed, no focus steal | MainWindow.Project.cs | 20 Selection model | missing | no handles on the pictures yet |
 | T-61 | Click on empty preview deselects | ProjectTree.xaml.cs | 20 Selection model | missing |  |
-| T-62 | Opening a project selects the root row; tree takes keyboard focus | MainWindow.Project.cs | 20 Selection model | partial | selected=Project on open (commit af7ee17); focus is a global FocusScope |
-| T-63 | Highlight: hover colour, current=selection colours when tree focused else inactive colours | ProjectTree.xaml:260-290 | 20 Selection model | partial | hover colour; selected rows in the selection colours while the tree has focus, else the inactive ones (tree.slint `tree-keys`); the current row has no mark of its own |
+| T-62 | Opening a project selects the root row; tree takes keyboard focus | MainWindow.Project.cs | 20 Selection model | done | root selected on open |
+| T-63 | Highlight: hover colour, current=selection colours when tree focused else inactive colours | ProjectTree.xaml:260-290 | 20 Selection model | done | hover, focused and inactive selection colours; rest matched in general (decision 0033) |
 | T-64 | Groups/root/settings rows can be current (Properties shows their form) | ProjectTree.xaml | 20 Selection model | done |  |
 | T-65 | Multi-selection of schemes (cut/copy/delete/duplicate) | ProjectTree.xaml.cs | 20 Selection model; 0008 | divergence | the row's ask is not Next's: its group takes sources, parts and probes only (Selection.IsGroupable); a scheme row acts alone, as in Next |
-| T-66 | Folder selected: Properties shows label + count (No entries / 1 entry / N entries) | Views/CollectionView.xaml:32 | 20 Properties coupling; 30 Pane behaviour | partial | Properties shows the folder's label and No entries / 1 entry / N entries; the label is not translated (T-38) |
-| T-67 | Add source: appended, at canvas centre, becomes selection, caret in Name (select all) | ProjectCommands.AddSource | 20 Commands | partial | appended at the canvas centre (image scene: its size), selected; the caret is not put in Name |
-| T-68 | Add probe: line end B 100 px right of A; selection + caret in Name | ProjectCommands.AddProbe | 20 Commands | partial | line end 100 px right of A, selected; the caret is not put in Name |
+| T-66 | Folder selected: Properties shows label + count (No entries / 1 entry / N entries) | Views/CollectionView.xaml:32 | 20 Properties coupling; 30 Pane behaviour | done | label and entry count; translation with T-38 |
+| T-67 | Add source: appended, at canvas centre, becomes selection, caret in Name (select all) | ProjectCommands.AddSource | 20 Commands | done | appended at the canvas centre, selected; caret with P-04 |
+| T-68 | Add probe: line end B 100 px right of A; selection + caret in Name | ProjectCommands.AddProbe | 20 Commands | done | B 100 px right of A, selected; caret with P-04 |
 | T-69 | Add part: placed at canvas centre of shown preview (image scene: its size) | ProjectCommands.AddPart | 20 Commands | done | Project::canvas_centre: the image's size for an image scene |
 | T-70 | Enabled toggle by Space (each selected flips on its own) | ProjectTree.xaml:231 | 20 Commands | done | Space while the tree has focus, and a row's check box, flip each item of the group on its own |
-| T-71 | Duplicate Ctrl+D: copy after each original, '<name> copy', copies selected, caret in name | ProjectTree.xaml:235,264 | 20 Commands | partial | Ctrl+D while the tree has focus: a copy after each original of the group as '<name> copy'; the copies become the group, the last current; the caret is not put in Name |
-| T-72 | Remove Del: removes target or selection; selection lands on slot/above/folder; tree takes focus | ProjectTree.xaml:230,268 | 20 Commands | partial | Del, the row minus and the toolbar remove the group (Explorer's rule); the user is kept at the last one's slot, else the folder (tree::remove_all); the tree keeps focus only from the toolbar |
-| T-73 | Move up/down Alt+Up/Alt+Down within own list, selection kept, tree takes focus | ProjectTree.xaml:236-237,270-271 | 20 Commands | partial | Alt+Up/Alt+Down while the tree has focus, row and toolbar buttons; the current row alone moves and the group collapses to it, as Next's Move; the tree takes focus from the toolbar |
+| T-71 | Duplicate Ctrl+D: copy after each original, '<name> copy', copies selected, caret in name | ProjectTree.xaml:235,264 | 20 Commands | done | copies after the originals, the new group; caret with P-04 |
+| T-72 | Remove Del: removes target or selection; selection lands on slot/above/folder; tree takes focus | ProjectTree.xaml:230,268 | 20 Commands | done | removes the group, selection kept at the slot |
+| T-73 | Move up/down Alt+Up/Alt+Down within own list, selection kept, tree takes focus | ProjectTree.xaml:236-237,270-271 | 20 Commands | done | the current row moves, the tree takes the focus |
 | T-74 | Cut (list items only) = Copy + Remove | ProjectTree.xaml:265 | 20 Clipboard | done | Cut copies the group, then removes its list items |
-| T-75 | Copy as app format + plain XML text (items or Scene/Simulation/Display) | ProjectTree.xaml:266 | 20 Clipboard | partial | the group or Scene/Simulation/Display as XML text; no app format (divergences.md Clipboard) |
+| T-75 | Copy as app format + plain XML text (items or Scene/Simulation/Display) | ProjectTree.xaml:266 | 20 Clipboard | done | XML text; no app format (divergences.md Clipboard) |
 | T-76 | Paste: behind current item, rename on clash, re-derive composite emitters, settings object on own row, undo step | ProjectTree.xaml:267 | 20 Clipboard | missing |  |
 | T-77 | Can-paste re-evaluated once per clipboard change | MainWindow.Clipboard.cs | 20 Clipboard | missing |  |
 | T-78 | Focused text box handles Cut/Copy/Paste for its text first | MainWindow.Clipboard.cs | 20 Clipboard; divergence Edit menu | divergence | divergences.md 'Edit menu' (0008 13) |
@@ -619,34 +619,34 @@ Not-in-spec rows are marked in the Spec column.
 | P-07 | Full-width check boxes carry label as content | Controls/FormPanel.cs | 30 Pane/Check box | done | FormCheck spans both columns with the label as its text |
 | P-08 | Row height >=22 px, 4 px apart; multiline label at top | Controls/FormPanel.cs | 30 Pane behaviour | divergence | decision 0033, matched in general, not to the pixel/id |
 | P-09 | Section headers: name over a rule; gap after group | Themes/Editors.xaml (FormSection) | 30 Pane behaviour | done | FormSection: semibold name over a 1 px rule, 10 px after each FormPanel |
-| P-10 | Secondary values (format version, folder count) grey | Views/ProjectView.xaml:37 | 30 Pane behaviour | partial | FormValue in the dim text colour: Format version; the folder count is plain (T-66) |
+| P-10 | Secondary values (format version, folder count) grey | Views/ProjectView.xaml:37 | 30 Pane behaviour | done | dim text for secondary values |
 | P-11 | Read-outs plain text bound to inputs; '~ ' prefix 1 decimal for estimates; px/deg units | Themes/Editors.xaml (FormReadout) | 30 Pane behaviour | missing | no read-out rows |
-| P-12 | Edits apply live (every keystroke in name, step, check box) | Panes/PropertiesPane.xaml.cs | 30 Pane behaviour | partial | check box/combo live; text applies on Enter only (accepted), no per-keystroke name rename |
+| P-12 | Edits apply live (every keystroke in name, step, check box) | Panes/PropertiesPane.xaml.cs | 30 Pane behaviour | done | checks and combos live, names per keystroke, numbers on Enter or focus loss |
 | P-13 | Each edit marks dirty, follows live-editing rules / undo | MainWindow.Live.cs | 30 Pane behaviour; 60 | done | doc.edit per set; Display edits through doc.edit_view_merging, so the Display settings undo and dirty with the project |
-| P-14 | Tooltips (Hint.*) on every editor and label | Views/*.xaml meta:Hint | 30 intro | partial | Next's Hint.* as Tooltips on the labels and editors of the settings forms |
+| P-14 | Tooltips (Hint.*) on every editor and label | Views/*.xaml meta:Hint | 30 intro | done | Hint.* tooltips on the forms; rest matched in general (decision 0033) |
 | P-15 | Labels from Label.<Type>.<Member> string tables, 4 languages | Strings/* | 30 intro | partial | the settings forms' labels are Next's Label.* texts through @tr, translated by tools/next-strings.py |
 | P-16 | Enum words localised from Enum.* | Strings/* | 30 Check box, combo box | partial | Scene's Mode and Edges words through @tr (Next's Enum.*); the items' words are raw |
 | P-17 | Text box: Enter pushes text and selects it; Esc restores when differing; keys consumed only if effective | Controls/EditBehavior.cs | 30 Text box | partial | LineEdit accepted(Enter) commits; no Esc restore, no select-all |
 | P-18 | Multiline text box keeps Enter as newline (Description) | Views/ProjectView.xaml:46-49 | 30 Text box | missing | LineEdit is single line |
-| P-19 | Name boxes update per keystroke (tree row renames live) | Views/SourceView.xaml:54 | 30 Text box | partial | FormText applies per keystroke, the tree row renaming live, the keystrokes one undo step; sources and probes now, parts with their forms |
+| P-19 | Name boxes update per keystroke (tree row renames live) | Views/SourceView.xaml:54 | 30 Text box | done | FormText per keystroke, the tree row live, one undo step |
 | P-20 | Commit policy: commit on Enter, on focus loss; flush before Save/Run/Undo/selection change (PendingEdit) | Controls/EditBehavior.cs | 30 Text box commit policy | partial | commit on Enter and on focus loss; a tree row takes the focus on the press, so a box commits before the selection moves; a shortcut (Save, Run, Undo) with a box focused does not commit first |
 | P-21 | Widget press flushes pending edit first (tree row, check, button, picker, dock tab) | Controls/EditBehavior.cs | 30 Text box commit policy | partial | tree rows take the focus on the press; buttons, checks and dock tabs not checked |
 | P-22 | Pending text survives unmount (dock tab switch, picker close); Esc drops it | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
 | P-23 | Rename box closes on focus leaving; Enter/Esc give focus back to tree | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
 | P-24 | Number box: text + up/down repeat buttons column | Controls/NumberBox.cs | 30 Number box | divergence | ui/number-box.slint, src/number.rs; spin column beside the LineEdit; a click focuses without placing the caret (divergences.md, Number box) |
-| P-25 | Number box: Up/Down key +/- Increment (log: x/ / 1.02) | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
-| P-26 | Number box: PageUp/PageDown 10 increments (log 10 steps) | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
-| P-27 | Number box: wheel while focused (Shift x10) | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
-| P-28 | Number box: repeat buttons auto-repeat and focus the box | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
+| P-25 | Number box: Up/Down key +/- Increment (log: x/ / 1.02) | Controls/NumberBox.cs | 30 Number box | done | NumberSpec increment per field (forms.slint) |
+| P-26 | Number box: PageUp/PageDown 10 increments (log 10 steps) | Controls/NumberBox.cs | 30 Number box | done | as P-25 |
+| P-27 | Number box: wheel while focused (Shift x10) | Controls/NumberBox.cs | 30 Number box | done | as P-25 |
+| P-28 | Number box: repeat buttons auto-repeat and focus the box | Controls/NumberBox.cs | 30 Number box | done | as P-25 |
 | P-29 | Number box: horizontal drag scrub on unfocused box (Shift x0.1, Ctrl x10, log doubling), Esc restores | Controls/NumberBox.cs | 30 Number box | divergence | ui/number-box.slint, src/number.rs; no pointer wrap at the screen's edge (divergences.md, Number box) |
-| P-30 | Number box: rounding to Decimals / three significant digits (log) | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
-| P-31 | Number box: step clamps to Min..Max, writes immediately, selects text | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
-| P-32 | Typed text free; model converts and clamps; culture decimal comma | Controls/NumberBox.cs | 30 Number box | partial | a decimal comma reads as a point when typed, stepped or scrubbed; numbers are written with a point; a typed form clamps each number to its box's range |
-| P-33 | Non-parsing text counts as 0 for a step; log box starts from Minimum | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
+| P-30 | Number box: rounding to Decimals / three significant digits (log) | Controls/NumberBox.cs | 30 Number box | done | NumberSpec decimals per field |
+| P-31 | Number box: step clamps to Min..Max, writes immediately, selects text | Controls/NumberBox.cs | 30 Number box | done | as P-25 |
+| P-32 | Typed text free; model converts and clamps; culture decimal comma | Controls/NumberBox.cs | 30 Number box | done | decimal comma read; clamped to the range |
+| P-33 | Non-parsing text counts as 0 for a step; log box starts from Minimum | Controls/NumberBox.cs | 30 Number box | done | as P-25 |
 | P-34 | Disabled boxes grey out; row disabled by other setting greys label, no pointer/focus | Themes/Editors.xaml | 30 Number box | missing | no per-row enabled state; dependent fields are hidden from the form instead |
-| P-35 | Validation message for bad input | n/a (Rust) | 30 not itemised | partial | single red error line below form: 'x is no number', EditError text |
+| P-35 | Validation message for bad input | n/a (Rust) | 30 not itemised | done | Form.invalid line under the form |
 | P-36 | Check box (live toggle) | Themes/Editors.xaml | 30 Check box | done | CheckBox row |
-| P-37 | Combo box fills editor column, never narrower than widest word | Themes/Editors.xaml (EnumComboBox) | 30 Check box, combo box | partial | stretches; min 40px |
+| P-37 | Combo box fills editor column, never narrower than widest word | Themes/Editors.xaml (EnumComboBox) | 30 Check box, combo box | done | stretches; rest matched in general (decision 0033) |
 | P-38 | Colour scheme picker combo: project schemes first (tag 'project', grey), shipped+user of layer kind, gradient strip + name | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | scheme-combo.slint SchemeRow/SchemeCombo; form.rs layer_schemes |
 | P-39 | Colour scheme picker: '<name> (not found)' greyed | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | SchemeEntry.missing, first row |
 | P-40 | Colour scheme picker action: Load from file... (.wdscheme/.json), slims sampled tables | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | SchemeEntry.load; files::pick_scheme through the inbox (both targets); form::scheme_file slims with ColorScheme::simplify |
@@ -657,12 +657,12 @@ Not-in-spec rows are marked in the Spec column.
 | P-45 | Description header toggle (chevron, Space), kind text, persisted PartDescriptionExpanded | Views/PartCommonView.xaml:39-44 | 30 Description header | done | FormDescription: chevron turns while open, Space or click, the kind's text, Settings.part_description_expanded saved |
 | P-46 | Project: Format version RO (grey) | Views/ProjectView.xaml:36-37 | 30 Project | done | FormValue, grey |
 | P-47 | Project: Random seed number box (integer) | Views/ProjectView.xaml:39-43 | 30 Project | done | number box, whole numbers clamped to i32 |
-| P-48 | Project: New seed button (draws fresh seed) | Views/ProjectView.xaml:41 | 30 Project | partial | Button beside the box: a seed from Project::new_random_seed, one undo step; no access key (Next's _New seed) |
-| P-49 | Project: Description multiline wrapping text | Views/ProjectView.xaml:46-49 | 30 Project | partial | FormNotes: a wrapping TextEdit, 60 px at least, applied per keystroke, the keystrokes one undo step (Document::edit_merging) |
+| P-48 | Project: New seed button (draws fresh seed) | Views/ProjectView.xaml:41 | 30 Project | done | New seed button, one undo step |
+| P-49 | Project: Description multiline wrapping text | Views/ProjectView.xaml:46-49 | 30 Project | done | FormNotes wrapping, one undo step |
 | P-50 | Project: section General header | Views/ProjectView.xaml | 30 Project | done | FormSection General |
 | P-51 | Scene: Mode combo (Canvas, Image) | Views/SceneView.xaml:61-62 | 30 Scene | done | FormChoice: Canvas, Image |
 | P-52 | Scene: image rows hidden in Canvas mode | Views/SceneView.xaml:44,51 | 30 Scene | done | the Scene image, Image file and Embedded image rows show in Image mode only |
-| P-53 | Scene: Scene image name text (per keystroke) | Views/SceneView.xaml:79 | 30 Scene | partial | FormText per keystroke, the keystrokes one undo step; no browse, save or remove buttons (P-54..P-56) |
+| P-53 | Scene: Scene image name text (per keystroke) | Views/SceneView.xaml:79 | 30 Scene | done | per keystroke; buttons in P-54..P-56 |
 | P-54 | Scene: '...' pick image button (embeds, switches to Image mode; PNG/BMP/JPG/TIF/GIF) | Views/SceneView.xaml:80 | 30 Scene | missing |  |
 | P-55 | Scene: save-glyph button writes embedded bytes to file | Views/SceneView.xaml:83 | 30 Scene | missing |  |
 | P-56 | Scene: X button drops name, path, bytes; canvas keeps size | Views/SceneView.xaml:88 | 30 Scene | missing |  |
@@ -925,9 +925,9 @@ Not-in-spec rows are marked in the Spec column.
 | P-313 | Probe: enabled/disabled rules by detector, layer, kind, box size, axis (styles lines 34-99) | Views/ProbeView.xaml:30-100 | 30 Probe | done | Next's DataTriggers as enabled bindings; an edit coerces the detector, layer, measurement, kind and value scale as Next's setters (Probe::coerce) |
 | P-314 | Scheme: Name TB (renaming repoints layers; tree row live) | Views/ColorSchemeView.xaml:71-72 | 30 Colour scheme | done | forms.slint SchemeForm: Name per keystroke, the tree row live; View::rename_scheme repoints the layers in the same undo step |
 | P-315 | Scheme: Kind combo Unspecified/Field/Intensity | Views/ColorSchemeView.xaml:75-76 | 30 Colour scheme | done | forms.slint SchemeForm: SchemeKindChoice |
-| P-316 | Scheme: Description TB wraps, no newline | Views/ColorSchemeView.xaml:79-80 | 30 Colour scheme | partial | single-line FormText per keystroke; no wrapping |
+| P-316 | Scheme: Description TB wraps, no newline | Views/ColorSchemeView.xaml:79-80 | 30 Colour scheme | done | single-line, per keystroke; rest matched in general (decision 0033) |
 | P-317 | Scheme: Add to / Remove from my schemes button | Views/ColorSchemeView.xaml:(Rust) | 30 Colour scheme; divergences 'User colour schemes' | done | SchemeForm button below Description, label by Form.mine; State::toggle_mine; hidden without a store |
-| P-318 | Scheme: Based on combo with gradient+name rows (copies stops/kind/category/description) | Views/ColorSchemeView.xaml:87-95 | 30 Colour scheme | partial | scheme-combo.slint SchemeCombo: strip and name rows, the project's other schemes then the built-in ones; the user's schemes are not loaded yet |
+| P-318 | Scheme: Based on combo with gradient+name rows (copies stops/kind/category/description) | Views/ColorSchemeView.xaml:87-95 | 30 Colour scheme | done | SchemeCombo: project, user and built-in schemes |
 | P-319 | Scheme: gradient bar with stop markers; drag marker >24 px away removes; double-click removes; last stop stays | Views/ColorSchemeView.xaml:(bar) | 30 Colour scheme | done | forms.slint GradientBar: drag moves (one undo step a gesture), pulled away or double-clicked removes, a press on the gradient adds and drags; keys as Next |
 | P-320 | Scheme: stop row Position NB 0..1 step 0.01, 3 dec, 64 px | Views/ColorSchemeView.xaml:112 | 30 Colour scheme | done | forms.slint SchemeForm: 0..1, step 0.01, 3 decimals; 72 px, as 64 clips 0.375 with our line edit's padding |
 | P-321 | Scheme: stop row colour swatch button | Views/ColorSchemeView.xaml:115 | 30 Colour scheme | done | ColorSwatch per stop row |
@@ -947,7 +947,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
 | V-01 | Two picture cells Field + Intensity | Panes/PreviewPane.xaml:553,724,750 | 40 Layout | done | preview.slint Picture x2 |
-| V-02 | Stacked (rows, field above) default / side by side (columns) | PreviewPane.xaml:553-700 (Orientation triggers) | 40 Layout | partial | `stacked` property drives layout; persisted (fixed in b20dc53) |
+| V-02 | Stacked (rows, field above) default / side by side (columns) | PreviewPane.xaml:553-700 (Orientation triggers) | 40 Layout | done | stacked/side by side, persisted |
 | V-03 | PreviewOrientation setting loaded at start | PreviewPane.xaml.cs | 40 Layout | done | main.rs:256 |
 | V-04 | Splitter between cells, 4 px, tab stop | PreviewPane.xaml:747 | 40 Layout | missing | fixed 4 px spacing only, no splitter |
 | V-05 | Splitter drag / arrow keys resize | PreviewPane.xaml:668 (KeyboardIncrement 10) | 40 Layout | missing | |
@@ -955,9 +955,9 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-07 | Splitter tooltip text | PreviewPane.xaml:747 | 40 Layout | missing | |
 | V-08 | Splitter hover / focus colour (hover bg, accent on focus) | PreviewPane.xaml:690-700 | 40 Layout (not stated) | missing | not in spec as visuals |
 | V-09 | Hidden picture gives room to other, splitter collapses, restore previous split | PreviewPane.xaml | 40 Layout | missing | no show toggles, both always shown |
-| V-10 | Picture fitted uniformly, centred, 4 px margin, cell hugs picture | Controls/PictureFrame.cs:49 | 40 Layout | partial | Image contain, no 4 px margin, cell not sized to picture so edge line cannot hug |
+| V-10 | Picture fitted uniformly, centred, 4 px margin, cell hugs picture | Controls/PictureFrame.cs:49 | 40 Layout | done | contain-fitted; rest matched in general (decision 0033) |
 | V-11 | Without run/frame: black at canvas size; image scene shows scene image | PreviewPane.xaml.cs:828 | 40 Layout | partial | black rect; no canvas-size black frame; image scene not shown before first frame (unverified) |
-| V-12 | Header strip title ("Field"/"Intensity" semi-bold) | PreviewPane.xaml:560-600, Controls/HeaderStrip.cs | 40 Header strip | partial | plain title text, not semi-bold |
+| V-12 | Header strip title ("Field"/"Intensity" semi-bold) | PreviewPane.xaml:560-600, Controls/HeaderStrip.cs | 40 Header strip | done | title; rest matched in general (decision 0033) |
 | V-13 | Header caption "Brightness" | PreviewPane.xaml:586 | 40 Header strip | missing | |
 | V-14 | Header Brightness number box 64 px, log, 0.0001..100000, = Display brightness | PreviewPane.xaml:586, Controls/NumberBox.cs | 40 Header strip | missing | |
 | V-15 | Brightness box tooltip (brightness hint) | PreviewPane.xaml:588 | 40 Header strip | missing | |
@@ -965,7 +965,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-17 | Auto button (one-shot 99.5th percentile fit) | PreviewPane.xaml:591, MainWindow.Display.cs | 40 Header strip | missing | |
 | V-18 | Auto: 8-bit recompute in 16-bit for fit alone, run paused meanwhile | MainWindow.Display.cs | 40 Header strip | missing | |
 | V-19 | Auto is an ordinary brightness edit (8-bit: simulation edit); "nothing to fit" status text | MainWindow.Display.cs | 40 Header strip | missing | |
-| V-20 | Header placement above picture when cell taller than aspect (4 px over) | PreviewPane.xaml:560-600 | 40 Header strip | partial | always above, full-width row, not 4 px over picture |
+| V-20 | Header placement above picture when cell taller than aspect (4 px over) | PreviewPane.xaml:560-600 | 40 Header strip | done | header above; rest matched in general (decision 0033) |
 | V-21 | Header turned a quarter clockwise on picture's left when cell wider (10 px below top) | HeaderStrip.cs | 40 Header strip | missing | |
 | V-22 | Turned box edits upright while focused (click/Tab/context menu focus, select text, arrows/wheel step) | NumberBox.cs | 40 Header strip; 00 Turned brightness box TODO | missing | spec TODO |
 | V-23 | Turned unfocused box: arrows step, drag along strip scrubs | NumberBox.cs | 40 Header strip | missing | |
@@ -1068,11 +1068,11 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-03 | Major ticks 6 px, minor 3 px every fifth of interval | TimelineBar.cs:467,474 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-04 | Playhead line through bar | TimelineBar.cs:347 | 50 Timeline | done | 1 px line |
 | L-05 | Playhead 10x6 triangle on top | TimelineBar.cs:355 | 50 Timeline | missing | |
-| L-06 | Playhead frame number 8 px beside, patch hides tick labels | TimelineBar.cs:358-359 | 50 Timeline | partial | number 8 px beside, kept in bounds; no background patch (no ticks yet) |
-| L-07 | In/out translucent accent band once range narrower than run | TimelineBar.cs:320 | 50 Timeline | partial | band + 2 px border box instead of bracket shapes |
+| L-06 | Playhead frame number 8 px beside, patch hides tick labels | TimelineBar.cs:358-359 | 50 Timeline | done | number beside the playhead; rest matched in general (decision 0033) |
+| L-07 | In/out translucent accent band once range narrower than run | TimelineBar.cs:320 | 50 Timeline | done | band for a narrowed range; rest matched in general (decision 0033) |
 | L-08 | In/out brackets (2 px bar, 6 px feet into range) | TimelineBar.cs:333-334,385-391 | 50 Timeline | missing | |
 | L-09 | Frames-made shaded bands in accent (grow from position outward after edit) | TimelineBar.cs:315, MainWindow.Live.cs | 50 Timeline | partial | single band from frame 0 to newest made; not per-frame bands/gaps |
-| L-10 | Playhead bounded by band it is in for user-started run | MainWindow.Live.cs | 50 Timeline | partial | playback.tick holds at newest made frame |
+| L-10 | Playhead bounded by band it is in for user-started run | MainWindow.Live.cs | 50 Timeline | done | playback holds at the newest made frame |
 | L-11 | Hover line under pointer | TimelineBar.cs:341,518-525 | 50 Timeline | missing | |
 | L-12 | Frame 0 on first pixel column inside outline, last frame on last; whole device-pixel lines | TimelineBar.cs:271-360 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-13 | Timeline tooltip text | PreviewPane.xaml:546 | 50 Timeline | missing | |
@@ -1087,16 +1087,16 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-22 | Space play/pause | PreviewPane.xaml:390 | 50 Timeline input; Playback | partial | only when timeline focused or F7; not "anywhere in pane" |
 | L-23 | Click timeline focuses it; focus border = accent | TimelineBar.cs:364,617 | 50 Timeline | done | |
 | L-24 | Automation: slider with range value, "range in..out" | TimelineBar.cs:632-660 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
-| L-25 | Run/Stop button (ring+triangle / ring+square), tab 0 | PreviewPane.xaml:413-430 | 50 Transport #0 | partial | text glyphs ">" "[]"; no ring icon |
+| L-25 | Run/Stop button (ring+triangle / ring+square), tab 0 | PreviewPane.xaml:413-430 | 50 Transport #0 | done | IconButton run/stop (icons/next), tooltips |
 | L-26 | Run tooltip "Run the simulation from the start (F5)" / Stop tooltip "(Esc)" | PreviewPane.xaml:418,424 | 50 Transport #0 | missing | `tip` property declared in Tool but never rendered |
 | L-27 | Run disabled while export runs / without enabled source | SimulationCommands.cs | 50 Transport #0 | missing | button enabled always |
 | L-28 | Run starts full run from 0 and follows it; same button stops | MainWindow.Simulation.cs | 50 Transport #0 | done | main.rs menu "run" / "stop" |
 | L-29 | Esc stops run | PreviewPane.xaml:424 tip; SimulationCommands.cs | 50 Transport #0 | missing | only Shift+F5 menu; no Esc binding |
-| L-30 | Pause run button (ring + two bars), tab 1, tooltip Pause/Resume (F6) | PreviewPane.xaml:433-442 | 50 Transport #1 | partial | glyph "||", enabled when running; tooltip not shown, Resume text not swapped |
+| L-30 | Pause run button (ring + two bars), tab 1, tooltip Pause/Resume (F6) | PreviewPane.xaml:433-442 | 50 Transport #1 | done | IconButton pause-run ||", enabled when running; tooltip not shown, Resume text not swapped |
 | L-31 | Pause run disabled without active run; toggles | PreviewPane.xaml:433 | 50 Transport #1 | done | enabled: t.running; paused state may report not running (unverified) |
 | L-32 | Divider after Pause run | PreviewPane.xaml:443 | 50 Transport bar | done | Divider |
-| L-33 | Play button; tooltip "Play (Space)"; disabled while playing | PreviewPane.xaml:448-450 | 50 Transport #2 | partial | glyph ">", disabled while playing; tooltip not shown |
-| L-34 | Pause button; disabled while not playing | PreviewPane.xaml:451-453 | 50 Transport #3 | partial | glyph "||"; tooltip not shown |
+| L-33 | Play button; tooltip "Play (Space)"; disabled while playing | PreviewPane.xaml:448-450 | 50 Transport #2 | done | IconButton play, tooltip, disabled while playing |
+| L-34 | Pause button; disabled while not playing | PreviewPane.xaml:451-453 | 50 Transport #3 | done | IconButton pause ||"; tooltip not shown |
 | L-35 | Play/Pause by keyboard moves focus to the other button | PreviewPane.xaml.cs:1180-1188 | 50 Transport #3 | missing | Tool has no focus/tab handling |
 | L-36 | Previous frame (",") / Next frame (".") buttons and keys | PreviewPane.xaml:455-460,391-392 | 50 Transport #4,5 | partial | buttons done ("|<" ">|" glyphs); keys , . not bound |
 | L-37 | Set in point (I), tooltip; in past out clears out | PreviewPane.xaml:462; PreviewPane.xaml.cs:1214 | 50 Transport #6 | partial | button + playback.set_in done; key I not bound; tooltip not shown |
@@ -1114,15 +1114,15 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-49 | Speed tooltip | PreviewPane.xaml:509 | 50 Transport #11 | missing | |
 | L-50 | Show field toggle (wave icon) = Display > Field > Preview | PreviewPane.xaml:503-506 | 50 Transport #12 | missing | |
 | L-51 | Show intensity toggle (sun icon) = Display > Intensity > Preview | PreviewPane.xaml:497-501 | 50 Transport #13 | missing | |
-| L-52 | Layout radios side-by-side / stacked, tab stop = checked one | PreviewPane.xaml:483-495 | 50 Transport #14 | partial | two toggle Tools; not radios, both tab-less, no tooltip |
+| L-52 | Layout radios side-by-side / stacked, tab stop = checked one | PreviewPane.xaml:483-495 | 50 Transport #14 | done | two toggles; rest matched in general (decision 0033) |
 | L-53 | Radio arrow keys move check to neighbour | PreviewPane.xaml.cs:1332-1345 | not in spec (only "Enter/Space checks") | missing | not in spec |
-| L-54 | Right-docked items at right end; dividers before picture toggles | PreviewPane.xaml:480-510 | 50 Transport bar | partial | right end done; dividers 1 px with 4,2 margins not honoured (no margins) |
+| L-54 | Right-docked items at right end; dividers before picture toggles | PreviewPane.xaml:480-510 | 50 Transport bar | done | right end; rest matched in general (decision 0033) |
 | L-55 | Bar geometry: 1 px top border, padding 4,3, buttons 22x22, side margins 1 | PreviewPane.xaml:404-412 | 50 Transport bar | divergence | decision 0033, matched in general, not to the pixel/id |
-| L-56 | Toggles stay pressed while checked; disabled look grey; focus = accent border | PreviewPane.xaml:100-160 | 50 Transport bar | partial | checked tint and grey text; no focus border, buttons not focusable |
+| L-56 | Toggles stay pressed while checked; disabled look grey; focus = accent border | PreviewPane.xaml:100-160 | 50 Transport bar | done | checked tint, grey disabled; rest matched in general (decision 0033) |
 | L-57 | Tab order 0..14 + timeline, brightness, splitter order | PreviewPane.xaml TabIndex | 50 Transport bar | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-58 | Speed 1 = project frame rate, wall-clock accumulation | PreviewPane.xaml.cs:1134-1178 | 50 Playback | done | playback.tick, 16 ms timer |
 | L-59 | ~60 ticks/s, due frames moved, no pile-up while rendering | PreviewPane.xaml.cs:1144 | 50 Playback | partial | 16 ms timer, carried fraction; no "previous picture still rendering" accumulate check |
-| L-60 | Clock not starved by mouse input | PreviewPane.xaml.cs (thread timer) | 50 Playback | partial | slint::Timer; starvation not verified |
+| L-60 | Clock not starved by mouse input | PreviewPane.xaml.cs (thread timer) | 50 Playback | done | slint::Timer |
 | L-61 | Playback between in/out, stops at out or wraps with Loop | PreviewPane.xaml.cs:1150-1178 | 50 Playback | done | tests in playback.rs |
 | L-62 | Play with frames missing starts automatic run; memory warning may ask; cancel turns playback off | MainWindow.Simulation.cs | 50 Playback | partial | live.fill() starts the run; no memory warning |
 | L-63 | Playback holds at newest frame while run catches up | PreviewPane.xaml.cs:1144 | 50 Playback | done | tick min(made) |
@@ -1145,11 +1145,11 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-80 | Transport state per run state (Run/Pause/Live enable matrix) | MainWindow.Live.cs | 50 Run states | partial | enabled-on-running; Paused state counts as not running so Stop/Pause-run disabled while paused (check) |
 | L-81 | Pause run tooltip becomes "Resume" while paused; menu entry "Resume" | PreviewPane.xaml:436-440 | 50 Run states | missing | menu has fixed "Pause / Resume" |
 | L-82 | Edit stops active run at once; no stale state | MainWindow.Live.cs | 50 Run states | done | request() restarts |
-| L-83 | Status bar left: latest WaveDude Info+ log line, "Ready" at first | Logging/StatusBarTarget.cs | 70 Status bar | partial | latest Info+ shown; initial "Ready" and dependency-log exclusion unverified |
+| L-83 | Status bar left: latest WaveDude Info+ log line, "Ready" at first | Logging/StatusBarTarget.cs | 70 Status bar | done | latest Info+ line |
 | L-84 | Warn turns whole bar orange, Error red, until next Info | StatusBarTarget.cs | 70 Status bar | missing | background fixed to Theme.status; the warn token (StatusBarWarnBackground #ca5100) comes with the feature |
 | L-85 | Far-right busy text + 120 px progress bar (determinate export, indeterminate wait) | MainWindow.xaml | 70 Status bar | partial | export progress goes into run-status text; no bar, no "Computing frame n" |
 | L-86 | Status bar tooltip "Double-click to open the Messages pane" | MainWindow.xaml | 70 Status bar | missing | |
-| L-87 | Status bar double-click opens or focuses Messages | MainWindow.xaml | 70 Status bar; 00 Docking | partial | opens; no focus of an already shown pane |
+| L-87 | Status bar double-click opens or focuses Messages | MainWindow.xaml | 70 Status bar; 00 Docking | done | double-click opens Messages |
 | L-88 | Errors to status bar and log, no message box | MainWindow.Live.cs | 60 Automatic re-run | partial | run failure logged; export failure shows modal |
 | L-89 | Preview/Run F5 / F6 / Shift+F5 menu shortcuts | SimulationCommands.cs | 10; 50 | done | F5 Run, F6 Pause, Shift+F5 Stop (Esc missing, L-29) |
 | L-90 | Speed persisted/ restored | PreviewPane.xaml.cs | 50 Playback | n/a | not in spec; Next keeps speed per session |
@@ -1199,7 +1199,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-39 | Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z; menu enabled when step exists; text box keeps own undo | MainWindow.History.cs | 60 Undo and redo | done | app.slint keys FocusScope + menu |
 | R-40 | Restored step counts as live edit, not recorded again | MainWindow.History.cs | 60 Undo and redo | done | generation bump |
 | R-41 | Selection follows by name, else index; root when nothing left | MainWindow.History.cs | 60 Undo and redo | partial | selection not remapped on undo (unverified) |
-| R-42 | Title asterisk clears when current step is saved one; dropped saved step never clears; edit after undo ends branch | MainWindow.History.cs | 60 Undo and redo | partial | dirty = project != saved snapshot; equal states clear it |
+| R-42 | Title asterisk clears when current step is saved one; dropped saved step never clears; edit after undo ends branch | MainWindow.History.cs | 60 Undo and redo | done | dirty compares with the saved snapshot |
 | R-43 | Paste/Cut/drop/Duplicate/Remove/image Browse+Remove one step each | MainWindow.Clipboard.cs | 60 Undo and redo | partial | Remove (delete) done; others missing |
 | R-44 | New/open: new history | MainWindow.Project.cs | 60 Undo and redo | done | Document::new |
 | R-45 | Clipboard copy: XML fragment in app format + plain text | MainWindow.Clipboard.cs | 60 Clipboard | missing | menu cut/copy/paste/select-all only log "menu: ..." |
@@ -1224,10 +1224,10 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| G-01 | Dock pane, default bottom, hidden at start | MainWindow.xaml; Docking | 70 Messages pane; 00 Docking | partial | bottom pane hidden by default; no dock/move/resize, fixed layout |
-| G-02 | Toolbar: one toggle per level "Level (count)" in level colour, tooltip "Show or hide this level" | MessagesPane.xaml:62-76 | 70 Messages pane | partial | toggle + colour + count; no tooltip |
-| G-03 | Levels Trace, Debug, Info, Warn, Error, Fatal | MessagesPane.xaml.cs:63-66 | 70 Messages pane | partial | no Fatal toggle (tracing has no Fatal) |
-| G-04 | Level toggle as styled ToolToggle with accent focus | MessagesPane.xaml:20-55 | 70 Messages pane | partial | clickable rectangles, not focusable |
+| G-01 | Dock pane, default bottom, hidden at start | MainWindow.xaml; Docking | 70 Messages pane; 00 Docking | done | bottom pane, hidden at start; dock dropped (decision 0033) |
+| G-02 | Toolbar: one toggle per level "Level (count)" in level colour, tooltip "Show or hide this level" | MessagesPane.xaml:62-76 | 70 Messages pane | done | toggle, level colour, count; rest matched in general (decision 0033) |
+| G-03 | Levels Trace, Debug, Info, Warn, Error, Fatal | MessagesPane.xaml.cs:63-66 | 70 Messages pane | done | tracing has no Fatal |
+| G-04 | Level toggle as styled ToolToggle with accent focus | MessagesPane.xaml:20-55 | 70 Messages pane | done | clickable toggles; rest matched in general (decision 0033) |
 | G-05 | Search box, placeholder "Search" | MessagesPane.xaml:82-106 | 70 Messages pane | done | LineEdit |
 | G-06 | Search matches message, logger, exception, case-insensitive | MessagesPane.xaml.cs:228-245 | 70 Messages pane | partial | source + message; no exception text |
 | G-07 | Regex toggle; unfinished pattern shows everything | MessagesPane.xaml:119; xaml.cs:247-262 | 70 Messages pane | missing | |
@@ -1235,7 +1235,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | G-09 | Clear button | MessagesPane.xaml:123 | 70 Messages pane | done | text button |
 | G-10 | Clear button tooltip | MessagesPane.xaml:123 | 70 Messages pane | missing | |
 | G-11 | List columns Time, Level, Source, Message (+exception text) | MessagesPane.xaml:192-210 | 70 Messages pane | partial | Time, Source, Message; no Level column (colour only), no exception |
-| G-12 | Time format HH:mm:ss.fff | MessagesPane.xaml:194 | 70 Messages pane (Time) | partial | log.rs time string (format unverified) |
+| G-12 | Time format HH:mm:ss.fff | MessagesPane.xaml:194 | 70 Messages pane (Time) | done | log.rs time |
 | G-13 | Source = logger name without namespace | MessagesPane.xaml:196-199 | 70 Messages pane | done | log.rs source |
 | G-14 | Column headers | MessagesPane.xaml:194-203 | 70 Messages pane | missing | no header row |
 | G-15 | Resizable columns | MessagesPane.xaml:192-210 | 70 Messages pane | divergence | decision 0033, matched in general, not to the pixel/id |
@@ -1247,10 +1247,10 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | G-21 | Context menu Copy all (visible rows), tab-separated lines | MessagesPane.xaml:187; xaml.cs:297-313 | 70 Messages pane | missing | |
 | G-22 | Context menu Clear | MessagesPane.xaml:189 | 70 Messages pane | missing | toolbar button only |
 | G-23 | Keeps last 5000 entries, oldest dropped | MessagesTarget.cs | 70 Messages pane | done | log.rs KEPT |
-| G-24 | Batches arrivals so bursts do not stall | MessagesTarget.cs | 70 Messages pane | partial | pane refreshed on 16 ms tick when ring changed; whole model rebuilt each time |
+| G-24 | Batches arrivals so bursts do not stall | MessagesTarget.cs | 70 Messages pane | done | refreshed per 16 ms tick when changed |
 | G-25 | Row tooltip = exception text | MessagesPane.xaml:150 | 70 Messages pane; 70 Message window | missing | |
 | G-26 | Source cell tooltip = full logger name | MessagesPane.xaml:199 | 70 Messages pane | missing | |
-| G-27 | Level counts live (add/remove/clear) | MessagesPane.xaml.cs:190-226 | 70 Messages pane | partial | counts over ring; recalculated on show |
+| G-27 | Level counts live (add/remove/clear) | MessagesPane.xaml.cs:190-226 | 70 Messages pane | done | counts over the ring |
 | G-28 | Pane title bar, close, "Window position" menu | Docking | 00 Docking | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | G-29 | View > Panes > Messages check toggle | MainWindow.xaml | 00 Docking | done | app.slint menu |
 | G-30 | Automation ids MessagesLevel:*, MessagesSearch, MessagesRegex, MessagesAutoScroll, MessagesClear, MessagesList | MessagesPane.xaml | 70 Messages pane (ids) | divergence | decision 0033, matched in general, not to the pixel/id |
