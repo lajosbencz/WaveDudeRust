@@ -1,4 +1,5 @@
 import { Theme } from "theme.slint";
+import { Command, NewItem, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
 // Selawik on every platform, Segoe UI's metric twin (docs/divergences.md, Font).
 import "../../../crates/waveduderust/assets/fonts/Selawik-Regular.ttf";
 import "../../../crates/waveduderust/assets/fonts/Selawik-Semibold.ttf";
@@ -20,6 +21,7 @@ import { WelcomeLayer } from "welcome.slint";
 import { ExamplesLayer, ExampleRow } from "examples.slint";
 
 export { NumberLogic, NumberSpec } from "number-box.slint";
+export { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
 export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle, Modal, ModalKind, ExampleRow }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
@@ -61,19 +63,19 @@ export component AppWindow inherits Window {
     in property <[TreeRow]> tree-rows;
     // the current row's index among them, -1 when hidden
     in property <int> tree-current;
-    // the row and how: 0 alone, 1 toggled (Ctrl), 2 range (Shift)
-    callback tree-select(int, int);
+    callback tree-select(int, Pick);
     callback tree-toggle(int);
     callback tree-expand(int);
-    callback tree-navigate(string, bool);
+    callback tree-navigate(TreeKey, bool);
     pure callback tree-drag-data(int) -> data-transfer;
-    callback tree-drop-place(int, data-transfer, bool) -> int;
+    callback tree-drop-place(int, data-transfer, bool) -> DropPlace;
     callback tree-drop(int, data-transfer, bool);
     callback tree-shift(int, int);
     callback tree-remove(int);
     in property <image> field;
     in property <image> intensity;
-    in property <string> run-status;
+    in property <RunStatus> run-status;
+    in property <ExportProgress> export-progress;
     in property <Transport> transport;
     in property <Modal> modal;
     in-out property <bool> examples-shown;
@@ -87,8 +89,7 @@ export component AppWindow inherits Window {
     in property <string> welcome-ram;
     in property <string> welcome-levers;
     in property <bool> welcome-show-startup;
-    callback welcome-preset(int);
-    callback welcome-action(string);
+    callback welcome-preset(PreviewQuality);
     callback welcome-show-startup-toggled(bool);
     in-out property <bool> settings-shown;
     in property <[string]> settings-sections;
@@ -103,8 +104,8 @@ export component AppWindow inherits Window {
     callback log-search(string);
     callback log-clear();
     callback seek(int);
-    callback transport-action(string);
-    callback transport-speed(string);
+    callback transport-action(TransportAction);
+    callback transport-speed(float);
     in property <string> props-heading;
     // a folder's item count; -1 for other rows
     in property <int> props-entries: -1;
@@ -115,7 +116,6 @@ export component AppWindow inherits Window {
     in-out property <bool> project-shown: true;
     in-out property <bool> properties-shown: true;
     in-out property <bool> messages-shown: false;
-    // A menu entry's action, by its id (docs/ui/10).
     in-out property <bool> preview-stacked: true;
     // The panes' stretches, which the splitters move (docs/ui/00, Panes: 1 : 3, 1 : 2, 3 : 1).
     in-out property <float> left-weight: 1;
@@ -124,7 +124,11 @@ export component AppWindow inherits Window {
     in-out property <float> properties-weight: 2;
     in-out property <float> preview-weight: 3;
     in-out property <float> messages-weight: 1;
-    callback menu(string);
+    // a menu entry's, shortcut's or button's action (docs/ui/10)
+    callback command(Command);
+    callback add(NewItem);
+    // the recent file at an index of `recent-files`
+    callback open-recent(int);
     // The main area takes the keys back once the last overlay closed.
     function overlays-closed() {
         if (!self.welcome-shown && !self.examples-shown && !self.settings-shown && !self.modal.shown) {
@@ -156,45 +160,45 @@ export component AppWindow inherits Window {
     MenuBar {
         Menu {
             title: root.menu-text(@tr("&File"), @tr("File"));
-            MenuItem { title: root.menu-text(@tr("&New Project"), @tr("New Project")); icon: MenuIcons.note-add; shortcut: @keys(Control + N); activated => { root.menu("new"); } }
-            MenuItem { title: root.menu-text(@tr("&Open Project..."), @tr("Open Project...")); icon: MenuIcons.folder-open; shortcut: @keys(Control + O); activated => { root.menu("open"); } }
+            MenuItem { title: root.menu-text(@tr("&New Project"), @tr("New Project")); icon: MenuIcons.note-add; shortcut: @keys(Control + N); activated => { root.command(Command.new); } }
+            MenuItem { title: root.menu-text(@tr("&Open Project..."), @tr("Open Project...")); icon: MenuIcons.folder-open; shortcut: @keys(Control + O); activated => { root.command(Command.open); } }
             Menu {
                 title: root.menu-text(@tr("&Recent Projects"), @tr("Recent Projects")); icon: MenuIcons.history;
-                for path[i] in root.recent-files: MenuItem { title: path; activated => { root.menu("recent:" + i); } }
+                for path[i] in root.recent-files: MenuItem { title: path; activated => { root.open-recent(i); } }
             }
-            MenuItem { title: root.menu-text(@tr("Exam&ples"), @tr("Examples")); icon: MenuIcons.list-alt; activated => { root.menu("examples"); } }
-            MenuItem { title: root.menu-text(@tr("&Welcome Page..."), @tr("Welcome Page...")); icon: MenuIcons.waving-hand; activated => { root.menu("welcome"); } }
-            MenuItem { title: root.menu-text(@tr("Se&ttings..."), @tr("Settings...")); icon: MenuIcons.settings; shortcut: @keys(Control + ","); activated => { root.menu("settings"); } }
+            MenuItem { title: root.menu-text(@tr("Exam&ples"), @tr("Examples")); icon: MenuIcons.list-alt; activated => { root.command(Command.examples); } }
+            MenuItem { title: root.menu-text(@tr("&Welcome Page..."), @tr("Welcome Page...")); icon: MenuIcons.waving-hand; activated => { root.command(Command.welcome); } }
+            MenuItem { title: root.menu-text(@tr("Se&ttings..."), @tr("Settings...")); icon: MenuIcons.settings; shortcut: @keys(Control + ","); activated => { root.command(Command.settings); } }
             MenuSeparator { }
-            MenuItem { title: root.menu-text(@tr("&Save"), @tr("Save")); icon: MenuIcons.save; shortcut: @keys(Control + S); activated => { root.menu("save"); } }
-            MenuItem { title: root.menu-text(@tr("Save &As..."), @tr("Save As...")); icon: MenuIcons.save-as; shortcut: @keys(Control + Shift + S); activated => { root.menu("save-as"); } }
+            MenuItem { title: root.menu-text(@tr("&Save"), @tr("Save")); icon: MenuIcons.save; shortcut: @keys(Control + S); activated => { root.command(Command.save); } }
+            MenuItem { title: root.menu-text(@tr("Save &As..."), @tr("Save As...")); icon: MenuIcons.save-as; shortcut: @keys(Control + Shift + S); activated => { root.command(Command.save-as); } }
             MenuSeparator { }
             Menu {
                 title: root.menu-text(@tr("&Export"), @tr("Export")); icon: MenuIcons.ios-share;
-                MenuItem { title: root.menu-text(@tr("Export &field..."), @tr("Export field...")); enabled: root.commands.can-export; icon: MenuIcons.ios-share; shortcut: @keys(Control + Shift + E); activated => { root.menu("export-field"); } }
-                MenuItem { title: root.menu-text(@tr("Export &intensity..."), @tr("Export intensity...")); enabled: root.commands.can-export; icon: MenuIcons.ios-share; shortcut: @keys(Control + Shift + I); activated => { root.menu("export-intensity"); } }
-                MenuItem { title: root.menu-text(@tr("Export b&oth..."), @tr("Export both...")); enabled: root.commands.can-export; icon: MenuIcons.ios-share; shortcut: @keys(Control + Shift + B); activated => { root.menu("export-both"); } }
+                MenuItem { title: root.menu-text(@tr("Export &field..."), @tr("Export field...")); enabled: root.commands.can-export; icon: MenuIcons.ios-share; shortcut: @keys(Control + Shift + E); activated => { root.command(Command.export-field); } }
+                MenuItem { title: root.menu-text(@tr("Export &intensity..."), @tr("Export intensity...")); enabled: root.commands.can-export; icon: MenuIcons.ios-share; shortcut: @keys(Control + Shift + I); activated => { root.command(Command.export-intensity); } }
+                MenuItem { title: root.menu-text(@tr("Export b&oth..."), @tr("Export both...")); enabled: root.commands.can-export; icon: MenuIcons.ios-share; shortcut: @keys(Control + Shift + B); activated => { root.command(Command.export-both); } }
                 MenuSeparator { }
-                MenuItem { title: root.menu-text(@tr("Export field f&rame..."), @tr("Export field frame...")); enabled: root.commands.can-export; icon: MenuIcons.image; shortcut: @keys(Control + Shift + F); activated => { root.menu("export-field-frame"); } }
-                MenuItem { title: root.menu-text(@tr("Export intensity fra&me..."), @tr("Export intensity frame...")); enabled: root.commands.can-export; icon: MenuIcons.image; shortcut: @keys(Control + Shift + G); activated => { root.menu("export-intensity-frame"); } }
+                MenuItem { title: root.menu-text(@tr("Export field f&rame..."), @tr("Export field frame...")); enabled: root.commands.can-export; icon: MenuIcons.image; shortcut: @keys(Control + Shift + F); activated => { root.command(Command.export-field-frame); } }
+                MenuItem { title: root.menu-text(@tr("Export intensity fra&me..."), @tr("Export intensity frame...")); enabled: root.commands.can-export; icon: MenuIcons.image; shortcut: @keys(Control + Shift + G); activated => { root.command(Command.export-intensity-frame); } }
             }
-            MenuItem { title: root.menu-text(@tr("Export &last"), @tr("Export last")); enabled: root.commands.can-export-last; icon: MenuIcons.repeat; shortcut: @keys(Control + E); activated => { root.menu("export-last"); } }
+            MenuItem { title: root.menu-text(@tr("Export &last"), @tr("Export last")); enabled: root.commands.can-export-last; icon: MenuIcons.repeat; shortcut: @keys(Control + E); activated => { root.command(Command.export-last); } }
             MenuSeparator { }
-            MenuItem { title: root.menu-text(@tr("&Close Project"), @tr("Close Project")); enabled: root.commands.can-close; icon: MenuIcons.close; activated => { root.menu("close"); } }
+            MenuItem { title: root.menu-text(@tr("&Close Project"), @tr("Close Project")); enabled: root.commands.can-close; icon: MenuIcons.close; activated => { root.command(Command.close); } }
             MenuSeparator { }
-            MenuItem { title: root.menu-text(@tr("E&xit"), @tr("Exit")); icon: MenuIcons.logout; activated => { root.menu("exit"); } }
+            MenuItem { title: root.menu-text(@tr("E&xit"), @tr("Exit")); icon: MenuIcons.logout; activated => { root.command(Command.exit); } }
         }
         Menu {
             title: root.menu-text(@tr("&Edit"), @tr("Edit"));
-            MenuItem { title: root.menu-text(@tr("&Undo"), @tr("Undo")); icon: MenuIcons.undo; enabled: root.commands.can-undo; activated => { root.menu("undo"); } }
-            MenuItem { title: root.menu-text(@tr("&Redo"), @tr("Redo")); icon: MenuIcons.redo; enabled: root.commands.can-redo; activated => { root.menu("redo"); } }
+            MenuItem { title: root.menu-text(@tr("&Undo"), @tr("Undo")); icon: MenuIcons.undo; enabled: root.commands.can-undo; activated => { root.command(Command.undo); } }
+            MenuItem { title: root.menu-text(@tr("&Redo"), @tr("Redo")); icon: MenuIcons.redo; enabled: root.commands.can-redo; activated => { root.command(Command.redo); } }
             MenuSeparator { }
-            MenuItem { title: root.menu-text(@tr("Cu&t"), @tr("Cut")); icon: MenuIcons.content-cut; enabled: root.commands.can-delete; activated => { root.menu("cut"); } }
-            MenuItem { title: root.menu-text(@tr("&Copy"), @tr("Copy")); icon: MenuIcons.content-copy; enabled: root.commands.can-copy; activated => { root.menu("copy"); } }
-            MenuItem { title: root.menu-text(@tr("&Paste"), @tr("Paste")); icon: MenuIcons.content-paste; enabled: true; activated => { root.menu("paste"); } }
-            MenuItem { title: root.menu-text(@tr("&Delete"), @tr("Delete")); icon: MenuIcons.delete; enabled: root.commands.can-delete; activated => { root.menu("delete"); } }
+            MenuItem { title: root.menu-text(@tr("Cu&t"), @tr("Cut")); icon: MenuIcons.content-cut; enabled: root.commands.can-delete; activated => { root.command(Command.cut); } }
+            MenuItem { title: root.menu-text(@tr("&Copy"), @tr("Copy")); icon: MenuIcons.content-copy; enabled: root.commands.can-copy; activated => { root.command(Command.copy); } }
+            MenuItem { title: root.menu-text(@tr("&Paste"), @tr("Paste")); icon: MenuIcons.content-paste; enabled: true; activated => { root.command(Command.paste); } }
+            MenuItem { title: root.menu-text(@tr("&Delete"), @tr("Delete")); icon: MenuIcons.delete; enabled: root.commands.can-delete; activated => { root.command(Command.delete); } }
             MenuSeparator { }
-            MenuItem { title: root.menu-text(@tr("Select &all"), @tr("Select all")); icon: MenuIcons.select-all; enabled: root.commands.can-select-all; activated => { root.menu("select-all"); } }
+            MenuItem { title: root.menu-text(@tr("Select &all"), @tr("Select all")); icon: MenuIcons.select-all; enabled: root.commands.can-select-all; activated => { root.command(Command.select-all); } }
         }
         Menu {
             title: root.menu-text(@tr("&View"), @tr("View"));
@@ -207,22 +211,22 @@ export component AppWindow inherits Window {
         }
         Menu {
             title: root.menu-text(@tr("&Simulation"), @tr("Simulation"));
-            MenuItem { title: root.menu-text(@tr("&Run"), @tr("Run")); icon: MenuIcons.play-arrow; enabled: root.commands.can-run; shortcut: @keys(F5); activated => { root.menu("run"); } }
-            MenuItem { title: root.commands.paused ? root.menu-text(@tr("&Resume"), @tr("Resume")) : root.menu-text(@tr("&Pause"), @tr("Pause")); icon: MenuIcons.pause; enabled: root.commands.run-active; shortcut: @keys(F6); activated => { root.menu("pause"); } }
-            MenuItem { title: root.menu-text(@tr("S&top"), @tr("Stop")); icon: MenuIcons.stop; enabled: root.commands.can-stop; shortcut: @keys(Shift + F5); activated => { root.menu("stop"); } }
+            MenuItem { title: root.menu-text(@tr("&Run"), @tr("Run")); icon: MenuIcons.play-arrow; enabled: root.commands.can-run; shortcut: @keys(F5); activated => { root.command(Command.run); } }
+            MenuItem { title: root.commands.paused ? root.menu-text(@tr("&Resume"), @tr("Resume")) : root.menu-text(@tr("&Pause"), @tr("Pause")); icon: MenuIcons.pause; enabled: root.commands.run-active; shortcut: @keys(F6); activated => { root.command(Command.pause); } }
+            MenuItem { title: root.menu-text(@tr("S&top"), @tr("Stop")); icon: MenuIcons.stop; enabled: root.commands.can-stop; shortcut: @keys(Shift + F5); activated => { root.command(Command.stop); } }
             MenuSeparator { }
             MenuItem {
                 title: root.commands.playing ? root.menu-text(@tr("Pause pla&yback"), @tr("Pause playback")) : root.menu-text(@tr("Pla&y"), @tr("Play"));
                 icon: root.commands.playing ? MenuIcons.pause : MenuIcons.play-arrow;
                 enabled: root.commands.can-play;
                 shortcut: @keys(F7);
-                activated => { root.transport-action("play"); }
+                activated => { root.transport-action(TransportAction.play); }
             }
         }
         Menu {
             title: root.menu-text(@tr("&Help"), @tr("Help"));
-            MenuItem { title: root.menu-text(@tr("&About WaveDude Rust"), @tr("About WaveDude Rust")); icon: MenuIcons.info; activated => { root.menu("about"); } }
-            MenuItem { title: root.menu-text(@tr("&Project page on GitHub"), @tr("Project page on GitHub")); icon: MenuIcons.open-in-new; shortcut: @keys(F1); activated => { root.menu("github"); } }
+            MenuItem { title: root.menu-text(@tr("&About WaveDude Rust"), @tr("About WaveDude Rust")); icon: MenuIcons.info; activated => { root.command(Command.about); } }
+            MenuItem { title: root.menu-text(@tr("&Project page on GitHub"), @tr("Project page on GitHub")); icon: MenuIcons.open-in-new; shortcut: @keys(F1); activated => { root.command(Command.github); } }
         }
     }
 
@@ -231,15 +235,15 @@ export component AppWindow inherits Window {
     keys := FocusScope {
         init => { self.focus(); }
         key-pressed(e) => {
-            if (e.text == Key.Escape && root.commands.can-stop) { root.menu("stop"); return accept; }
-            if (e.text == Key.Delete && !e.modifiers.control && !e.modifiers.shift) { root.menu("delete"); return accept; }
+            if (e.text == Key.Escape && root.commands.can-stop) { root.command(Command.stop); return accept; }
+            if (e.text == Key.Delete && !e.modifiers.control && !e.modifiers.shift) { root.command(Command.delete); return accept; }
             if (!e.modifiers.control || e.modifiers.alt) { return reject; }
-            if (e.text == "z" && !e.modifiers.shift) { root.menu("undo"); return accept; }
-            if (e.text == "y" || (e.text == "z" && e.modifiers.shift)) { root.menu("redo"); return accept; }
-            if (e.text == "x") { root.menu("cut"); return accept; }
-            if (e.text == "c") { root.menu("copy"); return accept; }
-            if (e.text == "v") { root.menu("paste"); return accept; }
-            if (e.text == "a") { root.menu("select-all"); return accept; }
+            if (e.text == "z" && !e.modifiers.shift) { root.command(Command.undo); return accept; }
+            if (e.text == "y" || (e.text == "z" && e.modifiers.shift)) { root.command(Command.redo); return accept; }
+            if (e.text == "x") { root.command(Command.cut); return accept; }
+            if (e.text == "c") { root.command(Command.copy); return accept; }
+            if (e.text == "v") { root.command(Command.paste); return accept; }
+            if (e.text == "a") { root.command(Command.select-all); return accept; }
             reject
         }
         VerticalLayout {
@@ -271,7 +275,8 @@ export component AppWindow inherits Window {
                             can-copy: root.commands.can-copy;
                             can-select-all: root.commands.can-select-all;
                             can-toggle: root.commands.can-toggle;
-                            act(id) => { root.menu(id); }
+                            act(c) => { root.command(c); }
+                            add-item(item) => { root.add(item); }
                             navigate(key, extend) => { root.tree-navigate(key, extend); }
                             drag-data(row) => { return root.tree-drag-data(row); }
                             drop-place(row, data, before) => { return root.tree-drop-place(row, data, before); }
@@ -322,14 +327,14 @@ export component AppWindow inherits Window {
                         preview-keys := FocusScope {
                             key-pressed(e) => {
                                 if (e.modifiers.control || e.modifiers.alt || e.modifiers.meta || e.modifiers.shift) { return reject; }
-                                if (e.text == " ") { root.transport-action("play"); return accept; }
-                                if (e.text == ",") { root.transport-action("prev"); return accept; }
-                                if (e.text == ".") { root.transport-action("next"); return accept; }
-                                if (e.text == "i" || e.text == "I") { root.transport-action("in"); return accept; }
-                                if (e.text == "o" || e.text == "O") { root.transport-action("out"); return accept; }
-                                if (e.text == "x" || e.text == "X") { root.transport-action("clear-range"); return accept; }
-                                if (e.text == "l" || e.text == "L") { root.transport-action("loop"); return accept; }
-                                if (e.text == "f" || e.text == "F") { root.transport-action("live"); return accept; }
+                                if (e.text == " ") { root.transport-action(TransportAction.play); return accept; }
+                                if (e.text == ",") { root.transport-action(TransportAction.prev); return accept; }
+                                if (e.text == ".") { root.transport-action(TransportAction.next); return accept; }
+                                if (e.text == "i" || e.text == "I") { root.transport-action(TransportAction.set-in); return accept; }
+                                if (e.text == "o" || e.text == "O") { root.transport-action(TransportAction.set-out); return accept; }
+                                if (e.text == "x" || e.text == "X") { root.transport-action(TransportAction.clear-range); return accept; }
+                                if (e.text == "l" || e.text == "L") { root.transport-action(TransportAction.loop); return accept; }
+                                if (e.text == "f" || e.text == "F") { root.transport-action(TransportAction.live); return accept; }
                                 if (e.text == Key.Home) { root.seek(root.transport.start); return accept; }
                                 if (e.text == Key.End) { root.seek(root.transport.end); return accept; }
                                 reject
@@ -343,12 +348,13 @@ export component AppWindow inherits Window {
                                 Timeline {
                                     t: root.transport;
                                     seek(f) => { root.seek(f); }
-                                    key(k) => { root.transport-action(k); }
+                                    action(a) => { root.transport-action(a); }
                                 }
                                 TransportBar {
                                     t: root.transport;
                                     stacked <=> root.preview-stacked;
                                     action(a) => { root.transport-action(a); }
+                                    command(c) => { root.command(c); }
                                     speed(v) => { root.transport-speed(v); }
                                 }
                             }
@@ -396,7 +402,13 @@ export component AppWindow inherits Window {
                     // a Text's width bounds its row; the spacer leaves the window free
                     Rectangle { horizontal-stretch: 1; min-width: 12px; }
                     Text {
-                        text: root.run-status;
+                        text: root.export-progress.active ? @tr("Exporting {}/{}", root.export-progress.done, root.export-progress.total)
+                            : root.run-status.state == RunState.none ? ""
+                            : @tr("{}: {} / {} steps, {}", root.run-status.state == RunState.running ? @tr("Running")
+                                : root.run-status.state == RunState.paused ? @tr("Paused")
+                                : root.run-status.state == RunState.failed ? @tr("Failed")
+                                : root.run-status.state == RunState.completed ? @tr("Completed") : @tr("Stopped"),
+                                root.run-status.steps-done, root.run-status.steps, root.run-status.engine);
                         color: Theme.selection-text;
                         vertical-alignment: center;
                     }
@@ -415,7 +427,10 @@ export component AppWindow inherits Window {
         levers: root.welcome-levers;
         show-startup: root.welcome-show-startup;
         preset(i) => { root.welcome-preset(i); }
-        action(a) => { root.welcome-action(a); }
+        command(c) => {
+            root.welcome-shown = false;
+            root.command(c);
+        }
         show-startup-toggled(b) => { root.welcome-show-startup-toggled(b); }
     }
     ExamplesLayer {

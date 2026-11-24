@@ -5,18 +5,7 @@ use waveduderust::model::Project;
 
 use crate::tree::Node;
 
-/// How a row click selects.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Pick {
-	/// The row alone.
-	Alone,
-	/// Into the group or out of it (Ctrl+click, Insert, Ctrl+Space).
-	Toggle,
-	/// The rows from the current one to it, in tree order (Shift+click).
-	Range,
-	/// Current, the group kept when it is in it (a right click).
-	Focus,
-}
+pub(crate) use crate::ui::Pick;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Selection {

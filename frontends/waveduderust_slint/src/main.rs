@@ -34,7 +34,6 @@ mod ui {
 }
 
 use std::cell::RefCell;
-#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -47,6 +46,7 @@ use crate::messages::Messages;
 use crate::playback::Playback;
 use crate::selection::{Pick, Selection};
 use crate::tree::Node;
+use crate::ui::{Command, TransportAction};
 use waveduderust::model::PartKind;
 
 /// Undo steps until the settings arrive (decision 0030).
@@ -63,7 +63,7 @@ struct State {
 	playback: Playback,
 	messages: Messages,
 	/// The menu action the unsaved edits prompt holds.
-	pending: Option<String>,
+	pending: Option<Action>,
 	settings: waveduderust_platform::settings::Settings,
 	store: Option<waveduderust_platform::store::Store>,
 	settings_section: usize,
@@ -326,38 +326,109 @@ fn shift(state: &mut State, by: isize) {
 	state.selection.set(to);
 }
 
+/// A tree row's handler: `f` on the row's node with the callback's argument, typed text committed first and the
+/// window refreshed after.
+fn on_row<A: 'static>(
+	state: &Rc<RefCell<State>>,
+	app: &AppWindow,
+	f: impl Fn(&mut State, Node, A) + 'static,
+) -> impl Fn(i32, A) + 'static {
+	let (state, weak) = (state.clone(), app.as_weak());
+	move |row, arg| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *state.borrow_mut();
+		let Some(node) = s.node(row) else { return };
+		s.commit_draft(&app);
+		f(s, node, arg);
+		s.show(&app);
+	}
+}
+
 /// The tree row a drag carries.
 fn dragged(data: &slint::DataTransfer) -> Option<Node> {
 	data.user_data().and_then(|d| d.downcast_ref::<Node>().copied())
 }
 
-/// Runs a menu action by its id (docs/ui/10).
-fn menu(state: &mut State, app: &AppWindow, id: &str) {
-	// a recent file by its path, which saving first may move in the list
-	if let Some(i) = id.strip_prefix("recent:") {
-		if let Some(path) = i.parse::<usize>().ok().and_then(|i| state.settings.recent_files.get(i)) {
-			let id = format!("open-file:{}", path.to_string_lossy());
-			menu(state, app, &id);
-		}
-		return;
+/// What the user asked of the app: a command, or opening a file or an example, which unsaved edits may hold up.
+#[derive(Clone, Debug)]
+enum Action {
+	Command(Command),
+	#[cfg_attr(target_arch = "wasm32", allow(dead_code, reason = "no recent files in the browser"))]
+	OpenFile(PathBuf),
+	/// An example by its index in `examples::all()`.
+	Example(usize),
+}
+
+impl Action {
+	/// Whether it replaces the project, so asks about unsaved edits first.
+	fn replaces(&self) -> bool {
+		matches!(
+			self,
+			Action::Command(Command::New | Command::Open | Command::Close | Command::Exit)
+				| Action::OpenFile(_)
+				| Action::Example(_)
+		)
 	}
-	// an add menu's entry or a folder's plus, at the centre of the canvas
-	if let Some(what) = id.strip_prefix("add:") {
-		let (centre, mut to) = (state.doc.project.canvas_centre(), None);
-		state.doc.edit(|p| to = tree::add(p, what, centre));
-		state.selection.set(to.unwrap_or(state.selection.current()));
+}
+
+/// Appends `item` at the centre of the canvas and selects it.
+fn add(state: &mut State, item: ui::NewItem) {
+	let (centre, mut to) = (state.doc.project.canvas_centre(), Node::Project);
+	state.doc.edit(|p| to = tree::add(p, item, centre));
+	state.selection.set(to);
+}
+
+/// Runs a menu entry's, shortcut's or button's command (docs/ui/10).
+fn command(state: &mut State, app: &AppWindow, command: Command) {
+	act(state, app, Action::Command(command));
+}
+
+fn act(state: &mut State, app: &AppWindow, action: Action) {
+	if action.replaces() && state.doc.dirty() {
+		state.pending = Some(action);
+		let name = state.doc.name();
+		app.set_modal(modal(
+			ui::ModalKind::Question,
+			"WaveDude Rust",
+			&format!("Save the changes to {name}?"),
+			&["Save", "Don't save", "Cancel"],
+			0,
+			2,
+		));
 		state.show(app);
 		return;
 	}
-	match id {
-		"run" => {
+	let command = match action {
+		Action::Command(command) => command,
+		#[cfg(not(target_arch = "wasm32"))]
+		Action::OpenFile(path) => {
+			open(state, app, path);
+			return state.show(app);
+		}
+		#[cfg(target_arch = "wasm32")]
+		Action::OpenFile(_) => return,
+		Action::Example(i) => {
+			let e = &examples::all()[i];
+			match waveduderust::io::wdproj::read_str(e.text) {
+				Ok((project, view)) => {
+					state.doc.adopt(project, view, &format!("{}.wdproj", e.title));
+					state.opened();
+					tracing::info!("Opened the example {}", e.title);
+				}
+				Err(err) => tracing::error!("the example {} does not parse: {err}", e.file),
+			}
+			return state.show(app);
+		}
+	};
+	match command {
+		Command::Run => {
 			state.live.run(&state.doc.project, &state.doc.view);
 			state.playback.frames = state.live.frames;
 			state.playback.follow();
 		}
-		"pause" => state.live.toggle_pause(),
+		Command::Pause => state.live.toggle_pause(),
 		// the menu, Shift+F5 and Esc: a running export first, else the run
-		"stop" => {
+		Command::Stop => {
 			if let Some(e) = &state.exporting {
 				e.cancel();
 			} else {
@@ -365,47 +436,26 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 				state.playback.live = false;
 			}
 		}
-		"welcome" => {
+		Command::Welcome => {
 			show_welcome(state, app);
 			app.set_welcome_shown(true);
 		}
-		"random-example" => {
+		Command::RandomExample => {
 			let nanos = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
-			let e = &examples::all()[nanos as usize % examples::all().len()];
-			menu(state, app, &format!("example:{}", e.file));
+			return act(state, app, Action::Example(nanos as usize % examples::all().len()));
 		}
-		"examples" => {
+		Command::Examples => {
 			show_examples(state, app);
 			app.set_examples_shown(true);
 		}
-		id if id.starts_with("example:") && !state.doc.dirty() => {
-			let file = &id["example:".len()..];
-			if let Some(e) = examples::all().iter().find(|e| e.file == file) {
-				match waveduderust::io::wdproj::read_str(e.text) {
-					Ok((project, view)) => {
-						state.doc.adopt(project, view, &format!("{}.wdproj", e.title));
-						state.opened();
-						tracing::info!("Opened the example {}", e.title);
-					}
-					Err(err) => tracing::error!("the example {file} does not parse: {err}"),
-				}
-			}
-		}
-		id if (matches!(id, "new" | "open" | "close" | "exit") || id.starts_with("example:") || id.starts_with("open-file:"))
-			&& state.doc.dirty() =>
-		{
-			state.pending = Some(id.to_owned());
-			let name = state.doc.name();
-			app.set_modal(modal(ui::ModalKind::Question, "WaveDude Rust", &format!("Save the changes to {name}?"), &["Save", "Don't save", "Cancel"], 0, 2));
-		}
-		"new" | "close" => {
+		Command::New | Command::Close => {
 			state.playback.reset();
 			let generation = state.doc.generation + 1;
 			state.doc = Document::new(state.settings.undo_steps as usize);
 			state.doc.generation = generation;
 			state.opened();
 		}
-		"open" => {
+		Command::Open => {
 			#[cfg(not(target_arch = "wasm32"))]
 			if let Some(path) = files::dialog().pick_file() {
 				open(state, app, path);
@@ -413,18 +463,21 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			#[cfg(target_arch = "wasm32")]
 			files::pick(&state.inbox);
 		}
-		#[cfg(not(target_arch = "wasm32"))]
-		id if id.starts_with("open-file:") => open(state, app, id["open-file:".len()..].into()),
-		"github" => {
+		Command::Github => {
 			if let Err(e) = webbrowser::open(env!("CARGO_PKG_REPOSITORY")) {
 				tracing::error!("cannot open the project page: {e}");
 			}
 		}
-		"save" | "save-as" => {
-			save(state, app, id == "save-as");
+		Command::Save | Command::SaveAs => {
+			save(state, app, command == Command::SaveAs);
 		}
-		id if export::Kind::of(id).is_some() || id == "export-last" => {
-			let kind = export::Kind::of(id).or(state.last_export);
+		Command::ExportField
+		| Command::ExportIntensity
+		| Command::ExportBoth
+		| Command::ExportFieldFrame
+		| Command::ExportIntensityFrame
+		| Command::ExportLast => {
+			let kind = export::Kind::of(command).or(state.last_export);
 			if state.exporting.is_none()
 				&& let Some(kind) = kind
 			{
@@ -434,11 +487,11 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 				}
 			}
 		}
-		"settings" => {
+		Command::Settings => {
 			show_settings(state, app);
 			app.set_settings_shown(true);
 		}
-		"about" => app.set_modal(modal(
+		Command::About => app.set_modal(modal(
 			ui::ModalKind::Info,
 			"About WaveDude Rust",
 			&format!("WaveDude Rust {}\nA 2D wave simulator\n\nBased on the work of WaveDude Next; Jeroen Vleggaar, Huygens Optics, author of Wave Dude 2D, Copyright (C) 2026; 0x23 (Diffraction Limited), author of WaveSimulator2D.\n\nThis program is free software under the GNU General Public License, version 3 or later.", env!("CARGO_PKG_VERSION")),
@@ -446,51 +499,52 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			0,
 			0,
 		)),
-		"undo" => {
+		Command::Undo => {
 			state.doc.undo();
 			state.selection.collapse();
 		}
-		"redo" => {
+		Command::Redo => {
 			state.doc.redo();
 			state.selection.collapse();
 		}
-		"copy" | "cut" => {
+		Command::Copy | Command::Cut => {
 			let group = state.selection.group();
 			let copied = clipboard::copy(&state.doc.project, &state.doc.view, &group)
 				.map(|f| clipboard::write(waveduderust::io::wdproj::write_fragment(&f)));
 			match copied {
-				Some(Ok(())) if id == "cut" && state.commands().can_delete => remove(state, &group),
+				Some(Ok(())) if command == Command::Cut && state.commands().can_delete => remove(state, &group),
 				Some(Err(e)) => tracing::error!("clipboard: {e}"),
 				_ => {}
 			}
 		}
-		"paste" => {
+		Command::Paste => {
 			clipboard::read(&state.pasted);
 			paste(state);
 		}
-		"delete" if state.commands().can_delete => remove(state, &state.selection.group()),
-		"move-up" if state.commands().can_move_up => shift(state, -1),
-		"move-down" if state.commands().can_move_down => shift(state, 1),
-		"duplicate" if state.commands().can_delete => {
+		Command::Delete if state.commands().can_delete => remove(state, &state.selection.group()),
+		Command::MoveUp if state.commands().can_move_up => shift(state, -1),
+		Command::MoveDown if state.commands().can_move_down => shift(state, 1),
+		Command::Duplicate if state.commands().can_delete => {
 			let (group, mut copies) = (state.selection.group(), Vec::new());
 			state.doc.edit(|p| copies = tree::duplicate_all(p, &group));
 			if !copies.is_empty() {
 				state.selection.set_group(copies);
 			}
 		}
-		"toggle-enabled" if state.commands().can_toggle => {
+		Command::ToggleEnabled if state.commands().can_toggle => {
 			let group = state.selection.group();
 			state.doc.edit(|p| group.iter().for_each(|&n| tree::toggle(p, n)));
 		}
-		"toggle-selected" => {
+		Command::ToggleSelected => {
 			let node = state.selection.current();
 			state.selection.toggle(node);
 		}
-		"select-all" => state.selection.select_all(&state.doc.project),
-		"exit" => {
+		Command::SelectAll => state.selection.select_all(&state.doc.project),
+		Command::Exit => {
 			let _ = app.hide();
 		}
-		other => tracing::info!("menu: {other}"),
+		// unavailable here
+		Command::Delete | Command::MoveUp | Command::MoveDown | Command::Duplicate | Command::ToggleEnabled => {}
 	}
 	state.show(app);
 }
@@ -702,29 +756,29 @@ fn answer(state: &mut State, app: &AppWindow, button: i32) {
 		};
 		if go {
 			state.doc.mark_saved();
-			menu(state, app, &then);
+			act(state, app, then);
 		}
 	}
 }
 
 /// A transport bar or timeline action (docs/ui/50).
-fn transport(state: &mut State, app: &AppWindow, id: &str) {
+fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
 	let p = &mut state.playback;
-	match id {
-		"play" if p.playing => p.pause(),
-		"play" => {
+	match action {
+		TransportAction::Play if p.playing => p.pause(),
+		TransportAction::Play => {
 			p.play();
 			state.live.fill();
 		}
-		"prev" => p.seek(i64::from(p.position) - 1),
-		"next" => p.seek(i64::from(p.position) + 1),
-		"in" => p.set_in(),
-		"out" => p.set_out(),
-		"clear-range" => (p.start, p.end) = (None, None),
-		"loop" => p.looping ^= true,
-		"live" => p.live ^= state.live.active(),
-		"pause-run" => state.live.toggle_pause(),
-		"layout" => {
+		TransportAction::Prev => p.seek(i64::from(p.position) - 1),
+		TransportAction::Next => p.seek(i64::from(p.position) + 1),
+		TransportAction::SetIn => p.set_in(),
+		TransportAction::SetOut => p.set_out(),
+		TransportAction::ClearRange => (p.start, p.end) = (None, None),
+		TransportAction::Loop => p.looping ^= true,
+		TransportAction::Live => p.live ^= state.live.active(),
+		TransportAction::PauseRun => state.live.toggle_pause(),
+		TransportAction::Layout => {
 			use waveduderust_platform::settings::Orientation;
 			state.settings.preview_orientation =
 				if app.get_preview_stacked() { Orientation::Vertical } else { Orientation::Horizontal };
@@ -732,7 +786,6 @@ fn transport(state: &mut State, app: &AppWindow, id: &str) {
 				tracing::error!("{e}");
 			}
 		}
-		other => menu(state, app, other),
 	}
 }
 
@@ -833,43 +886,18 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	}
 	state.borrow_mut().show(&app);
 
-	let on = |f: fn(&mut State, &AppWindow, i32, i32)| {
-		let (state, weak) = (state.clone(), app.as_weak());
-		move |row: i32, arg: i32| {
-			if let Some(app) = weak.upgrade() {
-				let mut s = state.borrow_mut();
-				s.commit_draft(&app);
-				f(&mut s, &app, row, arg);
-				s.show(&app);
-			}
-		}
-	};
-	app.on_tree_select(on(|s, _, row, pick| {
-		let pick = match pick {
-			1 => Pick::Toggle,
-			2 => Pick::Range,
-			3 => Pick::Focus,
-			_ => Pick::Alone,
-		};
-		if let Some(node) = s.node(row) {
-			s.selection.pick(&s.doc.project, node, pick);
-		}
-	}));
+	app.on_tree_select(on_row(&state, &app, |s, node, pick| s.selection.pick(&s.doc.project, node, pick)));
 	// a row's own check box and buttons act on the group it belongs to, else on the row
-	let toggle = on(|s, _, row, _| {
-		if let Some(node) = s.node(row) {
-			let group = s.selection.group_of(node);
-			s.doc.edit(|p| group.iter().for_each(|&n| tree::toggle(p, n)));
-		}
+	let toggle = on_row(&state, &app, |s, node, ()| {
+		let group = s.selection.group_of(node);
+		s.doc.edit(|p| group.iter().for_each(|&n| tree::toggle(p, n)));
 	});
-	app.on_tree_toggle(move |row| toggle(row, 0));
-	let expand = on(|s, _, row, _| {
-		if let Some(node) = s.node(row) {
-			let open = s.collapsed.contains(&node);
-			s.expand(node, open);
-		}
+	app.on_tree_toggle(move |row| toggle(row, ()));
+	let expand = on_row(&state, &app, |s, node, ()| {
+		let open = s.collapsed.contains(&node);
+		s.expand(node, open);
 	});
-	app.on_tree_expand(move |row| expand(row, 0));
+	app.on_tree_expand(move |row| expand(row, ()));
 	let st = state.clone();
 	app.on_tree_drag_data(move |row| {
 		let mut data = slint::DataTransfer::default();
@@ -883,12 +911,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.on_tree_drop_place(move |row, data, before| {
 		let s = st.borrow();
 		let place = dragged(&data).zip(s.node(row)).and_then(|(n, t)| tree::drop_target(&s.doc.project, n, t, before));
-		match place {
-			Some((tree::Place::Before, _)) => 1,
-			Some((tree::Place::After, _)) => 2,
-			Some((tree::Place::Into, _)) => 3,
-			None => 0,
-		}
+		place.map_or(ui::DropPlace::None, |(place, _)| place)
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_tree_drop(move |row, data, before| {
@@ -912,7 +935,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		if let Some(app) = weak.upgrade() {
 			let mut s = st.borrow_mut();
 			let s = &mut *s;
-			match tree::navigate(&s.doc.project, &s.nodes, &s.collapsed, s.selection.current(), &key) {
+			match tree::navigate(&s.doc.project, &s.nodes, &s.collapsed, s.selection.current(), key) {
 				Some(tree::Step::To(node)) => {
 					s.commit_draft(&app);
 					s.selection.pick(&s.doc.project, node, if extend { Pick::Range } else { Pick::Alone });
@@ -923,19 +946,13 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			s.show(&app);
 		}
 	});
-	app.on_tree_shift(on(|s, _, row, by| {
-		if let Some(node) = s.node(row) {
-			let mut to = node;
-			s.doc.edit(|p| to = tree::shift(p, node, by as isize));
-			s.selection.set(to);
-		}
+	app.on_tree_shift(on_row(&state, &app, |s, node, by: i32| {
+		let mut to = node;
+		s.doc.edit(|p| to = tree::shift(p, node, by as isize));
+		s.selection.set(to);
 	}));
-	let remove_row = on(|s, _, row, _| {
-		if let Some(node) = s.node(row) {
-			remove(s, &s.selection.group_of(node));
-		}
-	});
-	app.on_tree_remove(move |row| remove_row(row, 0));
+	let remove_row = on_row(&state, &app, |s, node, ()| remove(s, &s.selection.group_of(node)));
+	app.on_tree_remove(move |row| remove_row(row, ()));
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_props_set(move |form, row, text| {
 		if let Some(app) = weak.upgrade() {
@@ -1023,9 +1040,27 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		s.show(&app);
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_menu(move |id| {
+	app.on_command(move |c| {
 		if let Some(app) = weak.upgrade() {
-			menu(&mut st.borrow_mut(), &app, &id);
+			command(&mut st.borrow_mut(), &app, c);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_add(move |item| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			add(s, item);
+			s.show(&app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_open_recent(move |i| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			// the path now: saving first may move it in the list
+			if let Some(path) = usize::try_from(i).ok().and_then(|i| s.settings.recent_files.get(i)).cloned() {
+				act(s, &app, Action::OpenFile(path));
+			}
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
@@ -1050,7 +1085,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			let s = &mut *st.borrow_mut();
 			if let Some(&i) = usize::try_from(row).ok().and_then(|r| s.example_rows.get(r)) {
 				app.set_examples_shown(false);
-				menu(s, &app, &format!("example:{}", examples::all()[i].file));
+				act(s, &app, Action::Example(i));
 			}
 		}
 	});
@@ -1059,7 +1094,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		if let Some(app) = weak.upgrade() {
 			let s = &mut *st.borrow_mut();
 			let facts = s.facts;
-			settings::preset(&mut s.settings, s.store.as_ref(), usize::try_from(i).unwrap_or_default(), facts);
+			settings::preset(&mut s.settings, s.store.as_ref(), i, facts);
 			apply_settings(s, &app);
 			show_welcome(s, &app);
 		}
@@ -1073,14 +1108,6 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				tracing::error!("{e}");
 			}
 			show_welcome(s, &app);
-		}
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_welcome_action(move |action| {
-		if let Some(app) = weak.upgrade() {
-			app.set_welcome_shown(false);
-			let id = if action == "random" { "random-example" } else { action.as_str() };
-			menu(&mut st.borrow_mut(), &app, id);
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
@@ -1116,26 +1143,22 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		let Some(app) = weak.upgrade() else { return slint::CloseRequestResponse::HideWindow };
 		let s = &mut *st.borrow_mut();
 		if s.doc.dirty() {
-			menu(s, &app, "exit");
+			command(s, &app, Command::Exit);
 			slint::CloseRequestResponse::KeepWindowShown
 		} else {
 			slint::CloseRequestResponse::HideWindow
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_transport_action(move |id| {
+	app.on_transport_action(move |action| {
 		if let Some(app) = weak.upgrade() {
-			transport(&mut st.borrow_mut(), &app, &id);
+			transport(&mut st.borrow_mut(), &app, action);
 		}
 	});
 	let st = state.clone();
 	app.on_seek(move |frame| st.borrow_mut().playback.seek(i64::from(frame)));
 	let st = state.clone();
-	app.on_transport_speed(move |v| {
-		if let Ok(speed) = v.parse::<f64>() {
-			st.borrow_mut().playback.speed = speed.clamp(0.01, 100.0);
-		}
-	});
+	app.on_transport_speed(move |speed| st.borrow_mut().playback.speed = f64::from(speed).clamp(0.01, 100.0));
 	let on_log = |f: fn(&mut Messages, slint::SharedString)| {
 		let (st, weak) = (state.clone(), app.as_weak());
 		move |arg: slint::SharedString| {
@@ -1175,9 +1198,10 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			app.set_commands(s.commands());
 			if let Some(e) = &mut s.exporting {
 				match e.poll() {
-					Ok(progress) => app.set_run_status(progress.into()),
+					Ok(progress) => app.set_export_progress(progress),
 					Err(outcome) => {
 						s.exporting = None;
+						app.set_export_progress(ui::ExportProgress::default());
 						match outcome {
 							Ok(written) => tracing::info!("exported {written}"),
 							Err(e) => {
@@ -1228,7 +1252,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			if let Some(image) = shown.intensity {
 				app.set_intensity(image);
 			}
-			app.set_run_status(shown.status.into());
+			app.set_run_status(shown.status);
 		}
 	});
 	#[cfg(target_arch = "wasm32")]

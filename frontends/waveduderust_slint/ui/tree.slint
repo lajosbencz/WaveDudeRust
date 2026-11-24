@@ -2,12 +2,13 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icon, IconButton } from "icons.slint";
 import { MenuIcons } from "menu-icons.slint";
+import { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace } from "commands.slint";
 
-// An add menu's entry: an id for `tree::add`.
+// An add menu's entry.
 struct AddKind {
     title: string,
     icon: image,
-    id: string,
+    id: NewItem,
 }
 
 // Next's menus of part and probe kinds (ProjectTree.xaml PartKindMenu, ProbeKindMenu), shared by the toolbar's menus
@@ -15,39 +16,39 @@ struct AddKind {
 // (docs/divergences.md, Add menus).
 global AddKinds {
     out property <[AddKind]> parts: [
-        { title: @tr("Lens/Mirror"), icon: MenuIcons.next-lens, id: "part:lens" },
-        { title: @tr("Fresnel lens"), icon: MenuIcons.next-fresnel-lens, id: "part:fresnel-lens" },
-        { title: @tr("Fibre"), icon: MenuIcons.next-fiber, id: "part:fiber" },
-        { title: @tr("Bragg reflector"), icon: MenuIcons.next-bragg-reflector, id: "part:bragg-reflector" },
-        { title: @tr("GRIN lens"), icon: MenuIcons.next-grin-lens, id: "part:grin-lens" },
-        { title: @tr("Zone plate"), icon: MenuIcons.next-zone-plate, id: "part:zone-plate" },
-        { title: @tr("Diffuser"), icon: MenuIcons.next-diffuser, id: "part:diffuser" },
-        { title: @tr("Interference filter"), icon: MenuIcons.next-interference-filter, id: "part:interference-filter" },
+        { title: @tr("Lens/Mirror"), icon: MenuIcons.next-lens, id: NewItem.lens },
+        { title: @tr("Fresnel lens"), icon: MenuIcons.next-fresnel-lens, id: NewItem.fresnel-lens },
+        { title: @tr("Fibre"), icon: MenuIcons.next-fiber, id: NewItem.fiber },
+        { title: @tr("Bragg reflector"), icon: MenuIcons.next-bragg-reflector, id: NewItem.bragg-reflector },
+        { title: @tr("GRIN lens"), icon: MenuIcons.next-grin-lens, id: NewItem.grin-lens },
+        { title: @tr("Zone plate"), icon: MenuIcons.next-zone-plate, id: NewItem.zone-plate },
+        { title: @tr("Diffuser"), icon: MenuIcons.next-diffuser, id: NewItem.diffuser },
+        { title: @tr("Interference filter"), icon: MenuIcons.next-interference-filter, id: NewItem.interference-filter },
     ];
     out property <[AddKind]> gratings: [
-        { title: @tr("Simple 2D grating"), icon: MenuIcons.next-simple-grating, id: "part:simple-grating" },
-        { title: @tr("Facetted grating"), icon: MenuIcons.next-facetted-grating, id: "part:facetted-grating" },
+        { title: @tr("Simple 2D grating"), icon: MenuIcons.next-simple-grating, id: NewItem.simple-grating },
+        { title: @tr("Facetted grating"), icon: MenuIcons.next-facetted-grating, id: NewItem.facetted-grating },
     ];
     out property <[AddKind]> meta: [
-        { title: @tr("Meta lens"), icon: MenuIcons.next-meta-lens, id: "part:meta-lens" },
-        { title: @tr("Meta prism"), icon: MenuIcons.next-meta-prism, id: "part:meta-prism" },
-        { title: @tr("Meta axicon"), icon: MenuIcons.next-meta-axicon, id: "part:meta-axicon" },
+        { title: @tr("Meta lens"), icon: MenuIcons.next-meta-lens, id: NewItem.meta-lens },
+        { title: @tr("Meta prism"), icon: MenuIcons.next-meta-prism, id: NewItem.meta-prism },
+        { title: @tr("Meta axicon"), icon: MenuIcons.next-meta-axicon, id: NewItem.meta-axicon },
     ];
     out property <[AddKind]> shapes: [
-        { title: @tr("Polygon"), icon: MenuIcons.next-polygon, id: "part:polygon" },
-        { title: @tr("Rectangle"), icon: MenuIcons.next-rectangle, id: "part:rectangle" },
-        { title: @tr("Ellipse"), icon: MenuIcons.next-ellipse, id: "part:ellipse" },
-        { title: @tr("Triangle"), icon: MenuIcons.next-triangle, id: "part:triangle" },
-        { title: @tr("Outline"), icon: MenuIcons.next-outline, id: "part:outline" },
+        { title: @tr("Polygon"), icon: MenuIcons.next-polygon, id: NewItem.polygon },
+        { title: @tr("Rectangle"), icon: MenuIcons.next-rectangle, id: NewItem.rectangle },
+        { title: @tr("Ellipse"), icon: MenuIcons.next-ellipse, id: NewItem.ellipse },
+        { title: @tr("Triangle"), icon: MenuIcons.next-triangle, id: NewItem.triangle },
+        { title: @tr("Outline"), icon: MenuIcons.next-outline, id: NewItem.outline },
     ];
     out property <[AddKind]> logic: [
-        { title: @tr("XOR (Mach-Zehnder)"), icon: MenuIcons.next-xor-gate, id: "part:xor-gate" },
-        { title: @tr("AND"), icon: MenuIcons.next-and-gate, id: "part:and-gate" },
-        { title: @tr("OR"), icon: MenuIcons.next-or-gate, id: "part:or-gate" },
+        { title: @tr("XOR (Mach-Zehnder)"), icon: MenuIcons.next-xor-gate, id: NewItem.xor-gate },
+        { title: @tr("AND"), icon: MenuIcons.next-and-gate, id: NewItem.and-gate },
+        { title: @tr("OR"), icon: MenuIcons.next-or-gate, id: NewItem.or-gate },
     ];
     out property <[AddKind]> detectors: [
-        { title: @tr("Counting detector"), icon: MenuIcons.next-counting-detector, id: "probe:counting" },
-        { title: @tr("Imaging detector"), icon: MenuIcons.next-imaging-detector, id: "probe:imaging" },
+        { title: @tr("Counting detector"), icon: MenuIcons.next-counting-detector, id: NewItem.counting-detector },
+        { title: @tr("Imaging detector"), icon: MenuIcons.next-imaging-detector, id: NewItem.imaging-detector },
     ];
 }
 
@@ -55,7 +56,7 @@ global AddKinds {
 component PartMenu {
     // off: no right click opens it
     in property <bool> enabled: true;
-    callback add(string);
+    callback add(NewItem);
     public function open() { menu.show({ x: 0, y: root.height }); }
     menu := ContextMenuArea {
         enabled: root.enabled;
@@ -86,12 +87,12 @@ component PartMenu {
 // The menu of probe kinds, opened as the parts' is.
 component ProbeMenu {
     in property <bool> enabled: true;
-    callback add(string);
+    callback add(NewItem);
     public function open() { menu.show({ x: 0, y: root.height }); }
     menu := ContextMenuArea {
         enabled: root.enabled;
         Menu {
-            MenuItem { title: @tr("Standard probe"); icon: MenuIcons.next-probe; activated => { root.add("probe:standard"); } }
+            MenuItem { title: @tr("Standard probe"); icon: MenuIcons.next-probe; activated => { root.add(NewItem.standard-probe); } }
             Menu {
                 title: @tr("Probabilistic");
                 icon: MenuIcons.next-counting-detector;
@@ -159,8 +160,8 @@ export struct TreeRow {
     checked: bool,
     selected: bool,
     icon: image,
-    // a folder's plus: "source", "part", "probe" or "scheme"; empty for other rows
-    add: string,
+    // a folder's plus
+    add: FolderAdd,
     // has children, and shows them
     expandable: bool,
     expanded: bool,
@@ -173,8 +174,7 @@ export component ProjectTree inherits Rectangle {
     in property <[TreeRow]> rows;
     // the current row's index, -1 when hidden
     in property <int> current-row;
-    // the row and how: 0 alone, 1 toggled (Ctrl), 2 range (Shift), 3 current in the group kept (right click)
-    callback select(int, int);
+    callback select(row: int, pick: Pick);
     callback toggle(int);
     callback expand(int);
     callback shift(int, int);
@@ -186,14 +186,15 @@ export component ProjectTree inherits Rectangle {
     in property <bool> can-select-all;
     // the current row can be switched on and off and join a group
     in property <bool> can-toggle;
-    // a command on the current row ("move-up", "move-down", "delete") or an add ("add:<what>")
-    callback act(string);
-    // a key's move: "up", "down", "home", "end", "left", "right"; `extend` a Shift range
-    callback navigate(key: string, extend: bool);
+    // a command on the current row
+    callback act(Command);
+    callback add-item(NewItem);
+    // `extend`: a Shift range
+    callback navigate(key: TreeKey, extend: bool);
     // a row's drag payload
     pure callback drag-data(row: int) -> data-transfer;
-    // where a drop of `data` on the row would go: 0 nowhere, 1 before, 2 after, 3 into; `before` its upper half
-    callback drop-place(row: int, data: data-transfer, before: bool) -> int;
+    // where a drop of `data` on the row would go; `before`: over its upper half
+    callback drop-place(row: int, data: data-transfer, before: bool) -> DropPlace;
     callback drop(row: int, data: data-transfer, before: bool);
 
     // the current row stays in view
@@ -207,9 +208,13 @@ export component ProjectTree inherits Rectangle {
     }
 
     // the tree takes the focus with a command on it (Next's rule)
-    function run(id: string) {
+    function run(command: Command) {
         tree-keys.focus();
-        root.act(id);
+        root.act(command);
+    }
+    function add(item: NewItem) {
+        tree-keys.focus();
+        root.add-item(item);
     }
     property <bool> focused: tree-keys.has-focus;
 
@@ -225,7 +230,7 @@ export component ProjectTree inherits Rectangle {
                     icon: @image-url("icons/next/source.svg");
                     text: @tr("Source");
                     tip: @tr("Add a source (appended at the end)");
-                    clicked => { root.run("add:source"); }
+                    clicked => { root.add(NewItem.source); }
                 }
                 AddButton {
                     icon: @image-url("icons/next/probe.svg");
@@ -233,7 +238,7 @@ export component ProjectTree inherits Rectangle {
                     tip: @tr("Add a probe: a standard probe, or a probabilistic detector (appended at the end)");
                     drop-down: true;
                     clicked => { probes.open(); }
-                    probes := ProbeMenu { add(id) => { root.run("add:" + id); } }
+                    probes := ProbeMenu { add(id) => { root.add(id); } }
                 }
                 AddButton {
                     icon: @image-url("icons/next/part.svg");
@@ -241,31 +246,31 @@ export component ProjectTree inherits Rectangle {
                     tip: @tr("Add an optical part (a menu of kinds; appended at the end)");
                     drop-down: true;
                     clicked => { parts.open(); }
-                    parts := PartMenu { add(id) => { root.run("add:" + id); } }
+                    parts := PartMenu { add(id) => { root.add(id); } }
                 }
                 Rectangle { width: 9px; Rectangle { x: 4px; width: 1px; height: parent.height - 4px; background: Theme.border; } }
-                IconButton { icon: @image-url("icons/next/tree-chevron-up.svg"); tip: @tr("Move up (Alt+Up); drag to reorder"); enabled: root.can-move-up; clicked => { root.run("move-up"); } }
-                IconButton { icon: @image-url("icons/next/tree-chevron-down.svg"); tip: @tr("Move down (Alt+Down); drag to reorder"); enabled: root.can-move-down; clicked => { root.run("move-down"); } }
-                IconButton { icon: @image-url("icons/next/tree-minus.svg"); tip: @tr("Remove (Del)"); enabled: root.can-remove; clicked => { root.run("delete"); } }
+                IconButton { icon: @image-url("icons/next/tree-chevron-up.svg"); tip: @tr("Move up (Alt+Up); drag to reorder"); enabled: root.can-move-up; clicked => { root.run(Command.move-up); } }
+                IconButton { icon: @image-url("icons/next/tree-chevron-down.svg"); tip: @tr("Move down (Alt+Down); drag to reorder"); enabled: root.can-move-down; clicked => { root.run(Command.move-down); } }
+                IconButton { icon: @image-url("icons/next/tree-minus.svg"); tip: @tr("Remove (Del)"); enabled: root.can-remove; clicked => { root.run(Command.delete); } }
             }
             Rectangle { y: parent.height - 1px; height: 1px; background: Theme.border; }
         }
         // Next's TreeView keys, only while the tree has focus
         tree-keys := FocusScope {
             key-pressed(e) => {
-                if (e.modifiers.alt && !e.modifiers.control && e.text == Key.UpArrow) { root.act("move-up"); return accept; }
-                if (e.modifiers.alt && !e.modifiers.control && e.text == Key.DownArrow) { root.act("move-down"); return accept; }
-                if (e.modifiers.control && !e.modifiers.alt && e.text == "d") { root.act("duplicate"); return accept; }
-                if (e.modifiers.control && !e.modifiers.alt && e.text == " ") { root.act("toggle-selected"); return accept; }
+                if (e.modifiers.alt && !e.modifiers.control && e.text == Key.UpArrow) { root.act(Command.move-up); return accept; }
+                if (e.modifiers.alt && !e.modifiers.control && e.text == Key.DownArrow) { root.act(Command.move-down); return accept; }
+                if (e.modifiers.control && !e.modifiers.alt && e.text == "d") { root.act(Command.duplicate); return accept; }
+                if (e.modifiers.control && !e.modifiers.alt && e.text == " ") { root.act(Command.toggle-selected); return accept; }
                 if (e.modifiers.alt || e.modifiers.control) { return reject; }
-                if (e.text == Key.UpArrow) { root.navigate("up", e.modifiers.shift); return accept; }
-                if (e.text == Key.DownArrow) { root.navigate("down", e.modifiers.shift); return accept; }
-                if (e.text == Key.Home) { root.navigate("home", e.modifiers.shift); return accept; }
-                if (e.text == Key.End) { root.navigate("end", e.modifiers.shift); return accept; }
-                if (e.text == Key.LeftArrow) { root.navigate("left", false); return accept; }
-                if (e.text == Key.RightArrow) { root.navigate("right", false); return accept; }
-                if (e.text == " ") { root.act("toggle-enabled"); return accept; }
-                if (e.text == Key.Insert) { root.act("toggle-selected"); return accept; }
+                if (e.text == Key.UpArrow) { root.navigate(TreeKey.up, e.modifiers.shift); return accept; }
+                if (e.text == Key.DownArrow) { root.navigate(TreeKey.down, e.modifiers.shift); return accept; }
+                if (e.text == Key.Home) { root.navigate(TreeKey.home, e.modifiers.shift); return accept; }
+                if (e.text == Key.End) { root.navigate(TreeKey.end, e.modifiers.shift); return accept; }
+                if (e.text == Key.LeftArrow) { root.navigate(TreeKey.left, false); return accept; }
+                if (e.text == Key.RightArrow) { root.navigate(TreeKey.right, false); return accept; }
+                if (e.text == " ") { root.act(Command.toggle-enabled); return accept; }
+                if (e.text == Key.Insert) { root.act(Command.toggle-selected); return accept; }
                 if (e.text == Key.Menu || (e.modifiers.shift && e.text == Key.F10)) {
                     rows-menu.show({
                         x: list.absolute-position.x + 24px - menu-anchor.absolute-position.x,
@@ -284,53 +289,53 @@ export component ProjectTree inherits Rectangle {
                 height: 0px;
                 rows-menu := ContextMenuArea {
                     Menu {
-                        MenuItem { title: @tr("Add source"); icon: MenuIcons.add; activated => { root.run("add:source"); } }
+                        MenuItem { title: @tr("Add source"); icon: MenuIcons.add; activated => { root.add(NewItem.source); } }
                         Menu {
                             title: @tr("Add part");
                             icon: MenuIcons.add;
-                            for kind in AddKinds.parts: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                            for kind in AddKinds.parts: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
                             Menu {
                                 title: @tr("Diffraction gratings");
                                 icon: MenuIcons.next-diffraction-gratings;
-                                for kind in AddKinds.gratings: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                                for kind in AddKinds.gratings: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
                             }
                             Menu {
                                 title: @tr("Meta surfaces");
                                 icon: MenuIcons.next-meta-surfaces;
-                                for kind in AddKinds.meta: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                                for kind in AddKinds.meta: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
                             }
                             MenuSeparator { }
-                            for kind in AddKinds.shapes: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                            for kind in AddKinds.shapes: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
                             MenuSeparator { }
                             Menu {
                                 title: @tr("Optical logic");
                                 icon: MenuIcons.next-optical-logic;
-                                for kind in AddKinds.logic: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                                for kind in AddKinds.logic: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
                             }
                         }
                         Menu {
                             title: @tr("Add probe");
                             icon: MenuIcons.add;
-                            MenuItem { title: @tr("Standard probe"); icon: MenuIcons.next-probe; activated => { root.run("add:probe:standard"); } }
+                            MenuItem { title: @tr("Standard probe"); icon: MenuIcons.next-probe; activated => { root.add(NewItem.standard-probe); } }
                             Menu {
                                 title: @tr("Probabilistic");
                                 icon: MenuIcons.next-counting-detector;
-                                for kind in AddKinds.detectors: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                                for kind in AddKinds.detectors: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
                             }
                         }
                         MenuSeparator { }
-                        MenuItem { title: @tr("Add to or remove from selection"); icon: MenuIcons.checklist; enabled: root.can-toggle; activated => { root.run("toggle-selected"); } }
-                        MenuItem { title: @tr("Select all"); icon: MenuIcons.select-all; enabled: root.can-select-all; activated => { root.run("select-all"); } }
+                        MenuItem { title: @tr("Add to or remove from selection"); icon: MenuIcons.checklist; enabled: root.can-toggle; activated => { root.run(Command.toggle-selected); } }
+                        MenuItem { title: @tr("Select all"); icon: MenuIcons.select-all; enabled: root.can-select-all; activated => { root.run(Command.select-all); } }
                         MenuSeparator { }
-                        MenuItem { title: @tr("Enabled"); icon: MenuIcons.check-box; enabled: root.can-toggle; activated => { root.run("toggle-enabled"); } }
-                        MenuItem { title: @tr("Duplicate"); icon: MenuIcons.control-point-duplicate; enabled: root.can-remove; activated => { root.run("duplicate"); } }
-                        MenuItem { title: @tr("Cut"); icon: MenuIcons.content-cut; enabled: root.can-remove; activated => { root.run("cut"); } }
-                        MenuItem { title: @tr("Copy"); icon: MenuIcons.content-copy; enabled: root.can-copy; activated => { root.run("copy"); } }
-                        MenuItem { title: @tr("Paste"); icon: MenuIcons.content-paste; enabled: true; activated => { root.run("paste"); } }
-                        MenuItem { title: @tr("Remove"); icon: MenuIcons.delete; enabled: root.can-remove; activated => { root.run("delete"); } }
+                        MenuItem { title: @tr("Enabled"); icon: MenuIcons.check-box; enabled: root.can-toggle; activated => { root.run(Command.toggle-enabled); } }
+                        MenuItem { title: @tr("Duplicate"); icon: MenuIcons.control-point-duplicate; enabled: root.can-remove; activated => { root.run(Command.duplicate); } }
+                        MenuItem { title: @tr("Cut"); icon: MenuIcons.content-cut; enabled: root.can-remove; activated => { root.run(Command.cut); } }
+                        MenuItem { title: @tr("Copy"); icon: MenuIcons.content-copy; enabled: root.can-copy; activated => { root.run(Command.copy); } }
+                        MenuItem { title: @tr("Paste"); icon: MenuIcons.content-paste; enabled: true; activated => { root.run(Command.paste); } }
+                        MenuItem { title: @tr("Remove"); icon: MenuIcons.delete; enabled: root.can-remove; activated => { root.run(Command.delete); } }
                         MenuSeparator { }
-                        MenuItem { title: @tr("Move up"); icon: MenuIcons.arrow-upward; enabled: root.can-move-up; activated => { root.run("move-up"); } }
-                        MenuItem { title: @tr("Move down"); icon: MenuIcons.arrow-downward; enabled: root.can-move-down; activated => { root.run("move-down"); } }
+                        MenuItem { title: @tr("Move up"); icon: MenuIcons.arrow-upward; enabled: root.can-move-up; activated => { root.run(Command.move-up); } }
+                        MenuItem { title: @tr("Move down"); icon: MenuIcons.arrow-downward; enabled: root.can-move-down; activated => { root.run(Command.move-down); } }
                     }
                 }
             }
@@ -340,10 +345,10 @@ export component ProjectTree inherits Rectangle {
                     background: row.selected ? (root.focused ? Theme.selection : Theme.inactive-selection) : area.has-hover ? Theme.row-hover : transparent;
                     drop := DropArea {
                         // where a drop over the row would go (drop-place)
-                        property <int> place;
+                        property <DropPlace> place;
                         can-drop(e) => {
                             self.place = root.drop-place(i, e.data, e.position.y < self.height / 2);
-                            self.place == 0 ? DragAction.none : DragAction.move
+                            self.place == DropPlace.none ? DragAction.none : DragAction.move
                         }
                         dropped(e) => {
                             tree-keys.focus();
@@ -357,13 +362,13 @@ export component ProjectTree inherits Rectangle {
                             data: root.drag-data(i);
                             area := TouchArea {
                                 // the press's modifiers: `clicked` carries none
-                                property <int> pick;
+                                property <Pick> pick;
                                 pointer-event(e) => {
                                     if (e.kind == PointerEventKind.down) {
-                                        self.pick = e.modifiers.control ? 1 : e.modifiers.shift ? 2 : 0;
+                                        self.pick = e.modifiers.control ? Pick.toggle : e.modifiers.shift ? Pick.range : Pick.alone;
                                         if (e.button == PointerEventButton.right) {
                                             tree-keys.focus();
-                                            root.select(i, row.selected ? 3 : 0);
+                                            root.select(i, row.selected ? Pick.focus : Pick.alone);
                                             rows-menu.show({
                                                 x: self.absolute-position.x + self.mouse-x - menu-anchor.absolute-position.x,
                                                 y: self.absolute-position.y + self.mouse-y - menu-anchor.absolute-position.y,
@@ -429,17 +434,23 @@ export component ProjectTree inherits Rectangle {
                             horizontal-stretch: 1;
                             color: row.selected && root.focused ? Theme.selection-text : row.checked ? Theme.text : Theme.text-disabled;
                         }
-                        if row.add != "": IconButton {
+                        if row.add != FolderAdd.none: IconButton {
                             size: 18px;
                             focusable: false;
                             y: (parent.height - self.height) / 2;
                             icon: @image-url("icons/next/tree-plus.svg");
                             tip: @tr("Add an item to this folder");
                             clicked => {
-                                if (row.add == "part") { kinds.open(); } else if (row.add == "probe") { probe-kinds.open(); } else { root.run("add:" + row.add); }
+                                if (row.add == FolderAdd.part) {
+                                    kinds.open();
+                                } else if (row.add == FolderAdd.probe) {
+                                    probe-kinds.open();
+                                } else {
+                                    root.add(row.add == FolderAdd.source ? NewItem.source : NewItem.scheme);
+                                }
                             }
-                            kinds := PartMenu { enabled: row.add == "part"; add(id) => { root.run("add:" + id); } }
-                            probe-kinds := ProbeMenu { enabled: row.add == "probe"; add(id) => { root.run("add:" + id); } }
+                            kinds := PartMenu { enabled: row.add == FolderAdd.part; add(id) => { root.add(id); } }
+                            probe-kinds := ProbeMenu { enabled: row.add == FolderAdd.probe; add(id) => { root.add(id); } }
                         }
                         if row.depth == 2: HorizontalLayout {
                             spacing: 0px;
@@ -449,9 +460,9 @@ export component ProjectTree inherits Rectangle {
                         }
                     }
                     // Next's insertion adorner: a line along the edge, an outline around a folder
-                    if drop.has-drag && drop.place == 1: Rectangle { y: 0; height: 2px; background: Theme.accent; }
-                    if drop.has-drag && drop.place == 2: Rectangle { y: parent.height - 2px; height: 2px; background: Theme.accent; }
-                    if drop.has-drag && drop.place == 3: Rectangle { border-width: 1px; border-color: Theme.accent; }
+                    if drop.has-drag && drop.place == DropPlace.before: Rectangle { y: 0; height: 2px; background: Theme.accent; }
+                    if drop.has-drag && drop.place == DropPlace.after: Rectangle { y: parent.height - 2px; height: 2px; background: Theme.accent; }
+                    if drop.has-drag && drop.place == DropPlace.into: Rectangle { border-width: 1px; border-color: Theme.accent; }
                 }
             }
         }

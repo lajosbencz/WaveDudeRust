@@ -7,7 +7,7 @@ use waveduderust::model::{
 };
 
 use crate::selection::Selection;
-use crate::ui::{TreeKind, TreeRow};
+use crate::ui::{DropPlace, FolderAdd, NewItem, TreeKey, TreeKind, TreeRow};
 
 /// What a tree row stands for.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -68,13 +68,12 @@ pub(crate) fn rows(project: &Project, selection: &Selection, collapsed: &[Node])
 				_ => slint::Image::default(),
 			},
 			add: match node {
-				Node::Sources => "source",
-				Node::Parts => "part",
-				Node::Probes => "probe",
-				Node::Schemes => "scheme",
-				_ => "",
-			}
-			.into(),
+				Node::Sources => FolderAdd::Source,
+				Node::Parts => FolderAdd::Part,
+				Node::Probes => FolderAdd::Probe,
+				Node::Schemes => FolderAdd::Scheme,
+				_ => FolderAdd::None,
+			},
 		});
 	};
 	push(Node::Project, 0, "Project", None);
@@ -182,54 +181,45 @@ pub(crate) enum Step {
 	Expand(Node, bool),
 }
 
-/// What `key` ("up", "down", "home", "end", "left", "right") does with `current` among the shown `nodes`.
+/// What `key` does with `current` among the shown `nodes`.
 pub(crate) fn navigate(
 	project: &Project,
 	nodes: &[Node],
 	collapsed: &[Node],
 	current: Node,
-	key: &str,
+	key: TreeKey,
 ) -> Option<Step> {
 	let i = nodes.iter().position(|&n| n == current).unwrap_or(0);
 	let (holds, shut) = (children(project, current) > 0, collapsed.contains(&current));
 	let to = match key {
-		"up" => i.checked_sub(1),
-		"down" => Some(i + 1),
-		"home" => Some(0),
-		"end" => nodes.len().checked_sub(1),
-		"left" if holds && !shut => return Some(Step::Expand(current, false)),
-		"left" => return parent(current).map(Step::To),
-		"right" if holds && shut => return Some(Step::Expand(current, true)),
-		"right" if holds => Some(i + 1),
-		_ => None,
+		TreeKey::Up => i.checked_sub(1),
+		TreeKey::Down => Some(i + 1),
+		TreeKey::Home => Some(0),
+		TreeKey::End => nodes.len().checked_sub(1),
+		TreeKey::Left if holds && !shut => return Some(Step::Expand(current, false)),
+		TreeKey::Left => return parent(current).map(Step::To),
+		TreeKey::Right if holds && shut => return Some(Step::Expand(current, true)),
+		TreeKey::Right if holds => Some(i + 1),
+		TreeKey::Right => None,
 	};
 	to.and_then(|k| nodes.get(k)).map(|&n| Step::To(n))
-}
-
-/// Where a dropped row goes by the row it is dropped on (Next's `InsertionPlacement`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Place {
-	Before,
-	After,
-	/// At the end of the folder dropped on.
-	Into,
 }
 
 /// Where dropping the item `dragged` on `target`'s row (its upper half when `before`) moves it (Next's
 /// `FindDropTarget`): onto a sibling before or after it, onto its own folder at the end. The place and the item's index
 /// after the move; `None` where it would not move.
-pub(crate) fn drop_target(project: &Project, dragged: Node, target: Node, before: bool) -> Option<(Place, usize)> {
+pub(crate) fn drop_target(project: &Project, dragged: Node, target: Node, before: bool) -> Option<(DropPlace, usize)> {
 	let folder = parent(dragged).filter(|_| is_item(dragged))?;
 	let (current, last) = (index(dragged), children(project, folder).checked_sub(1)?);
 	if target == folder {
-		return (current != last).then_some((Place::Into, last));
+		return (current != last).then_some((DropPlace::Into, last));
 	}
 	if target == dragged || !is_item(target) || parent(target) != Some(folder) {
 		return None;
 	}
 	let insert = index(target) + usize::from(!before);
 	let to = insert - usize::from(current < insert);
-	(to != current).then_some((if before { Place::Before } else { Place::After }, to))
+	(to != current).then_some((if before { DropPlace::Before } else { DropPlace::After }, to))
 }
 
 /// Moves the item `node` to index `to` of its list; the node it ends at.
@@ -352,67 +342,55 @@ pub(crate) fn can_shift(project: &Project, node: Node, by: isize) -> bool {
 	i < len && i.checked_add_signed(by).is_some_and(|j| j < len)
 }
 
-/// Appends the item an add command names at (`x`, `y`): `source`, `scheme`, `probe:<detector>` or `part:<kind>`
-/// (Next's add menus); its row.
-pub(crate) fn add(project: &mut Project, what: &str, (x, y): (i32, i32)) -> Option<Node> {
+/// Appends `item` at (`x`, `y`) as Next's add menus prepare it; its row.
+pub(crate) fn add(project: &mut Project, item: NewItem, (x, y): (i32, i32)) -> Node {
 	let last = |len: usize| len - 1;
-	match what.split_once(':').unwrap_or((what, "")) {
-		("source", _) => {
-			project.add_source_at(x, y);
-			Some(Node::Source(last(project.sources.len())))
-		}
-		("scheme", _) => {
-			project.add_new_color_scheme();
-			Some(Node::Scheme(last(project.color_schemes.len())))
-		}
-		("probe", detector) => {
-			let detector = match detector {
-				"counting" => ProbeDetector::Counting,
-				"imaging" => ProbeDetector::Imaging,
-				_ => ProbeDetector::Standard,
-			};
-			project.add_detector_at(x, y, detector);
-			Some(Node::Probe(last(project.probes.len())))
-		}
-		("part", kind) => {
-			project.add_part_at(new_part(kind)?, x, y);
-			Some(Node::Part(last(project.parts.len())))
-		}
-		_ => None,
-	}
-}
-
-/// A new part of the kind an add menu entry names, as Next prepares it.
-fn new_part(kind: &str) -> Option<PartKind> {
+	let detector = |project: &mut Project, detector| {
+		project.add_detector_at(x, y, detector);
+		Node::Probe(last(project.probes.len()))
+	};
 	let gate = |kind: GateKind| {
 		let mut gate = LogicGate::default();
 		gate.kind = kind;
 		PartKind::LogicGate(gate)
 	};
-	Some(match kind {
-		"lens" => PartKind::Lens(Lens::default()),
-		"fresnel-lens" => PartKind::FresnelLens(FresnelLens::new_plate()),
-		"fiber" => PartKind::Fiber(Fiber::default()),
-		"bragg-reflector" => PartKind::BraggReflector(BraggReflector::default()),
-		"grin-lens" => PartKind::GrinLens(GrinLens::default()),
-		"zone-plate" => PartKind::ZonePlate(ZonePlate::default()),
-		"diffuser" => PartKind::Diffuser(Diffuser::new_part()),
-		"interference-filter" => PartKind::InterferenceFilter(InterferenceFilter::new_part()),
-		"simple-grating" => PartKind::SimpleGrating(SimpleGrating::new_part()),
-		"facetted-grating" => PartKind::FacettedGrating(FacettedGrating::default()),
-		"meta-lens" => PartKind::MetaSurface(MetaSurface::new_part(MetaDesign::Lens(MetaLensDesign::default()))),
-		"meta-prism" => PartKind::MetaSurface(MetaSurface::new_part(MetaDesign::Prism(MetaPrismDesign::default()))),
-		"meta-axicon" => PartKind::MetaSurface(MetaSurface::new_part(MetaDesign::Axicon(MetaAxiconDesign::default()))),
-		"polygon" => PartKind::Polygon(Polygon::default()),
-		"rectangle" => PartKind::Rectangle(Rectangle::default()),
-		"ellipse" => PartKind::Ellipse(Ellipse::default()),
-		"triangle" => PartKind::Triangle(Triangle::default()),
-		"outline" => PartKind::Outline(Outline::default()),
-		"xor-gate" => gate(GateKind::Xor),
-		"and-gate" => gate(GateKind::And),
-		"or-gate" => gate(GateKind::Or),
-		_ => return None,
-	})
+	let meta = |design| PartKind::MetaSurface(MetaSurface::new_part(design));
+	let part = match item {
+		NewItem::Source => {
+			project.add_source_at(x, y);
+			return Node::Source(last(project.sources.len()));
+		}
+		NewItem::Scheme => {
+			project.add_new_color_scheme();
+			return Node::Scheme(last(project.color_schemes.len()));
+		}
+		NewItem::StandardProbe => return detector(project, ProbeDetector::Standard),
+		NewItem::CountingDetector => return detector(project, ProbeDetector::Counting),
+		NewItem::ImagingDetector => return detector(project, ProbeDetector::Imaging),
+		NewItem::Lens => PartKind::Lens(Lens::default()),
+		NewItem::FresnelLens => PartKind::FresnelLens(FresnelLens::new_plate()),
+		NewItem::Fiber => PartKind::Fiber(Fiber::default()),
+		NewItem::BraggReflector => PartKind::BraggReflector(BraggReflector::default()),
+		NewItem::GrinLens => PartKind::GrinLens(GrinLens::default()),
+		NewItem::ZonePlate => PartKind::ZonePlate(ZonePlate::default()),
+		NewItem::Diffuser => PartKind::Diffuser(Diffuser::new_part()),
+		NewItem::InterferenceFilter => PartKind::InterferenceFilter(InterferenceFilter::new_part()),
+		NewItem::SimpleGrating => PartKind::SimpleGrating(SimpleGrating::new_part()),
+		NewItem::FacettedGrating => PartKind::FacettedGrating(FacettedGrating::default()),
+		NewItem::MetaLens => meta(MetaDesign::Lens(MetaLensDesign::default())),
+		NewItem::MetaPrism => meta(MetaDesign::Prism(MetaPrismDesign::default())),
+		NewItem::MetaAxicon => meta(MetaDesign::Axicon(MetaAxiconDesign::default())),
+		NewItem::Polygon => PartKind::Polygon(Polygon::default()),
+		NewItem::Rectangle => PartKind::Rectangle(Rectangle::default()),
+		NewItem::Ellipse => PartKind::Ellipse(Ellipse::default()),
+		NewItem::Triangle => PartKind::Triangle(Triangle::default()),
+		NewItem::Outline => PartKind::Outline(Outline::default()),
+		NewItem::XorGate => gate(GateKind::Xor),
+		NewItem::AndGate => gate(GateKind::And),
+		NewItem::OrGate => gate(GateKind::Or),
+	};
+	project.add_part_at(part, x, y);
+	Node::Part(last(project.parts.len()))
 }
 
 /// Inserts a copy of an item row's item after it under a copy name; its row.
@@ -455,14 +433,14 @@ mod tests {
 		}
 		p.add_probe();
 		let s = |i| Node::Source(i);
-		assert_eq!(drop_target(&p, s(0), s(2), false), Some((Place::After, 2)));
-		assert_eq!(drop_target(&p, s(0), s(2), true), Some((Place::Before, 1)));
-		assert_eq!(drop_target(&p, s(2), s(0), true), Some((Place::Before, 0)));
+		assert_eq!(drop_target(&p, s(0), s(2), false), Some((DropPlace::After, 2)));
+		assert_eq!(drop_target(&p, s(0), s(2), true), Some((DropPlace::Before, 1)));
+		assert_eq!(drop_target(&p, s(2), s(0), true), Some((DropPlace::Before, 0)));
 		// no-op positions and other lists are no target
 		assert_eq!(drop_target(&p, s(0), s(1), true), None);
 		assert_eq!(drop_target(&p, s(0), s(0), false), None);
 		assert_eq!(drop_target(&p, s(0), Node::Probe(0), true), None);
-		assert_eq!(drop_target(&p, s(0), Node::Sources, false), Some((Place::Into, 2)));
+		assert_eq!(drop_target(&p, s(0), Node::Sources, false), Some((DropPlace::Into, 2)));
 		assert_eq!(drop_target(&p, s(2), Node::Sources, false), None);
 		assert_eq!(drop_target(&p, Node::Scene, Node::Project, false), None);
 		let name = p.sources[0].name.clone();
@@ -476,14 +454,14 @@ mod tests {
 		p.add_source();
 		let (nodes, _) = rows(&p, &Selection::default(), &[]);
 		let go = |current, key, collapsed: &[Node]| navigate(&p, &nodes, collapsed, current, key);
-		assert_eq!(go(Node::Project, "down", &[]), Some(Step::To(nodes[1])));
-		assert_eq!(go(Node::Project, "up", &[]), None);
-		assert_eq!(go(Node::Project, "end", &[]), nodes.last().map(|&n| Step::To(n)));
-		assert_eq!(go(Node::Sources, "left", &[]), Some(Step::Expand(Node::Sources, false)));
-		assert_eq!(go(Node::Sources, "left", &[Node::Sources]), Some(Step::To(Node::Project)));
-		assert_eq!(go(Node::Sources, "right", &[Node::Sources]), Some(Step::Expand(Node::Sources, true)));
-		assert_eq!(go(Node::Source(0), "left", &[]), Some(Step::To(Node::Sources)));
-		assert_eq!(go(Node::Source(0), "right", &[]), None);
+		assert_eq!(go(Node::Project, TreeKey::Down, &[]), Some(Step::To(nodes[1])));
+		assert_eq!(go(Node::Project, TreeKey::Up, &[]), None);
+		assert_eq!(go(Node::Project, TreeKey::End, &[]), nodes.last().map(|&n| Step::To(n)));
+		assert_eq!(go(Node::Sources, TreeKey::Left, &[]), Some(Step::Expand(Node::Sources, false)));
+		assert_eq!(go(Node::Sources, TreeKey::Left, &[Node::Sources]), Some(Step::To(Node::Project)));
+		assert_eq!(go(Node::Sources, TreeKey::Right, &[Node::Sources]), Some(Step::Expand(Node::Sources, true)));
+		assert_eq!(go(Node::Source(0), TreeKey::Left, &[]), Some(Step::To(Node::Sources)));
+		assert_eq!(go(Node::Source(0), TreeKey::Right, &[]), None);
 	}
 
 	use super::*;
@@ -505,37 +483,37 @@ mod tests {
 
 	#[test]
 	fn every_add_entry_adds_its_kind_and_selects_it() {
+		use NewItem as N;
 		let mut p = Project::default();
-		for kind in [
-			"lens",
-			"fresnel-lens",
-			"fiber",
-			"bragg-reflector",
-			"grin-lens",
-			"zone-plate",
-			"diffuser",
-			"interference-filter",
-			"simple-grating",
-			"facetted-grating",
-			"meta-lens",
-			"meta-prism",
-			"meta-axicon",
-			"polygon",
-			"rectangle",
-			"ellipse",
-			"triangle",
-			"outline",
-			"xor-gate",
-			"and-gate",
-			"or-gate",
-		] {
-			let node = add(&mut p, &format!("part:{kind}"), (10, 20));
-			assert_eq!(node, Some(Node::Part(p.parts.len() - 1)), "{kind}");
+		let parts = [
+			N::Lens,
+			N::FresnelLens,
+			N::Fiber,
+			N::BraggReflector,
+			N::GrinLens,
+			N::ZonePlate,
+			N::Diffuser,
+			N::InterferenceFilter,
+			N::SimpleGrating,
+			N::FacettedGrating,
+			N::MetaLens,
+			N::MetaPrism,
+			N::MetaAxicon,
+			N::Polygon,
+			N::Rectangle,
+			N::Ellipse,
+			N::Triangle,
+			N::Outline,
+			N::XorGate,
+			N::AndGate,
+			N::OrGate,
+		];
+		for kind in parts {
+			assert_eq!(add(&mut p, kind, (10, 20)), Node::Part(p.parts.len() - 1), "{kind:?}");
 		}
 		assert_eq!(p.parts[1].base.name, "Fresnel lens 1");
 		assert_eq!((p.parts[0].base.x, p.parts[0].base.y), (10, 20));
-		assert_eq!(add(&mut p, "part:nothing", (0, 0)), None);
-		assert_eq!(add(&mut p, "probe:imaging", (0, 0)), Some(Node::Probe(0)));
+		assert_eq!(add(&mut p, N::ImagingDetector, (0, 0)), Node::Probe(0));
 		assert_eq!(p.probes[0].name, "Detector 1");
 	}
 

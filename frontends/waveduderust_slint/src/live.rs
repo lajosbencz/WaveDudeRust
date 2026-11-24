@@ -12,6 +12,7 @@ use waveduderust::unstable::scene::glowing_edges::EdgeImage;
 use waveduderust::unstable::spec::{RunRequest, SceneCache};
 
 use crate::gpu::{Look, Picture};
+use crate::ui::{RunState, RunStatus};
 
 /// The run and the pictures it feeds.
 pub(crate) struct Live {
@@ -57,7 +58,7 @@ pub(crate) struct Live {
 pub(crate) struct Shown {
 	pub(crate) field: Option<slint::Image>,
 	pub(crate) intensity: Option<slint::Image>,
-	pub(crate) status: String,
+	pub(crate) status: RunStatus,
 	/// The newest frame the run holds.
 	pub(crate) made: Option<u32>,
 	/// The simulation step of the frame shown.
@@ -223,15 +224,15 @@ impl Live {
 				tracing::error!("the run failed: {e}");
 			}
 		}
-		let word = self.started.map(|_| match &status.state {
-			WorkState::Stepping { .. } | WorkState::Fitting => "Running",
-			WorkState::Paused => "Paused",
-			WorkState::Failed(_) => "Failed",
-			WorkState::Idle if status.store.as_ref().is_some_and(|s| s.is_complete()) => "Completed",
-			WorkState::Idle => "Stopped",
+		let state = self.started.map_or(RunState::None, |_| match &status.state {
+			WorkState::Stepping { .. } | WorkState::Fitting => RunState::Running,
+			WorkState::Paused => RunState::Paused,
+			WorkState::Failed(_) => RunState::Failed,
+			WorkState::Idle if status.store.as_ref().is_some_and(|s| s.is_complete()) => RunState::Completed,
+			WorkState::Idle => RunState::Stopped,
 		});
-		if let (Some(started), Some(word @ ("Completed" | "Stopped")), Some(store)) =
-			(self.started, word, status.store.as_ref())
+		if let (Some(started), RunState::Completed | RunState::Stopped, Some(store)) =
+			(self.started, state, status.store.as_ref())
 			&& !matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting)
 			&& !self.summarised
 		{
@@ -239,7 +240,7 @@ impl Live {
 			let gib = |b: u64| b as f64 / f64::from(1u32 << 30);
 			tracing::info!(
 				"Run {}: {} of {} steps, {} frames, {:.1} s; {} stored, {} in memory ({:.1} GB) and {} on disk ({:.1} GB)",
-				if word == "Completed" { "Completed" } else { "Cancelled" },
+				if state == RunState::Completed { "Completed" } else { "Cancelled" },
 				status.steps_done,
 				self.steps,
 				self.frames,
@@ -254,9 +255,12 @@ impl Live {
 		let mut shown = Shown {
 			field: None,
 			intensity: None,
-			status: word.map_or_else(String::new, |w| {
-				format!("{w}: {} / {} steps, {}", status.steps_done, self.steps, self.engine)
-			}),
+			status: RunStatus {
+				state,
+				steps_done: i32::try_from(status.steps_done).unwrap_or(i32::MAX),
+				steps: i32::try_from(self.steps).unwrap_or(i32::MAX),
+				engine: self.engine.as_str().into(),
+			},
 			made: None,
 			step: None,
 			running: matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting),

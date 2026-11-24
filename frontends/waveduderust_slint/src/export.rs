@@ -3,6 +3,8 @@
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use native::{Exporting, start};
 use waveduderust::unstable::export::{ExportFormat, ExportLayers};
+
+use crate::ui::Command;
 #[cfg(target_arch = "wasm32")]
 pub(crate) use web::{Exporting, start};
 
@@ -15,13 +17,13 @@ pub(crate) enum Kind {
 }
 
 impl Kind {
-	pub(crate) fn of(id: &str) -> Option<Self> {
-		Some(match id {
-			"export-field" => Self::Run(ExportLayers::Field),
-			"export-intensity" => Self::Run(ExportLayers::Intensity),
-			"export-both" => Self::Run(ExportLayers::Both),
-			"export-field-frame" => Self::Frame(ExportLayers::Field),
-			"export-intensity-frame" => Self::Frame(ExportLayers::Intensity),
+	pub(crate) fn of(command: Command) -> Option<Self> {
+		Some(match command {
+			Command::ExportField => Self::Run(ExportLayers::Field),
+			Command::ExportIntensity => Self::Run(ExportLayers::Intensity),
+			Command::ExportBoth => Self::Run(ExportLayers::Both),
+			Command::ExportFieldFrame => Self::Frame(ExportLayers::Field),
+			Command::ExportIntensityFrame => Self::Frame(ExportLayers::Intensity),
 			_ => return None,
 		})
 	}
@@ -59,6 +61,7 @@ mod native {
 	use waveduderust_platform::settings::{AppDirs, Settings};
 
 	use super::Kind;
+	use crate::ui::ExportProgress;
 
 	/// An export in progress.
 	pub(crate) struct Exporting {
@@ -73,8 +76,8 @@ mod native {
 			self.cancel.store(true, Ordering::Relaxed);
 		}
 
-		/// The progress text while it runs; its outcome once it ended.
-		pub(crate) fn poll(&mut self) -> Result<String, Result<String, String>> {
+		/// The progress while it runs; its outcome once it ended.
+		pub(crate) fn poll(&mut self) -> Result<ExportProgress, Result<String, String>> {
 			if self.thread.as_ref().is_some_and(JoinHandle::is_finished) {
 				let outcome = self.thread.take().map_or_else(
 					|| Err("gone".into()),
@@ -82,7 +85,8 @@ mod native {
 				);
 				return Err(outcome);
 			}
-			Ok(format!("Exporting {}/{}", self.done.load(Ordering::Relaxed), self.total.load(Ordering::Relaxed)))
+			let count = |n: &AtomicUsize| i32::try_from(n.load(Ordering::Relaxed)).unwrap_or(i32::MAX);
+			Ok(ExportProgress { active: true, done: count(&self.done), total: count(&self.total) })
 		}
 	}
 
@@ -165,6 +169,7 @@ mod web {
 	use waveduderust_platform::settings::Settings;
 
 	use super::Kind;
+	use crate::ui::ExportProgress;
 
 	pub(crate) enum Exporting {}
 
@@ -173,7 +178,7 @@ mod web {
 			match *self {}
 		}
 
-		pub(crate) fn poll(&mut self) -> Result<String, Result<String, String>> {
+		pub(crate) fn poll(&mut self) -> Result<ExportProgress, Result<String, String>> {
 			match *self {}
 		}
 	}

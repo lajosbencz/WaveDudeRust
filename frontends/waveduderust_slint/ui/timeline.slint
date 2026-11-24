@@ -1,4 +1,5 @@
 import { ComboBox } from "std-widgets.slint";
+import { Command, TransportAction } from "commands.slint";
 import { Theme } from "theme.slint";
 import { IconButton } from "icons.slint";
 
@@ -21,7 +22,8 @@ export struct Transport {
 export component Timeline inherits Rectangle {
     in property <Transport> t;
     callback seek(int);
-    callback key(string);
+    // the keys the bar shares with the transport bar
+    callback action(TransportAction);
 
     property <float> last: max(1, t.frames - 1);
     property <length> inner: self.width - 8px;
@@ -37,7 +39,7 @@ export component Timeline inherits Rectangle {
             if (e.text == Key.PageDown) { root.seek(t.position - 10); return accept; }
             if (e.text == Key.Home) { root.seek(t.start); return accept; }
             if (e.text == Key.End) { root.seek(t.end); return accept; }
-            if (e.text == " ") { root.key("play"); return accept; }
+            if (e.text == " ") { root.action(TransportAction.play); return accept; }
             reject
         }
     }
@@ -100,27 +102,28 @@ component Divider inherits Rectangle {
 export component TransportBar inherits Rectangle {
     in property <Transport> t;
     in-out property <bool> stacked;
-    callback action(string);
-    callback speed(string);
+    callback action(TransportAction);
+    callback command(Command);
+    callback speed(float);
 
     height: 28px;
     background: Theme.window-background;
     HorizontalLayout {
         padding: 3px;
         spacing: 1px;
-        IconButton { icon: t.running ? @image-url("icons/next/stop.svg") : @image-url("icons/next/run.svg"); tip: t.running ? @tr("Stop the simulation; the frames so far stay (Esc)") : @tr("Run the simulation from the start (F5)"); clicked => { root.action(t.running ? "stop" : "run"); } }
-        IconButton { icon: @image-url("icons/next/pause-run.svg"); tip: @tr("Pause the simulation (F6)"); enabled: t.running; clicked => { root.action("pause-run"); } }
+        IconButton { icon: t.running ? @image-url("icons/next/stop.svg") : @image-url("icons/next/run.svg"); tip: t.running ? @tr("Stop the simulation; the frames so far stay (Esc)") : @tr("Run the simulation from the start (F5)"); clicked => { root.command(t.running ? Command.stop : Command.run); } }
+        IconButton { icon: @image-url("icons/next/pause-run.svg"); tip: @tr("Pause the simulation (F6)"); enabled: t.running; clicked => { root.action(TransportAction.pause-run); } }
         Divider { }
-        IconButton { icon: @image-url("icons/next/play.svg"); tip: @tr("Play (Space)"); enabled: !t.playing; clicked => { root.action("play"); } }
-        IconButton { icon: @image-url("icons/next/pause.svg"); tip: @tr("Pause (Space)"); enabled: t.playing; clicked => { root.action("play"); } }
-        IconButton { icon: @image-url("icons/next/step-back.svg"); tip: @tr("Previous frame (,)"); clicked => { root.action("prev"); } }
-        IconButton { icon: @image-url("icons/next/step-forward.svg"); tip: @tr("Next frame (.)"); clicked => { root.action("next"); } }
+        IconButton { icon: @image-url("icons/next/play.svg"); tip: @tr("Play (Space)"); enabled: !t.playing; clicked => { root.action(TransportAction.play); } }
+        IconButton { icon: @image-url("icons/next/pause.svg"); tip: @tr("Pause (Space)"); enabled: t.playing; clicked => { root.action(TransportAction.play); } }
+        IconButton { icon: @image-url("icons/next/step-back.svg"); tip: @tr("Previous frame (,)"); clicked => { root.action(TransportAction.prev); } }
+        IconButton { icon: @image-url("icons/next/step-forward.svg"); tip: @tr("Next frame (.)"); clicked => { root.action(TransportAction.next); } }
         Divider { }
-        IconButton { icon: @image-url("icons/next/set-in.svg"); tip: @tr("Start the export range at this frame (I)"); clicked => { root.action("in"); } }
-        IconButton { icon: @image-url("icons/next/set-out.svg"); tip: @tr("End the export range at this frame (O)"); clicked => { root.action("out"); } }
-        IconButton { icon: @image-url("icons/next/clear-range.svg"); tip: @tr("Clear the export range: the whole run is exported (X)"); enabled: t.ranged; clicked => { root.action("clear-range"); } }
-        IconButton { icon: @image-url("icons/next/loop.svg"); tip: @tr("Loop playback over the export range (L)"); checked: t.looping; clicked => { root.action("loop"); } }
-        IconButton { icon: @image-url("icons/next/live.svg"); tip: @tr("Follow the newest frame while the run is in progress (F)"); checked: t.live; enabled: t.running; clicked => { root.action("live"); } }
+        IconButton { icon: @image-url("icons/next/set-in.svg"); tip: @tr("Start the export range at this frame (I)"); clicked => { root.action(TransportAction.set-in); } }
+        IconButton { icon: @image-url("icons/next/set-out.svg"); tip: @tr("End the export range at this frame (O)"); clicked => { root.action(TransportAction.set-out); } }
+        IconButton { icon: @image-url("icons/next/clear-range.svg"); tip: @tr("Clear the export range: the whole run is exported (X)"); enabled: t.ranged; clicked => { root.action(TransportAction.clear-range); } }
+        IconButton { icon: @image-url("icons/next/loop.svg"); tip: @tr("Loop playback over the export range (L)"); checked: t.looping; clicked => { root.action(TransportAction.loop); } }
+        IconButton { icon: @image-url("icons/next/live.svg"); tip: @tr("Follow the newest frame while the run is in progress (F)"); checked: t.live; enabled: t.running; clicked => { root.action(TransportAction.live); } }
         Divider { }
         Text {
             text: t.position + " / " + max(0, t.frames - 1);
@@ -145,13 +148,14 @@ export component TransportBar inherits Rectangle {
             key-pressed(e) => { e.text == " " ? accept : reject }
             ComboBox {
                 width: 64px;
+                property <[float]> speeds: [0.25, 0.5, 1, 1.5, 2, 4];
                 model: ["0.25", "0.5", "1", "1.5", "2", "4"];
                 current-index: 2;
-                selected(v) => { root.speed(v); }
+                selected => { root.speed(self.speeds[self.current-index]); }
             }
         }
         Divider { }
-        IconButton { icon: @image-url("icons/next/side-by-side.svg"); tip: @tr("Field and intensity side by side"); checked: !root.stacked; clicked => { root.stacked = false; root.action("layout"); } }
-        IconButton { icon: @image-url("icons/next/stacked.svg"); tip: @tr("Field above intensity"); checked: root.stacked; clicked => { root.stacked = true; root.action("layout"); } }
+        IconButton { icon: @image-url("icons/next/side-by-side.svg"); tip: @tr("Field and intensity side by side"); checked: !root.stacked; clicked => { root.stacked = false; root.action(TransportAction.layout); } }
+        IconButton { icon: @image-url("icons/next/stacked.svg"); tip: @tr("Field above intensity"); checked: root.stacked; clicked => { root.stacked = true; root.action(TransportAction.layout); } }
     }
 }

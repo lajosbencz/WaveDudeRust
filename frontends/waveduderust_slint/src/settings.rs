@@ -5,7 +5,7 @@ use waveduderust::quality::PreviewTier;
 use waveduderust_platform::settings::{Settings, Theme};
 use waveduderust_platform::store::Store;
 
-use crate::ui::{PropKind, PropRow};
+use crate::ui::{PreviewQuality, PropKind, PropRow};
 
 pub(crate) const SECTIONS: [&str; 4] = ["General", "Preview and memory", "Simulation", "Updates"];
 
@@ -207,8 +207,13 @@ pub(crate) fn levers(settings: &Settings) -> String {
 }
 
 /// Applies preset `index`: Low, Medium, High, then Auto from `facts`; saves the settings.
-pub(crate) fn preset(settings: &mut Settings, store: Option<&Store>, index: usize, facts: MachineFacts) {
-	let tier = PreviewTier::ALL.get(index).copied().unwrap_or_else(|| settings.auto_preset(facts));
+pub(crate) fn preset(settings: &mut Settings, store: Option<&Store>, quality: PreviewQuality, facts: MachineFacts) {
+	let tier = match quality {
+		PreviewQuality::Low => PreviewTier::Low,
+		PreviewQuality::Medium => PreviewTier::Medium,
+		PreviewQuality::High => PreviewTier::High,
+		PreviewQuality::Auto => settings.auto_preset(facts),
+	};
 	settings.apply_preset(tier);
 	save(settings, store);
 }

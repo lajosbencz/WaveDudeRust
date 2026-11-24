@@ -1,5 +1,6 @@
 import { Button, CheckBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Command, PreviewQuality } from "commands.slint";
 
 // The Welcome page (docs/ui/70, Welcome page).
 export component WelcomeLayer inherits Rectangle {
@@ -7,8 +8,8 @@ export component WelcomeLayer inherits Rectangle {
     in property <string> ram;
     in property <string> levers;
     in property <bool> show-startup;
-    callback preset(int);
-    callback action(string);
+    callback preset(PreviewQuality);
+    callback command(Command);
     callback show-startup-toggled(bool);
 
     visible: shown;
@@ -17,7 +18,7 @@ export component WelcomeLayer inherits Rectangle {
     focus := FocusScope {
         key-pressed(e) => {
             if (e.text == Key.Escape) { root.shown = false; return accept; }
-            if (e.text == Key.Return) { root.action("examples"); return accept; }
+            if (e.text == Key.Return) { root.command(Command.examples); return accept; }
             reject
         }
     }
@@ -54,10 +55,10 @@ export component WelcomeLayer inherits Rectangle {
             HorizontalLayout {
                 spacing: 6px;
                 alignment: start;
-                for name[i] in [@tr("Low"), @tr("Medium"), @tr("High"), @tr("Auto")]: Button {
-                    text: name;
-                    clicked => { root.preset(i); }
-                }
+                Button { text: @tr("Low"); clicked => { root.preset(PreviewQuality.low); } }
+                Button { text: @tr("Medium"); clicked => { root.preset(PreviewQuality.medium); } }
+                Button { text: @tr("High"); clicked => { root.preset(PreviewQuality.high); } }
+                Button { text: @tr("Auto"); clicked => { root.preset(PreviewQuality.auto); } }
             }
             Text {
                 text: root.levers;
@@ -67,7 +68,7 @@ export component WelcomeLayer inherits Rectangle {
                 alignment: start;
                 Button {
                     text: @tr("Settings...");
-                    clicked => { root.action("settings"); }
+                    clicked => { root.command(Command.settings); }
                 }
             }
             CheckBox {
@@ -80,16 +81,16 @@ export component WelcomeLayer inherits Rectangle {
                 spacing: 6px;
                 Button {
                     text: @tr("Open Project...");
-                    clicked => { root.action("open"); }
+                    clicked => { root.command(Command.open); }
                 }
                 Button {
                     text: @tr("Random Example");
-                    clicked => { root.action("random"); }
+                    clicked => { root.command(Command.random-example); }
                 }
                 Button {
                     text: @tr("Examples...");
                     primary: true;
-                    clicked => { root.action("examples"); }
+                    clicked => { root.command(Command.examples); }
                 }
             }
         }

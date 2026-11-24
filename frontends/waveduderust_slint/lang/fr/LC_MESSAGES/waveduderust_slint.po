@@ -376,6 +376,10 @@ msgstr "Palette de couleurs"
 msgid "Columns"
 msgstr "Colonnes"
 
+#. RunStateCompleted
+msgid "Completed"
+msgstr "Terminée"
+
 #. Label.Source.IsComposite
 msgid "Composite source"
 msgstr "Source composite"
@@ -663,6 +667,10 @@ msgstr "Très grand"
 #. MenuAddFacettedGrating
 msgid "Facetted grating"
 msgstr "Réseau à facettes"
+
+#. RunStateFailed
+msgid "Failed"
+msgstr "Échec"
 
 #. MenuAddFiber
 msgid "Fibre"
@@ -1164,6 +1172,10 @@ msgstr "Mettre la lecture en pause"
 msgid "Pause the simulation (F6)"
 msgstr "Mettre la simulation en pause (F6)"
 
+#. RunStatePaused
+msgid "Paused"
+msgstr "En pause"
+
 #. Hint.Scene.ImageSourceScale
 msgid "Peak amplitude of the image sources."
 msgstr "Amplitude de crête des sources de l'image."
@@ -1372,6 +1384,10 @@ msgstr "Lancer"
 msgid "Run the simulation from the start (F5)"
 msgstr "Lancer la simulation depuis le début (F5)"
 
+#. RunStateRunning
+msgid "Running"
+msgstr "En cours"
+
 #. MenuSimulationStop
 msgid "S&top"
 msgstr "&Arrêter"
@@ -1527,6 +1543,10 @@ msgstr "Arrêter"
 #. TipPreviewStop
 msgid "Stop the simulation; the frames so far stay (Esc)"
 msgstr "Arrêter la simulation ; les images calculées restent (Échap)"
+
+#. RunStateCancelled
+msgid "Stopped"
+msgstr "Arrêtée"
 
 #. TipApexAngle
 msgid "The angle at the apex: 180° minus the two base angles"
@@ -1735,6 +1755,10 @@ msgstr "Zones"
 #. ItemCountMany
 msgid "{} entries"
 msgstr "{} entrées"
+
+#. RunStatusFormat
+msgid "{}: {} / {} steps, {}"
+msgstr "{} : {} / {} pas, {}"
 
 #. Enum.CoatingProfile.Layer
 msgctxt "Enum.CoatingProfile.Layer"

@@ -1,0 +1,51 @@
+// What the menus, shortcuts and buttons ask of the app, and the states it reports back.
+
+export enum Command {
+    new, open, close, save, save-as, export-field, export-intensity, export-both, export-field-frame,
+    export-intensity-frame, export-last, settings, exit, undo, redo, cut, copy, paste, delete, select-all, duplicate,
+    move-up, move-down, toggle-enabled, toggle-selected, run, pause, stop, welcome, examples, random-example, github,
+    about,
+}
+
+// An item an add menu or a folder's plus appends.
+export enum NewItem {
+    source, scheme, standard-probe, counting-detector, imaging-detector, lens, fresnel-lens, fiber, bragg-reflector,
+    grin-lens, zone-plate, diffuser, interference-filter, simple-grating, facetted-grating, meta-lens, meta-prism,
+    meta-axicon, polygon, rectangle, ellipse, triangle, outline, xor-gate, and-gate, or-gate,
+}
+
+// What a folder's plus adds: parts and probes open a menu of kinds.
+export enum FolderAdd { none, source, part, probe, scheme }
+
+// A key's move in the tree.
+export enum TreeKey { up, down, home, end, left, right }
+
+// How a row click selects: alone, toggled into the group (Ctrl), a range (Shift), current in the group kept
+// (a right click).
+export enum Pick { alone, toggle, range, focus }
+
+// Where a drop on a row goes.
+export enum DropPlace { none, before, after, into }
+
+// The transport bar's and the timeline's actions.
+export enum TransportAction { play, prev, next, set-in, set-out, clear-range, loop, live, pause-run, layout }
+
+// The Welcome page's preview quality presets.
+export enum PreviewQuality { low, medium, high, auto }
+
+// A run's state in the status bar; `none` before the first run.
+export enum RunState { none, running, paused, failed, completed, stopped }
+
+export struct RunStatus {
+    state: RunState,
+    steps-done: int,
+    steps: int,
+    engine: string,
+}
+
+// An export in progress: frames written of the total.
+export struct ExportProgress {
+    active: bool,
+    done: int,
+    total: int,
+}
