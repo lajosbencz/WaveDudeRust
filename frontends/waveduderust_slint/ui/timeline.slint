@@ -1,0 +1,165 @@
+import { ComboBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// The playback state the timeline and transport bar show.
+export struct Transport {
+    frames: int,
+    position: int,
+    made: int,
+    start: int,
+    end: int,
+    ranged: bool,
+    playing: bool,
+    live: bool,
+    looping: bool,
+    running: bool,
+    step: string,
+}
+
+// The scrub bar (docs/ui/50, Timeline): frames made, the in/out range, the playhead; click or drag to scrub.
+export component Timeline inherits Rectangle {
+    in property <Transport> t;
+    callback seek(int);
+    callback key(string);
+
+    property <float> last: max(1, t.frames - 1);
+    property <length> inner: self.width - 8px;
+    pure function x-of(frame: int) -> length { 4px + root.inner * frame / root.last }
+
+    height: 36px;
+    background: Theme.window-background;
+    focus := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.LeftArrow) { root.seek(t.position - 1); return accept; }
+            if (e.text == Key.RightArrow) { root.seek(t.position + 1); return accept; }
+            if (e.text == Key.PageUp) { root.seek(t.position + 10); return accept; }
+            if (e.text == Key.PageDown) { root.seek(t.position - 10); return accept; }
+            if (e.text == Key.Home) { root.seek(t.start); return accept; }
+            if (e.text == Key.End) { root.seek(t.end); return accept; }
+            if (e.text == " ") { root.key("play"); return accept; }
+            reject
+        }
+    }
+    bar := Rectangle {
+        y: 14px;
+        height: 22px;
+        background: Theme.input-background;
+        border-width: 1px;
+        border-color: focus.has-focus ? Theme.accent : Theme.border;
+        if t.made >= 0: Rectangle {
+            x: 4px;
+            width: root.x-of(t.made) - 4px;
+            height: parent.height - 2px;
+            y: 1px;
+            background: Theme.accent.transparentize(0.6);
+        }
+        if t.ranged: Rectangle {
+            x: root.x-of(t.start);
+            width: root.x-of(t.end) - self.x;
+            height: parent.height - 2px;
+            y: 1px;
+            background: Theme.accent.transparentize(0.75);
+            border-width: 2px;
+            border-color: Theme.accent;
+        }
+        Rectangle {
+            x: root.x-of(t.position);
+            width: 1px;
+            background: Theme.text;
+        }
+        TouchArea {
+            mouse-cursor: pointer;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.down) { focus.focus(); }
+            }
+            moved => { if (self.pressed) { root.seek(round((self.mouse-x - 4px) / root.inner * root.last)); } }
+            clicked => { root.seek(round((self.mouse-x - 4px) / root.inner * root.last)); }
+            scroll-event(e) => {
+                root.seek(t.position + (e.delta-y > 0 ? 1 : -1));
+                accept
+            }
+        }
+    }
+    Text {
+        x: min(root.x-of(t.position) + 8px, root.width - self.width - 2px);
+        y: 0px;
+        height: 14px;
+        text: t.position;
+        color: Theme.text;
+        font-size: 10px;
+    }
+}
+
+component Tool inherits Rectangle {
+    in property <string> glyph;
+    in property <string> tip;
+    in property <bool> enabled: true;
+    in property <bool> checked;
+    callback clicked();
+    width: 22px;
+    height: 22px;
+    background: checked ? Theme.accent.transparentize(0.5) : area.has-hover && enabled ? Theme.hover-background : transparent;
+    Text {
+        text: root.glyph;
+        color: root.enabled ? Theme.text : Theme.text-disabled;
+    }
+    area := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component Divider inherits Rectangle {
+    width: 1px;
+    background: Theme.border;
+}
+
+// The transport bar (docs/ui/50, Transport bar).
+export component TransportBar inherits Rectangle {
+    in property <Transport> t;
+    callback action(string);
+    callback speed(string);
+
+    height: 28px;
+    background: Theme.window-background;
+    HorizontalLayout {
+        padding: 3px;
+        spacing: 1px;
+        Tool { glyph: t.running ? "[]" : ">"; tip: "Run (F5) / Stop (Esc)"; clicked => { root.action(t.running ? "stop" : "run"); } }
+        Tool { glyph: "||"; tip: "Pause the simulation (F6)"; enabled: t.running; clicked => { root.action("pause-run"); } }
+        Divider { }
+        Tool { glyph: ">"; tip: "Play (Space)"; enabled: !t.playing; clicked => { root.action("play"); } }
+        Tool { glyph: "||"; tip: "Pause (Space)"; enabled: t.playing; clicked => { root.action("play"); } }
+        Tool { glyph: "|<"; tip: "Previous frame (,)"; clicked => { root.action("prev"); } }
+        Tool { glyph: ">|"; tip: "Next frame (.)"; clicked => { root.action("next"); } }
+        Divider { }
+        Tool { glyph: "["; tip: "Start the export range at this frame (I)"; clicked => { root.action("in"); } }
+        Tool { glyph: "]"; tip: "End the export range at this frame (O)"; clicked => { root.action("out"); } }
+        Tool { glyph: "x"; tip: "Clear the export range (X)"; enabled: t.ranged; clicked => { root.action("clear-range"); } }
+        Tool { glyph: "L"; tip: "Loop playback over the export range (L)"; checked: t.looping; clicked => { root.action("loop"); } }
+        Tool { glyph: "o"; tip: "Follow the newest frame (F)"; checked: t.live; enabled: t.running; clicked => { root.action("live"); } }
+        Divider { }
+        Text {
+            text: t.position + " / " + max(0, t.frames - 1);
+            vertical-alignment: center;
+            color: Theme.text;
+        }
+        Text {
+            text: t.step;
+            vertical-alignment: center;
+            color: Theme.text-dim;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Text {
+            text: @tr("Speed");
+            vertical-alignment: center;
+            color: Theme.text;
+        }
+        ComboBox {
+            width: 64px;
+            model: ["0.25", "0.5", "1", "1.5", "2", "4"];
+            current-index: 2;
+            selected(v) => { root.speed(v); }
+        }
+    }
+}

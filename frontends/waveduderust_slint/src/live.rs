@@ -16,6 +16,11 @@ pub(crate) struct Live {
 	worker: RunWorker,
 	revision: u64,
 	active: bool,
+	request: Option<RunRequest>,
+	position: u32,
+	paused: bool,
+	/// Frames of the planned run.
+	pub(crate) frames: u32,
 	drawn: Option<(u64, usize)>,
 	last_state: Option<std::mem::Discriminant<WorkState>>,
 	device: wgpu::Device,
@@ -30,6 +35,12 @@ pub(crate) struct Shown {
 	pub(crate) field: Option<slint::Image>,
 	pub(crate) intensity: Option<slint::Image>,
 	pub(crate) status: String,
+	/// The newest frame the run holds.
+	pub(crate) made: Option<u32>,
+	/// The simulation step of the frame shown.
+	pub(crate) step: Option<u64>,
+	/// The run is stepping or fitting.
+	pub(crate) running: bool,
 }
 
 impl Live {
@@ -41,6 +52,10 @@ impl Live {
 			worker,
 			revision: 0,
 			active: false,
+			request: None,
+			position: 0,
+			paused: false,
+			frames: 0,
 			drawn: None,
 			last_state: None,
 			device,
@@ -61,13 +76,40 @@ impl Live {
 		project.normalize();
 		self.revision += 1;
 		self.active = true;
+		self.paused = false;
 		let request = RunRequest::new(&project, PreviewQuality::FULL, view.into(), false);
+		self.frames = request.schedule().frame_count();
+		self.request = Some(request);
+		self.publish();
+	}
+
+	fn publish(&self) {
 		self.worker.set_goal(Goal {
 			revision: self.revision,
-			run: Some(request),
+			run: self.request.clone(),
+			position: self.position,
+			paused: self.paused,
 			wanted: Wanted::All,
 			..Goal::default()
 		});
+	}
+
+	/// Pauses or resumes the run (F6).
+	pub(crate) fn toggle_pause(&mut self) {
+		if self.active {
+			self.paused ^= true;
+			self.publish();
+		}
+	}
+
+	/// Asks the run for the frame at `position` first.
+	pub(crate) fn seek(&mut self, position: u32) {
+		if self.position != position {
+			self.position = position;
+			if self.active {
+				self.publish();
+			}
+		}
 	}
 
 	/// Starts over after an edit when a run is active.
@@ -80,7 +122,8 @@ impl Live {
 	pub(crate) fn stop(&mut self) {
 		self.revision += 1;
 		self.active = false;
-		self.worker.set_goal(Goal { revision: self.revision, ..Goal::default() });
+		self.request = None;
+		self.publish();
 	}
 
 	/// The newest stored frame drawn, when it changed, and the run's state.
@@ -91,9 +134,21 @@ impl Live {
 			self.last_state = Some(state);
 			tracing::info!("run: {}", state_text(&status.state, status.steps_done));
 		}
-		let mut shown = Shown { field: None, intensity: None, status: state_text(&status.state, status.steps_done) };
+		let mut shown = Shown {
+			field: None,
+			intensity: None,
+			status: state_text(&status.state, status.steps_done),
+			made: None,
+			step: None,
+			running: matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting),
+		};
+		let stored = self.position as usize;
+		if let Some(store) = &status.store {
+			shown.made = store.count().checked_sub(1).and_then(|m| u32::try_from(m).ok());
+			shown.step = store.has(stored).then(|| store.step_of(stored));
+		}
 		if let (Some(frames), Some(store)) = (status.device_frames, status.store)
-			&& let Some(stored) = store.count().checked_sub(1)
+			&& store.has(stored)
 			&& self.drawn != Some((store.id(), stored))
 			&& let Some(frame) = frames.hold(FrameTag { store: store.id(), generation: store.generation(), stored })
 		{

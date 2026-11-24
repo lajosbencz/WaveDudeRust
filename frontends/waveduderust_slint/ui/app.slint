@@ -3,8 +3,9 @@ import { Pane } from "pane.slint";
 import { ProjectTree, TreeRow, TreeKind } from "tree.slint";
 import { Properties, PropRow, PropKind } from "properties.slint";
 import { Preview } from "preview.slint";
+import { Timeline, TransportBar, Transport } from "timeline.slint";
 
-export { Theme, TreeRow, TreeKind, PropRow, PropKind }
+export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 export component AppWindow inherits Window {
@@ -21,6 +22,10 @@ export component AppWindow inherits Window {
     in property <image> field;
     in property <image> intensity;
     in property <string> run-status;
+    in property <Transport> transport;
+    callback seek(int);
+    callback transport-action(string);
+    callback transport-speed(string);
     in property <string> props-heading;
     in property <[PropRow]> props-rows;
     in property <string> props-error;
@@ -90,12 +95,12 @@ export component AppWindow inherits Window {
         }
         Menu {
             title: @tr("Simulation");
-            MenuItem { title: @tr("Run"); enabled: !root.run-active; shortcut: @keys(F5); activated => { root.menu("run"); } }
-            MenuItem { title: @tr("Pause"); enabled: root.run-active; shortcut: @keys(F6); activated => { root.menu("pause"); } }
-            MenuItem { title: @tr("Stop"); enabled: root.run-active; shortcut: @keys(Shift + F5); activated => { root.menu("stop"); } }
+            MenuItem { title: @tr("Run"); enabled: !root.transport.running; shortcut: @keys(F5); activated => { root.menu("run"); } }
+            MenuItem { title: @tr("Pause / Resume"); enabled: root.run-active; shortcut: @keys(F6); activated => { root.menu("pause"); } }
+            MenuItem { title: @tr("Stop"); enabled: root.transport.running; shortcut: @keys(Shift + F5); activated => { root.menu("stop"); } }
             MenuItem { title: @tr("Discard frames"); activated => { root.menu("discard"); } }
             MenuSeparator { }
-            MenuItem { title: @tr("Play / Pause playback"); shortcut: @keys(F7); activated => { root.menu("play"); } }
+            MenuItem { title: @tr("Play / Pause playback"); shortcut: @keys(F7); activated => { root.transport-action("play"); } }
         }
         Menu {
             title: @tr("Help");
@@ -144,9 +149,21 @@ export component AppWindow inherits Window {
                     title: @tr("Preview");
                     active: true;
                     vertical-stretch: 3;
-                    Preview {
-                        field: root.field;
-                        intensity: root.intensity;
+                    VerticalLayout {
+                        Preview {
+                            field: root.field;
+                            intensity: root.intensity;
+                        }
+                        Timeline {
+                            t: root.transport;
+                            seek(f) => { root.seek(f); }
+                            key(k) => { root.transport-action(k); }
+                        }
+                        TransportBar {
+                            t: root.transport;
+                            action(a) => { root.transport-action(a); }
+                            speed(v) => { root.transport-speed(v); }
+                        }
                     }
                 }
                 if root.messages-shown: Pane {

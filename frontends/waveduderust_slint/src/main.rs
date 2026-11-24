@@ -4,6 +4,7 @@ mod document;
 mod form;
 mod gpu;
 mod live;
+mod playback;
 mod tree;
 
 #[allow(
@@ -28,6 +29,7 @@ use ui::AppWindow;
 
 use crate::document::Document;
 use crate::live::Live;
+use crate::playback::Playback;
 use crate::tree::Node;
 
 /// Undo steps until the settings arrive (decision 0030).
@@ -39,6 +41,7 @@ struct State {
 	nodes: Vec<Node>,
 	selected: Node,
 	live: Live,
+	playback: Playback,
 	/// The document generation the run started from.
 	ran: u64,
 }
@@ -74,9 +77,18 @@ fn project_dialog() -> rfd::FileDialog {
 /// Runs a menu action by its id (docs/ui/10).
 fn menu(state: &mut State, app: &AppWindow, id: &str) {
 	match id {
-		"run" => state.live.run(&state.doc.project, &state.doc.view),
-		"stop" => state.live.stop(),
+		"run" => {
+			state.live.run(&state.doc.project, &state.doc.view);
+			state.playback.frames = state.live.frames;
+			state.playback.follow();
+		}
+		"pause" => state.live.toggle_pause(),
+		"stop" => {
+			state.live.stop();
+			state.playback.live = false;
+		}
 		"new" => {
+			state.playback.reset();
 			let generation = state.doc.generation + 1;
 			state.doc = Document::new(UNDO_STEPS);
 			state.doc.generation = generation;
@@ -116,10 +128,47 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 	state.show(app);
 }
 
+/// A transport bar or timeline action (docs/ui/50).
+fn transport(state: &mut State, app: &AppWindow, id: &str) {
+	let p = &mut state.playback;
+	match id {
+		"play" if p.playing => p.pause(),
+		"play" => p.play(),
+		"prev" => p.seek(i64::from(p.position) - 1),
+		"next" => p.seek(i64::from(p.position) + 1),
+		"in" => p.set_in(),
+		"out" => p.set_out(),
+		"clear-range" => (p.start, p.end) = (None, None),
+		"loop" => p.looping ^= true,
+		"live" => p.live ^= true,
+		"pause-run" => state.live.toggle_pause(),
+		other => menu(state, app, other),
+	}
+}
+
+fn transport_state(p: &Playback, shown: &live::Shown) -> ui::Transport {
+	let int = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
+	let (start, end) = p.range();
+	ui::Transport {
+		frames: int(p.frames),
+		position: int(p.position),
+		made: shown.made.map_or(-1, int),
+		start: int(start),
+		end: int(end),
+		ranged: p.start.is_some() || p.end.is_some(),
+		playing: p.playing,
+		live: p.live,
+		looping: p.looping,
+		running: shown.running,
+		step: shown.step.map_or_else(Default::default, |s| format!("step {s}").into()),
+	}
+}
+
 fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 	match state.doc.open(&path) {
 		Ok(()) => {
 			state.selected = Node::Project;
+			state.playback.reset();
 			app.set_status_text(format!("Opened {}", path.display()).into());
 		}
 		Err(e) => app.set_status_text(format!("Cannot open: {e}").into()),
@@ -137,6 +186,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		nodes: Vec::new(),
 		selected: Node::Project,
 		live,
+		playback: Playback::default(),
 		ran: 0,
 	}));
 	if let Some(path) = std::env::args_os().nth(1) {
@@ -201,11 +251,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_transport_action(move |id| {
+		if let Some(app) = weak.upgrade() {
+			transport(&mut st.borrow_mut(), &app, &id);
+		}
+	});
+	let st = state.clone();
+	app.on_seek(move |frame| st.borrow_mut().playback.seek(i64::from(frame)));
+	let st = state.clone();
+	app.on_transport_speed(move |v| {
+		if let Ok(speed) = v.parse::<f64>() {
+			st.borrow_mut().playback.speed = speed.clamp(0.01, 100.0);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
 	let timer = slint::Timer::default();
 	timer.start(slint::TimerMode::Repeated, std::time::Duration::from_millis(16), move || {
 		if let Some(app) = weak.upgrade() {
 			let s = &mut *st.borrow_mut();
+			s.live.seek(s.playback.position);
 			let shown = s.live.poll(&s.doc.project, &s.doc.view);
+			s.playback.frames = s.live.frames.max(s.playback.frames);
+			if s.playback.live && !shown.running && shown.made.is_some_and(|m| m + 1 >= s.playback.frames) {
+				s.playback.position = shown.made.unwrap_or_default();
+				s.playback.live = false;
+			}
+			s.playback.tick(std::time::Instant::now(), s.doc.view.video.fps, shown.made);
+			app.set_transport(transport_state(&s.playback, &shown));
 			if let Some(image) = shown.field {
 				app.set_field(image);
 			}
