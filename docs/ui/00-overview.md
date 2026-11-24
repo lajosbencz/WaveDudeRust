@@ -1,5 +1,7 @@
 # UI overview
 
+Per-feature status of the Rust app lives in [`../parity.md`](../parity.md).
+
 Source of truth: WaveDude Next WPF app (`WaveDudeNext.WPF/`), its `MANUAL.md`, `CLAUDE.md` and the
 figures in `Assets/` (badge legend: `Assets/Legend.md`). File names below are lookup pointers only.
 
@@ -51,8 +53,7 @@ Docking behaviour (`Docking/`):
 - Port: no indicators; the pointer picks the target. A 40 px strip along an outer edge of the dock drops there (a
   quarter of the dock); over a group its outer 30 % towards a side splits beside it (a third of the group) and its
   middle tabs into it; the Preview's group takes its sides only. The drop area is tinted accent with a 2 px accent
-  border, the pane's title follows the pointer on an accent label; Esc cancels the drag
-  ([`ui/dock.rs`](../../frontends/classic/src/ui/dock.rs)).
+  border, the pane's title follows the pointer on an accent label; Esc cancels the drag.
 - Multiple panes in a group show a tab strip; the active pane's title bar is accent-coloured with white text
   and a light-blue grip, others inactive.
 - Default arrangement: left column a quarter of the window (1 : 3 against the preview), Project over
@@ -64,7 +65,7 @@ Docking behaviour (`Docking/`):
 - The arrangement (incl. sizes) is saved on close and restored at start; unknown ids in a saved layout are
   ignored.
 - Port: the arrangement is saved as it changes, once the pointer lets go (a drag or a resize writes it once), on
-  both targets ([`ui/mod.rs`](../../frontends/classic/src/ui/mod.rs)).
+  both targets.
 - View > Panes lists Preview too (decision 0008); in the WPF code the Preview is the centre area
   and not a registered pane, so only Project, Properties, Messages are listed.
 
@@ -73,7 +74,7 @@ Docking behaviour (`Docking/`):
 dnSpy / Visual Studio tool-window look (look only, nothing copied).
 
 - Font: Segoe UI 12 DIP (9 pt) everywhere; icons from the platform icon font (Segoe Fluent Icons / MDL2)
-  or the app's own 16 px stroked drawings. Rust port: Segoe UI when installed, else the bundled Selawik
+  or the app's own 16 px stroked drawings. Port: Segoe UI when installed, else the bundled Selawik
   (Microsoft's metric-compatible stand-in, SIL OFL; a Noto Sans Math subset after it for the Greek and math
   signs it lacks), 12 px; 16 px icons.
 - Themes: System (follows OS), Light, Dark; live switch, native title bars follow. Colour tokens live in
@@ -97,8 +98,7 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 - Every menu entry has a unique mnemonic within its menu, in all four languages (incl. shared strings such as
   Cut, Copy, Paste, Select all, the export entries, in every menu they appear in).
 - Commands pressed by automation have an unmodified key.
-- Everything automation needs has a stable id (WPF AutomationId). Rust port: the ids name the elements; the
-  window's tests find them in egui's AccessKit tree by role and label (decision 0019).
+- Everything automation needs has a stable id (WPF AutomationId). Port: the ids name the elements, exposed to assistive technology by role and label.
 
 ## UI zoom and DPI
 
@@ -123,44 +123,15 @@ dnSpy / Visual Studio tool-window look (look only, nothing copied).
 
 ## Touch: TODO
 
-Generic touch support (egui's out-of-the-box input) is in; found in touch emulation on 2026-11-15, still open:
+Found in touch emulation on 2026-11-15, still open:
 
 - The pinch's fixed point drifts about 15 px, likely as the visible rect grows from letterboxed to the whole
   cell once zoomed.
 
 ## Drag out of the window: TODO
 
-A tree drag stays inside the window ([`20-project-tree.md`](20-project-tree.md), Drag and drop): winit starts no
-operating-system drag, so no XML text reaches a text editor or another window (PARITY TREE-24).
-
-## UI tests: TODO
-
-On 2026-11-15 the UI tests were pruned to the invisible or destructive ones (data loss, edit and undo, what reaches
-the model and the files, resources, strings, non-visual logic) while the UI evolves. The UI tests are to be rebuilt.
-Removed areas: layout and drawing, docking, menus and shortcuts, touch, widget state, the messages pane.
-[`CONTRIBUTING.md`](../../CONTRIBUTING.md)'s rule of a test that failed before the change is suspended for visible UI
-changes until then.
-
-- The welcome page (presets, launch check box, Settings... / Examples... and back) has no UI test since decision 0027.
-
-## Turned brightness box: TODO
-
-On its side a picture's brightness box ([`40-preview-pane.md`](40-preview-pane.md), Header strip) is the kit's
-turned box ([`kit/number.rs`](../../frontends/classic/src/kit/number.rs), `turned`: arrows and a scrub along the
-strip); a click opens the flat box, an upright `TextEdit`, in an `Area` over it, focused a pass later (`BoxFocus` in
-[`header_strip.rs`](../../frontends/classic/src/ui/preview/header_strip.rs)). egui rotates drawing only, not hit
-testing or text editing, and keeps `Memory::request_focus_next_frame` crate-private. Wanted: the box edits turned,
-typing, caret and drag selection along the strip.
-
-- The number logic is egui-mineral's `NumberEdit`, shared by the flat and the turned box; the turned box gets a text
-  editor of its own.
-- The turned editor maps the pointer into the galley's frame (`Galley::cursor_from_pos`), uses egui's
-  `text_selection` (`TextCursorState::pointer_interaction`, `CCursorRange::on_key_press`, `paint_text_selection`,
-  `paint_text_cursor`, `update_accesskit_for_text_widget`) and paints the galley turned (`TextShape::with_angle`).
-- Its text edits (insert, Backspace/Delete, word deletes, cut/copy/paste, select all) are its own, `TextEdit`'s being
-  private; a number needs no IME or multi-line.
-- A drag selects in a focused box, along the strip.
-- The overlay, its `AreaState` check and `BoxFocus::Upright` go.
+A tree drag stays inside the window ([`20-project-tree.md`](20-project-tree.md), Drag and drop): no operating-system drag is
+started, so no XML text reaches a text editor or another window (parity TREE-24).
 
 ## Languages
 

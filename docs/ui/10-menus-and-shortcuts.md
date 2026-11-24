@@ -11,14 +11,11 @@ Conventions:
 - Every entry is 23 px high, shows its shortcut text right-aligned.
 - A disabled entry greys text and icon.
 - (port) While a modal shows, the menu bar is greyed and takes no pointer or key.
-- Port: menu bar, tree menus and shortcuts dispatch one exhaustive `MenuAction` enum (`waveduderust_app` [`menus.rs`](../../crates/waveduderust_app/src/menus.rs));
-  the ids in this document name the entries.
-- Port: the menu bar is the table `menus::MENU_BAR`, whose unit test checks the mnemonics of every menu in every
-  language; the recent files and the panes carry none.
-- Port: one table, `menus::enabled`, holds the Enabled rules of every menu here, the context menus' included; the menu
-  bar, the context menus, the tree's toolbar, the transport bar's Run and the dispatcher read it, so a shortcut whose
-  entry is disabled does nothing. Paste and Export last also need objects on the clipboard and a last export of the
-  open project, which their entries and their actions check.
+- Port: menu bar, tree menus and shortcuts dispatch one set of actions; the ids in this document name the entries.
+  The recent files and the panes carry no mnemonics.
+- Port: one set of Enabled rules covers every menu here, the context menus' included; the menu bar, the context
+  menus, the tree's toolbar and the transport bar's Run read it, so a shortcut whose entry is disabled does nothing.
+  Paste and Export last also need objects on the clipboard and a last export of the open project.
 - Keys in the menus: Alt held underlines the mnemonics, as do keys working the menus. Alt+letter opens that menu
   of the bar on its first entry; F10 or a lone Alt puts the focus on the bar's first header, where Left/Right walk
   the headers and Down, Enter, Space or a letter opens one (Up: on its last entry). In an open menu Up/Down walk the
@@ -26,7 +23,7 @@ Conventions:
   turn), Home/End reach the ends, Left/Right open the neighbouring menu of the bar, Esc closes one level (from a
   menu of the bar back to its header, from there out of the bar) and the focus returns to where the keys took it
   from. The pane title bar's menu takes letters too. The mnemonics are the entries' access keys for assistive
-  technology (port: [`kit/menu.rs`](../../frontends/classic/src/kit/menu.rs)).
+  technology.
 
 ## File
 
@@ -134,7 +131,7 @@ move; Select all and Paste as in the Edit menu.
 |---|---|---|---|---|
 | Add source | S/Q/R/B | - | U+E710 | |
 | Add part > | R/B/C/O | - | U+E710 | The part kinds submenu (below). |
-| Add probe | B/O/N/S | - | U+E710 | |
+| Add probe > | B/O/N/S | - | U+E710 | The probe kinds submenu (below). |
 | - separator | | | | |
 | Add to or remove from selection | L/T/I/R | Ins | U+E762 | |
 | Select all | A/S/T/A | Ctrl+A | U+E8B3 | |
@@ -153,16 +150,26 @@ move; Select all and Paste as in the Edit menu.
 
 ### Add part (tree toolbar "+ Part", Parts folder "+", row menu > Add part)
 
-Order: optics, separator, shapes, separator, logic submenu. Each entry's tooltip = the kind description
+Order: optics (with the grating and meta surface submenus), separator, shapes, separator, logic submenu. Each entry's tooltip = the kind description
 (`Kind.<Type>`).
 
 | Entry | Mn | Icon |
 |---|---|---|
 | Lens/Mirror | L/L/L/L | Draw:Lens (biconvex lens beside a concave mirror) |
+| Fresnel lens | S/S/S/S | Draw:FresnelLens |
 | Fibre | F/F/F/V | Draw:Fiber |
 | Bragg reflector | B/B/B/B | Draw:BraggReflector |
 | GRIN lens | G/G/G/G | Draw:GrinLens |
 | Zone plate | Z/Z/Z/Z | Draw:ZonePlate |
+| Diffuser | D/I/D/F | Draw:Diffuser |
+| Interference filter | N/N/N/N | Draw:InterferenceFilter |
+| Diffraction gratings > | C/T/A/U | Draw:DiffractionGratings |
+| > Simple 2D grating | S/E/S/E | Draw:SimpleGrating |
+| > Facetted grating | F/F/F/F | Draw:FacettedGrating |
+| Meta surfaces > | M/M/M/M | Draw:MetaSurfaces |
+| > Meta lens | M/M/M/M | Draw:MetaLens |
+| > Meta prism | P/P/P/P | Draw:MetaPrism |
+| > Meta axicon | A/A/A/A | Draw:MetaAxicon |
 | - separator | | |
 | Polygon | P/P/P/P | Draw:Polygon |
 | Rectangle | R/R/R/R | Draw:Rectangle |
@@ -176,6 +183,19 @@ Order: optics, separator, shapes, separator, logic submenu. Each entry's tooltip
 | > OR | O | Draw:OrGate |
 
 "+ Part" without a kind opens this menu under the button (keyboard: Space opens, arrows walk, Enter picks).
+
+### Add probe (tree toolbar "+ Probe", Probes folder "+", row menu > Add probe)
+
+Each entry's tooltip = the detector's description.
+
+| Entry | Mn | Icon |
+|---|---|---|
+| Standard probe | S/S/S/S | Draw:Probe |
+| Probabilistic > | P/P/P/P | Draw:CountingDetector |
+| > Counting detector | C/Z/C/T | Draw:CountingDetector |
+| > Imaging detector | I/B/I/B | Draw:ImagingDetector |
+
+"+ Probe" without a kind opens this menu under the button.
 
 ### Preview picture (right-click or Apps key on a picture cell)
 

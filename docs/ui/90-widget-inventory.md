@@ -1,13 +1,12 @@
-# Widget inventory of `waveduderust_classic` (egui)
+# Widget inventory
 
-Derived from files 00..80. Each widget: required behaviours, then what it is built on in
-[`frontends/classic/src/ui`](../../frontends/classic/src/ui/) (decision 0019).
+Derived from files 00..80. Each widget: required behaviours.
 
 Cross-cutting requirements for every widget:
 - Keyboard first: focusable where interactive, visible focus (accent border), Tab order = visual order.
 - Theme tokens only (no hard-coded colours) except the preview overlays and graph boxes (fixed colours).
 - Re-labels live on a language switch; scales with the UI zoom; lines on whole device pixels.
-- Its role and label in egui's AccessKit tree, through which the window's tests find it.
+- Its role and label exposed to assistive technology.
 - 23 px row height for rows, toolbar buttons, the menu bar and tabs; 22 px for drop-down menu entries, text
   boxes, number boxes and combo boxes; 16 px icons in text colour (greys when disabled).
 - WPF's box model: square corners everywhere; buttons padding 10,3 inside a 1 px border (toolbar text buttons
@@ -29,7 +28,6 @@ Behaviours:
 - Show/hide panes (hide = keep registration); default side for a pane shown without a saved place.
 - Serialize/deserialize the layout by pane id (unknown ids ignored); default layout definition.
 - Sizes survive rebuilds; hosted content keeps its state across re-parenting.
-Base: egui_tiles, with the app's title bars, tabs, drop overlay and saved arrangement (`dock.rs`).
 
 ## 2. Menu bar and menus
 
@@ -44,10 +42,7 @@ Behaviours:
 - Keyboard: Esc closes a level; first entry focused when opened by keyboard.
 - A click outside while open closes and still lands on its target (incl. window title bar where the platform
   allows).
-Base: the classic kit's menus (`kit/menu.rs`) over egui_mineral's menubar, mnemonic and anchor models; the
-bar's entries come from `menu_bar.rs`.
-Port: an entry carries a typed action (the app's `MenuAction`, the preview's `PictureMenu`) beside its string
-test id; activation reports the action, never the id.
+Port: activation reports an entry's action, never its string id.
 
 ## 3. Tree view (project tree)
 
@@ -64,15 +59,11 @@ Behaviours:
 - Drag source (row, not its buttons) carrying text; drop target with insertion feedback: line above/below a row
   (by half), outline around a folder; claims only drags it accepts.
 - Per-row context menu with the node as target.
-Base: the classic kit's tree (`kit/tree.rs`) over egui_mineral's tree model (rows, keys, move validity, reveal),
-with Next's drop slots (a folder row takes the whole drop); the rows' content, the selection and the drop rule come
-from `tree.rs`.
 
 ## 4. Toolbar buttons
 
 Behaviours: flat text+icon button with plus badge; flat 16/18 px glyph button; tooltip; disabled skipped by Tab;
 toggle variant (pressed while checked); radio variant (each button a tab stop).
-Base: own painted buttons (`tree.rs`, `preview/transport.rs`).
 
 ## 5. Property form (form panel and rows)
 
@@ -86,15 +77,12 @@ Behaviours:
 - Repeated row lists with per-row remove button and an Add button (points, nodes, stops).
 - Collapsible description header with chevron (Space toggles, persisted).
 - Vertical scroll, never horizontal; caret into the first text box on a new item.
-Base: the kit's form grid on egui-mineral's `LabelColumn` (`kit/form.rs`) in a ScrollArea (`properties/`).
 
 ## 6. Text box
 
 Behaviours: Enter commits to the bound value and selects all; Esc reverts when changed (consumed only then);
 per-keystroke binding option; multiline option; own undo (Ctrl+Z) and clipboard handled before window commands;
 placeholder text (Messages search); option to select all text when the box gains focus (the object Name box).
-Base: egui's TextEdit with the commit policy of the pending edit (`text_box.rs`, `edit.rs`); the box selects its
-text when it gains the focus.
 
 ## 7. Number box (linear and logarithmic)
 
@@ -110,34 +98,27 @@ Behaviours:
 - Look: 22 px, padding 3,2, 1 px border (hover, focus accent), 14 px spin column with 4 x 2 chevrons, hover and
   pressed backgrounds; disabled: window background, grey text, no spin buttons.
 - Writes through to the bound value on every step; selects text after a step.
-Base: the kit's box (`kit/number.rs`) on egui-mineral's `NumberEdit` and `RangeModel` (stepping, scrub, parse,
-clamp), egui's TextEdit for the text; `ui/number_box.rs` adapts a `NumberSpec` and the pending edit.
 
 ## 8. Check box, combo box, editable combo
 
 Behaviours: check box with label content; enum combo with localised words; editable combo (speed box) with preset
 list and free typing, swallowing Space; keyboard open/close and arrow selection.
-Base: own check box and combo box over egui's Popup (`properties/mod.rs`); the speed box a number box with a presets
-Popup (`preview/transport.rs`).
 
 ## 9. Colour scheme picker (combo with gradient rows)
 
 Behaviours: rows with gradient strip + name + grey tag; greyed missing name; italic action rows (Load from file...,
 Edit a copy in the project...); list updated in place; value = scheme name.
-Base: the combo box with painted rows, the gradient as a mesh (`properties/`, `gradient_editor.rs`).
 
 ## 10. Colour swatch button and colour picker popup
 
 Behaviours: swatch toggles a popup below it (Space/Enter/Down); SV square + hue strip (Canvas), markers, mouse drag,
 arrow keys with Shift x10; R/G/B number boxes; hex box (Enter applies); live colour commit throttled to 10/s plus on
 drag end; Enter keeps, Esc reverts, click outside closes without reopening; focus returns to the swatch.
-Base: egui's Popup with painted square and strip (`color_picker.rs`).
 
 ## 11. Gradient editor rows (colour scheme form)
 
 Behaviours: gradient bar; stop rows (position number box 0..1, swatch, hex box, remove); Add stop in the widest gap;
 Based-on combo copying stops.
-Base: composed from 5, 7, 10 (`gradient_editor.rs`).
 
 ## 12. Canvas image (preview picture)
 
@@ -150,8 +131,6 @@ Behaviours:
 - Context menu; focusable pane for Space.
 - Its hooks and callbacks compare by identity: made once by the parent, with a redraw key that changes with the
   overlay's inputs, the picture does not re-render with its parent. The device size is reported after layout.
-Base: a wgpu texture written in place, or the GPU engine's frame coloured in a paint callback (`preview/picture.rs`,
-`preview/texture.rs`, `preview/device.rs`).
 
 ## 13. Scene overlay (handles)
 
@@ -167,7 +146,6 @@ Behaviours:
 - Visibility rules (Handles/Labels settings, current-item-only handles).
 - Drop target for objects (paste at pixel).
 - Hit testing must not walk thousands of dots under a resting pointer.
-Base: the view's epaint shapes, own hit testing and focus (`preview/overlay.rs`).
 
 ## 14. Probe graph box overlay
 
@@ -175,52 +153,43 @@ Behaviours: draws boxes (translucent dark, axes, labels, curve clipped to the pl
 fixed text size; linear and symmetric/logarithmic axes; each box draggable and focusable (arrows, Del), corner grip
 resize snapping to fixed sizes; snap/attach to probe point with hysteresis; selected border; context menu (CSV);
 cached text layout.
-Base: the view's epaint shapes (`preview/graph_boxes.rs`).
 
 ## 15. Header strip
 
 Behaviours: title + optional caption + tools (number box, Auto button); caption dropped first, title trimmed when
 short; can be laid out rotated 90 degrees beside the picture (picture frame decides above vs beside by aspect).
-Base: own layout, turned text shapes and an upright editing Area (`preview/header_strip.rs`).
 
 ## 16. Picture splitter / split container
 
 Behaviours: two cells side by side or stacked; 4 px splitter, tab stop, arrows move 10 px, Enter/double-click
 resets to half; collapses when one cell is hidden and restores the split.
-Base: the kit's splitter (`kit/split.rs`) on egui-mineral's `Splitter` (drag, limits, reset).
 
 ## 17. Timeline
 
 Behaviours: custom-drawn bar with tick labels (interval by label width), playhead with frame label, in/out brackets
 and band, available-frames shading (accent or grey when stale), hover line and label; click/drag scrub, bracket
 drag, keys Left/Right/PageUp/PageDown/Home/End, wheel; cached tick drawing; whole-pixel lines; test value exposure.
-Base: painted shapes on whole device pixels (`preview/timeline.rs`).
 
 ## 18. Transport bar
 
 Behaviours: glyph buttons and toggles with state-driven glyph/tooltip/command (Run/Stop, Pause/Resume), focus
 handoff Play<->Pause, readout text "frame / last" + dim step, speed editable combo, layout radio group.
-Base: composed from 4 and 8 (`preview/transport.rs`).
 
 ## 19. Tooltip
 
 Behaviours: on hover after 400 ms (WPF's initial show delay), under the pointer and kept inside the window;
 a press or leaving hides it; localised text, themed, zoomed, square 1 px border, padding 6,3, UI font; on menu
 entries too (shown 400 ms after the entry is highlighted).
-Base: egui's tooltips (`on_hover_text`) in the app's visuals.
 
 ## 20. Busy indicators
 
 Behaviours: dim rectangle (45 % black) + spinner (three-quarter ring, one turn per second) over the pictures after a
 150 ms delay, not hit-testable; status bar progress bar determinate/indeterminate.
-Base: painted dim and spinner (`preview/picture.rs`), the kit's status bar progress (`kit/status.rs`).
 
 ## 21. Status bar
 
 Behaviours: left log line with background/foreground switching for warn/error; right run status; far-right busy
 text + bar; tooltip; double-click opens Messages; resize grip corner.
-Base: the kit's bar (`kit/status.rs`) on egui-mineral's `StatusItem`, strip placement, `Tone` and window grip, in
-egui's bottom panel (`status_bar.rs`).
 
 ## 22. Message list (Messages pane)
 
@@ -229,24 +198,19 @@ clear; columns Time/Level/Source/Message with resizable headers; per-level row c
 Copy/Copy all/Clear; 5000-entry ring buffer with batched updates; virtualised rows; row tooltip. The visible
 lines are kept as ids per (log revision, filter), so a hover or a selection change neither copies lines nor
 compiles the search again.
-Base: the kit's table (`kit/table.rs`) on egui-mineral's `ColumnWidths`, `VirtualList` and `RowStyle` (`messages/`).
 
 ## 23. Dialog window
 
 Behaviours: modal owned window with themed title bar, icon disc, wrapped text, button sets with default/cancel,
 mnemonics without Alt; sized to content; zoomed. Also used for the memory warning (check boxes with greyed states,
 live result line) and About (links, collapsible document, read-only text, copy).
-Base: egui-mineral's modal layer with the kit's frame, title, message body and button row (`kit/dialog.rs`); the
-queue and focus give-back in `modal.rs`.
 
 ## 24. Document viewer (license)
 
 Behaviours: render Markdown (headings, paragraphs, tight lists, emphasis, code, links) in a scrolling column; text
 selection and copy; external links. The manual's viewer is gone (decision 0028).
-Base: egui_commonmark with own code blocks (`markdown.rs`).
 
 ## 25. Icon view
 
 Behaviours: 16 px icon from an icon font glyph or an app vector drawing (stroke + optional fill), text colour,
 optional plus badge; lens profile variants chosen from data.
-Base: egui_material_icons, and SVG path data flattened into meshes (`icons.rs`).

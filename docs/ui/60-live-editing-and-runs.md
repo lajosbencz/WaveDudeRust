@@ -2,8 +2,7 @@
 
 Pointers: `MainWindow.Live.cs`, `MainWindow.Simulation.cs`, `MainWindow.History.cs`,
 `MainWindow.Clipboard.cs`, `MainWindow.SceneImageWatch.cs`, `Dialogs/MemoryWarningWindow.xaml(.cs)`,
-core: `ProjectWatcher`, `ProjectHistory`, `ProjectClipboard`. Rust: [`waveduderust_app/src/live.rs`](../../crates/waveduderust_app/src/live.rs) (the
-controller), [`waveduderust/src/run/worker.rs`](../../crates/waveduderust/src/run/worker.rs) (the live run), decision 0012.
+core: `ProjectWatcher`, `ProjectHistory`, `ProjectClipboard`. Rust: [`waveduderust/src/run/worker.rs`](../../crates/waveduderust/src/run/worker.rs) (the live run), decision 0012.
 
 ## Edit classes
 

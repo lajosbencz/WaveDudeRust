@@ -67,12 +67,11 @@ Fixed colours, not themed; preview only, never exported.
 
 ## Zoom
 
-Both pictures share one zoom over the fit (`View` in [`waveduderust_app/src/preview/view.rs`](../../crates/waveduderust_app/src/preview/view.rs)): the
+Both pictures share one zoom over the fit: the
 wheel over a picture zooms in by a factor of 1.25 a notch, out by the same, never below the fit, up to 64x; the
 canvas point under the pointer stays where it is. A middle-button drag pans a zoomed view. On a touch screen a pinch
 that begins over a picture (not over a popup or dialog) zooms about the fingers' centre by the same rules, and a
-two-finger drag pans a zoomed view (egui's `InputState::multi_touch`, which reports real touches alone, so it works
-on any device); the wheel is ignored meanwhile. A second finger on the screen cancels what the first started: it
+two-finger drag pans a zoomed view; the wheel is ignored meanwhile. A second finger on the screen cancels what the first started: it
 presses nothing on the pictures, a handle being dragged goes back as with Esc, a graph box goes back to where and as
 large as it was, and a marquee is dropped, so a pinch never edits. The zoomed picture is
 larger than the cell's area and is held so that no area is left empty; the handles, the graph boxes and the
