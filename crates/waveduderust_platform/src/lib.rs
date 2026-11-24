@@ -3,6 +3,8 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod codec;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod export;
 pub mod settings;
 pub mod store;
 pub mod user_schemes;

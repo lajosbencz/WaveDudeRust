@@ -40,7 +40,7 @@ impl EngineArgs {
 		Ok(engine::build(spec.scene.clone(), spec.options.clone(), self.gpu).engine)
 	}
 
-	fn backend(self) -> Backend {
+	pub(crate) fn backend(self) -> Backend {
 		if self.gpu { Backend::Auto } else { Backend::Cpu }
 	}
 }

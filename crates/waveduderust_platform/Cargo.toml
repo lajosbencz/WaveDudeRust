@@ -12,7 +12,7 @@ description = "WaveDude Rust's host services without a UI toolkit: settings and 
 workspace = true
 
 [dependencies]
-waveduderust = { path = "../waveduderust", default-features = false, features = ["unstable-export", "unstable-reflect", "unstable-run", "run", "serde", "export"] }
+waveduderust = { path = "../waveduderust", default-features = false, features = ["unstable-engine", "unstable-export", "unstable-reflect", "unstable-run", "run", "serde", "export"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
