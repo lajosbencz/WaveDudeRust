@@ -36,16 +36,15 @@ Status: accepted, 2026-11-24 (the user's decision).
 - Nothing in `waveduderust` or `waveduderust_platform` depends on a UI toolkit.
 - Every crate shares MAJOR.MINOR with the app; patches are per crate. `waveduderust_macros` and `waveduderust`
   publish; the rest are `publish = false`.
-- Executables: `waveduderust`, `waveduderust-cli`. App id `io.github.lajosbencz.WaveDudeRust`; the settings folder is
+- Executables: `waveduderust`, `waveduderust-cli`. App id `io.github.lajosbencz.wavedude-rust`; the settings folder is
   `APP_FOLDER`.
 - Platforms are packages, not crates: the browser (Pages), Windows (installer), macOS (universal app), Linux
-  (AppImage, Flathub). Packaging files live in `packaging/<target>/`. Store builds turn off the self-updater and the
-  OpenH264 download through features.
+  (AppImage, Flathub). Packaging is `[package.metadata.packager]` and `assets/` of the app crate.
 
 ## Core API
 
 - A facade at the root: `Project`, `Simulation` (builder: backend Auto / Cpu / Gpu with the reported fallback,
-  intensity tracking; `build_async` where the GPU needs it), `FieldView`, probe readings, and the background run:
+  intensity tracking), `FieldView`, probe readings, and the background run:
   the builder's `spawn(RunOptions)` gives a `Run` (progress, wait, cancel, traces) whose frames read through a
   read-only `Frames`.
 - Everything else is crate-private or behind an opt-in `unstable-<area>` feature, reached through
@@ -54,10 +53,12 @@ Status: accepted, 2026-11-24 (the user's decision).
   reach every wasm and CI build.
 - Model types, options, errors and responses are `#[non_exhaustive]`, built through `Default`, `new` or builders;
   one `thiserror` enum per area; no panics, no `anyhow` in the API.
-- Typed ids (`SourceId`, `ProbeId`, `PartId`) instead of indices: stable for a session, never saved.
 - No network in the library: MP4 takes an encoder provider; downloading OpenH264 is `waveduderust_platform`'s.
-- Public dependencies: `half::f16`, and `wgpu` behind `gpu` to share a device (`Simulation::with_device`).
+- Public dependencies: `half::f16`, and `wgpu` behind `gpu` to share a device (`GpuContext`, unstable).
 - Same project, seed and backend give the same readings.
 - MSRV is the pinned toolchain. Checks come from a `justfile` that CI calls: cargo-hack per feature on native and
   wasm32, nextest, a public API diff (`cargo public-api`) that fails on a breaking change without a MINOR bump
   (`unstable-*` skipped), a version alignment check, ast-grep rules.
+
+Decided, not built: typed ids (`SourceId`, `ProbeId`, `PartId`) in place of indices; store builds without the
+self-updater and the OpenH264 download.
