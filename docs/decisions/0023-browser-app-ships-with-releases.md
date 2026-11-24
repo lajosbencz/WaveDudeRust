@@ -1,6 +1,6 @@
 # 0023: The browser app ships with releases
 
-Status: accepted, 2026-11-14 (the user's decision). Amends [0019](0019-egui-and-the-platform-layer.md): GitHub Pages
+Status: accepted, 2026-11-14 (the user's decision). GitHub Pages
 serves the latest release's browser app, not master's.
 
 ## Context

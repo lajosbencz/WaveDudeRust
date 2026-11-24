@@ -33,8 +33,8 @@ Use modern toolings for lineage tracing.
 
 ## Stack
 
-- One Cargo workspace: the simulation library, the headless app, workers, cli, examples, frontends ([decision 0031](decisions/0031-modular-core-and-frontends.md))
-- UI: egui 0.37 on eframe through egui-mineral kits (Material, the classic look), natively and in the browser ([decisions 0019](decisions/0019-egui-and-the-platform-layer.md), [0031](decisions/0031-modular-core-and-frontends.md)); GNOME and KDE frontends later
+- One Cargo workspace: the simulation library, macros, cli, platform services, one frontend ([decision 0032](decisions/0032-slint-single-frontend.md))
+- UI: Slint, natively and in the browser ([decision 0032](decisions/0032-slint-single-frontend.md))
 - Render: wgpu + CPU fallback
 - Project files: support the WaveDudeNext formats; `.wdproj` is the one project format
 - Export: PNG/JPEG/EXR sequences, MPEG-1, AVI, QuickTime, H.264 MP4 via openh264
@@ -45,9 +45,9 @@ Use modern toolings for lineage tracing.
 2. Build: Core library create from that spec, with unit-level analytic physics tests and snapshot tests (dispersion, reflection, absorption, refraction, diffusion, energy conservation)
 3. Compare: The original C# program (headless harness) to find mistakes on either side. Fix ours, report theirs, never calibrate
 4. Design: Map the WPF UI layout and behaviour into [`docs/ui`](ui/)
-5. Build: widgets through egui-mineral kits; domain widgets (pictures, timeline, gradient) where no kit has them
+5. Build: the UI in `.slint` files, domain widgets (pictures, timeline, gradient) where the toolkit has none
 6. Build: Desktop and terminal applications
-7. Restructure: a simulation library with a stable API, a headless app, thin frontends ([decision 0031](decisions/0031-modular-core-and-frontends.md))
+7. Restructure: a simulation library with a stable API and one frontend ([decision 0032](decisions/0032-slint-single-frontend.md))
 
 Steps 1-4 may run in parallel.
 Decisions go to [`docs/decisions`](decisions/) as ADRs, measurements to [`docs/measurements.md`](measurements.md).
@@ -60,5 +60,5 @@ If something is ambiguous/missing, ask the user instead of assuming.
 - `cargo test --workspace` green
 - GPU tests skip without an adapter
 - Original example projects open and run, the photonic logic gates from Huygens Optics' video are reproduced in [`examples/gates.md`](../examples/gates.md) with measured truth tables.
-- `cargo build --release -p waveduderust_cli -p waveduderust_classic` produces hand-checked app
+- `cargo build --release -p waveduderust_cli -p waveduderust_slint` produces hand-checked app
 

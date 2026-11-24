@@ -3,7 +3,7 @@
 Status: accepted, 2026-11-14 (the user's decision); losses and versions, the mirror's memory added 2026-11-14;
 builds added 2026-11-15;
 amended by [0026](0026-kick-the-gpu-queue-while-waiting.md). Amends [0015](0015-core-builds-for-wasm.md),
-[0016](0016-gpu-engine-in-the-browser.md), [0019](0019-egui-and-the-platform-layer.md) and
+[0016](0016-gpu-engine-in-the-browser.md) and
 [0020](0020-browser-frame-spill-in-opfs.md): the run leaves the page's thread.
 
 ## Context
@@ -48,7 +48,7 @@ worker's binary is 2.1 MB (0.6 MB gzipped) against the app's 21 MB.
 ## Alternatives rejected
 
 - Wasm threads with `SharedArrayBuffer`: no cross-origin isolation on GitHub Pages.
-- The app's own wasm as the worker: 21 MB loaded twice, egui and the examples instantiated for nothing.
+- The app's own wasm as the worker: 21 MB loaded twice, the UI and the examples instantiated for nothing.
 - A fallback to the page's thread: a second run path for a deployment error; the error is shown instead.
 - The spill in the worker through `FileSystemSyncAccessHandle`: the playhead's reads would cross agents and need
   prefetching; deferred until scrubbing measures slow. The page's writes measured slow instead: the spill moved to a

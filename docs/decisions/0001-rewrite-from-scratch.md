@@ -14,6 +14,6 @@ source, so the result is a derivative work in spirit). Credits to Alexander Grae
 Not a GitHub fork: no code is shared, so the fork relation would be noise.
 
 Plan: 1 map core features -> 2 core crate with tests -> 3 compare with C# ->
-4 map UI -> 5 widget crate -> 6 Freya app. Steps 1 and 4 run in parallel.
+4 map UI -> 5 widget crate -> 6 app. Steps 1 and 4 run in parallel.
 The C# source is read to discover features and later to compare details; the
 implementation is written from the spec.

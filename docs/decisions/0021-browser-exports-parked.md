@@ -1,7 +1,7 @@
 # 0021: Browser exports are parked, the export crate is prepared for them
 
 Status: superseded by [0025](0025-browser-exports.md), 2026-11-14 (accepted 2026-11-13). The browser build offered no exports until the design below was built; builds on
-[0019](0019-egui-and-the-platform-layer.md) and [0020](0020-browser-frame-spill-in-opfs.md).
+[0020](0020-browser-frame-spill-in-opfs.md).
 
 ## Context
 
@@ -12,8 +12,7 @@ Exports in the browser need a decision on where files go, how video is encoded a
 ## Decision
 
 - The browser build offers no exports: the File > Export submenu and Export last, the probe CSV entry of the tree
-  and of the graph box and the picture's export entries are hidden through `HAS_EXPORTS`
-  ([`web.rs`](../../crates/waveduderust_app/src/platform/web.rs)); their shortcuts do nothing. The desktop
+  and of the graph box and the picture's export entries are hidden through `HAS_EXPORTS`; their shortcuts do nothing. The desktop
   exports are unchanged.
 - Already in place: `waveduderust::unstable::export` builds for wasm32 without `mp4` (a CI clippy line); its output
   files go through the `OutputFs` seam ([`fs.rs`](../../crates/waveduderust/src/export/fs.rs), `StdFs` natively), closed

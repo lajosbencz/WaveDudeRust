@@ -8,7 +8,7 @@ The live preview had two runners mirroring WaveDude Next: a `ScratchRunner` comp
 is now" on a second engine, and the `SimulationRun` storing every frame, with the controller pacing them by a
 120 ms debounce, 1.5 s of quiet before the re-run, and pausing the run while a scratch frame computed. The
 abandon-on-newer-request rule starved drags of heavy frames; the debounce and quiet were constants nobody could
-derive; the two engines and the coordination were half of [`live.rs`](../../crates/waveduderust_app/src/live.rs). WaveDude Next dropped its timers on
+derive; the two engines and the coordination were half of the old live module. WaveDude Next dropped its timers on
 2026-11-09 and kept the two runners.
 
 ## Decision

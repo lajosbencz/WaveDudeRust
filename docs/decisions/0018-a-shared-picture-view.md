@@ -1,7 +1,7 @@
 # 0018: A shared picture view: one draw list for Skia and Canvas2D, probes read back in the browser
 
-Status: accepted, 2026-11-12; shapes as epaint's, 2026-11-12 (below); amended by [0019](0019-egui-and-the-platform-layer.md),
-2026-11-13: the Skia and Canvas2D executors and the wasm package are gone, the window and the browser draw the epaint shapes. Builds on [0016](0016-gpu-engine-in-the-browser.md)
+Status: accepted, 2026-11-12; shapes as epaint's, 2026-11-12 (below); the Skia and Canvas2D executors and the wasm
+package are gone, the window and the browser draw the epaint shapes. Builds on [0016](0016-gpu-engine-in-the-browser.md)
 and amends [0017](0017-a-wasm-package-and-a-web-demo.md): the web demo shows the preview's handles, labels, edge line and probe graph boxes.
 
 ## Context
@@ -73,9 +73,9 @@ the desktop's.
 
 ## Shapes as epaint's (added 2026-11-12)
 
-With the window on egui, the own draw list and its executors are gone: the overlay's and a graph box's shapes are
+The own draw list and its executors are gone: the overlay's and a graph box's shapes are
 epaint shapes in points, their text galleys laid out by epaint's fonts from the bundled Selawik (`fonts.rs`), and
-epaint's tessellator makes them meshes, which the window draws with egui's wgpu renderer and an export rasterises on
+epaint's tessellator makes them meshes, which the window draws and an export rasterises on
 the CPU into its frame (`waveduderust::unstable::export::raster`): pixels are drawn where they live. `TextMetrics` stays the graph
 layout's measure (epaint's fonts in the box's font through `graph::layout_with`, or an estimate); `DeviceGrid` puts hairlines and text on whole
 device pixels and maps them back to points. epaint strokes no text, so a label's halo is its glyphs' outlines, read by

@@ -19,10 +19,8 @@ asynchronous too and ask more of the user or the code.
 - One store, two spills: the store logic (budget, which frames spill, bookkeeping, generations, the frame kept
   through a clear) is shared; natively the spill is the file, on wasm32 a pending spill whose writes and reads return
   tokens the store settles (`SpillBackend` and `SpillFactory` in
-  [`pending.rs`](../../crates/waveduderust/src/run/pending.rs)). The core takes no browser API: the page's backend lives in the app state's platform layer
-  ([`spill.rs`](../../crates/waveduderust_app/src/platform/opfs/spill.rs)) and posts each write, read and removal
-  to the spill worker, a dedicated worker of its own crate
-  ([`wavedude-spill-worker`](../../crates/waveduderust_workers/src/bin/wavedude-spill-worker/worker.rs)), completing the tokens as it answers.
+  [`pending.rs`](../../crates/waveduderust/src/run/pending.rs)). The core takes no browser API: the page's backend lives in the browser app's platform layer
+  and posts each write, read and removal to the spill worker, a dedicated worker, completing the tokens as it answers.
 - One file per store generation at `wavedude-spill/<session>/<store>-<generation>`, opened at its first write with a
   synchronous access handle, which only a dedicated worker has. Frames are appended and their places indexed, as the
   frames held in memory are never written. The worker handles the page's messages in order, so a generation's file
@@ -71,7 +69,7 @@ A read completes in a later task of the page's event loop, after the pass that a
 playback reached was shown a pass late, the picture before it held meanwhile. Playback names the frames it shows next:
 each tick the live controller hands the store the position and the frames after it at the stride of the last tick,
 wrapped to the in point with Loop on, never past the out point or the newest frame of a run still going
-(`Playback::ahead` in [`playback.rs`](../../crates/waveduderust_app/src/playback.rs), `FrameStore::prefetch`). The
+(`Playback::ahead`, `FrameStore::prefetch`). The
 position is named too: a tick moves it past the frame asked for last before the pass asks for it. The pending spill
 reads the first 4 of them that are spilled (the position and 3 after it), within the 2 reads in flight, a frame asked
 for going first; a frame read back is kept while it is named, and the frame asked for last always, so 5 are kept, at
@@ -101,8 +99,7 @@ budget can stand on:
   browser at about 500 to 700 MB in practice, its address space fragmented; one 5 GB Android phone got 4 GiB (bug
   269777).
 
-So the frames take what the platform tells, an eighth of the device's memory, at most 512 MiB (`web_frame_memory` in
-[`live.rs`](../../crates/waveduderust_app/src/live.rs)): 128 MiB where the browser does not tell (Firefox, Safari),
+So the frames take what the platform tells, an eighth of the device's memory, at most 512 MiB (`web_frame_memory`): 128 MiB where the browser does not tell (Firefox, Safari),
 256 MiB at 2 GiB, 512 MiB from 4 GiB on. No heuristic stands in where it does not tell. That is the RAM cache size's
 Auto (The RAM cache size in the browser, below). The frames past it spill as above, so a run is no shorter for it;
 the memory warning asks sooner.

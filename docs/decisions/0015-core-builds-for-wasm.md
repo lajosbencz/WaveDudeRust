@@ -1,6 +1,6 @@
 # 0015: The core builds for wasm32 without its runs and GPU engine
 
-Status: accepted, 2026-11-12; amended by [0016](0016-gpu-engine-in-the-browser.md), [0019](0019-egui-and-the-platform-layer.md)
+Status: accepted, 2026-11-12; amended by [0016](0016-gpu-engine-in-the-browser.md)
 (the live run of `run` builds for wasm32, pumped from the frame loop) and [0020](0020-browser-frame-spill-in-opfs.md).
 
 ## Context

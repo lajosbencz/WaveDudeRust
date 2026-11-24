@@ -215,7 +215,7 @@ The meshes' rasteriser draws bands of rows in parallel; the source markers, whic
 once; probe strokes are quads on whole pixels, without feathering. What is left over the previous rasteriser is
 drawing the source markers' triangles every frame (about 0.3 ms a layer here, 16 000 triangles).
 
-Before, 2026-11-12, the meshes were drawn on the GPU by egui-wgpu and read back: 6.0 to 6.6 ms a frame on the RTX
+Before, 2026-11-12, the meshes were drawn on the GPU and read back: 6.0 to 6.6 ms a frame on the RTX
 5070 Ti, 11.0 to 11.2 on lavapipe; uploading and reading back only the rectangles the shapes cover, 4.9 to 5.1 and
 9.5 to 9.9, of which the device setup was 0.2 s an export (the run on the CPU engine leaves no device to share).
 
@@ -281,7 +281,7 @@ Open performance items:
 
 ## The browser demo
 
-The demo page and its package are gone ([decision 0019](decisions/0019-egui-and-the-platform-layer.md)); the numbers are the engines' in
+The demo page and its package are gone ([decision 0017](decisions/0017-a-wasm-package-and-a-web-demo.md)); the numbers are the engines' in
 the browser.
 
 2026-11-12, Chrome 158 and Firefox 159 (flatpak, `dom.webgpu.enabled`, with the NVIDIA driver's flatpak GL

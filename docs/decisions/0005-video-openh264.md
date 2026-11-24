@@ -43,7 +43,7 @@ built:
   verbatim) with the licensing information: the About dialog and `wavedude-cli
   openh264 license`.
 
-The `openh264-source` feature (on `waveduderust`, `wavedude-cli` and `wavedude-app`)
+The `openh264-source` feature (on `waveduderust` and `wavedude-cli`)
 compiles OpenH264 in instead (`OpenH264API::from_source`): no download, no
 question, no check box, no Cisco notice; for development and CI, never for distributed
 builds. Building `waveduderust` or `wavedude-cli` without the `mp4` feature drops
@@ -55,8 +55,7 @@ writer stays in-house.
 ## The browser (2026-11-14)
 
 OpenH264 does not run in the browser, and Cisco's licence covers its binary on the user's device only. The browser
-build encodes H.264 with the browser's own encoder, WebCodecs' `VideoEncoder`
-([`webcodecs`](../../crates/waveduderust_app/src/platform/webcodecs/mod.rs)), behind the same `H264Encoder` seam and
+build encodes H.264 with the browser's own encoder, WebCodecs' `VideoEncoder`, behind the same `H264Encoder` seam and
 MP4 muxer (feature `mp4-mux`). Nothing is downloaded: no Cisco notice, no check box, no `UseOpenH264` question; the
 H.264 royalties are those of the browser's or the operating system's vendor, whose encoder it is.
 

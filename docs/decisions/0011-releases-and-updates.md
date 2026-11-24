@@ -11,7 +11,7 @@ Status: accepted, 2026-11-07; the startup question gone 2026-11-16 ([0027](0027-
   workflows) never reach the changelog or trigger a release; it takes its changelog format from a `[changelog]`
   section of its own (a git-cliff file only through a deprecated key); and it runs cargo in the job holding the
   write token, while the write job of [`release.yml`](../../.github/workflows/release.yml) only applies and pushes a checked patch. Every crate is `publish = false`;
-  none is published before the library's API is ready ([0031](0031-modular-core-and-frontends.md)), the user's choice;
+  none is published before the library's API is ready ([0032](0032-slint-single-frontend.md)), the user's choice;
   [`docs/release.md`](../release.md) says what turning it on takes.
   Everything runs on the workflow's `GITHUB_TOKEN`, no personal token: CI on each release PR waits once for a
   person's approval on the PR page. A GitHub App's token would start it without the click; not chosen, to keep the

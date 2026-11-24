@@ -156,9 +156,8 @@ Label font: see "Burned-in overlays" below.
   (`AccessUnit`), possibly later (`poll_ready`, `start_flush`, `poll_flushed`); the sink passes this on as
   `FrameSink::poll_ready` and `poll_finish`, which the job polls before writing a frame and before finishing (not
   after a cancel). Natively the encoder is OpenH264 (feature `mp4`, decision 0005), Cisco's binary loaded at run time
-  (`OpenH264Factory`, the path from `waveduderust_app::codec::library`, which downloads Cisco's binary); without one the export fails with
-  `H264Missing`. In the browser it is WebCodecs' `VideoEncoder` (`waveduderust_app::platform::WebCodecsFactory`,
-  decision 0005): codec string `avc1.42E0LL` (Baseline), `4D00LL` (Main) or `6400LL` (High) at the lowest level `LL`
+  (`OpenH264Factory`, the path from `waveduderust_platform::codec::library`, which downloads Cisco's binary); without one the export fails with
+  `H264Missing`. In the browser it is WebCodecs' `VideoEncoder` (decision 0005): codec string `avc1.42E0LL` (Baseline), `4D00LL` (Main) or `6400LL` (High) at the lowest level `LL`
   of Table A-1 whose MaxFS, MaxMBPS and side limit hold the size and frame rate, `avc: {format: "annexb"}`, the
   bitrate above, `bitrateMode: "variable"`, `latencyMode: "quality"`, `hardwareAcceleration: "no-preference"`; a key
   frame every fps pictures; I420 frames at `index / fps` s, colour space `smpte170m` limited range. At most 6 pictures

@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-11-14; the download from the user's click and a name per output with the archive's added
 2026-11-15. Supersedes
-[0021](0021-browser-exports-parked.md); builds on [0019](0019-egui-and-the-platform-layer.md),
+[0021](0021-browser-exports-parked.md); builds on
 [0020](0020-browser-frame-spill-in-opfs.md) and [0024](0024-browser-run-in-a-web-worker.md).
 
 ## Context
@@ -18,10 +18,8 @@ where the export runs, how a file larger than memory reaches the user, and what 
   through `FrameSource::prefetch`, and the live controller leaves read-ahead to a running export.
 - A still and the probe CSV are written in memory.
 - A run's export is spooled in the origin private file system, in the session folder of
-  [0020](0020-browser-frame-spill-in-opfs.md) under `export-<n>/`
-  ([`spool.rs`](../../crates/waveduderust_app/src/platform/opfs/spool.rs); the module is split into `session`,
-  `spill`, `queue` and `spool`). A file is written through a `FileSystemWritableFileStream`; its writes are queued
-  ([`queue.rs`](../../crates/waveduderust_app/src/platform/opfs/queue.rs)) and one task per file posts them in
+  [0020](0020-browser-frame-spill-in-opfs.md) under `export-<n>/`. A file is written through a `FileSystemWritableFileStream`; its writes are queued
+  and one task per file posts them in
   order, each completion waking the window. At most 64 MiB are in flight: `OutputFs::poll_ready` is pending above
   that and the job waits, `OutputFs::poll_flushed` is pending until every closed file is committed, and the job ends
   only then, so a completed export has its files. The first failure is sticky.
@@ -64,8 +62,7 @@ activation duration after a click, a touch's end or a key (HTML,
 
 - A completed export's file is made ready (`platform::Download`: its object URL and name) and offered in a modal,
   "The export is ready: {name}", with Download (default) and Close. Download clicks the anchor in the pass that
-  takes the click: eframe runs the app's logic inside the `pointerup` handler, and after a touch or a key in the next
-  frame, within the activation. Every export ends so, stills and the probe CSV too, as their export may wait for a
+  takes the click, and after a touch or a key in the next frame, within the activation. Every export ends so, stills and the probe CSV too, as their export may wait for a
   run.
 - Save and Save As still download at once: they run in the user's action.
 - The object URL of the download started last, an export's or a Save's, is kept until the next download starts: a

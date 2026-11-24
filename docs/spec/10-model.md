@@ -366,7 +366,7 @@ to the spaced name. A missing scheme renders as `Grey` (stops 0: #000000, 1: #FE
 and the layer when a project is opened, the user's schemes change, an export or a CLI run colours the layer
 (`SchemeStore::check`, `resolve_layer`), never per picture.
 
-User schemes (WaveDudeRust, [`user_schemes.rs`](../../crates/waveduderust_app/src/user_schemes.rs)): a project scheme
+User schemes (WaveDudeRust, [`user_schemes.rs`](../../crates/waveduderust_platform/src/user_schemes.rs)): a project scheme
 is added to or removed from the user's schemes from the UI ([ui/20](../ui/20-project-tree.md), [ui/30](../ui/30-properties-pane.md)).
 They are `ColorSchemes/<stem>.wdscheme` in the config folder natively and in the page's `localStorage` in the browser;
 `.wdscheme` and Wave Dude 2D `.json` files placed there load too. The CLI's `run` and `export` load the same folder

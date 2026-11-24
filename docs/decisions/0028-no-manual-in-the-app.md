@@ -1,8 +1,7 @@
 # 0028: No manual in the app; Help opens the project page
 
-Status: accepted, 2026-11-16. Amends [0006](0006-testing.md) (the figures' rendering),
-[0008](0008-ui-behaviour-answers.md) (15, the figures) and [0019](0019-egui-and-the-platform-layer.md)
-(egui_commonmark for the manual, the figures on lavapipe).
+Status: accepted, 2026-11-16. Amends [0006](0006-testing.md) (the figures' rendering) and
+[0008](0008-ui-behaviour-answers.md) (15, the figures).
 
 ## Context
 
@@ -27,7 +26,5 @@ program next to its releases and issues and needs no rebuild to change.
 ## Consequences
 
 - The browser wasm went from 22.0 MB raw / 7.5 MB gzip to 19.0 MB / 5.7 MB (`tools/build-web.sh`, `gzip -9`).
-- Links open through `platform::open` (`waveduderust_app`): natively the system's handler through the `opener`
-  crate, in the browser a new tab.
-- egui_commonmark stays for the About dialog's license text; egui_extras' image loader for the About icon.
+- Links open natively through the system's handler (the `opener` crate), in the browser in a new tab.
 - The docs no longer ask for a manual update with a user-visible change.
