@@ -12,17 +12,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 5 | 20 | 9 | 6 | 0 |
-| M | Menus and shortcuts | 28 | 31 | 60 | 21 | 0 |
+| M | Menus and shortcuts | 34 | 27 | 58 | 21 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
-| T | Project tree | 16 | 20 | 36 | 29 | 0 |
+| T | Project tree | 19 | 21 | 29 | 32 | 0 |
 | P | Properties | 3 | 114 | 206 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 147 | 322 | 539 | 81 | 6 |
+| | All | 156 | 319 | 530 | 84 | 6 |
 
 ## Cross-cutting
 
@@ -119,12 +119,12 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | M-23 | Undo, Ctrl+Z, enabled when a step exists; a focused text box keeps its own Ctrl+Z | MW:282, SE:51, EditCommands.cs:37 | ui/10 Edit | partial | enabled can-undo; Ctrl+Z is a window key a focused text field takes first, no shortcut text (divergences.md Menus) |
 | M-24 | Redo, Ctrl+Y and Ctrl+Shift+Z | MW:283, SE:52, EditCommands.cs:41 | ui/10 Edit | partial | enabled can-redo; Ctrl+Y and Ctrl+Shift+Z as M-23 |
 | M-25 | Separator | MW:284 | ui/10 Edit | done | app:124 |
-| M-26 | Cut, Ctrl+X, enabled when list items selected, copies then removes | MW:285, SE:53 | ui/10 Edit | partial | copies then removes the selected list item (src/clipboard.rs); one object until multi-selection (piece 3) |
-| M-27 | Copy, Ctrl+C, objects to clipboard as XML text + app format | MW:286, SE:54 | ui/10 Edit | partial | the selected list item or settings object as `.wdproj` fragment text (arboard; navigator.clipboard on the web); no app format (divergences.md Clipboard); one object until piece 3 |
+| M-26 | Cut, Ctrl+X, enabled when list items selected, copies then removes | MW:285, SE:53 | ui/10 Edit | done | copies the group (Explorer's rule, src/selection.rs) then removes its list items, only when the clipboard took it |
+| M-27 | Copy, Ctrl+C, objects to clipboard as XML text + app format | MW:286, SE:54 | ui/10 Edit | partial | the group or a settings object as `.wdproj` fragment text (arboard; navigator.clipboard on the web); no app format (divergences.md Clipboard) |
 | M-28 | Paste, Ctrl+V, enabled when clipboard parses; paste behind current; settings object replaces | MW:287, SE:55 | ui/10 Edit | divergence | after the current item of its list, else at the end, under a copy name when the name is taken and a fresh id (Project::paste_*); a settings object replaces on its row or the root; always enabled (divergences.md Clipboard); the last pasted becomes current |
-| M-29 | Delete, Del, enabled as Cut, removes selection (text box: its text) | MW:288, SE:56, InputGestureText "Del" | ui/10 Edit | partial | enabled when an object row is selected; Del as a window key; one object, no multi-selection (piece 3) |
+| M-29 | Delete, Del, enabled as Cut, removes selection (text box: its text) | MW:288, SE:56, InputGestureText "Del" | ui/10 Edit | done | removes the group (Explorer's rule) and keeps the user at the last one's slot (tree::remove_all); Del as a window key a text field takes first |
 | M-30 | Separator before Select all | MW:289 | ui/10 Edit | done | app:129 |
-| M-31 | Select all, Ctrl+A, enabled when project has items; every source/part/probe, last current; tree and preview | MW:291, SE:184 (MenuProjectSelectAll), ProjectCommands.cs:57 | ui/10 Edit | missing | app:130; main.rs has no "select-all" arm (single selection only, tree.rs) |
+| M-31 | Select all, Ctrl+A, enabled when project has items; every source/part/probe, last current; tree and preview | MW:291, SE:184 (MenuProjectSelectAll), ProjectCommands.cs:57 | ui/10 Edit | done | every source, part and probe, the last current (src/selection.rs select_all); enabled when there is one; Ctrl+A from the tree and the preview |
 
 #### M View menu
 | ID | Feature | Next source | Spec | Slint | Note |
@@ -231,8 +231,8 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-102 | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S | MW:144-149,209-211 | ui/10 window-wide | done | app:95-103 |
 | M-103 | Alt+F4 exit | MW:32-36 | ui/10 | partial | OS-level; see M-20 |
 | M-104 | Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z undo/redo (text box: own) | EditCommands.cs:37,41 | ui/10 | partial | FocusScope app:166-168; behaviour while a LineEdit has focus not verified (FocusScope only receives unhandled keys) |
-| M-105 | Ctrl+X / Ctrl+C / Ctrl+V cut/copy/paste objects (text box: text) | ApplicationCommands | ui/10 | partial | window keys a focused text field takes first; act on the one selected object |
-| M-106 | Ctrl+A select all objects (text box: text) | ProjectCommands.cs:57 | ui/10 | missing | |
+| M-105 | Ctrl+X / Ctrl+C / Ctrl+V cut/copy/paste objects (text box: text) | ApplicationCommands | ui/10 | done | window keys a focused text field takes first; act on the group (Explorer's rule) |
+| M-106 | Ctrl+A select all objects (text box: text) | ProjectCommands.cs:57 | ui/10 | done | window key (app.slint `keys`) a focused text field takes first: every source, part and probe, the last current |
 | M-107 | Ctrl+E export last | ExportCommands.cs:59 | ui/10 | partial | M-18 |
 | M-108 | Ctrl+Shift+E / I / B, Ctrl+Shift+F / G | ExportCommands.cs:35-51 | ui/10 | partial | M-12..17 |
 | M-109 | F1 project page | HelpCommands.cs:31 (Manual) | ui/10, decision 0028 | missing | binding exists, action does nothing (M-56) |
@@ -258,7 +258,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-125 | Preview pane: I set in point / O set out / X clear | PP:393-395 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it |
 | M-126 | Preview pane: L toggle loop / F toggle Live (only while run active) | PP:396-397 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it; F acts only while a run is active |
 | M-127 | Preview pane: Home / End go to in / out point | PreviewCommands.cs:47,51 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it and the timeline |
-| M-128 | Preview pane: Ctrl+A select all; letter keys consumed even if command cannot run | PP:398 | ui/10 | partial | letter keys consumed even when the command cannot run (app.slint `preview-keys`); Ctrl+A select all comes with multi-selection (piece 3) |
+| M-128 | Preview pane: Ctrl+A select all; letter keys consumed even if command cannot run | PP:398 | ui/10 | done | letter keys consumed even when the command cannot run (app.slint `preview-keys`); Ctrl+A passes to the window: select all |
 | M-129 | Timeline focused: Left/Right 1 frame, PageUp/PageDown 10, Home/End in/out, wheel 1 frame | TimelineBar.cs | ui/10 Timeline | done | timeline.slint:33-38, scroll-event :77 |
 | M-130 | Handles on pictures: arrows 1 px, Shift+arrows 10 px, rotation lever 1/10 degree, grip resize | PreviewPane handles | ui/10 Handles | missing | no handles (preview is a plain Image) |
 | M-131 | Handles: Del removes item/selection; Esc undoes drag; Tab next handle selects item | PP | ui/10 Handles | missing | |
@@ -562,27 +562,27 @@ Not-in-spec rows are marked in the Spec column.
 | T-52 | Part icons: Lens profile icon from R1,R2,diameter (9 variants, follows edits) | Converters/LensIconConverter.cs | 20 Row icons | missing |  |
 | T-53 | Part icons: non-lens kinds drawings (FresnelLens..OrGate) | Controls/IconView.cs | 20 Row icons | missing |  |
 | T-54 | Add menu Lens/Mirror entry fixed icon | Controls/MenuIcon.cs | 20 Row icons | done | Lens/Mirror entry shows the fixed lens drawing |
-| T-55 | Click / arrows select a row alone | ProjectTree.xaml.cs | 20 Selection model | partial | click only; no arrow-key nav, anchor missing |
-| T-56 | Ctrl+click toggles row in selection | ProjectTree.xaml.cs:41 | 20 Selection model | missing | single selection only |
-| T-57 | Shift+click / Shift+arrows range select in tree order | ProjectTree.xaml.cs:41 | 20 Selection model | missing |  |
-| T-58 | Insert / Ctrl+Space toggle focused row in selection | ProjectTree.xaml:232-233 | 20 Selection model | missing |  |
-| T-59 | Ctrl+A selects all sources, parts, probes | ProjectTree.xaml:234 | 20 Selection model | missing | app.slint maps Ctrl+A to menu 'select-all' which only logs |
+| T-55 | Click / arrows select a row alone | ProjectTree.xaml.cs | 20 Selection model | partial | a click selects the row alone; arrow keys come with tree keyboard navigation (3e) |
+| T-56 | Ctrl+click toggles row in selection | ProjectTree.xaml.cs:41 | 20 Selection model | divergence | Ctrl+click toggles a source, part or probe, the current row following (src/selection.rs toggle); toggling out the last one leaves the root selected where Next leaves nothing |
+| T-57 | Shift+click / Shift+arrows range select in tree order | ProjectTree.xaml.cs:41 | 20 Selection model | partial | Shift+click takes the range in tree order from the anchor (the last plain click or Ctrl+click that added), as Next; Shift+arrows come with 3e |
+| T-58 | Insert / Ctrl+Space toggle focused row in selection | ProjectTree.xaml:232-233 | 20 Selection model | divergence | Insert and Ctrl+Space while the tree has focus; out of a group of one, the root stays selected (T-56) |
+| T-59 | Ctrl+A selects all sources, parts, probes | ProjectTree.xaml:234 | 20 Selection model | done | Ctrl+A and Edit, Select all: every source, part and probe, the last current |
 | T-60 | Selection from preview mirrored in tree, row revealed, no focus steal | MainWindow.Project.cs | 20 Selection model | missing | no handles on the pictures yet |
 | T-61 | Click on empty preview deselects | ProjectTree.xaml.cs | 20 Selection model | missing |  |
 | T-62 | Opening a project selects the root row; tree takes keyboard focus | MainWindow.Project.cs | 20 Selection model | partial | selected=Project on open (commit af7ee17); focus is a global FocusScope |
-| T-63 | Highlight: hover colour, current=selection colours when tree focused else inactive colours | ProjectTree.xaml:260-290 | 20 Selection model | partial | hover/selection/inactive done; 'focused' hard-coded true; no multi rows |
+| T-63 | Highlight: hover colour, current=selection colours when tree focused else inactive colours | ProjectTree.xaml:260-290 | 20 Selection model | partial | hover colour; selected rows in the selection colours while the tree has focus, else the inactive ones (tree.slint `tree-keys`); the current row has no mark of its own |
 | T-64 | Groups/root/settings rows can be current (Properties shows their form) | ProjectTree.xaml | 20 Selection model | done |  |
-| T-65 | Multi-selection of schemes (cut/copy/delete/duplicate) | ProjectTree.xaml.cs | 20 Selection model; 0008 | missing |  |
+| T-65 | Multi-selection of schemes (cut/copy/delete/duplicate) | ProjectTree.xaml.cs | 20 Selection model; 0008 | divergence | the row's ask is not Next's: its group takes sources, parts and probes only (Selection.IsGroupable); a scheme row acts alone, as in Next |
 | T-66 | Folder selected: Properties shows label + count (No entries / 1 entry / N entries) | Views/CollectionView.xaml:32 | 20 Properties coupling; 30 Pane behaviour | missing | heading shows debug name, no rows/count |
 | T-67 | Add source: appended, at canvas centre, becomes selection, caret in Name (select all) | ProjectCommands.AddSource | 20 Commands | partial | appended at the canvas centre (image scene: its size), selected; the caret is not put in Name |
 | T-68 | Add probe: line end B 100 px right of A; selection + caret in Name | ProjectCommands.AddProbe | 20 Commands | partial | line end 100 px right of A, selected; the caret is not put in Name |
 | T-69 | Add part: placed at canvas centre of shown preview (image scene: its size) | ProjectCommands.AddPart | 20 Commands | done | Project::canvas_centre: the image's size for an image scene |
-| T-70 | Enabled toggle by Space (each selected flips on its own) | ProjectTree.xaml:231 | 20 Commands | partial | check box click toggles one item; Space key missing |
-| T-71 | Duplicate Ctrl+D: copy after each original, '<name> copy', copies selected, caret in name | ProjectTree.xaml:235,264 | 20 Commands | partial | Ctrl+D while the tree has focus (tree.slint tree-keys): the copy after the original as '<name> copy', selected; one object until multi-selection (3b); the caret is not put in Name |
-| T-72 | Remove Del: removes target or selection; selection lands on slot/above/folder; tree takes focus | ProjectTree.xaml:230,268 | 20 Commands | partial | Del, the row minus and the toolbar remove the current item; the selection lands on the slot, else above, else the folder (tree::remove); one object until 3b |
-| T-73 | Move up/down Alt+Up/Alt+Down within own list, selection kept, tree takes focus | ProjectTree.xaml:236-237,270-271 | 20 Commands | partial | Alt+Up/Alt+Down while the tree has focus, row and toolbar buttons; the selection follows the item, the tree takes focus from the toolbar; one object until 3b |
-| T-74 | Cut (list items only) = Copy + Remove | ProjectTree.xaml:265 | 20 Clipboard | missing | menu 'cut' only logs |
-| T-75 | Copy as app format + plain XML text (items or Scene/Simulation/Display) | ProjectTree.xaml:266 | 20 Clipboard | missing | menu 'copy' only logs |
+| T-70 | Enabled toggle by Space (each selected flips on its own) | ProjectTree.xaml:231 | 20 Commands | done | Space while the tree has focus, and a row's check box, flip each item of the group on its own |
+| T-71 | Duplicate Ctrl+D: copy after each original, '<name> copy', copies selected, caret in name | ProjectTree.xaml:235,264 | 20 Commands | partial | Ctrl+D while the tree has focus: a copy after each original of the group as '<name> copy'; the copies become the group, the last current; the caret is not put in Name |
+| T-72 | Remove Del: removes target or selection; selection lands on slot/above/folder; tree takes focus | ProjectTree.xaml:230,268 | 20 Commands | partial | Del, the row minus and the toolbar remove the group (Explorer's rule); the user is kept at the last one's slot, else the folder (tree::remove_all); the tree keeps focus only from the toolbar |
+| T-73 | Move up/down Alt+Up/Alt+Down within own list, selection kept, tree takes focus | ProjectTree.xaml:236-237,270-271 | 20 Commands | partial | Alt+Up/Alt+Down while the tree has focus, row and toolbar buttons; the current row alone moves and the group collapses to it, as Next's Move; the tree takes focus from the toolbar |
+| T-74 | Cut (list items only) = Copy + Remove | ProjectTree.xaml:265 | 20 Clipboard | done | Cut copies the group, then removes its list items |
+| T-75 | Copy as app format + plain XML text (items or Scene/Simulation/Display) | ProjectTree.xaml:266 | 20 Clipboard | partial | the group or Scene/Simulation/Display as XML text; no app format (divergences.md Clipboard) |
 | T-76 | Paste: behind current item, rename on clash, re-derive composite emitters, settings object on own row, undo step | ProjectTree.xaml:267 | 20 Clipboard | missing |  |
 | T-77 | Can-paste re-evaluated once per clipboard change | MainWindow.Clipboard.cs | 20 Clipboard | missing |  |
 | T-78 | Focused text box handles Cut/Copy/Paste for its text first | MainWindow.Clipboard.cs | 20 Clipboard; divergence Edit menu | divergence | divergences.md 'Edit menu' (0008 13) |

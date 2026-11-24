@@ -28,6 +28,8 @@ export struct Commands {
     // an object row is selected
     can-delete: bool,
     can-move-up: bool,
+    // any source, part or probe
+    can-select-all: bool,
     can-move-down: bool,
     // an object or a settings row is selected
     can-copy: bool,
@@ -53,7 +55,8 @@ export component AppWindow inherits Window {
     // Newest first, full paths.
     in property <[string]> recent-files;
     in property <[TreeRow]> tree-rows;
-    callback tree-select(int);
+    // the row and how: 0 alone, 1 toggled (Ctrl), 2 range (Shift)
+    callback tree-select(int, int);
     callback tree-toggle(int);
     callback tree-shift(int, int);
     callback tree-remove(int);
@@ -178,7 +181,7 @@ export component AppWindow inherits Window {
             MenuItem { title: root.menu-text(@tr("&Paste"), @tr("Paste")); icon: MenuIcons.content-paste; enabled: true; activated => { root.menu("paste"); } }
             MenuItem { title: root.menu-text(@tr("&Delete"), @tr("Delete")); icon: MenuIcons.delete; enabled: root.commands.can-delete; activated => { root.menu("delete"); } }
             MenuSeparator { }
-            MenuItem { title: root.menu-text(@tr("Select &all"), @tr("Select all")); icon: MenuIcons.select-all; enabled: false; activated => { root.menu("select-all"); } }
+            MenuItem { title: root.menu-text(@tr("Select &all"), @tr("Select all")); icon: MenuIcons.select-all; enabled: root.commands.can-select-all; activated => { root.menu("select-all"); } }
         }
         Menu {
             title: root.menu-text(@tr("&View"), @tr("View"));
@@ -243,7 +246,7 @@ export component AppWindow inherits Window {
                         close => { root.project-shown = false; }
                         ProjectTree {
                             rows: root.tree-rows;
-                            select(i) => { root.tree-select(i); }
+                            select(i, pick) => { root.tree-select(i, pick); }
                             toggle(i) => { root.tree-toggle(i); }
                             shift(i, by) => { root.tree-shift(i, by); }
                             remove(i) => { root.tree-remove(i); }

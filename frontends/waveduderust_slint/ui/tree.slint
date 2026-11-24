@@ -137,7 +137,8 @@ export struct TreeRow {
 // The project tree (docs/ui/20): fixed rows, folders and item rows with their check box and row buttons.
 export component ProjectTree inherits Rectangle {
     in property <[TreeRow]> rows;
-    callback select(int);
+    // the row and how: 0 alone, 1 toggled (Ctrl), 2 range (Shift)
+    callback select(int, int);
     callback toggle(int);
     callback shift(int, int);
     callback remove(int);
@@ -197,6 +198,10 @@ export component ProjectTree inherits Rectangle {
                 if (e.modifiers.alt && !e.modifiers.control && e.text == Key.UpArrow) { root.act("move-up"); return accept; }
                 if (e.modifiers.alt && !e.modifiers.control && e.text == Key.DownArrow) { root.act("move-down"); return accept; }
                 if (e.modifiers.control && !e.modifiers.alt && e.text == "d") { root.act("duplicate"); return accept; }
+                if (e.modifiers.control && !e.modifiers.alt && e.text == " ") { root.act("toggle-selected"); return accept; }
+                if (e.modifiers.alt || e.modifiers.control) { return reject; }
+                if (e.text == " ") { root.act("toggle-enabled"); return accept; }
+                if (e.text == Key.Insert) { root.act("toggle-selected"); return accept; }
                 reject
             }
             ListView {
@@ -204,9 +209,16 @@ export component ProjectTree inherits Rectangle {
                     height: Theme.row-height;
                     background: row.selected ? (root.focused ? Theme.selection : Theme.inactive-selection) : area.has-hover ? Theme.row-hover : transparent;
                     area := TouchArea {
+                        // the press's modifiers: `clicked` carries none
+                        property <int> pick;
+                        pointer-event(e) => {
+                            if (e.kind == PointerEventKind.down) {
+                                self.pick = e.modifiers.control ? 1 : e.modifiers.shift ? 2 : 0;
+                            }
+                        }
                         clicked => {
                             tree-keys.focus();
-                            root.select(i);
+                            root.select(i, self.pick);
                         }
                     }
                     HorizontalLayout {

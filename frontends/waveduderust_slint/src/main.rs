@@ -13,6 +13,7 @@ mod log;
 mod messages;
 mod number;
 mod playback;
+mod selection;
 mod settings;
 mod tree;
 #[cfg(target_arch = "wasm32")]
@@ -43,6 +44,7 @@ use crate::document::Document;
 use crate::live::Live;
 use crate::messages::Messages;
 use crate::playback::Playback;
+use crate::selection::{Pick, Selection};
 use crate::tree::Node;
 
 /// Undo steps until the settings arrive (decision 0030).
@@ -52,7 +54,7 @@ const UNDO_STEPS: usize = 1000;
 struct State {
 	doc: Document,
 	nodes: Vec<Node>,
-	selected: Node,
+	selection: Selection,
 	live: Live,
 	playback: Playback,
 	messages: Messages,
@@ -148,7 +150,7 @@ impl State {
 	/// Sets row `row` of the selected object's form to `text`.
 	fn set_prop(&mut self, row: usize, text: &str) -> Result<(), String> {
 		self.draft = None;
-		let node = self.selected;
+		let node = self.selection.current();
 		let mut result = Ok(());
 		if node == Node::Display {
 			let doc = &mut self.doc;
@@ -175,7 +177,8 @@ impl State {
 
 	/// Pushes the state into the window's properties.
 	fn show(&mut self, app: &AppWindow) {
-		let (nodes, rows) = tree::rows(&self.doc.project, self.selected);
+		self.selection.retain(&self.doc.project);
+		let (nodes, rows) = tree::rows(&self.doc.project, &self.selection);
 		self.nodes = nodes;
 		app.set_tree_rows(ModelRc::new(VecModel::from(rows)));
 		app.set_window_title(self.doc.title().into());
@@ -194,13 +197,13 @@ impl State {
 			self.ran = self.doc.generation;
 			self.live.edited(&self.doc.project, &self.doc.view);
 		}
-		let (heading, rows) = form::of_selected(&self.doc.project, &self.doc.view, self.selected);
+		let (heading, rows) = form::of_selected(&self.doc.project, &self.doc.view, self.selection.current());
 		app.set_props_heading(heading.into());
 		if self.doc.generation != self.form_seen {
 			self.form_seen = self.doc.generation;
 			self.form_base = self.doc.generation;
 		}
-		let key = format!("{:?}@{}", self.selected, self.form_base);
+		let key = format!("{:?}@{}", self.selection.current(), self.form_base);
 		sync(&app.get_props_rows(), &mut self.props, key, rows, |m| {
 			app.set_props_rows(m);
 		});
@@ -208,7 +211,7 @@ impl State {
 
 	/// A project replaced the one shown: the selection and the timeline start over, frame 0 is made.
 	fn opened(&mut self) {
-		self.selected = Node::Project;
+		self.selection.set(Node::Project);
 		self.last_export = None;
 		self.playback.reset();
 		self.live.load(&self.doc.project, &self.doc.view);
@@ -224,9 +227,13 @@ impl State {
 			can_undo: self.doc.can_undo(),
 			can_redo: self.doc.can_redo(),
 			can_delete: self.node_exists(),
-			can_move_up: tree::can_shift(&self.doc.project, self.selected, -1),
-			can_move_down: tree::can_shift(&self.doc.project, self.selected, 1),
-			can_copy: matches!(self.selected, Node::Scene | Node::Simulation | Node::Display) || self.node_exists(),
+			can_select_all: !(self.doc.project.sources.is_empty()
+				&& self.doc.project.parts.is_empty()
+				&& self.doc.project.probes.is_empty()),
+			can_move_up: tree::can_shift(&self.doc.project, self.selection.current(), -1),
+			can_move_down: tree::can_shift(&self.doc.project, self.selection.current(), 1),
+			can_copy: matches!(self.selection.current(), Node::Scene | Node::Simulation | Node::Display)
+				|| self.node_exists(),
 			can_run: !self.live.active() && !exporting,
 			run_active: self.live.active(),
 			paused: self.live.paused(),
@@ -242,7 +249,7 @@ impl State {
 	/// Whether the selected node is a list item that exists.
 	fn node_exists(&self) -> bool {
 		let p = &self.doc.project;
-		match self.selected {
+		match self.selection.current() {
 			Node::Source(i) => i < p.sources.len(),
 			Node::Part(i) => i < p.parts.len(),
 			Node::Probe(i) => i < p.probes.len(),
@@ -270,7 +277,7 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 	if let Some(what) = id.strip_prefix("add:") {
 		let (centre, mut to) = (state.doc.project.canvas_centre(), None);
 		state.doc.edit(|p| to = tree::add(p, what, centre));
-		state.selected = to.unwrap_or(state.selected);
+		state.selection.set(to.unwrap_or(state.selection.current()));
 		state.show(app);
 		return;
 	}
@@ -371,18 +378,20 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			0,
 			0,
 		)),
-		"undo" => state.doc.undo(),
-		"redo" => state.doc.redo(),
+		"undo" => {
+			state.doc.undo();
+			state.selection.collapse();
+		}
+		"redo" => {
+			state.doc.redo();
+			state.selection.collapse();
+		}
 		"copy" | "cut" => {
-			let node = state.selected;
-			let copied = clipboard::copy(&state.doc.project, &state.doc.view, node)
+			let group = state.selection.group();
+			let copied = clipboard::copy(&state.doc.project, &state.doc.view, &group)
 				.map(|f| clipboard::write(waveduderust::io::wdproj::write_fragment(&f)));
 			match copied {
-				Some(Ok(())) if id == "cut" && state.commands().can_delete => {
-					let mut to = node;
-					state.doc.edit(|p| to = tree::remove(p, node));
-					state.selected = to;
-				}
+				Some(Ok(())) if id == "cut" && state.commands().can_delete => remove(state, &group),
 				Some(Err(e)) => tracing::error!("clipboard: {e}"),
 				_ => {}
 			}
@@ -391,21 +400,28 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			clipboard::read(&state.pasted);
 			paste(state);
 		}
-		"delete" if state.commands().can_delete => {
-			let (node, mut to) = (state.selected, state.selected);
-			state.doc.edit(|p| to = tree::remove(p, node));
-			state.selected = to;
-		}
+		"delete" if state.commands().can_delete => remove(state, &state.selection.group()),
 		"move-up" | "move-down" if state.commands().can_delete => {
-			let (node, mut to) = (state.selected, state.selected);
+			let (node, mut to) = (state.selection.current(), state.selection.current());
 			state.doc.edit(|p| to = tree::shift(p, node, if id == "move-up" { -1 } else { 1 }));
-			state.selected = to;
+			state.selection.set(to);
 		}
 		"duplicate" if state.commands().can_delete => {
-			let (node, mut to) = (state.selected, None);
-			state.doc.edit(|p| to = tree::duplicate(p, node));
-			state.selected = to.unwrap_or(node);
+			let (group, mut copies) = (state.selection.group(), Vec::new());
+			state.doc.edit(|p| copies = tree::duplicate_all(p, &group));
+			if !copies.is_empty() {
+				state.selection.set_group(copies);
+			}
 		}
+		"toggle-enabled" if state.commands().can_delete => {
+			let group = state.selection.group();
+			state.doc.edit(|p| group.iter().for_each(|&n| tree::toggle(p, n)));
+		}
+		"toggle-selected" => {
+			let node = state.selection.current();
+			state.selection.toggle(node);
+		}
+		"select-all" => state.selection.select_all(&state.doc.project),
 		"exit" => {
 			let _ = app.hide();
 		}
@@ -414,17 +430,27 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 	state.show(app);
 }
 
+/// Removes the items of `group` (list items only) and keeps the user at the slot of the last one.
+fn remove(state: &mut State, group: &[Node]) {
+	let items: Vec<Node> = group.iter().copied().filter(|&n| tree::is_item(n)).collect();
+	let mut to = None;
+	state.doc.edit(|p| to = tree::remove_all(p, &items));
+	if let Some(to) = to {
+		state.selection.set(to);
+	}
+}
+
 /// Pastes the clipboard text read for it; text that holds no objects is logged.
 fn paste(state: &mut State) {
 	let texts: Vec<String> = state.pasted.borrow_mut().drain(..).collect();
 	for text in texts {
 		match waveduderust::io::wdproj::read_fragment(&text) {
 			Ok(fragment) if !fragment.is_empty() => {
-				let (current, view) = (state.selected, &mut state.doc.view.clone());
+				let (current, view) = (state.selection.current(), &mut state.doc.view.clone());
 				let mut last = None;
 				state.doc.edit(|p| last = clipboard::paste(p, view, fragment, current));
 				state.doc.view = view.clone();
-				state.selected = last.unwrap_or(current);
+				state.selection.set(last.unwrap_or(current));
 			}
 			_ => tracing::info!("the clipboard holds no project objects"),
 		}
@@ -701,7 +727,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	let state = Rc::new(RefCell::new(State {
 		doc: Document::new(UNDO_STEPS),
 		nodes: Vec::new(),
-		selected: Node::Project,
+		selection: Selection::default(),
 		live,
 		playback: Playback::default(),
 		messages: Messages::new(ring),
@@ -750,11 +776,21 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			}
 		}
 	};
-	let select = on(|s, _, row, _| s.selected = s.node(row).unwrap_or_default());
-	app.on_tree_select(move |row| select(row, 0));
+	app.on_tree_select(on(|s, _, row, pick| {
+		let pick = match pick {
+			1 => Pick::Toggle,
+			2 => Pick::Range,
+			_ => Pick::Alone,
+		};
+		if let Some(node) = s.node(row) {
+			s.selection.pick(&s.doc.project, node, pick);
+		}
+	}));
+	// a row's own check box and buttons act on the group it belongs to, else on the row
 	let toggle = on(|s, _, row, _| {
 		if let Some(node) = s.node(row) {
-			s.doc.edit(|p| tree::toggle(p, node));
+			let group = s.selection.group_of(node);
+			s.doc.edit(|p| group.iter().for_each(|&n| tree::toggle(p, n)));
 		}
 	});
 	app.on_tree_toggle(move |row| toggle(row, 0));
@@ -762,17 +798,15 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		if let Some(node) = s.node(row) {
 			let mut to = node;
 			s.doc.edit(|p| to = tree::shift(p, node, by as isize));
-			s.selected = to;
+			s.selection.set(to);
 		}
 	}));
-	let remove = on(|s, _, row, _| {
+	let remove_row = on(|s, _, row, _| {
 		if let Some(node) = s.node(row) {
-			let mut to = node;
-			s.doc.edit(|p| to = tree::remove(p, node));
-			s.selected = to;
+			remove(s, &s.selection.group_of(node));
 		}
 	});
-	app.on_tree_remove(move |row| remove(row, 0));
+	app.on_tree_remove(move |row| remove_row(row, 0));
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_props_set(move |form, row, text| {
 		if let Some(app) = weak.upgrade() {

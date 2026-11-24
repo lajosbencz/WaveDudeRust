@@ -6,6 +6,7 @@ use waveduderust::model::{
 	Polygon, ProbeDetector, Project, Rectangle, SimpleGrating, Triangle, ZonePlate,
 };
 
+use crate::selection::Selection;
 use crate::ui::{TreeKind, TreeRow};
 
 /// What a tree row stands for.
@@ -42,7 +43,7 @@ impl Node {
 }
 
 /// The rows of `project` in tree order, with their nodes.
-pub(crate) fn rows(project: &Project, selected: Node) -> (Vec<Node>, Vec<TreeRow>) {
+pub(crate) fn rows(project: &Project, selection: &Selection) -> (Vec<Node>, Vec<TreeRow>) {
 	let mut nodes = Vec::new();
 	let mut rows = Vec::new();
 	let mut push = |node: Node, depth: i32, label: &str, enabled: Option<bool>| {
@@ -53,7 +54,7 @@ pub(crate) fn rows(project: &Project, selected: Node) -> (Vec<Node>, Vec<TreeRow
 			label: label.into(),
 			checkable: enabled.is_some(),
 			checked: enabled.unwrap_or(true),
-			selected: node == selected,
+			selected: selection.contains(node),
 			icon: crate::icons::tree(project, node),
 			add: match node {
 				Node::Sources => "source",
@@ -91,9 +92,21 @@ pub(crate) fn rows(project: &Project, selected: Node) -> (Vec<Node>, Vec<TreeRow
 /// Flips the enabled (or active) flag of an item row.
 pub(crate) fn toggle(project: &mut Project, node: Node) {
 	match node {
-		Node::Source(i) => project.sources[i].enabled ^= true,
-		Node::Part(i) => project.parts[i].base.enabled ^= true,
-		Node::Probe(i) => project.probes[i].active ^= true,
+		Node::Source(i) => {
+			if let Some(s) = project.sources.get_mut(i) {
+				s.enabled ^= true;
+			}
+		}
+		Node::Part(i) => {
+			if let Some(p) = project.parts.get_mut(i) {
+				p.base.enabled ^= true;
+			}
+		}
+		Node::Probe(i) => {
+			if let Some(p) = project.probes.get_mut(i) {
+				p.active ^= true;
+			}
+		}
 		_ => {}
 	}
 }
@@ -113,6 +126,87 @@ pub(crate) fn remove(project: &mut Project, node: Node) -> Node {
 		Node::Part(i) => go(&mut project.parts, i, Node::Part, Node::Parts),
 		Node::Probe(i) => go(&mut project.probes, i, Node::Probe, Node::Probes),
 		Node::Scheme(i) => go(&mut project.color_schemes, i, Node::Scheme, Node::Schemes),
+		_ => node,
+	}
+}
+
+/// Removes the items of `nodes`; the row the user is kept at (Next's `ProjectItems.Remove`): the slot of the last
+/// one in its list, else that list's folder.
+pub(crate) fn remove_all(project: &mut Project, nodes: &[Node]) -> Option<Node> {
+	let last = *nodes.last()?;
+	let mut sorted = nodes.to_vec();
+	// from the end, so the indices left stay valid
+	sorted.sort_by_key(|&n| std::cmp::Reverse(index(n)));
+	for node in sorted {
+		remove(project, node);
+	}
+	let (i, len, item, folder): (usize, usize, fn(usize) -> Node, Node) = match last {
+		Node::Source(i) => (i, project.sources.len(), Node::Source, Node::Sources),
+		Node::Part(i) => (i, project.parts.len(), Node::Part, Node::Parts),
+		Node::Probe(i) => (i, project.probes.len(), Node::Probe, Node::Probes),
+		Node::Scheme(i) => (i, project.color_schemes.len(), Node::Scheme, Node::Schemes),
+		_ => return None,
+	};
+	Some(if len > 0 { item(i.min(len - 1)) } else { folder })
+}
+
+/// Whether `node` is a list item's row.
+pub(crate) fn is_item(node: Node) -> bool {
+	matches!(node, Node::Source(_) | Node::Part(_) | Node::Probe(_) | Node::Scheme(_))
+}
+
+/// An item row's list, for ordering.
+fn list(node: Node) -> u8 {
+	match node {
+		Node::Source(_) => 0,
+		Node::Part(_) => 1,
+		Node::Probe(_) => 2,
+		_ => 3,
+	}
+}
+
+/// An item row's index in its list.
+fn index(node: Node) -> usize {
+	match node {
+		Node::Source(i) | Node::Part(i) | Node::Probe(i) | Node::Scheme(i) => i,
+		_ => 0,
+	}
+}
+
+/// A copy after each item of `nodes` (Next's `ProjectItems.Duplicate`); the copies' rows in the order of `nodes`.
+pub(crate) fn duplicate_all(project: &mut Project, nodes: &[Node]) -> Vec<Node> {
+	let mut sorted = nodes.to_vec();
+	sorted.sort_by_key(|&n| (list(n), index(n)));
+	sorted.dedup();
+	// from the end, then each copy is shifted by the copies inserted before it in its list
+	let mut copies: Vec<Option<Node>> = sorted.iter().rev().map(|&n| duplicate(project, n)).collect();
+	copies.reverse();
+	let mut before = [0; 4];
+	for copy in copies.iter_mut().flatten() {
+		let list = usize::from(list(*copy));
+		*copy = shift_index(*copy, before[list]);
+		before[list] += 1;
+	}
+	let mut seen = Vec::new();
+	nodes
+		.iter()
+		.filter_map(|n| {
+			let k = sorted.iter().position(|s| s == n)?;
+			if seen.contains(&k) {
+				return None;
+			}
+			seen.push(k);
+			copies[k]
+		})
+		.collect()
+}
+
+fn shift_index(node: Node, by: usize) -> Node {
+	match node {
+		Node::Source(i) => Node::Source(i + by),
+		Node::Part(i) => Node::Part(i + by),
+		Node::Probe(i) => Node::Probe(i + by),
+		Node::Scheme(i) => Node::Scheme(i + by),
 		_ => node,
 	}
 }
@@ -224,6 +318,21 @@ pub(crate) fn shift(project: &mut Project, node: Node, by: isize) -> Node {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn a_group_duplicates_after_each_and_removes_to_the_last_slot() {
+		let mut p = Project::default();
+		for _ in 0..3 {
+			p.add_source();
+		}
+		let copies = duplicate_all(&mut p, &[Node::Source(2), Node::Source(0)]);
+		assert_eq!(copies, [Node::Source(4), Node::Source(1)]);
+		assert_eq!(p.sources[1].name, format!("{} copy", p.sources[0].name));
+		assert_eq!(p.sources[4].name, format!("{} copy", p.sources[3].name));
+		assert_eq!(remove_all(&mut p, &[Node::Source(0), Node::Source(4)]), Some(Node::Source(2)));
+		assert_eq!(p.sources.len(), 3);
+		assert_eq!(remove_all(&mut p, &[Node::Source(0), Node::Source(1), Node::Source(2)]), Some(Node::Sources));
+	}
 
 	#[test]
 	fn every_add_entry_adds_its_kind_and_selects_it() {

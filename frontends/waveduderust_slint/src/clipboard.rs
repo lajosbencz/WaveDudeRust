@@ -12,20 +12,23 @@ use crate::tree::Node;
 /// Clipboard text read for a paste, for the window's timer to paste (the browser reads asynchronously).
 pub(crate) type Pasted = Rc<RefCell<Vec<String>>>;
 
-/// The objects Copy takes with `node` current: a list item or a settings object.
-pub(crate) fn copy(project: &Project, view: &View, node: Node) -> Option<Fragment> {
+/// The objects Copy takes from `nodes`: list items or a settings object; `None` when there is none.
+pub(crate) fn copy(project: &Project, view: &View, nodes: &[Node]) -> Option<Fragment> {
 	let mut f = Fragment::default();
-	match node {
-		Node::Scene => f.scene = Some(project.scene.clone()),
-		Node::Simulation => f.simulation = Some(project.simulation.clone()),
-		Node::Display => f.view = Some(view.clone()),
-		Node::Source(i) => f.sources.push(project.sources.get(i)?.clone()),
-		Node::Part(i) => f.parts.push(project.parts.get(i)?.clone()),
-		Node::Probe(i) => f.probes.push(project.probes.get(i)?.clone()),
-		Node::Scheme(i) => f.schemes.push(project.color_schemes.get(i)?.clone()),
-		_ => return None,
+	let mut any = false;
+	for &node in nodes {
+		any |= match node {
+			Node::Scene => f.scene.replace(project.scene.clone()).is_none(),
+			Node::Simulation => f.simulation.replace(project.simulation.clone()).is_none(),
+			Node::Display => f.view.replace(view.clone()).is_none(),
+			Node::Source(i) => project.sources.get(i).map(|s| f.sources.push(s.clone())).is_some(),
+			Node::Part(i) => project.parts.get(i).map(|p| f.parts.push(p.clone())).is_some(),
+			Node::Probe(i) => project.probes.get(i).map(|p| f.probes.push(p.clone())).is_some(),
+			Node::Scheme(i) => project.color_schemes.get(i).map(|s| f.schemes.push(s.clone())).is_some(),
+			_ => false,
+		};
 	}
-	Some(f)
+	any.then_some(f)
 }
 
 /// Pastes `fragment` with `current` the current row: a settings object replaces its own on its row or the project
@@ -158,7 +161,7 @@ mod tests {
 		let mut p = Project::default();
 		p.sources = vec![named("a"), named("b")];
 		let mut v = View::default();
-		let clip = copy(&p, &v, Node::Source(0)).unwrap();
+		let clip = copy(&p, &v, &[Node::Source(0)]).unwrap();
 		assert_eq!(paste(&mut p, &mut v, clip.clone(), Node::Source(0)), Some(Node::Source(1)));
 		assert_eq!(p.sources.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["a", "a copy", "b"]);
 		assert_eq!(paste(&mut p, &mut v, clip, Node::Scene), Some(Node::Source(3)));
@@ -168,7 +171,7 @@ mod tests {
 	fn a_settings_object_replaces_only_on_its_row_or_the_root() {
 		let mut p = Project::default();
 		let mut v = View::default();
-		let mut clip = copy(&p, &v, Node::Scene).unwrap();
+		let mut clip = copy(&p, &v, &[Node::Scene]).unwrap();
 		clip.scene.as_mut().unwrap().width = 640;
 		assert_eq!(paste(&mut p, &mut v, clip.clone(), Node::Simulation), None);
 		assert_eq!(paste(&mut p, &mut v, clip, Node::Project), Some(Node::Scene));
