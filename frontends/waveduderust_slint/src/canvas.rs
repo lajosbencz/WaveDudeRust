@@ -34,6 +34,12 @@ impl Shown {
 #[derive(Default)]
 pub(crate) struct Overlays {
 	shown: [Shown; 2],
+	/// The handle with keyboard focus.
+	focus: Option<(ui::Layer, ItemRef, HandleKind)>,
+	/// Counts focus changes: a run of key moves is one undo step.
+	run: u64,
+	/// The view's handles and labels switches the overlays were built with.
+	shows: (bool, bool),
 }
 
 /// Where a dragged item started.
@@ -72,6 +78,13 @@ pub(crate) struct Drag {
 	from: (f64, f64),
 	/// The whole-pixel move applied last.
 	by: (f64, f64),
+}
+
+pub(crate) fn model_layer(layer: ui::Layer) -> Layer {
+	match layer {
+		ui::Layer::Field => Layer::Field,
+		ui::Layer::Intensity => Layer::Intensity,
+	}
 }
 
 fn index(layer: ui::Layer) -> usize {
@@ -161,12 +174,14 @@ impl Overlays {
 
 	/// Shows both overlays of `project` with `selection`.
 	pub(crate) fn show(&mut self, canvas: &ui::Canvas<'_>, project: &Project, view: &View, selection: &Selection) {
+		self.shows = (view.handles_in_preview, view.labels_in_preview);
 		let selected: Vec<ItemRef> = selection.group().into_iter().filter_map(|n| item_of(project, n)).collect();
 		let current = item_of(project, selection.current());
 		let (w, h) = project.canvas_size();
 		canvas.set_width(i32::try_from(w).unwrap_or(i32::MAX));
 		canvas.set_height(i32::try_from(h).unwrap_or(i32::MAX));
-		for (layer, shown) in [Layer::Field, Layer::Intensity].into_iter().zip(&mut self.shown) {
+		let layers = [(Layer::Field, ui::Layer::Field), (Layer::Intensity, ui::Layer::Intensity)];
+		for ((layer, ui_layer), shown) in layers.into_iter().zip(&mut self.shown) {
 			let scale = shown.scale();
 			let m = overlay::build(
 				project,
@@ -177,10 +192,21 @@ impl Overlays {
 				view.handles_in_preview,
 				view.labels_in_preview,
 			);
+			let focus = self.focus;
+			let focused = |h: &overlay::Handle| focus == Some((ui_layer, h.item, h.kind));
+			if self.focus.is_some_and(|f| f.0 == ui_layer) && !m.handles.iter().any(focused) {
+				self.focus = None;
+			}
 			let handles = m
 				.handles
 				.iter()
-				.map(|h| ui::HandleData { x: h.at.0, y: h.at.1, glyph: glyph(h.kind), selected: h.selected })
+				.map(|h| ui::HandleData {
+					x: h.at.0,
+					y: h.at.1,
+					glyph: glyph(h.kind),
+					selected: h.selected,
+					focused: focused(h),
+				})
 				.collect();
 			update(&shown.handles, handles);
 			let labels = m
@@ -228,7 +254,7 @@ impl Overlays {
 	/// click does (Ctrl toggles, Shift adds, neither drags) and starts a drag of what the handle moves. Elsewhere: a
 	/// marquee.
 	pub(crate) fn press(
-		&self,
+		&mut self,
 		project: &Project,
 		selection: &mut Selection,
 		layer: ui::Layer,
@@ -237,10 +263,12 @@ impl Overlays {
 		gesture: u64,
 	) -> Option<Gesture> {
 		let shown = &self.shown[index(layer)];
-		let Some(handle) = hit(&shown.model, at, HIT_REACH / shown.scale()) else {
+		let Some(handle) = hit(&shown.model, at, HIT_REACH / shown.scale()).cloned() else {
+			self.set_focus(None);
 			return Some(Gesture::Marquee(Marquee { layer, from: at, to: at, control, shift }));
 		};
 		let node = node_of(project, handle.item)?;
+		let focus = (layer, handle.item, handle.kind);
 		let drag = |target: Target| Drag {
 			key: format!("drag {gesture}"),
 			node,
@@ -253,8 +281,10 @@ impl Overlays {
 		};
 		if control {
 			selection.toggle(node);
+			self.set_focus(selection.contains(node).then_some(focus));
 			return None;
 		}
+		self.set_focus(Some(focus));
 		// a lever or a shape handle belongs to the current item alone: Shift on it snaps a lever, it adds nothing
 		if shift && handle.kind.moves_item() {
 			if !selection.contains(node) {
@@ -280,6 +310,124 @@ impl Overlays {
 			Target::Items(start(project, node, which).into_iter().collect())
 		};
 		Some(Gesture::Handle(drag(target)))
+	}
+}
+
+impl Overlays {
+	fn set_focus(&mut self, focus: Option<(ui::Layer, ItemRef, HandleKind)>) {
+		self.focus = focus;
+		self.run += 1;
+	}
+
+	/// The handle focused on `layer`, as shown.
+	fn focused(&self, layer: ui::Layer) -> Option<&overlay::Handle> {
+		let (at, item, kind) = self.focus?;
+		let handles = &self.shown[index(layer)].model.handles;
+		handles.iter().find(|h| at == layer && h.item == item && h.kind == kind)
+	}
+
+	/// Takes the keyboard focus into `layer`'s picture: the handle it had, else the first.
+	pub(crate) fn enter(&mut self, project: &Project, selection: &mut Selection, layer: ui::Layer) -> bool {
+		self.focused(layer).is_some() || self.tab(project, selection, layer, false)
+	}
+
+	/// Moves the keyboard focus to the next handle of `layer`, or the previous one with `back`, and selects its item
+	/// (kept in its group); false past the ends, where the focus leaves the picture. Back onto another item lands on
+	/// its last handle as shown once it is selected (its lever and grips).
+	pub(crate) fn tab(&mut self, project: &Project, selection: &mut Selection, layer: ui::Layer, back: bool) -> bool {
+		let scale = self.shown[index(layer)].scale();
+		let handles = &self.shown[index(layer)].model.handles;
+		let at = self.focused(layer).and_then(|f| handles.iter().position(|h| h.item == f.item && h.kind == f.kind));
+		let next = match (at, back) {
+			(None, false) => Some(0),
+			(None, true) => handles.len().checked_sub(1),
+			(Some(i), false) => Some(i + 1),
+			(Some(i), true) => i.checked_sub(1),
+		};
+		let Some(h) = next.and_then(|i| handles.get(i)) else {
+			self.set_focus(None);
+			return false;
+		};
+		let (mut item, mut kind) = (h.item, h.kind);
+		let Some(node) = node_of(project, item) else { return false };
+		let moved_off = self.focus.is_none_or(|f| f.1 != item);
+		if selection.contains(node) {
+			selection.pick(project, node, ui::Pick::Focus);
+		} else {
+			selection.set(node);
+		}
+		if back && moved_off {
+			let selected: Vec<ItemRef> = selection.group().into_iter().filter_map(|n| item_of(project, n)).collect();
+			let m =
+				overlay::build(project, &selected, Some(item), model_layer(layer), scale, self.shows.0, self.shows.1);
+			if let Some(last) = m.handles.iter().rev().find(|h| h.item == item) {
+				(item, kind) = (last.item, last.kind);
+			}
+		}
+		self.set_focus(Some((layer, item, kind)));
+		true
+	}
+
+	/// The undo key of a run of key moves on `layer`'s focused handle; a new focus or group starts another.
+	pub(crate) fn nudge_key(&self, layer: ui::Layer, selection: &Selection) -> Option<String> {
+		let h = self.focused(layer)?;
+		Some(format!("keys {} {:?} {:?} {:?}", self.run, h.item, h.kind, selection.group()))
+	}
+
+	/// Moves what the focused handle moves by `d` canvas pixels (its item's group with it), or turns its lever by
+	/// `turn` degrees.
+	pub(crate) fn nudge(
+		&self,
+		project: &mut Project,
+		selection: &Selection,
+		layer: ui::Layer,
+		d: (f64, f64),
+		turn: f64,
+	) {
+		let Some(h) = self.focused(layer) else { return };
+		let (item, kind) = (h.item, h.kind);
+		let Some(node) = node_of(project, item) else { return };
+		match kind {
+			HandleKind::SourceLever | HandleKind::PartLever => match node {
+				Node::Source(i) => {
+					if let Some(array) = &mut project.sources[i].array {
+						array.angle = handles::turn_lever(array.angle, turn);
+					}
+				}
+				Node::Part(i) => {
+					edit_part(&mut project.parts[i], |p| p.base.angle = handles::turn_lever(p.base.angle, turn));
+				}
+				_ => {}
+			},
+			kind if kind.moves_item() => {
+				let group = selection.group_of(node);
+				let starts: Vec<_> = if group.len() > 1 {
+					group.iter().filter_map(|&n| start(project, n, Which::Both)).collect()
+				} else {
+					let which = match kind {
+						HandleKind::ProbeA => Which::A,
+						HandleKind::ProbeB => Which::B,
+						_ => Which::Both,
+					};
+					start(project, node, which).into_iter().collect()
+				};
+				move_items(project, &starts, d);
+			}
+			HandleKind::Grip => {
+				let Node::Part(i) = node else { return };
+				let at = (f64::from(h.at.0), f64::from(h.at.1));
+				edit_part(&mut project.parts[i], |p| {
+					let grip = handles::to_part_frame(p, at);
+					let d = handles::to_part_frame(p, (at.0 + d.0, at.1 + d.1)) - grip;
+					handles::nudge_grip(&mut p.kind, grip, d);
+				});
+			}
+			kind => {
+				let from = (f64::from(h.at.0), f64::from(h.at.1));
+				let mut drag = Drag { key: String::new(), node, target: Target::Shape(item, kind), from, by: (0., 0.) };
+				drag.apply(project, (d.0 as f32, d.1 as f32), false);
+			}
+		}
 	}
 }
 

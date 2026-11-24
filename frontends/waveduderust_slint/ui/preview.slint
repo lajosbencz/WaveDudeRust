@@ -1,6 +1,11 @@
 import { Theme } from "theme.slint";
 import { Layer } from "data.slint";
-import { Canvas, HandleData, HandleGlyph, LabelData, OverlayArt } from "canvas.slint";
+import { Canvas, HandleData, HandleGlyph, HandleKey, LabelData, OverlayArt } from "canvas.slint";
+import { Command } from "commands.slint";
+import { Button } from "std-widgets.slint";
+import { NumberBox, NumberSpec } from "number-box.slint";
+import { NumberParse } from "form.slint";
+import { MenuIcons } from "menu-icons.slint";
 
 // The handle glyphs, 21 px with the point on the centre pixel (docs/ui/40, Handles and overlays).
 global Glyphs {
@@ -22,6 +27,7 @@ global Glyphs {
 component HandleView inherits Rectangle {
     in property <HandleData> handle;
     in property <float> scale;
+    in property <bool> focus-shown;
     property <bool> filled: root.handle.glyph == HandleGlyph.grip || root.handle.glyph == HandleGlyph.bezier;
     property <color> ink: root.handle.selected ? Theme.picture-selection : Theme.picture-handle;
     x: root.handle.x * root.scale * 1px - 10.5px;
@@ -48,6 +54,14 @@ component HandleView inherits Rectangle {
         stroke-width: 1.5px;
         fill: root.filled ? root.ink : transparent;
     }
+    if root.focus-shown && root.handle.focused: Rectangle {
+        x: -2px;
+        y: -2px;
+        width: parent.width + 4px;
+        height: parent.height + 4px;
+        border-width: 1px;
+        border-color: Theme.picture-selection;
+    }
 }
 
 component LabelView inherits Text {
@@ -70,22 +84,53 @@ component Art inherits Path {
 }
 
 component Picture inherits VerticalLayout {
+    // the Display form's
+    out property <NumberSpec> brightness-spec: { min: 0.0001, max: 100000, increment: 1, decimals: -1, log: true };
     in property <string> title;
     in property <image> source;
     in property <Layer> layer;
     in property <[HandleData]> handles;
     in property <[LabelData]> labels;
     in property <OverlayArt> art;
+    in property <bool> can-export;
+    callback command(Command);
     horizontal-stretch: 1;
     vertical-stretch: 1;
-    Rectangle {
-        height: Theme.row-height;
-        background: Theme.window-background;
+    // the header strip (docs/ui/40): title, then the layer's brightness and Auto at the far end
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-bottom: 4px;
+        spacing: 4px;
         Text {
-            x: 6px;
             text: root.title;
             color: Theme.text;
+            font-weight: 600;
             vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+            min-width: 0;
+        }
+        Rectangle { width: 8px; }
+        Text {
+            text: @tr("Brightness");
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+        brightness := NumberBox {
+            width: 64px;
+            value: "\{root.layer == Layer.field ? Canvas.field-brightness : Canvas.intensity-brightness}";
+            spec: root.brightness-spec;
+            edited(t) => {
+                let parsed = NumberParse.float(self.spec, t);
+                if (parsed.ok) {
+                    Canvas.brightness(root.layer, parsed.value);
+                }
+                parsed.ok
+            }
+        }
+        Button {
+            text: @tr("Auto");
+            clicked => { Canvas.auto(root.layer); }
         }
     }
     cell := Rectangle {
@@ -125,7 +170,7 @@ component Picture inherits VerticalLayout {
             }
             if root.art.outlines != "": Art { commands: root.art.outlines; stroke: Theme.picture-selection; stroke-width: 1px; }
             for label in root.labels: LabelView { label: label; scale: cell.scale; }
-            for handle in root.handles: HandleView { handle: handle; scale: cell.scale; }
+            for handle in root.handles: HandleView { handle: handle; scale: cell.scale; focus-shown: keys.has-focus; }
             if Canvas.marquee-shown && Canvas.marquee-layer == root.layer: Rectangle {
                 x: Canvas.marquee.x * cell.scale * 1px;
                 y: Canvas.marquee.y * cell.scale * 1px;
@@ -136,74 +181,120 @@ component Picture inherits VerticalLayout {
                 border-color: Theme.selection;
             }
         }
-        // one area for the whole picture: the drawings take no pointer, the app finds the handle under a press
-        TouchArea {
-            property <length> from-x;
-            property <length> from-y;
-            // a middle-button pan: where it started and the centre then
-            property <bool> panning;
-            property <length> pan-x;
-            property <length> pan-y;
-            property <float> centre-x;
-            property <float> centre-y;
-            scroll-event(e) => {
-                // a zoom mid-gesture would move what the gesture measures from
-                if (e.delta-y == 0 || self.pressed || self.panning) {
+        // the handles' keys: Tab walks them, arrows move the focused one; Del is the window's
+        keys := FocusScope {
+            focus-gained(reason) => {
+                // either direction: Slint does not say which
+                if (reason == FocusReason.tab-navigation) {
+                    self.take(HandleKey.enter, false);
+                }
+            }
+            function take(key: HandleKey, shift: bool) -> bool {
+                Canvas.key(root.layer, key, shift)
+            }
+            key-pressed(e) => {
+                if (e.modifiers.control || e.modifiers.alt) {
                     return reject;
                 }
-                // the canvas point under the pointer stays there
-                let at-x = (self.mouse-x - cell.left) / (cell.scale * 1px);
-                let at-y = (self.mouse-y - cell.top) / (cell.scale * 1px);
-                Canvas.zoom = clamp(Canvas.zoom * (e.delta-y > 0 ? 1.25 : 0.8), 1, 64);
-                let s = cell.fit * Canvas.zoom * 1px;
-                Canvas.centre-x = at-x - (self.mouse-x - cell.width / 2) / s;
-                Canvas.centre-y = at-y - (self.mouse-y - cell.height / 2) / s;
-                accept
+                if (e.text == Key.Menu || (e.modifiers.shift && e.text == Key.F10)) {
+                    menu.show({ x: cell.width / 2, y: cell.height / 2 });
+                    return accept;
+                }
+                let key = e.text == Key.Tab ? HandleKey.next : e.text == Key.Backtab ? HandleKey.previous
+                    : e.text == Key.LeftArrow ? HandleKey.left : e.text == Key.RightArrow ? HandleKey.right
+                    : e.text == Key.UpArrow ? HandleKey.up : e.text == Key.DownArrow ? HandleKey.down : HandleKey.next;
+                let known = e.text == Key.Tab || e.text == Key.Backtab || e.text == Key.LeftArrow
+                    || e.text == Key.RightArrow || e.text == Key.UpArrow || e.text == Key.DownArrow;
+                known && self.take(key, e.modifiers.shift) ? accept : reject
             }
-            pointer-event(e) => {
-                if (e.kind == PointerEventKind.cancel) {
-                    self.panning = false;
-                    Canvas.cancel();
-                    return;
-                }
-                if (e.kind == PointerEventKind.move) {
-                    if (self.panning) {
-                        // held where the picture's edge stops it, so a drag back moves it at once
-                        let half-x = cell.width / 2 / (cell.scale * 1px);
-                        let half-y = cell.height / 2 / (cell.scale * 1px);
-                        Canvas.centre-x = clamp(self.centre-x - (self.mouse-x - self.pan-x) / (cell.scale * 1px), half-x, max(half-x, Canvas.width - half-x));
-                        Canvas.centre-y = clamp(self.centre-y - (self.mouse-y - self.pan-y) / (cell.scale * 1px), half-y, max(half-y, Canvas.height - half-y));
-                    } else if (self.pressed) {
-                        Canvas.drag(
-                            (self.mouse-x - self.from-x) / (cell.scale * 1px),
-                            (self.mouse-y - self.from-y) / (cell.scale * 1px),
-                            e.modifiers.shift);
+            // Next's picture menu (PreviewPane.xaml ContextMenu)
+            menu := ContextMenuArea {
+                Menu {
+                    MenuItem { title: @tr("Brightness"); icon: MenuIcons.brightness-6; activated => { brightness.focus(); } }
+                    MenuItem { title: @tr("Auto brightness"); icon: MenuIcons.brightness-6; activated => { Canvas.auto(root.layer); } }
+                    MenuSeparator { }
+                    MenuItem {
+                        title: @tr("Export this frame...");
+                        icon: MenuIcons.image;
+                        enabled: root.can-export;
+                        activated => { root.command(root.layer == Layer.field ? Command.export-field-frame : Command.export-intensity-frame); }
                     }
-                    return;
+                    MenuSeparator { }
+                    MenuItem { title: @tr("Export field..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-field); } }
+                    MenuItem { title: @tr("Export intensity..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-intensity); } }
+                    MenuItem { title: @tr("Export both..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-both); } }
                 }
-                if (e.button == PointerEventButton.middle) {
-                    self.panning = e.kind == PointerEventKind.down && Canvas.zoom > 1 && !self.pressed;
-                    self.pan-x = self.mouse-x;
-                    self.pan-y = self.mouse-y;
-                    // the centre shown, which a fitted picture does not hold
-                    self.centre-x = (cell.width / 2 - cell.left) / (cell.scale * 1px);
-                    self.centre-y = (cell.height / 2 - cell.top) / (cell.scale * 1px);
-                    return;
-                }
-                if (e.button != PointerEventButton.left) {
-                    return;
-                }
-                if (e.kind == PointerEventKind.down) {
-                    self.from-x = self.mouse-x;
-                    self.from-y = self.mouse-y;
-                    Canvas.press(
-                        root.layer,
-                        (self.mouse-x - cell.left) / (cell.scale * 1px),
-                        (self.mouse-y - cell.top) / (cell.scale * 1px),
-                        e.modifiers.control,
-                        e.modifiers.shift);
-                } else if (e.kind == PointerEventKind.up) {
-                    Canvas.release();
+                // one area for the whole picture: the drawings take no pointer, the app finds the handle under a press
+                TouchArea {
+                    property <length> from-x;
+                    property <length> from-y;
+                    // a middle-button pan: where it started and the centre then
+                    property <bool> panning;
+                    property <length> pan-x;
+                    property <length> pan-y;
+                    property <float> centre-x;
+                    property <float> centre-y;
+                    scroll-event(e) => {
+                        // a zoom mid-gesture would move what the gesture measures from
+                        if (e.delta-y == 0 || self.pressed || self.panning) {
+                            return reject;
+                        }
+                        // the canvas point under the pointer stays there
+                        let at-x = (self.mouse-x - cell.left) / (cell.scale * 1px);
+                        let at-y = (self.mouse-y - cell.top) / (cell.scale * 1px);
+                        Canvas.zoom = clamp(Canvas.zoom * (e.delta-y > 0 ? 1.25 : 0.8), 1, 64);
+                        let s = cell.fit * Canvas.zoom * 1px;
+                        Canvas.centre-x = at-x - (self.mouse-x - cell.width / 2) / s;
+                        Canvas.centre-y = at-y - (self.mouse-y - cell.height / 2) / s;
+                        accept
+                    }
+                    pointer-event(e) => {
+                        if (e.kind == PointerEventKind.cancel) {
+                            self.panning = false;
+                            Canvas.cancel();
+                            return;
+                        }
+                        if (e.kind == PointerEventKind.move) {
+                            if (self.panning) {
+                                // held where the picture's edge stops it, so a drag back moves it at once
+                                let half-x = cell.width / 2 / (cell.scale * 1px);
+                                let half-y = cell.height / 2 / (cell.scale * 1px);
+                                Canvas.centre-x = clamp(self.centre-x - (self.mouse-x - self.pan-x) / (cell.scale * 1px), half-x, max(half-x, Canvas.width - half-x));
+                                Canvas.centre-y = clamp(self.centre-y - (self.mouse-y - self.pan-y) / (cell.scale * 1px), half-y, max(half-y, Canvas.height - half-y));
+                            } else if (self.pressed) {
+                                Canvas.drag(
+                                    (self.mouse-x - self.from-x) / (cell.scale * 1px),
+                                    (self.mouse-y - self.from-y) / (cell.scale * 1px),
+                                    e.modifiers.shift);
+                            }
+                            return;
+                        }
+                        if (e.button == PointerEventButton.middle) {
+                            self.panning = e.kind == PointerEventKind.down && Canvas.zoom > 1 && !self.pressed;
+                            self.pan-x = self.mouse-x;
+                            self.pan-y = self.mouse-y;
+                            // the centre shown, which a fitted picture does not hold
+                            self.centre-x = (cell.width / 2 - cell.left) / (cell.scale * 1px);
+                            self.centre-y = (cell.height / 2 - cell.top) / (cell.scale * 1px);
+                            return;
+                        }
+                        if (e.button != PointerEventButton.left) {
+                            return;
+                        }
+                        if (e.kind == PointerEventKind.down) {
+                            keys.focus();
+                            self.from-x = self.mouse-x;
+                            self.from-y = self.mouse-y;
+                            Canvas.press(
+                                root.layer,
+                                (self.mouse-x - cell.left) / (cell.scale * 1px),
+                                (self.mouse-y - cell.top) / (cell.scale * 1px),
+                                e.modifiers.control,
+                                e.modifiers.shift);
+                        } else if (e.kind == PointerEventKind.up) {
+                            Canvas.release();
+                        }
+                    }
                 }
             }
         }
@@ -215,6 +306,8 @@ export component Preview inherits Rectangle {
     in property <image> field;
     in property <image> intensity;
     in property <bool> stacked: true;
+    in property <bool> can-export;
+    callback command(Command);
     if root.stacked: VerticalLayout {
         spacing: 4px;
         Picture {
@@ -224,6 +317,8 @@ export component Preview inherits Rectangle {
             handles: Canvas.field-handles;
             labels: Canvas.field-labels;
             art: Canvas.field-art;
+            can-export: root.can-export;
+            command(c) => { root.command(c); }
         }
         Picture {
             title: @tr("Intensity");
@@ -232,6 +327,8 @@ export component Preview inherits Rectangle {
             handles: Canvas.intensity-handles;
             labels: Canvas.intensity-labels;
             art: Canvas.intensity-art;
+            can-export: root.can-export;
+            command(c) => { root.command(c); }
         }
     }
     if !root.stacked: HorizontalLayout {
@@ -243,6 +340,8 @@ export component Preview inherits Rectangle {
             handles: Canvas.field-handles;
             labels: Canvas.field-labels;
             art: Canvas.field-art;
+            can-export: root.can-export;
+            command(c) => { root.command(c); }
         }
         Picture {
             title: @tr("Intensity");
@@ -251,6 +350,8 @@ export component Preview inherits Rectangle {
             handles: Canvas.intensity-handles;
             labels: Canvas.intensity-labels;
             art: Canvas.intensity-art;
+            can-export: root.can-export;
+            command(c) => { root.command(c); }
         }
     }
 }

@@ -15,6 +15,12 @@ pub fn lever_angle(pivot: (f64, f64), pointer: (f64, f64), snap: bool) -> f64 {
 	if a <= -180. { a + 360. } else { a + 0. }
 }
 
+/// `angle` turned by `by` degrees: whole degrees in (-180, 180].
+pub fn turn_lever(angle: f64, by: f64) -> f64 {
+	let a = (angle + by).round().rem_euclid(360.);
+	if a > 180. { a - 360. } else { a }
+}
+
 /// The canvas point `p` in the frame of `part`.
 pub fn to_part_frame(part: &Part, p: (f64, f64)) -> Vec2 {
 	Frame::of(&part.base).to_frame(Vec2::new(p.0, p.1))
@@ -44,6 +50,27 @@ pub fn drag_grip(kind: &mut PartKind, q: Vec2) {
 		PartKind::InterferenceFilter(f) => (f.length, f.width) = (length, width),
 		PartKind::GrinLens(g) => (g.length, g.diameter) = (length, span(q.y, 2)),
 		_ => {}
+	}
+}
+
+/// Sizes `kind` by a key: its grip at the part-frame point `grip` moved by `d`. A linked rectangle or ellipse and a
+/// polygon have one size, stepped by the move along the grip's ray (at least a pixel per step), so keys shrink them as
+/// they grow them; the rest as a drag to `grip + d`.
+pub fn nudge_grip(kind: &mut PartKind, grip: Vec2, d: Vec2) {
+	let along = if grip.length() > 0. { d.dot(grip) / grip.length() } else { 0. };
+	let step = along.signum() * along.abs().round().max(1.);
+	let resize = |size: &mut u32, by: f64, min: f64| *size = (f64::from(*size) + by).round().max(min) as u32;
+	match kind {
+		PartKind::Rectangle(r) if r.linked => {
+			resize(&mut r.length, 2. * step, 1.);
+			r.width = r.length;
+		}
+		PartKind::Ellipse(e) if e.linked => {
+			resize(&mut e.length, 2. * step, 1.);
+			e.width = e.length;
+		}
+		PartKind::Polygon(p) => resize(&mut p.side, step, 2.),
+		kind => drag_grip(kind, Vec2::new(grip.x + d.x, grip.y + d.y)),
 	}
 }
 
@@ -110,11 +137,30 @@ mod tests {
 	}
 
 	#[test]
+	fn a_lever_turned_by_keys_wraps() {
+		assert_eq!(turn_lever(175., 10.), -175.);
+		assert_eq!(turn_lever(-175., -10.), 175.);
+		assert_eq!(turn_lever(179.6, 0.), 180.);
+	}
+
+	#[test]
 	fn a_linked_rectangle_takes_the_farther_coordinate() {
 		let mut k = PartKind::Rectangle(Rectangle { linked: true, ..Rectangle::default() });
 		drag_grip(&mut k, Vec2::new(10.2, -3.));
 		let PartKind::Rectangle(r) = k else { unreachable!() };
 		assert_eq!((r.length, r.width), (20, 20));
+	}
+
+	#[test]
+	fn keys_shrink_a_linked_rectangle_and_step_a_polygon() {
+		let mut k = PartKind::Rectangle(Rectangle { linked: true, length: 20, width: 20, ..Rectangle::default() });
+		nudge_grip(&mut k, Vec2::new(10., 10.), Vec2::new(-1., 0.));
+		let PartKind::Rectangle(r) = k else { unreachable!() };
+		assert_eq!((r.length, r.width), (18, 18));
+		let mut k = PartKind::Polygon(Polygon { sides: 20, side: 10, ..Polygon::default() });
+		nudge_grip(&mut k, Vec2::new(0., 30.), Vec2::new(0., 1.));
+		let PartKind::Polygon(p) = k else { unreachable!() };
+		assert_eq!(p.side, 11);
 	}
 
 	#[test]

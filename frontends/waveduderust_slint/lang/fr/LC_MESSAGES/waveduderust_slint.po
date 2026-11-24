@@ -344,6 +344,10 @@ msgstr "Réseau"
 msgid "Auto"
 msgstr "Auto"
 
+#. MenuAutoBrightness
+msgid "Auto brightness"
+msgstr "Luminosité automatique"
+
 #. Label.Probe.AutoScaleX
 msgid "Auto-scale steps"
 msgstr "Échelle auto des pas"
@@ -939,6 +943,10 @@ msgstr "Exporter l'intensité..."
 #. MenuFileExportLast
 msgid "Export last"
 msgstr "Répéter le dernier export"
+
+#. MenuExportThisFrame
+msgid "Export this frame..."
+msgstr "Exporter cette image..."
 
 #. Hint.InterferenceFilterPart.Width
 msgid "Extent across the axis in pixels, of the plate and the layers alike."

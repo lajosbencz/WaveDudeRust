@@ -344,6 +344,10 @@ msgstr "Raster"
 msgid "Auto"
 msgstr "Auto"
 
+#. MenuAutoBrightness
+msgid "Auto brightness"
+msgstr "Automatische helderheid"
+
 #. Label.Probe.AutoScaleX
 msgid "Auto-scale steps"
 msgstr "Stappen automatisch schalen"
@@ -939,6 +943,10 @@ msgstr "Intensiteit exporteren..."
 #. MenuFileExportLast
 msgid "Export last"
 msgstr "Laatste export herhalen"
+
+#. MenuExportThisFrame
+msgid "Export this frame..."
+msgstr "Dit beeld exporteren..."
 
 #. Hint.InterferenceFilterPart.Width
 msgid "Extent across the axis in pixels, of the plate and the layers alike."

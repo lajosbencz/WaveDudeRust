@@ -344,6 +344,10 @@ msgstr "Anordnung"
 msgid "Auto"
 msgstr "Auto"
 
+#. MenuAutoBrightness
+msgid "Auto brightness"
+msgstr "Automatische Helligkeit"
+
 #. Label.Probe.AutoScaleX
 msgid "Auto-scale steps"
 msgstr "Schritte automatisch skalieren"
@@ -939,6 +943,10 @@ msgstr "Intensität exportieren..."
 #. MenuFileExportLast
 msgid "Export last"
 msgstr "Letzten Export wiederholen"
+
+#. MenuExportThisFrame
+msgid "Export this frame..."
+msgstr "Dieses Bild exportieren..."
 
 #. Hint.InterferenceFilterPart.Width
 msgid "Extent across the axis in pixels, of the plate and the layers alike."

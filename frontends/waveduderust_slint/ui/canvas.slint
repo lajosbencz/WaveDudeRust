@@ -7,11 +7,16 @@ export struct Rect { x: float, y: float, width: float, height: float }
 
 export enum HandleGlyph { source, lever, part, grip, point, bezier, probe }
 
+// keys on a picture: the focus arriving by Tab, Tab, Shift+Tab, arrows
+export enum HandleKey { enter, next, previous, left, right, up, down }
+
 export struct HandleData {
     x: float,
     y: float,
     glyph: HandleGlyph,
     selected: bool,
+    // has the keyboard focus while its picture does
+    focused: bool,
 }
 
 export struct LabelData {
@@ -60,4 +65,11 @@ export global Canvas {
     // canvas pixels from the press; `shift` snaps a lever
     callback drag(dx: float, dy: float, shift: bool);
     callback release();
+    // the layers' brightness (Display), its edits and Auto
+    in property <float> field-brightness: 1;
+    in property <float> intensity-brightness: 1;
+    callback brightness(layer: Layer, value: float);
+    callback auto(layer: Layer);
+    // a key on `layer`'s picture, Shift held; whether it was taken
+    callback key(layer: Layer, key: HandleKey, shift: bool) -> bool;
 }

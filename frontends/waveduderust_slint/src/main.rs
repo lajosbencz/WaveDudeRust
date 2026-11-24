@@ -79,6 +79,8 @@ struct State {
 	last_export: Option<export::Kind>,
 	/// The document generation the run started from.
 	ran: u64,
+	/// The view generation the pictures are drawn with.
+	styled: u64,
 	/// The desktop's colour scheme once a forced theme has written the palette's, which ends its system binding
 	/// (docs/blockers.md, Slint's system colour scheme).
 	system_scheme: Option<slint::language::ColorScheme>,
@@ -174,6 +176,13 @@ impl State {
 			self.ran = self.doc.generation;
 			self.live.edited(&self.doc.project, &self.doc.view);
 		}
+		if self.styled != self.doc.view_generation {
+			self.styled = self.doc.view_generation;
+			self.live.restyle();
+		}
+		let canvas = app.global::<ui::Canvas<'_>>();
+		canvas.set_field_brightness(self.doc.view.field.brightness as f32);
+		canvas.set_intensity_brightness(self.doc.view.intensity.brightness as f32);
 		self.overlays.show(&app.global::<ui::Canvas<'_>>(), &self.doc.project, &self.doc.view, &self.selection);
 		let node = self.selection.current();
 		let kind = form::kind(&self.doc.project, node);
@@ -261,6 +270,19 @@ impl State {
 			form::layer_settings(v, layer).color_scheme.clone_from(&added);
 		});
 		tracing::info!("Colour scheme '{added}' loaded from '{name}' into the project");
+	}
+
+	/// Sets `layer`'s brightness, one undo step.
+	fn set_brightness(&mut self, layer: waveduderust::model::Layer, value: f64) {
+		self.doc.edit_view_merging(None, |v| v.layer_mut(layer).brightness = value);
+	}
+
+	/// Takes an Auto brightness fit.
+	fn fitted(&mut self, layer: waveduderust::model::Layer, fit: Option<f64>) {
+		match fit {
+			Some(b) => self.set_brightness(layer, b),
+			None => tracing::info!("Auto brightness: nothing to fit"),
+		}
 	}
 
 	/// Ends a picture gesture as its release does.
@@ -846,6 +868,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		example_rows: Vec::new(),
 		last_export: None,
 		ran: 0,
+		styled: 0,
 		system_scheme: None,
 		form_seen: (0, 0),
 		form_base: 0,
@@ -1299,6 +1322,10 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			if s.messages.take() {
 				s.messages.show(&app);
 			}
+			if let Some((layer, fit)) = shown.fitted {
+				s.fitted(layer, fit);
+				s.show(&app);
+			}
 			if let Some(image) = shown.field {
 				app.set_field(image);
 			}
@@ -1384,6 +1411,50 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		let s = &mut *st.borrow_mut();
 		s.finish_gesture(&app);
 		s.show(&app);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	canvas.on_brightness(move |layer, value| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		s.set_brightness(canvas::model_layer(layer), value.into());
+		s.show(&app);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	canvas.on_auto(move |layer| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		let layer = canvas::model_layer(layer);
+		if let live::Fit::Done(fit) = s.live.auto(layer) {
+			s.fitted(layer, fit);
+		}
+		s.show(&app);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	canvas.on_key(move |layer, key, shift| {
+		use ui::HandleKey;
+		let Some(app) = weak.upgrade() else { return false };
+		let s = &mut *st.borrow_mut();
+		let step = if shift { 10. } else { 1. };
+		// a lever turns counter-clockwise on Right and Up
+		let (d, turn) = match key {
+			HandleKey::Enter | HandleKey::Next | HandleKey::Previous => {
+				let taken = if key == HandleKey::Enter {
+					s.overlays.enter(&s.doc.project, &mut s.selection, layer)
+				} else {
+					s.overlays.tab(&s.doc.project, &mut s.selection, layer, key == HandleKey::Previous)
+				};
+				s.show(&app);
+				return taken;
+			}
+			HandleKey::Left => ((-step, 0.), -step),
+			HandleKey::Right => ((step, 0.), step),
+			HandleKey::Up => ((0., -step), step),
+			HandleKey::Down => ((0., step), -step),
+		};
+		let Some(key) = s.overlays.nudge_key(layer, &s.selection) else { return false };
+		s.doc.edit_merging(Some(&key), |p| s.overlays.nudge(p, &s.selection, layer, d, turn));
+		s.show(&app);
+		true
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	canvas.on_cancel(move || {

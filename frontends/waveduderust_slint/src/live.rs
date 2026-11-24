@@ -5,8 +5,10 @@ use waveduderust::model::normalize::Normalize;
 use waveduderust::model::{Layer, Project, View};
 use waveduderust::quality::PreviewQuality;
 
-use waveduderust::run::{FrameStore, Goal, RunWorker, Wanted, WorkState};
+use waveduderust::run::{FitRequest, FrameStore, Goal, RunWorker, Wanted, WorkState};
 use waveduderust::unstable::engine::gpu::{FrameTag, GpuContext};
+use waveduderust::unstable::engine::types::SampleFormat;
+use waveduderust::unstable::render::fit_plane;
 use waveduderust::unstable::render::gpu::{DevicePlane, PicturePipeline};
 use waveduderust::unstable::scene::glowing_edges::EdgeImage;
 use waveduderust::unstable::spec::{RunRequest, SceneCache};
@@ -54,6 +56,17 @@ pub(crate) struct Live {
 	/// The scene's glowing edges, drawn over a picture whose layer shows the outline.
 	edges: Option<std::sync::Arc<EdgeImage>>,
 	intensity: Picture,
+	/// An Auto of an 8-bit frame waiting for the frame in 16-bit: the request and the layer.
+	fit: Option<(u64, Layer)>,
+	fits: u64,
+}
+
+/// What Auto brightness finds.
+pub(crate) enum Fit {
+	/// The brightness, or nothing to fit.
+	Done(Option<f64>),
+	/// Asked for the frame in 16-bit; a poll brings the fit.
+	Pending,
 }
 
 /// What a poll brings the window.
@@ -67,6 +80,8 @@ pub(crate) struct Shown {
 	pub(crate) step: Option<u64>,
 	/// The run is stepping or fitting.
 	pub(crate) running: bool,
+	/// A pending Auto's layer and brightness (`None`: nothing to fit).
+	pub(crate) fitted: Option<(Layer, Option<f64>)>,
 }
 
 impl Live {
@@ -94,6 +109,8 @@ impl Live {
 			auto_rerun: true,
 			frames: 0,
 			drawn: None,
+			fit: None,
+			fits: 0,
 			started: None,
 			summarised: false,
 			steps: 0,
@@ -176,8 +193,29 @@ impl Live {
 			position: self.position,
 			paused: self.paused,
 			wanted: self.wanted,
+			fit: self.fit.map(|(id, _)| FitRequest { id, frame: self.position }),
 			..Goal::default()
 		});
+	}
+
+	/// Draws the shown frame again, for a changed look.
+	pub(crate) fn restyle(&mut self) {
+		self.drawn = None;
+	}
+
+	/// Auto brightness of `layer` for the frame shown (docs/ui/40, Header strip).
+	pub(crate) fn auto(&mut self, layer: Layer) -> Fit {
+		let stored = self.position as usize;
+		let Some(store) = self.worker.status().store.filter(|s| s.has(stored) && s.layers().contains(&layer)) else {
+			return Fit::Done(None);
+		};
+		if matches!(store.shape().format, SampleFormat::Half) {
+			return Fit::Done(store.copy_layer(stored, layer).ok().and_then(|b| fit_plane(&b, store.shape(), layer)));
+		}
+		self.fits += 1;
+		self.fit = Some((self.fits, layer));
+		self.publish();
+		Fit::Pending
 	}
 
 	/// Pauses or resumes the run (F6).
@@ -218,6 +256,15 @@ impl Live {
 	pub(crate) fn poll(&mut self, project: &Project, view: &View, schemes: &SchemeStore) -> Shown {
 		#[cfg(target_arch = "wasm32")]
 		self.worker.pump(std::time::Duration::from_millis(10), std::task::Waker::noop());
+		let mut fitted = None;
+		if let Some((id, layer)) = self.fit
+			&& let Some(frame) = self.worker.take_fit()
+			&& frame.id == id
+		{
+			self.fit = None;
+			self.publish();
+			fitted = Some((layer, fit_plane(frame.snapshot.plane(layer), &frame.snapshot.shape, layer)));
+		}
 		let status = self.worker.status();
 		let state = std::mem::discriminant(&status.state);
 		if self.last_state != Some(state) {
@@ -266,6 +313,7 @@ impl Live {
 			made: None,
 			step: None,
 			running: matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting),
+			fitted,
 		};
 		let stored = self.position as usize;
 		if let Some(store) = &status.store {

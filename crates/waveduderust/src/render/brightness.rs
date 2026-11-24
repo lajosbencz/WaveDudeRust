@@ -2,7 +2,8 @@
 
 use half::f16;
 
-use crate::engine::types::SampleKind;
+use crate::engine::types::{FrameShape, SampleFormat, SampleKind};
+use crate::model::Layer;
 
 /// Percentile of the magnitudes put at the palette's top.
 pub const PERCENTILE: f64 = 0.995;
@@ -14,6 +15,20 @@ pub const MAX_BRIGHTNESS: f64 = crate::model::ranges::LAYER_BRIGHTNESS.max;
 /// in magnitude.
 pub fn fit_brightness(samples: &[f16], kind: SampleKind) -> Option<f64> {
 	fit(samples.iter().map(|s| s.to_f32()), kind)
+}
+
+/// The fitted brightness of `layer`'s stored plane of a frame of `shape`; `None` for palette indices, which need
+/// the frame in 16-bit, or when there is nothing to fit.
+pub fn fit_plane(bytes: &[u8], shape: &FrameShape, layer: Layer) -> Option<f64> {
+	if !matches!(shape.format, SampleFormat::Half) {
+		return None;
+	}
+	let kind = match layer {
+		Layer::Field => SampleKind::Field,
+		Layer::Intensity if shape.intensity_root => SampleKind::IntensityRoot,
+		Layer::Intensity => SampleKind::Intensity,
+	};
+	fit(bytes.as_chunks::<2>().0.iter().map(|&b| f16::from_le_bytes(b).to_f32()), kind)
 }
 
 fn fit(samples: impl Iterator<Item = f32>, kind: SampleKind) -> Option<f64> {

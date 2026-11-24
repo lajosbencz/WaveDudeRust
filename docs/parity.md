@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 52 | 1 | 10 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 41 | 7 | 59 | 4 | 1 |
+| V | Preview | 55 | 7 | 45 | 4 | 1 |
 | L | Timeline, transport, status | 40 | 20 | 20 | 7 | 3 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 629 | 82 | 239 | 139 | 6 |
+| | All | 643 | 82 | 225 | 139 | 6 |
 
 ## Cross-cutting
 
@@ -958,18 +958,18 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-10 | Picture fitted uniformly, centred, 4 px margin, cell hugs picture | Controls/PictureFrame.cs:49 | 40 Layout | done | contain-fitted; rest matched in general (decision 0033) |
 | V-11 | Without run/frame: black at canvas size; image scene shows scene image | PreviewPane.xaml.cs:828 | 40 Layout | partial | black rect; no canvas-size black frame; image scene not shown before first frame (unverified) |
 | V-12 | Header strip title ("Field"/"Intensity" semi-bold) | PreviewPane.xaml:560-600, Controls/HeaderStrip.cs | 40 Header strip | done | title; rest matched in general (decision 0033) |
-| V-13 | Header caption "Brightness" | PreviewPane.xaml:586 | 40 Header strip | missing | |
-| V-14 | Header Brightness number box 64 px, log, 0.0001..100000, = Display brightness | PreviewPane.xaml:586, Controls/NumberBox.cs | 40 Header strip | missing | |
-| V-15 | Brightness box tooltip (brightness hint) | PreviewPane.xaml:588 | 40 Header strip | missing | |
-| V-16 | Brightness box keys: Up/Down 2 pct, PageUp/PageDown a fifth, 3 significant digits | Controls/NumberBox.cs | 40 Header strip | missing | |
-| V-17 | Auto button (one-shot 99.5th percentile fit) | PreviewPane.xaml:591, MainWindow.Display.cs | 40 Header strip | missing | |
-| V-18 | Auto: 8-bit recompute in 16-bit for fit alone, run paused meanwhile | MainWindow.Display.cs | 40 Header strip | missing | |
-| V-19 | Auto is an ordinary brightness edit (8-bit: simulation edit); "nothing to fit" status text | MainWindow.Display.cs | 40 Header strip | missing | |
+| V-13 | Header caption "Brightness" | PreviewPane.xaml:586 | 40 Header strip | done | preview.slint Picture header |
+| V-14 | Header Brightness number box 64 px, log, 0.0001..100000, = Display brightness | PreviewPane.xaml:586, Controls/NumberBox.cs | 40 Header strip | done | NumberBox 64 px with the Display form spec (log, 0.0001..100000); Canvas.field-/intensity-brightness from the view |
+| V-15 | Brightness box tooltip (brightness hint) | PreviewPane.xaml:588 | 40 Header strip | missing | NumberBox has no tooltip yet |
+| V-16 | Brightness box keys: Up/Down 2 pct, PageUp/PageDown a fifth, 3 significant digits | Controls/NumberBox.cs | 40 Header strip | done | the number box keys: 1.02 per step, PageUp/PageDown ten steps (about a fifth), three digits |
+| V-17 | Auto button (one-shot 99.5th percentile fit) | PreviewPane.xaml:591, MainWindow.Display.cs | 40 Header strip | done | Live::auto: core render::fit_plane on the shown 16-bit plane |
+| V-18 | Auto: 8-bit recompute in 16-bit for fit alone, run paused meanwhile | MainWindow.Display.cs | 40 Header strip | done | 8-bit: a FitRequest; the worker serves the frame in 16-bit, the poll fits it |
+| V-19 | Auto is an ordinary brightness edit (8-bit: simulation edit); "nothing to fit" status text | MainWindow.Display.cs | 40 Header strip | done | an ordinary view edit; nothing to fit logs (status bar) Auto brightness: nothing to fit |
 | V-20 | Header placement above picture when cell taller than aspect (4 px over) | PreviewPane.xaml:560-600 | 40 Header strip | done | header above; rest matched in general (decision 0033) |
 | V-21 | Header turned a quarter clockwise on picture's left when cell wider (10 px below top) | HeaderStrip.cs | 40 Header strip | missing | |
 | V-22 | Turned box edits upright while focused (click/Tab/context menu focus, select text, arrows/wheel step) | NumberBox.cs | 40 Header strip; 00 Turned brightness box TODO | missing | spec TODO |
 | V-23 | Turned unfocused box: arrows step, drag along strip scrubs | NumberBox.cs | 40 Header strip | missing | |
-| V-24 | Narrow strip: caption dropped first, then title ellipsis; 12 px min gap | HeaderStrip.cs | 40 Header strip | missing | |
+| V-24 | Narrow strip: caption dropped first, then title ellipsis; 12 px min gap | HeaderStrip.cs | 40 Header strip | partial | the title elides; the caption is not dropped first |
 | V-25 | Edge line 1 px, blue #0000FF when damping rim outside canvas | PreviewPane.xaml:602-610 | 40 Edge line | missing | |
 | V-26 | Edge line red #FF0000 for reflective edges (rim wins over wall) | PreviewPane.xaml:602-610 | 40 Edge line | missing | |
 | V-27 | Edge line none for open edges / damping band inside | PreviewPane.xaml:602 | 40 Edge line | done | nothing drawn (trivially) |
@@ -1021,16 +1021,16 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-73 | Drag fibre node (with handles) / Bezier handle (smooth node mirrors length) | SceneOverlay.cs MirrorLength | 40 Interaction | done | canvas::Target::Shape with Node/InHandle/OutHandle |
 | V-74 | Drag probe A onto detached graph box picks it up | SceneOverlay.cs:952 | 40 Interaction | missing | |
 | V-75 | Esc during drag puts item/group back; second finger likewise | SceneOverlay.cs:1507-1517 | 40 Interaction | done | Esc while a drag is held: Document::cancel drops its step; the second finger dropped (decision 0033) |
-| V-76 | Click empty space deselects (unless Shift/Ctrl), focuses pane | PreviewPane.xaml.cs:1289 | 40 Interaction | partial | a press off the handles selects the root unless Ctrl/Shift; the pane takes no focus yet |
+| V-76 | Click empty space deselects (unless Shift/Ctrl), focuses pane | PreviewPane.xaml.cs:1289 | 40 Interaction | done | a press off the handles selects the root unless Ctrl/Shift and focuses the picture |
 | V-77 | Marquee on empty drag (faint accent fill, dashed edge); Shift add, Ctrl toggle, else replace | SceneOverlay.cs:1256-1365 | 40 Interaction | done | canvas::Marquee: a press off the handles; whole-item handles inside; Shift adds, Ctrl toggles, else replaces |
-| V-78 | Tab through handles; focusing selects item, tree mirrors without focus | SceneOverlay.cs | 40 Interaction | missing | |
-| V-79 | Arrows / Shift+Arrows on focused handle: 1 / 10 px (group), lever 1 / 10 deg (Right/Up ccw) | SceneOverlay.cs:1527-1565 | 40 Interaction | missing | |
+| V-78 | Tab through handles; focusing selects item, tree mirrors without focus | SceneOverlay.cs | 40 Interaction | done | Overlays::tab: overlay handle order; focusing selects (kept in its group); back onto an item lands on its last handle once selected; entering by Tab resumes the focused handle, else the first (Slint gives no direction) |
+| V-79 | Arrows / Shift+Arrows on focused handle: 1 / 10 px (group), lever 1 / 10 deg (Right/Up ccw) | SceneOverlay.cs:1527-1565 | 40 Interaction | done | Overlays::nudge, a run (one focus, one group) is one undo step; lever via handles::turn_lever; grips via handles::nudge_grip |
 | V-80 | Lens surface handle keeps rim fixed across key presses | SceneOverlay.cs:1560 (DragAnchors) | 40 Interaction | missing | |
-| V-81 | Del on focused handle/box removes item or its selection | SceneOverlay.cs:1517-1523 | 40 Interaction | missing | main.rs "delete" works from tree selection only |
-| V-82 | Right-click / Apps: picture context menu | PreviewPane.xaml:728-771 | 40 Interaction; 10 | missing | |
-| V-83 | Context menu: Brightness (focus box), Auto brightness | PreviewPane.xaml:736-737,762-763; PreviewPane.xaml.cs:1347 | 40 Automation ids | missing | |
-| V-84 | Context menu: Export this frame (field Ctrl+Shift+F / intensity Ctrl+Shift+G) | PreviewPane.xaml:739,765 | 40 Automation ids; 10 | missing | exports exist in File menu only |
-| V-85 | Context menu: Export field / intensity / both | PreviewPane.xaml:741-743,767-769 | 40 Automation ids | missing | File menu has them |
+| V-81 | Del on focused handle/box removes item or its selection | SceneOverlay.cs:1517-1523 | 40 Interaction | done | Del is the window-wide Delete on the selection, which focusing a handle sets |
+| V-82 | Right-click / Apps: picture context menu | PreviewPane.xaml:728-771 | 40 Interaction; 10 | done | ContextMenuArea on the picture; Menu or Shift+F10 opens it at the centre |
+| V-83 | Context menu: Brightness (focus box), Auto brightness | PreviewPane.xaml:736-737,762-763; PreviewPane.xaml.cs:1347 | 40 Automation ids | done | Brightness focuses the header box; Auto brightness |
+| V-84 | Context menu: Export this frame (field Ctrl+Shift+F / intensity Ctrl+Shift+G) | PreviewPane.xaml:739,765 | 40 Automation ids; 10 | done | Command.export-field-frame / export-intensity-frame by the layer |
+| V-85 | Context menu: Export field / intensity / both | PreviewPane.xaml:741-743,767-769 | 40 Automation ids | done | the File menu commands |
 | V-86 | Drop of objects from tree: paste and place at drop pixel | SceneOverlay.cs:1212,1228 | 40 Interaction; 20 | missing | |
 | V-87 | Drop of file not claimed, window opens it | SceneOverlay.cs | 40 Interaction | missing | see R-30 |
 | V-88 | Handle tooltips (Tip*Format per role) | SceneOverlay.cs:528-531 | 40 Interaction | missing | |
