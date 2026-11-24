@@ -192,9 +192,21 @@ msgstr "Een zoneplaat: Fresnelzones gesneden voor een ontwerpfrequentie en een b
 msgid "AND"
 msgstr "AND"
 
+#. Enum.GateOutput.And
+msgid "AND: 4 × as bright with both on"
+msgstr "AND: 4 × zo helder met beide aan"
+
 #. Label.LensPart.Coating
 msgid "AR coating"
 msgstr "AR-coating"
+
+#. Label.LogicGatePart.InputCoated
+msgid "AR on input side"
+msgstr "AR aan ingangszijde"
+
+#. Label.LogicGatePart.OutputCoated
+msgid "AR on output side"
+msgstr "AR aan uitgangszijde"
 
 #. Label.LensPart.Absorption
 msgid "Absorption"
@@ -255,6 +267,18 @@ msgstr "Amplitude in procent, 0 tot 100, decimalen toegestaan."
 #. Kind.EllipsePart
 msgid "An ellipse of glass or mirror, by the length and width of its box; linked, a circle."
 msgstr "Een ellips van glas of als spiegel, naar de lengte en breedte van zijn kader; gekoppeld een cirkel."
+
+#. Kind.AndGatePart
+msgid "An optical AND gate: the same coupler with the lower input a quarter period behind, so the upper output carries the sum. It is brightest with both inputs lit, about four times a single one; a passive linear gate has no truer AND."
+msgstr "Een optische AND-poort: dezelfde koppelaar met de onderste ingang een kwart periode achter, zodat de bovenste uitgang de som draagt. Het helderst met beide ingangen, ongeveer viermaal één; een passieve lineaire poort heeft geen echtere AND."
+
+#. Kind.OrGatePart
+msgid "An optical OR gate: the same coupler with the lower input a twelfth of a period ahead, so the upper output carries half the power of either input and of both. It lights with one input or both."
+msgstr "Een optische OR-poort: dezelfde koppelaar met de onderste ingang een twaalfde periode vooruit, zodat de bovenste uitgang de halve kracht van elke ingang en van beide draagt. Hij licht op met één ingang of beide."
+
+#. Kind.XorGatePart
+msgid "An optical XOR gate: two input waveguides, a phase section putting the lower input a quarter period ahead, and a coupler whose upper output carries their difference. It lights when one input is lit, not both, for coherent inputs at the design frequency."
+msgstr "Een optische XOR-poort: twee ingangsgolfgeleiders, een fasesectie die de onderste ingang een kwart periode vooruit zet, en een koppelaar waarvan de bovenste uitgang hun verschil draagt. Hij licht op als één ingang brandt, niet beide, bij coherente ingangen op de ontwerpfrequentie."
 
 #. Label.OpticalPart.Angle
 msgid "Angle"
@@ -380,6 +404,10 @@ msgstr "Annuleren"
 msgid "Canvas"
 msgstr "Canvas"
 
+#. TipGatePorts
+msgid "Canvas pixels. Feed the inputs with equal waves (the same frequency, amplitude and phase); a missing wave is a logical 0. The outputs line up with the inputs of gates set a port spacing above and below, one length on"
+msgstr "Canvaspixels. Voed de ingangen met gelijke golven (dezelfde frequentie, amplitude en fase); een ontbrekende golf is een logische 0. De uitgangen liggen in lijn met de ingangen van poorten die een poortafstand hoger en lager staan, één lengte verder"
+
 #. Label.GrinLensPart.CentreIndex
 msgid "Centre index"
 msgstr "Index op de as"
@@ -391,6 +419,10 @@ msgstr "Middendikte"
 #. Label.DiffuserPart.CenterWavelength
 msgid "Centre wavelength"
 msgstr "Centrale golflengte"
+
+#. Label.FiberPart.CladdingIndex
+msgid "Cladding index"
+msgstr "Mantelindex"
 
 #. MessagesClear
 msgid "Clear"
@@ -448,6 +480,10 @@ msgstr "Voltooid"
 msgid "Composite source"
 msgstr "Samengestelde bron"
 
+#. TipGateLayout
+msgid "Computed from the design wavelength and the indices with the simulator's own wave equation (the 4th-order Laplacian)"
+msgstr "Berekend uit de ontwerpgolflengte en de indices met de eigen golfvergelijking van de simulator (de 4e-orde-Laplaciaan)"
+
 #. Label.LensPart.IsConcave
 msgid "Concave (diverging)"
 msgstr "Hol (divergerend)"
@@ -472,6 +508,14 @@ msgstr "Bollend, de vulling het grootst in het midden en naar buiten afnemend bi
 msgid "Copy"
 msgstr "Kopiëren"
 
+#. Label.FiberPart.CoreIndex
+msgid "Core index"
+msgstr "Kernindex"
+
+#. LabelCoreWidth
+msgid "Core width"
+msgstr "Kernbreedte"
+
 #. OpenError
 msgid "Could not open '{}'."
 msgstr "Kan '{}' niet openen."
@@ -487,6 +531,14 @@ msgstr "Tellend"
 #. MenuAddCountingDetector
 msgid "Counting detector"
 msgstr "Tellende detector"
+
+#. LabelCouplerGap
+msgid "Coupler gap"
+msgstr "Spleet van de koppelaar"
+
+#. LabelCouplerLength
+msgid "Coupler length"
+msgstr "Lengte van de koppelaar"
 
 #. MenuEditCut
 msgid "Cu&t"
@@ -539,6 +591,10 @@ msgstr "Beschrijving"
 #. SectionDesign
 msgid "Design"
 msgstr "Ontwerp"
+
+#. Label.LogicGatePart.DesignFrequency
+msgid "Design frequency"
+msgstr "Ontwerpfrequentie"
 
 #. Label.Source.DetachAfter
 msgid "Detach after step"
@@ -595,6 +651,10 @@ msgstr "Afstand tussen naburige rijen dwars op de as in pixels: de periode van h
 #. Hint.SourceArray.SpacingY
 msgid "Distance between neighbouring rows in canvas pixels."
 msgstr "Afstand tussen naburige rijen in canvaspixels."
+
+#. Hint.LogicGatePart.PortSpacing
+msgid "Distance between the two inputs, and between the two outputs, in pixels. A value below what the design needs to keep the arms apart is raised to it, and the box shows the spacing used."
+msgstr "Afstand tussen de twee ingangen, en tussen de twee uitgangen, in pixels. Een waarde onder wat het ontwerp nodig heeft om de armen gescheiden te houden, wordt daartoe verhoogd, en het vak toont de gebruikte afstand."
 
 #. Hint.LensPart.Thickness
 msgid "Distance between the two surfaces on the axis in pixels."
@@ -1040,6 +1100,14 @@ msgstr "Index 1"
 msgid "Index 2"
 msgstr "Index 2"
 
+#. LabelInputA
+msgid "Input A"
+msgstr "Ingang A"
+
+#. LabelInputB
+msgid "Input B"
+msgstr "Ingang B"
+
 #. Enum.ProbeMeasurement.IntegratedValue
 msgid "Integrated value"
 msgstr "Geïntegreerde waarde"
@@ -1116,6 +1184,10 @@ msgstr "Laagparen"
 msgid "Layers"
 msgstr "Lagen"
 
+#. SectionLayout
+msgid "Layout"
+msgstr "Indeling"
+
 #. Hint.Probe.BoxX
 msgid "Left edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on."
 msgstr "Linkerrand van het grafiekkader in canvaspixels. Een kader op punt A van de sonde beweegt met haar mee; dichtbij gesleept klikt het daar vast."
@@ -1156,9 +1228,17 @@ msgstr "Lens/Spiegel"
 msgid "Let the green channel of the scene image emit waves; the pixel value is the frequency level."
 msgstr "Het groene kanaal van de scèneafbeelding golven laten uitzenden; de pixelwaarde is het frequentieniveau."
 
+#. Hint.LogicGatePart.LowerOutputActive
+msgid "Let the lower output's light leave the gate. Switched off, an absorber with a soft rise takes it in the last stretch of the arm."
+msgstr "Laat het licht van de onderste uitgang de poort verlaten. Uitgeschakeld neemt een geleidelijk oplopende absorber het op in het laatste stuk van de arm."
+
 #. Hint.Probe.AutoScaleX
 msgid "Let the step axis follow the samples recorded so far; point probes and counting detectors only."
 msgstr "De stappenas de tot nu toe opgenomen monsters laten volgen; alleen puntsondes en tellende detectoren."
+
+#. Hint.LogicGatePart.UpperOutputActive
+msgid "Let the upper output's light leave the gate. Switched off, an absorber with a soft rise takes it in the last stretch of the arm."
+msgstr "Laat het licht van de bovenste uitgang de poort verlaten. Uitgeschakeld neemt een geleidelijk oplopende absorber het op in het laatste stuk van de arm."
 
 #. Enum.AppTheme.Light
 msgid "Light"
@@ -1187,6 +1267,10 @@ msgstr "Afspelen herhalen binnen het exportbereik (L)"
 #. Hint.Probe.YMin
 msgid "Lower bound of the value axis when it is not auto-scaled."
 msgstr "Ondergrens van de waardenas zonder automatische schaling."
+
+#. Label.LogicGatePart.LowerOutputActive
+msgid "Lower output"
+msgstr "Onderste uitgang"
 
 #. Hint.LensPart.Mirror
 msgid "Make the part a mirror instead of a lens. The refractive index, the coating and the absorption are ignored then."
@@ -1356,6 +1440,10 @@ msgstr "OK"
 msgid "OR"
 msgstr "OR"
 
+#. Enum.GateOutput.Or
+msgid "OR: as bright for one as for two"
+msgstr "OR: even helder voor één als twee"
+
 #. Label.Scene.ObjectSources
 msgid "Object sources"
 msgstr "Objectbronnen"
@@ -1407,6 +1495,10 @@ msgstr "Omtrek in het voorbeeld"
 #. Hint.Probe.Layer
 msgid "Output the probe samples and is drawn on."
 msgstr "Uitvoer die de sonde bemonstert en waarop ze wordt getekend."
+
+#. SectionOutputs
+msgid "Outputs active"
+msgstr "Actieve uitgangen"
 
 #. TipPartEnabled
 msgid "Paint the part into the scene (Space on the row toggles it)"
@@ -1508,6 +1600,14 @@ msgstr "Punten"
 msgid "Polygon"
 msgstr "Polygoon"
 
+#. Label.LogicGatePart.PortSpacing
+msgid "Port spacing"
+msgstr "Poortafstand"
+
+#. SectionPorts
+msgid "Ports"
+msgstr "Poorten"
+
 #. SectionPosition
 msgid "Position"
 msgstr "Positie"
@@ -1576,6 +1676,14 @@ msgstr "Pulsbreedte"
 msgid "Pulsed"
 msgstr "Gepulst"
 
+#. Hint.LogicGatePart.InputCoated
+msgid "Put the anti-reflection band on the input end. Switch it off where the gate takes its light from a gate before it, so the wave passes through the junction."
+msgstr "Breng de antireflectieband aan op het ingangsuiteinde. Schakel hem uit waar de poort haar licht van een voorgaande poort krijgt, zodat de golf door de overgang gaat."
+
+#. Hint.LogicGatePart.OutputCoated
+msgid "Put the anti-reflection band on the output end. Switch it off where the gate hands its light to a gate after it, so the wave passes through the junction."
+msgstr "Breng de antireflectieband aan op het uitgangsuiteinde. Schakel hem uit waar de poort haar licht aan een volgende poort doorgeeft, zodat de golf door de overgang gaat."
+
 #. Hint.CoatedPart.BackCoated
 msgid "Put the band on the back: the faces turned away from a source on the left, a lens's second surface. Clear it to leave them bare."
 msgstr "De band op de achterkant leggen: de vlakken die van een bron links zijn afgekeerd, het tweede oppervlak van een lens. Uitschakelen laat ze kaal."
@@ -1595,6 +1703,10 @@ msgstr "Kwaliteit"
 #. MenuViewResolutionQuarter
 msgid "Quarter"
 msgstr "Kwart"
+
+#. LabelQuarterWave
+msgid "Quarter-wave coating"
+msgstr "Kwartgolf-coating"
 
 #. Label.LensPart.R1
 msgid "R1"
@@ -1656,6 +1768,10 @@ msgstr "Brekingsindex aan de rand, 1,00 tot 2,55 in stappen van 0,01. Het profie
 msgid "Refractive index of a blank canvas, 1.0 to 2.55. The wave speed is 1/n cells per step."
 msgstr "Brekingsindex van een leeg canvas, 1,0 tot 2,55. De golfsnelheid is 1/n cellen per stap."
 
+#. Hint.LogicGatePart.CladdingIndex
+msgid "Refractive index of the cladding around the cores, 1.00 to 2.55 in steps of 0.01."
+msgstr "Brekingsindex van de mantel rond de kernen, 1,00 tot 2,55 in stappen van 0,01."
+
 #. Hint.BraggReflectorPart.Index1
 msgid "Refractive index of the first layer of each pair, 1.00 to 2.55 in steps of 0.01."
 msgstr "Brekingsindex van de eerste laag van elk paar, 1,00 tot 2,55 in stappen van 0,01."
@@ -1672,9 +1788,17 @@ msgstr "Brekingsindex van de richels, 1,00 tot 2,55 in stappen van 0,01, meestal
 msgid "Refractive index of the second layer of each pair, 1.00 to 2.55 in steps of 0.01."
 msgstr "Brekingsindex van de tweede laag van elk paar, 1,00 tot 2,55 in stappen van 0,01."
 
+#. Hint.LogicGatePart.CoreIndex
+msgid "Refractive index of the waveguide cores, 1.00 to 2.55 in steps of 0.01. It must be above the cladding's; the larger the difference, the narrower the cores and the tighter the bends."
+msgstr "Brekingsindex van de golfgeleiderkernen, 1,00 tot 2,55 in stappen van 0,01. Moet boven die van de mantel liggen; hoe groter het verschil, hoe smaller de kernen en hoe krapper de bochten."
+
 #. Hint.GrinLensPart.CentreIndex
 msgid "Refractive index on the axis, 1.00 to 2.55 in steps of 0.01."
 msgstr "Brekingsindex op de as, 1,00 tot 2,55 in stappen van 0,01."
+
+#. Enum.GateOutput.Remainder
+msgid "Remainder: 3 × with both on"
+msgstr "Rest: 3 × met beide aan"
 
 #. MenuProjectRemove
 msgid "Remove"
@@ -1984,6 +2108,10 @@ msgstr "De hoogte van het reliëf aan weerszijden van het gemiddelde vlak in pix
 msgid "The rough face from its highest point to its lowest: what the ripples add up to"
 msgstr "Het ruwe vlak van zijn hoogste punt tot zijn laagste: wat de rimpels samen opleveren"
 
+#. Hint.LogicGatePart.DesignFrequency
+msgid "The source frequency the gate is designed for, on the same scale as a source's frequency: the frequency of the sources that drive it. The wavelength, and from it the core width, the coupler and the phase section, follow from it, so the gate works at this frequency only."
+msgstr "De bronfrequentie waarvoor de poort is ontworpen, op dezelfde schaal als de frequentie van een bron: de frequentie van de bronnen die hem voeden. De golflengte, en daaruit de kernbreedte, de koppelaar en de fasesectie, volgen eruit, dus de poort werkt alleen bij deze frequentie."
+
 #. Hint.ZonePlatePart.DesignFrequency
 msgid "The source frequency the plate is designed for, on the same scale as a source's frequency. The zones follow from the wavelength it gives, so the plate focuses this frequency at the focal length; other frequencies focus elsewhere."
 msgstr "De bronfrequentie waarvoor de plaat is ontworpen, op dezelfde schaal als de frequentie van een bron. De zones volgen uit de golflengte die ze geeft, dus de plaat focust deze frequentie op de brandpuntsafstand; andere frequenties elders."
@@ -1999,6 +2127,10 @@ msgstr "De ruimtelijke golflengte in pixels in het midden van het spectrum van d
 #. Hint.DiffuserPart.Sigma
 msgid "The spread of the roughness's wavelengths about the centre wavelength, in pixels: a wavelength gets the amplitude times the bell e^(−(λ − centre)² / 2σ²). 0 leaves the centre wavelength alone, a single regular ripple; the larger, the more wavelengths join in and the less regular the face."
 msgstr "De spreiding van de golflengten van de ruwheid rond de centrale golflengte, in pixels: een golflengte krijgt de amplitude maal de klok e^(−(λ − centrum)² / 2σ²). 0 laat alleen de centrale golflengte over, één regelmatige rimpel; hoe groter, hoe meer golflengten meedoen en hoe onregelmatiger het vlak."
+
+#. TipQuarterWave
+msgid "The thickness of the least reflecting coating on the core, λ / (4 √n)"
+msgstr "De dikte van de minst reflecterende coating op de kern, λ / (4 √n)"
 
 #. TipGateWavelength
 msgid "The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale"
@@ -2044,6 +2176,10 @@ msgstr "Dikte aan de rand: de middendikte min wat de bolle oppervlakken nemen, p
 msgid "Thickness in pixels of the absorbing frame: positive inside the canvas, where it shows as a dark margin; negative outside it, simulated but never shown. 0 turns it off."
 msgstr "Dikte in pixels van de absorberende rand: positief binnen het canvas, waar hij als donkere marge zichtbaar is; negatief erbuiten, gesimuleerd maar nooit getoond. 0 schakelt hem uit."
 
+#. Hint.LogicGatePart.Coating
+msgid "Thickness in pixels of the anti-reflection band at the ends ticked below, with the index √n of the core and of the cladding; 0 for none. A quarter-wave band, the least reflecting, is λ / (4 √n) pixels thick; the form shows it for the core."
+msgstr "Dikte in pixels van de antireflectieband aan de hieronder aangevinkte uiteinden, met index √n van de kern en van de mantel; 0 voor geen. Een kwartgolfband, de minst reflecterende, is λ / (4 √n) pixels dik; het formulier toont die voor de kern."
+
 #. Hint.LensPart.Coating
 msgid "Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is λ / (4 √n) pixels thick, λ being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on."
 msgstr "Dikte in pixels van de antireflectieband net binnen de omtrek; 0 voor geen. Een kwartgolflaag is λ / (4 √n) pixels dik, λ de golflengte die het bronformulier toont; een geleidelijke band is vanaf een golflengte beter naarmate hij dikker is."
@@ -2076,6 +2212,10 @@ msgstr "Tot stap"
 msgid "Top edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on."
 msgstr "Bovenrand van het grafiekkader in canvaspixels. Een kader op punt A van de sonde beweegt met haar mee; dichtbij gesleept klikt het daar vast."
 
+#. LabelGateLength
+msgid "Total length"
+msgstr "Totale lengte"
+
 #. Hint.Simulation.Steps
 msgid "Total number of simulation steps."
 msgstr "Totaal aantal simulatiestappen."
@@ -2099,6 +2239,10 @@ msgstr "Naamloos"
 #. Hint.Probe.YMax
 msgid "Upper bound of the value axis when it is not auto-scaled."
 msgstr "Bovengrens van de waardenas zonder automatische schaling."
+
+#. Label.LogicGatePart.UpperOutputActive
+msgid "Upper output"
+msgstr "Bovenste uitgang"
 
 #. Hint.Simulation.FourthOrderLaplacian
 msgid "Use the 4th-order stencil with sub-stepping instead of the 9-point stencil. More accurate, slower."
@@ -2223,6 +2367,10 @@ msgstr "X ten opzichte van het middelpunt van het onderdeel in canvaspixels, vó
 #. MenuAddXorGate
 msgid "XOR (Mach-Zehnder)"
 msgstr "XOR (Mach-Zehnder)"
+
+#. Enum.GateOutput.Xor
+msgid "XOR: dark with both on"
+msgstr "XOR: donker met beide aan"
 
 #. Label.Source.Y
 msgid "Y"

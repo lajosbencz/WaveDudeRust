@@ -17,9 +17,10 @@ export enum TriangleType { equilateral, right-isosceles, thirty-sixty-ninety, is
 export enum ZoneDivision { equal-width, equal-depth }
 export enum FacetPattern { sawtooth, square-wave, sinusoidal }
 export enum MetaLensType { converging, diverging }
+export enum GateKind { xor, and, or }
 
 // Which form Properties shows; `none` for the generic rows.
-export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens, simple-grating, facetted-grating, meta-lens, meta-prism, meta-axicon }
+export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens, simple-grating, facetted-grating, meta-lens, meta-prism, meta-axicon, logic-gate }
 
 export struct ProjectData {
     seed: int,
@@ -291,4 +292,32 @@ export struct MetaData {
 export struct PointData {
     x: int,
     y: int,
+}
+
+// A logic gate's inputs, then the layout its design gives; `designed` false when the design frequency gives none.
+export struct GateData {
+    kind: GateKind,
+    design-frequency: float,
+    core-index: float,
+    cladding-index: float,
+    coating: float,
+    input-coated: bool,
+    output-coated: bool,
+    // the spacing the design uses
+    port-spacing: int,
+    upper-output-active: bool,
+    lower-output-active: bool,
+    // read-outs in pixels; the wavelength 0 for none
+    wavelength: float,
+    designed: bool,
+    quarter-wave: float,
+    core-width: int,
+    gap: int,
+    coupler-length: int,
+    length: int,
+    // the ports in canvas pixels
+    input-a: PointData,
+    input-b: PointData,
+    upper-out: PointData,
+    lower-out: PointData,
 }

@@ -8,6 +8,8 @@ use waveduderust::model::{
 	self as m, Coating, Lens, Material, PROJECT_VERSION, Part, PartKind, Point, Project, Stencil, View, wavelength,
 };
 
+use waveduderust::unstable::scene::gate_design::{GateDesign, ports_of};
+
 use crate::tree::Node;
 use crate::ui::{self, Form, FormKind};
 
@@ -116,6 +118,7 @@ words! {
 	ZoneDivision = ZoneDivision { EqualWidth, EqualDepth }
 	FacetPattern = FacetPattern { Sawtooth, SquareWave, Sinusoidal }
 	MetaLensType = MetaLensType { Converging, Diverging }
+	GateKind = GateKind { Xor, And, Or }
 }
 
 /// A form's data of a model type: its fields of the same names, the rest left to the caller.
@@ -178,6 +181,10 @@ data! {
 	LensData = Lens { diameter, r1, r2, thickness }
 	FresnelData = m::FresnelLens { zones, division }
 	BraggData = m::BraggReflector { pairs, thickness1, index1, thickness2, index2, width }
+	GateData = m::LogicGate {
+		kind, design_frequency, core_index, cladding_index, coating, input_coated, output_coated, upper_output_active,
+		lower_output_active,
+	}
 	MetaData = m::MetaSurface { length, width, design_frequency, pattern_index, pitch, height }
 	FacetData = m::FacettedGrating { length, width, pattern, pitch, amplitude }
 	GratingData = m::SimpleGrating { columns, rows, column_spacing, row_spacing, diameter }
@@ -217,6 +224,7 @@ pub(crate) fn kind(project: &Project, node: Node) -> FormKind {
 			Some(PartKind::GrinLens(_)) => FormKind::GrinLens,
 			Some(PartKind::SimpleGrating(_)) => FormKind::SimpleGrating,
 			Some(PartKind::FacettedGrating(_)) => FormKind::FacettedGrating,
+			Some(PartKind::LogicGate(_)) => FormKind::LogicGate,
 			Some(PartKind::MetaSurface(s)) => match s.design {
 				m::MetaDesign::Lens(_) => FormKind::MetaLens,
 				m::MetaDesign::Prism(_) => FormKind::MetaPrism,
@@ -299,6 +307,39 @@ fn meta_data(s: &m::MetaSurface, scale: f64) -> ui::MetaData {
 		_ => {}
 	}
 	data
+}
+
+/// A logic gate's data: the port spacing its design uses, and the layout read-outs.
+fn gate_data(base: &m::PartBase, g: &m::LogicGate, sim: &m::Simulation) -> ui::GateData {
+	let design = GateDesign::for_gate(g, sim);
+	let lambda = wavelength(g.design_frequency, 1.0, sim.source_frequency_scale);
+	let cells = |n: i64| i32::try_from(n).unwrap_or(i32::MAX);
+	let mut data = ui::GateData {
+		port_spacing: design.as_ref().map_or_else(|| Bridge::show(&g.port_spacing), |d| cells(d.port_spacing)),
+		wavelength: if lambda.is_finite() && lambda > 0.0 { lambda as f32 } else { 0.0 },
+		designed: design.is_some(),
+		..Data::show(g)
+	};
+	if let Some(d) = &design {
+		data.quarter_wave = (d.wavelength / (4.0 * d.core_index.sqrt())) as f32;
+		data.core_width = cells(d.core_width);
+		data.gap = cells(d.coupled - d.core_width);
+		data.coupler_length = cells(d.coupler_len);
+		data.length = cells(d.length);
+		let [a, b, upper, lower] = ports_of(d, base).map(|p| Data::show(&p));
+		(data.input_a, data.input_b, data.upper_out, data.lower_out) = (a, b, upper, lower);
+	}
+	data
+}
+
+/// Writes a logic gate's changed fields; a port spacing typed is the design's raised one replaced.
+fn apply_gate(d: &ui::GateData, g: &mut m::LogicGate, sim: &m::Simulation) {
+	let used = GateDesign::for_gate(g, sim)
+		.map_or_else(|| Bridge::show(&g.port_spacing), |design| i32::try_from(design.port_spacing).unwrap_or(i32::MAX));
+	d.apply(&Data::show(&*g), g);
+	if d.port_spacing != used {
+		g.port_spacing = d.port_spacing.model();
+	}
 }
 
 /// Writes `ui` to `model` when it differs from the model's shown value.
@@ -410,6 +451,9 @@ fn show_part(form: &Form<'_>, project: &Project, part: &Part) {
 		}
 		PartKind::BraggReflector(b) => put(form.get_bragg(), Data::show(b), |d| form.set_bragg(d)),
 		PartKind::FacettedGrating(f) => put(form.get_facets(), Data::show(f), |d| form.set_facets(d)),
+		PartKind::LogicGate(g) => {
+			put(form.get_gate(), gate_data(&part.base, g, &project.simulation), |d| form.set_gate(d));
+		}
 		PartKind::MetaSurface(s) => {
 			put(form.get_meta(), meta_data(s, project.simulation.source_frequency_scale), |d| form.set_meta(d));
 		}
@@ -501,14 +545,14 @@ pub(crate) fn apply(form: &Form<'_>, project: &mut Project, node: Node) {
 		Node::Part(i) => {
 			let Some(part) = project.parts.get_mut(i) else { return };
 			let before = part.clone();
-			apply_part(form, part);
+			apply_part(form, part, &project.simulation);
 			part.edited(&before);
 		}
 		Node::Display | Node::Sources | Node::Parts | Node::Probes | Node::Schemes | Node::Scheme(_) => {}
 	}
 }
 
-fn apply_part(form: &Form<'_>, part: &mut Part) {
+fn apply_part(form: &Form<'_>, part: &mut Part, sim: &m::Simulation) {
 	form.get_part().apply(&Data::show(&part.base), &mut part.base);
 	if let Some((material, coating)) = shape_mut(&mut part.kind) {
 		form.get_material().apply(&Data::show(&*material), material);
@@ -529,6 +573,7 @@ fn apply_part(form: &Form<'_>, part: &mut Part) {
 		PartKind::SimpleGrating(g) => form.get_grating().apply(&Data::show(&*g), g),
 		PartKind::FacettedGrating(f) => form.get_facets().apply(&Data::show(&*f), f),
 		PartKind::MetaSurface(s) => apply_meta(&form.get_meta(), s),
+		PartKind::LogicGate(g) => apply_gate(&form.get_gate(), g, sim),
 		PartKind::GrinLens(g) => {
 			form.get_coating().apply(&Data::show(&g.coating), &mut g.coating);
 			form.get_grin().apply(&Data::show(&*g), g);

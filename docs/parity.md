@@ -880,25 +880,25 @@ Not-in-spec rows are marked in the Spec column.
 | P-264 | Zone plate: Mount width NB min 1 step 10 (on when Mount) | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
 | P-265 | Zone plate: Number of zones RO | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
 | P-266 | Zone plate: Outermost zone RO | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
-| P-267 | XOR/AND/OR gate: Design frequency NB 1..255 | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-268 | XOR/AND/OR gate: Wavelength RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-269 | XOR/AND/OR gate: Core index NB 1..2.55 | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-270 | XOR/AND/OR gate: Cladding index NB 1..2.55 | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-271 | XOR/AND/OR gate: AR coating NB 0..50 | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-272 | XOR/AND/OR gate: AR on input side CB | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-273 | XOR/AND/OR gate: AR on output side CB | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-274 | XOR/AND/OR gate: Quarter-wave coating RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-275 | XOR/AND/OR gate: Port spacing NB 2..2000 step 2 (shows used spacing) | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-276 | XOR/AND/OR gate: Upper output CB (function word per gate kind) | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-277 | XOR/AND/OR gate: Lower output CB (function word per gate kind) | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-278 | XOR/AND/OR gate: Core width RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-279 | XOR/AND/OR gate: Coupler gap RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-280 | XOR/AND/OR gate: Coupler length RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-281 | XOR/AND/OR gate: Total length RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-282 | XOR/AND/OR gate: Input A RO (x, y) | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-283 | XOR/AND/OR gate: Input B RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-284 | XOR/AND/OR gate: Upper output port RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-285 | XOR/AND/OR gate: Lower output port RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-267 | XOR/AND/OR gate: Design frequency NB 1..255 | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-268 | XOR/AND/OR gate: Wavelength RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-269 | XOR/AND/OR gate: Core index NB 1..2.55 | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-270 | XOR/AND/OR gate: Cladding index NB 1..2.55 | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-271 | XOR/AND/OR gate: AR coating NB 0..50 | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-272 | XOR/AND/OR gate: AR on input side CB | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-273 | XOR/AND/OR gate: AR on output side CB | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-274 | XOR/AND/OR gate: Quarter-wave coating RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-275 | XOR/AND/OR gate: Port spacing NB 2..2000 step 2 (shows used spacing) | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-276 | XOR/AND/OR gate: Upper output CB (function word per gate kind) | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-277 | XOR/AND/OR gate: Lower output CB (function word per gate kind) | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-278 | XOR/AND/OR gate: Core width RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-279 | XOR/AND/OR gate: Coupler gap RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-280 | XOR/AND/OR gate: Coupler length RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-281 | XOR/AND/OR gate: Total length RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-282 | XOR/AND/OR gate: Input A RO (x, y) | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-283 | XOR/AND/OR gate: Input B RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-284 | XOR/AND/OR gate: Upper output port RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
+| P-285 | XOR/AND/OR gate: Lower output port RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | done | forms.slint LogicGateForm |
 | P-286 | Probe: Name TB | Views/ProbeView.xaml:110 | 30 Probe | done | ProbeForm FormText, per keystroke |
 | P-287 | Probe: Active CB | Views/ProbeView.xaml:112 | 30 Probe | done | FormCheck |
 | P-288 | Probe: Start after step NB min 0 | Views/ProbeView.xaml:116 | 30 Probe | done | number box from 0 |
