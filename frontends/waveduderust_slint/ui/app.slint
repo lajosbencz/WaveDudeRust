@@ -213,6 +213,7 @@ export component AppWindow inherits Window {
     keys := FocusScope {
         init => { self.focus(); }
         key-pressed(e) => {
+            if (e.text == Key.Escape && root.commands.can-stop) { root.menu("stop"); return accept; }
             if (e.text == Key.Delete && !e.modifiers.control && !e.modifiers.shift) { root.menu("delete"); return accept; }
             if (!e.modifiers.control || e.modifiers.alt) { return reject; }
             if (e.text == "z" && !e.modifiers.shift) { root.menu("undo"); return accept; }
@@ -285,22 +286,40 @@ export component AppWindow inherits Window {
                         vertical-stretch: root.preview-weight;
                         preferred-height: 0px;
                         min-height: 100px;
-                        VerticalLayout {
-                            Preview {
-                                field: root.field;
-                                intensity: root.intensity;
-                                stacked: root.preview-stacked;
+                        // Next's preview keys, its own even when the command cannot run; a click on the pictures
+                        // focuses it
+                        preview-keys := FocusScope {
+                            key-pressed(e) => {
+                                if (e.modifiers.control || e.modifiers.alt || e.modifiers.meta || e.modifiers.shift) { return reject; }
+                                if (e.text == " ") { root.transport-action("play"); return accept; }
+                                if (e.text == ",") { root.transport-action("prev"); return accept; }
+                                if (e.text == ".") { root.transport-action("next"); return accept; }
+                                if (e.text == "i" || e.text == "I") { root.transport-action("in"); return accept; }
+                                if (e.text == "o" || e.text == "O") { root.transport-action("out"); return accept; }
+                                if (e.text == "x" || e.text == "X") { root.transport-action("clear-range"); return accept; }
+                                if (e.text == "l" || e.text == "L") { root.transport-action("loop"); return accept; }
+                                if (e.text == "f" || e.text == "F") { root.transport-action("live"); return accept; }
+                                if (e.text == Key.Home) { root.seek(root.transport.start); return accept; }
+                                if (e.text == Key.End) { root.seek(root.transport.end); return accept; }
+                                reject
                             }
-                            Timeline {
-                                t: root.transport;
-                                seek(f) => { root.seek(f); }
-                                key(k) => { root.transport-action(k); }
-                            }
-                            TransportBar {
-                                t: root.transport;
-                                stacked <=> root.preview-stacked;
-                                action(a) => { root.transport-action(a); }
-                                speed(v) => { root.transport-speed(v); }
+                            VerticalLayout {
+                                Preview {
+                                    field: root.field;
+                                    intensity: root.intensity;
+                                    stacked: root.preview-stacked;
+                                }
+                                Timeline {
+                                    t: root.transport;
+                                    seek(f) => { root.seek(f); }
+                                    key(k) => { root.transport-action(k); }
+                                }
+                                TransportBar {
+                                    t: root.transport;
+                                    stacked <=> root.preview-stacked;
+                                    action(a) => { root.transport-action(a); }
+                                    speed(v) => { root.transport-speed(v); }
+                                }
                             }
                         }
                     }

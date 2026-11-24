@@ -1,4 +1,4 @@
-# Parity with WaveDude Next
+# Parity with WaveDude NextNone done | enabled while a run or an export is active; the menu, Shift+F5 and Esc (window level) cancel a running export, else stop the run |None partial | Esc cancels a running export, else stops the run, when nothing focused took it; the number box reverts its edit (plain text fields do not: Esc passes on, the edit commits on blur); drag cancel comes with the handles (piece 5) |None done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures, plain keys only; the speed box swallows Space (timeline.slint) |None done | handled by the timeline when it is focused, else by app.slint `preview-keys` |
 
 The acceptance list for the Slint app ([`rebuild.md`](rebuild.md)): every user-visible feature of WaveDude Next, from
 [`ui/`](ui/) and Next's source (`$WAVEDUDE_NEXT_DIR`), with its state in
@@ -12,7 +12,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 5 | 20 | 9 | 6 | 0 |
-| M | Menus and shortcuts | 23 | 31 | 66 | 20 | 0 |
+| M | Menus and shortcuts | 28 | 31 | 61 | 20 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 11 | 30 | 24 | 18 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 128 | 321 | 585 | 55 | 6 |
+| | All | 133 | 321 | 580 | 55 | 6 |
 
 ## Cross-cutting
 
@@ -146,7 +146,7 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | M-42 | Simulation header, Mn S/S/S/S | MW:385, SE:99 | ui/10 Simulation | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
 | M-43 | Run, F5, enabled: no run active, no export; runs from step 0, preview follows (Live); may ask memory warning | MW:386, SE:100, SimulationCommands.cs:30 | ui/10 Simulation | done | enabled: no run active, no export (Next's CanRun); F5; memory warning is D-21 |
 | M-44 | Pause / Resume, F6, enabled while run active; header reads Resume while paused | MW:388-399, SE:101-102, SimulationCommands.cs:34 | ui/10 Simulation | done | enabled while a run is active; reads Resume while paused; F6 |
-| M-45 | Stop, Shift+F5 and Esc, enabled while run or export active; Esc cancels export first else stops run | MW:400, SE:103, SimulationCommands.cs:44 | ui/10 Simulation | partial | enabled while a run or an export is active; Shift+F5; "stop" cancels the export too; Esc at window level is piece 2c |
+| M-45 | Stop, Shift+F5 and Esc, enabled while run or export active; Esc cancels export first else stops run | MW:400, SE:103, SimulationCommands.cs:44 | ui/10 Simulation | done | enabled while a run or an export is active; Shift+F5; Esc at window level ("escape": the export first, else the run) |
 | M-46 | Discard frames (port), Mn D/V/S/V, enabled when run has frames and export not holding them; asks "Discard the frames of the run?" Yes/No (No default); drops frames, timeline to 0 | not in Next | ui/10 Simulation | missing | entry removed until discarding exists |
 | M-47 | Separator | MW:401 | ui/10 Simulation | done | app:147 |
 | M-48 | Play / Pause playback, F7; header and icon switch while playing; enabled CanPlayPause | MW:404-417, SE:104-105, PreviewCommands.cs:40 | ui/10 Simulation | done | Play / Pause playback by playback state, icon too; enabled with more than one frame; F7 |
@@ -237,9 +237,9 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-108 | Ctrl+Shift+E / I / B, Ctrl+Shift+F / G | ExportCommands.cs:35-51 | ui/10 | partial | M-12..17 |
 | M-109 | F1 project page | HelpCommands.cs:31 (Manual) | ui/10, decision 0028 | missing | binding exists, action does nothing (M-56) |
 | M-110 | Ctrl+, Settings (port) | not in Next | ui/10 | done | app:100 |
-| M-111 | Ctrl+= / Ctrl+Plus / Ctrl+- / Ctrl+0 UI zoom step up/down/reset across 0.5x..3x (port) | not in Next (View > UI zoom menu only) | ui/10 | missing | no zoom support; key handler absent |
+| M-111 | Ctrl+= / Ctrl+Plus / Ctrl+- / Ctrl+0 UI zoom step up/down/reset across 0.5x..3x (port) | not in Next (View > UI zoom menu only) | ui/10 | missing | Slint 1.19 has no API to rescale a running window (only a backend's dispatch_event, which winit overrides); the UI zoom setting is not applied |
 | M-112 | F5 Run, F6 Pause/resume, Shift+F5 Stop, F7 Play/pause playback | SimulationCommands.cs:30,34,44; PreviewCommands.cs:40 | ui/10 | done | app:143-148 |
-| M-113 | Esc: cancel running export, else stop run; text box reverts edit; during drag cancels drag | SimulationCommands.cs:44 | ui/10 | missing | Esc only closes overlays (modal.slint, settings.slint...) |
+| M-113 | Esc: cancel running export, else stop run; text box reverts edit; during drag cancels drag | SimulationCommands.cs:44 | ui/10 | partial | Esc cancels a running export, else stops the run, when nothing focused took it (an unchanged number box passes it on); drag cancel comes with the handles (piece 5) |
 | M-114 | Tab / Shift+Tab next/prev control, menu bar excluded | MW:216 (TabNavigation None) | ui/10 | partial | Slint default focus handling; menu bar excluded natively |
 
 #### M Keys: tree, preview pane, timeline, handles, widgets
@@ -253,12 +253,12 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-120 | Tree: Del remove | PT:230 | ui/10 | partial | window FocusScope Del (app:162) removes selected |
 | M-121 | Tree: Alt+Up / Alt+Down move within group | PT:236-237 | ui/10 | missing | buttons only |
 | M-122 | Tree: Enter moves focus into properties form (decision 0008) | n/a | ui/10 | missing | |
-| M-123 | Preview pane: Space play/pause (not in speed box) | PP:390 | ui/10 | partial | timeline.slint:39 only while timeline focused |
-| M-124 | Preview pane: , one frame back / . one frame forward | PP:391-392 | ui/10 | missing | tooltips only (timeline.slint:209-210), no key bindings |
-| M-125 | Preview pane: I set in point / O set out / X clear | PP:393-395 | ui/10 | missing | tooltips only |
-| M-126 | Preview pane: L toggle loop / F toggle Live (only while run active) | PP:396-397 | ui/10 | missing | tooltips only |
-| M-127 | Preview pane: Home / End go to in / out point | PreviewCommands.cs:47,51 | ui/10 | done | timeline.slint:37-38 (when timeline focused) |
-| M-128 | Preview pane: Ctrl+A select all; letter keys consumed even if command cannot run | PP:398 | ui/10 | missing | |
+| M-123 | Preview pane: Space play/pause (not in speed box) | PP:390 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it; a text field (speed box) keeps its Space |
+| M-124 | Preview pane: , one frame back / . one frame forward | PP:391-392 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it |
+| M-125 | Preview pane: I set in point / O set out / X clear | PP:393-395 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it |
+| M-126 | Preview pane: L toggle loop / F toggle Live (only while run active) | PP:396-397 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it; F acts only while a run is active |
+| M-127 | Preview pane: Home / End go to in / out point | PreviewCommands.cs:47,51 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it and the timeline |
+| M-128 | Preview pane: Ctrl+A select all; letter keys consumed even if command cannot run | PP:398 | ui/10 | partial | letter keys consumed even when the command cannot run (app.slint `preview-keys`); Ctrl+A select all comes with multi-selection (piece 3) |
 | M-129 | Timeline focused: Left/Right 1 frame, PageUp/PageDown 10, Home/End in/out, wheel 1 frame | TimelineBar.cs | ui/10 Timeline | done | timeline.slint:33-38, scroll-event :77 |
 | M-130 | Handles on pictures: arrows 1 px, Shift+arrows 10 px, rotation lever 1/10 degree, grip resize | PreviewPane handles | ui/10 Handles | missing | no handles (preview is a plain Image) |
 | M-131 | Handles: Del removes item/selection; Esc undoes drag; Tab next handle selects item | PP | ui/10 Handles | missing | |

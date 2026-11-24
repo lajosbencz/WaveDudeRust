@@ -271,12 +271,14 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			state.playback.follow();
 		}
 		"pause" => state.live.toggle_pause(),
+		// the menu, Shift+F5 and Esc: a running export first, else the run
 		"stop" => {
 			if let Some(e) = &state.exporting {
 				e.cancel();
+			} else {
+				state.live.stop();
+				state.playback.live = false;
 			}
-			state.live.stop();
-			state.playback.live = false;
 		}
 		"welcome" => {
 			show_welcome(state, app);
@@ -607,7 +609,7 @@ fn transport(state: &mut State, app: &AppWindow, id: &str) {
 		"out" => p.set_out(),
 		"clear-range" => (p.start, p.end) = (None, None),
 		"loop" => p.looping ^= true,
-		"live" => p.live ^= true,
+		"live" => p.live ^= state.live.active(),
 		"pause-run" => state.live.toggle_pause(),
 		"layout" => {
 			use waveduderust_platform::settings::Orientation;

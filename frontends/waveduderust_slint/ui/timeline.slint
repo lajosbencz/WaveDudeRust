@@ -138,11 +138,17 @@ export component TransportBar inherits Rectangle {
             vertical-alignment: center;
             color: Theme.text;
         }
-        ComboBox {
-            width: 64px;
-            model: ["0.25", "0.5", "1", "1.5", "2", "4"];
-            current-index: 2;
-            selected(v) => { root.speed(v); }
+        // Space in the speed box neither plays nor opens it (Next's OnSpeedBoxPreviewKeyDown)
+        FocusScope {
+            focus-on-click: false;
+            focus-on-tab-navigation: false;
+            key-pressed(e) => { e.text == " " ? accept : reject }
+            ComboBox {
+                width: 64px;
+                model: ["0.25", "0.5", "1", "1.5", "2", "4"];
+                current-index: 2;
+                selected(v) => { root.speed(v); }
+            }
         }
         Divider { }
         IconButton { icon: @image-url("icons/next/side-by-side.svg"); tip: @tr("Field and intensity side by side"); checked: !root.stacked; clicked => { root.stacked = false; root.action("layout"); } }
