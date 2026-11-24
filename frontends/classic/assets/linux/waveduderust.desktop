@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=WaveDude Rust
-Comment=A 2D wave simulator
-Exec=waveduderust %F
-Icon=waveduderust
-Terminal=false
-Categories=Education;
-MimeType=application/x-wavedude-project+xml;application/x-wavedude-scheme+xml;

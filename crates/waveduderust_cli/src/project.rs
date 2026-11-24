@@ -11,8 +11,8 @@ use waveduderust::unstable::scene::compose::compose_scene;
 use waveduderust::unstable::scene::glowing_edges;
 use waveduderust::unstable::scene::pixels::ScenePixels;
 use waveduderust::unstable::spec::RunSpec;
-use waveduderust_app::settings::AppDirs;
-use waveduderust_app::user_schemes;
+use waveduderust_platform::settings::AppDirs;
+use waveduderust_platform::user_schemes;
 
 use crate::png_out::write_rgba;
 

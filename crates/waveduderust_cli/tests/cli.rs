@@ -120,7 +120,7 @@ fn first_pixel(path: &Path) -> [u8; 3] {
 
 #[test]
 fn run_draws_with_the_users_colour_schemes() {
-	use waveduderust_app::settings::{AppDirs, SCHEME_FOLDER};
+	use waveduderust_platform::settings::{AppDirs, SCHEME_FOLDER};
 
 	let dir = tempfile::tempdir().unwrap();
 	let dirs = dir.path().join("app");

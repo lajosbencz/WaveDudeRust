@@ -13,7 +13,7 @@ use waveduderust::run::{FrameStore, Run, RunError};
 use waveduderust::unstable::engine::types::FrameShape;
 use waveduderust::unstable::export::h264::Profile;
 use waveduderust::unstable::export::{ExportFormat, ExportLayers, ExportPlan, ExportState, FrameSource, naming};
-use waveduderust_app::settings::AppDirs;
+use waveduderust_platform::settings::AppDirs;
 
 use crate::project::{load, user_schemes};
 use crate::run::{EngineArgs, outcome, parse_steps, start};

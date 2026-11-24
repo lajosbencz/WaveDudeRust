@@ -16,7 +16,7 @@ use waveduderust::unstable::render::frame::{render_half, render_indexed};
 use waveduderust::unstable::render::lut::{HalfTable, Palette};
 use waveduderust::unstable::spec::RunSpec;
 use waveduderust::{Backend, Simulation};
-use waveduderust_app::settings::AppDirs;
+use waveduderust_platform::settings::AppDirs;
 
 use waveduderust::unstable::export::csv::write_probe_csv;
 use waveduderust::unstable::export::naming;

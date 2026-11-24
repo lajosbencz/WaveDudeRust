@@ -7,9 +7,9 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use waveduderust::unstable::export::h264;
-use waveduderust_app::codec;
-use waveduderust_app::platform::{Store, touch_first};
-use waveduderust_app::settings::{AppDirs, Settings};
+use waveduderust_platform::codec;
+use waveduderust_platform::settings::{AppDirs, Settings};
+use waveduderust_platform::store::{Store, touch_first};
 
 /// What to do with the codec.
 #[derive(Clone, Copy, ValueEnum)]

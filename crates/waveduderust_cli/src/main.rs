@@ -20,7 +20,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use tracing_subscriber::filter::LevelFilter;
 use waveduderust::quality::PreviewQuality;
-use waveduderust_app::settings::AppDirs;
+use waveduderust_platform::settings::AppDirs;
 
 #[derive(Parser)]
 #[command(name = "waveduderust-cli", version, about = "Headless checks, benches and scripted exports for WaveDude")]

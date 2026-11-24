@@ -28,7 +28,7 @@ ctrlc = "3.4"
 png.workspace = true
 tracing-subscriber = "0.3"
 waveduderust = { path = "../waveduderust", default-features = false, features = ["unstable-engine", "unstable-scene", "unstable-run", "unstable-export", "gpu", "run", "export", "clap"] }
-waveduderust_app = { path = "../waveduderust_app" }
+waveduderust_platform = { path = "../waveduderust_platform" }
 
 [dev-dependencies]
 tempfile = "3"

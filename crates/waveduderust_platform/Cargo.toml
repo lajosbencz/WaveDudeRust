@@ -1,0 +1,31 @@
+[package]
+name = "waveduderust_platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "WaveDude Rust's host services without a UI toolkit: settings and their store, folders, the OpenH264 download, user colour schemes"
+
+[lints]
+workspace = true
+
+[dependencies]
+waveduderust = { path = "../waveduderust", default-features = false, features = ["unstable-export", "unstable-reflect", "unstable-run", "run", "serde", "export"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+directories = "6"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls-native-roots"] }
+bzip2 = "0.6"
+waveduderust = { path = "../waveduderust", default-features = false, features = ["mp4"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { workspace = true, features = ["Window", "Storage", "MediaQueryList"] }
+
+[dev-dependencies]
+tempfile.workspace = true
