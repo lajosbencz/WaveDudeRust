@@ -1,42 +1,102 @@
-//! The Settings window's rows (docs/ui/70, Settings; decision 0027): each change applies and is saved at once.
+//! The Settings window's data (docs/ui/70, Settings; decision 0027): each change applies and is saved at once.
 
 use waveduderust::quality::MachineFacts;
 use waveduderust::quality::PreviewTier;
 use waveduderust_platform::settings::{Settings, Theme};
 use waveduderust_platform::store::Store;
 
-use crate::ui::{PreviewQuality, PropKind, PropRow};
+use crate::ui::{ColorTheme, Language, Levers, NumberSpec, PreviewQuality, Scale, SettingsData};
 
-pub(crate) const SECTIONS: [&str; 4] = ["General", "Preview and memory", "Simulation", "Updates"];
-
-/// A row: its section, label, choices (empty for a check box or number), and how it reads and writes the setting.
-struct Row {
-	section: usize,
-	label: &'static str,
-	choices: &'static [&'static str],
-	/// A whole number's range; `None` for a choice or a switch.
-	range: Option<(u32, u32)>,
-	get: fn(&Settings) -> String,
-	set: fn(&mut Settings, &str),
+fn scale(divisor: u32) -> Scale {
+	match divisor {
+		1 => Scale::Full,
+		2 => Scale::Half,
+		_ => Scale::Quarter,
+	}
 }
 
-const SCALES: [&str; 3] = ["Full", "Half", "Quarter"];
-
-fn scale_name(divisor: u32) -> String {
-	SCALES[divisor.trailing_zeros().min(2) as usize].into()
+fn divisor(scale: Scale) -> u32 {
+	match scale {
+		Scale::Full => 1,
+		Scale::Half => 2,
+		Scale::Quarter => 4,
+	}
 }
 
-fn scale_divisor(name: &str) -> u32 {
-	1 << SCALES.iter().position(|s| *s == name).unwrap_or(0)
+/// The settings as the window shows them.
+pub(crate) fn data(s: &Settings) -> SettingsData {
+	SettingsData {
+		theme: match s.theme {
+			Theme::System => ColorTheme::System,
+			Theme::Light => ColorTheme::Light,
+			Theme::Dark => ColorTheme::Dark,
+		},
+		language: match s.language.as_str() {
+			"en" => Language::En,
+			"de" => Language::De,
+			"fr" => Language::Fr,
+			"nl" => Language::Nl,
+			_ => Language::System,
+		},
+		title_full_path: s.title_full_path,
+		show_startup: s.show_startup,
+		undo_steps: i32::try_from(s.undo_steps).unwrap_or(i32::MAX),
+		preview_resolution: scale(s.preview_resolution),
+		preview_frames: scale(s.preview_frames),
+		use_gpu: s.use_gpu,
+		auto_rerun: s.auto_rerun,
+		warn_ram: s.warn_when_ram_insufficient,
+		check_updates: s.check_for_updates == Some(true),
+	}
 }
 
-fn flag(b: bool) -> String {
-	b.to_string()
+/// Writes the window's edit into `settings` and saves them.
+pub(crate) fn apply(d: &SettingsData, settings: &mut Settings, store: Option<&Store>) {
+	let shown = data(settings);
+	settings.theme = match d.theme {
+		ColorTheme::System => Theme::System,
+		ColorTheme::Light => Theme::Light,
+		ColorTheme::Dark => Theme::Dark,
+	};
+	settings.language = match d.language {
+		Language::System => "",
+		Language::En => "en",
+		Language::De => "de",
+		Language::Fr => "fr",
+		Language::Nl => "nl",
+	}
+	.into();
+	settings.title_full_path = d.title_full_path;
+	settings.show_startup = d.show_startup;
+	settings.undo_steps = u32::try_from(d.undo_steps).unwrap_or_default();
+	settings.preview_resolution = divisor(d.preview_resolution);
+	settings.preview_frames = divisor(d.preview_frames);
+	settings.use_gpu = d.use_gpu;
+	settings.auto_rerun = d.auto_rerun;
+	settings.warn_when_ram_insufficient = d.warn_ram;
+	// unset stays unset until the user picks
+	if d.check_updates != shown.check_updates {
+		settings.check_for_updates = Some(d.check_updates);
+	}
+	settings.normalize();
+	save(settings, store);
 }
 
-/// The string tables' languages by their own names (Next's `LanguageController`).
-const LANGUAGE_NAMES: [(&str, &str); 4] =
-	[("en", "English"), ("de", "Deutsch"), ("fr", "Fran\u{e7}ais"), ("nl", "Nederlands")];
+/// The undo steps' box.
+pub(crate) fn undo_spec() -> NumberSpec {
+	let (min, max) = waveduderust_platform::settings::UNDO_STEPS;
+	crate::number::whole(min as f32, max as f32)
+}
+
+/// The preview levers as they are.
+pub(crate) fn levers(settings: &Settings) -> Levers {
+	let int = |n: u32| i32::try_from(n).unwrap_or(i32::MAX);
+	Levers {
+		resolution: int(settings.preview_resolution),
+		frames: int(settings.preview_frames),
+		bits: if settings.preview_sample_bytes >= 2 { 16 } else { 8 },
+	}
+}
 
 /// The language `settings` pick: theirs, else the system's when a table has it, else English.
 pub(crate) fn language(settings: &Settings) -> String {
@@ -46,164 +106,6 @@ pub(crate) fn language(settings: &Settings) -> String {
 	let system = sys_locale::get_locale().unwrap_or_default();
 	let base = system.split(['-', '_']).next().unwrap_or_default().to_lowercase();
 	if waveduderust_platform::settings::LANGUAGES.contains(&base.as_str()) { base } else { "en".into() }
-}
-
-const ROWS: &[Row] = &[
-	Row {
-		section: 0,
-		label: "Theme",
-		choices: &["System", "Light", "Dark"],
-		range: None,
-		get: |s| format!("{:?}", s.theme),
-		set: |s, v| {
-			s.theme = match v {
-				"Light" => Theme::Light,
-				"Dark" => Theme::Dark,
-				_ => Theme::System,
-			}
-		},
-	},
-	Row {
-		section: 0,
-		label: "Language",
-		choices: &["System", "English", "Deutsch", "Fran\u{e7}ais", "Nederlands"],
-		range: None,
-		get: |s| {
-			LANGUAGE_NAMES.iter().find(|(code, _)| *code == s.language).map_or("System", |(_, name)| name).to_owned()
-		},
-		set: |s, v| {
-			s.language = LANGUAGE_NAMES.iter().find(|(_, name)| *name == v).map_or("", |(code, _)| code).to_owned();
-		},
-	},
-	Row {
-		section: 0,
-		label: "Full path in the title",
-		choices: &[],
-		range: None,
-		get: |s| flag(s.title_full_path),
-		set: |s, v| s.title_full_path = v == "true",
-	},
-	Row {
-		section: 0,
-		label: "Show the welcome page at each launch",
-		choices: &[],
-		range: None,
-		get: |s| flag(s.show_startup),
-		set: |s, v| s.show_startup = v == "true",
-	},
-	Row {
-		section: 0,
-		label: "Undo steps",
-		choices: &[],
-		range: Some(waveduderust_platform::settings::UNDO_STEPS),
-		get: |s| s.undo_steps.to_string(),
-		set: |s, v| {
-			if let Ok(n) = v.trim().parse::<u32>() {
-				s.undo_steps = n.clamp(10, 100_000);
-			}
-		},
-	},
-	Row {
-		section: 1,
-		label: "Preview resolution",
-		choices: &SCALES,
-		range: None,
-		get: |s| scale_name(s.preview_resolution),
-		set: |s, v| s.preview_resolution = scale_divisor(v),
-	},
-	Row {
-		section: 1,
-		label: "Preview frames",
-		choices: &SCALES,
-		range: None,
-		get: |s| scale_name(s.preview_frames),
-		set: |s, v| s.preview_frames = scale_divisor(v),
-	},
-	Row {
-		section: 1,
-		label: "Use the GPU",
-		choices: &[],
-		range: None,
-		get: |s| flag(s.use_gpu),
-		set: |s, v| s.use_gpu = v == "true",
-	},
-	Row {
-		section: 2,
-		label: "Re-run automatically after edits",
-		choices: &[],
-		range: None,
-		get: |s| flag(s.auto_rerun),
-		set: |s, v| s.auto_rerun = v == "true",
-	},
-	Row {
-		section: 2,
-		label: "Warn when the RAM cache is too small",
-		choices: &[],
-		range: None,
-		get: |s| flag(s.warn_when_ram_insufficient),
-		set: |s, v| s.warn_when_ram_insufficient = v == "true",
-	},
-	Row {
-		section: 3,
-		label: "Check for updates at start",
-		choices: &[],
-		range: None,
-		get: |s| flag(s.check_for_updates == Some(true)),
-		set: |s, v| s.check_for_updates = Some(v == "true"),
-	},
-];
-
-fn in_section(section: usize) -> impl Iterator<Item = &'static Row> {
-	ROWS.iter().filter(move |r| r.section == section)
-}
-
-/// The rows of `section`.
-pub(crate) fn rows(settings: &Settings, section: usize) -> Vec<PropRow> {
-	in_section(section)
-		.map(|r| {
-			let value = (r.get)(settings);
-			let kind = if !r.choices.is_empty() {
-				PropKind::Choice
-			} else if r.range.is_some() {
-				PropKind::Int
-			} else {
-				PropKind::Bool
-			};
-			let choices: Vec<slint::SharedString> = r.choices.iter().map(|c| (*c).into()).collect();
-			PropRow {
-				label: r.label.into(),
-				kind,
-				current: r.choices.iter().position(|c| *c == value).map_or(-1, |i| i as i32),
-				value: value.into(),
-				choices: slint::ModelRc::from(choices.as_slice()),
-				spec: r.range.map_or_else(Default::default, |(min, max)| crate::number::whole(min as f32, max as f32)),
-				form: 0,
-			}
-		})
-		.collect()
-}
-
-/// Sets row `row` of `section` and saves the settings.
-pub(crate) fn set_row(settings: &mut Settings, store: Option<&Store>, section: usize, row: usize, value: &str) {
-	if let Some(r) = in_section(section).nth(row) {
-		(r.set)(settings, value);
-		settings.normalize();
-		save(settings, store);
-	}
-}
-
-/// The preview levers as they are, e.g. "Full resolution, every frame, 8-bit samples".
-pub(crate) fn levers(settings: &Settings) -> String {
-	let resolution = match settings.preview_resolution {
-		1 => "Full resolution".to_owned(),
-		d => format!("1/{d} resolution"),
-	};
-	let frames = match settings.preview_frames {
-		1 => "every frame".to_owned(),
-		2 => "every 2nd frame".to_owned(),
-		d => format!("every {d}th frame"),
-	};
-	format!("{resolution}, {frames}, {}-bit samples", if settings.preview_sample_bytes >= 2 { 16 } else { 8 })
 }
 
 /// Applies preset `index`: Low, Medium, High, then Auto from `facts`; saves the settings.
@@ -238,12 +140,15 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn a_choice_row_reads_and_writes_its_setting() {
+	fn the_window_data_reads_and_writes_the_settings() {
 		let mut s = Settings::default();
-		set_row(&mut s, None, 0, 0, "Dark");
-		assert_eq!(s.theme, Theme::Dark);
-		let rows = rows(&s, 1);
-		set_row(&mut s, None, 1, 0, "Half");
-		assert_eq!((rows[0].kind, s.preview_resolution), (PropKind::Choice, 2));
+		let mut d = data(&s);
+		d.theme = ColorTheme::Dark;
+		d.language = Language::Fr;
+		d.preview_resolution = Scale::Half;
+		apply(&d, &mut s, None);
+		assert_eq!((s.theme, s.language.as_str(), s.preview_resolution), (Theme::Dark, "fr", 2));
+		assert_eq!(s.check_for_updates, Settings::default().check_for_updates);
+		assert_eq!(data(&s), d);
 	}
 }

@@ -436,6 +436,10 @@ msgstr "Knippen"
 msgid "Damping edge"
 msgstr "Dempingsrand"
 
+#. Enum.AppTheme.Dark
+msgid "Dark"
+msgstr "Donker"
+
 #. Label.Probe.Decades
 msgid "Decades"
 msgstr "Decaden"
@@ -760,6 +764,10 @@ msgstr "Fresnellens"
 msgid "From step"
 msgstr "Vanaf stap"
 
+#. MenuViewResolutionFull
+msgid "Full"
+msgstr "Volledig"
+
 #. MenuAddGrinLens
 msgid "GRIN lens"
 msgstr "GRIN-lens"
@@ -783,6 +791,10 @@ msgstr "Geleidelijk"
 #. SectionGraph
 msgid "Graph"
 msgstr "Grafiek"
+
+#. MenuViewResolutionHalf
+msgid "Half"
+msgstr "Half"
 
 #. Label.Display.HandlesInPreview
 msgid "Handles in the preview"
@@ -896,6 +908,10 @@ msgstr "Soort"
 msgid "Labels in the preview"
 msgstr "Labels in het voorbeeld"
 
+#. MenuViewLanguage
+msgid "Language"
+msgstr "Taal"
+
 #. Enum.ProbeBoxSize.Large
 msgid "Large"
 msgstr "Groot"
@@ -947,6 +963,10 @@ msgstr "Het groene kanaal van de scèneafbeelding golven laten uitzenden; de pix
 #. Hint.Probe.AutoScaleX
 msgid "Let the step axis follow the samples recorded so far; point probes and counting detectors only."
 msgstr "De stappenas de tot nu toe opgenomen monsters laten volgen; alleen puntsondes en tellende detectoren."
+
+#. Enum.AppTheme.Light
+msgid "Light"
+msgstr "Licht"
 
 #. Enum.ProbeKind.Line
 msgid "Line"
@@ -1256,6 +1276,14 @@ msgstr "Positie"
 msgid "Preview"
 msgstr "Voorbeeld"
 
+#. MenuViewFrames
+msgid "Preview frames"
+msgstr "Voorbeeldframes"
+
+#. MenuViewResolution
+msgid "Preview resolution"
+msgstr "Voorbeeldresolutie"
+
 #. TipPreviewStepBack
 msgid "Previous frame (,)"
 msgstr "Vorig beeld (,)"
@@ -1316,6 +1344,10 @@ msgstr "De band op de zijkanten leggen: de vlakken die voor- noch achterkant zij
 msgid "Quality"
 msgstr "Kwaliteit"
 
+#. MenuViewResolutionQuarter
+msgid "Quarter"
+msgstr "Kwart"
+
 #. Label.LensPart.R1
 msgid "R1"
 msgstr "R1"
@@ -1339,6 +1371,10 @@ msgstr "Willekeurige afwijkingen, per emitter opgeteld"
 #. Label.Project.Seed
 msgid "Random seed"
 msgstr "Willekeurige seed"
+
+#. MenuSimulationAutoRerun
+msgid "Re-run automatically after edits"
+msgstr "Na bewerkingen automatisch opnieuw starten"
 
 #. MenuFileRecent
 msgid "Recent Projects"
@@ -1596,6 +1632,10 @@ msgstr "Simulatie stoppen; de berekende beelden blijven (Esc)"
 msgid "Stopped"
 msgstr "Gestopt"
 
+#. LanguageSystem
+msgid "System"
+msgstr "Systeem"
+
 #. TipApexAngle
 msgid "The angle at the apex: 180° minus the two base angles"
 msgstr "De hoek aan de top: 180° min de twee basishoeken"
@@ -1603,6 +1643,10 @@ msgstr "De hoek aan de top: 180° min de twee basishoeken"
 #. ExportError
 msgid "The export failed."
 msgstr "De export is mislukt."
+
+#. MenuViewTheme
+msgid "Theme"
+msgstr "Thema"
 
 #. TipEdgeThickness
 msgid "Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim"

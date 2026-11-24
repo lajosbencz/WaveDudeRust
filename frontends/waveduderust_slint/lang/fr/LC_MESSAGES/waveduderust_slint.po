@@ -436,6 +436,10 @@ msgstr "Couper"
 msgid "Damping edge"
 msgstr "Bord amortissant"
 
+#. Enum.AppTheme.Dark
+msgid "Dark"
+msgstr "Sombre"
+
 #. Label.Probe.Decades
 msgid "Decades"
 msgstr "Décades"
@@ -760,6 +764,10 @@ msgstr "Lentille de Fresnel"
 msgid "From step"
 msgstr "Du pas"
 
+#. MenuViewResolutionFull
+msgid "Full"
+msgstr "Complète"
+
 #. MenuAddGrinLens
 msgid "GRIN lens"
 msgstr "Lentille GRIN"
@@ -783,6 +791,10 @@ msgstr "Graduel"
 #. SectionGraph
 msgid "Graph"
 msgstr "Graphique"
+
+#. MenuViewResolutionHalf
+msgid "Half"
+msgstr "Moitié"
 
 #. Label.Display.HandlesInPreview
 msgid "Handles in the preview"
@@ -896,6 +908,10 @@ msgstr "Type"
 msgid "Labels in the preview"
 msgstr "Étiquettes dans l'aperçu"
 
+#. MenuViewLanguage
+msgid "Language"
+msgstr "Langue"
+
 #. Enum.ProbeBoxSize.Large
 msgid "Large"
 msgstr "Grand"
@@ -947,6 +963,10 @@ msgstr "Laisser le canal vert de l'image de scène émettre des ondes ; la valeu
 #. Hint.Probe.AutoScaleX
 msgid "Let the step axis follow the samples recorded so far; point probes and counting detectors only."
 msgstr "Laisser l'axe des pas suivre les échantillons enregistrés jusqu'ici ; sondes ponctuelles et détecteurs de comptage seulement."
+
+#. Enum.AppTheme.Light
+msgid "Light"
+msgstr "Clair"
 
 #. Enum.ProbeKind.Line
 msgid "Line"
@@ -1256,6 +1276,14 @@ msgstr "Position"
 msgid "Preview"
 msgstr "Aperçu"
 
+#. MenuViewFrames
+msgid "Preview frames"
+msgstr "Images de l'aperçu"
+
+#. MenuViewResolution
+msgid "Preview resolution"
+msgstr "Résolution de l'aperçu"
+
 #. TipPreviewStepBack
 msgid "Previous frame (,)"
 msgstr "Image précédente (,)"
@@ -1316,6 +1344,10 @@ msgstr "Mettre la bande sur les côtés : les faces qui ne sont ni avant ni arri
 msgid "Quality"
 msgstr "Qualité"
 
+#. MenuViewResolutionQuarter
+msgid "Quarter"
+msgstr "Quart"
+
 #. Label.LensPart.R1
 msgid "R1"
 msgstr "R1"
@@ -1339,6 +1371,10 @@ msgstr "Écarts aléatoires, ajoutés par émetteur"
 #. Label.Project.Seed
 msgid "Random seed"
 msgstr "Graine aléatoire"
+
+#. MenuSimulationAutoRerun
+msgid "Re-run automatically after edits"
+msgstr "Relancer automatiquement après une modification"
 
 #. MenuFileRecent
 msgid "Recent Projects"
@@ -1596,6 +1632,10 @@ msgstr "Arrêter la simulation ; les images calculées restent (Échap)"
 msgid "Stopped"
 msgstr "Arrêtée"
 
+#. LanguageSystem
+msgid "System"
+msgstr "Système"
+
 #. TipApexAngle
 msgid "The angle at the apex: 180° minus the two base angles"
 msgstr "L'angle au sommet : 180° moins les deux angles à la base"
@@ -1603,6 +1643,10 @@ msgstr "L'angle au sommet : 180° moins les deux angles à la base"
 #. ExportError
 msgid "The export failed."
 msgstr "L'export a échoué."
+
+#. MenuViewTheme
+msgid "Theme"
+msgstr "Thème"
 
 #. TipEdgeThickness
 msgid "Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim"

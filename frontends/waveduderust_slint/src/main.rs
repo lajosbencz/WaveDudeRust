@@ -66,7 +66,6 @@ struct State {
 	pending: Option<Action>,
 	settings: waveduderust_platform::settings::Settings,
 	store: Option<waveduderust_platform::store::Store>,
-	settings_section: usize,
 	facts: waveduderust::quality::MachineFacts,
 	exporting: Option<export::Exporting>,
 	inbox: files::Inbox,
@@ -82,9 +81,8 @@ struct State {
 	/// The desktop's colour scheme once a forced theme has written the palette's, which ends its system binding
 	/// (docs/blockers.md, Slint's system colour scheme).
 	system_scheme: Option<slint::language::ColorScheme>,
-	/// The forms the Properties pane and the settings show, for [`sync`].
+	/// The generic rows the Properties pane shows, for [`sync`].
 	props: Shown,
-	settings_rows: Shown,
 	/// The generation the Properties form last saw, and the one its object was last placed at: a change not made
 	/// through the form (undo, a removal, a reorder, another project) may put another object under the same node.
 	form_seen: u64,
@@ -430,7 +428,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			}
 		}
 		Command::Welcome => {
-			show_welcome(state, app);
+			show_settings(state, app);
 			app.set_welcome_shown(true);
 		}
 		Command::RandomExample => {
@@ -603,13 +601,6 @@ fn show_examples(state: &mut State, app: &AppWindow) {
 	app.set_example_rows(ModelRc::new(VecModel::from(rows)));
 }
 
-/// Pushes the Welcome page's RAM, levers and check box.
-fn show_welcome(state: &State, app: &AppWindow) {
-	app.set_welcome_ram(format!("{:.1} GiB", state.facts.physical_bytes as f64 / f64::from(1u32 << 30)).into());
-	app.set_welcome_levers(settings::levers(&state.settings).into());
-	app.set_welcome_show_startup(state.settings.show_startup);
-}
-
 /// After a forced theme, keeps the System theme on the desktop's scheme from winit's theme event, which Linux lacks
 /// (docs/blockers.md, Slint's system colour scheme).
 fn follow_desktop_scheme(state: &Rc<RefCell<State>>, app: &AppWindow) {
@@ -659,19 +650,15 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	state.live.auto_rerun = s.auto_rerun;
 }
 
-/// Pushes the Settings window's sections and rows.
-fn show_settings(state: &mut State, app: &AppWindow) {
-	let sections: Vec<slint::SharedString> = settings::SECTIONS.iter().map(|s| (*s).into()).collect();
-	app.set_settings_sections(ModelRc::from(sections.as_slice()));
-	app.set_settings_section(i32::try_from(state.settings_section).unwrap_or_default());
-	let rows = settings::rows(&state.settings, state.settings_section);
-	let key = state.settings_section.to_string();
-	sync(&app.get_settings_rows(), &mut state.settings_rows, key, rows, |m| {
-		app.set_settings_rows(m);
-	});
+/// Pushes the settings to the Settings window and the Welcome page.
+fn show_settings(state: &State, app: &AppWindow) {
+	app.set_settings(settings::data(&state.settings));
+	app.set_undo_spec(settings::undo_spec());
+	app.set_welcome_ram((state.facts.physical_bytes as f64 / f64::from(1u32 << 30)) as f32);
+	app.set_welcome_levers(settings::levers(&state.settings));
+	app.set_welcome_show_startup(state.settings.show_startup);
 }
 
-/// A message window's content (docs/ui/70, Message window).
 /// The project's file name, an untitled one's in the UI's language.
 fn file_name(state: &State, app: &AppWindow) -> String {
 	state.doc.name().unwrap_or_else(|| format!("{}.wdproj", app.global::<ui::Words<'_>>().get_untitled()))
@@ -827,7 +814,6 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		pending: None,
 		settings,
 		store,
-		settings_section: 0,
 		facts,
 		exporting: None,
 		inbox: files::Inbox::default(),
@@ -839,7 +825,6 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		ran: 0,
 		system_scheme: None,
 		props: Shown::default(),
-		settings_rows: Shown::default(),
 		form_seen: 0,
 		form_base: 0,
 		draft: None,
@@ -850,7 +835,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	follow_desktop_scheme(&state, &app);
 	state.borrow_mut().opened();
 	if state.borrow().settings.show_startup && std::env::args_os().nth(1).is_none() {
-		show_welcome(&state.borrow(), &app);
+		show_settings(&state.borrow(), &app);
 		app.set_welcome_shown(true);
 	}
 	#[cfg(not(target_arch = "wasm32"))]
@@ -1069,7 +1054,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			let facts = s.facts;
 			settings::preset(&mut s.settings, s.store.as_ref(), i, facts);
 			apply_settings(s, &app);
-			show_welcome(s, &app);
+			show_settings(s, &app);
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
@@ -1080,28 +1065,17 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			if let Some(Err(e)) = s.store.as_ref().map(|store| s.settings.save(store)) {
 				tracing::error!("{e}");
 			}
-			show_welcome(s, &app);
-		}
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_settings_pick(move |i| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
-			s.settings_section = usize::try_from(i).unwrap_or_default();
 			show_settings(s, &app);
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_settings_set(move |row, value| {
+	app.on_settings_edited(move || {
 		if let Some(app) = weak.upgrade() {
 			let s = &mut *st.borrow_mut();
-			let row = usize::try_from(row).unwrap_or(usize::MAX);
-			settings::set_row(&mut s.settings, s.store.as_ref(), s.settings_section, row, &value);
+			settings::apply(&app.get_settings(), &mut s.settings, s.store.as_ref());
 			apply_settings(s, &app);
 			show_settings(s, &app);
-			return true;
 		}
-		false
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_modal_answer(move |button| {

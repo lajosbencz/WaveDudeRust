@@ -17,10 +17,13 @@ import { Preview } from "preview.slint";
 import { Timeline, TransportBar, Transport } from "timeline.slint";
 import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
 import { ModalLayer, Modal, Message, Answer } from "modal.slint";
-import { SettingsLayer } from "settings.slint";
-import { WelcomeLayer } from "welcome.slint";
+import { SettingsLayer, SettingsData, ColorTheme, Language, Scale } from "settings.slint";
+export { SettingsData, ColorTheme, Language, Scale }
+import { WelcomeLayer, Levers } from "welcome.slint";
+export { Levers }
 import { ExamplesLayer, ExampleRow, ExampleTopic } from "examples.slint";
 
+import { NumberSpec } from "number-box.slint";
 export { NumberLogic, NumberSpec } from "number-box.slint";
 export { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
 export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
@@ -90,17 +93,15 @@ export component AppWindow inherits Window {
     callback example-search(string);
     callback example-open(int);
     in-out property <bool> welcome-shown;
-    in property <string> welcome-ram;
-    in property <string> welcome-levers;
+    in property <float> welcome-ram;
+    in property <Levers> welcome-levers;
     in property <bool> welcome-show-startup;
     callback welcome-preset(PreviewQuality);
     callback welcome-show-startup-toggled(bool);
     in-out property <bool> settings-shown;
-    in property <[string]> settings-sections;
-    in property <int> settings-section;
-    in property <[PropRow]> settings-rows;
-    callback settings-pick(int);
-    callback settings-set(int, string) -> bool;
+    in-out property <SettingsData> settings;
+    in property <NumberSpec> undo-spec;
+    callback settings-edited();
     callback modal-answer(Answer);
     in property <[LogRow]> log-rows;
     in property <[LevelToggle]> log-levels;
@@ -459,11 +460,9 @@ export component AppWindow inherits Window {
         min-height: 0px;
         max-height: 100000px;
         shown <=> root.settings-shown;
-        sections: root.settings-sections;
-        section: root.settings-section;
-        rows: root.settings-rows;
-        pick(i) => { root.settings-pick(i); }
-        set(i, v) => { return root.settings-set(i, v); }
+        data <=> root.settings;
+        undo-spec: root.undo-spec;
+        edited => { root.settings-edited(); }
     }
     ModalLayer {
         // an overlay: its frame sets no bounds on the window

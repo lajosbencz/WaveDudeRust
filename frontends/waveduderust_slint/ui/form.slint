@@ -97,13 +97,18 @@ export global NumberParse {
     pure callback float(spec: NumberSpec, text: string) -> ParsedFloat;
 }
 
-// A whole number field; `blank` shows no number.
-export component FormInt inherits Rectangle {
+// A whole number field; `blank` shows no number. `committed` follows each change, `invalid` gets text it could
+// not read.
+export component IntField inherits Rectangle {
     in-out property <int> value;
     in property <NumberSpec> spec: { min: -2147483648, max: 2147483647, increment: 1, decimals: 0 };
     in property <bool> enabled: true;
     in property <bool> blank;
     in property <string> tip;
+    // changes with the object shown, dropping text typed for the last one
+    in property <int> token;
+    callback committed();
+    callback invalid(text: string);
     horizontal-stretch: 1;
     min-height: max(Theme.row-height, box.min-height);
     min-width: box.min-width;
@@ -113,20 +118,26 @@ export component FormInt inherits Rectangle {
         height: parent.height;
         enabled: root.enabled;
         spec: root.spec;
-        token: Form.token;
+        token: root.token;
         value: root.blank ? "" : "\{root.value}";
         edited(t) => {
             let parsed = NumberParse.int(root.spec, t);
             if (!parsed.ok) {
-                Form.invalid = t;
+                root.invalid(t);
             } else {
                 root.value = parsed.value;
-                Form.edited(false);
+                root.committed();
             }
             parsed.ok
         }
     }
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+export component FormInt inherits IntField {
+    token: Form.token;
+    committed => { Form.edited(false); }
+    invalid(t) => { Form.invalid = t; }
 }
 
 // A decimal field.
@@ -161,11 +172,12 @@ export component FormFloat inherits Rectangle {
 }
 
 // A full-width check box, its label as its text.
-export component FormCheck inherits Rectangle {
+export component Check inherits Rectangle {
     in-out property <bool> checked;
     in property <string> text;
     in property <string> tip;
     in property <bool> enabled: true;
+    callback committed();
     min-height: max(Theme.row-height, check.min-height);
     min-width: check.min-width;
     check := CheckBox {
@@ -174,18 +186,23 @@ export component FormCheck inherits Rectangle {
         text: root.text;
         enabled: root.enabled;
         checked <=> root.checked;
-        toggled => { Form.edited(false); }
+        toggled => { root.committed(); }
     }
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
 }
 
+export component FormCheck inherits Check {
+    committed => { Form.edited(false); }
+}
+
 // A combo box of `titles`; a kind's choice maps its words to `index` and back in `picked`.
-export component FormChoice inherits Rectangle {
+export component Choice inherits Rectangle {
     in property <int> index;
     in property <[string]> titles;
     in property <string> tip;
     in property <bool> enabled: true;
     callback picked(index: int);
+    callback committed();
     // a pick assigns `current-index`, ending its binding to `index`: the index is put back on each change
     changed index => { combo.current-index = root.index; }
     horizontal-stretch: 1;
@@ -200,10 +217,14 @@ export component FormChoice inherits Rectangle {
         current-index: root.index;
         selected => {
             root.picked(self.current-index);
-            Form.edited(false);
+            root.committed();
         }
     }
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+export component FormChoice inherits Choice {
+    committed => { Form.edited(false); }
 }
 
 // A text box, applied per keystroke.

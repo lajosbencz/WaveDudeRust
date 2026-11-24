@@ -3,10 +3,18 @@ import { Theme } from "theme.slint";
 import { Command, PreviewQuality } from "commands.slint";
 
 // The Welcome page (docs/ui/70, Welcome page).
+// The preview levers as set: the resolution and frame divisors, the bits per sample.
+export struct Levers {
+    resolution: int,
+    frames: int,
+    bits: int,
+}
+
 export component WelcomeLayer inherits Rectangle {
     in-out property <bool> shown;
-    in property <string> ram;
-    in property <string> levers;
+    // the machine's memory in GiB
+    in property <float> ram;
+    in property <Levers> levers;
     in property <bool> show-startup;
     callback preset(PreviewQuality);
     callback command(Command);
@@ -49,7 +57,7 @@ export component WelcomeLayer inherits Rectangle {
                 color: Theme.text;
             }
             Text {
-                text: @tr("RAM: {}", root.ram);
+                text: @tr("RAM: {} GiB", root.ram.to-fixed(1));
                 color: Theme.text;
             }
             HorizontalLayout {
@@ -61,7 +69,10 @@ export component WelcomeLayer inherits Rectangle {
                 Button { text: @tr("Auto"); clicked => { root.preset(PreviewQuality.auto); } }
             }
             Text {
-                text: root.levers;
+                text: @tr("{}, {}, {}-bit samples",
+                    root.levers.resolution == 1 ? @tr("Full resolution") : @tr("1/{} resolution", root.levers.resolution),
+                    root.levers.frames == 1 ? @tr("every frame") : root.levers.frames == 2 ? @tr("every 2nd frame") : @tr("every {}th frame", root.levers.frames),
+                    root.levers.bits);
                 color: Theme.text-dim;
             }
             HorizontalLayout {

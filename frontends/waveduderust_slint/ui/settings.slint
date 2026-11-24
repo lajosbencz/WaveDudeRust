@@ -1,15 +1,63 @@
-import { LineEdit, Button } from "std-widgets.slint";
+import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { Properties, PropRow } from "properties.slint";
+import { NumberSpec } from "number-box.slint";
+import { FormPanel, FormLabel, IntField, Check, Choice } from "form.slint";
 
-// The Settings window (docs/ui/70, Settings): sections on the left, the section's rows on the right.
+export enum ColorTheme { system, light, dark }
+// `system`: the system's language when a table has it, else English
+export enum Language { system, en, de, fr, nl }
+// a preview lever: every value, every 2nd, every 4th
+export enum Scale { full, half, quarter }
+
+export struct SettingsData {
+    theme: ColorTheme,
+    language: Language,
+    title-full-path: bool,
+    show-startup: bool,
+    undo-steps: int,
+    preview-resolution: Scale,
+    preview-frames: Scale,
+    use-gpu: bool,
+    auto-rerun: bool,
+    warn-ram: bool,
+    check-updates: bool,
+}
+
+component ThemeChoice inherits Choice {
+    in-out property <ColorTheme> value;
+    titles: [@tr("System"), @tr("Light"), @tr("Dark")];
+    index: root.value == ColorTheme.system ? 0 : root.value == ColorTheme.light ? 1 : 2;
+    picked(i) => { root.value = i == 0 ? ColorTheme.system : i == 1 ? ColorTheme.light : ColorTheme.dark; }
+}
+
+// the languages by their own names
+component LanguageChoice inherits Choice {
+    in-out property <Language> value;
+    titles: [@tr("System"), "English", "Deutsch", "Fran\u{e7}ais", "Nederlands"];
+    index: root.value == Language.system ? 0 : root.value == Language.en ? 1 : root.value == Language.de ? 2 : root.value == Language.fr ? 3 : 4;
+    picked(i) => {
+        root.value = i == 0 ? Language.system : i == 1 ? Language.en : i == 2 ? Language.de : i == 3 ? Language.fr : Language.nl;
+    }
+}
+
+component ScaleChoice inherits Choice {
+    in-out property <Scale> value;
+    titles: [@tr("Full"), @tr("Half"), @tr("Quarter")];
+    index: root.value == Scale.full ? 0 : root.value == Scale.half ? 1 : 2;
+    picked(i) => { root.value = i == 0 ? Scale.full : i == 1 ? Scale.half : Scale.quarter; }
+}
+
+// The Settings window (docs/ui/70, Settings): sections on the left, the section's rows on the right; each change
+// applies and is saved at once.
 export component SettingsLayer inherits Rectangle {
     in-out property <bool> shown;
-    in property <[string]> sections;
-    in property <int> section;
-    in property <[PropRow]> rows;
-    callback pick(int);
-    callback set(int, string) -> bool;
+    in-out property <SettingsData> data;
+    in property <NumberSpec> undo-spec;
+    callback edited();
+
+    property <[string]> sections: [@tr("General"), @tr("Preview and memory"), @tr("Simulation"), @tr("Updates")];
+    property <int> section;
+    property <string> invalid;
 
     visible: shown;
     background: #00000080;
@@ -20,7 +68,10 @@ export component SettingsLayer inherits Rectangle {
             reject
         }
     }
-    changed visible => { if (self.visible) { focus.focus(); } }
+    changed visible => {
+        root.invalid = "";
+        if (self.visible) { focus.focus(); }
+    }
     Rectangle {
         width: min(760px, root.width - 40px);
         height: min(520px, root.height - 40px);
@@ -50,14 +101,76 @@ export component SettingsLayer inherits Rectangle {
                             vertical-alignment: center;
                         }
                         area := TouchArea {
-                            clicked => { root.pick(i); }
+                            clicked => {
+                                root.section = i;
+                                root.invalid = "";
+                            }
                         }
                     }
                 }
-                Properties {
-                    heading: root.sections[root.section];
-                    rows: root.rows;
-                    set(form, i, v) => { return root.set(i, v); }
+                VerticalLayout {
+                    alignment: start;
+                    spacing: 6px;
+                    Text {
+                        text: root.sections[root.section];
+                        font-weight: 700;
+                        color: Theme.text;
+                    }
+                    if root.section == 0: FormPanel {
+                        Row {
+                            FormLabel { text: @tr("Theme"); }
+                            ThemeChoice { value <=> root.data.theme; committed => { root.edited(); } }
+                        }
+                        Row {
+                            FormLabel { text: @tr("Language"); }
+                            LanguageChoice { value <=> root.data.language; committed => { root.edited(); } }
+                        }
+                        Row {
+                            Check { colspan: 2; text: @tr("Full path in the title"); checked <=> root.data.title-full-path; committed => { root.edited(); } }
+                        }
+                        Row {
+                            Check { colspan: 2; text: @tr("Show the welcome page at each launch"); checked <=> root.data.show-startup; committed => { root.edited(); } }
+                        }
+                        Row {
+                            FormLabel { text: @tr("Undo steps"); }
+                            IntField {
+                                value <=> root.data.undo-steps;
+                                spec: root.undo-spec;
+                                committed => { root.invalid = ""; root.edited(); }
+                                invalid(t) => { root.invalid = t; }
+                            }
+                        }
+                    }
+                    if root.section == 1: FormPanel {
+                        Row {
+                            FormLabel { text: @tr("Preview resolution"); }
+                            ScaleChoice { value <=> root.data.preview-resolution; committed => { root.edited(); } }
+                        }
+                        Row {
+                            FormLabel { text: @tr("Preview frames"); }
+                            ScaleChoice { value <=> root.data.preview-frames; committed => { root.edited(); } }
+                        }
+                        Row {
+                            Check { colspan: 2; text: @tr("Use the GPU"); checked <=> root.data.use-gpu; committed => { root.edited(); } }
+                        }
+                    }
+                    if root.section == 2: FormPanel {
+                        Row {
+                            Check { colspan: 2; text: @tr("Re-run automatically after edits"); checked <=> root.data.auto-rerun; committed => { root.edited(); } }
+                        }
+                        Row {
+                            Check { colspan: 2; text: @tr("Warn when the RAM cache is too small"); checked <=> root.data.warn-ram; committed => { root.edited(); } }
+                        }
+                    }
+                    if root.section == 3: FormPanel {
+                        Row {
+                            Check { colspan: 2; text: @tr("Check for updates at start"); checked <=> root.data.check-updates; committed => { root.edited(); } }
+                        }
+                    }
+                    if root.invalid != "": Text {
+                        text: @tr("Not a number: {}", root.invalid);
+                        color: Theme.status-error;
+                    }
                 }
             }
             HorizontalLayout {
