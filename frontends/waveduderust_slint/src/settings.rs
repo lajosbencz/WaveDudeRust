@@ -190,12 +190,12 @@ fn save(settings: &Settings, store: Option<&Store>) {
 	}
 }
 
-/// The theme as the std-widgets' colour scheme; System takes `system`, the desktop's.
-pub(crate) fn color_scheme(settings: &Settings, system: slint::language::ColorScheme) -> slint::language::ColorScheme {
+/// The colour scheme the theme forces on the std-widgets; `None` for the desktop's.
+pub(crate) fn color_scheme(settings: &Settings) -> Option<slint::language::ColorScheme> {
 	match settings.theme {
-		Theme::Light => slint::language::ColorScheme::Light,
-		Theme::Dark => slint::language::ColorScheme::Dark,
-		_ => system,
+		Theme::Light => Some(slint::language::ColorScheme::Light),
+		Theme::Dark => Some(slint::language::ColorScheme::Dark),
+		_ => None,
 	}
 }
 

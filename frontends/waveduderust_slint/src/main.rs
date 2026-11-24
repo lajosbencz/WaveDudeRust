@@ -70,8 +70,9 @@ struct State {
 	last_export: Option<export::Kind>,
 	/// The document generation the run started from.
 	ran: u64,
-	/// The desktop's colour scheme at start, for the System theme: writing the palette's scheme ends its system binding.
-	system_scheme: slint::language::ColorScheme,
+	/// The desktop's colour scheme once a forced theme has written the palette's, which ends its system binding
+	/// (docs/blockers.md, Slint's system colour scheme).
+	system_scheme: Option<slint::language::ColorScheme>,
 }
 
 impl State {
@@ -252,10 +253,44 @@ fn show_welcome(state: &State, app: &AppWindow) {
 	app.set_welcome_show_startup(state.settings.show_startup);
 }
 
+/// After a forced theme, keeps the System theme on the desktop's scheme from winit's theme event, which Linux lacks
+/// (docs/blockers.md, Slint's system colour scheme).
+fn follow_desktop_scheme(state: &Rc<RefCell<State>>, app: &AppWindow) {
+	use slint::language::ColorScheme;
+	use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
+	let (state, weak) = (state.clone(), app.as_weak());
+	app.window().on_winit_window_event(move |_, event| {
+		if let (winit::event::WindowEvent::ThemeChanged(theme), Some(app)) = (event, weak.upgrade()) {
+			let mut s = state.borrow_mut();
+			if s.system_scheme.is_some() {
+				s.system_scheme = Some(match theme {
+					winit::window::Theme::Dark => ColorScheme::Dark,
+					winit::window::Theme::Light => ColorScheme::Light,
+				});
+				apply_theme(&mut s, &app);
+			}
+		}
+		EventResult::Propagate
+	});
+}
+
+/// Sets the palette's scheme for a forced theme, or back to the desktop's after one; untouched, it follows the desktop.
+fn apply_theme(state: &mut State, app: &AppWindow) {
+	let palette = app.global::<ui::Palette<'_>>();
+	match (settings::color_scheme(&state.settings), state.system_scheme) {
+		(Some(forced), system) => {
+			state.system_scheme = system.or_else(|| Some(palette.get_color_scheme()));
+			palette.set_color_scheme(forced);
+		}
+		(None, Some(system)) => palette.set_color_scheme(system),
+		(None, None) => {}
+	}
+}
+
 /// Applies the settings to the window, the history and the run.
 fn apply_settings(state: &mut State, app: &AppWindow) {
+	apply_theme(state, app);
 	let s = &state.settings;
-	app.global::<ui::Palette<'_>>().set_color_scheme(settings::color_scheme(s, state.system_scheme));
 	app.set_preview_stacked(s.preview_orientation == waveduderust_platform::settings::Orientation::Vertical);
 	state.doc.set_limit(s.undo_steps as usize);
 	state.live.quality = s.preview_quality();
@@ -452,9 +487,10 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		example_rows: Vec::new(),
 		last_export: None,
 		ran: 0,
-		system_scheme: app.global::<ui::Palette<'_>>().get_color_scheme(),
+		system_scheme: None,
 	}));
 	apply_settings(&mut state.borrow_mut(), &app);
+	follow_desktop_scheme(&state, &app);
 	state.borrow_mut().opened();
 	if state.borrow().settings.show_startup && std::env::args_os().nth(1).is_none() {
 		show_welcome(&state.borrow(), &app);
