@@ -120,6 +120,10 @@ msgstr "Eine Fresnel-Linse: eine Linse, deren gekrümmte Flächen von der Achse 
 msgid "A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects."
 msgstr "Ein Diffusor: eine Platte aus Glas oder als Spiegel mit rauer Vorderseite und ebener Rückseite. Die Rauheit ist eine Streuung von Wellen um eine Mittenwellenlänge, ihre Phasen zufällig aus dem Startwert des Projekts; er streut, was hindurchgeht oder zurückgeworfen wird."
 
+#. Kind.FacettedGratingPart
+msgid "A facetted grating: a plate of glass or mirror whose front face carries a periodic relief, a sawtooth, a square wave or a sinusoid repeated every pitch, the back flat. A diffuser of one wavelength: the pitch and the wavelength set the angles the orders leave at."
+msgstr "Ein Facettengitter: eine Platte aus Glas oder Spiegel, deren Vorderseite ein periodisches Relief trägt, ein Sägezahn, eine Rechteckwelle oder eine Sinuswelle, je Teilung wiederholt, die Rückseite eben. Ein Diffusor einer einzigen Wellenlänge: Teilung und Wellenlänge bestimmen die Winkel, unter denen die Ordnungen abgehen."
+
 #. Kind.OutlinePart
 msgid "A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing."
 msgstr "Ein freier Umriss aus Glas oder als Spiegel: eine geschlossene Form durch die Punkte, die Sie setzen und ziehen; weniger als drei malen nichts."
@@ -756,6 +760,10 @@ msgstr "Letzten Export wiederholen"
 msgid "Extent across the axis in pixels."
 msgstr "Ausdehnung quer zur Achse in Pixeln."
 
+#. Hint.FacettedGratingPart.Width
+msgid "Extent across the axis in pixels: the width of the facetted face."
+msgstr "Ausdehnung quer zur Achse in Pixeln: die Breite der facettierten Fläche."
+
 #. Hint.DiffuserPart.Width
 msgid "Extent across the axis in pixels: the width of the rough face."
 msgstr "Ausdehnung quer zur Achse in Pixeln: die Breite der rauen Fläche."
@@ -772,6 +780,10 @@ msgstr "Ausdehnung entlang der Achse in Pixeln."
 msgid "Extent along the axis in pixels: the depth of the blocks. It should leave room for the anti-reflection rise on both faces."
 msgstr "Ausdehnung entlang der Achse in Pixeln: die Tiefe der Blöcke. Sie sollte Raum für den entspiegelnden Anstieg an beiden Seiten lassen."
 
+#. Hint.FacettedGratingPart.Length
+msgid "Extent along the axis in pixels: the plate's thickness at the mean of its facetted face."
+msgstr "Ausdehnung entlang der Achse in Pixeln: die Dicke der Platte am Mittel ihrer facettierten Fläche."
+
 #. Hint.DiffuserPart.Length
 msgid "Extent along the axis in pixels: the plate's thickness at the mean of its rough face."
 msgstr "Ausdehnung entlang der Achse in Pixeln: die Dicke der Platte am Mittel ihrer rauen Fläche."
@@ -783,6 +795,10 @@ msgstr "Ausdehnung des Stapels quer zur Achse in Pixeln."
 #. Enum.ProbeBoxSize.ExtraLarge
 msgid "Extra large"
 msgstr "Sehr groß"
+
+#. SectionFacets
+msgid "Facets"
+msgstr "Facetten"
 
 #. MenuAddFacettedGrating
 msgid "Facetted grating"
@@ -1356,6 +1372,10 @@ msgstr "Bauteile"
 msgid "Paste"
 msgstr "Einfügen"
 
+#. SectionPattern
+msgid "Pattern"
+msgstr "Muster"
+
 #. MenuSimulationPause
 msgid "Pause"
 msgstr "Pause"
@@ -1391,6 +1411,10 @@ msgstr "Phase"
 #. Hint.Source.Phase
 msgid "Phase offset in degrees, -180 to 180."
 msgstr "Phasenversatz in Grad, -180 bis 180."
+
+#. Label.FacettedGratingPart.Pitch
+msgid "Pitch"
+msgstr "Teilung"
 
 #. Hint.Probe.BinSize
 msgid "Pixels of the line per bin of an imaging detector's histogram, 1 to 20: the detections of a bin's pixels are added up, and the graph shows the bin's total across them. Wider bins fill faster and show less detail."
@@ -1672,6 +1696,10 @@ msgstr "Speichern unter..."
 msgid "Save the changes to {}?"
 msgstr "Änderungen an {} speichern?"
 
+#. Enum.FacetPattern.Sawtooth
+msgid "Sawtooth"
+msgstr "Sägezahn"
+
 #. TreeScene
 msgid "Scene"
 msgstr "Szene"
@@ -1736,6 +1764,10 @@ msgstr "Simulation"
 msgid "Simulation step at which the source fades out; -1 keeps it on for the whole run."
 msgstr "Simulationsschritt, bei dem die Quelle ausblendet; -1 lässt sie den ganzen Lauf an."
 
+#. Enum.FacetPattern.Sinusoidal
+msgid "Sinusoidal"
+msgstr "Sinus"
+
 #. TipEmbeddedImage
 msgid "Size of the embedded scene image; the canvas takes this size"
 msgstr "Größe des eingebetteten Szenenbilds; die Leinwand übernimmt diese Größe"
@@ -1779,6 +1811,10 @@ msgstr "Quellen aus dem Bild"
 #. LabelPreviewSpeed
 msgid "Speed"
 msgstr "Tempo"
+
+#. Enum.FacetPattern.SquareWave
+msgid "Square wave"
+msgstr "Rechteckwelle"
 
 #. Enum.ProbeDetector.Standard
 msgid "Standard"
@@ -1843,6 +1879,18 @@ msgstr "Der Winkel an der Spitze: 180° minus die beiden Grundwinkel"
 #. ExportError
 msgid "The export failed."
 msgstr "Der Export ist fehlgeschlagen."
+
+#. Hint.FacettedGratingPart.Pattern
+msgid "The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid."
+msgstr "Die Form der Facetten je Teilung: ein Sägezahn, eine Rampe und dann eine Stufe; eine Rechteckwelle, ein Kamm und ein Tal von je einer halben Teilung; oder eine Sinuswelle."
+
+#. Hint.FacettedGratingPart.Pitch
+msgid "The period of the facets across the face in pixels: the grating's pitch, which with the wavelength sets the diffraction angles. Two pixels at least."
+msgstr "Die Periode der Facetten über die Fläche in Pixeln: die Gitterteilung, die mit der Wellenlänge die Beugungswinkel festlegt. Mindestens zwei Pixel."
+
+#. Hint.FacettedGratingPart.Amplitude
+msgid "The relief's height either side of the mean face in pixels: the facets run from this far out to this far in, twice it from crest to trough. 0 makes the face flat."
+msgstr "Die Höhe des Reliefs zu beiden Seiten der mittleren Fläche in Pixeln: die Facetten reichen so weit nach außen wie nach innen, das Doppelte von Kamm zu Tal. 0 macht die Fläche eben."
 
 #. TipProfileHeight
 msgid "The rough face from its highest point to its lowest: what the ripples add up to"

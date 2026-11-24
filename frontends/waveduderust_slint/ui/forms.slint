@@ -2,7 +2,7 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
-import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice } from "choices.slint";
+import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice } from "choices.slint";
 import { SceneMode, SourceMode, ProbeDetector, ProbeKind, Layer, BoxSize, YScale, TriangleType, LayerData } from "data.slint";
 import { IconButton } from "icons.slint";
 
@@ -1616,6 +1616,68 @@ export component SimpleGratingForm inherits VerticalLayout {
                 value <=> Form.grating.diameter;
                 spec: { min: 1, max: Form.grating.max-diameter, increment: 1, decimals: 0 };
                 tip: @tr("Diameter of each dot in pixels, at most half the smaller spacing. A dot of 2 pixels on a whole-pixel position covers a square of 2 \u{D7} 2 pixels; a mirror dot under 2 pixels covers no pixel centre and paints nothing.");
+            }
+        }
+    }
+}
+
+export component FacettedGratingForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A facetted grating: a plate of glass or mirror whose front face carries a periodic relief, a sawtooth, a square wave or a sinusoid repeated every pitch, the back flat. A diffuser of one wavelength: the pitch and the wavelength set the angles the orders leave at.");
+    }
+    ShapeMaterial { back-only: true; }
+    FormSection { text: @tr("Shape"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Length"); tip: @tr("Extent along the axis in pixels: the plate's thickness at the mean of its facetted face."); }
+            FormInt {
+                value <=> Form.facets.length;
+                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                tip: @tr("Extent along the axis in pixels: the plate's thickness at the mean of its facetted face.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Width"); tip: @tr("Extent across the axis in pixels: the width of the facetted face."); }
+            FormInt {
+                value <=> Form.facets.width;
+                spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 };
+                tip: @tr("Extent across the axis in pixels: the width of the facetted face.");
+            }
+        }
+    }
+    FormSection { text: @tr("Facets"); }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Pattern");
+                tip: @tr("The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid.");
+            }
+            FacetPatternChoice {
+                value <=> Form.facets.pattern;
+                tip: @tr("The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Pitch");
+                tip: @tr("The period of the facets across the face in pixels: the grating's pitch, which with the wavelength sets the diffraction angles. Two pixels at least.");
+            }
+            FormFloat {
+                value <=> Form.facets.pitch;
+                spec: { min: 2, max: 10000, increment: 1, decimals: 2, drag-step: 0.1 };
+                tip: @tr("The period of the facets across the face in pixels: the grating's pitch, which with the wavelength sets the diffraction angles. Two pixels at least.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Amplitude");
+                tip: @tr("The relief's height either side of the mean face in pixels: the facets run from this far out to this far in, twice it from crest to trough. 0 makes the face flat.");
+            }
+            FormFloat {
+                value <=> Form.facets.amplitude;
+                spec: { min: 0, max: 10000, increment: 1, decimals: 2, drag-step: 0.1 };
+                tip: @tr("The relief's height either side of the mean face in pixels: the facets run from this far out to this far in, twice it from crest to trough. 0 makes the face flat.");
             }
         }
     }

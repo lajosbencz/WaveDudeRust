@@ -2,7 +2,7 @@
 import { CheckBox } from "std-widgets.slint";
 import { Form, FormChoice } from "form.slint";
 import { Theme } from "theme.slint";
-import { Stencil, BoxSize, CoatingProfile, Edges, Layer, Measurement, ProbeDetector, ProbeKind, PulseShape, ScaleMode, SceneMode, SourceMode, TriangleType, YScale, ZoneDivision } from "data.slint";
+import { Stencil, BoxSize, CoatingProfile, Edges, Layer, Measurement, ProbeDetector, ProbeKind, PulseShape, ScaleMode, SceneMode, SourceMode, TriangleType, YScale, ZoneDivision, FacetPattern } from "data.slint";
 
 export component SceneModeChoice inherits FormChoice {
     in-out property <SceneMode> value;
@@ -129,4 +129,11 @@ export component StencilCheck inherits Rectangle {
         }
     }
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+export component FacetPatternChoice inherits FormChoice {
+    in-out property <FacetPattern> value;
+    titles: [@tr("Sawtooth"), @tr("Square wave"), @tr("Sinusoidal")];
+    index: root.value == FacetPattern.sawtooth ? 0 : root.value == FacetPattern.square-wave ? 1 : 2;
+    picked(i) => { root.value = i == 0 ? FacetPattern.sawtooth : i == 1 ? FacetPattern.square-wave : FacetPattern.sinusoidal; }
 }

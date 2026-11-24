@@ -120,6 +120,10 @@ msgstr "Een fresnellens: een lens waarvan de gekromde oppervlakken in zones zijn
 msgid "A diffuser: a plate of glass or mirror whose front face is rough, the back flat. The roughness is a spread of ripples about a centre wavelength, their phases random from the project's seed; it scatters what passes or reflects."
 msgstr "Een diffusor: een plaat van glas of als spiegel met een ruw voorvlak en een vlakke achterkant. De ruwheid is een spreiding van rimpels rond een centrale golflengte, met willekeurige fasen uit het zaad van het project; hij verstrooit wat erdoorheen gaat of erop weerkaatst."
 
+#. Kind.FacettedGratingPart
+msgid "A facetted grating: a plate of glass or mirror whose front face carries a periodic relief, a sawtooth, a square wave or a sinusoid repeated every pitch, the back flat. A diffuser of one wavelength: the pitch and the wavelength set the angles the orders leave at."
+msgstr "Een facetrooster: een plaat van glas of spiegel waarvan de voorkant een periodiek reliëf draagt, een zaagtand, een blokgolf of een sinus herhaald per steek, de achterkant vlak. Een diffusor van één golflengte: de steek en de golflengte bepalen de hoeken waaronder de ordes vertrekken."
+
 #. Kind.OutlinePart
 msgid "A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing."
 msgstr "Een vrije omtrek van glas of als spiegel: een gesloten vorm door de punten die u plaatst en sleept; minder dan drie tekenen niets."
@@ -756,6 +760,10 @@ msgstr "Laatste export herhalen"
 msgid "Extent across the axis in pixels."
 msgstr "Afmeting dwars op de as in pixels."
 
+#. Hint.FacettedGratingPart.Width
+msgid "Extent across the axis in pixels: the width of the facetted face."
+msgstr "Afmeting dwars op de as in pixels: de breedte van het gefacetteerde vlak."
+
 #. Hint.DiffuserPart.Width
 msgid "Extent across the axis in pixels: the width of the rough face."
 msgstr "Afmeting dwars op de as in pixels: de breedte van het ruwe vlak."
@@ -772,6 +780,10 @@ msgstr "Afmeting langs de as in pixels."
 msgid "Extent along the axis in pixels: the depth of the blocks. It should leave room for the anti-reflection rise on both faces."
 msgstr "Afmeting langs de as in pixels: de diepte van de blokken. Laat ruimte voor de antireflectie-oploop aan beide zijden."
 
+#. Hint.FacettedGratingPart.Length
+msgid "Extent along the axis in pixels: the plate's thickness at the mean of its facetted face."
+msgstr "Afmeting langs de as in pixels: de dikte van de plaat bij het gemiddelde van het gefacetteerde vlak."
+
 #. Hint.DiffuserPart.Length
 msgid "Extent along the axis in pixels: the plate's thickness at the mean of its rough face."
 msgstr "Afmeting langs de as in pixels: de dikte van de plaat bij het gemiddelde van het ruwe vlak."
@@ -783,6 +795,10 @@ msgstr "Afmeting van de stapel dwars op de as in pixels."
 #. Enum.ProbeBoxSize.ExtraLarge
 msgid "Extra large"
 msgstr "Extra groot"
+
+#. SectionFacets
+msgid "Facets"
+msgstr "Facetten"
 
 #. MenuAddFacettedGrating
 msgid "Facetted grating"
@@ -1356,6 +1372,10 @@ msgstr "Onderdelen"
 msgid "Paste"
 msgstr "Plakken"
 
+#. SectionPattern
+msgid "Pattern"
+msgstr "Patroon"
+
 #. MenuSimulationPause
 msgid "Pause"
 msgstr "Pauzeren"
@@ -1391,6 +1411,10 @@ msgstr "Fase"
 #. Hint.Source.Phase
 msgid "Phase offset in degrees, -180 to 180."
 msgstr "Faseverschuiving in graden, -180 tot 180."
+
+#. Label.FacettedGratingPart.Pitch
+msgid "Pitch"
+msgstr "Steek"
 
 #. Hint.Probe.BinSize
 msgid "Pixels of the line per bin of an imaging detector's histogram, 1 to 20: the detections of a bin's pixels are added up, and the graph shows the bin's total across them. Wider bins fill faster and show less detail."
@@ -1672,6 +1696,10 @@ msgstr "Opslaan als..."
 msgid "Save the changes to {}?"
 msgstr "Wijzigingen in {} opslaan?"
 
+#. Enum.FacetPattern.Sawtooth
+msgid "Sawtooth"
+msgstr "Zaagtand"
+
 #. TreeScene
 msgid "Scene"
 msgstr "Scène"
@@ -1736,6 +1764,10 @@ msgstr "Simulatie"
 msgid "Simulation step at which the source fades out; -1 keeps it on for the whole run."
 msgstr "Simulatiestap waarbij de bron uitdooft; -1 houdt haar de hele run aan."
 
+#. Enum.FacetPattern.Sinusoidal
+msgid "Sinusoidal"
+msgstr "Sinus"
+
 #. TipEmbeddedImage
 msgid "Size of the embedded scene image; the canvas takes this size"
 msgstr "Grootte van de ingebedde scèneafbeelding; het canvas neemt deze grootte over"
@@ -1779,6 +1811,10 @@ msgstr "Bronnen uit de afbeelding"
 #. LabelPreviewSpeed
 msgid "Speed"
 msgstr "Snelheid"
+
+#. Enum.FacetPattern.SquareWave
+msgid "Square wave"
+msgstr "Blokgolf"
 
 #. Enum.ProbeDetector.Standard
 msgid "Standard"
@@ -1843,6 +1879,18 @@ msgstr "De hoek aan de top: 180° min de twee basishoeken"
 #. ExportError
 msgid "The export failed."
 msgstr "De export is mislukt."
+
+#. Hint.FacettedGratingPart.Pattern
+msgid "The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid."
+msgstr "De vorm van de facetten per steek: een zaagtand, een helling en dan een trap; een blokgolf, een top en een dal van elk een halve steek; of een sinus."
+
+#. Hint.FacettedGratingPart.Pitch
+msgid "The period of the facets across the face in pixels: the grating's pitch, which with the wavelength sets the diffraction angles. Two pixels at least."
+msgstr "De periode van de facetten over het vlak in pixels: de steek van het rooster, die met de golflengte de buigingshoeken bepaalt. Minstens twee pixels."
+
+#. Hint.FacettedGratingPart.Amplitude
+msgid "The relief's height either side of the mean face in pixels: the facets run from this far out to this far in, twice it from crest to trough. 0 makes the face flat."
+msgstr "De hoogte van het reliëf aan weerszijden van het gemiddelde vlak in pixels: de facetten lopen van zo ver naar buiten tot zo ver naar binnen, het dubbele van top tot dal. 0 maakt het vlak glad."
 
 #. TipProfileHeight
 msgid "The rough face from its highest point to its lowest: what the ripples add up to"

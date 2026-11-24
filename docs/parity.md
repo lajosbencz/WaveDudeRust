@@ -832,12 +832,12 @@ Not-in-spec rows are marked in the Spec column.
 | P-216 | Meta axicon: Line of focus RO | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-217 | Meta axicon: Zone width RO | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-218 | Meta axicon: Zones RO | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-219 | Facetted grating: Coating rows w/o front, sides | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-220 | Facetted grating: Length NB min 1 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-221 | Facetted grating: Width NB min 2 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-222 | Facetted grating: Pattern combo Sawtooth/Square wave/Sinusoidal | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-223 | Facetted grating: Pitch NB 2..10000 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-224 | Facetted grating: Amplitude NB 0..10000 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-219 | Facetted grating: Coating rows w/o front, sides | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
+| P-220 | Facetted grating: Length NB min 1 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
+| P-221 | Facetted grating: Width NB min 2 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
+| P-222 | Facetted grating: Pattern combo Sawtooth/Square wave/Sinusoidal | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
+| P-223 | Facetted grating: Pitch NB 2..10000 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
+| P-224 | Facetted grating: Amplitude NB 0..10000 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
 | P-225 | Fibre core: Core index NB 1..2.55 step 0.01 | Views/FiberPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-226 | Fibre core: Core diameter NB min 2 | Views/FiberPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-227 | Fibre cladding: Cladding index NB 1..2.55 | Views/FiberPartView.xaml | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |

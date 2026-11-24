@@ -15,9 +15,10 @@ export enum YScale { linear, logarithmic }
 export enum CoatingProfile { layer, graded }
 export enum TriangleType { equilateral, right-isosceles, thirty-sixty-ninety, isosceles, custom }
 export enum ZoneDivision { equal-width, equal-depth }
+export enum FacetPattern { sawtooth, square-wave, sinusoidal }
 
 // Which form Properties shows; `none` for the generic rows.
-export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens, simple-grating }
+export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens, simple-grating, facetted-grating }
 
 export struct ProjectData {
     seed: int,
@@ -256,6 +257,14 @@ export struct GratingData {
     diameter: int,
     // read-out: the dot diameter's bound, half the smaller spacing
     max-diameter: int,
+}
+
+export struct FacetData {
+    length: int,
+    width: int,
+    pattern: FacetPattern,
+    pitch: float,
+    amplitude: float,
 }
 
 export struct PointData {
