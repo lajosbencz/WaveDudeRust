@@ -11,7 +11,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 4 | 19 | 13 | 4 | 0 |
+| X | Cross-cutting | 4 | 19 | 12 | 5 | 0 |
 | M | Menus and shortcuts | 22 | 31 | 74 | 13 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 11 | 15 | 0 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 126 | 312 | 607 | 44 | 6 |
+| | All | 126 | 312 | 606 | 45 | 6 |
 
 ## Cross-cutting
 
@@ -55,7 +55,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-25 | Icons: 16 px stroked drawings in text colour, grey when disabled | Themes/Controls.xaml, Assets | 00, Look | partial | ui/icons.slint: transport, tree rows and buttons, pane close, menus; see I-rows |
 | X-26 | Keyboard focus = accent border everywhere | Themes/Controls.xaml | 00, Look; 90 | partial | std widgets' own focus look |
 | X-27 | Square corners; WPF box model paddings (buttons 10,3; toolbar 6,1,6,0; text 3,2) | Themes/Controls.xaml, Editors.xaml | 90, cross-cutting | partial | std-widgets (fluent) rounded corners |
-| X-28 | Tooltips on every toolbar/transport button | Themes/Controls.xaml ToolTip style | 90, cross-cutting | missing | `tip` property unused for display |
+| X-28 | Tooltips on every toolbar/transport button | Themes/Controls.xaml ToolTip style | 90, cross-cutting | divergence | every IconButton's tip through Slint's Tooltip (divergences.md, Tooltips) |
 | X-29 | Every control reachable by Tab and arrows | - | 00, Keyboard first | partial | tree, toolbars, timeline not all tab stops |
 | X-30 | Menu bar out of Tab cycle; F10/Alt enters; mnemonics unique per menu | MainWindow.xaml, Strings | 00, Keyboard first | missing | Slint MenuBar: no mnemonics, no F10 |
 | X-31 | UI zoom 0.5x..3x: Ctrl+=, Ctrl+-, Ctrl+0, Settings > General; persisted `UiZoom`; touch default 2x | Theming/WindowZoom.cs | 00, UI zoom | missing | |

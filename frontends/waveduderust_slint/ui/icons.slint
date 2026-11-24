@@ -44,6 +44,9 @@ export component IconButton inherits Rectangle {
         enabled: root.enabled;
         clicked => { root.clicked(); }
     }
+    if root.tip != "": Tooltip {
+        text: @markdown("\{root.tip}");
+    }
     focus := FocusScope {
         enabled: root.focusable && root.enabled;
         key-pressed(e) => {
