@@ -1,4 +1,8 @@
 import { Theme } from "theme.slint";
+// Selawik on every platform, Segoe UI's metric twin (docs/divergences.md, Font).
+import "../../../crates/waveduderust/assets/fonts/Selawik-Regular.ttf";
+import "../../../crates/waveduderust/assets/fonts/Selawik-Semibold.ttf";
+import "../../../crates/waveduderust/assets/fonts/Selawik-Bold.ttf";
 export { Palette } from "std-widgets.slint";
 import { MenuIcons } from "menu-icons.slint";
 import { Pane } from "pane.slint";
@@ -90,6 +94,7 @@ export component AppWindow inherits Window {
     preferred-width: 1280px;
     preferred-height: 800px;
     background: Theme.window-background;
+    default-font-family: "Selawik";
     default-font-size: Theme.font-size;
 
     MenuBar {

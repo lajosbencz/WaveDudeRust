@@ -20,23 +20,23 @@ export component Pane inherits Rectangle {
                     text: root.title;
                     vertical-alignment: center;
                     font-size: Theme.font-size;
-                    color: root.active ? Theme.selection-text : Theme.text;
+                    color: root.active ? Theme.selection-text : Theme.title-inactive-text;
                 }
                 Rectangle {
                     horizontal-stretch: 1;
                     height: 4px;
                     y: (parent.height - self.height) / 2;
                     border-width: 1px;
-                    border-color: root.active ? #9fd0f5 : Theme.title-grip;
+                    border-color: root.active ? Theme.title-grip-active : Theme.title-grip;
                 }
                 IconButton {
                     size: 16px;
                     focusable: false;
                     y: (parent.height - self.height) / 2;
                     icon: @image-url("icons/next/close.svg");
-                    ink: root.active ? Theme.selection-text : Theme.text;
+                    ink: root.active ? Theme.selection-text : Theme.title-inactive-text;
                     pressable: false;
-                    hover-background: root.active ? #1c97ea : Theme.dark ? #3e3e40 : #f7f7f9;
+                    hover-background: root.active ? Theme.title-button-hover-active : Theme.title-button-hover;
                     tip: @tr("Close");
                     clicked => { root.close(); }
                 }

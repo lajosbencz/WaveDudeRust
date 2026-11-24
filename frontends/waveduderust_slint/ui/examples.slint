@@ -51,7 +51,7 @@ export component ExamplesLayer inherits Rectangle {
                 for name[i] in root.topics: Rectangle {
                     height: Theme.row-height;
                     width: label.preferred-width + 16px;
-                    background: i == root.topic ? Theme.accent : tab.has-hover ? Theme.hover-background : transparent;
+                    background: i == root.topic ? Theme.accent : tab.has-hover ? Theme.button-hover : transparent;
                     label := Text {
                         text: name;
                         color: i == root.topic ? Theme.selection-text : Theme.text;

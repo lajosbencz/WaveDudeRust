@@ -40,7 +40,7 @@ export component Messages inherits Rectangle {
             height: Theme.row-height + 4px;
             for l in root.levels: Rectangle {
                 width: label.preferred-width + 10px;
-                background: l.shown ? Theme.control-background : transparent;
+                background: l.shown ? Theme.button-background : transparent;
                 border-width: 1px;
                 border-color: Theme.border;
                 label := Text {

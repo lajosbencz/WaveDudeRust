@@ -74,7 +74,7 @@ Docking behaviour (`Docking/`):
 dnSpy / Visual Studio tool-window look (look only, nothing copied).
 
 - Font: Segoe UI 12 DIP (9 pt) everywhere; icons from the platform icon font (Segoe Fluent Icons / MDL2)
-  or the app's own 16 px stroked drawings. Port: Segoe UI when installed, else the bundled Selawik
+  or the app's own 16 px stroked drawings. Port: the bundled Selawik everywhere (divergences.md, Font)
   (Microsoft's metric-compatible stand-in, SIL OFL; a Noto Sans Math subset after it for the Greek and math
   signs it lacks), 12 px; 16 px icons.
 - Themes: System (follows OS), Light, Dark; live switch, native title bars follow. Colour tokens live in

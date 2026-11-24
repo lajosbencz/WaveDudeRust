@@ -11,7 +11,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 4 | 20 | 14 | 2 | 0 |
+| X | Cross-cutting | 4 | 19 | 13 | 4 | 0 |
 | M | Menus and shortcuts | 22 | 31 | 74 | 13 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 11 | 15 | 0 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 126 | 313 | 608 | 42 | 6 |
+| | All | 126 | 312 | 607 | 44 | 6 |
 
 ## Cross-cutting
 
@@ -47,10 +47,10 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-17 | Status bar double-click opens or focuses Messages | MainWindow.xaml.cs | 00, Panes | partial | opens; no focus when shown |
 | X-18 | No floating windows | Docking | 00, Panes | done | |
 | X-19 | Status bar 22 px, padding 4,0,16,0: last log line, run status, busy text + 120x12 progress bar, frame cache | MainWindow.xaml | 00, Main window | partial | log line + run status only; no busy/progress, no frame cache item |
-| X-20 | Status bar warn/error colouring | Themes/Dark.xaml StatusBarWarn*/Error* | 00, Look | missing | tokens exist, unused |
-| X-21 | Theme tokens: 92 keys per theme (menu, title bars, tabs, tree, scroll bars, splitter, drop indicator, buttons, tooltips, text/combo/check boxes, log levels) | Themes/Dark.xaml, Light.xaml | 00, Look | partial | 39 tokens; no scroll bar, tooltip, tab, title bar inactive, menu glyph, drop preview tokens |
+| X-20 | Status bar warn/error colouring | Themes/Dark.xaml StatusBarWarn*/Error* | 00, Look | missing | the warn token (StatusBarWarnBackground #ca5100) comes with the feature; status-error exists |
+| X-21 | Theme tokens: 92 keys per theme (menu, title bars, tabs, tree, scroll bars, splitter, drop indicator, buttons, tooltips, text/combo/check boxes, log levels) | Themes/Dark.xaml, Light.xaml | 00, Look | divergence | ui/theme.slint: the used colours with Next's values (divergences.md, Theme tokens) |
 | X-22 | Themes System/Light/Dark, live switch, native title bar follows | Theming/ThemeController.cs | 00, Look | partial | live switch done; native title bar not verified |
-| X-23 | Font Segoe UI 12 px, else bundled Selawik + Noto Sans Math subset | App.xaml | 00, Look | missing | Slint default font; no font bundled |
+| X-23 | Font Segoe UI 12 px, else bundled Selawik + Noto Sans Math subset | App.xaml | 00, Look | divergence | Selawik everywhere (divergences.md, Font); Noto Sans Math is the overlays' (core) |
 | X-24 | Row 23 px (tree rows, toolbar buttons, menu bar, tabs); drop-down entries 22 px | Themes/Controls.xaml | 00, Look; 90 | partial | rows 23 px; Slint menus are native/Slint style |
 | X-25 | Icons: 16 px stroked drawings in text colour, grey when disabled | Themes/Controls.xaml, Assets | 00, Look | partial | ui/icons.slint: transport, tree rows and buttons, pane close, menus; see I-rows |
 | X-26 | Keyboard focus = accent border everywhere | Themes/Controls.xaml | 00, Look; 90 | partial | std widgets' own focus look |
@@ -347,7 +347,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-69 | Messages list columns Time, Level, Source (logger), Message(+exception), per-level colours, resizable | MP:207-210 | ui/70 | partial | Time, Source, Message shown (messages.slint:69-71), no Level column, no header, not resizable |
 | D-70 | Messages: opens scrolled to newest; keeps last 5000; batches arrivals; row tooltip exception; source tooltip full logger | MessagesTarget.cs | ui/70 | partial | ring in log.rs; tooltips/scroll-to-end not verified |
 | D-71 | Initial level visibility: Info+ always, Trace/Debug debug builds only | MessagesTarget.cs | ui/70 | partial | rule not verified in messages.rs/log.rs |
-| D-72 | Status bar: left latest WaveDude Info+ log line, "Ready" at first; warnings turn bar orange, errors red until next Info | MW:486-488 | ui/70 Status bar | partial | status text set from last line (messages.rs:82); bar colour fixed Theme.status (status-warn/-error unused); "Ready" initial not set |
+| D-72 | Status bar: left latest WaveDude Info+ log line, "Ready" at first; warnings turn bar orange, errors red until next Info | MW:486-488 | ui/70 Status bar | partial | status text set from last line (messages.rs:82); bar colour fixed Theme.status (the warn token comes with the feature); "Ready" initial not set |
 | D-73 | Status bar right: run status; far right: busy text + 120 px progress bar | MW:450-485 | ui/70 Status bar | partial | run status text done (app.slint:~262), busy text/bar missing |
 | D-74 | Status bar tooltip "Double-click to open the Messages pane"; double-click opens/focuses | MW:444-447, SE:215 | ui/70 Status bar | partial | double-click opens (app.slint:254); no tooltip |
 | D-75 | Crash report at next start (crash.txt, last-crash.txt, "WaveDude Rust hit an internal error..." Copy path / OK) | not in Next | ui/70 Crash report | missing | main.rs only sets a wasm panic hook |
@@ -1150,7 +1150,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-81 | Pause run tooltip becomes "Resume" while paused; menu entry "Resume" | PreviewPane.xaml:436-440 | 50 Run states | missing | menu has fixed "Pause / Resume" |
 | L-82 | Edit stops active run at once; no stale state | MainWindow.Live.cs | 50 Run states | done | request() restarts |
 | L-83 | Status bar left: latest WaveDude Info+ log line, "Ready" at first | Logging/StatusBarTarget.cs | 70 Status bar | partial | latest Info+ shown; initial "Ready" and dependency-log exclusion unverified |
-| L-84 | Warn turns whole bar orange, Error red, until next Info | StatusBarTarget.cs | 70 Status bar | missing | Theme has status-warn/error tokens, background fixed to Theme.status |
+| L-84 | Warn turns whole bar orange, Error red, until next Info | StatusBarTarget.cs | 70 Status bar | missing | background fixed to Theme.status; the warn token (StatusBarWarnBackground #ca5100) comes with the feature |
 | L-85 | Far-right busy text + 120 px progress bar (determinate export, indeterminate wait) | MainWindow.xaml | 70 Status bar | partial | export progress goes into run-status text; no bar, no "Computing frame n" |
 | L-86 | Status bar tooltip "Double-click to open the Messages pane" | MainWindow.xaml | 70 Status bar | missing | |
 | L-87 | Status bar double-click opens or focuses Messages | MainWindow.xaml | 70 Status bar; 00 Docking | partial | opens; no focus of an already shown pane |

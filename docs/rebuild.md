@@ -71,7 +71,7 @@ State per feature: [`parity.md`](parity.md), built 2026-11-24 from WaveDude Next
 nested display ([`tools/compare-csharp/README.md`](../tools/compare-csharp/README.md)); the commit that ports it ticks the
 row. Each phase is one coding pass, then a separate verification of the diff, the checks and the rows before the commit.
 
-1. Foundations every area uses: Next's icons as SVG (rows I-), the full theme token set and the bundled Selawik font
+1. Foundations every area uses: Next's icons as SVG (rows I-), Next's theme values and the bundled Selawik font
    (X-21, X-23), tooltips (X-28), WPF box model and focus border (X-26, X-27), a number box widget (P- rows), resizable
    splitters (X-07), UI strings through `@tr` with the four languages (X-34).
 2. Menus and shortcuts (M-): every entry, shortcut text, mnemonic, enabled rule, icons.

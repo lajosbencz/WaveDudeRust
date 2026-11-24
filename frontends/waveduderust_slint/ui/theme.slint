@@ -1,49 +1,45 @@
-// Colour tokens of the original's Themes/Dark.xaml and Themes/Light.xaml (docs/ui/00, Look).
+// Colours of the original's Themes/Dark.xaml and Themes/Light.xaml under the names the components use, and the
+// metrics (docs/ui/00, Look).
 import { Palette } from "std-widgets.slint";
 export global Theme {
     // Follows the settings' theme, which src/main.rs sets on the std-widgets' palette too.
     out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    // WindowBackground, WindowForeground, GrayText, ControlBorder, Accent, ToolWindowBackground
     out property <color> window-background: dark ? #2d2d30 : #eeeef2;
     out property <color> text: dark ? #f1f1f1 : #1e1e1e;
-    out property <color> border: dark ? #3f3f46 : #cccedb;
-    out property <color> accent: dark ? #007acc : #007acc;
-    out property <color> selection: dark ? #3399ff : #3399ff;
-    out property <color> menu-background: dark ? #1b1b1c : #f6f6f6;
-    out property <color> menu-border: dark ? #333337 : #cccedb;
-    out property <color> menu-hover: dark ? #333334 : #c9def5;
-    out property <color> menu-shortcut: dark ? #999999 : #a2a4a5;
-    out property <color> hover-background: dark ? #3e3e40 : #c9def5;
-    out property <color> control-background: dark ? #3f3f46 : #e6e7e8;
-    out property <color> input-background: dark ? #333337 : #ffffff;
     out property <color> text-disabled: dark ? #999999 : #a2a4a5;
-    out property <color> timeline-tick: dark ? #78787f : #a6a8b2;
+    out property <color> border: dark ? #3f3f46 : #cccedb;
+    out property <color> accent: #007acc;
     out property <color> tool-window-background: dark ? #252526 : #f5f5f5;
-    out property <color> hairline: dark ? #55555a : #a0a0a8;
-    out property <color> inactive-selection: dark ? #3f3f46 : #cccedb;
-    out property <color> inactive-selection-text: dark ? #f1f1f1 : #1e1e1e;
-    out property <color> row-hover: dark ? #3e3e40 : #e5e5e5;
-    out property <color> check-border: dark ? #6d6d70 : #9a9a9e;
-    out property <color> drop-indicator: dark ? #0097fb : #007acc;
-    out property <color> title-grip: dark ? #46464a : #999999;
+    // MenuGlyph: secondary text
     out property <color> text-dim: dark ? #999999 : #717171;
-    out property <color> input-hover-border: dark ? #5a5a5e : #a0a0a8;
-    out property <color> button-background: dark ? #3f3f46 : #ececf0;
-    out property <color> button-border: dark ? #555558 : #acacac;
-    out property <color> button-hover: dark ? #4f4f56 : #c9def5;
-    out property <color> combo-border: dark ? #434346 : #cccedb;
-    out property <color> combo-hover: dark ? #3f3f46 : #e6e7ed;
-    out property <color> clamp-flash: dark ? #e06c2b : #e06c2b;
-    out property <color> level-trace: dark ? #808080 : #909090;
-    out property <color> level-debug: dark ? #a0a0a0 : #707070;
-    out property <color> level-info: dark ? #f1f1f1 : #1e1e1e;
-    out property <color> level-warn: dark ? #ffb040 : #a05000;
-    out property <color> level-error: dark ? #ff6060 : #c01010;
-    out property <color> status: dark ? #007acc : #007acc;
-    out property <color> status-warn: dark ? #ca5100 : #ca5100;
-    out property <color> status-error: dark ? #b4211d : #b4211d;
+    // Foreground on the accent, the selection and the status bar
     out property <color> selection-text: #ffffff;
+    // TitleBar*: the pane headers
+    out property <color> title-inactive-text: dark ? #d0d0d0 : #444444;
+    out property <color> title-grip: dark ? #46464a : #999999;
+    out property <color> title-grip-active: #59a8de;
+    out property <color> title-button-hover: dark ? #3e3e40 : #f7f7f9;
+    out property <color> title-button-hover-active: #1c97ea;
+    // TreeViewItem*: rows of lists
+    out property <color> selection: #3399ff;
+    out property <color> inactive-selection: dark ? #3f3f46 : #cccedb;
+    out property <color> row-hover: dark ? #3e3e40 : #e5e5e5;
+    // Button*, TextBox*, CheckBox*
+    out property <color> button-background: dark ? #3f3f46 : #ececf0;
+    out property <color> button-hover: dark ? #4f4f56 : #c9def5;
+    out property <color> input-background: dark ? #333337 : #ffffff;
+    out property <color> check-border: dark ? #6d6d70 : #9a9a9e;
+    // StatusBar*
+    out property <color> status: #007acc;
+    out property <color> status-error: #b4211d;
+    // Log*: the Messages pane's levels
+    out property <color> level-trace: dark ? #808080 : #8a8a8a;
+    out property <color> level-debug: dark ? #9b9b9b : #6e6e6e;
+    out property <color> level-info: dark ? #f1f1f1 : #1e1e1e;
+    out property <color> level-warn: dark ? #e5c07b : #bf8700;
+    out property <color> level-error: dark ? #f14c4c : #c50500;
     out property <length> font-size: 12px;
     out property <length> row-height: 23px;
-    out property <length> menu-row-height: 22px;
     out property <length> status-height: 22px;
 }
