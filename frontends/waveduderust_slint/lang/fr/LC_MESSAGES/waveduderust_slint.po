@@ -144,6 +144,10 @@ msgstr "Un rectangle de verre ou en miroir, par longueur et largeur ; lié, un c
 msgid "A regular polygon of glass or mirror, by its number of sides and the side length."
 msgstr "Un polygone régulier de verre ou en miroir, par son nombre de côtés et la longueur du côté."
 
+#. Kind.SimpleGratingPart
+msgid "A simple 2D grating: a lattice of round dots, so many columns along the axis by so many rows across, each direction with its own spacing, nothing between them. The dots are mirror, or glass with an index; a wave passing the lattice is diffracted into the orders the spacings set. One column makes a line grating."
+msgstr "Un réseau 2D simple : une maille de points ronds, tant de colonnes le long de l'axe sur tant de lignes en travers, chaque direction avec son propre pas, rien entre eux. Les points sont miroir, ou verre avec un indice ; une onde qui traverse la maille est diffractée dans les ordres que les pas fixent. Une seule colonne fait un réseau de traits."
+
 #. Hint.Probe.Kind
 msgid "A single point, or a line from A to B."
 msgstr "Un point unique, ou une ligne de A à B."
@@ -408,6 +412,10 @@ msgstr "Palette de couleurs"
 msgid "Colour schemes"
 msgstr "Palettes de couleurs"
 
+#. Label.SimpleGratingPart.ColumnSpacing
+msgid "Column spacing"
+msgstr "Pas des colonnes"
+
 #. Label.SourceArray.SizeX
 msgid "Columns"
 msgstr "Colonnes"
@@ -520,6 +528,10 @@ msgstr "Diamètre perpendiculaire à l'axe en pixels."
 msgid "Diameter along the axis in pixels."
 msgstr "Diamètre le long de l'axe en pixels."
 
+#. Hint.SimpleGratingPart.Diameter
+msgid "Diameter of each dot in pixels, at most half the smaller spacing. A dot of 2 pixels on a whole-pixel position covers a square of 2 × 2 pixels; a mirror dot under 2 pixels covers no pixel centre and paints nothing."
+msgstr "Diamètre de chaque point en pixels, au plus la moitié du plus petit pas. Un point de 2 pixels sur une position entière couvre un carré de 2 × 2 pixels ; un point miroir de moins de 2 pixels ne couvre aucun centre de pixel et ne peint rien."
+
 #. MenuAddDiffractionGratings
 msgid "Diffraction gratings"
 msgstr "Réseaux de diffraction"
@@ -532,9 +544,17 @@ msgstr "Diffuseur"
 msgid "Display"
 msgstr "Affichage"
 
+#. Hint.SimpleGratingPart.ColumnSpacing
+msgid "Distance between neighbouring columns along the axis in pixels: the grating's period in that direction. The dots can be at most half the smaller spacing across."
+msgstr "Distance entre colonnes voisines le long de l'axe en pixels : la période du réseau dans cette direction. Les points font au plus la moitié du plus petit pas."
+
 #. Hint.SourceArray.SpacingX
 msgid "Distance between neighbouring columns in canvas pixels."
 msgstr "Distance entre colonnes voisines en pixels de toile."
+
+#. Hint.SimpleGratingPart.RowSpacing
+msgid "Distance between neighbouring rows across the axis in pixels: the grating's period in that direction. The dots can be at most half the smaller spacing across."
+msgstr "Distance entre lignes voisines en travers de l'axe en pixels : la période du réseau dans cette direction. Les points font au plus la moitié du plus petit pas."
 
 #. Hint.SourceArray.SpacingY
 msgid "Distance between neighbouring rows in canvas pixels."
@@ -551,6 +571,10 @@ msgstr "Distance en pixels de la lame à son foyer, pour une onde plane arrivant
 #. DialogDiscard
 msgid "Don't save"
 msgstr "Ne pas enregistrer"
+
+#. Label.SimpleGratingPart.Diameter
+msgid "Dot diameter"
+msgstr "Diamètre des points"
 
 #. Hint.Display.SourceMarkersInExport
 msgid "Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos."
@@ -1008,6 +1032,10 @@ msgstr "Grand"
 msgid "Last simulation step of the exported range; 0 means the end of the run."
 msgstr "Dernier pas de simulation de la plage exportée ; 0 signifie la fin de l'exécution."
 
+#. SectionLattice
+msgid "Lattice"
+msgstr "Maille"
+
 #. Hint.DisplayLayer.Overlay
 msgid "Lay the scene image's glowing-edges outline over this output in the preview."
 msgstr "Superposer le contour « bords lumineux » de l'image de scène à cette sortie dans l'aperçu."
@@ -1207,6 +1235,14 @@ msgstr "Taille nominale du cadre du graphique dessiné sur la sortie ; un cadre 
 #. Hint.Simulation.WaveSpeed
 msgid "Nominal wave speed in pixels per step; only used to estimate wavelengths in the editor."
 msgstr "Vitesse d'onde nominale en pixels par pas ; sert seulement à estimer les longueurs d'onde dans l'éditeur."
+
+#. Hint.SimpleGratingPart.Rows
+msgid "Number of dots across the axis. Odd counts keep the middle dot on the part's position."
+msgstr "Nombre de points en travers de l'axe. Un nombre impair garde le point central sur la position de la pièce."
+
+#. Hint.SimpleGratingPart.Columns
+msgid "Number of dots along the axis. Odd counts keep the middle dot on the part's position; one column is a line grating across the axis."
+msgstr "Nombre de points le long de l'axe. Un nombre impair garde le point central sur la position de la pièce ; une seule colonne fait un réseau de traits en travers de l'axe."
 
 #. Hint.SourceArray.SizeX
 msgid "Number of emitters across. Odd counts keep the centre emitter on the source position."
@@ -1587,6 +1623,10 @@ msgstr "Rotation de la grille autour de la position de la source en degrés, dan
 #. SectionRoughness
 msgid "Roughness"
 msgstr "Rugosité"
+
+#. Label.SimpleGratingPart.RowSpacing
+msgid "Row spacing"
+msgstr "Pas des lignes"
 
 #. Label.SourceArray.SizeY
 msgid "Rows"

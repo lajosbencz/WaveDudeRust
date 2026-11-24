@@ -144,6 +144,10 @@ msgstr "Een rechthoek van glas of als spiegel, naar lengte en breedte; gekoppeld
 msgid "A regular polygon of glass or mirror, by its number of sides and the side length."
 msgstr "Een regelmatige veelhoek van glas of als spiegel, naar het aantal zijden en de zijdelengte."
 
+#. Kind.SimpleGratingPart
+msgid "A simple 2D grating: a lattice of round dots, so many columns along the axis by so many rows across, each direction with its own spacing, nothing between them. The dots are mirror, or glass with an index; a wave passing the lattice is diffracted into the orders the spacings set. One column makes a line grating."
+msgstr "Een eenvoudig 2D-rooster: een rooster van ronde punten, zoveel kolommen langs de as bij zoveel rijen dwars erop, elke richting met een eigen afstand, niets ertussen. De punten zijn spiegel, of glas met een index; een golf die het rooster passeert wordt gebogen in de ordes die de afstanden bepalen. Eén kolom is een lijnrooster."
+
 #. Hint.Probe.Kind
 msgid "A single point, or a line from A to B."
 msgstr "Eén punt, of een lijn van A naar B."
@@ -408,6 +412,10 @@ msgstr "Kleurenschema"
 msgid "Colour schemes"
 msgstr "Kleurenschema's"
 
+#. Label.SimpleGratingPart.ColumnSpacing
+msgid "Column spacing"
+msgstr "Kolomafstand"
+
 #. Label.SourceArray.SizeX
 msgid "Columns"
 msgstr "Kolommen"
@@ -520,6 +528,10 @@ msgstr "Diameter dwars op de as in pixels."
 msgid "Diameter along the axis in pixels."
 msgstr "Diameter langs de as in pixels."
 
+#. Hint.SimpleGratingPart.Diameter
+msgid "Diameter of each dot in pixels, at most half the smaller spacing. A dot of 2 pixels on a whole-pixel position covers a square of 2 × 2 pixels; a mirror dot under 2 pixels covers no pixel centre and paints nothing."
+msgstr "Diameter van elke punt in pixels, hoogstens de helft van de kleinste afstand. Een punt van 2 pixels op een hele pixelpositie bedekt een vierkant van 2 × 2 pixels; een spiegelpunt onder 2 pixels bedekt geen pixelcentrum en tekent niets."
+
 #. MenuAddDiffractionGratings
 msgid "Diffraction gratings"
 msgstr "Buigingsroosters"
@@ -532,9 +544,17 @@ msgstr "Diffusor"
 msgid "Display"
 msgstr "Weergave"
 
+#. Hint.SimpleGratingPart.ColumnSpacing
+msgid "Distance between neighbouring columns along the axis in pixels: the grating's period in that direction. The dots can be at most half the smaller spacing across."
+msgstr "Afstand tussen naburige kolommen langs de as in pixels: de periode van het rooster in die richting. De punten kunnen hoogstens de helft van de kleinste afstand breed zijn."
+
 #. Hint.SourceArray.SpacingX
 msgid "Distance between neighbouring columns in canvas pixels."
 msgstr "Afstand tussen naburige kolommen in canvaspixels."
+
+#. Hint.SimpleGratingPart.RowSpacing
+msgid "Distance between neighbouring rows across the axis in pixels: the grating's period in that direction. The dots can be at most half the smaller spacing across."
+msgstr "Afstand tussen naburige rijen dwars op de as in pixels: de periode van het rooster in die richting. De punten kunnen hoogstens de helft van de kleinste afstand breed zijn."
 
 #. Hint.SourceArray.SpacingY
 msgid "Distance between neighbouring rows in canvas pixels."
@@ -551,6 +571,10 @@ msgstr "Afstand in pixels van de plaat tot het brandpunt, voor een vlakke golf d
 #. DialogDiscard
 msgid "Don't save"
 msgstr "Niet opslaan"
+
+#. Label.SimpleGratingPart.Diameter
+msgid "Dot diameter"
+msgstr "Puntdiameter"
 
 #. Hint.Display.SourceMarkersInExport
 msgid "Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos."
@@ -1008,6 +1032,10 @@ msgstr "Groot"
 msgid "Last simulation step of the exported range; 0 means the end of the run."
 msgstr "Laatste simulatiestap van het geëxporteerde bereik; 0 betekent het einde van de run."
 
+#. SectionLattice
+msgid "Lattice"
+msgstr "Rooster"
+
 #. Hint.DisplayLayer.Overlay
 msgid "Lay the scene image's glowing-edges outline over this output in the preview."
 msgstr "De gloeiende-randen-omtrek van de scèneafbeelding in het voorbeeld over deze uitvoer leggen."
@@ -1207,6 +1235,14 @@ msgstr "Nominale grootte van het grafiekkader over de uitvoer; een kader groter 
 #. Hint.Simulation.WaveSpeed
 msgid "Nominal wave speed in pixels per step; only used to estimate wavelengths in the editor."
 msgstr "Nominale golfsnelheid in pixels per stap; alleen om golflengtes in de editor te schatten."
+
+#. Hint.SimpleGratingPart.Rows
+msgid "Number of dots across the axis. Odd counts keep the middle dot on the part's position."
+msgstr "Aantal punten dwars op de as. Oneven aantallen houden de middelste punt op de positie van het onderdeel."
+
+#. Hint.SimpleGratingPart.Columns
+msgid "Number of dots along the axis. Odd counts keep the middle dot on the part's position; one column is a line grating across the axis."
+msgstr "Aantal punten langs de as. Oneven aantallen houden de middelste punt op de positie van het onderdeel; één kolom is een lijnrooster dwars op de as."
 
 #. Hint.SourceArray.SizeX
 msgid "Number of emitters across. Odd counts keep the centre emitter on the source position."
@@ -1587,6 +1623,10 @@ msgstr "Rotatie van het raster om de bronpositie in graden, tegen de klok in op 
 #. SectionRoughness
 msgid "Roughness"
 msgstr "Ruwheid"
+
+#. Label.SimpleGratingPart.RowSpacing
+msgid "Row spacing"
+msgstr "Rijafstand"
 
 #. Label.SourceArray.SizeY
 msgid "Rows"

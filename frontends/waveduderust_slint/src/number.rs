@@ -46,7 +46,9 @@ fn decimals_of(increment: f64) -> i32 {
 
 /// `value` clamped to the box's range and rounded as the box shows it.
 fn fit(spec: &NumberSpec, value: f64) -> f64 {
-	let value = value.clamp(wide(spec.min), wide(spec.max));
+	// a bound bound to data may cross the other: the minimum wins
+	let min = wide(spec.min);
+	let value = value.clamp(min, wide(spec.max).max(min));
 	let value = if spec.log {
 		format!("{value:.2e}").parse().unwrap_or(value)
 	} else {
@@ -100,6 +102,12 @@ mod tests {
 
 	fn spec(min: f32, max: f32, increment: f32, decimals: i32, log: bool) -> NumberSpec {
 		NumberSpec { min, max, increment, decimals, log, drag_step: 0.0 }
+	}
+
+	#[test]
+	fn a_maximum_below_the_minimum_gives_the_minimum() {
+		let spec = whole(1.0, 0.0);
+		assert_eq!(fit(&spec, 5.0), 1.0);
 	}
 
 	#[test]

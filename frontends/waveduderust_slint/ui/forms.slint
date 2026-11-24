@@ -1557,3 +1557,66 @@ export component GrinLensForm inherits VerticalLayout {
         }
     }
 }
+
+export component SimpleGratingForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A simple 2D grating: a lattice of round dots, so many columns along the axis by so many rows across, each direction with its own spacing, nothing between them. The dots are mirror, or glass with an index; a wave passing the lattice is diffracted into the orders the spacings set. One column makes a line grating.");
+    }
+    ShapeMaterial { coating-shown: false; }
+    FormSection { text: @tr("Lattice"); }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Columns");
+                tip: @tr("Number of dots along the axis. Odd counts keep the middle dot on the part's position; one column is a line grating across the axis.");
+            }
+            FormInt {
+                value <=> Form.grating.columns;
+                spec: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
+                tip: @tr("Number of dots along the axis. Odd counts keep the middle dot on the part's position; one column is a line grating across the axis.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Rows"); tip: @tr("Number of dots across the axis. Odd counts keep the middle dot on the part's position."); }
+            FormInt {
+                value <=> Form.grating.rows;
+                spec: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
+                tip: @tr("Number of dots across the axis. Odd counts keep the middle dot on the part's position.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Column spacing");
+                tip: @tr("Distance between neighbouring columns along the axis in pixels: the grating's period in that direction. The dots can be at most half the smaller spacing across.");
+            }
+            FormInt {
+                value <=> Form.grating.column-spacing;
+                spec: { min: 2, max: 1000000000, increment: 1, decimals: 0 };
+                tip: @tr("Distance between neighbouring columns along the axis in pixels: the grating's period in that direction. The dots can be at most half the smaller spacing across.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Row spacing");
+                tip: @tr("Distance between neighbouring rows across the axis in pixels: the grating's period in that direction. The dots can be at most half the smaller spacing across.");
+            }
+            FormInt {
+                value <=> Form.grating.row-spacing;
+                spec: { min: 2, max: 1000000000, increment: 1, decimals: 0 };
+                tip: @tr("Distance between neighbouring rows across the axis in pixels: the grating's period in that direction. The dots can be at most half the smaller spacing across.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Dot diameter");
+                tip: @tr("Diameter of each dot in pixels, at most half the smaller spacing. A dot of 2 pixels on a whole-pixel position covers a square of 2 \u{D7} 2 pixels; a mirror dot under 2 pixels covers no pixel centre and paints nothing.");
+            }
+            FormInt {
+                value <=> Form.grating.diameter;
+                spec: { min: 1, max: Form.grating.max-diameter, increment: 1, decimals: 0 };
+                tip: @tr("Diameter of each dot in pixels, at most half the smaller spacing. A dot of 2 pixels on a whole-pixel position covers a square of 2 \u{D7} 2 pixels; a mirror dot under 2 pixels covers no pixel centre and paints nothing.");
+            }
+        }
+    }
+}

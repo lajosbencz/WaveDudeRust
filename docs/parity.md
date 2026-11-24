@@ -805,12 +805,12 @@ Not-in-spec rows are marked in the Spec column.
 | P-189 | Interference filter: Layer remove button | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-190 | Interference filter: Add layer button (copy of last) | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-191 | Interference filter: Remove all button | Views/InterferenceFilterPartView.xaml:49-118 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-192 | Simple 2D grating: Mirror/Refractive index/Absorption/Absorption ramp (no coating rows) | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-193 | Simple 2D grating: Columns NB min 1 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-194 | Simple 2D grating: Rows NB min 1 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-195 | Simple 2D grating: Column spacing NB min 2 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-196 | Simple 2D grating: Row spacing NB min 2 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-197 | Simple 2D grating: Dot diameter NB 1..half smaller spacing | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-192 | Simple 2D grating: Mirror/Refractive index/Absorption/Absorption ramp (no coating rows) | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
+| P-193 | Simple 2D grating: Columns NB min 1 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
+| P-194 | Simple 2D grating: Rows NB min 1 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
+| P-195 | Simple 2D grating: Column spacing NB min 2 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
+| P-196 | Simple 2D grating: Row spacing NB min 2 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
+| P-197 | Simple 2D grating: Dot diameter NB 1..half smaller spacing | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
 | P-198 | Meta lens: Coating rows w/o sides | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-199 | Meta lens: Length NB min 1 step 10 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-200 | Meta lens: Width NB min 2 step 10 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |

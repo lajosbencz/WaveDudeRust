@@ -176,6 +176,7 @@ data! {
 	LensData = Lens { diameter, r1, r2, thickness }
 	FresnelData = m::FresnelLens { zones, division }
 	BraggData = m::BraggReflector { pairs, thickness1, index1, thickness2, index2, width }
+	GratingData = m::SimpleGrating { columns, rows, column_spacing, row_spacing, diameter }
 	GrinData = m::GrinLens { centre_index, edge_index, length, diameter }
 	DiffuserData = m::Diffuser { length, width, center_wavelength, amplitude, sigma }
 	ZonePlateData = m::ZonePlate { mount, mount_width, diameter, thickness, coating, design_frequency, focal_length, inverse }
@@ -210,6 +211,7 @@ pub(crate) fn kind(project: &Project, node: Node) -> FormKind {
 			Some(PartKind::ZonePlate(_)) => FormKind::ZonePlate,
 			Some(PartKind::BraggReflector(_)) => FormKind::BraggReflector,
 			Some(PartKind::GrinLens(_)) => FormKind::GrinLens,
+			Some(PartKind::SimpleGrating(_)) => FormKind::SimpleGrating,
 			_ => FormKind::None,
 		},
 		Node::Project => FormKind::Project,
@@ -241,6 +243,7 @@ fn shape(kind: &PartKind) -> Option<(&Material, &Coating)> {
 		PartKind::FresnelLens(p) => Some((&p.lens.material, &p.lens.coating)),
 		PartKind::Outline(p) => Some((&p.material, &p.coating)),
 		PartKind::Diffuser(p) => Some((&p.material, &p.coating)),
+		PartKind::SimpleGrating(p) => Some((&p.material, &p.coating)),
 		_ => None,
 	}
 }
@@ -255,6 +258,7 @@ fn shape_mut(kind: &mut PartKind) -> Option<(&mut Material, &mut Coating)> {
 		PartKind::FresnelLens(p) => Some((&mut p.lens.material, &mut p.lens.coating)),
 		PartKind::Outline(p) => Some((&mut p.material, &mut p.coating)),
 		PartKind::Diffuser(p) => Some((&mut p.material, &mut p.coating)),
+		PartKind::SimpleGrating(p) => Some((&mut p.material, &mut p.coating)),
 		_ => None,
 	}
 }
@@ -346,6 +350,10 @@ fn show_part(form: &Form<'_>, project: &Project, part: &Part) {
 			put(form.get_fresnel(), Data::show(f), |d| form.set_fresnel(d));
 		}
 		PartKind::BraggReflector(b) => put(form.get_bragg(), Data::show(b), |d| form.set_bragg(d)),
+		PartKind::SimpleGrating(g) => {
+			let data = ui::GratingData { max_diameter: Bridge::show(&g.max_diameter()), ..Data::show(g) };
+			put(form.get_grating(), data, |d| form.set_grating(d));
+		}
 		PartKind::GrinLens(g) => {
 			put(form.get_coating(), Data::show(&g.coating), |d| form.set_coating(d));
 			put(form.get_grin(), Data::show(g), |d| form.set_grin(d));
@@ -455,6 +463,7 @@ fn apply_part(form: &Form<'_>, part: &mut Part) {
 		}
 		PartKind::Diffuser(d) => form.get_diffuser().apply(&Data::show(&*d), d),
 		PartKind::BraggReflector(b) => form.get_bragg().apply(&Data::show(&*b), b),
+		PartKind::SimpleGrating(g) => form.get_grating().apply(&Data::show(&*g), g),
 		PartKind::GrinLens(g) => {
 			form.get_coating().apply(&Data::show(&g.coating), &mut g.coating);
 			form.get_grin().apply(&Data::show(&*g), g);
