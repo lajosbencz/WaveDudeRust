@@ -38,8 +38,8 @@ Search the open and closed issues first. The forms under [`.github/ISSUE_TEMPLAT
     ([`docs/conventions.md`](docs/conventions.md) says where each lives). Snapshot changes (`insta`) are reviewed with
     `cargo insta review` and explained in the pull request.
   - The specification follows the behaviour: [`docs/spec`](docs/spec/) for the core and export, [`docs/ui`](docs/ui/) for the application.
-    A new UI string goes into all four tables in
-    [`crates/waveduderust_app/assets/strings`](crates/waveduderust_app/assets/strings/).
+    A new UI string is wrapped in `@tr(...)` with WaveDude Next's English wording ([`docs/conventions.md`](docs/conventions.md), Strings).
+    A ported feature ticks its row in [`docs/parity.md`](docs/parity.md).
   - A difference from WaveDude Next is warranted by the criteria in [`docs/divergences.md`](docs/divergences.md) and recorded there,
     with its reasoning in a decision record.
   - Physics is correct per the literature, cited in [`docs/physics.md`](docs/physics.md) and listed in
@@ -68,21 +68,19 @@ recipes of the [`justfile`](justfile), which CI calls: `just ci` runs every bloc
 | `just clippy-wasm` | clippy, [cargo-hack](https://github.com/taiki-e/cargo-hack) | each feature alone, the default set and none of every browser crate (`wasm_crates`) build for wasm32 and are clippy-clean there, std's clocks banned | [`tools/clippy-wasm32/clippy.toml`](tools/clippy-wasm32/clippy.toml), [`.cargo/config.toml`](.cargo/config.toml) (web-sys's unstable APIs) |
 | `just test` | [cargo-nextest](https://nexte.st) | the tests; the export tests decode their output with `ffmpeg` when it is on the `PATH`; extra args go to nextest | [`.config/nextest.toml`](.config/nextest.toml) |
 | | [cargo-insta](https://insta.rs) | text snapshots (`cargo insta review`) | `tests/snapshots/` of core and export |
-| | [egui_kittest](https://docs.rs/egui_kittest) | the window's tests, driven through AccessKit by role and label, with no image snapshots | |
 | `just doctest` | cargo test | doctests (nextest runs none) | |
 | `just doc` | rustdoc | docs without warnings | |
 | `just features` | cargo-hack | every feature pair of every crate compiles | |
 | `just shear` | [cargo-shear](https://github.com/Boshen/cargo-shear) | no unused dependency, workspace entries and dev-dependencies included | |
-| `just layers` | cargo tree | no headless crate (`headless_crates`) depends on a UI toolkit ([decision 0031](docs/decisions/0031-modular-core-and-frontends.md)) | |
+| `just layers` | cargo tree | no headless crate (`headless_crates`) depends on a UI toolkit ([decision 0032](docs/decisions/0032-slint-single-frontend.md)) | |
 | `just versions-check` | cargo metadata | every crate shares MAJOR.MINOR; the toolchain is the workspace's `rust-version` | `[workspace.package]` of [`Cargo.toml`](Cargo.toml) |
-| `just hotpatch-guard` | cargo tree | `subsecond` is in no default dependency graph | |
 | `just api-diff <base>` | [cargo-public-api](https://github.com/cargo-public-api/cargo-public-api) | the library's public API against a git ref (`api_crates`, nightly rustdoc JSON) | |
 | `just lint` | [ast-grep](https://ast-grep.github.io) | structural rules clippy cannot say, with their tests | [`sgconfig.yml`](sgconfig.yml), [`lints/`](lints/) |
 | `just typos` | [typos](https://github.com/crate-ci/typos) | spelling | [`_typos.toml`](_typos.toml) |
 | `just deny` | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) | advisories, licences, wildcard versions, sources | [`deny.toml`](deny.toml) |
 | `just workflows` | [actionlint](https://github.com/rhysd/actionlint), [zizmor](https://docs.zizmor.sh) | the workflows' syntax and expressions, their `run:` scripts through [shellcheck](https://www.shellcheck.net) when it is on the `PATH`; their and Dependabot's security (`GH_TOKEN` set for the online audits) | [`.github/zizmor.yml`](.github/zizmor.yml) (accepted findings with reasons) |
-| `just web [<out>]` | wasm-bindgen, binaryen | the app builds for the browser (CI, in the wasm32 job) and runs there: [`tools/build-web.sh`](tools/build-web.sh) (default `target/web`) with the wasm-bindgen CLI of Cargo.lock's version and `wasm-opt` (`WAVEDUDE_NO_WASM_OPT=1` skips it), then serve the folder over HTTP | [decision 0029](docs/decisions/0029-wasm-opt-in-the-web-build.md), [`frontends/classic/web/index.html`](frontends/classic/web/index.html) |
-| `just hot classic|material` | [dx](https://dioxuslabs.com) | live-patching run of a frontend (`dx serve --hotpatch`) | |
+| `just web [<out>]` | wasm-bindgen, binaryen | the app builds for the browser (CI, in the wasm32 job) and runs there: [`tools/build-web.sh`](tools/build-web.sh) (default `target/web`) with the wasm-bindgen CLI of Cargo.lock's version and `wasm-opt` (`WAVEDUDE_NO_WASM_OPT=1` skips it), then serve the folder over HTTP | [decision 0029](docs/decisions/0029-wasm-opt-in-the-web-build.md), [`frontends/waveduderust_slint/web/index.html`](frontends/waveduderust_slint/web/index.html) |
+| `just hot` | Slint live preview | the app with its `.slint` files reloaded on save; Rust changes need a rerun | |
 | | MSRV | builds at the workspace's `rust-version` (CI, the `msrv` job): `cargo +1.100 check --workspace --all-targets` | `[workspace.package]` of [`Cargo.toml`](Cargo.toml) |
 | | glibc floor | the Linux programs build in the release's container and need glibc 2.28 at most (CI, the `glibc` job); [`docs/release.md`](docs/release.md), By hand | [`.github/build/linux.Dockerfile`](.github/build/linux.Dockerfile), [`.github/build/glibc-floor.sh`](.github/build/glibc-floor.sh) |
 | | [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) | optional, local only: code no test reaches (`cargo llvm-cov --workspace --features $F --summary-only`) | |
@@ -99,7 +97,7 @@ the checks:
   - `ignored_timing`: prints numbers, asserts little; `cargo test --release -p <crate> --test <file> -- --ignored ignored_timing:: --nocapture`.
   - `ignored_slow`: correctness tests that take seconds to minutes (the shipped gates).
   - `ignored_network`: Cisco's OpenH264, without `openh264-source`: the download
-    (`cargo test -p waveduderust_app -- --ignored ignored_network::`) and an MP4 through the downloaded binary
+    (`cargo test -p waveduderust_platform -- --ignored ignored_network::`) and an MP4 through the downloaded binary
     (`OPENH264_LIBRARY=<path> cargo test -p waveduderust --test video -- --ignored ignored_network::`).
 - [`tools/compare-csharp`](tools/compare-csharp/) dumps WaveDude Next's results for `waveduderust-cli compare` (.NET 10 SDK,
   `WAVEDUDE_NEXT_DIR`); its [`README.md`](tools/compare-csharp/README.md) has the commands.

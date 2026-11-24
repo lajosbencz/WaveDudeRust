@@ -27,7 +27,7 @@ wasm_crates := "waveduderust waveduderust_platform waveduderust_slint"
 
 # Crates without a UI toolkit, and the toolkits they must not reach.
 headless_crates := "waveduderust waveduderust_macros waveduderust_platform waveduderust_cli"
-toolkits := "slint egui eframe gtk4 libadwaita cxx-qt"
+toolkits := "slint winit"
 
 # The library crates whose public API the diff guards.
 api_crates := "waveduderust"

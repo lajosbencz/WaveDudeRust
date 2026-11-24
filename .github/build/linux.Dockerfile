@@ -3,7 +3,7 @@
 FROM almalinux:8@sha256:2d0f2eb2a83cc09dbc2eb92fade4dbe8f709628149e81aa00aec70630406603b
 
 # gcc for the build scripts (ring), file for appimagetool; the X11 client libraries winit loads at run time, which the
-# AppImage carries ([package.metadata.packager.appimage.files] of frontends/classic/Cargo.toml). No -devel package:
+# AppImage carries ([package.metadata.packager.appimage.files] of frontends/waveduderust_slint/Cargo.toml). No -devel package:
 # the windowing crates load their libraries at run time. curl, tar, xz and binutils (objdump, the glibc floor check)
 # come with the base image. The packages are the repositories' of the build date; the digest pins the base only.
 RUN dnf install -y --nodocs --setopt=install_weak_deps=False \

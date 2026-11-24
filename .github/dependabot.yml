@@ -24,7 +24,7 @@ updates:
         applies-to: security-updates
         patterns: ["*"]
     ignore:
-      # Moves with egui: waveduderust::view reads the glyph outlines with epaint's version.
+      # Moves with epaint: waveduderust::view reads the glyph outlines with epaint's version.
       - dependency-name: skrifa
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
     commit-message:

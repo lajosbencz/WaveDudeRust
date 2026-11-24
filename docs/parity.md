@@ -81,7 +81,7 @@ Status: done / partial / missing / divergence. "not in spec" = found in Next, ab
 Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise; not repeated per row):
 - G1 mnemonics: no underlined letter / access key on any menu title or entry (titles are plain @tr strings, app.slint:93-154); no DE/FR/NL strings (Language setting missing, S-05). Alt+letter, F10/Alt bar entry, letter-picks-entry, Left/Right neighbour menu: whatever Slint's native MenuBar gives, not the spec's rules.
 - G2 icons: no menu entry has an icon (Slint MenuItem carries none), see section I.
-- G3 enabled rules: no `menus::enabled` table (crate waveduderust_app is gone; docs/ui/10 still names it); only Undo/Redo/Run/Pause/Stop carry `enabled:`; every other entry is always enabled.
+- G3 enabled rules: no enabled-rule table; only Undo/Redo/Run/Pause/Stop carry `enabled:`; every other entry is always enabled.
 - G4 modal greying: menu bar is not greyed or blocked while a modal shows (app.slint has no such binding).
 - G5 shortcut text: native MenuBar shows only entries that declare `shortcut:`; Edit/Delete keys come from the FocusScope (app.slint:160-172), so the text is not shown.
 

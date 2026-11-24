@@ -1,7 +1,7 @@
 # Examples
 
-53 example projects, which the app and the web build ship through
-[`crates/waveduderust_examples`](crates/waveduderust_examples/). [`examples`](examples/) has one folder per domain, and each
+53 example projects, which the app and the web build ship, embedded by
+[`frontends/waveduderust_slint/build.rs`](frontends/waveduderust_slint/build.rs). [`examples`](examples/) has one folder per domain, and each
 folder is one tab of the Examples dialog:
 
 | Folder | Tab |

@@ -27,7 +27,7 @@ if [ "$locked" != "$installed" ]; then
 	echo "wasm-bindgen $installed is installed, Cargo.lock has $locked: cargo install wasm-bindgen-cli --version $locked" >&2
 	exit 1
 fi
-# the build both wasm files name (waveduderust_app::build_id) and the page's URLs carry: the commit, and the time
+# the build the page's URLs carry: the commit, and the time
 # when the tree has changes beside it
 if [ -z "${WAVEDUDE_BUILD:-}" ]; then
 	WAVEDUDE_BUILD=$(git rev-parse --short=12 HEAD 2>/dev/null || echo local)

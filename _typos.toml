@@ -6,7 +6,6 @@
 extend-exclude = [
 	"crates/waveduderust/tests/fixtures/**",
 	"examples/**",
-	"docs/review/**",
 	"CHANGELOG.md",
 	"frontends/waveduderust_slint/assets/windows/installer.nsi",
 	"crates/waveduderust/tests/snapshots/**",

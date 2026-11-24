@@ -64,24 +64,22 @@ Look (docs/ui/00, Look): the original's colours and layout; menus and shortcuts 
 Settings and other documented divergences stand: docs/divergences.md, decisions 0010 (solver), 0027 (settings), 0028
 (no manual), 0030 (undo cap).
 
-## Progress
+## Plan
 
-What is done is measured against [`parity.md`](parity.md), the feature list of WaveDude Next; the table below is the
-history of the phases.
+State per feature: [`parity.md`](parity.md), built 2026-11-24 from WaveDude Next's source and [`ui/`](ui/) (115 done,
+294 partial, 656 missing of 1095 rows). A feature is done when its row is checked against Next side by side on a
+nested display ([`tools/compare-csharp/README.md`](../tools/compare-csharp/README.md)); the commit that ports it ticks the
+row. Each phase is one coding pass, then a separate verification of the diff, the checks and the rows before the commit.
 
-| Phase | Done | Left |
-|---|---|---|
-| Skeleton | window, theme tokens, menus with shortcuts, pane layout, status bar, `just hot` | splitters, docking, Selawik font, icons |
-| Document | open/save (`.wdproj`, Wave Dude 2D import), title, undo/redo, tree rows, check, move, remove, select | multi-selection, toolbar, add items, drag and drop, clipboard, recent files, unsaved edits prompt |
-| Properties | a form per object from its reflected fields (`model::fields`): text, number, check and choice editors, edit errors | sections, units, number stepping, colour swatches, gradient rows, read-outs, part kind fields; Display edits skip undo |
-| Preview | one wgpu device for engine and window, Run (F5) and Stop, re-run on edit, field and intensity drawn into textures with no readback, run state in the status bar | header strip, zoom, handles and overlays, probe graph boxes, busy/stale marks, frame at the playback position |
-| Timeline and transport | playback at the frame rate and speed, loop, in/out range, live follow, scrub, wheel and arrow keys, run pause, frame/step read-out, the frame at the position drawn | tick labels, brackets drag, pane-scoped keys (`,` `.` I O X L F), field/intensity toggles and layout, editable speed |
-| Messages | log ring (5000 lines) beside stderr, level toggles with counts, search, clear, newest Info line in the status bar, double-click on the status bar opens the pane | regex, auto-scroll, columns, copy, local time |
-| Prompts | message window (info, question, error; Enter/Esc), unsaved edits prompt before New, Open, Close, Exit and window close, open/save errors, About | links and license toggle in About, export-running quit prompt |
-| Settings | settings loaded and saved through `waveduderust_platform`, Settings window (sections, rows on the property editors), theme mode, undo steps, preview quality, auto re-run, recent files recorded | language, UI zoom, RAM read-out, presets, samples and dithering, OpenH264 rows, search, Recent Projects menu, window size and layout restored |
-| Exports | Export field, intensity, both, field and intensity frame, Export last; save dialog with every format, MP4 through OpenH264, a thread per export, progress in the status bar, Stop cancels, errors as a message | the Export Save dialog's form (range, overlays, archive), probe CSV, the browser's exports |
-| Examples | every `examples/<topic>/*.wdproj` embedded by `build.rs`, Examples dialog with topic tabs, search, keys, guarded open, suggested file name | recent files menu |
-| Welcome | Welcome page at launch while Show at launch is on (not with a project argument), RAM, Low/Medium/High/Auto presets, levers line, Settings, Open, Random Example, Examples (Enter), Esc; overlays take the focus when shown | the browser's RAM cache picker |
-| Browser | the app builds for wasm32 (`tools/build-web.sh`, `just web`, CI's wasm32 job and wasm clippy): WebGPU device shared with Slint, run worker pumped by the window's timer, open by file picker, save by download, settings in localStorage, machine facts from `navigator` | OPFS spill and the run in a worker (`remote/`, `platform/opfs` at v0.4.0), exports (WebCodecs), canvas filling the page |
-| Fixes from spot checks | a project opened makes frame 0 (Run makes every frame, Stop keeps the project); the left column is a quarter of the window; forms fit their pane, the Project form leaves Scene and Simulation to their nodes, nested fields read by path; overlays set no bounds on the window (it opened capped at 800 px); the editing keys (Ctrl+Z/Y/X/C/V/A, Delete) go to a focused text field first, then to the main area | the Edit menu shows no shortcut text for them (Slint's menu shortcuts are global); the seed's range error reads "takes a Int" |
-| Comparison with Next (Xor) | Play with frames missing starts the run; the scene outline over the pictures from frame 0; pictures stacked by default with the transport radios (`PreviewOrientation`); the status bar run line and run summary as docs/ui/50; frames the device no longer holds drawn from the store; the window size is never bounded by its content | still to match: header strips (Brightness box, Auto), overlays (handles, labels, probe graph boxes), the tree toolbar's add menus, the timeline ruler and transport icons, Properties sections, spin boxes and New seed |
+1. Foundations every area uses: Next's icons as SVG (rows I-), the full theme token set and the bundled Selawik font
+   (X-21, X-23), tooltips (X-28), WPF box model and focus border (X-26, X-27), a number box widget (P- rows), resizable
+   splitters (X-07), UI strings through `@tr` with the four languages (X-34).
+2. Menus and shortcuts (M-): every entry, shortcut text, mnemonic, enabled rule, icons.
+3. Project tree (T-): toolbar and add menus, context menus, multi-selection, keys, drag and drop.
+4. Properties (P-): sections, editors, every kind-specific form.
+5. Preview (V-): header strips, overlays, handles and drag editing, graph boxes, zoom.
+6. Timeline, transport, status bar (L-), live editing and runs (R-), Messages pane (G-).
+7. Dialogs and settings (D-, S-), then docking and window persistence (X-).
+
+Known bugs: the run status overwrites the export progress in the status bar; the title ignores `TitleFullPath`;
+the pane split moves while playing (suspect: the transport's frame read-out changes width).

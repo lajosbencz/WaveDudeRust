@@ -46,7 +46,7 @@ reasoning; what warrants a new one is in
 ## Releases
 
 Installers for Windows (NSIS), macOS (universal app and DMG) and Linux
-(AppImage, and a tarball with an [`install.sh`](frontends/classic/assets/linux/install.sh) for the menu entry, icons and
+(AppImage, and a tarball with an [`install.sh`](frontends/waveduderust_slint/assets/linux/install.sh) for the menu entry, icons and
 file types; x86_64 with glibc 2.28 or newer: RHEL 8, Debian 10, Ubuntu 18.10 and
 later) are on the GitHub releases
 page, unsigned by Apple and Microsoft, so Gatekeeper and SmartScreen warn at

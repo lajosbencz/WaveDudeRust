@@ -40,7 +40,7 @@ one), the row below, the spec updated.
 | Objects off the canvas | Left out or clamped silently | The same, and a warning names them when the run's spec changes them | [ui/60](ui/60-live-editing-and-runs.md) |
 | Scene outline on a shrunk picture | WPF filters the edge layer linearly: thin edges show faint | Each channel's maximum over the canvas pixels a picture pixel covers: every edge at full strength | [spec/40](spec/40-frames-store-render.md) |
 | Scene image file | Taken silently when it differs, at open and while watched | Asked about: Load file or Keep embedded; kept bytes are not asked about again | decision 0008 (19), [ui/60](ui/60-live-editing-and-runs.md) |
-| Browser | None | The web build exports through downloads, has no updater, no recent files, no file watch | decisions 0019, 0020, 0025 |
+| Browser | None | The web build exports through downloads, has no updater, no recent files, no file watch | decisions 0020, 0025 |
 | Export names | One save dialog; both layers get their files from the one name by suffix | A name box per output, labelled by layer; an export of several files may go into one ZIP archive named in its own box (always in the browser) | decision 0025, [ui/70](ui/70-dialogs-and-windows.md) |
 | Edit menu | Acts on a focused text box | Acts on objects; the keys go to the box | decision 0008 (13) |
 | Windows integrations | Taskbar progress, jump list, title-bar menu click-through | Not ported; file associations come from the packaging | decision 0008 (14) |

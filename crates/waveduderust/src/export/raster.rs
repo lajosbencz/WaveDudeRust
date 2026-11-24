@@ -2,7 +2,7 @@
 //! over a frame's RGBA8 pixels in place.
 //!
 //! One pixel per point. A pixel is covered when its centre lies in a triangle (edges in 1/256 pixel fixed point, top-left
-//! rule, so a pixel on a shared edge is blended once), inside the clip rect rounded to whole pixels as egui-wgpu's
+//! rule, so a pixel on a shared edge is blended once), inside the clip rect rounded to whole pixels as a wgpu
 //! scissor is. Colours are premultiplied sRGB, interpolated and multiplied by the font atlas (bilinear, clamped edges),
 //! in gamma space as the window's renderer does, then blended: `out = min(255, src + (dst*(255 - a) + 127)/255)`.
 //! Integers and IEEE f32 without fused operations only, so every machine draws the same bytes. Bands of rows are drawn
@@ -316,7 +316,7 @@ fn owns(a: (i64, i64), b: (i64, i64)) -> bool {
 	dy < 0 || (dy == 0 && dx > 0)
 }
 
-/// `clip` in whole pixels of a `width x height` frame, rounded as egui-wgpu's scissor: `[x0, y0, x1, y1]`.
+/// `clip` in whole pixels of a `width x height` frame, rounded as a wgpu scissor rect: `[x0, y0, x1, y1]`.
 fn scissor(clip: Rect, width: u32, height: u32) -> [u32; 4] {
 	let round = |v: f32, size: u32| (v.round().max(0.) as u32).min(size);
 	let (x0, y0) = (round(clip.min.x, width), round(clip.min.y, height));

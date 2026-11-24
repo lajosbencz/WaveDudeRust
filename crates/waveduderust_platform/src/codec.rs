@@ -145,7 +145,7 @@ mod ignored_network {
 	use super::*;
 
 	#[test]
-	#[ignore = "network: downloads Cisco's OpenH264; cargo test -p waveduderust_app -- --ignored ignored_network::"]
+	#[ignore = "network: downloads Cisco's OpenH264; cargo test -p waveduderust_platform -- --ignored ignored_network::"]
 	fn ciscos_binary_downloads_checks_and_deletes() {
 		if h264::BUILT_IN {
 			return;
