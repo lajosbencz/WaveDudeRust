@@ -7,21 +7,27 @@ use crate::tree::Node;
 use crate::ui::{PropKind, PropRow};
 
 /// The fields a form edits: scalars and enums; lists and composites have their own rows in the tree.
+/// Nested objects with a tree node of their own, so a form never shows their fields.
+const OWN_NODES: [&str; 2] = ["Scene", "Simulation"];
+
 fn editable<T: Fields>() -> Vec<T::Field> {
 	T::Field::all()
 		.into_iter()
 		.filter(|f| !f.dependent() && !matches!(f.kind(), ValueKind::List | ValueKind::Nested))
+		.filter(|f| !f.path().split_once('.').is_some_and(|(top, _)| OWN_NODES.contains(&top)))
 		.collect()
 }
 
-/// `PascalCase` or `snake_case` as words: `PulseWidth` is `Pulse width`.
+/// `PascalCase` or `snake_case` as words, a path's dots as spaces: `Field.PulseWidth` is `Field pulse width`.
 fn label(name: &str) -> String {
 	let mut out = String::new();
 	for (i, c) in name.chars().enumerate() {
-		if c == '_' {
+		if c == '_' || c == '.' {
 			out.push(' ');
 		} else if c.is_uppercase() && i > 0 {
-			out.push(' ');
+			if !out.ends_with(' ') {
+				out.push(' ');
+			}
 			out.extend(c.to_lowercase());
 		} else {
 			out.push(c);
@@ -45,7 +51,7 @@ pub(crate) fn rows<T: Fields>(of: &T) -> Vec<PropRow> {
 			let value = f.get(of).map_or_else(String::new, |v| v.to_string());
 			let current = choices.iter().position(|c| *c == value).map_or(-1, |i| i as i32);
 			PropRow {
-				label: label(f.name()).into(),
+				label: label(&f.path()).into(),
 				kind,
 				value: value.into(),
 				choices: slint::ModelRc::from(
@@ -124,8 +130,16 @@ mod tests {
 	}
 
 	#[test]
+	fn the_project_form_leaves_the_scene_and_simulation_to_their_nodes() {
+		let rows = rows(&Project::default());
+		assert!(rows.iter().all(|r| !r.label.starts_with("Scene") && !r.label.starts_with("Simulation")));
+		assert!(rows.iter().any(|r| r.label == "Seed"));
+	}
+
+	#[test]
 	fn words_read_as_spaced_lower_case() {
 		assert_eq!(label("PulseWidth"), "Pulse width");
 		assert_eq!(label("x"), "x");
+		assert_eq!(label("Field.PulseWidth"), "Field pulse width");
 	}
 }

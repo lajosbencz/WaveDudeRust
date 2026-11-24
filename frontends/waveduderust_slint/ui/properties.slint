@@ -19,8 +19,11 @@ export component Properties inherits Rectangle {
     callback set(int, string);
 
     background: Theme.tool-window-background;
-    ScrollView {
-        VerticalLayout {
+    scroll := ScrollView {
+        viewport-width: self.visible-width;
+        viewport-height: content.preferred-height;
+        content := VerticalLayout {
+            width: scroll.visible-width;
             padding: 6px;
             spacing: 2px;
             alignment: start;
@@ -34,7 +37,7 @@ export component Properties inherits Rectangle {
                 min-height: Theme.row-height;
                 Text {
                     text: row.label;
-                    width: 120px;
+                    width: min(120px, scroll.visible-width * 40%);
                     vertical-alignment: center;
                     overflow: elide;
                     color: Theme.text;
@@ -44,11 +47,15 @@ export component Properties inherits Rectangle {
                     toggled => { root.set(i, self.checked ? "true" : "false"); }
                 }
                 if row.kind == PropKind.choice: ComboBox {
+                    min-width: 40px;
+                    horizontal-stretch: 1;
                     model: row.choices;
                     current-index: row.current;
                     selected(v) => { root.set(i, v); }
                 }
                 if row.kind == PropKind.text || row.kind == PropKind.int || row.kind == PropKind.float: LineEdit {
+                    min-width: 40px;
+                    horizontal-stretch: 1;
                     text: row.value;
                     input-type: row.kind == PropKind.text ? InputType.text : row.kind == PropKind.int ? InputType.number : InputType.decimal;
                     accepted(t) => { root.set(i, t); }

@@ -16,6 +16,8 @@ pub(crate) struct Live {
 	worker: RunWorker,
 	revision: u64,
 	active: bool,
+	/// Every frame (a run) or the position's frame alone.
+	wanted: Wanted,
 	request: Option<RunRequest>,
 	position: u32,
 	paused: bool,
@@ -64,6 +66,7 @@ impl Live {
 			worker,
 			revision: 0,
 			active: false,
+			wanted: Wanted::Position,
 			request: None,
 			position: 0,
 			paused: false,
@@ -85,12 +88,26 @@ impl Live {
 	}
 
 	/// Runs `project` from the start; a running run starts over (docs/ui/60, Automatic re-run).
+	/// A project opened: its frame at the position alone (docs/ui/60, The live run).
+	pub(crate) fn load(&mut self, project: &Project, view: &View) {
+		self.active = false;
+		self.wanted = Wanted::Position;
+		self.paused = false;
+		self.request(project, view);
+	}
+
+	/// Every frame (Run).
 	pub(crate) fn run(&mut self, project: &Project, view: &View) {
+		self.active = true;
+		self.wanted = Wanted::All;
+		self.paused = false;
+		self.request(project, view);
+	}
+
+	fn request(&mut self, project: &Project, view: &View) {
 		let mut project = project.clone();
 		project.normalize();
 		self.revision += 1;
-		self.active = true;
-		self.paused = false;
 		let request = RunRequest::new(&project, self.quality, view.into(), false);
 		self.frames = request.schedule().frame_count();
 		self.request = Some(request);
@@ -103,7 +120,7 @@ impl Live {
 			run: self.request.clone(),
 			position: self.position,
 			paused: self.paused,
-			wanted: Wanted::All,
+			wanted: self.wanted,
 			..Goal::default()
 		});
 	}
@@ -126,17 +143,19 @@ impl Live {
 		}
 	}
 
-	/// Starts over after an edit when a run is active.
+	/// Starts over after an edit, keeping what is wanted.
 	pub(crate) fn edited(&mut self, project: &Project, view: &View) {
-		if self.active && self.auto_rerun {
-			self.run(project, view);
+		if self.auto_rerun {
+			self.request(project, view);
 		}
 	}
 
+	/// No more frames than the position's.
 	pub(crate) fn stop(&mut self) {
 		self.revision += 1;
 		self.active = false;
-		self.request = None;
+		self.wanted = Wanted::Position;
+		self.paused = false;
 		self.publish();
 	}
 

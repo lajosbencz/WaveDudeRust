@@ -90,6 +90,15 @@ impl State {
 		app.set_props_rows(ModelRc::new(VecModel::from(rows)));
 	}
 
+	/// A project replaced the one shown: the selection and the timeline start over, frame 0 is made.
+	fn opened(&mut self) {
+		self.selected = Node::Project;
+		self.playback.reset();
+		self.live.load(&self.doc.project, &self.doc.view);
+		self.playback.frames = self.live.frames;
+		self.ran = self.doc.generation;
+	}
+
 	fn node(&self, row: i32) -> Option<Node> {
 		usize::try_from(row).ok().and_then(|r| self.nodes.get(r).copied())
 	}
@@ -130,8 +139,7 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 				match waveduderust::io::wdproj::read_str(e.text) {
 					Ok((project, view)) => {
 						state.doc.adopt(project, view, &format!("{}.wdproj", e.title));
-						state.selected = Node::Project;
-						state.playback.reset();
+						state.opened();
 						tracing::info!("opened the example {}", e.title);
 					}
 					Err(err) => tracing::error!("the example {file} does not parse: {err}"),
@@ -148,7 +156,7 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			let generation = state.doc.generation + 1;
 			state.doc = Document::new(state.settings.undo_steps as usize);
 			state.doc.generation = generation;
-			state.selected = Node::Project;
+			state.opened();
 		}
 		"open" => {
 			#[cfg(not(target_arch = "wasm32"))]
@@ -192,7 +200,6 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			state.selected = Node::Project;
 		}
 		"exit" => {
-			state.doc = Document::new(UNDO_STEPS);
 			let _ = app.hide();
 		}
 		other => tracing::info!("menu: {other}"),
@@ -382,8 +389,7 @@ fn transport_state(p: &Playback, shown: &live::Shown) -> ui::Transport {
 fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 	match state.doc.open(&path) {
 		Ok(()) => {
-			state.selected = Node::Project;
-			state.playback.reset();
+			state.opened();
 			remember(state, &path);
 			tracing::info!("opened {}", path.display());
 		}
@@ -433,6 +439,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		ran: 0,
 	}));
 	apply_settings(&mut state.borrow_mut(), &app);
+	state.borrow_mut().opened();
 	if state.borrow().settings.show_startup && std::env::args_os().nth(1).is_none() {
 		show_welcome(&state.borrow(), &app);
 		app.set_welcome_shown(true);
@@ -489,6 +496,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				let view = &mut s.doc.view.clone();
 				s.doc.edit(|p| result = form::set_selected(p, view, node, row, &text));
 			}
+			tracing::debug!("set {node:?} row {row} to {text:?}: {result:?}");
 			app.set_props_error(result.err().unwrap_or_default().into());
 			s.show(&app);
 		}
@@ -667,8 +675,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			for (name, text) in picked {
 				match s.doc.open_text(&name, &text) {
 					Ok(()) => {
-						s.selected = Node::Project;
-						s.playback.reset();
+						s.opened();
 						tracing::info!("opened {name}");
 					}
 					Err(e) => {
