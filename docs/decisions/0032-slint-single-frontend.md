@@ -53,6 +53,8 @@ Status: accepted, 2026-11-24 (the user's decision).
   reach every wasm and CI build.
 - Model types, options, errors and responses are `#[non_exhaustive]`, built through `Default`, `new` or builders;
   one `thiserror` enum per area; no panics, no `anyhow` in the API.
+- Typed ids (`SourceId`, `ProbeId`, `PartId`, `SchemeId`, [`model/ids.rs`](../../crates/waveduderust/src/model/ids.rs)):
+  stable for a session, never saved.
 - No network in the library: MP4 takes an encoder provider; downloading OpenH264 is `waveduderust_platform`'s.
 - Public dependencies: `half::f16`, and `wgpu` behind `gpu` to share a device (`GpuContext`, unstable).
 - Same project, seed and backend give the same readings.
@@ -60,5 +62,4 @@ Status: accepted, 2026-11-24 (the user's decision).
   wasm32, nextest, a public API diff (`cargo public-api`) that fails on a breaking change without a MINOR bump
   (`unstable-*` skipped), a version alignment check, ast-grep rules.
 
-Decided, not built: typed ids (`SourceId`, `ProbeId`, `PartId`) in place of indices; store builds without the
-self-updater and the OpenH264 download.
+Decided, not built: store builds without the self-updater and the OpenH264 download.
