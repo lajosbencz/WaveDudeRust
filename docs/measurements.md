@@ -133,10 +133,24 @@ values is made on the host for every sub-step, 10000 emitters twice a step.
 
 ## The CPML on the CPU
 
-2026-11-23, not the workstation above: a VirtualBox guest with 8 vCPUs, so the ranges are wide.
-`RAYON_NUM_THREADS=<n> waveduderust-cli bench --steps 200 --rim <rim>` on the default 1920x1080 canvas, no captures,
-the build of c83dfdb (before) and the CPML's stages over contiguous spans of a row with the mirror test hoisted to
-the span (after), alternated, two runs each, ms a step, 9-point / 4th order:
+The CPML's stages per cell (before) and over contiguous spans of a row with the mirror test hoisted to the span
+(after), ms a step, 9-point / 4th order, on the default 1920x1080 canvas.
+
+2026-11-24, the workstation above, `RAYON_NUM_THREADS=<n> waveduderust-cli bench --steps 200 --rim <rim>
+--captures-every 0`, the builds of cd625c5 (before) and d9dab60 (after), alternated, four runs each:
+
+| Rim, threads | Before | After |
+|---|---|---|
+| 0, 1 | 2.55 to 2.71 / 5.85 to 6.10 | 2.56 to 2.73 / 5.84 to 5.98 |
+| 0, 24 | 1.15 to 1.44 / 2.36 to 3.27 | 1.12 to 1.34 / 2.42 to 2.85 |
+| 32, 1 | 5.49 to 5.85 / 11.8 to 12.3 | 4.22 to 4.34 / 9.21 to 9.65 |
+| 32, 24 | 1.79 to 2.01 / 3.64 to 5.18 | 1.61 to 1.82 / 3.35 to 3.73 |
+| 64, 1 | 8.27 to 8.82 / 17.0 to 17.6 | 5.74 to 5.92 / 11.4 to 11.9 |
+| 64, 24 | 2.27 to 2.55 / 4.75 to 5.05 | 2.12 to 2.43 / 4.40 to 4.63 |
+
+2026-11-23, a VirtualBox guest with 8 vCPUs, so the ranges are wide.
+`RAYON_NUM_THREADS=<n> waveduderust-cli bench --steps 200 --rim <rim>`, no captures, the build of c83dfdb (before),
+alternated, two runs each:
 
 | Rim, threads | Before | After |
 |---|---|---|
