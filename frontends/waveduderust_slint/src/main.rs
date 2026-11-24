@@ -8,6 +8,7 @@ mod export;
 mod files;
 mod form;
 mod gpu;
+mod graphs;
 mod icons;
 mod live;
 mod log;
@@ -81,6 +82,7 @@ struct State {
 	ran: u64,
 	/// The view generation the pictures are drawn with.
 	styled: u64,
+	graphs: graphs::Graphs,
 	/// The desktop's colour scheme once a forced theme has written the palette's, which ends its system binding
 	/// (docs/blockers.md, Slint's system colour scheme).
 	system_scheme: Option<slint::language::ColorScheme>,
@@ -178,7 +180,7 @@ impl State {
 		}
 		if self.styled != self.doc.view_generation {
 			self.styled = self.doc.view_generation;
-			self.live.restyle();
+			self.live.restyle(&self.doc.project, &self.doc.view);
 		}
 		let canvas = app.global::<ui::Canvas<'_>>();
 		canvas.set_field_brightness(self.doc.view.field.brightness as f32);
@@ -192,6 +194,7 @@ impl State {
 		});
 		canvas.set_intensity_brightness(self.doc.view.intensity.brightness as f32);
 		self.overlays.show(&app.global::<ui::Canvas<'_>>(), &self.doc.project, &self.doc.view, &self.selection);
+		self.show_graphs();
 		let node = self.selection.current();
 		let kind = form::kind(&self.doc.project, node);
 		app.set_props_kind(node.kind());
@@ -278,6 +281,21 @@ impl State {
 			form::layer_settings(v, layer).color_scheme.clone_from(&added);
 		});
 		tracing::info!("Colour scheme '{added}' loaded from '{name}' into the project");
+	}
+
+	/// Lays out the probe graph boxes at the frame shown.
+	fn show_graphs(&mut self) {
+		let scales = [self.overlays.scale(ui::Layer::Field), self.overlays.scale(ui::Layer::Intensity)];
+		let selected: Vec<usize> = self
+			.selection
+			.group()
+			.into_iter()
+			.filter_map(|n| if let Node::Probe(i) = n { Some(i) } else { None })
+			.collect();
+		let (project, view, graphs) = (&self.doc.project, &self.doc.view, &mut self.graphs);
+		if self.live.traces(|t| graphs.show(project, view, &selected, Some(t), scales)).is_none() {
+			graphs.show(project, view, &selected, None, scales);
+		}
 	}
 
 	/// Sets `layer`'s brightness, one undo step.
@@ -877,6 +895,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		last_export: None,
 		ran: 0,
 		styled: 0,
+		graphs: graphs::Graphs::default(),
 		system_scheme: None,
 		form_seen: (0, 0),
 		form_base: 0,
@@ -1334,6 +1353,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				s.fitted(layer, fit);
 				s.show(&app);
 			}
+			if shown.running || shown.field.is_some() || shown.intensity.is_some() {
+				s.show_graphs();
+			}
 			if let Some(image) = shown.field {
 				app.set_field(image);
 			}
@@ -1373,6 +1395,7 @@ fn main() {
 fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	let canvas = app.global::<ui::Canvas<'_>>();
 	state.borrow().overlays.wire(&canvas);
+	state.borrow().graphs.wire(&canvas);
 	let (st, weak) = (state.clone(), app.as_weak());
 	canvas.on_rescaled(move |layer, scale| {
 		let Some(app) = weak.upgrade() else { return };
@@ -1425,7 +1448,7 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	canvas.on_brightness(move |layer, value| {
 		let Some(app) = weak.upgrade() else { return };
 		let s = &mut *st.borrow_mut();
-		s.set_brightness(canvas::model_layer(layer), value.into());
+		s.set_brightness(canvas::model_layer(layer), number::wide(value));
 		s.show(&app);
 	});
 	let (st, weak) = (state.clone(), app.as_weak());

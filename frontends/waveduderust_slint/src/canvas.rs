@@ -125,7 +125,7 @@ fn glyph(kind: HandleKind) -> ui::HandleGlyph {
 }
 
 /// Replaces `rows` with `new`, row by row while the count holds.
-fn update<T: Clone + PartialEq + 'static>(rows: &VecModel<T>, new: Vec<T>) {
+pub(crate) fn update<T: Clone + PartialEq + 'static>(rows: &VecModel<T>, new: Vec<T>) {
 	if rows.row_count() != new.len() {
 		rows.set_vec(new);
 		return;
@@ -162,6 +162,11 @@ impl Overlays {
 		canvas.set_field_labels(ModelRc::from(field.labels.clone()));
 		canvas.set_intensity_handles(ModelRc::from(intensity.handles.clone()));
 		canvas.set_intensity_labels(ModelRc::from(intensity.labels.clone()));
+	}
+
+	/// Logical pixels per canvas pixel of `layer`'s picture.
+	pub(crate) fn scale(&self, layer: ui::Layer) -> f32 {
+		self.shown[index(layer)].scale()
 	}
 
 	/// Notes the pictures' scale; whether it changed.

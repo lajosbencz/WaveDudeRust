@@ -7,6 +7,31 @@ export struct Rect { x: float, y: float, width: float, height: float }
 
 export enum HandleGlyph { source, lever, part, grip, point, bezier, probe }
 
+// a graph box's tick label, its top-left in the box
+export struct GraphTick { label: string, x: float, y: float }
+
+// a probe graph box (docs/ui/40): its corner in canvas pixels, the rest in logical pixels of the box
+export struct GraphBox {
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    has-plot: bool,
+    plot: Rect,
+    // SVG path commands in the box
+    grid: string,
+    zero: string,
+    curve: string,
+    // the curve is one point
+    dot: bool,
+    line-width: float,
+    y-ticks: [GraphTick],
+    x-ticks: [GraphTick],
+    title: string,
+    readout: string,
+    selected: bool,
+}
+
 // what a wave meets at the canvas edge
 export enum EdgeLine { open, wall, rim }
 
@@ -69,6 +94,8 @@ export global Canvas {
     callback drag(dx: float, dy: float, shift: bool);
     callback release();
     in property <EdgeLine> edge;
+    in property <[GraphBox]> field-graphs;
+    in property <[GraphBox]> intensity-graphs;
     // the run computes the frame wanted, not stored yet
     in property <bool> computing;
     // the layers' brightness (Display), its edits and Auto

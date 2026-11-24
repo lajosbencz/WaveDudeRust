@@ -3,7 +3,7 @@
 use slint::wgpu_30::wgpu;
 use waveduderust::model::normalize::Normalize;
 use waveduderust::model::{Layer, Project, View};
-use waveduderust::quality::PreviewQuality;
+use waveduderust::quality::{Brightness, PreviewQuality};
 
 use waveduderust::run::{FitRequest, FrameStore, Goal, RunWorker, Wanted, WorkState};
 use waveduderust::unstable::engine::gpu::{FrameTag, GpuContext};
@@ -173,6 +173,7 @@ impl Live {
 	}
 
 	fn request(&mut self, project: &Project, view: &View) {
+		self.fit = None;
 		let mut project = project.clone();
 		project.normalize();
 		self.revision += 1;
@@ -200,9 +201,27 @@ impl Live {
 		});
 	}
 
-	/// Draws the shown frame again, for a changed look.
-	pub(crate) fn restyle(&mut self) {
+	/// Calls `f` with the probe traces at the frame of the position, when it is stored.
+	pub(crate) fn traces<R>(&self, f: impl FnOnce(&crate::graphs::Traces<'_>) -> R) -> Option<R> {
+		let store = self.worker.status().store?;
+		let frame = self.position as usize;
+		if !store.has(frame) {
+			return None;
+		}
+		let step = store.step_of(frame);
+		Some(self.worker.with_traces(|traces| {
+			f(&crate::graphs::Traces { traces, step, frame, total_steps: u64::from(self.steps) })
+		}))
+	}
+
+	/// Draws the shown frame again for a changed look; frames of baked brightness (8-bit) are made again when it
+	/// changed, as for a simulation edit.
+	pub(crate) fn restyle(&mut self, project: &Project, view: &View) {
 		self.drawn = None;
+		let baked = self.worker.status().store.is_some_and(|s| matches!(s.shape().format, SampleFormat::Index));
+		if baked && self.request.as_ref().is_some_and(|r| r.brightness != Brightness::from(view)) {
+			self.edited(project, view);
+		}
 	}
 
 	/// Auto brightness of `layer` for the frame shown (docs/ui/40, Header strip).
@@ -232,7 +251,8 @@ impl Live {
 	pub(crate) fn seek(&mut self, position: u32) {
 		if self.position != position {
 			self.position = position;
-			if self.active {
+			// a pending fit follows the position
+			if self.active || self.fit.is_some() {
 				self.publish();
 			}
 		}
@@ -248,6 +268,7 @@ impl Live {
 	/// No more frames than the position's.
 	pub(crate) fn stop(&mut self) {
 		self.revision += 1;
+		self.fit = None;
 		self.active = false;
 		self.wanted = Wanted::Position;
 		self.paused = false;
@@ -272,6 +293,7 @@ impl Live {
 		if self.last_state != Some(state) {
 			self.last_state = Some(state);
 			if let WorkState::Failed(e) = &status.state {
+				self.fit = None;
 				tracing::error!("the run failed: {e}");
 			}
 		}

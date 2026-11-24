@@ -1,6 +1,6 @@
 import { Theme } from "theme.slint";
 import { Layer } from "data.slint";
-import { Canvas, EdgeLine, HandleData, HandleGlyph, HandleKey, LabelData, OverlayArt } from "canvas.slint";
+import { Canvas, EdgeLine, GraphBox, HandleData, HandleGlyph, HandleKey, LabelData, OverlayArt } from "canvas.slint";
 import { Command } from "commands.slint";
 import { Button } from "std-widgets.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
@@ -91,6 +91,65 @@ component Spinner inherits Rectangle {
     }
 }
 
+// A probe's graph box; fixed colours, as an export draws it (view::graph).
+component GraphBoxView inherits Rectangle {
+    in property <GraphBox> graph;
+    in property <float> scale;
+    x: round(root.graph.x * root.scale) * 1px;
+    y: round(root.graph.y * root.scale) * 1px;
+    width: root.graph.width * 1px;
+    height: root.graph.height * 1px;
+    background: #0e1016eb;
+    border-width: 1px;
+    border-color: root.graph.selected ? Theme.picture-selection : #c8c8d2aa;
+    clip: true;
+    if root.graph.has-plot: Path {
+        viewbox-width: root.graph.width;
+        viewbox-height: root.graph.height;
+        commands: root.graph.grid;
+        stroke: #ffffff2e;
+        stroke-width: 1px;
+    }
+    if root.graph.has-plot && root.graph.zero != "": Path {
+        viewbox-width: root.graph.width;
+        viewbox-height: root.graph.height;
+        commands: root.graph.zero;
+        stroke: #ffffff78;
+        stroke-width: 1px;
+    }
+    if root.graph.has-plot: Rectangle {
+        x: root.graph.plot.x * 1px;
+        y: root.graph.plot.y * 1px;
+        width: root.graph.plot.width * 1px;
+        height: root.graph.plot.height * 1px;
+        border-width: 1px;
+        border-color: #c8c8d282;
+        clip: true;
+        if root.graph.curve != "": Path {
+            viewbox-x: root.graph.plot.x;
+            viewbox-y: root.graph.plot.y;
+            viewbox-width: root.graph.plot.width;
+            viewbox-height: root.graph.plot.height;
+            commands: root.graph.curve;
+            stroke: root.graph.dot ? transparent : #ffd040;
+            fill: root.graph.dot ? #ffd040 : transparent;
+            stroke-width: root.graph.line-width * 1px;
+        }
+    }
+    for t in root.graph.y-ticks: Text { x: t.x * 1px; y: t.y * 1px; text: t.label; font-size: 11px; color: #e1e1e6e1; }
+    for t in root.graph.x-ticks: Text { x: t.x * 1px; y: t.y * 1px; text: t.label; font-size: 11px; color: #e1e1e6e1; }
+    // the title strip: the readout right-aligned in the curve's colour, the title elided in what remains
+    HorizontalLayout {
+        x: 6px;
+        y: 3px;
+        width: root.width - 14px;
+        height: 14px;
+        spacing: 8px;
+        Text { text: root.graph.title; font-size: 11px; color: #f0f0f5f0; overflow: elide; horizontal-stretch: 1; min-width: 0; }
+        if root.graph.readout != "": Text { text: root.graph.readout; font-size: 11px; color: #ffd040; }
+    }
+}
+
 // Canvas-pixel paths over the picture.
 component Art inherits Path {
     viewbox-width: Canvas.width;
@@ -106,6 +165,7 @@ component Picture inherits VerticalLayout {
     in property <[HandleData]> handles;
     in property <[LabelData]> labels;
     in property <OverlayArt> art;
+    in property <[GraphBox]> graphs;
     in property <bool> can-export;
     // dimmed, a frame being computed for a while
     in property <bool> busy;
@@ -187,15 +247,7 @@ component Picture inherits VerticalLayout {
             if root.art.outlines != "": Art { commands: root.art.outlines; stroke: Theme.picture-selection; stroke-width: 1px; }
             for label in root.labels: LabelView { label: label; scale: cell.scale; }
             for handle in root.handles: HandleView { handle: handle; scale: cell.scale; focus-shown: keys.has-focus; }
-            // fixed colours, not themed (docs/ui/40, Edge line)
-            if Canvas.edge != EdgeLine.open: Rectangle {
-                border-width: 1px;
-                border-color: Canvas.edge == EdgeLine.rim ? #0000ff : #ff0000;
-            }
-            if root.busy: Rectangle {
-                background: #00000073;
-                Spinner { }
-            }
+            for graph in root.graphs: GraphBoxView { graph: graph; scale: cell.scale; }
             if Canvas.marquee-shown && Canvas.marquee-layer == root.layer: Rectangle {
                 x: Canvas.marquee.x * cell.scale * 1px;
                 y: Canvas.marquee.y * cell.scale * 1px;
@@ -205,6 +257,28 @@ component Picture inherits VerticalLayout {
                 border-width: 1px;
                 border-color: Theme.selection;
             }
+        }
+        // the picture's visible area in the cell
+        property <length> view-x: max(cell.left, 0px);
+        property <length> view-y: max(cell.top, 0px);
+        property <length> view-width: min(cell.width, cell.left + Canvas.width * cell.scale * 1px) - self.view-x;
+        property <length> view-height: min(cell.height, cell.top + Canvas.height * cell.scale * 1px) - self.view-y;
+        // fixed colours, not themed (docs/ui/40, Edge line), round the visible picture
+        if Canvas.edge != EdgeLine.open: Rectangle {
+            x: cell.view-x - 1px;
+            y: cell.view-y - 1px;
+            width: cell.view-width + 2px;
+            height: cell.view-height + 2px;
+            border-width: 1px;
+            border-color: Canvas.edge == EdgeLine.rim ? #0000ff : #ff0000;
+        }
+        if root.busy: Rectangle {
+            x: cell.view-x;
+            y: cell.view-y;
+            width: cell.view-width;
+            height: cell.view-height;
+            background: #00000073;
+            Spinner { }
         }
         // the handles' keys: Tab walks them, arrows move the focused one; Del is the window's
         keys := FocusScope {
@@ -344,7 +418,7 @@ export component Preview inherits Rectangle {
     Timer {
         interval: 150ms;
         running: Canvas.computing && !root.busy;
-        triggered => { root.busy = true; }
+        triggered => { root.busy = Canvas.computing; }
     }
     callback command(Command);
     if root.stacked: VerticalLayout {
@@ -356,6 +430,7 @@ export component Preview inherits Rectangle {
             handles: Canvas.field-handles;
             labels: Canvas.field-labels;
             art: Canvas.field-art;
+            graphs: Canvas.field-graphs;
             can-export: root.can-export;
             busy: root.busy;
             command(c) => { root.command(c); }
@@ -367,6 +442,7 @@ export component Preview inherits Rectangle {
             handles: Canvas.intensity-handles;
             labels: Canvas.intensity-labels;
             art: Canvas.intensity-art;
+            graphs: Canvas.intensity-graphs;
             can-export: root.can-export;
             busy: root.busy;
             command(c) => { root.command(c); }
@@ -381,6 +457,7 @@ export component Preview inherits Rectangle {
             handles: Canvas.field-handles;
             labels: Canvas.field-labels;
             art: Canvas.field-art;
+            graphs: Canvas.field-graphs;
             can-export: root.can-export;
             busy: root.busy;
             command(c) => { root.command(c); }
@@ -392,6 +469,7 @@ export component Preview inherits Rectangle {
             handles: Canvas.intensity-handles;
             labels: Canvas.intensity-labels;
             art: Canvas.intensity-art;
+            graphs: Canvas.intensity-graphs;
             can-export: root.can-export;
             busy: root.busy;
             command(c) => { root.command(c); }

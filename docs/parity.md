@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 52 | 1 | 10 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 59 | 7 | 41 | 4 | 1 |
+| V | Preview | 70 | 6 | 31 | 4 | 1 |
 | L | Timeline, transport, status | 40 | 20 | 20 | 7 | 3 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 647 | 82 | 221 | 139 | 6 |
+| | All | 658 | 81 | 211 | 139 | 6 |
 
 ## Cross-cutting
 
@@ -982,9 +982,9 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-34 | Picture changes only when frame for position arrives; never black/other frame | PreviewPane.xaml.cs:716 | 40 What a picture shows | done | live.rs poll draws stored frame only on tag change; request() resets `drawn` but images persist in window |
 | V-35 | Busy dim (black 45 pct) after 150 ms of frame computation | PreviewPane.xaml.cs:250,385; xaml:~655 | 40 What a picture shows | done | Canvas.computing (the run steps, the position frame not stored); the Preview dims after 150 ms, lifts with the frame |
 | V-36 | Busy spinner (3/4 ring, 1 turn/s), not hit-testable | PreviewPane.xaml Spinner | 40 What a picture shows | done | preview.slint Spinner: a 3/4 ring, transform-rotation from animation-tick, no input |
-| V-37 | Overlay z-order: picture, outline, handles, graph boxes, busy dim | PreviewPane.xaml:612-660 | 40 What a picture shows | partial | picture, outlines, dots, lines, labels, handles, edge line, busy dim; graph boxes not yet |
+| V-37 | Overlay z-order: picture, outline, handles, graph boxes, busy dim | PreviewPane.xaml:612-660 | 40 What a picture shows | done | picture, outlines, dots, lines, labels, handles, graph boxes, then edge line and busy dim on the visible area |
 | V-38 | Scene outline (glowing edges) when enabled for layer | SceneBitmaps.cs, PreviewPane.xaml:620 | 40 What a picture shows | done | live.rs `edges` via Look (commit d1d244c) |
-| V-39 | 8-bit samples: palette indices at store resolution, brightness baked at run start | FramePresenter.cs | 40 8-bit vs 16-bit | partial | gpu.rs colours stored frame on GPU; sample-depth rules and brightness-edit-as-sim-edit not wired (no brightness control) |
+| V-39 | 8-bit samples: palette indices at store resolution, brightness baked at run start | FramePresenter.cs | 40 8-bit vs 16-bit | partial | 8-bit pictures are baked; a brightness edit makes the frames again (Live::restyle); other sample-depth rules unverified |
 | V-40 | 16-bit samples: exact device-pixel render, box/bilinear resample, instant recolour on brightness | FramePresenter.cs | 40 8-bit vs 16-bit | partial | GPU render exists; render at device size and brightness recolour unverified/no control |
 | V-41 | Dithering 16-bit only, Bayer 2/4/8/16 | FramePresenter.cs | 40 8-bit vs 16-bit | missing | no dither code in slint crate |
 | V-42 | GPU engine colouring in render pass, device copy of last frame, others uploaded | none (Rust only) | 40 8-bit vs 16-bit | done | live.rs device_frames + Uploads |
@@ -1035,16 +1035,16 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-87 | Drop of file not claimed, window opens it | SceneOverlay.cs | 40 Interaction | missing | see R-30 |
 | V-88 | Handle tooltips (Tip*Format per role) | SceneOverlay.cs:528-531 | 40 Interaction | missing | |
 | V-89 | Picture hover costs nothing; source layer cached as bitmap | SceneOverlay.cs:199-234 | 40 Interaction | done | the drawings take no pointer; one TouchArea per picture, hit-testing in Rust; dots one Path |
-| V-90 | Graph box: translucent dark box, grid, value labels, step labels, curve, 11 px text | ProbeGraphDrawing.cs, ProbeGraphPainter.cs | 40 Probe graph box | missing | |
-| V-91 | Graph title strip: probe name + live readout "= v" (point) / "max v" (line), 3 sig digits | ProbeGraphDrawing.cs | 40 Probe graph box | missing | |
-| V-92 | Graph layout shared with export (graph.rs) | ProbeGraphPainter.cs | 40 Probe graph box | missing | export side lives in core crate |
-| V-93 | Box x/y in canvas px, size presets Tiny 200x100..XL / Custom; shrink to fit; whole px | ProbeGraphOverlay.cs | 40 Probe graph box | missing | |
-| V-94 | Point probe: value over steps; Running window or Full; auto-scale steps | ProbeGraphDrawing.cs | 40 Probe graph box | missing | |
-| V-95 | Line probe: values along A..B at frame shown | ProbeGraphDrawing.cs | 40 Probe graph box | missing | |
-| V-96 | Value axis: field linear symmetric; intensity linear or log (Decades); auto-scale or min/max | ProbeGraphDrawing.cs | 40 Probe graph box | missing | |
-| V-97 | Floor rule (1/brightness, 1/brightness^2, integrated), 1.08 headroom | ProbeGraphDrawing.cs | 40 Probe graph box; divergences.md:49 | missing | divergence row 49 allows the floor |
-| V-98 | Graph data: live run recording cut at frame shown; remake after probe edit | ProbeGraphOverlay.cs | 40 Probe graph box | missing | |
-| V-99 | Selected probe's box accent border, drawn last | ProbeGraphOverlay.cs | 40 Probe graph box | missing | |
+| V-90 | Graph box: translucent dark box, grid, value labels, step labels, curve, 11 px text | ProbeGraphDrawing.cs, ProbeGraphPainter.cs | 40 Probe graph box | done | graphs.rs: core view::graph layout as Slint rows; GraphBoxView draws box, grid, labels, curve at 11 px |
+| V-91 | Graph title strip: probe name + live readout "= v" (point) / "max v" (line), 3 sig digits | ProbeGraphDrawing.cs | 40 Probe graph box | done | title elided, readout right in the curve colour |
+| V-92 | Graph layout shared with export (graph.rs) | ProbeGraphPainter.cs | 40 Probe graph box | done | the layout is the export's (layout_with, epaint metrics); Slint draws it |
+| V-93 | Box x/y in canvas px, size presets Tiny 200x100..XL / Custom; shrink to fit; whole px | ProbeGraphOverlay.cs | 40 Probe graph box | done | box_size / box_origin; laid out at the picture scale |
+| V-94 | Point probe: value over steps; Running window or Full; auto-scale steps | ProbeGraphDrawing.cs | 40 Probe graph box | done | GraphData::at with the live traces |
+| V-95 | Line probe: values along A..B at frame shown | ProbeGraphDrawing.cs | 40 Probe graph box | done | the frame's profile |
+| V-96 | Value axis: field linear symmetric; intensity linear or log (Decades); auto-scale or min/max | ProbeGraphDrawing.cs | 40 Probe graph box | done | core ranges |
+| V-97 | Floor rule (1/brightness, 1/brightness^2, integrated), 1.08 headroom | ProbeGraphDrawing.cs | 40 Probe graph box; divergences.md:49 | done | full_scale floor |
+| V-98 | Graph data: live run recording cut at frame shown; remake after probe edit | ProbeGraphOverlay.cs | 40 Probe graph box | done | Live::traces at the stored frame of the position; laid out again each poll while running and on every show |
+| V-99 | Selected probe's box accent border, drawn last | ProbeGraphOverlay.cs | 40 Probe graph box | done | selected boxes last, accent edge |
 | V-100 | Drag box (kept in canvas); snap to probe A within radius 14, release at 28 (hysteresis) | ProbeGraphOverlay.cs:102,105,495-502 | 40 Probe graph box | missing | |
 | V-101 | Box bottom-right corner grip resize, snaps to fixed sizes else Custom; arrows 1/10 px | ProbeGraphOverlay.cs:478-484 | 40 Probe graph box | missing | |
 | V-102 | Arrows on box move 1/10 px (no snap); Tab reaches boxes; focus selects probe | ProbeGraphOverlay.cs:540-561 | 40 Probe graph box | missing | |

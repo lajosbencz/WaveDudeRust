@@ -735,6 +735,10 @@ impl Worker {
 		let fit = goal.fit.filter(|f| self.served_fit != Some(f.id));
 		let target = self.next_target(goal);
 		if goal.paused {
+			if let Some(fit) = fit {
+				self.serve_fit(fit)?;
+				return Ok(true);
+			}
 			// The frame looked at is made even while paused (a scrub while paused shows its frame).
 			if let Some(Target::Frame(t)) = target
 				&& t == self.position_of(goal)
@@ -1275,7 +1279,12 @@ impl Worker {
 			tracing::debug!(?unit, "live run: left for the new goal");
 			return Err(Interrupted::Goal);
 		}
-		let looked_at = matches!(unit, Unit::Frame(j) if j == self.position_of(&goal));
+		// the frame looked at, and an Auto fit of it, are made while paused
+		let looked_at = match unit {
+			Unit::Frame(j) => j == self.position_of(&goal),
+			Unit::Fit(f) => goal.fit == Some(f),
+			Unit::End => false,
+		};
 		if !goal.paused || looked_at {
 			return Ok(());
 		}
@@ -2214,6 +2223,25 @@ mod tests {
 		assert_eq!(w.take_fit().map(|f| (f.id, f.frame)), Some((7, 10)));
 		assert!(w.store().unwrap().is_complete());
 		assert_eq!(w.status().traces_steps, 40);
+	}
+
+	#[test]
+	fn a_fit_is_served_while_paused() {
+		let factory: PumpedFactory = Box::new(|scene, options| -> EngineFuture {
+			Box::pin(std::future::ready(Box::new(CpuEngine::new(scene, options)) as Box<dyn WaveEngine>))
+		});
+		let w = RunWorker::pumped(factory, GIB, GIB, ample(), Arc::default());
+		let run = goal(1, &long(40));
+		w.set_goal(run.clone());
+		while pump(&w, AMPLE) != Pump::Idle {}
+		w.set_goal(Goal { paused: true, fit: Some(FitRequest { id: 5, frame: 10 }), ..run });
+		for _ in 0..100 {
+			if w.take_fit().is_some_and(|f| f.id == 5) {
+				return;
+			}
+			pump(&w, AMPLE);
+		}
+		panic!("a paused run never serves the fit");
 	}
 
 	#[test]
