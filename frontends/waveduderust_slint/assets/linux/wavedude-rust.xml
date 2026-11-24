@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The MIME types of Cargo.toml's file associations, which the .desktop file names (shared-mime-info). -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+	<mime-type type="application/x-wavedude-project+xml">
+		<comment>WaveDude project</comment>
+		<sub-class-of type="application/xml"/>
+		<glob pattern="*.wdproj"/>
+	</mime-type>
+	<mime-type type="application/x-wavedude-scheme+xml">
+		<comment>WaveDude colour scheme</comment>
+		<sub-class-of type="application/xml"/>
+		<glob pattern="*.wdscheme"/>
+	</mime-type>
+</mime-info>

@@ -28,3 +28,49 @@ waveduderust_platform = { path = "../../crates/waveduderust_platform" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rfd = "0.18"
+
+[package.metadata.packager]
+product-name = "WaveDude Rust"
+identifier = "io.github.lajosbencz.wavedude-rust"
+category = "Education"
+authors = ["Lajos Bencz"]
+publisher = "Lajos Bencz"
+homepage = "https://github.com/lajosbencz/WaveDudeRust"
+copyright = "Copyright (C) 2026 Lajos Bencz"
+license-file = "../../LICENSE.md"
+icons = ["assets/icons/*"]
+out-dir = "../../target/packages"
+binaries = [{ path = "waveduderust", main = true }, { path = "waveduderust-cli" }]
+# `name` is the Windows ProgId (no spaces); macOS takes its document types from assets/macos/Info.plist.
+file-associations = [
+	{ extensions = ["wdproj"], mime-type = "application/x-wavedude-project+xml", description = "WaveDude project", name = "WaveDudeRust.Project", role = "editor" },
+	{ extensions = ["wdscheme"], mime-type = "application/x-wavedude-scheme+xml", description = "WaveDude colour scheme", name = "WaveDudeRust.ColorScheme", role = "editor" },
+]
+
+[package.metadata.packager.nsis]
+installer-icon = "assets/icons/icon.ico"
+# The stock template with the file associations opt-in.
+template = "assets/windows/installer.nsi"
+
+# Ad-hoc signature: an unsigned bundle on Apple silicon is reported as damaged instead of unverified.
+[package.metadata.packager.macos]
+signing-identity = "-"
+# Merged over cargo-packager's: the exported types and the document types that name them.
+info-plist-path = "assets/macos/Info.plist"
+
+# The MIME types the .desktop file names, for desktop integration of the AppImage, and the X11 client libraries winit
+# dlopens, which linuxdeploy cannot find; the GPU stack (Vulkan, EGL, GL) stays the host's. The libraries are the
+# build image's (.github/build/linux.Dockerfile), placed in usr/lib, where linuxdeploy bundles their dependencies
+# too; it skips usr/lib64, where `libs` would put them.
+[package.metadata.packager.appimage.files]
+"assets/linux/wavedude-rust.xml" = "usr/share/mime/packages/wavedude-rust.xml"
+"/usr/lib64/libxkbcommon.so.0" = "usr/lib/libxkbcommon.so.0"
+"/usr/lib64/libxkbcommon-x11.so.0" = "usr/lib/libxkbcommon-x11.so.0"
+"/usr/lib64/libxcb-xkb.so.1" = "usr/lib/libxcb-xkb.so.1"
+"/usr/lib64/libXcursor.so.1" = "usr/lib/libXcursor.so.1"
+"/usr/lib64/libXi.so.6" = "usr/lib/libXi.so.6"
+"/usr/lib64/libXrandr.so.2" = "usr/lib/libXrandr.so.2"
+
+# The executable's icon and names in Explorer (build.rs); cargo-packager does not embed them.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"

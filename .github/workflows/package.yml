@@ -92,11 +92,11 @@ jobs:
       # cargo auditable embeds the dependency list in the binaries (`cargo audit bin`).
       - name: Build
         if: '!matrix.universal'
-        run: ${CONTAINER:+docker exec "$CONTAINER"} cargo auditable build --release -p waveduderust_classic -p waveduderust_cli
+        run: ${CONTAINER:+docker exec "$CONTAINER"} cargo auditable build --release -p waveduderust_slint -p waveduderust_cli
       - name: Build universal
         if: matrix.universal
         run: |
-          cargo auditable build --release -p waveduderust_classic -p waveduderust_cli \
+          cargo auditable build --release -p waveduderust_slint -p waveduderust_cli \
             --target aarch64-apple-darwin --target x86_64-apple-darwin
           mkdir -p target/universal-apple-darwin/release
           for program in waveduderust waveduderust-cli; do
@@ -105,7 +105,7 @@ jobs:
           done
       - name: Package
         run: |
-          ${CONTAINER:+docker exec "$CONTAINER"} cargo packager --release -p waveduderust_classic --formats "$PACKAGE_FORMATS" \
+          ${CONTAINER:+docker exec "$CONTAINER"} cargo packager --release -p waveduderust_slint --formats "$PACKAGE_FORMATS" \
             ${UNIVERSAL:+--target universal-apple-darwin}
         env:
           UNIVERSAL: ${{ matrix.universal }}
@@ -128,7 +128,7 @@ jobs:
         run: |
           # a prefix tree with its own install.sh: menu entry, icons and file types beside the programs
           dir="WaveDude_Rust-$VERSION-$PACKAGE_PLATFORM"
-          assets=frontends/classic/assets
+          assets=frontends/waveduderust_slint/assets
           mkdir -p "$dir/bin" "$dir/share/applications" "$dir/share/mime/packages"
           cp target/release/waveduderust target/release/waveduderust-cli "$dir/bin"
           cp LICENSE.md NOTICE.md README.md "$assets/linux/install.sh" "$dir"
@@ -188,10 +188,10 @@ jobs:
           done
       - name: SBOMs
         run: |
-          ${CONTAINER:+docker exec "$CONTAINER"} cargo cyclonedx -q --manifest-path frontends/classic/Cargo.toml \
+          ${CONTAINER:+docker exec "$CONTAINER"} cargo cyclonedx -q --manifest-path frontends/waveduderust_slint/Cargo.toml \
             -f json --spec-version 1.5 --target "$SBOM_TARGET" --override-filename sbom
           mkdir sbom
-          cp frontends/classic/sbom.json "sbom/waveduderust-$VERSION-$PACKAGE_PLATFORM.cdx.json"
+          cp frontends/waveduderust_slint/sbom.json "sbom/waveduderust-$VERSION-$PACKAGE_PLATFORM.cdx.json"
           cp crates/waveduderust_cli/sbom.json "sbom/waveduderust-cli-$VERSION-$PACKAGE_PLATFORM.cdx.json"
       - name: Update entry
         if: inputs.update-pubkey != ''
@@ -281,7 +281,7 @@ jobs:
         run: |
           mkdir sbom
           # The workers are one package, waveduderust_workers.
-          for entry in frontends/classic:waveduderust crates/waveduderust_workers:waveduderust_workers; do
+          for entry in frontends/waveduderust_slint:waveduderust crates/waveduderust_workers:waveduderust_workers; do
             dir=${entry%%:*} crate=${entry##*:}
             cargo cyclonedx -q --manifest-path "$dir/Cargo.toml" -f json --spec-version 1.5 \
               --target wasm32-unknown-unknown --override-filename sbom

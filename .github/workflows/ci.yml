@@ -277,7 +277,7 @@ jobs:
             -e CARGO_TERM_COLOR build sleep infinity
           docker exec build rustup toolchain install
       - name: Build
-        run: docker exec build cargo build --release -p waveduderust_classic -p waveduderust_cli
+        run: docker exec build cargo build --release -p waveduderust_slint -p waveduderust_cli
       # Then the check itself: below every version the CLI needs, it has to fail.
       - name: glibc floor
         run: |

@@ -4,14 +4,11 @@
 
 [files]
 extend-exclude = [
-	"crates/waveduderust_app/assets/strings/de.json",
-	"crates/waveduderust_app/assets/strings/fr.json",
-	"crates/waveduderust_app/assets/strings/nl.json",
 	"crates/waveduderust/tests/fixtures/**",
 	"examples/**",
 	"docs/review/**",
 	"CHANGELOG.md",
-	"frontends/classic/assets/windows/installer.nsi",
+	"frontends/waveduderust_slint/assets/windows/installer.nsi",
 	"crates/waveduderust/tests/snapshots/**",
 ]
 
