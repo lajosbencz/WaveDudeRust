@@ -2,6 +2,7 @@ import { Theme } from "theme.slint";
 import { Pane } from "pane.slint";
 import { ProjectTree, TreeRow, TreeKind } from "tree.slint";
 import { Properties, PropRow, PropKind } from "properties.slint";
+import { Preview } from "preview.slint";
 
 export { Theme, TreeRow, TreeKind, PropRow, PropKind }
 
@@ -17,6 +18,9 @@ export component AppWindow inherits Window {
     callback tree-toggle(int);
     callback tree-shift(int, int);
     callback tree-remove(int);
+    in property <image> field;
+    in property <image> intensity;
+    in property <string> run-status;
     in property <string> props-heading;
     in property <[PropRow]> props-rows;
     in property <string> props-error;
@@ -140,6 +144,10 @@ export component AppWindow inherits Window {
                     title: @tr("Preview");
                     active: true;
                     vertical-stretch: 3;
+                    Preview {
+                        field: root.field;
+                        intensity: root.intensity;
+                    }
                 }
                 if root.messages-shown: Pane {
                     title: @tr("Messages");
@@ -156,6 +164,12 @@ export component AppWindow inherits Window {
                 padding-right: 16px;
                 Text {
                     text: root.status-text;
+                    color: Theme.selection-text;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                Text {
+                    text: root.run-status;
                     color: Theme.selection-text;
                     vertical-alignment: center;
                 }

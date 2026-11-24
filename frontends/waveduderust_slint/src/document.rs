@@ -14,6 +14,8 @@ pub(crate) struct Document {
 	undo: Vec<Project>,
 	redo: Vec<Project>,
 	limit: usize,
+	/// Counts the project's changes, for whoever follows it.
+	pub(crate) generation: u64,
 }
 
 impl Document {
@@ -49,6 +51,7 @@ impl Document {
 		let before = self.project.clone();
 		edit(&mut self.project);
 		if self.project != before {
+			self.generation += 1;
 			self.undo.push(before);
 			if self.undo.len() > self.limit {
 				self.undo.remove(0);
@@ -59,12 +62,14 @@ impl Document {
 
 	pub(crate) fn undo(&mut self) {
 		if let Some(p) = self.undo.pop() {
+			self.generation += 1;
 			self.redo.push(std::mem::replace(&mut self.project, p));
 		}
 	}
 
 	pub(crate) fn redo(&mut self) {
 		if let Some(p) = self.redo.pop() {
+			self.generation += 1;
 			self.undo.push(std::mem::replace(&mut self.project, p));
 		}
 	}

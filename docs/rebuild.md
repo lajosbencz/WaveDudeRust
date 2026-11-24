@@ -71,3 +71,4 @@ Settings and other documented divergences stand: docs/divergences.md, decisions 
 | Skeleton | window, theme tokens, menus with shortcuts, pane layout, status bar, `just hot` | splitters, docking, Selawik font, icons |
 | Document | open/save (`.wdproj`, Wave Dude 2D import), title, undo/redo, tree rows, check, move, remove, select | multi-selection, toolbar, add items, drag and drop, clipboard, recent files, unsaved edits prompt |
 | Properties | a form per object from its reflected fields (`model::fields`): text, number, check and choice editors, edit errors | sections, units, number stepping, colour swatches, gradient rows, read-outs, part kind fields; Display edits skip undo |
+| Preview | one wgpu device for engine and window, Run (F5) and Stop, re-run on edit, field and intensity drawn into textures with no readback, run state in the status bar | header strip, zoom, handles and overlays, probe graph boxes, busy/stale marks, frame at the playback position |

@@ -2,6 +2,8 @@
 
 mod document;
 mod form;
+mod gpu;
+mod live;
 mod tree;
 
 #[allow(
@@ -25,6 +27,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use ui::AppWindow;
 
 use crate::document::Document;
+use crate::live::Live;
 use crate::tree::Node;
 
 /// Undo steps until the settings arrive (decision 0030).
@@ -35,6 +38,9 @@ struct State {
 	doc: Document,
 	nodes: Vec<Node>,
 	selected: Node,
+	live: Live,
+	/// The document generation the run started from.
+	ran: u64,
 }
 
 impl State {
@@ -46,6 +52,11 @@ impl State {
 		app.set_window_title(self.doc.title().into());
 		app.set_can_undo(self.doc.can_undo());
 		app.set_can_redo(self.doc.can_redo());
+		if self.ran != self.doc.generation {
+			self.ran = self.doc.generation;
+			self.live.edited(&self.doc.project, &self.doc.view);
+		}
+		app.set_run_active(self.live.active());
 		let (heading, rows) = form::of_selected(&self.doc.project, &self.doc.view, self.selected);
 		app.set_props_heading(heading.into());
 		app.set_props_rows(ModelRc::new(VecModel::from(rows)));
@@ -63,8 +74,12 @@ fn project_dialog() -> rfd::FileDialog {
 /// Runs a menu action by its id (docs/ui/10).
 fn menu(state: &mut State, app: &AppWindow, id: &str) {
 	match id {
+		"run" => state.live.run(&state.doc.project, &state.doc.view),
+		"stop" => state.live.stop(),
 		"new" => {
+			let generation = state.doc.generation + 1;
 			state.doc = Document::new(UNDO_STEPS);
+			state.doc.generation = generation;
 			state.selected = Node::Project;
 		}
 		"open" => {
@@ -112,10 +127,18 @@ fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 	state.show(app);
 }
 
-fn main() -> Result<(), slint::PlatformError> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+	tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).with_writer(std::io::stderr).init();
+	let (device, queue) = gpu::select()?;
 	let app = AppWindow::new()?;
-	let state =
-		Rc::new(RefCell::new(State { doc: Document::new(UNDO_STEPS), nodes: Vec::new(), selected: Node::Project }));
+	let live = Live::new(device, queue)?;
+	let state = Rc::new(RefCell::new(State {
+		doc: Document::new(UNDO_STEPS),
+		nodes: Vec::new(),
+		selected: Node::Project,
+		live,
+		ran: 0,
+	}));
 	if let Some(path) = std::env::args_os().nth(1) {
 		open(&mut state.borrow_mut(), &app, path.into());
 	}
@@ -177,5 +200,21 @@ fn main() -> Result<(), slint::PlatformError> {
 			menu(&mut st.borrow_mut(), &app, &id);
 		}
 	});
-	app.run()
+	let (st, weak) = (state.clone(), app.as_weak());
+	let timer = slint::Timer::default();
+	timer.start(slint::TimerMode::Repeated, std::time::Duration::from_millis(16), move || {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			let shown = s.live.poll(&s.doc.project, &s.doc.view);
+			if let Some(image) = shown.field {
+				app.set_field(image);
+			}
+			if let Some(image) = shown.intensity {
+				app.set_intensity(image);
+			}
+			app.set_run_status(shown.status.into());
+		}
+	});
+	app.run()?;
+	Ok(())
 }

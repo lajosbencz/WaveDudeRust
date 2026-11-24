@@ -1,0 +1,35 @@
+import { Theme } from "theme.slint";
+
+component Picture inherits VerticalLayout {
+    in property <string> title;
+    in property <image> source;
+    horizontal-stretch: 1;
+    Rectangle {
+        height: Theme.row-height;
+        background: Theme.window-background;
+        Text {
+            x: 6px;
+            text: root.title;
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+    }
+    Rectangle {
+        background: #000000;
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.source;
+            image-fit: contain;
+        }
+    }
+}
+
+// The preview's pictures (docs/ui/40): field and intensity side by side.
+export component Preview inherits HorizontalLayout {
+    in property <image> field;
+    in property <image> intensity;
+    spacing: 2px;
+    Picture { title: @tr("Field"); source: root.field; }
+    Picture { title: @tr("Intensity"); source: root.intensity; }
+}
