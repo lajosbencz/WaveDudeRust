@@ -5,7 +5,9 @@ use std::fmt::Write as _;
 use std::rc::Rc;
 
 use slint::{Model, ModelRc, VecModel};
-use waveduderust::model::{ItemRef, Layer, ProbeKind, Project, View};
+use waveduderust::model::edited::Edited;
+use waveduderust::model::{ItemRef, Layer, Part, PartKind, ProbeKind, Project, View};
+use waveduderust::unstable::view::handles;
 use waveduderust::unstable::view::overlay::{self, HandleKind, OverlayModel};
 
 use crate::selection::{Selection, groupable};
@@ -50,11 +52,24 @@ enum Which {
 	Both,
 }
 
-/// A handle drag under way: what it moves from where, one undo step.
+/// What a drag edits.
+enum Target {
+	/// Whole items (a source, a part's centre, a probe end, or a group of them) moved from where they started.
+	Items(Vec<(ItemRef, Start)>),
+	/// A source's or a part's rotation lever.
+	Lever(ItemRef),
+	/// A part's size grip, an outline point or a fibre node or Bezier handle.
+	Shape(ItemRef, HandleKind),
+}
+
+/// A handle drag under way, one undo step.
 pub(crate) struct Drag {
 	key: String,
 	node: Node,
-	starts: Vec<(ItemRef, Start)>,
+	target: Target,
+	/// Where the drag starts, canvas pixels: the press, or the shape handle's own point, so the first move does not
+	/// jump it to the pointer.
+	from: (f64, f64),
 	/// The whole-pixel move applied last.
 	by: (f64, f64),
 }
@@ -229,31 +244,43 @@ impl Overlays {
 			return None;
 		};
 		let node = node_of(project, handle.item)?;
+		let drag = |target: Target| Drag {
+			key: format!("drag {gesture}"),
+			node,
+			from: match target {
+				Target::Shape(..) => (f64::from(handle.at.0), f64::from(handle.at.1)),
+				_ => (f64::from(at.0), f64::from(at.1)),
+			},
+			target,
+			by: (0., 0.),
+		};
 		if control {
 			selection.toggle(node);
 			return None;
 		}
-		if shift {
+		// a lever or a shape handle belongs to the current item alone: Shift on it snaps a lever, it adds nothing
+		if shift && handle.kind.moves_item() {
 			if !selection.contains(node) {
 				selection.toggle(node);
 			}
 			return None;
 		}
 		let group = selection.group_of(node);
-		let starts = if group.len() > 1 && handle.kind.moves_item() {
+		let target = if group.len() > 1 && handle.kind.moves_item() {
 			selection.pick(project, node, ui::Pick::Focus);
-			group.iter().filter_map(|&n| start(project, n, Which::Both)).collect()
+			Target::Items(group.iter().filter_map(|&n| start(project, n, Which::Both)).collect())
 		} else {
 			selection.set(node);
 			let which = match handle.kind {
 				HandleKind::ProbeA => Which::A,
 				HandleKind::ProbeB => Which::B,
 				HandleKind::Source | HandleKind::PartCentre => Which::Both,
-				_ => return None,
+				HandleKind::SourceLever | HandleKind::PartLever => return Some(drag(Target::Lever(handle.item))),
+				kind => return Some(drag(Target::Shape(handle.item, kind))),
 			};
-			start(project, node, which).into_iter().collect()
+			Target::Items(start(project, node, which).into_iter().collect())
 		};
-		Some(Drag { key: format!("drag {gesture}"), node, starts, by: (0., 0.) })
+		Some(drag(target))
 	}
 }
 
@@ -308,56 +335,106 @@ impl Drag {
 		self.node
 	}
 
-	/// Whether the items are away from where they started.
+	/// Whether the pointer is a whole pixel or more away from the press (items: the move after the canvas limit).
 	pub(crate) fn moved(&self) -> bool {
 		self.by != (0., 0.)
 	}
 
-	/// Moves the dragged items by `(dx, dy)` canvas pixels from where they started, whole pixels, limited so none
-	/// leaves the canvas.
-	pub(crate) fn apply(&mut self, project: &mut Project, (dx, dy): (f32, f32)) {
-		let (w, h) = project.canvas_size();
-		let (w, h) = (f64::from(w) - 1., f64::from(h) - 1.);
-		let points: Vec<(f64, f64)> = self.starts.iter().flat_map(|(_, s)| s.points()).collect();
-		let range = |of: fn(&(f64, f64)) -> f64, max: f64| {
-			let lo = points.iter().map(|p| -of(p)).fold(f64::NEG_INFINITY, f64::max);
-			let hi = points.iter().map(|p| max - of(p)).fold(f64::INFINITY, f64::min);
-			(lo, hi.max(lo))
-		};
-		let ((xl, xh), (yl, yh)) = (range(|p| p.0, w), range(|p| p.1, h));
-		let d = (f64::from(dx).round().clamp(xl, xh), f64::from(dy).round().clamp(yl, yh));
-		self.by = d;
-		for &(item, s) in &self.starts {
-			let Some(node) = node_of(project, item) else { continue };
-			match (node, s) {
-				(Node::Source(i), Start::Source(x, y)) => {
-					let src = &mut project.sources[i];
-					(src.x, src.y) = (x + d.0, y + d.1);
-				}
-				(Node::Part(i), Start::Part(x, y)) => {
-					let base = &mut project.parts[i].base;
-					(base.x, base.y) = (x + d.0 as i32, y + d.1 as i32);
-				}
-				(Node::Probe(i), Start::Probe([ax, ay, bx, by], which)) => {
-					let p = &mut project.probes[i];
-					let (ex, ey) = (d.0 as i32, d.1 as i32);
-					if which != Which::B {
-						(p.ax, p.ay) = (ax + ex, ay + ey);
+	/// Takes the drag to `(dx, dy)` canvas pixels from the press; `snap` turns a lever in 15-degree steps. The
+	/// edited objects then make their fields agree, as a form's edit does.
+	pub(crate) fn apply(&mut self, project: &mut Project, (dx, dy): (f32, f32), snap: bool) {
+		let d = (f64::from(dx).round(), f64::from(dy).round());
+		let at = (self.from.0 + f64::from(dx), self.from.1 + f64::from(dy));
+		match &self.target {
+			Target::Items(starts) => self.by = move_items(project, starts, d),
+			&Target::Lever(item) => {
+				self.by = d;
+				match node_of(project, item) {
+					Some(Node::Source(i)) => {
+						let s = &mut project.sources[i];
+						if let Some(array) = &mut s.array {
+							array.angle = handles::lever_angle((s.x + 0.5, s.y + 0.5), at, snap);
+						}
 					}
-					if which != Which::A {
-						(p.bx, p.by) = (bx + ex, by + ey);
-					}
+					Some(Node::Part(i)) => edit_part(&mut project.parts[i], |p| {
+						p.base.angle = handles::lever_angle((p.base.x.into(), p.base.y.into()), at, snap);
+					}),
+					_ => {}
 				}
-				_ => {}
+			}
+			&Target::Shape(item, kind) => {
+				self.by = d;
+				let Some(Node::Part(i)) = node_of(project, item) else { return };
+				edit_part(&mut project.parts[i], |p| {
+					let q = handles::to_part_frame(p, at);
+					match (&mut p.kind, kind) {
+						(_, HandleKind::Grip) => handles::drag_grip(&mut p.kind, q),
+						(PartKind::Outline(o), HandleKind::Point(k)) => handles::drag_point(&mut o.points, k, q),
+						(PartKind::Fiber(f), kind) => handles::drag_fibre(&mut f.nodes, kind, q),
+						_ => {}
+					}
+				});
 			}
 		}
 	}
+}
+
+/// Edits `part` by `edit`, then makes its fields agree.
+fn edit_part(part: &mut Part, edit: impl FnOnce(&mut Part)) {
+	let before = part.clone();
+	edit(part);
+	part.edited(&before);
+}
+
+/// Moves the items of `starts` by `d` canvas pixels from where they started, limited so none leaves the canvas;
+/// the move made.
+fn move_items(project: &mut Project, starts: &[(ItemRef, Start)], d: (f64, f64)) -> (f64, f64) {
+	let (w, h) = project.canvas_size();
+	let (w, h) = (f64::from(w) - 1., f64::from(h) - 1.);
+	let points: Vec<(f64, f64)> = starts.iter().flat_map(|(_, s)| s.points()).collect();
+	let range = |of: fn(&(f64, f64)) -> f64, max: f64| {
+		let lo = points.iter().map(|p| -of(p)).fold(f64::NEG_INFINITY, f64::max);
+		let hi = points.iter().map(|p| max - of(p)).fold(f64::INFINITY, f64::min);
+		(lo, hi.max(lo))
+	};
+	let ((xl, xh), (yl, yh)) = (range(|p| p.0, w), range(|p| p.1, h));
+	let d = (d.0.clamp(xl, xh), d.1.clamp(yl, yh));
+	for &(item, s) in starts {
+		let Some(node) = node_of(project, item) else { continue };
+		match (node, s) {
+			(Node::Source(i), Start::Source(x, y)) => {
+				let src = &mut project.sources[i];
+				(src.x, src.y) = (x + d.0, y + d.1);
+			}
+			(Node::Part(i), Start::Part(x, y)) => {
+				edit_part(&mut project.parts[i], |p| (p.base.x, p.base.y) = (x + d.0 as i32, y + d.1 as i32));
+			}
+			(Node::Probe(i), Start::Probe([ax, ay, bx, by], which)) => {
+				let p = &mut project.probes[i];
+				let before = p.clone();
+				let (ex, ey) = (d.0 as i32, d.1 as i32);
+				if which != Which::B {
+					(p.ax, p.ay) = (ax + ex, ay + ey);
+				}
+				if which != Which::A {
+					(p.bx, p.by) = (bx + ex, by + ey);
+				}
+				p.edited(&before);
+			}
+			_ => {}
+		}
+	}
+	d
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use waveduderust::model::Project;
+
+	fn items(node: Node, starts: Vec<(ItemRef, Start)>) -> Drag {
+		Drag { key: String::new(), node, target: Target::Items(starts), from: (0., 0.), by: (0., 0.) }
+	}
 
 	#[test]
 	fn a_group_drag_stops_at_the_canvas_edge_for_all() {
@@ -367,8 +444,8 @@ mod tests {
 			let s = p.sources.iter().find(|s| s.id() == id).unwrap();
 			(ItemRef::Source(id), Start::Source(s.x, s.y))
 		});
-		let mut drag = Drag { key: String::new(), node: Node::Source(0), starts: starts.to_vec(), by: (0., 0.) };
-		drag.apply(&mut p, (-30.4, 2.6));
+		let mut drag = items(Node::Source(0), starts.to_vec());
+		drag.apply(&mut p, (-30.4, 2.6), false);
 		let xs: Vec<(f64, f64)> = p.sources.iter().map(|s| (s.x, s.y)).collect();
 		assert_eq!(xs, [(0., 13.), (40., 13.)]);
 		assert!(drag.moved());
@@ -381,8 +458,8 @@ mod tests {
 		p.probes[0].kind = ProbeKind::Point;
 		(p.probes[0].ax, p.probes[0].ay, p.probes[0].bx, p.probes[0].by) = (50, 50, 0, 0);
 		let starts = start(&p, Node::Probe(0), Which::Both).into_iter().collect();
-		let mut drag = Drag { key: String::new(), node: Node::Probe(0), starts, by: (0., 0.) };
-		drag.apply(&mut p, (-20., -20.));
+		let mut drag = items(Node::Probe(0), starts);
+		drag.apply(&mut p, (-20., -20.), false);
 		assert_eq!((p.probes[0].ax, p.probes[0].ay), (30, 30));
 	}
 
@@ -393,13 +470,8 @@ mod tests {
 		let pr = &p.probes[0];
 		let start = Start::Probe([pr.ax, pr.ay, pr.bx, pr.by], Which::B);
 		let (a, b) = ((pr.ax, pr.ay), (pr.bx + 5, pr.by - 3));
-		let mut drag = Drag {
-			key: String::new(),
-			node: Node::Probe(0),
-			starts: vec![(ItemRef::Probe(pr.id()), start)],
-			by: (0., 0.),
-		};
-		drag.apply(&mut p, (5., -3.));
+		let mut drag = items(Node::Probe(0), vec![(ItemRef::Probe(pr.id()), start)]);
+		drag.apply(&mut p, (5., -3.), false);
 		assert_eq!(((p.probes[0].ax, p.probes[0].ay), (p.probes[0].bx, p.probes[0].by)), (a, b));
 	}
 }

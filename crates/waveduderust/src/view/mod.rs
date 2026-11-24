@@ -6,6 +6,7 @@
 pub mod draw;
 pub mod fonts;
 pub mod graph;
+pub mod handles;
 pub mod overlay;
 
 pub use draw::{DeviceGrid, TextMetrics};

@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 52 | 1 | 10 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 27 | 12 | 68 | 4 | 1 |
+| V | Preview | 36 | 6 | 65 | 4 | 1 |
 | L | Timeline, transport, status | 40 | 20 | 20 | 7 | 3 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 614 | 87 | 249 | 139 | 6 |
+| | All | 623 | 81 | 246 | 139 | 6 |
 
 ## Cross-cutting
 
@@ -993,15 +993,15 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-45 | Glyphs odd-sized (21/15/13 px), centre pixel, 1.5 px AA strokes | MarkerThumb.cs | 40 Handles | divergence | decision 0033, matched in general, not to the pixel/id |
 | V-46 | Source position handle (ring + 4 ticks + dot) both pictures | SceneOverlay.cs:449 | 40 Handles | done | canvas.rs overlay rows from core overlay::build; preview.slint HandleView glyph |
 | V-47 | Composite emitter dots (selected source's in selection colour, not focusable) | SceneOverlay.cs:140,1092 | 40 Handles | done | one Path of dots per layer, the selected source's in the selection colour |
-| V-48 | Source rotation lever (arc arrow, dotted lever line), current item only | SceneOverlay.cs:136-139,449 | 40 Handles | partial | drawn with its lever line; dragging comes with the lever batch |
+| V-48 | Source rotation lever (arc arrow, dotted lever line), current item only | SceneOverlay.cs:136-139,449 | 40 Handles | done | drag turns the array: core view::handles::lever_angle, whole degrees, Shift 15 |
 | V-49 | Part centre handle (ring+inner ring+ticks) | SceneOverlay.cs:456 | 40 Handles | done | HandleView part glyph |
 | V-50 | Part outline in selection colour for selected parts | SceneOverlay.cs:1097-1122 | 40 Handles | done | selected parts' outlines and fibre centre lines in the selection colour |
-| V-51 | Part rotation lever | SceneOverlay.cs:456 | 40 Handles | partial | drawn; dragging comes with the lever batch |
-| V-52 | Part size grip (15 px filled square) corner/vertex | SceneOverlay.cs:459 | 40 Handles | partial | drawn; dragging comes with the grip batch |
-| V-53 | Lens surface handles (2) | SceneOverlay.cs:464-465 | 40 Handles | partial | drawn; dragging comes with the grip batch |
-| V-54 | Outline point handles | SceneOverlay.cs:477 | 40 Handles | partial | drawn; dragging comes with the grip batch |
-| V-55 | Fibre node handles | SceneOverlay.cs:499 | 40 Handles | partial | drawn; dragging comes with the grip batch |
-| V-56 | Fibre Bezier in/out handles + dotted lines; first in / last out omitted | SceneOverlay.cs:493-497,1134-1152 | 40 Handles | partial | drawn with lines to their node; dragging comes with the grip batch |
+| V-51 | Part rotation lever | SceneOverlay.cs:456 | 40 Handles | done | as V-48 for the part, its Edited rules applied |
+| V-52 | Part size grip (15 px filled square) corner/vertex | SceneOverlay.cs:459 | 40 Handles | done | core view::handles::drag_grip |
+| V-53 | Lens surface handles (2) | SceneOverlay.cs:464-465 | 40 Handles | partial | a lens has its diameter grip; the two surface handles are not built by the core overlay |
+| V-54 | Outline point handles | SceneOverlay.cs:477 | 40 Handles | done | core view::handles::drag_point |
+| V-55 | Fibre node handles | SceneOverlay.cs:499 | 40 Handles | done | core view::handles::drag_fibre: a node carries its handles |
+| V-56 | Fibre Bezier in/out handles + dotted lines; first in / last out omitted | SceneOverlay.cs:493-497,1134-1152 | 40 Handles | done | drag shapes the segment; a smooth node mirrors the opposite handle, length kept |
 | V-57 | Probe point A / end B marker (square+ticks+dot), only on probe's layer | SceneOverlay.cs:952, SourceMarkerPainter.cs | 40 Handles | done | probe A/B glyph on the probe's layer only |
 | V-58 | Line probe: dark line under dashed light line A..B | SceneOverlay.cs:1064 | 40 Handles | done | solid line A..B; rest matched in general (decision 0033) |
 | V-59 | Labels: item name beside handle (below for composites/parts), dark halo, kept in picture | SceneOverlay.cs:131,1189 | 40 Handles | done | LabelView, halo by text stroke; below for composites and parts |
@@ -1015,10 +1015,10 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-67 | Shift+click add to selection, no drag | SceneOverlay.cs:1410 | 40 Interaction | done | Shift adds, no drag |
 | V-68 | Drag handle moves it, live coordinates, measured from press (no clamp drift) | SceneOverlay.cs:1457 | 40 Interaction | done | canvas::Drag from the press, whole pixels, one undo step (merge key per drag) |
 | V-69 | Drag one of several selected: group move, limited so none leaves canvas; no-move drag selects item | SceneOverlay.cs:1446, Movable.Limit | 40 Interaction | done | group of whole-item handles, clamped so none leaves the canvas; a drag that does not move selects the item alone |
-| V-70 | Drag rotation lever, whole degrees, Shift snaps 15, angle in (-180,180] | SceneOverlay.cs:850,1467 | 40 Interaction | missing | |
-| V-71 | Drag size grip: absolute, whole px, min size, linked rect/ellipse farther coord, polygon on ray | SceneOverlay.cs | 40 Interaction | missing | |
+| V-70 | Drag rotation lever, whole degrees, Shift snaps 15, angle in (-180,180] | SceneOverlay.cs:850,1467 | 40 Interaction | done | canvas::Target::Lever |
+| V-71 | Drag size grip: absolute, whole px, min size, linked rect/ellipse farther coord, polygon on ray | SceneOverlay.cs | 40 Interaction | done | canvas::Target::Shape with Grip; linked: the farther coordinate; polygon on its ray |
 | V-72 | Drag lens surface handle (bulge/flatten/hollow, rim fixed) | SceneOverlay.cs | 40 Interaction | missing | |
-| V-73 | Drag fibre node (with handles) / Bezier handle (smooth node mirrors length) | SceneOverlay.cs MirrorLength | 40 Interaction | missing | |
+| V-73 | Drag fibre node (with handles) / Bezier handle (smooth node mirrors length) | SceneOverlay.cs MirrorLength | 40 Interaction | done | canvas::Target::Shape with Node/InHandle/OutHandle |
 | V-74 | Drag probe A onto detached graph box picks it up | SceneOverlay.cs:952 | 40 Interaction | missing | |
 | V-75 | Esc during drag puts item/group back; second finger likewise | SceneOverlay.cs:1507-1517 | 40 Interaction | missing | |
 | V-76 | Click empty space deselects (unless Shift/Ctrl), focuses pane | PreviewPane.xaml.cs:1289 | 40 Interaction | partial | a press off the handles selects the root unless Ctrl/Shift; the pane takes no focus yet |

@@ -44,7 +44,7 @@ export global Canvas {
     callback rescaled(layer: Layer, scale: float);
     // a press at canvas pixel (x, y)
     callback press(layer: Layer, x: float, y: float, control: bool, shift: bool);
-    // canvas pixels from the press
-    callback drag(dx: float, dy: float);
+    // canvas pixels from the press; `shift` snaps a lever
+    callback drag(dx: float, dy: float, shift: bool);
     callback release();
 }

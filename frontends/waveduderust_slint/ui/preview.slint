@@ -131,6 +131,15 @@ component Picture inherits VerticalLayout {
                     Canvas.release();
                     return;
                 }
+                if (e.kind == PointerEventKind.move) {
+                    if (self.pressed) {
+                        Canvas.drag(
+                            (self.mouse-x - self.from-x) / (cell.scale * 1px),
+                            (self.mouse-y - self.from-y) / (cell.scale * 1px),
+                            e.modifiers.shift);
+                    }
+                    return;
+                }
                 if (e.button != PointerEventButton.left) {
                     return;
                 }
@@ -145,11 +154,6 @@ component Picture inherits VerticalLayout {
                         e.modifiers.shift);
                 } else if (e.kind == PointerEventKind.up) {
                     Canvas.release();
-                }
-            }
-            moved => {
-                if (self.pressed) {
-                    Canvas.drag((self.mouse-x - self.from-x) / (cell.scale * 1px), (self.mouse-y - self.from-y) / (cell.scale * 1px));
                 }
             }
         }

@@ -1345,12 +1345,12 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		s.show(&app);
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
-	canvas.on_drag(move |dx, dy| {
+	canvas.on_drag(move |dx, dy, shift| {
 		let Some(app) = weak.upgrade() else { return };
 		let s = &mut *st.borrow_mut();
 		let Some(drag) = &mut s.drag else { return };
 		let key = drag.key().to_owned();
-		s.doc.edit_merging(Some(&key), |p| drag.apply(p, (dx, dy)));
+		s.doc.edit_merging(Some(&key), |p| drag.apply(p, (dx, dy), shift));
 		s.show(&app);
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
