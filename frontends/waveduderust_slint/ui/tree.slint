@@ -188,6 +188,23 @@ export component ProjectTree inherits Rectangle {
     in property <bool> can-toggle;
     // a command on the current row ("move-up", "move-down", "delete") or an add ("add:<what>")
     callback act(string);
+    // a key's move: "up", "down", "home", "end", "left", "right"; `extend` a Shift range
+    callback navigate(key: string, extend: bool);
+    // a row's drag payload
+    pure callback drag-data(row: int) -> data-transfer;
+    // where a drop of `data` on the row would go: 0 nowhere, 1 before, 2 after, 3 into; `before` its upper half
+    callback drop-place(row: int, data: data-transfer, before: bool) -> int;
+    callback drop(row: int, data: data-transfer, before: bool);
+
+    // the current row stays in view
+    changed current-row => {
+        let top = root.current-row * Theme.row-height;
+        if (root.current-row >= 0 && top < -list.viewport-y) {
+            list.viewport-y = -top;
+        } else if (root.current-row >= 0 && top + Theme.row-height > -list.viewport-y + list.visible-height) {
+            list.viewport-y = list.visible-height - top - Theme.row-height;
+        }
+    }
 
     // the tree takes the focus with a command on it (Next's rule)
     function run(id: string) {
@@ -241,6 +258,12 @@ export component ProjectTree inherits Rectangle {
                 if (e.modifiers.control && !e.modifiers.alt && e.text == "d") { root.act("duplicate"); return accept; }
                 if (e.modifiers.control && !e.modifiers.alt && e.text == " ") { root.act("toggle-selected"); return accept; }
                 if (e.modifiers.alt || e.modifiers.control) { return reject; }
+                if (e.text == Key.UpArrow) { root.navigate("up", e.modifiers.shift); return accept; }
+                if (e.text == Key.DownArrow) { root.navigate("down", e.modifiers.shift); return accept; }
+                if (e.text == Key.Home) { root.navigate("home", e.modifiers.shift); return accept; }
+                if (e.text == Key.End) { root.navigate("end", e.modifiers.shift); return accept; }
+                if (e.text == Key.LeftArrow) { root.navigate("left", false); return accept; }
+                if (e.text == Key.RightArrow) { root.navigate("right", false); return accept; }
                 if (e.text == " ") { root.act("toggle-enabled"); return accept; }
                 if (e.text == Key.Insert) { root.act("toggle-selected"); return accept; }
                 if (e.text == Key.Menu || (e.modifiers.shift && e.text == Key.F10)) {
@@ -315,25 +338,44 @@ export component ProjectTree inherits Rectangle {
                 for row[i] in root.rows: Rectangle {
                     height: Theme.row-height;
                     background: row.selected ? (root.focused ? Theme.selection : Theme.inactive-selection) : area.has-hover ? Theme.row-hover : transparent;
-                    area := TouchArea {
-                        // the press's modifiers: `clicked` carries none
-                        property <int> pick;
-                        pointer-event(e) => {
-                            if (e.kind == PointerEventKind.down) {
-                                self.pick = e.modifiers.control ? 1 : e.modifiers.shift ? 2 : 0;
-                                if (e.button == PointerEventButton.right) {
+                    drop := DropArea {
+                        // where a drop over the row would go (drop-place)
+                        property <int> place;
+                        can-drop(e) => {
+                            self.place = root.drop-place(i, e.data, e.position.y < self.height / 2);
+                            self.place == 0 ? DragAction.none : DragAction.move
+                        }
+                        dropped(e) => {
+                            tree-keys.focus();
+                            root.drop(i, e.data, e.position.y < self.height / 2);
+                            DragAction.move
+                        }
+                        // an item row reorders by dragging (Next's drag from the row, not its buttons)
+                        DragArea {
+                            enabled: row.depth == 2;
+                            allow-move: true;
+                            data: root.drag-data(i);
+                            area := TouchArea {
+                                // the press's modifiers: `clicked` carries none
+                                property <int> pick;
+                                pointer-event(e) => {
+                                    if (e.kind == PointerEventKind.down) {
+                                        self.pick = e.modifiers.control ? 1 : e.modifiers.shift ? 2 : 0;
+                                        if (e.button == PointerEventButton.right) {
+                                            tree-keys.focus();
+                                            root.select(i, row.selected ? 3 : 0);
+                                            rows-menu.show({
+                                                x: self.absolute-position.x + self.mouse-x - menu-anchor.absolute-position.x,
+                                                y: self.absolute-position.y + self.mouse-y - menu-anchor.absolute-position.y,
+                                            });
+                                        }
+                                    }
+                                }
+                                clicked => {
                                     tree-keys.focus();
-                                    root.select(i, row.selected ? 3 : 0);
-                                    rows-menu.show({
-                                        x: self.absolute-position.x + self.mouse-x - menu-anchor.absolute-position.x,
-                                        y: self.absolute-position.y + self.mouse-y - menu-anchor.absolute-position.y,
-                                    });
+                                    root.select(i, self.pick);
                                 }
                             }
-                        }
-                        clicked => {
-                            tree-keys.focus();
-                            root.select(i, self.pick);
                         }
                     }
                     HorizontalLayout {
@@ -406,6 +448,10 @@ export component ProjectTree inherits Rectangle {
                             IconButton { size: 18px; focusable: false; y: (parent.height - self.height) / 2; icon: @image-url("icons/next/tree-minus.svg"); tip: @tr("Remove (Del)"); clicked => { root.remove(i); } }
                         }
                     }
+                    // Next's insertion adorner: a line along the edge, an outline around a folder
+                    if drop.has-drag && drop.place == 1: Rectangle { y: 0; height: 2px; background: Theme.accent; }
+                    if drop.has-drag && drop.place == 2: Rectangle { y: parent.height - 2px; height: 2px; background: Theme.accent; }
+                    if drop.has-drag && drop.place == 3: Rectangle { border-width: 1px; border-color: Theme.accent; }
                 }
             }
         }

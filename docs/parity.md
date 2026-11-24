@@ -16,13 +16,13 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
-| T | Project tree | 25 | 19 | 21 | 36 | 0 |
+| T | Project tree | 32 | 18 | 14 | 37 | 0 |
 | P | Properties | 3 | 114 | 206 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 165 | 316 | 511 | 97 | 6 |
+| | All | 172 | 315 | 504 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -543,7 +543,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-33 | Root row Project (icon Draw:Project) | ProjectTree.xaml:292-308 | 20 Tree structure | partial | row present; no icon |
 | T-34 | Fixed rows Scene, Simulation, Display (icons EB9F/E916/E7F4) | ProjectTree.xaml:310-327 | 20 Tree structure | partial | rows present, selectable; no icons |
 | T-35 | Folder rows Sources/Parts/Probes/Colour schemes (icons) | ProjectTree.xaml:329-370 | 20 Tree structure | partial | rows present; no icons |
-| T-36 | Folder expand/collapse chevron, all expanded by default | ProjectTree.xaml:240-244 (TreeView) | 20 Tree structure | partial | tree.slint expander column: the root and folders with items, all expanded at first; a click collapses (State.collapsed, kept until restart); Left/Right keys come with 3e |
+| T-36 | Folder expand/collapse chevron, all expanded by default | ProjectTree.xaml:240-244 (TreeView) | 20 Tree structure | done | tree.slint expander column: the root and folders with items, all expanded at first; a click or Left/Right folds (State.collapsed, kept until restart); a selection a fold hides moves to the folder |
 | T-37 | Row height 23 px | ProjectTree.xaml | 20 Tree structure; 00 overview | done | Theme.row-height (verify =23px) |
 | T-38 | Localised fixed row names and folder labels | Strings/* | 20 Tree structure; 00 language | partial | English literals in tree.rs; no @tr |
 | T-39 | Item rows show item Name, live rename from Name box | ProjectTree.xaml:383-455 | 20 Item row | done | label from project each refresh |
@@ -593,19 +593,19 @@ Not-in-spec rows are marked in the Spec column.
 | T-83 | Context menu: Enabled (Space), Duplicate (Ctrl+D), Cut/Copy/Paste, Remove (Del), Move up/down (Alt+Up/Down) with glyphs | ProjectTree.xaml:263-271 | 20 Commands | divergence | tree.slint rows-menu: Enabled, Duplicate, Cut/Copy/Paste, Remove, Move up/down with icons; no access keys or key hints (divergences.md Row menu) |
 | T-84 | Context menu: Export probe CSV only on probe rows, own separator | ProjectTree.xaml:272-275 | 20 Commands | missing | waits for probe recordings in the live run (M-68) |
 | T-85 | Right-click row acts on selection or target (Explorer rule) | ProjectTree.xaml:252-254 | 20 Commands | divergence | a right click on a row outside the selection selects it, then the menu acts on the selection (Explorer's rule); Next acts on the clicked row's group without moving the selection (divergences.md Row menu) |
-| T-86 | TreeView native keyboard: Up/Down/Left/Right/Home/End, expand/collapse by arrows | WPF TreeView | not in spec | missing | no arrow keys in tree FocusScope |
+| T-86 | TreeView native keyboard: Up/Down/Left/Right/Home/End, expand/collapse by arrows | WPF TreeView | not in spec | done | tree.slint tree-keys: Up/Down/Home/End move the current row (Shift a range), Left folds or goes to the parent, Right unfolds or goes to the first child (tree::navigate); the current row scrolls into view |
 | T-87 | Tree-row Tab order / focus ring of tree | ProjectTree.xaml:240 | 20 Toolbar (Tab order) | missing |  |
-| T-88 | Drag starts from a row (not buttons) after system threshold | ProjectTree.xaml.cs:396-411 | 20 Drag and drop | missing |  |
-| T-89 | Drag carries item as app clipboard format + XML text | ProjectTree.xaml.cs:405-411 | 20 Drag and drop | missing |  |
-| T-90 | Drop on sibling row: before/after by half, insertion line along edge | ProjectTree.xaml.cs:557-580,531 | 20 Drag and drop | missing |  |
-| T-91 | Drop on own folder: append, outline around folder row | ProjectTree.xaml.cs:570 | 20 Drag and drop | missing |  |
-| T-92 | No-op positions are not a target | ProjectTree.xaml.cs:570,580 | 20 Drag and drop | missing |  |
+| T-88 | Drag starts from a row (not buttons) after system threshold | ProjectTree.xaml.cs:396-411 | 20 Drag and drop | done | Slint's DragArea on an item row's own area, its threshold; the row's buttons, check box and expander take their presses |
+| T-89 | Drag carries item as app clipboard format + XML text | ProjectTree.xaml.cs:405-411 | 20 Drag and drop | divergence | the drag carries the row in the app (DataTransfer user data), no .wdproj text: Slint takes drags to other applications on Qt only (divergences.md Tree drag) |
+| T-90 | Drop on sibling row: before/after by half, insertion line along edge | ProjectTree.xaml.cs:557-580,531 | 20 Drag and drop | done | DropArea per row: before or after a sibling by the half, the line along that edge (tree::drop_target, move_to); colour schemes reorder too, which Next marks but drops nothing for |
+| T-91 | Drop on own folder: append, outline around folder row | ProjectTree.xaml.cs:570 | 20 Drag and drop | done | a drop on the item's own folder appends, an outline around the folder row |
+| T-92 | No-op positions are not a target | ProjectTree.xaml.cs:570,580 | 20 Drag and drop | done | no-op positions, other lists and settings rows are no target (DragAction.none) |
 | T-93 | Drop into another window's tree (paste there) | ProjectTree.xaml.cs:451-486 | 20 Drag and drop | divergence | divergences.md 'Drag and drop' (0008 12) |
 | T-94 | Drop on a preview picture: pasted, moved as group under drop pixel, selection, one undo | Panes/PreviewPane.xaml.cs | 20 Drag and drop | missing | no handles/pictures drop yet |
 | T-95 | Drop onto text editor receives XML | ProjectTree.xaml.cs | 20 Drag and drop | divergence | divergences.md 'Drag and drop' |
-| T-96 | Insertion adorner line / outline visuals | Controls/InsertionAdorner.cs | 20 Drag and drop | missing |  |
+| T-96 | Insertion adorner line / outline visuals | Controls/InsertionAdorner.cs | 20 Drag and drop | done | accent line 2 px along the edge, 1 px outline around a folder |
 | T-97 | File drop on window: image becomes scene image, project file opens | MainWindow.Project.cs | 20 Drag and drop; 10 | missing | owned by another area? not in tree code |
-| T-98 | Settings rows (Scene, Simulation, Display) draggable, carry XML, do not reorder | ProjectTree.xaml.cs | 20 Drag and drop | missing |  |
+| T-98 | Settings rows (Scene, Simulation, Display) draggable, carry XML, do not reorder | ProjectTree.xaml.cs | 20 Drag and drop | missing | settings rows do not drag: no target takes them in the app yet (preview drop, T-94) |
 | T-99 | Touch-first: rows sense clicks alone, drag unavailable | n/a | 20 Drag and drop | missing | no touch mode |
 | T-100 | Schemes: move up/down/remove via row buttons | ProjectTree.xaml:446-451 | 20 Item row | done |  |
 | T-101 | Automation ids Tree:<name>, Enabled:<name>, InSelection, CollectionCount | ProjectTree.xaml:245,385 | 20 Automation ids | divergence | Slint has no AccessKit ids; decision 0032 |

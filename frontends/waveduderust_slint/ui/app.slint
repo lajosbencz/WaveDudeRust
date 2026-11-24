@@ -63,6 +63,10 @@ export component AppWindow inherits Window {
     callback tree-select(int, int);
     callback tree-toggle(int);
     callback tree-expand(int);
+    callback tree-navigate(string, bool);
+    pure callback tree-drag-data(int) -> data-transfer;
+    callback tree-drop-place(int, data-transfer, bool) -> int;
+    callback tree-drop(int, data-transfer, bool);
     callback tree-shift(int, int);
     callback tree-remove(int);
     in property <image> field;
@@ -266,6 +270,10 @@ export component AppWindow inherits Window {
                             can-select-all: root.commands.can-select-all;
                             can-toggle: root.commands.can-toggle;
                             act(id) => { root.menu(id); }
+                            navigate(key, extend) => { root.tree-navigate(key, extend); }
+                            drag-data(row) => { return root.tree-drag-data(row); }
+                            drop-place(row, data, before) => { return root.tree-drop-place(row, data, before); }
+                            drop(row, data, before) => { root.tree-drop(row, data, before); }
                         }
                     }
                     if root.project-shown && root.properties-shown: Splitter {

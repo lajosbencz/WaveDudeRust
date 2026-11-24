@@ -177,6 +177,17 @@ impl State {
 		}
 	}
 
+	/// Expands `node`'s row or collapses it; a selection it hides moves up to it (WPF's TreeView).
+	fn expand(&mut self, node: Node, open: bool) {
+		self.collapsed.retain(|&n| n != node);
+		if !open {
+			self.collapsed.push(node);
+			if self.selection.group().iter().any(|&n| n != node && tree::within(n, node)) {
+				self.selection.set(node);
+			}
+		}
+	}
+
 	/// Pushes the state into the window's properties.
 	fn show(&mut self, app: &AppWindow) {
 		self.selection.retain(&self.doc.project);
@@ -281,6 +292,11 @@ fn shift(state: &mut State, by: isize) {
 	let (node, mut to) = (state.selection.current(), state.selection.current());
 	state.doc.edit(|p| to = tree::shift(p, node, by));
 	state.selection.set(to);
+}
+
+/// The tree row a drag carries.
+fn dragged(data: &slint::DataTransfer) -> Option<Node> {
+	data.user_data().and_then(|d| d.downcast_ref::<Node>().copied())
 }
 
 /// Runs a menu action by its id (docs/ui/10).
@@ -815,19 +831,64 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.on_tree_toggle(move |row| toggle(row, 0));
 	let expand = on(|s, _, row, _| {
 		if let Some(node) = s.node(row) {
-			match s.collapsed.iter().position(|&n| n == node) {
-				Some(i) => drop(s.collapsed.remove(i)),
-				None => {
-					s.collapsed.push(node);
-					// a selection it hides moves up to it (WPF's TreeView)
-					if s.selection.group().iter().any(|&n| n != node && tree::within(n, node)) {
-						s.selection.set(node);
-					}
-				}
-			}
+			let open = s.collapsed.contains(&node);
+			s.expand(node, open);
 		}
 	});
 	app.on_tree_expand(move |row| expand(row, 0));
+	let st = state.clone();
+	app.on_tree_drag_data(move |row| {
+		let mut data = slint::DataTransfer::default();
+		// read lazily, at the drag start, and anew per show(), which replaces the rows; empty while the state is borrowed
+		if let Some(node) = st.try_borrow().ok().and_then(|s| s.node(row)) {
+			data.set_user_data(Rc::new(node));
+		}
+		data
+	});
+	let st = state.clone();
+	app.on_tree_drop_place(move |row, data, before| {
+		let s = st.borrow();
+		let place = dragged(&data).zip(s.node(row)).and_then(|(n, t)| tree::drop_target(&s.doc.project, n, t, before));
+		match place {
+			Some((tree::Place::Before, _)) => 1,
+			Some((tree::Place::After, _)) => 2,
+			Some((tree::Place::Into, _)) => 3,
+			None => 0,
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_tree_drop(move |row, data, before| {
+		if let Some(app) = weak.upgrade() {
+			let mut s = st.borrow_mut();
+			let target = dragged(&data).zip(s.node(row));
+			let Some((node, (_, to))) =
+				target.and_then(|(n, t)| Some((n, tree::drop_target(&s.doc.project, n, t, before)?)))
+			else {
+				return;
+			};
+			s.commit_draft(&app);
+			let mut moved = node;
+			s.doc.edit(|p| moved = tree::move_to(p, node, to));
+			s.selection.set(moved);
+			s.show(&app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_tree_navigate(move |key, extend| {
+		if let Some(app) = weak.upgrade() {
+			let mut s = st.borrow_mut();
+			let s = &mut *s;
+			match tree::navigate(&s.doc.project, &s.nodes, &s.collapsed, s.selection.current(), &key) {
+				Some(tree::Step::To(node)) => {
+					s.commit_draft(&app);
+					s.selection.pick(&s.doc.project, node, if extend { Pick::Range } else { Pick::Alone });
+				}
+				Some(tree::Step::Expand(node, open)) => s.expand(node, open),
+				None => return,
+			}
+			s.show(&app);
+		}
+	});
 	app.on_tree_shift(on(|s, _, row, by| {
 		if let Some(node) = s.node(row) {
 			let mut to = node;

@@ -51,14 +51,7 @@ pub(crate) fn rows(project: &Project, selection: &Selection, collapsed: &[Node])
 		if parent(node).is_some_and(shut) {
 			return;
 		}
-		let children = match node {
-			Node::Project => 1,
-			Node::Sources => project.sources.len(),
-			Node::Parts => project.parts.len(),
-			Node::Probes => project.probes.len(),
-			Node::Schemes => project.color_schemes.len(),
-			_ => 0,
-		};
+		let children = children(project, node);
 		nodes.push(node);
 		rows.push(TreeRow {
 			kind: node.kind(),
@@ -166,6 +159,96 @@ pub(crate) fn remove_all(project: &mut Project, nodes: &[Node]) -> Option<Node> 
 		_ => return None,
 	};
 	Some(if len > 0 { item(i.min(len - 1)) } else { folder })
+}
+
+/// How many rows `node` holds.
+fn children(project: &Project, node: Node) -> usize {
+	match node {
+		Node::Project => 1,
+		Node::Sources => project.sources.len(),
+		Node::Parts => project.parts.len(),
+		Node::Probes => project.probes.len(),
+		Node::Schemes => project.color_schemes.len(),
+		_ => 0,
+	}
+}
+
+/// What a tree key does (WPF's TreeView keys).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Step {
+	/// Moves the current row there.
+	To(Node),
+	/// Expands (`true`) or collapses the row.
+	Expand(Node, bool),
+}
+
+/// What `key` ("up", "down", "home", "end", "left", "right") does with `current` among the shown `nodes`.
+pub(crate) fn navigate(
+	project: &Project,
+	nodes: &[Node],
+	collapsed: &[Node],
+	current: Node,
+	key: &str,
+) -> Option<Step> {
+	let i = nodes.iter().position(|&n| n == current).unwrap_or(0);
+	let (holds, shut) = (children(project, current) > 0, collapsed.contains(&current));
+	let to = match key {
+		"up" => i.checked_sub(1),
+		"down" => Some(i + 1),
+		"home" => Some(0),
+		"end" => nodes.len().checked_sub(1),
+		"left" if holds && !shut => return Some(Step::Expand(current, false)),
+		"left" => return parent(current).map(Step::To),
+		"right" if holds && shut => return Some(Step::Expand(current, true)),
+		"right" if holds => Some(i + 1),
+		_ => None,
+	};
+	to.and_then(|k| nodes.get(k)).map(|&n| Step::To(n))
+}
+
+/// Where a dropped row goes by the row it is dropped on (Next's `InsertionPlacement`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Place {
+	Before,
+	After,
+	/// At the end of the folder dropped on.
+	Into,
+}
+
+/// Where dropping the item `dragged` on `target`'s row (its upper half when `before`) moves it (Next's
+/// `FindDropTarget`): onto a sibling before or after it, onto its own folder at the end. The place and the item's index
+/// after the move; `None` where it would not move.
+pub(crate) fn drop_target(project: &Project, dragged: Node, target: Node, before: bool) -> Option<(Place, usize)> {
+	let folder = parent(dragged).filter(|_| is_item(dragged))?;
+	let (current, last) = (index(dragged), children(project, folder).checked_sub(1)?);
+	if target == folder {
+		return (current != last).then_some((Place::Into, last));
+	}
+	if target == dragged || !is_item(target) || parent(target) != Some(folder) {
+		return None;
+	}
+	let insert = index(target) + usize::from(!before);
+	let to = insert - usize::from(current < insert);
+	(to != current).then_some((if before { Place::Before } else { Place::After }, to))
+}
+
+/// Moves the item `node` to index `to` of its list; the node it ends at.
+pub(crate) fn move_to(project: &mut Project, node: Node, to: usize) -> Node {
+	fn go<T>(v: &mut Vec<T>, i: usize, to: usize) -> bool {
+		let ok = i < v.len() && to < v.len();
+		if ok {
+			let item = v.remove(i);
+			v.insert(to, item);
+		}
+		ok
+	}
+	match node {
+		Node::Source(i) if go(&mut project.sources, i, to) => Node::Source(to),
+		Node::Part(i) if go(&mut project.parts, i, to) => Node::Part(to),
+		Node::Probe(i) if go(&mut project.probes, i, to) => Node::Probe(to),
+		Node::Scheme(i) if go(&mut project.color_schemes, i, to) => Node::Scheme(to),
+		_ => node,
+	}
 }
 
 /// The row `node` sits under.
@@ -363,6 +446,46 @@ pub(crate) fn shift(project: &mut Project, node: Node, by: isize) -> Node {
 
 #[cfg(test)]
 mod tests {
+
+	#[test]
+	fn a_drop_moves_within_the_list_by_the_half_or_to_the_folder_end() {
+		let mut p = Project::default();
+		for _ in 0..3 {
+			p.add_source();
+		}
+		p.add_probe();
+		let s = |i| Node::Source(i);
+		assert_eq!(drop_target(&p, s(0), s(2), false), Some((Place::After, 2)));
+		assert_eq!(drop_target(&p, s(0), s(2), true), Some((Place::Before, 1)));
+		assert_eq!(drop_target(&p, s(2), s(0), true), Some((Place::Before, 0)));
+		// no-op positions and other lists are no target
+		assert_eq!(drop_target(&p, s(0), s(1), true), None);
+		assert_eq!(drop_target(&p, s(0), s(0), false), None);
+		assert_eq!(drop_target(&p, s(0), Node::Probe(0), true), None);
+		assert_eq!(drop_target(&p, s(0), Node::Sources, false), Some((Place::Into, 2)));
+		assert_eq!(drop_target(&p, s(2), Node::Sources, false), None);
+		assert_eq!(drop_target(&p, Node::Scene, Node::Project, false), None);
+		let name = p.sources[0].name.clone();
+		assert_eq!(move_to(&mut p, s(0), 2), s(2));
+		assert_eq!(p.sources[2].name, name);
+	}
+
+	#[test]
+	fn keys_walk_the_shown_rows_and_fold_folders() {
+		let mut p = Project::default();
+		p.add_source();
+		let (nodes, _) = rows(&p, &Selection::default(), &[]);
+		let go = |current, key, collapsed: &[Node]| navigate(&p, &nodes, collapsed, current, key);
+		assert_eq!(go(Node::Project, "down", &[]), Some(Step::To(nodes[1])));
+		assert_eq!(go(Node::Project, "up", &[]), None);
+		assert_eq!(go(Node::Project, "end", &[]), nodes.last().map(|&n| Step::To(n)));
+		assert_eq!(go(Node::Sources, "left", &[]), Some(Step::Expand(Node::Sources, false)));
+		assert_eq!(go(Node::Sources, "left", &[Node::Sources]), Some(Step::To(Node::Project)));
+		assert_eq!(go(Node::Sources, "right", &[Node::Sources]), Some(Step::Expand(Node::Sources, true)));
+		assert_eq!(go(Node::Source(0), "left", &[]), Some(Step::To(Node::Sources)));
+		assert_eq!(go(Node::Source(0), "right", &[]), None);
+	}
+
 	use super::*;
 
 	#[test]
