@@ -82,6 +82,11 @@ impl Document {
 		!self.redo.is_empty()
 	}
 
+	/// Takes the project as saved: its edits are kept or given up.
+	pub(crate) fn mark_saved(&mut self) {
+		self.saved = self.project.clone();
+	}
+
 	pub(crate) fn dirty(&self) -> bool {
 		self.project != self.saved
 	}

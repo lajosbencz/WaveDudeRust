@@ -46,6 +46,8 @@ struct State {
 	live: Live,
 	playback: Playback,
 	messages: Messages,
+	/// The menu action the unsaved edits prompt holds.
+	pending: Option<String>,
 	/// The document generation the run started from.
 	ran: u64,
 }
@@ -91,7 +93,12 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			state.live.stop();
 			state.playback.live = false;
 		}
-		"new" => {
+		"new" | "open" | "close" | "exit" if state.doc.dirty() => {
+			state.pending = Some(id.to_owned());
+			let name = state.doc.path.as_deref().and_then(std::path::Path::file_name).map_or_else(|| "Untitled".into(), |n| n.to_string_lossy().into_owned());
+			app.set_modal(modal(ui::ModalKind::Question, "WaveDude Rust", &format!("Save the changes to {name}?"), &["Save", "Don't save", "Cancel"], 0, 2));
+		}
+		"new" | "close" => {
 			state.playback.reset();
 			let generation = state.doc.generation + 1;
 			state.doc = Document::new(UNDO_STEPS);
@@ -104,19 +111,16 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			}
 		}
 		"save" | "save-as" => {
-			let path = state
-				.doc
-				.path
-				.clone()
-				.filter(|_| id == "save")
-				.or_else(|| project_dialog().set_file_name("Untitled.wdproj").save_file());
-			if let Some(path) = path {
-				match state.doc.save_as(&path) {
-					Ok(()) => tracing::info!("saved {}", path.display()),
-					Err(e) => tracing::error!("cannot save {}: {e}", path.display()),
-				}
-			}
+			save(state, app, id == "save-as");
 		}
+		"about" => app.set_modal(modal(
+			ui::ModalKind::Info,
+			"About WaveDude Rust",
+			&format!("WaveDude Rust {}\nA 2D wave simulator\n\nBased on the work of WaveDude Next; Jeroen Vleggaar, Huygens Optics, author of Wave Dude 2D, Copyright (C) 2026; 0x23 (Diffraction Limited), author of WaveSimulator2D.\n\nThis program is free software under the GNU General Public License, version 3 or later.", env!("CARGO_PKG_VERSION")),
+			&["Close"],
+			0,
+			0,
+		)),
 		"undo" => state.doc.undo(),
 		"redo" => state.doc.redo(),
 		"delete" => {
@@ -125,11 +129,73 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			state.selected = Node::Project;
 		}
 		"exit" => {
+			state.doc = Document::new(UNDO_STEPS);
 			let _ = app.hide();
 		}
 		other => tracing::info!("menu: {other}"),
 	}
 	state.show(app);
+}
+
+/// A message window's content (docs/ui/70, Message window).
+fn modal(kind: ui::ModalKind, title: &str, text: &str, buttons: &[&str], default: i32, cancel: i32) -> ui::Modal {
+	let buttons: Vec<slint::SharedString> = buttons.iter().map(|b| (*b).into()).collect();
+	ui::Modal {
+		shown: true,
+		kind,
+		title: title.into(),
+		text: text.into(),
+		buttons: ModelRc::from(buttons.as_slice()),
+		default,
+		cancel,
+	}
+}
+
+/// Saves the project, to a picked file for Save As or without a file; `false` when cancelled or failed.
+fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
+	let Some(path) = state
+		.doc
+		.path
+		.clone()
+		.filter(|_| !pick)
+		.or_else(|| project_dialog().set_file_name("Untitled.wdproj").save_file())
+	else {
+		return false;
+	};
+	match state.doc.save_as(&path) {
+		Ok(()) => {
+			tracing::info!("saved {}", path.display());
+			true
+		}
+		Err(e) => {
+			tracing::error!("cannot save {}: {e}", path.display());
+			app.set_modal(modal(
+				ui::ModalKind::Error,
+				"WaveDude Rust",
+				&format!("Could not save '{}'.", path.display()),
+				&["OK"],
+				0,
+				0,
+			));
+			false
+		}
+	}
+}
+
+/// The answer to the message window: for the unsaved edits prompt, Save, Don't save or Cancel.
+fn answer(state: &mut State, app: &AppWindow, button: i32) {
+	app.set_modal(ui::Modal::default());
+	if let Some(then) = state.pending.take() {
+		let go = match button {
+			0 => save(state, app, false),
+			1 => true,
+			_ => false,
+		};
+		if go {
+			state.doc.mark_saved();
+			menu(state, app, &then);
+		}
+	}
 }
 
 /// A transport bar or timeline action (docs/ui/50).
@@ -175,7 +241,17 @@ fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 			state.playback.reset();
 			tracing::info!("opened {}", path.display());
 		}
-		Err(e) => tracing::error!("cannot open {}: {e}", path.display()),
+		Err(e) => {
+			tracing::error!("cannot open {}: {e}", path.display());
+			app.set_modal(modal(
+				ui::ModalKind::Error,
+				"WaveDude Rust",
+				&format!("Could not open '{}'.", path.display()),
+				&["OK"],
+				0,
+				0,
+			));
+		}
 	}
 	state.show(app);
 }
@@ -192,6 +268,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		live,
 		playback: Playback::default(),
 		messages: Messages::new(ring),
+		pending: None,
 		ran: 0,
 	}));
 	if let Some(path) = std::env::args_os().nth(1) {
@@ -253,6 +330,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	app.on_menu(move |id| {
 		if let Some(app) = weak.upgrade() {
 			menu(&mut st.borrow_mut(), &app, &id);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_modal_answer(move |button| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			answer(s, &app, button);
+			s.show(&app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.window().on_close_requested(move || {
+		let Some(app) = weak.upgrade() else { return slint::CloseRequestResponse::HideWindow };
+		let s = &mut *st.borrow_mut();
+		if s.doc.dirty() {
+			menu(s, &app, "exit");
+			slint::CloseRequestResponse::KeepWindowShown
+		} else {
+			slint::CloseRequestResponse::HideWindow
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());

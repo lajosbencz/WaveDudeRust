@@ -1,0 +1,79 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export enum ModalKind { info, question, error }
+
+export struct Modal {
+    shown: bool,
+    kind: ModalKind,
+    title: string,
+    text: string,
+    buttons: [string],
+    // The button Enter presses.
+    default: int,
+    // The button Esc and the close box press.
+    cancel: int,
+}
+
+// The app's own message window (docs/ui/70, Message window), modal over the main window.
+export component ModalLayer inherits Rectangle {
+    in property <Modal> modal;
+    callback answer(int);
+
+    visible: modal.shown;
+    background: #00000080;
+    TouchArea { }
+    focus := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) { root.answer(modal.cancel); return accept; }
+            if (e.text == Key.Return) { root.answer(modal.default); return accept; }
+            reject
+        }
+    }
+    changed visible => { if (self.visible) { focus.focus(); } }
+    Rectangle {
+        width: 440px;
+        height: box.preferred-height;
+        background: Theme.window-background;
+        border-width: 1px;
+        border-color: Theme.accent;
+        box := VerticalLayout {
+            padding: 12px;
+            spacing: 12px;
+            Text {
+                text: modal.title;
+                font-weight: 700;
+                color: Theme.text;
+            }
+            HorizontalLayout {
+                spacing: 12px;
+                if modal.kind != ModalKind.info: Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 16px;
+                    background: modal.kind == ModalKind.error ? Theme.status-error : Theme.accent;
+                    Text {
+                        text: modal.kind == ModalKind.error ? "!" : "?";
+                        color: #ffffff;
+                        font-weight: 700;
+                    }
+                }
+                Text {
+                    text: modal.text;
+                    wrap: word-wrap;
+                    color: Theme.text;
+                    horizontal-stretch: 1;
+                }
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: 6px;
+                for label[i] in modal.buttons: Button {
+                    text: label;
+                    primary: i == modal.default;
+                    clicked => { root.answer(i); }
+                }
+            }
+        }
+    }
+}

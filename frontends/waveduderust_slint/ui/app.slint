@@ -5,8 +5,9 @@ import { Properties, PropRow, PropKind } from "properties.slint";
 import { Preview } from "preview.slint";
 import { Timeline, TransportBar, Transport } from "timeline.slint";
 import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
+import { ModalLayer, Modal, ModalKind } from "modal.slint";
 
-export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle }
+export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle, Modal, ModalKind }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 export component AppWindow inherits Window {
@@ -24,6 +25,8 @@ export component AppWindow inherits Window {
     in property <image> intensity;
     in property <string> run-status;
     in property <Transport> transport;
+    in property <Modal> modal;
+    callback modal-answer(int);
     in property <[LogRow]> log-rows;
     in property <[LevelToggle]> log-levels;
     callback log-toggle(LogLevel);
@@ -208,5 +211,11 @@ export component AppWindow inherits Window {
                 }
             }
         }
+    }
+    ModalLayer {
+        width: 100%;
+        height: 100%;
+        modal: root.modal;
+        answer(i) => { root.modal-answer(i); }
     }
 }
