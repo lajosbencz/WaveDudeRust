@@ -1,6 +1,7 @@
 //! WaveDude Rust's app: the Slint window over the core (decision 0032).
 
 mod document;
+mod export;
 mod form;
 mod gpu;
 mod live;
@@ -52,6 +53,9 @@ struct State {
 	settings: waveduderust_platform::settings::Settings,
 	store: Option<waveduderust_platform::store::Store>,
 	settings_section: usize,
+	exporting: Option<export::Exporting>,
+	/// The last run export, for Export last.
+	last_export: Option<export::Kind>,
 	/// The document generation the run started from.
 	ran: u64,
 }
@@ -94,6 +98,9 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 		}
 		"pause" => state.live.toggle_pause(),
 		"stop" => {
+			if let Some(e) = &state.exporting {
+				e.cancel();
+			}
 			state.live.stop();
 			state.playback.live = false;
 		}
@@ -116,6 +123,17 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 		}
 		"save" | "save-as" => {
 			save(state, app, id == "save-as");
+		}
+		id if export::Kind::of(id).is_some() || id == "export-last" => {
+			let kind = export::Kind::of(id).or(state.last_export);
+			if state.exporting.is_none()
+				&& let Some(kind) = kind
+			{
+				state.exporting = export::start(kind, &state.doc.project, &state.doc.view, state.playback.position, &state.settings);
+				if matches!(kind, export::Kind::Run(_)) && state.exporting.is_some() {
+					state.last_export = Some(kind);
+				}
+			}
 		}
 		"settings" => {
 			show_settings(state, app);
@@ -314,6 +332,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		settings,
 		store,
 		settings_section: 0,
+		exporting: None,
+		last_export: None,
 		ran: 0,
 	}));
 	apply_settings(&mut state.borrow_mut(), &app);
@@ -465,6 +485,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 			}
 			s.playback.tick(std::time::Instant::now(), s.doc.view.video.fps, shown.made);
 			app.set_transport(transport_state(&s.playback, &shown));
+			if let Some(e) = &mut s.exporting {
+				match e.poll() {
+					Ok(progress) => app.set_run_status(progress.into()),
+					Err(outcome) => {
+						s.exporting = None;
+						match outcome {
+							Ok(written) => tracing::info!("exported {written}"),
+							Err(e) => {
+								tracing::error!("{e}");
+								app.set_modal(modal(
+									ui::ModalKind::Error,
+									"WaveDude Rust",
+									"The export failed.",
+									&["OK"],
+									0,
+									0,
+								));
+							}
+						}
+					}
+				}
+			}
 			if s.messages.take() {
 				s.messages.show(&app);
 			}
