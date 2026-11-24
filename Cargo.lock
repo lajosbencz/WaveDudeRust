@@ -6372,6 +6372,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "waveduderust",
+ "waveduderust_platform",
 ]
 
 [[package]]

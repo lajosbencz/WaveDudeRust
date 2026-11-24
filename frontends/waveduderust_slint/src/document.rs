@@ -82,6 +82,13 @@ impl Document {
 		!self.redo.is_empty()
 	}
 
+	/// Keeps at most `limit` undo steps from now on.
+	pub(crate) fn set_limit(&mut self, limit: usize) {
+		self.limit = limit;
+		let over = self.undo.len().saturating_sub(limit);
+		self.undo.drain(..over);
+	}
+
 	/// Takes the project as saved: its edits are kept or given up.
 	pub(crate) fn mark_saved(&mut self) {
 		self.saved = self.project.clone();

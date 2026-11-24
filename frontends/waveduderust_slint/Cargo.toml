@@ -24,6 +24,7 @@ tracing.workspace = true
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "ansi", "registry"] }
 waveduderust = { path = "../../crates/waveduderust", features = ["unstable-engine", "unstable-reflect", "unstable-run", "unstable-scene"] }
 pollster.workspace = true
+waveduderust_platform = { path = "../../crates/waveduderust_platform" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rfd = "0.18"

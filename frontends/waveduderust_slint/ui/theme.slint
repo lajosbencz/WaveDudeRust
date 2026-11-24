@@ -1,7 +1,9 @@
 // Colour tokens of the original's Themes/Dark.xaml and Themes/Light.xaml (docs/ui/00, Look).
 import { Palette } from "std-widgets.slint";
 export global Theme {
-    in-out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    // 0 follows the system, 1 light, 2 dark.
+    in-out property <int> mode;
+    out property <bool> dark: mode == 0 ? Palette.color-scheme == ColorScheme.dark : mode == 2;
     out property <color> window-background: dark ? #2d2d30 : #eeeef2;
     out property <color> text: dark ? #f1f1f1 : #1e1e1e;
     out property <color> border: dark ? #3f3f46 : #cccedb;

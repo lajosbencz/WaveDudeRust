@@ -19,6 +19,10 @@ pub(crate) struct Live {
 	request: Option<RunRequest>,
 	position: u32,
 	paused: bool,
+	/// The preview quality of the next run (Settings).
+	pub(crate) quality: PreviewQuality,
+	/// Re-run after edits (Settings).
+	pub(crate) auto_rerun: bool,
 	/// Frames of the planned run.
 	pub(crate) frames: u32,
 	drawn: Option<(u64, usize)>,
@@ -55,6 +59,8 @@ impl Live {
 			request: None,
 			position: 0,
 			paused: false,
+			quality: PreviewQuality::FULL,
+			auto_rerun: true,
 			frames: 0,
 			drawn: None,
 			last_state: None,
@@ -77,7 +83,7 @@ impl Live {
 		self.revision += 1;
 		self.active = true;
 		self.paused = false;
-		let request = RunRequest::new(&project, PreviewQuality::FULL, view.into(), false);
+		let request = RunRequest::new(&project, self.quality, view.into(), false);
 		self.frames = request.schedule().frame_count();
 		self.request = Some(request);
 		self.publish();
@@ -114,7 +120,7 @@ impl Live {
 
 	/// Starts over after an edit when a run is active.
 	pub(crate) fn edited(&mut self, project: &Project, view: &View) {
-		if self.active {
+		if self.active && self.auto_rerun {
 			self.run(project, view);
 		}
 	}

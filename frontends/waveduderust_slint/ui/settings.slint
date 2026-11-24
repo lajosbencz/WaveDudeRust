@@ -1,0 +1,72 @@
+import { LineEdit, Button } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Properties, PropRow } from "properties.slint";
+
+// The Settings window (docs/ui/70, Settings): sections on the left, the section's rows on the right.
+export component SettingsLayer inherits Rectangle {
+    in-out property <bool> shown;
+    in property <[string]> sections;
+    in property <int> section;
+    in property <[PropRow]> rows;
+    callback pick(int);
+    callback set(int, string);
+
+    visible: shown;
+    background: #00000080;
+    TouchArea { }
+    FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) { root.shown = false; return accept; }
+            reject
+        }
+    }
+    Rectangle {
+        width: min(760px, root.width - 40px);
+        height: min(520px, root.height - 40px);
+        background: Theme.window-background;
+        border-width: 1px;
+        border-color: Theme.accent;
+        VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+            Text {
+                text: @tr("Settings");
+                font-weight: 700;
+                color: Theme.text;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    width: 180px;
+                    alignment: start;
+                    for name[i] in root.sections: Rectangle {
+                        height: Theme.row-height;
+                        background: i == root.section ? Theme.selection : area.has-hover ? Theme.row-hover : transparent;
+                        Text {
+                            x: 6px;
+                            text: name;
+                            color: i == root.section ? Theme.selection-text : Theme.text;
+                            vertical-alignment: center;
+                        }
+                        area := TouchArea {
+                            clicked => { root.pick(i); }
+                        }
+                    }
+                }
+                Properties {
+                    heading: root.sections[root.section];
+                    rows: root.rows;
+                    set(i, v) => { root.set(i, v); }
+                }
+            }
+            HorizontalLayout {
+                alignment: end;
+                Button {
+                    text: @tr("Close");
+                    primary: true;
+                    clicked => { root.shown = false; }
+                }
+            }
+        }
+    }
+}

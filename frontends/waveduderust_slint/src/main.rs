@@ -7,6 +7,7 @@ mod live;
 mod log;
 mod messages;
 mod playback;
+mod settings;
 mod tree;
 
 #[allow(
@@ -48,6 +49,9 @@ struct State {
 	messages: Messages,
 	/// The menu action the unsaved edits prompt holds.
 	pending: Option<String>,
+	settings: waveduderust_platform::settings::Settings,
+	store: Option<waveduderust_platform::store::Store>,
+	settings_section: usize,
 	/// The document generation the run started from.
 	ran: u64,
 }
@@ -113,6 +117,10 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 		"save" | "save-as" => {
 			save(state, app, id == "save-as");
 		}
+		"settings" => {
+			show_settings(state, app);
+			app.set_settings_shown(true);
+		}
 		"about" => app.set_modal(modal(
 			ui::ModalKind::Info,
 			"About WaveDude Rust",
@@ -135,6 +143,31 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 		other => tracing::info!("menu: {other}"),
 	}
 	state.show(app);
+}
+
+/// Puts `path` first in the recent files and saves the settings.
+fn remember(state: &mut State, path: &std::path::Path) {
+	state.settings.push_recent(path);
+	if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
+		tracing::error!("{e}");
+	}
+}
+
+/// Applies the settings to the window, the history and the run.
+fn apply_settings(state: &mut State, app: &AppWindow) {
+	let s = &state.settings;
+	app.global::<ui::Theme<'_>>().set_mode(settings::theme_mode(s));
+	state.doc.set_limit(s.undo_steps as usize);
+	state.live.quality = s.preview_quality();
+	state.live.auto_rerun = s.auto_rerun;
+}
+
+/// Pushes the Settings window's sections and rows.
+fn show_settings(state: &State, app: &AppWindow) {
+	let sections: Vec<slint::SharedString> = settings::SECTIONS.iter().map(|s| (*s).into()).collect();
+	app.set_settings_sections(ModelRc::from(sections.as_slice()));
+	app.set_settings_section(i32::try_from(state.settings_section).unwrap_or_default());
+	app.set_settings_rows(ModelRc::new(VecModel::from(settings::rows(&state.settings, state.settings_section))));
 }
 
 /// A message window's content (docs/ui/70, Message window).
@@ -165,6 +198,7 @@ fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
 	match state.doc.save_as(&path) {
 		Ok(()) => {
 			tracing::info!("saved {}", path.display());
+			remember(state, &path);
 			true
 		}
 		Err(e) => {
@@ -239,6 +273,7 @@ fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 		Ok(()) => {
 			state.selected = Node::Project;
 			state.playback.reset();
+			remember(state, &path);
 			tracing::info!("opened {}", path.display());
 		}
 		Err(e) => {
@@ -261,6 +296,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let (device, queue) = gpu::select()?;
 	let app = AppWindow::new()?;
 	let live = Live::new(device, queue)?;
+	let store = waveduderust_platform::settings::AppDirs::platform().map(|d| d.store());
+	let settings = store.as_ref().map_or_else(Default::default, |s| {
+		waveduderust_platform::settings::Settings::load(s, false, || {
+			waveduderust::run::machine_facts(&waveduderust::run::FrameStore::default_dir())
+		})
+		.settings
+	});
 	let state = Rc::new(RefCell::new(State {
 		doc: Document::new(UNDO_STEPS),
 		nodes: Vec::new(),
@@ -269,8 +311,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		playback: Playback::default(),
 		messages: Messages::new(ring),
 		pending: None,
+		settings,
+		store,
+		settings_section: 0,
 		ran: 0,
 	}));
+	apply_settings(&mut state.borrow_mut(), &app);
 	if let Some(path) = std::env::args_os().nth(1) {
 		open(&mut state.borrow_mut(), &app, path.into());
 	}
@@ -330,6 +376,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	app.on_menu(move |id| {
 		if let Some(app) = weak.upgrade() {
 			menu(&mut st.borrow_mut(), &app, &id);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_settings_pick(move |i| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			s.settings_section = usize::try_from(i).unwrap_or_default();
+			show_settings(s, &app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_settings_set(move |row, value| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			let row = usize::try_from(row).unwrap_or(usize::MAX);
+			settings::set(&mut s.settings, s.store.as_ref(), s.settings_section, row, &value);
+			apply_settings(s, &app);
+			show_settings(s, &app);
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
