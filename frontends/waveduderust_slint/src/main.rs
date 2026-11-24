@@ -4,6 +4,8 @@ mod document;
 mod form;
 mod gpu;
 mod live;
+mod log;
+mod messages;
 mod playback;
 mod tree;
 
@@ -29,6 +31,7 @@ use ui::AppWindow;
 
 use crate::document::Document;
 use crate::live::Live;
+use crate::messages::Messages;
 use crate::playback::Playback;
 use crate::tree::Node;
 
@@ -42,6 +45,7 @@ struct State {
 	selected: Node,
 	live: Live,
 	playback: Playback,
+	messages: Messages,
 	/// The document generation the run started from.
 	ran: u64,
 }
@@ -108,8 +112,8 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 				.or_else(|| project_dialog().set_file_name("Untitled.wdproj").save_file());
 			if let Some(path) = path {
 				match state.doc.save_as(&path) {
-					Ok(()) => app.set_status_text(format!("Saved {}", path.display()).into()),
-					Err(e) => app.set_status_text(format!("Cannot save: {e}").into()),
+					Ok(()) => tracing::info!("saved {}", path.display()),
+					Err(e) => tracing::error!("cannot save {}: {e}", path.display()),
 				}
 			}
 		}
@@ -169,15 +173,15 @@ fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 		Ok(()) => {
 			state.selected = Node::Project;
 			state.playback.reset();
-			app.set_status_text(format!("Opened {}", path.display()).into());
+			tracing::info!("opened {}", path.display());
 		}
-		Err(e) => app.set_status_text(format!("Cannot open: {e}").into()),
+		Err(e) => tracing::error!("cannot open {}: {e}", path.display()),
 	}
 	state.show(app);
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-	tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).with_writer(std::io::stderr).init();
+	let ring = log::init();
 	let (device, queue) = gpu::select()?;
 	let app = AppWindow::new()?;
 	let live = Live::new(device, queue)?;
@@ -187,6 +191,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		selected: Node::Project,
 		live,
 		playback: Playback::default(),
+		messages: Messages::new(ring),
 		ran: 0,
 	}));
 	if let Some(path) = std::env::args_os().nth(1) {
@@ -264,6 +269,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 			st.borrow_mut().playback.speed = speed.clamp(0.01, 100.0);
 		}
 	});
+	let on_log = |f: fn(&mut Messages, slint::SharedString)| {
+		let (st, weak) = (state.clone(), app.as_weak());
+		move |arg: slint::SharedString| {
+			if let Some(app) = weak.upgrade() {
+				let m = &mut st.borrow_mut().messages;
+				f(m, arg);
+				m.show(&app);
+			}
+		}
+	};
+	let search = on_log(|m, t| m.search(&t));
+	app.on_log_search(search);
+	let clear = on_log(|m, _| m.clear());
+	app.on_log_clear(move || clear(slint::SharedString::new()));
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_log_toggle(move |level| {
+		if let Some(app) = weak.upgrade() {
+			let m = &mut st.borrow_mut().messages;
+			m.toggle(level);
+			m.show(&app);
+		}
+	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	let timer = slint::Timer::default();
 	timer.start(slint::TimerMode::Repeated, std::time::Duration::from_millis(16), move || {
@@ -278,6 +305,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 			}
 			s.playback.tick(std::time::Instant::now(), s.doc.view.video.fps, shown.made);
 			app.set_transport(transport_state(&s.playback, &shown));
+			if s.messages.take() {
+				s.messages.show(&app);
+			}
 			if let Some(image) = shown.field {
 				app.set_field(image);
 			}

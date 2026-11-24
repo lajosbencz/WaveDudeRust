@@ -4,8 +4,9 @@ import { ProjectTree, TreeRow, TreeKind } from "tree.slint";
 import { Properties, PropRow, PropKind } from "properties.slint";
 import { Preview } from "preview.slint";
 import { Timeline, TransportBar, Transport } from "timeline.slint";
+import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
 
-export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport }
+export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 export component AppWindow inherits Window {
@@ -23,6 +24,11 @@ export component AppWindow inherits Window {
     in property <image> intensity;
     in property <string> run-status;
     in property <Transport> transport;
+    in property <[LogRow]> log-rows;
+    in property <[LevelToggle]> log-levels;
+    callback log-toggle(LogLevel);
+    callback log-search(string);
+    callback log-clear();
     callback seek(int);
     callback transport-action(string);
     callback transport-speed(string);
@@ -170,12 +176,22 @@ export component AppWindow inherits Window {
                     title: @tr("Messages");
                     vertical-stretch: 1;
                     close => { root.messages-shown = false; }
+                    Messages {
+                        rows: root.log-rows;
+                        levels: root.log-levels;
+                        toggle(l) => { root.log-toggle(l); }
+                        search(t) => { root.log-search(t); }
+                        clear => { root.log-clear(); }
+                    }
                 }
             }
         }
         Rectangle {
             height: Theme.status-height;
             background: Theme.status;
+            TouchArea {
+                double-clicked => { root.messages-shown = true; }
+            }
             HorizontalLayout {
                 padding-left: 4px;
                 padding-right: 16px;
