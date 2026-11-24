@@ -11,7 +11,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 4 | 19 | 12 | 5 | 0 |
+| X | Cross-cutting | 5 | 19 | 11 | 5 | 0 |
 | M | Menus and shortcuts | 22 | 31 | 74 | 13 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 11 | 15 | 0 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 126 | 312 | 606 | 45 | 6 |
+| | All | 127 | 312 | 605 | 45 | 6 |
 
 ## Cross-cutting
 
@@ -34,14 +34,14 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-04 | Window size, position, state persisted; never minimised; kept inside the monitor's work area | MainWindow.xaml.cs | 00, Main window; 80 | missing | settings fields exist in waveduderust_platform, unused |
 | X-05 | Resize grip | MainWindow.xaml | 00, Main window | missing | |
 | X-06 | Dock layout tree: splits with star weights, tabbed groups, fixed centre | Docking/DockHost.cs | 00, Panes; 90 s1 | partial | fixed Slint layout, no tree |
-| X-07 | Splitters between panes: drag and arrow keys | Docking/DockHost.cs | 00, Panes; 90 s1 | missing | split is fixed 1:3 and 1:2 |
+| X-07 | Splitters between panes: drag and arrow keys | Docking/DockHost.cs | 00, Panes; 90 s1 | done | ui/splitter.slint: 4 px bars, drag, Next's minimums (60 px, 100 px for the preview); no keys, as Next's are not focusable; sizes per divergences.md, Pane sizes |
 | X-08 | Pane title bar 21 px: title, dotted grip, "Window position" drop-down, close button | Docking/DockGroupControl.cs, Themes/Controls.xaml | 00, Panes; 90 s1 | partial | title, grip, "x" close only; no drop-down; grip is a box not dots |
 | X-09 | "Window position" menu: Move to Left/Right/Top/Bottom, Close | Docking/DockCommands.cs | 00, Panes | missing | |
 | X-10 | Active pane title bar accent + white text + light-blue grip by focus; first group active at start | Docking/DockGroupControl.cs | 00, Panes | partial | Project fixed active; does not follow focus |
 | X-11 | Tab strip for groups with several panes | Docking/DockGroupControl.cs | 00, Panes; 90 s1 | missing | |
 | X-12 | Drag pane/group to dock: edge strip, split beside, tab into; accent drop preview; ghost label; Esc cancels | Docking/DockDragManager.cs, DockDropAdorner.cs | 00, Panes (port rules) | missing | port rules per divergences.md "Docking" (no five-way cluster) |
 | X-13 | Close hides the pane; reshown at its default side without a saved place | Docking/DockHost.cs | 00, Panes | partial | hide/show works; no sides |
-| X-14 | Default arrangement: left column 1:3, Project over Properties 1:2; Messages hidden | Docking/DockHost.cs | 00, Panes | partial | ratios done; Messages placement differs (bottom of centre?) |
+| X-14 | Default arrangement: left column 1:3, Project over Properties 1:2; Messages hidden | Docking/DockHost.cs | 00, Panes | partial | ratios done, sized per divergences.md, Pane sizes; Messages placement differs (bottom of centre?) |
 | X-15 | Layout saved as it changes and restored at start; unknown ids ignored | Docking/DockHost.cs | 00, Panes | missing | `Settings.layout` unused |
 | X-16 | View > Panes lists Project, Properties, Messages, Preview with check marks | MainWindow.xaml | 00, Panes; decision 0008 | partial | Preview not listed |
 | X-17 | Status bar double-click opens or focuses Messages | MainWindow.xaml.cs | 00, Panes | partial | opens; no focus when shown |

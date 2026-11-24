@@ -1,0 +1,46 @@
+import { Theme } from "theme.slint";
+
+// The 4 px bar between two panes (Next's GridSplitter in SplitterBackground). The panes have a fixed minimum and no
+// preferred size, so a layout gives each its minimum plus a part of the rest by stretch: a drag sets the stretches
+// to the sizes above the minimums, which puts the bar under the pointer and keeps the split's proportion when the
+// window resizes. A drag is measured from where it started.
+export component Splitter inherits Rectangle {
+    // Splits a column into rows; else a row into columns.
+    in property <bool> rows;
+    // The two panes' sizes together, the bar excluded, and where the first one starts in the bar's parent.
+    in property <length> span;
+    in property <length> start;
+    in property <length> minimum-before: 60px;
+    in property <length> minimum-after: 60px;
+    in-out property <float> before;
+    in-out property <float> after;
+
+    // sized along its axis only: a fixed cross size would cap the layout holding it
+    min-width: rows ? 0px : 4px;
+    preferred-width: rows ? 0px : 4px;
+    min-height: rows ? 4px : 0px;
+    preferred-height: rows ? 4px : 0px;
+    horizontal-stretch: rows ? 1 : 0;
+    vertical-stretch: rows ? 0 : 1;
+    background: Theme.window-background;
+    // At the press: the pointer along the axis, in window coordinates, and the first pane's laid-out size.
+    property <length> grabbed;
+    property <length> size;
+    TouchArea {
+        mouse-cursor: root.rows ? MouseCursor.row-resize : MouseCursor.col-resize;
+        property <length> pointer: root.rows ? self.absolute-position.y + self.mouse-y : self.absolute-position.x + self.mouse-x;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                root.grabbed = self.pointer;
+                root.size = (root.rows ? root.y : root.x) - root.start;
+            }
+        }
+        moved => {
+            if (root.span > root.minimum-before + root.minimum-after) {
+                let moved = clamp(root.size + self.pointer - root.grabbed, root.minimum-before, root.span - root.minimum-after);
+                root.before = max((moved - root.minimum-before) / 1px, 0.001);
+                root.after = max((root.span - moved - root.minimum-after) / 1px, 0.001);
+            }
+        }
+    }
+}

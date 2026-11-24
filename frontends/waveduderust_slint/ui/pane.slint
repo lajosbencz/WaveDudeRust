@@ -8,6 +8,8 @@ export component Pane inherits Rectangle {
     callback close();
 
     background: Theme.tool-window-background;
+    // below its content's size a pane cuts it off, as Next's grid cells do
+    clip: true;
     VerticalLayout {
         Rectangle {
             height: Theme.row-height;
