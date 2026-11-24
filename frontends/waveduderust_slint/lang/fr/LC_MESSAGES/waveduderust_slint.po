@@ -456,6 +456,10 @@ msgstr "Épaisseur au centre"
 msgid "Centre wavelength"
 msgstr "Longueur d'onde centrale"
 
+#. TipColorChannel
+msgid "Channel 0 to 255; Up and Down step it"
+msgstr "Canal de 0 à 255 ; Haut et Bas le modifient"
+
 #. SectionCladding
 msgid "Cladding"
 msgstr "Gaine"
@@ -1160,6 +1164,10 @@ msgstr "Comment les deux extrémités sont coupées : à plat, droit en travers 
 msgid "How the zones are divided from the axis to the rim: equal in width, the outer zone the deepest; or equal in depth, each zone cut to the same depth and the zones narrowing outward, as the elements of a lighthouse lens are."
 msgstr "Comment les zones sont divisées de l'axe au bord : de largeur égale, la zone extérieure la plus profonde ; ou de profondeur égale, chaque zone taillée à la même profondeur et les zones se resserrant vers l'extérieur, comme les éléments d'une lentille de phare."
 
+#. TipColorHue
+msgid "Hue: Up and Down move by a degree, ten with Shift"
+msgstr "Teinte : Haut et Bas déplacent d'un degré, dix avec Maj"
+
 #. Enum.SceneMode.Image
 msgid "Image"
 msgstr "Image"
@@ -1724,6 +1732,10 @@ msgstr "Phase"
 msgid "Phase offset in degrees, -180 to 180."
 msgstr "Décalage de phase en degrés, -180 à 180."
 
+#. TipStopSwatch
+msgid "Pick the colour: Space opens the picker, Enter keeps it, Escape puts the old colour back"
+msgstr "Choisir la couleur : Espace ouvre le sélecteur, Entrée la garde, Échap remet l'ancienne couleur"
+
 #. Label.FacettedGratingPart.Pitch
 msgid "Pitch"
 msgstr "Pas"
@@ -2067,6 +2079,10 @@ msgstr "Échantillonner et tracer cette sonde."
 #. TipProbeActive
 msgid "Sample this probe (Space on the row toggles it)"
 msgstr "Échantillonner cette sonde (Espace sur la ligne bascule)"
+
+#. TipColorSquare
+msgid "Saturation (Left, Right) and brightness (Up, Down); Shift moves by ten steps"
+msgstr "Saturation (Gauche, Droite) et luminosité (Haut, Bas) ; Maj déplace de dix pas"
 
 #. MenuFileSave
 msgid "Save"

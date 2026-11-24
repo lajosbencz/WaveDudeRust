@@ -638,6 +638,30 @@ impl Bridge<m::Rgb> for slint::Color {
 	}
 }
 
+pub(crate) fn rgb(colour: slint::Color) -> m::Rgb {
+	Bridge::model(&colour)
+}
+
+/// The colour picker's arithmetic.
+pub(crate) fn wire_colors(logic: &ui::ColorLogic<'_>) {
+	logic.on_to_hsv(|c| {
+		let (hue, saturation, value) = rgb(c).to_hsv();
+		ui::Hsv { hue: hue as f32, saturation: saturation as f32, value: value as f32 }
+	});
+	logic.on_from_hsv(|hsv| {
+		Bridge::show(&m::Rgb::from_hsv(f64::from(hsv.hue), f64::from(hsv.saturation), f64::from(hsv.value)))
+	});
+	logic.on_hex(|c| rgb(c).to_hex().into());
+	logic.on_parse_hex(|text, otherwise| m::Rgb::parse_hex(&text).map_or(otherwise, |c| Bridge::show(&c)));
+	logic.on_channel(|text, otherwise| {
+		text.trim()
+			.parse::<f64>()
+			.ok()
+			.filter(|v| v.is_finite())
+			.map_or(otherwise, |v| v.round().clamp(0.0, 255.0) as i32)
+	});
+}
+
 impl Data<m::Stop> for ui::StopData {
 	fn show(model: &m::Stop) -> Self {
 		Self { at: Bridge::show(&model.at), color: Bridge::show(&model.color), hex: model.color.to_hex().into() }

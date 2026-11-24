@@ -12,17 +12,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 6 | 19 | 9 | 6 | 0 |
-| M | Menus and shortcuts | 37 | 26 | 47 | 30 | 0 |
-| D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
+| M | Menus and shortcuts | 38 | 26 | 46 | 30 | 0 |
+| D | Dialogs and windows | 18 | 29 | 27 | 5 | 0 |
 | S | Settings | 7 | 11 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 270 | 34 | 19 | 2 | 0 |
+| P | Properties | 272 | 33 | 18 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 441 | 233 | 317 | 98 | 6 |
+| | All | 445 | 232 | 314 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -266,7 +266,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-133 | Picture splitter: arrows move, Enter/double-click reset to half | PP | ui/10 Splitter | missing | |
 | M-134 | Layout radio group (side by side / stacked): one tab stop, Left/Right switch | PP:485-490 | ui/10 Layout radio | partial | two Tool buttons (timeline.slint:241-242); no radio keys |
 | M-135 | Number box: Up/Down step, PageUp/PageDown x10, wheel (Shift x10), Enter commit, Esc revert | WPF/Controls/NumberBox.cs | ui/10 Number box, ui/30 | done | ui/number-box.slint, src/number.rs; Enter and leaving commit (a tree action commits the typed text first, src/main.rs `draft`), Esc restores and passes on when unchanged (Next's EditBehavior) |
-| M-136 | Colour swatch: Space/Enter/Down open picker; square/strip/channel keys; Enter keeps, Esc reverts | WPF/Controls/ColorPicker*.cs | ui/10 Colour picker | missing | no colour editor |
+| M-136 | Colour swatch: Space/Enter/Down open picker; square/strip/channel keys; Enter keeps, Esc reverts | WPF/Controls/ColorPicker*.cs | ui/10 Colour picker | done | color-picker.slint ColorSwatch, ColorPicker |
 | M-137 | Dialogs: Enter default, Esc cancel, mnemonics w/o Alt; About Esc/Enter close | MessageWindow.xaml.cs | ui/10 Dialogs | partial | modal.slint:25-27 Enter/Esc done; mnemonics without Alt missing |
 | M-138 | File drop on window: image becomes scene image; other file to open flow (.wdproj .xml .json .wdscheme); nothing while modal | MW:12-13 (AllowDrop, OnDrop) | ui/10 File dropped | missing | no drop handler in main.rs/app.slint |
 | M-139 | Browser: leaving the page asks while unsaved edits | n/a | ui/10 | missing | web.rs/index.html: no beforeunload (not verified in index.html) |
@@ -340,7 +340,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-62 | Examples: Welcome page... button (port) closes dialog, opens welcome | not in Next | ui/70 Examples | missing | buttons Open, Cancel only |
 | D-63 | Examples: Open / Cancel; Enter, Open, double-click opens; Esc/Cancel closes; Left/Right tab, Up/Down row; Tab cycles | not in Next | ui/70 Examples | partial | all but Tab cycling and "not while search focused" for Left/Right; opening runs guarded open (unsaved prompt) done |
 | D-64 | Manual window (contents tree, rendered MANUAL.md, splitter) | WPF/Help/ManualWindow.xaml, SE:143-146 | ui/70 Manual | divergence | removed, decision 0028 |
-| D-65 | Colour picker popup (swatch button, SV square, hue strip, R/G/B number boxes, hex box, live follow <=10 Hz, Enter keeps / Esc restores) | WPF/Controls/ColorPicker.cs, ColorPickerButton.cs | ui/70 Colour picker | missing | no colour widget |
+| D-65 | Colour picker popup (swatch button, SV square, hue strip, R/G/B number boxes, hex box, live follow <=10 Hz, Enter keeps / Esc restores) | WPF/Controls/ColorPicker.cs, ColorPickerButton.cs | ui/70 Colour picker | done | color-picker.slint; HSV in the model (Rgb::to_hsv, from_hsv); one undo step an opening |
 | D-66 | Messages pane: dock pane, default bottom, hidden at first start | MW:525-527 | ui/70 Messages | done | app.slint:139 messages-shown default false |
 | D-67 | Messages toolbar: level toggles "Level (count)" coloured (Trace..Fatal, tooltip "Show or hide this level") | MP:201-215 | ui/70 | done | messages.slint:36-52 LevelToggle; tooltip not checked |
 | D-68 | Messages toolbar: search box (message, logger, exception), Regex toggle, Auto-scroll toggle, Clear button | MP:201-214 | ui/70 | partial | search + Clear done (messages.slint:55-62); Regex and Auto-scroll toggles missing |
@@ -656,7 +656,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-40 | Colour scheme picker action: Load from file... (.wdscheme/.json), slims sampled tables | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing |  |
 | P-41 | Colour scheme picker action: Edit a copy in the project... | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing |  |
 | P-42 | Colour scheme picker action: Remove from my schemes (user scheme only) | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing |  |
-| P-43 | Colour swatch button opens picker popup below | Controls/ColorPickerButton.cs | 30 Colour swatch button; 70 | missing |  |
+| P-43 | Colour swatch button opens picker popup below | Controls/ColorPickerButton.cs | 30 Colour swatch button; 70 | done | color-picker.slint ColorSwatch |
 | P-44 | Link toggle (chain) between two number boxes, accent underline on focus | Themes/Editors.xaml | 30 Link toggle | done | FormLink: chain-linked/chain-parted icons, accent while linked, accent border on focus, Space toggles; centred across both rows |
 | P-45 | Description header toggle (chevron, Space), kind text, persisted PartDescriptionExpanded | Views/PartCommonView.xaml:39-44 | 30 Description header | done | FormDescription: chevron turns while open, Space or click, the kind's text, Settings.part_description_expanded saved |
 | P-46 | Project: Format version RO (grey) | Views/ProjectView.xaml:36-37 | 30 Project | done | FormValue, grey |
@@ -934,7 +934,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-318 | Scheme: Based on combo with gradient+name rows (copies stops/kind/category/description) | Views/ColorSchemeView.xaml:87-95 | 30 Colour scheme | partial | scheme-combo.slint SchemeCombo: strip and name rows, the project's other schemes then the built-in ones; the user's schemes are not loaded yet |
 | P-319 | Scheme: gradient bar with stop markers; drag marker >24 px away removes; double-click removes; last stop stays | Views/ColorSchemeView.xaml:(bar) | 30 Colour scheme | done | forms.slint GradientBar: drag moves (one undo step a gesture), pulled away or double-clicked removes, a press on the gradient adds and drags; keys as Next |
 | P-320 | Scheme: stop row Position NB 0..1 step 0.01, 3 dec, 64 px | Views/ColorSchemeView.xaml:112 | 30 Colour scheme | done | forms.slint SchemeForm: 0..1, step 0.01, 3 decimals; 72 px, as 64 clips 0.375 with our line edit's padding |
-| P-321 | Scheme: stop row colour swatch button | Views/ColorSchemeView.xaml:115 | 30 Colour scheme | partial | the stop colour as a swatch; no picker |
+| P-321 | Scheme: stop row colour swatch button | Views/ColorSchemeView.xaml:115 | 30 Colour scheme | done | ColorSwatch per stop row |
 | P-322 | Scheme: stop row hex TB #RRGGBB (Enter applies) | Views/ColorSchemeView.xaml:117 | 30 Colour scheme | done | HexField: Enter or focus loss applies; text that does not read restores the colour |
 | P-323 | Scheme: stop row remove button | Views/ColorSchemeView.xaml:110 | 30 Colour scheme | done | remove button, disabled on the last stop |
 | P-324 | Scheme: Add stop button (widest gap, gradient colour) | Views/ColorSchemeView.xaml:125 | 30 Colour scheme | done | ColorScheme::add_stop (core) |

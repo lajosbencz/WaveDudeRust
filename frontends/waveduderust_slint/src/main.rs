@@ -825,6 +825,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	let numbers = app.global::<ui::NumberLogic<'_>>();
 	numbers.on_step(|spec, text, steps| number::step(&spec, &text, steps).into());
 	numbers.on_scrub(|spec, start, dx, scale| number::scrub(&spec, &start, f64::from(dx), f64::from(scale)).into());
+	form::wire_colors(&app.global::<ui::ColorLogic<'_>>());
 	let live = Live::new(&context)?;
 	let store = waveduderust_platform::store::Store::open();
 	let facts = waveduderust_platform::machine::machine_facts();
@@ -1023,7 +1024,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		move |from, to| edit(form::RowEdit::Move { from: index(from), to: index(to) })
 	});
 	rows.on_clear_rows(move || edit_rows(form::RowEdit::Clear));
-	// the gradient bar: each edit on the scheme shown, the stop then selected handed back
+	// the gradient bar and the stop swatches: each edit on the scheme shown, the stop then selected handed back
 	let bar_edit = {
 		let (st, weak) = (state.clone(), app.as_weak());
 		move |gesture: i32, edit: &dyn Fn(&mut waveduderust::model::ColorScheme) -> i32| {
@@ -1056,8 +1057,18 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			})
 		}
 	});
-	bar.on_remove_stop(move |k, gesture| {
-		bar_edit(gesture, &|s| usize::try_from(k).map_or(k, |k| form::remove_stop(s, k)))
+	bar.on_remove_stop({
+		let edit = bar_edit.clone();
+		move |k, gesture| edit(gesture, &|s| usize::try_from(k).map_or(k, |k| form::remove_stop(s, k)))
+	});
+	bar.on_recolour_stop(move |k, colour, gesture| {
+		let colour = form::rgb(colour);
+		bar_edit(gesture, &|s| {
+			if let Some(stop) = usize::try_from(k).ok().and_then(|k| s.stops.get_mut(k)) {
+				stop.color = colour;
+			}
+			k
+		});
 	});
 	let weak = app.as_weak();
 	bar.on_marker_at(move |at, reach, selected| {

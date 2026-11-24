@@ -456,6 +456,10 @@ msgstr "Middendikte"
 msgid "Centre wavelength"
 msgstr "Centrale golflengte"
 
+#. TipColorChannel
+msgid "Channel 0 to 255; Up and Down step it"
+msgstr "Kanaal 0 tot 255; omhoog en omlaag veranderen het"
+
 #. SectionCladding
 msgid "Cladding"
 msgstr "Mantel"
@@ -1160,6 +1164,10 @@ msgstr "Hoe de twee uiteinden zijn afgesneden: vlak, recht dwars op het pad zoal
 msgid "How the zones are divided from the axis to the rim: equal in width, the outer zone the deepest; or equal in depth, each zone cut to the same depth and the zones narrowing outward, as the elements of a lighthouse lens are."
 msgstr "Hoe de zones van de as tot de rand verdeeld zijn: even breed, de buitenste zone het diepst; of even diep, elke zone tot dezelfde diepte gesneden en de zones naar buiten toe smaller, zoals de elementen van een vuurtorenlens."
 
+#. TipColorHue
+msgid "Hue: Up and Down move by a degree, ten with Shift"
+msgstr "Tint: omhoog en omlaag verplaatsen een graad, tien met Shift"
+
 #. Enum.SceneMode.Image
 msgid "Image"
 msgstr "Afbeelding"
@@ -1724,6 +1732,10 @@ msgstr "Fase"
 msgid "Phase offset in degrees, -180 to 180."
 msgstr "Faseverschuiving in graden, -180 tot 180."
 
+#. TipStopSwatch
+msgid "Pick the colour: Space opens the picker, Enter keeps it, Escape puts the old colour back"
+msgstr "Kleur kiezen: spatie opent de kiezer, Enter houdt hem, Escape zet de oude kleur terug"
+
 #. Label.FacettedGratingPart.Pitch
 msgid "Pitch"
 msgstr "Steek"
@@ -2067,6 +2079,10 @@ msgstr "Deze sonde bemonsteren en tekenen."
 #. TipProbeActive
 msgid "Sample this probe (Space on the row toggles it)"
 msgstr "Deze sonde bemonsteren (spatie op de rij schakelt om)"
+
+#. TipColorSquare
+msgid "Saturation (Left, Right) and brightness (Up, Down); Shift moves by ten steps"
+msgstr "Verzadiging (links, rechts) en helderheid (omhoog, omlaag); Shift verplaatst tien stappen"
 
 #. MenuFileSave
 msgid "Save"

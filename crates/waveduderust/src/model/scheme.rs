@@ -32,6 +32,42 @@ impl Rgb {
 	pub fn to_hex(self) -> String {
 		format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
 	}
+
+	/// Hue in degrees 0..360 (0 for a grey), saturation and value 0..1.
+	pub fn to_hsv(self) -> (f64, f64, f64) {
+		let [r, g, b] = [self.r, self.g, self.b].map(|c| f64::from(c) / 255.0);
+		let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+		let delta = max - min;
+		let hue = if delta == 0.0 {
+			0.0
+		} else if max == r {
+			60.0 * (g - b) / delta
+		} else if max == g {
+			60.0 * ((b - r) / delta + 2.0)
+		} else {
+			60.0 * ((r - g) / delta + 4.0)
+		};
+		(if hue < 0.0 { hue + 360.0 } else { hue }, if max > 0.0 { delta / max } else { 0.0 }, max)
+	}
+
+	/// The colour of `hue` (degrees, wrapped), `saturation` and `value` (clamped to 0..1), channels rounded half to even.
+	pub fn from_hsv(hue: f64, saturation: f64, value: f64) -> Self {
+		let hue = hue.rem_euclid(360.0);
+		let (s, v) = (saturation.clamp(0.0, 1.0), value.clamp(0.0, 1.0));
+		let c = v * s;
+		let x = c * (1.0 - (hue / 60.0 % 2.0 - 1.0).abs());
+		let (r, g, b) = match hue {
+			h if h < 60.0 => (c, x, 0.0),
+			h if h < 120.0 => (x, c, 0.0),
+			h if h < 180.0 => (0.0, c, x),
+			h if h < 240.0 => (0.0, x, c),
+			h if h < 300.0 => (x, 0.0, c),
+			_ => (c, 0.0, x),
+		};
+		let m = v - c;
+		let channel = |ch: f64| ((ch + m) * 255.0).round_ties_even().clamp(0.0, 255.0) as u8;
+		Self::new(channel(r), channel(g), channel(b))
+	}
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Word)]
@@ -234,6 +270,23 @@ pub(crate) fn round_channel(c: f64) -> u8 {
 #[cfg(test)]
 mod stop_tests {
 	use super::*;
+
+	#[test]
+	fn hsv_round_trips_and_rounds_half_to_even() {
+		for c in [
+			Rgb::new(0, 0, 0),
+			Rgb::new(255, 0, 0),
+			Rgb::new(18, 200, 77),
+			Rgb::new(128, 128, 128),
+			Rgb::new(1, 2, 250),
+		] {
+			let (h, s, v) = c.to_hsv();
+			assert_eq!(Rgb::from_hsv(h, s, v), c);
+		}
+		assert_eq!(Rgb::new(0, 255, 255).to_hsv(), (180.0, 1.0, 1.0));
+		assert_eq!(Rgb::from_hsv(-120.0, 1.0, 1.0), Rgb::new(0, 0, 255));
+		assert_eq!(Rgb::from_hsv(0.0, 0.0, 0.3), Rgb::new(76, 76, 76));
+	}
 
 	#[test]
 	fn the_grey_ramp_has_nine_levels_rounded_to_even() {

@@ -56,6 +56,7 @@ export global Form {
     callback add-stop-at(at: float, gesture: int) -> int;
     callback move-stop(index: int, at: float, gesture: int) -> int;
     callback remove-stop(index: int, gesture: int) -> int;
+    callback recolour-stop(index: int, color: color, gesture: int);
     // the gestures counted, so each has its own number
     in-out property <int> gestures;
     // changes when the stops change other than through the bar, which then drops its selection

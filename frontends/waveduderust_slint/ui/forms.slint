@@ -1,6 +1,7 @@
 // The forms Properties shows per kind of object, bound to the Form global's data.
 import { Button, LineEdit } from "std-widgets.slint";
 import { SchemeCombo } from "scheme-combo.slint";
+import { ColorSwatch } from "color-picker.slint";
 import { Theme } from "theme.slint";
 import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, Check, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
 import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice, MetaLensTypeChoice, FiberEndsChoice, SchemeKindChoice } from "choices.slint";
@@ -2677,11 +2678,14 @@ export component SchemeForm inherits VerticalLayout {
             spec: { min: 0, max: 1, increment: 0.01, decimals: 3 };
             tip: @tr("Position along the gradient: 0 at the lowest value, 1 at the highest");
         }
-        Rectangle {
-            width: 36px;
-            border-width: 1px;
-            border-color: Theme.border;
-            background: stop.color;
+        ColorSwatch {
+            color: stop.color;
+            tip: @tr("Pick the colour: Space opens the picker, Enter keeps it, Escape puts the old colour back");
+            recolour(c, gesture) => { Form.recolour-stop(k, c, gesture); }
+            next-gesture => {
+                Form.gestures += 1;
+                Form.gestures
+            }
         }
         HexField { text <=> stop.hex; tip: @tr("Colour as #RRGGBB; Enter applies it"); }
         Rectangle {

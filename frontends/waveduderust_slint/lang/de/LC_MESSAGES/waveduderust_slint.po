@@ -456,6 +456,10 @@ msgstr "Mittendicke"
 msgid "Centre wavelength"
 msgstr "Mittenwellenlänge"
 
+#. TipColorChannel
+msgid "Channel 0 to 255; Up and Down step it"
+msgstr "Kanal 0 bis 255; Auf und Ab verändern ihn"
+
 #. SectionCladding
 msgid "Cladding"
 msgstr "Mantel"
@@ -1160,6 +1164,10 @@ msgstr "Wie die beiden Enden geschnitten sind: flach, gerade quer zum Pfad wie e
 msgid "How the zones are divided from the axis to the rim: equal in width, the outer zone the deepest; or equal in depth, each zone cut to the same depth and the zones narrowing outward, as the elements of a lighthouse lens are."
 msgstr "Wie die Zonen von der Achse bis zum Rand geteilt sind: gleich breit, die äußerste Zone die tiefste; oder gleich tief, jede Zone bis zur selben Tiefe geschnitten und die Zonen nach außen schmaler, wie die Elemente einer Leuchtturmlinse."
 
+#. TipColorHue
+msgid "Hue: Up and Down move by a degree, ten with Shift"
+msgstr "Farbton: Auf und Ab bewegen um ein Grad, zehn mit Umschalt"
+
 #. Enum.SceneMode.Image
 msgid "Image"
 msgstr "Bild"
@@ -1724,6 +1732,10 @@ msgstr "Phase"
 msgid "Phase offset in degrees, -180 to 180."
 msgstr "Phasenversatz in Grad, -180 bis 180."
 
+#. TipStopSwatch
+msgid "Pick the colour: Space opens the picker, Enter keeps it, Escape puts the old colour back"
+msgstr "Farbe wählen: Leertaste öffnet die Auswahl, Eingabe übernimmt, Escape stellt die alte Farbe wieder her"
+
 #. Label.FacettedGratingPart.Pitch
 msgid "Pitch"
 msgstr "Teilung"
@@ -2067,6 +2079,10 @@ msgstr "Diese Sonde abtasten und zeichnen."
 #. TipProbeActive
 msgid "Sample this probe (Space on the row toggles it)"
 msgstr "Diese Sonde abtasten (Leertaste auf der Zeile schaltet um)"
+
+#. TipColorSquare
+msgid "Saturation (Left, Right) and brightness (Up, Down); Shift moves by ten steps"
+msgstr "Sättigung (Links, Rechts) und Helligkeit (Auf, Ab); Umschalt bewegt um zehn Schritte"
 
 #. MenuFileSave
 msgid "Save"

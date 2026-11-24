@@ -1,0 +1,403 @@
+import { LineEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { NumberBox } from "number-box.slint";
+
+export struct Hsv {
+    hue: float,
+    saturation: float,
+    value: float,
+}
+
+// The colour arithmetic, in src/form.rs.
+export global ColorLogic {
+    pure callback to-hsv(color: color) -> Hsv;
+    pure callback from-hsv(hsv: Hsv) -> color;
+    pure callback hex(color: color) -> string;
+    // `otherwise` for text that is not #RRGGBB
+    pure callback parse-hex(text: string, otherwise: color) -> color;
+    // a channel's text, 0..255; `otherwise` for text that is not a number
+    pure callback channel(text: string, otherwise: int) -> int;
+}
+
+// A focusable area dragged with the mouse: the square or the hue strip.
+component Pad inherits FocusScope {
+    in property <string> tip;
+    callback dragged(x: length, y: length);
+    callback released();
+    Rectangle {
+        border-width: 1px;
+        border-color: root.has-focus ? Theme.accent : Theme.border;
+        @children
+    }
+    TouchArea {
+        pointer-event(e) => {
+            if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
+                root.focus();
+                root.dragged(self.mouse-x, self.mouse-y);
+            } else if (e.button == PointerEventButton.left && e.kind == PointerEventKind.up) {
+                root.released();
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.dragged(self.mouse-x, self.mouse-y);
+            }
+        }
+    }
+    Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// A saturation/value square under the pure hue, a hue strip, the red, green and blue channels and the hex text, all
+// editing one colour. The hue is kept for a grey and whenever the colour given is what the hue, saturation and value
+// already make, so a drag never jumps. A move of the markers is `moved`, which the owner may hand on later, a colour
+// typed or stepped `took`, at once; a drag's end is `settled`. `done` asks to close keeping the colour, `cancel` to
+// put the initial colour back; nothing is handed on after either.
+export component ColorPicker inherits FocusScope {
+    in property <color> initial;
+    in property <float> initial-hue;
+    callback moved(color: color, hue: float);
+    callback took(color: color, hue: float);
+    callback settled();
+    callback done();
+    callback cancel();
+
+    property <float> hue: root.initial-hue;
+    property <float> saturation;
+    property <float> value;
+    property <color> shown;
+    // a box losing the focus as the popup closes commits late
+    property <bool> closing;
+    // the channel boxes' text as typed, applied by Enter
+    property <string> typed-red;
+    property <string> typed-green;
+    property <string> typed-blue;
+
+    function forget-typed() {
+        root.typed-red = "";
+        root.typed-green = "";
+        root.typed-blue = "";
+    }
+    function set-color(c: color) {
+        if (ColorLogic.from-hsv({ hue: root.hue, saturation: root.saturation, value: root.value }) != c) {
+            let hsv = ColorLogic.to-hsv(c);
+            if (hsv.saturation > 0 && hsv.value > 0) {
+                root.hue = hsv.hue;
+            }
+            root.saturation = hsv.saturation;
+            root.value = hsv.value;
+        }
+        root.shown = c;
+        root.forget-typed();
+    }
+    function take(c: color) {
+        if (!root.closing) {
+            root.set-color(c);
+            root.took(c, root.hue);
+        }
+    }
+    function hsv-changed() {
+        root.shown = ColorLogic.from-hsv({ hue: root.hue, saturation: root.saturation, value: root.value });
+        root.forget-typed();
+        root.moved(root.shown, root.hue);
+    }
+    function channel-text(k: int, text: string) -> bool {
+        let r = k == 0 ? ColorLogic.channel(text, root.shown.red) : root.shown.red;
+        let g = k == 1 ? ColorLogic.channel(text, root.shown.green) : root.shown.green;
+        let b = k == 2 ? ColorLogic.channel(text, root.shown.blue) : root.shown.blue;
+        root.take(rgb(r, g, b));
+        true
+    }
+
+    init => {
+        root.set-color(root.initial);
+        square.focus();
+    }
+    capture-key-pressed(e) => {
+        if (e.text == Key.Escape) {
+            root.closing = true;
+            root.cancel();
+            return accept;
+        }
+        if (e.text == Key.Return) {
+            if (hex.has-focus) {
+                root.take(ColorLogic.parse-hex(hex.text, root.shown));
+            }
+            // read before the first applies, which clears them
+            let red = root.typed-red;
+            let green = root.typed-green;
+            let blue = root.typed-blue;
+            if (red != "") {
+                root.channel-text(0, red);
+            }
+            if (green != "") {
+                root.channel-text(1, green);
+            }
+            if (blue != "") {
+                root.channel-text(2, blue);
+            }
+            root.closing = true;
+            root.done();
+            return accept;
+        }
+        reject
+    }
+    VerticalLayout {
+        padding: 8px;
+        spacing: 8px;
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            square := Pad {
+                width: 160px;
+                height: 160px;
+                tip: @tr("Saturation (Left, Right) and brightness (Up, Down); Shift moves by ten steps");
+                dragged(x, y) => {
+                    root.saturation = clamp(x / self.width, 0, 1);
+                    root.value = clamp(1 - y / self.height, 0, 1);
+                    root.hsv-changed();
+                }
+                released => { root.settled(); }
+                key-pressed(e) => {
+                    let step = e.modifiers.shift ? 0.1 : 0.01;
+                    if (e.text == Key.LeftArrow || e.text == Key.RightArrow) {
+                        root.saturation = clamp(root.saturation + (e.text == Key.LeftArrow ? -step : step), 0, 1);
+                    } else if (e.text == Key.UpArrow || e.text == Key.DownArrow) {
+                        root.value = clamp(root.value + (e.text == Key.DownArrow ? -step : step), 0, 1);
+                    } else {
+                        return reject;
+                    }
+                    root.hsv-changed();
+                    accept
+                }
+                Rectangle {
+                    x: 1px;
+                    y: 1px;
+                    width: parent.width - 2px;
+                    height: parent.height - 2px;
+                    clip: true;
+                    background: ColorLogic.from-hsv({ hue: root.hue, saturation: 1, value: 1 });
+                    Rectangle { background: @linear-gradient(90deg, #ffffff 0%, #ffffff00 100%); }
+                    Rectangle { background: @linear-gradient(180deg, #00000000 0%, #000000 100%); }
+                    Rectangle {
+                        x: root.saturation * parent.width - 6.5px;
+                        y: (1 - root.value) * parent.height - 6.5px;
+                        width: 13px;
+                        height: 13px;
+                        border-radius: 6.5px;
+                        border-width: 3px;
+                        border-color: black;
+                        Rectangle {
+                            width: 11.5px;
+                            height: 11.5px;
+                            border-radius: 5.75px;
+                            border-width: 1.5px;
+                            border-color: white;
+                        }
+                    }
+                }
+            }
+            strip := Pad {
+                width: 20px;
+                height: 160px;
+                tip: @tr("Hue: Up and Down move by a degree, ten with Shift");
+                dragged(x, y) => {
+                    root.hue = mod(clamp(y / self.height, 0, 1) * 360, 360);
+                    root.hsv-changed();
+                }
+                released => { root.settled(); }
+                key-pressed(e) => {
+                    let degrees = e.modifiers.shift ? 10 : 1;
+                    if (e.text == Key.UpArrow) {
+                        root.hue = mod(root.hue - degrees + 360, 360);
+                    } else if (e.text == Key.DownArrow) {
+                        root.hue = mod(root.hue + degrees, 360);
+                    } else {
+                        return reject;
+                    }
+                    root.hsv-changed();
+                    accept
+                }
+                Rectangle {
+                    x: 1px;
+                    y: 1px;
+                    width: parent.width - 2px;
+                    height: parent.height - 2px;
+                    background: @linear-gradient(180deg, #ff0000 0%, #ffff00 16.67%, #00ff00 33.33%, #00ffff 50%, #0000ff 66.67%, #ff00ff 83.33%, #ff0000 100%);
+                }
+                Rectangle {
+                    x: -2px;
+                    y: root.hue / 360 * parent.height - 3.5px;
+                    width: 22px;
+                    height: 7px;
+                    border-width: 1px;
+                    border-color: white;
+                    Rectangle {
+                        x: 1px;
+                        y: 1px;
+                        width: parent.width - 2px;
+                        height: parent.height - 2px;
+                        border-width: 1px;
+                        border-color: black;
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 3px;
+            for name[k] in ["R", "G", "B"]: HorizontalLayout {
+                spacing: 3px;
+                padding-left: k == 0 ? 0 : 5px;
+                Text {
+                    text: name;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                }
+                NumberBox {
+                    width: 56px;
+                    horizontal-stretch: 0;
+                    spec: { min: 0, max: 255, increment: 1, decimals: 0 };
+                    value: k == 0 ? root.shown.red : k == 1 ? root.shown.green : root.shown.blue;
+                    edited(text) => { root.channel-text(k, text) }
+                    typed(text) => {
+                        if (k == 0) {
+                            root.typed-red = text;
+                        } else if (k == 1) {
+                            root.typed-green = text;
+                        } else {
+                            root.typed-blue = text;
+                        }
+                    }
+                    Tooltip { text: @markdown("\{@tr("Channel 0 to 255; Up and Down step it")}"); }
+                }
+            }
+            Rectangle {
+                width: 5px;
+            }
+            hex := LineEdit {
+                width: 80px;
+                text: ColorLogic.hex(root.shown);
+                // typing breaks the binding above
+                property <string> showing: ColorLogic.hex(root.shown);
+                changed showing => { self.text = self.showing; }
+                changed has-focus => {
+                    if (!self.has-focus && self.text != self.showing) {
+                        root.take(ColorLogic.parse-hex(self.text, root.shown));
+                        self.text = self.showing;
+                    }
+                }
+                Tooltip { text: @markdown("\{@tr("Colour as #RRGGBB; Enter applies it")}"); }
+            }
+        }
+    }
+}
+
+// A colour swatch that opens a ColorPicker below it: Space, Enter or Down open it, the colour follows every move,
+// handed on at most ten times a second and once more when a drag ends; Enter keeps and closes, Escape puts the colour
+// back and closes, a click outside closes. `recolour`'s edits of one opening share `gesture`. The swatch keeps the
+// picker's hue, which a grey does not give, from one opening to the next.
+export component ColorSwatch inherits FocusScope {
+    in property <color> color;
+    in property <string> tip;
+    callback recolour(color: color, gesture: int);
+    // a new gesture's number
+    callback next-gesture() -> int;
+
+    property <color> original;
+    property <int> gesture;
+    property <float> hue;
+    property <color> pending-color;
+    property <bool> pending;
+    property <bool> cooling;
+    function show() {
+        root.flush();
+        root.original = root.color;
+        root.gesture = root.next-gesture();
+        popup.show();
+    }
+    function close() {
+        popup.close();
+        root.focus();
+    }
+    function hand-on(c: color) {
+        root.pending = false;
+        root.recolour(c, root.gesture);
+    }
+    function flush() {
+        if (root.pending) {
+            root.hand-on(root.pending-color);
+        }
+    }
+    width: 36px;
+    accessible-role: button;
+    accessible-label: @tr("Colour");
+    accessible-action-default => { root.show(); }
+    key-pressed(e) => {
+        if (e.text == " " || e.text == Key.Return || e.text == Key.DownArrow) {
+            root.show();
+            return accept;
+        }
+        reject
+    }
+    // outlives the popup: a move made just before a click outside is still handed on
+    Timer {
+        interval: 100ms;
+        running: root.cooling;
+        triggered => {
+            if (root.pending) {
+                root.flush();
+            } else {
+                root.cooling = false;
+            }
+        }
+    }
+    Rectangle {
+        border-width: 1px;
+        border-color: root.has-focus ? Theme.accent : area.has-hover ? Theme.accent.brighter(0.4) : Theme.border;
+        background: root.color;
+    }
+    area := TouchArea {
+        // the press outside that closes the popup never reaches here, so it does not reopen it
+        clicked => {
+            root.focus();
+            root.show();
+        }
+    }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+    popup := PopupWindow {
+        x: 0;
+        y: root.height;
+        close-policy: close-on-click-outside;
+        Rectangle {
+            background: Theme.input-background;
+            border-width: 1px;
+            border-color: Theme.border;
+            ColorPicker {
+                initial: root.original;
+                initial-hue: root.hue;
+                moved(c, hue) => {
+                    root.hue = hue;
+                    if (root.cooling) {
+                        root.pending-color = c;
+                        root.pending = true;
+                    } else {
+                        root.hand-on(c);
+                        root.cooling = true;
+                    }
+                }
+                took(c, hue) => {
+                    root.hue = hue;
+                    root.hand-on(c);
+                }
+                settled => { root.flush(); }
+                done => {
+                    root.flush();
+                    root.close();
+                }
+                cancel => {
+                    root.hand-on(root.original);
+                    root.close();
+                }
+            }
+        }
+    }
+}
