@@ -67,7 +67,13 @@ export component NumberBox inherits FocusScope {
     property <length> grabbed;
     property <string> start;
 
+    // changes with the object the box shows: text typed for the last one is dropped
+    in property <int> token;
+    // the token the text was typed under
+    property <int> typed-under;
+
     changed value => { edit.text = root.value; }
+    changed token => { edit.text = root.value; }
     function write(text: string) {
         edit.text = text;
         root.commit();
@@ -130,9 +136,13 @@ export component NumberBox inherits FocusScope {
                 text: root.value;
                 input-type: InputType.decimal;
                 accepted => { root.commit(); }
-                edited(t) => { root.typed(t); }
+                edited(t) => {
+                    root.typed-under = root.token;
+                    root.typed(t);
+                }
+                // runs late: the box may show another object by then
                 changed has-focus => {
-                    if (!self.has-focus && self.text != root.value && root.edited(self.text)) {
+                    if (!self.has-focus && self.text != root.value && root.typed-under == root.token && root.edited(self.text)) {
                         self.text = root.value;
                     }
                 }

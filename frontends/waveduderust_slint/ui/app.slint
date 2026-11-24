@@ -8,8 +8,8 @@ import { MenuIcons } from "menu-icons.slint";
 import { Pane } from "pane.slint";
 import { Splitter } from "splitter.slint";
 import { ProjectTree, TreeRow, TreeKind } from "tree.slint";
-import { Form } from "form.slint";
-export { Form }
+import { Form, NumberParse } from "form.slint";
+export { Form, NumberParse }
 import { Properties, PropRow, PropKind } from "properties.slint";
 import { Preview } from "preview.slint";
 import { Timeline, TransportBar, Transport } from "timeline.slint";
@@ -105,8 +105,6 @@ export component AppWindow inherits Window {
     callback seek(int);
     callback transport-action(string);
     callback transport-speed(string);
-    in property <string> props-form;
-    callback props-action(string);
     in property <string> props-heading;
     // a folder's item count; -1 for other rows
     in property <int> props-entries: -1;
@@ -293,8 +291,6 @@ export component AppWindow inherits Window {
                         min-height: 60px;
                         close => { root.properties-shown = false; }
                         Properties {
-                            form: root.props-form;
-                            action(id) => { root.props-action(id); }
                             heading: root.props-heading;
                             entries: root.props-entries;
                             rows: root.props-rows;

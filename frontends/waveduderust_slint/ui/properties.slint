@@ -1,6 +1,8 @@
 import { LineEdit, CheckBox, ComboBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
+import { Form } from "form.slint";
+import { FormKind } from "data.slint";
 import { ProjectForm, SceneForm, SimulationForm, DisplayForm, SourceForm, ProbeForm, RectangleForm, EllipseForm, TriangleForm, PolygonForm, LensForm, FresnelLensForm, OutlineForm } from "forms.slint";
 
 export enum PropKind { text, int, float, bool, choice }
@@ -19,10 +21,6 @@ export struct PropRow {
 
 // The properties pane (docs/ui/30): one labelled editor per field of the selected object.
 export component Properties inherits Rectangle {
-    // the shown object's form (ui/forms.slint), "" for the rows below
-    in property <string> form;
-    // a form's button: "new-seed"
-    callback action(id: string);
     in property <string> heading;
     // a folder's item count (Next's CollectionView); -1 for an object
     in property <int> entries: -1;
@@ -39,23 +37,23 @@ export component Properties inherits Rectangle {
         content-height: content.preferred-height;
         content := VerticalLayout {
             width: scroll.visible-width;
-            padding: root.form != "" ? 8px : 6px;
+            padding: Form.kind != FormKind.none ? 8px : 6px;
             spacing: 2px;
             alignment: start;
-            if root.form == "project": ProjectForm { new-seed => { root.action("new-seed"); } }
-            if root.form == "scene": SceneForm { }
-            if root.form == "simulation": SimulationForm { }
-            if root.form == "display": DisplayForm { }
-            if root.form == "source": SourceForm { }
-            if root.form == "probe": ProbeForm { }
-            if root.form == "rectangle": RectangleForm { }
-            if root.form == "ellipse": EllipseForm { }
-            if root.form == "triangle": TriangleForm { }
-            if root.form == "polygon": PolygonForm { }
-            if root.form == "lens": LensForm { }
-            if root.form == "fresnel-lens": FresnelLensForm { }
-            if root.form == "outline": OutlineForm { }
-            if root.form == "": Text {
+            if Form.kind == FormKind.project: ProjectForm { }
+            if Form.kind == FormKind.scene: SceneForm { }
+            if Form.kind == FormKind.simulation: SimulationForm { }
+            if Form.kind == FormKind.display: DisplayForm { }
+            if Form.kind == FormKind.source: SourceForm { }
+            if Form.kind == FormKind.probe: ProbeForm { }
+            if Form.kind == FormKind.rectangle: RectangleForm { }
+            if Form.kind == FormKind.ellipse: EllipseForm { }
+            if Form.kind == FormKind.triangle: TriangleForm { }
+            if Form.kind == FormKind.polygon: PolygonForm { }
+            if Form.kind == FormKind.lens: LensForm { }
+            if Form.kind == FormKind.fresnel-lens: FresnelLensForm { }
+            if Form.kind == FormKind.outline: OutlineForm { }
+            if Form.kind == FormKind.none: Text {
                 text: root.heading;
                 font-weight: 700;
                 color: Theme.text;
@@ -88,6 +86,7 @@ export component Properties inherits Rectangle {
                 if row.kind == PropKind.int || row.kind == PropKind.float: NumberBox {
                     value: row.value;
                     spec: row.spec;
+                    token: row.form;
                     edited(t) => { return root.set(row.form, i, t); }
                     typed(t) => { root.typed(row.form, i, t); }
                 }
@@ -106,6 +105,11 @@ export component Properties inherits Rectangle {
                         }
                     }
                 }
+            }
+            if Form.invalid != "": Text {
+                text: @tr("Not a number: {}", Form.invalid);
+                color: Theme.status-error;
+                wrap: word-wrap;
             }
             if root.error != "": Text {
                 text: root.error;

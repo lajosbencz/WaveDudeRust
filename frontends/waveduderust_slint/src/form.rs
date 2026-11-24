@@ -1,436 +1,471 @@
-//! The properties pane's form of any model type, from its reflected fields (docs/ui/30, Forms).
+//! The typed forms (ui/forms.slint): an object as the Slint data its form binds (ui/data.slint), and a form's edits
+//! applied back field by field.
 
-use std::collections::HashMap;
-use waveduderust::model::fields::{Edit, EditError, Field, Fields, Value, ValueKind};
-
+use slint::{Model, ModelRc, SharedString, VecModel};
 use waveduderust::model::edited::Edited;
 use waveduderust::model::lens_geometry::{edge_thickness, fit_radii_zoned};
 use waveduderust::model::{
-	Lens, PROJECT_VERSION, Part, PartKind, Point, Project, Stencil, View, ZoneDivision, wavelength,
+	self as m, Coating, Lens, Material, PROJECT_VERSION, Part, PartKind, Point, Project, Stencil, View, wavelength,
 };
 
 use crate::tree::Node;
-use crate::ui::{PropKind, PropRow};
+use crate::ui::{self, Form, FormKind};
 
-/// The fields a form edits: scalars and enums; lists and composites have their own rows in the tree.
-/// Nested objects with a tree node of their own, so a form never shows their fields.
-const OWN_NODES: [&str; 2] = ["Scene", "Simulation"];
-
-fn editable<T: Fields>() -> Vec<T::Field> {
-	T::Field::all()
-		.into_iter()
-		.filter(|f| !f.dependent() && !matches!(f.kind(), ValueKind::List | ValueKind::Nested))
-		.filter(|f| !f.path().split_once('.').is_some_and(|(top, _)| OWN_NODES.contains(&top)))
-		.collect()
+/// A model value as a form holds it.
+trait Bridge<M> {
+	fn show(model: &M) -> Self;
+	fn model(&self) -> M;
 }
 
-/// `PascalCase` or `snake_case` as words, a path's dots as spaces: `Field.PulseWidth` is `Field pulse width`.
-fn label(name: &str) -> String {
-	let mut out = String::new();
-	for (i, c) in name.chars().enumerate() {
-		if c == '_' || c == '.' {
-			out.push(' ');
-		} else if c.is_uppercase() && i > 0 {
-			if !out.ends_with(' ') {
-				out.push(' ');
-			}
-			out.extend(c.to_lowercase());
-		} else {
-			out.push(c);
-		}
+impl Bridge<bool> for bool {
+	fn show(model: &bool) -> Self {
+		*model
 	}
-	out
+	fn model(&self) -> bool {
+		*self
+	}
 }
 
-/// The rows of `of`'s form.
-pub(crate) fn rows<T: Fields>(of: &T) -> Vec<PropRow> {
-	editable::<T>()
-		.into_iter()
-		.map(|f| {
-			let (kind, choices): (PropKind, &[&str]) = match f.kind() {
-				ValueKind::Bool => (PropKind::Bool, &[]),
-				ValueKind::Int | ValueKind::UInt => (PropKind::Int, &[]),
-				ValueKind::Float => (PropKind::Float, &[]),
-				ValueKind::Word(names) => (PropKind::Choice, names),
-				_ => (PropKind::Text, &[]),
-			};
-			let value = f.get(of).map_or_else(String::new, |v| v.to_string());
-			let range = f.range().map_or((f32::MIN, f32::MAX), |r| (r.min as f32, r.max as f32));
-			let spec = match kind {
-				PropKind::Int => crate::number::whole(range.0, range.1),
-				PropKind::Float => crate::number::NumberSpec {
-					min: range.0,
-					max: range.1,
-					increment: 1.0,
-					decimals: -1,
-					..Default::default()
-				},
-				_ => Default::default(),
-			};
-			let current = choices.iter().position(|c| *c == value).map_or(-1, |i| i as i32);
-			PropRow {
-				label: label(&f.path()).into(),
-				kind,
-				value: value.into(),
-				choices: slint::ModelRc::from(
-					choices.iter().map(|c| slint::SharedString::from(*c)).collect::<Vec<_>>().as_slice(),
-				),
-				current,
-				spec,
-				form: 0,
+impl Bridge<i32> for i32 {
+	fn show(model: &i32) -> Self {
+		*model
+	}
+	fn model(&self) -> i32 {
+		*self
+	}
+}
+
+impl Bridge<u32> for i32 {
+	fn show(model: &u32) -> Self {
+		i32::try_from(*model).unwrap_or(i32::MAX)
+	}
+	fn model(&self) -> u32 {
+		u32::try_from(*self).unwrap_or(0)
+	}
+}
+
+/// An optional step: below 0 is none, as the box's minimum.
+impl Bridge<Option<u32>> for i32 {
+	fn show(model: &Option<u32>) -> Self {
+		model.map_or(-1, |v| Bridge::show(&v))
+	}
+	fn model(&self) -> Option<u32> {
+		u32::try_from(*self).ok()
+	}
+}
+
+impl Bridge<f64> for f32 {
+	fn show(model: &f64) -> Self {
+		*model as f32
+	}
+	fn model(&self) -> f64 {
+		crate::number::wide(*self)
+	}
+}
+
+impl Bridge<String> for SharedString {
+	fn show(model: &String) -> Self {
+		model.into()
+	}
+	fn model(&self) -> String {
+		self.into()
+	}
+}
+
+/// Slint enums and the model's of the same variants. The model's are non-exhaustive: one is shown as the Slint
+/// variant that converts back to it, the first for one this table lacks (tested below).
+macro_rules! words {
+	($($ui:ident = $model:ident { $($v:ident),+ $(,)? })+) => {
+		$(impl Bridge<m::$model> for ui::$ui {
+			fn show(model: &m::$model) -> Self {
+				[$(Self::$v),+].into_iter().find(|u| u.model() == *model).unwrap_or_default()
 			}
-		})
-		.collect()
-}
+			fn model(&self) -> m::$model {
+				match self {
+					$(Self::$v => m::$model::$v,)+
+				}
+			}
+		})+
 
-/// Sets row `row` of `of`'s form from the text the user entered.
-pub(crate) fn set<T: Fields>(of: &mut T, row: usize, text: &str) -> Result<(), String> {
-	let field = *editable::<T>().get(row).ok_or("no such row")?;
-	let value = match field.kind() {
-		ValueKind::Bool => Value::Bool(text == "true"),
-		ValueKind::Int | ValueKind::UInt => {
-			Value::Int(text.trim().parse().map_err(|_| format!("{text} is no whole number"))?)
-		}
-		ValueKind::Float => Value::Float(crate::number::parse(text).ok_or_else(|| format!("{text} is no number"))?),
-		ValueKind::Word(names) => Value::Word(names.iter().find(|n| **n == text).ok_or("unknown choice")?),
-		_ => Value::Text(text.into()),
-	};
-	field.edit(value).and_then(|e| e.apply(of)).map(drop).map_err(|e: EditError| e.to_string())
-}
-
-/// Runs `$body` with `$of` bound to the object `$node` stands for in `$p` (the project) or `$v` (its view).
-macro_rules! with_object {
-	($p:expr, $v:expr, $node:expr, |$of:ident| $body:expr, $none:expr $(, $m:tt)?) => {
-		match $node {
-			Node::Project => { let $of = &$($m)? *$p; $body }
-			Node::Scene => { let $of = &$($m)? $p.scene; $body }
-			Node::Simulation => { let $of = &$($m)? $p.simulation; $body }
-			Node::Display => { let $of = &$($m)? *$v; $body }
-			Node::Source(i) => { let $of = &$($m)? $p.sources[i]; $body }
-			Node::Part(i) => { let $of = &$($m)? $p.parts[i].base; $body }
-			Node::Probe(i) => { let $of = &$($m)? $p.probes[i]; $body }
-			Node::Scheme(i) => { let $of = &$($m)? $p.color_schemes[i]; $body }
-			Node::Sources | Node::Parts | Node::Probes | Node::Schemes => $none,
+		#[cfg(test)]
+		#[test]
+		fn every_model_word_has_its_slint_variant() {
+			use waveduderust::model::Word;
+			$(for w in m::$model::MEMBERS {
+				assert_eq!(<ui::$ui as Bridge<m::$model>>::show(w).model(), *w, "{}", w.name());
+			})+
 		}
 	};
 }
 
-/// The Slint form `node` shows (ui/forms.slint); empty for the generic rows.
-pub(crate) fn kind(project: &Project, node: Node) -> &'static str {
+words! {
+	SceneMode = SceneMode { Canvas, Image }
+	Edges = Edges { Open, Reflective }
+	Stencil = Stencil { NinePoint, FourthOrder }
+	SourceMode = SourceMode { Continuous, Pulsed }
+	PulseShape = PulseShape { Gaussian, SmoothedSquare }
+	Layer = Layer { Field, Intensity }
+	Measurement = Measurement { Amplitude, Value, IntegratedValue }
+	ProbeKind = ProbeKind { Point, Line }
+	ProbeDetector = ProbeDetector { Standard, Counting, Imaging }
+	BoxSize = BoxSize { Tiny, Small, Medium, Large, ExtraLarge, Custom }
+	ScaleMode = ScaleMode { Running, Full }
+	YScale = YScale { Linear, Logarithmic }
+	CoatingProfile = CoatingProfile { Layer, Graded }
+	TriangleType = TriangleType { Equilateral, RightIsosceles, ThirtySixtyNinety, Isosceles, Custom }
+	ZoneDivision = ZoneDivision { EqualWidth, EqualDepth }
+}
+
+/// A form's data of a model type: its fields of the same names, the rest left to the caller.
+trait Data<M>: Sized {
+	fn show(model: &M) -> Self;
+	/// Writes to `model` the fields that differ from `shown`, the data `model` gives: a field the form did not change
+	/// keeps the model's exact value, which the form's may only approximate.
+	fn apply(&self, shown: &Self, model: &mut M);
+}
+
+macro_rules! data {
+	($($ui:ident = $model:ty { $($f:ident),+ $(,)? })+) => {$(
+		impl Data<$model> for ui::$ui {
+			// the read-outs are the caller's
+			#[allow(clippy::needless_update)]
+			fn show(model: &$model) -> Self {
+				Self { $($f: Bridge::show(&model.$f),)+ ..Default::default() }
+			}
+			fn apply(&self, shown: &Self, model: &mut $model) {
+				$(if self.$f != shown.$f {
+					model.$f = self.$f.model();
+				})+
+			}
+		}
+	)+};
+}
+
+data! {
+	ProjectData = Project { seed, description }
+	SceneData = m::Scene {
+		mode, image, image_path, width, height, damping_edge, edges, refractive_index, image_sources,
+		image_source_scale, object_sources,
+	}
+	SimulationData = m::Simulation {
+		steps, visualize_every, stencil, wave_speed, time_decay, source_frequency_scale, intensity_scale,
+	}
+	DisplayData = View {
+		export_from, export_to, probe_graphs_in_export, probe_markers_in_export, source_markers_in_export,
+		handles_in_preview, labels_in_preview,
+	}
+	LayerData = m::DisplayLayer { color_scheme, brightness, black_level, preview, overlay, overlay_gain, overlay_in_export }
+	VideoData = m::Video { fps, quality }
+	SourceData = m::Source {
+		name, enabled, x, y, frequency, amplitude, phase, mode, pulse_shape, pulse_width, off_width, detach_after,
+	}
+	ArrayData = m::SourceArray {
+		size_x, size_y, spacing_x, spacing_y, angle, random_frequency, random_phase, random_off_width, random_position,
+	}
+	ProbeData = m::Probe {
+		name, active, start_after, detector, sensitivity, bin_size, layer, measurement, kind, ax, ay, bx, by, box_size,
+		box_x, box_y, box_width, box_height, scale_mode, window, auto_scale_x, auto_scale_y, y_scale, decades, y_min,
+		y_max,
+	}
+	PartData = m::PartBase { name, enabled, x, y, angle }
+	MaterialData = Material { mirror, refractive_index, absorption, absorption_ramp }
+	CoatingData = Coating { depth, profile, front, back, sides }
+	SidesData = m::Rectangle { length, width, linked }
+	TriangleData = m::Triangle { base, kind, angle_a, angle_b }
+	PolygonData = m::Polygon { sides, side }
+	LensData = Lens { diameter, r1, r2, thickness }
+	FresnelData = m::FresnelLens { zones, division }
+	PointData = Point { x, y }
+}
+
+/// An ellipse's sides are a rectangle's.
+impl Data<m::Ellipse> for ui::SidesData {
+	fn show(model: &m::Ellipse) -> Self {
+		Self { length: Bridge::show(&model.length), width: Bridge::show(&model.width), linked: model.linked }
+	}
+	fn apply(&self, shown: &Self, model: &mut m::Ellipse) {
+		let mut sides = m::Rectangle::default();
+		(sides.length, sides.width, sides.linked) = (model.length, model.width, model.linked);
+		self.apply(shown, &mut sides);
+		(model.length, model.width, model.linked) = (sides.length, sides.width, sides.linked);
+	}
+}
+
+/// The form `node` shows; none for an object without one.
+pub(crate) fn kind(project: &Project, node: Node) -> FormKind {
 	match node {
 		Node::Part(i) => match project.parts.get(i).map(|p| &p.kind) {
-			Some(PartKind::Rectangle(_)) => "rectangle",
-			Some(PartKind::Ellipse(_)) => "ellipse",
-			Some(PartKind::Triangle(_)) => "triangle",
-			Some(PartKind::Polygon(_)) => "polygon",
-			Some(PartKind::Lens(_)) => "lens",
-			Some(PartKind::FresnelLens(_)) => "fresnel-lens",
-			Some(PartKind::Outline(_)) => "outline",
-			_ => "",
+			Some(PartKind::Rectangle(_)) => FormKind::Rectangle,
+			Some(PartKind::Ellipse(_)) => FormKind::Ellipse,
+			Some(PartKind::Triangle(_)) => FormKind::Triangle,
+			Some(PartKind::Polygon(_)) => FormKind::Polygon,
+			Some(PartKind::Lens(_)) => FormKind::Lens,
+			Some(PartKind::FresnelLens(_)) => FormKind::FresnelLens,
+			Some(PartKind::Outline(_)) => FormKind::Outline,
+			_ => FormKind::None,
 		},
-		Node::Project => "project",
-		Node::Scene => "scene",
-		Node::Simulation => "simulation",
-		Node::Display => "display",
-		Node::Source(_) => "source",
-		Node::Probe(_) => "probe",
-		_ => "",
+		Node::Project => FormKind::Project,
+		Node::Scene => FormKind::Scene,
+		Node::Simulation => FormKind::Simulation,
+		Node::Display => FormKind::Display,
+		Node::Source(_) => FormKind::Source,
+		Node::Probe(_) => FormKind::Probe,
+		Node::Sources | Node::Parts | Node::Probes | Node::Schemes | Node::Scheme(_) => FormKind::None,
 	}
 }
 
-/// Every field of `of` as text by its path.
-fn paths<T: Fields>(of: &T) -> HashMap<String, String> {
-	let mut values = HashMap::new();
-	for f in T::Field::all() {
-		let Some(value) = f.get(of) else { continue };
-		// an absent optional step reads as Next's -1
-		let value = if value == Value::Absent { "-1".to_owned() } else { value.to_string() };
-		// a word's index among its kind's, for a combo box
-		if let ValueKind::Word(names) = f.kind() {
-			let index = names.iter().position(|n| *n == value).map_or(-1, |i| i as i32);
-			values.insert(format!("{}#", f.path()), index.to_string());
-		}
-		values.insert(f.path(), value);
+/// Sets a form property to `value` when it differs: an equal one is left alone, so an editor bound to it keeps its
+/// caret and selection.
+fn put<T: PartialEq>(shown: T, value: T, set: impl FnOnce(T)) {
+	if shown != value {
+		set(value);
 	}
-	values
 }
 
-/// Where a part's own fields sit below `Kind.`: its variant's name and a dot.
-fn kind_prefix(part: &Part) -> String {
-	let path =
-		<Part as Fields>::Field::all().into_iter().find(|f| f.path().starts_with("Kind.") && f.get(part).is_some());
-	path.and_then(|f| f.path().split('.').nth(1).map(|k| format!("Kind.{k}."))).unwrap_or_default()
+/// The material and coating of a part kind that has them.
+fn shape(kind: &PartKind) -> Option<(&Material, &Coating)> {
+	match kind {
+		PartKind::Rectangle(p) => Some((&p.material, &p.coating)),
+		PartKind::Ellipse(p) => Some((&p.material, &p.coating)),
+		PartKind::Triangle(p) => Some((&p.material, &p.coating)),
+		PartKind::Polygon(p) => Some((&p.material, &p.coating)),
+		PartKind::Lens(p) => Some((&p.material, &p.coating)),
+		PartKind::FresnelLens(p) => Some((&p.lens.material, &p.lens.coating)),
+		PartKind::Outline(p) => Some((&p.material, &p.coating)),
+		_ => None,
+	}
 }
 
-/// The values a form of `node` shows by path: its fields and the read-outs Next derives from them. A part's own
-/// fields are also by their path below its kind, so one form fits every kind that has them.
-pub(crate) fn values(project: &Project, view: &View, node: Node) -> HashMap<String, String> {
-	let mut values = match node {
-		Node::Part(i) => {
-			let part = &project.parts[i];
-			let mut values = paths(part);
-			let prefix = kind_prefix(part);
-			let own: Vec<_> =
-				values.iter().filter_map(|(k, v)| Some((k.strip_prefix(&prefix)?.to_owned(), v.clone()))).collect();
-			values.extend(own);
-			values
-		}
-		_ => with_object!(project, view, node, |of| paths(of), HashMap::new()),
-	};
+fn shape_mut(kind: &mut PartKind) -> Option<(&mut Material, &mut Coating)> {
+	match kind {
+		PartKind::Rectangle(p) => Some((&mut p.material, &mut p.coating)),
+		PartKind::Ellipse(p) => Some((&mut p.material, &mut p.coating)),
+		PartKind::Triangle(p) => Some((&mut p.material, &mut p.coating)),
+		PartKind::Polygon(p) => Some((&mut p.material, &mut p.coating)),
+		PartKind::Lens(p) => Some((&mut p.material, &mut p.coating)),
+		PartKind::FresnelLens(p) => Some((&mut p.lens.material, &mut p.lens.coating)),
+		PartKind::Outline(p) => Some((&mut p.material, &mut p.coating)),
+		_ => None,
+	}
+}
+
+/// A lens's data with its read-outs: concave, and its thickness at the rim with its radii fitted as a run fits them.
+fn lens_data(l: &Lens, zones: u32, division: m::ZoneDivision) -> ui::LensData {
+	let (diameter, thickness) = (l.diameter.max(2), l.thickness.max(1));
+	let (r1, r2) = fit_radii_zoned(diameter, thickness, l.r1, l.r2, zones, division);
+	ui::LensData {
+		concave: l.is_concave(),
+		edge: edge_thickness(diameter, thickness, r1, r2, zones, division) as f32,
+		..Data::show(l)
+	}
+}
+
+fn scene_data(scene: &m::Scene) -> ui::SceneData {
+	let (image_width, image_height) = scene.image_size;
+	ui::SceneData {
+		embedded: scene.image_data.is_some(),
+		readable: scene.image_size != (0, 0),
+		image_width: Bridge::show(&image_width),
+		image_height: Bridge::show(&image_height),
+		image_kb: scene.image_data.as_ref().map_or(0, |b| i32::try_from(b.len() / 1024).unwrap_or(i32::MAX).max(1)),
+		..Data::show(scene)
+	}
+}
+
+fn source_data(source: &m::Source, sim: &m::Simulation) -> ui::SourceData {
+	let lambda = wavelength(source.frequency, sim.wave_speed, sim.source_frequency_scale);
+	ui::SourceData {
+		composite: source.array.is_some(),
+		wavelength: lambda as f32,
+		wavelength_known: lambda.is_finite(),
+		nine_point: sim.stencil == Stencil::NinePoint,
+		..Data::show(source)
+	}
+}
+
+/// Hands the form of `node` its object's data.
+pub(crate) fn show(form: &Form<'_>, project: &Project, view: &View, node: Node) {
 	match node {
-		Node::Project => {
-			values.insert("Version".into(), PROJECT_VERSION.to_string());
-		}
-		Node::Scene => {
-			let scene = &project.scene;
-			let info = scene.image_data.as_ref().map(|bytes| match scene.image_size {
-				(0, 0) => "(unreadable)".to_owned(),
-				(w, h) => format!("{w} \u{d7} {h}, {} KB", (bytes.len() / 1024).max(1)),
-			});
-			values.insert("EmbeddedImage".into(), info.unwrap_or_default());
+		Node::Project => put(
+			form.get_project(),
+			ui::ProjectData { version: Bridge::show(&PROJECT_VERSION), ..Data::show(project) },
+			|d| form.set_project(d),
+		),
+		Node::Scene => put(form.get_scene(), scene_data(&project.scene), |d| form.set_scene(d)),
+		Node::Simulation => put(form.get_simulation(), Data::show(&project.simulation), |d| form.set_simulation(d)),
+		Node::Display => {
+			put(form.get_display(), Data::show(view), |d| form.set_display(d));
+			put(form.get_field(), Data::show(&view.field), |d| form.set_field(d));
+			put(form.get_intensity(), Data::show(&view.intensity), |d| form.set_intensity(d));
+			put(form.get_video(), Data::show(&view.video), |d| form.set_video(d));
 		}
 		Node::Source(i) => {
 			let source = &project.sources[i];
-			values.insert("IsComposite".into(), source.array.is_some().to_string());
-			let sim = &project.simulation;
-			let lambda = wavelength(source.frequency, sim.wave_speed, sim.source_frequency_scale);
-			values.insert("Wavelength".into(), if lambda.is_finite() { format!("{lambda:.1}") } else { String::new() });
-			values.insert("NinePoint".into(), (sim.stencil == Stencil::NinePoint).to_string());
+			put(form.get_source(), source_data(source, &project.simulation), |d| form.set_source(d));
+			let array = source.array.clone().unwrap_or_default();
+			put(form.get_array(), Data::show(&array), |d| form.set_array(d));
 		}
-		Node::Part(i) => match &project.parts[i].kind {
-			PartKind::Triangle(t) => {
-				// Next's TriangleApexConverter
-				let (a, b) = t.effective_angles();
-				values.insert("ApexAngle".into(), format!("{}\u{b0}", one_decimal(180.0 - a - b)));
-			}
-			PartKind::Lens(l) => {
-				values.insert("IsConcave".into(), l.is_concave().to_string());
-				values.insert("EdgeThickness".into(), edge_text(l, 1, ZoneDivision::EqualWidth));
-			}
-			PartKind::FresnelLens(f) => {
-				values.insert("EdgeThickness".into(), edge_text(&f.lens, f.zones, f.division));
-			}
-			PartKind::Outline(o) => {
-				values.insert("Points#".into(), o.points.len().to_string());
-				for (k, p) in o.points.iter().enumerate() {
-					values.insert(format!("Points.{k}.X"), p.x.to_string());
-					values.insert(format!("Points.{k}.Y"), p.y.to_string());
+		Node::Probe(i) => put(form.get_probe(), Data::show(&project.probes[i]), |d| form.set_probe(d)),
+		Node::Part(i) => show_part(form, &project.parts[i]),
+		Node::Sources | Node::Parts | Node::Probes | Node::Schemes | Node::Scheme(_) => {}
+	}
+}
+
+fn show_part(form: &Form<'_>, part: &Part) {
+	put(form.get_part(), Data::show(&part.base), |d| form.set_part(d));
+	if let Some((material, coating)) = shape(&part.kind) {
+		put(form.get_material(), Data::show(material), |d| form.set_material(d));
+		put(form.get_coating(), Data::show(coating), |d| form.set_coating(d));
+	}
+	match &part.kind {
+		PartKind::Rectangle(p) => put(form.get_sides(), Data::show(p), |d| form.set_sides(d)),
+		PartKind::Ellipse(p) => put(form.get_sides(), Data::show(p), |d| form.set_sides(d)),
+		PartKind::Triangle(t) => {
+			let (a, b) = t.effective_angles();
+			let data = ui::TriangleData { apex: (180.0 - a - b) as f32, ..Data::show(t) };
+			put(form.get_triangle(), data, |d| form.set_triangle(d));
+		}
+		PartKind::Polygon(p) => put(form.get_polygon(), Data::show(p), |d| form.set_polygon(d)),
+		PartKind::Lens(l) => put(form.get_lens(), lens_data(l, 1, m::ZoneDivision::EqualWidth), |d| form.set_lens(d)),
+		PartKind::FresnelLens(f) => {
+			put(form.get_lens(), lens_data(&f.lens, f.zones, f.division), |d| form.set_lens(d));
+			put(form.get_fresnel(), Data::show(f), |d| form.set_fresnel(d));
+		}
+		PartKind::Outline(o) => {
+			// in place: a row's box keeps text typed into it while another row is added or removed
+			let points: Vec<ui::PointData> = o.points.iter().map(Data::show).collect();
+			let shown = form.get_points();
+			match shown.as_any().downcast_ref::<VecModel<ui::PointData>>() {
+				Some(model) => {
+					while model.row_count() > points.len() {
+						model.remove(model.row_count() - 1);
+					}
+					for (k, point) in points.into_iter().enumerate() {
+						match model.row_data(k) {
+							Some(old) if old == point => {}
+							Some(_) => model.set_row_data(k, point),
+							None => model.push(point),
+						}
+					}
 				}
+				None => form.set_points(ModelRc::new(VecModel::from(points))),
 			}
-			_ => {}
-		},
+		}
 		_ => {}
 	}
-	values
 }
 
-/// A lens's thickness at the rim with its radii fitted as a run fits them (Next's LensEdgeConverter).
-fn edge_text(l: &Lens, zones: u32, division: ZoneDivision) -> String {
-	let (diameter, thickness) = (l.diameter.max(2), l.thickness.max(1));
-	let (r1, r2) = fit_radii_zoned(diameter, thickness, l.r1, l.r2, zones, division);
-	format!("{} px", one_decimal(edge_thickness(diameter, thickness, r1, r2, zones, division)))
-}
-
-/// `v` as .NET's `0.#`: one decimal, none when it is 0.
-fn one_decimal(v: f64) -> String {
-	let text = format!("{v:.1}");
-	text.strip_suffix(".0").map_or(text.clone(), str::to_owned)
-}
-
-/// Edits an outline's points: `Add` appends one a step right of the last (Next's PartPointsView), `Remove` takes the
-/// one at index `text`, `<index>.X` and `<index>.Y` set a coordinate.
-fn set_point(points: &mut Vec<Point>, path: &str, text: &str) -> Result<(), String> {
-	const STEP: i32 = 20;
-	match path {
-		"Add" => {
-			let last = points.last().copied();
-			points.push(last.map_or(Point::new(0, 0), |p| Point::new(p.x + STEP, p.y)));
+/// Applies the edits the form of `node`, a project object, holds.
+pub(crate) fn apply(form: &Form<'_>, project: &mut Project, node: Node) {
+	match node {
+		Node::Project => {
+			let shown = ui::ProjectData { version: form.get_project().version, ..Data::show(&*project) };
+			form.get_project().apply(&shown, project);
 		}
-		"Remove" => {
-			let k = text.parse::<usize>().ok().filter(|&k| k < points.len()).ok_or("no such point")?;
-			points.remove(k);
+		Node::Scene => {
+			let scene = &mut project.scene;
+			form.get_scene().apply(&scene_data(scene), scene);
 		}
-		_ => {
-			let (k, axis) = path.split_once('.').ok_or("no such field")?;
-			let point = k.parse::<usize>().ok().and_then(|k| points.get_mut(k)).ok_or("no such point")?;
-			set_path(point, axis, text)?;
+		Node::Simulation => {
+			let sim = &mut project.simulation;
+			form.get_simulation().apply(&Data::show(&*sim), sim);
 		}
-	}
-	Ok(())
-}
-
-/// Sets the field at `path` of `of` from the text the user entered.
-fn set_path<T: Fields>(of: &mut T, path: &str, text: &str) -> Result<(), String> {
-	let field = T::Field::all().into_iter().find(|f| f.path() == path).ok_or("no such field")?;
-	let value = match field.kind() {
-		ValueKind::Bool => Value::Bool(text == "true"),
-		ValueKind::Int | ValueKind::UInt => {
-			let v = crate::number::parse(text).filter(|v| v.fract() == 0.0);
-			let v = v.ok_or_else(|| format!("{text} is no whole number"))?;
-			// a box's f32 bounds round i32::MAX up a step
-			let (min, max) = if field.kind() == ValueKind::UInt {
-				(0.0, f64::from(u32::MAX))
-			} else {
-				(f64::from(i32::MIN), f64::from(i32::MAX))
-			};
-			let (min, max) = field.range().map_or((min, max), |r| (r.min, r.max));
-			match v.clamp(min, max) {
-				// -1 of an optional step (its range's minimum) is no step
-				v if v < 0.0 && field.kind() == ValueKind::UInt => Value::Absent,
-				v => Value::Int(v as i64),
+		Node::Source(i) => {
+			let sim = project.simulation.clone();
+			let Some(source) = project.sources.get_mut(i) else { return };
+			let data = form.get_source();
+			data.apply(&source_data(source, &sim), source);
+			if data.composite != source.array.is_some() {
+				source.array = data.composite.then(Default::default);
+			} else if let Some(array) = &mut source.array {
+				form.get_array().apply(&Data::show(&*array), array);
 			}
 		}
-		ValueKind::Float => Value::Float(crate::number::parse(text).ok_or_else(|| format!("{text} is no number"))?),
-		ValueKind::Word(names) => Value::Word(names.iter().find(|n| **n == text).ok_or("unknown choice")?),
-		_ => Value::Text(text.into()),
-	};
-	field.edit(value).and_then(|e| e.apply(of)).map(drop).map_err(|e: EditError| e.to_string())
-}
-
-/// Sets the field at `path` of the object `node` stands for.
-pub(crate) fn set_at(project: &mut Project, view: &mut View, node: Node, path: &str, text: &str) -> Result<(), String> {
-	if let (Node::Source(i), "IsComposite") = (node, path) {
-		let array = &mut project.sources.get_mut(i).ok_or("no such source")?.array;
-		*array = (text == "true").then(|| array.take().unwrap_or_default());
-		return Ok(());
-	}
-	if let Node::Probe(i) = node {
-		let probe = project.probes.get_mut(i).ok_or("no such probe")?;
-		let before = probe.clone();
-		set_path(probe, path, text)?;
-		probe.edited(&before);
-		return Ok(());
-	}
-	if let Node::Part(i) = node {
-		let part = project.parts.get_mut(i).ok_or("no such part")?;
-		let before = part.clone();
-		match (&mut part.kind, path) {
-			(_, _) if path.starts_with("Base.") => set_path(part, path, text)?,
-			(PartKind::Outline(o), _) if path.starts_with("Points.") => set_point(&mut o.points, &path[7..], text)?,
-			(PartKind::Lens(l), "IsConcave") => l.set_concave(text == "true"),
-			_ => set_path(part, &format!("{}{path}", kind_prefix(part)), text)?,
+		Node::Probe(i) => {
+			let Some(probe) = project.probes.get_mut(i) else { return };
+			let before = probe.clone();
+			form.get_probe().apply(&Data::show(&before), probe);
+			probe.edited(&before);
 		}
-		part.edited(&before);
-		return Ok(());
+		Node::Part(i) => {
+			let Some(part) = project.parts.get_mut(i) else { return };
+			let before = part.clone();
+			apply_part(form, part);
+			part.edited(&before);
+		}
+		Node::Display | Node::Sources | Node::Parts | Node::Probes | Node::Schemes | Node::Scheme(_) => {}
 	}
-	with_object!(project, view, node, |of| set_path(of, path, text), Err("nothing to edit".into()), mut)
 }
 
-/// The heading and rows of the selected object's form.
-pub(crate) fn of_selected(project: &Project, view: &View, node: Node) -> (String, Vec<PropRow>) {
-	let rows = with_object!(project, view, node, |of| rows(of), Vec::new());
-	(format!("{node:?}"), rows)
+fn apply_part(form: &Form<'_>, part: &mut Part) {
+	form.get_part().apply(&Data::show(&part.base), &mut part.base);
+	if let Some((material, coating)) = shape_mut(&mut part.kind) {
+		form.get_material().apply(&Data::show(&*material), material);
+		form.get_coating().apply(&Data::show(&*coating), coating);
+	}
+	match &mut part.kind {
+		PartKind::Rectangle(p) => form.get_sides().apply(&Data::show(&*p), p),
+		PartKind::Ellipse(p) => form.get_sides().apply(&Data::show(&*p), p),
+		PartKind::Triangle(p) => form.get_triangle().apply(&Data::show(&*p), p),
+		PartKind::Polygon(p) => form.get_polygon().apply(&Data::show(&*p), p),
+		PartKind::Lens(l) => apply_lens(&form.get_lens(), l, 1, m::ZoneDivision::EqualWidth),
+		PartKind::FresnelLens(f) => {
+			apply_lens(&form.get_lens(), &mut f.lens, f.zones, f.division);
+			form.get_fresnel().apply(&Data::show(&*f), f);
+		}
+		PartKind::Outline(o) => {
+			for (point, data) in o.points.iter_mut().zip(form.get_points().iter()) {
+				data.apply(&Data::show(&*point), point);
+			}
+		}
+		_ => {}
+	}
 }
 
-/// Sets row `row` of the selected object's form.
-pub(crate) fn set_selected(
-	project: &mut Project,
-	view: &mut View,
-	node: Node,
-	row: usize,
-	text: &str,
-) -> Result<(), String> {
-	with_object!(project, view, node, |of| set(of, row, text), Err("nothing to edit".into()), mut)
+fn apply_lens(data: &ui::LensData, l: &mut Lens, zones: u32, division: m::ZoneDivision) {
+	let shown = lens_data(l, zones, division);
+	data.apply(&shown, l);
+	if data.concave != shown.concave {
+		l.set_concave(data.concave);
+	}
+}
+
+/// Applies the edits the Display form holds.
+pub(crate) fn apply_view(form: &Form<'_>, view: &mut View) {
+	form.get_display().apply(&Data::show(&*view), view);
+	form.get_field().apply(&Data::show(&view.field), &mut view.field);
+	form.get_intensity().apply(&Data::show(&view.intensity), &mut view.intensity);
+	form.get_video().apply(&Data::show(&view.video), &mut view.video);
+}
+
+/// Appends a point to an outline a step right of its last one.
+pub(crate) fn add_point(points: &mut Vec<Point>) {
+	const STEP: i32 = 20;
+	let last = points.last().copied();
+	points.push(last.map_or(Point::new(0, 0), |p| Point::new(p.x + STEP, p.y)));
 }
 
 #[cfg(test)]
 mod tests {
-	use waveduderust::model::Source;
-
 	use super::*;
 
 	#[test]
-	fn a_source_form_edits_its_name_and_rejects_a_bad_number() {
-		let mut s = Source::default();
-		let rows = rows(&s);
-		let name = rows.iter().position(|r| r.label == "Name").unwrap();
-		set(&mut s, name, "Laser").unwrap();
-		assert_eq!(s.name, "Laser");
-		let int = rows.iter().position(|r| r.kind == PropKind::Int).unwrap();
-		assert!(set(&mut s, int, "many").is_err());
+	fn applying_writes_only_the_changed_fields() {
+		let mut sim = m::Simulation::default();
+		sim.wave_speed = 0.123_456_789_123;
+		let shown: ui::SimulationData = Data::show(&sim);
+		let edited = ui::SimulationData { steps: 42, ..shown.clone() };
+		edited.apply(&shown, &mut sim);
+		assert_eq!((sim.steps, sim.wave_speed), (42, 0.123_456_789_123));
+		// a decimal as typed, not as f32 holds it
+		ui::SimulationData { time_decay: 0.1, ..shown.clone() }.apply(&shown, &mut sim);
+		assert_eq!(sim.time_decay, 0.1);
 	}
 
 	#[test]
-	fn the_project_form_leaves_the_scene_and_simulation_to_their_nodes() {
-		let rows = rows(&Project::default());
-		assert!(rows.iter().all(|r| !r.label.starts_with("Scene") && !r.label.starts_with("Simulation")));
-		assert!(rows.iter().any(|r| r.label == "Seed"));
-	}
-
-	#[test]
-	fn words_read_as_spaced_lower_case() {
-		assert_eq!(label("PulseWidth"), "Pulse width");
-		assert_eq!(label("x"), "x");
-		assert_eq!(label("Field.PulseWidth"), "Field pulse width");
-	}
-}
-
-#[cfg(test)]
-mod path_tests {
-	use super::*;
-
-	#[test]
-	fn fields_read_and_set_by_path_with_next_s_read_outs() {
-		let (mut p, mut v) = (Project::default(), View::default());
-		let values = values(&p, &v, Node::Simulation);
-		assert_eq!(values["Steps"], p.simulation.steps.to_string());
-		assert_eq!((values["Stencil"].as_str(), values["Stencil#"].as_str()), ("FourthOrder", "1"));
-		set_at(&mut p, &mut v, Node::Simulation, "Steps", "1200").unwrap();
-		assert_eq!(p.simulation.steps, 1200);
-		set_at(&mut p, &mut v, Node::Display, "Video.Fps", "30").unwrap();
-		assert_eq!(v.video.fps, 30);
-		assert!(set_at(&mut p, &mut v, Node::Scene, "Width", "1.5").is_err());
-		assert_eq!(super::values(&p, &v, Node::Project)["Version"], PROJECT_VERSION.to_string());
-		// -1 is no detach step, both ways
-		p.sources.push(Default::default());
-		set_at(&mut p, &mut v, Node::Source(0), "DetachAfter", "30").unwrap();
-		assert_eq!(p.sources[0].detach_after, Some(30));
-		set_at(&mut p, &mut v, Node::Source(0), "DetachAfter", "-1").unwrap();
-		assert_eq!(p.sources[0].detach_after, None);
-		assert_eq!(super::values(&p, &v, Node::Source(0))["DetachAfter"], "-1");
-		// a probe takes Next's coupling: a detector is an integrated intensity line; the box on A follows it
-		p.probes.push(Default::default());
-		let probe = Node::Probe(0);
-		(p.probes[0].box_x, p.probes[0].box_y) = (p.probes[0].ax, p.probes[0].ay);
-		set_at(&mut p, &mut v, probe, "Ax", "40").unwrap();
-		assert_eq!(p.probes[0].box_x, 40);
-		set_at(&mut p, &mut v, probe, "Detector", "Counting").unwrap();
-		assert_eq!(super::values(&p, &v, probe)["Measurement"], "IntegratedValue");
-		set_at(&mut p, &mut v, probe, "Detector", "Standard").unwrap();
-		set_at(&mut p, &mut v, probe, "Layer", "Field").unwrap();
-		assert_eq!(super::values(&p, &v, probe)["Measurement"], "Amplitude");
-		// a part's own fields by their path below its kind; Next's setters carry an edit along
-		let mut rectangle = waveduderust::model::Rectangle::default();
-		rectangle.linked = true;
-		p.parts.push(Part::new(PartKind::Rectangle(rectangle), 0, 0));
-		let part = Node::Part(0);
-		set_at(&mut p, &mut v, part, "Width", "90").unwrap();
-		assert_eq!(super::values(&p, &v, part)["Kind.Rectangle.Length"], "90");
-		set_at(&mut p, &mut v, part, "Base.Name", "Slab").unwrap();
-		assert_eq!(super::values(&p, &v, part)["Base.Name"], "Slab");
-		p.parts[0].kind = PartKind::Triangle(waveduderust::model::Triangle::default());
-		set_at(&mut p, &mut v, part, "Kind", "RightIsosceles").unwrap();
-		assert_eq!(super::values(&p, &v, part)["AngleA"], "45");
-		assert_eq!(super::values(&p, &v, part)["ApexAngle"], "90\u{b0}");
-		// a lens: the mirror box renames it, the concave box flips both radii
-		p.parts[0] = Part::new(PartKind::Lens(Lens::default()), 0, 0);
-		p.parts[0].base.name = "Lens 1".into();
-		set_at(&mut p, &mut v, part, "Material.Mirror", "true").unwrap();
-		assert_eq!(p.parts[0].base.name, "Mirror 1");
-		let concave = super::values(&p, &v, part)["IsConcave"] == "true";
-		set_at(&mut p, &mut v, part, "IsConcave", &(!concave).to_string()).unwrap();
-		assert_eq!(super::values(&p, &v, part)["IsConcave"], (!concave).to_string());
-		// an outline's points: added a step right of the last, set, removed
-		p.parts[0] = Part::new(PartKind::Outline(waveduderust::model::Outline::default()), 0, 0);
-		set_at(&mut p, &mut v, part, "Points.Add", "").unwrap();
-		set_at(&mut p, &mut v, part, "Points.Add", "").unwrap();
-		set_at(&mut p, &mut v, part, "Points.0.Y", "5").unwrap();
-		let values = super::values(&p, &v, part);
-		assert_eq!(
-			(values["Points#"].as_str(), values["Points.1.X"].as_str(), values["Points.0.Y"].as_str()),
-			("2", "20", "5")
-		);
-		set_at(&mut p, &mut v, part, "Points.Remove", "0").unwrap();
-		assert_eq!(super::values(&p, &v, part)["Points#"], "1");
+	fn an_optional_step_below_zero_is_none() {
+		assert_eq!(<i32 as Bridge<Option<u32>>>::model(&-1), None);
+		assert_eq!(<i32 as Bridge<Option<u32>>>::show(&None), -1);
+		assert_eq!(<i32 as Bridge<Option<u32>>>::model(&5), Some(5));
 	}
 }

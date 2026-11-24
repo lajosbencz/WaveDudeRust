@@ -1,0 +1,209 @@
+// The model's words and the forms' data as Slint types; src/form.rs converts them to and from the model.
+
+export enum SceneMode { canvas, image }
+export enum Edges { open, reflective }
+export enum Stencil { nine-point, fourth-order }
+export enum SourceMode { continuous, pulsed }
+export enum PulseShape { gaussian, smoothed-square }
+export enum Layer { field, intensity }
+export enum Measurement { amplitude, value, integrated-value }
+export enum ProbeKind { point, line }
+export enum ProbeDetector { standard, counting, imaging }
+export enum BoxSize { tiny, small, medium, large, extra-large, custom }
+export enum ScaleMode { running, full }
+export enum YScale { linear, logarithmic }
+export enum CoatingProfile { layer, graded }
+export enum TriangleType { equilateral, right-isosceles, thirty-sixty-ninety, isosceles, custom }
+export enum ZoneDivision { equal-width, equal-depth }
+
+// Which form Properties shows; `none` for the generic rows.
+export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline }
+
+export struct ProjectData {
+    seed: int,
+    description: string,
+    version: int,
+}
+
+export struct SceneData {
+    mode: SceneMode,
+    image: string,
+    image-path: string,
+    // the embedded image: present, readable, its size in pixels and kilobytes
+    embedded: bool,
+    readable: bool,
+    image-width: int,
+    image-height: int,
+    image-kb: int,
+    width: int,
+    height: int,
+    damping-edge: int,
+    edges: Edges,
+    refractive-index: float,
+    image-sources: bool,
+    image-source-scale: float,
+    object-sources: bool,
+}
+
+export struct SimulationData {
+    steps: int,
+    visualize-every: int,
+    stencil: Stencil,
+    wave-speed: float,
+    time-decay: float,
+    source-frequency-scale: float,
+    intensity-scale: float,
+}
+
+export struct LayerData {
+    color-scheme: string,
+    brightness: float,
+    black-level: float,
+    preview: bool,
+    overlay: bool,
+    overlay-gain: float,
+    overlay-in-export: bool,
+}
+
+export struct VideoData {
+    fps: int,
+    quality: int,
+}
+
+export struct DisplayData {
+    export-from: int,
+    export-to: int,
+    probe-graphs-in-export: bool,
+    probe-markers-in-export: bool,
+    source-markers-in-export: bool,
+    handles-in-preview: bool,
+    labels-in-preview: bool,
+}
+
+export struct SourceData {
+    name: string,
+    enabled: bool,
+    x: float,
+    y: float,
+    frequency: float,
+    amplitude: float,
+    phase: float,
+    mode: SourceMode,
+    pulse-shape: PulseShape,
+    pulse-width: int,
+    off-width: int,
+    // below 0: never detached
+    detach-after: int,
+    // an array of emitters instead of one
+    composite: bool,
+    // the wavelength in pixels the frequency gives, when finite; nominal on the 9-point stencil
+    wavelength: float,
+    wavelength-known: bool,
+    nine-point: bool,
+}
+
+export struct ArrayData {
+    size-x: int,
+    size-y: int,
+    spacing-x: int,
+    spacing-y: int,
+    angle: float,
+    random-frequency: int,
+    random-phase: int,
+    random-off-width: int,
+    random-position: int,
+}
+
+export struct ProbeData {
+    name: string,
+    active: bool,
+    start-after: int,
+    detector: ProbeDetector,
+    sensitivity: float,
+    bin-size: int,
+    layer: Layer,
+    measurement: Measurement,
+    kind: ProbeKind,
+    ax: int,
+    ay: int,
+    bx: int,
+    by: int,
+    box-size: BoxSize,
+    box-x: int,
+    box-y: int,
+    box-width: int,
+    box-height: int,
+    scale-mode: ScaleMode,
+    window: int,
+    auto-scale-x: bool,
+    auto-scale-y: bool,
+    y-scale: YScale,
+    decades: int,
+    y-min: float,
+    y-max: float,
+}
+
+export struct PartData {
+    name: string,
+    enabled: bool,
+    x: int,
+    y: int,
+    angle: float,
+}
+
+export struct MaterialData {
+    mirror: bool,
+    refractive-index: float,
+    absorption: int,
+    absorption-ramp: int,
+}
+
+export struct CoatingData {
+    depth: float,
+    profile: CoatingProfile,
+    front: bool,
+    back: bool,
+    sides: bool,
+}
+
+// A rectangle's or ellipse's sides.
+export struct SidesData {
+    length: int,
+    width: int,
+    linked: bool,
+}
+
+export struct TriangleData {
+    base: int,
+    kind: TriangleType,
+    angle-a: float,
+    angle-b: float,
+    // read-out: 180 degrees less the base angles the type gives
+    apex: float,
+}
+
+export struct PolygonData {
+    sides: int,
+    side: int,
+}
+
+export struct LensData {
+    diameter: int,
+    r1: float,
+    r2: float,
+    thickness: int,
+    // diverging; ticking it flips both radii
+    concave: bool,
+    // read-out: the thickness at the rim, the radii fitted
+    edge: float,
+}
+
+export struct FresnelData {
+    zones: int,
+    division: ZoneDivision,
+}
+
+export struct PointData {
+    x: int,
+    y: int,
+}

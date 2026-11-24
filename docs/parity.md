@@ -498,7 +498,7 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 Slint code: frontends/waveduderust_slint/ui/tree.slint, ui/properties.slint, src/tree.rs, src/form.rs, src/main.rs (tree_*/props_set/menu).
 Next paths are relative to WaveDudeNext.WPF (Panes/ProjectTree.xaml etc). Spec files are docs/ui/20 and docs/ui/30.
 Status words: done / partial / missing / divergence.
-Legend G (generic row): the Slint form is built by reflection from model fields (form.rs): a label from the field path
+Legend G (generic row): the Slint form is built by reflection from model fields (rows.rs): a label from the field path
 (English, no hints), a plain LineEdit (text/int/float; Enter commits), CheckBox or ComboBox; no spin buttons, step, drag, wheel,
 clamp, units, tooltips, sections, enable/disable rules, per-keystroke apply; a rejected value shows one red error line at the
 bottom. Fields marked dependent, lists and nested objects are not shown. Part forms edit parts[i].base only.
@@ -645,7 +645,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-29 | Number box: horizontal drag scrub on unfocused box (Shift x0.1, Ctrl x10, log doubling), Esc restores | Controls/NumberBox.cs | 30 Number box | divergence | ui/number-box.slint, src/number.rs; no pointer wrap at the screen's edge (divergences.md, Number box) |
 | P-30 | Number box: rounding to Decimals / three significant digits (log) | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
 | P-31 | Number box: step clamps to Min..Max, writes immediately, selects text | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
-| P-32 | Typed text free; model converts and clamps; culture decimal comma | Controls/NumberBox.cs | 30 Number box | partial | a decimal comma reads as a point when typed, stepped or scrubbed; numbers are written with a point; typed values are not clamped: field edits ignore the declared ranges (Scene width takes 99999999) |
+| P-32 | Typed text free; model converts and clamps; culture decimal comma | Controls/NumberBox.cs | 30 Number box | partial | a decimal comma reads as a point when typed, stepped or scrubbed; numbers are written with a point; a typed form clamps each number to its box's range; the generic rows do not clamp |
 | P-33 | Non-parsing text counts as 0 for a step; log box starts from Minimum | Controls/NumberBox.cs | 30 Number box | partial | ui/number-box.slint, src/number.rs; every box steps by Next's default 1 until piece 4 brings each field's increment and decimals |
 | P-34 | Disabled boxes grey out; row disabled by other setting greys label, no pointer/focus | Themes/Editors.xaml | 30 Number box | missing | no per-row enabled state; dependent fields are hidden from the form instead |
 | P-35 | Validation message for bad input | n/a (Rust) | 30 not itemised | partial | single red error line below form: 'x is no number', EditError text |
@@ -660,7 +660,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-44 | Link toggle (chain) between two number boxes, accent underline on focus | Themes/Editors.xaml | 30 Link toggle | done | FormLink: chain-linked/chain-parted icons, accent while linked, accent border on focus, Space toggles; centred across both rows |
 | P-45 | Description header toggle (chevron, Space), kind text, persisted PartDescriptionExpanded | Views/PartCommonView.xaml:39-44 | 30 Description header | done | FormDescription: chevron turns while open, Space or click, the kind's text, Settings.part_description_expanded saved |
 | P-46 | Project: Format version RO (grey) | Views/ProjectView.xaml:36-37 | 30 Project | done | FormValue, grey |
-| P-47 | Project: Random seed number box (integer) | Views/ProjectView.xaml:39-43 | 30 Project | done | FormNumber, whole numbers clamped to i32 |
+| P-47 | Project: Random seed number box (integer) | Views/ProjectView.xaml:39-43 | 30 Project | done | number box, whole numbers clamped to i32 |
 | P-48 | Project: New seed button (draws fresh seed) | Views/ProjectView.xaml:41 | 30 Project | partial | Button beside the box: a seed from Project::new_random_seed, one undo step; no access key (Next's _New seed) |
 | P-49 | Project: Description multiline wrapping text | Views/ProjectView.xaml:46-49 | 30 Project | partial | FormNotes: a wrapping TextEdit, 60 px at least, applied per keystroke, the keystrokes one undo step (Document::edit_merging) |
 | P-50 | Project: section General header | Views/ProjectView.xaml | 30 Project | done | FormSection General |
@@ -672,115 +672,115 @@ Not-in-spec rows are marked in the Spec column.
 | P-56 | Scene: X button drops name, path, bytes; canvas keeps size | Views/SceneView.xaml:88 | 30 Scene | missing |  |
 | P-57 | Scene: Image file RO path ellipsis + '(not found)' | Views/SceneView.xaml:95-101 | 30 Scene | partial | the path, elided; no '(not found)' note: the app watches no scene image file yet |
 | P-58 | Scene: Embedded image RO 'W x H, N KB' / '(unreadable)' | Views/SceneView.xaml:105-107 | 30 Scene | done | 'W x H, N KB' from the embedded bytes and the decoded size, '(unreadable)' when it has none |
-| P-59 | Scene: Width NB 8..16384 (disabled in Image mode) | Views/SceneView.xaml:111-112 | 30 Scene | done | FormNumber 8..16384, label and box disabled in Image mode |
-| P-60 | Scene: Height NB 8..16384 (disabled in Image mode) | Views/SceneView.xaml:114-115 | 30 Scene | done | FormNumber 8..16384, label and box disabled in Image mode |
+| P-59 | Scene: Width NB 8..16384 (disabled in Image mode) | Views/SceneView.xaml:111-112 | 30 Scene | done | number box 8..16384, label and box disabled in Image mode |
+| P-60 | Scene: Height NB 8..16384 (disabled in Image mode) | Views/SceneView.xaml:114-115 | 30 Scene | done | number box 8..16384, label and box disabled in Image mode |
 | P-61 | Scene: Edges combo Open/Reflective (disabled while Damping edge < 0) | Views/SceneView.xaml:117-118 | 30 Scene; divergence rim | done | FormChoice Open, Reflective; Next no longer disables it (SceneView.xaml) |
-| P-62 | Scene: Damping edge NB -8192..8192 | Views/SceneView.xaml:121-122 | 30 Scene | done | FormNumber -8192..8192 |
-| P-63 | Scene: Refractive index NB 1..2.55 step 0.01 | Views/SceneView.xaml:124-125 | 30 Scene | done | FormNumber 1..2.55 step 0.01 |
+| P-62 | Scene: Damping edge NB -8192..8192 | Views/SceneView.xaml:121-122 | 30 Scene | done | number box -8192..8192 |
+| P-63 | Scene: Refractive index NB 1..2.55 step 0.01 | Views/SceneView.xaml:124-125 | 30 Scene | done | number box 1..2.55 step 0.01 |
 | P-64 | Scene: Image sources check box (full width) | Views/SceneView.xaml:130 | 30 Scene | done | FormCheck, full width |
-| P-65 | Scene: Image source amplitude NB 0..1000 step 0.1 (enabled w/ Image sources) | Views/SceneView.xaml:133-134 | 30 Scene | done | FormNumber 0..1000 step 0.1, label and box enabled with Image sources |
+| P-65 | Scene: Image source amplitude NB 0..1000 step 0.1 (enabled w/ Image sources) | Views/SceneView.xaml:133-134 | 30 Scene | done | number box 0..1000 step 0.1, label and box enabled with Image sources |
 | P-66 | Scene: Object sources check box | Views/SceneView.xaml:136 | 30 Scene | done | FormCheck, full width |
 | P-67 | Scene: sections Canvas / Sources from the image | Views/SceneView.xaml:57-60,128 | 30 Scene | done | FormSection Canvas, Sources from the image |
-| P-68 | Simulation: Steps NB 1..10,000,000 step 100 | Views/SimulationView.xaml:31-32 | 30 Simulation | done | FormNumber 1..10,000,000 step 100 |
-| P-69 | Simulation: Visualize every NB 1..1000 | Views/SimulationView.xaml:34-35 | 30 Simulation | done | FormNumber 1..1000 |
-| P-70 | Simulation: Wave speed NB 1e-6..1e6 step 0.01 | Views/SimulationView.xaml:43-44 | 30 Simulation | done | FormNumber 1e-6..1e6 step 0.01 |
-| P-71 | Simulation: Intensity time decay NB 1..100 drag 0.1, 1 dec | Views/SimulationView.xaml:46-47 | 30 Simulation | done | FormNumber 1..100, drag 0.1, 1 decimal |
-| P-72 | Simulation: Source frequency scale NB 0..1000 step 0.1 | Views/SimulationView.xaml:49-50 | 30 Simulation | done | FormNumber 0..1000 step 0.1 |
-| P-73 | Simulation: Intensity scale NB 1e-7..1e6 step 0.1 | Views/SimulationView.xaml:52-53 | 30 Simulation | done | FormNumber 1e-7..1e6 step 0.1 |
+| P-68 | Simulation: Steps NB 1..10,000,000 step 100 | Views/SimulationView.xaml:31-32 | 30 Simulation | done | number box 1..10,000,000 step 100 |
+| P-69 | Simulation: Visualize every NB 1..1000 | Views/SimulationView.xaml:34-35 | 30 Simulation | done | number box 1..1000 |
+| P-70 | Simulation: Wave speed NB 1e-6..1e6 step 0.01 | Views/SimulationView.xaml:43-44 | 30 Simulation | done | number box 1e-6..1e6 step 0.01 |
+| P-71 | Simulation: Intensity time decay NB 1..100 drag 0.1, 1 dec | Views/SimulationView.xaml:46-47 | 30 Simulation | done | number box 1..100, drag 0.1, 1 decimal |
+| P-72 | Simulation: Source frequency scale NB 0..1000 step 0.1 | Views/SimulationView.xaml:49-50 | 30 Simulation | done | number box 0..1000 step 0.1 |
+| P-73 | Simulation: Intensity scale NB 1e-7..1e6 step 0.1 | Views/SimulationView.xaml:52-53 | 30 Simulation | done | number box 1e-7..1e6 step 0.1 |
 | P-74 | Simulation: 4th-order Laplacian check box (full width) | Views/SimulationView.xaml:40 | 30 Simulation | done | FormCheck over the Stencil word: FourthOrder checked, NinePoint not |
 | P-75 | Simulation: sections Run / Solver | Views/SimulationView.xaml:29-42 | 30 Simulation | done | FormSection Run (key SectionRun), Solver |
 | P-76 | Display Field: Colour scheme picker (gradient swatch 56x12 + name, layer kind) | Views/DisplayLayerView.xaml:30-32 | 30 Display layer | partial | a text box for the scheme's name (FormText); the picker with its swatches comes later in piece 4 |
-| P-77 | Display Field: Brightness NB logarithmic 0.0001..100000 | Views/DisplayLayerView.xaml:36-37 | 30 Display layer | done | FormNumber, logarithmic 0.0001..100000 |
-| P-78 | Display Field: Black level NB -10..1 step 0.01 | Views/DisplayLayerView.xaml:39-40 | 30 Display layer | done | FormNumber -10..1 step 0.01 |
+| P-77 | Display Field: Brightness NB logarithmic 0.0001..100000 | Views/DisplayLayerView.xaml:36-37 | 30 Display layer | done | number box, logarithmic 0.0001..100000 |
+| P-78 | Display Field: Black level NB -10..1 step 0.01 | Views/DisplayLayerView.xaml:39-40 | 30 Display layer | done | number box -10..1 step 0.01 |
 | P-79 | Display Field: Preview check box (shows picture; same as transport show toggle) | Views/DisplayLayerView.xaml:42 | 30 Display layer | done | FormCheck; the same field as the transport's show toggle |
 | P-80 | Display Field: Outline in the preview check box | Views/DisplayLayerView.xaml:45 | 30 Display layer | done | FormCheck |
-| P-81 | Display Field: Outline brightness NB 0..5 step 0.05 | Views/DisplayLayerView.xaml:47-48 | 30 Display layer | done | FormNumber 0..5 step 0.05 |
+| P-81 | Display Field: Outline brightness NB 0..5 step 0.05 | Views/DisplayLayerView.xaml:47-48 | 30 Display layer | done | number box 0..5 step 0.05 |
 | P-82 | Display Field: Outline in the export check box | Views/DisplayLayerView.xaml:49 | 30 Display layer | done | FormCheck |
 | P-83 | Display Intensity: Colour scheme picker (gradient swatch 56x12 + name, layer kind) | Views/DisplayLayerView.xaml:30-32 | 30 Display layer | partial | a text box for the scheme's name (FormText); the picker with its swatches comes later in piece 4 |
-| P-84 | Display Intensity: Brightness NB logarithmic 0.0001..100000 | Views/DisplayLayerView.xaml:36-37 | 30 Display layer | done | FormNumber, logarithmic 0.0001..100000 |
-| P-85 | Display Intensity: Black level NB -10..1 step 0.01 | Views/DisplayLayerView.xaml:39-40 | 30 Display layer | done | FormNumber -10..1 step 0.01 |
+| P-84 | Display Intensity: Brightness NB logarithmic 0.0001..100000 | Views/DisplayLayerView.xaml:36-37 | 30 Display layer | done | number box, logarithmic 0.0001..100000 |
+| P-85 | Display Intensity: Black level NB -10..1 step 0.01 | Views/DisplayLayerView.xaml:39-40 | 30 Display layer | done | number box -10..1 step 0.01 |
 | P-86 | Display Intensity: Preview check box (shows picture; same as transport show toggle) | Views/DisplayLayerView.xaml:42 | 30 Display layer | done | FormCheck; the same field as the transport's show toggle |
 | P-87 | Display Intensity: Outline in the preview check box | Views/DisplayLayerView.xaml:45 | 30 Display layer | done | FormCheck |
-| P-88 | Display Intensity: Outline brightness NB 0..5 step 0.05 | Views/DisplayLayerView.xaml:47-48 | 30 Display layer | done | FormNumber 0..5 step 0.05 |
+| P-88 | Display Intensity: Outline brightness NB 0..5 step 0.05 | Views/DisplayLayerView.xaml:47-48 | 30 Display layer | done | number box 0..5 step 0.05 |
 | P-89 | Display Intensity: Outline in the export check box | Views/DisplayLayerView.xaml:49 | 30 Display layer | done | FormCheck |
 | P-90 | Display: Handles in the preview check box | Views/DisplayView.xaml:39 | 30 Display | done | FormCheck, full width |
 | P-91 | Display: Labels in the preview check box | Views/DisplayView.xaml:41 | 30 Display | done | FormCheck, full width |
-| P-92 | Display: Export From step NB min 0 | Views/DisplayView.xaml:47-48 | 30 Display | done | FormNumber from 0 |
-| P-93 | Display: Export To step NB min 0 (0 = end) | Views/DisplayView.xaml:50-51 | 30 Display | done | FormNumber from 0; the model bounds it by the run |
+| P-92 | Display: Export From step NB min 0 | Views/DisplayView.xaml:47-48 | 30 Display | done | number box from 0 |
+| P-93 | Display: Export To step NB min 0 (0 = end) | Views/DisplayView.xaml:50-51 | 30 Display | done | number box from 0; the model bounds it by the run |
 | P-94 | Display: Probe graphs in the export check box | Views/DisplayView.xaml:53 | 30 Display | done | FormCheck, full width |
 | P-95 | Display: Probe markers in the export check box | Views/DisplayView.xaml:55 | 30 Display | done | FormCheck, full width |
 | P-96 | Display: Source markers in the export check box | Views/DisplayView.xaml:57 | 30 Display | done | FormCheck, full width |
-| P-97 | Display: Video export Frame rate NB 1..240 | Views/DisplayView.xaml:63-64 | 30 Display | done | FormNumber 1..240 |
-| P-98 | Display: Video export Quality NB 1..100 | Views/DisplayView.xaml:66-67 | 30 Display | done | FormNumber 1..100 |
+| P-97 | Display: Video export Frame rate NB 1..240 | Views/DisplayView.xaml:63-64 | 30 Display | done | number box 1..240 |
+| P-98 | Display: Video export Quality NB 1..100 | Views/DisplayView.xaml:66-67 | 30 Display | done | number box 1..100 |
 | P-99 | Display: sections Field/Intensity/Preview/Export/Video export and on-screen order | Views/DisplayView.xaml:28-62 | 30 Display | done | Field, Intensity, Preview, Export (key SectionExportRange), Video export, in Next's order |
 | P-100 | Source: Name TB | Views/SourceView.xaml:54 | 30 Source | done | SourceForm FormText, per keystroke |
 | P-101 | Source: Enabled CB | Views/SourceView.xaml:56 | 30 Source | done | FormCheck, Next's Label.Source.Enabled through a @tr context |
-| P-102 | Source: X NB integer (min 0) | Views/SourceView.xaml:63 | 30 Source | done | FormNumber from 0, whole steps |
-| P-103 | Source: Y NB integer (min 0) | Views/SourceView.xaml:66 | 30 Source | done | FormNumber from 0, whole steps |
-| P-104 | Source: Frequency NB 0.01..255 drag 0.1 2 dec | Views/SourceView.xaml:72 | 30 Source | done | FormNumber 0.01..255, drag 0.1, 2 decimals |
-| P-105 | Source: Amplitude NB 0..100 drag 0.1 2 dec | Views/SourceView.xaml:75 | 30 Source | done | FormNumber 0..100, drag 0.1, 2 decimals |
-| P-106 | Source: Phase NB -180..180 drag 0.5 2 dec | Views/SourceView.xaml:78 | 30 Source | done | FormNumber -180..180, drag 0.5, 2 decimals |
+| P-102 | Source: X NB integer (min 0) | Views/SourceView.xaml:63 | 30 Source | done | number box from 0, whole steps |
+| P-103 | Source: Y NB integer (min 0) | Views/SourceView.xaml:66 | 30 Source | done | number box from 0, whole steps |
+| P-104 | Source: Frequency NB 0.01..255 drag 0.1 2 dec | Views/SourceView.xaml:72 | 30 Source | done | number box 0.01..255, drag 0.1, 2 decimals |
+| P-105 | Source: Amplitude NB 0..100 drag 0.1 2 dec | Views/SourceView.xaml:75 | 30 Source | done | number box 0..100, drag 0.1, 2 decimals |
+| P-106 | Source: Phase NB -180..180 drag 0.5 2 dec | Views/SourceView.xaml:78 | 30 Source | done | number box -180..180, drag 0.5, 2 decimals |
 | P-107 | Source: Mode combo Continuous/Pulsed | Views/SourceView.xaml:100 | 30 Source | done | FormChoice Continuous, Pulsed |
 | P-108 | Source: Pulse shape combo Gaussian/Smoothed square (off when Continuous) | Views/SourceView.xaml:104 | 30 Source | done | FormChoice Gaussian, Smoothed square, off when Continuous |
-| P-109 | Source: Pulse width NB min 1 (off when Continuous) | Views/SourceView.xaml:108 | 30 Source | done | FormNumber from 1, off when Continuous |
-| P-110 | Source: Off width NB min 1 (off when Continuous) | Views/SourceView.xaml:111 | 30 Source | done | FormNumber from 1, off when Continuous |
-| P-111 | Source: Detach after step NB min -1 | Views/SourceView.xaml:114 | 30 Source | done | FormNumber from -1 (-1 = no detach) |
+| P-109 | Source: Pulse width NB min 1 (off when Continuous) | Views/SourceView.xaml:108 | 30 Source | done | number box from 1, off when Continuous |
+| P-110 | Source: Off width NB min 1 (off when Continuous) | Views/SourceView.xaml:111 | 30 Source | done | number box from 1, off when Continuous |
+| P-111 | Source: Detach after step NB min -1 | Views/SourceView.xaml:114 | 30 Source | done | number box from -1 (-1 = no detach) |
 | P-112 | Source: Composite source CB | Views/SourceView.xaml:118 | 30 Source | done | FormCheck IsComposite: adds the array (its defaults) or drops it |
-| P-113 | Source: Columns NB min 1 (array, on when Composite) | Views/SourceView.xaml:124 | 30 Source | done | FormNumber from 1 |
-| P-114 | Source: Rows NB min 1 | Views/SourceView.xaml:127 | 30 Source | done | FormNumber from 1 |
-| P-115 | Source: Horizontal spacing NB | Views/SourceView.xaml:130 | 30 Source | done | FormNumber |
-| P-116 | Source: Vertical spacing NB | Views/SourceView.xaml:133 | 30 Source | done | FormNumber |
-| P-117 | Source: Rotation NB -180..180 step 5 drag 0.5 1 dec | Views/SourceView.xaml:136 | 30 Source | done | FormNumber -180..180 step 5, drag 0.5, 1 decimal |
-| P-118 | Source: Frequency (random) NB min 0 | Views/SourceView.xaml:142 | 30 Source | done | FormNumber from 0 |
-| P-119 | Source: Phase (random) NB min 0 | Views/SourceView.xaml:145 | 30 Source | done | FormNumber from 0 |
-| P-120 | Source: Off width (random) NB min 0 | Views/SourceView.xaml:148 | 30 Source | done | FormNumber from 0 |
-| P-121 | Source: Position (random) NB min 0 | Views/SourceView.xaml:151 | 30 Source | done | FormNumber from 0 |
+| P-113 | Source: Columns NB min 1 (array, on when Composite) | Views/SourceView.xaml:124 | 30 Source | done | number box from 1 |
+| P-114 | Source: Rows NB min 1 | Views/SourceView.xaml:127 | 30 Source | done | number box from 1 |
+| P-115 | Source: Horizontal spacing NB | Views/SourceView.xaml:130 | 30 Source | done | number box |
+| P-116 | Source: Vertical spacing NB | Views/SourceView.xaml:133 | 30 Source | done | number box |
+| P-117 | Source: Rotation NB -180..180 step 5 drag 0.5 1 dec | Views/SourceView.xaml:136 | 30 Source | done | number box -180..180 step 5, drag 0.5, 1 decimal |
+| P-118 | Source: Frequency (random) NB min 0 | Views/SourceView.xaml:142 | 30 Source | done | number box from 0 |
+| P-119 | Source: Phase (random) NB min 0 | Views/SourceView.xaml:145 | 30 Source | done | number box from 0 |
+| P-120 | Source: Off width (random) NB min 0 | Views/SourceView.xaml:148 | 30 Source | done | number box from 0 |
+| P-121 | Source: Position (random) NB min 0 | Views/SourceView.xaml:151 | 30 Source | done | number box from 0 |
 | P-122 | Source: Wavelength RO '~ N.N px' (+ '(nominal)' with 9-point stencil), tooltip | Views/SourceView.xaml:81-84 | 30 Source | done | '~ N.N px' (U+2248) from model::wavelength, '(nominal)' with the 9-point stencil, '-' when none; Next's tip; the figure takes a decimal point in every language |
 | P-123 | Source: sections General/Position/Wave/Timing/Array/Random offsets | Views/SourceView.xaml:49-150 | 30 Source | done | General, Position, Wave, Timing, Array, the random offsets' heading inside the array panel |
 | P-124 | Source: array rows disabled unless Composite | Views/SourceView.xaml:122 | 30 Source | done | array labels and boxes disabled unless Composite |
-| P-125 | Part: Name TB (section General, per keystroke) | Views/PartCommonView.xaml:55-56 | 30 Part common | done | PartCommon FormText Base.Name, per keystroke |
-| P-126 | Part: Enabled CB | Views/PartCommonView.xaml:58 | 30 Part common | done | PartCommon FormCheck Base.Enabled |
-| P-127 | Part: X NB min 0 | Views/PartCommonView.xaml:64-65 | 30 Part common | done | PartCommon FormNumber from 0 |
-| P-128 | Part: Y NB min 0 | Views/PartCommonView.xaml:67-68 | 30 Part common | done | PartCommon FormNumber from 0 |
-| P-129 | Part: Angle NB -180..180 step 5 drag 0.5 1 dec | Views/PartCommonView.xaml:70-71 | 30 Part common | done | PartCommon FormNumber -180..180 step 5, drag 0.5, 1 decimal |
-| P-130 | Part: kind-specific forms shown after shared rows (form dispatch per kind) | Panes/PropertiesPane.xaml:117 | 30 Forms | partial | form::kind by PartKind; a kind's own fields by their path below Kind.<Variant> (form::values), Next's setters in PartKind::follow; rectangle, ellipse, triangle, polygon, lens, Fresnel lens, outline so far, other kinds show the generic rows |
+| P-125 | Part: Name TB (section General, per keystroke) | Views/PartCommonView.xaml:55-56 | 30 Part common | done | PartCommon FormText, per keystroke |
+| P-126 | Part: Enabled CB | Views/PartCommonView.xaml:58 | 30 Part common | done | PartCommon FormCheck |
+| P-127 | Part: X NB min 0 | Views/PartCommonView.xaml:64-65 | 30 Part common | done | PartCommon number box from 0 |
+| P-128 | Part: Y NB min 0 | Views/PartCommonView.xaml:67-68 | 30 Part common | done | PartCommon number box from 0 |
+| P-129 | Part: Angle NB -180..180 step 5 drag 0.5 1 dec | Views/PartCommonView.xaml:70-71 | 30 Part common | done | PartCommon number box -180..180 step 5, drag 0.5, 1 decimal |
+| P-130 | Part: kind-specific forms shown after shared rows (form dispatch per kind) | Panes/PropertiesPane.xaml:117 | 30 Forms | partial | form::kind by PartKind, a typed form per kind (ui/data.slint), rules in edited::Edited; rectangle, ellipse, triangle, polygon, lens, Fresnel lens, outline so far, other kinds show the generic rows |
 | P-131 | Material: Mirror CB | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | ShapeMaterial FormCheck |
-| P-132 | Material: Refractive index NB 1..2.55 step 0.01 (off when Mirror) | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormNumber 1..2.55 step 0.01, off for a mirror |
-| P-133 | Material: AR coating NB 0..50 (off when Mirror) | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormNumber 0..50, off for a mirror; hidden where the kind takes no coating |
+| P-132 | Material: Refractive index NB 1..2.55 step 0.01 (off when Mirror) | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | number box 1..2.55 step 0.01, off for a mirror |
+| P-133 | Material: AR coating NB 0..50 (off when Mirror) | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | number box 0..50, off for a mirror; hidden where the kind takes no coating |
 | P-134 | Material: Coating profile combo Layer/Graded (off when Mirror) | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormChoice Layer, Graded, off for a mirror |
 | P-135 | Material: Coat the front CB | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormCheck, off for a mirror; hidden for a back-only kind |
 | P-136 | Material: Coat the back CB | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormCheck, off for a mirror |
 | P-137 | Material: Coat the sides CB | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormCheck, off for a mirror; hidden for back-only and sides-hidden kinds |
-| P-138 | Material: Absorption NB 0..255 step 5 | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormNumber 0..255 step 5, off for a mirror |
-| P-139 | Material: Absorption ramp NB 1..400 step 5 | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormNumber 1..400 step 5, off for a mirror |
+| P-138 | Material: Absorption NB 0..255 step 5 | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | number box 0..255 step 5, off for a mirror |
+| P-139 | Material: Absorption ramp NB 1..400 step 5 | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | number box 1..400 step 5, off for a mirror |
 | P-140 | Lens: ticking Mirror renames 'Lens' to 'Mirror' and back (only via the box) | Views/LensPartView.xaml | 30 Material | done | the Mirror box of a lens or Fresnel lens renames by names::set_lens_mirror, the form's box only |
 | P-141 | Material section header 'Material'; applies to lens, polygon, rectangle, ellipse, triangle, outline | Views/ShapeMaterialView.xaml: | 30 Material | done | ShapeMaterial on lens, Fresnel lens (its lens's, by prefix), polygon, rectangle, ellipse, triangle, outline |
-| P-142 | Lens: Diameter NB min 2 step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | LensShape FormNumber from 2 step 10 |
+| P-142 | Lens: Diameter NB min 2 step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | LensShape number box from 2 step 10 |
 | P-143 | Lens: Concave (diverging) CB (flips both radii signs) | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | FormCheck on Lens::is_concave; ticking it flips both radii, a flat one stays 0 (Lens::set_concave) |
-| P-144 | Lens: R1 NB step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | FormNumber step 10 |
-| P-145 | Lens: R2 NB step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | FormNumber step 10 |
-| P-146 | Lens: Centre thickness NB min 1 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | FormNumber from 1 |
+| P-144 | Lens: R1 NB step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | number box step 10 |
+| P-145 | Lens: R2 NB step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | number box step 10 |
+| P-146 | Lens: Centre thickness NB min 1 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | number box from 1 |
 | P-147 | Lens: Edge thickness RO | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | FormValue from lens_geometry::edge_thickness, 0.# px, with Next's tip |
 | P-148 | Fresnel lens: lens rows w/o Concave | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | done | LensShape with the Fresnel lens's lens by prefix, no Concave box |
-| P-149 | Fresnel lens: Zones NB 1..100 | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | done | FormNumber 1..100 |
+| P-149 | Fresnel lens: Zones NB 1..100 | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | done | number box 1..100 |
 | P-150 | Fresnel lens: Zone division combo Equal width/Equal depth | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | done | FormChoice Equal width, Equal depth |
 | P-151 | Fresnel lens: Edge thickness RO (deepest zone) | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | done | FormValue from edge_thickness with the zones and division |
-| P-152 | Polygon: Number of sides NB 3..64 | Views/PolygonPartView.xaml:35 | 30 Kind-specific forms | done | FormNumber 3..64 |
-| P-153 | Polygon: Side length NB min 2 step 10 | Views/PolygonPartView.xaml:35 | 30 Kind-specific forms | done | FormNumber from 2 step 10 |
-| P-154 | Rectangle: Length NB min 1 step 10 | Views/RectanglePartView.xaml:49-54 | 30 Kind-specific forms | done | LinkedSides FormNumber from 1 step 10 |
-| P-155 | Rectangle: Width NB min 1 step 10 | Views/RectanglePartView.xaml:49-54 | 30 Kind-specific forms | done | LinkedSides FormNumber from 1 step 10 |
+| P-152 | Polygon: Number of sides NB 3..64 | Views/PolygonPartView.xaml:35 | 30 Kind-specific forms | done | number box 3..64 |
+| P-153 | Polygon: Side length NB min 2 step 10 | Views/PolygonPartView.xaml:35 | 30 Kind-specific forms | done | number box from 2 step 10 |
+| P-154 | Rectangle: Length NB min 1 step 10 | Views/RectanglePartView.xaml:49-54 | 30 Kind-specific forms | done | LinkedSides number box from 1 step 10 |
+| P-155 | Rectangle: Width NB min 1 step 10 | Views/RectanglePartView.xaml:49-54 | 30 Kind-specific forms | done | LinkedSides number box from 1 step 10 |
 | P-156 | Rectangle: Linked chain toggle (square) | Views/RectanglePartView.xaml:49-54 | 30 Kind-specific forms | done | FormLink; Width follows Length and back while linked (PartKind::follow) |
-| P-157 | Ellipse: Length NB | Views/EllipsePartView.xaml:49 | 30 Kind-specific forms | done | LinkedSides FormNumber from 1 step 10 |
-| P-158 | Ellipse: Width NB | Views/EllipsePartView.xaml:49 | 30 Kind-specific forms | done | LinkedSides FormNumber from 1 step 10 |
+| P-157 | Ellipse: Length NB | Views/EllipsePartView.xaml:49 | 30 Kind-specific forms | done | LinkedSides number box from 1 step 10 |
+| P-158 | Ellipse: Width NB | Views/EllipsePartView.xaml:49 | 30 Kind-specific forms | done | LinkedSides number box from 1 step 10 |
 | P-159 | Ellipse: Linked chain toggle (circle) | Views/EllipsePartView.xaml:49 | 30 Kind-specific forms | done | FormLink; Width follows Length and back while linked (PartKind::follow) |
 | P-160 | Triangle: Type combo (Equilateral, Right isosceles, 30-60-90, Isosceles, Custom) | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | FormChoice; a preset sets its angles (PartKind::follow) |
-| P-161 | Triangle: Base NB min 2 step 10 | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | FormNumber from 2 step 10 |
-| P-162 | Triangle: Angle A NB 1..178 (Isosceles, Custom) | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | FormNumber 1..178, drag 0.5, 1 decimal, Isosceles and Custom only; Isosceles copies it to B |
-| P-163 | Triangle: Angle B NB 1..178 (Custom only) | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | FormNumber 1..178, drag 0.5, 1 decimal, Custom only |
+| P-161 | Triangle: Base NB min 2 step 10 | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | number box from 2 step 10 |
+| P-162 | Triangle: Angle A NB 1..178 (Isosceles, Custom) | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | number box 1..178, drag 0.5, 1 decimal, Isosceles and Custom only; Isosceles copies it to B |
+| P-163 | Triangle: Angle B NB 1..178 (Custom only) | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | number box 1..178, drag 0.5, 1 decimal, Custom only |
 | P-164 | Triangle: Apex angle RO | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | FormValue from Triangle::effective_angles, 0.# and a degree sign, with Next's tip |
 | P-165 | Outline: Hint text | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | PointList grey wrapped hint |
 | P-166 | Outline: Heading row X,Y | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | X and Y headings over the two columns, the remove column kept free |
-| P-167 | Outline: Per point X NB, Y NB | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | FormNumber per coordinate, by Points.<index>.X/Y |
+| P-167 | Outline: Per point X NB, Y NB | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | number box per coordinate, by Points.<index>.X/Y |
 | P-168 | Outline: Per point remove button (tab cycle) | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | IconButton (minus, 18 px) per row, a tab stop |
 | P-169 | Outline: Add point button (appends after last) | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | Add point: a step of 20 right of the last, at the centre for none (Next's NewPointStep) |
 | P-170 | Diffuser: Length NB min 1 step 10 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
@@ -901,30 +901,30 @@ Not-in-spec rows are marked in the Spec column.
 | P-285 | XOR/AND/OR gate: Lower output port RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-286 | Probe: Name TB | Views/ProbeView.xaml:110 | 30 Probe | done | ProbeForm FormText, per keystroke |
 | P-287 | Probe: Active CB | Views/ProbeView.xaml:112 | 30 Probe | done | FormCheck |
-| P-288 | Probe: Start after step NB min 0 | Views/ProbeView.xaml:116 | 30 Probe | done | FormNumber from 0 |
+| P-288 | Probe: Start after step NB min 0 | Views/ProbeView.xaml:116 | 30 Probe | done | number box from 0 |
 | P-289 | Probe: Detector combo Standard/Counting/Imaging | Views/ProbeView.xaml:122 | 30 Probe | done | FormChoice Standard, Counting, Imaging |
-| P-290 | Probe: Detector sensitivity NB 0..1e6 2 dec drag 0.5 (detector only) | Views/ProbeView.xaml:126 | 30 Probe | done | FormNumber 0..1e6, 2 decimals, drag 0.5, detectors only |
-| P-291 | Probe: Bin size NB 1..20 (imaging only) | Views/ProbeView.xaml:130 | 30 Probe | done | FormNumber 1..20, the imaging detector only |
+| P-290 | Probe: Detector sensitivity NB 0..1e6 2 dec drag 0.5 (detector only) | Views/ProbeView.xaml:126 | 30 Probe | done | number box 0..1e6, 2 decimals, drag 0.5, detectors only |
+| P-291 | Probe: Bin size NB 1..20 (imaging only) | Views/ProbeView.xaml:130 | 30 Probe | done | number box 1..20, the imaging detector only |
 | P-292 | Probe: Layer combo Field/Intensity (disabled for detector) | Views/ProbeView.xaml:134 | 30 Probe | done | FormChoice Field, Intensity, off for a detector |
 | P-293 | Probe: Measurement combo by layer (Field->Amplitude; Intensity->Value/Integrated value) | Views/ProbeView.xaml:139 | 30 Probe | done | one FormChoice per layer: Amplitude; Value, Integrated value (an offset into the model's words) |
 | P-294 | Probe: Kind combo Point/Line (disabled for detector) | Views/ProbeView.xaml:143 | 30 Probe | done | FormChoice Point, Line, off for a detector |
-| P-295 | Probe: A x NB min 0 | Views/ProbeView.xaml:150 | 30 Probe | done | FormNumber from 0; a graph box on A moves with it (Probe::box_attached) |
-| P-296 | Probe: A y NB min 0 | Views/ProbeView.xaml:153 | 30 Probe | done | FormNumber from 0; a graph box on A moves with it (Probe::box_attached) |
-| P-297 | Probe: B x NB min 0 (line only) | Views/ProbeView.xaml:156 | 30 Probe | done | FormNumber from 0, line probes only |
-| P-298 | Probe: B y NB min 0 (line only) | Views/ProbeView.xaml:159 | 30 Probe | done | FormNumber from 0, line probes only |
+| P-295 | Probe: A x NB min 0 | Views/ProbeView.xaml:150 | 30 Probe | done | number box from 0; a graph box on A moves with it (Probe::box_attached) |
+| P-296 | Probe: A y NB min 0 | Views/ProbeView.xaml:153 | 30 Probe | done | number box from 0; a graph box on A moves with it (Probe::box_attached) |
+| P-297 | Probe: B x NB min 0 (line only) | Views/ProbeView.xaml:156 | 30 Probe | done | number box from 0, line probes only |
+| P-298 | Probe: B y NB min 0 (line only) | Views/ProbeView.xaml:159 | 30 Probe | done | number box from 0, line probes only |
 | P-299 | Probe: Box size combo Tiny..Extra large/Custom | Views/ProbeView.xaml:165 | 30 Probe | done | FormChoice Tiny..Extra large, Custom |
-| P-300 | Probe: Box x NB min 0 | Views/ProbeView.xaml:169 | 30 Probe | done | FormNumber from 0 |
-| P-301 | Probe: Box y NB min 0 | Views/ProbeView.xaml:172 | 30 Probe | done | FormNumber from 0 |
-| P-302 | Probe: Box width NB 60..4096 step 10 (custom) | Views/ProbeView.xaml:175 | 30 Probe | done | FormNumber 60..4096 step 10, Custom only |
-| P-303 | Probe: Box height NB 30..4096 step 10 (custom) | Views/ProbeView.xaml:178 | 30 Probe | done | FormNumber 30..4096 step 10, Custom only |
+| P-300 | Probe: Box x NB min 0 | Views/ProbeView.xaml:169 | 30 Probe | done | number box from 0 |
+| P-301 | Probe: Box y NB min 0 | Views/ProbeView.xaml:172 | 30 Probe | done | number box from 0 |
+| P-302 | Probe: Box width NB 60..4096 step 10 (custom) | Views/ProbeView.xaml:175 | 30 Probe | done | number box 60..4096 step 10, Custom only |
+| P-303 | Probe: Box height NB 30..4096 step 10 (custom) | Views/ProbeView.xaml:178 | 30 Probe | done | number box 30..4096 step 10, Custom only |
 | P-304 | Probe: Step axis combo Running/Full (point probe or counting) | Views/ProbeView.xaml:184 | 30 Probe | done | FormChoice Running, Full, off for a line (Next's PointOnlyCombo by Kind, a detector's line included); contexts keep Next's enum words apart from the menus' |
-| P-305 | Probe: Window NB 10..1e6 step 10 | Views/ProbeView.xaml:188 | 30 Probe | done | FormNumber 10..1e6 step 10 |
+| P-305 | Probe: Window NB 10..1e6 step 10 | Views/ProbeView.xaml:188 | 30 Probe | done | number box 10..1e6 step 10 |
 | P-306 | Probe: Auto-scale steps CB (point/counting) | Views/ProbeView.xaml:190 | 30 Probe | done | FormCheck, off for a line |
 | P-307 | Probe: Auto-scale values CB | Views/ProbeView.xaml:192 | 30 Probe | done | FormCheck |
 | P-308 | Probe: Value axis combo Linear/Logarithmic (intensity layer) | Views/ProbeView.xaml:196 | 30 Probe | done | FormChoice Linear, Logarithmic, off on the field layer |
-| P-309 | Probe: Decades NB 1..12 (log axis) | Views/ProbeView.xaml:200 | 30 Probe | done | FormNumber 1..12, a logarithmic axis on the intensity only (Next's IsLogarithmic) |
-| P-310 | Probe: Value minimum NB step 0.1 | Views/ProbeView.xaml:203 | 30 Probe | done | FormNumber step 0.1 |
-| P-311 | Probe: Value maximum NB step 0.1 | Views/ProbeView.xaml:206 | 30 Probe | done | FormNumber step 0.1 |
+| P-309 | Probe: Decades NB 1..12 (log axis) | Views/ProbeView.xaml:200 | 30 Probe | done | number box 1..12, a logarithmic axis on the intensity only (Next's IsLogarithmic) |
+| P-310 | Probe: Value minimum NB step 0.1 | Views/ProbeView.xaml:203 | 30 Probe | done | number box step 0.1 |
+| P-311 | Probe: Value maximum NB step 0.1 | Views/ProbeView.xaml:206 | 30 Probe | done | number box step 0.1 |
 | P-312 | Probe: sections General/Measurement/Position/Graph/Axes | Views/ProbeView.xaml:105-206 | 30 Probe | done | FormSection General, Measurement, Position, Graph, Axes |
 | P-313 | Probe: enabled/disabled rules by detector, layer, kind, box size, axis (styles lines 34-99) | Views/ProbeView.xaml:30-100 | 30 Probe | done | Next's DataTriggers as enabled bindings; an edit coerces the detector, layer, measurement, kind and value scale as Next's setters (Probe::coerce) |
 | P-314 | Scheme: Name TB (renaming repoints layers; tree row live) | Views/ColorSchemeView.xaml:71-72 | 30 Colour scheme | partial | G; no repoint check, Enter commit |

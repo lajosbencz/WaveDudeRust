@@ -83,7 +83,7 @@ row. Each phase is one coding pass, then a separate verification of the diff, th
       (a detector's layer, a linked side, a triangle's preset, a lens's name with its mirror box).
    2. Typed forms: a Slint struct per form, Slint enums for the model's words, editors bound two-way to the struct's
       fields, actions as typed callbacks, a list as a model of structs. Rust converts between model and struct by
-      exhaustive matches and applies the shown form before any selection or model change. No string paths, index or
+      exhaustive matches and applies each commit at once. No string paths, index or
       `-1` conventions, no integer codes. A compact form row component: label, hint once, editor.
    3. Typed boundary elsewhere: commands, tree picks and drop places, run states as Slint enums.
    4. UI text only in `.slint`: Rust sends data (node kinds, states, message codes and arguments); words Rust needs for
@@ -93,4 +93,5 @@ row. Each phase is one coding pass, then a separate verification of the diff, th
 7. Dialogs and settings (D-, S-), then docking and window persistence (X-).
 
 Known bugs: the run status overwrites the export progress in the status bar; the title ignores `TitleFullPath`;
-field edits ignore the declared ranges, where Next's setters clamp (P-32).
+the generic rows ignore the declared ranges (P-32); text typed into a number box and not committed is dropped when
+the selection moves.

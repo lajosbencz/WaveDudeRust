@@ -1,0 +1,132 @@
+// A combo box per model word, its translated titles in the word's order; `value` is the field it edits.
+import { CheckBox } from "std-widgets.slint";
+import { Form, FormChoice } from "form.slint";
+import { Theme } from "theme.slint";
+import { Stencil, BoxSize, CoatingProfile, Edges, Layer, Measurement, ProbeDetector, ProbeKind, PulseShape, ScaleMode, SceneMode, SourceMode, TriangleType, YScale, ZoneDivision } from "data.slint";
+
+export component SceneModeChoice inherits FormChoice {
+    in-out property <SceneMode> value;
+    titles: [@tr("Canvas"), @tr("Image")];
+    index: root.value == SceneMode.canvas ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? SceneMode.canvas : SceneMode.image; }
+}
+
+export component EdgesChoice inherits FormChoice {
+    in-out property <Edges> value;
+    titles: [@tr("Open"), @tr("Reflective")];
+    index: root.value == Edges.open ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? Edges.open : Edges.reflective; }
+}
+
+export component SourceModeChoice inherits FormChoice {
+    in-out property <SourceMode> value;
+    titles: [@tr("Continuous"), @tr("Pulsed")];
+    index: root.value == SourceMode.continuous ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? SourceMode.continuous : SourceMode.pulsed; }
+}
+
+export component PulseShapeChoice inherits FormChoice {
+    in-out property <PulseShape> value;
+    titles: [@tr("Gaussian"), @tr("Smoothed square")];
+    index: root.value == PulseShape.gaussian ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? PulseShape.gaussian : PulseShape.smoothed-square; }
+}
+
+export component DetectorChoice inherits FormChoice {
+    in-out property <ProbeDetector> value;
+    titles: [@tr("Standard"), @tr("Counting"), @tr("Imaging")];
+    index: root.value == ProbeDetector.standard ? 0 : root.value == ProbeDetector.counting ? 1 : 2;
+    picked(i) => { root.value = i == 0 ? ProbeDetector.standard : i == 1 ? ProbeDetector.counting : ProbeDetector.imaging; }
+}
+
+export component LayerChoice inherits FormChoice {
+    in-out property <Layer> value;
+    titles: [@tr("Field"), @tr("Intensity")];
+    index: root.value == Layer.field ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? Layer.field : Layer.intensity; }
+}
+
+export component FieldMeasurementChoice inherits FormChoice {
+    in-out property <Measurement> value;
+    titles: [@tr("Amplitude")];
+    index: 0;
+    picked(i) => { root.value = Measurement.amplitude; }
+}
+
+export component IntensityMeasurementChoice inherits FormChoice {
+    in-out property <Measurement> value;
+    titles: [@tr("Value"), @tr("Integrated value")];
+    index: root.value == Measurement.value ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? Measurement.value : Measurement.integrated-value; }
+}
+
+export component ProbeKindChoice inherits FormChoice {
+    in-out property <ProbeKind> value;
+    titles: [@tr("Point"), @tr("Line")];
+    index: root.value == ProbeKind.point ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? ProbeKind.point : ProbeKind.line; }
+}
+
+export component BoxSizeChoice inherits FormChoice {
+    in-out property <BoxSize> value;
+    titles: [@tr("Tiny"), @tr("Small"), @tr("Medium"), @tr("Large"), @tr("Extra large"), @tr("Custom")];
+    index: root.value == BoxSize.tiny ? 0 : root.value == BoxSize.small ? 1 : root.value == BoxSize.medium ? 2 : root.value == BoxSize.large ? 3 : root.value == BoxSize.extra-large ? 4 : 5;
+    picked(i) => { root.value = i == 0 ? BoxSize.tiny : i == 1 ? BoxSize.small : i == 2 ? BoxSize.medium : i == 3 ? BoxSize.large : i == 4 ? BoxSize.extra-large : BoxSize.custom; }
+}
+
+export component ScaleModeChoice inherits FormChoice {
+    in-out property <ScaleMode> value;
+    titles: [@tr("Enum.ProbeScaleMode.Running" => "Running"), @tr("Enum.ProbeScaleMode.Full" => "Full")];
+    index: root.value == ScaleMode.running ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? ScaleMode.running : ScaleMode.full; }
+}
+
+export component YScaleChoice inherits FormChoice {
+    in-out property <YScale> value;
+    titles: [@tr("Linear"), @tr("Logarithmic")];
+    index: root.value == YScale.linear ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? YScale.linear : YScale.logarithmic; }
+}
+
+export component ProfileChoice inherits FormChoice {
+    in-out property <CoatingProfile> value;
+    titles: [@tr("Enum.CoatingProfile.Layer" => "Layer"), @tr("Graded")];
+    index: root.value == CoatingProfile.layer ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? CoatingProfile.layer : CoatingProfile.graded; }
+}
+
+export component TriangleTypeChoice inherits FormChoice {
+    in-out property <TriangleType> value;
+    titles: [@tr("Equilateral"), @tr("Right isosceles (45\u{B0})"), @tr("30-60-90"), @tr("Isosceles"), @tr("Enum.TriangleType.Custom" => "Custom")];
+    index: root.value == TriangleType.equilateral ? 0 : root.value == TriangleType.right-isosceles ? 1 : root.value == TriangleType.thirty-sixty-ninety ? 2 : root.value == TriangleType.isosceles ? 3 : 4;
+    picked(i) => { root.value = i == 0 ? TriangleType.equilateral : i == 1 ? TriangleType.right-isosceles : i == 2 ? TriangleType.thirty-sixty-ninety : i == 3 ? TriangleType.isosceles : TriangleType.custom; }
+}
+
+export component DivisionChoice inherits FormChoice {
+    in-out property <ZoneDivision> value;
+    titles: [@tr("Equal width"), @tr("Equal depth")];
+    index: root.value == ZoneDivision.equal-width ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? ZoneDivision.equal-width : ZoneDivision.equal-depth; }
+}
+
+// The solver's stencil as a check box: ticked for the 4th-order Laplacian.
+export component StencilCheck inherits Rectangle {
+    in-out property <Stencil> value;
+    in property <string> text;
+    in property <string> tip;
+    // a click assigns `checked`, ending its binding: the stencil is put back on each change
+    changed value => { check.checked = root.value == Stencil.fourth-order; }
+    min-height: max(Theme.row-height, check.min-height);
+    min-width: check.min-width;
+    check := CheckBox {
+        x: 0;
+        height: parent.height;
+        text: root.text;
+        checked: root.value == Stencil.fourth-order;
+        toggled => {
+            root.value = self.checked ? Stencil.fourth-order : Stencil.nine-point;
+            Form.edited(false);
+        }
+    }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}

@@ -16,7 +16,7 @@ pub(crate) fn whole(min: f32, max: f32) -> NumberSpec {
 }
 
 /// A setting as the decimal it was written as: `0.1f32` is 0.1, not 0.100000001490116.
-fn wide(x: f32) -> f64 {
+pub(crate) fn wide(x: f32) -> f64 {
 	x.to_string().parse().unwrap_or(f64::from(x))
 }
 
@@ -44,8 +44,8 @@ fn decimals_of(increment: f64) -> i32 {
 		.unwrap_or(10)
 }
 
-/// `value` clamped to the box's range, rounded as the box shows it, as text.
-fn write(spec: &NumberSpec, value: f64) -> String {
+/// `value` clamped to the box's range and rounded as the box shows it.
+fn fit(spec: &NumberSpec, value: f64) -> f64 {
 	let value = value.clamp(wide(spec.min), wide(spec.max));
 	let value = if spec.log {
 		format!("{value:.2e}").parse().unwrap_or(value)
@@ -55,7 +55,17 @@ fn write(spec: &NumberSpec, value: f64) -> String {
 		(value * scale).round() / scale
 	};
 	// -0 shows as 0
-	(value + 0.0).to_string()
+	value + 0.0
+}
+
+/// [`fit`] as text.
+fn write(spec: &NumberSpec, value: f64) -> String {
+	fit(spec, value).to_string()
+}
+
+/// The value the box's text commits: parsed, clamped and rounded; `None` for text that is no number.
+pub(crate) fn commit(spec: &NumberSpec, text: &str) -> Option<f64> {
+	parse(text).map(|v| fit(spec, v))
 }
 
 /// `text` moved by `steps` increments (factors of 1.02 on a logarithmic box); text that is no number counts as 0.
