@@ -17,6 +17,7 @@
 //!
 //! Threads: one driver thread; each pass fans out over rows on the rayon pool, reading only its input field.
 
+use std::ops::Range;
 use std::sync::Arc;
 
 use rayon::prelude::*;
@@ -282,21 +283,30 @@ impl CpuEngine {
 			let update = |x: usize, next: &mut f32, v: f32, lap: f32| {
 				*next = v + ((v - *next) * d[x] + lap * c2[x] * centred(d[x]));
 			};
-			if let Some(cuts) = row_cuts(cuts, mirrors, at, gw) {
-				for (x, (next, &cut)) in next.iter_mut().zip(cuts).enumerate() {
-					update(x, next, u[at + x], nine_point(u, at + x, s, cut));
+			// The cells of `span` with no cut, on row slices, as `nine_point` in the same order.
+			let uncut = |span: Range<usize>, next: &mut [f32]| {
+				let x0 = span.start;
+				let tap = |k: isize| &u[(at + x0).wrapping_add_signed(k)..][..span.len()];
+				let (si, one) = (s as isize, 1isize);
+				let (c, w, e, n, so) = (tap(0), tap(-one), tap(one), tap(-si), tap(si));
+				let (nw, ne, sw, se) = (tap(-si - 1), tap(-si + 1), tap(si - 1), tap(si + 1));
+				for (x, next) in next[span].iter_mut().enumerate() {
+					let v = c[x];
+					let diagonals = ((nw[x] - v) + (ne[x] - v)) + ((sw[x] - v) + (se[x] - v));
+					let axes = ((n[x] - v) + (so[x] - v)) + ((w[x] - v) + (e[x] - v));
+					update(x0 + x, next, v, K9_DIAGONAL * diagonals + K9_AXIS * axes);
 				}
-				return;
-			}
-			let tap = |k: isize| &u[at.wrapping_add_signed(k)..][..gw];
-			let (si, one) = (s as isize, 1isize);
-			let (c, w, e, n, so) = (tap(0), tap(-one), tap(one), tap(-si), tap(si));
-			let (nw, ne, sw, se) = (tap(-si - 1), tap(-si + 1), tap(si - 1), tap(si + 1));
-			for (x, next) in next.iter_mut().enumerate() {
-				let v = c[x];
-				let diagonals = ((nw[x] - v) + (ne[x] - v)) + ((sw[x] - v) + (se[x] - v));
-				let axes = ((n[x] - v) + (so[x] - v)) + ((w[x] - v) + (e[x] - v));
-				update(x, next, v, K9_DIAGONAL * diagonals + K9_AXIS * axes);
+			};
+			match row_cuts(cuts, mirrors, at, gw) {
+				None => uncut(0..gw, next),
+				Some(cuts) => cut_spans(cuts, |span, cut| {
+					if !cut {
+						return uncut(span, next);
+					}
+					for x in span {
+						update(x, &mut next[x], u[at + x], nine_point(u, at + x, s, cuts[x]));
+					}
+				}),
 			}
 		});
 	}
@@ -445,8 +455,21 @@ fn row_cuts(cuts: &[u8], mirrors: bool, at: usize, gw: usize) -> Option<&[u8]> {
 	row.iter().any(|&c| c != 0).then_some(row)
 }
 
+/// Hands `f` the maximal runs of `cuts` in order, each with whether its cells drop a tap (a non-zero cut byte).
+/// A row crossed by a mirror has only a few cut cells near it; the runs between take the row-slice loops.
+#[inline(always)]
+fn cut_spans(cuts: &[u8], mut f: impl FnMut(Range<usize>, bool)) {
+	let mut start = 0;
+	while start < cuts.len() {
+		let cut = cuts[start] != 0;
+		let len = cuts[start..].iter().position(|&c| (c != 0) != cut).unwrap_or(cuts.len() - start);
+		f(start..start + len, cut);
+		start += len;
+	}
+}
+
 /// The DRP Laplacian of the `gw` grid cells from padded cell `at`, handed to `f` with the cell's
-/// offset in the row. A row without mirrors runs on row slices, as [`drp`] in the same order.
+/// offset in the row. Cells without a cut run on row slices ([`drp_span`]), the cut ones through [`drp`].
 #[inline(always)]
 fn drp_row(
 	u: &[f32],
@@ -457,24 +480,34 @@ fn drp_row(
 	cuts: Option<&[u8]>,
 	mut f: impl FnMut(usize, f32),
 ) {
-	if let Some(cuts) = cuts {
-		for (x, &cut) in cuts.iter().enumerate() {
-			f(x, drp(u, at + x, s, a, cut));
+	let Some(cuts) = cuts else { return drp_span(u, at, s, 0..gw, a, &mut f) };
+	cut_spans(cuts, |span, cut| {
+		if !cut {
+			return drp_span(u, at, s, span, a, &mut f);
 		}
-		return;
-	}
-	let tap = |k: isize| &u[at.wrapping_add_signed(k)..][..gw];
+		for x in span {
+			f(x, drp(u, at + x, s, a, cuts[x]));
+		}
+	});
+}
+
+/// The DRP Laplacian of the cells `span` of the row from padded cell `at`, none of them cut, on row slices, as
+/// [`drp`] in the same order.
+#[inline(always)]
+fn drp_span(u: &[f32], at: usize, s: usize, span: Range<usize>, a: &[f32; 4], f: &mut impl FnMut(usize, f32)) {
+	let x0 = span.start;
+	let tap = |k: isize| &u[(at + x0).wrapping_add_signed(k)..][..span.len()];
 	let si = s as isize;
 	let c = tap(0);
 	let (w1, e1, n1, s1) = (tap(-1), tap(1), tap(-si), tap(si));
 	let (w2, e2, n2, s2) = (tap(-2), tap(2), tap(-2 * si), tap(2 * si));
 	let (w3, e3, n3, s3) = (tap(-3), tap(3), tap(-3 * si), tap(3 * si));
-	for x in 0..gw {
+	for x in 0..span.len() {
 		let v = c[x];
 		let near = ((w1[x] - v) + (e1[x] - v)) + ((n1[x] - v) + (s1[x] - v));
 		let mid = ((w2[x] - v) + (e2[x] - v)) + ((n2[x] - v) + (s2[x] - v));
 		let far = ((w3[x] - v) + (e3[x] - v)) + ((n3[x] - v) + (s3[x] - v));
-		f(x, a[1] * near + a[2] * mid + a[3] * far);
+		f(x0 + x, a[1] * near + a[2] * mid + a[3] * far);
 	}
 }
 
@@ -811,5 +844,32 @@ mod tests {
 		e.shared.sources.level_used[0] = true;
 		e.update_alpha();
 		assert_eq!(e.alpha, (-1.0f64 / 10.0).exp() as f32, "level 0 is not a source level");
+	}
+
+	#[test]
+	fn cut_spans_cover_the_row_in_maximal_runs() {
+		let mut runs = Vec::new();
+		cut_spans(&[0, 0, 3, 1, 0, 0, 0, 8], |span, cut| runs.push((span, cut)));
+		assert_eq!(runs, [(0..2, false), (2..4, true), (4..7, false), (7..8, true)]);
+		runs.clear();
+		cut_spans(&[0; 5], |span, cut| runs.push((span, cut)));
+		assert_eq!(runs, [(0..5, false)]);
+	}
+
+	#[test]
+	fn a_row_with_cuts_matches_drp_per_cell() {
+		let (s, gw) = (20, 14);
+		let u: Vec<f32> = (0..s * 10).map(|i| ((i * 7919 % 101) as f32 - 50.0) * 0.013).collect();
+		let at = 4 * s + PAD;
+		let mut cuts = vec![0u8; gw];
+		(cuts[3], cuts[4], cuts[10]) = (0b0001_0010, 0b1000_0000, 0b0000_0101);
+		let a = [0.0, 1.3, -0.17, 0.021];
+		let mut got = vec![f32::NAN; gw];
+		drp_row(&u, at, s, gw, &a, Some(&cuts), |x, v| got[x] = v);
+		let want: Vec<f32> = (0..gw).map(|x| drp(&u, at + x, s, &a, cuts[x])).collect();
+		assert_eq!(
+			got.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+			want.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+		);
 	}
 }

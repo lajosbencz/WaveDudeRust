@@ -173,6 +173,41 @@ The fields are bit for bit the same: a temporary test hashing the field and both
 steps, both stencils, rims of 16 and 5 with mirror lines inside them, gave the same hashes before and after. What is
 left of psi of x and the correction is their reach into the two ends of every grid row.
 
+## The CPU engine's mirror rows
+
+A grid row with a cut cell (a tap dropped beside a mirror) ran every cell of the row through the per-cell stencil
+(before); the cells without a cut now run on row slices, the cut ones per cell (after). Example01's rectangular mirror
+crosses about half the rows of its 960x540 canvas, a few cells of each beside it.
+
+2026-11-24, a VirtualBox guest with 8 vCPUs; `RAYON_NUM_THREADS=<n> waveduderust-cli probes --steps 300` of
+`examples/sources/Example01_Source_Mirror_Probe.wdproj` (4th order) and of a copy with `FourthOrderLaplacian="false"`
+(9-point), the builds of e4475b7 (before) and the branch (after), alternated, two runs each, seconds:
+
+| Stencil, threads | Before | After |
+|---|---|---|
+| 4th order, 1 | 12.0 to 12.1 | 5.8 |
+| 4th order, 8 | 4.0 | 2.8 to 3.1 |
+| 9-point, 1 | 4.0 to 4.4 | 4.3 |
+| 9-point, 8 | 1.7 to 1.9 | 1.7 to 1.8 |
+
+The 9-point's per-cell stencil was already about as fast as its row loop. The probe series are byte for byte the same
+before and after for both stencils; the probe sits beside the mirror.
+
+In the browser, where the run worker has no WebGPU adapter and runs the CPU engine on one thread: Chrome 157
+headless on the same guest (SwiftShader, no WebGPU), the app built by `tools/build-web.sh` and served by
+`python3 -m http.server`, Example01 opened from the examples, run with F5 and the memory warning's halved resolution,
+the steps read off the status bar 10 s and 30 s after the start. Before: e4475b7; with simd128 alone: e4475b7 built
+with `-C target-feature=+simd128`; after: the branch, simd128 in [`.cargo/config.toml`](../.cargo/config.toml).
+
+| | Steps a second |
+|---|---|
+| Before | 13.7 |
+| simd128 alone | 15.2 |
+| After (mirror rows on row slices, simd128) | 39.4 |
+
+A CPU profile of the run worker (DevTools, 15 s, before) had it busy throughout: the per-cell `drp` and `pml::taps`,
+not inlined in the wasm, took 37 % of it.
+
 ## Other operations
 
 2026-11-06 unless noted.
