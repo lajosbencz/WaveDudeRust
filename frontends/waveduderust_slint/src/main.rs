@@ -1,5 +1,6 @@
 //! WaveDude Rust's app: the Slint window over the core (decision 0032).
 
+mod canvas;
 mod clipboard;
 mod document;
 mod examples;
@@ -87,6 +88,11 @@ struct State {
 	form_base: u64,
 	/// The typed form shown: its object's identity and the token that drops text typed for another.
 	typed_form: Shown,
+	overlays: canvas::Overlays,
+	/// A handle drag under way.
+	drag: Option<canvas::Drag>,
+	/// Presses on the pictures so far; each drag's undo key.
+	drags: u64,
 }
 
 /// The typed form shown: its key, the token its editors carry and the lists it caches.
@@ -168,6 +174,7 @@ impl State {
 			self.ran = self.doc.generation;
 			self.live.edited(&self.doc.project, &self.doc.view);
 		}
+		self.overlays.show(&app.global::<ui::Canvas<'_>>(), &self.doc.project, &self.doc.view, &self.selection);
 		let node = self.selection.current();
 		let kind = form::kind(&self.doc.project, node);
 		app.set_props_kind(node.kind());
@@ -830,6 +837,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		form_seen: (0, 0),
 		form_base: 0,
 		typed_form: Shown::default(),
+		overlays: canvas::Overlays::default(),
+		drag: None,
+		drags: 0,
 	}));
 	app.set_native_access_keys(cfg!(windows));
 	apply_settings(&mut state.borrow_mut(), &app);
@@ -1016,6 +1026,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			k
 		});
 	});
+	wire_canvas(&state, &app);
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.global::<ui::Form<'_>>().on_load_scheme_file(move |layer| {
 		let Some(app) = weak.upgrade() else { return };
@@ -1306,5 +1317,51 @@ fn main() {
 		if let Err(e) = start().await {
 			web_sys::console::error_1(&format!("WaveDude Rust could not start: {e}").into());
 		}
+	});
+}
+
+/// The pictures' handles: selection by click, drags as one undo step each.
+fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
+	let canvas = app.global::<ui::Canvas<'_>>();
+	state.borrow().overlays.wire(&canvas);
+	let (st, weak) = (state.clone(), app.as_weak());
+	canvas.on_rescaled(move |layer, scale| {
+		let Some(app) = weak.upgrade() else { return };
+		// reported during a layout, which may run while the state is borrowed: taken up once it is free
+		let st = st.clone();
+		slint::Timer::single_shot(std::time::Duration::ZERO, move || {
+			let s = &mut *st.borrow_mut();
+			if s.overlays.rescale(layer, scale) {
+				s.overlays.show(&app.global::<ui::Canvas<'_>>(), &s.doc.project, &s.doc.view, &s.selection);
+			}
+		});
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	canvas.on_press(move |layer, x, y, control, shift| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		s.drags += 1;
+		s.drag = s.overlays.press(&s.doc.project, &mut s.selection, layer, (x, y), (control, shift), s.drags);
+		s.show(&app);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	canvas.on_drag(move |dx, dy| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		let Some(drag) = &mut s.drag else { return };
+		let key = drag.key().to_owned();
+		s.doc.edit_merging(Some(&key), |p| drag.apply(p, (dx, dy)));
+		s.show(&app);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	canvas.on_release(move || {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		let Some(drag) = s.drag.take() else { return };
+		// a drag that ends where it began makes its item the selection
+		if !drag.moved() {
+			s.selection.set(drag.node());
+		}
+		s.show(&app);
 	});
 }

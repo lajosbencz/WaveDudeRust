@@ -1,0 +1,50 @@
+// The pictures' overlays (docs/ui/40, Handles and overlays): rows the app builds from the project and the
+// selection, in canvas pixels, and what the handles report.
+
+import { Layer } from "data.slint";
+
+export enum HandleGlyph { source, lever, part, grip, point, bezier, probe }
+
+export struct HandleData {
+    x: float,
+    y: float,
+    glyph: HandleGlyph,
+    selected: bool,
+}
+
+export struct LabelData {
+    text: string,
+    x: float,
+    y: float,
+    // below the handle rather than to its right
+    below: bool,
+    selected: bool,
+}
+
+// SVG path commands in canvas pixels
+export struct OverlayArt {
+    lines: string,
+    selected-lines: string,
+    outlines: string,
+    dots: string,
+    selected-dots: string,
+}
+
+export global Canvas {
+    // canvas pixels
+    in property <int> width: 1;
+    in property <int> height: 1;
+    in property <[HandleData]> field-handles;
+    in property <[LabelData]> field-labels;
+    in property <OverlayArt> field-art;
+    in property <[HandleData]> intensity-handles;
+    in property <[LabelData]> intensity-labels;
+    in property <OverlayArt> intensity-art;
+    // logical pixels per canvas pixel of a layer's picture
+    callback rescaled(layer: Layer, scale: float);
+    // a press at canvas pixel (x, y)
+    callback press(layer: Layer, x: float, y: float, control: bool, shift: bool);
+    // canvas pixels from the press
+    callback drag(dx: float, dy: float);
+    callback release();
+}

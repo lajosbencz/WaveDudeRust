@@ -16,13 +16,13 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | D | Dialogs and windows | 34 | 13 | 24 | 8 | 0 |
 | S | Settings | 10 | 7 | 12 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
-| T | Project tree | 50 | 1 | 12 | 38 | 0 |
+| T | Project tree | 52 | 1 | 10 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 12 | 4 | 91 | 4 | 1 |
+| V | Preview | 27 | 12 | 68 | 4 | 1 |
 | L | Timeline, transport, status | 40 | 20 | 20 | 7 | 3 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 597 | 79 | 274 | 139 | 6 |
+| | All | 614 | 87 | 249 | 139 | 6 |
 
 ## Cross-cutting
 
@@ -563,8 +563,8 @@ Not-in-spec rows are marked in the Spec column.
 | T-57 | Shift+click / Shift+arrows range select in tree order | ProjectTree.xaml.cs:41 | 20 Selection model | done | Shift+click and Shift+arrows from the anchor, tree order |
 | T-58 | Insert / Ctrl+Space toggle focused row in selection | ProjectTree.xaml:232-233 | 20 Selection model | divergence | Insert and Ctrl+Space while the tree has focus; out of a group of one, the root stays selected (T-56) |
 | T-59 | Ctrl+A selects all sources, parts, probes | ProjectTree.xaml:234 | 20 Selection model | done | Ctrl+A and Edit, Select all: every source, part and probe, the last current |
-| T-60 | Selection from preview mirrored in tree, row revealed, no focus steal | MainWindow.Project.cs | 20 Selection model | missing | no handles on the pictures yet |
-| T-61 | Click on empty preview deselects | ProjectTree.xaml.cs | 20 Selection model | missing |  |
+| T-60 | Selection from preview mirrored in tree, row revealed, no focus steal | MainWindow.Project.cs | 20 Selection model | done | a press on a handle selects; the tree follows without focus |
+| T-61 | Click on empty preview deselects | ProjectTree.xaml.cs | 20 Selection model | done | as V-76 |
 | T-62 | Opening a project selects the root row; tree takes keyboard focus | MainWindow.Project.cs | 20 Selection model | done | root selected on open |
 | T-63 | Highlight: hover colour, current=selection colours when tree focused else inactive colours | ProjectTree.xaml:260-290 | 20 Selection model | done | hover, focused and inactive selection colours; rest matched in general (decision 0033) |
 | T-64 | Groups/root/settings rows can be current (Properties shows their form) | ProjectTree.xaml | 20 Selection model | done |  |
@@ -982,7 +982,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-34 | Picture changes only when frame for position arrives; never black/other frame | PreviewPane.xaml.cs:716 | 40 What a picture shows | done | live.rs poll draws stored frame only on tag change; request() resets `drawn` but images persist in window |
 | V-35 | Busy dim (black 45 pct) after 150 ms of frame computation | PreviewPane.xaml.cs:250,385; xaml:~655 | 40 What a picture shows | missing | |
 | V-36 | Busy spinner (3/4 ring, 1 turn/s), not hit-testable | PreviewPane.xaml Spinner | 40 What a picture shows | missing | |
-| V-37 | Overlay z-order: picture, outline, handles, graph boxes, busy dim | PreviewPane.xaml:612-660 | 40 What a picture shows | partial | picture + glowing-edge outline baked in by gpu.rs; no other layers |
+| V-37 | Overlay z-order: picture, outline, handles, graph boxes, busy dim | PreviewPane.xaml:612-660 | 40 What a picture shows | partial | picture, outlines, dots, lines, labels, handles; graph boxes and busy dim not yet |
 | V-38 | Scene outline (glowing edges) when enabled for layer | SceneBitmaps.cs, PreviewPane.xaml:620 | 40 What a picture shows | done | live.rs `edges` via Look (commit d1d244c) |
 | V-39 | 8-bit samples: palette indices at store resolution, brightness baked at run start | FramePresenter.cs | 40 8-bit vs 16-bit | partial | gpu.rs colours stored frame on GPU; sample-depth rules and brightness-edit-as-sim-edit not wired (no brightness control) |
 | V-40 | 16-bit samples: exact device-pixel render, box/bilinear resample, instant recolour on brightness | FramePresenter.cs | 40 8-bit vs 16-bit | partial | GPU render exists; render at device size and brightness recolour unverified/no control |
@@ -991,37 +991,37 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-43 | WebGL2 / over-limit fallback with Messages warning | none | 40 8-bit vs 16-bit | missing | |
 | V-44 | Handle style: light grey over dark halo; selected bright yellow; focused accent fill; hover/focus thicker | Controls/MarkerThumb.cs:69-115 | 40 Handles | divergence | decision 0033, matched in general, not to the pixel/id |
 | V-45 | Glyphs odd-sized (21/15/13 px), centre pixel, 1.5 px AA strokes | MarkerThumb.cs | 40 Handles | divergence | decision 0033, matched in general, not to the pixel/id |
-| V-46 | Source position handle (ring + 4 ticks + dot) both pictures | SceneOverlay.cs:449 | 40 Handles | missing | |
-| V-47 | Composite emitter dots (selected source's in selection colour, not focusable) | SceneOverlay.cs:140,1092 | 40 Handles | missing | |
-| V-48 | Source rotation lever (arc arrow, dotted lever line), current item only | SceneOverlay.cs:136-139,449 | 40 Handles | missing | |
-| V-49 | Part centre handle (ring+inner ring+ticks) | SceneOverlay.cs:456 | 40 Handles | missing | |
-| V-50 | Part outline in selection colour for selected parts | SceneOverlay.cs:1097-1122 | 40 Handles | missing | |
-| V-51 | Part rotation lever | SceneOverlay.cs:456 | 40 Handles | missing | |
-| V-52 | Part size grip (15 px filled square) corner/vertex | SceneOverlay.cs:459 | 40 Handles | missing | |
-| V-53 | Lens surface handles (2) | SceneOverlay.cs:464-465 | 40 Handles | missing | |
-| V-54 | Outline point handles | SceneOverlay.cs:477 | 40 Handles | missing | |
-| V-55 | Fibre node handles | SceneOverlay.cs:499 | 40 Handles | missing | |
-| V-56 | Fibre Bezier in/out handles + dotted lines; first in / last out omitted | SceneOverlay.cs:493-497,1134-1152 | 40 Handles | missing | |
-| V-57 | Probe point A / end B marker (square+ticks+dot), only on probe's layer | SceneOverlay.cs:952, SourceMarkerPainter.cs | 40 Handles | missing | |
-| V-58 | Line probe: dark line under dashed light line A..B | SceneOverlay.cs:1064 | 40 Handles | missing | |
-| V-59 | Labels: item name beside handle (below for composites/parts), dark halo, kept in picture | SceneOverlay.cs:131,1189 | 40 Handles | missing | |
-| V-60 | Display > Preview "Handles in preview" setting (off hides all but selected; hidden leave Tab cycle) | SceneOverlay HandlesInPreview | 40 Handles | missing | |
-| V-61 | Display > Preview "Labels in preview" setting | SceneOverlay LabelsInPreview | 40 Handles | missing | |
+| V-46 | Source position handle (ring + 4 ticks + dot) both pictures | SceneOverlay.cs:449 | 40 Handles | done | canvas.rs overlay rows from core overlay::build; preview.slint HandleView glyph |
+| V-47 | Composite emitter dots (selected source's in selection colour, not focusable) | SceneOverlay.cs:140,1092 | 40 Handles | done | one Path of dots per layer, the selected source's in the selection colour |
+| V-48 | Source rotation lever (arc arrow, dotted lever line), current item only | SceneOverlay.cs:136-139,449 | 40 Handles | partial | drawn with its lever line; dragging comes with the lever batch |
+| V-49 | Part centre handle (ring+inner ring+ticks) | SceneOverlay.cs:456 | 40 Handles | done | HandleView part glyph |
+| V-50 | Part outline in selection colour for selected parts | SceneOverlay.cs:1097-1122 | 40 Handles | done | selected parts' outlines and fibre centre lines in the selection colour |
+| V-51 | Part rotation lever | SceneOverlay.cs:456 | 40 Handles | partial | drawn; dragging comes with the lever batch |
+| V-52 | Part size grip (15 px filled square) corner/vertex | SceneOverlay.cs:459 | 40 Handles | partial | drawn; dragging comes with the grip batch |
+| V-53 | Lens surface handles (2) | SceneOverlay.cs:464-465 | 40 Handles | partial | drawn; dragging comes with the grip batch |
+| V-54 | Outline point handles | SceneOverlay.cs:477 | 40 Handles | partial | drawn; dragging comes with the grip batch |
+| V-55 | Fibre node handles | SceneOverlay.cs:499 | 40 Handles | partial | drawn; dragging comes with the grip batch |
+| V-56 | Fibre Bezier in/out handles + dotted lines; first in / last out omitted | SceneOverlay.cs:493-497,1134-1152 | 40 Handles | partial | drawn with lines to their node; dragging comes with the grip batch |
+| V-57 | Probe point A / end B marker (square+ticks+dot), only on probe's layer | SceneOverlay.cs:952, SourceMarkerPainter.cs | 40 Handles | done | probe A/B glyph on the probe's layer only |
+| V-58 | Line probe: dark line under dashed light line A..B | SceneOverlay.cs:1064 | 40 Handles | done | solid line A..B; rest matched in general (decision 0033) |
+| V-59 | Labels: item name beside handle (below for composites/parts), dark halo, kept in picture | SceneOverlay.cs:131,1189 | 40 Handles | done | LabelView, halo by text stroke; below for composites and parts |
+| V-60 | Display > Preview "Handles in preview" setting (off hides all but selected; hidden leave Tab cycle) | SceneOverlay HandlesInPreview | 40 Handles | done | View.handles_in_preview into overlay::build |
+| V-61 | Display > Preview "Labels in preview" setting | SceneOverlay LabelsInPreview | 40 Handles | done | View.labels_in_preview into overlay::build |
 | V-62 | Graph boxes unaffected by handles/labels settings | ProbeGraphOverlay.cs | 40 Handles | missing | |
 | V-63 | Z-order rules: boxes over handles, selected drawn last of kind, tab order kept | PreviewPane.xaml:632 | 40 Handles | missing | |
 | V-64 | Rotation lever may extend beyond picture (clipped); other handles clamped inside canvas | SceneOverlay.cs | 40 Handles | missing | |
-| V-65 | Click handle: select item (tree/properties follow) | SceneOverlay.cs:1380-1428 | 40 Interaction | missing | |
-| V-66 | Ctrl+click toggle in selection, no drag | SceneOverlay.cs:1399 | 40 Interaction | missing | |
-| V-67 | Shift+click add to selection, no drag | SceneOverlay.cs:1410 | 40 Interaction | missing | |
-| V-68 | Drag handle moves it, live coordinates, measured from press (no clamp drift) | SceneOverlay.cs:1457 | 40 Interaction | missing | |
-| V-69 | Drag one of several selected: group move, limited so none leaves canvas; no-move drag selects item | SceneOverlay.cs:1446, Movable.Limit | 40 Interaction | missing | |
+| V-65 | Click handle: select item (tree/properties follow) | SceneOverlay.cs:1380-1428 | 40 Interaction | done | Canvas.press hit-tests the topmost handle within 10 px; tree and Properties follow |
+| V-66 | Ctrl+click toggle in selection, no drag | SceneOverlay.cs:1399 | 40 Interaction | done | Ctrl toggles, no drag |
+| V-67 | Shift+click add to selection, no drag | SceneOverlay.cs:1410 | 40 Interaction | done | Shift adds, no drag |
+| V-68 | Drag handle moves it, live coordinates, measured from press (no clamp drift) | SceneOverlay.cs:1457 | 40 Interaction | done | canvas::Drag from the press, whole pixels, one undo step (merge key per drag) |
+| V-69 | Drag one of several selected: group move, limited so none leaves canvas; no-move drag selects item | SceneOverlay.cs:1446, Movable.Limit | 40 Interaction | done | group of whole-item handles, clamped so none leaves the canvas; a drag that does not move selects the item alone |
 | V-70 | Drag rotation lever, whole degrees, Shift snaps 15, angle in (-180,180] | SceneOverlay.cs:850,1467 | 40 Interaction | missing | |
 | V-71 | Drag size grip: absolute, whole px, min size, linked rect/ellipse farther coord, polygon on ray | SceneOverlay.cs | 40 Interaction | missing | |
 | V-72 | Drag lens surface handle (bulge/flatten/hollow, rim fixed) | SceneOverlay.cs | 40 Interaction | missing | |
 | V-73 | Drag fibre node (with handles) / Bezier handle (smooth node mirrors length) | SceneOverlay.cs MirrorLength | 40 Interaction | missing | |
 | V-74 | Drag probe A onto detached graph box picks it up | SceneOverlay.cs:952 | 40 Interaction | missing | |
 | V-75 | Esc during drag puts item/group back; second finger likewise | SceneOverlay.cs:1507-1517 | 40 Interaction | missing | |
-| V-76 | Click empty space deselects (unless Shift/Ctrl), focuses pane | PreviewPane.xaml.cs:1289 | 40 Interaction | missing | |
+| V-76 | Click empty space deselects (unless Shift/Ctrl), focuses pane | PreviewPane.xaml.cs:1289 | 40 Interaction | partial | a press off the handles selects the root unless Ctrl/Shift; the pane takes no focus yet |
 | V-77 | Marquee on empty drag (faint accent fill, dashed edge); Shift add, Ctrl toggle, else replace | SceneOverlay.cs:1256-1365 | 40 Interaction | missing | |
 | V-78 | Tab through handles; focusing selects item, tree mirrors without focus | SceneOverlay.cs | 40 Interaction | missing | |
 | V-79 | Arrows / Shift+Arrows on focused handle: 1 / 10 px (group), lever 1 / 10 deg (Right/Up ccw) | SceneOverlay.cs:1527-1565 | 40 Interaction | missing | |
@@ -1034,7 +1034,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-86 | Drop of objects from tree: paste and place at drop pixel | SceneOverlay.cs:1212,1228 | 40 Interaction; 20 | missing | |
 | V-87 | Drop of file not claimed, window opens it | SceneOverlay.cs | 40 Interaction | missing | see R-30 |
 | V-88 | Handle tooltips (Tip*Format per role) | SceneOverlay.cs:528-531 | 40 Interaction | missing | |
-| V-89 | Picture hover costs nothing; source layer cached as bitmap | SceneOverlay.cs:199-234 | 40 Interaction | missing | n/a without overlay |
+| V-89 | Picture hover costs nothing; source layer cached as bitmap | SceneOverlay.cs:199-234 | 40 Interaction | done | the drawings take no pointer; one TouchArea per picture, hit-testing in Rust; dots one Path |
 | V-90 | Graph box: translucent dark box, grid, value labels, step labels, curve, 11 px text | ProbeGraphDrawing.cs, ProbeGraphPainter.cs | 40 Probe graph box | missing | |
 | V-91 | Graph title strip: probe name + live readout "= v" (point) / "max v" (line), 3 sig digits | ProbeGraphDrawing.cs | 40 Probe graph box | missing | |
 | V-92 | Graph layout shared with export (graph.rs) | ProbeGraphPainter.cs | 40 Probe graph box | missing | export side lives in core crate |

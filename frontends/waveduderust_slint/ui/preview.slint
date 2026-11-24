@@ -1,8 +1,81 @@
 import { Theme } from "theme.slint";
+import { Layer } from "data.slint";
+import { Canvas, HandleData, HandleGlyph, LabelData, OverlayArt } from "canvas.slint";
+
+// The handle glyphs, 21 px with the point on the centre pixel (docs/ui/40, Handles and overlays).
+global Glyphs {
+    out property <string> ticks: "M 10.5 0 V 4 M 10.5 17 V 21 M 0 10.5 H 4 M 17 10.5 H 21 ";
+    out property <string> dot: "M 9.5 10.5 a 1 1 0 1 0 2 0 a 1 1 0 1 0 -2 0 ";
+    public pure function of(glyph: HandleGlyph) -> string {
+        if (glyph == HandleGlyph.source) { return self.ticks + "M 4.5 10.5 a 6 6 0 1 0 12 0 a 6 6 0 1 0 -12 0 " + self.dot; }
+        if (glyph == HandleGlyph.part) {
+            return self.ticks + "M 3.5 10.5 a 7 7 0 1 0 14 0 a 7 7 0 1 0 -14 0 M 7.5 10.5 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0";
+        }
+        if (glyph == HandleGlyph.probe) { return self.ticks + "M 5 5 H 16 V 16 H 5 Z " + self.dot; }
+        if (glyph == HandleGlyph.lever) { return "M 5.5 10.5 a 5 5 0 1 0 10 0 a 5 5 0 1 0 -10 0 M 8 8 L 13 13 M 13 8 L 8 13"; }
+        if (glyph == HandleGlyph.grip) { return "M 4 4 H 17 V 17 H 4 Z"; }
+        if (glyph == HandleGlyph.point) { return "M 6.5 10.5 a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0"; }
+        "M 7.5 10.5 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0"
+    }
+}
+
+component HandleView inherits Rectangle {
+    in property <HandleData> handle;
+    in property <float> scale;
+    property <bool> filled: root.handle.glyph == HandleGlyph.grip || root.handle.glyph == HandleGlyph.bezier;
+    property <color> ink: root.handle.selected ? Theme.picture-selection : Theme.picture-handle;
+    x: root.handle.x * root.scale * 1px - 10.5px;
+    y: root.handle.y * root.scale * 1px - 10.5px;
+    width: 21px;
+    height: 21px;
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 21;
+        viewbox-height: 21;
+        commands: Glyphs.of(root.handle.glyph);
+        stroke: Theme.picture-halo;
+        stroke-width: 3.5px;
+        fill: root.filled ? Theme.picture-halo : transparent;
+    }
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 21;
+        viewbox-height: 21;
+        commands: Glyphs.of(root.handle.glyph);
+        stroke: root.ink;
+        stroke-width: 1.5px;
+        fill: root.filled ? root.ink : transparent;
+    }
+}
+
+component LabelView inherits Text {
+    in property <LabelData> label;
+    in property <float> scale;
+    x: root.label.below ? root.label.x * root.scale * 1px - self.width / 2 : root.label.x * root.scale * 1px + 13px;
+    y: root.label.below ? root.label.y * root.scale * 1px + 12px : root.label.y * root.scale * 1px - self.height / 2;
+    text: root.label.text;
+    font-size: 11px;
+    color: root.label.selected ? Theme.picture-selection : Theme.picture-handle;
+    stroke: Theme.picture-halo;
+    stroke-width: 2px;
+    stroke-style: outside;
+}
+
+// Canvas-pixel paths over the picture.
+component Art inherits Path {
+    viewbox-width: Canvas.width;
+    viewbox-height: Canvas.height;
+}
 
 component Picture inherits VerticalLayout {
     in property <string> title;
     in property <image> source;
+    in property <Layer> layer;
+    in property <[HandleData]> handles;
+    in property <[LabelData]> labels;
+    in property <OverlayArt> art;
     horizontal-stretch: 1;
     vertical-stretch: 1;
     Rectangle {
@@ -15,13 +88,70 @@ component Picture inherits VerticalLayout {
             vertical-alignment: center;
         }
     }
-    Rectangle {
+    cell := Rectangle {
         background: #000000;
-        Image {
-            width: 100%;
-            height: 100%;
-            source: root.source;
-            image-fit: contain;
+        clip: true;
+        // logical pixels per canvas pixel
+        property <float> scale: max(0.001, min(self.width / (Canvas.width * 1px), self.height / (Canvas.height * 1px)));
+        changed scale => { Canvas.rescaled(root.layer, self.scale); }
+        init => { Canvas.rescaled(root.layer, self.scale); }
+        Rectangle {
+            x: (cell.width - self.width) / 2;
+            y: (cell.height - self.height) / 2;
+            width: Canvas.width * cell.scale * 1px;
+            height: Canvas.height * cell.scale * 1px;
+            Image {
+                x: 0;
+                y: 0;
+                width: 100%;
+                height: 100%;
+                source: root.source;
+                image-fit: fill;
+            }
+            if root.art.dots != "": Art { commands: root.art.dots; fill: Theme.picture-handle; }
+            if root.art.selected-dots != "": Art { commands: root.art.selected-dots; fill: Theme.picture-selection; }
+            if root.art.lines != "": Art { commands: root.art.lines; stroke: Theme.picture-handle; stroke-width: 1px; }
+            if root.art.selected-lines != "": Art {
+                commands: root.art.selected-lines;
+                stroke: Theme.picture-selection;
+                stroke-width: 1px;
+            }
+            if root.art.outlines != "": Art { commands: root.art.outlines; stroke: Theme.picture-selection; stroke-width: 1px; }
+            for label in root.labels: LabelView { label: label; scale: cell.scale; }
+            for handle in root.handles: HandleView { handle: handle; scale: cell.scale; }
+        }
+        // one area for the whole picture: the drawings take no pointer, the app finds the handle under a press
+        TouchArea {
+            property <length> left: (cell.width - Canvas.width * cell.scale * 1px) / 2;
+            property <length> top: (cell.height - Canvas.height * cell.scale * 1px) / 2;
+            property <length> from-x;
+            property <length> from-y;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.cancel) {
+                    Canvas.release();
+                    return;
+                }
+                if (e.button != PointerEventButton.left) {
+                    return;
+                }
+                if (e.kind == PointerEventKind.down) {
+                    self.from-x = self.mouse-x;
+                    self.from-y = self.mouse-y;
+                    Canvas.press(
+                        root.layer,
+                        (self.mouse-x - self.left) / (cell.scale * 1px),
+                        (self.mouse-y - self.top) / (cell.scale * 1px),
+                        e.modifiers.control,
+                        e.modifiers.shift);
+                } else if (e.kind == PointerEventKind.up) {
+                    Canvas.release();
+                }
+            }
+            moved => {
+                if (self.pressed) {
+                    Canvas.drag((self.mouse-x - self.from-x) / (cell.scale * 1px), (self.mouse-y - self.from-y) / (cell.scale * 1px));
+                }
+            }
         }
     }
 }
@@ -33,12 +163,40 @@ export component Preview inherits Rectangle {
     in property <bool> stacked: true;
     if root.stacked: VerticalLayout {
         spacing: 4px;
-        Picture { title: @tr("Field"); source: root.field; }
-        Picture { title: @tr("Intensity"); source: root.intensity; }
+        Picture {
+            title: @tr("Field");
+            source: root.field;
+            layer: Layer.field;
+            handles: Canvas.field-handles;
+            labels: Canvas.field-labels;
+            art: Canvas.field-art;
+        }
+        Picture {
+            title: @tr("Intensity");
+            source: root.intensity;
+            layer: Layer.intensity;
+            handles: Canvas.intensity-handles;
+            labels: Canvas.intensity-labels;
+            art: Canvas.intensity-art;
+        }
     }
     if !root.stacked: HorizontalLayout {
         spacing: 4px;
-        Picture { title: @tr("Field"); source: root.field; }
-        Picture { title: @tr("Intensity"); source: root.intensity; }
+        Picture {
+            title: @tr("Field");
+            source: root.field;
+            layer: Layer.field;
+            handles: Canvas.field-handles;
+            labels: Canvas.field-labels;
+            art: Canvas.field-art;
+        }
+        Picture {
+            title: @tr("Intensity");
+            source: root.intensity;
+            layer: Layer.intensity;
+            handles: Canvas.intensity-handles;
+            labels: Canvas.intensity-labels;
+            art: Canvas.intensity-art;
+        }
     }
 }

@@ -123,6 +123,12 @@ impl Document {
 		if !self.counted(&before) {
 			return;
 		}
+		// a merged step back where it began is no step
+		if joins && self.undo.last().is_some_and(|s| s.project == self.project && s.view == self.view) {
+			self.undo.pop();
+			self.merging = None;
+			return;
+		}
 		if !joins {
 			self.merging = key.map(str::to_owned);
 			self.undo.push(before);
@@ -224,6 +230,19 @@ mod tests {
 	}
 
 	use super::*;
+
+	#[test]
+	fn a_merged_step_back_where_it_began_is_dropped() {
+		let mut d = Document::new(10);
+		let seed = d.project.seed;
+		d.edit_merging(Some("g"), |p| p.seed = seed + 1);
+		d.edit_merging(Some("g"), |p| p.seed = seed);
+		assert!(!d.can_undo());
+		d.edit_merging(Some("g"), |p| p.seed = seed + 2);
+		assert!(d.can_undo());
+		d.undo();
+		assert_eq!(d.project.seed, seed);
+	}
 
 	#[test]
 	fn an_edit_is_undone_and_redone_and_a_no_op_leaves_no_step() {
