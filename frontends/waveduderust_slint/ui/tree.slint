@@ -199,10 +199,10 @@ export component ProjectTree inherits Rectangle {
     // the current row stays in view
     changed current-row => {
         let top = root.current-row * Theme.row-height;
-        if (root.current-row >= 0 && top < -list.viewport-y) {
-            list.viewport-y = -top;
-        } else if (root.current-row >= 0 && top + Theme.row-height > -list.viewport-y + list.visible-height) {
-            list.viewport-y = list.visible-height - top - Theme.row-height;
+        if (root.current-row >= 0 && top < -list.content-y) {
+            list.content-y = -top;
+        } else if (root.current-row >= 0 && top + Theme.row-height > -list.content-y + list.visible-height) {
+            list.content-y = list.visible-height - top - Theme.row-height;
         }
     }
 
@@ -269,7 +269,7 @@ export component ProjectTree inherits Rectangle {
                 if (e.text == Key.Menu || (e.modifiers.shift && e.text == Key.F10)) {
                     rows-menu.show({
                         x: list.absolute-position.x + 24px - menu-anchor.absolute-position.x,
-                        y: list.absolute-position.y + list.viewport-y + (max(root.current-row, 0) + 1) * Theme.row-height - menu-anchor.absolute-position.y,
+                        y: list.absolute-position.y + list.content-y + (max(root.current-row, 0) + 1) * Theme.row-height - menu-anchor.absolute-position.y,
                     });
                     return accept;
                 }

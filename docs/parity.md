@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 3 | 114 | 206 | 2 | 0 |
+| P | Properties | 49 | 82 | 192 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 172 | 315 | 504 | 98 | 6 |
+| | All | 218 | 283 | 490 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -615,21 +615,21 @@ Not-in-spec rows are marked in the Spec column.
 | ID | Feature | Next source (file:line) | Spec (docs/ui file, section) | Slint | Note |
 |---|---|---|---|---|---|
 | P-01 | Pane shows form of the current item; 'No selection' grey when none | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | missing | heading + empty list |
-| P-02 | Pane heading / form selected by node type | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | partial | heading is Debug name e.g. 'Scene', 'Source(0)'; one generic form |
+| P-02 | Pane heading / form selected by node type | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | partial | Project, Scene, Simulation and Display show Next's forms (ui/forms.slint), without a heading as Next; items keep the generic rows until their forms (piece 4) |
 | P-03 | Folder row: label header + count (No entries/1 entry/N entries), grey | Views/CollectionView.xaml:32 | 30 Pane behaviour | missing |  |
 | P-04 | Caret into first text box with text selected on newly added item | Panes/PropertiesPane.xaml.cs:83-88 | 30 Pane behaviour | missing |  |
 | P-05 | Form scrolls vertically, never horizontally | Panes/PropertiesPane.xaml | 30 Pane behaviour | done | ScrollView |
-| P-06 | FormPanel two columns: label column = widest label (>=110 px), editors fill rest | Controls/FormPanel.cs | 30 Pane behaviour | partial | label width min(120px,40%), not widest label |
-| P-07 | Full-width check boxes carry label as content | Controls/FormPanel.cs | 30 Pane/Check box | missing | checkboxes in editor column with left label |
-| P-08 | Row height >=22 px, 4 px apart; multiline label at top | Controls/FormPanel.cs | 30 Pane behaviour | partial | row-height, spacing 2px |
-| P-09 | Section headers: name over a rule; gap after group | Themes/Editors.xaml (FormSection) | 30 Pane behaviour | missing | no sections at all, one flat list |
-| P-10 | Secondary values (format version, folder count) grey | Views/ProjectView.xaml:37 | 30 Pane behaviour | missing |  |
+| P-06 | FormPanel two columns: label column = widest label (>=110 px), editors fill rest | Controls/FormPanel.cs | 30 Pane behaviour | partial | ui/form.slint FormPanel: a grid, the label column its widest label, 110 px at least, editors fill the rest; items keep the generic rows until their forms (piece 4) |
+| P-07 | Full-width check boxes carry label as content | Controls/FormPanel.cs | 30 Pane/Check box | partial | FormCheck spans both columns with the label as its text; items keep the generic rows until their forms (piece 4) |
+| P-08 | Row height >=22 px, 4 px apart; multiline label at top | Controls/FormPanel.cs | 30 Pane behaviour | partial | rows {Theme.row-height} at least, 4 px apart; the Description label sits at its row's centre, not its top; items keep the generic rows until their forms (piece 4) |
+| P-09 | Section headers: name over a rule; gap after group | Themes/Editors.xaml (FormSection) | 30 Pane behaviour | partial | FormSection: semibold name over a 1 px rule, 10 px after each FormPanel; items keep the generic rows until their forms (piece 4) |
+| P-10 | Secondary values (format version, folder count) grey | Views/ProjectView.xaml:37 | 30 Pane behaviour | partial | FormValue in the dim text colour: Format version; the folder count is plain (T-66) |
 | P-11 | Read-outs plain text bound to inputs; '~ ' prefix 1 decimal for estimates; px/deg units | Themes/Editors.xaml (FormReadout) | 30 Pane behaviour | missing | no read-out rows |
 | P-12 | Edits apply live (every keystroke in name, step, check box) | Panes/PropertiesPane.xaml.cs | 30 Pane behaviour | partial | check box/combo live; text applies on Enter only (accepted), no per-keystroke name rename |
 | P-13 | Each edit marks dirty, follows live-editing rules / undo | MainWindow.Live.cs | 30 Pane behaviour; 60 | done | doc.edit per set |
-| P-14 | Tooltips (Hint.*) on every editor and label | Views/*.xaml meta:Hint | 30 intro | missing | no tooltips |
-| P-15 | Labels from Label.<Type>.<Member> string tables, 4 languages | Strings/* | 30 intro | partial | labels derived from field path (label()), English only |
-| P-16 | Enum words localised from Enum.* | Strings/* | 30 Check box, combo box | partial | raw model word names |
+| P-14 | Tooltips (Hint.*) on every editor and label | Views/*.xaml meta:Hint | 30 intro | partial | Next's Hint.* as Tooltips on the labels and editors of the settings forms; items keep the generic rows until their forms (piece 4) |
+| P-15 | Labels from Label.<Type>.<Member> string tables, 4 languages | Strings/* | 30 intro | partial | the settings forms' labels are Next's Label.* texts through @tr, translated by tools/next-strings.py; items keep the generic rows until their forms (piece 4) |
+| P-16 | Enum words localised from Enum.* | Strings/* | 30 Check box, combo box | partial | Scene's Mode and Edges words through @tr (Next's Enum.*); the items' words are raw |
 | P-17 | Text box: Enter pushes text and selects it; Esc restores when differing; keys consumed only if effective | Controls/EditBehavior.cs | 30 Text box | partial | LineEdit accepted(Enter) commits; no Esc restore, no select-all |
 | P-18 | Multiline text box keeps Enter as newline (Description) | Views/ProjectView.xaml:46-49 | 30 Text box | missing | LineEdit is single line |
 | P-19 | Name boxes update per keystroke (tree row renames live) | Views/SourceView.xaml:54 | 30 Text box | missing | commits on Enter only |
@@ -659,60 +659,60 @@ Not-in-spec rows are marked in the Spec column.
 | P-43 | Colour swatch button opens picker popup below | Controls/ColorPickerButton.cs | 30 Colour swatch button; 70 | missing |  |
 | P-44 | Link toggle (chain) between two number boxes, accent underline on focus | Themes/Editors.xaml | 30 Link toggle | missing |  |
 | P-45 | Description header toggle (chevron, Space), kind text, persisted PartDescriptionExpanded | Views/PartCommonView.xaml:39-44 | 30 Description header | missing |  |
-| P-46 | Project: Format version RO (grey) | Views/ProjectView.xaml:36-37 | 30 Project | partial | only if exposed as field; plain row, editable-looking |
-| P-47 | Project: Random seed number box (integer) | Views/ProjectView.xaml:39-43 | 30 Project | partial | 'Seed' LineEdit int; test project_form_leaves... shows row |
-| P-48 | Project: New seed button (draws fresh seed) | Views/ProjectView.xaml:41 | 30 Project | missing |  |
-| P-49 | Project: Description multiline wrapping text | Views/ProjectView.xaml:46-49 | 30 Project | partial | single-line LineEdit |
-| P-50 | Project: section General header | Views/ProjectView.xaml | 30 Project | missing |  |
-| P-51 | Scene: Mode combo (Canvas, Image) | Views/SceneView.xaml:61-62 | 30 Scene | partial | G combo; no hide/show of image rows |
-| P-52 | Scene: image rows hidden in Canvas mode | Views/SceneView.xaml:44,51 | 30 Scene | missing |  |
-| P-53 | Scene: Scene image name text (per keystroke) | Views/SceneView.xaml:79 | 30 Scene | partial | text row 'Image' if scalar; Enter commit |
+| P-46 | Project: Format version RO (grey) | Views/ProjectView.xaml:36-37 | 30 Project | done | FormValue, grey |
+| P-47 | Project: Random seed number box (integer) | Views/ProjectView.xaml:39-43 | 30 Project | done | FormNumber, whole numbers clamped to i32 |
+| P-48 | Project: New seed button (draws fresh seed) | Views/ProjectView.xaml:41 | 30 Project | partial | Button beside the box: a seed from Project::new_random_seed, one undo step; no access key (Next's _New seed) |
+| P-49 | Project: Description multiline wrapping text | Views/ProjectView.xaml:46-49 | 30 Project | partial | FormNotes: a wrapping TextEdit, 60 px at least, applied per keystroke, the keystrokes one undo step (Document::edit_merging) |
+| P-50 | Project: section General header | Views/ProjectView.xaml | 30 Project | done | FormSection General |
+| P-51 | Scene: Mode combo (Canvas, Image) | Views/SceneView.xaml:61-62 | 30 Scene | done | FormChoice: Canvas, Image |
+| P-52 | Scene: image rows hidden in Canvas mode | Views/SceneView.xaml:44,51 | 30 Scene | done | the Scene image, Image file and Embedded image rows show in Image mode only |
+| P-53 | Scene: Scene image name text (per keystroke) | Views/SceneView.xaml:79 | 30 Scene | partial | FormText per keystroke, the keystrokes one undo step; no browse, save or remove buttons (P-54..P-56) |
 | P-54 | Scene: '...' pick image button (embeds, switches to Image mode; PNG/BMP/JPG/TIF/GIF) | Views/SceneView.xaml:80 | 30 Scene | missing |  |
 | P-55 | Scene: save-glyph button writes embedded bytes to file | Views/SceneView.xaml:83 | 30 Scene | missing |  |
 | P-56 | Scene: X button drops name, path, bytes; canvas keeps size | Views/SceneView.xaml:88 | 30 Scene | missing |  |
-| P-57 | Scene: Image file RO path ellipsis + '(not found)' | Views/SceneView.xaml:95-101 | 30 Scene | missing |  |
-| P-58 | Scene: Embedded image RO 'W x H, N KB' / '(unreadable)' | Views/SceneView.xaml:105-107 | 30 Scene | missing |  |
-| P-59 | Scene: Width NB 8..16384 (disabled in Image mode) | Views/SceneView.xaml:111-112 | 30 Scene | partial | G int row; no greying; model range check |
-| P-60 | Scene: Height NB 8..16384 (disabled in Image mode) | Views/SceneView.xaml:114-115 | 30 Scene | partial | G |
-| P-61 | Scene: Edges combo Open/Reflective (disabled while Damping edge < 0) | Views/SceneView.xaml:117-118 | 30 Scene; divergence rim | partial | G combo; no greying (divergences.md 'Rim and edges' greys it) |
-| P-62 | Scene: Damping edge NB -8192..8192 | Views/SceneView.xaml:121-122 | 30 Scene | partial | G |
-| P-63 | Scene: Refractive index NB 1..2.55 step 0.01 | Views/SceneView.xaml:124-125 | 30 Scene | partial | G float |
-| P-64 | Scene: Image sources check box (full width) | Views/SceneView.xaml:130 | 30 Scene | partial | G checkbox |
-| P-65 | Scene: Image source amplitude NB 0..1000 step 0.1 (enabled w/ Image sources) | Views/SceneView.xaml:133-134 | 30 Scene | partial | G; no greying |
-| P-66 | Scene: Object sources check box | Views/SceneView.xaml:136 | 30 Scene | partial | G |
-| P-67 | Scene: sections Canvas / Sources from the image | Views/SceneView.xaml:57-60,128 | 30 Scene | missing |  |
-| P-68 | Simulation: Steps NB 1..10,000,000 step 100 | Views/SimulationView.xaml:31-32 | 30 Simulation | partial | G |
-| P-69 | Simulation: Visualize every NB 1..1000 | Views/SimulationView.xaml:34-35 | 30 Simulation | partial | G |
-| P-70 | Simulation: Wave speed NB 1e-6..1e6 step 0.01 | Views/SimulationView.xaml:43-44 | 30 Simulation | partial | G |
-| P-71 | Simulation: Intensity time decay NB 1..100 drag 0.1, 1 dec | Views/SimulationView.xaml:46-47 | 30 Simulation | partial | G |
-| P-72 | Simulation: Source frequency scale NB 0..1000 step 0.1 | Views/SimulationView.xaml:49-50 | 30 Simulation | partial | G |
-| P-73 | Simulation: Intensity scale NB 1e-7..1e6 step 0.1 | Views/SimulationView.xaml:52-53 | 30 Simulation | partial | G |
-| P-74 | Simulation: 4th-order Laplacian check box (full width) | Views/SimulationView.xaml:40 | 30 Simulation | partial | G checkbox |
-| P-75 | Simulation: sections Run / Solver | Views/SimulationView.xaml:29-42 | 30 Simulation | missing |  |
-| P-76 | Display Field: Colour scheme picker (gradient swatch 56x12 + name, layer kind) | Views/DisplayLayerView.xaml:30-32 | 30 Display layer | missing |  |
-| P-77 | Display Field: Brightness NB logarithmic 0.0001..100000 | Views/DisplayLayerView.xaml:36-37 | 30 Display layer | partial | G float; no log stepping; same value as picture header box (not yet) |
-| P-78 | Display Field: Black level NB -10..1 step 0.01 | Views/DisplayLayerView.xaml:39-40 | 30 Display layer | partial | G |
-| P-79 | Display Field: Preview check box (shows picture; same as transport show toggle) | Views/DisplayLayerView.xaml:42 | 30 Display layer | partial | G; sync with transport toggle unverified |
-| P-80 | Display Field: Outline in the preview check box | Views/DisplayLayerView.xaml:45 | 30 Display layer | partial | G |
-| P-81 | Display Field: Outline brightness NB 0..5 step 0.05 | Views/DisplayLayerView.xaml:47-48 | 30 Display layer | partial | G |
-| P-82 | Display Field: Outline in the export check box | Views/DisplayLayerView.xaml:49 | 30 Display layer | partial | G |
-| P-83 | Display Intensity: Colour scheme picker (gradient swatch 56x12 + name, layer kind) | Views/DisplayLayerView.xaml:30-32 | 30 Display layer | missing |  |
-| P-84 | Display Intensity: Brightness NB logarithmic 0.0001..100000 | Views/DisplayLayerView.xaml:36-37 | 30 Display layer | partial | G float; no log stepping; same value as picture header box (not yet) |
-| P-85 | Display Intensity: Black level NB -10..1 step 0.01 | Views/DisplayLayerView.xaml:39-40 | 30 Display layer | partial | G |
-| P-86 | Display Intensity: Preview check box (shows picture; same as transport show toggle) | Views/DisplayLayerView.xaml:42 | 30 Display layer | partial | G; sync with transport toggle unverified |
-| P-87 | Display Intensity: Outline in the preview check box | Views/DisplayLayerView.xaml:45 | 30 Display layer | partial | G |
-| P-88 | Display Intensity: Outline brightness NB 0..5 step 0.05 | Views/DisplayLayerView.xaml:47-48 | 30 Display layer | partial | G |
-| P-89 | Display Intensity: Outline in the export check box | Views/DisplayLayerView.xaml:49 | 30 Display layer | partial | G |
-| P-90 | Display: Handles in the preview check box | Views/DisplayView.xaml:39 | 30 Display | partial | G |
-| P-91 | Display: Labels in the preview check box | Views/DisplayView.xaml:41 | 30 Display | partial | G |
-| P-92 | Display: Export From step NB min 0 | Views/DisplayView.xaml:47-48 | 30 Display | partial | G |
-| P-93 | Display: Export To step NB min 0 (0 = end) | Views/DisplayView.xaml:50-51 | 30 Display | partial | G |
-| P-94 | Display: Probe graphs in the export check box | Views/DisplayView.xaml:53 | 30 Display | partial | G |
-| P-95 | Display: Probe markers in the export check box | Views/DisplayView.xaml:55 | 30 Display | partial | G |
-| P-96 | Display: Source markers in the export check box | Views/DisplayView.xaml:57 | 30 Display | partial | G |
-| P-97 | Display: Video export Frame rate NB 1..240 | Views/DisplayView.xaml:63-64 | 30 Display | partial | G |
-| P-98 | Display: Video export Quality NB 1..100 | Views/DisplayView.xaml:66-67 | 30 Display | partial | G |
-| P-99 | Display: sections Field/Intensity/Preview/Export/Video export and on-screen order | Views/DisplayView.xaml:28-62 | 30 Display | missing | order is field declaration order; nested layer paths like 'Field Brightness' |
+| P-57 | Scene: Image file RO path ellipsis + '(not found)' | Views/SceneView.xaml:95-101 | 30 Scene | partial | the path, elided; no '(not found)' note: the app watches no scene image file yet |
+| P-58 | Scene: Embedded image RO 'W x H, N KB' / '(unreadable)' | Views/SceneView.xaml:105-107 | 30 Scene | done | 'W x H, N KB' from the embedded bytes and the decoded size, '(unreadable)' when it has none |
+| P-59 | Scene: Width NB 8..16384 (disabled in Image mode) | Views/SceneView.xaml:111-112 | 30 Scene | done | FormNumber 8..16384, label and box disabled in Image mode |
+| P-60 | Scene: Height NB 8..16384 (disabled in Image mode) | Views/SceneView.xaml:114-115 | 30 Scene | done | FormNumber 8..16384, label and box disabled in Image mode |
+| P-61 | Scene: Edges combo Open/Reflective (disabled while Damping edge < 0) | Views/SceneView.xaml:117-118 | 30 Scene; divergence rim | done | FormChoice Open, Reflective; Next no longer disables it (SceneView.xaml) |
+| P-62 | Scene: Damping edge NB -8192..8192 | Views/SceneView.xaml:121-122 | 30 Scene | done | FormNumber -8192..8192 |
+| P-63 | Scene: Refractive index NB 1..2.55 step 0.01 | Views/SceneView.xaml:124-125 | 30 Scene | done | FormNumber 1..2.55 step 0.01 |
+| P-64 | Scene: Image sources check box (full width) | Views/SceneView.xaml:130 | 30 Scene | done | FormCheck, full width |
+| P-65 | Scene: Image source amplitude NB 0..1000 step 0.1 (enabled w/ Image sources) | Views/SceneView.xaml:133-134 | 30 Scene | done | FormNumber 0..1000 step 0.1, label and box enabled with Image sources |
+| P-66 | Scene: Object sources check box | Views/SceneView.xaml:136 | 30 Scene | done | FormCheck, full width |
+| P-67 | Scene: sections Canvas / Sources from the image | Views/SceneView.xaml:57-60,128 | 30 Scene | done | FormSection Canvas, Sources from the image |
+| P-68 | Simulation: Steps NB 1..10,000,000 step 100 | Views/SimulationView.xaml:31-32 | 30 Simulation | done | FormNumber 1..10,000,000 step 100 |
+| P-69 | Simulation: Visualize every NB 1..1000 | Views/SimulationView.xaml:34-35 | 30 Simulation | done | FormNumber 1..1000 |
+| P-70 | Simulation: Wave speed NB 1e-6..1e6 step 0.01 | Views/SimulationView.xaml:43-44 | 30 Simulation | done | FormNumber 1e-6..1e6 step 0.01 |
+| P-71 | Simulation: Intensity time decay NB 1..100 drag 0.1, 1 dec | Views/SimulationView.xaml:46-47 | 30 Simulation | done | FormNumber 1..100, drag 0.1, 1 decimal |
+| P-72 | Simulation: Source frequency scale NB 0..1000 step 0.1 | Views/SimulationView.xaml:49-50 | 30 Simulation | done | FormNumber 0..1000 step 0.1 |
+| P-73 | Simulation: Intensity scale NB 1e-7..1e6 step 0.1 | Views/SimulationView.xaml:52-53 | 30 Simulation | done | FormNumber 1e-7..1e6 step 0.1 |
+| P-74 | Simulation: 4th-order Laplacian check box (full width) | Views/SimulationView.xaml:40 | 30 Simulation | done | FormCheck over the Stencil word: FourthOrder checked, NinePoint not |
+| P-75 | Simulation: sections Run / Solver | Views/SimulationView.xaml:29-42 | 30 Simulation | done | FormSection Run (key SectionRun), Solver |
+| P-76 | Display Field: Colour scheme picker (gradient swatch 56x12 + name, layer kind) | Views/DisplayLayerView.xaml:30-32 | 30 Display layer | partial | a text box for the scheme's name (FormText); the picker with its swatches comes later in piece 4 |
+| P-77 | Display Field: Brightness NB logarithmic 0.0001..100000 | Views/DisplayLayerView.xaml:36-37 | 30 Display layer | done | FormNumber, logarithmic 0.0001..100000 |
+| P-78 | Display Field: Black level NB -10..1 step 0.01 | Views/DisplayLayerView.xaml:39-40 | 30 Display layer | done | FormNumber -10..1 step 0.01 |
+| P-79 | Display Field: Preview check box (shows picture; same as transport show toggle) | Views/DisplayLayerView.xaml:42 | 30 Display layer | done | FormCheck; the same field as the transport's show toggle |
+| P-80 | Display Field: Outline in the preview check box | Views/DisplayLayerView.xaml:45 | 30 Display layer | done | FormCheck |
+| P-81 | Display Field: Outline brightness NB 0..5 step 0.05 | Views/DisplayLayerView.xaml:47-48 | 30 Display layer | done | FormNumber 0..5 step 0.05 |
+| P-82 | Display Field: Outline in the export check box | Views/DisplayLayerView.xaml:49 | 30 Display layer | done | FormCheck |
+| P-83 | Display Intensity: Colour scheme picker (gradient swatch 56x12 + name, layer kind) | Views/DisplayLayerView.xaml:30-32 | 30 Display layer | partial | a text box for the scheme's name (FormText); the picker with its swatches comes later in piece 4 |
+| P-84 | Display Intensity: Brightness NB logarithmic 0.0001..100000 | Views/DisplayLayerView.xaml:36-37 | 30 Display layer | done | FormNumber, logarithmic 0.0001..100000 |
+| P-85 | Display Intensity: Black level NB -10..1 step 0.01 | Views/DisplayLayerView.xaml:39-40 | 30 Display layer | done | FormNumber -10..1 step 0.01 |
+| P-86 | Display Intensity: Preview check box (shows picture; same as transport show toggle) | Views/DisplayLayerView.xaml:42 | 30 Display layer | done | FormCheck; the same field as the transport's show toggle |
+| P-87 | Display Intensity: Outline in the preview check box | Views/DisplayLayerView.xaml:45 | 30 Display layer | done | FormCheck |
+| P-88 | Display Intensity: Outline brightness NB 0..5 step 0.05 | Views/DisplayLayerView.xaml:47-48 | 30 Display layer | done | FormNumber 0..5 step 0.05 |
+| P-89 | Display Intensity: Outline in the export check box | Views/DisplayLayerView.xaml:49 | 30 Display layer | done | FormCheck |
+| P-90 | Display: Handles in the preview check box | Views/DisplayView.xaml:39 | 30 Display | done | FormCheck, full width |
+| P-91 | Display: Labels in the preview check box | Views/DisplayView.xaml:41 | 30 Display | done | FormCheck, full width |
+| P-92 | Display: Export From step NB min 0 | Views/DisplayView.xaml:47-48 | 30 Display | done | FormNumber from 0 |
+| P-93 | Display: Export To step NB min 0 (0 = end) | Views/DisplayView.xaml:50-51 | 30 Display | done | FormNumber from 0; the model bounds it by the run |
+| P-94 | Display: Probe graphs in the export check box | Views/DisplayView.xaml:53 | 30 Display | done | FormCheck, full width |
+| P-95 | Display: Probe markers in the export check box | Views/DisplayView.xaml:55 | 30 Display | done | FormCheck, full width |
+| P-96 | Display: Source markers in the export check box | Views/DisplayView.xaml:57 | 30 Display | done | FormCheck, full width |
+| P-97 | Display: Video export Frame rate NB 1..240 | Views/DisplayView.xaml:63-64 | 30 Display | done | FormNumber 1..240 |
+| P-98 | Display: Video export Quality NB 1..100 | Views/DisplayView.xaml:66-67 | 30 Display | done | FormNumber 1..100 |
+| P-99 | Display: sections Field/Intensity/Preview/Export/Video export and on-screen order | Views/DisplayView.xaml:28-62 | 30 Display | done | Field, Intensity, Preview, Export (key SectionExportRange), Video export, in Next's order |
 | P-100 | Source: Name TB | Views/SourceView.xaml:54 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
 | P-101 | Source: Enabled CB | Views/SourceView.xaml:56 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |
 | P-102 | Source: X NB integer (min 0) | Views/SourceView.xaml:63 | 30 Source | partial | G; array/random fields may be hidden if Nested/dependent |

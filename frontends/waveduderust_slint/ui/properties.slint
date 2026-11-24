@@ -1,6 +1,7 @@
 import { LineEdit, CheckBox, ComboBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
+import { ProjectForm, SceneForm, SimulationForm, DisplayForm } from "forms.slint";
 
 export enum PropKind { text, int, float, bool, choice }
 
@@ -18,6 +19,10 @@ export struct PropRow {
 
 // The properties pane (docs/ui/30): one labelled editor per field of the selected object.
 export component Properties inherits Rectangle {
+    // the shown object's form (ui/forms.slint), "" for the rows below
+    in property <string> form;
+    // a form's button: "new-seed"
+    callback action(id: string);
     in property <string> heading;
     // a folder's item count (Next's CollectionView); -1 for an object
     in property <int> entries: -1;
@@ -34,10 +39,14 @@ export component Properties inherits Rectangle {
         content-height: content.preferred-height;
         content := VerticalLayout {
             width: scroll.visible-width;
-            padding: 6px;
+            padding: root.form != "" ? 8px : 6px;
             spacing: 2px;
             alignment: start;
-            Text {
+            if root.form == "project": ProjectForm { new-seed => { root.action("new-seed"); } }
+            if root.form == "scene": SceneForm { }
+            if root.form == "simulation": SimulationForm { }
+            if root.form == "display": DisplayForm { }
+            if root.form == "": Text {
                 text: root.heading;
                 font-weight: 700;
                 color: Theme.text;

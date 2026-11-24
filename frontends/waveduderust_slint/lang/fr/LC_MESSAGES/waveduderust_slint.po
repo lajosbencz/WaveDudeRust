@@ -88,6 +88,10 @@ msgstr "&Affichage"
 msgid "1 entry"
 msgstr "1 entrée"
 
+#. Label.Simulation.FourthOrderLaplacian
+msgid "4th-order Laplacian"
+msgstr "Laplacien du 4e ordre"
+
 #. MenuAddAndGate
 msgid "AND"
 msgstr "AND (ET)"
@@ -128,13 +132,37 @@ msgstr "Ajouter à la sélection ou en retirer"
 msgid "Auto"
 msgstr "Auto"
 
+#. Hint.Simulation.TimeDecay
+msgid "Averaging window factor of the intensity: the engine averages over this × 100 / lowest source level steps."
+msgstr "Facteur de fenêtre du moyennage de l'intensité : le moteur moyenne sur ce facteur × 100 / niveau de source le plus bas pas."
+
+#. Hint.DisplayLayer.OverlayInExport
+msgid "Bake the outline into exported frames and videos of this output."
+msgstr "Incruster le contour dans les images et vidéos exportées de cette sortie."
+
+#. Label.DisplayLayer.BlackLevel
+msgid "Black level"
+msgstr "Niveau de noir"
+
+#. Hint.Scene.Mode
+msgid "Blank canvas of the given size, or a canvas built from the scene image."
+msgstr "Toile vierge de la taille donnée, ou toile construite à partir de l'image de scène."
+
 #. MenuAddBraggReflector
 msgid "Bragg reflector"
 msgstr "Réflecteur de Bragg"
 
+#. MenuBrightness
+msgid "Brightness"
+msgstr "Luminosité"
+
 #. DialogCancel
 msgid "Cancel"
 msgstr "Annuler"
+
+#. SectionCanvas
+msgid "Canvas"
+msgstr "Toile"
 
 #. MessagesClear
 msgid "Clear"
@@ -152,6 +180,10 @@ msgstr "Fermer"
 msgid "Close Project"
 msgstr "Fermer le projet"
 
+#. Label.DisplayLayer.ColorScheme
+msgid "Colour scheme"
+msgstr "Palette de couleurs"
+
 #. MenuEditCopy
 msgid "Copy"
 msgstr "Copier"
@@ -168,9 +200,17 @@ msgstr "Co&uper"
 msgid "Cut"
 msgstr "Couper"
 
+#. Label.Scene.DampingEdge
+msgid "Damping edge"
+msgstr "Bord amortissant"
+
 #. MenuEditDelete
 msgid "Delete"
 msgstr "Supprimer"
+
+#. SectionDescription
+msgid "Description"
+msgstr "Description"
 
 #. MenuAddDiffractionGratings
 msgid "Diffraction gratings"
@@ -180,6 +220,18 @@ msgstr "Réseaux de diffraction"
 msgid "Diffuser"
 msgstr "Diffuseur"
 
+#. Hint.Display.SourceMarkersInExport
+msgid "Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos."
+msgstr "Dessiner les sources actives (le marqueur, les points émetteurs d'une source composée, le nom) sur les images et vidéos exportées."
+
+#. Hint.Display.ProbeGraphsInExport
+msgid "Draw the probes' graph boxes over exported frames and videos."
+msgstr "Dessiner les cadres de graphe des sondes sur les images et vidéos exportées."
+
+#. Hint.Display.ProbeMarkersInExport
+msgid "Draw the probes' positions (crosses, the line of a line probe, the number) over exported frames and videos."
+msgstr "Dessiner les positions des sondes (croix, la ligne d'une sonde linéaire, le numéro) sur les images et vidéos exportées."
+
 #. MenuProjectDuplicate
 msgid "Duplicate"
 msgstr "Dupliquer"
@@ -187,6 +239,10 @@ msgstr "Dupliquer"
 #. MenuFileExit
 msgid "E&xit"
 msgstr "&Quitter"
+
+#. Label.Scene.Edges
+msgid "Edges"
+msgstr "Bords"
 
 #. MenuEdit
 msgid "Edit"
@@ -196,9 +252,17 @@ msgstr "Édition"
 msgid "Ellipse"
 msgstr "Ellipse"
 
+#. LabelEmbeddedImage
+msgid "Embedded image"
+msgstr "Image intégrée"
+
 #. MenuProjectToggleEnabled
 msgid "Enabled"
 msgstr "Activé"
+
+#. Hint.Video.Quality
+msgid "Encoder quality, 1 to 100."
+msgstr "Qualité de l'encodeur, 1 à 100."
 
 #. TipPreviewSetOut
 msgid "End the export range at this frame (O)"
@@ -292,21 +356,85 @@ msgstr "Champ et intensité côte à côte"
 msgid "File"
 msgstr "Fichier"
 
+#. Hint.Display.ExportFrom
+msgid "First simulation step of the exported range; 0 is the start of the run."
+msgstr "Premier pas de simulation de la plage exportée ; 0 est le début de l'exécution."
+
 #. TipPreviewLive
 msgid "Follow the newest frame while the run is in progress (F)"
 msgstr "Suivre l'image la plus récente pendant l'exécution (F)"
+
+#. Label.Project.Version
+msgid "Format version"
+msgstr "Version du format"
+
+#. Label.Video.Fps
+msgid "Frame rate"
+msgstr "Fréquence d'images"
+
+#. Hint.Video.Fps
+msgid "Frames per second of the exported video."
+msgstr "Images par seconde de la vidéo exportée."
+
+#. Hint.Project.Description
+msgid "Free-text notes about the project."
+msgstr "Notes libres sur le projet."
 
 #. MenuAddFresnelLens
 msgid "Fresnel lens"
 msgstr "Lentille de Fresnel"
 
+#. Label.Display.ExportFrom
+msgid "From step"
+msgstr "Du pas"
+
 #. MenuAddGrinLens
 msgid "GRIN lens"
 msgstr "Lentille GRIN"
 
+#. Hint.DisplayLayer.Brightness
+msgid "Gain applied to the values before the colour lookup."
+msgstr "Gain appliqué aux valeurs avant la correspondance des couleurs."
+
+#. SectionGeneral
+msgid "General"
+msgstr "Général"
+
+#. Label.Display.HandlesInPreview
+msgid "Handles in the preview"
+msgstr "Poignées dans l'aperçu"
+
+#. Label.Scene.Height
+msgid "Height"
+msgstr "Hauteur"
+
+#. Hint.Scene.Height
+msgid "Height of a blank canvas in pixels."
+msgstr "Hauteur d'une toile vierge en pixels."
+
 #. MenuHelp
 msgid "Help"
 msgstr "Aide"
+
+#. Enum.SceneMode.Image
+msgid "Image"
+msgstr "Image"
+
+#. Label.Scene.ImagePath
+msgid "Image file"
+msgstr "Fichier image"
+
+#. Label.Scene.ImageSourceScale
+msgid "Image source amplitude"
+msgstr "Amplitude des sources de l'image"
+
+#. Label.Scene.ImageSources
+msgid "Image sources"
+msgstr "Sources de l'image"
+
+#. Hint.Scene.Image
+msgid "Image the canvas is built from: red = refractive index (red 0 = a mirror), green = sources, blue = damping. The name of the embedded image, or a path relative to the project folder."
+msgstr "Image dont la toile est construite : rouge = indice de réfraction (rouge 0 = un miroir), vert = sources, bleu = amortissement. Le nom de l'image intégrée, ou un chemin relatif au dossier du projet."
 
 #. MenuAddImagingDetector
 msgid "Imaging detector"
@@ -320,13 +448,37 @@ msgstr "Inclure la source dans les exécutions (Espace sur la ligne bascule)"
 msgid "Intensity"
 msgstr "Intensité"
 
+#. Label.Simulation.IntensityScale
+msgid "Intensity scale"
+msgstr "Facteur d'intensité"
+
+#. Label.Simulation.TimeDecay
+msgid "Intensity time decay"
+msgstr "Décroissance temporelle de l'intensité"
+
 #. MenuAddInterferenceFilter
 msgid "Interference filter"
 msgstr "Filtre interférentiel"
 
+#. Label.Display.LabelsInPreview
+msgid "Labels in the preview"
+msgstr "Étiquettes dans l'aperçu"
+
+#. Hint.Display.ExportTo
+msgid "Last simulation step of the exported range; 0 means the end of the run."
+msgstr "Dernier pas de simulation de la plage exportée ; 0 signifie la fin de l'exécution."
+
+#. Hint.DisplayLayer.Overlay
+msgid "Lay the scene image's glowing-edges outline over this output in the preview."
+msgstr "Superposer le contour « bords lumineux » de l'image de scène à cette sortie dans l'aperçu."
+
 #. MenuAddLens
 msgid "Lens/Mirror"
 msgstr "Lentille/Miroir"
+
+#. Hint.Scene.ImageSources
+msgid "Let the green channel of the scene image emit waves; the pixel value is the frequency level."
+msgstr "Laisser le canal vert de l'image de scène émettre des ondes ; la valeur du pixel est le niveau de fréquence."
 
 #. TipPreviewLoop
 msgid "Loop playback over the export range (L)"
@@ -356,6 +508,10 @@ msgstr "Métaprisme"
 msgid "Meta surfaces"
 msgstr "Métasurfaces"
 
+#. Label.Scene.Mode
+msgid "Mode"
+msgstr "Mode"
+
 #. MenuProjectMoveDown
 msgid "Move down"
 msgstr "Descendre"
@@ -372,9 +528,29 @@ msgstr "Monter"
 msgid "Move up (Alt+Up); drag to reorder"
 msgstr "Monter (Alt+Haut) ; glisser pour réordonner"
 
+#. Hint.Simulation.IntensityScale
+msgid "Multiplier applied to the intensity values the engine produces."
+msgstr "Multiplicateur appliqué aux valeurs d'intensité produites par le moteur."
+
+#. Hint.Simulation.SourceFrequencyScale
+msgid "Multiplier of the level-to-frequency mapping: ω = level / 255 × 0.5 × scale, in radians per step."
+msgstr "Multiplicateur de la correspondance niveau-fréquence : ω = niveau / 255 × 0,5 × facteur, en radians par pas."
+
+#. Hint.DisplayLayer.OverlayGain
+msgid "Multiplier of the outline: 1 as computed, higher lifts faint edges, 0 hides it."
+msgstr "Multiplicateur du contour : 1 tel que calculé, plus haut relève les bords faibles, 0 le masque."
+
+#. Hint.DisplayLayer.ColorScheme
+msgid "Name of the colour scheme mapped onto the values."
+msgstr "Nom de la palette appliquée aux valeurs."
+
 #. MenuFileNew
 msgid "New Project"
 msgstr "Nouveau projet"
+
+#. ButtonNewSeed
+msgid "New seed"
+msgstr "Nouvelle graine"
 
 #. TipPreviewStepForward
 msgid "Next frame (.)"
@@ -384,9 +560,21 @@ msgstr "Image suivante (.)"
 msgid "No entries"
 msgstr "Aucune entrée"
 
+#. Hint.Simulation.WaveSpeed
+msgid "Nominal wave speed in pixels per step; only used to estimate wavelengths in the editor."
+msgstr "Vitesse d'onde nominale en pixels par pas ; sert seulement à estimer les longueurs d'onde dans l'éditeur."
+
 #. MenuAddOrGate
 msgid "OR"
 msgstr "OR (OU)"
+
+#. Label.Scene.ObjectSources
+msgid "Object sources"
+msgstr "Sources objets"
+
+#. Hint.DisplayLayer.BlackLevel
+msgid "Offset applied before the colour lookup; values at or below it map to the first colour."
+msgstr "Décalage appliqué avant la correspondance des couleurs ; les valeurs inférieures ou égales prennent la première couleur."
 
 #. Enum.EdgeMode.Open
 msgid "Open"
@@ -396,6 +584,10 @@ msgstr "Ouvert"
 msgid "Open Project..."
 msgstr "Ouvrir un projet..."
 
+#. Hint.Scene.Edges
+msgid "Open lets a wave leave the grid, as if the canvas sat in open space; Reflective is a hard wall, as in Wave Dude 2D."
+msgstr "Ouvert laisse l'onde quitter la grille, comme si la toile était dans l'espace libre ; Réfléchissant est un mur dur, comme dans Wave Dude 2D."
+
 #. MenuAddOpticalLogic
 msgid "Optical logic"
 msgstr "Logique optique"
@@ -403,6 +595,18 @@ msgstr "Logique optique"
 #. MenuAddOutline
 msgid "Outline"
 msgstr "Contour"
+
+#. Label.DisplayLayer.OverlayGain
+msgid "Outline brightness"
+msgstr "Luminosité du contour"
+
+#. Label.DisplayLayer.OverlayInExport
+msgid "Outline in the export"
+msgstr "Contour dans l'export"
+
+#. Label.DisplayLayer.Overlay
+msgid "Outline in the preview"
+msgstr "Contour dans l'aperçu"
 
 #. TipPartEnabled
 msgid "Paint the part into the scene (Space on the row toggles it)"
@@ -440,6 +644,10 @@ msgstr "Mettre la lecture en pause"
 msgid "Pause the simulation (F6)"
 msgstr "Mettre la simulation en pause (F6)"
 
+#. Hint.Scene.ImageSourceScale
+msgid "Peak amplitude of the image sources."
+msgstr "Amplitude de crête des sources de l'image."
+
 #. MenuSimulationPlay
 msgid "Pla&y"
 msgstr "L&ecture"
@@ -472,6 +680,14 @@ msgstr "Probabiliste"
 msgid "Probe"
 msgstr "Sonde"
 
+#. Label.Display.ProbeGraphsInExport
+msgid "Probe graphs in the export"
+msgstr "Graphes des sondes dans l'export"
+
+#. Label.Display.ProbeMarkersInExport
+msgid "Probe markers in the export"
+msgstr "Marqueurs des sondes dans l'export"
+
 #. PaneProject
 msgid "Project"
 msgstr "Projet"
@@ -479,6 +695,14 @@ msgstr "Projet"
 #. PaneProperties
 msgid "Properties"
 msgstr "Propriétés"
+
+#. Label.Video.Quality
+msgid "Quality"
+msgstr "Qualité"
+
+#. Label.Project.Seed
+msgid "Random seed"
+msgstr "Graine aléatoire"
 
 #. MenuFileRecent
 msgid "Recent Projects"
@@ -492,6 +716,18 @@ msgstr "Rectangle"
 msgid "Redo"
 msgstr "Rétablir"
 
+#. Enum.EdgeMode.Reflective
+msgid "Reflective"
+msgstr "Réfléchissant"
+
+#. Label.Scene.RefractiveIndex
+msgid "Refractive index"
+msgstr "Indice de réfraction"
+
+#. Hint.Scene.RefractiveIndex
+msgid "Refractive index of a blank canvas, 1.0 to 2.55. The wave speed is 1/n cells per step."
+msgstr "Indice de réfraction d'une toile vierge, 1,0 à 2,55. La vitesse d'onde est de 1/n cellules par pas."
+
 #. MenuProjectRemove
 msgid "Remove"
 msgstr "Supprimer"
@@ -499,6 +735,10 @@ msgstr "Supprimer"
 #. TipRemove
 msgid "Remove (Del)"
 msgstr "Supprimer (Suppr)"
+
+#. Hint.Simulation.VisualizeEvery
+msgid "Render a frame, export it and sample the probes every this many steps."
+msgstr "Rendre une image, l'exporter et échantillonner les sondes tous les ce nombre de pas."
 
 #. MenuSimulationResume
 msgid "Resume"
@@ -532,9 +772,17 @@ msgstr "Enregistrer &sous..."
 msgid "Save As..."
 msgstr "Enregistrer sous..."
 
+#. Label.Scene.Image
+msgid "Scene image"
+msgstr "Image de scène"
+
 #. MessagesSearchHint
 msgid "Search"
 msgstr "Rechercher"
+
+#. Hint.Project.Seed
+msgid "Seed of all random decisions (emitter jitter, random gaps). The same seed reproduces the same frames."
+msgstr "Graine de toutes les décisions aléatoires (gigue des émetteurs, intervalles aléatoires). La même graine reproduit les mêmes images."
 
 #. MenuProjectSelectAll
 msgid "Select &all"
@@ -544,6 +792,18 @@ msgstr "&Tout sélectionner"
 msgid "Select all"
 msgstr "Tout sélectionner"
 
+#. Hint.Display.HandlesInPreview
+msgid "Show the handles, lines, emitter dots and levers of every source, part and probe over the preview pictures. A selected object shows its own either way."
+msgstr "Afficher les poignées, les lignes, les points émetteurs et les leviers de toutes les sources, pièces et sondes sur les images de l'aperçu. Un objet sélectionné montre les siens dans tous les cas."
+
+#. Hint.Display.LabelsInPreview
+msgid "Show the names beside the handles over the preview pictures. A selected object shows its own either way."
+msgstr "Afficher les noms à côté des poignées sur les images de l'aperçu. Un objet sélectionné montre le sien dans tous les cas."
+
+#. Hint.DisplayLayer.Preview
+msgid "Show this output in the live preview."
+msgstr "Afficher cette sortie dans l'aperçu en direct."
+
 #. MenuAddSimpleGrating
 msgid "Simple 2D grating"
 msgstr "Réseau 2D simple"
@@ -552,9 +812,29 @@ msgstr "Réseau 2D simple"
 msgid "Simulation"
 msgstr "Simulation"
 
+#. TipEmbeddedImage
+msgid "Size of the embedded scene image; the canvas takes this size"
+msgstr "Taille de l'image de scène intégrée ; la toile prend cette taille"
+
+#. SectionSolver
+msgid "Solver"
+msgstr "Solveur"
+
 #. ToolAddSource
 msgid "Source"
 msgstr "Source"
+
+#. Label.Simulation.SourceFrequencyScale
+msgid "Source frequency scale"
+msgstr "Facteur de fréquence des sources"
+
+#. Label.Display.SourceMarkersInExport
+msgid "Source markers in the export"
+msgstr "Marqueurs des sources dans l'export"
+
+#. SectionImageSources
+msgid "Sources from the image"
+msgstr "Sources issues de l'image"
 
 #. LabelPreviewSpeed
 msgid "Speed"
@@ -568,6 +848,10 @@ msgstr "Sonde standard"
 msgid "Start the export range at this frame (I)"
 msgstr "Commencer la plage d'export à cette image (I)"
 
+#. Label.Simulation.Steps
+msgid "Steps"
+msgstr "Pas"
+
 #. MenuSimulationStop
 msgid "Stop"
 msgstr "Arrêter"
@@ -575,6 +859,18 @@ msgstr "Arrêter"
 #. TipPreviewStop
 msgid "Stop the simulation; the frames so far stay (Esc)"
 msgstr "Arrêter la simulation ; les images calculées restent (Échap)"
+
+#. Hint.Scene.DampingEdge
+msgid "Thickness in pixels of the absorbing frame: positive inside the canvas, where it shows as a dark margin; negative outside it, simulated but never shown. 0 turns it off."
+msgstr "Épaisseur en pixels du cadre absorbant : positive à l'intérieur de la toile, où il apparaît comme une marge sombre ; négative à l'extérieur, simulée mais jamais affichée. 0 le désactive."
+
+#. Label.Display.ExportTo
+msgid "To step"
+msgstr "Au pas"
+
+#. Hint.Simulation.Steps
+msgid "Total number of simulation steps."
+msgstr "Nombre total de pas de simulation."
 
 #. MenuAddTriangle
 msgid "Triangle"
@@ -584,9 +880,45 @@ msgstr "Triangle"
 msgid "Undo"
 msgstr "Annuler"
 
+#. Hint.Simulation.FourthOrderLaplacian
+msgid "Use the 4th-order stencil with sub-stepping instead of the 9-point stencil. More accurate, slower."
+msgstr "Utiliser le schéma du 4e ordre avec sous-pas au lieu du schéma à 9 points. Plus précis, plus lent."
+
+#. Hint.Scene.ObjectSources
+msgid "Use the sources defined in the project."
+msgstr "Utiliser les sources définies dans le projet."
+
+#. Hint.Project.Version
+msgid "Version of the project file format."
+msgstr "Version du format de fichier de projet."
+
+#. SectionVideo
+msgid "Video export"
+msgstr "Export vidéo"
+
 #. MenuView
 msgid "View"
 msgstr "Affichage"
+
+#. Label.Simulation.VisualizeEvery
+msgid "Visualize every"
+msgstr "Visualiser tous les"
+
+#. Label.Simulation.WaveSpeed
+msgid "Wave speed"
+msgstr "Vitesse d'onde"
+
+#. Hint.Scene.ImagePath
+msgid "Where the embedded image came from; the embedded image is what is simulated, a missing file changes nothing. The file is watched while the project is open and re-embedded when it changes; on opening the project a changed file replaces the embedded image too."
+msgstr "Origine de l'image intégrée ; c'est l'image intégrée qui est simulée, un fichier manquant ne change rien. Le fichier est surveillé tant que le projet est ouvert et réintégré quand il change ; à l'ouverture du projet, un fichier modifié remplace aussi l'image intégrée."
+
+#. Label.Scene.Width
+msgid "Width"
+msgstr "Largeur"
+
+#. Hint.Scene.Width
+msgid "Width of a blank canvas in pixels."
+msgstr "Largeur d'une toile vierge en pixels."
 
 #. MenuAddXorGate
 msgid "XOR (Mach-Zehnder)"
@@ -599,3 +931,13 @@ msgstr "Lame à zones"
 #. ItemCountMany
 msgid "{} entries"
 msgstr "{} entrées"
+
+#. SectionExportRange
+msgctxt "SectionExportRange"
+msgid "Export"
+msgstr "Export"
+
+#. SectionRun
+msgctxt "SectionRun"
+msgid "Run"
+msgstr "Exécution"

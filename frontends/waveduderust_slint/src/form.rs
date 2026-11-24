@@ -1,7 +1,9 @@
 //! The properties pane's form of any model type, from its reflected fields (docs/ui/30, Forms).
 
+use std::collections::HashMap;
 use waveduderust::model::fields::{Edit, EditError, Field, Fields, Value, ValueKind};
-use waveduderust::model::{Project, View};
+
+use waveduderust::model::{PROJECT_VERSION, Project, View};
 
 use crate::tree::Node;
 use crate::ui::{PropKind, PropRow};
@@ -109,6 +111,81 @@ macro_rules! with_object {
 	};
 }
 
+/// The Slint form `node` shows (ui/forms.slint); empty for the generic rows.
+pub(crate) fn kind(node: Node) -> &'static str {
+	match node {
+		Node::Project => "project",
+		Node::Scene => "scene",
+		Node::Simulation => "simulation",
+		Node::Display => "display",
+		_ => "",
+	}
+}
+
+/// Every field of `of` as text by its path.
+fn paths<T: Fields>(of: &T) -> HashMap<String, String> {
+	let mut values = HashMap::new();
+	for f in T::Field::all() {
+		let Some(value) = f.get(of).map(|v| v.to_string()) else { continue };
+		// a word's index among its kind's, for a combo box
+		if let ValueKind::Word(names) = f.kind() {
+			let index = names.iter().position(|n| *n == value).map_or(-1, |i| i as i32);
+			values.insert(format!("{}#", f.path()), index.to_string());
+		}
+		values.insert(f.path(), value);
+	}
+	values
+}
+
+/// The values a form of `node` shows by path: its fields and the read-outs Next derives from them.
+pub(crate) fn values(project: &Project, view: &View, node: Node) -> HashMap<String, String> {
+	let mut values = with_object!(project, view, node, |of| paths(of), HashMap::new());
+	match node {
+		Node::Project => {
+			values.insert("Version".into(), PROJECT_VERSION.to_string());
+		}
+		Node::Scene => {
+			let scene = &project.scene;
+			let info = scene.image_data.as_ref().map(|bytes| match scene.image_size {
+				(0, 0) => "(unreadable)".to_owned(),
+				(w, h) => format!("{w} \u{d7} {h}, {} KB", (bytes.len() / 1024).max(1)),
+			});
+			values.insert("EmbeddedImage".into(), info.unwrap_or_default());
+		}
+		_ => {}
+	}
+	values
+}
+
+/// Sets the field at `path` of `of` from the text the user entered.
+fn set_path<T: Fields>(of: &mut T, path: &str, text: &str) -> Result<(), String> {
+	let field = T::Field::all().into_iter().find(|f| f.path() == path).ok_or("no such field")?;
+	let value = match field.kind() {
+		ValueKind::Bool => Value::Bool(text == "true"),
+		ValueKind::Int | ValueKind::UInt => {
+			let v = crate::number::parse(text).filter(|v| v.fract() == 0.0);
+			let v = v.ok_or_else(|| format!("{text} is no whole number"))?;
+			// a box's f32 bounds round i32::MAX up a step
+			let (min, max) = if field.kind() == ValueKind::UInt {
+				(0.0, f64::from(u32::MAX))
+			} else {
+				(f64::from(i32::MIN), f64::from(i32::MAX))
+			};
+			let (min, max) = field.range().map_or((min, max), |r| (r.min.max(min), r.max.min(max)));
+			Value::Int(v.clamp(min, max) as i64)
+		}
+		ValueKind::Float => Value::Float(crate::number::parse(text).ok_or_else(|| format!("{text} is no number"))?),
+		ValueKind::Word(names) => Value::Word(names.iter().find(|n| **n == text).ok_or("unknown choice")?),
+		_ => Value::Text(text.into()),
+	};
+	field.edit(value).and_then(|e| e.apply(of)).map(drop).map_err(|e: EditError| e.to_string())
+}
+
+/// Sets the field at `path` of the object `node` stands for.
+pub(crate) fn set_at(project: &mut Project, view: &mut View, node: Node, path: &str, text: &str) -> Result<(), String> {
+	with_object!(project, view, node, |of| set_path(of, path, text), Err("nothing to edit".into()), mut)
+}
+
 /// The heading and rows of the selected object's form.
 pub(crate) fn of_selected(project: &Project, view: &View, node: Node) -> (String, Vec<PropRow>) {
 	let rows = with_object!(project, view, node, |of| rows(of), Vec::new());
@@ -155,5 +232,24 @@ mod tests {
 		assert_eq!(label("PulseWidth"), "Pulse width");
 		assert_eq!(label("x"), "x");
 		assert_eq!(label("Field.PulseWidth"), "Field pulse width");
+	}
+}
+
+#[cfg(test)]
+mod path_tests {
+	use super::*;
+
+	#[test]
+	fn fields_read_and_set_by_path_with_next_s_read_outs() {
+		let (mut p, mut v) = (Project::default(), View::default());
+		let values = values(&p, &v, Node::Simulation);
+		assert_eq!(values["Steps"], p.simulation.steps.to_string());
+		assert_eq!((values["Stencil"].as_str(), values["Stencil#"].as_str()), ("FourthOrder", "1"));
+		set_at(&mut p, &mut v, Node::Simulation, "Steps", "1200").unwrap();
+		assert_eq!(p.simulation.steps, 1200);
+		set_at(&mut p, &mut v, Node::Display, "Video.Fps", "30").unwrap();
+		assert_eq!(v.video.fps, 30);
+		assert!(set_at(&mut p, &mut v, Node::Scene, "Width", "1.5").is_err());
+		assert_eq!(super::values(&p, &v, Node::Project)["Version"], PROJECT_VERSION.to_string());
 	}
 }

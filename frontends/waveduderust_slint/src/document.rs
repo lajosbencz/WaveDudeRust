@@ -16,6 +16,8 @@ pub(crate) struct Document {
 	undo: Vec<Project>,
 	redo: Vec<Project>,
 	limit: usize,
+	/// The key of the run of edits the last undo step holds (typing into one field).
+	merging: Option<String>,
 	/// Counts the project's changes, for whoever follows it.
 	pub(crate) generation: u64,
 }
@@ -87,9 +89,18 @@ impl Document {
 
 	/// Applies `edit` as one undo step; an edit that changes nothing leaves no step.
 	pub(crate) fn edit(&mut self, edit: impl FnOnce(&mut Project)) {
+		self.edit_merging(None, edit);
+	}
+
+	/// Applies `edit`, joining the last undo step when it was made under the same `key` and nothing came between.
+	pub(crate) fn edit_merging(&mut self, key: Option<&str>, edit: impl FnOnce(&mut Project)) {
+		let joins = key.is_some() && self.merging.as_deref() == key && !self.undo.is_empty();
 		let before = self.project.clone();
 		edit(&mut self.project);
-		if self.project != before {
+		if self.project != before && joins {
+			self.generation += 1;
+		} else if self.project != before {
+			self.merging = key.map(str::to_owned);
 			self.generation += 1;
 			self.undo.push(before);
 			if self.undo.len() > self.limit {
@@ -100,6 +111,7 @@ impl Document {
 	}
 
 	pub(crate) fn undo(&mut self) {
+		self.merging = None;
 		if let Some(p) = self.undo.pop() {
 			self.generation += 1;
 			self.redo.push(std::mem::replace(&mut self.project, p));
@@ -107,6 +119,7 @@ impl Document {
 	}
 
 	pub(crate) fn redo(&mut self) {
+		self.merging = None;
 		if let Some(p) = self.redo.pop() {
 			self.generation += 1;
 			self.undo.push(std::mem::replace(&mut self.project, p));
@@ -156,6 +169,21 @@ impl Document {
 
 #[cfg(test)]
 mod tests {
+
+	#[test]
+	fn typing_into_one_field_is_one_undo_step() {
+		let mut d = Document::new(10);
+		for seed in 2..5 {
+			d.edit_merging(Some("Project/Seed"), |p| p.seed = seed);
+		}
+		d.edit_merging(Some("Project/Description"), |p| p.description = "x".into());
+		d.undo();
+		assert_eq!(d.project.seed, 4);
+		d.undo();
+		assert_eq!(d.project.seed, Project::default().seed);
+		assert!(!d.can_undo());
+	}
+
 	use super::*;
 
 	#[test]

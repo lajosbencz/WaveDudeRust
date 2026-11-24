@@ -88,6 +88,10 @@ struct State {
 	form_seen: u64,
 	form_base: u64,
 	draft: Option<Draft>,
+	/// The shown typed form's values by path, read by the `Form` global, and the form's identity and revision.
+	values: Rc<RefCell<std::collections::HashMap<String, String>>>,
+	typed_form: Shown,
+	revision: i32,
 }
 
 /// Text typed into a Properties row and not committed: the tree commits it before it acts, since the editor's own
@@ -95,6 +99,8 @@ struct State {
 struct Draft {
 	token: i32,
 	row: usize,
+	/// A typed form's field instead of a row.
+	path: Option<String>,
 	text: String,
 	/// The row's value the text was typed over.
 	over: slint::SharedString,
@@ -166,10 +172,35 @@ impl State {
 		result
 	}
 
+	/// Sets the field at `path` of the selected object's typed form to `text`.
+	/// `typing`: a keystroke, joining the field's run of keystrokes into one undo step.
+	fn set_field(&mut self, path: &str, text: &str, typing: bool) -> Result<(), String> {
+		self.draft = None;
+		let node = self.selection.current();
+		let mut result = Ok(());
+		if node == Node::Display {
+			let doc = &mut self.doc;
+			result = form::set_at(&mut doc.project, &mut doc.view, node, path, text);
+		} else {
+			let view = &mut self.doc.view.clone();
+			let key = typing.then(|| format!("{node:?}/{path}"));
+			self.doc.edit_merging(key.as_deref(), |p| result = form::set_at(p, view, node, path, text));
+		}
+		self.form_seen = self.doc.generation;
+		result
+	}
+
 	/// Commits the [`State::draft`] while its editor is still the one shown.
 	fn commit_draft(&mut self, app: &AppWindow) {
 		use slint::Model;
 		let Some(draft) = self.draft.take() else { return };
+		if let Some(path) = draft.path {
+			let over = self.values.borrow().get(&path).is_some_and(|v| *v == draft.over.as_str());
+			if draft.token == self.typed_form.token && over {
+				let _ = self.set_field(&path, &draft.text, false);
+			}
+			return;
+		}
 		let shown = app.get_props_rows().row_data(draft.row).map(|r| r.value);
 		if draft.token == self.props.token && shown.is_some_and(|v| v == draft.over) {
 			// the form leaves the view, so would its error
@@ -215,7 +246,14 @@ impl State {
 			self.ran = self.doc.generation;
 			self.live.edited(&self.doc.project, &self.doc.view);
 		}
-		let (mut heading, rows) = form::of_selected(&self.doc.project, &self.doc.view, self.selection.current());
+		let node = self.selection.current();
+		let kind = form::kind(node);
+		app.set_props_form(kind.into());
+		let (mut heading, rows) = if kind.is_empty() {
+			form::of_selected(&self.doc.project, &self.doc.view, node)
+		} else {
+			Default::default()
+		};
 		let folder = tree::folder(&self.doc.project, self.selection.current());
 		if let Some((label, _)) = folder {
 			heading = label.into();
@@ -227,6 +265,17 @@ impl State {
 			self.form_base = self.doc.generation;
 		}
 		let key = format!("{:?}@{}", self.selection.current(), self.form_base);
+		if !kind.is_empty() {
+			if self.typed_form.key.as_ref() != Some(&key) {
+				self.typed_form.key = Some(key.clone());
+				self.typed_form.token = self.typed_form.token.wrapping_add(1);
+			}
+			*self.values.borrow_mut() = form::values(&self.doc.project, &self.doc.view, node);
+			self.revision = self.revision.wrapping_add(1);
+			let g = app.global::<ui::Form<'_>>();
+			g.set_token(self.typed_form.token);
+			g.set_revision(self.revision);
+		}
 		sync(&app.get_props_rows(), &mut self.props, key, rows, |m| {
 			app.set_props_rows(m);
 		});
@@ -784,6 +833,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		form_seen: 0,
 		form_base: 0,
 		draft: None,
+		values: Rc::default(),
+		typed_form: Shown::default(),
+		revision: 0,
 	}));
 	app.set_native_access_keys(cfg!(windows));
 	apply_settings(&mut state.borrow_mut(), &app);
@@ -923,7 +975,45 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		use slint::Model;
 		let (Some(app), Ok(row)) = (weak.upgrade(), usize::try_from(row)) else { return };
 		let over = app.get_props_rows().row_data(row).map_or_else(Default::default, |r| r.value);
-		st.borrow_mut().draft = Some(Draft { token, row, text: text.into(), over });
+		st.borrow_mut().draft = Some(Draft { token, row, path: None, text: text.into(), over });
+	});
+	let values = state.borrow().values.clone();
+	app.global::<ui::Form<'_>>()
+		.on_value(move |_, path| values.borrow().get(path.as_str()).cloned().unwrap_or_default().into());
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.global::<ui::Form<'_>>().on_set(move |path, text| {
+		let Some(app) = weak.upgrade() else { return false };
+		let mut s = st.borrow_mut();
+		let result = s.set_field(&path, &text, false);
+		let took = result.is_ok();
+		app.set_props_error(result.err().unwrap_or_default().into());
+		s.show(&app);
+		took
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.global::<ui::Form<'_>>().on_set_text(move |path, text| {
+		let Some(app) = weak.upgrade() else { return };
+		let mut s = st.borrow_mut();
+		let result = s.set_field(&path, &text, true);
+		app.set_props_error(result.err().unwrap_or_default().into());
+		s.show(&app);
+	});
+	let st = state.clone();
+	app.global::<ui::Form<'_>>().on_typed(move |token, path, text| {
+		let mut s = st.borrow_mut();
+		let over = s.values.borrow().get(path.as_str()).cloned().unwrap_or_default().into();
+		s.draft = Some(Draft { token, row: 0, path: Some(path.into()), text: text.into(), over });
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_props_action(move |id| {
+		let Some(app) = weak.upgrade() else { return };
+		let mut s = st.borrow_mut();
+		if id == "new-seed" {
+			s.commit_draft(&app);
+			let seed = waveduderust::model::Project::new_random_seed().seed;
+			s.doc.edit(|p| p.seed = seed);
+			s.show(&app);
+		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_menu(move |id| {

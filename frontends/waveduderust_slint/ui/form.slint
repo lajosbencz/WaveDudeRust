@@ -1,0 +1,190 @@
+import { CheckBox, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { NumberBox, NumberSpec } from "number-box.slint";
+
+// The shown object's fields by path (Next's binding paths, src/form.rs): values in, edits out.
+export global Form {
+    // the shown form; typed text left in an older one's editor is not committed
+    in property <int> token;
+    // bumped with every change of the values
+    in property <int> revision;
+    // a field's value as text
+    pure callback value(revision: int, path: string) -> string;
+    // sets a field; whether it took the text
+    callback set(path: string, text: string) -> bool;
+    // sets a text field per keystroke, the keystrokes one undo step
+    callback set-text(path: string, text: string);
+    // text typed, not yet committed
+    callback typed(token: int, path: string, text: string);
+}
+
+// Next's FormSection: the name over a rule.
+export component FormSection inherits VerticalLayout {
+    in property <string> text;
+    padding-top: 2px;
+    padding-bottom: 6px;
+    spacing: 2px;
+    Text {
+        text: root.text;
+        font-weight: 600;
+        color: Theme.text;
+    }
+    Rectangle { height: 1px; background: Theme.border; }
+}
+
+// Next's FormPanel: rows of a label and its editor, the label column as wide as its widest label, 110 px at least;
+// 10 px after the group.
+export component FormPanel inherits GridLayout {
+    spacing-horizontal: 8px;
+    spacing-vertical: 4px;
+    padding-bottom: 10px;
+}
+
+// Next's FormLabel, with the editor's hint as its tip.
+export component FormLabel inherits Rectangle {
+    in property <string> text;
+    in property <string> tip;
+    in property <bool> enabled: true;
+    min-width: max(110px, label.preferred-width);
+    preferred-width: self.min-width;
+    horizontal-stretch: 0;
+    min-height: Theme.row-height;
+    label := Text {
+        x: 0;
+        width: parent.width;
+        text: root.text;
+        vertical-alignment: center;
+        overflow: elide;
+        color: root.enabled ? Theme.text : Theme.text-disabled;
+    }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// A grey read-only value (Next's FormValue).
+export component FormValue inherits Text {
+    horizontal-stretch: 1;
+    vertical-alignment: center;
+    overflow: elide;
+    color: Theme.text-dim;
+}
+
+// A number box bound to `path`.
+export component FormNumber inherits Rectangle {
+    in property <string> path;
+    in property <NumberSpec> spec: { min: -1000000000, max: 1000000000, increment: 1, decimals: -1 };
+    in property <bool> enabled: true;
+    in property <string> tip;
+    horizontal-stretch: 1;
+    min-height: max(Theme.row-height, box.min-height);
+    min-width: box.min-width;
+    preferred-width: box.preferred-width;
+    box := NumberBox {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        spec: root.spec;
+        value: Form.value(Form.revision, root.path);
+        edited(t) => { return Form.set(root.path, t); }
+        typed(t) => { Form.typed(Form.token, root.path, t); }
+    }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// A full-width check box bound to `path`, its label as its text (Next's FormPanel.FullWidth).
+export component FormCheck inherits Rectangle {
+    in property <string> path;
+    in property <string> text;
+    in property <string> tip;
+    in property <bool> enabled: true;
+    // the value that checks it, when the field is no bool
+    in property <string> on: "true";
+    in property <string> off: "false";
+    // a click assigns `checked`, ending its binding: the value is put back on each change
+    property <string> value: Form.value(Form.revision, root.path);
+    changed value => { check.checked = root.value == root.on; }
+    min-height: max(Theme.row-height, check.min-height);
+    min-width: check.min-width;
+    check := CheckBox {
+        x: 0;
+        height: parent.height;
+        text: root.text;
+        enabled: root.enabled;
+        checked: root.value == root.on;
+        toggled => { Form.set(root.path, self.checked ? root.on : root.off); }
+    }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// A combo box of a field's words in the model's order, `titles` their translations; the current one's index is the
+// value at `path#`.
+export component FormChoice inherits Rectangle {
+    in property <string> path;
+    in property <[string]> words;
+    in property <[string]> titles;
+    in property <string> tip;
+    in property <bool> enabled: true;
+    // a pick assigns `current-index`, ending its binding: the index is put back on each change
+    property <int> index: Form.value(Form.revision, root.path + "#").to-float();
+    changed index => { combo.current-index = root.index; }
+    horizontal-stretch: 1;
+    min-height: max(Theme.row-height, combo.min-height);
+    min-width: combo.min-width;
+    preferred-width: combo.preferred-width;
+    combo := ComboBox {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        model: root.titles;
+        current-index: root.index;
+        selected => { Form.set(root.path, root.words[self.current-index]); }
+    }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// A text box bound to `path`, applied per keystroke (Next's UpdateSourceTrigger=PropertyChanged).
+export component FormText inherits Rectangle {
+    in property <string> path;
+    in property <string> tip;
+    in property <bool> enabled: true;
+    property <string> value: Form.value(Form.revision, root.path);
+    horizontal-stretch: 1;
+    min-height: max(Theme.row-height, edit.min-height);
+    min-width: edit.min-width;
+    preferred-width: edit.preferred-width;
+    edit := LineEdit {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        text: root.value;
+        edited(t) => { Form.set-text(root.path, t); }
+    }
+    // typing breaks the binding above; a value from elsewhere (undo) comes back in
+    changed value => {
+        if (edit.text != root.value) {
+            edit.text = root.value;
+        }
+    }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// A wrapping multi-line text box bound to `path`, Enter a new line, 60 px at least.
+export component FormNotes inherits Rectangle {
+    in property <string> path;
+    in property <string> tip;
+    property <string> value: Form.value(Form.revision, root.path);
+    horizontal-stretch: 1;
+    min-height: 60px;
+    edit := TextEdit {
+        width: parent.width;
+        height: parent.height;
+        wrap: word-wrap;
+        text: root.value;
+        edited(t) => { Form.set-text(root.path, t); }
+    }
+    changed value => {
+        if (edit.text != root.value) {
+            edit.text = root.value;
+        }
+    }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}

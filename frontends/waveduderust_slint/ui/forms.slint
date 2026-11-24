@@ -1,0 +1,358 @@
+// The forms of the project's settings objects (Next's Views/ProjectView, SceneView, SimulationView, DisplayView and
+// DisplayLayerView): labels and hints are Next's Label.* and Hint.* strings.
+import { Button } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Form, FormSection, FormPanel, FormLabel, FormValue, FormNumber, FormCheck, FormChoice, FormText, FormNotes } from "form.slint";
+
+export component ProjectForm inherits VerticalLayout {
+    // draws a fresh seed (Next's ProjectView.Reseed)
+    callback new-seed();
+    alignment: start;
+    FormSection { text: @tr("General"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Format version"); tip: @tr("Version of the project file format."); }
+            FormValue { text: Form.value(Form.revision, "Version"); }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Random seed");
+                tip: @tr("Seed of all random decisions (emitter jitter, random gaps). The same seed reproduces the same frames.");
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                horizontal-stretch: 1;
+                FormNumber {
+                    path: "Seed";
+                    spec: { min: -2147483648, max: 2147483647, increment: 1, decimals: 0 };
+                    tip: @tr("Seed of all random decisions (emitter jitter, random gaps). The same seed reproduces the same frames.");
+                }
+                Button { text: @tr("New seed"); clicked => { root.new-seed(); } }
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Description"); tip: @tr("Free-text notes about the project."); vertical-stretch: 0; }
+            FormNotes { path: "Description"; tip: @tr("Free-text notes about the project."); }
+        }
+    }
+}
+
+export component SceneForm inherits VerticalLayout {
+    property <bool> image: Form.value(Form.revision, "Mode") == "Image";
+    property <bool> image-sources: Form.value(Form.revision, "ImageSources") == "true";
+    alignment: start;
+    FormSection { text: @tr("Canvas"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Mode"); tip: @tr("Blank canvas of the given size, or a canvas built from the scene image."); }
+            FormChoice {
+                path: "Mode";
+                words: ["Canvas", "Image"];
+                titles: [@tr("Canvas"), @tr("Image")];
+                tip: @tr("Blank canvas of the given size, or a canvas built from the scene image.");
+            }
+        }
+        // the image rows show for an image scene only
+        if root.image: Row {
+            FormLabel {
+                text: @tr("Scene image");
+                tip: @tr("Image the canvas is built from: red = refractive index (red 0 = a mirror), green = sources, blue = damping. The name of the embedded image, or a path relative to the project folder.");
+            }
+            FormText {
+                path: "Image";
+                tip: @tr("Image the canvas is built from: red = refractive index (red 0 = a mirror), green = sources, blue = damping. The name of the embedded image, or a path relative to the project folder.");
+            }
+        }
+        if root.image: Row {
+            FormLabel {
+                text: @tr("Image file");
+                tip: @tr("Where the embedded image came from; the embedded image is what is simulated, a missing file changes nothing. The file is watched while the project is open and re-embedded when it changes; on opening the project a changed file replaces the embedded image too.");
+            }
+            FormValue { text: Form.value(Form.revision, "ImagePath"); color: Theme.text; }
+        }
+        if root.image: Row {
+            FormLabel { text: @tr("Embedded image"); tip: @tr("Size of the embedded scene image; the canvas takes this size"); }
+            FormValue { text: Form.value(Form.revision, "EmbeddedImage"); color: Theme.text; }
+        }
+        Row {
+            FormLabel { text: @tr("Width"); tip: @tr("Width of a blank canvas in pixels."); enabled: !root.image; }
+            FormNumber { path: "Width"; spec: { min: 8, max: 16384, increment: 1, decimals: 0 }; enabled: !root.image; tip: @tr("Width of a blank canvas in pixels."); }
+        }
+        Row {
+            FormLabel { text: @tr("Height"); tip: @tr("Height of a blank canvas in pixels."); enabled: !root.image; }
+            FormNumber { path: "Height"; spec: { min: 8, max: 16384, increment: 1, decimals: 0 }; enabled: !root.image; tip: @tr("Height of a blank canvas in pixels."); }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Edges");
+                tip: @tr("Open lets a wave leave the grid, as if the canvas sat in open space; Reflective is a hard wall, as in Wave Dude 2D.");
+            }
+            FormChoice {
+                path: "Edges";
+                words: ["Open", "Reflective"];
+                titles: [@tr("Open"), @tr("Reflective")];
+                tip: @tr("Open lets a wave leave the grid, as if the canvas sat in open space; Reflective is a hard wall, as in Wave Dude 2D.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Damping edge");
+                tip: @tr("Thickness in pixels of the absorbing frame: positive inside the canvas, where it shows as a dark margin; negative outside it, simulated but never shown. 0 turns it off.");
+            }
+            FormNumber {
+                path: "DampingEdge";
+                spec: { min: -8192, max: 8192, increment: 1, decimals: 0 };
+                tip: @tr("Thickness in pixels of the absorbing frame: positive inside the canvas, where it shows as a dark margin; negative outside it, simulated but never shown. 0 turns it off.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Refractive index");
+                tip: @tr("Refractive index of a blank canvas, 1.0 to 2.55. The wave speed is 1/n cells per step.");
+            }
+            FormNumber {
+                path: "RefractiveIndex";
+                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                tip: @tr("Refractive index of a blank canvas, 1.0 to 2.55. The wave speed is 1/n cells per step.");
+            }
+        }
+    }
+    FormSection { text: @tr("Sources from the image"); }
+    FormPanel {
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "ImageSources";
+                text: @tr("Image sources");
+                tip: @tr("Let the green channel of the scene image emit waves; the pixel value is the frequency level.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Image source amplitude"); tip: @tr("Peak amplitude of the image sources."); enabled: root.image-sources; }
+            FormNumber {
+                path: "ImageSourceScale";
+                spec: { min: 0, max: 1000, increment: 0.1, decimals: -1 };
+                enabled: root.image-sources;
+                tip: @tr("Peak amplitude of the image sources.");
+            }
+        }
+        Row {
+            FormCheck { colspan: 2; path: "ObjectSources"; text: @tr("Object sources"); tip: @tr("Use the sources defined in the project."); }
+        }
+    }
+}
+
+export component SimulationForm inherits VerticalLayout {
+    alignment: start;
+    FormSection { text: @tr("SectionRun" => "Run"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Steps"); tip: @tr("Total number of simulation steps."); }
+            FormNumber { path: "Steps"; spec: { min: 1, max: 10000000, increment: 100, decimals: 0 }; tip: @tr("Total number of simulation steps."); }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Visualize every");
+                tip: @tr("Render a frame, export it and sample the probes every this many steps.");
+            }
+            FormNumber {
+                path: "VisualizeEvery";
+                spec: { min: 1, max: 1000, increment: 1, decimals: 0 };
+                tip: @tr("Render a frame, export it and sample the probes every this many steps.");
+            }
+        }
+    }
+    FormSection { text: @tr("Solver"); }
+    FormPanel {
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "Stencil";
+                on: "FourthOrder";
+                off: "NinePoint";
+                text: @tr("4th-order Laplacian");
+                tip: @tr("Use the 4th-order stencil with sub-stepping instead of the 9-point stencil. More accurate, slower.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Wave speed");
+                tip: @tr("Nominal wave speed in pixels per step; only used to estimate wavelengths in the editor.");
+            }
+            FormNumber {
+                path: "WaveSpeed";
+                spec: { min: 0.000001, max: 1000000, increment: 0.01, decimals: -1 };
+                tip: @tr("Nominal wave speed in pixels per step; only used to estimate wavelengths in the editor.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Intensity time decay");
+                tip: @tr("Averaging window factor of the intensity: the engine averages over this \u{D7} 100 / lowest source level steps.");
+            }
+            FormNumber {
+                path: "TimeDecay";
+                spec: { min: 1, max: 100, increment: 1, decimals: 1, drag-step: 0.1 };
+                tip: @tr("Averaging window factor of the intensity: the engine averages over this \u{D7} 100 / lowest source level steps.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Source frequency scale");
+                tip: @tr("Multiplier of the level-to-frequency mapping: \u{3C9} = level / 255 \u{D7} 0.5 \u{D7} scale, in radians per step.");
+            }
+            FormNumber {
+                path: "SourceFrequencyScale";
+                spec: { min: 0, max: 1000, increment: 0.1, decimals: -1 };
+                tip: @tr("Multiplier of the level-to-frequency mapping: \u{3C9} = level / 255 \u{D7} 0.5 \u{D7} scale, in radians per step.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Intensity scale"); tip: @tr("Multiplier applied to the intensity values the engine produces."); }
+            FormNumber {
+                path: "IntensityScale";
+                spec: { min: 0.0000001, max: 1000000, increment: 0.1, decimals: -1 };
+                tip: @tr("Multiplier applied to the intensity values the engine produces.");
+            }
+        }
+    }
+}
+
+// One output's settings (Next's DisplayLayerView); `layer` is "Field" or "Intensity".
+component DisplayLayerForm inherits FormPanel {
+    in property <string> layer;
+    Row {
+        FormLabel { text: @tr("Colour scheme"); tip: @tr("Name of the colour scheme mapped onto the values."); }
+        FormText { path: root.layer + ".ColorScheme"; tip: @tr("Name of the colour scheme mapped onto the values."); }
+    }
+    Row {
+        FormLabel { text: @tr("Brightness"); tip: @tr("Gain applied to the values before the colour lookup."); }
+        FormNumber {
+            path: root.layer + ".Brightness";
+            spec: { min: 0.0001, max: 100000, increment: 1, decimals: -1, log: true };
+            tip: @tr("Gain applied to the values before the colour lookup.");
+        }
+    }
+    Row {
+        FormLabel {
+            text: @tr("Black level");
+            tip: @tr("Offset applied before the colour lookup; values at or below it map to the first colour.");
+        }
+        FormNumber {
+            path: root.layer + ".BlackLevel";
+            spec: { min: -10, max: 1, increment: 0.01, decimals: -1 };
+            tip: @tr("Offset applied before the colour lookup; values at or below it map to the first colour.");
+        }
+    }
+    Row {
+        FormCheck { colspan: 2; path: root.layer + ".Preview"; text: @tr("Preview"); tip: @tr("Show this output in the live preview."); }
+    }
+    Row {
+        FormCheck {
+            colspan: 2;
+            path: root.layer + ".Overlay";
+            text: @tr("Outline in the preview");
+            tip: @tr("Lay the scene image's glowing-edges outline over this output in the preview.");
+        }
+    }
+    Row {
+        FormLabel {
+            text: @tr("Outline brightness");
+            tip: @tr("Multiplier of the outline: 1 as computed, higher lifts faint edges, 0 hides it.");
+        }
+        FormNumber {
+            path: root.layer + ".OverlayGain";
+            spec: { min: 0, max: 5, increment: 0.05, decimals: -1 };
+            tip: @tr("Multiplier of the outline: 1 as computed, higher lifts faint edges, 0 hides it.");
+        }
+    }
+    Row {
+        FormCheck {
+            colspan: 2;
+            path: root.layer + ".OverlayInExport";
+            text: @tr("Outline in the export");
+            tip: @tr("Bake the outline into exported frames and videos of this output.");
+        }
+    }
+}
+
+export component DisplayForm inherits VerticalLayout {
+    alignment: start;
+    FormSection { text: @tr("Field"); }
+    DisplayLayerForm { layer: "Field"; }
+    FormSection { text: @tr("Intensity"); }
+    DisplayLayerForm { layer: "Intensity"; }
+    FormSection { text: @tr("Preview"); }
+    FormPanel {
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "HandlesInPreview";
+                text: @tr("Handles in the preview");
+                tip: @tr("Show the handles, lines, emitter dots and levers of every source, part and probe over the preview pictures. A selected object shows its own either way.");
+            }
+        }
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "LabelsInPreview";
+                text: @tr("Labels in the preview");
+                tip: @tr("Show the names beside the handles over the preview pictures. A selected object shows its own either way.");
+            }
+        }
+    }
+    FormSection { text: @tr("SectionExportRange" => "Export"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("From step"); tip: @tr("First simulation step of the exported range; 0 is the start of the run."); }
+            FormNumber {
+                path: "ExportFrom";
+                spec: { min: 0, max: 2147483647, increment: 1, decimals: 0 };
+                tip: @tr("First simulation step of the exported range; 0 is the start of the run.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("To step"); tip: @tr("Last simulation step of the exported range; 0 means the end of the run."); }
+            FormNumber {
+                path: "ExportTo";
+                spec: { min: 0, max: 2147483647, increment: 1, decimals: 0 };
+                tip: @tr("Last simulation step of the exported range; 0 means the end of the run.");
+            }
+        }
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "ProbeGraphsInExport";
+                text: @tr("Probe graphs in the export");
+                tip: @tr("Draw the probes' graph boxes over exported frames and videos.");
+            }
+        }
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "ProbeMarkersInExport";
+                text: @tr("Probe markers in the export");
+                tip: @tr("Draw the probes' positions (crosses, the line of a line probe, the number) over exported frames and videos.");
+            }
+        }
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "SourceMarkersInExport";
+                text: @tr("Source markers in the export");
+                tip: @tr("Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos.");
+            }
+        }
+    }
+    FormSection { text: @tr("Video export"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Frame rate"); tip: @tr("Frames per second of the exported video."); }
+            FormNumber { path: "Video.Fps"; spec: { min: 1, max: 240, increment: 1, decimals: 0 }; tip: @tr("Frames per second of the exported video."); }
+        }
+        Row {
+            FormLabel { text: @tr("Quality"); tip: @tr("Encoder quality, 1 to 100."); }
+            FormNumber { path: "Video.Quality"; spec: { min: 1, max: 100, increment: 1, decimals: 0 }; tip: @tr("Encoder quality, 1 to 100."); }
+        }
+    }
+}
