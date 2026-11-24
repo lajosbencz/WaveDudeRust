@@ -17,7 +17,7 @@ export enum TriangleType { equilateral, right-isosceles, thirty-sixty-ninety, is
 export enum ZoneDivision { equal-width, equal-depth }
 
 // Which form Properties shows; `none` for the generic rows.
-export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate }
+export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens }
 
 export struct ProjectData {
     seed: int,
@@ -230,6 +230,22 @@ export struct ZonePlateData {
     wavelength: float,
     zones: int,
     outer-zone: float,
+}
+
+export struct BraggData {
+    pairs: int,
+    thickness1: int,
+    index1: float,
+    thickness2: int,
+    index2: float,
+    width: int,
+}
+
+export struct GrinData {
+    centre-index: float,
+    edge-index: float,
+    length: int,
+    diameter: int,
 }
 
 export struct PointData {

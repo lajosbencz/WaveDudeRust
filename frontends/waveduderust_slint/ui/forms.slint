@@ -856,8 +856,93 @@ component PartCommon inherits VerticalLayout {
     }
 }
 
-// mirror or glass, the index, the coating, the absorption; a mirror takes none but the box.
-// A kind's form hides the coating rows, the front box or the sides box where they do not apply.
+// A material's rows: the caller's own first, then the anti-reflection band's (depth, profile, the faces it covers)
+// and, with `absorption-shown`, the material's absorption; one grid, so the labels share a column.
+component MaterialPanel inherits FormPanel {
+    in property <bool> enabled: true;
+    in property <bool> coating-shown: true;
+    in property <bool> back-only;
+    in property <bool> sides-hidden;
+    in property <bool> absorption-shown;
+    @children
+    if root.coating-shown: Row {
+        FormLabel {
+            text: @tr("AR coating");
+            tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
+        }
+        FormFloat {
+            value <=> Form.coating.depth;
+            spec: { min: 0, max: 50, increment: 1, decimals: -1 };
+            enabled: root.enabled;
+            tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
+        }
+    }
+    if root.coating-shown: Row {
+        FormLabel {
+            text: @tr("Coating profile");
+            tip: @tr("How the index runs through the band: a layer at \u{221A}n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for.");
+        }
+        ProfileChoice {
+            value <=> Form.coating.profile;
+            enabled: root.enabled;
+            tip: @tr("How the index runs through the band: a layer at \u{221A}n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for.");
+        }
+    }
+    if root.coating-shown && !root.back-only: Row {
+        FormCheck {
+            checked <=> Form.coating.front;
+            colspan: 2;
+            text: @tr("Coat the front");
+            enabled: root.enabled;
+            tip: @tr("Put the band on the front: the faces turned toward a source on the left, a lens's first surface. Clear it to leave them bare, as the inner faces of a cavity are.");
+        }
+    }
+    if root.coating-shown: Row {
+        FormCheck {
+            checked <=> Form.coating.back;
+            colspan: 2;
+            text: @tr("Coat the back");
+            enabled: root.enabled;
+            tip: @tr("Put the band on the back: the faces turned away from a source on the left, a lens's second surface. Clear it to leave them bare.");
+        }
+    }
+    if root.coating-shown && !root.back-only && !root.sides-hidden: Row {
+        FormCheck {
+            checked <=> Form.coating.sides;
+            colspan: 2;
+            text: @tr("Coat the sides");
+            enabled: root.enabled;
+            tip: @tr("Put the band on the sides: the faces that are neither front nor back, a lens's rim, a slab's narrow ends. Clear it to leave them bare.");
+        }
+    }
+    if root.absorption-shown: Row {
+        FormLabel {
+            text: @tr("Absorption");
+            tip: @tr("How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it.");
+        }
+        FormInt {
+            value <=> Form.material.absorption;
+            spec: { min: 0, max: 255, increment: 5, decimals: -1 };
+            enabled: root.enabled;
+            tip: @tr("How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it.");
+        }
+    }
+    if root.absorption-shown: Row {
+        FormLabel {
+            text: @tr("Absorption ramp");
+            tip: @tr("Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle.");
+        }
+        FormInt {
+            value <=> Form.material.absorption-ramp;
+            spec: { min: 1, max: 400, increment: 5, decimals: -1 };
+            enabled: root.enabled;
+            tip: @tr("Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle.");
+        }
+    }
+}
+
+// The shared Material section: mirror or glass, the index, the coating and the absorption. A kind's form hides the
+// coating rows it lacks.
 component ShapeMaterial inherits VerticalLayout {
     in property <string> mirror-tip: @tr("Make the part a mirror instead of glass. The refractive index, the coating and the absorption are ignored then.");
     in property <bool> coating-shown: true;
@@ -865,7 +950,12 @@ component ShapeMaterial inherits VerticalLayout {
     in property <bool> sides-hidden;
     property <bool> glass: !Form.material.mirror;
     FormSection { text: @tr("Material"); }
-    FormPanel {
+    MaterialPanel {
+        enabled: root.glass;
+        coating-shown: root.coating-shown;
+        back-only: root.back-only;
+        sides-hidden: root.sides-hidden;
+        absorption-shown: true;
         Row {
             FormCheck {
                 checked <=> Form.material.mirror;
@@ -881,80 +971,6 @@ component ShapeMaterial inherits VerticalLayout {
                 spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
                 enabled: root.glass;
                 tip: @tr("Refractive index of the glass, 1.00 to 2.55 in steps of 0.01.");
-            }
-        }
-        if root.coating-shown: Row {
-            FormLabel {
-                text: @tr("AR coating");
-                tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
-            }
-            FormFloat {
-                value <=> Form.coating.depth;
-                spec: { min: 0, max: 50, increment: 1, decimals: -1 };
-                enabled: root.glass;
-                tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
-            }
-        }
-        if root.coating-shown: Row {
-            FormLabel {
-                text: @tr("Coating profile");
-                tip: @tr("How the index runs through the band: a layer at \u{221A}n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for.");
-            }
-            ProfileChoice {
-                value <=> Form.coating.profile;
-                enabled: root.glass;
-                tip: @tr("How the index runs through the band: a layer at \u{221A}n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for.");
-            }
-        }
-        if root.coating-shown && !root.back-only: Row {
-            FormCheck {
-                checked <=> Form.coating.front;
-                colspan: 2;
-                text: @tr("Coat the front");
-                enabled: root.glass;
-                tip: @tr("Put the band on the front: the faces turned toward a source on the left, a lens's first surface. Clear it to leave them bare, as the inner faces of a cavity are.");
-            }
-        }
-        if root.coating-shown: Row {
-            FormCheck {
-                checked <=> Form.coating.back;
-                colspan: 2;
-                text: @tr("Coat the back");
-                enabled: root.glass;
-                tip: @tr("Put the band on the back: the faces turned away from a source on the left, a lens's second surface. Clear it to leave them bare.");
-            }
-        }
-        if root.coating-shown && !root.back-only && !root.sides-hidden: Row {
-            FormCheck {
-                checked <=> Form.coating.sides;
-                colspan: 2;
-                text: @tr("Coat the sides");
-                enabled: root.glass;
-                tip: @tr("Put the band on the sides: the faces that are neither front nor back, a lens's rim, a slab's narrow ends. Clear it to leave them bare.");
-            }
-        }
-        Row {
-            FormLabel {
-                text: @tr("Absorption");
-                tip: @tr("How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it.");
-            }
-            FormInt {
-                value <=> Form.material.absorption;
-                spec: { min: 0, max: 255, increment: 5, decimals: -1 };
-                enabled: root.glass;
-                tip: @tr("How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it.");
-            }
-        }
-        Row {
-            FormLabel {
-                text: @tr("Absorption ramp");
-                tip: @tr("Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle.");
-            }
-            FormInt {
-                value <=> Form.material.absorption-ramp;
-                spec: { min: 1, max: 400, increment: 5, decimals: -1 };
-                enabled: root.glass;
-                tip: @tr("Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle.");
             }
         }
     }
@@ -1439,6 +1455,105 @@ export component ZonePlateForm inherits VerticalLayout {
                 text: Form.zone-plate.zones == 0 ? "\u{2013}" : "\u{2248} \{Form.zone-plate.outer-zone.to-fixed(1)} px";
                 tip: @tr("The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)");
             }
+        }
+    }
+}
+
+export component BraggReflectorForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A Bragg reflector: pairs of layers of two indices stacked along the axis. It reflects strongly around the wavelength the layer thicknesses are tuned to, a quarter wave each, and passes others.");
+    }
+    FormSection { text: @tr("Layers"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Layer pairs"); tip: @tr("Number of layer pairs, 1 to 200."); }
+            FormInt { value <=> Form.bragg.pairs; spec: { min: 1, max: 200, increment: 1, decimals: 0 }; tip: @tr("Number of layer pairs, 1 to 200."); }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Thickness 1");
+                tip: @tr("Thickness of the first layer of each pair in pixels. A quarter-wave layer is \u{3BB} / (4 n) pixels thick.");
+            }
+            FormInt {
+                value <=> Form.bragg.thickness1;
+                spec: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
+                tip: @tr("Thickness of the first layer of each pair in pixels. A quarter-wave layer is \u{3BB} / (4 n) pixels thick.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Index 1"); tip: @tr("Refractive index of the first layer of each pair, 1.00 to 2.55 in steps of 0.01."); }
+            FormFloat {
+                value <=> Form.bragg.index1;
+                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                tip: @tr("Refractive index of the first layer of each pair, 1.00 to 2.55 in steps of 0.01.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Thickness 2");
+                tip: @tr("Thickness of the second layer of each pair in pixels. A quarter-wave layer is \u{3BB} / (4 n) pixels thick.");
+            }
+            FormInt {
+                value <=> Form.bragg.thickness2;
+                spec: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
+                tip: @tr("Thickness of the second layer of each pair in pixels. A quarter-wave layer is \u{3BB} / (4 n) pixels thick.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Index 2"); tip: @tr("Refractive index of the second layer of each pair, 1.00 to 2.55 in steps of 0.01."); }
+            FormFloat {
+                value <=> Form.bragg.index2;
+                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                tip: @tr("Refractive index of the second layer of each pair, 1.00 to 2.55 in steps of 0.01.");
+            }
+        }
+    }
+    FormSection { text: @tr("Shape"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Width"); tip: @tr("Extent of the stack across the axis in pixels."); }
+            FormInt { value <=> Form.bragg.width; spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 }; tip: @tr("Extent of the stack across the axis in pixels."); }
+        }
+    }
+}
+
+export component GrinLensForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A gradient-index lens: a rectangle whose index falls from the axis to the edge in a parabolic profile, so it focuses like a lens with flat faces.");
+    }
+    FormSection { text: @tr("Material"); }
+    MaterialPanel {
+        Row {
+            FormLabel { text: @tr("Centre index"); tip: @tr("Refractive index on the axis, 1.00 to 2.55 in steps of 0.01."); }
+            FormFloat {
+                value <=> Form.grin.centre-index;
+                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                tip: @tr("Refractive index on the axis, 1.00 to 2.55 in steps of 0.01.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Edge index");
+                tip: @tr("Refractive index at the edge, 1.00 to 2.55 in steps of 0.01. The profile between the axis and the edge is parabolic.");
+            }
+            FormFloat {
+                value <=> Form.grin.edge-index;
+                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                tip: @tr("Refractive index at the edge, 1.00 to 2.55 in steps of 0.01. The profile between the axis and the edge is parabolic.");
+            }
+        }
+    }
+    FormSection { text: @tr("Shape"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Length"); tip: @tr("Extent along the axis in pixels."); }
+            FormInt { value <=> Form.grin.length; spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 }; tip: @tr("Extent along the axis in pixels."); }
+        }
+        Row {
+            FormLabel { text: @tr("Diameter"); tip: @tr("Extent across the axis in pixels."); }
+            FormInt { value <=> Form.grin.diameter; spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 }; tip: @tr("Extent across the axis in pixels."); }
         }
     }
 }

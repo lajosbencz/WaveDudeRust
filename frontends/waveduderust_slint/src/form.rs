@@ -175,6 +175,8 @@ data! {
 	PolygonData = m::Polygon { sides, side }
 	LensData = Lens { diameter, r1, r2, thickness }
 	FresnelData = m::FresnelLens { zones, division }
+	BraggData = m::BraggReflector { pairs, thickness1, index1, thickness2, index2, width }
+	GrinData = m::GrinLens { centre_index, edge_index, length, diameter }
 	DiffuserData = m::Diffuser { length, width, center_wavelength, amplitude, sigma }
 	ZonePlateData = m::ZonePlate { mount, mount_width, diameter, thickness, coating, design_frequency, focal_length, inverse }
 	PointData = Point { x, y }
@@ -206,6 +208,8 @@ pub(crate) fn kind(project: &Project, node: Node) -> FormKind {
 			Some(PartKind::Outline(_)) => FormKind::Outline,
 			Some(PartKind::Diffuser(_)) => FormKind::Diffuser,
 			Some(PartKind::ZonePlate(_)) => FormKind::ZonePlate,
+			Some(PartKind::BraggReflector(_)) => FormKind::BraggReflector,
+			Some(PartKind::GrinLens(_)) => FormKind::GrinLens,
 			_ => FormKind::None,
 		},
 		Node::Project => FormKind::Project,
@@ -341,6 +345,11 @@ fn show_part(form: &Form<'_>, project: &Project, part: &Part) {
 			put(form.get_lens(), lens_data(&f.lens, f.zones, f.division), |d| form.set_lens(d));
 			put(form.get_fresnel(), Data::show(f), |d| form.set_fresnel(d));
 		}
+		PartKind::BraggReflector(b) => put(form.get_bragg(), Data::show(b), |d| form.set_bragg(d)),
+		PartKind::GrinLens(g) => {
+			put(form.get_coating(), Data::show(&g.coating), |d| form.set_coating(d));
+			put(form.get_grin(), Data::show(g), |d| form.set_grin(d));
+		}
 		PartKind::Diffuser(d) => {
 			let profile = d.profile(&part.base.name, project.seed);
 			let (low, high) =
@@ -445,6 +454,11 @@ fn apply_part(form: &Form<'_>, part: &mut Part) {
 			form.get_fresnel().apply(&Data::show(&*f), f);
 		}
 		PartKind::Diffuser(d) => form.get_diffuser().apply(&Data::show(&*d), d),
+		PartKind::BraggReflector(b) => form.get_bragg().apply(&Data::show(&*b), b),
+		PartKind::GrinLens(g) => {
+			form.get_coating().apply(&Data::show(&g.coating), &mut g.coating);
+			form.get_grin().apply(&Data::show(&*g), g);
+		}
 		PartKind::ZonePlate(z) => form.get_zone_plate().apply(&Data::show(&*z), z),
 		PartKind::Outline(o) => {
 			for (point, data) in o.points.iter_mut().zip(form.get_points().iter()) {

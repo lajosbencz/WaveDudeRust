@@ -108,6 +108,10 @@ msgstr "Laplace 4. Ordnung"
 msgid "A 2D wave simulator"
 msgstr "Ein 2D-Wellensimulator"
 
+#. Kind.BraggReflectorPart
+msgid "A Bragg reflector: pairs of layers of two indices stacked along the axis. It reflects strongly around the wavelength the layer thicknesses are tuned to, a quarter wave each, and passes others."
+msgstr "Ein Bragg-Reflektor: Paare von Schichten zweier Indizes, entlang der Achse gestapelt. Er reflektiert stark um die Wellenlänge, auf die die Schichtdicken abgestimmt sind, je eine Viertelwelle, und lässt andere durch."
+
 #. Kind.FresnelLensPart
 msgid "A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, equal in width or in depth, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and their division; a flat surface stays flat."
 msgstr "Eine Fresnel-Linse: eine Linse, deren gekrümmte Flächen von der Achse bis zum Rand in Zonen geschnitten sind, gleich breit oder gleich tief, wobei der Bogen jeder Zone auf der Scheitelebene neu beginnt, sodass eine dünne Platte das Licht wie eine dicke Linse bricht. Die Einstellungen sind die der Linse, dazu die Zahl der Zonen und ihre Teilung; eine ebene Fläche bleibt eben."
@@ -119,6 +123,10 @@ msgstr "Ein Diffusor: eine Platte aus Glas oder als Spiegel mit rauer Vorderseit
 #. Kind.OutlinePart
 msgid "A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing."
 msgstr "Ein freier Umriss aus Glas oder als Spiegel: eine geschlossene Form durch die Punkte, die Sie setzen und ziehen; weniger als drei malen nichts."
+
+#. Kind.GrinLensPart
+msgid "A gradient-index lens: a rectangle whose index falls from the axis to the edge in a parabolic profile, so it focuses like a lens with flat faces."
+msgstr "Eine Gradientenindex-Linse: ein Rechteck, dessen Index von der Achse zum Rand parabolisch abfällt, sodass es wie eine Linse mit ebenen Flächen fokussiert."
 
 #. Kind.LensPart
 msgid "A lens or a mirror: a strip of the diameter between two spherical surfaces, each bulging outward, flat or hollow by the sign of its radius, the centre thickness apart. As a mirror it reflects everything; as a lens it refracts by its index, with an anti-reflection coating and absorption if wanted."
@@ -348,6 +356,10 @@ msgstr "Abbrechen"
 msgid "Canvas"
 msgstr "Leinwand"
 
+#. Label.GrinLensPart.CentreIndex
+msgid "Centre index"
+msgstr "Index auf der Achse"
+
 #. Label.LensPart.Thickness
 msgid "Centre thickness"
 msgstr "Mittendicke"
@@ -576,6 +588,10 @@ msgstr "Die Phase jedes Strahlers wird um bis zu ± so viele Grad versetzt. 0 sc
 msgid "Each gap between bursts is offset by up to ± this many cycles, re-drawn every period. 0 turns it off."
 msgstr "Jede Lücke zwischen Pulsen wird um bis zu ± so viele Perioden versetzt, jede Periode neu gezogen. 0 schaltet es ab."
 
+#. Label.GrinLensPart.EdgeIndex
+msgid "Edge index"
+msgstr "Index am Rand"
+
 #. LabelEdgeThickness
 msgid "Edge thickness"
 msgstr "Randdicke"
@@ -735,6 +751,10 @@ msgstr "Ausdehnung entlang der Achse in Pixeln: die Tiefe der Blöcke. Sie sollt
 #. Hint.DiffuserPart.Length
 msgid "Extent along the axis in pixels: the plate's thickness at the mean of its rough face."
 msgstr "Ausdehnung entlang der Achse in Pixeln: die Dicke der Platte am Mittel ihrer rauen Fläche."
+
+#. Hint.BraggReflectorPart.Width
+msgid "Extent of the stack across the axis in pixels."
+msgstr "Ausdehnung des Stapels quer zur Achse in Pixeln."
 
 #. Enum.ProbeBoxSize.ExtraLarge
 msgid "Extra large"
@@ -924,6 +944,14 @@ msgstr "Quelle in Läufe einbeziehen (Leertaste auf der Zeile schaltet um)"
 msgid "Include the source in simulation runs."
 msgstr "Die Quelle in Simulationsläufe einbeziehen."
 
+#. Label.BraggReflectorPart.Index1
+msgid "Index 1"
+msgstr "Index 1"
+
+#. Label.BraggReflectorPart.Index2
+msgid "Index 2"
+msgstr "Index 2"
+
 #. Enum.ProbeMeasurement.IntegratedValue
 msgid "Integrated value"
 msgstr "Integrierter Wert"
@@ -987,6 +1015,14 @@ msgstr "Den Leuchtkanten-Umriss des Szenenbilds in der Vorschau über diese Ausg
 #. Label.Probe.Layer
 msgid "Layer"
 msgstr "Ebene"
+
+#. Label.BraggReflectorPart.Pairs
+msgid "Layer pairs"
+msgstr "Schichtpaare"
+
+#. SectionLayers
+msgid "Layers"
+msgstr "Schichten"
 
 #. Hint.Probe.BoxX
 msgid "Left edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on."
@@ -1179,6 +1215,10 @@ msgstr "Anzahl der Strahler nebeneinander. Ungerade Anzahlen halten den mittlere
 #. Hint.SourceArray.SizeY
 msgid "Number of emitters down."
 msgstr "Anzahl der Strahler untereinander."
+
+#. Hint.BraggReflectorPart.Pairs
+msgid "Number of layer pairs, 1 to 200."
+msgstr "Anzahl der Schichtpaare, 1 bis 200."
 
 #. Label.PolygonPart.Sides
 msgid "Number of sides"
@@ -1480,13 +1520,29 @@ msgstr "Reflektierend"
 msgid "Refractive index"
 msgstr "Brechungsindex"
 
+#. Hint.GrinLensPart.EdgeIndex
+msgid "Refractive index at the edge, 1.00 to 2.55 in steps of 0.01. The profile between the axis and the edge is parabolic."
+msgstr "Brechungsindex am Rand, 1,00 bis 2,55 in Schritten von 0,01. Das Profil zwischen Achse und Rand ist parabolisch."
+
 #. Hint.Scene.RefractiveIndex
 msgid "Refractive index of a blank canvas, 1.0 to 2.55. The wave speed is 1/n cells per step."
 msgstr "Brechungsindex einer leeren Leinwand, 1,0 bis 2,55. Die Wellengeschwindigkeit beträgt 1/n Zellen pro Schritt."
 
+#. Hint.BraggReflectorPart.Index1
+msgid "Refractive index of the first layer of each pair, 1.00 to 2.55 in steps of 0.01."
+msgstr "Brechungsindex der ersten Schicht jedes Paars, 1,00 bis 2,55 in Schritten von 0,01."
+
 #. Hint.LensPart.RefractiveIndex
 msgid "Refractive index of the glass, 1.00 to 2.55 in steps of 0.01."
 msgstr "Brechungsindex des Glases, 1,00 bis 2,55 in Schritten von 0,01."
+
+#. Hint.BraggReflectorPart.Index2
+msgid "Refractive index of the second layer of each pair, 1.00 to 2.55 in steps of 0.01."
+msgstr "Brechungsindex der zweiten Schicht jedes Paars, 1,00 bis 2,55 in Schritten von 0,01."
+
+#. Hint.GrinLensPart.CentreIndex
+msgid "Refractive index on the axis, 1.00 to 2.55 in steps of 0.01."
+msgstr "Brechungsindex auf der Achse, 1,00 bis 2,55 in Schritten von 0,01."
 
 #. MenuProjectRemove
 msgid "Remove"
@@ -1780,6 +1836,14 @@ msgstr "Design"
 msgid "Thickness"
 msgstr "Dicke"
 
+#. Label.BraggReflectorPart.Thickness1
+msgid "Thickness 1"
+msgstr "Dicke 1"
+
+#. Label.BraggReflectorPart.Thickness2
+msgid "Thickness 2"
+msgstr "Dicke 2"
+
 #. TipEdgeThickness
 msgid "Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim"
 msgstr "Dicke am Rand: die Mittendicke abzüglich dessen, was die konvexen Flächen nehmen, zuzüglich dessen, was die konkaven hinzufügen; 0, wenn sich die Flächen am Rand treffen"
@@ -1791,6 +1855,14 @@ msgstr "Dicke des absorbierenden Rahmens in Pixeln: positiv innerhalb der Leinwa
 #. Hint.LensPart.Coating
 msgid "Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is λ / (4 √n) pixels thick, λ being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on."
 msgstr "Dicke in Pixeln des entspiegelnden Bands direkt innerhalb des Umrisses; 0 für keines. Eine λ/4-Schicht ist λ / (4 √n) Pixel dick, λ die Wellenlänge aus dem Quellenformular; ein graduelles Band ist ab einer Wellenlänge umso besser, je dicker es ist."
+
+#. Hint.BraggReflectorPart.Thickness1
+msgid "Thickness of the first layer of each pair in pixels. A quarter-wave layer is λ / (4 n) pixels thick."
+msgstr "Dicke der ersten Schicht jedes Paars in Pixeln. Eine λ/4-Schicht ist λ / (4 n) Pixel dick."
+
+#. Hint.BraggReflectorPart.Thickness2
+msgid "Thickness of the second layer of each pair in pixels. A quarter-wave layer is λ / (4 n) pixels thick."
+msgstr "Dicke der zweiten Schicht jedes Paars in Pixeln. Eine λ/4-Schicht ist λ / (4 n) Pixel dick."
 
 #. SectionTiming
 msgid "Timing"

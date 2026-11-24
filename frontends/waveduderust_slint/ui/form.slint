@@ -2,7 +2,7 @@ import { CheckBox, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
 import { Icon } from "icons.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
-import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, PointData } from "data.slint";
+import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, PointData } from "data.slint";
 
 // The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
 export global Form {
@@ -29,6 +29,8 @@ export global Form {
     in-out property <FresnelData> fresnel;
     in-out property <DiffuserData> diffuser;
     in-out property <ZonePlateData> zone-plate;
+    in-out property <BraggData> bragg;
+    in-out property <GrinData> grin;
     in property <[PointData]> points;
     // text a number box could not read, shown until the next edit or another object
     in-out property <string> invalid;

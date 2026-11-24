@@ -856,19 +856,19 @@ Not-in-spec rows are marked in the Spec column.
 | P-240 | Fibre nodes: In InX NB, InY NB | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-241 | Fibre nodes: Out OutX NB, OutY NB | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-242 | Fibre nodes: Add node button (continues path) | Views/FiberPathView.xaml:38-87 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-243 | Bragg reflector: Layer pairs NB 1..200 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-244 | Bragg reflector: Thickness 1 NB min 1 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-245 | Bragg reflector: Index 1 NB 1..2.55 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-246 | Bragg reflector: Thickness 2 NB min 1 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-247 | Bragg reflector: Index 2 NB 1..2.55 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-248 | Bragg reflector: Width NB min 2 step 10 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-249 | GRIN lens: Centre index NB 1..2.55 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-250 | GRIN lens: Edge index NB 1..2.55 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-251 | GRIN lens: AR coating NB 0..50 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-252 | GRIN lens: Coating profile combo | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-253 | GRIN lens: Coat front/back/sides CB | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-254 | GRIN lens: Length NB min 1 step 10 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-255 | GRIN lens: Diameter NB min 2 step 10 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-243 | Bragg reflector: Layer pairs NB 1..200 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint BraggReflectorForm |
+| P-244 | Bragg reflector: Thickness 1 NB min 1 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint BraggReflectorForm |
+| P-245 | Bragg reflector: Index 1 NB 1..2.55 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint BraggReflectorForm |
+| P-246 | Bragg reflector: Thickness 2 NB min 1 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint BraggReflectorForm |
+| P-247 | Bragg reflector: Index 2 NB 1..2.55 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint BraggReflectorForm |
+| P-248 | Bragg reflector: Width NB min 2 step 10 | Views/BraggReflectorPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint BraggReflectorForm |
+| P-249 | GRIN lens: Centre index NB 1..2.55 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint GrinLensForm |
+| P-250 | GRIN lens: Edge index NB 1..2.55 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint GrinLensForm |
+| P-251 | GRIN lens: AR coating NB 0..50 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint GrinLensForm |
+| P-252 | GRIN lens: Coating profile combo | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint GrinLensForm |
+| P-253 | GRIN lens: Coat front/back/sides CB | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint GrinLensForm |
+| P-254 | GRIN lens: Length NB min 1 step 10 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint GrinLensForm |
+| P-255 | GRIN lens: Diameter NB min 2 step 10 | Views/GrinLensPartView.xaml:34 | 30 Kind-specific forms | done | forms.slint GrinLensForm |
 | P-256 | Zone plate: Target frequency NB 1..255 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
 | P-257 | Zone plate: Wavelength RO | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
 | P-258 | Zone plate: Focal length NB min 1 step 10 | Views/ZonePlatePartView.xaml:39 | 30 Kind-specific forms | done | forms.slint ZonePlateForm |
