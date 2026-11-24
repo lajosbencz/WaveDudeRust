@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 7 | 11 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 272 | 33 | 18 | 2 | 0 |
+| P | Properties | 277 | 31 | 15 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 445 | 232 | 314 | 98 | 6 |
+| | All | 450 | 230 | 311 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -651,10 +651,10 @@ Not-in-spec rows are marked in the Spec column.
 | P-35 | Validation message for bad input | n/a (Rust) | 30 not itemised | partial | single red error line below form: 'x is no number', EditError text |
 | P-36 | Check box (live toggle) | Themes/Editors.xaml | 30 Check box | done | CheckBox row |
 | P-37 | Combo box fills editor column, never narrower than widest word | Themes/Editors.xaml (EnumComboBox) | 30 Check box, combo box | partial | stretches; min 40px |
-| P-38 | Colour scheme picker combo: project schemes first (tag 'project', grey), shipped+user of layer kind, gradient strip + name | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing | scheme is a text/choice cell |
-| P-39 | Colour scheme picker: '<name> (not found)' greyed | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing |  |
+| P-38 | Colour scheme picker combo: project schemes first (tag 'project', grey), shipped+user of layer kind, gradient strip + name | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | scheme-combo.slint SchemeRow/SchemeCombo; form.rs layer_schemes |
+| P-39 | Colour scheme picker: '<name> (not found)' greyed | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | SchemeEntry.missing, first row |
 | P-40 | Colour scheme picker action: Load from file... (.wdscheme/.json), slims sampled tables | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing |  |
-| P-41 | Colour scheme picker action: Edit a copy in the project... | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing |  |
+| P-41 | Colour scheme picker action: Edit a copy in the project... | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | form.rs find_scheme; main.rs on_edit_scheme_copy |
 | P-42 | Colour scheme picker action: Remove from my schemes (user scheme only) | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing |  |
 | P-43 | Colour swatch button opens picker popup below | Controls/ColorPickerButton.cs | 30 Colour swatch button; 70 | done | color-picker.slint ColorSwatch |
 | P-44 | Link toggle (chain) between two number boxes, accent underline on focus | Themes/Editors.xaml | 30 Link toggle | done | FormLink: chain-linked/chain-parted icons, accent while linked, accent border on focus, Space toggles; centred across both rows |
@@ -689,14 +689,14 @@ Not-in-spec rows are marked in the Spec column.
 | P-73 | Simulation: Intensity scale NB 1e-7..1e6 step 0.1 | Views/SimulationView.xaml:52-53 | 30 Simulation | done | number box 1e-7..1e6 step 0.1 |
 | P-74 | Simulation: 4th-order Laplacian check box (full width) | Views/SimulationView.xaml:40 | 30 Simulation | done | FormCheck over the Stencil word: FourthOrder checked, NinePoint not |
 | P-75 | Simulation: sections Run / Solver | Views/SimulationView.xaml:29-42 | 30 Simulation | done | FormSection Run (key SectionRun), Solver |
-| P-76 | Display Field: Colour scheme picker (gradient swatch 56x12 + name, layer kind) | Views/DisplayLayerView.xaml:30-32 | 30 Display layer | partial | a text box for the scheme's name (FormText); the picker with its swatches comes later in piece 4 |
+| P-76 | Display Field: Colour scheme picker (gradient swatch 56x12 + name, layer kind) | Views/DisplayLayerView.xaml:30-32 | 30 Display layer | done | DisplayLayerForm SchemeCombo, Field kind |
 | P-77 | Display Field: Brightness NB logarithmic 0.0001..100000 | Views/DisplayLayerView.xaml:36-37 | 30 Display layer | done | number box, logarithmic 0.0001..100000 |
 | P-78 | Display Field: Black level NB -10..1 step 0.01 | Views/DisplayLayerView.xaml:39-40 | 30 Display layer | done | number box -10..1 step 0.01 |
 | P-79 | Display Field: Preview check box (shows picture; same as transport show toggle) | Views/DisplayLayerView.xaml:42 | 30 Display layer | done | FormCheck; the same field as the transport's show toggle |
 | P-80 | Display Field: Outline in the preview check box | Views/DisplayLayerView.xaml:45 | 30 Display layer | done | FormCheck |
 | P-81 | Display Field: Outline brightness NB 0..5 step 0.05 | Views/DisplayLayerView.xaml:47-48 | 30 Display layer | done | number box 0..5 step 0.05 |
 | P-82 | Display Field: Outline in the export check box | Views/DisplayLayerView.xaml:49 | 30 Display layer | done | FormCheck |
-| P-83 | Display Intensity: Colour scheme picker (gradient swatch 56x12 + name, layer kind) | Views/DisplayLayerView.xaml:30-32 | 30 Display layer | partial | a text box for the scheme's name (FormText); the picker with its swatches comes later in piece 4 |
+| P-83 | Display Intensity: Colour scheme picker (gradient swatch 56x12 + name, layer kind) | Views/DisplayLayerView.xaml:30-32 | 30 Display layer | done | DisplayLayerForm SchemeCombo, Intensity kind |
 | P-84 | Display Intensity: Brightness NB logarithmic 0.0001..100000 | Views/DisplayLayerView.xaml:36-37 | 30 Display layer | done | number box, logarithmic 0.0001..100000 |
 | P-85 | Display Intensity: Black level NB -10..1 step 0.01 | Views/DisplayLayerView.xaml:39-40 | 30 Display layer | done | number box -10..1 step 0.01 |
 | P-86 | Display Intensity: Preview check box (shows picture; same as transport show toggle) | Views/DisplayLayerView.xaml:42 | 30 Display layer | done | FormCheck; the same field as the transport's show toggle |

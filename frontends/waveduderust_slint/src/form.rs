@@ -716,11 +716,101 @@ pub(crate) fn show_bases(
 	if shown.len() == now.len() && shown.iter().zip(&now).all(|(a, b)| a == *b) {
 		return false;
 	}
-	let choices: Vec<ui::SchemeChoice> =
-		now.iter().map(|s| ui::SchemeChoice { name: s.name.as_str().into(), strip: strip(s) }).collect();
+	let choices: Vec<ui::SchemeChoice> = now
+		.iter()
+		.map(|s| ui::SchemeChoice { name: s.name.as_str().into(), strip: strip(s), ..Default::default() })
+		.collect();
 	form.set_bases(ModelRc::new(VecModel::from(choices)));
 	*shown = now.into_iter().cloned().collect();
 	true
+}
+
+/// The scheme `name` resolves to, the project's, the user's or a built-in one, and whether it is the project's.
+pub(crate) fn find_scheme<'a>(
+	project: &'a Project,
+	user: &'a SchemeStore,
+	name: &str,
+) -> Option<(&'a m::ColorScheme, bool)> {
+	use waveduderust::io::schemes::{built_in, find};
+	find(&project.color_schemes, name)
+		.map(|s| (s, true))
+		.or_else(|| find(&user.user, name).or_else(|| find(built_in(), name)).map(|s| (s, false)))
+}
+
+/// A Display layer picker's schemes: the project's, then the user's and the built-in ones of `kind` or of none, each
+/// name once, the user's before a built-in one of the same name; whether each is the project's.
+pub(crate) fn layer_schemes<'a>(
+	project: &'a Project,
+	user: &'a SchemeStore,
+	kind: m::SchemeKind,
+) -> Vec<(&'a m::ColorScheme, bool)> {
+	let mut schemes: Vec<(&m::ColorScheme, bool)> = project.color_schemes.iter().map(|s| (s, true)).collect();
+	let shared = user.user.iter().chain(waveduderust::io::schemes::built_in());
+	for s in shared.filter(|s| s.kind == kind || s.kind == m::SchemeKind::Unspecified) {
+		if !schemes.iter().any(|(t, own)| !own && t.name.eq_ignore_ascii_case(&s.name)) {
+			schemes.push((s, false));
+		}
+	}
+	schemes
+}
+
+/// What a layer picker shows: its schemes and the layer's scheme name.
+pub(crate) type LayerPicker = (Vec<(m::ColorScheme, bool)>, String);
+
+/// Shows layer `layer`'s picker when its schemes or its name changed since `shown`: a name no scheme has first, the
+/// copy action last.
+pub(crate) fn show_layer_schemes(
+	form: &Form<'_>,
+	project: &Project,
+	user: &SchemeStore,
+	view: &View,
+	layer: ui::Layer,
+	shown: &mut Option<LayerPicker>,
+) {
+	let (settings, kind) = match layer {
+		ui::Layer::Field => (&view.field, m::SchemeKind::Field),
+		_ => (&view.intensity, m::SchemeKind::Intensity),
+	};
+	let name = &settings.color_scheme;
+	let now = layer_schemes(project, user, kind);
+	if shown.as_ref().is_some_and(|(schemes, n)| {
+		n == name && schemes.len() == now.len() && schemes.iter().zip(&now).all(|(a, b)| a.0 == *b.0 && a.1 == b.1)
+	}) {
+		return;
+	}
+	let resolved = find_scheme(project, user, name).map(|(s, _)| s);
+	let mut current = now.iter().position(|(s, _)| resolved.is_some_and(|r| std::ptr::eq(*s, r)));
+	let mut choices: Vec<ui::SchemeChoice> = now
+		.iter()
+		.map(|(s, own)| ui::SchemeChoice {
+			name: s.name.as_str().into(),
+			strip: strip(s),
+			entry: if *own { ui::SchemeEntry::Project } else { ui::SchemeEntry::Scheme },
+		})
+		.collect();
+	if current.is_none() && !name.is_empty() {
+		choices.insert(
+			0,
+			ui::SchemeChoice { name: name.as_str().into(), entry: ui::SchemeEntry::Missing, ..Default::default() },
+		);
+		current = Some(0);
+	}
+	if resolved.is_some() {
+		choices.push(ui::SchemeChoice { entry: ui::SchemeEntry::EditCopy, ..Default::default() });
+	}
+	let current = current.map_or(-1, index);
+	let model = ModelRc::new(VecModel::from(choices));
+	match layer {
+		ui::Layer::Field => {
+			form.set_field_schemes(model);
+			form.set_field_scheme(current);
+		}
+		_ => {
+			form.set_intensity_schemes(model);
+			form.set_intensity_scheme(current);
+		}
+	}
+	*shown = Some((now.into_iter().map(|(s, own)| (s.clone(), own)).collect(), name.clone()));
 }
 
 /// The stop indices of `stops` in gradient order, stable.
@@ -930,6 +1020,24 @@ mod tests {
 		assert_eq!(stop_beside(&s, 2, 1), 1);
 		assert_eq!(stop_beside(&s, 1, 5), 1);
 		assert_eq!(stop_beside(&s, -1, 0), 0);
+	}
+
+	#[test]
+	fn a_layer_picker_lists_the_projects_then_the_shared_schemes_of_its_kind_once() {
+		let named = |name: &str, kind| m::ColorScheme::default().with_name(name.into()).with_kind(kind);
+		let mut project = Project::default();
+		project.color_schemes.push(named("Mine", m::SchemeKind::Intensity));
+		let user = SchemeStore {
+			user: vec![named("Inferno", m::SchemeKind::Field), named("Copper", m::SchemeKind::Intensity)],
+		};
+		let names: Vec<(&str, bool)> = layer_schemes(&project, &user, m::SchemeKind::Field)
+			.into_iter()
+			.map(|(s, own)| (s.name.as_str(), own))
+			.collect();
+		assert_eq!(names[..2], [("Mine", true), ("Inferno", false)]);
+		assert_eq!(names.iter().filter(|(n, _)| *n == "Inferno").count(), 1);
+		assert!(!names.iter().any(|(n, _)| *n == "Copper"));
+		assert_eq!(find_scheme(&project, &user, "mine").map(|(s, own)| (s.name.as_str(), own)), Some(("Mine", true)));
 	}
 
 	#[test]

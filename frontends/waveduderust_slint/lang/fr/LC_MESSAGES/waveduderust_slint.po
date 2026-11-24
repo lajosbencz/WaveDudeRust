@@ -2676,6 +2676,14 @@ msgstr "Largeur de zone"
 msgid "Zones"
 msgstr "Zones"
 
+#. PickerProjectTag
+msgid "project"
+msgstr "projet"
+
+#. PickerMissingFormat
+msgid "{} (not found)"
+msgstr "{} (introuvable)"
+
 #. ItemCountMany
 msgid "{} entries"
 msgstr "{} entrées"

@@ -1,19 +1,20 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icon } from "icons.slint";
-import { SchemeChoice } from "data.slint";
+import { SchemeChoice, SchemeEntry } from "data.slint";
 
-// A scheme's gradient strip and name.
+// A scheme's gradient strip and name, the project's own tagged; a missing name greyed, an action in italics.
 component SchemeRow inherits HorizontalLayout {
     in property <SchemeChoice> scheme;
+    property <bool> has-strip: root.scheme.entry == SchemeEntry.scheme || root.scheme.entry == SchemeEntry.project;
     spacing: 6px;
     Rectangle {
         width: 56px;
         height: 12px;
         y: (parent.height - self.height) / 2;
-        border-width: 0.5px;
+        border-width: root.has-strip ? 0.5px : 0;
         border-color: Theme.border;
-        Image {
+        if root.has-strip: Image {
             width: parent.width;
             height: parent.height;
             source: root.scheme.strip;
@@ -21,10 +22,19 @@ component SchemeRow inherits HorizontalLayout {
         }
     }
     Text {
-        text: root.scheme.name;
+        horizontal-stretch: 1;
+        text: root.scheme.entry == SchemeEntry.missing ? @tr("{} (not found)", root.scheme.name)
+            : root.scheme.entry == SchemeEntry.edit-copy ? @tr("Edit a copy in the project...") : root.scheme.name;
         vertical-alignment: center;
         overflow: elide;
-        color: Theme.text;
+        font-italic: root.scheme.entry == SchemeEntry.edit-copy;
+        color: root.scheme.entry == SchemeEntry.missing ? Theme.text-dim : Theme.text;
+    }
+    if root.scheme.entry == SchemeEntry.project: Text {
+        text: @tr("project");
+        vertical-alignment: center;
+        font-size: 0.85rem;
+        color: Theme.text-dim;
     }
 }
 
@@ -100,7 +110,7 @@ component SchemeList inherits Rectangle {
 }
 
 // A combo box of schemes, each a gradient strip and a name; `current` -1 shows none. Space, Enter or Alt+Down opens
-// it, Up and Down step through the schemes while it is closed.
+// it, Up and Down step through the schemes while it is closed, past a missing name and an action.
 export component SchemeCombo inherits FocusScope {
     in property <[SchemeChoice]> choices;
     in property <int> current: -1;
@@ -111,9 +121,12 @@ export component SchemeCombo inherits FocusScope {
             popup.show();
         }
     }
-    function pick(i: int) {
-        if (i >= 0 && i < root.choices.length) {
-            root.picked(i);
+    // the schemes' rows: a missing name comes first, an action last
+    property <int> first: root.choices.length > 0 && root.choices[0].entry == SchemeEntry.missing ? 1 : 0;
+    property <int> last: root.choices.length - (root.choices.length > 0 && root.choices[root.choices.length - 1].entry == SchemeEntry.edit-copy ? 2 : 1);
+    function step(i: int) {
+        if (root.last >= root.first) {
+            root.picked(clamp(i, root.first, root.last));
         }
     }
 
@@ -128,11 +141,11 @@ export component SchemeCombo inherits FocusScope {
             return accept;
         }
         if (e.text == Key.UpArrow) {
-            root.pick(max(0, root.current - 1));
+            root.step(root.current - 1);
             return accept;
         }
         if (e.text == Key.DownArrow) {
-            root.pick(min(root.choices.length - 1, root.current + 1));
+            root.step(root.current < 0 ? root.first : root.current + 1);
             return accept;
         }
         reject
@@ -171,7 +184,7 @@ export component SchemeCombo inherits FocusScope {
             choices: root.choices;
             current: root.current;
             picked(i) => {
-                root.pick(i);
+                root.picked(i);
                 popup.close();
             }
             close => { popup.close(); }

@@ -2,7 +2,7 @@ import { CheckBox, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
 import { Icon } from "icons.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
-import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, FiberData, FiberNodeData, SchemeData, StopData, SchemeChoice, PointData } from "data.slint";
+import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, FiberData, FiberNodeData, SchemeData, StopData, SchemeChoice, PointData, Layer } from "data.slint";
 
 // The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
 export global Form {
@@ -46,6 +46,13 @@ export global Form {
     in property <image> gradient;
     // the schemes Based on offers
     in property <[SchemeChoice]> bases;
+    // the Display layers' scheme pickers and the row each shows
+    in property <[SchemeChoice]> field-schemes;
+    in property <int> field-scheme: -1;
+    in property <[SchemeChoice]> intensity-schemes;
+    in property <int> intensity-scheme: -1;
+    // copies the layer's scheme into the project, points the layer at the copy and selects it
+    callback edit-scheme-copy(layer: Layer);
     callback base-on(index: int);
     // the scheme Based on copied last, shown until another object is; -1 for none
     in property <int> based-on: -1;

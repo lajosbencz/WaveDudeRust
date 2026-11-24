@@ -114,6 +114,9 @@ struct Shown {
 	// the stops the gradient bar shows, and whether the bar changed them since
 	stops: Vec<waveduderust::model::Stop>,
 	bar_edited: bool,
+	// the Display layers' pickers
+	field_schemes: Option<form::LayerPicker>,
+	intensity_schemes: Option<form::LayerPicker>,
 }
 
 /// Shows `rows` of the form `key`. The same form's rows are updated in place, and only those that changed, so the
@@ -269,6 +272,12 @@ impl State {
 			g.set_invalid("".into());
 		}
 		form::show(&g, &self.doc.project, &self.doc.view, node);
+		if node == Node::Display {
+			let (project, view, user) = (&self.doc.project, &self.doc.view, &self.schemes);
+			let shown = &mut self.typed_form;
+			form::show_layer_schemes(&g, project, user, view, ui::Layer::Field, &mut shown.field_schemes);
+			form::show_layer_schemes(&g, project, user, view, ui::Layer::Intensity, &mut shown.intensity_schemes);
+		}
 		// a pick names a base by its index, which another list makes another's
 		if let Node::Scheme(i) = node {
 			if form::show_bases(&g, &self.doc.project, &self.schemes, i, &mut self.typed_form.bases) {
@@ -1069,6 +1078,33 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			}
 			k
 		});
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.global::<ui::Form<'_>>().on_edit_scheme_copy(move |layer| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		let view = &mut s.doc.view;
+		let settings = if layer == ui::Layer::Field { &mut view.field } else { &mut view.intensity };
+		let Some((scheme, own)) = form::find_scheme(&s.doc.project, &s.schemes, &settings.color_scheme) else {
+			return;
+		};
+		let mut copy = scheme.clone();
+		if own {
+			copy.description = format!("copy of project scheme '{}'", scheme.name);
+		}
+		copy.name = format!("{} copy", scheme.name);
+		let mut at = 0;
+		s.doc.edit(|p| {
+			p.add_color_scheme(copy);
+			at = p.color_schemes.len() - 1;
+		});
+		let name = s.doc.project.color_schemes[at].name.clone();
+		tracing::info!("Colour scheme '{name}' copied into the project for editing");
+		let view = &mut s.doc.view;
+		let settings = if layer == ui::Layer::Field { &mut view.field } else { &mut view.intensity };
+		settings.color_scheme = name;
+		s.selection.set(Node::Scheme(at));
+		s.show(&app);
 	});
 	let weak = app.as_weak();
 	bar.on_marker_at(move |at, reach, selected| {
