@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 52 | 1 | 10 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 55 | 7 | 45 | 4 | 1 |
+| V | Preview | 59 | 7 | 41 | 4 | 1 |
 | L | Timeline, transport, status | 40 | 20 | 20 | 7 | 3 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 643 | 82 | 225 | 139 | 6 |
+| | All | 647 | 82 | 221 | 139 | 6 |
 
 ## Cross-cutting
 
@@ -970,8 +970,8 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-22 | Turned box edits upright while focused (click/Tab/context menu focus, select text, arrows/wheel step) | NumberBox.cs | 40 Header strip; 00 Turned brightness box TODO | missing | spec TODO |
 | V-23 | Turned unfocused box: arrows step, drag along strip scrubs | NumberBox.cs | 40 Header strip | missing | |
 | V-24 | Narrow strip: caption dropped first, then title ellipsis; 12 px min gap | HeaderStrip.cs | 40 Header strip | partial | the title elides; the caption is not dropped first |
-| V-25 | Edge line 1 px, blue #0000FF when damping rim outside canvas | PreviewPane.xaml:602-610 | 40 Edge line | missing | |
-| V-26 | Edge line red #FF0000 for reflective edges (rim wins over wall) | PreviewPane.xaml:602-610 | 40 Edge line | missing | |
+| V-25 | Edge line 1 px, blue #0000FF when damping rim outside canvas | PreviewPane.xaml:602-610 | 40 Edge line | done | Canvas.edge from Scene::has_rim: a 1 px blue line round the picture |
+| V-26 | Edge line red #FF0000 for reflective edges (rim wins over wall) | PreviewPane.xaml:602-610 | 40 Edge line | done | red with reflective edges and no rim |
 | V-27 | Edge line none for open edges / damping band inside | PreviewPane.xaml:602 | 40 Edge line | done | nothing drawn (trivially) |
 | V-28 | Edge line preview only, never exported | PreviewPane.xaml | 40 Edge line | done | nothing drawn |
 | V-29 | Zoom: wheel 1.25x per notch, min fit, max 64x, point under pointer fixed, shared by both pictures | none (no zoom in Next) | 40 Zoom | done | Canvas.zoom 1..64, 1.25x per notch about the pointer, centred while the picture fits; one view for both pictures |
@@ -980,9 +980,9 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-32 | Zoomed 16-bit picture rendered for visible window only | none | 40 Zoom | partial | the frame texture is scaled; not re-rendered for the visible window |
 | V-33 | Zoom is session state, kept across projects | none | 40 Zoom | done | zoom and centre live in the Canvas global, kept across projects |
 | V-34 | Picture changes only when frame for position arrives; never black/other frame | PreviewPane.xaml.cs:716 | 40 What a picture shows | done | live.rs poll draws stored frame only on tag change; request() resets `drawn` but images persist in window |
-| V-35 | Busy dim (black 45 pct) after 150 ms of frame computation | PreviewPane.xaml.cs:250,385; xaml:~655 | 40 What a picture shows | missing | |
-| V-36 | Busy spinner (3/4 ring, 1 turn/s), not hit-testable | PreviewPane.xaml Spinner | 40 What a picture shows | missing | |
-| V-37 | Overlay z-order: picture, outline, handles, graph boxes, busy dim | PreviewPane.xaml:612-660 | 40 What a picture shows | partial | picture, outlines, dots, lines, labels, handles; graph boxes and busy dim not yet |
+| V-35 | Busy dim (black 45 pct) after 150 ms of frame computation | PreviewPane.xaml.cs:250,385; xaml:~655 | 40 What a picture shows | done | Canvas.computing (the run steps, the position frame not stored); the Preview dims after 150 ms, lifts with the frame |
+| V-36 | Busy spinner (3/4 ring, 1 turn/s), not hit-testable | PreviewPane.xaml Spinner | 40 What a picture shows | done | preview.slint Spinner: a 3/4 ring, transform-rotation from animation-tick, no input |
+| V-37 | Overlay z-order: picture, outline, handles, graph boxes, busy dim | PreviewPane.xaml:612-660 | 40 What a picture shows | partial | picture, outlines, dots, lines, labels, handles, edge line, busy dim; graph boxes not yet |
 | V-38 | Scene outline (glowing edges) when enabled for layer | SceneBitmaps.cs, PreviewPane.xaml:620 | 40 What a picture shows | done | live.rs `edges` via Look (commit d1d244c) |
 | V-39 | 8-bit samples: palette indices at store resolution, brightness baked at run start | FramePresenter.cs | 40 8-bit vs 16-bit | partial | gpu.rs colours stored frame on GPU; sample-depth rules and brightness-edit-as-sim-edit not wired (no brightness control) |
 | V-40 | 16-bit samples: exact device-pixel render, box/bilinear resample, instant recolour on brightness | FramePresenter.cs | 40 8-bit vs 16-bit | partial | GPU render exists; render at device size and brightness recolour unverified/no control |

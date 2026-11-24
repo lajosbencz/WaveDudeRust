@@ -80,6 +80,8 @@ pub(crate) struct Shown {
 	pub(crate) step: Option<u64>,
 	/// The run is stepping or fitting.
 	pub(crate) running: bool,
+	/// The run is computing the frame of the position, which is not stored yet.
+	pub(crate) computing: bool,
 	/// A pending Auto's layer and brightness (`None`: nothing to fit).
 	pub(crate) fitted: Option<(Layer, Option<f64>)>,
 }
@@ -313,9 +315,11 @@ impl Live {
 			made: None,
 			step: None,
 			running: matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting),
+			computing: false,
 			fitted,
 		};
 		let stored = self.position as usize;
+		shown.computing = shown.running && !status.store.as_ref().is_some_and(|s| s.has(stored));
 		if let Some(store) = &status.store {
 			shown.made = store.count().checked_sub(1).and_then(|m| u32::try_from(m).ok());
 			shown.step = store.has(stored).then(|| store.step_of(stored));

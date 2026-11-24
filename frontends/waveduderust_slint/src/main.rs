@@ -182,6 +182,14 @@ impl State {
 		}
 		let canvas = app.global::<ui::Canvas<'_>>();
 		canvas.set_field_brightness(self.doc.view.field.brightness as f32);
+		let scene = &self.doc.project.scene;
+		canvas.set_edge(if scene.has_rim() {
+			ui::EdgeLine::Rim
+		} else if scene.edges == waveduderust::model::Edges::Reflective {
+			ui::EdgeLine::Wall
+		} else {
+			ui::EdgeLine::Open
+		});
 		canvas.set_intensity_brightness(self.doc.view.intensity.brightness as f32);
 		self.overlays.show(&app.global::<ui::Canvas<'_>>(), &self.doc.project, &self.doc.view, &self.selection);
 		let node = self.selection.current();
@@ -1333,6 +1341,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				app.set_intensity(image);
 			}
 			app.set_run_status(shown.status);
+			app.global::<ui::Canvas<'_>>().set_computing(shown.computing);
 		}
 	});
 	#[cfg(target_arch = "wasm32")]

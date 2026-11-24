@@ -7,6 +7,9 @@ export struct Rect { x: float, y: float, width: float, height: float }
 
 export enum HandleGlyph { source, lever, part, grip, point, bezier, probe }
 
+// what a wave meets at the canvas edge
+export enum EdgeLine { open, wall, rim }
+
 // keys on a picture: the focus arriving by Tab, Tab, Shift+Tab, arrows
 export enum HandleKey { enter, next, previous, left, right, up, down }
 
@@ -65,6 +68,9 @@ export global Canvas {
     // canvas pixels from the press; `shift` snaps a lever
     callback drag(dx: float, dy: float, shift: bool);
     callback release();
+    in property <EdgeLine> edge;
+    // the run computes the frame wanted, not stored yet
+    in property <bool> computing;
     // the layers' brightness (Display), its edits and Auto
     in property <float> field-brightness: 1;
     in property <float> intensity-brightness: 1;
