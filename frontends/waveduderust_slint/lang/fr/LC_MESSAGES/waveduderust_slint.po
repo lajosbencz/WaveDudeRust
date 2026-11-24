@@ -108,6 +108,22 @@ msgstr "Ajouter un élément à ce dossier"
 msgid "Add an optical part (a menu of kinds; appended at the end)"
 msgstr "Ajouter un composant optique (menu des types ; à la fin)"
 
+#. MenuProjectAddPart
+msgid "Add part"
+msgstr "Ajouter un composant"
+
+#. MenuProjectAddProbe
+msgid "Add probe"
+msgstr "Ajouter une sonde"
+
+#. MenuProjectAddSource
+msgid "Add source"
+msgstr "Ajouter une source"
+
+#. MenuProjectToggleSelected
+msgid "Add to or remove from selection"
+msgstr "Ajouter à la sélection ou en retirer"
+
 #. ButtonAutoBrightness
 msgid "Auto"
 msgstr "Auto"
@@ -164,6 +180,10 @@ msgstr "Réseaux de diffraction"
 msgid "Diffuser"
 msgstr "Diffuseur"
 
+#. MenuProjectDuplicate
+msgid "Duplicate"
+msgstr "Dupliquer"
+
 #. MenuFileExit
 msgid "E&xit"
 msgstr "&Quitter"
@@ -175,6 +195,10 @@ msgstr "Édition"
 #. MenuAddEllipse
 msgid "Ellipse"
 msgstr "Ellipse"
+
+#. MenuProjectToggleEnabled
+msgid "Enabled"
+msgstr "Activé"
 
 #. TipPreviewSetOut
 msgid "End the export range at this frame (O)"
@@ -332,9 +356,17 @@ msgstr "Métaprisme"
 msgid "Meta surfaces"
 msgstr "Métasurfaces"
 
+#. MenuProjectMoveDown
+msgid "Move down"
+msgstr "Descendre"
+
 #. TipMoveDown
 msgid "Move down (Alt+Down); drag to reorder"
 msgstr "Descendre (Alt+Bas) ; glisser pour réordonner"
+
+#. MenuProjectMoveUp
+msgid "Move up"
+msgstr "Monter"
 
 #. TipMoveUp
 msgid "Move up (Alt+Up); drag to reorder"
@@ -459,6 +491,10 @@ msgstr "Rectangle"
 #. MenuEditRedo
 msgid "Redo"
 msgstr "Rétablir"
+
+#. MenuProjectRemove
+msgid "Remove"
+msgstr "Supprimer"
 
 #. TipRemove
 msgid "Remove (Del)"

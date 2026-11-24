@@ -186,6 +186,8 @@ impl State {
 		let (nodes, rows) = tree::rows(&self.doc.project, &self.selection, &self.collapsed);
 		self.nodes = nodes;
 		app.set_tree_rows(ModelRc::new(VecModel::from(rows)));
+		let current = self.nodes.iter().position(|&n| n == self.selection.current());
+		app.set_tree_current(current.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1));
 		app.set_window_title(self.doc.title().into());
 		app.set_commands(self.commands());
 		// the native menus (muda) read `&` as an access key on Windows and drop it on macOS
@@ -237,6 +239,7 @@ impl State {
 			can_undo: self.doc.can_undo(),
 			can_redo: self.doc.can_redo(),
 			can_delete: self.node_exists(),
+			can_toggle: selection::groupable(self.selection.current()) && self.node_exists(),
 			can_select_all: !(self.doc.project.sources.is_empty()
 				&& self.doc.project.parts.is_empty()
 				&& self.doc.project.probes.is_empty()),
@@ -271,6 +274,13 @@ impl State {
 	fn node(&self, row: i32) -> Option<Node> {
 		usize::try_from(row).ok().and_then(|r| self.nodes.get(r).copied())
 	}
+}
+
+/// Moves the current row `by` places in its list, the selection following it.
+fn shift(state: &mut State, by: isize) {
+	let (node, mut to) = (state.selection.current(), state.selection.current());
+	state.doc.edit(|p| to = tree::shift(p, node, by));
+	state.selection.set(to);
 }
 
 /// Runs a menu action by its id (docs/ui/10).
@@ -411,11 +421,8 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			paste(state);
 		}
 		"delete" if state.commands().can_delete => remove(state, &state.selection.group()),
-		"move-up" | "move-down" if state.commands().can_delete => {
-			let (node, mut to) = (state.selection.current(), state.selection.current());
-			state.doc.edit(|p| to = tree::shift(p, node, if id == "move-up" { -1 } else { 1 }));
-			state.selection.set(to);
-		}
+		"move-up" if state.commands().can_move_up => shift(state, -1),
+		"move-down" if state.commands().can_move_down => shift(state, 1),
 		"duplicate" if state.commands().can_delete => {
 			let (group, mut copies) = (state.selection.group(), Vec::new());
 			state.doc.edit(|p| copies = tree::duplicate_all(p, &group));
@@ -423,7 +430,7 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 				state.selection.set_group(copies);
 			}
 		}
-		"toggle-enabled" if state.commands().can_delete => {
+		"toggle-enabled" if state.commands().can_toggle => {
 			let group = state.selection.group();
 			state.doc.edit(|p| group.iter().for_each(|&n| tree::toggle(p, n)));
 		}
@@ -791,6 +798,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		let pick = match pick {
 			1 => Pick::Toggle,
 			2 => Pick::Range,
+			3 => Pick::Focus,
 			_ => Pick::Alone,
 		};
 		if let Some(node) = s.node(row) {

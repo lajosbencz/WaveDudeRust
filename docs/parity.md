@@ -12,17 +12,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 5 | 20 | 9 | 6 | 0 |
-| M | Menus and shortcuts | 34 | 27 | 58 | 21 | 0 |
+| M | Menus and shortcuts | 37 | 26 | 47 | 30 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
-| T | Project tree | 25 | 19 | 25 | 32 | 0 |
+| T | Project tree | 25 | 19 | 21 | 36 | 0 |
 | P | Properties | 3 | 114 | 206 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 162 | 317 | 526 | 84 | 6 |
+| | All | 165 | 316 | 511 | 97 | 6 |
 
 ## Cross-cutting
 
@@ -164,22 +164,22 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | M-56 | Project page on GitHub (port), F1, opens github.com/lajosbencz/WaveDudeRust (system browser / new tab) | not in Next | ui/10 Help | done | "github" opens the repository URL in the system browser, a new tab on the web (webbrowser crate); F1 |
 | M-57 | Check for updates (port; builds with updater), Mn U/U/J/U | not in Next | ui/10 Help, ui/70 Updates | missing | entry removed: this build has no updater |
 
-#### M Context menus (all missing in Slint: no ContextMenu/PopupWindow in ui/*.slint; Apps key and Shift+F10 unhandled)
+#### M Context menus
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-58 | Tree row menu: Add source, Mn S/Q/R/B, icon U+E710 | PT:256, SE:148 | ui/10 Tree row | missing | no context menus |
-| M-59 | Tree row menu: Add part > submenu, Mn R/B/C/O | PT:257, SE:154 | ui/10 Tree row | missing | see M-71.. for kinds |
-| M-60 | Tree row menu: Add probe (Next: Add probe > Standard / Probabilistic > Counting, Imaging), Mn B/O/N/S | PT:258, PT:150-157, SE:149-153 | ui/10 Tree row; ui/20 l.19,165 | missing | ui/10 lists a single "Add probe"; ui/20 lists the kinds: spec inconsistent |
-| M-61 | Tree row menu: Add to or remove from selection, Ins, U+E762, Mn L/T/I/R | PT:260, SE:185 | ui/10 Tree row | missing | |
-| M-62 | Tree row menu: Select all, Ctrl+A, U+E8B3 | PT:261, SE:184 | ui/10 Tree row | missing | |
-| M-63 | Tree row menu: Enabled (Space), toggles Enabled/Active, group flips each | PT:263, SE:179 | ui/10 Tree row | missing | the row check box toggles (tree.slint:38-62) done; menu/keyboard Space missing |
-| M-64 | Tree row menu: Duplicate, Ctrl+D, U+F413, copy after each original, caret in last name | PT:264, SE:180 | ui/10 Tree row | missing | no duplicate action in main.rs/tree.rs |
-| M-65 | Tree row menu: Cut / Copy / Paste (no gesture text) | PT:265-267 | ui/10 Tree row | missing | clipboard not implemented (M-26..28) |
-| M-66 | Tree row menu: Remove, Del, U+E738 | PT:268, SE:181 | ui/10 Tree row | partial | row "-" button (tree.slint:75) and Del key remove one; no menu |
-| M-67 | Tree row menu: Move up Alt+Up U+E74A / Move down Alt+Down U+E74B, enabled where item can move | PT:270-271, SE:182-183 | ui/10 Tree row | partial | row up/down glyph buttons (tree.slint:73-74); Alt+Up/Down keys and menu missing |
-| M-68 | Tree probe row: Export probe data as CSV..., Mn X/X/V/G, active probe and no export running | PT:274-275, SE:48, ExportCommands ProbeCsv | ui/10 Tree row | missing | export.rs has no CSV export |
-| M-69 | Tree toolbar "+ Source", "+ Probe v", "+ Part v" buttons with icon+plus badge and drop-down arrow; Probe/Part open kind menu | PT:178-208, SE tips TipAddSource etc | ui/10 Add part, ui/20 | missing | tree.slint has no toolbar |
-| M-70 | Tree folder "+" buttons (Parts, Probes open kind menus) | PT:333-345 | ui/10 Add part, ui/20 | missing | |
+| M-58 | Tree row menu: Add source, Mn S/Q/R/B, icon U+E710 | PT:256, SE:148 | ui/10 Tree row | divergence | tree.slint rows-menu: Add source, add icon; no access keys or key hints (divergences.md Row menu) |
+| M-59 | Tree row menu: Add part > submenu, Mn R/B/C/O | PT:257, SE:154 | ui/10 Tree row | divergence | tree.slint rows-menu: Add part > Next's kinds (tree.slint AddKinds, shared with the toolbar); no access keys or key hints (divergences.md Row menu) |
+| M-60 | Tree row menu: Add probe (Next: Add probe > Standard / Probabilistic > Counting, Imaging), Mn B/O/N/S | PT:258, PT:150-157, SE:149-153 | ui/10 Tree row; ui/20 l.19,165 | divergence | tree.slint rows-menu: Add probe > Standard / Probabilistic > Counting, Imaging; no access keys or key hints (divergences.md Row menu) |
+| M-61 | Tree row menu: Add to or remove from selection, Ins, U+E762, Mn L/T/I/R | PT:260, SE:185 | ui/10 Tree row | divergence | tree.slint rows-menu: Add to or remove from selection, enabled on a source, part or probe; no access keys or key hints (divergences.md Row menu) |
+| M-62 | Tree row menu: Select all, Ctrl+A, U+E8B3 | PT:261, SE:184 | ui/10 Tree row | divergence | tree.slint rows-menu: Select all, enabled when there is an item; no access keys or key hints (divergences.md Row menu) |
+| M-63 | Tree row menu: Enabled (Space), toggles Enabled/Active, group flips each | PT:263, SE:179 | ui/10 Tree row | divergence | tree.slint rows-menu: Enabled flips each of the group; no access keys or key hints (divergences.md Row menu) |
+| M-64 | Tree row menu: Duplicate, Ctrl+D, U+F413, copy after each original, caret in last name | PT:264, SE:180 | ui/10 Tree row | divergence | tree.slint rows-menu: Duplicate, a copy after each original of the group; the caret is not put in Name (T-71); no access keys or key hints (divergences.md Row menu) |
+| M-65 | Tree row menu: Cut / Copy / Paste (no gesture text) | PT:265-267 | ui/10 Tree row | done | tree.slint rows-menu: Cut / Copy / Paste, no gesture text, as Next |
+| M-66 | Tree row menu: Remove, Del, U+E738 | PT:268, SE:181 | ui/10 Tree row | divergence | tree.slint rows-menu: Remove the group (tree::remove_all); no access keys or key hints (divergences.md Row menu) |
+| M-67 | Tree row menu: Move up Alt+Up U+E74A / Move down Alt+Down U+E74B, enabled where item can move | PT:270-271, SE:182-183 | ui/10 Tree row | divergence | tree.slint rows-menu: Move up / Move down, enabled where the item can move; no access keys or key hints (divergences.md Row menu) |
+| M-68 | Tree probe row: Export probe data as CSV..., Mn X/X/V/G, active probe and no export running | PT:274-275, SE:48, ExportCommands ProbeCsv | ui/10 Tree row | missing | the live run keeps no probe recordings yet (probe graphs piece); the core writes them (export/csv.rs) |
+| M-69 | Tree toolbar "+ Source", "+ Probe v", "+ Part v" buttons with icon+plus badge and drop-down arrow; Probe/Part open kind menu | PT:178-208, SE tips TipAddSource etc | ui/10 Add part, ui/20 | done | tree.slint AddButton x3 with the folder drawing and plus badge; Probe and Part open their menus of kinds (T-01..T-06) |
+| M-70 | Tree folder "+" buttons (Parts, Probes open kind menus) | PT:333-345 | ui/10 Add part, ui/20 | done | tree.slint row add button: Sources adds, Parts and Probes open their kind menus |
 
 #### M Add part menu (tree toolbar, folder plus, row menu)
 Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing in Slint (no add menu; no add-part action in tree.rs/main.rs).
@@ -227,7 +227,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
 | M-100 | F10 / lone Alt enters menu bar (Left/Right walk headers, Down/Enter/Space open, Esc back) | MW:216 (OnMenuPreviewKeyDown) | ui/10 Keys in menus | divergence | Windows' native bar has F10/Alt; Slint's drawn bar (Linux, web) has none (docs/blockers.md) |
-| M-101 | Apps / Shift+F10 opens context menu of the focused element | WPF default | ui/10 window-wide | missing | no context menus |
+| M-101 | Apps / Shift+F10 opens context menu of the focused element | WPF default | ui/10 window-wide | partial | the tree's row menu opens on Menu and Shift+F10 under the current row; other panes have no context menus |
 | M-102 | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S | MW:144-149,209-211 | ui/10 window-wide | done | app:95-103 |
 | M-103 | Alt+F4 exit | MW:32-36 | ui/10 | partial | OS-level; see M-20 |
 | M-104 | Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z undo/redo (text box: own) | EditCommands.cs:37,41 | ui/10 | partial | FocusScope app:166-168; behaviour while a LineEdit has focus not verified (FocusScope only receives unhandled keys) |
@@ -588,11 +588,11 @@ Not-in-spec rows are marked in the Spec column.
 | T-78 | Focused text box handles Cut/Copy/Paste for its text first | MainWindow.Clipboard.cs | 20 Clipboard; divergence Edit menu | divergence | divergences.md 'Edit menu' (0008 13) |
 | T-79 | Add to my schemes / Remove from my schemes (scheme rows, label follows existence) | n/a (Rust only) | 20 Commands | missing | divergences.md 'User colour schemes' (spec'd addition) |
 | T-80 | Export probe data as CSV (probe rows, active probes only; browser file-name box) | ProjectTree.xaml:273-275 | 20 Commands | missing | decision 0025 for browser |
-| T-81 | Context menu on any row (Add Source/Part/Probe submenus) | ProjectTree.xaml:248-259 | 20 (Commands) not itemised | missing | spec lists commands, no menu layout; Next shows Add entries with plus glyph |
-| T-82 | Context menu: Toggle selected (Ins), Select all (Ctrl+A) with automation ids | ProjectTree.xaml:260-261 | 20 Automation ids | missing |  |
-| T-83 | Context menu: Enabled (Space), Duplicate (Ctrl+D), Cut/Copy/Paste, Remove (Del), Move up/down (Alt+Up/Down) with glyphs | ProjectTree.xaml:263-271 | 20 Commands | missing |  |
-| T-84 | Context menu: Export probe CSV only on probe rows, own separator | ProjectTree.xaml:272-275 | 20 Commands | missing |  |
-| T-85 | Right-click row acts on selection or target (Explorer rule) | ProjectTree.xaml:252-254 | 20 Commands | missing |  |
+| T-81 | Context menu on any row (Add Source/Part/Probe submenus) | ProjectTree.xaml:248-259 | 20 (Commands) not itemised | divergence | tree.slint rows-menu on every row: Add source, Add part, Add probe submenus; no access keys or key hints (divergences.md Row menu) |
+| T-82 | Context menu: Toggle selected (Ins), Select all (Ctrl+A) with automation ids | ProjectTree.xaml:260-261 | 20 Automation ids | divergence | tree.slint rows-menu: Add to or remove from selection, Select all; no automation ids (decision 0032); no access keys or key hints (divergences.md Row menu) |
+| T-83 | Context menu: Enabled (Space), Duplicate (Ctrl+D), Cut/Copy/Paste, Remove (Del), Move up/down (Alt+Up/Down) with glyphs | ProjectTree.xaml:263-271 | 20 Commands | divergence | tree.slint rows-menu: Enabled, Duplicate, Cut/Copy/Paste, Remove, Move up/down with icons; no access keys or key hints (divergences.md Row menu) |
+| T-84 | Context menu: Export probe CSV only on probe rows, own separator | ProjectTree.xaml:272-275 | 20 Commands | missing | waits for probe recordings in the live run (M-68) |
+| T-85 | Right-click row acts on selection or target (Explorer rule) | ProjectTree.xaml:252-254 | 20 Commands | divergence | a right click on a row outside the selection selects it, then the menu acts on the selection (Explorer's rule); Next acts on the clicked row's group without moving the selection (divergences.md Row menu) |
 | T-86 | TreeView native keyboard: Up/Down/Left/Right/Home/End, expand/collapse by arrows | WPF TreeView | not in spec | missing | no arrow keys in tree FocusScope |
 | T-87 | Tree-row Tab order / focus ring of tree | ProjectTree.xaml:240 | 20 Toolbar (Tab order) | missing |  |
 | T-88 | Drag starts from a row (not buttons) after system threshold | ProjectTree.xaml.cs:396-411 | 20 Drag and drop | missing |  |

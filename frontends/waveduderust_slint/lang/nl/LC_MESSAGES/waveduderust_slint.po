@@ -108,6 +108,22 @@ msgstr "Item aan deze map toevoegen"
 msgid "Add an optical part (a menu of kinds; appended at the end)"
 msgstr "Optisch onderdeel toevoegen (menu met soorten; achteraan)"
 
+#. MenuProjectAddPart
+msgid "Add part"
+msgstr "Onderdeel toevoegen"
+
+#. MenuProjectAddProbe
+msgid "Add probe"
+msgstr "Sonde toevoegen"
+
+#. MenuProjectAddSource
+msgid "Add source"
+msgstr "Bron toevoegen"
+
+#. MenuProjectToggleSelected
+msgid "Add to or remove from selection"
+msgstr "Aan selectie toevoegen of eruit verwijderen"
+
 #. ButtonAutoBrightness
 msgid "Auto"
 msgstr "Auto"
@@ -164,6 +180,10 @@ msgstr "Buigingsroosters"
 msgid "Diffuser"
 msgstr "Diffusor"
 
+#. MenuProjectDuplicate
+msgid "Duplicate"
+msgstr "Dupliceren"
+
 #. MenuFileExit
 msgid "E&xit"
 msgstr "A&fsluiten"
@@ -175,6 +195,10 @@ msgstr "Bewerken"
 #. MenuAddEllipse
 msgid "Ellipse"
 msgstr "Ellips"
+
+#. MenuProjectToggleEnabled
+msgid "Enabled"
+msgstr "Ingeschakeld"
 
 #. TipPreviewSetOut
 msgid "End the export range at this frame (O)"
@@ -332,9 +356,17 @@ msgstr "Metaprisma"
 msgid "Meta surfaces"
 msgstr "Metasurfaces"
 
+#. MenuProjectMoveDown
+msgid "Move down"
+msgstr "Omlaag"
+
 #. TipMoveDown
 msgid "Move down (Alt+Down); drag to reorder"
 msgstr "Omlaag (Alt+Omlaag); slepen om te herschikken"
+
+#. MenuProjectMoveUp
+msgid "Move up"
+msgstr "Omhoog"
 
 #. TipMoveUp
 msgid "Move up (Alt+Up); drag to reorder"
@@ -459,6 +491,10 @@ msgstr "Rechthoek"
 #. MenuEditRedo
 msgid "Redo"
 msgstr "Opnieuw"
+
+#. MenuProjectRemove
+msgid "Remove"
+msgstr "Verwijderen"
 
 #. TipRemove
 msgid "Remove (Del)"

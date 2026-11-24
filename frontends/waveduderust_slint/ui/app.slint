@@ -30,6 +30,8 @@ export struct Commands {
     can-move-up: bool,
     // any source, part or probe
     can-select-all: bool,
+    // the current row is a source, a part or a probe
+    can-toggle: bool,
     can-move-down: bool,
     // an object or a settings row is selected
     can-copy: bool,
@@ -55,6 +57,8 @@ export component AppWindow inherits Window {
     // Newest first, full paths.
     in property <[string]> recent-files;
     in property <[TreeRow]> tree-rows;
+    // the current row's index among them, -1 when hidden
+    in property <int> tree-current;
     // the row and how: 0 alone, 1 toggled (Ctrl), 2 range (Shift)
     callback tree-select(int, int);
     callback tree-toggle(int);
@@ -249,6 +253,7 @@ export component AppWindow inherits Window {
                         close => { root.project-shown = false; }
                         ProjectTree {
                             rows: root.tree-rows;
+                            current-row: root.tree-current;
                             select(i, pick) => { root.tree-select(i, pick); }
                             toggle(i) => { root.tree-toggle(i); }
                             expand(i) => { root.tree-expand(i); }
@@ -257,6 +262,9 @@ export component AppWindow inherits Window {
                             can-move-up: root.commands.can-move-up;
                             can-move-down: root.commands.can-move-down;
                             can-remove: root.commands.can-delete;
+                            can-copy: root.commands.can-copy;
+                            can-select-all: root.commands.can-select-all;
+                            can-toggle: root.commands.can-toggle;
                             act(id) => { root.menu(id); }
                         }
                     }

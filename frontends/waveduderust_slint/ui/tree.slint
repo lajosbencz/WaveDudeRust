@@ -3,8 +3,55 @@ import { Theme } from "theme.slint";
 import { Icon, IconButton } from "icons.slint";
 import { MenuIcons } from "menu-icons.slint";
 
-// Next's menu of part kinds (ProjectTree.xaml, PartKindMenu): a click on its owner or a right click opens it under
-// the owner. Slint's menu entries take no tooltip, so the kinds' descriptions are not shown (docs/divergences.md).
+// An add menu's entry: an id for `tree::add`.
+struct AddKind {
+    title: string,
+    icon: image,
+    id: string,
+}
+
+// Next's menus of part and probe kinds (ProjectTree.xaml PartKindMenu, ProbeKindMenu), shared by the toolbar's menus
+// and the rows' menu. Slint's menu entries take no tooltip, so the kinds' descriptions are not shown
+// (docs/divergences.md, Add menus).
+global AddKinds {
+    out property <[AddKind]> parts: [
+        { title: @tr("Lens/Mirror"), icon: MenuIcons.next-lens, id: "part:lens" },
+        { title: @tr("Fresnel lens"), icon: MenuIcons.next-fresnel-lens, id: "part:fresnel-lens" },
+        { title: @tr("Fibre"), icon: MenuIcons.next-fiber, id: "part:fiber" },
+        { title: @tr("Bragg reflector"), icon: MenuIcons.next-bragg-reflector, id: "part:bragg-reflector" },
+        { title: @tr("GRIN lens"), icon: MenuIcons.next-grin-lens, id: "part:grin-lens" },
+        { title: @tr("Zone plate"), icon: MenuIcons.next-zone-plate, id: "part:zone-plate" },
+        { title: @tr("Diffuser"), icon: MenuIcons.next-diffuser, id: "part:diffuser" },
+        { title: @tr("Interference filter"), icon: MenuIcons.next-interference-filter, id: "part:interference-filter" },
+    ];
+    out property <[AddKind]> gratings: [
+        { title: @tr("Simple 2D grating"), icon: MenuIcons.next-simple-grating, id: "part:simple-grating" },
+        { title: @tr("Facetted grating"), icon: MenuIcons.next-facetted-grating, id: "part:facetted-grating" },
+    ];
+    out property <[AddKind]> meta: [
+        { title: @tr("Meta lens"), icon: MenuIcons.next-meta-lens, id: "part:meta-lens" },
+        { title: @tr("Meta prism"), icon: MenuIcons.next-meta-prism, id: "part:meta-prism" },
+        { title: @tr("Meta axicon"), icon: MenuIcons.next-meta-axicon, id: "part:meta-axicon" },
+    ];
+    out property <[AddKind]> shapes: [
+        { title: @tr("Polygon"), icon: MenuIcons.next-polygon, id: "part:polygon" },
+        { title: @tr("Rectangle"), icon: MenuIcons.next-rectangle, id: "part:rectangle" },
+        { title: @tr("Ellipse"), icon: MenuIcons.next-ellipse, id: "part:ellipse" },
+        { title: @tr("Triangle"), icon: MenuIcons.next-triangle, id: "part:triangle" },
+        { title: @tr("Outline"), icon: MenuIcons.next-outline, id: "part:outline" },
+    ];
+    out property <[AddKind]> logic: [
+        { title: @tr("XOR (Mach-Zehnder)"), icon: MenuIcons.next-xor-gate, id: "part:xor-gate" },
+        { title: @tr("AND"), icon: MenuIcons.next-and-gate, id: "part:and-gate" },
+        { title: @tr("OR"), icon: MenuIcons.next-or-gate, id: "part:or-gate" },
+    ];
+    out property <[AddKind]> detectors: [
+        { title: @tr("Counting detector"), icon: MenuIcons.next-counting-detector, id: "probe:counting" },
+        { title: @tr("Imaging detector"), icon: MenuIcons.next-imaging-detector, id: "probe:imaging" },
+    ];
+}
+
+// The menu of part kinds; a click on its owner or a right click opens it under the owner.
 component PartMenu {
     // off: no right click opens it
     in property <bool> enabled: true;
@@ -13,48 +60,31 @@ component PartMenu {
     menu := ContextMenuArea {
         enabled: root.enabled;
         Menu {
-            MenuItem { title: @tr("Lens/Mirror"); icon: MenuIcons.next-lens; activated => { root.add("part:lens"); } }
-            MenuItem { title: @tr("Fresnel lens"); icon: MenuIcons.next-fresnel-lens; activated => { root.add("part:fresnel-lens"); } }
-            MenuItem { title: @tr("Fibre"); icon: MenuIcons.next-fiber; activated => { root.add("part:fiber"); } }
-            MenuItem { title: @tr("Bragg reflector"); icon: MenuIcons.next-bragg-reflector; activated => { root.add("part:bragg-reflector"); } }
-            MenuItem { title: @tr("GRIN lens"); icon: MenuIcons.next-grin-lens; activated => { root.add("part:grin-lens"); } }
-            MenuItem { title: @tr("Zone plate"); icon: MenuIcons.next-zone-plate; activated => { root.add("part:zone-plate"); } }
-            MenuItem { title: @tr("Diffuser"); icon: MenuIcons.next-diffuser; activated => { root.add("part:diffuser"); } }
-            MenuItem { title: @tr("Interference filter"); icon: MenuIcons.next-interference-filter; activated => { root.add("part:interference-filter"); } }
+            for kind in AddKinds.parts: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
             Menu {
                 title: @tr("Diffraction gratings");
                 icon: MenuIcons.next-diffraction-gratings;
-                MenuItem { title: @tr("Simple 2D grating"); icon: MenuIcons.next-simple-grating; activated => { root.add("part:simple-grating"); } }
-                MenuItem { title: @tr("Facetted grating"); icon: MenuIcons.next-facetted-grating; activated => { root.add("part:facetted-grating"); } }
+                for kind in AddKinds.gratings: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
             }
             Menu {
                 title: @tr("Meta surfaces");
                 icon: MenuIcons.next-meta-surfaces;
-                MenuItem { title: @tr("Meta lens"); icon: MenuIcons.next-meta-lens; activated => { root.add("part:meta-lens"); } }
-                MenuItem { title: @tr("Meta prism"); icon: MenuIcons.next-meta-prism; activated => { root.add("part:meta-prism"); } }
-                MenuItem { title: @tr("Meta axicon"); icon: MenuIcons.next-meta-axicon; activated => { root.add("part:meta-axicon"); } }
+                for kind in AddKinds.meta: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
             }
             MenuSeparator { }
-            MenuItem { title: @tr("Polygon"); icon: MenuIcons.next-polygon; activated => { root.add("part:polygon"); } }
-            MenuItem { title: @tr("Rectangle"); icon: MenuIcons.next-rectangle; activated => { root.add("part:rectangle"); } }
-            MenuItem { title: @tr("Ellipse"); icon: MenuIcons.next-ellipse; activated => { root.add("part:ellipse"); } }
-            MenuItem { title: @tr("Triangle"); icon: MenuIcons.next-triangle; activated => { root.add("part:triangle"); } }
-            MenuItem { title: @tr("Outline"); icon: MenuIcons.next-outline; activated => { root.add("part:outline"); } }
+            for kind in AddKinds.shapes: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
             MenuSeparator { }
             Menu {
                 title: @tr("Optical logic");
                 icon: MenuIcons.next-optical-logic;
-                MenuItem { title: @tr("XOR (Mach-Zehnder)"); icon: MenuIcons.next-xor-gate; activated => { root.add("part:xor-gate"); } }
-                MenuItem { title: @tr("AND"); icon: MenuIcons.next-and-gate; activated => { root.add("part:and-gate"); } }
-                MenuItem { title: @tr("OR"); icon: MenuIcons.next-or-gate; activated => { root.add("part:or-gate"); } }
+                for kind in AddKinds.logic: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
             }
         }
     }
 }
 
-// Next's menu of probe kinds (ProbeKindMenu), opened as the parts' is.
+// The menu of probe kinds, opened as the parts' is.
 component ProbeMenu {
-    // off: no right click opens it
     in property <bool> enabled: true;
     callback add(string);
     public function open() { menu.show({ x: 0, y: root.height }); }
@@ -65,8 +95,7 @@ component ProbeMenu {
             Menu {
                 title: @tr("Probabilistic");
                 icon: MenuIcons.next-counting-detector;
-                MenuItem { title: @tr("Counting detector"); icon: MenuIcons.next-counting-detector; activated => { root.add("probe:counting"); } }
-                MenuItem { title: @tr("Imaging detector"); icon: MenuIcons.next-imaging-detector; activated => { root.add("probe:imaging"); } }
+                for kind in AddKinds.detectors: MenuItem { title: kind.title; icon: kind.icon; activated => { root.add(kind.id); } }
             }
         }
     }
@@ -142,7 +171,9 @@ export struct TreeRow {
 // The project tree (docs/ui/20): fixed rows, folders and item rows with their check box and row buttons.
 export component ProjectTree inherits Rectangle {
     in property <[TreeRow]> rows;
-    // the row and how: 0 alone, 1 toggled (Ctrl), 2 range (Shift)
+    // the current row's index, -1 when hidden
+    in property <int> current-row;
+    // the row and how: 0 alone, 1 toggled (Ctrl), 2 range (Shift), 3 current in the group kept (right click)
     callback select(int, int);
     callback toggle(int);
     callback expand(int);
@@ -151,6 +182,10 @@ export component ProjectTree inherits Rectangle {
     in property <bool> can-move-up;
     in property <bool> can-move-down;
     in property <bool> can-remove;
+    in property <bool> can-copy;
+    in property <bool> can-select-all;
+    // the current row can be switched on and off and join a group
+    in property <bool> can-toggle;
     // a command on the current row ("move-up", "move-down", "delete") or an add ("add:<what>")
     callback act(string);
 
@@ -208,9 +243,75 @@ export component ProjectTree inherits Rectangle {
                 if (e.modifiers.alt || e.modifiers.control) { return reject; }
                 if (e.text == " ") { root.act("toggle-enabled"); return accept; }
                 if (e.text == Key.Insert) { root.act("toggle-selected"); return accept; }
+                if (e.text == Key.Menu || (e.modifiers.shift && e.text == Key.F10)) {
+                    rows-menu.show({
+                        x: list.absolute-position.x + 24px - menu-anchor.absolute-position.x,
+                        y: list.absolute-position.y + list.viewport-y + (max(root.current-row, 0) + 1) * Theme.row-height - menu-anchor.absolute-position.y,
+                    });
+                    return accept;
+                }
                 reject
             }
-            ListView {
+            // Next's row menu (ProjectTree.xaml ItemContainerStyle ContextMenu), opened by a row's right press, Menu or
+            // Shift+F10: a ContextMenuArea over the rows would take that press. Its commands act on the selection, whose
+            // current row the right-clicked one becomes; one outside it is selected alone (Explorer's rule). No access keys or key hints: Slint draws context menus
+            // without mnemonics, and a menu shortcut would bind its key window-wide.
+            menu-anchor := Rectangle {
+                width: 0px;
+                height: 0px;
+                rows-menu := ContextMenuArea {
+                    Menu {
+                        MenuItem { title: @tr("Add source"); icon: MenuIcons.add; activated => { root.run("add:source"); } }
+                        Menu {
+                            title: @tr("Add part");
+                            icon: MenuIcons.add;
+                            for kind in AddKinds.parts: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                            Menu {
+                                title: @tr("Diffraction gratings");
+                                icon: MenuIcons.next-diffraction-gratings;
+                                for kind in AddKinds.gratings: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                            }
+                            Menu {
+                                title: @tr("Meta surfaces");
+                                icon: MenuIcons.next-meta-surfaces;
+                                for kind in AddKinds.meta: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                            }
+                            MenuSeparator { }
+                            for kind in AddKinds.shapes: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                            MenuSeparator { }
+                            Menu {
+                                title: @tr("Optical logic");
+                                icon: MenuIcons.next-optical-logic;
+                                for kind in AddKinds.logic: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                            }
+                        }
+                        Menu {
+                            title: @tr("Add probe");
+                            icon: MenuIcons.add;
+                            MenuItem { title: @tr("Standard probe"); icon: MenuIcons.next-probe; activated => { root.run("add:probe:standard"); } }
+                            Menu {
+                                title: @tr("Probabilistic");
+                                icon: MenuIcons.next-counting-detector;
+                                for kind in AddKinds.detectors: MenuItem { title: kind.title; icon: kind.icon; activated => { root.run("add:" + kind.id); } }
+                            }
+                        }
+                        MenuSeparator { }
+                        MenuItem { title: @tr("Add to or remove from selection"); icon: MenuIcons.checklist; enabled: root.can-toggle; activated => { root.run("toggle-selected"); } }
+                        MenuItem { title: @tr("Select all"); icon: MenuIcons.select-all; enabled: root.can-select-all; activated => { root.run("select-all"); } }
+                        MenuSeparator { }
+                        MenuItem { title: @tr("Enabled"); icon: MenuIcons.check-box; enabled: root.can-toggle; activated => { root.run("toggle-enabled"); } }
+                        MenuItem { title: @tr("Duplicate"); icon: MenuIcons.control-point-duplicate; enabled: root.can-remove; activated => { root.run("duplicate"); } }
+                        MenuItem { title: @tr("Cut"); icon: MenuIcons.content-cut; enabled: root.can-remove; activated => { root.run("cut"); } }
+                        MenuItem { title: @tr("Copy"); icon: MenuIcons.content-copy; enabled: root.can-copy; activated => { root.run("copy"); } }
+                        MenuItem { title: @tr("Paste"); icon: MenuIcons.content-paste; enabled: true; activated => { root.run("paste"); } }
+                        MenuItem { title: @tr("Remove"); icon: MenuIcons.delete; enabled: root.can-remove; activated => { root.run("delete"); } }
+                        MenuSeparator { }
+                        MenuItem { title: @tr("Move up"); icon: MenuIcons.arrow-upward; enabled: root.can-move-up; activated => { root.run("move-up"); } }
+                        MenuItem { title: @tr("Move down"); icon: MenuIcons.arrow-downward; enabled: root.can-move-down; activated => { root.run("move-down"); } }
+                    }
+                }
+            }
+            list := ListView {
                 for row[i] in root.rows: Rectangle {
                     height: Theme.row-height;
                     background: row.selected ? (root.focused ? Theme.selection : Theme.inactive-selection) : area.has-hover ? Theme.row-hover : transparent;
@@ -220,6 +321,14 @@ export component ProjectTree inherits Rectangle {
                         pointer-event(e) => {
                             if (e.kind == PointerEventKind.down) {
                                 self.pick = e.modifiers.control ? 1 : e.modifiers.shift ? 2 : 0;
+                                if (e.button == PointerEventButton.right) {
+                                    tree-keys.focus();
+                                    root.select(i, row.selected ? 3 : 0);
+                                    rows-menu.show({
+                                        x: self.absolute-position.x + self.mouse-x - menu-anchor.absolute-position.x,
+                                        y: self.absolute-position.y + self.mouse-y - menu-anchor.absolute-position.y,
+                                    });
+                                }
                             }
                         }
                         clicked => {

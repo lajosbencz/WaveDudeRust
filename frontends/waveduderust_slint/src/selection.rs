@@ -14,6 +14,8 @@ pub(crate) enum Pick {
 	Toggle,
 	/// The rows from the current one to it, in tree order (Shift+click).
 	Range,
+	/// Current, the group kept when it is in it (a right click).
+	Focus,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -75,6 +77,7 @@ impl Selection {
 				self.items = all[a.min(b)..=a.max(b)].to_vec();
 				self.current = node;
 			}
+			Pick::Focus if self.items.contains(&node) => self.current = node,
 			_ => self.set(node),
 		}
 	}
@@ -177,5 +180,8 @@ mod tests {
 		assert_eq!(s.group(), [Node::Source(1), Node::Source(2)]);
 		s.select_all(&p);
 		assert_eq!(s.group().len(), 4);
+		// a right click in the group moves only the current row
+		s.pick(&p, Node::Source(0), Pick::Focus);
+		assert_eq!((s.current(), s.group().len()), (Node::Source(0), 4));
 	}
 }
