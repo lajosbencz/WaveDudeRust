@@ -100,6 +100,18 @@ msgstr "30-60-90"
 msgid "4th-order Laplacian"
 msgstr "Laplacien du 4e ordre"
 
+#. Kind.FresnelLensPart
+msgid "A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, equal in width or in depth, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and their division; a flat surface stays flat."
+msgstr "Une lentille de Fresnel : une lentille dont les surfaces courbes sont découpées en zones de l'axe au bord, de largeur ou de profondeur égale, l'arc de chaque zone repartant du plan du sommet, de sorte qu'une lame mince dévie la lumière comme une lentille épaisse. Les réglages sont ceux de la lentille, avec le nombre de zones et leur division ; une surface plane reste plane."
+
+#. Kind.OutlinePart
+msgid "A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing."
+msgstr "Un contour libre de verre ou en miroir : une forme fermée passant par les points que vous placez et déplacez ; moins de trois ne peignent rien."
+
+#. Kind.LensPart
+msgid "A lens or a mirror: a strip of the diameter between two spherical surfaces, each bulging outward, flat or hollow by the sign of its radius, the centre thickness apart. As a mirror it reflects everything; as a lens it refracts by its index, with an anti-reflection coating and absorption if wanted."
+msgstr "Une lentille ou un miroir : une bande du diamètre entre deux surfaces sphériques, chacune bombée, plate ou creuse selon le signe de son rayon, séparées de l'épaisseur au centre. En miroir, il réfléchit tout ; en lentille, elle réfracte selon son indice, avec un traitement antireflet et une absorption si on le souhaite."
+
 #. Hint.Probe.YScale
 msgid "A linear or a logarithmic value axis; intensity probes only, the field is always linear."
 msgstr "Axe des valeurs linéaire ou logarithmique ; sondes d'intensité seulement, le champ est toujours linéaire."
@@ -171,6 +183,10 @@ msgstr "Ajouter un composant optique (menu des types ; à la fin)"
 #. MenuProjectAddPart
 msgid "Add part"
 msgstr "Ajouter un composant"
+
+#. ButtonAddPoint
+msgid "Add point"
+msgstr "Ajouter un point"
 
 #. MenuProjectAddProbe
 msgid "Add probe"
@@ -308,6 +324,10 @@ msgstr "Annuler"
 msgid "Canvas"
 msgstr "Toile"
 
+#. Label.LensPart.Thickness
+msgid "Centre thickness"
+msgstr "Épaisseur au centre"
+
 #. MessagesClear
 msgid "Clear"
 msgstr "Effacer"
@@ -351,6 +371,10 @@ msgstr "Colonnes"
 #. Label.Source.IsComposite
 msgid "Composite source"
 msgstr "Source composite"
+
+#. Label.LensPart.IsConcave
+msgid "Concave (diverging)"
+msgstr "Concave (divergente)"
 
 #. Enum.SourceMode.Continuous
 msgid "Continuous"
@@ -416,6 +440,10 @@ msgstr "Détecteur"
 msgid "Detector sensitivity"
 msgstr "Sensibilité"
 
+#. Label.LensPart.Diameter
+msgid "Diameter"
+msgstr "Diamètre"
+
 #. Hint.EllipsePart.Width
 msgid "Diameter across the axis in pixels."
 msgstr "Diamètre perpendiculaire à l'axe en pixels."
@@ -439,6 +467,10 @@ msgstr "Distance entre colonnes voisines en pixels de toile."
 #. Hint.SourceArray.SpacingY
 msgid "Distance between neighbouring rows in canvas pixels."
 msgstr "Distance entre lignes voisines en pixels de toile."
+
+#. Hint.LensPart.Thickness
+msgid "Distance between the two surfaces on the axis in pixels."
+msgstr "Distance entre les deux surfaces sur l'axe en pixels."
 
 #. Hint.Display.SourceMarkersInExport
 msgid "Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos."
@@ -475,6 +507,10 @@ msgstr "La phase de chaque émetteur est décalée d'au plus ± ce nombre de deg
 #. Hint.SourceArray.RandomOffWidth
 msgid "Each gap between bursts is offset by up to ± this many cycles, re-drawn every period. 0 turns it off."
 msgstr "Chaque intervalle entre impulsions est décalé d'au plus ± ce nombre de périodes, retiré à chaque période. 0 désactive."
+
+#. LabelEdgeThickness
+msgid "Edge thickness"
+msgstr "Épaisseur au bord"
 
 #. Label.Scene.Edges
 msgid "Edges"
@@ -515,6 +551,14 @@ msgstr "Terminer la plage d'export à cette image (O)"
 #. Hint.Source.PulseShape
 msgid "Envelope of each burst; pulsed mode only."
 msgstr "Enveloppe de chaque impulsion ; mode pulsé seulement."
+
+#. Enum.ZoneDivision.EqualDepth
+msgid "Equal depth"
+msgstr "Profondeur égale"
+
+#. Enum.ZoneDivision.EqualWidth
+msgid "Equal width"
+msgstr "Largeur égale"
 
 #. Enum.TriangleType.Equilateral
 msgid "Equilateral"
@@ -732,6 +776,10 @@ msgstr "Force avec laquelle le composant absorbe les ondes, de 0 (pas du tout) �
 msgid "How the index runs through the band: a layer at √n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for."
 msgstr "Comment l'indice varie dans la bande : une couche d'indice √n, l'idée du quart d'onde, ou une montée graduelle du milieu extérieur vers le verre. Une bande graduelle réfléchit moins qu'une couche dès qu'elle fait une longueur d'onde ou plus, à toute longueur d'onde ; une couche seulement à celle pour laquelle elle est taillée."
 
+#. Hint.FresnelLensPart.Division
+msgid "How the zones are divided from the axis to the rim: equal in width, the outer zone the deepest; or equal in depth, each zone cut to the same depth and the zones narrowing outward, as the elements of a lighthouse lens are."
+msgstr "Comment les zones sont divisées de l'axe au bord : de largeur égale, la zone extérieure la plus profonde ; ou de profondeur égale, chaque zone taillée à la même profondeur et les zones se resserrant vers l'extérieur, comme les éléments d'une lentille de phare."
+
 #. Enum.SceneMode.Image
 msgid "Image"
 msgstr "Image"
@@ -880,6 +928,10 @@ msgstr "Lire en boucle sur la plage d'export (L)"
 msgid "Lower bound of the value axis when it is not auto-scaled."
 msgstr "Borne inférieure de l'axe des valeurs sans échelle automatique."
 
+#. Hint.LensPart.Mirror
+msgid "Make the part a mirror instead of a lens. The refractive index, the coating and the absorption are ignored then."
+msgstr "Faire du composant un miroir au lieu d'une lentille. L'indice de réfraction, le traitement antireflet et l'absorption sont alors ignorés."
+
 #. Hint.ShapePart.Mirror
 msgid "Make the part a mirror instead of glass. The refractive index, the coating and the absorption are ignored then."
 msgstr "Faire du composant un miroir au lieu du verre. L'indice de réfraction, le traitement antireflet et l'absorption sont alors ignorés."
@@ -1008,6 +1060,10 @@ msgstr "Nombre de côtés"
 msgid "Number of sides, 3 to 64."
 msgstr "Nombre de côtés, de 3 à 64."
 
+#. Hint.FresnelLensPart.Zones
+msgid "Number of zones each curved surface is cut into, from the axis to the rim, equal in width or in depth as the zone division says. At each zone's inner edge the arc starts again at the vertex plane, so the plate stays thin; 1 is a plain lens."
+msgstr "Nombre de zones en lesquelles chaque surface courbe est découpée, de l'axe au bord, de largeur ou de profondeur égale selon la division des zones. Au bord intérieur de chaque zone l'arc repart du plan du sommet, de sorte que la lame reste mince ; 1 est une lentille ordinaire."
+
 #. MenuAddOrGate
 msgid "OR"
 msgstr "OR (OU)"
@@ -1132,6 +1188,10 @@ msgstr "Lecture (Espace)"
 msgid "Point"
 msgstr "Point"
 
+#. SectionPoints
+msgid "Points"
+msgstr "Points"
+
 #. MenuAddPolygon
 msgid "Polygon"
 msgstr "Polygone"
@@ -1200,6 +1260,22 @@ msgstr "Mettre la bande sur les côtés : les faces qui ne sont ni avant ni arri
 msgid "Quality"
 msgstr "Qualité"
 
+#. Label.LensPart.R1
+msgid "R1"
+msgstr "R1"
+
+#. Label.LensPart.R2
+msgid "R2"
+msgstr "R2"
+
+#. Hint.LensPart.R1
+msgid "Radius of the first surface in pixels: positive bulges outward, negative is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest that fits."
+msgstr "Rayon de la première surface en pixels : positif bombé vers l'extérieur, négatif concave, 0 plan. Un rayon trop courbé pour le diamètre et l'épaisseur au centre est porté au plus petit qui convient."
+
+#. Hint.LensPart.R2
+msgid "Radius of the second surface in pixels: negative bulges outward, positive is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest that fits."
+msgstr "Rayon de la seconde surface en pixels : négatif bombé vers l'extérieur, positif concave, 0 plan. Un rayon trop courbé pour le diamètre et l'épaisseur au centre est porté au plus petit qui convient."
+
 #. SectionRandom
 msgid "Random offsets, added per emitter"
 msgstr "Écarts aléatoires, ajoutés par émetteur"
@@ -1247,6 +1323,10 @@ msgstr "Supprimer"
 #. TipRemove
 msgid "Remove (Del)"
 msgstr "Supprimer (Suppr)"
+
+#. TipRemovePoint
+msgid "Remove this point"
+msgstr "Supprimer ce point"
 
 #. Hint.Simulation.VisualizeEvery
 msgid "Render a frame, export it and sample the probes every this many steps."
@@ -1444,6 +1524,10 @@ msgstr "Arrêter la simulation ; les images calculées restent (Échap)"
 msgid "The angle at the apex: 180° minus the two base angles"
 msgstr "L'angle au sommet : 180° moins les deux angles à la base"
 
+#. TipEdgeThickness
+msgid "Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim"
+msgstr "Épaisseur au bord : l'épaisseur au centre moins ce que prennent les surfaces convexes, plus ce qu'ajoutent les concaves ; 0 quand les surfaces se rejoignent au bord"
+
 #. Hint.Scene.DampingEdge
 msgid "Thickness in pixels of the absorbing frame: positive inside the canvas, where it shows as a dark margin; negative outside it, simulated but never shown. 0 turns it off."
 msgstr "Épaisseur en pixels du cadre absorbant : positive à l'intérieur de la toile, où il apparaît comme une marge sombre ; négative à l'extérieur, simulée mais jamais affichée. 0 le désactive."
@@ -1520,6 +1604,10 @@ msgstr "Version du format de fichier de projet."
 msgid "Vertical spacing"
 msgstr "Espacement vertical"
 
+#. HintPolygonPoints
+msgid "Vertices of the outline relative to the centre, before rotation. Empty: the regular polygon above is used."
+msgstr "Sommets du contour par rapport au centre, avant rotation. Vide : le polygone régulier ci-dessus est utilisé."
+
 #. SectionVideo
 msgid "Video export"
 msgstr "Export vidéo"
@@ -1547,6 +1635,10 @@ msgstr "Longueur d'onde"
 #. Hint.Scene.ImagePath
 msgid "Where the embedded image came from; the embedded image is what is simulated, a missing file changes nothing. The file is watched while the project is open and re-embedded when it changes; on opening the project a changed file replaces the embedded image too."
 msgstr "Origine de l'image intégrée ; c'est l'image intégrée qui est simulée, un fichier manquant ne change rien. Le fichier est surveillé tant que le projet est ouvert et réintégré quand il change ; à l'ouverture du projet, un fichier modifié remplace aussi l'image intégrée."
+
+#. Hint.LensPart.IsConcave
+msgid "Whether the lens diverges, its surfaces curving inward. Ticking it turns the lens around by flipping the sign of both radii; a flat surface stays flat."
+msgstr "Si la lentille est divergente, ses surfaces courbées vers l'intérieur. Cocher retourne la lentille en changeant le signe des deux rayons ; une surface plane reste plane."
 
 #. Label.Scene.Width
 msgid "Width"
@@ -1588,6 +1680,10 @@ msgstr "X du centre en pixels de la toile."
 msgid "X of the probe pixel, or of the start of the line, in canvas pixels."
 msgstr "X du pixel de la sonde, ou du début de la ligne, en pixels de toile."
 
+#. Hint.PartPoint.X
+msgid "X relative to the part's centre in canvas pixels, before rotation."
+msgstr "X par rapport au centre du composant en pixels de la toile, avant rotation."
+
 #. MenuAddXorGate
 msgid "XOR (Mach-Zehnder)"
 msgstr "XOR (Mach-Zehnder)"
@@ -1612,9 +1708,21 @@ msgstr "Y du centre en pixels de la toile."
 msgid "Y of the probe pixel, or of the start of the line, in canvas pixels."
 msgstr "Y du pixel de la sonde, ou du début de la ligne, en pixels de toile."
 
+#. Hint.PartPoint.Y
+msgid "Y relative to the part's centre in canvas pixels, before rotation."
+msgstr "Y par rapport au centre du composant en pixels de la toile, avant rotation."
+
+#. Label.FresnelLensPart.Division
+msgid "Zone division"
+msgstr "Division des zones"
+
 #. MenuAddZonePlate
 msgid "Zone plate"
 msgstr "Lame à zones"
+
+#. LabelMetaZones
+msgid "Zones"
+msgstr "Zones"
 
 #. ItemCountMany
 msgid "{} entries"
@@ -1644,6 +1752,16 @@ msgstr "Personnalisé"
 msgctxt "Label.OpticalPart.Enabled"
 msgid "Enabled"
 msgstr "Activé"
+
+#. Label.PartPoint.X
+msgctxt "Label.PartPoint.X"
+msgid "X"
+msgstr "X"
+
+#. Label.PartPoint.Y
+msgctxt "Label.PartPoint.Y"
+msgid "Y"
+msgstr "Y"
 
 #. Label.Probe.Measurement
 msgctxt "Label.Probe.Measurement"

@@ -175,6 +175,10 @@ impl State {
 	/// Sets the field at `path` of the selected object's typed form to `text`.
 	/// `typing`: a keystroke, joining the field's run of keystrokes into one undo step.
 	fn set_field(&mut self, path: &str, text: &str, typing: bool) -> Result<(), String> {
+		// another field's typed text is committed first, as WPF's LostFocus does when a button or box takes focus
+		if let Some(draft) = self.draft.take().filter(|d| d.path.as_deref().is_some_and(|p| p != path)) {
+			self.commit_typed(draft);
+		}
 		self.draft = None;
 		let node = self.selection.current();
 		let mut result = Ok(());
@@ -194,17 +198,22 @@ impl State {
 	fn commit_draft(&mut self, app: &AppWindow) {
 		use slint::Model;
 		let Some(draft) = self.draft.take() else { return };
-		if let Some(path) = draft.path {
-			let over = self.values.borrow().get(&path).is_some_and(|v| *v == draft.over.as_str());
-			if draft.token == self.typed_form.token && over {
-				let _ = self.set_field(&path, &draft.text, false);
-			}
-			return;
+		if draft.path.is_some() {
+			return self.commit_typed(draft);
 		}
 		let shown = app.get_props_rows().row_data(draft.row).map(|r| r.value);
 		if draft.token == self.props.token && shown.is_some_and(|v| v == draft.over) {
 			// the form leaves the view, so would its error
 			let _ = self.set_prop(draft.row, &draft.text);
+		}
+	}
+
+	/// Commits a typed form's draft while its form is shown and its field still holds the value it was typed over.
+	fn commit_typed(&mut self, draft: Draft) {
+		let Some(path) = draft.path else { return };
+		let over = self.values.borrow().get(&path).is_some_and(|v| *v == draft.over.as_str());
+		if draft.token == self.typed_form.token && over {
+			let _ = self.set_field(&path, &draft.text, false);
 		}
 	}
 

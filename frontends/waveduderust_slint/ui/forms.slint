@@ -3,6 +3,7 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Form, FormSection, FormPanel, FormLabel, FormValue, FormNumber, FormCheck, FormChoice, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
+import { IconButton } from "icons.slint";
 
 export component ProjectForm inherits VerticalLayout {
     // draws a fresh seed (Next's ProjectView.Reseed)
@@ -883,24 +884,27 @@ component PartCommon inherits VerticalLayout {
 // Next's ShapeMaterialView: mirror or glass, the index, the coating, the absorption; a mirror takes none but the box.
 // A kind's form hides the coating rows, the front box or the sides box where they do not apply.
 component ShapeMaterial inherits VerticalLayout {
+    // where the material and coating sit below the kind's fields: a Fresnel lens's are its lens's
+    in property <string> prefix;
+    in property <string> mirror-tip: @tr("Make the part a mirror instead of glass. The refractive index, the coating and the absorption are ignored then.");
     in property <bool> coating-shown: true;
     in property <bool> back-only;
     in property <bool> sides-hidden;
-    property <bool> glass: Form.value(Form.revision, "Material.Mirror") != "true";
+    property <bool> glass: Form.value(Form.revision, root.prefix + "Material.Mirror") != "true";
     FormSection { text: @tr("Material"); }
     FormPanel {
         Row {
             FormCheck {
                 colspan: 2;
-                path: "Material.Mirror";
+                path: root.prefix + "Material.Mirror";
                 text: @tr("Mirror");
-                tip: @tr("Make the part a mirror instead of glass. The refractive index, the coating and the absorption are ignored then.");
+                tip: root.mirror-tip;
             }
         }
         Row {
             FormLabel { text: @tr("Refractive index"); tip: @tr("Refractive index of the glass, 1.00 to 2.55 in steps of 0.01."); }
             FormNumber {
-                path: "Material.RefractiveIndex";
+                path: root.prefix + "Material.RefractiveIndex";
                 spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
                 enabled: root.glass;
                 tip: @tr("Refractive index of the glass, 1.00 to 2.55 in steps of 0.01.");
@@ -912,7 +916,7 @@ component ShapeMaterial inherits VerticalLayout {
                 tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
             }
             FormNumber {
-                path: "Coating.Depth";
+                path: root.prefix + "Coating.Depth";
                 spec: { min: 0, max: 50, increment: 1, decimals: -1 };
                 enabled: root.glass;
                 tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
@@ -924,7 +928,7 @@ component ShapeMaterial inherits VerticalLayout {
                 tip: @tr("How the index runs through the band: a layer at \u{221A}n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for.");
             }
             FormChoice {
-                path: "Coating.Profile";
+                path: root.prefix + "Coating.Profile";
                 words: ["Layer", "Graded"];
                 titles: [@tr("Enum.CoatingProfile.Layer" => "Layer"), @tr("Graded")];
                 enabled: root.glass;
@@ -934,7 +938,7 @@ component ShapeMaterial inherits VerticalLayout {
         if root.coating-shown && !root.back-only: Row {
             FormCheck {
                 colspan: 2;
-                path: "Coating.Front";
+                path: root.prefix + "Coating.Front";
                 text: @tr("Coat the front");
                 enabled: root.glass;
                 tip: @tr("Put the band on the front: the faces turned toward a source on the left, a lens's first surface. Clear it to leave them bare, as the inner faces of a cavity are.");
@@ -943,7 +947,7 @@ component ShapeMaterial inherits VerticalLayout {
         if root.coating-shown: Row {
             FormCheck {
                 colspan: 2;
-                path: "Coating.Back";
+                path: root.prefix + "Coating.Back";
                 text: @tr("Coat the back");
                 enabled: root.glass;
                 tip: @tr("Put the band on the back: the faces turned away from a source on the left, a lens's second surface. Clear it to leave them bare.");
@@ -952,7 +956,7 @@ component ShapeMaterial inherits VerticalLayout {
         if root.coating-shown && !root.back-only && !root.sides-hidden: Row {
             FormCheck {
                 colspan: 2;
-                path: "Coating.Sides";
+                path: root.prefix + "Coating.Sides";
                 text: @tr("Coat the sides");
                 enabled: root.glass;
                 tip: @tr("Put the band on the sides: the faces that are neither front nor back, a lens's rim, a slab's narrow ends. Clear it to leave them bare.");
@@ -964,7 +968,7 @@ component ShapeMaterial inherits VerticalLayout {
                 tip: @tr("How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it.");
             }
             FormNumber {
-                path: "Material.Absorption";
+                path: root.prefix + "Material.Absorption";
                 spec: { min: 0, max: 255, increment: 5, decimals: -1 };
                 enabled: root.glass;
                 tip: @tr("How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it.");
@@ -976,7 +980,7 @@ component ShapeMaterial inherits VerticalLayout {
                 tip: @tr("Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle.");
             }
             FormNumber {
-                path: "Material.AbsorptionRamp";
+                path: root.prefix + "Material.AbsorptionRamp";
                 spec: { min: 1, max: 400, increment: 5, decimals: -1 };
                 enabled: root.glass;
                 tip: @tr("Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle.");
@@ -1111,4 +1115,182 @@ export component PolygonForm inherits VerticalLayout {
             FormNumber { path: "Side"; spec: { min: 2, max: 1000000000, increment: 10, decimals: -1 }; tip: @tr("Length of each side in pixels."); }
         }
     }
+}
+
+// Next's LensPartView: the lens's rows; a Fresnel lens has its zones in place of the Concave box.
+component LensShape inherits VerticalLayout {
+    // where the lens's fields sit below the kind's: a Fresnel lens's lens
+    in property <string> prefix;
+    in property <bool> zones;
+    FormSection { text: @tr("Shape"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Diameter"); tip: @tr("Extent across the axis in pixels."); }
+            FormNumber { path: root.prefix + "Diameter"; spec: { min: 2, max: 1000000000, increment: 10, decimals: -1 }; tip: @tr("Extent across the axis in pixels."); }
+        }
+        if !root.zones: Row {
+            FormCheck {
+                colspan: 2;
+                path: "IsConcave";
+                text: @tr("Concave (diverging)");
+                tip: @tr("Whether the lens diverges, its surfaces curving inward. Ticking it turns the lens around by flipping the sign of both radii; a flat surface stays flat.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("R1");
+                tip: @tr("Radius of the first surface in pixels: positive bulges outward, negative is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest that fits.");
+            }
+            FormNumber {
+                path: root.prefix + "R1";
+                spec: { min: -1000000000, max: 1000000000, increment: 10, decimals: -1 };
+                tip: @tr("Radius of the first surface in pixels: positive bulges outward, negative is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest that fits.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("R2");
+                tip: @tr("Radius of the second surface in pixels: negative bulges outward, positive is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest that fits.");
+            }
+            FormNumber {
+                path: root.prefix + "R2";
+                spec: { min: -1000000000, max: 1000000000, increment: 10, decimals: -1 };
+                tip: @tr("Radius of the second surface in pixels: negative bulges outward, positive is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest that fits.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Centre thickness"); tip: @tr("Distance between the two surfaces on the axis in pixels."); }
+            FormNumber {
+                path: root.prefix + "Thickness";
+                spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
+                tip: @tr("Distance between the two surfaces on the axis in pixels.");
+            }
+        }
+        if root.zones: Row {
+            FormLabel {
+                text: @tr("Zones");
+                tip: @tr("Number of zones each curved surface is cut into, from the axis to the rim, equal in width or in depth as the zone division says. At each zone's inner edge the arc starts again at the vertex plane, so the plate stays thin; 1 is a plain lens.");
+            }
+            FormNumber {
+                path: "Zones";
+                spec: { min: 1, max: 100, increment: 1, decimals: -1 };
+                tip: @tr("Number of zones each curved surface is cut into, from the axis to the rim, equal in width or in depth as the zone division says. At each zone's inner edge the arc starts again at the vertex plane, so the plate stays thin; 1 is a plain lens.");
+            }
+        }
+        if root.zones: Row {
+            FormLabel {
+                text: @tr("Zone division");
+                tip: @tr("How the zones are divided from the axis to the rim: equal in width, the outer zone the deepest; or equal in depth, each zone cut to the same depth and the zones narrowing outward, as the elements of a lighthouse lens are.");
+            }
+            FormChoice {
+                path: "Division";
+                words: ["EqualWidth", "EqualDepth"];
+                titles: [@tr("Equal width"), @tr("Equal depth")];
+                tip: @tr("How the zones are divided from the axis to the rim: equal in width, the outer zone the deepest; or equal in depth, each zone cut to the same depth and the zones narrowing outward, as the elements of a lighthouse lens are.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Edge thickness");
+                tip: @tr("Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim");
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                FormValue { x: 0; color: Theme.text; text: Form.value(Form.revision, "EdgeThickness"); }
+                Tooltip {
+                    text: @markdown("\{@tr("Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim")}");
+                }
+            }
+        }
+    }
+}
+
+export component LensForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A lens or a mirror: a strip of the diameter between two spherical surfaces, each bulging outward, flat or hollow by the sign of its radius, the centre thickness apart. As a mirror it reflects everything; as a lens it refracts by its index, with an anti-reflection coating and absorption if wanted.");
+    }
+    ShapeMaterial {
+        mirror-tip: @tr("Make the part a mirror instead of a lens. The refractive index, the coating and the absorption are ignored then.");
+    }
+    LensShape { }
+}
+
+export component FresnelLensForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, equal in width or in depth, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and their division; a flat surface stays flat.");
+    }
+    ShapeMaterial {
+        prefix: "Lens.";
+        mirror-tip: @tr("Make the part a mirror instead of a lens. The refractive index, the coating and the absorption are ignored then.");
+    }
+    LensShape {
+        prefix: "Lens.";
+        zones: true;
+    }
+}
+
+// Next's PartPointsView: the outline's vertices, each with a remove button, and Add point.
+component PointList inherits VerticalLayout {
+    in property <string> hint;
+    property <int> count: Form.value(Form.revision, "Points#").to-float();
+    FormSection { text: @tr("Points"); }
+    Text {
+        text: root.hint;
+        wrap: word-wrap;
+        color: Theme.text-dim;
+    }
+    Rectangle { height: 4px; }
+    HorizontalLayout {
+        padding-bottom: 2px;
+        spacing: 4px;
+        Text { horizontal-stretch: 1; text: @tr("Label.PartPoint.X" => "X"); color: Theme.text; }
+        Text { horizontal-stretch: 1; text: @tr("Label.PartPoint.Y" => "Y"); color: Theme.text; }
+        Rectangle { width: 22px; }
+    }
+    for k in root.count: HorizontalLayout {
+        padding-bottom: 4px;
+        spacing: 4px;
+        FormNumber {
+            path: "Points.\{k}.X";
+            tip: @tr("X relative to the part's centre in canvas pixels, before rotation.");
+        }
+        FormNumber {
+            path: "Points.\{k}.Y";
+            tip: @tr("Y relative to the part's centre in canvas pixels, before rotation.");
+        }
+        Rectangle {
+            width: 22px;
+            IconButton {
+                size: 18px;
+                icon: @image-url("icons/next/tree-minus.svg");
+                tip: @tr("Remove this point");
+                clicked => { Form.set("Points.Remove", k); }
+            }
+        }
+    }
+    HorizontalLayout {
+        padding-top: 2px;
+        padding-bottom: 10px;
+        alignment: start;
+        Rectangle {
+            width: add.preferred-width;
+            height: add.preferred-height;
+            add := Button {
+                text: @tr("Add point");
+                clicked => { Form.set("Points.Add", ""); }
+            }
+            Tooltip { text: @markdown("\{@tr("Append a point after the last one")}"); }
+        }
+    }
+}
+
+export component OutlineForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing.");
+    }
+    ShapeMaterial { }
+    PointList { hint: @tr("Vertices of the outline relative to the centre, before rotation. Empty: the regular polygon above is used."); }
 }

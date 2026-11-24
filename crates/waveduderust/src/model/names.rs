@@ -5,7 +5,10 @@
 
 use super::items::{Identified, insert, position};
 use super::normalize::Normalize;
-use super::{ColorScheme, Part, PartId, PartKind, Probe, ProbeDetector, ProbeId, Project, SchemeId, Source, SourceId};
+use super::{
+	ColorScheme, FresnelLens, Part, PartId, PartKind, Probe, ProbeDetector, ProbeId, Project, SchemeId, Source,
+	SourceId,
+};
 
 /// An item with a user-visible name unique within its list.
 pub trait Named {
@@ -84,10 +87,10 @@ pub fn mirror_name(name: &str, mirror: bool) -> String {
 	if mirror { replace_word(name, "Lens", "Mirror") } else { replace_word(name, "Mirror", "Lens") }
 }
 
-/// Sets a lens part's mirror flag as the editor does, renaming it by [`mirror_name`].
-/// Returns false for a part that is not a lens.
+/// Sets a lens or Fresnel lens part's mirror flag as the editor does, renaming it by [`mirror_name`].
+/// Returns false for a part that is neither.
 pub fn set_lens_mirror(part: &mut Part, mirror: bool) -> bool {
-	let PartKind::Lens(lens) = &mut part.kind else {
+	let (PartKind::Lens(lens) | PartKind::FresnelLens(FresnelLens { lens, .. })) = &mut part.kind else {
 		return false;
 	};
 	if lens.material.mirror != mirror {

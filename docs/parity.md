@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 130 | 33 | 160 | 2 | 0 |
+| P | Properties | 147 | 32 | 144 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 299 | 234 | 458 | 98 | 6 |
+| | All | 316 | 233 | 442 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -743,7 +743,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-127 | Part: X NB min 0 | Views/PartCommonView.xaml:64-65 | 30 Part common | done | PartCommon FormNumber from 0 |
 | P-128 | Part: Y NB min 0 | Views/PartCommonView.xaml:67-68 | 30 Part common | done | PartCommon FormNumber from 0 |
 | P-129 | Part: Angle NB -180..180 step 5 drag 0.5 1 dec | Views/PartCommonView.xaml:70-71 | 30 Part common | done | PartCommon FormNumber -180..180 step 5, drag 0.5, 1 decimal |
-| P-130 | Part: kind-specific forms shown after shared rows (form dispatch per kind) | Panes/PropertiesPane.xaml:117 | 30 Forms | partial | form::kind by PartKind; a kind's own fields by their path below Kind.<Variant> (form::values), Next's setters in PartKind::follow; rectangle, ellipse, triangle, polygon so far, other kinds show the generic rows |
+| P-130 | Part: kind-specific forms shown after shared rows (form dispatch per kind) | Panes/PropertiesPane.xaml:117 | 30 Forms | partial | form::kind by PartKind; a kind's own fields by their path below Kind.<Variant> (form::values), Next's setters in PartKind::follow; rectangle, ellipse, triangle, polygon, lens, Fresnel lens, outline so far, other kinds show the generic rows |
 | P-131 | Material: Mirror CB | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | ShapeMaterial FormCheck |
 | P-132 | Material: Refractive index NB 1..2.55 step 0.01 (off when Mirror) | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormNumber 1..2.55 step 0.01, off for a mirror |
 | P-133 | Material: AR coating NB 0..50 (off when Mirror) | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormNumber 0..50, off for a mirror; hidden where the kind takes no coating |
@@ -753,18 +753,18 @@ Not-in-spec rows are marked in the Spec column.
 | P-137 | Material: Coat the sides CB | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormCheck, off for a mirror; hidden for back-only and sides-hidden kinds |
 | P-138 | Material: Absorption NB 0..255 step 5 | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormNumber 0..255 step 5, off for a mirror |
 | P-139 | Material: Absorption ramp NB 1..400 step 5 | Views/ShapeMaterialView.xaml:51+ | 30 Glass and mirror material | done | FormNumber 1..400 step 5, off for a mirror |
-| P-140 | Lens: ticking Mirror renames 'Lens' to 'Mirror' and back (only via the box) | Views/LensPartView.xaml | 30 Material | missing |  |
-| P-141 | Material section header 'Material'; applies to lens, polygon, rectangle, ellipse, triangle, outline | Views/ShapeMaterialView.xaml: | 30 Material | partial | ShapeMaterial on polygon, rectangle, ellipse, triangle; lens and outline with their forms |
-| P-142 | Lens: Diameter NB min 2 step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-143 | Lens: Concave (diverging) CB (flips both radii signs) | Views/LensPartView.xaml:74 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-144 | Lens: R1 NB step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-145 | Lens: R2 NB step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-146 | Lens: Centre thickness NB min 1 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-147 | Lens: Edge thickness RO | Views/LensPartView.xaml:74 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-148 | Fresnel lens: lens rows w/o Concave | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-149 | Fresnel lens: Zones NB 1..100 | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-150 | Fresnel lens: Zone division combo Equal width/Equal depth | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-151 | Fresnel lens: Edge thickness RO (deepest zone) | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-140 | Lens: ticking Mirror renames 'Lens' to 'Mirror' and back (only via the box) | Views/LensPartView.xaml | 30 Material | done | the Mirror box of a lens or Fresnel lens renames by names::set_lens_mirror, the form's box only |
+| P-141 | Material section header 'Material'; applies to lens, polygon, rectangle, ellipse, triangle, outline | Views/ShapeMaterialView.xaml: | 30 Material | done | ShapeMaterial on lens, Fresnel lens (its lens's, by prefix), polygon, rectangle, ellipse, triangle, outline |
+| P-142 | Lens: Diameter NB min 2 step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | LensShape FormNumber from 2 step 10 |
+| P-143 | Lens: Concave (diverging) CB (flips both radii signs) | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | FormCheck on Lens::is_concave; ticking it flips both radii, a flat one stays 0 (Lens::set_concave) |
+| P-144 | Lens: R1 NB step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | FormNumber step 10 |
+| P-145 | Lens: R2 NB step 10 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | FormNumber step 10 |
+| P-146 | Lens: Centre thickness NB min 1 | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | FormNumber from 1 |
+| P-147 | Lens: Edge thickness RO | Views/LensPartView.xaml:74 | 30 Kind-specific forms | done | FormValue from lens_geometry::edge_thickness, 0.# px, with Next's tip |
+| P-148 | Fresnel lens: lens rows w/o Concave | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | done | LensShape with the Fresnel lens's lens by prefix, no Concave box |
+| P-149 | Fresnel lens: Zones NB 1..100 | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | done | FormNumber 1..100 |
+| P-150 | Fresnel lens: Zone division combo Equal width/Equal depth | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | done | FormChoice Equal width, Equal depth |
+| P-151 | Fresnel lens: Edge thickness RO (deepest zone) | Views/LensPartView.xaml (Fresnel) | 30 Kind-specific forms | done | FormValue from edge_thickness with the zones and division |
 | P-152 | Polygon: Number of sides NB 3..64 | Views/PolygonPartView.xaml:35 | 30 Kind-specific forms | done | FormNumber 3..64 |
 | P-153 | Polygon: Side length NB min 2 step 10 | Views/PolygonPartView.xaml:35 | 30 Kind-specific forms | done | FormNumber from 2 step 10 |
 | P-154 | Rectangle: Length NB min 1 step 10 | Views/RectanglePartView.xaml:49-54 | 30 Kind-specific forms | done | LinkedSides FormNumber from 1 step 10 |
@@ -778,11 +778,11 @@ Not-in-spec rows are marked in the Spec column.
 | P-162 | Triangle: Angle A NB 1..178 (Isosceles, Custom) | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | FormNumber 1..178, drag 0.5, 1 decimal, Isosceles and Custom only; Isosceles copies it to B |
 | P-163 | Triangle: Angle B NB 1..178 (Custom only) | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | FormNumber 1..178, drag 0.5, 1 decimal, Custom only |
 | P-164 | Triangle: Apex angle RO | Views/TrianglePartView.xaml:60-75 | 30 Kind-specific forms | done | FormValue from Triangle::effective_angles, 0.# and a degree sign, with Next's tip |
-| P-165 | Outline: Hint text | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-166 | Outline: Heading row X,Y | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-167 | Outline: Per point X NB, Y NB | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-168 | Outline: Per point remove button (tab cycle) | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-169 | Outline: Add point button (appends after last) | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-165 | Outline: Hint text | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | PointList grey wrapped hint |
+| P-166 | Outline: Heading row X,Y | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | X and Y headings over the two columns, the remove column kept free |
+| P-167 | Outline: Per point X NB, Y NB | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | FormNumber per coordinate, by Points.<index>.X/Y |
+| P-168 | Outline: Per point remove button (tab cycle) | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | IconButton (minus, 18 px) per row, a tab stop |
+| P-169 | Outline: Add point button (appends after last) | Views/PartPointsView.xaml:36-60 | 30 Kind-specific forms | done | Add point: a step of 20 right of the last, at the centre for none (Next's NewPointStep) |
 | P-170 | Diffuser: Length NB min 1 step 10 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-171 | Diffuser: Width NB min 2 step 10 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-172 | Diffuser: Centre wavelength NB 2..10000 | Views/DiffuserPartView.xaml:40 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |

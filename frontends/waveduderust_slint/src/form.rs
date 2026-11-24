@@ -3,7 +3,11 @@
 use std::collections::HashMap;
 use waveduderust::model::fields::{Edit, EditError, Field, Fields, Value, ValueKind};
 
-use waveduderust::model::{PROJECT_VERSION, Part, PartKind, Project, Stencil, View, wavelength};
+use waveduderust::model::lens_geometry::{edge_thickness, fit_radii_zoned};
+use waveduderust::model::names::set_lens_mirror;
+use waveduderust::model::{
+	Lens, PROJECT_VERSION, Part, PartKind, Point, Project, Stencil, View, ZoneDivision, wavelength,
+};
 
 use crate::tree::Node;
 use crate::ui::{PropKind, PropRow};
@@ -119,6 +123,9 @@ pub(crate) fn kind(project: &Project, node: Node) -> &'static str {
 			Some(PartKind::Ellipse(_)) => "ellipse",
 			Some(PartKind::Triangle(_)) => "triangle",
 			Some(PartKind::Polygon(_)) => "polygon",
+			Some(PartKind::Lens(_)) => "lens",
+			Some(PartKind::FresnelLens(_)) => "fresnel-lens",
+			Some(PartKind::Outline(_)) => "outline",
 			_ => "",
 		},
 		Node::Project => "project",
@@ -190,17 +197,66 @@ pub(crate) fn values(project: &Project, view: &View, node: Node) -> HashMap<Stri
 			values.insert("Wavelength".into(), if lambda.is_finite() { format!("{lambda:.1}") } else { String::new() });
 			values.insert("NinePoint".into(), (sim.stencil == Stencil::NinePoint).to_string());
 		}
-		Node::Part(i) => {
-			if let PartKind::Triangle(t) = &project.parts[i].kind {
-				// Next's TriangleApexConverter, 0.#
+		Node::Part(i) => match &project.parts[i].kind {
+			PartKind::Triangle(t) => {
+				// Next's TriangleApexConverter
 				let (a, b) = t.effective_angles();
-				let apex = format!("{:.1}", 180.0 - a - b);
-				values.insert("ApexAngle".into(), format!("{}\u{b0}", apex.strip_suffix(".0").unwrap_or(&apex)));
+				values.insert("ApexAngle".into(), format!("{}\u{b0}", one_decimal(180.0 - a - b)));
 			}
-		}
+			PartKind::Lens(l) => {
+				values.insert("IsConcave".into(), l.is_concave().to_string());
+				values.insert("EdgeThickness".into(), edge_text(l, 1, ZoneDivision::EqualWidth));
+			}
+			PartKind::FresnelLens(f) => {
+				values.insert("EdgeThickness".into(), edge_text(&f.lens, f.zones, f.division));
+			}
+			PartKind::Outline(o) => {
+				values.insert("Points#".into(), o.points.len().to_string());
+				for (k, p) in o.points.iter().enumerate() {
+					values.insert(format!("Points.{k}.X"), p.x.to_string());
+					values.insert(format!("Points.{k}.Y"), p.y.to_string());
+				}
+			}
+			_ => {}
+		},
 		_ => {}
 	}
 	values
+}
+
+/// A lens's thickness at the rim with its radii fitted as a run fits them (Next's LensEdgeConverter).
+fn edge_text(l: &Lens, zones: u32, division: ZoneDivision) -> String {
+	let (diameter, thickness) = (l.diameter.max(2), l.thickness.max(1));
+	let (r1, r2) = fit_radii_zoned(diameter, thickness, l.r1, l.r2, zones, division);
+	format!("{} px", one_decimal(edge_thickness(diameter, thickness, r1, r2, zones, division)))
+}
+
+/// `v` as .NET's `0.#`: one decimal, none when it is 0.
+fn one_decimal(v: f64) -> String {
+	let text = format!("{v:.1}");
+	text.strip_suffix(".0").map_or(text.clone(), str::to_owned)
+}
+
+/// Edits an outline's points: `Add` appends one a step right of the last (Next's PartPointsView), `Remove` takes the
+/// one at index `text`, `<index>.X` and `<index>.Y` set a coordinate.
+fn set_point(points: &mut Vec<Point>, path: &str, text: &str) -> Result<(), String> {
+	const STEP: i32 = 20;
+	match path {
+		"Add" => {
+			let last = points.last().copied();
+			points.push(last.map_or(Point::new(0, 0), |p| Point::new(p.x + STEP, p.y)));
+		}
+		"Remove" => {
+			let k = text.parse::<usize>().ok().filter(|&k| k < points.len()).ok_or("no such point")?;
+			points.remove(k);
+		}
+		_ => {
+			let (k, axis) = path.split_once('.').ok_or("no such field")?;
+			let point = k.parse::<usize>().ok().and_then(|k| points.get_mut(k)).ok_or("no such point")?;
+			set_path(point, axis, text)?;
+		}
+	}
+	Ok(())
 }
 
 /// Sets the field at `path` of `of` from the text the user entered.
@@ -253,6 +309,21 @@ pub(crate) fn set_at(project: &mut Project, view: &mut View, node: Node, path: &
 		let part = project.parts.get_mut(i).ok_or("no such part")?;
 		if path.starts_with("Base.") {
 			return set_path(part, path, text);
+		}
+		match (&mut part.kind, path) {
+			(PartKind::Outline(o), _) if path.starts_with("Points.") => {
+				return set_point(&mut o.points, &path[7..], text);
+			}
+			(PartKind::Lens(l), "IsConcave") => {
+				l.set_concave(text == "true");
+				return Ok(());
+			}
+			// Next's MirrorToggled: the name follows, Lens 1 to Mirror 1 and back
+			(PartKind::Lens(_) | PartKind::FresnelLens(_), "Material.Mirror" | "Lens.Material.Mirror") => {
+				set_lens_mirror(part, text == "true");
+				return Ok(());
+			}
+			_ => {}
 		}
 		set_path(part, &format!("{}{path}", kind_prefix(part)), text)?;
 		part.kind.follow(path);
@@ -357,5 +428,25 @@ mod path_tests {
 		set_at(&mut p, &mut v, part, "Kind", "RightIsosceles").unwrap();
 		assert_eq!(super::values(&p, &v, part)["AngleA"], "45");
 		assert_eq!(super::values(&p, &v, part)["ApexAngle"], "90\u{b0}");
+		// a lens: the mirror box renames it, the concave box flips both radii
+		p.parts[0] = Part::new(PartKind::Lens(Lens::default()), 0, 0);
+		p.parts[0].base.name = "Lens 1".into();
+		set_at(&mut p, &mut v, part, "Material.Mirror", "true").unwrap();
+		assert_eq!(p.parts[0].base.name, "Mirror 1");
+		let concave = super::values(&p, &v, part)["IsConcave"] == "true";
+		set_at(&mut p, &mut v, part, "IsConcave", &(!concave).to_string()).unwrap();
+		assert_eq!(super::values(&p, &v, part)["IsConcave"], (!concave).to_string());
+		// an outline's points: added a step right of the last, set, removed
+		p.parts[0] = Part::new(PartKind::Outline(waveduderust::model::Outline::default()), 0, 0);
+		set_at(&mut p, &mut v, part, "Points.Add", "").unwrap();
+		set_at(&mut p, &mut v, part, "Points.Add", "").unwrap();
+		set_at(&mut p, &mut v, part, "Points.0.Y", "5").unwrap();
+		let values = super::values(&p, &v, part);
+		assert_eq!(
+			(values["Points#"].as_str(), values["Points.1.X"].as_str(), values["Points.0.Y"].as_str()),
+			("2", "20", "5")
+		);
+		set_at(&mut p, &mut v, part, "Points.Remove", "0").unwrap();
+		assert_eq!(super::values(&p, &v, part)["Points#"], "1");
 	}
 }

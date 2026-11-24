@@ -113,7 +113,11 @@ export component FormCheck inherits Rectangle {
         text: root.text;
         enabled: root.enabled;
         checked: root.value == root.on;
-        toggled => { Form.set(root.path, self.checked ? root.on : root.off); }
+        toggled => {
+            Form.set(root.path, self.checked ? root.on : root.off);
+            // the field may refuse or coerce the value, which then need not change
+            self.checked = root.value == root.on;
+        }
     }
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
 }
@@ -227,7 +231,7 @@ export component FormDescription inherits VerticalLayout {
                 height: 11px;
                 y: (parent.height - self.height) / 2;
                 source: @image-url("icons/next/chevron-right.svg");
-                rotation-angle: Form.described ? 90deg : 0deg;
+                transform-rotation: Form.described ? 90deg : 0deg;
             }
             Text {
                 text: @tr("Description");

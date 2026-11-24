@@ -929,6 +929,22 @@ pub struct Part {
 	pub kind: PartKind,
 }
 
+impl Lens {
+	/// Whether the lens diverges: its surfaces' curvatures sum below zero (Next's IsConcave).
+	pub fn is_concave(&self) -> bool {
+		let curvature = |r: f64| if r == 0.0 { 0.0 } else { 1.0 / r };
+		curvature(self.r1) - curvature(self.r2) < 0.0
+	}
+
+	/// Turns the lens around to diverge or converge by flipping the sign of both radii; a flat surface stays flat.
+	pub fn set_concave(&mut self, concave: bool) {
+		if concave != self.is_concave() {
+			let flip = |r: f64| if r == 0.0 { 0.0 } else { -r };
+			(self.r1, self.r2) = (flip(self.r1), flip(self.r2));
+		}
+	}
+}
+
 impl PartKind {
 	/// Carries an edit of the field at `path` (below the kind) to the fields tied to it, as Next's setters: a linked
 	/// rectangle's or ellipse's other side, a triangle preset's angles, an isosceles triangle's second angle.

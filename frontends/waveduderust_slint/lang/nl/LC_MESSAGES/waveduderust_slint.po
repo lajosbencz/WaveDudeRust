@@ -100,6 +100,18 @@ msgstr "30-60-90"
 msgid "4th-order Laplacian"
 msgstr "4e-orde-Laplaciaan"
 
+#. Kind.FresnelLensPart
+msgid "A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, equal in width or in depth, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and their division; a flat surface stays flat."
+msgstr "Een fresnellens: een lens waarvan de gekromde oppervlakken in zones zijn geknipt, van de as tot de rand, even breed of even diep, waarbij de boog van elke zone opnieuw begint op het topvlak, zodat een dunne plaat het licht buigt als een dikke lens. De instellingen zijn die van de lens, met het aantal zones en hun verdeling; een vlak oppervlak blijft vlak."
+
+#. Kind.OutlinePart
+msgid "A free outline of glass or mirror: a closed shape through the points you place and drag; fewer than three paint nothing."
+msgstr "Een vrije omtrek van glas of als spiegel: een gesloten vorm door de punten die u plaatst en sleept; minder dan drie tekenen niets."
+
+#. Kind.LensPart
+msgid "A lens or a mirror: a strip of the diameter between two spherical surfaces, each bulging outward, flat or hollow by the sign of its radius, the centre thickness apart. As a mirror it reflects everything; as a lens it refracts by its index, with an anti-reflection coating and absorption if wanted."
+msgstr "Een lens of een spiegel: een strook van de diameter tussen twee boloppervlakken, elk bol, vlak of hol naar het teken van zijn straal, de middendikte uit elkaar. Als spiegel kaatst hij alles terug; als lens breekt hij naar zijn index, desgewenst met een antireflectielaag en absorptie."
+
 #. Hint.Probe.YScale
 msgid "A linear or a logarithmic value axis; intensity probes only, the field is always linear."
 msgstr "Lineaire of logaritmische waardenas; alleen intensiteitssondes, het veld is altijd lineair."
@@ -171,6 +183,10 @@ msgstr "Optisch onderdeel toevoegen (menu met soorten; achteraan)"
 #. MenuProjectAddPart
 msgid "Add part"
 msgstr "Onderdeel toevoegen"
+
+#. ButtonAddPoint
+msgid "Add point"
+msgstr "Punt toevoegen"
 
 #. MenuProjectAddProbe
 msgid "Add probe"
@@ -308,6 +324,10 @@ msgstr "Annuleren"
 msgid "Canvas"
 msgstr "Canvas"
 
+#. Label.LensPart.Thickness
+msgid "Centre thickness"
+msgstr "Middendikte"
+
 #. MessagesClear
 msgid "Clear"
 msgstr "Wissen"
@@ -351,6 +371,10 @@ msgstr "Kolommen"
 #. Label.Source.IsComposite
 msgid "Composite source"
 msgstr "Samengestelde bron"
+
+#. Label.LensPart.IsConcave
+msgid "Concave (diverging)"
+msgstr "Hol (divergerend)"
 
 #. Enum.SourceMode.Continuous
 msgid "Continuous"
@@ -416,6 +440,10 @@ msgstr "Detector"
 msgid "Detector sensitivity"
 msgstr "Gevoeligheid"
 
+#. Label.LensPart.Diameter
+msgid "Diameter"
+msgstr "Diameter"
+
 #. Hint.EllipsePart.Width
 msgid "Diameter across the axis in pixels."
 msgstr "Diameter dwars op de as in pixels."
@@ -439,6 +467,10 @@ msgstr "Afstand tussen naburige kolommen in canvaspixels."
 #. Hint.SourceArray.SpacingY
 msgid "Distance between neighbouring rows in canvas pixels."
 msgstr "Afstand tussen naburige rijen in canvaspixels."
+
+#. Hint.LensPart.Thickness
+msgid "Distance between the two surfaces on the axis in pixels."
+msgstr "Afstand tussen de twee oppervlakken op de as in pixels."
 
 #. Hint.Display.SourceMarkersInExport
 msgid "Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos."
@@ -475,6 +507,10 @@ msgstr "De fase van elke emitter wordt tot ± zoveel graden verschoven. 0 schake
 #. Hint.SourceArray.RandomOffWidth
 msgid "Each gap between bursts is offset by up to ± this many cycles, re-drawn every period. 0 turns it off."
 msgstr "Elk gat tussen pulsen wordt tot ± zoveel perioden verschoven, elke periode opnieuw getrokken. 0 schakelt het uit."
+
+#. LabelEdgeThickness
+msgid "Edge thickness"
+msgstr "Randdikte"
 
 #. Label.Scene.Edges
 msgid "Edges"
@@ -515,6 +551,14 @@ msgstr "Exportbereik bij dit beeld laten eindigen (O)"
 #. Hint.Source.PulseShape
 msgid "Envelope of each burst; pulsed mode only."
 msgstr "Omhullende van elke puls; alleen in pulsmodus."
+
+#. Enum.ZoneDivision.EqualDepth
+msgid "Equal depth"
+msgstr "Even diep"
+
+#. Enum.ZoneDivision.EqualWidth
+msgid "Equal width"
+msgstr "Even breed"
 
 #. Enum.TriangleType.Equilateral
 msgid "Equilateral"
@@ -732,6 +776,10 @@ msgstr "Hoe sterk het onderdeel golven absorbeert, 0 (helemaal niet) tot 255, zo
 msgid "How the index runs through the band: a layer at √n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for."
 msgstr "Hoe de index door de band loopt: een laag met √n, het kwartgolfidee, of een geleidelijke stijging van het medium buiten naar het glas. Een geleidelijke band reflecteert minder dan een laag zodra hij een golflengte of dikker is, bij elke golflengte; een laag alleen bij de golflengte waarvoor hij is gesneden."
 
+#. Hint.FresnelLensPart.Division
+msgid "How the zones are divided from the axis to the rim: equal in width, the outer zone the deepest; or equal in depth, each zone cut to the same depth and the zones narrowing outward, as the elements of a lighthouse lens are."
+msgstr "Hoe de zones van de as tot de rand verdeeld zijn: even breed, de buitenste zone het diepst; of even diep, elke zone tot dezelfde diepte gesneden en de zones naar buiten toe smaller, zoals de elementen van een vuurtorenlens."
+
 #. Enum.SceneMode.Image
 msgid "Image"
 msgstr "Afbeelding"
@@ -880,6 +928,10 @@ msgstr "Afspelen herhalen binnen het exportbereik (L)"
 msgid "Lower bound of the value axis when it is not auto-scaled."
 msgstr "Ondergrens van de waardenas zonder automatische schaling."
 
+#. Hint.LensPart.Mirror
+msgid "Make the part a mirror instead of a lens. The refractive index, the coating and the absorption are ignored then."
+msgstr "Het onderdeel een spiegel maken in plaats van een lens. De brekingsindex, de coating en de absorptie worden dan genegeerd."
+
 #. Hint.ShapePart.Mirror
 msgid "Make the part a mirror instead of glass. The refractive index, the coating and the absorption are ignored then."
 msgstr "Het onderdeel een spiegel maken in plaats van glas. De brekingsindex, de coating en de absorptie worden dan genegeerd."
@@ -1008,6 +1060,10 @@ msgstr "Aantal zijden"
 msgid "Number of sides, 3 to 64."
 msgstr "Aantal zijden, 3 tot 64."
 
+#. Hint.FresnelLensPart.Zones
+msgid "Number of zones each curved surface is cut into, from the axis to the rim, equal in width or in depth as the zone division says. At each zone's inner edge the arc starts again at the vertex plane, so the plate stays thin; 1 is a plain lens."
+msgstr "Aantal zones waarin elk gekromd oppervlak wordt geknipt, van de as tot de rand, even breed of even diep zoals de zoneverdeling zegt. Aan de binnenrand van elke zone begint de boog opnieuw op het topvlak, zodat de plaat dun blijft; 1 is een gewone lens."
+
 #. MenuAddOrGate
 msgid "OR"
 msgstr "OR"
@@ -1132,6 +1188,10 @@ msgstr "Afspelen (spatie)"
 msgid "Point"
 msgstr "Punt"
 
+#. SectionPoints
+msgid "Points"
+msgstr "Punten"
+
 #. MenuAddPolygon
 msgid "Polygon"
 msgstr "Polygoon"
@@ -1200,6 +1260,22 @@ msgstr "De band op de zijkanten leggen: de vlakken die voor- noch achterkant zij
 msgid "Quality"
 msgstr "Kwaliteit"
 
+#. Label.LensPart.R1
+msgid "R1"
+msgstr "R1"
+
+#. Label.LensPart.R2
+msgid "R2"
+msgstr "R2"
+
+#. Hint.LensPart.R1
+msgid "Radius of the first surface in pixels: positive bulges outward, negative is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest that fits."
+msgstr "Straal van het eerste oppervlak in pixels: positief bolt naar buiten, negatief is hol, 0 is vlak. Een straal die te sterk gekromd is voor de diameter en de middendikte wordt verhoogd tot de kleinste die past."
+
+#. Hint.LensPart.R2
+msgid "Radius of the second surface in pixels: negative bulges outward, positive is concave, 0 is flat. A radius too curved for the diameter and the centre thickness is raised to the smallest that fits."
+msgstr "Straal van het tweede oppervlak in pixels: negatief bolt naar buiten, positief is hol, 0 is vlak. Een straal die te sterk gekromd is voor de diameter en de middendikte wordt verhoogd tot de kleinste die past."
+
 #. SectionRandom
 msgid "Random offsets, added per emitter"
 msgstr "Willekeurige afwijkingen, per emitter opgeteld"
@@ -1247,6 +1323,10 @@ msgstr "Verwijderen"
 #. TipRemove
 msgid "Remove (Del)"
 msgstr "Verwijderen (Del)"
+
+#. TipRemovePoint
+msgid "Remove this point"
+msgstr "Dit punt verwijderen"
 
 #. Hint.Simulation.VisualizeEvery
 msgid "Render a frame, export it and sample the probes every this many steps."
@@ -1444,6 +1524,10 @@ msgstr "Simulatie stoppen; de berekende beelden blijven (Esc)"
 msgid "The angle at the apex: 180° minus the two base angles"
 msgstr "De hoek aan de top: 180° min de twee basishoeken"
 
+#. TipEdgeThickness
+msgid "Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim"
+msgstr "Dikte aan de rand: de middendikte min wat de bolle oppervlakken nemen, plus wat de holle toevoegen; 0 als de oppervlakken elkaar aan de rand raken"
+
 #. Hint.Scene.DampingEdge
 msgid "Thickness in pixels of the absorbing frame: positive inside the canvas, where it shows as a dark margin; negative outside it, simulated but never shown. 0 turns it off."
 msgstr "Dikte in pixels van de absorberende rand: positief binnen het canvas, waar hij als donkere marge zichtbaar is; negatief erbuiten, gesimuleerd maar nooit getoond. 0 schakelt hem uit."
@@ -1520,6 +1604,10 @@ msgstr "Versie van het projectbestandsformaat."
 msgid "Vertical spacing"
 msgstr "Verticale afstand"
 
+#. HintPolygonPoints
+msgid "Vertices of the outline relative to the centre, before rotation. Empty: the regular polygon above is used."
+msgstr "Hoekpunten van de omtrek ten opzichte van het middelpunt, vóór rotatie. Leeg: de regelmatige veelhoek hierboven wordt gebruikt."
+
 #. SectionVideo
 msgid "Video export"
 msgstr "Video-export"
@@ -1547,6 +1635,10 @@ msgstr "Golflengte"
 #. Hint.Scene.ImagePath
 msgid "Where the embedded image came from; the embedded image is what is simulated, a missing file changes nothing. The file is watched while the project is open and re-embedded when it changes; on opening the project a changed file replaces the embedded image too."
 msgstr "Herkomst van de ingebedde afbeelding; gesimuleerd wordt de ingebedde afbeelding, een ontbrekend bestand verandert niets. Het bestand wordt bewaakt zolang het project open is en opnieuw ingebed als het verandert; bij het openen van het project vervangt een gewijzigd bestand de ingebedde afbeelding ook."
+
+#. Hint.LensPart.IsConcave
+msgid "Whether the lens diverges, its surfaces curving inward. Ticking it turns the lens around by flipping the sign of both radii; a flat surface stays flat."
+msgstr "Of de lens divergeert, dus de oppervlakken naar binnen gekromd zijn. Aanvinken keert de lens om door het teken van beide stralen te wisselen; een vlak oppervlak blijft vlak."
 
 #. Label.Scene.Width
 msgid "Width"
@@ -1588,6 +1680,10 @@ msgstr "X van het middelpunt in canvaspixels."
 msgid "X of the probe pixel, or of the start of the line, in canvas pixels."
 msgstr "X van de sondepixel, of van het begin van de lijn, in canvaspixels."
 
+#. Hint.PartPoint.X
+msgid "X relative to the part's centre in canvas pixels, before rotation."
+msgstr "X ten opzichte van het middelpunt van het onderdeel in canvaspixels, vóór rotatie."
+
 #. MenuAddXorGate
 msgid "XOR (Mach-Zehnder)"
 msgstr "XOR (Mach-Zehnder)"
@@ -1612,9 +1708,21 @@ msgstr "Y van het middelpunt in canvaspixels."
 msgid "Y of the probe pixel, or of the start of the line, in canvas pixels."
 msgstr "Y van de sondepixel, of van het begin van de lijn, in canvaspixels."
 
+#. Hint.PartPoint.Y
+msgid "Y relative to the part's centre in canvas pixels, before rotation."
+msgstr "Y ten opzichte van het middelpunt van het onderdeel in canvaspixels, vóór rotatie."
+
+#. Label.FresnelLensPart.Division
+msgid "Zone division"
+msgstr "Zoneverdeling"
+
 #. MenuAddZonePlate
 msgid "Zone plate"
 msgstr "Zoneplaat"
+
+#. LabelMetaZones
+msgid "Zones"
+msgstr "Zones"
 
 #. ItemCountMany
 msgid "{} entries"
@@ -1644,6 +1752,16 @@ msgstr "Eigen hoeken"
 msgctxt "Label.OpticalPart.Enabled"
 msgid "Enabled"
 msgstr "Ingeschakeld"
+
+#. Label.PartPoint.X
+msgctxt "Label.PartPoint.X"
+msgid "X"
+msgstr "X"
+
+#. Label.PartPoint.Y
+msgctxt "Label.PartPoint.Y"
+msgid "Y"
+msgstr "Y"
 
 #. Label.Probe.Measurement
 msgctxt "Label.Probe.Measurement"
