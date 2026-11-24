@@ -574,3 +574,276 @@ export component SourceForm inherits VerticalLayout {
         }
     }
 }
+
+// Next's ProbeView: a probabilistic detector is a line of the integrated intensity, so it fixes the layer, the
+// measurement and the kind.
+export component ProbeForm inherits VerticalLayout {
+    property <bool> line: Form.value(Form.revision, "Kind") == "Line";
+    property <string> detector: Form.value(Form.revision, "Detector");
+    property <bool> standard: root.detector == "Standard";
+    property <bool> field: Form.value(Form.revision, "Layer") == "Field";
+    alignment: start;
+    FormSection { text: @tr("General"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Name"); tip: @tr("Name shown in the project tree and in the graph title."); }
+            FormText { path: "Name"; tip: @tr("Name shown in the project tree and in the graph title."); }
+        }
+        Row {
+            FormCheck { colspan: 2; path: "Active"; text: @tr("Active"); tip: @tr("Sample and draw this probe."); }
+        }
+        Row {
+            FormLabel { text: @tr("Start after step"); tip: @tr("Step at which recording starts; 0 records from the first step."); }
+            FormNumber {
+                path: "StartAfter";
+                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                tip: @tr("Step at which recording starts; 0 records from the first step.");
+            }
+        }
+    }
+    FormSection { text: @tr("Measurement"); }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Detector");
+                tip: @tr("A standard probe, or a probabilistic detector: counting, the detections of the whole line step by step over time, as a photomultiplier's pulses; or imaging, the detections at every point of the line added up over the run, as a SPAD array builds an image. A detector is a line probe of the integrated intensity.");
+            }
+            FormChoice {
+                path: "Detector";
+                words: ["Standard", "Counting", "Imaging"];
+                titles: [@tr("Standard"), @tr("Counting"), @tr("Imaging")];
+                tip: @tr("A standard probe, or a probabilistic detector: counting, the detections of the whole line step by step over time, as a photomultiplier's pulses; or imaging, the detections at every point of the line added up over the run, as a SPAD array builds an image. A detector is a line probe of the integrated intensity.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Detector sensitivity");
+                tip: @tr("Expected detections per unit of intensity per step at a point of the line: the detector's quantum efficiency and the scale from intensity to detections in one number. The detections are Poisson-distributed about intensity \u{D7} sensitivity; 0 detects nothing.");
+                enabled: !root.standard;
+            }
+            FormNumber {
+                path: "Sensitivity";
+                spec: { min: 0, max: 1000000, increment: 1, decimals: 2, drag-step: 0.5 };
+                enabled: !root.standard;
+                tip: @tr("Expected detections per unit of intensity per step at a point of the line: the detector's quantum efficiency and the scale from intensity to detections in one number. The detections are Poisson-distributed about intensity \u{D7} sensitivity; 0 detects nothing.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Bin size");
+                tip: @tr("Pixels of the line per bin of an imaging detector's histogram, 1 to 20: the detections of a bin's pixels are added up, and the graph shows the bin's total across them. Wider bins fill faster and show less detail.");
+                enabled: root.detector == "Imaging";
+            }
+            FormNumber {
+                path: "BinSize";
+                spec: { min: 1, max: 20, increment: 1, decimals: -1 };
+                enabled: root.detector == "Imaging";
+                tip: @tr("Pixels of the line per bin of an imaging detector's histogram, 1 to 20: the detections of a bin's pixels are added up, and the graph shows the bin's total across them. Wider bins fill faster and show less detail.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Layer"); tip: @tr("Output the probe samples and is drawn on."); enabled: root.standard; }
+            FormChoice {
+                path: "Layer";
+                words: ["Field", "Intensity"];
+                titles: [@tr("Field"), @tr("Intensity")];
+                enabled: root.standard;
+                tip: @tr("Output the probe samples and is drawn on.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Label.Probe.Measurement" => "Measurement");
+                tip: @tr("Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run.");
+                enabled: root.standard;
+            }
+            // the layer's own measurements (Next's MeasurementsForLayerConverter)
+            if root.field: FormChoice {
+                path: "Measurement";
+                words: ["Amplitude"];
+                titles: [@tr("Amplitude")];
+                enabled: root.standard;
+                tip: @tr("Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run.");
+            }
+            if !root.field: FormChoice {
+                path: "Measurement";
+                words: ["Value", "IntegratedValue"];
+                titles: [@tr("Value"), @tr("Integrated value")];
+                offset: 1;
+                enabled: root.standard;
+                tip: @tr("Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Kind"); tip: @tr("A single point, or a line from A to B."); enabled: root.standard; }
+            FormChoice {
+                path: "Kind";
+                words: ["Point", "Line"];
+                titles: [@tr("Point"), @tr("Line")];
+                enabled: root.standard;
+                tip: @tr("A single point, or a line from A to B.");
+            }
+        }
+    }
+    FormSection { text: @tr("Position"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("A x"); tip: @tr("X of the probe pixel, or of the start of the line, in canvas pixels."); }
+            FormNumber { path: "Ax"; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("X of the probe pixel, or of the start of the line, in canvas pixels."); }
+        }
+        Row {
+            FormLabel { text: @tr("A y"); tip: @tr("Y of the probe pixel, or of the start of the line, in canvas pixels."); }
+            FormNumber { path: "Ay"; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("Y of the probe pixel, or of the start of the line, in canvas pixels."); }
+        }
+        Row {
+            FormLabel { text: @tr("B x"); tip: @tr("X of the end of the line in canvas pixels; line probes only."); enabled: root.line; }
+            FormNumber {
+                path: "Bx";
+                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                enabled: root.line;
+                tip: @tr("X of the end of the line in canvas pixels; line probes only.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("B y"); tip: @tr("Y of the end of the line in canvas pixels; line probes only."); enabled: root.line; }
+            FormNumber {
+                path: "By";
+                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                enabled: root.line;
+                tip: @tr("Y of the end of the line in canvas pixels; line probes only.");
+            }
+        }
+    }
+    FormSection { text: @tr("Graph"); }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Box size");
+                tip: @tr("Nominal size of the graph box drawn over the output; a box larger than the canvas is shrunk to fit it, aspect kept.");
+            }
+            FormChoice {
+                path: "BoxSize";
+                words: ["Tiny", "Small", "Medium", "Large", "ExtraLarge", "Custom"];
+                titles: [@tr("Tiny"), @tr("Small"), @tr("Medium"), @tr("Large"), @tr("Extra large"), @tr("Custom")];
+                tip: @tr("Nominal size of the graph box drawn over the output; a box larger than the canvas is shrunk to fit it, aspect kept.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Box x");
+                tip: @tr("Left edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on.");
+            }
+            FormNumber {
+                path: "BoxX";
+                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                tip: @tr("Left edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Box y");
+                tip: @tr("Top edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on.");
+            }
+            FormNumber {
+                path: "BoxY";
+                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                tip: @tr("Top edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Box width");
+                tip: @tr("Width of the graph box in canvas pixels; custom box size only. A box larger than the canvas is shrunk to fit it, aspect kept.");
+                enabled: Form.value(Form.revision, "BoxSize") == "Custom";
+            }
+            FormNumber {
+                path: "BoxWidth";
+                spec: { min: 60, max: 4096, increment: 10, decimals: -1 };
+                enabled: Form.value(Form.revision, "BoxSize") == "Custom";
+                tip: @tr("Width of the graph box in canvas pixels; custom box size only. A box larger than the canvas is shrunk to fit it, aspect kept.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Box height");
+                tip: @tr("Height of the graph box in canvas pixels; custom box size only. A box larger than the canvas is shrunk to fit it, aspect kept.");
+                enabled: Form.value(Form.revision, "BoxSize") == "Custom";
+            }
+            FormNumber {
+                path: "BoxHeight";
+                spec: { min: 30, max: 4096, increment: 10, decimals: -1 };
+                enabled: Form.value(Form.revision, "BoxSize") == "Custom";
+                tip: @tr("Height of the graph box in canvas pixels; custom box size only. A box larger than the canvas is shrunk to fit it, aspect kept.");
+            }
+        }
+    }
+    FormSection { text: @tr("Axes"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Step axis"); tip: @tr("Sliding window of the last steps, or the whole run; point probes only."); enabled: !root.line; }
+            FormChoice {
+                path: "ScaleMode";
+                words: ["Running", "Full"];
+                titles: [@tr("Enum.ProbeScaleMode.Running" => "Running"), @tr("Enum.ProbeScaleMode.Full" => "Full")];
+                enabled: !root.line;
+                tip: @tr("Sliding window of the last steps, or the whole run; point probes only.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Window"); tip: @tr("Width of the sliding step window, in steps."); }
+            FormNumber { path: "Window"; spec: { min: 10, max: 1000000, increment: 10, decimals: -1 }; tip: @tr("Width of the sliding step window, in steps."); }
+        }
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "AutoScaleX";
+                text: @tr("Auto-scale steps");
+                enabled: !root.line;
+                tip: @tr("Let the step axis follow the samples recorded so far; point probes only.");
+            }
+        }
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "AutoScaleY";
+                text: @tr("Auto-scale values");
+                tip: @tr("Fit the value axis to the data instead of the fixed minimum and maximum.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Value axis");
+                tip: @tr("A linear or a logarithmic value axis; intensity probes only, the field is always linear.");
+                enabled: !root.field;
+            }
+            FormChoice {
+                path: "YScale";
+                words: ["Linear", "Logarithmic"];
+                titles: [@tr("Linear"), @tr("Logarithmic")];
+                enabled: !root.field;
+                tip: @tr("A linear or a logarithmic value axis; intensity probes only, the field is always linear.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Decades");
+                tip: @tr("Decades a logarithmic value axis spans below its top; smaller values, zero included, sit on the bottom line.");
+                enabled: Form.value(Form.revision, "YScale") == "Logarithmic" && !root.field;
+            }
+            FormNumber {
+                path: "Decades";
+                spec: { min: 1, max: 12, increment: 1, decimals: -1 };
+                enabled: Form.value(Form.revision, "YScale") == "Logarithmic" && !root.field;
+                tip: @tr("Decades a logarithmic value axis spans below its top; smaller values, zero included, sit on the bottom line.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Value minimum"); tip: @tr("Lower bound of the value axis when it is not auto-scaled."); }
+            FormNumber { path: "YMin"; spec: { min: -1000000000, max: 1000000000, increment: 0.1, decimals: -1 }; tip: @tr("Lower bound of the value axis when it is not auto-scaled."); }
+        }
+        Row {
+            FormLabel { text: @tr("Value maximum"); tip: @tr("Upper bound of the value axis when it is not auto-scaled."); }
+            FormNumber { path: "YMax"; spec: { min: -1000000000, max: 1000000000, increment: 0.1, decimals: -1 }; tip: @tr("Upper bound of the value axis when it is not auto-scaled."); }
+        }
+    }
+}

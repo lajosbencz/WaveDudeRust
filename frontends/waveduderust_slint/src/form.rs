@@ -119,6 +119,7 @@ pub(crate) fn kind(node: Node) -> &'static str {
 		Node::Simulation => "simulation",
 		Node::Display => "display",
 		Node::Source(_) => "source",
+		Node::Probe(_) => "probe",
 		_ => "",
 	}
 }
@@ -203,6 +204,17 @@ pub(crate) fn set_at(project: &mut Project, view: &mut View, node: Node, path: &
 		*array = (text == "true").then(|| array.take().unwrap_or_default());
 		return Ok(());
 	}
+	if let Node::Probe(i) = node {
+		// Next's probe setters: the box on A moves with it; the detector and layer settings agree
+		let probe = project.probes.get_mut(i).ok_or("no such probe")?;
+		let attached = probe.box_attached();
+		set_path(probe, path, text)?;
+		if attached {
+			(probe.box_x, probe.box_y) = (probe.ax, probe.ay);
+		}
+		probe.coerce();
+		return Ok(());
+	}
 	with_object!(project, view, node, |of| set_path(of, path, text), Err("nothing to edit".into()), mut)
 }
 
@@ -278,5 +290,16 @@ mod path_tests {
 		set_at(&mut p, &mut v, Node::Source(0), "DetachAfter", "-1").unwrap();
 		assert_eq!(p.sources[0].detach_after, None);
 		assert_eq!(super::values(&p, &v, Node::Source(0))["DetachAfter"], "-1");
+		// a probe takes Next's coupling: a detector is an integrated intensity line; the box on A follows it
+		p.probes.push(Default::default());
+		let probe = Node::Probe(0);
+		(p.probes[0].box_x, p.probes[0].box_y) = (p.probes[0].ax, p.probes[0].ay);
+		set_at(&mut p, &mut v, probe, "Ax", "40").unwrap();
+		assert_eq!(p.probes[0].box_x, 40);
+		set_at(&mut p, &mut v, probe, "Detector", "Counting").unwrap();
+		assert_eq!(super::values(&p, &v, probe)["Measurement"], "IntegratedValue");
+		set_at(&mut p, &mut v, probe, "Detector", "Standard").unwrap();
+		set_at(&mut p, &mut v, probe, "Layer", "Field").unwrap();
+		assert_eq!(super::values(&p, &v, probe)["Measurement"], "Amplitude");
 	}
 }

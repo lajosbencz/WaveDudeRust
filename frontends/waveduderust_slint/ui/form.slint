@@ -123,8 +123,10 @@ export component FormChoice inherits Rectangle {
     in property <[string]> titles;
     in property <string> tip;
     in property <bool> enabled: true;
+    // `words` start at this index of the model's
+    in property <int> offset;
     // a pick assigns `current-index`, ending its binding: the index is put back on each change
-    property <int> index: Form.value(Form.revision, root.path + "#").to-float();
+    property <int> index: Form.value(Form.revision, root.path + "#").to-float() - root.offset;
     changed index => { combo.current-index = root.index; }
     horizontal-stretch: 1;
     min-height: max(Theme.row-height, combo.min-height);

@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 73 | 62 | 188 | 2 | 0 |
+| P | Properties | 101 | 36 | 186 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 242 | 263 | 486 | 98 | 6 |
+| | All | 270 | 237 | 484 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -632,7 +632,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-16 | Enum words localised from Enum.* | Strings/* | 30 Check box, combo box | partial | Scene's Mode and Edges words through @tr (Next's Enum.*); the items' words are raw |
 | P-17 | Text box: Enter pushes text and selects it; Esc restores when differing; keys consumed only if effective | Controls/EditBehavior.cs | 30 Text box | partial | LineEdit accepted(Enter) commits; no Esc restore, no select-all |
 | P-18 | Multiline text box keeps Enter as newline (Description) | Views/ProjectView.xaml:46-49 | 30 Text box | missing | LineEdit is single line |
-| P-19 | Name boxes update per keystroke (tree row renames live) | Views/SourceView.xaml:54 | 30 Text box | partial | FormText applies per keystroke, the tree row renaming live, the keystrokes one undo step; sources now, parts and probes with their forms |
+| P-19 | Name boxes update per keystroke (tree row renames live) | Views/SourceView.xaml:54 | 30 Text box | partial | FormText applies per keystroke, the tree row renaming live, the keystrokes one undo step; sources and probes now, parts with their forms |
 | P-20 | Commit policy: commit on Enter, on focus loss; flush before Save/Run/Undo/selection change (PendingEdit) | Controls/EditBehavior.cs | 30 Text box commit policy | missing | LineEdit accepted only; focus loss drops text; selecting another row loses typed value |
 | P-21 | Widget press flushes pending edit first (tree row, check, button, picker, dock tab) | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
 | P-22 | Pending text survives unmount (dock tab switch, picker close); Esc drops it | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
@@ -899,34 +899,34 @@ Not-in-spec rows are marked in the Spec column.
 | P-283 | XOR/AND/OR gate: Input B RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-284 | XOR/AND/OR gate: Upper output port RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
 | P-285 | XOR/AND/OR gate: Lower output port RO | Views/LogicGatePartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-286 | Probe: Name TB | Views/ProbeView.xaml:110 | 30 Probe | partial | G |
-| P-287 | Probe: Active CB | Views/ProbeView.xaml:112 | 30 Probe | partial | G |
-| P-288 | Probe: Start after step NB min 0 | Views/ProbeView.xaml:116 | 30 Probe | partial | G |
-| P-289 | Probe: Detector combo Standard/Counting/Imaging | Views/ProbeView.xaml:122 | 30 Probe | partial | G |
-| P-290 | Probe: Detector sensitivity NB 0..1e6 2 dec drag 0.5 (detector only) | Views/ProbeView.xaml:126 | 30 Probe | partial | G; no greying/enabled rule |
-| P-291 | Probe: Bin size NB 1..20 (imaging only) | Views/ProbeView.xaml:130 | 30 Probe | partial | G; no greying/enabled rule |
-| P-292 | Probe: Layer combo Field/Intensity (disabled for detector) | Views/ProbeView.xaml:134 | 30 Probe | partial | G; no greying/enabled rule |
-| P-293 | Probe: Measurement combo by layer (Field->Amplitude; Intensity->Value/Integrated value) | Views/ProbeView.xaml:139 | 30 Probe | partial | G; Measurement list is not filtered by layer |
-| P-294 | Probe: Kind combo Point/Line (disabled for detector) | Views/ProbeView.xaml:143 | 30 Probe | partial | G; no greying/enabled rule |
-| P-295 | Probe: A x NB min 0 | Views/ProbeView.xaml:150 | 30 Probe | partial | G |
-| P-296 | Probe: A y NB min 0 | Views/ProbeView.xaml:153 | 30 Probe | partial | G |
-| P-297 | Probe: B x NB min 0 (line only) | Views/ProbeView.xaml:156 | 30 Probe | partial | G; no greying/enabled rule |
-| P-298 | Probe: B y NB min 0 (line only) | Views/ProbeView.xaml:159 | 30 Probe | partial | G; no greying/enabled rule |
-| P-299 | Probe: Box size combo Tiny..Extra large/Custom | Views/ProbeView.xaml:165 | 30 Probe | partial | G |
-| P-300 | Probe: Box x NB min 0 | Views/ProbeView.xaml:169 | 30 Probe | partial | G |
-| P-301 | Probe: Box y NB min 0 | Views/ProbeView.xaml:172 | 30 Probe | partial | G |
-| P-302 | Probe: Box width NB 60..4096 step 10 (custom) | Views/ProbeView.xaml:175 | 30 Probe | partial | G; no greying/enabled rule |
-| P-303 | Probe: Box height NB 30..4096 step 10 (custom) | Views/ProbeView.xaml:178 | 30 Probe | partial | G; no greying/enabled rule |
-| P-304 | Probe: Step axis combo Running/Full (point probe or counting) | Views/ProbeView.xaml:184 | 30 Probe | partial | G; no greying/enabled rule |
-| P-305 | Probe: Window NB 10..1e6 step 10 | Views/ProbeView.xaml:188 | 30 Probe | partial | G |
-| P-306 | Probe: Auto-scale steps CB (point/counting) | Views/ProbeView.xaml:190 | 30 Probe | partial | G; no greying/enabled rule |
-| P-307 | Probe: Auto-scale values CB | Views/ProbeView.xaml:192 | 30 Probe | partial | G |
-| P-308 | Probe: Value axis combo Linear/Logarithmic (intensity layer) | Views/ProbeView.xaml:196 | 30 Probe | partial | G; no greying/enabled rule |
-| P-309 | Probe: Decades NB 1..12 (log axis) | Views/ProbeView.xaml:200 | 30 Probe | partial | G; no greying/enabled rule |
-| P-310 | Probe: Value minimum NB step 0.1 | Views/ProbeView.xaml:203 | 30 Probe | partial | G |
-| P-311 | Probe: Value maximum NB step 0.1 | Views/ProbeView.xaml:206 | 30 Probe | partial | G |
-| P-312 | Probe: sections General/Measurement/Position/Graph/Axes | Views/ProbeView.xaml:105-206 | 30 Probe | missing |  |
-| P-313 | Probe: enabled/disabled rules by detector, layer, kind, box size, axis (styles lines 34-99) | Views/ProbeView.xaml:30-100 | 30 Probe | missing | fields hidden if dependent, otherwise always editable |
+| P-286 | Probe: Name TB | Views/ProbeView.xaml:110 | 30 Probe | done | ProbeForm FormText, per keystroke |
+| P-287 | Probe: Active CB | Views/ProbeView.xaml:112 | 30 Probe | done | FormCheck |
+| P-288 | Probe: Start after step NB min 0 | Views/ProbeView.xaml:116 | 30 Probe | done | FormNumber from 0 |
+| P-289 | Probe: Detector combo Standard/Counting/Imaging | Views/ProbeView.xaml:122 | 30 Probe | done | FormChoice Standard, Counting, Imaging |
+| P-290 | Probe: Detector sensitivity NB 0..1e6 2 dec drag 0.5 (detector only) | Views/ProbeView.xaml:126 | 30 Probe | done | FormNumber 0..1e6, 2 decimals, drag 0.5, detectors only |
+| P-291 | Probe: Bin size NB 1..20 (imaging only) | Views/ProbeView.xaml:130 | 30 Probe | done | FormNumber 1..20, the imaging detector only |
+| P-292 | Probe: Layer combo Field/Intensity (disabled for detector) | Views/ProbeView.xaml:134 | 30 Probe | done | FormChoice Field, Intensity, off for a detector |
+| P-293 | Probe: Measurement combo by layer (Field->Amplitude; Intensity->Value/Integrated value) | Views/ProbeView.xaml:139 | 30 Probe | done | one FormChoice per layer: Amplitude; Value, Integrated value (an offset into the model's words) |
+| P-294 | Probe: Kind combo Point/Line (disabled for detector) | Views/ProbeView.xaml:143 | 30 Probe | done | FormChoice Point, Line, off for a detector |
+| P-295 | Probe: A x NB min 0 | Views/ProbeView.xaml:150 | 30 Probe | done | FormNumber from 0; a graph box on A moves with it (Probe::box_attached) |
+| P-296 | Probe: A y NB min 0 | Views/ProbeView.xaml:153 | 30 Probe | done | FormNumber from 0; a graph box on A moves with it (Probe::box_attached) |
+| P-297 | Probe: B x NB min 0 (line only) | Views/ProbeView.xaml:156 | 30 Probe | done | FormNumber from 0, line probes only |
+| P-298 | Probe: B y NB min 0 (line only) | Views/ProbeView.xaml:159 | 30 Probe | done | FormNumber from 0, line probes only |
+| P-299 | Probe: Box size combo Tiny..Extra large/Custom | Views/ProbeView.xaml:165 | 30 Probe | done | FormChoice Tiny..Extra large, Custom |
+| P-300 | Probe: Box x NB min 0 | Views/ProbeView.xaml:169 | 30 Probe | done | FormNumber from 0 |
+| P-301 | Probe: Box y NB min 0 | Views/ProbeView.xaml:172 | 30 Probe | done | FormNumber from 0 |
+| P-302 | Probe: Box width NB 60..4096 step 10 (custom) | Views/ProbeView.xaml:175 | 30 Probe | done | FormNumber 60..4096 step 10, Custom only |
+| P-303 | Probe: Box height NB 30..4096 step 10 (custom) | Views/ProbeView.xaml:178 | 30 Probe | done | FormNumber 30..4096 step 10, Custom only |
+| P-304 | Probe: Step axis combo Running/Full (point probe or counting) | Views/ProbeView.xaml:184 | 30 Probe | done | FormChoice Running, Full, off for a line (Next's PointOnlyCombo by Kind, a detector's line included); contexts keep Next's enum words apart from the menus' |
+| P-305 | Probe: Window NB 10..1e6 step 10 | Views/ProbeView.xaml:188 | 30 Probe | done | FormNumber 10..1e6 step 10 |
+| P-306 | Probe: Auto-scale steps CB (point/counting) | Views/ProbeView.xaml:190 | 30 Probe | done | FormCheck, off for a line |
+| P-307 | Probe: Auto-scale values CB | Views/ProbeView.xaml:192 | 30 Probe | done | FormCheck |
+| P-308 | Probe: Value axis combo Linear/Logarithmic (intensity layer) | Views/ProbeView.xaml:196 | 30 Probe | done | FormChoice Linear, Logarithmic, off on the field layer |
+| P-309 | Probe: Decades NB 1..12 (log axis) | Views/ProbeView.xaml:200 | 30 Probe | done | FormNumber 1..12, a logarithmic axis on the intensity only (Next's IsLogarithmic) |
+| P-310 | Probe: Value minimum NB step 0.1 | Views/ProbeView.xaml:203 | 30 Probe | done | FormNumber step 0.1 |
+| P-311 | Probe: Value maximum NB step 0.1 | Views/ProbeView.xaml:206 | 30 Probe | done | FormNumber step 0.1 |
+| P-312 | Probe: sections General/Measurement/Position/Graph/Axes | Views/ProbeView.xaml:105-206 | 30 Probe | done | FormSection General, Measurement, Position, Graph, Axes |
+| P-313 | Probe: enabled/disabled rules by detector, layer, kind, box size, axis (styles lines 34-99) | Views/ProbeView.xaml:30-100 | 30 Probe | done | Next's DataTriggers as enabled bindings; an edit coerces the detector, layer, measurement, kind and value scale as Next's setters (Probe::coerce) |
 | P-314 | Scheme: Name TB (renaming repoints layers; tree row live) | Views/ColorSchemeView.xaml:71-72 | 30 Colour scheme | partial | G; no repoint check, Enter commit |
 | P-315 | Scheme: Kind combo Unspecified/Field/Intensity | Views/ColorSchemeView.xaml:75-76 | 30 Colour scheme | partial | G |
 | P-316 | Scheme: Description TB wraps, no newline | Views/ColorSchemeView.xaml:79-80 | 30 Colour scheme | partial | single-line |

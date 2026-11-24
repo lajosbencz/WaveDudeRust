@@ -221,6 +221,30 @@ impl Probe {
 		self.detector != ProbeDetector::Standard
 	}
 
+	/// Makes the detector, layer, measurement, kind and value scale agree, as an edit of one of them must: a detector
+	/// is a line probe of the integrated intensity; the field offers its amplitude on a linear axis only; the
+	/// intensity no amplitude.
+	pub fn coerce(&mut self) {
+		if self.is_detector() {
+			self.kind = ProbeKind::Line;
+			self.layer = Layer::Intensity;
+			self.measurement = Measurement::IntegratedValue;
+		}
+		match self.layer {
+			Layer::Field => {
+				self.measurement = Measurement::Amplitude;
+				self.y_scale = YScale::Linear;
+			}
+			Layer::Intensity if self.measurement == Measurement::Amplitude => self.measurement = Measurement::Value,
+			Layer::Intensity => {}
+		}
+	}
+
+	/// Whether the graph box sits on point A, so it moves with A.
+	pub fn box_attached(&self) -> bool {
+		self.box_x == self.ax && self.box_y == self.ay
+	}
+
 	/// Whether the graph shows a profile along the line (a line probe, an imaging detector) rather than a
 	/// series over time (a point probe, a counting detector, whose line gives one count a step).
 	pub fn shows_profile(&self) -> bool {

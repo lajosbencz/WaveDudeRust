@@ -8,9 +8,9 @@ use super::names;
 use super::ranges as r;
 use super::{
 	BraggReflector, Coating, ColorScheme, Diffuser, DisplayLayer, Ellipse, FacettedGrating, Fiber, FilterLayer,
-	FresnelLens, GrinLens, InterferenceFilter, Layer, Lens, LogicGate, Material, Measurement, MetaDesign, MetaSurface,
-	Outline, Part, PartKind, Polygon, Probe, ProbeKind, Project, Rectangle, Scene, SimpleGrating, Simulation, Source,
-	SourceArray, Stop, Triangle, TriangleType, Video, View, YScale, ZonePlate, normalize_angle,
+	FresnelLens, GrinLens, InterferenceFilter, Layer, Lens, LogicGate, Material, MetaDesign, MetaSurface, Outline,
+	Part, PartKind, Polygon, Probe, Project, Rectangle, Scene, SimpleGrating, Simulation, Source, SourceArray, Stop,
+	Triangle, TriangleType, Video, View, ZonePlate, normalize_angle,
 };
 use derive_setters::Setters;
 
@@ -132,22 +132,9 @@ impl Normalize for SourceArray {
 
 impl Normalize for Probe {
 	fn normalize(&mut self) {
-		if self.is_detector() {
-			// a detector is a line probe of the integrated intensity, whatever the file says
-			self.kind = ProbeKind::Line;
-			self.layer = Layer::Intensity;
-			self.measurement = Measurement::IntegratedValue;
-		}
+		self.coerce();
 		self.sensitivity = r::PROBE_SENSITIVITY.clamp_or(self.sensitivity, Probe::default().sensitivity);
 		self.bin_size = r::PROBE_BIN_SIZE.clamp_u32(self.bin_size);
-		match self.layer {
-			Layer::Field => {
-				self.measurement = Measurement::Amplitude;
-				self.y_scale = YScale::Linear;
-			}
-			Layer::Intensity if self.measurement == Measurement::Amplitude => self.measurement = Measurement::Value,
-			Layer::Intensity => {}
-		}
 		if !self.y_min.is_finite() || !self.y_max.is_finite() || self.y_max <= self.y_min {
 			self.y_min = -1.0;
 			self.y_max = 1.0;
@@ -479,7 +466,7 @@ pub fn box_in_canvas(probe: &Probe, w: u32, h: u32) -> BoxRect {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::model::{BoxSize, GateKind, Rgb};
+	use crate::model::{BoxSize, GateKind, Measurement, Rgb, YScale};
 
 	#[test]
 	fn angles_wrap() {

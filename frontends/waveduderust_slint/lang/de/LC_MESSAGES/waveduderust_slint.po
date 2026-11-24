@@ -96,9 +96,33 @@ msgstr "1 Eintrag"
 msgid "4th-order Laplacian"
 msgstr "Laplace 4. Ordnung"
 
+#. Hint.Probe.YScale
+msgid "A linear or a logarithmic value axis; intensity probes only, the field is always linear."
+msgstr "Lineare oder logarithmische Werteachse; nur Intensitätssonden, das Feld ist immer linear."
+
+#. Hint.Probe.Kind
+msgid "A single point, or a line from A to B."
+msgstr "Ein einzelner Punkt oder eine Linie von A nach B."
+
+#. Hint.Probe.Detector
+msgid "A standard probe, or a probabilistic detector: counting, the detections of the whole line step by step over time, as a photomultiplier's pulses; or imaging, the detections at every point of the line added up over the run, as a SPAD array builds an image. A detector is a line probe of the integrated intensity."
+msgstr "Eine Standardsonde oder ein probabilistischer Detektor: zählend, die Detektionen der ganzen Linie Schritt für Schritt über die Zeit, wie die Pulse eines Photomultipliers; oder bildgebend, die Detektionen an jedem Punkt der Linie über den Lauf aufsummiert, wie ein SPAD-Array ein Bild aufbaut. Ein Detektor ist eine Liniensonde der integrierten Intensität."
+
+#. Label.Probe.AX
+msgid "A x"
+msgstr "A x"
+
+#. Label.Probe.AY
+msgid "A y"
+msgstr "A y"
+
 #. MenuAddAndGate
 msgid "AND"
 msgstr "AND"
+
+#. Label.Probe.Active
+msgid "Active"
+msgstr "Aktiv"
 
 #. TipAddProbe
 msgid "Add a probe: a standard probe, or a probabilistic detector (appended at the end)"
@@ -148,13 +172,37 @@ msgstr "Anordnung"
 msgid "Auto"
 msgstr "Auto"
 
+#. Label.Probe.AutoScaleX
+msgid "Auto-scale steps"
+msgstr "Schritte automatisch skalieren"
+
+#. Label.Probe.AutoScaleY
+msgid "Auto-scale values"
+msgstr "Werte automatisch skalieren"
+
 #. Hint.Simulation.TimeDecay
 msgid "Averaging window factor of the intensity: the engine averages over this × 100 / lowest source level steps."
 msgstr "Fensterfaktor der Intensitätsmittelung: die Engine mittelt über diesen Wert × 100 / niedrigste Quellstufe Schritte."
 
+#. SectionAxes
+msgid "Axes"
+msgstr "Achsen"
+
+#. Label.Probe.BX
+msgid "B x"
+msgstr "B x"
+
+#. Label.Probe.BY
+msgid "B y"
+msgstr "B y"
+
 #. Hint.DisplayLayer.OverlayInExport
 msgid "Bake the outline into exported frames and videos of this output."
 msgstr "Den Umriss in exportierte Bilder und Videos dieser Ausgabe einbrennen."
+
+#. Label.Probe.BinSize
+msgid "Bin size"
+msgstr "Bin-Breite"
 
 #. Label.DisplayLayer.BlackLevel
 msgid "Black level"
@@ -163,6 +211,26 @@ msgstr "Schwarzwert"
 #. Hint.Scene.Mode
 msgid "Blank canvas of the given size, or a canvas built from the scene image."
 msgstr "Leere Leinwand der angegebenen Größe oder eine aus dem Szenenbild gebaute Leinwand."
+
+#. Label.Probe.BoxHeight
+msgid "Box height"
+msgstr "Kastenhöhe"
+
+#. Label.Probe.BoxSize
+msgid "Box size"
+msgstr "Kastengröße"
+
+#. Label.Probe.BoxWidth
+msgid "Box width"
+msgstr "Kastenbreite"
+
+#. Label.Probe.BoxX
+msgid "Box x"
+msgstr "Kasten x"
+
+#. Label.Probe.BoxY
+msgid "Box y"
+msgstr "Kasten y"
 
 #. MenuAddBraggReflector
 msgid "Bragg reflector"
@@ -216,6 +284,10 @@ msgstr "Durchgehend"
 msgid "Copy"
 msgstr "Kopieren"
 
+#. Enum.ProbeDetector.Counting
+msgid "Counting"
+msgstr "Zählend"
+
 #. MenuAddCountingDetector
 msgid "Counting detector"
 msgstr "Zählender Detektor"
@@ -224,6 +296,10 @@ msgstr "Zählender Detektor"
 msgid "Cu&t"
 msgstr "&Ausschneiden"
 
+#. Enum.ProbeBoxSize.Custom
+msgid "Custom"
+msgstr "Eigene"
+
 #. MenuEditCut
 msgid "Cut"
 msgstr "Ausschneiden"
@@ -231,6 +307,14 @@ msgstr "Ausschneiden"
 #. Label.Scene.DampingEdge
 msgid "Damping edge"
 msgstr "Dämpfungsrand"
+
+#. Label.Probe.Decades
+msgid "Decades"
+msgstr "Dekaden"
+
+#. Hint.Probe.Decades
+msgid "Decades a logarithmic value axis spans below its top; smaller values, zero included, sit on the bottom line."
+msgstr "Dekaden, die eine logarithmische Werteachse unter ihrem oberen Ende zeigt; kleinere Werte, auch null, liegen auf der unteren Linie."
 
 #. MenuEditDelete
 msgid "Delete"
@@ -243,6 +327,14 @@ msgstr "Beschreibung"
 #. Label.Source.DetachAfter
 msgid "Detach after step"
 msgstr "Abschalten nach Schritt"
+
+#. Label.Probe.Detector
+msgid "Detector"
+msgstr "Detektor"
+
+#. Label.Probe.Sensitivity
+msgid "Detector sensitivity"
+msgstr "Empfindlichkeit"
 
 #. MenuAddDiffractionGratings
 msgid "Diffraction gratings"
@@ -352,6 +444,10 @@ msgstr "Beispiele"
 msgid "Exit"
 msgstr "Beenden"
 
+#. Hint.Probe.Sensitivity
+msgid "Expected detections per unit of intensity per step at a point of the line: the detector's quantum efficiency and the scale from intensity to detections in one number. The detections are Poisson-distributed about intensity × sensitivity; 0 detects nothing."
+msgstr "Erwartete Detektionen je Einheit Intensität je Schritt an einem Punkt der Linie: die Quanteneffizienz des Detektors und der Maßstab von Intensität zu Detektionen in einer Zahl. Die Detektionen sind Poisson-verteilt um Intensität × Empfindlichkeit; 0 detektiert nichts."
+
 #. MenuFileExport
 msgid "Export"
 msgstr "Exportieren"
@@ -404,6 +500,10 @@ msgstr "Intensität exportieren..."
 msgid "Export last"
 msgstr "Letzten Export wiederholen"
 
+#. Enum.ProbeBoxSize.ExtraLarge
+msgid "Extra large"
+msgstr "Sehr groß"
+
 #. MenuAddFacettedGrating
 msgid "Facetted grating"
 msgstr "Facettengitter"
@@ -431,6 +531,10 @@ msgstr "Datei"
 #. Hint.Display.ExportFrom
 msgid "First simulation step of the exported range; 0 is the start of the run."
 msgstr "Erster Simulationsschritt des exportierten Bereichs; 0 ist der Anfang des Laufs."
+
+#. Hint.Probe.AutoScaleY
+msgid "Fit the value axis to the data instead of the fixed minimum and maximum."
+msgstr "Die Werteachse an die Daten anpassen statt an festes Minimum und Maximum."
 
 #. TipPreviewLive
 msgid "Follow the newest frame while the run is in progress (F)"
@@ -484,6 +588,10 @@ msgstr "Gaußsch"
 msgid "General"
 msgstr "Allgemein"
 
+#. SectionGraph
+msgid "Graph"
+msgstr "Diagramm"
+
 #. Label.Display.HandlesInPreview
 msgid "Handles in the preview"
 msgstr "Griffe in der Vorschau"
@@ -495,6 +603,10 @@ msgstr "Höhe"
 #. Hint.Scene.Height
 msgid "Height of a blank canvas in pixels."
 msgstr "Höhe einer leeren Leinwand in Pixeln."
+
+#. Hint.Probe.BoxHeight
+msgid "Height of the graph box in canvas pixels; custom box size only. A box larger than the canvas is shrunk to fit it, aspect kept."
+msgstr "Höhe des Diagrammkastens in Leinwandpixeln; nur bei eigener Kastengröße. Ein Kasten größer als die Leinwand wird seitenverhältnistreu auf sie verkleinert."
 
 #. MenuHelp
 msgid "Help"
@@ -524,6 +636,10 @@ msgstr "Bildquellen"
 msgid "Image the canvas is built from: red = refractive index (red 0 = a mirror), green = sources, blue = damping. The name of the embedded image, or a path relative to the project folder."
 msgstr "Bild, aus dem die Leinwand gebaut wird: Rot = Brechungsindex (Rot 0 = ein Spiegel), Grün = Quellen, Blau = Dämpfung. Der Name des eingebetteten Bilds oder ein Pfad relativ zum Projektordner."
 
+#. Enum.ProbeDetector.Imaging
+msgid "Imaging"
+msgstr "Bildgebend"
+
 #. MenuAddImagingDetector
 msgid "Imaging detector"
 msgstr "Bildgebender Detektor"
@@ -535,6 +651,10 @@ msgstr "Quelle in Läufe einbeziehen (Leertaste auf der Zeile schaltet um)"
 #. Hint.Source.Enabled
 msgid "Include the source in simulation runs."
 msgstr "Die Quelle in Simulationsläufe einbeziehen."
+
+#. Enum.ProbeMeasurement.IntegratedValue
+msgid "Integrated value"
+msgstr "Integrierter Wert"
 
 #. SectionIntensity
 msgid "Intensity"
@@ -552,9 +672,17 @@ msgstr "Intensitäts-Zeitabfall"
 msgid "Interference filter"
 msgstr "Interferenzfilter"
 
+#. Label.Probe.Kind
+msgid "Kind"
+msgstr "Art"
+
 #. Label.Display.LabelsInPreview
 msgid "Labels in the preview"
 msgstr "Beschriftungen in der Vorschau"
+
+#. Enum.ProbeBoxSize.Large
+msgid "Large"
+msgstr "Groß"
 
 #. Hint.Display.ExportTo
 msgid "Last simulation step of the exported range; 0 means the end of the run."
@@ -563,6 +691,14 @@ msgstr "Letzter Simulationsschritt des exportierten Bereichs; 0 bedeutet das End
 #. Hint.DisplayLayer.Overlay
 msgid "Lay the scene image's glowing-edges outline over this output in the preview."
 msgstr "Den Leuchtkanten-Umriss des Szenenbilds in der Vorschau über diese Ausgabe legen."
+
+#. Label.Probe.Layer
+msgid "Layer"
+msgstr "Ebene"
+
+#. Hint.Probe.BoxX
+msgid "Left edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on."
+msgstr "Linker Rand des Diagrammkastens in Leinwandpixeln. Ein Kasten auf Punkt A der Sonde wandert mit ihr; in die Nähe gezogen rastet er dort ein."
 
 #. Hint.Source.PulseWidth
 msgid "Length of each burst in cycles of the source frequency; pulsed mode only."
@@ -580,9 +716,33 @@ msgstr "Linse/Spiegel"
 msgid "Let the green channel of the scene image emit waves; the pixel value is the frequency level."
 msgstr "Den Grünkanal des Szenenbilds Wellen abstrahlen lassen; der Pixelwert ist die Frequenzstufe."
 
+#. Hint.Probe.AutoScaleX
+msgid "Let the step axis follow the samples recorded so far; point probes only."
+msgstr "Die Schrittachse den bisher aufgezeichneten Messwerten folgen lassen; nur Punktsonden."
+
+#. Enum.ProbeKind.Line
+msgid "Line"
+msgstr "Linie"
+
+#. Enum.ProbeValueScale.Linear
+msgid "Linear"
+msgstr "Linear"
+
+#. Enum.ProbeValueScale.Logarithmic
+msgid "Logarithmic"
+msgstr "Logarithmisch"
+
 #. TipPreviewLoop
 msgid "Loop playback over the export range (L)"
 msgstr "Wiedergabe im Exportbereich wiederholen (L)"
+
+#. Hint.Probe.YMin
+msgid "Lower bound of the value axis when it is not auto-scaled."
+msgstr "Untere Grenze der Werteachse ohne automatische Skalierung."
+
+#. SectionMeasurement
+msgid "Measurement"
+msgstr "Messung"
 
 #. Enum.ProbeBoxSize.Medium
 msgid "Medium"
@@ -648,6 +808,10 @@ msgstr "Name"
 msgid "Name of the colour scheme mapped onto the values."
 msgstr "Name des Farbschemas, das auf die Werte abgebildet wird."
 
+#. Hint.Probe.Name
+msgid "Name shown in the project tree and in the graph title."
+msgstr "Name im Projektbaum und im Diagrammtitel."
+
 #. Hint.Source.Name
 msgid "Name shown in the project tree and on the canvas."
 msgstr "Name im Projektbaum und auf der Leinwand."
@@ -667,6 +831,10 @@ msgstr "Nächstes Bild (.)"
 #. ItemCountZero
 msgid "No entries"
 msgstr "Keine Einträge"
+
+#. Hint.Probe.BoxSize
+msgid "Nominal size of the graph box drawn over the output; a box larger than the canvas is shrunk to fit it, aspect kept."
+msgstr "Nenngröße des Diagrammkastens über der Ausgabe; ein Kasten größer als die Leinwand wird seitenverhältnistreu auf sie verkleinert."
 
 #. Hint.Simulation.WaveSpeed
 msgid "Nominal wave speed in pixels per step; only used to estimate wavelengths in the editor."
@@ -728,6 +896,10 @@ msgstr "Umriss im Export"
 msgid "Outline in the preview"
 msgstr "Umriss in der Vorschau"
 
+#. Hint.Probe.Layer
+msgid "Output the probe samples and is drawn on."
+msgstr "Ausgabe, die die Sonde abtastet und auf der sie gezeichnet wird."
+
 #. TipPartEnabled
 msgid "Paint the part into the scene (Space on the row toggles it)"
 msgstr "Bauteil in die Szene zeichnen (Leertaste auf der Zeile schaltet um)"
@@ -776,6 +948,10 @@ msgstr "Phase"
 msgid "Phase offset in degrees, -180 to 180."
 msgstr "Phasenversatz in Grad, -180 bis 180."
 
+#. Hint.Probe.BinSize
+msgid "Pixels of the line per bin of an imaging detector's histogram, 1 to 20: the detections of a bin's pixels are added up, and the graph shows the bin's total across them. Wider bins fill faster and show less detail."
+msgstr "Pixel der Linie je Bin des Histogramms eines bildgebenden Detektors, 1 bis 20: die Detektionen der Pixel eines Bins werden aufsummiert, und die Grafik zeigt die Summe des Bins über ihnen. Breitere Bins füllen sich schneller und zeigen weniger Einzelheiten."
+
 #. MenuSimulationPlay
 msgid "Pla&y"
 msgstr "Wie&dergabe"
@@ -787,6 +963,10 @@ msgstr "Wiedergabe"
 #. TipPreviewPlay
 msgid "Play (Space)"
 msgstr "Wiedergabe (Leertaste)"
+
+#. Enum.ProbeKind.Point
+msgid "Point"
+msgstr "Punkt"
 
 #. MenuAddPolygon
 msgid "Polygon"
@@ -856,6 +1036,10 @@ msgstr "Zufallsstartwert"
 msgid "Recent Projects"
 msgstr "Zuletzt geöffnet"
 
+#. Hint.Probe.Measurement
+msgid "Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run."
+msgstr "Aufgezeichnete Größe. Das Feld bietet nur die Amplitude; die Intensitätsebene ihren Wert oder den über den Lauf integrierten Wert."
+
 #. MenuAddRectangle
 msgid "Rectangle"
 msgstr "Rechteck"
@@ -915,6 +1099,10 @@ msgstr "Simulation von vorn starten (F5)"
 #. MenuSimulationStop
 msgid "S&top"
 msgstr "S&topp"
+
+#. Hint.Probe.Active
+msgid "Sample and draw this probe."
+msgstr "Diese Sonde abtasten und zeichnen."
 
 #. TipProbeActive
 msgid "Sample this probe (Space on the row toggles it)"
@@ -980,6 +1168,14 @@ msgstr "Simulationsschritt, bei dem die Quelle ausblendet; -1 lässt sie den gan
 msgid "Size of the embedded scene image; the canvas takes this size"
 msgstr "Größe des eingebetteten Szenenbilds; die Leinwand übernimmt diese Größe"
 
+#. Hint.Probe.ScaleMode
+msgid "Sliding window of the last steps, or the whole run; point probes only."
+msgstr "Gleitendes Fenster der letzten Schritte oder der ganze Lauf; nur Punktsonden."
+
+#. Enum.ProbeBoxSize.Small
+msgid "Small"
+msgstr "Klein"
+
 #. Enum.PulseShape.SmoothedSquare
 msgid "Smoothed square"
 msgstr "Geglättetes Rechteck"
@@ -1008,13 +1204,29 @@ msgstr "Quellen aus dem Bild"
 msgid "Speed"
 msgstr "Tempo"
 
+#. Enum.ProbeDetector.Standard
+msgid "Standard"
+msgstr "Standard"
+
 #. MenuAddStandardProbe
 msgid "Standard probe"
 msgstr "Standardsonde"
 
+#. Label.Probe.StartAfter
+msgid "Start after step"
+msgstr "Start nach Schritt"
+
 #. TipPreviewSetIn
 msgid "Start the export range at this frame (I)"
 msgstr "Exportbereich bei diesem Bild beginnen (I)"
+
+#. Hint.Probe.StartAfter
+msgid "Step at which recording starts; 0 records from the first step."
+msgstr "Schritt, ab dem aufgezeichnet wird; 0 zeichnet ab dem ersten Schritt auf."
+
+#. Label.Probe.ScaleMode
+msgid "Step axis"
+msgstr "Schrittachse"
 
 #. Label.Simulation.Steps
 msgid "Steps"
@@ -1036,9 +1248,17 @@ msgstr "Dicke des absorbierenden Rahmens in Pixeln: positiv innerhalb der Leinwa
 msgid "Timing"
 msgstr "Zeitverhalten"
 
+#. Enum.ProbeBoxSize.Tiny
+msgid "Tiny"
+msgstr "Winzig"
+
 #. Label.Display.ExportTo
 msgid "To step"
 msgstr "Bis Schritt"
+
+#. Hint.Probe.BoxY
+msgid "Top edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on."
+msgstr "Oberer Rand des Diagrammkastens in Leinwandpixeln. Ein Kasten auf Punkt A der Sonde wandert mit ihr; in die Nähe gezogen rastet er dort ein."
 
 #. Hint.Simulation.Steps
 msgid "Total number of simulation steps."
@@ -1052,6 +1272,10 @@ msgstr "Dreieck"
 msgid "Undo"
 msgstr "Rückgängig"
 
+#. Hint.Probe.YMax
+msgid "Upper bound of the value axis when it is not auto-scaled."
+msgstr "Obere Grenze der Werteachse ohne automatische Skalierung."
+
 #. Hint.Simulation.FourthOrderLaplacian
 msgid "Use the 4th-order stencil with sub-stepping instead of the 9-point stencil. More accurate, slower."
 msgstr "Das Schema 4. Ordnung mit Zwischenschritten statt des 9-Punkt-Schemas verwenden. Genauer, langsamer."
@@ -1059,6 +1283,22 @@ msgstr "Das Schema 4. Ordnung mit Zwischenschritten statt des 9-Punkt-Schemas ve
 #. Hint.Scene.ObjectSources
 msgid "Use the sources defined in the project."
 msgstr "Die im Projekt definierten Quellen verwenden."
+
+#. Enum.ProbeMeasurement.Value
+msgid "Value"
+msgstr "Wert"
+
+#. Label.Probe.YScale
+msgid "Value axis"
+msgstr "Werteachse"
+
+#. Label.Probe.YMax
+msgid "Value maximum"
+msgstr "Wert Maximum"
+
+#. Label.Probe.YMin
+msgid "Value minimum"
+msgstr "Wert Minimum"
 
 #. Hint.Project.Version
 msgid "Version of the project file format."
@@ -1104,6 +1344,18 @@ msgstr "Breite"
 msgid "Width of a blank canvas in pixels."
 msgstr "Breite einer leeren Leinwand in Pixeln."
 
+#. Hint.Probe.BoxWidth
+msgid "Width of the graph box in canvas pixels; custom box size only. A box larger than the canvas is shrunk to fit it, aspect kept."
+msgstr "Breite des Diagrammkastens in Leinwandpixeln; nur bei eigener Kastengröße. Ein Kasten größer als die Leinwand wird seitenverhältnistreu auf sie verkleinert."
+
+#. Hint.Probe.Window
+msgid "Width of the sliding step window, in steps."
+msgstr "Breite des gleitenden Schrittfensters, in Schritten."
+
+#. Label.Probe.Window
+msgid "Window"
+msgstr "Fenster"
+
 #. Label.Source.X
 msgid "X"
 msgstr "X"
@@ -1111,6 +1363,14 @@ msgstr "X"
 #. Hint.Source.X
 msgid "X of the emitter, or of the array centre, in canvas pixels."
 msgstr "X des Strahlers bzw. der Anordnungsmitte, in Leinwandpixeln."
+
+#. Hint.Probe.BX
+msgid "X of the end of the line in canvas pixels; line probes only."
+msgstr "X des Linienendes in Leinwandpixeln; nur Liniensonden."
+
+#. Hint.Probe.AX
+msgid "X of the probe pixel, or of the start of the line, in canvas pixels."
+msgstr "X des Sondenpixels bzw. des Linienanfangs, in Leinwandpixeln."
 
 #. MenuAddXorGate
 msgid "XOR (Mach-Zehnder)"
@@ -1124,6 +1384,14 @@ msgstr "Y"
 msgid "Y of the emitter, or of the array centre, in canvas pixels."
 msgstr "Y des Strahlers bzw. der Anordnungsmitte, in Leinwandpixeln."
 
+#. Hint.Probe.BY
+msgid "Y of the end of the line in canvas pixels; line probes only."
+msgstr "Y des Linienendes in Leinwandpixeln; nur Liniensonden."
+
+#. Hint.Probe.AY
+msgid "Y of the probe pixel, or of the start of the line, in canvas pixels."
+msgstr "Y des Sondenpixels bzw. des Linienanfangs, in Leinwandpixeln."
+
 #. MenuAddZonePlate
 msgid "Zone plate"
 msgstr "Zonenplatte"
@@ -1131,6 +1399,21 @@ msgstr "Zonenplatte"
 #. ItemCountMany
 msgid "{} entries"
 msgstr "{} Einträge"
+
+#. Enum.ProbeScaleMode.Full
+msgctxt "Enum.ProbeScaleMode.Full"
+msgid "Full"
+msgstr "Ganzer Lauf"
+
+#. Enum.ProbeScaleMode.Running
+msgctxt "Enum.ProbeScaleMode.Running"
+msgid "Running"
+msgstr "Gleitend"
+
+#. Label.Probe.Measurement
+msgctxt "Label.Probe.Measurement"
+msgid "Measurement"
+msgstr "Messgröße"
 
 #. Label.Source.Enabled
 msgctxt "Label.Source.Enabled"
