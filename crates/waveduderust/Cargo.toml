@@ -50,7 +50,7 @@ workspace = true
 
 [dependencies]
 thiserror.workspace = true
-waveduderust_macros = { path = "../waveduderust_macros", version = "0.4.0" }
+waveduderust_macros = { path = "../waveduderust_macros", version = "0.4.1" }
 half.workspace = true
 bytemuck.workspace = true
 rayon.workspace = true
