@@ -96,13 +96,16 @@ component GraphBoxView inherits Rectangle {
     in property <GraphBox> graph;
     in property <float> scale;
     in property <bool> hovered;
+    // the box (or its grip) has the keyboard focus
+    in property <bool> focused;
+    in property <bool> grip-focused;
     x: round(root.graph.x * root.scale) * 1px;
     y: round(root.graph.y * root.scale) * 1px;
     width: root.graph.width * 1px;
     height: root.graph.height * 1px;
     background: #0e1016eb;
     border-width: 1px;
-    border-color: root.graph.selected ? Theme.picture-selection : root.hovered ? #ffffffe0 : #c8c8d2aa;
+    border-color: root.focused ? Theme.accent : root.graph.selected ? Theme.picture-selection : root.hovered ? #ffffffe0 : #c8c8d2aa;
     clip: true;
     if root.graph.has-plot: Path {
         viewbox-width: root.graph.width;
@@ -140,7 +143,7 @@ component GraphBoxView inherits Rectangle {
     for t in root.graph.y-ticks: Text { x: t.x * 1px; y: t.y * 1px; text: t.label; font-size: 11px; color: #e1e1e6e1; }
     for t in root.graph.x-ticks: Text { x: t.x * 1px; y: t.y * 1px; text: t.label; font-size: 11px; color: #e1e1e6e1; }
     // the resize grip: two diagonal bands in the bottom-right 12 px cell (view::graph GRIP_BANDS)
-    if root.hovered || root.graph.selected: Path {
+    if root.hovered || root.graph.selected || root.grip-focused: Path {
         x: root.width - 12px;
         y: root.height - 12px;
         width: 12px;
@@ -148,7 +151,7 @@ component GraphBoxView inherits Rectangle {
         viewbox-width: 12;
         viewbox-height: 12;
         commands: "M 11 1 L 11 3 L 3 11 L 1 11 Z M 11 6 L 11 8 L 8 11 L 6 11 Z";
-        fill: root.hovered ? #ffffff : #ffffffa0;
+        fill: root.hovered || root.grip-focused ? #ffffff : #ffffffa0;
     }
     // the title strip: the readout right-aligned in the curve's colour, the title elided in what remains
     HorizontalLayout {
@@ -264,6 +267,8 @@ component Picture inherits VerticalLayout {
                 graph: graph;
                 scale: cell.scale;
                 hovered: touch.has-hover && Canvas.hover-layer == root.layer && Canvas.hover-box == graph.probe;
+                focused: keys.has-focus && !Canvas.focus-grip && Canvas.focus-layer == root.layer && Canvas.focus-box == graph.probe;
+                grip-focused: keys.has-focus && Canvas.focus-grip && Canvas.focus-layer == root.layer && Canvas.focus-box == graph.probe;
             }
             if Canvas.marquee-shown && Canvas.marquee-layer == root.layer: Rectangle {
                 x: Canvas.marquee.x * cell.scale * 1px;

@@ -1,7 +1,6 @@
-import { ComboBox } from "std-widgets.slint";
 import { Command, TransportAction } from "commands.slint";
 import { Theme } from "theme.slint";
-import { IconButton } from "icons.slint";
+import { Icon, IconButton } from "icons.slint";
 
 // The playback state the timeline and transport bar show.
 export struct Transport {
@@ -104,7 +103,8 @@ export component TransportBar inherits Rectangle {
     in-out property <bool> stacked;
     callback action(TransportAction);
     callback command(Command);
-    callback speed(float);
+    // the typed speed; the text to show (the speed kept, as text)
+    callback speed(text: string) -> string;
 
     height: 28px;
     background: Theme.window-background;
@@ -141,17 +141,56 @@ export component TransportBar inherits Rectangle {
             vertical-alignment: center;
             color: Theme.text;
         }
-        // Space in the speed box neither plays nor opens it (Next's OnSpeedBoxPreviewKeyDown)
-        FocusScope {
-            focus-on-click: false;
-            focus-on-tab-navigation: false;
-            key-pressed(e) => { e.text == " " ? accept : reject }
-            ComboBox {
+        // an editable combo (docs/ui/50, #11): typed 0.01..100 or a preset; its text keeps Space from Play
+        Rectangle {
+            width: 64px;
+            border-width: 1px;
+            border-color: speed-box.has-focus ? Theme.accent : Theme.border;
+            HorizontalLayout {
+                padding-left: 4px;
+                speed-box := TextInput {
+                    text: "1";
+                    vertical-alignment: center;
+                    color: Theme.text;
+                    single-line: true;
+                    accepted => { self.text = root.speed(self.text); }
+                    changed has-focus => {
+                        if (!self.has-focus) { self.text = root.speed(self.text); }
+                    }
+                }
+                Rectangle {
+                    width: 16px;
+                    background: drop.has-hover ? Theme.button-hover : transparent;
+                    Icon { source: @image-url("icons/next/chevron-down.svg"); }
+                    drop := TouchArea { clicked => { presets.show(); } }
+                }
+            }
+            presets := PopupWindow {
+                // six 22 px rows, padding and edge
+                height: 138px;
+                x: 0;
+                y: -self.height;
+                close-policy: close-on-click-outside;
                 width: 64px;
-                property <[float]> speeds: [0.25, 0.5, 1, 1.5, 2, 4];
-                model: ["0.25", "0.5", "1", "1.5", "2", "4"];
-                current-index: 2;
-                selected => { root.speed(self.speeds[self.current-index]); }
+                Rectangle {
+                    background: Theme.window-background;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    VerticalLayout {
+                        padding: 2px;
+                        for preset in ["0.25", "0.5", "1", "1.5", "2", "4"]: Rectangle {
+                            height: 22px;
+                            background: pick.has-hover ? Theme.button-hover : transparent;
+                            Text {
+                                x: 6px;
+                                text: preset;
+                                vertical-alignment: center;
+                                color: Theme.text;
+                            }
+                            pick := TouchArea { clicked => { speed-box.text = root.speed(preset); } }
+                        }
+                    }
+                }
             }
         }
         Divider { }

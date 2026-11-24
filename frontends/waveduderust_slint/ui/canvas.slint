@@ -96,6 +96,10 @@ export global Canvas {
     callback drag(dx: float, dy: float, shift: bool);
     callback release();
     in property <EdgeLine> edge;
+    // the graph box with the keyboard focus: its probe's index (-1: none), picture, and whether its grip has it
+    in property <int> focus-box: -1;
+    in property <Layer> focus-layer;
+    in property <bool> focus-grip;
     // the graph box under the pointer: its probe's index (-1: none) and picture
     in property <int> hover-box: -1;
     in property <Layer> hover-layer;

@@ -117,7 +117,7 @@ export component AppWindow inherits Window {
     callback log-clear();
     callback seek(int);
     callback transport-action(TransportAction);
-    callback transport-speed(float);
+    callback transport-speed(text: string) -> string;
     // the selected row: its kind and an item's name
     in property <TreeKind> props-kind;
     in property <string> props-heading;
@@ -367,7 +367,7 @@ export component AppWindow inherits Window {
                                     stacked <=> root.preview-stacked;
                                     action(a) => { root.transport-action(a); }
                                     command(c) => { root.command(c); }
-                                    speed(v) => { root.transport-speed(v); }
+                                    speed(text) => { root.transport-speed(text) }
                                 }
                             }
                         }

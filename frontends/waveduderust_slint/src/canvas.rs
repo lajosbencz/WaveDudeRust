@@ -10,6 +10,7 @@ use waveduderust::model::{BoxSize, ItemRef, Layer, Part, PartKind, ProbeKind, Pr
 use waveduderust::unstable::view::overlay::{self, HandleKind, OverlayModel};
 use waveduderust::unstable::view::{graph, handles};
 
+use crate::graphs::Placed;
 use crate::selection::{Selection, groupable};
 use crate::tree::Node;
 use crate::ui;
@@ -34,12 +35,20 @@ impl Shown {
 #[derive(Default)]
 pub(crate) struct Overlays {
 	shown: [Shown; 2],
-	/// The handle with keyboard focus.
-	focus: Option<(ui::Layer, ItemRef, HandleKind)>,
+	/// What has the keyboard focus, and on which picture.
+	focus: Option<(ui::Layer, ItemRef, Stop)>,
 	/// Counts focus changes: a run of key moves is one undo step.
 	run: u64,
 	/// The view's handles and labels switches the overlays were built with.
 	shows: (bool, bool),
+}
+
+/// What Tab stops on in a picture: the handles, then each graph box and its corner grip.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Stop {
+	Handle(HandleKind),
+	Box,
+	Grip,
 }
 
 /// Where a dragged item started.
@@ -210,8 +219,10 @@ impl Overlays {
 				view.labels_in_preview,
 			);
 			let focus = self.focus;
-			let focused = |h: &overlay::Handle| focus == Some((ui_layer, h.item, h.kind));
-			if self.focus.is_some_and(|f| f.0 == ui_layer) && !m.handles.iter().any(focused) {
+			let focused = |h: &overlay::Handle| focus == Some((ui_layer, h.item, Stop::Handle(h.kind)));
+			if focus.is_some_and(|f| f.0 == ui_layer && matches!(f.2, Stop::Handle(_)))
+				&& !m.handles.iter().any(focused)
+			{
 				self.focus = None;
 			}
 			let handles = m
@@ -276,7 +287,7 @@ impl Overlays {
 		selection: &mut Selection,
 		Press { layer, at, control, shift }: Press,
 		gesture: u64,
-		boxes: &[crate::graphs::Placed],
+		boxes: &[Placed],
 	) -> Option<Gesture> {
 		let shown = &self.shown[index(layer)];
 		let scale = shown.scale();
@@ -285,14 +296,15 @@ impl Overlays {
 			let node = Node::Probe(b.probe);
 			let probe = project.probes.get(b.probe)?;
 			let item = ItemRef::Probe(probe.id());
-			self.set_focus(None);
+			let grip = BOX_GRIP / scale;
+			let corner = at.0 >= b.at.0 + b.size.0 - grip && at.1 >= b.at.1 + b.size.1 - grip;
 			if control {
 				selection.toggle(node);
+				self.set_focus(None);
 				return None;
 			}
 			selection.set(node);
-			let grip = BOX_GRIP / scale;
-			let corner = at.0 >= b.at.0 + b.size.0 - grip && at.1 >= b.at.1 + b.size.1 - grip;
+			self.set_focus(Some((layer, item, if corner { Stop::Grip } else { Stop::Box })));
 			let scale = f64::from(scale);
 			// from the box as drawn: placed in the canvas, shrunk to fit it
 			let start = (b.at.0.round() as i32, b.at.1.round() as i32);
@@ -309,7 +321,7 @@ impl Overlays {
 			return Some(Gesture::Marquee(Marquee { layer, from: at, to: at, control, shift }));
 		};
 		let node = node_of(project, handle.item)?;
-		let focus = (layer, handle.item, handle.kind);
+		let focus = (layer, handle.item, Stop::Handle(handle.kind));
 		let drag = |target: Target| Drag {
 			key: format!("drag {gesture}"),
 			node,
@@ -355,41 +367,73 @@ impl Overlays {
 }
 
 impl Overlays {
-	fn set_focus(&mut self, focus: Option<(ui::Layer, ItemRef, HandleKind)>) {
+	fn set_focus(&mut self, focus: Option<(ui::Layer, ItemRef, Stop)>) {
 		self.focus = focus;
 		self.run += 1;
 	}
 
 	/// The handle focused on `layer`, as shown.
 	fn focused(&self, layer: ui::Layer) -> Option<&overlay::Handle> {
-		let (at, item, kind) = self.focus?;
+		let (at, item, Stop::Handle(kind)) = self.focus? else { return None };
 		let handles = &self.shown[index(layer)].model.handles;
 		handles.iter().find(|h| at == layer && h.item == item && h.kind == kind)
 	}
 
-	/// Takes the keyboard focus into `layer`'s picture: the handle it had, else the first.
-	pub(crate) fn enter(&mut self, project: &Project, selection: &mut Selection, layer: ui::Layer) -> bool {
-		self.focused(layer).is_some() || self.tab(project, selection, layer, false)
+	/// The Tab stops of `layer`'s picture with `boxes`: its handles, then each box and its grip.
+	fn stops(&self, project: &Project, layer: ui::Layer, boxes: &[Placed]) -> Vec<(ItemRef, Stop)> {
+		let handles = self.shown[index(layer)].model.handles.iter().map(|h| (h.item, Stop::Handle(h.kind)));
+		// in probe order: the draw order puts the selected boxes last, and a stop selects its probe
+		let mut probes: Vec<usize> = boxes.iter().map(|b| b.probe).collect();
+		probes.sort_unstable();
+		let boxes = probes
+			.into_iter()
+			.filter_map(|i| project.probes.get(i).map(|p| ItemRef::Probe(p.id())))
+			.flat_map(|item| [(item, Stop::Box), (item, Stop::Grip)]);
+		handles.chain(boxes).collect()
 	}
 
-	/// Moves the keyboard focus to the next handle of `layer`, or the previous one with `back`, and selects its item
-	/// (kept in its group); false past the ends, where the focus leaves the picture. Back onto another item lands on
-	/// its last handle as shown once it is selected (its lever and grips).
-	pub(crate) fn tab(&mut self, project: &Project, selection: &mut Selection, layer: ui::Layer, back: bool) -> bool {
+	/// The focused stop of `layer` among `stops`.
+	fn focused_stop(&self, layer: ui::Layer, stops: &[(ItemRef, Stop)]) -> Option<usize> {
+		let (_, item, stop) = self.focus.filter(|f| f.0 == layer)?;
+		stops.iter().position(|&s| s == (item, stop))
+	}
+
+	/// Takes the keyboard focus into `layer`'s picture: the stop it had, else the first.
+	pub(crate) fn enter(
+		&mut self,
+		project: &Project,
+		selection: &mut Selection,
+		layer: ui::Layer,
+		boxes: &[Placed],
+	) -> bool {
+		let stops = self.stops(project, layer, boxes);
+		self.focused_stop(layer, &stops).is_some() || self.tab(project, selection, layer, false, boxes)
+	}
+
+	/// Moves the keyboard focus to the next stop of `layer`, or the previous one with `back`, and selects its item
+	/// (kept in its group); false past the ends, where the focus leaves the picture. Back onto another item's handle
+	/// lands on its last handle as shown once it is selected (its lever and grips).
+	pub(crate) fn tab(
+		&mut self,
+		project: &Project,
+		selection: &mut Selection,
+		layer: ui::Layer,
+		back: bool,
+		boxes: &[Placed],
+	) -> bool {
 		let scale = self.shown[index(layer)].scale();
-		let handles = &self.shown[index(layer)].model.handles;
-		let at = self.focused(layer).and_then(|f| handles.iter().position(|h| h.item == f.item && h.kind == f.kind));
+		let stops = self.stops(project, layer, boxes);
+		let at = self.focused_stop(layer, &stops);
 		let next = match (at, back) {
 			(None, false) => Some(0),
-			(None, true) => handles.len().checked_sub(1),
+			(None, true) => stops.len().checked_sub(1),
 			(Some(i), false) => Some(i + 1),
 			(Some(i), true) => i.checked_sub(1),
 		};
-		let Some(h) = next.and_then(|i| handles.get(i)) else {
+		let Some(&(mut item, mut stop)) = next.and_then(|i| stops.get(i)) else {
 			self.set_focus(None);
 			return false;
 		};
-		let (mut item, mut kind) = (h.item, h.kind);
 		let Some(node) = node_of(project, item) else { return false };
 		let moved_off = self.focus.is_none_or(|f| f.1 != item);
 		if selection.contains(node) {
@@ -397,22 +441,62 @@ impl Overlays {
 		} else {
 			selection.set(node);
 		}
-		if back && moved_off {
+		if back && moved_off && matches!(stop, Stop::Handle(_)) {
 			let selected: Vec<ItemRef> = selection.group().into_iter().filter_map(|n| item_of(project, n)).collect();
 			let m =
 				overlay::build(project, &selected, Some(item), model_layer(layer), scale, self.shows.0, self.shows.1);
 			if let Some(last) = m.handles.iter().rev().find(|h| h.item == item) {
-				(item, kind) = (last.item, last.kind);
+				(item, stop) = (last.item, Stop::Handle(last.kind));
 			}
 		}
-		self.set_focus(Some((layer, item, kind)));
+		self.set_focus(Some((layer, item, stop)));
 		true
 	}
 
-	/// The undo key of a run of key moves on `layer`'s focused handle; a new focus or group starts another.
+	/// The undo key of a run of key moves on `layer`'s focused stop; a new focus or group starts another.
 	pub(crate) fn nudge_key(&self, layer: ui::Layer, selection: &Selection) -> Option<String> {
-		let h = self.focused(layer)?;
-		Some(format!("keys {} {:?} {:?} {:?}", self.run, h.item, h.kind, selection.group()))
+		let (_, item, stop) = self.focus.filter(|f| f.0 == layer)?;
+		Some(format!("keys {} {item:?} {stop:?} {:?}", self.run, selection.group()))
+	}
+
+	/// Drops a graph box focus whose box `layer`'s picture no longer draws among `boxes`.
+	pub(crate) fn drop_lost_box(&mut self, layer: ui::Layer, project: &Project, boxes: &[Placed]) {
+		let on_box = self.focus.is_some_and(|f| f.0 == layer && matches!(f.2, Stop::Box | Stop::Grip));
+		if on_box && self.focused_box(layer, project, boxes).is_none() {
+			self.focus = None;
+		}
+	}
+
+	/// The graph box focused on `layer` and whether its grip is, as drawn among `boxes`.
+	pub(crate) fn focused_box(&self, layer: ui::Layer, project: &Project, boxes: &[Placed]) -> Option<(Placed, bool)> {
+		let (at, ItemRef::Probe(id), stop @ (Stop::Box | Stop::Grip)) = self.focus? else { return None };
+		let b = boxes.iter().find(|b| at == layer && project.probes.get(b.probe).is_some_and(|p| p.id() == id))?;
+		Some((*b, stop == Stop::Grip))
+	}
+
+	/// Moves the focused graph box by `d` canvas pixels, or sizes it from its focused grip, kept in the canvas.
+	pub(crate) fn nudge_box(&self, project: &mut Project, layer: ui::Layer, d: (f64, f64), boxes: &[Placed]) {
+		let Some((b, grip)) = self.focused_box(layer, project, boxes) else { return };
+		let (cw, ch) = project.canvas_size();
+		let p = &mut project.probes[b.probe];
+		if grip {
+			// never below what the picture still draws, so keys can grow it back
+			let scale = f64::from(self.shown[index(layer)].scale());
+			let least = |min: f32| (f64::from(min) / scale).ceil();
+			let size = |now: f32, by: f64, range: ranges::Range, min: f32, room: u32| {
+				let now = f64::from(now).round();
+				range.clamp_or(now + by, now).min(f64::from(room)).max(least(min).min(now)) as u32
+			};
+			let w = size(b.size.0, d.0, ranges::PROBE_BOX_WIDTH, graph::MIN_VISIBLE.0, cw);
+			let h = size(b.size.1, d.1, ranges::PROBE_BOX_HEIGHT, graph::MIN_VISIBLE.1, ch);
+			if (w, h) != (b.size.0.round() as u32, b.size.1.round() as u32) {
+				(p.box_size, p.box_width, p.box_height) = (BoxSize::Custom, w, h);
+			}
+		} else {
+			let x = (f64::from(b.at.0).round() + d.0).clamp(0., (f64::from(cw) - f64::from(b.size.0)).max(0.));
+			let y = (f64::from(b.at.1).round() + d.1).clamp(0., (f64::from(ch) - f64::from(b.size.1)).max(0.));
+			(p.box_x, p.box_y) = (x as i32, y as i32);
+		}
 	}
 
 	/// Moves what the focused handle moves by `d` canvas pixels (its item's group with it), or turns its lever by

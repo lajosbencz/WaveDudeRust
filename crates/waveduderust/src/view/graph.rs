@@ -14,7 +14,7 @@ use crate::view::draw::{DeviceGrid, FontMetrics, TextMetrics, elided};
 use crate::view::overlay::SELECTED;
 
 /// Smallest box drawn at all, pixels.
-const MIN_VISIBLE: (f32, f32) = (40.0, 30.0);
+pub const MIN_VISIBLE: (f32, f32) = (40.0, 30.0);
 /// Space between the box edge and its text, pixels.
 const EDGE_PAD: f32 = 3.0;
 /// Space between a label and the plot frame, pixels.

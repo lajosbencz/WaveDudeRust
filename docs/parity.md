@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 73 | 8 | 26 | 4 | 1 |
-| L | Timeline, transport, status | 40 | 20 | 20 | 7 | 3 |
+| V | Preview | 76 | 6 | 25 | 4 | 1 |
+| L | Timeline, transport, status | 49 | 12 | 20 | 7 | 2 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 666 | 83 | 201 | 139 | 6 |
+| | All | 678 | 73 | 200 | 139 | 5 |
 
 ## Cross-cutting
 
@@ -1046,11 +1046,11 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-98 | Graph data: live run recording cut at frame shown; remake after probe edit | ProbeGraphOverlay.cs | 40 Probe graph box | done | Live::traces at the stored frame of the position; laid out again each poll while running and on every show |
 | V-99 | Selected probe's box accent border, drawn last | ProbeGraphOverlay.cs | 40 Probe graph box | done | selected boxes last, accent edge |
 | V-100 | Drag box (kept in canvas); snap to probe A within radius 14, release at 28 (hysteresis) | ProbeGraphOverlay.cs:102,105,495-502 | 40 Probe graph box | done | canvas::Target::GraphBox: kept in the canvas; lands on A within 14 screen px, leaves past 28 |
-| V-101 | Box bottom-right corner grip resize, snaps to fixed sizes else Custom; arrows 1/10 px | ProbeGraphOverlay.cs:478-484 | 40 Probe graph box | partial | Target::GraphSize: the corner grip (two bands, view::graph) sizes the box, a fixed size within 10 screen px, else Custom; arrows on the grip not yet |
-| V-102 | Arrows on box move 1/10 px (no snap); Tab reaches boxes; focus selects probe | ProbeGraphOverlay.cs:540-561 | 40 Probe graph box | missing | Tab and arrows on boxes not yet |
+| V-101 | Box bottom-right corner grip resize, snaps to fixed sizes else Custom; arrows 1/10 px | ProbeGraphOverlay.cs:478-484 | 40 Probe graph box | done | Target::GraphSize drag snaps to the fixed sizes; the focused grip sizes it by arrows 1/10 px (Custom), kept in the canvas |
+| V-102 | Arrows on box move 1/10 px (no snap); Tab reaches boxes; focus selects probe | ProbeGraphOverlay.cs:540-561 | 40 Probe graph box | done | Tab stops: handles, then each box and its grip; arrows move the box 1/10 px, one undo per run; the stop selects the probe |
 | V-103 | Moving box never touches run; moving probe keeps frames, retraces | ProbeGraphOverlay.cs | 40 Probe graph box | done | a box move edits the probe's box fields only, not its recording key |
 | V-104 | Graph box context menu "Export probe data as CSV..." | ProbeGraphOverlay.cs:273-278 | 40 Probe graph box | done | as M-96 |
-| V-105 | Box hover and focus border | ProbeGraphOverlay.cs | 40 Probe graph box | partial | hover: a brighter edge and the grip (hit-tested in Rust); focus not yet |
+| V-105 | Box hover and focus border | ProbeGraphOverlay.cs | 40 Probe graph box | done | hover: brighter edge and grip (hit-tested in Rust); focus: accent edge, the grip bright when it has focus |
 | V-106 | Busy status "Computing frame n" + indeterminate bar mirrored on status bar | MainWindow.Live.cs | 40 Busy; 70 Status bar | missing | see L-50 |
 | V-107 | Timeline shades frames held by live run | TimelineBar.cs:315 | 40 Busy and stale | done | see L-08 |
 | V-108 | Show/hide each picture toggle (transport) feeds Display > Preview | PreviewPane.xaml:497-506 | 50 Transport #12,13 | missing | see L-37 |
@@ -1098,19 +1098,19 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-33 | Play button; tooltip "Play (Space)"; disabled while playing | PreviewPane.xaml:448-450 | 50 Transport #2 | done | IconButton play, tooltip, disabled while playing |
 | L-34 | Pause button; disabled while not playing | PreviewPane.xaml:451-453 | 50 Transport #3 | done | IconButton pause ||"; tooltip not shown |
 | L-35 | Play/Pause by keyboard moves focus to the other button | PreviewPane.xaml.cs:1180-1188 | 50 Transport #3 | missing | Tool has no focus/tab handling |
-| L-36 | Previous frame (",") / Next frame (".") buttons and keys | PreviewPane.xaml:455-460,391-392 | 50 Transport #4,5 | partial | buttons done ("|<" ">|" glyphs); keys , . not bound |
-| L-37 | Set in point (I), tooltip; in past out clears out | PreviewPane.xaml:462; PreviewPane.xaml.cs:1214 | 50 Transport #6 | partial | button + playback.set_in done; key I not bound; tooltip not shown |
-| L-38 | Set out point (O); last frame stored as 0; out before in clears in | PreviewPane.xaml.cs:1229 | 50 Transport #7 | partial | set_out done (last frame -> None); key O not bound |
-| L-39 | Clear range (X), disabled when no range | PreviewPane.xaml.cs:1244 | 50 Transport #8 | partial | button + enabled rule done; key X not bound |
-| L-40 | Loop toggle (L) | PreviewPane.xaml:471; PreviewPane.xaml.cs:1250 | 50 Transport #9 | partial | toggle done (glyph "L"); key L not bound |
-| L-41 | Live toggle (dot in ring, F), disabled without active run | PreviewPane.xaml:474-477; xaml.cs:1255 | 50 Transport #10 | partial | button enabled: running; key F not bound; F after run ended not guarded |
+| L-36 | Previous frame (",") / Next frame (".") buttons and keys | PreviewPane.xaml:455-460,391-392 | 50 Transport #4,5 | done | buttons and the , . keys (app.slint preview-keys) |<" ">|" glyphs); keys , . not bound |
+| L-37 | Set in point (I), tooltip; in past out clears out | PreviewPane.xaml:462; PreviewPane.xaml.cs:1214 | 50 Transport #6 | done | button, playback.set_in and the I key; tooltip not shown |
+| L-38 | Set out point (O); last frame stored as 0; out before in clears in | PreviewPane.xaml.cs:1229 | 50 Transport #7 | done | set_out (last frame -> None) and the O key |
+| L-39 | Clear range (X), disabled when no range | PreviewPane.xaml.cs:1244 | 50 Transport #8 | done | button, enabled rule and the X key |
+| L-40 | Loop toggle (L) | PreviewPane.xaml:471; PreviewPane.xaml.cs:1250 | 50 Transport #9 | done | toggle and the L key |
+| L-41 | Live toggle (dot in ring, F), disabled without active run | PreviewPane.xaml:474-477; xaml.cs:1255 | 50 Transport #10 | done | button enabled while running; F toggles only with an active run |
 | L-42 | Readout "frame / last" | PreviewPane.xaml:515-523 | 50 Transport readout | done | |
 | L-43 | Readout "step N" dimmer | PreviewPane.xaml:524-533 | 50 Transport readout | done | text-dim; empty when frame missing |
 | L-44 | Readout tooltips ("Frame shown / last frame", "Simulation step of the frame shown") | PreviewPane.xaml:515,524 | 50 Transport readout | missing | |
 | L-45 | Speed label "Speed" margins 8,0,4,0 | PreviewPane.xaml:514 | 50 Transport #11 | done | |
-| L-46 | Speed editable combo 64 px, presets 0.25,0.5,1,1.5,2,4 | PreviewPane.xaml:508 | 50 Transport #11 | partial | non-editable ComboBox, presets right |
-| L-47 | Typed speed 0.01..100, culture decimal separator | PreviewPane.xaml.cs, DoubleText converter | 50 Transport #11 | partial | clamp 0.01..100 in main.rs; can only pick presets |
-| L-48 | Space inside speed box swallowed | PreviewPane.xaml.cs:1274 | 50 Transport #11 | n/a | box not editable |
+| L-46 | Speed editable combo 64 px, presets 0.25,0.5,1,1.5,2,4 | PreviewPane.xaml:508 | 50 Transport #11 | done | 64 px TextInput with a preset popup 0.25..4 (timeline.slint) |
+| L-47 | Typed speed 0.01..100, culture decimal separator | PreviewPane.xaml.cs, DoubleText converter | 50 Transport #11 | done | typed 0.01..100, a decimal comma or point (number::parse); bad text restores the speed |
+| L-48 | Space inside speed box swallowed | PreviewPane.xaml.cs:1274 | 50 Transport #11 | done | the text box takes Space as text, Play never sees it |
 | L-49 | Speed tooltip | PreviewPane.xaml:509 | 50 Transport #11 | missing | |
 | L-50 | Show field toggle (wave icon) = Display > Field > Preview | PreviewPane.xaml:503-506 | 50 Transport #12 | missing | |
 | L-51 | Show intensity toggle (sun icon) = Display > Intensity > Preview | PreviewPane.xaml:497-501 | 50 Transport #13 | missing | |

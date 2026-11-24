@@ -195,6 +195,16 @@ impl State {
 		canvas.set_intensity_brightness(self.doc.view.intensity.brightness as f32);
 		self.overlays.show(&app.global::<ui::Canvas<'_>>(), &self.doc.project, &self.doc.view, &self.selection);
 		self.show_graphs();
+		let canvas = app.global::<ui::Canvas<'_>>();
+		let focus = [ui::Layer::Field, ui::Layer::Intensity].into_iter().find_map(|layer| {
+			let (b, grip) = self.overlays.focused_box(layer, &self.doc.project, self.graphs.placed(layer))?;
+			Some((layer, b.probe, grip))
+		});
+		canvas.set_focus_box(focus.map_or(-1, |(_, i, _)| i32::try_from(i).unwrap_or(-1)));
+		if let Some((layer, _, grip)) = focus {
+			canvas.set_focus_layer(layer);
+			canvas.set_focus_grip(grip);
+		}
 		let node = self.selection.current();
 		let kind = form::kind(&self.doc.project, node);
 		app.set_props_kind(node.kind());
@@ -300,6 +310,9 @@ impl State {
 		let (project, view, graphs) = (&self.doc.project, &self.doc.view, &mut self.graphs);
 		if self.live.traces(|t| graphs.show(project, view, &selected, Some(t), scales)).is_none() {
 			graphs.show(project, view, &selected, None, scales);
+		}
+		for layer in [ui::Layer::Field, ui::Layer::Intensity] {
+			self.overlays.drop_lost_box(layer, project, self.graphs.placed(layer));
 		}
 	}
 
@@ -1281,7 +1294,13 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	let st = state.clone();
 	app.on_seek(move |frame| st.borrow_mut().playback.seek(i64::from(frame)));
 	let st = state.clone();
-	app.on_transport_speed(move |speed| st.borrow_mut().playback.speed = f64::from(speed).clamp(0.01, 100.0));
+	app.on_transport_speed(move |text| {
+		let speed = &mut st.borrow_mut().playback.speed;
+		if let Some(v) = number::parse(&text) {
+			*speed = v.clamp(0.01, 100.0);
+		}
+		speed.to_string().into()
+	});
 	let on_log = |f: fn(&mut Messages, slint::SharedString)| {
 		let (st, weak) = (state.clone(), app.as_weak());
 		move |arg: slint::SharedString| {
@@ -1503,9 +1522,10 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		let (d, turn) = match key {
 			HandleKey::Enter | HandleKey::Next | HandleKey::Previous => {
 				let taken = if key == HandleKey::Enter {
-					s.overlays.enter(&s.doc.project, &mut s.selection, layer)
+					s.overlays.enter(&s.doc.project, &mut s.selection, layer, s.graphs.placed(layer))
 				} else {
-					s.overlays.tab(&s.doc.project, &mut s.selection, layer, key == HandleKey::Previous)
+					let back = key == HandleKey::Previous;
+					s.overlays.tab(&s.doc.project, &mut s.selection, layer, back, s.graphs.placed(layer))
 				};
 				s.show(&app);
 				return taken;
@@ -1516,7 +1536,12 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 			HandleKey::Down => ((0., step), -step),
 		};
 		let Some(key) = s.overlays.nudge_key(layer, &s.selection) else { return false };
-		s.doc.edit_merging(Some(&key), |p| s.overlays.nudge(p, &s.selection, layer, d, turn));
+		let boxes = s.graphs.placed(layer);
+		if s.overlays.focused_box(layer, &s.doc.project, boxes).is_some() {
+			s.doc.edit_merging(Some(&key), |p| s.overlays.nudge_box(p, layer, d, boxes));
+		} else {
+			s.doc.edit_merging(Some(&key), |p| s.overlays.nudge(p, &s.selection, layer, d, turn));
+		}
 		s.show(&app);
 		true
 	});
