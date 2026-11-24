@@ -2,7 +2,7 @@
 // DisplayLayerView): labels and hints are Next's Label.* and Hint.* strings.
 import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { Form, FormSection, FormPanel, FormLabel, FormValue, FormNumber, FormCheck, FormChoice, FormText, FormNotes } from "form.slint";
+import { Form, FormSection, FormPanel, FormLabel, FormValue, FormNumber, FormCheck, FormChoice, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
 
 export component ProjectForm inherits VerticalLayout {
     // draws a fresh seed (Next's ProjectView.Reseed)
@@ -75,11 +75,11 @@ export component SceneForm inherits VerticalLayout {
             FormValue { text: Form.value(Form.revision, "EmbeddedImage"); color: Theme.text; }
         }
         Row {
-            FormLabel { text: @tr("Width"); tip: @tr("Width of a blank canvas in pixels."); enabled: !root.image; }
+            FormLabel { text: @tr("Width"); tip: @tr("Width of a blank canvas in pixels."); }
             FormNumber { path: "Width"; spec: { min: 8, max: 16384, increment: 1, decimals: 0 }; enabled: !root.image; tip: @tr("Width of a blank canvas in pixels."); }
         }
         Row {
-            FormLabel { text: @tr("Height"); tip: @tr("Height of a blank canvas in pixels."); enabled: !root.image; }
+            FormLabel { text: @tr("Height"); tip: @tr("Height of a blank canvas in pixels."); }
             FormNumber { path: "Height"; spec: { min: 8, max: 16384, increment: 1, decimals: 0 }; enabled: !root.image; tip: @tr("Height of a blank canvas in pixels."); }
         }
         Row {
@@ -128,7 +128,7 @@ export component SceneForm inherits VerticalLayout {
             }
         }
         Row {
-            FormLabel { text: @tr("Image source amplitude"); tip: @tr("Peak amplitude of the image sources."); enabled: root.image-sources; }
+            FormLabel { text: @tr("Image source amplitude"); tip: @tr("Peak amplitude of the image sources."); }
             FormNumber {
                 path: "ImageSourceScale";
                 spec: { min: 0, max: 1000, increment: 0.1, decimals: -1 };
@@ -435,7 +435,7 @@ export component SourceForm inherits VerticalLayout {
             FormChoice { path: "Mode"; words: ["Continuous", "Pulsed"]; titles: [@tr("Continuous"), @tr("Pulsed")]; tip: @tr("Emit continuously or in bursts."); }
         }
         Row {
-            FormLabel { text: @tr("Pulse shape"); tip: @tr("Envelope of each burst; pulsed mode only."); enabled: root.pulsed; }
+            FormLabel { text: @tr("Pulse shape"); tip: @tr("Envelope of each burst; pulsed mode only."); }
             FormChoice {
                 path: "PulseShape";
                 words: ["Gaussian", "SmoothedSquare"];
@@ -445,7 +445,7 @@ export component SourceForm inherits VerticalLayout {
             }
         }
         Row {
-            FormLabel { text: @tr("Pulse width"); tip: @tr("Length of each burst in cycles of the source frequency; pulsed mode only."); enabled: root.pulsed; }
+            FormLabel { text: @tr("Pulse width"); tip: @tr("Length of each burst in cycles of the source frequency; pulsed mode only."); }
             FormNumber {
                 path: "PulseWidth";
                 spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
@@ -454,7 +454,7 @@ export component SourceForm inherits VerticalLayout {
             }
         }
         Row {
-            FormLabel { text: @tr("Off width"); tip: @tr("Length of the gap between bursts in cycles; pulsed mode only."); enabled: root.pulsed; }
+            FormLabel { text: @tr("Off width"); tip: @tr("Length of the gap between bursts in cycles; pulsed mode only."); }
             FormNumber {
                 path: "OffWidth";
                 spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
@@ -486,7 +486,6 @@ export component SourceForm inherits VerticalLayout {
             FormLabel {
                 text: @tr("Columns");
                 tip: @tr("Number of emitters across. Odd counts keep the centre emitter on the source position.");
-                enabled: root.composite;
             }
             FormNumber {
                 path: "Array.SizeX";
@@ -496,7 +495,7 @@ export component SourceForm inherits VerticalLayout {
             }
         }
         Row {
-            FormLabel { text: @tr("Rows"); tip: @tr("Number of emitters down."); enabled: root.composite; }
+            FormLabel { text: @tr("Rows"); tip: @tr("Number of emitters down."); }
             FormNumber {
                 path: "Array.SizeY";
                 spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
@@ -505,18 +504,17 @@ export component SourceForm inherits VerticalLayout {
             }
         }
         Row {
-            FormLabel { text: @tr("Horizontal spacing"); tip: @tr("Distance between neighbouring columns in canvas pixels."); enabled: root.composite; }
+            FormLabel { text: @tr("Horizontal spacing"); tip: @tr("Distance between neighbouring columns in canvas pixels."); }
             FormNumber { path: "Array.SpacingX"; enabled: root.composite; tip: @tr("Distance between neighbouring columns in canvas pixels."); }
         }
         Row {
-            FormLabel { text: @tr("Vertical spacing"); tip: @tr("Distance between neighbouring rows in canvas pixels."); enabled: root.composite; }
+            FormLabel { text: @tr("Vertical spacing"); tip: @tr("Distance between neighbouring rows in canvas pixels."); }
             FormNumber { path: "Array.SpacingY"; enabled: root.composite; tip: @tr("Distance between neighbouring rows in canvas pixels."); }
         }
         Row {
             FormLabel {
                 text: @tr("Rotation");
                 tip: @tr("Rotation of the grid about the source position in degrees, counter-clockwise on the screen. 0 keeps the rows horizontal.");
-                enabled: root.composite;
             }
             FormNumber {
                 path: "Array.Angle";
@@ -529,7 +527,7 @@ export component SourceForm inherits VerticalLayout {
             FormSection { colspan: 2; text: @tr("Random offsets, added per emitter"); }
         }
         Row {
-            FormLabel { text: @tr("Frequency"); tip: @tr("Each emitter's level is offset by up to \u{B1} this amount. 0 turns it off."); enabled: root.composite; }
+            FormLabel { text: @tr("Frequency"); tip: @tr("Each emitter's level is offset by up to \u{B1} this amount. 0 turns it off."); }
             FormNumber {
                 path: "Array.RandomFrequency";
                 spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
@@ -538,7 +536,7 @@ export component SourceForm inherits VerticalLayout {
             }
         }
         Row {
-            FormLabel { text: @tr("Phase"); tip: @tr("Each emitter's phase is offset by up to \u{B1} this many degrees. 0 turns it off."); enabled: root.composite; }
+            FormLabel { text: @tr("Phase"); tip: @tr("Each emitter's phase is offset by up to \u{B1} this many degrees. 0 turns it off."); }
             FormNumber {
                 path: "Array.RandomPhase";
                 spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
@@ -550,7 +548,6 @@ export component SourceForm inherits VerticalLayout {
             FormLabel {
                 text: @tr("Off width");
                 tip: @tr("Each gap between bursts is offset by up to \u{B1} this many cycles, re-drawn every period. 0 turns it off.");
-                enabled: root.composite;
             }
             FormNumber {
                 path: "Array.RandomOffWidth";
@@ -563,7 +560,6 @@ export component SourceForm inherits VerticalLayout {
             FormLabel {
                 text: @tr("Position");
                 tip: @tr("Each emitter is moved by up to \u{B1} this many pixels in X and in Y. 0 turns it off.");
-                enabled: root.composite;
             }
             FormNumber {
                 path: "Array.RandomPosition";
@@ -619,7 +615,6 @@ export component ProbeForm inherits VerticalLayout {
             FormLabel {
                 text: @tr("Detector sensitivity");
                 tip: @tr("Expected detections per unit of intensity per step at a point of the line: the detector's quantum efficiency and the scale from intensity to detections in one number. The detections are Poisson-distributed about intensity \u{D7} sensitivity; 0 detects nothing.");
-                enabled: !root.standard;
             }
             FormNumber {
                 path: "Sensitivity";
@@ -632,7 +627,6 @@ export component ProbeForm inherits VerticalLayout {
             FormLabel {
                 text: @tr("Bin size");
                 tip: @tr("Pixels of the line per bin of an imaging detector's histogram, 1 to 20: the detections of a bin's pixels are added up, and the graph shows the bin's total across them. Wider bins fill faster and show less detail.");
-                enabled: root.detector == "Imaging";
             }
             FormNumber {
                 path: "BinSize";
@@ -642,7 +636,7 @@ export component ProbeForm inherits VerticalLayout {
             }
         }
         Row {
-            FormLabel { text: @tr("Layer"); tip: @tr("Output the probe samples and is drawn on."); enabled: root.standard; }
+            FormLabel { text: @tr("Layer"); tip: @tr("Output the probe samples and is drawn on."); }
             FormChoice {
                 path: "Layer";
                 words: ["Field", "Intensity"];
@@ -655,7 +649,6 @@ export component ProbeForm inherits VerticalLayout {
             FormLabel {
                 text: @tr("Label.Probe.Measurement" => "Measurement");
                 tip: @tr("Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run.");
-                enabled: root.standard;
             }
             // the layer's own measurements (Next's MeasurementsForLayerConverter)
             if root.field: FormChoice {
@@ -675,7 +668,7 @@ export component ProbeForm inherits VerticalLayout {
             }
         }
         Row {
-            FormLabel { text: @tr("Kind"); tip: @tr("A single point, or a line from A to B."); enabled: root.standard; }
+            FormLabel { text: @tr("Kind"); tip: @tr("A single point, or a line from A to B."); }
             FormChoice {
                 path: "Kind";
                 words: ["Point", "Line"];
@@ -696,7 +689,7 @@ export component ProbeForm inherits VerticalLayout {
             FormNumber { path: "Ay"; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("Y of the probe pixel, or of the start of the line, in canvas pixels."); }
         }
         Row {
-            FormLabel { text: @tr("B x"); tip: @tr("X of the end of the line in canvas pixels; line probes only."); enabled: root.line; }
+            FormLabel { text: @tr("B x"); tip: @tr("X of the end of the line in canvas pixels; line probes only."); }
             FormNumber {
                 path: "Bx";
                 spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
@@ -705,7 +698,7 @@ export component ProbeForm inherits VerticalLayout {
             }
         }
         Row {
-            FormLabel { text: @tr("B y"); tip: @tr("Y of the end of the line in canvas pixels; line probes only."); enabled: root.line; }
+            FormLabel { text: @tr("B y"); tip: @tr("Y of the end of the line in canvas pixels; line probes only."); }
             FormNumber {
                 path: "By";
                 spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
@@ -754,7 +747,6 @@ export component ProbeForm inherits VerticalLayout {
             FormLabel {
                 text: @tr("Box width");
                 tip: @tr("Width of the graph box in canvas pixels; custom box size only. A box larger than the canvas is shrunk to fit it, aspect kept.");
-                enabled: Form.value(Form.revision, "BoxSize") == "Custom";
             }
             FormNumber {
                 path: "BoxWidth";
@@ -767,7 +759,6 @@ export component ProbeForm inherits VerticalLayout {
             FormLabel {
                 text: @tr("Box height");
                 tip: @tr("Height of the graph box in canvas pixels; custom box size only. A box larger than the canvas is shrunk to fit it, aspect kept.");
-                enabled: Form.value(Form.revision, "BoxSize") == "Custom";
             }
             FormNumber {
                 path: "BoxHeight";
@@ -780,7 +771,7 @@ export component ProbeForm inherits VerticalLayout {
     FormSection { text: @tr("Axes"); }
     FormPanel {
         Row {
-            FormLabel { text: @tr("Step axis"); tip: @tr("Sliding window of the last steps, or the whole run; point probes only."); enabled: !root.line; }
+            FormLabel { text: @tr("Step axis"); tip: @tr("Sliding window of the last steps, or the whole run; point probes only."); }
             FormChoice {
                 path: "ScaleMode";
                 words: ["Running", "Full"];
@@ -814,7 +805,6 @@ export component ProbeForm inherits VerticalLayout {
             FormLabel {
                 text: @tr("Value axis");
                 tip: @tr("A linear or a logarithmic value axis; intensity probes only, the field is always linear.");
-                enabled: !root.field;
             }
             FormChoice {
                 path: "YScale";
@@ -828,7 +818,6 @@ export component ProbeForm inherits VerticalLayout {
             FormLabel {
                 text: @tr("Decades");
                 tip: @tr("Decades a logarithmic value axis spans below its top; smaller values, zero included, sit on the bottom line.");
-                enabled: Form.value(Form.revision, "YScale") == "Logarithmic" && !root.field;
             }
             FormNumber {
                 path: "Decades";
@@ -844,6 +833,282 @@ export component ProbeForm inherits VerticalLayout {
         Row {
             FormLabel { text: @tr("Value maximum"); tip: @tr("Upper bound of the value axis when it is not auto-scaled."); }
             FormNumber { path: "YMax"; spec: { min: -1000000000, max: 1000000000, increment: 0.1, decimals: -1 }; tip: @tr("Upper bound of the value axis when it is not auto-scaled."); }
+        }
+    }
+}
+
+// Next's PartCommonView: what the kind is, then the members every part has.
+component PartCommon inherits VerticalLayout {
+    in property <string> description;
+    FormDescription { text: root.description; }
+    FormSection { text: @tr("General"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Name"); tip: @tr("Name shown in the project tree and on the canvas."); }
+            FormText { path: "Base.Name"; tip: @tr("Name shown in the project tree and on the canvas."); }
+        }
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "Base.Enabled";
+                text: @tr("Label.OpticalPart.Enabled" => "Enabled");
+                tip: @tr("Paint the part into the scene; a disabled part has no effect on a run.");
+            }
+        }
+    }
+    FormSection { text: @tr("Position"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("X"); tip: @tr("X of the part's centre in canvas pixels."); }
+            FormNumber { path: "Base.X"; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("X of the part's centre in canvas pixels."); }
+        }
+        Row {
+            FormLabel { text: @tr("Y"); tip: @tr("Y of the part's centre in canvas pixels."); }
+            FormNumber { path: "Base.Y"; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("Y of the part's centre in canvas pixels."); }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Angle");
+                tip: @tr("Rotation about the centre in degrees, counter-clockwise on the screen. 0 points the part's axis to the right.");
+            }
+            FormNumber {
+                path: "Base.Angle";
+                spec: { min: -180, max: 180, increment: 5, decimals: 1, drag-step: 0.5 };
+                tip: @tr("Rotation about the centre in degrees, counter-clockwise on the screen. 0 points the part's axis to the right.");
+            }
+        }
+    }
+}
+
+// Next's ShapeMaterialView: mirror or glass, the index, the coating, the absorption; a mirror takes none but the box.
+// A kind's form hides the coating rows, the front box or the sides box where they do not apply.
+component ShapeMaterial inherits VerticalLayout {
+    in property <bool> coating-shown: true;
+    in property <bool> back-only;
+    in property <bool> sides-hidden;
+    property <bool> glass: Form.value(Form.revision, "Material.Mirror") != "true";
+    FormSection { text: @tr("Material"); }
+    FormPanel {
+        Row {
+            FormCheck {
+                colspan: 2;
+                path: "Material.Mirror";
+                text: @tr("Mirror");
+                tip: @tr("Make the part a mirror instead of glass. The refractive index, the coating and the absorption are ignored then.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Refractive index"); tip: @tr("Refractive index of the glass, 1.00 to 2.55 in steps of 0.01."); }
+            FormNumber {
+                path: "Material.RefractiveIndex";
+                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                enabled: root.glass;
+                tip: @tr("Refractive index of the glass, 1.00 to 2.55 in steps of 0.01.");
+            }
+        }
+        if root.coating-shown: Row {
+            FormLabel {
+                text: @tr("AR coating");
+                tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
+            }
+            FormNumber {
+                path: "Coating.Depth";
+                spec: { min: 0, max: 50, increment: 1, decimals: -1 };
+                enabled: root.glass;
+                tip: @tr("Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is \u{3BB} / (4 \u{221A}n) pixels thick, \u{3BB} being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on.");
+            }
+        }
+        if root.coating-shown: Row {
+            FormLabel {
+                text: @tr("Coating profile");
+                tip: @tr("How the index runs through the band: a layer at \u{221A}n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for.");
+            }
+            FormChoice {
+                path: "Coating.Profile";
+                words: ["Layer", "Graded"];
+                titles: [@tr("Enum.CoatingProfile.Layer" => "Layer"), @tr("Graded")];
+                enabled: root.glass;
+                tip: @tr("How the index runs through the band: a layer at \u{221A}n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for.");
+            }
+        }
+        if root.coating-shown && !root.back-only: Row {
+            FormCheck {
+                colspan: 2;
+                path: "Coating.Front";
+                text: @tr("Coat the front");
+                enabled: root.glass;
+                tip: @tr("Put the band on the front: the faces turned toward a source on the left, a lens's first surface. Clear it to leave them bare, as the inner faces of a cavity are.");
+            }
+        }
+        if root.coating-shown: Row {
+            FormCheck {
+                colspan: 2;
+                path: "Coating.Back";
+                text: @tr("Coat the back");
+                enabled: root.glass;
+                tip: @tr("Put the band on the back: the faces turned away from a source on the left, a lens's second surface. Clear it to leave them bare.");
+            }
+        }
+        if root.coating-shown && !root.back-only && !root.sides-hidden: Row {
+            FormCheck {
+                colspan: 2;
+                path: "Coating.Sides";
+                text: @tr("Coat the sides");
+                enabled: root.glass;
+                tip: @tr("Put the band on the sides: the faces that are neither front nor back, a lens's rim, a slab's narrow ends. Clear it to leave them bare.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Absorption");
+                tip: @tr("How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it.");
+            }
+            FormNumber {
+                path: "Material.Absorption";
+                spec: { min: 0, max: 255, increment: 5, decimals: -1 };
+                enabled: root.glass;
+                tip: @tr("How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Absorption ramp");
+                tip: @tr("Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle.");
+            }
+            FormNumber {
+                path: "Material.AbsorptionRamp";
+                spec: { min: 1, max: 400, increment: 5, decimals: -1 };
+                enabled: root.glass;
+                tip: @tr("Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle.");
+            }
+        }
+    }
+}
+
+// Next's length and width rows with the chain between them that keeps them equal (Rectangle, Ellipse).
+component LinkedSides inherits FormPanel {
+    in property <string> length-tip;
+    in property <string> width-tip;
+    in property <string> link-tip;
+    Row {
+        FormLabel { text: @tr("Length"); tip: root.length-tip; }
+        FormNumber { path: "Length"; spec: { min: 1, max: 1000000000, increment: 10, decimals: -1 }; tip: root.length-tip; }
+        Rectangle {
+            rowspan: 2;
+            width: 22px;
+            FormLink { y: (parent.height - self.height) / 2; path: "Linked"; tip: root.link-tip; }
+        }
+    }
+    Row {
+        FormLabel { text: @tr("Width"); tip: root.width-tip; }
+        FormNumber { path: "Width"; spec: { min: 1, max: 1000000000, increment: 10, decimals: -1 }; tip: root.width-tip; }
+    }
+}
+
+export component RectangleForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon {
+        description: @tr("A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one.");
+    }
+    ShapeMaterial { }
+    FormSection { text: @tr("Shape"); }
+    LinkedSides {
+        length-tip: @tr("Extent along the axis in pixels.");
+        width-tip: @tr("Extent across the axis in pixels.");
+        link-tip: @tr("Keep the width equal to the length: a square.");
+    }
+}
+
+export component EllipseForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon { description: @tr("An ellipse of glass or mirror, by the length and width of its box; linked, a circle."); }
+    ShapeMaterial { }
+    FormSection { text: @tr("Shape"); }
+    LinkedSides {
+        length-tip: @tr("Diameter along the axis in pixels.");
+        width-tip: @tr("Diameter across the axis in pixels.");
+        link-tip: @tr("Keep the width equal to the length: a circle.");
+    }
+}
+
+// Next's TrianglePartView: the presets fix the angles, A is typed for the isosceles and custom types, B for custom.
+export component TriangleForm inherits VerticalLayout {
+    property <string> type: Form.value(Form.revision, "Kind");
+    alignment: start;
+    PartCommon {
+        description: @tr("A triangle of glass or mirror: the base across the axis, the apex along it, the base angles set by a preset or by hand.");
+    }
+    ShapeMaterial { }
+    FormSection { text: @tr("Shape"); }
+    FormPanel {
+        Row {
+            FormLabel {
+                text: @tr("Type");
+                tip: @tr("Equilateral, right isosceles (the 45\u{B0} prism), 30-60-90, isosceles with one typed angle, or custom with both typed.");
+            }
+            FormChoice {
+                path: "Kind";
+                words: ["Equilateral", "RightIsosceles", "ThirtySixtyNinety", "Isosceles", "Custom"];
+                titles: [@tr("Equilateral"), @tr("Right isosceles (45\u{B0})"), @tr("30-60-90"), @tr("Isosceles"), @tr("Enum.TriangleType.Custom" => "Custom")];
+                tip: @tr("Equilateral, right isosceles (the 45\u{B0} prism), 30-60-90, isosceles with one typed angle, or custom with both typed.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Base"); tip: @tr("Length of the base in pixels; the base lies across the axis, toward a source on the left."); }
+            FormNumber {
+                path: "Base";
+                spec: { min: 2, max: 1000000000, increment: 10, decimals: -1 };
+                tip: @tr("Length of the base in pixels; the base lies across the axis, toward a source on the left.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Angle A");
+                tip: @tr("Base angle at the first end of the base, in degrees. Typed for the isosceles and custom types; the presets fix it.");
+            }
+            FormNumber {
+                path: "AngleA";
+                spec: { min: 1, max: 178, increment: 1, decimals: 1, drag-step: 0.5 };
+                enabled: root.type == "Isosceles" || root.type == "Custom";
+                tip: @tr("Base angle at the first end of the base, in degrees. Typed for the isosceles and custom types; the presets fix it.");
+            }
+        }
+        Row {
+            FormLabel {
+                text: @tr("Angle B");
+                tip: @tr("Base angle at the second end of the base, in degrees. Typed for the custom type; the others fix it.");
+            }
+            FormNumber {
+                path: "AngleB";
+                spec: { min: 1, max: 178, increment: 1, decimals: 1, drag-step: 0.5 };
+                enabled: root.type == "Custom";
+                tip: @tr("Base angle at the second end of the base, in degrees. Typed for the custom type; the others fix it.");
+            }
+        }
+        Row {
+            FormLabel { text: @tr("Apex angle"); tip: @tr("The angle at the apex: 180\u{B0} minus the two base angles"); }
+            Rectangle {
+                horizontal-stretch: 1;
+                FormValue { x: 0; color: Theme.text; text: Form.value(Form.revision, "ApexAngle"); }
+                Tooltip { text: @markdown("\{@tr("The angle at the apex: 180\u{B0} minus the two base angles")}"); }
+            }
+        }
+    }
+}
+
+export component PolygonForm inherits VerticalLayout {
+    alignment: start;
+    PartCommon { description: @tr("A regular polygon of glass or mirror, by its number of sides and the side length."); }
+    ShapeMaterial { }
+    FormSection { text: @tr("Shape"); }
+    FormPanel {
+        Row {
+            FormLabel { text: @tr("Number of sides"); tip: @tr("Number of sides, 3 to 64."); }
+            FormNumber { path: "Sides"; spec: { min: 3, max: 64, increment: 1, decimals: -1 }; tip: @tr("Number of sides, 3 to 64."); }
+        }
+        Row {
+            FormLabel { text: @tr("Side length"); tip: @tr("Length of each side in pixels."); }
+            FormNumber { path: "Side"; spec: { min: 2, max: 1000000000, increment: 10, decimals: -1 }; tip: @tr("Length of each side in pixels."); }
         }
     }
 }

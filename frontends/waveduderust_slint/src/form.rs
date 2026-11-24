@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use waveduderust::model::fields::{Edit, EditError, Field, Fields, Value, ValueKind};
 
-use waveduderust::model::{PROJECT_VERSION, Project, Stencil, View, wavelength};
+use waveduderust::model::{PROJECT_VERSION, Part, PartKind, Project, Stencil, View, wavelength};
 
 use crate::tree::Node;
 use crate::ui::{PropKind, PropRow};
@@ -112,8 +112,15 @@ macro_rules! with_object {
 }
 
 /// The Slint form `node` shows (ui/forms.slint); empty for the generic rows.
-pub(crate) fn kind(node: Node) -> &'static str {
+pub(crate) fn kind(project: &Project, node: Node) -> &'static str {
 	match node {
+		Node::Part(i) => match project.parts.get(i).map(|p| &p.kind) {
+			Some(PartKind::Rectangle(_)) => "rectangle",
+			Some(PartKind::Ellipse(_)) => "ellipse",
+			Some(PartKind::Triangle(_)) => "triangle",
+			Some(PartKind::Polygon(_)) => "polygon",
+			_ => "",
+		},
 		Node::Project => "project",
 		Node::Scene => "scene",
 		Node::Simulation => "simulation",
@@ -141,9 +148,28 @@ fn paths<T: Fields>(of: &T) -> HashMap<String, String> {
 	values
 }
 
-/// The values a form of `node` shows by path: its fields and the read-outs Next derives from them.
+/// Where a part's own fields sit below `Kind.`: its variant's name and a dot.
+fn kind_prefix(part: &Part) -> String {
+	let path =
+		<Part as Fields>::Field::all().into_iter().find(|f| f.path().starts_with("Kind.") && f.get(part).is_some());
+	path.and_then(|f| f.path().split('.').nth(1).map(|k| format!("Kind.{k}."))).unwrap_or_default()
+}
+
+/// The values a form of `node` shows by path: its fields and the read-outs Next derives from them. A part's own
+/// fields are also by their path below its kind, so one form fits every kind that has them.
 pub(crate) fn values(project: &Project, view: &View, node: Node) -> HashMap<String, String> {
-	let mut values = with_object!(project, view, node, |of| paths(of), HashMap::new());
+	let mut values = match node {
+		Node::Part(i) => {
+			let part = &project.parts[i];
+			let mut values = paths(part);
+			let prefix = kind_prefix(part);
+			let own: Vec<_> =
+				values.iter().filter_map(|(k, v)| Some((k.strip_prefix(&prefix)?.to_owned(), v.clone()))).collect();
+			values.extend(own);
+			values
+		}
+		_ => with_object!(project, view, node, |of| paths(of), HashMap::new()),
+	};
 	match node {
 		Node::Project => {
 			values.insert("Version".into(), PROJECT_VERSION.to_string());
@@ -163,6 +189,14 @@ pub(crate) fn values(project: &Project, view: &View, node: Node) -> HashMap<Stri
 			let lambda = wavelength(source.frequency, sim.wave_speed, sim.source_frequency_scale);
 			values.insert("Wavelength".into(), if lambda.is_finite() { format!("{lambda:.1}") } else { String::new() });
 			values.insert("NinePoint".into(), (sim.stencil == Stencil::NinePoint).to_string());
+		}
+		Node::Part(i) => {
+			if let PartKind::Triangle(t) = &project.parts[i].kind {
+				// Next's TriangleApexConverter, 0.#
+				let (a, b) = t.effective_angles();
+				let apex = format!("{:.1}", 180.0 - a - b);
+				values.insert("ApexAngle".into(), format!("{}\u{b0}", apex.strip_suffix(".0").unwrap_or(&apex)));
+			}
 		}
 		_ => {}
 	}
@@ -213,6 +247,15 @@ pub(crate) fn set_at(project: &mut Project, view: &mut View, node: Node, path: &
 			(probe.box_x, probe.box_y) = (probe.ax, probe.ay);
 		}
 		probe.coerce();
+		return Ok(());
+	}
+	if let Node::Part(i) = node {
+		let part = project.parts.get_mut(i).ok_or("no such part")?;
+		if path.starts_with("Base.") {
+			return set_path(part, path, text);
+		}
+		set_path(part, &format!("{}{path}", kind_prefix(part)), text)?;
+		part.kind.follow(path);
 		return Ok(());
 	}
 	with_object!(project, view, node, |of| set_path(of, path, text), Err("nothing to edit".into()), mut)
@@ -301,5 +344,18 @@ mod path_tests {
 		set_at(&mut p, &mut v, probe, "Detector", "Standard").unwrap();
 		set_at(&mut p, &mut v, probe, "Layer", "Field").unwrap();
 		assert_eq!(super::values(&p, &v, probe)["Measurement"], "Amplitude");
+		// a part's own fields by their path below its kind; Next's setters carry an edit along
+		let mut rectangle = waveduderust::model::Rectangle::default();
+		rectangle.linked = true;
+		p.parts.push(Part::new(PartKind::Rectangle(rectangle), 0, 0));
+		let part = Node::Part(0);
+		set_at(&mut p, &mut v, part, "Width", "90").unwrap();
+		assert_eq!(super::values(&p, &v, part)["Kind.Rectangle.Length"], "90");
+		set_at(&mut p, &mut v, part, "Base.Name", "Slab").unwrap();
+		assert_eq!(super::values(&p, &v, part)["Base.Name"], "Slab");
+		p.parts[0].kind = PartKind::Triangle(waveduderust::model::Triangle::default());
+		set_at(&mut p, &mut v, part, "Kind", "RightIsosceles").unwrap();
+		assert_eq!(super::values(&p, &v, part)["AngleA"], "45");
+		assert_eq!(super::values(&p, &v, part)["ApexAngle"], "90\u{b0}");
 	}
 }

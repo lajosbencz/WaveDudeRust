@@ -1,7 +1,7 @@
 import { LineEdit, CheckBox, ComboBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
-import { ProjectForm, SceneForm, SimulationForm, DisplayForm, SourceForm, ProbeForm } from "forms.slint";
+import { ProjectForm, SceneForm, SimulationForm, DisplayForm, SourceForm, ProbeForm, RectangleForm, EllipseForm, TriangleForm, PolygonForm } from "forms.slint";
 
 export enum PropKind { text, int, float, bool, choice }
 
@@ -48,6 +48,10 @@ export component Properties inherits Rectangle {
             if root.form == "display": DisplayForm { }
             if root.form == "source": SourceForm { }
             if root.form == "probe": ProbeForm { }
+            if root.form == "rectangle": RectangleForm { }
+            if root.form == "ellipse": EllipseForm { }
+            if root.form == "triangle": TriangleForm { }
+            if root.form == "polygon": PolygonForm { }
             if root.form == "": Text {
                 text: root.heading;
                 font-weight: 700;

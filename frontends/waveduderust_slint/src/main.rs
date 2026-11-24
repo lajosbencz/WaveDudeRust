@@ -247,7 +247,7 @@ impl State {
 			self.live.edited(&self.doc.project, &self.doc.view);
 		}
 		let node = self.selection.current();
-		let kind = form::kind(node);
+		let kind = form::kind(&self.doc.project, node);
 		app.set_props_form(kind.into());
 		let (mut heading, rows) = if kind.is_empty() {
 			form::of_selected(&self.doc.project, &self.doc.view, node)
@@ -623,6 +623,7 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	}
 	let s = &state.settings;
 	app.set_preview_stacked(s.preview_orientation == waveduderust_platform::settings::Orientation::Vertical);
+	app.global::<ui::Form<'_>>().set_described(s.part_description_expanded);
 	state.doc.set_limit(s.undo_steps as usize);
 	state.live.quality = s.preview_quality();
 	state.live.auto_rerun = s.auto_rerun;
@@ -997,6 +998,14 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		let result = s.set_field(&path, &text, true);
 		app.set_props_error(result.err().unwrap_or_default().into());
 		s.show(&app);
+	});
+	let st = state.clone();
+	app.global::<ui::Form<'_>>().on_describe(move |open| {
+		let s = &mut *st.borrow_mut();
+		s.settings.part_description_expanded = open;
+		if let Some(Err(e)) = s.store.as_ref().map(|store| s.settings.save(store)) {
+			tracing::error!("{e}");
+		}
 	});
 	let st = state.clone();
 	app.global::<ui::Form<'_>>().on_typed(move |token, path, text| {

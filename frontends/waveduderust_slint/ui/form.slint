@@ -1,4 +1,5 @@
 import { CheckBox, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
+import { Icon } from "icons.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
 
@@ -16,6 +17,9 @@ export global Form {
     callback set-text(path: string, text: string);
     // text typed, not yet committed
     callback typed(token: int, path: string, text: string);
+    // whether a part's form shows its kind's description, one setting for every kind
+    in-out property <bool> described: true;
+    callback describe(open: bool);
 }
 
 // Next's FormSection: the name over a rule.
@@ -40,11 +44,10 @@ export component FormPanel inherits GridLayout {
     padding-bottom: 10px;
 }
 
-// Next's FormLabel, with the editor's hint as its tip.
+// Next's FormLabel, with the editor's hint as its tip; it stays as it is while its editor is disabled.
 export component FormLabel inherits Rectangle {
     in property <string> text;
     in property <string> tip;
-    in property <bool> enabled: true;
     min-width: max(110px, label.preferred-width);
     preferred-width: self.min-width;
     horizontal-stretch: 0;
@@ -55,7 +58,7 @@ export component FormLabel inherits Rectangle {
         text: root.text;
         vertical-alignment: center;
         overflow: elide;
-        color: root.enabled ? Theme.text : Theme.text-disabled;
+        color: Theme.text;
     }
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
 }
@@ -189,4 +192,99 @@ export component FormNotes inherits Rectangle {
         }
     }
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// Next's DescriptionToggle and FormDescription: a header whose chevron turns while open, Space or a click toggling
+// it, over the kind's text.
+export component FormDescription inherits VerticalLayout {
+    in property <string> text;
+    spacing: 0;
+    header := FocusScope {
+        accessible-role: button;
+        accessible-label: @tr("Show or hide what this kind of part is");
+        min-height: Theme.row-height;
+        key-pressed(e) => {
+            if (e.text == " ") {
+                Form.described = !Form.described;
+                Form.describe(Form.described);
+                return accept;
+            }
+            reject
+        }
+        TouchArea {
+            clicked => {
+                header.focus();
+                Form.described = !Form.described;
+                Form.describe(Form.described);
+            }
+        }
+        HorizontalLayout {
+            padding-top: 2px;
+            padding-bottom: 2px;
+            spacing: 7px;
+            Icon {
+                width: 6px;
+                height: 11px;
+                y: (parent.height - self.height) / 2;
+                source: @image-url("icons/next/chevron-right.svg");
+                rotation-angle: Form.described ? 90deg : 0deg;
+            }
+            Text {
+                text: @tr("Description");
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle {
+            y: parent.height - 1px;
+            height: 1px;
+            background: header.has-focus ? Theme.accent : Theme.border;
+        }
+        Tooltip { text: @markdown("\{@tr("Show or hide what this kind of part is")}"); }
+    }
+    Rectangle { height: 6px; }
+    if Form.described: Text {
+        text: root.text;
+        wrap: word-wrap;
+        color: Theme.text;
+    }
+    if Form.described: Rectangle { height: 10px; }
+}
+
+// Next's LinkToggle: a chain whose rings part when off, the accent while linked, bound to the bool at `path`.
+export component FormLink inherits FocusScope {
+    in property <string> path;
+    in property <string> tip;
+    property <bool> on: Form.value(Form.revision, root.path) == "true";
+    width: 22px;
+    height: 22px;
+    accessible-role: checkbox;
+    accessible-checked: root.on;
+    accessible-label: root.tip;
+    key-pressed(e) => {
+        if (e.text == " ") {
+            Form.set(root.path, root.on ? "false" : "true");
+            return accept;
+        }
+        reject
+    }
+    Rectangle {
+        background: area.has-hover ? Theme.button-hover : transparent;
+        border-width: 1px;
+        border-color: root.has-focus ? Theme.accent : transparent;
+        Icon {
+            width: 18px;
+            height: 16px;
+            source: root.on ? @image-url("icons/next/chain-linked.svg") : @image-url("icons/next/chain-parted.svg");
+            ink: root.on ? Theme.accent : Theme.text-dim;
+        }
+    }
+    area := TouchArea {
+        clicked => {
+            root.focus();
+            Form.set(root.path, root.on ? "false" : "true");
+        }
+    }
+    Tooltip { text: @markdown("\{root.tip}"); }
 }

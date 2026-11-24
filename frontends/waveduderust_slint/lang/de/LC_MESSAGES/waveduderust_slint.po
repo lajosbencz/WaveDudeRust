@@ -92,6 +92,10 @@ msgstr "(nominell)"
 msgid "1 entry"
 msgstr "1 Eintrag"
 
+#. Enum.TriangleType.ThirtySixtyNinety
+msgid "30-60-90"
+msgstr "30-60-90"
+
 #. Label.Simulation.FourthOrderLaplacian
 msgid "4th-order Laplacian"
 msgstr "Laplace 4. Ordnung"
@@ -100,6 +104,14 @@ msgstr "Laplace 4. Ordnung"
 msgid "A linear or a logarithmic value axis; intensity probes only, the field is always linear."
 msgstr "Lineare oder logarithmische Werteachse; nur Intensitätssonden, das Feld ist immer linear."
 
+#. Kind.RectanglePart
+msgid "A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one."
+msgstr "Ein Rechteck aus Glas oder als Spiegel, nach Länge und Breite; verkettet ein Quadrat. Ein ebener Spiegel ist ein langes, schmales."
+
+#. Kind.PolygonPart
+msgid "A regular polygon of glass or mirror, by its number of sides and the side length."
+msgstr "Ein regelmäßiges Vieleck aus Glas oder als Spiegel, nach Seitenzahl und Seitenlänge."
+
 #. Hint.Probe.Kind
 msgid "A single point, or a line from A to B."
 msgstr "Ein einzelner Punkt oder eine Linie von A nach B."
@@ -107,6 +119,10 @@ msgstr "Ein einzelner Punkt oder eine Linie von A nach B."
 #. Hint.Probe.Detector
 msgid "A standard probe, or a probabilistic detector: counting, the detections of the whole line step by step over time, as a photomultiplier's pulses; or imaging, the detections at every point of the line added up over the run, as a SPAD array builds an image. A detector is a line probe of the integrated intensity."
 msgstr "Eine Standardsonde oder ein probabilistischer Detektor: zählend, die Detektionen der ganzen Linie Schritt für Schritt über die Zeit, wie die Pulse eines Photomultipliers; oder bildgebend, die Detektionen an jedem Punkt der Linie über den Lauf aufsummiert, wie ein SPAD-Array ein Bild aufbaut. Ein Detektor ist eine Liniensonde der integrierten Intensität."
+
+#. Kind.TrianglePart
+msgid "A triangle of glass or mirror: the base across the axis, the apex along it, the base angles set by a preset or by hand."
+msgstr "Ein Dreieck aus Glas oder als Spiegel: die Basis quer zur Achse, die Spitze entlang ihr, die Basiswinkel nach Vorgabe oder von Hand."
 
 #. Label.Probe.AX
 msgid "A x"
@@ -119,6 +135,18 @@ msgstr "A y"
 #. MenuAddAndGate
 msgid "AND"
 msgstr "AND"
+
+#. Label.LensPart.Coating
+msgid "AR coating"
+msgstr "Entspiegelung"
+
+#. Label.LensPart.Absorption
+msgid "Absorption"
+msgstr "Absorption"
+
+#. Label.LensPart.AbsorptionRamp
+msgid "Absorption ramp"
+msgstr "Absorptionsrampe"
 
 #. Label.Probe.Active
 msgid "Active"
@@ -164,6 +192,26 @@ msgstr "Amplitude"
 msgid "Amplitude in percent, 0 to 100, decimals allowed."
 msgstr "Amplitude in Prozent, 0 bis 100, Dezimalstellen erlaubt."
 
+#. Kind.EllipsePart
+msgid "An ellipse of glass or mirror, by the length and width of its box; linked, a circle."
+msgstr "Eine Ellipse aus Glas oder als Spiegel, nach Länge und Breite ihres Kastens; verkettet ein Kreis."
+
+#. Label.OpticalPart.Angle
+msgid "Angle"
+msgstr "Winkel"
+
+#. Label.TrianglePart.AngleA
+msgid "Angle A"
+msgstr "Winkel A"
+
+#. Label.TrianglePart.AngleB
+msgid "Angle B"
+msgstr "Winkel B"
+
+#. LabelApexAngle
+msgid "Apex angle"
+msgstr "Winkel an der Spitze"
+
 #. SectionArray
 msgid "Array"
 msgstr "Anordnung"
@@ -199,6 +247,18 @@ msgstr "B y"
 #. Hint.DisplayLayer.OverlayInExport
 msgid "Bake the outline into exported frames and videos of this output."
 msgstr "Den Umriss in exportierte Bilder und Videos dieser Ausgabe einbrennen."
+
+#. Label.TrianglePart.Base
+msgid "Base"
+msgstr "Grundseite"
+
+#. Hint.TrianglePart.AngleA
+msgid "Base angle at the first end of the base, in degrees. Typed for the isosceles and custom types; the presets fix it."
+msgstr "Grundwinkel am ersten Ende der Grundseite in Grad. Eingabe bei gleichschenklig und eigenen Winkeln; die Vorgaben legen ihn fest."
+
+#. Hint.TrianglePart.AngleB
+msgid "Base angle at the second end of the base, in degrees. Typed for the custom type; the others fix it."
+msgstr "Grundwinkel am zweiten Ende der Grundseite in Grad. Eingabe nur bei eigenen Winkeln; die anderen Typen legen ihn fest."
 
 #. Label.Probe.BinSize
 msgid "Bin size"
@@ -264,6 +324,22 @@ msgstr "Schließen"
 msgid "Close Project"
 msgstr "Projekt schließen"
 
+#. Label.CoatedPart.BackCoated
+msgid "Coat the back"
+msgstr "Rückseite entspiegeln"
+
+#. Label.CoatedPart.FrontCoated
+msgid "Coat the front"
+msgstr "Vorderseite entspiegeln"
+
+#. Label.CoatedPart.SidesCoated
+msgid "Coat the sides"
+msgstr "Seiten entspiegeln"
+
+#. Label.CoatedPart.CoatingProfile
+msgid "Coating profile"
+msgstr "Profil der Entspiegelung"
+
 #. Label.DisplayLayer.ColorScheme
 msgid "Colour scheme"
 msgstr "Farbschema"
@@ -320,6 +396,10 @@ msgstr "Dekaden, die eine logarithmische Werteachse unter ihrem oberen Ende zeig
 msgid "Delete"
 msgstr "Löschen"
 
+#. Hint.LensPart.AbsorptionRamp
+msgid "Depth in pixels over which the absorption rises from nothing at the outline to its full value; the longer, the less of a wave is reflected. A part thinner than twice the ramp reaches its full absorption in its middle."
+msgstr "Tiefe in Pixeln, über die die Absorption vom Umriss an von null auf ihren vollen Wert steigt; je länger, desto weniger einer Welle wird reflektiert. Ein Bauteil, das dünner als die doppelte Rampe ist, erreicht seine volle Absorption in der Mitte."
+
 #. SectionDescription
 msgid "Description"
 msgstr "Beschreibung"
@@ -335,6 +415,14 @@ msgstr "Detektor"
 #. Label.Probe.Sensitivity
 msgid "Detector sensitivity"
 msgstr "Empfindlichkeit"
+
+#. Hint.EllipsePart.Width
+msgid "Diameter across the axis in pixels."
+msgstr "Durchmesser quer zur Achse in Pixeln."
+
+#. Hint.EllipsePart.Length
+msgid "Diameter along the axis in pixels."
+msgstr "Durchmesser entlang der Achse in Pixeln."
 
 #. MenuAddDiffractionGratings
 msgid "Diffraction gratings"
@@ -428,6 +516,14 @@ msgstr "Exportbereich bei diesem Bild beenden (O)"
 msgid "Envelope of each burst; pulsed mode only."
 msgstr "Hüllkurve jedes Pulses; nur im Pulsmodus."
 
+#. Enum.TriangleType.Equilateral
+msgid "Equilateral"
+msgstr "Gleichseitig"
+
+#. Hint.TrianglePart.Type
+msgid "Equilateral, right isosceles (the 45° prism), 30-60-90, isosceles with one typed angle, or custom with both typed."
+msgstr "Gleichseitig, rechtwinklig-gleichschenklig (das 45°-Prisma), 30-60-90, gleichschenklig mit einem eingegebenen Winkel oder eigene Winkel."
+
 #. TipWavelength
 msgid "Estimated from the wave speed and the frequency (λ = c / f): emitters one wavelength apart radiate in phase along that direction. Holds for the 4th-order Laplacian; the 9-point stencil's speed varies with the frequency"
 msgstr "Geschätzt aus Wellengeschwindigkeit und Frequenz (λ = c / f): Strahler im Abstand einer Wellenlänge strahlen in dieser Richtung gleichphasig. Gilt für den Laplace-Operator 4. Ordnung; beim 9-Punkt-Schema hängt die Geschwindigkeit von der Frequenz ab"
@@ -499,6 +595,14 @@ msgstr "Intensität exportieren..."
 #. MenuFileExportLast
 msgid "Export last"
 msgstr "Letzten Export wiederholen"
+
+#. Hint.LensPart.Diameter
+msgid "Extent across the axis in pixels."
+msgstr "Ausdehnung quer zur Achse in Pixeln."
+
+#. Hint.RectanglePart.Length
+msgid "Extent along the axis in pixels."
+msgstr "Ausdehnung entlang der Achse in Pixeln."
 
 #. Enum.ProbeBoxSize.ExtraLarge
 msgid "Extra large"
@@ -588,6 +692,10 @@ msgstr "Gaußsch"
 msgid "General"
 msgstr "Allgemein"
 
+#. Enum.CoatingProfile.Graded
+msgid "Graded"
+msgstr "Graduell"
+
 #. SectionGraph
 msgid "Graph"
 msgstr "Diagramm"
@@ -615,6 +723,14 @@ msgstr "Hilfe"
 #. Label.SourceArray.SpacingX
 msgid "Horizontal spacing"
 msgstr "Horizontaler Abstand"
+
+#. Hint.LensPart.Absorption
+msgid "How strongly the part absorbs waves, 0 (not at all) to 255, as the scene image's blue channel. It rises from nothing at the outline over the absorption ramp, so a wave enters the part instead of being reflected. A mirror ignores it."
+msgstr "Wie stark das Bauteil Wellen absorbiert, 0 (gar nicht) bis 255, wie der Blaukanal des Szenenbilds. Sie steigt über die Absorptionsrampe vom Umriss an von null an, damit eine Welle in das Bauteil eindringt statt reflektiert zu werden. Ein Spiegel ignoriert sie."
+
+#. Hint.CoatedPart.CoatingProfile
+msgid "How the index runs through the band: a layer at √n, the quarter-wave idea, or a graded rise from the medium outside to the glass. A graded band reflects less than a layer once it is a wavelength thick or more, at any wavelength; a layer only at the wavelength it is cut for."
+msgstr "Wie der Index durch das Band verläuft: eine Schicht mit √n, die λ/4-Idee, oder ein gradueller Anstieg vom Medium außen zum Glas. Ein graduelles Band reflektiert ab einer Wellenlänge Dicke weniger als eine Schicht, bei jeder Wellenlänge; eine Schicht nur bei der, für die sie bemessen ist."
 
 #. Enum.SceneMode.Image
 msgid "Image"
@@ -672,6 +788,18 @@ msgstr "Intensitäts-Zeitabfall"
 msgid "Interference filter"
 msgstr "Interferenzfilter"
 
+#. Enum.TriangleType.Isosceles
+msgid "Isosceles"
+msgstr "Gleichschenklig"
+
+#. Hint.EllipsePart.Linked
+msgid "Keep the width equal to the length: a circle."
+msgstr "Die Breite gleich der Länge halten: ein Kreis."
+
+#. Hint.RectanglePart.Linked
+msgid "Keep the width equal to the length: a square."
+msgstr "Die Breite gleich der Länge halten: ein Quadrat."
+
 #. Label.Probe.Kind
 msgid "Kind"
 msgstr "Art"
@@ -700,9 +828,21 @@ msgstr "Ebene"
 msgid "Left edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on."
 msgstr "Linker Rand des Diagrammkastens in Leinwandpixeln. Ein Kasten auf Punkt A der Sonde wandert mit ihr; in die Nähe gezogen rastet er dort ein."
 
+#. Label.RectanglePart.Length
+msgid "Length"
+msgstr "Länge"
+
 #. Hint.Source.PulseWidth
 msgid "Length of each burst in cycles of the source frequency; pulsed mode only."
 msgstr "Länge jedes Pulses in Perioden der Quellfrequenz; nur im Pulsmodus."
+
+#. Hint.PolygonPart.Side
+msgid "Length of each side in pixels."
+msgstr "Länge jeder Seite in Pixeln."
+
+#. Hint.TrianglePart.Base
+msgid "Length of the base in pixels; the base lies across the axis, toward a source on the left."
+msgstr "Länge der Grundseite in Pixeln; sie liegt quer zur Achse, einer Quelle links zugewandt."
 
 #. Hint.Source.OffWidth
 msgid "Length of the gap between bursts in cycles; pulsed mode only."
@@ -740,6 +880,14 @@ msgstr "Wiedergabe im Exportbereich wiederholen (L)"
 msgid "Lower bound of the value axis when it is not auto-scaled."
 msgstr "Untere Grenze der Werteachse ohne automatische Skalierung."
 
+#. Hint.ShapePart.Mirror
+msgid "Make the part a mirror instead of glass. The refractive index, the coating and the absorption are ignored then."
+msgstr "Das Bauteil als Spiegel statt als Glas. Brechungsindex, Entspiegelung und Absorption werden dann ignoriert."
+
+#. SectionMaterial
+msgid "Material"
+msgstr "Material"
+
 #. SectionMeasurement
 msgid "Measurement"
 msgstr "Messung"
@@ -767,6 +915,10 @@ msgstr "Metaprisma"
 #. MenuAddMetaSurfaces
 msgid "Meta surfaces"
 msgstr "Metaoberflächen"
+
+#. Label.LensPart.Mirror
+msgid "Mirror"
+msgstr "Spiegel"
 
 #. Label.Scene.Mode
 msgid "Mode"
@@ -848,6 +1000,14 @@ msgstr "Anzahl der Strahler nebeneinander. Ungerade Anzahlen halten den mittlere
 msgid "Number of emitters down."
 msgstr "Anzahl der Strahler untereinander."
 
+#. Label.PolygonPart.Sides
+msgid "Number of sides"
+msgstr "Anzahl Seiten"
+
+#. Hint.PolygonPart.Sides
+msgid "Number of sides, 3 to 64."
+msgstr "Anzahl der Seiten, 3 bis 64."
+
 #. MenuAddOrGate
 msgid "OR"
 msgstr "OR"
@@ -903,6 +1063,10 @@ msgstr "Ausgabe, die die Sonde abtastet und auf der sie gezeichnet wird."
 #. TipPartEnabled
 msgid "Paint the part into the scene (Space on the row toggles it)"
 msgstr "Bauteil in die Szene zeichnen (Leertaste auf der Zeile schaltet um)"
+
+#. Hint.OpticalPart.Enabled
+msgid "Paint the part into the scene; a disabled part has no effect on a run."
+msgstr "Das Bauteil in die Szene zeichnen; ein inaktives Bauteil hat keine Wirkung auf einen Lauf."
 
 #. MenuViewPanes
 msgid "Panes"
@@ -1020,6 +1184,18 @@ msgstr "Pulsbreite"
 msgid "Pulsed"
 msgstr "Gepulst"
 
+#. Hint.CoatedPart.BackCoated
+msgid "Put the band on the back: the faces turned away from a source on the left, a lens's second surface. Clear it to leave them bare."
+msgstr "Das Band auf die Rückseite legen: die Flächen, die von einer Quelle links abgewandt sind, die zweite Fläche einer Linse. Abwählen lässt sie blank."
+
+#. Hint.CoatedPart.FrontCoated
+msgid "Put the band on the front: the faces turned toward a source on the left, a lens's first surface. Clear it to leave them bare, as the inner faces of a cavity are."
+msgstr "Das Band auf die Vorderseite legen: die Flächen, die einer Quelle links zugewandt sind, die erste Fläche einer Linse. Abwählen lässt sie blank, wie die Innenflächen eines Resonators."
+
+#. Hint.CoatedPart.SidesCoated
+msgid "Put the band on the sides: the faces that are neither front nor back, a lens's rim, a slab's narrow ends. Clear it to leave them bare."
+msgstr "Das Band auf die Seiten legen: die Flächen, die weder vorn noch hinten sind, der Rand einer Linse, die schmalen Enden einer Platte. Abwählen lässt sie blank."
+
 #. Label.Video.Quality
 msgid "Quality"
 msgstr "Qualität"
@@ -1060,6 +1236,10 @@ msgstr "Brechungsindex"
 msgid "Refractive index of a blank canvas, 1.0 to 2.55. The wave speed is 1/n cells per step."
 msgstr "Brechungsindex einer leeren Leinwand, 1,0 bis 2,55. Die Wellengeschwindigkeit beträgt 1/n Zellen pro Schritt."
 
+#. Hint.LensPart.RefractiveIndex
+msgid "Refractive index of the glass, 1.00 to 2.55 in steps of 0.01."
+msgstr "Brechungsindex des Glases, 1,00 bis 2,55 in Schritten von 0,01."
+
 #. MenuProjectRemove
 msgid "Remove"
 msgstr "Entfernen"
@@ -1076,9 +1256,17 @@ msgstr "Alle so viele Schritte ein Bild rendern, exportieren und die Sonden abta
 msgid "Resume"
 msgstr "Fortsetzen"
 
+#. Enum.TriangleType.RightIsosceles
+msgid "Right isosceles (45°)"
+msgstr "Rechtwinklig-gleichschenklig (45°)"
+
 #. Label.SourceArray.Angle
 msgid "Rotation"
 msgstr "Drehung"
+
+#. Hint.OpticalPart.Angle
+msgid "Rotation about the centre in degrees, counter-clockwise on the screen. 0 points the part's axis to the right."
+msgstr "Drehung um den Mittelpunkt in Grad, gegen den Uhrzeigersinn auf dem Bildschirm. 0 richtet die Achse des Bauteils nach rechts."
 
 #. Hint.SourceArray.Angle
 msgid "Rotation of the grid about the source position in degrees, counter-clockwise on the screen. 0 keeps the rows horizontal."
@@ -1140,6 +1328,14 @@ msgstr "Alles au&swählen"
 msgid "Select all"
 msgstr "Alles auswählen"
 
+#. SectionShape
+msgid "Shape"
+msgstr "Form"
+
+#. TipPartDescription
+msgid "Show or hide what this kind of part is"
+msgstr "Zeigt oder verbirgt, was diese Art Bauteil ist"
+
 #. Hint.Display.HandlesInPreview
 msgid "Show the handles, lines, emitter dots and levers of every source, part and probe over the preview pictures. A selected object shows its own either way."
 msgstr "Die Griffe, Linien, Emitterpunkte und Hebel aller Quellen, Bauteile und Sonden über den Vorschaubildern zeigen. Ein ausgewähltes Objekt zeigt seine in jedem Fall."
@@ -1151,6 +1347,10 @@ msgstr "Die Namen neben den Griffen über den Vorschaubildern zeigen. Ein ausgew
 #. Hint.DisplayLayer.Preview
 msgid "Show this output in the live preview."
 msgstr "Diese Ausgabe in der Live-Vorschau zeigen."
+
+#. Label.PolygonPart.Side
+msgid "Side length"
+msgstr "Seitenlänge"
 
 #. MenuAddSimpleGrating
 msgid "Simple 2D grating"
@@ -1240,9 +1440,17 @@ msgstr "Stopp"
 msgid "Stop the simulation; the frames so far stay (Esc)"
 msgstr "Simulation stoppen; die bisherigen Bilder bleiben (Esc)"
 
+#. TipApexAngle
+msgid "The angle at the apex: 180° minus the two base angles"
+msgstr "Der Winkel an der Spitze: 180° minus die beiden Grundwinkel"
+
 #. Hint.Scene.DampingEdge
 msgid "Thickness in pixels of the absorbing frame: positive inside the canvas, where it shows as a dark margin; negative outside it, simulated but never shown. 0 turns it off."
 msgstr "Dicke des absorbierenden Rahmens in Pixeln: positiv innerhalb der Leinwand, wo er als dunkler Rand sichtbar ist; negativ außerhalb, simuliert, aber nie gezeigt. 0 schaltet ihn ab."
+
+#. Hint.LensPart.Coating
+msgid "Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is λ / (4 √n) pixels thick, λ being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on."
+msgstr "Dicke in Pixeln des entspiegelnden Bands direkt innerhalb des Umrisses; 0 für keines. Eine λ/4-Schicht ist λ / (4 √n) Pixel dick, λ die Wellenlänge aus dem Quellenformular; ein graduelles Band ist ab einer Wellenlänge umso besser, je dicker es ist."
 
 #. SectionTiming
 msgid "Timing"
@@ -1267,6 +1475,10 @@ msgstr "Gesamtzahl der Simulationsschritte."
 #. MenuAddTriangle
 msgid "Triangle"
 msgstr "Dreieck"
+
+#. Label.TrianglePart.Type
+msgid "Type"
+msgstr "Typ"
 
 #. MenuEditUndo
 msgid "Undo"
@@ -1368,6 +1580,10 @@ msgstr "X des Strahlers bzw. der Anordnungsmitte, in Leinwandpixeln."
 msgid "X of the end of the line in canvas pixels; line probes only."
 msgstr "X des Linienendes in Leinwandpixeln; nur Liniensonden."
 
+#. Hint.OpticalPart.X
+msgid "X of the part's centre in canvas pixels."
+msgstr "X des Mittelpunkts in Leinwandpixeln."
+
 #. Hint.Probe.AX
 msgid "X of the probe pixel, or of the start of the line, in canvas pixels."
 msgstr "X des Sondenpixels bzw. des Linienanfangs, in Leinwandpixeln."
@@ -1388,6 +1604,10 @@ msgstr "Y des Strahlers bzw. der Anordnungsmitte, in Leinwandpixeln."
 msgid "Y of the end of the line in canvas pixels; line probes only."
 msgstr "Y des Linienendes in Leinwandpixeln; nur Liniensonden."
 
+#. Hint.OpticalPart.Y
+msgid "Y of the part's centre in canvas pixels."
+msgstr "Y des Mittelpunkts in Leinwandpixeln."
+
 #. Hint.Probe.AY
 msgid "Y of the probe pixel, or of the start of the line, in canvas pixels."
 msgstr "Y des Sondenpixels bzw. des Linienanfangs, in Leinwandpixeln."
@@ -1400,6 +1620,11 @@ msgstr "Zonenplatte"
 msgid "{} entries"
 msgstr "{} Einträge"
 
+#. Enum.CoatingProfile.Layer
+msgctxt "Enum.CoatingProfile.Layer"
+msgid "Layer"
+msgstr "Schicht"
+
 #. Enum.ProbeScaleMode.Full
 msgctxt "Enum.ProbeScaleMode.Full"
 msgid "Full"
@@ -1409,6 +1634,16 @@ msgstr "Ganzer Lauf"
 msgctxt "Enum.ProbeScaleMode.Running"
 msgid "Running"
 msgstr "Gleitend"
+
+#. Enum.TriangleType.Custom
+msgctxt "Enum.TriangleType.Custom"
+msgid "Custom"
+msgstr "Eigene Winkel"
+
+#. Label.OpticalPart.Enabled
+msgctxt "Label.OpticalPart.Enabled"
+msgid "Enabled"
+msgstr "Aktiv"
 
 #. Label.Probe.Measurement
 msgctxt "Label.Probe.Measurement"
