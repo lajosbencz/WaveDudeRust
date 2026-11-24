@@ -748,6 +748,10 @@ msgstr "Niet opslaan"
 msgid "Dot diameter"
 msgstr "Puntdiameter"
 
+#. TipSchemeGradient
+msgid "Drag a marker to move its stop; drag it away from the gradient or double-click it to remove the stop; a click on the gradient adds a stop there. With keyboard focus Left and Right move the selected stop by a hundredth, a tenth with Shift, Page Up and Page Down select the stop before or after it, and Del removes it"
+msgstr "Sleep een markering om het bijbehorende punt te verplaatsen; van het verloop wegslepen of dubbelklikken verwijdert het punt; een klik op het verloop voegt daar een punt in. Met toetsenbordfocus verplaatsen Links en Rechts het gekozen punt een honderdste, een tiende met Shift, PageUp en PageDown kiezen het punt ervoor of erna, en Del verwijdert het"
+
 #. TipDragLayer
 msgid "Drag to move this layer through the list"
 msgstr "Slepen om deze laag in de lijst te verplaatsen"

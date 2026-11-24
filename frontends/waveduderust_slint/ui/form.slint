@@ -49,6 +49,22 @@ export global Form {
     callback base-on(index: int);
     // the scheme Based on copied last, shown until another object is; -1 for none
     in property <int> based-on: -1;
+    // changes with the object shown, not with its edits
+    in property <int> object;
+    // The gradient bar's edits, each giving the index of the stop selected after it. The edits of one gesture share
+    // `gesture`, one undo step; 0 for an edit of its own.
+    callback add-stop-at(at: float, gesture: int) -> int;
+    callback move-stop(index: int, at: float, gesture: int) -> int;
+    callback remove-stop(index: int, gesture: int) -> int;
+    // the gestures counted, so each has its own number
+    in-out property <int> gestures;
+    // changes when the stops change other than through the bar, which then drops its selection
+    in property <int> stops-replaced;
+    // The stop whose marker is nearest `at`, within `reach`, both along the gradient 0..1; the selected one when as
+    // near; -1 for none.
+    pure callback marker-at(at: float, reach: float, selected: int) -> int;
+    // The stop `step` places after stop `index` along the gradient, clamped to the ends; from -1, the first.
+    pure callback stop-beside(index: int, step: int) -> int;
     // text a number box could not read, shown until the next edit or another object
     in-out property <string> invalid;
     // the data changed; `typing`: a keystroke in a text box, one undo step with the next ones

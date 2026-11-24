@@ -106,6 +106,7 @@ mod native {
 		view: &View,
 		position: u32,
 		settings: &Settings,
+		schemes: &SchemeStore,
 		words: &Words<'_>,
 	) -> Option<Exporting> {
 		let mut dialog = rfd::FileDialog::new();
@@ -129,7 +130,7 @@ mod native {
 			layers,
 			still,
 			backend: if settings.use_gpu { Backend::Gpu } else { Backend::Cpu },
-			schemes: SchemeStore::default(),
+			schemes: schemes.clone(),
 			h264: if format == ExportFormat::Mp4 { h264(settings) } else { None },
 			h264_profile: Profile::default(),
 			keep_partial: false,
@@ -187,7 +188,15 @@ mod web {
 		}
 	}
 
-	pub(crate) fn start(_: Kind, _: &Project, _: &View, _: u32, _: &Settings, _: &Words<'_>) -> Option<Exporting> {
+	pub(crate) fn start(
+		_: Kind,
+		_: &Project,
+		_: &View,
+		_: u32,
+		_: &Settings,
+		_: &waveduderust::io::schemes::SchemeStore,
+		_: &Words<'_>,
+	) -> Option<Exporting> {
 		tracing::warn!("exports are not in the browser build yet");
 		None
 	}

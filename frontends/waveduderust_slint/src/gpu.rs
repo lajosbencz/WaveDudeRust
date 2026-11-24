@@ -42,6 +42,8 @@ pub(crate) async fn select() -> Result<Arc<GpuContext>, Box<dyn std::error::Erro
 pub(crate) struct Look<'a> {
 	pub(crate) project: &'a Project,
 	pub(crate) view: &'a View,
+	/// The user's schemes.
+	pub(crate) schemes: &'a SchemeStore,
 	pub(crate) edges: Option<&'a Arc<EdgeImage>>,
 }
 
@@ -67,7 +69,7 @@ impl Picture {
 		shape: &FrameShape,
 		look: &Look<'_>,
 	) -> Option<slint::Image> {
-		let Look { project, view, edges } = *look;
+		let Look { project, view, schemes, edges } = *look;
 		let (w, h) = (shape.width(), shape.height());
 		let texture = match &self.texture {
 			Some(t) if t.width() == w && t.height() == h => t.clone(),
@@ -90,7 +92,7 @@ impl Picture {
 			Layer::Field => &view.field,
 			_ => &view.intensity,
 		};
-		let colours = LayerColours::of(presentation, &project.color_schemes, &SchemeStore::default());
+		let colours = LayerColours::of(presentation, &project.color_schemes, schemes);
 		let fit = layer::View::of(shape, (w, h), None, 0);
 		self.picture.set(
 			pipeline,

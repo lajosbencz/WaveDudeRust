@@ -11,6 +11,8 @@ use waveduderust::unstable::render::gpu::{DevicePlane, PicturePipeline};
 use waveduderust::unstable::scene::glowing_edges::EdgeImage;
 use waveduderust::unstable::spec::{RunRequest, SceneCache};
 
+use waveduderust::io::schemes::SchemeStore;
+
 use crate::gpu::{Look, Picture};
 use crate::ui::{RunState, RunStatus};
 
@@ -213,7 +215,7 @@ impl Live {
 	}
 
 	/// The newest stored frame drawn, when it changed, and the run's state.
-	pub(crate) fn poll(&mut self, project: &Project, view: &View) -> Shown {
+	pub(crate) fn poll(&mut self, project: &Project, view: &View, schemes: &SchemeStore) -> Shown {
 		#[cfg(target_arch = "wasm32")]
 		self.worker.pump(std::time::Duration::from_millis(10), std::task::Waker::noop());
 		let status = self.worker.status();
@@ -275,7 +277,7 @@ impl Live {
 		{
 			let tag = FrameTag { store: store.id(), generation: store.generation(), stored };
 			if self.drawn != Some(tag) {
-				let look = Look { project, view, edges: self.edges.as_ref() };
+				let look = Look { project, view, schemes, edges: self.edges.as_ref() };
 				let pictures = [(&mut self.field, Layer::Field), (&mut self.intensity, Layer::Intensity)];
 				if let Some(frame) = status.device_frames.and_then(|frames| frames.hold(tag)) {
 					self.drawn = Some(tag);

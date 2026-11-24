@@ -748,6 +748,10 @@ msgstr "Nicht speichern"
 msgid "Dot diameter"
 msgstr "Punktdurchmesser"
 
+#. TipSchemeGradient
+msgid "Drag a marker to move its stop; drag it away from the gradient or double-click it to remove the stop; a click on the gradient adds a stop there. With keyboard focus Left and Right move the selected stop by a hundredth, a tenth with Shift, Page Up and Page Down select the stop before or after it, and Del removes it"
+msgstr "Eine Marke ziehen, um ihren Stützpunkt zu verschieben; vom Verlauf wegziehen oder ein Doppelklick entfernt ihn; ein Klick auf den Verlauf fügt dort einen Stützpunkt ein. Mit Tastaturfokus verschieben Links und Rechts den gewählten Stützpunkt um ein Hundertstel, mit Umschalt um ein Zehntel, Bild auf und Bild ab wählen den Stützpunkt davor oder danach, und Entf entfernt ihn"
+
 #. TipDragLayer
 msgid "Drag to move this layer through the list"
 msgstr "Ziehen, um diese Schicht in der Liste zu verschieben"

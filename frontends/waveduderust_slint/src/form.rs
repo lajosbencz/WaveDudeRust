@@ -8,6 +8,7 @@ use waveduderust::model::{
 	self as m, Coating, Lens, Material, PROJECT_VERSION, Part, PartKind, Point, Project, Stencil, View, wavelength,
 };
 
+use waveduderust::io::schemes::SchemeStore;
 use waveduderust::unstable::render::gradient::Gradient;
 use waveduderust::unstable::scene::gate_design::{GateDesign, ports_of};
 
@@ -665,10 +666,10 @@ fn strip(scheme: &m::ColorScheme) -> slint::Image {
 	slint::Image::from_rgb8(pixels)
 }
 
-/// The schemes a scheme can be based on: the project's others, then the built-in ones.
-pub(crate) fn bases(project: &Project, i: usize) -> Vec<&m::ColorScheme> {
+/// The schemes a scheme can be based on: the project's others, then the user's, then the built-in ones.
+pub(crate) fn bases<'a>(project: &'a Project, user: &'a SchemeStore, i: usize) -> Vec<&'a m::ColorScheme> {
 	let others = project.color_schemes.iter().enumerate().filter(|&(k, _)| k != i).map(|(_, s)| s);
-	others.chain(waveduderust::io::schemes::built_in()).collect()
+	others.chain(&user.user).chain(waveduderust::io::schemes::built_in()).collect()
 }
 
 fn show_scheme(form: &Form<'_>, project: &Project, i: usize) {
@@ -680,8 +681,14 @@ fn show_scheme(form: &Form<'_>, project: &Project, i: usize) {
 
 /// Shows the schemes scheme `i` can be based on, rebuilt only when they differ from `shown`, the last ones shown;
 /// whether they did.
-pub(crate) fn show_bases(form: &Form<'_>, project: &Project, i: usize, shown: &mut Vec<m::ColorScheme>) -> bool {
-	let now = bases(project, i);
+pub(crate) fn show_bases(
+	form: &Form<'_>,
+	project: &Project,
+	user: &SchemeStore,
+	i: usize,
+	shown: &mut Vec<m::ColorScheme>,
+) -> bool {
+	let now = bases(project, user, i);
 	if shown.len() == now.len() && shown.iter().zip(&now).all(|(a, b)| a == *b) {
 		return false;
 	}
@@ -690,6 +697,64 @@ pub(crate) fn show_bases(form: &Form<'_>, project: &Project, i: usize, shown: &m
 	form.set_bases(ModelRc::new(VecModel::from(choices)));
 	*shown = now.into_iter().cloned().collect();
 	true
+}
+
+/// The stop indices of `stops` in gradient order, stable.
+fn gradient_order(stops: &[f64]) -> Vec<usize> {
+	let mut order: Vec<usize> = (0..stops.len()).collect();
+	order.sort_by(|&a, &b| stops[a].total_cmp(&stops[b]));
+	order
+}
+
+fn positions(stops: &ModelRc<ui::StopData>) -> Vec<f64> {
+	stops.iter().map(|s| f64::from(s.at)).collect()
+}
+
+fn index(k: usize) -> i32 {
+	i32::try_from(k).unwrap_or(-1)
+}
+
+/// Form.marker-at: the stop nearest `at` within `reach`, the selected one when as near; -1 for none.
+pub(crate) fn marker_at(stops: &ModelRc<ui::StopData>, at: f32, reach: f32, selected: i32) -> i32 {
+	let distance = |s: &ui::StopData| (s.at - at).abs();
+	let mut nearest = None;
+	let mut best = reach;
+	for (k, s) in stops.iter().enumerate() {
+		if distance(&s) <= best {
+			(nearest, best) = (Some(k), distance(&s));
+		}
+	}
+	let selected_wins =
+		usize::try_from(selected).ok().and_then(|k| stops.row_data(k)).is_some_and(|s| distance(&s) <= best);
+	if selected_wins { selected } else { nearest.map_or(-1, index) }
+}
+
+/// Form.stop-beside: the stop `step` places after `k` along the gradient, clamped; from -1, the first.
+pub(crate) fn stop_beside(stops: &ModelRc<ui::StopData>, k: i32, step: i32) -> i32 {
+	let order = gradient_order(&positions(stops));
+	let Some(last) = order.len().checked_sub(1) else { return -1 };
+	let place = usize::try_from(k).ok().and_then(|k| order.iter().position(|&o| o == k));
+	let to = match place {
+		Some(p) => p.saturating_add_signed(step as isize).min(last),
+		None => 0,
+	};
+	index(order[to])
+}
+
+/// Removes stop `k` of `scheme`; the stop then selected: the one taking its place along the gradient, else the last.
+pub(crate) fn remove_stop(scheme: &mut m::ColorScheme, k: usize) -> i32 {
+	let ats = |s: &m::ColorScheme| s.stops.iter().map(|s| s.at).collect::<Vec<_>>();
+	let place = gradient_order(&ats(scheme)).iter().position(|&o| o == k);
+	if !scheme.remove_stop(k) {
+		return index(k);
+	}
+	let order = gradient_order(&ats(scheme));
+	place.and_then(|p| order.get(p.min(order.len() - 1))).map_or(-1, |&o| index(o))
+}
+
+/// A position along the gradient set by the pointer or the keys: thousandths, as Next keeps them.
+pub(crate) fn thousandths(at: f32) -> f64 {
+	(crate::number::wide(at) * 1000.0).round_ties_even() / 1000.0
 }
 
 /// Copies `base`'s stops and kind into `scheme`, its description naming it.
@@ -824,6 +889,33 @@ mod tests {
 		edit_rows(&mut project, Node::Part(0), RowEdit::Add);
 		filter.layers.push(m::FilterLayer::default());
 		assert_eq!(project.parts[0].kind, PartKind::InterferenceFilter(filter));
+	}
+
+	fn stops(ats: &[f32]) -> ModelRc<ui::StopData> {
+		ModelRc::new(VecModel::from(
+			ats.iter().map(|&at| ui::StopData { at, ..Default::default() }).collect::<Vec<_>>(),
+		))
+	}
+
+	#[test]
+	fn the_bar_finds_markers_and_neighbours_along_the_gradient() {
+		let s = stops(&[0.0, 0.8, 0.5]);
+		assert_eq!(marker_at(&s, 0.52, 0.05, -1), 2);
+		assert_eq!(marker_at(&s, 0.3, 0.05, -1), -1);
+		assert_eq!(stop_beside(&s, 0, 1), 2);
+		assert_eq!(stop_beside(&s, 2, 1), 1);
+		assert_eq!(stop_beside(&s, 1, 5), 1);
+		assert_eq!(stop_beside(&s, -1, 0), 0);
+	}
+
+	#[test]
+	fn a_removed_stops_place_goes_to_the_next_along_the_gradient() {
+		let stop = |at| m::Stop::new(at, m::Rgb::default());
+		let mut scheme = m::ColorScheme::default().with_stops(vec![stop(0.0), stop(1.0), stop(0.5)]);
+		assert_eq!(remove_stop(&mut scheme, 2), 1);
+		assert_eq!(remove_stop(&mut scheme, 1), 0);
+		assert_eq!(remove_stop(&mut scheme, 0), 0);
+		assert_eq!(scheme.stops.len(), 1);
 	}
 
 	#[test]

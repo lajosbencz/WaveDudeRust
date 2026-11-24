@@ -65,6 +65,8 @@ struct State {
 	pending: Option<Action>,
 	settings: waveduderust_platform::settings::Settings,
 	store: Option<waveduderust_platform::store::Store>,
+	/// The user's colour schemes.
+	schemes: waveduderust::io::schemes::SchemeStore,
 	facts: waveduderust::quality::MachineFacts,
 	exporting: Option<export::Exporting>,
 	inbox: files::Inbox,
@@ -109,6 +111,9 @@ struct Shown {
 	node: Option<Node>,
 	// the schemes Based on lists
 	bases: Vec<waveduderust::model::ColorScheme>,
+	// the stops the gradient bar shows, and whether the bar changed them since
+	stops: Vec<waveduderust::model::Stop>,
+	bar_edited: bool,
 }
 
 /// Shows `rows` of the form `key`. The same form's rows are updated in place, and only those that changed, so the
@@ -255,6 +260,7 @@ impl State {
 		if self.typed_form.node != Some(node) {
 			self.typed_form.node = Some(node);
 			g.set_based_on(-1);
+			g.set_object(g.get_object().wrapping_add(1));
 		}
 		if self.typed_form.key.as_ref() != Some(&key) {
 			self.typed_form.key = Some(key.clone());
@@ -264,10 +270,19 @@ impl State {
 		}
 		form::show(&g, &self.doc.project, &self.doc.view, node);
 		// a pick names a base by its index, which another list makes another's
-		if let Node::Scheme(i) = node
-			&& form::show_bases(&g, &self.doc.project, i, &mut self.typed_form.bases)
-		{
-			g.set_based_on(-1);
+		if let Node::Scheme(i) = node {
+			if form::show_bases(&g, &self.doc.project, &self.schemes, i, &mut self.typed_form.bases) {
+				g.set_based_on(-1);
+			}
+			// the bar selects a stop by its index, which an edit from elsewhere may give another
+			let stops = &self.doc.project.color_schemes[i].stops;
+			if *stops != self.typed_form.stops {
+				if !self.typed_form.bar_edited {
+					g.set_stops_replaced(g.get_stops_replaced().wrapping_add(1));
+				}
+				self.typed_form.stops.clone_from(stops);
+			}
+			self.typed_form.bar_edited = false;
 		}
 		sync(&app.get_props_rows(), &mut self.props, key, rows, |m| {
 			app.set_props_rows(m);
@@ -491,6 +506,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 					&state.doc.view,
 					state.playback.position,
 					&state.settings,
+					&state.schemes,
 					&app.global::<ui::Words<'_>>(),
 				);
 				if matches!(kind, export::Kind::Run(_)) && state.exporting.is_some() {
@@ -825,6 +841,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		messages: Messages::new(ring),
 		pending: None,
 		settings,
+		schemes: store.as_ref().map_or_else(Default::default, waveduderust_platform::user_schemes::load),
 		store,
 		facts,
 		exporting: None,
@@ -1006,12 +1023,56 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		move |from, to| edit(form::RowEdit::Move { from: index(from), to: index(to) })
 	});
 	rows.on_clear_rows(move || edit_rows(form::RowEdit::Clear));
+	// the gradient bar: each edit on the scheme shown, the stop then selected handed back
+	let bar_edit = {
+		let (st, weak) = (state.clone(), app.as_weak());
+		move |gesture: i32, edit: &dyn Fn(&mut waveduderust::model::ColorScheme) -> i32| {
+			let Some(app) = weak.upgrade() else { return -1 };
+			let mut s = st.borrow_mut();
+			let Node::Scheme(i) = s.selection.current() else { return -1 };
+			let mut selected = -1;
+			let key = (gesture != 0).then(|| format!("stop gesture {gesture}"));
+			s.typed_form.bar_edited = true;
+			s.doc.edit_merging(key.as_deref(), |p| {
+				if let Some(scheme) = p.color_schemes.get_mut(i) {
+					selected = edit(scheme);
+				}
+			});
+			s.show(&app);
+			selected
+		}
+	};
+	let bar = app.global::<ui::Form<'_>>();
+	bar.on_add_stop_at({
+		let edit = bar_edit.clone();
+		move |at, gesture| edit(gesture, &|s| i32::try_from(s.add_stop_at(form::thousandths(at))).unwrap_or(-1))
+	});
+	bar.on_move_stop({
+		let edit = bar_edit.clone();
+		move |k, at, gesture| {
+			edit(gesture, &|s| {
+				let moved = usize::try_from(k).ok().and_then(|k| s.move_stop(k, form::thousandths(at)));
+				moved.map_or(k, |k| i32::try_from(k).unwrap_or(-1))
+			})
+		}
+	});
+	bar.on_remove_stop(move |k, gesture| {
+		bar_edit(gesture, &|s| usize::try_from(k).map_or(k, |k| form::remove_stop(s, k)))
+	});
+	let weak = app.as_weak();
+	bar.on_marker_at(move |at, reach, selected| {
+		weak.upgrade().map_or(-1, |app| form::marker_at(&app.global::<ui::Form<'_>>().get_stops(), at, reach, selected))
+	});
+	let weak = app.as_weak();
+	bar.on_stop_beside(move |k, step| {
+		weak.upgrade().map_or(-1, |app| form::stop_beside(&app.global::<ui::Form<'_>>().get_stops(), k, step))
+	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.global::<ui::Form<'_>>().on_base_on(move |picked| {
 		let Some(app) = weak.upgrade() else { return };
 		let mut s = st.borrow_mut();
 		if let (Node::Scheme(i), Ok(k)) = (s.selection.current(), usize::try_from(picked)) {
-			let base = form::bases(&s.doc.project, i).get(k).map(|&b| b.clone());
+			let base = form::bases(&s.doc.project, &s.schemes, i).get(k).map(|&b| b.clone());
 			if let Some(base) = base {
 				s.doc.edit(|p| {
 					if let Some(scheme) = p.color_schemes.get_mut(i) {
@@ -1160,7 +1221,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		if let Some(app) = weak.upgrade() {
 			let s = &mut *st.borrow_mut();
 			s.live.seek(s.playback.position);
-			let shown = s.live.poll(&s.doc.project, &s.doc.view);
+			let shown = s.live.poll(&s.doc.project, &s.doc.view, &s.schemes);
 			s.playback.frames = s.live.frames.max(s.playback.frames);
 			if s.playback.live && !shown.running && shown.made.is_some_and(|m| m + 1 >= s.playback.frames) {
 				s.playback.position = shown.made.unwrap_or_default();

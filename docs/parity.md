@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 7 | 11 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 269 | 34 | 20 | 2 | 0 |
+| P | Properties | 270 | 34 | 19 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 440 | 233 | 318 | 98 | 6 |
+| | All | 441 | 233 | 317 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -930,9 +930,9 @@ Not-in-spec rows are marked in the Spec column.
 | P-314 | Scheme: Name TB (renaming repoints layers; tree row live) | Views/ColorSchemeView.xaml:71-72 | 30 Colour scheme | partial | forms.slint SchemeForm: Name per keystroke, the tree row live; renaming does not repoint the layers |
 | P-315 | Scheme: Kind combo Unspecified/Field/Intensity | Views/ColorSchemeView.xaml:75-76 | 30 Colour scheme | done | forms.slint SchemeForm: SchemeKindChoice |
 | P-316 | Scheme: Description TB wraps, no newline | Views/ColorSchemeView.xaml:79-80 | 30 Colour scheme | partial | single-line FormText per keystroke; no wrapping |
-| P-317 | Scheme: Add to / Remove from my schemes button | Views/ColorSchemeView.xaml:(Rust) | 30 Colour scheme; divergences 'User colour schemes' | missing |  |
+| P-317 | Scheme: Add to / Remove from my schemes button | Views/ColorSchemeView.xaml:(Rust) | 30 Colour scheme; divergences 'User colour schemes' | partial | the user's schemes load at the start, render, export and list in Based on; the button is missing |
 | P-318 | Scheme: Based on combo with gradient+name rows (copies stops/kind/category/description) | Views/ColorSchemeView.xaml:87-95 | 30 Colour scheme | partial | scheme-combo.slint SchemeCombo: strip and name rows, the project's other schemes then the built-in ones; the user's schemes are not loaded yet |
-| P-319 | Scheme: gradient bar with stop markers; drag marker >24 px away removes; double-click removes; last stop stays | Views/ColorSchemeView.xaml:(bar) | 30 Colour scheme | partial | forms.slint GradientBar: the gradient and a marker per stop; no drag, click, keys or tooltip |
+| P-319 | Scheme: gradient bar with stop markers; drag marker >24 px away removes; double-click removes; last stop stays | Views/ColorSchemeView.xaml:(bar) | 30 Colour scheme | done | forms.slint GradientBar: drag moves (one undo step a drag), pulled away or double-clicked removes, a press on the gradient adds and drags; keys as Next |
 | P-320 | Scheme: stop row Position NB 0..1 step 0.01, 3 dec, 64 px | Views/ColorSchemeView.xaml:112 | 30 Colour scheme | done | forms.slint SchemeForm: 0..1, step 0.01, 3 decimals; 72 px, as 64 clips 0.375 with our line edit's padding |
 | P-321 | Scheme: stop row colour swatch button | Views/ColorSchemeView.xaml:115 | 30 Colour scheme | partial | the stop colour as a swatch; no picker |
 | P-322 | Scheme: stop row hex TB #RRGGBB (Enter applies) | Views/ColorSchemeView.xaml:117 | 30 Colour scheme | done | HexField: Enter or focus loss applies; text that does not read restores the colour |

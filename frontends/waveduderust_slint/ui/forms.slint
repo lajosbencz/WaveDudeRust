@@ -2447,19 +2447,110 @@ component HexField inherits Rectangle {
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
 }
 
-// A colour scheme's gradient with a marker under each stop, half a marker's room left and right of it.
-component GradientBar inherits Rectangle {
-    // room left and right of the gradient for half a marker
+// A marker under a stop: a triangle from its tip at the gradient.
+component StopMarker inherits Path {
+    in property <color> stop-color;
+    in property <bool> selected;
+    width: 13px;
+    height: 9px;
+    viewbox-width: 13;
+    viewbox-height: 9;
+    commands: "M 6.5 0.5 L 12.5 8.5 L 0.5 8.5 Z";
+    fill: root.selected ? Theme.accent : root.stop-color;
+    stroke: root.selected ? Theme.accent : Theme.text;
+    stroke-width: 1px;
+}
+
+// A colour scheme's gradient with a marker under each stop, half a marker's room left and right of it. A marker
+// dragged moves its stop, pulled away above or below it goes at the release, double-clicked it goes; a press on the
+// gradient adds a stop there and drags it. With the focus Left and Right move the selected stop (Shift ten times),
+// Page Up and Page Down select the stop before or after it, Del removes it.
+component GradientBar inherits FocusScope {
     property <length> inset: 8px;
     property <length> gradient-height: 18px;
-    height: root.gradient-height + 10px;
+    // how far left and right of its tip, and up into the gradient, a press takes a marker
+    property <length> reach: 7px;
+    property <length> reach-up: 4px;
+    property <length> pull-away: 24px;
+    // the gradient's pixel columns: 0 at the centre of the first, 1 at the centre of the last
+    property <length> left: root.inset + 0.5px;
+    property <length> span: max(1px, root.width - 2 * root.inset - 1px);
+    property <int> selected: -1;
+    property <bool> dragging;
+    property <bool> moved;
+    property <bool> pulled-away;
+    // the pointer's distance from the marker's tip at the press
+    property <length> grab;
+    property <length> press-x;
+    // the gesture the edits of a press, or of the arrow keys while the bar has the focus, join: one undo step
+    property <int> gesture;
+    property <int> keys-gesture;
+    // the last press, whose second, soon after and close by, is a double click's: no stop added, no drag
+    property <duration> pressed-at;
+    property <length> pressed-x: -1000px;
+    function next-gesture() -> int {
+        Form.gestures += 1;
+        Form.gestures
+    }
+    function x-of(at: float) -> length {
+        root.left + clamp(at, 0, 1) * root.span
+    }
+    function at-of(x: length) -> float {
+        clamp((x - root.left) / root.span, 0, 1)
+    }
+    function marker-at(x: length, y: length) -> int {
+        y < root.gradient-height - root.reach-up ? -1 : Form.marker-at((x - root.left) / root.span, root.reach / root.span, root.selected)
+    }
+    function current() -> int {
+        root.selected >= 0 && root.selected < Form.stops.length ? root.selected : Form.stop-beside(-1, 0)
+    }
+    changed has-focus => {
+        if (self.has-focus) {
+            root.keys-gesture = root.next-gesture();
+            if (root.selected < 0) {
+                root.selected = Form.stop-beside(-1, 0);
+            }
+        }
+    }
+    // another scheme, or these stops replaced: the selected one may be gone
+    property <int> object: Form.object;
+    changed object => { root.selected = -1; }
+    property <int> replaced: Form.stops-replaced;
+    changed replaced => { root.selected = -1; }
+    height: root.gradient-height + 11px;
+    accessible-role: slider;
+    accessible-label: @tr("Gradient");
+    key-pressed(e) => {
+        if (Form.stops.length == 0 || e.modifiers.control || e.modifiers.alt || e.modifiers.meta) {
+            return reject;
+        }
+        let k = root.current();
+        if (e.text == Key.LeftArrow || e.text == Key.RightArrow) {
+            let step = (e.modifiers.shift ? 0.1 : 0.01) * (e.text == Key.LeftArrow ? -1 : 1);
+            root.selected = Form.move-stop(k, Form.stops[k].at + step, root.keys-gesture);
+            return accept;
+        }
+        if (e.modifiers.shift) {
+            return reject;
+        }
+        if (e.text == Key.PageUp || e.text == Key.PageDown) {
+            root.selected = Form.stop-beside(k, e.text == Key.PageUp ? -1 : 1);
+            return accept;
+        }
+        // handled whether or not a stop goes: Del never reaches the tree's, which removes the scheme
+        if (e.text == Key.Delete) {
+            root.selected = Form.remove-stop(k, 0);
+            return accept;
+        }
+        reject
+    }
     Rectangle {
         x: root.inset;
         y: 0;
         width: root.width - 2 * root.inset;
         height: root.gradient-height;
         border-width: 1px;
-        border-color: Theme.border;
+        border-color: root.has-focus ? Theme.accent : Theme.border;
         Image {
             x: 1px;
             y: 1px;
@@ -2469,17 +2560,76 @@ component GradientBar inherits Rectangle {
             image-fit: fill;
         }
     }
-    for stop in Form.stops: Path {
-        x: root.inset + clamp(stop.at, 0, 1) * (root.width - 2 * root.inset) - 6px;
-        y: root.gradient-height;
-        width: 12px;
-        height: 8px;
-        viewbox-width: 12;
-        viewbox-height: 8;
-        commands: "M 6 0 L 12 8 L 0 8 Z";
-        fill: stop.color;
-        stroke: Theme.text;
-        stroke-width: 1px;
+    // the markers in the list's order, a later one over an earlier, the selected one over all
+    for stop[k] in Form.stops: StopMarker {
+        x: root.x-of(stop.at) - 6.5px;
+        y: root.gradient-height + 0.5px;
+        stop-color: stop.color;
+        visible: k != root.selected;
+    }
+    if root.selected >= 0 && root.selected < Form.stops.length: StopMarker {
+        x: root.x-of(Form.stops[root.selected].at) - 6.5px;
+        y: root.gradient-height + 0.5px;
+        stop-color: Form.stops[root.selected].color;
+        selected: true;
+        opacity: root.pulled-away ? 0.35 : 1;
+    }
+    TouchArea {
+        mouse-cursor: root.dragging || root.marker-at(self.mouse-x, self.mouse-y) >= 0 ? MouseCursor.ew-resize : MouseCursor.default;
+        double-clicked => {
+            let k = root.marker-at(self.mouse-x, self.mouse-y);
+            if (k >= 0) {
+                root.selected = Form.remove-stop(k, 0);
+            }
+        }
+        pointer-event(e) => {
+            if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
+                root.focus();
+                let x = self.mouse-x;
+                let y = self.mouse-y;
+                let second = animation-tick() - root.pressed-at < 500ms && abs(x - root.pressed-x) < 4px;
+                root.pressed-at = animation-tick();
+                root.pressed-x = x;
+                let hit = root.marker-at(x, y);
+                if (second) {
+                    if (hit >= 0) {
+                        root.selected = hit;
+                    }
+                    return;
+                }
+                root.gesture = root.next-gesture();
+                root.grab = hit >= 0 ? x - root.x-of(Form.stops[hit].at) : 0;
+                let on-gradient = y < root.gradient-height && x >= root.inset && x <= root.width - root.inset;
+                let k = hit < 0 && on-gradient ? Form.add-stop-at(root.at-of(x), root.gesture) : hit;
+                if (k >= 0) {
+                    root.selected = k;
+                    root.press-x = x;
+                    root.moved = false;
+                    root.dragging = true;
+                }
+            } else if (e.button == PointerEventButton.left && e.kind == PointerEventKind.up && root.dragging) {
+                root.dragging = false;
+                if (root.pulled-away) {
+                    root.pulled-away = false;
+                    root.selected = Form.remove-stop(root.selected, root.gesture);
+                }
+            } else if (e.kind == PointerEventKind.cancel) {
+                root.dragging = false;
+                root.pulled-away = false;
+            }
+        }
+        moved => {
+            if (root.dragging) {
+                root.moved = root.moved || self.mouse-x != root.press-x;
+                root.pulled-away = Form.stops.length > 1 && (self.mouse-y < -root.pull-away || self.mouse-y > root.height + root.pull-away);
+                if (root.moved) {
+                    root.selected = Form.move-stop(root.selected, root.at-of(self.mouse-x - root.grab), root.gesture);
+                }
+            }
+        }
+    }
+    Tooltip {
+        text: @markdown("\{@tr("Drag a marker to move its stop; drag it away from the gradient or double-click it to remove the stop; a click on the gradient adds a stop there. With keyboard focus Left and Right move the selected stop by a hundredth, a tenth with Shift, Page Up and Page Down select the stop before or after it, and Del removes it")}");
     }
 }
 
