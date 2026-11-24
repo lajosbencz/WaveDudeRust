@@ -16,9 +16,10 @@ export enum CoatingProfile { layer, graded }
 export enum TriangleType { equilateral, right-isosceles, thirty-sixty-ninety, isosceles, custom }
 export enum ZoneDivision { equal-width, equal-depth }
 export enum FacetPattern { sawtooth, square-wave, sinusoidal }
+export enum MetaLensType { converging, diverging }
 
 // Which form Properties shows; `none` for the generic rows.
-export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens, simple-grating, facetted-grating }
+export enum FormKind { none, project, scene, simulation, display, source, probe, rectangle, ellipse, triangle, polygon, lens, fresnel-lens, outline, diffuser, zone-plate, bragg-reflector, grin-lens, simple-grating, facetted-grating, meta-lens, meta-prism, meta-axicon }
 
 export struct ProjectData {
     seed: int,
@@ -265,6 +266,26 @@ export struct FacetData {
     pattern: FacetPattern,
     pitch: float,
     amplitude: float,
+}
+
+// A meta surface's plate and pattern, then its design's fields: a lens's, a prism's or an axicon's.
+export struct MetaData {
+    length: int,
+    width: int,
+    design-frequency: float,
+    pattern-index: float,
+    pitch: float,
+    height: float,
+    focal-length: int,
+    lens-type: MetaLensType,
+    deflection: float,
+    cone-angle: float,
+    // read-outs in pixels, 0 without a wavelength or for another design
+    wavelength: float,
+    full-turn-height: float,
+    zone-width: float,
+    line-length: float,
+    zones: int,
 }
 
 export struct PointData {

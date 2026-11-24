@@ -11,18 +11,18 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 5 | 20 | 9 | 6 | 0 |
+| X | Cross-cutting | 6 | 19 | 9 | 6 | 0 |
 | M | Menus and shortcuts | 37 | 26 | 47 | 30 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
-| S | Settings | 6 | 12 | 14 | 0 | 0 |
+| S | Settings | 7 | 11 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 32 | 18 | 14 | 37 | 0 |
-| P | Properties | 147 | 32 | 144 | 2 | 0 |
+| P | Properties | 211 | 32 | 80 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 316 | 233 | 442 | 98 | 6 |
+| | All | 382 | 231 | 378 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -811,27 +811,27 @@ Not-in-spec rows are marked in the Spec column.
 | P-195 | Simple 2D grating: Column spacing NB min 2 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
 | P-196 | Simple 2D grating: Row spacing NB min 2 | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
 | P-197 | Simple 2D grating: Dot diameter NB 1..half smaller spacing | Views/SimpleGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint SimpleGratingForm |
-| P-198 | Meta lens: Coating rows w/o sides | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-199 | Meta lens: Length NB min 1 step 10 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-200 | Meta lens: Width NB min 2 step 10 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-201 | Meta lens: Target frequency NB 1..255 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-202 | Meta lens: Wavelength RO | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-203 | Meta lens: Focal length NB min 1 step 10 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-204 | Meta lens: Lens type combo Converging/Diverging | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-205 | Meta lens: Zones RO | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-206 | Meta lens: Pattern index NB 1..2.55 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-207 | Meta lens: Pitch NB 1..10000 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-208 | Meta lens: Height NB 1..10000 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-209 | Meta lens: Full-turn height RO | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-210 | Meta prism: shared meta rows (Length, Width, Target frequency, Wavelength, Pattern, Pitch, Height, Full-turn height) | Views/MetaPrismPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-211 | Meta prism: Deflection NB -89..89 2 dec | Views/MetaPrismPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-212 | Meta prism: Zone width RO | Views/MetaPrismPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-213 | Meta prism: Zones RO | Views/MetaPrismPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-214 | Meta axicon: shared meta rows | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-215 | Meta axicon: Cone angle NB 0.1..89 2 dec | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-216 | Meta axicon: Line of focus RO | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-217 | Meta axicon: Zone width RO | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
-| P-218 | Meta axicon: Zones RO | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | missing | kind fields not in Slint form (base only) |
+| P-198 | Meta lens: Coating rows w/o sides | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-199 | Meta lens: Length NB min 1 step 10 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-200 | Meta lens: Width NB min 2 step 10 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-201 | Meta lens: Target frequency NB 1..255 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-202 | Meta lens: Wavelength RO | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-203 | Meta lens: Focal length NB min 1 step 10 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-204 | Meta lens: Lens type combo Converging/Diverging | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-205 | Meta lens: Zones RO | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-206 | Meta lens: Pattern index NB 1..2.55 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-207 | Meta lens: Pitch NB 1..10000 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-208 | Meta lens: Height NB 1..10000 | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-209 | Meta lens: Full-turn height RO | Views/MetaLensPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-210 | Meta prism: shared meta rows (Length, Width, Target frequency, Wavelength, Pattern, Pitch, Height, Full-turn height) | Views/MetaPrismPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-211 | Meta prism: Deflection NB -89..89 2 dec | Views/MetaPrismPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-212 | Meta prism: Zone width RO | Views/MetaPrismPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-213 | Meta prism: Zones RO | Views/MetaPrismPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-214 | Meta axicon: shared meta rows | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-215 | Meta axicon: Cone angle NB 0.1..89 2 dec | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-216 | Meta axicon: Line of focus RO | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-217 | Meta axicon: Zone width RO | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
+| P-218 | Meta axicon: Zones RO | Views/MetaAxiconPartView.xaml:41 | 30 Kind-specific forms | done | forms.slint MetaSurfaceForm |
 | P-219 | Facetted grating: Coating rows w/o front, sides | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
 | P-220 | Facetted grating: Length NB min 1 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |
 | P-221 | Facetted grating: Width NB min 2 | Views/FacettedGratingPartView.xaml:36 | 30 Kind-specific forms | done | forms.slint FacettedGratingForm |

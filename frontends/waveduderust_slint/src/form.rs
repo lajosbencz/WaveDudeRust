@@ -115,6 +115,7 @@ words! {
 	TriangleType = TriangleType { Equilateral, RightIsosceles, ThirtySixtyNinety, Isosceles, Custom }
 	ZoneDivision = ZoneDivision { EqualWidth, EqualDepth }
 	FacetPattern = FacetPattern { Sawtooth, SquareWave, Sinusoidal }
+	MetaLensType = MetaLensType { Converging, Diverging }
 }
 
 /// A form's data of a model type: its fields of the same names, the rest left to the caller.
@@ -177,6 +178,7 @@ data! {
 	LensData = Lens { diameter, r1, r2, thickness }
 	FresnelData = m::FresnelLens { zones, division }
 	BraggData = m::BraggReflector { pairs, thickness1, index1, thickness2, index2, width }
+	MetaData = m::MetaSurface { length, width, design_frequency, pattern_index, pitch, height }
 	FacetData = m::FacettedGrating { length, width, pattern, pitch, amplitude }
 	GratingData = m::SimpleGrating { columns, rows, column_spacing, row_spacing, diameter }
 	GrinData = m::GrinLens { centre_index, edge_index, length, diameter }
@@ -215,6 +217,12 @@ pub(crate) fn kind(project: &Project, node: Node) -> FormKind {
 			Some(PartKind::GrinLens(_)) => FormKind::GrinLens,
 			Some(PartKind::SimpleGrating(_)) => FormKind::SimpleGrating,
 			Some(PartKind::FacettedGrating(_)) => FormKind::FacettedGrating,
+			Some(PartKind::MetaSurface(s)) => match s.design {
+				m::MetaDesign::Lens(_) => FormKind::MetaLens,
+				m::MetaDesign::Prism(_) => FormKind::MetaPrism,
+				m::MetaDesign::Axicon(_) => FormKind::MetaAxicon,
+				_ => FormKind::None,
+			},
 			_ => FormKind::None,
 		},
 		Node::Project => FormKind::Project,
@@ -248,6 +256,7 @@ fn shape(kind: &PartKind) -> Option<(&Material, &Coating)> {
 		PartKind::Diffuser(p) => Some((&p.material, &p.coating)),
 		PartKind::SimpleGrating(p) => Some((&p.material, &p.coating)),
 		PartKind::FacettedGrating(p) => Some((&p.material, &p.coating)),
+		PartKind::MetaSurface(p) => Some((&p.material, &p.coating)),
 		_ => None,
 	}
 }
@@ -264,7 +273,52 @@ fn shape_mut(kind: &mut PartKind) -> Option<(&mut Material, &mut Coating)> {
 		PartKind::Diffuser(p) => Some((&mut p.material, &mut p.coating)),
 		PartKind::SimpleGrating(p) => Some((&mut p.material, &mut p.coating)),
 		PartKind::FacettedGrating(p) => Some((&mut p.material, &mut p.coating)),
+		PartKind::MetaSurface(p) => Some((&mut p.material, &mut p.coating)),
 		_ => None,
+	}
+}
+
+/// A meta surface's data: its design's fields and the read-outs.
+fn meta_data(s: &m::MetaSurface, scale: f64) -> ui::MetaData {
+	let read = |v: Option<f64>| v.unwrap_or_default() as f32;
+	let mut data = ui::MetaData {
+		wavelength: read(s.wavelength(scale)),
+		full_turn_height: read(s.full_turn_height(scale)),
+		zone_width: read(s.zone_width(scale)),
+		line_length: read(s.line_length()),
+		zones: Bridge::show(&s.zone_count(scale)),
+		..Data::show(s)
+	};
+	match &s.design {
+		m::MetaDesign::Lens(l) => {
+			data.focal_length = Bridge::show(&l.focal_length);
+			data.lens_type = Bridge::show(&l.lens_type);
+		}
+		m::MetaDesign::Prism(p) => data.deflection = Bridge::show(&p.deflection),
+		m::MetaDesign::Axicon(a) => data.cone_angle = Bridge::show(&a.cone_angle),
+		_ => {}
+	}
+	data
+}
+
+/// Writes `ui` to `model` when it differs from the model's shown value.
+fn set<M, U: Bridge<M> + PartialEq>(ui: &U, model: &mut M) {
+	if *ui != U::show(model) {
+		*model = ui.model();
+	}
+}
+
+/// Writes a meta surface's changed fields, its design's among them.
+fn apply_meta(d: &ui::MetaData, s: &mut m::MetaSurface) {
+	d.apply(&Data::show(&*s), s);
+	match &mut s.design {
+		m::MetaDesign::Lens(l) => {
+			set(&d.focal_length, &mut l.focal_length);
+			set(&d.lens_type, &mut l.lens_type);
+		}
+		m::MetaDesign::Prism(p) => set(&d.deflection, &mut p.deflection),
+		m::MetaDesign::Axicon(a) => set(&d.cone_angle, &mut a.cone_angle),
+		_ => {}
 	}
 }
 
@@ -356,6 +410,9 @@ fn show_part(form: &Form<'_>, project: &Project, part: &Part) {
 		}
 		PartKind::BraggReflector(b) => put(form.get_bragg(), Data::show(b), |d| form.set_bragg(d)),
 		PartKind::FacettedGrating(f) => put(form.get_facets(), Data::show(f), |d| form.set_facets(d)),
+		PartKind::MetaSurface(s) => {
+			put(form.get_meta(), meta_data(s, project.simulation.source_frequency_scale), |d| form.set_meta(d));
+		}
 		PartKind::SimpleGrating(g) => {
 			let data = ui::GratingData { max_diameter: Bridge::show(&g.max_diameter()), ..Data::show(g) };
 			put(form.get_grating(), data, |d| form.set_grating(d));
@@ -471,6 +528,7 @@ fn apply_part(form: &Form<'_>, part: &mut Part) {
 		PartKind::BraggReflector(b) => form.get_bragg().apply(&Data::show(&*b), b),
 		PartKind::SimpleGrating(g) => form.get_grating().apply(&Data::show(&*g), g),
 		PartKind::FacettedGrating(f) => form.get_facets().apply(&Data::show(&*f), f),
+		PartKind::MetaSurface(s) => apply_meta(&form.get_meta(), s),
 		PartKind::GrinLens(g) => {
 			form.get_coating().apply(&Data::show(&g.coating), &mut g.coating);
 			form.get_grin().apply(&Data::show(&*g), g);

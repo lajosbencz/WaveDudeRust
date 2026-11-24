@@ -140,6 +140,18 @@ msgstr "Eine Linse oder ein Spiegel: ein Streifen des Durchmessers zwischen zwei
 msgid "A linear or a logarithmic value axis; intensity probes only, the field is always linear."
 msgstr "Lineare oder logarithmische Werteachse; nur Intensitätssonden, das Feld ist immer linear."
 
+#. Kind.MetaAxiconPart
+msgid "A meta axicon: a carrier plate with a sub-wavelength pattern on its front whose cells delay the wave in proportion to the distance from the axis, so the two halves of a wave arriving along the axis are turned toward it by a set angle and cross along a line behind the surface rather than at a point. Cut for a target frequency; the pattern's tops and the plate's back can carry an anti-reflection coating."
+msgstr "Ein Meta-Axicon: eine Trägerplatte mit einem Subwellenlängenmuster auf der Vorderseite, dessen Zellen die Welle proportional zum Abstand von der Achse verzögern, sodass die beiden Hälften einer Welle entlang der Achse um einen gesetzten Winkel zur Achse gedreht werden und sich hinter der Fläche entlang einer Linie statt in einem Punkt kreuzen. Für eine Zielfrequenz entworfen; die Oberseiten des Musters und die Rückseite der Platte können eine Antireflexschicht tragen."
+
+#. Kind.MetaLensPart
+msgid "A meta lens: a carrier plate with a sub-wavelength pattern on its front, a ridge of its own index in every cell, whose fill is computed from the target frequency and the focal length so the cells delay the wave as a lens would, zone by zone. Converging or diverging; the pattern's tops and the plate's back can carry an anti-reflection coating."
+msgstr "Eine Metalinse: eine Trägerplatte mit einem Subwellenlängenmuster auf der Vorderseite, in jeder Zelle ein Steg mit eigenem Index, dessen Füllung aus Zielfrequenz und Brennweite berechnet wird, sodass die Zellen die Welle wie eine Linse verzögern, Zone für Zone. Sammelnd oder zerstreuend; die Oberseiten des Musters und die Rückseite der Platte können eine Antireflexschicht tragen."
+
+#. Kind.MetaPrismPart
+msgid "A meta prism: a carrier plate with a sub-wavelength pattern on its front whose cells delay the wave in a line across the face, so a wave arriving along the axis leaves turned by a set angle, as a blazed grating's first order. Cut for a target frequency; the pattern's tops and the plate's back can carry an anti-reflection coating."
+msgstr "Ein Metaprisma: eine Trägerplatte mit einem Subwellenlängenmuster auf der Vorderseite, dessen Zellen die Welle linear über die Fläche verzögern, sodass eine Welle entlang der Achse um einen gesetzten Winkel gedreht abgeht, wie die erste Ordnung eines Blaze-Gitters. Für eine Zielfrequenz entworfen; die Oberseiten des Musters und die Rückseite der Platte können eine Antireflexschicht tragen."
+
 #. Kind.RectanglePart
 msgid "A rectangle of glass or mirror, by length and width; linked, a square. A flat mirror is a long, narrow one."
 msgstr "Ein Rechteck aus Glas oder als Spiegel, nach Länge und Breite; verkettet ein Quadrat. Ein ebener Spiegel ist ein langes, schmales."
@@ -292,6 +304,10 @@ msgstr "Fensterfaktor der Intensitätsmittelung: die Engine mittelt über diesen
 msgid "Axes"
 msgstr "Achsen"
 
+#. SectionAxicon
+msgid "Axicon"
+msgstr "Axicon"
+
 #. Label.Probe.BX
 msgid "B x"
 msgstr "B x"
@@ -436,9 +452,21 @@ msgstr "Zusammengesetzte Quelle"
 msgid "Concave (diverging)"
 msgstr "Konkav (zerstreuend)"
 
+#. Label.MetaAxiconPart.ConeAngle
+msgid "Cone angle"
+msgstr "Kegelwinkel"
+
 #. Enum.SourceMode.Continuous
 msgid "Continuous"
 msgstr "Durchgehend"
+
+#. Enum.MetaLensType.Converging
+msgid "Converging"
+msgstr "Sammelnd"
+
+#. Hint.MetaLensPart.LensType
+msgid "Converging, the fill greatest at the centre and falling outward within each zone, as a convex lens's glass thins; or diverging, the fill growing outward."
+msgstr "Sammelnd, die Füllung in der Mitte am größten und in jeder Zone nach außen abnehmend, wie das Glas einer konvexen Linse dünner wird; oder zerstreuend, die Füllung nach außen zunehmend."
 
 #. MenuEditCopy
 msgid "Copy"
@@ -487,6 +515,10 @@ msgstr "Dekaden"
 #. Hint.Probe.Decades
 msgid "Decades a logarithmic value axis spans below its top; smaller values, zero included, sit on the bottom line."
 msgstr "Dekaden, die eine logarithmische Werteachse unter ihrem oberen Ende zeigt; kleinere Werte, auch null, liegen auf der unteren Linie."
+
+#. Label.MetaPrismPart.Deflection
+msgid "Deflection"
+msgstr "Ablenkung"
 
 #. MenuEditDelete
 msgid "Delete"
@@ -568,9 +600,17 @@ msgstr "Abstand benachbarter Zeilen in Leinwandpixeln."
 msgid "Distance between the two surfaces on the axis in pixels."
 msgstr "Abstand der beiden Flächen auf der Achse in Pixeln."
 
+#. Hint.MetaLensPart.FocalLength
+msgid "Distance in pixels from the lens to its focus, for a plane wave arriving along the axis; a diverging lens spreads the wave as if from a focus that far behind it."
+msgstr "Abstand in Pixeln von der Linse zu ihrem Brennpunkt für eine ebene Welle entlang der Achse; eine zerstreuende Linse breitet die Welle aus wie von einem Brennpunkt so weit dahinter."
+
 #. Hint.ZonePlatePart.FocalLength
 msgid "Distance in pixels from the plate to its focus, for a plane wave arriving along the axis."
 msgstr "Abstand in Pixeln von der Platte bis zum Brennpunkt, für eine ebene Welle entlang der Achse."
+
+#. Enum.MetaLensType.Diverging
+msgid "Diverging"
+msgstr "Zerstreuend"
 
 #. DialogDiscard
 msgid "Don't save"
@@ -880,6 +920,10 @@ msgstr "Ab Schritt"
 msgid "Full"
 msgstr "Voll"
 
+#. LabelFullTurnHeight
+msgid "Full-turn height"
+msgstr "Höhe für eine volle Drehung"
+
 #. MenuAddGrinLens
 msgid "GRIN lens"
 msgstr "GRIN-Linse"
@@ -931,6 +975,10 @@ msgstr "Hilfe"
 #. Label.SourceArray.SpacingX
 msgid "Horizontal spacing"
 msgstr "Horizontaler Abstand"
+
+#. TipLineLength
+msgid "How far behind the surface the line of focus reaches: half the width over the tangent of the cone angle, where the rim's rays cross the axis"
+msgstr "Wie weit die Brennlinie hinter die Fläche reicht: die halbe Breite geteilt durch den Tangens des Kegelwinkels, wo die Strahlen des Randes die Achse kreuzen"
 
 #. TipComponentCount
 msgid "How many wavelengths make up the roughness: one at sigma 0, thirteen otherwise, those below two pixels left out"
@@ -1092,6 +1140,14 @@ msgstr "Länge der Grundseite in Pixeln; sie liegt quer zur Achse, einer Quelle 
 msgid "Length of the gap between bursts in cycles; pulsed mode only."
 msgstr "Länge der Lücke zwischen Pulsen in Perioden; nur im Pulsmodus."
 
+#. SectionLens
+msgid "Lens"
+msgstr "Linse"
+
+#. Label.MetaLensPart.LensType
+msgid "Lens type"
+msgstr "Linsentyp"
+
 #. MenuAddLens
 msgid "Lens/Mirror"
 msgstr "Linse/Spiegel"
@@ -1111,6 +1167,10 @@ msgstr "Hell"
 #. Enum.ProbeKind.Line
 msgid "Line"
 msgstr "Linie"
+
+#. LabelLineLength
+msgid "Line of focus"
+msgstr "Brennlinie"
 
 #. Enum.ProbeValueScale.Linear
 msgid "Linear"
@@ -1376,6 +1436,10 @@ msgstr "Einfügen"
 msgid "Pattern"
 msgstr "Muster"
 
+#. Label.MetaSurfacePart.PatternIndex
+msgid "Pattern index"
+msgstr "Musterindex"
+
 #. MenuSimulationPause
 msgid "Pause"
 msgstr "Pause"
@@ -1463,6 +1527,10 @@ msgstr "Vorschauauflösung"
 #. TipPreviewStepBack
 msgid "Previous frame (,)"
 msgstr "Vorheriges Bild (,)"
+
+#. SectionPrism
+msgid "Prism"
+msgstr "Prisma"
 
 #. MenuAddProbabilistic
 msgid "Probabilistic"
@@ -1595,6 +1663,10 @@ msgstr "Brechungsindex der ersten Schicht jedes Paars, 1,00 bis 2,55 in Schritte
 #. Hint.LensPart.RefractiveIndex
 msgid "Refractive index of the glass, 1.00 to 2.55 in steps of 0.01."
 msgstr "Brechungsindex des Glases, 1,00 bis 2,55 in Schritten von 0,01."
+
+#. Hint.MetaSurfacePart.PatternIndex
+msgid "Refractive index of the ridges, 1.00 to 2.55 in steps of 0.01, usually above the plate's. The higher, the lower the pattern can be."
+msgstr "Brechzahl der Stege, 1,00 bis 2,55 in Schritten von 0,01, meist über der der Platte. Je höher, desto niedriger kann das Muster sein."
 
 #. Hint.BraggReflectorPart.Index2
 msgid "Refractive index of the second layer of each pair, 1.00 to 2.55 in steps of 0.01."
@@ -1876,6 +1948,14 @@ msgstr "Die Amplitude in Pixeln der Welle bei der Mittenwellenlänge. Die andere
 msgid "The angle at the apex: 180° minus the two base angles"
 msgstr "Der Winkel an der Spitze: 180° minus die beiden Grundwinkel"
 
+#. Hint.MetaPrismPart.Deflection
+msgid "The angle in degrees by which a wave arriving along the axis is turned, counter-clockwise on the screen for a positive angle; 0 turns nothing. The steeper, the narrower the zones, which must stay a few cells wide."
+msgstr "Der Winkel in Grad, um den eine Welle entlang der Achse gedreht wird, bei positivem Winkel gegen den Uhrzeigersinn auf dem Bildschirm; 0 dreht nichts. Je steiler, desto schmaler die Zonen, die einige Zellen breit bleiben müssen."
+
+#. Hint.MetaAxiconPart.ConeAngle
+msgid "The angle in degrees by which each half of a wave arriving along the axis is turned toward it. The steeper, the shorter the line of focus behind the surface and the narrower the zones, which must stay a few cells wide."
+msgstr "Der Winkel in Grad, um den jede Hälfte einer Welle entlang der Achse zur Achse gedreht wird. Je steiler, desto kürzer die Brennlinie hinter der Fläche und desto schmaler die Zonen, die einige Zellen breit bleiben müssen."
+
 #. ExportError
 msgid "The export failed."
 msgstr "Der Export ist fehlgeschlagen."
@@ -1883,6 +1963,14 @@ msgstr "Der Export ist fehlgeschlagen."
 #. Hint.FacettedGratingPart.Pattern
 msgid "The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid."
 msgstr "Die Form der Facetten je Teilung: ein Sägezahn, eine Rampe und dann eine Stufe; eine Rechteckwelle, ein Kamm und ein Tal von je einer halben Teilung; oder eine Sinuswelle."
+
+#. Hint.MetaSurfacePart.Height
+msgid "The height of the ridges in front of the plate in pixels. A full turn of phase, which the zones need, takes a height of the wavelength over the pattern index less one; a lower pattern cannot delay enough and its fill saturates."
+msgstr "Die Höhe der Stege vor der Platte in Pixeln. Eine volle Phasendrehung, die die Zonen brauchen, verlangt eine Höhe von der Wellenlänge geteilt durch den Musterindex weniger eins; ein niedrigeres Muster verzögert zu wenig und seine Füllung sättigt."
+
+#. TipFullTurnHeight
+msgid "The pattern height at which a filled cell delays by a whole turn, the wavelength over the pattern index less one; a lower pattern saturates"
+msgstr "Die Musterhöhe, bei der eine gefüllte Zelle um eine ganze Drehung verzögert, die Wellenlänge geteilt durch den Musterindex weniger eins; ein niedrigeres Muster sättigt"
 
 #. Hint.FacettedGratingPart.Pitch
 msgid "The period of the facets across the face in pixels: the grating's pitch, which with the wavelength sets the diffraction angles. Two pixels at least."
@@ -1900,6 +1988,10 @@ msgstr "Die raue Fläche von ihrem höchsten Punkt bis zum tiefsten: was die Wel
 msgid "The source frequency the plate is designed for, on the same scale as a source's frequency. The zones follow from the wavelength it gives, so the plate focuses this frequency at the focal length; other frequencies focus elsewhere."
 msgstr "Die Quellfrequenz, für die die Platte entworfen ist, auf derselben Skala wie die Frequenz einer Quelle. Die Zonen folgen aus der Wellenlänge, die sie ergibt, also fokussiert die Platte diese Frequenz in der Brennweite; andere Frequenzen anderswo."
 
+#. Hint.MetaSurfacePart.DesignFrequency
+msgid "The source frequency the surface is designed for, on the same scale as a source's frequency. The cells' fill follows from the wavelength it gives, so the surface does its work at this frequency: a lens focuses it at the focal length, a prism turns it by its angle, an axicon by its cone angle. Another frequency sees another surface."
+msgstr "Die Quellfrequenz, für die die Fläche entworfen ist, auf derselben Skala wie die Frequenz einer Quelle. Die Füllung der Zellen folgt aus der Wellenlänge, die sie ergibt, sodass die Fläche bei dieser Frequenz ihre Arbeit tut: eine Linse fokussiert sie in der Brennweite, ein Prisma lenkt sie um seinen Winkel ab, ein Axicon um seinen Kegelwinkel. Eine andere Frequenz sieht eine andere Fläche."
+
 #. Hint.DiffuserPart.CenterWavelength
 msgid "The spatial wavelength in pixels at the middle of the roughness's spectrum: the ripple along the face that has the full amplitude. Two pixels at least."
 msgstr "Die räumliche Wellenlänge in Pixeln in der Mitte des Spektrums der Rauheit: die Welle entlang der Fläche mit der vollen Amplitude. Mindestens zwei Pixel."
@@ -1911,6 +2003,18 @@ msgstr "Die Streuung der Wellenlängen der Rauheit um die Mittenwellenlänge in 
 #. TipGateWavelength
 msgid "The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale"
 msgstr "Die Wellenlänge, die die Entwurfsfrequenz in einem Medium mit Index 1 ergibt, bei der Quellfrequenzskala der Simulation"
+
+#. Hint.MetaSurfacePart.Pitch
+msgid "The width of a cell of the pattern across the face in pixels, one ridge per cell. Well below the wavelength, so the wave sees each cell as a mean index rather than diffracting at it."
+msgstr "Die Breite einer Zelle des Musters über die Fläche in Pixeln, ein Steg je Zelle. Deutlich unter der Wellenlänge, sodass die Welle jede Zelle als mittleren Index sieht, statt an ihr zu beugen."
+
+#. TipZoneWidth
+msgid "The width of a zone across the face, a full turn of phase: the wavelength over the sine of the deflection"
+msgstr "Die Breite einer Zone über die Fläche, eine volle Phasendrehung: die Wellenlänge geteilt durch den Sinus der Ablenkung"
+
+#. TipMetaZones
+msgid "The zones from the centre to the rim, each a full turn of phase, the last one cut by the rim"
+msgstr "Die Zonen von der Mitte bis zum Rand, jede eine volle Phasendrehung, die letzte vom Rand abgeschnitten"
 
 #. TipZones
 msgid "The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)"
@@ -1943,6 +2047,10 @@ msgstr "Dicke des absorbierenden Rahmens in Pixeln: positiv innerhalb der Leinwa
 #. Hint.LensPart.Coating
 msgid "Thickness in pixels of the anti-reflection band just inside the outline; 0 for none. A quarter-wave layer is λ / (4 √n) pixels thick, λ being the wavelength the source form shows; a graded band is the better the thicker, from a wavelength on."
 msgstr "Dicke in Pixeln des entspiegelnden Bands direkt innerhalb des Umrisses; 0 für keines. Eine λ/4-Schicht ist λ / (4 √n) Pixel dick, λ die Wellenlänge aus dem Quellenformular; ein graduelles Band ist ab einer Wellenlänge umso besser, je dicker es ist."
+
+#. Hint.MetaSurfacePart.Length
+msgid "Thickness of the carrier plate along the axis in pixels; the pattern stands on its front, outside it."
+msgstr "Dicke der Trägerplatte entlang der Achse in Pixeln; das Muster steht auf ihrer Vorderseite, außerhalb."
 
 #. Hint.BraggReflectorPart.Thickness1
 msgid "Thickness of the first layer of each pair in pixels. A quarter-wave layer is λ / (4 n) pixels thick."
@@ -2076,6 +2184,10 @@ msgstr "Breite einer leeren Leinwand in Pixeln."
 msgid "Width of the graph box in canvas pixels; custom box size only. A box larger than the canvas is shrunk to fit it, aspect kept."
 msgstr "Breite des Diagrammkastens in Leinwandpixeln; nur bei eigener Kastengröße. Ein Kasten größer als die Leinwand wird seitenverhältnistreu auf sie verkleinert."
 
+#. Hint.MetaSurfacePart.Width
+msgid "Width of the plate and its pattern across the axis in pixels."
+msgstr "Breite der Platte und ihres Musters quer zur Achse in Pixeln."
+
 #. Hint.Probe.Window
 msgid "Width of the sliding step window, in steps."
 msgstr "Breite des gleitenden Schrittfensters, in Schritten."
@@ -2143,6 +2255,10 @@ msgstr "Zonenteilung"
 #. MenuAddZonePlate
 msgid "Zone plate"
 msgstr "Zonenplatte"
+
+#. LabelZoneWidth
+msgid "Zone width"
+msgstr "Zonenbreite"
 
 #. LabelMetaZones
 msgid "Zones"

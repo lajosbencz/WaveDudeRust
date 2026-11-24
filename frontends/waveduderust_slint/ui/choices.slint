@@ -2,7 +2,7 @@
 import { CheckBox } from "std-widgets.slint";
 import { Form, FormChoice } from "form.slint";
 import { Theme } from "theme.slint";
-import { Stencil, BoxSize, CoatingProfile, Edges, Layer, Measurement, ProbeDetector, ProbeKind, PulseShape, ScaleMode, SceneMode, SourceMode, TriangleType, YScale, ZoneDivision, FacetPattern } from "data.slint";
+import { Stencil, BoxSize, CoatingProfile, Edges, Layer, Measurement, ProbeDetector, ProbeKind, PulseShape, ScaleMode, SceneMode, SourceMode, TriangleType, YScale, ZoneDivision, FacetPattern, MetaLensType } from "data.slint";
 
 export component SceneModeChoice inherits FormChoice {
     in-out property <SceneMode> value;
@@ -136,4 +136,11 @@ export component FacetPatternChoice inherits FormChoice {
     titles: [@tr("Sawtooth"), @tr("Square wave"), @tr("Sinusoidal")];
     index: root.value == FacetPattern.sawtooth ? 0 : root.value == FacetPattern.square-wave ? 1 : 2;
     picked(i) => { root.value = i == 0 ? FacetPattern.sawtooth : i == 1 ? FacetPattern.square-wave : FacetPattern.sinusoidal; }
+}
+
+export component MetaLensTypeChoice inherits FormChoice {
+    in-out property <MetaLensType> value;
+    titles: [@tr("Converging"), @tr("Diverging")];
+    index: root.value == MetaLensType.converging ? 0 : 1;
+    picked(i) => { root.value = i == 0 ? MetaLensType.converging : MetaLensType.diverging; }
 }

@@ -8,6 +8,7 @@ use std::f64::consts::TAU;
 
 use super::{MetaDesign, MetaLensType, MetaSurface, wavelength};
 use crate::model::profiled::MAX_PIXELS;
+use crate::model::ranges;
 
 impl MetaSurface {
 	/// The wavelength in pixels in a medium of index 1 that the design frequency gives with the simulation's
@@ -23,6 +24,15 @@ impl MetaSurface {
 		if self.pitch.is_finite() { self.pitch.clamp(1.0, width) } else { 4.0 }
 	}
 
+	/// The pattern index as the design uses it: 1 to 2.55, the default when not finite.
+	pub fn guarded_pattern_index(&self) -> f64 {
+		if self.pattern_index.is_finite() {
+			self.pattern_index.clamp(ranges::INDEX.min, ranges::INDEX.max)
+		} else {
+			Self::default().pattern_index
+		}
+	}
+
 	/// The height as the pattern uses it: 1 to [`MAX_PIXELS`].
 	pub fn guarded_height(&self) -> f64 {
 		if self.height.is_finite() { self.height.clamp(1.0, MAX_PIXELS) } else { 32.0 }
@@ -30,7 +40,7 @@ impl MetaSurface {
 
 	/// The height at which a filled cell delays by a whole turn, `lambda / (n_p - 1)`.
 	pub fn full_turn_height(&self, scale: f64) -> Option<f64> {
-		self.wavelength(scale).map(|lambda| lambda / (self.pattern_index - 1.0).max(1e-9))
+		self.wavelength(scale).map(|lambda| lambda / (self.guarded_pattern_index() - 1.0).max(1e-9))
 	}
 
 	/// Cells across the face: the width over the pitch, rounded down, 1 at least.
@@ -78,7 +88,7 @@ impl MetaSurface {
 			return vec![0.0; cells];
 		};
 		let height = self.guarded_height();
-		let n2 = self.pattern_index * self.pattern_index;
+		let n2 = self.guarded_pattern_index() * self.guarded_pattern_index();
 		(0..cells)
 			.map(|j| {
 				let asked = self.delay(lambda, self.cell_centre(j));
