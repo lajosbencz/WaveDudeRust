@@ -13,6 +13,9 @@ that holds the reasoning and the details. Behaviour not listed here is meant to 
 - The toolkit or a platform cannot do it: the decision says what replaces it.
 - A measured gain with the same results, recorded in [`measurements.md`](measurements.md).
 
+- The UI outside what simulations, edits and controls do is matched in general, not to the pixel; the dock system,
+  the updater, UI zoom and touch-first behaviour are dropped ([decision 0033](decisions/0033-ui-match-scope.md)).
+
 Not warranted: taste, convenience, calibrating to Next's output, dropping a feature Next's users rely on, or a
 file written in a way Next cannot read. The process: an issue, a decision (new or a dated section of an existing
 one), the row below, the spec updated.

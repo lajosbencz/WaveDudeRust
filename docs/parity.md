@@ -11,18 +11,18 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 6 | 19 | 9 | 6 | 0 |
-| M | Menus and shortcuts | 38 | 26 | 46 | 30 | 0 |
-| D | Dialogs and windows | 18 | 29 | 27 | 5 | 0 |
-| S | Settings | 7 | 11 | 14 | 0 | 0 |
-| I | Icons | 13 | 28 | 24 | 18 | 0 |
-| T | Project tree | 33 | 18 | 13 | 37 | 0 |
-| P | Properties | 286 | 26 | 11 | 2 | 0 |
-| V | Preview | 8 | 8 | 95 | 0 | 1 |
-| L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
+| X | Cross-cutting | 6 | 12 | 2 | 20 | 0 |
+| M | Menus and shortcuts | 38 | 25 | 43 | 34 | 0 |
+| D | Dialogs and windows | 18 | 29 | 24 | 8 | 0 |
+| S | Settings | 7 | 10 | 12 | 3 | 0 |
+| I | Icons | 13 | 28 | 23 | 19 | 0 |
+| T | Project tree | 33 | 18 | 12 | 38 | 0 |
+| P | Properties | 286 | 25 | 11 | 3 | 0 |
+| V | Preview | 8 | 8 | 91 | 4 | 1 |
+| L | Timeline, transport, status | 27 | 33 | 20 | 7 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
-| G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 460 | 225 | 306 | 98 | 6 |
+| G | Messages pane | 8 | 10 | 11 | 3 | 0 |
+| | All | 460 | 211 | 279 | 139 | 6 |
 
 ## Cross-cutting
 
@@ -32,17 +32,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-02 | Title shows the full path by setting | MainWindow.xaml.cs | 00, Main window; decision 0008 | done | app.slint `title` from `file-path` while `title-full-path` |
 | X-03 | Window min 800x500, default 1280x800, centred on first start | MainWindow.xaml | 00, Main window | done | |
 | X-04 | Window size, position, state persisted; never minimised; kept inside the monitor's work area | MainWindow.xaml.cs | 00, Main window; 80 | missing | settings fields exist in waveduderust_platform, unused |
-| X-05 | Resize grip | MainWindow.xaml | 00, Main window | missing | |
-| X-06 | Dock layout tree: splits with star weights, tabbed groups, fixed centre | Docking/DockHost.cs | 00, Panes; 90 s1 | partial | fixed Slint layout, no tree |
+| X-05 | Resize grip | MainWindow.xaml | 00, Main window | divergence | decision 0033, matched in general, not to the pixel/id |
+| X-06 | Dock layout tree: splits with star weights, tabbed groups, fixed centre | Docking/DockHost.cs | 00, Panes; 90 s1 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | X-07 | Splitters between panes: drag and arrow keys | Docking/DockHost.cs | 00, Panes; 90 s1 | done | ui/splitter.slint: 4 px bars, drag, Next's minimums (60 px, 100 px for the preview); no keys, as Next's are not focusable; sizes per divergences.md, Pane sizes |
-| X-08 | Pane title bar 21 px: title, dotted grip, "Window position" drop-down, close button | Docking/DockGroupControl.cs, Themes/Controls.xaml | 00, Panes; 90 s1 | partial | title, grip, "x" close only; no drop-down; grip is a box not dots |
-| X-09 | "Window position" menu: Move to Left/Right/Top/Bottom, Close | Docking/DockCommands.cs | 00, Panes | missing | |
-| X-10 | Active pane title bar accent + white text + light-blue grip by focus; first group active at start | Docking/DockGroupControl.cs | 00, Panes | partial | Project fixed active; does not follow focus |
-| X-11 | Tab strip for groups with several panes | Docking/DockGroupControl.cs | 00, Panes; 90 s1 | missing | |
-| X-12 | Drag pane/group to dock: edge strip, split beside, tab into; accent drop preview; ghost label; Esc cancels | Docking/DockDragManager.cs, DockDropAdorner.cs | 00, Panes (port rules) | missing | port rules per divergences.md "Docking" (no five-way cluster) |
+| X-08 | Pane title bar 21 px: title, dotted grip, "Window position" drop-down, close button | Docking/DockGroupControl.cs, Themes/Controls.xaml | 00, Panes; 90 s1 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
+| X-09 | "Window position" menu: Move to Left/Right/Top/Bottom, Close | Docking/DockCommands.cs | 00, Panes | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
+| X-10 | Active pane title bar accent + white text + light-blue grip by focus; first group active at start | Docking/DockGroupControl.cs | 00, Panes | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
+| X-11 | Tab strip for groups with several panes | Docking/DockGroupControl.cs | 00, Panes; 90 s1 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
+| X-12 | Drag pane/group to dock: edge strip, split beside, tab into; accent drop preview; ghost label; Esc cancels | Docking/DockDragManager.cs, DockDropAdorner.cs | 00, Panes (port rules) | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | X-13 | Close hides the pane; reshown at its default side without a saved place | Docking/DockHost.cs | 00, Panes | partial | hide/show works; no sides |
 | X-14 | Default arrangement: left column 1:3, Project over Properties 1:2; Messages hidden | Docking/DockHost.cs | 00, Panes | partial | ratios done, sized per divergences.md, Pane sizes; Messages placement differs (bottom of centre?) |
-| X-15 | Layout saved as it changes and restored at start; unknown ids ignored | Docking/DockHost.cs | 00, Panes | missing | `Settings.layout` unused |
+| X-15 | Layout saved as it changes and restored at start; unknown ids ignored | Docking/DockHost.cs | 00, Panes | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | X-16 | View > Panes lists Project, Properties, Messages, Preview with check marks | MainWindow.xaml | 00, Panes; decision 0008 | partial | Preview not listed |
 | X-17 | Status bar double-click opens or focuses Messages | MainWindow.xaml.cs | 00, Panes | partial | opens; no focus when shown |
 | X-18 | No floating windows | Docking | 00, Panes | done | |
@@ -51,16 +51,16 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-21 | Theme tokens: 92 keys per theme (menu, title bars, tabs, tree, scroll bars, splitter, drop indicator, buttons, tooltips, text/combo/check boxes, log levels) | Themes/Dark.xaml, Light.xaml | 00, Look | divergence | ui/theme.slint: the used colours with Next's values (divergences.md, Theme tokens) |
 | X-22 | Themes System/Light/Dark, live switch, native title bar follows | Theming/ThemeController.cs | 00, Look | partial | live switch done; native title bar not verified |
 | X-23 | Font Segoe UI 12 px, else bundled Selawik + Noto Sans Math subset | App.xaml | 00, Look | divergence | Selawik everywhere (divergences.md, Font); Noto Sans Math is the overlays' (core) |
-| X-24 | Row 23 px (tree rows, toolbar buttons, menu bar, tabs); drop-down entries 22 px | Themes/Controls.xaml | 00, Look; 90 | partial | rows 23 px; Slint menus are native/Slint style |
-| X-25 | Icons: 16 px stroked drawings in text colour, grey when disabled | Themes/Controls.xaml, Assets | 00, Look | partial | ui/icons.slint: transport, tree rows and buttons, pane close, menus; see I-rows |
+| X-24 | Row 23 px (tree rows, toolbar buttons, menu bar, tabs); drop-down entries 22 px | Themes/Controls.xaml | 00, Look; 90 | divergence | decision 0033, matched in general, not to the pixel/id |
+| X-25 | Icons: 16 px stroked drawings in text colour, grey when disabled | Themes/Controls.xaml, Assets | 00, Look | divergence | decision 0033, matched in general, not to the pixel/id |
 | X-26 | Keyboard focus = accent border everywhere | Themes/Controls.xaml | 00, Look; 90 | partial | std widgets' own focus look |
-| X-27 | Square corners; WPF box model paddings (buttons 10,3; toolbar 6,1,6,0; text 3,2) | Themes/Controls.xaml, Editors.xaml | 90, cross-cutting | partial | std-widgets (fluent) rounded corners |
+| X-27 | Square corners; WPF box model paddings (buttons 10,3; toolbar 6,1,6,0; text 3,2) | Themes/Controls.xaml, Editors.xaml | 90, cross-cutting | divergence | decision 0033, matched in general, not to the pixel/id |
 | X-28 | Tooltips on every toolbar/transport button | Themes/Controls.xaml ToolTip style | 90, cross-cutting | divergence | every IconButton's tip through Slint's Tooltip (divergences.md, Tooltips) |
 | X-29 | Every control reachable by Tab and arrows | - | 00, Keyboard first | partial | tree, toolbars, timeline not all tab stops |
 | X-30 | Menu bar out of Tab cycle; F10/Alt enters; mnemonics unique per menu | MainWindow.xaml, Strings | 00, Keyboard first | divergence | Windows' native bar: F10/Alt and Next's access keys; Slint's drawn bar (Linux, web): none (docs/blockers.md) |
-| X-31 | UI zoom 0.5x..3x: Ctrl+=, Ctrl+-, Ctrl+0, Settings > General; persisted `UiZoom`; touch default 2x | Theming/WindowZoom.cs | 00, UI zoom | missing | |
-| X-32 | `--zoom=<f>` switch; unknown `--` switches logged | App.xaml.cs | 00, Startup | missing | |
-| X-33 | Per-monitor DPI; lines on whole device pixels | App.manifest | 00, UI zoom | partial | Slint scale factor; not verified |
+| X-31 | UI zoom 0.5x..3x: Ctrl+=, Ctrl+-, Ctrl+0, Settings > General; persisted `UiZoom`; touch default 2x | Theming/WindowZoom.cs | 00, UI zoom | divergence | decision 0033, dropped |
+| X-32 | `--zoom=<f>` switch; unknown `--` switches logged | App.xaml.cs | 00, Startup | divergence | decision 0033, dropped |
+| X-33 | Per-monitor DPI; lines on whole device pixels | App.manifest | 00, UI zoom | divergence | decision 0033, matched in general, not to the pixel/id |
 | X-34 | Languages EN/DE/FR/NL + System; live switch; persisted `Language` | Strings/Strings.*.xaml | 00, Languages | partial | `@tr` with Slint's bundled gettext tables from Next's (tools/next-strings.py, lang/); live switch and the system language through the Settings row Language (decision 0027); our texts Next lacks (welcome page, Settings window) and strings made in Rust (property and settings labels, tree names, status words) stay English; on the web System reads the browser's language |
 | X-35 | British spelling except "license" | Strings.EN.xaml | 00, Languages | partial | not audited |
 | X-36 | First argument opens .wdproj, configuration.json (import) or .wdscheme | App.xaml.cs | 00, Startup | partial | .wdproj and json; .wdscheme not handled |
@@ -162,7 +162,7 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | M-54 | About WaveDude (Next/Rust) entry, Mn A/U-uml/P/O | MW:438, SE:112 | ui/10 Help | partial | app:152 opens text modal (D-52); entry shortcut none |
 | M-55 | Manual, F1 (Next) | MW:439, SE:113 | ui/10 Help | divergence | replaced by Project page on GitHub (decision 0028, divergences.md "Manual") |
 | M-56 | Project page on GitHub (port), F1, opens github.com/lajosbencz/WaveDudeRust (system browser / new tab) | not in Next | ui/10 Help | done | "github" opens the repository URL in the system browser, a new tab on the web (webbrowser crate); F1 |
-| M-57 | Check for updates (port; builds with updater), Mn U/U/J/U | not in Next | ui/10 Help, ui/70 Updates | missing | entry removed: this build has no updater |
+| M-57 | Check for updates (port; builds with updater), Mn U/U/J/U | not in Next | ui/10 Help, ui/70 Updates | divergence | decision 0033, dropped |
 
 #### M Context menus
 | ID | Feature | Next source | Spec | Slint | Note |
@@ -220,7 +220,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 #### M Dock title bar and Messages menus
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-98 | Dock pane title drop-down "Window position": Move to Left (L/L/G/L), Right (R/R/D/R), Top (T/O/H/B), Bottom (B/U/B/O), separator, Close (C/S/F/S) | WPF/Docking/DockGroupControl.cs:133, SE:60-66 | ui/10 Dock | missing | pane.slint has only a fixed layout and an "x" close box (pane.slint:30-38); docking narrowed by decision 0008 (11) yet position menu still specced |
+| M-98 | Dock pane title drop-down "Window position": Move to Left (L/L/G/L), Right (R/R/D/R), Top (T/O/H/B), Bottom (B/U/B/O), separator, Close (C/S/F/S) | WPF/Docking/DockGroupControl.cs:133, SE:60-66 | ui/10 Dock | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | M-99 | Messages list menu: Copy (Ctrl+C, selected lines, tab-separated), Copy all (visible lines), separator, Clear (Mn C/K/C/K, A/A/T/A, L/L/E/W) | MP:184-191, SE:204-206 | ui/10 Messages | missing | messages.slint has a Clear button only (messages.slint:59-62) |
 
 #### M Keys: window-wide
@@ -237,7 +237,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-108 | Ctrl+Shift+E / I / B, Ctrl+Shift+F / G | ExportCommands.cs:35-51 | ui/10 | partial | M-12..17 |
 | M-109 | F1 project page | HelpCommands.cs:31 (Manual) | ui/10, decision 0028 | missing | binding exists, action does nothing (M-56) |
 | M-110 | Ctrl+, Settings (port) | not in Next | ui/10 | done | app:100 |
-| M-111 | Ctrl+= / Ctrl+Plus / Ctrl+- / Ctrl+0 UI zoom step up/down/reset across 0.5x..3x (port) | not in Next (View > UI zoom menu only) | ui/10 | missing | Slint 1.19 has no API to rescale a running window (only a backend's dispatch_event, which winit overrides); the UI zoom setting is not applied |
+| M-111 | Ctrl+= / Ctrl+Plus / Ctrl+- / Ctrl+0 UI zoom step up/down/reset across 0.5x..3x (port) | not in Next (View > UI zoom menu only) | ui/10 | divergence | decision 0033, dropped |
 | M-112 | F5 Run, F6 Pause/resume, Shift+F5 Stop, F7 Play/pause playback | SimulationCommands.cs:30,34,44; PreviewCommands.cs:40 | ui/10 | done | app:143-148 |
 | M-113 | Esc: cancel running export, else stop run; text box reverts edit; during drag cancels drag | SimulationCommands.cs:44 | ui/10 | partial | Esc cancels a running export, else stops the run, when nothing focused took it (an unchanged number box passes it on); drag cancel comes with the handles (piece 5) |
 | M-114 | Tab / Shift+Tab next/prev control, menu bar excluded | MW:216 (TabNavigation None) | ui/10 | partial | Slint default focus handling; menu bar excluded natively |
@@ -270,7 +270,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-137 | Dialogs: Enter default, Esc cancel, mnemonics w/o Alt; About Esc/Enter close | MessageWindow.xaml.cs | ui/10 Dialogs | partial | modal.slint:25-27 Enter/Esc done; mnemonics without Alt missing |
 | M-138 | File drop on window: image becomes scene image; other file to open flow (.wdproj .xml .json .wdscheme); nothing while modal | MW:12-13 (AllowDrop, OnDrop) | ui/10 File dropped | missing | no drop handler in main.rs/app.slint |
 | M-139 | Browser: leaving the page asks while unsaved edits | n/a | ui/10 | missing | web.rs/index.html: no beforeunload (not verified in index.html) |
-| M-140 | Menu entries 23 px high, shortcut text right-aligned, disabled entries grey text+icon | Themes/Controls.xaml MenuItem | ui/10 Conventions | partial | native MenuBar styling (Theme.menu-row-height 22px exists, unused by the native bar) |
+| M-140 | Menu entries 23 px high, shortcut text right-aligned, disabled entries grey text+icon | Themes/Controls.xaml MenuItem | ui/10 Conventions | divergence | decision 0033, matched in general, not to the pixel/id |
 
 ### D: dialogs and windows
 
@@ -288,7 +288,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-10 | Button set OK (Enter, Esc, close box = OK) | MessageWindow.xaml.cs | ui/70 | done | main.rs modal(... ["OK"],0,0) |
 | D-11 | Button set Yes (default) / No (Esc); Yes/No(default) for destructive | SE:289-290 | ui/70 | missing | no Yes/No question uses exist (replace-folder, discard) |
 | D-12 | Button set Save (default) / Don't save / Cancel (Esc) | SE:291-293 | ui/70 | done | main.rs:~118 modal(... ["Save","Don't save","Cancel"],0,2) |
-| D-13 | Mnemonics work without Alt on buttons (_Yes _No _Save _Don't save _Cancel) | SE:288-293 | ui/70 | missing | plain Button text |
+| D-13 | Mnemonics work without Alt on buttons (_Yes _No _Save _Don't save _Cancel) | SE:288-293 | ui/70 | divergence | decision 0033, matched in general, not to the pixel/id |
 | D-14 | Uses: open/save errors "Could not open/save '{0}'." | MessageWindow users | ui/70 | done | main.rs open()/save() modals |
 | D-15 | Use: "The folder {0} exists and holds files. Replace them?" Yes/No | ExportPaths | ui/70 | missing | |
 | D-16 | Use: "The export failed." and image save error | MainWindow.Export.cs | ui/70 | partial | main.rs timer: "The export failed." only; detail only logged |
@@ -311,8 +311,8 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-33 | Settings: one "Close" button, default and cancel (Enter outside a control, Esc) | not in Next | ui/70 Settings | partial | Close + Esc done (settings.slint:20-23,67); Enter not bound |
 | D-34 | Settings: Preset buttons row (Low, Medium, High, Auto) in Preview and memory | not in Next | ui/70 Settings table | missing | only on Welcome |
 | D-35 | Settings: RAM row read-only "{available} available of {physical}" native; browser drop-down | not in Next | ui/70 Settings table | missing | |
-| D-36 | Settings: Updates > "Check now" button | not in Next | ui/70 Settings table | missing | |
-| D-37 | Updates flow: launch check, "WaveDude Rust x is available (this is y). Download it?", progress "Downloading WaveDude Rust x", signature verify, "Restart now to install it?", failure/up-to-date messages, non-replaceable builds link to release page | not in Next | ui/70 Updates, decision 0011 | missing | no updater code in slint crate |
+| D-36 | Settings: Updates > "Check now" button | not in Next | ui/70 Settings table | divergence | decision 0033, dropped |
+| D-37 | Updates flow: launch check, "WaveDude Rust x is available (this is y). Download it?", progress "Downloading WaveDude Rust x", signature verify, "Restart now to install it?", failure/up-to-date messages, non-replaceable builds link to release page | not in Next | ui/70 Updates, decision 0011 | divergence | decision 0033, dropped |
 | D-38 | Export dialog: in-window dialog, title per command ("Export the field", "...the intensity", "...the field and the intensity", "Export the frame", "Export the probe data") | SE:272-277 | ui/70 Export Save dialog | divergence | Next uses a native save dialog; port in-window dialog (divergences.md "Export names", decision 0025). Slint: native rfd save dialog, no titles (export.rs:~106) -> partial implementation of the old Next form |
 | D-39 | Export dialog: format filter list (MP4 H.264, MPEG-1, AVI, MOV Animation, MOV PNG, PNG/JPEG/EXR I/EXR sqrt(I) sequences; stills: PNG, JPEG, EXR I, EXR sqrt) | SE:271,275 | ui/70 | partial | export.rs:35-47 Kind::formats; filter names are Debug names of the enum (`{f:?}`) not descriptions |
 | D-40 | Export dialog: proposed name `<project>_field` / `_intensity` / `<project>_field_0655` / probe name | ExportPaths.cs (UI) | ui/70 | missing | export.rs: "export.<ext>" |
@@ -363,7 +363,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 |---|---|---|---|---|---|
 | S-01 | WindowWidth/WindowHeight/WindowLeft/WindowTop double DIP (1280x800, centred) | UIS:69-99, MW:37-40 | ui/80 | missing | no read/write (grep window_width: 0 hits in slint src); fixed preferred size |
 | S-02 | WindowState Normal/Maximized | UIS:109, MW:41 | ui/80 | missing | |
-| S-03 | Layout (dock tree) saved on change | UIS:119, MW:495-515 | ui/80 | missing | pane shown flags (project/properties/messages) not persisted |
+| S-03 | Layout (dock tree) saved on change | UIS:119, MW:495-515 | ui/80 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | S-04 | Theme System/Light/Dark, Settings > General | UIS:129 | ui/80, ui/70 | done | set.rs row "Theme"; applied via Theme.mode (main.rs apply_settings) |
 | S-05 | Language ""/en/de/fr/nl, "System (in the current language)" first, each by own name | UIS:139, MW:295-297 | ui/80, ui/70 | partial | Settings > General > Language: System, then each by its own name (src/settings.rs); "System" is not translated (a Rust string, X-34) |
 | S-06 | RecentFiles list newest first max 10 (+ OS recent list) | UIS:149, MW:253-255 | ui/80 | partial | push_recent on open/save (main.rs:213); never shown (M-04) |
@@ -375,7 +375,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-12 | PreviewSampleBytes 1/2 drop-down "16-bit float / 8-bit palette index (brightness fixed when the run starts)" | UIS:233, SE:89-91 | ui/80, ui/70 | missing | no row (lever text reads it) |
 | S-13 | PreviewDitherBits 0/10/12/14/16 drop-down, disabled unless 16-bit samples | UIS:243, SE:92-97 | ui/80, ui/70 | missing | no row, no dithering |
 | S-14 | UseGpu bool (true), "Use the GPU (OpenCL)" -> "Use the GPU" | UIS:193, MW:420 | ui/80, ui/70 | partial | row exists; consumed by export backend only (export.rs:~100), live run not switched by apply_settings |
-| S-15 | UiZoom double 0.5..3 (menu), up to 8 (`--zoom`), default 1.0 / 2.0 touch; drop-down 0.5x..3x | UIS:256, MW:302-327 | ui/80, ui/70 | missing | no row, no zoom, no `--zoom` |
+| S-15 | UiZoom double 0.5..3 (menu), up to 8 (`--zoom`), default 1.0 / 2.0 touch; drop-down 0.5x..3x | UIS:256, MW:302-327 | ui/80, ui/70 | divergence | decision 0033, dropped |
 | S-16 | WarnWhenRamInsufficient bool (true) (+ memory warning "Do not warn me again") | UIS:183, MW:428 | ui/80, ui/70 | partial | row "Warn when the RAM cache is too small" (spec label "Warn when a run does not fit in RAM"); no warning dialog uses it (D-21) |
 | S-17 | LastExportFolder path, fallback start folder | UIS:266 | ui/80 | missing | |
 | S-18 | ExportFilterIndex int | UIS:276 | ui/80 | missing | |
@@ -384,7 +384,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-21 | TitleFullPath bool (false), Settings > General "Full path in the title" | not in Next | ui/80, ui/70 | done | app.slint `title-full-path` |
 | S-22 | H264Profile Baseline/Main/High, Settings > Export | not in Next | ui/80, ui/70 | missing | no row; export uses Profile::default() |
 | S-23 | UseOpenH264 bool or absent, Settings > Export check box with Cisco notice | not in Next | ui/80, ui/70 | partial | consumed in export.rs h264(); no row/notice |
-| S-24 | CheckForUpdates bool or absent, Settings > Updates "Look for a new version at each launch" | not in Next | ui/80, ui/70 | partial | row "Check for updates at start" (label differs); nothing checks |
+| S-24 | CheckForUpdates bool or absent, Settings > Updates "Look for a new version at each launch" | not in Next | ui/80, ui/70 | divergence | decision 0033, dropped |
 | S-25 | ShowStartup bool (true), Settings > General + welcome check box | not in Next | ui/80, ui/70 | done | row + welcome checkbox |
 | S-26 | UndoSteps int 10..100000 (1000), Settings > General number box, tooltip, decision 0030 | not in Next | ui/80, ui/70 | partial | row (LineEdit number) applies via set_limit; clamps in set_row; no tooltip "two percent a step" |
 | S-27 | ExportHints list (max 20, existing project files) | UIS:300-406 (ExportHint) | ui/80 | missing | |
@@ -422,7 +422,7 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-19 | Select all U+E8B3 (MW:291, PT:261) | MW:291 | ui/10 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); tree and Messages menus not yet |
 | I-20 | View>Panes U+E8A0 | MW:294 | ui/10 View | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-21 | View>Theme U+E790 (also tree ColorSchemes folder PT:~366) | MW:297 | not in spec (menu moved) | partial | tree ColorSchemes folder (Material Symbols stand-in); other uses not yet |
-| I-22 | View>UI zoom U+E8A3 | MW:302 | not in spec (moved) | missing | not in spec |
+| I-22 | View>UI zoom U+E8A3 | MW:302 | not in spec (moved) | divergence | decision 0033, dropped |
 | I-23 | View>Language U+E774 | MW:330 | not in spec (moved) | missing | not in spec |
 | I-24 | Simulation>Run U+E768, Play (while paused) U+E768 | MW:386,408 | ui/10 Simulation | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); play/pause swap not yet |
 | I-25 | Simulation>Pause U+E769, Pause playback U+E769 | MW:388,412 | ui/10 | partial | menu bar: Material Symbols stand-in (divergences.md, Icons); play/pause swap not yet |
@@ -602,7 +602,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-96 | Insertion adorner line / outline visuals | Controls/InsertionAdorner.cs | 20 Drag and drop | done | accent line 2 px along the edge, 1 px outline around a folder |
 | T-97 | File drop on window: image becomes scene image, project file opens | MainWindow.Project.cs | 20 Drag and drop; 10 | missing | owned by another area? not in tree code |
 | T-98 | Settings rows (Scene, Simulation, Display) draggable, carry XML, do not reorder | ProjectTree.xaml.cs | 20 Drag and drop | missing | settings rows do not drag: no target takes them in the app yet (preview drop, T-94) |
-| T-99 | Touch-first: rows sense clicks alone, drag unavailable | n/a | 20 Drag and drop | missing | no touch mode |
+| T-99 | Touch-first: rows sense clicks alone, drag unavailable | n/a | 20 Drag and drop | divergence | decision 0033, dropped |
 | T-100 | Schemes: move up/down/remove via row buttons | ProjectTree.xaml:446-451 | 20 Item row | done |  |
 | T-101 | Automation ids Tree:<name>, Enabled:<name>, InSelection, CollectionCount | ProjectTree.xaml:245,385 | 20 Automation ids | divergence | Slint has no AccessKit ids; decision 0032 |
 
@@ -617,7 +617,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-05 | Form scrolls vertically, never horizontally | Panes/PropertiesPane.xaml | 30 Pane behaviour | done | ScrollView |
 | P-06 | FormPanel two columns: label column = widest label (>=110 px), editors fill rest | Controls/FormPanel.cs | 30 Pane behaviour | done | ui/form.slint FormPanel: a grid, the label column its widest label, 110 px at least, editors fill the rest |
 | P-07 | Full-width check boxes carry label as content | Controls/FormPanel.cs | 30 Pane/Check box | done | FormCheck spans both columns with the label as its text |
-| P-08 | Row height >=22 px, 4 px apart; multiline label at top | Controls/FormPanel.cs | 30 Pane behaviour | partial | rows {Theme.row-height} at least, 4 px apart; the Description label sits at its row's centre, not its top |
+| P-08 | Row height >=22 px, 4 px apart; multiline label at top | Controls/FormPanel.cs | 30 Pane behaviour | divergence | decision 0033, matched in general, not to the pixel/id |
 | P-09 | Section headers: name over a rule; gap after group | Themes/Editors.xaml (FormSection) | 30 Pane behaviour | done | FormSection: semibold name over a 1 px rule, 10 px after each FormPanel |
 | P-10 | Secondary values (format version, folder count) grey | Views/ProjectView.xaml:37 | 30 Pane behaviour | partial | FormValue in the dim text colour: Format version; the folder count is plain (T-66) |
 | P-11 | Read-outs plain text bound to inputs; '~ ' prefix 1 decimal for estimates; px/deg units | Themes/Editors.xaml (FormReadout) | 30 Pane behaviour | missing | no read-out rows |
@@ -976,7 +976,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-28 | Edge line preview only, never exported | PreviewPane.xaml | 40 Edge line | done | nothing drawn |
 | V-29 | Zoom: wheel 1.25x per notch, min fit, max 64x, point under pointer fixed, shared by both pictures | none (no zoom in Next) | 40 Zoom | missing | (port) addition |
 | V-30 | Pan: middle-button drag on zoomed view, no empty area | none | 40 Zoom | missing | (port) |
-| V-31 | Touch: pinch zoom, two-finger pan, second finger cancels drag/marquee | none | 40 Zoom | missing | (port) |
+| V-31 | Touch: pinch zoom, two-finger pan, second finger cancels drag/marquee | none | 40 Zoom | divergence | decision 0033, dropped |
 | V-32 | Zoomed 16-bit picture rendered for visible window only | none | 40 Zoom | missing | (port) |
 | V-33 | Zoom is session state, kept across projects | none | 40 Zoom | missing | (port) |
 | V-34 | Picture changes only when frame for position arrives; never black/other frame | PreviewPane.xaml.cs:716 | 40 What a picture shows | done | live.rs poll draws stored frame only on tag change; request() resets `drawn` but images persist in window |
@@ -989,8 +989,8 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-41 | Dithering 16-bit only, Bayer 2/4/8/16 | FramePresenter.cs | 40 8-bit vs 16-bit | missing | no dither code in slint crate |
 | V-42 | GPU engine colouring in render pass, device copy of last frame, others uploaded | none (Rust only) | 40 8-bit vs 16-bit | done | live.rs device_frames + Uploads |
 | V-43 | WebGL2 / over-limit fallback with Messages warning | none | 40 8-bit vs 16-bit | missing | |
-| V-44 | Handle style: light grey over dark halo; selected bright yellow; focused accent fill; hover/focus thicker | Controls/MarkerThumb.cs:69-115 | 40 Handles | missing | no overlay layer exists |
-| V-45 | Glyphs odd-sized (21/15/13 px), centre pixel, 1.5 px AA strokes | MarkerThumb.cs | 40 Handles | missing | |
+| V-44 | Handle style: light grey over dark halo; selected bright yellow; focused accent fill; hover/focus thicker | Controls/MarkerThumb.cs:69-115 | 40 Handles | divergence | decision 0033, matched in general, not to the pixel/id |
+| V-45 | Glyphs odd-sized (21/15/13 px), centre pixel, 1.5 px AA strokes | MarkerThumb.cs | 40 Handles | divergence | decision 0033, matched in general, not to the pixel/id |
 | V-46 | Source position handle (ring + 4 ticks + dot) both pictures | SceneOverlay.cs:449 | 40 Handles | missing | |
 | V-47 | Composite emitter dots (selected source's in selection colour, not focusable) | SceneOverlay.cs:140,1092 | 40 Handles | missing | |
 | V-48 | Source rotation lever (arc arrow, dotted lever line), current item only | SceneOverlay.cs:136-139,449 | 40 Handles | missing | |
@@ -1057,15 +1057,15 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-109 | Pane Ctrl+A select all inside the pane | PreviewPane.xaml:398 | not in spec | missing | not in spec; app-level Ctrl+A menu is log-only |
 | V-110 | Letter keys swallowed in pane so WPF does not open menu mnemonics | PreviewPane.xaml.cs:1262-1272 | not in spec | n/a | WPF-only quirk; not applicable to Slint |
 | V-111 | Brightness numbers per layer from Display > layer | PreviewPane.xaml:586 | 40 Header strip | missing | duplicate of V-14 binding; Properties pane edits Display (30) |
-| V-112 | Automation ids PreviewFieldImage, PreviewIntensityImage, PreviewSplitter | PreviewPane.xaml | 40 Automation ids | missing | no accessibility ids in Slint |
+| V-112 | Automation ids PreviewFieldImage, PreviewIntensityImage, PreviewSplitter | PreviewPane.xaml | 40 Automation ids | divergence | decision 0033, matched in general, not to the pixel/id |
 
 ### L: Timeline, transport, status bar
 
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| L-01 | Timeline 36 px high, 14 px label row + 22 px bar, 4,2 margin | Controls/TimelineBar.cs:42,45 | 50 Timeline | partial | 36 px / 14+22 done; 4 px x margin, no 2 px y margin |
-| L-02 | Tick labels every 1,2,5,10,...,10000 frames, min 64 px apart, 2 px after tick, last kept inside | TimelineBar.cs:48,53,429-476 | 50 Timeline | missing | no tick labels |
-| L-03 | Major ticks 6 px, minor 3 px every fifth of interval | TimelineBar.cs:467,474 | 50 Timeline | missing | no ticks |
+| L-01 | Timeline 36 px high, 14 px label row + 22 px bar, 4,2 margin | Controls/TimelineBar.cs:42,45 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
+| L-02 | Tick labels every 1,2,5,10,...,10000 frames, min 64 px apart, 2 px after tick, last kept inside | TimelineBar.cs:48,53,429-476 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
+| L-03 | Major ticks 6 px, minor 3 px every fifth of interval | TimelineBar.cs:467,474 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-04 | Playhead line through bar | TimelineBar.cs:347 | 50 Timeline | done | 1 px line |
 | L-05 | Playhead 10x6 triangle on top | TimelineBar.cs:355 | 50 Timeline | missing | |
 | L-06 | Playhead frame number 8 px beside, patch hides tick labels | TimelineBar.cs:358-359 | 50 Timeline | partial | number 8 px beside, kept in bounds; no background patch (no ticks yet) |
@@ -1074,7 +1074,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-09 | Frames-made shaded bands in accent (grow from position outward after edit) | TimelineBar.cs:315, MainWindow.Live.cs | 50 Timeline | partial | single band from frame 0 to newest made; not per-frame bands/gaps |
 | L-10 | Playhead bounded by band it is in for user-started run | MainWindow.Live.cs | 50 Timeline | partial | playback.tick holds at newest made frame |
 | L-11 | Hover line under pointer | TimelineBar.cs:341,518-525 | 50 Timeline | missing | |
-| L-12 | Frame 0 on first pixel column inside outline, last frame on last; whole device-pixel lines | TimelineBar.cs:271-360 | 50 Timeline | partial | 4 px inset mapping; pixel snapping unverified |
+| L-12 | Frame 0 on first pixel column inside outline, last frame on last; whole device-pixel lines | TimelineBar.cs:271-360 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-13 | Timeline tooltip text | PreviewPane.xaml:546 | 50 Timeline | missing | |
 | L-14 | Click/drag on bar scrubs to nearest frame; turns Live off, pauses playback | TimelineBar.cs:501-531 | 50 Timeline input | done | Timeline TouchArea + playback.seek |
 | L-15 | Drag bracket moves in/out (hit +/- px, nearer wins) | TimelineBar.cs:51,501-510 | 50 Timeline input | missing | |
@@ -1086,7 +1086,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-21 | Mouse wheel one frame | TimelineBar.cs:554 | 50 Timeline input | done | scroll-event |
 | L-22 | Space play/pause | PreviewPane.xaml:390 | 50 Timeline input; Playback | partial | only when timeline focused or F7; not "anywhere in pane" |
 | L-23 | Click timeline focuses it; focus border = accent | TimelineBar.cs:364,617 | 50 Timeline | done | |
-| L-24 | Automation: slider with range value, "range in..out" | TimelineBar.cs:632-660 | 50 Timeline | missing | |
+| L-24 | Automation: slider with range value, "range in..out" | TimelineBar.cs:632-660 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-25 | Run/Stop button (ring+triangle / ring+square), tab 0 | PreviewPane.xaml:413-430 | 50 Transport #0 | partial | text glyphs ">" "[]"; no ring icon |
 | L-26 | Run tooltip "Run the simulation from the start (F5)" / Stop tooltip "(Esc)" | PreviewPane.xaml:418,424 | 50 Transport #0 | missing | `tip` property declared in Tool but never rendered |
 | L-27 | Run disabled while export runs / without enabled source | SimulationCommands.cs | 50 Transport #0 | missing | button enabled always |
@@ -1117,9 +1117,9 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-52 | Layout radios side-by-side / stacked, tab stop = checked one | PreviewPane.xaml:483-495 | 50 Transport #14 | partial | two toggle Tools; not radios, both tab-less, no tooltip |
 | L-53 | Radio arrow keys move check to neighbour | PreviewPane.xaml.cs:1332-1345 | not in spec (only "Enter/Space checks") | missing | not in spec |
 | L-54 | Right-docked items at right end; dividers before picture toggles | PreviewPane.xaml:480-510 | 50 Transport bar | partial | right end done; dividers 1 px with 4,2 margins not honoured (no margins) |
-| L-55 | Bar geometry: 1 px top border, padding 4,3, buttons 22x22, side margins 1 | PreviewPane.xaml:404-412 | 50 Transport bar | partial | 22x22, padding 3, spacing 1; no top border |
+| L-55 | Bar geometry: 1 px top border, padding 4,3, buttons 22x22, side margins 1 | PreviewPane.xaml:404-412 | 50 Transport bar | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-56 | Toggles stay pressed while checked; disabled look grey; focus = accent border | PreviewPane.xaml:100-160 | 50 Transport bar | partial | checked tint and grey text; no focus border, buttons not focusable |
-| L-57 | Tab order 0..14 + timeline, brightness, splitter order | PreviewPane.xaml TabIndex | 50 Transport bar | missing | |
+| L-57 | Tab order 0..14 + timeline, brightness, splitter order | PreviewPane.xaml TabIndex | 50 Transport bar | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-58 | Speed 1 = project frame rate, wall-clock accumulation | PreviewPane.xaml.cs:1134-1178 | 50 Playback | done | playback.tick, 16 ms timer |
 | L-59 | ~60 ticks/s, due frames moved, no pile-up while rendering | PreviewPane.xaml.cs:1144 | 50 Playback | partial | 16 ms timer, carried fraction; no "previous picture still rendering" accumulate check |
 | L-60 | Clock not starved by mouse input | PreviewPane.xaml.cs (thread timer) | 50 Playback | partial | slint::Timer; starvation not verified |
@@ -1238,7 +1238,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | G-12 | Time format HH:mm:ss.fff | MessagesPane.xaml:194 | 70 Messages pane (Time) | partial | log.rs time string (format unverified) |
 | G-13 | Source = logger name without namespace | MessagesPane.xaml:196-199 | 70 Messages pane | done | log.rs source |
 | G-14 | Column headers | MessagesPane.xaml:194-203 | 70 Messages pane | missing | no header row |
-| G-15 | Resizable columns | MessagesPane.xaml:192-210 | 70 Messages pane | missing | fixed widths |
+| G-15 | Resizable columns | MessagesPane.xaml:192-210 | 70 Messages pane | divergence | decision 0033, matched in general, not to the pixel/id |
 | G-16 | Rows coloured per level | MessagesPane.xaml:150-180 | 70 Messages pane | done | text colour per level |
 | G-17 | Opens scrolled to newest; focus on list | MessagesPane.xaml.cs:151,168-188 | 70 Messages pane | missing | |
 | G-18 | Initial visibility: Info+ always; Trace/Debug debug builds only | MessagesPane.xaml.cs:62-66 | 70 Messages pane | done | messages.rs shown[] |
@@ -1251,8 +1251,8 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | G-25 | Row tooltip = exception text | MessagesPane.xaml:150 | 70 Messages pane; 70 Message window | missing | |
 | G-26 | Source cell tooltip = full logger name | MessagesPane.xaml:199 | 70 Messages pane | missing | |
 | G-27 | Level counts live (add/remove/clear) | MessagesPane.xaml.cs:190-226 | 70 Messages pane | partial | counts over ring; recalculated on show |
-| G-28 | Pane title bar, close, "Window position" menu | Docking | 00 Docking | partial | Pane has close; no position menu |
+| G-28 | Pane title bar, close, "Window position" menu | Docking | 00 Docking | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | G-29 | View > Panes > Messages check toggle | MainWindow.xaml | 00 Docking | done | app.slint menu |
-| G-30 | Automation ids MessagesLevel:*, MessagesSearch, MessagesRegex, MessagesAutoScroll, MessagesClear, MessagesList | MessagesPane.xaml | 70 Messages pane (ids) | missing | |
+| G-30 | Automation ids MessagesLevel:*, MessagesSearch, MessagesRegex, MessagesAutoScroll, MessagesClear, MessagesList | MessagesPane.xaml | 70 Messages pane (ids) | divergence | decision 0033, matched in general, not to the pixel/id |
 | G-31 | Messages pane receives warnings (WebGL fallback, off-canvas, memory) | Logging | 40; 60 | partial | sink exists; those messages not produced |
 | G-32 | Log lines not localised, decimal point always | Logging | 00 Languages | done | tracing |
