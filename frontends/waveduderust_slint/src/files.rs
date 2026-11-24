@@ -3,13 +3,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Files picked in the browser, as (name, text), for the window's timer to open.
-pub(crate) type Inbox = Rc<RefCell<Vec<(String, String)>>>;
+/// Picked files for the window's timer to open, as (the layer a colour scheme is for, or `None` for a project; name;
+/// text).
+pub(crate) type Inbox = Rc<RefCell<Vec<(Option<Layer>, String, String)>>>;
 
-use crate::ui::Words;
+use crate::ui::{Layer, Words};
 
 const PROJECTS: &[&str] = &["wdproj", "xml"];
 const LEGACY: &[&str] = &["json"];
+const SCHEMES: &[&str] = &["wdscheme", "json"];
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn dialog(words: &Words<'_>) -> rfd::FileDialog {
@@ -19,14 +21,35 @@ pub(crate) fn dialog(words: &Words<'_>) -> rfd::FileDialog {
 /// Asks for a project; its name and text arrive in `inbox`.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn pick(inbox: &Inbox, words: &Words<'_>) {
-	let inbox = inbox.clone();
 	let dialog = rfd::AsyncFileDialog::new()
 		.add_filter(words.get_projects(), PROJECTS)
 		.add_filter(words.get_legacy_projects(), LEGACY);
+	pick_into(inbox, dialog, None);
+}
+
+/// Asks for a colour scheme for `layer`; it arrives in `inbox`.
+pub(crate) fn pick_scheme(inbox: &Inbox, words: &Words<'_>, layer: Layer) {
+	#[cfg(not(target_arch = "wasm32"))]
+	if let Some(path) = rfd::FileDialog::new().add_filter(words.get_schemes(), SCHEMES).pick_file() {
+		match std::fs::read(&path) {
+			Ok(bytes) => {
+				let text = String::from_utf8_lossy(&bytes).into_owned();
+				inbox.borrow_mut().push((Some(layer), path.display().to_string(), text));
+			}
+			Err(e) => tracing::error!("The colour scheme could not be loaded from '{}': {e}", path.display()),
+		}
+	}
+	#[cfg(target_arch = "wasm32")]
+	pick_into(inbox, rfd::AsyncFileDialog::new().add_filter(words.get_schemes(), SCHEMES), Some(layer));
+}
+
+#[cfg(target_arch = "wasm32")]
+fn pick_into(inbox: &Inbox, dialog: rfd::AsyncFileDialog, what: Option<Layer>) {
+	let inbox = inbox.clone();
 	wasm_bindgen_futures::spawn_local(async move {
 		if let Some(file) = dialog.pick_file().await {
 			let text = String::from_utf8_lossy(&file.read().await).into_owned();
-			inbox.borrow_mut().push((file.file_name(), text));
+			inbox.borrow_mut().push((what, file.file_name(), text));
 		}
 	});
 }

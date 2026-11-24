@@ -53,6 +53,8 @@ export global Form {
     in property <int> intensity-scheme: -1;
     // copies the layer's scheme into the project, points the layer at the copy and selects it
     callback edit-scheme-copy(layer: Layer);
+    // asks for a colour scheme file, adds its scheme to the project and points the layer at it
+    callback load-scheme-file(layer: Layer);
     // removes the user's scheme the layer names
     callback remove-my-scheme(layer: Layer);
     // the scheme shown among the user's: -1 no store to keep them, 0 not, 1 it is

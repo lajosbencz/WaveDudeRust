@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 7 | 11 | 14 | 0 | 0 |
 | I | Icons | 13 | 28 | 24 | 18 | 0 |
 | T | Project tree | 33 | 18 | 13 | 37 | 0 |
-| P | Properties | 285 | 26 | 12 | 2 | 0 |
+| P | Properties | 286 | 26 | 11 | 2 | 0 |
 | V | Preview | 8 | 8 | 95 | 0 | 1 |
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 459 | 225 | 307 | 98 | 6 |
+| | All | 460 | 225 | 306 | 98 | 6 |
 
 ## Cross-cutting
 
@@ -649,7 +649,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-37 | Combo box fills editor column, never narrower than widest word | Themes/Editors.xaml (EnumComboBox) | 30 Check box, combo box | partial | stretches; min 40px |
 | P-38 | Colour scheme picker combo: project schemes first (tag 'project', grey), shipped+user of layer kind, gradient strip + name | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | scheme-combo.slint SchemeRow/SchemeCombo; form.rs layer_schemes |
 | P-39 | Colour scheme picker: '<name> (not found)' greyed | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | SchemeEntry.missing, first row |
-| P-40 | Colour scheme picker action: Load from file... (.wdscheme/.json), slims sampled tables | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | missing |  |
+| P-40 | Colour scheme picker action: Load from file... (.wdscheme/.json), slims sampled tables | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | SchemeEntry.load; files::pick_scheme through the inbox (both targets); form::scheme_file slims with ColorScheme::simplify |
 | P-41 | Colour scheme picker action: Edit a copy in the project... | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | form.rs find_scheme; main.rs on_edit_scheme_copy |
 | P-42 | Colour scheme picker action: Remove from my schemes (user scheme only) | Controls/ColorSchemePicker.cs | 30 Colour scheme picker | done | SchemeEntry.remove-mine after the copy action while the layer's scheme resolves to a user scheme; main.rs on_remove_my_scheme |
 | P-43 | Colour swatch button opens picker popup below | Controls/ColorPickerButton.cs | 30 Colour swatch button; 70 | done | color-picker.slint ColorSwatch |

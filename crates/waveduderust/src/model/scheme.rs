@@ -216,6 +216,25 @@ impl ColorScheme {
 		removed
 	}
 
+	/// Keeps only the stops the straight line between their neighbours does not reproduce within `tolerance` (the largest
+	/// channel difference after rounding): Ramer-Douglas-Peucker over the sorted stops, the first and the last kept.
+	/// Returns whether any went.
+	pub fn simplify(&mut self, tolerance: f64) -> bool {
+		let sorted = self.sorted_stops();
+		let mut keep = vec![false; sorted.len()];
+		if let Some(last) = sorted.len().checked_sub(1) {
+			keep[0] = true;
+			keep[last] = true;
+			simplify_range(&sorted, 0, last, tolerance, &mut keep);
+		}
+		let kept: Vec<Stop> = sorted.into_iter().zip(&keep).filter_map(|(s, &k)| k.then_some(s)).collect();
+		let fewer = kept.len() < self.stops.len();
+		if fewer {
+			self.stops = kept;
+		}
+		fewer
+	}
+
 	/// A new scheme's stops, and those of one without: nine greys spread evenly from black to white.
 	pub fn grey_ramp() -> Self {
 		const STOPS: u32 = 9;
@@ -267,9 +286,46 @@ pub(crate) fn round_channel(c: f64) -> u8 {
 	c.round().clamp(0.0, 255.0) as u8
 }
 
+fn simplify_range(stops: &[Stop], first: usize, last: usize, tolerance: f64, keep: &mut [bool]) {
+	if last - first < 2 {
+		return;
+	}
+	let (a, b) = (&stops[first], &stops[last]);
+	let span = b.at - a.at;
+	let deviation = |p: &Stop| {
+		let t = if span <= 0.0 { 0.0 } else { (p.at - a.at) / span };
+		let channel = |x: u8, y: u8, z: u8| {
+			let on_line = round_channel(f64::from(x) + (f64::from(y) - f64::from(x)) * t);
+			f64::from(on_line.abs_diff(z))
+		};
+		channel(a.color.r, b.color.r, p.color.r)
+			.max(channel(a.color.g, b.color.g, p.color.g))
+			.max(channel(a.color.b, b.color.b, p.color.b))
+	};
+	let worst = (first + 1..last)
+		.map(|i| (i, deviation(&stops[i])))
+		.filter(|&(_, d)| d > tolerance)
+		.fold(None, |w: Option<(usize, f64)>, c| if w.is_some_and(|w| w.1 >= c.1) { w } else { Some(c) });
+	if let Some((worst, _)) = worst {
+		keep[worst] = true;
+		simplify_range(stops, first, worst, tolerance, keep);
+		simplify_range(stops, worst, last, tolerance, keep);
+	}
+}
+
 #[cfg(test)]
 mod stop_tests {
 	use super::*;
+
+	#[test]
+	fn simplify_keeps_the_bends_of_a_sampled_table() {
+		let ramp = |k: u32| Stop { at: f64::from(k) / 254.0, color: Rgb::new(k.min(127) as u8 * 2, 0, 0) };
+		let mut s = ColorScheme { stops: (0..255).map(ramp).collect(), ..ColorScheme::default() };
+		assert!(s.simplify(3.0));
+		let kept: Vec<u8> = s.stops.iter().map(|p| p.color.r).collect();
+		assert_eq!(kept, [0, 254, 254]);
+		assert!(!s.simplify(3.0));
+	}
 
 	#[test]
 	fn hsv_round_trips_and_rounds_half_to_even() {

@@ -85,7 +85,14 @@ pub fn has(schemes: &SchemeStore, name: &str) -> bool {
 
 /// The scheme of the store's `key`; `None` for a file of another type.
 fn read(store: &Store, key: &str) -> Option<Result<ColorScheme, String>> {
-	let path = Path::new(key);
+	let text = store.read(key).map_err(|e| e.to_string());
+	parse(key, || text.map(Option::unwrap_or_default))
+}
+
+/// The scheme a `.wdscheme` or `.json` file named `name` holds, its text from `text`; `None` for a file of another type.
+/// A file without a name of its own is named after the file.
+pub fn parse(name: &str, text: impl FnOnce() -> Result<String, String>) -> Option<Result<ColorScheme, String>> {
+	let path = Path::new(name);
 	let ext = path.extension().map_or_default(|e| e.to_string_lossy().to_ascii_lowercase());
 	let parse: fn(&str, &str) -> Result<ColorScheme, FormatError> = match ext.as_str() {
 		wdscheme::EXTENSION => wdscheme::read_str,
@@ -93,12 +100,7 @@ fn read(store: &Store, key: &str) -> Option<Result<ColorScheme, String>> {
 		_ => return None,
 	};
 	let stem = name_of_stem(&path.file_stem().map_or_default(|s| s.to_string_lossy()));
-	Some(
-		store
-			.read(key)
-			.map_err(|e| e.to_string())
-			.and_then(|text| parse(text.as_deref().unwrap_or_default(), &stem).map_err(|e| e.to_string())),
-	)
+	Some(text().and_then(|text| parse(&text, &stem).map_err(|e| e.to_string())))
 }
 
 /// The keys of the scheme folder, in the order of their names regardless of case.

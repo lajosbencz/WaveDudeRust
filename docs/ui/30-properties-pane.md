@@ -83,12 +83,12 @@ Text box plus a column of two small repeat buttons (up, down) on the right.
 
 Rows: the project's own schemes first (tag "project", grey), then the shipped and user schemes of the layer's
 kind (Field or Intensity); each row a gradient strip and the name (long names trimmed). A name the layer refers
-to that no scheme has: greyed "<name> (not found)". Two italic action rows at the end:
-- "Load from file..." (`.wdscheme` / `.json`): adds the scheme to the project and selects it. A sampled table
-  with many stops is slimmed to its bends.
-- "Edit a copy in the project...": copies the current scheme into the project as editable stops, selects the
-  copy on the layer and opens it in the tree.
-- "Remove from my schemes": a third action row, present only while the layer's scheme resolves to a user scheme
+to that no scheme has: greyed "<name> (not found)". Up to three italic action rows at the end:
+- "Load from file..." (`.wdscheme` / `.json`): adds the scheme to the project and selects it, one undo step. A
+  sampled table of more than 32 stops keeps only its bends (Ramer-Douglas-Peucker, 3 of 255 per channel).
+- "Edit a copy in the project...", present while the layer's scheme resolves: copies the current scheme into the
+  project as editable stops, selects the copy on the layer and opens it in the tree.
+- "Remove from my schemes", present only while the layer's scheme resolves to a user scheme
   (no project scheme of that name); removes that user scheme.
 
 A shared name is listed once, the user's scheme before a shipped one of that name. The row shown is the first of the layer's

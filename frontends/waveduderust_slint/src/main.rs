@@ -241,6 +241,21 @@ impl State {
 		}
 	}
 
+	/// Adds the scheme of the file `name` holding `text` to the project and points `layer` at it.
+	fn load_scheme(&mut self, layer: ui::Layer, name: &str, text: String) {
+		let scheme = match form::scheme_file(name, text) {
+			Ok(scheme) => scheme,
+			Err(e) => return tracing::error!("The colour scheme could not be loaded from '{name}': {e}"),
+		};
+		let mut added = String::new();
+		self.doc.edit_both(None, |p, v| {
+			p.add_color_scheme(scheme);
+			added.clone_from(&p.color_schemes[p.color_schemes.len() - 1].name);
+			form::layer_settings(v, layer).color_scheme.clone_from(&added);
+		});
+		tracing::info!("Colour scheme '{added}' loaded from '{name}' into the project");
+	}
+
 	/// Keeps the current scheme among the user's, or removes the user's of its name.
 	fn toggle_mine(&mut self) {
 		use waveduderust_platform::user_schemes;
@@ -1002,6 +1017,12 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		});
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
+	app.global::<ui::Form<'_>>().on_load_scheme_file(move |layer| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = st.borrow();
+		files::pick_scheme(&s.inbox, &app.global::<ui::Words<'_>>(), layer);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
 	app.global::<ui::Form<'_>>().on_toggle_mine(move || {
 		let Some(app) = weak.upgrade() else { return };
 		let s = &mut *st.borrow_mut();
@@ -1234,7 +1255,12 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				s.show(&app);
 			}
 			let picked: Vec<_> = s.inbox.borrow_mut().drain(..).collect();
-			for (name, text) in picked {
+			for (layer, name, text) in picked {
+				if let Some(layer) = layer {
+					s.load_scheme(layer, &name, text);
+					s.show(&app);
+					continue;
+				}
 				match s.doc.open_text(&name, &text) {
 					Ok(()) => {
 						s.opened();

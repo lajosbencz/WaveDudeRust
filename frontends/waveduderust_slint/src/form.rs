@@ -737,6 +737,24 @@ pub(crate) fn find_scheme<'a>(
 		.or_else(|| find(&user.user, name).or_else(|| find(built_in(), name)).map(|s| (s, false)))
 }
 
+/// The scheme of the colour scheme file `name` holding `text`; a sampled table of more than 32 colours keeps only its
+/// bends, as the shipped schemes.
+pub(crate) fn scheme_file(name: &str, text: String) -> Result<m::ColorScheme, String> {
+	const SAMPLED_TABLE_STOPS: usize = 32;
+	const SIMPLIFY_TOLERANCE: f64 = 3.0;
+	let mut scheme = waveduderust_platform::user_schemes::parse(name, || Ok(text))
+		.unwrap_or_else(|| Err("not a .wdscheme or .json file".into()))?;
+	let before = scheme.stops.len();
+	if before > SAMPLED_TABLE_STOPS && scheme.simplify(SIMPLIFY_TOLERANCE) {
+		tracing::info!(
+			"Colour scheme '{}': {before} sampled colours reduced to {} stops",
+			scheme.name,
+			scheme.stops.len()
+		);
+	}
+	Ok(scheme)
+}
+
 /// A Display layer picker's schemes: the project's, then the user's and the built-in ones of `kind` or of none, each
 /// name once, the user's before a built-in one of the same name; whether each is the project's.
 pub(crate) fn layer_schemes<'a>(
@@ -805,6 +823,7 @@ pub(crate) fn show_layer_schemes(
 		);
 		current = Some(0);
 	}
+	choices.push(ui::SchemeChoice { entry: ui::SchemeEntry::Load, ..Default::default() });
 	if resolved.is_some() {
 		choices.push(ui::SchemeChoice { entry: ui::SchemeEntry::EditCopy, ..Default::default() });
 	}
@@ -988,6 +1007,15 @@ fn add_point(points: &mut Vec<Point>) {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn a_sampled_scheme_file_keeps_its_bends() {
+		let colors: Vec<String> = (0..255).map(|k: u32| format!("[{},0,0]", k.min(127) * 2)).collect();
+		let text = format!("{{\"name\": \"Sampled\", \"colors\": [{}]}}", colors.join(","));
+		let scheme = scheme_file("x.json", text).unwrap();
+		assert_eq!((scheme.name.as_str(), scheme.stops.len()), ("Sampled", 3));
+		assert!(scheme_file("x.txt", String::new()).is_err());
+	}
 
 	#[test]
 	fn applying_writes_only_the_changed_fields() {

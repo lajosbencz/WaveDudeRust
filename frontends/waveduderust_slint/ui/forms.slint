@@ -231,7 +231,9 @@ component DisplayLayerForm inherits FormPanel {
             tip: @tr("Name of the colour scheme mapped onto the values.");
             picked(i) => {
                 let choice = root.schemes[i];
-                if (choice.entry == SchemeEntry.edit-copy) {
+                if (choice.entry == SchemeEntry.load) {
+                    Form.load-scheme-file(root.output);
+                } else if (choice.entry == SchemeEntry.edit-copy) {
                     Form.edit-scheme-copy(root.output);
                 } else if (choice.entry == SchemeEntry.remove-mine) {
                     Form.remove-my-scheme(root.output);

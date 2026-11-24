@@ -24,11 +24,12 @@ component SchemeRow inherits HorizontalLayout {
     Text {
         horizontal-stretch: 1;
         text: root.scheme.entry == SchemeEntry.missing ? @tr("{} (not found)", root.scheme.name)
+            : root.scheme.entry == SchemeEntry.load ? @tr("Load from file...")
             : root.scheme.entry == SchemeEntry.edit-copy ? @tr("Edit a copy in the project...")
             : root.scheme.entry == SchemeEntry.remove-mine ? @tr("Remove from my schemes") : root.scheme.name;
         vertical-alignment: center;
         overflow: elide;
-        font-italic: root.scheme.entry == SchemeEntry.edit-copy || root.scheme.entry == SchemeEntry.remove-mine;
+        font-italic: root.scheme.entry == SchemeEntry.load || root.scheme.entry == SchemeEntry.edit-copy || root.scheme.entry == SchemeEntry.remove-mine;
         color: root.scheme.entry == SchemeEntry.missing ? Theme.text-dim : Theme.text;
     }
     if root.scheme.entry == SchemeEntry.project: Text {
@@ -122,12 +123,13 @@ export component SchemeCombo inherits FocusScope {
             popup.show();
         }
     }
-    // the schemes' rows: a missing name comes first, up to two actions last
+    // the schemes' rows: a missing name comes first, up to three actions last
     property <int> first: root.choices.length > 0 && root.choices[0].entry == SchemeEntry.missing ? 1 : 0;
-    property <int> actions: (root.action(root.choices.length - 1) ? 1 : 0) + (root.action(root.choices.length - 1) && root.action(root.choices.length - 2) ? 1 : 0);
+    property <int> n: root.choices.length;
+    property <int> actions: !root.action(n - 1) ? 0 : !root.action(n - 2) ? 1 : !root.action(n - 3) ? 2 : 3;
     property <int> last: root.choices.length - 1 - root.actions;
     pure function action(i: int) -> bool {
-        i >= 0 && (root.choices[i].entry == SchemeEntry.edit-copy || root.choices[i].entry == SchemeEntry.remove-mine)
+        i >= 0 && (root.choices[i].entry == SchemeEntry.load || root.choices[i].entry == SchemeEntry.edit-copy || root.choices[i].entry == SchemeEntry.remove-mine)
     }
     function step(i: int) {
         if (root.last >= root.first) {
@@ -189,8 +191,8 @@ export component SchemeCombo inherits FocusScope {
             choices: root.choices;
             current: root.current;
             picked(i) => {
-                root.picked(i);
                 popup.close();
+                root.picked(i);
             }
             close => { popup.close(); }
         }
