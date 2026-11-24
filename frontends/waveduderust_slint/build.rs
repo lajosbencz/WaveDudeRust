@@ -1,15 +1,22 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-/// The topic folders of `examples/`, in the Examples dialog's tab order.
-const TOPICS: [&str; 6] = ["sources", "lenses", "gratings", "metasurfaces", "guides", "detectors"];
+/// The topic folders of `examples/` with their `ExampleTopic` variants (ui/examples.slint).
+const TOPICS: [(&str, &str); 6] = [
+	("sources", "Sources"),
+	("lenses", "Lenses"),
+	("gratings", "Gratings"),
+	("metasurfaces", "Metasurfaces"),
+	("guides", "Guides"),
+	("detectors", "Detectors"),
+];
 
 /// Embeds every `examples/<topic>/*.wdproj` as `(topic, file name, text)`.
 fn embed_examples() {
 	let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples").canonicalize().expect("examples/ exists");
 	println!("cargo::rerun-if-changed={}", root.display());
 	let mut out = String::from("&[\n");
-	for (topic, folder) in TOPICS.iter().enumerate() {
+	for (folder, topic) in TOPICS {
 		let dir = root.join(folder);
 		println!("cargo::rerun-if-changed={}", dir.display());
 		let mut files: Vec<_> = std::fs::read_dir(&dir)
@@ -20,7 +27,8 @@ fn embed_examples() {
 		files.sort();
 		for path in files {
 			let name = path.file_name().and_then(|n| n.to_str()).expect("a UTF-8 name");
-			let _ = writeln!(out, "\t({topic}, {name:?}, include_str!({:?})),", path.display().to_string());
+			let _ =
+				writeln!(out, "\t(ExampleTopic::{topic}, {name:?}, include_str!({:?})),", path.display().to_string());
 		}
 	}
 	out.push(']');

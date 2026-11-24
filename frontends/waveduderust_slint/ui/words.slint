@@ -1,0 +1,26 @@
+// The words the native file dialogs show, which Rust hands to them.
+
+export enum ExportFileFormat { mp4, mpeg1, avi, mov, mov-png, png, jpeg, exr, exr-root }
+
+export global Words {
+    // a project without a file
+    out property <string> untitled: @tr("Untitled");
+    out property <string> projects: @tr("WaveDude project");
+    out property <string> legacy-projects: @tr("Wave Dude 2D project");
+    // an export's default file name, without the extension
+    out property <string> export-file: @tr("export");
+    // an export format's filter; `still`: a single frame's file rather than a video or a sequence
+    public pure function export-filter(format: ExportFileFormat, still: bool) -> string {
+        if (format == ExportFileFormat.mp4) { return @tr("MP4 video, H.264"); }
+        if (format == ExportFileFormat.mpeg1) { return @tr("MPEG-1 video"); }
+        if (format == ExportFileFormat.avi) { return @tr("AVI video, uncompressed"); }
+        if (format == ExportFileFormat.mov) { return @tr("QuickTime movie, Animation codec, lossless"); }
+        if (format == ExportFileFormat.mov-png) { return @tr("QuickTime movie, PNG codec, lossless"); }
+        if (format == ExportFileFormat.png) { return still ? @tr("PNG image") : @tr("PNG image sequence"); }
+        if (format == ExportFileFormat.jpeg) { return still ? @tr("JPEG image") : @tr("JPEG image sequence"); }
+        if (format == ExportFileFormat.exr) {
+            return still ? @tr("OpenEXR image, 16-bit float data, intensity as I") : @tr("OpenEXR image sequence, 16-bit float data, intensity as I");
+        }
+        still ? @tr("OpenEXR image, 16-bit float data, intensity as \u{221A}I") : @tr("OpenEXR image sequence, 16-bit float data, intensity as \u{221A}I")
+    }
+}

@@ -4,7 +4,7 @@
 pub(crate) use native::{Exporting, start};
 use waveduderust::unstable::export::{ExportFormat, ExportLayers};
 
-use crate::ui::Command;
+use crate::ui::{Command, ExportFileFormat};
 #[cfg(target_arch = "wasm32")]
 pub(crate) use web::{Exporting, start};
 
@@ -29,19 +29,20 @@ impl Kind {
 	}
 
 	#[cfg_attr(target_arch = "wasm32", allow(dead_code, reason = "no exports in the browser yet"))]
-	fn formats(self) -> Vec<ExportFormat> {
+	/// The formats it offers, each with its name in the dialog.
+	fn formats(self) -> Vec<(ExportFormat, ExportFileFormat)> {
 		let all = [
-			ExportFormat::Mp4,
-			ExportFormat::Mpeg1,
-			ExportFormat::Avi,
-			ExportFormat::Mov,
-			ExportFormat::MovPng,
-			ExportFormat::Png,
-			ExportFormat::Jpeg,
-			ExportFormat::Exr,
-			ExportFormat::ExrRoot,
+			(ExportFormat::Mp4, ExportFileFormat::Mp4),
+			(ExportFormat::Mpeg1, ExportFileFormat::Mpeg1),
+			(ExportFormat::Avi, ExportFileFormat::Avi),
+			(ExportFormat::Mov, ExportFileFormat::Mov),
+			(ExportFormat::MovPng, ExportFileFormat::MovPng),
+			(ExportFormat::Png, ExportFileFormat::Png),
+			(ExportFormat::Jpeg, ExportFileFormat::Jpeg),
+			(ExportFormat::Exr, ExportFileFormat::Exr),
+			(ExportFormat::ExrRoot, ExportFileFormat::ExrRoot),
 		];
-		all.into_iter().filter(|f| matches!(self, Self::Run(_)) || f.supports_still()).collect()
+		all.into_iter().filter(|(f, _)| matches!(self, Self::Run(_)) || f.supports_still()).collect()
 	}
 }
 
@@ -61,7 +62,7 @@ mod native {
 	use waveduderust_platform::settings::{AppDirs, Settings};
 
 	use super::Kind;
-	use crate::ui::ExportProgress;
+	use crate::ui::{ExportProgress, Words};
 
 	/// An export in progress.
 	pub(crate) struct Exporting {
@@ -105,14 +106,17 @@ mod native {
 		view: &View,
 		position: u32,
 		settings: &Settings,
+		words: &Words<'_>,
 	) -> Option<Exporting> {
 		let mut dialog = rfd::FileDialog::new();
-		for f in kind.formats() {
-			dialog = dialog.add_filter(format!("{f:?}"), f.extensions());
+		let still = matches!(kind, Kind::Frame(_));
+		for (format, name) in kind.formats() {
+			dialog = dialog.add_filter(words.invoke_export_filter(name, still), format.extensions());
 		}
+		let first = kind.formats()[0].0;
 		let out: PathBuf =
-			dialog.set_file_name(format!("export.{}", kind.formats()[0].default_extension())).save_file()?;
-		let format = ExportFormat::from_path(&out).unwrap_or(kind.formats()[0]);
+			dialog.set_file_name(format!("{}.{}", words.get_export_file(), first.default_extension())).save_file()?;
+		let format = ExportFormat::from_path(&out).unwrap_or(first);
 		let (layers, still) = match kind {
 			Kind::Run(layers) => (layers, None),
 			Kind::Frame(layers) => (layers, Some(position as usize)),
@@ -169,7 +173,7 @@ mod web {
 	use waveduderust_platform::settings::Settings;
 
 	use super::Kind;
-	use crate::ui::ExportProgress;
+	use crate::ui::{ExportProgress, Words};
 
 	pub(crate) enum Exporting {}
 
@@ -183,7 +187,7 @@ mod web {
 		}
 	}
 
-	pub(crate) fn start(_: Kind, _: &Project, _: &View, _: u32, _: &Settings) -> Option<Exporting> {
+	pub(crate) fn start(_: Kind, _: &Project, _: &View, _: u32, _: &Settings, _: &Words<'_>) -> Option<Exporting> {
 		tracing::warn!("exports are not in the browser build yet");
 		None
 	}

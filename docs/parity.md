@@ -29,7 +29,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | ID | Feature | Next source (file:line) | Spec (docs/ui file, section) | Slint | Note |
 |---|---|---|---|---|---|
 | X-01 | Window title `<app> - <file>` + `*` for unsaved edits; suggested name; `Untitled`; app name alone with no project | MainWindow.xaml.cs | 00, Main window | done | app name "WaveDude Rust" (rename, not a divergence entry) |
-| X-02 | Title shows the full path by setting | MainWindow.xaml.cs | 00, Main window; decision 0008 | partial | setting row exists; title ignores it |
+| X-02 | Title shows the full path by setting | MainWindow.xaml.cs | 00, Main window; decision 0008 | done | app.slint `title` from `file-path` while `title-full-path` |
 | X-03 | Window min 800x500, default 1280x800, centred on first start | MainWindow.xaml | 00, Main window | done | |
 | X-04 | Window size, position, state persisted; never minimised; kept inside the monitor's work area | MainWindow.xaml.cs | 00, Main window; 80 | missing | settings fields exist in waveduderust_platform, unused |
 | X-05 | Resize grip | MainWindow.xaml | 00, Main window | missing | |
@@ -277,7 +277,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
 | D-01 | Main window: min 800x500, default 1280x800 centred, resizable with grip | MW:34-45 (Width/Height/Min, CenterScreen, CanResizeWithGrip) | ui/00, ui/80 | partial | app.slint:78-83 min/preferred sizes done; not centred explicitly, size/position not restored (S-01) |
-| D-02 | Window title: "<app> - <file>", asterisk when dirty, "Untitled", full path option, just app name when nothing | MW:134-141 (TitleConverter) | ui/00 Main window | partial | document.rs:150-153; always "WaveDude Rust - name", TitleFullPath ignored (S-21), no suggested-name rule check |
+| D-02 | Window title: "<app> - <file>", asterisk when dirty, "Untitled", full path option, just app name when nothing | MW:134-141 (TitleConverter) | ui/00 Main window | partial | app.slint `title`: "WaveDude Rust - " name or path, "*" when dirty, "Untitled"; no suggested-name rule check |
 | D-03 | Window icon (App.ico/png) | MW:35 `Icon="App.ico"`, WPF/App.ico | ui/70 | missing | no `icon:` in app.slint (assets/icons exist for packaging only) |
 | D-04 | Taskbar progress for export | MW:129-131 | divergences "Windows integrations" | divergence | not ported (decision 0008 (14)) |
 | D-05 | All windows use theme, UI zoom, current language | App.xaml | ui/70 intro | partial | theme done (Theme global), zoom/language missing |
@@ -381,7 +381,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-18 | ExportFilterIndex int | UIS:276 | ui/80 | missing | |
 | S-19 | ExportArchive bool (false), Settings > Export | not in Next | ui/80, ui/70 | missing | no Export section |
 | S-20 | PartDescriptionExpanded bool (true), description header on part forms | UIS:286 | ui/80 | missing | no part forms with description header |
-| S-21 | TitleFullPath bool (false), Settings > General "Full path in the title" | not in Next | ui/80, ui/70 | partial | row exists; Document::title ignores it (document.rs:150) |
+| S-21 | TitleFullPath bool (false), Settings > General "Full path in the title" | not in Next | ui/80, ui/70 | done | app.slint `title-full-path` |
 | S-22 | H264Profile Baseline/Main/High, Settings > Export | not in Next | ui/80, ui/70 | missing | no row; export uses Profile::default() |
 | S-23 | UseOpenH264 bool or absent, Settings > Export check box with Cisco notice | not in Next | ui/80, ui/70 | partial | consumed in export.rs h264(); no row/notice |
 | S-24 | CheckForUpdates bool or absent, Settings > Updates "Look for a new version at each launch" | not in Next | ui/80, ui/70 | partial | row "Check for updates at start" (label differs); nothing checks |

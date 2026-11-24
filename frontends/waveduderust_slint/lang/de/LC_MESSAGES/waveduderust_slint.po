@@ -104,6 +104,10 @@ msgstr "30-60-90"
 msgid "4th-order Laplacian"
 msgstr "Laplace 4. Ordnung"
 
+#. AboutTagline
+msgid "A 2D wave simulator"
+msgstr "Ein 2D-Wellensimulator"
+
 #. Kind.FresnelLensPart
 msgid "A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, equal in width or in depth, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and their division; a flat surface stays flat."
 msgstr "Eine Fresnel-Linse: eine Linse, deren gekrümmte Flächen von der Achse bis zum Rand in Zonen geschnitten sind, gleich breit oder gleich tief, wobei der Bogen jeder Zone auf der Scheitelebene neu beginnt, sodass eine dünne Platte das Licht wie eine dicke Linse bricht. Die Einstellungen sind die der Linse, dazu die Zahl der Zonen und ihre Teilung; eine ebene Fläche bleibt eben."
@@ -372,6 +376,10 @@ msgstr "Profil der Entspiegelung"
 msgid "Colour scheme"
 msgstr "Farbschema"
 
+#. TreeColorSchemes
+msgid "Colour schemes"
+msgstr "Farbschemata"
+
 #. Label.SourceArray.SizeX
 msgid "Columns"
 msgstr "Spalten"
@@ -395,6 +403,14 @@ msgstr "Durchgehend"
 #. MenuEditCopy
 msgid "Copy"
 msgstr "Kopieren"
+
+#. OpenError
+msgid "Could not open '{}'."
+msgstr "'{}' konnte nicht geöffnet werden."
+
+#. SaveError
+msgid "Could not save '{}'."
+msgstr "'{}' konnte nicht gespeichert werden."
 
 #. Enum.ProbeDetector.Counting
 msgid "Counting"
@@ -472,6 +488,10 @@ msgstr "Beugungsgitter"
 msgid "Diffuser"
 msgstr "Diffusor"
 
+#. TreeDisplay
+msgid "Display"
+msgstr "Darstellung"
+
 #. Hint.SourceArray.SpacingX
 msgid "Distance between neighbouring columns in canvas pixels."
 msgstr "Abstand benachbarter Spalten in Leinwandpixeln."
@@ -483,6 +503,10 @@ msgstr "Abstand benachbarter Zeilen in Leinwandpixeln."
 #. Hint.LensPart.Thickness
 msgid "Distance between the two surfaces on the axis in pixels."
 msgstr "Abstand der beiden Flächen auf der Achse in Pixeln."
+
+#. DialogDiscard
+msgid "Don't save"
+msgstr "Nicht speichern"
 
 #. Hint.Display.SourceMarkersInExport
 msgid "Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos."
@@ -1080,6 +1104,10 @@ msgstr "Anzahl der Seiten, 3 bis 64."
 msgid "Number of zones each curved surface is cut into, from the axis to the rim, equal in width or in depth as the zone division says. At each zone's inner edge the arc starts again at the vertex plane, so the plate stays thin; 1 is a plain lens."
 msgstr "Anzahl der Zonen, in die jede gekrümmte Fläche von der Achse bis zum Rand geschnitten wird, gleich breit oder gleich tief, wie die Zonenteilung es sagt. Am inneren Rand jeder Zone beginnt der Bogen auf der Scheitelebene neu, sodass die Platte dünn bleibt; 1 ist eine einfache Linse."
 
+#. DialogOk
+msgid "OK"
+msgstr "OK"
+
 #. MenuAddOrGate
 msgid "OR"
 msgstr "OR"
@@ -1147,6 +1175,10 @@ msgstr "Fenster"
 #. ToolAddPart
 msgid "Part"
 msgstr "Bauteil"
+
+#. TreeParts
+msgid "Parts"
+msgstr "Bauteile"
 
 #. MenuEditPaste
 msgid "Paste"
@@ -1243,6 +1275,10 @@ msgstr "Sondengraphen im Export"
 #. Label.Display.ProbeMarkersInExport
 msgid "Probe markers in the export"
 msgstr "Sondenmarkierungen im Export"
+
+#. TreeProbes
+msgid "Probes"
+msgstr "Sonden"
 
 #. PaneProject
 msgid "Project"
@@ -1412,6 +1448,14 @@ msgstr "Speichern &unter..."
 msgid "Save As..."
 msgstr "Speichern unter..."
 
+#. SaveChangesFormat
+msgid "Save the changes to {}?"
+msgstr "Änderungen an {} speichern?"
+
+#. TreeScene
+msgid "Scene"
+msgstr "Szene"
+
 #. Label.Scene.Image
 msgid "Scene image"
 msgstr "Szenenbild"
@@ -1500,6 +1544,10 @@ msgstr "Quellfrequenzfaktor"
 msgid "Source markers in the export"
 msgstr "Quellenmarkierungen im Export"
 
+#. TreeSources
+msgid "Sources"
+msgstr "Quellen"
+
 #. SectionImageSources
 msgid "Sources from the image"
 msgstr "Quellen aus dem Bild"
@@ -1552,6 +1600,10 @@ msgstr "Gestoppt"
 msgid "The angle at the apex: 180° minus the two base angles"
 msgstr "Der Winkel an der Spitze: 180° minus die beiden Grundwinkel"
 
+#. ExportError
+msgid "The export failed."
+msgstr "Der Export ist fehlgeschlagen."
+
 #. TipEdgeThickness
 msgid "Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim"
 msgstr "Dicke am Rand: die Mittendicke abzüglich dessen, was die konvexen Flächen nehmen, zuzüglich dessen, was die konkaven hinzufügen; 0, wenn sich die Flächen am Rand treffen"
@@ -1595,6 +1647,10 @@ msgstr "Typ"
 #. MenuEditUndo
 msgid "Undo"
 msgstr "Rückgängig"
+
+#. Untitled
+msgid "Untitled"
+msgstr "Unbenannt"
 
 #. Hint.Probe.YMax
 msgid "Upper bound of the value axis when it is not auto-scaled."

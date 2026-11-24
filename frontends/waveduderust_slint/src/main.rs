@@ -71,7 +71,7 @@ struct State {
 	exporting: Option<export::Exporting>,
 	inbox: files::Inbox,
 	pasted: clipboard::Pasted,
-	example_topic: usize,
+	example_topic: ui::ExampleTopic,
 	example_search: String,
 	/// The examples the dialog lists, by index into [`examples::all`].
 	example_rows: Vec<usize>,
@@ -216,7 +216,9 @@ impl State {
 		app.set_tree_rows(ModelRc::new(VecModel::from(rows)));
 		let current = self.nodes.iter().position(|&n| n == self.selection.current());
 		app.set_tree_current(current.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1));
-		app.set_window_title(self.doc.title().into());
+		app.set_file_name(self.doc.name().unwrap_or_default().into());
+		app.set_file_path(self.doc.path.as_deref().map_or_default(|p| p.display().to_string()).into());
+		app.set_dirty(self.doc.dirty());
 		app.set_commands(self.commands());
 		// the native menus (muda) read `&` as an access key on Windows and drop it on macOS
 		let native = cfg!(any(windows, target_os = "macos"));
@@ -234,17 +236,15 @@ impl State {
 		}
 		let node = self.selection.current();
 		let kind = form::kind(&self.doc.project, node);
-		let (mut heading, rows) = if kind == ui::FormKind::None {
+		let rows = if kind == ui::FormKind::None {
 			rows::of_selected(&self.doc.project, &self.doc.view, node)
 		} else {
-			Default::default()
+			Vec::new()
 		};
-		let folder = tree::folder(&self.doc.project, self.selection.current());
-		if let Some((label, _)) = folder {
-			heading = label.into();
-		}
-		app.set_props_heading(heading.into());
-		app.set_props_entries(folder.map_or(-1, |(_, n)| i32::try_from(n).unwrap_or(i32::MAX)));
+		app.set_props_kind(node.kind());
+		app.set_props_heading(tree::name(&self.doc.project, node).into());
+		let folder = tree::folder(&self.doc.project, node);
+		app.set_props_entries(folder.map_or(-1, |n| i32::try_from(n).unwrap_or(i32::MAX)));
 		if self.doc.generation != self.form_seen {
 			self.form_seen = self.doc.generation;
 			self.form_base = self.doc.generation;
@@ -386,15 +386,8 @@ fn command(state: &mut State, app: &AppWindow, command: Command) {
 fn act(state: &mut State, app: &AppWindow, action: Action) {
 	if action.replaces() && state.doc.dirty() {
 		state.pending = Some(action);
-		let name = state.doc.name();
-		app.set_modal(modal(
-			ui::ModalKind::Question,
-			"WaveDude Rust",
-			&format!("Save the changes to {name}?"),
-			&["Save", "Don't save", "Cancel"],
-			0,
-			2,
-		));
+		let name = state.doc.name().unwrap_or_else(|| app.global::<ui::Words<'_>>().get_untitled().into());
+		tell(app, ui::Message::SaveChanges, &name);
 		state.show(app);
 		return;
 	}
@@ -441,7 +434,8 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			app.set_welcome_shown(true);
 		}
 		Command::RandomExample => {
-			let nanos = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
+			let nanos =
+				web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
 			return act(state, app, Action::Example(nanos as usize % examples::all().len()));
 		}
 		Command::Examples => {
@@ -457,11 +451,11 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		}
 		Command::Open => {
 			#[cfg(not(target_arch = "wasm32"))]
-			if let Some(path) = files::dialog().pick_file() {
+			if let Some(path) = files::dialog(&app.global::<ui::Words<'_>>()).pick_file() {
 				open(state, app, path);
 			}
 			#[cfg(target_arch = "wasm32")]
-			files::pick(&state.inbox);
+			files::pick(&state.inbox, &app.global::<ui::Words<'_>>());
 		}
 		Command::Github => {
 			if let Err(e) = webbrowser::open(env!("CARGO_PKG_REPOSITORY")) {
@@ -481,7 +475,14 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			if state.exporting.is_none()
 				&& let Some(kind) = kind
 			{
-				state.exporting = export::start(kind, &state.doc.project, &state.doc.view, state.playback.position, &state.settings);
+				state.exporting = export::start(
+					kind,
+					&state.doc.project,
+					&state.doc.view,
+					state.playback.position,
+					&state.settings,
+					&app.global::<ui::Words<'_>>(),
+				);
 				if matches!(kind, export::Kind::Run(_)) && state.exporting.is_some() {
 					state.last_export = Some(kind);
 				}
@@ -491,14 +492,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			show_settings(state, app);
 			app.set_settings_shown(true);
 		}
-		Command::About => app.set_modal(modal(
-			ui::ModalKind::Info,
-			"About WaveDude Rust",
-			&format!("WaveDude Rust {}\nA 2D wave simulator\n\nBased on the work of WaveDude Next; Jeroen Vleggaar, Huygens Optics, author of Wave Dude 2D, Copyright (C) 2026; 0x23 (Diffraction Limited), author of WaveSimulator2D.\n\nThis program is free software under the GNU General Public License, version 3 or later.", env!("CARGO_PKG_VERSION")),
-			&["Close"],
-			0,
-			0,
-		)),
+		Command::About => tell(app, ui::Message::About, env!("CARGO_PKG_VERSION")),
 		Command::Undo => {
 			state.doc.undo();
 			state.selection.collapse();
@@ -587,8 +581,6 @@ fn remember(state: &mut State, path: &std::path::Path) {
 
 /// Pushes the Examples dialog's topics and the rows of the topic, filtered by the search.
 fn show_examples(state: &mut State, app: &AppWindow) {
-	let topics: Vec<slint::SharedString> = examples::TOPICS.iter().map(|t| (*t).into()).collect();
-	app.set_example_topics(ModelRc::from(topics.as_slice()));
 	let query = state.example_search.to_lowercase();
 	let matches = |e: &examples::Example| {
 		query.is_empty() || e.title.to_lowercase().contains(&query) || e.description.to_lowercase().contains(&query)
@@ -607,7 +599,7 @@ fn show_examples(state: &mut State, app: &AppWindow) {
 			description: examples::all()[i].description.as_str().into(),
 		})
 		.collect();
-	app.set_example_topic(i32::try_from(state.example_topic).unwrap_or_default());
+	app.set_example_topic(state.example_topic);
 	app.set_example_rows(ModelRc::new(VecModel::from(rows)));
 }
 
@@ -659,6 +651,7 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 		tracing::warn!("language: {e}");
 	}
 	let s = &state.settings;
+	app.set_title_full_path(s.title_full_path);
 	app.set_preview_stacked(s.preview_orientation == waveduderust_platform::settings::Orientation::Vertical);
 	app.global::<ui::Form<'_>>().set_described(s.part_description_expanded);
 	state.doc.set_limit(s.undo_steps as usize);
@@ -679,23 +672,20 @@ fn show_settings(state: &mut State, app: &AppWindow) {
 }
 
 /// A message window's content (docs/ui/70, Message window).
-fn modal(kind: ui::ModalKind, title: &str, text: &str, buttons: &[&str], default: i32, cancel: i32) -> ui::Modal {
-	let buttons: Vec<slint::SharedString> = buttons.iter().map(|b| (*b).into()).collect();
-	ui::Modal {
-		shown: true,
-		kind,
-		title: title.into(),
-		text: text.into(),
-		buttons: ModelRc::from(buttons.as_slice()),
-		default,
-		cancel,
-	}
+/// The project's file name, an untitled one's in the UI's language.
+fn file_name(state: &State, app: &AppWindow) -> String {
+	state.doc.name().unwrap_or_else(|| format!("{}.wdproj", app.global::<ui::Words<'_>>().get_untitled()))
+}
+
+/// Shows `message`, `arg` the value its text names.
+fn tell(app: &AppWindow, message: ui::Message, arg: &str) {
+	app.set_modal(ui::Modal { message, arg: arg.into() });
 }
 
 /// Saves the project, to a picked file for Save As or without a file; `false` when cancelled or failed.
 #[cfg(target_arch = "wasm32")]
 fn save(state: &mut State, app: &AppWindow, _: bool) -> bool {
-	let name = state.doc.name();
+	let name = file_name(state, app);
 	match files::download(&name, &state.doc.text()) {
 		Ok(()) => {
 			state.doc.mark_saved();
@@ -704,14 +694,7 @@ fn save(state: &mut State, app: &AppWindow, _: bool) -> bool {
 		}
 		Err(e) => {
 			tracing::error!("cannot save {name}: {e}");
-			app.set_modal(modal(
-				ui::ModalKind::Error,
-				"WaveDude Rust",
-				&format!("Could not save '{name}'."),
-				&["OK"],
-				0,
-				0,
-			));
+			tell(app, ui::Message::SaveFailed, &name);
 			false
 		}
 	}
@@ -719,9 +702,13 @@ fn save(state: &mut State, app: &AppWindow, _: bool) -> bool {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
-	let Some(path) = state.doc.path.clone().filter(|_| !pick).or_else(|| {
-		files::dialog().set_file_name(state.doc.suggested.as_deref().unwrap_or("Untitled.wdproj")).save_file()
-	}) else {
+	let Some(path) = state
+		.doc
+		.path
+		.clone()
+		.filter(|_| !pick)
+		.or_else(|| files::dialog(&app.global::<ui::Words<'_>>()).set_file_name(file_name(state, app)).save_file())
+	else {
 		return false;
 	};
 	match state.doc.save_as(&path) {
@@ -732,27 +719,20 @@ fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
 		}
 		Err(e) => {
 			tracing::error!("cannot save {}: {e}", path.display());
-			app.set_modal(modal(
-				ui::ModalKind::Error,
-				"WaveDude Rust",
-				&format!("Could not save '{}'.", path.display()),
-				&["OK"],
-				0,
-				0,
-			));
+			tell(app, ui::Message::SaveFailed, &path.display().to_string());
 			false
 		}
 	}
 }
 
 /// The answer to the message window: for the unsaved edits prompt, Save, Don't save or Cancel.
-fn answer(state: &mut State, app: &AppWindow, button: i32) {
+fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 	app.set_modal(ui::Modal::default());
 	if let Some(then) = state.pending.take() {
-		let go = match button {
-			0 => save(state, app, false),
-			1 => true,
-			_ => false,
+		let go = match answer {
+			ui::Answer::Save => save(state, app, false),
+			ui::Answer::Discard => true,
+			ui::Answer::Ok | ui::Answer::Cancel => false,
 		};
 		if go {
 			state.doc.mark_saved();
@@ -817,14 +797,7 @@ fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 		}
 		Err(e) => {
 			tracing::error!("cannot open {}: {e}", path.display());
-			app.set_modal(modal(
-				ui::ModalKind::Error,
-				"WaveDude Rust",
-				&format!("Could not open '{}'.", path.display()),
-				&["OK"],
-				0,
-				0,
-			));
+			tell(app, ui::Message::OpenFailed, &path.display().to_string());
 		}
 	}
 	state.show(app);
@@ -859,7 +832,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		exporting: None,
 		inbox: files::Inbox::default(),
 		pasted: clipboard::Pasted::default(),
-		example_topic: 0,
+		example_topic: ui::ExampleTopic::default(),
 		example_search: String::new(),
 		example_rows: Vec::new(),
 		last_export: None,
@@ -1067,7 +1040,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.on_example_topic_picked(move |i| {
 		if let Some(app) = weak.upgrade() {
 			let s = &mut *st.borrow_mut();
-			s.example_topic = usize::try_from(i).unwrap_or_default();
+			s.example_topic = i;
 			show_examples(s, &app);
 		}
 	});
@@ -1206,14 +1179,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 							Ok(written) => tracing::info!("exported {written}"),
 							Err(e) => {
 								tracing::error!("{e}");
-								app.set_modal(modal(
-									ui::ModalKind::Error,
-									"WaveDude Rust",
-									"The export failed.",
-									&["OK"],
-									0,
-									0,
-								));
+								tell(&app, ui::Message::ExportFailed, "");
 							}
 						}
 					}
@@ -1232,14 +1198,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 					}
 					Err(e) => {
 						tracing::error!("cannot open {name}: {e}");
-						app.set_modal(modal(
-							ui::ModalKind::Error,
-							"WaveDude Rust",
-							&format!("Could not open '{name}'."),
-							&["OK"],
-							0,
-							0,
-						));
+						tell(&app, ui::Message::OpenFailed, &name);
 					}
 				}
 			}

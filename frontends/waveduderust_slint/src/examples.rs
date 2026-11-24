@@ -2,23 +2,15 @@
 
 use std::sync::OnceLock;
 
-/// The topics in tab order.
-pub(crate) const TOPICS: [&str; 6] = [
-	"Sources and coherence",
-	"Lenses and imaging",
-	"Gratings and filters",
-	"Metasurfaces and diffusers",
-	"Guides, cavities and logic",
-	"Detectors and statistics",
-];
+use crate::ui::ExampleTopic;
 
 /// `(topic, file name, text)` of every example.
-const FILES: &[(usize, &str, &str)] = include!(concat!(env!("OUT_DIR"), "/examples.rs"));
+const FILES: &[(ExampleTopic, &str, &str)] = include!(concat!(env!("OUT_DIR"), "/examples.rs"));
 
 /// An example as the dialog lists it.
 #[derive(Debug)]
 pub(crate) struct Example {
-	pub(crate) topic: usize,
+	pub(crate) topic: ExampleTopic,
 	pub(crate) file: &'static str,
 	pub(crate) title: String,
 	pub(crate) description: String,
@@ -59,7 +51,9 @@ mod tests {
 		for e in all() {
 			assert!(waveduderust::io::wdproj::read_str(e.text).is_ok(), "{}", e.file);
 		}
-		assert!((0..TOPICS.len()).all(|t| all().iter().any(|e| e.topic == t)));
+		use ExampleTopic as T;
+		let topics = [T::Sources, T::Lenses, T::Gratings, T::Metasurfaces, T::Guides, T::Detectors];
+		assert!(topics.iter().all(|&t| all().iter().any(|e| e.topic == t)));
 		assert_eq!(title("Example02_Coherent_source_gaussian_beam.wdproj"), "Coherent source gaussian beam");
 	}
 }

@@ -6,20 +6,24 @@ use std::rc::Rc;
 /// Files picked in the browser, as (name, text), for the window's timer to open.
 pub(crate) type Inbox = Rc<RefCell<Vec<(String, String)>>>;
 
-const PROJECTS: (&str, &[&str]) = ("WaveDude project", &["wdproj", "xml"]);
-const LEGACY: (&str, &[&str]) = ("Wave Dude 2D", &["json"]);
+use crate::ui::Words;
+
+const PROJECTS: &[&str] = &["wdproj", "xml"];
+const LEGACY: &[&str] = &["json"];
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn dialog() -> rfd::FileDialog {
-	rfd::FileDialog::new().add_filter(PROJECTS.0, PROJECTS.1).add_filter(LEGACY.0, LEGACY.1)
+pub(crate) fn dialog(words: &Words<'_>) -> rfd::FileDialog {
+	rfd::FileDialog::new().add_filter(words.get_projects(), PROJECTS).add_filter(words.get_legacy_projects(), LEGACY)
 }
 
 /// Asks for a project; its name and text arrive in `inbox`.
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn pick(inbox: &Inbox) {
+pub(crate) fn pick(inbox: &Inbox, words: &Words<'_>) {
 	let inbox = inbox.clone();
+	let dialog = rfd::AsyncFileDialog::new()
+		.add_filter(words.get_projects(), PROJECTS)
+		.add_filter(words.get_legacy_projects(), LEGACY);
 	wasm_bindgen_futures::spawn_local(async move {
-		let dialog = rfd::AsyncFileDialog::new().add_filter(PROJECTS.0, PROJECTS.1).add_filter(LEGACY.0, LEGACY.1);
 		if let Some(file) = dialog.pick_file().await {
 			let text = String::from_utf8_lossy(&file.read().await).into_owned();
 			inbox.borrow_mut().push((file.file_name(), text));

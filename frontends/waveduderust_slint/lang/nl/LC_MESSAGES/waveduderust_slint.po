@@ -104,6 +104,10 @@ msgstr "30-60-90"
 msgid "4th-order Laplacian"
 msgstr "4e-orde-Laplaciaan"
 
+#. AboutTagline
+msgid "A 2D wave simulator"
+msgstr "Een 2D-golfsimulator"
+
 #. Kind.FresnelLensPart
 msgid "A Fresnel lens: a lens whose curved surfaces are cut into zones from the axis to the rim, equal in width or in depth, each zone's arc starting again at the vertex plane, so a thin plate bends light as a thick lens would. The settings are the lens's, with the number of zones and their division; a flat surface stays flat."
 msgstr "Een fresnellens: een lens waarvan de gekromde oppervlakken in zones zijn geknipt, van de as tot de rand, even breed of even diep, waarbij de boog van elke zone opnieuw begint op het topvlak, zodat een dunne plaat het licht buigt als een dikke lens. De instellingen zijn die van de lens, met het aantal zones en hun verdeling; een vlak oppervlak blijft vlak."
@@ -372,6 +376,10 @@ msgstr "Coatingprofiel"
 msgid "Colour scheme"
 msgstr "Kleurenschema"
 
+#. TreeColorSchemes
+msgid "Colour schemes"
+msgstr "Kleurenschema's"
+
 #. Label.SourceArray.SizeX
 msgid "Columns"
 msgstr "Kolommen"
@@ -395,6 +403,14 @@ msgstr "Continu"
 #. MenuEditCopy
 msgid "Copy"
 msgstr "Kopiëren"
+
+#. OpenError
+msgid "Could not open '{}'."
+msgstr "Kan '{}' niet openen."
+
+#. SaveError
+msgid "Could not save '{}'."
+msgstr "Kan '{}' niet opslaan."
 
 #. Enum.ProbeDetector.Counting
 msgid "Counting"
@@ -472,6 +488,10 @@ msgstr "Buigingsroosters"
 msgid "Diffuser"
 msgstr "Diffusor"
 
+#. TreeDisplay
+msgid "Display"
+msgstr "Weergave"
+
 #. Hint.SourceArray.SpacingX
 msgid "Distance between neighbouring columns in canvas pixels."
 msgstr "Afstand tussen naburige kolommen in canvaspixels."
@@ -483,6 +503,10 @@ msgstr "Afstand tussen naburige rijen in canvaspixels."
 #. Hint.LensPart.Thickness
 msgid "Distance between the two surfaces on the axis in pixels."
 msgstr "Afstand tussen de twee oppervlakken op de as in pixels."
+
+#. DialogDiscard
+msgid "Don't save"
+msgstr "Niet opslaan"
 
 #. Hint.Display.SourceMarkersInExport
 msgid "Draw the enabled sources (the marker, a composite source's emitter dots, the name) over exported frames and videos."
@@ -1080,6 +1104,10 @@ msgstr "Aantal zijden, 3 tot 64."
 msgid "Number of zones each curved surface is cut into, from the axis to the rim, equal in width or in depth as the zone division says. At each zone's inner edge the arc starts again at the vertex plane, so the plate stays thin; 1 is a plain lens."
 msgstr "Aantal zones waarin elk gekromd oppervlak wordt geknipt, van de as tot de rand, even breed of even diep zoals de zoneverdeling zegt. Aan de binnenrand van elke zone begint de boog opnieuw op het topvlak, zodat de plaat dun blijft; 1 is een gewone lens."
 
+#. DialogOk
+msgid "OK"
+msgstr "OK"
+
 #. MenuAddOrGate
 msgid "OR"
 msgstr "OR"
@@ -1147,6 +1175,10 @@ msgstr "Panelen"
 #. ToolAddPart
 msgid "Part"
 msgstr "Onderdeel"
+
+#. TreeParts
+msgid "Parts"
+msgstr "Onderdelen"
 
 #. MenuEditPaste
 msgid "Paste"
@@ -1243,6 +1275,10 @@ msgstr "Sondegrafieken in de export"
 #. Label.Display.ProbeMarkersInExport
 msgid "Probe markers in the export"
 msgstr "Sondemarkeringen in de export"
+
+#. TreeProbes
+msgid "Probes"
+msgstr "Sondes"
 
 #. PaneProject
 msgid "Project"
@@ -1412,6 +1448,14 @@ msgstr "Opslaan &als..."
 msgid "Save As..."
 msgstr "Opslaan als..."
 
+#. SaveChangesFormat
+msgid "Save the changes to {}?"
+msgstr "Wijzigingen in {} opslaan?"
+
+#. TreeScene
+msgid "Scene"
+msgstr "Scène"
+
 #. Label.Scene.Image
 msgid "Scene image"
 msgstr "Scèneafbeelding"
@@ -1500,6 +1544,10 @@ msgstr "Bronfrequentiefactor"
 msgid "Source markers in the export"
 msgstr "Bronmarkeringen in de export"
 
+#. TreeSources
+msgid "Sources"
+msgstr "Bronnen"
+
 #. SectionImageSources
 msgid "Sources from the image"
 msgstr "Bronnen uit de afbeelding"
@@ -1552,6 +1600,10 @@ msgstr "Gestopt"
 msgid "The angle at the apex: 180° minus the two base angles"
 msgstr "De hoek aan de top: 180° min de twee basishoeken"
 
+#. ExportError
+msgid "The export failed."
+msgstr "De export is mislukt."
+
 #. TipEdgeThickness
 msgid "Thickness at the rim: the centre thickness less what the convex surfaces take, plus what the concave ones add; 0 when the surfaces meet at the rim"
 msgstr "Dikte aan de rand: de middendikte min wat de bolle oppervlakken nemen, plus wat de holle toevoegen; 0 als de oppervlakken elkaar aan de rand raken"
@@ -1595,6 +1647,10 @@ msgstr "Type"
 #. MenuEditUndo
 msgid "Undo"
 msgstr "Ongedaan maken"
+
+#. Untitled
+msgid "Untitled"
+msgstr "Naamloos"
 
 #. Hint.Probe.YMax
 msgid "Upper bound of the value axis when it is not auto-scaled."

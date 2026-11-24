@@ -29,11 +29,16 @@ pub(crate) enum Node {
 
 impl Node {
 	/// The row's kind as the UI draws it.
-	fn kind(self) -> TreeKind {
+	pub(crate) fn kind(self) -> TreeKind {
 		match self {
 			Self::Project => TreeKind::Project,
-			Self::Scene | Self::Simulation | Self::Display => TreeKind::Settings,
-			Self::Sources | Self::Parts | Self::Probes | Self::Schemes => TreeKind::Folder,
+			Self::Scene => TreeKind::Scene,
+			Self::Simulation => TreeKind::Simulation,
+			Self::Display => TreeKind::Display,
+			Self::Sources => TreeKind::Sources,
+			Self::Parts => TreeKind::Parts,
+			Self::Probes => TreeKind::Probes,
+			Self::Schemes => TreeKind::Schemes,
 			Self::Source(_) => TreeKind::Source,
 			Self::Part(_) => TreeKind::Part,
 			Self::Probe(_) => TreeKind::Probe,
@@ -76,23 +81,23 @@ pub(crate) fn rows(project: &Project, selection: &Selection, collapsed: &[Node])
 			},
 		});
 	};
-	push(Node::Project, 0, "Project", None);
-	push(Node::Scene, 1, "Scene", None);
-	push(Node::Simulation, 1, "Simulation", None);
-	push(Node::Display, 1, "Display", None);
-	push(Node::Sources, 1, folder(project, Node::Sources).expect("a folder").0, None);
+	push(Node::Project, 0, "", None);
+	push(Node::Scene, 1, "", None);
+	push(Node::Simulation, 1, "", None);
+	push(Node::Display, 1, "", None);
+	push(Node::Sources, 1, "", None);
 	for (i, s) in project.sources.iter().enumerate() {
 		push(Node::Source(i), 2, &s.name, Some(s.enabled));
 	}
-	push(Node::Parts, 1, folder(project, Node::Parts).expect("a folder").0, None);
+	push(Node::Parts, 1, "", None);
 	for (i, p) in project.parts.iter().enumerate() {
 		push(Node::Part(i), 2, &p.base.name, Some(p.base.enabled));
 	}
-	push(Node::Probes, 1, folder(project, Node::Probes).expect("a folder").0, None);
+	push(Node::Probes, 1, "", None);
 	for (i, p) in project.probes.iter().enumerate() {
 		push(Node::Probe(i), 2, &p.name, Some(p.active));
 	}
-	push(Node::Schemes, 1, folder(project, Node::Schemes).expect("a folder").0, None);
+	push(Node::Schemes, 1, "", None);
 	for (i, s) in project.color_schemes.iter().enumerate() {
 		push(Node::Scheme(i), 2, &s.name, None);
 	}
@@ -258,13 +263,25 @@ pub(crate) fn within(node: Node, ancestor: Node) -> bool {
 	std::iter::successors(Some(node), |&n| parent(n)).any(|n| n == ancestor)
 }
 
-/// A folder row's label and item count.
-pub(crate) fn folder(project: &Project, node: Node) -> Option<(&'static str, usize)> {
+/// An item row's name; empty for the other rows.
+pub(crate) fn name(project: &Project, node: Node) -> &str {
+	match node {
+		Node::Source(i) => project.sources.get(i).map(|s| s.name.as_str()),
+		Node::Part(i) => project.parts.get(i).map(|p| p.base.name.as_str()),
+		Node::Probe(i) => project.probes.get(i).map(|p| p.name.as_str()),
+		Node::Scheme(i) => project.color_schemes.get(i).map(|s| s.name.as_str()),
+		_ => None,
+	}
+	.unwrap_or_default()
+}
+
+/// A folder row's item count.
+pub(crate) fn folder(project: &Project, node: Node) -> Option<usize> {
 	Some(match node {
-		Node::Sources => ("Sources", project.sources.len()),
-		Node::Parts => ("Parts", project.parts.len()),
-		Node::Probes => ("Probes", project.probes.len()),
-		Node::Schemes => ("Colour schemes", project.color_schemes.len()),
+		Node::Sources => project.sources.len(),
+		Node::Parts => project.parts.len(),
+		Node::Probes => project.probes.len(),
+		Node::Schemes => project.color_schemes.len(),
 		_ => return None,
 	})
 }

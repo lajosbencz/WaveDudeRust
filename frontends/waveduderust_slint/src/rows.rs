@@ -109,10 +109,9 @@ macro_rules! with_object {
 	};
 }
 
-/// The heading and rows of the selected object's form.
-pub(crate) fn of_selected(project: &Project, view: &View, node: Node) -> (String, Vec<PropRow>) {
-	let rows = with_object!(project, view, node, |of| rows(of), Vec::new());
-	(format!("{node:?}"), rows)
+/// The rows of the selected object's form.
+pub(crate) fn of_selected(project: &Project, view: &View, node: Node) -> Vec<PropRow> {
+	with_object!(project, view, node, |of| rows(of), Vec::new())
 }
 
 /// Sets row `row` of the selected object's form.

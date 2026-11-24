@@ -150,20 +150,13 @@ impl Document {
 		self.project != self.saved
 	}
 
-	/// The window title (docs/ui/00, Main window): the file name, `*` for unsaved edits, `Untitled` without a file.
-	/// The file's name, the suggested one or "Untitled.wdproj".
-	pub(crate) fn name(&self) -> String {
+	/// The file's name or the suggested one; `None` for an untitled project.
+	pub(crate) fn name(&self) -> Option<String> {
 		self.path
 			.as_deref()
 			.and_then(Path::file_name)
 			.map(|n| n.to_string_lossy().into_owned())
 			.or_else(|| self.suggested.clone())
-			.unwrap_or_else(|| "Untitled.wdproj".into())
-	}
-
-	pub(crate) fn title(&self) -> String {
-		let name = self.name();
-		format!("WaveDude Rust - {name}{}", if self.dirty() { "*" } else { "" })
 	}
 }
 

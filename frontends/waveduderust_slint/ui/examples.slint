@@ -1,6 +1,14 @@
 import { LineEdit, Button, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
+// The examples' topics, in tab order.
+export enum ExampleTopic { sources, lenses, gratings, metasurfaces, guides, detectors }
+
+struct Tab {
+    topic: ExampleTopic,
+    title: string,
+}
+
 export struct ExampleRow {
     title: string,
     description: string,
@@ -9,11 +17,23 @@ export struct ExampleRow {
 // The Examples dialog (docs/ui/70, Examples dialog): topic tabs, search, the topic's examples, Open and Cancel.
 export component ExamplesLayer inherits Rectangle {
     in-out property <bool> shown;
-    in property <[string]> topics;
-    in property <int> topic;
+    in property <ExampleTopic> topic;
     in property <[ExampleRow]> rows;
     in-out property <int> current: 0;
-    callback pick-topic(int);
+    callback pick-topic(ExampleTopic);
+
+    property <[Tab]> tabs: [
+        { topic: ExampleTopic.sources, title: @tr("Sources and coherence") },
+        { topic: ExampleTopic.lenses, title: @tr("Lenses and imaging") },
+        { topic: ExampleTopic.gratings, title: @tr("Gratings and filters") },
+        { topic: ExampleTopic.metasurfaces, title: @tr("Metasurfaces and diffusers") },
+        { topic: ExampleTopic.guides, title: @tr("Guides, cavities and logic") },
+        { topic: ExampleTopic.detectors, title: @tr("Detectors and statistics") },
+    ];
+    // the shown topic's tab
+    property <int> shown-tab: root.topic == ExampleTopic.sources ? 0 : root.topic == ExampleTopic.lenses ? 1
+        : root.topic == ExampleTopic.gratings ? 2 : root.topic == ExampleTopic.metasurfaces ? 3
+        : root.topic == ExampleTopic.guides ? 4 : 5;
     callback search(string);
     callback open(int);
 
@@ -26,8 +46,8 @@ export component ExamplesLayer inherits Rectangle {
             if (e.text == Key.Return) { root.open(root.current); return accept; }
             if (e.text == Key.UpArrow) { root.current = max(0, root.current - 1); return accept; }
             if (e.text == Key.DownArrow) { root.current = min(root.rows.length - 1, root.current + 1); return accept; }
-            if (e.text == Key.LeftArrow) { root.pick-topic(max(0, root.topic - 1)); return accept; }
-            if (e.text == Key.RightArrow) { root.pick-topic(min(root.topics.length - 1, root.topic + 1)); return accept; }
+            if (e.text == Key.LeftArrow) { root.pick-topic(root.tabs[max(0, root.shown-tab - 1)].topic); return accept; }
+            if (e.text == Key.RightArrow) { root.pick-topic(root.tabs[min(root.tabs.length - 1, root.shown-tab + 1)].topic); return accept; }
             reject
         }
     }
@@ -48,16 +68,16 @@ export component ExamplesLayer inherits Rectangle {
             }
             HorizontalLayout {
                 spacing: 2px;
-                for name[i] in root.topics: Rectangle {
+                for t in root.tabs: Rectangle {
                     height: Theme.row-height;
                     width: label.preferred-width + 16px;
-                    background: i == root.topic ? Theme.accent : tab.has-hover ? Theme.button-hover : transparent;
+                    background: t.topic == root.topic ? Theme.accent : tab.has-hover ? Theme.button-hover : transparent;
                     label := Text {
-                        text: name;
-                        color: i == root.topic ? Theme.selection-text : Theme.text;
+                        text: t.title;
+                        color: t.topic == root.topic ? Theme.selection-text : Theme.text;
                     }
                     tab := TouchArea {
-                        clicked => { root.pick-topic(i); root.current = 0; }
+                        clicked => { root.pick-topic(t.topic); root.current = 0; }
                     }
                 }
             }

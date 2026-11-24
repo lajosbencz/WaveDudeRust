@@ -1,32 +1,41 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
-export enum ModalKind { info, question, error }
+// The messages the app shows; `none` while none is.
+export enum Message { none, save-changes, about, open-failed, save-failed, export-failed }
 
+// A message and the one value its text names: a file's name or path, or the version.
 export struct Modal {
-    shown: bool,
-    kind: ModalKind,
-    title: string,
+    message: Message,
+    arg: string,
+}
+
+export enum Answer { ok, save, discard, cancel }
+
+// One of a message's buttons.
+struct Choice {
     text: string,
-    buttons: [string],
-    // The button Enter presses.
-    default: int,
-    // The button Esc and the close box press.
-    cancel: int,
+    answer: Answer,
 }
 
 // The app's own message window (docs/ui/70, Message window), modal over the main window.
 export component ModalLayer inherits Rectangle {
     in property <Modal> modal;
-    callback answer(int);
+    callback answer(Answer);
 
-    visible: modal.shown;
+    property <bool> asks: modal.message == Message.save-changes;
+    property <bool> fails: modal.message == Message.open-failed || modal.message == Message.save-failed || modal.message == Message.export-failed;
+    property <[Choice]> choices: root.asks
+        ? [{ text: @tr("Save"), answer: Answer.save }, { text: @tr("Don't save"), answer: Answer.discard }, { text: @tr("Cancel"), answer: Answer.cancel }]
+        : [{ text: modal.message == Message.about ? @tr("Close") : @tr("OK"), answer: Answer.ok }];
+
+    visible: modal.message != Message.none;
     background: #00000080;
     TouchArea { }
     focus := FocusScope {
         key-pressed(e) => {
-            if (e.text == Key.Escape) { root.answer(modal.cancel); return accept; }
-            if (e.text == Key.Return) { root.answer(modal.default); return accept; }
+            if (e.text == Key.Escape) { root.answer(root.asks ? Answer.cancel : Answer.ok); return accept; }
+            if (e.text == Key.Return) { root.answer(root.choices[0].answer); return accept; }
             reject
         }
     }
@@ -41,25 +50,32 @@ export component ModalLayer inherits Rectangle {
             padding: 12px;
             spacing: 12px;
             Text {
-                text: modal.title;
+                text: modal.message == Message.about ? @tr("About WaveDude Rust") : "WaveDude Rust";
                 font-weight: 700;
                 color: Theme.text;
             }
             HorizontalLayout {
                 spacing: 12px;
-                if modal.kind != ModalKind.info: Rectangle {
+                if root.asks || root.fails: Rectangle {
                     width: 32px;
                     height: 32px;
                     border-radius: 16px;
-                    background: modal.kind == ModalKind.error ? Theme.status-error : Theme.accent;
+                    background: root.fails ? Theme.status-error : Theme.accent;
                     Text {
-                        text: modal.kind == ModalKind.error ? "!" : "?";
+                        text: root.fails ? "!" : "?";
                         color: #ffffff;
                         font-weight: 700;
                     }
                 }
                 Text {
-                    text: modal.text;
+                    text: modal.message == Message.save-changes ? @tr("Save the changes to {}?", modal.arg)
+                        : modal.message == Message.open-failed ? @tr("Could not open '{}'.", modal.arg)
+                        : modal.message == Message.save-failed ? @tr("Could not save '{}'.", modal.arg)
+                        : modal.message == Message.export-failed ? @tr("The export failed.")
+                        : modal.message == Message.about ? "WaveDude Rust \{modal.arg}\n" + @tr("A 2D wave simulator") + "\n\n"
+                            + @tr("Based on the work of WaveDude Next; Jeroen Vleggaar, Huygens Optics, author of Wave Dude 2D, Copyright (C) 2026; 0x23 (Diffraction Limited), author of WaveSimulator2D.")
+                            + "\n\n" + @tr("This program is free software under the GNU General Public License, version 3 or later.")
+                        : "";
                     wrap: word-wrap;
                     color: Theme.text;
                     horizontal-stretch: 1;
@@ -68,10 +84,10 @@ export component ModalLayer inherits Rectangle {
             HorizontalLayout {
                 alignment: end;
                 spacing: 6px;
-                for label[i] in modal.buttons: Button {
-                    text: label;
-                    primary: i == modal.default;
-                    clicked => { root.answer(i); }
+                for choice[i] in root.choices: Button {
+                    text: choice.text;
+                    primary: i == 0;
+                    clicked => { root.answer(choice.answer); }
                 }
             }
         }

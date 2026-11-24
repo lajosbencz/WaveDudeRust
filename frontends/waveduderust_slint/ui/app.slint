@@ -8,21 +8,22 @@ export { Palette } from "std-widgets.slint";
 import { MenuIcons } from "menu-icons.slint";
 import { Pane } from "pane.slint";
 import { Splitter } from "splitter.slint";
-import { ProjectTree, TreeRow, TreeKind } from "tree.slint";
+import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
 import { Form, NumberParse } from "form.slint";
 export { Form, NumberParse }
+export { Words, ExportFileFormat } from "words.slint";
 import { Properties, PropRow, PropKind } from "properties.slint";
 import { Preview } from "preview.slint";
 import { Timeline, TransportBar, Transport } from "timeline.slint";
 import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
-import { ModalLayer, Modal, ModalKind } from "modal.slint";
+import { ModalLayer, Modal, Message, Answer } from "modal.slint";
 import { SettingsLayer } from "settings.slint";
 import { WelcomeLayer } from "welcome.slint";
-import { ExamplesLayer, ExampleRow } from "examples.slint";
+import { ExamplesLayer, ExampleRow, ExampleTopic } from "examples.slint";
 
 export { NumberLogic, NumberSpec } from "number-box.slint";
 export { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
-export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle, Modal, ModalKind, ExampleRow }
+export { Theme, TreeRow, TreeKind, PropRow, PropKind, Transport, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 // Which menu commands can run (Next's CanExecute rules, docs/ui/10).
@@ -53,7 +54,11 @@ export struct Commands {
 }
 
 export component AppWindow inherits Window {
-    in property <string> window-title: "WaveDude Rust";
+    // the project's file: its name (empty without one), its full path, unsaved edits
+    in property <string> file-name;
+    in property <string> file-path;
+    in property <bool> dirty;
+    in property <bool> title-full-path;
     in property <string> status-text;
     in property <Commands> commands;
     // The menu bar is Windows' native one (not `Platform.os`, which names a browser's host on the web).
@@ -79,10 +84,9 @@ export component AppWindow inherits Window {
     in property <Transport> transport;
     in property <Modal> modal;
     in-out property <bool> examples-shown;
-    in property <[string]> example-topics;
-    in property <int> example-topic;
+    in property <ExampleTopic> example-topic;
     in property <[ExampleRow]> example-rows;
-    callback example-topic-picked(int);
+    callback example-topic-picked(ExampleTopic);
     callback example-search(string);
     callback example-open(int);
     in-out property <bool> welcome-shown;
@@ -97,7 +101,7 @@ export component AppWindow inherits Window {
     in property <[PropRow]> settings-rows;
     callback settings-pick(int);
     callback settings-set(int, string) -> bool;
-    callback modal-answer(int);
+    callback modal-answer(Answer);
     in property <[LogRow]> log-rows;
     in property <[LevelToggle]> log-levels;
     callback log-toggle(LogLevel);
@@ -106,6 +110,8 @@ export component AppWindow inherits Window {
     callback seek(int);
     callback transport-action(TransportAction);
     callback transport-speed(float);
+    // the selected row: its kind and an item's name
+    in property <TreeKind> props-kind;
     in property <string> props-heading;
     // a folder's item count; -1 for other rows
     in property <int> props-entries: -1;
@@ -131,7 +137,7 @@ export component AppWindow inherits Window {
     callback open-recent(int);
     // The main area takes the keys back once the last overlay closed.
     function overlays-closed() {
-        if (!self.welcome-shown && !self.examples-shown && !self.settings-shown && !self.modal.shown) {
+        if (!self.welcome-shown && !self.examples-shown && !self.settings-shown && self.modal.message == Message.none) {
             keys.focus();
         }
     }
@@ -140,7 +146,7 @@ export component AppWindow inherits Window {
     changed settings-shown => { self.overlays-closed(); }
     changed modal => { self.overlays-closed(); }
 
-    title: root.window-title;
+    title: "WaveDude Rust - " + (root.title-full-path && root.file-path != "" ? root.file-path : root.file-name != "" ? root.file-name : @tr("Untitled")) + (root.dirty ? "*" : "");
     icon: @image-url("../assets/icon.svg");
     min-width: 800px;
     min-height: 500px;
@@ -296,7 +302,7 @@ export component AppWindow inherits Window {
                         min-height: 60px;
                         close => { root.properties-shown = false; }
                         Properties {
-                            heading: root.props-heading;
+                            heading: TreeWords.label(root.props-kind, root.props-heading);
                             entries: root.props-entries;
                             rows: root.props-rows;
                             error: root.props-error;
@@ -440,7 +446,6 @@ export component AppWindow inherits Window {
         min-height: 0px;
         max-height: 100000px;
         shown <=> root.examples-shown;
-        topics: root.example-topics;
         topic: root.example-topic;
         rows: root.example-rows;
         pick-topic(i) => { root.example-topic-picked(i); }

@@ -92,6 +92,5 @@ row. Each phase is one coding pass, then a separate verification of the diff, th
 6. Timeline, transport, status bar (L-), live editing and runs (R-), Messages pane (G-).
 7. Dialogs and settings (D-, S-), then docking and window persistence (X-).
 
-Known bugs: the title ignores `TitleFullPath`;
-the generic rows ignore the declared ranges (P-32); text typed into a number box and not committed is dropped when
+Known bugs: the generic rows ignore the declared ranges (P-32); text typed into a number box and not committed is dropped when
 the selection moves.
