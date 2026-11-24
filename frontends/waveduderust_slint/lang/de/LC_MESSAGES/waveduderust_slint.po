@@ -4,6 +4,86 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language: de\n"
 
+#. MenuFileClose
+msgid "&Close Project"
+msgstr "Projekt s&chließen"
+
+#. MenuEditCopy
+msgid "&Copy"
+msgstr "&Kopieren"
+
+#. MenuEditDelete
+msgid "&Delete"
+msgstr "&Löschen"
+
+#. MenuEdit
+msgid "&Edit"
+msgstr "&Bearbeiten"
+
+#. MenuFileExport
+msgid "&Export"
+msgstr "&Exportieren"
+
+#. MenuFile
+msgid "&File"
+msgstr "&Datei"
+
+#. MenuHelp
+msgid "&Help"
+msgstr "&Hilfe"
+
+#. MenuFileNew
+msgid "&New Project"
+msgstr "&Neues Projekt"
+
+#. MenuFileOpen
+msgid "&Open Project..."
+msgstr "Projekt &öffnen..."
+
+#. MenuViewPanes
+msgid "&Panes"
+msgstr "&Fenster"
+
+#. MenuEditPaste
+msgid "&Paste"
+msgstr "&Einfügen"
+
+#. MenuSimulationPause
+msgid "&Pause"
+msgstr "&Pause"
+
+#. MenuFileRecent
+msgid "&Recent Projects"
+msgstr "&Zuletzt geöffnet"
+
+#. MenuEditRedo
+msgid "&Redo"
+msgstr "&Wiederholen"
+
+#. MenuSimulationResume
+msgid "&Resume"
+msgstr "&Fortsetzen"
+
+#. MenuSimulationRun
+msgid "&Run"
+msgstr "&Starten"
+
+#. MenuFileSave
+msgid "&Save"
+msgstr "&Speichern"
+
+#. MenuSimulation
+msgid "&Simulation"
+msgstr "&Simulation"
+
+#. MenuEditUndo
+msgid "&Undo"
+msgstr "&Rückgängig"
+
+#. MenuView
+msgid "&View"
+msgstr "&Ansicht"
+
 #. ButtonAutoBrightness
 msgid "Auto"
 msgstr "Auto"
@@ -33,12 +113,20 @@ msgid "Copy"
 msgstr "Kopieren"
 
 #. MenuEditCut
+msgid "Cu&t"
+msgstr "&Ausschneiden"
+
+#. MenuEditCut
 msgid "Cut"
 msgstr "Ausschneiden"
 
 #. MenuEditDelete
 msgid "Delete"
 msgstr "Löschen"
+
+#. MenuFileExit
+msgid "E&xit"
+msgstr "&Beenden"
 
 #. MenuEdit
 msgid "Edit"
@@ -47,6 +135,10 @@ msgstr "Bearbeiten"
 #. TipPreviewSetOut
 msgid "End the export range at this frame (O)"
 msgstr "Exportbereich bei diesem Bild beenden (O)"
+
+#. MenuFileExamples
+msgid "Exam&ples"
+msgstr "Beis&piele"
 
 #. MenuFileExamples
 msgid "Examples"
@@ -60,9 +152,29 @@ msgstr "Beenden"
 msgid "Export"
 msgstr "Exportieren"
 
+#. MenuFileExportField
+msgid "Export &field..."
+msgstr "&Feld exportieren..."
+
+#. MenuFileExportIntensity
+msgid "Export &intensity..."
+msgstr "&Intensität exportieren..."
+
+#. MenuFileExportLast
+msgid "Export &last"
+msgstr "Letzten Export &wiederholen"
+
+#. MenuFileExportBoth
+msgid "Export b&oth..."
+msgstr "&Beides exportieren..."
+
 #. MenuFileExportBoth
 msgid "Export both..."
 msgstr "Beides exportieren..."
+
+#. MenuFileExportFieldFrame
+msgid "Export field f&rame..."
+msgstr "Feld-Ein&zelbild exportieren..."
 
 #. MenuFileExportFieldFrame
 msgid "Export field frame..."
@@ -71,6 +183,10 @@ msgstr "Feld-Einzelbild exportieren..."
 #. MenuFileExportField
 msgid "Export field..."
 msgstr "Feld exportieren..."
+
+#. MenuFileExportIntensityFrame
+msgid "Export intensity fra&me..."
+msgstr "Intensitäts-Einzelbild e&xportieren..."
 
 #. MenuFileExportIntensityFrame
 msgid "Export intensity frame..."
@@ -156,13 +272,33 @@ msgstr "Fenster"
 msgid "Paste"
 msgstr "Einfügen"
 
+#. MenuSimulationPause
+msgid "Pause"
+msgstr "Pause"
+
 #. TipPreviewPause
 msgid "Pause (Space)"
 msgstr "Pause (Leertaste)"
 
+#. MenuSimulationPausePlayback
+msgid "Pause pla&yback"
+msgstr "Wie&dergabe anhalten"
+
+#. MenuSimulationPausePlayback
+msgid "Pause playback"
+msgstr "Wiedergabe anhalten"
+
 #. TipPreviewPauseRun
 msgid "Pause the simulation (F6)"
 msgstr "Simulation anhalten (F6)"
+
+#. MenuSimulationPlay
+msgid "Pla&y"
+msgstr "Wie&dergabe"
+
+#. MenuSimulationPlay
+msgid "Play"
+msgstr "Wiedergabe"
 
 #. TipPreviewPlay
 msgid "Play (Space)"
@@ -196,6 +332,10 @@ msgstr "Wiederholen"
 msgid "Remove (Del)"
 msgstr "Entfernen (Entf)"
 
+#. MenuSimulationResume
+msgid "Resume"
+msgstr "Fortsetzen"
+
 #. MenuSimulationRun
 msgid "Run"
 msgstr "Starten"
@@ -204,9 +344,17 @@ msgstr "Starten"
 msgid "Run the simulation from the start (F5)"
 msgstr "Simulation von vorn starten (F5)"
 
+#. MenuSimulationStop
+msgid "S&top"
+msgstr "S&topp"
+
 #. MenuFileSave
 msgid "Save"
 msgstr "Speichern"
+
+#. MenuFileSaveAs
+msgid "Save &As..."
+msgstr "Speichern &unter..."
 
 #. MenuFileSaveAs
 msgid "Save As..."
@@ -215,6 +363,10 @@ msgstr "Speichern unter..."
 #. MessagesSearchHint
 msgid "Search"
 msgstr "Suchen"
+
+#. MenuProjectSelectAll
+msgid "Select &all"
+msgstr "Alles au&swählen"
 
 #. MenuProjectSelectAll
 msgid "Select all"

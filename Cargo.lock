@@ -6395,6 +6395,7 @@ dependencies = [
  "waveduderust_platform",
  "web-sys",
  "web-time",
+ "webbrowser",
  "winresource",
 ]
 

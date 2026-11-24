@@ -11,10 +11,10 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 5 | 20 | 10 | 5 | 0 |
-| M | Menus and shortcuts | 23 | 31 | 73 | 13 | 0 |
+| X | Cross-cutting | 5 | 20 | 9 | 6 | 0 |
+| M | Menus and shortcuts | 23 | 28 | 70 | 19 | 0 |
 | D | Dialogs and windows | 17 | 29 | 28 | 5 | 0 |
-| S | Settings | 6 | 11 | 15 | 0 | 0 |
+| S | Settings | 6 | 12 | 14 | 0 | 0 |
 | I | Icons | 11 | 30 | 24 | 18 | 0 |
 | T | Project tree | 4 | 17 | 76 | 4 | 0 |
 | P | Properties | 3 | 114 | 206 | 2 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 27 | 36 | 24 | 0 | 3 |
 | R | Live editing and runs | 16 | 13 | 30 | 0 | 2 |
 | G | Messages pane | 8 | 11 | 13 | 0 | 0 |
-| | All | 128 | 320 | 594 | 47 | 6 |
+| | All | 128 | 318 | 589 | 54 | 6 |
 
 ## Cross-cutting
 
@@ -57,7 +57,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-27 | Square corners; WPF box model paddings (buttons 10,3; toolbar 6,1,6,0; text 3,2) | Themes/Controls.xaml, Editors.xaml | 90, cross-cutting | partial | std-widgets (fluent) rounded corners |
 | X-28 | Tooltips on every toolbar/transport button | Themes/Controls.xaml ToolTip style | 90, cross-cutting | divergence | every IconButton's tip through Slint's Tooltip (divergences.md, Tooltips) |
 | X-29 | Every control reachable by Tab and arrows | - | 00, Keyboard first | partial | tree, toolbars, timeline not all tab stops |
-| X-30 | Menu bar out of Tab cycle; F10/Alt enters; mnemonics unique per menu | MainWindow.xaml, Strings | 00, Keyboard first | missing | Slint MenuBar: no mnemonics, no F10 |
+| X-30 | Menu bar out of Tab cycle; F10/Alt enters; mnemonics unique per menu | MainWindow.xaml, Strings | 00, Keyboard first | divergence | Windows' native bar: F10/Alt and Next's access keys; Slint's drawn bar (Linux, web): none (docs/blockers.md) |
 | X-31 | UI zoom 0.5x..3x: Ctrl+=, Ctrl+-, Ctrl+0, Settings > General; persisted `UiZoom`; touch default 2x | Theming/WindowZoom.cs | 00, UI zoom | missing | |
 | X-32 | `--zoom=<f>` switch; unknown `--` switches logged | App.xaml.cs | 00, Startup | missing | |
 | X-33 | Per-monitor DPI; lines on whole device pixels | App.manifest | 00, UI zoom | partial | Slint scale factor; not verified |
@@ -79,9 +79,9 @@ Spec: ui/10 = docs/ui/10-menus-and-shortcuts.md, ui/70 = 70-dialogs-and-windows.
 Status: done / partial / missing / divergence. "not in spec" = found in Next, absent from docs/ui.
 
 Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise; not repeated per row):
-- G1 mnemonics: no underlined letter / access key on any menu title or entry (titles are plain @tr strings, app.slint:93-154); no DE/FR/NL strings (Language setting missing, S-05). Alt+letter, F10/Alt bar entry, letter-picks-entry, Left/Right neighbour menu: whatever Slint's native MenuBar gives, not the spec's rules.
-- G2 icons: no menu entry has an icon (Slint MenuItem carries none), see section I.
-- G3 enabled rules: no enabled-rule table; only Undo/Redo/Run/Pause/Stop carry `enabled:`; every other entry is always enabled.
+- G1 access keys: Next's per language on Windows' native menu bar (`menu-text`, tools/next-strings.py); none on Linux and the web, where Slint draws the bar (docs/blockers.md). Titles translate through `@tr` (X-34).
+- G2 icons: Material Symbols per theme (`MenuIcons`, divergences.md Icons), see section I.
+- G3 enabled rules: `Commands` (State::commands) carries Next's CanExecute rules for the menu bar; entries without a rule are noted per row.
 - G4 modal greying: menu bar is not greyed or blocked while a modal shows (app.slint has no such binding).
 - G5 shortcut text: native MenuBar shows only entries that declare `shortcut:`; Edit/Delete keys come from the FocusScope (app.slint:160-172), so the text is not shown.
 
@@ -90,39 +90,39 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 #### M File menu
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-01 | File menu header, Mn F/D/F/D (EN F) | MW:217, SE:28 | ui/10 File | done | app:93-94, entries below; G1 |
+| M-01 | File menu header, Mn F/D/F/D (EN F) | MW:217, SE:28 | ui/10 File | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
 | M-02 | New Project, Ctrl+N, always on, asks unsaved edits then blank project (open edges, rim -32, no sources), timeline frame 0 | MW:251, SE:29 | ui/10 File #1 | done | app:95, main.rs "new" arm, dirty prompt via pending. Not checked: blank-project defaults (rim -32) come from core Document::new |
 | M-03 | Open Project..., Ctrl+O, asks unsaved edits; dialog filters: WaveDude Next (*.wdproj), Wave Dude 2D (configuration.json;*.json), XML (*.xml), All files | MW:252, SE:30, SE:440 | ui/10 File #2 | partial | app:96. files.rs:9-10 filters: "WaveDude project" (wdproj, xml) and "Wave Dude 2D" (json) only: no "All files", labels differ; configuration.json import goes via legacy::import_str (document.rs:60) done |
-| M-04 | Recent Projects > : one entry per recent file, newest first, full path plain text, click opens; empty submenu when none | MW:253-255, SE:31 | ui/10 File #3 | missing | app:97 is an empty `Menu`; settings.push_recent stores (main.rs:213) but nothing fills the submenu. Max 10 |
+| M-04 | Recent Projects > : one entry per recent file, newest first, full path plain text, click opens; empty submenu when none | MW:253-255, SE:31 | ui/10 File #3 | done | app.slint `recent-files` from Settings.recent_files, full path, newest first; "recent:<i>" opens after the unsaved-edits question; none on the web (no paths) |
 | M-05 | Examples... entry (spec: dialog of 53 projects; Next: File > Examples submenu of its shipped examples, tooltip=description) | MW:257-259, SE:32 | ui/10 File #4 | divergence | app:98 opens dialog (D-section); divergence row "Examples" in docs/divergences.md |
-| M-06 | Welcome Page... entry (port), Mn W/K/A/W | not in Next | ui/10 File #4a | done | app:99 -> main.rs "welcome" |
+| M-06 | Welcome Page... entry (port), Mn W/K/A/W | not in Next | ui/10 File #4a | done | main.rs "welcome"; &W on Windows (English only: not in Next's tables) |
 | M-07 | Settings... entry (port), Ctrl+, , Mn T/I/M/I | not in Next | ui/10 File #4b | done | app:100 Control+"," ; decision 0027 |
 | M-08 | Separator after Settings | MW:260 | ui/10 File | done | app:101 |
 | M-09 | Save, Ctrl+S, Save As when no file | MW:261, SE:33 | ui/10 File #5 | done | app:102, main.rs save(); web: download |
 | M-10 | Save As..., Ctrl+Shift+S, filters *.wdproj *.xml, proposes suggested name beside origin | MW:244-245 (InputBinding), MW:262, SE:34, SE:441 | ui/10 File #6 | partial | app:103. Slint dialog dialog() uses the open filters (json too, no xml-only save list); suggested name only as file name, not "beside its origin" folder (main.rs save()) |
-| M-11 | Export > submenu header, Mn E/E/X/E | MW:264, SE:36 | ui/10 File #7 | done | app:105 |
-| M-12 | Export field..., Ctrl+Shift+E, enabled when no export running and Steps>0 | MW:265, SE:37, Cmd/ExportCommands.cs:35 | ui/10 File>Export | partial | app:107, main.rs export arm; no enabled rule (only `exporting.is_none()` inside the action); dialog see D-section |
-| M-13 | Export intensity..., Ctrl+Shift+I | MW:266, SE:38, ExportCommands.cs:39 | ui/10 File>Export | partial | app:108, as M-12 |
-| M-14 | Export both..., Ctrl+Shift+B, two outputs `_field`/`_intensity` | MW:267, SE:39, ExportCommands.cs:43 | ui/10 File>Export | partial | app:109; both layers one name via platform export; suffix rule not verified |
+| M-11 | Export > submenu header, Mn E/E/X/E | MW:264, SE:36 | ui/10 File #7 | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
+| M-12 | Export field..., Ctrl+Shift+E, enabled when no export running and Steps>0 | MW:265, SE:37, Cmd/ExportCommands.cs:35 | ui/10 File>Export | partial | enabled: no export running and Steps > 0 (State::commands); dialog see D-section |
+| M-13 | Export intensity..., Ctrl+Shift+I | MW:266, SE:38, ExportCommands.cs:39 | ui/10 File>Export | partial | enabled: no export running and Steps > 0 (State::commands); dialog see D-section |
+| M-14 | Export both..., Ctrl+Shift+B, two outputs `_field`/`_intensity` | MW:267, SE:39, ExportCommands.cs:43 | ui/10 File>Export | partial | enabled as M-12; both layers one name via platform export; suffix rule not verified |
 | M-15 | Separator in Export submenu | MW:269 | ui/10 File>Export | done | app:110 |
-| M-16 | Export field frame..., Ctrl+Shift+F, the frame shown as one image | MW:271, SE:40, ExportCommands.cs:47 | ui/10 File>Export | partial | app:111, Kind::Frame uses playback.position; formats png/jpg/exr via supports_still |
-| M-17 | Export intensity frame..., Ctrl+Shift+G | MW:272, SE:41, ExportCommands.cs:51 | ui/10 File>Export | partial | app:112 |
-| M-18 | Export last, Ctrl+E, enabled after first completed run export since open; repeats layers/format/path with no dialog, replaces silently; stills/cancelled/failed do not count | MW:275, SE:42, ExportCommands.cs:59 | ui/10 File #8 | partial | app:114, main.rs last_export. Missing: enabled rule; repeats kind only, not path (start() always asks the save dialog again); set at start not at completion (cancelled/failed count) |
-| M-19 | Close Project, Mn C/C/F/L, enabled unless placeholder project, asks unsaved edits, then empty project | MW:277, SE:35 | ui/10 File #9 | partial | app:116, "close" arm shares "new"; always enabled (no Document::is_placeholder) |
+| M-16 | Export field frame..., Ctrl+Shift+F, the frame shown as one image | MW:271, SE:40, ExportCommands.cs:47 | ui/10 File>Export | partial | enabled as M-12; Kind::Frame uses playback.position; formats png/jpg/exr via supports_still |
+| M-17 | Export intensity frame..., Ctrl+Shift+G | MW:272, SE:41, ExportCommands.cs:51 | ui/10 File>Export | partial | enabled as M-12; Kind::Frame uses playback.position; formats png/jpg/exr via supports_still |
+| M-18 | Export last, Ctrl+E, enabled after first completed run export since open; repeats layers/format/path with no dialog, replaces silently; stills/cancelled/failed do not count | MW:275, SE:42, ExportCommands.cs:59 | ui/10 File #8 | partial | enabled after a run export of this project (cleared on open/new/close) and as M-12; repeats the kind only, not the path; set at start, not completion |
+| M-19 | Close Project, Mn C/C/F/L, enabled unless placeholder project, asks unsaved edits, then empty project | MW:277, SE:35 | ui/10 File #9 | partial | enabled unless the blank project (divergences.md Menus: Next needs a file); shares "new" |
 | M-20 | Exit, Alt+F4, Mn X/B/Q/F, asks unsaved edits | MW:279, SE:49 | ui/10 File #10 | partial | app:118 no shortcut text; Alt+F4 is the window manager's; close box handled via on_close_requested (main.rs:~600): prompt only when dirty. Missing: "An export is running. Stop it and quit?" prompt (ui/70) |
 | M-21 | Separators: after Settings, after Save As, after Export last, after Close | MW:260,263,276,278 | ui/10 File | done | app:101,104,115,117 |
 
 #### M Edit menu
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-22 | Edit header, Mn E/B/B/B | MW:281, SE:50 | ui/10 Edit | done | app:120 |
-| M-23 | Undo, Ctrl+Z, enabled when a step exists; a focused text box keeps its own Ctrl+Z | MW:282, SE:51, EditCommands.cs:37 | ui/10 Edit | partial | app:122 enabled bound to can-undo; Ctrl+Z only via FocusScope key-pressed (app:166-168), not as menu shortcut text (G5). Text-box precedence not verified |
-| M-24 | Redo, Ctrl+Y and Ctrl+Shift+Z | MW:283, SE:52, EditCommands.cs:41 | ui/10 Edit | partial | app:123, FocusScope handles both keys; no shortcut text |
+| M-22 | Edit header, Mn E/B/B/B | MW:281, SE:50 | ui/10 Edit | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
+| M-23 | Undo, Ctrl+Z, enabled when a step exists; a focused text box keeps its own Ctrl+Z | MW:282, SE:51, EditCommands.cs:37 | ui/10 Edit | partial | enabled can-undo; Ctrl+Z is a window key a focused text field takes first, no shortcut text (divergences.md Menus) |
+| M-24 | Redo, Ctrl+Y and Ctrl+Shift+Z | MW:283, SE:52, EditCommands.cs:41 | ui/10 Edit | partial | enabled can-redo; Ctrl+Y and Ctrl+Shift+Z as M-23 |
 | M-25 | Separator | MW:284 | ui/10 Edit | done | app:124 |
-| M-26 | Cut, Ctrl+X, enabled when list items selected, copies then removes | MW:285, SE:53 | ui/10 Edit | missing | app:125 entry present, main.rs falls to `other => tracing::info!` (no clipboard code) |
-| M-27 | Copy, Ctrl+C, objects to clipboard as XML text + app format | MW:286, SE:54 | ui/10 Edit | missing | app:126, not implemented |
-| M-28 | Paste, Ctrl+V, enabled when clipboard parses; paste behind current; settings object replaces | MW:287, SE:55 | ui/10 Edit | missing | app:127, not implemented |
-| M-29 | Delete, Del, enabled as Cut, removes selection (text box: its text) | MW:288, SE:56, InputGestureText "Del" | ui/10 Edit | partial | app:128 + FocusScope Del (app:162); main.rs "delete" removes the one selected node; no enabled rule, no multi-selection |
+| M-26 | Cut, Ctrl+X, enabled when list items selected, copies then removes | MW:285, SE:53 | ui/10 Edit | missing | entry disabled until the clipboard commands (piece 2b) |
+| M-27 | Copy, Ctrl+C, objects to clipboard as XML text + app format | MW:286, SE:54 | ui/10 Edit | missing | entry disabled until the clipboard commands (piece 2b) |
+| M-28 | Paste, Ctrl+V, enabled when clipboard parses; paste behind current; settings object replaces | MW:287, SE:55 | ui/10 Edit | missing | entry disabled until the clipboard commands (piece 2b) |
+| M-29 | Delete, Del, enabled as Cut, removes selection (text box: its text) | MW:288, SE:56, InputGestureText "Del" | ui/10 Edit | partial | enabled when an object row is selected; Del as a window key; one object, no multi-selection (piece 3) |
 | M-30 | Separator before Select all | MW:289 | ui/10 Edit | done | app:129 |
 | M-31 | Select all, Ctrl+A, enabled when project has items; every source/part/probe, last current; tree and preview | MW:291, SE:184 (MenuProjectSelectAll), ProjectCommands.cs:57 | ui/10 Edit | missing | app:130; main.rs has no "select-all" arm (single selection only, tree.rs) |
 
@@ -133,7 +133,7 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | M-33 | Panes > submenu: one checkable entry per pane (Preview, Project, Properties, Messages), check = shown, click toggles | MW:294-296, SE:58, MW PaneMenuItemStyle:67-73 | ui/10 View | partial | app:134-139 has Project, Properties, Messages; no Preview entry (preview cannot be hidden); no dock host |
 | M-34 | View > Theme > (System/Light/Dark, checkmark) | MW:297-299, SE:70, MW ThemeMenuItemStyle:113-125 | ui/10 View note | divergence | moved to Settings (decision 0027); see S-04 |
 | M-35 | View > UI zoom > 0.5x .. 3x (8 entries, check) | MW:302-327, SE:71-79 | ui/10 View note | divergence | moved to Settings; Slint has no UI zoom at all: see S-15, M-111 |
-| M-36 | View > Language > (System + each) | MW:328-330, SE:80, MW LanguageMenuItemStyle:76-88 | ui/10 View note | divergence | moved to Settings; missing in Slint, see S-05 |
+| M-36 | View > Language > (System + each) | MW:328-330, SE:80, MW LanguageMenuItemStyle:76-88 | ui/10 View note | divergence | moved to Settings > General > Language (decision 0027, X-34) |
 | M-37 | View > Preview resolution > Full/Half/Quarter (check) | MW:334-344, SE:81-84 | ui/10 View note | divergence | moved to Settings (S-10) |
 | M-38 | View > Preview frames > Full/Half (every second)/Quarter (every fourth) | MW:345-355, SE:85-88 | ui/10 View note | divergence | moved to Settings (S-11) |
 | M-39 | View > Preview samples > 16-bit float / 8-bit palette index | MW:356-363, SE:89-91 | ui/10 View note | divergence | moved to Settings (S-12) |
@@ -143,13 +143,13 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 #### M Simulation menu
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-42 | Simulation header, Mn S/S/S/S | MW:385, SE:99 | ui/10 Simulation | done | app:141 |
-| M-43 | Run, F5, enabled: no run active, no export, an enabled source; runs from step 0, preview follows (Live); may ask memory warning | MW:386, SE:100, SimulationCommands.cs:30 | ui/10 Simulation | partial | app:143 enabled `!transport.running` only; no source/export rule; no memory warning (D-21); main.rs "run" starts live.run, playback.follow |
-| M-44 | Pause / Resume, F6, enabled while run active; header reads Resume while paused | MW:388-399, SE:101-102, SimulationCommands.cs:34 | ui/10 Simulation | partial | app:144 enabled run-active, F6; title static "Pause / Resume" (no switch to Resume) |
-| M-45 | Stop, Shift+F5 and Esc, enabled while run or export active; Esc cancels export first else stops run | MW:400, SE:103, SimulationCommands.cs:44 | ui/10 Simulation | partial | app:145 Shift+F5 ok, enabled `transport.running` only (not export); Esc not bound at window level (only tooltip text timeline.slint:129); main.rs "stop" cancels export too |
-| M-46 | Discard frames (port), Mn D/V/S/V, enabled when run has frames and export not holding them; asks "Discard the frames of the run?" Yes/No (No default); drops frames, timeline to 0 | not in Next | ui/10 Simulation | missing | app:146 entry; main.rs has no "discard" arm; no prompt |
+| M-42 | Simulation header, Mn S/S/S/S | MW:385, SE:99 | ui/10 Simulation | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
+| M-43 | Run, F5, enabled: no run active, no export; runs from step 0, preview follows (Live); may ask memory warning | MW:386, SE:100, SimulationCommands.cs:30 | ui/10 Simulation | done | enabled: no run active, no export (Next's CanRun); F5; memory warning is D-21 |
+| M-44 | Pause / Resume, F6, enabled while run active; header reads Resume while paused | MW:388-399, SE:101-102, SimulationCommands.cs:34 | ui/10 Simulation | done | enabled while a run is active; reads Resume while paused; F6 |
+| M-45 | Stop, Shift+F5 and Esc, enabled while run or export active; Esc cancels export first else stops run | MW:400, SE:103, SimulationCommands.cs:44 | ui/10 Simulation | partial | enabled while a run or an export is active; Shift+F5; "stop" cancels the export too; Esc at window level is piece 2c |
+| M-46 | Discard frames (port), Mn D/V/S/V, enabled when run has frames and export not holding them; asks "Discard the frames of the run?" Yes/No (No default); drops frames, timeline to 0 | not in Next | ui/10 Simulation | missing | entry removed until discarding exists |
 | M-47 | Separator | MW:401 | ui/10 Simulation | done | app:147 |
-| M-48 | Play / Pause playback, F7; header and icon switch while playing; enabled CanPlayPause | MW:404-417, SE:104-105, PreviewCommands.cs:40 | ui/10 Simulation | partial | app:148 F7 -> transport-action "play"; static title, no enabled rule |
+| M-48 | Play / Pause playback, F7; header and icon switch while playing; enabled CanPlayPause | MW:404-417, SE:104-105, PreviewCommands.cs:40 | ui/10 Simulation | done | Play / Pause playback by playback state, icon too; enabled with more than one frame; F7 |
 | M-49 | Simulation > Use the GPU (OpenCL) checkable | MW:420-422, SE:106 | ui/10 Simulation note | divergence | moved to Settings (S-14) |
 | M-50 | Simulation > Re-run automatically after edits checkable | MW:423-425, SE:107 | ui/10 note | divergence | moved to Settings (S-16) |
 | M-51 | Simulation > Warn when a run does not fit in RAM checkable | MW:428-430, SE:108 | ui/10 note | divergence | moved to Settings (S-17) |
@@ -158,11 +158,11 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 #### M Help menu
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-53 | Help header, Mn H/H/A/H | MW:437, SE:111 | ui/10 Help | done | app:150 |
+| M-53 | Help header, Mn H/H/A/H | MW:437, SE:111 | ui/10 Help | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
 | M-54 | About WaveDude (Next/Rust) entry, Mn A/U-uml/P/O | MW:438, SE:112 | ui/10 Help | partial | app:152 opens text modal (D-52); entry shortcut none |
 | M-55 | Manual, F1 (Next) | MW:439, SE:113 | ui/10 Help | divergence | replaced by Project page on GitHub (decision 0028, divergences.md "Manual") |
-| M-56 | Project page on GitHub (port), F1, opens github.com/lajosbencz/WaveDudeRust (system browser / new tab) | not in Next | ui/10 Help | missing | app:153 entry + F1; main.rs has no "github" arm (logs only) |
-| M-57 | Check for updates (port; builds with updater), Mn U/U/J/U | not in Next | ui/10 Help, ui/70 Updates | missing | app:154 entry always shown; no "updates" arm; no updater |
+| M-56 | Project page on GitHub (port), F1, opens github.com/lajosbencz/WaveDudeRust (system browser / new tab) | not in Next | ui/10 Help | done | "github" opens the repository URL in the system browser, a new tab on the web (webbrowser crate); F1 |
+| M-57 | Check for updates (port; builds with updater), Mn U/U/J/U | not in Next | ui/10 Help, ui/70 Updates | missing | entry removed: this build has no updater |
 
 #### M Context menus (all missing in Slint: no ContextMenu/PopupWindow in ui/*.slint; Apps key and Shift+F10 unhandled)
 | ID | Feature | Next source | Spec | Slint | Note |
@@ -226,7 +226,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 #### M Keys: window-wide
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-100 | F10 / lone Alt enters menu bar (Left/Right walk headers, Down/Enter/Space open, Esc back) | MW:216 (OnMenuPreviewKeyDown) | ui/10 Keys in menus | missing | native MenuBar behaviour only (platform dependent; not on web) |
+| M-100 | F10 / lone Alt enters menu bar (Left/Right walk headers, Down/Enter/Space open, Esc back) | MW:216 (OnMenuPreviewKeyDown) | ui/10 Keys in menus | divergence | Windows' native bar has F10/Alt; Slint's drawn bar (Linux, web) has none (docs/blockers.md) |
 | M-101 | Apps / Shift+F10 opens context menu of the focused element | WPF default | ui/10 window-wide | missing | no context menus |
 | M-102 | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S | MW:144-149,209-211 | ui/10 window-wide | done | app:95-103 |
 | M-103 | Alt+F4 exit | MW:32-36 | ui/10 | partial | OS-level; see M-20 |
@@ -365,7 +365,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-02 | WindowState Normal/Maximized | UIS:109, MW:41 | ui/80 | missing | |
 | S-03 | Layout (dock tree) saved on change | UIS:119, MW:495-515 | ui/80 | missing | pane shown flags (project/properties/messages) not persisted |
 | S-04 | Theme System/Light/Dark, Settings > General | UIS:129 | ui/80, ui/70 | done | set.rs row "Theme"; applied via Theme.mode (main.rs apply_settings) |
-| S-05 | Language ""/en/de/fr/nl, "System (in the current language)" first, each by own name | UIS:139, MW:295-297 | ui/80, ui/70 | missing | no row, no translation bundles loaded; only @tr source strings |
+| S-05 | Language ""/en/de/fr/nl, "System (in the current language)" first, each by own name | UIS:139, MW:295-297 | ui/80, ui/70 | partial | Settings > General > Language: System, then each by its own name (src/settings.rs); "System" is not translated (a Rust string, X-34) |
 | S-06 | RecentFiles list newest first max 10 (+ OS recent list) | UIS:149, MW:253-255 | ui/80 | partial | push_recent on open/save (main.rs:213); never shown (M-04) |
 | S-07 | PreviewOrientation Horizontal/Vertical (default Vertical), transport layout radios | UIS:159, MW:537 | ui/80 | partial | applied at start (apply_settings); toggling saves always Vertical: main.rs transport "layout" arm `if true { Vertical }` |
 | S-08 | AutoRerun bool (true), Settings > Simulation "Re-run automatically after edits" | UIS:169 | ui/80, ui/70 | done | settings.rs row, applied to live.auto_rerun |

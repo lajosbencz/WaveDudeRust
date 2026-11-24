@@ -15,3 +15,9 @@ Upstream bugs and gaps, worked around or accepted here; each goes once the fix i
   (`i-slint-backend-winit/xdg_desktop_settings.rs`): there the System theme follows the desktop live until a forced
   theme is chosen, then keeps the scheme it had until restart. Accepted, not worked around. To report to
   slint-ui/slint: a public read of the resolved system scheme.
+
+- Slint 1.19 draws its own `MenuBar` on Linux and the web, with no access keys and no keyboard entry (F10, a lone
+  Alt); an open menu walks with the arrow keys. On Windows and macOS it hands the bar to `muda`: native menus with the
+  platform's keys, titles passed unchanged, so Windows reads a `&` as an access key and the drawn bar would show it.
+  `ui/app.slint` (`menu-text`) gives Windows Next's access keys and the other platforms plain titles. Accepted, not
+  worked around. To report to slint-ui/slint: access keys and keyboard entry for the drawn `MenuBar`.

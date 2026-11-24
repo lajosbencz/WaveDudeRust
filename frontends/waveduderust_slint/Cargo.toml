@@ -21,6 +21,7 @@ slint-build = "1.19"
 [dependencies]
 slint = { version = "1.19", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-30", "unstable-winit-030", "accessibility"] }
 sys-locale = "0.3"
+webbrowser = "1"
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "ansi", "registry"] }
 waveduderust = { path = "../../crates/waveduderust", default-features = false, features = ["gpu", "run", "unstable-engine", "unstable-reflect", "unstable-run", "unstable-scene"] }

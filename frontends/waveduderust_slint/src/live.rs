@@ -111,6 +111,10 @@ impl Live {
 		self.active
 	}
 
+	pub(crate) fn paused(&self) -> bool {
+		self.paused
+	}
+
 	/// Runs `project` from the start; a running run starts over (docs/ui/60, Automatic re-run).
 	/// A project opened: its frame at the position alone (docs/ui/60, The live run).
 	pub(crate) fn load(&mut self, project: &Project, view: &View) {

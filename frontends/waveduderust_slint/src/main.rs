@@ -177,13 +177,21 @@ impl State {
 		self.nodes = nodes;
 		app.set_tree_rows(ModelRc::new(VecModel::from(rows)));
 		app.set_window_title(self.doc.title().into());
-		app.set_can_undo(self.doc.can_undo());
-		app.set_can_redo(self.doc.can_redo());
+		app.set_commands(self.commands());
+		// the native menus (muda) read `&` as an access key on Windows and drop it on macOS
+		let native = cfg!(any(windows, target_os = "macos"));
+		let recent: Vec<slint::SharedString> = self
+			.settings
+			.recent_files
+			.iter()
+			.map(|p| p.display().to_string())
+			.map(|p| if native { p.replace('&', "&&") } else { p }.into())
+			.collect();
+		app.set_recent_files(ModelRc::from(recent.as_slice()));
 		if self.ran != self.doc.generation {
 			self.ran = self.doc.generation;
 			self.live.edited(&self.doc.project, &self.doc.view);
 		}
-		app.set_run_active(self.live.active());
 		let (heading, rows) = form::of_selected(&self.doc.project, &self.doc.view, self.selected);
 		app.set_props_heading(heading.into());
 		if self.doc.generation != self.form_seen {
@@ -199,10 +207,31 @@ impl State {
 	/// A project replaced the one shown: the selection and the timeline start over, frame 0 is made.
 	fn opened(&mut self) {
 		self.selected = Node::Project;
+		self.last_export = None;
 		self.playback.reset();
 		self.live.load(&self.doc.project, &self.doc.view);
 		self.playback.frames = self.live.frames;
 		self.ran = self.doc.generation;
+	}
+
+	/// Which menu commands can run (Next's CanExecute rules).
+	fn commands(&self) -> ui::Commands {
+		let exporting = self.exporting.is_some();
+		let can_export = !exporting && self.doc.project.simulation.steps > 0;
+		ui::Commands {
+			can_undo: self.doc.can_undo(),
+			can_redo: self.doc.can_redo(),
+			can_delete: matches!(self.selected, Node::Source(_) | Node::Part(_) | Node::Probe(_) | Node::Scheme(_)),
+			can_run: !self.live.active() && !exporting,
+			run_active: self.live.active(),
+			paused: self.live.paused(),
+			can_stop: self.live.active() || exporting,
+			can_export,
+			can_export_last: can_export && self.last_export.is_some(),
+			can_close: self.doc.path.is_some() || self.doc.suggested.is_some() || self.doc.dirty(),
+			can_play: self.playback.frames > 1,
+			playing: self.playback.playing,
+		}
 	}
 
 	fn node(&self, row: i32) -> Option<Node> {
@@ -212,6 +241,14 @@ impl State {
 
 /// Runs a menu action by its id (docs/ui/10).
 fn menu(state: &mut State, app: &AppWindow, id: &str) {
+	// a recent file by its path, which saving first may move in the list
+	if let Some(i) = id.strip_prefix("recent:") {
+		if let Some(path) = i.parse::<usize>().ok().and_then(|i| state.settings.recent_files.get(i)) {
+			let id = format!("open-file:{}", path.to_string_lossy());
+			menu(state, app, &id);
+		}
+		return;
+	}
 	match id {
 		"run" => {
 			state.live.run(&state.doc.project, &state.doc.view);
@@ -252,7 +289,9 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 				}
 			}
 		}
-		id if (matches!(id, "new" | "open" | "close" | "exit") || id.starts_with("example:")) && state.doc.dirty() => {
+		id if (matches!(id, "new" | "open" | "close" | "exit") || id.starts_with("example:") || id.starts_with("open-file:"))
+			&& state.doc.dirty() =>
+		{
 			state.pending = Some(id.to_owned());
 			let name = state.doc.name();
 			app.set_modal(modal(ui::ModalKind::Question, "WaveDude Rust", &format!("Save the changes to {name}?"), &["Save", "Don't save", "Cancel"], 0, 2));
@@ -271,6 +310,13 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 			}
 			#[cfg(target_arch = "wasm32")]
 			files::pick(&state.inbox);
+		}
+		#[cfg(not(target_arch = "wasm32"))]
+		id if id.starts_with("open-file:") => open(state, app, id["open-file:".len()..].into()),
+		"github" => {
+			if let Err(e) = webbrowser::open(env!("CARGO_PKG_REPOSITORY")) {
+				tracing::error!("cannot open the project page: {e}");
+			}
 		}
 		"save" | "save-as" => {
 			save(state, app, id == "save-as");
@@ -300,7 +346,7 @@ fn menu(state: &mut State, app: &AppWindow, id: &str) {
 		)),
 		"undo" => state.doc.undo(),
 		"redo" => state.doc.redo(),
-		"delete" => {
+		"delete" if state.commands().can_delete => {
 			let node = state.selected;
 			state.doc.edit(|p| tree::remove(p, node));
 			state.selected = Node::Project;
@@ -606,6 +652,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		form_base: 0,
 		draft: None,
 	}));
+	app.set_native_access_keys(cfg!(windows));
 	apply_settings(&mut state.borrow_mut(), &app);
 	follow_desktop_scheme(&state, &app);
 	state.borrow_mut().opened();
@@ -825,6 +872,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			}
 			s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
 			app.set_transport(transport_state(&s.playback, &shown));
+			app.set_commands(s.commands());
 			if let Some(e) = &mut s.exporting {
 				match e.poll() {
 					Ok(progress) => app.set_run_status(progress.into()),
