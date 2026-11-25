@@ -415,9 +415,9 @@ impl Live {
 		position as usize
 	}
 
-	/// The run has frames stored.
+	/// The run has frames stored beyond the one a preview makes for the position.
 	pub(crate) fn has_frames(&self) -> bool {
-		self.worker.status().store.is_some_and(|s| s.count() > 0)
+		self.worker.status().store.is_some_and(|s| s.count() > 1)
 	}
 
 	/// The frames and traces go, on a new store; the run stops (Discard frames).
@@ -426,9 +426,10 @@ impl Live {
 		(self.active, self.wanted, self.paused, self.started) = (false, Wanted::Position, false, None);
 		self.position = 0;
 		self.drawn = None;
-		self.worker.discard_frames();
+		// the goal first: a run under way does not start over on the old one
 		self.revision += 1;
 		self.publish();
+		self.worker.discard_frames();
 	}
 
 	/// No more frames than the position's.

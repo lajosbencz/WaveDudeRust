@@ -39,8 +39,9 @@ pub(crate) struct Overlays {
 	focus: Option<(ui::Layer, ItemRef, Stop)>,
 	/// Counts focus changes: a run of key moves is one undo step.
 	run: u64,
-	/// What a run of keys on a lens surface holds still, and the run's count.
-	anchors: std::cell::Cell<Option<(u64, handles::Anchors)>>,
+	/// What a run of keys on a lens surface holds still, with the part as the last key left it: any other edit
+	/// (undo, the form) takes them anew.
+	anchors: std::cell::RefCell<Option<(Part, handles::Anchors)>>,
 	/// The view's handles and labels switches the overlays were built with.
 	shows: (bool, bool),
 }
@@ -598,16 +599,18 @@ impl Overlays {
 			}
 			HandleKind::Surface(surface) => {
 				let Node::Part(i) = node else { return };
-				// held from the first key while the handle keeps the focus, as a drag holds them
-				let anchors = match self.anchors.get() {
-					Some((run, anchors)) if run == self.run => Some(anchors),
-					_ => handles::surface_anchors(&project.parts[i], surface),
-				};
-				let Some(anchors) = anchors else { return };
-				self.anchors.set(Some((self.run, anchors)));
-				let Some(vertex) = handles::surface_vertex(&project.parts[i], surface, anchors) else { return };
+				let part = &project.parts[i];
+				// held from the first key while the lens is as the keys left it, as a drag holds them
+				let held = self.anchors.borrow().as_ref().filter(|(p, _)| p == part).map(|(_, a)| *a);
+				let Some(anchors) = held.or_else(|| handles::surface_anchors(part, surface)) else { return };
+				let Some(vertex) = handles::surface_vertex(part, surface, anchors) else { return };
 				let at = (vertex.0 + d.0, vertex.1 + d.1);
+				// a key across the axis moves nothing: it would only round the radius anew
+				if handles::along_axis(part, vertex, at).abs() < 1e-9 {
+					return;
+				}
 				edit_part(&mut project.parts[i], |p| handles::drag_surface(p, surface, at, anchors));
+				*self.anchors.borrow_mut() = Some((project.parts[i].clone(), anchors));
 			}
 			HandleKind::Grip => {
 				let Node::Part(i) = node else { return };

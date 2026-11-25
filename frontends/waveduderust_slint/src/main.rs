@@ -950,7 +950,7 @@ fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
 fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 	app.set_modal(ui::Modal::default());
 	// only Discard frames asks Yes or No
-	if answer == ui::Answer::Yes {
+	if answer == ui::Answer::Yes && state.commands().can_discard {
 		state.live.discard();
 		state.playback.pause();
 		state.playback.seek(0);

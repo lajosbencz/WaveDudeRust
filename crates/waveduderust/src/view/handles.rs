@@ -110,6 +110,12 @@ pub fn surface_vertex(part: &Part, surface: usize, [_, other]: Anchors) -> Optio
 	Some((p.x, p.y))
 }
 
+/// How far `to` lies from `from` along `part`'s axis, canvas pixels.
+pub fn along_axis(part: &Part, from: (f64, f64), to: (f64, f64)) -> f64 {
+	let frame = Frame::of(&part.base);
+	frame.to_frame(Vec2::new(to.0, to.1)).x - frame.to_frame(Vec2::new(from.0, from.1)).x
+}
+
 /// Drags `surface`'s vertex along the axis to the canvas point `at`, the `anchors` staying: the part's centre
 /// follows the middle of the vertices.
 pub fn drag_surface(part: &mut Part, surface: usize, at: (f64, f64), [rim, other]: Anchors) {
