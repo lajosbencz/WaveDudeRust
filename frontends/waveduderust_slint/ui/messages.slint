@@ -1,5 +1,6 @@
 import { ListView, LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { MenuIcons } from "menu-icons.slint";
 
 export enum LogLevel { trace, debug, info, warn, error }
 
@@ -121,6 +122,8 @@ export component Messages inherits Rectangle {
             }
             Button {
                 text: @tr("Clear");
+                icon: MenuIcons.clear-all;
+                colorize-icon: true;
                 clicked => { root.clear(); }
                 Tooltip { text: @markdown("\{@tr("Clear all messages")}"); }
             }
@@ -145,10 +148,10 @@ export component Messages inherits Rectangle {
             }
             ContextMenuArea {
                 Menu {
-                    MenuItem { title: @tr("Copy"); activated => { root.copy(false); } }
-                    MenuItem { title: @tr("Copy all"); activated => { root.copy(true); } }
+                    MenuItem { title: @tr("Copy"); icon: MenuIcons.content-copy; activated => { root.copy(false); } }
+                    MenuItem { title: @tr("Copy all"); icon: MenuIcons.select-all; activated => { root.copy(true); } }
                     MenuSeparator { }
-                    MenuItem { title: @tr("Clear"); activated => { root.clear(); } }
+                    MenuItem { title: @tr("Clear"); icon: MenuIcons.clear-all; activated => { root.clear(); } }
                 }
                 list := ListView {
                     for row[i] in root.rows: line := Rectangle {

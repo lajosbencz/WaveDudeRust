@@ -211,7 +211,7 @@ component Picture inherits VerticalLayout {
         // the caption goes before the title elides; 12 px at least after the title
         property <bool> roomy: true;
         function fit() {
-            self.roomy = self.width >= self.padding-left + title.preferred-width + 12px + caption.preferred-width + 64px
+            self.roomy = self.width >= self.padding-left + 22px + title.preferred-width + 12px + caption.preferred-width + 64px
                 + auto.preferred-width + 3 * self.spacing;
         }
         // what the strip needs besides the gap: its texts change with the language
@@ -219,6 +219,12 @@ component Picture inherits VerticalLayout {
         init => { self.fit(); }
         changed width => { self.fit(); }
         changed needs => { self.fit(); }
+        Image {
+            width: 16px;
+            source: root.layer == Layer.field ? @image-url("icons/next/field.svg") : @image-url("icons/next/intensity.svg");
+            colorize: Theme.text;
+            vertical-alignment: center;
+        }
         title := Text {
             text: root.title;
             color: Theme.text;

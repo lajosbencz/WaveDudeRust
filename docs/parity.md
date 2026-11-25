@@ -15,14 +15,14 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | M | Menus and shortcuts | 75 | 8 | 5 | 52 | 0 |
 | D | Dialogs and windows | 42 | 16 | 13 | 8 | 0 |
 | S | Settings | 15 | 6 | 8 | 3 | 0 |
-| I | Icons | 41 | 0 | 23 | 19 | 0 |
+| I | Icons | 57 | 1 | 6 | 19 | 0 |
 | T | Project tree | 56 | 2 | 5 | 38 | 0 |
 | P | Properties | 307 | 7 | 8 | 3 | 0 |
 | V | Preview | 90 | 5 | 12 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
 | R | Live editing and runs | 31 | 14 | 14 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 764 | 76 | 92 | 158 | 5 |
+| | All | 780 | 77 | 75 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -430,16 +430,16 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-27 | Discard frames U+E74D (port) | not in Next | ui/10 Simulation | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-28 | Help>About U+E946 | MW:438 | ui/10 Help | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-29 | Help>Manual U+E736 (Next); port uses "open_in_new" for Project page | MW:439 | ui/10 Help, decision 0028 | divergence | Material Symbols stand-in (divergences.md, Icons) |
-| I-30 | Add source/part/probe U+E710 (tree row menu) | PT:256-258 | ui/10 Tree row | missing | |
-| I-31 | Add/remove from selection U+E762 | PT:260 | ui/10 Tree row | missing | |
-| I-32 | Enabled toggle U+E73A | PT:263 | ui/10 | missing | |
-| I-33 | Duplicate U+F413 | PT:264 | ui/10 | missing | |
-| I-34 | Remove U+E738 | PT:268 | ui/10 | missing | Next toolbar also uses drawn Minus (I-78) |
-| I-35 | Move up U+E74A / Move down U+E74B | PT:270-271 | ui/10 | missing | |
-| I-36 | Brightness U+E706 | PP:736,762 | ui/10 Preview menu | missing | |
-| I-37 | Clear (messages) U+E894 | MP:189 | ui/10 Messages (not given in spec) | missing | not in spec |
+| I-30 | Add source/part/probe U+E710 (tree row menu) | PT:256-258 | ui/10 Tree row | done | tree menu Add: MenuIcons.add |
+| I-31 | Add/remove from selection U+E762 | PT:260 | ui/10 Tree row | done | Add to or remove from selection: checklist |
+| I-32 | Enabled toggle U+E73A | PT:263 | ui/10 | done | Enabled: check-box |
+| I-33 | Duplicate U+F413 | PT:264 | ui/10 | done | Duplicate: control-point-duplicate |
+| I-34 | Remove U+E738 | PT:268 | ui/10 | done | Remove: delete |
+| I-35 | Move up U+E74A / Move down U+E74B | PT:270-271 | ui/10 | done | Move up/down: arrow-upward/arrow-downward |
+| I-36 | Brightness U+E706 | PP:736,762 | ui/10 Preview menu | done | picture menu Brightness: brightness-6 |
+| I-37 | Clear (messages) U+E894 | MP:189 | ui/10 Messages (not given in spec) | done | Messages menu Copy, Copy all, Clear with icons (clear-all) |
 | I-38 | Tree Simulation row U+E916 / Display row U+E7F4 | PT:319,325 | ui/20 | divergence | Material Symbols stand-in (divergences.md, Icons); tree rows |
-| I-39 | Welcome / Settings / Check-for-updates / Discard glyphs in port | not in Next | ui/10 | missing | see I-05, I-06, I-27; Check for updates has none |
+| I-39 | Welcome / Settings / Check-for-updates / Discard glyphs in port | not in Next | ui/10 | partial | Discard frames: delete-sweep; Welcome and Settings have menu glyphs; no updates (dropped) |
 
 #### I App drawings (Icon<Name> StreamGeometry, 16 px grid), file CX = WaveDudeNext.WPF/Themes/Controls.xaml
 | ID | Feature (name) and where used | Next source | Spec | Slint | Note |
@@ -451,7 +451,7 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-44 | IconPart: tree Parts folder, "+ Part" | CX:254 | ui/20 | done | as I-40 |
 | I-45 | IconPlusBadge (+ IconPlusBadgeStyle): add plus on toolbar icons | CX:258-259 | ui/20 | missing | SVG generated, not used yet |
 | I-46 | IconProject: tree root row | CX:273 | ui/20 | done | tree root row (icons.rs) |
-| I-47 | IconLens (Lens/Mirror entry, biconvex + concave mirror) | CX:279 | ui/10 | missing | SVG generated, not used yet |
+| I-47 | IconLens (Lens/Mirror entry, biconvex + concave mirror) | CX:279 | ui/10 | done | tree add menu: next-lens |
 | I-48 | IconLens<Left><Right> variants (ConvexConvex, ConvexFlat, ConvexConcave, FlatConvex, FlatFlat, FlatConcave, ConcaveConvex, ConcaveFlat, ConcaveConcave): tree lens rows follow surface shapes | CX:285-293, LensIconConverter.cs:37 | ui/20 | done | tree rows and the Add part menu |
 | I-49 | IconFresnelLens | CX:295 | ui/20 | done | as I-48 |
 | I-50 | IconFiber | CX:297 | ui/10 | done | as I-48 |
@@ -460,8 +460,8 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-53 | IconZonePlate (Fill) | CX:303 | ui/10 | done | as I-48 |
 | I-54 | IconDiffuser | CX:305 | ui/20 | done | as I-48 |
 | I-55 | IconInterferenceFilter | CX:307 | ui/20 | done | as I-48 |
-| I-56 | IconDiffractionGratings (Fill) | CX:309 | ui/20 | missing | SVG generated, not used yet |
-| I-57 | IconMetaSurfaces | CX:311 | ui/20 | missing | SVG generated, not used yet |
+| I-56 | IconDiffractionGratings (Fill) | CX:309 | ui/20 | done | next-diffraction-gratings |
+| I-57 | IconMetaSurfaces | CX:311 | ui/20 | done | next-meta-surfaces |
 | I-58 | IconMetaLens / IconMetaPrism / IconMetaAxicon | CX:313,315,317 | ui/20 | done | as I-48 |
 | I-59 | IconFacettedGrating / IconSimpleGrating (Fill) | CX:319,321 | ui/20 | done | as I-48 |
 | I-60 | IconPolygon / Rectangle / Ellipse / Triangle / Outline | CX:323,325,327,329,331 | ui/10 | done | as I-48 |
@@ -482,12 +482,12 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-71 | LoopGeometry | PP:58, PP:471 | ui/50 | done | transport bar (timeline.slint) |
 | I-72 | LiveGeometry | PP:60, PP:474 | ui/50 | done | transport bar (timeline.slint) |
 | I-73 | SideBySideGeometry / StackedGeometry layout radios | PP:48-49, PP:485,490 | ui/50 | done | transport bar (timeline.slint) |
-| I-74 | FieldGeometry / IntensityGeometry picture header icons | PP:44-45, PP:497,502 | ui/40 | missing | headers are text only (preview.slint:12-18) |
-| I-75 | SpinnerGeometry busy spinner | PP:64-66 | ui/40 | missing | |
-| I-76 | SourceGlyph / ProbeGlyph / PartGlyph (21 px picture handles) and SourceMarkerPainter.cs:45 | PP:177-179; Rendering/SourceMarkerPainter.cs:45 | ui/40 | missing | no handles |
-| I-77 | AngleGlyph rotation lever, ResizeGripGlyph graph box grip | PP:277,329 | ui/40 | missing | |
+| I-74 | FieldGeometry / IntensityGeometry picture header icons | PP:44-45, PP:497,502 | ui/40 | done | picture headers: field.svg / intensity.svg before the title (preview.slint) |
+| I-75 | SpinnerGeometry busy spinner | PP:64-66 | ui/40 | done | preview.slint Spinner while a frame is computed |
+| I-76 | SourceGlyph / ProbeGlyph / PartGlyph (21 px picture handles) and SourceMarkerPainter.cs:45 | PP:177-179; Rendering/SourceMarkerPainter.cs:45 | ui/40 | done | handle glyphs (canvas.slint HandleGlyph source, part, probe) |
+| I-77 | AngleGlyph rotation lever, ResizeGripGlyph graph box grip | PP:277,329 | ui/40 | done | lever and grip glyphs; graph box corner grip |
 | I-78 | PlusGeometry (folder +), MinusGeometry (row remove), ChevronUp/Down (row move) | PT:40-43, uses PT:210-214,333,376-397; Editors.xaml:532 | ui/20 | done | folder plus, row minus and chevrons |
-| I-79 | ClearGeometry (messages Clear button icon) | MP:29, MP:128 | ui/70 | missing | text button "Clear" |
+| I-79 | ClearGeometry (messages Clear button icon) | MP:29, MP:128 | ui/70 | done | Messages Clear button with the clear-all icon |
 | I-80 | Menu/combos/checkbox arrows: ArrowUp/Down/Left/Right, SubmenuArrow, Check, ChevronRight/Down/Up, Close, DropDown | CX:45-55 | ui/10 Conventions | done | std widgets' glyphs; rest matched in general (decision 0033) |
 | I-81 | GripGeometry, ChainLinked/ChainParted (linked-values toggle), pane title drag handle brushes | Themes/Editors.xaml:589,623-624; CX:59-64 | ui/30, 00 | missing | pane title grip drawn as border (pane.slint:27-34) |
 | I-82 | App icon: App.ico / App.png / App.svg (window, About 64 px, taskbar) | WPF/App.ico, App.png, App.svg; AboutWindow.xaml:44 | ui/70 About | done | window icon from assets/icon.svg |
