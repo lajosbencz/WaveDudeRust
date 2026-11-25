@@ -13,16 +13,16 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
 | M | Menus and shortcuts | 76 | 9 | 3 | 52 | 0 |
-| D | Dialogs and windows | 44 | 16 | 11 | 8 | 0 |
-| S | Settings | 16 | 7 | 6 | 3 | 0 |
+| D | Dialogs and windows | 47 | 19 | 4 | 9 | 0 |
+| S | Settings | 20 | 7 | 2 | 3 | 0 |
 | I | Icons | 57 | 1 | 6 | 19 | 0 |
 | T | Project tree | 56 | 3 | 4 | 38 | 0 |
 | P | Properties | 310 | 7 | 4 | 4 | 0 |
 | V | Preview | 90 | 5 | 12 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
-| R | Live editing and runs | 39 | 15 | 5 | 0 | 2 |
+| R | Live editing and runs | 39 | 15 | 3 | 2 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 796 | 81 | 54 | 159 | 5 |
+| | All | 803 | 84 | 41 | 162 | 5 |
 
 ## Cross-cutting
 
@@ -315,14 +315,14 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-37 | Updates flow: launch check, "WaveDude Rust x is available (this is y). Download it?", progress "Downloading WaveDude Rust x", signature verify, "Restart now to install it?", failure/up-to-date messages, non-replaceable builds link to release page | not in Next | ui/70 Updates, decision 0011 | divergence | decision 0033, dropped |
 | D-38 | Export dialog: in-window dialog, title per command ("Export the field", "...the intensity", "...the field and the intensity", "Export the frame", "Export the probe data") | SE:272-277 | ui/70 Export Save dialog | divergence | Next uses a native save dialog; port in-window dialog (divergences.md "Export names", decision 0025). Slint: native rfd save dialog, no titles (export.rs:~106) -> partial implementation of the old Next form |
 | D-39 | Export dialog: format filter list (MP4 H.264, MPEG-1, AVI, MOV Animation, MOV PNG, PNG/JPEG/EXR I/EXR sqrt(I) sequences; stills: PNG, JPEG, EXR I, EXR sqrt) | SE:271,275 | ui/70 | partial | export.rs:35-47 Kind::formats; filter names are Debug names of the enum (`{f:?}`) not descriptions |
-| D-40 | Export dialog: proposed name `<project>_field` / `_intensity` / `<project>_field_0655` / probe name | ExportPaths.cs (UI) | ui/70 | missing | export.rs: "export.<ext>" |
-| D-41 | Export dialog: one path box per output with "..." browse, labels (Field/Intensity/Archive), OK disabled on empty/duplicate | not in Next | ui/70 | missing | |
-| D-42 | Export dialog: "Archive into one ZIP file" check box + Archive box (ExportArchive) | not in Next | ui/70 | missing | |
-| D-43 | Export dialog: MP4 OpenH264 notice + "Use Cisco's OpenH264 codec" check, "Delete the downloaded codec" | not in Next | ui/70 | missing | export.rs h264() uses setting silently |
-| D-44 | Export dialog: H.264 profile drop-down with greyed unsupported entries + reason | not in Next | ui/70 | missing | Profile::default() hard-coded (export.rs:~118) |
-| D-45 | Export: remember filter index, start folder rule per kind/project (ExportHints), fallback LastExportFolder | UIS:266-305 | ui/70, ui/80 | missing | |
-| D-46 | Export: replace-existing questions (folder with files "Replace them?", video/still/archive "Replace it?") | MainWindow.Export.cs | ui/70 | missing | rfd overwrite confirm only |
-| D-47 | Export: starts a full-quality run first when none/incomplete/reduced/no intensity; status "Export: waiting for the run" | MainWindow.Export.cs | ui/70, ui/60 | missing | export.rs starts platform export directly |
+| D-40 | Export dialog: proposed name `<project>_field` / `_intensity` / `<project>_field_0655` / probe name | ExportPaths.cs (UI) | ui/70 | done | export-dialog.slint: <project>_field / _intensity / <project> (both) / <project>_field_NNNN still |
+| D-41 | Export dialog: one path box per output with "..." browse, labels (Field/Intensity/Archive), OK disabled on empty/duplicate | not in Next | ui/70 | partial | one path box with ... (platform dialog) and the outputs it writes listed; both layers named from it with suffixes; OK disabled on empty or MP4 without the codec |
+| D-42 | Export dialog: "Archive into one ZIP file" check box + Archive box (ExportArchive) | not in Next | ui/70 | missing | no archive: the platform export writes no ZIP |
+| D-43 | Export dialog: MP4 OpenH264 notice + "Use Cisco's OpenH264 codec" check, "Delete the downloaded codec" | not in Next | ui/70 | done | MP4: Cisco notice, Use Cisco OpenH264 check (OK needs it), Delete the downloaded codec; download on the export thread |
+| D-44 | Export dialog: H.264 profile drop-down with greyed unsupported entries + reason | not in Next | ui/70 | partial | H.264 profile choice saved; entries not greyed, OpenH264 encodes Baseline only note below |
+| D-45 | Export: remember filter index, start folder rule per kind/project (ExportHints), fallback LastExportFolder | UIS:266-305 | ui/70, ui/80 | done | ExportFilterIndex (video means PNG for a still), start folder from the project hint, project folder, LastExportFolder; recorded on completion |
+| D-46 | Export: replace-existing questions (folder with files "Replace them?", video/still/archive "Replace it?") | MainWindow.Export.cs | ui/70 | partial | Replace it? / The folder {} exists and holds files. Replace them? per output, No default; replacing overwrites, a sequence folder is not emptied |
+| D-47 | Export: starts a full-quality run first when none/incomplete/reduced/no intensity; status "Export: waiting for the run" | MainWindow.Export.cs | ui/70, ui/60 | divergence | the export runs its own full-quality simulation on its thread; the live run is untouched |
 | D-48 | Export progress: "Exporting n / N frames", 120 px determinate bar, tooltip "Cancel the export (Esc)", indeterminate while waiting | MW:450-468, SE (TipExportCancel) | ui/70, status bar | partial | "Exporting d/t" (ExportProgress) over the run's status while an export runs; no progress bar |
 | D-49 | Export: Esc cancels (also while waiting); completed export reports in status bar | MW:464 | ui/70 | partial | Stop menu/F5 cancels via "stop"; Esc unbound; completion only logged |
 | D-50 | Probe data CSV export (point: step;amplitude; line: frame;step;distances; semicolons) | ExportCommands.ProbeCsv | ui/70 CSV | done | core export::csv::write_probe_csv with the run schedule (visualize every, frame divisor), as the CLI |
@@ -377,17 +377,17 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-14 | UseGpu bool (true), "Use the GPU (OpenCL)" -> "Use the GPU" | UIS:193, MW:420 | ui/80, ui/70 | partial | row exists; consumed by export backend only (export.rs:~100), live run not switched by apply_settings |
 | S-15 | UiZoom double 0.5..3 (menu), up to 8 (`--zoom`), default 1.0 / 2.0 touch; drop-down 0.5x..3x | UIS:256, MW:302-327 | ui/80, ui/70 | divergence | decision 0033, dropped |
 | S-16 | WarnWhenRamInsufficient bool (true) (+ memory warning "Do not warn me again") | UIS:183, MW:428 | ui/80, ui/70 | done | Settings row and the warning Do not warn me again |
-| S-17 | LastExportFolder path, fallback start folder | UIS:266 | ui/80 | missing | |
-| S-18 | ExportFilterIndex int | UIS:276 | ui/80 | missing | |
-| S-19 | ExportArchive bool (false), Settings > Export | not in Next | ui/80, ui/70 | missing | no Export section |
+| S-17 | LastExportFolder path, fallback start folder | UIS:266 | ui/80 | done | LastExportFolder: last completed export folder, the start folder fallback |
+| S-18 | ExportFilterIndex int | UIS:276 | ui/80 | done | ExportFilterIndex from the dialog |
+| S-19 | ExportArchive bool (false), Settings > Export | not in Next | ui/80, ui/70 | missing | see D-42 |
 | S-20 | PartDescriptionExpanded bool (true), description header on part forms | UIS:286 | ui/80 | done | Form.described saved as PartDescriptionExpanded (main.rs on_describe) |
 | S-21 | TitleFullPath bool (false), Settings > General "Full path in the title" | not in Next | ui/80, ui/70 | done | app.slint `title-full-path` |
-| S-22 | H264Profile Baseline/Main/High, Settings > Export | not in Next | ui/80, ui/70 | missing | no row; export uses Profile::default() |
+| S-22 | H264Profile Baseline/Main/High, Settings > Export | not in Next | ui/80, ui/70 | done | H264Profile from the export dialog (no Settings row); the encoder best when it lacks it |
 | S-23 | UseOpenH264 bool or absent, Settings > Export check box with Cisco notice | not in Next | ui/80, ui/70 | partial | consumed in export.rs h264(); no row/notice |
 | S-24 | CheckForUpdates bool or absent, Settings > Updates "Look for a new version at each launch" | not in Next | ui/80, ui/70 | divergence | decision 0033, dropped |
 | S-25 | ShowStartup bool (true), Settings > General + welcome check box | not in Next | ui/80, ui/70 | done | row + welcome checkbox |
 | S-26 | UndoSteps int 10..100000 (1000), Settings > General number box, tooltip, decision 0030 | not in Next | ui/80, ui/70 | done | number row, applied at once; rest matched in general (decision 0033) |
-| S-27 | ExportHints list (max 20, existing project files) | UIS:300-406 (ExportHint) | ui/80 | missing | |
+| S-27 | ExportHints list (max 20, existing project files) | UIS:300-406 (ExportHint) | ui/80 | done | ExportHints per project via Settings::set_export_hint on completion |
 | S-28 | Settings file format: sparse JSON, Version 2, atomic write (temp + rename), unreadable value -> default + log, unknown keys kept, bad file never moved | UIS:321 (XML) | ui/80 | done | implemented in waveduderust_platform::settings (store.rs); Slint calls load/save |
 | S-29 | Written on change and on close | UIS | ui/80 | partial | row edits save at once; the window on exit; the pane layout is not saved |
 | S-30 | Not persisted: playback speed, loop, Live, picture split, Export last target, selection, undo | n/a | ui/80 | done | not stored in Slint (playback.rs transient) |
@@ -1182,8 +1182,8 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-22 | Automatic re-run setting (default on) | MainWindow.Live.cs | 60 Automatic re-run | done | live.auto_rerun from Settings |
 | R-23 | Auto re-run on: position frame first, earlier frames on the way, then later; never moves preview | MainWindow.Live.cs | 60 Automatic re-run | partial | request wants `wanted` state; ordering is core's |
 | R-24 | Auto re-run off: only position's frame; Play/F5 make the rest | MainWindow.Live.cs | 60 Automatic re-run | partial | edited() skips request, so no frame at position after an edit with setting off |
-| R-25 | Export waiting for run dropped by edit/Stop (status says so) | MainWindow.Export.cs | 60 Automatic re-run | missing | export.rs own run; no wait-for-run |
-| R-26 | Export reading run holds frames; edit taken up at export end; New/Open/Close refused with status text; F5 refused | MainWindow.Export.cs | 60 Automatic re-run | missing | |
+| R-25 | Export waiting for run dropped by edit/Stop (status says so) | MainWindow.Export.cs | 60 Automatic re-run | divergence | see D-47: no export waits for the live run |
+| R-26 | Export reading run holds frames; edit taken up at export end; New/Open/Close refused with status text; F5 refused | MainWindow.Export.cs | 60 Automatic re-run | divergence | see D-47: the export reads its own run; edits and New/Open go on |
 | R-27 | Turning setting on asks nothing | MainWindow.Live.cs | 60 Automatic re-run | done | |
 | R-28 | Memory warning window before preview run exceeding RAM cache (500 px, Run default, Cancel Esc) | Dialogs/MemoryWarningWindow.xaml | 60 Memory warning | partial | asked before Run, Play with frames missing and an automatic re-run (live.rs want_all); natively only: the browser budget is the worker estimate |
 | R-29 | Warning text and 4 lever check boxes (RAM Auto, half resolution, half frames, 8-bit) with grey-out rules | MemoryWarningWindow.xaml.cs | 60 Memory warning | done | text and the lever boxes, greyed by MemoryWarning::enabled |

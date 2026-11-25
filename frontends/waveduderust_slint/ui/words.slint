@@ -14,6 +14,10 @@ export global Words {
     out property <string> export-probe-data: @tr("Export the probe data");
     // an export's default file name, without the extension
     out property <string> export-file: @tr("export");
+    out property <string> export-field: @tr("Export the field");
+    out property <string> export-intensity: @tr("Export the intensity");
+    out property <string> export-both: @tr("Export the field and the intensity");
+    out property <string> export-frame: @tr("Export the frame");
     // an export format's filter; `still`: a single frame's file rather than a video or a sequence
     public pure function export-filter(format: ExportFileFormat, still: bool) -> string {
         if (format == ExportFileFormat.mp4) { return @tr("MP4 video, H.264"); }

@@ -996,6 +996,22 @@ msgstr "Laatste export herhalen"
 msgid "Export probe data as CSV..."
 msgstr "Sondegegevens als CSV exporteren..."
 
+#. ExportDialogTitleField
+msgid "Export the field"
+msgstr "Veld exporteren"
+
+#. ExportDialogTitleBoth
+msgid "Export the field and the intensity"
+msgstr "Veld en intensiteit exporteren"
+
+#. ExportDialogTitleFrame
+msgid "Export the frame"
+msgstr "Beeld exporteren"
+
+#. ExportDialogTitleIntensity
+msgid "Export the intensity"
+msgstr "Intensiteit exporteren"
+
 #. ExportDialogTitleProbeCsv
 msgid "Export the probe data"
 msgstr "Sondegegevens exporteren"
@@ -2463,6 +2479,10 @@ msgstr "De export is mislukt."
 #. Hint.FacettedGratingPart.Pattern
 msgid "The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid."
 msgstr "De vorm van de facetten per steek: een zaagtand, een helling en dan een trap; een blokgolf, een top en een dal van elk een halve steek; of een sinus."
+
+#. ExportFolderExistsFormat
+msgid "The folder {} exists and holds files. Replace them?"
+msgstr "De map {} bestaat en bevat bestanden. Vervangen?"
 
 #. MemoryWarningFitsFormat
 msgid "The frames then need {} and fit in the RAM cache."

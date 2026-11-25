@@ -1,0 +1,133 @@
+// The export dialog (docs/ui/70, Export Save dialog; port: in-window, a path box with "..." for the platform dialog).
+
+import { Button, LineEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Choice, Check } from "form.slint";
+
+export struct ExportData {
+    title: string,
+    formats: [string],
+    format: int,
+    // the chosen path; both layers' outputs are named from it with their suffixes
+    path: string,
+    // the outputs the path writes, when they differ from it
+    outputs: string,
+    mp4: bool,
+    // OpenH264 compiled in: no consent row
+    codec-built-in: bool,
+    codec-installed: bool,
+    use-openh264: bool,
+    profile: int,
+    error: string,
+}
+
+export component ExportLayer inherits Rectangle {
+    in-out property <bool> shown;
+    in-out property <ExportData> data;
+    callback format(index: int);
+    callback browse();
+    callback ok();
+    callback delete-codec();
+    callback path-edited();
+    property <bool> can-ok: root.data.path != "" && (!root.data.mp4 || root.data.codec-built-in || root.data.use-openh264);
+
+    visible: shown;
+    background: #00000080;
+    TouchArea { }
+    focus := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) { root.shown = false; return accept; }
+            if (e.text == Key.Return && root.can-ok) { root.ok(); return accept; }
+            reject
+        }
+    }
+    changed shown => {
+        if (self.shown) { path.focus(); }
+    }
+    Rectangle {
+        width: min(640px, root.width - 40px);
+        height: min(box.preferred-height, root.height - 40px);
+        background: Theme.window-background;
+        border-width: 1px;
+        border-color: Theme.accent;
+        box := VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+            Text { text: root.data.title; font-weight: 700; color: Theme.text; }
+            HorizontalLayout {
+                spacing: 8px;
+                Text { text: @tr("Format"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
+                Choice {
+                    titles: root.data.formats;
+                    index: root.data.format;
+                    picked(i) => { root.format(i); }
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                Text { text: @tr("File"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
+                path := LineEdit {
+                    text <=> root.data.path;
+                    edited => { root.path-edited(); }
+                    key-pressed(e) => {
+                        if (e.text == Key.Escape) { root.shown = false; return accept; }
+                        if (e.text == Key.Return && root.can-ok) { root.ok(); return accept; }
+                        reject
+                    }
+                }
+                Button { text: "..."; clicked => { root.browse(); } }
+            }
+            if root.data.outputs != "": Text {
+                text: @tr("Writes {}", root.data.outputs);
+                color: Theme.text-dim;
+                wrap: word-wrap;
+            }
+            if root.data.mp4 && !root.data.codec-built-in: VerticalLayout {
+                spacing: 4px;
+                Text { text: @tr("OpenH264 Video Codec provided by Cisco Systems, Inc."); color: Theme.text; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    Check {
+                        text: @tr("Use Cisco's OpenH264 codec (downloaded from Cisco at the first MP4 export)");
+                        checked <=> root.data.use-openh264;
+                    }
+                    if root.data.codec-installed: Button {
+                        text: @tr("Delete the downloaded codec");
+                        clicked => { root.delete-codec(); }
+                    }
+                }
+            }
+            if root.data.mp4: HorizontalLayout {
+                spacing: 8px;
+                Text { text: @tr("H.264 profile"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
+                Choice {
+                    titles: ["Baseline", "Main", "High"];
+                    index: root.data.profile;
+                    picked(i) => { root.data.profile = i; }
+                }
+            }
+            // OpenH264, the one encoder, encodes Baseline alone
+            if root.data.mp4 && root.data.profile != 0: Text {
+                text: @tr("OpenH264 encodes Baseline only; the export uses Baseline.");
+                color: Theme.text-dim;
+                wrap: word-wrap;
+            }
+            if root.data.error != "": Text {
+                text: root.data.error;
+                color: Theme.status-error;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+                Button {
+                    text: @tr("OK");
+                    primary: true;
+                    enabled: root.can-ok;
+                    clicked => { root.ok(); }
+                }
+                Button { text: @tr("Cancel"); clicked => { root.shown = false; } }
+            }
+        }
+    }
+}

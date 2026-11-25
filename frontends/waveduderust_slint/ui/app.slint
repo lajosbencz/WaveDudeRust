@@ -21,6 +21,8 @@ import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
 import { ModalLayer, Modal, Message, Answer } from "modal.slint";
 import { MemoryWarningLayer, MemoryWarningData } from "memory-warning.slint";
 import { AboutLayer, AboutData } from "about.slint";
+import { ExportLayer, ExportData } from "export-dialog.slint";
+export { ExportData }
 import { SettingsLayer, SettingsData, ColorTheme, Language, Scale, Search } from "settings.slint";
 export { SettingsData, ColorTheme, Language, Scale, Search }
 import { WelcomeLayer, Levers } from "welcome.slint";
@@ -130,6 +132,13 @@ export component AppWindow inherits Window {
     in-out property <bool> about-shown;
     in property <AboutData> about;
     callback about-copy();
+    in-out property <bool> export-shown;
+    in-out property <ExportData> export-data;
+    callback export-format(index: int);
+    callback export-browse();
+    callback export-ok();
+    callback export-delete-codec();
+    callback export-path-edited();
     in property <bool> memory-warning-shown;
     in property <MemoryWarningData> memory-warning;
     callback memory-warning-ticked(bool, bool, bool, bool);
@@ -166,13 +175,15 @@ export component AppWindow inherits Window {
     callback open-recent(int);
     // The main area takes the keys back once the last overlay closed.
     function overlays-closed() {
-        if (!self.welcome-shown && !self.examples-shown && !self.settings-shown && self.modal.message == Message.none) {
+        if (!self.welcome-shown && !self.examples-shown && !self.settings-shown && !self.export-shown
+            && self.modal.message == Message.none) {
             keys.focus();
         }
     }
     changed welcome-shown => { self.overlays-closed(); }
     changed examples-shown => { self.overlays-closed(); }
     changed settings-shown => { self.overlays-closed(); }
+    changed export-shown => { self.overlays-closed(); }
     changed modal => { self.overlays-closed(); }
 
     title: "WaveDude Rust - " + (root.title-full-path && root.file-path != "" ? root.file-path : root.file-name != "" ? root.file-name : @tr("Untitled")) + (root.dirty ? "*" : "");
@@ -525,6 +536,20 @@ export component AppWindow inherits Window {
         undo-spec: root.undo-spec;
         edited => { root.settings-edited(); }
         preset(q) => { root.welcome-preset(q); }
+    }
+    ExportLayer {
+        // an overlay: its frame sets no bounds on the window
+        min-width: 0px;
+        max-width: 100000px;
+        min-height: 0px;
+        max-height: 100000px;
+        shown <=> root.export-shown;
+        data <=> root.export-data;
+        format(i) => { root.export-format(i); }
+        browse => { root.export-browse(); }
+        ok => { root.export-ok(); }
+        delete-codec => { root.export-delete-codec(); }
+        path-edited => { root.export-path-edited(); }
     }
     AboutLayer {
         // an overlay: its frame sets no bounds on the window

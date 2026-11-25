@@ -80,7 +80,12 @@ struct State {
 	/// The examples the dialog lists, by index into [`examples::all`].
 	example_rows: Vec<usize>,
 	/// The last run export, for Export last.
-	last_export: Option<export::Kind>,
+	last_export: Option<export::Plan>,
+	export_dialog: Option<export::Dialog>,
+	/// The plan of the export running.
+	export_plan: Option<export::Plan>,
+	/// The export asked about and the outputs it would replace, asked one by one.
+	replacing: Option<(export::Plan, Vec<(PathBuf, bool)>)>,
 	/// The document generation the run started from.
 	ran: u64,
 	/// The view generation the pictures are drawn with.
@@ -177,6 +182,9 @@ impl State {
 	}
 
 	fn show(&mut self, app: &AppWindow) {
+		if self.export_dialog.is_none() {
+			app.set_export_shown(false);
+		}
 		self.selection.retain(&self.doc.project);
 		// a row selected elsewhere (an add, a paste) shows its folder
 		let current = self.selection.current();
@@ -295,6 +303,7 @@ impl State {
 		self.find_scene_image();
 		self.selection.set(Node::Project);
 		self.last_export = None;
+		(self.export_dialog, self.replacing) = (None, None);
 		self.playback.reset();
 		self.live.load(&self.doc.project, &self.doc.view);
 		self.playback.frames = self.live.frames;
@@ -656,21 +665,37 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		| Command::ExportFieldFrame
 		| Command::ExportIntensityFrame
 		| Command::ExportLast => {
-			let kind = export::Kind::of(command).or(state.last_export);
-			if state.exporting.is_none()
-				&& let Some(kind) = kind
-			{
-				state.exporting = export::start(
-					kind,
-					&state.doc.project,
-					&state.doc.view,
-					state.playback.position,
-					&state.settings,
-					&state.schemes,
-					&app.global::<ui::Words<'_>>(),
-				);
-				if matches!(kind, export::Kind::Run(_)) && state.exporting.is_some() {
-					state.last_export = Some(kind);
+			if state.exporting.is_some() {
+				return;
+			}
+			match export::Kind::of(command) {
+				Some(kind) => {
+					let words = app.global::<ui::Words<'_>>();
+					let name = state.doc.name().map_or_else(
+						|| words.get_export_file().to_string(),
+						|n| {
+							std::path::Path::new(&n).file_stem().map_or(n.clone(), |s| s.to_string_lossy().into_owned())
+						},
+					);
+					let opened = export::Dialog::open(
+						kind,
+						state.doc.path.as_deref(),
+						&name,
+						state.playback.position,
+						&state.settings,
+						&words,
+					);
+					if let Some((dialog, data)) = opened {
+						state.export_dialog = Some(dialog);
+						app.set_export_data(data);
+						app.set_export_shown(true);
+					}
+				}
+				// Export last repeats the outputs and asks nothing
+				None => {
+					if let Some(plan) = state.last_export.clone() {
+						begin_export(state, app, &plan);
+					}
 				}
 			}
 		}
@@ -1056,6 +1081,43 @@ fn file_name(state: &State, app: &AppWindow) -> String {
 	state.doc.name().unwrap_or_else(|| format!("{}.wdproj", app.global::<ui::Words<'_>>().get_untitled()))
 }
 
+/// Starts the export of `plan`.
+fn begin_export(state: &mut State, app: &AppWindow, plan: &export::Plan) {
+	app.set_export_shown(false);
+	state.export_dialog = None;
+	let s = &*state;
+	state.exporting = export::start(plan, &s.doc.project, &s.doc.view, s.playback.position, &s.settings, &s.schemes);
+	state.export_plan = Some(plan.clone());
+}
+
+/// A completed export: where it wrote is remembered, a run's is what Export last repeats.
+fn export_completed(state: &mut State) {
+	let Some(plan) = state.export_plan.take() else { return };
+	export::remember(&plan, state.doc.path.as_deref(), &mut state.settings);
+	if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
+		tracing::error!("{e}");
+	}
+	if matches!(plan.kind, export::Kind::Run(_)) {
+		state.last_export = Some(plan);
+	}
+}
+
+/// Asks about the next output the export would replace, or starts it when none is left.
+fn ask_replace(state: &mut State, app: &AppWindow) {
+	let Some((plan, outputs)) = state.replacing.as_mut() else { return };
+	match outputs.pop() {
+		Some((path, folder)) => {
+			let message = if folder { ui::Message::ReplaceThem } else { ui::Message::ReplaceIt };
+			tell(app, message, &path.display().to_string());
+		}
+		None => {
+			let plan = plan.clone();
+			state.replacing = None;
+			begin_export(state, app, &plan);
+		}
+	}
+}
+
 /// Shows `message`, `arg` the value its text names.
 fn tell(app: &AppWindow, message: ui::Message, arg: &str) {
 	app.set_modal(ui::Modal { message, arg: arg.into() });
@@ -1109,6 +1171,8 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 	let message = app.get_modal().message;
 	app.set_modal(ui::Modal::default());
 	match (message, answer) {
+		(ui::Message::ReplaceIt | ui::Message::ReplaceThem, ui::Answer::Yes) => ask_replace(state, app),
+		(ui::Message::ReplaceIt | ui::Message::ReplaceThem, _) => state.replacing = None,
 		(ui::Message::SceneImage, answer) => {
 			if let Some((bytes, size)) = state.scene_watch.answer(answer == ui::Answer::Yes) {
 				embed(state, bytes, size);
@@ -1266,6 +1330,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		example_search: String::new(),
 		example_rows: Vec::new(),
 		last_export: None,
+		export_dialog: None,
+		export_plan: None,
+		replacing: None,
 		ran: 0,
 		styled: 0,
 		pictures: (true, true),
@@ -1728,6 +1795,61 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			s.show(&app);
 		}
 	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_export_format(move |index| {
+		let Some(app) = weak.upgrade() else { return };
+		let s = st.borrow();
+		let Some(dialog) = &s.export_dialog else { return };
+		let mut data = app.get_export_data();
+		dialog.format(&mut data, index);
+		app.set_export_data(data);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_export_browse(move || {
+		let Some(app) = weak.upgrade() else { return };
+		let s = st.borrow();
+		let Some(dialog) = &s.export_dialog else { return };
+		let mut data = app.get_export_data();
+		dialog.browse(&mut data, &app.global::<ui::Words<'_>>());
+		app.set_export_data(data);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_export_path_edited(move || {
+		let Some(app) = weak.upgrade() else { return };
+		let s = st.borrow();
+		let Some(dialog) = &s.export_dialog else { return };
+		let mut data = app.get_export_data();
+		data.error = Default::default();
+		dialog.follow(&mut data);
+		app.set_export_data(data);
+	});
+	let weak = app.as_weak();
+	app.on_export_delete_codec(move || {
+		let Some(app) = weak.upgrade() else { return };
+		let mut data = app.get_export_data();
+		export::delete_codec(&mut data);
+		app.set_export_data(data);
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_export_ok(move || {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		let Some(dialog) = &s.export_dialog else { return };
+		let mut data = app.get_export_data();
+		match dialog.plan(&data, &mut s.settings) {
+			Ok(plan) => {
+				// asked in order, popped from the end
+				let mut outputs = plan.existing();
+				outputs.reverse();
+				s.replacing = Some((plan, outputs));
+				ask_replace(s, &app);
+			}
+			Err(e) => {
+				data.error = e.into();
+				app.set_export_data(data);
+			}
+		}
+	});
 	let st = state.clone();
 	app.on_about_copy(move || {
 		let text = about(&st.borrow()).system.to_string();
@@ -1793,7 +1915,10 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 						s.exporting = None;
 						app.set_export_progress(ui::ExportProgress::default());
 						match outcome {
-							Ok(written) => tracing::info!("exported {written}"),
+							Ok(written) => {
+								tracing::info!("exported {written}");
+								export_completed(s);
+							}
 							Err(e) => {
 								tracing::error!("{e}");
 								tell(&app, ui::Message::ExportFailed, "");
