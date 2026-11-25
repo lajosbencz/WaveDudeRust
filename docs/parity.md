@@ -13,7 +13,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 13 | 6 | 1 | 20 | 0 |
 | M | Menus and shortcuts | 75 | 8 | 5 | 52 | 0 |
-| D | Dialogs and windows | 37 | 14 | 20 | 8 | 0 |
+| D | Dialogs and windows | 41 | 16 | 14 | 8 | 0 |
 | S | Settings | 15 | 6 | 8 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 56 | 2 | 5 | 38 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
 | R | Live editing and runs | 31 | 14 | 14 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 759 | 74 | 99 | 158 | 5 |
+| | All | 763 | 76 | 93 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -286,7 +286,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-08 | Message window: 32 px disc red "!" for error (plus error sound), accent "?" for question, info none | MessageWindow.xaml:30-35 | ui/70 | done | error and question discs; rest matched in general (decision 0033) |
 | D-09 | Message window: wrapped text beside disc, buttons right-aligned at bottom | MessageWindow.xaml:36-40 | ui/70 | done | modal.slint:69-86 |
 | D-10 | Button set OK (Enter, Esc, close box = OK) | MessageWindow.xaml.cs | ui/70 | done | main.rs modal(... ["OK"],0,0) |
-| D-11 | Button set Yes (default) / No (Esc); Yes/No(default) for destructive | SE:289-290 | ui/70 | missing | no Yes/No question uses exist (replace-folder, discard) |
+| D-11 | Button set Yes (default) / No (Esc); Yes/No(default) for destructive | SE:289-290 | ui/70 | partial | Yes/No with No default for Discard frames and the running export; no Yes-default question yet |
 | D-12 | Button set Save (default) / Don't save / Cancel (Esc) | SE:291-293 | ui/70 | done | main.rs:~118 modal(... ["Save","Don't save","Cancel"],0,2) |
 | D-13 | Mnemonics work without Alt on buttons (_Yes _No _Save _Don't save _Cancel) | SE:288-293 | ui/70 | divergence | decision 0033, matched in general, not to the pixel/id |
 | D-14 | Uses: open/save errors "Could not open/save '{0}'." | MessageWindow users | ui/70 | done | main.rs open()/save() modals |
@@ -294,12 +294,12 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-16 | Use: "The export failed." and image save error | MainWindow.Export.cs | ui/70 | done | "The export failed.", detail logged |
 | D-17 | Error dialog one line; detail to log and Messages tooltip (unreadable file: first 64K chars + XML error line) | n/a | ui/70 | done | one line, detail logged; rest matched in general (decision 0033) |
 | D-18 | Unsaved edits prompt before New, Open, Close, Exit, update restart, example, recent file: "Save the changes to <name>?" | MainWindow.Project.cs | ui/70 Unsaved | done | New, Open, Close, Exit, example; updater dropped |
-| D-19 | "An export is running. Stop it and quit?" Yes/No on Exit/close/update | n/a | ui/70 Unsaved | missing | |
+| D-19 | "An export is running. Stop it and quit?" Yes/No on Exit/close/update | n/a | ui/70 Unsaved | done | Exit or close while exporting asks An export is running. Stop it and quit? Yes/No (No default), then the unsaved check |
 | D-20 | Scene image changed on disk: "The scene image file '<name>' differs from the image embedded... Load the file?" Load file (default)/Keep embedded (Esc) | WPF scene image watch | ui/70, ui/60 | missing | no file watch |
 | D-21 | Memory warning window: 500 px wide, "?" disc, facts text, "Settings to change for this and later runs:", checkboxes (RAM cache to Auto, halve resolution, half the frames, 8-bit samples; pre-ticked mildest set), result line, "Do not warn me again", Run (default) / Cancel | WPF/Dialogs/MemoryWarningWindow.xaml:20-77, SE:296-304 | ui/70 Memory warning, ui/60 | done | memory-warning.slint: 500 px, ? disc, facts, four boxes (cache box browser only), bar, fit line, Do not warn me again, Run (Enter) / Cancel (Esc) |
 | D-22 | Welcome page modal: title "Welcome to WaveDude Rust", shown first start and each launch while ShowStartup, and File > Welcome Page | not in Next | ui/70 Welcome | done | welcome.slint, main.rs:~455 |
 | D-23 | Welcome: "Preview quality" heading + one sentence | not in Next | ui/70 Welcome 1 | done | welcome.slint:38-45 |
-| D-24 | Welcome: RAM row ("{available} available of {physical}") | not in Next | ui/70 Welcome 2 | partial | welcome.slint:46; main.rs show_welcome prints physical GiB only, no "available" |
+| D-24 | Welcome: RAM row ("{available} available of {physical}") | not in Next | ui/70 Welcome 2 | done | Welcome RAM: {available} available of {physical} (browser: physical) |
 | D-25 | Welcome: buttons Low / Medium / High / Auto apply presets at once + dim levers line | not in Next | ui/70 Welcome 3 | done | welcome.slint:51-62, settings::preset/levers; levers text lacks "dithering" note (spec example matches) |
 | D-26 | Welcome: "Settings..." closes page and opens Settings | not in Next | ui/70 Welcome 4 | done | welcome.slint:63-69 |
 | D-27 | Welcome: check box "Show this page at each launch" (ShowStartup), saved as it changes | not in Next | ui/70 Welcome 5 | done | welcome.slint:70-74 |
@@ -330,14 +330,14 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-52 | About window: modal 600 px wide (min 480x620), Esc/Enter close, focus on Close | WPF/Help/AboutWindow.xaml:21-28 | ui/70 About | done | modal About; rest matched in general (decision 0033) |
 | D-53 | About: app icon 64 px, product name, "Version x.y.z (hash7)", tagline "A 2D wave simulator", copyright line | AboutWindow.xaml:44-53, SE:115-117 | ui/70 About 1 | done | version and tagline; rest matched in general (decision 0033) |
 | D-54 | About: "Based on the work of" credits word for word with 5 hyperlinks; WaveDude Next credit + GitHub link (port) | AboutWindow.xaml:56-70, SE:118 | ui/70 About 2 | partial | credits as one plain sentence, no links, no Next link line |
-| D-55 | About: License section, GPL notice, toggle "Show/Hide the license text" (T), LICENSE.md rendered in scroll box | AboutWindow.xaml:72-86, SE:119-122 | ui/70 About 3 | missing | one GPL sentence only |
-| D-56 | About: OpenH264 notice + toggle "Show the OpenH264 license" (O) (port) | not in Next | ui/70 About 4 | missing | |
-| D-57 | About: System box (Program, Runtime, OS, Processor+cores, GPU setting, Engine, H.264 encoder) read-only, max 160 px | AboutWindow.xaml:88-94, SE:123-138 | ui/70 About 4 | missing | |
+| D-55 | About: License section, GPL notice, toggle "Show/Hide the license text" (T), LICENSE.md rendered in scroll box | AboutWindow.xaml:72-86, SE:119-122 | ui/70 About 3 | partial | about.slint License section, Show/Hide the license text (T); LICENSE.md as plain text in a scroll box, not rendered |
+| D-56 | About: OpenH264 notice + toggle "Show the OpenH264 license" (O) (port) | not in Next | ui/70 About 4 | done | OpenH264 notice and Show/Hide the OpenH264 license (O), Cisco licence text |
+| D-57 | About: System box (Program, Runtime, OS, Processor+cores, GPU setting, Engine, H.264 encoder) read-only, max 160 px | AboutWindow.xaml:88-94, SE:123-138 | ui/70 About 4 | partial | System box: program, runtime, OS and arch, logical cores, GPU setting, engine, H.264 encoder; no processor name; Copy system info (C) |
 | D-58 | About: buttons "Copy system info" (C, tooltip, status "System information copied to the clipboard") and "Close" (default/cancel) | AboutWindow.xaml:96-99, SE:139-142 | ui/70 About 5 | partial | Close only |
 | D-59 | Examples dialog: modal 860 px, title "Examples", six topic tabs with counts 8/10/7/5/18/5 | not in Next (Next: submenu) | ui/70 Examples | done | 860 px, six topic tabs |
 | D-60 | Examples: search box filters all tabs by title+description, dims tabs without a match, moves to first with match | not in Next | ui/70 Examples | done | search filters and moves to a match; rest matched in general (decision 0033) |
 | D-61 | Examples: 360 px scrolled list, rows title + wrapped dim description | not in Next | ui/70 Examples | done | examples.slint:75-97 (height not fixed to 360) |
-| D-62 | Examples: Welcome page... button (port) closes dialog, opens welcome | not in Next | ui/70 Examples | missing | buttons Open, Cancel only |
+| D-62 | Examples: Welcome page... button (port) closes dialog, opens welcome | not in Next | ui/70 Examples | done | Examples: Welcome page... closes the dialog and opens the Welcome page |
 | D-63 | Examples: Open / Cancel; Enter, Open, double-click opens; Esc/Cancel closes; Left/Right tab, Up/Down row; Tab cycles | not in Next | ui/70 Examples | done | Open/Cancel, Enter, double-click, Esc, Left/Right |
 | D-64 | Manual window (contents tree, rendered MANUAL.md, splitter) | WPF/Help/ManualWindow.xaml, SE:143-146 | ui/70 Manual | divergence | removed, decision 0028 |
 | D-65 | Colour picker popup (swatch button, SV square, hue strip, R/G/B number boxes, hex box, live follow <=10 Hz, Enter keeps / Esc restores) | WPF/Controls/ColorPicker.cs, ColorPickerButton.cs | ui/70 Colour picker | done | color-picker.slint; HSV in the model (Rgb::to_hsv, from_hsv); one undo step an opening |

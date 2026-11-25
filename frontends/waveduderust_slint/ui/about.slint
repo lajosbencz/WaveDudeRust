@@ -1,0 +1,144 @@
+import { Button, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// What the About window shows beside its own text.
+export struct AboutData {
+    version: string,
+    license: string,
+    // Cisco's licence; empty when OpenH264 is compiled in
+    openh264: string,
+    // one line each: program, runtime, OS, processor, GPU setting, engine, H.264 encoder
+    system: string,
+}
+
+// A read-only text in a scrolling box.
+component TextBox inherits Rectangle {
+    in property <string> text;
+    border-width: 1px;
+    border-color: Theme.border;
+    ScrollView {
+        content-height: text.height;
+        text := Text {
+            x: 6px;
+            y: 0px;
+            // the box's width: the viewport's would follow the text's own
+            width: root.width - 24px;
+            height: self.preferred-height;
+            text: root.text;
+            wrap: word-wrap;
+            color: Theme.text;
+        }
+    }
+}
+
+// The About window (docs/ui/70, About dialog): Esc or Enter closes, T and O show the licences, C copies the system lines.
+export component AboutLayer inherits Rectangle {
+    in-out property <bool> shown;
+    in property <AboutData> data;
+    // the system lines to the clipboard
+    callback copy();
+
+    property <bool> license-open;
+    // the window's height, followed by a handler: a binding would loop through the boxes' heights
+    property <length> room: 600px;
+    init => { root.room = self.height; }
+    changed height => { root.room = self.height; }
+    property <bool> openh264-open;
+
+    visible: root.shown;
+    background: #00000080;
+    TouchArea { }
+    changed shown => {
+        root.license-open = false;
+        root.openh264-open = false;
+        if (self.shown) { keys.focus(); }
+    }
+    keys := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape || e.text == Key.Return) { root.shown = false; return accept; }
+            if (e.modifiers.control || e.modifiers.alt) { return reject; }
+            if (e.text == "t" || e.text == "T") { root.license-open = !root.license-open; return accept; }
+            if ((e.text == "o" || e.text == "O") && root.data.openh264 != "") { root.openh264-open = !root.openh264-open; return accept; }
+            if (e.text == "c" || e.text == "C") { root.copy(); return accept; }
+            reject
+        }
+        Rectangle {
+            width: min(600px, root.width - 40px);
+            height: min(box.preferred-height, root.height - 40px);
+            background: Theme.window-background;
+            border-width: 1px;
+            border-color: Theme.accent;
+            // a window too short for it scrolls the dialog
+            ScrollView {
+            content-height: box.preferred-height;
+            box := VerticalLayout {
+                width: parent.width;
+                padding: 12px;
+                spacing: 8px;
+                Text { text: @tr("About WaveDude Rust"); font-weight: 700; color: Theme.text; }
+                Text { text: "WaveDude Rust " + root.data.version; font-size: 16px; color: Theme.text; }
+                Text { text: @tr("A 2D wave simulator"); color: Theme.text-dim; }
+                Text {
+                    text: @tr("Based on the work of WaveDude Next; Jeroen Vleggaar, Huygens Optics, author of Wave Dude 2D, Copyright (C) 2026; 0x23 (Diffraction Limited), author of WaveSimulator2D.");
+                    wrap: word-wrap;
+                    color: Theme.text;
+                }
+                Text { text: @tr("License"); font-weight: 700; color: Theme.text; }
+                Text {
+                    text: @tr("This program is free software under the GNU General Public License, version 3 or later.");
+                    wrap: word-wrap;
+                    color: Theme.text;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        text: root.license-open ? @tr("Hide the license text") : @tr("Show the license text");
+                        clicked => { root.license-open = !root.license-open; }
+                    }
+                }
+                if root.license-open: TextBox {
+                    height: max(120px, min(260px, root.room * 0.3));
+                    text: root.data.license;
+                }
+                if root.data.openh264 != "": Text { text: "OpenH264"; font-weight: 700; color: Theme.text; }
+                if root.data.openh264 != "": Text {
+                    text: @tr("OpenH264 Video Codec provided by Cisco Systems, Inc.");
+                    wrap: word-wrap;
+                    color: Theme.text;
+                }
+                if root.data.openh264 != "": HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        text: root.openh264-open ? @tr("Hide the OpenH264 license") : @tr("Show the OpenH264 license");
+                        clicked => { root.openh264-open = !root.openh264-open; }
+                    }
+                }
+                if root.openh264-open: TextBox {
+                    height: max(120px, min(260px, root.room * 0.3));
+                    text: root.data.openh264;
+                }
+                Text { text: @tr("System"); font-weight: 700; color: Theme.text; }
+                TextBox {
+                    height: min(160px, sys.preferred-height + 8px);
+                    text: root.data.system;
+                    sys := Text { visible: false; text: root.data.system; }
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Button {
+                        text: @tr("Copy system info");
+                        clicked => { root.copy(); }
+                        Tooltip { text: @markdown("\{@tr("Copy the system lines to the clipboard, for a bug report")}"); }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    Button {
+                        text: @tr("Close");
+                        primary: true;
+                        clicked => { root.shown = false; }
+                    }
+                }
+            }
+            }
+        }
+    }
+}

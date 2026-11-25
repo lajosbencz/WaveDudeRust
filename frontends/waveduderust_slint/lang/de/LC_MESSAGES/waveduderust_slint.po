@@ -596,9 +596,17 @@ msgstr "Kopieren"
 msgid "Copy all"
 msgstr "Alles kopieren"
 
+#. AboutCopy
+msgid "Copy system info"
+msgstr "Systeminfo kopieren"
+
 #. TipBasedOn
 msgid "Copy the stops of an existing scheme into this one, then change them"
 msgstr "Übernimmt die Stützpunkte eines vorhandenen Schemas; danach anpassen"
+
+#. TipAboutCopy
+msgid "Copy the system lines to the clipboard, for a bug report"
+msgstr "Die Systemzeilen in die Zwischenablage kopieren, für einen Fehlerbericht"
 
 #. SectionCore
 msgid "Core"
@@ -1208,6 +1216,10 @@ msgstr "Höhe des Diagrammkastens in Leinwandpixeln; nur bei eigener Kastengrö�
 msgid "Help"
 msgstr "Hilfe"
 
+#. AboutHideLicense
+msgid "Hide the license text"
+msgstr "Lizenztext ausblenden"
+
 #. Label.SourceArray.SpacingX
 msgid "Horizontal spacing"
 msgstr "Horizontaler Abstand"
@@ -1443,6 +1455,10 @@ msgstr "Das Licht des oberen Ausgangs aus dem Gatter lassen. Ausgeschaltet nimmt
 #. MessagesColumnLevel
 msgid "Level"
 msgstr "Stufe"
+
+#. AboutLicense
+msgid "License"
+msgstr "Lizenz"
 
 #. Enum.AppTheme.Light
 msgid "Light"
@@ -2267,6 +2283,10 @@ msgstr "Die Griffe, Linien, Emitterpunkte und Hebel aller Quellen, Bauteile und 
 #. TipPreviewShowIntensity
 msgid "Show the intensity picture"
 msgstr "Intensitätsbild anzeigen"
+
+#. AboutShowLicense
+msgid "Show the license text"
+msgstr "Lizenztext anzeigen"
 
 #. Hint.Display.LabelsInPreview
 msgid "Show the names beside the handles over the preview pictures. A selected object shows its own either way."

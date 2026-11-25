@@ -596,9 +596,17 @@ msgstr "Kopiëren"
 msgid "Copy all"
 msgstr "Alles kopiëren"
 
+#. AboutCopy
+msgid "Copy system info"
+msgstr "Systeeminfo kopiëren"
+
 #. TipBasedOn
 msgid "Copy the stops of an existing scheme into this one, then change them"
 msgstr "Neemt de punten van een bestaand schema over; daarna aanpassen"
+
+#. TipAboutCopy
+msgid "Copy the system lines to the clipboard, for a bug report"
+msgstr "De systeemregels naar het klembord kopiëren, voor een foutmelding"
 
 #. SectionCore
 msgid "Core"
@@ -1208,6 +1216,10 @@ msgstr "Hoogte van het grafiekkader in canvaspixels; alleen bij een eigen kaderm
 msgid "Help"
 msgstr "Help"
 
+#. AboutHideLicense
+msgid "Hide the license text"
+msgstr "Licentietekst verbergen"
+
 #. Label.SourceArray.SpacingX
 msgid "Horizontal spacing"
 msgstr "Horizontale afstand"
@@ -1443,6 +1455,10 @@ msgstr "Laat het licht van de bovenste uitgang de poort verlaten. Uitgeschakeld 
 #. MessagesColumnLevel
 msgid "Level"
 msgstr "Niveau"
+
+#. AboutLicense
+msgid "License"
+msgstr "Licentie"
 
 #. Enum.AppTheme.Light
 msgid "Light"
@@ -2267,6 +2283,10 @@ msgstr "De grepen, lijnen, emitterpunten en hefbomen van alle bronnen, onderdele
 #. TipPreviewShowIntensity
 msgid "Show the intensity picture"
 msgstr "Intensiteitsbeeld tonen"
+
+#. AboutShowLicense
+msgid "Show the license text"
+msgstr "Licentietekst tonen"
 
 #. Hint.Display.LabelsInPreview
 msgid "Show the names beside the handles over the preview pictures. A selected object shows its own either way."

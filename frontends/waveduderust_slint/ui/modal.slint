@@ -2,7 +2,7 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // The messages the app shows; `none` while none is.
-export enum Message { none, save-changes, discard-frames, about, open-failed, save-failed, export-failed }
+export enum Message { none, save-changes, discard-frames, export-running, open-failed, save-failed, export-failed }
 
 // A message and the one value its text names: a file's name or path, or the version.
 export struct Modal {
@@ -24,12 +24,12 @@ export component ModalLayer inherits Rectangle {
     callback answer(Answer);
 
     // a destructive question: No is the default
-    property <bool> confirms: modal.message == Message.discard-frames;
+    property <bool> confirms: modal.message == Message.discard-frames || modal.message == Message.export-running;
     property <bool> asks: modal.message == Message.save-changes || root.confirms;
     property <bool> fails: modal.message == Message.open-failed || modal.message == Message.save-failed || modal.message == Message.export-failed;
     property <[Choice]> choices: root.confirms ? [{ text: @tr("Yes"), answer: Answer.yes }, { text: @tr("No"), answer: Answer.no }]
         : root.asks ? [{ text: @tr("Save"), answer: Answer.save }, { text: @tr("Don't save"), answer: Answer.discard }, { text: @tr("Cancel"), answer: Answer.cancel }]
-        : [{ text: modal.message == Message.about ? @tr("Close") : @tr("OK"), answer: Answer.ok }];
+        : [{ text: @tr("OK"), answer: Answer.ok }];
 
     visible: modal.message != Message.none;
     background: #00000080;
@@ -52,7 +52,7 @@ export component ModalLayer inherits Rectangle {
             padding: 12px;
             spacing: 12px;
             Text {
-                text: modal.message == Message.about ? @tr("About WaveDude Rust") : "WaveDude Rust";
+                text: "WaveDude Rust";
                 font-weight: 700;
                 color: Theme.text;
             }
@@ -72,12 +72,10 @@ export component ModalLayer inherits Rectangle {
                 Text {
                     text: modal.message == Message.save-changes ? @tr("Save the changes to {}?", modal.arg)
                         : modal.message == Message.discard-frames ? @tr("Discard the frames of the run?")
+                        : modal.message == Message.export-running ? @tr("An export is running. Stop it and quit?")
                         : modal.message == Message.open-failed ? @tr("Could not open '{}'.", modal.arg)
                         : modal.message == Message.save-failed ? @tr("Could not save '{}'.", modal.arg)
                         : modal.message == Message.export-failed ? @tr("The export failed.")
-                        : modal.message == Message.about ? "WaveDude Rust \{modal.arg}\n" + @tr("A 2D wave simulator") + "\n\n"
-                            + @tr("Based on the work of WaveDude Next; Jeroen Vleggaar, Huygens Optics, author of Wave Dude 2D, Copyright (C) 2026; 0x23 (Diffraction Limited), author of WaveSimulator2D.")
-                            + "\n\n" + @tr("This program is free software under the GNU General Public License, version 3 or later.")
                         : "";
                     wrap: word-wrap;
                     color: Theme.text;

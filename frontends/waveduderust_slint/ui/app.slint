@@ -20,6 +20,7 @@ import { Timeline, TransportBar, Transport } from "timeline.slint";
 import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
 import { ModalLayer, Modal, Message, Answer } from "modal.slint";
 import { MemoryWarningLayer, MemoryWarningData } from "memory-warning.slint";
+import { AboutLayer, AboutData } from "about.slint";
 import { SettingsLayer, SettingsData, ColorTheme, Language, Scale } from "settings.slint";
 export { SettingsData, ColorTheme, Language, Scale }
 import { WelcomeLayer, Levers } from "welcome.slint";
@@ -31,7 +32,7 @@ export { NumberLogic, NumberSpec } from "number-box.slint";
 export { ColorLogic, Hsv } from "color-picker.slint";
 export { Canvas, EdgeLine, GraphBox, GraphTick, HandleData, HandleGlyph, HandleKey, HoverTip, LabelData, OverlayArt, Rect, TipKind } from "canvas.slint";
 export { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
-export { MemoryWarningData }
+export { MemoryWarningData, AboutData }
 export { Theme, TreeRow, TreeKind, Transport, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
@@ -107,7 +108,8 @@ export component AppWindow inherits Window {
     callback example-search(string);
     callback example-open(int);
     in-out property <bool> welcome-shown;
-    in property <float> welcome-ram;
+    in property <string> welcome-ram-available;
+    in property <string> welcome-ram-physical;
     in property <Levers> welcome-levers;
     in property <bool> welcome-show-startup;
     callback welcome-preset(PreviewQuality);
@@ -125,6 +127,9 @@ export component AppWindow inherits Window {
     callback log-regex(bool);
     callback log-select(int, bool, bool);
     callback log-copy(bool) -> bool;
+    in-out property <bool> about-shown;
+    in property <AboutData> about;
+    callback about-copy();
     in property <bool> memory-warning-shown;
     in property <MemoryWarningData> memory-warning;
     callback memory-warning-ticked(bool, bool, bool, bool);
@@ -484,7 +489,8 @@ export component AppWindow inherits Window {
         min-height: 0px;
         max-height: 100000px;
         shown <=> root.welcome-shown;
-        ram: root.welcome-ram;
+        ram-available: root.welcome-ram-available;
+        ram-physical: root.welcome-ram-physical;
         levers: root.welcome-levers;
         show-startup: root.welcome-show-startup;
         preset(i) => { root.welcome-preset(i); }
@@ -506,6 +512,7 @@ export component AppWindow inherits Window {
         pick-topic(i) => { root.example-topic-picked(i); }
         search(t) => { root.example-search(t); }
         open(i) => { root.example-open(i); }
+        welcome => { root.command(Command.welcome); }
     }
     SettingsLayer {
         // an overlay: its frame sets no bounds on the window
@@ -518,6 +525,16 @@ export component AppWindow inherits Window {
         undo-spec: root.undo-spec;
         edited => { root.settings-edited(); }
         preset(q) => { root.welcome-preset(q); }
+    }
+    AboutLayer {
+        // an overlay: its frame sets no bounds on the window
+        min-width: 0px;
+        max-width: 100000px;
+        min-height: 0px;
+        max-height: 100000px;
+        shown <=> root.about-shown;
+        data: root.about;
+        copy => { root.about-copy(); }
     }
     MemoryWarningLayer {
         // an overlay: its frame sets no bounds on the window

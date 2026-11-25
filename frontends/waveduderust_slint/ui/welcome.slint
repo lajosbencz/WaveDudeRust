@@ -13,7 +13,9 @@ export struct Levers {
 export component WelcomeLayer inherits Rectangle {
     in-out property <bool> shown;
     // the machine's memory in GiB
-    in property <float> ram;
+    // the memory free now (empty when unknown) and the machine's
+    in property <string> ram-available;
+    in property <string> ram-physical;
     in property <Levers> levers;
     in property <bool> show-startup;
     callback preset(PreviewQuality);
@@ -57,7 +59,8 @@ export component WelcomeLayer inherits Rectangle {
                 color: Theme.text;
             }
             Text {
-                text: @tr("RAM: {} GiB", root.ram.to-fixed(1));
+                text: root.ram-available == "" ? @tr("RAM: {}", root.ram-physical)
+                    : @tr("RAM: {} available of {}", root.ram-available, root.ram-physical);
                 color: Theme.text;
             }
             HorizontalLayout {

@@ -519,6 +519,11 @@ fn command(state: &mut State, app: &AppWindow, command: Command) {
 }
 
 fn act(state: &mut State, app: &AppWindow, action: Action) {
+	if matches!(action, Action::Command(Command::Exit)) && state.exporting.is_some() {
+		state.pending = Some(action);
+		tell(app, ui::Message::ExportRunning, "");
+		return;
+	}
 	if action.replaces() && state.doc.dirty() {
 		state.pending = Some(action);
 		let name = state.doc.name().unwrap_or_else(|| app.global::<ui::Words<'_>>().get_untitled().into());
@@ -635,7 +640,10 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			show_settings(state, app);
 			app.set_settings_shown(true);
 		}
-		Command::About => tell(app, ui::Message::About, env!("CARGO_PKG_VERSION")),
+		Command::About => {
+			app.set_about(about(state));
+			app.set_about_shown(true);
+		}
 		Command::Undo => {
 			state.doc.undo();
 			state.selection.collapse();
@@ -823,6 +831,42 @@ fn apply_theme(state: &mut State, app: &AppWindow) {
 	}
 }
 
+/// The About window's version, licences and system lines.
+fn about(state: &State) -> ui::AboutData {
+	let threads = state.facts.threads;
+	let gpu = if state.settings.use_gpu { "on" } else { "off" };
+	#[cfg(not(target_arch = "wasm32"))]
+	let h264 = {
+		let enabled = waveduderust_platform::codec::enabled(state.settings.use_openh264);
+		let installed = waveduderust_platform::settings::AppDirs::platform()
+			.and_then(|d| waveduderust_platform::codec::installed(&d.codec()))
+			.is_some();
+		match (enabled, installed) {
+			(false, _) => "not enabled",
+			(true, true) => "Cisco's OpenH264 2.6.0",
+			(true, false) => "enabled, not downloaded",
+		}
+	};
+	#[cfg(target_arch = "wasm32")]
+	let h264 = "the browser's (WebCodecs)";
+	let system = [
+		format!("Program: WaveDude Rust {}", env!("CARGO_PKG_VERSION")),
+		"Runtime: Rust, Slint".to_owned(),
+		format!("Operating system: {} {}", std::env::consts::OS, std::env::consts::ARCH),
+		format!("Processor: {threads} logical cores"),
+		format!("GPU setting: {gpu}"),
+		format!("Engine: {}", state.live.engine()),
+		format!("H.264 encoder: {h264}"),
+	]
+	.join("\n");
+	ui::AboutData {
+		version: env!("CARGO_PKG_VERSION").into(),
+		license: include_str!("../../../LICENSE.md").into(),
+		openh264: include_str!("../../../crates/waveduderust/assets/OpenH264-BINARY_LICENSE.txt").into(),
+		system: system.into(),
+	}
+}
+
 /// The memory warning answered: Run applies the ticks to the settings and runs, Cancel leaves the frames as they
 /// are and turns playback off; `mute` clears the setting.
 fn answer_warning(state: &mut State, app: &AppWindow, run: bool, mute: bool) {
@@ -886,9 +930,14 @@ fn show_settings(state: &State, app: &AppWindow) {
 		let (available, physical) = settings::ram();
 		(data.ram_available, data.ram_physical) = (available.into(), physical.into());
 	}
+	app.set_welcome_ram_available(data.ram_available.clone());
+	app.set_welcome_ram_physical(if data.ram_physical.is_empty() {
+		memory::size(state.facts.physical_bytes).into()
+	} else {
+		data.ram_physical.clone()
+	});
 	app.set_settings(data);
 	app.set_undo_spec(settings::undo_spec());
-	app.set_welcome_ram((state.facts.physical_bytes as f64 / f64::from(1u32 << 30)) as f32);
 	app.set_welcome_levers(settings::levers(&state.settings));
 	app.set_welcome_show_startup(state.settings.show_startup);
 }
@@ -948,13 +997,30 @@ fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
 
 /// The answer to the message window: for the unsaved edits prompt, Save, Don't save or Cancel.
 fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
+	let message = app.get_modal().message;
 	app.set_modal(ui::Modal::default());
-	// only Discard frames asks Yes or No
-	if answer == ui::Answer::Yes && state.commands().can_discard {
-		state.live.discard();
-		state.playback.pause();
-		state.playback.seek(0);
-		tracing::info!("Frames discarded");
+	match (message, answer) {
+		(ui::Message::DiscardFrames, ui::Answer::Yes) if state.commands().can_discard => {
+			state.live.discard();
+			state.playback.pause();
+			state.playback.seek(0);
+			tracing::info!("Frames discarded");
+		}
+		(ui::Message::ExportRunning, ui::Answer::Yes) => {
+			if let Some(e) = state.exporting.take() {
+				e.cancel();
+			}
+			// on to the unsaved changes, then out
+			if let Some(then) = state.pending.take() {
+				act(state, app, then);
+			}
+			return;
+		}
+		(ui::Message::ExportRunning, _) => {
+			state.pending = None;
+			return;
+		}
+		_ => {}
 	}
 	if let Some(then) = state.pending.take() {
 		let go = match answer {
@@ -1439,7 +1505,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.window().on_close_requested(move || {
 		let Some(app) = weak.upgrade() else { return slint::CloseRequestResponse::HideWindow };
 		let s = &mut *st.borrow_mut();
-		if s.doc.dirty() {
+		if s.doc.dirty() || s.exporting.is_some() {
 			command(s, &app, Command::Exit);
 			slint::CloseRequestResponse::KeepWindowShown
 		} else {
@@ -1497,6 +1563,14 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			let s = &mut *st.borrow_mut();
 			answer_warning(s, &app, run, mute);
 			s.show(&app);
+		}
+	});
+	let st = state.clone();
+	app.on_about_copy(move || {
+		let text = about(&st.borrow()).system.to_string();
+		match clipboard::write(text) {
+			Ok(()) => tracing::info!("System information copied to the clipboard"),
+			Err(e) => tracing::warn!("clipboard: {e}"),
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());

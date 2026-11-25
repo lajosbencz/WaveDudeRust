@@ -166,6 +166,11 @@ impl Live {
 		}
 	}
 
+	/// The engine as the status bar names it.
+	pub(crate) fn engine(&self) -> &str {
+		&self.engine
+	}
+
 	pub(crate) fn active(&self) -> bool {
 		self.active
 	}

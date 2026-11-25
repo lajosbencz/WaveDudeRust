@@ -36,6 +36,8 @@ export component ExamplesLayer inherits Rectangle {
         : root.topic == ExampleTopic.guides ? 4 : 5;
     callback search(string);
     callback open(int);
+    // the Welcome page in place of the dialog
+    callback welcome();
 
     visible: shown;
     background: #00000080;
@@ -107,8 +109,15 @@ export component ExamplesLayer inherits Rectangle {
                 }
             }
             HorizontalLayout {
-                alignment: end;
                 spacing: 6px;
+                Button {
+                    text: @tr("Welcome page...");
+                    clicked => {
+                        root.shown = false;
+                        root.welcome();
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
                 Button {
                     text: @tr("Open");
                     primary: true;
