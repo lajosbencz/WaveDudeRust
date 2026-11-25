@@ -18,7 +18,7 @@ use waveduderust::unstable::spec::{RunRequest, SceneCache};
 
 use waveduderust::io::schemes::SchemeStore;
 
-use crate::gpu::{Look, Picture};
+use crate::gpu::{CpuPicture, Look, Picture};
 use crate::ui::{RunState, RunStatus};
 
 /// What an edit asks of the run (docs/ui/60, Edit classes).
@@ -60,13 +60,10 @@ pub(crate) struct Live {
 	steps: u32,
 	/// The engine as the status bar names it.
 	engine: String,
-	/// The layers of a stored frame the device no longer holds.
-	uploads: Uploads,
 	last_state: Option<std::mem::Discriminant<WorkState>>,
-	device: wgpu::Device,
-	queue: wgpu::Queue,
-	pipeline: PicturePipeline,
-	field: Picture,
+	/// The device the engine and the pictures share; `None` without one.
+	context: Option<std::sync::Arc<GpuContext>>,
+	painter: Painter,
 	/// The scene the edges are made from.
 	scene: SceneCache,
 	/// The scene's glowing edges, drawn over a picture whose layer shows the outline.
@@ -75,7 +72,6 @@ pub(crate) struct Live {
 	gpu: std::sync::Arc<std::sync::atomic::AtomicBool>,
 	/// The objects off the canvas last warned of.
 	off: Vec<OffCanvas>,
-	intensity: Picture,
 	/// An Auto of an 8-bit frame waiting for the frame in 16-bit: the request and the layer.
 	fit: Option<(u64, Layer)>,
 	fits: u64,
@@ -158,6 +154,27 @@ pub(crate) enum Fit {
 	Pending,
 }
 
+/// Where the pictures are coloured.
+enum Painter {
+	Gpu(Box<GpuPainter>),
+	Cpu(Box<[CpuPicture; 2]>),
+}
+
+struct GpuPainter {
+	device: wgpu::Device,
+	queue: wgpu::Queue,
+	pipeline: PicturePipeline,
+	pictures: [Picture; 2],
+	/// The layers of a stored frame the device no longer holds.
+	uploads: Uploads,
+}
+
+impl Painter {
+	fn cpu() -> Self {
+		Self::Cpu(Box::new([CpuPicture::new(Layer::Field), CpuPicture::new(Layer::Intensity)]))
+	}
+}
+
 /// What a poll brings the window.
 pub(crate) struct Shown {
 	pub(crate) field: Option<slint::Image>,
@@ -190,9 +207,9 @@ fn off_canvas_list(off: &[OffCanvas]) -> String {
 }
 
 impl Live {
-	pub(crate) fn new(context: &std::sync::Arc<GpuContext>) -> std::io::Result<Self> {
-		let (device, queue) = (context.device.clone(), context.queue.clone());
-		let gpu = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+	/// The run on `context`'s device, or on the CPU without one.
+	pub(crate) fn new(context: Option<&std::sync::Arc<GpuContext>>) -> std::io::Result<Self> {
+		let gpu = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(context.is_some()));
 		#[cfg(not(target_arch = "wasm32"))]
 		let worker = {
 			let gpu = gpu.clone();
@@ -204,13 +221,25 @@ impl Live {
 			RunWorker::new(engines, std::env::temp_dir(), Default::default())?
 		};
 		#[cfg(target_arch = "wasm32")]
+		let context = context.ok_or_else(|| std::io::Error::other("no usable GPU"))?;
+		#[cfg(target_arch = "wasm32")]
 		let worker = crate::web::worker(context.clone());
 		worker.set_notify(Box::new(crate::wake::wake));
 		let worker = Rc::new(worker);
 		#[cfg(target_arch = "wasm32")]
 		let pump = crate::web::run(worker.clone(), context.clone());
-		let pipeline = PicturePipeline::new(&device, wgpu::TextureFormat::Rgba8Unorm);
-		let (field, intensity) = (Picture::new(&device, Layer::Field), Picture::new(&device, Layer::Intensity));
+		#[cfg(target_arch = "wasm32")]
+		let context = Some(context);
+		let painter = context.map_or_else(Painter::cpu, |c| {
+			let (device, queue) = (c.device.clone(), c.queue.clone());
+			Painter::Gpu(Box::new(GpuPainter {
+				pipeline: PicturePipeline::new(&device, wgpu::TextureFormat::Rgba8Unorm),
+				pictures: [Picture::new(&device, Layer::Field), Picture::new(&device, Layer::Intensity)],
+				uploads: Uploads::default(),
+				device,
+				queue,
+			}))
+		});
 		Ok(Self {
 			worker,
 			#[cfg(target_arch = "wasm32")]
@@ -238,24 +267,21 @@ impl Live {
 			started: None,
 			summarised: false,
 			steps: 0,
-			engine: format!("GPU: {}", context.info.name),
-			uploads: Uploads::default(),
+			engine: context.map_or_else(|| "CPU".to_owned(), |c| format!("GPU: {}", c.info.name)),
 			last_state: None,
-			device,
-			queue,
-			pipeline,
-			field,
+			context: context.cloned(),
+			painter,
 			scene: SceneCache::default(),
 			edges: None,
 			off: Vec::new(),
 			gpu,
-			intensity,
 		})
 	}
 
 	/// The device of the engines built from now on (Use the GPU): the next run or edit builds on it.
+	/// Engines on the GPU when `on` and a device is there.
 	pub(crate) fn set_gpu(&self, on: bool) {
-		self.gpu.store(on, std::sync::atomic::Ordering::Relaxed);
+		self.gpu.store(on && self.context.is_some(), std::sync::atomic::Ordering::Relaxed);
 	}
 
 	/// The preview quality of the next run; another one ends an export's run quality.
@@ -274,6 +300,11 @@ impl Live {
 			self.dither_bits = bits;
 			self.drawn = None;
 		}
+	}
+
+	/// A GPU device is there.
+	pub(crate) fn has_gpu(&self) -> bool {
+		self.context.is_some()
 	}
 
 	/// The engine as the status bar names it.
@@ -754,24 +785,36 @@ impl Live {
 			let tag = FrameTag { store: store.id(), generation: store.generation(), stored };
 			if self.drawn != Some(tag) {
 				let look = Look { project, view, schemes, edges: self.edges.as_ref(), dither_bits: self.dither_bits };
-				let pictures = [(&mut self.field, Layer::Field), (&mut self.intensity, Layer::Intensity)];
-				if let Some(frame) = status.device_frames.and_then(|frames| frames.hold(tag)) {
-					self.drawn = Some(tag);
-					let [field, intensity] = pictures.map(|(picture, layer)| {
-						let plane = DevicePlane { buffer: &frame.buffer, first_word: frame.first_word(layer)? };
-						picture.draw(&self.device, &self.queue, &self.pipeline, plane, &frame.shape, &look)
-					});
-					(shown.field, shown.intensity) = (field, intensity);
-				} else {
-					self.uploads.stage(&self.device, &self.queue, &store, stored);
-					self.drawn = Some(tag);
-					let shape = *store.shape();
-					let [field, intensity] = pictures.map(|(picture, layer)| {
-						let plane = DevicePlane { buffer: self.uploads.buffer(layer)?, first_word: 0 };
-						picture.draw(&self.device, &self.queue, &self.pipeline, plane, &shape, &look)
-					});
-					(shown.field, shown.intensity) = (field, intensity);
-				}
+				self.drawn = Some(tag);
+				let [field, intensity] = match &mut self.painter {
+					Painter::Gpu(gpu) => {
+						let GpuPainter { device, queue, pipeline, pictures, uploads } = &mut **gpu;
+						if let Some(frame) = status.device_frames.and_then(|frames| frames.hold(tag)) {
+							pictures.each_mut().map(|picture| {
+								let plane = DevicePlane {
+									buffer: &frame.buffer,
+									first_word: frame.first_word(picture.layer())?,
+								};
+								picture.draw(device, queue, pipeline, plane, &frame.shape, &look)
+							})
+						} else {
+							uploads.stage(device, queue, &store, stored);
+							let shape = *store.shape();
+							pictures.each_mut().map(|picture| {
+								let plane = DevicePlane { buffer: uploads.buffer(picture.layer())?, first_word: 0 };
+								picture.draw(device, queue, pipeline, plane, &shape, &look)
+							})
+						}
+					}
+					Painter::Cpu(pictures) => {
+						let shape = *store.shape();
+						pictures.each_mut().map(|picture| {
+							let bytes = store.copy_layer(stored, picture.layer()).ok()?;
+							Some(picture.draw(&bytes, &shape, &look))
+						})
+					}
+				};
+				(shown.field, shown.intensity) = (field, intensity);
 			}
 		}
 		shown

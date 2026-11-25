@@ -32,6 +32,8 @@ regex = "1.13"
 waveduderust_platform = { path = "../../crates/waveduderust_platform" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# the window without a GPU
+slint = { version = "1.19", default-features = false, features = ["renderer-software"] }
 # Slint's clipboard serves its text fields only; already in its winit backend's tree
 arboard = { version = "3.6", default-features = false }
 # the scene image file watched through its folder

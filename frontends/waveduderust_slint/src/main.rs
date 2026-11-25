@@ -997,7 +997,11 @@ fn apply_theme(state: &mut State, app: &AppWindow) {
 /// The About window's version, licences and system lines.
 fn about(state: &State) -> ui::AboutData {
 	let threads = state.facts.threads;
-	let gpu = if state.settings.use_gpu { "on" } else { "off" };
+	let gpu = match (state.live.has_gpu(), state.settings.use_gpu) {
+		(false, _) => "none",
+		(true, true) => "on",
+		(true, false) => "off",
+	};
 	#[cfg(not(target_arch = "wasm32"))]
 	let h264 = {
 		let enabled = waveduderust_platform::codec::enabled(state.settings.use_openh264);
@@ -1377,7 +1381,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.global::<ui::Form<'_>>().set_pick_files(cfg!(not(target_arch = "wasm32")));
 	app.global::<ui::Search<'_>>()
 		.on_matches(|text, query| text.to_lowercase().contains(query.trim().to_lowercase().as_str()));
-	let live = Live::new(&context)?;
+	let live = Live::new(context.as_ref())?;
 	let store = waveduderust_platform::store::Store::open();
 	let facts = waveduderust_platform::machine::machine_facts();
 	let settings = store.as_ref().map_or_else(Default::default, |s| {
