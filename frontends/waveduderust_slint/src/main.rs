@@ -1354,6 +1354,29 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	let clear = on_log(|m, _| m.clear());
 	app.on_log_clear(move || clear(slint::SharedString::new()));
 	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_log_regex(move |on| {
+		if let Some(app) = weak.upgrade() {
+			let m = &mut st.borrow_mut().messages;
+			m.set_regex(on);
+			m.show(&app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_log_select(move |row, control, shift| {
+		if let (Some(app), Ok(row)) = (weak.upgrade(), usize::try_from(row)) {
+			let m = &mut st.borrow_mut().messages;
+			m.select(row, control, shift);
+			m.show(&app);
+		}
+	});
+	let st = state.clone();
+	app.on_log_copy(move |all| {
+		let text = st.borrow().messages.text(all);
+		if let Err(e) = clipboard::write(text) {
+			tracing::warn!("clipboard: {e}");
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_log_toggle(move |level| {
 		if let Some(app) = weak.upgrade() {
 			let m = &mut st.borrow_mut().messages;

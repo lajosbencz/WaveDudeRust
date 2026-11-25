@@ -356,6 +356,10 @@ msgstr "Stappen automatisch schalen"
 msgid "Auto-scale values"
 msgstr "Waarden automatisch schalen"
 
+#. MessagesAutoScroll
+msgid "Auto-scroll"
+msgstr "Meescrollen"
+
 #. Hint.Simulation.TimeDecay
 msgid "Averaging window factor of the intensity: the engine averages over this × 100 / lowest source level steps."
 msgstr "Vensterfactor van de intensiteitsmiddeling: de engine middelt over deze waarde × 100 / laagste bronniveau stappen."
@@ -484,6 +488,10 @@ msgstr "Manteldikte"
 msgid "Clear"
 msgstr "Wissen"
 
+#. TipMessagesClear
+msgid "Clear all messages"
+msgstr "Alle berichten wissen"
+
 #. TipPreviewClearRange
 msgid "Clear the export range: the whole run is exported (X)"
 msgstr "Exportbereik wissen: de hele run wordt geëxporteerd (X)"
@@ -571,6 +579,10 @@ msgstr "Bollend, de vulling het grootst in het midden en naar buiten afnemend bi
 #. MenuEditCopy
 msgid "Copy"
 msgstr "Kopiëren"
+
+#. MessagesCopyAll
+msgid "Copy all"
+msgstr "Alles kopiëren"
 
 #. TipBasedOn
 msgid "Copy the stops of an existing scheme into this one, then change them"
@@ -1060,6 +1072,10 @@ msgstr "Vlak"
 msgid "Focal length"
 msgstr "Brandpuntsafstand"
 
+#. TipMessagesAutoScroll
+msgid "Follow new messages"
+msgstr "Nieuwe berichten volgen"
+
 #. TipPreviewLive
 msgid "Follow the newest frame while the run is in progress (F)"
 msgstr "Het nieuwste beeld volgen zolang de run loopt (F)"
@@ -1400,6 +1416,10 @@ msgstr "De stappenas de tot nu toe opgenomen monsters laten volgen; alleen punts
 msgid "Let the upper output's light leave the gate. Switched off, an absorber with a soft rise takes it in the last stretch of the arm."
 msgstr "Laat het licht van de bovenste uitgang de poort verlaten. Uitgeschakeld neemt een geleidelijk oplopende absorber het op in het laatste stuk van de arm."
 
+#. MessagesColumnLevel
+msgid "Level"
+msgstr "Niveau"
+
 #. Enum.AppTheme.Light
 msgid "Light"
 msgstr "Licht"
@@ -1451,6 +1471,10 @@ msgstr "Meting"
 #. Enum.ProbeBoxSize.Medium
 msgid "Medium"
 msgstr "Middel"
+
+#. MessagesColumnMessage
+msgid "Message"
+msgstr "Bericht"
 
 #. PaneMessages
 msgid "Messages"
@@ -2008,6 +2032,10 @@ msgstr "Brekingsindex van de golfgeleiderkernen, 1,00 tot 2,55 in stappen van 0,
 msgid "Refractive index on the axis, 1.00 to 2.55 in steps of 0.01."
 msgstr "Brekingsindex op de as, 1,00 tot 2,55 in stappen van 0,01."
 
+#. MessagesRegex
+msgid "Regex"
+msgstr "Regex"
+
 #. Enum.GateOutput.Remainder
 msgid "Remainder: 3 × with both on"
 msgstr "Rest: 3 × met beide aan"
@@ -2163,6 +2191,10 @@ msgstr "Alles selecteren"
 #. SectionShape
 msgid "Shape"
 msgstr "Vorm"
+
+#. TipMessagesLevel
+msgid "Show or hide this level"
+msgstr "Dit niveau tonen of verbergen"
 
 #. TipPartDescription
 msgid "Show or hide what this kind of part is"
@@ -2480,6 +2512,10 @@ msgstr "Dikte van de eerste laag van elk paar in pixels. Een kwartgolflaag is λ
 msgid "Thickness of the second layer of each pair in pixels. A quarter-wave layer is λ / (4 n) pixels thick."
 msgstr "Dikte van de tweede laag van elk paar in pixels. Een kwartgolflaag is λ / (4 n) pixels dik."
 
+#. MessagesColumnTime
+msgid "Time"
+msgstr "Tijd"
+
 #. SectionTiming
 msgid "Timing"
 msgstr "Timing"
@@ -2503,6 +2539,10 @@ msgstr "Totale lengte"
 #. Hint.Simulation.Steps
 msgid "Total number of simulation steps."
 msgstr "Totaal aantal simulatiestappen."
+
+#. TipMessagesRegex
+msgid "Treat the search text as a regular expression"
+msgstr "Zoektekst als reguliere expressie behandelen"
 
 #. MenuAddTriangle
 msgid "Triangle"

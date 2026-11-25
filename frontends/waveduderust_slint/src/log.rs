@@ -19,7 +19,11 @@ pub(crate) struct Line {
 	pub(crate) time: String,
 	pub(crate) level: Level,
 	pub(crate) source: String,
+	/// The logger's full name.
+	pub(crate) target: String,
 	pub(crate) message: String,
+	/// The line's number among all ever added.
+	pub(crate) id: u64,
 }
 
 #[derive(Debug, Default)]
@@ -63,13 +67,15 @@ impl<S: Subscriber> Layer<S> for Ring {
 		event.record(&mut message);
 		let meta = event.metadata();
 		let source = meta.target().rsplit("::").next().unwrap_or_default().to_owned();
-		let secs = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-		let time = format!("{:02}:{:02}:{:02}", secs / 3600 % 24, secs / 60 % 60, secs % 60);
+		let since = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).unwrap_or_default();
+		let (secs, ms) = (since.as_secs(), since.subsec_millis());
+		let time = format!("{:02}:{:02}:{:02}.{ms:03}", secs / 3600 % 24, secs / 60 % 60, secs % 60);
 		let mut l = self.0.lock().unwrap_or_else(PoisonError::into_inner);
 		if l.lines.len() == KEPT {
 			l.lines.pop_front();
 		}
-		l.lines.push_back(Line { time, level: *meta.level(), source, message: message.0 });
+		let (target, id) = (meta.target().to_owned(), l.added);
+		l.lines.push_back(Line { time, level: *meta.level(), source, target, message: message.0, id });
 		l.added += 1;
 	}
 }

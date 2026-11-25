@@ -115,6 +115,9 @@ export component AppWindow inherits Window {
     callback log-toggle(LogLevel);
     callback log-search(string);
     callback log-clear();
+    callback log-regex(bool);
+    callback log-select(int, bool, bool);
+    callback log-copy(bool);
     callback seek(int);
     callback transport-action(TransportAction);
     callback transport-speed(text: string) -> string;
@@ -396,6 +399,9 @@ export component AppWindow inherits Window {
                             toggle(l) => { root.log-toggle(l); }
                             search(t) => { root.log-search(t); }
                             clear => { root.log-clear(); }
+                            regex(on) => { root.log-regex(on); }
+                            select(row, control, shift) => { root.log-select(row, control, shift); }
+                            copy(all) => { root.log-copy(all); }
                         }
                     }
                 }

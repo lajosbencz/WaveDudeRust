@@ -356,6 +356,10 @@ msgstr "Échelle auto des pas"
 msgid "Auto-scale values"
 msgstr "Échelle auto des valeurs"
 
+#. MessagesAutoScroll
+msgid "Auto-scroll"
+msgstr "Défilement auto"
+
 #. Hint.Simulation.TimeDecay
 msgid "Averaging window factor of the intensity: the engine averages over this × 100 / lowest source level steps."
 msgstr "Facteur de fenêtre du moyennage de l'intensité : le moteur moyenne sur ce facteur × 100 / niveau de source le plus bas pas."
@@ -484,6 +488,10 @@ msgstr "Épaisseur de la gaine"
 msgid "Clear"
 msgstr "Effacer"
 
+#. TipMessagesClear
+msgid "Clear all messages"
+msgstr "Effacer tous les messages"
+
 #. TipPreviewClearRange
 msgid "Clear the export range: the whole run is exported (X)"
 msgstr "Effacer la plage d'export : toute l'exécution est exportée (X)"
@@ -571,6 +579,10 @@ msgstr "Convergente, le remplissage maximal au centre et décroissant vers l'ext
 #. MenuEditCopy
 msgid "Copy"
 msgstr "Copier"
+
+#. MessagesCopyAll
+msgid "Copy all"
+msgstr "Tout copier"
 
 #. TipBasedOn
 msgid "Copy the stops of an existing scheme into this one, then change them"
@@ -1060,6 +1072,10 @@ msgstr "Plates"
 msgid "Focal length"
 msgstr "Distance focale"
 
+#. TipMessagesAutoScroll
+msgid "Follow new messages"
+msgstr "Suivre les nouveaux messages"
+
 #. TipPreviewLive
 msgid "Follow the newest frame while the run is in progress (F)"
 msgstr "Suivre l'image la plus récente pendant l'exécution (F)"
@@ -1400,6 +1416,10 @@ msgstr "Laisser l'axe des pas suivre les échantillons enregistrés jusqu'ici ; 
 msgid "Let the upper output's light leave the gate. Switched off, an absorber with a soft rise takes it in the last stretch of the arm."
 msgstr "Laisser la lumière de la sortie haute quitter la porte. Désactivée, un absorbeur à montée douce la prend dans le dernier tronçon du bras."
 
+#. MessagesColumnLevel
+msgid "Level"
+msgstr "Niveau"
+
 #. Enum.AppTheme.Light
 msgid "Light"
 msgstr "Clair"
@@ -1451,6 +1471,10 @@ msgstr "Mesure"
 #. Enum.ProbeBoxSize.Medium
 msgid "Medium"
 msgstr "Moyen"
+
+#. MessagesColumnMessage
+msgid "Message"
+msgstr "Message"
 
 #. PaneMessages
 msgid "Messages"
@@ -2008,6 +2032,10 @@ msgstr "Indice de réfraction des cœurs des guides, de 1,00 à 2,55 par pas de 
 msgid "Refractive index on the axis, 1.00 to 2.55 in steps of 0.01."
 msgstr "Indice de réfraction sur l'axe, de 1,00 à 2,55 par pas de 0,01."
 
+#. MessagesRegex
+msgid "Regex"
+msgstr "Regex"
+
 #. Enum.GateOutput.Remainder
 msgid "Remainder: 3 × with both on"
 msgstr "Reste : 3 fois avec les deux"
@@ -2163,6 +2191,10 @@ msgstr "Tout sélectionner"
 #. SectionShape
 msgid "Shape"
 msgstr "Forme"
+
+#. TipMessagesLevel
+msgid "Show or hide this level"
+msgstr "Afficher ou masquer ce niveau"
 
 #. TipPartDescription
 msgid "Show or hide what this kind of part is"
@@ -2480,6 +2512,10 @@ msgstr "Épaisseur de la première couche de chaque paire en pixels. Une couche 
 msgid "Thickness of the second layer of each pair in pixels. A quarter-wave layer is λ / (4 n) pixels thick."
 msgstr "Épaisseur de la seconde couche de chaque paire en pixels. Une couche quart d'onde fait λ / (4 n) pixels."
 
+#. MessagesColumnTime
+msgid "Time"
+msgstr "Heure"
+
 #. SectionTiming
 msgid "Timing"
 msgstr "Chronologie"
@@ -2503,6 +2539,10 @@ msgstr "Longueur totale"
 #. Hint.Simulation.Steps
 msgid "Total number of simulation steps."
 msgstr "Nombre total de pas de simulation."
+
+#. TipMessagesRegex
+msgid "Treat the search text as a regular expression"
+msgstr "Traiter le texte recherché comme une expression régulière"
 
 #. MenuAddTriangle
 msgid "Triangle"

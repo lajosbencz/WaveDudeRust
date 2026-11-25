@@ -21,8 +21,8 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | V | Preview | 86 | 5 | 16 | 4 | 1 |
 | L | Timeline, transport, status | 60 | 11 | 10 | 7 | 2 |
 | R | Live editing and runs | 24 | 9 | 26 | 0 | 2 |
-| G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 715 | 67 | 151 | 157 | 5 |
+| G | Messages pane | 25 | 3 | 0 | 4 | 0 |
+| | All | 725 | 67 | 140 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -1229,27 +1229,27 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | G-03 | Levels Trace, Debug, Info, Warn, Error, Fatal | MessagesPane.xaml.cs:63-66 | 70 Messages pane | done | tracing has no Fatal |
 | G-04 | Level toggle as styled ToolToggle with accent focus | MessagesPane.xaml:20-55 | 70 Messages pane | done | clickable toggles; rest matched in general (decision 0033) |
 | G-05 | Search box, placeholder "Search" | MessagesPane.xaml:82-106 | 70 Messages pane | done | LineEdit |
-| G-06 | Search matches message, logger, exception, case-insensitive | MessagesPane.xaml.cs:228-245 | 70 Messages pane | partial | source + message; no exception text |
-| G-07 | Regex toggle; unfinished pattern shows everything | MessagesPane.xaml:119; xaml.cs:247-262 | 70 Messages pane | missing | |
-| G-08 | Auto-scroll toggle "Follow new messages" | MessagesPane.xaml:121; xaml.cs:135,274-288 | 70 Messages pane | missing | ListView not auto-following |
+| G-06 | Search matches message, logger, exception, case-insensitive | MessagesPane.xaml.cs:228-245 | 70 Messages pane | partial | message, logger (full name) and source, case-insensitive; tracing has no exception text |
+| G-07 | Regex toggle; unfinished pattern shows everything | MessagesPane.xaml:119; xaml.cs:247-262 | 70 Messages pane | done | Regex toggle (regex crate, case-insensitive); an unfinished pattern shows everything |
+| G-08 | Auto-scroll toggle "Follow new messages" | MessagesPane.xaml:121; xaml.cs:135,274-288 | 70 Messages pane | done | Auto-scroll toggle, on by default: new rows scroll to the newest |
 | G-09 | Clear button | MessagesPane.xaml:123 | 70 Messages pane | done | text button |
-| G-10 | Clear button tooltip | MessagesPane.xaml:123 | 70 Messages pane | missing | |
-| G-11 | List columns Time, Level, Source, Message (+exception text) | MessagesPane.xaml:192-210 | 70 Messages pane | partial | Time, Source, Message; no Level column (colour only), no exception |
-| G-12 | Time format HH:mm:ss.fff | MessagesPane.xaml:194 | 70 Messages pane (Time) | done | log.rs time |
+| G-10 | Clear button tooltip | MessagesPane.xaml:123 | 70 Messages pane | done | Clear all messages |
+| G-11 | List columns Time, Level, Source, Message (+exception text) | MessagesPane.xaml:192-210 | 70 Messages pane | partial | Time, Level, Source, Message; no exception text (tracing has none) |
+| G-12 | Time format HH:mm:ss.fff | MessagesPane.xaml:194 | 70 Messages pane (Time) | done | HH:mm:ss.fff (log.rs) |
 | G-13 | Source = logger name without namespace | MessagesPane.xaml:196-199 | 70 Messages pane | done | log.rs source |
-| G-14 | Column headers | MessagesPane.xaml:194-203 | 70 Messages pane | missing | no header row |
+| G-14 | Column headers | MessagesPane.xaml:194-203 | 70 Messages pane | done | a header row Time, Level, Source, Message |
 | G-15 | Resizable columns | MessagesPane.xaml:192-210 | 70 Messages pane | divergence | decision 0033, matched in general, not to the pixel/id |
 | G-16 | Rows coloured per level | MessagesPane.xaml:150-180 | 70 Messages pane | done | text colour per level |
-| G-17 | Opens scrolled to newest; focus on list | MessagesPane.xaml.cs:151,168-188 | 70 Messages pane | missing | |
+| G-17 | Opens scrolled to newest; focus on list | MessagesPane.xaml.cs:151,168-188 | 70 Messages pane | done | init scrolls to the newest line and focuses the list |
 | G-18 | Initial visibility: Info+ always; Trace/Debug debug builds only | MessagesPane.xaml.cs:62-66 | 70 Messages pane | done | messages.rs shown[] |
-| G-19 | Row selection (extended) | MessagesPane.xaml:140 | 70 Messages pane | missing | rows not selectable |
-| G-20 | Context menu Copy (Ctrl+C, selected rows) | MessagesPane.xaml:186; xaml.cs:290-293 | 70 Messages pane | missing | |
-| G-21 | Context menu Copy all (visible rows), tab-separated lines | MessagesPane.xaml:187; xaml.cs:297-313 | 70 Messages pane | missing | |
-| G-22 | Context menu Clear | MessagesPane.xaml:189 | 70 Messages pane | missing | toolbar button only |
+| G-19 | Row selection (extended) | MessagesPane.xaml:140 | 70 Messages pane | done | click, Ctrl+click toggles, Shift+click extends from the anchor (messages.rs select) |
+| G-20 | Context menu Copy (Ctrl+C, selected rows) | MessagesPane.xaml:186; xaml.cs:290-293 | 70 Messages pane | done | Copy (menu, Ctrl+C on the list): selected rows tab-separated |
+| G-21 | Context menu Copy all (visible rows), tab-separated lines | MessagesPane.xaml:187; xaml.cs:297-313 | 70 Messages pane | done | Copy all: the visible rows |
+| G-22 | Context menu Clear | MessagesPane.xaml:189 | 70 Messages pane | done | Clear in the list menu |
 | G-23 | Keeps last 5000 entries, oldest dropped | MessagesTarget.cs | 70 Messages pane | done | log.rs KEPT |
 | G-24 | Batches arrivals so bursts do not stall | MessagesTarget.cs | 70 Messages pane | done | refreshed per 16 ms tick when changed |
-| G-25 | Row tooltip = exception text | MessagesPane.xaml:150 | 70 Messages pane; 70 Message window | missing | |
-| G-26 | Source cell tooltip = full logger name | MessagesPane.xaml:199 | 70 Messages pane | missing | |
+| G-25 | Row tooltip = exception text | MessagesPane.xaml:150 | 70 Messages pane; 70 Message window | divergence | tracing events carry no exception; the message holds the error text |
+| G-26 | Source cell tooltip = full logger name | MessagesPane.xaml:199 | 70 Messages pane | done | Source cell tooltip: the full logger name |
 | G-27 | Level counts live (add/remove/clear) | MessagesPane.xaml.cs:190-226 | 70 Messages pane | done | counts over the ring |
 | G-28 | Pane title bar, close, "Window position" menu | Docking | 00 Docking | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | G-29 | View > Panes > Messages check toggle | MainWindow.xaml | 00 Docking | done | app.slint menu |

@@ -6383,6 +6383,7 @@ dependencies = [
  "arboard",
  "js-sys",
  "pollster",
+ "regex",
  "rfd",
  "slint",
  "slint-build",

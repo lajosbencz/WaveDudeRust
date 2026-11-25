@@ -7,7 +7,10 @@ export struct LogRow {
     time: string,
     level: LogLevel,
     source: string,
+    // the logger's full name
+    logger: string,
     message: string,
+    selected: bool,
 }
 
 export struct LevelToggle {
@@ -16,13 +19,45 @@ export struct LevelToggle {
     shown: bool,
 }
 
-// The Messages pane (docs/ui/70, Messages pane): level toggles with counts, search, clear, the log lines.
+// A toolbar toggle: pressed while `on`.
+component Toggle inherits Rectangle {
+    in property <string> text;
+    in property <color> ink: Theme.text;
+    in property <bool> on;
+    in property <string> tip;
+    callback toggled();
+    width: label.preferred-width + 10px;
+    background: root.on ? Theme.button-background : area.has-hover ? Theme.button-hover : transparent;
+    border-width: 1px;
+    border-color: Theme.border;
+    label := Text {
+        text: root.text;
+        color: root.ink;
+        opacity: root.on ? 1 : 0.5;
+    }
+    area := TouchArea {
+        clicked => { root.toggled(); }
+    }
+    Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// The Messages pane (docs/ui/70, Messages pane): level toggles with counts, search, Regex, Auto-scroll, Clear,
+// the log lines with Copy, Copy all and Clear.
 export component Messages inherits Rectangle {
     in property <[LogRow]> rows;
     in property <[LevelToggle]> levels;
     callback toggle(LogLevel);
     callback search(string);
+    callback regex(bool);
     callback clear();
+    // row `row` pressed with Control or Shift held
+    callback select(row: int, control: bool, shift: bool);
+    // the selected lines (`all`: every visible line) to the clipboard
+    callback copy(all: bool);
+
+    property <bool> regex-on;
+    property <bool> follow: true;
+    property <length> row-height: 18px;
 
     pure function colour(level: LogLevel) -> color {
         if level == LogLevel.trace { return Theme.level-trace; }
@@ -31,6 +66,21 @@ export component Messages inherits Rectangle {
         if level == LogLevel.error { return Theme.level-error; }
         Theme.level-info
     }
+    pure function level-name(level: LogLevel) -> string {
+        level == LogLevel.trace ? "TRACE" : level == LogLevel.debug ? "DEBUG" : level == LogLevel.warn ? "WARN"
+            : level == LogLevel.error ? "ERROR" : "INFO"
+    }
+    function newest() {
+        list.content-y = min(0px, list.visible-height - root.rows.length * root.row-height);
+    }
+    changed rows => {
+        if (root.follow) { root.newest(); }
+    }
+    // opens on the newest line, the list focused
+    init => {
+        root.newest();
+        keys.focus();
+    }
 
     background: Theme.tool-window-background;
     VerticalLayout {
@@ -38,37 +88,93 @@ export component Messages inherits Rectangle {
             padding: 2px;
             spacing: 4px;
             height: Theme.row-height + 4px;
-            for l in root.levels: Rectangle {
-                width: label.preferred-width + 10px;
-                background: l.shown ? Theme.button-background : transparent;
-                border-width: 1px;
-                border-color: Theme.border;
-                label := Text {
-                    text: l.label;
-                    color: root.colour(l.level);
-                    opacity: l.shown ? 1 : 0.5;
-                }
-                TouchArea {
-                    clicked => { root.toggle(l.level); }
-                }
+            for l in root.levels: Toggle {
+                text: l.label;
+                ink: root.colour(l.level);
+                on: l.shown;
+                tip: @tr("Show or hide this level");
+                toggled => { root.toggle(l.level); }
             }
             LineEdit {
                 placeholder-text: @tr("Search");
                 edited(t) => { root.search(t); }
             }
+            Toggle {
+                text: @tr("Regex");
+                on: root.regex-on;
+                tip: @tr("Treat the search text as a regular expression");
+                toggled => {
+                    root.regex-on = !root.regex-on;
+                    root.regex(root.regex-on);
+                }
+            }
+            Toggle {
+                text: @tr("Auto-scroll");
+                on: root.follow;
+                tip: @tr("Follow new messages");
+                toggled => {
+                    root.follow = !root.follow;
+                    if (root.follow) { root.newest(); }
+                }
+            }
             Button {
                 text: @tr("Clear");
                 clicked => { root.clear(); }
+                Tooltip { text: @markdown("\{@tr("Clear all messages")}"); }
             }
         }
-        ListView {
-            for row in root.rows: HorizontalLayout {
-                spacing: 8px;
-                padding-left: 4px;
-                height: 18px;
-                Text { text: row.time; width: 56px; color: root.colour(row.level); }
-                Text { text: row.source; width: 96px; overflow: elide; color: root.colour(row.level); }
-                Text { text: row.message; overflow: elide; color: root.colour(row.level); horizontal-stretch: 1; }
+        // the column headers
+        HorizontalLayout {
+            spacing: 8px;
+            padding-left: 4px;
+            height: root.row-height;
+            Text { text: @tr("Time"); width: 80px; color: Theme.text-dim; }
+            Text { text: @tr("Level"); width: 40px; color: Theme.text-dim; }
+            Text { text: @tr("Source"); width: 96px; color: Theme.text-dim; }
+            Text { text: @tr("Message"); color: Theme.text-dim; horizontal-stretch: 1; }
+        }
+        keys := FocusScope {
+            key-pressed(e) => {
+                if (e.modifiers.control && (e.text == "c" || e.text == "C")) {
+                    root.copy(false);
+                    return accept;
+                }
+                reject
+            }
+            ContextMenuArea {
+                Menu {
+                    MenuItem { title: @tr("Copy"); activated => { root.copy(false); } }
+                    MenuItem { title: @tr("Copy all"); activated => { root.copy(true); } }
+                    MenuSeparator { }
+                    MenuItem { title: @tr("Clear"); activated => { root.clear(); } }
+                }
+                list := ListView {
+                    for row[i] in root.rows: line := Rectangle {
+                        height: root.row-height;
+                        background: row.selected ? (keys.has-focus ? Theme.accent : Theme.button-background) : transparent;
+                        property <color> ink: row.selected && keys.has-focus ? Theme.selection-text : root.colour(row.level);
+                        HorizontalLayout {
+                            spacing: 8px;
+                            padding-left: 4px;
+                            Text { text: row.time; width: 80px; color: line.ink; }
+                            Text { text: root.level-name(row.level); width: 40px; color: line.ink; }
+                            Rectangle {
+                                width: 96px;
+                                Text { width: 100%; text: row.source; overflow: elide; color: line.ink; }
+                                Tooltip { text: @markdown("\{row.logger}"); }
+                            }
+                            Text { text: row.message; overflow: elide; color: line.ink; horizontal-stretch: 1; }
+                        }
+                        TouchArea {
+                            pointer-event(e) => {
+                                if (e.kind == PointerEventKind.down && (e.button == PointerEventButton.left || !row.selected)) {
+                                    keys.focus();
+                                    root.select(i, e.modifiers.control, e.modifiers.shift);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
