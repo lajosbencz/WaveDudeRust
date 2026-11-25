@@ -84,6 +84,8 @@ struct State {
 	/// The last run export, for Export last.
 	last_export: Option<export::Plan>,
 	export_dialog: Option<export::Dialog>,
+	/// Unsaved edits, for the browser's question on leaving the page.
+	unsaved: Rc<std::cell::Cell<bool>>,
 	/// A form focus request was seen pending at the last tick.
 	focus_seen: bool,
 	/// The plan of the export running.
@@ -186,6 +188,7 @@ impl State {
 	}
 
 	fn show(&mut self, app: &AppWindow) {
+		self.unsaved.set(self.doc.dirty());
 		if self.export_dialog.is_none() {
 			app.set_export_shown(false);
 		}
@@ -1345,6 +1348,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		export_dialog: None,
 		export_plan: None,
 		focus_seen: false,
+		unsaved: Rc::default(),
 		replacing: None,
 		ran: 0,
 		styled: 0,
@@ -1362,6 +1366,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.set_native_access_keys(cfg!(windows));
 	apply_settings(&mut state.borrow_mut(), &app);
 	follow_desktop_scheme(&state, &app);
+	#[cfg(target_arch = "wasm32")]
+	web::guard_unload(state.borrow().unsaved.clone());
 	state.borrow_mut().opened();
 	// a crash report comes first; the welcome page waits for the next start
 	#[cfg(not(target_arch = "wasm32"))]

@@ -48,3 +48,19 @@ pub(crate) fn worker(context: Arc<GpuContext>) -> RunWorker {
 	});
 	RunWorker::pumped(factory, BUDGET, BUDGET, Box::new(DropSpill), Arc::default())
 }
+
+/// Leaving the page asks, the browser's own question, while `dirty` holds.
+pub(crate) fn guard_unload(dirty: std::rc::Rc<std::cell::Cell<bool>>) {
+	use wasm_bindgen::JsCast as _;
+	use wasm_bindgen::closure::Closure;
+	let Some(window) = web_sys::window() else { return };
+	let ask = Closure::<dyn Fn(web_sys::BeforeUnloadEvent)>::new(move |e: web_sys::BeforeUnloadEvent| {
+		if dirty.get() {
+			e.prevent_default();
+		}
+	});
+	if window.add_event_listener_with_callback("beforeunload", ask.as_ref().unchecked_ref()).is_ok() {
+		// the page's own: it lives as long as the page
+		ask.forget();
+	}
+}

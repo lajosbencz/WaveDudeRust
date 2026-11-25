@@ -12,7 +12,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
-| M | Menus and shortcuts | 78 | 9 | 1 | 52 | 0 |
+| M | Menus and shortcuts | 79 | 9 | 0 | 52 | 0 |
 | D | Dialogs and windows | 47 | 20 | 3 | 9 | 0 |
 | S | Settings | 20 | 7 | 2 | 3 | 0 |
 | I | Icons | 57 | 1 | 3 | 22 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
 | R | Live editing and runs | 39 | 15 | 2 | 3 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 811 | 86 | 24 | 169 | 5 |
+| | All | 812 | 86 | 23 | 169 | 5 |
 
 ## Cross-cutting
 
@@ -269,7 +269,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-136 | Colour swatch: Space/Enter/Down open picker; square/strip/channel keys; Enter keeps, Esc reverts | WPF/Controls/ColorPicker*.cs | ui/10 Colour picker | done | color-picker.slint ColorSwatch, ColorPicker |
 | M-137 | Dialogs: Enter default, Esc cancel, mnemonics w/o Alt; About Esc/Enter close | MessageWindow.xaml.cs | ui/10 Dialogs | done | Enter default, Esc cancel; access letters dropped (decision 0033) |
 | M-138 | File drop on window: image becomes scene image; other file to open flow (.wdproj .xml .json .wdscheme); nothing while modal | MW:12-13 (AllowDrop, OnDrop) | ui/10 File dropped | partial | winit DroppedFile: image becomes the scene image, .wdproj/.xml/.json open after the unsaved check; .wdscheme not taken; browser none |
-| M-139 | Browser: leaving the page asks while unsaved edits | n/a | ui/10 | missing | web.rs/index.html: no beforeunload (not verified in index.html) |
+| M-139 | Browser: leaving the page asks while unsaved edits | n/a | ui/10 | done | web.rs guard_unload: beforeunload asks while Document::dirty (State::show keeps the flag); not yet run in a browser |
 | M-140 | Menu entries 23 px high, shortcut text right-aligned, disabled entries grey text+icon | Themes/Controls.xaml MenuItem | ui/10 Conventions | divergence | decision 0033, matched in general, not to the pixel/id |
 
 ### D: dialogs and windows
