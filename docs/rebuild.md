@@ -66,8 +66,8 @@ Settings and other documented divergences stand: docs/divergences.md, decisions 
 
 ## Plan
 
-State per feature: [`parity.md`](parity.md), built 2026-11-24 from WaveDude Next's source and [`ui/`](ui/) (115 done,
-294 partial, 656 missing of 1095 rows). A feature is done when its row is checked against Next side by side on a
+State per feature: [`parity.md`](parity.md), built 2026-11-24 from WaveDude Next's source and [`ui/`](ui/); on
+2026-11-25 824 done, 86 partial, 177 divergence, 3 missing of 1095 rows. A feature is done when its row is checked against Next side by side on a
 nested display ([`tools/compare-csharp/README.md`](../tools/compare-csharp/README.md)); the commit that ports it ticks the
 row. Each phase is one coding pass, then a separate verification of the diff, the checks and the rows before the commit.
 
@@ -91,5 +91,25 @@ row. Each phase is one coding pass, then a separate verification of the diff, th
 5. Preview (V-): header strips, overlays, handles and drag editing, graph boxes, zoom.
 6. Timeline, transport, status bar (L-), live editing and runs (R-), Messages pane (G-).
 7. Dialogs and settings (D-, S-), then docking and window persistence (X-).
+8. The classic app's architecture and performance decisions, lost with the app crates (the core's are kept). Each
+   step ends with the classic measurement it restores, re-run on the Slint app
+   ([measurements.md](measurements.md)); the code to port is at `master` before the merge of `rewrite/slint`.
+   1. Woken by news only: the core's `RunWorker::set_notify` and the scene image watch wake the window through
+      `slint::invoke_from_event_loop`; the timer runs only while a run, playback or a drag is in progress. Measure:
+      The idle window (0 wakeups).
+   2. The browser's pump: pumped until `Pump::Waiting` with a waker that wakes the window, and the GPU queue kicked on
+      `Kicks` while completions are owed (decision 0026). Measure: The browser's GPU latency (Firefox).
+   3. The browser's run in a module worker (decision 0024): `remote/` and `wavedude-run-worker` of `master`, the frames
+      posted to the page's mirror store and coloured on the page's device, the engine's fallback in Messages. Measure:
+      The browser's live run in a worker; the page's main-thread time during a run.
+   4. The browser's frame spill in OPFS through the spill worker (decision 0020, `platform/opfs/` of `master`) and
+      playback reading ahead (`FrameStore::prefetch`), parity L-65. Measure: The browser's frame spill, read ahead,
+      writes.
+   5. Exports from the live run's store, waiting for its full-quality frames (decision 0012, `ExportGate` of
+      `master`), not a run of their own (parity D-47, R-25, R-26). Then the browser's exports (decision 0025: names only,
+      always ZIP, WebCodecs MP4, the OPFS spool, Download), parity D-51.
+   6. Fallbacks: no GPU adapter starts the app on Slint's software renderer and the CPU engine, the pictures coloured
+      on the CPU; in the browser WebGL2 and the CPU engine, the reason in Messages (parity V-43); the browser's CPU
+      engine in a SIMD build beside the scalar one (decision 0034); a lost GPU device reported and the run rebuilt.
 
 Known bugs: a shortcut (Save, Run, Undo) pressed while a number box holds typed text acts before the box commits.
