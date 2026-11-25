@@ -15,14 +15,14 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | M | Menus and shortcuts | 76 | 9 | 3 | 52 | 0 |
 | D | Dialogs and windows | 47 | 19 | 4 | 9 | 0 |
 | S | Settings | 20 | 7 | 2 | 3 | 0 |
-| I | Icons | 57 | 1 | 6 | 19 | 0 |
-| T | Project tree | 56 | 3 | 4 | 38 | 0 |
+| I | Icons | 57 | 1 | 3 | 22 | 0 |
+| T | Project tree | 56 | 3 | 3 | 39 | 0 |
 | P | Properties | 310 | 7 | 4 | 4 | 0 |
-| V | Preview | 90 | 5 | 12 | 4 | 1 |
+| V | Preview | 94 | 5 | 8 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
-| R | Live editing and runs | 39 | 15 | 3 | 2 | 2 |
+| R | Live editing and runs | 39 | 15 | 2 | 3 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 803 | 84 | 41 | 162 | 5 |
+| | All | 807 | 84 | 32 | 167 | 5 |
 
 ## Cross-cutting
 
@@ -423,7 +423,7 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-20 | View>Panes U+E8A0 | MW:294 | ui/10 View | divergence | Material Symbols stand-in (divergences.md, Icons) |
 | I-21 | View>Theme U+E790 (also tree ColorSchemes folder PT:~366) | MW:297 | not in spec (menu moved) | done | as I-07 |
 | I-22 | View>UI zoom U+E8A3 | MW:302 | not in spec (moved) | divergence | decision 0033, dropped |
-| I-23 | View>Language U+E774 | MW:330 | not in spec (moved) | missing | not in spec |
+| I-23 | View>Language U+E774 | MW:330 | not in spec (moved) | divergence | no View > Language menu: Language is a Settings row (decision 0033) |
 | I-24 | Simulation>Run U+E768, Play (while paused) U+E768 | MW:386,408 | ui/10 Simulation | done | as I-07 |
 | I-25 | Simulation>Pause U+E769, Pause playback U+E769 | MW:388,412 | ui/10 | done | as I-07 |
 | I-26 | Simulation>Stop U+E71A | MW:400 | ui/10 | divergence | Material Symbols stand-in (divergences.md, Icons) |
@@ -467,8 +467,8 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-60 | IconPolygon / Rectangle / Ellipse / Triangle / Outline | CX:323,325,327,329,331 | ui/10 | done | as I-48 |
 | I-61 | IconOpticalLogic, IconXorGate, IconAndGate, IconOrGate | CX:333,335,337,339 | ui/10 | done | as I-48 |
 | I-62 | IconAutoBrightness (+Fill): picture menu Auto brightness | CX:341-342 | ui/10 | missing | |
-| I-63 | IconPreviewResolution / IconPreviewFrames / IconPreviewSamples / IconPreviewDither (+Fill): View preview-quality menus | CX:344-351 | not in spec (menus moved) | missing | not in spec |
-| I-64 | IconFrameMemory: Simulation>RAM cache size | CX:353 | not in spec | missing | not in spec |
+| I-63 | IconPreviewResolution / IconPreviewFrames / IconPreviewSamples / IconPreviewDither (+Fill): View preview-quality menus | CX:344-351 | not in spec (menus moved) | divergence | no View preview-quality menus: Settings > Preview and memory rows |
+| I-64 | IconFrameMemory: Simulation>RAM cache size | CX:353 | not in spec | divergence | no RAM cache size menu: the desktop RAM cache is Auto |
 
 #### I Interface geometries (transport, markers, glyph buttons)
 | ID | Feature (name) and where used | Next source | Spec | Slint | Note |
@@ -580,7 +580,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-74 | Cut (list items only) = Copy + Remove | ProjectTree.xaml:265 | 20 Clipboard | done | Cut copies the group, then removes its list items |
 | T-75 | Copy as app format + plain XML text (items or Scene/Simulation/Display) | ProjectTree.xaml:266 | 20 Clipboard | done | XML text; no app format (divergences.md Clipboard) |
 | T-76 | Paste: behind current item, rename on clash, re-derive composite emitters, settings object on own row, undo step | ProjectTree.xaml:267 | 20 Clipboard | partial | clipboard.rs paste after the current row; settings on their own row |
-| T-77 | Can-paste re-evaluated once per clipboard change | MainWindow.Clipboard.cs | 20 Clipboard | missing |  |
+| T-77 | Can-paste re-evaluated once per clipboard change | MainWindow.Clipboard.cs | 20 Clipboard | divergence | Paste stays enabled: no clipboard polling; text that is no fragment pastes nothing |
 | T-78 | Focused text box handles Cut/Copy/Paste for its text first | MainWindow.Clipboard.cs | 20 Clipboard; divergence Edit menu | divergence | divergences.md 'Edit menu' (0008 13) |
 | T-79 | Add to my schemes / Remove from my schemes (scheme rows, label follows existence) | n/a (Rust only) | 20 Commands | done | tree.slint rows menu, scheme rows below a separator, label by Commands.mine; Command.toggle-mine |
 | T-80 | Export probe data as CSV (probe rows, active probes only; browser file-name box) | ProjectTree.xaml:273-275 | 20 Commands | done | save dialog: title Export the probe data, CSV file filter, the probe name; browser: a download |
@@ -1007,8 +1007,8 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-59 | Labels: item name beside handle (below for composites/parts), dark halo, kept in picture | SceneOverlay.cs:131,1189 | 40 Handles | done | LabelView, halo by text stroke; below for composites and parts |
 | V-60 | Display > Preview "Handles in preview" setting (off hides all but selected; hidden leave Tab cycle) | SceneOverlay HandlesInPreview | 40 Handles | done | View.handles_in_preview into overlay::build |
 | V-61 | Display > Preview "Labels in preview" setting | SceneOverlay LabelsInPreview | 40 Handles | done | View.labels_in_preview into overlay::build |
-| V-62 | Graph boxes unaffected by handles/labels settings | ProbeGraphOverlay.cs | 40 Handles | missing | |
-| V-63 | Z-order rules: boxes over handles, selected drawn last of kind, tab order kept | PreviewPane.xaml:632 | 40 Handles | missing | |
+| V-62 | Graph boxes unaffected by handles/labels settings | ProbeGraphOverlay.cs | 40 Handles | done | graph boxes come from graphs.rs, outside the handle and label settings |
+| V-63 | Z-order rules: boxes over handles, selected drawn last of kind, tab order kept | PreviewPane.xaml:632 | 40 Handles | done | preview.slint: labels, handles, then graph boxes; selected boxes last (graphs.rs sort) |
 | V-64 | Rotation lever may extend beyond picture (clipped); other handles clamped inside canvas | SceneOverlay.cs | 40 Handles | missing | |
 | V-65 | Click handle: select item (tree/properties follow) | SceneOverlay.cs:1380-1428 | 40 Interaction | done | Canvas.press hit-tests the topmost handle within 10 px; tree and Properties follow |
 | V-66 | Ctrl+click toggle in selection, no drag | SceneOverlay.cs:1399 | 40 Interaction | done | Ctrl toggles, no drag |
@@ -1032,7 +1032,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-84 | Context menu: Export this frame (field Ctrl+Shift+F / intensity Ctrl+Shift+G) | PreviewPane.xaml:739,765 | 40 Automation ids; 10 | done | Command.export-field-frame / export-intensity-frame by the layer |
 | V-85 | Context menu: Export field / intensity / both | PreviewPane.xaml:741-743,767-769 | 40 Automation ids | done | the File menu commands |
 | V-86 | Drop of objects from tree: paste and place at drop pixel | SceneOverlay.cs:1212,1228 | 40 Interaction; 20 | missing | |
-| V-87 | Drop of file not claimed, window opens it | SceneOverlay.cs | 40 Interaction | missing | see R-30 |
+| V-87 | Drop of file not claimed, window opens it | SceneOverlay.cs | 40 Interaction | done | winit DroppedFile anywhere on the window (main.rs dropped) |
 | V-88 | Handle tooltips (Tip*Format per role) | SceneOverlay.cs:528-531 | 40 Interaction | done | Rust hit-tests the hover (box, corner, handle) into Canvas.hover-tip; Slint formats Next's Tip*Format texts |
 | V-89 | Picture hover costs nothing; source layer cached as bitmap | SceneOverlay.cs:199-234 | 40 Interaction | done | the drawings take no pointer; one TouchArea per picture, hit-testing in Rust; dots one Path |
 | V-90 | Graph box: translucent dark box, grid, value labels, step labels, curve, 11 px text | ProbeGraphDrawing.cs, ProbeGraphPainter.cs | 40 Probe graph box | done | graphs.rs: core view::graph layout as Slint rows; GraphBoxView draws box, grid, labels, curve at 11 px |
@@ -1056,7 +1056,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-108 | Show/hide each picture toggle (transport) feeds Display > Preview | PreviewPane.xaml:497-506 | 50 Transport #12,13 | done | Preview drops a hidden picture (if), the other takes its room; any change of the flags (toggle, form, undo) ends a gesture and the hidden picture's focus, and its keyboard focus goes back to the pane; the run still draws both layers |
 | V-109 | Pane Ctrl+A select all inside the pane | PreviewPane.xaml:398 | not in spec | missing | not in spec; app-level Ctrl+A menu is log-only |
 | V-110 | Letter keys swallowed in pane so WPF does not open menu mnemonics | PreviewPane.xaml.cs:1262-1272 | not in spec | n/a | WPF-only quirk; not applicable to Slint |
-| V-111 | Brightness numbers per layer from Display > layer | PreviewPane.xaml:586 | 40 Header strip | missing | duplicate of V-14 binding; Properties pane edits Display (30) |
+| V-111 | Brightness numbers per layer from Display > layer | PreviewPane.xaml:586 | 40 Header strip | done | picture headers: Brightness box per layer from Display > layer, Auto |
 | V-112 | Automation ids PreviewFieldImage, PreviewIntensityImage, PreviewSplitter | PreviewPane.xaml | 40 Automation ids | divergence | decision 0033, matched in general, not to the pixel/id |
 
 ### L: Timeline, transport, status bar
@@ -1206,7 +1206,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-46 | Paste accepts app format or plain-text fragment | MainWindow.Clipboard.cs | 60 Clipboard | partial | clipboard.rs pastes a fragment; non-objects logged |
 | R-47 | Tree drag carries same text | ProjectTree.xaml.cs | 60 Clipboard | missing | |
 | R-48 | Name clash on paste appends " copy"; composite emitters re-derived | MainWindow.Clipboard.cs | 60 Clipboard | partial | name clash appends copy (clipboard.rs test); composite re-derivation unchecked |
-| R-49 | Paste enable state checked per clipboard change | MainWindow.Clipboard.cs | 60 Clipboard | missing | |
+| R-49 | Paste enable state checked per clipboard change | MainWindow.Clipboard.cs | 60 Clipboard | divergence | see T-77 |
 | R-50 | File dropped on window opens .wdproj / configuration.json / .wdscheme; others refused | MainWindow.xaml.cs | 60 Files and drop | partial | see M-138; others refused with a log warning |
 | R-51 | Scene image differs from embedded: ask "Load file?" Load/Keep embedded; undoable | MainWindow.SceneImageWatch.cs | 60 Files and drop | done | Load embeds as an undoable edit; Keep remembers the bytes (scene_watch.rs) |
 | R-52 | Scene image file watched, 400 ms debounce, retries, one question at a time, withdraws on revert | MainWindow.SceneImageWatch.cs | 60 Files and drop | done | polled 100 ms, taken after 400 ms still, reads retried; one question, shown when no other; withdrawn on revert, kept bytes, undecodable or deleted file |
