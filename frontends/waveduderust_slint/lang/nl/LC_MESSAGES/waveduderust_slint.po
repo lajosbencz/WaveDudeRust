@@ -488,6 +488,10 @@ msgstr "Wissen"
 msgid "Clear the export range: the whole run is exported (X)"
 msgstr "Exportbereik wissen: de hele run wordt geëxporteerd (X)"
 
+#. TipPreviewTimeline
+msgid "Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step a frame, PageUp/PageDown ten, Home/End jump to the start/end of the range"
+msgstr "Klik of sleep om door de beelden te gaan; sleep een haak om het begin of einde van het exportbereik te verplaatsen. Links/Rechts één beeld, PageUp/PageDown tien, Home/End naar het begin/einde van het bereik"
+
 #. DockCloseMenu
 msgid "Close"
 msgstr "Sluiten"
@@ -759,6 +763,10 @@ msgstr "Puntdiameter"
 #. TipSchemeGradient
 msgid "Drag a marker to move its stop; drag it away from the gradient or double-click it to remove the stop; a click on the gradient adds a stop there. With keyboard focus Left and Right move the selected stop by a hundredth, a tenth with Shift, Page Up and Page Down select the stop before or after it, and Del removes it"
 msgstr "Sleep een markering om het bijbehorende punt te verplaatsen; van het verloop wegslepen of dubbelklikken verwijdert het punt; een klik op het verloop voegt daar een punt in. Met toetsenbordfocus verplaatsen Links en Rechts het gekozen punt een honderdste, een tiende met Shift, PageUp en PageDown kiezen het punt ervoor of erna, en Del verwijdert het"
+
+#. TipPreviewSplitter
+msgid "Drag or use the arrow keys to resize; double-click or Enter resets to half"
+msgstr "Slepen of pijltoetsen om de verdeling te wijzigen; dubbelklik of Enter zet terug op de helft"
 
 #. TipDragLayer
 msgid "Drag to move this layer through the list"

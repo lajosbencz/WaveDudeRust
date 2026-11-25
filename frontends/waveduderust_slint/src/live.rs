@@ -145,6 +145,8 @@ impl Live {
 	/// Runs `project` from the start; a running run starts over (docs/ui/60, Automatic re-run).
 	/// A project opened: its frame at the position alone (docs/ui/60, The live run).
 	pub(crate) fn load(&mut self, project: &Project, view: &View) {
+		// nothing carries over from the project before, its tracking neither
+		self.request = None;
 		self.active = false;
 		self.started = None;
 		self.wanted = Wanted::Position;
@@ -188,8 +190,9 @@ impl Live {
 	fn request_of(&self, project: &Project, view: &View) -> RunRequest {
 		let mut project = project.clone();
 		project.normalize();
-		// a shown intensity picture is tracked
-		RunRequest::new(&project, self.quality, view.into(), view.intensity.preview)
+		// a shown intensity picture is tracked; the run keeps tracking it once hidden, as the worker does
+		let tracked = self.request.as_ref().is_some_and(RunRequest::tracks_intensity);
+		RunRequest::new(&project, self.quality, view.into(), view.intensity.preview || tracked)
 	}
 
 	fn submit(&mut self, request: RunRequest) {
@@ -294,7 +297,8 @@ impl Live {
 		if change == Change::Frames {
 			self.fit = None;
 			if self.auto_rerun {
-				// a paused run waits paused with the edit
+				// a paused run waits paused with the edit; a pause with nothing left to do was no pause
+				self.paused &= !self.summarised;
 				self.begin();
 				self.active = true;
 				self.wanted = Wanted::All;
@@ -366,8 +370,6 @@ impl Live {
 			&& !self.summarised
 		{
 			self.summarised = true;
-			// the run is over: a pause with nothing left to do is no pause
-			(self.active, self.paused) = (false, false);
 			let gib = |b: u64| b as f64 / f64::from(1u32 << 30);
 			tracing::info!(
 				"Run {}: {} of {} steps, {} frames, {:.1} s; {} stored, {} in memory ({:.1} GB) and {} on disk ({:.1} GB)",

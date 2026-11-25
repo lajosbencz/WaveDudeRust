@@ -14,6 +14,9 @@ export component Splitter inherits Rectangle {
     in property <length> minimum-after: 60px;
     in-out property <float> before;
     in-out property <float> after;
+    // a tab stop: arrows move it 10 px, Enter or a double-click resets it to half; `tip` its tooltip
+    in property <bool> keyed;
+    in property <string> tip;
 
     // sized along its axis only: a fixed cross size would cap the layout holding it
     min-width: rows ? 0px : 4px;
@@ -22,25 +25,46 @@ export component Splitter inherits Rectangle {
     preferred-height: rows ? 4px : 0px;
     horizontal-stretch: rows ? 1 : 0;
     vertical-stretch: rows ? 0 : 1;
-    background: Theme.window-background;
+    background: keys.has-focus ? Theme.accent : root.keyed && area.has-hover ? Theme.button-hover : Theme.window-background;
     // At the press: the pointer along the axis, in window coordinates, and the first pane's laid-out size.
     property <length> grabbed;
     property <length> size;
-    TouchArea {
+    // the first pane's size moved to `size` (clamped to the minimums): the stretches it needs
+    function place(size: length) {
+        if (root.span > root.minimum-before + root.minimum-after) {
+            let moved = clamp(size, root.minimum-before, root.span - root.minimum-after);
+            root.before = max((moved - root.minimum-before) / 1px, 0.001);
+            root.after = max((root.span - moved - root.minimum-after) / 1px, 0.001);
+        }
+    }
+    function reset() {
+        root.before = 1;
+        root.after = 1;
+    }
+    keys := FocusScope {
+        enabled: root.keyed;
+        key-pressed(e) => {
+            let at = (root.rows ? root.y : root.x) - root.start;
+            if (e.text == Key.Return) { root.reset(); return accept; }
+            if ((root.rows && e.text == Key.UpArrow) || (!root.rows && e.text == Key.LeftArrow)) { root.place(at - 10px); return accept; }
+            if ((root.rows && e.text == Key.DownArrow) || (!root.rows && e.text == Key.RightArrow)) { root.place(at + 10px); return accept; }
+            reject
+        }
+    }
+    area := TouchArea {
+        double-clicked => {
+            if (root.keyed) { root.reset(); }
+        }
         mouse-cursor: root.rows ? MouseCursor.row-resize : MouseCursor.col-resize;
         property <length> pointer: root.rows ? self.absolute-position.y + self.mouse-y : self.absolute-position.x + self.mouse-x;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                if (root.keyed) { keys.focus(); }
                 root.grabbed = self.pointer;
                 root.size = (root.rows ? root.y : root.x) - root.start;
             }
         }
-        moved => {
-            if (root.span > root.minimum-before + root.minimum-after) {
-                let moved = clamp(root.size + self.pointer - root.grabbed, root.minimum-before, root.span - root.minimum-after);
-                root.before = max((moved - root.minimum-before) / 1px, 0.001);
-                root.after = max((root.span - moved - root.minimum-after) / 1px, 0.001);
-            }
-        }
+        moved => { root.place(root.size + self.pointer - root.grabbed); }
     }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
 }

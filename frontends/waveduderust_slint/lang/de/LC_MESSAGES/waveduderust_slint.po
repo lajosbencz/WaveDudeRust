@@ -488,6 +488,10 @@ msgstr "Leeren"
 msgid "Clear the export range: the whole run is exported (X)"
 msgstr "Exportbereich aufheben: der ganze Lauf wird exportiert (X)"
 
+#. TipPreviewTimeline
+msgid "Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step a frame, PageUp/PageDown ten, Home/End jump to the start/end of the range"
+msgstr "Klicken oder ziehen, um durch die Bilder zu fahren; eine Klammer ziehen, um Anfang oder Ende des Exportbereichs zu verschieben. Links/Rechts ein Bild, Bild auf/ab zehn, Pos1/Ende zum Anfang/Ende des Bereichs"
+
 #. DockCloseMenu
 msgid "Close"
 msgstr "Schließen"
@@ -759,6 +763,10 @@ msgstr "Punktdurchmesser"
 #. TipSchemeGradient
 msgid "Drag a marker to move its stop; drag it away from the gradient or double-click it to remove the stop; a click on the gradient adds a stop there. With keyboard focus Left and Right move the selected stop by a hundredth, a tenth with Shift, Page Up and Page Down select the stop before or after it, and Del removes it"
 msgstr "Eine Marke ziehen, um ihren Stützpunkt zu verschieben; vom Verlauf wegziehen oder ein Doppelklick entfernt ihn; ein Klick auf den Verlauf fügt dort einen Stützpunkt ein. Mit Tastaturfokus verschieben Links und Rechts den gewählten Stützpunkt um ein Hundertstel, mit Umschalt um ein Zehntel, Bild auf und Bild ab wählen den Stützpunkt davor oder danach, und Entf entfernt ihn"
+
+#. TipPreviewSplitter
+msgid "Drag or use the arrow keys to resize; double-click or Enter resets to half"
+msgstr "Ziehen oder Pfeiltasten zum Umverteilen; Doppelklick oder Eingabe setzt auf die Mitte zurück"
 
 #. TipDragLayer
 msgid "Drag to move this layer through the list"

@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 80 | 5 | 22 | 4 | 1 |
+| V | Preview | 86 | 5 | 16 | 4 | 1 |
 | L | Timeline, transport, status | 60 | 11 | 10 | 7 | 2 |
 | R | Live editing and runs | 24 | 9 | 26 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 709 | 67 | 157 | 157 | 5 |
+| | All | 715 | 67 | 151 | 157 | 5 |
 
 ## Cross-cutting
 
@@ -949,12 +949,12 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-01 | Two picture cells Field + Intensity | Panes/PreviewPane.xaml:553,724,750 | 40 Layout | done | preview.slint Picture x2 |
 | V-02 | Stacked (rows, field above) default / side by side (columns) | PreviewPane.xaml:553-700 (Orientation triggers) | 40 Layout | done | stacked/side by side, persisted |
 | V-03 | PreviewOrientation setting loaded at start | PreviewPane.xaml.cs | 40 Layout | done | main.rs:256 |
-| V-04 | Splitter between cells, 4 px, tab stop | PreviewPane.xaml:747 | 40 Layout | missing | fixed 4 px spacing only, no splitter |
-| V-05 | Splitter drag / arrow keys resize | PreviewPane.xaml:668 (KeyboardIncrement 10) | 40 Layout | missing | |
-| V-06 | Splitter double-click / Enter resets to half | PreviewPane.xaml.cs:1314,1317 | 40 Layout | missing | |
-| V-07 | Splitter tooltip text | PreviewPane.xaml:747 | 40 Layout | missing | |
-| V-08 | Splitter hover / focus colour (hover bg, accent on focus) | PreviewPane.xaml:690-700 | 40 Layout (not stated) | missing | not in spec as visuals |
-| V-09 | Hidden picture gives room to other, splitter collapses, restore previous split | PreviewPane.xaml | 40 Layout | missing | no show toggles, both always shown |
+| V-04 | Splitter between cells, 4 px, tab stop | PreviewPane.xaml:747 | 40 Layout | done | Splitter (splitter.slint, keyed) between the pictures: 4 px, a tab stop |
+| V-05 | Splitter drag / arrow keys resize | PreviewPane.xaml:668 (KeyboardIncrement 10) | 40 Layout | done | drag; arrows move it 10 px |
+| V-06 | Splitter double-click / Enter resets to half | PreviewPane.xaml.cs:1314,1317 | 40 Layout | done | double-click or Enter resets to half |
+| V-07 | Splitter tooltip text | PreviewPane.xaml:747 | 40 Layout | done | tooltip with Next's text |
+| V-08 | Splitter hover / focus colour (hover bg, accent on focus) | PreviewPane.xaml:690-700 | 40 Layout (not stated) | done | hover background, accent while focused |
+| V-09 | Hidden picture gives room to other, splitter collapses, restore previous split | PreviewPane.xaml | 40 Layout | done | a hidden picture takes its splitter with it; the split is kept for its return |
 | V-10 | Picture fitted uniformly, centred, 4 px margin, cell hugs picture | Controls/PictureFrame.cs:49 | 40 Layout | done | contain-fitted; rest matched in general (decision 0033) |
 | V-11 | Without run/frame: black at canvas size; image scene shows scene image | PreviewPane.xaml.cs:828 | 40 Layout | partial | black rect; no canvas-size black frame; image scene not shown before first frame (unverified) |
 | V-12 | Header strip title ("Field"/"Intensity" semi-bold) | PreviewPane.xaml:560-600, Controls/HeaderStrip.cs | 40 Header strip | done | title; rest matched in general (decision 0033) |
@@ -1169,7 +1169,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-09 | Run converges on goal, no timers; position frame first, then fill | worker.rs (core) | 60 The live run | done | core RunWorker |
 | R-10 | Spec change = new generation, store cleared, engine reused/rebuilt | worker.rs | 60 The live run | done | core |
 | R-11 | Probe-only spec change clears traces keeps frames | worker.rs | 60 The live run | done | core; UI never emits probe-only edit (R-02) |
-| R-12 | Paused + edited project adopts edit at once; pause with nothing to do reads Completed | worker.rs | 60 The live run | done | a Frames edit while paused submits at once and stays paused; a finished run is neither active nor paused |
+| R-12 | Paused + edited project adopts edit at once; pause with nothing to do reads Completed | worker.rs | 60 The live run | done | a simulation edit while paused submits at once and stays paused; a pause over a finished run is dropped by the next edit |
 | R-13 | Switching device (Use the GPU) rebuilds engine at next work | worker.rs | 60 The live run | missing | Slint engine fixed GPU (live.rs new) |
 | R-14 | Showing intensity picture makes run track it | worker.rs | 60 The live run | done | the request tracks the intensity while its picture is shown; turning it on is a Frames edit, off keeps the frames |
 | R-15 | Goal looked at every 16 steps; fit frame abandoned when not asked | worker.rs | 60 The live run | done | core |
