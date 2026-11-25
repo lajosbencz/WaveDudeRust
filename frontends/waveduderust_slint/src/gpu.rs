@@ -205,3 +205,10 @@ impl CpuPicture {
 		slint::Image::from_rgba8(pixels)
 	}
 }
+
+/// The device was lost; asks the device first, which reports a loss only when polled.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn lost(context: &GpuContext) -> bool {
+	let _ = context.device.poll(wgpu::PollType::Poll);
+	context.lost().is_some()
+}
