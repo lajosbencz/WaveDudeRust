@@ -13,7 +13,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
 | M | Menus and shortcuts | 76 | 9 | 3 | 52 | 0 |
-| D | Dialogs and windows | 47 | 19 | 4 | 9 | 0 |
+| D | Dialogs and windows | 47 | 20 | 3 | 9 | 0 |
 | S | Settings | 20 | 7 | 2 | 3 | 0 |
 | I | Icons | 57 | 1 | 3 | 22 | 0 |
 | T | Project tree | 56 | 3 | 3 | 39 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
 | R | Live editing and runs | 39 | 15 | 2 | 3 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 807 | 84 | 32 | 167 | 5 |
+| | All | 807 | 85 | 31 | 167 | 5 |
 
 ## Cross-cutting
 
@@ -350,7 +350,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-72 | Status bar: left latest WaveDude Info+ log line, "Ready" at first; warnings turn bar orange, errors red until next Info | MW:486-488 | ui/70 Status bar | partial | status text set from last line (messages.rs:82); bar colour fixed Theme.status (the warn token comes with the feature); "Ready" initial not set |
 | D-73 | Status bar right: run status; far right: busy text + 120 px progress bar | MW:450-485 | ui/70 Status bar | partial | run status text done (app.slint:~262), busy text/bar missing |
 | D-74 | Status bar tooltip "Double-click to open the Messages pane"; double-click opens/focuses | MW:444-447, SE:215 | ui/70 Status bar | done | double-click opens; rest matched in general (decision 0033) |
-| D-75 | Crash report at next start (crash.txt, last-crash.txt, "WaveDude Rust hit an internal error..." Copy path / OK) | not in Next | ui/70 Crash report | missing | main.rs only sets a wasm panic hook |
+| D-75 | Crash report at next start (crash.txt, last-crash.txt, "WaveDude Rust hit an internal error..." Copy path / OK) | not in Next | ui/70 Crash report | partial | desktop: main-thread panics appended to crash.txt in the config folder; next start shows it renamed last-crash.txt, Copy path / OK (default), welcome waits; browser: none |
 | D-76 | First start: machine facts, presets chosen, settings file written at once, one Info line, default layout, welcome opens | WPF/App.xaml.cs, UIS IsFirstStart | ui/70 First start | done | Settings::load(facts); Welcome at first start |
 | D-77 | File type registration (.wdproj, .wdscheme) | WPF/FileAssociation.cs (UI) | ui/70, decision 0008 | divergence | installer/package only (decision 0008) |
 | D-78 | Command line: open file argument | App.xaml.cs | ui/70 | done | main.rs:~457 args_os().nth(1) |

@@ -2,7 +2,7 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // The messages the app shows; `none` while none is.
-export enum Message { none, save-changes, discard-frames, export-running, scene-image, replace-it, replace-them, open-failed, save-failed, export-failed }
+export enum Message { none, crashed, save-changes, discard-frames, export-running, scene-image, replace-it, replace-them, open-failed, save-failed, export-failed }
 
 // A message and the one value its text names: a file's name or path, or the version.
 export struct Modal {
@@ -10,7 +10,7 @@ export struct Modal {
     arg: string,
 }
 
-export enum Answer { ok, save, discard, cancel, yes, no }
+export enum Answer { ok, save, discard, cancel, yes, no, copy }
 
 // One of a message's buttons.
 struct Choice {
@@ -27,10 +27,13 @@ export component ModalLayer inherits Rectangle {
     property <bool> confirms: modal.message == Message.discard-frames || modal.message == Message.export-running
         || modal.message == Message.replace-it || modal.message == Message.replace-them;
     property <bool> asks: modal.message == Message.save-changes || root.confirms;
-    property <bool> fails: modal.message == Message.open-failed || modal.message == Message.save-failed || modal.message == Message.export-failed;
+    property <bool> fails: modal.message == Message.crashed || modal.message == Message.open-failed || modal.message == Message.save-failed || modal.message == Message.export-failed;
     // the scene image file changed: Load file is the default
     property <bool> reloads: modal.message == Message.scene-image;
-    property <[Choice]> choices: root.reloads ? [{ text: @tr("Load file"), answer: Answer.yes }, { text: @tr("Keep embedded"), answer: Answer.no }]
+    // the button Enter presses
+    property <int> default: root.confirms || modal.message == Message.crashed ? 1 : 0;
+    property <[Choice]> choices: modal.message == Message.crashed ? [{ text: @tr("Copy path"), answer: Answer.copy }, { text: @tr("OK"), answer: Answer.ok }]
+        : root.reloads ? [{ text: @tr("Load file"), answer: Answer.yes }, { text: @tr("Keep embedded"), answer: Answer.no }]
         : root.confirms ? [{ text: @tr("Yes"), answer: Answer.yes }, { text: @tr("No"), answer: Answer.no }]
         : root.asks ? [{ text: @tr("Save"), answer: Answer.save }, { text: @tr("Don't save"), answer: Answer.discard }, { text: @tr("Cancel"), answer: Answer.cancel }]
         : [{ text: @tr("OK"), answer: Answer.ok }];
@@ -41,7 +44,7 @@ export component ModalLayer inherits Rectangle {
     focus := FocusScope {
         key-pressed(e) => {
             if (e.text == Key.Escape) { root.answer(root.confirms || root.reloads ? Answer.no : root.asks ? Answer.cancel : Answer.ok); return accept; }
-            if (e.text == Key.Return) { root.answer(root.choices[root.confirms ? 1 : 0].answer); return accept; }
+            if (e.text == Key.Return) { root.answer(root.choices[root.default].answer); return accept; }
             reject
         }
     }
@@ -80,6 +83,7 @@ export component ModalLayer inherits Rectangle {
                         : modal.message == Message.replace-it ? @tr("'{}' exists. Replace it?", modal.arg)
                         : modal.message == Message.replace-them ? @tr("The folder {} exists and holds files. Replace them?", modal.arg)
                         : modal.message == Message.scene-image ? @tr("The scene image file '{}' differs from the image embedded in the project. Load the file?", modal.arg)
+                        : modal.message == Message.crashed ? @tr("WaveDude Rust hit an internal error in the last session. The report, to attach to a bug report:\n{}", modal.arg)
                         : modal.message == Message.open-failed ? @tr("Could not open '{}'.", modal.arg)
                         : modal.message == Message.save-failed ? @tr("Could not save '{}'.", modal.arg)
                         : modal.message == Message.export-failed ? @tr("The export failed.")
@@ -94,7 +98,7 @@ export component ModalLayer inherits Rectangle {
                 spacing: 6px;
                 for choice[i] in root.choices: Button {
                     text: choice.text;
-                    primary: i == (root.confirms ? 1 : 0);
+                    primary: i == root.default;
                     clicked => { root.answer(choice.answer); }
                 }
             }

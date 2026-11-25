@@ -2,6 +2,8 @@
 
 mod canvas;
 mod clipboard;
+#[cfg(not(target_arch = "wasm32"))]
+mod crash;
 mod document;
 mod examples;
 mod export;
@@ -1168,11 +1170,19 @@ fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
 
 /// The answer to the message window: for the unsaved edits prompt, Save, Don't save or Cancel.
 fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
-	let message = app.get_modal().message;
+	let modal = app.get_modal();
+	let message = modal.message;
 	app.set_modal(ui::Modal::default());
 	match (message, answer) {
 		(ui::Message::ReplaceIt | ui::Message::ReplaceThem, ui::Answer::Yes) => ask_replace(state, app),
 		(ui::Message::ReplaceIt | ui::Message::ReplaceThem, _) => state.replacing = None,
+		(ui::Message::Crashed, ui::Answer::Copy) => {
+			if let Err(e) = clipboard::write(modal.arg.to_string()) {
+				tracing::error!("{e}");
+			}
+			// the window stays
+			app.set_modal(modal);
+		}
 		(ui::Message::SceneImage, answer) => {
 			if let Some((bytes, size)) = state.scene_watch.answer(answer == ui::Answer::Yes) {
 				embed(state, bytes, size);
@@ -1205,7 +1215,7 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 		let go = match answer {
 			ui::Answer::Save => save(state, app, false),
 			ui::Answer::Discard => true,
-			ui::Answer::Ok | ui::Answer::Cancel | ui::Answer::Yes | ui::Answer::No => false,
+			ui::Answer::Ok | ui::Answer::Cancel | ui::Answer::Yes | ui::Answer::No | ui::Answer::Copy => false,
 		};
 		if go {
 			state.doc.mark_saved();
@@ -1350,7 +1360,15 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	apply_settings(&mut state.borrow_mut(), &app);
 	follow_desktop_scheme(&state, &app);
 	state.borrow_mut().opened();
-	if state.borrow().settings.show_startup && std::env::args_os().nth(1).is_none() {
+	// a crash report comes first; the welcome page waits for the next start
+	#[cfg(not(target_arch = "wasm32"))]
+	let crashed = waveduderust_platform::settings::AppDirs::platform().and_then(|d| crash::take(&d.config));
+	#[cfg(target_arch = "wasm32")]
+	let crashed: Option<PathBuf> = None;
+	if let Some(path) = &crashed {
+		tell(&app, ui::Message::Crashed, &path.display().to_string());
+	}
+	if crashed.is_none() && state.borrow().settings.show_startup && std::env::args_os().nth(1).is_none() {
 		show_settings(&state.borrow(), &app);
 		app.set_welcome_shown(true);
 	}
@@ -1986,6 +2004,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+	if let Some(dirs) = waveduderust_platform::settings::AppDirs::platform() {
+		crash::install(dirs.config);
+	}
 	pollster::block_on(start())
 }
 
