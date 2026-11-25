@@ -16,6 +16,7 @@ mod memory;
 mod messages;
 mod number;
 mod playback;
+mod scene_watch;
 mod selection;
 mod settings;
 mod tree;
@@ -56,6 +57,7 @@ const UNDO_STEPS: usize = 1000;
 /// What the window shows.
 struct State {
 	doc: Document,
+	scene_watch: scene_watch::SceneWatch,
 	nodes: Vec<Node>,
 	selection: Selection,
 	/// Tree rows whose children are hidden.
@@ -289,12 +291,31 @@ impl State {
 
 	/// A project replaced the one shown: the selection and the timeline start over, frame 0 is made.
 	fn opened(&mut self) {
+		self.scene_watch = scene_watch::SceneWatch::default();
+		self.find_scene_image();
 		self.selection.set(Node::Project);
 		self.last_export = None;
 		self.playback.reset();
 		self.live.load(&self.doc.project, &self.doc.view);
 		self.playback.frames = self.live.frames;
 		self.ran = self.doc.generation;
+	}
+
+	/// A scene image without a path is looked for by name beside the project and in its `scene_images` folder; the
+	/// path found is adopted, relative.
+	fn find_scene_image(&mut self) {
+		let scene = &self.doc.project.scene;
+		let Some(folder) = self.doc.path.as_deref().and_then(std::path::Path::parent) else { return };
+		if !scene.image_path.is_empty() || scene.image.is_empty() {
+			return;
+		}
+		let found = [folder.join(&scene.image), folder.join("scene_images").join(&scene.image)]
+			.into_iter()
+			.find(|p| p.is_file());
+		if let Some(found) = found {
+			let path = waveduderust::io::stored_image_path(Some(folder), &found.to_string_lossy());
+			self.doc.settle(|p| p.scene.image_path.clone_from(&path));
+		}
 	}
 
 	/// Whether the current scheme is among the user's: -1 for another row or no store to keep them, 0 not, 1 it is.
@@ -832,6 +853,34 @@ fn adopt_image(state: &mut State, path: &std::path::Path) {
 	tracing::info!("Scene image {name}");
 }
 
+/// Embeds `bytes` as the scene image, the canvas taking its size.
+fn embed(state: &mut State, bytes: std::sync::Arc<[u8]>, size: (u32, u32)) {
+	state.doc.edit(|p| {
+		let s = &mut p.scene;
+		(s.image_data, s.image_size) = (Some(bytes), size);
+		(s.width, s.height) = size;
+	});
+}
+
+/// Follows the scene image file (docs/ui/60, Files and drop): asks while no other question shows.
+fn watch_scene_image(state: &mut State, app: &AppWindow) {
+	use scene_watch::Event;
+	let folder = state.doc.path.as_deref().and_then(std::path::Path::parent);
+	match state.scene_watch.tick(&state.doc.project.scene, folder) {
+		Some(Event::Withdraw) if app.get_modal().message == ui::Message::SceneImage => {
+			app.set_modal(ui::Modal::default());
+		}
+		Some(Event::Take(bytes, size)) => {
+			state.doc.settle(|p| (p.scene.image_data, p.scene.image_size) = (Some(bytes.clone()), size));
+			state.show(app);
+		}
+		_ => {}
+	}
+	if state.scene_watch.asking() && app.get_modal().message == ui::Message::None {
+		tell(app, ui::Message::SceneImage, &state.doc.project.scene.image);
+	}
+}
+
 /// After a forced theme, keeps the System theme on the desktop's scheme from winit's theme event, which Linux lacks
 /// (docs/blockers.md, Slint's system colour scheme).
 fn follow_desktop_scheme(state: &Rc<RefCell<State>>, app: &AppWindow) {
@@ -1042,6 +1091,11 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 	let message = app.get_modal().message;
 	app.set_modal(ui::Modal::default());
 	match (message, answer) {
+		(ui::Message::SceneImage, answer) => {
+			if let Some((bytes, size)) = state.scene_watch.answer(answer == ui::Answer::Yes) {
+				embed(state, bytes, size);
+			}
+		}
 		(ui::Message::DiscardFrames, ui::Answer::Yes) if state.commands().can_discard => {
 			state.live.discard();
 			state.playback.pause();
@@ -1184,6 +1238,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		exporting: None,
 		inbox: files::Inbox::default(),
 		pasted: clipboard::Pasted::default(),
+		scene_watch: scene_watch::SceneWatch::default(),
 		example_topic: ui::ExampleTopic::default(),
 		example_search: String::new(),
 		example_rows: Vec::new(),
@@ -1728,6 +1783,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				paste(s);
 				s.show(&app);
 			}
+			watch_scene_image(s, &app);
 			let picked: Vec<_> = s.inbox.borrow_mut().drain(..).collect();
 			for (layer, name, text) in picked {
 				if let Some(layer) = layer {

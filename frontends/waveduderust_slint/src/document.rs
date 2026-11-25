@@ -39,6 +39,17 @@ impl Document {
 		Self { limit, ..Self::default() }
 	}
 
+	/// Applies `f` to the project, its saved state and its history: what the project takes as it opens, neither an
+	/// edit nor undone.
+	pub(crate) fn settle(&mut self, f: impl Fn(&mut Project)) {
+		f(&mut self.project);
+		let history = self.undo.iter_mut().chain(&mut self.redo);
+		for snapshot in std::iter::once(&mut self.saved).chain(history) {
+			f(&mut snapshot.project);
+		}
+		self.generation += 1;
+	}
+
 	/// The project of `path`, replacing this one and its history.
 	#[cfg(not(target_arch = "wasm32"))]
 	pub(crate) fn open(&mut self, path: &Path) -> waveduderust::io::Result<()> {

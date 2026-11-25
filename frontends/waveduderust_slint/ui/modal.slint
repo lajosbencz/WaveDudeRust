@@ -2,7 +2,7 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // The messages the app shows; `none` while none is.
-export enum Message { none, save-changes, discard-frames, export-running, open-failed, save-failed, export-failed }
+export enum Message { none, save-changes, discard-frames, export-running, scene-image, open-failed, save-failed, export-failed }
 
 // A message and the one value its text names: a file's name or path, or the version.
 export struct Modal {
@@ -27,7 +27,10 @@ export component ModalLayer inherits Rectangle {
     property <bool> confirms: modal.message == Message.discard-frames || modal.message == Message.export-running;
     property <bool> asks: modal.message == Message.save-changes || root.confirms;
     property <bool> fails: modal.message == Message.open-failed || modal.message == Message.save-failed || modal.message == Message.export-failed;
-    property <[Choice]> choices: root.confirms ? [{ text: @tr("Yes"), answer: Answer.yes }, { text: @tr("No"), answer: Answer.no }]
+    // the scene image file changed: Load file is the default
+    property <bool> reloads: modal.message == Message.scene-image;
+    property <[Choice]> choices: root.reloads ? [{ text: @tr("Load file"), answer: Answer.yes }, { text: @tr("Keep embedded"), answer: Answer.no }]
+        : root.confirms ? [{ text: @tr("Yes"), answer: Answer.yes }, { text: @tr("No"), answer: Answer.no }]
         : root.asks ? [{ text: @tr("Save"), answer: Answer.save }, { text: @tr("Don't save"), answer: Answer.discard }, { text: @tr("Cancel"), answer: Answer.cancel }]
         : [{ text: @tr("OK"), answer: Answer.ok }];
 
@@ -36,7 +39,7 @@ export component ModalLayer inherits Rectangle {
     TouchArea { }
     focus := FocusScope {
         key-pressed(e) => {
-            if (e.text == Key.Escape) { root.answer(root.confirms ? Answer.no : root.asks ? Answer.cancel : Answer.ok); return accept; }
+            if (e.text == Key.Escape) { root.answer(root.confirms || root.reloads ? Answer.no : root.asks ? Answer.cancel : Answer.ok); return accept; }
             if (e.text == Key.Return) { root.answer(root.choices[root.confirms ? 1 : 0].answer); return accept; }
             reject
         }
@@ -73,6 +76,7 @@ export component ModalLayer inherits Rectangle {
                     text: modal.message == Message.save-changes ? @tr("Save the changes to {}?", modal.arg)
                         : modal.message == Message.discard-frames ? @tr("Discard the frames of the run?")
                         : modal.message == Message.export-running ? @tr("An export is running. Stop it and quit?")
+                        : modal.message == Message.scene-image ? @tr("The scene image file '{}' differs from the image embedded in the project. Load the file?", modal.arg)
                         : modal.message == Message.open-failed ? @tr("Could not open '{}'.", modal.arg)
                         : modal.message == Message.save-failed ? @tr("Could not save '{}'.", modal.arg)
                         : modal.message == Message.export-failed ? @tr("The export failed.")

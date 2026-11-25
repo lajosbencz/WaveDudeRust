@@ -13,16 +13,16 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
 | M | Menus and shortcuts | 76 | 9 | 3 | 52 | 0 |
-| D | Dialogs and windows | 43 | 16 | 12 | 8 | 0 |
+| D | Dialogs and windows | 44 | 16 | 11 | 8 | 0 |
 | S | Settings | 16 | 7 | 6 | 3 | 0 |
 | I | Icons | 57 | 1 | 6 | 19 | 0 |
 | T | Project tree | 56 | 3 | 4 | 38 | 0 |
 | P | Properties | 310 | 7 | 4 | 4 | 0 |
 | V | Preview | 90 | 5 | 12 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
-| R | Live editing and runs | 33 | 15 | 11 | 0 | 2 |
+| R | Live editing and runs | 37 | 15 | 7 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 789 | 81 | 61 | 159 | 5 |
+| | All | 794 | 81 | 56 | 159 | 5 |
 
 ## Cross-cutting
 
@@ -295,7 +295,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-17 | Error dialog one line; detail to log and Messages tooltip (unreadable file: first 64K chars + XML error line) | n/a | ui/70 | done | one line, detail logged; rest matched in general (decision 0033) |
 | D-18 | Unsaved edits prompt before New, Open, Close, Exit, update restart, example, recent file: "Save the changes to <name>?" | MainWindow.Project.cs | ui/70 Unsaved | done | New, Open, Close, Exit, example; updater dropped |
 | D-19 | "An export is running. Stop it and quit?" Yes/No on Exit/close/update | n/a | ui/70 Unsaved | done | Exit or close while exporting asks An export is running. Stop it and quit? Yes/No (No default), then the unsaved check |
-| D-20 | Scene image changed on disk: "The scene image file '<name>' differs from the image embedded... Load the file?" Load file (default)/Keep embedded (Esc) | WPF scene image watch | ui/70, ui/60 | missing | no file watch |
+| D-20 | Scene image changed on disk: "The scene image file '<name>' differs from the image embedded... Load the file?" Load file (default)/Keep embedded (Esc) | WPF scene image watch | ui/70, ui/60 | done | modal scene-image: The scene image file {} differs ... Load the file? Load file (Enter) / Keep embedded (Esc) |
 | D-21 | Memory warning window: 500 px wide, "?" disc, facts text, "Settings to change for this and later runs:", checkboxes (RAM cache to Auto, halve resolution, half the frames, 8-bit samples; pre-ticked mildest set), result line, "Do not warn me again", Run (default) / Cancel | WPF/Dialogs/MemoryWarningWindow.xaml:20-77, SE:296-304 | ui/70 Memory warning, ui/60 | done | memory-warning.slint: 500 px, ? disc, facts, four boxes (cache box browser only), bar, fit line, Do not warn me again, Run (Enter) / Cancel (Esc) |
 | D-22 | Welcome page modal: title "Welcome to WaveDude Rust", shown first start and each launch while ShowStartup, and File > Welcome Page | not in Next | ui/70 Welcome | done | welcome.slint, main.rs:~455 |
 | D-23 | Welcome: "Preview quality" heading + one sentence | not in Next | ui/70 Welcome 1 | done | welcome.slint:38-45 |
@@ -1208,10 +1208,10 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-48 | Name clash on paste appends " copy"; composite emitters re-derived | MainWindow.Clipboard.cs | 60 Clipboard | partial | name clash appends copy (clipboard.rs test); composite re-derivation unchecked |
 | R-49 | Paste enable state checked per clipboard change | MainWindow.Clipboard.cs | 60 Clipboard | missing | |
 | R-50 | File dropped on window opens .wdproj / configuration.json / .wdscheme; others refused | MainWindow.xaml.cs | 60 Files and drop | partial | see M-138; others refused with a log warning |
-| R-51 | Scene image differs from embedded: ask "Load file?" Load/Keep embedded; undoable | MainWindow.SceneImageWatch.cs | 60 Files and drop | missing | |
-| R-52 | Scene image file watched, 400 ms debounce, retries, one question at a time, withdraws on revert | MainWindow.SceneImageWatch.cs | 60 Files and drop | missing | |
-| R-53 | Project with no embedded image takes file without asking; missing/undecodable logs "(not found)" | MainWindow.SceneImageWatch.cs | 60 Files and drop | missing | |
-| R-54 | Image looked up beside project and in scene_images, adopts relative path | ProjectWatcher | 60 Files and drop | missing | |
+| R-51 | Scene image differs from embedded: ask "Load file?" Load/Keep embedded; undoable | MainWindow.SceneImageWatch.cs | 60 Files and drop | done | Load embeds as an undoable edit; Keep remembers the bytes (scene_watch.rs) |
+| R-52 | Scene image file watched, 400 ms debounce, retries, one question at a time, withdraws on revert | MainWindow.SceneImageWatch.cs | 60 Files and drop | done | polled 100 ms, taken after 400 ms still, reads retried; one question, shown when no other; withdrawn on revert, kept bytes, undecodable or deleted file |
+| R-53 | Project with no embedded image takes file without asking; missing/undecodable logs "(not found)" | MainWindow.SceneImageWatch.cs | 60 Files and drop | done | no embedded image: taken silently (Document::settle, not dirty); missing logs (not found) once |
+| R-54 | Image looked up beside project and in scene_images, adopts relative path | ProjectWatcher | 60 Files and drop | done | find_scene_image: by name beside the project and in scene_images, relative path adopted without dirtying |
 | R-55 | Image inside project folder stored relative | ProjectWatcher | 60 Files and drop | done | stored_image_path: inside the project folder stored relative |
 | R-56 | Unsaved-edits ask before New/Open/Close/Exit/example/drop | MainWindow.Project.cs | 60 Files and drop; 70 | partial | done for New/Open/Close/Exit/example; drop missing |
 | R-57 | Off-canvas objects warning in log, once per list change | none (divergence: Next silent) | 60 Objects off the canvas | done | live.rs submit: off_canvas list warned once per change, spec wording |
