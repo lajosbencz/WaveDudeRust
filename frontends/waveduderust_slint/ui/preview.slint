@@ -192,6 +192,7 @@ component Picture inherits VerticalLayout {
     pure function tip(t: HoverTip) -> string {
         t.kind == TipKind.lever ? @tr("{}: drag to turn the array (Shift snaps to 15 degrees); with keyboard focus the arrow keys turn it by a degree, ten with Shift", t.name)
         : t.kind == TipKind.grip ? @tr("{}: drag to resize; with keyboard focus the arrow keys move the grip by a pixel, ten with Shift", t.name)
+        : t.kind == TipKind.surface ? @tr("{}, surface {}: drag along the axis to curve it, outward bulges, inward flattens and then hollows; the rim stays. With keyboard focus the arrow keys move it by a pixel, ten with Shift", t.name, t.index)
         : t.kind == TipKind.point ? @tr("{}, point {}: drag to move it; with keyboard focus the arrow keys move it by a pixel, ten with Shift", t.name, t.index)
         : t.kind == TipKind.node ? @tr("{}, node {}: drag to move it with its handles; with keyboard focus the arrow keys move it by a pixel, ten with Shift", t.name, t.index)
         : t.kind == TipKind.in-handle ? @tr("{}, node {}, in-handle: drag to shape the segment arriving here; a smooth node turns the out-handle with it. With keyboard focus the arrow keys move it by a pixel, ten with Shift", t.name, t.index)

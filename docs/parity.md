@@ -12,17 +12,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 13 | 6 | 1 | 20 | 0 |
-| M | Menus and shortcuts | 74 | 9 | 5 | 52 | 0 |
+| M | Menus and shortcuts | 75 | 8 | 5 | 52 | 0 |
 | D | Dialogs and windows | 37 | 14 | 20 | 8 | 0 |
 | S | Settings | 15 | 6 | 8 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 56 | 2 | 5 | 38 | 0 |
 | P | Properties | 307 | 7 | 8 | 3 | 0 |
-| V | Preview | 88 | 5 | 14 | 4 | 1 |
+| V | Preview | 90 | 5 | 12 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
 | R | Live editing and runs | 31 | 14 | 14 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 756 | 75 | 101 | 158 | 5 |
+| | All | 759 | 74 | 99 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -249,7 +249,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-116 | Tree: Shift+Up/Down extend range from anchor | PT | ui/10 | done | Shift+Up/Down extend from the anchor |
 | M-117 | Tree: Space toggles Enabled/Active | PT:231 | ui/10 | done | Space toggles Enabled/Active |
 | M-118 | Tree: Insert / Ctrl+Space toggle focused row in selection | PT:232-233 | ui/10 | done | Insert / Ctrl+Space toggle the row in the selection |
-| M-119 | Tree: Ctrl+A select all, Ctrl+D duplicate | PT:234-235 | ui/10 | partial | Ctrl+A selects all (app.slint); no Ctrl+D |
+| M-119 | Tree: Ctrl+A select all, Ctrl+D duplicate | PT:234-235 | ui/10 | done | Ctrl+A in app.slint, Ctrl+D in tree.slint:285 |
 | M-120 | Tree: Del remove | PT:230 | ui/10 | done | Del removes the selection |
 | M-121 | Tree: Alt+Up / Alt+Down move within group | PT:236-237 | ui/10 | done | Alt+Up/Alt+Down move within the list |
 | M-122 | Tree: Enter moves focus into properties form (decision 0008) | n/a | ui/10 | missing | |
@@ -1017,7 +1017,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-69 | Drag one of several selected: group move, limited so none leaves canvas; no-move drag selects item | SceneOverlay.cs:1446, Movable.Limit | 40 Interaction | done | group of whole-item handles, clamped so none leaves the canvas; a drag that does not move selects the item alone |
 | V-70 | Drag rotation lever, whole degrees, Shift snaps 15, angle in (-180,180] | SceneOverlay.cs:850,1467 | 40 Interaction | done | canvas::Target::Lever |
 | V-71 | Drag size grip: absolute, whole px, min size, linked rect/ellipse farther coord, polygon on ray | SceneOverlay.cs | 40 Interaction | done | canvas::Target::Shape with Grip; linked: the farther coordinate; polygon on its ray |
-| V-72 | Drag lens surface handle (bulge/flatten/hollow, rim fixed) | SceneOverlay.cs | 40 Interaction | missing | |
+| V-72 | Drag lens surface handle (bulge/flatten/hollow, rim fixed) | SceneOverlay.cs | 40 Interaction | done | HandleKind::Surface on each vertex of a lens or Fresnel lens; drag along the axis, rim and other vertex held (lens_geometry set_vertex, handles drag_surface) |
 | V-73 | Drag fibre node (with handles) / Bezier handle (smooth node mirrors length) | SceneOverlay.cs MirrorLength | 40 Interaction | done | canvas::Target::Shape with Node/InHandle/OutHandle |
 | V-74 | Drag probe A onto detached graph box picks it up | SceneOverlay.cs:952 | 40 Interaction | missing | |
 | V-75 | Esc during drag puts item/group back; second finger likewise | SceneOverlay.cs:1507-1517 | 40 Interaction | done | Esc while a drag is held: Document::cancel drops its step; the second finger dropped (decision 0033) |
@@ -1025,7 +1025,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-77 | Marquee on empty drag (faint accent fill, dashed edge); Shift add, Ctrl toggle, else replace | SceneOverlay.cs:1256-1365 | 40 Interaction | done | canvas::Marquee: a press off the handles; whole-item handles inside; Shift adds, Ctrl toggles, else replaces |
 | V-78 | Tab through handles; focusing selects item, tree mirrors without focus | SceneOverlay.cs | 40 Interaction | done | Overlays::tab: overlay handle order; focusing selects (kept in its group); back onto an item lands on its last handle once selected; entering by Tab resumes the focused handle, else the first (Slint gives no direction) |
 | V-79 | Arrows / Shift+Arrows on focused handle: 1 / 10 px (group), lever 1 / 10 deg (Right/Up ccw) | SceneOverlay.cs:1527-1565 | 40 Interaction | done | Overlays::nudge, a run (one focus, one group) is one undo step; lever via handles::turn_lever; grips via handles::nudge_grip |
-| V-80 | Lens surface handle keeps rim fixed across key presses | SceneOverlay.cs:1560 (DragAnchors) | 40 Interaction | missing | |
+| V-80 | Lens surface handle keeps rim fixed across key presses | SceneOverlay.cs:1560 (DragAnchors) | 40 Interaction | done | keys hold the anchors for the focus run and step from the anchored vertex (canvas.rs nudge, handles surface_vertex) |
 | V-81 | Del on focused handle/box removes item or its selection | SceneOverlay.cs:1517-1523 | 40 Interaction | done | Del is the window-wide Delete on the selection, which focusing a handle sets |
 | V-82 | Right-click / Apps: picture context menu | PreviewPane.xaml:728-771 | 40 Interaction; 10 | done | ContextMenuArea on the picture; Menu or Shift+F10 opens it at the centre |
 | V-83 | Context menu: Brightness (focus box), Auto brightness | PreviewPane.xaml:736-737,762-763; PreviewPane.xaml.cs:1347 | 40 Automation ids | done | Brightness focuses the header box; Auto brightness |

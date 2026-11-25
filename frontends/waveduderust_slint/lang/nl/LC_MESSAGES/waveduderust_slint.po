@@ -2860,6 +2860,10 @@ msgstr "{}, knooppunt {}: slepen om het met zijn grepen te verplaatsen; met toet
 msgid "{}, point {}: drag to move it; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
 msgstr "{}, punt {}: slepen om te verplaatsen; met toetsenbordfocus verplaatsen de pijltoetsen één pixel, tien met Shift"
 
+#. TipSurfaceFormat
+msgid "{}, surface {}: drag along the axis to curve it, outward bulges, inward flattens and then hollows; the rim stays. With keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}, oppervlak {}: langs de as slepen om het te krommen, naar buiten bolt het, naar binnen wordt het vlak en dan hol; de rand blijft. Met toetsenbordfocus verplaatsen de pijltoetsen het één pixel, tien met Shift"
+
 #. TipMarkerFormat
 msgid "{}: drag to move; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
 msgstr "{}: slepen om te verplaatsen; met toetsenbordfocus verplaatsen de pijltoetsen één pixel, tien met Shift"

@@ -2,7 +2,8 @@
 //! outline points and fibre nodes. Canvas pixels as continuous values; angles in degrees, counter-clockwise on
 //! screen.
 
-use crate::model::{FiberNode, Part, PartKind, Point};
+use crate::model::lens_geometry::{rim_x, set_vertex, vertex_x};
+use crate::model::{FiberNode, Lens, Part, PartKind, Point, ZoneDivision};
 use crate::scene::shapes::{Frame, Vec2};
 use crate::view::overlay::HandleKind;
 
@@ -72,6 +73,56 @@ pub fn nudge_grip(kind: &mut PartKind, grip: Vec2, d: Vec2) {
 		PartKind::Polygon(p) => resize(&mut p.side, step, 2.),
 		kind => drag_grip(kind, Vec2::new(grip.x + d.x, grip.y + d.y)),
 	}
+}
+
+/// What a drag of a lens surface holds still, canvas pixels: its rim and the other vertex.
+pub type Anchors = [(f64, f64); 2];
+
+/// A lens kind's lens and zones: a Fresnel lens's, else one zone.
+pub fn lens_of(kind: &PartKind) -> Option<(&Lens, u32, ZoneDivision)> {
+	match kind {
+		PartKind::Lens(l) => Some((l, 1, ZoneDivision::EqualWidth)),
+		PartKind::FresnelLens(f) => Some((&f.lens, f.zones, f.division)),
+		_ => None,
+	}
+}
+
+/// What a drag of `surface`'s vertex holds still, in canvas pixels: its rim and the other vertex.
+pub fn surface_anchors(part: &Part, surface: usize) -> Option<Anchors> {
+	let (lens, zones, division) = lens_of(&part.kind)?;
+	let frame = Frame::of(&part.base);
+	let canvas = |x: f64| {
+		let p = frame.to_canvas(Vec2::new(x, 0.));
+		(p.x, p.y)
+	};
+	let other = if surface == 1 { 2 } else { 1 };
+	Some([canvas(rim_x(lens, zones, division, surface)), canvas(vertex_x(lens.thickness, other))])
+}
+
+/// Where `surface`'s vertex lies in canvas pixels, reckoned from the other vertex of `anchors` and the thickness,
+/// so the part's rounded centre does not creep into a run of keys.
+pub fn surface_vertex(part: &Part, surface: usize, [_, other]: Anchors) -> Option<(f64, f64)> {
+	let (lens, ..) = lens_of(&part.kind)?;
+	let frame = Frame::of(&part.base);
+	let side = if surface == 1 { -1. } else { 1. };
+	let x = frame.to_frame(Vec2::new(other.0, other.1)).x + side * f64::from(lens.thickness.max(1));
+	let p = frame.to_canvas(Vec2::new(x, 0.));
+	Some((p.x, p.y))
+}
+
+/// Drags `surface`'s vertex along the axis to the canvas point `at`, the `anchors` staying: the part's centre
+/// follows the middle of the vertices.
+pub fn drag_surface(part: &mut Part, surface: usize, at: (f64, f64), [rim, other]: Anchors) {
+	let frame = Frame::of(&part.base);
+	let along = |p: (f64, f64)| frame.to_frame(Vec2::new(p.0, p.1)).x;
+	let xs = (along(at), along(rim), along(other));
+	let centre = match &mut part.kind {
+		PartKind::Lens(l) => set_vertex(l, 1, ZoneDivision::EqualWidth, surface, xs),
+		PartKind::FresnelLens(f) => set_vertex(&mut f.lens, f.zones, f.division, surface, xs),
+		_ => return,
+	};
+	let c = frame.to_canvas(Vec2::new(centre, 0.));
+	(part.base.x, part.base.y) = (c.x.round() as i32, c.y.round() as i32);
 }
 
 /// Puts outline point `i` at the part-frame point `q`.

@@ -2860,6 +2860,10 @@ msgstr "{}, Knoten {}: zum Verschieben mit seinen Griffen ziehen; mit Tastaturfo
 msgid "{}, point {}: drag to move it; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
 msgstr "{}, Punkt {}: zum Verschieben ziehen; mit Tastaturfokus bewegen die Pfeiltasten um ein Pixel, mit Umschalt um zehn"
 
+#. TipSurfaceFormat
+msgid "{}, surface {}: drag along the axis to curve it, outward bulges, inward flattens and then hollows; the rim stays. With keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}, Fläche {}: entlang der Achse ziehen, um sie zu wölben; nach außen wölbt, nach innen ebnet und höhlt; der Rand bleibt. Mit Tastaturfokus bewegen die Pfeiltasten sie um ein Pixel, mit Umschalt um zehn"
+
 #. TipMarkerFormat
 msgid "{}: drag to move; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
 msgstr "{}: zum Verschieben ziehen; mit Tastaturfokus bewegen die Pfeiltasten um ein Pixel, mit Umschalt um zehn"

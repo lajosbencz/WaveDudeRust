@@ -39,6 +39,8 @@ pub(crate) struct Overlays {
 	focus: Option<(ui::Layer, ItemRef, Stop)>,
 	/// Counts focus changes: a run of key moves is one undo step.
 	run: u64,
+	/// What a run of keys on a lens surface holds still, and the run's count.
+	anchors: std::cell::Cell<Option<(u64, handles::Anchors)>>,
 	/// The view's handles and labels switches the overlays were built with.
 	shows: (bool, bool),
 }
@@ -75,6 +77,8 @@ enum Target {
 	Lever(ItemRef),
 	/// A part's size grip, an outline point or a fibre node or Bezier handle.
 	Shape(ItemRef, HandleKind),
+	/// A lens surface's vertex, its rim and the other vertex as the press found them (canvas pixels).
+	Surface { item: ItemRef, surface: usize, anchors: handles::Anchors },
 	/// A probe's graph box from its corner; whether it sits on A (attached), screen pixels per canvas pixel.
 	GraphBox { item: ItemRef, start: (i32, i32), attached: bool, scale: f64 },
 	/// A probe's A alone, screen pixels per canvas pixel: it picks up its detached graph box when it comes near.
@@ -141,7 +145,7 @@ fn glyph(kind: HandleKind) -> ui::HandleGlyph {
 		HandleKind::SourceLever | HandleKind::PartLever => ui::HandleGlyph::Lever,
 		HandleKind::PartCentre => ui::HandleGlyph::Part,
 		HandleKind::Grip => ui::HandleGlyph::Grip,
-		HandleKind::Point(_) | HandleKind::Node(_) => ui::HandleGlyph::Point,
+		HandleKind::Point(_) | HandleKind::Node(_) | HandleKind::Surface(_) => ui::HandleGlyph::Point,
 		HandleKind::InHandle(_) | HandleKind::OutHandle(_) => ui::HandleGlyph::Bezier,
 		HandleKind::ProbeA | HandleKind::ProbeB => ui::HandleGlyph::Probe,
 	}
@@ -328,7 +332,7 @@ impl Overlays {
 			key: format!("drag {gesture}"),
 			node,
 			from: match target {
-				Target::Shape(..) => (f64::from(handle.at.0), f64::from(handle.at.1)),
+				Target::Shape(..) | Target::Surface { .. } => (f64::from(handle.at.0), f64::from(handle.at.1)),
 				_ => (f64::from(at.0), f64::from(at.1)),
 			},
 			target,
@@ -359,6 +363,11 @@ impl Overlays {
 				HandleKind::Source | HandleKind::PartCentre => Which::Both,
 				HandleKind::SourceLever | HandleKind::PartLever => {
 					return Some(Gesture::Handle(drag(Target::Lever(handle.item))));
+				}
+				HandleKind::Surface(surface) => {
+					let Node::Part(i) = node else { return None };
+					let anchors = handles::surface_anchors(&project.parts[i], surface)?;
+					return Some(Gesture::Handle(drag(Target::Surface { item: handle.item, surface, anchors })));
 				}
 				kind => return Some(Gesture::Handle(drag(Target::Shape(handle.item, kind)))),
 			};
@@ -488,6 +497,7 @@ impl Overlays {
 			HandleKind::SourceLever | HandleKind::PartLever => (ui::TipKind::Lever, 0),
 			HandleKind::Grip => (ui::TipKind::Grip, 0),
 			HandleKind::Point(i) => (ui::TipKind::Point, i),
+			HandleKind::Surface(s) => (ui::TipKind::Surface, s),
 			HandleKind::Node(i) => (ui::TipKind::Node, i),
 			HandleKind::InHandle(i) => (ui::TipKind::InHandle, i),
 			HandleKind::OutHandle(i) => (ui::TipKind::OutHandle, i),
@@ -586,6 +596,19 @@ impl Overlays {
 				};
 				move_items(project, &starts, d);
 			}
+			HandleKind::Surface(surface) => {
+				let Node::Part(i) = node else { return };
+				// held from the first key while the handle keeps the focus, as a drag holds them
+				let anchors = match self.anchors.get() {
+					Some((run, anchors)) if run == self.run => Some(anchors),
+					_ => handles::surface_anchors(&project.parts[i], surface),
+				};
+				let Some(anchors) = anchors else { return };
+				self.anchors.set(Some((self.run, anchors)));
+				let Some(vertex) = handles::surface_vertex(&project.parts[i], surface, anchors) else { return };
+				let at = (vertex.0 + d.0, vertex.1 + d.1);
+				edit_part(&mut project.parts[i], |p| handles::drag_surface(p, surface, at, anchors));
+			}
 			HandleKind::Grip => {
 				let Node::Part(i) = node else { return };
 				let at = (f64::from(h.at.0), f64::from(h.at.1));
@@ -682,8 +705,10 @@ pub(crate) enum Gesture {
 const HIT_REACH: f32 = 10.;
 
 /// The topmost handle of `model` within `reach` canvas pixels of `at`.
+/// The handle nearest to `at` within `reach`; of equally near ones the topmost.
 fn hit(model: &OverlayModel, at: (f32, f32), reach: f32) -> Option<&overlay::Handle> {
-	model.handles.iter().rev().find(|h| (h.at.0 - at.0).hypot(h.at.1 - at.1) <= reach)
+	let distance = |h: &overlay::Handle| (h.at.0 - at.0).hypot(h.at.1 - at.1);
+	model.handles.iter().rev().filter(|h| distance(h) <= reach).min_by(|a, b| distance(a).total_cmp(&distance(b)))
 }
 
 fn start(project: &Project, node: Node, which: Which) -> Option<(ItemRef, Start)> {
@@ -798,6 +823,11 @@ impl Drag {
 					Some(size) => p.box_size = size,
 					None => (p.box_size, p.box_width, p.box_height) = (BoxSize::Custom, w as u32, h as u32),
 				}
+			}
+			&mut Target::Surface { item, surface, anchors } => {
+				self.by = d;
+				let Some(Node::Part(i)) = node_of(project, item) else { return };
+				edit_part(&mut project.parts[i], |p| handles::drag_surface(p, surface, at, anchors));
 			}
 			&mut Target::Shape(item, kind) => {
 				self.by = d;

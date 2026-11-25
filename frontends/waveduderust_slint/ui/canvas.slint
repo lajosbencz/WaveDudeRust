@@ -35,7 +35,7 @@ export struct GraphBox {
 }
 
 // what a handle or graph box under the pointer does (Next's Tip*Format strings)
-export enum TipKind { none, marker, lever, grip, point, node, in-handle, out-handle, graph, graph-corner }
+export enum TipKind { none, marker, lever, grip, surface, point, node, in-handle, out-handle, graph, graph-corner }
 
 // the tooltip of what is under the pointer: its kind, its item's name and the point or node index
 export struct HoverTip { kind: TipKind, name: string, index: int }

@@ -7,7 +7,7 @@
 //! again at the vertex plane at each zone's inner edge, so the deepest zone's sag is what the centre thickness must
 //! hold.
 
-use super::ZoneDivision;
+use super::{Lens, ZoneDivision};
 
 /// How far a surface of `radius` bows beyond its vertex at `half` pixels from the axis; 0 when flat.
 pub fn sag(radius: f64, half: f64) -> f64 {
@@ -107,6 +107,57 @@ fn radius_of_zone_sag(half: f64, zones: u32, division: ZoneDivision, sag: f64) -
 	high
 }
 
+/// Where the vertex of `surface` (1 the left, 2 the right) of a lens `thickness` thick sits on the axis.
+pub fn vertex_x(thickness: u32, surface: usize) -> f64 {
+	let side = if surface == 1 { -1.0 } else { 1.0 };
+	side * f64::from(thickness.max(1)) / 2.0
+}
+
+/// How far a surface's profile at the rim lies from its vertex, signed toward +x': for zones the outer zone's.
+fn profile_sag(radius: f64, half: f64, zones: u32, division: ZoneDivision) -> f64 {
+	let rim = surface_sag(radius, half);
+	if zones <= 1 { rim } else { rim - surface_sag(radius, zone_bound(radius, half, zones, division, zones - 1)) }
+}
+
+/// Where `surface` meets the rim on the axis: its vertex plus its sag at the half diameter, the radii fitted.
+pub fn rim_x(lens: &Lens, zones: u32, division: ZoneDivision, surface: usize) -> f64 {
+	let (diameter, thickness) = (lens.diameter.max(2), lens.thickness.max(1));
+	let (r1, r2) = fit_radii_zoned(diameter, thickness, lens.r1, lens.r2, zones, division);
+	let radius = if surface == 1 { r1 } else { r2 };
+	vertex_x(thickness, surface) + profile_sag(radius, f64::from(diameter) / 2.0, zones, division)
+}
+
+/// Puts the vertex of `surface` at `x` on the axis, the rim at `rim` and the other vertex at `other` staying:
+/// the thickness from the vertices, the radius from the sag (flat under half a pixel). The new centre on the axis.
+pub fn set_vertex(
+	lens: &mut Lens,
+	zones: u32,
+	division: ZoneDivision,
+	surface: usize,
+	(x, rim, other): (f64, f64, f64),
+) -> f64 {
+	let half = f64::from(lens.diameter.max(2)) / 2.0;
+	let side = if surface == 1 { -1.0 } else { 1.0 };
+	let thickness = (side * (x - other)).round().max(1.0);
+	let x = other + side * thickness;
+	let sag = (side * (x - rim)).clamp(-half, half);
+	// R1 > 0 bulges left, R2 < 0 right; to hundredths, rounded flatter so the fit never kicks in at the rim
+	let outward = -side * if sag.abs() < 0.5 { 0.0 } else { sag };
+	let radius = if outward == 0.0 {
+		0.0
+	} else {
+		let hundredths = radius_of_zone_sag(half, zones, division, outward.abs()).copysign(outward) * 100.0;
+		(if surface == 1 { hundredths.ceil() } else { hundredths.floor() }) / 100.0
+	};
+	lens.thickness = thickness as u32;
+	if surface == 1 {
+		lens.r1 = radius;
+	} else {
+		lens.r2 = radius;
+	}
+	(x + other) / 2.0
+}
+
 /// [`fit_radii_zoned`] for a plain lens.
 pub fn fit_radii(diameter: u32, thickness: u32, r1: f64, r2: f64) -> (f64, f64) {
 	fit_radii_zoned(diameter, thickness, r1, r2, 1, ZoneDivision::EqualWidth)
@@ -188,5 +239,18 @@ mod tests {
 		// the refit of a stretched Fresnel lens lands on a radius whose outer zone just fits
 		let (f1, _) = fit_radii_zoned(500, 4, 300.0, 0.0, 4, ZoneDivision::EqualWidth);
 		assert!(zone_sag(f1, 250.0, 4, ZoneDivision::EqualWidth) <= 4.0 + 1e-9 && f1 > 300.0);
+	}
+
+	#[test]
+	fn a_dragged_vertex_curves_its_surface_and_keeps_the_rim() {
+		let mut lens = Lens { diameter: 100, thickness: 20, r1: 0.0, r2: 0.0, ..Lens::default() };
+		let (rim, other) = (rim_x(&lens, 1, ZoneDivision::EqualWidth, 1), vertex_x(20, 2));
+		// outward by 10: thickness 30, a sag of 10 at the rim
+		let centre = set_vertex(&mut lens, 1, ZoneDivision::EqualWidth, 1, (-20.0, rim, other));
+		assert_eq!((lens.thickness, centre), (30, -5.0));
+		assert!((sag(lens.r1, 50.0) - 10.0).abs() < 0.01 && lens.r1 > 0.0);
+		// past the rim inward: hollow
+		set_vertex(&mut lens, 1, ZoneDivision::EqualWidth, 1, (5.0, rim, other));
+		assert!(lens.r1 < 0.0);
 	}
 }

@@ -28,6 +28,8 @@ pub enum HandleKind {
 	Grip,
 	/// Point `i` of an outline.
 	Point(usize),
+	/// The vertex of a lens's surface 1 (left) or 2 (right).
+	Surface(usize),
 	/// Node `i` of a fibre, and its Bezier handles.
 	Node(usize),
 	InHandle(usize),
@@ -179,10 +181,11 @@ pub fn build(
 			m.outlines.push(outline);
 		}
 		if handles_shown || sel {
+			// the shape handles over the centre, as Next stacks them
+			m.handles.push(Handle { item, kind: HandleKind::PartCentre, at, from: None, selected: sel });
 			if current == Some(item) {
 				part_handles(project, p, item, gap, &mut m.handles);
 			}
-			m.handles.push(Handle { item, kind: HandleKind::PartCentre, at, from: None, selected: sel });
 		}
 		if labels_shown || sel {
 			m.labels.push(Label { text: p.base.name.clone(), at, below: true, selected: sel });
@@ -266,6 +269,12 @@ fn part_handles(project: &Project, p: &Part, item: ItemRef, gap: f64, out: &mut 
 	if let Some(g) = grip_of(&p.kind) {
 		out.push(handle(HandleKind::Grip, frame.to_canvas(g), None));
 	}
+	if let Some((lens, ..)) = super::handles::lens_of(&p.kind) {
+		for s in [1, 2] {
+			let vertex = Vec2::new(crate::model::lens_geometry::vertex_x(lens.thickness, s), 0.);
+			out.push(handle(HandleKind::Surface(s), frame.to_canvas(vertex), None));
+		}
+	}
 	match &p.kind {
 		PartKind::Outline(o) => {
 			for (i, q) in o.points.iter().enumerate() {
@@ -347,7 +356,7 @@ fn backdrop(kind: HandleKind) -> (Backdrop, bool) {
 		HandleKind::Source | HandleKind::PartCentre => (Backdrop::Disc(6.5), true),
 		HandleKind::ProbeA | HandleKind::ProbeB => (Backdrop::Square(5.5), true),
 		HandleKind::SourceLever | HandleKind::PartLever => (Backdrop::Disc(7.5), true),
-		HandleKind::Point(_) | HandleKind::Node(_) => (Backdrop::Disc(5.5), true),
+		HandleKind::Point(_) | HandleKind::Node(_) | HandleKind::Surface(_) => (Backdrop::Disc(5.5), true),
 		HandleKind::Grip => (Backdrop::Square(7.5), false),
 		HandleKind::InHandle(_) | HandleKind::OutHandle(_) => (Backdrop::Disc(6.5), false),
 	}
@@ -425,7 +434,7 @@ fn glyph(
 				out.extend(arc_arrow(at).map(|points| Shape::line(points, stroke)));
 			}
 		}
-		HandleKind::Point(_) | HandleKind::Node(_) => {
+		HandleKind::Point(_) | HandleKind::Node(_) | HandleKind::Surface(_) => {
 			for stroke in strokes {
 				out.push(Shape::circle_stroke(at, 5.5, stroke));
 			}
