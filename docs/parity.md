@@ -13,16 +13,16 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
 | M | Menus and shortcuts | 79 | 9 | 0 | 52 | 0 |
-| D | Dialogs and windows | 48 | 20 | 2 | 9 | 0 |
-| S | Settings | 20 | 7 | 2 | 3 | 0 |
-| I | Icons | 57 | 1 | 3 | 22 | 0 |
+| D | Dialogs and windows | 49 | 20 | 1 | 9 | 0 |
+| S | Settings | 21 | 7 | 1 | 3 | 0 |
+| I | Icons | 59 | 1 | 1 | 22 | 0 |
 | T | Project tree | 56 | 4 | 2 | 39 | 0 |
 | P | Properties | 311 | 7 | 0 | 7 | 0 |
-| V | Preview | 95 | 5 | 6 | 5 | 1 |
+| V | Preview | 95 | 6 | 5 | 5 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 1 | 9 | 2 |
 | R | Live editing and runs | 40 | 15 | 1 | 3 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 814 | 86 | 17 | 173 | 5 |
+| | All | 818 | 87 | 12 | 173 | 5 |
 
 ## Cross-cutting
 
@@ -317,7 +317,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-39 | Export dialog: format filter list (MP4 H.264, MPEG-1, AVI, MOV Animation, MOV PNG, PNG/JPEG/EXR I/EXR sqrt(I) sequences; stills: PNG, JPEG, EXR I, EXR sqrt) | SE:271,275 | ui/70 | partial | export.rs:35-47 Kind::formats; filter names are Debug names of the enum (`{f:?}`) not descriptions |
 | D-40 | Export dialog: proposed name `<project>_field` / `_intensity` / `<project>_field_0655` / probe name | ExportPaths.cs (UI) | ui/70 | done | export-dialog.slint: <project>_field / _intensity / <project> (both) / <project>_field_NNNN still |
 | D-41 | Export dialog: one path box per output with "..." browse, labels (Field/Intensity/Archive), OK disabled on empty/duplicate | not in Next | ui/70 | partial | one path box with ... (platform dialog) and the outputs it writes listed; both layers named from it with suffixes; OK disabled on empty or MP4 without the codec |
-| D-42 | Export dialog: "Archive into one ZIP file" check box + Archive box (ExportArchive) | not in Next | ui/70 | missing | no archive: the platform export writes no ZIP |
+| D-42 | Export dialog: "Archive into one ZIP file" check box + Archive box (ExportArchive) | not in Next | ui/70 | done | export dialog Archive into one ZIP file + Archive box when the export writes several files; platform Request.archive packs the outputs (ZipFs, stored) once complete; Stop interrupts packing; a pack failure keeps the outputs |
 | D-43 | Export dialog: MP4 OpenH264 notice + "Use Cisco's OpenH264 codec" check, "Delete the downloaded codec" | not in Next | ui/70 | done | MP4: Cisco notice, Use Cisco OpenH264 check (OK needs it), Delete the downloaded codec; download on the export thread |
 | D-44 | Export dialog: H.264 profile drop-down with greyed unsupported entries + reason | not in Next | ui/70 | partial | H.264 profile choice saved; entries not greyed, OpenH264 encodes Baseline only note below |
 | D-45 | Export: remember filter index, start folder rule per kind/project (ExportHints), fallback LastExportFolder | UIS:266-305 | ui/70, ui/80 | done | ExportFilterIndex (video means PNG for a still), start folder from the project hint, project folder, LastExportFolder; recorded on completion |
@@ -379,7 +379,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-16 | WarnWhenRamInsufficient bool (true) (+ memory warning "Do not warn me again") | UIS:183, MW:428 | ui/80, ui/70 | done | Settings row and the warning Do not warn me again |
 | S-17 | LastExportFolder path, fallback start folder | UIS:266 | ui/80 | done | LastExportFolder: last completed export folder, the start folder fallback |
 | S-18 | ExportFilterIndex int | UIS:276 | ui/80 | done | ExportFilterIndex from the dialog |
-| S-19 | ExportArchive bool (false), Settings > Export | not in Next | ui/80, ui/70 | missing | see D-42 |
+| S-19 | ExportArchive bool (false), Settings > Export | not in Next | ui/80, ui/70 | done | Settings.export_archive, remembered from the export dialog |
 | S-20 | PartDescriptionExpanded bool (true), description header on part forms | UIS:286 | ui/80 | done | Form.described saved as PartDescriptionExpanded (main.rs on_describe) |
 | S-21 | TitleFullPath bool (false), Settings > General "Full path in the title" | not in Next | ui/80, ui/70 | done | app.slint `title-full-path` |
 | S-22 | H264Profile Baseline/Main/High, Settings > Export | not in Next | ui/80, ui/70 | done | H264Profile from the export dialog (no Settings row); the encoder best when it lacks it |
@@ -449,7 +449,7 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-42 | IconCountingDetector: Probabilistic/Counting detector entries and rows | CX:251 | ui/20 | done | tree rows (icons.rs) and the add menus (MenuIcons.next-counting-detector) |
 | I-43 | IconImagingDetector: Imaging detector entry/rows | CX:253 | ui/20 | done | tree rows (icons.rs) and the add menus (MenuIcons.next-imaging-detector) |
 | I-44 | IconPart: tree Parts folder, "+ Part" | CX:254 | ui/20 | done | as I-40 |
-| I-45 | IconPlusBadge (+ IconPlusBadgeStyle): add plus on toolbar icons | CX:258-259 | ui/20 | missing | SVG generated, not used yet |
+| I-45 | IconPlusBadge (+ IconPlusBadgeStyle): add plus on toolbar icons | CX:258-259 | ui/20 | done | AddButton draws plus-badge.svg over the toolbar icon (tree.slint) |
 | I-46 | IconProject: tree root row | CX:273 | ui/20 | done | tree root row (icons.rs) |
 | I-47 | IconLens (Lens/Mirror entry, biconvex + concave mirror) | CX:279 | ui/10 | done | tree add menu: next-lens |
 | I-48 | IconLens<Left><Right> variants (ConvexConvex, ConvexFlat, ConvexConcave, FlatConvex, FlatFlat, FlatConcave, ConcaveConvex, ConcaveFlat, ConcaveConcave): tree lens rows follow surface shapes | CX:285-293, LensIconConverter.cs:37 | ui/20 | done | tree rows and the Add part menu |
@@ -466,7 +466,7 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-59 | IconFacettedGrating / IconSimpleGrating (Fill) | CX:319,321 | ui/20 | done | as I-48 |
 | I-60 | IconPolygon / Rectangle / Ellipse / Triangle / Outline | CX:323,325,327,329,331 | ui/10 | done | as I-48 |
 | I-61 | IconOpticalLogic, IconXorGate, IconAndGate, IconOrGate | CX:333,335,337,339 | ui/10 | done | as I-48 |
-| I-62 | IconAutoBrightness (+Fill): picture menu Auto brightness | CX:341-342 | ui/10 | missing | |
+| I-62 | IconAutoBrightness (+Fill): picture menu Auto brightness | CX:341-342 | ui/10 | missing | auto-brightness.svg generated but the menu needs themed copies: tools/next-icons.py fails on Next 1f198c0 (geometries moved to Themes/Icons.xaml) |
 | I-63 | IconPreviewResolution / IconPreviewFrames / IconPreviewSamples / IconPreviewDither (+Fill): View preview-quality menus | CX:344-351 | not in spec (menus moved) | divergence | no View preview-quality menus: Settings > Preview and memory rows |
 | I-64 | IconFrameMemory: Simulation>RAM cache size | CX:353 | not in spec | divergence | no RAM cache size menu: the desktop RAM cache is Auto |
 
@@ -489,7 +489,7 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-78 | PlusGeometry (folder +), MinusGeometry (row remove), ChevronUp/Down (row move) | PT:40-43, uses PT:210-214,333,376-397; Editors.xaml:532 | ui/20 | done | folder plus, row minus and chevrons |
 | I-79 | ClearGeometry (messages Clear button icon) | MP:29, MP:128 | ui/70 | done | Messages Clear button with the clear-all icon |
 | I-80 | Menu/combos/checkbox arrows: ArrowUp/Down/Left/Right, SubmenuArrow, Check, ChevronRight/Down/Up, Close, DropDown | CX:45-55 | ui/10 Conventions | done | std widgets' glyphs; rest matched in general (decision 0033) |
-| I-81 | GripGeometry, ChainLinked/ChainParted (linked-values toggle), pane title drag handle brushes | Themes/Editors.xaml:589,623-624; CX:59-64 | ui/30, 00 | missing | pane title grip drawn as border (pane.slint:27-34) |
+| I-81 | GripGeometry, ChainLinked/ChainParted (linked-values toggle), pane title drag handle brushes | Themes/Editors.xaml:589,623-624; CX:59-64 | ui/30, 00 | done | grip.svg (scheme rows), chain-linked/parted (FormLink); the pane title grip is a border line |
 | I-82 | App icon: App.ico / App.png / App.svg (window, About 64 px, taskbar) | WPF/App.ico, App.png, App.svg; AboutWindow.xaml:44 | ui/70 About | done | window icon from assets/icon.svg |
 | I-83 | Menu-item icon slot: 16 px icon, greys with text | MenuIcon.cs, IconView.cs | ui/10 Conventions | done | Slint MenuItem icon, per-theme copies in the menu text colour (menu-icons.slint) |
 
@@ -1009,7 +1009,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-61 | Display > Preview "Labels in preview" setting | SceneOverlay LabelsInPreview | 40 Handles | done | View.labels_in_preview into overlay::build |
 | V-62 | Graph boxes unaffected by handles/labels settings | ProbeGraphOverlay.cs | 40 Handles | done | graph boxes come from graphs.rs, outside the handle and label settings |
 | V-63 | Z-order rules: boxes over handles, selected drawn last of kind, tab order kept | PreviewPane.xaml:632 | 40 Handles | done | preview.slint: labels, handles, then graph boxes; selected boxes last (graphs.rs sort) |
-| V-64 | Rotation lever may extend beyond picture (clipped); other handles clamped inside canvas | SceneOverlay.cs | 40 Handles | missing | |
+| V-64 | Rotation lever may extend beyond picture (clipped); other handles clamped inside canvas | SceneOverlay.cs | 40 Handles | partial | lever on its axis however far, clipped to the picture; item positions held inside the canvas (move_items); a handle at the canvas edge is clipped to half where Next shows it whole |
 | V-65 | Click handle: select item (tree/properties follow) | SceneOverlay.cs:1380-1428 | 40 Interaction | done | Canvas.press hit-tests the topmost handle within 10 px; tree and Properties follow |
 | V-66 | Ctrl+click toggle in selection, no drag | SceneOverlay.cs:1399 | 40 Interaction | done | Ctrl toggles, no drag |
 | V-67 | Shift+click add to selection, no drag | SceneOverlay.cs:1410 | 40 Interaction | done | Shift adds, no drag |

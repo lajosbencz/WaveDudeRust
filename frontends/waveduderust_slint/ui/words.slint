@@ -18,6 +18,7 @@ export global Words {
     out property <string> export-intensity: @tr("Export the intensity");
     out property <string> export-both: @tr("Export the field and the intensity");
     out property <string> export-frame: @tr("Export the frame");
+    out property <string> zip-archive: @tr("ZIP archive");
     // an export format's filter; `still`: a single frame's file rather than a video or a sequence
     public pure function export-filter(format: ExportFileFormat, still: bool) -> string {
         if (format == ExportFileFormat.mp4) { return @tr("MP4 video, H.264"); }

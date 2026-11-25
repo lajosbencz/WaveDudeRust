@@ -1876,6 +1876,15 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		dialog.follow(&mut data);
 		app.set_export_data(data);
 	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_export_browse_archive(move || {
+		let Some(app) = weak.upgrade() else { return };
+		let s = st.borrow();
+		let Some(dialog) = &s.export_dialog else { return };
+		let mut data = app.get_export_data();
+		dialog.browse_archive(&mut data, &app.global::<ui::Words<'_>>());
+		app.set_export_data(data);
+	});
 	let weak = app.as_weak();
 	app.on_export_delete_codec(move || {
 		let Some(app) = weak.upgrade() else { return };

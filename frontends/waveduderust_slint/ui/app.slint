@@ -136,6 +136,7 @@ export component AppWindow inherits Window {
     in-out property <ExportData> export-data;
     callback export-format(index: int);
     callback export-browse();
+    callback export-browse-archive();
     callback export-ok();
     callback export-delete-codec();
     callback export-path-edited();
@@ -547,6 +548,7 @@ export component AppWindow inherits Window {
         data <=> root.export-data;
         format(i) => { root.export-format(i); }
         browse => { root.export-browse(); }
+        browse-archive => { root.export-browse-archive(); }
         ok => { root.export-ok(); }
         delete-codec => { root.export-delete-codec(); }
         path-edited => { root.export-path-edited(); }

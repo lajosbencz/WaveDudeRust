@@ -13,6 +13,10 @@ export struct ExportData {
     // the outputs the path writes, when they differ from it
     outputs: string,
     mp4: bool,
+    // the export writes more than one file: it may go into one ZIP archive
+    several: bool,
+    archive: bool,
+    archive-path: string,
     // OpenH264 compiled in: no consent row
     codec-built-in: bool,
     codec-installed: bool,
@@ -26,10 +30,12 @@ export component ExportLayer inherits Rectangle {
     in-out property <ExportData> data;
     callback format(index: int);
     callback browse();
+    callback browse-archive();
     callback ok();
     callback delete-codec();
     callback path-edited();
-    property <bool> can-ok: root.data.path != "" && (!root.data.mp4 || root.data.codec-built-in || root.data.use-openh264);
+    property <bool> can-ok: root.data.path != "" && (!root.data.mp4 || root.data.codec-built-in || root.data.use-openh264)
+        && !(root.data.several && root.data.archive && root.data.archive-path.is-empty);
 
     visible: shown;
     background: #00000080;
@@ -81,6 +87,23 @@ export component ExportLayer inherits Rectangle {
                 text: @tr("Writes {}", root.data.outputs);
                 color: Theme.text-dim;
                 wrap: word-wrap;
+            }
+            if root.data.several: Check {
+                text: @tr("Archive into one ZIP file");
+                checked <=> root.data.archive;
+            }
+            if root.data.several && root.data.archive: HorizontalLayout {
+                spacing: 8px;
+                Text { text: @tr("Archive"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
+                LineEdit {
+                    text <=> root.data.archive-path;
+                    key-pressed(e) => {
+                        if (e.text == Key.Escape) { root.shown = false; return accept; }
+                        if (e.text == Key.Return && root.can-ok) { root.ok(); return accept; }
+                        reject
+                    }
+                }
+                Button { text: "..."; clicked => { root.browse-archive(); } }
             }
             if root.data.mp4 && !root.data.codec-built-in: VerticalLayout {
                 spacing: 4px;

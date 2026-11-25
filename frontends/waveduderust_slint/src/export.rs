@@ -72,11 +72,16 @@ mod native {
 		pub(crate) kind: Kind,
 		format: ExportFormat,
 		out: PathBuf,
+		/// The ZIP archive the outputs go into.
+		archive: Option<PathBuf>,
 	}
 
 	impl Plan {
 		/// The outputs that exist: each with whether it is a sequence's folder holding files.
 		pub(crate) fn existing(&self) -> Vec<(PathBuf, bool)> {
+			if let Some(archive) = &self.archive {
+				return if archive.is_file() { vec![(archive.clone(), false)] } else { Vec::new() };
+			}
 			let layers = match self.kind {
 				Kind::Run(l) | Kind::Frame(l) => l,
 			};
@@ -122,6 +127,22 @@ mod native {
 		}
 	}
 
+	/// The archive at `typed`, `.zip` appended unless it ends so.
+	fn archive_path(typed: &str) -> Result<PathBuf, String> {
+		if typed.is_empty() || typed.ends_with(std::path::MAIN_SEPARATOR) {
+			return Err("Enter an archive name.".into());
+		}
+		let mut path = PathBuf::from(typed);
+		if !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
+			path.as_mut_os_string().push(".zip");
+		}
+		let path = std::path::absolute(&path).unwrap_or(path);
+		if path.is_dir() {
+			return Err(format!("{} is a folder.", path.display()));
+		}
+		Ok(path)
+	}
+
 	impl Dialog {
 		/// The dialog of `kind` for the project at `project` named `name`, the shown timeline frame `frame`.
 		pub(crate) fn open(
@@ -162,6 +183,7 @@ mod native {
 				(Kind::Frame(_), _) => PathBuf::from(still_file_name(name, layer(layers), frame as usize, ext)),
 			};
 			let path = folder.join(file.file_name().unwrap_or_default());
+			let archive_path = folder.join(format!("{name}.zip"));
 			let title = match kind {
 				Kind::Frame(_) => words.get_export_frame(),
 				Kind::Run(ExportLayers::Field) => words.get_export_field(),
@@ -184,6 +206,8 @@ mod native {
 				codec_built_in: waveduderust::unstable::export::h264::BUILT_IN,
 				codec_installed: codec.is_some_and(|d| waveduderust_platform::codec::installed(&d).is_some()),
 				use_openh264: settings.use_openh264 == Some(true),
+				archive: settings.export_archive,
+				archive_path: archive_path.to_string_lossy().as_ref().into(),
 				profile: Profile::ALL.iter().position(|p| *p == settings.h264_profile).map_or(0, |i| i as i32),
 				..ExportData::default()
 			};
@@ -199,6 +223,7 @@ mod native {
 		pub(crate) fn follow(&self, data: &mut ExportData) {
 			let format = self.format_of(data);
 			data.mp4 = format == ExportFormat::Mp4;
+			data.several = matches!(self.kind, Kind::Run(l) if l == ExportLayers::Both || !format.is_video());
 			data.outputs = match self.kind {
 				Kind::Run(ExportLayers::Both) => {
 					let outs = layer_outputs(
@@ -244,6 +269,21 @@ mod native {
 			}
 		}
 
+		/// The platform's save dialog for the archive box.
+		pub(crate) fn browse_archive(&self, data: &mut ExportData, words: &Words<'_>) {
+			let path = PathBuf::from(data.archive_path.as_str());
+			let mut dialog = rfd::FileDialog::new().add_filter(words.get_zip_archive().as_str(), &["zip"]);
+			if let Some(folder) = path.parent().filter(|f| f.is_dir()) {
+				dialog = dialog.set_directory(folder);
+			}
+			if let Some(file) = path.file_name() {
+				dialog = dialog.set_file_name(file.to_string_lossy());
+			}
+			if let Some(picked) = dialog.save_file() {
+				data.archive_path = picked.to_string_lossy().as_ref().into();
+			}
+		}
+
 		/// The plan of the dialog's answer, the settings it leaves remembered; the reason when the path names no file.
 		pub(crate) fn plan(&self, data: &ExportData, settings: &mut Settings) -> Result<Plan, String> {
 			let format = self.format_of(data);
@@ -263,7 +303,14 @@ mod native {
 				settings.h264_profile =
 					Profile::ALL.get(usize::try_from(data.profile).unwrap_or(0)).copied().unwrap_or_default();
 			}
-			Ok(Plan { kind: self.kind, format, out })
+			if data.several {
+				settings.export_archive = data.archive;
+			}
+			let archive = match data.several && data.archive {
+				true => Some(archive_path(data.archive_path.trim())?),
+				false => None,
+			};
+			Ok(Plan { kind: self.kind, format, out, archive })
 		}
 	}
 
@@ -358,6 +405,7 @@ mod native {
 			h264: None,
 			h264_profile: settings.h264_profile,
 			keep_partial: false,
+			archive: plan.archive.clone(),
 		};
 		let use_openh264 = settings.use_openh264;
 		let (cancel, done, total) =
@@ -451,6 +499,10 @@ mod web {
 		}
 
 		pub(crate) fn browse(&self, _: &mut ExportData, _: &Words<'_>) {
+			match *self {}
+		}
+
+		pub(crate) fn browse_archive(&self, _: &mut ExportData, _: &Words<'_>) {
 			match *self {}
 		}
 

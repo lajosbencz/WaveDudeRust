@@ -118,6 +118,7 @@ pub(crate) fn run(args: &Args, dirs: Option<&AppDirs>) -> Result<()> {
 			schemes: user_schemes(dirs),
 			h264,
 			h264_profile: Profile::default(),
+			archive: None,
 			keep_partial: args.keep_partial,
 		},
 		|done, total| eprint!("\rexport frame {done}/{total}"),
