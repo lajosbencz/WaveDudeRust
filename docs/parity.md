@@ -12,9 +12,9 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 13 | 5 | 2 | 20 | 0 |
-| M | Menus and shortcuts | 63 | 8 | 35 | 34 | 0 |
+| M | Menus and shortcuts | 71 | 8 | 9 | 52 | 0 |
 | D | Dialogs and windows | 35 | 13 | 23 | 8 | 0 |
-| S | Settings | 10 | 7 | 12 | 3 | 0 |
+| S | Settings | 11 | 6 | 12 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 51 | 12 | 18 | 7 | 2 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 684 | 72 | 195 | 139 | 5 |
+| | All | 693 | 71 | 169 | 157 | 5 |
 
 ## Cross-cutting
 
@@ -185,37 +185,37 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing in Slint (no add menu; no add-part action in tree.rs/main.rs).
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-71 | Lens/Mirror, Mn L/L/L/L, icon Lens | PT:116, SE:155 | ui/10 Add part | missing | |
-| M-72 | Fresnel lens, Mn "Fre_snel" S | PT:117, SE:156 | ui/20 l.71,163 (not in ui/10 list) | missing | not in ui/10 |
-| M-73 | Fibre, Mn F/F/F/V | PT:118, SE:162 | ui/10 | missing | |
-| M-74 | Bragg reflector, B | PT:119, SE:163 | ui/10 | missing | |
-| M-75 | GRIN lens, G | PT:120, SE:164 | ui/10 | missing | |
-| M-76 | Zone plate, Z | PT:121, SE:165 | ui/10 | missing | |
-| M-77 | Diffuser, D | PT:122, SE:166 | ui/20 l.71 (not in ui/10 list) | missing | not in ui/10 |
-| M-78 | Interference filter, Mn N | PT:123, SE:167 | ui/20 (not in ui/10 list) | missing | not in ui/10 |
-| M-79 | Diffraction gratings > submenu, Mn C | PT:125, SE:168 | ui/20 l.163 (not in ui/10) | missing | not in ui/10 |
-| M-80 | Diffraction gratings > Simple 2D grating, S | PT:126, SE:169 | ui/20 | missing | not in ui/10 |
-| M-81 | Diffraction gratings > Facetted grating, F | PT:127, SE:170 | ui/20 | missing | not in ui/10 |
-| M-82 | Meta surfaces > submenu, Mn M | PT:130, SE:171 | ui/20 | missing | not in ui/10 |
-| M-83 | Meta surfaces > Meta lens, L | PT:131, SE:172 | ui/20 | missing | not in ui/10 |
-| M-84 | Meta surfaces > Meta prism, P | PT:132, SE:173 | ui/20 | missing | not in ui/10 |
-| M-85 | Meta surfaces > Meta axicon, A | PT:133, SE:174 | ui/20 | missing | not in ui/10 |
-| M-86 | Separator, then shapes: Polygon, Rectangle, Ellipse, Triangle, Outline (Mn P/R/E/T/O) | PT:135-140, SE:157-161 | ui/10 | missing | 5 entries |
-| M-87 | Optical logic > submenu, Mn I/O/I/I | PT:143, SE:175 | ui/10 | missing | |
-| M-88 | Optical logic > XOR (Mach-Zehnder), AND, OR (Mn X/A/O) | PT:144-146, SE:176-178 | ui/10 | missing | 3 entries |
+| M-71 | Lens/Mirror, Mn L/L/L/L, icon Lens | PT:116, SE:155 | ui/10 Add part | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-72 | Fresnel lens, Mn "Fre_snel" S | PT:117, SE:156 | ui/20 l.71,163 (not in ui/10 list) | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-73 | Fibre, Mn F/F/F/V | PT:118, SE:162 | ui/10 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-74 | Bragg reflector, B | PT:119, SE:163 | ui/10 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-75 | GRIN lens, G | PT:120, SE:164 | ui/10 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-76 | Zone plate, Z | PT:121, SE:165 | ui/10 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-77 | Diffuser, D | PT:122, SE:166 | ui/20 l.71 (not in ui/10 list) | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-78 | Interference filter, Mn N | PT:123, SE:167 | ui/20 (not in ui/10 list) | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-79 | Diffraction gratings > submenu, Mn C | PT:125, SE:168 | ui/20 l.163 (not in ui/10) | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-80 | Diffraction gratings > Simple 2D grating, S | PT:126, SE:169 | ui/20 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-81 | Diffraction gratings > Facetted grating, F | PT:127, SE:170 | ui/20 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-82 | Meta surfaces > submenu, Mn M | PT:130, SE:171 | ui/20 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-83 | Meta surfaces > Meta lens, L | PT:131, SE:172 | ui/20 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-84 | Meta surfaces > Meta prism, P | PT:132, SE:173 | ui/20 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-85 | Meta surfaces > Meta axicon, A | PT:133, SE:174 | ui/20 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-86 | Separator, then shapes: Polygon, Rectangle, Ellipse, Triangle, Outline (Mn P/R/E/T/O) | PT:135-140, SE:157-161 | ui/10 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-87 | Optical logic > submenu, Mn I/O/I/I | PT:143, SE:175 | ui/10 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
+| M-88 | Optical logic > XOR (Mach-Zehnder), AND, OR (Mn X/A/O) | PT:144-146, SE:176-178 | ui/10 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
 | M-89 | Add probe menu: Standard probe (S), Probabilistic > Counting detector (C), Imaging detector (I); tooltips Detector.* | PT:150-157, SE:150-153 | ui/20 l.19,165 (not in ui/10) | divergence | tree.slint ProbeMenu; no access keys or tooltips (divergences.md Add menus) |
 | M-90 | "+ Part" keyboard: Space opens menu, arrows walk, Enter picks | PT:194-208 | ui/10 Add part | missing | |
 
 #### M Preview picture context menu (both pictures, parameterised by layer)
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-91 | Right-click / Apps on a picture cell opens menu | PP:728-745, PP:754-771 | ui/10 Preview picture | missing | preview.slint Picture has no menu |
-| M-92 | Brightness (focuses that picture's brightness box), U+E706, Mn B/H/L/H | PP:736,762, SE:44 | ui/10 | missing | |
-| M-93 | Auto brightness, Draw:AutoBrightness, Mn A | PP:737,763, SE:45, DisplayCommands AutoBrightness | ui/10 | missing | |
-| M-94 | Export this frame..., Ctrl+Shift+F (field) / Ctrl+Shift+G (intensity), U+EB9F, Mn T/D/E/D | PP:739,765, SE:43 | ui/10 | missing | |
-| M-95 | Export field... / intensity... / both... (Ctrl+Shift+E/I/B), U+EDE1 | PP:741-743,767-769 | ui/10 | missing | same actions exist in File menu |
+| M-91 | Right-click / Apps on a picture cell opens menu | PP:728-745, PP:754-771 | ui/10 Preview picture | done | preview.slint keys FocusScope > ContextMenuArea: right-click or the menu key on a picture |
+| M-92 | Brightness (focuses that picture's brightness box), U+E706, Mn B/H/L/H | PP:736,762, SE:44 | ui/10 | done | Brightness focuses the picture's brightness box |
+| M-93 | Auto brightness, Draw:AutoBrightness, Mn A | PP:737,763, SE:45, DisplayCommands AutoBrightness | ui/10 | done | Auto brightness: Canvas.auto(layer) |
+| M-94 | Export this frame..., Ctrl+Shift+F (field) / Ctrl+Shift+G (intensity), U+EB9F, Mn T/D/E/D | PP:739,765, SE:43 | ui/10 | done | picture menu Export this frame... per layer; Ctrl+Shift+F/G are the File menu shortcuts |
+| M-95 | Export field... / intensity... / both... (Ctrl+Shift+E/I/B), U+EDE1 | PP:741-743,767-769 | ui/10 | done | Export field/intensity/both entries, enabled with can-export |
 | M-96 | Probe graph box menu: Export probe data as CSV... (X/X/V/G, U+EDE1), enabled as tree row | PreviewPane probe overlay, SE:48 | ui/10 Probe graph box | done | the picture menu over a box (Rust hit-tests the hover) holds only this entry |
-| M-97 | Header strip has no own menu; right-click/Apps opens the picture's menu | n/a | ui/10 Header strip | missing | |
+| M-97 | Header strip has no own menu; right-click/Apps opens the picture's menu | n/a | ui/10 Header strip | done | the header strip lies outside the picture's menu area; the picture's menu covers the cell |
 
 #### M Dock title bar and Messages menus
 | ID | Feature | Next source | Spec | Slint | Note |
@@ -260,8 +260,8 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-127 | Preview pane: Home / End go to in / out point | PreviewCommands.cs:47,51 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it and the timeline |
 | M-128 | Preview pane: Ctrl+A select all; letter keys consumed even if command cannot run | PP:398 | ui/10 | done | letter keys consumed even when the command cannot run (app.slint `preview-keys`); Ctrl+A passes to the window: select all |
 | M-129 | Timeline focused: Left/Right 1 frame, PageUp/PageDown 10, Home/End in/out, wheel 1 frame | TimelineBar.cs | ui/10 Timeline | done | timeline.slint:33-38, scroll-event :77 |
-| M-130 | Handles on pictures: arrows 1 px, Shift+arrows 10 px, rotation lever 1/10 degree, grip resize | PreviewPane handles | ui/10 Handles | missing | no handles (preview is a plain Image) |
-| M-131 | Handles: Del removes item/selection; Esc undoes drag; Tab next handle selects item | PP | ui/10 Handles | missing | |
+| M-130 | Handles on pictures: arrows 1 px, Shift+arrows 10 px, rotation lever 1/10 degree, grip resize | PreviewPane handles | ui/10 Handles | done | canvas.rs nudge: arrows 1 px, Shift 10; lever 1/10 degrees; grip resize (nudge_grip) |
+| M-131 | Handles: Del removes item/selection; Esc undoes drag; Tab next handle selects item | PP | ui/10 Handles | done | Del removes the selection; Esc cancels a drag (Document::cancel); Tab walks the handles and selects the item |
 | M-132 | Pictures: wheel zoom about pointer, middle drag pan, pinch/two-finger zoom+pan | PP / CanvasImage.cs | ui/10 Handles | done | wheel zoom about the pointer, middle drag pan; touch dropped (decision 0033) |
 | M-133 | Picture splitter: arrows move, Enter/double-click reset to half | PP | ui/10 Splitter | missing | |
 | M-134 | Layout radio group (side by side / stacked): one tab stop, Left/Right switch | PP:485-490 | ui/10 Layout radio | done | two toggles; rest matched in general (decision 0033) |
@@ -367,7 +367,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-04 | Theme System/Light/Dark, Settings > General | UIS:129 | ui/80, ui/70 | done | set.rs row "Theme"; applied via Theme.mode (main.rs apply_settings) |
 | S-05 | Language ""/en/de/fr/nl, "System (in the current language)" first, each by own name | UIS:139, MW:295-297 | ui/80, ui/70 | partial | Settings > General > Language: System, then each by its own name (src/settings.rs); "System" is not translated (a Rust string, X-34) |
 | S-06 | RecentFiles list newest first max 10 (+ OS recent list) | UIS:149, MW:253-255 | ui/80 | partial | push_recent on open/save (main.rs:213); never shown (M-04) |
-| S-07 | PreviewOrientation Horizontal/Vertical (default Vertical), transport layout radios | UIS:159, MW:537 | ui/80 | partial | applied at start (apply_settings); toggling saves always Vertical: main.rs transport "layout" arm `if true { Vertical }` |
+| S-07 | PreviewOrientation Horizontal/Vertical (default Vertical), transport layout radios | UIS:159, MW:537 | ui/80 | done | applied at start (apply_settings); the transport layout toggles save the layout shown (verified: Horizontal saved and restored) |
 | S-08 | AutoRerun bool (true), Settings > Simulation "Re-run automatically after edits" | UIS:169 | ui/80, ui/70 | done | settings.rs row, applied to live.auto_rerun |
 | S-09 | FrameMemoryBytes (0 Auto, 256 MiB..2 GiB; browser only), RAM row; replaces Next FrameMemoryPercent (10..100 %) | UIS:203 (percent) | ui/80, ui/70 | missing | no row; Next's percent setting dropped in v2 |
 | S-10 | PreviewResolution 1/2/4 drop-down Full/Half/Quarter | UIS:213 | ui/80, ui/70 | done | set.rs row; apply via preview_quality |
