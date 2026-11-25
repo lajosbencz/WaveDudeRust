@@ -1056,6 +1056,7 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	state.live.warn = s.warn_when_ram_insufficient;
 	state.live.set_dither(s.preview_dither_bits);
 	state.live.set_gpu(s.use_gpu);
+	state.live.ram_cache = s.ram_cache();
 	// another preview quality is a simulation edit
 	if state.live.edited(&state.doc.project, &state.doc.view) == live::Change::Frames {
 		state.playback.pause();
@@ -1064,12 +1065,18 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 
 /// Pushes the settings to the Settings window and the Welcome page.
 fn show_settings(state: &State, app: &AppWindow) {
-	#[allow(unused_mut, reason = "the browser has no RAM row")]
 	let mut data = settings::data(&state.settings);
 	#[cfg(not(target_arch = "wasm32"))]
 	{
 		let (available, physical) = settings::ram();
 		(data.ram_available, data.ram_physical) = (available.into(), physical.into());
+	}
+	#[cfg(target_arch = "wasm32")]
+	{
+		use waveduderust_platform::settings::WEB_RAM_CACHE_SIZES;
+		data.ram_auto = memory::size(web::BUDGET).into();
+		let sizes: Vec<slint::SharedString> = WEB_RAM_CACHE_SIZES.iter().map(|&b| memory::size(b).into()).collect();
+		data.ram_sizes = ModelRc::from(sizes.as_slice());
 	}
 	app.set_welcome_ram_available(data.ram_available.clone());
 	app.set_welcome_ram_physical(if data.ram_physical.is_empty() {

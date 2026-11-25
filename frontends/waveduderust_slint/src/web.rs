@@ -9,7 +9,7 @@ use waveduderust::unstable::engine::build_on;
 use waveduderust::unstable::engine::gpu::GpuContext;
 
 /// The engine and the stores' memory: wasm32's 4 GiB address space, less the page's own.
-const BUDGET: u64 = 1 << 30;
+pub(crate) const BUDGET: u64 = 1 << 30;
 
 /// A spill that keeps nothing: the frames past the RAM share are dropped, not read back.
 struct DropSpill;

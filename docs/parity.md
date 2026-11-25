@@ -13,16 +13,16 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
 | M | Menus and shortcuts | 79 | 9 | 0 | 52 | 0 |
-| D | Dialogs and windows | 49 | 20 | 1 | 9 | 0 |
-| S | Settings | 21 | 7 | 1 | 3 | 0 |
+| D | Dialogs and windows | 50 | 19 | 1 | 9 | 0 |
+| S | Settings | 22 | 7 | 0 | 3 | 0 |
 | I | Icons | 59 | 1 | 1 | 22 | 0 |
-| T | Project tree | 57 | 4 | 1 | 39 | 0 |
+| T | Project tree | 58 | 4 | 0 | 39 | 0 |
 | P | Properties | 311 | 7 | 0 | 7 | 0 |
-| V | Preview | 95 | 6 | 5 | 5 | 1 |
+| V | Preview | 96 | 6 | 1 | 8 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 1 | 9 | 2 |
-| R | Live editing and runs | 40 | 15 | 1 | 3 | 2 |
+| R | Live editing and runs | 40 | 15 | 0 | 4 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 819 | 87 | 11 | 173 | 5 |
+| | All | 823 | 86 | 4 | 177 | 5 |
 
 ## Cross-cutting
 
@@ -310,7 +310,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-32 | Settings: rows = label column + control; change applies and saves at once | not in Next | ui/70 Settings | done | set_row -> save (settings.rs:164) |
 | D-33 | Settings: one "Close" button, default and cancel (Enter outside a control, Esc) | not in Next | ui/70 Settings | done | Close, Esc; rest matched in general (decision 0033) |
 | D-34 | Settings: Preset buttons row (Low, Medium, High, Auto) in Preview and memory | not in Next | ui/70 Settings table | done | Preset buttons Low, Medium, High, Auto (settings::preset) |
-| D-35 | Settings: RAM row read-only "{available} available of {physical}" native; browser drop-down | not in Next | ui/70 Settings table | partial | natively {available} available of {physical}; the browser drop-down is not there (FrameMemoryBytes, S-09) |
+| D-35 | Settings: RAM row read-only "{available} available of {physical}" native; browser drop-down | not in Next | ui/70 Settings table | done | natively {available} available of {physical}; the browser drop-down (S-09) |
 | D-36 | Settings: Updates > "Check now" button | not in Next | ui/70 Settings table | divergence | decision 0033, dropped |
 | D-37 | Updates flow: launch check, "WaveDude Rust x is available (this is y). Download it?", progress "Downloading WaveDude Rust x", signature verify, "Restart now to install it?", failure/up-to-date messages, non-replaceable builds link to release page | not in Next | ui/70 Updates, decision 0011 | divergence | decision 0033, dropped |
 | D-38 | Export dialog: in-window dialog, title per command ("Export the field", "...the intensity", "...the field and the intensity", "Export the frame", "Export the probe data") | SE:272-277 | ui/70 Export Save dialog | divergence | Next uses a native save dialog; port in-window dialog (divergences.md "Export names", decision 0025). Slint: native rfd save dialog, no titles (export.rs:~106) -> partial implementation of the old Next form |
@@ -369,7 +369,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-06 | RecentFiles list newest first max 10 (+ OS recent list) | UIS:149, MW:253-255 | ui/80 | partial | push_recent on open/save (main.rs:213); never shown (M-04) |
 | S-07 | PreviewOrientation Horizontal/Vertical (default Vertical), transport layout radios | UIS:159, MW:537 | ui/80 | done | applied at start (apply_settings); the transport layout toggles save the layout shown (verified: Horizontal saved and restored) |
 | S-08 | AutoRerun bool (true), Settings > Simulation "Re-run automatically after edits" | UIS:169 | ui/80, ui/70 | done | settings.rs row, applied to live.auto_rerun |
-| S-09 | FrameMemoryBytes (0 Auto, 256 MiB..2 GiB; browser only), RAM row; replaces Next FrameMemoryPercent (10..100 %) | UIS:203 (percent) | ui/80, ui/70 | missing | no row; Next's percent setting dropped in v2 |
+| S-09 | FrameMemoryBytes (0 Auto, 256 MiB..2 GiB; browser only), RAM row; replaces Next FrameMemoryPercent (10..100 %) | UIS:203 (percent) | ui/80, ui/70 | done | browser Settings > Preview and memory > RAM drop-down Auto (1.0 GB)/256 MB..2.0 GB writes FrameMemoryBytes; Live passes settings.ram_cache() in the run goal (checked in the browser build) |
 | S-10 | PreviewResolution 1/2/4 drop-down Full/Half/Quarter | UIS:213 | ui/80, ui/70 | done | set.rs row; apply via preview_quality |
 | S-11 | PreviewFrames 1/2/4 drop-down "Full / Half (every second frame) / Quarter (every fourth frame)" | UIS:223, SE:85-88 | ui/80, ui/70 | done | row with Full/Half/Quarter; rest matched in general (decision 0033) |
 | S-12 | PreviewSampleBytes 1/2 drop-down "16-bit float / 8-bit palette index (brightness fixed when the run starts)" | UIS:233, SE:89-91 | ui/80, ui/70 | done | Settings > Preview and memory, Preview samples: 16-bit float / 8-bit palette index |
@@ -590,7 +590,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-84 | Context menu: Export probe CSV only on probe rows, own separator | ProjectTree.xaml:272-275 | 20 Commands | done | own separator, probe rows only |
 | T-85 | Right-click row acts on selection or target (Explorer rule) | ProjectTree.xaml:252-254 | 20 Commands | divergence | a right click on a row outside the selection selects it, then the menu acts on the selection (Explorer's rule); Next acts on the clicked row's group without moving the selection (divergences.md Row menu) |
 | T-86 | TreeView native keyboard: Up/Down/Left/Right/Home/End, expand/collapse by arrows | WPF TreeView | not in spec | done | tree.slint tree-keys: Up/Down/Home/End move the current row (Shift a range), Left folds or goes to the parent, Right unfolds or goes to the first child (tree::navigate); the current row scrolls into view |
-| T-87 | Tree-row Tab order / focus ring of tree | ProjectTree.xaml:240 | 20 Toolbar (Tab order) | missing |  |
+| T-87 | Tree-row Tab order / focus ring of tree | ProjectTree.xaml:240 | 20 Toolbar (Tab order) | done | Tab order Source > Probe > Part > enabled move/remove > tree (checked on :77); the tree shows focus by the active selection colour (ui/20) |
 | T-88 | Drag starts from a row (not buttons) after system threshold | ProjectTree.xaml.cs:396-411 | 20 Drag and drop | done | Slint's DragArea on an item row's own area, its threshold; the row's buttons, check box and expander take their presses |
 | T-89 | Drag carries item as app clipboard format + XML text | ProjectTree.xaml.cs:405-411 | 20 Drag and drop | divergence | the drag carries the row in the app (DataTransfer user data), no .wdproj text: Slint takes drags to other applications on Qt only (divergences.md Tree drag) |
 | T-90 | Drop on sibling row: before/after by half, insertion line along edge | ProjectTree.xaml.cs:557-580,531 | 20 Drag and drop | done | DropArea per row: before or after a sibling by the half, the line along that edge (tree::drop_target, move_to); colour schemes reorder too, which Next marks but drops nothing for |
@@ -966,9 +966,9 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-18 | Auto: 8-bit recompute in 16-bit for fit alone, run paused meanwhile | MainWindow.Display.cs | 40 Header strip | done | 8-bit: a FitRequest; the worker serves the frame in 16-bit, the poll fits it |
 | V-19 | Auto is an ordinary brightness edit (8-bit: simulation edit); "nothing to fit" status text | MainWindow.Display.cs | 40 Header strip | done | an ordinary view edit; nothing to fit logs (status bar) Auto brightness: nothing to fit |
 | V-20 | Header placement above picture when cell taller than aspect (4 px over) | PreviewPane.xaml:560-600 | 40 Header strip | done | header above; rest matched in general (decision 0033) |
-| V-21 | Header turned a quarter clockwise on picture's left when cell wider (10 px below top) | HeaderStrip.cs | 40 Header strip | missing | |
-| V-22 | Turned box edits upright while focused (click/Tab/context menu focus, select text, arrows/wheel step) | NumberBox.cs | 40 Header strip; 00 Turned brightness box TODO | missing | spec TODO |
-| V-23 | Turned unfocused box: arrows step, drag along strip scrubs | NumberBox.cs | 40 Header strip | missing | |
+| V-21 | Header turned a quarter clockwise on picture's left when cell wider (10 px below top) | HeaderStrip.cs | 40 Header strip | divergence | the header strip stays above the picture at any cell shape (decision 0033: layout loosely); no turned strip |
+| V-22 | Turned box edits upright while focused (click/Tab/context menu focus, select text, arrows/wheel step) | NumberBox.cs | 40 Header strip; 00 Turned brightness box TODO | divergence | see V-21 |
+| V-23 | Turned unfocused box: arrows step, drag along strip scrubs | NumberBox.cs | 40 Header strip | divergence | see V-21 |
 | V-24 | Narrow strip: caption dropped first, then title ellipsis; 12 px min gap | HeaderStrip.cs | 40 Header strip | done | the caption drops (changed width) before the title elides; 12 px kept after the title |
 | V-25 | Edge line 1 px, blue #0000FF when damping rim outside canvas | PreviewPane.xaml:602-610 | 40 Edge line | done | Canvas.edge from Scene::has_rim: a 1 px blue line round the picture |
 | V-26 | Edge line red #FF0000 for reflective edges (rim wins over wall) | PreviewPane.xaml:602-610 | 40 Edge line | done | red with reflective edges and no rim |
@@ -1019,7 +1019,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-71 | Drag size grip: absolute, whole px, min size, linked rect/ellipse farther coord, polygon on ray | SceneOverlay.cs | 40 Interaction | done | canvas::Target::Shape with Grip; linked: the farther coordinate; polygon on its ray |
 | V-72 | Drag lens surface handle (bulge/flatten/hollow, rim fixed) | SceneOverlay.cs | 40 Interaction | done | HandleKind::Surface on each vertex of a lens or Fresnel lens; drag along the axis, rim and other vertex held (lens_geometry set_vertex, handles drag_surface) |
 | V-73 | Drag fibre node (with handles) / Bezier handle (smooth node mirrors length) | SceneOverlay.cs MirrorLength | 40 Interaction | done | canvas::Target::Shape with Node/InHandle/OutHandle |
-| V-74 | Drag probe A onto detached graph box picks it up | SceneOverlay.cs:952 | 40 Interaction | missing | |
+| V-74 | Drag probe A onto detached graph box picks it up | SceneOverlay.cs:952 | 40 Interaction | done | canvas.rs Target::Probe A: picks up its detached box within BOX_SNAP (test a_probe_a_dragged_near_its_detached_box_picks_it_up) |
 | V-75 | Esc during drag puts item/group back; second finger likewise | SceneOverlay.cs:1507-1517 | 40 Interaction | done | Esc while a drag is held: Document::cancel drops its step; the second finger dropped (decision 0033) |
 | V-76 | Click empty space deselects (unless Shift/Ctrl), focuses pane | PreviewPane.xaml.cs:1289 | 40 Interaction | done | a press off the handles selects the root unless Ctrl/Shift and focuses the picture |
 | V-77 | Marquee on empty drag (faint accent fill, dashed edge); Shift add, Ctrl toggle, else replace | SceneOverlay.cs:1256-1365 | 40 Interaction | done | canvas::Marquee: a press off the handles; whole-item handles inside; Shift adds, Ctrl toggles, else replaces |
@@ -1216,7 +1216,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-56 | Unsaved-edits ask before New/Open/Close/Exit/example/drop | MainWindow.Project.cs | 60 Files and drop; 70 | partial | done for New/Open/Close/Exit/example; drop missing |
 | R-57 | Off-canvas objects warning in log, once per list change | none (divergence: Next silent) | 60 Objects off the canvas | done | live.rs submit: off_canvas list warned once per change, spec wording |
 | R-58 | Run start errors in status bar: "The simulation could not start." etc | MainWindow.Simulation.cs | 60 Run start errors | partial | worker failure logged as "the run failed: ..."; fixed texts absent |
-| R-59 | Browser worker failure messages and reload advice | web.rs | 60 Run start errors | missing | web.rs minimal |
+| R-59 | Browser worker failure messages and reload advice | web.rs | 60 Run start errors | divergence | the browser build runs the simulation on the page thread (web.rs pumped RunWorker): no worker to fail to load or stop; engine build errors go through the native start-error path |
 | R-60 | Scene image / save-first run start errors | MainWindow.Simulation.cs | 60 Run start errors | done | Run and Play refuse an image scene without its image: the two spec messages as errors in the status bar |
 | R-61 | Live edit while dragging a handle: nothing completes until hand rests a frame time | worker.rs | 60 The live run | n/a | no handle drags (V-68) |
 

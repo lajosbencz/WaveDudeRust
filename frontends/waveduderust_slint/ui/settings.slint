@@ -25,6 +25,10 @@ export struct SettingsData {
     // the memory free now and the machine's; empty in the browser
     ram-available: string,
     ram-physical: string,
+    // the browser's RAM cache: Auto's size (empty natively), the fixed sizes, the pick (0 Auto)
+    ram-auto: string,
+    ram-sizes: [string],
+    ram-size: int,
     use-gpu: bool,
     auto-rerun: bool,
     warn-ram: bool,
@@ -193,6 +197,14 @@ export component SettingsLayer inherits Rectangle {
                                 text: @tr("{} available of {}", root.data.ram-available, root.data.ram-physical);
                                 color: Theme.text;
                                 vertical-alignment: center;
+                            }
+                        }
+                        if root.data.ram-auto != "" && root.shows(1, @tr("RAM")): Row {
+                            FormLabel { text: @tr("RAM"); }
+                            Choice {
+                                titles: [@tr("Auto ({})", root.data.ram-auto), root.data.ram-sizes[0], root.data.ram-sizes[1], root.data.ram-sizes[2], root.data.ram-sizes[3]];
+                                index: root.data.ram-size;
+                                picked(i) => { root.data.ram-size = i; root.edited(); }
                             }
                         }
                         if root.shows(1, @tr("Preset")): Row {

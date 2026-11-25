@@ -40,6 +40,8 @@ pub(crate) struct Live {
 	dither_bits: u32,
 	/// Warn when a run's frames exceed the RAM cache.
 	pub(crate) warn: bool,
+	/// The RAM cache size of a run's store: the browser's pick, natively Auto.
+	pub(crate) ram_cache: waveduderust::run::RamCache,
 	asked: Option<Ask>,
 	/// Frames of the planned run.
 	pub(crate) frames: u32,
@@ -157,6 +159,7 @@ impl Live {
 			quality: PreviewQuality::FULL,
 			auto_rerun: true,
 			warn: true,
+			ram_cache: waveduderust::run::RamCache::Auto,
 			dither_bits: 0,
 			asked: None,
 			frames: 0,
@@ -349,7 +352,7 @@ impl Live {
 			paused: self.paused,
 			wanted: self.wanted,
 			fit: self.fit.map(|(id, _)| FitRequest { id, frame: self.position }),
-			..Goal::default()
+			ram_cache: self.ram_cache,
 		});
 	}
 
