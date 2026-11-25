@@ -5,6 +5,7 @@
 
 pub mod capture;
 pub mod cpu;
+mod damage;
 pub mod emitters;
 pub mod envelope;
 pub mod forcing;
