@@ -530,6 +530,9 @@ while the device owes completions). Main thread busy over 5 s idle after the run
 | F5 to `Run Completed` | 372 to 438 ms | 301 to 304 ms |
 | Main thread busy, 5 s idle | 85 to 103 ms | 39 to 44 ms |
 
+Firefox 159 (`dom.webgpu.enabled`) on the desktop, the same steps, one run each (Firefox loses its WebGPU device on
+Xvfb): 0.6 s before, 0.2 s after (F5 to `Run Completed` 632 / 173 ms).
+
 ## The browser's live run in a worker
 
 2026-11-14, Chrome 158 (Playwright, WebGPU through Vulkan) on Linux, RTX 5070 Ti; the app built by `tools/build-web.sh`
