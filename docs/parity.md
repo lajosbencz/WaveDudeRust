@@ -17,12 +17,12 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | S | Settings | 16 | 7 | 6 | 3 | 0 |
 | I | Icons | 57 | 1 | 6 | 19 | 0 |
 | T | Project tree | 56 | 3 | 4 | 38 | 0 |
-| P | Properties | 310 | 7 | 5 | 3 | 0 |
+| P | Properties | 310 | 7 | 4 | 4 | 0 |
 | V | Preview | 90 | 5 | 12 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
-| R | Live editing and runs | 32 | 15 | 12 | 0 | 2 |
+| R | Live editing and runs | 33 | 15 | 11 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 788 | 81 | 63 | 158 | 5 |
+| | All | 789 | 81 | 61 | 159 | 5 |
 
 ## Cross-cutting
 
@@ -610,7 +610,7 @@ Not-in-spec rows are marked in the Spec column.
 
 | ID | Feature | Next source (file:line) | Spec (docs/ui file, section) | Slint | Note |
 |---|---|---|---|---|---|
-| P-01 | Pane shows form of the current item; 'No selection' grey when none | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | missing | heading + empty list |
+| P-01 | Pane shows form of the current item; 'No selection' grey when none | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | divergence | the selection always holds a row, Project when nothing else: no No selection state |
 | P-02 | Pane heading / form selected by node type | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | done | every node shows its typed form (ui/forms.slint), without a heading as Next; a folder shows its name and entry count |
 | P-03 | Folder row: label header + count (No entries/1 entry/N entries), grey | Views/CollectionView.xaml:32 | 30 Pane behaviour | done | properties.slint: No entries / 1 entry / N entries |
 | P-04 | Caret into first text box with text selected on newly added item | Panes/PropertiesPane.xaml.cs:83-88 | 30 Pane behaviour | missing |  |
@@ -1214,7 +1214,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-54 | Image looked up beside project and in scene_images, adopts relative path | ProjectWatcher | 60 Files and drop | missing | |
 | R-55 | Image inside project folder stored relative | ProjectWatcher | 60 Files and drop | done | stored_image_path: inside the project folder stored relative |
 | R-56 | Unsaved-edits ask before New/Open/Close/Exit/example/drop | MainWindow.Project.cs | 60 Files and drop; 70 | partial | done for New/Open/Close/Exit/example; drop missing |
-| R-57 | Off-canvas objects warning in log, once per list change | none (divergence: Next silent) | 60 Objects off the canvas | missing | spec marks as divergence; no such log in slint crate (core?) |
+| R-57 | Off-canvas objects warning in log, once per list change | none (divergence: Next silent) | 60 Objects off the canvas | done | live.rs submit: off_canvas list warned once per change, spec wording |
 | R-58 | Run start errors in status bar: "The simulation could not start." etc | MainWindow.Simulation.cs | 60 Run start errors | partial | worker failure logged as "the run failed: ..."; fixed texts absent |
 | R-59 | Browser worker failure messages and reload advice | web.rs | 60 Run start errors | missing | web.rs minimal |
 | R-60 | Scene image / save-first run start errors | MainWindow.Simulation.cs | 60 Run start errors | missing | |

@@ -4,6 +4,7 @@ use slint::wgpu_30::wgpu;
 use waveduderust::model::normalize::Normalize;
 use waveduderust::model::{Layer, Project, View};
 use waveduderust::quality::PreviewQuality;
+use waveduderust::unstable::scene::off_canvas::{OffCanvas, off_canvas};
 
 use waveduderust::run::{FitRequest, FrameStore, Goal, RunWorker, Wanted, WorkState};
 use waveduderust::unstable::engine::gpu::{FrameTag, GpuContext};
@@ -63,6 +64,8 @@ pub(crate) struct Live {
 	scene: SceneCache,
 	/// The scene's glowing edges, drawn over a picture whose layer shows the outline.
 	edges: Option<std::sync::Arc<EdgeImage>>,
+	/// The objects off the canvas last warned of.
+	off: Vec<OffCanvas>,
 	intensity: Picture,
 	/// An Auto of an 8-bit frame waiting for the frame in 16-bit: the request and the layer.
 	fit: Option<(u64, Layer)>,
@@ -112,6 +115,17 @@ pub(crate) struct Shown {
 	pub(crate) fitted: Option<(Layer, Option<f64>)>,
 }
 
+/// The off-canvas warning's list (docs/ui/60, Objects off the canvas).
+fn off_canvas_list(off: &[OffCanvas]) -> String {
+	let item = |o: &OffCanvas| match o {
+		OffCanvas::Source { name, outside, of } if outside == of => format!("{name} (left out)"),
+		OffCanvas::Source { name, outside, of } => format!("{name} ({outside} of {of} elements left out)"),
+		OffCanvas::Part(name) => format!("{name} (left out)"),
+		OffCanvas::Probe(name) => format!("{name} (reads at the edge)"),
+	};
+	off.iter().map(item).collect::<Vec<_>>().join(", ")
+}
+
 impl Live {
 	pub(crate) fn new(context: &std::sync::Arc<GpuContext>) -> std::io::Result<Self> {
 		let (device, queue) = (context.device.clone(), context.queue.clone());
@@ -154,6 +168,7 @@ impl Live {
 			field,
 			scene: SceneCache::default(),
 			edges: None,
+			off: Vec::new(),
 			intensity,
 		})
 	}
@@ -299,6 +314,13 @@ impl Live {
 	fn submit(&mut self, request: RunRequest) {
 		self.revision += 1;
 		self.edges = self.scene.pixels(&request.project).map(|p| std::sync::Arc::new(EdgeImage::of(&p)));
+		let off = off_canvas(&request.project);
+		if off != self.off {
+			if !off.is_empty() {
+				tracing::warn!("off the canvas: {}", off_canvas_list(&off));
+			}
+			self.off = off;
+		}
 		self.drawn = None;
 		let schedule = request.schedule();
 		(self.frames, self.steps) = (schedule.frame_count(), schedule.steps);
