@@ -173,6 +173,91 @@ The fields are bit for bit the same: a temporary test hashing the field and both
 steps, both stencils, rims of 16 and 5 with mirror lines inside them, gave the same hashes before and after. What is
 left of psi of x and the correction is their reach into the two ends of every grid row.
 
+## The CPU engine's mirror rows
+
+A grid row with a cut cell (a tap dropped beside a mirror) ran every cell of the row through the per-cell stencil
+(before); the cells without a cut now run on row slices, the cut ones per cell (after). Example01's rectangular mirror
+crosses about half the rows of its 960x540 canvas, a few cells of each beside it.
+
+2026-11-24, a VirtualBox guest with 8 vCPUs; `RAYON_NUM_THREADS=<n> waveduderust-cli probes --steps 300` of
+`examples/sources/Example01_Source_Mirror_Probe.wdproj` (4th order) and of a copy with `FourthOrderLaplacian="false"`
+(9-point), the builds of e4475b7 (before) and the branch (after), alternated, two runs each, seconds:
+
+| Stencil, threads | Before | After |
+|---|---|---|
+| 4th order, 1 | 12.0 to 12.1 | 5.8 |
+| 4th order, 8 | 4.0 | 2.8 to 3.1 |
+| 9-point, 1 | 4.0 to 4.4 | 4.3 |
+| 9-point, 8 | 1.7 to 1.9 | 1.7 to 1.8 |
+
+The 9-point's per-cell stencil was already about as fast as its row loop. The probe series are byte for byte the same
+before and after for both stencils; the probe sits beside the mirror.
+
+In the browser, where the run worker has no WebGPU adapter and runs the CPU engine on one thread: Chrome 157
+headless on the same guest (SwiftShader, no WebGPU), the app built by `tools/build-web.sh` and served by
+`python3 -m http.server`, Example01 opened from the examples, run with F5 and the memory warning's halved resolution,
+the steps read off the status bar 10 s and 30 s after the start. Before: e4475b7; with simd128 alone: e4475b7 built
+with `-C target-feature=+simd128`; after: the branch, simd128 in [`.cargo/config.toml`](../.cargo/config.toml).
+
+| | Steps a second |
+|---|---|
+| Before | 13.7 |
+| simd128 alone | 15.2 |
+| After (mirror rows on row slices, simd128) | 39.4 |
+
+A CPU profile of the run worker (DevTools, 15 s, before) had it busy throughout: the per-cell `drp` and `pml::taps`,
+not inlined in the wasm, took 37 % of it.
+
+## The CPU engine's 9-point loop vectorised
+
+The 9-point leapfrog's row loop indexed `c2` and `d` by the row's offset, so its bounds checks stayed in the loop and it
+ran scalar: the release binary's disassembly (`objdump -d`) had no packed `mulps`/`addps`/`subps` in it, against 81 and
+108 in the 4th order's passes. With every slice cut to the span (after) it has 25.
+
+2026-11-24, the VirtualBox guest above, `RAYON_NUM_THREADS=<n> waveduderust-cli bench --stencil nine --steps 200
+--captures-every 0 --width <w> --height <h> --rim <rim>`, the branch before and after, alternated, two runs each, ms a
+step:
+
+| Canvas, rim, threads | Before | After |
+|---|---|---|
+| 256x256, 0, 1 | 0.58 to 0.60 | 0.17 to 0.24 |
+| 256x256, 0, 8 | 0.19 to 0.22 | 0.11 to 0.15 |
+| 1920x1080, 0, 1 | 16.1 | 8.9 |
+| 1920x1080, 0, 8 | 6.2 to 6.4 | 5.9 |
+| 1920x1080, 32, 1 | 21.9 | 13.8 to 14.4 |
+| 1920x1080, 32, 8 | 8.3 to 8.8 | 8.0 to 8.2 |
+
+On 8 threads the full canvas is bound by the memory's bandwidth. The probe series of Example01 with
+`FourthOrderLaplacian="false"`, with and without its mirror, 600 steps, are byte for byte the same before and after.
+
+2026-11-25, an AMD Ryzen 9 9900X (12 cores, 24 threads), the same bench at 1920x1080, rim 0, master (90d4511) and the
+branch merged on it, alternated, two runs each: 2.64 to 2.67 / 2.65 to 2.66 ms a step on 1 thread, 0.75 to 0.79 /
+0.79 to 0.83 on 8. The gain does not show on this host's native build. Example01 (4th order), `probes --steps 300`:
+5.6 / 2.1 s on 1 thread, 0.97 / 0.47 s on 8; the probe series byte for byte the same.
+
+## The CPU engine in wasm, with and without simd128
+
+2026-11-25, the workstation above. A harness outside the repository runs the CPU engine alone, built for wasm32 at
+each commit with and without `-C target-feature=+simd128` (wasm-bindgen 0.2.130, `wasm-opt -O3`), in Node 24 (V8):
+`read_str`, `RunSpec::create`, `CpuEngine::new`, then `advance_one_step` 150 times after 20 warm-up steps, steps a
+second, median of 3 runs. The author's column: Chrome 157 headless on a VirtualBox guest with 8 vCPUs, no WebGPU, the
+whole app, steps read off its status bar ([The CPU engine's mirror rows](#the-cpu-engines-mirror-rows)). The engine
+alone runs 2.5 to 3.5 times as many steps; compare within a column.
+
+| Build | Mirror rows on slices | 9-point loop | simd128 | Example01, author | Example01, 9900X | Example09, author | Example09, 9900X |
+|---|---|---|---|---|---|---|---|
+| e4475b7 (before) | no | before | no | 13.7 | 36.2 | 31.3 | 100.7 |
+| e4475b7 | no | before | yes | 15.2 | 35.6 | | 210.9 |
+| 7fceb92 | yes | before | no | | 59.3 | | 99.2 |
+| 7fceb92 / 2c192b9 | yes | before | yes | 39.4 | 96.4 | | 101.6 |
+| 10a6a02 | yes | slices cut to the span | no | | 60.7 | | 100.6 |
+| 10a6a02 | yes | slices cut to the span | yes | 40.7 | 96.9 | 60.5 | 217.7 |
+
+Example01 (4th order, a mirror): simd128 alone gains nothing; with the mirror rows on slices it takes 60 to 97 steps a
+second. Example09 (9-point, no mirror): simd128 doubles the steps at e4475b7 and at 10a6a02; at 7fceb92 it gains
+nothing. The author's Example09 figures were taken in the browser's
+whole app and are not split by simd128.
+
 ## Other operations
 
 2026-11-06 unless noted.
