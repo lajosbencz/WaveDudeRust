@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2](https://github.com/lajosbencz/WaveDudeRust/compare/v0.4.1...v0.4.2) - 2026-11-25
+
+### Performance
+
+- *(core)* the CPU engine's mirror rows run their uncut cells on row slices, and wasm32 builds with simd128 (#52)
+
+### Dependencies
+
+- bump the cargo-minor group with 4 updates (#53)
+
 ## [0.4.1](https://github.com/lajosbencz/WaveDudeRust/compare/v0.4.0...v0.4.1) - 2026-11-24
 
 ### Performance

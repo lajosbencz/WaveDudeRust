@@ -6379,7 +6379,7 @@ dependencies = [
 
 [[package]]
 name = "waveduderust"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "base64 0.23.1",
  "bytemuck",
@@ -6419,7 +6419,7 @@ dependencies = [
 
 [[package]]
 name = "waveduderust_app"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -6457,7 +6457,7 @@ dependencies = [
 
 [[package]]
 name = "waveduderust_classic"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "eframe",
@@ -6486,7 +6486,7 @@ dependencies = [
 
 [[package]]
 name = "waveduderust_cli"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -6500,7 +6500,7 @@ dependencies = [
 
 [[package]]
 name = "waveduderust_egui_platform"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "arboard",
  "eframe",
@@ -6517,7 +6517,7 @@ dependencies = [
 
 [[package]]
 name = "waveduderust_egui_preview"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "eframe",
  "kurbo",
@@ -6529,14 +6529,14 @@ dependencies = [
 
 [[package]]
 name = "waveduderust_examples"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "waveduderust",
 ]
 
 [[package]]
 name = "waveduderust_icon_subset"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "allsorts",
  "serde_json",
@@ -6544,7 +6544,7 @@ dependencies = [
 
 [[package]]
 name = "waveduderust_macros"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -6554,7 +6554,7 @@ dependencies = [
 
 [[package]]
 name = "waveduderust_material"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "eframe",
@@ -6575,7 +6575,7 @@ dependencies = [
 
 [[package]]
 name = "waveduderust_workers"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "gloo-timers",
  "js-sys",
