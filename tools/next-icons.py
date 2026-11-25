@@ -22,24 +22,24 @@ UI = "frontends/waveduderust_slint/ui"
 OUT = os.path.join(UI, "icons/next")
 SYMBOLS = os.path.join(UI, "icons/symbols")
 
-# (file, key, svg name, style, box): style "fill" or a stroke thickness; box the fixed size Next draws it in, (w, h) or
+# (key, svg name, style, box), all of Themes/Icons.xaml: style "fill" or a stroke thickness; box the fixed size Next draws it in, (w, h) or
 # 16 for the 16 px icons, which have a Fill part too; None to measure
 ICONS = [
-	# Themes/Controls.xaml: glyphs of menus, combo boxes, check boxes, scroll bars, dock buttons
-	("Themes/Controls.xaml", "ArrowUpGeometry", "arrow-up", "fill", None),
-	("Themes/Controls.xaml", "ArrowDownGeometry", "arrow-down", "fill", None),
-	("Themes/Controls.xaml", "ArrowLeftGeometry", "arrow-left", "fill", None),
-	("Themes/Controls.xaml", "ArrowRightGeometry", "arrow-right", "fill", None),
-	("Themes/Controls.xaml", "SubmenuArrowGeometry", "submenu-arrow", "fill", None),
-	("Themes/Controls.xaml", "CheckGeometry", "check", 1.5, None),
-	("Themes/Controls.xaml", "ChevronRightGeometry", "chevron-right", 1.0, None),
-	("Themes/Controls.xaml", "ChevronDownGeometry", "chevron-down", 1.0, None),
-	("Themes/Controls.xaml", "ChevronUpGeometry", "chevron-up", 1.0, None),
-	("Themes/Controls.xaml", "CloseGeometry", "close", "fill", None),
-	("Themes/Controls.xaml", "DropDownGeometry", "drop-down", "fill", None),
-	# Themes/Controls.xaml: the tree's and menus' 16 px drawings (IconView: a 1 px stroke and an optional Fill part)
+	# glyphs of menus, combo boxes, check boxes, scroll bars, dock buttons
+	("ArrowUpGeometry", "arrow-up", "fill", None),
+	("ArrowDownGeometry", "arrow-down", "fill", None),
+	("ArrowLeftGeometry", "arrow-left", "fill", None),
+	("ArrowRightGeometry", "arrow-right", "fill", None),
+	("SubmenuArrowGeometry", "submenu-arrow", "fill", None),
+	("CheckGeometry", "check", 1.5, None),
+	("ChevronRightGeometry", "chevron-right", 1.0, None),
+	("ChevronDownGeometry", "chevron-down", 1.0, None),
+	("ChevronUpGeometry", "chevron-up", 1.0, None),
+	("CloseGeometry", "close", "fill", None),
+	("DropDownGeometry", "drop-down", "fill", None),
+	# the tree's and menus' 16 px drawings (IconView: a 1 px stroke and an optional Fill part)
 	*[
-		("Themes/Controls.xaml", "Icon" + k, re.sub(r"(?<!^)(?=[A-Z])", "-", k).lower(), 1.0, 16)
+		("Icon" + k, re.sub(r"(?<!^)(?=[A-Z])", "-", k).lower(), 1.0, 16)
 		for k in [
 			"Source", "Probe", "CountingDetector", "ImagingDetector", "Part", "PlusBadge", "Project", "Lens",
 			"LensConvexConvex", "LensConvexFlat", "LensConvexConcave", "LensFlatConvex", "LensFlatFlat",
@@ -50,26 +50,26 @@ ICONS = [
 			"AutoBrightness", "PreviewResolution", "PreviewFrames", "PreviewSamples", "PreviewDither", "FrameMemory",
 		]
 	],
-	# Panes/PreviewPane.xaml: transport bar and picture headers, filled
+	# transport bar and picture headers, filled
 	*[
-		("Panes/PreviewPane.xaml", k + "Geometry", re.sub(r"(?<!^)(?=[A-Z])", "-", k).lower(), "fill", None)
+		(k + "Geometry", re.sub(r"(?<!^)(?=[A-Z])", "-", k).lower(), "fill", None)
 		for k in [
 			"Run", "PauseRun", "Stop", "Field", "Intensity", "Play", "Pause", "SideBySide", "Stacked", "StepBack",
 			"StepForward", "SetIn", "SetOut", "ClearRange", "Loop", "Live",
 		]
 	],
-	("Panes/PreviewPane.xaml", "SpinnerGeometry", "spinner", 3.0, (36, 36)),
-	("Panes/PreviewPane.xaml", "ResizeGripGlyph", "resize-grip", "fill", None),
-	# Panes/ProjectTree.xaml: the rows' buttons, stroked at 1.2
-	("Panes/ProjectTree.xaml", "PlusGeometry", "tree-plus", 1.2, None),
-	("Panes/ProjectTree.xaml", "MinusGeometry", "tree-minus", 1.2, None),
-	("Panes/ProjectTree.xaml", "ChevronUpGeometry", "tree-chevron-up", 1.2, None),
-	("Panes/ProjectTree.xaml", "ChevronDownGeometry", "tree-chevron-down", 1.2, None),
-	# Panes/MessagesPane.xaml and Themes/Editors.xaml
-	("Panes/MessagesPane.xaml", "ClearGeometry", "clear", 1.2, None),
-	("Themes/Editors.xaml", "GripGeometry", "grip", 1.0, None),
-	("Themes/Editors.xaml", "ChainLinkedGeometry", "chain-linked", 1.3, (18, 16)),
-	("Themes/Editors.xaml", "ChainPartedGeometry", "chain-parted", 1.3, (18, 16)),
+	("SpinnerGeometry", "spinner", 3.0, (36, 36)),
+	("ResizeGripGlyph", "resize-grip", "fill", None),
+	# the tree rows' buttons, stroked at 1.2
+	("PlusGeometry", "tree-plus", 1.2, None),
+	("MinusGeometry", "tree-minus", 1.2, None),
+	("RowUpGeometry", "tree-chevron-up", 1.2, None),
+	("RowDownGeometry", "tree-chevron-down", 1.2, None),
+	# Messages, number boxes
+	("MessagesClearGeometry", "clear", 1.2, None),
+	("GripGeometry", "grip", 1.0, None),
+	("ChainLinkedGeometry", "chain-linked", 1.3, (18, 16)),
+	("ChainPartedGeometry", "chain-parted", 1.3, (18, 16)),
 ]
 
 # Next's drawings its add menus show, themed for the menus as the symbols are
@@ -77,7 +77,7 @@ MENU_DRAWINGS = [
 	"probe", "counting-detector", "imaging-detector", "lens", "fresnel-lens", "fiber", "bragg-reflector", "grin-lens",
 	"zone-plate", "diffuser", "interference-filter", "diffraction-gratings", "simple-grating", "facetted-grating",
 	"meta-surfaces", "meta-lens", "meta-prism", "meta-axicon", "polygon", "rectangle", "ellipse", "triangle", "outline",
-	"optical-logic", "xor-gate", "and-gate", "or-gate",
+	"optical-logic", "xor-gate", "and-gate", "or-gate", "auto-brightness",
 ]
 TOKEN = re.compile(r"[A-Za-z]|-?\d*\.?\d+(?:[eE][-+]?\d+)?")
 ARGS = {"M": 2, "L": 2, "H": 1, "V": 1, "C": 6, "S": 4, "Q": 4, "T": 2, "A": 7, "Z": 0}
@@ -224,13 +224,12 @@ def main():
 		sys.exit("set WAVEDUDE_NEXT_DIR to WaveDude Next's source tree")
 	wpf = os.path.join(NEXT, "WaveDudeNext.WPF")
 	os.makedirs(OUT, exist_ok=True)
-	sources = {}
-	for file, key, name, style, box in ICONS:
-		xaml = sources.setdefault(file, read(os.path.join(wpf, file)))
+	xaml = read(os.path.join(wpf, "Themes/Icons.xaml"))
+	for key, name, style, box in ICONS:
 		d = geometry(xaml, key)
 		fill = geometry(xaml, key + "Fill") if box == 16 else None
 		if d is None and fill is None:
-			sys.exit(f"{key} is not in {file}")
+			sys.exit(f"{key} is not in Themes/Icons.xaml")
 		parts = [path(p, s) for p, s in ((d, style), (fill, "fill")) if p]
 		if box:
 			w, h = (box, box) if box == 16 else box

@@ -15,14 +15,14 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | M | Menus and shortcuts | 79 | 9 | 0 | 52 | 0 |
 | D | Dialogs and windows | 50 | 19 | 1 | 9 | 0 |
 | S | Settings | 22 | 7 | 0 | 3 | 0 |
-| I | Icons | 59 | 1 | 1 | 22 | 0 |
+| I | Icons | 60 | 1 | 0 | 22 | 0 |
 | T | Project tree | 58 | 4 | 0 | 39 | 0 |
 | P | Properties | 311 | 7 | 0 | 7 | 0 |
 | V | Preview | 96 | 6 | 1 | 8 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 1 | 9 | 2 |
 | R | Live editing and runs | 40 | 15 | 0 | 4 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 823 | 86 | 4 | 177 | 5 |
+| | All | 824 | 86 | 3 | 177 | 5 |
 
 ## Cross-cutting
 
@@ -466,7 +466,7 @@ Next draws menu/tool icons two ways: (a) glyphs of the Windows icon font (Segoe 
 | I-59 | IconFacettedGrating / IconSimpleGrating (Fill) | CX:319,321 | ui/20 | done | as I-48 |
 | I-60 | IconPolygon / Rectangle / Ellipse / Triangle / Outline | CX:323,325,327,329,331 | ui/10 | done | as I-48 |
 | I-61 | IconOpticalLogic, IconXorGate, IconAndGate, IconOrGate | CX:333,335,337,339 | ui/10 | done | as I-48 |
-| I-62 | IconAutoBrightness (+Fill): picture menu Auto brightness | CX:341-342 | ui/10 | missing | auto-brightness.svg generated but the menu needs themed copies: tools/next-icons.py fails on Next 1f198c0 (geometries moved to Themes/Icons.xaml) |
+| I-62 | IconAutoBrightness (+Fill): picture menu Auto brightness | CX:341-342 | ui/10 | done | picture menu Auto brightness: MenuIcons.next-auto-brightness (IconAutoBrightness, themed) |
 | I-63 | IconPreviewResolution / IconPreviewFrames / IconPreviewSamples / IconPreviewDither (+Fill): View preview-quality menus | CX:344-351 | not in spec (menus moved) | divergence | no View preview-quality menus: Settings > Preview and memory rows |
 | I-64 | IconFrameMemory: Simulation>RAM cache size | CX:353 | not in spec | divergence | no RAM cache size menu: the desktop RAM cache is Auto |
 

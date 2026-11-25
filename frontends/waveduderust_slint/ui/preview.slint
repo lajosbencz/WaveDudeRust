@@ -377,7 +377,7 @@ component Picture inherits VerticalLayout {
                         activated => { Canvas.export-probe-csv(Canvas.hover-box); }
                     }
                     if !root.over-box: MenuItem { title: @tr("Brightness"); icon: MenuIcons.brightness-6; activated => { brightness.focus(); } }
-                    if !root.over-box: MenuItem { title: @tr("Auto brightness"); icon: MenuIcons.brightness-6; activated => { Canvas.auto(root.layer); } }
+                    if !root.over-box: MenuItem { title: @tr("Auto brightness"); icon: MenuIcons.next-auto-brightness; activated => { Canvas.auto(root.layer); } }
                     if !root.over-box: MenuSeparator { }
                     if !root.over-box: MenuItem {
                         title: @tr("Export this frame...");
