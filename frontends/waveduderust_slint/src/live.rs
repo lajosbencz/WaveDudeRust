@@ -3,7 +3,7 @@
 use slint::wgpu_30::wgpu;
 use waveduderust::model::normalize::Normalize;
 use waveduderust::model::{Layer, Project, View};
-use waveduderust::quality::{Brightness, PreviewQuality};
+use waveduderust::quality::PreviewQuality;
 
 use waveduderust::run::{FitRequest, FrameStore, Goal, RunWorker, Wanted, WorkState};
 use waveduderust::unstable::engine::gpu::{FrameTag, GpuContext};
@@ -17,6 +17,9 @@ use waveduderust::io::schemes::SchemeStore;
 
 use crate::gpu::{Look, Picture};
 use crate::ui::{RunState, RunStatus};
+
+/// What an edit asks of the run (docs/ui/60, Edit classes).
+pub(crate) use waveduderust::unstable::spec::RunChange as Change;
 
 /// The run and the pictures it feeds.
 pub(crate) struct Live {
@@ -174,19 +177,27 @@ impl Live {
 		self.summarised = false;
 	}
 
+	/// A run of `project` from scratch (open, Run): a pending fit goes with the old frames.
 	fn request(&mut self, project: &Project, view: &View) {
 		self.fit = None;
+		let request = self.request_of(project, view);
+		self.submit(request);
+	}
+
+	/// The request of `project` as it is now.
+	fn request_of(&self, project: &Project, view: &View) -> RunRequest {
 		let mut project = project.clone();
 		project.normalize();
+		// a shown intensity picture is tracked
+		RunRequest::new(&project, self.quality, view.into(), view.intensity.preview)
+	}
+
+	fn submit(&mut self, request: RunRequest) {
 		self.revision += 1;
-		self.edges = self.scene.pixels(&project).map(|p| std::sync::Arc::new(EdgeImage::of(&p)));
+		self.edges = self.scene.pixels(&request.project).map(|p| std::sync::Arc::new(EdgeImage::of(&p)));
 		self.drawn = None;
-		let request = RunRequest::new(&project, self.quality, view.into(), false);
 		let schedule = request.schedule();
 		(self.frames, self.steps) = (schedule.frame_count(), schedule.steps);
-		if self.active {
-			self.begin();
-		}
 		self.request = Some(request);
 		self.publish();
 	}
@@ -233,12 +244,9 @@ impl Live {
 
 	/// Draws the shown frame again for a changed look; frames of baked brightness (8-bit) are made again when it
 	/// changed, as for a simulation edit.
-	pub(crate) fn restyle(&mut self, project: &Project, view: &View) {
+	pub(crate) fn restyle(&mut self, project: &Project, view: &View) -> Change {
 		self.drawn = None;
-		let baked = self.worker.status().store.is_some_and(|s| matches!(s.shape().format, SampleFormat::Index));
-		if baked && self.request.as_ref().is_some_and(|r| r.brightness != Brightness::from(view)) {
-			self.edited(project, view);
-		}
+		self.edited(project, view)
 	}
 
 	/// Auto brightness of `layer` for the frame shown (docs/ui/40, Header strip).
@@ -275,29 +283,35 @@ impl Live {
 		}
 	}
 
-	/// Starts over after an edit, keeping what is wanted.
-	pub(crate) fn edited(&mut self, project: &Project, view: &View) {
-		if self.auto_rerun && !self.runs_as_before(project, view) {
-			self.request(project, view);
+	/// Takes up an edit (docs/ui/60, Edit classes): a simulation edit makes the position's frame anew, and every frame
+	/// with Re-run automatically on, else nothing more; a probe edit keeps the frames and what is wanted, its
+	/// recordings made anew. Says what the edit asked.
+	pub(crate) fn edited(&mut self, project: &Project, view: &View) -> Change {
+		// nothing loaded yet: opening a project asks for its frame
+		let Some(old) = &self.request else { return Change::None };
+		let request = self.request_of(project, view);
+		let change = old.change_to(&request);
+		if change == Change::Frames {
+			self.fit = None;
+			if self.auto_rerun {
+				// a paused run waits paused with the edit
+				self.begin();
+				self.active = true;
+				self.wanted = Wanted::All;
+			} else {
+				self.active = false;
+				self.wanted = Wanted::Position;
+				self.paused = false;
+				self.started = None;
+			}
 		}
-	}
-
-	/// Whether `project` runs as the request in force: it differs at most in what no run reads (graph boxes and
-	/// axes, which the probes' recording keys leave out).
-	fn runs_as_before(&self, project: &Project, view: &View) -> bool {
-		let Some(r) = &self.request else { return false };
-		let mut project = project.clone();
-		project.normalize();
-		let keys = |p: &Project| p.probes.iter().map(|p| (p.id(), p.recording_key())).collect::<Vec<_>>();
-		let without_probes = |p: &Project| {
-			let mut p = p.clone();
-			p.probes.clear();
-			p
-		};
-		r.quality == self.quality
-			&& r.brightness == Brightness::from(view)
-			&& keys(&r.project) == keys(&project)
-			&& without_probes(&r.project) == without_probes(&project)
+		if change == Change::None {
+			// what no run reads may still be drawn: a colour scheme recolours the frame shown
+			self.drawn = None;
+		} else {
+			self.submit(request);
+		}
+		change
 	}
 
 	/// The stored frame of the position.
@@ -352,6 +366,8 @@ impl Live {
 			&& !self.summarised
 		{
 			self.summarised = true;
+			// the run is over: a pause with nothing left to do is no pause
+			(self.active, self.paused) = (false, false);
 			let gib = |b: u64| b as f64 / f64::from(1u32 << 30);
 			tracing::info!(
 				"Run {}: {} of {} steps, {} frames, {:.1} s; {} stored, {} in memory ({:.1} GB) and {} on disk ({:.1} GB)",

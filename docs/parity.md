@@ -19,10 +19,10 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
 | V | Preview | 80 | 5 | 22 | 4 | 1 |
-| L | Timeline, transport, status | 51 | 12 | 18 | 7 | 2 |
-| R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
+| L | Timeline, transport, status | 60 | 11 | 10 | 7 | 2 |
+| R | Live editing and runs | 24 | 9 | 26 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 693 | 71 | 169 | 157 | 5 |
+| | All | 709 | 67 | 157 | 157 | 5 |
 
 ## Cross-cutting
 
@@ -1067,31 +1067,31 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-02 | Tick labels every 1,2,5,10,...,10000 frames, min 64 px apart, 2 px after tick, last kept inside | TimelineBar.cs:48,53,429-476 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-03 | Major ticks 6 px, minor 3 px every fifth of interval | TimelineBar.cs:467,474 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-04 | Playhead line through bar | TimelineBar.cs:347 | 50 Timeline | done | 1 px line |
-| L-05 | Playhead 10x6 triangle on top | TimelineBar.cs:355 | 50 Timeline | missing | |
+| L-05 | Playhead 10x6 triangle on top | TimelineBar.cs:355 | 50 Timeline | done | Path 10 x 6 over the bar, the frame number beside it on a patch of the window colour |
 | L-06 | Playhead frame number 8 px beside, patch hides tick labels | TimelineBar.cs:358-359 | 50 Timeline | done | number beside the playhead; rest matched in general (decision 0033) |
 | L-07 | In/out translucent accent band once range narrower than run | TimelineBar.cs:320 | 50 Timeline | done | band for a narrowed range; rest matched in general (decision 0033) |
-| L-08 | In/out brackets (2 px bar, 6 px feet into range) | TimelineBar.cs:333-334,385-391 | 50 Timeline | missing | |
+| L-08 | In/out brackets (2 px bar, 6 px feet into range) | TimelineBar.cs:333-334,385-391 | 50 Timeline | done | two Paths: 2 px bar, 6 px feet into the range, over a translucent band |
 | L-09 | Frames-made shaded bands in accent (grow from position outward after edit) | TimelineBar.cs:315, MainWindow.Live.cs | 50 Timeline | partial | single band from frame 0 to newest made; not per-frame bands/gaps |
 | L-10 | Playhead bounded by band it is in for user-started run | MainWindow.Live.cs | 50 Timeline | done | playback holds at the newest made frame |
-| L-11 | Hover line under pointer | TimelineBar.cs:341,518-525 | 50 Timeline | missing | |
+| L-11 | Hover line under pointer | TimelineBar.cs:341,518-525 | 50 Timeline | done | a 1 px line at the frame under the pointer |
 | L-12 | Frame 0 on first pixel column inside outline, last frame on last; whole device-pixel lines | TimelineBar.cs:271-360 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
-| L-13 | Timeline tooltip text | PreviewPane.xaml:546 | 50 Timeline | missing | |
+| L-13 | Timeline tooltip text | PreviewPane.xaml:546 | 50 Timeline | done | Tooltip with Next's text |
 | L-14 | Click/drag on bar scrubs to nearest frame; turns Live off, pauses playback | TimelineBar.cs:501-531 | 50 Timeline input | done | Timeline TouchArea + playback.seek |
-| L-15 | Drag bracket moves in/out (hit +/- px, nearer wins) | TimelineBar.cs:51,501-510 | 50 Timeline input | missing | |
-| L-16 | Bracket hover cursor SizeWE | TimelineBar.cs:524 | not in spec | missing | not in spec |
+| L-15 | Drag bracket moves in/out (hit +/- px, nearer wins) | TimelineBar.cs:51,501-510 | 50 Timeline input | done | a press within 5 px of a bracket drags it (nearer wins): Playback::drag_bracket, never past the other |
+| L-16 | Bracket hover cursor SizeWE | TimelineBar.cs:524 | not in spec | done | ew-resize near a bracket and while dragging it |
 | L-17 | Left / Right one frame | TimelineBar.cs:596-612 | 50 Timeline input | done | when bar focused |
 | L-18 | PageUp/PageDown ten frames (PageUp forward) | TimelineBar.cs:596-612 | 50 Timeline input | done | |
 | L-19 | Home / End to in / out (start / end unset) | TimelineBar.cs:596-612; PreviewPane.xaml:379-380 | 50 Timeline input | done | uses range() |
-| L-20 | Home/End as GoToStart/GoToEnd commands from anywhere in pane (not in text box) | PreviewPane.xaml:379-380; PreviewPane.xaml.cs:1200,1202 | not in spec (spec: timeline row only) | missing | not in spec |
+| L-20 | Home/End as GoToStart/GoToEnd commands from anywhere in pane (not in text box) | PreviewPane.xaml:379-380; PreviewPane.xaml.cs:1200,1202 | not in spec (spec: timeline row only) | done | preview-keys FocusScope: Home/End seek the range ends |
 | L-21 | Mouse wheel one frame | TimelineBar.cs:554 | 50 Timeline input | done | scroll-event |
-| L-22 | Space play/pause | PreviewPane.xaml:390 | 50 Timeline input; Playback | partial | only when timeline focused or F7; not "anywhere in pane" |
+| L-22 | Space play/pause | PreviewPane.xaml:390 | 50 Timeline input; Playback | done | Space in the preview keys and the timeline |
 | L-23 | Click timeline focuses it; focus border = accent | TimelineBar.cs:364,617 | 50 Timeline | done | |
 | L-24 | Automation: slider with range value, "range in..out" | TimelineBar.cs:632-660 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-25 | Run/Stop button (ring+triangle / ring+square), tab 0 | PreviewPane.xaml:413-430 | 50 Transport #0 | done | IconButton run/stop (icons/next), tooltips |
 | L-26 | Run tooltip "Run the simulation from the start (F5)" / Stop tooltip "(Esc)" | PreviewPane.xaml:418,424 | 50 Transport #0 | missing | `tip` property declared in Tool but never rendered |
 | L-27 | Run disabled while export runs / without enabled source | SimulationCommands.cs | 50 Transport #0 | missing | button enabled always |
 | L-28 | Run starts full run from 0 and follows it; same button stops | MainWindow.Simulation.cs | 50 Transport #0 | done | main.rs menu "run" / "stop" |
-| L-29 | Esc stops run | PreviewPane.xaml:424 tip; SimulationCommands.cs | 50 Transport #0 | missing | only Shift+F5 menu; no Esc binding |
+| L-29 | Esc stops run | PreviewPane.xaml:424 tip; SimulationCommands.cs | 50 Transport #0 | done | Esc stops the run (app.slint keys) |
 | L-30 | Pause run button (ring + two bars), tab 1, tooltip Pause/Resume (F6) | PreviewPane.xaml:433-442 | 50 Transport #1 | done | IconButton pause-run ||", enabled when running; tooltip not shown, Resume text not swapped |
 | L-31 | Pause run disabled without active run; toggles | PreviewPane.xaml:433 | 50 Transport #1 | done | enabled: t.running; paused state may report not running (unverified) |
 | L-32 | Divider after Pause run | PreviewPane.xaml:443 | 50 Transport bar | done | Divider |
@@ -1158,20 +1158,20 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| R-01 | Simulation edit class: frames go, pictures keep last, playback stops, position frame first then all if auto re-run | MainWindow.Live.cs | 60 Edit classes | partial | any model change restarts run (live.edited); playback not stopped on edit |
-| R-02 | Probe edit class: frames stay, recordings remade from step 0 | MainWindow.Live.cs | 60 Edit classes; divergences.md:25 | missing | probe edits restart everything |
-| R-03 | Display edit class: redraw only (colour scheme, brightness 16-bit, outline, preview on/off, handles/labels, graph box) | MainWindow.Live.cs | 60 Edit classes | missing | all edits restart run |
-| R-04 | Colour scheme edit: recolour shown frame | MainWindow.Live.cs | 60 Edit classes | missing | |
+| R-01 | Simulation edit class: frames go, pictures keep last, playback stops, position frame first then all if auto re-run | MainWindow.Live.cs | 60 Edit classes | done | core RunRequest::change_to Frames: playback stops (State::show), the position first, then every frame with Re-run automatically on, else nothing more |
+| R-02 | Probe edit class: frames stay, recordings remade from step 0 | MainWindow.Live.cs | 60 Edit classes; divergences.md:25 | done | change_to Probes: the worker keeps the frames and re-records; what is wanted stays |
+| R-03 | Display edit class: redraw only (colour scheme, brightness 16-bit, outline, preview on/off, handles/labels, graph box) | MainWindow.Live.cs | 60 Edit classes | done | change_to None for colour schemes, description, graph boxes and 16-bit brightness: redraw only |
+| R-04 | Colour scheme edit: recolour shown frame | MainWindow.Live.cs | 60 Edit classes | done | a project edit no run reads redraws the frame shown (Live::edited) |
 | R-05 | Any edit: dirty, undo step pending (title *) | MainWindow.History.cs | 60 Edit classes | done | document.rs title/dirty |
-| R-06 | Mixed-class edits take least destructive effect | MainWindow.Live.cs | 60 Edit classes | missing | single class |
+| R-06 | Mixed-class edits take least destructive effect | MainWindow.Live.cs | 60 Edit classes | done | change_to compares what the frames, then the probes, read: the least destructive class covering the edit |
 | R-07 | Status bar run line words + engine | MainWindow.Live.cs | 60 Edit classes | done | see L-76 |
 | R-08 | Live run: one worker/engine/store, goal published (spec, position, wanted, paused) | MainWindow.Live.cs | 60 The live run | done | live.rs Goal/RunWorker |
 | R-09 | Run converges on goal, no timers; position frame first, then fill | worker.rs (core) | 60 The live run | done | core RunWorker |
 | R-10 | Spec change = new generation, store cleared, engine reused/rebuilt | worker.rs | 60 The live run | done | core |
 | R-11 | Probe-only spec change clears traces keeps frames | worker.rs | 60 The live run | done | core; UI never emits probe-only edit (R-02) |
-| R-12 | Paused + edited project adopts edit at once; pause with nothing to do reads Completed | worker.rs | 60 The live run | partial | core; Slint treats state per status only |
+| R-12 | Paused + edited project adopts edit at once; pause with nothing to do reads Completed | worker.rs | 60 The live run | done | a Frames edit while paused submits at once and stays paused; a finished run is neither active nor paused |
 | R-13 | Switching device (Use the GPU) rebuilds engine at next work | worker.rs | 60 The live run | missing | Slint engine fixed GPU (live.rs new) |
-| R-14 | Showing intensity picture makes run track it | worker.rs | 60 The live run | partial | both layers always drawn; no show toggle |
+| R-14 | Showing intensity picture makes run track it | worker.rs | 60 The live run | done | the request tracks the intensity while its picture is shown; turning it on is a Frames edit, off keeps the frames |
 | R-15 | Goal looked at every 16 steps; fit frame abandoned when not asked | worker.rs | 60 The live run | done | core |
 | R-16 | Last frame stays readable through a clear; graphs follow picture | worker.rs | 60 The live run | partial | pictures hold; no graphs |
 | R-17 | Playback holds at newest contiguous frame | PreviewPane.xaml.cs:1144 | 60 The live run | done | |

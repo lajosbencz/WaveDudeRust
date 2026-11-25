@@ -20,16 +20,34 @@ export struct Transport {
     intensity-shown: bool,
 }
 
-// The scrub bar (docs/ui/50, Timeline): frames made, the in/out range, the playhead; click or drag to scrub.
+// The scrub bar (docs/ui/50, Timeline): tick labels, frames made, the in/out range, the playhead; click or drag to
+// scrub, drag a bracket to move the range.
 export component Timeline inherits Rectangle {
     in property <Transport> t;
     callback seek(int);
+    // the in point (or the out point with `end`) dragged to `frame`
+    callback bracket(end: bool, frame: int);
     // the keys the bar shares with the transport bar
     callback action(TransportAction);
 
     property <float> last: max(1, t.frames - 1);
-    property <length> inner: self.width - 8px;
-    pure function x-of(frame: int) -> length { 4px + root.inner * frame / root.last }
+    property <length> inner: self.width - 8px - 2px;
+    // frame 0 on the first column inside the outline, the last frame on the last
+    pure function x-of(frame: int) -> length { 5px + round(root.inner * frame / root.last / 1px) * 1px }
+    pure function frame-at(x: length) -> int { round((x - 5px) / root.inner * root.last) }
+    // the labels' interval: 1, 2, 5, 10, 20, 50 ... frames, at least 64 px apart
+    property <int> interval: root.pick(root.inner / root.last);
+    pure function pick(per-frame: length) -> int {
+        per-frame * 1 >= 64px ? 1 : per-frame * 2 >= 64px ? 2 : per-frame * 5 >= 64px ? 5
+            : per-frame * 10 >= 64px ? 10 : per-frame * 20 >= 64px ? 20 : per-frame * 50 >= 64px ? 50
+            : per-frame * 100 >= 64px ? 100 : per-frame * 200 >= 64px ? 200 : per-frame * 500 >= 64px ? 500
+            : per-frame * 1000 >= 64px ? 1000 : per-frame * 2000 >= 64px ? 2000 : per-frame * 5000 >= 64px ? 5000
+            : 10000
+    }
+    // minor ticks every fifth of the interval, when that is whole
+    property <int> minor: mod(root.interval, 5) == 0 ? root.interval / 5 : root.interval;
+    // the bracket under a press: 0 none, 1 in, 2 out
+    property <int> dragging;
 
     height: 36px;
     background: Theme.window-background;
@@ -45,53 +63,139 @@ export component Timeline inherits Rectangle {
             reject
         }
     }
+    // ticks and labels over the label row
+    for i in floor(root.last / root.minor) + 1: Rectangle {
+        property <bool> major: mod(i * root.minor, root.interval) == 0;
+        x: root.x-of(i * root.minor);
+        y: 14px - self.height;
+        width: 1px;
+        height: self.major ? 6px : 3px;
+        background: Theme.text-dim;
+    }
+    for i in floor(root.last / root.interval) + 1: Text {
+        x: min(root.x-of(i * root.interval) + 2px, root.width - 4px - self.width);
+        y: 0px;
+        height: 10px;
+        text: i * root.interval;
+        color: Theme.text-dim;
+        font-size: 9px;
+    }
     bar := Rectangle {
+        x: 4px;
+        width: root.width - 8px;
         y: 14px;
-        height: 22px;
+        height: 22px - 2px;
         background: Theme.input-background;
         border-width: 1px;
         border-color: focus.has-focus ? Theme.accent : Theme.border;
-        if t.made >= 0: Rectangle {
-            x: 4px;
-            width: root.x-of(t.made) - 4px;
-            height: parent.height - 2px;
-            y: 1px;
-            background: Theme.accent.transparentize(0.6);
-        }
-        if t.ranged: Rectangle {
-            x: root.x-of(t.start);
-            width: root.x-of(t.end) - self.x;
-            height: parent.height - 2px;
-            y: 1px;
-            background: Theme.accent.transparentize(0.75);
-            border-width: 2px;
-            border-color: Theme.accent;
-        }
-        Rectangle {
-            x: root.x-of(t.position);
-            width: 1px;
-            background: Theme.text;
-        }
-        TouchArea {
-            mouse-cursor: pointer;
-            pointer-event(e) => {
-                if (e.kind == PointerEventKind.down) { focus.focus(); }
-            }
-            moved => { if (self.pressed) { root.seek(round((self.mouse-x - 4px) / root.inner * root.last)); } }
-            clicked => { root.seek(round((self.mouse-x - 4px) / root.inner * root.last)); }
-            scroll-event(e) => {
-                root.seek(t.position + (e.delta-y > 0 ? 1 : -1));
-                accept
-            }
-        }
     }
-    Text {
+    if t.made >= 0: Rectangle {
+        x: 5px;
+        width: root.x-of(t.made) + 1px - self.x;
+        y: bar.y + 1px;
+        height: bar.height - 2px;
+        background: Theme.accent.transparentize(0.6);
+    }
+    if t.ranged: Rectangle {
+        x: root.x-of(t.start);
+        width: root.x-of(t.end) + 1px - self.x;
+        y: bar.y + 1px;
+        height: bar.height - 2px;
+        background: Theme.accent.transparentize(0.8);
+    }
+    // the brackets: a 2 px bar, 6 px feet into the range
+    if t.ranged: Path {
+        x: root.x-of(t.start);
+        y: bar.y;
+        width: 8px;
+        height: bar.height;
+        viewbox-width: 8;
+        viewbox-height: bar.height / 1px;
+        fill: Theme.accent;
+        commands: "M 0 0 L 8 0 L 8 2 L 2 2 L 2 \{bar.height / 1px - 2} L 8 \{bar.height / 1px - 2} L 8 \{bar.height / 1px} L 0 \{bar.height / 1px} Z";
+    }
+    if t.ranged: Path {
+        x: root.x-of(t.end) + 1px - 8px;
+        y: bar.y;
+        width: 8px;
+        height: bar.height;
+        viewbox-width: 8;
+        viewbox-height: bar.height / 1px;
+        fill: Theme.accent;
+        commands: "M 8 0 L 0 0 L 0 2 L 6 2 L 6 \{bar.height / 1px - 2} L 0 \{bar.height / 1px - 2} L 0 \{bar.height / 1px} L 8 \{bar.height / 1px} Z";
+    }
+    if touch.has-hover: Rectangle {
+        x: root.x-of(root.frame-at(touch.mouse-x));
+        y: bar.y;
+        width: 1px;
+        height: bar.height;
+        background: Theme.text-dim;
+    }
+    // the playhead: a line, a 10 x 6 triangle on top and the frame number beside it over a patch of the bar's colour
+    Rectangle {
+        x: root.x-of(t.position);
+        y: bar.y;
+        width: 1px;
+        height: bar.height;
+        background: Theme.text;
+    }
+    Path {
+        x: root.x-of(t.position) - 4.5px;
+        y: bar.y - 6px;
+        width: 10px;
+        height: 6px;
+        viewbox-width: 10;
+        viewbox-height: 6;
+        fill: Theme.text;
+        commands: "M 0 0 L 10 0 L 5 6 Z";
+    }
+    number := Rectangle {
         x: min(root.x-of(t.position) + 8px, root.width - self.width - 2px);
         y: 0px;
-        height: 14px;
-        text: t.position;
-        color: Theme.text;
-        font-size: 10px;
+        width: label.preferred-width + 4px;
+        height: 12px;
+        background: Theme.window-background;
+        label := Text {
+            text: t.position;
+            color: Theme.text;
+            font-size: 10px;
+        }
+    }
+    touch := TouchArea {
+        y: bar.y;
+        height: bar.height;
+        mouse-cursor: root.dragging > 0 || root.near-bracket(self.mouse-x) > 0 ? MouseCursor.ew-resize : MouseCursor.pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                focus.focus();
+                root.dragging = root.near-bracket(self.mouse-x);
+                if (root.dragging == 0) { root.seek(root.frame-at(self.mouse-x)); }
+            } else if (e.kind == PointerEventKind.up) {
+                root.dragging = 0;
+            }
+        }
+        moved => {
+            if (!self.pressed) { return; }
+            if (root.dragging > 0) {
+                root.bracket(root.dragging == 2, root.frame-at(self.mouse-x));
+            } else {
+                root.seek(root.frame-at(self.mouse-x));
+            }
+        }
+        scroll-event(e) => {
+            root.seek(t.position + (e.delta-y > 0 ? 1 : -1));
+            accept
+        }
+    }
+    // a bracket within 5 px of `x`, the nearer one: 0 none, 1 in, 2 out
+    pure function near-bracket(x: length) -> int {
+        if (!t.ranged) { return 0; }
+        let in = abs(x - root.x-of(t.start));
+        let out = abs(x - root.x-of(t.end));
+        min(in, out) > 5px ? 0 : in <= out ? 1 : 2
+    }
+    Tooltip {
+        text: @markdown("\{@tr("Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step a frame, PageUp/PageDown ten, Home/End jump to the start/end of the range")}");
     }
 }
 

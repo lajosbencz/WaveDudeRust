@@ -1149,3 +1149,31 @@ mod ignored_timing {
 		);
 	}
 }
+
+#[test]
+fn an_edit_is_classed_by_what_a_run_reads() {
+	use waveduderust::unstable::spec::RunChange;
+	let q = PreviewQuality::FULL;
+	let mut p = project(64, 48, 10);
+	p.probes.push(Probe::default());
+	let before = request(&p, q);
+	let mut graph = p.clone();
+	graph.probes[0].box_x += 10;
+	graph.description = "notes".into();
+	assert_eq!(before.change_to(&request(&graph, q)), RunChange::None);
+	let mut moved = p.clone();
+	moved.probes[0].ax += 1;
+	assert_eq!(before.change_to(&request(&moved, q)), RunChange::Probes);
+	let mut seeded = moved.clone();
+	seeded.seed += 1;
+	assert_eq!(before.change_to(&request(&seeded, q)), RunChange::Frames);
+	let mut shown = View::default();
+	shown.intensity.preview = true;
+	// no probe measuring the intensity: the picture alone asks for its tracking
+	let bare = project(64, 48, 10);
+	let mut unshown = View::default();
+	unshown.intensity.preview = false;
+	let (hidden, tracking) = (request_with(&bare, &unshown, q), request_with(&bare, &shown, q));
+	assert_eq!(hidden.change_to(&tracking), RunChange::Frames);
+	assert_eq!(tracking.change_to(&hidden), RunChange::None);
+}

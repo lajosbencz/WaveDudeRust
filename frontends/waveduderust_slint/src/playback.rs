@@ -95,6 +95,20 @@ impl Playback {
 		}
 	}
 
+	/// Moves the in point (or the out point with `end`) to `frame`, never past the other; at the run's ends it is
+	/// unset.
+	pub(crate) fn drag_bracket(&mut self, end: bool, frame: i64) {
+		let (start, stop) = self.range();
+		let frame = u32::try_from(frame.max(0)).unwrap_or(u32::MAX).min(self.last());
+		if end {
+			let frame = frame.max(start);
+			self.end = (frame < self.last()).then_some(frame);
+		} else {
+			let frame = frame.min(stop);
+			self.start = (frame > 0).then_some(frame);
+		}
+	}
+
 	/// Moves the position by the frames that fell due at `fps` frames a second at speed 1, holding at `made`, the
 	/// newest frame the run holds; while following, the position is `made`.
 	pub(crate) fn tick(&mut self, now: Instant, fps: u32, made: Option<u32>) {
@@ -130,6 +144,19 @@ mod tests {
 	use std::time::Duration;
 
 	use super::*;
+
+	#[test]
+	fn a_bracket_stops_at_the_other_and_unsets_at_the_ends() {
+		let mut p = Playback { frames: 100, start: Some(20), end: Some(60), ..Playback::default() };
+		p.drag_bracket(false, 80);
+		assert_eq!(p.start, Some(60));
+		p.drag_bracket(false, -5);
+		assert_eq!(p.start, None);
+		p.drag_bracket(true, 200);
+		assert_eq!(p.end, None);
+		p.drag_bracket(true, 30);
+		assert_eq!(p.end, Some(30));
+	}
 
 	fn playing(frames: u32) -> (Playback, Instant) {
 		let mut p = Playback { frames, ..Playback::default() };

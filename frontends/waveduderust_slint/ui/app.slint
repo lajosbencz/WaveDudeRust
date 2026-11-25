@@ -118,6 +118,7 @@ export component AppWindow inherits Window {
     callback seek(int);
     callback transport-action(TransportAction);
     callback transport-speed(text: string) -> string;
+    callback bracket(end: bool, frame: int);
     // the selected row: its kind and an item's name
     in property <TreeKind> props-kind;
     in property <string> props-heading;
@@ -363,6 +364,7 @@ export component AppWindow inherits Window {
                                 Timeline {
                                     t: root.transport;
                                     seek(f) => { root.seek(f); }
+                                    bracket(end, f) => { root.bracket(end, f); }
                                     action(a) => { root.transport-action(a); }
                                 }
                                 TransportBar {

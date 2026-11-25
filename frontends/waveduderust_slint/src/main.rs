@@ -176,13 +176,18 @@ impl State {
 			.map(|p| if native { p.replace('&', "&&") } else { p }.into())
 			.collect();
 		app.set_recent_files(ModelRc::from(recent.as_slice()));
+		let mut change = live::Change::None;
 		if self.ran != self.doc.generation {
 			self.ran = self.doc.generation;
-			self.live.edited(&self.doc.project, &self.doc.view);
+			change = self.live.edited(&self.doc.project, &self.doc.view);
 		}
 		if self.styled != self.doc.view_generation {
 			self.styled = self.doc.view_generation;
-			self.live.restyle(&self.doc.project, &self.doc.view);
+			change = change.max(self.live.restyle(&self.doc.project, &self.doc.view));
+		}
+		// a simulation edit: the frames go, playback stops (docs/ui/60, Edit classes)
+		if change == live::Change::Frames {
+			self.playback.pause();
 		}
 		let canvas = app.global::<ui::Canvas<'_>>();
 		canvas.set_field_brightness(self.doc.view.field.brightness as f32);
@@ -757,6 +762,10 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	state.doc.set_limit(s.undo_steps as usize);
 	state.live.quality = s.preview_quality();
 	state.live.auto_rerun = s.auto_rerun;
+	// another preview quality is a simulation edit
+	if state.live.edited(&state.doc.project, &state.doc.view) == live::Change::Frames {
+		state.playback.pause();
+	}
 }
 
 /// Pushes the settings to the Settings window and the Welcome page.
@@ -1320,6 +1329,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	});
 	let st = state.clone();
 	app.on_seek(move |frame| st.borrow_mut().playback.seek(i64::from(frame)));
+	let st = state.clone();
+	app.on_bracket(move |end, frame| st.borrow_mut().playback.drag_bracket(end, i64::from(frame)));
 	let st = state.clone();
 	app.on_transport_speed(move |text| {
 		let speed = &mut st.borrow_mut().playback.speed;

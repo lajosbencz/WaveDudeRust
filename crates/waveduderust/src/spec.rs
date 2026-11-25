@@ -72,6 +72,17 @@ impl Schedule {
 	}
 }
 
+/// What an edit asks of a run, least destructive first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RunChange {
+	/// Nothing a run reads.
+	None,
+	/// What the probes record: the frames stay.
+	Probes,
+	/// What the frames are made of: they go.
+	Frames,
+}
+
 /// What a run is made from: a project state, the preview quality, the brightness and whether the intensity is
 /// tracked. The worker builds the [`RunSpec`] from it; what the UI needs meanwhile (the schedule, the store's size,
 /// the probes) comes from the project itself. Cheap to clone.
@@ -98,6 +109,28 @@ impl RunRequest {
 	pub fn with_quality(&self, quality: PreviewQuality) -> Self {
 		debug_assert!(quality.is_valid(), "invalid preview quality {quality:?}");
 		Self { quality, ..self.clone() }
+	}
+
+	/// What a run of `self` must do to run `other` instead (docs/ui/60, Edit classes): what the frames are made of
+	/// before what the probes record; the rest of the project (colour schemes, the description, graph boxes) no run
+	/// reads.
+	pub fn change_to(&self, other: &Self) -> RunChange {
+		let (a, b) = (&*self.project, &*other.project);
+		let baked = |r: &Self| (r.quality.format == SampleFormat::Index).then_some(r.brightness);
+		let frames = self.quality != other.quality
+			|| baked(self) != baked(other)
+			// a run tracking the intensity serves a request without it
+			|| (other.tracks_intensity() && !self.tracks_intensity())
+			|| (a.seed, &a.scene, &a.simulation, &a.sources, &a.parts)
+				!= (b.seed, &b.scene, &b.simulation, &b.sources, &b.parts);
+		let keys = |p: &Project| p.probes.iter().map(|p| (p.id(), p.recording_key())).collect::<Vec<_>>();
+		if frames {
+			RunChange::Frames
+		} else if keys(a) != keys(b) {
+			RunChange::Probes
+		} else {
+			RunChange::None
+		}
 	}
 
 	/// The same project state, quality, brightness and tracking: the same spec comes out.
