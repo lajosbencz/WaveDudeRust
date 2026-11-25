@@ -768,6 +768,10 @@ msgstr "Abstand in Pixeln von der Platte bis zum Brennpunkt, für eine ebene Wel
 msgid "Diverging"
 msgstr "Zerstreuend"
 
+#. MemoryWarningMute
+msgid "Do not warn me again"
+msgstr "Nicht mehr warnen"
+
 #. DialogDiscard
 msgid "Don't save"
 msgstr "Nicht speichern"
@@ -2212,6 +2216,10 @@ msgstr "Alles au&swählen"
 msgid "Select all"
 msgstr "Alles auswählen"
 
+#. MemoryWarningChoices
+msgid "Settings to change for this and later runs:"
+msgstr "Einstellungen, die für diesen und spätere Läufe geändert werden:"
+
 #. SectionShape
 msgid "Shape"
 msgstr "Form"
@@ -2408,6 +2416,14 @@ msgstr "Der Export ist fehlgeschlagen."
 msgid "The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid."
 msgstr "Die Form der Facetten je Teilung: ein Sägezahn, eine Rampe und dann eine Stufe; eine Rechteckwelle, ein Kamm und ein Tal von je einer halben Teilung; oder eine Sinuswelle."
 
+#. MemoryWarningFitsFormat
+msgid "The frames then need {} and fit in the RAM cache."
+msgstr "Die Bilder brauchen dann {} und passen in den RAM-Cache."
+
+#. MemoryWarningSpillsFormat
+msgid "The frames then need {}; {} of them still go to disk."
+msgstr "Die Bilder brauchen dann {}; {} davon gehen weiterhin auf die Festplatte."
+
 #. Hint.MetaSurfacePart.Height
 msgid "The height of the ridges in front of the plate in pixels. A full turn of phase, which the zones need, takes a height of the wavelength over the pattern index less one; a lower pattern cannot delay enough and its fill saturates."
 msgstr "Die Höhe der Stege vor der Platte in Pixeln. Eine volle Phasendrehung, die die Zonen brauchen, verlangt eine Höhe von der Wellenlänge geteilt durch den Musterindex weniger eins; ein niedrigeres Muster verzögert zu wenig und seine Füllung sättigt."
@@ -2443,6 +2459,10 @@ msgstr "Die Höhe des Reliefs zu beiden Seiten der mittleren Fläche in Pixeln: 
 #. TipProfileHeight
 msgid "The rough face from its highest point to its lowest: what the ripples add up to"
 msgstr "Die raue Fläche von ihrem höchsten Punkt bis zum tiefsten: was die Wellen zusammen ergeben"
+
+#. MemoryWarningTextFormat
+msgid "The run's frames need {} of memory, and the RAM cache has {}. The frames beyond that go to the cache file on disk, which is slower."
+msgstr "Die Bilder des Laufs brauchen {} Speicher, der RAM-Cache hat {}. Die Bilder darüber hinaus gehen in die Cache-Datei auf der Festplatte, was langsamer ist."
 
 #. Hint.LogicGatePart.DesignFrequency
 msgid "The source frequency the gate is designed for, on the same scale as a source's frequency: the frequency of the sources that drive it. The wavelength, and from it the core width, the coupler and the phase section, follow from it, so the gate works at this frequency only."

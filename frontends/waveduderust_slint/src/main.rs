@@ -12,6 +12,7 @@ mod graphs;
 mod icons;
 mod live;
 mod log;
+mod memory;
 mod messages;
 mod number;
 mod playback;
@@ -84,6 +85,8 @@ struct State {
 	styled: u64,
 	/// Display > Field / Intensity > Preview as last shown.
 	pictures: (bool, bool),
+	/// The memory warning's boxes while it is open.
+	warning_ticks: Option<waveduderust::run::Levers>,
 	graphs: graphs::Graphs,
 	/// The desktop's colour scheme once a forced theme has written the palette's, which ends its system binding
 	/// (docs/blockers.md, Slint's system colour scheme).
@@ -152,6 +155,23 @@ impl State {
 	}
 
 	/// Pushes the state into the window's properties.
+	/// Opens the memory warning the run asks, with the proposal ticked; closes one no longer asked.
+	fn show_warning(&mut self, app: &AppWindow) {
+		match (self.live.warning(), self.warning_ticks) {
+			(Some((_, w)), None) => {
+				let ticks = w.proposal();
+				self.warning_ticks = Some(ticks);
+				app.set_memory_warning(memory::data(&w, ticks));
+				app.set_memory_warning_shown(true);
+			}
+			(None, Some(_)) => {
+				self.warning_ticks = None;
+				app.set_memory_warning_shown(false);
+			}
+			_ => {}
+		}
+	}
+
 	fn show(&mut self, app: &AppWindow) {
 		self.selection.retain(&self.doc.project);
 		// a row selected elsewhere (an add, a paste) shows its folder
@@ -189,6 +209,7 @@ impl State {
 		if change == live::Change::Frames {
 			self.playback.pause();
 		}
+		self.show_warning(app);
 		let canvas = app.global::<ui::Canvas<'_>>();
 		canvas.set_field_brightness(self.doc.view.field.brightness as f32);
 		let scene = &self.doc.project.scene;
@@ -530,9 +551,10 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			if !state.can_run(state.exporting.is_some()) {
 				return;
 			}
-			state.live.run(&state.doc.project, &state.doc.view);
-			state.playback.frames = state.live.frames;
-			state.playback.follow();
+			if state.live.run(&state.doc.project, &state.doc.view) {
+				state.playback.frames = state.live.frames;
+				state.playback.follow();
+			}
 		}
 		Command::Pause => state.live.toggle_pause(),
 		// the menu, Shift+F5 and Esc: a running export first, else the run
@@ -794,6 +816,39 @@ fn apply_theme(state: &mut State, app: &AppWindow) {
 	}
 }
 
+/// The memory warning answered: Run applies the ticks to the settings and runs, Cancel leaves the frames as they
+/// are and turns playback off; `mute` clears the setting.
+fn answer_warning(state: &mut State, app: &AppWindow, run: bool, mute: bool) {
+	let Some(ticks) = state.warning_ticks.take() else { return };
+	let quality = state.live.warning().map(|(_, w)| w.quality_of(ticks));
+	let Some(ask) = state.live.take_ask() else { return };
+	app.set_memory_warning_shown(false);
+	if mute {
+		state.settings.warn_when_ram_insufficient = false;
+	}
+	if run {
+		if let Some(q) = quality {
+			state.settings.set_preview_quality(q);
+		}
+		apply_settings(state, app);
+		// the new quality's re-run may ask again: this answer goes for it
+		state.live.take_ask();
+		state.live.go(ask.then);
+		if ask.then == live::Then::Run {
+			state.playback.frames = state.live.frames;
+			state.playback.follow();
+		}
+	} else {
+		state.live.warn = state.settings.warn_when_ram_insufficient;
+		state.playback.pause();
+		tracing::info!("Run cancelled: the frames exceed the RAM cache; the frames made stay");
+	}
+	if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
+		tracing::error!("{e}");
+	}
+	show_settings(state, app);
+}
+
 /// Applies the settings to the window, the history and the run.
 fn apply_settings(state: &mut State, app: &AppWindow) {
 	apply_theme(state, app);
@@ -807,6 +862,7 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	state.doc.set_limit(s.undo_steps as usize);
 	state.live.quality = s.preview_quality();
 	state.live.auto_rerun = s.auto_rerun;
+	state.live.warn = s.warn_when_ram_insufficient;
 	// another preview quality is a simulation edit
 	if state.live.edited(&state.doc.project, &state.doc.view) == live::Change::Frames {
 		state.playback.pause();
@@ -1001,6 +1057,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		ran: 0,
 		styled: 0,
 		pictures: (true, true),
+		warning_ticks: None,
 		graphs: graphs::Graphs::default(),
 		system_scheme: None,
 		form_seen: (0, 0),
@@ -1401,6 +1458,25 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.on_log_search(search);
 	let clear = on_log(|m, _| m.clear());
 	app.on_log_clear(move || clear(slint::SharedString::new()));
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_memory_warning_ticked(move |cache_auto, resolution, frames, samples| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			let ticks = waveduderust::run::Levers { cache_auto, resolution, frames, samples };
+			if let Some((_, w)) = s.live.warning() {
+				app.set_memory_warning(memory::data(&w, ticks));
+				s.warning_ticks = Some(ticks);
+			}
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_memory_warning_answer(move |run, mute| {
+		if let Some(app) = weak.upgrade() {
+			let s = &mut *st.borrow_mut();
+			answer_warning(s, &app, run, mute);
+			s.show(&app);
+		}
+	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_log_regex(move |on| {
 		if let Some(app) = weak.upgrade() {

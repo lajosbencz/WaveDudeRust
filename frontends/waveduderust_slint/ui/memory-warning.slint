@@ -1,0 +1,141 @@
+import { Button, CheckBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// The memory warning's figures (MB or GB) and levers for the boxes ticked.
+export struct MemoryWarningData {
+    need: string,
+    budget: string,
+    auto-budget: string,
+    cache-shown: bool,
+    cache-enabled: bool,
+    resolution-enabled: bool,
+    frames-enabled: bool,
+    samples-enabled: bool,
+    cache-ticked: bool,
+    resolution-ticked: bool,
+    frames-ticked: bool,
+    samples-ticked: bool,
+    // the ticks' need over their budget, at most 1; `over`: beyond it
+    fill: float,
+    over: bool,
+    figures: string,
+    then-need: string,
+    // what still goes to disk; empty when the frames fit
+    spill: string,
+}
+
+// The memory warning (docs/ui/60, Memory warning), modal over the main window: Run (Enter) or Cancel (Esc).
+export component MemoryWarningLayer inherits Rectangle {
+    in property <bool> shown;
+    in property <MemoryWarningData> data;
+    // the boxes as ticked
+    callback ticked(cache: bool, resolution: bool, frames: bool, samples: bool);
+    callback answer(run: bool, mute: bool);
+
+    property <bool> mute;
+    function tick() {
+        root.ticked(root.data.cache-ticked, resolution.checked, frames.checked, samples.checked);
+    }
+
+    visible: root.shown;
+    background: #00000080;
+    TouchArea { }
+    keys := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) { root.answer(false, root.mute); return accept; }
+            if (e.text == Key.Return) { root.answer(true, root.mute); return accept; }
+            reject
+        }
+    }
+    changed shown => {
+        if (self.shown) {
+            root.mute = false;
+            keys.focus();
+        }
+    }
+    Rectangle {
+        width: 500px;
+        height: box.preferred-height;
+        background: Theme.window-background;
+        border-width: 1px;
+        border-color: Theme.accent;
+        box := VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+            Text { text: "WaveDude Rust"; font-weight: 700; color: Theme.text; }
+            HorizontalLayout {
+                spacing: 12px;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 16px;
+                    background: Theme.accent;
+                    Text { text: "?"; color: #ffffff; font-weight: 700; }
+                }
+                Text {
+                    text: @tr("The run's frames need {} of memory, and the RAM cache has {}. The frames beyond that go to the cache file on disk, which is slower.", root.data.need, root.data.budget);
+                    wrap: word-wrap;
+                    color: Theme.text;
+                }
+            }
+            Text { text: @tr("Settings to change for this and later runs:"); color: Theme.text; }
+            if root.data.cache-shown: CheckBox {
+                text: @tr("RAM cache size to Auto: {} for the frames (Settings)", root.data.auto-budget);
+                enabled: root.data.cache-enabled;
+                checked: root.data.cache-ticked;
+                toggled => { root.ticked(self.checked, resolution.checked, frames.checked, samples.checked); }
+            }
+            resolution := CheckBox {
+                text: @tr("Halve the resolution: a quarter of the memory (Settings)");
+                enabled: root.data.resolution-enabled;
+                checked: root.data.resolution-ticked;
+                toggled => { root.tick(); }
+            }
+            frames := CheckBox {
+                text: @tr("Store half the frames: half the memory (Settings)");
+                enabled: root.data.frames-enabled;
+                checked: root.data.frames-ticked;
+                toggled => { root.tick(); }
+            }
+            samples := CheckBox {
+                text: @tr("8-bit samples: half the memory (Settings)");
+                enabled: root.data.samples-enabled;
+                checked: root.data.samples-ticked;
+                toggled => { root.tick(); }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                height: 16px;
+                Rectangle {
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    Rectangle {
+                        x: 1px;
+                        y: 1px;
+                        height: parent.height - 2px;
+                        width: (parent.width - 2px) * root.data.fill;
+                        background: root.data.over ? Theme.status-warn : Theme.accent;
+                    }
+                }
+                Text { text: root.data.figures; color: Theme.text; vertical-alignment: center; min-width: 150px; }
+            }
+            Text {
+                text: root.data.spill == "" ? @tr("The frames then need {} and fit in the RAM cache.", root.data.then-need)
+                    : @tr("The frames then need {}; {} of them still go to disk.", root.data.then-need, root.data.spill);
+                wrap: word-wrap;
+                color: Theme.text;
+            }
+            CheckBox {
+                text: @tr("Do not warn me again");
+                checked: root.mute;
+                toggled => { root.mute = self.checked; }
+            }
+            HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+                Button { text: @tr("Run"); primary: true; clicked => { root.answer(true, root.mute); } }
+                Button { text: @tr("Cancel"); clicked => { root.answer(false, root.mute); } }
+            }
+        }
+    }
+}

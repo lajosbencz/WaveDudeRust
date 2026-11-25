@@ -13,16 +13,16 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 13 | 5 | 2 | 20 | 0 |
 | M | Menus and shortcuts | 71 | 8 | 9 | 52 | 0 |
-| D | Dialogs and windows | 35 | 13 | 23 | 8 | 0 |
-| S | Settings | 12 | 7 | 10 | 3 | 0 |
+| D | Dialogs and windows | 36 | 13 | 22 | 8 | 0 |
+| S | Settings | 13 | 6 | 10 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
 | V | Preview | 87 | 5 | 15 | 4 | 1 |
-| L | Timeline, transport, status | 68 | 10 | 3 | 7 | 2 |
-| R | Live editing and runs | 25 | 9 | 25 | 0 | 2 |
+| L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
+| R | Live editing and runs | 30 | 11 | 18 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 736 | 67 | 129 | 158 | 5 |
+| | All | 744 | 67 | 121 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -296,7 +296,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-18 | Unsaved edits prompt before New, Open, Close, Exit, update restart, example, recent file: "Save the changes to <name>?" | MainWindow.Project.cs | ui/70 Unsaved | done | New, Open, Close, Exit, example; updater dropped |
 | D-19 | "An export is running. Stop it and quit?" Yes/No on Exit/close/update | n/a | ui/70 Unsaved | missing | |
 | D-20 | Scene image changed on disk: "The scene image file '<name>' differs from the image embedded... Load the file?" Load file (default)/Keep embedded (Esc) | WPF scene image watch | ui/70, ui/60 | missing | no file watch |
-| D-21 | Memory warning window: 500 px wide, "?" disc, facts text, "Settings to change for this and later runs:", checkboxes (RAM cache to Auto, halve resolution, half the frames, 8-bit samples; pre-ticked mildest set), result line, "Do not warn me again", Run (default) / Cancel | WPF/Dialogs/MemoryWarningWindow.xaml:20-77, SE:296-304 | ui/70 Memory warning, ui/60 | missing | no dialog; WarnWhenRamInsufficient only a stored flag |
+| D-21 | Memory warning window: 500 px wide, "?" disc, facts text, "Settings to change for this and later runs:", checkboxes (RAM cache to Auto, halve resolution, half the frames, 8-bit samples; pre-ticked mildest set), result line, "Do not warn me again", Run (default) / Cancel | WPF/Dialogs/MemoryWarningWindow.xaml:20-77, SE:296-304 | ui/70 Memory warning, ui/60 | done | memory-warning.slint: 500 px, ? disc, facts, four boxes (cache box browser only), bar, fit line, Do not warn me again, Run (Enter) / Cancel (Esc) |
 | D-22 | Welcome page modal: title "Welcome to WaveDude Rust", shown first start and each launch while ShowStartup, and File > Welcome Page | not in Next | ui/70 Welcome | done | welcome.slint, main.rs:~455 |
 | D-23 | Welcome: "Preview quality" heading + one sentence | not in Next | ui/70 Welcome 1 | done | welcome.slint:38-45 |
 | D-24 | Welcome: RAM row ("{available} available of {physical}") | not in Next | ui/70 Welcome 2 | partial | welcome.slint:46; main.rs show_welcome prints physical GiB only, no "available" |
@@ -376,7 +376,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-13 | PreviewDitherBits 0/10/12/14/16 drop-down, disabled unless 16-bit samples | UIS:243, SE:92-97 | ui/80, ui/70 | missing | no row, no dithering |
 | S-14 | UseGpu bool (true), "Use the GPU (OpenCL)" -> "Use the GPU" | UIS:193, MW:420 | ui/80, ui/70 | partial | row exists; consumed by export backend only (export.rs:~100), live run not switched by apply_settings |
 | S-15 | UiZoom double 0.5..3 (menu), up to 8 (`--zoom`), default 1.0 / 2.0 touch; drop-down 0.5x..3x | UIS:256, MW:302-327 | ui/80, ui/70 | divergence | decision 0033, dropped |
-| S-16 | WarnWhenRamInsufficient bool (true) (+ memory warning "Do not warn me again") | UIS:183, MW:428 | ui/80, ui/70 | partial | row "Warn when the RAM cache is too small" (spec label "Warn when a run does not fit in RAM"); no warning dialog uses it (D-21) |
+| S-16 | WarnWhenRamInsufficient bool (true) (+ memory warning "Do not warn me again") | UIS:183, MW:428 | ui/80, ui/70 | done | Settings row and the warning Do not warn me again |
 | S-17 | LastExportFolder path, fallback start folder | UIS:266 | ui/80 | missing | |
 | S-18 | ExportFilterIndex int | UIS:276 | ui/80 | missing | |
 | S-19 | ExportArchive bool (false), Settings > Export | not in Next | ui/80, ui/70 | missing | no Export section |
@@ -1124,7 +1124,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-59 | ~60 ticks/s, due frames moved, no pile-up while rendering | PreviewPane.xaml.cs:1144 | 50 Playback | partial | 16 ms timer, carried fraction; no "previous picture still rendering" accumulate check |
 | L-60 | Clock not starved by mouse input | PreviewPane.xaml.cs (thread timer) | 50 Playback | done | slint::Timer |
 | L-61 | Playback between in/out, stops at out or wraps with Loop | PreviewPane.xaml.cs:1150-1178 | 50 Playback | done | tests in playback.rs |
-| L-62 | Play with frames missing starts automatic run; memory warning may ask; cancel turns playback off | MainWindow.Simulation.cs | 50 Playback | partial | live.fill() starts the run; no memory warning |
+| L-62 | Play with frames missing starts automatic run; memory warning may ask; cancel turns playback off | MainWindow.Simulation.cs | 50 Playback | done | Play with frames missing fills; the memory warning may ask first; Cancel pauses playback |
 | L-63 | Playback holds at newest frame while run catches up | PreviewPane.xaml.cs:1144 | 50 Playback | done | tick min(made) |
 | L-64 | Run ended short plays to last frame as to out point | PreviewPane.xaml.cs | 50 Playback | partial | holds at made; end handled via range, unverified |
 | L-65 | Browser: read-ahead from spill for playback (decision 0020) | none | 50 Playback | missing | web.rs spill keeps nothing |
@@ -1185,13 +1185,13 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-25 | Export waiting for run dropped by edit/Stop (status says so) | MainWindow.Export.cs | 60 Automatic re-run | missing | export.rs own run; no wait-for-run |
 | R-26 | Export reading run holds frames; edit taken up at export end; New/Open/Close refused with status text; F5 refused | MainWindow.Export.cs | 60 Automatic re-run | missing | |
 | R-27 | Turning setting on asks nothing | MainWindow.Live.cs | 60 Automatic re-run | done | |
-| R-28 | Memory warning window before preview run exceeding RAM cache (500 px, Run default, Cancel Esc) | Dialogs/MemoryWarningWindow.xaml | 60 Memory warning | missing | setting exists (settings.rs:113), no dialog |
-| R-29 | Warning text and 4 lever check boxes (RAM Auto, half resolution, half frames, 8-bit) with grey-out rules | MemoryWarningWindow.xaml.cs | 60 Memory warning | missing | |
-| R-30 | Pre-tick rule (fewest, mildest, tie order) | MemoryWarningWindow.xaml.cs | 60 Memory warning | missing | |
-| R-31 | Live bar need/budget + fit line | MemoryWarningWindow.xaml | 60 Memory warning | missing | |
-| R-32 | "Do not warn me again" clears the setting | MemoryWarningWindow.xaml.cs | 60 Memory warning | missing | |
-| R-33 | Run applies ticks to settings then runs; Cancel changes nothing, Info line, playback off | MainWindow.Simulation.cs | 60 Memory warning | missing | |
-| R-34 | Warning not for export runs; closed by export; asked every time | MainWindow.Simulation.cs | 60 Memory warning | missing | |
+| R-28 | Memory warning window before preview run exceeding RAM cache (500 px, Run default, Cancel Esc) | Dialogs/MemoryWarningWindow.xaml | 60 Memory warning | partial | asked before Run, Play with frames missing and an automatic re-run (live.rs want_all); natively only: the browser budget is the worker estimate |
+| R-29 | Warning text and 4 lever check boxes (RAM Auto, half resolution, half frames, 8-bit) with grey-out rules | MemoryWarningWindow.xaml.cs | 60 Memory warning | done | text and the lever boxes, greyed by MemoryWarning::enabled |
+| R-30 | Pre-tick rule (fewest, mildest, tie order) | MemoryWarningWindow.xaml.cs | 60 Memory warning | done | MemoryWarning::proposal (core) |
+| R-31 | Live bar need/budget + fit line | MemoryWarningWindow.xaml | 60 Memory warning | done | bar need/budget, orange beyond it, figures, fit or spill line (memory.rs) |
+| R-32 | "Do not warn me again" clears the setting | MemoryWarningWindow.xaml.cs | 60 Memory warning | done | Do not warn me again clears WarnWhenRamInsufficient |
+| R-33 | Run applies ticks to settings then runs; Cancel changes nothing, Info line, playback off | MainWindow.Simulation.cs | 60 Memory warning | done | Run sets the ticked quality and runs (answer_warning); Cancel keeps the frames, Info line, playback paused |
+| R-34 | Warning not for export runs; closed by export; asked every time | MainWindow.Simulation.cs | 60 Memory warning | partial | exports run apart from the live run, so never asked; an export does not close an open warning |
 | R-35 | Welcome page RAM/lever presets (similar levers) | Dialogs | 70 First start | done | main.rs:245 show_welcome (outside this area) |
 | R-36 | Undo up to N steps (default 1000, 10..100000), clone per step | MainWindow.History.cs | 60 Undo and redo; decision 0030 | done | document.rs limit |
 | R-37 | Step ends after 0.5 s quiet, no mouse held: drag/scrub/held key = one step | MainWindow.History.cs | 60 Undo and redo | partial | one step per edit call; no 0.5 s coalescing |

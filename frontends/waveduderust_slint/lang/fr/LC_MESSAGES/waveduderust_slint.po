@@ -768,6 +768,10 @@ msgstr "Distance en pixels de la lame à son foyer, pour une onde plane arrivant
 msgid "Diverging"
 msgstr "Divergente"
 
+#. MemoryWarningMute
+msgid "Do not warn me again"
+msgstr "Ne plus m'avertir"
+
 #. DialogDiscard
 msgid "Don't save"
 msgstr "Ne pas enregistrer"
@@ -2212,6 +2216,10 @@ msgstr "&Tout sélectionner"
 msgid "Select all"
 msgstr "Tout sélectionner"
 
+#. MemoryWarningChoices
+msgid "Settings to change for this and later runs:"
+msgstr "Réglages à changer pour cette simulation et les suivantes :"
+
 #. SectionShape
 msgid "Shape"
 msgstr "Forme"
@@ -2408,6 +2416,14 @@ msgstr "L'export a échoué."
 msgid "The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid."
 msgstr "La forme des facettes sur chaque pas : une dent de scie, une rampe puis une marche ; un créneau, une crête et un creux d'un demi-pas chacun ; ou une sinusoïde."
 
+#. MemoryWarningFitsFormat
+msgid "The frames then need {} and fit in the RAM cache."
+msgstr "Les images ont alors besoin de {} et tiennent dans le cache RAM."
+
+#. MemoryWarningSpillsFormat
+msgid "The frames then need {}; {} of them still go to disk."
+msgstr "Les images ont alors besoin de {} ; {} vont encore sur le disque."
+
 #. Hint.MetaSurfacePart.Height
 msgid "The height of the ridges in front of the plate in pixels. A full turn of phase, which the zones need, takes a height of the wavelength over the pattern index less one; a lower pattern cannot delay enough and its fill saturates."
 msgstr "La hauteur des arêtes devant la lame en pixels. Un tour de phase entier, dont les zones ont besoin, demande une hauteur de la longueur d'onde divisée par l'indice du motif moins un ; un motif plus bas retarde trop peu et son remplissage sature."
@@ -2443,6 +2459,10 @@ msgstr "La hauteur du relief de part et d'autre de la face moyenne en pixels : l
 #. TipProfileHeight
 msgid "The rough face from its highest point to its lowest: what the ripples add up to"
 msgstr "La face rugueuse de son point le plus haut au plus bas : ce que les ondulations donnent ensemble"
+
+#. MemoryWarningTextFormat
+msgid "The run's frames need {} of memory, and the RAM cache has {}. The frames beyond that go to the cache file on disk, which is slower."
+msgstr "Les images de la simulation ont besoin de {} de mémoire ; le cache RAM en offre {}. Les images au-delà vont dans le fichier cache sur le disque, ce qui est plus lent."
 
 #. Hint.LogicGatePart.DesignFrequency
 msgid "The source frequency the gate is designed for, on the same scale as a source's frequency: the frequency of the sources that drive it. The wavelength, and from it the core width, the coupler and the phase section, follow from it, so the gate works at this frequency only."

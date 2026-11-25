@@ -768,6 +768,10 @@ msgstr "Afstand in pixels van de plaat tot het brandpunt, voor een vlakke golf d
 msgid "Diverging"
 msgstr "Hol"
 
+#. MemoryWarningMute
+msgid "Do not warn me again"
+msgstr "Niet meer waarschuwen"
+
 #. DialogDiscard
 msgid "Don't save"
 msgstr "Niet opslaan"
@@ -2212,6 +2216,10 @@ msgstr "&Alles selecteren"
 msgid "Select all"
 msgstr "Alles selecteren"
 
+#. MemoryWarningChoices
+msgid "Settings to change for this and later runs:"
+msgstr "Instellingen die voor deze en latere simulaties veranderen:"
+
 #. SectionShape
 msgid "Shape"
 msgstr "Vorm"
@@ -2408,6 +2416,14 @@ msgstr "De export is mislukt."
 msgid "The facets' shape over each pitch: a sawtooth, a ramp then a step; a square wave, a crest and a trough of half a pitch each; or a sinusoid."
 msgstr "De vorm van de facetten per steek: een zaagtand, een helling en dan een trap; een blokgolf, een top en een dal van elk een halve steek; of een sinus."
 
+#. MemoryWarningFitsFormat
+msgid "The frames then need {} and fit in the RAM cache."
+msgstr "De beelden hebben dan {} nodig en passen in de RAM-cache."
+
+#. MemoryWarningSpillsFormat
+msgid "The frames then need {}; {} of them still go to disk."
+msgstr "De beelden hebben dan {} nodig; {} daarvan gaan nog naar de schijf."
+
 #. Hint.MetaSurfacePart.Height
 msgid "The height of the ridges in front of the plate in pixels. A full turn of phase, which the zones need, takes a height of the wavelength over the pattern index less one; a lower pattern cannot delay enough and its fill saturates."
 msgstr "De hoogte van de richels vóór de plaat in pixels. Een volle fasedraai, die de zones nodig hebben, vergt een hoogte van de golflengte gedeeld door de patroonindex min één; een lager patroon vertraagt te weinig en zijn vulling verzadigt."
@@ -2443,6 +2459,10 @@ msgstr "De hoogte van het reliëf aan weerszijden van het gemiddelde vlak in pix
 #. TipProfileHeight
 msgid "The rough face from its highest point to its lowest: what the ripples add up to"
 msgstr "Het ruwe vlak van zijn hoogste punt tot zijn laagste: wat de rimpels samen opleveren"
+
+#. MemoryWarningTextFormat
+msgid "The run's frames need {} of memory, and the RAM cache has {}. The frames beyond that go to the cache file on disk, which is slower."
+msgstr "De beelden van de simulatie hebben {} geheugen nodig, en de RAM-cache heeft {}. De beelden daarboven gaan naar het cachebestand op de schijf, wat trager is."
 
 #. Hint.LogicGatePart.DesignFrequency
 msgid "The source frequency the gate is designed for, on the same scale as a source's frequency: the frequency of the sources that drive it. The wavelength, and from it the core width, the coupler and the phase section, follow from it, so the gate works at this frequency only."

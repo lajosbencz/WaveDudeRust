@@ -35,6 +35,9 @@ pub(crate) struct Live {
 	pub(crate) quality: PreviewQuality,
 	/// Re-run after edits (Settings).
 	pub(crate) auto_rerun: bool,
+	/// Warn when a run's frames exceed the RAM cache.
+	pub(crate) warn: bool,
+	asked: Option<Ask>,
 	/// Frames of the planned run.
 	pub(crate) frames: u32,
 	/// The frame the pictures show.
@@ -62,6 +65,22 @@ pub(crate) struct Live {
 	/// An Auto of an 8-bit frame waiting for the frame in 16-bit: the request and the layer.
 	fit: Option<(u64, Layer)>,
 	fits: u64,
+}
+
+/// What asked for every frame: Run, Play with frames missing, an edit's automatic re-run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Then {
+	Run,
+	Play,
+	Rerun,
+}
+
+/// A memory warning asked (docs/ui/60, Memory warning): what waits on it and the budgets it was asked on.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Ask {
+	pub(crate) then: Then,
+	pub(crate) budget: u64,
+	pub(crate) auto_budget: u64,
 }
 
 /// What Auto brightness finds.
@@ -114,6 +133,8 @@ impl Live {
 			paused: false,
 			quality: PreviewQuality::FULL,
 			auto_rerun: true,
+			warn: true,
+			asked: None,
 			frames: 0,
 			drawn: None,
 			fit: None,
@@ -154,26 +175,82 @@ impl Live {
 		self.request(project, view);
 	}
 
-	/// Every frame (Run).
-	pub(crate) fn run(&mut self, project: &Project, view: &View) {
+	/// Every frame (Run); `false` when the memory warning asks first.
+	pub(crate) fn run(&mut self, project: &Project, view: &View) -> bool {
+		self.active = false;
+		self.wanted = Wanted::Position;
+		self.request(project, view);
+		self.want_all(Then::Run)
+	}
+
+	/// Every frame of the project as it is, from the position on (Play with frames missing, docs/ui/50); `false`
+	/// when the memory warning asks first.
+	pub(crate) fn fill(&mut self) -> bool {
+		self.active || self.complete() || self.want_all(Then::Play)
+	}
+
+	/// The worker holds every frame of the newest goal.
+	fn complete(&self) -> bool {
+		let status = self.worker.status();
+		status.adopted == self.revision && status.store.is_some_and(|s| s.is_complete())
+	}
+
+	/// Every frame, after the memory warning when they exceed the RAM cache.
+	fn want_all(&mut self, then: Then) -> bool {
+		if let Some(ask) = self.ask(then) {
+			tracing::debug!(budget = ask.budget, "memory warning asks before the run");
+			// the first asker's answer goes for all
+			self.asked.get_or_insert(ask);
+			(self.active, self.wanted, self.started) = (false, Wanted::Position, None);
+			self.publish();
+			return false;
+		}
+		self.go(then);
+		true
+	}
+
+	/// Every frame, no warning asked; a run under way goes on.
+	pub(crate) fn go(&mut self, then: Then) {
+		if self.active {
+			return;
+		}
+		// a paused run waits paused with the edit; a pause with nothing left to do was no pause
+		self.paused = then == Then::Rerun && self.paused && !self.summarised;
 		self.begin();
 		self.active = true;
 		self.wanted = Wanted::All;
-		self.paused = false;
-		self.request(project, view);
+		// a goal of its own: the worker's echo of it tells when this run is over
+		self.revision += 1;
+		self.publish();
 	}
 
-	/// Every frame of the project as it is, from the position on (Play with frames missing, docs/ui/50).
-	pub(crate) fn fill(&mut self) {
-		if !self.active {
-			self.begin();
-			self.active = true;
-			self.wanted = Wanted::All;
-			self.paused = false;
-			// a goal of its own: the worker's echo of it tells when this fill is over
-			self.revision += 1;
-			self.publish();
-		}
+	/// The warning for the request's frames on the budgets now, when they exceed the RAM cache.
+	#[cfg(not(target_arch = "wasm32"))]
+	fn ask(&self, then: Then) -> Option<Ask> {
+		use waveduderust::run::{Budget, Memory, MemoryWarning, RamCache};
+		let request = self.request.as_ref().filter(|_| self.warn)?;
+		// the store a run replaces counts as free
+		let reclaimed = self.worker.status().store.map_or(0, |s| s.ram_bytes());
+		// natively the RAM cache is Auto: the cache lever has nothing to offer
+		let budget = Budget::compute(Memory::default(), reclaimed, RamCache::Auto);
+		MemoryWarning::check(request, budget, budget).map(|_| Ask { then, budget, auto_budget: budget })
+	}
+
+	/// The browser's budget is the worker's estimate, which it learns while the run starts: no warning.
+	#[cfg(target_arch = "wasm32")]
+	fn ask(&self, _then: Then) -> Option<Ask> {
+		None
+	}
+
+	/// The warning asked and its arithmetic on the request as it is.
+	pub(crate) fn warning(&self) -> Option<(Ask, waveduderust::run::MemoryWarning<'_>)> {
+		let (ask, request) = (self.asked?, self.request.as_ref()?);
+		Some((ask, waveduderust::run::MemoryWarning { request, budget: ask.budget, auto_budget: ask.auto_budget }))
+	}
+
+	/// The warning answered: what it held back.
+	pub(crate) fn take_ask(&mut self) -> Option<Ask> {
+		self.asked.take()
 	}
 
 	fn begin(&mut self) {
@@ -296,26 +373,21 @@ impl Live {
 		let Some(old) = &self.request else { return Change::None };
 		let request = self.request_of(project, view);
 		let change = old.change_to(&request);
+		let rerun = change == Change::Frames && self.auto_rerun;
 		if change == Change::Frames {
 			self.fit = None;
-			if self.auto_rerun {
-				// a paused run waits paused with the edit; a pause with nothing left to do was no pause
-				self.paused &= !self.summarised;
-				self.begin();
-				self.active = true;
-				self.wanted = Wanted::All;
-			} else {
-				self.active = false;
-				self.wanted = Wanted::Position;
-				self.paused = false;
-				self.started = None;
-			}
+			// the new frames are a run of their own, below
+			(self.active, self.wanted, self.started) = (false, Wanted::Position, None);
+			self.paused &= rerun;
 		}
 		if change == Change::None {
 			// what no run reads may still be drawn: a colour scheme recolours the frame shown
 			self.drawn = None;
 		} else {
 			self.submit(request);
+		}
+		if rerun {
+			self.want_all(Then::Rerun);
 		}
 		change
 	}
