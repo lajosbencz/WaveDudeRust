@@ -415,6 +415,22 @@ impl Live {
 		position as usize
 	}
 
+	/// The run has frames stored.
+	pub(crate) fn has_frames(&self) -> bool {
+		self.worker.status().store.is_some_and(|s| s.count() > 0)
+	}
+
+	/// The frames and traces go, on a new store; the run stops (Discard frames).
+	pub(crate) fn discard(&mut self) {
+		self.fit = None;
+		(self.active, self.wanted, self.paused, self.started) = (false, Wanted::Position, false, None);
+		self.position = 0;
+		self.drawn = None;
+		self.worker.discard_frames();
+		self.revision += 1;
+		self.publish();
+	}
+
 	/// No more frames than the position's.
 	pub(crate) fn stop(&mut self) {
 		self.revision += 1;

@@ -1604,6 +1604,10 @@ msgstr "Nieuwe seed"
 msgid "Next frame (.)"
 msgstr "Volgend beeld (.)"
 
+#. DialogNo
+msgid "No"
+msgstr "Nee"
+
 #. ItemCountZero
 msgid "No entries"
 msgstr "Geen items"
@@ -2807,6 +2811,10 @@ msgstr "Y van de sondepixel, of van het begin van de lijn, in canvaspixels."
 #. Hint.PartPoint.Y
 msgid "Y relative to the part's centre in canvas pixels, before rotation."
 msgstr "Y ten opzichte van het middelpunt van het onderdeel in canvaspixels, vóór rotatie."
+
+#. DialogYes
+msgid "Yes"
+msgstr "Ja"
 
 #. Label.FresnelLensPart.Division
 msgid "Zone division"

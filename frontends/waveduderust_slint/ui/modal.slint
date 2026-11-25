@@ -2,7 +2,7 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // The messages the app shows; `none` while none is.
-export enum Message { none, save-changes, about, open-failed, save-failed, export-failed }
+export enum Message { none, save-changes, discard-frames, about, open-failed, save-failed, export-failed }
 
 // A message and the one value its text names: a file's name or path, or the version.
 export struct Modal {
@@ -10,7 +10,7 @@ export struct Modal {
     arg: string,
 }
 
-export enum Answer { ok, save, discard, cancel }
+export enum Answer { ok, save, discard, cancel, yes, no }
 
 // One of a message's buttons.
 struct Choice {
@@ -23,10 +23,12 @@ export component ModalLayer inherits Rectangle {
     in property <Modal> modal;
     callback answer(Answer);
 
-    property <bool> asks: modal.message == Message.save-changes;
+    // a destructive question: No is the default
+    property <bool> confirms: modal.message == Message.discard-frames;
+    property <bool> asks: modal.message == Message.save-changes || root.confirms;
     property <bool> fails: modal.message == Message.open-failed || modal.message == Message.save-failed || modal.message == Message.export-failed;
-    property <[Choice]> choices: root.asks
-        ? [{ text: @tr("Save"), answer: Answer.save }, { text: @tr("Don't save"), answer: Answer.discard }, { text: @tr("Cancel"), answer: Answer.cancel }]
+    property <[Choice]> choices: root.confirms ? [{ text: @tr("Yes"), answer: Answer.yes }, { text: @tr("No"), answer: Answer.no }]
+        : root.asks ? [{ text: @tr("Save"), answer: Answer.save }, { text: @tr("Don't save"), answer: Answer.discard }, { text: @tr("Cancel"), answer: Answer.cancel }]
         : [{ text: modal.message == Message.about ? @tr("Close") : @tr("OK"), answer: Answer.ok }];
 
     visible: modal.message != Message.none;
@@ -34,8 +36,8 @@ export component ModalLayer inherits Rectangle {
     TouchArea { }
     focus := FocusScope {
         key-pressed(e) => {
-            if (e.text == Key.Escape) { root.answer(root.asks ? Answer.cancel : Answer.ok); return accept; }
-            if (e.text == Key.Return) { root.answer(root.choices[0].answer); return accept; }
+            if (e.text == Key.Escape) { root.answer(root.confirms ? Answer.no : root.asks ? Answer.cancel : Answer.ok); return accept; }
+            if (e.text == Key.Return) { root.answer(root.choices[root.confirms ? 1 : 0].answer); return accept; }
             reject
         }
     }
@@ -69,6 +71,7 @@ export component ModalLayer inherits Rectangle {
                 }
                 Text {
                     text: modal.message == Message.save-changes ? @tr("Save the changes to {}?", modal.arg)
+                        : modal.message == Message.discard-frames ? @tr("Discard the frames of the run?")
                         : modal.message == Message.open-failed ? @tr("Could not open '{}'.", modal.arg)
                         : modal.message == Message.save-failed ? @tr("Could not save '{}'.", modal.arg)
                         : modal.message == Message.export-failed ? @tr("The export failed.")
@@ -86,7 +89,7 @@ export component ModalLayer inherits Rectangle {
                 spacing: 6px;
                 for choice[i] in root.choices: Button {
                     text: choice.text;
-                    primary: i == 0;
+                    primary: i == (root.confirms ? 1 : 0);
                     clicked => { root.answer(choice.answer); }
                 }
             }

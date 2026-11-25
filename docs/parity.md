@@ -11,18 +11,18 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 13 | 5 | 2 | 20 | 0 |
-| M | Menus and shortcuts | 71 | 8 | 9 | 52 | 0 |
+| X | Cross-cutting | 13 | 6 | 1 | 20 | 0 |
+| M | Menus and shortcuts | 74 | 9 | 5 | 52 | 0 |
 | D | Dialogs and windows | 37 | 14 | 20 | 8 | 0 |
 | S | Settings | 15 | 6 | 8 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
-| T | Project tree | 54 | 1 | 8 | 38 | 0 |
-| P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 87 | 5 | 15 | 4 | 1 |
+| T | Project tree | 56 | 2 | 5 | 38 | 0 |
+| P | Properties | 307 | 7 | 8 | 3 | 0 |
+| V | Preview | 88 | 5 | 14 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
-| R | Live editing and runs | 30 | 11 | 18 | 0 | 2 |
+| R | Live editing and runs | 31 | 14 | 14 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 747 | 68 | 117 | 158 | 5 |
+| | All | 756 | 75 | 101 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -31,7 +31,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-01 | Window title `<app> - <file>` + `*` for unsaved edits; suggested name; `Untitled`; app name alone with no project | MainWindow.xaml.cs | 00, Main window | done | app name "WaveDude Rust" (rename, not a divergence entry) |
 | X-02 | Title shows the full path by setting | MainWindow.xaml.cs | 00, Main window; decision 0008 | done | app.slint `title` from `file-path` while `title-full-path` |
 | X-03 | Window min 800x500, default 1280x800, centred on first start | MainWindow.xaml | 00, Main window | done | |
-| X-04 | Window size, position, state persisted; never minimised; kept inside the monitor's work area | MainWindow.xaml.cs | 00, Main window; 80 | missing | settings fields exist in waveduderust_platform, unused |
+| X-04 | Window size, position, state persisted; never minimised; kept inside the monitor's work area | MainWindow.xaml.cs | 00, Main window; 80 | partial | window size, corner, maximized saved and restored (main.rs keep_window/place_window); no work-area clamp |
 | X-05 | Resize grip | MainWindow.xaml | 00, Main window | divergence | decision 0033, matched in general, not to the pixel/id |
 | X-06 | Dock layout tree: splits with star weights, tabbed groups, fixed centre | Docking/DockHost.cs | 00, Panes; 90 s1 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | X-07 | Splitters between panes: drag and arrow keys | Docking/DockHost.cs | 00, Panes; 90 s1 | done | ui/splitter.slint: 4 px bars, drag, Next's minimums (60 px, 100 px for the preview); no keys, as Next's are not focusable; sizes per divergences.md, Pane sizes |
@@ -147,7 +147,7 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | M-43 | Run, F5, enabled: no run active, no export; runs from step 0, preview follows (Live); may ask memory warning | MW:386, SE:100, SimulationCommands.cs:30 | ui/10 Simulation | done | enabled: no run active, no export (Next's CanRun); F5; memory warning is D-21 |
 | M-44 | Pause / Resume, F6, enabled while run active; header reads Resume while paused | MW:388-399, SE:101-102, SimulationCommands.cs:34 | ui/10 Simulation | done | enabled while a run is active; reads Resume while paused; F6 |
 | M-45 | Stop, Shift+F5 and Esc, enabled while run or export active; Esc cancels export first else stops run | MW:400, SE:103, SimulationCommands.cs:44 | ui/10 Simulation | done | enabled while a run or an export is active; Shift+F5; Esc at window level ("escape": the export first, else the run) |
-| M-46 | Discard frames (port), Mn D/V/S/V, enabled when run has frames and export not holding them; asks "Discard the frames of the run?" Yes/No (No default); drops frames, timeline to 0 | not in Next | ui/10 Simulation | missing | entry removed until discarding exists |
+| M-46 | Discard frames (port), Mn D/V/S/V, enabled when run has frames and export not holding them; asks "Discard the frames of the run?" Yes/No (No default); drops frames, timeline to 0 | not in Next | ui/10 Simulation | done | Simulation > Discard frames (D): enabled with frames and no export; Discard the frames of the run? Yes/No (No default) |
 | M-47 | Separator | MW:401 | ui/10 Simulation | done | app:147 |
 | M-48 | Play / Pause playback, F7; header and icon switch while playing; enabled CanPlayPause | MW:404-417, SE:104-105, PreviewCommands.cs:40 | ui/10 Simulation | done | Play / Pause playback by playback state, icon too; enabled with more than one frame; F7 |
 | M-49 | Simulation > Use the GPU (OpenCL) checkable | MW:420-422, SE:106 | ui/10 Simulation note | divergence | moved to Settings (S-14) |
@@ -221,7 +221,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
 | M-98 | Dock pane title drop-down "Window position": Move to Left (L/L/G/L), Right (R/R/D/R), Top (T/O/H/B), Bottom (B/U/B/O), separator, Close (C/S/F/S) | WPF/Docking/DockGroupControl.cs:133, SE:60-66 | ui/10 Dock | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
-| M-99 | Messages list menu: Copy (Ctrl+C, selected lines, tab-separated), Copy all (visible lines), separator, Clear (Mn C/K/C/K, A/A/T/A, L/L/E/W) | MP:184-191, SE:204-206 | ui/10 Messages | missing | messages.slint has a Clear button only (messages.slint:59-62) |
+| M-99 | Messages list menu: Copy (Ctrl+C, selected lines, tab-separated), Copy all (visible lines), separator, Clear (Mn C/K/C/K, A/A/T/A, L/L/E/W) | MP:184-191, SE:204-206 | ui/10 Messages | done | messages.slint Copy/Copy all/Clear menu; tab-separated (messages.rs text); Ctrl+C on the list |
 
 #### M Keys: window-wide
 | ID | Feature | Next source | Spec | Slint | Note |
@@ -249,7 +249,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-116 | Tree: Shift+Up/Down extend range from anchor | PT | ui/10 | done | Shift+Up/Down extend from the anchor |
 | M-117 | Tree: Space toggles Enabled/Active | PT:231 | ui/10 | done | Space toggles Enabled/Active |
 | M-118 | Tree: Insert / Ctrl+Space toggle focused row in selection | PT:232-233 | ui/10 | done | Insert / Ctrl+Space toggle the row in the selection |
-| M-119 | Tree: Ctrl+A select all, Ctrl+D duplicate | PT:234-235 | ui/10 | missing | |
+| M-119 | Tree: Ctrl+A select all, Ctrl+D duplicate | PT:234-235 | ui/10 | partial | Ctrl+A selects all (app.slint); no Ctrl+D |
 | M-120 | Tree: Del remove | PT:230 | ui/10 | done | Del removes the selection |
 | M-121 | Tree: Alt+Up / Alt+Down move within group | PT:236-237 | ui/10 | done | Alt+Up/Alt+Down move within the list |
 | M-122 | Tree: Enter moves focus into properties form (decision 0008) | n/a | ui/10 | missing | |
@@ -263,7 +263,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-130 | Handles on pictures: arrows 1 px, Shift+arrows 10 px, rotation lever 1/10 degree, grip resize | PreviewPane handles | ui/10 Handles | done | canvas.rs nudge: arrows 1 px, Shift 10; lever 1/10 degrees; grip resize (nudge_grip) |
 | M-131 | Handles: Del removes item/selection; Esc undoes drag; Tab next handle selects item | PP | ui/10 Handles | done | Del removes the selection; Esc cancels a drag (Document::cancel); Tab walks the handles and selects the item |
 | M-132 | Pictures: wheel zoom about pointer, middle drag pan, pinch/two-finger zoom+pan | PP / CanvasImage.cs | ui/10 Handles | done | wheel zoom about the pointer, middle drag pan; touch dropped (decision 0033) |
-| M-133 | Picture splitter: arrows move, Enter/double-click reset to half | PP | ui/10 Splitter | missing | |
+| M-133 | Picture splitter: arrows move, Enter/double-click reset to half | PP | ui/10 Splitter | done | splitter.slint: arrows 10 px, Enter or double-click resets |
 | M-134 | Layout radio group (side by side / stacked): one tab stop, Left/Right switch | PP:485-490 | ui/10 Layout radio | done | two toggles; rest matched in general (decision 0033) |
 | M-135 | Number box: Up/Down step, PageUp/PageDown x10, wheel (Shift x10), Enter commit, Esc revert | WPF/Controls/NumberBox.cs | ui/10 Number box, ui/30 | done | ui/number-box.slint, src/number.rs; Enter and leaving commit (a tree action commits the typed text first, src/main.rs `draft`), Esc restores and passes on when unchanged (Next's EditBehavior) |
 | M-136 | Colour swatch: Space/Enter/Down open picker; square/strip/channel keys; Enter keeps, Esc reverts | WPF/Controls/ColorPicker*.cs | ui/10 Colour picker | done | color-picker.slint ColorSwatch, ColorPicker |
@@ -555,8 +555,8 @@ Not-in-spec rows are marked in the Spec column.
 | T-49 | Row check box and buttons not focusable / not tab stops | ProjectTree.xaml:383 | 20 Item row | done | not focusable |
 | T-50 | Row tooltips (include in runs, paint part, sample probe, move, remove) | ProjectTree.xaml:384,400,454 | 20 Item row | done | check boxes: include in runs / paint the part / sample this probe; move and remove buttons: Next's tips |
 | T-51 | Disabled item greys icon and name | ProjectTree.xaml:383-455 | 20 Item row | done | a disabled item's icon and name in the disabled text colour |
-| T-52 | Part icons: Lens profile icon from R1,R2,diameter (9 variants, follows edits) | Converters/LensIconConverter.cs | 20 Row icons | missing |  |
-| T-53 | Part icons: non-lens kinds drawings (FresnelLens..OrGate) | Controls/IconView.cs | 20 Row icons | missing |  |
+| T-52 | Part icons: Lens profile icon from R1,R2,diameter (9 variants, follows edits) | Converters/LensIconConverter.cs | 20 Row icons | done | icons.rs: lens icon by its surfaces |
+| T-53 | Part icons: non-lens kinds drawings (FresnelLens..OrGate) | Controls/IconView.cs | 20 Row icons | done | icons.rs: per-kind icons |
 | T-54 | Add menu Lens/Mirror entry fixed icon | Controls/MenuIcon.cs | 20 Row icons | done | Lens/Mirror entry shows the fixed lens drawing |
 | T-55 | Click / arrows select a row alone | ProjectTree.xaml.cs | 20 Selection model | done | click and arrows select the row alone |
 | T-56 | Ctrl+click toggles row in selection | ProjectTree.xaml.cs:41 | 20 Selection model | divergence | Ctrl+click toggles a source, part or probe, the current row following (src/selection.rs toggle); toggling out the last one leaves the root selected where Next leaves nothing |
@@ -579,7 +579,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-73 | Move up/down Alt+Up/Alt+Down within own list, selection kept, tree takes focus | ProjectTree.xaml:236-237,270-271 | 20 Commands | done | the current row moves, the tree takes the focus |
 | T-74 | Cut (list items only) = Copy + Remove | ProjectTree.xaml:265 | 20 Clipboard | done | Cut copies the group, then removes its list items |
 | T-75 | Copy as app format + plain XML text (items or Scene/Simulation/Display) | ProjectTree.xaml:266 | 20 Clipboard | done | XML text; no app format (divergences.md Clipboard) |
-| T-76 | Paste: behind current item, rename on clash, re-derive composite emitters, settings object on own row, undo step | ProjectTree.xaml:267 | 20 Clipboard | missing |  |
+| T-76 | Paste: behind current item, rename on clash, re-derive composite emitters, settings object on own row, undo step | ProjectTree.xaml:267 | 20 Clipboard | partial | clipboard.rs paste after the current row; settings on their own row |
 | T-77 | Can-paste re-evaluated once per clipboard change | MainWindow.Clipboard.cs | 20 Clipboard | missing |  |
 | T-78 | Focused text box handles Cut/Copy/Paste for its text first | MainWindow.Clipboard.cs | 20 Clipboard; divergence Edit menu | divergence | divergences.md 'Edit menu' (0008 13) |
 | T-79 | Add to my schemes / Remove from my schemes (scheme rows, label follows existence) | n/a (Rust only) | 20 Commands | done | tree.slint rows menu, scheme rows below a separator, label by Commands.mine; Command.toggle-mine |
@@ -612,7 +612,7 @@ Not-in-spec rows are marked in the Spec column.
 |---|---|---|---|---|---|
 | P-01 | Pane shows form of the current item; 'No selection' grey when none | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | missing | heading + empty list |
 | P-02 | Pane heading / form selected by node type | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | done | every node shows its typed form (ui/forms.slint), without a heading as Next; a folder shows its name and entry count |
-| P-03 | Folder row: label header + count (No entries/1 entry/N entries), grey | Views/CollectionView.xaml:32 | 30 Pane behaviour | missing |  |
+| P-03 | Folder row: label header + count (No entries/1 entry/N entries), grey | Views/CollectionView.xaml:32 | 30 Pane behaviour | done | properties.slint: No entries / 1 entry / N entries |
 | P-04 | Caret into first text box with text selected on newly added item | Panes/PropertiesPane.xaml.cs:83-88 | 30 Pane behaviour | missing |  |
 | P-05 | Form scrolls vertically, never horizontally | Panes/PropertiesPane.xaml | 30 Pane behaviour | done | ScrollView |
 | P-06 | FormPanel two columns: label column = widest label (>=110 px), editors fill rest | Controls/FormPanel.cs | 30 Pane behaviour | done | ui/form.slint FormPanel: a grid, the label column its widest label, 110 px at least, editors fill the rest |
@@ -620,14 +620,14 @@ Not-in-spec rows are marked in the Spec column.
 | P-08 | Row height >=22 px, 4 px apart; multiline label at top | Controls/FormPanel.cs | 30 Pane behaviour | divergence | decision 0033, matched in general, not to the pixel/id |
 | P-09 | Section headers: name over a rule; gap after group | Themes/Editors.xaml (FormSection) | 30 Pane behaviour | done | FormSection: semibold name over a 1 px rule, 10 px after each FormPanel |
 | P-10 | Secondary values (format version, folder count) grey | Views/ProjectView.xaml:37 | 30 Pane behaviour | done | dim text for secondary values |
-| P-11 | Read-outs plain text bound to inputs; '~ ' prefix 1 decimal for estimates; px/deg units | Themes/Editors.xaml (FormReadout) | 30 Pane behaviour | missing | no read-out rows |
+| P-11 | Read-outs plain text bound to inputs; '~ ' prefix 1 decimal for estimates; px/deg units | Themes/Editors.xaml (FormReadout) | 30 Pane behaviour | partial | FormReadout rows in px; the ~ prefix unchecked |
 | P-12 | Edits apply live (every keystroke in name, step, check box) | Panes/PropertiesPane.xaml.cs | 30 Pane behaviour | done | checks and combos live, names per keystroke, numbers on Enter or focus loss |
 | P-13 | Each edit marks dirty, follows live-editing rules / undo | MainWindow.Live.cs | 30 Pane behaviour; 60 | done | doc.edit per set; Display edits through doc.edit_view_merging, so the Display settings undo and dirty with the project |
 | P-14 | Tooltips (Hint.*) on every editor and label | Views/*.xaml meta:Hint | 30 intro | done | Hint.* tooltips on the forms; rest matched in general (decision 0033) |
 | P-15 | Labels from Label.<Type>.<Member> string tables, 4 languages | Strings/* | 30 intro | partial | the settings forms' labels are Next's Label.* texts through @tr, translated by tools/next-strings.py |
 | P-16 | Enum words localised from Enum.* | Strings/* | 30 Check box, combo box | partial | Scene's Mode and Edges words through @tr (Next's Enum.*); the items' words are raw |
 | P-17 | Text box: Enter pushes text and selects it; Esc restores when differing; keys consumed only if effective | Controls/EditBehavior.cs | 30 Text box | partial | LineEdit accepted(Enter) commits; no Esc restore, no select-all |
-| P-18 | Multiline text box keeps Enter as newline (Description) | Views/ProjectView.xaml:46-49 | 30 Text box | missing | LineEdit is single line |
+| P-18 | Multiline text box keeps Enter as newline (Description) | Views/ProjectView.xaml:46-49 | 30 Text box | done | form.slint FormNotes word-wrapped, forms.slint |
 | P-19 | Name boxes update per keystroke (tree row renames live) | Views/SourceView.xaml:54 | 30 Text box | done | FormText per keystroke, the tree row live, one undo step |
 | P-20 | Commit policy: commit on Enter, on focus loss; flush before Save/Run/Undo/selection change (PendingEdit) | Controls/EditBehavior.cs | 30 Text box commit policy | partial | commit on Enter and on focus loss; a tree row takes the focus on the press, so a box commits before the selection moves; a shortcut (Save, Run, Undo) with a box focused does not commit first |
 | P-21 | Widget press flushes pending edit first (tree row, check, button, picker, dock tab) | Controls/EditBehavior.cs | 30 Text box commit policy | partial | tree rows take the focus on the press; buttons, checks and dock tabs not checked |
@@ -986,7 +986,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-38 | Scene outline (glowing edges) when enabled for layer | SceneBitmaps.cs, PreviewPane.xaml:620 | 40 What a picture shows | done | live.rs `edges` via Look (commit d1d244c) |
 | V-39 | 8-bit samples: palette indices at store resolution, brightness baked at run start | FramePresenter.cs | 40 8-bit vs 16-bit | partial | 8-bit pictures are baked; a brightness edit makes the frames again (Live::restyle); other sample-depth rules unverified |
 | V-40 | 16-bit samples: exact device-pixel render, box/bilinear resample, instant recolour on brightness | FramePresenter.cs | 40 8-bit vs 16-bit | partial | GPU render exists; render at device size and brightness recolour unverified/no control |
-| V-41 | Dithering 16-bit only, Bayer 2/4/8/16 | FramePresenter.cs | 40 8-bit vs 16-bit | missing | no dither code in slint crate |
+| V-41 | Dithering 16-bit only, Bayer 2/4/8/16 | FramePresenter.cs | 40 8-bit vs 16-bit | done | View::dither_bits from PreviewDitherBits: Bayer 2/4/8/16 (core DitherDepth), 16-bit planes only |
 | V-42 | GPU engine colouring in render pass, device copy of last frame, others uploaded | none (Rust only) | 40 8-bit vs 16-bit | done | live.rs device_frames + Uploads |
 | V-43 | WebGL2 / over-limit fallback with Messages warning | none | 40 8-bit vs 16-bit | missing | |
 | V-44 | Handle style: light grey over dark halo; selected bright yellow; focused accent fill; hover/focus thicker | Controls/MarkerThumb.cs:69-115 | 40 Handles | divergence | decision 0033, matched in general, not to the pixel/id |
@@ -1177,7 +1177,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-17 | Playback holds at newest contiguous frame | PreviewPane.xaml.cs:1144 | 60 The live run | done | |
 | R-18 | Busy feedback: status "Computing frame n", dim+spinner after 150 ms | MainWindow.Live.cs | 60 The live run | done | status bar Computing frame n (L-85); dim and spinner after 150 ms (preview.slint) |
 | R-19 | Opening a project makes frame 0 and nothing more | MainWindow.Project.cs | 60 The live run | done | live.load wanted Position |
-| R-20 | Simulation > Discard frames (confirm Yes), new store, frames and traces gone | MainWindow.Simulation.cs | 60 The live run | missing | menu item exists; main.rs falls to `menu: discard` log |
+| R-20 | Simulation > Discard frames (confirm Yes), new store, frames and traces gone | MainWindow.Simulation.cs | 60 The live run | done | Live::discard: worker discard_frames (new store, traces gone), run stopped, timeline to 0 |
 | R-21 | Part edit repaints scene in background (outline follows drag) | MainWindow.Live.cs | 60 The live run | partial | outline rebuilt per request; no drag editing |
 | R-22 | Automatic re-run setting (default on) | MainWindow.Live.cs | 60 Automatic re-run | done | live.auto_rerun from Settings |
 | R-23 | Auto re-run on: position frame first, earlier frames on the way, then later; never moves preview | MainWindow.Live.cs | 60 Automatic re-run | partial | request wants `wanted` state; ordering is core's |
@@ -1202,10 +1202,10 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-42 | Title asterisk clears when current step is saved one; dropped saved step never clears; edit after undo ends branch | MainWindow.History.cs | 60 Undo and redo | done | dirty compares with the saved snapshot |
 | R-43 | Paste/Cut/drop/Duplicate/Remove/image Browse+Remove one step each | MainWindow.Clipboard.cs | 60 Undo and redo | partial | Remove (delete) done; others missing |
 | R-44 | New/open: new history | MainWindow.Project.cs | 60 Undo and redo | done | Document::new |
-| R-45 | Clipboard copy: XML fragment in app format + plain text | MainWindow.Clipboard.cs | 60 Clipboard | missing | menu cut/copy/paste/select-all only log "menu: ..." |
-| R-46 | Paste accepts app format or plain-text fragment | MainWindow.Clipboard.cs | 60 Clipboard | missing | |
+| R-45 | Clipboard copy: XML fragment in app format + plain text | MainWindow.Clipboard.cs | 60 Clipboard | partial | Copy/Cut via clipboard.rs; the app format and plain text not checked against Next |
+| R-46 | Paste accepts app format or plain-text fragment | MainWindow.Clipboard.cs | 60 Clipboard | partial | clipboard.rs pastes a fragment; non-objects logged |
 | R-47 | Tree drag carries same text | ProjectTree.xaml.cs | 60 Clipboard | missing | |
-| R-48 | Name clash on paste appends " copy"; composite emitters re-derived | MainWindow.Clipboard.cs | 60 Clipboard | missing | |
+| R-48 | Name clash on paste appends " copy"; composite emitters re-derived | MainWindow.Clipboard.cs | 60 Clipboard | partial | name clash appends copy (clipboard.rs test); composite re-derivation unchecked |
 | R-49 | Paste enable state checked per clipboard change | MainWindow.Clipboard.cs | 60 Clipboard | missing | |
 | R-50 | File dropped on window opens .wdproj / configuration.json / .wdscheme; others refused | MainWindow.xaml.cs | 60 Files and drop | missing | no drop handler |
 | R-51 | Scene image differs from embedded: ask "Load file?" Load/Keep embedded; undoable | MainWindow.SceneImageWatch.cs | 60 Files and drop | missing | |

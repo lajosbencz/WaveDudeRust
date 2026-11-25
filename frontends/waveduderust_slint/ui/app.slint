@@ -58,6 +58,8 @@ export struct Commands {
     paused: bool,
     // a run or an export is active
     can-stop: bool,
+    // the run has frames and no export holds them
+    can-discard: bool,
     can-export: bool,
     can-export-last: bool,
     // the project is not the blank one shown at start
@@ -242,6 +244,7 @@ export component AppWindow inherits Window {
             MenuItem { title: root.menu-text(@tr("&Run"), @tr("Run")); icon: MenuIcons.play-arrow; enabled: root.commands.can-run; shortcut: @keys(F5); activated => { root.command(Command.run); } }
             MenuItem { title: root.commands.paused ? root.menu-text(@tr("&Resume"), @tr("Resume")) : root.menu-text(@tr("&Pause"), @tr("Pause")); icon: MenuIcons.pause; enabled: root.commands.run-active; shortcut: @keys(F6); activated => { root.command(Command.pause); } }
             MenuItem { title: root.menu-text(@tr("S&top"), @tr("Stop")); icon: MenuIcons.stop; enabled: root.commands.can-stop; shortcut: @keys(Shift + F5); activated => { root.command(Command.stop); } }
+            MenuItem { title: root.menu-text(@tr("&Discard frames"), @tr("Discard frames")); enabled: root.commands.can-discard; activated => { root.command(Command.discard); } }
             MenuSeparator { }
             MenuItem {
                 title: root.commands.playing ? root.menu-text(@tr("Pause pla&yback"), @tr("Pause playback")) : root.menu-text(@tr("Pla&y"), @tr("Play"));

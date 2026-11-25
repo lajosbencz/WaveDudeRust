@@ -1604,6 +1604,10 @@ msgstr "Neuer Startwert"
 msgid "Next frame (.)"
 msgstr "Nächstes Bild (.)"
 
+#. DialogNo
+msgid "No"
+msgstr "Nein"
+
 #. ItemCountZero
 msgid "No entries"
 msgstr "Keine Einträge"
@@ -2807,6 +2811,10 @@ msgstr "Y des Sondenpixels bzw. des Linienanfangs, in Leinwandpixeln."
 #. Hint.PartPoint.Y
 msgid "Y relative to the part's centre in canvas pixels, before rotation."
 msgstr "Y relativ zum Mittelpunkt des Bauteils in Leinwandpixeln, vor der Drehung."
+
+#. DialogYes
+msgid "Yes"
+msgstr "Ja"
 
 #. Label.FresnelLensPart.Division
 msgid "Zone division"

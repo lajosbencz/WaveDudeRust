@@ -429,6 +429,7 @@ impl State {
 			run_active: self.live.active(),
 			paused: self.live.paused(),
 			can_stop: self.live.active() || exporting,
+			can_discard: self.live.has_frames() && !exporting,
 			can_export,
 			can_export_last: can_export && self.last_export.is_some(),
 			can_close: self.doc.path.is_some() || self.doc.suggested.is_some() || self.doc.dirty(),
@@ -559,6 +560,8 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			}
 		}
 		Command::Pause => state.live.toggle_pause(),
+		Command::Discard if state.commands().can_discard => tell(app, ui::Message::DiscardFrames, ""),
+		Command::Discard => {}
 		// the menu, Shift+F5 and Esc: a running export first, else the run
 		Command::Stop => {
 			if let Some(e) = &state.exporting {
@@ -946,11 +949,18 @@ fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
 /// The answer to the message window: for the unsaved edits prompt, Save, Don't save or Cancel.
 fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 	app.set_modal(ui::Modal::default());
+	// only Discard frames asks Yes or No
+	if answer == ui::Answer::Yes {
+		state.live.discard();
+		state.playback.pause();
+		state.playback.seek(0);
+		tracing::info!("Frames discarded");
+	}
 	if let Some(then) = state.pending.take() {
 		let go = match answer {
 			ui::Answer::Save => save(state, app, false),
 			ui::Answer::Discard => true,
-			ui::Answer::Ok | ui::Answer::Cancel => false,
+			ui::Answer::Ok | ui::Answer::Cancel | ui::Answer::Yes | ui::Answer::No => false,
 		};
 		if go {
 			state.doc.mark_saved();
