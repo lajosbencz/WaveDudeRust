@@ -14,7 +14,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X | Cross-cutting | 13 | 5 | 2 | 20 | 0 |
 | M | Menus and shortcuts | 71 | 8 | 9 | 52 | 0 |
 | D | Dialogs and windows | 35 | 13 | 23 | 8 | 0 |
-| S | Settings | 11 | 6 | 12 | 3 | 0 |
+| S | Settings | 12 | 7 | 10 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 68 | 10 | 3 | 7 | 2 |
 | R | Live editing and runs | 25 | 9 | 25 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 735 | 66 | 131 | 158 | 5 |
+| | All | 736 | 67 | 129 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -361,8 +361,8 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, platform crate, handles file I/O, sparse write, version 2, unknown keys kept). Slint reads/writes via Settings::load/save (main.rs start()).
 | ID | Feature (key, type, default) | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| S-01 | WindowWidth/WindowHeight/WindowLeft/WindowTop double DIP (1280x800, centred) | UIS:69-99, MW:37-40 | ui/80 | missing | no read/write (grep window_width: 0 hits in slint src); fixed preferred size |
-| S-02 | WindowState Normal/Maximized | UIS:109, MW:41 | ui/80 | missing | |
+| S-01 | WindowWidth/WindowHeight/WindowLeft/WindowTop double DIP (1280x800, centred) | UIS:69-99, MW:37-40 | ui/80 | partial | logical size and corner saved on exit (keep_window), restored before showing (place_window); no off-screen clamp, no centring when unset |
+| S-02 | WindowState Normal/Maximized | UIS:109, MW:41 | ui/80 | done | Maximized saved and restored; a maximized window keeps its normal size |
 | S-03 | Layout (dock tree) saved on change | UIS:119, MW:495-515 | ui/80 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
 | S-04 | Theme System/Light/Dark, Settings > General | UIS:129 | ui/80, ui/70 | done | set.rs row "Theme"; applied via Theme.mode (main.rs apply_settings) |
 | S-05 | Language ""/en/de/fr/nl, "System (in the current language)" first, each by own name | UIS:139, MW:295-297 | ui/80, ui/70 | partial | Settings > General > Language: System, then each by its own name (src/settings.rs); "System" is not translated (a Rust string, X-34) |
@@ -389,7 +389,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-26 | UndoSteps int 10..100000 (1000), Settings > General number box, tooltip, decision 0030 | not in Next | ui/80, ui/70 | done | number row, applied at once; rest matched in general (decision 0033) |
 | S-27 | ExportHints list (max 20, existing project files) | UIS:300-406 (ExportHint) | ui/80 | missing | |
 | S-28 | Settings file format: sparse JSON, Version 2, atomic write (temp + rename), unreadable value -> default + log, unknown keys kept, bad file never moved | UIS:321 (XML) | ui/80 | done | implemented in waveduderust_platform::settings (store.rs); Slint calls load/save |
-| S-29 | Written on change and on close | UIS | ui/80 | partial | row edits save at once; window/layout never saved |
+| S-29 | Written on change and on close | UIS | ui/80 | partial | row edits save at once; the window on exit; the pane layout is not saved |
 | S-30 | Not persisted: playback speed, loop, Live, picture split, Export last target, selection, undo | n/a | ui/80 | done | not stored in Slint (playback.rs transient) |
 | S-31 | First-start preset choice (memory/threads/GPU/HDD) writes the settings file at once | App.xaml.cs | ui/70 First start | done | Settings::load(facts) writes the presets |
 | S-32 | Settings search keys, tooltips per row (e.g. UndoSteps) | n/a | ui/70 | missing | see D-30 |

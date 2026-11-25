@@ -657,6 +657,8 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		}
 		Command::SelectAll => state.selection.select_all(&state.doc.project),
 		Command::Exit => {
+			#[cfg(not(target_arch = "wasm32"))]
+			keep_window(state, app);
 			let _ = app.hide();
 		}
 		// unavailable here
@@ -688,6 +690,40 @@ fn paste(state: &mut State) {
 			}
 			_ => tracing::info!("the clipboard holds no project objects"),
 		}
+	}
+}
+
+/// Puts the window where it was left: size and corner in logical pixels, maximized.
+#[cfg(not(target_arch = "wasm32"))]
+fn place_window(settings: &waveduderust_platform::settings::Settings, app: &AppWindow) {
+	let w = app.window();
+	w.set_size(slint::LogicalSize::new(
+		settings.window_width.max(640.) as f32,
+		settings.window_height.max(400.) as f32,
+	));
+	if let (Some(x), Some(y)) = (settings.window_left, settings.window_top) {
+		w.set_position(slint::LogicalPosition::new(x as f32, y as f32));
+	}
+	w.set_maximized(settings.window_state == waveduderust_platform::settings::WindowState::Maximized);
+}
+
+/// Saves the window's size, corner and state; a maximized window keeps its normal size and corner.
+#[cfg(not(target_arch = "wasm32"))]
+fn keep_window(state: &mut State, app: &AppWindow) {
+	use waveduderust_platform::settings::WindowState;
+	let w = app.window();
+	let s = &mut state.settings;
+	if w.is_maximized() {
+		s.window_state = WindowState::Maximized;
+	} else {
+		let scale = w.scale_factor();
+		let (size, at) = (w.size().to_logical(scale), w.position().to_logical(scale));
+		s.window_state = WindowState::Normal;
+		(s.window_width, s.window_height) = (f64::from(size.width), f64::from(size.height));
+		(s.window_left, s.window_top) = (Some(f64::from(at.x)), Some(f64::from(at.y)));
+	}
+	if let Some(Err(e)) = state.store.as_ref().map(|store| state.settings.save(store)) {
+		tracing::error!("{e}");
 	}
 }
 
@@ -1328,6 +1364,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			command(s, &app, Command::Exit);
 			slint::CloseRequestResponse::KeepWindowShown
 		} else {
+			#[cfg(not(target_arch = "wasm32"))]
+			keep_window(s, &app);
 			slint::CloseRequestResponse::HideWindow
 		}
 	});
@@ -1477,6 +1515,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		std::mem::forget(timer);
 		std::mem::forget(app.clone_strong());
 	}
+	#[cfg(not(target_arch = "wasm32"))]
+	place_window(&state.borrow().settings, &app);
 	app.run()?;
 	Ok(())
 }
