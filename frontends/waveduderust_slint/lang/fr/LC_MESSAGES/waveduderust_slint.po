@@ -2228,6 +2228,10 @@ msgstr "Enregistrer sous..."
 msgid "Save the changes to {}?"
 msgstr "Enregistrer les modifications de {} ?"
 
+#. TipSaveSceneImage
+msgid "Save the embedded image to a file"
+msgstr "Enregistrer l'image intégrée dans un fichier"
+
 #. Enum.FacetPattern.Sawtooth
 msgid "Sawtooth"
 msgstr "Dent de scie"

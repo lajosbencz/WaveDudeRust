@@ -797,6 +797,41 @@ fn show_examples(state: &mut State, app: &AppWindow) {
 	app.set_example_rows(ModelRc::new(VecModel::from(rows)));
 }
 
+/// A file dropped on the window: an image becomes the scene image, a project opens (after the unsaved check).
+fn dropped(state: &mut State, app: &AppWindow, path: PathBuf) {
+	let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_lowercase();
+	if waveduderust::io::image_extensions().contains(&ext.as_str()) {
+		adopt_image(state, &path);
+	} else if ["wdproj", "xml", "json"].contains(&ext.as_str()) {
+		act(state, app, Action::OpenFile(path));
+	} else {
+		tracing::warn!("cannot open {}: not a project or an image", path.display());
+	}
+}
+
+/// Embeds the image at `path` as the scene image, an image scene, one undo step.
+fn adopt_image(state: &mut State, path: &std::path::Path) {
+	let bytes = match std::fs::read(path) {
+		Ok(b) => b,
+		Err(e) => return tracing::error!("cannot read {}: {e}", path.display()),
+	};
+	let size = match waveduderust::io::image_size(&bytes) {
+		Ok(s) => s,
+		Err(e) => return tracing::error!("cannot read {}: {e}", path.display()),
+	};
+	let folder = state.doc.path.as_deref().and_then(std::path::Path::parent);
+	let stored = waveduderust::io::stored_image_path(folder, &path.to_string_lossy());
+	let name = path.file_name().map_or_default(|n| n.to_string_lossy().into_owned());
+	state.doc.edit(|p| {
+		let s = &mut p.scene;
+		s.mode = waveduderust::model::SceneMode::Image;
+		(s.image, s.image_path) = (name.clone(), stored);
+		(s.image_data, s.image_size) = (Some(bytes.into()), size);
+		(s.width, s.height) = size;
+	});
+	tracing::info!("Scene image {name}");
+}
+
 /// After a forced theme, keeps the System theme on the desktop's scheme from winit's theme event, which Linux lacks
 /// (docs/blockers.md, Slint's system colour scheme).
 fn follow_desktop_scheme(state: &Rc<RefCell<State>>, app: &AppWindow) {
@@ -804,6 +839,13 @@ fn follow_desktop_scheme(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 	let (state, weak) = (state.clone(), app.as_weak());
 	app.window().on_winit_window_event(move |_, event| {
+		if let (winit::event::WindowEvent::DroppedFile(path), Some(app)) = (event, weak.upgrade()) {
+			// a native dialog's nested loop may deliver it while the state is borrowed
+			let Ok(mut s) = state.try_borrow_mut() else { return EventResult::Propagate };
+			let s = &mut *s;
+			dropped(s, &app, path.clone());
+			s.show(&app);
+		}
 		if let (winit::event::WindowEvent::ThemeChanged(theme), Some(app)) = (event, weak.upgrade()) {
 			let mut s = state.borrow_mut();
 			if s.system_scheme.is_some() {
@@ -1009,6 +1051,7 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 		(ui::Message::ExportRunning, ui::Answer::Yes) => {
 			if let Some(e) = state.exporting.take() {
 				e.cancel();
+				app.set_export_progress(ui::ExportProgress::default());
 			}
 			// on to the unsaved changes, then out
 			if let Some(then) = state.pending.take() {
@@ -1116,6 +1159,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	numbers.on_step(|spec, text, steps| number::step(&spec, &text, steps).into());
 	numbers.on_scrub(|spec, start, dx, scale| number::scrub(&spec, &start, f64::from(dx), f64::from(scale)).into());
 	form::wire_colors(&app.global::<ui::ColorLogic<'_>>());
+	app.global::<ui::Form<'_>>().set_pick_files(cfg!(not(target_arch = "wasm32")));
+	app.global::<ui::Search<'_>>()
+		.on_matches(|text, query| text.to_lowercase().contains(query.trim().to_lowercase().as_str()));
 	let live = Live::new(&context)?;
 	let store = waveduderust_platform::store::Store::open();
 	let facts = waveduderust_platform::machine::machine_facts();
@@ -1346,6 +1392,45 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		let Some(app) = weak.upgrade() else { return };
 		let s = st.borrow();
 		files::pick_scheme(&s.inbox, &app.global::<ui::Words<'_>>(), layer);
+	});
+	#[cfg(not(target_arch = "wasm32"))]
+	{
+		let (st, weak) = (state.clone(), app.as_weak());
+		app.global::<ui::Form<'_>>().on_pick_image(move || {
+			let Some(app) = weak.upgrade() else { return };
+			let words = app.global::<ui::Words<'_>>();
+			let picked = rfd::FileDialog::new()
+				.set_title(words.get_pick_scene_image().as_str())
+				.add_filter(words.get_image_files().as_str(), &waveduderust::io::image_extensions())
+				.pick_file();
+			if let Some(path) = picked {
+				let s = &mut *st.borrow_mut();
+				adopt_image(s, &path);
+				s.show(&app);
+			}
+		});
+		let st = state.clone();
+		app.global::<ui::Form<'_>>().on_save_image(move || {
+			let (Some(bytes), name) = ({
+				let scene = &st.borrow().doc.project.scene;
+				(scene.image_data.clone(), scene.image.clone())
+			}) else {
+				return;
+			};
+			if let Some(path) = rfd::FileDialog::new().set_file_name(&name).save_file() {
+				match std::fs::write(&path, &bytes) {
+					Ok(()) => tracing::info!("Saved {}", path.display()),
+					Err(e) => tracing::error!("cannot save {}: {e}", path.display()),
+				}
+			}
+		});
+	}
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.global::<ui::Form<'_>>().on_drop_image(move || {
+		let Some(app) = weak.upgrade() else { return };
+		let s = &mut *st.borrow_mut();
+		s.doc.edit(|p| p.scene.remove_image());
+		s.show(&app);
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.global::<ui::Form<'_>>().on_toggle_mine(move || {

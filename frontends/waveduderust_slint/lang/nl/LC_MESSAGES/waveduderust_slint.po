@@ -2228,6 +2228,10 @@ msgstr "Opslaan als..."
 msgid "Save the changes to {}?"
 msgstr "Wijzigingen in {} opslaan?"
 
+#. TipSaveSceneImage
+msgid "Save the embedded image to a file"
+msgstr "Ingebedde afbeelding naar een bestand opslaan"
+
 #. Enum.FacetPattern.Sawtooth
 msgid "Sawtooth"
 msgstr "Zaagtand"

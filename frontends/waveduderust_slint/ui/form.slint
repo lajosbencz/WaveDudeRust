@@ -86,6 +86,12 @@ export global Form {
     // the data changed; `typing`: a keystroke in a text box, one undo step with the next ones
     callback edited(typing: bool);
     callback new-seed();
+    // file dialogs open: the scene image's pick and save buttons show
+    in property <bool> pick-files;
+    // the scene image: pick and embed a file, save the embedded bytes, drop it
+    callback pick-image();
+    callback save-image();
+    callback drop-image();
     // the shown object's list: an outline's points, a filter's layers, a fibre's nodes, a scheme's stops
     callback add-row();
     callback remove-row(index: int);

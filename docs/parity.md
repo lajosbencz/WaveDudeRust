@@ -11,18 +11,18 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 13 | 6 | 1 | 20 | 0 |
-| M | Menus and shortcuts | 75 | 8 | 5 | 52 | 0 |
-| D | Dialogs and windows | 42 | 16 | 13 | 8 | 0 |
-| S | Settings | 15 | 6 | 8 | 3 | 0 |
+| X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
+| M | Menus and shortcuts | 76 | 9 | 3 | 52 | 0 |
+| D | Dialogs and windows | 43 | 16 | 12 | 8 | 0 |
+| S | Settings | 16 | 7 | 6 | 3 | 0 |
 | I | Icons | 57 | 1 | 6 | 19 | 0 |
-| T | Project tree | 56 | 2 | 5 | 38 | 0 |
-| P | Properties | 307 | 7 | 8 | 3 | 0 |
+| T | Project tree | 56 | 3 | 4 | 38 | 0 |
+| P | Properties | 310 | 7 | 5 | 3 | 0 |
 | V | Preview | 90 | 5 | 12 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
-| R | Live editing and runs | 31 | 14 | 14 | 0 | 2 |
+| R | Live editing and runs | 32 | 15 | 12 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 780 | 77 | 75 | 158 | 5 |
+| | All | 788 | 81 | 63 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -47,7 +47,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-17 | Status bar double-click opens or focuses Messages | MainWindow.xaml.cs | 00, Panes | done | double-click opens Messages; rest matched in general (decision 0033) |
 | X-18 | No floating windows | Docking | 00, Panes | done | |
 | X-19 | Status bar 22 px, padding 4,0,16,0: last log line, run status, busy text + 120x12 progress bar, frame cache | MainWindow.xaml | 00, Main window | partial | log line + run status only; no busy/progress, no frame cache item |
-| X-20 | Status bar warn/error colouring | Themes/Dark.xaml StatusBarWarn*/Error* | 00, Look | missing | the warn token (StatusBarWarnBackground #ca5100) comes with the feature; status-error exists |
+| X-20 | Status bar warn/error colouring | Themes/Dark.xaml StatusBarWarn*/Error* | 00, Look | done | status bar orange/red by the newest own line (app.slint status-level) |
 | X-21 | Theme tokens: 92 keys per theme (menu, title bars, tabs, tree, scroll bars, splitter, drop indicator, buttons, tooltips, text/combo/check boxes, log levels) | Themes/Dark.xaml, Light.xaml | 00, Look | divergence | ui/theme.slint: the used colours with Next's values (divergences.md, Theme tokens) |
 | X-22 | Themes System/Light/Dark, live switch, native title bar follows | Theming/ThemeController.cs | 00, Look | done | System/Light/Dark, live switch; rest matched in general (decision 0033) |
 | X-23 | Font Segoe UI 12 px, else bundled Selawik + Noto Sans Math subset | App.xaml | 00, Look | divergence | Selawik everywhere (divergences.md, Font); Noto Sans Math is the overlays' (core) |
@@ -235,7 +235,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-106 | Ctrl+A select all objects (text box: text) | ProjectCommands.cs:57 | ui/10 | done | window key (app.slint `keys`) a focused text field takes first: every source, part and probe, the last current |
 | M-107 | Ctrl+E export last | ExportCommands.cs:59 | ui/10 | partial | M-18 |
 | M-108 | Ctrl+Shift+E / I / B, Ctrl+Shift+F / G | ExportCommands.cs:35-51 | ui/10 | done | M-12..M-17 |
-| M-109 | F1 project page | HelpCommands.cs:31 (Manual) | ui/10, decision 0028 | missing | binding exists, action does nothing (M-56) |
+| M-109 | F1 project page | HelpCommands.cs:31 (Manual) | ui/10, decision 0028 | done | Help > Project page on GitHub, F1 |
 | M-110 | Ctrl+, Settings (port) | not in Next | ui/10 | done | app:100 |
 | M-111 | Ctrl+= / Ctrl+Plus / Ctrl+- / Ctrl+0 UI zoom step up/down/reset across 0.5x..3x (port) | not in Next (View > UI zoom menu only) | ui/10 | divergence | decision 0033, dropped |
 | M-112 | F5 Run, F6 Pause/resume, Shift+F5 Stop, F7 Play/pause playback | SimulationCommands.cs:30,34,44; PreviewCommands.cs:40 | ui/10 | done | app:143-148 |
@@ -268,7 +268,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-135 | Number box: Up/Down step, PageUp/PageDown x10, wheel (Shift x10), Enter commit, Esc revert | WPF/Controls/NumberBox.cs | ui/10 Number box, ui/30 | done | ui/number-box.slint, src/number.rs; Enter and leaving commit (a tree action commits the typed text first, src/main.rs `draft`), Esc restores and passes on when unchanged (Next's EditBehavior) |
 | M-136 | Colour swatch: Space/Enter/Down open picker; square/strip/channel keys; Enter keeps, Esc reverts | WPF/Controls/ColorPicker*.cs | ui/10 Colour picker | done | color-picker.slint ColorSwatch, ColorPicker |
 | M-137 | Dialogs: Enter default, Esc cancel, mnemonics w/o Alt; About Esc/Enter close | MessageWindow.xaml.cs | ui/10 Dialogs | done | Enter default, Esc cancel; access letters dropped (decision 0033) |
-| M-138 | File drop on window: image becomes scene image; other file to open flow (.wdproj .xml .json .wdscheme); nothing while modal | MW:12-13 (AllowDrop, OnDrop) | ui/10 File dropped | missing | no drop handler in main.rs/app.slint |
+| M-138 | File drop on window: image becomes scene image; other file to open flow (.wdproj .xml .json .wdscheme); nothing while modal | MW:12-13 (AllowDrop, OnDrop) | ui/10 File dropped | partial | winit DroppedFile: image becomes the scene image, .wdproj/.xml/.json open after the unsaved check; .wdscheme not taken; browser none |
 | M-139 | Browser: leaving the page asks while unsaved edits | n/a | ui/10 | missing | web.rs/index.html: no beforeunload (not verified in index.html) |
 | M-140 | Menu entries 23 px high, shortcut text right-aligned, disabled entries grey text+icon | Themes/Controls.xaml MenuItem | ui/10 Conventions | divergence | decision 0033, matched in general, not to the pixel/id |
 
@@ -305,7 +305,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-27 | Welcome: check box "Show this page at each launch" (ShowStartup), saved as it changes | not in Next | ui/70 Welcome 5 | done | welcome.slint:70-74 |
 | D-28 | Welcome: bottom-right Open Project..., Random Example, Examples... (default, accent, Enter); no Close button; Esc closes | not in Next | ui/70 Welcome 6 | done | welcome.slint:75-95, key handler :20-25 |
 | D-29 | Settings window: modal 760 px wide, title "Settings", frame/backdrop like other dialogs | not in Next | ui/70 Settings, decision 0027 | done | settings.slint:36-40 (min(760, w-40)); height fixed 520 not content |
-| D-30 | Settings: search box (SettingsSearch, focused on open) filtering rows by label/English label/section name; "No setting matches"; clearing returns to last section | not in Next | ui/70 Settings | missing | settings.slint has no search |
+| D-30 | Settings: search box (SettingsSearch, focused on open) filtering rows by label/English label/section name; "No setting matches"; clearing returns to last section | not in Next | ui/70 Settings | done | settings.slint search box, focused on open: rows by label or section name, sections listed while searching, No setting matches, Esc clears then closes; English label not matched |
 | D-31 | Settings: section list left (General, Preview and memory, Simulation, Export, Updates), Up/Down walk, Tab cycles | not in Next | ui/70 Settings | partial | sections General/Preview and memory/Simulation/Updates (settings.rs:11); no Export section; mouse only |
 | D-32 | Settings: rows = label column + control; change applies and saves at once | not in Next | ui/70 Settings | done | set_row -> save (settings.rs:164) |
 | D-33 | Settings: one "Close" button, default and cancel (Enter outside a control, Esc) | not in Next | ui/70 Settings | done | Close, Esc; rest matched in general (decision 0033) |
@@ -380,7 +380,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-17 | LastExportFolder path, fallback start folder | UIS:266 | ui/80 | missing | |
 | S-18 | ExportFilterIndex int | UIS:276 | ui/80 | missing | |
 | S-19 | ExportArchive bool (false), Settings > Export | not in Next | ui/80, ui/70 | missing | no Export section |
-| S-20 | PartDescriptionExpanded bool (true), description header on part forms | UIS:286 | ui/80 | missing | no part forms with description header |
+| S-20 | PartDescriptionExpanded bool (true), description header on part forms | UIS:286 | ui/80 | done | Form.described saved as PartDescriptionExpanded (main.rs on_describe) |
 | S-21 | TitleFullPath bool (false), Settings > General "Full path in the title" | not in Next | ui/80, ui/70 | done | app.slint `title-full-path` |
 | S-22 | H264Profile Baseline/Main/High, Settings > Export | not in Next | ui/80, ui/70 | missing | no row; export uses Profile::default() |
 | S-23 | UseOpenH264 bool or absent, Settings > Export check box with Cisco notice | not in Next | ui/80, ui/70 | partial | consumed in export.rs h264(); no row/notice |
@@ -392,7 +392,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-29 | Written on change and on close | UIS | ui/80 | partial | row edits save at once; the window on exit; the pane layout is not saved |
 | S-30 | Not persisted: playback speed, loop, Live, picture split, Export last target, selection, undo | n/a | ui/80 | done | not stored in Slint (playback.rs transient) |
 | S-31 | First-start preset choice (memory/threads/GPU/HDD) writes the settings file at once | App.xaml.cs | ui/70 First start | done | Settings::load(facts) writes the presets |
-| S-32 | Settings search keys, tooltips per row (e.g. UndoSteps) | n/a | ui/70 | missing | see D-30 |
+| S-32 | Settings search keys, tooltips per row (e.g. UndoSteps) | n/a | ui/70 | partial | search by label and section; no per-row tooltips |
 
 ### I: icons
 
@@ -600,7 +600,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-94 | Drop on a preview picture: pasted, moved as group under drop pixel, selection, one undo | Panes/PreviewPane.xaml.cs | 20 Drag and drop | missing | no handles/pictures drop yet |
 | T-95 | Drop onto text editor receives XML | ProjectTree.xaml.cs | 20 Drag and drop | divergence | divergences.md 'Drag and drop' |
 | T-96 | Insertion adorner line / outline visuals | Controls/InsertionAdorner.cs | 20 Drag and drop | done | accent line 2 px along the edge, 1 px outline around a folder |
-| T-97 | File drop on window: image becomes scene image, project file opens | MainWindow.Project.cs | 20 Drag and drop; 10 | missing | owned by another area? not in tree code |
+| T-97 | File drop on window: image becomes scene image, project file opens | MainWindow.Project.cs | 20 Drag and drop; 10 | partial | see M-138 |
 | T-98 | Settings rows (Scene, Simulation, Display) draggable, carry XML, do not reorder | ProjectTree.xaml.cs | 20 Drag and drop | missing | settings rows do not drag: no target takes them in the app yet (preview drop, T-94) |
 | T-99 | Touch-first: rows sense clicks alone, drag unavailable | n/a | 20 Drag and drop | divergence | decision 0033, dropped |
 | T-100 | Schemes: move up/down/remove via row buttons | ProjectTree.xaml:446-451 | 20 Item row | done |  |
@@ -663,9 +663,9 @@ Not-in-spec rows are marked in the Spec column.
 | P-51 | Scene: Mode combo (Canvas, Image) | Views/SceneView.xaml:61-62 | 30 Scene | done | FormChoice: Canvas, Image |
 | P-52 | Scene: image rows hidden in Canvas mode | Views/SceneView.xaml:44,51 | 30 Scene | done | the Scene image, Image file and Embedded image rows show in Image mode only |
 | P-53 | Scene: Scene image name text (per keystroke) | Views/SceneView.xaml:79 | 30 Scene | done | per keystroke; buttons in P-54..P-56 |
-| P-54 | Scene: '...' pick image button (embeds, switches to Image mode; PNG/BMP/JPG/TIF/GIF) | Views/SceneView.xaml:80 | 30 Scene | missing |  |
-| P-55 | Scene: save-glyph button writes embedded bytes to file | Views/SceneView.xaml:83 | 30 Scene | missing |  |
-| P-56 | Scene: X button drops name, path, bytes; canvas keeps size | Views/SceneView.xaml:88 | 30 Scene | missing |  |
+| P-54 | Scene: '...' pick image button (embeds, switches to Image mode; PNG/BMP/JPG/TIF/GIF) | Views/SceneView.xaml:80 | 30 Scene | done | Scene image row: folder button picks and embeds (image scene, canvas takes the image size); desktop only, the browser hides it |
+| P-55 | Scene: save-glyph button writes embedded bytes to file | Views/SceneView.xaml:83 | 30 Scene | done | save button writes the embedded bytes (desktop) |
+| P-56 | Scene: X button drops name, path, bytes; canvas keeps size | Views/SceneView.xaml:88 | 30 Scene | done | X drops name, path and bytes; the canvas keeps the image size (Scene::remove_image) |
 | P-57 | Scene: Image file RO path ellipsis + '(not found)' | Views/SceneView.xaml:95-101 | 30 Scene | partial | the path, elided; no '(not found)' note: the app watches no scene image file yet |
 | P-58 | Scene: Embedded image RO 'W x H, N KB' / '(unreadable)' | Views/SceneView.xaml:105-107 | 30 Scene | done | 'W x H, N KB' from the embedded bytes and the decoded size, '(unreadable)' when it has none |
 | P-59 | Scene: Width NB 8..16384 (disabled in Image mode) | Views/SceneView.xaml:111-112 | 30 Scene | done | number box 8..16384, label and box disabled in Image mode |
@@ -1207,12 +1207,12 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-47 | Tree drag carries same text | ProjectTree.xaml.cs | 60 Clipboard | missing | |
 | R-48 | Name clash on paste appends " copy"; composite emitters re-derived | MainWindow.Clipboard.cs | 60 Clipboard | partial | name clash appends copy (clipboard.rs test); composite re-derivation unchecked |
 | R-49 | Paste enable state checked per clipboard change | MainWindow.Clipboard.cs | 60 Clipboard | missing | |
-| R-50 | File dropped on window opens .wdproj / configuration.json / .wdscheme; others refused | MainWindow.xaml.cs | 60 Files and drop | missing | no drop handler |
+| R-50 | File dropped on window opens .wdproj / configuration.json / .wdscheme; others refused | MainWindow.xaml.cs | 60 Files and drop | partial | see M-138; others refused with a log warning |
 | R-51 | Scene image differs from embedded: ask "Load file?" Load/Keep embedded; undoable | MainWindow.SceneImageWatch.cs | 60 Files and drop | missing | |
 | R-52 | Scene image file watched, 400 ms debounce, retries, one question at a time, withdraws on revert | MainWindow.SceneImageWatch.cs | 60 Files and drop | missing | |
 | R-53 | Project with no embedded image takes file without asking; missing/undecodable logs "(not found)" | MainWindow.SceneImageWatch.cs | 60 Files and drop | missing | |
 | R-54 | Image looked up beside project and in scene_images, adopts relative path | ProjectWatcher | 60 Files and drop | missing | |
-| R-55 | Image inside project folder stored relative | ProjectWatcher | 60 Files and drop | missing | |
+| R-55 | Image inside project folder stored relative | ProjectWatcher | 60 Files and drop | done | stored_image_path: inside the project folder stored relative |
 | R-56 | Unsaved-edits ask before New/Open/Close/Exit/example/drop | MainWindow.Project.cs | 60 Files and drop; 70 | partial | done for New/Open/Close/Exit/example; drop missing |
 | R-57 | Off-canvas objects warning in log, once per list change | none (divergence: Next silent) | 60 Objects off the canvas | missing | spec marks as divergence; no such log in slint crate (core?) |
 | R-58 | Run start errors in status bar: "The simulation could not start." etc | MainWindow.Simulation.cs | 60 Run start errors | partial | worker failure logged as "the run failed: ..."; fixed texts absent |

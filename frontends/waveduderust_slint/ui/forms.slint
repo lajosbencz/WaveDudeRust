@@ -3,6 +3,8 @@ import { Button, LineEdit } from "std-widgets.slint";
 import { SchemeCombo } from "scheme-combo.slint";
 import { ColorSwatch } from "color-picker.slint";
 import { Theme } from "theme.slint";
+import { IconButton } from "icons.slint";
+import { MenuIcons } from "menu-icons.slint";
 import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, Check, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
 import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice, MetaLensTypeChoice, FiberEndsChoice, SchemeKindChoice } from "choices.slint";
 import { FormKind, GateKind, PointData, SchemeChoice, SchemeEntry, SceneMode, SourceMode, ProbeDetector, ProbeKind, Layer, BoxSize, YScale, TriangleType, LayerData } from "data.slint";
@@ -58,9 +60,31 @@ export component SceneForm inherits VerticalLayout {
                 text: @tr("Scene image");
                 tip: @tr("Image the canvas is built from: red = refractive index (red 0 = a mirror), green = sources, blue = damping. The name of the embedded image, or a path relative to the project folder.");
             }
-            FormText {
-                text <=> Form.scene.image;
-                tip: @tr("Image the canvas is built from: red = refractive index (red 0 = a mirror), green = sources, blue = damping. The name of the embedded image, or a path relative to the project folder.");
+            HorizontalLayout {
+                spacing: 2px;
+                FormText {
+                    // the buttons beside it fit a narrow pane
+                    min-width: 40px;
+                    text <=> Form.scene.image;
+                    tip: @tr("Image the canvas is built from: red = refractive index (red 0 = a mirror), green = sources, blue = damping. The name of the embedded image, or a path relative to the project folder.");
+                }
+                if Form.pick-files: IconButton {
+                    icon: MenuIcons.folder-open;
+                    tip: @tr("Pick the scene image file; it is embedded in the project");
+                    clicked => { Form.pick-image(); }
+                }
+                if Form.pick-files: IconButton {
+                    icon: MenuIcons.save;
+                    tip: @tr("Save the embedded image to a file");
+                    enabled: Form.scene.embedded;
+                    clicked => { Form.save-image(); }
+                }
+                IconButton {
+                    icon: MenuIcons.close;
+                    tip: @tr("Remove the scene image; the canvas keeps its size");
+                    enabled: Form.scene.embedded || Form.scene.image != "";
+                    clicked => { Form.drop-image(); }
+                }
             }
         }
         if root.image: Row {
