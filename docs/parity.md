@@ -20,9 +20,9 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | P | Properties | 310 | 7 | 4 | 4 | 0 |
 | V | Preview | 90 | 5 | 12 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
-| R | Live editing and runs | 37 | 15 | 7 | 0 | 2 |
+| R | Live editing and runs | 38 | 15 | 6 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 794 | 81 | 56 | 159 | 5 |
+| | All | 795 | 81 | 55 | 159 | 5 |
 
 ## Cross-cutting
 
@@ -1217,7 +1217,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-57 | Off-canvas objects warning in log, once per list change | none (divergence: Next silent) | 60 Objects off the canvas | done | live.rs submit: off_canvas list warned once per change, spec wording |
 | R-58 | Run start errors in status bar: "The simulation could not start." etc | MainWindow.Simulation.cs | 60 Run start errors | partial | worker failure logged as "the run failed: ..."; fixed texts absent |
 | R-59 | Browser worker failure messages and reload advice | web.rs | 60 Run start errors | missing | web.rs minimal |
-| R-60 | Scene image / save-first run start errors | MainWindow.Simulation.cs | 60 Run start errors | missing | |
+| R-60 | Scene image / save-first run start errors | MainWindow.Simulation.cs | 60 Run start errors | done | Run and Play refuse an image scene without its image: the two spec messages as errors in the status bar |
 | R-61 | Live edit while dragging a handle: nothing completes until hand rests a frame time | worker.rs | 60 The live run | n/a | no handle drags (V-68) |
 
 ### G: Messages pane

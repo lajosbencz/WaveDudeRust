@@ -347,6 +347,20 @@ impl State {
 	}
 
 	/// Run is offered: no run or export under way, and a source enabled to drive one.
+	/// Why a run cannot start (docs/ui/60, Run start errors): an image scene without its image.
+	fn start_error(&self) -> Option<&'static str> {
+		let scene = &self.doc.project.scene;
+		if scene.mode != waveduderust::model::SceneMode::Image || scene.image_data.is_some() {
+			return None;
+		}
+		let relative = !scene.image_path.is_empty() && std::path::Path::new(&scene.image_path).is_relative();
+		Some(if relative && self.doc.path.is_none() {
+			"Save the project first, so the scene image can be found relative to it."
+		} else {
+			"The scene uses an image, but no image file is set."
+		})
+	}
+
 	fn can_run(&self, exporting: bool) -> bool {
 		!self.live.active() && !exporting && self.doc.project.sources.iter().any(|s| s.enabled)
 	}
@@ -579,6 +593,9 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			// F5 reaches here past a disabled menu entry
 			if !state.can_run(state.exporting.is_some()) {
 				return;
+			}
+			if let Some(e) = state.start_error() {
+				return tracing::error!("{e}");
 			}
 			if state.live.run(&state.doc.project, &state.doc.view) {
 				state.playback.frames = state.live.frames;
@@ -1139,7 +1156,12 @@ fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
 		TransportAction::Play if p.playing => p.pause(),
 		TransportAction::Play => {
 			p.play();
-			state.live.fill();
+			match state.start_error() {
+				Some(e) => tracing::error!("{e}"),
+				None => {
+					state.live.fill();
+				}
+			}
 		}
 		TransportAction::Prev => p.seek(i64::from(p.position) - 1),
 		TransportAction::Next => p.seek(i64::from(p.position) + 1),
