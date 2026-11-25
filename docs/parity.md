@@ -13,16 +13,16 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
 | M | Menus and shortcuts | 79 | 9 | 0 | 52 | 0 |
-| D | Dialogs and windows | 50 | 19 | 1 | 9 | 0 |
+| D | Dialogs and windows | 51 | 19 | 1 | 8 | 0 |
 | S | Settings | 22 | 7 | 0 | 3 | 0 |
 | I | Icons | 60 | 1 | 0 | 22 | 0 |
 | T | Project tree | 58 | 4 | 0 | 39 | 0 |
 | P | Properties | 311 | 7 | 0 | 7 | 0 |
 | V | Preview | 96 | 6 | 1 | 8 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 1 | 9 | 2 |
-| R | Live editing and runs | 40 | 15 | 0 | 4 | 2 |
+| R | Live editing and runs | 42 | 15 | 0 | 2 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 824 | 86 | 3 | 177 | 5 |
+| | All | 827 | 86 | 3 | 174 | 5 |
 
 ## Cross-cutting
 
@@ -322,7 +322,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-44 | Export dialog: H.264 profile drop-down with greyed unsupported entries + reason | not in Next | ui/70 | partial | H.264 profile choice saved; entries not greyed, OpenH264 encodes Baseline only note below |
 | D-45 | Export: remember filter index, start folder rule per kind/project (ExportHints), fallback LastExportFolder | UIS:266-305 | ui/70, ui/80 | done | ExportFilterIndex (video means PNG for a still), start folder from the project hint, project folder, LastExportFolder; recorded on completion |
 | D-46 | Export: replace-existing questions (folder with files "Replace them?", video/still/archive "Replace it?") | MainWindow.Export.cs | ui/70 | partial | Replace it? / The folder {} exists and holds files. Replace them? per output, No default; replacing overwrites, a sequence folder is not emptied |
-| D-47 | Export: starts a full-quality run first when none/incomplete/reduced/no intensity; status "Export: waiting for the run" | MainWindow.Export.cs | ui/70, ui/60 | divergence | the export runs its own full-quality simulation on its thread; the live run is untouched |
+| D-47 | Export: starts a full-quality run first when none/incomplete/reduced/no intensity; status "Export: waiting for the run" | MainWindow.Export.cs | ui/70, ui/60 | done | the export reads the live run (decision 0012); one not full quality or without the intensity it needs is run first, the status bar says Export: waiting for the run |
 | D-48 | Export progress: "Exporting n / N frames", 120 px determinate bar, tooltip "Cancel the export (Esc)", indeterminate while waiting | MW:450-468, SE (TipExportCancel) | ui/70, status bar | partial | "Exporting d/t" (ExportProgress) over the run's status while an export runs; no progress bar |
 | D-49 | Export: Esc cancels (also while waiting); completed export reports in status bar | MW:464 | ui/70 | partial | Stop menu/F5 cancels via "stop"; Esc unbound; completion only logged |
 | D-50 | Probe data CSV export (point: step;amplitude; line: frame;step;distances; semicolons) | ExportCommands.ProbeCsv | ui/70 CSV | done | core export::csv::write_probe_csv with the run schedule (visualize every, frame divisor), as the CLI |
@@ -1182,8 +1182,8 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-22 | Automatic re-run setting (default on) | MainWindow.Live.cs | 60 Automatic re-run | done | live.auto_rerun from Settings |
 | R-23 | Auto re-run on: position frame first, earlier frames on the way, then later; never moves preview | MainWindow.Live.cs | 60 Automatic re-run | partial | request wants `wanted` state; ordering is core's |
 | R-24 | Auto re-run off: only position's frame; Play/F5 make the rest | MainWindow.Live.cs | 60 Automatic re-run | partial | edited() skips request, so no frame at position after an edit with setting off |
-| R-25 | Export waiting for run dropped by edit/Stop (status says so) | MainWindow.Export.cs | 60 Automatic re-run | divergence | see D-47: no export waits for the live run |
-| R-26 | Export reading run holds frames; edit taken up at export end; New/Open/Close refused with status text; F5 refused | MainWindow.Export.cs | 60 Automatic re-run | divergence | see D-47: the export reads its own run; edits and New/Open go on |
+| R-25 | Export waiting for run dropped by edit/Stop (status says so) | MainWindow.Export.cs | 60 Automatic re-run | done | an edit making other frames, Stop or a failed run drops the waiting export; the warning shows in the status bar |
+| R-26 | Export reading run holds frames; edit taken up at export end; New/Open/Close refused with status text; F5 refused | MainWindow.Export.cs | 60 Automatic re-run | done | the export holds the run: edits are taken up when it ends, New/Open/Close/examples refused with a status bar warning, Run disabled |
 | R-27 | Turning setting on asks nothing | MainWindow.Live.cs | 60 Automatic re-run | done | |
 | R-28 | Memory warning window before preview run exceeding RAM cache (500 px, Run default, Cancel Esc) | Dialogs/MemoryWarningWindow.xaml | 60 Memory warning | partial | asked before Run, Play with frames missing and an automatic re-run (live.rs want_all); natively only: the browser budget is the worker estimate |
 | R-29 | Warning text and 4 lever check boxes (RAM Auto, half resolution, half frames, 8-bit) with grey-out rules | MemoryWarningWindow.xaml.cs | 60 Memory warning | done | text and the lever boxes, greyed by MemoryWarning::enabled |

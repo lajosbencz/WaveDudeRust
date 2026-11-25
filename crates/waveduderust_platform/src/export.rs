@@ -19,7 +19,7 @@ use waveduderust::unstable::export::h264::{H264Factory, Profile};
 use waveduderust::unstable::export::{
 	ExportFormat, ExportLayers, ExportPlan, ExportReport, ExportState, FrameSource, naming,
 };
-use waveduderust::{Backend, Simulation};
+use waveduderust::{Backend, ProbeTrace, Simulation};
 
 /// What to export and where.
 pub struct Request {
@@ -168,8 +168,22 @@ fn pack(parts: &Path, archive: &Path, cancel: &AtomicBool) -> std::io::Result<()
 	done
 }
 
-/// Runs `request`'s project at full quality and exports it; `progress` hears (frames done, frames in all).
-pub fn export(request: Request, progress: impl FnMut(usize, usize), cancel: &AtomicBool) -> Result<Done, Error> {
+/// What a run made for an export beside its frames.
+pub struct Made<'a> {
+	/// The probes' traces, drawn when the view puts the graphs in the export.
+	pub traces: &'a [ProbeTrace],
+	pub frame_count: usize,
+	pub total_steps: u64,
+}
+
+/// Exports `request` from frames already made (`source`, a live run's store); the project is not run again.
+pub fn export_frames<'s>(
+	request: &Request,
+	source: Arc<dyn FrameSource + 's>,
+	made: &Made<'_>,
+	progress: impl FnMut(usize, usize),
+	cancel: &AtomicBool,
+) -> Result<ExportReport, Error> {
 	if request.still.is_some() && !request.format.supports_still() {
 		return Err(Error::StillOfVideo);
 	}
@@ -179,19 +193,7 @@ pub fn export(request: Request, progress: impl FnMut(usize, usize), cancel: &Ato
 		Some(parts) => parts.0.join(request.out.file_name().unwrap_or_default()),
 		None => request.out.clone(),
 	};
-	let quality = PreviewQuality { intensity_root: request.format.intensity_root(), ..PreviewQuality::FULL };
-	let track_intensity = request.layers != ExportLayers::Field || request.view.intensity.preview;
-	let run = Simulation::builder(&request.project)
-		.backend(request.backend)
-		.track_intensity(track_intensity)
-		.spawn(RunOptions::default().quality(quality).brightness((&request.view).into()))?;
 	let graphs = request.view.probe_graphs_in_export && request.project.probes.iter().any(|p| p.active);
-	if graphs {
-		run.wait_until(|_| cancel.load(Ordering::Relaxed));
-	}
-	let traces = if graphs { run.traces() } else { Vec::new() };
-	let store = run.wait_for_store().map_err(|e| Error::Run(e.to_string()))?;
-	let schedule = run.schedule();
 	let plan = ExportPlan {
 		project: &request.project,
 		view: &request.view,
@@ -199,16 +201,14 @@ pub fn export(request: Request, progress: impl FnMut(usize, usize), cancel: &Ato
 		fs: Arc::new(StdFs),
 		outputs: naming::layer_outputs(&out, request.layers),
 		still: request.still,
-		frame_count: schedule.frame_count() as usize,
-		traces: &traces,
-		total_steps: u64::from(schedule.steps),
+		frame_count: made.frame_count,
+		traces: if graphs { made.traces } else { &[] },
+		total_steps: made.total_steps,
 		keep_partial: request.keep_partial,
 		h264: request.h264.clone(),
 		h264_profile: request.h264_profile,
 	};
-	#[allow(clippy::arc_with_non_send_sync, reason = "the job shares the source on this thread")]
-	let source = Arc::new(LiveFrames { run: &run, store: store.clone(), cancel, waited: AtomicU64::new(0) });
-	let job = plan.build_job(source.clone(), &request.schemes)?;
+	let job = plan.build_job(source, &request.schemes)?;
 	let mut report = job.run(progress, cancel);
 	if let (Some(archive), Some(folder)) = (&request.archive, parts)
 		&& matches!(report.state, ExportState::Completed)
@@ -222,6 +222,32 @@ pub fn export(request: Request, progress: impl FnMut(usize, usize), cancel: &Ato
 			Err(error) => return Err(Error::ArchiveKept { error, kept: folder.keep() }),
 		}
 	}
+	Ok(report)
+}
+
+/// Runs `request`'s project at full quality and exports it; `progress` hears (frames done, frames in all).
+pub fn export(request: Request, progress: impl FnMut(usize, usize), cancel: &AtomicBool) -> Result<Done, Error> {
+	if request.still.is_some() && !request.format.supports_still() {
+		return Err(Error::StillOfVideo);
+	}
+	let quality = PreviewQuality { intensity_root: request.format.intensity_root(), ..PreviewQuality::FULL };
+	let track_intensity = request.layers != ExportLayers::Field || request.view.intensity.preview;
+	let run = Simulation::builder(&request.project)
+		.backend(request.backend)
+		.track_intensity(track_intensity)
+		.spawn(RunOptions::default().quality(quality).brightness((&request.view).into()))?;
+	let graphs = request.view.probe_graphs_in_export && request.project.probes.iter().any(|p| p.active);
+	if graphs {
+		run.wait_until(|_| cancel.load(Ordering::Relaxed));
+	}
+	let traces = if graphs { run.traces() } else { Vec::new() };
+	let store = run.wait_for_store().map_err(|e| Error::Run(e.to_string()))?;
+	let schedule = run.schedule();
+	let made =
+		Made { traces: &traces, frame_count: schedule.frame_count() as usize, total_steps: u64::from(schedule.steps) };
+	#[allow(clippy::arc_with_non_send_sync, reason = "the job shares the source on this thread")]
+	let source = Arc::new(LiveFrames { run: &run, store: store.clone(), cancel, waited: AtomicU64::new(0) });
+	let report = export_frames(&request, source.clone(), &made, progress, cancel)?;
 	if cancel.load(Ordering::Relaxed) {
 		run.cancel();
 	}

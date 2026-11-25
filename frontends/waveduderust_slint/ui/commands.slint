@@ -43,9 +43,10 @@ export struct RunStatus {
     engine: string,
 }
 
-// An export in progress: frames written of the total.
+// An export in progress: frames written of the total, or waiting for its run.
 export struct ExportProgress {
     active: bool,
+    waiting: bool,
     done: int,
     total: int,
 }

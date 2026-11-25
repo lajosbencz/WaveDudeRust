@@ -634,3 +634,15 @@ running) and after (the tick runs while something moves, news wakes the window t
 |---|---|---|
 | Startup page shown | 624 wakeups, 0.03 s CPU | 0 wakeups, 0 s CPU |
 | A project run to its end, then idle | 625 wakeups, 0.01 s CPU | 0 wakeups, 0 s CPU |
+
+## Exports from the live run
+
+2026-11-25, the Slint app, release build on Xvfb, RTX 5070 Ti. `lens.wdproj` (400 steps, 200 frames, 960x540) opened,
+run with F5 at the High preview (8-bit samples), then Export field as uncompressed AVI (A), then Export last (B); the time
+from OK to the `exported` line, two passes each. Before: each export ran the project again on a thread of its own;
+after: the export reads the live run's store (decision 0012), starting a full-quality run only when the one held is not.
+
+| | Before | After |
+|---|---|---|
+| A: the preview run is 8-bit, a full-quality run is needed | 462 to 488 ms | 464 to 493 ms |
+| B: the run held is full quality | 339 to 469 ms | 118 ms |

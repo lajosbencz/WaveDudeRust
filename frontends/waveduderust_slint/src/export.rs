@@ -60,10 +60,11 @@ mod native {
 	use waveduderust::unstable::export::h264::{H264Factory, OpenH264Factory, Profile};
 	use waveduderust::unstable::export::naming::{layer_outputs, sequence_folder, still_file_name, with_layer_suffix};
 	use waveduderust::unstable::export::{ExportFormat, ExportLayers, ExportState};
-	use waveduderust_platform::export::{Request, export};
+	use waveduderust_platform::export::{Made, Request, export_frames};
 	use waveduderust_platform::settings::{AppDirs, ExportHint, Settings};
 
 	use super::Kind;
+	use crate::live::{ExportFrames, Needs};
 	use crate::ui::{ExportData, ExportFileFormat, ExportProgress, Words};
 
 	/// What an export writes: the dialog's answer, repeated by Export last.
@@ -343,21 +344,50 @@ mod native {
 		}
 	}
 
-	/// An export in progress.
+	/// An export waiting for its run, or writing.
 	pub(crate) struct Exporting {
 		cancel: Arc<AtomicBool>,
 		done: Arc<AtomicUsize>,
 		total: Arc<AtomicUsize>,
 		thread: Option<JoinHandle<Result<String, String>>>,
+		/// The plan waiting for its run and the timeline frame of its still.
+		waiting: Option<(Plan, u32)>,
 	}
 
 	impl Exporting {
+		/// `plan` waits for its run; a still is of the timeline frame `position`.
+		pub(crate) fn waiting(plan: &Plan, position: u32) -> Self {
+			Self {
+				cancel: Arc::default(),
+				done: Arc::default(),
+				total: Arc::default(),
+				thread: None,
+				waiting: Some((plan.clone(), position)),
+			}
+		}
+
+		/// The plan of an export waiting for its run, with its still's timeline frame.
+		pub(crate) fn waits(&self) -> Option<&(Plan, u32)> {
+			self.waiting.as_ref()
+		}
+
 		pub(crate) fn cancel(&self) {
 			self.cancel.store(true, Ordering::Relaxed);
 		}
 
-		/// The progress while it runs; its outcome once it ended.
+		/// Cancels and waits for the writer to end.
+		pub(crate) fn stop(&mut self) {
+			self.cancel();
+			if let Some(thread) = self.thread.take() {
+				let _ = thread.join();
+			}
+		}
+
+		/// The progress while it waits or writes; its outcome once it ended.
 		pub(crate) fn poll(&mut self) -> Result<ExportProgress, Result<String, String>> {
+			if self.waiting.is_some() {
+				return Ok(ExportProgress { active: true, waiting: true, done: 0, total: 0 });
+			}
 			if self.thread.as_ref().is_some_and(JoinHandle::is_finished) {
 				let outcome = self.thread.take().map_or_else(
 					|| Err("gone".into()),
@@ -366,7 +396,7 @@ mod native {
 				return Err(outcome);
 			}
 			let count = |n: &AtomicUsize| i32::try_from(n.load(Ordering::Relaxed)).unwrap_or(i32::MAX);
-			Ok(ExportProgress { active: true, done: count(&self.done), total: count(&self.total) })
+			Ok(ExportProgress { active: true, waiting: false, done: count(&self.done), total: count(&self.total) })
 		}
 	}
 
@@ -379,15 +409,30 @@ mod native {
 		Ok(Arc::new(OpenH264Factory::new(library)))
 	}
 
-	/// Starts the export of `plan` at the timeline frame `position` (a still's).
+	impl Plan {
+		/// What the export needs of its run.
+		pub(crate) fn needs(&self, view: &View) -> Needs {
+			let layers = match self.kind {
+				Kind::Run(layers) | Kind::Frame(layers) => layers,
+			};
+			if layers == ExportLayers::Field && !view.intensity.preview {
+				Needs::Field
+			} else {
+				Needs::Intensity { root: self.format.intensity_root() }
+			}
+		}
+	}
+
+	/// Starts writing `plan` from the run's `frames`, a still at the timeline frame `position`.
 	pub(crate) fn start(
 		plan: &Plan,
+		frames: ExportFrames,
 		project: &Project,
 		view: &View,
 		position: u32,
 		settings: &Settings,
 		schemes: &SchemeStore,
-	) -> Option<Exporting> {
+	) -> Exporting {
 		let (layers, still) = match plan.kind {
 			Kind::Run(layers) => (layers, None),
 			Kind::Frame(layers) => (layers, Some(position as usize)),
@@ -400,7 +445,8 @@ mod native {
 			out: plan.out.clone(),
 			layers,
 			still,
-			backend: if settings.use_gpu { Backend::Gpu } else { Backend::Cpu },
+			// the frames are made: no run of the export's own
+			backend: Backend::Cpu,
 			schemes: schemes.clone(),
 			h264: None,
 			h264_profile: settings.h264_profile,
@@ -416,16 +462,19 @@ mod native {
 				if format == ExportFormat::Mp4 {
 					request.h264 = Some(h264(use_openh264)?);
 				}
-				let report = export(
-					request,
+				let made =
+					Made { traces: &frames.traces, frame_count: frames.frame_count, total_steps: frames.total_steps };
+				let report = export_frames(
+					&request,
+					frames.store.clone(),
+					&made,
 					|d, t| {
 						done.store(d, Ordering::Relaxed);
 						total.store(t, Ordering::Relaxed);
 					},
 					&cancel,
 				)
-				.map_err(|e| e.to_string())?
-				.report;
+				.map_err(|e| e.to_string())?;
 				match report.state {
 					ExportState::Completed => {
 						Ok(report.written.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", "))
@@ -439,7 +488,7 @@ mod native {
 				}
 			})
 		};
-		Some(Exporting { cancel, done, total, thread: Some(thread) })
+		Exporting { cancel, done, total, thread: Some(thread), waiting: None }
 	}
 }
 
@@ -453,11 +502,24 @@ mod web {
 	use waveduderust_platform::settings::Settings;
 
 	use super::Kind;
+	use crate::live::{ExportFrames, Needs};
 	use crate::ui::{ExportData, ExportProgress, Words};
 
 	pub(crate) enum Exporting {}
 
 	impl Exporting {
+		pub(crate) fn waiting(plan: &Plan, _: u32) -> Self {
+			match plan.never {}
+		}
+
+		pub(crate) fn waits(&self) -> Option<&(Plan, u32)> {
+			match *self {}
+		}
+
+		pub(crate) fn stop(&mut self) {
+			match *self {}
+		}
+
 		pub(crate) fn cancel(&self) {
 			match *self {}
 		}
@@ -471,9 +533,14 @@ mod web {
 	#[derive(Clone, Debug)]
 	pub(crate) struct Plan {
 		pub(crate) kind: Kind,
+		never: std::convert::Infallible,
 	}
 
 	impl Plan {
+		pub(crate) fn needs(&self, _: &View) -> Needs {
+			match self.never {}
+		}
+
 		pub(crate) fn existing(&self) -> Vec<(std::path::PathBuf, bool)> {
 			Vec::new()
 		}
@@ -519,7 +586,15 @@ mod web {
 
 	pub(crate) fn delete_codec(_: &mut ExportData) {}
 
-	pub(crate) fn start(_: &Plan, _: &Project, _: &View, _: u32, _: &Settings, _: &SchemeStore) -> Option<Exporting> {
-		None
+	pub(crate) fn start(
+		plan: &Plan,
+		_: ExportFrames,
+		_: &Project,
+		_: &View,
+		_: u32,
+		_: &Settings,
+		_: &SchemeStore,
+	) -> Exporting {
+		match plan.never {}
 	}
 }

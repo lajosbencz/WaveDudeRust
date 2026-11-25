@@ -1020,6 +1020,10 @@ msgstr "Sondendaten exportieren"
 msgid "Export this frame..."
 msgstr "Dieses Bild exportieren..."
 
+#. ExportStatusWaiting
+msgid "Export: waiting for the run"
+msgstr "Export: wartet auf den Lauf"
+
 #. Hint.InterferenceFilterPart.Width
 msgid "Extent across the axis in pixels, of the plate and the layers alike."
 msgstr "Ausdehnung quer zur Achse in Pixeln, für die Platte und die Schichten gleich."

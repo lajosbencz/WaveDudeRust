@@ -577,6 +577,11 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		tell(app, ui::Message::ExportRunning, "");
 		return;
 	}
+	// the export reads the run of this project (decision 0012)
+	if action.replaces() && state.exporting.is_some() {
+		tracing::warn!("the export holds the project: stop it first");
+		return;
+	}
 	if action.replaces() && state.doc.dirty() {
 		state.pending = Some(action);
 		let name = state.doc.name().unwrap_or_else(|| app.global::<ui::Words<'_>>().get_untitled().into());
@@ -627,6 +632,9 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		Command::Stop => {
 			if let Some(e) = &state.exporting {
 				e.cancel();
+				if e.waits().is_some() {
+					release_export(state, app);
+				}
 			} else {
 				state.live.stop();
 				state.playback.live = false;
@@ -1066,7 +1074,7 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	app.set_preview_stacked(s.preview_orientation == waveduderust_platform::settings::Orientation::Vertical);
 	app.global::<ui::Form<'_>>().set_described(s.part_description_expanded);
 	state.doc.set_limit(s.undo_steps as usize);
-	state.live.quality = s.preview_quality();
+	state.live.set_quality(s.preview_quality());
 	state.live.auto_rerun = s.auto_rerun;
 	state.live.warn = s.warn_when_ram_insufficient;
 	state.live.set_dither(s.preview_dither_bits);
@@ -1110,13 +1118,41 @@ fn file_name(state: &State, app: &AppWindow) -> String {
 	state.doc.name().unwrap_or_else(|| format!("{}.wdproj", app.global::<ui::Words<'_>>().get_untitled()))
 }
 
-/// Starts the export of `plan`.
+/// Starts the export of `plan` from the live run, or waits for the run it needs (decision 0012).
+#[cfg_attr(target_arch = "wasm32", expect(unreachable_code, reason = "the browser build makes no export plan"))]
 fn begin_export(state: &mut State, app: &AppWindow, plan: &export::Plan) {
 	app.set_export_shown(false);
 	state.export_dialog = None;
-	let s = &*state;
-	state.exporting = export::start(plan, &s.doc.project, &s.doc.view, s.playback.position, &s.settings, &s.schemes);
+	let needs = plan.needs(&state.doc.view);
+	match state.live.request_export(&state.doc.project, &state.doc.view, needs) {
+		live::Gate::Ready => write_export(state, plan, state.playback.position),
+		live::Gate::Waiting => state.exporting = Some(export::Exporting::waiting(plan, state.playback.position)),
+		live::Gate::Busy => return,
+	}
 	state.export_plan = Some(plan.clone());
+	state.show(app);
+}
+
+/// Writes `plan` from the run the export holds, a still of the timeline frame `position`.
+#[cfg_attr(target_arch = "wasm32", expect(unreachable_code, reason = "the browser build makes no export plan"))]
+fn write_export(state: &mut State, plan: &export::Plan, position: u32) {
+	let Some(frames) = state.live.export_frames() else {
+		tracing::error!("the export has no frames to read");
+		state.live.end_export(&state.doc.project, &state.doc.view);
+		state.exporting = None;
+		return;
+	};
+	let s = &*state;
+	state.exporting = Some(export::start(plan, frames, &s.doc.project, &s.doc.view, position, &s.settings, &s.schemes));
+}
+
+/// The export ended or was stopped: the run it held goes on with the edits made meanwhile.
+fn release_export(state: &mut State, app: &AppWindow) {
+	state.exporting = None;
+	app.set_export_progress(ui::ExportProgress::default());
+	if state.live.end_export(&state.doc.project, &state.doc.view) == live::Change::Frames {
+		state.playback.pause();
+	}
 }
 
 /// A completed export: where it wrote is remembered, a run's is what Export last repeats.
@@ -1222,9 +1258,10 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 			tracing::info!("Frames discarded");
 		}
 		(ui::Message::ExportRunning, ui::Answer::Yes) => {
-			if let Some(e) = state.exporting.take() {
-				e.cancel();
-				app.set_export_progress(ui::ExportProgress::default());
+			if let Some(e) = state.exporting.as_mut() {
+				// the run is held until the writer let go of it
+				e.stop();
+				release_export(state, app);
 			}
 			// on to the unsaved changes, then out
 			if let Some(then) = state.pending.take() {
@@ -1998,12 +2035,17 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
 			app.set_transport(transport_state(&s.playback, &shown, &s.doc.view, s.live.paused()));
 			app.set_commands(s.commands());
+			match (shown.export, s.exporting.as_ref().and_then(export::Exporting::waits).cloned()) {
+				(Some(live::ExportNews::Ready), Some((plan, position))) => write_export(s, &plan, position),
+				// the warning says so in the status bar
+				(Some(live::ExportNews::Stopped), Some(_)) => release_export(s, &app),
+				_ => {}
+			}
 			if let Some(e) = &mut s.exporting {
 				match e.poll() {
 					Ok(progress) => app.set_export_progress(progress),
 					Err(outcome) => {
-						s.exporting = None;
-						app.set_export_progress(ui::ExportProgress::default());
+						release_export(s, &app);
 						match outcome {
 							Ok(written) => {
 								tracing::info!("exported {written}");

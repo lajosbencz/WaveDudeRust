@@ -476,7 +476,8 @@ export component AppWindow inherits Window {
                         padding-left: 12px;
                         spacing: 6px;
                         Text {
-                            text: root.export-progress.active
+                            text: root.export-progress.waiting ? @tr("Export: waiting for the run")
+                                : root.export-progress.active
                                 ? @tr("Exporting {}/{}", root.export-progress.done, root.export-progress.total)
                                 : @tr("Computing frame {}", root.transport.position);
                             color: Theme.selection-text;
@@ -486,7 +487,7 @@ export component AppWindow inherits Window {
                             width: 120px;
                             height: 8px;
                             y: (parent.height - self.height) / 2;
-                            indeterminate: !root.export-progress.active;
+                            indeterminate: !root.export-progress.active || root.export-progress.waiting;
                             progress: root.export-progress.total > 0 ? root.export-progress.done / root.export-progress.total : 0;
                         }
                     }

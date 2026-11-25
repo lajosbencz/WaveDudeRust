@@ -1020,6 +1020,10 @@ msgstr "Sondegegevens exporteren"
 msgid "Export this frame..."
 msgstr "Dit beeld exporteren..."
 
+#. ExportStatusWaiting
+msgid "Export: waiting for the run"
+msgstr "Export: wacht op de run"
+
 #. Hint.InterferenceFilterPart.Width
 msgid "Extent across the axis in pixels, of the plate and the layers alike."
 msgstr "Afmeting dwars op de as in pixels, van de plaat en de lagen gelijk."

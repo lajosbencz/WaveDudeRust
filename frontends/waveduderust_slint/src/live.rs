@@ -38,7 +38,7 @@ pub(crate) struct Live {
 	position: u32,
 	paused: bool,
 	/// The preview quality of the next run (Settings).
-	pub(crate) quality: PreviewQuality,
+	quality: PreviewQuality,
 	/// Re-run after edits (Settings).
 	pub(crate) auto_rerun: bool,
 	/// A 16-bit plane's dither depth (10..16; else plain).
@@ -79,6 +79,59 @@ pub(crate) struct Live {
 	/// An Auto of an 8-bit frame waiting for the frame in 16-bit: the request and the layer.
 	fit: Option<(u64, Layer)>,
 	fits: u64,
+	/// An export's hold on the run (decision 0012).
+	export: Hold,
+	/// What the run is made for while an export needs it, over the preview quality.
+	export_run: Option<Needs>,
+	/// Edits made while an export read the run, taken up once it ends.
+	edited_while_reading: bool,
+	/// A waiting export's run became ready or stopped.
+	news: Option<ExportNews>,
+}
+
+/// What an export needs of its run beyond full quality.
+#[cfg_attr(target_arch = "wasm32", expect(dead_code, reason = "the browser build makes no export plan"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Needs {
+	Field,
+	/// The intensity tracked, its plane holding sqrt(I) when `root`.
+	Intensity {
+		root: bool,
+	},
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Hold {
+	Idle,
+	Waiting(Needs),
+	Reading,
+}
+
+/// An export's ask for its run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Gate {
+	/// The run is complete as needed: read it now; it is held until [`Live::end_export`].
+	Ready,
+	/// Such a run started; [`Shown::export`] tells when it is ready or stopped.
+	Waiting,
+	/// Another export holds the run.
+	Busy,
+}
+
+/// What became of a waiting export's run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ExportNews {
+	Ready,
+	Stopped,
+}
+
+/// The run an export reads: its store, traces and schedule.
+#[cfg_attr(target_arch = "wasm32", expect(dead_code, reason = "the browser build makes no export plan"))]
+pub(crate) struct ExportFrames {
+	pub(crate) store: std::sync::Arc<FrameStore>,
+	pub(crate) traces: Vec<waveduderust::ProbeTrace>,
+	pub(crate) frame_count: usize,
+	pub(crate) total_steps: u64,
 }
 
 /// What asked for every frame: Run, Play with frames missing, an edit's automatic re-run.
@@ -122,6 +175,7 @@ pub(crate) struct Shown {
 	pub(crate) computing: bool,
 	/// A pending Auto's layer and brightness (`None`: nothing to fit).
 	pub(crate) fitted: Option<(Layer, Option<f64>)>,
+	pub(crate) export: Option<ExportNews>,
 }
 
 /// The off-canvas warning's list (docs/ui/60, Objects off the canvas).
@@ -177,6 +231,10 @@ impl Live {
 			drawn: None,
 			fit: None,
 			fits: 0,
+			export: Hold::Idle,
+			export_run: None,
+			edited_while_reading: false,
+			news: None,
 			started: None,
 			summarised: false,
 			steps: 0,
@@ -198,6 +256,16 @@ impl Live {
 	/// The device of the engines built from now on (Use the GPU): the next run or edit builds on it.
 	pub(crate) fn set_gpu(&self, on: bool) {
 		self.gpu.store(on, std::sync::atomic::Ordering::Relaxed);
+	}
+
+	/// The preview quality of the next run; another one ends an export's run quality.
+	pub(crate) fn set_quality(&mut self, quality: PreviewQuality) {
+		if quality != self.quality {
+			self.quality = quality;
+			if self.export != Hold::Reading {
+				self.export_run = None;
+			}
+		}
 	}
 
 	/// Dithering only redraws.
@@ -229,8 +297,9 @@ impl Live {
 	/// Runs `project` from the start; a running run starts over (docs/ui/60, Automatic re-run).
 	/// A project opened: its frame at the position alone (docs/ui/60, The live run).
 	pub(crate) fn load(&mut self, project: &Project, view: &View) {
-		// nothing carries over from the project before, its tracking neither, nor a warning asked
+		// nothing carries over from the project before, its tracking neither, nor a warning asked or an export's quality
 		self.request = None;
+		self.export_run = None;
 		self.asked = None;
 		self.active = false;
 		self.started = None;
@@ -259,7 +328,10 @@ impl Live {
 	/// The worker holds every frame of the newest goal.
 	fn complete(&self) -> bool {
 		let status = self.worker.status();
-		status.adopted == self.revision && status.store.is_some_and(|s| s.is_complete())
+		// a probe edit keeps the frames and records the traces anew
+		status.adopted == self.revision
+			&& status.store.is_some_and(|s| s.is_complete())
+			&& matches!(status.state, WorkState::Idle | WorkState::Fitting)
 	}
 
 	/// Every frame, after the memory warning when they exceed the RAM cache.
@@ -340,7 +412,12 @@ impl Live {
 		project.normalize();
 		// a shown intensity picture is tracked; the run keeps tracking it once hidden, as the worker does
 		let tracked = self.request.as_ref().is_some_and(RunRequest::tracks_intensity);
-		RunRequest::new(&project, self.quality, view.into(), view.intensity.preview || tracked)
+		let (quality, for_export) = match self.export_run {
+			None => (self.quality, false),
+			Some(Needs::Field) => (PreviewQuality::FULL, false),
+			Some(Needs::Intensity { root }) => (PreviewQuality { intensity_root: root, ..PreviewQuality::FULL }, true),
+		};
+		RunRequest::new(&project, quality, view.into(), view.intensity.preview || tracked || for_export)
 	}
 
 	fn submit(&mut self, request: RunRequest) {
@@ -448,10 +525,18 @@ impl Live {
 	/// with Re-run automatically on, else nothing more; a probe edit keeps the frames and what is wanted, its
 	/// recordings made anew. Says what the edit asked.
 	pub(crate) fn edited(&mut self, project: &Project, view: &View) -> Change {
+		if self.export == Hold::Reading {
+			self.edited_while_reading = true;
+			return Change::None;
+		}
 		// nothing loaded yet: opening a project asks for its frame
 		let Some(old) = &self.request else { return Change::None };
-		let request = self.request_of(project, view);
+		let mut request = self.request_of(project, view);
 		let change = old.change_to(&request);
+		if change == Change::Frames && self.export_run.take().is_some() {
+			self.drop_waiting_export();
+			request = self.request_of(project, view);
+		}
 		let rerun = change == Change::Frames && self.auto_rerun;
 		if change == Change::Frames {
 			self.fit = None;
@@ -496,8 +581,84 @@ impl Live {
 		self.pump.raise();
 	}
 
+	/// An export asks for its run: ready when the run is complete, full quality and as `needs` says, else such a
+	/// run starts, the memory warning not asked.
+	pub(crate) fn request_export(&mut self, project: &Project, view: &View, needs: Needs) -> Gate {
+		if self.export != Hold::Idle {
+			return Gate::Busy;
+		}
+		self.asked = None;
+		if self.full_for(needs) {
+			self.export = Hold::Reading;
+			return Gate::Ready;
+		}
+		self.export_run = Some(needs);
+		(self.active, self.wanted, self.paused) = (false, Wanted::Position, false);
+		self.request(project, view);
+		self.go(Then::Run);
+		self.export = Hold::Waiting(needs);
+		Gate::Waiting
+	}
+
+	/// Every frame of a full-quality run, with the intensity in the form `needs` says, is stored.
+	fn full_for(&self, needs: Needs) -> bool {
+		self.request.as_ref().is_some_and(|r| {
+			r.quality.is_full()
+				&& match needs {
+					Needs::Field => true,
+					Needs::Intensity { root } => {
+						r.layers().contains(&Layer::Intensity) && r.quality.intensity_root == root
+					}
+				}
+		}) && self.complete()
+	}
+
+	/// The run a ready export reads.
+	pub(crate) fn export_frames(&self) -> Option<ExportFrames> {
+		let (store, request) = (self.worker.status().store?, self.request.as_ref()?);
+		let schedule = request.schedule();
+		Some(ExportFrames {
+			traces: self.worker.with_traces(<[_]>::to_vec),
+			frame_count: store.count(),
+			total_steps: u64::from(schedule.steps),
+			store,
+		})
+	}
+
+	/// The export ended or was cancelled: the edits it held back are taken up.
+	pub(crate) fn end_export(&mut self, project: &Project, view: &View) -> Change {
+		if matches!(self.export, Hold::Waiting(_)) {
+			// a waiting export cancelled: said in the status bar, its run stops
+			self.drop_waiting_export();
+			self.news = None;
+			self.stop();
+		}
+		self.export = Hold::Idle;
+		if std::mem::take(&mut self.edited_while_reading) { self.edited(project, view) } else { Change::None }
+	}
+
+	fn drop_waiting_export(&mut self) {
+		if let Hold::Waiting(_) = self.export {
+			self.export = Hold::Idle;
+			tracing::warn!("the export was dropped: its run stopped before the last frame");
+			self.news = Some(ExportNews::Stopped);
+		}
+	}
+
+	/// A waiting export's run is ready, or stopped short.
+	fn poll_export(&mut self, state: &WorkState) {
+		let Hold::Waiting(needs) = self.export else { return };
+		if self.full_for(needs) {
+			self.export = Hold::Reading;
+			self.news = Some(ExportNews::Ready);
+		} else if !self.active || matches!(state, WorkState::Failed(_)) {
+			self.drop_waiting_export();
+		}
+	}
+
 	/// No more frames than the position's.
 	pub(crate) fn stop(&mut self) {
+		self.drop_waiting_export();
 		self.revision += 1;
 		self.fit = None;
 		self.active = false;
@@ -577,7 +738,10 @@ impl Live {
 			computing: false,
 			changed,
 			fitted,
+			export: None,
 		};
+		self.poll_export(&status.state);
+		shown.export = self.news.take();
 		let stored = self.stored();
 		shown.computing = shown.running && !status.store.as_ref().is_some_and(|s| s.has(stored));
 		if let Some(store) = &status.store {
