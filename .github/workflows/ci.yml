@@ -132,7 +132,7 @@ jobs:
       - name: Test
         # bash on Windows too, for the parameter expansion
         shell: bash
-        run: just test --profile ci --no-fail-fast ${NO_RUN:+--no-run}
+        run: just test --profile ci ${NO_RUN:+--no-run}
         env:
           NO_RUN: ${{ github.event_name == 'push' && 'true' || '' }}
       # nextest runs no doctests.
