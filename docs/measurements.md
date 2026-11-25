@@ -230,6 +230,34 @@ step:
 On 8 threads the full canvas is bound by the memory's bandwidth. The probe series of Example01 with
 `FourthOrderLaplacian="false"`, with and without its mirror, 600 steps, are byte for byte the same before and after.
 
+2026-11-25, an AMD Ryzen 9 9900X (12 cores, 24 threads), the same bench at 1920x1080, rim 0, master (90d4511) and the
+branch merged on it, alternated, two runs each: 2.64 to 2.67 / 2.65 to 2.66 ms a step on 1 thread, 0.75 to 0.79 /
+0.79 to 0.83 on 8. The gain does not show on this host's native build. Example01 (4th order), `probes --steps 300`:
+5.6 / 2.1 s on 1 thread, 0.97 / 0.47 s on 8; the probe series byte for byte the same.
+
+## The CPU engine in wasm, with and without simd128
+
+2026-11-25, the workstation above. A harness outside the repository runs the CPU engine alone, built for wasm32 at
+each commit with and without `-C target-feature=+simd128` (wasm-bindgen 0.2.130, `wasm-opt -O3`), in Node 24 (V8):
+`read_str`, `RunSpec::create`, `CpuEngine::new`, then `advance_one_step` 150 times after 20 warm-up steps, steps a
+second, median of 3 runs. The author's column: Chrome 157 headless on a VirtualBox guest with 8 vCPUs, no WebGPU, the
+whole app, steps read off its status bar ([The CPU engine's mirror rows](#the-cpu-engines-mirror-rows)). The engine
+alone runs 2.5 to 3.5 times as many steps; compare within a column.
+
+| Build | Mirror rows on slices | 9-point loop | simd128 | Example01, author | Example01, 9900X | Example09, author | Example09, 9900X |
+|---|---|---|---|---|---|---|---|
+| e4475b7 (before) | no | before | no | 13.7 | 36.2 | 31.3 | 100.7 |
+| e4475b7 | no | before | yes | 15.2 | 35.6 | | 210.9 |
+| 7fceb92 | yes | before | no | | 59.3 | | 99.2 |
+| 7fceb92 / 2c192b9 | yes | before | yes | 39.4 | 96.4 | | 101.6 |
+| 10a6a02 | yes | slices cut to the span | no | | 60.7 | | 100.6 |
+| 10a6a02 | yes | slices cut to the span | yes | 40.7 | 96.9 | 60.5 | 217.7 |
+
+Example01 (4th order, a mirror): simd128 alone gains nothing; with the mirror rows on slices it takes 60 to 97 steps a
+second. Example09 (9-point, no mirror): simd128 doubles the steps at e4475b7 and at 10a6a02; at 7fceb92 it gains
+nothing. The author's Example09 figures were taken in the browser's
+whole app and are not split by simd128.
+
 ## Other operations
 
 2026-11-06 unless noted.
