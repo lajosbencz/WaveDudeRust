@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Builds the browser app into the folder given (default target/web): the release wasm of waveduderust and of its
-# workers, wavedude-run-worker and wavedude-spill-worker, bound by wasm-bindgen into pkg/ beside
-# frontends/classic/web/index.html, run-worker.js and spill-worker.js. The wasm-bindgen CLI must match Cargo.lock's
-# crate; `tools/build-web.sh --bindgen-version` prints that version. A tree with changes gets a fresh build id per run
-# (WAVEDUDE_BUILD), which rebuilds app-state, the app and the run worker. binaryen's wasm-opt (-O3, names kept) then
-# shrinks each wasm; WAVEDUDE_NO_WASM_OPT=1 skips it (decision 0029). WAVEDUDE_WEB_APP=waveduderust-material builds the
-# Material window instead of waveduderust, by default into target/web-mineral, on the same page and workers.
+# workers, wavedude-run-worker and wavedude-spill-worker, bound by wasm-bindgen into pkg/ (the run worker's 128-bit
+# SIMD build into pkg-simd/, decision 0032) beside frontends/classic/web/index.html, run-worker.js and spill-worker.js.
+# The wasm-bindgen CLI must match Cargo.lock's crate; `tools/build-web.sh --bindgen-version` prints that version. A
+# tree with changes gets a fresh build id per run (WAVEDUDE_BUILD), which rebuilds app-state, the app and the run
+# worker. binaryen's wasm-opt (-O3, names kept) then shrinks each wasm; WAVEDUDE_NO_WASM_OPT=1 skips it (decision
+# 0029). WAVEDUDE_WEB_APP=waveduderust-material builds the Material window instead of waveduderust, by default into
+# target/web-mineral, on the same page and workers.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 locked=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/version = |"/, ""); print; exit }' "$root/Cargo.lock")
@@ -50,16 +51,38 @@ if ! [[ $WAVEDUDE_BUILD =~ ^[A-Za-z0-9._+-]+$ ]]; then
 	exit 1
 fi
 export WAVEDUDE_BUILD
+# the run worker again with 128-bit SIMD (decision 0032), beside the builds below: its own target dir, so neither waits
+# on the other's lock nor rebuilds the other's crates for the flag
+mkdir -p "$target"
+simd_log="$target/web-simd.log"
+(
+	cargo build --release --locked -p waveduderust_workers --bin wavedude-run-worker --target wasm32-unknown-unknown \
+		--target-dir "$target/simd" --config 'target.wasm32-unknown-unknown.rustflags=["-C", "target-feature=+simd128"]'
+	wasm-bindgen --target web --no-typescript --out-dir "$out/pkg-simd" \
+		"$target/simd/wasm32-unknown-unknown/release/wavedude-run-worker.wasm"
+) > "$simd_log" 2>&1 &
+simd=$!
+trap 'pkill -P "$simd" 2> /dev/null || :; kill "$simd" 2> /dev/null || :' EXIT
 # one build each: built together, the workers would take the app's features of their shared crates (wgpu's WebGL)
 for bin in "$app" wavedude-run-worker wavedude-spill-worker; do
 	case $bin in wavedude-*-worker) package=waveduderust_workers ;; waveduderust-material) package=waveduderust_material ;; waveduderust) package=waveduderust_classic ;; *) package=$bin ;; esac
 	cargo build --release --locked -p "$package" --bin "$bin" --target wasm32-unknown-unknown
 	wasm-bindgen --target web --no-typescript --out-dir "$out/pkg" "$target/wasm32-unknown-unknown/release/$bin.wasm"
 done
+if ! wait "$simd"; then
+	cat "$simd_log" >&2
+	exit 1
+fi
 if [ -z "${WAVEDUDE_NO_WASM_OPT:-}" ]; then
-	# --debuginfo keeps the name section that panic stacks read; the default features cover rustc's wasm32 output
-	for wasm in "$out"/pkg/*_bg.wasm; do
-		wasm-opt -O3 --debuginfo "$wasm" -o "$wasm"
+	# --debuginfo keeps the name section that panic stacks read; the default features and the modules' target features
+	# section cover rustc's wasm32 output
+	opts=()
+	for wasm in "$out"/pkg/*_bg.wasm "$out"/pkg-simd/*_bg.wasm; do
+		wasm-opt -O3 --debuginfo "$wasm" -o "$wasm" &
+		opts+=($!)
+	done
+	for pid in "${opts[@]}"; do
+		wait "$pid"
 	done
 fi
 cp frontends/classic/web/run-worker.js frontends/classic/web/spill-worker.js "$out/"

@@ -15,8 +15,8 @@ worker's 2,104,574 / 595,929 and the spill worker's 314,866 / 89,976. The downlo
 - CI (the wasm32 job of `ci.yml`, the web job of `package.yml`) installs binaryen version_133 from its release tarball
   against a pinned digest; `pins.yml` reports a newer release.
 - No `--enable-*` flags: binaryen 133 enables by default the features rustc's wasm32 output uses (bulk memory, sign
-  extension, non-trapping float to int, mutable globals); it takes SIMD ([0032](0032-wasm-simd128.md)) from the
-  modules' target features section.
+  extension, non-trapping float to int, mutable globals); it takes the SIMD of the run worker's second build
+  ([0032](0032-wasm-simd128.md)) from the module's target features section. The wasm files are optimised in parallel.
 
 ## Why
 

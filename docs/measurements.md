@@ -197,7 +197,7 @@ In the browser, where the run worker has no WebGPU adapter and runs the CPU engi
 headless on the same guest (SwiftShader, no WebGPU), the app built by `tools/build-web.sh` and served by
 `python3 -m http.server`, Example01 opened from the examples, run with F5 and the memory warning's halved resolution,
 the steps read off the status bar 10 s and 30 s after the start. Before: e4475b7; with simd128 alone: e4475b7 built
-with `-C target-feature=+simd128`; after: the branch, simd128 in [`.cargo/config.toml`](../.cargo/config.toml).
+with `-C target-feature=+simd128`; after: 2c192b9, simd128 for every wasm32 build.
 
 | | Steps a second |
 |---|---|
