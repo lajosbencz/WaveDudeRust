@@ -1,4 +1,5 @@
 import { Theme } from "theme.slint";
+import { ProgressIndicator } from "std-widgets.slint";
 import { Command, NewItem, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
 // Selawik on every platform, Segoe UI's metric twin (docs/divergences.md, Font).
 import "../../../crates/waveduderust/assets/fonts/Selawik-Regular.ttf";
@@ -69,7 +70,9 @@ export component AppWindow inherits Window {
     in property <string> file-path;
     in property <bool> dirty;
     in property <bool> title-full-path;
-    in property <string> status-text;
+    in property <string> status-text: @tr("Ready");
+    // the status line's level: a warning turns the bar orange, an error red, until the next Info line
+    in property <LogLevel> status-level: LogLevel.info;
     in property <Commands> commands;
     // The menu bar is Windows' native one (not `Platform.os`, which names a browser's host on the web).
     in property <bool> native-access-keys;
@@ -408,10 +411,12 @@ export component AppWindow inherits Window {
             }
             Rectangle {
                 height: Theme.status-height;
-                background: Theme.status;
+                background: root.status-level == LogLevel.error ? Theme.status-error
+                    : root.status-level == LogLevel.warn ? Theme.status-warn : Theme.status;
                 TouchArea {
                     double-clicked => { root.messages-shown = true; }
                 }
+                Tooltip { text: @markdown("\{@tr("Double-click to open the Messages pane")}"); }
                 HorizontalLayout {
                     padding-left: 4px;
                     padding-right: 16px;
@@ -425,8 +430,7 @@ export component AppWindow inherits Window {
                     // a Text's width bounds its row; the spacer leaves the window free
                     Rectangle { horizontal-stretch: 1; min-width: 12px; }
                     Text {
-                        text: root.export-progress.active ? @tr("Exporting {}/{}", root.export-progress.done, root.export-progress.total)
-                            : root.run-status.state == RunState.none ? ""
+                        text: root.run-status.state == RunState.none ? ""
                             : @tr("{}: {} / {} steps, {}", root.run-status.state == RunState.running ? @tr("Running")
                                 : root.run-status.state == RunState.paused ? @tr("Paused")
                                 : root.run-status.state == RunState.failed ? @tr("Failed")
@@ -434,6 +438,25 @@ export component AppWindow inherits Window {
                                 root.run-status.steps-done, root.run-status.steps, root.run-status.engine);
                         color: Theme.selection-text;
                         vertical-alignment: center;
+                    }
+                    // busy: an export's frames, or a frame being computed
+                    if root.export-progress.active || Canvas.computing: HorizontalLayout {
+                        padding-left: 12px;
+                        spacing: 6px;
+                        Text {
+                            text: root.export-progress.active
+                                ? @tr("Exporting {}/{}", root.export-progress.done, root.export-progress.total)
+                                : @tr("Computing frame {}", root.transport.position);
+                            color: Theme.selection-text;
+                            vertical-alignment: center;
+                        }
+                        ProgressIndicator {
+                            width: 120px;
+                            height: 8px;
+                            y: (parent.height - self.height) / 2;
+                            indeterminate: !root.export-progress.active;
+                            progress: root.export-progress.total > 0 ? root.export-progress.done / root.export-progress.total : 0;
+                        }
                     }
                 }
             }

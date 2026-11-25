@@ -556,6 +556,10 @@ msgstr "Source composite"
 msgid "Computed from the design wavelength and the indices with the simulator's own wave equation (the 4th-order Laplacian)"
 msgstr "Calculé à partir de la longueur d'onde de conception et des indices avec l'équation d'onde du simulateur lui-même (le laplacien du 4e ordre)"
 
+#. StatusComputingFormat
+msgid "Computing frame {}"
+msgstr "Calcul de l'image {}"
+
 #. Label.LensPart.IsConcave
 msgid "Concave (diverging)"
 msgstr "Concave (divergente)"
@@ -771,6 +775,10 @@ msgstr "Ne pas enregistrer"
 #. Label.SimpleGratingPart.Diameter
 msgid "Dot diameter"
 msgstr "Diamètre des points"
+
+#. TipStatusBar
+msgid "Double-click to open the Messages pane"
+msgstr "Double-clic pour ouvrir le panneau Messages"
 
 #. TipSchemeGradient
 msgid "Drag a marker to move its stop; drag it away from the gradient or double-click it to remove the stop; a click on the gradient adds a stop there. With keyboard focus Left and Right move the selected stop by a hundredth, a tenth with Shift, Page Up and Page Down select the stop before or after it, and Del removes it"
@@ -1963,6 +1971,10 @@ msgstr "Graine aléatoire"
 #. MenuSimulationAutoRerun
 msgid "Re-run automatically after edits"
 msgstr "Relancer automatiquement après une modification"
+
+#. Ready
+msgid "Ready"
+msgstr "Prêt"
 
 #. MenuFileRecent
 msgid "Recent Projects"

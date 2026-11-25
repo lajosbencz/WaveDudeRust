@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 86 | 5 | 16 | 4 | 1 |
-| L | Timeline, transport, status | 60 | 11 | 10 | 7 | 2 |
-| R | Live editing and runs | 24 | 9 | 26 | 0 | 2 |
+| V | Preview | 87 | 5 | 15 | 4 | 1 |
+| L | Timeline, transport, status | 63 | 10 | 8 | 7 | 2 |
+| R | Live editing and runs | 25 | 9 | 25 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 725 | 67 | 140 | 158 | 5 |
+| | All | 730 | 66 | 136 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -1051,7 +1051,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-103 | Moving box never touches run; moving probe keeps frames, retraces | ProbeGraphOverlay.cs | 40 Probe graph box | done | a box move edits the probe's box fields only, not its recording key |
 | V-104 | Graph box context menu "Export probe data as CSV..." | ProbeGraphOverlay.cs:273-278 | 40 Probe graph box | done | as M-96 |
 | V-105 | Box hover and focus border | ProbeGraphOverlay.cs | 40 Probe graph box | done | hover: brighter edge and grip (hit-tested in Rust); focus: accent edge, the grip bright when it has focus |
-| V-106 | Busy status "Computing frame n" + indeterminate bar mirrored on status bar | MainWindow.Live.cs | 40 Busy; 70 Status bar | missing | see L-50 |
+| V-106 | Busy status "Computing frame n" + indeterminate bar mirrored on status bar | MainWindow.Live.cs | 40 Busy; 70 Status bar | done | status bar Computing frame n with an indeterminate bar (L-85) |
 | V-107 | Timeline shades frames held by live run | TimelineBar.cs:315 | 40 Busy and stale | done | see L-08 |
 | V-108 | Show/hide each picture toggle (transport) feeds Display > Preview | PreviewPane.xaml:497-506 | 50 Transport #12,13 | done | Preview drops a hidden picture (if), the other takes its room; any change of the flags (toggle, form, undo) ends a gesture and the hidden picture's focus, and its keyboard focus goes back to the pane; the run still draws both layers |
 | V-109 | Pane Ctrl+A select all inside the pane | PreviewPane.xaml:398 | not in spec | missing | not in spec; app-level Ctrl+A menu is log-only |
@@ -1146,9 +1146,9 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-81 | Pause run tooltip becomes "Resume" while paused; menu entry "Resume" | PreviewPane.xaml:436-440 | 50 Run states | missing | menu has fixed "Pause / Resume" |
 | L-82 | Edit stops active run at once; no stale state | MainWindow.Live.cs | 50 Run states | done | request() restarts |
 | L-83 | Status bar left: latest WaveDude Info+ log line, "Ready" at first | Logging/StatusBarTarget.cs | 70 Status bar | done | latest Info+ line |
-| L-84 | Warn turns whole bar orange, Error red, until next Info | StatusBarTarget.cs | 70 Status bar | missing | background fixed to Theme.status; the warn token (StatusBarWarnBackground #ca5100) comes with the feature |
-| L-85 | Far-right busy text + 120 px progress bar (determinate export, indeterminate wait) | MainWindow.xaml | 70 Status bar | partial | export progress goes into run-status text; no bar, no "Computing frame n" |
-| L-86 | Status bar tooltip "Double-click to open the Messages pane" | MainWindow.xaml | 70 Status bar | missing | |
+| L-84 | Warn turns whole bar orange, Error red, until next Info | StatusBarTarget.cs | 70 Status bar | done | status-level from the newest own Info+ line: warn #ca5100, error #b4211d (Next StatusBar*Background), else the accent |
+| L-85 | Far-right busy text + 120 px progress bar (determinate export, indeterminate wait) | MainWindow.xaml | 70 Status bar | done | far right: Exporting n/m with a determinate 120 px bar, Computing frame n with an indeterminate one; hidden when idle |
+| L-86 | Status bar tooltip "Double-click to open the Messages pane" | MainWindow.xaml | 70 Status bar | done | Tooltip Double-click to open the Messages pane; double-click shows it |
 | L-87 | Status bar double-click opens or focuses Messages | MainWindow.xaml | 70 Status bar; 00 Docking | done | double-click opens Messages |
 | L-88 | Errors to status bar and log, no message box | MainWindow.Live.cs | 60 Automatic re-run | partial | run failure logged; export failure shows modal |
 | L-89 | Preview/Run F5 / F6 / Shift+F5 menu shortcuts | SimulationCommands.cs | 10; 50 | done | F5 Run, F6 Pause, Shift+F5 Stop (Esc missing, L-29) |
@@ -1175,7 +1175,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-15 | Goal looked at every 16 steps; fit frame abandoned when not asked | worker.rs | 60 The live run | done | core |
 | R-16 | Last frame stays readable through a clear; graphs follow picture | worker.rs | 60 The live run | partial | pictures hold; no graphs |
 | R-17 | Playback holds at newest contiguous frame | PreviewPane.xaml.cs:1144 | 60 The live run | done | |
-| R-18 | Busy feedback: status "Computing frame n", dim+spinner after 150 ms | MainWindow.Live.cs | 60 The live run | missing | see V-35, L-85 |
+| R-18 | Busy feedback: status "Computing frame n", dim+spinner after 150 ms | MainWindow.Live.cs | 60 The live run | done | status bar Computing frame n (L-85); dim and spinner after 150 ms (preview.slint) |
 | R-19 | Opening a project makes frame 0 and nothing more | MainWindow.Project.cs | 60 The live run | done | live.load wanted Position |
 | R-20 | Simulation > Discard frames (confirm Yes), new store, frames and traces gone | MainWindow.Simulation.cs | 60 The live run | missing | menu item exists; main.rs falls to `menu: discard` log |
 | R-21 | Part edit repaints scene in background (outline follows drag) | MainWindow.Live.cs | 60 The live run | partial | outline rebuilt per request; no drag editing |

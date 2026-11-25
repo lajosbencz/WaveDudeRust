@@ -556,6 +556,10 @@ msgstr "Samengestelde bron"
 msgid "Computed from the design wavelength and the indices with the simulator's own wave equation (the 4th-order Laplacian)"
 msgstr "Berekend uit de ontwerpgolflengte en de indices met de eigen golfvergelijking van de simulator (de 4e-orde-Laplaciaan)"
 
+#. StatusComputingFormat
+msgid "Computing frame {}"
+msgstr "Beeld {} wordt berekend"
+
 #. Label.LensPart.IsConcave
 msgid "Concave (diverging)"
 msgstr "Hol (divergerend)"
@@ -771,6 +775,10 @@ msgstr "Niet opslaan"
 #. Label.SimpleGratingPart.Diameter
 msgid "Dot diameter"
 msgstr "Puntdiameter"
+
+#. TipStatusBar
+msgid "Double-click to open the Messages pane"
+msgstr "Dubbelklik opent het paneel Berichten"
 
 #. TipSchemeGradient
 msgid "Drag a marker to move its stop; drag it away from the gradient or double-click it to remove the stop; a click on the gradient adds a stop there. With keyboard focus Left and Right move the selected stop by a hundredth, a tenth with Shift, Page Up and Page Down select the stop before or after it, and Del removes it"
@@ -1963,6 +1971,10 @@ msgstr "Willekeurige seed"
 #. MenuSimulationAutoRerun
 msgid "Re-run automatically after edits"
 msgstr "Na bewerkingen automatisch opnieuw starten"
+
+#. Ready
+msgid "Ready"
+msgstr "Gereed"
 
 #. MenuFileRecent
 msgid "Recent Projects"

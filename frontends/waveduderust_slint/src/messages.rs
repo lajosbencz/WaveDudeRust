@@ -151,8 +151,11 @@ impl Messages {
 			.collect();
 		app.set_log_rows(ModelRc::new(VecModel::from(rows)));
 		app.set_log_levels(ModelRc::new(VecModel::from(levels)));
-		if let Some(last) = self.lines.iter().rev().find(|l| l.level <= Level::INFO) {
+		// the app's own lines, not a dependency's
+		let own = |l: &&Line| l.level <= Level::INFO && l.target.starts_with("waveduderust");
+		if let Some(last) = self.lines.iter().rev().find(own) {
 			app.set_status_text(last.message.as_str().into());
+			app.set_status_level(LEVELS[index(last.level)].1);
 		}
 	}
 }
