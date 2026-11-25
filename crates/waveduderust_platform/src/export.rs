@@ -107,7 +107,8 @@ impl Parts {
 			Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
 			_ => {}
 		}
-		std::fs::create_dir_all(&folder)?;
+		// the archive's folder must exist: none is made for it
+		std::fs::create_dir(&folder)?;
 		Ok(Self(folder, false))
 	}
 
@@ -150,7 +151,7 @@ fn pack(parts: &Path, archive: &Path, cancel: &AtomicBool) -> std::io::Result<()
 			let inside = path.strip_prefix(parts).map_err(std::io::Error::other)?;
 			zip.write_entry_sync(inside, || {
 				if cancel.load(Ordering::Relaxed) {
-					return Err(std::io::ErrorKind::Interrupted.into());
+					return Err(std::io::Error::other("cancelled"));
 				}
 				let mut chunk = vec![0; 1 << 20];
 				let n = file.read(&mut chunk)?;
@@ -160,13 +161,11 @@ fn pack(parts: &Path, archive: &Path, cancel: &AtomicBool) -> std::io::Result<()
 		}
 		zip.finish()
 	})();
-	match packed {
-		Ok(()) => std::fs::rename(&partial, archive),
-		Err(e) => {
-			let _ = std::fs::remove_file(&partial);
-			Err(e)
-		}
+	let done = packed.and_then(|()| std::fs::rename(&partial, archive));
+	if done.is_err() {
+		let _ = std::fs::remove_file(&partial);
 	}
+	done
 }
 
 /// Runs `request`'s project at full quality and exports it; `progress` hears (frames done, frames in all).
@@ -216,7 +215,7 @@ pub fn export(request: Request, progress: impl FnMut(usize, usize), cancel: &Ato
 	{
 		match pack(&folder.0, archive, cancel) {
 			Ok(()) => report.written = vec![archive.clone()],
-			Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+			Err(_) if cancel.load(Ordering::Relaxed) => {
 				report.state = ExportState::Cancelled;
 				report.written.clear();
 			}
