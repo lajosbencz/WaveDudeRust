@@ -101,6 +101,9 @@ export global Canvas {
     // canvas pixels from the press; `shift` snaps a lever
     callback drag(dx: float, dy: float, shift: bool);
     callback release();
+    // a tree drag: whether it carries an object, and its drop at canvas pixel (x, y)
+    pure callback can-drop(data: data-transfer) -> bool;
+    callback drop(data: data-transfer, x: float, y: float);
     in property <EdgeLine> edge;
     // the graph box with the keyboard focus: its probe's index (-1: none), picture, and whether its grip has it
     in property <int> focus-box: -1;

@@ -1424,6 +1424,26 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			s.show(&app);
 		}
 	});
+	app.global::<ui::Canvas<'_>>()
+		.on_can_drop(|data| matches!(dragged(&data), Some(Node::Source(_) | Node::Part(_) | Node::Probe(_))));
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.global::<ui::Canvas<'_>>().on_drop(move |data, x, y| {
+		let Some(app) = weak.upgrade() else { return };
+		let Some(node) = dragged(&data) else { return };
+		let s = &mut *st.borrow_mut();
+		let Some(fragment) = clipboard::copy(&s.doc.project, &s.doc.view, &[node]) else { return };
+		let mut pasted = None;
+		s.doc.edit_both(None, |p, v| {
+			pasted = clipboard::paste(p, v, fragment, node);
+			if let Some(new) = pasted {
+				canvas::place(p, &[new], (f64::from(x), f64::from(y)));
+			}
+		});
+		if let Some(new) = pasted {
+			s.selection.set(new);
+		}
+		s.show(&app);
+	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_tree_navigate(move |key, extend| {
 		if let Some(app) = weak.upgrade() {

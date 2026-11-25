@@ -849,6 +849,18 @@ impl Drag {
 	}
 }
 
+/// Moves `nodes` so the middle of their points lies at canvas pixel `at`, none leaving the canvas.
+pub(crate) fn place(project: &mut Project, nodes: &[Node], at: (f64, f64)) {
+	let starts: Vec<(ItemRef, Start)> = nodes.iter().filter_map(|&n| start(project, n, Which::Both)).collect();
+	let points: Vec<(f64, f64)> = starts.iter().flat_map(|(_, s)| s.points()).collect();
+	if points.is_empty() {
+		return;
+	}
+	let n = points.len() as f64;
+	let middle = points.iter().fold((0., 0.), |m, p| (m.0 + p.0 / n, m.1 + p.1 / n));
+	move_items(project, &starts, ((at.0 - middle.0).round(), (at.1 - middle.1).round()));
+}
+
 /// Edits `part` by `edit`, then makes its fields agree.
 fn edit_part(part: &mut Part, edit: impl FnOnce(&mut Part)) {
 	let before = part.clone();

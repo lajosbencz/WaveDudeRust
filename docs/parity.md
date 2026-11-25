@@ -12,17 +12,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
-| M | Menus and shortcuts | 77 | 9 | 2 | 52 | 0 |
+| M | Menus and shortcuts | 78 | 9 | 1 | 52 | 0 |
 | D | Dialogs and windows | 47 | 20 | 3 | 9 | 0 |
 | S | Settings | 20 | 7 | 2 | 3 | 0 |
 | I | Icons | 57 | 1 | 3 | 22 | 0 |
-| T | Project tree | 56 | 3 | 3 | 39 | 0 |
-| P | Properties | 311 | 7 | 3 | 4 | 0 |
-| V | Preview | 94 | 5 | 8 | 4 | 1 |
+| T | Project tree | 56 | 4 | 2 | 39 | 0 |
+| P | Properties | 311 | 7 | 1 | 6 | 0 |
+| V | Preview | 95 | 5 | 7 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
 | R | Live editing and runs | 39 | 15 | 2 | 3 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 809 | 85 | 29 | 167 | 5 |
+| | All | 811 | 86 | 24 | 169 | 5 |
 
 ## Cross-cutting
 
@@ -204,7 +204,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-87 | Optical logic > submenu, Mn I/O/I/I | PT:143, SE:175 | ui/10 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
 | M-88 | Optical logic > XOR (Mach-Zehnder), AND, OR (Mn X/A/O) | PT:144-146, SE:176-178 | ui/10 | divergence | tree.slint AddKinds (toolbar + row menu): the entry is there; no access keys (as M-59) |
 | M-89 | Add probe menu: Standard probe (S), Probabilistic > Counting detector (C), Imaging detector (I); tooltips Detector.* | PT:150-157, SE:150-153 | ui/20 l.19,165 (not in ui/10) | divergence | tree.slint ProbeMenu; no access keys or tooltips (divergences.md Add menus) |
-| M-90 | "+ Part" keyboard: Space opens menu, arrows walk, Enter picks | PT:194-208 | ui/10 Add part | missing | |
+| M-90 | "+ Part" keyboard: Space opens menu, arrows walk, Enter picks | PT:194-208 | ui/10 Add part | done | toolbar drop-down buttons open on Space/Enter; Slint menus walk by arrows, Enter picks |
 
 #### M Preview picture context menu (both pictures, parameterised by layer)
 | ID | Feature | Next source | Spec | Slint | Note |
@@ -597,7 +597,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-91 | Drop on own folder: append, outline around folder row | ProjectTree.xaml.cs:570 | 20 Drag and drop | done | a drop on the item's own folder appends, an outline around the folder row |
 | T-92 | No-op positions are not a target | ProjectTree.xaml.cs:570,580 | 20 Drag and drop | done | no-op positions, other lists and settings rows are no target (DragAction.none) |
 | T-93 | Drop into another window's tree (paste there) | ProjectTree.xaml.cs:451-486 | 20 Drag and drop | divergence | divergences.md 'Drag and drop' (0008 12) |
-| T-94 | Drop on a preview picture: pasted, moved as group under drop pixel, selection, one undo | Panes/PreviewPane.xaml.cs | 20 Drag and drop | missing | no handles/pictures drop yet |
+| T-94 | Drop on a preview picture: pasted, moved as group under drop pixel, selection, one undo | Panes/PreviewPane.xaml.cs | 20 Drag and drop | partial | the dragged row alone (a tree drag carries one row), pasted, centred under the drop pixel within the canvas, selected, one undo step |
 | T-95 | Drop onto text editor receives XML | ProjectTree.xaml.cs | 20 Drag and drop | divergence | divergences.md 'Drag and drop' |
 | T-96 | Insertion adorner line / outline visuals | Controls/InsertionAdorner.cs | 20 Drag and drop | done | accent line 2 px along the edge, 1 px outline around a folder |
 | T-97 | File drop on window: image becomes scene image, project file opens | MainWindow.Project.cs | 20 Drag and drop; 10 | partial | see M-138 |
@@ -631,8 +631,8 @@ Not-in-spec rows are marked in the Spec column.
 | P-19 | Name boxes update per keystroke (tree row renames live) | Views/SourceView.xaml:54 | 30 Text box | done | FormText per keystroke, the tree row live, one undo step |
 | P-20 | Commit policy: commit on Enter, on focus loss; flush before Save/Run/Undo/selection change (PendingEdit) | Controls/EditBehavior.cs | 30 Text box commit policy | partial | commit on Enter and on focus loss; a tree row takes the focus on the press, so a box commits before the selection moves; a shortcut (Save, Run, Undo) with a box focused does not commit first |
 | P-21 | Widget press flushes pending edit first (tree row, check, button, picker, dock tab) | Controls/EditBehavior.cs | 30 Text box commit policy | partial | tree rows take the focus on the press; buttons, checks and dock tabs not checked |
-| P-22 | Pending text survives unmount (dock tab switch, picker close); Esc drops it | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
-| P-23 | Rename box closes on focus leaving; Enter/Esc give focus back to tree | Controls/EditBehavior.cs | 30 Text box commit policy | missing |  |
+| P-22 | Pending text survives unmount (dock tab switch, picker close); Esc drops it | Controls/EditBehavior.cs | 30 Text box commit policy | divergence | no dock tabs or pickers that unmount a pending box (decision 0033) |
+| P-23 | Rename box closes on focus leaving; Enter/Esc give focus back to tree | Controls/EditBehavior.cs | 30 Text box commit policy | divergence | no tree rename box: names are edited in the Name box (Enter on the tree goes there) |
 | P-24 | Number box: text + up/down repeat buttons column | Controls/NumberBox.cs | 30 Number box | divergence | ui/number-box.slint, src/number.rs; spin column beside the LineEdit; a click focuses without placing the caret (divergences.md, Number box) |
 | P-25 | Number box: Up/Down key +/- Increment (log: x/ / 1.02) | Controls/NumberBox.cs | 30 Number box | done | NumberSpec increment per field (forms.slint) |
 | P-26 | Number box: PageUp/PageDown 10 increments (log 10 steps) | Controls/NumberBox.cs | 30 Number box | done | as P-25 |
@@ -1031,7 +1031,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-83 | Context menu: Brightness (focus box), Auto brightness | PreviewPane.xaml:736-737,762-763; PreviewPane.xaml.cs:1347 | 40 Automation ids | done | Brightness focuses the header box; Auto brightness |
 | V-84 | Context menu: Export this frame (field Ctrl+Shift+F / intensity Ctrl+Shift+G) | PreviewPane.xaml:739,765 | 40 Automation ids; 10 | done | Command.export-field-frame / export-intensity-frame by the layer |
 | V-85 | Context menu: Export field / intensity / both | PreviewPane.xaml:741-743,767-769 | 40 Automation ids | done | the File menu commands |
-| V-86 | Drop of objects from tree: paste and place at drop pixel | SceneOverlay.cs:1212,1228 | 40 Interaction; 20 | missing | |
+| V-86 | Drop of objects from tree: paste and place at drop pixel | SceneOverlay.cs:1212,1228 | 40 Interaction; 20 | done | picture DropArea: a tree source, part or probe dropped is pasted and placed under the drop pixel |
 | V-87 | Drop of file not claimed, window opens it | SceneOverlay.cs | 40 Interaction | done | winit DroppedFile anywhere on the window (main.rs dropped) |
 | V-88 | Handle tooltips (Tip*Format per role) | SceneOverlay.cs:528-531 | 40 Interaction | done | Rust hit-tests the hover (box, corner, handle) into Canvas.hover-tip; Slint formats Next's Tip*Format texts |
 | V-89 | Picture hover costs nothing; source layer cached as bitmap | SceneOverlay.cs:199-234 | 40 Interaction | done | the drawings take no pointer; one TouchArea per picture, hit-testing in Rust; dots one Path |

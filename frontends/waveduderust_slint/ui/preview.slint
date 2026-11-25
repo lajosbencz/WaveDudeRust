@@ -391,6 +391,13 @@ component Picture inherits VerticalLayout {
                     if !root.over-box: MenuItem { title: @tr("Export both..."); icon: MenuIcons.ios-share; enabled: root.can-export; activated => { root.command(Command.export-both); } }
                 }
                 // one area for the whole picture: the drawings take no pointer, the app finds the handle under a press
+                // a tree item dropped on the picture: a copy placed under the pointer
+                DropArea {
+                    can-drop(e) => { Canvas.can-drop(e.data) ? DragAction.copy : DragAction.none }
+                    dropped(e) => {
+                        Canvas.drop(e.data, e.position.x / (cell.scale * 1px) - cell.left / (cell.scale * 1px), e.position.y / (cell.scale * 1px) - cell.top / (cell.scale * 1px));
+                        DragAction.copy
+                    }
                 touch := TouchArea {
                     if self.has-hover && !self.pressed && Canvas.hover-layer == root.layer && Canvas.hover-tip.kind != TipKind.none: Tooltip {
                         text: @markdown("\{root.tip(Canvas.hover-tip)}");
@@ -475,6 +482,7 @@ component Picture inherits VerticalLayout {
                                 (self.mouse-y - cell.top) / (cell.scale * 1px));
                         }
                     }
+                }
                 }
             }
         }

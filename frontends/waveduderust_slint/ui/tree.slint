@@ -395,6 +395,8 @@ export component ProjectTree inherits Rectangle {
                         DragArea {
                             enabled: row.depth == 2;
                             allow-move: true;
+                            // a drop on a picture copies
+                            allow-copy: true;
                             data: root.drag-data(i);
                             area := TouchArea {
                                 // the press's modifiers: `clicked` carries none
