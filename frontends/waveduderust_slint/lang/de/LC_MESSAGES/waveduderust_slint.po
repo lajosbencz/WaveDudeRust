@@ -1096,6 +1096,10 @@ msgstr "Formatversion"
 msgid "Frame rate"
 msgstr "Bildrate"
 
+#. TipPreviewFrame
+msgid "Frame shown / last frame"
+msgstr "Gezeigtes Bild / letztes Bild"
+
 #. Hint.Video.Fps
 msgid "Frames per second of the exported video."
 msgstr "Bilder pro Sekunde des exportierten Videos."
@@ -1820,6 +1824,10 @@ msgstr "Wiedergabe"
 msgid "Play (Space)"
 msgstr "Wiedergabe (Leertaste)"
 
+#. TipPreviewSpeed
+msgid "Playback speed: pick a factor or type one"
+msgstr "Wiedergabetempo: Faktor wählen oder eintippen"
+
 #. Enum.ProbeKind.Point
 msgid "Point"
 msgstr "Punkt"
@@ -2092,6 +2100,10 @@ msgstr "Alle so viele Schritte ein Bild rendern, exportieren und die Sonden abta
 msgid "Resume"
 msgstr "Fortsetzen"
 
+#. TipPreviewResumeRun
+msgid "Resume the simulation (F6)"
+msgstr "Simulation fortsetzen (F6)"
+
 #. Enum.TriangleType.RightIsosceles
 msgid "Right isosceles (45°)"
 msgstr "Rechtwinklig-gleichschenklig (45°)"
@@ -2251,6 +2263,10 @@ msgstr "Simulation"
 #. Hint.Source.DetachAfter
 msgid "Simulation step at which the source fades out; -1 keeps it on for the whole run."
 msgstr "Simulationsschritt, bei dem die Quelle ausblendet; -1 lässt sie den ganzen Lauf an."
+
+#. TipPreviewStep
+msgid "Simulation step of the frame shown"
+msgstr "Simulationsschritt des gezeigten Bildes"
 
 #. Enum.FacetPattern.Sinusoidal
 msgid "Sinusoidal"

@@ -19,10 +19,10 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
 | V | Preview | 87 | 5 | 15 | 4 | 1 |
-| L | Timeline, transport, status | 63 | 10 | 8 | 7 | 2 |
+| L | Timeline, transport, status | 68 | 10 | 3 | 7 | 2 |
 | R | Live editing and runs | 25 | 9 | 25 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 730 | 66 | 136 | 158 | 5 |
+| | All | 735 | 66 | 131 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -1088,8 +1088,8 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-23 | Click timeline focuses it; focus border = accent | TimelineBar.cs:364,617 | 50 Timeline | done | |
 | L-24 | Automation: slider with range value, "range in..out" | TimelineBar.cs:632-660 | 50 Timeline | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-25 | Run/Stop button (ring+triangle / ring+square), tab 0 | PreviewPane.xaml:413-430 | 50 Transport #0 | done | IconButton run/stop (icons/next), tooltips |
-| L-26 | Run tooltip "Run the simulation from the start (F5)" / Stop tooltip "(Esc)" | PreviewPane.xaml:418,424 | 50 Transport #0 | missing | `tip` property declared in Tool but never rendered |
-| L-27 | Run disabled while export runs / without enabled source | SimulationCommands.cs | 50 Transport #0 | missing | button enabled always |
+| L-26 | Run tooltip "Run the simulation from the start (F5)" / Stop tooltip "(Esc)" | PreviewPane.xaml:418,424 | 50 Transport #0 | done | Run / Stop tooltips with F5 / Esc (timeline.slint) |
+| L-27 | Run disabled while export runs / without enabled source | SimulationCommands.cs | 50 Transport #0 | done | State::can_run: no run or export under way and an enabled source; F5 checks it too |
 | L-28 | Run starts full run from 0 and follows it; same button stops | MainWindow.Simulation.cs | 50 Transport #0 | done | main.rs menu "run" / "stop" |
 | L-29 | Esc stops run | PreviewPane.xaml:424 tip; SimulationCommands.cs | 50 Transport #0 | done | Esc stops the run (app.slint keys) |
 | L-30 | Pause run button (ring + two bars), tab 1, tooltip Pause/Resume (F6) | PreviewPane.xaml:433-442 | 50 Transport #1 | done | IconButton pause-run ||", enabled when running; tooltip not shown, Resume text not swapped |
@@ -1106,12 +1106,12 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-41 | Live toggle (dot in ring, F), disabled without active run | PreviewPane.xaml:474-477; xaml.cs:1255 | 50 Transport #10 | done | button enabled while running; F toggles only with an active run |
 | L-42 | Readout "frame / last" | PreviewPane.xaml:515-523 | 50 Transport readout | done | |
 | L-43 | Readout "step N" dimmer | PreviewPane.xaml:524-533 | 50 Transport readout | done | text-dim; empty when frame missing |
-| L-44 | Readout tooltips ("Frame shown / last frame", "Simulation step of the frame shown") | PreviewPane.xaml:515,524 | 50 Transport readout | missing | |
+| L-44 | Readout tooltips ("Frame shown / last frame", "Simulation step of the frame shown") | PreviewPane.xaml:515,524 | 50 Transport readout | done | readout tooltips Frame shown / last frame, Simulation step of the frame shown |
 | L-45 | Speed label "Speed" margins 8,0,4,0 | PreviewPane.xaml:514 | 50 Transport #11 | done | |
 | L-46 | Speed editable combo 64 px, presets 0.25,0.5,1,1.5,2,4 | PreviewPane.xaml:508 | 50 Transport #11 | done | 64 px TextInput with a preset popup 0.25..4 (timeline.slint) |
 | L-47 | Typed speed 0.01..100, culture decimal separator | PreviewPane.xaml.cs, DoubleText converter | 50 Transport #11 | done | typed 0.01..100, a decimal comma or point (number::parse); bad text restores the speed |
 | L-48 | Space inside speed box swallowed | PreviewPane.xaml.cs:1274 | 50 Transport #11 | done | the text box takes Space as text, Play never sees it |
-| L-49 | Speed tooltip | PreviewPane.xaml:509 | 50 Transport #11 | missing | |
+| L-49 | Speed tooltip | PreviewPane.xaml:509 | 50 Transport #11 | done | Playback speed: pick a factor or type one |
 | L-50 | Show field toggle (wave icon) = Display > Field > Preview | PreviewPane.xaml:503-506 | 50 Transport #12 | done | IconButton field.svg, checked = Display > Field > Preview; one undo step |
 | L-51 | Show intensity toggle (sun icon) = Display > Intensity > Preview | PreviewPane.xaml:497-501 | 50 Transport #13 | done | IconButton intensity.svg, checked = Display > Intensity > Preview; one undo step |
 | L-52 | Layout radios side-by-side / stacked, tab stop = checked one | PreviewPane.xaml:483-495 | 50 Transport #14 | done | two toggles; rest matched in general (decision 0033) |
@@ -1143,7 +1143,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-78 | Engine text "CPU (n threads)" / "GPU: adapter" / browser "engine starting", "no engine" | MainWindow.Live.cs | 50 Run states; 60 Edit classes | partial | only "GPU: <adapter>" |
 | L-79 | Summary log "Run Completed: ..." / "Run Cancelled: ..." in status bar left | MainWindow.Live.cs | 50 Run states | done | live.rs tracing::info |
 | L-80 | Transport state per run state (Run/Pause/Live enable matrix) | MainWindow.Live.cs | 50 Run states | partial | enabled-on-running; Paused state counts as not running so Stop/Pause-run disabled while paused (check) |
-| L-81 | Pause run tooltip becomes "Resume" while paused; menu entry "Resume" | PreviewPane.xaml:436-440 | 50 Run states | missing | menu has fixed "Pause / Resume" |
+| L-81 | Pause run tooltip becomes "Resume" while paused; menu entry "Resume" | PreviewPane.xaml:436-440 | 50 Run states | done | Pause run tooltip Resume the simulation (F6) while paused; the menu entry Resume |
 | L-82 | Edit stops active run at once; no stale state | MainWindow.Live.cs | 50 Run states | done | request() restarts |
 | L-83 | Status bar left: latest WaveDude Info+ log line, "Ready" at first | Logging/StatusBarTarget.cs | 70 Status bar | done | latest Info+ line |
 | L-84 | Warn turns whole bar orange, Error red, until next Info | StatusBarTarget.cs | 70 Status bar | done | status-level from the newest own Info+ line: warn #ca5100, error #b4211d (Next StatusBar*Background), else the accent |

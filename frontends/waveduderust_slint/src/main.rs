@@ -302,6 +302,11 @@ impl State {
 		tracing::info!("Colour scheme '{added}' loaded from '{name}' into the project");
 	}
 
+	/// Run is offered: no run or export under way, and a source enabled to drive one.
+	fn can_run(&self, exporting: bool) -> bool {
+		!self.live.active() && !exporting && self.doc.project.sources.iter().any(|s| s.enabled)
+	}
+
 	/// Whether `node` is an active probe, which a run records.
 	fn active_probe(&self, node: Node) -> bool {
 		matches!(node, Node::Probe(i) if self.doc.project.probes.get(i).is_some_and(|p| p.active))
@@ -397,7 +402,7 @@ impl State {
 				|| self.node_exists(),
 			mine: self.mine(),
 			can_export_csv: !exporting && self.active_probe(self.selection.current()),
-			can_run: !self.live.active() && !exporting,
+			can_run: self.can_run(exporting),
 			run_active: self.live.active(),
 			paused: self.live.paused(),
 			can_stop: self.live.active() || exporting,
@@ -521,6 +526,10 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 	};
 	match command {
 		Command::Run => {
+			// F5 reaches here past a disabled menu entry
+			if !state.can_run(state.exporting.is_some()) {
+				return;
+			}
 			state.live.run(&state.doc.project, &state.doc.view);
 			state.playback.frames = state.live.frames;
 			state.playback.follow();
@@ -882,7 +891,7 @@ fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
 	}
 }
 
-fn transport_state(p: &Playback, shown: &live::Shown, view: &waveduderust::model::View) -> ui::Transport {
+fn transport_state(p: &Playback, shown: &live::Shown, view: &waveduderust::model::View, paused: bool) -> ui::Transport {
 	let int = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
 	let (start, end) = p.range();
 	ui::Transport {
@@ -896,6 +905,7 @@ fn transport_state(p: &Playback, shown: &live::Shown, view: &waveduderust::model
 		live: p.live,
 		looping: p.looping,
 		running: shown.running,
+		paused,
 		step: shown.step.map_or_else(Default::default, |s| format!("step {s}").into()),
 		field_shown: view.field.preview,
 		intensity_shown: view.intensity.preview,
@@ -1401,7 +1411,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				s.playback.live = false;
 			}
 			s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
-			app.set_transport(transport_state(&s.playback, &shown, &s.doc.view));
+			app.set_transport(transport_state(&s.playback, &shown, &s.doc.view, s.live.paused()));
 			app.set_commands(s.commands());
 			if let Some(e) = &mut s.exporting {
 				match e.poll() {

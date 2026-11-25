@@ -14,6 +14,8 @@ export struct Transport {
     live: bool,
     looping: bool,
     running: bool,
+    // the run is paused (F6)
+    paused: bool,
     step: string,
     // Display > Field / Intensity > Preview
     field-shown: bool,
@@ -222,7 +224,7 @@ export component TransportBar inherits Rectangle {
         padding: 3px;
         spacing: 1px;
         IconButton { icon: t.running ? @image-url("icons/next/stop.svg") : @image-url("icons/next/run.svg"); tip: t.running ? @tr("Stop the simulation; the frames so far stay (Esc)") : @tr("Run the simulation from the start (F5)"); clicked => { root.command(t.running ? Command.stop : Command.run); } }
-        IconButton { icon: @image-url("icons/next/pause-run.svg"); tip: @tr("Pause the simulation (F6)"); enabled: t.running; clicked => { root.action(TransportAction.pause-run); } }
+        IconButton { icon: @image-url("icons/next/pause-run.svg"); tip: t.paused ? @tr("Resume the simulation (F6)") : @tr("Pause the simulation (F6)"); enabled: t.running; clicked => { root.action(TransportAction.pause-run); } }
         Divider { }
         IconButton { icon: @image-url("icons/next/play.svg"); tip: @tr("Play (Space)"); enabled: !t.playing; clicked => { root.action(TransportAction.play); } }
         IconButton { icon: @image-url("icons/next/pause.svg"); tip: @tr("Pause (Space)"); enabled: t.playing; clicked => { root.action(TransportAction.play); } }
@@ -235,15 +237,23 @@ export component TransportBar inherits Rectangle {
         IconButton { icon: @image-url("icons/next/loop.svg"); tip: @tr("Loop playback over the export range (L)"); checked: t.looping; clicked => { root.action(TransportAction.loop); } }
         IconButton { icon: @image-url("icons/next/live.svg"); tip: @tr("Follow the newest frame while the run is in progress (F)"); checked: t.live; enabled: t.running; clicked => { root.action(TransportAction.live); } }
         Divider { }
-        Text {
-            text: t.position + " / " + max(0, t.frames - 1);
-            vertical-alignment: center;
-            color: Theme.text;
+        Rectangle {
+            width: frame.preferred-width;
+            frame := Text {
+                text: t.position + " / " + max(0, t.frames - 1);
+                vertical-alignment: center;
+                color: Theme.text;
+            }
+            Tooltip { text: @markdown("\{@tr("Frame shown / last frame")}"); }
         }
-        Text {
-            text: t.step;
-            vertical-alignment: center;
-            color: Theme.text-dim;
+        Rectangle {
+            width: step.preferred-width;
+            step := Text {
+                text: t.step;
+                vertical-alignment: center;
+                color: Theme.text-dim;
+            }
+            Tooltip { text: @markdown("\{@tr("Simulation step of the frame shown")}"); }
         }
         Rectangle { horizontal-stretch: 1; }
         Text {
@@ -256,6 +266,7 @@ export component TransportBar inherits Rectangle {
             width: 64px;
             border-width: 1px;
             border-color: speed-box.has-focus ? Theme.accent : Theme.border;
+            Tooltip { text: @markdown("\{@tr("Playback speed: pick a factor or type one")}"); }
             HorizontalLayout {
                 padding-left: 4px;
                 speed-box := TextInput {
