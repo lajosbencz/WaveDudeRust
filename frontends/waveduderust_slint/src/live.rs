@@ -170,6 +170,8 @@ impl Live {
 			self.active = true;
 			self.wanted = Wanted::All;
 			self.paused = false;
+			// a goal of its own: the worker's echo of it tells when this fill is over
+			self.revision += 1;
 			self.publish();
 		}
 	}
@@ -364,12 +366,19 @@ impl Live {
 			WorkState::Idle if status.store.as_ref().is_some_and(|s| s.is_complete()) => RunState::Completed,
 			WorkState::Idle => RunState::Stopped,
 		});
+		// the worker has taken up the newest goal: its Idle is this run's, not the one before
+		let current = status.adopted == self.revision;
 		if let (Some(started), RunState::Completed | RunState::Stopped, Some(store)) =
 			(self.started, state, status.store.as_ref())
+			&& current
 			&& !matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting)
 			&& !self.summarised
 		{
 			self.summarised = true;
+			// a run with every frame made is over: nothing to stop or pause
+			if state == RunState::Completed {
+				(self.active, self.paused) = (false, false);
+			}
 			let gib = |b: u64| b as f64 / f64::from(1u32 << 30);
 			tracing::info!(
 				"Run {}: {} of {} steps, {} frames, {:.1} s; {} stored, {} in memory ({:.1} GB) and {} on disk ({:.1} GB)",

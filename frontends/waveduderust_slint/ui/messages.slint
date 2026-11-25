@@ -46,14 +46,16 @@ component Toggle inherits Rectangle {
 export component Messages inherits Rectangle {
     in property <[LogRow]> rows;
     in property <[LevelToggle]> levels;
+    // moves with each line added
+    in property <int> added;
     callback toggle(LogLevel);
     callback search(string);
     callback regex(bool);
     callback clear();
     // row `row` pressed with Control or Shift held
     callback select(row: int, control: bool, shift: bool);
-    // the selected lines (`all`: every visible line) to the clipboard
-    callback copy(all: bool);
+    // the selected lines (`all`: every visible line) to the clipboard; false with none
+    callback copy(all: bool) -> bool;
 
     property <bool> regex-on;
     property <bool> follow: true;
@@ -73,7 +75,7 @@ export component Messages inherits Rectangle {
     function newest() {
         list.content-y = min(0px, list.visible-height - root.rows.length * root.row-height);
     }
-    changed rows => {
+    changed added => {
         if (root.follow) { root.newest(); }
     }
     // opens on the newest line, the list focused
@@ -135,9 +137,9 @@ export component Messages inherits Rectangle {
         }
         keys := FocusScope {
             key-pressed(e) => {
+                // with no line selected the app copies its items
                 if (e.modifiers.control && (e.text == "c" || e.text == "C")) {
-                    root.copy(false);
-                    return accept;
+                    return root.copy(false) ? accept : reject;
                 }
                 reject
             }

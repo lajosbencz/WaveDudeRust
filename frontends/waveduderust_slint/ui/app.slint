@@ -120,7 +120,8 @@ export component AppWindow inherits Window {
     callback log-clear();
     callback log-regex(bool);
     callback log-select(int, bool, bool);
-    callback log-copy(bool);
+    callback log-copy(bool) -> bool;
+    in property <int> log-added;
     callback seek(int);
     callback transport-action(TransportAction);
     callback transport-speed(text: string) -> string;
@@ -133,6 +134,10 @@ export component AppWindow inherits Window {
     in-out property <bool> project-shown: true;
     in-out property <bool> properties-shown: true;
     in-out property <bool> messages-shown: false;
+    // the pane takes the focus when it opens; closed, it hands the focus back
+    changed messages-shown => {
+        if (!self.messages-shown) { keys.focus(); }
+    }
     in-out property <bool> preview-stacked: true;
     // The panes' stretches, which the splitters move (docs/ui/00, Panes: 1 : 3, 1 : 2, 3 : 1).
     in-out property <float> left-weight: 1;
@@ -404,7 +409,8 @@ export component AppWindow inherits Window {
                             clear => { root.log-clear(); }
                             regex(on) => { root.log-regex(on); }
                             select(row, control, shift) => { root.log-select(row, control, shift); }
-                            copy(all) => { root.log-copy(all); }
+                            copy(all) => { root.log-copy(all) }
+                            added: root.log-added;
                         }
                     }
                 }

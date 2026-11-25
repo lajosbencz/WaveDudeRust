@@ -1372,9 +1372,13 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	let st = state.clone();
 	app.on_log_copy(move |all| {
 		let text = st.borrow().messages.text(all);
+		if text.is_empty() {
+			return false;
+		}
 		if let Err(e) = clipboard::write(text) {
 			tracing::warn!("clipboard: {e}");
 		}
+		true
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_log_toggle(move |level| {

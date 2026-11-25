@@ -27,6 +27,8 @@ pub(crate) struct Messages {
 	search: String,
 	/// The search is a regular expression; an unfinished one shows everything.
 	regex: bool,
+	/// The search compiled while `regex` is on and it parses.
+	pattern: Option<regex::Regex>,
 	/// The selected lines' ids, and where a Shift selection grows from.
 	selected: BTreeSet<u64>,
 	anchor: Option<u64>,
@@ -42,6 +44,7 @@ impl Messages {
 			shown: [debug, debug, true, true, true],
 			search: String::new(),
 			regex: false,
+			pattern: None,
 			selected: BTreeSet::new(),
 			anchor: None,
 		}
@@ -55,16 +58,25 @@ impl Messages {
 
 	pub(crate) fn search(&mut self, text: &str) {
 		self.search = text.to_owned();
+		self.compile();
 	}
 
 	pub(crate) fn set_regex(&mut self, on: bool) {
 		self.regex = on;
+		self.compile();
+	}
+
+	fn compile(&mut self) {
+		self.pattern = (self.regex && !self.search.is_empty())
+			.then(|| regex::RegexBuilder::new(&self.search).case_insensitive(true).build().ok())
+			.flatten();
 	}
 
 	pub(crate) fn clear(&mut self) {
 		self.ring.clear();
 		self.lines.clear();
 		self.selected.clear();
+		self.anchor = None;
 	}
 
 	/// Takes new lines from the ring; `true` when there were any.
@@ -74,11 +86,8 @@ impl Messages {
 
 	/// The lines shown: of a shown level, matching the search in message, logger or source.
 	fn visible(&self) -> Vec<&Line> {
-		let pattern = (self.regex && !self.search.is_empty())
-			.then(|| regex::RegexBuilder::new(&self.search).case_insensitive(true).build().ok())
-			.flatten();
 		let needle = self.search.to_lowercase();
-		let matches = |text: &str| match &pattern {
+		let matches = |text: &str| match &self.pattern {
 			Some(p) => p.is_match(text),
 			// an unfinished pattern shows everything
 			None if self.regex => true,
@@ -150,6 +159,8 @@ impl Messages {
 			})
 			.collect();
 		app.set_log_rows(ModelRc::new(VecModel::from(rows)));
+		// new lines, which Auto-scroll follows
+		app.set_log_added(i32::try_from(self.seen % (1 << 30)).unwrap_or(0));
 		app.set_log_levels(ModelRc::new(VecModel::from(levels)));
 		// the app's own lines, not a dependency's
 		let own = |l: &&Line| l.level <= Level::INFO && l.target.starts_with("waveduderust");

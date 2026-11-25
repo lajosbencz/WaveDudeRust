@@ -520,8 +520,10 @@ export component Preview inherits Rectangle {
     if root.stacked: VerticalLayout {
         if root.field-shown: Picture {
             focused(has) => { root.field-focused = has; }
-            vertical-stretch: root.stacked ? root.field-weight : 1;
-            horizontal-stretch: root.stacked ? 1 : root.field-weight;
+            // the splitter sets the stretches over a fixed minimum
+            vertical-stretch: root.field-weight;
+            min-height: 60px;
+            preferred-height: 0px;
             title: @tr("Field");
             source: root.field;
             layer: Layer.field;
@@ -543,8 +545,9 @@ export component Preview inherits Rectangle {
         }
         if root.intensity-shown: Picture {
             focused(has) => { root.intensity-focused = has; }
-            vertical-stretch: root.stacked ? root.intensity-weight : 1;
-            horizontal-stretch: root.stacked ? 1 : root.intensity-weight;
+            vertical-stretch: root.intensity-weight;
+            min-height: 60px;
+            preferred-height: 0px;
             title: @tr("Intensity");
             source: root.intensity;
             layer: Layer.intensity;
@@ -560,8 +563,9 @@ export component Preview inherits Rectangle {
     if !root.stacked: HorizontalLayout {
         if root.field-shown: Picture {
             focused(has) => { root.field-focused = has; }
-            vertical-stretch: root.stacked ? root.field-weight : 1;
-            horizontal-stretch: root.stacked ? 1 : root.field-weight;
+            horizontal-stretch: root.field-weight;
+            min-width: 60px;
+            preferred-width: 0px;
             title: @tr("Field");
             source: root.field;
             layer: Layer.field;
@@ -582,8 +586,9 @@ export component Preview inherits Rectangle {
         }
         if root.intensity-shown: Picture {
             focused(has) => { root.intensity-focused = has; }
-            vertical-stretch: root.stacked ? root.intensity-weight : 1;
-            horizontal-stretch: root.stacked ? 1 : root.intensity-weight;
+            horizontal-stretch: root.intensity-weight;
+            min-width: 60px;
+            preferred-width: 0px;
             title: @tr("Intensity");
             source: root.intensity;
             layer: Layer.intensity;
