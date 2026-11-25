@@ -514,6 +514,7 @@ export component AppWindow inherits Window {
         data <=> root.settings;
         undo-spec: root.undo-spec;
         edited => { root.settings-edited(); }
+        preset(q) => { root.welcome-preset(q); }
     }
     MemoryWarningLayer {
         // an overlay: its frame sets no bounds on the window

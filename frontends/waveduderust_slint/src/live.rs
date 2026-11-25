@@ -35,6 +35,8 @@ pub(crate) struct Live {
 	pub(crate) quality: PreviewQuality,
 	/// Re-run after edits (Settings).
 	pub(crate) auto_rerun: bool,
+	/// A 16-bit plane's dither depth (10..16; else plain).
+	dither_bits: u32,
 	/// Warn when a run's frames exceed the RAM cache.
 	pub(crate) warn: bool,
 	asked: Option<Ask>,
@@ -134,6 +136,7 @@ impl Live {
 			quality: PreviewQuality::FULL,
 			auto_rerun: true,
 			warn: true,
+			dither_bits: 0,
 			asked: None,
 			frames: 0,
 			drawn: None,
@@ -155,6 +158,14 @@ impl Live {
 		})
 	}
 
+	/// Dithering only redraws.
+	pub(crate) fn set_dither(&mut self, bits: u32) {
+		if bits != self.dither_bits {
+			self.dither_bits = bits;
+			self.drawn = None;
+		}
+	}
+
 	pub(crate) fn active(&self) -> bool {
 		self.active
 	}
@@ -166,8 +177,9 @@ impl Live {
 	/// Runs `project` from the start; a running run starts over (docs/ui/60, Automatic re-run).
 	/// A project opened: its frame at the position alone (docs/ui/60, The live run).
 	pub(crate) fn load(&mut self, project: &Project, view: &View) {
-		// nothing carries over from the project before, its tracking neither
+		// nothing carries over from the project before, its tracking neither, nor a warning asked
 		self.request = None;
+		self.asked = None;
 		self.active = false;
 		self.started = None;
 		self.wanted = Wanted::Position;
@@ -177,8 +189,7 @@ impl Live {
 
 	/// Every frame (Run); `false` when the memory warning asks first.
 	pub(crate) fn run(&mut self, project: &Project, view: &View) -> bool {
-		self.active = false;
-		self.wanted = Wanted::Position;
+		(self.active, self.wanted, self.paused) = (false, Wanted::Position, false);
 		self.request(project, view);
 		self.want_all(Then::Run)
 	}
@@ -186,7 +197,11 @@ impl Live {
 	/// Every frame of the project as it is, from the position on (Play with frames missing, docs/ui/50); `false`
 	/// when the memory warning asks first.
 	pub(crate) fn fill(&mut self) -> bool {
-		self.active || self.complete() || self.want_all(Then::Play)
+		if self.active || self.complete() {
+			return true;
+		}
+		self.paused = false;
+		self.want_all(Then::Play)
 	}
 
 	/// The worker holds every frame of the newest goal.
@@ -211,6 +226,8 @@ impl Live {
 
 	/// Every frame, no warning asked; a run under way goes on.
 	pub(crate) fn go(&mut self, then: Then) {
+		// a run that goes needs no answer
+		self.asked = None;
 		if self.active {
 			return;
 		}
@@ -493,7 +510,7 @@ impl Live {
 		{
 			let tag = FrameTag { store: store.id(), generation: store.generation(), stored };
 			if self.drawn != Some(tag) {
-				let look = Look { project, view, schemes, edges: self.edges.as_ref() };
+				let look = Look { project, view, schemes, edges: self.edges.as_ref(), dither_bits: self.dither_bits };
 				let pictures = [(&mut self.field, Layer::Field), (&mut self.intensity, Layer::Intensity)];
 				if let Some(frame) = status.device_frames.and_then(|frames| frames.hold(tag)) {
 					self.drawn = Some(tag);

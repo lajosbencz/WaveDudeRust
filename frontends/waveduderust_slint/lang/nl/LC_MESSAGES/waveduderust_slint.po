@@ -96,6 +96,10 @@ msgstr "(onleesbaar)"
 msgid "1 entry"
 msgstr "1 item"
 
+#. MenuViewSamples16
+msgid "16-bit float"
+msgstr "16-bits zwevende komma"
+
 #. Enum.TriangleType.ThirtySixtyNinety
 msgid "30-60-90"
 msgstr "30-60-90"
@@ -103,6 +107,10 @@ msgstr "30-60-90"
 #. Label.Simulation.FourthOrderLaplacian
 msgid "4th-order Laplacian"
 msgstr "4e-orde-Laplaciaan"
+
+#. MenuViewSamples8
+msgid "8-bit palette index (brightness fixed when the run starts)"
+msgstr "8-bits paletindex (helderheid vastgelegd bij de start van de run)"
 
 #. AboutTagline
 msgid "A 2D wave simulator"
@@ -1672,6 +1680,10 @@ msgstr "OR: even helder voor één als twee"
 msgid "Object sources"
 msgstr "Objectbronnen"
 
+#. MenuViewDitherOff
+msgid "Off"
+msgstr "Uit"
+
 #. Label.Source.OffWidth
 msgid "Off width"
 msgstr "Pauzebreedte"
@@ -1864,6 +1876,10 @@ msgstr "Positie in het verloop: 0 bij de laagste waarde, 1 bij de hoogste"
 msgid "Preview"
 msgstr "Voorbeeld"
 
+#. MenuViewDither
+msgid "Preview dithering"
+msgstr "Voorbeelddithering"
+
 #. MenuViewFrames
 msgid "Preview frames"
 msgstr "Voorbeeldframes"
@@ -1871,6 +1887,10 @@ msgstr "Voorbeeldframes"
 #. MenuViewResolution
 msgid "Preview resolution"
 msgstr "Voorbeeldresolutie"
+
+#. MenuViewSamples
+msgid "Preview samples"
+msgstr "Voorbeeldsamples"
 
 #. TipPreviewStepBack
 msgid "Previous frame (,)"

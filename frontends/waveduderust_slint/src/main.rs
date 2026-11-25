@@ -164,11 +164,13 @@ impl State {
 				app.set_memory_warning(memory::data(&w, ticks));
 				app.set_memory_warning_shown(true);
 			}
+			// the request may have changed under it
+			(Some((_, w)), Some(ticks)) => app.set_memory_warning(memory::data(&w, ticks)),
 			(None, Some(_)) => {
 				self.warning_ticks = None;
 				app.set_memory_warning_shown(false);
 			}
-			_ => {}
+			(None, None) => {}
 		}
 	}
 
@@ -735,7 +737,9 @@ fn keep_window(state: &mut State, app: &AppWindow) {
 	use waveduderust_platform::settings::WindowState;
 	let w = app.window();
 	let s = &mut state.settings;
-	if w.is_maximized() {
+	if w.is_minimized() {
+		// where it was before is unknown: the saved place stays
+	} else if w.is_maximized() {
 		s.window_state = WindowState::Maximized;
 	} else {
 		let scale = w.scale_factor();
@@ -863,6 +867,7 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	state.live.quality = s.preview_quality();
 	state.live.auto_rerun = s.auto_rerun;
 	state.live.warn = s.warn_when_ram_insufficient;
+	state.live.set_dither(s.preview_dither_bits);
 	// another preview quality is a simulation edit
 	if state.live.edited(&state.doc.project, &state.doc.view) == live::Change::Frames {
 		state.playback.pause();
@@ -871,7 +876,14 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 
 /// Pushes the settings to the Settings window and the Welcome page.
 fn show_settings(state: &State, app: &AppWindow) {
-	app.set_settings(settings::data(&state.settings));
+	#[allow(unused_mut, reason = "the browser has no RAM row")]
+	let mut data = settings::data(&state.settings);
+	#[cfg(not(target_arch = "wasm32"))]
+	{
+		let (available, physical) = settings::ram();
+		(data.ram_available, data.ram_physical) = (available.into(), physical.into());
+	}
+	app.set_settings(data);
 	app.set_undo_spec(settings::undo_spec());
 	app.set_welcome_ram((state.facts.physical_bytes as f64 / f64::from(1u32 << 30)) as f32);
 	app.set_welcome_levers(settings::levers(&state.settings));
@@ -1582,6 +1594,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				app.set_intensity(image);
 			}
 			app.set_run_status(shown.status);
+			// Play and edits ask from here too
+			s.show_warning(&app);
 			app.global::<ui::Canvas<'_>>().set_computing(shown.computing);
 		}
 	});

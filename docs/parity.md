@@ -13,8 +13,8 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 13 | 5 | 2 | 20 | 0 |
 | M | Menus and shortcuts | 71 | 8 | 9 | 52 | 0 |
-| D | Dialogs and windows | 36 | 13 | 22 | 8 | 0 |
-| S | Settings | 13 | 6 | 10 | 3 | 0 |
+| D | Dialogs and windows | 37 | 14 | 20 | 8 | 0 |
+| S | Settings | 15 | 6 | 8 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
 | R | Live editing and runs | 30 | 11 | 18 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 744 | 67 | 121 | 158 | 5 |
+| | All | 747 | 68 | 117 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -309,8 +309,8 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-31 | Settings: section list left (General, Preview and memory, Simulation, Export, Updates), Up/Down walk, Tab cycles | not in Next | ui/70 Settings | partial | sections General/Preview and memory/Simulation/Updates (settings.rs:11); no Export section; mouse only |
 | D-32 | Settings: rows = label column + control; change applies and saves at once | not in Next | ui/70 Settings | done | set_row -> save (settings.rs:164) |
 | D-33 | Settings: one "Close" button, default and cancel (Enter outside a control, Esc) | not in Next | ui/70 Settings | done | Close, Esc; rest matched in general (decision 0033) |
-| D-34 | Settings: Preset buttons row (Low, Medium, High, Auto) in Preview and memory | not in Next | ui/70 Settings table | missing | only on Welcome |
-| D-35 | Settings: RAM row read-only "{available} available of {physical}" native; browser drop-down | not in Next | ui/70 Settings table | missing | |
+| D-34 | Settings: Preset buttons row (Low, Medium, High, Auto) in Preview and memory | not in Next | ui/70 Settings table | done | Preset buttons Low, Medium, High, Auto (settings::preset) |
+| D-35 | Settings: RAM row read-only "{available} available of {physical}" native; browser drop-down | not in Next | ui/70 Settings table | partial | natively {available} available of {physical}; the browser drop-down is not there (FrameMemoryBytes, S-09) |
 | D-36 | Settings: Updates > "Check now" button | not in Next | ui/70 Settings table | divergence | decision 0033, dropped |
 | D-37 | Updates flow: launch check, "WaveDude Rust x is available (this is y). Download it?", progress "Downloading WaveDude Rust x", signature verify, "Restart now to install it?", failure/up-to-date messages, non-replaceable builds link to release page | not in Next | ui/70 Updates, decision 0011 | divergence | decision 0033, dropped |
 | D-38 | Export dialog: in-window dialog, title per command ("Export the field", "...the intensity", "...the field and the intensity", "Export the frame", "Export the probe data") | SE:272-277 | ui/70 Export Save dialog | divergence | Next uses a native save dialog; port in-window dialog (divergences.md "Export names", decision 0025). Slint: native rfd save dialog, no titles (export.rs:~106) -> partial implementation of the old Next form |
@@ -372,8 +372,8 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 | S-09 | FrameMemoryBytes (0 Auto, 256 MiB..2 GiB; browser only), RAM row; replaces Next FrameMemoryPercent (10..100 %) | UIS:203 (percent) | ui/80, ui/70 | missing | no row; Next's percent setting dropped in v2 |
 | S-10 | PreviewResolution 1/2/4 drop-down Full/Half/Quarter | UIS:213 | ui/80, ui/70 | done | set.rs row; apply via preview_quality |
 | S-11 | PreviewFrames 1/2/4 drop-down "Full / Half (every second frame) / Quarter (every fourth frame)" | UIS:223, SE:85-88 | ui/80, ui/70 | done | row with Full/Half/Quarter; rest matched in general (decision 0033) |
-| S-12 | PreviewSampleBytes 1/2 drop-down "16-bit float / 8-bit palette index (brightness fixed when the run starts)" | UIS:233, SE:89-91 | ui/80, ui/70 | missing | no row (lever text reads it) |
-| S-13 | PreviewDitherBits 0/10/12/14/16 drop-down, disabled unless 16-bit samples | UIS:243, SE:92-97 | ui/80, ui/70 | missing | no row, no dithering |
+| S-12 | PreviewSampleBytes 1/2 drop-down "16-bit float / 8-bit palette index (brightness fixed when the run starts)" | UIS:233, SE:89-91 | ui/80, ui/70 | done | Settings > Preview and memory, Preview samples: 16-bit float / 8-bit palette index |
+| S-13 | PreviewDitherBits 0/10/12/14/16 drop-down, disabled unless 16-bit samples | UIS:243, SE:92-97 | ui/80, ui/70 | done | Preview dithering Off/10/12/14/16, disabled at 8-bit; Live::set_dither redraws (gpu.rs Look) |
 | S-14 | UseGpu bool (true), "Use the GPU (OpenCL)" -> "Use the GPU" | UIS:193, MW:420 | ui/80, ui/70 | partial | row exists; consumed by export backend only (export.rs:~100), live run not switched by apply_settings |
 | S-15 | UiZoom double 0.5..3 (menu), up to 8 (`--zoom`), default 1.0 / 2.0 touch; drop-down 0.5x..3x | UIS:256, MW:302-327 | ui/80, ui/70 | divergence | decision 0033, dropped |
 | S-16 | WarnWhenRamInsufficient bool (true) (+ memory warning "Do not warn me again") | UIS:183, MW:428 | ui/80, ui/70 | done | Settings row and the warning Do not warn me again |

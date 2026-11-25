@@ -2,6 +2,7 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { NumberSpec } from "number-box.slint";
 import { FormPanel, FormLabel, IntField, Check, Choice } from "form.slint";
+import { PreviewQuality } from "commands.slint";
 
 export enum ColorTheme { system, light, dark }
 // `system`: the system's language when a table has it, else English
@@ -17,6 +18,13 @@ export struct SettingsData {
     undo-steps: int,
     preview-resolution: Scale,
     preview-frames: Scale,
+    // 8-bit palette index rather than 16-bit float
+    preview-index: bool,
+    // 0 off, then 10, 12, 14, 16 bits per channel
+    preview-dither: int,
+    // the memory free now and the machine's; empty in the browser
+    ram-available: string,
+    ram-physical: string,
     use-gpu: bool,
     auto-rerun: bool,
     warn-ram: bool,
@@ -54,6 +62,7 @@ export component SettingsLayer inherits Rectangle {
     in-out property <SettingsData> data;
     in property <NumberSpec> undo-spec;
     callback edited();
+    callback preset(PreviewQuality);
 
     property <[string]> sections: [@tr("General"), @tr("Preview and memory"), @tr("Simulation"), @tr("Updates")];
     property <int> section;
@@ -142,6 +151,24 @@ export component SettingsLayer inherits Rectangle {
                         }
                     }
                     if root.section == 1: FormPanel {
+                        if root.data.ram-physical != "": Row {
+                            FormLabel { text: @tr("RAM"); }
+                            Text {
+                                text: @tr("{} available of {}", root.data.ram-available, root.data.ram-physical);
+                                color: Theme.text;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Row {
+                            FormLabel { text: @tr("Preset"); }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button { text: @tr("Low"); clicked => { root.preset(PreviewQuality.low); } }
+                                Button { text: @tr("Medium"); clicked => { root.preset(PreviewQuality.medium); } }
+                                Button { text: @tr("High"); clicked => { root.preset(PreviewQuality.high); } }
+                                Button { text: @tr("Auto"); clicked => { root.preset(PreviewQuality.auto); } }
+                            }
+                        }
                         Row {
                             FormLabel { text: @tr("Preview resolution"); }
                             ScaleChoice { value <=> root.data.preview-resolution; committed => { root.edited(); } }
@@ -149,6 +176,25 @@ export component SettingsLayer inherits Rectangle {
                         Row {
                             FormLabel { text: @tr("Preview frames"); }
                             ScaleChoice { value <=> root.data.preview-frames; committed => { root.edited(); } }
+                        }
+                        Row {
+                            FormLabel { text: @tr("Preview samples"); }
+                            Choice {
+                                titles: [@tr("16-bit float"), @tr("8-bit palette index (brightness fixed when the run starts)")];
+                                index: root.data.preview-index ? 1 : 0;
+                                picked(i) => { root.data.preview-index = i == 1; }
+                                committed => { root.edited(); }
+                            }
+                        }
+                        Row {
+                            FormLabel { text: @tr("Preview dithering"); }
+                            Choice {
+                                titles: [@tr("Off"), "10", "12", "14", "16"];
+                                enabled: !root.data.preview-index;
+                                index: root.data.preview-dither;
+                                picked(i) => { root.data.preview-dither = i; }
+                                committed => { root.edited(); }
+                            }
                         }
                         Row {
                             Check { colspan: 2; text: @tr("Use the GPU"); checked <=> root.data.use-gpu; committed => { root.edited(); } }

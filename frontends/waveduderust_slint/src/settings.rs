@@ -43,11 +43,22 @@ pub(crate) fn data(s: &Settings) -> SettingsData {
 		undo_steps: i32::try_from(s.undo_steps).unwrap_or(i32::MAX),
 		preview_resolution: scale(s.preview_resolution),
 		preview_frames: scale(s.preview_frames),
+		preview_index: s.preview_sample_bytes < 2,
+		preview_dither: [0, 10, 12, 14, 16].iter().position(|&b| b == s.preview_dither_bits).unwrap_or(0) as i32,
+		ram_available: Default::default(),
+		ram_physical: Default::default(),
 		use_gpu: s.use_gpu,
 		auto_rerun: s.auto_rerun,
 		warn_ram: s.warn_when_ram_insufficient,
 		check_updates: s.check_for_updates == Some(true),
 	}
+}
+
+/// The memory free now and the machine's.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn ram() -> (String, String) {
+	let (available, physical) = waveduderust::run::Memory::default().read();
+	(crate::memory::size(available), crate::memory::size(physical))
 }
 
 /// Writes the window's edit into `settings` and saves them.
@@ -71,6 +82,8 @@ pub(crate) fn apply(d: &SettingsData, settings: &mut Settings, store: Option<&St
 	settings.undo_steps = u32::try_from(d.undo_steps).unwrap_or_default();
 	settings.preview_resolution = divisor(d.preview_resolution);
 	settings.preview_frames = divisor(d.preview_frames);
+	settings.preview_sample_bytes = if d.preview_index { 1 } else { 2 };
+	settings.preview_dither_bits = [0, 10, 12, 14, 16][usize::try_from(d.preview_dither).unwrap_or(0).min(4)];
 	settings.use_gpu = d.use_gpu;
 	settings.auto_rerun = d.auto_rerun;
 	settings.warn_when_ram_insufficient = d.warn_ram;

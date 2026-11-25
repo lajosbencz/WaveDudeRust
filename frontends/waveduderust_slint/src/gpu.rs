@@ -45,6 +45,8 @@ pub(crate) struct Look<'a> {
 	/// The user's schemes.
 	pub(crate) schemes: &'a SchemeStore,
 	pub(crate) edges: Option<&'a Arc<EdgeImage>>,
+	/// A 16-bit plane's dither depth (10..16; else plain).
+	pub(crate) dither_bits: u32,
 }
 
 /// A layer's picture: the pipeline's draw into a texture of the frame's size.
@@ -69,7 +71,7 @@ impl Picture {
 		shape: &FrameShape,
 		look: &Look<'_>,
 	) -> Option<slint::Image> {
-		let Look { project, view, schemes, edges } = *look;
+		let Look { project, view, schemes, edges, dither_bits } = *look;
 		let (w, h) = (shape.width(), shape.height());
 		let texture = match &self.texture {
 			Some(t) if t.width() == w && t.height() == h => t.clone(),
@@ -93,7 +95,7 @@ impl Picture {
 			_ => &view.intensity,
 		};
 		let colours = LayerColours::of(presentation, &project.color_schemes, schemes);
-		let fit = layer::View::of(shape, (w, h), None, 0);
+		let fit = layer::View::of(shape, (w, h), None, dither_bits);
 		self.picture.set(
 			pipeline,
 			device,
