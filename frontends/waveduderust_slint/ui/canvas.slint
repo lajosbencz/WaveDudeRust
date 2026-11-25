@@ -34,6 +34,12 @@ export struct GraphBox {
     selected: bool,
 }
 
+// what a handle or graph box under the pointer does (Next's Tip*Format strings)
+export enum TipKind { none, marker, lever, grip, point, node, in-handle, out-handle, graph, graph-corner }
+
+// the tooltip of what is under the pointer: its kind, its item's name and the point or node index
+export struct HoverTip { kind: TipKind, name: string, index: int }
+
 // what a wave meets at the canvas edge
 export enum EdgeLine { open, wall, rim }
 
@@ -103,6 +109,7 @@ export global Canvas {
     // the graph box under the pointer: its probe's index (-1: none) and picture
     in property <int> hover-box: -1;
     in property <Layer> hover-layer;
+    in property <HoverTip> hover-tip;
     // the pointer over a picture at canvas pixel (x, y)
     callback hover(layer: Layer, x: float, y: float);
     callback export-probe-csv(probe: int);

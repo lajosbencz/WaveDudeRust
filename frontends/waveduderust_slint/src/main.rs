@@ -836,6 +836,14 @@ fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
 		TransportAction::Loop => p.looping ^= true,
 		TransportAction::Live => p.live ^= state.live.active(),
 		TransportAction::PauseRun => state.live.toggle_pause(),
+		TransportAction::ShowField | TransportAction::ShowIntensity => {
+			use waveduderust::model::Layer;
+			let layer = if action == TransportAction::ShowField { Layer::Field } else { Layer::Intensity };
+			// the picture comes or goes: a gesture on it gets no release
+			state.finish_gesture(app);
+			state.doc.edit_view_merging(None, |v| v.layer_mut(layer).preview ^= true);
+			state.show(app);
+		}
 		TransportAction::Layout => {
 			use waveduderust_platform::settings::Orientation;
 			// the pictures are made anew: a gesture on them gets no release
@@ -849,7 +857,7 @@ fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
 	}
 }
 
-fn transport_state(p: &Playback, shown: &live::Shown) -> ui::Transport {
+fn transport_state(p: &Playback, shown: &live::Shown, view: &waveduderust::model::View) -> ui::Transport {
 	let int = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
 	let (start, end) = p.range();
 	ui::Transport {
@@ -864,6 +872,8 @@ fn transport_state(p: &Playback, shown: &live::Shown) -> ui::Transport {
 		looping: p.looping,
 		running: shown.running,
 		step: shown.step.map_or_else(Default::default, |s| format!("step {s}").into()),
+		field_shown: view.field.preview,
+		intensity_shown: view.intensity.preview,
 	}
 }
 
@@ -1336,7 +1346,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				s.playback.live = false;
 			}
 			s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
-			app.set_transport(transport_state(&s.playback, &shown));
+			app.set_transport(transport_state(&s.playback, &shown, &s.doc.view));
 			app.set_commands(s.commands());
 			if let Some(e) = &mut s.exporting {
 				match e.poll() {
@@ -1435,6 +1445,8 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 			let s = &mut *st.borrow_mut();
 			if s.overlays.rescale(layer, scale) {
 				s.overlays.show(&app.global::<ui::Canvas<'_>>(), &s.doc.project, &s.doc.view, &s.selection);
+				// the boxes are laid out in logical pixels
+				s.show_graphs();
 			}
 		});
 	});
@@ -1501,6 +1513,7 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		let under = s.graphs.under(layer, (x, y)).map_or(-1, |i| i32::try_from(i).unwrap_or(-1));
 		canvas.set_hover_layer(layer);
 		canvas.set_hover_box(under);
+		canvas.set_hover_tip(s.overlays.tip(&s.doc.project, layer, (x, y), s.graphs.placed(layer)));
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	canvas.on_export_probe_csv(move |probe| {

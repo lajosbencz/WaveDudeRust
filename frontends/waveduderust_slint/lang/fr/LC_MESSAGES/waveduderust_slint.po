@@ -1124,6 +1124,14 @@ msgstr "Graduel"
 msgid "Graph"
 msgstr "Graphique"
 
+#. TipProbeBoxFormat
+msgid "Graph of {}: drag to move the box; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "Graphique de {} : glisser pour déplacer le cadre ; avec le focus clavier, les flèches le déplacent d'un pixel, de dix avec Maj"
+
+#. TipProbeBoxCornerFormat
+msgid "Graph of {}: drag to resize the box (it snaps to the fixed sizes); with keyboard focus the arrow keys resize it by a pixel, ten with Shift"
+msgstr "Graphique de {} : glisser pour redimensionner le cadre (il s'aligne sur les tailles fixes) ; avec le focus clavier, les flèches le redimensionnent d'un pixel, de dix avec Maj"
+
 #. MenuViewResolutionHalf
 msgid "Half"
 msgstr "Moitié"
@@ -2152,9 +2160,17 @@ msgstr "Forme"
 msgid "Show or hide what this kind of part is"
 msgstr "Affiche ou masque ce qu'est ce type de pièce"
 
+#. TipPreviewShowField
+msgid "Show the field picture"
+msgstr "Afficher l'image du champ"
+
 #. Hint.Display.HandlesInPreview
 msgid "Show the handles, lines, emitter dots and levers of every source, part and probe over the preview pictures. A selected object shows its own either way."
 msgstr "Afficher les poignées, les lignes, les points émetteurs et les leviers de toutes les sources, pièces et sondes sur les images de l'aperçu. Un objet sélectionné montre les siens dans tous les cas."
+
+#. TipPreviewShowIntensity
+msgid "Show the intensity picture"
+msgstr "Afficher l'image de l'intensité"
 
 #. Hint.Display.LabelsInPreview
 msgid "Show the names beside the handles over the preview pictures. A selected object shows its own either way."
@@ -2703,6 +2719,34 @@ msgstr "{} (introuvable)"
 #. ItemCountMany
 msgid "{} entries"
 msgstr "{} entrées"
+
+#. TipInHandleFormat
+msgid "{}, node {}, in-handle: drag to shape the segment arriving here; a smooth node turns the out-handle with it. With keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}, nœud {}, poignée d'entrée : glisser pour former le segment qui arrive ici ; un nœud lisse entraîne la poignée de sortie. Avec le focus clavier, les flèches la déplacent d'un pixel, de dix avec Maj"
+
+#. TipOutHandleFormat
+msgid "{}, node {}, out-handle: drag to shape the segment leaving here; a smooth node turns the in-handle with it. With keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}, nœud {}, poignée de sortie : glisser pour former le segment qui part d'ici ; un nœud lisse entraîne la poignée d'entrée. Avec le focus clavier, les flèches la déplacent d'un pixel, de dix avec Maj"
+
+#. TipNodeFormat
+msgid "{}, node {}: drag to move it with its handles; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}, nœud {} : glisser pour le déplacer avec ses poignées ; avec le focus clavier, les flèches le déplacent d'un pixel, de dix avec Maj"
+
+#. TipPointFormat
+msgid "{}, point {}: drag to move it; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}, point {} : glisser pour déplacer ; avec le focus clavier, les flèches déplacent d'un pixel, de dix avec Maj"
+
+#. TipMarkerFormat
+msgid "{}: drag to move; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{} : glisser pour déplacer ; avec le focus clavier, les flèches déplacent d'un pixel, de dix avec Maj"
+
+#. TipGripFormat
+msgid "{}: drag to resize; with keyboard focus the arrow keys move the grip by a pixel, ten with Shift"
+msgstr "{} : glisser pour redimensionner ; avec le focus clavier, les flèches déplacent la poignée d'un pixel, de dix avec Maj"
+
+#. TipAngleMarkerFormat
+msgid "{}: drag to turn the array (Shift snaps to 15 degrees); with keyboard focus the arrow keys turn it by a degree, ten with Shift"
+msgstr "{} : glisser pour tourner la grille (Maj aligne sur 15 degrés) ; avec le focus clavier, les flèches la tournent d'un degré, de dix avec Maj"
 
 #. RunStatusFormat
 msgid "{}: {} / {} steps, {}"

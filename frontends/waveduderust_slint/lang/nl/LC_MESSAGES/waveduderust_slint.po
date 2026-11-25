@@ -1124,6 +1124,14 @@ msgstr "Geleidelijk"
 msgid "Graph"
 msgstr "Grafiek"
 
+#. TipProbeBoxFormat
+msgid "Graph of {}: drag to move the box; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "Grafiek van {}: slepen om het kader te verplaatsen; met toetsenbordfocus verplaatsen de pijltoetsen het één pixel, tien met Shift"
+
+#. TipProbeBoxCornerFormat
+msgid "Graph of {}: drag to resize the box (it snaps to the fixed sizes); with keyboard focus the arrow keys resize it by a pixel, ten with Shift"
+msgstr "Grafiek van {}: slepen om het kader te vergroten of verkleinen (het klikt vast op de vaste maten); met toetsenbordfocus wijzigen de pijltoetsen de maat één pixel, tien met Shift"
+
 #. MenuViewResolutionHalf
 msgid "Half"
 msgstr "Half"
@@ -2152,9 +2160,17 @@ msgstr "Vorm"
 msgid "Show or hide what this kind of part is"
 msgstr "Toont of verbergt wat dit soort onderdeel is"
 
+#. TipPreviewShowField
+msgid "Show the field picture"
+msgstr "Veldbeeld tonen"
+
 #. Hint.Display.HandlesInPreview
 msgid "Show the handles, lines, emitter dots and levers of every source, part and probe over the preview pictures. A selected object shows its own either way."
 msgstr "De grepen, lijnen, emitterpunten en hefbomen van alle bronnen, onderdelen en sondes over de voorbeeldbeelden tonen. Een geselecteerd object toont de zijne hoe dan ook."
+
+#. TipPreviewShowIntensity
+msgid "Show the intensity picture"
+msgstr "Intensiteitsbeeld tonen"
 
 #. Hint.Display.LabelsInPreview
 msgid "Show the names beside the handles over the preview pictures. A selected object shows its own either way."
@@ -2703,6 +2719,34 @@ msgstr "{} (niet gevonden)"
 #. ItemCountMany
 msgid "{} entries"
 msgstr "{} items"
+
+#. TipInHandleFormat
+msgid "{}, node {}, in-handle: drag to shape the segment arriving here; a smooth node turns the out-handle with it. With keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}, knooppunt {}, ingaande greep: slepen vormt het segment dat hier aankomt; een glad knooppunt draait de uitgaande greep mee. Met toetsenbordfocus verplaatsen de pijltoetsen één pixel, tien met Shift"
+
+#. TipOutHandleFormat
+msgid "{}, node {}, out-handle: drag to shape the segment leaving here; a smooth node turns the in-handle with it. With keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}, knooppunt {}, uitgaande greep: slepen vormt het segment dat hier vertrekt; een glad knooppunt draait de ingaande greep mee. Met toetsenbordfocus verplaatsen de pijltoetsen één pixel, tien met Shift"
+
+#. TipNodeFormat
+msgid "{}, node {}: drag to move it with its handles; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}, knooppunt {}: slepen om het met zijn grepen te verplaatsen; met toetsenbordfocus verplaatsen de pijltoetsen één pixel, tien met Shift"
+
+#. TipPointFormat
+msgid "{}, point {}: drag to move it; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}, punt {}: slepen om te verplaatsen; met toetsenbordfocus verplaatsen de pijltoetsen één pixel, tien met Shift"
+
+#. TipMarkerFormat
+msgid "{}: drag to move; with keyboard focus the arrow keys move it by a pixel, ten with Shift"
+msgstr "{}: slepen om te verplaatsen; met toetsenbordfocus verplaatsen de pijltoetsen één pixel, tien met Shift"
+
+#. TipGripFormat
+msgid "{}: drag to resize; with keyboard focus the arrow keys move the grip by a pixel, ten with Shift"
+msgstr "{}: slepen om de grootte te wijzigen; met toetsenbordfocus verplaatsen de pijltoetsen de greep één pixel, tien met Shift"
+
+#. TipAngleMarkerFormat
+msgid "{}: drag to turn the array (Shift snaps to 15 degrees); with keyboard focus the arrow keys turn it by a degree, ten with Shift"
+msgstr "{}: slepen om het raster te draaien (Shift klikt vast op 15 graden); met toetsenbordfocus draaien de pijltoetsen het één graad, tien met Shift"
 
 #. RunStatusFormat
 msgid "{}: {} / {} steps, {}"

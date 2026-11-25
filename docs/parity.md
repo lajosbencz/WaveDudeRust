@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 54 | 1 | 8 | 38 | 0 |
 | P | Properties | 305 | 6 | 11 | 3 | 0 |
-| V | Preview | 76 | 6 | 25 | 4 | 1 |
-| L | Timeline, transport, status | 49 | 12 | 20 | 7 | 2 |
+| V | Preview | 80 | 5 | 22 | 4 | 1 |
+| L | Timeline, transport, status | 51 | 12 | 18 | 7 | 2 |
 | R | Live editing and runs | 17 | 12 | 30 | 0 | 2 |
 | G | Messages pane | 15 | 3 | 11 | 3 | 0 |
-| | All | 678 | 73 | 200 | 139 | 5 |
+| | All | 684 | 72 | 195 | 139 | 5 |
 
 ## Cross-cutting
 
@@ -960,7 +960,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-12 | Header strip title ("Field"/"Intensity" semi-bold) | PreviewPane.xaml:560-600, Controls/HeaderStrip.cs | 40 Header strip | done | title; rest matched in general (decision 0033) |
 | V-13 | Header caption "Brightness" | PreviewPane.xaml:586 | 40 Header strip | done | preview.slint Picture header |
 | V-14 | Header Brightness number box 64 px, log, 0.0001..100000, = Display brightness | PreviewPane.xaml:586, Controls/NumberBox.cs | 40 Header strip | done | NumberBox 64 px with the Display form spec (log, 0.0001..100000); Canvas.field-/intensity-brightness from the view |
-| V-15 | Brightness box tooltip (brightness hint) | PreviewPane.xaml:588 | 40 Header strip | missing | NumberBox has no tooltip yet |
+| V-15 | Brightness box tooltip (brightness hint) | PreviewPane.xaml:588 | 40 Header strip | done | NumberBox tip: the Display brightness hint |
 | V-16 | Brightness box keys: Up/Down 2 pct, PageUp/PageDown a fifth, 3 significant digits | Controls/NumberBox.cs | 40 Header strip | done | the number box keys: 1.02 per step, PageUp/PageDown ten steps (about a fifth), three digits |
 | V-17 | Auto button (one-shot 99.5th percentile fit) | PreviewPane.xaml:591, MainWindow.Display.cs | 40 Header strip | done | Live::auto: core render::fit_plane on the shown 16-bit plane |
 | V-18 | Auto: 8-bit recompute in 16-bit for fit alone, run paused meanwhile | MainWindow.Display.cs | 40 Header strip | done | 8-bit: a FitRequest; the worker serves the frame in 16-bit, the poll fits it |
@@ -969,7 +969,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-21 | Header turned a quarter clockwise on picture's left when cell wider (10 px below top) | HeaderStrip.cs | 40 Header strip | missing | |
 | V-22 | Turned box edits upright while focused (click/Tab/context menu focus, select text, arrows/wheel step) | NumberBox.cs | 40 Header strip; 00 Turned brightness box TODO | missing | spec TODO |
 | V-23 | Turned unfocused box: arrows step, drag along strip scrubs | NumberBox.cs | 40 Header strip | missing | |
-| V-24 | Narrow strip: caption dropped first, then title ellipsis; 12 px min gap | HeaderStrip.cs | 40 Header strip | partial | the title elides; the caption is not dropped first |
+| V-24 | Narrow strip: caption dropped first, then title ellipsis; 12 px min gap | HeaderStrip.cs | 40 Header strip | done | the caption drops (changed width) before the title elides; 12 px kept after the title |
 | V-25 | Edge line 1 px, blue #0000FF when damping rim outside canvas | PreviewPane.xaml:602-610 | 40 Edge line | done | Canvas.edge from Scene::has_rim: a 1 px blue line round the picture |
 | V-26 | Edge line red #FF0000 for reflective edges (rim wins over wall) | PreviewPane.xaml:602-610 | 40 Edge line | done | red with reflective edges and no rim |
 | V-27 | Edge line none for open edges / damping band inside | PreviewPane.xaml:602 | 40 Edge line | done | nothing drawn (trivially) |
@@ -1033,7 +1033,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-85 | Context menu: Export field / intensity / both | PreviewPane.xaml:741-743,767-769 | 40 Automation ids | done | the File menu commands |
 | V-86 | Drop of objects from tree: paste and place at drop pixel | SceneOverlay.cs:1212,1228 | 40 Interaction; 20 | missing | |
 | V-87 | Drop of file not claimed, window opens it | SceneOverlay.cs | 40 Interaction | missing | see R-30 |
-| V-88 | Handle tooltips (Tip*Format per role) | SceneOverlay.cs:528-531 | 40 Interaction | missing | |
+| V-88 | Handle tooltips (Tip*Format per role) | SceneOverlay.cs:528-531 | 40 Interaction | done | Rust hit-tests the hover (box, corner, handle) into Canvas.hover-tip; Slint formats Next's Tip*Format texts |
 | V-89 | Picture hover costs nothing; source layer cached as bitmap | SceneOverlay.cs:199-234 | 40 Interaction | done | the drawings take no pointer; one TouchArea per picture, hit-testing in Rust; dots one Path |
 | V-90 | Graph box: translucent dark box, grid, value labels, step labels, curve, 11 px text | ProbeGraphDrawing.cs, ProbeGraphPainter.cs | 40 Probe graph box | done | graphs.rs: core view::graph layout as Slint rows; GraphBoxView draws box, grid, labels, curve at 11 px |
 | V-91 | Graph title strip: probe name + live readout "= v" (point) / "max v" (line), 3 sig digits | ProbeGraphDrawing.cs | 40 Probe graph box | done | title elided, readout right in the curve colour |
@@ -1045,7 +1045,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-97 | Floor rule (1/brightness, 1/brightness^2, integrated), 1.08 headroom | ProbeGraphDrawing.cs | 40 Probe graph box; divergences.md:49 | done | full_scale floor |
 | V-98 | Graph data: live run recording cut at frame shown; remake after probe edit | ProbeGraphOverlay.cs | 40 Probe graph box | done | Live::traces at the stored frame of the position; laid out again each poll while running and on every show |
 | V-99 | Selected probe's box accent border, drawn last | ProbeGraphOverlay.cs | 40 Probe graph box | done | selected boxes last, accent edge |
-| V-100 | Drag box (kept in canvas); snap to probe A within radius 14, release at 28 (hysteresis) | ProbeGraphOverlay.cs:102,105,495-502 | 40 Probe graph box | done | canvas::Target::GraphBox: kept in the canvas; lands on A within 14 screen px, leaves past 28 |
+| V-100 | Drag box (kept in canvas); snap to probe A within radius 14, release at 28 (hysteresis) | ProbeGraphOverlay.cs:102,105,495-502 | 40 Probe graph box | done | Target::GraphBox: kept in the canvas, attaches within 14 px of A, releases past 28; Target::ProbeA: A dragged within 14 px of its detached box corner picks it up (Next SceneOverlay) |
 | V-101 | Box bottom-right corner grip resize, snaps to fixed sizes else Custom; arrows 1/10 px | ProbeGraphOverlay.cs:478-484 | 40 Probe graph box | done | Target::GraphSize drag snaps to the fixed sizes; the focused grip sizes it by arrows 1/10 px (Custom), kept in the canvas |
 | V-102 | Arrows on box move 1/10 px (no snap); Tab reaches boxes; focus selects probe | ProbeGraphOverlay.cs:540-561 | 40 Probe graph box | done | Tab stops: handles, then each box and its grip; arrows move the box 1/10 px, one undo per run; the stop selects the probe |
 | V-103 | Moving box never touches run; moving probe keeps frames, retraces | ProbeGraphOverlay.cs | 40 Probe graph box | done | a box move edits the probe's box fields only, not its recording key |
@@ -1053,7 +1053,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-105 | Box hover and focus border | ProbeGraphOverlay.cs | 40 Probe graph box | done | hover: brighter edge and grip (hit-tested in Rust); focus: accent edge, the grip bright when it has focus |
 | V-106 | Busy status "Computing frame n" + indeterminate bar mirrored on status bar | MainWindow.Live.cs | 40 Busy; 70 Status bar | missing | see L-50 |
 | V-107 | Timeline shades frames held by live run | TimelineBar.cs:315 | 40 Busy and stale | done | see L-08 |
-| V-108 | Show/hide each picture toggle (transport) feeds Display > Preview | PreviewPane.xaml:497-506 | 50 Transport #12,13 | missing | see L-37 |
+| V-108 | Show/hide each picture toggle (transport) feeds Display > Preview | PreviewPane.xaml:497-506 | 50 Transport #12,13 | done | Preview drops a hidden picture (if), the other takes its room; the boxes lay out again on a rescale |
 | V-109 | Pane Ctrl+A select all inside the pane | PreviewPane.xaml:398 | not in spec | missing | not in spec; app-level Ctrl+A menu is log-only |
 | V-110 | Letter keys swallowed in pane so WPF does not open menu mnemonics | PreviewPane.xaml.cs:1262-1272 | not in spec | n/a | WPF-only quirk; not applicable to Slint |
 | V-111 | Brightness numbers per layer from Display > layer | PreviewPane.xaml:586 | 40 Header strip | missing | duplicate of V-14 binding; Properties pane edits Display (30) |
@@ -1112,8 +1112,8 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-47 | Typed speed 0.01..100, culture decimal separator | PreviewPane.xaml.cs, DoubleText converter | 50 Transport #11 | done | typed 0.01..100, a decimal comma or point (number::parse); bad text restores the speed |
 | L-48 | Space inside speed box swallowed | PreviewPane.xaml.cs:1274 | 50 Transport #11 | done | the text box takes Space as text, Play never sees it |
 | L-49 | Speed tooltip | PreviewPane.xaml:509 | 50 Transport #11 | missing | |
-| L-50 | Show field toggle (wave icon) = Display > Field > Preview | PreviewPane.xaml:503-506 | 50 Transport #12 | missing | |
-| L-51 | Show intensity toggle (sun icon) = Display > Intensity > Preview | PreviewPane.xaml:497-501 | 50 Transport #13 | missing | |
+| L-50 | Show field toggle (wave icon) = Display > Field > Preview | PreviewPane.xaml:503-506 | 50 Transport #12 | done | IconButton field.svg, checked = Display > Field > Preview; one undo step |
+| L-51 | Show intensity toggle (sun icon) = Display > Intensity > Preview | PreviewPane.xaml:497-501 | 50 Transport #13 | done | IconButton intensity.svg, checked = Display > Intensity > Preview; one undo step |
 | L-52 | Layout radios side-by-side / stacked, tab stop = checked one | PreviewPane.xaml:483-495 | 50 Transport #14 | done | two toggles; rest matched in general (decision 0033) |
 | L-53 | Radio arrow keys move check to neighbour | PreviewPane.xaml.cs:1332-1345 | not in spec (only "Enter/Space checks") | missing | not in spec |
 | L-54 | Right-docked items at right end; dividers before picture toggles | PreviewPane.xaml:480-510 | 50 Transport bar | done | right end; rest matched in general (decision 0033) |

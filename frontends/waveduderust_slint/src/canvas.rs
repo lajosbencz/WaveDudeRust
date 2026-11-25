@@ -77,6 +77,8 @@ enum Target {
 	Shape(ItemRef, HandleKind),
 	/// A probe's graph box from its corner; whether it sits on A (attached), screen pixels per canvas pixel.
 	GraphBox { item: ItemRef, start: (i32, i32), attached: bool, scale: f64 },
+	/// A probe's A alone, screen pixels per canvas pixel: it picks up its detached graph box when it comes near.
+	ProbeA { start: (ItemRef, Start), scale: f64 },
 	/// A graph box's corner grip from the box's size.
 	GraphSize { item: ItemRef, start: (u32, u32), scale: f64 },
 }
@@ -360,7 +362,12 @@ impl Overlays {
 				}
 				kind => return Some(Gesture::Handle(drag(Target::Shape(handle.item, kind)))),
 			};
-			Target::Items(start(project, node, which).into_iter().collect())
+			let start = start(project, node, which)?;
+			if which == Which::A {
+				Target::ProbeA { start, scale: f64::from(scale) }
+			} else {
+				Target::Items(vec![start])
+			}
 		};
 		Some(Gesture::Handle(drag(target)))
 	}
@@ -457,6 +464,40 @@ impl Overlays {
 	pub(crate) fn nudge_key(&self, layer: ui::Layer, selection: &Selection) -> Option<String> {
 		let (_, item, stop) = self.focus.filter(|f| f.0 == layer)?;
 		Some(format!("keys {} {item:?} {stop:?} {:?}", self.run, selection.group()))
+	}
+
+	/// The tooltip of what lies under canvas pixel `at` of `layer`'s picture with `boxes`: a box (its corner grip),
+	/// else a handle.
+	pub(crate) fn tip(&self, project: &Project, layer: ui::Layer, at: (f32, f32), boxes: &[Placed]) -> ui::HoverTip {
+		let shown = &self.shown[index(layer)];
+		let scale = shown.scale();
+		let named = |kind, node: Node, index: usize| ui::HoverTip {
+			kind,
+			name: crate::tree::name(project, node).into(),
+			index: i32::try_from(index).unwrap_or(0),
+		};
+		if let Some(b) = boxes.iter().rev().find(|b| b.contains(at)) {
+			let grip = BOX_GRIP / scale;
+			let corner = at.0 >= b.at.0 + b.size.0 - grip && at.1 >= b.at.1 + b.size.1 - grip;
+			let kind = if corner { ui::TipKind::GraphCorner } else { ui::TipKind::Graph };
+			return named(kind, Node::Probe(b.probe), 0);
+		}
+		let Some(h) = hit(&shown.model, at, HIT_REACH / scale) else { return ui::HoverTip::default() };
+		let Some(node) = node_of(project, h.item) else { return ui::HoverTip::default() };
+		let (kind, i) = match h.kind {
+			HandleKind::SourceLever | HandleKind::PartLever => (ui::TipKind::Lever, 0),
+			HandleKind::Grip => (ui::TipKind::Grip, 0),
+			HandleKind::Point(i) => (ui::TipKind::Point, i),
+			HandleKind::Node(i) => (ui::TipKind::Node, i),
+			HandleKind::InHandle(i) => (ui::TipKind::InHandle, i),
+			HandleKind::OutHandle(i) => (ui::TipKind::OutHandle, i),
+			HandleKind::ProbeB => {
+				let name = format!("{} B", crate::tree::name(project, node));
+				return ui::HoverTip { kind: ui::TipKind::Marker, name: name.into(), index: 0 };
+			}
+			_ => (ui::TipKind::Marker, 0),
+		};
+		named(kind, node, i)
 	}
 
 	/// Drops a graph box focus whose box `layer`'s picture no longer draws among `boxes`.
@@ -693,6 +734,16 @@ impl Drag {
 		let at = (self.from.0 + f64::from(dx), self.from.1 + f64::from(dy));
 		match &mut self.target {
 			Target::Items(starts) => self.by = move_items(project, starts, d),
+			Target::ProbeA { start, scale } => {
+				self.by = move_items(project, std::slice::from_ref(start), d);
+				if let Some(Node::Probe(i)) = node_of(project, start.0) {
+					let p = &mut project.probes[i];
+					let off = f64::from(p.box_x - p.ax).hypot(f64::from(p.box_y - p.ay)) * *scale;
+					if !p.box_attached() && off <= BOX_SNAP {
+						(p.box_x, p.box_y) = (p.ax, p.ay);
+					}
+				}
+			}
 			&mut Target::Lever(item) => {
 				self.by = d;
 				match node_of(project, item) {
@@ -810,6 +861,26 @@ fn move_items(project: &mut Project, starts: &[(ItemRef, Start)], d: (f64, f64))
 mod tests {
 	use super::*;
 	use waveduderust::model::Project;
+
+	#[test]
+	fn a_probe_a_dragged_near_its_detached_box_picks_it_up() {
+		let mut project = Project::default();
+		project.probes.push(waveduderust::model::Probe::default());
+		let p = &mut project.probes[0];
+		(p.ax, p.ay, p.bx, p.by, p.box_x, p.box_y) = (10, 10, 20, 10, 200, 200);
+		let start = (ItemRef::Probe(p.id()), Start::Probe([10, 10, 20, 10], Which::A));
+		let mut drag = Drag {
+			key: String::new(),
+			node: Node::Probe(0),
+			target: Target::ProbeA { start, scale: 2. },
+			from: (0., 0.),
+			by: (0., 0.),
+		};
+		drag.apply(&mut project, (183., 183.), false);
+		assert!(!project.probes[0].box_attached(), "10 canvas px is 20 screen px");
+		drag.apply(&mut project, (186., 186.), false);
+		assert!(project.probes[0].box_attached());
+	}
 
 	fn items(node: Node, starts: Vec<(ItemRef, Start)>) -> Drag {
 		Drag { key: String::new(), node, target: Target::Items(starts), from: (0., 0.), by: (0., 0.) }

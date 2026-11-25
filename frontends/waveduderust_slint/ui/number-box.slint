@@ -60,6 +60,7 @@ export component NumberBox inherits FocusScope {
     in property <NumberSpec> spec: { min: -1000000000, max: 1000000000, increment: 1, decimals: -1 };
     // Hands a commit to the field; true when it took the text, which then shows the field's value.
     callback edited(text: string) -> bool;
+    in property <string> tip;
     // The text as typed, before a commit.
     callback typed(text: string);
 
@@ -191,4 +192,5 @@ export component NumberBox inherits FocusScope {
             }
         }
     }
+    if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
 }

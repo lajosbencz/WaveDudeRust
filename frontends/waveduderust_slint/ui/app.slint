@@ -27,7 +27,7 @@ import { ExamplesLayer, ExampleRow, ExampleTopic } from "examples.slint";
 import { NumberSpec } from "number-box.slint";
 export { NumberLogic, NumberSpec } from "number-box.slint";
 export { ColorLogic, Hsv } from "color-picker.slint";
-export { Canvas, EdgeLine, GraphBox, GraphTick, HandleData, HandleGlyph, HandleKey, LabelData, OverlayArt, Rect } from "canvas.slint";
+export { Canvas, EdgeLine, GraphBox, GraphTick, HandleData, HandleGlyph, HandleKey, HoverTip, LabelData, OverlayArt, Rect, TipKind } from "canvas.slint";
 export { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
 export { Theme, TreeRow, TreeKind, Transport, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
 
@@ -355,6 +355,8 @@ export component AppWindow inherits Window {
                                     intensity: root.intensity;
                                     stacked: root.preview-stacked;
                                     can-export: root.commands.can-export;
+                                    field-shown: root.transport.field-shown;
+                                    intensity-shown: root.transport.intensity-shown;
                                     command(c) => { root.command(c); }
                                 }
                                 Timeline {

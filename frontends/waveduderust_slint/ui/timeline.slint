@@ -15,6 +15,9 @@ export struct Transport {
     looping: bool,
     running: bool,
     step: string,
+    // Display > Field / Intensity > Preview
+    field-shown: bool,
+    intensity-shown: bool,
 }
 
 // The scrub bar (docs/ui/50, Timeline): frames made, the in/out range, the playhead; click or drag to scrub.
@@ -193,6 +196,9 @@ export component TransportBar inherits Rectangle {
                 }
             }
         }
+        Divider { }
+        IconButton { icon: @image-url("icons/next/field.svg"); tip: @tr("Show the field picture"); checked: root.t.field-shown; clicked => { root.action(TransportAction.show-field); } }
+        IconButton { icon: @image-url("icons/next/intensity.svg"); tip: @tr("Show the intensity picture"); checked: root.t.intensity-shown; clicked => { root.action(TransportAction.show-intensity); } }
         Divider { }
         IconButton { icon: @image-url("icons/next/side-by-side.svg"); tip: @tr("Field and intensity side by side"); checked: !root.stacked; clicked => { root.stacked = false; root.action(TransportAction.layout); } }
         IconButton { icon: @image-url("icons/next/stacked.svg"); tip: @tr("Field above intensity"); checked: root.stacked; clicked => { root.stacked = true; root.action(TransportAction.layout); } }
