@@ -13,7 +13,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 13 | 6 | 1 | 20 | 0 |
 | M | Menus and shortcuts | 75 | 8 | 5 | 52 | 0 |
-| D | Dialogs and windows | 41 | 16 | 14 | 8 | 0 |
+| D | Dialogs and windows | 42 | 16 | 13 | 8 | 0 |
 | S | Settings | 15 | 6 | 8 | 3 | 0 |
 | I | Icons | 41 | 0 | 23 | 19 | 0 |
 | T | Project tree | 56 | 2 | 5 | 38 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
 | R | Live editing and runs | 31 | 14 | 14 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 763 | 76 | 93 | 158 | 5 |
+| | All | 764 | 76 | 92 | 158 | 5 |
 
 ## Cross-cutting
 
@@ -278,7 +278,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 |---|---|---|---|---|---|
 | D-01 | Main window: min 800x500, default 1280x800 centred, resizable with grip | MW:34-45 (Width/Height/Min, CenterScreen, CanResizeWithGrip) | ui/00, ui/80 | done | min and default sizes; rest matched in general (decision 0033) |
 | D-02 | Window title: "<app> - <file>", asterisk when dirty, "Untitled", full path option, just app name when nothing | MW:134-141 (TitleConverter) | ui/00 Main window | done | "WaveDude Rust - " name or path, "*" when dirty, "Untitled" |
-| D-03 | Window icon (App.ico/png) | MW:35 `Icon="App.ico"`, WPF/App.ico | ui/70 | missing | no `icon:` in app.slint (assets/icons exist for packaging only) |
+| D-03 | Window icon (App.ico/png) | MW:35 `Icon="App.ico"`, WPF/App.ico | ui/70 | done | app.slint icon: assets/icon.svg; About shows it at 64 px |
 | D-04 | Taskbar progress for export | MW:129-131 | divergences "Windows integrations" | divergence | not ported (decision 0008 (14)) |
 | D-05 | All windows use theme, UI zoom, current language | App.xaml | ui/70 intro | done | theme and language; UI zoom dropped (decision 0033) |
 | D-06 | Modal ownership: one modal at a time; later requests queue; window close box closes modals then exits as File > Exit | n/a (WPF owner windows) | ui/70 intro | partial | Slint modal property is a single slot: a second modal overwrites the first (no queue); on_close_requested prompts only when dirty |

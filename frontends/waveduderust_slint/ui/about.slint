@@ -76,8 +76,15 @@ export component AboutLayer inherits Rectangle {
                 padding: 12px;
                 spacing: 8px;
                 Text { text: @tr("About WaveDude Rust"); font-weight: 700; color: Theme.text; }
-                Text { text: "WaveDude Rust " + root.data.version; font-size: 16px; color: Theme.text; }
-                Text { text: @tr("A 2D wave simulator"); color: Theme.text-dim; }
+                HorizontalLayout {
+                    spacing: 12px;
+                    Image { source: @image-url("../assets/icon.svg"); width: 64px; height: 64px; }
+                    VerticalLayout {
+                        alignment: center;
+                        Text { text: "WaveDude Rust " + root.data.version; font-size: 16px; color: Theme.text; }
+                        Text { text: @tr("A 2D wave simulator"); color: Theme.text-dim; }
+                    }
+                }
                 Text {
                     text: @tr("Based on the work of WaveDude Next; Jeroen Vleggaar, Huygens Optics, author of Wave Dude 2D, Copyright (C) 2026; 0x23 (Diffraction Limited), author of WaveSimulator2D.");
                     wrap: word-wrap;
