@@ -1023,6 +1023,7 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	state.live.auto_rerun = s.auto_rerun;
 	state.live.warn = s.warn_when_ram_insufficient;
 	state.live.set_dither(s.preview_dither_bits);
+	state.live.set_gpu(s.use_gpu);
 	// another preview quality is a simulation edit
 	if state.live.edited(&state.doc.project, &state.doc.view) == live::Change::Frames {
 		state.playback.pause();

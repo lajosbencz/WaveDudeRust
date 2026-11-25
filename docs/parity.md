@@ -20,9 +20,9 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | P | Properties | 310 | 7 | 4 | 4 | 0 |
 | V | Preview | 90 | 5 | 12 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
-| R | Live editing and runs | 38 | 15 | 6 | 0 | 2 |
+| R | Live editing and runs | 39 | 15 | 5 | 0 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 795 | 81 | 55 | 159 | 5 |
+| | All | 796 | 81 | 54 | 159 | 5 |
 
 ## Cross-cutting
 
@@ -1170,7 +1170,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-10 | Spec change = new generation, store cleared, engine reused/rebuilt | worker.rs | 60 The live run | done | core |
 | R-11 | Probe-only spec change clears traces keeps frames | worker.rs | 60 The live run | done | core; UI never emits probe-only edit (R-02) |
 | R-12 | Paused + edited project adopts edit at once; pause with nothing to do reads Completed | worker.rs | 60 The live run | done | a simulation edit while paused submits at once and stays paused; a pause over a finished run is dropped by the next edit |
-| R-13 | Switching device (Use the GPU) rebuilds engine at next work | worker.rs | 60 The live run | missing | Slint engine fixed GPU (live.rs new) |
+| R-13 | Switching device (Use the GPU) rebuilds engine at next work | worker.rs | 60 The live run | done | Use the GPU feeds the worker engine factory (Live::set_gpu): engines built from then on use the CPU or GPU; desktop |
 | R-14 | Showing intensity picture makes run track it | worker.rs | 60 The live run | done | the request tracks the intensity while its picture is shown; turning it on is a Frames edit, off keeps the frames |
 | R-15 | Goal looked at every 16 steps; fit frame abandoned when not asked | worker.rs | 60 The live run | done | core |
 | R-16 | Last frame stays readable through a clear; graphs follow picture | worker.rs | 60 The live run | partial | pictures hold; no graphs |

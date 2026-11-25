@@ -64,6 +64,8 @@ pub(crate) struct Live {
 	scene: SceneCache,
 	/// The scene's glowing edges, drawn over a picture whose layer shows the outline.
 	edges: Option<std::sync::Arc<EdgeImage>>,
+	/// Whether engines are built on the GPU, read by the worker's factory.
+	gpu: std::sync::Arc<std::sync::atomic::AtomicBool>,
 	/// The objects off the canvas last warned of.
 	off: Vec<OffCanvas>,
 	intensity: Picture,
@@ -129,12 +131,17 @@ fn off_canvas_list(off: &[OffCanvas]) -> String {
 impl Live {
 	pub(crate) fn new(context: &std::sync::Arc<GpuContext>) -> std::io::Result<Self> {
 		let (device, queue) = (context.device.clone(), context.queue.clone());
+		let gpu = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
 		#[cfg(not(target_arch = "wasm32"))]
-		let worker = RunWorker::new(
-			waveduderust::run::engines(waveduderust::Backend::Gpu),
-			std::env::temp_dir(),
-			Default::default(),
-		)?;
+		let worker = {
+			let gpu = gpu.clone();
+			let engines: waveduderust::run::EngineFactory = Box::new(move |scene, options| {
+				use waveduderust::Backend;
+				let backend = if gpu.load(std::sync::atomic::Ordering::Relaxed) { Backend::Gpu } else { Backend::Cpu };
+				waveduderust::run::engines(backend)(scene, options)
+			});
+			RunWorker::new(engines, std::env::temp_dir(), Default::default())?
+		};
 		#[cfg(target_arch = "wasm32")]
 		let worker = crate::web::worker(context.clone());
 		let pipeline = PicturePipeline::new(&device, wgpu::TextureFormat::Rgba8Unorm);
@@ -169,8 +176,14 @@ impl Live {
 			scene: SceneCache::default(),
 			edges: None,
 			off: Vec::new(),
+			gpu,
 			intensity,
 		})
+	}
+
+	/// The device of the engines built from now on (Use the GPU): the next run or edit builds on it.
+	pub(crate) fn set_gpu(&self, on: bool) {
+		self.gpu.store(on, std::sync::atomic::Ordering::Relaxed);
 	}
 
 	/// Dithering only redraws.
