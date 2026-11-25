@@ -1053,7 +1053,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-105 | Box hover and focus border | ProbeGraphOverlay.cs | 40 Probe graph box | done | hover: brighter edge and grip (hit-tested in Rust); focus: accent edge, the grip bright when it has focus |
 | V-106 | Busy status "Computing frame n" + indeterminate bar mirrored on status bar | MainWindow.Live.cs | 40 Busy; 70 Status bar | missing | see L-50 |
 | V-107 | Timeline shades frames held by live run | TimelineBar.cs:315 | 40 Busy and stale | done | see L-08 |
-| V-108 | Show/hide each picture toggle (transport) feeds Display > Preview | PreviewPane.xaml:497-506 | 50 Transport #12,13 | done | Preview drops a hidden picture (if), the other takes its room; the boxes lay out again on a rescale |
+| V-108 | Show/hide each picture toggle (transport) feeds Display > Preview | PreviewPane.xaml:497-506 | 50 Transport #12,13 | done | Preview drops a hidden picture (if), the other takes its room; any change of the flags (toggle, form, undo) ends a gesture and the hidden picture's focus, and its keyboard focus goes back to the pane; the run still draws both layers |
 | V-109 | Pane Ctrl+A select all inside the pane | PreviewPane.xaml:398 | not in spec | missing | not in spec; app-level Ctrl+A menu is log-only |
 | V-110 | Letter keys swallowed in pane so WPF does not open menu mnemonics | PreviewPane.xaml.cs:1262-1272 | not in spec | n/a | WPF-only quirk; not applicable to Slint |
 | V-111 | Brightness numbers per layer from Display > layer | PreviewPane.xaml:586 | 40 Header strip | missing | duplicate of V-14 binding; Properties pane edits Display (30) |

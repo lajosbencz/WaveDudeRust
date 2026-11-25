@@ -500,6 +500,13 @@ impl Overlays {
 		named(kind, node, i)
 	}
 
+	/// Drops the keyboard focus of `layer`'s picture, which is gone.
+	pub(crate) fn forget(&mut self, layer: ui::Layer) {
+		if self.focus.is_some_and(|f| f.0 == layer) {
+			self.set_focus(None);
+		}
+	}
+
 	/// Drops a graph box focus whose box `layer`'s picture no longer draws among `boxes`.
 	pub(crate) fn drop_lost_box(&mut self, layer: ui::Layer, project: &Project, boxes: &[Placed]) {
 		let on_box = self.focus.is_some_and(|f| f.0 == layer && matches!(f.2, Stop::Box | Stop::Grip));

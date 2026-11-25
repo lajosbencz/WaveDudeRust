@@ -357,6 +357,7 @@ export component AppWindow inherits Window {
                                     can-export: root.commands.can-export;
                                     field-shown: root.transport.field-shown;
                                     intensity-shown: root.transport.intensity-shown;
+                                    focus-lost => { preview-keys.focus(); }
                                     command(c) => { root.command(c); }
                                 }
                                 Timeline {

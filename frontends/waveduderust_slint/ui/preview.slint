@@ -175,6 +175,8 @@ component Picture inherits VerticalLayout {
     // the Display form's
     out property <NumberSpec> brightness-spec: { min: 0.0001, max: 100000, increment: 1, decimals: -1, log: true };
     in property <string> title;
+    // the picture's keys took or lost the keyboard focus
+    callback focused(has: bool);
     in property <image> source;
     in property <Layer> layer;
     in property <[HandleData]> handles;
@@ -331,6 +333,7 @@ component Picture inherits VerticalLayout {
         }
         // the handles' keys: Tab walks them, arrows move the focused one; Del is the window's
         keys := FocusScope {
+            changed has-focus => { root.focused(self.has-focus); }
             focus-gained(reason) => {
                 // either direction: Slint does not say which
                 if (reason == FocusReason.tab-navigation) {
@@ -486,6 +489,22 @@ export component Preview inherits Rectangle {
     // Display > Field / Intensity > Preview: a hidden picture gives its room to the other
     in property <bool> field-shown: true;
     in property <bool> intensity-shown: true;
+    // a hidden picture took the keyboard focus with it
+    callback focus-lost();
+    property <bool> field-focused;
+    property <bool> intensity-focused;
+    changed field-shown => {
+        if (!self.field-shown && self.field-focused) {
+            self.field-focused = false;
+            root.focus-lost();
+        }
+    }
+    changed intensity-shown => {
+        if (!self.intensity-shown && self.intensity-focused) {
+            self.intensity-focused = false;
+            root.focus-lost();
+        }
+    }
     // a frame computed for 150 ms dims the pictures
     property <bool> busy;
     Timer {
@@ -497,6 +516,7 @@ export component Preview inherits Rectangle {
     if root.stacked: VerticalLayout {
         spacing: 4px;
         if root.field-shown: Picture {
+            focused(has) => { root.field-focused = has; }
             title: @tr("Field");
             source: root.field;
             layer: Layer.field;
@@ -509,6 +529,7 @@ export component Preview inherits Rectangle {
             command(c) => { root.command(c); }
         }
         if root.intensity-shown: Picture {
+            focused(has) => { root.intensity-focused = has; }
             title: @tr("Intensity");
             source: root.intensity;
             layer: Layer.intensity;
@@ -524,6 +545,7 @@ export component Preview inherits Rectangle {
     if !root.stacked: HorizontalLayout {
         spacing: 4px;
         if root.field-shown: Picture {
+            focused(has) => { root.field-focused = has; }
             title: @tr("Field");
             source: root.field;
             layer: Layer.field;
@@ -536,6 +558,7 @@ export component Preview inherits Rectangle {
             command(c) => { root.command(c); }
         }
         if root.intensity-shown: Picture {
+            focused(has) => { root.intensity-focused = has; }
             title: @tr("Intensity");
             source: root.intensity;
             layer: Layer.intensity;

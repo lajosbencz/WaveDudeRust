@@ -82,6 +82,8 @@ struct State {
 	ran: u64,
 	/// The view generation the pictures are drawn with.
 	styled: u64,
+	/// Display > Field / Intensity > Preview as last shown.
+	pictures: (bool, bool),
 	graphs: graphs::Graphs,
 	/// The desktop's colour scheme once a forced theme has written the palette's, which ends its system binding
 	/// (docs/blockers.md, Slint's system colour scheme).
@@ -193,18 +195,20 @@ impl State {
 			ui::EdgeLine::Open
 		});
 		canvas.set_intensity_brightness(self.doc.view.intensity.brightness as f32);
+		let pictures = (self.doc.view.field.preview, self.doc.view.intensity.preview);
+		if pictures != self.pictures {
+			// a picture came or went (the toggles, the form, undo): a gesture on it gets no release
+			self.pictures = pictures;
+			self.finish_gesture(app);
+			for (layer, shown) in [(ui::Layer::Field, pictures.0), (ui::Layer::Intensity, pictures.1)] {
+				if !shown {
+					self.overlays.forget(layer);
+				}
+			}
+		}
 		self.overlays.show(&app.global::<ui::Canvas<'_>>(), &self.doc.project, &self.doc.view, &self.selection);
 		self.show_graphs();
-		let canvas = app.global::<ui::Canvas<'_>>();
-		let focus = [ui::Layer::Field, ui::Layer::Intensity].into_iter().find_map(|layer| {
-			let (b, grip) = self.overlays.focused_box(layer, &self.doc.project, self.graphs.placed(layer))?;
-			Some((layer, b.probe, grip))
-		});
-		canvas.set_focus_box(focus.map_or(-1, |(_, i, _)| i32::try_from(i).unwrap_or(-1)));
-		if let Some((layer, _, grip)) = focus {
-			canvas.set_focus_layer(layer);
-			canvas.set_focus_grip(grip);
-		}
+		self.show_box_focus(app);
 		let node = self.selection.current();
 		let kind = form::kind(&self.doc.project, node);
 		app.set_props_kind(node.kind());
@@ -313,6 +317,20 @@ impl State {
 		}
 		for layer in [ui::Layer::Field, ui::Layer::Intensity] {
 			self.overlays.drop_lost_box(layer, project, self.graphs.placed(layer));
+		}
+	}
+
+	/// Marks the graph box with the keyboard focus.
+	fn show_box_focus(&self, app: &AppWindow) {
+		let canvas = app.global::<ui::Canvas<'_>>();
+		let focus = [ui::Layer::Field, ui::Layer::Intensity].into_iter().find_map(|layer| {
+			let (b, grip) = self.overlays.focused_box(layer, &self.doc.project, self.graphs.placed(layer))?;
+			Some((layer, b.probe, grip))
+		});
+		canvas.set_focus_box(focus.map_or(-1, |(_, i, _)| i32::try_from(i).unwrap_or(-1)));
+		if let Some((layer, _, grip)) = focus {
+			canvas.set_focus_layer(layer);
+			canvas.set_focus_grip(grip);
 		}
 	}
 
@@ -839,8 +857,6 @@ fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
 		TransportAction::ShowField | TransportAction::ShowIntensity => {
 			use waveduderust::model::Layer;
 			let layer = if action == TransportAction::ShowField { Layer::Field } else { Layer::Intensity };
-			// the picture comes or goes: a gesture on it gets no release
-			state.finish_gesture(app);
 			state.doc.edit_view_merging(None, |v| v.layer_mut(layer).preview ^= true);
 			state.show(app);
 		}
@@ -929,6 +945,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		last_export: None,
 		ran: 0,
 		styled: 0,
+		pictures: (true, true),
 		graphs: graphs::Graphs::default(),
 		system_scheme: None,
 		form_seen: (0, 0),
@@ -1447,6 +1464,7 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 				s.overlays.show(&app.global::<ui::Canvas<'_>>(), &s.doc.project, &s.doc.view, &s.selection);
 				// the boxes are laid out in logical pixels
 				s.show_graphs();
+				s.show_box_focus(&app);
 			}
 		});
 	});
