@@ -99,6 +99,8 @@ export global Form {
     callback clear-rows();
     // whether a part's form shows its kind's description, one setting for every kind
     in-out property <bool> described: true;
+    // the form's first box takes the keyboard focus, its text selected (Enter on the tree, a new item)
+    in-out property <bool> focus-pending;
     callback describe(open: bool);
 }
 
@@ -304,6 +306,18 @@ export component FormText inherits Rectangle {
     in-out property <string> text;
     in property <string> tip;
     in property <bool> enabled: true;
+    // the box Form.focus-pending focuses
+    in property <bool> first;
+    function take() {
+        if (root.first && Form.focus-pending) {
+            Form.focus-pending = false;
+            edit.focus();
+            edit.select-all();
+        }
+    }
+    init => { self.take(); }
+    property <bool> pending: Form.focus-pending;
+    changed pending => { self.take(); }
     horizontal-stretch: 1;
     min-height: max(Theme.row-height, edit.min-height);
     min-width: edit.min-width;

@@ -84,6 +84,8 @@ struct State {
 	/// The last run export, for Export last.
 	last_export: Option<export::Plan>,
 	export_dialog: Option<export::Dialog>,
+	/// A form focus request was seen pending at the last tick.
+	focus_seen: bool,
 	/// The plan of the export running.
 	export_plan: Option<export::Plan>,
 	/// The export asked about and the outputs it would replace, asked one by one.
@@ -1342,6 +1344,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		last_export: None,
 		export_dialog: None,
 		export_plan: None,
+		focus_seen: false,
 		replacing: None,
 		ran: 0,
 		styled: 0,
@@ -1673,6 +1676,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			let s = &mut *st.borrow_mut();
 			add(s, item);
 			s.show(&app);
+			app.global::<ui::Form<'_>>().set_focus_pending(true);
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
@@ -1950,6 +1954,12 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				s.show(&app);
 			}
 			watch_scene_image(s, &app);
+			// a focus request no box took within a frame lapses
+			let form = app.global::<ui::Form<'_>>();
+			s.focus_seen = form.get_focus_pending() && !s.focus_seen;
+			if !s.focus_seen {
+				form.set_focus_pending(false);
+			}
 			let picked: Vec<_> = s.inbox.borrow_mut().drain(..).collect();
 			for (layer, name, text) in picked {
 				if let Some(layer) = layer {

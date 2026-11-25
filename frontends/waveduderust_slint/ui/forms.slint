@@ -408,7 +408,7 @@ export component SourceForm inherits VerticalLayout {
     FormPanel {
         Row {
             FormLabel { text: @tr("Name"); tip: @tr("Name shown in the project tree and on the canvas."); }
-            FormText { text <=> Form.source.name; tip: @tr("Name shown in the project tree and on the canvas."); }
+            FormText { first: true; text <=> Form.source.name; tip: @tr("Name shown in the project tree and on the canvas."); }
         }
         Row {
             FormCheck { checked <=> Form.source.enabled; colspan: 2; text: @tr("Label.Source.Enabled" => "Enabled"); tip: @tr("Include the source in simulation runs."); }
@@ -622,7 +622,7 @@ export component ProbeForm inherits VerticalLayout {
     FormPanel {
         Row {
             FormLabel { text: @tr("Name"); tip: @tr("Name shown in the project tree and in the graph title."); }
-            FormText { text <=> Form.probe.name; tip: @tr("Name shown in the project tree and in the graph title."); }
+            FormText { first: true; text <=> Form.probe.name; tip: @tr("Name shown in the project tree and in the graph title."); }
         }
         Row {
             FormCheck { checked <=> Form.probe.active; colspan: 2; text: @tr("Active"); tip: @tr("Sample and draw this probe."); }
@@ -867,7 +867,7 @@ component PartCommon inherits VerticalLayout {
     FormPanel {
         Row {
             FormLabel { text: @tr("Name"); tip: @tr("Name shown in the project tree and on the canvas."); }
-            FormText { text <=> Form.part.name; tip: @tr("Name shown in the project tree and on the canvas."); }
+            FormText { first: true; text <=> Form.part.name; tip: @tr("Name shown in the project tree and on the canvas."); }
         }
         Row {
             FormCheck {

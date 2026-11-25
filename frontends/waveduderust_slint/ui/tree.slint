@@ -3,6 +3,7 @@ import { Theme } from "theme.slint";
 import { Icon, IconButton } from "icons.slint";
 import { MenuIcons } from "menu-icons.slint";
 import { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace } from "commands.slint";
+import { Form } from "form.slint";
 
 // An add menu's entry.
 struct AddKind {
@@ -292,6 +293,7 @@ export component ProjectTree inherits Rectangle {
                 if (e.text == Key.LeftArrow) { root.navigate(TreeKey.left, false); return accept; }
                 if (e.text == Key.RightArrow) { root.navigate(TreeKey.right, false); return accept; }
                 if (e.text == " ") { root.act(Command.toggle-enabled); return accept; }
+                if (e.text == Key.Return) { Form.focus-pending = true; return accept; }
                 if (e.text == Key.Insert) { root.act(Command.toggle-selected); return accept; }
                 if (e.text == Key.Menu || (e.modifiers.shift && e.text == Key.F10)) {
                     rows-menu.show({

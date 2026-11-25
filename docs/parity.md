@@ -12,17 +12,17 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
-| M | Menus and shortcuts | 76 | 9 | 3 | 52 | 0 |
+| M | Menus and shortcuts | 77 | 9 | 2 | 52 | 0 |
 | D | Dialogs and windows | 47 | 20 | 3 | 9 | 0 |
 | S | Settings | 20 | 7 | 2 | 3 | 0 |
 | I | Icons | 57 | 1 | 3 | 22 | 0 |
 | T | Project tree | 56 | 3 | 3 | 39 | 0 |
-| P | Properties | 310 | 7 | 4 | 4 | 0 |
+| P | Properties | 311 | 7 | 3 | 4 | 0 |
 | V | Preview | 94 | 5 | 8 | 4 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
 | R | Live editing and runs | 39 | 15 | 2 | 3 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 807 | 85 | 31 | 167 | 5 |
+| | All | 809 | 85 | 29 | 167 | 5 |
 
 ## Cross-cutting
 
@@ -252,7 +252,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-119 | Tree: Ctrl+A select all, Ctrl+D duplicate | PT:234-235 | ui/10 | done | Ctrl+A in app.slint, Ctrl+D in tree.slint:285 |
 | M-120 | Tree: Del remove | PT:230 | ui/10 | done | Del removes the selection |
 | M-121 | Tree: Alt+Up / Alt+Down move within group | PT:236-237 | ui/10 | done | Alt+Up/Alt+Down move within the list |
-| M-122 | Tree: Enter moves focus into properties form (decision 0008) | n/a | ui/10 | missing | |
+| M-122 | Tree: Enter moves focus into properties form (decision 0008) | n/a | ui/10 | done | tree Enter sets Form.focus-pending: the Name box takes the focus, text selected; a form without one lets it lapse |
 | M-123 | Preview pane: Space play/pause (not in speed box) | PP:390 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it; a text field (speed box) keeps its Space |
 | M-124 | Preview pane: , one frame back / . one frame forward | PP:391-392 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it |
 | M-125 | Preview pane: I set in point / O set out / X clear | PP:393-395 | ui/10 | done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures; keys the timeline leaves bubble to it |
@@ -613,7 +613,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-01 | Pane shows form of the current item; 'No selection' grey when none | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | divergence | the selection always holds a row, Project when nothing else: no No selection state |
 | P-02 | Pane heading / form selected by node type | Panes/PropertiesPane.xaml:117 | 30 Pane behaviour | done | every node shows its typed form (ui/forms.slint), without a heading as Next; a folder shows its name and entry count |
 | P-03 | Folder row: label header + count (No entries/1 entry/N entries), grey | Views/CollectionView.xaml:32 | 30 Pane behaviour | done | properties.slint: No entries / 1 entry / N entries |
-| P-04 | Caret into first text box with text selected on newly added item | Panes/PropertiesPane.xaml.cs:83-88 | 30 Pane behaviour | missing |  |
+| P-04 | Caret into first text box with text selected on newly added item | Panes/PropertiesPane.xaml.cs:83-88 | 30 Pane behaviour | done | an added source, part or probe: the Name box takes the focus with its text selected |
 | P-05 | Form scrolls vertically, never horizontally | Panes/PropertiesPane.xaml | 30 Pane behaviour | done | ScrollView |
 | P-06 | FormPanel two columns: label column = widest label (>=110 px), editors fill rest | Controls/FormPanel.cs | 30 Pane behaviour | done | ui/form.slint FormPanel: a grid, the label column its widest label, 110 px at least, editors fill the rest |
 | P-07 | Full-width check boxes carry label as content | Controls/FormPanel.cs | 30 Pane/Check box | done | FormCheck spans both columns with the label as its text |
