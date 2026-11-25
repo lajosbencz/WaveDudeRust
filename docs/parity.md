@@ -13,16 +13,16 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
 | M | Menus and shortcuts | 79 | 9 | 0 | 52 | 0 |
-| D | Dialogs and windows | 47 | 20 | 3 | 9 | 0 |
+| D | Dialogs and windows | 48 | 20 | 2 | 9 | 0 |
 | S | Settings | 20 | 7 | 2 | 3 | 0 |
 | I | Icons | 57 | 1 | 3 | 22 | 0 |
 | T | Project tree | 56 | 4 | 2 | 39 | 0 |
-| P | Properties | 311 | 7 | 1 | 6 | 0 |
-| V | Preview | 95 | 5 | 7 | 4 | 1 |
-| L | Timeline, transport, status | 69 | 9 | 3 | 7 | 2 |
-| R | Live editing and runs | 39 | 15 | 2 | 3 | 2 |
+| P | Properties | 311 | 7 | 0 | 7 | 0 |
+| V | Preview | 95 | 5 | 6 | 5 | 1 |
+| L | Timeline, transport, status | 69 | 9 | 1 | 9 | 2 |
+| R | Live editing and runs | 40 | 15 | 1 | 3 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 812 | 86 | 23 | 169 | 5 |
+| | All | 814 | 86 | 17 | 173 | 5 |
 
 ## Cross-cutting
 
@@ -290,7 +290,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-12 | Button set Save (default) / Don't save / Cancel (Esc) | SE:291-293 | ui/70 | done | main.rs:~118 modal(... ["Save","Don't save","Cancel"],0,2) |
 | D-13 | Mnemonics work without Alt on buttons (_Yes _No _Save _Don't save _Cancel) | SE:288-293 | ui/70 | divergence | decision 0033, matched in general, not to the pixel/id |
 | D-14 | Uses: open/save errors "Could not open/save '{0}'." | MessageWindow users | ui/70 | done | main.rs open()/save() modals |
-| D-15 | Use: "The folder {0} exists and holds files. Replace them?" Yes/No | ExportPaths | ui/70 | missing | |
+| D-15 | Use: "The folder {0} exists and holds files. Replace them?" Yes/No | ExportPaths | ui/70 | done | the export dialog asks The folder {} exists and holds files. Replace them? (Message.replace-them) |
 | D-16 | Use: "The export failed." and image save error | MainWindow.Export.cs | ui/70 | done | "The export failed.", detail logged |
 | D-17 | Error dialog one line; detail to log and Messages tooltip (unreadable file: first 64K chars + XML error line) | n/a | ui/70 | done | one line, detail logged; rest matched in general (decision 0033) |
 | D-18 | Unsaved edits prompt before New, Open, Close, Exit, update restart, example, recent file: "Save the changes to <name>?" | MainWindow.Project.cs | ui/70 Unsaved | done | New, Open, Close, Exit, example; updater dropped |
@@ -643,7 +643,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-31 | Number box: step clamps to Min..Max, writes immediately, selects text | Controls/NumberBox.cs | 30 Number box | done | as P-25 |
 | P-32 | Typed text free; model converts and clamps; culture decimal comma | Controls/NumberBox.cs | 30 Number box | done | decimal comma read; clamped to the range |
 | P-33 | Non-parsing text counts as 0 for a step; log box starts from Minimum | Controls/NumberBox.cs | 30 Number box | done | as P-25 |
-| P-34 | Disabled boxes grey out; row disabled by other setting greys label, no pointer/focus | Themes/Editors.xaml | 30 Number box | missing | no per-row enabled state; dependent fields are hidden from the form instead |
+| P-34 | Disabled boxes grey out; row disabled by other setting greys label, no pointer/focus | Themes/Editors.xaml | 30 Number box | divergence | dependent fields are hidden from the form instead of greyed |
 | P-35 | Validation message for bad input | n/a (Rust) | 30 not itemised | done | Form.invalid line under the form |
 | P-36 | Check box (live toggle) | Themes/Editors.xaml | 30 Check box | done | CheckBox row |
 | P-37 | Combo box fills editor column, never narrower than widest word | Themes/Editors.xaml (EnumComboBox) | 30 Check box, combo box | done | stretches; rest matched in general (decision 0033) |
@@ -1054,7 +1054,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-106 | Busy status "Computing frame n" + indeterminate bar mirrored on status bar | MainWindow.Live.cs | 40 Busy; 70 Status bar | done | status bar Computing frame n with an indeterminate bar (L-85) |
 | V-107 | Timeline shades frames held by live run | TimelineBar.cs:315 | 40 Busy and stale | done | see L-08 |
 | V-108 | Show/hide each picture toggle (transport) feeds Display > Preview | PreviewPane.xaml:497-506 | 50 Transport #12,13 | done | Preview drops a hidden picture (if), the other takes its room; any change of the flags (toggle, form, undo) ends a gesture and the hidden picture's focus, and its keyboard focus goes back to the pane; the run still draws both layers |
-| V-109 | Pane Ctrl+A select all inside the pane | PreviewPane.xaml:398 | not in spec | missing | not in spec; app-level Ctrl+A menu is log-only |
+| V-109 | Pane Ctrl+A select all inside the pane | PreviewPane.xaml:398 | not in spec | divergence | not in spec: Ctrl+A acts on the selection app-wide |
 | V-110 | Letter keys swallowed in pane so WPF does not open menu mnemonics | PreviewPane.xaml.cs:1262-1272 | not in spec | n/a | WPF-only quirk; not applicable to Slint |
 | V-111 | Brightness numbers per layer from Display > layer | PreviewPane.xaml:586 | 40 Header strip | done | picture headers: Brightness box per layer from Display > layer, Auto |
 | V-112 | Automation ids PreviewFieldImage, PreviewIntensityImage, PreviewSplitter | PreviewPane.xaml | 40 Automation ids | divergence | decision 0033, matched in general, not to the pixel/id |
@@ -1097,7 +1097,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-32 | Divider after Pause run | PreviewPane.xaml:443 | 50 Transport bar | done | Divider |
 | L-33 | Play button; tooltip "Play (Space)"; disabled while playing | PreviewPane.xaml:448-450 | 50 Transport #2 | done | IconButton play, tooltip, disabled while playing |
 | L-34 | Pause button; disabled while not playing | PreviewPane.xaml:451-453 | 50 Transport #3 | done | IconButton pause ||"; tooltip not shown |
-| L-35 | Play/Pause by keyboard moves focus to the other button | PreviewPane.xaml.cs:1180-1188 | 50 Transport #3 | missing | Tool has no focus/tab handling |
+| L-35 | Play/Pause by keyboard moves focus to the other button | PreviewPane.xaml.cs:1180-1188 | 50 Transport #3 | divergence | transport buttons are no focus stops; Space and the shortcuts play and pause |
 | L-36 | Previous frame (",") / Next frame (".") buttons and keys | PreviewPane.xaml:455-460,391-392 | 50 Transport #4,5 | done | buttons and the , . keys (app.slint preview-keys) |<" ">|" glyphs); keys , . not bound |
 | L-37 | Set in point (I), tooltip; in past out clears out | PreviewPane.xaml:462; PreviewPane.xaml.cs:1214 | 50 Transport #6 | done | button, playback.set_in and the I key; tooltip not shown |
 | L-38 | Set out point (O); last frame stored as 0; out before in clears in | PreviewPane.xaml.cs:1229 | 50 Transport #7 | done | set_out (last frame -> None) and the O key |
@@ -1115,7 +1115,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-50 | Show field toggle (wave icon) = Display > Field > Preview | PreviewPane.xaml:503-506 | 50 Transport #12 | done | IconButton field.svg, checked = Display > Field > Preview; one undo step |
 | L-51 | Show intensity toggle (sun icon) = Display > Intensity > Preview | PreviewPane.xaml:497-501 | 50 Transport #13 | done | IconButton intensity.svg, checked = Display > Intensity > Preview; one undo step |
 | L-52 | Layout radios side-by-side / stacked, tab stop = checked one | PreviewPane.xaml:483-495 | 50 Transport #14 | done | two toggles; rest matched in general (decision 0033) |
-| L-53 | Radio arrow keys move check to neighbour | PreviewPane.xaml.cs:1332-1345 | not in spec (only "Enter/Space checks") | missing | not in spec |
+| L-53 | Radio arrow keys move check to neighbour | PreviewPane.xaml.cs:1332-1345 | not in spec (only "Enter/Space checks") | divergence | not in spec: radios take Enter/Space |
 | L-54 | Right-docked items at right end; dividers before picture toggles | PreviewPane.xaml:480-510 | 50 Transport bar | done | right end; rest matched in general (decision 0033) |
 | L-55 | Bar geometry: 1 px top border, padding 4,3, buttons 22x22, side margins 1 | PreviewPane.xaml:404-412 | 50 Transport bar | divergence | decision 0033, matched in general, not to the pixel/id |
 | L-56 | Toggles stay pressed while checked; disabled look grey; focus = accent border | PreviewPane.xaml:100-160 | 50 Transport bar | done | checked tint, grey disabled; rest matched in general (decision 0033) |
@@ -1204,7 +1204,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | R-44 | New/open: new history | MainWindow.Project.cs | 60 Undo and redo | done | Document::new |
 | R-45 | Clipboard copy: XML fragment in app format + plain text | MainWindow.Clipboard.cs | 60 Clipboard | partial | Copy/Cut via clipboard.rs; the app format and plain text not checked against Next |
 | R-46 | Paste accepts app format or plain-text fragment | MainWindow.Clipboard.cs | 60 Clipboard | partial | clipboard.rs pastes a fragment; non-objects logged |
-| R-47 | Tree drag carries same text | ProjectTree.xaml.cs | 60 Clipboard | missing | |
+| R-47 | Tree drag carries same text | ProjectTree.xaml.cs | 60 Clipboard | done | tree drag data: the row node and the Copy fragment text (set_plain_text) |
 | R-48 | Name clash on paste appends " copy"; composite emitters re-derived | MainWindow.Clipboard.cs | 60 Clipboard | partial | name clash appends copy (clipboard.rs test); composite re-derivation unchecked |
 | R-49 | Paste enable state checked per clipboard change | MainWindow.Clipboard.cs | 60 Clipboard | divergence | see T-77 |
 | R-50 | File dropped on window opens .wdproj / configuration.json / .wdscheme; others refused | MainWindow.xaml.cs | 60 Files and drop | partial | see M-138; others refused with a log warning |

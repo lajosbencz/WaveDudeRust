@@ -1403,7 +1403,12 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.on_tree_drag_data(move |row| {
 		let mut data = slint::DataTransfer::default();
 		// read lazily, at the drag start, and anew per show(), which replaces the rows; empty while the state is borrowed
-		if let Some(node) = st.try_borrow().ok().and_then(|s| s.node(row)) {
+		let Ok(s) = st.try_borrow() else { return data };
+		if let Some(node) = s.node(row) {
+			// the Copy text, for a drop outside the tree
+			if let Some(f) = clipboard::copy(&s.doc.project, &s.doc.view, &[node]) {
+				data.set_plain_text(waveduderust::io::wdproj::write_fragment(&f).into());
+			}
 			data.set_user_data(Rc::new(node));
 		}
 		data
