@@ -16,13 +16,13 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | D | Dialogs and windows | 49 | 20 | 1 | 9 | 0 |
 | S | Settings | 21 | 7 | 1 | 3 | 0 |
 | I | Icons | 59 | 1 | 1 | 22 | 0 |
-| T | Project tree | 56 | 4 | 2 | 39 | 0 |
+| T | Project tree | 57 | 4 | 1 | 39 | 0 |
 | P | Properties | 311 | 7 | 0 | 7 | 0 |
 | V | Preview | 95 | 6 | 5 | 5 | 1 |
 | L | Timeline, transport, status | 69 | 9 | 1 | 9 | 2 |
 | R | Live editing and runs | 40 | 15 | 1 | 3 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 818 | 87 | 12 | 173 | 5 |
+| | All | 819 | 87 | 11 | 173 | 5 |
 
 ## Cross-cutting
 
@@ -601,7 +601,7 @@ Not-in-spec rows are marked in the Spec column.
 | T-95 | Drop onto text editor receives XML | ProjectTree.xaml.cs | 20 Drag and drop | divergence | divergences.md 'Drag and drop' |
 | T-96 | Insertion adorner line / outline visuals | Controls/InsertionAdorner.cs | 20 Drag and drop | done | accent line 2 px along the edge, 1 px outline around a folder |
 | T-97 | File drop on window: image becomes scene image, project file opens | MainWindow.Project.cs | 20 Drag and drop; 10 | partial | see M-138 |
-| T-98 | Settings rows (Scene, Simulation, Display) draggable, carry XML, do not reorder | ProjectTree.xaml.cs | 20 Drag and drop | missing | settings rows do not drag: no target takes them in the app yet (preview drop, T-94) |
+| T-98 | Settings rows (Scene, Simulation, Display) draggable, carry XML, do not reorder | ProjectTree.xaml.cs | 20 Drag and drop | done | Scene, Simulation and Display rows drag their Copy text; tree and picture drops refuse them |
 | T-99 | Touch-first: rows sense clicks alone, drag unavailable | n/a | 20 Drag and drop | divergence | decision 0033, dropped |
 | T-100 | Schemes: move up/down/remove via row buttons | ProjectTree.xaml:446-451 | 20 Item row | done |  |
 | T-101 | Automation ids Tree:<name>, Enabled:<name>, InSelection, CollectionCount | ProjectTree.xaml:245,385 | 20 Automation ids | divergence | Slint has no AccessKit ids; decision 0032 |

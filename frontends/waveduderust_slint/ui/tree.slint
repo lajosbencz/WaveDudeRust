@@ -391,9 +391,11 @@ export component ProjectTree inherits Rectangle {
                             root.drop(i, e.data, e.position.y < self.height / 2);
                             DragAction.move
                         }
-                        // an item row reorders by dragging (Next's drag from the row, not its buttons)
+                        // an item row reorders by dragging (Next's drag from the row, not its buttons); a settings row
+                        // drags its Copy text and reorders nothing
                         DragArea {
-                            enabled: row.depth == 2;
+                            enabled: row.depth == 2 || row.kind == TreeKind.scene || row.kind == TreeKind.simulation
+                                || row.kind == TreeKind.display;
                             allow-move: true;
                             // a drop on a picture copies
                             allow-copy: true;
