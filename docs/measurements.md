@@ -517,6 +517,19 @@ waveduderust --test run -- --ignored --nocapture ignored_timing::live_run_drag_b
 of Example16 25 to 31 / 23 to 25 ms (source moved), 70 to 87 / 60 to 64 ms (part moved); 118 to 120 / 120 of 120 frames
 shown with every frame wanted.
 
+The Slint app, 2026-11-25, Chromium 1255 headed on Xvfb with native Vulkan (`--use-vulkan=native
+--disable-vulkan-surface`), RTX 5070 Ti, Playwright; `lens.wdproj` (400 steps, 200 stored frames) opened, then F5 to the
+`Run Completed` line, three passes each. Before: the window's 16 ms timer pumped the run for 10 ms with no waker; after:
+classic's pump loop on the page (a message to itself while work is left, the run's waker while it waits, queue kicks
+while the device owes completions). Main thread busy over 5 s idle after the run includes the measuring
+`requestAnimationFrame` loop.
+
+| | Before | After |
+|---|---|---|
+| Run (the app's figure) | 0.4 s | 0.3 s |
+| F5 to `Run Completed` | 372 to 438 ms | 301 to 304 ms |
+| Main thread busy, 5 s idle | 85 to 103 ms | 39 to 44 ms |
+
 ## The browser's live run in a worker
 
 2026-11-14, Chrome 158 (Playwright, WebGPU through Vulkan) on Linux, RTX 5070 Ti; the app built by `tools/build-web.sh`
@@ -610,3 +623,11 @@ Wakeups are the main thread's voluntary context switches over 10 s without input
 
 While nothing moves the window requests no repaint; a log line, the scene image file changing, the run's state
 changing kind, an open request from the OS and the OS colour scheme wake it.
+
+The Slint app, 2026-11-25, same machine and method, release build, 30 s after the start: before (a 16 ms timer always
+running) and after (the tick runs while something moves, news wakes the window through `slint::invoke_from_event_loop`).
+
+| | 16 ms timer | Woken by news only |
+|---|---|---|
+| Startup page shown | 624 wakeups, 0.03 s CPU | 0 wakeups, 0 s CPU |
+| A project run to its end, then idle | 625 wakeups, 0.01 s CPU | 0 wakeups, 0 s CPU |

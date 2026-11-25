@@ -35,6 +35,7 @@ pub(crate) fn pick_scheme(inbox: &Inbox, words: &Words<'_>, layer: Layer) {
 			Ok(bytes) => {
 				let text = String::from_utf8_lossy(&bytes).into_owned();
 				inbox.borrow_mut().push((Some(layer), path.display().to_string(), text));
+				crate::wake::wake();
 			}
 			Err(e) => tracing::error!("The colour scheme could not be loaded from '{}': {e}", path.display()),
 		}
@@ -50,6 +51,7 @@ fn pick_into(inbox: &Inbox, dialog: rfd::AsyncFileDialog, what: Option<Layer>) {
 		if let Some(file) = dialog.pick_file().await {
 			let text = String::from_utf8_lossy(&file.read().await).into_owned();
 			inbox.borrow_mut().push((what, file.file_name(), text));
+			crate::wake::wake();
 		}
 	});
 }

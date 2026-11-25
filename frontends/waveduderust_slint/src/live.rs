@@ -1,5 +1,7 @@
 //! The live run (docs/ui/60, The live run): a worker thread steps the project; the newest stored frame is drawn.
 
+use std::rc::Rc;
+
 use slint::wgpu_30::wgpu;
 use waveduderust::model::normalize::Normalize;
 use waveduderust::model::{Layer, Project, View};
@@ -24,7 +26,10 @@ pub(crate) use waveduderust::unstable::spec::RunChange as Change;
 
 /// The run and the pictures it feeds.
 pub(crate) struct Live {
-	worker: RunWorker,
+	worker: Rc<RunWorker>,
+	/// Starts the page's pump again after a goal.
+	#[cfg(target_arch = "wasm32")]
+	pump: std::sync::Arc<crate::web::Wake>,
 	revision: u64,
 	active: bool,
 	/// Every frame (a run) or the position's frame alone.
@@ -146,10 +151,16 @@ impl Live {
 		};
 		#[cfg(target_arch = "wasm32")]
 		let worker = crate::web::worker(context.clone());
+		worker.set_notify(Box::new(crate::wake::wake));
+		let worker = Rc::new(worker);
+		#[cfg(target_arch = "wasm32")]
+		let pump = crate::web::run(worker.clone(), context.clone());
 		let pipeline = PicturePipeline::new(&device, wgpu::TextureFormat::Rgba8Unorm);
 		let (field, intensity) = (Picture::new(&device, Layer::Field), Picture::new(&device, Layer::Intensity));
 		Ok(Self {
 			worker,
+			#[cfg(target_arch = "wasm32")]
+			pump,
 			revision: 0,
 			active: false,
 			wanted: Wanted::Position,
@@ -208,6 +219,11 @@ impl Live {
 
 	pub(crate) fn paused(&self) -> bool {
 		self.paused
+	}
+
+	/// An Auto brightness fit is on its way.
+	pub(crate) fn fit_pending(&self) -> bool {
+		self.fit.is_some()
 	}
 
 	/// Runs `project` from the start; a running run starts over (docs/ui/60, Automatic re-run).
@@ -345,6 +361,9 @@ impl Live {
 	}
 
 	fn publish(&self) {
+		crate::wake::wake();
+		#[cfg(target_arch = "wasm32")]
+		self.pump.raise();
 		self.worker.set_goal(Goal {
 			revision: self.revision,
 			run: self.request.clone(),
@@ -473,6 +492,8 @@ impl Live {
 		self.revision += 1;
 		self.publish();
 		self.worker.discard_frames();
+		#[cfg(target_arch = "wasm32")]
+		self.pump.raise();
 	}
 
 	/// No more frames than the position's.
@@ -487,8 +508,6 @@ impl Live {
 
 	/// The newest stored frame drawn, when it changed, and the run's state.
 	pub(crate) fn poll(&mut self, project: &Project, view: &View, schemes: &SchemeStore) -> Shown {
-		#[cfg(target_arch = "wasm32")]
-		self.worker.pump(std::time::Duration::from_millis(10), std::task::Waker::noop());
 		let mut fitted = None;
 		if let Some((id, layer)) = self.fit
 			&& let Some(frame) = self.worker.take_fit()

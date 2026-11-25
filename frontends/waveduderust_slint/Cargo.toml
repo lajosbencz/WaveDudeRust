@@ -34,16 +34,19 @@ waveduderust_platform = { path = "../../crates/waveduderust_platform" }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Slint's clipboard serves its text fields only; already in its winit backend's tree
 arboard = { version = "3.6", default-features = false }
+# the scene image file watched through its folder
+notify = "8"
 pollster.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { version = "0.4", features = ["futures"] }
 js-sys = "0.3"
 tracing-web = "0.1"
 # the browser's language for System
 sys-locale = { version = "0.3", features = ["js"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-web-sys = { workspace = true, features = ["BeforeUnloadEvent", "Blob", "BlobPropertyBag", "Document", "Event", "EventTarget", "Element", "Clipboard", "HtmlAnchorElement", "Navigator", "Url", "Window", "console"] }
+web-sys = { workspace = true, features = ["BeforeUnloadEvent", "Blob", "BlobPropertyBag", "Document", "Event", "EventTarget", "Element", "Clipboard", "HtmlAnchorElement", "MessageChannel", "MessageEvent", "MessagePort", "Navigator", "Url", "Window", "console"] }
 
 [package.metadata.packager]
 product-name = "WaveDude Rust"

@@ -121,7 +121,10 @@ pub(crate) fn write(text: String) -> Result<(), String> {
 pub(crate) fn read(pasted: &Pasted) {
 	#[cfg(not(target_arch = "wasm32"))]
 	match with_board(arboard::Clipboard::get_text) {
-		Ok(text) => pasted.borrow_mut().push(text),
+		Ok(text) => {
+			pasted.borrow_mut().push(text);
+			crate::wake::wake();
+		}
 		Err(e) => tracing::warn!("clipboard: {e}"),
 	}
 	#[cfg(target_arch = "wasm32")]
@@ -129,7 +132,10 @@ pub(crate) fn read(pasted: &Pasted) {
 		let (pasted, promise) = (pasted.clone(), clipboard.read_text());
 		wasm_bindgen_futures::spawn_local(async move {
 			match wasm_bindgen_futures::JsFuture::from(promise).await {
-				Ok(text) => pasted.borrow_mut().extend(text.as_string()),
+				Ok(text) => {
+					pasted.borrow_mut().extend(text.as_string());
+					crate::wake::wake();
+				}
 				Err(e) => tracing::warn!("clipboard: {e:?}"),
 			}
 		});

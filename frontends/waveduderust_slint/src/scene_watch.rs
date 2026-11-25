@@ -1,10 +1,12 @@
-//! The scene image file watched while its project is open (docs/ui/60, Files and drop): polled, a change taken once
-//! the file holds still for 400 ms, a read retried while the writer holds it.
+//! The scene image file watched while its project is open (docs/ui/60, Files and drop): its folder watched, so a
+//! change wakes the window, then polled while the window ticks; a change taken once the file holds still for 400 ms,
+//! a read retried while the writer holds it.
 
 use std::collections::HashSet;
 use std::hash::{BuildHasher, RandomState};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use web_time::Instant;
@@ -42,6 +44,10 @@ pub(crate) struct SceneWatch {
 	/// The path warned of as not found.
 	missing: bool,
 	polled: Option<Instant>,
+	#[cfg(not(target_arch = "wasm32"))]
+	watcher: Option<notify::RecommendedWatcher>,
+	/// The watcher saw the file change: the next tick looks at once.
+	touched: Arc<AtomicBool>,
 }
 
 impl SceneWatch {
@@ -51,7 +57,8 @@ impl SceneWatch {
 
 	/// Watches `scene`'s image file from the project folder `folder`; a new path starts over and is read at once.
 	pub(crate) fn tick(&mut self, scene: &Scene, folder: Option<&Path>) -> Option<Event> {
-		if self.polled.is_some_and(|at| at.elapsed() < Duration::from_millis(100)) {
+		let touched = self.touched.swap(false, Ordering::AcqRel);
+		if !touched && self.polled.is_some_and(|at| at.elapsed() < Duration::from_millis(100)) {
 			return None;
 		}
 		self.polled = Some(Instant::now());
@@ -59,6 +66,10 @@ impl SceneWatch {
 		if path != self.path {
 			let withdraw = self.asking.is_some();
 			*self = Self { path, hasher: std::mem::take(&mut self.hasher), ..Self::default() };
+			#[cfg(not(target_arch = "wasm32"))]
+			{
+				self.watcher = watch(&self.path, self.touched.clone());
+			}
 			self.changed = Some(Instant::now().checked_sub(SETTLE).unwrap_or_else(Instant::now));
 			if withdraw {
 				return Some(Event::Withdraw);
@@ -119,6 +130,11 @@ impl SceneWatch {
 		Some(Event::Ask)
 	}
 
+	/// A change waits to settle or to be read: the window keeps ticking.
+	pub(crate) fn pending(&self) -> bool {
+		self.changed.is_some()
+	}
+
 	/// A question stands.
 	pub(crate) fn asking(&self) -> bool {
 		self.asking.is_some()
@@ -138,6 +154,33 @@ impl SceneWatch {
 		self.kept.insert(hash);
 		None
 	}
+}
+
+/// Watches `path` through its folder (an editor may replace the file), marking `touched` and waking the window on a
+/// change of it; `None`, with a warning, where the platform refuses.
+#[cfg(not(target_arch = "wasm32"))]
+fn watch(path: &Path, touched: Arc<AtomicBool>) -> Option<notify::RecommendedWatcher> {
+	use notify::Watcher as _;
+	// a link's target changes in the target's folder
+	let path = &std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
+	let name = path.file_name()?.to_owned();
+	let folder = path.parent().filter(|f| !f.as_os_str().is_empty()).unwrap_or(Path::new("."));
+	let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+		if let Ok(event) = event
+			// our own reads of the file are no change
+			&& !event.kind.is_access()
+			&& event.paths.iter().any(|p| p.file_name() == Some(&name))
+		{
+			touched.store(true, Ordering::Release);
+			crate::wake::wake();
+		}
+	});
+	let mut watcher = watcher.inspect_err(|e| tracing::warn!("{} is not watched: {e}", path.display())).ok()?;
+	watcher
+		.watch(folder, notify::RecursiveMode::NonRecursive)
+		.inspect_err(|e| tracing::warn!("{} is not watched: {e}", path.display()))
+		.ok()?;
+	Some(watcher)
 }
 
 #[cfg(test)]

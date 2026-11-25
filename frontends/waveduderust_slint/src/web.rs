@@ -1,12 +1,16 @@
-//! The browser's run: a worker pumped by the window's timer on the page's WebGPU device.
+//! The browser's run: a worker pumped on the page's thread, its engines on the page's WebGPU device.
 
+use std::future::Future;
 use std::io;
-use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::pin::pin;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::task::{Context, Poll, Waker};
 
-use waveduderust::run::{PumpedFactory, RunWorker, SpillBackend, SpillFactory, StoreLayout, Token};
+use waveduderust::run::{Pump, PumpedFactory, RunWorker, SpillBackend, SpillFactory, StoreLayout, Token};
 use waveduderust::unstable::engine::build_on;
-use waveduderust::unstable::engine::gpu::GpuContext;
+use waveduderust::unstable::engine::gpu::{GpuContext, Kicks};
 
 /// The engine and the stores' memory: wasm32's 4 GiB address space, less the page's own.
 pub(crate) const BUDGET: u64 = 1 << 30;
@@ -49,8 +53,116 @@ pub(crate) fn worker(context: Arc<GpuContext>) -> RunWorker {
 	RunWorker::pumped(factory, BUDGET, BUDGET, Box::new(DropSpill), Arc::default())
 }
 
+/// The run's work between two turns of the page's event loop.
+const SLICE: std::time::Duration = std::time::Duration::from_millis(8);
+
+/// Pumps `worker` on the page as classic's run worker pumped it (decision 0024, `wavedude-run-worker` of `master`):
+/// with work left a message to itself turns the event loop and goes on; while the run waits, what it waits for or a
+/// raise of the returned [`Wake`] (a new goal) starts it again; meanwhile, while `gpu` owes completions, empty submits
+/// kick its queue (decision 0026).
+pub(crate) fn run(worker: Rc<RunWorker>, gpu: Arc<GpuContext>) -> Arc<Wake> {
+	let wake = Arc::new(Wake::default());
+	let (pumped, again) = (wake.clone(), Again::new(wake.clone()));
+	wasm_bindgen_futures::spawn_local(async move {
+		let waker = Waker::from(pumped.clone());
+		loop {
+			let left = worker.pump(SLICE, &waker);
+			if left == Pump::Work {
+				again.post();
+			}
+			if left == Pump::Waiting && gpu.lost().is_none() && gpu.awaits_completions() {
+				first(pumped.wait(), kick(&gpu)).await;
+			} else {
+				pumped.wait().await;
+			}
+		}
+	});
+	wake
+}
+
+/// Kicks the queue while `gpu` awaits completions and is not lost; pending ever after.
+async fn kick(gpu: &GpuContext) {
+	for gap in Kicks::default() {
+		gloo_timers::future::TimeoutFuture::new(u32::try_from(gap.as_micros().div_ceil(1000)).unwrap_or(u32::MAX))
+			.await;
+		if gpu.lost().is_some() || !gpu.awaits_completions() {
+			break;
+		}
+		gpu.kick();
+	}
+	std::future::pending::<()>().await;
+}
+
+/// Waits for `wait`, polling `beside` meanwhile.
+async fn first(wait: impl Future<Output = ()>, beside: impl Future<Output = ()>) {
+	let (mut wait, mut beside) = (pin!(wait), pin!(beside));
+	std::future::poll_fn(|cx| {
+		let ready = wait.as_mut().poll(cx);
+		if ready.is_pending() {
+			let _ = beside.as_mut().poll(cx);
+		}
+		ready
+	})
+	.await;
+}
+
+/// What starts the pump again: a goal, the run going on, or what it waits for being ready.
+#[derive(Default)]
+pub(crate) struct Wake {
+	raised: AtomicBool,
+	/// The pump's task while it waits.
+	waiting: Mutex<Option<Waker>>,
+}
+
+impl Wake {
+	pub(crate) fn raise(&self) {
+		self.raised.store(true, Ordering::Release);
+		if let Some(waiting) = self.waiting.lock().unwrap_or_else(PoisonError::into_inner).take() {
+			waiting.wake();
+		}
+	}
+
+	/// Returns once raised since it last returned.
+	async fn wait(&self) {
+		std::future::poll_fn(|cx| {
+			*self.waiting.lock().unwrap_or_else(PoisonError::into_inner) = Some(cx.waker().clone());
+			if self.raised.swap(false, Ordering::AcqRel) { Poll::Ready(()) } else { Poll::Pending }
+		})
+		.await;
+	}
+}
+
+impl std::task::Wake for Wake {
+	fn wake(self: Arc<Self>) {
+		self.raise();
+	}
+}
+
+/// Raises the wake once the event loop turned: a message to itself, which no timer clamps.
+struct Again {
+	channel: web_sys::MessageChannel,
+	_listener: wasm_bindgen::closure::Closure<dyn FnMut(web_sys::MessageEvent)>,
+}
+
+impl Again {
+	fn new(wake: Arc<Wake>) -> Self {
+		use wasm_bindgen::JsCast as _;
+		let channel = web_sys::MessageChannel::new().expect("a page makes message channels");
+		let listener =
+			wasm_bindgen::closure::Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |_: web_sys::MessageEvent| {
+				wake.raise();
+			});
+		channel.port1().set_onmessage(Some(listener.as_ref().unchecked_ref()));
+		Self { channel, _listener: listener }
+	}
+
+	fn post(&self) {
+		let _ = self.channel.port2().post_message(&wasm_bindgen::JsValue::UNDEFINED);
+	}
+}
+
 /// Leaving the page asks, the browser's own question, while `dirty` holds.
-pub(crate) fn guard_unload(dirty: std::rc::Rc<std::cell::Cell<bool>>) {
+pub(crate) fn guard_unload(dirty: Rc<std::cell::Cell<bool>>) {
 	use wasm_bindgen::JsCast as _;
 	use wasm_bindgen::closure::Closure;
 	let Some(window) = web_sys::window() else { return };

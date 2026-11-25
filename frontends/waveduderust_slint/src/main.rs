@@ -22,6 +22,7 @@ mod scene_watch;
 mod selection;
 mod settings;
 mod tree;
+mod wake;
 #[cfg(target_arch = "wasm32")]
 mod web;
 
@@ -188,6 +189,7 @@ impl State {
 	}
 
 	fn show(&mut self, app: &AppWindow) {
+		wake::wake();
 		self.unsaved.set(self.doc.dirty());
 		if self.export_dialog.is_none() {
 			app.set_export_shown(false);
@@ -930,21 +932,34 @@ fn watch_scene_image(state: &mut State, app: &AppWindow) {
 	}
 }
 
-/// After a forced theme, keeps the System theme on the desktop's scheme from winit's theme event, which Linux lacks
-/// (docs/blockers.md, Slint's system colour scheme).
-fn follow_desktop_scheme(state: &Rc<RefCell<State>>, app: &AppWindow) {
+/// The window's own events: input wakes the tick, a dropped file opens, and after a forced theme the System theme
+/// keeps the desktop's scheme from winit's theme event, which Linux lacks (docs/blockers.md, Slint's system colour
+/// scheme).
+fn wire_window_events(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	use slint::language::ColorScheme;
 	use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 	let (state, weak) = (state.clone(), app.as_weak());
 	app.window().on_winit_window_event(move |_, event| {
-		if let (winit::event::WindowEvent::DroppedFile(path), Some(app)) = (event, weak.upgrade()) {
+		use winit::event::WindowEvent;
+		// input ticks once after Slint handled it, as classic's repaint on input did: what a callback changed is shown
+		if matches!(
+			event,
+			WindowEvent::KeyboardInput { .. }
+				| WindowEvent::MouseInput { .. }
+				| WindowEvent::MouseWheel { .. }
+				| WindowEvent::Touch(_)
+				| WindowEvent::Ime(_)
+		) {
+			wake::wake();
+		}
+		if let (WindowEvent::DroppedFile(path), Some(app)) = (event, weak.upgrade()) {
 			// a native dialog's nested loop may deliver it while the state is borrowed
 			let Ok(mut s) = state.try_borrow_mut() else { return EventResult::Propagate };
 			let s = &mut *s;
 			dropped(s, &app, path.clone());
 			s.show(&app);
 		}
-		if let (winit::event::WindowEvent::ThemeChanged(theme), Some(app)) = (event, weak.upgrade()) {
+		if let (WindowEvent::ThemeChanged(theme), Some(app)) = (event, weak.upgrade()) {
 			let mut s = state.borrow_mut();
 			if s.system_scheme.is_some() {
 				s.system_scheme = Some(match theme {
@@ -1372,7 +1387,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	}));
 	app.set_native_access_keys(cfg!(windows));
 	apply_settings(&mut state.borrow_mut(), &app);
-	follow_desktop_scheme(&state, &app);
+	wire_window_events(&state, &app);
 	#[cfg(target_arch = "wasm32")]
 	web::guard_unload(state.borrow().unsaved.clone());
 	state.borrow_mut().opened();
@@ -1811,9 +1826,15 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		}
 	});
 	let st = state.clone();
-	app.on_seek(move |frame| st.borrow_mut().playback.seek(i64::from(frame)));
+	app.on_seek(move |frame| {
+		st.borrow_mut().playback.seek(i64::from(frame));
+		wake::wake();
+	});
 	let st = state.clone();
-	app.on_bracket(move |end, frame| st.borrow_mut().playback.drag_bracket(end, i64::from(frame)));
+	app.on_bracket(move |end, frame| {
+		st.borrow_mut().playback.drag_bracket(end, i64::from(frame));
+		wake::wake();
+	});
 	let st = state.clone();
 	app.on_transport_speed(move |text| {
 		let speed = &mut st.borrow_mut().playback.speed;
@@ -1963,8 +1984,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
-	let timer = slint::Timer::default();
-	timer.start(slint::TimerMode::Repeated, std::time::Duration::from_millis(16), move || {
+	wake::set(ticker::wake);
+	ticker::start(move || {
 		if let Some(app) = weak.upgrade() {
 			let s = &mut *st.borrow_mut();
 			s.live.seek(s.playback.position);
@@ -2045,14 +2066,20 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			// Play and edits ask from here too
 			s.show_warning(&app);
 			app.global::<ui::Canvas<'_>>().set_computing(shown.computing);
+			// classic's `Shell::next_tick`: ticks while something moves, else news wakes the window
+			return shown.running
+				|| shown.computing
+				|| s.live.fit_pending()
+				|| s.playback.playing
+				|| s.exporting.is_some()
+				|| s.scene_watch.pending()
+				|| form.get_focus_pending();
 		}
+		false
 	});
+	// The browser's event loop outlives this function.
 	#[cfg(target_arch = "wasm32")]
-	{
-		// The browser's event loop outlives this function.
-		std::mem::forget(timer);
-		std::mem::forget(app.clone_strong());
-	}
+	std::mem::forget(app.clone_strong());
 	#[cfg(not(target_arch = "wasm32"))]
 	place_window(&state.borrow().settings, &app);
 	app.run()?;
@@ -2075,6 +2102,50 @@ fn main() {
 			web_sys::console::error_1(&format!("WaveDude Rust could not start: {e}").into());
 		}
 	});
+}
+
+/// The window's tick: every 16 ms while the last one said something moves, else stopped until [`wake::wake`].
+mod ticker {
+	use std::sync::atomic::{AtomicBool, Ordering};
+
+	const TICK: std::time::Duration = std::time::Duration::from_millis(16);
+
+	thread_local! {
+		static TIMER: slint::Timer = slint::Timer::default();
+	}
+
+	/// A wake on its way to the event loop: the wakes before it lands are one.
+	static WAKING: AtomicBool = AtomicBool::new(false);
+
+	/// Starts ticking `tick`, which says whether to go on.
+	pub(super) fn start(tick: impl Fn() -> bool + 'static) {
+		TIMER.with(|t| {
+			t.start(slint::TimerMode::Repeated, TICK, move || {
+				if !tick() {
+					TIMER.with(slint::Timer::stop);
+				}
+			});
+		});
+	}
+
+	/// Ticks again; from any thread.
+	pub(super) fn wake() {
+		if WAKING.swap(true, Ordering::AcqRel) {
+			return;
+		}
+		let queued = slint::invoke_from_event_loop(|| {
+			WAKING.store(false, Ordering::Release);
+			TIMER.with(|t| {
+				if !t.running() {
+					t.restart();
+				}
+			});
+		});
+		if queued.is_err() {
+			// no event loop: a later wake tries again
+			WAKING.store(false, Ordering::Release);
+		}
+	}
 }
 
 /// The pictures' handles: selection by click, drags as one undo step each.

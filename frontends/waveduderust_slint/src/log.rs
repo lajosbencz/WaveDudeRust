@@ -75,8 +75,14 @@ impl<S: Subscriber> Layer<S> for Ring {
 			l.lines.pop_front();
 		}
 		let (target, id) = (meta.target().to_owned(), l.added);
+		// Debug and Trace wait for the next tick, as do other crates' lines
+		let wakes = *meta.level() <= Level::INFO && target.starts_with("wavedude");
 		l.lines.push_back(Line { time, level: *meta.level(), source, target, message: message.0, id });
 		l.added += 1;
+		drop(l);
+		if wakes {
+			crate::wake::wake();
+		}
 	}
 }
 
