@@ -918,11 +918,10 @@ impl Live {
 		});
 		// the worker has taken up the newest goal: its Idle is this run's, not the one before
 		let current = status.adopted == self.revision;
-		// a completed run reads as the timeline it covers, whatever its engine stepped (a reused store, kept frames)
+		// a completed run reads at least the timeline it covers: a reused store or kept frames step less, probes on
 		let steps_done = match (state, &self.request, &status.store) {
-			(RunState::Completed, Some(request), Some(store)) => {
-				steps_covered(&request.schedule(), store.count()).unwrap_or(status.steps_done)
-			}
+			(RunState::Completed, Some(request), Some(store)) => steps_covered(&request.schedule(), store.count())
+				.map_or(status.steps_done, |c| c.max(status.steps_done)),
 			_ => status.steps_done,
 		};
 		if let (Some(started), RunState::Completed | RunState::Stopped, Some(store)) =
