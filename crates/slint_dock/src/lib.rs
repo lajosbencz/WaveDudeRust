@@ -3,10 +3,13 @@
 //! splitters ([`Dock::resize`]), finds where a dragged pane or group lands ([`Dock::drop_target`]) and moves,
 //! hides and shows panes. The tree round-trips through [`Arrangement`], serde-able with the `serde` feature.
 //!
+//! `ui/dock.slint` draws the chrome from the layout; [`ui_dir`] is its folder, for a build script's
+//! `slint_build::CompilerConfiguration::with_library_paths`.
+//!
 //! ```
 //! use slint_dock::{Arrangement, Axis, Dock, Metrics, Point, Rect, Side, Size, Subject, Target};
 //!
-//! let mut dock = Dock::new(Metrics { splitter: 4., title_bar: 20., centre_min: Size::new(100., 100.) });
+//! let mut dock = Dock::new(Metrics { splitter: 4., title_bar: 20., tab_strip: 20., centre_min: Size::new(100., 100.) });
 //! dock.register("a", Side::Left, Size::new(50., 50.));
 //! dock.register("b", Side::Left, Size::new(50., 50.));
 //! dock.register("log", Side::Bottom, Size::new(50., 50.));
@@ -30,6 +33,7 @@ mod tree;
 mod tests;
 
 use std::collections::HashSet;
+use std::path::PathBuf;
 
 pub use arrangement::{ArrangeError, Arrangement, Tab};
 pub use geometry::{Axis, Point, Rect, Side, Size};
@@ -48,6 +52,12 @@ pub const SIDE_ZONE: f32 = 0.3;
 pub const BESIDE_SHARE: f32 = 1. / 3.;
 /// The least weight a resize leaves a child, so a child shrunk to nothing keeps a share.
 const MIN_WEIGHT: f32 = 1e-3;
+
+/// The folder of `dock.slint`, a Slint library: registered as `slint-dock`, it is imported as
+/// `@slint-dock/dock.slint`.
+pub fn ui_dir() -> PathBuf {
+	PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ui")
+}
 
 /// A tab group, or the centre area.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -69,6 +79,8 @@ pub struct Metrics {
 	pub splitter: f32,
 	/// Height of a tab group's title bar, along its top; the centre area has none.
 	pub title_bar: f32,
+	/// Height of a tab group's tab strip, along its bottom while it shows several panes.
+	pub tab_strip: f32,
 	/// Minimum size of the centre area.
 	pub centre_min: Size,
 }
@@ -109,7 +121,7 @@ pub struct GroupLayout {
 	pub id: GroupId,
 	/// Its whole rectangle, title bar included.
 	pub rect: Rect,
-	/// The rectangle below the title bar.
+	/// The rectangle between the title bar and the tab strip.
 	pub content: Rect,
 	/// Its shown panes in tab order; empty for the centre.
 	pub tabs: Vec<String>,
@@ -350,8 +362,8 @@ impl Dock {
 		true
 	}
 
-	/// Shows pane `id` as the active tab of its place, or when it has none in a group of its own at its
-	/// registered side, as [`Target::Edge`]. Whether it is registered.
+	/// Shows pane `id` as the active tab of its place; without one, as the active tab of the group along the dock's
+	/// edge at its registered side, else in a group of its own there, as [`Target::Edge`]. Whether it is registered.
 	pub fn show(&mut self, id: &str) -> bool {
 		if let Some(group) = self.root.group_mut(&|g| g.position(id).is_some()) {
 			if let Some(i) = group.position(id) {
@@ -361,6 +373,11 @@ impl Dock {
 			return true;
 		}
 		let Some(side) = self.panes.iter().find(|p| p.id == id).map(|p| p.side) else { return false };
+		if let Some(group) = self.edge_group_mut(side) {
+			group.tabs.push(Tab { id: id.to_owned(), shown: true });
+			group.active = group.tabs.len() - 1;
+			return true;
+		}
 		let group = Group { id: GroupId(self.fresh()), tabs: vec![Tab { id: id.to_owned(), shown: true }], active: 0 };
 		let split = SplitId(self.fresh());
 		wrap(&mut self.root, Node::Group(group), split, side, EDGE_SHARE);
@@ -375,6 +392,19 @@ impl Dock {
 		};
 		group.active = group.position(id).unwrap_or(group.active);
 		true
+	}
+
+	/// The group spanning the dock along `side`: the outermost child there of a root split across it.
+	fn edge_group_mut(&mut self, side: Side) -> Option<&mut Group> {
+		let Node::Split(s) = &mut self.root else { return None };
+		if s.axis != side.axis() {
+			return None;
+		}
+		let edge = if side.leads() { s.children.first_mut() } else { s.children.last_mut() };
+		match &mut edge?.node {
+			Node::Group(g) => Some(g),
+			Node::Centre | Node::Split(_) => None,
+		}
 	}
 
 	fn fresh(&mut self) -> u32 {
@@ -398,17 +428,23 @@ impl Dock {
 		}
 	}
 
+	/// Height of a group's title bar and tab strip with `shown` panes.
+	fn chrome(&self, shown: usize) -> f32 {
+		self.metrics.title_bar + if shown > 1 { self.metrics.tab_strip } else { 0. }
+	}
+
 	fn min_size(&self, node: &Node) -> Size {
 		match node {
 			Node::Centre => self.metrics.centre_min,
 			Node::Group(g) => {
-				let content = g
+				let shown: Vec<&Registered> = g
 					.tabs
 					.iter()
 					.filter(|t| t.shown)
 					.filter_map(|t| self.panes.iter().find(|p| p.id == t.id))
-					.fold(Size::ZERO, |m, p| m.max(p.min));
-				Size::new(content.width, content.height + self.metrics.title_bar)
+					.collect();
+				let content = shown.iter().fold(Size::ZERO, |m, p| m.max(p.min));
+				Size::new(content.width, content.height + self.chrome(shown.len()))
 			}
 			Node::Split(s) => {
 				let mins: Vec<Size> =
@@ -434,12 +470,13 @@ impl Dock {
 				active: None,
 			}),
 			Node::Group(g) if g.is_visible() => {
-				let title = self.metrics.title_bar.min(rect.height);
 				let shown: Vec<&Tab> = g.tabs.iter().filter(|t| t.shown).collect();
+				let title = self.metrics.title_bar.min(rect.height);
+				let chrome = self.chrome(shown.len()).min(rect.height);
 				out.groups.push(GroupLayout {
 					id: g.id,
 					rect,
-					content: Rect::new(rect.x, rect.y + title, rect.width, rect.height - title),
+					content: Rect::new(rect.x, rect.y + title, rect.width, rect.height - chrome),
 					tabs: shown.iter().map(|t| t.id.clone()).collect(),
 					active: shown.iter().position(|t| t.id == g.tabs[g.active].id),
 				});

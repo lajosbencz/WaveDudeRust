@@ -7,8 +7,7 @@ import "../../../crates/waveduderust/assets/fonts/Selawik-Semibold.ttf";
 import "../../../crates/waveduderust/assets/fonts/Selawik-Bold.ttf";
 export { Palette } from "std-widgets.slint";
 import { MenuIcons } from "menu-icons.slint";
-import { Pane } from "pane.slint";
-import { Splitter } from "splitter.slint";
+import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace } from "@slint-dock/dock.slint";
 import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
 import { Form, NumberParse } from "form.slint";
 export { Form, NumberParse }
@@ -70,6 +69,21 @@ export struct Commands {
     can-close: bool,
     can-play: bool,
     playing: bool,
+}
+
+// A pane's content at its place in the dock, cut off below its content's size as Next's grid cells do.
+component DockedPane inherits Rectangle {
+    in property <DockPlace> place;
+    x: root.place.x;
+    y: root.place.y;
+    width: root.place.width;
+    height: root.place.height;
+    visible: root.place.visible;
+    background: Theme.tool-window-background;
+    clip: true;
+    VerticalLayout {
+        @children
+    }
 }
 
 export component AppWindow inherits Window {
@@ -156,22 +170,36 @@ export component AppWindow inherits Window {
     in property <string> props-heading;
     // a folder's item count; -1 for other rows
     in property <int> props-entries: -1;
-    in-out property <bool> project-shown: true;
-    in-out property <bool> properties-shown: true;
-    in-out property <bool> messages-shown: false;
-    in-out property <bool> performance-shown: false;
+    // The dock (src/docking.rs): its chrome's models, its size, and per pane whether it is shown and where its
+    // content goes; the preview is the centre.
+    in property <[DockGroup]> dock-groups;
+    in property <[DockSplitter]> dock-splitters;
+    in property <DockMetrics> dock-metrics;
+    out property <length> dock-width: dock.width;
+    out property <length> dock-height: dock.height;
+    out property <length> dock-x: dock.absolute-position.x;
+    out property <length> dock-y: dock.absolute-position.y;
+    // a pointer press at `x`, `y` in the window, which Slint delivers too
+    callback dock-pressed(x: length, y: length);
+    callback dock-resized();
+    callback dock-splitter-moved(index: int, x: length, y: length);
+    callback dock-activate(pane: string);
+    // shows or hides pane `pane`
+    callback pane-shown(pane: string, shown: bool);
+    in property <bool> project-shown;
+    in property <bool> properties-shown;
+    in property <bool> messages-shown;
+    in property <bool> performance-shown;
+    in property <DockPlace> project-place;
+    in property <DockPlace> properties-place;
+    in property <DockPlace> messages-place;
+    in property <DockPlace> performance-place;
+    in property <DockPlace> preview-place;
     // the pane takes the focus when it opens; closed, it hands the focus back
     changed messages-shown => {
         if (!self.messages-shown) { keys.focus(); }
     }
     in-out property <bool> preview-stacked: true;
-    // The panes' stretches, which the splitters move (docs/ui/00, Panes: 1 : 3, 1 : 2, 3 : 1).
-    in-out property <float> left-weight: 1;
-    in-out property <float> right-weight: 3;
-    in-out property <float> project-weight: 1;
-    in-out property <float> properties-weight: 2;
-    in-out property <float> preview-weight: 3;
-    in-out property <float> messages-weight: 1;
     // a menu entry's, shortcut's or button's action (docs/ui/10)
     callback command(Command);
     callback add(NewItem);
@@ -254,10 +282,10 @@ export component AppWindow inherits Window {
             title: root.menu-text(@tr("&View"), @tr("View"));
             Menu {
                 title: root.menu-text(@tr("&Panes"), @tr("Panes")); icon: MenuIcons.view-sidebar;
-                MenuItem { title: @tr("Project"); checkable: true; checked: root.project-shown; activated => { root.project-shown = !root.project-shown; } }
-                MenuItem { title: @tr("Properties"); checkable: true; checked: root.properties-shown; activated => { root.properties-shown = !root.properties-shown; } }
-                MenuItem { title: @tr("Messages"); checkable: true; checked: root.messages-shown; activated => { root.messages-shown = !root.messages-shown; } }
-                MenuItem { title: @tr("Performance"); checkable: true; checked: root.performance-shown; activated => { root.performance-shown = !root.performance-shown; } }
+                MenuItem { title: @tr("Project"); checkable: true; checked: root.project-shown; activated => { root.pane-shown("project", !root.project-shown); } }
+                MenuItem { title: @tr("Properties"); checkable: true; checked: root.properties-shown; activated => { root.pane-shown("properties", !root.properties-shown); } }
+                MenuItem { title: @tr("Messages"); checkable: true; checked: root.messages-shown; activated => { root.pane-shown("messages", !root.messages-shown); } }
+                MenuItem { title: @tr("Performance"); checkable: true; checked: root.performance-shown; activated => { root.pane-shown("performance", !root.performance-shown); } }
             }
         }
         Menu {
@@ -301,19 +329,44 @@ export component AppWindow inherits Window {
         }
         VerticalLayout {
 
-            columns := HorizontalLayout {
+            HorizontalLayout {
                 padding: 4px;
-                // a pane's minimum is Next's (DockHost: 60 px, 100 px holding the preview), its content clipped
-                if root.project-shown || root.properties-shown: left := VerticalLayout {
-                    horizontal-stretch: root.left-weight;
-                    preferred-width: 0px;
-                    min-width: 60px;
-                    if root.project-shown: Pane {
-                        title: @tr("Project");
-                        vertical-stretch: root.project-weight;
-                        preferred-height: 0px;
-                        min-height: 60px;
-                        close => { root.project-shown = false; }
+                // the dock's chrome, the panes' contents over it at their places
+                Rectangle {
+                    dock := DockArea {
+                        groups: root.dock-groups;
+                        splitters: root.dock-splitters;
+                        metrics: root.dock-metrics;
+                        style: {
+                            font-size: Theme.font-size,
+                            pane: Theme.tool-window-background,
+                            title: Theme.window-background,
+                            title-text: Theme.title-inactive-text,
+                            grip: Theme.title-grip,
+                            title-button-hover: Theme.title-button-hover,
+                            title-active: Theme.accent,
+                            title-active-text: Theme.selection-text,
+                            grip-active: Theme.title-grip-active,
+                            title-button-hover-active: Theme.title-button-hover-active,
+                            tab-strip: Theme.window-background,
+                            tab-border: Theme.border,
+                            tab-text: Theme.tab-text,
+                            tab-selected-text: Theme.tab-selected-text,
+                            tab-hover-text: Theme.tab-hover-text,
+                            splitter: Theme.window-background,
+                        };
+                        close-tip: @tr("Close");
+                        title(pane) => {
+                            pane == "project" ? @tr("Project") : pane == "properties" ? @tr("Properties")
+                                : pane == "messages" ? @tr("Messages") : pane == "performance" ? @tr("Performance") : pane
+                        }
+                        close(pane) => { root.pane-shown(pane, false); }
+                        activate(pane) => { root.dock-activate(pane); }
+                        splitter-moved(index, x, y) => { root.dock-splitter-moved(index, x, y); }
+                        resized => { root.dock-resized(); }
+                    }
+                    if root.project-shown: DockedPane {
+                        place: root.project-place;
                         ProjectTree {
                             rows: root.tree-rows;
                             current-row: root.tree-current;
@@ -339,41 +392,36 @@ export component AppWindow inherits Window {
                             drop(row, data, before) => { root.tree-drop(row, data, before); }
                         }
                     }
-                    if root.project-shown && root.properties-shown: Splitter {
-                        rows: true;
-                        span: left.height - 4px;
-                        before <=> root.project-weight;
-                        after <=> root.properties-weight;
-                    }
-                    if root.properties-shown: Pane {
-                        title: @tr("Properties");
-                        vertical-stretch: root.properties-weight;
-                        preferred-height: 0px;
-                        min-height: 60px;
-                        close => { root.properties-shown = false; }
+                    if root.properties-shown: DockedPane {
+                        place: root.properties-place;
                         Properties {
                             heading: TreeWords.label(root.props-kind, root.props-heading);
                             entries: root.props-entries;
                         }
                     }
-                }
-                if root.project-shown || root.properties-shown: Splitter {
-                    span: columns.width - 12px;
-                    start: 4px;
-                    minimum-after: 100px;
-                    before <=> root.left-weight;
-                    after <=> root.right-weight;
-                }
-                right := VerticalLayout {
-                    horizontal-stretch: root.right-weight;
-                    preferred-width: 0px;
-                    min-width: 100px;
-                    Pane {
-                        title: @tr("Preview");
-                        active: true;
-                        vertical-stretch: root.preview-weight;
-                        preferred-height: 0px;
-                        min-height: 100px;
+                    if root.messages-shown: DockedPane {
+                        place: root.messages-place;
+                        Messages {
+                            rows: root.log-rows;
+                            levels: root.log-levels;
+                            toggle(l) => { root.log-toggle(l); }
+                            search(t) => { root.log-search(t); }
+                            clear => { root.log-clear(); }
+                            regex(on) => { root.log-regex(on); }
+                            select(row, control, shift) => { root.log-select(row, control, shift); }
+                            copy(all) => { root.log-copy(all) }
+                            added: root.log-added;
+                        }
+                    }
+                    if root.performance-shown: DockedPane {
+                        place: root.performance-place;
+                        VerticalLayout {
+                            padding: 8px;
+                            RamBarView { ram: root.ram; }
+                        }
+                    }
+                    DockedPane {
+                        place: root.preview-place;
                         // Next's preview keys, its own even when the command cannot run; a click on the pictures
                         // focuses it
                         preview-keys := FocusScope {
@@ -418,41 +466,6 @@ export component AppWindow inherits Window {
                             }
                         }
                     }
-                    if root.messages-shown: Splitter {
-                        rows: true;
-                        span: right.height - 4px;
-                        minimum-before: 100px;
-                        before <=> root.preview-weight;
-                        after <=> root.messages-weight;
-                    }
-                    if root.messages-shown: Pane {
-                        title: @tr("Messages");
-                        vertical-stretch: root.messages-weight;
-                        preferred-height: 0px;
-                        min-height: 60px;
-                        close => { root.messages-shown = false; }
-                        Messages {
-                            rows: root.log-rows;
-                            levels: root.log-levels;
-                            toggle(l) => { root.log-toggle(l); }
-                            search(t) => { root.log-search(t); }
-                            clear => { root.log-clear(); }
-                            regex(on) => { root.log-regex(on); }
-                            select(row, control, shift) => { root.log-select(row, control, shift); }
-                            copy(all) => { root.log-copy(all) }
-                            added: root.log-added;
-                        }
-                    }
-                    // sized to its content, under the others
-                    if root.performance-shown: Pane {
-                        title: @tr("Performance");
-                        vertical-stretch: 0;
-                        close => { root.performance-shown = false; }
-                        VerticalLayout {
-                            padding: 8px;
-                            RamBarView { ram: root.ram; }
-                        }
-                    }
                 }
             }
             Rectangle {
@@ -460,7 +473,7 @@ export component AppWindow inherits Window {
                 background: root.status-level == LogLevel.error ? Theme.status-error
                     : root.status-level == LogLevel.warn ? Theme.status-warn : Theme.status;
                 TouchArea {
-                    double-clicked => { root.messages-shown = true; }
+                    double-clicked => { root.pane-shown("messages", true); }
                 }
                 Tooltip { text: @markdown("\{@tr("Double-click to open the Messages pane")}"); }
                 HorizontalLayout {

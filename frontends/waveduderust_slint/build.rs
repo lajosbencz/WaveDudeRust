@@ -41,7 +41,8 @@ fn main() {
 	println!("cargo::rerun-if-changed=lang");
 	let config = slint_build::CompilerConfiguration::new()
 		.with_bundled_translations("lang")
-		.with_default_translation_context(slint_build::DefaultTranslationContext::None);
+		.with_default_translation_context(slint_build::DefaultTranslationContext::None)
+		.with_library_paths(std::collections::HashMap::from([("slint-dock".to_owned(), slint_dock::ui_dir())]));
 	slint_build::compile_with_config("ui/app.slint", config).expect("ui/app.slint compiles");
 	println!("cargo::rerun-if-changed=assets/icons/icon.ico");
 	#[cfg(windows)]

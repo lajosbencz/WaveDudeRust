@@ -6512,6 +6512,7 @@ dependencies = [
  "rfd",
  "slint",
  "slint-build",
+ "slint_dock",
  "sys-locale",
  "tracing",
  "tracing-subscriber",

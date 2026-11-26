@@ -1,0 +1,252 @@
+// The chrome of a `slint_dock::Dock` layout, drawn from models its Rust side fills: each group's title bar and tab
+// strip, and the splitters. Slint cannot instantiate a pane's content from a model, so the app keeps every content
+// as its own element and places it at the rectangle the Rust side computes for it, over its group.
+
+// Sizes of the chrome; `title` and `splitter` are the Rust side's `Metrics`.
+export struct DockMetrics {
+    title: length,
+    tab: length,
+    splitter: length,
+}
+
+// Colours and font of the chrome.
+export struct DockStyle {
+    font-size: length,
+    // a group's background
+    pane: brush,
+    title: brush,
+    title-text: brush,
+    grip: brush,
+    title-button-hover: brush,
+    // the title bar of the active group
+    title-active: brush,
+    title-active-text: brush,
+    grip-active: brush,
+    title-button-hover-active: brush,
+    // the strip; the selected tab takes `pane` and a `tab-border` round it but along the content
+    tab-strip: brush,
+    tab-border: brush,
+    tab-text: brush,
+    tab-selected-text: brush,
+    tab-hover-text: brush,
+    splitter: brush,
+}
+
+// A shown pane of a group; `active` is the one its group shows.
+export struct DockTab {
+    pane: string,
+    active: bool,
+}
+
+// A shown group: its rectangle, title bar included, in the area; its active pane, whose title the title bar shows;
+// its panes, a tab strip under the content from two on; `active` lights its title bar.
+export struct DockGroup {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    pane: string,
+    active: bool,
+    tabs: [DockTab],
+}
+
+// A splitter bar; `rows` when it moves vertically.
+export struct DockSplitter {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    rows: bool,
+}
+
+// Where the app places a pane's content in the area; `visible` when it is its group's active pane.
+export struct DockPlace {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    visible: bool,
+}
+
+component CloseButton inherits Rectangle {
+    in property <brush> ink;
+    in property <brush> hover-background;
+    in property <string> tip;
+    callback clicked();
+
+    width: 16px;
+    height: 16px;
+    background: area.has-hover ? root.hover-background : transparent;
+    accessible-role: button;
+    accessible-label: root.tip;
+    accessible-action-default => { root.clicked(); }
+    Path {
+        width: 8px;
+        height: 8px;
+        viewbox-width: 8;
+        viewbox-height: 8;
+        commands: "M0,1 L1,0 L4,3 L7,0 L8,1 L5,4 L8,7 L7,8 L4,5 L1,8 L0,7 L3,4 Z";
+        fill: root.ink;
+    }
+    area := TouchArea {
+        clicked => { root.clicked(); }
+    }
+    if root.tip != "": Tooltip {
+        text: @markdown("\{root.tip}");
+    }
+}
+
+component TitleBar inherits Rectangle {
+    in property <DockStyle> style;
+    in property <string> title;
+    in property <bool> active;
+    in property <string> close-tip;
+    callback close();
+    callback clicked();
+
+    background: root.active ? root.style.title-active : root.style.title;
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 2px;
+        spacing: 4px;
+        Text {
+            text: root.title;
+            vertical-alignment: center;
+            font-size: root.style.font-size;
+            color: root.active ? root.style.title-active-text : root.style.title-text;
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 4px;
+            y: (parent.height - self.height) / 2;
+            border-width: 1px;
+            border-color: root.active ? root.style.grip-active : root.style.grip;
+        }
+        CloseButton {
+            y: (parent.height - self.height) / 2;
+            ink: root.active ? root.style.title-active-text : root.style.title-text;
+            hover-background: root.active ? root.style.title-button-hover-active : root.style.title-button-hover;
+            tip: root.close-tip;
+            clicked => { root.close(); }
+        }
+    }
+}
+
+component TabStrip inherits Rectangle {
+    in property <DockStyle> style;
+    in property <[DockTab]> tabs;
+    pure callback title(pane: string) -> string;
+    callback activate(pane: string);
+
+    background: root.style.tab-strip;
+    clip: true;
+    HorizontalLayout {
+        alignment: start;
+        for tab in root.tabs: Rectangle {
+            background: tab.active ? root.style.pane : transparent;
+            // its top border is cut off: the tab joins the content above it
+            Rectangle {
+                y: -1px;
+                height: parent.height + 1px;
+                border-width: 1px;
+                border-color: tab.active ? root.style.tab-border : transparent;
+            }
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                Text {
+                    text: root.title(tab.pane);
+                    vertical-alignment: center;
+                    font-size: root.style.font-size;
+                    color: tab.active ? root.style.tab-selected-text
+                        : area.has-hover ? root.style.tab-hover-text : root.style.tab-text;
+                }
+            }
+            area := TouchArea {
+                clicked => { root.activate(tab.pane); }
+            }
+        }
+    }
+}
+
+// The groups' chrome and the splitters, in the coordinates of the area this fills.
+export component DockArea inherits Rectangle {
+    in property <[DockGroup]> groups;
+    in property <[DockSplitter]> splitters;
+    in property <DockMetrics> metrics: { title: 23px, tab: 23px, splitter: 4px };
+    in property <DockStyle> style: {
+        font-size: 12px,
+        pane: #f5f5f5,
+        title: #eeeef2,
+        title-text: #444444,
+        grip: #999999,
+        title-button-hover: #f7f7f9,
+        title-active: #007acc,
+        title-active-text: #ffffff,
+        grip-active: #59a8de,
+        title-button-hover-active: #1c97ea,
+        tab-strip: #eeeef2,
+        tab-border: #cccedb,
+        tab-text: #444444,
+        tab-selected-text: #0e70c0,
+        tab-hover-text: #1c97ea,
+        splitter: #eeeef2,
+    };
+    // the close buttons' tooltip
+    in property <string> close-tip;
+    pure callback title(pane: string) -> string;
+    callback close(pane: string);
+    // a tab or a title bar was clicked
+    callback activate(pane: string);
+    // the bar at `index` of `splitters` dragged, the pointer at `x`, `y`
+    callback splitter-moved(index: int, x: length, y: length);
+    callback resized(width: length, height: length);
+
+    changed width => { root.resized(self.width, self.height); }
+    changed height => { root.resized(self.width, self.height); }
+
+    for group in root.groups: Rectangle {
+        x: group.x;
+        y: group.y;
+        width: group.width;
+        height: group.height;
+        background: root.style.pane;
+        clip: true;
+        TitleBar {
+            y: 0;
+            height: root.metrics.title;
+            style: root.style;
+            title: root.title(group.pane);
+            active: group.active;
+            close-tip: root.close-tip;
+            close => { root.close(group.pane); }
+            clicked => { root.activate(group.pane); }
+        }
+        if group.tabs.length > 1: TabStrip {
+            y: parent.height - root.metrics.tab;
+            height: root.metrics.tab;
+            style: root.style;
+            tabs: group.tabs;
+            title(pane) => { root.title(pane) }
+            activate(pane) => { root.activate(pane); }
+        }
+    }
+    for bar[index] in root.splitters: Rectangle {
+        x: bar.x;
+        y: bar.y;
+        width: bar.width;
+        height: bar.height;
+        background: root.style.splitter;
+        TouchArea {
+            mouse-cursor: bar.rows ? MouseCursor.row-resize : MouseCursor.col-resize;
+            // the pointer reported as if the press had been on the bar's middle, so the bar keeps its grab offset
+            moved => {
+                root.splitter-moved(index, parent.x + self.mouse-x - (self.pressed-x - parent.width / 2),
+                    parent.y + self.mouse-y - (self.pressed-y - parent.height / 2));
+            }
+        }
+    }
+}

@@ -11,7 +11,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
+| X | Cross-cutting | 16 | 8 | 3 | 13 | 0 |
 | M | Menus and shortcuts | 79 | 9 | 0 | 52 | 0 |
 | D | Dialogs and windows | 52 | 19 | 0 | 8 | 0 |
 | S | Settings | 22 | 7 | 0 | 3 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 70 | 9 | 0 | 9 | 2 |
 | R | Live editing and runs | 42 | 15 | 0 | 2 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 830 | 86 | 0 | 174 | 5 |
+| | All | 832 | 88 | 3 | 167 | 5 |
 
 ## Cross-cutting
 
@@ -33,16 +33,16 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-03 | Window min 800x500, default 1280x800, centred on first start | MainWindow.xaml | 00, Main window | done | |
 | X-04 | Window size, position, state persisted; never minimised; kept inside the monitor's work area | MainWindow.xaml.cs | 00, Main window; 80 | partial | window size, corner, maximized saved and restored (main.rs keep_window/place_window); no work-area clamp |
 | X-05 | Resize grip | MainWindow.xaml | 00, Main window | divergence | decision 0033, matched in general, not to the pixel/id |
-| X-06 | Dock layout tree: splits with star weights, tabbed groups, fixed centre | Docking/DockHost.cs | 00, Panes; 90 s1 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
-| X-07 | Splitters between panes: drag and arrow keys | Docking/DockHost.cs | 00, Panes; 90 s1 | done | ui/splitter.slint: 4 px bars, drag, Next's minimums (60 px, 100 px for the preview); no keys, as Next's are not focusable; sizes per divergences.md, Pane sizes |
-| X-08 | Pane title bar 21 px: title, dotted grip, "Window position" drop-down, close button | Docking/DockGroupControl.cs, Themes/Controls.xaml | 00, Panes; 90 s1 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
-| X-09 | "Window position" menu: Move to Left/Right/Top/Bottom, Close | Docking/DockCommands.cs | 00, Panes | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
-| X-10 | Active pane title bar accent + white text + light-blue grip by focus; first group active at start | Docking/DockGroupControl.cs | 00, Panes | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
-| X-11 | Tab strip for groups with several panes | Docking/DockGroupControl.cs | 00, Panes; 90 s1 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
-| X-12 | Drag pane/group to dock: edge strip, split beside, tab into; accent drop preview; ghost label; Esc cancels | Docking/DockDragManager.cs, DockDropAdorner.cs | 00, Panes (port rules) | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
+| X-06 | Dock layout tree: splits with star weights, tabbed groups, fixed centre | Docking/DockHost.cs | 00, Panes; 90 s1 | done | crates/slint_dock: a split tree with weights, tab groups, the preview as the fixed centre; the centre has no title bar, as Next's DocumentContent |
+| X-07 | Splitters between panes: drag and arrow keys | Docking/DockHost.cs | 00, Panes; 90 s1 | done | crates/slint_dock: 4 px bars, drag, star sizes above Next's minimums (60 px, 100 px for the preview); no keys, as Next's are not focusable |
+| X-08 | Pane title bar 21 px: title, dotted grip, "Window position" drop-down, close button | Docking/DockGroupControl.cs, Themes/Controls.xaml | 00, Panes; 90 s1 | partial | crates/slint_dock ui/dock.slint: title, grip, close button, 23 px (a row); no "Window position" drop-down yet (X-09) |
+| X-09 | "Window position" menu: Move to Left/Right/Top/Bottom, Close | Docking/DockCommands.cs | 00, Panes | missing | planned with the saved layout (X-15) |
+| X-10 | Active pane title bar accent + white text + light-blue grip by focus; first group active at start | Docking/DockGroupControl.cs | 00, Panes | partial | accent, white text, light-blue grip; first group lit at start; a pointer press in a group (title, tab or content, through the window's events) lights it, one in the preview none; keyboard focus moves do not |
+| X-11 | Tab strip for groups with several panes | Docking/DockGroupControl.cs | 00, Panes; 90 s1 | done | crates/slint_dock ui/dock.slint: under the content, Next's ToolTab colours; a click activates; dragging a tab is X-12 |
+| X-12 | Drag pane/group to dock: edge strip, split beside, tab into; accent drop preview; ghost label; Esc cancels | Docking/DockDragManager.cs, DockDropAdorner.cs | 00, Panes (port rules) | missing | planned: drag-to-dock on crates/slint_dock's drop targets |
 | X-13 | Close hides the pane; reshown at its default side without a saved place | Docking/DockHost.cs | 00, Panes | done | hide/show works; rest matched in general (decision 0033) |
-| X-14 | Default arrangement: left column 1:3, Project over Properties 1:2; Messages hidden | Docking/DockHost.cs | 00, Panes | done | ratios done; rest matched in general (decision 0033) |
-| X-15 | Layout saved as it changes and restored at start; unknown ids ignored | Docking/DockHost.cs | 00, Panes | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
+| X-14 | Default arrangement: left column 1:3, Project over Properties 1:2; Messages hidden | Docking/DockHost.cs | 00, Panes | done | ratios done; a pane shown at its default side without a place takes a full-width (or full-height) quarter strip at that edge, as Next's edge drop, or tabs into the group already there (Messages and Performance at the bottom) |
+| X-15 | Layout saved as it changes and restored at start; unknown ids ignored | Docking/DockHost.cs | 00, Panes | missing | planned: crates/slint_dock Arrangement (serde) saved and restored |
 | X-16 | View > Panes lists Project, Properties, Messages, Preview with check marks | MainWindow.xaml | 00, Panes; decision 0008 | done | Preview always shown; rest matched in general (decision 0033) |
 | X-17 | Status bar double-click opens or focuses Messages | MainWindow.xaml.cs | 00, Panes | done | double-click opens Messages; rest matched in general (decision 0033) |
 | X-18 | No floating windows | Docking | 00, Panes | done | |

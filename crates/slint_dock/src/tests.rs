@@ -15,7 +15,8 @@ fn assert_rect(r: Rect, x: f32, y: f32, w: f32, h: f32) {
 }
 
 fn registered() -> Dock {
-	let mut dock = Dock::new(Metrics { splitter: 4., title_bar: 20., centre_min: Size::new(100., 100.) });
+	let mut dock =
+		Dock::new(Metrics { splitter: 4., title_bar: 20., tab_strip: 16., centre_min: Size::new(100., 100.) });
 	dock.register("a", Side::Left, MIN);
 	dock.register("b", Side::Left, MIN);
 	dock.register("m", Side::Bottom, MIN);
@@ -389,7 +390,7 @@ fn an_arrangement_round_trips_through_json() {
 }
 
 fn bare(panes: &[&str]) -> Dock {
-	let mut dock = Dock::new(Metrics { splitter: 0., title_bar: 0., centre_min: Size::ZERO });
+	let mut dock = Dock::new(Metrics { splitter: 0., title_bar: 0., tab_strip: 0., centre_min: Size::ZERO });
 	for id in panes {
 		dock.register(*id, Side::Left, Size::ZERO);
 	}
@@ -454,4 +455,55 @@ fn a_resize_ignores_a_pointer_off_the_numbers() {
 	assert!(!dock.resize(&bar, Point::new(f32::NAN, 0.), AREA));
 	assert!(!dock.resize(&bar, Point::new(f32::INFINITY, 0.), AREA));
 	assert_eq!(dock.arrangement(), before);
+}
+
+#[test]
+fn ui_dir_holds_the_slint_library() {
+	assert!(ui_dir().join("dock.slint").is_file());
+}
+
+#[test]
+fn a_pane_shown_at_an_occupied_edge_tabs_into_its_group() {
+	let mut dock = dock();
+	dock.register("n", Side::Bottom, MIN);
+	dock.show("m");
+	let m = dock.group_of("m").expect("shown");
+	dock.show("n");
+	assert_eq!(dock.group_of("n"), Some(m));
+	let g = group(&dock, m);
+	assert_eq!((g.tabs, g.active), (vec!["m".to_owned(), "n".to_owned()], Some(1)));
+	assert_rect(g.rect, 0., 454., 1004., 150.);
+	dock.close("m");
+	dock.close("n");
+	dock.register("o", Side::Bottom, MIN);
+	dock.show("o");
+	assert_eq!(dock.group_of("o"), Some(m));
+}
+
+#[test]
+fn an_edge_across_the_root_split_takes_a_group_of_its_own() {
+	let mut dock = dock();
+	dock.register("n", Side::Bottom, MIN);
+	dock.show("m");
+	dock.register("l", Side::Left, MIN);
+	dock.show("l");
+	assert_ne!(dock.group_of("l"), dock.group_of("a"));
+	assert_rect(pane_rect(&dock, "l"), 0., 0., 250., 604.);
+}
+
+#[test]
+fn the_tab_strip_takes_room_from_a_group_of_several_panes() {
+	let mut dock = dock();
+	let b = dock.group_of("b").expect("shown");
+	assert_rect(group(&dock, b).content, 0., 224., 250., 380.);
+	dock.move_to(&pane("a"), Target::Tab(b));
+	let g = group(&dock, b);
+	assert_rect(g.content, g.rect.x, g.rect.y + 20., g.rect.width, g.rect.height - 36.);
+
+	let mut dock = Dock::new(Metrics { splitter: 0., title_bar: 20., tab_strip: 16., centre_min: Size::ZERO });
+	dock.register("a", Side::Left, MIN);
+	dock.register("b", Side::Left, MIN);
+	let tabs = Arrangement::tabs(["a", "b"]);
+	dock.arrange(&Arrangement::split(Axis::Vertical, [(1., tabs), (100., Arrangement::Centre)])).expect("valid");
+	assert_rect(pane_rect(&dock, "a"), 0., 0., 1004., MIN.height + 36.);
 }

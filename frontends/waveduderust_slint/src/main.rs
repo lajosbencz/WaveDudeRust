@@ -4,6 +4,7 @@ mod canvas;
 mod clipboard;
 #[cfg(not(target_arch = "wasm32"))]
 mod crash;
+mod docking;
 mod document;
 mod examples;
 mod export;
@@ -945,8 +946,26 @@ fn wire_window_events(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	use slint::language::ColorScheme;
 	use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 	let (state, weak) = (state.clone(), app.as_weak());
-	app.window().on_winit_window_event(move |_, event| {
-		use winit::event::WindowEvent;
+	let mut cursor = None;
+	app.window().on_winit_window_event(move |window, event| {
+		use winit::event::{ElementState, TouchPhase, WindowEvent};
+		let pressed = match event {
+			WindowEvent::CursorMoved { position, .. } => {
+				cursor = Some(*position);
+				None
+			}
+			WindowEvent::CursorLeft { .. } => {
+				cursor = None;
+				None
+			}
+			WindowEvent::MouseInput { state: ElementState::Pressed, .. } => cursor,
+			WindowEvent::Touch(t) if t.phase == TouchPhase::Started => Some(t.location),
+			_ => None,
+		};
+		if let (Some(at), Some(app)) = (pressed, weak.upgrade()) {
+			let at = at.to_logical::<f32>(f64::from(window.scale_factor()));
+			app.invoke_dock_pressed(at.x, at.y);
+		}
 		// input ticks once after Slint handled it, as classic's repaint on input did: what a callback changed is shown
 		if matches!(
 			event,
@@ -1451,6 +1470,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.set_native_access_keys(cfg!(windows));
 	apply_settings(&mut state.borrow_mut(), &app);
 	wire_window_events(&state, &app);
+	docking::wire(&app);
 	#[cfg(target_arch = "wasm32")]
 	web::guard_unload(state.borrow().unsaved.clone());
 	state.borrow_mut().opened();
