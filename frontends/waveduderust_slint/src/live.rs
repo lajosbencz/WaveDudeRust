@@ -474,6 +474,7 @@ impl Live {
 		self.wanted = Wanted::Position;
 		self.paused = false;
 		self.request(project, view);
+		self.publish();
 	}
 
 	/// Every frame (Run); `false` when the memory warning asks first.
@@ -572,7 +573,7 @@ impl Live {
 		self.summarised = false;
 	}
 
-	/// A run of `project` from scratch (open, Run): a pending fit goes with the old frames.
+	/// A run of `project` from scratch (open, Run), published by the caller: a pending fit goes with the old frames.
 	fn request(&mut self, project: &Project, view: &View) {
 		(self.fit, self.read_fit) = (None, None);
 		let request = self.request_of(project, view);
@@ -593,6 +594,8 @@ impl Live {
 		RunRequest::new(&project, quality, view.into(), view.intensity.preview || tracked || for_export)
 	}
 
+	/// Takes `request` up unpublished: the caller publishes once, so the worker never starts on a goal about to be
+	/// replaced (the position's frame alone skips the frames before it).
 	fn submit(&mut self, request: RunRequest) {
 		self.revision += 1;
 		self.edges = self.scene.pixels(&request.project).map(|p| std::sync::Arc::new(EdgeImage::of(&p)));
@@ -607,7 +610,6 @@ impl Live {
 		let schedule = request.schedule();
 		(self.frames, self.steps) = (schedule.frame_count(), schedule.steps);
 		self.request = Some(request);
-		self.publish();
 	}
 
 	fn publish(&mut self) {
@@ -728,11 +730,13 @@ impl Live {
 		if change == Change::None {
 			// what no run reads may still be drawn: a colour scheme recolours the frame shown
 			self.drawn = None;
-		} else {
-			self.submit(request);
+			return change;
 		}
+		self.submit(request);
 		if rerun {
 			self.want_all(Then::Rerun);
+		} else {
+			self.publish();
 		}
 		change
 	}
