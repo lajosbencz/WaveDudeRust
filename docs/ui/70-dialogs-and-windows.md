@@ -300,6 +300,12 @@ welcome page and the update check, which wait for the next start. In the browser
 the report is kept in the page's storage; the window shows its text, and Copy report puts the text on the
 clipboard.
 
+In the browser a page offering neither WebGPU nor WebGL2 says "WaveDude Rust cannot start: this browser offers
+neither WebGPU nor WebGL2, or has them turned off." instead of loading the program
+([`web/index.html`](../../frontends/waveduderust_slint/web/index.html)). A failure to start ("WaveDude Rust could not
+start: <why>") and a panic ("WaveDude Rust stopped: <panic>") show their text in the page over the window and in
+the console.
+
 ## First start
 
 When no settings file exists:

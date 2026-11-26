@@ -12,11 +12,15 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #2d2d30; col
 #loading progress::-webkit-progress-bar { background: #3f3f46; }
 #loading progress::-webkit-progress-value { background: #007acc; }
 #loading progress::-moz-progress-bar { background: #007acc; }
+#failure { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: #2d2d30; font-size: 14px; text-align: center; white-space: pre-wrap; }
+#failure[hidden] { display: none; }
 </style>
 </head>
 <body>
 <canvas id="canvas"></canvas>
 <div id="loading"><progress></progress><span>Loading WaveDude Rust</span></div>
+<!-- the app's failure to start or its panic, shown by the app (src/web.rs `fail`) or below -->
+<div id="failure" hidden></div>
 <script type="module">
 // the build and the app's crate, written by tools/build-web.sh; the build is in every URL of the app, so the browser's
 // cache serves no file of another build
@@ -26,6 +30,23 @@ import init from "./pkg/__APP__.js?build=__BUILD__";
 const TOTAL = Number("__WASM_BYTES__");
 const loading = document.getElementById("loading");
 const [bar, text] = loading.children;
+const failure = document.getElementById("failure");
+
+function fail(message) {
+	loading.remove();
+	failure.textContent = message;
+	failure.hidden = false;
+}
+
+// the window draws through WebGPU or WebGL2; without either it would stay blank
+function renderer() {
+	if ("gpu" in navigator) return true;
+	try {
+		return document.createElement("canvas").getContext("webgl2") !== null;
+	} catch {
+		return false;
+	}
+}
 const mb = (n) => (n / 1e6).toFixed(1);
 
 async function download(url) {
@@ -46,15 +67,18 @@ async function download(url) {
 	return new Blob(chunks).arrayBuffer();
 }
 
-try {
-	const bytes = await download("./pkg/__APP___bg.wasm?build=__BUILD__");
-	bar.removeAttribute("value");
-	text.textContent = "Starting";
-	await init({ module_or_path: bytes });
-	loading.remove();
-} catch (e) {
-	bar.remove();
-	text.textContent = `WaveDude Rust could not start: ${e}`;
+if (!renderer()) {
+	fail("WaveDude Rust cannot start: this browser offers neither WebGPU nor WebGL2, or has them turned off.");
+} else {
+	try {
+		const bytes = await download("./pkg/__APP___bg.wasm?build=__BUILD__");
+		bar.removeAttribute("value");
+		text.textContent = "Starting";
+		await init({ module_or_path: bytes });
+		loading.remove();
+	} catch (e) {
+		fail(`WaveDude Rust could not start: ${e}`);
+	}
 }
 </script>
 </body>

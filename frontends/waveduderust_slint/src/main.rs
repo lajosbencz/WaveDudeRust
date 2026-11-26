@@ -2276,10 +2276,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
-	std::panic::set_hook(Box::new(|info| web_sys::console::error_1(&info.to_string().into())));
+	// a panic ends the module: the page says so
+	std::panic::set_hook(Box::new(|info| web::fail(&format!("WaveDude Rust stopped: {info}"))));
 	wasm_bindgen_futures::spawn_local(async {
 		if let Err(e) = start().await {
-			web_sys::console::error_1(&format!("WaveDude Rust could not start: {e}").into());
+			web::fail(&format!("WaveDude Rust could not start: {e}"));
 		}
 	});
 }

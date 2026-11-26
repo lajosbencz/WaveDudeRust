@@ -1,5 +1,6 @@
 //! The browser's services: the live run on the page's GPU (decision 0035) or on the CPU in the run worker (decision
-//! 0024), its frames past memory in the spill worker's files (decision 0020), and the question on leaving the page.
+//! 0024), its frames past memory in the spill worker's files (decision 0020), the question on leaving the page, and
+//! a failure shown in the page.
 
 use std::future::Future;
 use std::pin::pin;
@@ -250,5 +251,15 @@ pub(crate) fn guard_unload(dirty: Rc<std::cell::Cell<bool>>) {
 	if window.add_event_listener_with_callback("beforeunload", ask.as_ref().unchecked_ref()).is_ok() {
 		// the page's own: it lives as long as the page
 		ask.forget();
+	}
+}
+
+/// Logs `message` to the console and shows it in the page's `failure` box (web/index.html), over a window that may
+/// never have drawn.
+pub(crate) fn fail(message: &str) {
+	web_sys::console::error_1(&message.into());
+	if let Some(element) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.get_element_by_id("failure")) {
+		element.set_text_content(Some(message));
+		let _ = element.remove_attribute("hidden");
 	}
 }
