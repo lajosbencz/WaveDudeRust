@@ -5,9 +5,10 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use slint::{ComponentHandle, Model, ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, VecModel};
 use slint_dock::{Arrangement, Axis, Dock, GroupId, Layout, Metrics, Point, Rect, Side, Size, Subject, Target};
 
+use crate::models;
 use crate::ui::{self, AppWindow};
 
 /// The panes in View > Panes order with their default sides (Next's MainWindow.xaml).
@@ -252,8 +253,8 @@ impl Docking {
 			height: s.rect.height,
 			rows: s.axis == Axis::Vertical,
 		});
-		update(&self.groups, groups);
-		update(&self.splitters, splitters.collect());
+		models::update(&self.groups, groups);
+		models::update(&self.splitters, splitters);
 		for (id, _) in PANES {
 			let at = places.iter().find(|(p, _)| *p == id).map(|(_, p)| p.clone());
 			set_pane(app, id, at.is_some(), at.unwrap_or_default());
@@ -288,17 +289,6 @@ fn drop_at(dock: &mut Dock, pane: &str, group: bool, pointer: Point, area: Rect)
 
 fn place(r: Rect, visible: bool) -> ui::DockPlace {
 	ui::DockPlace { x: r.x, y: r.y, width: r.width, height: r.height, visible }
-}
-
-/// Replaces `model`'s rows in place when their count holds, so a dragged splitter keeps its pointer grab.
-fn update<T: Clone + 'static>(model: &VecModel<T>, rows: Vec<T>) {
-	if model.row_count() == rows.len() {
-		for (i, row) in rows.into_iter().enumerate() {
-			model.set_row_data(i, row);
-		}
-	} else {
-		model.set_vec(rows);
-	}
 }
 
 fn set_pane(app: &AppWindow, id: &str, shown: bool, at: ui::DockPlace) {

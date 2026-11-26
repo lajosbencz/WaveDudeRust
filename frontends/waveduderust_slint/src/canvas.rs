@@ -4,13 +4,14 @@
 use std::fmt::Write as _;
 use std::rc::Rc;
 
-use slint::{Model, ModelRc, VecModel};
+use slint::{ModelRc, VecModel};
 use waveduderust::model::edited::Edited;
 use waveduderust::model::{BoxSize, ItemRef, Layer, Part, PartKind, ProbeKind, Project, View, ranges};
 use waveduderust::unstable::view::overlay::{self, HandleKind, OverlayModel};
 use waveduderust::unstable::view::{graph, handles};
 
 use crate::graphs::Placed;
+use crate::models;
 use crate::selection::{Selection, groupable};
 use crate::tree::Node;
 use crate::ui;
@@ -152,19 +153,6 @@ fn glyph(kind: HandleKind) -> ui::HandleGlyph {
 	}
 }
 
-/// Replaces `rows` with `new`, row by row while the count holds.
-pub(crate) fn update<T: Clone + PartialEq + 'static>(rows: &VecModel<T>, new: Vec<T>) {
-	if rows.row_count() != new.len() {
-		rows.set_vec(new);
-		return;
-	}
-	for (i, row) in new.into_iter().enumerate() {
-		if rows.row_data(i).as_ref() != Some(&row) {
-			rows.set_row_data(i, row);
-		}
-	}
-}
-
 /// SVG path commands of small circles of `r` canvas pixels around `points`.
 fn circles(points: impl Iterator<Item = (f32, f32)>, r: f32) -> String {
 	let mut out = String::new();
@@ -232,30 +220,22 @@ impl Overlays {
 			{
 				self.focus = None;
 			}
-			let handles = m
-				.handles
-				.iter()
-				.map(|h| ui::HandleData {
-					x: h.at.0,
-					y: h.at.1,
-					glyph: glyph(h.kind),
-					selected: h.selected,
-					focused: focused(h),
-				})
-				.collect();
-			update(&shown.handles, handles);
-			let labels = m
-				.labels
-				.iter()
-				.map(|l| ui::LabelData {
-					text: l.text.as_str().into(),
-					x: l.at.0,
-					y: l.at.1,
-					below: l.below,
-					selected: l.selected,
-				})
-				.collect();
-			update(&shown.labels, labels);
+			let handles = m.handles.iter().map(|h| ui::HandleData {
+				x: h.at.0,
+				y: h.at.1,
+				glyph: glyph(h.kind),
+				selected: h.selected,
+				focused: focused(h),
+			});
+			models::update(&shown.handles, handles);
+			let labels = m.labels.iter().map(|l| ui::LabelData {
+				text: l.text.as_str().into(),
+				x: l.at.0,
+				y: l.at.1,
+				below: l.below,
+				selected: l.selected,
+			});
+			models::update(&shown.labels, labels);
 			let r = 1.5 / scale;
 			let (mut lines, mut picked) = (String::new(), String::new());
 			for l in &m.lines {

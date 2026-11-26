@@ -17,6 +17,7 @@ mod live;
 mod log;
 mod memory;
 mod messages;
+mod models;
 mod number;
 mod playback;
 mod scene_watch;

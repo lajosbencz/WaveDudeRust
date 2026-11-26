@@ -168,7 +168,7 @@ impl Graphs {
 			// the selected boxes over the rest
 			boxes.sort_by_key(|(picked, ..)| *picked);
 			*placed = boxes.iter().map(|(.., p)| *p).collect();
-			crate::canvas::update(rows, boxes.into_iter().map(|(_, b, _)| b).collect());
+			crate::models::update(rows, boxes.into_iter().map(|(_, b, _)| b));
 		}
 	}
 }

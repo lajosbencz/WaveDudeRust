@@ -930,20 +930,10 @@ fn put_rows<M, U>(shown: &ModelRc<U>, rows: &[M], set: impl FnOnce(ModelRc<U>))
 where
 	U: Data<M> + PartialEq + Clone + 'static,
 {
-	let rows: Vec<U> = rows.iter().map(Data::show).collect();
-	let Some(model) = shown.as_any().downcast_ref::<VecModel<U>>() else {
-		set(ModelRc::new(VecModel::from(rows)));
-		return;
-	};
-	while model.row_count() > rows.len() {
-		model.remove(model.row_count() - 1);
-	}
-	for (k, row) in rows.into_iter().enumerate() {
-		match model.row_data(k) {
-			Some(old) if old == row => {}
-			Some(_) => model.set_row_data(k, row),
-			None => model.push(row),
-		}
+	let rows = rows.iter().map(Data::show);
+	match shown.as_any().downcast_ref::<VecModel<U>>() {
+		Some(model) => crate::models::update(model, rows),
+		None => set(ModelRc::new(VecModel::from_iter(rows))),
 	}
 }
 
