@@ -302,6 +302,12 @@ fn last_made(schedule: Option<&Schedule>, stored: usize) -> Option<u32> {
 	schedule.map_or(stored, |s| s.covered_frames(stored)).checked_sub(1)
 }
 
+/// The steps up to the last timeline frame `stored` frames cover: a run that kept every F-th frame covers the
+/// timeline's end as the frame before it shows there.
+fn steps_covered(schedule: &Schedule, stored: usize) -> Option<u32> {
+	last_made(Some(schedule), stored).map(|k| schedule.step_of(k) + 1)
+}
+
 /// The off-canvas warning's list (docs/ui/60, Objects off the canvas).
 fn off_canvas_list(off: &[OffCanvas]) -> String {
 	let item = |o: &OffCanvas| match o {
@@ -912,6 +918,13 @@ impl Live {
 		});
 		// the worker has taken up the newest goal: its Idle is this run's, not the one before
 		let current = status.adopted == self.revision;
+		// a completed run reads as the timeline it covers, whatever its engine stepped (a reused store, kept frames)
+		let steps_done = match (state, &self.request, &status.store) {
+			(RunState::Completed, Some(request), Some(store)) => {
+				steps_covered(&request.schedule(), store.count()).unwrap_or(status.steps_done)
+			}
+			_ => status.steps_done,
+		};
 		if let (Some(started), RunState::Completed | RunState::Stopped, Some(store)) =
 			(self.started, state, status.store.as_ref())
 			&& current
@@ -927,7 +940,7 @@ impl Live {
 			tracing::info!(
 				"Run {}: {} of {} steps, {} frames, {:.1} s; {} stored, {} in memory ({:.1} GB) and {} on disk ({:.1} GB)",
 				if state == RunState::Completed { "Completed" } else { "Cancelled" },
-				status.steps_done,
+				steps_done,
 				self.steps,
 				self.frames,
 				started.elapsed().as_secs_f64(),
@@ -943,7 +956,7 @@ impl Live {
 			intensity: None,
 			status: RunStatus {
 				state,
-				steps_done: i32::try_from(status.steps_done).unwrap_or(i32::MAX),
+				steps_done: i32::try_from(steps_done).unwrap_or(i32::MAX),
 				steps: i32::try_from(self.steps).unwrap_or(i32::MAX),
 				// a run that stepped without the GPU engine's frames fell back to the CPU engine (the reason is in Messages)
 				engine: if self.engine.gpu
@@ -1079,7 +1092,7 @@ mod tests {
 	use waveduderust::unstable::engine::types::{FrameShape, SampleFormat};
 	use waveduderust::unstable::render::gpu::PlaneTooLarge;
 
-	use super::{last_made, on_device};
+	use super::{last_made, on_device, steps_covered};
 
 	#[test]
 	fn the_frames_made_count_in_timeline_frames_with_every_second_frame_stored() {
@@ -1091,6 +1104,18 @@ mod tests {
 		assert_eq!(last_made(Some(&schedule), 3), Some(5), "stored frame 2 shows timeline frames 4 and 5");
 		assert_eq!(last_made(Some(&schedule), 50), Some(99), "every frame made reaches the last timeline frame");
 		assert_eq!(last_made(None, 3), Some(2));
+	}
+
+	#[test]
+	fn a_completed_run_covers_the_same_steps_with_every_frame_or_every_second_stored() {
+		let schedule = |frame_divisor| Schedule {
+			steps: 400,
+			visualize_every: 2,
+			quality: PreviewQuality { frame_divisor, ..PreviewQuality::FULL },
+		};
+		assert_eq!(steps_covered(&schedule(1), 200), Some(399));
+		assert_eq!(steps_covered(&schedule(2), 100), Some(399), "the last kept frame shows the timeline's end");
+		assert_eq!(steps_covered(&schedule(2), 0), None);
 	}
 
 	#[test]

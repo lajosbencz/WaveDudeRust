@@ -123,7 +123,8 @@ with no run. Engine e.g. "CPU (16 threads)" or "GPU: <adapter name>".
 A run that completes or is stopped logs its summary, which the status bar's left item shows: "Run Completed:
 <done> of <total> steps, <frames> frames, <seconds> s; <stored> stored, <n> in memory (<GiB>) and <n> on disk
 (<GiB>)" ("Run Cancelled: ..." for a stopped run; English, as every log line). The time is wall time from
-the start of the run.
+the start of the run. A completed run's <done> is the steps up to the last timeline frame its frames cover, at
+any frame divisor.
 
 | State word | Meaning | Transport |
 |---|---|---|
