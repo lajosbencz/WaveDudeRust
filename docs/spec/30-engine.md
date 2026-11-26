@@ -87,9 +87,10 @@ Rust, CPU engine: the passes skip the cells that stay 0. One rectangle of grid c
 cell of the field and the intensity stages that is not +0. It is empty at rest and after a reset, and the whole grid
 after a field is set. A pass runs on the damage grown on every side by the cells the pass reaches: the stencil's reach
 (1 for the 9-point stencil, 3 for the 4th order), and 4 with a rim, the CPML's reach (`engine::pml::REACH`). It runs
-only the rows inside, and only its columns within those rows. The CPML after it does the same on the rim: the top
-and bottom strips on the area's rows and columns, and the left and right strips on its rows, only where the area meets
-them. Afterwards the damage takes in the cells a source drove
+only the rows inside, and only its columns within those rows. The CPML's correction of the pass does the same on the
+rim: the top and bottom strips on the area's rows and columns, and the left and right strips on its rows, only where
+the area meets them. It advances the y strips' memory before the pass and corrects each row of the rim as the pass
+writes it, the same result as a pass over the rim after the pass over the grid. Afterwards the damage takes in the cells a source drove
 and the cells the pass left not +0 (any bit set, no threshold), found by reading only the band it grew by. So it
 follows the excited medium, about the wave's speed, rather than the stencil's reach of up to 16 cells a step. It
 never shrinks before a reset, so every cell once written is recomputed. The skipped cells would compute to +0, so

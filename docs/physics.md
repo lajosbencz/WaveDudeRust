@@ -387,7 +387,8 @@ pass over the grid, times c2, is
     (O_x z~ - D2x z~) + chi D2x delta_y + delta_y
 
 in four stages ([engine/pml.rs](../crates/waveduderust/src/engine/pml.rs); on the GPU four kernels over the rim): psi of y,
-delta_y and xi of y, psi of x on z~, then the x part and the sum. The modified
+delta_y and xi of y, psi of x on z~, then the x part and the sum. On the CPU the first two run over the y strips
+before the pass and the last two on each row the pass writes, right after it. The modified
 equation applies the operator twice per sub-step and keeps a second set of
 psi and xi. Storage: x strips of 2 rim columns over the full height, y strips
 of 2 rim rows over the full width.

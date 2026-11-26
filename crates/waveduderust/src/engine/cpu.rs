@@ -13,7 +13,7 @@
 //!
 //! The 9-point sub-step is one leapfrog pass: `next = u + ((u - prev) d + c2 L u)`. The 4th-order (DRP) stencil is
 //! two passes, `w = c2 L u`, then `next = u + ((u - prev) d + (w + c2 L w / 12))` (stencil.rs); `next` is written
-//! over `prev`. With a rim, the CPML corrects the rim after each pass (pml.rs).
+//! over `prev`. With a rim, the CPML corrects the rim of each pass, row by row as the pass writes them (pml.rs).
 //!
 //! Fused passes: the 4th-order outer pass computes `w` itself where it can, so the plane `w` makes no round trip
 //! through memory there. Each block of rows keeps the 7 rows of `w` its stencil reads in a ring; the row 3 below the
@@ -25,27 +25,30 @@
 //!
 //! Uniform medium: `c2` and `d` never change during a run, and most of a scene is one medium. Each grid row keeps its
 //! runs of at least 16 cells where both hold one value, bit for bit; the leapfrog pass and the fused outer pass, its
-//! ring included, take that run's values as constants and read neither plane there. The values are the same, so the result is the same bit for bit.
+//! ring included, take that run's values as constants and read neither plane there. The values are the same, so the
+//! result is the same bit for bit.
 //!
 //! Threads: one driver thread; each pass fans out over rows, or blocks of rows, on the rayon pool, reading only its
 //! input fields.
 //!
 //! Damage: one rectangle of grid cells (damage.rs) outside which the field and the intensity stages are +0. A pass
 //! runs on the damage grown by its reach (the stencil's, the CPML's with a rim), its rows only and its columns within
-//! them, and so does the CPML on the rim (pml.rs, `CpuPml::apply`); a skipped cell would compute to +0, so the result is the same bit for bit. The damage then takes in the cells
-//! a source drives and the cells the pass made non-zero (any bit set), found in the band it grew by. It is empty at
-//! rest and shrinks only on a reset, so every cell ever written is recomputed while the run lasts.
+//! them, and so does the CPML on the rim (pml.rs, `CpuPml::begin`); a skipped cell would compute to +0, so the result
+//! is the same bit for bit. The damage then takes in the cells a source drives and the cells the pass made non-zero
+//! (any bit set), found in the band it grew by. It is empty at rest and shrinks only on a reset, so every cell ever
+//! written is recomputed while the run lasts.
 
 use std::ops::Range;
 use std::sync::Arc;
 
+use rayon::iter::Either;
 use rayon::prelude::*;
 
 use super::capture;
 use super::damage::{Damage, extent};
 use super::forcing::{IMAGE_LEVELS, SourceGroups, live};
 use super::mur::{MurChain, mur_chains};
-use super::pml::{self, CpuPml, Medium, cut, cut_taps};
+use super::pml::{self, CpuPml, Medium, XPart, XRows, XScratch, XShared, cut, cut_taps};
 use super::shared::{Shared, blend};
 use super::stencil::{INV12, K9_AXIS, K9_DIAGONAL, PAD, StencilCoefficients, TimeScheme, centred};
 use super::substeps::sub_steps;
@@ -329,7 +332,9 @@ impl CpuEngine {
 		let (u, c2, d, cuts, mirrors, uniform) = (&self.u, &self.c2, &self.d, &self.cuts, self.mirrors, &self.uniform);
 		let (area, xs) = (&self.damage, self.damage.x.clone());
 		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
-		grid_rows(&mut self.prev, stages, s, gw, area, |r, next| {
+		let medium = Medium { cuts, c2 };
+		let mut rim = self.pml.as_mut().and_then(|p| p.begin(0, u, medium, 1.0, area));
+		grid_rows(&mut self.prev, stages, s, area, rim.as_mut(), |r, next| {
 			let (at, runs) = (r * s + PAD, uniform.row(r - PAD));
 			let (c2, d) = (&c2[at..][..gw], &d[at..][..gw]);
 			let update = |x: usize, next: &mut f32, v: f32, lap: f32| {
@@ -368,7 +373,8 @@ impl CpuEngine {
 		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
 		let (u, c2, cuts, axis, mirrors) = (&self.u, &self.c2, &self.cuts, &self.axis, self.mirrors);
 		let (area, xs) = (&self.damage, &self.damage.x);
-		grid_rows(&mut self.w, None, s, gw, area, |r, w| {
+		let mut rim = self.pml.as_mut().and_then(|p| p.begin(0, u, Medium { cuts, c2 }, 1.0, area));
+		grid_rows(&mut self.w, None, s, area, rim.as_mut(), |r, w| {
 			let (at, rows) = (r * s + PAD, plane_rows(u, r, s));
 			let c2 = &c2[at..][..gw];
 			let cuts = row_cuts(cuts, mirrors, at, gw, xs);
@@ -417,12 +423,13 @@ impl CpuEngine {
 		};
 		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
 		let block = area.y.len().div_ceil(2 * rayon::current_num_threads()).max(MIN_BLOCK);
+		let mut rim = self.pml.as_mut().and_then(|p| p.begin(1, w, Medium { cuts, c2 }, INV12, area));
 		grid_blocks(
 			&mut self.prev,
-			stages,
 			s,
 			area,
 			block,
+			RowEnd { stages, rim: rim.as_mut() },
 			|| vec![0.0f32; RING * s],
 			|ring, r0, lines, done| {
 				for r in r0 - 3..r0 + 3 {
@@ -476,9 +483,6 @@ impl CpuEngine {
 			TimeScheme::Leapfrog => {
 				self.damage = self.reached(&known);
 				self.leapfrog_pass(intensity);
-				if let Some(p) = &mut self.pml {
-					p.apply(0, &self.u, Medium { cuts: &self.cuts, c2: &self.c2 }, &mut self.prev, 1.0, &self.damage);
-				}
 				self.force_next(intensity);
 				std::mem::replace(&mut self.damage, known)
 			}
@@ -488,17 +492,11 @@ impl CpuEngine {
 				self.damage = self.reached(&known);
 				let fresh = self.fresh(&known);
 				self.inner_pass(&fresh);
-				if let Some(p) = &mut self.pml {
-					p.apply(0, &self.u, Medium { cuts: &self.cuts, c2: &self.c2 }, &mut self.w, 1.0, &self.damage);
-				}
 				self.force_w(&fresh);
 				let inner = std::mem::replace(&mut self.damage, known.clone());
 				let excited = extent(&self.w, self.stride, &inner, known);
 				self.damage = self.reached(&excited);
 				self.outer_pass(intensity, &fresh);
-				if let Some(p) = &mut self.pml {
-					p.apply(1, &self.w, Medium { cuts: &self.cuts, c2: &self.c2 }, &mut self.prev, INV12, &self.damage);
-				}
 				std::mem::replace(&mut self.damage, excited)
 			}
 		};
@@ -539,31 +537,54 @@ struct Stages<'a> {
 
 /// Runs `row(r, cells)` on the `gw` grid cells of every padded row `r` of `out` (rows of `s`) that `area`
 /// covers, in parallel; `row` writes `area`'s columns. Then advances the intensity stages of those cells by
-/// the values written, if given.
+/// the values written, if given, and runs the rim's correction on the row, if given ([`grid_blocks`]).
 fn grid_rows(
 	out: &mut [f32],
 	stages: Option<Stages<'_>>,
 	s: usize,
-	gw: usize,
 	area: &Damage,
+	rim: Option<&mut XPart<'_>>,
 	row: impl Fn(usize, &mut [f32]) + Sync,
 ) {
 	if area.is_empty() {
 		return;
 	}
-	let (first, rows) = (PAD + area.y.start, (PAD + area.y.start) * s..(PAD + area.y.end) * s);
-	let xs = PAD + area.x.start..PAD + area.x.end;
-	match stages {
-		Some(Stages { s1, s2, alpha }) => out[rows.clone()]
-			.par_chunks_mut(s)
-			.zip(s1[rows.clone()].par_chunks_mut(s))
-			.zip(s2[rows].par_chunks_mut(s))
-			.enumerate()
-			.for_each(|(k, ((line, s1), s2))| {
-				row(first + k, &mut line[PAD..][..gw]);
-				accumulate(&mut s1[xs.clone()], &mut s2[xs.clone()], &line[xs.clone()], alpha);
-			}),
-		None => out[rows].par_chunks_mut(s).enumerate().for_each(|(k, line)| row(first + k, &mut line[PAD..][..gw])),
+	let (first, span) = (PAD + area.y.start, (PAD + area.y.start) * s..(PAD + area.y.end) * s);
+	let (xs, gw) = (PAD + area.x.start..PAD + area.x.end, s - 2 * PAD);
+	type RimRow<'r, 'a, 'b> = Option<(&'r XShared<'a>, &'r mut XRows<'b>, &'r mut XScratch)>;
+	let run = |r: usize, line: &mut [f32], stages: Option<(&mut [f32], &mut [f32], f32)>, rim: RimRow<'_, '_, '_>| {
+		row(r, &mut line[PAD..][..gw]);
+		if let Some((s1, s2, alpha)) = stages {
+			accumulate(&mut s1[xs.clone()], &mut s2[xs.clone()], &line[xs.clone()], alpha);
+		}
+		if let Some((shared, rows, scratch)) = rim {
+			shared.row(r - PAD, rows, 0, &mut line[PAD..][..gw], scratch);
+		}
+	};
+	let lines = out[span.clone()].par_chunks_mut(s).enumerate();
+	match (stages, rim) {
+		(None, None) => lines.for_each(|(k, line)| run(first + k, line, None, None)),
+		(Some(Stages { s1, s2, alpha }), None) => {
+			let stages = s1[span.clone()].par_chunks_mut(s).zip(s2[span].par_chunks_mut(s));
+			lines.zip(stages).for_each(|((k, line), (s1, s2))| run(first + k, line, Some((s1, s2, alpha)), None));
+		}
+		(None, Some(part)) => {
+			let (shared, chunks) = part.chunks(1);
+			lines.zip(chunks).for_each_init(
+				|| shared.scratch(),
+				|scratch, ((k, line), mut rows)| run(first + k, line, None, Some((shared, &mut rows, scratch))),
+			);
+		}
+		(Some(Stages { s1, s2, alpha }), Some(part)) => {
+			let (shared, chunks) = part.chunks(1);
+			let stages = s1[span.clone()].par_chunks_mut(s).zip(s2[span].par_chunks_mut(s));
+			lines.zip(stages).zip(chunks).for_each_init(
+				|| shared.scratch(),
+				|scratch, (((k, line), (s1, s2)), mut rows)| {
+					run(first + k, line, Some((s1, s2, alpha)), Some((shared, &mut rows, scratch)));
+				},
+			);
+		}
 	}
 }
 
@@ -573,39 +594,81 @@ const RING: usize = 7;
 /// The fewest rows a block of the fused outer pass takes: each block computes the 6 rows of `w` around it again.
 const MIN_BLOCK: usize = 16;
 
+/// What runs on each row after a pass writes it ([`grid_blocks`]): the intensity stages' advance and the rim's
+/// psi of x and correction, each if given.
+struct RowEnd<'s, 'r, 'x> {
+	stages: Option<Stages<'s>>,
+	rim: Option<&'r mut XPart<'x>>,
+}
+
 /// Runs `block(scratch, r, lines, done)` on blocks of up to `rows` padded rows of `out` (rows of `s`) that `area`
 /// covers, in parallel: `r` the block's first row, `scratch` from `init` and reused across blocks. `block` writes
 /// `area`'s columns of each row of `lines` in order and then calls `done(j, line)` on its row `j`, which advances the
-/// intensity stages of those cells by the values written, if given.
+/// intensity stages of those cells by the values written, if given, and then runs the rim's psi of x and correction
+/// on the row, if given (pml.rs, `XShared::row`), as a pass over the grid followed by one over the rim would.
 fn grid_blocks<T>(
 	out: &mut [f32],
-	stages: Option<Stages<'_>>,
 	s: usize,
 	area: &Damage,
 	rows: usize,
+	RowEnd { stages, rim }: RowEnd<'_, '_, '_>,
 	init: impl Fn() -> T + Sync + Send,
-	block: impl Fn(&mut T, usize, &mut [f32], &mut dyn FnMut(usize, &[f32])) + Sync + Send,
+	block: impl Fn(&mut T, usize, &mut [f32], &mut dyn FnMut(usize, &mut [f32])) + Sync + Send,
 ) {
 	if area.is_empty() {
 		return;
 	}
-	let (first, span) = (PAD + area.y.start, (PAD + area.y.start) * s..(PAD + area.y.end) * s);
-	let xs = PAD + area.x.start..PAD + area.x.end;
-	match stages {
-		Some(Stages { s1, s2, alpha }) => out[span.clone()]
-			.par_chunks_mut(rows * s)
-			.zip(s1[span.clone()].par_chunks_mut(rows * s))
-			.zip(s2[span].par_chunks_mut(rows * s))
-			.enumerate()
-			.for_each_init(init, |scratch, (k, ((lines, s1), s2))| {
-				block(scratch, first + k * rows, lines, &mut |j, line| {
-					let (s1, s2) = (&mut s1[j * s..][xs.clone()], &mut s2[j * s..][xs.clone()]);
-					accumulate(s1, s2, &line[xs.clone()], alpha);
+	let (first, span, n) = (PAD + area.y.start, (PAD + area.y.start) * s..(PAD + area.y.end) * s, area.y.len());
+	let (xs, gw, blocks) = (PAD + area.x.start..PAD + area.x.end, s - 2 * PAD, n.div_ceil(rows));
+	let (s1, s2, alpha) = match stages {
+		Some(Stages { s1, s2, alpha }) => (Some(&mut s1[span.clone()]), Some(&mut s2[span.clone()]), alpha),
+		None => (None, None, 0.0),
+	};
+	let (shared, rim_rows) = match rim {
+		Some(part) => {
+			let (shared, chunks) = part.chunks(rows);
+			(Some(shared), Either::Left(chunks.map(Some)))
+		}
+		None => (None, Either::Right((0..blocks).into_par_iter().map(|_| None))),
+	};
+	out[span]
+		.par_chunks_mut(rows * s)
+		.zip(chunks_or_none(s1, rows * s, blocks))
+		.zip(chunks_or_none(s2, rows * s, blocks))
+		.zip(rim_rows)
+		.enumerate()
+		.for_each_init(
+			|| (init(), shared.map(XShared::scratch)),
+			|(scratch, rim_scratch), (k, (((lines, mut s1), mut s2), mut rim_rows))| {
+				let r0 = first + k * rows;
+				block(scratch, r0, lines, &mut |j, line| {
+					if let (Some(s1), Some(s2)) = (s1.as_deref_mut(), s2.as_deref_mut()) {
+						accumulate(
+							&mut s1[j * s..][xs.clone()],
+							&mut s2[j * s..][xs.clone()],
+							&line[xs.clone()],
+							alpha,
+						);
+					}
+					if let (Some(shared), Some(rim_rows), Some(rim_scratch)) =
+						(shared, &mut rim_rows, &mut *rim_scratch)
+					{
+						shared.row(r0 + j - PAD, rim_rows, j, &mut line[PAD..][..gw], rim_scratch);
+					}
 				});
-			}),
-		None => out[span].par_chunks_mut(rows * s).enumerate().for_each_init(init, |scratch, (k, lines)| {
-			block(scratch, first + k * rows, lines, &mut |_, _| {});
-		}),
+			},
+		);
+}
+
+/// `buf` in chunks of `size`, or `n` Nones without it.
+fn chunks_or_none(
+	buf: Option<&mut [f32]>,
+	size: usize,
+	n: usize,
+) -> impl IndexedParallelIterator<Item = Option<&mut [f32]>> {
+	match buf {
+		Some(buf) => Either::Left(buf.par_chunks_mut(size).map(Some)),
+		None => Either::Right((0..n).into_par_iter().map(|_| None)),
 	}
 }
 

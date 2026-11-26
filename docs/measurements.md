@@ -361,6 +361,38 @@ series of Example01, 03, 08, 13 and 21 and of `01-single-fiber`, 300 steps, are 
 Both paths of each loop vectorise, natively (SSE2) and in wasm with simd128, read as in
 [The CPU engine's loops vectorised in wasm](#the-cpu-engines-loops-vectorised-in-wasm).
 
+## The CPU engine's CPML in the row passes
+
+2026-11-26, the workstation above. Timers around each stage of the step (added for the measurement, not kept), 4th
+order, 1920x1080 rim 32, wave filled: the CPML took 32% of the step on 8 threads and 22% on 1, for about 9% of the
+cells; its two applications ran 4.8 ms a step on 1 thread and 2.9 ms on 8, 1.6 times faster (the grid's pass 2.9
+times), psi of y not faster at all. Each application was four passes over the rim, the x strips' two over every row
+for `2 rim` cells each; the 8 threads ran at about 490 to 505% CPU. `perf` was not open to the guest
+(`perf_event_paranoid` 4).
+
+The y strips' two stages read only the field, so they run before the pass; psi of x and the correction need nothing
+beyond their row, so the pass runs them on each row right after writing it (and after the row's intensity), the
+same operations in the same order as a pass over the rim after the grid's. The A/B harness of
+[The CPU engine's fused 4th-order passes](#the-cpu-engines-fused-4th-order-passes) against the commit before
+(`dd633a8`), fused over before, total time:
+
+| Threads | Grid, rim | Stencil | Open edges | Mirror box |
+|---|---|---|---|---|
+| 8 | 1920x1080, 32 | 4th order | 0.856, 0.893, 0.909 | 0.890, 0.959, 0.960 |
+| 8 | 1920x1080, 64 | 4th order | 0.825 to 0.919 (5 runs) | 0.881 to 0.949 (5 runs) |
+| 8 | 1920x1080, 32 | 9-point | 0.900, 0.926, 0.930 | 0.906, 0.914, 0.944 |
+| 8 | 1920x1080, 64 | 9-point | 0.844 to 0.893 (5 runs) | 0.792 to 0.938 (5 runs) |
+| 1 | 800x600, 32 | 4th order | 0.888 to 0.968 (6 runs) | 0.982 to 1.001 |
+| 1 | 800x600, 32 | 9-point | 0.996 to 1.070 (6 runs) | 1.014 to 1.024 |
+
+The 9-point on 1 thread is 2 to 4% slower, and so it is without a rim (1.016 to 1.109, medians 1.00 to 1.04), where
+it runs none of the changed code: its row loop is the same as before. Three ways of driving the rows (blocks of one
+row, blocks of up to 16, a plain loop per row) and the rim as a separate sweep on one thread changed nothing, so the
+cause looks like code placement, which `perf` would show. The fields are equal bit for bit in every run, at 8 and 1
+threads, at 300x200, 640x360 and 120x90, rims 0, 16, 32 and 40, open, mirror box and graded, both stencils; the probe
+series of Example01, 03, 08, 13 and 21 and of `01-single-fiber`, 300 steps, are byte for byte the commit before's.
+Every CPML loop keeps its vector body, natively (SSE2) and in wasm with simd128.
+
 ## The CPU engine in wasm, with and without simd128
 
 2026-11-25, the workstation above. A harness outside the repository runs the CPU engine alone, built for wasm32 at
