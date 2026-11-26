@@ -64,12 +64,16 @@ The crates are listed in [`WORKSPACE.md`](../WORKSPACE.md) ([decision 0032](deci
   through synchronous access handles (decision 0020). Depends on core and remote.
 - `waveduderust_cli`: binary only (no `lib.rs`); core and platform. The global `--config-dir <DIR>` puts the app's
   folders under `DIR` (`AppDirs::under`); its tests pass an empty one, so they never read the user's.
+- `slint_dock`: the docking layout, a library for any Slint app ([decision 0036](decisions/0036-docking-returns.md)):
+  the headless `Dock` (split tree of tab groups around a fixed centre, geometry, drop targets, moves, show and
+  close, `Arrangement` serde-able behind `serde`) and the Slint library `ui/dock.slint` (`DockArea`) drawing its
+  chrome. Depends on no workspace crate and holds no WaveDude wording.
 - `waveduderust_slint` (program `waveduderust`): the window, natively and in the browser
   ([`tools/build-web.sh`](../tools/build-web.sh)). `ui/*.slint` declares the window, one file per pane, dialog or
   widget; `src/*.rs` binds callbacks, properties and models, one module per concern (`document`, `live`, `playback`,
-  `tree`, `form`, `messages`, `settings`, `export`, `files`, `examples`, `gpu`; `web` in the browser). One wgpu device
+  `tree`, `form`, `messages`, `settings`, `export`, `files`, `examples`, `gpu`, `docking`; `web` in the browser). One wgpu device
   serves the engine and the window ([`src/gpu.rs`](../frontends/waveduderust_slint/src/gpu.rs)); in the browser the
-  CPU engine runs in the run worker ([decision 0035](decisions/0035-browser-run-on-the-page-gpu.md)). Depends on core, platform and, in the browser, remote.
+  CPU engine runs in the run worker ([decision 0035](decisions/0035-browser-run-on-the-page-gpu.md)). Depends on core, platform, slint_dock and, in the browser, remote.
 
 ## Where new things go
 

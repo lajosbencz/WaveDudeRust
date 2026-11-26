@@ -65,7 +65,8 @@ Docking behaviour (`Docking/`):
 - The arrangement (incl. sizes) is saved on close and restored at start; unknown ids in a saved layout are
   ignored.
 - Port: the arrangement is saved as it changes, once the pointer lets go (a drag or a resize writes it once), on
-  both targets.
+  both targets, as the settings' `Layout` ([`80-settings.md`](80-settings.md)); an unreadable one is logged and the
+  default used. The dock is the crate `slint_dock` (decision 0036).
 - View > Panes lists Preview too (decision 0008); in the WPF code the Preview is the centre area
   and not a registered pane, so only Project, Properties, Messages are listed.
 

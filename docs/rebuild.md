@@ -6,7 +6,7 @@ rebuilt in `frontends/waveduderust_slint`; the old code stays readable at tag `v
 
 ## Layout
 
-Main window (docs/ui/00): menu bar, a dock of panes, status bar. Default arrangement:
+Main window (docs/ui/00): menu bar, a dock of panes (crate `slint_dock`, decision 0036), status bar. Default arrangement:
 
 | Pane | Spec | Contents |
 |---|---|---|
@@ -67,7 +67,7 @@ Settings and other documented divergences stand: docs/divergences.md, decisions 
 ## Plan
 
 State per feature: [`parity.md`](parity.md), built 2026-11-24 from WaveDude Next's source and [`ui/`](ui/); on
-2026-11-26 830 done, 86 partial, 174 divergence, 0 missing of 1095 rows. A feature is done when its row is checked against Next side by side on a
+2026-11-26 839 done, 87 partial, 164 divergence, 0 missing of 1095 rows. A feature is done when its row is checked against Next side by side on a
 nested display ([`tools/compare-csharp/README.md`](../tools/compare-csharp/README.md)); the commit that ports it ticks the
 row. Each phase is one coding pass, then a separate verification of the diff, the checks and the rows before the commit.
 

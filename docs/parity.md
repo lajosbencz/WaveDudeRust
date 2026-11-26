@@ -11,18 +11,18 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 17 | 8 | 2 | 13 | 0 |
-| M | Menus and shortcuts | 79 | 9 | 0 | 52 | 0 |
+| X | Cross-cutting | 20 | 7 | 0 | 13 | 0 |
+| M | Menus and shortcuts | 80 | 9 | 0 | 51 | 0 |
 | D | Dialogs and windows | 52 | 19 | 0 | 8 | 0 |
-| S | Settings | 22 | 7 | 0 | 3 | 0 |
+| S | Settings | 23 | 7 | 0 | 2 | 0 |
 | I | Icons | 60 | 1 | 0 | 22 | 0 |
 | T | Project tree | 58 | 4 | 0 | 39 | 0 |
 | P | Properties | 311 | 7 | 0 | 7 | 0 |
 | V | Preview | 97 | 6 | 0 | 8 | 1 |
 | L | Timeline, transport, status | 70 | 9 | 0 | 9 | 2 |
 | R | Live editing and runs | 42 | 15 | 0 | 2 | 2 |
-| G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 833 | 88 | 2 | 167 | 5 |
+| G | Messages pane | 26 | 3 | 0 | 3 | 0 |
+| | All | 839 | 87 | 0 | 164 | 5 |
 
 ## Cross-cutting
 
@@ -35,14 +35,14 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-05 | Resize grip | MainWindow.xaml | 00, Main window | divergence | decision 0033, matched in general, not to the pixel/id |
 | X-06 | Dock layout tree: splits with star weights, tabbed groups, fixed centre | Docking/DockHost.cs | 00, Panes; 90 s1 | done | crates/slint_dock: a split tree with weights, tab groups, the preview as the fixed centre; the centre has no title bar, as Next's DocumentContent |
 | X-07 | Splitters between panes: drag and arrow keys | Docking/DockHost.cs | 00, Panes; 90 s1 | done | crates/slint_dock: 4 px bars, drag, star sizes above Next's minimums (60 px, 100 px for the preview); no keys, as Next's are not focusable |
-| X-08 | Pane title bar 21 px: title, dotted grip, "Window position" drop-down, close button | Docking/DockGroupControl.cs, Themes/Controls.xaml | 00, Panes; 90 s1 | partial | crates/slint_dock ui/dock.slint: title, grip, close button, 23 px (a row); no "Window position" drop-down yet (X-09) |
-| X-09 | "Window position" menu: Move to Left/Right/Top/Bottom, Close | Docking/DockCommands.cs | 00, Panes | missing | planned with the saved layout (X-15) |
+| X-08 | Pane title bar 21 px: title, dotted grip, "Window position" drop-down, close button | Docking/DockGroupControl.cs, Themes/Controls.xaml | 00, Panes; 90 s1 | done | crates/slint_dock ui/dock.slint: title, grip, the "Window position" drop-down (X-09) and the close button, 23 px (a row) |
+| X-09 | "Window position" menu: Move to Left/Right/Top/Bottom, Close | Docking/DockCommands.cs | 00, Panes | done | crates/slint_dock ui/dock.slint: the drop-down opens a menu under it, acting on the group's active pane; Move to is `Dock::move_to` to that outer edge, as an edge drop; no access keys (M-98) |
 | X-10 | Active pane title bar accent + white text + light-blue grip by focus; first group active at start | Docking/DockGroupControl.cs | 00, Panes | partial | accent, white text, light-blue grip; first group lit at start; a pointer press in a group (title, tab or content, through the window's events) lights it, one in the preview none; keyboard focus moves do not |
 | X-11 | Tab strip for groups with several panes | Docking/DockGroupControl.cs | 00, Panes; 90 s1 | done | crates/slint_dock ui/dock.slint: under the content, Next's ToolTab colours; a click activates; dragging a tab is X-12 |
 | X-12 | Drag pane/group to dock: edge strip, split beside, tab into; accent drop preview; ghost label; Esc cancels | Docking/DockDragManager.cs, DockDropAdorner.cs | 00, Panes (port rules) | done | crates/slint_dock ui/dock.slint: a title bar drags its group, a tab its pane, past 4 px; Dock::drop_target picks the target, its area tinted accent with a 2 px border over the panes' contents, the title on an accent label at the pointer; the focus stays, the window's key handler takes every key mid-drag and Esc cancels; a lost grab cancels |
 | X-13 | Close hides the pane; reshown at its default side without a saved place | Docking/DockHost.cs | 00, Panes | done | hide/show works; rest matched in general (decision 0033) |
 | X-14 | Default arrangement: left column 1:3, Project over Properties 1:2; Messages hidden | Docking/DockHost.cs | 00, Panes | done | ratios done; a pane shown at its default side without a place takes a full-width (or full-height) quarter strip at that edge, as Next's edge drop, or tabs into the group already there (Messages and Performance at the bottom) |
-| X-15 | Layout saved as it changes and restored at start; unknown ids ignored | Docking/DockHost.cs | 00, Panes | missing | planned: crates/slint_dock Arrangement (serde) saved and restored |
+| X-15 | Layout saved as it changes and restored at start; unknown ids ignored | Docking/DockHost.cs | 00, Panes | done | the settings' `Layout`, slint_dock's `Arrangement` as JSON (docking.rs), written once the pointer lets go (a drop, a splitter release, a menu move, show/close, a tab picked) on both targets; hidden panes keep their places; unknown ids dropped at start, an unreadable layout logged and the default used |
 | X-16 | View > Panes lists Project, Properties, Messages, Preview with check marks | MainWindow.xaml | 00, Panes; decision 0008 | done | Preview always shown; rest matched in general (decision 0033) |
 | X-17 | Status bar double-click opens or focuses Messages | MainWindow.xaml.cs | 00, Panes | done | double-click opens Messages; rest matched in general (decision 0033) |
 | X-18 | No floating windows | Docking | 00, Panes | done | |
@@ -220,7 +220,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 #### M Dock title bar and Messages menus
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| M-98 | Dock pane title drop-down "Window position": Move to Left (L/L/G/L), Right (R/R/D/R), Top (T/O/H/B), Bottom (B/U/B/O), separator, Close (C/S/F/S) | WPF/Docking/DockGroupControl.cs:133, SE:60-66 | ui/10 Dock | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
+| M-98 | Dock pane title drop-down "Window position": Move to Left (L/L/G/L), Right (R/R/D/R), Top (T/O/H/B), Bottom (B/U/B/O), separator, Close (C/S/F/S) | WPF/Docking/DockGroupControl.cs:133, SE:60-66 | ui/10 Dock | done | crates/slint_dock ui/dock.slint, its texts from app.slint in the four languages; no access keys, Slint draws context menus without them (decision 0036) |
 | M-99 | Messages list menu: Copy (Ctrl+C, selected lines, tab-separated), Copy all (visible lines), separator, Clear (Mn C/K/C/K, A/A/T/A, L/L/E/W) | MP:184-191, SE:204-206 | ui/10 Messages | done | messages.slint Copy/Copy all/Clear menu; tab-separated (messages.rs text); Ctrl+C on the list |
 
 #### M Keys: window-wide
@@ -354,7 +354,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-76 | First start: machine facts, presets chosen, settings file written at once, one Info line, default layout, welcome opens | WPF/App.xaml.cs, UIS IsFirstStart | ui/70 First start | done | Settings::load(facts); Welcome at first start |
 | D-77 | File type registration (.wdproj, .wdscheme) | WPF/FileAssociation.cs (UI) | ui/70, decision 0008 | divergence | installer/package only (decision 0008) |
 | D-78 | Command line: open file argument | App.xaml.cs | ui/70 | done | main.rs:~457 args_os().nth(1) |
-| D-79 | Dock host: drag/drop panes, tab groups, five-way drop, floating windows | WPF/Docking/*.cs, MW:491-541 | divergences "Docking", decision 0008 (11) | divergence | spec keeps four side lists; Slint has fixed layout with show/hide only (M-98) |
+| D-79 | Dock host: drag/drop panes, tab groups, five-way drop, floating windows | WPF/Docking/*.cs, MW:491-541 | divergences "Docking", decision 0008 (11) | divergence | crates/slint_dock (decision 0036): drag and drop of panes and groups, tab groups, edges, sides and tabs; no drop indicators, the pointer picks the target (divergences "Docking"); no floating windows, as Next |
 
 ### S: settings
 
@@ -363,7 +363,7 @@ Port keeps JSON `settings.json` (crates/waveduderust_platform/src/settings.rs, p
 |---|---|---|---|---|---|
 | S-01 | WindowWidth/WindowHeight/WindowLeft/WindowTop double DIP (1280x800, centred) | UIS:69-99, MW:37-40 | ui/80 | partial | logical size and corner saved on exit (keep_window), restored before showing (place_window); no off-screen clamp, no centring when unset |
 | S-02 | WindowState Normal/Maximized | UIS:109, MW:41 | ui/80 | done | Maximized saved and restored; a maximized window keeps its normal size |
-| S-03 | Layout (dock tree) saved on change | UIS:119, MW:495-515 | ui/80 | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
+| S-03 | Layout (dock tree) saved on change | UIS:119, MW:495-515 | ui/80 | done | the arrangement's JSON once the pointer lets go (X-15) |
 | S-04 | Theme System/Light/Dark, Settings > General | UIS:129 | ui/80, ui/70 | done | set.rs row "Theme"; applied via Theme.mode (main.rs apply_settings) |
 | S-05 | Language ""/en/de/fr/nl, "System (in the current language)" first, each by own name | UIS:139, MW:295-297 | ui/80, ui/70 | partial | Settings > General > Language: System, then each by its own name (src/settings.rs); "System" is not translated (a Rust string, X-34) |
 | S-06 | RecentFiles list newest first max 10 (+ OS recent list) | UIS:149, MW:253-255 | ui/80 | partial | push_recent on open/save (main.rs:213); never shown (M-04) |
@@ -631,7 +631,7 @@ Not-in-spec rows are marked in the Spec column.
 | P-19 | Name boxes update per keystroke (tree row renames live) | Views/SourceView.xaml:54 | 30 Text box | done | FormText per keystroke, the tree row live, one undo step |
 | P-20 | Commit policy: commit on Enter, on focus loss; flush before Save/Run/Undo/selection change (PendingEdit) | Controls/EditBehavior.cs | 30 Text box commit policy | partial | commit on Enter and on focus loss; a tree row takes the focus on the press, so a box commits before the selection moves; a shortcut (Save, Run, Undo) with a box focused does not commit first |
 | P-21 | Widget press flushes pending edit first (tree row, check, button, picker, dock tab) | Controls/EditBehavior.cs | 30 Text box commit policy | partial | tree rows take the focus on the press; buttons, checks and dock tabs not checked |
-| P-22 | Pending text survives unmount (dock tab switch, picker close); Esc drops it | Controls/EditBehavior.cs | 30 Text box commit policy | divergence | no dock tabs or pickers that unmount a pending box (decision 0033) |
+| P-22 | Pending text survives unmount (dock tab switch, picker close); Esc drops it | Controls/EditBehavior.cs | 30 Text box commit policy | divergence | a dock tab switch hides its pane without unmounting it, and no picker unmounts a pending box (decision 0033) |
 | P-23 | Rename box closes on focus leaving; Enter/Esc give focus back to tree | Controls/EditBehavior.cs | 30 Text box commit policy | divergence | no tree rename box: names are edited in the Name box (Enter on the tree goes there) |
 | P-24 | Number box: text + up/down repeat buttons column | Controls/NumberBox.cs | 30 Number box | divergence | ui/number-box.slint, src/number.rs; spin column beside the LineEdit; a click focuses without placing the caret (divergences.md, Number box) |
 | P-25 | Number box: Up/Down key +/- Increment (log: x/ / 1.02) | Controls/NumberBox.cs | 30 Number box | done | NumberSpec increment per field (forms.slint) |
@@ -1224,7 +1224,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
-| G-01 | Dock pane, default bottom, hidden at start | MainWindow.xaml; Docking | 70 Messages pane; 00 Docking | done | bottom pane, hidden at start; dock dropped (decision 0033) |
+| G-01 | Dock pane, default bottom, hidden at start | MainWindow.xaml; Docking | 70 Messages pane; 00 Docking | done | bottom pane, hidden at start; docks as the others (decision 0036) |
 | G-02 | Toolbar: one toggle per level "Level (count)" in level colour, tooltip "Show or hide this level" | MessagesPane.xaml:62-76 | 70 Messages pane | done | toggle, level colour, count; rest matched in general (decision 0033) |
 | G-03 | Levels Trace, Debug, Info, Warn, Error, Fatal | MessagesPane.xaml.cs:63-66 | 70 Messages pane | done | tracing has no Fatal |
 | G-04 | Level toggle as styled ToolToggle with accent focus | MessagesPane.xaml:20-55 | 70 Messages pane | done | clickable toggles; rest matched in general (decision 0033) |
@@ -1251,7 +1251,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | G-25 | Row tooltip = exception text | MessagesPane.xaml:150 | 70 Messages pane; 70 Message window | divergence | tracing events carry no exception; the message holds the error text |
 | G-26 | Source cell tooltip = full logger name | MessagesPane.xaml:199 | 70 Messages pane | done | Source cell tooltip: the full logger name |
 | G-27 | Level counts live (add/remove/clear) | MessagesPane.xaml.cs:190-226 | 70 Messages pane | done | counts over the ring |
-| G-28 | Pane title bar, close, "Window position" menu | Docking | 00 Docking | divergence | decision 0033, dropped: fixed layout, View > Panes shows/hides |
+| G-28 | Pane title bar, close, "Window position" menu | Docking | 00 Docking | done | crates/slint_dock: title bar, close button, "Window position" menu (X-08, X-09) |
 | G-29 | View > Panes > Messages check toggle | MainWindow.xaml | 00 Docking | done | app.slint menu |
 | G-30 | Automation ids MessagesLevel:*, MessagesSearch, MessagesRegex, MessagesAutoScroll, MessagesClear, MessagesList | MessagesPane.xaml | 70 Messages pane (ids) | divergence | decision 0033, matched in general, not to the pixel/id |
 | G-31 | Messages pane receives warnings (WebGL fallback, off-canvas, memory) | Logging | 40; 60 | partial | sink exists; those messages not produced |

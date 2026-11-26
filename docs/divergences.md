@@ -13,8 +13,9 @@ that holds the reasoning and the details. Behaviour not listed here is meant to 
 - The toolkit or a platform cannot do it: the decision says what replaces it.
 - A measured gain with the same results, recorded in [`measurements.md`](measurements.md).
 
-- The UI outside what simulations, edits and controls do is matched in general, not to the pixel; the dock system,
-  the updater, UI zoom and touch-first behaviour are dropped ([decision 0033](decisions/0033-ui-match-scope.md)).
+- The UI outside what simulations, edits and controls do is matched in general, not to the pixel; the updater, UI
+  zoom and touch-first behaviour are dropped ([decision 0033](decisions/0033-ui-match-scope.md)); docking returned
+  ([decision 0036](decisions/0036-docking-returns.md)).
 
 Not warranted: taste, convenience, calibrating to Next's output, dropping a feature Next's users rely on, or a
 file written in a way Next cannot read. The process: an issue, a decision (new or a dated section of an existing
@@ -35,7 +36,7 @@ one), the row below, the spec updated.
 | Browser MP4 | Not applicable | The browser's WebCodecs H.264 encoder, variable bitrate rate control, the profiles the browser supports; the files differ from the desktop's | decision 0005, [ui/70](ui/70-dialogs-and-windows.md) |
 | Frame store | Memory then a file, frames appended in order | The same tiers, frames written by index in any order, cleared in place between generations | [spec/40](spec/40-frames-store-render.md) |
 | GPU | OpenCL, a transfer queue of its own for captures | wgpu compute, one queue; captures run after the steps ([measurements.md](measurements.md)) | decision 0003 |
-| Docking | Floating windows, a five-way drop cluster | Four side lists around the centre; drops on edges, tabs and ends; no floating windows | decision 0008 (11) |
+| Docking | Drop indicators: four outer-edge ones and a five-way cluster on the hovered group | No indicators: the pointer picks the target, a strip along an outer edge or a zone of the hovered group ([ui/00](ui/00-overview.md), Panes) | decisions 0008 (11), 0036 |
 | Drag and drop | Tree rows drag into other windows and editors | Within the tree and onto a picture; the clipboard text does the rest | decision 0008 (12) |
 | File drop | A project or colour scheme dropped on the window opens | An image dropped on the window also becomes the scene image; the last file of a frame wins | [ui/10](ui/10-menus-and-shortcuts.md) |
 | Leaving the browser page | Not applicable | The browser build asks before the page is left while the project has unsaved edits | [ui/10](ui/10-menus-and-shortcuts.md) |

@@ -223,7 +223,9 @@ Enabled as on the probe's tree row.
 ### Dock pane title bar drop-down ("Window position")
 
 Move to Left (L/L/G/L), Move to Right (R/R/D/R), Move to Top (T/O/H/B), Move to Bottom (B/U/B/O),
-separator, Close (C/S/F/S).
+separator, Close (C/S/F/S). They act on the group's active pane; Move to puts it in a group of its own along that
+outer edge, as an edge drop. Port: opened by a click on the button, under it; no access keys, as the other context
+menus (decision 0036).
 
 ### Messages pane list
 

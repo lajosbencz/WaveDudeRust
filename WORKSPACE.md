@@ -10,6 +10,7 @@ The crates of [decision 0032](docs/decisions/0032-slint-single-frontend.md).
 | [`waveduderust_remote`](crates/waveduderust_remote) | the live run in the browser's run worker (decision 0024): the messages between the page and the worker, the worker's end and the page's mirror of its frames; the page's end of the spill worker (decision 0020) |
 | [`waveduderust_workers`](crates/waveduderust_workers) | the browser's workers: `wavedude-run-worker`, the live run's CPU engine beside the page, and `wavedude-spill-worker`, the frames past memory in the origin private file system |
 | [`waveduderust_cli`](crates/waveduderust_cli) | the `waveduderust-cli` program: headless checks, benches, dispersion tables, scripted runs and exports |
+| [`slint_dock`](crates/slint_dock) | a docking layout for any Slint app (decision 0036): tab groups in a split tree around a fixed centre, its geometry, drop targets, moves, show and close, a serde-able arrangement; `ui/dock.slint` draws the chrome; no WaveDude dependency |
 | [`waveduderust_slint`](frontends/waveduderust_slint) | the `waveduderust` program: the window on Slint, natively and in the browser on WebGPU; `.slint` files in `ui/`, their Rust bindings in `src/`; the example projects of [`examples`](examples) embedded |
 
 ```sh

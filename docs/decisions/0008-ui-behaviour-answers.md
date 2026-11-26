@@ -28,7 +28,8 @@ app ([0028](0028-no-manual-in-the-app.md))
 11. Docking: a title bar or tab is dragged onto an outer edge of the window, onto the middle of another pane (a
     tab) or onto an end of it (a split beside it, along its side); no floating windows and no five-way cluster on
     the centre area, since the layout is four side lists around the centre, not a free split tree. A group's
-    tab strip sits under its content.
+    tab strip sits under its content. Since 2026-11-26 a split tree of tab groups replaces the side lists
+    ([0036](0036-docking-returns.md)); a drop beside a group splits it.
 12. Tree rows are dragged within their list and onto a picture (a copy lands where dropped). Drags into another
     window or into a text editor are not offered: the toolkit has no OS drag source; the clipboard text does the same.
 13. The Edit menu acts on objects even while a text box has the focus; the keys (Ctrl+Z, X, C, V, A) go to the
