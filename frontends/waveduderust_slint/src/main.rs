@@ -834,7 +834,7 @@ fn remove(state: &mut State, group: &[Node]) {
 
 /// Pastes the clipboard text read for it; text that holds no objects is logged.
 fn paste(state: &mut State) {
-	let texts: Vec<String> = state.pasted.borrow_mut().drain(..).collect();
+	let texts = state.pasted.take();
 	for text in texts {
 		match waveduderust::io::wdproj::read_fragment(&text) {
 			Ok(fragment) if !fragment.is_empty() => {
@@ -2150,7 +2150,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			if !s.focus_seen {
 				form.set_focus_pending(false);
 			}
-			let picked: Vec<_> = s.inbox.borrow_mut().drain(..).collect();
+			let picked = s.inbox.take();
 			for (layer, name, text) in picked {
 				if let Some(layer) = layer {
 					s.load_scheme(layer, &name, text);
