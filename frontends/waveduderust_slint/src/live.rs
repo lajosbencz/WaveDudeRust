@@ -675,8 +675,9 @@ impl Live {
 	pub(crate) fn seek(&mut self, position: u32) {
 		if self.position != position {
 			self.position = position;
-			// a pending fit follows the position
-			if self.active || self.fit.is_some() {
+			// a pending fit follows the position; a frame not stored yet is made (docs/ui/50, Position rules)
+			let missing = !self.worker.status().store.is_some_and(|s| s.has(self.stored()));
+			if self.active || self.fit.is_some() || missing {
 				self.publish();
 			}
 		}
