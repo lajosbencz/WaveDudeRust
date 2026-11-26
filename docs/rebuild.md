@@ -99,9 +99,10 @@ row. Each phase is one coding pass, then a separate verification of the diff, th
       The idle window (0 wakeups).
    2. The browser's pump: pumped until `Pump::Waiting` with a waker that wakes the window, and the GPU queue kicked on
       `Kicks` while completions are owed (decision 0026). Measure: The browser's GPU latency (Firefox).
-   3. The browser's run in a module worker (decision 0024): `remote/` and `wavedude-run-worker` of `master`, the frames
-      posted to the page's mirror store and coloured on the page's device, the engine's fallback in Messages. Measure:
-      The browser's live run in a worker; the page's main-thread time during a run.
+   3. The browser's CPU run in a module worker (decisions 0024, 0035): `remote/` and `wavedude-run-worker` of `master`
+      as `waveduderust_remote` and `waveduderust_workers`, the frames posted to the page's mirror store and coloured
+      on the page; the GPU engine stays pumped on the page; Use the GPU swaps the two. A lost worker in Messages.
+      Measure: The browser's live run in a worker; the page's main-thread time during a run, on both.
    4. The browser's frame spill in OPFS through the spill worker (decision 0020, `platform/opfs/` of `master`) and
       playback reading ahead (`FrameStore::prefetch`), parity L-65. Measure: The browser's frame spill, read ahead,
       writes.

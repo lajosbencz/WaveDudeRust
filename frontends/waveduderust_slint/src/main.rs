@@ -1082,12 +1082,20 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	state.live.auto_rerun = s.auto_rerun;
 	state.live.warn = s.warn_when_ram_insufficient;
 	state.live.set_dither(s.preview_dither_bits);
-	state.live.set_gpu(s.use_gpu);
+	if state.live.set_gpu(s.use_gpu) {
+		frames_dropped(&mut state.playback);
+	}
 	state.live.ram_cache = s.ram_cache();
 	// another preview quality is a simulation edit
 	if state.live.edited(&state.doc.project, &state.doc.view) == live::Change::Frames {
 		state.playback.pause();
 	}
+}
+
+/// The run's frames went and it starts over at frame 0: playback stops there.
+fn frames_dropped(playback: &mut Playback) {
+	playback.pause();
+	playback.seek(0);
 }
 
 /// Pushes the settings to the Settings window and the Welcome page.
@@ -1257,8 +1265,7 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 		}
 		(ui::Message::DiscardFrames, ui::Answer::Yes) if state.commands().can_discard => {
 			state.live.discard();
-			state.playback.pause();
-			state.playback.seek(0);
+			frames_dropped(&mut state.playback);
 			tracing::info!("Frames discarded");
 		}
 		(ui::Message::ExportRunning, ui::Answer::Yes) => {

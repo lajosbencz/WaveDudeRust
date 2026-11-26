@@ -132,8 +132,9 @@ pub struct Goal {
 }
 
 /// Equality compares the variant; two failures are equal when they share the error.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum WorkState {
+	#[default]
 	Idle,
 	/// Stepping towards stored frame `target`.
 	Stepping {
@@ -158,7 +159,7 @@ impl PartialEq for WorkState {
 impl Eq for WorkState {}
 
 /// What the worker published last.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Status {
 	/// The goal revision whose spec is in force: the store's frames are its.
 	pub adopted: u64,
@@ -232,15 +233,7 @@ impl Shared {
 			rebuild: AtomicBool::new(false),
 			discard: AtomicBool::new(false),
 			shutdown: AtomicBool::new(false),
-			published: Mutex::new(Status {
-				adopted: 0,
-				state: WorkState::Idle,
-				steps_done: 0,
-				traces_steps: 0,
-				store: None,
-				#[cfg(feature = "gpu")]
-				device_frames: None,
-			}),
+			published: Mutex::default(),
 			changed: Condvar::new(),
 			traces: Mutex::default(),
 			held: Mutex::new(Vec::new()),

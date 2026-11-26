@@ -1,6 +1,6 @@
-//! The live run (docs/ui/60, The live run): a worker thread steps the project; the newest stored frame is drawn.
-
-use std::rc::Rc;
+//! The live run (docs/ui/60, The live run): a worker thread steps the project; in the browser a worker pumped on the
+//! page with the GPU engine (decision 0035), or the run worker with the CPU engine (decision 0024), whose frames land in
+//! the page's mirror store; the newest stored frame is drawn.
 
 use slint::wgpu_30::wgpu;
 use waveduderust::model::normalize::Normalize;
@@ -8,7 +8,7 @@ use waveduderust::model::{Layer, Project, View};
 use waveduderust::quality::PreviewQuality;
 use waveduderust::unstable::scene::off_canvas::{OffCanvas, off_canvas};
 
-use waveduderust::run::{FitRequest, FrameStore, Goal, RunWorker, Wanted, WorkState};
+use waveduderust::run::{FitFrame, FitRequest, FrameStore, Goal, Status, Wanted, WorkState};
 use waveduderust::unstable::engine::gpu::{FrameTag, GpuContext};
 use waveduderust::unstable::engine::types::SampleFormat;
 use waveduderust::unstable::render::fit_plane;
@@ -24,12 +24,47 @@ use crate::ui::{RunState, RunStatus};
 /// What an edit asks of the run (docs/ui/60, Edit classes).
 pub(crate) use waveduderust::unstable::spec::RunChange as Change;
 
+/// What the live run is driven through, with `RunWorker`'s meaning: natively the core's worker on its thread, in the
+/// browser the runs of `web`.
+pub(crate) trait Run {
+	fn status(&self) -> Status;
+	fn set_goal(&mut self, goal: Goal);
+	fn with_traces(&self, f: &mut dyn FnMut(&[waveduderust::ProbeTrace]));
+	fn take_fit(&mut self) -> Option<FitFrame>;
+	fn discard_frames(&mut self);
+	/// Takes in what arrived since the last call.
+	fn pump(&mut self) {}
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Run for waveduderust::run::RunWorker {
+	fn status(&self) -> Status {
+		Self::status(self)
+	}
+
+	fn set_goal(&mut self, goal: Goal) {
+		Self::set_goal(self, goal);
+	}
+
+	fn with_traces(&self, f: &mut dyn FnMut(&[waveduderust::ProbeTrace])) {
+		Self::with_traces(self, f);
+	}
+
+	fn take_fit(&mut self) -> Option<FitFrame> {
+		Self::take_fit(self)
+	}
+
+	fn discard_frames(&mut self) {
+		Self::discard_frames(self);
+	}
+}
+
 /// The run and the pictures it feeds.
 pub(crate) struct Live {
-	worker: Rc<RunWorker>,
-	/// Starts the page's pump again after a goal.
+	worker: Box<dyn Run>,
+	/// The run worker's run while the page's GPU runs.
 	#[cfg(target_arch = "wasm32")]
-	pump: std::sync::Arc<crate::web::Wake>,
+	cpu: Option<Box<dyn Run>>,
 	revision: u64,
 	active: bool,
 	/// Every frame (a run) or the position's frame alone.
@@ -195,6 +230,25 @@ pub(crate) struct Shown {
 	pub(crate) export: Option<ExportNews>,
 }
 
+/// The browser's run: on the page's GPU with `context`, else in the run worker on the CPU.
+#[cfg(target_arch = "wasm32")]
+fn run_on(context: Option<&std::sync::Arc<GpuContext>>) -> Box<dyn Run> {
+	match context {
+		Some(context) => Box::new(crate::web::gpu_run(context.clone())),
+		None => Box::new(crate::web::cpu_run()),
+	}
+}
+
+/// The engine as the status bar names it, on `context`'s GPU or the CPU.
+fn engine_of(context: Option<&std::sync::Arc<GpuContext>>) -> String {
+	match context.map(|c| c.info.name.as_str()) {
+		None => "CPU".to_owned(),
+		// a WebGPU adapter may have no name
+		Some("") => "GPU: WebGPU".to_owned(),
+		Some(name) => format!("GPU: {name}"),
+	}
+}
+
 /// The off-canvas warning's list (docs/ui/60, Objects off the canvas).
 fn off_canvas_list(off: &[OffCanvas]) -> String {
 	let item = |o: &OffCanvas| match o {
@@ -211,25 +265,19 @@ impl Live {
 	pub(crate) fn new(context: Option<&std::sync::Arc<GpuContext>>) -> std::io::Result<Self> {
 		let gpu = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(context.is_some()));
 		#[cfg(not(target_arch = "wasm32"))]
-		let worker = {
+		let worker: Box<dyn Run> = {
 			let gpu = gpu.clone();
 			let engines: waveduderust::run::EngineFactory = Box::new(move |scene, options| {
 				use waveduderust::Backend;
 				let backend = if gpu.load(std::sync::atomic::Ordering::Relaxed) { Backend::Gpu } else { Backend::Cpu };
 				waveduderust::run::engines(backend)(scene, options)
 			});
-			RunWorker::new(engines, std::env::temp_dir(), Default::default())?
+			let worker = waveduderust::run::RunWorker::new(engines, std::env::temp_dir(), Default::default())?;
+			worker.set_notify(Box::new(crate::wake::wake));
+			Box::new(worker)
 		};
 		#[cfg(target_arch = "wasm32")]
-		let context = context.ok_or_else(|| std::io::Error::other("no usable GPU"))?;
-		#[cfg(target_arch = "wasm32")]
-		let worker = crate::web::worker(context.clone());
-		worker.set_notify(Box::new(crate::wake::wake));
-		let worker = Rc::new(worker);
-		#[cfg(target_arch = "wasm32")]
-		let pump = crate::web::run(worker.clone(), context.clone());
-		#[cfg(target_arch = "wasm32")]
-		let context = Some(context);
+		let worker = run_on(context);
 		let painter = context.map_or_else(Painter::cpu, |c| {
 			let (device, queue) = (c.device.clone(), c.queue.clone());
 			Painter::Gpu(Box::new(GpuPainter {
@@ -243,7 +291,7 @@ impl Live {
 		Ok(Self {
 			worker,
 			#[cfg(target_arch = "wasm32")]
-			pump,
+			cpu: None,
 			revision: 0,
 			active: false,
 			wanted: Wanted::Position,
@@ -267,7 +315,7 @@ impl Live {
 			started: None,
 			summarised: false,
 			steps: 0,
-			engine: context.map_or_else(|| "CPU".to_owned(), |c| format!("GPU: {}", c.info.name)),
+			engine: engine_of(context),
 			last_state: None,
 			context: context.cloned(),
 			painter,
@@ -279,9 +327,36 @@ impl Live {
 	}
 
 	/// The device of the engines built from now on (Use the GPU): the next run or edit builds on it.
-	/// Engines on the GPU when `on` and a device is there.
-	pub(crate) fn set_gpu(&self, on: bool) {
+	/// Engines on the GPU when `on` and a device is there. The frames stay: says `false`.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub(crate) fn set_gpu(&mut self, on: bool) -> bool {
 		self.gpu.store(on && self.context.is_some(), std::sync::atomic::Ordering::Relaxed);
+		false
+	}
+
+	/// The run on the page's GPU when `on` and a device is there, else in the run worker on the CPU (decision 0035).
+	/// The run swapped, the old one's frames go with it as Discard frames' do and the new one makes frame 0; the run
+	/// worker, started the first time, stays for the page's life. Says whether the run swapped.
+	#[cfg(target_arch = "wasm32")]
+	pub(crate) fn set_gpu(&mut self, on: bool) -> bool {
+		let context = self.context.clone().filter(|_| on);
+		if self.gpu.swap(context.is_some(), std::sync::atomic::Ordering::Relaxed) == context.is_some() {
+			return false;
+		}
+		self.engine = engine_of(context.as_ref());
+		match context {
+			Some(context) => {
+				let mut cpu = std::mem::replace(&mut self.worker, Box::new(crate::web::gpu_run(context)));
+				// idle and without frames until taken up again
+				cpu.set_goal(Goal::default());
+				cpu.discard_frames();
+				self.cpu = Some(cpu);
+			}
+			None => self.worker = self.cpu.take().unwrap_or_else(|| Box::new(crate::web::cpu_run())),
+		}
+		self.last_state = None;
+		self.drop_frames();
+		true
 	}
 
 	/// The preview quality of the next run; another one ends an export's run quality.
@@ -468,10 +543,8 @@ impl Live {
 		self.publish();
 	}
 
-	fn publish(&self) {
+	fn publish(&mut self) {
 		crate::wake::wake();
-		#[cfg(target_arch = "wasm32")]
-		self.pump.raise();
 		self.worker.set_goal(Goal {
 			revision: self.revision,
 			run: self.request.clone(),
@@ -492,7 +565,7 @@ impl Live {
 		}
 		let step = store.step_of(frame);
 		let probes = self.request.as_ref()?.probes().map(waveduderust::model::Probe::id).collect();
-		Some(self.worker.with_traces(|traces| {
+		Some(self.with_traces(|traces| {
 			f(&crate::graphs::Traces { traces, probes, step, frame, total_steps: u64::from(self.steps) })
 		}))
 	}
@@ -502,7 +575,7 @@ impl Live {
 		let request = self.request.as_ref()?;
 		let n = request.probes().position(|p| p.id() == probe.id())?;
 		let schedule = request.schedule();
-		self.worker.with_traces(|traces| {
+		self.with_traces(|traces| {
 			let mut out = Vec::new();
 			let (every, divisor) = (schedule.visualize_every, schedule.frame_divisor());
 			waveduderust::unstable::export::csv::write_probe_csv(&mut out, probe, traces.get(n)?, every, divisor)
@@ -600,16 +673,26 @@ impl Live {
 
 	/// The frames and traces go, on a new store; the run stops (Discard frames).
 	pub(crate) fn discard(&mut self) {
+		self.drop_frames();
+		self.worker.discard_frames();
+	}
+
+	/// The run stops and starts over at frame 0, its frames gone: the goal first, so a run under way does not start
+	/// over on the old one.
+	fn drop_frames(&mut self) {
 		self.fit = None;
 		(self.active, self.wanted, self.paused, self.started) = (false, Wanted::Position, false, None);
 		self.position = 0;
 		self.drawn = None;
-		// the goal first: a run under way does not start over on the old one
 		self.revision += 1;
 		self.publish();
-		self.worker.discard_frames();
-		#[cfg(target_arch = "wasm32")]
-		self.pump.raise();
+	}
+
+	/// Calls `f` with the run's probe traces, in its probe order.
+	fn with_traces<R>(&self, f: impl FnOnce(&[waveduderust::ProbeTrace]) -> R) -> R {
+		let (mut f, mut out) = (Some(f), None);
+		self.worker.with_traces(&mut |traces| out = f.take().map(|f| f(traces)));
+		out.expect("the run calls a traces reader once")
 	}
 
 	/// An export asks for its run: ready when the run is complete, full quality and as `needs` says, else such a
@@ -649,7 +732,7 @@ impl Live {
 		let (store, request) = (self.worker.status().store?, self.request.as_ref()?);
 		let schedule = request.schedule();
 		Some(ExportFrames {
-			traces: self.worker.with_traces(<[_]>::to_vec),
+			traces: self.with_traces(<[_]>::to_vec),
 			frame_count: store.count(),
 			total_steps: u64::from(schedule.steps),
 			store,
@@ -700,6 +783,12 @@ impl Live {
 
 	/// The newest stored frame drawn, when it changed, and the run's state.
 	pub(crate) fn poll(&mut self, project: &Project, view: &View, schemes: &SchemeStore) -> Shown {
+		self.worker.pump();
+		// the parked run lands or drops what it was sent before it was parked
+		#[cfg(target_arch = "wasm32")]
+		if let Some(cpu) = &mut self.cpu {
+			cpu.pump();
+		}
 		let mut fitted = None;
 		if let Some((id, layer)) = self.fit
 			&& let Some(frame) = self.worker.take_fit()

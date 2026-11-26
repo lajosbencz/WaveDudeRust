@@ -41,6 +41,7 @@ bytemuck = { version = "1", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 half = { version = "2.7", features = ["bytemuck", "num-traits"] }
 image = { version = "0.25", default-features = false }
+js-sys = "0.3"
 insta = "1"
 png = "0.18"
 pollster = "1"
@@ -51,6 +52,9 @@ serde_json = { version = "1.0.131", features = ["float_roundtrip"] }
 tempfile = "3"
 thiserror = "2"
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false }
+tracing-web = "0.1"
+wasm-bindgen-futures = "0.4"
 web-sys = "0.3"
 web-time = "1.1"
 wgpu = "30"

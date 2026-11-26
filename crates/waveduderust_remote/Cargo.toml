@@ -1,0 +1,24 @@
+[package]
+name = "waveduderust_remote"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "WaveDude Rust's live run in another agent: the protocol between the page and the browser's run worker, and both its ends"
+
+[lints]
+workspace = true
+
+[dependencies]
+postcard.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+waveduderust = { path = "../waveduderust", default-features = false, features = ["run", "serde", "unstable-engine", "unstable-run", "unstable-scene"] }
+web-time.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys.workspace = true
+web-sys = { workspace = true, features = ["DedicatedWorkerGlobalScope", "ErrorEvent", "Event", "MessageEvent", "Window", "Worker", "WorkerOptions", "WorkerType"] }

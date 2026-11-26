@@ -2,7 +2,8 @@
 
 Status: accepted, 2026-11-14 (the user's decision); losses and versions, the mirror's memory added 2026-11-14;
 builds added 2026-11-15;
-amended by [0026](0026-kick-the-gpu-queue-while-waiting.md). Amends [0015](0015-core-builds-for-wasm.md),
+amended by [0026](0026-kick-the-gpu-queue-while-waiting.md); on the Slint app
+[0035](0035-browser-run-on-the-page-gpu.md) supersedes its GPU part, the worker runs the CPU engine alone. Amends [0015](0015-core-builds-for-wasm.md),
 [0016](0016-gpu-engine-in-the-browser.md) and
 [0020](0020-browser-frame-spill-in-opfs.md): the run leaves the page's thread.
 

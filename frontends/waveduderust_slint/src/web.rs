@@ -1,4 +1,5 @@
-//! The browser's run: a worker pumped on the page's thread, its engines on the page's WebGPU device.
+//! The browser's services: the live run on the page's GPU (decision 0035) or on the CPU in the run worker (decision
+//! 0024), its frames past memory dropped, and the question on leaving the page.
 
 use std::future::Future;
 use std::io;
@@ -8,11 +9,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll, Waker};
 
-use waveduderust::run::{Pump, PumpedFactory, RunWorker, SpillBackend, SpillFactory, StoreLayout, Token};
+use waveduderust::ProbeTrace;
+use waveduderust::run::{
+	FitFrame, Goal, Pump, PumpedFactory, RunWorker, SpillBackend, SpillFactory, Status, StoreLayout, Token,
+};
 use waveduderust::unstable::engine::build_on;
 use waveduderust::unstable::engine::gpu::{GpuContext, Kicks};
+use waveduderust_remote::web::PagePort;
+use waveduderust_remote::{Port, Remote};
 
-/// The engine and the stores' memory: wasm32's 4 GiB address space, less the page's own.
+use crate::live::Run;
+
+/// The engine and the stores' memory at Auto: wasm32's 4 GiB address space, less the page's own.
 pub(crate) const BUDGET: u64 = 1 << 30;
 
 /// A spill that keeps nothing: the frames past the RAM share are dropped, not read back.
@@ -44,8 +52,92 @@ impl SpillBackend for DropSpill {
 	fn drop_generation(&self, _: u64) {}
 }
 
+/// The run worker's script, beside the page.
+const RUN_WORKER: &str = "run-worker.js";
+
+/// The live run on the CPU in the run worker (decision 0024), which it starts: its frames in the page's mirror,
+/// [`BUDGET`] at Auto. The worker is named with the page's build as its query, which the script passes on to its
+/// files, so the browser's cache never serves the worker of another build.
+pub(crate) fn cpu_run() -> Remote<PagePort> {
+	let url = format!("{RUN_WORKER}?build={}", js_sys::encode_uri_component(&waveduderust_remote::build_id()));
+	Remote::new(PagePort::start(&url, crate::wake::wake), BUDGET, Box::new(DropSpill), crate::wake::wake)
+}
+
+/// The live run on the page's GPU (decision 0035): a worker pumped on the page's thread, its engines on `context`'s
+/// device.
+pub(crate) fn gpu_run(context: Arc<GpuContext>) -> Pumped {
+	let worker = worker(context.clone());
+	worker.set_notify(Box::new(crate::wake::wake));
+	let worker = Rc::new(worker);
+	let wake = run(worker.clone(), context);
+	Pumped { worker, wake }
+}
+
+/// A worker pumped on the page; its pump ends once it is dropped.
+pub(crate) struct Pumped {
+	worker: Rc<RunWorker>,
+	/// Starts the pump again after a goal.
+	wake: Arc<Wake>,
+}
+
+impl Drop for Pumped {
+	fn drop(&mut self) {
+		self.wake.raise();
+	}
+}
+
+impl Run for Pumped {
+	fn status(&self) -> Status {
+		self.worker.status()
+	}
+
+	fn set_goal(&mut self, goal: Goal) {
+		self.worker.set_goal(goal);
+		self.wake.raise();
+	}
+
+	fn with_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+		self.worker.with_traces(f);
+	}
+
+	fn take_fit(&mut self) -> Option<FitFrame> {
+		self.worker.take_fit()
+	}
+
+	fn discard_frames(&mut self) {
+		self.worker.discard_frames();
+		self.wake.raise();
+	}
+}
+
+impl<P: Port> Run for Remote<P> {
+	fn status(&self) -> Status {
+		Self::status(self)
+	}
+
+	fn set_goal(&mut self, goal: Goal) {
+		Self::set_goal(self, goal);
+	}
+
+	fn with_traces(&self, f: &mut dyn FnMut(&[ProbeTrace])) {
+		Self::with_traces(self, f);
+	}
+
+	fn take_fit(&mut self) -> Option<FitFrame> {
+		Self::take_fit(self)
+	}
+
+	fn discard_frames(&mut self) {
+		Self::discard_frames(self);
+	}
+
+	fn pump(&mut self) {
+		Self::pump(self);
+	}
+}
+
 /// A worker whose engines run on `context`'s device.
-pub(crate) fn worker(context: Arc<GpuContext>) -> RunWorker {
+fn worker(context: Arc<GpuContext>) -> RunWorker {
 	let factory: PumpedFactory = Box::new(move |scene, options| {
 		let gpu = Some(context.clone());
 		Box::pin(async move { build_on(scene, options, gpu).await.engine })
@@ -56,16 +148,16 @@ pub(crate) fn worker(context: Arc<GpuContext>) -> RunWorker {
 /// The run's work between two turns of the page's event loop.
 const SLICE: std::time::Duration = std::time::Duration::from_millis(8);
 
-/// Pumps `worker` on the page as classic's run worker pumped it (decision 0024, `wavedude-run-worker` of `master`):
-/// with work left a message to itself turns the event loop and goes on; while the run waits, what it waits for or a
-/// raise of the returned [`Wake`] (a new goal) starts it again; meanwhile, while `gpu` owes completions, empty submits
-/// kick its queue (decision 0026).
-pub(crate) fn run(worker: Rc<RunWorker>, gpu: Arc<GpuContext>) -> Arc<Wake> {
+/// Pumps `worker` on the page as the run worker pumps its own (decision 0035): with work left a message to itself turns
+/// the event loop and goes on; while the run waits, what it waits for or a raise of the returned [`Wake`] (a new goal)
+/// starts it again; meanwhile, while `gpu` owes completions, empty submits kick its queue (decision 0026). The pump
+/// ends once it holds the last reference to `worker`.
+fn run(worker: Rc<RunWorker>, gpu: Arc<GpuContext>) -> Arc<Wake> {
 	let wake = Arc::new(Wake::default());
 	let (pumped, again) = (wake.clone(), Again::new(wake.clone()));
 	wasm_bindgen_futures::spawn_local(async move {
 		let waker = Waker::from(pumped.clone());
-		loop {
+		while Rc::strong_count(&worker) > 1 {
 			let left = worker.pump(SLICE, &waker);
 			if left == Pump::Work {
 				again.post();
@@ -108,14 +200,14 @@ async fn first(wait: impl Future<Output = ()>, beside: impl Future<Output = ()>)
 
 /// What starts the pump again: a goal, the run going on, or what it waits for being ready.
 #[derive(Default)]
-pub(crate) struct Wake {
+struct Wake {
 	raised: AtomicBool,
 	/// The pump's task while it waits.
 	waiting: Mutex<Option<Waker>>,
 }
 
 impl Wake {
-	pub(crate) fn raise(&self) {
+	fn raise(&self) {
 		self.raised.store(true, Ordering::Release);
 		if let Some(waiting) = self.waiting.lock().unwrap_or_else(PoisonError::into_inner).take() {
 			waiting.wake();

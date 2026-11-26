@@ -6476,6 +6476,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "waveduderust_remote"
+version = "0.4.2"
+dependencies = [
+ "js-sys",
+ "postcard",
+ "serde",
+ "thiserror 2.0.21",
+ "tracing",
+ "waveduderust",
+ "web-sys",
+ "web-time",
+]
+
+[[package]]
 name = "waveduderust_slint"
 version = "0.4.2"
 dependencies = [
@@ -6497,10 +6511,25 @@ dependencies = [
  "wasm-bindgen-futures",
  "waveduderust",
  "waveduderust_platform",
+ "waveduderust_remote",
  "web-sys",
  "web-time",
  "webbrowser",
  "winresource",
+]
+
+[[package]]
+name = "waveduderust_workers"
+version = "0.4.2"
+dependencies = [
+ "js-sys",
+ "tracing-subscriber",
+ "tracing-web",
+ "wasm-bindgen-futures",
+ "waveduderust",
+ "waveduderust_remote",
+ "web-sys",
+ "web-time",
 ]
 
 [[package]]

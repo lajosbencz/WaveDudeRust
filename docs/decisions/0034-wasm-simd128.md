@@ -1,7 +1,8 @@
 # 0034: The run worker ships a 128-bit SIMD build beside the scalar one
 
 Status: accepted, 2026-11-25, for the classic frontend (numbered 0032 on master). Not applied on the Slint app
-(decision 0032): it has no run worker, and the browser runs no CPU engine until the WebGL2 fallback (parity V-43).
+(decision 0032) yet: its run worker runs the CPU engine ([0035](0035-browser-run-on-the-page-gpu.md)) in the scalar
+build alone.
 
 ## Context
 

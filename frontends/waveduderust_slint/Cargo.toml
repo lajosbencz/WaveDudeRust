@@ -23,7 +23,7 @@ slint = { version = "1.19", default-features = false, features = ["std", "compat
 sys-locale = "0.3"
 webbrowser = "1"
 tracing.workspace = true
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "ansi", "registry"] }
+tracing-subscriber = { workspace = true, features = ["fmt", "std", "ansi", "registry"] }
 waveduderust = { path = "../../crates/waveduderust", default-features = false, features = ["gpu", "run", "unstable-engine", "unstable-reflect", "unstable-run", "unstable-scene"] }
 web-time.workspace = true
 rfd = "0.18"
@@ -41,13 +41,15 @@ notify = "8"
 pollster.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+# the queue kicks' gaps
 gloo-timers = { version = "0.4", features = ["futures"] }
-js-sys = "0.3"
-tracing-web = "0.1"
+js-sys.workspace = true
+tracing-web.workspace = true
 # the browser's language for System
 sys-locale = { version = "0.3", features = ["js"] }
 wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
+wasm-bindgen-futures.workspace = true
+waveduderust_remote = { path = "../../crates/waveduderust_remote" }
 web-sys = { workspace = true, features = ["BeforeUnloadEvent", "Blob", "BlobPropertyBag", "Document", "Event", "EventTarget", "Element", "Clipboard", "HtmlAnchorElement", "MessageChannel", "MessageEvent", "MessagePort", "Navigator", "Url", "Window", "console"] }
 
 [package.metadata.packager]

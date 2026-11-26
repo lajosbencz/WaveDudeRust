@@ -575,6 +575,22 @@ writes in flight before, 8 after, so the frames held past the memory budget drop
 | Lighthouse run, 4 runs each | 1.3 to 1.6 s | 1.2 to 1.4 s |
 | 1920x1080 run at full quality, 4 runs each | 9.5 to 10.8 s | 10.7 to 11.1 s |
 
+The Slint app, 2026-11-26, Chromium 1255 headed on Xvfb with native Vulkan, RTX 5070 Ti; each build by
+`tools/build-web.sh` into its own folder served by `python3 -m http.server`, a fresh page per pass. `lens.wdproj` at
+1200 steps (600 frames, 1920x1080 grid, the welcome page's High preview) opened with Ctrl+O and run with F5; the run is
+the app's `Run Completed` line, the main-thread time CDP's `TaskDuration` over the run, the gap the longest between two
+`requestAnimationFrame` callbacks. Page pump: c9b1b5c, the GPU engine pumped on the page. Worker: the GPU engine in the
+run worker, its frames posted to the page's mirror. After: decision 0035, the GPU engine pumped on the page again and
+the run worker for the CPU engine, measured with Use the GPU on and off (set in `wavedude/settings.json` of the local
+storage before a reload). 3 passes each.
+
+| | Run | Main thread during the run | Longest gap |
+|---|---|---|---|
+| Page pump (c9b1b5c) | 0.6 s | 0.37 to 0.41 s | 17 to 33 ms |
+| Worker, GPU engine | 0.8 s | 0.57 to 0.60 s | 17 ms |
+| After, Use the GPU on (page pump) | 0.6 to 0.7 s | 0.40 to 0.41 s | 17 to 67 ms |
+| After, Use the GPU off (worker, CPU engine) | 12.1 to 12.2 s | 3.06 to 3.12 s | 17 ms |
+
 ## The browser's GPU latency
 
 2026-11-14, Chrome 158 and Firefox 159 (Playwright, WebGPU, Firefox with `dom.webgpu.enabled` and

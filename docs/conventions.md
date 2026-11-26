@@ -54,14 +54,19 @@ The crates are listed in [`WORKSPACE.md`](../WORKSPACE.md) ([decision 0032](deci
   `store`, the program's folders (`AppDirs`), `codec` (the OpenH264 download), `user_schemes`, `export` (a project's
   full-quality run feeding the export job, native only), `machine` (memory and threads; from the navigator in the
   browser). Depends on core.
+- `waveduderust_remote`: the live run in the browser's run worker (decision 0024): the protocol, the worker's `Host`
+  and the page's `Remote`, whose mirror store receives the worker's frames, over `postMessage` ports in the browser and
+  a `Loopback` pair in the tests. Depends on core.
+- `waveduderust_workers`: the browser's workers, binaries only: `wavedude-run-worker`, the live run's CPU engine in a
+  module worker (decision 0035). Depends on core and remote.
 - `waveduderust_cli`: binary only (no `lib.rs`); core and platform. The global `--config-dir <DIR>` puts the app's
   folders under `DIR` (`AppDirs::under`); its tests pass an empty one, so they never read the user's.
 - `waveduderust_slint` (program `waveduderust`): the window, natively and in the browser
   ([`tools/build-web.sh`](../tools/build-web.sh)). `ui/*.slint` declares the window, one file per pane, dialog or
   widget; `src/*.rs` binds callbacks, properties and models, one module per concern (`document`, `live`, `playback`,
   `tree`, `form`, `messages`, `settings`, `export`, `files`, `examples`, `gpu`; `web` in the browser). One wgpu device
-  serves the engine and the window ([`src/gpu.rs`](../frontends/waveduderust_slint/src/gpu.rs)). Depends on core and
-  platform.
+  serves the engine and the window ([`src/gpu.rs`](../frontends/waveduderust_slint/src/gpu.rs)); in the browser the
+  CPU engine runs in the run worker ([decision 0035](decisions/0035-browser-run-on-the-page-gpu.md)). Depends on core, platform and, in the browser, remote.
 
 ## Where new things go
 
