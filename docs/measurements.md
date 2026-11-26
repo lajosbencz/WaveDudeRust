@@ -271,6 +271,44 @@ engines stay equal bit for bit. Branch over master, total time, two runs:
 
 On 8 threads single blocks vary by more than the difference; the 1.069 is one such run, its median block 0.971.
 
+## The CPU engine's loops vectorised in wasm
+
+2026-11-26. Which of the CPU step's row loops the wasm32 build with simd128 vectorises, read from the run worker
+the web build ships (the SIMD one, [`tools/build-web.sh`](../tools/build-web.sh)) built again with line tables:
+
+```sh
+CARGO_PROFILE_RELEASE_DEBUG=line-tables-only RUSTFLAGS="--cfg=web_sys_unstable_apis -C target-feature=+simd128" \
+  cargo build --release --locked -p waveduderust_workers --bin wavedude-run-worker --target wasm32-unknown-unknown \
+  --target-dir <dir>
+llvm-dwarfdump --debug-line <wasm> > lines.txt; llvm-objdump -d --no-show-raw-insn <wasm> > code.txt
+```
+
+Each `f32x4` and scalar `f32` add, sub and mul of `code.txt` goes to the source line of its address in `lines.txt`
+(DWARF addresses in wasm count from the code section's payload, `wasm-objdump -h`; `llvm-objdump -l` mis-offsets
+them). The line tables leave the code alike: 512 `f32x4` and 8535 or 8536 scalar `f32` instructions with and without.
+LLVM's `-C remark=loop-vectorize` reports nothing on this toolchain, not even for a loop it vectorises. A loop with
+`f32x4` arithmetic has a vector body; its scalar share is the remainder of each row.
+
+| Loop | Before | After |
+|---|---|---|
+| 9-point leapfrog, cells without a cut (`cpu.rs`) | vector | vector |
+| DRP span, both passes of the modified equation (`drp_span`) | vector | vector |
+| intensity stages (`accumulate`) | vector | vector |
+| CPML psi of y, `delta_y` (`psi_y_row`, `delta_y_row`) | vector | vector |
+| CPML z~ (`z_span`) | scalar | vector, the up to 3 cells beyond the grid scalar |
+| CPML psi of x (`psi_x_span`) | scalar | vector |
+| CPML correction of the x strips (`correct_cells`) | scalar | vector |
+| CPML correction between the x strips, `delta_y + chi D2x delta_y` (`plain_cells`) | scalar | vector, the grid's two edge cells scalar |
+
+`z_span` read `d` behind a test per cell, `psi_x_span` and `correct_cells` read their taps through an index window and
+their coefficients as `[f32; 4]` per cell, and the correction's middle called a closure with three tests per cell.
+They now run on shifted row slices and coefficient columns, the tests outside the loops; each cell is the same
+expression in the same order. The cells with a cut keep their per-cell loops. The A/B harness of
+[The CPU engine's damage rectangle](#the-cpu-engines-damage-rectangle), master against the branch, 1 thread
+(`taskset -c 3`), 800x600, rim 16, branch over master: 9-point box 0.872, open 0.887; 4th order box 0.877, open 0.917,
+the fields equal bit for bit; at 300x200 rim 16 and 640x360 rim 32 too. The probe series of Example01, 03, 08, 13 and
+21 and of `01-single-fiber`, 300 steps, are byte for byte master's.
+
 ## The CPU engine in wasm, with and without simd128
 
 2026-11-25, the workstation above. A harness outside the repository runs the CPU engine alone, built for wasm32 at
