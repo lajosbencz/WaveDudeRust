@@ -1079,7 +1079,8 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	state.live.auto_rerun = s.auto_rerun;
 	state.live.warn = s.warn_when_ram_insufficient;
 	state.live.set_dither(s.preview_dither_bits);
-	if state.live.set_gpu(s.use_gpu) {
+	// an export reads the run's frames: the run swaps once it ended
+	if state.exporting.is_none() && state.live.set_gpu(s.use_gpu) {
 		frames_dropped(&mut state.playback);
 	}
 	state.live.ram_cache = s.ram_cache();
@@ -1159,6 +1160,9 @@ fn release_export(state: &mut State, app: &AppWindow) {
 	app.set_export_progress(ui::ExportProgress::default());
 	if state.live.end_export(&state.doc.project, &state.doc.view) == live::Change::Frames {
 		state.playback.pause();
+	}
+	if state.live.set_gpu(state.settings.use_gpu) {
+		frames_dropped(&mut state.playback);
 	}
 }
 

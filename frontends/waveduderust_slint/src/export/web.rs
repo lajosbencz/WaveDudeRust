@@ -249,6 +249,8 @@ pub(crate) struct Exporting {
 
 enum State {
 	Waiting,
+	/// Has its frames; waits for the browser to say which H.264 profiles it encodes.
+	Probing(Box<Inputs>),
 	Running(Runner),
 	/// Failed before its first frame.
 	Failed(String),
@@ -289,6 +291,14 @@ impl Exporting {
 				self.state = State::Waiting;
 				Ok(ExportProgress { active: true, waiting: true, ..ExportProgress::default() })
 			}
+			State::Probing(inputs) if inputs.probing() => {
+				self.state = State::Probing(inputs);
+				Ok(ExportProgress { active: true, waiting: true, ..ExportProgress::default() })
+			}
+			State::Probing(inputs) => {
+				self.state = inputs.start(self.cancel.clone());
+				self.poll()
+			}
 			State::Running(mut runner) => {
 				let shown = match runner.poll() {
 					Status::Working(done, total) => progress(done, total),
@@ -322,11 +332,46 @@ pub(crate) fn start(
 ) -> Exporting {
 	KEPT.take();
 	let cancel = Arc::new(AtomicBool::new(false));
-	let state = match Runner::start(plan, &frames, project, view, position, settings, schemes, cancel.clone()) {
-		Ok(runner) => State::Running(runner),
-		Err(e) => State::Failed(format!("the export failed: {e}")),
+	let inputs = Inputs {
+		plan: plan.clone(),
+		frames,
+		project: project.clone(),
+		view: view.clone(),
+		position,
+		settings: settings.clone(),
+		schemes: schemes.clone(),
 	};
+	let state = if inputs.probing() { State::Probing(Box::new(inputs)) } else { inputs.start(cancel.clone()) };
 	Exporting { cancel, waiting: None, state }
+}
+
+/// What an export starts from.
+struct Inputs {
+	plan: Plan,
+	frames: ExportFrames,
+	project: Project,
+	view: View,
+	position: u32,
+	settings: Settings,
+	schemes: SchemeStore,
+}
+
+impl Inputs {
+	/// An MP4 export whose H.264 profiles the browser is still asked for (Export last skips the dialog that waits).
+	fn probing(&self) -> bool {
+		self.plan.format == ExportFormat::Mp4 && {
+			let (width, height, fps) = video_format(&self.project, &self.view);
+			matches!(support(width, height, fps), Support::Probing)
+		}
+	}
+
+	fn start(self, cancel: Arc<AtomicBool>) -> State {
+		let Self { plan, frames, project, view, position, settings, schemes } = self;
+		match Runner::start(&plan, &frames, &project, &view, position, &settings, &schemes, cancel) {
+			Ok(runner) => State::Running(runner),
+			Err(e) => State::Failed(format!("the export failed: {e}")),
+		}
+	}
 }
 
 /// Where a running export is.

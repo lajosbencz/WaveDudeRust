@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 60 | 1 | 0 | 22 | 0 |
 | T | Project tree | 58 | 4 | 0 | 39 | 0 |
 | P | Properties | 311 | 7 | 0 | 7 | 0 |
-| V | Preview | 96 | 6 | 1 | 8 | 1 |
-| L | Timeline, transport, status | 69 | 9 | 1 | 9 | 2 |
+| V | Preview | 96 | 7 | 0 | 8 | 1 |
+| L | Timeline, transport, status | 70 | 9 | 0 | 9 | 2 |
 | R | Live editing and runs | 42 | 15 | 0 | 2 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 827 | 87 | 2 | 174 | 5 |
+| | All | 828 | 88 | 0 | 174 | 5 |
 
 ## Cross-cutting
 
