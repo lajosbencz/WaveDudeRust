@@ -21,3 +21,11 @@ Upstream bugs and gaps, worked around or accepted here; each goes once the fix i
   platform's keys, titles passed unchanged, so Windows reads a `&` as an access key and the drawn bar would show it.
   `ui/app.slint` (`menu-text`) gives Windows Next's access keys and the other platforms plain titles. Accepted, not
   worked around. To report to slint-ui/slint: access keys and keyboard entry for the drawn `MenuBar`.
+
+- Slint 1.19's FemtoVG renderer rasterizes glyphs with swash, which has no autohinter: a round glyph's overshoot
+  below the baseline (Selawik's `d`, `o`, `t`, 0.13 to 0.23 px at 12 px) renders as an extra faint row, so those
+  glyphs look one pixel low. Glyph placement is already on whole pixels; an autohinted font (`ttfautohint`) and
+  snapping the text transform change nothing visible. Slint's Vello renderer (`renderer-vello`) fixes it once
+  `i-slint-renderer-anyrender` passes `hint: true` to `draw_glyphs` (it passes `false`), but needs WebGPU on the
+  web. Accepted, not worked around. To report to slint-ui/slint: hinted glyphs for the Vello renderer; to
+  femtovg: an autohinter (e.g. skrifa's) for its glyph atlas.
