@@ -486,8 +486,12 @@ impl Live {
 			&& matches!(status.state, WorkState::Idle | WorkState::Fitting)
 	}
 
-	/// Every frame, after the memory warning when they exceed the RAM cache.
+	/// Every frame, after the memory warning when they exceed the RAM cache; none without an enabled source, as F5
+	/// (only the position's frame is made).
 	fn want_all(&mut self, then: Then) -> bool {
+		if !self.request.as_ref().is_some_and(|r| r.project.has_enabled_source()) {
+			return true;
+		}
 		if let Some(ask) = self.ask(then) {
 			tracing::debug!(budget = ask.budget, "memory warning asks before the run");
 			// the first asker's answer goes for all

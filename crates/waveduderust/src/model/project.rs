@@ -47,6 +47,11 @@ impl Default for Project {
 }
 
 impl Project {
+	/// Whether a run has a wave to make: an enabled source.
+	pub fn has_enabled_source(&self) -> bool {
+		self.sources.iter().any(|s| s.enabled)
+	}
+
 	/// A new project with a random seed in [1, `i32::MAX`).
 	pub fn new_random_seed() -> Self {
 		use web_time::{SystemTime, UNIX_EPOCH};
@@ -62,5 +67,21 @@ impl Project {
 	/// Canvas size the scene simulates: the image's size for an image scene, else the settings'.
 	pub fn canvas_size(&self) -> (u32, u32) {
 		self.scene.canvas_size()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::model::Source;
+
+	#[test]
+	fn only_an_enabled_source_makes_a_project_runnable() {
+		let mut project = Project::default();
+		assert!(!project.has_enabled_source(), "no source");
+		project.sources.push(Source { enabled: false, ..Source::default() });
+		assert!(!project.has_enabled_source(), "a disabled source");
+		project.sources.push(Source { enabled: true, ..Source::default() });
+		assert!(project.has_enabled_source());
 	}
 }

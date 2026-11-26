@@ -383,7 +383,7 @@ impl State {
 	}
 
 	fn can_run(&self, exporting: bool) -> bool {
-		!self.live.active() && !exporting && self.doc.project.sources.iter().any(|s| s.enabled)
+		!self.live.active() && !exporting && self.doc.project.has_enabled_source()
 	}
 
 	/// Whether `node` is an active probe, which a run records.
