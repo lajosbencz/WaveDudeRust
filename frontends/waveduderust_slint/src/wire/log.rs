@@ -9,8 +9,9 @@ use crate::messages::Messages;
 use crate::state::State;
 use crate::ui::AppWindow;
 
-/// The Messages pane: search, levels, selection, copy and clear.
+/// The Messages pane: its rows, search, levels, selection, copy and clear.
 pub(crate) fn wire_log(state: &Rc<RefCell<State>>, app: &AppWindow) {
+	app.set_log_rows(state.borrow().messages.rows());
 	let on_log = |f: fn(&mut Messages, slint::SharedString)| {
 		let h = Handle::new(state, app);
 		move |arg: slint::SharedString| {
