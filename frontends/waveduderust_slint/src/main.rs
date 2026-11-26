@@ -346,16 +346,17 @@ impl State {
 		}
 	}
 
-	/// Whether the current scheme is among the user's: -1 for another row or no store to keep them, 0 not, 1 it is.
-	fn mine(&self) -> i32 {
+	/// Whether the current scheme is among the user's.
+	fn mine(&self) -> ui::Mine {
 		match (self.selection.current(), &self.store) {
-			(Node::Scheme(i), Some(_)) => self
-				.doc
-				.project
-				.color_schemes
-				.get(i)
-				.map_or(-1, |s| i32::from(waveduderust_platform::user_schemes::has(&self.schemes, &s.name))),
-			_ => -1,
+			(Node::Scheme(i), Some(_)) => self.doc.project.color_schemes.get(i).map_or(ui::Mine::Hidden, |s| {
+				if waveduderust_platform::user_schemes::has(&self.schemes, &s.name) {
+					ui::Mine::Yes
+				} else {
+					ui::Mine::No
+				}
+			}),
+			_ => ui::Mine::Hidden,
 		}
 	}
 

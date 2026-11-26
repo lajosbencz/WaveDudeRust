@@ -3,7 +3,7 @@ import { Theme } from "theme.slint";
 import { Icon, IconButton } from "icons.slint";
 import { MenuIcons } from "menu-icons.slint";
 import { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace } from "commands.slint";
-import { Form } from "form.slint";
+import { Form, Mine } from "form.slint";
 
 // An add menu's entry.
 struct AddKind {
@@ -204,8 +204,8 @@ export component ProjectTree inherits Rectangle {
     in property <bool> can-select-all;
     // the current row can be switched on and off and join a group
     in property <bool> can-toggle;
-    // the current scheme among the user's: -1 not a scheme row, 0 not, 1 it is
-    in property <int> mine: -1;
+    // the current scheme among the user's
+    in property <Mine> mine;
     // a probe row: its menu offers the CSV export, enabled by this
     in property <bool> probe-row;
     in property <bool> can-export-csv;
@@ -367,9 +367,9 @@ export component ProjectTree inherits Rectangle {
                             enabled: root.can-export-csv;
                             activated => { root.run(Command.export-probe-csv); }
                         }
-                        if root.mine >= 0: MenuSeparator { }
-                        if root.mine >= 0: MenuItem {
-                            title: root.mine == 1 ? @tr("Remove from my schemes") : @tr("Add to my schemes");
+                        if root.mine != Mine.hidden: MenuSeparator { }
+                        if root.mine != Mine.hidden: MenuItem {
+                            title: root.mine == Mine.yes ? @tr("Remove from my schemes") : @tr("Add to my schemes");
                             activated => { root.run(Command.toggle-mine); }
                         }
                     }

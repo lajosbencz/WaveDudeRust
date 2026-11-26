@@ -10,8 +10,8 @@ import { MenuIcons } from "menu-icons.slint";
 import { EditKeys } from "edit-keys.slint";
 import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview, DockSide } from "@slint-dock/dock.slint";
 import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
-import { Form, NumberParse } from "form.slint";
-export { Form, NumberParse }
+import { Form, NumberParse, Mine } from "form.slint";
+export { Form, NumberParse, Mine }
 export { Words, ExportFileFormat } from "words.slint";
 import { Properties } from "properties.slint";
 import { Preview } from "preview.slint";
@@ -53,8 +53,8 @@ export struct Commands {
     can-move-down: bool,
     // an object or a settings row is selected
     can-copy: bool,
-    // the current scheme among the user's: -1 no scheme row (or no store), 0 not, 1 it is
-    mine: int,
+    // the current scheme among the user's
+    mine: Mine,
     // the current probe's recording can go to a CSV file
     can-export-csv: bool,
     can-run: bool,

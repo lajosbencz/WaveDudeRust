@@ -5,6 +5,9 @@ import { NumberBox, NumberSpec } from "number-box.slint";
 import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, FiberData, FiberNodeData, SchemeData, StopData, SchemeChoice, PointData, Layer } from "data.slint";
 import { EditKeys } from "edit-keys.slint";
 
+// Whether the current scheme is among the user's; hidden: not a scheme, or no store to keep them.
+export enum Mine { hidden, no, yes }
+
 // The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
 export global Form {
     // the first item from `from` on, a `step` apart, that `enabled` lets pick among `count`; -1 when none
@@ -60,8 +63,8 @@ export global Form {
     callback load-scheme-file(layer: Layer);
     // removes the user's scheme the layer names
     callback remove-my-scheme(layer: Layer);
-    // the scheme shown among the user's: -1 no store to keep them, 0 not, 1 it is
-    in property <int> mine: -1;
+    // the scheme shown among the user's
+    in property <Mine> mine;
     // keeps the scheme shown among the user's, or removes the user's of its name
     callback toggle-mine();
     callback base-on(index: int);
