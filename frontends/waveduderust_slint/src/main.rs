@@ -195,6 +195,14 @@ impl State {
 		}
 	}
 
+	/// `edit` on the export dialog's data with the dialog open; none open, nothing.
+	fn edit_export(&self, app: &AppWindow, edit: impl FnOnce(&export::Dialog, &mut ui::ExportData)) {
+		let Some(dialog) = &self.export_dialog else { return };
+		let mut data = app.get_export_data();
+		edit(dialog, &mut data);
+		app.set_export_data(data);
+	}
+
 	/// Saves the settings; a failure is logged.
 	fn save_settings(&self) {
 		settings::save(&self.settings, self.store.as_ref());
@@ -1960,42 +1968,24 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	});
 	let h = Handle::new(&state, &app);
 	app.on_memory_warning_answer(move |run, mute| h.show(|s, app| answer_warning(s, app, run, mute)));
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_export_format(move |index| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = st.borrow();
-		let Some(dialog) = &s.export_dialog else { return };
-		let mut data = app.get_export_data();
-		dialog.format(&mut data, index);
-		app.set_export_data(data);
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
+	app.on_export_format(move |index| h.read(|s, app| s.edit_export(app, |d, data| d.format(data, index))));
+	let h = Handle::new(&state, &app);
 	app.on_export_browse(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let s = st.borrow();
-		let Some(dialog) = &s.export_dialog else { return };
-		let mut data = app.get_export_data();
-		dialog.browse(&mut data, &app.global::<ui::Words<'_>>());
-		app.set_export_data(data);
+		h.read(|s, app| s.edit_export(app, |d, data| d.browse(data, &app.global::<ui::Words<'_>>())));
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_export_path_edited(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let s = st.borrow();
-		let Some(dialog) = &s.export_dialog else { return };
-		let mut data = app.get_export_data();
-		data.error = Default::default();
-		dialog.follow(&mut data);
-		app.set_export_data(data);
+		h.read(|s, app| {
+			s.edit_export(app, |d, data| {
+				data.error = Default::default();
+				d.follow(data);
+			});
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_export_browse_archive(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let s = st.borrow();
-		let Some(dialog) = &s.export_dialog else { return };
-		let mut data = app.get_export_data();
-		dialog.browse_archive(&mut data, &app.global::<ui::Words<'_>>());
-		app.set_export_data(data);
+		h.read(|s, app| s.edit_export(app, |d, data| d.browse_archive(data, &app.global::<ui::Words<'_>>())));
 	});
 	let weak = app.as_weak();
 	app.on_export_delete_codec(move || {
