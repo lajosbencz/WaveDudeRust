@@ -490,6 +490,7 @@ impl Live {
 	/// (only the position's frame is made).
 	fn want_all(&mut self, then: Then) -> bool {
 		if !self.request.as_ref().is_some_and(|r| r.project.has_enabled_source()) {
+			self.publish();
 			return true;
 		}
 		if let Some(ask) = self.ask(then) {
@@ -675,10 +676,12 @@ impl Live {
 	pub(crate) fn seek(&mut self, position: u32) {
 		if self.position != position {
 			self.position = position;
-			// a pending fit follows the position; a frame not stored yet is made (docs/ui/50, Position rules)
-			let missing = !self.worker.status().store.is_some_and(|s| s.has(self.stored()));
-			if self.active || self.fit.is_some() || missing {
+			// a pending fit follows the position
+			if self.active || self.fit.is_some() {
 				self.publish();
+			} else if !self.worker.status().store.is_some_and(|s| s.has(self.stored())) {
+				// a frame not made yet: the run makes it first, then the rest (docs/ui/50, Position rules)
+				self.want_all(Then::Rerun);
 			}
 		}
 	}

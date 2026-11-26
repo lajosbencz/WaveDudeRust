@@ -1137,7 +1137,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-72 | Position rules: New/open/example/close -> frame 0, playback stops | MainWindow.Project.cs | 50 Position rules | done | state.opened -> playback.reset |
 | L-73 | Run stopped: preview moves to newest frame if following; Live off | MainWindow.Live.cs | 50 Position rules | partial | Live turned off; no jump to newest |
 | L-74 | Run discarded: position kept | MainWindow.Live.cs | 50 Position rules | n/a | discard missing (R-24) |
-| L-75 | Frame missing for position: live run makes it first, last picture stays | MainWindow.Live.cs | 50 Position rules | done | live.seek publishes the goal while a run is active or a fit pending, and when the position frame is not stored yet |
+| L-75 | Frame missing for position: live run makes it first, last picture stays | MainWindow.Live.cs | 50 Position rules | done | live.seek: a position whose frame is not stored starts the run as an automatic re-run does (the position first, then every frame); an empty project makes the frame alone |
 | L-76 | Status bar right: "<State>: <done> / <total> steps, <engine>", empty without run | MainWindow.Live.cs | 50 Run states | done | live.rs poll |
 | L-77 | State words Running/Paused/Completed/Stopped/Failed | MainWindow.Live.cs | 50 Run states | done | |
 | L-78 | Engine text "CPU (n threads)" / "GPU: adapter" / browser "engine starting", "no engine" | MainWindow.Live.cs | 50 Run states; 60 Edit classes | partial | only "GPU: <adapter>" |
