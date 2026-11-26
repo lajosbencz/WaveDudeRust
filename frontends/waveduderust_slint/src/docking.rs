@@ -170,7 +170,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 	app.on_dock_splitter_moved(move |index, x, y| {
 		let Some(app) = weak.upgrade() else { return };
 		let mut d = dk.borrow_mut();
-		let Some(bar) = usize::try_from(index).ok().and_then(|i| d.layout.splitters.get(i).copied()) else { return };
+		let Some(bar) = models::index_from_ui(index).and_then(|i| d.layout.splitters.get(i).copied()) else { return };
 		let area = d.area;
 		if d.dock.resize(&bar, Point::new(x, y), area) {
 			d.refresh(&app);

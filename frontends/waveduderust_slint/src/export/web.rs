@@ -27,6 +27,7 @@ use super::{Kind, Outcome, Written, outputs_line, profile_index, with_format_ext
 use crate::document::Document;
 use crate::files::Download;
 use crate::live::{ExportFrames, Needs};
+use crate::models;
 use crate::ui::{ExportData, ExportFileFormat, ExportProgress, ExportReason, Words};
 
 /// How long a step writes frames before the page draws again.
@@ -237,7 +238,7 @@ impl Exports {
 	}
 
 	fn format_of(&self, data: &ExportData) -> ExportFormat {
-		usize::try_from(data.format).ok().and_then(|i| self.formats.get(i)).map_or(ExportFormat::Png, |(f, _)| *f)
+		models::index_from_ui(data.format).and_then(|i| self.formats.get(i)).map_or(ExportFormat::Png, |(f, _)| *f)
 	}
 
 	/// The format's flags, the outputs the name gives and why the export cannot start.
@@ -271,8 +272,7 @@ impl Exports {
 		};
 		let enabled: Vec<bool> = self.formats.iter().map(|(f, _)| *f != ExportFormat::Mp4 || mp4).collect();
 		// a remembered format the browser cannot write gives way to the first it can
-		let other = usize::try_from(data.format)
-			.ok()
+		let other = models::index_from_ui(data.format)
 			.filter(|&i| !enabled.get(i).copied().unwrap_or(true))
 			.and_then(|_| enabled.iter().position(|&e| e));
 		data.format_enabled = slint::ModelRc::new(slint::VecModel::from(enabled));
@@ -309,7 +309,7 @@ impl Exports {
 		}
 		if data.mp4 {
 			settings.h264_profile =
-				Profile::ALL.get(usize::try_from(data.profile).unwrap_or(0)).copied().unwrap_or_default();
+				Profile::ALL.get(models::index_from_ui(data.profile).unwrap_or(0)).copied().unwrap_or_default();
 		}
 		let outputs = layer_outputs(&out, self.kind.layers());
 		let delivery = match self.kind {

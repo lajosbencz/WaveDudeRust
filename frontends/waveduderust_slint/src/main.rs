@@ -222,7 +222,7 @@ impl State {
 		self.nodes = nodes;
 		models::update(&self.tree_rows, rows);
 		let current = self.nodes.iter().position(|&n| n == self.selection.current());
-		app.set_tree_current(current.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1));
+		app.set_tree_current(models::index_to_ui(current));
 		app.set_file_name(self.doc.name().unwrap_or_default().into());
 		app.set_file_path(self.doc.path.as_deref().map_or_default(|p| p.display().to_string()).into());
 		app.set_dirty(self.doc.dirty());
@@ -424,7 +424,7 @@ impl State {
 			let (b, grip) = self.overlays.focused_box(layer, &self.doc.project, self.graphs.placed(layer))?;
 			Some((layer, b.probe, grip))
 		});
-		canvas.set_focus_box(focus.map_or(-1, |(_, i, _)| i32::try_from(i).unwrap_or(-1)));
+		canvas.set_focus_box(models::index_to_ui(focus.map(|(_, i, _)| i)));
 		if let Some((layer, _, grip)) = focus {
 			canvas.set_focus_layer(layer);
 			canvas.set_focus_grip(grip);
@@ -515,7 +515,7 @@ impl State {
 	}
 
 	fn node(&self, row: i32) -> Option<Node> {
-		usize::try_from(row).ok().and_then(|r| self.nodes.get(r).copied())
+		models::index_from_ui(row).and_then(|r| self.nodes.get(r).copied())
 	}
 }
 
@@ -1676,7 +1676,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			});
 		}
 	};
-	let index = |k: i32| usize::try_from(k).unwrap_or(usize::MAX);
+	let index = |k: i32| models::index_from_ui(k).unwrap_or(usize::MAX);
 	let rows = app.global::<ui::Form<'_>>();
 	rows.on_add_row({
 		let edit = edit_rows.clone();
@@ -1713,25 +1713,25 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	let bar = app.global::<ui::Form<'_>>();
 	bar.on_add_stop_at({
 		let edit = bar_edit.clone();
-		move |at, gesture| edit(gesture, &|s| i32::try_from(s.add_stop_at(form::thousandths(at))).unwrap_or(-1))
+		move |at, gesture| edit(gesture, &|s| models::index_to_ui(Some(s.add_stop_at(form::thousandths(at)))))
 	});
 	bar.on_move_stop({
 		let edit = bar_edit.clone();
 		move |k, at, gesture| {
 			edit(gesture, &|s| {
-				let moved = usize::try_from(k).ok().and_then(|k| s.move_stop(k, form::thousandths(at)));
-				moved.map_or(k, |k| i32::try_from(k).unwrap_or(-1))
+				let moved = models::index_from_ui(k).and_then(|k| s.move_stop(k, form::thousandths(at)));
+				moved.map_or(k, |k| models::index_to_ui(Some(k)))
 			})
 		}
 	});
 	bar.on_remove_stop({
 		let edit = bar_edit.clone();
-		move |k, gesture| edit(gesture, &|s| usize::try_from(k).map_or(k, |k| form::remove_stop(s, k)))
+		move |k, gesture| edit(gesture, &|s| models::index_from_ui(k).map_or(k, |k| form::remove_stop(s, k)))
 	});
 	bar.on_recolour_stop(move |k, colour, gesture| {
 		let colour = form::rgb(colour);
 		bar_edit(gesture, &|s| {
-			if let Some(stop) = usize::try_from(k).ok().and_then(|k| s.stops.get_mut(k)) {
+			if let Some(stop) = models::index_from_ui(k).and_then(|k| s.stops.get_mut(k)) {
 				stop.color = colour;
 			}
 			k
@@ -1853,7 +1853,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.on_open_recent(move |i| {
 		h.with(|s, app| {
 			// the path now: saving first may move it in the list
-			if let Some(path) = usize::try_from(i).ok().and_then(|i| s.settings.recent_files.get(i)).cloned() {
+			if let Some(path) = models::index_from_ui(i).and_then(|i| s.settings.recent_files.get(i)).cloned() {
 				act(s, app, Action::OpenFile(path));
 			}
 		});
@@ -1875,7 +1875,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	let h = Handle::new(&state, &app);
 	app.on_example_open(move |row| {
 		h.with(|s, app| {
-			if let Some(&i) = usize::try_from(row).ok().and_then(|r| s.example_rows.get(r)) {
+			if let Some(&i) = models::index_from_ui(row).and_then(|r| s.example_rows.get(r)) {
 				app.set_examples_shown(false);
 				act(s, app, Action::Example(i));
 			}
@@ -2419,7 +2419,7 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	canvas.on_hover(move |layer, x, y| {
 		h.read(|s, app| {
 			let canvas = app.global::<ui::Canvas<'_>>();
-			let under = s.graphs.under(layer, (x, y)).map_or(-1, |i| i32::try_from(i).unwrap_or(-1));
+			let under = models::index_to_ui(s.graphs.under(layer, (x, y)));
 			canvas.set_hover_layer(layer);
 			canvas.set_hover_box(under);
 			canvas.set_hover_tip(s.overlays.tip(&s.doc.project, layer, (x, y), s.graphs.placed(layer)));

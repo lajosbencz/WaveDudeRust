@@ -210,6 +210,7 @@ mod native {
 	use super::{Kind, Outcome, Written, outputs_line, profile_index, with_format_extension};
 	use crate::document::Document;
 	use crate::live::{ExportFrames, Needs};
+	use crate::models;
 	use crate::ui::{ExportData, ExportFileFormat, ExportProgress, Words};
 
 	/// What an export writes: the dialog's answer, repeated by Export last.
@@ -322,7 +323,7 @@ mod native {
 		}
 
 		fn format_of(&self, data: &ExportData) -> ExportFormat {
-			usize::try_from(data.format).ok().and_then(|i| self.formats.get(i)).map_or(ExportFormat::Png, |(f, _)| *f)
+			models::index_from_ui(data.format).and_then(|i| self.formats.get(i)).map_or(ExportFormat::Png, |(f, _)| *f)
 		}
 
 		/// The format's flags and the outputs the path names.
@@ -345,7 +346,8 @@ mod native {
 
 		/// The platform's save dialog for the path box.
 		pub(crate) fn browse(&self, data: &mut ExportData, words: &Words<'_>) {
-			let (format, name) = self.formats[usize::try_from(data.format).unwrap_or(0).min(self.formats.len() - 1)];
+			let (format, name) =
+				self.formats[models::index_from_ui(data.format).unwrap_or(0).min(self.formats.len() - 1)];
 			let path = PathBuf::from(data.path.as_str());
 			let mut dialog = rfd::FileDialog::new()
 				.add_filter(words.invoke_export_filter(name, matches!(self.kind, Kind::Frame(_))), format.extensions());
@@ -393,7 +395,7 @@ mod native {
 					settings.use_openh264 = Some(data.use_openh264);
 				}
 				settings.h264_profile =
-					Profile::ALL.get(usize::try_from(data.profile).unwrap_or(0)).copied().unwrap_or_default();
+					Profile::ALL.get(models::index_from_ui(data.profile).unwrap_or(0)).copied().unwrap_or_default();
 			}
 			if data.several {
 				settings.export_archive = data.archive;

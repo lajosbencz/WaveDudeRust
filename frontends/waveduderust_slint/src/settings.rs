@@ -5,6 +5,7 @@ use waveduderust::quality::PreviewTier;
 use waveduderust_platform::settings::{Settings, Theme, WEB_RAM_CACHE_SIZES};
 use waveduderust_platform::store::Store;
 
+use crate::models;
 use crate::ui::{ColorTheme, Language, Levers, NumberSpec, PreviewQuality, RamBar, Scale, SettingsData};
 
 fn scale(divisor: u32) -> Scale {
@@ -108,11 +109,11 @@ pub(crate) fn apply(d: &SettingsData, settings: &mut Settings, store: Option<&St
 	settings.preview_resolution = divisor(d.preview_resolution);
 	settings.preview_frames = divisor(d.preview_frames);
 	settings.preview_sample_bytes = if d.preview_index { 1 } else { 2 };
-	settings.preview_dither_bits = [0, 10, 12, 14, 16][usize::try_from(d.preview_dither).unwrap_or(0).min(4)];
+	settings.preview_dither_bits = [0, 10, 12, 14, 16][models::index_from_ui(d.preview_dither).unwrap_or(0).min(4)];
 	// the browser's row alone sets it
 	if !d.ram_auto.is_empty() {
 		settings.frame_memory_bytes =
-			usize::try_from(d.ram_size - 1).ok().and_then(|i| WEB_RAM_CACHE_SIZES.get(i).copied()).unwrap_or(0);
+			models::index_from_ui(d.ram_size - 1).and_then(|i| WEB_RAM_CACHE_SIZES.get(i).copied()).unwrap_or(0);
 	}
 	settings.use_gpu = d.use_gpu;
 	settings.auto_rerun = d.auto_rerun;
@@ -138,10 +139,9 @@ pub(crate) fn levers(settings: &Settings) -> Levers {
 		resolution: int(settings.preview_resolution),
 		frames: int(settings.preview_frames),
 		bits: if settings.preview_sample_bytes >= 2 { 16 } else { 8 },
-		preset: settings
-			.preset()
-			.and_then(|tier| PreviewTier::ALL.iter().position(|&t| t == tier))
-			.map_or(-1, |i| i32::try_from(i).unwrap_or(-1)),
+		preset: models::index_to_ui(
+			settings.preset().and_then(|tier| PreviewTier::ALL.iter().position(|&t| t == tier)),
+		),
 	}
 }
 

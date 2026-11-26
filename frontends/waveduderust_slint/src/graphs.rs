@@ -11,6 +11,7 @@ use waveduderust::unstable::view::epaint::text::{Fonts, TextOptions};
 use waveduderust::unstable::view::fonts;
 use waveduderust::unstable::view::graph::{self, GraphData, GraphLayout};
 
+use crate::models;
 use crate::ui;
 
 /// What the boxes show: the probe traces in the active probes' order, at a step and stored frame, and the steps
@@ -94,7 +95,7 @@ fn row(g: &GraphLayout, probe: usize, at: (f32, f32), selected: bool) -> ui::Gra
 		}
 	}
 	ui::GraphBox {
-		probe: i32::try_from(probe).unwrap_or(-1),
+		probe: models::index_to_ui(Some(probe)),
 		x: at.0,
 		y: at.1,
 		width: g.width,
@@ -168,7 +169,7 @@ impl Graphs {
 			// the selected boxes over the rest
 			boxes.sort_by_key(|(picked, ..)| *picked);
 			*placed = boxes.iter().map(|(.., p)| *p).collect();
-			crate::models::update(rows, boxes.into_iter().map(|(_, b, _)| b));
+			models::update(rows, boxes.into_iter().map(|(_, b, _)| b));
 		}
 	}
 }

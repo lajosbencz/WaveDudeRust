@@ -12,6 +12,7 @@ use waveduderust::io::schemes::SchemeStore;
 use waveduderust::unstable::render::gradient::Gradient;
 use waveduderust::unstable::scene::gate_design::{GateDesign, ports_of};
 
+use crate::models;
 use crate::tree::Node;
 use crate::ui::{self, Form, FormKind};
 
@@ -844,7 +845,7 @@ pub(crate) fn show_layer_schemes(
 	if resolved.is_some_and(|r| user.user.iter().any(|u| std::ptr::eq(u, r))) {
 		choices.push(ui::SchemeChoice { entry: ui::SchemeEntry::RemoveMine, ..Default::default() });
 	}
-	let current = current.map_or(-1, index);
+	let current = models::index_to_ui(current);
 	let model = ModelRc::new(VecModel::from(choices));
 	match layer {
 		ui::Layer::Field => {
@@ -870,10 +871,6 @@ fn positions(stops: &ModelRc<ui::StopData>) -> Vec<f64> {
 	stops.iter().map(|s| f64::from(s.at)).collect()
 }
 
-fn index(k: usize) -> i32 {
-	i32::try_from(k).unwrap_or(-1)
-}
-
 /// Form.marker-at: the stop nearest `at` within `reach`, the selected one when as near; -1 for none.
 pub(crate) fn marker_at(stops: &ModelRc<ui::StopData>, at: f32, reach: f32, selected: i32) -> i32 {
 	let distance = |s: &ui::StopData| (s.at - at).abs();
@@ -885,20 +882,20 @@ pub(crate) fn marker_at(stops: &ModelRc<ui::StopData>, at: f32, reach: f32, sele
 		}
 	}
 	let selected_wins =
-		usize::try_from(selected).ok().and_then(|k| stops.row_data(k)).is_some_and(|s| distance(&s) <= best);
-	if selected_wins { selected } else { nearest.map_or(-1, index) }
+		models::index_from_ui(selected).and_then(|k| stops.row_data(k)).is_some_and(|s| distance(&s) <= best);
+	if selected_wins { selected } else { models::index_to_ui(nearest) }
 }
 
 /// Form.stop-beside: the stop `step` places after `k` along the gradient, clamped; from -1, the first.
 pub(crate) fn stop_beside(stops: &ModelRc<ui::StopData>, k: i32, step: i32) -> i32 {
 	let order = gradient_order(&positions(stops));
 	let Some(last) = order.len().checked_sub(1) else { return -1 };
-	let place = usize::try_from(k).ok().and_then(|k| order.iter().position(|&o| o == k));
+	let place = models::index_from_ui(k).and_then(|k| order.iter().position(|&o| o == k));
 	let to = match place {
 		Some(p) => p.saturating_add_signed(step as isize).min(last),
 		None => 0,
 	};
-	index(order[to])
+	models::index_to_ui(Some(order[to]))
 }
 
 /// Removes stop `k` of `scheme`; the stop then selected: the one taking its place along the gradient, else the last.
@@ -906,10 +903,10 @@ pub(crate) fn remove_stop(scheme: &mut m::ColorScheme, k: usize) -> i32 {
 	let ats = |s: &m::ColorScheme| s.stops.iter().map(|s| s.at).collect::<Vec<_>>();
 	let place = gradient_order(&ats(scheme)).iter().position(|&o| o == k);
 	if !scheme.remove_stop(k) {
-		return index(k);
+		return models::index_to_ui(Some(k));
 	}
 	let order = gradient_order(&ats(scheme));
-	place.and_then(|p| order.get(p.min(order.len() - 1))).map_or(-1, |&o| index(o))
+	models::index_to_ui(place.and_then(|p| order.get(p.min(order.len() - 1)).copied()))
 }
 
 /// A position along the gradient set by the pointer or the keys: thousandths, as Next keeps them.
@@ -932,7 +929,7 @@ where
 {
 	let rows = rows.iter().map(Data::show);
 	match shown.as_any().downcast_ref::<VecModel<U>>() {
-		Some(model) => crate::models::update(model, rows),
+		Some(model) => models::update(model, rows),
 		None => set(ModelRc::new(VecModel::from_iter(rows))),
 	}
 }
