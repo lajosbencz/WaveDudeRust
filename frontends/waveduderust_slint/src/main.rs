@@ -175,7 +175,6 @@ impl State {
 		}
 	}
 
-	/// Pushes the state into the window's properties.
 	/// Opens the memory warning the run asks, with the proposal ticked; closes one no longer asked.
 	fn show_warning(&mut self, app: &AppWindow) {
 		match (self.live.warning(), self.warning_ticks) {
@@ -208,6 +207,7 @@ impl State {
 		settings::save(&self.settings, self.store.as_ref());
 	}
 
+	/// Pushes the state into the window's properties.
 	fn show(&mut self, app: &AppWindow) {
 		wake::wake();
 		self.unsaved.set(self.doc.dirty());
@@ -375,7 +375,6 @@ impl State {
 		tracing::info!("Colour scheme '{added}' loaded from '{name}' into the project");
 	}
 
-	/// Run is offered: no run or export under way, and a source enabled to drive one.
 	/// Why a run cannot start (docs/ui/60, Run start errors): an image scene without its image.
 	fn start_error(&self) -> Option<&'static str> {
 		let scene = &self.doc.project.scene;
@@ -390,6 +389,7 @@ impl State {
 		})
 	}
 
+	/// Run is offered: no run or export under way, and a source enabled to drive one.
 	fn can_run(&self, exporting: bool) -> bool {
 		!self.live.active() && !exporting && self.doc.project.has_enabled_source()
 	}
