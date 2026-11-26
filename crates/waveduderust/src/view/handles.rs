@@ -11,7 +11,7 @@ use crate::view::overlay::HandleKind;
 /// (-180, 180].
 pub fn lever_angle(pivot: (f64, f64), pointer: (f64, f64), snap: bool) -> f64 {
 	let step = if snap { 15. } else { 1. };
-	let a = ((pivot.1 - pointer.1).atan2(pointer.0 - pivot.0).to_degrees() / step).round() * step;
+	let a = (libm::atan2(pivot.1 - pointer.1, pointer.0 - pivot.0).to_degrees() / step).round() * step;
 	// + 0 turns -0 into 0
 	if a <= -180. { a + 360. } else { a + 0. }
 }
@@ -41,7 +41,7 @@ pub fn drag_grip(kind: &mut PartKind, q: Vec2) {
 		}
 		PartKind::Polygon(p) => {
 			let n = f64::from(p.sides.max(3));
-			p.side = (2. * q.length() * (std::f64::consts::PI / n).sin()).round().max(2.) as u32;
+			p.side = (2. * q.length() * libm::sin(std::f64::consts::PI / n)).round().max(2.) as u32;
 		}
 		PartKind::Lens(l) => l.diameter = span(q.y, 2),
 		PartKind::FresnelLens(f) => f.lens.diameter = span(q.y, 2),
@@ -172,8 +172,8 @@ pub fn drag_fibre(nodes: &mut [FiberNode], kind: HandleKind, q: Vec2) {
 
 /// `keep` turned to point away from `h`, its length kept.
 fn opposite(h: (i32, i32), keep: (i32, i32)) -> (i32, i32) {
-	let len = f64::from(keep.0).hypot(f64::from(keep.1));
-	let d = f64::from(h.0).hypot(f64::from(h.1));
+	let len = libm::hypot(f64::from(keep.0), f64::from(keep.1));
+	let d = libm::hypot(f64::from(h.0), f64::from(h.1));
 	if d == 0. {
 		return keep;
 	}
