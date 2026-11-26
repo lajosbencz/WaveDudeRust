@@ -178,8 +178,9 @@ The crates are listed in [`WORKSPACE.md`](../WORKSPACE.md) ([decision 0032](deci
 ## State and views
 
 - The `.slint` files hold the look, layout and focus; Rust holds the state (`State` in
-  [`src/main.rs`](../frontends/waveduderust_slint/src/main.rs): document, live run, playback, settings) and pushes it to the window
-  as properties and models; callbacks come back as named actions. Logic that needs no window is a Rust module tested
+  [`src/state.rs`](../frontends/waveduderust_slint/src/state.rs): document, live run, playback, settings) and pushes it to the window
+  as properties and models; callbacks come back as named actions, wired by area in
+  [`src/wire`](../frontends/waveduderust_slint/src/wire/). Logic that needs no window is a Rust module tested
   without one.
 - Runs converge on a goal without debounce or quiet timers ([`docs/ui/60-live-editing-and-runs.md`](ui/60-live-editing-and-runs.md),
   decision 0012). A 16 ms `slint::Timer` polls the live run and playback and draws the frame due.
