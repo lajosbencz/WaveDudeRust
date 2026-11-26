@@ -161,7 +161,7 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | M-53 | Help header, Mn H/H/A/H | MW:437, SE:111 | ui/10 Help | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
 | M-54 | About WaveDude (Next/Rust) entry, Mn A/U-uml/P/O | MW:438, SE:112 | ui/10 Help | done | opens About; rest matched in general (decision 0033) |
 | M-55 | Manual, F1 (Next) | MW:439, SE:113 | ui/10 Help | divergence | replaced by Project page on GitHub (decision 0028, divergences.md "Manual") |
-| M-56 | Project page on GitHub (port), opens github.com/lajosbencz/WaveDudeRust (system browser / new tab) | not in Next | ui/10 Help | done | "github" opens the repository URL in the system browser, a new tab on the web (webbrowser crate); F1 opens About, which links it |
+| M-56 | Project page on GitHub (port), opens github.com/lajosbencz/WaveDudeRust (system browser / new tab) | not in Next | ui/10 Help | done | "github" opens the repository URL in the system browser, a new tab on the web (webbrowser crate); F1 opens About |
 | M-57 | Check for updates (port; builds with updater), Mn U/U/J/U | not in Next | ui/10 Help, ui/70 Updates | divergence | decision 0033, dropped |
 
 #### M Context menus
@@ -235,7 +235,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | M-106 | Ctrl+A select all objects (text box: text) | ProjectCommands.cs:57 | ui/10 | done | window key (app.slint `keys`) a focused text field takes first: every source, part and probe, the last current |
 | M-107 | Ctrl+E export last | ExportCommands.cs:59 | ui/10 | partial | M-18 |
 | M-108 | Ctrl+Shift+E / I / B, Ctrl+Shift+F / G | ExportCommands.cs:35-51 | ui/10 | done | M-12..M-17 |
-| M-109 | F1 project page | HelpCommands.cs:31 (Manual) | ui/10, decision 0028 | done | F1 opens About, its Links section has the project page |
+| M-109 | F1 project page | HelpCommands.cs:31 (Manual) | ui/10, decision 0028 | done | F1 opens About; Help > Project page on GitHub opens the repository |
 | M-110 | Ctrl+, Settings (port) | not in Next | ui/10 | done | app:100 |
 | M-111 | Ctrl+= / Ctrl+Plus / Ctrl+- / Ctrl+0 UI zoom step up/down/reset across 0.5x..3x (port) | not in Next (View > UI zoom menu only) | ui/10 | divergence | decision 0033, dropped |
 | M-112 | F5 Run, F6 Pause/resume, Shift+F5 Stop, F7 Play/pause playback | SimulationCommands.cs:30,34,44; PreviewCommands.cs:40 | ui/10 | done | app:143-148 |

@@ -3275,8 +3275,6 @@ msgstr "Lauf"
 msgid "Links"
 msgstr "Links"
 
-msgid "WaveDude Rust on GitHub"
-msgstr "WaveDude Rust auf GitHub"
 
 msgid "WaveDude Next on GitHub (a separate project, not affiliated with WaveDude Rust)"
 msgstr "WaveDude Next auf GitHub (ein eigenes Projekt, nicht mit WaveDude Rust verbunden)"
@@ -3287,8 +3285,5 @@ msgstr "WaveSimulator2D auf GitHub (0x23)"
 msgid "Huygens Optics on YouTube"
 msgstr "Huygens Optics auf YouTube"
 
-msgid "Huygens Optics website"
-msgstr "Website von Huygens Optics"
-
-msgid "Diffraction Limited on YouTube"
-msgstr "Diffraction Limited auf YouTube"
+msgid "Simulates the 2D wave equation: field and intensity views, scenes from images and optical parts, point and composite sources, probes with live graphs, video export. Opens and saves WaveDude Next's project files."
+msgstr "Simuliert die 2D-Wellengleichung: Feld- und Intensitätsansicht, Szenen aus Bildern und optischen Teilen, Punkt- und zusammengesetzte Quellen, Sonden mit Live-Graphen, Videoexport. Öffnet und speichert die Projektdateien von WaveDude Next."

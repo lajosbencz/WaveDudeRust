@@ -533,7 +533,6 @@ fn about(state: &State) -> ui::AboutData {
 		license: include_str!("../../../LICENSE.md").into(),
 		openh264: include_str!("../../../crates/waveduderust/assets/OpenH264-BINARY_LICENSE.txt").into(),
 		system: system.into(),
-		repository: env!("CARGO_PKG_REPOSITORY").into(),
 	}
 }
 
