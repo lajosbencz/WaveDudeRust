@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 60 | 1 | 0 | 22 | 0 |
 | T | Project tree | 58 | 4 | 0 | 39 | 0 |
 | P | Properties | 311 | 7 | 0 | 7 | 0 |
-| V | Preview | 96 | 7 | 0 | 8 | 1 |
+| V | Preview | 97 | 6 | 0 | 8 | 1 |
 | L | Timeline, transport, status | 70 | 9 | 0 | 9 | 2 |
 | R | Live editing and runs | 42 | 15 | 0 | 2 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 829 | 87 | 0 | 174 | 5 |
+| | All | 830 | 86 | 0 | 174 | 5 |
 
 ## Cross-cutting
 
@@ -988,7 +988,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-40 | 16-bit samples: exact device-pixel render, box/bilinear resample, instant recolour on brightness | FramePresenter.cs | 40 8-bit vs 16-bit | partial | GPU render exists; render at device size and brightness recolour unverified/no control |
 | V-41 | Dithering 16-bit only, Bayer 2/4/8/16 | FramePresenter.cs | 40 8-bit vs 16-bit | done | View::dither_bits from PreviewDitherBits: Bayer 2/4/8/16 (core DitherDepth), 16-bit planes only |
 | V-42 | GPU engine colouring in render pass, device copy of last frame, others uploaded | none (Rust only) | 40 8-bit vs 16-bit | done | live.rs device_frames + Uploads |
-| V-43 | WebGL2 / over-limit fallback with Messages warning | none | 40 8-bit vs 16-bit | partial | without a usable WebGPU device the window takes Slint's own WebGPU or WebGL2 device, the run the CPU engine in the run worker, the pictures coloured on the CPU, the reason in Messages (gpu.rs `select`); a plane over the device's storage buffer limits is not checked |
+| V-43 | WebGL2 / over-limit fallback with Messages warning | none | 40 8-bit vs 16-bit | done | without a usable WebGPU device the window takes Slint's own WebGPU or WebGL2 device, the run the CPU engine in the run worker, the pictures coloured on the CPU, the reason in Messages (gpu.rs `select`); a grid over the device's storage buffer limits builds the CPU engine instead (engine/gpu/grid.rs `check_grid`, the reason in Messages), a plane over them is coloured on the CPU with a warning (live.rs `on_device`) |
 | V-44 | Handle style: light grey over dark halo; selected bright yellow; focused accent fill; hover/focus thicker | Controls/MarkerThumb.cs:69-115 | 40 Handles | divergence | decision 0033, matched in general, not to the pixel/id |
 | V-45 | Glyphs odd-sized (21/15/13 px), centre pixel, 1.5 px AA strokes | MarkerThumb.cs | 40 Handles | divergence | decision 0033, matched in general, not to the pixel/id |
 | V-46 | Source position handle (ring + 4 ticks + dot) both pictures | SceneOverlay.cs:449 | 40 Handles | done | canvas.rs overlay rows from core overlay::build; preview.slint HandleView glyph |

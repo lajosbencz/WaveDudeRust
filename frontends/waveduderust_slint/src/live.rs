@@ -10,9 +10,9 @@ use waveduderust::unstable::scene::off_canvas::{OffCanvas, off_canvas};
 
 use waveduderust::run::{FitFrame, FitRequest, FrameStore, Goal, Status, StoreError, Wanted, WorkState};
 use waveduderust::unstable::engine::gpu::{FrameTag, GpuContext};
-use waveduderust::unstable::engine::types::SampleFormat;
+use waveduderust::unstable::engine::types::{FrameShape, SampleFormat};
 use waveduderust::unstable::render::fit_plane;
-use waveduderust::unstable::render::gpu::{DevicePlane, PicturePipeline};
+use waveduderust::unstable::render::gpu::{DevicePlane, PicturePipeline, PlaneTooLarge, plane_fits};
 use waveduderust::unstable::scene::glowing_edges::EdgeImage;
 use waveduderust::unstable::spec::{RunRequest, SceneCache, Schedule};
 
@@ -202,12 +202,46 @@ struct GpuPainter {
 	pictures: [Picture; 2],
 	/// The layers of a stored frame the device no longer holds.
 	uploads: Uploads,
+	/// The pictures whose planes exceed the device's storage buffer limits (docs/ui/40, Colours).
+	cpu: Box<[CpuPicture; 2]>,
+	/// Why the pictures are coloured on the CPU, once warned of.
+	oversize: Option<PlaneTooLarge>,
+}
+
+/// Whether planes of `shape` bind on a device of `limits`; a plane too large is warned of once, until it fits or its
+/// size changes.
+fn on_device(shape: &FrameShape, limits: &wgpu::Limits, oversize: &mut Option<PlaneTooLarge>) -> bool {
+	let fits = plane_fits(shape, limits);
+	if let Err(e) = fits
+		&& *oversize != Some(e)
+	{
+		tracing::warn!("the preview colours this run's pictures on the CPU: {e}");
+	}
+	*oversize = fits.err();
+	oversize.is_none()
+}
+
+/// The layers of a frame of `shape`, their planes from `read`, coloured on the CPU.
+fn draw_on_cpu(
+	pictures: &mut [CpuPicture; 2],
+	shape: &FrameShape,
+	look: &Look<'_>,
+	read: &mut impl FnMut(Layer) -> Option<Vec<u8>>,
+) -> [Option<slint::Image>; 2] {
+	pictures.each_mut().map(|picture| {
+		let bytes = read(picture.layer())?;
+		Some(picture.draw(&bytes, shape, look))
+	})
 }
 
 impl Painter {
 	fn cpu() -> Self {
-		Self::Cpu(Box::new([CpuPicture::new(Layer::Field), CpuPicture::new(Layer::Intensity)]))
+		Self::Cpu(cpu_pictures())
 	}
+}
+
+fn cpu_pictures() -> Box<[CpuPicture; 2]> {
+	Box::new([CpuPicture::new(Layer::Field), CpuPicture::new(Layer::Intensity)])
 }
 
 /// What a poll brings the window.
@@ -293,6 +327,8 @@ impl Live {
 				pipeline: PicturePipeline::new(&device, wgpu::TextureFormat::Rgba8Unorm),
 				pictures: [Picture::new(&device, Layer::Field), Picture::new(&device, Layer::Intensity)],
 				uploads: Uploads::default(),
+				cpu: cpu_pictures(),
+				oversize: None,
 				device,
 				queue,
 			}))
@@ -932,8 +968,11 @@ impl Live {
 				};
 				let [field, intensity] = match &mut self.painter {
 					Painter::Gpu(gpu) => {
-						let GpuPainter { device, queue, pipeline, pictures, uploads } = &mut **gpu;
-						if let Some(frame) = status.device_frames.and_then(|frames| frames.hold(tag)) {
+						let GpuPainter { device, queue, pipeline, pictures, uploads, cpu, oversize } = &mut **gpu;
+						let shape = *store.shape();
+						if !on_device(&shape, &device.limits(), oversize) {
+							draw_on_cpu(cpu, &shape, &look, &mut read)
+						} else if let Some(frame) = status.device_frames.and_then(|frames| frames.hold(tag)) {
 							pictures.each_mut().map(|picture| {
 								let plane = DevicePlane {
 									buffer: &frame.buffer,
@@ -943,20 +982,13 @@ impl Live {
 							})
 						} else {
 							uploads.stage(device, queue, store.layers(), &mut read);
-							let shape = *store.shape();
 							pictures.each_mut().map(|picture| {
 								let plane = DevicePlane { buffer: uploads.buffer(picture.layer())?, first_word: 0 };
 								picture.draw(device, queue, pipeline, plane, &shape, &look)
 							})
 						}
 					}
-					Painter::Cpu(pictures) => {
-						let shape = *store.shape();
-						pictures.each_mut().map(|picture| {
-							let bytes = read(picture.layer())?;
-							Some(picture.draw(&bytes, &shape, &look))
-						})
-					}
+					Painter::Cpu(pictures) => draw_on_cpu(pictures, store.shape(), &look, &mut read),
 				};
 				if pending {
 					self.drawn = None;
@@ -1016,7 +1048,11 @@ mod tests {
 	use waveduderust::quality::PreviewQuality;
 	use waveduderust::unstable::spec::Schedule;
 
-	use super::last_made;
+	use slint::wgpu_30::wgpu;
+	use waveduderust::unstable::engine::types::{FrameShape, SampleFormat};
+	use waveduderust::unstable::render::gpu::PlaneTooLarge;
+
+	use super::{last_made, on_device};
 
 	#[test]
 	fn the_frames_made_count_in_timeline_frames_with_every_second_frame_stored() {
@@ -1028,5 +1064,27 @@ mod tests {
 		assert_eq!(last_made(Some(&schedule), 3), Some(5), "stored frame 2 shows timeline frames 4 and 5");
 		assert_eq!(last_made(Some(&schedule), 50), Some(99), "every frame made reaches the last timeline frame");
 		assert_eq!(last_made(None, 3), Some(2));
+	}
+
+	#[test]
+	fn a_plane_over_the_storage_buffer_limits_is_coloured_on_the_cpu_and_warned_of_once() {
+		let shape = |side| FrameShape {
+			canvas_width: side,
+			canvas_height: side,
+			divisor: 1,
+			format: SampleFormat::Half,
+			field_brightness: 1.,
+			intensity_brightness: 1.,
+			intensity_root: false,
+		};
+		// 1000 x 1000 half samples
+		let limits = wgpu::Limits { max_storage_buffer_binding_size: 2_000_000, ..Default::default() };
+		let mut oversize = None;
+		assert!(on_device(&shape(1000), &limits, &mut oversize));
+		assert!(!on_device(&shape(1001), &limits, &mut oversize));
+		assert_eq!(oversize, Some(PlaneTooLarge { bytes: 2_004_004, limit: 2_000_000 }));
+		assert!(!on_device(&shape(1001), &limits, &mut oversize), "still too large");
+		assert!(on_device(&shape(500), &limits, &mut oversize));
+		assert_eq!(oversize, None);
 	}
 }
