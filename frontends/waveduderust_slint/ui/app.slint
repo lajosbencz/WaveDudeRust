@@ -21,8 +21,8 @@ import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
 import { ModalLayer, Modal, Message, Answer } from "modal.slint";
 import { MemoryWarningLayer, MemoryWarningData } from "memory-warning.slint";
 import { AboutLayer, AboutData } from "about.slint";
-import { ExportLayer, ExportData } from "export-dialog.slint";
-export { ExportData }
+import { ExportLayer, ExportData, ExportReason } from "export-dialog.slint";
+export { ExportData, ExportReason }
 import { SettingsLayer, SettingsData, ColorTheme, Language, Scale, Search } from "settings.slint";
 export { SettingsData, ColorTheme, Language, Scale, Search }
 import { WelcomeLayer, Levers } from "welcome.slint";
@@ -477,6 +477,7 @@ export component AppWindow inherits Window {
                         spacing: 6px;
                         Text {
                             text: root.export-progress.waiting ? @tr("Export: waiting for the run")
+                                : root.export-progress.packing ? @tr("Export: packing the archive")
                                 : root.export-progress.active
                                 ? @tr("Exporting {}/{}", root.export-progress.done, root.export-progress.total)
                                 : @tr("Computing frame {}", root.transport.position);
@@ -487,7 +488,7 @@ export component AppWindow inherits Window {
                             width: 120px;
                             height: 8px;
                             y: (parent.height - self.height) / 2;
-                            indeterminate: !root.export-progress.active || root.export-progress.waiting;
+                            indeterminate: !root.export-progress.active || root.export-progress.waiting || root.export-progress.packing;
                             progress: root.export-progress.total > 0 ? root.export-progress.done / root.export-progress.total : 0;
                         }
                     }

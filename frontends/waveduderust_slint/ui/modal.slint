@@ -2,7 +2,7 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // The messages the app shows; `none` while none is.
-export enum Message { none, crashed, save-changes, discard-frames, export-running, scene-image, replace-it, replace-them, open-failed, save-failed, export-failed, run-failed, storage-full }
+export enum Message { none, crashed, save-changes, discard-frames, export-running, scene-image, replace-it, replace-them, open-failed, save-failed, export-failed, run-failed, storage-full, export-ready }
 
 // A message and the one value its text names: a file's name or path, or the version.
 export struct Modal {
@@ -10,7 +10,7 @@ export struct Modal {
     arg: string,
 }
 
-export enum Answer { ok, save, discard, cancel, yes, no, copy }
+export enum Answer { ok, save, discard, cancel, yes, no, copy, download }
 
 // One of a message's buttons.
 struct Choice {
@@ -31,10 +31,13 @@ export component ModalLayer inherits Rectangle {
         || modal.message == Message.run-failed || modal.message == Message.storage-full;
     // the scene image file changed: Load file is the default
     property <bool> reloads: modal.message == Message.scene-image;
+    // a browser export's file: Download is the default, it starts from the user's click (decision 0025)
+    property <bool> offers: modal.message == Message.export-ready;
     // the button Enter presses
     property <int> default: root.confirms || modal.message == Message.crashed ? 1 : 0;
     property <[Choice]> choices: modal.message == Message.crashed ? [{ text: @tr("Copy path"), answer: Answer.copy }, { text: @tr("OK"), answer: Answer.ok }]
         : root.reloads ? [{ text: @tr("Load file"), answer: Answer.yes }, { text: @tr("Keep embedded"), answer: Answer.no }]
+        : root.offers ? [{ text: @tr("Download"), answer: Answer.download }, { text: @tr("Close"), answer: Answer.cancel }]
         : root.confirms ? [{ text: @tr("Yes"), answer: Answer.yes }, { text: @tr("No"), answer: Answer.no }]
         : root.asks ? [{ text: @tr("Save"), answer: Answer.save }, { text: @tr("Don't save"), answer: Answer.discard }, { text: @tr("Cancel"), answer: Answer.cancel }]
         : [{ text: @tr("OK"), answer: Answer.ok }];
@@ -44,7 +47,7 @@ export component ModalLayer inherits Rectangle {
     TouchArea { }
     focus := FocusScope {
         key-pressed(e) => {
-            if (e.text == Key.Escape) { root.answer(root.confirms || root.reloads ? Answer.no : root.asks ? Answer.cancel : Answer.ok); return accept; }
+            if (e.text == Key.Escape) { root.answer(root.confirms || root.reloads ? Answer.no : root.asks || root.offers ? Answer.cancel : Answer.ok); return accept; }
             if (e.text == Key.Return) { root.answer(root.choices[root.default].answer); return accept; }
             reject
         }
@@ -66,13 +69,13 @@ export component ModalLayer inherits Rectangle {
             }
             HorizontalLayout {
                 spacing: 12px;
-                if root.asks || root.fails: Rectangle {
+                if root.asks || root.fails || root.offers: Rectangle {
                     width: 32px;
                     height: 32px;
                     border-radius: 16px;
                     background: root.fails ? Theme.status-error : Theme.accent;
                     Text {
-                        text: root.fails ? "!" : "?";
+                        text: root.fails ? "!" : root.offers ? "i" : "?";
                         color: #ffffff;
                         font-weight: 700;
                     }
@@ -88,6 +91,7 @@ export component ModalLayer inherits Rectangle {
                         : modal.message == Message.open-failed ? @tr("Could not open '{}'.", modal.arg)
                         : modal.message == Message.save-failed ? @tr("Could not save '{}'.", modal.arg)
                         : modal.message == Message.export-failed ? @tr("The export failed.")
+                        : modal.message == Message.export-ready ? @tr("The export is ready: {}", modal.arg)
                         : modal.message == Message.run-failed ? @tr("The simulation failed: {}", modal.arg)
                         : modal.message == Message.storage-full ? @tr("The simulation failed: {}", modal.arg) + "\n"
                             + @tr("The storage is full. Close other WaveDude Rust tabs or free disk space, then try again.")

@@ -93,6 +93,9 @@ struct State {
 	export_plan: Option<export::Plan>,
 	/// The export asked about and the outputs it would replace, asked one by one.
 	replacing: Option<(export::Plan, Vec<(PathBuf, bool)>)>,
+	/// A completed export's file, downloaded when its message window's Download is clicked.
+	#[cfg(target_arch = "wasm32")]
+	ready: Option<files::Download>,
 	/// The document generation the run started from.
 	ran: u64,
 	/// The view generation the pictures are drawn with.
@@ -694,14 +697,8 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 							std::path::Path::new(&n).file_stem().map_or(n.clone(), |s| s.to_string_lossy().into_owned())
 						},
 					);
-					let opened = export::Dialog::open(
-						kind,
-						state.doc.path.as_deref(),
-						&name,
-						state.playback.position,
-						&state.settings,
-						&words,
-					);
+					let opened =
+						export::Dialog::open(kind, &state.doc, &name, state.playback.position, &state.settings, &words);
 					if let Some((dialog, data)) = opened {
 						state.export_dialog = Some(dialog);
 						app.set_export_data(data);
@@ -1131,7 +1128,6 @@ fn file_name(state: &State, app: &AppWindow) -> String {
 }
 
 /// Starts the export of `plan` from the live run, or waits for the run it needs (decision 0012).
-#[cfg_attr(target_arch = "wasm32", expect(unreachable_code, reason = "the browser build makes no export plan"))]
 fn begin_export(state: &mut State, app: &AppWindow, plan: &export::Plan) {
 	app.set_export_shown(false);
 	state.export_dialog = None;
@@ -1146,7 +1142,6 @@ fn begin_export(state: &mut State, app: &AppWindow, plan: &export::Plan) {
 }
 
 /// Writes `plan` from the run the export holds, a still of the timeline frame `position`.
-#[cfg_attr(target_arch = "wasm32", expect(unreachable_code, reason = "the browser build makes no export plan"))]
 fn write_export(state: &mut State, plan: &export::Plan, position: u32) {
 	let Some(frames) = state.live.export_frames() else {
 		tracing::error!("the export has no frames to read");
@@ -1284,13 +1279,27 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 			state.pending = None;
 			return;
 		}
+		// the click's own pass: a browser may drop a download a page starts without one (decision 0025)
+		#[cfg(target_arch = "wasm32")]
+		(ui::Message::ExportReady, answer) => {
+			if let Some(download) = state.ready.take().filter(|_| answer == ui::Answer::Download)
+				&& let Err(e) = download.start()
+			{
+				tracing::error!("cannot download {}: {e}", download.name());
+			}
+		}
 		_ => {}
 	}
 	if let Some(then) = state.pending.take() {
 		let go = match answer {
 			ui::Answer::Save => save(state, app, false),
 			ui::Answer::Discard => true,
-			ui::Answer::Ok | ui::Answer::Cancel | ui::Answer::Yes | ui::Answer::No | ui::Answer::Copy => false,
+			ui::Answer::Ok
+			| ui::Answer::Cancel
+			| ui::Answer::Yes
+			| ui::Answer::No
+			| ui::Answer::Copy
+			| ui::Answer::Download => false,
 		};
 		if go {
 			state.doc.mark_saved();
@@ -1417,6 +1426,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		last_export: None,
 		export_dialog: None,
 		export_plan: None,
+		#[cfg(target_arch = "wasm32")]
+		ready: None,
 		focus_seen: false,
 		unsaved: Rc::default(),
 		replacing: None,
@@ -2055,6 +2066,14 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				(Some(live::ExportNews::Stopped), Some(_)) => release_export(s, &app),
 				_ => {}
 			}
+			// the browser's late answers: the H.264 profiles it encodes, its session for the spool
+			#[cfg(target_arch = "wasm32")]
+			if let Some(dialog) = &s.export_dialog {
+				let mut data = app.get_export_data();
+				if dialog.refresh(&mut data) {
+					app.set_export_data(data);
+				}
+			}
 			if let Some(e) = &mut s.exporting {
 				match e.poll() {
 					Ok(progress) => app.set_export_progress(progress),
@@ -2062,8 +2081,13 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 						release_export(s, &app);
 						match outcome {
 							Ok(written) => {
-								tracing::info!("exported {written}");
+								tracing::info!("{}", written.line);
 								export_completed(s);
+								#[cfg(target_arch = "wasm32")]
+								{
+									tell(&app, ui::Message::ExportReady, written.download.name());
+									s.ready = Some(written.download);
+								}
 							}
 							Err(e) => {
 								tracing::error!("{e}");

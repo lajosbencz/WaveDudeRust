@@ -1,8 +1,12 @@
-// The export dialog (docs/ui/70, Export Save dialog; port: in-window, a path box with "..." for the platform dialog).
+// The export dialog (docs/ui/70, Export Save dialog; port: in-window, a path box with "..." for the platform dialog;
+// in the browser file names alone, decision 0025).
 
 import { Button, LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Choice, Check } from "form.slint";
+
+// Why the browser cannot start the export.
+export enum ExportReason { none, no-storage, no-webcodecs, no-profile, probing }
 
 export struct ExportData {
     title: string,
@@ -23,6 +27,11 @@ export struct ExportData {
     use-openh264: bool,
     profile: int,
     error: string,
+    // the browser's dialog: file names alone, an export of several files always archived
+    browser: bool,
+    reason: ExportReason,
+    // per H.264 profile, whether the browser encodes it; empty until it answered
+    profile-supported: [bool],
 }
 
 export component ExportLayer inherits Rectangle {
@@ -35,7 +44,7 @@ export component ExportLayer inherits Rectangle {
     callback delete-codec();
     callback path-edited();
     property <bool> can-ok: root.data.path != "" && (!root.data.mp4 || root.data.codec-built-in || root.data.use-openh264)
-        && !(root.data.several && root.data.archive && root.data.archive-path.is-empty);
+        && !(root.data.several && root.data.archive && root.data.archive-path.is-empty) && root.data.reason == ExportReason.none;
 
     visible: shown;
     background: #00000080;
@@ -81,7 +90,7 @@ export component ExportLayer inherits Rectangle {
                         reject
                     }
                 }
-                Button { text: "..."; clicked => { root.browse(); } }
+                if !root.data.browser: Button { text: "..."; clicked => { root.browse(); } }
             }
             if root.data.outputs != "": Text {
                 text: @tr("Writes {}", root.data.outputs);
@@ -90,6 +99,7 @@ export component ExportLayer inherits Rectangle {
             }
             if root.data.several: Check {
                 text: @tr("Archive into one ZIP file");
+                enabled: !root.data.browser;
                 checked <=> root.data.archive;
             }
             if root.data.several && root.data.archive: HorizontalLayout {
@@ -103,7 +113,7 @@ export component ExportLayer inherits Rectangle {
                         reject
                     }
                 }
-                Button { text: "..."; clicked => { root.browse-archive(); } }
+                if !root.data.browser: Button { text: "..."; clicked => { root.browse-archive(); } }
             }
             if root.data.mp4 && !root.data.codec-built-in: VerticalLayout {
                 spacing: 4px;
@@ -129,10 +139,26 @@ export component ExportLayer inherits Rectangle {
                     picked(i) => { root.data.profile = i; }
                 }
             }
-            // OpenH264, the one encoder, encodes Baseline alone
-            if root.data.mp4 && root.data.profile != 0: Text {
+            // OpenH264, the one native encoder, encodes Baseline alone
+            if root.data.mp4 && !root.data.browser && root.data.profile != 0: Text {
                 text: @tr("OpenH264 encodes Baseline only; the export uses Baseline.");
                 color: Theme.text-dim;
+                wrap: word-wrap;
+            }
+            if root.data.mp4 && root.data.browser && root.data.reason == ExportReason.none
+                && !root.data.profile-supported[root.data.profile]: Text {
+                text: @tr("not supported by this browser");
+                color: Theme.text-dim;
+                wrap: word-wrap;
+            }
+            if root.data.reason != ExportReason.none: Text {
+                text: root.data.reason == ExportReason.no-storage
+                    ? @tr("This browser has no private file storage to write the export to; frames and probe data still export.")
+                    : root.data.reason == ExportReason.no-webcodecs ? @tr("This browser has no video encoder (WebCodecs).")
+                    : root.data.reason == ExportReason.no-profile
+                    ? @tr("This browser encodes no H.264 profile at this picture size and frame rate.")
+                    : @tr("Asking the browser which H.264 profiles it encodes...");
+                color: Theme.status-error;
                 wrap: word-wrap;
             }
             if root.data.error != "": Text {

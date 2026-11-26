@@ -31,6 +31,11 @@ fn spill() -> Box<dyn SpillFactory> {
 	SPILL.with(Opfs::factory)
 }
 
+/// Starts the spill worker and the session, which the exports' spool shares, unless a run started them.
+pub(crate) fn start_spill() {
+	SPILL.with(|_| ());
+}
+
 /// The run worker's script, beside the page.
 const RUN_WORKER: &str = "run-worker.js";
 

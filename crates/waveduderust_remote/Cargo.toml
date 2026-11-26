@@ -11,6 +11,10 @@ description = "WaveDude Rust's live run in another agent: the protocol between t
 [lints]
 workspace = true
 
+[features]
+# The exports' files in the session folder (`opfs::Spool`), written by the page.
+spool = ["waveduderust/unstable-export"]
+
 [dependencies]
 postcard.workspace = true
 serde.workspace = true
@@ -25,10 +29,14 @@ wasm-bindgen-futures.workspace = true
 web-sys = { workspace = true, features = [
 	"DedicatedWorkerGlobalScope",
 	"ErrorEvent",
+	"Blob",
 	"Event",
 	"FileSystemDirectoryHandle",
+	"FileSystemFileHandle",
 	"FileSystemGetDirectoryOptions",
+	"FileSystemGetFileOptions",
 	"FileSystemRemoveOptions",
+	"FileSystemWritableFileStream",
 	"Lock",
 	"LockManager",
 	"LockOptions",
@@ -39,4 +47,6 @@ web-sys = { workspace = true, features = [
 	"Worker",
 	"WorkerOptions",
 	"WorkerType",
+	"WriteCommandType",
+	"WriteParams",
 ] }

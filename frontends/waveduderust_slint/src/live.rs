@@ -123,7 +123,6 @@ pub(crate) struct Live {
 }
 
 /// What an export needs of its run beyond full quality.
-#[cfg_attr(target_arch = "wasm32", expect(dead_code, reason = "the browser build makes no export plan"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Needs {
 	Field,
@@ -159,7 +158,6 @@ pub(crate) enum ExportNews {
 }
 
 /// The run an export reads: its store, traces and schedule.
-#[cfg_attr(target_arch = "wasm32", expect(dead_code, reason = "the browser build makes no export plan"))]
 pub(crate) struct ExportFrames {
 	pub(crate) store: std::sync::Arc<FrameStore>,
 	pub(crate) traces: Vec<waveduderust::ProbeTrace>,

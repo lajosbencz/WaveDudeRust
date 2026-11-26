@@ -1,7 +1,8 @@
 //! The frames past a store's memory ([`SpillBackend`]) in the spill worker (decision 0020), which keeps each store
 //! generation in one file of this tab's session folder, `wavedude-spill/<session>/<store>-<generation>`. The page
 //! posts each write with the frame's planes, each read and each removal ([`crate::spill`] has the messages), and
-//! completes an operation's [`Token`] as the worker answers it.
+//! completes an operation's [`Token`] as the worker answers it. With feature `spool` the page writes and reads the
+//! exports' files in that folder itself (`Spool`, decision 0025).
 //!
 //! A tab holds the Web Lock of its session while it lives. At start the sessions whose lock is free (their tab is
 //! gone) are removed. The free storage is asked for as each store opens, other tabs write too; a store's spill is
@@ -13,10 +14,16 @@
 
 #[cfg(target_arch = "wasm32")]
 mod client;
+#[cfg(any(test, all(feature = "spool", target_arch = "wasm32")))]
+mod queue;
 #[cfg(any(test, target_arch = "wasm32"))]
 mod requests;
 #[cfg(target_arch = "wasm32")]
 mod session;
+#[cfg(all(feature = "spool", target_arch = "wasm32"))]
+mod spool;
 
 #[cfg(target_arch = "wasm32")]
 pub use client::Opfs;
+#[cfg(all(feature = "spool", target_arch = "wasm32"))]
+pub use spool::{Spool, SpoolReader};

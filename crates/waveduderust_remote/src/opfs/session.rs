@@ -1,5 +1,7 @@
-//! This tab's session folder, in which the spill worker keeps the frames past memory.
+//! This tab's session folder, in which the spill worker keeps the frames past memory, and the storage calls of the
+//! spool.
 
+use std::cell::OnceCell;
 use std::io;
 
 use js_sys::{Promise, Reflect};
@@ -13,6 +15,17 @@ use crate::spill::{FOLDER, FailureKind};
 
 const LOCK_PREFIX: &str = "wavedude-spill-";
 
+thread_local! {
+	/// This tab's session folder, once the start made it.
+	static SESSION: OnceCell<FileSystemDirectoryHandle> = const { OnceCell::new() };
+}
+
+/// This tab's session folder; `None` before the start made it or when it failed.
+#[cfg_attr(not(feature = "spool"), expect(dead_code, reason = "the spool alone reads it"))]
+pub(super) fn session() -> Option<FileSystemDirectoryHandle> {
+	SESSION.with(|s| s.get().cloned())
+}
+
 /// The JS error's name and message.
 fn describe(e: &JsValue) -> String {
 	let field = |key: &str| Reflect::get(e, &key.into()).ok().and_then(|v| v.as_string());
@@ -24,24 +37,37 @@ fn describe(e: &JsValue) -> String {
 
 /// A failed storage operation; a full quota as [`io::ErrorKind::QuotaExceeded`], a missing entry as
 /// [`io::ErrorKind::NotFound`].
-fn storage_error(e: &JsValue) -> io::Error {
+pub(super) fn storage_error(e: &JsValue) -> io::Error {
 	let name = Reflect::get(e, &"name".into()).ok().and_then(|v| v.as_string());
 	io::Error::new(FailureKind::of_name(name.as_deref()).into(), format!("browser storage: {}", describe(e)))
 }
 
-async fn awaited<T: JsCast>(promise: Promise) -> io::Result<T> {
+pub(super) async fn awaited<T: JsCast>(promise: Promise) -> io::Result<T> {
 	let value = JsFuture::from(promise).await.map_err(|e| storage_error(&e))?;
 	value.dyn_into().map_err(|v| io::Error::other(format!("browser storage answered {v:?}")))
 }
 
-async fn folder(parent: &FileSystemDirectoryHandle, name: &str) -> io::Result<FileSystemDirectoryHandle> {
+pub(super) async fn folder(
+	parent: &FileSystemDirectoryHandle,
+	name: &str,
+	create: bool,
+) -> io::Result<FileSystemDirectoryHandle> {
 	let options = FileSystemGetDirectoryOptions::new();
-	options.set_create(true);
+	options.set_create(create);
 	awaited(parent.get_directory_handle_with_options(name, &options)).await
 }
 
+/// Removes entry `name` of `parent`, with what it holds when `recursive`.
+#[cfg(feature = "spool")]
+pub(super) async fn remove_entry(parent: &FileSystemDirectoryHandle, name: &str, recursive: bool) -> io::Result<()> {
+	let options = FileSystemRemoveOptions::new();
+	options.set_recursive(recursive);
+	JsFuture::from(parent.remove_entry_with_options(name, &options)).await.map_err(|e| storage_error(&e))?;
+	Ok(())
+}
+
 /// Whether `object` has `key`.
-fn has(object: &JsValue, key: &str) -> bool {
+pub(super) fn has(object: &JsValue, key: &str) -> bool {
 	Reflect::has(object, &key.into()).unwrap_or(false)
 }
 
@@ -59,11 +85,12 @@ pub(super) async fn prepare() -> io::Result<String> {
 	hold(&format!("{LOCK_PREFIX}{session}")).await;
 
 	let root: FileSystemDirectoryHandle = awaited(navigator.storage().get_directory()).await?;
-	let spill = folder(&root, FOLDER).await?;
+	let spill = folder(&root, FOLDER, true).await?;
 	for name in entries(&spill).await? {
 		remove_if_free(&spill, &name).await;
 	}
-	folder(&spill, &session).await?;
+	let mine = folder(&spill, &session, true).await?;
+	SESSION.with(|s| s.set(mine)).expect("one start per tab");
 	Ok(session)
 }
 

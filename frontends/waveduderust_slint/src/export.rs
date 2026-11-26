@@ -1,12 +1,33 @@
-//! Exports of the run and of a frame (docs/ui/10, Export; docs/ui/70, Export Save dialog) on a thread of their own.
+//! Exports of the run and of a frame (docs/ui/10, Export; docs/ui/70, Export Save dialog) from the live run's frames:
+//! natively on a thread of their own, in the browser stepped on the page (decision 0025).
+
+use std::path::{Path, PathBuf};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use native::{Dialog, Exporting, Plan, delete_codec, remember, start};
+use slint::{ModelRc, SharedString, VecModel};
+use waveduderust::model::{Layer, View};
+use waveduderust::unstable::export::h264::Profile;
+use waveduderust::unstable::export::naming::{layer_outputs, layer_suffix, still_file_name};
 use waveduderust::unstable::export::{ExportFormat, ExportLayers};
+use waveduderust_platform::settings::Settings;
 
-use crate::ui::{Command, ExportFileFormat};
+use crate::live::Needs;
+use crate::ui::{Command, ExportFileFormat, Words};
 #[cfg(target_arch = "wasm32")]
 pub(crate) use web::{Dialog, Exporting, Plan, delete_codec, remember, start};
+
+#[cfg(target_arch = "wasm32")]
+mod web;
+#[cfg(any(test, target_arch = "wasm32"))]
+mod webcodecs;
+
+/// A completed export: its line for the log, and in the browser its file for the download the user starts.
+pub(crate) struct Written {
+	pub(crate) line: String,
+	#[cfg(target_arch = "wasm32")]
+	pub(crate) download: crate::files::Download,
+}
 
 /// What the menu asks to export.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,7 +49,6 @@ impl Kind {
 		})
 	}
 
-	#[cfg_attr(target_arch = "wasm32", allow(dead_code, reason = "no exports in the browser yet"))]
 	/// The formats it offers, each with its name in the dialog.
 	fn formats(self) -> Vec<(ExportFormat, ExportFileFormat)> {
 		let all = [
@@ -44,6 +64,103 @@ impl Kind {
 		];
 		all.into_iter().filter(|(f, _)| matches!(self, Self::Run(_)) || f.supports_still()).collect()
 	}
+
+	fn layers(self) -> ExportLayers {
+		match self {
+			Self::Run(layers) | Self::Frame(layers) => layers,
+		}
+	}
+
+	/// The layer of an export of one, `None` for both.
+	fn layer(self) -> Option<Layer> {
+		match self.layers().layers() {
+			[one] => Some(*one),
+			_ => None,
+		}
+	}
+
+	/// The format the dialog starts at, of `formats`, and its index: the remembered one when offered (a still takes no
+	/// video), else the first.
+	fn first_format(self, formats: &[(ExportFormat, ExportFileFormat)], settings: &Settings) -> (ExportFormat, i32) {
+		let still = matches!(self, Self::Frame(_));
+		let remembered = ExportFormat::ALL.get(settings.export_filter_index as usize).copied();
+		let remembered = if still && remembered.is_some_and(ExportFormat::is_video) { None } else { remembered };
+		let first = if still { ExportFormat::Png } else { formats[0].0 };
+		let format = remembered.filter(|f| formats.iter().any(|(g, _)| g == f)).unwrap_or(first);
+		let index = formats.iter().position(|(f, _)| *f == format).unwrap_or(0);
+		(format, i32::try_from(index).unwrap_or(0))
+	}
+
+	/// The file name first proposed for the project named `name`, a still's of timeline frame `frame`.
+	fn proposed(self, name: &str, frame: u32, ext: &str) -> String {
+		match self {
+			Self::Run(_) => format!("{name}{}.{ext}", self.layer().map_or("", layer_suffix)),
+			Self::Frame(_) => still_file_name(name, self.layer(), frame as usize, ext),
+		}
+	}
+
+	fn title(self, words: &Words<'_>) -> SharedString {
+		match self {
+			Self::Frame(_) => words.get_export_frame(),
+			Self::Run(ExportLayers::Field) => words.get_export_field(),
+			Self::Run(ExportLayers::Intensity) => words.get_export_intensity(),
+			Self::Run(ExportLayers::Both) => words.get_export_both(),
+		}
+	}
+
+	/// The dialog's names of `formats`.
+	fn format_names(self, formats: &[(ExportFormat, ExportFileFormat)], words: &Words<'_>) -> ModelRc<SharedString> {
+		let still = matches!(self, Self::Frame(_));
+		let names: Vec<SharedString> = formats
+			.iter()
+			.map(|(f, n)| {
+				format!("{} (*.{})", words.invoke_export_filter(*n, still), f.extensions().join(", *.")).into()
+			})
+			.collect();
+		ModelRc::new(VecModel::from(names))
+	}
+
+	/// An export in `format` writes more than one file: both layers, or an image sequence.
+	fn several(self, format: ExportFormat) -> bool {
+		matches!(self, Self::Run(l) if l == ExportLayers::Both || !format.is_video())
+	}
+
+	/// What an export in `format` needs of its run.
+	fn needs(self, format: ExportFormat, view: &View) -> Needs {
+		if self.layers() == ExportLayers::Field && !view.intensity.preview {
+			Needs::Field
+		} else {
+			Needs::Intensity { root: format.intensity_root() }
+		}
+	}
+}
+
+/// The index of the remembered H.264 profile.
+fn profile_index(settings: &Settings) -> i32 {
+	Profile::ALL.iter().position(|p| *p == settings.h264_profile).map_or(0, |i| i32::try_from(i).unwrap_or(0))
+}
+
+/// `path` with `format`'s extension: an export format's extension replaced, any other suffix kept.
+fn with_format_extension(path: &Path, format: ExportFormat) -> PathBuf {
+	let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase());
+	if ext.is_some_and(|e| ExportFormat::ALL.iter().any(|f| f.extensions().contains(&e.as_str()))) {
+		return path.with_extension(format.default_extension());
+	}
+	let mut name = path.as_os_str().to_owned();
+	name.push(".");
+	name.push(format.default_extension());
+	PathBuf::from(name)
+}
+
+/// The dialog's line of the files an export of both layers named `path` writes; empty for one output.
+fn outputs_line(kind: Kind, path: &Path, format: ExportFormat) -> SharedString {
+	if kind != Kind::Run(ExportLayers::Both) {
+		return SharedString::new();
+	}
+	let outs = layer_outputs(&with_format_extension(path, format), ExportLayers::Both);
+	let names: Vec<String> =
+		outs.iter().filter_map(|(_, p)| p.file_name()).map(|n| n.to_string_lossy().into_owned()).collect();
+	names.join(", ").into()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -53,17 +170,17 @@ mod native {
 	use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 	use std::thread::JoinHandle;
 
-	use slint::{ModelRc, SharedString, VecModel};
 	use waveduderust::Backend;
 	use waveduderust::io::schemes::SchemeStore;
 	use waveduderust::model::{Project, View};
 	use waveduderust::unstable::export::h264::{H264Factory, OpenH264Factory, Profile};
-	use waveduderust::unstable::export::naming::{layer_outputs, sequence_folder, still_file_name, with_layer_suffix};
-	use waveduderust::unstable::export::{ExportFormat, ExportLayers, ExportState};
+	use waveduderust::unstable::export::naming::{layer_outputs, sequence_folder, with_layer_suffix};
+	use waveduderust::unstable::export::{ExportFormat, ExportState};
 	use waveduderust_platform::export::{Made, Request, export_frames};
 	use waveduderust_platform::settings::{AppDirs, ExportHint, Settings};
 
-	use super::Kind;
+	use super::{Kind, Written, outputs_line, profile_index, with_format_extension};
+	use crate::document::Document;
 	use crate::live::{ExportFrames, Needs};
 	use crate::ui::{ExportData, ExportFileFormat, ExportProgress, Words};
 
@@ -83,9 +200,7 @@ mod native {
 			if let Some(archive) = &self.archive {
 				return if archive.is_file() { vec![(archive.clone(), false)] } else { Vec::new() };
 			}
-			let layers = match self.kind {
-				Kind::Run(l) | Kind::Frame(l) => l,
-			};
+			let layers = self.kind.layers();
 			let sequence = matches!(self.kind, Kind::Run(_)) && !self.format.is_video();
 			layer_outputs(&self.out, layers)
 				.into_iter()
@@ -102,30 +217,10 @@ mod native {
 		}
 	}
 
-	/// `path` with `format`'s extension: an export format's extension replaced, any other suffix kept.
-	fn with_format_extension(path: &Path, format: ExportFormat) -> PathBuf {
-		let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase());
-		if ext.is_some_and(|e| ExportFormat::ALL.iter().any(|f| f.extensions().contains(&e.as_str()))) {
-			return path.with_extension(format.default_extension());
-		}
-		let mut name = path.as_os_str().to_owned();
-		name.push(".");
-		name.push(format.default_extension());
-		PathBuf::from(name)
-	}
-
 	/// The export dialog while it is open.
 	pub(crate) struct Dialog {
 		kind: Kind,
 		formats: Vec<(ExportFormat, ExportFileFormat)>,
-	}
-
-	/// The layers' names of an export, `None` for both.
-	fn layer(layers: ExportLayers) -> Option<waveduderust::model::Layer> {
-		match layers.layers() {
-			[one] => Some(*one),
-			_ => None,
-		}
 	}
 
 	/// The archive at `typed`, `.zip` appended unless it ends so.
@@ -145,27 +240,23 @@ mod native {
 	}
 
 	impl Dialog {
-		/// The dialog of `kind` for the project at `project` named `name`, the shown timeline frame `frame`.
+		/// The dialog of `kind` for `doc` named `name`, the shown timeline frame `frame`.
 		pub(crate) fn open(
 			kind: Kind,
-			project: Option<&Path>,
+			doc: &Document,
 			name: &str,
 			frame: u32,
 			settings: &Settings,
 			words: &Words<'_>,
 		) -> Option<(Self, ExportData)> {
+			let project = doc.path.as_deref();
 			let formats = kind.formats();
-			let still = matches!(kind, Kind::Frame(_));
-			let remembered = ExportFormat::ALL.get(settings.export_filter_index as usize).copied();
-			let remembered = if still && remembered.is_some_and(ExportFormat::is_video) { None } else { remembered };
-			let first = if still { ExportFormat::Png } else { formats[0].0 };
-			let format = remembered.filter(|f| formats.iter().any(|(g, _)| g == f)).unwrap_or(first);
-			let index = formats.iter().position(|(f, _)| *f == format).unwrap_or(0);
+			let (format, index) = kind.first_format(&formats, settings);
 			let ext = format.default_extension();
 			let hint = project.and_then(|p| settings.export_hint(p));
-			let (last, layers) = match kind {
-				Kind::Run(l) => (hint.and_then(|h| h.run.clone()), l),
-				Kind::Frame(l) => (hint.and_then(|h| h.still.clone()), l),
+			let last = match kind {
+				Kind::Run(_) => hint.and_then(|h| h.run.clone()),
+				Kind::Frame(_) => hint.and_then(|h| h.still.clone()),
 			};
 			let folder = last
 				.as_deref()
@@ -176,42 +267,26 @@ mod native {
 				.or_else(std::env::home_dir)
 				.unwrap_or_default();
 			let file = match (kind, last) {
-				(Kind::Run(_), Some(last)) => with_layer_suffix(&last, layer(layers)).with_extension(ext),
-				(Kind::Run(_), None) => {
-					let suffix = layer(layers).map_or("", waveduderust::unstable::export::naming::layer_suffix);
-					PathBuf::from(format!("{name}{suffix}.{ext}"))
-				}
-				(Kind::Frame(_), _) => PathBuf::from(still_file_name(name, layer(layers), frame as usize, ext)),
+				(Kind::Run(_), Some(last)) => with_layer_suffix(&last, kind.layer()).with_extension(ext),
+				(Kind::Run(_), None) | (Kind::Frame(_), _) => PathBuf::from(kind.proposed(name, frame, ext)),
 			};
 			let path = folder.join(file.file_name().unwrap_or_default());
 			let archive_path = folder.join(format!("{name}.zip"));
-			let title = match kind {
-				Kind::Frame(_) => words.get_export_frame(),
-				Kind::Run(ExportLayers::Field) => words.get_export_field(),
-				Kind::Run(ExportLayers::Intensity) => words.get_export_intensity(),
-				Kind::Run(ExportLayers::Both) => words.get_export_both(),
-			};
-			let names: Vec<SharedString> = formats
-				.iter()
-				.map(|(f, n)| {
-					format!("{} (*.{})", words.invoke_export_filter(*n, still), f.extensions().join(", *.")).into()
-				})
-				.collect();
-			let dialog = Self { kind, formats };
 			let codec = AppDirs::platform().map(|d| d.codec());
 			let mut data = ExportData {
-				title,
-				formats: ModelRc::new(VecModel::from(names)),
-				format: i32::try_from(index).unwrap_or(0),
+				title: kind.title(words),
+				formats: kind.format_names(&formats, words),
+				format: index,
 				path: path.to_string_lossy().as_ref().into(),
 				codec_built_in: waveduderust::unstable::export::h264::BUILT_IN,
 				codec_installed: codec.is_some_and(|d| waveduderust_platform::codec::installed(&d).is_some()),
 				use_openh264: settings.use_openh264 == Some(true),
 				archive: settings.export_archive,
 				archive_path: archive_path.to_string_lossy().as_ref().into(),
-				profile: Profile::ALL.iter().position(|p| *p == settings.h264_profile).map_or(0, |i| i as i32),
+				profile: profile_index(settings),
 				..ExportData::default()
 			};
+			let dialog = Self { kind, formats };
 			dialog.follow(&mut data);
 			Some((dialog, data))
 		}
@@ -224,22 +299,8 @@ mod native {
 		pub(crate) fn follow(&self, data: &mut ExportData) {
 			let format = self.format_of(data);
 			data.mp4 = format == ExportFormat::Mp4;
-			data.several = matches!(self.kind, Kind::Run(l) if l == ExportLayers::Both || !format.is_video());
-			data.outputs = match self.kind {
-				Kind::Run(ExportLayers::Both) => {
-					let outs = layer_outputs(
-						&with_format_extension(Path::new(data.path.as_str()), format),
-						ExportLayers::Both,
-					);
-					let names: Vec<String> = outs
-						.iter()
-						.filter_map(|(_, p)| p.file_name())
-						.map(|n| n.to_string_lossy().into_owned())
-						.collect();
-					names.join(", ").into()
-				}
-				_ => SharedString::new(),
-			};
+			data.several = self.kind.several(format);
+			data.outputs = outputs_line(self.kind, Path::new(data.path.as_str()), format);
 		}
 
 		/// Picks format `index`: the path takes its extension.
@@ -384,19 +445,24 @@ mod native {
 		}
 
 		/// The progress while it waits or writes; its outcome once it ended.
-		pub(crate) fn poll(&mut self) -> Result<ExportProgress, Result<String, String>> {
+		pub(crate) fn poll(&mut self) -> Result<ExportProgress, Result<Written, String>> {
 			if self.waiting.is_some() {
-				return Ok(ExportProgress { active: true, waiting: true, done: 0, total: 0 });
+				return Ok(ExportProgress { active: true, waiting: true, ..ExportProgress::default() });
 			}
 			if self.thread.as_ref().is_some_and(JoinHandle::is_finished) {
 				let outcome = self.thread.take().map_or_else(
 					|| Err("gone".into()),
 					|t| t.join().unwrap_or_else(|_| Err("the export panicked".into())),
 				);
-				return Err(outcome);
+				return Err(outcome.map(|written| Written { line: format!("exported {written}") }));
 			}
 			let count = |n: &AtomicUsize| i32::try_from(n.load(Ordering::Relaxed)).unwrap_or(i32::MAX);
-			Ok(ExportProgress { active: true, waiting: false, done: count(&self.done), total: count(&self.total) })
+			Ok(ExportProgress {
+				active: true,
+				done: count(&self.done),
+				total: count(&self.total),
+				..Default::default()
+			})
 		}
 	}
 
@@ -412,14 +478,7 @@ mod native {
 	impl Plan {
 		/// What the export needs of its run.
 		pub(crate) fn needs(&self, view: &View) -> Needs {
-			let layers = match self.kind {
-				Kind::Run(layers) | Kind::Frame(layers) => layers,
-			};
-			if layers == ExportLayers::Field && !view.intensity.preview {
-				Needs::Field
-			} else {
-				Needs::Intensity { root: self.format.intensity_root() }
-			}
+			self.kind.needs(self.format, view)
 		}
 	}
 
@@ -489,112 +548,5 @@ mod native {
 			})
 		};
 		Exporting { cancel, done, total, thread: Some(thread), waiting: None }
-	}
-}
-
-/// The browser has no exports yet.
-#[cfg(target_arch = "wasm32")]
-mod web {
-	use std::path::Path;
-
-	use waveduderust::io::schemes::SchemeStore;
-	use waveduderust::model::{Project, View};
-	use waveduderust_platform::settings::Settings;
-
-	use super::Kind;
-	use crate::live::{ExportFrames, Needs};
-	use crate::ui::{ExportData, ExportProgress, Words};
-
-	pub(crate) enum Exporting {}
-
-	impl Exporting {
-		pub(crate) fn waiting(plan: &Plan, _: u32) -> Self {
-			match plan.never {}
-		}
-
-		pub(crate) fn waits(&self) -> Option<&(Plan, u32)> {
-			match *self {}
-		}
-
-		pub(crate) fn stop(&mut self) {
-			match *self {}
-		}
-
-		pub(crate) fn cancel(&self) {
-			match *self {}
-		}
-
-		pub(crate) fn poll(&mut self) -> Result<ExportProgress, Result<String, String>> {
-			match *self {}
-		}
-	}
-
-	/// Never made: the browser's dialog does not open.
-	#[derive(Clone, Debug)]
-	pub(crate) struct Plan {
-		pub(crate) kind: Kind,
-		never: std::convert::Infallible,
-	}
-
-	impl Plan {
-		pub(crate) fn needs(&self, _: &View) -> Needs {
-			match self.never {}
-		}
-
-		pub(crate) fn existing(&self) -> Vec<(std::path::PathBuf, bool)> {
-			Vec::new()
-		}
-	}
-
-	pub(crate) enum Dialog {}
-
-	impl Dialog {
-		pub(crate) fn open(
-			_: Kind,
-			_: Option<&Path>,
-			_: &str,
-			_: u32,
-			_: &Settings,
-			_: &Words<'_>,
-		) -> Option<(Self, ExportData)> {
-			tracing::warn!("exports are not in the browser build yet");
-			None
-		}
-
-		pub(crate) fn format(&self, _: &mut ExportData, _: i32) {
-			match *self {}
-		}
-
-		pub(crate) fn browse(&self, _: &mut ExportData, _: &Words<'_>) {
-			match *self {}
-		}
-
-		pub(crate) fn browse_archive(&self, _: &mut ExportData, _: &Words<'_>) {
-			match *self {}
-		}
-
-		pub(crate) fn plan(&self, _: &ExportData, _: &mut Settings) -> Result<Plan, String> {
-			match *self {}
-		}
-
-		pub(crate) fn follow(&self, _: &mut ExportData) {
-			match *self {}
-		}
-	}
-
-	pub(crate) fn remember(_: &Plan, _: Option<&Path>, _: &mut Settings) {}
-
-	pub(crate) fn delete_codec(_: &mut ExportData) {}
-
-	pub(crate) fn start(
-		plan: &Plan,
-		_: ExportFrames,
-		_: &Project,
-		_: &View,
-		_: u32,
-		_: &Settings,
-		_: &SchemeStore,
-	) -> Exporting {
-		match plan.never {}
 	}
 }

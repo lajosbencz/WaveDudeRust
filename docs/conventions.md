@@ -57,7 +57,8 @@ The crates are listed in [`WORKSPACE.md`](../WORKSPACE.md) ([decision 0032](deci
 - `waveduderust_remote`: the live run in the browser's run worker (decision 0024): the protocol, the worker's `Host`
   and the page's `Remote`, whose mirror store receives the worker's frames, over `postMessage` ports in the browser and
   a `Loopback` pair in the tests; the spill worker's messages (`spill`) and the page's end of it (`opfs::Opfs`, the
-  stores' frames past memory, decision 0020). Depends on core.
+  stores' frames past memory, decision 0020); with feature `spool` the exports' files in the same session folder
+  (`opfs::Spool`, decision 0025). Depends on core.
 - `waveduderust_workers`: the browser's workers, binaries only: `wavedude-run-worker`, the live run's CPU engine in a
   module worker (decision 0035), and `wavedude-spill-worker`, the frames past memory in the origin private file system
   through synchronous access handles (decision 0020). Depends on core and remote.

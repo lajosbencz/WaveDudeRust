@@ -110,7 +110,10 @@ row. Each phase is one coding pass, then a separate verification of the diff, th
       ([measurements.md](measurements.md), The browser's frame spill in the Slint app).
    5. Exports from the live run's store, waiting for its full-quality frames (decision 0012, `ExportGate` of
       `master`), not a run of their own (parity D-47, R-25, R-26). Then the browser's exports (decision 0025: names only,
-      always ZIP, WebCodecs MP4, the OPFS spool, Download), parity D-51.
+      always ZIP, WebCodecs MP4, the OPFS spool, Download), parity D-51. Done 2026-11-26: the browser's exports read
+      the live run's store through the same export hold, the job stepped on the page; `waveduderust_remote::opfs::Spool`
+      (feature `spool`) writes a run's files in the spill session's folder, the page's WebCodecs encoder
+      (`export/webcodecs.rs`) writes MP4, and a completed export offers its file in "The export is ready" with Download.
    6. Fallbacks: no GPU adapter starts the app on Slint's software renderer and the CPU engine, the pictures coloured
       on the CPU; in the browser WebGL2 and the CPU engine, the reason in Messages (parity V-43); the browser's CPU
       engine in a SIMD build beside the scalar one (decision 0034); a lost GPU device reported and the run rebuilt.

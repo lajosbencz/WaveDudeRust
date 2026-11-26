@@ -49,8 +49,45 @@ tracing-web.workspace = true
 sys-locale = { version = "0.3", features = ["js"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures.workspace = true
-waveduderust_remote = { path = "../../crates/waveduderust_remote" }
-web-sys = { workspace = true, features = ["BeforeUnloadEvent", "Blob", "BlobPropertyBag", "Document", "Event", "EventTarget", "Element", "Clipboard", "HtmlAnchorElement", "MessageChannel", "MessageEvent", "MessagePort", "Navigator", "Url", "Window", "console"] }
+# MP4 through the browser's WebCodecs encoder
+waveduderust = { path = "../../crates/waveduderust", default-features = false, features = ["mp4-mux"] }
+waveduderust_remote = { path = "../../crates/waveduderust_remote", features = ["spool"] }
+web-sys = { workspace = true, features = [
+	"BeforeUnloadEvent",
+	"Blob",
+	"BlobPropertyBag",
+	"Clipboard",
+	"CodecState",
+	"Document",
+	"Element",
+	"EncodedVideoChunk",
+	"EncodedVideoChunkType",
+	"Event",
+	"EventTarget",
+	"HardwareAcceleration",
+	"HtmlAnchorElement",
+	"LatencyMode",
+	"MessageChannel",
+	"MessageEvent",
+	"MessagePort",
+	"Navigator",
+	"Url",
+	"VideoColorPrimaries",
+	"VideoColorSpaceInit",
+	"VideoEncoder",
+	"VideoEncoderBitrateMode",
+	"VideoEncoderConfig",
+	"VideoEncoderEncodeOptions",
+	"VideoEncoderInit",
+	"VideoEncoderSupport",
+	"VideoFrame",
+	"VideoFrameBufferInit",
+	"VideoMatrixCoefficients",
+	"VideoPixelFormat",
+	"VideoTransferCharacteristics",
+	"Window",
+	"console",
+] }
 
 [package.metadata.packager]
 product-name = "WaveDude Rust"

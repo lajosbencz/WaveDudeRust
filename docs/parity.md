@@ -13,7 +13,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 |---|---|---|---|---|---|---|
 | X | Cross-cutting | 14 | 6 | 0 | 20 | 0 |
 | M | Menus and shortcuts | 79 | 9 | 0 | 52 | 0 |
-| D | Dialogs and windows | 51 | 19 | 1 | 8 | 0 |
+| D | Dialogs and windows | 51 | 20 | 0 | 8 | 0 |
 | S | Settings | 22 | 7 | 0 | 3 | 0 |
 | I | Icons | 60 | 1 | 0 | 22 | 0 |
 | T | Project tree | 58 | 4 | 0 | 39 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 69 | 9 | 1 | 9 | 2 |
 | R | Live editing and runs | 42 | 15 | 0 | 2 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 827 | 86 | 3 | 174 | 5 |
+| | All | 827 | 87 | 2 | 174 | 5 |
 
 ## Cross-cutting
 
@@ -326,7 +326,7 @@ Kind descriptions are the entries' tooltips (Kind.<Type>). All entries missing i
 | D-48 | Export progress: "Exporting n / N frames", 120 px determinate bar, tooltip "Cancel the export (Esc)", indeterminate while waiting | MW:450-468, SE (TipExportCancel) | ui/70, status bar | partial | "Exporting d/t" (ExportProgress) over the run's status while an export runs; no progress bar |
 | D-49 | Export: Esc cancels (also while waiting); completed export reports in status bar | MW:464 | ui/70 | partial | Stop menu/F5 cancels via "stop"; Esc unbound; completion only logged |
 | D-50 | Probe data CSV export (point: step;amplitude; line: frame;step;distances; semicolons) | ExportCommands.ProbeCsv | ui/70 CSV | done | core export::csv::write_probe_csv with the run schedule (visualize every, frame divisor), as the CLI |
-| D-51 | Browser export dialog (names only, always ZIP, WebCodecs MP4, "export is ready" Download/Close window, OPFS) | n/a | ui/70 Browser differences, decision 0025 | missing | export.rs web mod: "exports are not in the browser build yet" |
+| D-51 | Browser export dialog (names only, always ZIP, WebCodecs MP4, "export is ready" Download/Close window, OPFS) | n/a | ui/70 Browser differences, decision 0025 | partial | export/web.rs: file names alone, an export of several files one ZIP, MP4 through WebCodecs (export/webcodecs.rs), a run's files spooled in OPFS (`waveduderust_remote::opfs::Spool`, the spill session's folder), "The export is ready" with Download/Close; unverified in a browser; MP4 and a profile the browser lacks are not greyed in their lists (the reason shows below, OK disabled for MP4); the probe CSV downloads at once without the dialog |
 | D-52 | About window: modal 600 px wide (min 480x620), Esc/Enter close, focus on Close | WPF/Help/AboutWindow.xaml:21-28 | ui/70 About | done | modal About; rest matched in general (decision 0033) |
 | D-53 | About: app icon 64 px, product name, "Version x.y.z (hash7)", tagline "A 2D wave simulator", copyright line | AboutWindow.xaml:44-53, SE:115-117 | ui/70 About 1 | done | version and tagline; rest matched in general (decision 0033) |
 | D-54 | About: "Based on the work of" credits word for word with 5 hyperlinks; WaveDude Next credit + GitHub link (port) | AboutWindow.xaml:56-70, SE:118 | ui/70 About 2 | partial | credits as one plain sentence, no links, no Next link line |

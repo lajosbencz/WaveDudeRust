@@ -207,6 +207,12 @@ fn with_link<T>(f: impl FnOnce(&Link) -> T) -> T {
 	LINK.with(|link| f(link.get().expect("the spill worker is started first")))
 }
 
+/// Calls the page's wake.
+#[cfg(feature = "spool")]
+pub(super) fn wake() {
+	with_link(|link| (link.wake)());
+}
+
 /// Whether the spill worker answers nothing more.
 fn gone() -> bool {
 	with_link(|link| link.state.borrow().gone().is_some())
