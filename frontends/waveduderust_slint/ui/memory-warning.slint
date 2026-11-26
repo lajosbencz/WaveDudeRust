@@ -25,12 +25,14 @@ export struct MemoryWarningData {
 }
 
 // The memory warning (docs/ui/60, Memory warning), modal over the main window: Run (Enter) or Cancel (Esc).
+export enum WarningAnswer { run, cancel }
+
 export component MemoryWarningLayer inherits Rectangle {
     in property <bool> shown;
     in property <MemoryWarningData> data;
     // the boxes as ticked
     callback ticked(cache: bool, resolution: bool, frames: bool, samples: bool);
-    callback answer(run: bool, mute: bool);
+    callback answer(answer: WarningAnswer, mute: bool);
 
     property <bool> mute;
     function tick() {
@@ -58,8 +60,8 @@ export component MemoryWarningLayer inherits Rectangle {
     // the dialog inside: Esc and Enter bubble up from a focused box
     keys := FocusScope {
         key-pressed(e) => {
-            if (e.text == Key.Escape) { root.answer(false, root.mute); return accept; }
-            if (e.text == Key.Return) { root.answer(true, root.mute); return accept; }
+            if (e.text == Key.Escape) { root.answer(WarningAnswer.cancel, root.mute); return accept; }
+            if (e.text == Key.Return) { root.answer(WarningAnswer.run, root.mute); return accept; }
             reject
         }
         Rectangle {
@@ -143,8 +145,8 @@ export component MemoryWarningLayer inherits Rectangle {
                 HorizontalLayout {
                     alignment: end;
                     spacing: 8px;
-                    Button { text: @tr("Run"); primary: true; clicked => { root.answer(true, root.mute); } }
-                    Button { text: @tr("Cancel"); clicked => { root.answer(false, root.mute); } }
+                    Button { text: @tr("Run"); primary: true; clicked => { root.answer(WarningAnswer.run, root.mute); } }
+                    Button { text: @tr("Cancel"); clicked => { root.answer(WarningAnswer.cancel, root.mute); } }
                 }
             }
         }

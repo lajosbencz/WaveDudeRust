@@ -23,13 +23,16 @@ export struct Transport {
     intensity-shown: bool,
 }
 
+// The in or the out point of the range.
+export enum Bracket { start, end }
+
 // The scrub bar (docs/ui/50, Timeline): tick labels, frames made, the in/out range, the playhead; click or drag to
 // scrub, drag a bracket to move the range.
 export component Timeline inherits Rectangle {
     in property <Transport> t;
     callback seek(int);
-    // the in point (or the out point with `end`) dragged to `frame`
-    callback bracket(end: bool, frame: int);
+    // the bracket dragged to `frame`
+    callback bracket(bracket: Bracket, frame: int);
     // the keys the bar shares with the transport bar
     callback action(TransportAction);
 
@@ -182,7 +185,7 @@ export component Timeline inherits Rectangle {
         moved => {
             if (!self.pressed) { return; }
             if (root.dragging > 0) {
-                root.bracket(root.dragging == 2, root.frame-at(self.mouse-x));
+                root.bracket(root.dragging == 2 ? Bracket.end : Bracket.start, root.frame-at(self.mouse-x));
             } else {
                 root.seek(root.frame-at(self.mouse-x));
             }

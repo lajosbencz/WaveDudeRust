@@ -720,7 +720,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			}
 		}
 		Command::Save | Command::SaveAs => {
-			save(state, app, command == Command::SaveAs);
+			save(state, app, if command == Command::SaveAs { SaveTo::Picked } else { SaveTo::File });
 		}
 		Command::ExportField
 		| Command::ExportIntensity
@@ -1104,7 +1104,7 @@ fn about(state: &State) -> ui::AboutData {
 
 /// The memory warning answered: Run applies the ticks to the settings and runs, Cancel leaves the frames as they
 /// are and turns playback off; `mute` clears the setting.
-fn answer_warning(state: &mut State, app: &AppWindow, run: bool, mute: bool) {
+fn answer_warning(state: &mut State, app: &AppWindow, answer: ui::WarningAnswer, mute: bool) {
 	let Some(ticks) = state.warning_ticks.take() else { return };
 	let quality = state.live.warning().map(|(_, w)| w.quality_of(ticks));
 	let Some(ask) = state.live.take_ask() else { return };
@@ -1112,7 +1112,7 @@ fn answer_warning(state: &mut State, app: &AppWindow, run: bool, mute: bool) {
 	if mute {
 		state.settings.warn_when_ram_insufficient = false;
 	}
-	if run {
+	if answer == ui::WarningAnswer::Run {
 		if let Some(q) = quality {
 			state.settings.set_preview_quality(q);
 		}
@@ -1262,9 +1262,16 @@ fn tell(app: &AppWindow, message: ui::Message, arg: &str) {
 	app.set_modal(ui::Modal { message, arg: arg.into() });
 }
 
-/// Saves the project, to a picked file for Save As or without a file; `false` when cancelled or failed.
+/// Where Save writes: the project's file, asked for when it has none, or a file asked for (Save As).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SaveTo {
+	File,
+	Picked,
+}
+
+/// Saves the project, to a picked file for [`SaveTo::Picked`] or without a file; `false` when cancelled or failed.
 #[cfg(target_arch = "wasm32")]
-fn save(state: &mut State, app: &AppWindow, _: bool) -> bool {
+fn save(state: &mut State, app: &AppWindow, _: SaveTo) -> bool {
 	let name = file_name(state, app);
 	match files::download(&name, &state.doc.text(), "application/xml") {
 		Ok(()) => {
@@ -1281,12 +1288,12 @@ fn save(state: &mut State, app: &AppWindow, _: bool) -> bool {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
+fn save(state: &mut State, app: &AppWindow, to: SaveTo) -> bool {
 	let Some(path) = state
 		.doc
 		.path
 		.clone()
-		.filter(|_| !pick)
+		.filter(|_| to == SaveTo::File)
 		.or_else(|| files::dialog(&app.global::<ui::Words<'_>>()).set_file_name(file_name(state, app)).save_file())
 	else {
 		return false;
@@ -1359,7 +1366,7 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 	}
 	if let Some(then) = state.pending.take() {
 		let go = match answer {
-			ui::Answer::Save => save(state, app, false),
+			ui::Answer::Save => save(state, app, SaveTo::File),
 			ui::Answer::Discard => true,
 			ui::Answer::Ok
 			| ui::Answer::Cancel
@@ -1932,8 +1939,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		wake::wake();
 	});
 	let st = state.clone();
-	app.on_bracket(move |end, frame| {
-		st.borrow_mut().playback.drag_bracket(end, i64::from(frame));
+	app.on_bracket(move |bracket, frame| {
+		st.borrow_mut().playback.drag_bracket(bracket, i64::from(frame));
 		wake::wake();
 	});
 	let st = state.clone();
@@ -1968,7 +1975,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		});
 	});
 	let h = Handle::new(&state, &app);
-	app.on_memory_warning_answer(move |run, mute| h.show(|s, app| answer_warning(s, app, run, mute)));
+	app.on_memory_warning_answer(move |answer, mute| h.show(|s, app| answer_warning(s, app, answer, mute)));
 	let h = Handle::new(&state, &app);
 	app.on_export_format(move |index| h.read(|s, app| s.edit_export(app, |d, data| d.format(data, index))));
 	let h = Handle::new(&state, &app);

@@ -16,10 +16,10 @@ export { Words, ExportFileFormat } from "words.slint";
 import { Properties } from "properties.slint";
 import { Preview } from "preview.slint";
 import { Canvas } from "canvas.slint";
-import { Timeline, TransportBar, Transport } from "timeline.slint";
+import { Timeline, TransportBar, Transport, Bracket } from "timeline.slint";
 import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
 import { ModalLayer, Modal, Message, Answer } from "modal.slint";
-import { MemoryWarningLayer, MemoryWarningData } from "memory-warning.slint";
+import { MemoryWarningLayer, MemoryWarningData, WarningAnswer } from "memory-warning.slint";
 import { AboutLayer, AboutData } from "about.slint";
 import { ExportLayer, ExportData, ExportReason } from "export-dialog.slint";
 export { ExportData, ExportReason }
@@ -35,8 +35,8 @@ export { NumberLogic, NumberSpec } from "number-box.slint";
 export { ColorLogic, Hsv } from "color-picker.slint";
 export { Canvas, EdgeLine, GraphBox, GraphTick, HandleData, HandleGlyph, HandleKey, HoverTip, LabelData, OverlayArt, Rect, TipKind } from "canvas.slint";
 export { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
-export { MemoryWarningData, AboutData }
-export { Theme, TreeRow, TreeKind, Transport, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
+export { MemoryWarningData, WarningAnswer, AboutData }
+export { Theme, TreeRow, TreeKind, Transport, Bracket, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
 
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 // Which menu commands can run (Next's CanExecute rules, docs/ui/10).
@@ -160,12 +160,12 @@ export component AppWindow inherits Window {
     in property <bool> memory-warning-shown;
     in property <MemoryWarningData> memory-warning;
     callback memory-warning-ticked(bool, bool, bool, bool);
-    callback memory-warning-answer(bool, bool);
+    callback memory-warning-answer(WarningAnswer, bool);
     in property <int> log-added;
     callback seek(int);
     callback transport-action(TransportAction);
     callback transport-speed(text: string) -> string;
-    callback bracket(end: bool, frame: int);
+    callback bracket(bracket: Bracket, frame: int);
     // the selected row: its kind and an item's name
     in property <TreeKind> props-kind;
     in property <string> props-heading;
@@ -485,7 +485,7 @@ export component AppWindow inherits Window {
                                     Timeline {
                                         t: root.transport;
                                         seek(f) => { root.seek(f); }
-                                        bracket(end, f) => { root.bracket(end, f); }
+                                        bracket(b, f) => { root.bracket(b, f); }
                                         action(a) => { root.transport-action(a); }
                                     }
                                     TransportBar {
@@ -638,7 +638,7 @@ export component AppWindow inherits Window {
         shown: root.memory-warning-shown;
         data: root.memory-warning;
         ticked(c, r, f, s) => { root.memory-warning-ticked(c, r, f, s); }
-        answer(run, mute) => { root.memory-warning-answer(run, mute); }
+        answer(answer, mute) => { root.memory-warning-answer(answer, mute); }
     }
     ModalLayer {
         // an overlay: its frame sets no bounds on the window
