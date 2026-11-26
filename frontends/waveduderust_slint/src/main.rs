@@ -480,65 +480,6 @@ fn watch_scene_image(state: &mut State, app: &AppWindow) {
 	}
 }
 
-/// The window's own events: input wakes the tick, a dropped file opens, and after a forced theme the System theme
-/// keeps the desktop's scheme from winit's theme event, which Linux lacks (docs/blockers.md, Slint's system colour
-/// scheme).
-fn wire_window_events(state: &Rc<RefCell<State>>, app: &AppWindow) {
-	use slint::language::ColorScheme;
-	use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
-	let (state, weak) = (state.clone(), app.as_weak());
-	let mut cursor = None;
-	app.window().on_winit_window_event(move |window, event| {
-		use winit::event::{ElementState, TouchPhase, WindowEvent};
-		let pressed = match event {
-			WindowEvent::CursorMoved { position, .. } => {
-				cursor = Some(*position);
-				None
-			}
-			WindowEvent::CursorLeft { .. } => {
-				cursor = None;
-				None
-			}
-			WindowEvent::MouseInput { state: ElementState::Pressed, .. } => cursor,
-			WindowEvent::Touch(t) if t.phase == TouchPhase::Started => Some(t.location),
-			_ => None,
-		};
-		if let (Some(at), Some(app)) = (pressed, weak.upgrade()) {
-			let at = at.to_logical::<f32>(f64::from(window.scale_factor()));
-			app.invoke_dock_pressed(at.x, at.y);
-		}
-		// input ticks once after Slint handled it, as classic's repaint on input did: what a callback changed is shown
-		if matches!(
-			event,
-			WindowEvent::KeyboardInput { .. }
-				| WindowEvent::MouseInput { .. }
-				| WindowEvent::MouseWheel { .. }
-				| WindowEvent::Touch(_)
-				| WindowEvent::Ime(_)
-		) {
-			wake::wake();
-		}
-		if let (WindowEvent::DroppedFile(path), Some(app)) = (event, weak.upgrade()) {
-			// a native dialog's nested loop may deliver it while the state is borrowed
-			let Ok(mut s) = state.try_borrow_mut() else { return EventResult::Propagate };
-			let s = &mut *s;
-			dropped(s, &app, path.clone());
-			s.show(&app);
-		}
-		if let (WindowEvent::ThemeChanged(theme), Some(app)) = (event, weak.upgrade()) {
-			let mut s = state.borrow_mut();
-			if s.system_scheme.is_some() {
-				s.system_scheme = Some(match theme {
-					winit::window::Theme::Dark => ColorScheme::Dark,
-					winit::window::Theme::Light => ColorScheme::Light,
-				});
-				apply_theme(&mut s, &app);
-			}
-		}
-		EventResult::Propagate
-	});
-}
-
 /// Sets the palette's scheme for a forced theme, or back to the desktop's after one; untouched, it follows the desktop.
 fn apply_theme(state: &mut State, app: &AppWindow) {
 	let palette = app.global::<ui::Palette<'_>>();
@@ -1004,7 +945,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.set_tree_rows(ModelRc::from(state.borrow().tree_rows.clone()));
 	app.set_native_access_keys(cfg!(windows));
 	apply_settings(&mut state.borrow_mut(), &app);
-	wire_window_events(&state, &app);
+	wire::wire_window_events(&state, &app);
 	let layout = state.borrow().settings.layout.clone();
 	let keeper = Rc::downgrade(&state);
 	docking::wire(&app, layout.as_deref(), move |layout| {
@@ -1038,7 +979,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
 	wire::wire_tree(&state, &app);
 	wire::wire_form(&state, &app);
-	wire_canvas(&state, &app);
+	wire::wire_canvas(&state, &app);
 	wire::wire_menu(&state, &app);
 	wire::wire_dialogs(&state, &app);
 	wire::wire_transport(&state, &app);
@@ -1255,132 +1196,6 @@ mod ticker {
 			WAKING.store(false, Ordering::Release);
 		}
 	}
-}
-
-/// The pictures' handles: selection by click, drags as one undo step each.
-fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
-	let canvas = app.global::<ui::Canvas<'_>>();
-	state.borrow().overlays.wire(&canvas);
-	state.borrow().graphs.wire(&canvas);
-	let (st, weak) = (state.clone(), app.as_weak());
-	canvas.on_rescaled(move |layer, scale| {
-		let Some(app) = weak.upgrade() else { return };
-		// reported during a layout, which may run while the state is borrowed: taken up once it is free
-		let st = st.clone();
-		slint::Timer::single_shot(std::time::Duration::ZERO, move || {
-			let s = &mut *st.borrow_mut();
-			if s.overlays.rescale(layer, scale) {
-				s.overlays.show(&app.global::<ui::Canvas<'_>>(), &s.doc.project, &s.doc.view, &s.selection);
-				// the boxes are laid out in logical pixels
-				s.show_graphs();
-				s.show_box_focus(&app);
-			}
-		});
-	});
-	let h = Handle::new(state, app);
-	canvas.on_press(move |layer, x, y, control, shift| {
-		h.show(|s, app| {
-			s.drags += 1;
-			let boxes = s.graphs.placed(layer);
-			let press = canvas::Press { layer, at: (x, y), control, shift };
-			s.gesture = s.overlays.press(&s.doc.project, &mut s.selection, press, s.drags, boxes);
-			app.global::<ui::Canvas<'_>>().set_dragging(s.gesture.is_some());
-		});
-	});
-	let h = Handle::new(state, app);
-	canvas.on_drag(move |dx, dy, shift| {
-		h.with(|s, app| match &mut s.gesture {
-			Some(canvas::Gesture::Handle(drag)) => {
-				s.doc.edit_merging(Some(drag.key()), |p| drag.apply(p, (dx, dy), shift));
-				s.show(app);
-			}
-			Some(canvas::Gesture::Marquee(m)) => {
-				m.stretch((dx, dy));
-				let canvas = app.global::<ui::Canvas<'_>>();
-				canvas.set_marquee(m.rect());
-				canvas.set_marquee_layer(m.layer());
-				canvas.set_marquee_shown(true);
-			}
-			None => {}
-		});
-	});
-	let h = Handle::new(state, app);
-	canvas.on_release(move || h.show(State::finish_gesture));
-	let h = Handle::new(state, app);
-	canvas.on_brightness(move |layer, value| {
-		h.show(|s, _| s.set_brightness(canvas::model_layer(layer), number::wide(value)));
-	});
-	let h = Handle::new(state, app);
-	canvas.on_auto(move |layer| {
-		h.show(|s, _| {
-			let layer = canvas::model_layer(layer);
-			if let live::Fit::Done(fit) = s.live.auto(layer) {
-				s.fitted(layer, fit);
-			}
-		});
-	});
-	let h = Handle::new(state, app);
-	canvas.on_hover(move |layer, x, y| {
-		h.read(|s, app| {
-			let canvas = app.global::<ui::Canvas<'_>>();
-			let under = models::index_to_ui(s.graphs.under(layer, (x, y)));
-			canvas.set_hover_layer(layer);
-			canvas.set_hover_box(under);
-			canvas.set_hover_tip(s.overlays.tip(&s.doc.project, layer, (x, y), s.graphs.placed(layer)));
-		});
-	});
-	let h = Handle::new(state, app);
-	canvas.on_export_probe_csv(move |probe| {
-		h.with(|s, app| {
-			if let Ok(i) = usize::try_from(probe) {
-				s.selection.set(Node::Probe(i));
-				export_probe_csv(s, app, i);
-				s.show(app);
-			}
-		});
-	});
-	let h = Handle::new(state, app);
-	canvas.on_key(move |layer, key, shift| {
-		use ui::HandleKey;
-		h.with(|s, app| {
-			let step = if shift { 10. } else { 1. };
-			// a lever turns counter-clockwise on Right and Up
-			let (d, turn) = match key {
-				HandleKey::Enter | HandleKey::Next | HandleKey::Previous => {
-					let taken = if key == HandleKey::Enter {
-						s.overlays.enter(&s.doc.project, &mut s.selection, layer, s.graphs.placed(layer))
-					} else {
-						let back = key == HandleKey::Previous;
-						s.overlays.tab(&s.doc.project, &mut s.selection, layer, back, s.graphs.placed(layer))
-					};
-					s.show(app);
-					return taken;
-				}
-				HandleKey::Left => ((-step, 0.), -step),
-				HandleKey::Right => ((step, 0.), step),
-				HandleKey::Up => ((0., -step), step),
-				HandleKey::Down => ((0., step), -step),
-			};
-			let Some(key) = s.overlays.nudge_key(layer, &s.selection) else { return false };
-			let boxes = s.graphs.placed(layer);
-			if s.overlays.focused_box(layer, &s.doc.project, boxes).is_some() {
-				s.doc.edit_merging(Some(key), |p| s.overlays.nudge_box(p, layer, d, boxes));
-			} else {
-				s.doc.edit_merging(Some(key), |p| s.overlays.nudge(p, &s.selection, layer, d, turn));
-			}
-			s.show(app);
-			true
-		})
-	});
-	let h = Handle::new(state, app);
-	canvas.on_cancel(move || {
-		h.show(|s, app| {
-			end_gesture(app);
-			if let Some(canvas::Gesture::Handle(drag)) = s.gesture.take() {
-				s.doc.cancel(&drag.key());
-			}
-		});
-	});
 }
 
 /// Writes probe `i`'s recording to a CSV file the user names (the browser: the export dialog names its download).
