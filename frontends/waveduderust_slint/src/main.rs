@@ -1086,6 +1086,7 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 			Ok(()) => {
 				s.opened();
 				tracing::info!("Opened {name}");
+				s.show(app);
 			}
 			Err(e) => {
 				tracing::error!("cannot open {name}: {e}");
