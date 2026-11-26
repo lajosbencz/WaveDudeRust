@@ -15,7 +15,16 @@
 //! two passes, `w = c2 L u`, then `next = u + ((u - prev) d + (w + c2 L w / 12))` (stencil.rs); `next` is written
 //! over `prev`. With a rim, the CPML corrects the rim after each pass (pml.rs).
 //!
-//! Threads: one driver thread; each pass fans out over rows on the rayon pool, reading only its input field.
+//! Fused passes: the 4th-order outer pass computes `w` itself where it can, so the plane `w` makes no round trip
+//! through memory there. Each block of rows keeps the 7 rows of `w` its stencil reads in a ring; the row 3 below the
+//! one it writes is computed from `u` (`c2 L u`, as the inner pass would) on the fresh area, the damage before the
+//! sub-step less the band of rows and columns the CPML reads `w` from. The inner pass writes the plane on the rest of
+//! the damage: the band, where the CPML corrects `w`, and the cells the damage grew by, whose extent the outer pass's
+//! area needs. A driven cell of the fresh area takes `w` from the plane, where the forcing completes it. Every value
+//! of `w` is the same expression in the same order as in two passes; the plane holds stale values on the fresh area.
+//!
+//! Threads: one driver thread; each pass fans out over rows, or blocks of rows, on the rayon pool, reading only its
+//! input fields.
 //!
 //! Damage: one rectangle of grid cells (damage.rs) outside which the field and the intensity stages are +0. A pass
 //! runs on the damage grown by its reach (the stencil's, the CPML's with a rim), its rows only and its columns within
@@ -32,7 +41,7 @@ use super::capture;
 use super::damage::{Damage, extent};
 use super::forcing::{IMAGE_LEVELS, SourceGroups, live};
 use super::mur::{MurChain, mur_chains};
-use super::pml::{self, CpuPml, Medium, cut, taps};
+use super::pml::{self, CpuPml, Medium, cut, cut_taps};
 use super::shared::{Shared, blend};
 use super::stencil::{INV12, K9_AXIS, K9_DIAGONAL, PAD, StencilCoefficients, TimeScheme, centred};
 use super::substeps::sub_steps;
@@ -58,7 +67,8 @@ pub struct CpuEngine {
 	mirrors: bool,
 	u: Vec<f32>,
 	prev: Vec<f32>,
-	/// The modified equation's `c2 L u`, 0 on the padding.
+	/// The modified equation's `c2 L u`, 0 on the padding; current outside the sub-step's fresh area and at its driven
+	/// cells (module docs, Fused passes).
 	w: Vec<f32>,
 	/// The intensity's EMA stages; empty unless the intensity is tracked.
 	s1: Vec<f32>,
@@ -77,6 +87,8 @@ pub struct CpuEngine {
 	damage: Damage,
 	/// Cells one pass reaches along an axis: the stencil's, the CPML's when there is a rim.
 	reach: usize,
+	/// The padded cells of the sub-step's fresh area (module docs, Fused passes) the forcing drove, ascending.
+	driven: Vec<usize>,
 }
 
 /// The bytes [`CpuEngine`] allocates by the grid of `scene` with `options`: the field, medium and stage planes, the
@@ -129,6 +141,7 @@ impl CpuEngine {
 			probe_reading: ProbeReadings::default(),
 			damage: Damage::NONE,
 			reach: 0,
+			driven: Vec::new(),
 			shared: Shared::new(scene, options, n),
 		};
 		engine.load_scene();
@@ -240,24 +253,32 @@ impl CpuEngine {
 		self.values.resize(self.shared.sources.table_len(), 0.0);
 	}
 
-	/// Adds the sub-step's forcing `F` to `w` at the driven cells, where the modified equation takes
-	/// `A u` (forcing.rs).
-	fn force_w(&mut self) {
+	/// Adds the sub-step's forcing `F` to `w` at the driven cells, where the modified equation takes `A u`
+	/// (forcing.rs). A driven cell of `fresh` first takes `w = c2 L u`, which the inner pass left to the outer, and
+	/// joins `driven`, from which the outer pass reads it.
+	fn force_w(&mut self, fresh: &Damage) {
+		let s = self.stride;
+		self.driven.clear();
 		for (cell, run) in self.groups.iter() {
+			let mut live_values = run.iter().map(|&e| self.values[e as usize]).filter(|&f| live(f)).peekable();
+			if live_values.peek().is_none() {
+				continue;
+			}
+			let (gx, gy) = (cell % s - PAD, cell / s - PAD);
+			if fresh.x.contains(&gx) && fresh.y.contains(&gy) {
+				let cut = if self.mirrors { self.cuts[cell] } else { 0 };
+				self.w[cell] = self.c2[cell] * drp(&plane_rows(&self.u, cell / s, s), gx, &self.axis, cut);
+				self.driven.push(cell);
+			}
 			let mut v = self.w[cell];
-			let mut driven = false;
-			for &e in run {
-				let f = self.values[e as usize];
-				if live(f) {
-					v += f;
-					driven = true;
-				}
+			for f in live_values {
+				v += f;
 			}
-			if driven {
-				self.w[cell] = v;
-				self.damage.include(cell, self.stride);
-			}
+			self.w[cell] = v;
+			self.damage.include(cell, s);
 		}
+		self.driven.sort_unstable();
+		self.driven.dedup();
 	}
 
 	/// Adds `h F` to the next field at the driven cells, where leapfrog takes `h A u`, and moves the
@@ -337,35 +358,94 @@ impl CpuEngine {
 		});
 	}
 
-	/// The modified equation's first pass: `w = c2 L u` on the damaged cells.
-	fn inner_pass(&mut self) {
+	/// The modified equation's first pass: `w = c2 L u` on the damaged cells but those of `fresh`, which the outer pass
+	/// computes in its ring (module docs, Fused passes).
+	fn inner_pass(&mut self, fresh: &Damage) {
 		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
 		let (u, c2, cuts, axis, mirrors) = (&self.u, &self.c2, &self.cuts, &self.axis, self.mirrors);
 		let (area, xs) = (&self.damage, &self.damage.x);
 		grid_rows(&mut self.w, None, s, gw, area, |r, w| {
-			let at = r * s + PAD;
+			let (at, rows) = (r * s + PAD, plane_rows(u, r, s));
 			let c2 = &c2[at..][..gw];
 			let cuts = row_cuts(cuts, mirrors, at, gw, xs);
-			drp_row(u, at, s, xs.clone(), axis, cuts, |x, lap| w[x] = c2[x] * lap);
+			let mut span = |span: Range<usize>| drp_row(&rows, span, axis, cuts, |x, lap| w[x] = c2[x] * lap);
+			if fresh.y.contains(&(r - PAD)) {
+				span(xs.start..fresh.x.start);
+				span(fresh.x.end..xs.end);
+			} else {
+				span(xs.clone());
+			}
 		});
 	}
 
-	/// The modified equation's second pass: writes the next field over `prev`, and the intensity
-	/// stages when `intensity`.
-	fn outer_pass(&mut self, intensity: bool) {
+	/// The modified equation's second pass, fused with the first on `fresh`: writes the next field over `prev`, and
+	/// the intensity stages when `intensity`. Each block of rows keeps the 7 rows of `w` its stencil reads in a ring,
+	/// computing `w = c2 L u` on `fresh` and taking the plane's elsewhere (module docs, Fused passes).
+	fn outer_pass(&mut self, intensity: bool, fresh: &Damage) {
 		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
-		let (u, w, c2, d, cuts, axis, mirrors) =
-			(&self.u, &self.w, &self.c2, &self.d, &self.cuts, &self.axis, self.mirrors);
+		let (u, w, c2, d, cuts, axis, mirrors, driven) =
+			(&self.u, &self.w, &self.c2, &self.d, &self.cuts, &self.axis, self.mirrors, &self.driven);
 		let (area, xs) = (&self.damage, &self.damage.x);
+		// The columns of `w` the stencil reads.
+		let wide = xs.start.saturating_sub(3)..(xs.end + 3).min(gw);
+		// Padded row `r` of `w` into its slot of `ring`.
+		let fill = |ring: &mut [f32], r: usize| {
+			let cells = &mut ring[r % RING * s..][PAD..][..gw];
+			let (at, plane) = (r * s + PAD, &w[r * s + PAD..][..gw]);
+			let own = if fresh.y.contains(&r.wrapping_sub(PAD)) { fresh.x.clone() } else { 0..0 };
+			if own.is_empty() {
+				return cells[wide.clone()].copy_from_slice(&plane[wide.clone()]);
+			}
+			cells[wide.start..own.start].copy_from_slice(&plane[wide.start..own.start]);
+			cells[own.end..wide.end].copy_from_slice(&plane[own.end..wide.end]);
+			let c2 = &c2[at..][..gw];
+			let own_cuts = row_cuts(cuts, mirrors, at, gw, &own);
+			drp_row(&plane_rows(u, r, s), own, axis, own_cuts, |x, lap| cells[x] = c2[x] * lap);
+			// The driven cells, whose `w` the forcing completed in the plane.
+			let first = driven.partition_point(|&c| c < at);
+			for &c in driven[first..].iter().take_while(|&&c| c < at + gw) {
+				cells[c - at] = w[c];
+			}
+		};
 		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
-		grid_rows(&mut self.prev, stages, s, gw, area, |r, next| {
-			let at = r * s + PAD;
-			let (uc, wc, c2, d) = (&u[at..][..gw], &w[at..][..gw], &c2[at..][..gw], &d[at..][..gw]);
-			drp_row(w, at, s, xs.clone(), axis, row_cuts(cuts, mirrors, at, gw, xs), |x, lw| {
-				let c = uc[x];
-				next[x] = c + ((c - next[x]) * d[x] + (wc[x] + c2[x] * lw * INV12) * centred(d[x]));
-			});
-		});
+		let block = area.y.len().div_ceil(2 * rayon::current_num_threads()).max(MIN_BLOCK);
+		grid_blocks(
+			&mut self.prev,
+			stages,
+			s,
+			area,
+			block,
+			|| vec![0.0f32; RING * s],
+			|ring, r0, lines, done| {
+				for r in r0 - 3..r0 + 3 {
+					fill(ring, r);
+				}
+				for (j, line) in lines.chunks_mut(s).enumerate() {
+					let r = r0 + j;
+					fill(ring, r + 3);
+					let rows: Rows<'_> = std::array::from_fn(|k| &ring[(r + k - 3) % RING * s..][..s]);
+					let at = r * s + PAD;
+					let (uc, wc, c2, d) = (&u[at..][..gw], &rows[3][PAD..][..gw], &c2[at..][..gw], &d[at..][..gw]);
+					let next = &mut line[PAD..][..gw];
+					drp_row(&rows, xs.clone(), axis, row_cuts(cuts, mirrors, at, gw, xs), |x, lw| {
+						let c = uc[x];
+						next[x] = c + ((c - next[x]) * d[x] + (wc[x] + c2[x] * lw * INV12) * centred(d[x]));
+					});
+					done(j, line);
+				}
+			},
+		);
+	}
+
+	/// The cells of `known` whose `w` the outer pass computes itself (module docs, Fused passes): all but the band the
+	/// CPML reads `w` from.
+	fn fresh(&self, known: &Damage) -> Damage {
+		let scene = &self.shared.scene;
+		let (gw, gh) = (scene.grid_width() as usize, scene.grid_height() as usize);
+		let band = self.pml.as_ref().map_or(0, CpuPml::band);
+		let within = |r: &Range<usize>, len: usize| r.start.max(band)..r.end.min(len.saturating_sub(band));
+		let fresh = Damage { x: within(&known.x, gw), y: within(&known.y, gh) };
+		if fresh.is_empty() { Damage::NONE } else { fresh }
 	}
 
 	/// The damage grown by one pass's reach: every cell the pass and the CPML after it can change.
@@ -389,17 +469,19 @@ impl CpuEngine {
 				std::mem::replace(&mut self.damage, known)
 			}
 			TimeScheme::ModifiedEquation => {
-				// `w` is written on the inner area, which a later sub-step's covers, as the damage only grows.
+				// `w` is written on the inner area, which a later sub-step's covers, as the damage only grows; on
+				// `fresh` it is left to the outer pass.
 				self.damage = self.reached(&known);
-				self.inner_pass();
+				let fresh = self.fresh(&known);
+				self.inner_pass(&fresh);
 				if let Some(p) = &mut self.pml {
 					p.apply(0, &self.u, Medium { cuts: &self.cuts, c2: &self.c2 }, &mut self.w, 1.0, &self.damage);
 				}
-				self.force_w();
+				self.force_w(&fresh);
 				let inner = std::mem::replace(&mut self.damage, known.clone());
 				let excited = extent(&self.w, self.stride, &inner, known);
 				self.damage = self.reached(&excited);
-				self.outer_pass(intensity);
+				self.outer_pass(intensity, &fresh);
 				if let Some(p) = &mut self.pml {
 					p.apply(1, &self.w, Medium { cuts: &self.cuts, c2: &self.c2 }, &mut self.prev, INV12, &self.damage);
 				}
@@ -471,6 +553,48 @@ fn grid_rows(
 	}
 }
 
+/// Slots of the outer pass's ring of `w` rows: the 7 its stencil reads.
+const RING: usize = 7;
+
+/// The fewest rows a block of the fused outer pass takes: each block computes the 6 rows of `w` around it again.
+const MIN_BLOCK: usize = 16;
+
+/// Runs `block(scratch, r, lines, done)` on blocks of up to `rows` padded rows of `out` (rows of `s`) that `area`
+/// covers, in parallel: `r` the block's first row, `scratch` from `init` and reused across blocks. `block` writes
+/// `area`'s columns of each row of `lines` in order and then calls `done(j, line)` on its row `j`, which advances the
+/// intensity stages of those cells by the values written, if given.
+fn grid_blocks<T>(
+	out: &mut [f32],
+	stages: Option<Stages<'_>>,
+	s: usize,
+	area: &Damage,
+	rows: usize,
+	init: impl Fn() -> T + Sync + Send,
+	block: impl Fn(&mut T, usize, &mut [f32], &mut dyn FnMut(usize, &[f32])) + Sync + Send,
+) {
+	if area.is_empty() {
+		return;
+	}
+	let (first, span) = (PAD + area.y.start, (PAD + area.y.start) * s..(PAD + area.y.end) * s);
+	let xs = PAD + area.x.start..PAD + area.x.end;
+	match stages {
+		Some(Stages { s1, s2, alpha }) => out[span.clone()]
+			.par_chunks_mut(rows * s)
+			.zip(s1[span.clone()].par_chunks_mut(rows * s))
+			.zip(s2[span].par_chunks_mut(rows * s))
+			.enumerate()
+			.for_each_init(init, |scratch, (k, ((lines, s1), s2))| {
+				block(scratch, first + k * rows, lines, &mut |j, line| {
+					let (s1, s2) = (&mut s1[j * s..][xs.clone()], &mut s2[j * s..][xs.clone()]);
+					accumulate(s1, s2, &line[xs.clone()], alpha);
+				});
+			}),
+		None => out[span].par_chunks_mut(rows * s).enumerate().for_each_init(init, |scratch, (k, lines)| {
+			block(scratch, first + k * rows, lines, &mut |_, _| {});
+		}),
+	}
+}
+
 /// The 9-point Laplacian at padded cell `i` (row length `s`) with the cut byte `cut`: a diagonal tap
 /// is dropped when either axis neighbour it passes is a mirror, so no wave crosses a mirror line
 /// that is only 8-connected; the rule is symmetric between the two cells of a tap. Same order of
@@ -486,12 +610,24 @@ fn nine_point(u: &[f32], i: usize, s: usize, cut: u8) -> f32 {
 	K9_DIAGONAL * diagonals + K9_AXIS * axes
 }
 
-/// The DRP Laplacian at padded cell `i` (row length `s`), the taps beyond a mirror dropped (`cut`):
+/// Seven padded rows (`s` values each, grid column x at `PAD + x`) from 3 above to 3 below a centre row: the rows a
+/// DRP Laplacian of the centre row reads, from a plane or from the fused outer pass's ring of `w` rows.
+type Rows<'a> = [&'a [f32]; 7];
+
+/// The rows of the plane `u` (row length `s`) around padded row `r`.
+#[inline]
+fn plane_rows(u: &[f32], r: usize, s: usize) -> Rows<'_> {
+	std::array::from_fn(|k| &u[(r + k - 3) * s..][..s])
+}
+
+/// The DRP Laplacian at grid column `x` of the centre row of `rows`, the taps beyond a mirror dropped (`cut`):
 /// `sum over m of a_m sum over ring m of (u_k - u)`, the stencil since `a0 = -2 (a1 + a2 + a3)`.
 #[inline]
-fn drp(u: &[f32], i: usize, s: usize, a: &[f32; 4], cut: u8) -> f32 {
-	let c = u[i];
-	let (x, y) = (taps(u, i, 1, cut >> cut::X_SHIFT), taps(u, i, s, cut >> cut::Y_SHIFT));
+fn drp(rows: &Rows<'_>, x: usize, a: &[f32; 4], cut: u8) -> f32 {
+	let i = PAD + x;
+	let c = rows[3][i];
+	let x = cut_taps(std::array::from_fn(|k| rows[3][i + k - 3]), cut >> cut::X_SHIFT);
+	let y = cut_taps(std::array::from_fn(|k| rows[k][i]), cut >> cut::Y_SHIFT);
 	let ring = |m: usize| ((x[3 - m] - c) + (x[3 + m] - c)) + ((y[3 - m] - c) + (y[3 + m] - c));
 	a[1] * ring(1) + a[2] * ring(2) + a[3] * ring(3)
 }
@@ -519,41 +655,33 @@ fn cut_spans(cuts: &[u8], xs: Range<usize>, mut f: impl FnMut(Range<usize>, bool
 	}
 }
 
-/// The DRP Laplacian of the grid cells `xs` of the row from padded cell `at`, handed to `f` with the cell's
-/// offset in the row. Cells without a cut run on row slices ([`drp_span`]), the cut ones through [`drp`].
+/// The DRP Laplacian of the grid cells `xs` of the centre row of `rows`, handed to `f` with the cell's column. Cells
+/// without a cut run on row slices ([`drp_span`]), the cut ones through [`drp`].
 #[inline(always)]
-fn drp_row(
-	u: &[f32],
-	at: usize,
-	s: usize,
-	xs: Range<usize>,
-	a: &[f32; 4],
-	cuts: Option<&[u8]>,
-	mut f: impl FnMut(usize, f32),
-) {
-	let Some(cuts) = cuts else { return drp_span(u, at, s, xs, a, &mut f) };
+fn drp_row(rows: &Rows<'_>, xs: Range<usize>, a: &[f32; 4], cuts: Option<&[u8]>, mut f: impl FnMut(usize, f32)) {
+	let Some(cuts) = cuts else { return drp_span(rows, xs, a, &mut f) };
 	cut_spans(cuts, xs, |span, cut| {
 		if !cut {
-			return drp_span(u, at, s, span, a, &mut f);
+			return drp_span(rows, span, a, &mut f);
 		}
 		for x in span {
-			f(x, drp(u, at + x, s, a, cuts[x]));
+			f(x, drp(rows, x, a, cuts[x]));
 		}
 	});
 }
 
-/// The DRP Laplacian of the cells `span` of the row from padded cell `at`, none of them cut, on row slices, as
-/// [`drp`] in the same order.
+/// The DRP Laplacian of the cells `span` of the centre row of `rows`, none of them cut, on row slices, as [`drp`] in
+/// the same order.
 #[inline(always)]
-fn drp_span(u: &[f32], at: usize, s: usize, span: Range<usize>, a: &[f32; 4], f: &mut impl FnMut(usize, f32)) {
-	let x0 = span.start;
-	let tap = |k: isize| &u[(at + x0).wrapping_add_signed(k)..][..span.len()];
-	let si = s as isize;
+fn drp_span(rows: &Rows<'_>, span: Range<usize>, a: &[f32; 4], f: &mut impl FnMut(usize, f32)) {
+	let (x0, len) = (span.start, span.len());
+	let tap = |k: isize| &rows[3][(PAD + x0).wrapping_add_signed(k)..][..len];
+	let column = |k: usize| &rows[k][PAD + x0..][..len];
 	let c = tap(0);
-	let (w1, e1, n1, s1) = (tap(-1), tap(1), tap(-si), tap(si));
-	let (w2, e2, n2, s2) = (tap(-2), tap(2), tap(-2 * si), tap(2 * si));
-	let (w3, e3, n3, s3) = (tap(-3), tap(3), tap(-3 * si), tap(3 * si));
-	for x in 0..span.len() {
+	let (w1, e1, n1, s1) = (tap(-1), tap(1), column(2), column(4));
+	let (w2, e2, n2, s2) = (tap(-2), tap(2), column(1), column(5));
+	let (w3, e3, n3, s3) = (tap(-3), tap(3), column(0), column(6));
+	for x in 0..len {
 		let v = c[x];
 		let near = ((w1[x] - v) + (e1[x] - v)) + ((n1[x] - v) + (s1[x] - v));
 		let mid = ((w2[x] - v) + (e2[x] - v)) + ((n2[x] - v) + (s2[x] - v));
@@ -899,9 +1027,10 @@ mod tests {
 		assert_eq!(e.alpha, (-1.0f64 / 10.0).exp() as f32, "level 0 is not a source level");
 	}
 
-	/// Every buffer the step writes, as bits.
+	/// Every buffer the step writes but `w`, which holds stale values on the fresh area (module docs, Fused passes), as
+	/// bits.
 	fn state(e: &CpuEngine) -> Vec<u32> {
-		[&e.u, &e.prev, &e.w, &e.s1, &e.s2].into_iter().flatten().map(|v| v.to_bits()).collect()
+		[&e.u, &e.prev, &e.s1, &e.s2].into_iter().flatten().map(|v| v.to_bits()).collect()
 	}
 
 	#[test]
@@ -972,8 +1101,9 @@ mod tests {
 		(cuts[3], cuts[4], cuts[10]) = (0b0001_0010, 0b1000_0000, 0b0000_0101);
 		let a = [0.0, 1.3, -0.17, 0.021];
 		let mut got = vec![f32::NAN; gw];
-		drp_row(&u, at, s, 0..gw, &a, Some(&cuts), |x, v| got[x] = v);
-		let want: Vec<f32> = (0..gw).map(|x| drp(&u, at + x, s, &a, cuts[x])).collect();
+		let rows = plane_rows(&u, at / s, s);
+		drp_row(&rows, 0..gw, &a, Some(&cuts), |x, v| got[x] = v);
+		let want: Vec<f32> = (0..gw).map(|x| drp(&rows, x, &a, cuts[x])).collect();
 		assert_eq!(
 			got.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
 			want.iter().map(|v| v.to_bits()).collect::<Vec<_>>()

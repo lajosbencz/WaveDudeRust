@@ -284,6 +284,12 @@ impl CpuPml {
 		})
 	}
 
+	/// The grid rows and columns from each edge whose field values [`CpuPml::apply`] reads: the rim and the 3 cells
+	/// of the stencil's taps beyond it. The cells it writes lie within the rim.
+	pub fn band(&self) -> usize {
+		self.strips.rim + 3
+	}
+
 	pub fn reset(&mut self) {
 		for b in self.psi.iter_mut().chain(&mut self.xi) {
 			b.fill(0.0);

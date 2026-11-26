@@ -96,6 +96,13 @@ never shrinks before a reset, so every cell once written is recomputed. The skip
 the result is the same bit for bit; a unit test compares it with the whole grid for both stencils on open,
 reflective and CPML edges with a mirror.
 
+Rust, CPU engine: the 4th order's two passes are fused where the CPML does not read `w`. The second pass computes
+`w = c2 L u` of the rows its stencil reads in a ring of 7 rows per block of rows, instead of reading the plane the
+first pass wrote; the first pass writes the plane only on the band of the rim and 3 cells beyond, where the CPML
+corrects and reads `w`, and on the cells the damage grew by. A driven cell takes its `w` with the forcing from the
+plane. Each value of `w` is the same expression in the same order, so the result is the same bit for bit; elsewhere
+the plane `w` is neither written nor read ([docs/measurements.md](../measurements.md#the-cpu-engines-fused-4th-order-passes)).
+
 ## Sources
 
 Constants: `SourceOpacity = 0.9`, `DetachRampSteps = 30`.

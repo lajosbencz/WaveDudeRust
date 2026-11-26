@@ -309,6 +309,33 @@ expression in the same order. The cells with a cut keep their per-cell loops. Th
 the fields equal bit for bit; at 300x200 rim 16 and 640x360 rim 32 too. The probe series of Example01, 03, 08, 13 and
 21 and of `01-single-fiber`, 300 steps, are byte for byte master's.
 
+## The CPU engine's fused 4th-order passes
+
+2026-11-26, the workstation above (Ryzen 7 4700U, 8 cores, VirtualBox guest). The 4th order's outer pass computes
+`w` in a ring of 7 rows per block instead of reading the plane the inner pass wrote (engine/cpu.rs, Fused passes):
+per cell and sub-step the plane's write and read go, and `c2` comes from memory once, not twice. The A/B harness of
+[The CPU engine's damage rectangle](#the-cpu-engines-damage-rectangle), the commit before (`7cb616f`) against the
+fused one, one emitter in the middle, intensity tracked, after the wave filled the grid (600 steps at 800x600, 1400
+at 1920x1080), alternating blocks of 40 steps (8 threads) or 20 (1 thread, `taskset -c 3`); fused over before, total
+time, three runs each:
+
+| Threads | Grid, rim | Open edges | Mirror box |
+|---|---|---|---|
+| 8 | 800x600, 16 | 0.837, 0.841, 0.851 | 0.864, 0.873, 0.957 |
+| 8 | 1920x1080, 32 | 0.756, 0.811, 0.848 | 0.696, 0.721, 0.858 |
+| 1 | 800x600, 16 | 0.973, 0.985, 0.989 | 0.873, 0.916, 0.955 |
+| 1 | 1920x1080, 32 | 0.950, 0.969, 0.985 | 0.903, 0.928, 0.960 |
+
+The 9-point stencil, whose code did not change, read 0.93 to 1.03 alongside (8 threads at 1920x1080, 1 thread at
+800x600), the noise of a run. With 8 threads the step is bound by memory bandwidth and saves most; one thread is
+bound by arithmetic, which the fusion does not reduce (each block computes the 6 rows of `w` around it again, at
+least 16 rows a block). The first 200 steps at 1920x1080, 8 threads, while the damage is small: 0.983. The fields
+are equal bit for bit in every run, and at 300x200 and 640x360, rims 0, 16 and 32, both edges; the probe series of
+Example01, 03, 08, 13 and 21 and of `01-single-fiber`, 300 steps, are byte for byte the commit before's. The fused
+loops vectorise, natively (SSE2) and in wasm with simd128, read as in
+[The CPU engine's loops vectorised in wasm](#the-cpu-engines-loops-vectorised-in-wasm): `drp_span` has a vector body
+in the inner pass, the ring's rows and the outer pass, and so has each pass's per-cell update.
+
 ## The CPU engine in wasm, with and without simd128
 
 2026-11-25, the workstation above. A harness outside the repository runs the CPU engine alone, built for wasm32 at
