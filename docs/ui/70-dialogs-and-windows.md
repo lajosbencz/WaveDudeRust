@@ -162,7 +162,9 @@ dialog is described under Browser differences, below.
   full-quality run is started first (status "Export: waiting for the run", indeterminate); then "Exporting n / N
   frames" with a determinate bar (tooltip "Cancel the export (Esc)"). Esc cancels, while waiting too (the run
   stops). A run that ends without completing while the export waits (Stop, a simulation edit, a failure) drops
-  the export with a warning in the status bar; Play meanwhile plays along the run. The status bar reports the end.
+  the export with a warning in the status bar; Play meanwhile plays along the run. The status bar reports the end:
+  a cancelled export "Export cancelled after n of N frames" (Next adds that its outputs hold what was written; here
+  they are removed), with no message window; a failed one also shows "The export failed."
 - A still renders exactly what a video export would show at that frame, never the preview's frame.
 - CSV: a point probe one row per step ("step;amplitude" header), a line probe one row per frame
   ("frame;step;<distances>"), semicolons, decimal point. Full run first when needed.

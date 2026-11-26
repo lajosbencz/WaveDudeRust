@@ -9,7 +9,7 @@ use slint::{ModelRc, SharedString, VecModel};
 use waveduderust::model::{Layer, View};
 use waveduderust::unstable::export::h264::Profile;
 use waveduderust::unstable::export::naming::{layer_outputs, layer_suffix, still_file_name};
-use waveduderust::unstable::export::{ExportFormat, ExportLayers};
+use waveduderust::unstable::export::{ExportFormat, ExportLayers, ExportState};
 use waveduderust_platform::settings::Settings;
 
 use crate::live::Needs;
@@ -27,6 +27,34 @@ pub(crate) struct Written {
 	pub(crate) line: String,
 	#[cfg(target_arch = "wasm32")]
 	pub(crate) download: crate::files::Download,
+}
+
+/// How an export ended.
+pub(crate) enum Outcome<T = Written> {
+	Written(T),
+	/// Stopped by the user after `done` of `total` frames; nothing it wrote is kept.
+	Cancelled {
+		done: usize,
+		total: usize,
+	},
+	/// Why it failed.
+	Failed(String),
+}
+
+impl<T> Outcome<T> {
+	/// The outcome of a job that ended in `state` after `done` of `total` frames, `written` once completed.
+	fn of(state: ExportState, done: usize, total: usize, written: impl FnOnce() -> T) -> Self {
+		match state {
+			ExportState::Completed => Self::Written(written()),
+			ExportState::Cancelled => Self::Cancelled { done, total },
+			ExportState::Failed(e) => Self::Failed(format!("the export failed after {done} frames: {e}")),
+		}
+	}
+}
+
+/// The log line of a cancelled export, worded as WaveDude Next's.
+pub(crate) fn cancelled_line(done: usize, total: usize) -> String {
+	format!("Export cancelled after {done} of {total} frames")
 }
 
 /// What the menu asks to export.
@@ -173,13 +201,13 @@ mod native {
 	use waveduderust::Backend;
 	use waveduderust::io::schemes::SchemeStore;
 	use waveduderust::model::{Project, View};
+	use waveduderust::unstable::export::ExportFormat;
 	use waveduderust::unstable::export::h264::{H264Factory, OpenH264Factory, Profile};
 	use waveduderust::unstable::export::naming::{layer_outputs, sequence_folder, with_layer_suffix};
-	use waveduderust::unstable::export::{ExportFormat, ExportState};
 	use waveduderust_platform::export::{Made, Request, export_frames};
 	use waveduderust_platform::settings::{AppDirs, ExportHint, Settings};
 
-	use super::{Kind, Written, outputs_line, profile_index, with_format_extension};
+	use super::{Kind, Outcome, Written, outputs_line, profile_index, with_format_extension};
 	use crate::document::Document;
 	use crate::live::{ExportFrames, Needs};
 	use crate::ui::{ExportData, ExportFileFormat, ExportProgress, Words};
@@ -410,7 +438,7 @@ mod native {
 		cancel: Arc<AtomicBool>,
 		done: Arc<AtomicUsize>,
 		total: Arc<AtomicUsize>,
-		thread: Option<JoinHandle<Result<String, String>>>,
+		thread: Option<JoinHandle<Outcome>>,
 		/// The plan waiting for its run and the timeline frame of its still.
 		waiting: Option<(Plan, u32)>,
 	}
@@ -445,16 +473,16 @@ mod native {
 		}
 
 		/// The progress while it waits or writes; its outcome once it ended.
-		pub(crate) fn poll(&mut self) -> Result<ExportProgress, Result<Written, String>> {
+		pub(crate) fn poll(&mut self) -> Result<ExportProgress, Outcome> {
 			if self.waiting.is_some() {
 				return Ok(ExportProgress { active: true, waiting: true, ..ExportProgress::default() });
 			}
 			if self.thread.as_ref().is_some_and(JoinHandle::is_finished) {
 				let outcome = self.thread.take().map_or_else(
-					|| Err("gone".into()),
-					|t| t.join().unwrap_or_else(|_| Err("the export panicked".into())),
+					|| Outcome::Failed("gone".into()),
+					|t| t.join().unwrap_or_else(|_| Outcome::Failed("the export panicked".into())),
 				);
-				return Err(outcome.map(|written| Written { line: format!("exported {written}") }));
+				return Err(outcome);
 			}
 			let count = |n: &AtomicUsize| i32::try_from(n.load(Ordering::Relaxed)).unwrap_or(i32::MAX);
 			Ok(ExportProgress {
@@ -519,34 +547,42 @@ mod native {
 			let (cancel, done, total) = (cancel.clone(), done.clone(), total.clone());
 			std::thread::spawn(move || {
 				if format == ExportFormat::Mp4 {
-					request.h264 = Some(h264(use_openh264)?);
+					match h264(use_openh264) {
+						Ok(h264) => request.h264 = Some(h264),
+						Err(e) => return Outcome::Failed(e),
+					}
 				}
 				let made =
 					Made { traces: &frames.traces, frame_count: frames.frame_count, total_steps: frames.total_steps };
-				let report = export_frames(
-					&request,
-					frames.store.clone(),
-					&made,
-					|d, t| {
-						done.store(d, Ordering::Relaxed);
-						total.store(t, Ordering::Relaxed);
-					},
-					&cancel,
-				)
-				.map_err(|e| e.to_string())?;
-				match report.state {
-					ExportState::Completed => {
-						Ok(report.written.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", "))
-					}
-					ExportState::Cancelled => {
-						Err(format!("the export was stopped after {} frames", report.frames_done))
-					}
-					ExportState::Failed(e) => {
-						Err(format!("the export failed after {} frames: {e}", report.frames_done))
-					}
+				let progress = |d: usize, t: usize| {
+					done.store(d, Ordering::Relaxed);
+					total.store(t, Ordering::Relaxed);
+				};
+				match export_frames(&request, frames.store.clone(), &made, progress, &cancel) {
+					Ok(report) => Outcome::of(report.state, report.frames_done, total.load(Ordering::Relaxed), || {
+						let written = report.written.iter().map(|p| p.display().to_string()).collect::<Vec<_>>();
+						Written { line: format!("exported {}", written.join(", ")) }
+					}),
+					Err(e) => Outcome::Failed(e.to_string()),
 				}
 			})
 		};
 		Exporting { cancel, done, total, thread: Some(thread), waiting: None }
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use waveduderust::unstable::export::{ExportError, ExportState};
+
+	use super::Outcome;
+
+	#[test]
+	fn a_cancelled_job_is_told_from_a_failed_one() {
+		let of = |state| Outcome::of(state, 20, 100, || ());
+		assert!(matches!(of(ExportState::Completed), Outcome::Written(())));
+		assert!(matches!(of(ExportState::Cancelled), Outcome::Cancelled { done: 20, total: 100 }));
+		let failed = of(ExportState::Failed(ExportError::NoEncoder));
+		assert!(matches!(failed, Outcome::Failed(e) if e.starts_with("the export failed after 20 frames: ")));
 	}
 }

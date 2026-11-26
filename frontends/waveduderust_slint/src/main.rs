@@ -2101,7 +2101,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 					Err(outcome) => {
 						release_export(s, &app);
 						match outcome {
-							Ok(written) => {
+							export::Outcome::Written(written) => {
 								tracing::info!("{}", written.line);
 								export_completed(s);
 								#[cfg(target_arch = "wasm32")]
@@ -2110,7 +2110,10 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 									s.ready = Some(written.download);
 								}
 							}
-							Err(e) => {
+							export::Outcome::Cancelled { done, total } => {
+								tracing::info!("{}", export::cancelled_line(done, total));
+							}
+							export::Outcome::Failed(e) => {
 								tracing::error!("{e}");
 								tell(&app, ui::Message::ExportFailed, "");
 							}

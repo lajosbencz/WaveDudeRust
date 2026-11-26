@@ -16,14 +16,14 @@ use waveduderust::unstable::export::fs::zip::UtcDateTime;
 use waveduderust::unstable::export::fs::{MemFs, OutputFs, ZipFs};
 use waveduderust::unstable::export::h264::Profile;
 use waveduderust::unstable::export::naming::layer_outputs;
-use waveduderust::unstable::export::{ExportFormat, ExportJob, ExportPlan, ExportState, Step};
+use waveduderust::unstable::export::{ExportFormat, ExportJob, ExportPlan, Step};
 use waveduderust_platform::settings::Settings;
 use waveduderust_remote::opfs::Spool;
 use web_sys::Blob;
 use web_time::Duration;
 
 use super::webcodecs::{Support, WebCodecsFactory, support};
-use super::{Kind, Written, outputs_line, profile_index, with_format_extension};
+use super::{Kind, Outcome, Written, outputs_line, profile_index, with_format_extension};
 use crate::document::Document;
 use crate::files::Download;
 use crate::live::{ExportFrames, Needs};
@@ -366,7 +366,7 @@ impl Exporting {
 	}
 
 	/// Steps it: the progress while it waits or writes; its outcome once it ended.
-	pub(crate) fn poll(&mut self) -> Result<ExportProgress, Result<Written, String>> {
+	pub(crate) fn poll(&mut self) -> Result<ExportProgress, Outcome> {
 		let progress = |done: usize, total: usize| ExportProgress {
 			active: true,
 			done: i32::try_from(done).unwrap_or(i32::MAX),
@@ -391,7 +391,7 @@ impl Exporting {
 					Status::Working(done, total) => progress(done, total),
 					Status::Packing => ExportProgress { active: true, packing: true, ..ExportProgress::default() },
 					Status::Ended(outcome) => {
-						if let (Ok(_), Some(spool)) = (&outcome, runner.spool.take()) {
+						if let (Outcome::Written(_), Some(spool)) = (&outcome, runner.spool.take()) {
 							KEPT.set(Some(spool));
 						}
 						return Err(outcome);
@@ -400,8 +400,8 @@ impl Exporting {
 				self.state = State::Running(runner);
 				Ok(shown)
 			}
-			State::Failed(e) => Err(Err(e)),
-			State::Ended => Err(Err("the export ended".into())),
+			State::Failed(e) => Err(Outcome::Failed(e)),
+			State::Ended => Err(Outcome::Failed("the export ended".into())),
 		}
 	}
 }
@@ -466,7 +466,7 @@ enum Status {
 	/// The videos are packed into the archive.
 	Packing,
 	/// How it ended.
-	Ended(Result<Written, String>),
+	Ended(Outcome),
 }
 
 /// Where the job's files go.
@@ -579,15 +579,15 @@ impl Runner {
 						self.phase = Phase::Stepping(job, out);
 						return Status::Working(done, total);
 					}
-					Step::Ended(report) => match report.state {
-						ExportState::Completed => self.deliver(out),
-						ExportState::Cancelled => return self.end(Err(cancelled(done))),
-						ExportState::Failed(e) => Err(e.to_string()),
+					Step::Ended(report) => match Outcome::of(report.state, done, total, || ()) {
+						Outcome::Written(()) => self.deliver(out),
+						Outcome::Cancelled { done, total } => return self.end(Outcome::Cancelled { done, total }),
+						Outcome::Failed(e) => return self.end(Outcome::Failed(e)),
 					},
 				}
 			}
 			Phase::Packing(_) | Phase::Preparing(_) if self.cancel.load(Ordering::Relaxed) => {
-				return self.end(Err(cancelled(self.frames.0)));
+				return self.end(Outcome::Cancelled { done: self.frames.0, total: self.frames.1 });
 			}
 			Phase::Packing(packed) => match packed.take() {
 				None => {
@@ -605,7 +605,7 @@ impl Runner {
 					Download::of_blob(&blob, &self.delivery.download().display().to_string()).map(Next::Ready)
 				}),
 			},
-			Phase::Ended => return Status::Ended(Err("the export ended".into())),
+			Phase::Ended => return Status::Ended(Outcome::Failed("the export ended".into())),
 		};
 		match next {
 			Ok(Next::Phase(phase)) => {
@@ -614,9 +614,9 @@ impl Runner {
 			}
 			Ok(Next::Ready(download)) => {
 				let line = format!("{} frames exported as {}", self.frames.0, download.name());
-				self.end(Ok(Written { line, download }))
+				self.end(Outcome::Written(Written { line, download }))
 			}
-			Err(e) => self.end(Err(format!("the export failed after {} frames: {e}", self.frames.0))),
+			Err(e) => self.end(Outcome::Failed(format!("the export failed after {} frames: {e}", self.frames.0))),
 		}
 	}
 
@@ -659,17 +659,13 @@ impl Runner {
 		Next::Phase(Phase::Preparing(file))
 	}
 
-	fn end(&mut self, outcome: Result<Written, String>) -> Status {
+	fn end(&mut self, outcome: Outcome) -> Status {
 		self.phase = Phase::Ended;
-		if outcome.is_err() {
+		if !matches!(outcome, Outcome::Written(_)) {
 			self.spool = None;
 		}
 		Status::Ended(outcome)
 	}
-}
-
-fn cancelled(done: usize) -> String {
-	format!("the export was stopped after {done} frames")
 }
 
 /// Packs the spooled `videos` into the ZIP archive `archive` of `spool`, chunk by chunk as the spool takes them,
