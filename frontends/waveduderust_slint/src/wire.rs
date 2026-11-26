@@ -1,5 +1,6 @@
 //! The window's callbacks, by area, on the app's state.
 
+mod form;
 mod tree;
 
 use std::cell::RefCell;
@@ -7,6 +8,7 @@ use std::rc::Rc;
 
 use slint::ComponentHandle;
 
+pub(crate) use self::form::{wire_form, wire_widgets};
 pub(crate) use self::tree::wire_tree;
 use crate::state::State;
 use crate::tree::Node;
