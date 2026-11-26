@@ -1144,19 +1144,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		}
 		speed.to_string().into()
 	});
-	let on_log = |f: fn(&mut Messages, slint::SharedString)| {
-		let h = Handle::new(&state, &app);
-		move |arg: slint::SharedString| {
-			h.with(|s, app| {
-				f(&mut s.messages, arg);
-				s.messages.show(app);
-			});
-		}
-	};
-	let search = on_log(|m, t| m.search(&t));
-	app.on_log_search(search);
-	let clear = on_log(|m, _| m.clear());
-	app.on_log_clear(move || clear(slint::SharedString::new()));
+	wire::wire_log(&state, &app);
 	let h = Handle::new(&state, &app);
 	app.on_memory_warning_ticked(move |cache_auto, resolution, frames, samples| {
 		h.with(|s, app| {
@@ -1169,69 +1157,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	});
 	let h = Handle::new(&state, &app);
 	app.on_memory_warning_answer(move |answer, mute| h.show(|s, app| answer_warning(s, app, answer, mute)));
-	let h = Handle::new(&state, &app);
-	app.on_export_format(move |index| h.read(|s, app| s.edit_export(app, |d, data| d.format(data, index))));
-	let h = Handle::new(&state, &app);
-	app.on_export_browse(move || {
-		h.read(|s, app| s.edit_export(app, |d, data| d.browse(data, &app.global::<ui::Words<'_>>())));
-	});
-	let h = Handle::new(&state, &app);
-	app.on_export_path_edited(move || {
-		h.read(|s, app| {
-			s.edit_export(app, |d, data| {
-				data.error = Default::default();
-				d.follow(data);
-			});
-		});
-	});
-	let h = Handle::new(&state, &app);
-	app.on_export_browse_archive(move || {
-		h.read(|s, app| s.edit_export(app, |d, data| d.browse_archive(data, &app.global::<ui::Words<'_>>())));
-	});
-	let weak = app.as_weak();
-	app.on_export_delete_codec(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let mut data = app.get_export_data();
-		export::delete_codec(&mut data);
-		app.set_export_data(data);
-	});
-	let h = Handle::new(&state, &app);
-	app.on_export_ok(move || {
-		h.with(|s, app| {
-			let Some(dialog) = &s.export_dialog else { return };
-			let mut data = app.get_export_data();
-			#[cfg(target_arch = "wasm32")]
-			if let Some(download) = dialog.csv_download(&data) {
-				match download {
-					Ok(download) => {
-						app.set_export_shown(false);
-						s.export_dialog = None;
-						tracing::info!("Exported the probe data as {}", download.name());
-						tell(app, ui::Message::ExportReady, download.name());
-						s.ready = Some(download);
-					}
-					Err(e) => {
-						data.error = e.into();
-						app.set_export_data(data);
-					}
-				}
-				return;
-			}
-			match dialog.plan(&data, &mut s.settings) {
-				Ok(plan) => {
-					// asked in order, popped from the end
-					let mut outputs = plan.existing();
-					outputs.reverse();
-					s.replacing = Some((plan, outputs));
-					ask_replace(s, app);
-				}
-				Err(e) => {
-					data.error = e.into();
-					app.set_export_data(data);
-				}
-			}
-		});
-	});
+	wire::wire_export(&state, &app);
 	let st = state.clone();
 	app.on_about_copy(move || {
 		let text = about(&st.borrow()).system.to_string();
@@ -1239,39 +1165,6 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			Ok(()) => tracing::info!("System information copied to the clipboard"),
 			Err(e) => tracing::warn!("clipboard: {e}"),
 		}
-	});
-	let h = Handle::new(&state, &app);
-	app.on_log_regex(move |on| {
-		h.with(|s, app| {
-			s.messages.set_regex(on);
-			s.messages.show(app);
-		});
-	});
-	let h = Handle::new(&state, &app);
-	app.on_log_select(move |row, control, shift| {
-		let Ok(row) = usize::try_from(row) else { return };
-		h.with(|s, app| {
-			s.messages.select(row, control, shift);
-			s.messages.show(app);
-		});
-	});
-	let st = state.clone();
-	app.on_log_copy(move |all| {
-		let text = st.borrow().messages.text(all);
-		if text.is_empty() {
-			return false;
-		}
-		if let Err(e) = clipboard::write(text) {
-			tracing::warn!("clipboard: {e}");
-		}
-		true
-	});
-	let h = Handle::new(&state, &app);
-	app.on_log_toggle(move |level| {
-		h.with(|s, app| {
-			s.messages.toggle(level);
-			s.messages.show(app);
-		});
 	});
 
 	let h = Handle::new(&state, &app);
