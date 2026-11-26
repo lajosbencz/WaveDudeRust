@@ -67,7 +67,7 @@ Settings and other documented divergences stand: docs/divergences.md, decisions 
 ## Plan
 
 State per feature: [`parity.md`](parity.md), built 2026-11-24 from WaveDude Next's source and [`ui/`](ui/); on
-2026-11-26 828 done, 88 partial, 174 divergence, 0 missing of 1095 rows. A feature is done when its row is checked against Next side by side on a
+2026-11-26 829 done, 87 partial, 174 divergence, 0 missing of 1095 rows. A feature is done when its row is checked against Next side by side on a
 nested display ([`tools/compare-csharp/README.md`](../tools/compare-csharp/README.md)); the commit that ports it ticks the
 row. Each phase is one coding pass, then a separate verification of the diff, the checks and the rows before the commit.
 

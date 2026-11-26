@@ -11,6 +11,8 @@ export enum ExportReason { none, no-storage, no-webcodecs, no-profile, probing }
 export struct ExportData {
     title: string,
     formats: [string],
+    // per format, whether it can be picked; empty: all
+    format-enabled: [bool],
     format: int,
     // the chosen path; both layers' outputs are named from it with their suffixes
     path: string,
@@ -74,6 +76,7 @@ export component ExportLayer inherits Rectangle {
                 Text { text: @tr("Format"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
                 Choice {
                     titles: root.data.formats;
+                    item-enabled: root.data.format-enabled;
                     index: root.data.format;
                     picked(i) => { root.format(i); }
                 }
@@ -135,6 +138,7 @@ export component ExportLayer inherits Rectangle {
                 Text { text: @tr("H.264 profile"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
                 Choice {
                     titles: ["Baseline", "Main", "High"];
+                    item-enabled: root.data.browser ? root.data.profile-supported : [];
                     index: root.data.profile;
                     picked(i) => { root.data.profile = i; }
                 }

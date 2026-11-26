@@ -178,7 +178,7 @@ Browser differences (decision 0025):
 - MP4 encodes with the browser's WebCodecs encoder: no Cisco notice, no check box. As the dialog opens the browser
   is asked which H.264 profiles it encodes at the project's canvas size and frame rate; meanwhile MP4 shows "Asking
   the browser which H.264 profiles it encodes..." and OK is disabled. "H.264 profile" then greys the profiles it
-  lacks, their tooltip and the line below "not supported by this browser". MP4 itself is greyed in the format list,
+  lacks in its list, the line below a lacking one "not supported by this browser". MP4 itself is greyed in the format list,
   and shows its reason with OK disabled when chosen: "This browser has no video encoder (WebCodecs)." or "This
   browser encodes no H.264 profile at this picture size and frame rate." A run's export (not a still) shows "This browser has no private file storage to write the export to; frames and probe data
   still export." and is disabled when the browser has no OPFS. A still and the CSV do not need it.

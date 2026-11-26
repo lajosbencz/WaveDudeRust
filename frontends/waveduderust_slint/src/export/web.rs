@@ -92,11 +92,11 @@ fn typed_name(typed: &str, format: ExportFormat) -> Option<PathBuf> {
 	Some(with_format_extension(Path::new(name), format))
 }
 
-/// The archive's file name of what is typed, `.zip` appended unless it ends so; `None` without a name.
-fn typed_archive(typed: &str) -> Option<PathBuf> {
+/// The file name of what is typed, `.<ext>` appended unless it ends so; `None` without a name.
+fn typed_with(typed: &str, ext: &str) -> Option<PathBuf> {
 	let mut name = PathBuf::from(Path::new(typed.trim()).file_name()?);
-	if !name.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
-		name.as_mut_os_string().push(".zip");
+	if !name.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext)) {
+		name.as_mut_os_string().push(format!(".{ext}"));
 	}
 	Some(name)
 }
@@ -114,11 +114,10 @@ fn spool_available() -> bool {
 }
 
 /// The export dialog while it is open.
-pub(crate) struct Dialog {
-	kind: Kind,
-	formats: Vec<(ExportFormat, ExportFileFormat)>,
-	/// The picture size and rate of a video.
-	video: (u32, u32, u32),
+pub(crate) enum Dialog {
+	Export(Exports),
+	/// A probe's recording as CSV, downloaded under the name typed.
+	Csv(Vec<u8>),
 }
 
 impl Dialog {
@@ -131,6 +130,90 @@ impl Dialog {
 		settings: &Settings,
 		words: &Words<'_>,
 	) -> Option<(Self, ExportData)> {
+		let (dialog, data) = Exports::open(kind, doc, name, frame, settings, words);
+		Some((Self::Export(dialog), data))
+	}
+
+	/// The dialog of the probe named `probe`, whose recording is `csv`.
+	pub(crate) fn csv(probe: &str, csv: Vec<u8>, words: &Words<'_>) -> (Self, ExportData) {
+		let data = ExportData {
+			title: words.get_export_probe_data(),
+			formats: slint::ModelRc::new(slint::VecModel::from(vec![
+				format!("{} (*.csv)", words.get_csv_files()).into(),
+			])),
+			path: format!("{probe}.csv").into(),
+			codec_built_in: true,
+			browser: true,
+			..ExportData::default()
+		};
+		(Self::Csv(csv), data)
+	}
+
+	/// The format's flags, the outputs the name gives and why the export cannot start.
+	pub(crate) fn follow(&self, data: &mut ExportData) {
+		if let Self::Export(dialog) = self {
+			dialog.follow(data);
+		}
+	}
+
+	/// Follows the browser's late answers; whether `data` changed.
+	pub(crate) fn refresh(&self, data: &mut ExportData) -> bool {
+		match self {
+			Self::Export(dialog) => dialog.refresh(data),
+			Self::Csv(_) => false,
+		}
+	}
+
+	/// Picks format `index`: the name takes its extension.
+	pub(crate) fn format(&self, data: &mut ExportData, index: i32) {
+		if let Self::Export(dialog) = self {
+			dialog.format(data, index);
+		}
+	}
+
+	/// No platform dialog: the box takes a file name.
+	pub(crate) fn browse(&self, _: &mut ExportData, _: &Words<'_>) {}
+
+	/// No platform dialog: the box takes a file name.
+	pub(crate) fn browse_archive(&self, _: &mut ExportData, _: &Words<'_>) {}
+
+	/// The plan of the dialog's answer, the settings it leaves remembered; the reason when a box names no file.
+	pub(crate) fn plan(&self, data: &ExportData, settings: &mut Settings) -> Result<Plan, String> {
+		match self {
+			Self::Export(dialog) => dialog.plan(data, settings),
+			Self::Csv(_) => Err("the probe data is no run's export".into()),
+		}
+	}
+
+	/// The download of a CSV dialog's answer, or why there is none; `None` for a run's or a frame's export.
+	pub(crate) fn csv_download(&self, data: &ExportData) -> Option<Result<Download, String>> {
+		let Self::Csv(csv) = self else { return None };
+		Some(
+			typed_with(data.path.as_str(), "csv")
+				.ok_or_else(|| "Enter a file name.".to_owned())
+				.and_then(|name| Download::of_bytes(csv, &name.to_string_lossy())),
+		)
+	}
+}
+
+/// The dialog of a run's or a frame's export.
+pub(crate) struct Exports {
+	kind: Kind,
+	formats: Vec<(ExportFormat, ExportFileFormat)>,
+	/// The picture size and rate of a video.
+	video: (u32, u32, u32),
+}
+
+impl Exports {
+	/// The dialog of `kind` for `doc` named `name`, the shown timeline frame `frame`.
+	fn open(
+		kind: Kind,
+		doc: &Document,
+		name: &str,
+		frame: u32,
+		settings: &Settings,
+		words: &Words<'_>,
+	) -> (Self, ExportData) {
 		let formats = kind.formats();
 		let (format, index) = kind.first_format(&formats, settings);
 		let video = video_format(&doc.project, &doc.view);
@@ -150,7 +233,7 @@ impl Dialog {
 		};
 		let dialog = Self { kind, formats, video };
 		dialog.follow(&mut data);
-		Some((dialog, data))
+		(dialog, data)
 	}
 
 	fn format_of(&self, data: &ExportData) -> ExportFormat {
@@ -158,7 +241,7 @@ impl Dialog {
 	}
 
 	/// The format's flags, the outputs the name gives and why the export cannot start.
-	pub(crate) fn follow(&self, data: &mut ExportData) {
+	fn follow(&self, data: &mut ExportData) {
 		let format = self.format_of(data);
 		data.mp4 = format == ExportFormat::Mp4;
 		data.several = self.kind.several(format);
@@ -178,11 +261,21 @@ impl Dialog {
 			_ => ExportReason::None,
 		};
 		data.profile_supported = slint::ModelRc::new(slint::VecModel::from(supported));
+		let mp4 = match self.kind {
+			Kind::Run(_) => match support(self.video.0, self.video.1, self.video.2) {
+				Support::Unavailable => false,
+				Support::Profiles(profiles) => !profiles.is_empty(),
+				Support::Probing => true,
+			},
+			Kind::Frame(_) => true,
+		};
+		let enabled: Vec<bool> = self.formats.iter().map(|(f, _)| *f != ExportFormat::Mp4 || mp4).collect();
+		data.format_enabled = slint::ModelRc::new(slint::VecModel::from(enabled));
 	}
 
 	/// [`follow`](Self::follow) while the export cannot start, as the browser answers which profiles it encodes or
 	/// the session is made; whether `data` changed.
-	pub(crate) fn refresh(&self, data: &mut ExportData) -> bool {
+	fn refresh(&self, data: &mut ExportData) -> bool {
 		let reason = data.reason;
 		if reason == ExportReason::None {
 			return false;
@@ -192,7 +285,7 @@ impl Dialog {
 	}
 
 	/// Picks format `index`: the name takes its extension.
-	pub(crate) fn format(&self, data: &mut ExportData, index: i32) {
+	fn format(&self, data: &mut ExportData, index: i32) {
 		data.format = index;
 		if let Some(name) = typed_name(data.path.as_str(), self.format_of(data)) {
 			data.path = name.to_string_lossy().as_ref().into();
@@ -200,14 +293,7 @@ impl Dialog {
 		self.follow(data);
 	}
 
-	/// No platform dialog: the box takes a file name.
-	pub(crate) fn browse(&self, _: &mut ExportData, _: &Words<'_>) {}
-
-	/// No platform dialog: the box takes a file name.
-	pub(crate) fn browse_archive(&self, _: &mut ExportData, _: &Words<'_>) {}
-
-	/// The plan of the dialog's answer, the settings it leaves remembered; the reason when a box names no file.
-	pub(crate) fn plan(&self, data: &ExportData, settings: &mut Settings) -> Result<Plan, String> {
+	fn plan(&self, data: &ExportData, settings: &mut Settings) -> Result<Plan, String> {
 		let format = self.format_of(data);
 		let out = typed_name(data.path.as_str(), format).ok_or("Enter a file name.")?;
 		if let Some(i) = ExportFormat::ALL.iter().position(|f| *f == format) {
@@ -222,7 +308,7 @@ impl Dialog {
 			Kind::Frame(_) => Delivery::Still(outputs[0].1.clone()),
 			Kind::Run(_) if !self.kind.several(format) => Delivery::Video(outputs[0].1.clone()),
 			Kind::Run(_) => {
-				let archive = typed_archive(data.archive_path.as_str()).ok_or("Enter an archive name.")?;
+				let archive = typed_with(data.archive_path.as_str(), "zip").ok_or("Enter an archive name.")?;
 				if format.is_video() {
 					Delivery::Videos { videos: outputs.iter().map(|(_, video)| video.clone()).collect(), archive }
 				} else {

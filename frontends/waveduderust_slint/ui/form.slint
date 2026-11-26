@@ -273,12 +273,22 @@ export component FormCheck inherits Check {
 export component Choice inherits Rectangle {
     in property <int> index;
     in property <[string]> titles;
+    // per title, whether it can be picked; empty: all
+    in property <[bool]> item-enabled;
     in property <string> tip;
     in property <bool> enabled: true;
     callback picked(index: int);
     callback committed();
     // a pick assigns `current-index`, ending its binding to `index`: the index is put back on each change
     changed index => { combo.current-index = root.index; }
+    function pick(i: int) {
+        if (root.item-enabled.length > 0 && !root.item-enabled[i]) {
+            combo.current-index = root.index;
+            return;
+        }
+        root.picked(i);
+        root.committed();
+    }
     horizontal-stretch: 1;
     min-height: max(Theme.row-height, combo.min-height);
     min-width: combo.min-width;
@@ -289,9 +299,25 @@ export component Choice inherits Rectangle {
         enabled: root.enabled;
         model: root.titles;
         current-index: root.index;
-        selected => {
-            root.picked(self.current-index);
-            root.committed();
+        selected => { root.pick(self.current-index); }
+    }
+    // the combo box greys no item: a click opens a menu that does
+    if root.item-enabled.length > 0 && root.enabled: TouchArea {
+        clicked => {
+            combo.focus();
+            menu.show({ x: 0, y: root.height });
+        }
+    }
+    menu := ContextMenuArea {
+        enabled: false;
+        Menu {
+            for title[i] in root.titles: MenuItem {
+                title: title;
+                enabled: root.item-enabled.length == 0 || root.item-enabled[i];
+                checkable: true;
+                checked: i == root.index;
+                activated => { root.pick(i); }
+            }
         }
     }
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }

@@ -1991,6 +1991,23 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		let s = &mut *st.borrow_mut();
 		let Some(dialog) = &s.export_dialog else { return };
 		let mut data = app.get_export_data();
+		#[cfg(target_arch = "wasm32")]
+		if let Some(download) = dialog.csv_download(&data) {
+			match download {
+				Ok(download) => {
+					app.set_export_shown(false);
+					s.export_dialog = None;
+					tracing::info!("Exported the probe data as {}", download.name());
+					tell(&app, ui::Message::ExportReady, download.name());
+					s.ready = Some(download);
+				}
+				Err(e) => {
+					data.error = e.into();
+					app.set_export_data(data);
+				}
+			}
+			return;
+		}
 		match dialog.plan(&data, &mut s.settings) {
 			Ok(plan) => {
 				// asked in order, popped from the end
@@ -2451,16 +2468,16 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	});
 }
 
-/// Writes probe `i`'s recording to a CSV file the user names (the browser: a download).
-fn export_probe_csv(state: &State, app: &AppWindow, i: usize) {
+/// Writes probe `i`'s recording to a CSV file the user names (the browser: the export dialog names its download).
+fn export_probe_csv(state: &mut State, app: &AppWindow, i: usize) {
 	let Some(probe) = state.doc.project.probes.get(i) else { return };
 	let Some(csv) = state.live.probe_csv(probe) else {
 		tracing::info!("{}: no recording to export yet", probe.name);
 		return;
 	};
-	let name = format!("{}.csv", probe.name);
 	#[cfg(not(target_arch = "wasm32"))]
 	{
+		let name = format!("{}.csv", probe.name);
 		let words = app.global::<ui::Words<'_>>();
 		let Some(path) = rfd::FileDialog::new()
 			.set_title(words.get_export_probe_data().as_str())
@@ -2477,10 +2494,10 @@ fn export_probe_csv(state: &State, app: &AppWindow, i: usize) {
 	}
 	#[cfg(target_arch = "wasm32")]
 	{
-		let _ = app;
-		if let Err(e) = files::download(&name, &String::from_utf8_lossy(&csv), "text/csv") {
-			tracing::error!("{e}");
-		}
+		let (dialog, data) = export::Dialog::csv(&probe.name, csv, &app.global::<ui::Words<'_>>());
+		state.export_dialog = Some(dialog);
+		app.set_export_data(data);
+		app.set_export_shown(true);
 	}
 }
 
