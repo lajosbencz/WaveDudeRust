@@ -7,6 +7,7 @@ import "../../../crates/waveduderust/assets/fonts/Selawik-Semibold.ttf";
 import "../../../crates/waveduderust/assets/fonts/Selawik-Bold.ttf";
 export { Palette } from "std-widgets.slint";
 import { MenuIcons } from "menu-icons.slint";
+import { EditKeys } from "edit-keys.slint";
 import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview, DockSide } from "@slint-dock/dock.slint";
 import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
 import { Form, NumberParse } from "form.slint";
@@ -209,6 +210,8 @@ export component AppWindow inherits Window {
     // a menu entry's, shortcut's or button's action (docs/ui/10)
     callback command(Command);
     callback add(NewItem);
+    // a shortcut that binds nothing
+    property <keys> no-keys;
     // the recent file at an index of `recent-files`
     callback open-recent(int);
     // The main area takes the keys back once the last overlay closed.
@@ -274,15 +277,15 @@ export component AppWindow inherits Window {
         }
         Menu {
             title: root.menu-text(@tr("&Edit"), @tr("Edit"));
-            MenuItem { title: root.menu-text(@tr("&Undo"), @tr("Undo")); icon: MenuIcons.undo; enabled: root.commands.can-undo; activated => { root.command(Command.undo); } }
-            MenuItem { title: root.menu-text(@tr("&Redo"), @tr("Redo")); icon: MenuIcons.redo; enabled: root.commands.can-redo; activated => { root.command(Command.redo); } }
+            MenuItem { title: root.menu-text(@tr("&Undo"), @tr("Undo")); icon: MenuIcons.undo; enabled: root.commands.can-undo; shortcut: EditKeys.local ? root.no-keys : @keys(Control + Z); activated => { root.command(Command.undo); } }
+            MenuItem { title: root.menu-text(@tr("&Redo"), @tr("Redo")); icon: MenuIcons.redo; enabled: root.commands.can-redo; shortcut: EditKeys.local ? root.no-keys : @keys(Control + Y); activated => { root.command(Command.redo); } }
             MenuSeparator { }
-            MenuItem { title: root.menu-text(@tr("Cu&t"), @tr("Cut")); icon: MenuIcons.content-cut; enabled: root.commands.can-delete; activated => { root.command(Command.cut); } }
-            MenuItem { title: root.menu-text(@tr("&Copy"), @tr("Copy")); icon: MenuIcons.content-copy; enabled: root.commands.can-copy; activated => { root.command(Command.copy); } }
-            MenuItem { title: root.menu-text(@tr("&Paste"), @tr("Paste")); icon: MenuIcons.content-paste; enabled: true; activated => { root.command(Command.paste); } }
-            MenuItem { title: root.menu-text(@tr("&Delete"), @tr("Delete")); icon: MenuIcons.delete; enabled: root.commands.can-delete; activated => { root.command(Command.delete); } }
+            MenuItem { title: root.menu-text(@tr("Cu&t"), @tr("Cut")); icon: MenuIcons.content-cut; enabled: root.commands.can-delete; shortcut: EditKeys.local ? root.no-keys : @keys(Control + X); activated => { root.command(Command.cut); } }
+            MenuItem { title: root.menu-text(@tr("&Copy"), @tr("Copy")); icon: MenuIcons.content-copy; enabled: root.commands.can-copy; shortcut: EditKeys.local ? root.no-keys : @keys(Control + C); activated => { root.command(Command.copy); } }
+            MenuItem { title: root.menu-text(@tr("&Paste"), @tr("Paste")); icon: MenuIcons.content-paste; enabled: true; shortcut: EditKeys.local ? root.no-keys : @keys(Control + V); activated => { root.command(Command.paste); } }
+            MenuItem { title: root.menu-text(@tr("&Delete"), @tr("Delete")); icon: MenuIcons.delete; enabled: root.commands.can-delete; shortcut: EditKeys.local ? root.no-keys : @keys(Delete); activated => { root.command(Command.delete); } }
             MenuSeparator { }
-            MenuItem { title: root.menu-text(@tr("Select &all"), @tr("Select all")); icon: MenuIcons.select-all; enabled: root.commands.can-select-all; activated => { root.command(Command.select-all); } }
+            MenuItem { title: root.menu-text(@tr("Select &all"), @tr("Select all")); icon: MenuIcons.select-all; enabled: root.commands.can-select-all; shortcut: EditKeys.local ? root.no-keys : @keys(Control + A); activated => { root.command(Command.select-all); } }
         }
         Menu {
             title: root.menu-text(@tr("&View"), @tr("View"));
@@ -344,6 +347,7 @@ export component AppWindow inherits Window {
 
             HorizontalLayout {
                 padding: 4px;
+                padding-top: 0;
                 // the dock's chrome, the panes' contents its children at their places
                 Rectangle {
                     dock := DockArea {

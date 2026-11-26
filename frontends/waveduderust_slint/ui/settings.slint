@@ -4,6 +4,7 @@ import { NumberSpec } from "number-box.slint";
 import { FormPanel, FormLabel, IntField, Check, Choice } from "form.slint";
 import { PreviewQuality } from "commands.slint";
 import { RamBar, RamBarView } from "ram-bar.slint";
+import { EditKeys } from "edit-keys.slint";
 
 export enum ColorTheme { system, light, dark }
 // `system`: the system's language when a table has it, else English
@@ -125,6 +126,7 @@ export component SettingsLayer inherits Rectangle {
                     alignment: start;
                     spacing: 6px;
                     search := LineEdit {
+                        changed has-focus => { EditKeys.local = self.has-focus; }
                         placeholder-text: @tr("Search settings");
                         text <=> root.query;
                         key-pressed(e) => {

@@ -1,8 +1,9 @@
-import { CheckBox, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
+import { CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
 import { Icon } from "icons.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
 import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, FiberData, FiberNodeData, SchemeData, StopData, SchemeChoice, PointData, Layer } from "data.slint";
+import { EditKeys } from "edit-keys.slint";
 
 // The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
 export global Form {
@@ -364,6 +365,7 @@ export component FormText inherits Rectangle {
     min-width: edit.min-width;
     preferred-width: edit.preferred-width;
     edit := LineEdit {
+        changed has-focus => { EditKeys.local = self.has-focus; }
         width: parent.width;
         height: parent.height;
         enabled: root.enabled;
@@ -377,14 +379,52 @@ export component FormText inherits Rectangle {
 export component FormNotes inherits Rectangle {
     in-out property <string> text;
     in property <string> tip;
+    // the box's height, which the grip at its bottom drags
+    in-out property <length> size: 80px;
     horizontal-stretch: 1;
-    min-height: 60px;
-    edit := TextEdit {
-        width: parent.width;
-        height: parent.height;
-        wrap: word-wrap;
-        text <=> root.text;
-        edited => { Form.edited(true); }
+    min-height: 40px;
+    preferred-height: self.size;
+    background: Theme.input-background;
+    border-width: 1px;
+    border-color: edit.has-focus ? Theme.accent : Theme.border;
+    clip: true;
+    view := Flickable {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        height: parent.height - 2px;
+        content-height: max(self.height, edit.preferred-height);
+        edit := TextInput {
+            changed has-focus => { EditKeys.local = self.has-focus; }
+            x: 4px;
+            y: 2px;
+            width: view.width - 8px;
+            single-line: false;
+            wrap: word-wrap;
+            color: Theme.text;
+            selection-background-color: Theme.selection;
+            text <=> root.text;
+            edited => { Form.edited(true); }
+            // keeps the cursor line in view
+            cursor-position-changed(p) => {
+                if (p.y + self.y + view.content-y < 0) {
+                    view.content-y = -(p.y + self.y);
+                } else if (p.y + self.y + Theme.row-height + view.content-y > view.height) {
+                    view.content-y = view.height - p.y - self.y - Theme.row-height;
+                }
+            }
+        }
+    }
+    // the grip: drags the box's height
+    TouchArea {
+        y: parent.height - 5px;
+        height: 5px;
+        mouse-cursor: row-resize;
+        property <length> grabbed;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) { self.grabbed = root.size - self.mouse-y; }
+        }
+        moved => { root.size = max(40px, self.grabbed + self.mouse-y); }
     }
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
 }

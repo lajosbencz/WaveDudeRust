@@ -1,6 +1,7 @@
 import { LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { NumberBox } from "number-box.slint";
+import { EditKeys } from "edit-keys.slint";
 
 export struct Hsv {
     hue: float,
@@ -280,6 +281,7 @@ export component ColorPicker inherits FocusScope {
                 property <string> showing: ColorLogic.hex(root.shown);
                 changed showing => { self.text = self.showing; }
                 changed has-focus => {
+                    EditKeys.local = self.has-focus;
                     if (!self.has-focus && self.text != self.showing) {
                         root.take(ColorLogic.parse-hex(self.text, root.shown));
                         self.text = self.showing;

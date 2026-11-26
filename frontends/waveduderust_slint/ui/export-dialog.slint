@@ -4,6 +4,7 @@
 import { Button, LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Choice, Check } from "form.slint";
+import { EditKeys } from "edit-keys.slint";
 
 // Why the browser cannot start the export.
 export enum ExportReason { none, no-storage, no-webcodecs, no-profile, probing }
@@ -85,6 +86,7 @@ export component ExportLayer inherits Rectangle {
                 spacing: 8px;
                 Text { text: @tr("File"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
                 path := LineEdit {
+                    changed has-focus => { EditKeys.local = self.has-focus; }
                     text <=> root.data.path;
                     edited => { root.path-edited(); }
                     key-pressed(e) => {
@@ -109,6 +111,7 @@ export component ExportLayer inherits Rectangle {
                 spacing: 8px;
                 Text { text: @tr("Archive"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
                 LineEdit {
+                    changed has-focus => { EditKeys.local = self.has-focus; }
                     text <=> root.data.archive-path;
                     key-pressed(e) => {
                         if (e.text == Key.Escape) { root.shown = false; return accept; }

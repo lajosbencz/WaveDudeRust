@@ -9,6 +9,7 @@ import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, Check,
 import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice, MetaLensTypeChoice, FiberEndsChoice, SchemeKindChoice } from "choices.slint";
 import { FormKind, GateKind, PointData, SchemeChoice, SchemeEntry, SceneMode, SourceMode, ProbeDetector, ProbeKind, Layer, BoxSize, YScale, TriangleType, LayerData } from "data.slint";
 import { Icon, IconButton } from "icons.slint";
+import { EditKeys } from "edit-keys.slint";
 
 export component ProjectForm inherits VerticalLayout {
     alignment: start;
@@ -2480,6 +2481,7 @@ component HexField inherits Rectangle {
         changed shown => { self.text = self.shown; }
         accepted => { root.commit(); }
         changed has-focus => {
+            EditKeys.local = self.has-focus;
             if (!self.has-focus && self.text != root.text) {
                 root.commit();
             }

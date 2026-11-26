@@ -18,11 +18,11 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | I | Icons | 60 | 1 | 0 | 22 | 0 |
 | T | Project tree | 58 | 4 | 0 | 39 | 0 |
 | P | Properties | 311 | 7 | 0 | 7 | 0 |
-| V | Preview | 97 | 6 | 0 | 8 | 1 |
+| V | Preview | 99 | 7 | 0 | 5 | 1 |
 | L | Timeline, transport, status | 70 | 9 | 0 | 9 | 2 |
 | R | Live editing and runs | 42 | 15 | 0 | 2 | 2 |
 | G | Messages pane | 26 | 3 | 0 | 3 | 0 |
-| | All | 839 | 87 | 0 | 164 | 5 |
+| | All | 841 | 88 | 0 | 161 | 5 |
 
 ## Cross-cutting
 
@@ -116,7 +116,7 @@ Global gaps (apply to EVERY menu row below unless the Slint cell says otherwise;
 | ID | Feature | Next source | Spec | Slint | Note |
 |---|---|---|---|---|---|
 | M-22 | Edit header, Mn E/B/B/B | MW:281, SE:50 | ui/10 Edit | divergence | access keys on Windows' native bar (`menu-text`, Next's per language), none on Linux and the web (docs/blockers.md) |
-| M-23 | Undo, Ctrl+Z, enabled when a step exists; a focused text box keeps its own Ctrl+Z | MW:282, SE:51, EditCommands.cs:37 | ui/10 Edit | done | enabled can-undo; a focused text box takes Ctrl+Z first; rest matched in general (decision 0033) |
+| M-23 | Undo, Ctrl+Z, enabled when a step exists; a focused text box keeps its own Ctrl+Z | MW:282, SE:51, EditCommands.cs:37 | ui/10 Edit | done | Ctrl+Z shown and bound on the menu unless a focused text box or the Messages list takes the Edit keys (ui/edit-keys.slint); rest matched in general (decision 0033) |
 | M-24 | Redo, Ctrl+Y and Ctrl+Shift+Z | MW:283, SE:52, EditCommands.cs:41 | ui/10 Edit | done | as M-23 |
 | M-25 | Separator | MW:284 | ui/10 Edit | done | app:124 |
 | M-26 | Cut, Ctrl+X, enabled when list items selected, copies then removes | MW:285, SE:53 | ui/10 Edit | done | copies the group (Explorer's rule, src/selection.rs) then removes its list items, only when the clipboard took it |
@@ -966,9 +966,9 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-18 | Auto: 8-bit recompute in 16-bit for fit alone, run paused meanwhile | MainWindow.Display.cs | 40 Header strip | done | 8-bit: a FitRequest; the worker serves the frame in 16-bit, the poll fits it |
 | V-19 | Auto is an ordinary brightness edit (8-bit: simulation edit); "nothing to fit" status text | MainWindow.Display.cs | 40 Header strip | done | an ordinary view edit; nothing to fit logs (status bar) Auto brightness: nothing to fit |
 | V-20 | Header placement above picture when cell taller than aspect (4 px over) | PreviewPane.xaml:560-600 | 40 Header strip | done | header above; rest matched in general (decision 0033) |
-| V-21 | Header turned a quarter clockwise on picture's left when cell wider (10 px below top) | HeaderStrip.cs | 40 Header strip | divergence | the header strip stays above the picture at any cell shape (decision 0033: layout loosely); no turned strip |
-| V-22 | Turned box edits upright while focused (click/Tab/context menu focus, select text, arrows/wheel step) | NumberBox.cs | 40 Header strip; 00 Turned brightness box TODO | divergence | see V-21 |
-| V-23 | Turned unfocused box: arrows step, drag along strip scrubs | NumberBox.cs | 40 Header strip | divergence | see V-21 |
+| V-21 | Header turned a quarter clockwise on picture's left when cell wider (10 px below top) | HeaderStrip.cs | 40 Header strip | done | preview.slint Picture: the strip turned on the left when the cell is wider than the picture (Slint maps input through the rotation) |
+| V-22 | Turned box edits upright while focused (click/Tab/context menu focus, select text, arrows/wheel step) | NumberBox.cs | 40 Header strip; 00 Turned brightness box TODO | done | the turned NumberBox stands upright from the band into the picture while it edits |
+| V-23 | Turned unfocused box: arrows step, drag along strip scrubs | NumberBox.cs | 40 Header strip | partial | the turned box keeps its arrows and drag scrub through the rotation; not checked in a window |
 | V-24 | Narrow strip: caption dropped first, then title ellipsis; 12 px min gap | HeaderStrip.cs | 40 Header strip | done | the caption drops (changed width) before the title elides; 12 px kept after the title |
 | V-25 | Edge line 1 px, blue #0000FF when damping rim outside canvas | PreviewPane.xaml:602-610 | 40 Edge line | done | Canvas.edge from Scene::has_rim: a 1 px blue line round the picture |
 | V-26 | Edge line red #FF0000 for reflective edges (rim wins over wall) | PreviewPane.xaml:602-610 | 40 Edge line | done | red with reflective edges and no rim |
@@ -1137,7 +1137,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-72 | Position rules: New/open/example/close -> frame 0, playback stops | MainWindow.Project.cs | 50 Position rules | done | state.opened -> playback.reset |
 | L-73 | Run stopped: preview moves to newest frame if following; Live off | MainWindow.Live.cs | 50 Position rules | partial | Live turned off; no jump to newest |
 | L-74 | Run discarded: position kept | MainWindow.Live.cs | 50 Position rules | n/a | discard missing (R-24) |
-| L-75 | Frame missing for position: live run makes it first, last picture stays | MainWindow.Live.cs | 50 Position rules | done | live.seek publishes goal |
+| L-75 | Frame missing for position: live run makes it first, last picture stays | MainWindow.Live.cs | 50 Position rules | done | live.seek publishes the goal while a run is active or a fit pending, and when the position frame is not stored yet |
 | L-76 | Status bar right: "<State>: <done> / <total> steps, <engine>", empty without run | MainWindow.Live.cs | 50 Run states | done | live.rs poll |
 | L-77 | State words Running/Paused/Completed/Stopped/Failed | MainWindow.Live.cs | 50 Run states | done | |
 | L-78 | Engine text "CPU (n threads)" / "GPU: adapter" / browser "engine starting", "no engine" | MainWindow.Live.cs | 50 Run states; 60 Edit classes | partial | only "GPU: <adapter>" |

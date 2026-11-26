@@ -1,6 +1,7 @@
 import { LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icon } from "icons.slint";
+import { EditKeys } from "edit-keys.slint";
 
 // A number box's settings (Next's NumberBox properties); `decimals` -1 takes the increment's, `drag-step` 0 the
 // increment's half per pixel.
@@ -56,6 +57,8 @@ component SpinButton inherits Rectangle {
 // Ctrl faster; Esc restores). A step, a scrub, Enter or leaving the box hands the text to `edited`; Esc restores
 // `value` and is left to others when the text already shows it (Next's EditBehavior).
 export component NumberBox inherits FocusScope {
+    // the text is being edited
+    out property <bool> editing: edit.has-focus;
     in property <string> value;
     in property <NumberSpec> spec: { min: -1000000000, max: 1000000000, increment: 1, decimals: -1 };
     // Hands a commit to the field; true when it took the text, which then shows the field's value.
@@ -143,6 +146,7 @@ export component NumberBox inherits FocusScope {
                 }
                 // runs late: the box may show another object by then
                 changed has-focus => {
+                    EditKeys.local = self.has-focus;
                     if (!self.has-focus && self.text != root.value && root.typed-under == root.token && root.edited(self.text)) {
                         self.text = root.value;
                     }

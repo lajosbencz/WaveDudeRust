@@ -1,6 +1,7 @@
 import { ListView, LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { MenuIcons } from "menu-icons.slint";
+import { EditKeys } from "edit-keys.slint";
 
 export enum LogLevel { trace, debug, info, warn, error }
 
@@ -99,6 +100,7 @@ export component Messages inherits Rectangle {
                 toggled => { root.toggle(l.level); }
             }
             LineEdit {
+                changed has-focus => { EditKeys.local = self.has-focus; }
                 placeholder-text: @tr("Search");
                 edited(t) => { root.search(t); }
             }
@@ -139,6 +141,7 @@ export component Messages inherits Rectangle {
             Text { text: @tr("Message"); color: Theme.text-dim; horizontal-stretch: 1; }
         }
         keys := FocusScope {
+            changed has-focus => { EditKeys.local = self.has-focus; }
             key-pressed(e) => {
                 // with no line selected the app copies its items
                 if (e.modifiers.control && (e.text == "c" || e.text == "C")) {

@@ -1,6 +1,7 @@
 import { Command, TransportAction } from "commands.slint";
 import { Theme } from "theme.slint";
 import { Icon, IconButton } from "icons.slint";
+import { EditKeys } from "edit-keys.slint";
 
 // The playback state the timeline and transport bar show.
 export struct Transport {
@@ -234,8 +235,13 @@ export component TransportBar inherits Rectangle {
         IconButton { icon: @image-url("icons/next/loop.svg"); tip: @tr("Loop playback over the export range (L)"); checked: t.looping; clicked => { root.action(TransportAction.loop); } }
         IconButton { icon: @image-url("icons/next/live.svg"); tip: @tr("Follow the newest frame while the run is in progress (F)"); checked: t.live; enabled: t.running; clicked => { root.action(TransportAction.live); } }
         Divider { }
+        // as wide as the widest readout of the run, so playing does not shift what follows
         Rectangle {
-            width: frame.preferred-width;
+            width: max(frame.preferred-width, widest.preferred-width);
+            widest := Text {
+                visible: false;
+                text: "8" + max(0, t.frames - 1) + " / " + max(0, t.frames - 1);
+            }
             frame := Text {
                 text: t.position + " / " + max(0, t.frames - 1);
                 vertical-alignment: center;
@@ -244,8 +250,9 @@ export component TransportBar inherits Rectangle {
             Tooltip { text: @markdown("\{@tr("Frame shown / last frame")}"); }
         }
         Rectangle {
-            width: step.preferred-width;
+            width: step.preferred-width + 6px;
             step := Text {
+                x: 6px;
                 text: t.step;
                 vertical-alignment: center;
                 color: Theme.text-dim;
@@ -273,6 +280,7 @@ export component TransportBar inherits Rectangle {
                     single-line: true;
                     accepted => { self.text = root.speed(self.text); }
                     changed has-focus => {
+                        EditKeys.local = self.has-focus;
                         if (!self.has-focus) { self.text = root.speed(self.text); }
                     }
                 }

@@ -1,5 +1,6 @@
 import { LineEdit, Button, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { EditKeys } from "edit-keys.slint";
 
 // The examples' topics, in tab order.
 export enum ExampleTopic { sources, lenses, gratings, metasurfaces, guides, detectors }
@@ -84,6 +85,7 @@ export component ExamplesLayer inherits Rectangle {
                 }
             }
             LineEdit {
+                changed has-focus => { EditKeys.local = self.has-focus; }
                 placeholder-text: @tr("Search");
                 edited(t) => { root.search(t); root.current = 0; }
             }
