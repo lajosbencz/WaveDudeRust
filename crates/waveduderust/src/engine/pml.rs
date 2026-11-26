@@ -41,6 +41,7 @@ use std::ops::Range;
 use rayon::prelude::*;
 
 use super::damage::Damage;
+use super::isa;
 use super::stencil::PAD;
 use super::types::{PmlLayer, SceneData};
 
@@ -480,6 +481,7 @@ impl XShared<'_> {
 	/// `rows`) and advances psi of x on it, for each strip the area meets; then adds the correction times `scale c2`
 	/// to the row's grid cells `line` and advances their xi: the x strips' cells, and on a y-strip row the cells of the
 	/// area between them.
+	#[cfg_attr(target_arch = "x86_64", inline(always))]
 	pub fn row(&self, gy: usize, rows: &mut XRows<'_>, j: usize, line: &mut [f32], scratch: &mut XScratch) {
 		let Strips { gw, rim, .. } = self.strips;
 		let (s, w, zw, scale) = (self.stride, rows.w, rows.zw, self.scale);
@@ -552,6 +554,7 @@ impl XShared<'_> {
 
 	/// Adds `scale c2 (init + O_x z~ - D2x z~)` to the cells `line` of one x strip of a row and advances their
 	/// xi; `padded` holds at least the strip's psi and two zeros each side.
+	#[cfg_attr(target_arch = "x86_64", inline(always))]
 	fn correct_span(
 		&self,
 		span: &XSpan<'_>,
@@ -580,19 +583,24 @@ impl XShared<'_> {
 		scale: f32,
 		init: &[f32],
 	) {
-		let n = line.len();
-		let z: [&[f32]; 7] = std::array::from_fn(|j| &span.z[j..][..n]);
-		let (cut, [b, a, ik, dik], c2) = (&span.cut[..n], span.x.map(|c| &c[..n]), &span.c2[..n]);
-		let (xi, init) = (&mut xi[..n], &init[..n]);
-		let padded = &mut padded[..n + 4];
-		padded[2..n + 2].copy_from_slice(&span.psi[..n]);
-		let [p0, p1, p3, p4] = [0, 1, 3, 4].map(|j| &padded[j..][..n]);
-		for k in 0..n {
-			let dpsi = (8.0 * (p3[k] - p1[k]) - (p4[k] - p0[k])) / 12.0;
-			let taps = maybe_cut::<CUT>(z.map(|r| r[k]), cut[k] >> cut::X_SHIFT);
-			let sum = init[k] + stretched(&taps, &self.axis, [b[k], a[k], ik[k], dik[k]], dpsi, &mut xi[k]);
-			line[k] += scale * c2[k] * sum;
-		}
+		isa::wide(
+			#[cfg_attr(target_arch = "x86_64", inline(always))]
+			|| {
+				let n = line.len();
+				let z: [&[f32]; 7] = std::array::from_fn(|j| &span.z[j..][..n]);
+				let (cut, [b, a, ik, dik], c2) = (&span.cut[..n], span.x.map(|c| &c[..n]), &span.c2[..n]);
+				let (xi, init) = (&mut xi[..n], &init[..n]);
+				let padded = &mut padded[..n + 4];
+				padded[2..n + 2].copy_from_slice(&span.psi[..n]);
+				let [p0, p1, p3, p4] = [0, 1, 3, 4].map(|j| &padded[j..][..n]);
+				for k in 0..n {
+					let dpsi = (8.0 * (p3[k] - p1[k]) - (p4[k] - p0[k])) / 12.0;
+					let taps = maybe_cut::<CUT>(z.map(|r| r[k]), cut[k] >> cut::X_SHIFT);
+					let sum = init[k] + stretched(&taps, &self.axis, [b[k], a[k], ik[k], dik[k]], dpsi, &mut xi[k]);
+					line[k] += scale * c2[k] * sum;
+				}
+			},
+		);
 	}
 }
 
@@ -609,26 +617,31 @@ struct XSpan<'a> {
 /// `delta_y`, 0 beyond the grid. The cells between the grid's edges run on row slices and vectorise; each cell is
 /// the same expression in the same order either way.
 fn plain_cells(d: &[f32], cross: f32, cols: Range<usize>, out: &mut [f32]) {
-	if cross == 0.0 {
-		out[cols.clone()].copy_from_slice(&d[cols]);
-		return;
-	}
-	let gw = d.len();
-	let edge = |gx: usize| {
-		let left = if gx > 0 { d[gx - 1] } else { 0.0 };
-		let right = if gx + 1 < gw { d[gx + 1] } else { 0.0 };
-		d[gx] + cross * (left + right - 2.0 * d[gx])
-	};
-	let inner_start = cols.start.max(1).min(cols.end);
-	let inner = inner_start..cols.end.min(gw - 1).max(inner_start);
-	for gx in (cols.start..inner.start).chain(inner.end..cols.end) {
-		out[gx] = edge(gx);
-	}
-	let n = inner.len();
-	let (l, c, r) = (&d[inner.start - 1..][..n], &d[inner.clone()], &d[inner.start + 1..][..n]);
-	for (o, ((&l, &c), &r)) in out[inner].iter_mut().zip(l.iter().zip(c).zip(r)) {
-		*o = c + cross * (l + r - 2.0 * c);
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			if cross == 0.0 {
+				out[cols.clone()].copy_from_slice(&d[cols]);
+				return;
+			}
+			let gw = d.len();
+			let edge = |gx: usize| {
+				let left = if gx > 0 { d[gx - 1] } else { 0.0 };
+				let right = if gx + 1 < gw { d[gx + 1] } else { 0.0 };
+				d[gx] + cross * (left + right - 2.0 * d[gx])
+			};
+			let inner_start = cols.start.max(1).min(cols.end);
+			let inner = inner_start..cols.end.min(gw - 1).max(inner_start);
+			for gx in (cols.start..inner.start).chain(inner.end..cols.end) {
+				out[gx] = edge(gx);
+			}
+			let n = inner.len();
+			let (l, c, r) = (&d[inner.start - 1..][..n], &d[inner.clone()], &d[inner.start + 1..][..n]);
+			for (o, ((&l, &c), &r)) in out[inner].iter_mut().zip(l.iter().zip(c).zip(r)) {
+				*o = c + cross * (l + r - 2.0 * c);
+			}
+		},
+	);
 }
 
 /// One row of the y strips: the field's seven rows around it, psi of the rows 1 and 2 after and before
@@ -652,66 +665,86 @@ fn maybe_cut<const CUT: bool>(t: [f32; 7], bits: u8) -> [f32; 7] {
 
 #[inline(always)]
 fn psi_y_row<const CUT: bool>(line: &mut [f32], t: [&[f32]; 7], cut: &[u8], b: f32, a: f32) {
-	let gw = line.len();
-	let (t, cut) = (t.map(|row| &row[..gw]), &cut[..gw]);
-	for x in 0..gw {
-		let taps = maybe_cut::<CUT>(t.map(|row| row[x]), cut[x] >> cut::Y_SHIFT);
-		line[x] = b * line[x] + a * first(&taps);
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			let gw = line.len();
+			let (t, cut) = (t.map(|row| &row[..gw]), &cut[..gw]);
+			for x in 0..gw {
+				let taps = maybe_cut::<CUT>(t.map(|row| row[x]), cut[x] >> cut::Y_SHIFT);
+				line[x] = b * line[x] + a * first(&taps);
+			}
+		},
+	);
 }
 
 #[inline(always)]
 fn delta_y_row<const CUT: bool>(row: &YRow<'_>, axis: &[f32; 4], coef: [f32; 4], xi: &mut [f32], delta: &mut [f32]) {
-	let gw = xi.len();
-	let (t, [p1, m1, p2, m2]) = (row.t.map(|r| &r[..gw]), row.psi.map(|r| &r[..gw]));
-	let (cut, delta) = (&row.cut[..gw], &mut delta[..gw]);
-	for x in 0..gw {
-		let taps = maybe_cut::<CUT>(t.map(|r| r[x]), cut[x] >> cut::Y_SHIFT);
-		let dpsi = (8.0 * (p1[x] - m1[x]) - (p2[x] - m2[x])) / 12.0;
-		delta[x] = stretched(&taps, axis, coef, dpsi, &mut xi[x]);
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			let gw = xi.len();
+			let (t, [p1, m1, p2, m2]) = (row.t.map(|r| &r[..gw]), row.psi.map(|r| &r[..gw]));
+			let (cut, delta) = (&row.cut[..gw], &mut delta[..gw]);
+			for x in 0..gw {
+				let taps = maybe_cut::<CUT>(t.map(|r| r[x]), cut[x] >> cut::Y_SHIFT);
+				let dpsi = (8.0 * (p1[x] - m1[x]) - (p2[x] - m2[x])) / 12.0;
+				delta[x] = stretched(&taps, axis, coef, dpsi, &mut xi[x]);
+			}
+		},
+	);
 }
 
 /// z~ of the `out.len()` cells from grid column `g0` of the row whose grid cells start at padded index `base`;
 /// `d` is the row's `delta_y` (zeros outside the y strips), 0 beyond the grid.
 fn z_span(out: &mut [f32], field: &[f32], base: usize, s: usize, cross: f32, d: &[f32], g0: isize) {
-	let (n, gw) = (out.len(), d.len());
-	let j0 = base.wrapping_add_signed(g0);
-	let f = &field[j0..][..n];
-	if cross == 0.0 {
-		out.copy_from_slice(f);
-		return;
-	}
-	let (up, down) = (&field[j0 - s..][..n], &field[j0 + s..][..n]);
-	let cell = |k: usize, dk: f32| {
-		let v = f[k];
-		v + cross * ((up[k] + down[k] - 2.0 * v) + dk)
-	};
-	// The cells within the grid, `lo..hi`, take `d` on row slices, so that loop vectorises; the at most 3 beyond each
-	// side take 0.
-	let lo = (-g0).clamp(0, n as isize) as usize;
-	let hi = (gw as isize - g0).clamp(lo as isize, n as isize) as usize;
-	for k in (0..lo).chain(hi..n) {
-		out[k] = cell(k, 0.0);
-	}
-	let d = &d[(g0 + lo as isize) as usize..][..hi - lo];
-	let (f, up, down) = (&f[lo..hi], &up[lo..hi], &down[lo..hi]);
-	for (o, (((&v, &u), &w), &dk)) in out[lo..hi].iter_mut().zip(f.iter().zip(up).zip(down).zip(d)) {
-		*o = v + cross * ((u + w - 2.0 * v) + dk);
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			let (n, gw) = (out.len(), d.len());
+			let j0 = base.wrapping_add_signed(g0);
+			let f = &field[j0..][..n];
+			if cross == 0.0 {
+				out.copy_from_slice(f);
+				return;
+			}
+			let (up, down) = (&field[j0 - s..][..n], &field[j0 + s..][..n]);
+			let cell = |k: usize, dk: f32| {
+				let v = f[k];
+				v + cross * ((up[k] + down[k] - 2.0 * v) + dk)
+			};
+			// The cells within the grid, `lo..hi`, take `d` on row slices, so that loop vectorises; the at most 3
+			// beyond each side take 0.
+			let lo = (-g0).clamp(0, n as isize) as usize;
+			let hi = (gw as isize - g0).clamp(lo as isize, n as isize) as usize;
+			for k in (0..lo).chain(hi..n) {
+				out[k] = cell(k, 0.0);
+			}
+			let d = &d[(g0 + lo as isize) as usize..][..hi - lo];
+			let (f, up, down) = (&f[lo..hi], &up[lo..hi], &down[lo..hi]);
+			for (o, (((&v, &u), &w), &dk)) in out[lo..hi].iter_mut().zip(f.iter().zip(up).zip(down).zip(d)) {
+				*o = v + cross * ((u + w - 2.0 * v) + dk);
+			}
+		},
+	);
 }
 
 /// Advances psi of x of one strip's cells on row slices: the taps of `z` (z~ from 3 before the first cell) are shifted
 /// slices and `x` the coefficient columns, so the loop vectorises without mirrors.
 #[inline(always)]
 fn psi_x_span<const CUT: bool>(psi: &mut [f32], z: &[f32], cut: &[u8], x: [&[f32]; 4]) {
-	let n = psi.len();
-	let z: [&[f32]; 7] = std::array::from_fn(|j| &z[j..][..n]);
-	let (cut, [b, a, ..]) = (&cut[..n], x.map(|c| &c[..n]));
-	for k in 0..n {
-		let taps = maybe_cut::<CUT>(z.map(|r| r[k]), cut[k] >> cut::X_SHIFT);
-		psi[k] = b[k] * psi[k] + a[k] * first(&taps);
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			let n = psi.len();
+			let z: [&[f32]; 7] = std::array::from_fn(|j| &z[j..][..n]);
+			let (cut, [b, a, ..]) = (&cut[..n], x.map(|c| &c[..n]));
+			for k in 0..n {
+				let taps = maybe_cut::<CUT>(z.map(|r| r[k]), cut[k] >> cut::X_SHIFT);
+				psi[k] = b[k] * psi[k] + a[k] * first(&taps);
+			}
+		},
+	);
 }
 
 /// `u_x~x~ - D2 u` at one cell from its taps, the axis's coefficients `[b, a, 1/kappa, (1/kappa)']`,

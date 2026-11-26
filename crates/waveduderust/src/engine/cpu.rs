@@ -47,6 +47,7 @@ use rayon::prelude::*;
 use super::capture;
 use super::damage::{Damage, extent};
 use super::forcing::{IMAGE_LEVELS, SourceGroups, live};
+use super::isa;
 use super::mur::{MurChain, mur_chains};
 use super::pml::{self, CpuPml, Medium, XPart, XRows, XScratch, XShared, cut, cut_taps};
 use super::shared::{Shared, blend};
@@ -334,37 +335,50 @@ impl CpuEngine {
 		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
 		let medium = Medium { cuts, c2 };
 		let mut rim = self.pml.as_mut().and_then(|p| p.begin(0, u, medium, 1.0, area));
-		grid_rows(&mut self.prev, stages, s, area, rim.as_mut(), |r, next| {
-			let (at, runs) = (r * s + PAD, uniform.row(r - PAD));
-			let (c2, d) = (&c2[at..][..gw], &d[at..][..gw]);
-			let update = |x: usize, next: &mut f32, v: f32, lap: f32| {
-				*next = v + ((v - *next) * d[x] + lap * c2[x] * centred(d[x]));
-			};
-			// The cells of `span` with no cut, on row slices ([`nine_span`]), a uniform run's with its constants.
-			let uncut = |span: Range<usize>, next: &mut [f32]| {
-				medium_spans(runs, c2, d, span, |piece, medium| {
-					let next = &mut next[piece.clone()];
-					match medium {
-						Some((c2, d)) => nine_span(u, at + piece.start, s, next, |_| c2, |_| d),
-						None => {
-							let (c2, d) = (&c2[piece.clone()], &d[piece.clone()]);
-							nine_span(u, at + piece.start, s, next, |x| c2[x], |x| d[x]);
+		grid_rows(
+			&mut self.prev,
+			stages,
+			s,
+			area,
+			rim.as_mut(),
+			#[cfg_attr(target_arch = "x86_64", inline(always))]
+			|r, next| {
+				let (at, runs) = (r * s + PAD, uniform.row(r - PAD));
+				let (c2, d) = (&c2[at..][..gw], &d[at..][..gw]);
+				let update = |x: usize, next: &mut f32, v: f32, lap: f32| {
+					*next = v + ((v - *next) * d[x] + lap * c2[x] * centred(d[x]));
+				};
+				// The cells of `span` with no cut, on row slices ([`nine_span`]), a uniform run's with its constants.
+				let uncut = |span: Range<usize>, next: &mut [f32]| {
+					medium_spans(runs, c2, d, span, |piece, medium| {
+						isa::wide(
+							#[cfg_attr(target_arch = "x86_64", inline(always))]
+							|| {
+								let next = &mut next[piece.clone()];
+								match medium {
+									Some((c2, d)) => nine_span(u, at + piece.start, s, next, |_| c2, |_| d),
+									None => {
+										let (c2, d) = (&c2[piece.clone()], &d[piece.clone()]);
+										nine_span(u, at + piece.start, s, next, |x| c2[x], |x| d[x]);
+									}
+								}
+							},
+						);
+					});
+				};
+				match row_cuts(cuts, mirrors, at, gw, &xs) {
+					None => uncut(xs.clone(), next),
+					Some(cuts) => cut_spans(cuts, xs.clone(), |span, cut| {
+						if !cut {
+							return uncut(span, next);
 						}
-					}
-				});
-			};
-			match row_cuts(cuts, mirrors, at, gw, &xs) {
-				None => uncut(xs.clone(), next),
-				Some(cuts) => cut_spans(cuts, xs.clone(), |span, cut| {
-					if !cut {
-						return uncut(span, next);
-					}
-					for x in span {
-						update(x, &mut next[x], u[at + x], nine_point(u, at + x, s, cuts[x]));
-					}
-				}),
-			}
-		});
+						for x in span {
+							update(x, &mut next[x], u[at + x], nine_point(u, at + x, s, cuts[x]));
+						}
+					}),
+				}
+			},
+		);
 	}
 
 	/// The modified equation's first pass: `w = c2 L u` on the damaged cells but those of `fresh`, which the outer pass
@@ -374,18 +388,31 @@ impl CpuEngine {
 		let (u, c2, cuts, axis, mirrors) = (&self.u, &self.c2, &self.cuts, &self.axis, self.mirrors);
 		let (area, xs) = (&self.damage, &self.damage.x);
 		let mut rim = self.pml.as_mut().and_then(|p| p.begin(0, u, Medium { cuts, c2 }, 1.0, area));
-		grid_rows(&mut self.w, None, s, area, rim.as_mut(), |r, w| {
-			let (at, rows) = (r * s + PAD, plane_rows(u, r, s));
-			let c2 = &c2[at..][..gw];
-			let cuts = row_cuts(cuts, mirrors, at, gw, xs);
-			let mut span = |span: Range<usize>| drp_row(&rows, span, axis, cuts, |x, lap| w[x] = c2[x] * lap);
-			if fresh.y.contains(&(r - PAD)) {
-				span(xs.start..fresh.x.start);
-				span(fresh.x.end..xs.end);
-			} else {
-				span(xs.clone());
-			}
-		});
+		grid_rows(
+			&mut self.w,
+			None,
+			s,
+			area,
+			rim.as_mut(),
+			#[cfg_attr(target_arch = "x86_64", inline(always))]
+			|r, w| {
+				let (at, rows) = (r * s + PAD, plane_rows(u, r, s));
+				let c2 = &c2[at..][..gw];
+				let cuts = row_cuts(cuts, mirrors, at, gw, xs);
+				let mut span = |span: Range<usize>| {
+					isa::wide(
+						#[cfg_attr(target_arch = "x86_64", inline(always))]
+						|| drp_row(&rows, span, axis, cuts, |x, lap| w[x] = c2[x] * lap),
+					);
+				};
+				if fresh.y.contains(&(r - PAD)) {
+					span(xs.start..fresh.x.start);
+					span(fresh.x.end..xs.end);
+				} else {
+					span(xs.clone());
+				}
+			},
+		);
 	}
 
 	/// The modified equation's second pass, fused with the first on `fresh`: writes the next field over `prev`, and
@@ -411,9 +438,14 @@ impl CpuEngine {
 			cells[own.end..wide.end].copy_from_slice(&plane[own.end..wide.end]);
 			let (c2, d, rows) = (&c2[at..][..gw], &d[at..][..gw], plane_rows(u, r, s));
 			let own_cuts = row_cuts(cuts, mirrors, at, gw, &own);
-			medium_spans(uniform.row(r - PAD), c2, d, own, |piece, medium| match medium {
-				Some((k, _)) => drp_row(&rows, piece, axis, own_cuts, |x, lap| cells[x] = k * lap),
-				None => drp_row(&rows, piece, axis, own_cuts, |x, lap| cells[x] = c2[x] * lap),
+			medium_spans(uniform.row(r - PAD), c2, d, own, |piece, medium| {
+				isa::wide(
+					#[cfg_attr(target_arch = "x86_64", inline(always))]
+					|| match medium {
+						Some((k, _)) => drp_row(&rows, piece, axis, own_cuts, |x, lap| cells[x] = k * lap),
+						None => drp_row(&rows, piece, axis, own_cuts, |x, lap| cells[x] = c2[x] * lap),
+					},
+				);
 			});
 			// The driven cells, whose `w` the forcing completed in the plane.
 			let first = driven.partition_point(|&c| c < at);
@@ -431,6 +463,7 @@ impl CpuEngine {
 			block,
 			RowEnd { stages, rim: rim.as_mut() },
 			|| vec![0.0f32; RING * s],
+			#[cfg_attr(target_arch = "x86_64", inline(always))]
 			|ring, r0, lines, done| {
 				for r in r0 - 3..r0 + 3 {
 					fill(ring, r);
@@ -442,15 +475,20 @@ impl CpuEngine {
 					let at = r * s + PAD;
 					let (uc, wc, c2, d) = (&u[at..][..gw], &rows[3][PAD..][..gw], &c2[at..][..gw], &d[at..][..gw]);
 					let (next, row_cuts) = (&mut line[PAD..][..gw], row_cuts(cuts, mirrors, at, gw, xs));
-					medium_spans(uniform.row(r - PAD), c2, d, xs.clone(), |piece, medium| match medium {
-						Some((k, dk)) => drp_row(&rows, piece, axis, row_cuts, |x, lw| {
-							let c = uc[x];
-							next[x] = c + ((c - next[x]) * dk + (wc[x] + k * lw * INV12) * centred(dk));
-						}),
-						None => drp_row(&rows, piece, axis, row_cuts, |x, lw| {
-							let c = uc[x];
-							next[x] = c + ((c - next[x]) * d[x] + (wc[x] + c2[x] * lw * INV12) * centred(d[x]));
-						}),
+					medium_spans(uniform.row(r - PAD), c2, d, xs.clone(), |piece, medium| {
+						isa::wide(
+							#[cfg_attr(target_arch = "x86_64", inline(always))]
+							|| match medium {
+								Some((k, dk)) => drp_row(&rows, piece, axis, row_cuts, |x, lw| {
+									let c = uc[x];
+									next[x] = c + ((c - next[x]) * dk + (wc[x] + k * lw * INV12) * centred(dk));
+								}),
+								None => drp_row(&rows, piece, axis, row_cuts, |x, lw| {
+									let c = uc[x];
+									next[x] = c + ((c - next[x]) * d[x] + (wc[x] + c2[x] * lw * INV12) * centred(d[x]));
+								}),
+							},
+						);
 					});
 					done(j, line);
 				}
@@ -553,13 +591,18 @@ fn grid_rows(
 	let (xs, gw) = (PAD + area.x.start..PAD + area.x.end, s - 2 * PAD);
 	type RimRow<'r, 'a, 'b> = Option<(&'r XShared<'a>, &'r mut XRows<'b>, &'r mut XScratch)>;
 	let run = |r: usize, line: &mut [f32], stages: Option<(&mut [f32], &mut [f32], f32)>, rim: RimRow<'_, '_, '_>| {
-		row(r, &mut line[PAD..][..gw]);
-		if let Some((s1, s2, alpha)) = stages {
-			accumulate(&mut s1[xs.clone()], &mut s2[xs.clone()], &line[xs.clone()], alpha);
-		}
-		if let Some((shared, rows, scratch)) = rim {
-			shared.row(r - PAD, rows, 0, &mut line[PAD..][..gw], scratch);
-		}
+		isa::wide(
+			#[cfg_attr(target_arch = "x86_64", inline(always))]
+			|| {
+				row(r, &mut line[PAD..][..gw]);
+				if let Some((s1, s2, alpha)) = stages {
+					accumulate(&mut s1[xs.clone()], &mut s2[xs.clone()], &line[xs.clone()], alpha);
+				}
+				if let Some((shared, rows, scratch)) = rim {
+					shared.row(r - PAD, rows, 0, &mut line[PAD..][..gw], scratch);
+				}
+			},
+		);
 	};
 	let lines = out[span.clone()].par_chunks_mut(s).enumerate();
 	match (stages, rim) {
@@ -641,21 +684,32 @@ fn grid_blocks<T>(
 			|| (init(), shared.map(XShared::scratch)),
 			|(scratch, rim_scratch), (k, (((lines, mut s1), mut s2), mut rim_rows))| {
 				let r0 = first + k * rows;
-				block(scratch, r0, lines, &mut |j, line| {
-					if let (Some(s1), Some(s2)) = (s1.as_deref_mut(), s2.as_deref_mut()) {
-						accumulate(
-							&mut s1[j * s..][xs.clone()],
-							&mut s2[j * s..][xs.clone()],
-							&line[xs.clone()],
-							alpha,
-						);
-					}
-					if let (Some(shared), Some(rim_rows), Some(rim_scratch)) =
-						(shared, &mut rim_rows, &mut *rim_scratch)
-					{
-						shared.row(r0 + j - PAD, rim_rows, j, &mut line[PAD..][..gw], rim_scratch);
-					}
-				});
+				isa::wide(
+					#[cfg_attr(target_arch = "x86_64", inline(always))]
+					|| {
+						// Called through `dyn`, so out of line: it takes the instruction set on its own.
+						block(scratch, r0, lines, &mut |j, line| {
+							isa::wide(
+								#[cfg_attr(target_arch = "x86_64", inline(always))]
+								|| {
+									if let (Some(s1), Some(s2)) = (s1.as_deref_mut(), s2.as_deref_mut()) {
+										accumulate(
+											&mut s1[j * s..][xs.clone()],
+											&mut s2[j * s..][xs.clone()],
+											&line[xs.clone()],
+											alpha,
+										);
+									}
+									if let (Some(shared), Some(rim_rows), Some(rim_scratch)) =
+										(shared, &mut rim_rows, &mut *rim_scratch)
+									{
+										shared.row(r0 + j - PAD, rim_rows, j, &mut line[PAD..][..gw], rim_scratch);
+									}
+								},
+							);
+						});
+					},
+				);
 			},
 		);
 }
@@ -859,11 +913,16 @@ fn drp_span(rows: &Rows<'_>, span: Range<usize>, a: &[f32; 4], f: &mut impl FnMu
 /// Advances the intensity's two EMA stages of one row by the field `v`.
 #[inline]
 fn accumulate(s1: &mut [f32], s2: &mut [f32], v: &[f32], alpha: f32) {
-	let rest = 1.0 - alpha;
-	for ((a, b), &v) in s1.iter_mut().zip(s2).zip(v) {
-		*a = *a * alpha + v * v * rest;
-		*b = *b * alpha + *a * rest;
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			let rest = 1.0 - alpha;
+			for ((a, b), &v) in s1.iter_mut().zip(s2).zip(v) {
+				*a = *a * alpha + v * v * rest;
+				*b = *b * alpha + *a * rest;
+			}
+		},
+	);
 }
 
 impl WaveEngine for CpuEngine {

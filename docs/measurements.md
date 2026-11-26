@@ -393,6 +393,35 @@ threads, at 300x200, 640x360 and 120x90, rims 0, 16, 32 and 40, open, mirror box
 series of Example01, 03, 08, 13 and 21 and of `01-single-fiber`, 300 steps, are byte for byte the commit before's.
 Every CPML loop keeps its vector body, natively (SSE2) and in wasm with simd128.
 
+## The CPU engine's AVX2 dispatch
+
+2026-11-26, the workstation above (a KVM guest of 8 vCPUs on a Ryzen 7 4700U, which has AVX2 and FMA). The release
+build targets x86-64, so its loops ran SSE2, 4 lanes. Built whole with `-C target-cpu=x86-64-v3`, the 4th order took
+about 0.84 of the time on 1 thread, with the same probe series bit for bit (Rust fuses no multiply-add on its own).
+Each row's work now runs through `isa::wide`, compiled for AVX2 and FMA when the CPU has them: the A/B harness of
+[The CPU engine's fused 4th-order passes](#the-cpu-engines-fused-4th-order-passes) against the commit before
+(`7f71f98`), open edges, total time:
+
+| Threads | Grid, rim | 4th order | 9-point |
+|---|---|---|---|
+| 1 | 800x600, 32 | 0.862, 0.865, 0.884 | 0.878, 0.894, 0.918 |
+| 8 | 1920x1080, 64 | 0.875, 0.885, 0.949 | 0.983, 1.045, 1.058 |
+
+Wrapping only the innermost loops reached 0.89 to 0.93 on the 4th order: a closure keeps the instruction set of the
+function it is written in, and the passes' callbacks were left out of line in the baseline's. The 9-point on 8
+threads gains nothing measurable on this host, which preempts the guest's threads. Timers around the
+stages (not kept) put the passes within 1 to 8% of the whole x86-64-v3 build's. The fields are equal bit for bit in
+every run, at 8 and 1 threads, at 300x200, 640x360 and 120x90, rims 0, 16, 32 and 40, open, mirror box and graded,
+both stencils; the 256-bit loop bodies of the 9-point and 4th-order stencils, the ring of `w`, the intensity and the
+CPML were checked in the disassembly.
+
+In wasm `isa::wide` is a plain call. The CPU engine alone in Node 22, 4th order, 800x600 rim 32, 1 thread, mean of 6
+medians, the commit before against this one, same field: 7.87 ms a step against 8.13 with simd128 (3% longer), 20.9
+against 22.2 without (6%); a second series of 4 took 2 and 1.5% longer; the 9-point the same as before. Forcing the
+closures inline there too grew the wasm by 12 to 25% and took 3 to 7% longer, so it is forced on x86-64 only, and
+the wasm is the size it was. Building either file at the commit before, the other at this one, took 0 to 2.5% longer
+as well, so what is left is not in one place; the same build varies by about 3% between runs here.
+
 ## The CPU engine in wasm, with and without simd128
 
 2026-11-25, the workstation above. A harness outside the repository runs the CPU engine alone, built for wasm32 at

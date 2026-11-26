@@ -110,6 +110,11 @@ order's fused outer pass, its ring of `w` included, take the run's values as con
 planes. The values are the same, so the result is the same bit for bit
 ([docs/measurements.md](../measurements.md#the-cpu-engines-uniform-medium-runs)).
 
+Rust, CPU engine: on x86-64 a CPU with AVX2 and FMA runs each row's work, the passes' loops, the intensity and the
+CPML's loops, compiled for those, chosen when the step runs (`engine/isa.rs`); the rest run the baseline, SSE2.
+Rust contracts no `a * b + c` into a fused multiply-add, so both compute the same values bit for bit. In wasm nothing
+changes ([docs/measurements.md](../measurements.md#the-cpu-engines-avx2-dispatch)).
+
 ## Sources
 
 Constants: `SourceOpacity = 0.9`, `DetachRampSteps = 30`.

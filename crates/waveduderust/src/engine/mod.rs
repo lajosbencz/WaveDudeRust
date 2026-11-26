@@ -12,6 +12,7 @@ pub mod forcing;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod green;
+mod isa;
 mod mur;
 pub mod pml;
 pub mod poisson;
