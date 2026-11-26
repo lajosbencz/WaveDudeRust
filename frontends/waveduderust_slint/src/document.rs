@@ -1,5 +1,6 @@
 //! The open project: its file, the saved state and the undo history (docs/ui/60, Undo and redo; decision 0030).
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use waveduderust::model::{Project, View};
@@ -15,7 +16,7 @@ pub(crate) struct Document {
 	saved: Snapshot,
 	/// The project or the view differs from `saved`.
 	dirty: bool,
-	undo: Vec<Snapshot>,
+	undo: VecDeque<Snapshot>,
 	redo: Vec<Snapshot>,
 	limit: usize,
 	/// The key of the run of edits the last undo step holds (typing into one field).
@@ -140,15 +141,15 @@ impl Document {
 			return;
 		}
 		// a merged step back where it began is no step
-		if joins && self.undo.last().is_some_and(|s| s.project == self.project && s.view == self.view) {
-			self.undo.pop();
+		if joins && self.undo.back().is_some_and(|s| s.project == self.project && s.view == self.view) {
+			self.undo.pop_back();
 			self.merging = None;
 			return;
 		}
 		if !joins {
 			self.merging = key.map(str::to_owned);
-			self.undo.push(before);
-			let evicted = (self.undo.len() > self.limit).then(|| self.undo.remove(0));
+			self.undo.push_back(before);
+			let evicted = if self.undo.len() > self.limit { self.undo.pop_front() } else { None };
 			self.dropped = (std::mem::take(&mut self.redo), evicted);
 		}
 	}
@@ -157,14 +158,14 @@ impl Document {
 	/// the oldest step it dropped come back. An edit of another key since then leaves it as it is.
 	pub(crate) fn cancel(&mut self, key: &str) {
 		if self.merging.as_deref() == Some(key)
-			&& let Some(before) = self.undo.pop()
+			&& let Some(before) = self.undo.pop_back()
 		{
 			self.restore(before);
 			self.merging = None;
 			let (redo, evicted) = std::mem::take(&mut self.dropped);
 			self.redo = redo;
 			if let Some(oldest) = evicted {
-				self.undo.insert(0, oldest);
+				self.undo.push_front(oldest);
 			}
 		}
 	}
@@ -201,7 +202,7 @@ impl Document {
 
 	pub(crate) fn undo(&mut self) {
 		self.merging = None;
-		if let Some(step) = self.undo.pop() {
+		if let Some(step) = self.undo.pop_back() {
 			let was = self.restore(step);
 			self.redo.push(was);
 		}
@@ -211,7 +212,7 @@ impl Document {
 		self.merging = None;
 		if let Some(step) = self.redo.pop() {
 			let was = self.restore(step);
-			self.undo.push(was);
+			self.undo.push_back(was);
 		}
 	}
 
