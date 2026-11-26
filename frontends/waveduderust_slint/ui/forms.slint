@@ -5,7 +5,7 @@ import { ColorSwatch } from "color-picker.slint";
 import { Theme } from "theme.slint";
 import { IconButton } from "icons.slint";
 import { MenuIcons } from "menu-icons.slint";
-import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, Check, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink } from "form.slint";
+import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, Check, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink, RowRemove, RowAdd, ListButton } from "form.slint";
 import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice, MetaLensTypeChoice, FiberEndsChoice, SchemeKindChoice } from "choices.slint";
 import { FormKind, GateKind, PointData, SchemeChoice, SchemeEntry, SceneMode, SourceMode, ProbeDetector, ProbeKind, Layer, BoxSize, YScale, TriangleType, LayerData } from "data.slint";
 import { Icon, IconButton } from "icons.slint";
@@ -1278,29 +1278,14 @@ component PointList inherits VerticalLayout {
             value <=> point.y;
             tip: @tr("Y relative to the part's centre in canvas pixels, before rotation.");
         }
-        Rectangle {
-            width: 22px;
-            IconButton {
-                size: 18px;
-                icon: @image-url("icons/next/tree-minus.svg");
-                tip: @tr("Remove this point");
-                clicked => { Form.remove-row(k); }
-            }
+        RowRemove {
+            index: k;
+            tip: @tr("Remove this point");
         }
     }
-    HorizontalLayout {
-        padding-top: 2px;
-        padding-bottom: 10px;
-        alignment: start;
-        Rectangle {
-            width: add.preferred-width;
-            height: add.preferred-height;
-            add := Button {
-                text: @tr("Add point");
-                clicked => { Form.add-row(); }
-            }
-            Tooltip { text: @markdown("\{@tr("Append a point after the last one")}"); }
-        }
+    RowAdd {
+        text: @tr("Add point");
+        tip: @tr("Append a point after the last one");
     }
 }
 
@@ -2218,11 +2203,10 @@ component LayerList inherits VerticalLayout {
                     tip: @tr("Move this layer down, towards the plate");
                     clicked => { root.move(k, k + 1); }
                 }
-                IconButton {
+                RowRemove {
+                    index: k;
                     size: 22px;
-                    icon: @image-url("icons/next/tree-minus.svg");
                     tip: @tr("Remove this layer");
-                    clicked => { Form.remove-row(k); }
                 }
             }
         }
@@ -2233,29 +2217,14 @@ component LayerList inherits VerticalLayout {
             background: Theme.accent;
         }
     }
-    HorizontalLayout {
-        padding-top: 2px;
-        padding-bottom: 10px;
-        spacing: 6px;
-        alignment: start;
-        Rectangle {
-            width: add.preferred-width;
-            height: add.preferred-height;
-            add := Button {
-                text: @tr("Add layer");
-                clicked => { Form.add-row(); }
-            }
-            Tooltip { text: @markdown("\{@tr("Append a copy of the last layer")}"); }
-        }
-        Rectangle {
-            width: clear.preferred-width;
-            height: clear.preferred-height;
-            clear := Button {
-                text: @tr("Remove all");
-                enabled: Form.layers.length > 0;
-                clicked => { Form.clear-rows(); }
-            }
-            Tooltip { text: @markdown("\{@tr("Remove every layer, to build another stack from nothing; Undo brings them back")}"); }
+    RowAdd {
+        text: @tr("Add layer");
+        tip: @tr("Append a copy of the last layer");
+        ListButton {
+            text: @tr("Remove all");
+            tip: @tr("Remove every layer, to build another stack from nothing; Undo brings them back");
+            enabled: Form.layers.length > 0;
+            clicked => { Form.clear-rows(); }
         }
     }
 }
@@ -2328,14 +2297,9 @@ component NodeList inherits VerticalLayout {
                     text: @tr("Smooth");
                     tip: @tr("Keep the two handles opposite each other through the node, so the path runs smoothly through it. Switching it on lines them up at once; afterwards moving or typing one handle turns the other with it, keeping its length. Off, the node may be a corner.");
                 }
-                Rectangle {
-                    width: 22px;
-                    IconButton {
-                        size: 18px;
-                        icon: @image-url("icons/next/tree-minus.svg");
-                        tip: @tr("Remove this node");
-                        clicked => { Form.remove-row(k); }
-                    }
+                RowRemove {
+                    index: k;
+                    tip: @tr("Remove this node");
                 }
             }
         }
@@ -2364,19 +2328,9 @@ component NodeList inherits VerticalLayout {
         Check { text: @tr("Smooth"); }
         Rectangle { width: 22px; }
     }
-    HorizontalLayout {
-        padding-top: 2px;
-        padding-bottom: 10px;
-        alignment: start;
-        Rectangle {
-            width: add.preferred-width;
-            height: add.preferred-height;
-            add := Button {
-                text: @tr("Add node");
-                clicked => { Form.add-row(); }
-            }
-            Tooltip { text: @markdown("\{@tr("Append a node beyond the last one, continuing the path")}"); }
-        }
+    RowAdd {
+        text: @tr("Add node");
+        tip: @tr("Append a node beyond the last one, continuing the path");
     }
 }
 
@@ -2744,29 +2698,15 @@ export component SchemeForm inherits VerticalLayout {
             }
         }
         HexField { text <=> stop.hex; tip: @tr("Colour as #RRGGBB; Enter applies it"); }
-        Rectangle {
-            width: 22px;
-            IconButton {
-                size: 18px;
-                icon: @image-url("icons/next/tree-minus.svg");
-                enabled: Form.stops.length > 1;
-                tip: @tr("Remove this stop");
-                clicked => { Form.remove-row(k); }
-            }
+        RowRemove {
+            index: k;
+            enabled: Form.stops.length > 1;
+            tip: @tr("Remove this stop");
         }
     }
-    HorizontalLayout {
-        padding-top: 2px;
-        padding-bottom: 10px;
-        alignment: start;
-        Rectangle {
-            width: add.preferred-width;
-            height: add.preferred-height;
-            add := Button {
-                text: @tr("Add stop");
-                clicked => { Form.add-row(); }
-            }
-            Tooltip { text: @markdown("\{@tr("Insert a stop in the widest gap, with the gradient's colour there")}"); }
-        }
+    RowAdd {
+        text: @tr("Add stop");
+        tip: @tr("Insert a stop in the widest gap, with the gradient's colour there");
     }
+
 }

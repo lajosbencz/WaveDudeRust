@@ -1,5 +1,5 @@
-import { CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
-import { Icon } from "icons.slint";
+import { Button, CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
+import { Icon, IconButton } from "icons.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
 import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, FiberData, FiberNodeData, SchemeData, StopData, SchemeChoice, PointData, Layer } from "data.slint";
@@ -524,4 +524,52 @@ export component FormLink inherits FocusScope {
         }
     }
     Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// The remove button of list row `index`, in its 22px column.
+export component RowRemove inherits Rectangle {
+    in property <int> index;
+    in property <string> tip;
+    in property <bool> enabled: true;
+    in property <length> size: 18px;
+    width: 22px;
+    IconButton {
+        size: root.size;
+        icon: @image-url("icons/next/tree-minus.svg");
+        enabled: root.enabled;
+        tip: root.tip;
+        clicked => { Form.remove-row(root.index); }
+    }
+}
+
+// A button under a list, with its tooltip.
+export component ListButton inherits Rectangle {
+    in property <string> text;
+    in property <string> tip;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: button.preferred-width;
+    height: button.preferred-height;
+    button := Button {
+        text: root.text;
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+    Tooltip { text: @markdown("\{root.tip}"); }
+}
+
+// A list's footer: the Add button appending a row, then the buttons placed in it.
+export component RowAdd inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> tip;
+    padding-top: 2px;
+    padding-bottom: 10px;
+    spacing: 6px;
+    alignment: start;
+    ListButton {
+        text: root.text;
+        tip: root.tip;
+        clicked => { Form.add-row(); }
+    }
+    @children
 }
