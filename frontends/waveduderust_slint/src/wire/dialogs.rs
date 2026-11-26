@@ -75,6 +75,7 @@ pub(crate) fn wire_dialogs(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	});
 	let h = Handle::new(state, app);
 	app.on_memory_warning_answer(move |answer, mute| h.show(|s, app| answer_warning(s, app, answer, mute)));
+	app.on_about_link(|url| crate::open_link(&url));
 	let st = state.clone();
 	app.on_about_copy(move || {
 		let text = about(&st.borrow()).system.to_string();

@@ -149,6 +149,7 @@ export component AppWindow inherits Window {
     in-out property <bool> about-shown;
     in property <AboutData> about;
     callback about-copy();
+    callback about-link(string);
     in-out property <bool> export-shown;
     in-out property <ExportData> export-data;
     callback export-format(index: int);
@@ -314,8 +315,8 @@ export component AppWindow inherits Window {
         }
         Menu {
             title: root.menu-text(@tr("&Help"), @tr("Help"));
-            MenuItem { title: root.menu-text(@tr("&About WaveDude Rust"), @tr("About WaveDude Rust")); icon: MenuIcons.info; activated => { root.command(Command.about); } }
-            MenuItem { title: root.menu-text(@tr("&Project page on GitHub"), @tr("Project page on GitHub")); icon: MenuIcons.open-in-new; shortcut: @keys(F1); activated => { root.command(Command.github); } }
+            MenuItem { title: root.menu-text(@tr("&About WaveDude Rust"), @tr("About WaveDude Rust")); icon: MenuIcons.info; shortcut: @keys(F1); activated => { root.command(Command.about); } }
+            MenuItem { title: root.menu-text(@tr("&Project page on GitHub"), @tr("Project page on GitHub")); icon: MenuIcons.open-in-new; activated => { root.command(Command.github); } }
         }
     }
 
@@ -628,6 +629,7 @@ export component AppWindow inherits Window {
         shown <=> root.about-shown;
         data: root.about;
         copy => { root.about-copy(); }
+        open-link(u) => { root.about-link(u); }
     }
     MemoryWarningLayer {
         // an overlay: its frame sets no bounds on the window

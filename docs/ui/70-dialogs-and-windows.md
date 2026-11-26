@@ -218,6 +218,9 @@ Content top to bottom:
    (YouTube channels, websites, GitHub). English regardless of language. (port) The WaveDude Next credit comes
    first, followed on its line by a small link "GitHub (a separate project, not affiliated with WaveDude Rust)" to
    `github.com/wavedudenext/WaveDudeNext`, opened through `platform::open`; a failure shows below the credits.
+2a. (port) "Links", one per line, each opened in the system browser (a new tab on the web): WaveDude Rust on GitHub
+   (the package's repository), WaveDude Next on GitHub (a separate project, not affiliated), WaveSimulator2D on
+   GitHub (0x23), Huygens Optics on YouTube, the Huygens Optics website, Diffraction Limited on YouTube.
 3. "License": the GPL notice sentence; toggle button "Show the license text" / "Hide the license text" (T).
    Shown: [LICENSE.md](../../LICENSE.md) rendered as a document (headings, lists, links) in a scrollable box (260 px, at most 30% of the window's height, min 120);
    a taller window gives its extra height to the document; hidden: window shrinks back.

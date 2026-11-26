@@ -3271,3 +3271,24 @@ msgstr "Export"
 msgctxt "SectionRun"
 msgid "Run"
 msgstr "Run"
+
+msgid "Links"
+msgstr "Links"
+
+msgid "WaveDude Rust on GitHub"
+msgstr "WaveDude Rust op GitHub"
+
+msgid "WaveDude Next on GitHub (a separate project, not affiliated with WaveDude Rust)"
+msgstr "WaveDude Next op GitHub (een apart project, niet verbonden met WaveDude Rust)"
+
+msgid "WaveSimulator2D on GitHub (0x23)"
+msgstr "WaveSimulator2D op GitHub (0x23)"
+
+msgid "Huygens Optics on YouTube"
+msgstr "Huygens Optics op YouTube"
+
+msgid "Huygens Optics website"
+msgstr "Website van Huygens Optics"
+
+msgid "Diffraction Limited on YouTube"
+msgstr "Diffraction Limited op YouTube"

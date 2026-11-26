@@ -115,8 +115,8 @@ row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
 
 | Entry | Mn | Shortcut | Icon | Action |
 |---|---|---|---|---|
-| About WaveDude Next | A/U-umlaut/P/O | - | U+E946 | Modal About dialog. |
-| Project page on GitHub (port) | G/G/G/G | F1 | open_in_new | Opens <https://github.com/lajosbencz/WaveDudeRust>: the system browser natively, a new tab in the browser; no manual in the app (decision 0028). |
+| About WaveDude Next | A/U-umlaut/P/O | F1 (port) | U+E946 | Modal About dialog. |
+| Project page on GitHub (port) | G/G/G/G | - | open_in_new | Opens <https://github.com/lajosbencz/WaveDudeRust>: the system browser natively, a new tab in the browser; no manual in the app (decision 0028). |
 | Check for updates (port; builds with the updater) | U/U/J/U | - | none | Looks for a newer release now ([docs/ui/70](70-dialogs-and-windows.md), Updates). |
 
 ## Context menus
@@ -252,7 +252,7 @@ No own context menu; right-click or Apps on the strip opens the picture's menu (
 | Ctrl+E | Export last. |
 | Ctrl+Shift+E / I / B | Export field / intensity / both. |
 | Ctrl+Shift+F / G | Export field frame / intensity frame. |
-| F1 | Project page on GitHub (decision 0028). |
+| F1 | About dialog, which links the project page (decision 0028). |
 | Ctrl+, (port) | Settings. |
 | Ctrl+= or Ctrl+Plus / Ctrl+- / Ctrl+0 (port) | UI zoom one step up / one step down the zooms 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x, 2.5x, 3x / back to the device's default. The browser's own page zoom does not take them. |
 | F5 | Run. |

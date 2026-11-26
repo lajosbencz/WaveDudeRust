@@ -9,6 +9,19 @@ export struct AboutData {
     openh264: string,
     // one line each: program, runtime, OS, processor, GPU setting, engine, H.264 encoder
     system: string,
+    // this program's repository
+    repository: string,
+}
+
+// A link: its text in the accent colour, the address opened on a click.
+component Link inherits Text {
+    in property <string> url;
+    callback open(string);
+    color: area.has-hover ? Theme.text : Theme.accent;
+    area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.open(root.url); }
+    }
 }
 
 // A read-only text in a scrolling box.
@@ -37,6 +50,8 @@ export component AboutLayer inherits Rectangle {
     in property <AboutData> data;
     // the system lines to the clipboard
     callback copy();
+    // an address to open in the browser
+    callback open-link(string);
 
     property <bool> license-open;
     // the window's height, followed by a handler: a binding would loop through the boxes' heights
@@ -90,6 +105,13 @@ export component AboutLayer inherits Rectangle {
                     wrap: word-wrap;
                     color: Theme.text;
                 }
+                Text { text: @tr("Links"); font-weight: 700; color: Theme.text; }
+                Link { text: @tr("WaveDude Rust on GitHub"); url: root.data.repository; open(u) => { root.open-link(u); } }
+                Link { text: @tr("WaveDude Next on GitHub (a separate project, not affiliated with WaveDude Rust)"); wrap: word-wrap; url: "https://github.com/wavedudenext/WaveDudeNext"; open(u) => { root.open-link(u); } }
+                Link { text: @tr("WaveSimulator2D on GitHub (0x23)"); url: "https://github.com/0x23/WaveSimulator2D"; open(u) => { root.open-link(u); } }
+                Link { text: @tr("Huygens Optics on YouTube"); url: "https://www.youtube.com/@HuygensOptics"; open(u) => { root.open-link(u); } }
+                Link { text: @tr("Huygens Optics website"); url: "https://www.huygensoptics.com"; open(u) => { root.open-link(u); } }
+                Link { text: @tr("Diffraction Limited on YouTube"); url: "https://www.youtube.com/@DiffractionLimited"; open(u) => { root.open-link(u); } }
                 Text { text: @tr("License"); font-weight: 700; color: Theme.text; }
                 Text {
                     text: @tr("This program is free software under the GNU General Public License, version 3 or later.");

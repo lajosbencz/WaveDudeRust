@@ -204,11 +204,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			#[cfg(target_arch = "wasm32")]
 			files::pick(&state.inbox, &app.global::<ui::Words<'_>>());
 		}
-		Command::Github => {
-			if let Err(e) = webbrowser::open(env!("CARGO_PKG_REPOSITORY")) {
-				tracing::error!("cannot open the project page: {e}");
-			}
-		}
+		Command::Github => open_link(env!("CARGO_PKG_REPOSITORY")),
 		Command::Save | Command::SaveAs => {
 			save(state, app, if command == Command::SaveAs { SaveTo::Picked } else { SaveTo::File });
 		}
@@ -493,6 +489,13 @@ fn apply_theme(state: &mut State, app: &AppWindow) {
 	}
 }
 
+/// Opens `url` in the system browser, a new tab on the web.
+pub(crate) fn open_link(url: &str) {
+	if let Err(e) = webbrowser::open(url) {
+		tracing::error!("cannot open {url}: {e}");
+	}
+}
+
 /// The About window's version, licences and system lines.
 fn about(state: &State) -> ui::AboutData {
 	let threads = state.facts.threads;
@@ -530,6 +533,7 @@ fn about(state: &State) -> ui::AboutData {
 		license: include_str!("../../../LICENSE.md").into(),
 		openh264: include_str!("../../../crates/waveduderust/assets/OpenH264-BINARY_LICENSE.txt").into(),
 		system: system.into(),
+		repository: env!("CARGO_PKG_REPOSITORY").into(),
 	}
 }
 
