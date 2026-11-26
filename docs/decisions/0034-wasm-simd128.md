@@ -1,8 +1,7 @@
 # 0034: The run worker ships a 128-bit SIMD build beside the scalar one
 
-Status: accepted, 2026-11-25, for the classic frontend (numbered 0032 on master). Not applied on the Slint app
-(decision 0032) yet: its run worker runs the CPU engine ([0035](0035-browser-run-on-the-page-gpu.md)) in the scalar
-build alone.
+Status: accepted, 2026-11-25, for the classic frontend (numbered 0032 on master); applied on the Slint app
+(decision 0032) 2026-11-26, whose run worker runs the CPU engine ([0035](0035-browser-run-on-the-page-gpu.md)).
 
 ## Context
 
@@ -14,7 +13,7 @@ its row loops run scalar. A module holding any SIMD instruction fails to compile
 
 - [`tools/build-web.sh`](../../tools/build-web.sh) builds `wavedude-run-worker` a second time with
   `-C target-feature=+simd128` into `pkg-simd/`, in its own target directory, alongside the other builds.
-- [`run-worker.js`](../../frontends/classic/web/run-worker.js) validates a SIMD probe module (wasm-feature-detect's
+- [`run-worker.js`](../../frontends/waveduderust_slint/web/run-worker.js) validates a SIMD probe module (wasm-feature-detect's
   bytes, inlined) and loads `pkg-simd/` where it validates, else `pkg/`.
 - The app and the spill worker stay scalar: the CPU engine runs in the run worker, and the spill worker does no float
   work.

@@ -117,5 +117,10 @@ row. Each phase is one coding pass, then a separate verification of the diff, th
    6. Fallbacks: no GPU adapter starts the app on Slint's software renderer and the CPU engine, the pictures coloured
       on the CPU; in the browser WebGL2 and the CPU engine, the reason in Messages (parity V-43); the browser's CPU
       engine in a SIMD build beside the scalar one (decision 0034); a lost GPU device reported and the run rebuilt.
+      Done 2026-11-26 in the browser: without a usable WebGPU device (none, a software adapter, no compute shaders)
+      the window takes Slint's own device, WebGPU or else WebGL2 through wgpu's GL backend, the run the CPU engine in
+      the run worker, the pictures coloured on the CPU, the reason in Messages, About's GPU setting none (parity
+      V-43); the GPU engine stays off WebGL2, which runs no compute shaders. The run worker's SIMD build in
+      `pkg-simd/`, chosen by `run-worker.js`'s probe (decision 0034).
 
 Known bugs: a shortcut (Save, Run, Undo) pressed while a number box holds typed text acts before the box commits.

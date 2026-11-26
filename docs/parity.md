@@ -988,7 +988,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-40 | 16-bit samples: exact device-pixel render, box/bilinear resample, instant recolour on brightness | FramePresenter.cs | 40 8-bit vs 16-bit | partial | GPU render exists; render at device size and brightness recolour unverified/no control |
 | V-41 | Dithering 16-bit only, Bayer 2/4/8/16 | FramePresenter.cs | 40 8-bit vs 16-bit | done | View::dither_bits from PreviewDitherBits: Bayer 2/4/8/16 (core DitherDepth), 16-bit planes only |
 | V-42 | GPU engine colouring in render pass, device copy of last frame, others uploaded | none (Rust only) | 40 8-bit vs 16-bit | done | live.rs device_frames + Uploads |
-| V-43 | WebGL2 / over-limit fallback with Messages warning | none | 40 8-bit vs 16-bit | missing | |
+| V-43 | WebGL2 / over-limit fallback with Messages warning | none | 40 8-bit vs 16-bit | partial | without a usable WebGPU device the window takes Slint's own WebGPU or WebGL2 device, the run the CPU engine in the run worker, the pictures coloured on the CPU, the reason in Messages (gpu.rs `select`); a plane over the device's storage buffer limits is not checked |
 | V-44 | Handle style: light grey over dark halo; selected bright yellow; focused accent fill; hover/focus thicker | Controls/MarkerThumb.cs:69-115 | 40 Handles | divergence | decision 0033, matched in general, not to the pixel/id |
 | V-45 | Glyphs odd-sized (21/15/13 px), centre pixel, 1.5 px AA strokes | MarkerThumb.cs | 40 Handles | divergence | decision 0033, matched in general, not to the pixel/id |
 | V-46 | Source position handle (ring + 4 ticks + dot) both pictures | SceneOverlay.cs:449 | 40 Handles | done | canvas.rs overlay rows from core overlay::build; preview.slint HandleView glyph |

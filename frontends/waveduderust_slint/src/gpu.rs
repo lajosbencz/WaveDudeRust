@@ -1,5 +1,6 @@
 //! One wgpu device for the engine and the window; the layers drawn into textures the window shows, no CPU readback.
-//! Without a device the window draws in software and the layers are coloured on the CPU.
+//! Without a device the layers are coloured on the CPU and the window draws in software natively, through Slint's own
+//! WebGPU or WebGL2 device in the browser.
 
 use slint::wgpu_30::{WGPUConfiguration, wgpu};
 use std::sync::Arc;
@@ -14,20 +15,29 @@ use waveduderust::unstable::render::screen::ScreenRenderer;
 use waveduderust::unstable::scene::glowing_edges::{self, EdgeImage};
 
 /// Creates the device with the adapter's limits and hands it to the engine and to Slint (whose own choice would take
-/// WebGL2's limits); natively, without one, Slint's software renderer and `None`.
+/// WebGL2's limits); without one, the window's renderer for no engine device and `None`.
 pub(crate) async fn select() -> Result<Option<Arc<GpuContext>>, Box<dyn std::error::Error>> {
 	match device().await {
 		Ok(context) => Ok(Some(context)),
-		#[cfg(not(target_arch = "wasm32"))]
 		Err(why) => {
-			tracing::warn!(
-				"no usable GPU ({why}): the window and the pictures are drawn on the CPU, the run uses the CPU engine"
-			);
-			slint::BackendSelector::new().renderer_name("software".into()).select()?;
+			#[cfg(not(target_arch = "wasm32"))]
+			{
+				tracing::warn!(
+					"no usable GPU ({why}): the window and the pictures are drawn on the CPU, the run uses the CPU engine"
+				);
+				slint::BackendSelector::new().renderer_name("software".into()).select()?;
+			}
+			#[cfg(target_arch = "wasm32")]
+			{
+				tracing::warn!(
+					"no usable WebGPU device ({why}): the window is drawn through WebGL2 where WebGPU is missing, the \
+					 pictures are coloured on the CPU, the run uses the CPU engine"
+				);
+				// Slint's own device: WebGPU where the browser gives an adapter, else WebGL2
+				slint::BackendSelector::new().renderer_name("femtovg-wgpu".into()).select()?;
+			}
 			Ok(None)
 		}
-		#[cfg(target_arch = "wasm32")]
-		Err(why) => Err(why),
 	}
 }
 
