@@ -193,8 +193,8 @@ impl Dock {
 		self.panes.iter().map(|p| p.id.as_str())
 	}
 
-	/// Replaces the tree by `arrangement`, normalised: panes not registered and repeated ones are left out, and
-	/// registered panes it lacks are hidden without a place.
+	/// Replaces the tree by `arrangement`, normalised: panes not registered and repeated ones are left out,
+	/// registered panes it lacks are hidden without a place, and weights not positive get a least share.
 	pub fn arrange(&mut self, arrangement: &Arrangement) -> Result<(), ArrangeError> {
 		let panes = &self.panes;
 		let mut next_id = 0;

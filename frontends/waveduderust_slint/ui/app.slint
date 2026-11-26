@@ -7,7 +7,7 @@ import "../../../crates/waveduderust/assets/fonts/Selawik-Semibold.ttf";
 import "../../../crates/waveduderust/assets/fonts/Selawik-Bold.ttf";
 export { Palette } from "std-widgets.slint";
 import { MenuIcons } from "menu-icons.slint";
-import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview } from "@slint-dock/dock.slint";
+import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview, DockSide } from "@slint-dock/dock.slint";
 import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
 import { Form, NumberParse } from "form.slint";
 export { Form, NumberParse }
@@ -183,6 +183,8 @@ export component AppWindow inherits Window {
     callback dock-pressed(x: length, y: length);
     callback dock-resized();
     callback dock-splitter-moved(index: int, x: length, y: length);
+    callback dock-splitter-released();
+    callback dock-move-to(pane: string, side: DockSide);
     callback dock-activate(pane: string);
     callback dock-drag-over(pane: string, group: bool, x: length, y: length) -> DockPreview;
     callback dock-dropped(pane: string, group: bool, x: length, y: length);
@@ -370,7 +372,14 @@ export component AppWindow inherits Window {
                             label: Theme.accent,
                             label-text: Theme.selection-text,
                         };
-                        close-tip: @tr("Close");
+                        words: {
+                            position: @tr("Window position"),
+                            left: @tr("Move to Left"),
+                            right: @tr("Move to Right"),
+                            top: @tr("Move to Top"),
+                            bottom: @tr("Move to Bottom"),
+                            close: @tr("Close"),
+                        };
                         title(pane) => {
                             pane == "project" ? @tr("Project") : pane == "properties" ? @tr("Properties")
                                 : pane == "messages" ? @tr("Messages") : pane == "performance" ? @tr("Performance") : pane
@@ -378,6 +387,8 @@ export component AppWindow inherits Window {
                         close(pane) => { root.pane-shown(pane, false); }
                         activate(pane) => { root.dock-activate(pane); }
                         splitter-moved(index, x, y) => { root.dock-splitter-moved(index, x, y); }
+                        splitter-released => { root.dock-splitter-released(); }
+                        move-to(pane, side) => { root.dock-move-to(pane, side); }
                         resized => { root.dock-resized(); }
                         drag-over(pane, group, x, y) => { root.dock-drag-over(pane, group, x, y) }
                         dropped(pane, group, x, y) => { root.dock-dropped(pane, group, x, y); }

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use crate::tree::{Child, Group, Node, Split};
-use crate::{Axis, GroupId, SplitId};
+use crate::{Axis, GroupId, MIN_WEIGHT, SplitId};
 
 /// A pane in a tab group.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -82,7 +82,8 @@ impl fmt::Display for ArrangeError {
 
 impl std::error::Error for ArrangeError {}
 
-/// Turns an arrangement into a tree with fresh ids, keeping the first tab of each `known` pane.
+/// Turns an arrangement into a tree with fresh ids, keeping the first tab of each `known` pane; a weight below
+/// [`MIN_WEIGHT`] takes that, one not finite 1.
 pub(crate) struct Builder<'a, F: Fn(&str) -> bool> {
 	pub(crate) known: F,
 	pub(crate) next_id: &'a mut u32,
@@ -111,7 +112,10 @@ impl<F: Fn(&str) -> bool> Builder<'_, F> {
 			Arrangement::Split { axis, children } => {
 				let children = children
 					.iter()
-					.filter_map(|(weight, child)| Some(Child { weight: *weight, node: self.build(child)? }))
+					.filter_map(|(weight, child)| {
+						let weight = if weight.is_finite() { weight.max(MIN_WEIGHT) } else { 1. };
+						Some(Child { weight, node: self.build(child)? })
+					})
 					.collect();
 				Some(Node::Split(Split { id: SplitId(self.fresh()), axis: *axis, children }))
 			}

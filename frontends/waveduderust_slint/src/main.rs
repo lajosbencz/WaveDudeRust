@@ -1470,7 +1470,16 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.set_native_access_keys(cfg!(windows));
 	apply_settings(&mut state.borrow_mut(), &app);
 	wire_window_events(&state, &app);
-	docking::wire(&app);
+	let layout = state.borrow().settings.layout.clone();
+	let keeper = Rc::downgrade(&state);
+	docking::wire(&app, layout.as_deref(), move |layout| {
+		let Some(state) = keeper.upgrade() else { return };
+		let s = &mut *state.borrow_mut();
+		s.settings.layout = Some(layout);
+		if let Some(Err(e)) = s.store.as_ref().map(|store| s.settings.save(store)) {
+			tracing::error!("{e}");
+		}
+	});
 	#[cfg(target_arch = "wasm32")]
 	web::guard_unload(state.borrow().unsaved.clone());
 	state.borrow_mut().opened();

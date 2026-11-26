@@ -548,10 +548,6 @@ msgstr "Alle berichten wissen"
 msgid "Clear the export range: the whole run is exported (X)"
 msgstr "Exportbereik wissen: de hele run wordt geëxporteerd (X)"
 
-#. TipPreviewTimeline
-msgid "Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step a frame, PageUp/PageDown ten, Home/End jump to the start/end of the range"
-msgstr "Klik of sleep om door de beelden te gaan; sleep een haak om het begin of einde van het exportbereik te verplaatsen. Links/Rechts één beeld, PageUp/PageDown tien, Home/End naar het begin/einde van het bereik"
-
 #. DockCloseMenu
 msgid "Close"
 msgstr "Sluiten"
@@ -1707,6 +1703,22 @@ msgstr "Deze laag omlaag, naar de plaat toe"
 #. TipLayerUp
 msgid "Move this layer up, outwards"
 msgstr "Deze laag omhoog, naar buiten"
+
+#. DockMoveBottom
+msgid "Move to Bottom"
+msgstr "Naar onder"
+
+#. DockMoveLeft
+msgid "Move to Left"
+msgstr "Naar links"
+
+#. DockMoveRight
+msgid "Move to Right"
+msgstr "Naar rechts"
+
+#. DockMoveTop
+msgid "Move to Top"
+msgstr "Naar boven"
 
 #. MenuProjectMoveUp
 msgid "Move up"
@@ -3028,6 +3040,10 @@ msgstr "Breedte van het schuivende stappenvenster, in stappen."
 msgid "Window"
 msgstr "Venster"
 
+#. DockWindowPosition
+msgid "Window position"
+msgstr "Positie van het paneel"
+
 #. Label.Source.X
 msgid "X"
 msgstr "X"
@@ -3135,10 +3151,6 @@ msgstr "project"
 #. PickerMissingFormat
 msgid "{} (not found)"
 msgstr "{} (niet gevonden)"
-
-#. classic:SettingsRamFormat
-msgid "{} available of {}"
-msgstr "{} van {} beschikbaar"
 
 #. ItemCountMany
 msgid "{} entries"

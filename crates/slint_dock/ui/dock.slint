@@ -39,6 +39,19 @@ export struct DockStyle {
     label-text: brush,
 }
 
+// The texts of the chrome: the title bar's drop-down button and its menu, whose `close` names the close button too.
+export struct DockWords {
+    position: string,
+    left: string,
+    right: string,
+    top: string,
+    bottom: string,
+    close: string,
+}
+
+// An outer edge of the area, where the menu's Move to entries put a pane.
+export enum DockSide { left, right, top, bottom }
+
 // A shown pane of a group; `active` is the one its group shows.
 export struct DockTab {
     pane: string,
@@ -124,7 +137,10 @@ component Grip inherits TouchArea {
     }
 }
 
-component CloseButton inherits Rectangle {
+// A title bar button drawing `glyph`, an 8 px wide path `glyph-height` high.
+component HeaderButton inherits Rectangle {
+    in property <string> glyph;
+    in property <float> glyph-height;
     in property <brush> ink;
     in property <brush> hover-background;
     in property <string> tip;
@@ -138,10 +154,10 @@ component CloseButton inherits Rectangle {
     accessible-action-default => { root.clicked(); }
     Path {
         width: 8px;
-        height: 8px;
+        height: root.glyph-height * 1px;
         viewbox-width: 8;
-        viewbox-height: 8;
-        commands: "M0,1 L1,0 L4,3 L7,0 L8,1 L5,4 L8,7 L7,8 L4,5 L1,8 L0,7 L3,4 Z";
+        viewbox-height: root.glyph-height;
+        commands: root.glyph;
         fill: root.ink;
     }
     area := TouchArea {
@@ -156,8 +172,9 @@ component TitleBar inherits Rectangle {
     in property <DockStyle> style;
     in property <string> title;
     in property <bool> active;
-    in property <string> close-tip;
+    in property <DockWords> words;
     in property <length> drag-threshold;
+    callback move-to(side: DockSide);
     callback close();
     callback clicked();
     callback drag-started();
@@ -191,12 +208,35 @@ component TitleBar inherits Rectangle {
             border-width: 1px;
             border-color: root.active ? root.style.grip-active : root.style.grip;
         }
-        CloseButton {
+        menu-button := HeaderButton {
             y: (parent.height - self.height) / 2;
+            glyph: "M0,0 L8,0 L4,4 Z";
+            glyph-height: 4;
             ink: root.active ? root.style.title-active-text : root.style.title-text;
             hover-background: root.active ? root.style.title-button-hover-active : root.style.title-button-hover;
-            tip: root.close-tip;
+            tip: root.words.position;
+            clicked => { menu.show({ x: self.x, y: root.height }); }
+        }
+        HeaderButton {
+            y: (parent.height - self.height) / 2;
+            glyph: "M0,1 L1,0 L4,3 L7,0 L8,1 L5,4 L8,7 L7,8 L4,5 L1,8 L0,7 L3,4 Z";
+            glyph-height: 8;
+            ink: root.active ? root.style.title-active-text : root.style.title-text;
+            hover-background: root.active ? root.style.title-button-hover-active : root.style.title-button-hover;
+            tip: root.words.close;
             clicked => { root.close(); }
+        }
+    }
+    // opened by the drop-down button only, under it
+    menu := ContextMenuArea {
+        enabled: false;
+        Menu {
+            MenuItem { title: root.words.left; activated => { root.move-to(DockSide.left); } }
+            MenuItem { title: root.words.right; activated => { root.move-to(DockSide.right); } }
+            MenuItem { title: root.words.top; activated => { root.move-to(DockSide.top); } }
+            MenuItem { title: root.words.bottom; activated => { root.move-to(DockSide.bottom); } }
+            MenuSeparator { }
+            MenuItem { title: root.words.close; activated => { root.close(); } }
         }
     }
 }
@@ -281,14 +321,24 @@ export component DockArea inherits Rectangle {
     };
     // how far the pointer moves from a press on a title bar or tab before it drags
     in property <length> drag-threshold: 4px;
-    // the close buttons' tooltip
-    in property <string> close-tip;
+    in property <DockWords> words: {
+        position: "Window position",
+        left: "Move to Left",
+        right: "Move to Right",
+        top: "Move to Top",
+        bottom: "Move to Bottom",
+        close: "Close",
+    };
     pure callback title(pane: string) -> string;
     callback close(pane: string);
+    // the title bar menu's Move to entry of `pane`'s group, for its active pane
+    callback move-to(pane: string, side: DockSide);
     // a tab or a title bar was clicked
     callback activate(pane: string);
     // the bar at `index` of `splitters` dragged, the pointer at `x`, `y`
     callback splitter-moved(index: int, x: length, y: length);
+    // a splitter drag ended
+    callback splitter-released();
     callback resized(width: length, height: length);
     // where `pane`, or its whole group with `group`, would drop with the pointer at `x`, `y`
     callback drag-over(pane: string, group: bool, x: length, y: length) -> DockPreview;
@@ -346,8 +396,9 @@ export component DockArea inherits Rectangle {
             style: root.style;
             title: root.title(group.pane);
             active: group.active;
-            close-tip: root.close-tip;
+            words: root.words;
             drag-threshold: root.drag-threshold;
+            move-to(side) => { root.move-to(group.pane, side); }
             close => { root.close(group.pane); }
             clicked => { root.activate(group.pane); }
             drag-started => { root.start(group.pane, true); }
@@ -381,6 +432,12 @@ export component DockArea inherits Rectangle {
             moved => {
                 root.splitter-moved(index, parent.x + self.mouse-x - (self.pressed-x - parent.width / 2),
                     parent.y + self.mouse-y - (self.pressed-y - parent.height / 2));
+            }
+            pointer-event(e) => {
+                if ((e.button == PointerEventButton.left && e.kind == PointerEventKind.up)
+                    || e.kind == PointerEventKind.cancel) {
+                    root.splitter-released();
+                }
             }
         }
     }

@@ -548,10 +548,6 @@ msgstr "Alle Meldungen löschen"
 msgid "Clear the export range: the whole run is exported (X)"
 msgstr "Exportbereich aufheben: der ganze Lauf wird exportiert (X)"
 
-#. TipPreviewTimeline
-msgid "Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step a frame, PageUp/PageDown ten, Home/End jump to the start/end of the range"
-msgstr "Klicken oder ziehen, um durch die Bilder zu fahren; eine Klammer ziehen, um Anfang oder Ende des Exportbereichs zu verschieben. Links/Rechts ein Bild, Bild auf/ab zehn, Pos1/Ende zum Anfang/Ende des Bereichs"
-
 #. DockCloseMenu
 msgid "Close"
 msgstr "Schließen"
@@ -1707,6 +1703,22 @@ msgstr "Diese Schicht nach unten, zur Platte hin"
 #. TipLayerUp
 msgid "Move this layer up, outwards"
 msgstr "Diese Schicht nach oben, nach außen"
+
+#. DockMoveBottom
+msgid "Move to Bottom"
+msgstr "Nach unten"
+
+#. DockMoveLeft
+msgid "Move to Left"
+msgstr "Nach links"
+
+#. DockMoveRight
+msgid "Move to Right"
+msgstr "Nach rechts"
+
+#. DockMoveTop
+msgid "Move to Top"
+msgstr "Nach oben"
 
 #. MenuProjectMoveUp
 msgid "Move up"
@@ -3028,6 +3040,10 @@ msgstr "Breite des gleitenden Schrittfensters, in Schritten."
 msgid "Window"
 msgstr "Fenster"
 
+#. DockWindowPosition
+msgid "Window position"
+msgstr "Fensterposition"
+
 #. Label.Source.X
 msgid "X"
 msgstr "X"
@@ -3135,10 +3151,6 @@ msgstr "Projekt"
 #. PickerMissingFormat
 msgid "{} (not found)"
 msgstr "{} (nicht gefunden)"
-
-#. classic:SettingsRamFormat
-msgid "{} available of {}"
-msgstr "{} von {} verfügbar"
 
 #. ItemCountMany
 msgid "{} entries"

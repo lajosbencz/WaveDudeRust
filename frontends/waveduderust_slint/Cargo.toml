@@ -32,7 +32,9 @@ rfd = "0.18"
 # the Messages pane's Regex search; already in the tree
 regex = "1.13"
 waveduderust_platform = { path = "../../crates/waveduderust_platform" }
-slint_dock = { path = "../../crates/slint_dock" }
+slint_dock = { path = "../../crates/slint_dock", features = ["serde"] }
+# the dock's arrangement in the settings
+serde_json.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # the window without a GPU

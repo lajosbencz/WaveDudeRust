@@ -389,6 +389,16 @@ fn an_arrangement_round_trips_through_json() {
 	assert_eq!(restored.arrangement(), dock.arrangement());
 }
 
+#[test]
+fn an_arrangement_gets_positive_finite_weights() {
+	let mut dock = registered();
+	let weights = [(-1., Arrangement::tabs(["a"])), (f32::NAN, Arrangement::tabs(["b"])), (0., Arrangement::Centre)];
+	dock.arrange(&Arrangement::split(Axis::Horizontal, weights)).expect("valid");
+	let Arrangement::Split { children, .. } = dock.arrangement() else { panic!("a split") };
+	let kept: Vec<f32> = children.iter().map(|&(w, _)| w).collect();
+	assert_eq!(kept, [MIN_WEIGHT, 1., MIN_WEIGHT]);
+}
+
 fn bare(panes: &[&str]) -> Dock {
 	let mut dock = Dock::new(Metrics { splitter: 0., title_bar: 0., tab_strip: 0., centre_min: Size::ZERO });
 	for id in panes {
