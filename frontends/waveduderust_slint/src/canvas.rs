@@ -10,6 +10,7 @@ use waveduderust::model::{BoxSize, ItemRef, Layer, Part, PartKind, ProbeKind, Pr
 use waveduderust::unstable::view::overlay::{self, HandleKind, OverlayModel};
 use waveduderust::unstable::view::{graph, handles};
 
+use crate::document::MergeKey;
 use crate::graphs::Placed;
 use crate::models;
 use crate::selection::{Selection, groupable};
@@ -47,8 +48,17 @@ pub(crate) struct Overlays {
 	shows: (bool, bool),
 }
 
+/// What a run of arrow keys on a picture moves: the focus run, the focused stop and the group.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Nudge {
+	run: u64,
+	item: ItemRef,
+	stop: Stop,
+	group: Vec<Node>,
+}
+
 /// What Tab stops on in a picture: the handles, then each graph box and its corner grip.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Stop {
 	Handle(HandleKind),
 	Box,
@@ -99,7 +109,8 @@ const BOX_GRIP: f32 = 12.;
 
 /// A handle drag under way, one undo step.
 pub(crate) struct Drag {
-	key: String,
+	/// The press count, 0 for a drag no undo step merges.
+	gesture: u64,
 	node: Node,
 	target: Target,
 	/// Where the drag starts, canvas pixels: the press, or the shape handle's own point, so the first move does not
@@ -301,7 +312,7 @@ impl Overlays {
 				Target::GraphBox { item, start, attached: probe.box_attached(), scale }
 			};
 			let from = (f64::from(at.0), f64::from(at.1));
-			return Some(Gesture::Handle(Drag { key: format!("drag {gesture}"), node, target, from, by: (0., 0.) }));
+			return Some(Gesture::Handle(Drag { gesture, node, target, from, by: (0., 0.) }));
 		}
 		let Some(handle) = hit(&shown.model, at, HIT_REACH / shown.scale()).cloned() else {
 			self.set_focus(None);
@@ -310,7 +321,7 @@ impl Overlays {
 		let node = node_of(project, handle.item)?;
 		let focus = (layer, handle.item, Stop::Handle(handle.kind));
 		let drag = |target: Target| Drag {
-			key: format!("drag {gesture}"),
+			gesture,
 			node,
 			from: match target {
 				Target::Shape(..) | Target::Surface { .. } => (f64::from(handle.at.0), f64::from(handle.at.1)),
@@ -451,9 +462,9 @@ impl Overlays {
 	}
 
 	/// The undo key of a run of key moves on `layer`'s focused stop; a new focus or group starts another.
-	pub(crate) fn nudge_key(&self, layer: ui::Layer, selection: &Selection) -> Option<String> {
+	pub(crate) fn nudge_key(&self, layer: ui::Layer, selection: &Selection) -> Option<MergeKey> {
 		let (_, item, stop) = self.focus.filter(|f| f.0 == layer)?;
-		Some(format!("keys {} {item:?} {stop:?} {:?}", self.run, selection.group()))
+		Some(MergeKey::Nudge(Nudge { run: self.run, item, stop, group: selection.group() }))
 	}
 
 	/// The tooltip of what lies under canvas pixel `at` of `layer`'s picture with `boxes`: a box (its corner grip),
@@ -603,7 +614,7 @@ impl Overlays {
 			}
 			kind => {
 				let from = (f64::from(h.at.0), f64::from(h.at.1));
-				let mut drag = Drag { key: String::new(), node, target: Target::Shape(item, kind), from, by: (0., 0.) };
+				let mut drag = Drag { gesture: 0, node, target: Target::Shape(item, kind), from, by: (0., 0.) };
 				drag.apply(project, (d.0 as f32, d.1 as f32), false);
 			}
 		}
@@ -729,8 +740,8 @@ impl Start {
 }
 
 impl Drag {
-	pub(crate) fn key(&self) -> &str {
-		&self.key
+	pub(crate) fn key(&self) -> MergeKey {
+		MergeKey::Drag(self.gesture)
 	}
 
 	pub(crate) fn node(&self) -> Node {
@@ -902,7 +913,7 @@ mod tests {
 		(p.ax, p.ay, p.bx, p.by, p.box_x, p.box_y) = (10, 10, 20, 10, 200, 200);
 		let start = (ItemRef::Probe(p.id()), Start::Probe([10, 10, 20, 10], Which::A));
 		let mut drag = Drag {
-			key: String::new(),
+			gesture: 0,
 			node: Node::Probe(0),
 			target: Target::ProbeA { start, scale: 2. },
 			from: (0., 0.),
@@ -915,7 +926,7 @@ mod tests {
 	}
 
 	fn items(node: Node, starts: Vec<(ItemRef, Start)>) -> Drag {
-		Drag { key: String::new(), node, target: Target::Items(starts), from: (0., 0.), by: (0., 0.) }
+		Drag { gesture: 0, node, target: Target::Items(starts), from: (0., 0.), by: (0., 0.) }
 	}
 
 	#[test]
@@ -964,7 +975,7 @@ mod tests {
 		let pr = &mut p.probes[0];
 		(pr.ax, pr.ay, pr.box_x, pr.box_y) = (100, 100, 150, 100);
 		let target = Target::GraphBox { item: ItemRef::Probe(pr.id()), start: (150, 100), attached: false, scale: 1. };
-		let mut drag = Drag { key: String::new(), node: Node::Probe(0), target, from: (0., 0.), by: (0., 0.) };
+		let mut drag = Drag { gesture: 0, node: Node::Probe(0), target, from: (0., 0.), by: (0., 0.) };
 		let at = |p: &Project| (p.probes[0].box_x, p.probes[0].box_y);
 		drag.apply(&mut p, (-30., 0.), false);
 		assert_eq!(at(&p), (120, 100), "outside the snap radius");

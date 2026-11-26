@@ -48,7 +48,7 @@ use std::rc::Rc;
 use slint::{ComponentHandle, ModelRc, VecModel};
 use ui::AppWindow;
 
-use crate::document::Document;
+use crate::document::{Document, MergeKey};
 use crate::live::Live;
 use crate::messages::Messages;
 use crate::playback::Playback;
@@ -146,12 +146,12 @@ impl State {
 	/// into one undo step.
 	fn edit_form(&mut self, form: &ui::Form<'_>, typing: bool) {
 		let node = self.selection.current();
-		let key = typing.then(|| format!("{node:?}"));
+		let key = typing.then_some(MergeKey::Form(node));
 		if node == Node::Display {
-			self.doc.edit_view_merging(key.as_deref(), |v| form::apply_view(form, v));
+			self.doc.edit_view_merging(key, |v| form::apply_view(form, v));
 		} else if let Node::Scheme(i) = node {
 			// a renamed scheme takes its layers along, in the same step
-			self.doc.edit_both(key.as_deref(), |p, v| {
+			self.doc.edit_both(key, |p, v| {
 				let old = p.color_schemes.get(i).map(|s| s.name.clone());
 				form::apply(form, p, node);
 				if let (Some(old), Some(new)) = (old, p.color_schemes.get(i).map(|s| &s.name)) {
@@ -159,7 +159,7 @@ impl State {
 				}
 			});
 		} else {
-			self.doc.edit_merging(key.as_deref(), |p| form::apply(form, p, node));
+			self.doc.edit_merging(key, |p| form::apply(form, p, node));
 		}
 		self.form_seen = (self.doc.generation, self.doc.view_generation);
 	}
@@ -1699,9 +1699,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			let mut s = st.borrow_mut();
 			let Node::Scheme(i) = s.selection.current() else { return -1 };
 			let mut selected = -1;
-			let key = (gesture != 0).then(|| format!("stop gesture {gesture}"));
+			let key = (gesture != 0).then_some(MergeKey::Stops(gesture));
 			s.typed_form.bar_edited = true;
-			s.doc.edit_merging(key.as_deref(), |p| {
+			s.doc.edit_merging(key, |p| {
 				if let Some(scheme) = p.color_schemes.get_mut(i) {
 					selected = edit(scheme);
 				}
@@ -2387,8 +2387,7 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	canvas.on_drag(move |dx, dy, shift| {
 		h.with(|s, app| match &mut s.gesture {
 			Some(canvas::Gesture::Handle(drag)) => {
-				let key = drag.key().to_owned();
-				s.doc.edit_merging(Some(&key), |p| drag.apply(p, (dx, dy), shift));
+				s.doc.edit_merging(Some(drag.key()), |p| drag.apply(p, (dx, dy), shift));
 				s.show(app);
 			}
 			Some(canvas::Gesture::Marquee(m)) => {
@@ -2461,9 +2460,9 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 			let Some(key) = s.overlays.nudge_key(layer, &s.selection) else { return false };
 			let boxes = s.graphs.placed(layer);
 			if s.overlays.focused_box(layer, &s.doc.project, boxes).is_some() {
-				s.doc.edit_merging(Some(&key), |p| s.overlays.nudge_box(p, layer, d, boxes));
+				s.doc.edit_merging(Some(key), |p| s.overlays.nudge_box(p, layer, d, boxes));
 			} else {
-				s.doc.edit_merging(Some(&key), |p| s.overlays.nudge(p, &s.selection, layer, d, turn));
+				s.doc.edit_merging(Some(key), |p| s.overlays.nudge(p, &s.selection, layer, d, turn));
 			}
 			s.show(app);
 			true
@@ -2474,7 +2473,7 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		h.show(|s, app| {
 			end_gesture(app);
 			if let Some(canvas::Gesture::Handle(drag)) = s.gesture.take() {
-				s.doc.cancel(drag.key());
+				s.doc.cancel(&drag.key());
 			}
 		});
 	});

@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 
 use waveduderust::model::{Project, View};
 
+use crate::canvas::Nudge;
+use crate::tree::Node;
+
 /// The open project with its undo and redo steps.
 #[derive(Debug, Default)]
 pub(crate) struct Document {
@@ -20,13 +23,26 @@ pub(crate) struct Document {
 	redo: Vec<Snapshot>,
 	limit: usize,
 	/// The key of the run of edits the last undo step holds (typing into one field).
-	merging: Option<String>,
+	merging: Option<MergeKey>,
 	/// What starting that step dropped: the redo steps and the oldest undo step over the limit, for a cancel.
 	dropped: (Vec<Snapshot>, Option<Snapshot>),
 	/// Counts the project's changes, for whoever follows it.
 	pub(crate) generation: u64,
 	/// Counts the view's changes.
 	pub(crate) view_generation: u64,
+}
+
+/// What a run of edits joined into one undo step is made under.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum MergeKey {
+	/// Typing into the form of a row.
+	Form(Node),
+	/// A gesture on the gradient bar or a swatch's colour picker, by its number.
+	Stops(i32),
+	/// A handle drag on a picture, by its press count.
+	Drag(u64),
+	/// A run of arrow keys on a picture.
+	Nudge(Nudge),
 }
 
 /// What an undo step restores and the saved state is compared by: the Display settings belong to the project file.
@@ -119,22 +135,22 @@ impl Document {
 	}
 
 	/// Applies `edit`, joining the last undo step when it was made under the same `key` and nothing came between.
-	pub(crate) fn edit_merging(&mut self, key: Option<&str>, edit: impl FnOnce(&mut Project)) {
+	pub(crate) fn edit_merging(&mut self, key: Option<MergeKey>, edit: impl FnOnce(&mut Project)) {
 		self.change(key, |project, _| edit(project));
 	}
 
 	/// Applies `edit` to the view as [`Document::edit_merging`] does to the project.
-	pub(crate) fn edit_view_merging(&mut self, key: Option<&str>, edit: impl FnOnce(&mut View)) {
+	pub(crate) fn edit_view_merging(&mut self, key: Option<MergeKey>, edit: impl FnOnce(&mut View)) {
 		self.change(key, |_, view| edit(view));
 	}
 
 	/// Applies `edit` to the project and the view as [`Document::edit_merging`] does to the project.
-	pub(crate) fn edit_both(&mut self, key: Option<&str>, edit: impl FnOnce(&mut Project, &mut View)) {
+	pub(crate) fn edit_both(&mut self, key: Option<MergeKey>, edit: impl FnOnce(&mut Project, &mut View)) {
 		self.change(key, edit);
 	}
 
-	fn change(&mut self, key: Option<&str>, edit: impl FnOnce(&mut Project, &mut View)) {
-		let joins = key.is_some() && self.merging.as_deref() == key && !self.undo.is_empty();
+	fn change(&mut self, key: Option<MergeKey>, edit: impl FnOnce(&mut Project, &mut View)) {
+		let joins = key.is_some() && self.merging == key && !self.undo.is_empty();
 		let before = self.snapshot();
 		edit(&mut self.project, &mut self.view);
 		if !self.counted(&before) {
@@ -147,7 +163,7 @@ impl Document {
 			return;
 		}
 		if !joins {
-			self.merging = key.map(str::to_owned);
+			self.merging = key;
 			self.undo.push_back(before);
 			let evicted = if self.undo.len() > self.limit { self.undo.pop_front() } else { None };
 			self.dropped = (std::mem::take(&mut self.redo), evicted);
@@ -156,8 +172,8 @@ impl Document {
 
 	/// Takes back the merged step of `key` while it is the last one, as if it had not been made: the redo steps and
 	/// the oldest step it dropped come back. An edit of another key since then leaves it as it is.
-	pub(crate) fn cancel(&mut self, key: &str) {
-		if self.merging.as_deref() == Some(key)
+	pub(crate) fn cancel(&mut self, key: &MergeKey) {
+		if self.merging.as_ref() == Some(key)
 			&& let Some(before) = self.undo.pop_back()
 		{
 			self.restore(before);
@@ -258,9 +274,9 @@ mod tests {
 	fn typing_into_one_field_is_one_undo_step() {
 		let mut d = Document::new(10);
 		for seed in 2..5 {
-			d.edit_merging(Some("Project/Seed"), |p| p.seed = seed);
+			d.edit_merging(Some(MergeKey::Drag(1)), |p| p.seed = seed);
 		}
-		d.edit_merging(Some("Project/Description"), |p| p.description = "x".into());
+		d.edit_merging(Some(MergeKey::Drag(2)), |p| p.description = "x".into());
 		d.undo();
 		assert_eq!(d.project.seed, 4);
 		d.undo();
@@ -274,12 +290,12 @@ mod tests {
 	fn a_cancelled_gesture_leaves_no_step() {
 		let mut d = Document::new(10);
 		let seed = d.project.seed;
-		d.edit_merging(Some("g"), |p| p.seed = seed + 1);
-		d.edit_merging(Some("g"), |p| p.seed = seed + 2);
-		d.cancel("g");
+		d.edit_merging(Some(MergeKey::Drag(1)), |p| p.seed = seed + 1);
+		d.edit_merging(Some(MergeKey::Drag(1)), |p| p.seed = seed + 2);
+		d.cancel(&MergeKey::Drag(1));
 		assert_eq!(d.project.seed, seed);
 		assert!(!d.can_undo() && !d.can_redo());
-		d.cancel("g");
+		d.cancel(&MergeKey::Drag(1));
 		assert_eq!(d.project.seed, seed);
 	}
 
@@ -289,8 +305,8 @@ mod tests {
 		let seed = d.project.seed;
 		d.edit(|p| p.seed = seed + 1);
 		d.undo();
-		d.edit_merging(Some("g"), |p| p.seed = seed + 5);
-		d.cancel("g");
+		d.edit_merging(Some(MergeKey::Drag(1)), |p| p.seed = seed + 5);
+		d.cancel(&MergeKey::Drag(1));
 		assert!(d.can_redo());
 		d.redo();
 		assert_eq!(d.project.seed, seed + 1);
@@ -300,10 +316,10 @@ mod tests {
 	fn a_merged_step_back_where_it_began_is_dropped() {
 		let mut d = Document::new(10);
 		let seed = d.project.seed;
-		d.edit_merging(Some("g"), |p| p.seed = seed + 1);
-		d.edit_merging(Some("g"), |p| p.seed = seed);
+		d.edit_merging(Some(MergeKey::Drag(1)), |p| p.seed = seed + 1);
+		d.edit_merging(Some(MergeKey::Drag(1)), |p| p.seed = seed);
 		assert!(!d.can_undo());
-		d.edit_merging(Some("g"), |p| p.seed = seed + 2);
+		d.edit_merging(Some(MergeKey::Drag(1)), |p| p.seed = seed + 2);
 		assert!(d.can_undo());
 		d.undo();
 		assert_eq!(d.project.seed, seed);
@@ -325,8 +341,8 @@ mod tests {
 	#[test]
 	fn a_display_edit_is_undone_and_dirties_without_counting_as_a_project_change() {
 		let mut d = Document::new(10);
-		d.edit_view_merging(Some("Display"), |v| v.field.brightness = 3.0);
-		d.edit_view_merging(Some("Display"), |v| v.field.brightness = 4.0);
+		d.edit_view_merging(Some(MergeKey::Form(Node::Display)), |v| v.field.brightness = 3.0);
+		d.edit_view_merging(Some(MergeKey::Form(Node::Display)), |v| v.field.brightness = 4.0);
 		assert!(d.dirty());
 		assert_eq!((d.generation, d.view_generation), (0, 2));
 		d.edit_both(None, |p, v| {
@@ -359,9 +375,9 @@ mod tests {
 		assert!(d.dirty());
 		d.redo();
 		assert!(!d.dirty());
-		d.edit_merging(Some("g"), |p| p.seed = seed + 2);
+		d.edit_merging(Some(MergeKey::Drag(1)), |p| p.seed = seed + 2);
 		assert!(d.dirty());
-		d.cancel("g");
+		d.cancel(&MergeKey::Drag(1));
 		assert!(!d.dirty());
 		d.edit_view_merging(None, |v| v.field.brightness = 3.0);
 		d.settle(|p| p.seed = seed + 3);
