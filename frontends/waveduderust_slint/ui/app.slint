@@ -26,6 +26,7 @@ export { ExportData, ExportReason }
 import { SettingsLayer, SettingsData, ColorTheme, Language, Scale, Search } from "settings.slint";
 export { SettingsData, ColorTheme, Language, Scale, Search }
 import { WelcomeLayer, Levers } from "welcome.slint";
+import { RamBar, RamBarView } from "ram-bar.slint";
 export { Levers }
 import { ExamplesLayer, ExampleRow, ExampleTopic } from "examples.slint";
 
@@ -110,8 +111,9 @@ export component AppWindow inherits Window {
     callback example-search(string);
     callback example-open(int);
     in-out property <bool> welcome-shown;
-    in property <string> welcome-ram-available;
-    in property <string> welcome-ram-physical;
+    // the memory, refreshed by `ram-refresh` while a view of it is shown
+    in property <RamBar> ram;
+    callback ram-refresh();
     in property <Levers> welcome-levers;
     in property <bool> welcome-show-startup;
     callback welcome-preset(PreviewQuality);
@@ -157,6 +159,7 @@ export component AppWindow inherits Window {
     in-out property <bool> project-shown: true;
     in-out property <bool> properties-shown: true;
     in-out property <bool> messages-shown: false;
+    in-out property <bool> performance-shown: false;
     // the pane takes the focus when it opens; closed, it hands the focus back
     changed messages-shown => {
         if (!self.messages-shown) { keys.focus(); }
@@ -254,6 +257,7 @@ export component AppWindow inherits Window {
                 MenuItem { title: @tr("Project"); checkable: true; checked: root.project-shown; activated => { root.project-shown = !root.project-shown; } }
                 MenuItem { title: @tr("Properties"); checkable: true; checked: root.properties-shown; activated => { root.properties-shown = !root.properties-shown; } }
                 MenuItem { title: @tr("Messages"); checkable: true; checked: root.messages-shown; activated => { root.messages-shown = !root.messages-shown; } }
+                MenuItem { title: @tr("Performance"); checkable: true; checked: root.performance-shown; activated => { root.performance-shown = !root.performance-shown; } }
             }
         }
         Menu {
@@ -439,6 +443,16 @@ export component AppWindow inherits Window {
                             added: root.log-added;
                         }
                     }
+                    // sized to its content, under the others
+                    if root.performance-shown: Pane {
+                        title: @tr("Performance");
+                        vertical-stretch: 0;
+                        close => { root.performance-shown = false; }
+                        VerticalLayout {
+                            padding: 8px;
+                            RamBarView { ram: root.ram; }
+                        }
+                    }
                 }
             }
             Rectangle {
@@ -503,8 +517,6 @@ export component AppWindow inherits Window {
         min-height: 0px;
         max-height: 100000px;
         shown <=> root.welcome-shown;
-        ram-available: root.welcome-ram-available;
-        ram-physical: root.welcome-ram-physical;
         levers: root.welcome-levers;
         show-startup: root.welcome-show-startup;
         preset(i) => { root.welcome-preset(i); }
@@ -537,8 +549,14 @@ export component AppWindow inherits Window {
         shown <=> root.settings-shown;
         data <=> root.settings;
         undo-spec: root.undo-spec;
+        ram: root.ram;
         edited => { root.settings-edited(); }
         preset(q) => { root.welcome-preset(q); }
+    }
+    Timer {
+        interval: 1s;
+        running: root.performance-shown || root.settings-shown;
+        triggered => { root.ram-refresh(); }
     }
     ExportLayer {
         // an overlay: its frame sets no bounds on the window

@@ -1,0 +1,53 @@
+import { Theme } from "theme.slint";
+
+// The memory and the preview's share of it.
+export struct RamBar {
+    // the memory free now (empty when unknown), the machine's and the RAM cache, as text
+    available: string,
+    physical: string,
+    cache: string,
+    // shares of the machine's memory: in use (-1 when unknown) and the RAM cache
+    used: float,
+    cache-share: float,
+}
+
+// The memory as a bar: in use, then the RAM cache, then the rest free.
+export component RamBarView inherits VerticalLayout {
+    in property <RamBar> ram;
+    spacing: 4px;
+    HorizontalLayout {
+        spacing: 8px;
+        bar := Rectangle {
+            horizontal-stretch: 1;
+            height: 14px;
+            background: Theme.input-background;
+            border-width: 1px;
+            border-color: Theme.text-dim;
+            property <float> used: max(0, root.ram.used);
+            Rectangle {
+                x: 1px;
+                y: 1px;
+                width: (parent.width - 2px) * min(1, bar.used);
+                height: parent.height - 2px;
+                background: Theme.text-dim;
+            }
+            Rectangle {
+                x: 1px + (parent.width - 2px) * min(1, bar.used);
+                y: 1px;
+                width: (parent.width - 2px) * max(0, min(1 - bar.used, root.ram.cache-share));
+                height: parent.height - 2px;
+                background: Theme.accent;
+            }
+        }
+        Text {
+            text: root.ram.available == "" ? root.ram.physical
+                : @tr("{} free of {}", root.ram.available, root.ram.physical);
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+    }
+    Text {
+        text: @tr("RAM cache {}: frames past it go to disk", root.ram.cache);
+        color: Theme.text-dim;
+    }
+}

@@ -5,7 +5,7 @@ use waveduderust::quality::PreviewTier;
 use waveduderust_platform::settings::{Settings, Theme, WEB_RAM_CACHE_SIZES};
 use waveduderust_platform::store::Store;
 
-use crate::ui::{ColorTheme, Language, Levers, NumberSpec, PreviewQuality, Scale, SettingsData};
+use crate::ui::{ColorTheme, Language, Levers, NumberSpec, PreviewQuality, RamBar, Scale, SettingsData};
 
 fn scale(divisor: u32) -> Scale {
 	match divisor {
@@ -45,10 +45,8 @@ pub(crate) fn data(s: &Settings) -> SettingsData {
 		preview_frames: scale(s.preview_frames),
 		preview_index: s.preview_sample_bytes < 2,
 		preview_dither: [0, 10, 12, 14, 16].iter().position(|&b| b == s.preview_dither_bits).unwrap_or(0) as i32,
-		ram_available: Default::default(),
-		ram_physical: Default::default(),
-		ram_auto: Default::default(),
-		ram_sizes: Default::default(),
+		ram_auto: web_ram_auto(),
+		ram_sizes: web_ram_sizes(),
 		ram_size: WEB_RAM_CACHE_SIZES.iter().position(|&b| b == s.frame_memory_bytes).map_or(0, |i| i as i32 + 1),
 		use_gpu: s.use_gpu,
 		auto_rerun: s.auto_rerun,
@@ -57,11 +55,35 @@ pub(crate) fn data(s: &Settings) -> SettingsData {
 	}
 }
 
-/// The memory free now and the machine's.
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn ram() -> (String, String) {
-	let (available, physical) = waveduderust::run::Memory::default().read();
-	(crate::memory::size(available), crate::memory::size(physical))
+/// The browser's Auto RAM cache size; empty natively, where the cache has no choice.
+fn web_ram_auto() -> slint::SharedString {
+	#[cfg(target_arch = "wasm32")]
+	return crate::memory::size(crate::web::BUDGET).into();
+	#[cfg(not(target_arch = "wasm32"))]
+	slint::SharedString::default()
+}
+
+/// The browser's fixed RAM cache sizes; none natively.
+fn web_ram_sizes() -> slint::ModelRc<slint::SharedString> {
+	if cfg!(target_arch = "wasm32") {
+		let sizes: Vec<slint::SharedString> =
+			WEB_RAM_CACHE_SIZES.iter().map(|&b| crate::memory::size(b).into()).collect();
+		slint::ModelRc::from(sizes.as_slice())
+	} else {
+		slint::ModelRc::default()
+	}
+}
+
+/// The memory bar: `available` free (unknown in the browser) of `physical`, and the RAM cache.
+pub(crate) fn ram_bar(available: Option<u64>, physical: u64, cache: u64) -> RamBar {
+	let share = |bytes: u64| if physical == 0 { 0.0 } else { (bytes as f64 / physical as f64).min(1.0) as f32 };
+	RamBar {
+		available: available.map_or_else(String::new, crate::memory::size).into(),
+		physical: crate::memory::size(physical).into(),
+		cache: crate::memory::size(cache).into(),
+		used: available.map_or(-1.0, |a| 1.0 - share(a)),
+		cache_share: share(cache),
+	}
 }
 
 /// Writes the window's edit into `settings` and saves them.
@@ -116,6 +138,10 @@ pub(crate) fn levers(settings: &Settings) -> Levers {
 		resolution: int(settings.preview_resolution),
 		frames: int(settings.preview_frames),
 		bits: if settings.preview_sample_bytes >= 2 { 16 } else { 8 },
+		preset: settings
+			.preset()
+			.and_then(|tier| PreviewTier::ALL.iter().position(|&t| t == tier))
+			.map_or(-1, |i| i32::try_from(i).unwrap_or(-1)),
 	}
 }
 
@@ -159,6 +185,15 @@ pub(crate) fn color_scheme(settings: &Settings) -> Option<slint::language::Color
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn the_memory_bar_shares_the_physical_memory() {
+		let gib = 1u64 << 30;
+		let bar = ram_bar(Some(12 * gib), 16 * gib, 8 * gib);
+		assert_eq!((bar.used, bar.cache_share), (0.25, 0.5));
+		let unknown = ram_bar(None, 0, gib);
+		assert_eq!((unknown.used, unknown.cache_share, unknown.available.as_str()), (-1.0, 0.0, ""));
+	}
 
 	#[test]
 	fn the_window_data_reads_and_writes_the_settings() {

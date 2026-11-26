@@ -413,6 +413,16 @@ impl Settings {
 		self.preview_dither_bits = PreviewDefaults::dither_bits_of(tier);
 	}
 
+	/// The preset the four preview levers hold, if any.
+	pub fn preset(&self) -> Option<PreviewTier> {
+		let levers = |s: &Self| (s.preview_resolution, s.preview_frames, s.preview_sample_bytes, s.preview_dither_bits);
+		PreviewTier::ALL.into_iter().find(|&tier| {
+			let mut preset = self.clone();
+			preset.apply_preset(tier);
+			levers(&preset) == levers(self)
+		})
+	}
+
 	/// The Auto preset: the tier of `facts`; in the browser a picked RAM cache size stands in for the device memory.
 	pub fn auto_preset(&self, facts: MachineFacts) -> PreviewTier {
 		let picked = if cfg!(target_arch = "wasm32") { self.frame_memory_bytes } else { 0 };
@@ -618,6 +628,9 @@ mod tests {
 				Settings { preview_resolution: 4, preview_frames: 4, preview_dither_bits: 12, ..Settings::default() };
 			s.apply_preset(tier);
 			assert_eq!(levers(&s), want, "{tier:?}");
+			assert_eq!(s.preset(), Some(tier), "{tier:?}");
+			s.preview_dither_bits += 1;
+			assert_eq!(s.preset(), None, "{tier:?} with another dithering");
 			assert_eq!(s.preview_quality(), PreviewDefaults::quality_of(tier), "{tier:?}");
 		}
 	}

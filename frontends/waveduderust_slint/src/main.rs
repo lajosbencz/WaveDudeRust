@@ -1097,27 +1097,22 @@ fn frames_dropped(playback: &mut Playback) {
 	playback.seek(0);
 }
 
-/// Pushes the settings to the Settings window and the Welcome page.
-fn show_settings(state: &State, app: &AppWindow) {
-	let mut data = settings::data(&state.settings);
+/// The memory bar; the RAM cache is the budget a run starting now gets.
+fn ram_bar(state: &State) -> ui::RamBar {
+	use waveduderust::run::Budget;
 	#[cfg(not(target_arch = "wasm32"))]
 	{
-		let (available, physical) = settings::ram();
-		(data.ram_available, data.ram_physical) = (available.into(), physical.into());
+		let (available, physical) = waveduderust::run::Memory::default().read();
+		settings::ram_bar(Some(available), physical, Budget::of(available, physical, state.settings.ram_cache(), 0))
 	}
 	#[cfg(target_arch = "wasm32")]
-	{
-		use waveduderust_platform::settings::WEB_RAM_CACHE_SIZES;
-		data.ram_auto = memory::size(web::BUDGET).into();
-		let sizes: Vec<slint::SharedString> = WEB_RAM_CACHE_SIZES.iter().map(|&b| memory::size(b).into()).collect();
-		data.ram_sizes = ModelRc::from(sizes.as_slice());
-	}
-	app.set_welcome_ram_available(data.ram_available.clone());
-	app.set_welcome_ram_physical(if data.ram_physical.is_empty() {
-		memory::size(state.facts.physical_bytes).into()
-	} else {
-		data.ram_physical.clone()
-	});
+	settings::ram_bar(None, state.facts.physical_bytes, Budget::of_memory(web::BUDGET, state.settings.ram_cache()))
+}
+
+/// Pushes the settings to the Settings window and the Welcome page.
+fn show_settings(state: &State, app: &AppWindow) {
+	let data = settings::data(&state.settings);
+	app.set_ram(ram_bar(state));
 	app.set_settings(data);
 	app.set_undo_spec(settings::undo_spec());
 	app.set_welcome_levers(settings::levers(&state.settings));
@@ -1846,6 +1841,12 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			settings::preset(&mut s.settings, s.store.as_ref(), i, facts);
 			apply_settings(s, &app);
 			show_settings(s, &app);
+		}
+	});
+	let (st, weak) = (state.clone(), app.as_weak());
+	app.on_ram_refresh(move || {
+		if let Some(app) = weak.upgrade() {
+			app.set_ram(ram_bar(&st.borrow()));
 		}
 	});
 	let (st, weak) = (state.clone(), app.as_weak());

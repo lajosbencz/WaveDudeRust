@@ -3,6 +3,7 @@ import { Theme } from "theme.slint";
 import { NumberSpec } from "number-box.slint";
 import { FormPanel, FormLabel, IntField, Check, Choice } from "form.slint";
 import { PreviewQuality } from "commands.slint";
+import { RamBar, RamBarView } from "ram-bar.slint";
 
 export enum ColorTheme { system, light, dark }
 // `system`: the system's language when a table has it, else English
@@ -22,9 +23,6 @@ export struct SettingsData {
     preview-index: bool,
     // 0 off, then 10, 12, 14, 16 bits per channel
     preview-dither: int,
-    // the memory free now and the machine's; empty in the browser
-    ram-available: string,
-    ram-physical: string,
     // the browser's RAM cache: Auto's size (empty natively), the fixed sizes, the pick (0 Auto)
     ram-auto: string,
     ram-sizes: [string],
@@ -70,6 +68,7 @@ export component SettingsLayer inherits Rectangle {
     in-out property <bool> shown;
     in-out property <SettingsData> data;
     in property <NumberSpec> undo-spec;
+    in property <RamBar> ram;
     callback edited();
     callback preset(PreviewQuality);
 
@@ -190,15 +189,8 @@ export component SettingsLayer inherits Rectangle {
                             }
                         }
                     }
+                    if root.shows(1, @tr("RAM")): RamBarView { ram: root.ram; }
                     if root.query == "" ? root.section == 1 : root.hits[1]: FormPanel {
-                        if root.data.ram-physical != "" && root.shows(1, @tr("RAM")): Row {
-                            FormLabel { text: @tr("RAM"); }
-                            Text {
-                                text: @tr("{} available of {}", root.data.ram-available, root.data.ram-physical);
-                                color: Theme.text;
-                                vertical-alignment: center;
-                            }
-                        }
                         if root.data.ram-auto != "" && root.shows(1, @tr("RAM")): Row {
                             FormLabel { text: @tr("RAM"); }
                             Choice {
