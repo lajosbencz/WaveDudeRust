@@ -517,6 +517,40 @@ fn shift(state: &mut State, by: isize) {
 	state.selection.set(to);
 }
 
+/// The state and the window as a callback holds them; the window weakly, as it owns its callbacks.
+#[derive(Clone)]
+struct Handle {
+	state: Rc<RefCell<State>>,
+	app: slint::Weak<AppWindow>,
+}
+
+impl Handle {
+	fn new(state: &Rc<RefCell<State>>, app: &AppWindow) -> Self {
+		Self { state: state.clone(), app: app.as_weak() }
+	}
+
+	/// `f` on the state borrowed mutably and the window; the default once the window is gone.
+	fn with<R: Default>(&self, f: impl FnOnce(&mut State, &AppWindow) -> R) -> R {
+		let Some(app) = self.app.upgrade() else { return R::default() };
+		f(&mut self.state.borrow_mut(), &app)
+	}
+
+	/// [`Self::with`], the window refreshed after.
+	fn show(&self, f: impl FnOnce(&mut State, &AppWindow)) {
+		self.with(|s, app| {
+			f(s, app);
+			s.show(app);
+		});
+	}
+
+	/// `f` on the state borrowed shared and the window; nothing once the window is gone.
+	fn read(&self, f: impl FnOnce(&State, &AppWindow)) {
+		if let Some(app) = self.app.upgrade() {
+			f(&self.state.borrow(), &app);
+		}
+	}
+}
+
 /// A tree row's handler: `f` on the row's node with the callback's argument and the
 /// window refreshed after.
 fn on_row<A: 'static>(
@@ -524,13 +558,13 @@ fn on_row<A: 'static>(
 	app: &AppWindow,
 	f: impl Fn(&mut State, Node, A) + 'static,
 ) -> impl Fn(i32, A) + 'static {
-	let (state, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(state, app);
 	move |row, arg| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *state.borrow_mut();
-		let Some(node) = s.node(row) else { return };
-		f(s, node, arg);
-		s.show(&app);
+		h.with(|s, app| {
+			let Some(node) = s.node(row) else { return };
+			f(s, node, arg);
+			s.show(app);
+		});
 	}
 }
 
@@ -1538,10 +1572,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		let place = dragged(&data).zip(s.node(row)).and_then(|(n, t)| tree::drop_target(&s.doc.project, n, t, before));
 		place.map_or(ui::DropPlace::None, |(place, _)| place)
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_tree_drop(move |row, data, before| {
-		if let Some(app) = weak.upgrade() {
-			let mut s = st.borrow_mut();
+		h.with(|s, app| {
 			let target = dragged(&data).zip(s.node(row));
 			let Some((node, (_, to))) =
 				target.and_then(|(n, t)| Some((n, tree::drop_target(&s.doc.project, n, t, before)?)))
@@ -1551,34 +1584,32 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			let mut moved = node;
 			s.doc.edit(|p| moved = tree::move_to(p, node, to));
 			s.selection.set(moved);
-			s.show(&app);
-		}
+			s.show(app);
+		});
 	});
 	app.global::<ui::Canvas<'_>>()
 		.on_can_drop(|data| matches!(dragged(&data), Some(Node::Source(_) | Node::Part(_) | Node::Probe(_))));
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.global::<ui::Canvas<'_>>().on_drop(move |data, x, y| {
-		let Some(app) = weak.upgrade() else { return };
-		let Some(node) = dragged(&data) else { return };
-		let s = &mut *st.borrow_mut();
-		let Some(fragment) = clipboard::copy(&s.doc.project, &s.doc.view, &[node]) else { return };
-		let mut pasted = None;
-		s.doc.edit_both(None, |p, v| {
-			pasted = clipboard::paste(p, v, fragment, node);
+		h.with(|s, app| {
+			let Some(node) = dragged(&data) else { return };
+			let Some(fragment) = clipboard::copy(&s.doc.project, &s.doc.view, &[node]) else { return };
+			let mut pasted = None;
+			s.doc.edit_both(None, |p, v| {
+				pasted = clipboard::paste(p, v, fragment, node);
+				if let Some(new) = pasted {
+					canvas::place(p, &[new], (f64::from(x), f64::from(y)));
+				}
+			});
 			if let Some(new) = pasted {
-				canvas::place(p, &[new], (f64::from(x), f64::from(y)));
+				s.selection.set(new);
 			}
+			s.show(app);
 		});
-		if let Some(new) = pasted {
-			s.selection.set(new);
-		}
-		s.show(&app);
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_tree_navigate(move |key, extend| {
-		if let Some(app) = weak.upgrade() {
-			let mut s = st.borrow_mut();
-			let s = &mut *s;
+		h.with(|s, app| {
 			match tree::navigate(&s.doc.project, &s.nodes, &s.collapsed, s.selection.current(), key) {
 				Some(tree::Step::To(node)) => {
 					s.selection.pick(&s.doc.project, node, if extend { Pick::Range } else { Pick::Alone });
@@ -1586,8 +1617,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				Some(tree::Step::Expand(node, open)) => s.expand(node, open),
 				None => return,
 			}
-			s.show(&app);
-		}
+			s.show(app);
+		});
 	});
 	app.on_tree_shift(on_row(&state, &app, |s, node, by: i32| {
 		let mut to = node;
@@ -1606,14 +1637,13 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		let value = number::commit(&spec, &text);
 		ui::ParsedFloat { ok: value.is_some(), value: value.unwrap_or_default() as f32 }
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.global::<ui::Form<'_>>().on_edited(move |typing| {
-		let Some(app) = weak.upgrade() else { return };
-		let mut s = st.borrow_mut();
-		let form = app.global::<ui::Form<'_>>();
-		form.set_invalid("".into());
-		s.edit_form(&form, typing);
-		s.show(&app);
+		h.show(|s, app| {
+			let form = app.global::<ui::Form<'_>>();
+			form.set_invalid("".into());
+			s.edit_form(&form, typing);
+		});
 	});
 	let st = state.clone();
 	app.global::<ui::Form<'_>>().on_describe(move |open| {
@@ -1621,22 +1651,20 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		s.settings.part_description_expanded = open;
 		s.save_settings();
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.global::<ui::Form<'_>>().on_new_seed(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let mut s = st.borrow_mut();
-		let seed = waveduderust::model::Project::new_random_seed().seed;
-		s.doc.edit(|p| p.seed = seed);
-		s.show(&app);
+		h.show(|s, _| {
+			let seed = waveduderust::model::Project::new_random_seed().seed;
+			s.doc.edit(|p| p.seed = seed);
+		});
 	});
 	let edit_rows = {
-		let (st, weak) = (state.clone(), app.as_weak());
+		let h = Handle::new(&state, &app);
 		move |edit: form::RowEdit| {
-			let Some(app) = weak.upgrade() else { return };
-			let mut s = st.borrow_mut();
-			let node = s.selection.current();
-			s.doc.edit(|p| form::edit_rows(p, node, edit));
-			s.show(&app);
+			h.show(|s, _| {
+				let node = s.selection.current();
+				s.doc.edit(|p| form::edit_rows(p, node, edit));
+			});
 		}
 	};
 	let index = |k: i32| usize::try_from(k).unwrap_or(usize::MAX);
@@ -1701,11 +1729,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		});
 	});
 	wire_canvas(&state, &app);
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.global::<ui::Form<'_>>().on_load_scheme_file(move |layer| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = st.borrow();
-		files::pick_scheme(&s.inbox, &app.global::<ui::Words<'_>>(), layer);
+		h.read(|s, app| files::pick_scheme(&s.inbox, &app.global::<ui::Words<'_>>(), layer));
 	});
 	#[cfg(not(target_arch = "wasm32"))]
 	{
@@ -1739,52 +1765,45 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			}
 		});
 	}
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.global::<ui::Form<'_>>().on_drop_image(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		s.doc.edit(|p| p.scene.remove_image());
-		s.show(&app);
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.global::<ui::Form<'_>>().on_toggle_mine(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		s.toggle_mine();
-		s.show(&app);
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
+	app.global::<ui::Form<'_>>().on_drop_image(move || h.show(|s, _| s.doc.edit(|p| p.scene.remove_image())));
+	let h = Handle::new(&state, &app);
+	app.global::<ui::Form<'_>>().on_toggle_mine(move || h.show(|s, _| s.toggle_mine()));
+	let h = Handle::new(&state, &app);
 	app.global::<ui::Form<'_>>().on_remove_my_scheme(move |layer| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		let Some(store) = &s.store else { return };
-		let name = form::layer_settings(&mut s.doc.view, layer).color_scheme.clone();
-		if waveduderust_platform::user_schemes::remove(store, &name).is_ok() {
-			tracing::info!("Colour scheme '{name}' removed from my schemes");
-		}
-		s.schemes = waveduderust_platform::user_schemes::load(store);
-		s.show(&app);
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.global::<ui::Form<'_>>().on_edit_scheme_copy(move |layer| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		let name = form::layer_settings(&mut s.doc.view, layer).color_scheme.clone();
-		let Some((scheme, own)) = form::find_scheme(&s.doc.project, &s.schemes, &name) else { return };
-		let mut copy = scheme.clone();
-		if own {
-			copy.description = format!("copy of project scheme '{}'", scheme.name);
-		}
-		copy.name = format!("{} copy", scheme.name);
-		let mut at = 0;
-		s.doc.edit_both(None, |p, v| {
-			p.add_color_scheme(copy);
-			at = p.color_schemes.len() - 1;
-			form::layer_settings(v, layer).color_scheme.clone_from(&p.color_schemes[at].name);
+		h.with(|s, app| {
+			let Some(store) = &s.store else { return };
+			let name = form::layer_settings(&mut s.doc.view, layer).color_scheme.clone();
+			if waveduderust_platform::user_schemes::remove(store, &name).is_ok() {
+				tracing::info!("Colour scheme '{name}' removed from my schemes");
+			}
+			s.schemes = waveduderust_platform::user_schemes::load(store);
+			s.show(app);
 		});
-		tracing::info!("Colour scheme '{}' copied into the project for editing", s.doc.project.color_schemes[at].name);
-		s.selection.set(Node::Scheme(at));
-		s.show(&app);
+	});
+	let h = Handle::new(&state, &app);
+	app.global::<ui::Form<'_>>().on_edit_scheme_copy(move |layer| {
+		h.with(|s, app| {
+			let name = form::layer_settings(&mut s.doc.view, layer).color_scheme.clone();
+			let Some((scheme, own)) = form::find_scheme(&s.doc.project, &s.schemes, &name) else { return };
+			let mut copy = scheme.clone();
+			if own {
+				copy.description = format!("copy of project scheme '{}'", scheme.name);
+			}
+			copy.name = format!("{} copy", scheme.name);
+			let mut at = 0;
+			s.doc.edit_both(None, |p, v| {
+				p.add_color_scheme(copy);
+				at = p.color_schemes.len() - 1;
+				form::layer_settings(v, layer).color_scheme.clone_from(&p.color_schemes[at].name);
+			});
+			tracing::info!(
+				"Colour scheme '{}' copied into the project for editing",
+				s.doc.project.color_schemes[at].name
+			);
+			s.selection.set(Node::Scheme(at));
+			s.show(app);
+		});
 	});
 
 	let weak = app.as_weak();
@@ -1795,135 +1814,109 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	bar.on_stop_beside(move |k, step| {
 		weak.upgrade().map_or(-1, |app| form::stop_beside(&app.global::<ui::Form<'_>>().get_stops(), k, step))
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.global::<ui::Form<'_>>().on_base_on(move |picked| {
-		let Some(app) = weak.upgrade() else { return };
-		let mut s = st.borrow_mut();
-		if let (Node::Scheme(i), Ok(k)) = (s.selection.current(), usize::try_from(picked)) {
-			let base = form::bases(&s.doc.project, &s.schemes, i).get(k).map(|&b| b.clone());
-			if let Some(base) = base {
-				s.doc.edit(|p| {
-					if let Some(scheme) = p.color_schemes.get_mut(i) {
-						form::base_on(scheme, &base);
-					}
-				});
-				app.global::<ui::Form<'_>>().set_based_on(picked);
+		h.show(|s, app| {
+			if let (Node::Scheme(i), Ok(k)) = (s.selection.current(), usize::try_from(picked)) {
+				let base = form::bases(&s.doc.project, &s.schemes, i).get(k).map(|&b| b.clone());
+				if let Some(base) = base {
+					s.doc.edit(|p| {
+						if let Some(scheme) = p.color_schemes.get_mut(i) {
+							form::base_on(scheme, &base);
+						}
+					});
+					app.global::<ui::Form<'_>>().set_based_on(picked);
+				}
 			}
-		}
-		s.show(&app);
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_command(move |c| {
-		if let Some(app) = weak.upgrade() {
-			command(&mut st.borrow_mut(), &app, c);
-		}
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
+	app.on_command(move |c| h.with(|s, app| command(s, app, c)));
+	let h = Handle::new(&state, &app);
 	app.on_add(move |item| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
+		h.with(|s, app| {
 			add(s, item);
-			s.show(&app);
+			s.show(app);
 			app.global::<ui::Form<'_>>().set_focus_pending(true);
-		}
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_open_recent(move |i| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
+		h.with(|s, app| {
 			// the path now: saving first may move it in the list
 			if let Some(path) = usize::try_from(i).ok().and_then(|i| s.settings.recent_files.get(i)).cloned() {
-				act(s, &app, Action::OpenFile(path));
+				act(s, app, Action::OpenFile(path));
 			}
-		}
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_example_topic_picked(move |i| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
+		h.with(|s, app| {
 			s.example_topic = i;
-			show_examples(s, &app);
-		}
+			show_examples(s, app);
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_example_search(move |t| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
+		h.with(|s, app| {
 			s.example_search = t.into();
-			show_examples(s, &app);
-		}
+			show_examples(s, app);
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_example_open(move |row| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
+		h.with(|s, app| {
 			if let Some(&i) = usize::try_from(row).ok().and_then(|r| s.example_rows.get(r)) {
 				app.set_examples_shown(false);
-				act(s, &app, Action::Example(i));
+				act(s, app, Action::Example(i));
 			}
-		}
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_welcome_preset(move |i| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
+		h.with(|s, app| {
 			let facts = s.facts;
 			settings::preset(&mut s.settings, s.store.as_ref(), i, facts);
-			apply_settings(s, &app);
-			show_settings(s, &app);
-		}
+			apply_settings(s, app);
+			show_settings(s, app);
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_ram_refresh(move || {
-		if let Some(app) = weak.upgrade() {
-			app.set_ram(ram_bar(&st.borrow()));
-		}
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
+	app.on_ram_refresh(move || h.read(|s, app| app.set_ram(ram_bar(s))));
+	let h = Handle::new(&state, &app);
 	app.on_welcome_show_startup_toggled(move |on| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
+		h.with(|s, app| {
 			s.settings.show_startup = on;
 			s.save_settings();
-			show_settings(s, &app);
-		}
+			show_settings(s, app);
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_settings_edited(move || {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
+		h.with(|s, app| {
 			settings::apply(&app.get_settings(), &mut s.settings, s.store.as_ref());
-			apply_settings(s, &app);
-			show_settings(s, &app);
-		}
+			apply_settings(s, app);
+			show_settings(s, app);
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_modal_answer(move |button| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
-			answer(s, &app, button);
-			s.show(&app);
-		}
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
+	app.on_modal_answer(move |button| h.show(|s, app| answer(s, app, button)));
+	let h = Handle::new(&state, &app);
+	// gone, the window hides: the response's default
 	app.window().on_close_requested(move || {
-		let Some(app) = weak.upgrade() else { return slint::CloseRequestResponse::HideWindow };
-		let s = &mut *st.borrow_mut();
-		if s.doc.dirty() || s.exporting.is_some() {
-			command(s, &app, Command::Exit);
-			slint::CloseRequestResponse::KeepWindowShown
-		} else {
-			#[cfg(not(target_arch = "wasm32"))]
-			keep_window(s, &app);
-			slint::CloseRequestResponse::HideWindow
-		}
+		h.with(|s, app| {
+			if s.doc.dirty() || s.exporting.is_some() {
+				command(s, app, Command::Exit);
+				slint::CloseRequestResponse::KeepWindowShown
+			} else {
+				#[cfg(not(target_arch = "wasm32"))]
+				keep_window(s, app);
+				slint::CloseRequestResponse::HideWindow
+			}
+		})
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_transport_action(move |action| {
-		if let Some(app) = weak.upgrade() {
-			transport(&mut st.borrow_mut(), &app, action);
-		}
-	});
+	let h = Handle::new(&state, &app);
+	app.on_transport_action(move |action| h.with(|s, app| transport(s, app, action)));
 	let st = state.clone();
 	app.on_seek(move |frame| {
 		st.borrow_mut().playback.seek(i64::from(frame));
@@ -1943,38 +1936,30 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		speed.to_string().into()
 	});
 	let on_log = |f: fn(&mut Messages, slint::SharedString)| {
-		let (st, weak) = (state.clone(), app.as_weak());
+		let h = Handle::new(&state, &app);
 		move |arg: slint::SharedString| {
-			if let Some(app) = weak.upgrade() {
-				let m = &mut st.borrow_mut().messages;
-				f(m, arg);
-				m.show(&app);
-			}
+			h.with(|s, app| {
+				f(&mut s.messages, arg);
+				s.messages.show(app);
+			});
 		}
 	};
 	let search = on_log(|m, t| m.search(&t));
 	app.on_log_search(search);
 	let clear = on_log(|m, _| m.clear());
 	app.on_log_clear(move || clear(slint::SharedString::new()));
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_memory_warning_ticked(move |cache_auto, resolution, frames, samples| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
+		h.with(|s, app| {
 			let ticks = waveduderust::run::Levers { cache_auto, resolution, frames, samples };
 			if let Some((_, w)) = s.live.warning() {
 				app.set_memory_warning(memory::data(&w, ticks));
 				s.warning_ticks = Some(ticks);
 			}
-		}
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	app.on_memory_warning_answer(move |run, mute| {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
-			answer_warning(s, &app, run, mute);
-			s.show(&app);
-		}
-	});
+	let h = Handle::new(&state, &app);
+	app.on_memory_warning_answer(move |run, mute| h.show(|s, app| answer_warning(s, app, run, mute)));
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.on_export_format(move |index| {
 		let Some(app) = weak.upgrade() else { return };
@@ -2019,42 +2004,42 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		export::delete_codec(&mut data);
 		app.set_export_data(data);
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_export_ok(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		let Some(dialog) = &s.export_dialog else { return };
-		let mut data = app.get_export_data();
-		#[cfg(target_arch = "wasm32")]
-		if let Some(download) = dialog.csv_download(&data) {
-			match download {
-				Ok(download) => {
-					app.set_export_shown(false);
-					s.export_dialog = None;
-					tracing::info!("Exported the probe data as {}", download.name());
-					tell(&app, ui::Message::ExportReady, download.name());
-					s.ready = Some(download);
+		h.with(|s, app| {
+			let Some(dialog) = &s.export_dialog else { return };
+			let mut data = app.get_export_data();
+			#[cfg(target_arch = "wasm32")]
+			if let Some(download) = dialog.csv_download(&data) {
+				match download {
+					Ok(download) => {
+						app.set_export_shown(false);
+						s.export_dialog = None;
+						tracing::info!("Exported the probe data as {}", download.name());
+						tell(app, ui::Message::ExportReady, download.name());
+						s.ready = Some(download);
+					}
+					Err(e) => {
+						data.error = e.into();
+						app.set_export_data(data);
+					}
+				}
+				return;
+			}
+			match dialog.plan(&data, &mut s.settings) {
+				Ok(plan) => {
+					// asked in order, popped from the end
+					let mut outputs = plan.existing();
+					outputs.reverse();
+					s.replacing = Some((plan, outputs));
+					ask_replace(s, app);
 				}
 				Err(e) => {
 					data.error = e.into();
 					app.set_export_data(data);
 				}
 			}
-			return;
-		}
-		match dialog.plan(&data, &mut s.settings) {
-			Ok(plan) => {
-				// asked in order, popped from the end
-				let mut outputs = plan.existing();
-				outputs.reverse();
-				s.replacing = Some((plan, outputs));
-				ask_replace(s, &app);
-			}
-			Err(e) => {
-				data.error = e.into();
-				app.set_export_data(data);
-			}
-		}
+		});
 	});
 	let st = state.clone();
 	app.on_about_copy(move || {
@@ -2064,21 +2049,20 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			Err(e) => tracing::warn!("clipboard: {e}"),
 		}
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_log_regex(move |on| {
-		if let Some(app) = weak.upgrade() {
-			let m = &mut st.borrow_mut().messages;
-			m.set_regex(on);
-			m.show(&app);
-		}
+		h.with(|s, app| {
+			s.messages.set_regex(on);
+			s.messages.show(app);
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_log_select(move |row, control, shift| {
-		if let (Some(app), Ok(row)) = (weak.upgrade(), usize::try_from(row)) {
-			let m = &mut st.borrow_mut().messages;
-			m.select(row, control, shift);
-			m.show(&app);
-		}
+		let Ok(row) = usize::try_from(row) else { return };
+		h.with(|s, app| {
+			s.messages.select(row, control, shift);
+			s.messages.show(app);
+		});
 	});
 	let st = state.clone();
 	app.on_log_copy(move |all| {
@@ -2091,19 +2075,18 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		}
 		true
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(&state, &app);
 	app.on_log_toggle(move |level| {
-		if let Some(app) = weak.upgrade() {
-			let m = &mut st.borrow_mut().messages;
-			m.toggle(level);
-			m.show(&app);
-		}
+		h.with(|s, app| {
+			s.messages.toggle(level);
+			s.messages.show(app);
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+
+	let h = Handle::new(&state, &app);
 	wake::set(ticker::wake);
 	ticker::start(move || {
-		if let Some(app) = weak.upgrade() {
-			let s = &mut *st.borrow_mut();
+		h.with(|s, app| {
 			s.live.seek(s.playback.position);
 			let shown = s.live.poll(&s.doc.project, &s.doc.view, &s.schemes);
 			s.playback.frames = s.live.frames.max(s.playback.frames);
@@ -2121,7 +2104,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 					write_export(s, &plan, position);
 				}
 				// the warning says so in the status bar
-				(Some(live::ExportNews::Stopped), Some(_)) => release_export(s, &app),
+				(Some(live::ExportNews::Stopped), Some(_)) => release_export(s, app),
 				_ => {}
 			}
 			// the browser's late answers: the H.264 profiles it encodes, its session for the spool
@@ -2136,14 +2119,14 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				match e.poll() {
 					Ok(progress) => app.set_export_progress(progress),
 					Err(outcome) => {
-						release_export(s, &app);
+						release_export(s, app);
 						match outcome {
 							export::Outcome::Written(written) => {
 								tracing::info!("{}", written.line);
 								export_completed(s);
 								#[cfg(target_arch = "wasm32")]
 								{
-									tell(&app, ui::Message::ExportReady, written.download.name());
+									tell(app, ui::Message::ExportReady, written.download.name());
 									s.ready = Some(written.download);
 								}
 							}
@@ -2152,7 +2135,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 							}
 							export::Outcome::Failed(e) => {
 								tracing::error!("{e}");
-								tell(&app, ui::Message::ExportFailed, "");
+								tell(app, ui::Message::ExportFailed, "");
 							}
 						}
 					}
@@ -2160,9 +2143,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			}
 			if !s.pasted.borrow().is_empty() {
 				paste(s);
-				s.show(&app);
+				s.show(app);
 			}
-			watch_scene_image(s, &app);
+			watch_scene_image(s, app);
 			// a focus request no box took within a frame lapses
 			let form = app.global::<ui::Form<'_>>();
 			s.focus_seen = form.get_focus_pending() && !s.focus_seen;
@@ -2173,7 +2156,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			for (layer, name, text) in picked {
 				if let Some(layer) = layer {
 					s.load_scheme(layer, &name, text);
-					s.show(&app);
+					s.show(app);
 					continue;
 				}
 				match s.doc.open_text(&name, &text) {
@@ -2183,19 +2166,19 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 					}
 					Err(e) => {
 						tracing::error!("cannot open {name}: {e}");
-						tell(&app, ui::Message::OpenFailed, &name);
+						tell(app, ui::Message::OpenFailed, &name);
 					}
 				}
 			}
 			if s.messages.take() {
-				s.messages.show(&app);
+				s.messages.show(app);
 			}
 			if let Some((why, full)) = &shown.failed {
-				tell(&app, if *full { ui::Message::StorageFull } else { ui::Message::RunFailed }, why);
+				tell(app, if *full { ui::Message::StorageFull } else { ui::Message::RunFailed }, why);
 			}
 			if let Some((layer, fit)) = shown.fitted {
 				s.fitted(layer, fit);
-				s.show(&app);
+				s.show(app);
 			}
 			if shown.running || shown.changed || shown.field.is_some() || shown.intensity.is_some() {
 				s.show_graphs();
@@ -2208,18 +2191,17 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			}
 			app.set_run_status(shown.status);
 			// Play and edits ask from here too
-			s.show_warning(&app);
+			s.show_warning(app);
 			app.global::<ui::Canvas<'_>>().set_computing(shown.computing);
 			// classic's `Shell::next_tick`: ticks while something moves, else news wakes the window
-			return shown.running
+			shown.running
 				|| shown.computing
 				|| s.live.fit_pending()
 				|| s.playback.playing
 				|| s.exporting.is_some()
 				|| s.scene_watch.pending()
-				|| form.get_focus_pending();
-		}
-		false
+				|| form.get_focus_pending()
+		})
 	});
 	// The browser's event loop outlives this function.
 	#[cfg(target_arch = "wasm32")]
@@ -2400,26 +2382,23 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 			}
 		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(state, app);
 	canvas.on_press(move |layer, x, y, control, shift| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		s.drags += 1;
-		let boxes = s.graphs.placed(layer);
-		let press = canvas::Press { layer, at: (x, y), control, shift };
-		s.gesture = s.overlays.press(&s.doc.project, &mut s.selection, press, s.drags, boxes);
-		app.global::<ui::Canvas<'_>>().set_dragging(s.gesture.is_some());
-		s.show(&app);
+		h.show(|s, app| {
+			s.drags += 1;
+			let boxes = s.graphs.placed(layer);
+			let press = canvas::Press { layer, at: (x, y), control, shift };
+			s.gesture = s.overlays.press(&s.doc.project, &mut s.selection, press, s.drags, boxes);
+			app.global::<ui::Canvas<'_>>().set_dragging(s.gesture.is_some());
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(state, app);
 	canvas.on_drag(move |dx, dy, shift| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		match &mut s.gesture {
+		h.with(|s, app| match &mut s.gesture {
 			Some(canvas::Gesture::Handle(drag)) => {
 				let key = drag.key().to_owned();
 				s.doc.edit_merging(Some(&key), |p| drag.apply(p, (dx, dy), shift));
-				s.show(&app);
+				s.show(app);
 			}
 			Some(canvas::Gesture::Marquee(m)) => {
 				m.stretch((dx, dy));
@@ -2429,94 +2408,84 @@ fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 				canvas.set_marquee_shown(true);
 			}
 			None => {}
-		}
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
-	canvas.on_release(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		s.finish_gesture(&app);
-		s.show(&app);
-	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(state, app);
+	canvas.on_release(move || h.show(State::finish_gesture));
+	let h = Handle::new(state, app);
 	canvas.on_brightness(move |layer, value| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		s.set_brightness(canvas::model_layer(layer), number::wide(value));
-		s.show(&app);
+		h.show(|s, _| s.set_brightness(canvas::model_layer(layer), number::wide(value)));
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(state, app);
 	canvas.on_auto(move |layer| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		let layer = canvas::model_layer(layer);
-		if let live::Fit::Done(fit) = s.live.auto(layer) {
-			s.fitted(layer, fit);
-		}
-		s.show(&app);
+		h.show(|s, _| {
+			let layer = canvas::model_layer(layer);
+			if let live::Fit::Done(fit) = s.live.auto(layer) {
+				s.fitted(layer, fit);
+			}
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(state, app);
 	canvas.on_hover(move |layer, x, y| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = st.borrow();
-		let canvas = app.global::<ui::Canvas<'_>>();
-		let under = s.graphs.under(layer, (x, y)).map_or(-1, |i| i32::try_from(i).unwrap_or(-1));
-		canvas.set_hover_layer(layer);
-		canvas.set_hover_box(under);
-		canvas.set_hover_tip(s.overlays.tip(&s.doc.project, layer, (x, y), s.graphs.placed(layer)));
+		h.read(|s, app| {
+			let canvas = app.global::<ui::Canvas<'_>>();
+			let under = s.graphs.under(layer, (x, y)).map_or(-1, |i| i32::try_from(i).unwrap_or(-1));
+			canvas.set_hover_layer(layer);
+			canvas.set_hover_box(under);
+			canvas.set_hover_tip(s.overlays.tip(&s.doc.project, layer, (x, y), s.graphs.placed(layer)));
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(state, app);
 	canvas.on_export_probe_csv(move |probe| {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		if let Ok(i) = usize::try_from(probe) {
-			s.selection.set(Node::Probe(i));
-			export_probe_csv(s, &app, i);
-			s.show(&app);
-		}
+		h.with(|s, app| {
+			if let Ok(i) = usize::try_from(probe) {
+				s.selection.set(Node::Probe(i));
+				export_probe_csv(s, app, i);
+				s.show(app);
+			}
+		});
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(state, app);
 	canvas.on_key(move |layer, key, shift| {
 		use ui::HandleKey;
-		let Some(app) = weak.upgrade() else { return false };
-		let s = &mut *st.borrow_mut();
-		let step = if shift { 10. } else { 1. };
-		// a lever turns counter-clockwise on Right and Up
-		let (d, turn) = match key {
-			HandleKey::Enter | HandleKey::Next | HandleKey::Previous => {
-				let taken = if key == HandleKey::Enter {
-					s.overlays.enter(&s.doc.project, &mut s.selection, layer, s.graphs.placed(layer))
-				} else {
-					let back = key == HandleKey::Previous;
-					s.overlays.tab(&s.doc.project, &mut s.selection, layer, back, s.graphs.placed(layer))
-				};
-				s.show(&app);
-				return taken;
+		h.with(|s, app| {
+			let step = if shift { 10. } else { 1. };
+			// a lever turns counter-clockwise on Right and Up
+			let (d, turn) = match key {
+				HandleKey::Enter | HandleKey::Next | HandleKey::Previous => {
+					let taken = if key == HandleKey::Enter {
+						s.overlays.enter(&s.doc.project, &mut s.selection, layer, s.graphs.placed(layer))
+					} else {
+						let back = key == HandleKey::Previous;
+						s.overlays.tab(&s.doc.project, &mut s.selection, layer, back, s.graphs.placed(layer))
+					};
+					s.show(app);
+					return taken;
+				}
+				HandleKey::Left => ((-step, 0.), -step),
+				HandleKey::Right => ((step, 0.), step),
+				HandleKey::Up => ((0., -step), step),
+				HandleKey::Down => ((0., step), -step),
+			};
+			let Some(key) = s.overlays.nudge_key(layer, &s.selection) else { return false };
+			let boxes = s.graphs.placed(layer);
+			if s.overlays.focused_box(layer, &s.doc.project, boxes).is_some() {
+				s.doc.edit_merging(Some(&key), |p| s.overlays.nudge_box(p, layer, d, boxes));
+			} else {
+				s.doc.edit_merging(Some(&key), |p| s.overlays.nudge(p, &s.selection, layer, d, turn));
 			}
-			HandleKey::Left => ((-step, 0.), -step),
-			HandleKey::Right => ((step, 0.), step),
-			HandleKey::Up => ((0., -step), step),
-			HandleKey::Down => ((0., step), -step),
-		};
-		let Some(key) = s.overlays.nudge_key(layer, &s.selection) else { return false };
-		let boxes = s.graphs.placed(layer);
-		if s.overlays.focused_box(layer, &s.doc.project, boxes).is_some() {
-			s.doc.edit_merging(Some(&key), |p| s.overlays.nudge_box(p, layer, d, boxes));
-		} else {
-			s.doc.edit_merging(Some(&key), |p| s.overlays.nudge(p, &s.selection, layer, d, turn));
-		}
-		s.show(&app);
-		true
+			s.show(app);
+			true
+		})
 	});
-	let (st, weak) = (state.clone(), app.as_weak());
+	let h = Handle::new(state, app);
 	canvas.on_cancel(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let s = &mut *st.borrow_mut();
-		end_gesture(&app);
-		if let Some(canvas::Gesture::Handle(drag)) = s.gesture.take() {
-			s.doc.cancel(drag.key());
-		}
-		s.show(&app);
+		h.show(|s, app| {
+			end_gesture(app);
+			if let Some(canvas::Gesture::Handle(drag)) = s.gesture.take() {
+				s.doc.cancel(drag.key());
+			}
+		});
 	});
 }
 
