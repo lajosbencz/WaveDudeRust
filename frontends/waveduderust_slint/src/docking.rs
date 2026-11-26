@@ -11,9 +11,60 @@ use slint_dock::{Arrangement, Axis, Dock, GroupId, Layout, Metrics, Point, Rect,
 use crate::models;
 use crate::ui::{self, AppWindow};
 
-/// The panes in View > Panes order with their default sides (Next's MainWindow.xaml).
-const PANES: [(&str, Side); 4] =
-	[("project", Side::Left), ("properties", Side::Right), ("messages", Side::Bottom), ("performance", Side::Bottom)];
+/// The panes round the preview, each with its `*-shown` and `*-place` properties of ui/app.slint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Pane {
+	Project,
+	Properties,
+	Messages,
+	Performance,
+}
+
+impl Pane {
+	/// View > Panes order.
+	const ALL: [Self; 4] = [Self::Project, Self::Properties, Self::Messages, Self::Performance];
+
+	/// The id the dock and the window know the pane by.
+	const fn id(self) -> &'static str {
+		match self {
+			Self::Project => "project",
+			Self::Properties => "properties",
+			Self::Messages => "messages",
+			Self::Performance => "performance",
+		}
+	}
+
+	/// Next's MainWindow.xaml.
+	const fn side(self) -> Side {
+		match self {
+			Self::Project => Side::Left,
+			Self::Properties => Side::Right,
+			Self::Messages | Self::Performance => Side::Bottom,
+		}
+	}
+
+	fn set(self, app: &AppWindow, shown: bool, at: ui::DockPlace) {
+		match self {
+			Self::Project => {
+				app.set_project_shown(shown);
+				app.set_project_place(at);
+			}
+			Self::Properties => {
+				app.set_properties_shown(shown);
+				app.set_properties_place(at);
+			}
+			Self::Messages => {
+				app.set_messages_shown(shown);
+				app.set_messages_place(at);
+			}
+			Self::Performance => {
+				app.set_performance_shown(shown);
+				app.set_performance_place(at);
+			}
+		}
+	}
+}
+
 /// Next's DockHost minimums: 60 px a pane, 100 px the preview.
 const PANE_MIN: Size = Size::new(60., 60.);
 /// The title bar and the tab strip are a row high (Theme.row-height).
@@ -57,7 +108,7 @@ impl Saver {
 fn default_arrangement() -> Arrangement {
 	let left = Arrangement::split(
 		Axis::Vertical,
-		[(1., Arrangement::tabs(["project"])), (2., Arrangement::tabs(["properties"]))],
+		[(1., Arrangement::tabs([Pane::Project.id()])), (2., Arrangement::tabs([Pane::Properties.id()]))],
 	);
 	Arrangement::split(Axis::Horizontal, [(1., left), (3., Arrangement::Centre)])
 }
@@ -66,8 +117,8 @@ fn default_arrangement() -> Arrangement {
 /// is logged.
 fn restore(saved: Option<&str>) -> Dock {
 	let mut dock = Dock::new(METRICS);
-	for (id, side) in PANES {
-		dock.register(id, side, PANE_MIN);
+	for pane in Pane::ALL {
+		dock.register(pane.id(), pane.side(), PANE_MIN);
 	}
 	let read = saved.map(|text| {
 		serde_json::from_str::<Arrangement>(text)
@@ -255,9 +306,9 @@ impl Docking {
 		});
 		models::update(&self.groups, groups);
 		models::update(&self.splitters, splitters);
-		for (id, _) in PANES {
-			let at = places.iter().find(|(p, _)| *p == id).map(|(_, p)| p.clone());
-			set_pane(app, id, at.is_some(), at.unwrap_or_default());
+		for pane in Pane::ALL {
+			let at = places.iter().find(|(p, _)| *p == pane.id()).map(|(_, p)| p.clone());
+			pane.set(app, at.is_some(), at.unwrap_or_default());
 		}
 	}
 }
@@ -289,28 +340,6 @@ fn drop_at(dock: &mut Dock, pane: &str, group: bool, pointer: Point, area: Rect)
 
 fn place(r: Rect, visible: bool) -> ui::DockPlace {
 	ui::DockPlace { x: r.x, y: r.y, width: r.width, height: r.height, visible }
-}
-
-fn set_pane(app: &AppWindow, id: &str, shown: bool, at: ui::DockPlace) {
-	match id {
-		"project" => {
-			app.set_project_shown(shown);
-			app.set_project_place(at);
-		}
-		"properties" => {
-			app.set_properties_shown(shown);
-			app.set_properties_place(at);
-		}
-		"messages" => {
-			app.set_messages_shown(shown);
-			app.set_messages_place(at);
-		}
-		"performance" => {
-			app.set_performance_shown(shown);
-			app.set_performance_place(at);
-		}
-		_ => unreachable!("a pane of PANES"),
-	}
 }
 
 #[cfg(test)]
