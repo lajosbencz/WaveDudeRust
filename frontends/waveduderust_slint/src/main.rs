@@ -64,6 +64,8 @@ struct State {
 	doc: Document,
 	scene_watch: scene_watch::SceneWatch,
 	nodes: Vec<Node>,
+	/// The window's tree rows, one per entry of `nodes`.
+	tree_rows: Rc<VecModel<ui::TreeRow>>,
 	selection: Selection,
 	/// Tree rows whose children are hidden.
 	collapsed: Vec<Node>,
@@ -205,7 +207,7 @@ impl State {
 		self.collapsed.retain(|&n| n == current || !tree::within(current, n));
 		let (nodes, rows) = tree::rows(&self.doc.project, &self.selection, &self.collapsed);
 		self.nodes = nodes;
-		app.set_tree_rows(ModelRc::new(VecModel::from(rows)));
+		models::update(&self.tree_rows, rows);
 		let current = self.nodes.iter().position(|&n| n == self.selection.current());
 		app.set_tree_current(current.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1));
 		app.set_file_name(self.doc.name().unwrap_or_default().into());
@@ -1430,6 +1432,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	let state = Rc::new(RefCell::new(State {
 		doc: Document::new(UNDO_STEPS),
 		nodes: Vec::new(),
+		tree_rows: Rc::default(),
 		selection: Selection::default(),
 		collapsed: Vec::new(),
 		live,
@@ -1468,6 +1471,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		gesture: None,
 		drags: 0,
 	}));
+	app.set_tree_rows(ModelRc::from(state.borrow().tree_rows.clone()));
 	app.set_native_access_keys(cfg!(windows));
 	apply_settings(&mut state.borrow_mut(), &app);
 	wire_window_events(&state, &app);
