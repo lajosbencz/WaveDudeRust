@@ -199,9 +199,6 @@ export component Timeline inherits Rectangle {
         // coincident brackets: the side of the pointer picks
         min(in, out) > 5px ? 0 : in < out ? 1 : out < in ? 2 : x > root.x-of(t.start) ? 2 : 1
     }
-    Tooltip {
-        text: @markdown("\{@tr("Click or drag to scrub; drag a bracket to move the start or end of the export range. Left/Right step a frame, PageUp/PageDown ten, Home/End jump to the start/end of the range")}");
-    }
 }
 
 component Divider inherits Rectangle {
