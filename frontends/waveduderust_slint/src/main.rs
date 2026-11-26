@@ -2196,6 +2196,8 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	place_window(&state.borrow().settings, &app);
 	let ran = app.run();
 	#[cfg(not(target_arch = "wasm32"))]
+	ticker::end();
+	#[cfg(not(target_arch = "wasm32"))]
 	if let Err(e) = &ran
 		&& let Some(context) = &context
 		&& gpu::lost(context)
@@ -2300,7 +2302,7 @@ mod ticker {
 	const TICK: std::time::Duration = std::time::Duration::from_millis(16);
 
 	thread_local! {
-		static TIMER: slint::Timer = slint::Timer::default();
+		static TIMER: std::cell::RefCell<Option<slint::Timer>> = const { std::cell::RefCell::new(None) };
 	}
 
 	/// A wake on its way to the event loop: the wakes before it lands are one.
@@ -2308,13 +2310,20 @@ mod ticker {
 
 	/// Starts ticking `tick`, which says whether to go on.
 	pub(super) fn start(tick: impl Fn() -> bool + 'static) {
-		TIMER.with(|t| {
-			t.start(slint::TimerMode::Repeated, TICK, move || {
-				if !tick() {
-					TIMER.with(slint::Timer::stop);
-				}
-			});
+		let timer = slint::Timer::default();
+		timer.start(slint::TimerMode::Repeated, TICK, move || {
+			if !tick() {
+				TIMER.with(|t| t.borrow().as_ref().map(slint::Timer::stop));
+			}
 		});
+		TIMER.with(|t| t.replace(Some(timer)));
+	}
+
+	/// Drops the tick and what it holds, the app's state with its run and GPU buffers, while the thread's other
+	/// locals (wgpu's) are alive: dropped by the thread-local destructors at exit, they may outlive them.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub(super) fn end() {
+		TIMER.with(std::cell::RefCell::take);
 	}
 
 	/// Ticks again; from any thread.
@@ -2325,7 +2334,9 @@ mod ticker {
 		let queued = slint::invoke_from_event_loop(|| {
 			WAKING.store(false, Ordering::Release);
 			TIMER.with(|t| {
-				if !t.running() {
+				if let Some(t) = t.borrow().as_ref()
+					&& !t.running()
+				{
 					t.restart();
 				}
 			});
