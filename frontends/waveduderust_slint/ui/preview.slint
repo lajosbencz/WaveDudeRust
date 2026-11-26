@@ -203,9 +203,11 @@ component Picture inherits Rectangle {
     }
     horizontal-stretch: 1;
     vertical-stretch: 1;
-    // a cell wider than the picture's aspect: the strip turned a quarter clockwise on the picture's left
-    property <bool> side: root.width * Canvas.height > root.height * Canvas.width;
-    property <length> band: strip.preferred-height;
+    // the strip turned a quarter clockwise on the picture's left when that leaves the picture larger than on top
+    property <bool> side: min((root.width - root.band) / (Canvas.width * 1px), root.height / (Canvas.height * 1px))
+        > min(root.width / (Canvas.width * 1px), (root.height - root.band) / (Canvas.height * 1px));
+    // the strip and its 4 px gap to the picture
+    property <length> band: strip.preferred-height + 4px;
     // the header strip (docs/ui/40): title, then the layer's brightness and Auto at the far end
     Rectangle {
         width: root.side ? root.height - 14px : root.width;
@@ -214,9 +216,9 @@ component Picture inherits Rectangle {
         y: root.side ? 10px + (self.width - root.band) / 2 : 0;
         transform-rotation: root.side ? 90deg : 0deg;
         strip := HorizontalLayout {
+            y: root.side ? 4px : 0;
+            height: root.band - 4px;
             padding-left: 6px;
-            padding-top: root.side ? 4px : 0;
-            padding-bottom: root.side ? 0 : 4px;
             spacing: 4px;
             // the caption goes before the title elides; 12 px at least after the title
             property <bool> roomy: true;
