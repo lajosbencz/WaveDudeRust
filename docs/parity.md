@@ -1,4 +1,4 @@
-# Parity with WaveDude NextNone done | enabled while a run or an export is active; the menu, Shift+F5 and Esc (window level) cancel a running export, else stop the run |None partial | Esc cancels a running export, else stops the run, when nothing focused took it; the number box reverts its edit (plain text fields do not: Esc passes on, the edit commits on blur); drag cancel comes with the handles (piece 5) |None done | app.slint `preview-keys`: a FocusScope over the pane, focused by a click on the pictures, plain keys only; the speed box swallows Space (timeline.slint) |None done | handled by the timeline when it is focused, else by app.slint `preview-keys` |
+# Parity with WaveDude Next
 
 The acceptance list for the Slint app ([`rebuild.md`](rebuild.md)): every user-visible feature of WaveDude Next, from
 [`ui/`](ui/) and Next's source (`$WAVEDUDE_NEXT_DIR`), with its state in
