@@ -5304,6 +5304,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "slint_dock"
+version = "0.4.2"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "slotmap"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

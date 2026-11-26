@@ -1,0 +1,22 @@
+[package]
+name = "slint_dock"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Docking layout for Slint: a split tree of tab groups around a fixed centre, its geometry, drop targets and save/restore"
+
+[lints]
+workspace = true
+
+[features]
+# Serialize and Deserialize on Arrangement, for save/restore.
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true
