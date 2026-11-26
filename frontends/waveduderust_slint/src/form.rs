@@ -643,6 +643,20 @@ pub(crate) fn rgb(colour: slint::Color) -> m::Rgb {
 }
 
 /// The colour picker's arithmetic.
+/// The first of `count` items from `from` on, `step` apart, that `enabled` lets pick (empty: all); -1 when none.
+pub(crate) fn next_enabled(enabled: &[bool], count: usize, from: i32, step: i32) -> i32 {
+	let mut at = from;
+	while let Ok(i) = usize::try_from(at)
+		&& i < count
+	{
+		if enabled.get(i).copied().unwrap_or(true) {
+			return at;
+		}
+		at += step;
+	}
+	-1
+}
+
 pub(crate) fn wire_colors(logic: &ui::ColorLogic<'_>) {
 	logic.on_to_hsv(|c| {
 		let (hue, saturation, value) = rgb(c).to_hsv();
@@ -1006,6 +1020,15 @@ fn add_point(points: &mut Vec<Point>) {
 
 #[cfg(test)]
 mod tests {
+	#[test]
+	fn the_next_item_that_can_be_picked_steps_past_greyed_ones_either_way() {
+		let enabled = [true, false, false, true];
+		assert_eq!(next_enabled(&enabled, 4, 1, 1), 3);
+		assert_eq!(next_enabled(&enabled, 4, 2, -1), 0);
+		assert_eq!(next_enabled(&[true, false], 2, 1, 1), -1, "none past the end");
+		assert_eq!(next_enabled(&[], 3, 2, 1), 2, "no list: every item");
+	}
+
 	use super::*;
 
 	#[test]

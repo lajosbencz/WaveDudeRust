@@ -270,7 +270,15 @@ impl Exports {
 			Kind::Frame(_) => true,
 		};
 		let enabled: Vec<bool> = self.formats.iter().map(|(f, _)| *f != ExportFormat::Mp4 || mp4).collect();
+		// a remembered format the browser cannot write gives way to the first it can
+		let other = usize::try_from(data.format)
+			.ok()
+			.filter(|&i| !enabled.get(i).copied().unwrap_or(true))
+			.and_then(|_| enabled.iter().position(|&e| e));
 		data.format_enabled = slint::ModelRc::new(slint::VecModel::from(enabled));
+		if let Some(index) = other {
+			self.format(data, i32::try_from(index).unwrap_or_default());
+		}
 	}
 
 	/// [`follow`](Self::follow) while the export cannot start, as the browser answers which profiles it encodes or

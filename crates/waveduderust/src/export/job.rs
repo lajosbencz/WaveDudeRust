@@ -76,6 +76,8 @@ pub struct ExportReport {
 	pub state: ExportState,
 	/// Frames written to every target.
 	pub frames_done: usize,
+	/// Frames the export was to write.
+	pub frames_total: usize,
 	/// Wall time since the job was made, idle time between steps included.
 	pub elapsed: Duration,
 	/// Files left in the job's file store: every output when completed or kept partial, none otherwise.
@@ -359,7 +361,13 @@ impl<'a> ExportJob<'a> {
 		} else {
 			tracing::debug!(?state, frames = done, elapsed = ?self.started.elapsed(), "export ended");
 		}
-		ExportReport { state, frames_done: done, elapsed: self.started.elapsed(), written }
+		ExportReport {
+			state,
+			frames_done: done,
+			frames_total: self.progress().1,
+			elapsed: self.started.elapsed(),
+			written,
+		}
 	}
 }
 

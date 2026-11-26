@@ -6,6 +6,8 @@ import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerDat
 
 // The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
 export global Form {
+    // the first item from `from` on, a `step` apart, that `enabled` lets pick among `count`; -1 when none
+    pure callback next-enabled(enabled: [bool], count: int, from: int, step: int) -> int;
     in property <FormKind> kind;
     // changes with the object shown, dropping text typed into the last one's boxes
     in property <int> token;
@@ -282,24 +284,37 @@ export component Choice inherits Rectangle {
     // a pick assigns `current-index`, ending its binding to `index`: the index is put back on each change
     changed index => { combo.current-index = root.index; }
     function pick(i: int) {
-        if (root.item-enabled.length > 0 && !root.item-enabled[i]) {
+        // arrows and the wheel step past a greyed item the way they moved
+        let to = Form.next-enabled(root.item-enabled, root.titles.length, i, i < root.index ? -1 : 1);
+        if (to < 0 || to == root.index) {
             combo.current-index = root.index;
             return;
         }
-        root.picked(i);
+        combo.current-index = to;
+        root.picked(to);
         root.committed();
     }
     horizontal-stretch: 1;
     min-height: max(Theme.row-height, combo.min-height);
     min-width: combo.min-width;
     preferred-width: combo.preferred-width;
+    // with greyed items, Return and Space open the menu that greys them instead of the combo box's popup
+    keys := FocusScope {
+        capture-key-pressed(e) => {
+            if (root.item-enabled.length > 0 && combo.has-focus && (e.text == Key.Return || e.text == " ")) {
+                menu.show({ x: 0, y: root.height });
+                return accept;
+            }
+            reject
+        }
     combo := ComboBox {
-        width: parent.width;
-        height: parent.height;
+        width: root.width;
+        height: root.height;
         enabled: root.enabled;
         model: root.titles;
         current-index: root.index;
         selected => { root.pick(self.current-index); }
+    }
     }
     // the combo box greys no item: a click opens a menu that does
     if root.item-enabled.length > 0 && root.enabled: TouchArea {

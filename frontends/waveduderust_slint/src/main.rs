@@ -636,6 +636,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 			if let Some(e) = &state.exporting {
 				e.cancel();
 				if e.waits().is_some() {
+					tracing::info!("Export cancelled before its first frame");
 					release_export(state, app);
 				}
 			} else {
@@ -1399,6 +1400,10 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	numbers.on_scrub(|spec, start, dx, scale| number::scrub(&spec, &start, f64::from(dx), f64::from(scale)).into());
 	form::wire_colors(&app.global::<ui::ColorLogic<'_>>());
 	app.global::<ui::Form<'_>>().set_pick_files(cfg!(not(target_arch = "wasm32")));
+	app.global::<ui::Form<'_>>().on_next_enabled(|enabled, count, from, step| {
+		let enabled: Vec<bool> = slint::Model::iter(&enabled).collect();
+		form::next_enabled(&enabled, usize::try_from(count).unwrap_or_default(), from, step)
+	});
 	app.global::<ui::Search<'_>>()
 		.on_matches(|text, query| text.to_lowercase().contains(query.trim().to_lowercase().as_str()));
 	let live = Live::new(context.as_ref())?;

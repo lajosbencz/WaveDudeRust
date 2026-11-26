@@ -559,7 +559,7 @@ mod native {
 					total.store(t, Ordering::Relaxed);
 				};
 				match export_frames(&request, frames.store.clone(), &made, progress, &cancel) {
-					Ok(report) => Outcome::of(report.state, report.frames_done, total.load(Ordering::Relaxed), || {
+					Ok(report) => Outcome::of(report.state, report.frames_done, report.frames_total, || {
 						let written = report.written.iter().map(|p| p.display().to_string()).collect::<Vec<_>>();
 						Written { line: format!("exported {}", written.join(", ")) }
 					}),
