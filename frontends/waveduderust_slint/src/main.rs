@@ -214,16 +214,6 @@ impl State {
 		app.set_file_path(self.doc.path.as_deref().map_or_default(|p| p.display().to_string()).into());
 		app.set_dirty(self.doc.dirty());
 		app.set_commands(self.commands());
-		// the native menus (muda) read `&` as an access key on Windows and drop it on macOS
-		let native = cfg!(any(windows, target_os = "macos"));
-		let recent: Vec<slint::SharedString> = self
-			.settings
-			.recent_files
-			.iter()
-			.map(|p| p.display().to_string())
-			.map(|p| if native { p.replace('&', "&&") } else { p }.into())
-			.collect();
-		app.set_recent_files(ModelRc::from(recent.as_slice()));
 		let mut change = live::Change::None;
 		if self.ran != self.doc.generation {
 			self.ran = self.doc.generation;
@@ -848,11 +838,25 @@ fn keep_window(state: &mut State, app: &AppWindow) {
 
 /// Puts `path` first in the recent files and saves the settings.
 #[cfg(not(target_arch = "wasm32"))]
-fn remember(state: &mut State, path: &std::path::Path) {
+fn remember(state: &mut State, app: &AppWindow, path: &std::path::Path) {
 	state.settings.push_recent(path);
 	if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
 		tracing::error!("{e}");
 	}
+	show_recent(&state.settings, app);
+}
+
+/// Pushes the recent files into File > Open recent.
+fn show_recent(settings: &waveduderust_platform::settings::Settings, app: &AppWindow) {
+	// the native menus (muda) read `&` as an access key on Windows and drop it on macOS
+	let native = cfg!(any(windows, target_os = "macos"));
+	let recent: Vec<slint::SharedString> = settings
+		.recent_files
+		.iter()
+		.map(|p| p.display().to_string())
+		.map(|p| if native { p.replace('&', "&&") } else { p }.into())
+		.collect();
+	app.set_recent_files(ModelRc::from(recent.as_slice()));
 }
 
 /// Pushes the Examples dialog's topics and the rows of the topic, filtered by the search.
@@ -1094,6 +1098,7 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 		tracing::warn!("language: {e}");
 	}
 	let s = &state.settings;
+	show_recent(s, app);
 	app.set_title_full_path(s.title_full_path);
 	app.set_preview_stacked(s.preview_orientation == waveduderust_platform::settings::Orientation::Vertical);
 	app.global::<ui::Form<'_>>().set_described(s.part_description_expanded);
@@ -1249,7 +1254,7 @@ fn save(state: &mut State, app: &AppWindow, pick: bool) -> bool {
 	match state.doc.save_as(&path) {
 		Ok(()) => {
 			tracing::info!("saved {}", path.display());
-			remember(state, &path);
+			remember(state, app, &path);
 			true
 		}
 		Err(e) => {
@@ -1397,7 +1402,7 @@ fn open(state: &mut State, app: &AppWindow, path: PathBuf) {
 	match state.doc.open(&path) {
 		Ok(()) => {
 			state.opened();
-			remember(state, &path);
+			remember(state, app, &path);
 			tracing::info!("Opened {}", path.display());
 		}
 		Err(e) => {
