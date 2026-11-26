@@ -3,6 +3,8 @@
 //! One driver thread per engine, no internal locking. The CPU engine is the
 //! reference; the GPU engine must agree within the tolerance in docs/physics.md.
 
+#[cfg(target_arch = "x86_64")]
+pub mod avx;
 pub mod capture;
 pub mod cpu;
 mod damage;
@@ -12,6 +14,7 @@ pub mod forcing;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 pub mod green;
+mod host;
 mod isa;
 mod mur;
 pub mod pml;
@@ -41,7 +44,7 @@ pub enum EngineError {
 ///
 /// A GPU failure in a call that returns no `Result` is kept and returned by the next call that does.
 pub trait WaveEngine: MaybeSend {
-	/// "CPU" or "GPU", for logs.
+	/// "CPU", "CPU (AVX2)" or "GPU", for logs.
 	fn name(&self) -> &'static str;
 	/// Whether the GPU runs the steps.
 	fn is_gpu(&self) -> bool {
@@ -139,7 +142,18 @@ pub struct Built {
 #[cfg(any(feature = "gpu", not(target_arch = "wasm32")))]
 fn cpu_instead(scene: Arc<SceneData>, options: EngineOptions, why: Fallback) -> Built {
 	tracing::warn!("the GPU engine is not available ({why}); the CPU engine runs instead");
-	Built { engine: Box::new(cpu::CpuEngine::new(scene, options)), fallback: Some(why) }
+	Built { engine: cpu_engine(scene, options), fallback: Some(why) }
+}
+
+/// The CPU engine: the portable one ([`cpu::CpuEngine`]), or the AVX2 one (`avx::AvxEngine`) when the environment
+/// variable `WAVEDUDE_CPU_ENGINE` is `avx` and the CPU is an x86-64 one with AVX2 and FMA. The AVX2 engine is opt-in
+/// until it is the faster.
+fn cpu_engine(scene: Arc<SceneData>, options: EngineOptions) -> Box<dyn WaveEngine> {
+	#[cfg(target_arch = "x86_64")]
+	if std::env::var_os("WAVEDUDE_CPU_ENGINE").is_some_and(|v| v == "avx") && avx::available() {
+		return Box::new(avx::AvxEngine::new(scene, options));
+	}
+	Box::new(cpu::CpuEngine::new(scene, options))
 }
 
 /// The engine for `scene`: the GPU's on `gpu` when given and it builds, else the CPU's.
@@ -155,14 +169,14 @@ pub async fn build_on(scene: Arc<SceneData>, options: EngineOptions, gpu: Option
 	if let Some(never) = gpu {
 		match never {}
 	}
-	Built { engine: Box::new(cpu::CpuEngine::new(scene, options)), fallback: None }
+	Built { engine: cpu_engine(scene, options), fallback: None }
 }
 
 /// The engine for `scene`, blocking: the GPU's when `prefer_gpu` and one is available, else the CPU's.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn build(scene: Arc<SceneData>, options: EngineOptions, prefer_gpu: bool) -> Built {
 	if !prefer_gpu {
-		return Built { engine: Box::new(cpu::CpuEngine::new(scene, options)), fallback: None };
+		return Built { engine: cpu_engine(scene, options), fallback: None };
 	}
 	#[cfg(feature = "gpu")]
 	{

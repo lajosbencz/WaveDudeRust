@@ -28,6 +28,9 @@
 //! ring included, take that run's values as constants and read neither plane there. The values are the same, so the
 //! result is the same bit for bit.
 //!
+//! State: the planes, the medium, the forcing, the probes and the damage, with the calls that do not depend on the
+//! passes, are host.rs's, which the AVX2 engine (engine/avx) shares; this module owns the passes.
+//!
 //! Threads: one driver thread; each pass fans out over rows, or blocks of rows, on the rayon pool, reading only its
 //! input fields.
 //!
@@ -44,57 +47,18 @@ use std::sync::Arc;
 use rayon::iter::Either;
 use rayon::prelude::*;
 
-use super::capture;
 use super::damage::{Damage, extent};
-use super::forcing::{IMAGE_LEVELS, SourceGroups, live};
+use super::host::{Host, Stages, host_engine};
 use super::isa;
-use super::mur::{MurChain, mur_chains};
 use super::pml::{self, CpuPml, Medium, XPart, XRows, XScratch, XShared, cut, cut_taps};
-use super::shared::{Shared, blend};
 use super::stencil::{INV12, K9_AXIS, K9_DIAGONAL, PAD, StencilCoefficients, TimeScheme, centred};
 use super::substeps::sub_steps;
-use super::types::{
-	Emitter, EngineOptions, FrameShape, PendingCapture, PendingProbes, ProbeCells, ProbeQueue, ProbeReadings,
-	SceneData, Snapshot,
-};
-use super::{EngineError, WaveEngine};
-use crate::model::Layer;
+use super::types::{EngineOptions, SceneData};
 
 /// The reference engine. See the module docs for the grid layout and the scheme.
 pub struct CpuEngine {
-	shared: Shared,
-	stride: usize,
-	/// The axis weights a0..a3 of the stencil.
-	axis: [f32; 4],
-	/// c2 / n^2 per padded cell.
-	c2: Vec<f32>,
-	/// d^(1/n) per padded cell.
-	d: Vec<f32>,
-	/// Cut bytes per padded cell (pml.rs, `cuts`); all 0 without mirrors.
-	cuts: Vec<u8>,
-	mirrors: bool,
-	u: Vec<f32>,
-	prev: Vec<f32>,
-	/// The modified equation's `c2 L u`, 0 on the padding; current outside the sub-step's fresh area and at its driven
-	/// cells (module docs, Fused passes).
-	w: Vec<f32>,
-	/// The intensity's EMA stages; empty unless the intensity is tracked.
-	s1: Vec<f32>,
-	s2: Vec<f32>,
-	mur: Vec<MurChain>,
-	pml: Option<CpuPml>,
-	groups: SourceGroups,
-	/// The source table of the current sub-step (forcing.rs).
-	values: Vec<f32>,
-	alpha: f32,
-	/// Per probe its layer and padded cells.
-	probes: Vec<(Layer, Vec<usize>)>,
-	probe_queue: ProbeQueue,
-	probe_reading: ProbeReadings,
-	/// The cells that hold a value (module docs, Damage).
-	damage: Damage,
-	/// Cells one pass reaches along an axis: the stencil's, the CPML's when there is a rim.
-	reach: usize,
+	/// The planes, the medium, the forcing, the probes and the damage (host.rs).
+	host: Host,
 	/// The runs of each grid row where `c2` and `d` hold one value (module docs, Uniform medium).
 	uniform: UniformRuns,
 	/// The padded cells of the sub-step's fresh area (module docs, Fused passes) the forcing drove, ascending.
@@ -123,220 +87,30 @@ impl CpuEngine {
 	/// An engine taking `n` sub-steps per step whatever the scene; below the CFL bound it diverges.
 	/// For tests of the bound.
 	pub fn with_sub_steps(scene: impl Into<Arc<SceneData>>, options: EngineOptions, n: u32) -> Self {
-		assert!(n >= 1, "at least one sub-step");
-		let scene = scene.into();
-		let stride = scene.stride();
-		let cells = scene.padded_cells();
-		let scheme = TimeScheme::of(options.stencil);
-		let stages = if options.track_intensity { cells } else { 0 };
-		let mut engine = Self {
-			stride,
-			axis: StencilCoefficients::of(options.stencil).axis.map(|a| a as f32),
-			c2: vec![0.0; cells],
-			d: vec![1.0; cells],
-			cuts: Vec::new(),
-			mirrors: false,
-			u: vec![0.0; cells],
-			prev: vec![0.0; cells],
-			w: if scheme == TimeScheme::ModifiedEquation { vec![0.0; cells] } else { Vec::new() },
-			s1: vec![0.0; stages],
-			s2: vec![0.0; stages],
-			mur: Vec::new(),
-			pml: None,
-			groups: SourceGroups::default(),
-			values: vec![0.0; IMAGE_LEVELS],
-			alpha: 0.0,
-			probes: Vec::new(),
-			probe_queue: ProbeQueue::default(),
-			probe_reading: ProbeReadings::default(),
-			damage: Damage::NONE,
-			reach: 0,
-			driven: Vec::new(),
-			uniform: UniformRuns::default(),
-			shared: Shared::new(scene, options, n),
-		};
-		engine.load_scene();
-		engine.update_alpha();
+		let host = Host::new(scene.into(), options, n);
+		let mut engine = Self { host, uniform: UniformRuns::default(), driven: Vec::new() };
+		engine.scene_loaded();
 		engine
 	}
 
-	/// Sets the field now and one sub-step before, each grid-sized (no padding), row-major.
-	/// For analytic tests that start from a given state.
-	pub fn set_field(&mut self, now: &[f32], before: &[f32]) {
-		let scene = &self.shared.scene;
-		let gw = scene.grid_width() as usize;
-		assert_eq!(now.len(), gw * scene.grid_height() as usize);
-		assert_eq!(before.len(), now.len());
-		for (gy, (a, b)) in now.chunks_exact(gw).zip(before.chunks_exact(gw)).enumerate() {
-			let at = scene.padded_index(0, gy);
-			self.u[at..at + gw].copy_from_slice(a);
-			self.prev[at..at + gw].copy_from_slice(b);
-		}
-		self.damage = Damage::all(gw, scene.grid_height() as usize);
-	}
-
-	/// The padded field buffer (see [`SceneData::stride`]).
-	pub fn field_padded(&self) -> &[f32] {
-		&self.u
-	}
-
-	// The inherent calls below take `&mut self` like the trait's, so they win method resolution on a
-	// `CpuEngine`: callers on the concrete type get no `Result`.
-
-	/// [`WaveEngine::advance_one_step`], which cannot fail here.
-	pub fn advance_one_step(&mut self) {
-		for k in 0..self.shared.sub_steps {
-			self.shared.source_values(&mut self.values, k);
-			self.sub_step(self.shared.accumulates(k));
-		}
-		self.shared.time += 1;
-	}
-
-	/// [`WaveEngine::sample_probes`], which cannot fail here.
-	pub fn sample_probes(&mut self, out: &mut ProbeReadings) {
-		out.clear();
-		for (layer, cells) in &self.probes {
-			match layer {
-				Layer::Field => out.push(cells.iter().map(|&c| self.u[c])),
-				Layer::Intensity => out.push(cells.iter().map(|&c| self.blended(c))),
-			}
-		}
-	}
-
-	/// Converts the canvas after the last step into `out`'s planes in `shape`, their allocations reused.
-	pub fn capture_into(&self, shape: &FrameShape, out: &mut Snapshot) {
-		let (scene, options) = (&self.shared.scene, &self.shared.options);
-		assert_eq!((shape.canvas_width, shape.canvas_height), (scene.canvas_width, scene.canvas_height));
-		capture::plane_rows(shape, Layer::Field, &mut out.field, |y, row| {
-			let at = scene.canvas_index(0, y);
-			row.copy_from_slice(&self.u[at..at + row.len()]);
-		});
-		if options.track_intensity {
-			let scale = options.intensity_scale as f32;
-			capture::plane_rows(shape, Layer::Intensity, &mut out.intensity, |y, row| {
-				let at = scene.canvas_index(0, y);
-				let n = row.len();
-				for ((r, &a), &b) in row.iter_mut().zip(&self.s1[at..at + n]).zip(&self.s2[at..at + n]) {
-					*r = blend(a, b, scale);
-				}
-			});
-		} else {
-			out.intensity.clear();
-		}
-		out.shape = *shape;
-		out.step = self.shared.time.saturating_sub(1);
-	}
-
-	/// [`WaveEngine::capture_frame`], which cannot fail here.
-	pub fn capture_frame(&mut self, shape: &FrameShape) -> Snapshot {
-		let mut out = Snapshot::new(*shape);
-		self.capture_into(shape, &mut out);
-		out
-	}
-
-	/// [`WaveEngine::prepare_frame`], which cannot fail here.
-	pub fn prepare_frame(&mut self) -> (Vec<f32>, Vec<f32>) {
-		let stages = (!self.s1.is_empty()).then_some((&self.s1[..], &self.s2[..]));
-		self.shared.canvas_frame(&self.u, stages)
-	}
-
-	/// Copies the scene's maps into the padded buffers at the sub-step scale and builds the cuts, the Mur
-	/// chains, the PML and the source groups.
-	fn load_scene(&mut self) {
-		let (scene, n) = (&self.shared.scene, self.shared.sub_steps);
-		scene.fill_sub_step_medium(n, &mut self.c2, &mut self.d);
-		self.uniform = UniformRuns::of(&self.c2, &self.d, self.stride, scene.grid_width() as usize);
-		self.cuts = pml::cuts(scene);
-		self.mirrors = self.cuts.iter().any(|&c| c != 0);
-		self.mur = mur_chains(scene, &self.c2, &self.d);
-		let coefficients = StencilCoefficients::of(self.shared.options.stencil);
-		self.pml = CpuPml::new(scene, n, self.axis, coefficients.cross as f32);
-		let pml = if self.pml.is_some() { pml::REACH } else { 0 };
-		self.reach = coefficients.reach().max(pml);
-		self.group_sources();
-	}
-
-	fn update_alpha(&mut self) {
-		self.alpha = self.shared.alpha();
-	}
-
-	fn group_sources(&mut self) {
-		self.groups = self.shared.groups();
-		self.values.resize(self.shared.sources.table_len(), 0.0);
-	}
-
-	/// Adds the sub-step's forcing `F` to `w` at the driven cells, where the modified equation takes `A u`
-	/// (forcing.rs). A driven cell of `fresh` first takes `w = c2 L u`, which the inner pass left to the outer, and
-	/// joins `driven`, from which the outer pass reads it.
-	fn force_w(&mut self, fresh: &Damage) {
-		let s = self.stride;
-		self.driven.clear();
-		for (cell, run) in self.groups.iter() {
-			let mut live_values = run.iter().map(|&e| self.values[e as usize]).filter(|&f| live(f)).peekable();
-			if live_values.peek().is_none() {
-				continue;
-			}
-			let (gx, gy) = (cell % s - PAD, cell / s - PAD);
-			if fresh.x.contains(&gx) && fresh.y.contains(&gy) {
-				let cut = if self.mirrors { self.cuts[cell] } else { 0 };
-				self.w[cell] = self.c2[cell] * drp(&plane_rows(&self.u, cell / s, s), gx, &self.axis, cut);
-				self.driven.push(cell);
-			}
-			let mut v = self.w[cell];
-			for f in live_values {
-				v += f;
-			}
-			self.w[cell] = v;
-			self.damage.include(cell, s);
-		}
-		self.driven.sort_unstable();
-		self.driven.dedup();
-	}
-
-	/// Adds `h F` to the next field at the driven cells, where leapfrog takes `h A u`, and moves the
-	/// intensity stages of the last sub-step to the forced value.
-	fn force_next(&mut self, intensity: bool) {
-		let rest = 1.0 - self.alpha;
-		for (cell, run) in self.groups.iter() {
-			let (before, h) = (self.prev[cell], centred(self.d[cell]));
-			let mut v = before;
-			let mut driven = false;
-			for &e in run {
-				let f = self.values[e as usize];
-				if live(f) {
-					v += h * f;
-					driven = true;
-				}
-			}
-			if !driven {
-				continue;
-			}
-			self.prev[cell] = v;
-			self.damage.include(cell, self.stride);
-			if intensity {
-				let s1 = self.s1[cell] + (v * v - before * before) * rest;
-				self.s2[cell] += (s1 - self.s1[cell]) * rest;
-				self.s1[cell] = s1;
-			}
-		}
-	}
-
-	/// The intensity stages and their weight when `intensity` (and tracked), for [`grid_rows`].
-	fn stages<'a>(s1: &'a mut [f32], s2: &'a mut [f32], alpha: f32, intensity: bool) -> Option<Stages<'a>> {
-		(intensity && !s1.is_empty()).then_some(Stages { s1, s2, alpha })
+	/// Rebuilds the uniform runs from the medium the host loaded.
+	fn scene_loaded(&mut self) {
+		let h = &self.host;
+		self.uniform = UniformRuns::of(&h.c2, &h.d, h.stride, h.gw());
 	}
 
 	/// The leapfrog pass of the 9-point stencil: writes the next field over `prev`, and the intensity
 	/// stages when `intensity`.
 	fn leapfrog_pass(&mut self, intensity: bool) {
-		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
-		let (u, c2, d, cuts, mirrors, uniform) = (&self.u, &self.c2, &self.d, &self.cuts, self.mirrors, &self.uniform);
-		let (area, xs) = (&self.damage, self.damage.x.clone());
-		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
+		let (s, gw) = (self.host.stride, self.host.shared.scene.grid_width() as usize);
+		let (u, c2, d, cuts, mirrors, uniform) =
+			(&self.host.u, &self.host.c2, &self.host.d, &self.host.cuts, self.host.mirrors, &self.uniform);
+		let (area, xs) = (&self.host.damage, self.host.damage.x.clone());
+		let stages = Host::stages(&mut self.host.s1, &mut self.host.s2, self.host.alpha, intensity);
 		let medium = Medium { cuts, c2 };
-		let mut rim = self.pml.as_mut().and_then(|p| p.begin(0, u, medium, 1.0, area));
+		let mut rim = self.host.pml.as_mut().and_then(|p| p.begin(0, u, medium, 1.0, area));
 		grid_rows(
-			&mut self.prev,
+			&mut self.host.prev,
 			stages,
 			s,
 			area,
@@ -384,12 +158,13 @@ impl CpuEngine {
 	/// The modified equation's first pass: `w = c2 L u` on the damaged cells but those of `fresh`, which the outer pass
 	/// computes in its ring (module docs, Fused passes).
 	fn inner_pass(&mut self, fresh: &Damage) {
-		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
-		let (u, c2, cuts, axis, mirrors) = (&self.u, &self.c2, &self.cuts, &self.axis, self.mirrors);
-		let (area, xs) = (&self.damage, &self.damage.x);
-		let mut rim = self.pml.as_mut().and_then(|p| p.begin(0, u, Medium { cuts, c2 }, 1.0, area));
+		let (s, gw) = (self.host.stride, self.host.shared.scene.grid_width() as usize);
+		let (u, c2, cuts, axis, mirrors) =
+			(&self.host.u, &self.host.c2, &self.host.cuts, &self.host.axis, self.host.mirrors);
+		let (area, xs) = (&self.host.damage, &self.host.damage.x);
+		let mut rim = self.host.pml.as_mut().and_then(|p| p.begin(0, u, Medium { cuts, c2 }, 1.0, area));
 		grid_rows(
-			&mut self.w,
+			&mut self.host.w,
 			None,
 			s,
 			area,
@@ -419,11 +194,19 @@ impl CpuEngine {
 	/// the intensity stages when `intensity`. Each block of rows keeps the 7 rows of `w` its stencil reads in a ring,
 	/// computing `w = c2 L u` on `fresh` and taking the plane's elsewhere (module docs, Fused passes).
 	fn outer_pass(&mut self, intensity: bool, fresh: &Damage) {
-		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
-		let (u, w, c2, d, cuts, axis, mirrors, driven) =
-			(&self.u, &self.w, &self.c2, &self.d, &self.cuts, &self.axis, self.mirrors, &self.driven);
+		let (s, gw) = (self.host.stride, self.host.shared.scene.grid_width() as usize);
+		let (u, w, c2, d, cuts, axis, mirrors, driven) = (
+			&self.host.u,
+			&self.host.w,
+			&self.host.c2,
+			&self.host.d,
+			&self.host.cuts,
+			&self.host.axis,
+			self.host.mirrors,
+			&self.driven,
+		);
 		let uniform = &self.uniform;
-		let (area, xs) = (&self.damage, &self.damage.x);
+		let (area, xs) = (&self.host.damage, &self.host.damage.x);
 		// The columns of `w` the stencil reads.
 		let wide = xs.start.saturating_sub(3)..(xs.end + 3).min(gw);
 		// Padded row `r` of `w` into its slot of `ring`.
@@ -453,11 +236,11 @@ impl CpuEngine {
 				cells[c - at] = w[c];
 			}
 		};
-		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
+		let stages = Host::stages(&mut self.host.s1, &mut self.host.s2, self.host.alpha, intensity);
 		let block = area.y.len().div_ceil(2 * rayon::current_num_threads()).max(MIN_BLOCK);
-		let mut rim = self.pml.as_mut().and_then(|p| p.begin(1, w, Medium { cuts, c2 }, INV12, area));
+		let mut rim = self.host.pml.as_mut().and_then(|p| p.begin(1, w, Medium { cuts, c2 }, INV12, area));
 		grid_blocks(
-			&mut self.prev,
+			&mut self.host.prev,
 			s,
 			area,
 			block,
@@ -499,79 +282,44 @@ impl CpuEngine {
 	/// The cells of `known` whose `w` the outer pass computes itself (module docs, Fused passes): all but the band the
 	/// CPML reads `w` from.
 	fn fresh(&self, known: &Damage) -> Damage {
-		let scene = &self.shared.scene;
+		let scene = &self.host.shared.scene;
 		let (gw, gh) = (scene.grid_width() as usize, scene.grid_height() as usize);
-		let band = self.pml.as_ref().map_or(0, CpuPml::band);
+		let band = self.host.pml.as_ref().map_or(0, CpuPml::band);
 		let within = |r: &Range<usize>, len: usize| r.start.max(band)..r.end.min(len.saturating_sub(band));
 		let fresh = Damage { x: within(&known.x, gw), y: within(&known.y, gh) };
 		if fresh.is_empty() { Damage::NONE } else { fresh }
 	}
 
-	/// The damage grown by one pass's reach: every cell the pass and the CPML after it can change.
-	fn reached(&self, damage: &Damage) -> Damage {
-		let scene = &self.shared.scene;
-		damage.grown(self.reach, scene.grid_width() as usize, scene.grid_height() as usize)
-	}
-
 	/// One sub-step; the next field ends in `u`. Each pass runs on the damage grown by its reach; the damage then
 	/// takes in what the pass and the forcing made non-zero (module docs, Damage).
 	fn sub_step(&mut self, intensity: bool) {
-		let known = self.damage.clone();
-		let area = match self.shared.scheme {
+		let known = self.host.damage.clone();
+		let area = match self.host.shared.scheme {
 			TimeScheme::Leapfrog => {
-				self.damage = self.reached(&known);
+				self.host.damage = self.host.reached(&known);
 				self.leapfrog_pass(intensity);
-				self.force_next(intensity);
-				std::mem::replace(&mut self.damage, known)
+				self.host.force_next(intensity);
+				std::mem::replace(&mut self.host.damage, known)
 			}
 			TimeScheme::ModifiedEquation => {
 				// `w` is written on the inner area, which a later sub-step's covers, as the damage only grows; on
 				// `fresh` it is left to the outer pass.
-				self.damage = self.reached(&known);
+				self.host.damage = self.host.reached(&known);
 				let fresh = self.fresh(&known);
 				self.inner_pass(&fresh);
-				self.force_w(&fresh);
-				let inner = std::mem::replace(&mut self.damage, known.clone());
-				let excited = extent(&self.w, self.stride, &inner, known);
-				self.damage = self.reached(&excited);
+				self.host.force_w(&fresh, &mut self.driven);
+				let inner = std::mem::replace(&mut self.host.damage, known.clone());
+				let excited = extent(&self.host.w, self.host.stride, &inner, known);
+				self.host.damage = self.host.reached(&excited);
 				self.outer_pass(intensity, &fresh);
-				std::mem::replace(&mut self.damage, excited)
+				std::mem::replace(&mut self.host.damage, excited)
 			}
 		};
-		self.damage = extent(&self.prev, self.stride, &area, self.damage.clone());
-		self.apply_open_edges();
-		std::mem::swap(&mut self.u, &mut self.prev);
-	}
-
-	/// Mur's condition on the first ring (mur.rs, `mur_weights`); the second and third rings, which only the DRP stencil
-	/// reads, continue the field linearly from the edge cell through the first ring. Chaining Mur ring by ring grows a
-	/// mode where two open edges meet at Courant numbers above about 0.75 (docs/physics.md, Open edges).
-	fn apply_open_edges(&mut self) {
-		for m in &self.mur {
-			let [a, b, c] = m.weights;
-			let [r1, r2, r3] = m.rings;
-			let (edge, first) = (self.prev[m.inner], a * self.u[m.inner] + b * self.prev[m.inner] + c * self.u[r1]);
-			self.prev[r1] = first;
-			self.prev[r2] = 2.0 * first - edge;
-			self.prev[r3] = 3.0 * first - 2.0 * edge;
-		}
-	}
-
-	/// The intensity at padded cell `cell`, 0 when it is not tracked.
-	fn blended(&self, cell: usize) -> f32 {
-		if self.s1.is_empty() {
-			return 0.0;
-		}
-		blend(self.s1[cell], self.s2[cell], self.shared.options.intensity_scale as f32)
+		self.host.end_sub_step(&area);
 	}
 }
 
-/// The intensity stages a pass advances, and the EMA weight.
-struct Stages<'a> {
-	s1: &'a mut [f32],
-	s2: &'a mut [f32],
-	alpha: f32,
-}
+host_engine!(CpuEngine, "CPU");
 
 /// Runs `row(r, cells)` on the `gw` grid cells of every padded row `r` of `out` (rows of `s`) that `area`
 /// covers, in parallel; `row` writes `area`'s columns. Then advances the intensity stages of those cells by
@@ -715,7 +463,7 @@ fn grid_blocks<T>(
 }
 
 /// `buf` in chunks of `size`, or `n` Nones without it.
-fn chunks_or_none(
+pub(super) fn chunks_or_none(
 	buf: Option<&mut [f32]>,
 	size: usize,
 	n: usize,
@@ -732,14 +480,14 @@ const MIN_RUN: usize = 16;
 /// The runs of at least [`MIN_RUN`] grid cells per grid row where `c2` and `d` hold one value, bit for bit, in order:
 /// `runs[rows[gy]..rows[gy + 1]]` for grid row `gy`, as column ranges.
 #[derive(Default)]
-struct UniformRuns {
+pub(super) struct UniformRuns {
 	runs: Vec<(u32, u32)>,
 	rows: Vec<u32>,
 }
 
 impl UniformRuns {
 	/// The runs of the padded `c2` and `d` (row length `s`) of a grid `gw` cells wide.
-	fn of(c2: &[f32], d: &[f32], s: usize, gw: usize) -> Self {
+	pub(super) fn of(c2: &[f32], d: &[f32], s: usize, gw: usize) -> Self {
 		let gh = (c2.len() / s).saturating_sub(2 * PAD);
 		let mut out = Self { runs: Vec::new(), rows: vec![0] };
 		for gy in 0..gh {
@@ -760,7 +508,7 @@ impl UniformRuns {
 	}
 
 	/// The runs of grid row `gy`.
-	fn row(&self, gy: usize) -> &[(u32, u32)] {
+	pub(super) fn row(&self, gy: usize) -> &[(u32, u32)] {
 		match (self.rows.get(gy), self.rows.get(gy + 1)) {
 			(Some(&a), Some(&b)) => &self.runs[a as usize..b as usize],
 			_ => &[],
@@ -771,7 +519,7 @@ impl UniformRuns {
 /// Hands `f` the pieces of `xs` in order, each with the `(c2, d)` of the uniform run it lies in (from the row's `c2`
 /// and `d`), or None between runs.
 #[inline(always)]
-fn medium_spans(
+pub(super) fn medium_spans(
 	runs: &[(u32, u32)],
 	c2: &[f32],
 	d: &[f32],
@@ -820,7 +568,7 @@ fn nine_span(u: &[f32], at: usize, s: usize, next: &mut [f32], c2: impl Fn(usize
 /// that is only 8-connected; the rule is symmetric between the two cells of a tap. Same order of
 /// operations as the uncut rows.
 #[inline]
-fn nine_point(u: &[f32], i: usize, s: usize, cut: u8) -> f32 {
+pub(super) fn nine_point(u: &[f32], i: usize, s: usize, cut: u8) -> f32 {
 	let v = u[i];
 	let [nw, ne, sw, se] = pml::diagonal_cuts(cut);
 	let tap = |k: usize, cut: bool| if cut { 0.0 } else { u[k] };
@@ -832,18 +580,18 @@ fn nine_point(u: &[f32], i: usize, s: usize, cut: u8) -> f32 {
 
 /// Seven padded rows (`s` values each, grid column x at `PAD + x`) from 3 above to 3 below a centre row: the rows a
 /// DRP Laplacian of the centre row reads, from a plane or from the fused outer pass's ring of `w` rows.
-type Rows<'a> = [&'a [f32]; 7];
+pub(super) type Rows<'a> = [&'a [f32]; 7];
 
 /// The rows of the plane `u` (row length `s`) around padded row `r`.
 #[inline]
-fn plane_rows(u: &[f32], r: usize, s: usize) -> Rows<'_> {
+pub(super) fn plane_rows(u: &[f32], r: usize, s: usize) -> Rows<'_> {
 	std::array::from_fn(|k| &u[(r + k - 3) * s..][..s])
 }
 
 /// The DRP Laplacian at grid column `x` of the centre row of `rows`, the taps beyond a mirror dropped (`cut`):
 /// `sum over m of a_m sum over ring m of (u_k - u)`, the stencil since `a0 = -2 (a1 + a2 + a3)`.
 #[inline]
-fn drp(rows: &Rows<'_>, x: usize, a: &[f32; 4], cut: u8) -> f32 {
+pub(super) fn drp(rows: &Rows<'_>, x: usize, a: &[f32; 4], cut: u8) -> f32 {
 	let i = PAD + x;
 	let c = rows[3][i];
 	let x = cut_taps(std::array::from_fn(|k| rows[3][i + k - 3]), cut >> cut::X_SHIFT);
@@ -854,7 +602,7 @@ fn drp(rows: &Rows<'_>, x: usize, a: &[f32; 4], cut: u8) -> f32 {
 
 /// The cut bytes of the `gw` grid cells from padded cell `at`, or None when the cells `xs` of the row have no mirror.
 #[inline]
-fn row_cuts<'a>(cuts: &'a [u8], mirrors: bool, at: usize, gw: usize, xs: &Range<usize>) -> Option<&'a [u8]> {
+pub(super) fn row_cuts<'a>(cuts: &'a [u8], mirrors: bool, at: usize, gw: usize, xs: &Range<usize>) -> Option<&'a [u8]> {
 	if !mirrors {
 		return None;
 	}
@@ -865,7 +613,7 @@ fn row_cuts<'a>(cuts: &'a [u8], mirrors: bool, at: usize, gw: usize, xs: &Range<
 /// Hands `f` the maximal runs of `cuts` within `xs` in order, each with whether its cells drop a tap (a non-zero
 /// cut byte). A row crossed by a mirror has only a few cut cells near it; the runs between take the row-slice loops.
 #[inline(always)]
-fn cut_spans(cuts: &[u8], xs: Range<usize>, mut f: impl FnMut(Range<usize>, bool)) {
+pub(super) fn cut_spans(cuts: &[u8], xs: Range<usize>, mut f: impl FnMut(Range<usize>, bool)) {
 	let mut start = xs.start;
 	while start < xs.end {
 		let cut = cuts[start] != 0;
@@ -925,117 +673,12 @@ fn accumulate(s1: &mut [f32], s2: &mut [f32], v: &[f32], alpha: f32) {
 	);
 }
 
-impl WaveEngine for CpuEngine {
-	fn name(&self) -> &'static str {
-		"CPU"
-	}
-
-	fn scene(&self) -> &SceneData {
-		&self.shared.scene
-	}
-
-	fn options(&self) -> &EngineOptions {
-		&self.shared.options
-	}
-
-	fn time(&self) -> u32 {
-		self.shared.time
-	}
-
-	fn sub_steps(&self) -> u32 {
-		self.shared.sub_steps
-	}
-
-	fn reset(&mut self) {
-		for b in [&mut self.u, &mut self.prev, &mut self.w, &mut self.s1, &mut self.s2] {
-			b.fill(0.0);
-		}
-		self.damage = Damage::NONE;
-		if let Some(p) = &mut self.pml {
-			p.reset();
-		}
-		self.shared.reset();
-		self.probe_queue.clear();
-	}
-
-	fn set_track_intensity(&mut self, on: bool) {
-		if self.shared.options.track_intensity != on {
-			self.shared.options.track_intensity = on;
-			let stages = if on { self.u.len() } else { 0 };
-			self.s1 = vec![0.0; stages];
-			self.s2 = vec![0.0; stages];
-		}
-	}
-
-	fn set_emitters(&mut self, emitters: &[Emitter]) {
-		self.shared.set_emitters(emitters);
-		self.group_sources();
-		self.update_alpha();
-	}
-
-	fn set_probes(&mut self, probes: &[ProbeCells]) {
-		let scene = &self.shared.scene;
-		self.probes = probes
-			.iter()
-			.map(|p| (p.layer, p.cells.iter().map(|&(x, y)| scene.canvas_index(x as usize, y as usize)).collect()))
-			.collect();
-		self.probe_queue.set_lengths(probes.iter().map(|p| p.cells.len()).collect());
-	}
-
-	fn try_replace_scene(&mut self, scene: &Arc<SceneData>) -> bool {
-		let Some(n) = self.shared.replacement(scene) else { return false };
-		self.shared.replace_scene(scene.clone(), n);
-		self.load_scene();
-		self.update_alpha();
-		true
-	}
-
-	fn advance_one_step(&mut self) -> Result<(), EngineError> {
-		CpuEngine::advance_one_step(self);
-		Ok(())
-	}
-
-	fn sample_probes(&mut self, out: &mut ProbeReadings) -> Result<(), EngineError> {
-		CpuEngine::sample_probes(self, out);
-		Ok(())
-	}
-
-	fn queue_probes(&mut self) -> Result<(), EngineError> {
-		let mut reading = std::mem::take(&mut self.probe_reading);
-		CpuEngine::sample_probes(self, &mut reading);
-		self.probe_queue.push(reading.values());
-		self.probe_reading = reading;
-		Ok(())
-	}
-
-	fn pending_probes(&mut self) -> Result<PendingProbes, EngineError> {
-		Ok(PendingProbes::done(self.probe_queue.end()))
-	}
-
-	fn drain_probes(&mut self, pending: PendingProbes, f: &mut dyn FnMut(&ProbeReadings)) -> Result<(), EngineError> {
-		self.probe_queue.drain(pending.end(), f);
-		Ok(())
-	}
-
-	fn begin_capture(&mut self, shape: &FrameShape, mut into: Snapshot) -> Result<PendingCapture, EngineError> {
-		self.capture_into(shape, &mut into);
-		Ok(PendingCapture::done(into))
-	}
-
-	fn finish_capture(&mut self, pending: PendingCapture) -> Result<Snapshot, EngineError> {
-		Ok(pending.snapshot)
-	}
-
-	fn prepare_frame(&mut self) -> Result<(Vec<f32>, Vec<f32>), EngineError> {
-		Ok(CpuEngine::prepare_frame(self))
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::engine::types::ImageSource;
-	use crate::model::{Edges, PulseShape, Scene, Stencil};
+	use crate::engine::WaveEngine;
+	use crate::engine::types::{Emitter, FrameShape, ImageSource, ProbeCells, ProbeReadings, Snapshot};
+	use crate::model::{Edges, Layer, PulseShape, Scene, Stencil};
 
 	fn options(stencil: Stencil) -> EngineOptions {
 		EngineOptions {
@@ -1096,7 +739,7 @@ mod tests {
 
 	#[test]
 	fn outside_emitters_are_dropped() {
-		assert_eq!(engine(Edges::Open, 0, Stencil::NinePoint).shared.sources.emitters.len(), 1);
+		assert_eq!(engine(Edges::Open, 0, Stencil::NinePoint).host.shared.sources.emitters.len(), 1);
 	}
 
 	#[test]
@@ -1105,12 +748,12 @@ mod tests {
 		for _ in 0..80 {
 			e.advance_one_step();
 		}
-		let (s, rows) = (e.stride, e.u.len() / e.stride);
+		let (s, rows) = (e.host.stride, e.host.u.len() / e.host.stride);
 		let padding = (0..rows * s).filter(|&i| {
 			let (x, y) = (i % s, i / s);
 			x < PAD || y < PAD || x >= s - PAD || y >= rows - PAD
 		});
-		assert!(padding.into_iter().all(|i| e.u[i] == 0.0 && e.prev[i] == 0.0 && e.w[i] == 0.0));
+		assert!(padding.into_iter().all(|i| e.host.u[i] == 0.0 && e.host.prev[i] == 0.0 && e.host.w[i] == 0.0));
 		let (field, intensity) = e.prepare_frame();
 		assert!(field.iter().any(|&v| v != 0.0));
 		assert!(intensity.iter().all(|&v| v >= 0.0) && intensity.iter().any(|&v| v > 0.0));
@@ -1240,22 +883,22 @@ mod tests {
 	#[test]
 	fn alpha_follows_the_lowest_level() {
 		let mut e = engine(Edges::Open, 0, Stencil::NinePoint);
-		assert_eq!(e.alpha, (-1.0f64 / 10.0).exp() as f32);
+		assert_eq!(e.host.alpha, (-1.0f64 / 10.0).exp() as f32);
 		let mut low = emitter(1, 1);
 		low.level = 50.0;
 		e.set_emitters(&[low]);
-		assert_eq!(e.alpha, (-1.0f64 / 20.0).exp() as f32);
+		assert_eq!(e.host.alpha, (-1.0f64 / 20.0).exp() as f32);
 		e.set_emitters(&[]);
-		assert_eq!(e.alpha, (-1.0f64 / 10.0).exp() as f32);
-		e.shared.sources.level_used[0] = true;
-		e.update_alpha();
-		assert_eq!(e.alpha, (-1.0f64 / 10.0).exp() as f32, "level 0 is not a source level");
+		assert_eq!(e.host.alpha, (-1.0f64 / 10.0).exp() as f32);
+		e.host.shared.sources.level_used[0] = true;
+		e.host.update_alpha();
+		assert_eq!(e.host.alpha, (-1.0f64 / 10.0).exp() as f32, "level 0 is not a source level");
 	}
 
 	/// Every buffer the step writes but `w`, which holds stale values on the fresh area (module docs, Fused passes), as
 	/// bits.
 	fn state(e: &CpuEngine) -> Vec<u32> {
-		[&e.u, &e.prev, &e.s1, &e.s2].into_iter().flatten().map(|v| v.to_bits()).collect()
+		[&e.host.u, &e.host.prev, &e.host.s1, &e.host.s2].into_iter().flatten().map(|v| v.to_bits()).collect()
 	}
 
 	#[test]
@@ -1274,12 +917,12 @@ mod tests {
 				for e in [&mut damaged, &mut whole] {
 					e.set_emitters(&[emitter(30, 22), emitter(30, 41)]);
 				}
-				let cells = gw * whole.shared.scene.grid_height() as usize;
+				let cells = gw * whole.host.shared.scene.grid_height() as usize;
 				whole.set_field(&vec![0.0; cells], &vec![0.0; cells]);
 				damaged.advance_one_step();
 				whole.advance_one_step();
 				let all = Damage::all(gw, cells / gw);
-				assert!(damaged.damage != all, "{stencil:?} {edges:?} {rim}: nothing skipped");
+				assert!(damaged.host.damage != all, "{stencil:?} {edges:?} {rim}: nothing skipped");
 				for step in 1..150 {
 					damaged.advance_one_step();
 					whole.advance_one_step();
@@ -1295,12 +938,12 @@ mod tests {
 		for _ in 0..5 {
 			e.advance_one_step();
 		}
-		assert_eq!(e.damage, Damage::NONE);
+		assert_eq!(e.host.damage, Damage::NONE);
 		e.set_emitters(&[emitter(20, 15)]);
 		e.advance_one_step();
-		assert!(!e.damage.is_empty());
+		assert!(!e.host.damage.is_empty());
 		e.reset();
-		assert_eq!(e.damage, Damage::NONE);
+		assert_eq!(e.host.damage, Damage::NONE);
 	}
 
 	#[test]
