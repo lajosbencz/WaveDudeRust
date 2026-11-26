@@ -32,7 +32,7 @@ export struct ExportData {
     // the browser's dialog: file names alone, an export of several files always archived
     browser: bool,
     reason: ExportReason,
-    // per H.264 profile, whether the browser encodes it; empty until it answered
+    // per H.264 profile, whether the encoder encodes it (OpenH264 natively, the browser's); empty until it answered
     profile-supported: [bool],
 }
 
@@ -138,12 +138,12 @@ export component ExportLayer inherits Rectangle {
                 Text { text: @tr("H.264 profile"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
                 Choice {
                     titles: ["Baseline", "Main", "High"];
-                    item-enabled: root.data.browser ? root.data.profile-supported : [];
+                    item-enabled: root.data.profile-supported;
                     index: root.data.profile;
                     picked(i) => { root.data.profile = i; }
                 }
             }
-            // OpenH264, the one native encoder, encodes Baseline alone
+            // a remembered profile the encoder lacks: the export uses its best
             if root.data.mp4 && !root.data.browser && root.data.profile != 0: Text {
                 text: @tr("OpenH264 encodes Baseline only; the export uses Baseline.");
                 color: Theme.text-dim;

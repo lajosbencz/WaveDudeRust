@@ -312,6 +312,8 @@ mod native {
 				archive: settings.export_archive,
 				archive_path: archive_path.to_string_lossy().as_ref().into(),
 				profile: profile_index(settings),
+				// OpenH264, the one native encoder, encodes Baseline alone
+				profile_supported: slint::ModelRc::new(slint::VecModel::from(vec![true, false, false])),
 				..ExportData::default()
 			};
 			let dialog = Self { kind, formats };

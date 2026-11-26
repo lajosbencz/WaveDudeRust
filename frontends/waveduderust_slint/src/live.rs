@@ -927,7 +927,16 @@ impl Live {
 				state,
 				steps_done: i32::try_from(status.steps_done).unwrap_or(i32::MAX),
 				steps: i32::try_from(self.steps).unwrap_or(i32::MAX),
-				engine: self.engine.as_str().into(),
+				// a run that stepped without the GPU engine's frames fell back to the CPU engine (the reason is in Messages)
+				engine: if self.engine.starts_with("GPU")
+					&& status.steps_done > 0
+					&& status.store.is_some()
+					&& status.device_frames.is_none()
+				{
+					"CPU".into()
+				} else {
+					self.engine.as_str().into()
+				},
 			},
 			made: None,
 			step: None,
