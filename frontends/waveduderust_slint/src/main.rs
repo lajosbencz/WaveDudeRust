@@ -2121,8 +2121,11 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			s.live.prefetch(|count| s.playback.ahead(count, shown.made));
 			app.set_transport(transport_state(&s.playback, &shown, &s.doc.view, s.live.paused()));
 			app.set_commands(s.commands());
-			match (shown.export, s.exporting.as_ref().and_then(export::Exporting::waits).cloned()) {
-				(Some(live::ExportNews::Ready), Some((plan, position))) => write_export(s, &plan, position),
+			match (shown.export, s.exporting.as_ref().and_then(export::Exporting::waits)) {
+				(Some(live::ExportNews::Ready), Some(waiting)) => {
+					let (plan, position) = waiting.clone();
+					write_export(s, &plan, position);
+				}
 				// the warning says so in the status bar
 				(Some(live::ExportNews::Stopped), Some(_)) => release_export(s, &app),
 				_ => {}
