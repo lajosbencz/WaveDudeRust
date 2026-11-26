@@ -40,6 +40,7 @@ fn main() {
 	embed_examples();
 	println!("cargo::rerun-if-changed=lang");
 	let config = slint_build::CompilerConfiguration::new()
+		.with_style("cupertino".into())
 		.with_bundled_translations("lang")
 		.with_default_translation_context(slint_build::DefaultTranslationContext::None)
 		.with_library_paths(std::collections::HashMap::from([("slint-dock".to_owned(), slint_dock::ui_dir())]));

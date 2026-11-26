@@ -21,9 +21,3 @@ Upstream bugs and gaps, worked around or accepted here; each goes once the fix i
   platform's keys, titles passed unchanged, so Windows reads a `&` as an access key and the drawn bar would show it.
   `ui/app.slint` (`menu-text`) gives Windows Next's access keys and the other platforms plain titles. Accepted, not
   worked around. To report to slint-ui/slint: access keys and keyboard entry for the drawn `MenuBar`.
-
-- Slint 1.19's drawn `MenuBar` takes its metrics from the style: Fluent sets a 40 px minimum height, 10 px between
-  titles and 11 px inside each (`widgets/fluent/menu.slint`). Slint has no compact or density setting, no
-  spacing or height property on `MenuBar`, and no app-supplied styles; Cupertino's 24 px bar would restyle every
-  widget. Accepted, not worked around. To report to slint-ui/slint: a density or spacing property for the drawn
-  `MenuBar`.
