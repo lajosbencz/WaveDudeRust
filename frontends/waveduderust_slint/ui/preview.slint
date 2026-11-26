@@ -262,8 +262,8 @@ component Picture inherits VerticalLayout {
             clicked => { Canvas.auto(root.layer); }
         }
     }
+    // transparent round the picture: the pane's background shows
     cell := Rectangle {
-        background: #000000;
         clip: true;
         // logical pixels per canvas pixel: fitted, then zoomed
         property <float> fit: max(0.001, min(self.width / (Canvas.width * 1px), self.height / (Canvas.height * 1px)));
@@ -281,6 +281,8 @@ component Picture inherits VerticalLayout {
             y: cell.top;
             width: Canvas.width * cell.scale * 1px;
             height: Canvas.height * cell.scale * 1px;
+            // black at the canvas size without a frame (docs/ui/40, Layout)
+            background: #000000;
             Image {
                 x: 0;
                 y: 0;

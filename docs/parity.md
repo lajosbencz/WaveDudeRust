@@ -956,7 +956,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | V-08 | Splitter hover / focus colour (hover bg, accent on focus) | PreviewPane.xaml:690-700 | 40 Layout (not stated) | done | hover background, accent while focused |
 | V-09 | Hidden picture gives room to other, splitter collapses, restore previous split | PreviewPane.xaml | 40 Layout | done | a hidden picture takes its splitter with it; the split is kept for its return |
 | V-10 | Picture fitted uniformly, centred, 4 px margin, cell hugs picture | Controls/PictureFrame.cs:49 | 40 Layout | done | contain-fitted; rest matched in general (decision 0033) |
-| V-11 | Without run/frame: black at canvas size; image scene shows scene image | PreviewPane.xaml.cs:828 | 40 Layout | partial | black rect; no canvas-size black frame; image scene not shown before first frame (unverified) |
+| V-11 | Without run/frame: black at canvas size; image scene shows scene image | PreviewPane.xaml.cs:828 | 40 Layout | partial | black at the canvas size, the pane background round it; image scene not shown before first frame (unverified) |
 | V-12 | Header strip title ("Field"/"Intensity" semi-bold) | PreviewPane.xaml:560-600, Controls/HeaderStrip.cs | 40 Header strip | done | title; rest matched in general (decision 0033) |
 | V-13 | Header caption "Brightness" | PreviewPane.xaml:586 | 40 Header strip | done | preview.slint Picture header |
 | V-14 | Header Brightness number box 64 px, log, 0.0001..100000, = Display brightness | PreviewPane.xaml:586, Controls/NumberBox.cs | 40 Header strip | done | NumberBox 64 px with the Display form spec (log, 0.0001..100000); Canvas.field-/intensity-brightness from the view |
