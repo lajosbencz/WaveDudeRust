@@ -1627,124 +1627,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 
 	let h = Handle::new(&state, &app);
 	wake::set(ticker::wake);
-	ticker::start(move || {
-		h.with(|s, app| {
-			s.live.seek(s.playback.position);
-			let shown = s.live.poll(&s.doc.project, &s.doc.view, &s.schemes);
-			s.playback.frames = s.live.frames.max(s.playback.frames);
-			if s.playback.live && !shown.running && shown.made.is_some_and(|m| m + 1 >= s.playback.frames) {
-				s.playback.position = shown.made.unwrap_or_default();
-				s.playback.live = false;
-			}
-			s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
-			s.live.prefetch(|count| s.playback.ahead(count, shown.made));
-			app.set_transport(transport_state(&s.playback, &shown, &s.doc.view, s.live.paused()));
-			app.set_commands(s.commands());
-			match (shown.export, s.exporting.as_ref().and_then(export::Exporting::waits)) {
-				(Some(live::ExportNews::Ready), Some(waiting)) => {
-					let (plan, position) = waiting.clone();
-					write_export(s, &plan, position);
-				}
-				// the warning says so in the status bar
-				(Some(live::ExportNews::Stopped), Some(_)) => release_export(s, app),
-				_ => {}
-			}
-			// the browser's late answers: the H.264 profiles it encodes, its session for the spool
-			#[cfg(target_arch = "wasm32")]
-			if let Some(dialog) = &s.export_dialog {
-				let mut data = app.get_export_data();
-				if dialog.refresh(&mut data) {
-					app.set_export_data(data);
-				}
-			}
-			if let Some(e) = &mut s.exporting {
-				match e.poll() {
-					Ok(progress) => app.set_export_progress(progress),
-					Err(outcome) => {
-						release_export(s, app);
-						match outcome {
-							export::Outcome::Written(written) => {
-								tracing::info!("{}", written.line);
-								export_completed(s);
-								#[cfg(target_arch = "wasm32")]
-								{
-									tell(app, ui::Message::ExportReady, written.download.name());
-									s.ready = Some(written.download);
-								}
-							}
-							export::Outcome::Cancelled { done, total } => {
-								tracing::info!("{}", export::cancelled_line(done, total));
-							}
-							export::Outcome::Failed(e) => {
-								tracing::error!("{e}");
-								tell(app, ui::Message::ExportFailed, "");
-							}
-						}
-					}
-				}
-			}
-			if !s.pasted.borrow().is_empty() {
-				paste(s);
-				s.show(app);
-			}
-			watch_scene_image(s, app);
-			// a focus request no box took within a frame lapses
-			let form = app.global::<ui::Form<'_>>();
-			s.focus_seen = form.get_focus_pending() && !s.focus_seen;
-			if !s.focus_seen {
-				form.set_focus_pending(false);
-			}
-			let picked = s.inbox.take();
-			for (layer, name, text) in picked {
-				if let Some(layer) = layer {
-					s.load_scheme(layer, &name, text);
-					s.show(app);
-					continue;
-				}
-				match s.doc.open_text(&name, &text) {
-					Ok(()) => {
-						s.opened();
-						tracing::info!("Opened {name}");
-					}
-					Err(e) => {
-						tracing::error!("cannot open {name}: {e}");
-						tell(app, ui::Message::OpenFailed, &name);
-					}
-				}
-			}
-			if s.messages.take() {
-				s.messages.show(app);
-			}
-			if let Some((why, full)) = &shown.failed {
-				tell(app, if *full { ui::Message::StorageFull } else { ui::Message::RunFailed }, why);
-			}
-			if let Some((layer, fit)) = shown.fitted {
-				s.fitted(layer, fit);
-				s.show(app);
-			}
-			if shown.running || shown.changed || shown.field.is_some() || shown.intensity.is_some() {
-				s.show_graphs();
-			}
-			if let Some(image) = shown.field {
-				app.set_field(image);
-			}
-			if let Some(image) = shown.intensity {
-				app.set_intensity(image);
-			}
-			app.set_run_status(shown.status);
-			// Play and edits ask from here too
-			s.show_warning(app);
-			app.global::<ui::Canvas<'_>>().set_computing(shown.computing);
-			// classic's `Shell::next_tick`: ticks while something moves, else news wakes the window
-			shown.running
-				|| shown.computing
-				|| s.live.fit_pending()
-				|| s.playback.playing
-				|| s.exporting.is_some()
-				|| s.scene_watch.pending()
-				|| form.get_focus_pending()
-		})
-	});
+	ticker::start(move || h.with(tick));
 	// The browser's event loop outlives this function.
 	#[cfg(target_arch = "wasm32")]
 	std::mem::forget(app.clone_strong());
@@ -1762,6 +1645,124 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	}
 	ran?;
 	Ok(())
+}
+
+/// One tick of the window: the run's news, playback, the export, the inboxes; whether something still moves.
+fn tick(s: &mut State, app: &AppWindow) -> bool {
+	s.live.seek(s.playback.position);
+	let shown = s.live.poll(&s.doc.project, &s.doc.view, &s.schemes);
+	s.playback.frames = s.live.frames.max(s.playback.frames);
+	if s.playback.live && !shown.running && shown.made.is_some_and(|m| m + 1 >= s.playback.frames) {
+		s.playback.position = shown.made.unwrap_or_default();
+		s.playback.live = false;
+	}
+	s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
+	s.live.prefetch(|count| s.playback.ahead(count, shown.made));
+	app.set_transport(transport_state(&s.playback, &shown, &s.doc.view, s.live.paused()));
+	app.set_commands(s.commands());
+	match (shown.export, s.exporting.as_ref().and_then(export::Exporting::waits)) {
+		(Some(live::ExportNews::Ready), Some(waiting)) => {
+			let (plan, position) = waiting.clone();
+			write_export(s, &plan, position);
+		}
+		// the warning says so in the status bar
+		(Some(live::ExportNews::Stopped), Some(_)) => release_export(s, app),
+		_ => {}
+	}
+	// the browser's late answers: the H.264 profiles it encodes, its session for the spool
+	#[cfg(target_arch = "wasm32")]
+	if let Some(dialog) = &s.export_dialog {
+		let mut data = app.get_export_data();
+		if dialog.refresh(&mut data) {
+			app.set_export_data(data);
+		}
+	}
+	if let Some(e) = &mut s.exporting {
+		match e.poll() {
+			Ok(progress) => app.set_export_progress(progress),
+			Err(outcome) => {
+				release_export(s, app);
+				match outcome {
+					export::Outcome::Written(written) => {
+						tracing::info!("{}", written.line);
+						export_completed(s);
+						#[cfg(target_arch = "wasm32")]
+						{
+							tell(app, ui::Message::ExportReady, written.download.name());
+							s.ready = Some(written.download);
+						}
+					}
+					export::Outcome::Cancelled { done, total } => {
+						tracing::info!("{}", export::cancelled_line(done, total));
+					}
+					export::Outcome::Failed(e) => {
+						tracing::error!("{e}");
+						tell(app, ui::Message::ExportFailed, "");
+					}
+				}
+			}
+		}
+	}
+	if !s.pasted.borrow().is_empty() {
+		paste(s);
+		s.show(app);
+	}
+	watch_scene_image(s, app);
+	// a focus request no box took within a frame lapses
+	let form = app.global::<ui::Form<'_>>();
+	s.focus_seen = form.get_focus_pending() && !s.focus_seen;
+	if !s.focus_seen {
+		form.set_focus_pending(false);
+	}
+	let picked = s.inbox.take();
+	for (layer, name, text) in picked {
+		if let Some(layer) = layer {
+			s.load_scheme(layer, &name, text);
+			s.show(app);
+			continue;
+		}
+		match s.doc.open_text(&name, &text) {
+			Ok(()) => {
+				s.opened();
+				tracing::info!("Opened {name}");
+			}
+			Err(e) => {
+				tracing::error!("cannot open {name}: {e}");
+				tell(app, ui::Message::OpenFailed, &name);
+			}
+		}
+	}
+	if s.messages.take() {
+		s.messages.show(app);
+	}
+	if let Some((why, full)) = &shown.failed {
+		tell(app, if *full { ui::Message::StorageFull } else { ui::Message::RunFailed }, why);
+	}
+	if let Some((layer, fit)) = shown.fitted {
+		s.fitted(layer, fit);
+		s.show(app);
+	}
+	if shown.running || shown.changed || shown.field.is_some() || shown.intensity.is_some() {
+		s.show_graphs();
+	}
+	if let Some(image) = shown.field {
+		app.set_field(image);
+	}
+	if let Some(image) = shown.intensity {
+		app.set_intensity(image);
+	}
+	app.set_run_status(shown.status);
+	// Play and edits ask from here too
+	s.show_warning(app);
+	app.global::<ui::Canvas<'_>>().set_computing(shown.computing);
+	// classic's `Shell::next_tick`: ticks while something moves, else news wakes the window
+	shown.running
+		|| shown.computing
+		|| s.live.fit_pending()
+		|| s.playback.playing
+		|| s.exporting.is_some()
+		|| s.scene_watch.pending()
+		|| form.get_focus_pending()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
