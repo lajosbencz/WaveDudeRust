@@ -2105,6 +2105,9 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 			if s.messages.take() {
 				s.messages.show(&app);
 			}
+			if let Some((why, full)) = &shown.failed {
+				tell(&app, if *full { ui::Message::StorageFull } else { ui::Message::RunFailed }, why);
+			}
 			if let Some((layer, fit)) = shown.fitted {
 				s.fitted(layer, fit);
 				s.show(&app);

@@ -144,13 +144,18 @@ impl Playback {
 		self.position = next;
 	}
 
-	/// The frames playback shows next while playing: the position and up to `count` after it at the stride of the
-	/// last tick, wrapped to the in point with Loop on, never past the out point or `made`; none when stopped.
+	/// The frames playback shows next: playing, the position and up to `count` after it at the stride of the last
+	/// tick, wrapped to the in point with Loop on, never past the out point or `made`; paused, the position and up to
+	/// `count` around it, nearest first, the next before the previous, for stepping either way.
 	pub(crate) fn ahead(&self, count: usize, made: Option<u32>) -> Vec<u32> {
-		if !self.playing {
-			return Vec::new();
-		}
 		let (start, end) = self.range();
+		if !self.playing {
+			let last = made.map_or(end, |m| m.min(end));
+			let after = (1..).map(|k| self.position.checked_add(k).filter(|&f| f <= last));
+			let before = (1..).map(|k| self.position.checked_sub(k).filter(|&f| f >= start));
+			let around = after.zip(before).take(count).flat_map(|(a, b)| [a, b]).flatten();
+			return std::iter::once(self.position).chain(around).take(count + 1).collect();
+		}
 		let mut frames = vec![self.position];
 		let mut at = self.position;
 		while frames.len() <= count {
@@ -235,7 +240,8 @@ mod tests {
 		p.start = Some(2);
 		assert_eq!(p.ahead(3, None), [4, 8, 3, 7], "wrapped to the in point");
 		p.pause();
-		assert!(p.ahead(3, None).is_empty());
+		assert_eq!(p.ahead(3, None), [4, 5, 3, 6], "paused: the nearest around the position, the next first");
+		assert_eq!(p.ahead(4, Some(5)), [4, 5, 3, 2], "never past the newest frame of the run");
 	}
 
 	#[test]

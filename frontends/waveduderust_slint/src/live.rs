@@ -229,6 +229,8 @@ pub(crate) struct Shown {
 	pub(crate) computing: bool,
 	/// A pending Auto's layer and brightness (`None`: nothing to fit).
 	pub(crate) fitted: Option<(Layer, Option<f64>)>,
+	/// The run failed since the last poll: why, and whether the storage was full.
+	pub(crate) failed: Option<(String, bool)>,
 	pub(crate) export: Option<ExportNews>,
 }
 
@@ -840,11 +842,13 @@ impl Live {
 		let status = self.worker.status();
 		let state = std::mem::discriminant(&status.state);
 		let changed = self.last_state != Some(state);
+		let mut failed = None;
 		if changed {
 			self.last_state = Some(state);
 			if let WorkState::Failed(e) = &status.state {
 				self.fit = None;
 				tracing::error!("the run failed: {e}");
+				failed = Some((e.to_string(), e.storage_full()));
 			}
 		}
 		let state = self.started.map_or(RunState::None, |_| match &status.state {
@@ -897,6 +901,7 @@ impl Live {
 			computing: false,
 			changed,
 			fitted,
+			failed,
 			export: None,
 		};
 		self.poll_export(&status.state);

@@ -2,7 +2,7 @@ import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // The messages the app shows; `none` while none is.
-export enum Message { none, crashed, save-changes, discard-frames, export-running, scene-image, replace-it, replace-them, open-failed, save-failed, export-failed }
+export enum Message { none, crashed, save-changes, discard-frames, export-running, scene-image, replace-it, replace-them, open-failed, save-failed, export-failed, run-failed, storage-full }
 
 // A message and the one value its text names: a file's name or path, or the version.
 export struct Modal {
@@ -27,7 +27,8 @@ export component ModalLayer inherits Rectangle {
     property <bool> confirms: modal.message == Message.discard-frames || modal.message == Message.export-running
         || modal.message == Message.replace-it || modal.message == Message.replace-them;
     property <bool> asks: modal.message == Message.save-changes || root.confirms;
-    property <bool> fails: modal.message == Message.crashed || modal.message == Message.open-failed || modal.message == Message.save-failed || modal.message == Message.export-failed;
+    property <bool> fails: modal.message == Message.crashed || modal.message == Message.open-failed || modal.message == Message.save-failed || modal.message == Message.export-failed
+        || modal.message == Message.run-failed || modal.message == Message.storage-full;
     // the scene image file changed: Load file is the default
     property <bool> reloads: modal.message == Message.scene-image;
     // the button Enter presses
@@ -87,6 +88,9 @@ export component ModalLayer inherits Rectangle {
                         : modal.message == Message.open-failed ? @tr("Could not open '{}'.", modal.arg)
                         : modal.message == Message.save-failed ? @tr("Could not save '{}'.", modal.arg)
                         : modal.message == Message.export-failed ? @tr("The export failed.")
+                        : modal.message == Message.run-failed ? @tr("The simulation failed: {}", modal.arg)
+                        : modal.message == Message.storage-full ? @tr("The simulation failed: {}", modal.arg) + "\n"
+                            + @tr("The storage is full. Close other WaveDude Rust tabs or free disk space, then try again.")
                         : "";
                     wrap: word-wrap;
                     color: Theme.text;
