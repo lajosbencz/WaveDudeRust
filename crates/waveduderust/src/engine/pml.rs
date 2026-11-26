@@ -213,7 +213,7 @@ pub fn first(t: &[f32; 7]) -> f32 {
 pub struct CpuPml {
 	strips: Strips,
 	stride: usize,
-	x: Vec<[f32; 4]>,
+	x: Columns,
 	y: Vec<[f32; 4]>,
 	axis: [f32; 4],
 	cross: f32,
@@ -224,6 +224,21 @@ pub struct CpuPml {
 	/// side: `2 (rim + 6)` values a row.
 	z: Vec<f32>,
 	zeros: Vec<f32>,
+}
+
+/// An axis's coefficients `[b, a, 1/kappa, (1/kappa)']` per coordinate ([`axis_table`]) as one column each, so the
+/// x strips' loops read them as row slices and vectorise.
+struct Columns([Vec<f32>; 4]);
+
+impl Columns {
+	fn of(table: &[[f32; 4]]) -> Self {
+		Self(std::array::from_fn(|j| table.iter().map(|c| c[j]).collect()))
+	}
+
+	/// The `n` coordinates from `g0`.
+	fn span(&self, g0: usize, n: usize) -> [&[f32]; 4] {
+		self.0.each_ref().map(|c| &c[g0..][..n])
+	}
 }
 
 /// The medium a pass runs over: the cut bytes and `c2` per padded cell, `c2` at the sub-step scale.
@@ -258,7 +273,7 @@ impl CpuPml {
 		Some(Self {
 			strips,
 			stride: scene.stride(),
-			x: axis_table(&scene.pml, strips.gw, dt),
+			x: Columns::of(&axis_table(&scene.pml, strips.gw, dt)),
 			y: axis_table(&scene.pml, strips.gh, dt),
 			axis,
 			cross,
@@ -385,7 +400,7 @@ impl CpuPml {
 						continue;
 					}
 					z_span(zs, field, base, s, cross, d, g0 as isize - 3);
-					let (cut, x, zs) = (&cuts[base + g0..][..rim], &x[g0..][..rim], &*zs);
+					let (cut, x, zs) = (&cuts[base + g0..][..rim], x.span(g0, rim), &*zs);
 					if any_cut(cut, cut::X_SHIFT) {
 						psi_x_span::<true>(span, zs, cut, x);
 					} else {
@@ -413,9 +428,10 @@ impl CpuPml {
 		let mid_start = xs.start.max(rim);
 		let mid = mid_start..xs.end.min(right_start).max(mid_start);
 		let xi_rows = &mut xi_x[ys.start * 2 * rim..ys.end * 2 * rim];
+		let zeros = &self.zeros[..rim];
 		rows.par_chunks_mut(s).zip(xi_rows.par_chunks_mut(2 * rim)).enumerate().for_each_init(
-			|| vec![0.0f32; rim + 4],
-			|padded, (k, (line, xi_x))| {
+			|| (vec![0.0f32; rim + 4], vec![0.0f32; gw]),
+			|(padded, plain), (k, (line, xi_x))| {
 				let gy = ys.start + k;
 				let base = (gy + PAD) * s + PAD;
 				let (line, c2) = (&mut line[PAD..][..gw], &c2[base..][..gw]);
@@ -426,41 +442,36 @@ impl CpuPml {
 					z,
 					psi,
 					cut: &cuts[base + g0..][..rim],
-					x: &pml.x[g0..][..rim],
+					x: pml.x.span(g0, rim),
 					c2: &c2[g0..][..rim],
 				});
 				let (line_l, rest) = line.split_at_mut(rim);
 				let (line_mid, line_r) = rest.split_at_mut(right_start - rim);
 				match Self::strip_row(strips, gy).map(|r| &delta[r * gw..][..gw]) {
 					Some(d) => {
-						let cross = pml.cross;
-						// delta_y plus chi D2x delta_y, delta_y 0 beyond the grid
-						let plain = |gx: usize| {
-							let mut sum = d[gx];
-							if cross != 0.0 {
-								let left = if gx > 0 { d[gx - 1] } else { 0.0 };
-								let right = if gx + 1 < gw { d[gx + 1] } else { 0.0 };
-								sum += cross * (left + right - 2.0 * d[gx]);
+						let (lc, rc) = (0..rim, right_start..gw);
+						for (on, cols) in [(sides[0], lc.clone()), (true, mid.clone()), (sides[1], rc.clone())] {
+							if on {
+								plain_cells(d, pml.cross, cols, plain);
 							}
-							sum
-						};
+						}
 						if sides[0] {
-							pml.correct_span(&left, xl, line_l, padded, scale, plain);
+							pml.correct_span(&left, xl, line_l, padded, scale, &plain[lc]);
 						}
 						if sides[1] {
-							pml.correct_span(&right, xr, line_r, padded, scale, |k| plain(right_start + k));
+							pml.correct_span(&right, xr, line_r, padded, scale, &plain[rc]);
 						}
-						let (cells, c2) = (&mut line_mid[mid.start - rim..mid.end - rim], &c2[mid.clone()]);
-						for (k, (v, &c)) in cells.iter_mut().zip(c2).enumerate() {
-							*v += scale * c * plain(mid.start + k);
+						let cells = &mut line_mid[mid.start - rim..mid.end - rim];
+						for ((v, &c), &p) in cells.iter_mut().zip(&c2[mid.clone()]).zip(&plain[mid.clone()]) {
+							*v += scale * c * p;
 						}
 					}
 					None => {
 						if sides[0] {
-							pml.correct_span(&left, xl, line_l, padded, scale, |_| 0.0);
+							pml.correct_span(&left, xl, line_l, padded, scale, zeros);
 						}
 						if sides[1] {
-							pml.correct_span(&right, xr, line_r, padded, scale, |_| 0.0);
+							pml.correct_span(&right, xr, line_r, padded, scale, zeros);
 						}
 					}
 				}
@@ -478,7 +489,7 @@ impl CpuPml {
 		line: &mut [f32],
 		padded: &mut [f32],
 		scale: f32,
-		init: impl Fn(usize) -> f32,
+		init: &[f32],
 	) {
 		if any_cut(span.cut, cut::X_SHIFT) {
 			self.correct_cells::<true>(span, xi, line, padded, scale, init);
@@ -487,6 +498,8 @@ impl CpuPml {
 		}
 	}
 
+	/// [`correct_span`](Self::correct_span) on row slices: the taps of z~ and of psi are shifted slices, so the
+	/// loop has no bounds checks and vectorises without mirrors.
 	#[inline(always)]
 	fn correct_cells<const CUT: bool>(
 		&self,
@@ -495,16 +508,19 @@ impl CpuPml {
 		line: &mut [f32],
 		padded: &mut [f32],
 		scale: f32,
-		init: impl Fn(usize) -> f32,
+		init: &[f32],
 	) {
 		let n = line.len();
-		let (z, cut, x, c2, xi) = (&span.z[..n + 6], &span.cut[..n], &span.x[..n], &span.c2[..n], &mut xi[..n]);
+		let z: [&[f32]; 7] = std::array::from_fn(|j| &span.z[j..][..n]);
+		let (cut, [b, a, ik, dik], c2) = (&span.cut[..n], span.x.map(|c| &c[..n]), &span.c2[..n]);
+		let (xi, init) = (&mut xi[..n], &init[..n]);
 		let padded = &mut padded[..n + 4];
 		padded[2..n + 2].copy_from_slice(&span.psi[..n]);
+		let [p0, p1, p3, p4] = [0, 1, 3, 4].map(|j| &padded[j..][..n]);
 		for k in 0..n {
-			let dpsi = (8.0 * (padded[k + 3] - padded[k + 1]) - (padded[k + 4] - padded[k])) / 12.0;
-			let taps = maybe_cut::<CUT>(window(z, k), cut[k] >> cut::X_SHIFT);
-			let sum = init(k) + stretched(&taps, &self.axis, x[k], dpsi, &mut xi[k]);
+			let dpsi = (8.0 * (p3[k] - p1[k]) - (p4[k] - p0[k])) / 12.0;
+			let taps = maybe_cut::<CUT>(z.map(|r| r[k]), cut[k] >> cut::X_SHIFT);
+			let sum = init[k] + stretched(&taps, &self.axis, [b[k], a[k], ik[k], dik[k]], dpsi, &mut xi[k]);
 			line[k] += scale * c2[k] * sum;
 		}
 	}
@@ -515,8 +531,34 @@ struct XSpan<'a> {
 	z: &'a [f32],
 	psi: &'a [f32],
 	cut: &'a [u8],
-	x: &'a [[f32; 4]],
+	x: [&'a [f32]; 4],
 	c2: &'a [f32],
+}
+
+/// `delta_y + chi D2x delta_y` of the columns `cols` of a y-strip row into `out` (indexed by column), `d` its
+/// `delta_y`, 0 beyond the grid. The cells between the grid's edges run on row slices and vectorise; each cell is
+/// the same expression in the same order either way.
+fn plain_cells(d: &[f32], cross: f32, cols: Range<usize>, out: &mut [f32]) {
+	if cross == 0.0 {
+		out[cols.clone()].copy_from_slice(&d[cols]);
+		return;
+	}
+	let gw = d.len();
+	let edge = |gx: usize| {
+		let left = if gx > 0 { d[gx - 1] } else { 0.0 };
+		let right = if gx + 1 < gw { d[gx + 1] } else { 0.0 };
+		d[gx] + cross * (left + right - 2.0 * d[gx])
+	};
+	let inner_start = cols.start.max(1).min(cols.end);
+	let inner = inner_start..cols.end.min(gw - 1).max(inner_start);
+	for gx in (cols.start..inner.start).chain(inner.end..cols.end) {
+		out[gx] = edge(gx);
+	}
+	let n = inner.len();
+	let (l, c, r) = (&d[inner.start - 1..][..n], &d[inner.clone()], &d[inner.start + 1..][..n]);
+	for (o, ((&l, &c), &r)) in out[inner].iter_mut().zip(l.iter().zip(c).zip(r)) {
+		*o = c + cross * (l + r - 2.0 * c);
+	}
 }
 
 /// One row of the y strips: the field's seven rows around it, psi of the rows 1 and 2 after and before
@@ -536,12 +578,6 @@ fn any_cut(cuts: &[u8], shift: u32) -> bool {
 #[inline(always)]
 fn maybe_cut<const CUT: bool>(t: [f32; 7], bits: u8) -> [f32; 7] {
 	if CUT { cut_taps(t, bits) } else { t }
-}
-
-/// The seven values of `z` from `k`.
-#[inline(always)]
-fn window(z: &[f32], k: usize) -> [f32; 7] {
-	std::array::from_fn(|j| z[k + j])
 }
 
 #[inline(always)]
@@ -577,22 +613,34 @@ fn z_span(out: &mut [f32], field: &[f32], base: usize, s: usize, cross: f32, d: 
 		return;
 	}
 	let (up, down) = (&field[j0 - s..][..n], &field[j0 + s..][..n]);
-	for k in 0..n {
-		let gx = g0 + k as isize;
-		let dk = if gx >= 0 && (gx as usize) < gw { d[gx as usize] } else { 0.0 };
+	let cell = |k: usize, dk: f32| {
 		let v = f[k];
-		out[k] = v + cross * ((up[k] + down[k] - 2.0 * v) + dk);
+		v + cross * ((up[k] + down[k] - 2.0 * v) + dk)
+	};
+	// The cells within the grid, `lo..hi`, take `d` on row slices, so that loop vectorises; the at most 3 beyond each
+	// side take 0.
+	let lo = (-g0).clamp(0, n as isize) as usize;
+	let hi = (gw as isize - g0).clamp(lo as isize, n as isize) as usize;
+	for k in (0..lo).chain(hi..n) {
+		out[k] = cell(k, 0.0);
+	}
+	let d = &d[(g0 + lo as isize) as usize..][..hi - lo];
+	let (f, up, down) = (&f[lo..hi], &up[lo..hi], &down[lo..hi]);
+	for (o, (((&v, &u), &w), &dk)) in out[lo..hi].iter_mut().zip(f.iter().zip(up).zip(down).zip(d)) {
+		*o = v + cross * ((u + w - 2.0 * v) + dk);
 	}
 }
 
+/// Advances psi of x of one strip's cells on row slices: the taps of `z` (z~ from 3 before the first cell) are shifted
+/// slices and `x` the coefficient columns, so the loop vectorises without mirrors.
 #[inline(always)]
-fn psi_x_span<const CUT: bool>(psi: &mut [f32], z: &[f32], cut: &[u8], x: &[[f32; 4]]) {
+fn psi_x_span<const CUT: bool>(psi: &mut [f32], z: &[f32], cut: &[u8], x: [&[f32]; 4]) {
 	let n = psi.len();
-	let (z, cut, x) = (&z[..n + 6], &cut[..n], &x[..n]);
+	let z: [&[f32]; 7] = std::array::from_fn(|j| &z[j..][..n]);
+	let (cut, [b, a, ..]) = (&cut[..n], x.map(|c| &c[..n]));
 	for k in 0..n {
-		let taps = maybe_cut::<CUT>(window(z, k), cut[k] >> cut::X_SHIFT);
-		let [b, a, ..] = x[k];
-		psi[k] = b * psi[k] + a * first(&taps);
+		let taps = maybe_cut::<CUT>(z.map(|r| r[k]), cut[k] >> cut::X_SHIFT);
+		psi[k] = b[k] * psi[k] + a[k] * first(&taps);
 	}
 }
 
