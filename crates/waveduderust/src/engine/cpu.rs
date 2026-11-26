@@ -290,6 +290,11 @@ impl CpuEngine {
 		if fresh.is_empty() { Damage::NONE } else { fresh }
 	}
 
+	/// One step: its sub-steps one by one.
+	fn step(&mut self) {
+		self.sub_steps_in_turn();
+	}
+
 	/// One sub-step; the next field ends in `u`. Each pass runs on the damage grown by its reach; the damage then
 	/// takes in what the pass and the forcing made non-zero (module docs, Damage).
 	fn sub_step(&mut self, intensity: bool) {

@@ -21,6 +21,40 @@
 //! is not done here yet. The outer kernel reads its 7 rows of `w` as slices, so a ring can hand it its rows in place
 //! of the plane's. Nor does it take a uniform medium's runs as constants: the kernels read the `c2` and `d` planes.
 //!
+//! Blocked steps: the 9-point pass is bound by memory once the planes leave the caches, and a step of `n` sub-steps
+//! sweeps them `n` times. With two or more sub-steps (and anything to compute) the engine fuses them into one sweep
+//! over the rows instead (blocked.rs): row `q` reaches level `j` (the field after `j` sub-steps) as soon as the rows
+//! it reads have reached level `j - 1`, so each row is read from memory once a step and its later levels come from
+//! the cache. The step is the same expressions on the same inputs as `n` sub-steps one by one, only the order of the
+//! rows changes, so the results are the same bit for bit; the 4th order and single sub-steps keep the passes above.
+//!
+//! - In place: level `j` is written over level `j - 2` in the plane of `j`'s parity (`u` holds the even levels, `prev`
+//!   the odd ones, and the planes swap after an odd `n`), so a row may advance only once the rows that read its older
+//!   level have read it. Within one sweep a lag of one row per level does it (four with a rim, below).
+//! - Threads: split tiling, without halos. The rows split into bands, one per thread; a first parallel phase runs in
+//!   each band the units whose inputs and whose overwritten values' readers all lie in the band, a trapezoid that
+//!   narrows by the stencil's reach per level at each side facing another band; a second parallel phase runs the
+//!   inverted trapezoids around the boundaries, whose inputs the first phase left in the planes at the levels they
+//!   need (a row holds its last two levels). No work is done twice, no row is copied, and a thread never waits for
+//!   another inside a phase: overlapped tiling would recompute halos and copy their rows and the CPML's memory per
+//!   row, and pipelined bands would stall on a preempted neighbour, which this host's noisy threads make common. A
+//!   band takes at least `2 S + rho` rows (`S` the widest trapezoid side, `rho` the read reach), so two boundaries'
+//!   units never meet; a grid of fewer rows runs as one band.
+//! - Damage: the step runs on the damage, with every cell a source drives on any of its sub-steps, grown by `n`
+//!   sub-steps' reach up front; a cell outside the true damage of a sub-step computes to the +0 it holds. After the
+//!   step the damage takes in the non-zero cells of both planes in the band it grew by.
+//! - Forcing: the step's source tables are taken before it, in order; each row adds sub-step `j - 1`'s forcing to its
+//!   driven cells right after its update to level `j` (host.rs's `force_next`, row by row).
+//! - Mur: each row runs Mur's condition on its own chains after its update to each level (the first and last rows
+//!   also the rings above and below the grid), so with open edges every row of the grid takes part, the rows outside
+//!   the damage with Mur's chains alone.
+//! - Intensity: the stages advance in the last level's update, as in the passes.
+//! - CPML: the y strips' stages split per row. psi of y of a row at level `j - 1` reads the field within 2 rows (3
+//!   loaded), `delta_y` and xi of y read psi of y within 2 rows of the same strip and the field within 3; the x part
+//!   reads its row's own memory and the field within 1 row. So a row's update with a rim depends on the field within
+//!   4 rows, and psi of y is one more unit per row and level, run 2 rows ahead of the update (blocked.rs, `Tiling`).
+//!   Each row's memory variables are its own, so the trapezoids carry them like the field.
+//!
 //! Instruction set: the engine is built only on a CPU with AVX2 and FMA (its constructor asserts [`available`]), so
 //! the Rust around the kernels (the CPML's rows, the cut cells) runs compiled for them through `wide`, with no
 //! feature test on the way.
@@ -32,6 +66,7 @@
 
 #![allow(unsafe_code)]
 
+mod blocked;
 mod kernels;
 
 use std::ops::Range;
@@ -40,11 +75,13 @@ use std::sync::Arc;
 use rayon::iter::Either;
 use rayon::prelude::*;
 
-use self::kernels::{Intensity, RowKernels, RowMedium, advance};
+use self::blocked::{MurRows, Rim, Shared, Step, Tiling};
+use self::kernels::{Intensity, NineRow, RowKernels, RowMedium, advance};
 use super::cpu::{Rows, UniformRuns, chunks_or_none, cut_spans, drp, medium_spans, nine_point, plane_rows, row_cuts};
 use super::damage::{Damage, extent};
+use super::forcing::live;
 use super::host::{Host, Stages, host_engine};
-use super::pml::{Medium, XPart, XShared};
+use super::pml::{Medium, XPart, XPass, XShared};
 use super::stencil::{INV12, PAD, TimeScheme, centred};
 use super::substeps::sub_steps;
 use super::types::{EngineOptions, SceneData};
@@ -61,6 +98,13 @@ pub struct AvxEngine {
 	kernels: RowKernels,
 	/// The runs of each grid row where `c2` and `d` hold one value (engine/cpu.rs, Uniform medium).
 	uniform: UniformRuns,
+	/// Mur's chains by the grid row that owns them (blocked.rs).
+	mur: MurRows,
+	/// A blocked step's source table of each sub-step, and its driven cells with their runs of table entries.
+	tables: Vec<Vec<f32>>,
+	driven: Vec<(usize, u32, u32)>,
+	/// The last blocked step's tiling, kept for the next.
+	tiling: Option<Tiling>,
 }
 
 impl AvxEngine {
@@ -80,7 +124,15 @@ impl AvxEngine {
 	pub fn with_sub_steps(scene: impl Into<Arc<SceneData>>, options: EngineOptions, n: u32) -> Self {
 		assert!(available(), "the AVX2 engine needs a CPU with AVX2 and FMA");
 		let host = Host::new(scene.into(), options, n);
-		let mut engine = Self { host, kernels: RowKernels::native(), uniform: UniformRuns::default() };
+		let mut engine = Self {
+			host,
+			kernels: RowKernels::native(),
+			uniform: UniformRuns::default(),
+			mur: MurRows::default(),
+			tables: Vec::new(),
+			driven: Vec::new(),
+			tiling: None,
+		};
 		engine.scene_loaded();
 		engine
 	}
@@ -95,50 +147,20 @@ impl AvxEngine {
 	fn scene_loaded(&mut self) {
 		let h = &self.host;
 		self.uniform = UniformRuns::of(&h.c2, &h.d, h.stride, h.gw());
+		self.mur = MurRows::of(&h.mur, h.stride, h.shared.scene.grid_height() as usize);
 	}
 
 	/// The leapfrog pass of the 9-point stencil: writes the next field over `prev`, and the intensity stages when
 	/// `intensity`.
 	fn leapfrog_pass(&mut self, intensity: bool) {
 		let h = &mut self.host;
-		let (s, gw, nine, uniform) = (h.stride, h.gw(), self.kernels.nine, &self.uniform);
-		let (u, c2, d, cuts, mirrors) = (&h.u, &h.c2, &h.d, &h.cuts, h.mirrors);
-		let (area, xs) = (&h.damage, h.damage.x.clone());
+		let (s, area, xs) = (h.stride, &h.damage, h.damage.x.clone());
+		let line = NineLine::of((h.stride, &h.c2, &h.d, &h.cuts, h.mirrors), &self.uniform, self.kernels.nine, &xs);
+		let (u, c2, cuts) = (&h.u, &h.c2, &h.cuts);
 		let stages = Host::stages(&mut h.s1, &mut h.s2, h.alpha, intensity);
 		let mut rim = h.pml.as_mut().and_then(|p| p.begin(0, u, Medium { cuts, c2 }, 1.0, area));
-		grid_rows(&mut h.prev, stages, s, area, rim.as_mut(), |r, next, mut stages| {
-			let (at, runs) = (r * s + PAD, uniform.row(r - PAD));
-			let (c2, d) = (&c2[at..][..gw], &d[at..][..gw]);
-			// Grid column x of the rows above, of and below is at x + 1 of these.
-			let rows: [&[f32]; 3] = std::array::from_fn(|k| &u[at + k * s - s - 1..][..gw + 2]);
-			// The cells of `span` with no cut, a uniform run's with its constants.
-			let uncut = |span: Range<usize>, next: &mut [f32], stages: &mut Option<Intensity<'_>>| {
-				medium_spans(runs, c2, d, span, |piece, medium| {
-					let taps = rows.map(|row| &row[piece.start..piece.end + 2]);
-					let medium = match medium {
-						Some((c2, d)) => RowMedium::Uniform { c2, d },
-						None => RowMedium::Planes { c2: &c2[piece.clone()], d: &d[piece.clone()] },
-					};
-					let stages = stages.as_mut().map(|st| st.span(piece.start, piece.len()));
-					nine(taps, medium, &mut next[piece], stages);
-				});
-			};
-			let Some(cuts) = row_cuts(cuts, mirrors, at, gw, &xs) else {
-				return uncut(xs.clone(), next, &mut stages);
-			};
-			cut_spans(cuts, xs.clone(), |span, cut| {
-				if !cut {
-					return uncut(span, next, &mut stages);
-				}
-				for x in span {
-					let v = u[at + x];
-					let lap = nine_point(u, at + x, s, cuts[x]);
-					next[x] = v + ((v - next[x]) * d[x] + lap * c2[x] * centred(d[x]));
-					if let Some(st) = stages.as_mut() {
-						advance(&mut st.s1[x], &mut st.s2[x], next[x], st.alpha, 1.0 - st.alpha);
-					}
-				}
-			});
+		grid_rows(&mut h.prev, stages, s, area, rim.as_mut(), |r, next, stages| {
+			line.row(r, &u[(r - 1) * s..(r + 2) * s], next, stages);
 		});
 	}
 
@@ -202,6 +224,100 @@ impl AvxEngine {
 		});
 	}
 
+	/// One step (module docs, Blocked steps): the 9-point's sub-steps fused into one sweep over the rows when there are
+	/// two or more and anything to compute, else one by one.
+	fn step(&mut self) {
+		let n = self.host.shared.sub_steps as usize;
+		if n < 2 || self.host.shared.scheme != TimeScheme::Leapfrog {
+			return self.sub_steps_in_turn();
+		}
+		let h = &mut self.host;
+		let len = h.values.len();
+		self.tables.resize_with(n, Vec::new);
+		for (k, table) in self.tables.iter_mut().enumerate() {
+			table.clear();
+			table.resize(len, 0.0);
+			h.shared.source_values(table, k as u32);
+		}
+		// The cells a source drives on any sub-step, ascending, and the damage with them.
+		let (s, groups) = (h.stride, &h.groups);
+		self.driven.clear();
+		let mut known = h.damage.clone();
+		for ((&cell, &(start, count)), _) in groups.cells.iter().zip(&groups.runs).zip(0..) {
+			let run = &groups.entries[start as usize..(start + count) as usize];
+			if self.tables.iter().any(|t| run.iter().any(|&e| live(t[e as usize]))) {
+				self.driven.push((cell, start, count));
+				known.include(cell, s);
+			}
+		}
+		self.driven.sort_unstable_by_key(|&(cell, ..)| cell);
+		if known.is_empty() {
+			for k in 0..n {
+				self.host.values.copy_from_slice(&self.tables[k]);
+				let intensity = self.host.shared.accumulates(k as u32);
+				self.sub_step(intensity);
+			}
+			return;
+		}
+		self.blocked_step(n, known);
+	}
+
+	/// The sub-steps of a step fused into one sweep (blocked.rs) on the damage with the step's driven cells, `known`,
+	/// grown by their reach; then the damage takes in what they made non-zero.
+	fn blocked_step(&mut self, n: usize, known: Damage) {
+		let h = &mut self.host;
+		let (s, gw, gh) = (h.stride, h.gw(), h.shared.scene.grid_height() as usize);
+		let area = known.grown(n * h.reach, gw, gh);
+		let intensity = h.shared.accumulates(n as u32 - 1) && !h.s1.is_empty();
+		let stages = intensity.then(|| (Shared::of(&mut h.s1), Shared::of(&mut h.s2), h.alpha));
+		let planes = [Shared::of(&mut h.u), Shared::of(&mut h.prev)];
+		let line = NineLine::of((h.stride, &h.c2, &h.d, &h.cuts, h.mirrors), &self.uniform, self.kernels.nine, &area.x);
+		let medium = Medium { cuts: &h.cuts, c2: &h.c2 };
+		let rim = h.pml.as_mut().map(|pml| {
+			let (tables, memory) = pml.row_wise(0);
+			Rim {
+				tables,
+				psi_y: Shared::of(memory.psi_y),
+				xi_y: Shared::of(memory.xi_y),
+				delta: Shared::of(memory.delta),
+				psi_x: Shared::of(memory.psi_x),
+				xi_x: Shared::of(memory.xi_x),
+				z: Shared::of(memory.z),
+				pass: XPass { xs: area.x.clone(), medium, scale: 1.0 },
+			}
+		});
+		let tiling = match self.tiling.take() {
+			Some(tiling) if tiling.is(n, rim.is_some()) => tiling,
+			_ => Tiling::new(n, rim.is_some()),
+		};
+		let step = Step {
+			s,
+			gw,
+			gh,
+			n,
+			planes,
+			stages,
+			alpha: h.alpha,
+			line,
+			d: &h.d,
+			cuts: &h.cuts,
+			area: area.y.clone(),
+			tables: &self.tables,
+			driven: &self.driven,
+			entries: &h.groups.entries,
+			mur: &self.mur,
+			rim,
+		};
+		step.run(&tiling, BANDS_PER_THREAD * rayon::current_num_threads());
+		self.tiling = Some(tiling);
+		if n % 2 == 1 {
+			std::mem::swap(&mut h.u, &mut h.prev);
+		}
+		h.values.copy_from_slice(&self.tables[n - 1]);
+		let damage = extent(&h.u, s, &area, known);
+		h.damage = extent(&h.prev, s, &area, damage);
+	}
+
 	/// One sub-step; the next field ends in `u`. Each pass runs on the damage grown by its reach; the damage then
 	/// takes in what the pass and the forcing made non-zero (engine/cpu.rs, Damage).
 	fn sub_step(&mut self, intensity: bool) {
@@ -230,6 +346,78 @@ impl AvxEngine {
 }
 
 host_engine!(AvxEngine, "CPU (AVX2)");
+
+/// The bands of a blocked step per thread of the rayon pool (blocked.rs).
+const BANDS_PER_THREAD: usize = 1;
+
+/// What the 9-point leapfrog update of a grid row reads besides the field: the medium, its uniform runs and cuts, the
+/// row kernel, and the columns to update.
+#[derive(Clone, Copy)]
+struct NineLine<'a> {
+	s: usize,
+	gw: usize,
+	nine: NineRow,
+	uniform: &'a UniformRuns,
+	c2: &'a [f32],
+	d: &'a [f32],
+	cuts: &'a [u8],
+	mirrors: bool,
+	xs: &'a Range<usize>,
+}
+
+impl<'a> NineLine<'a> {
+	/// The update on a medium of rows of `s` with its `c2`, `d`, cuts and whether any cell is cut (a host's fields,
+	/// borrowed one by one so its planes stay free).
+	fn of(
+		(s, c2, d, cuts, mirrors): (usize, &'a [f32], &'a [f32], &'a [u8], bool),
+		uniform: &'a UniformRuns,
+		nine: NineRow,
+		xs: &'a Range<usize>,
+	) -> Self {
+		Self { s, gw: s - 2 * PAD, nine, uniform, c2, d, cuts, mirrors, xs }
+	}
+
+	/// Writes the next field over `next`, the `gw` grid cells of padded row `r` holding the field one sub-step before,
+	/// on the columns `xs`, and advances `stages` (the row's), when given, by the values written. `u` holds the
+	/// padded rows `r - 1` to `r + 1` of the field.
+	#[inline(always)]
+	fn row(&self, r: usize, u: &[f32], next: &mut [f32], mut stages: Option<Intensity<'_>>) {
+		let Self { s, gw, nine, uniform, c2, d, cuts, mirrors, xs } = *self;
+		let (at, runs) = (r * s + PAD, uniform.row(r - PAD));
+		let (c2, d) = (&c2[at..][..gw], &d[at..][..gw]);
+		// Grid column x of the rows above, of and below is at x + 1 of these; the row's own at `s + PAD`.
+		let rows: [&[f32]; 3] = std::array::from_fn(|k| &u[k * s + PAD - 1..][..gw + 2]);
+		let centre = s + PAD;
+		// The cells of `span` with no cut, a uniform run's with its constants.
+		let uncut = |span: Range<usize>, next: &mut [f32], stages: &mut Option<Intensity<'_>>| {
+			medium_spans(runs, c2, d, span, |piece, medium| {
+				let taps = rows.map(|row| &row[piece.start..piece.end + 2]);
+				let medium = match medium {
+					Some((c2, d)) => RowMedium::Uniform { c2, d },
+					None => RowMedium::Planes { c2: &c2[piece.clone()], d: &d[piece.clone()] },
+				};
+				let stages = stages.as_mut().map(|st| st.span(piece.start, piece.len()));
+				nine(taps, medium, &mut next[piece], stages);
+			});
+		};
+		let Some(cuts) = row_cuts(cuts, mirrors, at, gw, xs) else {
+			return uncut(xs.clone(), next, &mut stages);
+		};
+		cut_spans(cuts, xs.clone(), |span, cut| {
+			if !cut {
+				return uncut(span, next, &mut stages);
+			}
+			for x in span {
+				let v = u[centre + x];
+				let lap = nine_point(u, centre + x, s, cuts[x]);
+				next[x] = v + ((v - next[x]) * d[x] + lap * c2[x] * centred(d[x]));
+				if let Some(st) = stages.as_mut() {
+					advance(&mut st.s1[x], &mut st.s2[x], next[x], st.alpha, 1.0 - st.alpha);
+				}
+			}
+		});
+	}
+}
 
 /// Runs `row(r, cells, stages)` on the `gw` grid cells of every padded row `r` of `out` (rows of `s`) that `area`
 /// covers, one row per task on the rayon pool; `row` writes `area`'s columns and, when given the row's intensity stages,

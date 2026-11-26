@@ -336,8 +336,10 @@ impl Host {
 }
 
 /// The public calls and the [`WaveEngine`](super::WaveEngine) impl of an engine type on a [`Host`] in its field
-/// `host`, named `$name` for logs. The type has `fn sub_step(&mut self, intensity: bool)`, one sub-step with the next
-/// field ending in `u`, and `fn scene_loaded(&mut self)`, which rebuilds what it derives from the scene.
+/// `host`, named `$name` for logs. The type has `fn step(&mut self)`, the sub-steps of one step with the next field
+/// ending in `u` (`sub_steps_in_turn`, which the macro adds, runs them one by one through
+/// `fn sub_step(&mut self, intensity: bool)`), and `fn scene_loaded(&mut self)`, which rebuilds what it derives from
+/// the scene.
 macro_rules! host_engine {
 	($engine:ty, $name:literal) => {
 		impl $engine {
@@ -363,12 +365,17 @@ macro_rules! host_engine {
 
 			/// [`WaveEngine::advance_one_step`](crate::engine::WaveEngine::advance_one_step), which cannot fail here.
 			pub fn advance_one_step(&mut self) {
+				self.step();
+				self.host.shared.time += 1;
+			}
+
+			/// The step's sub-steps one after the other, each with its source table.
+			fn sub_steps_in_turn(&mut self) {
 				for k in 0..self.host.shared.sub_steps {
 					self.host.shared.source_values(&mut self.host.values, k);
 					let intensity = self.host.shared.accumulates(k);
 					self.sub_step(intensity);
 				}
-				self.host.shared.time += 1;
 			}
 
 			/// [`WaveEngine::sample_probes`](crate::engine::WaveEngine::sample_probes), which cannot fail here.

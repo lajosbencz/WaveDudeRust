@@ -33,6 +33,11 @@ fn avx_available() -> bool {
 	yes
 }
 
+/// Runs `f` on a pool of 8 threads, so the blocked steps' band seams cross the rim's strips on any machine.
+fn on_seams(f: impl FnOnce() + Send) {
+	rayon::ThreadPoolBuilder::new().num_threads(8).build().expect("a pool of 8 threads").install(f);
+}
+
 fn options(stencil: Stencil) -> EngineOptions {
 	EngineOptions {
 		stencil,
@@ -119,7 +124,18 @@ struct Trio {
 
 impl Trio {
 	fn new(stencil: Stencil, edges: Edges, damping_edge: i32, sub_steps: Option<u32>) -> Self {
-		let build = || scene(edges, damping_edge, 100);
+		let what = format!("{stencil:?} {edges:?} damping edge {damping_edge}");
+		Self::on(|| scene(edges, damping_edge, 100), stencil, sub_steps, what, &emitters())
+	}
+
+	/// The three engines on the scene `build` makes, with `emitters`.
+	fn on(
+		build: impl Fn() -> SceneData,
+		stencil: Stencil,
+		sub_steps: Option<u32>,
+		what: String,
+		emitters: &[Emitter],
+	) -> Self {
 		let (reference, native, cpu) = match sub_steps {
 			Some(n) => (
 				AvxEngine::with_sub_steps(build(), options(stencil), n),
@@ -130,13 +146,8 @@ impl Trio {
 				CpuEngine::new(build(), options(stencil))
 			}),
 		};
-		let mut trio = Self {
-			reference: reference.with_reference_kernels(),
-			native,
-			cpu,
-			what: format!("{stencil:?} {edges:?} damping edge {damping_edge}"),
-		};
-		trio.each(|e| e.set_emitters(&emitters()));
+		let mut trio = Self { reference: reference.with_reference_kernels(), native, cpu, what };
+		trio.each(|e| e.set_emitters(emitters));
 		trio
 	}
 
@@ -201,18 +212,21 @@ fn the_avx_engine_steps_as_the_cpu_engine() {
 	if !avx_available() {
 		return;
 	}
-	for stencil in STENCILS {
-		for (edges, damping_edge) in EDGES {
-			let mut trio = Trio::new(stencil, edges, damping_edge, None);
-			assert_eq!(trio.reference.sub_steps(), trio.cpu.sub_steps());
-			for step in 1..=300 {
-				trio.run(1);
-				if step % 20 == 1 || step == 300 {
-					trio.check(&format!("step {step}"));
+	on_seams(|| {
+		for stencil in STENCILS {
+			for (edges, damping_edge) in EDGES {
+				let mut trio = Trio::new(stencil, edges, damping_edge, None);
+				assert_eq!(trio.reference.sub_steps(), trio.cpu.sub_steps());
+				assert!(trio.cpu.sub_steps() > 1, "{}: the 9-point's steps are blocked", trio.what);
+				for step in 1..=300 {
+					trio.run(1);
+					if step % 20 == 1 || step == 300 {
+						trio.check(&format!("step {step}"));
+					}
 				}
 			}
 		}
-	}
+	});
 }
 
 #[test]
@@ -220,20 +234,22 @@ fn sub_steps_reset_and_replay_agree() {
 	if !avx_available() {
 		return;
 	}
-	for stencil in STENCILS {
-		let n = CpuEngine::new(scene(Edges::Open, -RIM, 100), options(stencil)).sub_steps() + 2;
-		let mut trio = Trio::new(stencil, Edges::Open, -RIM, Some(n));
-		assert_eq!(trio.reference.sub_steps(), n);
-		trio.run(150);
-		trio.check(&format!("{n} sub-steps"));
-		let first = trio.native.prepare_frame();
-		trio.each(|e| e.reset());
-		assert_eq!(trio.native.time(), 0);
-		assert!(trio.native.field_padded().iter().all(|&v| v == 0.0), "{stencil:?}: the reset clears the field");
-		trio.run(150);
-		trio.check(&format!("{n} sub-steps, replayed"));
-		assert_eq!(trio.native.prepare_frame(), first, "{stencil:?}: the replay repeats the run");
-	}
+	on_seams(|| {
+		for stencil in STENCILS {
+			let n = CpuEngine::new(scene(Edges::Open, -RIM, 100), options(stencil)).sub_steps() + 2;
+			let mut trio = Trio::new(stencil, Edges::Open, -RIM, Some(n));
+			assert_eq!(trio.reference.sub_steps(), n);
+			trio.run(150);
+			trio.check(&format!("{n} sub-steps"));
+			let first = trio.native.prepare_frame();
+			trio.each(|e| e.reset());
+			assert_eq!(trio.native.time(), 0);
+			assert!(trio.native.field_padded().iter().all(|&v| v == 0.0), "{stencil:?}: the reset clears the field");
+			trio.run(150);
+			trio.check(&format!("{n} sub-steps, replayed"));
+			assert_eq!(trio.native.prepare_frame(), first, "{stencil:?}: the replay repeats the run");
+		}
+	});
 }
 
 #[test]
@@ -241,18 +257,20 @@ fn intensity_toggled_and_emitters_replaced_agree() {
 	if !avx_available() {
 		return;
 	}
-	for stencil in STENCILS {
-		let mut trio = Trio::new(stencil, Edges::Open, 0, None);
-		trio.run(80);
-		trio.each(|e| e.set_track_intensity(false));
-		trio.run(20);
-		assert!(trio.native.prepare_frame().1.iter().all(|&v| v == 0.0), "{stencil:?}: no intensity untracked");
-		trio.each(|e| e.set_track_intensity(true));
-		let fewer = [emitter(64, 48, 70.0), Emitter { pulsed: true, ..emitter(20, 70, 110.0) }];
-		trio.each(|e| e.set_emitters(&fewer));
-		trio.run(100);
-		trio.check("tracked again");
-	}
+	on_seams(|| {
+		for stencil in STENCILS {
+			let mut trio = Trio::new(stencil, Edges::Open, 0, None);
+			trio.run(80);
+			trio.each(|e| e.set_track_intensity(false));
+			trio.run(20);
+			assert!(trio.native.prepare_frame().1.iter().all(|&v| v == 0.0), "{stencil:?}: no intensity untracked");
+			trio.each(|e| e.set_track_intensity(true));
+			let fewer = [emitter(64, 48, 70.0), Emitter { pulsed: true, ..emitter(20, 70, 110.0) }];
+			trio.each(|e| e.set_emitters(&fewer));
+			trio.run(100);
+			trio.check("tracked again");
+		}
+	});
 }
 
 #[test]
@@ -260,58 +278,63 @@ fn probes_and_captures_agree() {
 	if !avx_available() {
 		return;
 	}
-	let shape = FrameShape {
-		canvas_width: W,
-		canvas_height: H,
-		divisor: 1,
-		format: SampleFormat::Half,
-		field_brightness: 1.0,
-		intensity_brightness: 1.0,
-		intensity_root: false,
-	};
-	let probes = [
-		ProbeCells { layer: Layer::Field, cells: vec![(40, 40), (47, 20), (5, 5)] },
-		ProbeCells { layer: Layer::Intensity, cells: vec![(40, 40), (95, 80)] },
-	];
-	for stencil in STENCILS {
-		let mut trio = Trio::new(stencil, Edges::Open, -RIM, None);
-		trio.each(|e| e.set_probes(&probes));
-		for _ in 0..120 {
-			trio.run(1);
-			trio.each(|e| e.queue_probes().unwrap());
-		}
-		let readings = |e: &mut dyn WaveEngine| {
-			let mut now = ProbeReadings::default();
-			e.sample_probes(&mut now).unwrap();
-			let (pending, mut queued) = (e.pending_probes().unwrap(), Vec::new());
-			e.drain_probes(pending, &mut |r| queued.push(r.clone())).unwrap();
-			assert_eq!(queued.len(), 120);
-			assert_eq!(queued.last(), Some(&now), "the last reading queued is the one sampled");
-			queued
+	on_seams(|| {
+		let shape = FrameShape {
+			canvas_width: W,
+			canvas_height: H,
+			divisor: 1,
+			format: SampleFormat::Half,
+			field_brightness: 1.0,
+			intensity_brightness: 1.0,
+			intensity_root: false,
 		};
-		let (r, n, c) = (readings(&mut trio.reference), readings(&mut trio.native), readings(&mut trio.cpu));
-		assert!(r == c, "{stencil:?}: the reference kernels' probes differ");
-		for k in 0..probes.len() {
-			// Each probe's readings of every step, against the CPU engine's peak over them.
-			let trace =
-				|readings: &[ProbeReadings]| readings.iter().flat_map(|r| r.probe(k).to_vec()).collect::<Vec<_>>();
-			let d = relative(&trace(&n), &trace(&c));
-			assert!(d <= TOLERANCE, "{stencil:?}: probe {k} differs by {d:e} of its peak");
-		}
-		let (sr, sn, sc) =
-			(trio.reference.capture_frame(&shape), trio.native.capture_frame(&shape), trio.cpu.capture_frame(&shape));
-		assert_eq!((sn.step, sn.shape), (sc.step, sc.shape));
-		for layer in [Layer::Field, Layer::Intensity] {
-			assert!(
-				sr.halves(layer) == sc.halves(layer),
-				"{stencil:?}: the reference kernels' {layer:?} capture differs"
+		let probes = [
+			ProbeCells { layer: Layer::Field, cells: vec![(40, 40), (47, 20), (5, 5)] },
+			ProbeCells { layer: Layer::Intensity, cells: vec![(40, 40), (95, 80)] },
+		];
+		for stencil in STENCILS {
+			let mut trio = Trio::new(stencil, Edges::Open, -RIM, None);
+			trio.each(|e| e.set_probes(&probes));
+			for _ in 0..120 {
+				trio.run(1);
+				trio.each(|e| e.queue_probes().unwrap());
+			}
+			let readings = |e: &mut dyn WaveEngine| {
+				let mut now = ProbeReadings::default();
+				e.sample_probes(&mut now).unwrap();
+				let (pending, mut queued) = (e.pending_probes().unwrap(), Vec::new());
+				e.drain_probes(pending, &mut |r| queued.push(r.clone())).unwrap();
+				assert_eq!(queued.len(), 120);
+				assert_eq!(queued.last(), Some(&now), "the last reading queued is the one sampled");
+				queued
+			};
+			let (r, n, c) = (readings(&mut trio.reference), readings(&mut trio.native), readings(&mut trio.cpu));
+			assert!(r == c, "{stencil:?}: the reference kernels' probes differ");
+			for k in 0..probes.len() {
+				// Each probe's readings of every step, against the CPU engine's peak over them.
+				let trace =
+					|readings: &[ProbeReadings]| readings.iter().flat_map(|r| r.probe(k).to_vec()).collect::<Vec<_>>();
+				let d = relative(&trace(&n), &trace(&c));
+				assert!(d <= TOLERANCE, "{stencil:?}: probe {k} differs by {d:e} of its peak");
+			}
+			let (sr, sn, sc) = (
+				trio.reference.capture_frame(&shape),
+				trio.native.capture_frame(&shape),
+				trio.cpu.capture_frame(&shape),
 			);
-			let floats = |halves: &[f16]| halves.iter().map(|h| h.to_f32()).collect::<Vec<_>>();
-			let (x, y) = (floats(sn.halves(layer)), floats(sc.halves(layer)));
-			// A value on either side of a half's rounding boundary differs by a half's ulp, 2^-11 of it.
-			assert!(!y.is_empty() && relative(&x, &y) <= 1e-3, "{stencil:?}: the captured {layer:?} differs");
+			assert_eq!((sn.step, sn.shape), (sc.step, sc.shape));
+			for layer in [Layer::Field, Layer::Intensity] {
+				assert!(
+					sr.halves(layer) == sc.halves(layer),
+					"{stencil:?}: the reference kernels' {layer:?} capture differs"
+				);
+				let floats = |halves: &[f16]| halves.iter().map(|h| h.to_f32()).collect::<Vec<_>>();
+				let (x, y) = (floats(sn.halves(layer)), floats(sc.halves(layer)));
+				// A value on either side of a half's rounding boundary differs by a half's ulp, 2^-11 of it.
+				assert!(!y.is_empty() && relative(&x, &y) <= 1e-3, "{stencil:?}: the captured {layer:?} differs");
+			}
 		}
-	}
+	});
 }
 
 #[test]
@@ -319,23 +342,77 @@ fn a_set_field_and_a_replaced_medium_agree() {
 	if !avx_available() {
 		return;
 	}
-	for stencil in STENCILS {
-		for (edges, damping_edge) in EDGES {
-			let mut trio = Trio::new(stencil, edges, damping_edge, None);
-			let gw = trio.cpu.scene().grid_width() as usize;
-			let cells = gw * trio.cpu.scene().grid_height() as usize;
-			let now: Vec<f32> = (0..cells).map(|i| (((i * 7919) % 101) as f32 - 50.0) * 1e-3).collect();
-			let before: Vec<f32> = now.iter().map(|v| v * 0.9).collect();
-			trio.reference.set_field(&now, &before);
-			trio.native.set_field(&now, &before);
-			trio.cpu.set_field(&now, &before);
-			trio.run(40);
-			trio.check("from a set field");
-			// A slower background: another medium on the same grid.
-			let slower = Arc::new(scene(edges, damping_edge, 160));
-			trio.each(|e| assert!(e.try_replace_scene(&slower)));
-			trio.run(40);
-			trio.check("after a replaced medium");
+	on_seams(|| {
+		for stencil in STENCILS {
+			for (edges, damping_edge) in EDGES {
+				let mut trio = Trio::new(stencil, edges, damping_edge, None);
+				let gw = trio.cpu.scene().grid_width() as usize;
+				let cells = gw * trio.cpu.scene().grid_height() as usize;
+				let now: Vec<f32> = (0..cells).map(|i| (((i * 7919) % 101) as f32 - 50.0) * 1e-3).collect();
+				let before: Vec<f32> = now.iter().map(|v| v * 0.9).collect();
+				trio.reference.set_field(&now, &before);
+				trio.native.set_field(&now, &before);
+				trio.cpu.set_field(&now, &before);
+				trio.run(40);
+				trio.check("from a set field");
+				// A slower background: another medium on the same grid.
+				let slower = Arc::new(scene(edges, damping_edge, 160));
+				trio.each(|e| assert!(e.try_replace_scene(&slower)));
+				trio.run(40);
+				trio.check("after a replaced medium");
+			}
 		}
+	});
+}
+
+/// Odd and larger sub-step counts, which the AVX2 engine's blocked steps (engine/avx, Blocked steps) fuse into one sweep
+/// over the rows, ending on the other plane than an even count does.
+#[test]
+fn odd_and_many_sub_steps_agree() {
+	if !avx_available() {
+		return;
 	}
+	on_seams(|| {
+		for n in [3, 5] {
+			for (edges, damping_edge) in EDGES {
+				let mut trio = Trio::new(Stencil::NinePoint, edges, damping_edge, Some(n));
+				trio.what = format!("{}, {n} sub-steps", trio.what);
+				for step in 1..=60 {
+					trio.run(1);
+					if step % 20 == 0 {
+						trio.check(&format!("step {step}"));
+					}
+				}
+			}
+		}
+	});
+}
+
+/// Grids of a few rows, fewer than the blocked step's bands would need on every thread, with sources on the first and
+/// last rows.
+#[test]
+fn short_grids_agree() {
+	if !avx_available() {
+		return;
+	}
+	on_seams(|| {
+		for h in [3, 7, 12, 25] {
+			let sources = [
+				emitter(30, 0, 100.0),
+				Emitter { pulsed: true, ..emitter(70, h as i32 - 1, 80.0) },
+				emitter(3, h as i32 / 2, 90.0),
+			];
+			for (edges, damping_edge) in EDGES {
+				let settings =
+					Scene::default().with_damping_edge(damping_edge).with_edges(edges).with_image_sources(true);
+				let build = || SceneData::from_pixels(&pixels(100)[..(W * h * 4) as usize], W, h, &settings);
+				for n in [None, Some(3)] {
+					let what = format!("{edges:?} damping edge {damping_edge}, {h} rows, {n:?} sub-steps");
+					let mut trio = Trio::on(build, Stencil::NinePoint, n, what, &sources);
+					trio.run(80);
+					trio.check("step 80");
+				}
+			}
+		}
+	});
 }
