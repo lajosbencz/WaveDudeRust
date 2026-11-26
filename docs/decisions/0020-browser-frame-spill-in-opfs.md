@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-11-13; writes in flight changed 2026-11-14; reading ahead added 2026-11-14; the browser's
 memory budget added 2026-11-15; the spill worker added 2026-11-15; the RAM cache size in the browser added
-2026-11-16; set in Settings since 2026-11-16 ([0027](0027-unified-settings.md)).
+2026-11-16; set in Settings since 2026-11-16 ([0027](0027-unified-settings.md)); the Slint app added 2026-11-26.
 Amends [0015](0015-core-builds-for-wasm.md): on wasm32 a store keeps the frames past its memory budget, as
 natively, instead of refusing them.
 
@@ -153,3 +153,22 @@ frame whose memory the browser refuses fails the run with a message pointing to 
 - The size is the page's mirror's: the run worker's `Host` runs each goal at Auto on no memory, so its store keeps no
   frame and posts each to the page ([0024](0024-browser-run-in-a-web-worker.md)).
 - The desktop's share (`FrameMemoryPercent`) is gone on both targets (0027): a stored one is logged and dropped at load.
+
+## The Slint app (added 2026-11-26)
+
+The Slint app has two browser runs, the GPU engine's pumped on the page and the CPU engine's in the run worker
+([0035](0035-browser-run-on-the-page-gpu.md)). One spill worker and one session serve the page
+(`waveduderust_remote::opfs::Opfs`, started with the first run); each run gets a factory of its own, so the free
+storage one run asked for is never spent by the other's store. The page's session no longer checks `createWritable`,
+which only the exports' spool needs.
+
+A session the page cannot make (no OPFS, no Web Locks) or the spill worker cannot open (no synchronous access
+handles; it answers `Gone` instead of the free storage), or a spill worker that does not start, stops or speaks
+another version no longer fails a run that would spill: the stores opened after keep what fits in memory and drop
+the frames past it, said once as a warning, as the app did before it had a spill. A run whose spill was open when the
+worker went still fails with the reason; a store whose frames do not fit the free storage is refused as above.
+
+The preview keeps the picture shown while the frame of the position is read back and draws it once the read wakes the
+window. Playback names the frames it shows next after each tick (`Playback::ahead` and `Live::prefetch` in
+[`frontends/waveduderust_slint/src`](../../frontends/waveduderust_slint/src/)), except while an export reads the run's
+frames, which names its own; natively the file spill reads in the call and the store reads nothing ahead.

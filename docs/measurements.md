@@ -495,6 +495,28 @@ app built by `tools/build-web.sh` and served by `python3 -m http.server`), its t
 line, with temporary counters in the run worker's loop timing each pump's wait by its reason: before, every wait was
 for the spill's writes, 14.8 s; after, 2.3 s in Firefox, the spill's writes a quarter of the waits.
 
+## The browser's frame spill in the Slint app
+
+2026-11-26, Chrome for Testing 159 (Playwright, WebGPU through Vulkan, a fresh persistent profile) on Linux, Ryzen 9
+9900X, RTX 5070 Ti; the app built by `tools/build-web.sh` and served by `python3 -m http.server`, with a temporary
+counter in `Live::poll` logging each second the frames drawn and the frames refused as pending at least once (shown a
+pass late), and the spill client's `spilled frame read back` line raised to info. `lens.wdproj` with 3000 steps (960x540,
+1500 frames of 2 MB), run with F5 at the 1 GiB budget (`web::BUDGET`), Use the GPU on (the engine pumped on the page)
+and off (the run worker's CPU engine). Then 21 clicks across the timeline from its end to its start, 150 ms apart,
+and playback at speed 1 (60 frames/s due) from frame 600, all spilled, for 10 s.
+
+| | GPU engine on the page | CPU engine in the run worker |
+|---|---|---|
+| Run of 3000 steps (`Run Completed`) | 1.5 to 1.6 s | 29.6 s |
+| Frames in memory / on disk | 517 (1.0 GB) / 983 (1.9 GB) | 517 (1.0 GB) / 983 (1.9 GB) |
+| Playback over spilled frames, shown / a pass late a second | 57 to 61 / 0 | 60 to 61 / 0 |
+| Read of a spilled frame while playing, median / p95 / worst | 0.7 / 1.0 / 6.9 ms (602 reads) | 0.8 / 1.2 / 3.9 ms (603 reads) |
+| `could not be read` warnings, run, scrub and playback | 0 | 0 |
+
+A click to a spilled frame shows the picture before it until the frame is read back, in the next pass. In
+Playwright's default context (`browser.newContext()`, no persistent profile) the storage estimate let the store open
+but a write failed with `QuotaExceededError` and failed the run, as decision 0020 says of a full storage.
+
 ## The browser's live run
 
 2026-11-13, Chrome for Testing 158 headless (WebGPU through Vulkan) and Firefox 159 (`dom.webgpu.enabled`) on Linux,

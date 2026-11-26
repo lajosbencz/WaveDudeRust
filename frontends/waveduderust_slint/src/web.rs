@@ -1,20 +1,18 @@
 //! The browser's services: the live run on the page's GPU (decision 0035) or on the CPU in the run worker (decision
-//! 0024), its frames past memory dropped, and the question on leaving the page.
+//! 0024), its frames past memory in the spill worker's files (decision 0020), and the question on leaving the page.
 
 use std::future::Future;
-use std::io;
 use std::pin::pin;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::task::{Context, Poll, Waker};
+use std::task::{Poll, Waker};
 
 use waveduderust::ProbeTrace;
-use waveduderust::run::{
-	FitFrame, Goal, Pump, PumpedFactory, RunWorker, SpillBackend, SpillFactory, Status, StoreLayout, Token,
-};
+use waveduderust::run::{FitFrame, Goal, Pump, PumpedFactory, RunWorker, SpillFactory, Status};
 use waveduderust::unstable::engine::build_on;
 use waveduderust::unstable::engine::gpu::{GpuContext, Kicks};
+use waveduderust_remote::opfs::Opfs;
 use waveduderust_remote::web::PagePort;
 use waveduderust_remote::{Port, Remote};
 
@@ -23,48 +21,29 @@ use crate::live::Run;
 /// The engine and the stores' memory at Auto: wasm32's 4 GiB address space, less the page's own.
 pub(crate) const BUDGET: u64 = 1 << 30;
 
-/// A spill that keeps nothing: the frames past the RAM share are dropped, not read back.
-struct DropSpill;
-
-impl SpillFactory for DropSpill {
-	fn poll_ready(&self, _: &mut Context<'_>) -> Poll<()> {
-		Poll::Ready(())
-	}
-
-	fn open(&self, _: u64, _: &StoreLayout, _: u64) -> io::Result<Box<dyn SpillBackend>> {
-		Ok(Box::new(Self))
-	}
+thread_local! {
+	/// The page's spill worker and session, started with the first run.
+	static SPILL: Opfs = Opfs::start(crate::wake::wake);
 }
 
-impl SpillBackend for DropSpill {
-	fn write(&self, _: u64, _: usize, _: &[&[u8]]) -> Token<()> {
-		let t = Token::default();
-		t.complete(Ok(()));
-		t
-	}
-
-	fn read(&self, _: u64, _: usize) -> Token<Vec<u8>> {
-		let t = Token::default();
-		t.complete(Err(io::Error::other("the browser build keeps no frames past memory yet")));
-		t
-	}
-
-	fn drop_generation(&self, _: u64) {}
+/// A run's spill of its frames past memory (decision 0020).
+fn spill() -> Box<dyn SpillFactory> {
+	SPILL.with(Opfs::factory)
 }
 
 /// The run worker's script, beside the page.
 const RUN_WORKER: &str = "run-worker.js";
 
 /// The live run on the CPU in the run worker (decision 0024), which it starts: its frames in the page's mirror,
-/// [`BUDGET`] at Auto. The worker is named with the page's build as its query, which the script passes on to its
+/// [`BUDGET`] at Auto, the rest spilled. The worker is named with the page's build as its query, which the script passes on to its
 /// files, so the browser's cache never serves the worker of another build.
 pub(crate) fn cpu_run() -> Remote<PagePort> {
 	let url = format!("{RUN_WORKER}?build={}", js_sys::encode_uri_component(&waveduderust_remote::build_id()));
-	Remote::new(PagePort::start(&url, crate::wake::wake), BUDGET, Box::new(DropSpill), crate::wake::wake)
+	Remote::new(PagePort::start(&url, crate::wake::wake), BUDGET, spill(), crate::wake::wake)
 }
 
 /// The live run on the page's GPU (decision 0035): a worker pumped on the page's thread, its engines on `context`'s
-/// device.
+/// device, its frames past [`BUDGET`] spilled; a spill not ready wakes the pump through its waker.
 pub(crate) fn gpu_run(context: Arc<GpuContext>) -> Pumped {
 	let worker = worker(context.clone());
 	worker.set_notify(Box::new(crate::wake::wake));
@@ -142,7 +121,7 @@ fn worker(context: Arc<GpuContext>) -> RunWorker {
 		let gpu = Some(context.clone());
 		Box::pin(async move { build_on(scene, options, gpu).await.engine })
 	});
-	RunWorker::pumped(factory, BUDGET, BUDGET, Box::new(DropSpill), Arc::default())
+	RunWorker::pumped(factory, BUDGET, BUDGET, spill(), Arc::default())
 }
 
 /// The run's work between two turns of the page's event loop.

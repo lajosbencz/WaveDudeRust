@@ -2046,6 +2046,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 				s.playback.live = false;
 			}
 			s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
+			s.live.prefetch(|count| s.playback.ahead(count, shown.made));
 			app.set_transport(transport_state(&s.playback, &shown, &s.doc.view, s.live.paused()));
 			app.set_commands(s.commands());
 			match (shown.export, s.exporting.as_ref().and_then(export::Exporting::waits).cloned()) {

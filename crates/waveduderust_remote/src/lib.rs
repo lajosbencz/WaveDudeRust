@@ -1,5 +1,6 @@
 //! The live run in another agent (the browser's run worker, decision 0024): the messages between the page and the
-//! worker ([`protocol`]), the worker's end ([`Host`]) and the page's ([`Remote`]).
+//! worker ([`protocol`]), the worker's end ([`Host`]) and the page's ([`Remote`]); and the frames past memory in the
+//! browser's spill worker (decision 0020): its messages ([`spill`]) and the page's end, `opfs::Opfs`.
 //!
 //! The worker's stores keep no frames: each frame crosses to the page as one buffer, into a mirror store that the
 //! preview and status read. The page acknowledges a frame once its mirror holds it, so the worker is at most the
@@ -11,8 +12,10 @@
 //! [`StoreLayout::writes_in_flight`]: waveduderust::run::StoreLayout::writes_in_flight
 
 mod host;
+pub mod opfs;
 mod page;
 pub mod protocol;
+pub mod spill;
 #[cfg(target_arch = "wasm32")]
 pub mod web;
 
@@ -152,8 +155,11 @@ fn post(port: &impl Port, message: &impl Serialize, buffer: Option<Vec<u8>>) {
 }
 
 fn envelope(message: &impl Serialize, buffer: Option<Vec<u8>>) -> Envelope {
-	let message = postcard::to_allocvec(message).expect("a message of the protocol encodes");
-	Envelope { message, buffer: buffer.map(Buffer::from) }
+	envelope_of(message, buffer.map(Buffer::from))
+}
+
+fn envelope_of(message: &impl Serialize, buffer: Option<Buffer>) -> Envelope {
+	Envelope { message: postcard::to_allocvec(message).expect("a message of the protocol encodes"), buffer }
 }
 
 fn decode<M: DeserializeOwned>(envelope: &Envelope) -> postcard::Result<M> {

@@ -18,6 +18,8 @@ pub(crate) struct Playback {
 	/// Frames of the planned run.
 	pub(crate) frames: u32,
 	clock: Option<(Instant, f64)>,
+	/// The frames the last tick that moved moved by.
+	stride: u32,
 }
 
 impl Default for Playback {
@@ -32,6 +34,7 @@ impl Default for Playback {
 			end: None,
 			frames: 0,
 			clock: None,
+			stride: 1,
 		}
 	}
 }
@@ -122,6 +125,9 @@ impl Playback {
 		let due = carried + now.duration_since(since).as_secs_f64() * f64::from(fps) * self.speed;
 		let whole = due.floor();
 		self.clock = Some((now, due - whole));
+		if whole >= 1.0 {
+			self.stride = whole as u32;
+		}
 		let (start, end) = self.range();
 		let mut next = self.position.saturating_add(whole as u32);
 		if next > end {
@@ -136,6 +142,33 @@ impl Playback {
 			next = next.min(made.max(self.position));
 		}
 		self.position = next;
+	}
+
+	/// The frames playback shows next while playing: the position and up to `count` after it at the stride of the
+	/// last tick, wrapped to the in point with Loop on, never past the out point or `made`; none when stopped.
+	pub(crate) fn ahead(&self, count: usize, made: Option<u32>) -> Vec<u32> {
+		if !self.playing {
+			return Vec::new();
+		}
+		let (start, end) = self.range();
+		let mut frames = vec![self.position];
+		let mut at = self.position;
+		while frames.len() <= count {
+			let mut next = at.saturating_add(self.stride);
+			if next > end {
+				match (self.looping, at < end) {
+					(true, _) => next = start + (next - end - 1) % (end - start + 1),
+					(false, true) => next = end,
+					(false, false) => break,
+				}
+			}
+			if made.is_some_and(|m| next > m) {
+				break;
+			}
+			frames.push(next);
+			at = next;
+		}
+		frames
 	}
 }
 
@@ -186,6 +219,23 @@ mod tests {
 		let (mut p, t) = playing(100);
 		p.tick(t + Duration::from_secs(1), 30, Some(5));
 		assert_eq!(p.position, 5);
+	}
+
+	#[test]
+	fn the_frames_ahead_follow_the_last_stride_wrap_with_loop_and_stop_at_the_out_point_or_the_run() {
+		let (mut p, t) = playing(100);
+		assert_eq!(p.ahead(3, None), [0, 1, 2, 3], "the position first, at a stride of 1 before a tick");
+		p.speed = 4.0;
+		p.tick(t + Duration::from_millis(100), 10, None);
+		assert_eq!(p.ahead(3, None), [4, 8, 12, 16]);
+		assert_eq!(p.ahead(3, Some(13)), [4, 8, 12], "never past the newest frame of the run");
+		p.end = Some(10);
+		assert_eq!(p.ahead(3, None), [4, 8, 10], "the out point ends playback");
+		p.looping = true;
+		p.start = Some(2);
+		assert_eq!(p.ahead(3, None), [4, 8, 3, 7], "wrapped to the in point");
+		p.pause();
+		assert!(p.ahead(3, None).is_empty());
 	}
 
 	#[test]

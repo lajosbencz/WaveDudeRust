@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish = false
-description = "WaveDude Rust's browser workers: the live run's engine beside the page"
+description = "WaveDude Rust's browser workers: the live run's engine beside the page, and the frames past memory in a dedicated worker's files"
 
 [lints]
 workspace = true
@@ -14,10 +14,25 @@ workspace = true
 # The workers run in the browser alone; natively each binary says so and exits.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys.workspace = true
+postcard.workspace = true
+tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["fmt", "registry", "std"] }
 tracing-web.workspace = true
 wasm-bindgen-futures.workspace = true
 waveduderust = { path = "../waveduderust", default-features = false, features = ["run", "unstable-run"] }
 waveduderust_remote = { path = "../waveduderust_remote" }
 web-time.workspace = true
-web-sys = { workspace = true, features = ["MessageChannel", "MessageEvent", "MessagePort"] }
+web-sys = { workspace = true, features = [
+	"DedicatedWorkerGlobalScope",
+	"FileSystemDirectoryHandle",
+	"FileSystemFileHandle",
+	"FileSystemGetFileOptions",
+	"FileSystemReadWriteOptions",
+	"FileSystemSyncAccessHandle",
+	"MessageChannel",
+	"MessageEvent",
+	"MessagePort",
+	"StorageEstimate",
+	"StorageManager",
+	"WorkerNavigator",
+] }

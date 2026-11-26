@@ -8,13 +8,13 @@ use waveduderust::model::{Layer, Project, View};
 use waveduderust::quality::PreviewQuality;
 use waveduderust::unstable::scene::off_canvas::{OffCanvas, off_canvas};
 
-use waveduderust::run::{FitFrame, FitRequest, FrameStore, Goal, Status, Wanted, WorkState};
+use waveduderust::run::{FitFrame, FitRequest, FrameStore, Goal, Status, StoreError, Wanted, WorkState};
 use waveduderust::unstable::engine::gpu::{FrameTag, GpuContext};
 use waveduderust::unstable::engine::types::SampleFormat;
 use waveduderust::unstable::render::fit_plane;
 use waveduderust::unstable::render::gpu::{DevicePlane, PicturePipeline};
 use waveduderust::unstable::scene::glowing_edges::EdgeImage;
-use waveduderust::unstable::spec::{RunRequest, SceneCache};
+use waveduderust::unstable::spec::{RunRequest, SceneCache, Schedule};
 
 use waveduderust::io::schemes::SchemeStore;
 
@@ -109,6 +109,8 @@ pub(crate) struct Live {
 	off: Vec<OffCanvas>,
 	/// An Auto of an 8-bit frame waiting for the frame in 16-bit: the request and the layer.
 	fit: Option<(u64, Layer)>,
+	/// An Auto of a 16-bit frame waiting for it to be read back from the spill: the layer.
+	read_fit: Option<Layer>,
 	fits: u64,
 	/// An export's hold on the run (decision 0012).
 	export: Hold,
@@ -215,7 +217,7 @@ pub(crate) struct Shown {
 	pub(crate) field: Option<slint::Image>,
 	pub(crate) intensity: Option<slint::Image>,
 	pub(crate) status: RunStatus,
-	/// The newest frame the run holds.
+	/// The newest timeline frame the run's stored frames show.
 	pub(crate) made: Option<u32>,
 	/// The simulation step of the frame shown.
 	pub(crate) step: Option<u64>,
@@ -247,6 +249,13 @@ fn engine_of(context: Option<&std::sync::Arc<GpuContext>>) -> String {
 		Some("") => "GPU: WebGPU".to_owned(),
 		Some(name) => format!("GPU: {name}"),
 	}
+}
+
+/// The last timeline frame `stored` frames show, by `schedule`, whose frame divisor stores every n-th timeline
+/// frame; without one each stored frame is a timeline frame.
+fn last_made(schedule: Option<&Schedule>, stored: usize) -> Option<u32> {
+	let stored = u32::try_from(stored).ok()?;
+	schedule.map_or(stored, |s| s.covered_frames(stored)).checked_sub(1)
 }
 
 /// The off-canvas warning's list (docs/ui/60, Objects off the canvas).
@@ -307,6 +316,7 @@ impl Live {
 			frames: 0,
 			drawn: None,
 			fit: None,
+			read_fit: None,
 			fits: 0,
 			export: Hold::Idle,
 			export_run: None,
@@ -397,7 +407,7 @@ impl Live {
 
 	/// An Auto brightness fit is on its way.
 	pub(crate) fn fit_pending(&self) -> bool {
-		self.fit.is_some()
+		self.fit.is_some() || self.read_fit.is_some()
 	}
 
 	/// Runs `project` from the start; a running run starts over (docs/ui/60, Automatic re-run).
@@ -507,7 +517,7 @@ impl Live {
 
 	/// A run of `project` from scratch (open, Run): a pending fit goes with the old frames.
 	fn request(&mut self, project: &Project, view: &View) {
-		self.fit = None;
+		(self.fit, self.read_fit) = (None, None);
 		let request = self.request_of(project, view);
 		self.submit(request);
 	}
@@ -598,7 +608,14 @@ impl Live {
 			return Fit::Done(None);
 		};
 		if matches!(store.shape().format, SampleFormat::Half) {
-			return Fit::Done(store.copy_layer(stored, layer).ok().and_then(|b| fit_plane(&b, store.shape(), layer)));
+			// a spilled frame on its way back: its read wakes the window, whose poll fits it
+			return match store.copy_layer(stored, layer) {
+				Err(StoreError::Pending { .. }) => {
+					self.read_fit = Some(layer);
+					Fit::Pending
+				}
+				read => Fit::Done(read.ok().and_then(|b| fit_plane(&b, store.shape(), layer))),
+			};
 		}
 		self.fits += 1;
 		self.fit = Some((self.fits, layer));
@@ -680,7 +697,7 @@ impl Live {
 	/// The run stops and starts over at frame 0, its frames gone: the goal first, so a run under way does not start
 	/// over on the old one.
 	fn drop_frames(&mut self) {
-		self.fit = None;
+		(self.fit, self.read_fit) = (None, None);
 		(self.active, self.wanted, self.paused, self.started) = (false, Wanted::Position, false, None);
 		self.position = 0;
 		self.drawn = None;
@@ -770,6 +787,23 @@ impl Live {
 		}
 	}
 
+	/// Names the stored frames playback shows next, `ahead(count)` timeline frames from the position on, to the
+	/// store, which reads the spilled ones ahead (decision 0020, Reading ahead); not while an export reads the frames,
+	/// which names its own.
+	pub(crate) fn prefetch(&self, ahead: impl FnOnce(usize) -> Vec<u32>) {
+		if self.export == Hold::Reading {
+			return;
+		}
+		let (Some(store), Some(request)) = (self.worker.status().store, self.request.as_ref()) else { return };
+		let depth = store.read_ahead();
+		if depth == 0 {
+			return;
+		}
+		let schedule = request.schedule();
+		let frames = ahead(depth * schedule.frame_divisor() as usize);
+		store.prefetch(frames.into_iter().map(|frame| schedule.stored_index_of(frame) as usize));
+	}
+
 	/// No more frames than the position's.
 	pub(crate) fn stop(&mut self) {
 		self.drop_waiting_export();
@@ -790,6 +824,11 @@ impl Live {
 			cpu.pump();
 		}
 		let mut fitted = None;
+		if let Some(layer) = self.read_fit.take()
+			&& let Fit::Done(fit) = self.auto(layer)
+		{
+			fitted = Some((layer, fit));
+		}
 		if let Some((id, layer)) = self.fit
 			&& let Some(frame) = self.worker.take_fit()
 			&& frame.id == id
@@ -865,7 +904,7 @@ impl Live {
 		let stored = self.stored();
 		shown.computing = shown.running && !status.store.as_ref().is_some_and(|s| s.has(stored));
 		if let Some(store) = &status.store {
-			shown.made = store.count().checked_sub(1).and_then(|m| u32::try_from(m).ok());
+			shown.made = last_made(self.request.as_ref().map(RunRequest::schedule).as_ref(), store.count());
 			shown.step = store.has(stored).then(|| store.step_of(stored));
 		}
 		if let Some(store) = status.store
@@ -875,6 +914,19 @@ impl Live {
 			if self.drawn != Some(tag) {
 				let look = Look { project, view, schemes, edges: self.edges.as_ref(), dither_bits: self.dither_bits };
 				self.drawn = Some(tag);
+				// a spilled frame on its way back keeps the pictures shown; its read wakes the window
+				let mut pending = false;
+				let mut read = |layer| match store.copy_layer(stored, layer) {
+					Ok(bytes) => Some(bytes),
+					Err(StoreError::Pending { .. }) => {
+						pending = true;
+						None
+					}
+					Err(e) => {
+						tracing::warn!("frame {stored} could not be read: {e}");
+						None
+					}
+				};
 				let [field, intensity] = match &mut self.painter {
 					Painter::Gpu(gpu) => {
 						let GpuPainter { device, queue, pipeline, pictures, uploads } = &mut **gpu;
@@ -887,7 +939,7 @@ impl Live {
 								picture.draw(device, queue, pipeline, plane, &frame.shape, &look)
 							})
 						} else {
-							uploads.stage(device, queue, &store, stored);
+							uploads.stage(device, queue, store.layers(), &mut read);
 							let shape = *store.shape();
 							pictures.each_mut().map(|picture| {
 								let plane = DevicePlane { buffer: uploads.buffer(picture.layer())?, first_word: 0 };
@@ -898,12 +950,16 @@ impl Live {
 					Painter::Cpu(pictures) => {
 						let shape = *store.shape();
 						pictures.each_mut().map(|picture| {
-							let bytes = store.copy_layer(stored, picture.layer()).ok()?;
+							let bytes = read(picture.layer())?;
 							Some(picture.draw(&bytes, &shape, &look))
 						})
 					}
 				};
-				(shown.field, shown.intensity) = (field, intensity);
+				if pending {
+					self.drawn = None;
+				} else {
+					(shown.field, shown.intensity) = (field, intensity);
+				}
 			}
 		}
 		shown
@@ -917,21 +973,19 @@ struct Uploads {
 }
 
 impl Uploads {
-	/// Uploads frame `stored`'s planes.
-	fn stage(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, store: &FrameStore, stored: usize) {
+	/// Uploads the planes of `layers` that `read` gives.
+	fn stage(
+		&mut self,
+		device: &wgpu::Device,
+		queue: &wgpu::Queue,
+		layers: &[Layer],
+		read: &mut impl FnMut(Layer) -> Option<Vec<u8>>,
+	) {
 		for layer in [Layer::Field, Layer::Intensity] {
 			let slot = &mut self.buffers[layer as usize];
-			if !store.layers().contains(&layer) {
+			let Some(mut bytes) = layers.contains(&layer).then(|| read(layer)).flatten() else {
 				*slot = None;
 				continue;
-			}
-			let mut bytes = match store.copy_layer(stored, layer) {
-				Ok(bytes) => bytes,
-				Err(e) => {
-					tracing::warn!("frame {stored} could not be read: {e}");
-					*slot = None;
-					continue;
-				}
 			};
 			// a storage buffer's size is a multiple of 4
 			bytes.resize(bytes.len().next_multiple_of(4), 0);
@@ -951,5 +1005,25 @@ impl Uploads {
 
 	fn buffer(&self, layer: Layer) -> Option<&wgpu::Buffer> {
 		self.buffers[layer as usize].as_ref()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use waveduderust::quality::PreviewQuality;
+	use waveduderust::unstable::spec::Schedule;
+
+	use super::last_made;
+
+	#[test]
+	fn the_frames_made_count_in_timeline_frames_with_every_second_frame_stored() {
+		// the Low preview and the memory warning's fewer frames store every second timeline frame
+		let quality = PreviewQuality { frame_divisor: 2, ..PreviewQuality::FULL };
+		let schedule = Schedule { steps: 199, visualize_every: 2, quality };
+		assert_eq!(schedule.frame_count(), 100);
+		assert_eq!(last_made(Some(&schedule), 0), None);
+		assert_eq!(last_made(Some(&schedule), 3), Some(5), "stored frame 2 shows timeline frames 4 and 5");
+		assert_eq!(last_made(Some(&schedule), 50), Some(99), "every frame made reaches the last timeline frame");
+		assert_eq!(last_made(None, 3), Some(2));
 	}
 }

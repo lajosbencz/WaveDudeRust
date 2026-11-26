@@ -1127,7 +1127,7 @@ No allowed divergence covers the Slint gaps below; docs/divergences.md and decis
 | L-62 | Play with frames missing starts automatic run; memory warning may ask; cancel turns playback off | MainWindow.Simulation.cs | 50 Playback | done | Play with frames missing fills; the memory warning may ask first; Cancel pauses playback |
 | L-63 | Playback holds at newest frame while run catches up | PreviewPane.xaml.cs:1144 | 50 Playback | done | tick min(made) |
 | L-64 | Run ended short plays to last frame as to out point | PreviewPane.xaml.cs | 50 Playback | partial | holds at made; end handled via range, unverified |
-| L-65 | Browser: read-ahead from spill for playback (decision 0020) | none | 50 Playback | missing | web.rs spill keeps nothing |
+| L-65 | Browser: read-ahead from spill for playback (decision 0020) | none | 50 Playback | done | `Playback::ahead`, `Live::prefetch`; frames past memory in the spill worker (`waveduderust_remote::opfs`) |
 | L-66 | Space/F7 from anywhere; click on picture focuses pane | PreviewPane.xaml.cs:1289 | 50 Playback | partial | F7 menu done; click-to-focus missing |
 | L-67 | Live: position follows newest frame of active run | MainWindow.Live.cs | 50 Live follow | done | playback.live + tick |
 | L-68 | User run: frame 0, Live on, playback stops | MainWindow.Simulation.cs | 50 Live follow | done | playback.follow |

@@ -105,7 +105,9 @@ row. Each phase is one coding pass, then a separate verification of the diff, th
       Measure: The browser's live run in a worker; the page's main-thread time during a run, on both.
    4. The browser's frame spill in OPFS through the spill worker (decision 0020, `platform/opfs/` of `master`) and
       playback reading ahead (`FrameStore::prefetch`), parity L-65. Measure: The browser's frame spill, read ahead,
-      writes.
+      writes. Done 2026-11-26: `waveduderust_remote::opfs` and `wavedude-spill-worker`, one spill worker and session
+      per page shared by both runs; without one the frames past memory are dropped, said once
+      ([measurements.md](measurements.md), The browser's frame spill in the Slint app).
    5. Exports from the live run's store, waiting for its full-quality frames (decision 0012, `ExportGate` of
       `master`), not a run of their own (parity D-47, R-25, R-26). Then the browser's exports (decision 0025: names only,
       always ZIP, WebCodecs MP4, the OPFS spool, Download), parity D-51.

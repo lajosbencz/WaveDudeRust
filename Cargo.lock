@@ -6484,6 +6484,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.21",
  "tracing",
+ "wasm-bindgen-futures",
  "waveduderust",
  "web-sys",
  "web-time",
@@ -6523,6 +6524,8 @@ name = "waveduderust_workers"
 version = "0.4.2"
 dependencies = [
  "js-sys",
+ "postcard",
+ "tracing",
  "tracing-subscriber",
  "tracing-web",
  "wasm-bindgen-futures",
