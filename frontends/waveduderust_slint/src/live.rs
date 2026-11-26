@@ -2,6 +2,7 @@
 //! page with the GPU engine (decision 0035), or the run worker with the CPU engine (decision 0024), whose frames land in
 //! the page's mirror store; the newest stored frame is drawn.
 
+use slint::SharedString;
 use slint::wgpu_30::wgpu;
 use waveduderust::model::normalize::Normalize;
 use waveduderust::model::{Layer, Project, View};
@@ -93,8 +94,7 @@ pub(crate) struct Live {
 	summarised: bool,
 	/// Steps of the planned run.
 	steps: u32,
-	/// The engine as the status bar names it.
-	engine: String,
+	engine: Engine,
 	last_state: Option<std::mem::Discriminant<WorkState>>,
 	/// The device the engine and the pictures share; `None` without one.
 	context: Option<std::sync::Arc<GpuContext>>,
@@ -275,14 +275,24 @@ fn run_on(context: Option<&std::sync::Arc<GpuContext>>) -> Box<dyn Run> {
 	}
 }
 
-/// The engine as the status bar names it, on `context`'s GPU or the CPU.
-fn engine_of(context: Option<&std::sync::Arc<GpuContext>>) -> String {
-	match context.map(|c| c.info.name.as_str()) {
-		None => "CPU".to_owned(),
+/// The engine runs are built on.
+struct Engine {
+	gpu: bool,
+	/// As the status bar names it.
+	name: SharedString,
+}
+
+const CPU: &str = "CPU";
+
+/// The engine on `context`'s GPU or the CPU.
+fn engine_of(context: Option<&std::sync::Arc<GpuContext>>) -> Engine {
+	let name = match context.map(|c| c.info.name.as_str()) {
+		None => CPU.into(),
 		// a WebGPU adapter may have no name
-		Some("") => "GPU: WebGPU".to_owned(),
-		Some(name) => format!("GPU: {name}"),
-	}
+		Some("") => "GPU: WebGPU".into(),
+		Some(name) => slint::format!("GPU: {name}"),
+	};
+	Engine { gpu: context.is_some(), name }
 }
 
 /// The last timeline frame `stored` frames show, by `schedule`, whose frame divisor stores every n-th timeline
@@ -430,7 +440,7 @@ impl Live {
 
 	/// The engine as the status bar names it.
 	pub(crate) fn engine(&self) -> &str {
-		&self.engine
+		&self.engine.name
 	}
 
 	pub(crate) fn active(&self) -> bool {
@@ -936,14 +946,14 @@ impl Live {
 				steps_done: i32::try_from(status.steps_done).unwrap_or(i32::MAX),
 				steps: i32::try_from(self.steps).unwrap_or(i32::MAX),
 				// a run that stepped without the GPU engine's frames fell back to the CPU engine (the reason is in Messages)
-				engine: if self.engine.starts_with("GPU")
+				engine: if self.engine.gpu
 					&& status.steps_done > 0
 					&& status.store.is_some()
 					&& status.device_frames.is_none()
 				{
-					"CPU".into()
+					CPU.into()
 				} else {
-					self.engine.as_str().into()
+					self.engine.name.clone()
 				},
 			},
 			made: None,
