@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use slint::Image;
 use waveduderust::model::lens_geometry::sag;
-use waveduderust::model::{GateKind, MetaDesign, PartKind, ProbeDetector, Project};
+use waveduderust::model::{ColorScheme, GateKind, MetaDesign, PartKind, ProbeDetector, Project, Stop};
 
 use crate::tree::Node;
 
@@ -67,6 +67,15 @@ svgs! {
 
 thread_local! {
 	static LOADED: RefCell<HashMap<&'static str, Image>> = RefCell::new(HashMap::new());
+	/// The strips of the project's schemes by index.
+	static STRIPS: RefCell<Vec<Option<Strip>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A scheme's strip and the stops it was drawn from.
+#[derive(Clone)]
+struct Strip {
+	stops: Vec<Stop>,
+	image: Image,
 }
 
 /// The icon `name`, parsed once per thread.
@@ -165,10 +174,22 @@ pub(crate) fn tree(project: &Project, node: Node) -> Image {
 /// Width and height of a colour scheme's strip in the tree (Next's 36 x 10 rectangle).
 const STRIP: (u32, u32) = (36, 10);
 
-/// The gradient of `scheme` as the tree row's strip.
-pub(crate) fn strip(scheme: &waveduderust::model::ColorScheme) -> Image {
+/// The gradient of the project's scheme `i` as its tree row's strip, drawn again once its stops change.
+pub(crate) fn strip(i: usize, scheme: &ColorScheme) -> Image {
+	STRIPS.with_borrow_mut(|strips| {
+		if strips.len() <= i {
+			strips.resize(i + 1, None);
+		}
+		match &mut strips[i] {
+			Some(drawn) if drawn.stops == scheme.stops => drawn.image.clone(),
+			slot => slot.insert(Strip { stops: scheme.stops.clone(), image: draw_strip(&scheme.stops) }).image.clone(),
+		}
+	})
+}
+
+fn draw_strip(stops: &[Stop]) -> Image {
 	use waveduderust::unstable::render::gradient::Gradient;
-	let colours = Gradient::new(&scheme.stops).interpolate(STRIP.0 as usize);
+	let colours = Gradient::new(stops).interpolate(STRIP.0 as usize);
 	let mut buffer = slint::SharedPixelBuffer::<slint::Rgb8Pixel>::new(STRIP.0, STRIP.1);
 	for (i, pixel) in buffer.make_mut_slice().iter_mut().enumerate() {
 		let c = colours[i % STRIP.0 as usize];
@@ -180,6 +201,16 @@ pub(crate) fn strip(scheme: &waveduderust::model::ColorScheme) -> Image {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn a_strip_is_drawn_again_only_when_its_stops_change() {
+		let mut scheme = ColorScheme::default();
+		scheme.stops.push(Stop::new(0.0, waveduderust::model::Rgb::default()));
+		let first = strip(0, &scheme);
+		assert_eq!(strip(0, &scheme), first);
+		scheme.stops[0].color = waveduderust::model::Rgb::new(1, 2, 3);
+		assert_ne!(strip(0, &scheme), first);
+	}
 
 	#[test]
 	fn a_lens_row_follows_its_surfaces() {

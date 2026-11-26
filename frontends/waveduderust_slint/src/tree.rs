@@ -69,7 +69,7 @@ pub(crate) fn rows(project: &Project, selection: &Selection, collapsed: &[Node])
 			expandable: children > 0,
 			expanded: !collapsed.contains(&node),
 			strip: match node {
-				Node::Scheme(i) => crate::icons::strip(&project.color_schemes[i]),
+				Node::Scheme(i) => crate::icons::strip(i, &project.color_schemes[i]),
 				_ => slint::Image::default(),
 			},
 			add: match node {
