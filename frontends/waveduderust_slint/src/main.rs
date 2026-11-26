@@ -195,6 +195,11 @@ impl State {
 		}
 	}
 
+	/// Saves the settings; a failure is logged.
+	fn save_settings(&self) {
+		settings::save(&self.settings, self.store.as_ref());
+	}
+
 	fn show(&mut self, app: &AppWindow) {
 		wake::wake();
 		self.unsaved.set(self.doc.dirty());
@@ -831,18 +836,14 @@ fn keep_window(state: &mut State, app: &AppWindow) {
 		(s.window_width, s.window_height) = (f64::from(size.width), f64::from(size.height));
 		(s.window_left, s.window_top) = (Some(f64::from(at.x)), Some(f64::from(at.y)));
 	}
-	if let Some(Err(e)) = state.store.as_ref().map(|store| state.settings.save(store)) {
-		tracing::error!("{e}");
-	}
+	state.save_settings();
 }
 
 /// Puts `path` first in the recent files and saves the settings.
 #[cfg(not(target_arch = "wasm32"))]
 fn remember(state: &mut State, app: &AppWindow, path: &std::path::Path) {
 	state.settings.push_recent(path);
-	if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
-		tracing::error!("{e}");
-	}
+	state.save_settings();
 	show_recent(&state.settings, app);
 }
 
@@ -1085,9 +1086,7 @@ fn answer_warning(state: &mut State, app: &AppWindow, run: bool, mute: bool) {
 		state.playback.pause();
 		tracing::info!("Run cancelled: the frames exceed the RAM cache; the frames made stay");
 	}
-	if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
-		tracing::error!("{e}");
-	}
+	state.save_settings();
 	show_settings(state, app);
 }
 
@@ -1193,9 +1192,7 @@ fn release_export(state: &mut State, app: &AppWindow) {
 fn export_completed(state: &mut State) {
 	let Some(plan) = state.export_plan.take() else { return };
 	export::remember(&plan, state.doc.path.as_deref(), &mut state.settings);
-	if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
-		tracing::error!("{e}");
-	}
+	state.save_settings();
 	if matches!(plan.kind, export::Kind::Run(_)) {
 		state.last_export = Some(plan);
 	}
@@ -1369,9 +1366,7 @@ fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
 			state.finish_gesture(app);
 			state.settings.preview_orientation =
 				if app.get_preview_stacked() { Orientation::Vertical } else { Orientation::Horizontal };
-			if let Some(Err(e)) = state.store.as_ref().map(|s| state.settings.save(s)) {
-				tracing::error!("{e}");
-			}
+			state.save_settings();
 		}
 	}
 }
@@ -1486,9 +1481,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		let Some(state) = keeper.upgrade() else { return };
 		let s = &mut *state.borrow_mut();
 		s.settings.layout = Some(layout);
-		if let Some(Err(e)) = s.store.as_ref().map(|store| s.settings.save(store)) {
-			tracing::error!("{e}");
-		}
+		s.save_settings();
 	});
 	#[cfg(target_arch = "wasm32")]
 	web::guard_unload(state.borrow().unsaved.clone());
@@ -1626,9 +1619,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	app.global::<ui::Form<'_>>().on_describe(move |open| {
 		let s = &mut *st.borrow_mut();
 		s.settings.part_description_expanded = open;
-		if let Some(Err(e)) = s.store.as_ref().map(|store| s.settings.save(store)) {
-			tracing::error!("{e}");
-		}
+		s.save_settings();
 	});
 	let (st, weak) = (state.clone(), app.as_weak());
 	app.global::<ui::Form<'_>>().on_new_seed(move || {
@@ -1893,9 +1884,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		if let Some(app) = weak.upgrade() {
 			let s = &mut *st.borrow_mut();
 			s.settings.show_startup = on;
-			if let Some(Err(e)) = s.store.as_ref().map(|store| s.settings.save(store)) {
-				tracing::error!("{e}");
-			}
+			s.save_settings();
 			show_settings(s, &app);
 		}
 	});

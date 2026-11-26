@@ -167,7 +167,8 @@ pub(crate) fn preset(settings: &mut Settings, store: Option<&Store>, quality: Pr
 	save(settings, store);
 }
 
-fn save(settings: &Settings, store: Option<&Store>) {
+/// Saves `settings` to `store`; a failure is logged.
+pub(crate) fn save(settings: &Settings, store: Option<&Store>) {
 	if let Some(Err(e)) = store.map(|s| settings.save(s)) {
 		tracing::error!("{e}");
 	}
