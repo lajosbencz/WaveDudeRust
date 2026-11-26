@@ -128,7 +128,7 @@ struct State {
 /// The typed form shown: its key, the token its editors carry and the lists it caches.
 #[derive(Default)]
 struct Shown {
-	key: Option<String>,
+	key: Option<(Node, u64)>,
 	token: i32,
 	node: Option<Node>,
 	// the schemes Based on lists
@@ -274,7 +274,7 @@ impl State {
 			self.form_seen = seen;
 			self.form_base = self.form_base.wrapping_add(1);
 		}
-		let key = format!("{:?}@{}", self.selection.current(), self.form_base);
+		let key = (node, self.form_base);
 		let g = app.global::<ui::Form<'_>>();
 		g.set_kind(kind);
 		if self.typed_form.node != Some(node) {
@@ -282,8 +282,8 @@ impl State {
 			g.set_based_on(-1);
 			g.set_object(g.get_object().wrapping_add(1));
 		}
-		if self.typed_form.key.as_ref() != Some(&key) {
-			self.typed_form.key = Some(key.clone());
+		if self.typed_form.key != Some(key) {
+			self.typed_form.key = Some(key);
 			self.typed_form.token = self.typed_form.token.wrapping_add(1);
 			g.set_token(self.typed_form.token);
 			g.set_invalid("".into());
