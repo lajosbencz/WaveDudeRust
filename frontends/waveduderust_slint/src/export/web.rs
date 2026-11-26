@@ -35,7 +35,8 @@ const BUDGET: Duration = Duration::from_millis(8);
 const CHUNK: u64 = 4 << 20;
 
 thread_local! {
-	/// The spool of the last completed export, which holds its download until the next export starts.
+	/// The spool of the last completed export with one, which holds its download until the next such export
+	/// completes: a download in progress outlives the next export's start.
 	static KEPT: RefCell<Option<Arc<Spool>>> = const { RefCell::new(None) };
 }
 
@@ -304,8 +305,8 @@ impl Exporting {
 					Status::Working(done, total) => progress(done, total),
 					Status::Packing => ExportProgress { active: true, packing: true, ..ExportProgress::default() },
 					Status::Ended(outcome) => {
-						if outcome.is_ok() {
-							KEPT.set(runner.spool.take());
+						if let (Ok(_), Some(spool)) = (&outcome, runner.spool.take()) {
+							KEPT.set(Some(spool));
 						}
 						return Err(outcome);
 					}
@@ -319,8 +320,7 @@ impl Exporting {
 	}
 }
 
-/// Starts writing `plan` from the run's `frames`, a still at the timeline frame `position`; the last export's spool
-/// is removed first.
+/// Starts writing `plan` from the run's `frames`, a still at the timeline frame `position`.
 pub(crate) fn start(
 	plan: &Plan,
 	frames: ExportFrames,
@@ -330,7 +330,6 @@ pub(crate) fn start(
 	settings: &Settings,
 	schemes: &SchemeStore,
 ) -> Exporting {
-	KEPT.take();
 	let cancel = Arc::new(AtomicBool::new(false));
 	let inputs = Inputs {
 		plan: plan.clone(),
@@ -408,7 +407,7 @@ enum Next {
 }
 
 /// A browser export from its first frame to its file ready for download. The spool is removed when the export ends
-/// other than completed, else kept for its download until the next export.
+/// other than completed, else kept for its download until the next export with a spool completes.
 struct Runner {
 	delivery: Delivery,
 	phase: Phase,

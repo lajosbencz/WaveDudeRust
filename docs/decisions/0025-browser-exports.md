@@ -37,8 +37,8 @@ where the export runs, how a file larger than memory reaches the user, and what 
   the CSV still work.
 - MP4 goes through the browser's WebCodecs encoder behind the export crate's encoder seam, the MP4 muxer split from
   OpenH264 (feature `mp4-mux`); [0005](0005-video-openh264.md), The browser, has the details.
-- The spool of an export is kept until the next export starts, so a download started from it reads it to the end;
-  one that ends cancelled or failed is removed at once. Session folders whose tab is gone are removed at load
+- The spool of an export is kept until the next export with a spool completes, so a download started from it reads
+  it to the end while the next export runs; one that ends cancelled or failed is removed at once. Session folders whose tab is gone are removed at load
   ([0020](0020-browser-frame-spill-in-opfs.md)).
 - The export entries show in both builds; the export crate builds for the browser without default features, and the
   `zip` crate is used by its tests only.
@@ -67,7 +67,7 @@ activation duration after a click, a touch's end or a key (HTML,
 - Save and Save As still download at once: they run in the user's action.
 - The object URL of the download started last, an export's or a Save's, is kept until the next download starts: a
   browser may fetch it after the click returns, so it is not revoked with the click. The spool keeps the file until
-  the next export.
+  the next export with a spool completes.
 
 ## A name per output (added 2026-11-15)
 

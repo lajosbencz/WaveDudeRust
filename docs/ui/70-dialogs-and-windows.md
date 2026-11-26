@@ -198,10 +198,10 @@ Browser differences (decision 0025):
 - A completed export shows a message window (info disc): "The export is ready: <download name>", with Download
   (default) and Close (Esc). Download starts the browser's download and closes it; a browser may drop a download a
   page starts without the user's click, so the end of an export never starts one by itself. The status bar reports
-  "n frames exported as <name>". The file stays available to the download it started until the next export or
-  download (Save, Save As) starts.
-- The export's files wait in the browser's private storage; they are kept until the next export starts and removed
-  at once when an export is cancelled or fails. Folders of closed tabs are removed at the next load.
+  "n frames exported as <name>". The file stays available to the download it started until the next download
+  (Save, Save As, an export's) starts or the next run export completes.
+- The export's files wait in the browser's private storage; they are kept until the next run export completes and
+  removed at once when an export is cancelled or fails. Folders of closed tabs are removed at the next load.
 
 ## About dialog
 
