@@ -111,7 +111,8 @@ impl Kind {
 	/// video), else the first.
 	fn first_format(self, formats: &[(ExportFormat, ExportFileFormat)], settings: &Settings) -> (ExportFormat, i32) {
 		let still = matches!(self, Self::Frame(_));
-		let remembered = ExportFormat::ALL.get(settings.export_filter_index as usize).copied();
+		let remembered =
+			usize::try_from(settings.export_filter_index).ok().and_then(|i| ExportFormat::ALL.get(i)).copied();
 		let remembered = if still && remembered.is_some_and(ExportFormat::is_video) { None } else { remembered };
 		let first = if still { ExportFormat::Png } else { formats[0].0 };
 		let format = remembered.filter(|f| formats.iter().any(|(g, _)| g == f)).unwrap_or(first);
@@ -387,8 +388,8 @@ mod native {
 			}
 			let out = with_format_extension(&path, format);
 			let out = std::path::absolute(&out).unwrap_or(out);
-			if let Some(i) = ExportFormat::ALL.iter().position(|f| *f == format) {
-				settings.export_filter_index = i as u32;
+			if let Some(i) = ExportFormat::ALL.iter().position(|f| *f == format).and_then(|i| u32::try_from(i).ok()) {
+				settings.export_filter_index = i;
 			}
 			if data.mp4 {
 				if !data.codec_built_in {

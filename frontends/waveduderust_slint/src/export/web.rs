@@ -304,8 +304,8 @@ impl Exports {
 	fn plan(&self, data: &ExportData, settings: &mut Settings) -> Result<Plan, String> {
 		let format = self.format_of(data);
 		let out = typed_name(data.path.as_str(), format).ok_or("Enter a file name.")?;
-		if let Some(i) = ExportFormat::ALL.iter().position(|f| *f == format) {
-			settings.export_filter_index = i as u32;
+		if let Some(i) = ExportFormat::ALL.iter().position(|f| *f == format).and_then(|i| u32::try_from(i).ok()) {
+			settings.export_filter_index = i;
 		}
 		if data.mp4 {
 			settings.h264_profile =

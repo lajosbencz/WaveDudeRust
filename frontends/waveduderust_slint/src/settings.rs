@@ -45,10 +45,18 @@ pub(crate) fn data(s: &Settings) -> SettingsData {
 		preview_resolution: scale(s.preview_resolution),
 		preview_frames: scale(s.preview_frames),
 		preview_index: s.preview_sample_bytes < 2,
-		preview_dither: [0, 10, 12, 14, 16].iter().position(|&b| b == s.preview_dither_bits).unwrap_or(0) as i32,
+		preview_dither: [0, 10, 12, 14, 16]
+			.iter()
+			.position(|&b| b == s.preview_dither_bits)
+			.and_then(|i| i32::try_from(i).ok())
+			.unwrap_or(0),
 		ram_auto: web_ram_auto(),
 		ram_sizes: web_ram_sizes(),
-		ram_size: WEB_RAM_CACHE_SIZES.iter().position(|&b| b == s.frame_memory_bytes).map_or(0, |i| i as i32 + 1),
+		ram_size: WEB_RAM_CACHE_SIZES
+			.iter()
+			.position(|&b| b == s.frame_memory_bytes)
+			.and_then(|i| i32::try_from(i + 1).ok())
+			.unwrap_or(0),
 		use_gpu: s.use_gpu,
 		auto_rerun: s.auto_rerun,
 		warn_ram: s.warn_when_ram_insufficient,
