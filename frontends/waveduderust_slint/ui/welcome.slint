@@ -1,6 +1,7 @@
 import { Button, CheckBox } from "std-widgets.slint";
 import { MenuIcons } from "menu-icons.slint";
 import { Theme } from "theme.slint";
+import { IconButton } from "icons.slint";
 import { Command, PreviewQuality } from "commands.slint";
 
 // The Welcome page (docs/ui/70, Welcome page).
@@ -41,11 +42,21 @@ export component WelcomeLayer inherits Rectangle {
         box := VerticalLayout {
             padding: 16px;
             spacing: 10px;
-            Text {
-                text: @tr("Welcome to WaveDude Rust");
-                font-size: 16px;
-                font-weight: 700;
-                color: Theme.text;
+            HorizontalLayout {
+                Text {
+                    text: @tr("Welcome to WaveDude Rust");
+                    font-size: 16px;
+                    font-weight: 700;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                IconButton {
+                    icon: MenuIcons.close;
+                    tip: @tr("Close");
+                    focusable: false;
+                    clicked => { root.shown = false; }
+                }
             }
             HorizontalLayout {
                 spacing: 6px;
