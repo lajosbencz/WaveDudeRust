@@ -13,6 +13,8 @@ pub(crate) struct Document {
 	/// The name an example suggests while there is no file.
 	pub(crate) suggested: Option<String>,
 	saved: Snapshot,
+	/// The project or the view differs from `saved`.
+	dirty: bool,
 	undo: Vec<Snapshot>,
 	redo: Vec<Snapshot>,
 	limit: usize,
@@ -48,6 +50,7 @@ impl Document {
 			f(&mut snapshot.project);
 		}
 		self.generation += 1;
+		self.recheck();
 	}
 
 	/// The project of `path`, replacing this one and its history.
@@ -105,7 +108,7 @@ impl Document {
 	pub(crate) fn save_as(&mut self, path: &Path) -> waveduderust::io::Result<()> {
 		waveduderust::io::save_project(&self.project, &self.view, path)?;
 		self.path = Some(path.to_owned());
-		self.saved = self.snapshot();
+		self.mark_saved();
 		Ok(())
 	}
 
@@ -176,7 +179,14 @@ impl Document {
 		let view = self.view != before.view;
 		self.generation += u64::from(project);
 		self.view_generation += u64::from(view);
+		if project || view {
+			self.recheck();
+		}
 		project || view
+	}
+
+	fn recheck(&mut self) {
+		self.dirty = self.project != self.saved.project || self.view != self.saved.view;
 	}
 
 	/// Replaces the project and the view with `to`, handing back what they were.
@@ -223,10 +233,11 @@ impl Document {
 	/// Takes the project and the view as saved: their edits are kept or given up.
 	pub(crate) fn mark_saved(&mut self) {
 		self.saved = self.snapshot();
+		self.dirty = false;
 	}
 
 	pub(crate) fn dirty(&self) -> bool {
-		self.project != self.saved.project || self.view != self.saved.view
+		self.dirty
 	}
 
 	/// The file's name or the suggested one; `None` for an untitled project.
@@ -328,6 +339,33 @@ mod tests {
 		);
 		d.undo();
 		assert_eq!(d.view.field.brightness, View::default().field.brightness);
+		assert!(!d.dirty());
+	}
+
+	#[test]
+	fn the_project_is_dirty_until_it_is_back_where_it_was_saved() {
+		let mut d = Document::new(10);
+		let seed = d.project.seed;
+		d.edit(|p| p.seed = seed + 1);
+		assert!(d.dirty());
+		d.undo();
+		assert!(!d.dirty());
+		d.redo();
+		assert!(d.dirty());
+		d.mark_saved();
+		assert!(!d.dirty());
+		d.undo();
+		assert!(d.dirty());
+		d.redo();
+		assert!(!d.dirty());
+		d.edit_merging(Some("g"), |p| p.seed = seed + 2);
+		assert!(d.dirty());
+		d.cancel("g");
+		assert!(!d.dirty());
+		d.edit_view_merging(None, |v| v.field.brightness = 3.0);
+		d.settle(|p| p.seed = seed + 3);
+		assert!(d.dirty());
+		d.adopt(d.project.clone(), d.view.clone(), "x.wdproj");
 		assert!(!d.dirty());
 	}
 
