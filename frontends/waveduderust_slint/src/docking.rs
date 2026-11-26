@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
-use slint_dock::{Arrangement, Axis, Dock, GroupId, Layout, Metrics, Point, Rect, Side, Size};
+use slint_dock::{Arrangement, Axis, Dock, GroupId, Layout, Metrics, Point, Rect, Side, Size, Subject};
 
 use crate::ui::{self, AppWindow};
 
@@ -24,6 +24,8 @@ struct Docking {
 	/// The group last pressed or shown, the centre included; its title bar is lit, the first group's while it
 	/// is none or gone.
 	focused: Option<GroupId>,
+	/// A refresh waits for the drag's end.
+	stale: bool,
 	groups: Rc<VecModel<ui::DockGroup>>,
 	splitters: Rc<VecModel<ui::DockSplitter>>,
 }
@@ -57,6 +59,7 @@ pub(crate) fn wire(app: &AppWindow) {
 		area: Rect::new(0., 0., app.get_dock_width(), app.get_dock_height()),
 		layout: Layout::default(),
 		focused: None,
+		stale: false,
 		groups,
 		splitters,
 	}));
@@ -87,6 +90,35 @@ pub(crate) fn wire(app: &AppWindow) {
 		d.focused = d.dock.group_of(&pane);
 		d.refresh(&app);
 	});
+	let dk = docking.clone();
+	app.on_dock_drag_over(move |pane, group, x, y| {
+		let d = dk.borrow();
+		let drop = subject(&d.dock, &pane, group).and_then(|s| d.dock.drop_target(&s, Point::new(x, y), d.area));
+		drop.map_or_else(Default::default, |t| {
+			let r = t.preview;
+			ui::DockPreview { shown: true, x: r.x, y: r.y, width: r.width, height: r.height }
+		})
+	});
+	let (dk, weak) = (docking.clone(), app.as_weak());
+	app.on_dock_dropped(move |pane, group, x, y| {
+		let Some(app) = weak.upgrade() else { return };
+		let mut d = dk.borrow_mut();
+		let area = d.area;
+		if drop_at(&mut d.dock, &pane, group, Point::new(x, y), area) {
+			d.focused = d.dock.group_of(&pane);
+			d.refresh(&app);
+		} else if d.stale {
+			d.refresh(&app);
+		}
+	});
+	let (dk, weak) = (docking.clone(), app.as_weak());
+	app.on_dock_cancelled(move || {
+		let Some(app) = weak.upgrade() else { return };
+		let mut d = dk.borrow_mut();
+		if d.stale {
+			d.refresh(&app);
+		}
+	});
 	// a press anywhere in a group lights it, as Next's focus does; the window's events report it unconsumed
 	let (dk, weak) = (docking.clone(), app.as_weak());
 	app.on_dock_pressed(move |x, y| {
@@ -114,8 +146,13 @@ pub(crate) fn wire(app: &AppWindow) {
 }
 
 impl Docking {
-	/// Lays the dock out anew into the window's models and the panes' places.
+	/// Lays the dock out anew into the window's models and the panes' places, once no drag is on: new models would
+	/// drop the instance of the pressed title bar or tab, and with it the pointer grab the drag lives on.
 	fn refresh(&mut self, app: &AppWindow) {
+		self.stale = app.get_dock_dragging();
+		if self.stale {
+			return;
+		}
 		self.layout = self.dock.layout(self.area);
 		let chrome: Vec<_> = self.layout.groups.iter().filter(|g| g.id != GroupId::CENTRE).collect();
 		let focused = self
@@ -162,6 +199,17 @@ impl Docking {
 	}
 }
 
+/// What a drag of `pane` moves: its group by the title bar (`group`), else the pane by its tab.
+fn subject(dock: &Dock, pane: &str, group: bool) -> Option<Subject> {
+	if group { dock.group_of(pane).map(Subject::Group) } else { Some(Subject::Pane(pane.to_owned())) }
+}
+
+/// Drops the drag of `pane` at `pointer` in `area`. Whether the layout changed.
+fn drop_at(dock: &mut Dock, pane: &str, group: bool, pointer: Point, area: Rect) -> bool {
+	let Some(subject) = subject(dock, pane, group) else { return false };
+	dock.drop_target(&subject, pointer, area).is_some_and(|t| dock.move_to(&subject, t.target))
+}
+
 fn place(r: Rect, visible: bool) -> ui::DockPlace {
 	ui::DockPlace { x: r.x, y: r.y, width: r.width, height: r.height, visible }
 }
@@ -205,16 +253,48 @@ mod tests {
 
 	#[test]
 	fn default_layout_is_a_left_quarter_of_project_over_properties() {
-		let mut dock = Dock::new(METRICS);
-		for (id, side) in PANES {
-			dock.register(id, side, PANE_MIN);
-		}
-		dock.arrange(&default_arrangement()).expect("one centre");
+		let dock = first_start();
 		let layout = dock.layout(Rect::new(0., 0., 1004., 604.));
 		let ids: Vec<_> = layout.groups.iter().map(|g| g.tabs.clone()).collect();
 		assert_eq!(ids, [vec!["project".to_owned()], vec!["properties".to_owned()], vec![]]);
 		assert_eq!(layout.groups[0].rect.width, 250.);
 		assert_eq!(layout.groups[0].rect.height, 200.);
 		assert!(!dock.is_shown("messages") && !dock.is_shown("performance"));
+	}
+
+	fn first_start() -> Dock {
+		let mut dock = Dock::new(METRICS);
+		for (id, side) in PANES {
+			dock.register(id, side, PANE_MIN);
+		}
+		dock.arrange(&default_arrangement()).expect("one centre");
+		dock
+	}
+
+	const AREA: Rect = Rect::new(0., 0., 1004., 604.);
+
+	#[test]
+	fn a_title_bar_drags_its_group_and_a_tab_its_pane() {
+		let mut dock = first_start();
+		let project = dock.group_of("project").expect("shown");
+		assert_eq!(subject(&dock, "project", true), Some(Subject::Group(project)));
+		assert_eq!(subject(&dock, "project", false), Some(Subject::Pane("project".into())));
+		assert_eq!(subject(&dock, "messages", true), None);
+		// tab Project into Properties, then drag the pair by its title bar to the right edge
+		assert!(drop_at(&mut dock, "project", false, Point::new(125., 400.), AREA));
+		assert_eq!(dock.group_of("project"), dock.group_of("properties"));
+		assert!(drop_at(&mut dock, "properties", true, Point::new(1000., 300.), AREA));
+		let right = dock.layout(AREA).groups.into_iter().find(|g| g.tabs.len() == 2).expect("the pair");
+		assert_eq!(right.rect.x + right.rect.width, AREA.width);
+	}
+
+	#[test]
+	fn a_release_off_a_target_changes_nothing() {
+		let mut dock = first_start();
+		let before = dock.arrangement();
+		// over its own group, and outside the dock
+		assert!(!drop_at(&mut dock, "project", true, Point::new(125., 100.), AREA));
+		assert!(!drop_at(&mut dock, "project", false, Point::new(-5., 100.), AREA));
+		assert_eq!(dock.arrangement(), before);
 	}
 }

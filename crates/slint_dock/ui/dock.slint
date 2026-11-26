@@ -1,6 +1,7 @@
 // The chrome of a `slint_dock::Dock` layout, drawn from models its Rust side fills: each group's title bar and tab
 // strip, and the splitters. Slint cannot instantiate a pane's content from a model, so the app keeps every content
-// as its own element and places it at the rectangle the Rust side computes for it, over its group.
+// as its own element, a child of `DockArea`, and places it at the rectangle the Rust side computes for it, over its
+// group; a drag's preview and label draw over the children.
 
 // Sizes of the chrome; `title` and `splitter` are the Rust side's `Metrics`.
 export struct DockMetrics {
@@ -30,6 +31,12 @@ export struct DockStyle {
     tab-selected-text: brush,
     tab-hover-text: brush,
     splitter: brush,
+    // a drag's drop area and its 2 px border
+    drop-fill: brush,
+    drop-border: brush,
+    // the label with the dragged pane's title at the pointer
+    label: brush,
+    label-text: brush,
 }
 
 // A shown pane of a group; `active` is the one its group shows.
@@ -68,6 +75,55 @@ export struct DockPlace {
     visible: bool,
 }
 
+// The room a drop takes in the area; `shown` while the pointer is over a target.
+export struct DockPreview {
+    shown: bool,
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+}
+
+// A press that becomes a drag once the pointer leaves `threshold` of it, a click otherwise. Slint sends the moves
+// and the release to the TouchArea pressed wherever the pointer goes, so the drag needs nothing from what it
+// crosses; positions are the window's.
+component Grip inherits TouchArea {
+    in property <length> threshold;
+    // the press became a drag
+    out property <bool> dragged;
+    callback click();
+    callback started();
+    callback dragging(x: length, y: length);
+    callback released(x: length, y: length);
+    // the grab was lost before a release
+    callback cancelled();
+
+    pointer-event(e) => {
+        if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
+            self.dragged = false;
+        }
+        if (e.button == PointerEventButton.left && e.kind == PointerEventKind.up && self.dragged) {
+            root.released(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+        }
+        if (e.kind == PointerEventKind.cancel && self.dragged) {
+            root.cancelled();
+        }
+    }
+    moved => {
+        if (!self.dragged && max(abs(self.mouse-x - self.pressed-x), abs(self.mouse-y - self.pressed-y)) > self.threshold) {
+            self.dragged = true;
+            root.started();
+        }
+        if (self.dragged) {
+            root.dragging(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+        }
+    }
+    // a press that dragged is no click
+    clicked => {
+        if (!self.dragged) { root.click(); }
+    }
+}
+
 component CloseButton inherits Rectangle {
     in property <brush> ink;
     in property <brush> hover-background;
@@ -101,12 +157,22 @@ component TitleBar inherits Rectangle {
     in property <string> title;
     in property <bool> active;
     in property <string> close-tip;
+    in property <length> drag-threshold;
     callback close();
     callback clicked();
+    callback drag-started();
+    callback dragging(x: length, y: length);
+    callback released(x: length, y: length);
+    callback cancelled();
 
     background: root.active ? root.style.title-active : root.style.title;
-    TouchArea {
-        clicked => { root.clicked(); }
+    Grip {
+        threshold: root.drag-threshold;
+        click => { root.clicked(); }
+        started => { root.drag-started(); }
+        dragging(x, y) => { root.dragging(x, y); }
+        released(x, y) => { root.released(x, y); }
+        cancelled => { root.cancelled(); }
     }
     HorizontalLayout {
         padding-left: 6px;
@@ -138,8 +204,13 @@ component TitleBar inherits Rectangle {
 component TabStrip inherits Rectangle {
     in property <DockStyle> style;
     in property <[DockTab]> tabs;
+    in property <length> drag-threshold;
     pure callback title(pane: string) -> string;
     callback activate(pane: string);
+    callback drag-started(pane: string);
+    callback dragging(x: length, y: length);
+    callback released(x: length, y: length);
+    callback cancelled();
 
     background: root.style.tab-strip;
     clip: true;
@@ -165,14 +236,23 @@ component TabStrip inherits Rectangle {
                         : area.has-hover ? root.style.tab-hover-text : root.style.tab-text;
                 }
             }
-            area := TouchArea {
-                clicked => { root.activate(tab.pane); }
+            area := Grip {
+                threshold: root.drag-threshold;
+                click => { root.activate(tab.pane); }
+                started => { root.drag-started(tab.pane); }
+                dragging(x, y) => { root.dragging(x, y); }
+                released(x, y) => { root.released(x, y); }
+                cancelled => { root.cancelled(); }
             }
         }
     }
 }
 
-// The groups' chrome and the splitters, in the coordinates of the area this fills.
+// The groups' chrome and the splitters, in the coordinates of the area this fills; its children, the panes'
+// contents, draw over them and under a drag's preview and label.
+//
+// Dragging a title bar moves its group, a tab its pane: `drag-over` answers the preview for the pointer, `dropped`
+// reports the release. A drag takes no focus; `cancel()` ends it without a drop, for the app's Esc.
 export component DockArea inherits Rectangle {
     in property <[DockGroup]> groups;
     in property <[DockSplitter]> splitters;
@@ -194,7 +274,13 @@ export component DockArea inherits Rectangle {
         tab-selected-text: #0e70c0,
         tab-hover-text: #1c97ea,
         splitter: #eeeef2,
+        drop-fill: #007acc60,
+        drop-border: #007acc,
+        label: #007acc,
+        label-text: #ffffff,
     };
+    // how far the pointer moves from a press on a title bar or tab before it drags
+    in property <length> drag-threshold: 4px;
     // the close buttons' tooltip
     in property <string> close-tip;
     pure callback title(pane: string) -> string;
@@ -204,6 +290,45 @@ export component DockArea inherits Rectangle {
     // the bar at `index` of `splitters` dragged, the pointer at `x`, `y`
     callback splitter-moved(index: int, x: length, y: length);
     callback resized(width: length, height: length);
+    // where `pane`, or its whole group with `group`, would drop with the pointer at `x`, `y`
+    callback drag-over(pane: string, group: bool, x: length, y: length) -> DockPreview;
+    callback dropped(pane: string, group: bool, x: length, y: length);
+    // a drag ended without a drop
+    callback cancelled();
+
+    out property <bool> dragging;
+    property <string> drag-pane;
+    property <bool> drag-group;
+    property <length> drag-x;
+    property <length> drag-y;
+    property <DockPreview> preview;
+
+    function start(pane: string, group: bool) {
+        root.dragging = true;
+        root.drag-pane = pane;
+        root.drag-group = group;
+        root.preview = { };
+    }
+    function over(x: length, y: length) {
+        if (!root.dragging) { return; }
+        root.drag-x = x - root.absolute-position.x;
+        root.drag-y = y - root.absolute-position.y;
+        root.preview = root.drag-over(root.drag-pane, root.drag-group, root.drag-x, root.drag-y);
+    }
+    function release(x: length, y: length) {
+        if (!root.dragging) { return; }
+        root.over(x, y);
+        root.dragging = false;
+        root.preview = { };
+        root.dropped(root.drag-pane, root.drag-group, root.drag-x, root.drag-y);
+    }
+    // ends a drag without a drop
+    public function cancel() {
+        if (!root.dragging) { return; }
+        root.dragging = false;
+        root.preview = { };
+        root.cancelled();
+    }
 
     changed width => { root.resized(self.width, self.height); }
     changed height => { root.resized(self.width, self.height); }
@@ -222,16 +347,26 @@ export component DockArea inherits Rectangle {
             title: root.title(group.pane);
             active: group.active;
             close-tip: root.close-tip;
+            drag-threshold: root.drag-threshold;
             close => { root.close(group.pane); }
             clicked => { root.activate(group.pane); }
+            drag-started => { root.start(group.pane, true); }
+            dragging(x, y) => { root.over(x, y); }
+            released(x, y) => { root.release(x, y); }
+            cancelled => { root.cancel(); }
         }
         if group.tabs.length > 1: TabStrip {
             y: parent.height - root.metrics.tab;
             height: root.metrics.tab;
             style: root.style;
             tabs: group.tabs;
+            drag-threshold: root.drag-threshold;
             title(pane) => { root.title(pane) }
             activate(pane) => { root.activate(pane); }
+            drag-started(pane) => { root.start(pane, false); }
+            dragging(x, y) => { root.over(x, y); }
+            released(x, y) => { root.release(x, y); }
+            cancelled => { root.cancel(); }
         }
     }
     for bar[index] in root.splitters: Rectangle {
@@ -247,6 +382,33 @@ export component DockArea inherits Rectangle {
                 root.splitter-moved(index, parent.x + self.mouse-x - (self.pressed-x - parent.width / 2),
                     parent.y + self.mouse-y - (self.pressed-y - parent.height / 2));
             }
+        }
+    }
+    @children
+    if root.preview.shown: Rectangle {
+        x: root.preview.x;
+        y: root.preview.y;
+        width: root.preview.width;
+        height: root.preview.height;
+        background: root.style.drop-fill;
+        border-width: 2px;
+        border-color: root.style.drop-border;
+    }
+    if root.dragging: Rectangle {
+        x: root.drag-x + 14px;
+        y: root.drag-y + 14px;
+        width: label.width + 16px;
+        height: label.height + 6px;
+        background: root.style.label;
+        border-radius: 2px;
+        label := Text {
+            x: 8px;
+            y: 3px;
+            width: self.preferred-width;
+            height: self.preferred-height;
+            text: root.title(root.drag-pane);
+            font-size: root.style.font-size;
+            color: root.style.label-text;
         }
     }
 }

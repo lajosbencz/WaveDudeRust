@@ -11,7 +11,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 
 | Prefix | Area | done | partial | missing | divergence | other |
 |---|---|---|---|---|---|---|
-| X | Cross-cutting | 16 | 8 | 3 | 13 | 0 |
+| X | Cross-cutting | 17 | 8 | 2 | 13 | 0 |
 | M | Menus and shortcuts | 79 | 9 | 0 | 52 | 0 |
 | D | Dialogs and windows | 52 | 19 | 0 | 8 | 0 |
 | S | Settings | 22 | 7 | 0 | 3 | 0 |
@@ -22,7 +22,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | L | Timeline, transport, status | 70 | 9 | 0 | 9 | 2 |
 | R | Live editing and runs | 42 | 15 | 0 | 2 | 2 |
 | G | Messages pane | 25 | 3 | 0 | 4 | 0 |
-| | All | 832 | 88 | 3 | 167 | 5 |
+| | All | 833 | 88 | 2 | 167 | 5 |
 
 ## Cross-cutting
 
@@ -39,7 +39,7 @@ Statuses: done, partial (the note says what is missing), missing, divergence; "n
 | X-09 | "Window position" menu: Move to Left/Right/Top/Bottom, Close | Docking/DockCommands.cs | 00, Panes | missing | planned with the saved layout (X-15) |
 | X-10 | Active pane title bar accent + white text + light-blue grip by focus; first group active at start | Docking/DockGroupControl.cs | 00, Panes | partial | accent, white text, light-blue grip; first group lit at start; a pointer press in a group (title, tab or content, through the window's events) lights it, one in the preview none; keyboard focus moves do not |
 | X-11 | Tab strip for groups with several panes | Docking/DockGroupControl.cs | 00, Panes; 90 s1 | done | crates/slint_dock ui/dock.slint: under the content, Next's ToolTab colours; a click activates; dragging a tab is X-12 |
-| X-12 | Drag pane/group to dock: edge strip, split beside, tab into; accent drop preview; ghost label; Esc cancels | Docking/DockDragManager.cs, DockDropAdorner.cs | 00, Panes (port rules) | missing | planned: drag-to-dock on crates/slint_dock's drop targets |
+| X-12 | Drag pane/group to dock: edge strip, split beside, tab into; accent drop preview; ghost label; Esc cancels | Docking/DockDragManager.cs, DockDropAdorner.cs | 00, Panes (port rules) | done | crates/slint_dock ui/dock.slint: a title bar drags its group, a tab its pane, past 4 px; Dock::drop_target picks the target, its area tinted accent with a 2 px border over the panes' contents, the title on an accent label at the pointer; the focus stays, the window's key handler takes every key mid-drag and Esc cancels; a lost grab cancels |
 | X-13 | Close hides the pane; reshown at its default side without a saved place | Docking/DockHost.cs | 00, Panes | done | hide/show works; rest matched in general (decision 0033) |
 | X-14 | Default arrangement: left column 1:3, Project over Properties 1:2; Messages hidden | Docking/DockHost.cs | 00, Panes | done | ratios done; a pane shown at its default side without a place takes a full-width (or full-height) quarter strip at that edge, as Next's edge drop, or tabs into the group already there (Messages and Performance at the bottom) |
 | X-15 | Layout saved as it changes and restored at start; unknown ids ignored | Docking/DockHost.cs | 00, Panes | missing | planned: crates/slint_dock Arrangement (serde) saved and restored |

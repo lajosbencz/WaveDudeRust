@@ -7,7 +7,7 @@ import "../../../crates/waveduderust/assets/fonts/Selawik-Semibold.ttf";
 import "../../../crates/waveduderust/assets/fonts/Selawik-Bold.ttf";
 export { Palette } from "std-widgets.slint";
 import { MenuIcons } from "menu-icons.slint";
-import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace } from "@slint-dock/dock.slint";
+import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview } from "@slint-dock/dock.slint";
 import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
 import { Form, NumberParse } from "form.slint";
 export { Form, NumberParse }
@@ -184,6 +184,10 @@ export component AppWindow inherits Window {
     callback dock-resized();
     callback dock-splitter-moved(index: int, x: length, y: length);
     callback dock-activate(pane: string);
+    callback dock-drag-over(pane: string, group: bool, x: length, y: length) -> DockPreview;
+    callback dock-dropped(pane: string, group: bool, x: length, y: length);
+    callback dock-cancelled();
+    out property <bool> dock-dragging: dock.dragging;
     // shows or hides pane `pane`
     callback pane-shown(pane: string, shown: bool);
     in property <bool> project-shown;
@@ -314,6 +318,13 @@ export component AppWindow inherits Window {
     // the text fields.
     keys := FocusScope {
         init => { self.focus(); }
+        // a dock drag takes every key before the focused editor, so none edits the project or the layout; Esc
+        // cancels it (the menu bar's shortcuts come first, docking.rs defers their layout changes)
+        capture-key-pressed(e) => {
+            if (!dock.dragging) { return reject; }
+            if (e.text == Key.Escape) { dock.cancel(); }
+            accept
+        }
         key-pressed(e) => {
             if (e.text == Key.Escape && Canvas.dragging) { Canvas.cancel(); return accept; }
             if (e.text == Key.Escape && root.commands.can-stop) { root.command(Command.stop); return accept; }
@@ -331,7 +342,7 @@ export component AppWindow inherits Window {
 
             HorizontalLayout {
                 padding: 4px;
-                // the dock's chrome, the panes' contents over it at their places
+                // the dock's chrome, the panes' contents its children at their places
                 Rectangle {
                     dock := DockArea {
                         groups: root.dock-groups;
@@ -354,6 +365,10 @@ export component AppWindow inherits Window {
                             tab-selected-text: Theme.tab-selected-text,
                             tab-hover-text: Theme.tab-hover-text,
                             splitter: Theme.window-background,
+                            drop-fill: Theme.accent.with-alpha(96 / 255),
+                            drop-border: Theme.accent,
+                            label: Theme.accent,
+                            label-text: Theme.selection-text,
                         };
                         close-tip: @tr("Close");
                         title(pane) => {
@@ -364,104 +379,107 @@ export component AppWindow inherits Window {
                         activate(pane) => { root.dock-activate(pane); }
                         splitter-moved(index, x, y) => { root.dock-splitter-moved(index, x, y); }
                         resized => { root.dock-resized(); }
-                    }
-                    if root.project-shown: DockedPane {
-                        place: root.project-place;
-                        ProjectTree {
-                            rows: root.tree-rows;
-                            current-row: root.tree-current;
-                            select(i, pick) => { root.tree-select(i, pick); }
-                            toggle(i) => { root.tree-toggle(i); }
-                            expand(i) => { root.tree-expand(i); }
-                            shift(i, by) => { root.tree-shift(i, by); }
-                            remove(i) => { root.tree-remove(i); }
-                            can-move-up: root.commands.can-move-up;
-                            can-move-down: root.commands.can-move-down;
-                            can-remove: root.commands.can-delete;
-                            can-copy: root.commands.can-copy;
-                            mine: root.commands.mine;
-                            can-export-csv: root.commands.can-export-csv;
-                            probe-row: root.props-kind == TreeKind.probe;
-                            can-select-all: root.commands.can-select-all;
-                            can-toggle: root.commands.can-toggle;
-                            act(c) => { root.command(c); }
-                            add-item(item) => { root.add(item); }
-                            navigate(key, extend) => { root.tree-navigate(key, extend); }
-                            drag-data(row) => { return root.tree-drag-data(row); }
-                            drop-place(row, data, before) => { return root.tree-drop-place(row, data, before); }
-                            drop(row, data, before) => { root.tree-drop(row, data, before); }
-                        }
-                    }
-                    if root.properties-shown: DockedPane {
-                        place: root.properties-place;
-                        Properties {
-                            heading: TreeWords.label(root.props-kind, root.props-heading);
-                            entries: root.props-entries;
-                        }
-                    }
-                    if root.messages-shown: DockedPane {
-                        place: root.messages-place;
-                        Messages {
-                            rows: root.log-rows;
-                            levels: root.log-levels;
-                            toggle(l) => { root.log-toggle(l); }
-                            search(t) => { root.log-search(t); }
-                            clear => { root.log-clear(); }
-                            regex(on) => { root.log-regex(on); }
-                            select(row, control, shift) => { root.log-select(row, control, shift); }
-                            copy(all) => { root.log-copy(all) }
-                            added: root.log-added;
-                        }
-                    }
-                    if root.performance-shown: DockedPane {
-                        place: root.performance-place;
-                        VerticalLayout {
-                            padding: 8px;
-                            RamBarView { ram: root.ram; }
-                        }
-                    }
-                    DockedPane {
-                        place: root.preview-place;
-                        // Next's preview keys, its own even when the command cannot run; a click on the pictures
-                        // focuses it
-                        preview-keys := FocusScope {
-                            key-pressed(e) => {
-                                if (e.modifiers.control || e.modifiers.alt || e.modifiers.meta || e.modifiers.shift) { return reject; }
-                                if (e.text == " ") { root.transport-action(TransportAction.play); return accept; }
-                                if (e.text == ",") { root.transport-action(TransportAction.prev); return accept; }
-                                if (e.text == ".") { root.transport-action(TransportAction.next); return accept; }
-                                if (e.text == "i" || e.text == "I") { root.transport-action(TransportAction.set-in); return accept; }
-                                if (e.text == "o" || e.text == "O") { root.transport-action(TransportAction.set-out); return accept; }
-                                if (e.text == "x" || e.text == "X") { root.transport-action(TransportAction.clear-range); return accept; }
-                                if (e.text == "l" || e.text == "L") { root.transport-action(TransportAction.loop); return accept; }
-                                if (e.text == "f" || e.text == "F") { root.transport-action(TransportAction.live); return accept; }
-                                if (e.text == Key.Home) { root.seek(root.transport.start); return accept; }
-                                if (e.text == Key.End) { root.seek(root.transport.end); return accept; }
-                                reject
+                        drag-over(pane, group, x, y) => { root.dock-drag-over(pane, group, x, y) }
+                        dropped(pane, group, x, y) => { root.dock-dropped(pane, group, x, y); }
+                        cancelled => { root.dock-cancelled(); }
+                        if root.project-shown: DockedPane {
+                            place: root.project-place;
+                            ProjectTree {
+                                rows: root.tree-rows;
+                                current-row: root.tree-current;
+                                select(i, pick) => { root.tree-select(i, pick); }
+                                toggle(i) => { root.tree-toggle(i); }
+                                expand(i) => { root.tree-expand(i); }
+                                shift(i, by) => { root.tree-shift(i, by); }
+                                remove(i) => { root.tree-remove(i); }
+                                can-move-up: root.commands.can-move-up;
+                                can-move-down: root.commands.can-move-down;
+                                can-remove: root.commands.can-delete;
+                                can-copy: root.commands.can-copy;
+                                mine: root.commands.mine;
+                                can-export-csv: root.commands.can-export-csv;
+                                probe-row: root.props-kind == TreeKind.probe;
+                                can-select-all: root.commands.can-select-all;
+                                can-toggle: root.commands.can-toggle;
+                                act(c) => { root.command(c); }
+                                add-item(item) => { root.add(item); }
+                                navigate(key, extend) => { root.tree-navigate(key, extend); }
+                                drag-data(row) => { return root.tree-drag-data(row); }
+                                drop-place(row, data, before) => { return root.tree-drop-place(row, data, before); }
+                                drop(row, data, before) => { root.tree-drop(row, data, before); }
                             }
+                        }
+                        if root.properties-shown: DockedPane {
+                            place: root.properties-place;
+                            Properties {
+                                heading: TreeWords.label(root.props-kind, root.props-heading);
+                                entries: root.props-entries;
+                            }
+                        }
+                        if root.messages-shown: DockedPane {
+                            place: root.messages-place;
+                            Messages {
+                                rows: root.log-rows;
+                                levels: root.log-levels;
+                                toggle(l) => { root.log-toggle(l); }
+                                search(t) => { root.log-search(t); }
+                                clear => { root.log-clear(); }
+                                regex(on) => { root.log-regex(on); }
+                                select(row, control, shift) => { root.log-select(row, control, shift); }
+                                copy(all) => { root.log-copy(all) }
+                                added: root.log-added;
+                            }
+                        }
+                        if root.performance-shown: DockedPane {
+                            place: root.performance-place;
                             VerticalLayout {
-                                Preview {
-                                    field: root.field;
-                                    intensity: root.intensity;
-                                    stacked: root.preview-stacked;
-                                    can-export: root.commands.can-export;
-                                    field-shown: root.transport.field-shown;
-                                    intensity-shown: root.transport.intensity-shown;
-                                    focus-lost => { preview-keys.focus(); }
-                                    command(c) => { root.command(c); }
+                                padding: 8px;
+                                RamBarView { ram: root.ram; }
+                            }
+                        }
+                        DockedPane {
+                            place: root.preview-place;
+                            // Next's preview keys, its own even when the command cannot run; a click on the pictures
+                            // focuses it
+                            preview-keys := FocusScope {
+                                key-pressed(e) => {
+                                    if (e.modifiers.control || e.modifiers.alt || e.modifiers.meta || e.modifiers.shift) { return reject; }
+                                    if (e.text == " ") { root.transport-action(TransportAction.play); return accept; }
+                                    if (e.text == ",") { root.transport-action(TransportAction.prev); return accept; }
+                                    if (e.text == ".") { root.transport-action(TransportAction.next); return accept; }
+                                    if (e.text == "i" || e.text == "I") { root.transport-action(TransportAction.set-in); return accept; }
+                                    if (e.text == "o" || e.text == "O") { root.transport-action(TransportAction.set-out); return accept; }
+                                    if (e.text == "x" || e.text == "X") { root.transport-action(TransportAction.clear-range); return accept; }
+                                    if (e.text == "l" || e.text == "L") { root.transport-action(TransportAction.loop); return accept; }
+                                    if (e.text == "f" || e.text == "F") { root.transport-action(TransportAction.live); return accept; }
+                                    if (e.text == Key.Home) { root.seek(root.transport.start); return accept; }
+                                    if (e.text == Key.End) { root.seek(root.transport.end); return accept; }
+                                    reject
                                 }
-                                Timeline {
-                                    t: root.transport;
-                                    seek(f) => { root.seek(f); }
-                                    bracket(end, f) => { root.bracket(end, f); }
-                                    action(a) => { root.transport-action(a); }
-                                }
-                                TransportBar {
-                                    t: root.transport;
-                                    stacked <=> root.preview-stacked;
-                                    action(a) => { root.transport-action(a); }
-                                    command(c) => { root.command(c); }
-                                    speed(text) => { root.transport-speed(text) }
+                                VerticalLayout {
+                                    Preview {
+                                        field: root.field;
+                                        intensity: root.intensity;
+                                        stacked: root.preview-stacked;
+                                        can-export: root.commands.can-export;
+                                        field-shown: root.transport.field-shown;
+                                        intensity-shown: root.transport.intensity-shown;
+                                        focus-lost => { preview-keys.focus(); }
+                                        command(c) => { root.command(c); }
+                                    }
+                                    Timeline {
+                                        t: root.transport;
+                                        seek(f) => { root.seek(f); }
+                                        bracket(end, f) => { root.bracket(end, f); }
+                                        action(a) => { root.transport-action(a); }
+                                    }
+                                    TransportBar {
+                                        t: root.transport;
+                                        stacked <=> root.preview-stacked;
+                                        action(a) => { root.transport-action(a); }
+                                        command(c) => { root.command(c); }
+                                        speed(text) => { root.transport-speed(text) }
+                                    }
                                 }
                             }
                         }
