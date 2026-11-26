@@ -23,6 +23,10 @@
 //! area needs. A driven cell of the fresh area takes `w` from the plane, where the forcing completes it. Every value
 //! of `w` is the same expression in the same order as in two passes; the plane holds stale values on the fresh area.
 //!
+//! Uniform medium: `c2` and `d` never change during a run, and most of a scene is one medium. Each grid row keeps its
+//! runs of at least 16 cells where both hold one value, bit for bit; the leapfrog pass and the fused outer pass, its
+//! ring included, take that run's values as constants and read neither plane there. The values are the same, so the result is the same bit for bit.
+//!
 //! Threads: one driver thread; each pass fans out over rows, or blocks of rows, on the rayon pool, reading only its
 //! input fields.
 //!
@@ -87,6 +91,8 @@ pub struct CpuEngine {
 	damage: Damage,
 	/// Cells one pass reaches along an axis: the stencil's, the CPML's when there is a rim.
 	reach: usize,
+	/// The runs of each grid row where `c2` and `d` hold one value (module docs, Uniform medium).
+	uniform: UniformRuns,
 	/// The padded cells of the sub-step's fresh area (module docs, Fused passes) the forcing drove, ascending.
 	driven: Vec<usize>,
 }
@@ -142,6 +148,7 @@ impl CpuEngine {
 			damage: Damage::NONE,
 			reach: 0,
 			driven: Vec::new(),
+			uniform: UniformRuns::default(),
 			shared: Shared::new(scene, options, n),
 		};
 		engine.load_scene();
@@ -234,6 +241,7 @@ impl CpuEngine {
 	fn load_scene(&mut self) {
 		let (scene, n) = (&self.shared.scene, self.shared.sub_steps);
 		scene.fill_sub_step_medium(n, &mut self.c2, &mut self.d);
+		self.uniform = UniformRuns::of(&self.c2, &self.d, self.stride, scene.grid_width() as usize);
 		self.cuts = pml::cuts(scene);
 		self.mirrors = self.cuts.iter().any(|&c| c != 0);
 		self.mur = mur_chains(scene, &self.c2, &self.d);
@@ -318,31 +326,27 @@ impl CpuEngine {
 	/// stages when `intensity`.
 	fn leapfrog_pass(&mut self, intensity: bool) {
 		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
-		let (u, c2, d, cuts, mirrors) = (&self.u, &self.c2, &self.d, &self.cuts, self.mirrors);
+		let (u, c2, d, cuts, mirrors, uniform) = (&self.u, &self.c2, &self.d, &self.cuts, self.mirrors, &self.uniform);
 		let (area, xs) = (&self.damage, self.damage.x.clone());
 		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
 		grid_rows(&mut self.prev, stages, s, gw, area, |r, next| {
-			let at = r * s + PAD;
+			let (at, runs) = (r * s + PAD, uniform.row(r - PAD));
 			let (c2, d) = (&c2[at..][..gw], &d[at..][..gw]);
 			let update = |x: usize, next: &mut f32, v: f32, lap: f32| {
 				*next = v + ((v - *next) * d[x] + lap * c2[x] * centred(d[x]));
 			};
-			// The cells of `span` with no cut, on row slices, as `nine_point` and `update` in the same order. Every
-			// slice has the span's length, so the loop has no bounds checks and vectorises.
+			// The cells of `span` with no cut, on row slices ([`nine_span`]), a uniform run's with its constants.
 			let uncut = |span: Range<usize>, next: &mut [f32]| {
-				let len = span.len();
-				let tap = |k: isize| &u[(at + span.start).wrapping_add_signed(k)..][..len];
-				let (si, one) = (s as isize, 1isize);
-				let (c, w, e, n, so) = (tap(0), tap(-one), tap(one), tap(-si), tap(si));
-				let (nw, ne, sw, se) = (tap(-si - 1), tap(-si + 1), tap(si - 1), tap(si + 1));
-				let (c2, d, next) = (&c2[span.clone()], &d[span.clone()], &mut next[span]);
-				for x in 0..len {
-					let v = c[x];
-					let diagonals = ((nw[x] - v) + (ne[x] - v)) + ((sw[x] - v) + (se[x] - v));
-					let axes = ((n[x] - v) + (so[x] - v)) + ((w[x] - v) + (e[x] - v));
-					let lap = K9_DIAGONAL * diagonals + K9_AXIS * axes;
-					next[x] = v + ((v - next[x]) * d[x] + lap * c2[x] * centred(d[x]));
-				}
+				medium_spans(runs, c2, d, span, |piece, medium| {
+					let next = &mut next[piece.clone()];
+					match medium {
+						Some((c2, d)) => nine_span(u, at + piece.start, s, next, |_| c2, |_| d),
+						None => {
+							let (c2, d) = (&c2[piece.clone()], &d[piece.clone()]);
+							nine_span(u, at + piece.start, s, next, |x| c2[x], |x| d[x]);
+						}
+					}
+				});
 			};
 			match row_cuts(cuts, mirrors, at, gw, &xs) {
 				None => uncut(xs.clone(), next),
@@ -385,6 +389,7 @@ impl CpuEngine {
 		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
 		let (u, w, c2, d, cuts, axis, mirrors, driven) =
 			(&self.u, &self.w, &self.c2, &self.d, &self.cuts, &self.axis, self.mirrors, &self.driven);
+		let uniform = &self.uniform;
 		let (area, xs) = (&self.damage, &self.damage.x);
 		// The columns of `w` the stencil reads.
 		let wide = xs.start.saturating_sub(3)..(xs.end + 3).min(gw);
@@ -398,9 +403,12 @@ impl CpuEngine {
 			}
 			cells[wide.start..own.start].copy_from_slice(&plane[wide.start..own.start]);
 			cells[own.end..wide.end].copy_from_slice(&plane[own.end..wide.end]);
-			let c2 = &c2[at..][..gw];
+			let (c2, d, rows) = (&c2[at..][..gw], &d[at..][..gw], plane_rows(u, r, s));
 			let own_cuts = row_cuts(cuts, mirrors, at, gw, &own);
-			drp_row(&plane_rows(u, r, s), own, axis, own_cuts, |x, lap| cells[x] = c2[x] * lap);
+			medium_spans(uniform.row(r - PAD), c2, d, own, |piece, medium| match medium {
+				Some((k, _)) => drp_row(&rows, piece, axis, own_cuts, |x, lap| cells[x] = k * lap),
+				None => drp_row(&rows, piece, axis, own_cuts, |x, lap| cells[x] = c2[x] * lap),
+			});
 			// The driven cells, whose `w` the forcing completed in the plane.
 			let first = driven.partition_point(|&c| c < at);
 			for &c in driven[first..].iter().take_while(|&&c| c < at + gw) {
@@ -426,10 +434,16 @@ impl CpuEngine {
 					let rows: Rows<'_> = std::array::from_fn(|k| &ring[(r + k - 3) % RING * s..][..s]);
 					let at = r * s + PAD;
 					let (uc, wc, c2, d) = (&u[at..][..gw], &rows[3][PAD..][..gw], &c2[at..][..gw], &d[at..][..gw]);
-					let next = &mut line[PAD..][..gw];
-					drp_row(&rows, xs.clone(), axis, row_cuts(cuts, mirrors, at, gw, xs), |x, lw| {
-						let c = uc[x];
-						next[x] = c + ((c - next[x]) * d[x] + (wc[x] + c2[x] * lw * INV12) * centred(d[x]));
+					let (next, row_cuts) = (&mut line[PAD..][..gw], row_cuts(cuts, mirrors, at, gw, xs));
+					medium_spans(uniform.row(r - PAD), c2, d, xs.clone(), |piece, medium| match medium {
+						Some((k, dk)) => drp_row(&rows, piece, axis, row_cuts, |x, lw| {
+							let c = uc[x];
+							next[x] = c + ((c - next[x]) * dk + (wc[x] + k * lw * INV12) * centred(dk));
+						}),
+						None => drp_row(&rows, piece, axis, row_cuts, |x, lw| {
+							let c = uc[x];
+							next[x] = c + ((c - next[x]) * d[x] + (wc[x] + c2[x] * lw * INV12) * centred(d[x]));
+						}),
 					});
 					done(j, line);
 				}
@@ -592,6 +606,95 @@ fn grid_blocks<T>(
 		None => out[span].par_chunks_mut(rows * s).enumerate().for_each_init(init, |scratch, (k, lines)| {
 			block(scratch, first + k * rows, lines, &mut |_, _| {});
 		}),
+	}
+}
+
+/// The fewest cells of a uniform run (module docs, Uniform medium); shorter runs read `c2` and `d` per cell.
+const MIN_RUN: usize = 16;
+
+/// The runs of at least [`MIN_RUN`] grid cells per grid row where `c2` and `d` hold one value, bit for bit, in order:
+/// `runs[rows[gy]..rows[gy + 1]]` for grid row `gy`, as column ranges.
+#[derive(Default)]
+struct UniformRuns {
+	runs: Vec<(u32, u32)>,
+	rows: Vec<u32>,
+}
+
+impl UniformRuns {
+	/// The runs of the padded `c2` and `d` (row length `s`) of a grid `gw` cells wide.
+	fn of(c2: &[f32], d: &[f32], s: usize, gw: usize) -> Self {
+		let gh = (c2.len() / s).saturating_sub(2 * PAD);
+		let mut out = Self { runs: Vec::new(), rows: vec![0] };
+		for gy in 0..gh {
+			let at = (gy + PAD) * s + PAD;
+			let (c2, d) = (&c2[at..][..gw], &d[at..][..gw]);
+			let mut start = 0;
+			while start < gw {
+				let same = |x: usize| c2[x].to_bits() == c2[start].to_bits() && d[x].to_bits() == d[start].to_bits();
+				let end = (start..gw).find(|&x| !same(x)).unwrap_or(gw);
+				if end - start >= MIN_RUN {
+					out.runs.push((start as u32, end as u32));
+				}
+				start = end;
+			}
+			out.rows.push(out.runs.len() as u32);
+		}
+		out
+	}
+
+	/// The runs of grid row `gy`.
+	fn row(&self, gy: usize) -> &[(u32, u32)] {
+		match (self.rows.get(gy), self.rows.get(gy + 1)) {
+			(Some(&a), Some(&b)) => &self.runs[a as usize..b as usize],
+			_ => &[],
+		}
+	}
+}
+
+/// Hands `f` the pieces of `xs` in order, each with the `(c2, d)` of the uniform run it lies in (from the row's `c2`
+/// and `d`), or None between runs.
+#[inline(always)]
+fn medium_spans(
+	runs: &[(u32, u32)],
+	c2: &[f32],
+	d: &[f32],
+	xs: Range<usize>,
+	mut f: impl FnMut(Range<usize>, Option<(f32, f32)>),
+) {
+	let mut at = xs.start;
+	for &(a, b) in runs {
+		let (a, b) = ((a as usize).max(at), (b as usize).min(xs.end));
+		if a >= b {
+			continue;
+		}
+		if at < a {
+			f(at..a, None);
+		}
+		f(a..b, Some((c2[a], d[a])));
+		at = b;
+	}
+	if at < xs.end {
+		f(at..xs.end, None);
+	}
+}
+
+/// The 9-point leapfrog update of the `next.len()` cells from padded cell `at`, none of them cut, on row slices, as
+/// [`nine_point`] in the same order; `c2(x)` and `d(x)` give the medium of cell `x` of the span. Every slice has the
+/// span's length, so the loop has no bounds checks and vectorises.
+#[inline(always)]
+fn nine_span(u: &[f32], at: usize, s: usize, next: &mut [f32], c2: impl Fn(usize) -> f32, d: impl Fn(usize) -> f32) {
+	let len = next.len();
+	let tap = |k: isize| &u[at.wrapping_add_signed(k)..][..len];
+	let (si, one) = (s as isize, 1isize);
+	let (c, w, e, n, so) = (tap(0), tap(-one), tap(one), tap(-si), tap(si));
+	let (nw, ne, sw, se) = (tap(-si - 1), tap(-si + 1), tap(si - 1), tap(si + 1));
+	for x in 0..len {
+		let v = c[x];
+		let diagonals = ((nw[x] - v) + (ne[x] - v)) + ((sw[x] - v) + (se[x] - v));
+		let axes = ((n[x] - v) + (so[x] - v)) + ((w[x] - v) + (e[x] - v));
+		let lap = K9_DIAGONAL * diagonals + K9_AXIS * axes;
+		let (c2, d) = (c2(x), d(x));
+		next[x] = v + ((v - next[x]) * d + lap * c2 * centred(d));
 	}
 }
 
@@ -1108,5 +1211,40 @@ mod tests {
 			got.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
 			want.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
 		);
+	}
+
+	#[test]
+	fn uniform_runs_cover_the_long_constant_stretches_and_split_a_span() {
+		let (gw, s) = (60, 60 + 2 * PAD);
+		let mut c2 = vec![0.0f32; s * (2 + 2 * PAD)];
+		let mut d = vec![1.0f32; c2.len()];
+		let at = |gy: usize| (gy + PAD) * s + PAD;
+		// Row 0: 0.5 on 0..20, a ramp on 20..30, 0.25 on 30..60 but d differs at 40; row 1: 15 cells of 0.5, 16 of
+		// -0.0, then +0.0.
+		for x in 0..gw {
+			c2[at(0) + x] = if x < 20 {
+				0.5
+			} else if x < 30 {
+				x as f32
+			} else {
+				0.25
+			};
+			c2[at(1) + x] = if x < 15 {
+				0.5
+			} else if x < 31 {
+				-0.0
+			} else {
+				0.0
+			};
+		}
+		d[at(0) + 40] = 0.9;
+		let runs = UniformRuns::of(&c2, &d, s, gw);
+		assert_eq!(runs.row(0), [(0, 20), (41, 60)]);
+		assert_eq!(runs.row(1), [(15, 31), (31, 60)]);
+		assert_eq!(runs.row(2), &[] as &[(u32, u32)]);
+		let mut pieces = Vec::new();
+		let (c2, d) = (&c2[at(0)..][..gw], &d[at(0)..][..gw]);
+		medium_spans(runs.row(0), c2, d, 10..50, |piece, m| pieces.push((piece, m)));
+		assert_eq!(pieces, [(10..20, Some((0.5, 1.0))), (20..41, None), (41..50, Some((0.25, 1.0)))]);
 	}
 }

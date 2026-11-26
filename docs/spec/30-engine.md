@@ -103,6 +103,12 @@ corrects and reads `w`, and on the cells the damage grew by. A driven cell takes
 plane. Each value of `w` is the same expression in the same order, so the result is the same bit for bit; elsewhere
 the plane `w` is neither written nor read ([docs/measurements.md](../measurements.md#the-cpu-engines-fused-4th-order-passes)).
 
+Rust, CPU engine: `c2` and `d` are constant over most of a scene. Each grid row keeps its runs of at least 16 cells
+where both hold one value, bit for bit, found when the scene is loaded; there the 9-point leapfrog pass and the 4th
+order's fused outer pass, its ring of `w` included, take the run's values as constants instead of reading the two
+planes. The values are the same, so the result is the same bit for bit
+([docs/measurements.md](../measurements.md#the-cpu-engines-uniform-medium-runs)).
+
 ## Sources
 
 Constants: `SourceOpacity = 0.9`, `DetachRampSteps = 30`.

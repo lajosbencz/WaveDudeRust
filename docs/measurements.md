@@ -336,6 +336,31 @@ loops vectorise, natively (SSE2) and in wasm with simd128, read as in
 [The CPU engine's loops vectorised in wasm](#the-cpu-engines-loops-vectorised-in-wasm): `drp_span` has a vector body
 in the inner pass, the ring's rows and the outer pass, and so has each pass's per-cell update.
 
+## The CPU engine's uniform-medium runs
+
+2026-11-26, the workstation above. Each grid row keeps its runs of at least 16 cells where `c2` and `d` hold one
+value, and the stencil loops of both stencils take that value as a constant there, so per cell and sub-step neither
+plane is read (8 of about 20 bytes). The A/B harness of
+[The CPU engine's fused 4th-order passes](#the-cpu-engines-fused-4th-order-passes), against the commit before
+(`d9ef906`), same scenes plus a graded one where `c2` falls by up to 30% across every row, so that no row has a run
+(the worst case: only the overhead). 8 threads at 1920x1080 rim 32, 1 thread (`taskset -c 3`) at 800x600 rim 16;
+runs over before, total time, three runs each:
+
+| Threads | Stencil | Open edges | Mirror box | Graded |
+|---|---|---|---|---|
+| 8 | 4th order | 0.860, 0.867, 0.943 | 0.927, 0.942, 0.978 | 0.938, 0.976, 1.026 |
+| 8 | 9-point | 0.706, 0.793, 0.811 | 0.788, 0.912, 0.924 | 0.986, 1.001, 1.011 |
+| 1 | 4th order | 0.889, 0.921, 0.924 | 0.987, 1.011, 1.022 | 1.006, 1.035, 1.066 |
+| 1 | 9-point | 0.879, 0.888, 0.897 | 0.993, 0.995, 1.027 | 0.970, 1.012, 1.022 |
+
+Five more runs of the 4th order, graded, 1 thread: 0.990 to 1.050, about 2% slower on average; a direct path for
+rows without runs did not change that (1.017 to 1.049), so it stayed out. 8 threads, 4th order, open, 800x600 rim 16:
+0.955, 0.956, 1.061. The 9-point gains most, as its step moves fewer bytes besides `c2` and `d`. The fields are equal
+bit for bit in every run, and at 300x200 and 640x360, rims 0, 16 and 32, all three scenes, both stencils; the probe
+series of Example01, 03, 08, 13 and 21 and of `01-single-fiber`, 300 steps, are byte for byte the commit before's.
+Both paths of each loop vectorise, natively (SSE2) and in wasm with simd128, read as in
+[The CPU engine's loops vectorised in wasm](#the-cpu-engines-loops-vectorised-in-wasm).
+
 ## The CPU engine in wasm, with and without simd128
 
 2026-11-25, the workstation above. A harness outside the repository runs the CPU engine alone, built for wasm32 at
