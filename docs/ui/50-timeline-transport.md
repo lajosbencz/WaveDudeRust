@@ -114,6 +114,7 @@ accent border.
 | Run stopped | Frames so far stay; the preview moves to the newest one when it was following; Live off. |
 | Run discarded (replaced) | Position kept for what comes next. |
 | Frame missing for the position | The live run makes it first; the last picture stays meanwhile. |
+| No enabled source | Nothing to simulate: the timeline, Run and playback are off; the position stays. |
 
 ## Run states (as the user sees them)
 

@@ -455,7 +455,7 @@ impl State {
 			can_export,
 			can_export_last: can_export && self.last_export.is_some(),
 			can_close: self.doc.path.is_some() || self.doc.suggested.is_some() || self.doc.dirty(),
-			can_play: self.playback.frames > 1,
+			can_play: self.playback.frames > 1 && self.doc.project.has_enabled_source(),
 			playing: self.playback.playing,
 		}
 	}

@@ -815,6 +815,18 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 
 /// A transport bar or timeline action (docs/ui/50).
 fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
+	// an empty project has no frames to move through; the views stay switchable
+	if !state.doc.project.has_enabled_source()
+		&& !matches!(
+			action,
+			TransportAction::ShowField
+				| TransportAction::ShowIntensity
+				| TransportAction::Layout
+				| TransportAction::PauseRun
+				| TransportAction::ClearRange
+		) {
+		return;
+	}
 	let p = &mut state.playback;
 	match action {
 		TransportAction::Play if p.playing => p.pause(),
@@ -852,7 +864,13 @@ fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
 	}
 }
 
-fn transport_state(p: &Playback, shown: &live::Shown, view: &waveduderust::model::View, paused: bool) -> ui::Transport {
+fn transport_state(
+	p: &Playback,
+	shown: &live::Shown,
+	view: &waveduderust::model::View,
+	paused: bool,
+	empty: bool,
+) -> ui::Transport {
 	let int = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
 	let (start, end) = p.range();
 	ui::Transport {
@@ -867,6 +885,7 @@ fn transport_state(p: &Playback, shown: &live::Shown, view: &waveduderust::model
 		looping: p.looping,
 		running: shown.running,
 		paused,
+		empty,
 		step: shown.step.map_or_else(Default::default, |s| format!("step {s}").into()),
 		field_shown: view.field.preview,
 		intensity_shown: view.intensity.preview,
@@ -1019,7 +1038,8 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 	}
 	s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
 	s.live.prefetch(|count| s.playback.ahead(count, shown.made));
-	app.set_transport(transport_state(&s.playback, &shown, &s.doc.view, s.live.paused()));
+	let empty = !s.doc.project.has_enabled_source();
+	app.set_transport(transport_state(&s.playback, &shown, &s.doc.view, s.live.paused(), empty));
 	app.set_commands(s.commands());
 	match (shown.export, s.exporting.as_ref().and_then(export::Exporting::waits)) {
 		(Some(live::ExportNews::Ready), Some(waiting)) => {

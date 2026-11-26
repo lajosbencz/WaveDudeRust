@@ -14,13 +14,19 @@ pub(crate) fn wire_transport(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	app.on_transport_action(move |action| h.with(|s, app| transport(s, app, action)));
 	let st = state.clone();
 	app.on_seek(move |frame| {
-		st.borrow_mut().playback.seek(i64::from(frame));
-		wake::wake();
+		let s = &mut *st.borrow_mut();
+		if s.doc.project.has_enabled_source() {
+			s.playback.seek(i64::from(frame));
+			wake::wake();
+		}
 	});
 	let st = state.clone();
 	app.on_bracket(move |bracket, frame| {
-		st.borrow_mut().playback.drag_bracket(bracket, i64::from(frame));
-		wake::wake();
+		let s = &mut *st.borrow_mut();
+		if s.doc.project.has_enabled_source() {
+			s.playback.drag_bracket(bracket, i64::from(frame));
+			wake::wake();
+		}
 	});
 	let st = state.clone();
 	app.on_transport_speed(move |text| {

@@ -17,6 +17,8 @@ export struct Transport {
     running: bool,
     // the run is paused (F6)
     paused: bool,
+    // no enabled source: nothing to simulate, the timeline and playback are off
+    empty: bool,
     step: string,
     // Display > Field / Intensity > Preview
     field-shown: bool,
@@ -30,6 +32,7 @@ export enum Bracket { start, end }
 // scrub, drag a bracket to move the range.
 export component Timeline inherits Rectangle {
     in property <Transport> t;
+    opacity: t.empty ? 0.5 : 1;
     callback seek(int);
     // the bracket dragged to `frame`
     callback bracket(bracket: Bracket, frame: int);
@@ -170,6 +173,7 @@ export component Timeline inherits Rectangle {
         }
     }
     touch := TouchArea {
+        enabled: !root.t.empty;
         y: bar.y;
         height: bar.height;
         mouse-cursor: root.dragging > 0 || root.near-bracket(self.mouse-x) > 0 ? MouseCursor.ew-resize : MouseCursor.pointer;
@@ -224,18 +228,18 @@ export component TransportBar inherits Rectangle {
     HorizontalLayout {
         padding: 3px;
         spacing: 1px;
-        IconButton { icon: t.running ? @image-url("icons/next/stop.svg") : @image-url("icons/next/run.svg"); tip: t.running ? @tr("Stop the simulation; the frames so far stay (Esc)") : @tr("Run the simulation from the start (F5)"); clicked => { root.command(t.running ? Command.stop : Command.run); } }
+        IconButton { icon: t.running ? @image-url("icons/next/stop.svg") : @image-url("icons/next/run.svg"); enabled: t.running || !t.empty; tip: t.running ? @tr("Stop the simulation; the frames so far stay (Esc)") : @tr("Run the simulation from the start (F5)"); clicked => { root.command(t.running ? Command.stop : Command.run); } }
         IconButton { icon: @image-url("icons/next/pause-run.svg"); tip: t.paused ? @tr("Resume the simulation (F6)") : @tr("Pause the simulation (F6)"); enabled: t.running; clicked => { root.action(TransportAction.pause-run); } }
         Divider { }
-        IconButton { icon: @image-url("icons/next/play.svg"); tip: @tr("Play (Space)"); enabled: !t.playing; clicked => { root.action(TransportAction.play); } }
+        IconButton { icon: @image-url("icons/next/play.svg"); tip: @tr("Play (Space)"); enabled: !t.playing && !t.empty; clicked => { root.action(TransportAction.play); } }
         IconButton { icon: @image-url("icons/next/pause.svg"); tip: @tr("Pause (Space)"); enabled: t.playing; clicked => { root.action(TransportAction.play); } }
-        IconButton { icon: @image-url("icons/next/step-back.svg"); tip: @tr("Previous frame (,)"); clicked => { root.action(TransportAction.prev); } }
-        IconButton { icon: @image-url("icons/next/step-forward.svg"); tip: @tr("Next frame (.)"); clicked => { root.action(TransportAction.next); } }
+        IconButton { icon: @image-url("icons/next/step-back.svg"); tip: @tr("Previous frame (,)"); enabled: !t.empty; clicked => { root.action(TransportAction.prev); } }
+        IconButton { icon: @image-url("icons/next/step-forward.svg"); tip: @tr("Next frame (.)"); enabled: !t.empty; clicked => { root.action(TransportAction.next); } }
         Divider { }
-        IconButton { icon: @image-url("icons/next/set-in.svg"); tip: @tr("Start the export range at this frame (I)"); clicked => { root.action(TransportAction.set-in); } }
-        IconButton { icon: @image-url("icons/next/set-out.svg"); tip: @tr("End the export range at this frame (O)"); clicked => { root.action(TransportAction.set-out); } }
+        IconButton { icon: @image-url("icons/next/set-in.svg"); tip: @tr("Start the export range at this frame (I)"); enabled: !t.empty; clicked => { root.action(TransportAction.set-in); } }
+        IconButton { icon: @image-url("icons/next/set-out.svg"); tip: @tr("End the export range at this frame (O)"); enabled: !t.empty; clicked => { root.action(TransportAction.set-out); } }
         IconButton { icon: @image-url("icons/next/clear-range.svg"); tip: @tr("Clear the export range: the whole run is exported (X)"); enabled: t.ranged; clicked => { root.action(TransportAction.clear-range); } }
-        IconButton { icon: @image-url("icons/next/loop.svg"); tip: @tr("Loop playback over the export range (L)"); checked: t.looping; clicked => { root.action(TransportAction.loop); } }
+        IconButton { icon: @image-url("icons/next/loop.svg"); tip: @tr("Loop playback over the export range (L)"); checked: t.looping; enabled: !t.empty; clicked => { root.action(TransportAction.loop); } }
         IconButton { icon: @image-url("icons/next/live.svg"); tip: @tr("Follow the newest frame while the run is in progress (F)"); checked: t.live; enabled: t.running; clicked => { root.action(TransportAction.live); } }
         Divider { }
         // as wide as the widest readout of the run, so playing does not shift what follows
