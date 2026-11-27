@@ -7,11 +7,13 @@ import "../../../crates/waveduderust/assets/fonts/Selawik-Bold.ttf";
 export { Palette } from "std-widgets.slint";
 import { MenuIcons } from "menu-icons.slint";
 import { EditKeys } from "edit-keys.slint";
+import { Dock, PaneWords, PaneId } from "dock.slint";
 import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview, DockSide } from "@slint-dock/dock.slint";
 import { ProjectTree, Tree, TreeRow, TreeKind, TreeWords } from "tree.slint";
 import { Form, NumberParse } from "form.slint";
 export { Form, NumberParse }
 export { Log }
+export { Dock, PaneWords, PaneId, PaneSlot, Panes } from "dock.slint";
 export { Playback } from "timeline.slint";
 export { Tree, PropsHead } from "tree.slint";
 export { Status, StatusLine } from "status.slint";
@@ -106,37 +108,13 @@ export component AppWindow inherits Window {
     in property <MemoryWarningData> memory-warning;
     callback memory-warning-ticked(bool, bool, bool, bool);
     callback memory-warning-answer(WarningAnswer, bool);
-    // The dock (src/docking.rs): its chrome's models, its size, and per pane whether it is shown and where its
-    // content goes; the preview is the centre.
-    in property <[DockGroup]> dock-groups;
-    in property <[DockSplitter]> dock-splitters;
-    in property <DockMetrics> dock-metrics;
+    // the dock's size and place in the window, and whether a pane is being dragged
     out property <length> dock-width: dock.width;
     out property <length> dock-height: dock.height;
     out property <length> dock-x: dock.absolute-position.x;
     out property <length> dock-y: dock.absolute-position.y;
-    // a pointer press at `x`, `y` in the window, which Slint delivers too
-    callback dock-pressed(x: length, y: length);
-    callback dock-resized();
-    callback dock-splitter-moved(index: int, x: length, y: length);
-    callback dock-splitter-released();
-    callback dock-move-to(pane: string, side: DockSide);
-    callback dock-activate(pane: string);
-    callback dock-drag-over(pane: string, group: bool, x: length, y: length) -> DockPreview;
-    callback dock-dropped(pane: string, group: bool, x: length, y: length);
-    callback dock-cancelled();
     out property <bool> dock-dragging: dock.dragging;
-    // shows or hides pane `pane`
-    callback pane-shown(pane: string, shown: bool);
-    in property <bool> project-shown;
-    in property <bool> properties-shown;
-    in property <bool> messages-shown;
-    in property <bool> performance-shown;
-    in property <DockPlace> project-place;
-    in property <DockPlace> properties-place;
-    in property <DockPlace> messages-place;
-    in property <DockPlace> performance-place;
-    in property <DockPlace> preview-place;
+    property <bool> messages-shown: Dock.panes.messages.shown;
     // the pane takes the focus when it opens; closed, it hands the focus back
     changed messages-shown => {
         if (!self.messages-shown) { keys.focus(); }
@@ -221,10 +199,10 @@ export component AppWindow inherits Window {
             title: root.menu-text(@tr("&View"), @tr("View"));
             Menu {
                 title: root.menu-text(@tr("&Panes"), @tr("Panes")); icon: MenuIcons.view-sidebar;
-                MenuItem { title: @tr("Project"); checkable: true; checked: root.project-shown; activated => { root.pane-shown("project", !root.project-shown); } }
-                MenuItem { title: @tr("Properties"); checkable: true; checked: root.properties-shown; activated => { root.pane-shown("properties", !root.properties-shown); } }
-                MenuItem { title: @tr("Messages"); checkable: true; checked: root.messages-shown; activated => { root.pane-shown("messages", !root.messages-shown); } }
-                MenuItem { title: @tr("Performance"); checkable: true; checked: root.performance-shown; activated => { root.pane-shown("performance", !root.performance-shown); } }
+                MenuItem { title: @tr("Project"); checkable: true; checked: Dock.panes.project.shown; activated => { Dock.show-pane(PaneId.project, !Dock.panes.project.shown); } }
+                MenuItem { title: @tr("Properties"); checkable: true; checked: Dock.panes.properties.shown; activated => { Dock.show-pane(PaneId.properties, !Dock.panes.properties.shown); } }
+                MenuItem { title: @tr("Messages"); checkable: true; checked: Dock.panes.messages.shown; activated => { Dock.show-pane(PaneId.messages, !Dock.panes.messages.shown); } }
+                MenuItem { title: @tr("Performance"); checkable: true; checked: Dock.panes.performance.shown; activated => { Dock.show-pane(PaneId.performance, !Dock.panes.performance.shown); } }
             }
         }
         Menu {
@@ -281,9 +259,9 @@ export component AppWindow inherits Window {
                 // the dock's chrome, the panes' contents its children at their places
                 Rectangle {
                     dock := DockArea {
-                        groups: root.dock-groups;
-                        splitters: root.dock-splitters;
-                        metrics: root.dock-metrics;
+                        groups: Dock.groups;
+                        splitters: Dock.splitters;
+                        metrics: Dock.metrics;
                         style: {
                             font-size: Theme.font-size,
                             pane: Theme.tool-window-background,
@@ -314,48 +292,45 @@ export component AppWindow inherits Window {
                             bottom: @tr("Move to Bottom"),
                             close: @tr("Close"),
                         };
-                        title(pane) => {
-                            pane == "project" ? @tr("Project") : pane == "properties" ? @tr("Properties")
-                                : pane == "messages" ? @tr("Messages") : pane == "performance" ? @tr("Performance") : pane
-                        }
-                        close(pane) => { root.pane-shown(pane, false); }
-                        activate(pane) => { root.dock-activate(pane); }
-                        splitter-moved(index, x, y) => { root.dock-splitter-moved(index, x, y); }
-                        splitter-released => { root.dock-splitter-released(); }
-                        move-to(pane, side) => { root.dock-move-to(pane, side); }
-                        resized => { root.dock-resized(); }
-                        drag-over(pane, group, x, y) => { root.dock-drag-over(pane, group, x, y) }
-                        dropped(pane, group, x, y) => { root.dock-dropped(pane, group, x, y); }
-                        cancelled => { root.dock-cancelled(); }
-                        if root.project-shown: DockedPane {
-                            place: root.project-place;
+                        title(pane) => { PaneWords.title(pane) }
+                        close(pane) => { Dock.show-pane(pane, false); }
+                        activate(pane) => { Dock.activate(pane); }
+                        splitter-moved(index, x, y) => { Dock.splitter-moved(index, x, y); }
+                        splitter-released => { Dock.splitter-released(); }
+                        move-to(pane, side) => { Dock.move-to(pane, side); }
+                        resized => { Dock.resized(); }
+                        drag-over(pane, group, x, y) => { Dock.drag-over(pane, group, x, y) }
+                        dropped(pane, group, x, y) => { Dock.dropped(pane, group, x, y); }
+                        cancelled => { Dock.cancelled(); }
+                        if Dock.panes.project.shown: DockedPane {
+                            place: Dock.panes.project.place;
                             ProjectTree {
                                 commands: root.commands;
                                 act(c) => { root.command(c); }
                                 add-item(item) => { root.add(item); }
                             }
                         }
-                        if root.properties-shown: DockedPane {
-                            place: root.properties-place;
+                        if Dock.panes.properties.shown: DockedPane {
+                            place: Dock.panes.properties.place;
                             Properties {
                                 heading: TreeWords.label(Tree.head.kind, Tree.head.heading);
                                 entries: Tree.head.entries;
                             }
                         }
-                        if root.messages-shown: DockedPane {
-                            place: root.messages-place;
+                        if Dock.panes.messages.shown: DockedPane {
+                            place: Dock.panes.messages.place;
                             Messages {
                             }
                         }
-                        if root.performance-shown: DockedPane {
-                            place: root.performance-place;
+                        if Dock.panes.performance.shown: DockedPane {
+                            place: Dock.panes.performance.place;
                             VerticalLayout {
                                 padding: 8px;
                                 RamBarView { ram: root.ram; }
                             }
                         }
                         DockedPane {
-                            place: root.preview-place;
+                            place: Dock.panes.preview;
                             // Next's preview keys, its own even when the command cannot run; a click on the pictures
                             // focuses it
                             preview-keys := FocusScope {
@@ -393,7 +368,7 @@ export component AppWindow inherits Window {
             StatusBar {
                 computing: Canvas.computing;
                 position: Playback.transport.position;
-                open-messages => { root.pane-shown("messages", true); }
+                open-messages => { Dock.show-pane(PaneId.messages, true); }
             }
         }
     }
@@ -427,7 +402,7 @@ export component AppWindow inherits Window {
     }
     Timer {
         interval: 1s;
-        running: root.performance-shown || root.settings-shown;
+        running: Dock.panes.performance.shown || root.settings-shown;
         triggered => { root.ram-refresh(); }
     }
     ExportLayer {

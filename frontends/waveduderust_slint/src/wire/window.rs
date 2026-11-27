@@ -6,7 +6,7 @@ use std::rc::Rc;
 use slint::ComponentHandle;
 
 use crate::state::State;
-use crate::ui::AppWindow;
+use crate::ui::{self, AppWindow};
 use crate::{apply_theme, dropped, wake};
 
 /// The window's own events: input wakes the tick, a dropped file opens, and after a forced theme the System theme
@@ -34,7 +34,7 @@ pub(crate) fn wire_window_events(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		};
 		if let (Some(at), Some(app)) = (pressed, weak.upgrade()) {
 			let at = at.to_logical::<f32>(f64::from(window.scale_factor()));
-			app.invoke_dock_pressed(at.x, at.y);
+			app.global::<ui::Dock<'_>>().invoke_pressed(at.x, at.y);
 		}
 		// input ticks once after Slint handled it, as classic's repaint on input did: what a callback changed is shown
 		if matches!(

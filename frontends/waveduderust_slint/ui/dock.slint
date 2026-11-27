@@ -1,0 +1,50 @@
+import { DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview, DockSide } from "@slint-dock/dock.slint";
+
+// A pane's slot: whether it is shown, and where its content goes.
+export struct PaneSlot {
+    shown: bool,
+    place: DockPlace,
+}
+
+// Every pane's slot; the preview is the centre, always shown.
+export struct Panes {
+    project: PaneSlot,
+    properties: PaneSlot,
+    messages: PaneSlot,
+    performance: PaneSlot,
+    preview: DockPlace,
+}
+
+// The ids the dock knows the panes by (src/docking.rs, Pane::id).
+export global PaneId {
+    out property <string> project: "project";
+    out property <string> properties: "properties";
+    out property <string> messages: "messages";
+    out property <string> performance: "performance";
+}
+
+export global PaneWords {
+    public pure function title(pane: string) -> string {
+        pane == PaneId.project ? @tr("Project") : pane == PaneId.properties ? @tr("Properties")
+            : pane == PaneId.messages ? @tr("Messages") : pane == PaneId.performance ? @tr("Performance") : pane
+    }
+}
+
+// The dock's chrome models, the panes' slots and the dock's requests; filled and served by src/docking.rs.
+export global Dock {
+    in property <[DockGroup]> groups;
+    in property <[DockSplitter]> splitters;
+    in property <DockMetrics> metrics;
+    in property <Panes> panes;
+    // a pointer press at `x`, `y` in the window, which Slint delivers too
+    callback pressed(x: length, y: length);
+    callback resized();
+    callback splitter-moved(index: int, x: length, y: length);
+    callback splitter-released();
+    callback move-to(pane: string, side: DockSide);
+    callback activate(pane: string);
+    callback drag-over(pane: string, group: bool, x: length, y: length) -> DockPreview;
+    callback dropped(pane: string, group: bool, x: length, y: length);
+    callback cancelled();
+    callback show-pane(pane: string, shown: bool);
+}

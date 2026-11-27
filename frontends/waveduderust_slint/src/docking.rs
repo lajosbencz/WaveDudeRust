@@ -5,7 +5,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use slint::{ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, VecModel};
 use slint_dock::{Arrangement, Axis, Dock, GroupId, Layout, Metrics, Point, Rect, Side, Size, Subject, Target};
 
 use crate::models;
@@ -41,27 +41,6 @@ impl Pane {
 			Self::Project => Side::Left,
 			Self::Properties => Side::Right,
 			Self::Messages | Self::Performance => Side::Bottom,
-		}
-	}
-
-	fn set(self, app: &AppWindow, shown: bool, at: ui::DockPlace) {
-		match self {
-			Self::Project => {
-				app.set_project_shown(shown);
-				app.set_project_place(at);
-			}
-			Self::Properties => {
-				app.set_properties_shown(shown);
-				app.set_properties_place(at);
-			}
-			Self::Messages => {
-				app.set_messages_shown(shown);
-				app.set_messages_place(at);
-			}
-			Self::Performance => {
-				app.set_performance_shown(shown);
-				app.set_performance_place(at);
-			}
 		}
 	}
 }
@@ -141,13 +120,13 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 	let dock = restore(saved);
 	let saver = Saver::new(&dock, save);
 	let (groups, splitters) = (Rc::new(VecModel::default()), Rc::new(VecModel::default()));
-	app.set_dock_metrics(ui::DockMetrics {
+	app.global::<ui::Dock<'_>>().set_metrics(ui::DockMetrics {
 		title: METRICS.title_bar,
 		tab: METRICS.tab_strip,
 		splitter: METRICS.splitter,
 	});
-	app.set_dock_groups(ModelRc::from(groups.clone()));
-	app.set_dock_splitters(ModelRc::from(splitters.clone()));
+	app.global::<ui::Dock<'_>>().set_groups(ModelRc::from(groups.clone()));
+	app.global::<ui::Dock<'_>>().set_splitters(ModelRc::from(splitters.clone()));
 	let docking = Rc::new(RefCell::new(Docking {
 		dock,
 		area: Rect::new(0., 0., app.get_dock_width(), app.get_dock_height()),
@@ -161,14 +140,14 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 	docking.borrow_mut().refresh(app);
 
 	let h = Handle::new(&docking, app);
-	app.on_dock_resized(move || {
+	app.global::<ui::Dock<'_>>().on_resized(move || {
 		h.with(|d, app| {
 			d.area = Rect::new(0., 0., app.get_dock_width(), app.get_dock_height());
 			d.refresh(app);
 		});
 	});
 	let h = Handle::new(&docking, app);
-	app.on_dock_splitter_moved(move |index, x, y| {
+	app.global::<ui::Dock<'_>>().on_splitter_moved(move |index, x, y| {
 		h.with(|d, app| {
 			let Some(bar) = models::index_from_ui(index).and_then(|i| d.layout.splitters.get(i).copied()) else {
 				return;
@@ -180,12 +159,12 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		});
 	});
 	let dk = docking.clone();
-	app.on_dock_splitter_released(move || {
+	app.global::<ui::Dock<'_>>().on_splitter_released(move || {
 		let d = &mut *dk.borrow_mut();
 		d.saver.commit(&d.dock);
 	});
 	let h = Handle::new(&docking, app);
-	app.on_dock_activate(move |pane| {
+	app.global::<ui::Dock<'_>>().on_activate(move |pane| {
 		h.with(|d, app| {
 			d.dock.activate(&pane);
 			d.focused = d.dock.group_of(&pane);
@@ -193,7 +172,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		});
 	});
 	let h = Handle::new(&docking, app);
-	app.on_dock_move_to(move |pane, side| {
+	app.global::<ui::Dock<'_>>().on_move_to(move |pane, side| {
 		h.with(|d, app| {
 			if d.dock.move_to(&Subject::Pane(pane.to_string()), Target::Edge(edge(side))) {
 				d.focused = d.dock.group_of(&pane);
@@ -202,7 +181,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		});
 	});
 	let dk = docking.clone();
-	app.on_dock_drag_over(move |pane, group, x, y| {
+	app.global::<ui::Dock<'_>>().on_drag_over(move |pane, group, x, y| {
 		let d = dk.borrow();
 		let drop = subject(&d.dock, &pane, group).and_then(|s| d.dock.drop_target(&s, Point::new(x, y), d.area));
 		drop.map_or_else(Default::default, |t| {
@@ -211,7 +190,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		})
 	});
 	let h = Handle::new(&docking, app);
-	app.on_dock_dropped(move |pane, group, x, y| {
+	app.global::<ui::Dock<'_>>().on_dropped(move |pane, group, x, y| {
 		h.with(|d, app| {
 			let area = d.area;
 			if drop_at(&mut d.dock, &pane, group, Point::new(x, y), area) {
@@ -223,7 +202,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		});
 	});
 	let h = Handle::new(&docking, app);
-	app.on_dock_cancelled(move || {
+	app.global::<ui::Dock<'_>>().on_cancelled(move || {
 		h.with(|d, app| {
 			if d.stale {
 				d.refresh(app);
@@ -232,7 +211,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 	});
 	// a press anywhere in a group lights it, as Next's focus does; the window's events report it unconsumed
 	let h = Handle::new(&docking, app);
-	app.on_dock_pressed(move |x, y| {
+	app.global::<ui::Dock<'_>>().on_pressed(move |x, y| {
 		h.with(|d, app| {
 			let at = Point::new(x - app.get_dock_x(), y - app.get_dock_y());
 			let hit = d.layout.groups.iter().find(|g| g.rect.contains(at)).map(|g| g.id);
@@ -243,7 +222,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		});
 	});
 	let h = Handle::new(&docking, app);
-	app.on_pane_shown(move |pane, shown| {
+	app.global::<ui::Dock<'_>>().on_show_pane(move |pane, shown| {
 		h.with(|d, app| {
 			if shown {
 				d.dock.show(&pane);
@@ -278,9 +257,10 @@ impl Docking {
 			.or(chrome.first().map(|g| g.id));
 		let mut groups = Vec::with_capacity(chrome.len());
 		let mut places: Vec<(&str, ui::DockPlace)> = Vec::new();
+		let mut preview = ui::DockPlace::default();
 		for g in &self.layout.groups {
 			if g.id == GroupId::CENTRE {
-				app.set_preview_place(place(g.content, true));
+				preview = place(g.content, true);
 				continue;
 			}
 			places.extend(g.tabs.iter().enumerate().map(|(i, t)| (t.as_str(), place(g.content, g.active == Some(i)))));
@@ -309,10 +289,17 @@ impl Docking {
 		});
 		models::update(&self.groups, groups);
 		models::update(&self.splitters, splitters);
-		for pane in Pane::ALL {
+		let slot = |pane: Pane| {
 			let at = places.iter().find(|(p, _)| *p == pane.id()).map(|(_, p)| p.clone());
-			pane.set(app, at.is_some(), at.unwrap_or_default());
-		}
+			ui::PaneSlot { shown: at.is_some(), place: at.unwrap_or_default() }
+		};
+		app.global::<ui::Dock<'_>>().set_panes(ui::Panes {
+			project: slot(Pane::Project),
+			properties: slot(Pane::Properties),
+			messages: slot(Pane::Messages),
+			performance: slot(Pane::Performance),
+			preview,
+		});
 	}
 }
 
