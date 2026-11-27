@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish = false
-description = "WaveDude Rust's host services without a UI toolkit: settings and their store, folders, the OpenH264 download, user colour schemes"
+description = "WaveDude Rust's host services without a UI toolkit: settings and their store, folders, the OpenH264 download, user colour schemes, the export runner, the machine's facts"
 
 [lints]
 workspace = true
