@@ -97,8 +97,8 @@ msgid "&Welcome Page..."
 msgstr "Will&kommensseite..."
 
 #. WavelengthNominal
-msgid "(nominal)"
-msgstr "(nominell)"
+msgid "{} (nominal)"
+msgstr "{} (nominell)"
 
 #. ImageUnreadable
 msgid "(unreadable)"

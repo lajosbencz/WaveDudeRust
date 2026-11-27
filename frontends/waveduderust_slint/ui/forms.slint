@@ -472,7 +472,9 @@ export component SourceForm inherits VerticalLayout {
                 FormValue {
                     x: 0;
                     color: Theme.text;
-                    text: !Form.source.wavelength-known ? "\u{2013}" : "\u{2248} \{Form.source.wavelength.to-fixed(1)} px" + (Form.source.nine-point ? " " + @tr("(nominal)") : "");
+                    text: !Form.source.wavelength-known ? "\u{2013}"
+                        : Form.source.nine-point ? @tr("{} (nominal)", "\u{2248} \{Form.source.wavelength.to-fixed(1)} px")
+                        : "\u{2248} \{Form.source.wavelength.to-fixed(1)} px";
                 }
                 Tooltip {
                     text: @markdown("\{@tr("Estimated from the wave speed and the frequency (\u{3BB} = c / f): emitters one wavelength apart radiate in phase along that direction. Holds for the 4th-order Laplacian; the 9-point stencil's speed varies with the frequency")}");

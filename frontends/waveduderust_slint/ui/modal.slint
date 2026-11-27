@@ -92,8 +92,7 @@ export component ModalLayer inherits Overlay {
                         : modal.message == Message.export-failed ? @tr("The export failed.")
                         : modal.message == Message.export-ready ? @tr("The export is ready: {}", modal.arg)
                         : modal.message == Message.run-failed ? @tr("The simulation failed: {}", modal.arg)
-                        : modal.message == Message.storage-full ? @tr("The simulation failed: {}", modal.arg) + "\n"
-                            + @tr("The storage is full. Close other WaveDude Rust tabs or free disk space, then try again.")
+                        : modal.message == Message.storage-full ? @tr("The simulation failed: {}\nThe storage is full. Close other WaveDude Rust tabs or free disk space, then try again.", modal.arg)
                         : "";
                     wrap: word-wrap;
                     color: Theme.text;
