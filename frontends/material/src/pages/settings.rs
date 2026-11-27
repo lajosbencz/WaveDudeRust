@@ -236,6 +236,7 @@ impl Cx<'_> {
 				}
 			}
 			Setting::UseGpu => self.switch(ui, st.use_gpu, Event::SetUseGpu, ev),
+			Setting::LegacyCpuEngine => self.switch(ui, st.legacy_cpu_engine, Event::SetLegacyCpuEngine, ev),
 			Setting::AutoRerun => self.switch(ui, st.auto_rerun, Event::SetAutoRerun, ev),
 			Setting::WarnMemory => {
 				self.switch(ui, st.warn_when_ram_insufficient, Event::SetWarnWhenRamInsufficient, ev);

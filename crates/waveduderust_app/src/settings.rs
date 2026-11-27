@@ -144,6 +144,9 @@ pub struct Settings {
 	pub auto_rerun: bool,
 	pub warn_when_ram_insufficient: bool,
 	pub use_gpu: bool,
+	/// The CPU engine is the legacy one where the CPU_REV2 engine would run (natively, by default on x86-64 with AVX2
+	/// and FMA; docs/spec/30-engine.md).
+	pub legacy_cpu_engine: bool,
 	/// The browser's RAM cache size: 0 is Auto, else one of [`WEB_RAM_CACHE_SIZES`].
 	pub frame_memory_bytes: u64,
 	/// 1, 2 or 4.
@@ -204,6 +207,7 @@ impl Default for Settings {
 			auto_rerun: true,
 			warn_when_ram_insufficient: true,
 			use_gpu: true,
+			legacy_cpu_engine: false,
 			frame_memory_bytes: 0,
 			preview_resolution: 1,
 			preview_frames: 1,
@@ -511,15 +515,17 @@ mod tests {
 		assert_eq!(v, serde_json::json!({ "Version": VERSION }));
 		let s = Settings {
 			use_gpu: false,
+			legacy_cpu_engine: true,
 			ui_zoom: 1.25,
 			h264_profile: Profile::High,
 			undo_steps: 50,
 			..Settings::default()
 		};
 		let v: Value = serde_json::from_str(&s.to_sparse_json()).unwrap();
-		assert_eq!(v.as_object().unwrap().len(), 5);
+		assert_eq!(v.as_object().unwrap().len(), 6);
 		assert_eq!(v["UndoSteps"], 50);
 		assert_eq!(v["UseGpu"], Value::Bool(false));
+		assert_eq!(v["LegacyCpuEngine"], Value::Bool(true));
 		assert_eq!(v["H264Profile"], "High", "the profile by its name");
 		assert_eq!(Settings::from_json("{}", false).unwrap().version, 0, "a file before the field");
 		assert_eq!(Settings::from_json(&s.to_sparse_json(), false).unwrap(), s);
@@ -547,6 +553,7 @@ mod tests {
 		assert_eq!(loaded.version, 1);
 		assert!(loaded.unknown.is_empty(), "{:?}", loaded.unknown);
 		assert!(!loaded.use_gpu);
+		assert!(!loaded.legacy_cpu_engine, "a file before the setting");
 		loaded.save(&store).unwrap();
 		let written: Value = serde_json::from_str(&store.read(FILE_NAME).unwrap().unwrap()).unwrap();
 		assert_eq!(written, serde_json::json!({ "Version": 2, "UseGpu": false }));

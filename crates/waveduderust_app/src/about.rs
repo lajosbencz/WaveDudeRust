@@ -40,7 +40,11 @@ fn h264_encoder(s: &Strings, choice: Option<bool>) -> String {
 pub fn system_lines(app: &App) -> String {
 	let s = &app.strings;
 	let threads = crate::platform::machine_facts().threads;
-	let gpu = s.get(if app.settings.use_gpu { "AboutOn" } else { "AboutOff" });
+	let on_off = |on| s.get(if on { "AboutOn" } else { "AboutOff" });
+	let gpu = on_off(app.settings.use_gpu);
+	let legacy_cpu = crate::settings_table::Need::Rev2
+		.met(crate::settings_table::BUILD)
+		.then(|| format!("{}: {}", s.get("AboutLegacyCpuSetting"), on_off(app.settings.legacy_cpu_engine)));
 	#[cfg(not(target_arch = "wasm32"))]
 	let h264 = Some(format!("{}: {}", s.get("AboutH264Encoder"), h264_encoder(s, app.settings.use_openh264)));
 	#[cfg(target_arch = "wasm32")]
@@ -53,5 +57,5 @@ pub fn system_lines(app: &App) -> String {
 		format!("{}: {gpu}", s.get("AboutGpuSetting")),
 		format!("{}: {}", s.get("AboutEngine"), app.live.engine().text(s)),
 	];
-	lines.into_iter().chain(h264).collect::<Vec<_>>().join("\n")
+	lines.into_iter().chain(legacy_cpu).chain(h264).collect::<Vec<_>>().join("\n")
 }

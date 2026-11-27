@@ -83,6 +83,7 @@ Each row is a label column and its control; a change applies and is saved at onc
 | Preview and memory | Preview samples | drop-down 16-bit float, 8-bit palette index (brightness fixed when the run starts) | `PreviewSampleBytes` |
 | Preview and memory | Preview dithering | drop-down Off, 10, 12, 14, 16 bits per channel; disabled unless samples are 16-bit | `PreviewDitherBits` |
 | Preview and memory | Use the GPU | check box (CPU fallback logged) | `UseGpu` |
+| Preview and memory | Use the legacy CPU engine | check box; natively, absent unless the CPU_REV2 engine would run (docs/spec/30-engine.md) | `LegacyCpuEngine` |
 | Simulation | Re-run automatically after edits | check box | `AutoRerun` |
 | Simulation | Warn when a run does not fit in RAM | check box | `WarnWhenRamInsufficient` |
 | Export | Use Cisco's OpenH264 codec (downloaded from Cisco at the first MP4 export) | check box with Cisco's notice; natively, absent when OpenH264 is compiled in | `UseOpenH264` |

@@ -27,6 +27,7 @@ pub mod types;
 pub use types::*;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 
 use crate::sync::MaybeSend;
@@ -147,14 +148,46 @@ fn cpu_instead(scene: Arc<SceneData>, options: EngineOptions, why: Fallback) -> 
 /// The CPU engine: the CPU_REV2 engine ([`rev2::CpuRev2Engine`]) on the best backend this CPU runs when that is
 /// faster than the portable code (natively, on x86-64 with AVX2 and FMA), else the legacy one ([`cpu::CpuEngine`]),
 /// whose results the CPU_REV2 engine's generic backend repeats bit for bit and its faster backends within rounding.
-/// The environment variable `WAVEDUDE_CPU_ENGINE` overrides it natively ([`rev2_choice`]). The web builds the legacy
-/// engine until the CPU_REV2 engine has a backend there.
+/// The environment variable `WAVEDUDE_CPU_ENGINE` overrides it natively ([`rev2_choice`]), and the legacy engine
+/// switched on ([`set_legacy_cpu_engine`]) overrides both. The web builds the legacy engine until the CPU_REV2 engine
+/// has a backend there.
 fn cpu_engine(scene: Arc<SceneData>, options: EngineOptions) -> Box<dyn WaveEngine> {
-	#[cfg(not(target_arch = "wasm32"))]
-	if let Some(backend) = rev2_choice(std::env::var("WAVEDUDE_CPU_ENGINE").ok().as_deref()) {
+	if let Some(backend) = rev2_backend() {
 		return Box::new(rev2::CpuRev2Engine::with_backend(scene, options, backend));
 	}
 	Box::new(cpu::CpuEngine::new(scene, options))
+}
+
+/// The legacy CPU engine asked for in place of the CPU_REV2 engine, by the app's setting.
+static LEGACY_CPU_ENGINE: AtomicBool = AtomicBool::new(false);
+
+/// Every CPU engine built from now on is the legacy one ([`cpu::CpuEngine`]) while `on`, whatever the default and
+/// `WAVEDUDE_CPU_ENGINE`; off, they choose as [`cpu_engine`] says. Process-wide; an engine built stays what it is.
+pub fn set_legacy_cpu_engine(on: bool) {
+	LEGACY_CPU_ENGINE.store(on, Ordering::Relaxed);
+}
+
+/// Whether the CPU engine is the CPU_REV2 engine unless the legacy one is switched on ([`set_legacy_cpu_engine`]):
+/// by default natively on x86-64 with AVX2 and FMA, or as `WAVEDUDE_CPU_ENGINE` asks; never on the web.
+pub fn rev2_runs() -> bool {
+	unswitched().is_some()
+}
+
+/// The CPU_REV2 engine's backend for the next CPU engine, None for the legacy engine.
+fn rev2_backend() -> Option<rev2::Backend> {
+	if LEGACY_CPU_ENGINE.load(Ordering::Relaxed) { None } else { unswitched() }
+}
+
+/// The CPU_REV2 engine's backend without the switch, None for the legacy engine: natively as `WAVEDUDE_CPU_ENGINE`
+/// asks ([`rev2_choice`]), read once.
+fn unswitched() -> Option<rev2::Backend> {
+	#[cfg(not(target_arch = "wasm32"))]
+	{
+		static CHOICE: std::sync::OnceLock<Option<rev2::Backend>> = std::sync::OnceLock::new();
+		*CHOICE.get_or_init(|| rev2_choice(std::env::var("WAVEDUDE_CPU_ENGINE").ok().as_deref()))
+	}
+	#[cfg(target_arch = "wasm32")]
+	None
 }
 
 /// The CPU_REV2 engine's backend for `WAVEDUDE_CPU_ENGINE=value`, None for the legacy engine: unset, the best backend
@@ -238,7 +271,7 @@ pub fn gpu_adapter() -> Option<Result<String, String>> {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
 	use super::rev2::Backend;
-	use super::rev2_choice;
+	use super::{rev2_backend, rev2_choice, rev2_runs, set_legacy_cpu_engine};
 
 	/// The best backend when it beats the portable code, else none (the legacy engine).
 	fn default() -> Option<Backend> {
@@ -258,6 +291,17 @@ mod tests {
 			let want = if b.available() { b } else { Backend::Generic };
 			assert_eq!(rev2_choice(Some(&format!("rev2-{}", b.name()))), Some(want));
 		}
+	}
+
+	#[test]
+	fn the_legacy_switch_overrides_the_default_and_the_environment() {
+		let env = rev2_choice(std::env::var("WAVEDUDE_CPU_ENGINE").ok().as_deref());
+		assert_eq!((rev2_backend(), rev2_runs()), (env, env.is_some()));
+		set_legacy_cpu_engine(true);
+		let (legacy, runs) = (rev2_backend(), rev2_runs());
+		set_legacy_cpu_engine(false);
+		assert_eq!((legacy, runs), (None, env.is_some()), "rev2_runs answers without the switch");
+		assert_eq!(rev2_backend(), env);
 	}
 
 	#[test]

@@ -92,6 +92,9 @@ pub struct Build {
 	/// `OpenH264` is compiled in.
 	pub codec_built_in: bool,
 	pub updater: bool,
+	/// Whether the CPU_REV2 engine runs here unless the legacy one is asked for, asked at run time (the CPU's
+	/// features).
+	pub rev2: fn() -> bool,
 }
 
 /// This build.
@@ -100,10 +103,11 @@ pub const BUILD: Build = Build {
 	web: false,
 	codec_built_in: waveduderust::unstable::export::h264::BUILT_IN,
 	updater: crate::update::AVAILABLE,
+	rev2: waveduderust::unstable::engine::rev2_runs,
 };
 /// This build.
 #[cfg(target_arch = "wasm32")]
-pub const BUILD: Build = Build { web: true, codec_built_in: false, updater: false };
+pub const BUILD: Build = Build { web: true, codec_built_in: false, updater: false, rev2: || false };
 
 /// Which builds show a row.
 #[derive(Clone, Copy, Debug)]
@@ -113,6 +117,8 @@ pub enum Need {
 	/// Natively, while `OpenH264` is downloaded from Cisco.
 	CodecDownload,
 	Updater,
+	/// Natively, where the CPU_REV2 engine runs unless the legacy one is asked for.
+	Rev2,
 }
 
 impl Need {
@@ -122,6 +128,7 @@ impl Need {
 			Self::Native => !b.web,
 			Self::CodecDownload => !b.web && !b.codec_built_in,
 			Self::Updater => !b.web && b.updater,
+			Self::Rev2 => !b.web && (b.rev2)(),
 		}
 	}
 }
@@ -142,6 +149,7 @@ pub enum Setting {
 	Samples,
 	Dither,
 	UseGpu,
+	LegacyCpuEngine,
 	AutoRerun,
 	WarnMemory,
 	OpenH264,
@@ -164,7 +172,7 @@ const fn row(section: Section, label: &'static str, need: Need, setting: Setting
 	Row { section, label, need, setting }
 }
 
-pub const ROWS: [Row; 20] = [
+pub const ROWS: [Row; 21] = [
 	row(Section::General, "MenuViewTheme", Need::Always, Setting::Theme),
 	row(Section::General, "MenuViewLanguage", Need::Always, Setting::Language),
 	row(Section::General, "MenuViewUiZoom", Need::Always, Setting::Zoom),
@@ -178,6 +186,7 @@ pub const ROWS: [Row; 20] = [
 	row(Section::Preview, "MenuViewSamples", Need::Always, Setting::Samples),
 	row(Section::Preview, "MenuViewDither", Need::Always, Setting::Dither),
 	row(Section::Preview, "MenuSimulationUseGpu", Need::Always, Setting::UseGpu),
+	row(Section::Preview, "SettingsLegacyCpuEngine", Need::Rev2, Setting::LegacyCpuEngine),
 	row(Section::Simulation, "MenuSimulationAutoRerun", Need::Always, Setting::AutoRerun),
 	row(Section::Simulation, "MenuSimulationWarnMemory", Need::Always, Setting::WarnMemory),
 	row(Section::Export, "ExportUseOpenH264", Need::CodecDownload, Setting::OpenH264),
@@ -258,7 +267,7 @@ mod tests {
 
 	use super::*;
 
-	const NATIVE: Build = Build { web: false, codec_built_in: false, updater: true };
+	const NATIVE: Build = Build { web: false, codec_built_in: false, updater: true, rev2: || true };
 
 	fn labels(rows: &[usize]) -> Vec<&'static str> {
 		rows.iter().map(|&i| ROWS[i].label).collect()
@@ -289,12 +298,19 @@ mod tests {
 	#[test]
 	fn rows_follow_the_build() {
 		let shown = |b: Build| labels(&shown_rows(b).collect::<Vec<_>>());
-		let web = Build { web: true, codec_built_in: false, updater: false };
-		for label in ["ExportUseOpenH264", "SettingsExportArchive", "SettingsCheckForUpdates", "SettingsCheckNow"] {
+		let web = Build { web: true, codec_built_in: false, updater: false, rev2: || true };
+		for label in [
+			"ExportUseOpenH264",
+			"SettingsExportArchive",
+			"SettingsCheckForUpdates",
+			"SettingsCheckNow",
+			"SettingsLegacyCpuEngine",
+		] {
 			assert!(!shown(web).contains(&label), "{label} in the browser");
 			assert!(shown(NATIVE).contains(&label), "{label} natively");
 		}
 		assert!(!shown(Build { codec_built_in: true, ..NATIVE }).contains(&"ExportUseOpenH264"));
+		assert!(!shown(Build { rev2: || false, ..NATIVE }).contains(&"SettingsLegacyCpuEngine"), "no CPU_REV2 here");
 		assert!(!shown_sections(web).contains(&Section::Updates));
 		assert!(!shown_sections(Build { updater: false, ..NATIVE }).contains(&Section::Updates));
 		assert_eq!(shown_sections(NATIVE), Section::ALL);
@@ -304,6 +320,7 @@ mod tests {
 	fn the_search_reads_labels_in_both_languages_and_section_names() {
 		let (en, de) = (Strings::new(Language::English), Strings::new(Language::German));
 		assert_eq!(labels(&found("gpu", &en, NATIVE)), ["MenuSimulationUseGpu"]);
+		assert_eq!(labels(&found("legacy", &en, NATIVE)), ["SettingsLegacyCpuEngine"]);
 		assert_eq!(labels(&found("undo", &en, NATIVE)), ["SettingsUndoSteps"]);
 		assert_eq!(labels(&found("undo", &de, NATIVE)), ["SettingsUndoSteps"], "English in German");
 		assert_eq!(labels(&found("preview res", &en, NATIVE)), ["MenuViewResolution"], "mnemonics are no text");

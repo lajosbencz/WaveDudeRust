@@ -162,6 +162,8 @@ pub enum Event {
 	SetDitherBits(u32),
 	SetAutoRerun(bool),
 	SetUseGpu(bool),
+	/// Whether the CPU engine is the legacy one where the CPU_REV2 engine would run.
+	SetLegacyCpuEngine(bool),
 	SetRamCache(RamCache),
 	SetWarnWhenRamInsufficient(bool),
 	SetTitleFullPath(bool),
@@ -326,6 +328,7 @@ impl AppState<CoreBackend> {
 	}
 
 	fn started(loaded: settings::Loaded, store: Store, backend: CoreBackend, use_gpu: Arc<AtomicBool>) -> Self {
+		waveduderust::unstable::engine::set_legacy_cpu_engine(loaded.settings.legacy_cpu_engine);
 		let mut state = Self::with_backend(loaded.settings, Some(store.clone()), backend, use_gpu);
 		state.schemes = user_schemes::load(&store);
 		state.first_start = loaded.first_start;
@@ -858,6 +861,16 @@ impl<B: Backend> AppState<B> {
 			Event::SetUseGpu(on) => {
 				let changed = self.settings.use_gpu != on;
 				self.settings.use_gpu = on;
+				self.settings_changed(false, now);
+				if changed {
+					self.live.backend_mut().engine_changed();
+				}
+				Response::None
+			}
+			Event::SetLegacyCpuEngine(on) => {
+				let changed = self.settings.legacy_cpu_engine != on;
+				self.settings.legacy_cpu_engine = on;
+				waveduderust::unstable::engine::set_legacy_cpu_engine(on);
 				self.settings_changed(false, now);
 				if changed {
 					self.live.backend_mut().engine_changed();

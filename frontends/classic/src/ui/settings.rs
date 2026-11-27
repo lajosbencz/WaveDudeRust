@@ -240,6 +240,7 @@ fn control(setting: Setting) -> fn(&mut Ui, &mut Cx<'_>, Name<'_>) {
 		Setting::Samples => samples,
 		Setting::Dither => dither,
 		Setting::UseGpu => use_gpu,
+		Setting::LegacyCpuEngine => legacy_cpu_engine,
 		Setting::AutoRerun => auto_rerun,
 		Setting::WarnMemory => warn_memory,
 		Setting::OpenH264 => openh264,
@@ -442,6 +443,10 @@ fn dither(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {
 
 fn use_gpu(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {
 	toggle(ui, cx, name, |st| st.use_gpu, Event::SetUseGpu);
+}
+
+fn legacy_cpu_engine(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {
+	toggle(ui, cx, name, |st| st.legacy_cpu_engine, Event::SetLegacyCpuEngine);
 }
 
 fn auto_rerun(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {

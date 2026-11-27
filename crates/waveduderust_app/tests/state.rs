@@ -389,3 +389,18 @@ fn a_device_switch_rebuilds_the_engine_and_the_same_quality_is_no_edit() {
 	s.handle(Event::SetPreviewQuality(s.settings.preview_quality()), t);
 	assert_eq!(s.live.backend().goal().revision, revision, "the quality in force is no edit");
 }
+
+#[test]
+fn the_legacy_cpu_engine_setting_rebuilds_the_engine() {
+	let mut s = app();
+	let t = Instant::now();
+	assert!(!s.settings.legacy_cpu_engine, "off by default");
+	s.handle(Event::SetLegacyCpuEngine(true), t);
+	assert!(s.settings.legacy_cpu_engine);
+	assert_eq!(s.live.backend().engine_changes, 1);
+	s.handle(Event::SetLegacyCpuEngine(true), t);
+	assert_eq!(s.live.backend().engine_changes, 1, "the same engine again changes nothing");
+	s.handle(Event::SetLegacyCpuEngine(false), t);
+	assert!(!s.settings.legacy_cpu_engine);
+	assert_eq!(s.live.backend().engine_changes, 2);
+}

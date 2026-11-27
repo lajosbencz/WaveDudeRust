@@ -31,6 +31,7 @@ aside. An unreadable file is not a first start. Version 2 drops `FrameMemoryPerc
 | AutoRerun | bool | true | Settings > Simulation |
 | WarnWhenRamInsufficient | bool | true | Settings > Simulation; memory warning "Do not warn me again" |
 | UseGpu | bool | true | Settings > Preview and memory |
+| LegacyCpuEngine | bool (desktop, where the CPU_REV2 engine would run; docs/spec/30-engine.md) | false | Settings > Preview and memory |
 | FrameMemoryBytes | (port) int bytes; 0 = Auto, else 256 MiB, 512 MiB, 1 GiB or 2 GiB, any other value reads as Auto (the browser; natively unused) | 0 (Auto) | Settings > Preview and memory, RAM; memory warning lever |
 | PreviewResolution | 1 / 2 / 4 | 1 (first start may choose 2) | Settings > Preview and memory (lever or preset); memory warning |
 | PreviewFrames | 1 / 2 / 4 | 1 (first start may choose 2) | Settings > Preview and memory (lever or preset); memory warning |

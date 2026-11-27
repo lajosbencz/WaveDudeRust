@@ -111,8 +111,8 @@ row in the tree ([`30-properties-pane.md`](30-properties-pane.md)).
 | - separator | | | | | |
 | Play / Pause playback | Y/D/E/L | F7 | U+E768 / U+E769 | `CanPlayPause` | The timeline's Play/Pause from anywhere. Header and icon switch while playing. |
 
-(port) Use the GPU, automatic re-run, the memory warning and the RAM size are set in File > Settings... (decision
-0027).
+(port) Use the GPU, the legacy CPU engine, automatic re-run, the memory warning and the RAM size are set in File >
+Settings... (decision 0027).
 
 ## Help
 

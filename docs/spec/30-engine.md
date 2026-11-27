@@ -120,7 +120,9 @@ place. It runs a step's sub-steps as one wavefront over the rows, so a row is st
 reads it, and its row kernels are hand-written assembly with fused multiply-adds: its results match the CPU engine's
 within rounding (1e-4 of the peak), not bit for bit; on its generic backend they match bit for bit. Elsewhere, on the
 web among them, the CPU engine runs. `WAVEDUDE_CPU_ENGINE=legacy` asks for the CPU engine, `rev2` or `rev2-<backend>`
-for the CPU_REV2 engine (`generic`, `avx2`).
+for the CPU_REV2 engine (`generic`, `avx2`). Where the CPU_REV2 engine would run, the app's Settings > Preview and
+memory > Use the legacy CPU engine (`LegacyCpuEngine`) brings the CPU engine back over both
+(`engine::set_legacy_cpu_engine`); the row is absent elsewhere.
 
 ## Sources
 
