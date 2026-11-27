@@ -1341,32 +1341,3 @@ fn a_source_on_a_cell_boundary_radiates_symmetrically() {
 		assert!(off_boundary > 1e-2, "{stencil:?}: {off_boundary}");
 	}
 }
-
-mod ignored_timing {
-	use super::*;
-
-	/// Step time on a 1920 x 1080 canvas with a 32 px rim, open edges, two sources, intensity tracked.
-	#[test]
-	#[ignore = "timing: cargo test --release -p waveduderust --no-default-features --test physics -- --ignored ignored_timing:: --nocapture"]
-	fn step_time_full_hd() {
-		for stencil in STENCILS {
-			let data = SceneData::blank(1920, 1080, &scene(-32, Edges::Open, 1.0));
-			let mut e = CpuEngine::new(data, EngineOptions { track_intensity: true, ..options(stencil, 2.0) });
-			e.set_emitters(&[emitter(600, 540, 100.0), emitter(1300, 400, 80.0)]);
-			for _ in 0..20 {
-				e.advance_one_step();
-			}
-			let steps = 200;
-			let start = std::time::Instant::now();
-			for _ in 0..steps {
-				e.advance_one_step();
-			}
-			let per = start.elapsed().as_secs_f64() * 1000.0 / steps as f64;
-			println!(
-				"{stencil:?}: {per:.2} ms a step ({} sub-steps), {} threads",
-				e.sub_steps(),
-				rayon::current_num_threads()
-			);
-		}
-	}
-}

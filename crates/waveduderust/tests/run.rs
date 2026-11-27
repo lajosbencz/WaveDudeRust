@@ -1045,56 +1045,6 @@ fn nudge(project: &mut Project, part: bool) {
 mod ignored_timing {
 	use super::*;
 
-	#[test]
-	#[ignore = "timing: cargo test --release -p waveduderust --test run -- --ignored ignored_timing:: --nocapture"]
-	fn store_write_timing() {
-		let mut p = project(1920, 1080, 200);
-		p.sources.clear();
-		let s = spec(&p, PreviewQuality::FULL);
-		let shots: Vec<Snapshot> = (0..4).map(|k| snapshot_of(&s, k as f32)).collect();
-		// A capture writes the frame into the store's buffer; this copy stands in for it.
-		let write = |st: &FrameStore, shot: &Snapshot| {
-			let mut b = st.next_buffer();
-			b.field.clear();
-			b.field.extend_from_slice(&shot.field);
-			b.intensity.clear();
-			b.intensity.extend_from_slice(&shot.intensity);
-			st.write(b).unwrap();
-		};
-		let st = store(&s, 4 * GIB);
-		std::thread::sleep(Duration::from_millis(500));
-		let started = Instant::now();
-		let mut slowest = Duration::ZERO;
-		for k in 0..100 {
-			let t = Instant::now();
-			write(&st, &shots[k % 4]);
-			slowest = slowest.max(t.elapsed());
-		}
-		let steady = started.elapsed();
-		let st2 = store(&s, 4 * GIB);
-		let started = Instant::now();
-		for k in 0..100 {
-			write(&st2, &shots[k % 4]);
-		}
-		let cold = started.elapsed();
-		let dir = tempfile::tempdir().unwrap();
-		let st3 = FrameStore::in_dir(StoreLayout::of(&s), 0, None, dir.path()).unwrap();
-		let started = Instant::now();
-		for k in 0..100 {
-			write(&st3, &shots[k % 4]);
-		}
-		let disk = started.elapsed();
-		let ms = |d: Duration| d.as_secs_f64() * 1e3 / 100.0;
-		println!(
-			"full-HD both planes f16 ({} MB a frame): {:.2} ms a frame after a pause ({:.2} slowest), {:.2} from a cold start, {:.2} to the file",
-			s.frame_bytes() as f64 / 1e6,
-			ms(steady),
-			slowest.as_secs_f64() * 1e3,
-			ms(cold),
-			ms(disk)
-		);
-	}
-
 	/// A burst of edits at 32 a second on the GPU (docs/measurements.md, The live run): frames shown during the
 	/// drag and the final frame's lag, with the position's frame alone wanted and with every frame (the frames
 	/// before the position captured on the way).

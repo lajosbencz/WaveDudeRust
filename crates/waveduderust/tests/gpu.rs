@@ -5,7 +5,6 @@
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::time::Instant;
 
 use waveduderust::f16;
 use waveduderust::model::{Edges, Layer, PulseShape, Scene, Stencil};
@@ -894,58 +893,4 @@ fn no_engine_is_built_on_a_lost_device() {
 	let data = SceneData::blank(64, 48, &Scene::default().with_damping_edge(0));
 	let built = pollster::block_on(GpuEngine::create(ctx, data, options(Stencil::NinePoint)));
 	assert!(matches!(built, Err(GpuError::Lost { .. })), "{:?}", built.err());
-}
-
-mod ignored_timing {
-	use super::*;
-
-	/// Step and capture times at full HD with a 32 px rim.
-	#[test]
-	#[ignore = "timing: cargo test --release -p waveduderust --test gpu -- --ignored ignored_timing:: --nocapture"]
-	fn timing_full_hd() {
-		if !gpu_available() {
-			return;
-		}
-		let settings = Scene::default().with_damping_edge(-32);
-		for stencil in STENCILS {
-			let mut gpu =
-				GpuEngine::new(SceneData::blank(1920, 1080, &settings), options(stencil)).expect("GPU engine");
-			gpu.set_emitters(&[emitter(960, 540, 100.0)]);
-			run(&mut gpu, 200);
-			gpu.synchronize().unwrap();
-			let steps = 2000;
-			let t = Instant::now();
-			run(&mut gpu, steps);
-			gpu.synchronize().unwrap();
-			let step = t.elapsed().as_secs_f64() * 1e3 / steps as f64;
-			let mut capture = |format| {
-				let shape = FrameShape { canvas_width: 1920, canvas_height: 1080, ..shape(1, format) };
-				drop(gpu.capture_frame(&shape).unwrap());
-				let n = 50;
-				let t = Instant::now();
-				for _ in 0..n {
-					drop(gpu.capture_frame(&shape).unwrap());
-				}
-				t.elapsed().as_secs_f64() * 1e3 / n as f64
-			};
-			let (half, index) = (capture(SampleFormat::Half), capture(SampleFormat::Index));
-			let full = FrameShape { canvas_width: 1920, canvas_height: 1080, ..shape(1, SampleFormat::Half) };
-			let t = Instant::now();
-			let mut previous = None;
-			for _ in 0..100 {
-				run(&mut gpu, 2);
-				let pending = gpu.begin_capture(&full, Snapshot::new(full)).unwrap();
-				if let Some(p) = previous.replace(pending) {
-					drop(gpu.finish_capture(p).unwrap());
-				}
-			}
-			drop(gpu.finish_capture(previous.expect("a capture")).unwrap());
-			let cycle = t.elapsed().as_secs_f64() * 1e3 / 100.0;
-			eprintln!(
-				"{stencil:?}, {} sub-steps: {step:.3} ms a step; capture of both planes {half:.2} ms as halves, \
-				 {index:.2} ms as indices; 2 steps + overlapped half capture {cycle:.2} ms",
-				gpu.sub_steps()
-			);
-		}
-	}
 }

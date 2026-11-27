@@ -1,7 +1,6 @@
 #![allow(clippy::print_stdout, reason = "the measurements are printed for the reader")]
 //! The Rendering guarantees of docs/spec/70-guarantees.md.
 
-use std::time::Instant;
 
 use waveduderust::f16;
 use waveduderust::model::{ColorScheme, Rgb, Stop};
@@ -328,60 +327,5 @@ fn tables_take_the_brightness_in_single_precision() {
 	for bits in differing {
 		let v = f16::from_bits(bits).to_f64();
 		assert_eq!(table.color(f16::from_bits(bits))[2], color_at(f64::from(f32_brightness), v), "{bits:#06x}");
-	}
-}
-
-mod ignored_timing {
-	use super::*;
-
-	#[test]
-	#[ignore = "timing: cargo test --release -p waveduderust --no-default-features --test render -- --ignored ignored_timing:: --nocapture"]
-	fn timing() {
-		const BUILDS: u32 = 20;
-		let s = inferno();
-		let _ = HalfTable::new(&s, 0.0, 1.0, SampleKind::Field);
-		let clock = Instant::now();
-		for i in 0..BUILDS {
-			std::hint::black_box(HalfTable::new(&s, 0.0, 1.0 + i as f32, SampleKind::Field));
-		}
-		let table_ms = clock.elapsed().as_secs_f64() * 1e3 / BUILDS as f64;
-		let (w, ht) = (2880, 1080);
-		let plane: Vec<f16> = noise(w * ht, 3).map(|v| f16::from_f64(v * 2.0 - 1.0)).collect();
-		let table = HalfTable::new(&s, 0.0, 1.0, SampleKind::Field);
-		let mut out = vec![0u8; w * ht * 4];
-		waveduderust::unstable::render::render_half_into(&plane, &table, &mut out);
-		const RENDERS: u32 = 50;
-		let clock = Instant::now();
-		for _ in 0..RENDERS {
-			waveduderust::unstable::render::render_half_into(&plane, &table, &mut out);
-		}
-		let render_ms = clock.elapsed().as_secs_f64() * 1e3 / RENDERS as f64;
-		let indices: Vec<u8> = plane.iter().map(|&v| field_index(v, 1.0)).collect();
-		let palette = Palette::new(&s, 0.0);
-		let clock = Instant::now();
-		for _ in 0..RENDERS {
-			waveduderust::unstable::render::render_indexed_into(&indices, &palette, &mut out);
-		}
-		let indexed_ms = clock.elapsed().as_secs_f64() * 1e3 / RENDERS as f64;
-		let mut screen = ScreenRenderer::new(1920, 1080, 914, 514);
-		let mut small = vec![0u8; 914 * 514 * 4];
-		let full_hd = &plane[..1920 * 1080];
-		let deep = DeepHalfTable::new(&s, 0.0, 1.0, SampleKind::Field);
-		screen.render(full_hd, ScreenColors::Plain(&table), &mut small);
-		let clock = Instant::now();
-		for _ in 0..RENDERS {
-			screen.render(full_hd, ScreenColors::Plain(&table), &mut small);
-		}
-		let screen_ms = clock.elapsed().as_secs_f64() * 1e3 / RENDERS as f64;
-		let clock = Instant::now();
-		for _ in 0..RENDERS {
-			screen.render(full_hd, ScreenColors::Dithered(&deep, DitherDepth::Bits16), &mut small);
-		}
-		let dither_ms = clock.elapsed().as_secs_f64() * 1e3 / RENDERS as f64;
-		println!(
-			"threads {}: half table {table_ms:.3} ms; 2880x1080 half {render_ms:.3} ms, indexed {indexed_ms:.3} ms; \
-			 screen 1920x1080 -> 914x514 {screen_ms:.3} ms, dithered {dither_ms:.3} ms",
-			rayon::current_num_threads()
-		);
 	}
 }
