@@ -5,11 +5,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ModelRc, VecModel};
 use slint_dock::{Arrangement, Axis, Dock, GroupId, Layout, Metrics, Point, Rect, Side, Size, Subject, Target};
 
 use crate::models;
 use crate::ui::{self, AppWindow};
+use crate::wire::Handle;
 
 /// The panes round the preview, each with its `*-shown` and `*-place` properties of ui/app.slint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -159,44 +160,46 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 	}));
 	docking.borrow_mut().refresh(app);
 
-	let (dk, weak) = (docking.clone(), app.as_weak());
+	let h = Handle::new(&docking, app);
 	app.on_dock_resized(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let mut d = dk.borrow_mut();
-		d.area = Rect::new(0., 0., app.get_dock_width(), app.get_dock_height());
-		d.refresh(&app);
+		h.with(|d, app| {
+			d.area = Rect::new(0., 0., app.get_dock_width(), app.get_dock_height());
+			d.refresh(app);
+		});
 	});
-	let (dk, weak) = (docking.clone(), app.as_weak());
+	let h = Handle::new(&docking, app);
 	app.on_dock_splitter_moved(move |index, x, y| {
-		let Some(app) = weak.upgrade() else { return };
-		let mut d = dk.borrow_mut();
-		let Some(bar) = models::index_from_ui(index).and_then(|i| d.layout.splitters.get(i).copied()) else { return };
-		let area = d.area;
-		if d.dock.resize(&bar, Point::new(x, y), area) {
-			d.refresh(&app);
-		}
+		h.with(|d, app| {
+			let Some(bar) = models::index_from_ui(index).and_then(|i| d.layout.splitters.get(i).copied()) else {
+				return;
+			};
+			let area = d.area;
+			if d.dock.resize(&bar, Point::new(x, y), area) {
+				d.refresh(app);
+			}
+		});
 	});
 	let dk = docking.clone();
 	app.on_dock_splitter_released(move || {
 		let d = &mut *dk.borrow_mut();
 		d.saver.commit(&d.dock);
 	});
-	let (dk, weak) = (docking.clone(), app.as_weak());
+	let h = Handle::new(&docking, app);
 	app.on_dock_activate(move |pane| {
-		let Some(app) = weak.upgrade() else { return };
-		let mut d = dk.borrow_mut();
-		d.dock.activate(&pane);
-		d.focused = d.dock.group_of(&pane);
-		d.changed(&app);
-	});
-	let (dk, weak) = (docking.clone(), app.as_weak());
-	app.on_dock_move_to(move |pane, side| {
-		let Some(app) = weak.upgrade() else { return };
-		let mut d = dk.borrow_mut();
-		if d.dock.move_to(&Subject::Pane(pane.to_string()), Target::Edge(edge(side))) {
+		h.with(|d, app| {
+			d.dock.activate(&pane);
 			d.focused = d.dock.group_of(&pane);
-			d.changed(&app);
-		}
+			d.changed(app);
+		});
+	});
+	let h = Handle::new(&docking, app);
+	app.on_dock_move_to(move |pane, side| {
+		h.with(|d, app| {
+			if d.dock.move_to(&Subject::Pane(pane.to_string()), Target::Edge(edge(side))) {
+				d.focused = d.dock.group_of(&pane);
+				d.changed(app);
+			}
+		});
 	});
 	let dk = docking.clone();
 	app.on_dock_drag_over(move |pane, group, x, y| {
@@ -207,49 +210,49 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 			ui::DockPreview { shown: true, x: r.x, y: r.y, width: r.width, height: r.height }
 		})
 	});
-	let (dk, weak) = (docking.clone(), app.as_weak());
+	let h = Handle::new(&docking, app);
 	app.on_dock_dropped(move |pane, group, x, y| {
-		let Some(app) = weak.upgrade() else { return };
-		let mut d = dk.borrow_mut();
-		let area = d.area;
-		if drop_at(&mut d.dock, &pane, group, Point::new(x, y), area) {
-			d.focused = d.dock.group_of(&pane);
-			d.changed(&app);
-		} else if d.stale {
-			d.refresh(&app);
-		}
+		h.with(|d, app| {
+			let area = d.area;
+			if drop_at(&mut d.dock, &pane, group, Point::new(x, y), area) {
+				d.focused = d.dock.group_of(&pane);
+				d.changed(app);
+			} else if d.stale {
+				d.refresh(app);
+			}
+		});
 	});
-	let (dk, weak) = (docking.clone(), app.as_weak());
+	let h = Handle::new(&docking, app);
 	app.on_dock_cancelled(move || {
-		let Some(app) = weak.upgrade() else { return };
-		let mut d = dk.borrow_mut();
-		if d.stale {
-			d.refresh(&app);
-		}
+		h.with(|d, app| {
+			if d.stale {
+				d.refresh(app);
+			}
+		});
 	});
 	// a press anywhere in a group lights it, as Next's focus does; the window's events report it unconsumed
-	let (dk, weak) = (docking.clone(), app.as_weak());
+	let h = Handle::new(&docking, app);
 	app.on_dock_pressed(move |x, y| {
-		let Some(app) = weak.upgrade() else { return };
-		let mut d = dk.borrow_mut();
-		let at = Point::new(x - app.get_dock_x(), y - app.get_dock_y());
-		let hit = d.layout.groups.iter().find(|g| g.rect.contains(at)).map(|g| g.id);
-		if hit.is_some() && hit != d.focused {
-			d.focused = hit;
-			d.refresh(&app);
-		}
+		h.with(|d, app| {
+			let at = Point::new(x - app.get_dock_x(), y - app.get_dock_y());
+			let hit = d.layout.groups.iter().find(|g| g.rect.contains(at)).map(|g| g.id);
+			if hit.is_some() && hit != d.focused {
+				d.focused = hit;
+				d.refresh(app);
+			}
+		});
 	});
-	let weak = app.as_weak();
+	let h = Handle::new(&docking, app);
 	app.on_pane_shown(move |pane, shown| {
-		let Some(app) = weak.upgrade() else { return };
-		let mut d = docking.borrow_mut();
-		if shown {
-			d.dock.show(&pane);
-			d.focused = d.dock.group_of(&pane);
-		} else {
-			d.dock.close(&pane);
-		}
-		d.changed(&app);
+		h.with(|d, app| {
+			if shown {
+				d.dock.show(&pane);
+				d.focused = d.dock.group_of(&pane);
+			} else {
+				d.dock.close(&pane);
+			}
+			d.changed(app);
+		});
 	});
 }
 

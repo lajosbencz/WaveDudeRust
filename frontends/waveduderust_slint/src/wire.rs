@@ -29,36 +29,43 @@ use crate::tree::Node;
 use crate::ui::AppWindow;
 
 /// The state and the window as a callback holds them; the window weakly, as it owns its callbacks.
-#[derive(Clone)]
-pub(crate) struct Handle {
-	state: Rc<RefCell<State>>,
+pub(crate) struct Handle<T = State> {
+	state: Rc<RefCell<T>>,
 	app: slint::Weak<AppWindow>,
 }
 
-impl Handle {
-	pub(crate) fn new(state: &Rc<RefCell<State>>, app: &AppWindow) -> Self {
+impl<T> Clone for Handle<T> {
+	fn clone(&self) -> Self {
+		Self { state: self.state.clone(), app: self.app.clone() }
+	}
+}
+
+impl<T> Handle<T> {
+	pub(crate) fn new(state: &Rc<RefCell<T>>, app: &AppWindow) -> Self {
 		Self { state: state.clone(), app: app.as_weak() }
 	}
 
 	/// `f` on the state borrowed mutably and the window; the default once the window is gone.
-	pub(crate) fn with<R: Default>(&self, f: impl FnOnce(&mut State, &AppWindow) -> R) -> R {
+	pub(crate) fn with<R: Default>(&self, f: impl FnOnce(&mut T, &AppWindow) -> R) -> R {
 		let Some(app) = self.app.upgrade() else { return R::default() };
 		f(&mut self.state.borrow_mut(), &app)
 	}
 
+	/// `f` on the state borrowed shared and the window; nothing once the window is gone.
+	pub(crate) fn read(&self, f: impl FnOnce(&T, &AppWindow)) {
+		if let Some(app) = self.app.upgrade() {
+			f(&self.state.borrow(), &app);
+		}
+	}
+}
+
+impl Handle {
 	/// [`Self::with`], the window refreshed after.
 	pub(crate) fn show(&self, f: impl FnOnce(&mut State, &AppWindow)) {
 		self.with(|s, app| {
 			f(s, app);
 			s.show(app);
 		});
-	}
-
-	/// `f` on the state borrowed shared and the window; nothing once the window is gone.
-	pub(crate) fn read(&self, f: impl FnOnce(&State, &AppWindow)) {
-		if let Some(app) = self.app.upgrade() {
-			f(&self.state.borrow(), &app);
-		}
 	}
 }
 
