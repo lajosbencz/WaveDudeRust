@@ -1,0 +1,89 @@
+import { ProgressIndicator } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { RunState, RunStatus, ExportProgress } from "commands.slint";
+import { LogLevel } from "messages.slint";
+
+// The newest Info-and-up message; a warning turns the bar orange, an error red, until the next Info line.
+export struct StatusLine {
+    text: string,
+    level: LogLevel,
+}
+
+// The status bar's data, filled by Rust.
+export global Status {
+    in property <StatusLine> line: { text: @tr("Ready"), level: LogLevel.info };
+    in property <RunStatus> run;
+    in property <ExportProgress> export-progress;
+}
+
+// The status bar's words.
+export global StatusWords {
+    public pure function run(s: RunStatus) -> string {
+        if s.state == RunState.none {
+            return "";
+        }
+        @tr("{}: {} / {} steps, {}", s.state == RunState.running ? @tr("Running")
+            : s.state == RunState.paused ? @tr("Paused")
+            : s.state == RunState.failed ? @tr("Failed")
+            : s.state == RunState.completed ? @tr("Completed") : @tr("Stopped"),
+            s.steps-done, s.steps, s.engine)
+    }
+
+    // an export's progress, else the frame `position` being computed
+    public pure function busy(p: ExportProgress, position: int) -> string {
+        p.waiting ? @tr("Export: waiting for the run")
+            : p.packing ? @tr("Export: packing the archive")
+            : p.active ? @tr("Exporting {}/{}", p.done, p.total)
+            : @tr("Computing frame {}", position)
+    }
+}
+
+// The bar under the panes: the status line, the run's progress and, while busy, an export's or a frame's.
+export component StatusBar inherits Rectangle {
+    // a frame is being computed
+    in property <bool> computing;
+    // the frame shown
+    in property <int> position;
+    callback open-messages();
+    height: Theme.status-height;
+    background: Status.line.level == LogLevel.error ? Theme.status-error
+        : Status.line.level == LogLevel.warn ? Theme.status-warn : Theme.status;
+    TouchArea {
+        double-clicked => { root.open-messages(); }
+    }
+    Tooltip { text: @markdown("\{@tr("Double-click to open the Messages pane")}"); }
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 16px;
+        Text {
+            text: Status.line.text;
+            color: Theme.selection-text;
+            vertical-alignment: center;
+            overflow: elide;
+            min-width: 0px;
+        }
+        // a Text's width bounds its row; the spacer leaves the window free
+        Rectangle { horizontal-stretch: 1; min-width: 12px; }
+        Text {
+            text: StatusWords.run(Status.run);
+            color: Theme.selection-text;
+            vertical-alignment: center;
+        }
+        if Status.export-progress.active || root.computing: HorizontalLayout {
+            padding-left: 12px;
+            spacing: 6px;
+            Text {
+                text: StatusWords.busy(Status.export-progress, root.position);
+                color: Theme.selection-text;
+                vertical-alignment: center;
+            }
+            ProgressIndicator {
+                width: 120px;
+                height: 8px;
+                y: (parent.height - self.height) / 2;
+                indeterminate: !Status.export-progress.active || Status.export-progress.waiting || Status.export-progress.packing;
+                progress: Status.export-progress.total > 0 ? Status.export-progress.done / Status.export-progress.total : 0;
+            }
+        }
+    }
+}

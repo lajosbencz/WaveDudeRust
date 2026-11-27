@@ -657,7 +657,7 @@ fn write_export(state: &mut State, plan: &export::Plan, position: u32) {
 /// The export ended or was stopped: the run it held goes on with the edits made meanwhile.
 fn release_export(state: &mut State, app: &AppWindow) {
 	state.exporting = None;
-	app.set_export_progress(ui::ExportProgress::default());
+	app.global::<ui::Status<'_>>().set_export_progress(ui::ExportProgress::default());
 	if state.live.end_export(&state.doc.project, &state.doc.view) == live::Change::Frames {
 		state.playback.pause();
 	}
@@ -1063,7 +1063,7 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 	}
 	if let Some(e) = &mut s.exporting {
 		match e.poll() {
-			Ok(progress) => app.set_export_progress(progress),
+			Ok(progress) => app.global::<ui::Status<'_>>().set_export_progress(progress),
 			Err(outcome) => {
 				release_export(s, app);
 				match outcome {
@@ -1136,7 +1136,7 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 	if let Some(image) = shown.intensity {
 		app.set_intensity(image);
 	}
-	app.set_run_status(shown.status);
+	app.global::<ui::Status<'_>>().set_run(shown.status);
 	// Play and edits ask from here too
 	s.show_warning(app);
 	app.global::<ui::Canvas<'_>>().set_computing(shown.computing);

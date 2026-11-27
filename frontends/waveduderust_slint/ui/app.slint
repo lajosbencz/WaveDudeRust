@@ -1,6 +1,5 @@
 import { Theme } from "theme.slint";
-import { ProgressIndicator } from "std-widgets.slint";
-import { Command, Commands, NewItem, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
+import { Command, Commands, NewItem, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality } from "commands.slint";
 // Selawik on every platform, Segoe UI's metric twin (docs/divergences.md, Font).
 import "../../../crates/waveduderust/assets/fonts/Selawik-Regular.ttf";
 import "../../../crates/waveduderust/assets/fonts/Selawik-Semibold.ttf";
@@ -13,11 +12,13 @@ import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
 import { Form, NumberParse } from "form.slint";
 export { Form, NumberParse }
 export { Log }
+export { Status, StatusLine } from "status.slint";
 export { Words, ExportFileFormat } from "words.slint";
 import { Properties } from "properties.slint";
 import { Preview } from "preview.slint";
 import { Canvas } from "canvas.slint";
 import { Timeline, TransportBar, Transport, Bracket } from "timeline.slint";
+import { StatusBar } from "status.slint";
 import { Messages, Log, LogRow, LogLevel, LevelToggle } from "messages.slint";
 import { ModalLayer, Modal, Message, Answer } from "modal.slint";
 import { MemoryWarningLayer, MemoryWarningData, WarningAnswer } from "memory-warning.slint";
@@ -62,9 +63,6 @@ export component AppWindow inherits Window {
     in property <string> file-path;
     in property <bool> dirty;
     in property <bool> title-full-path;
-    in property <string> status-text: @tr("Ready");
-    // the status line's level: a warning turns the bar orange, an error red, until the next Info line
-    in property <LogLevel> status-level: LogLevel.info;
     in property <Commands> commands;
     // The menu bar is Windows' native one (not `Platform.os`, which names a browser's host on the web).
     in property <bool> native-access-keys;
@@ -84,8 +82,6 @@ export component AppWindow inherits Window {
     callback tree-remove(int);
     in property <image> field;
     in property <image> intensity;
-    in property <RunStatus> run-status;
-    in property <ExportProgress> export-progress;
     in property <Transport> transport;
     in property <Modal> modal;
     in-out property <bool> examples-shown;
@@ -442,58 +438,10 @@ export component AppWindow inherits Window {
                     }
                 }
             }
-            Rectangle {
-                height: Theme.status-height;
-                background: root.status-level == LogLevel.error ? Theme.status-error
-                    : root.status-level == LogLevel.warn ? Theme.status-warn : Theme.status;
-                TouchArea {
-                    double-clicked => { root.pane-shown("messages", true); }
-                }
-                Tooltip { text: @markdown("\{@tr("Double-click to open the Messages pane")}"); }
-                HorizontalLayout {
-                    padding-left: 4px;
-                    padding-right: 16px;
-                    Text {
-                        text: root.status-text;
-                        color: Theme.selection-text;
-                        vertical-alignment: center;
-                        overflow: elide;
-                        min-width: 0px;
-                    }
-                    // a Text's width bounds its row; the spacer leaves the window free
-                    Rectangle { horizontal-stretch: 1; min-width: 12px; }
-                    Text {
-                        text: root.run-status.state == RunState.none ? ""
-                            : @tr("{}: {} / {} steps, {}", root.run-status.state == RunState.running ? @tr("Running")
-                                : root.run-status.state == RunState.paused ? @tr("Paused")
-                                : root.run-status.state == RunState.failed ? @tr("Failed")
-                                : root.run-status.state == RunState.completed ? @tr("Completed") : @tr("Stopped"),
-                                root.run-status.steps-done, root.run-status.steps, root.run-status.engine);
-                        color: Theme.selection-text;
-                        vertical-alignment: center;
-                    }
-                    // busy: an export's frames, or a frame being computed
-                    if root.export-progress.active || Canvas.computing: HorizontalLayout {
-                        padding-left: 12px;
-                        spacing: 6px;
-                        Text {
-                            text: root.export-progress.waiting ? @tr("Export: waiting for the run")
-                                : root.export-progress.packing ? @tr("Export: packing the archive")
-                                : root.export-progress.active
-                                ? @tr("Exporting {}/{}", root.export-progress.done, root.export-progress.total)
-                                : @tr("Computing frame {}", root.transport.position);
-                            color: Theme.selection-text;
-                            vertical-alignment: center;
-                        }
-                        ProgressIndicator {
-                            width: 120px;
-                            height: 8px;
-                            y: (parent.height - self.height) / 2;
-                            indeterminate: !root.export-progress.active || root.export-progress.waiting || root.export-progress.packing;
-                            progress: root.export-progress.total > 0 ? root.export-progress.done / root.export-progress.total : 0;
-                        }
-                    }
-                }
+            StatusBar {
+                computing: Canvas.computing;
+                position: root.transport.position;
+                open-messages => { root.pane-shown("messages", true); }
             }
         }
     }

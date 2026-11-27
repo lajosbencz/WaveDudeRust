@@ -300,8 +300,8 @@ impl Messages {
 		// the app's own lines, not a dependency's
 		let own = |l: &&Line| l.level <= Level::INFO && l.target.starts_with("waveduderust");
 		if let Some(last) = self.lines.iter().rev().find(own) {
-			app.set_status_text(last.message.clone());
-			app.set_status_level(LEVELS[index(last.level)].1);
+			app.global::<ui::Status<'_>>()
+				.set_line(ui::StatusLine { text: last.message.clone(), level: LEVELS[index(last.level)].1 });
 		}
 	}
 }
