@@ -457,11 +457,12 @@ fn embed(state: &mut State, bytes: std::sync::Arc<[u8]>, size: (u32, u32)) {
 
 /// Follows the scene image file (docs/ui/60, Files and drop): asks while no other question shows.
 fn watch_scene_image(state: &mut State, app: &AppWindow) {
+	let ui_modal = app.global::<ui::Modal<'_>>();
 	use scene_watch::Event;
 	let folder = state.doc.path.as_deref().and_then(std::path::Path::parent);
 	match state.scene_watch.tick(&state.doc.project.scene, folder) {
-		Some(Event::Withdraw) if app.global::<ui::Modal<'_>>().get_data().message == ui::Message::SceneImage => {
-			app.global::<ui::Modal<'_>>().set_data(ui::ModalData::default());
+		Some(Event::Withdraw) if ui_modal.get_data().message == ui::Message::SceneImage => {
+			ui_modal.set_data(ui::ModalData::default());
 		}
 		Some(Event::Take(bytes, size)) => {
 			state.doc.settle(|p| (p.scene.image_data, p.scene.image_size) = (Some(bytes.clone()), size));
@@ -469,7 +470,7 @@ fn watch_scene_image(state: &mut State, app: &AppWindow) {
 		}
 		_ => {}
 	}
-	if state.scene_watch.asking() && app.global::<ui::Modal<'_>>().get_data().message == ui::Message::None {
+	if state.scene_watch.asking() && ui_modal.get_data().message == ui::Message::None {
 		tell(app, ui::Message::SceneImage, &state.doc.project.scene.image);
 	}
 }
@@ -748,9 +749,10 @@ fn save(state: &mut State, app: &AppWindow, to: SaveTo) -> bool {
 
 /// The answer to the message window: for the unsaved edits prompt, Save, Don't save or Cancel.
 fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
-	let modal = app.global::<ui::Modal<'_>>().get_data();
+	let ui_modal = app.global::<ui::Modal<'_>>();
+	let modal = ui_modal.get_data();
 	let message = modal.message;
-	app.global::<ui::Modal<'_>>().set_data(ui::ModalData::default());
+	ui_modal.set_data(ui::ModalData::default());
 	match (message, answer) {
 		(ui::Message::ReplaceIt | ui::Message::ReplaceThem, ui::Answer::Yes) => ask_replace(state, app),
 		(ui::Message::ReplaceIt | ui::Message::ReplaceThem, _) => state.replacing = None,
@@ -759,7 +761,7 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 				tracing::error!("{e}");
 			}
 			// the window stays
-			app.global::<ui::Modal<'_>>().set_data(modal);
+			ui_modal.set_data(modal);
 		}
 		(ui::Message::SceneImage, answer) => {
 			if let Some((bytes, size)) = state.scene_watch.answer(answer == ui::Answer::Yes) {
