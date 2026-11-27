@@ -567,7 +567,7 @@ fn answer_warning(state: &mut State, app: &AppWindow, answer: ui::WarningAnswer,
 	show_settings(state, app);
 }
 
-/// Applies the settings to the window, the history and the run.
+/// Applies the settings to the window, the history and the run, and shows them in Settings and Welcome.
 fn apply_settings(state: &mut State, app: &AppWindow) {
 	apply_theme(state, app);
 	if let Err(e) = slint::select_bundled_translation(&settings::language(&state.settings)) {
@@ -592,6 +592,7 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	if state.live.edited(&state.doc.project, &state.doc.view) == live::Change::Frames {
 		state.playback.pause();
 	}
+	show_settings(state, app);
 }
 
 /// The run's frames went and it starts over at frame 0: playback stops there.

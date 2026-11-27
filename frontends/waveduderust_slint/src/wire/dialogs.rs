@@ -42,7 +42,6 @@ pub(crate) fn wire_dialogs(state: &Rc<RefCell<State>>, app: &AppWindow) {
 			let facts = s.facts;
 			settings::preset(&mut s.settings, s.store.as_ref(), i, facts);
 			apply_settings(s, app);
-			show_settings(s, app);
 		});
 	});
 	let h = Handle::new(state, app);
@@ -60,7 +59,6 @@ pub(crate) fn wire_dialogs(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		h.with(|s, app| {
 			settings::apply(&app.get_settings(), &mut s.settings, s.store.as_ref());
 			apply_settings(s, app);
-			show_settings(s, app);
 		});
 	});
 	let h = Handle::new(state, app);
