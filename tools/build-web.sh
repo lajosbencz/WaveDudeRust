@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Builds the browser app into the folder given (default target/web): the release wasm of waveduderust_slint and of its
 # workers, wavedude-run-worker (decision 0024) and wavedude-spill-worker (decision 0020), bound by wasm-bindgen into
-# pkg/ (the run worker's 128-bit SIMD build into pkg-simd/, decision 0034) beside frontends/waveduderust_slint/web/index.html, run-worker.js and spill-worker.js. The wasm-bindgen CLI must
-# match Cargo.lock's crate; `tools/build-web.sh --bindgen-version` prints that version. A tree with changes gets a fresh
+# pkg/ (the run worker's 128-bit SIMD build into pkg-simd/, decision 0034) beside
+# frontends/waveduderust_slint/web/index.html and crates/waveduderust_workers/web/{run,spill}-worker.js. The
+# wasm-bindgen CLI must match Cargo.lock's crate; `tools/build-web.sh --bindgen-version` prints that version. A tree with changes gets a fresh
 # build id per run (WAVEDUDE_BUILD), which rebuilds the app and the workers. binaryen's wasm-opt (-O3, names kept) then shrinks each
 # wasm; WAVEDUDE_NO_WASM_OPT=1 skips it (decision 0029).
 set -euo pipefail
@@ -76,7 +77,7 @@ if [ -z "${WAVEDUDE_NO_WASM_OPT:-}" ]; then
 		wait "$pid"
 	done
 fi
-cp frontends/waveduderust_slint/web/run-worker.js frontends/waveduderust_slint/web/spill-worker.js "$out/"
+cp crates/waveduderust_workers/web/run-worker.js crates/waveduderust_workers/web/spill-worker.js "$out/"
 # the page's download bar needs the wasm's size, which the compressed response does not give
 sed -e "s/__WASM_BYTES__/$(wc -c < "$out/pkg/${app}_bg.wasm")/" -e "s/__BUILD__/$WAVEDUDE_BUILD/g" \
 	-e "s/__APP__/$app/g" frontends/waveduderust_slint/web/index.html > "$out/index.html"

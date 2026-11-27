@@ -13,7 +13,7 @@ its row loops run scalar. A module holding any SIMD instruction fails to compile
 
 - [`tools/build-web.sh`](../../tools/build-web.sh) builds `wavedude-run-worker` a second time with
   `-C target-feature=+simd128` into `pkg-simd/`, in its own target directory, alongside the other builds.
-- [`run-worker.js`](../../frontends/waveduderust_slint/web/run-worker.js) validates a SIMD probe module (wasm-feature-detect's
+- [`run-worker.js`](../../crates/waveduderust_workers/web/run-worker.js) validates a SIMD probe module (wasm-feature-detect's
   bytes, inlined) and loads `pkg-simd/` where it validates, else `pkg/`.
 - The app and the spill worker stay scalar: the CPU engine runs in the run worker, and the spill worker does no float
   work.
