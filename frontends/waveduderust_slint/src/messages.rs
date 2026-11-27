@@ -9,7 +9,8 @@ use slint::{Model, ModelNotify, ModelRc, ModelTracker, VecModel};
 use tracing::Level;
 
 use crate::log::{KEPT, Line, Ring};
-use crate::ui::{AppWindow, LevelToggle, LogLevel, LogRow};
+use crate::ui::{self, AppWindow, LevelToggle, LogLevel, LogRow};
+use slint::ComponentHandle;
 
 const LEVELS: [(Level, LogLevel); 5] = [
 	(Level::TRACE, LogLevel::Trace),
@@ -293,8 +294,9 @@ impl Messages {
 			})
 			.collect();
 		// new lines, which Auto-scroll follows
-		app.set_log_added(i32::try_from(self.seen.unwrap_or_default() % (1 << 30)).unwrap_or(0));
-		app.set_log_levels(ModelRc::new(VecModel::from(levels)));
+		let log = app.global::<ui::Log<'_>>();
+		log.set_added(i32::try_from(self.seen.unwrap_or_default() % (1 << 30)).unwrap_or(0));
+		log.set_levels(ModelRc::new(VecModel::from(levels)));
 		// the app's own lines, not a dependency's
 		let own = |l: &&Line| l.level <= Level::INFO && l.target.starts_with("waveduderust");
 		if let Some(last) = self.lines.iter().rev().find(own) {

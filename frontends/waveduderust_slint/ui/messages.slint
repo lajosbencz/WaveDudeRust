@@ -43,21 +43,26 @@ component Toggle inherits Rectangle {
     Tooltip { text: @markdown("\{root.tip}"); }
 }
 
-// The Messages pane (docs/ui/70, Messages pane): level toggles with counts, search, Regex, Auto-scroll, Clear,
-// the log lines with Copy, Copy all and Clear.
-export component Messages inherits Rectangle {
+// The Messages pane's data and requests, filled and served by src/wire/log.rs.
+export global Log {
     in property <[LogRow]> rows;
     in property <[LevelToggle]> levels;
     // moves with each line added
     in property <int> added;
-    callback toggle(LogLevel);
-    callback search(string);
-    callback regex(bool);
+    callback toggle(level: LogLevel);
+    callback search(text: string);
+    callback regex(on: bool);
     callback clear();
     // row `row` pressed with Control or Shift held
     callback select(row: int, control: bool, shift: bool);
     // the selected lines (`all`: every visible line) to the clipboard; false with none
     callback copy(all: bool) -> bool;
+}
+
+// The Messages pane (docs/ui/70, Messages pane): level toggles with counts, search, Regex, Auto-scroll, Clear,
+// the log lines with Copy, Copy all and Clear.
+export component Messages inherits Rectangle {
+    property <int> added: Log.added;
 
     property <bool> regex-on;
     property <bool> follow: true;
@@ -75,7 +80,7 @@ export component Messages inherits Rectangle {
             : level == LogLevel.error ? "ERROR" : "INFO"
     }
     function newest() {
-        list.content-y = min(0px, list.visible-height - root.rows.length * root.row-height);
+        list.content-y = min(0px, list.visible-height - Log.rows.length * root.row-height);
     }
     changed added => {
         if (root.follow) { root.newest(); }
@@ -92,16 +97,16 @@ export component Messages inherits Rectangle {
             padding: 2px;
             spacing: 4px;
             height: Theme.row-height + 4px;
-            for l in root.levels: Toggle {
+            for l in Log.levels: Toggle {
                 text: l.label;
                 ink: root.colour(l.level);
                 on: l.shown;
                 tip: @tr("Show or hide this level");
-                toggled => { root.toggle(l.level); }
+                toggled => { Log.toggle(l.level); }
             }
             EditLine {
                 placeholder-text: @tr("Search");
-                edited(t) => { root.search(t); }
+                edited(t) => { Log.search(t); }
             }
             Toggle {
                 text: @tr("Regex");
@@ -109,7 +114,7 @@ export component Messages inherits Rectangle {
                 tip: @tr("Treat the search text as a regular expression");
                 toggled => {
                     root.regex-on = !root.regex-on;
-                    root.regex(root.regex-on);
+                    Log.regex(root.regex-on);
                 }
             }
             Toggle {
@@ -125,7 +130,7 @@ export component Messages inherits Rectangle {
                 text: @tr("Clear");
                 icon: MenuIcons.clear-all;
                 colorize-icon: true;
-                clicked => { root.clear(); }
+                clicked => { Log.clear(); }
                 Tooltip { text: @markdown("\{@tr("Clear all messages")}"); }
             }
         }
@@ -144,19 +149,19 @@ export component Messages inherits Rectangle {
             key-pressed(e) => {
                 // with no line selected the app copies its items
                 if (e.modifiers.control && (e.text == "c" || e.text == "C")) {
-                    return root.copy(false) ? accept : reject;
+                    return Log.copy(false) ? accept : reject;
                 }
                 reject
             }
             ContextMenuArea {
                 Menu {
-                    MenuItem { title: @tr("Copy"); icon: MenuIcons.content-copy; activated => { root.copy(false); } }
-                    MenuItem { title: @tr("Copy all"); icon: MenuIcons.select-all; activated => { root.copy(true); } }
+                    MenuItem { title: @tr("Copy"); icon: MenuIcons.content-copy; activated => { Log.copy(false); } }
+                    MenuItem { title: @tr("Copy all"); icon: MenuIcons.select-all; activated => { Log.copy(true); } }
                     MenuSeparator { }
-                    MenuItem { title: @tr("Clear"); icon: MenuIcons.clear-all; activated => { root.clear(); } }
+                    MenuItem { title: @tr("Clear"); icon: MenuIcons.clear-all; activated => { Log.clear(); } }
                 }
                 list := ListView {
-                    for row[i] in root.rows: line := Rectangle {
+                    for row[i] in Log.rows: line := Rectangle {
                         height: root.row-height;
                         background: row.selected ? (keys.has-focus ? Theme.accent : Theme.button-background) : transparent;
                         property <color> ink: row.selected && keys.has-focus ? Theme.selection-text : root.colour(row.level);
@@ -176,7 +181,7 @@ export component Messages inherits Rectangle {
                             pointer-event(e) => {
                                 if (e.kind == PointerEventKind.down && (e.button == PointerEventButton.left || !row.selected)) {
                                     keys.focus();
-                                    root.select(i, e.modifiers.control, e.modifiers.shift);
+                                    Log.select(i, e.modifiers.control, e.modifiers.shift);
                                 }
                             }
                         }

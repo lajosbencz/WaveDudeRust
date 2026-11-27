@@ -3,28 +3,31 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use slint::ComponentHandle;
+
 use super::Handle;
 use crate::clipboard;
 use crate::messages::Messages;
 use crate::models;
 use crate::state::State;
-use crate::ui::AppWindow;
+use crate::ui::{self, AppWindow};
 
 /// The Messages pane: its rows, search, levels, selection, copy and clear.
 pub(crate) fn wire_log(state: &Rc<RefCell<State>>, app: &AppWindow) {
-	app.set_log_rows(state.borrow().messages.rows());
-	app.on_log_search(on_log(state, app, |m, t: slint::SharedString| m.search(&t)));
+	let log = app.global::<ui::Log<'_>>();
+	log.set_rows(state.borrow().messages.rows());
+	log.on_search(on_log(state, app, |m, t: slint::SharedString| m.search(&t)));
 	let clear = on_log(state, app, |m, ()| m.clear());
-	app.on_log_clear(move || clear(()));
-	app.on_log_regex(on_log(state, app, Messages::set_regex));
+	log.on_clear(move || clear(()));
+	log.on_regex(on_log(state, app, Messages::set_regex));
 	let select = on_log(state, app, |m, (row, control, shift)| {
 		if let Some(row) = models::index_from_ui(row) {
 			m.select(row, control, shift);
 		}
 	});
-	app.on_log_select(move |row, control, shift| select((row, control, shift)));
+	log.on_select(move |row, control, shift| select((row, control, shift)));
 	let st = state.clone();
-	app.on_log_copy(move |all| {
+	log.on_copy(move |all| {
 		let text = st.borrow().messages.text(all);
 		if text.is_empty() {
 			return false;
@@ -34,7 +37,7 @@ pub(crate) fn wire_log(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		}
 		true
 	});
-	app.on_log_toggle(on_log(state, app, Messages::toggle));
+	log.on_toggle(on_log(state, app, Messages::toggle));
 }
 
 /// A Messages pane handler: `f` on the messages with the callback's argument, the pane refreshed after.

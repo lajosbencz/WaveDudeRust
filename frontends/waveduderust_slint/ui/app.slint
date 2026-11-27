@@ -12,12 +12,13 @@ import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview,
 import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
 import { Form, NumberParse } from "form.slint";
 export { Form, NumberParse }
+export { Log }
 export { Words, ExportFileFormat } from "words.slint";
 import { Properties } from "properties.slint";
 import { Preview } from "preview.slint";
 import { Canvas } from "canvas.slint";
 import { Timeline, TransportBar, Transport, Bracket } from "timeline.slint";
-import { Messages, LogRow, LogLevel, LevelToggle } from "messages.slint";
+import { Messages, Log, LogRow, LogLevel, LevelToggle } from "messages.slint";
 import { ModalLayer, Modal, Message, Answer } from "modal.slint";
 import { MemoryWarningLayer, MemoryWarningData, WarningAnswer } from "memory-warning.slint";
 import { AboutLayer, AboutData } from "about.slint";
@@ -106,14 +107,6 @@ export component AppWindow inherits Window {
     in property <NumberSpec> undo-spec;
     callback settings-edited();
     callback modal-answer(Answer);
-    in property <[LogRow]> log-rows;
-    in property <[LevelToggle]> log-levels;
-    callback log-toggle(LogLevel);
-    callback log-search(string);
-    callback log-clear();
-    callback log-regex(bool);
-    callback log-select(int, bool, bool);
-    callback log-copy(bool) -> bool;
     in-out property <bool> about-shown;
     in property <AboutData> about;
     callback about-copy();
@@ -130,7 +123,6 @@ export component AppWindow inherits Window {
     in property <MemoryWarningData> memory-warning;
     callback memory-warning-ticked(bool, bool, bool, bool);
     callback memory-warning-answer(WarningAnswer, bool);
-    in property <int> log-added;
     callback seek(int);
     callback transport-action(TransportAction);
     callback transport-speed(text: string) -> string;
@@ -392,15 +384,6 @@ export component AppWindow inherits Window {
                         if root.messages-shown: DockedPane {
                             place: root.messages-place;
                             Messages {
-                                rows: root.log-rows;
-                                levels: root.log-levels;
-                                toggle(l) => { root.log-toggle(l); }
-                                search(t) => { root.log-search(t); }
-                                clear => { root.log-clear(); }
-                                regex(on) => { root.log-regex(on); }
-                                select(row, control, shift) => { root.log-select(row, control, shift); }
-                                copy(all) => { root.log-copy(all) }
-                                added: root.log-added;
                             }
                         }
                         if root.performance-shown: DockedPane {
