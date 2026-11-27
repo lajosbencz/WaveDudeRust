@@ -100,6 +100,8 @@ component GraphBoxView inherits Rectangle {
     // the box (or its grip) has the keyboard focus
     in property <bool> focused;
     in property <bool> grip-focused;
+    // the trace and the readout
+    property <color> trace: #ffd040;
     x: round(root.graph.x * root.scale) * 1px;
     y: round(root.graph.y * root.scale) * 1px;
     width: root.graph.width * 1px;
@@ -136,8 +138,8 @@ component GraphBoxView inherits Rectangle {
             viewbox-width: root.graph.plot.width;
             viewbox-height: root.graph.plot.height;
             commands: root.graph.curve;
-            stroke: root.graph.dot ? transparent : #ffd040;
-            fill: root.graph.dot ? #ffd040 : transparent;
+            stroke: root.graph.dot ? transparent : root.trace;
+            fill: root.graph.dot ? root.trace : transparent;
             stroke-width: root.graph.line-width * 1px;
         }
     }
@@ -162,7 +164,7 @@ component GraphBoxView inherits Rectangle {
         height: 14px;
         spacing: 8px;
         Text { text: root.graph.title; font-size: 11px; color: #f0f0f5f0; overflow: elide; horizontal-stretch: 1; min-width: 0; }
-        if root.graph.readout != "": Text { text: root.graph.readout; font-size: 11px; color: #ffd040; }
+        if root.graph.readout != "": Text { text: root.graph.readout; font-size: 11px; color: root.trace; }
     }
 }
 
