@@ -284,8 +284,8 @@ llvm-dwarfdump --debug-line <wasm> > lines.txt; llvm-objdump -d --no-show-raw-in
 ```
 
 Each `f32x4` and scalar `f32` add, sub and mul of `code.txt` goes to the source line of its address in `lines.txt`
-(DWARF addresses in wasm count from the code section's payload, `wasm-objdump -h`; `llvm-objdump -l` mis-offsets
-them). The line tables leave the code alike: 512 `f32x4` and 8535 or 8536 scalar `f32` instructions with and without.
+(DWARF addresses in wasm count from the code section's payload, `wasm-objdump -h`; `llvm-objdump -l` offsets them
+wrongly). The line tables leave the code alike: 512 `f32x4` and 8535 or 8536 scalar `f32` instructions with and without.
 LLVM's `-C remark=loop-vectorize` reports nothing on this toolchain, not even for a loop it vectorises. A loop with
 `f32x4` arithmetic has a vector body; its scalar share is the remainder of each row.
 
