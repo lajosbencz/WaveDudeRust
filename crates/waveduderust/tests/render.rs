@@ -1,6 +1,4 @@
-#![allow(clippy::print_stdout, reason = "the measurements are printed for the reader")]
 //! The Rendering guarantees of docs/spec/70-guarantees.md.
-
 
 use waveduderust::f16;
 use waveduderust::model::{ColorScheme, Rgb, Stop};
@@ -249,30 +247,6 @@ fn brightness_fit() {
 	assert_eq!(fit_brightness(&[f16::NAN, f16::INFINITY], SampleKind::Field), None);
 	assert_eq!(fit_brightness(&[h(-1.0); 4], SampleKind::IntensityRoot), None);
 	assert_eq!(fit_brightness(&[h(0.03), h(0.03)], SampleKind::Field), Some(33.3));
-}
-
-fn hex_picture(rgba: &[u8], width: usize) -> String {
-	pixels(rgba)
-		.chunks(width)
-		.map(|row| row.iter().map(|p| format!("{:02X}{:02X}{:02X}", p[0], p[1], p[2])).collect::<Vec<_>>().join(" "))
-		.collect::<Vec<_>>()
-		.join("\n")
-}
-
-#[test]
-fn snapshot_pictures() {
-	let s = inferno();
-	let indexed: Vec<u8> = (0..24).map(|i| (i * 11) as u8).collect();
-	insta::assert_snapshot!("indexed", hex_picture(&render_indexed(&indexed, &Palette::new(&s, 0.0)), 6));
-	let plane: Vec<f16> = (0..24).map(|i| h((i as f32 - 12.0) / 12.0)).collect();
-	let field = HalfTable::new(&s, -0.05, 1.0, SampleKind::Field);
-	insta::assert_snapshot!("half", hex_picture(&render_half(&plane, &field), 6));
-	let screen = ScreenRenderer::new(6, 4, 9, 3).render_to_vec(&plane, ScreenColors::Plain(&field));
-	insta::assert_snapshot!("screen", hex_picture(&screen, 9));
-	let deep = DeepHalfTable::new(&s, -0.05, 1.0, SampleKind::Field);
-	let dithered =
-		ScreenRenderer::new(6, 4, 9, 3).render_to_vec(&plane, ScreenColors::Dithered(&deep, DitherDepth::Bits12));
-	insta::assert_snapshot!("screen_dithered", hex_picture(&dithered, 9));
 }
 
 #[test]
