@@ -377,8 +377,8 @@ impl Exporting {
 	pub(crate) fn poll(&mut self) -> Result<ExportProgress, Outcome> {
 		let progress = |done: usize, total: usize| ExportProgress {
 			active: true,
-			done: i32::try_from(done).unwrap_or(i32::MAX),
-			total: i32::try_from(total).unwrap_or(i32::MAX),
+			done: models::count_to_ui(done),
+			total: models::count_to_ui(total),
 			..ExportProgress::default()
 		};
 		match std::mem::replace(&mut self.state, State::Ended) {

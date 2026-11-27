@@ -28,6 +28,11 @@ pub(crate) fn index_to_ui(i: Option<usize>) -> i32 {
 	i.and_then(|i| i32::try_from(i).ok()).unwrap_or(-1)
 }
 
+/// A count or size for the window, saturated at `i32::MAX`.
+pub(crate) fn count_to_ui(n: impl TryInto<i32>) -> i32 {
+	n.try_into().unwrap_or(i32::MAX)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

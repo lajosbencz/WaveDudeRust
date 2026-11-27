@@ -20,6 +20,7 @@ use waveduderust::unstable::spec::{RunRequest, SceneCache, Schedule};
 use waveduderust::io::schemes::SchemeStore;
 
 use crate::gpu::{CpuPicture, Look, Picture};
+use crate::models;
 use crate::ui::{RunState, RunStatus};
 
 /// What an edit asks of the run (docs/ui/60, Edit classes).
@@ -959,8 +960,8 @@ impl Live {
 			intensity: None,
 			status: RunStatus {
 				state,
-				steps_done: i32::try_from(steps_done).unwrap_or(i32::MAX),
-				steps: i32::try_from(self.steps).unwrap_or(i32::MAX),
+				steps_done: models::count_to_ui(steps_done),
+				steps: models::count_to_ui(self.steps),
 				// a run that stepped without the GPU engine's frames fell back to the CPU engine (the reason is in Messages)
 				engine: if self.engine.gpu
 					&& status.steps_done > 0

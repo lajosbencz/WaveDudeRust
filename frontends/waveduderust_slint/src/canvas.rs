@@ -210,8 +210,8 @@ impl Overlays {
 		let selected: Vec<ItemRef> = selection.group().into_iter().filter_map(|n| item_of(project, n)).collect();
 		let current = item_of(project, selection.current());
 		let (w, h) = project.canvas_size();
-		canvas.set_width(i32::try_from(w).unwrap_or(i32::MAX));
-		canvas.set_height(i32::try_from(h).unwrap_or(i32::MAX));
+		canvas.set_width(models::count_to_ui(w));
+		canvas.set_height(models::count_to_ui(h));
 		let layers = [(Layer::Field, ui::Layer::Field), (Layer::Intensity, ui::Layer::Intensity)];
 		for ((layer, ui_layer), shown) in layers.into_iter().zip(&mut self.shown) {
 			let scale = shown.scale();

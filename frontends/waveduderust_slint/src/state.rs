@@ -229,7 +229,7 @@ impl State {
 		app.set_props_kind(node.kind());
 		app.set_props_heading(tree::name(&self.doc.project, node).into());
 		let folder = tree::folder(&self.doc.project, node);
-		app.set_props_entries(folder.map_or(-1, |n| i32::try_from(n).unwrap_or(i32::MAX)));
+		app.set_props_entries(folder.map_or(-1, models::count_to_ui));
 		let seen = (self.doc.generation, self.doc.view_generation);
 		if seen != self.form_seen {
 			self.form_seen = seen;

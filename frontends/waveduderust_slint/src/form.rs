@@ -42,7 +42,7 @@ impl Bridge<i32> for i32 {
 
 impl Bridge<u32> for i32 {
 	fn show(model: &u32) -> Self {
-		i32::try_from(*model).unwrap_or(i32::MAX)
+		models::count_to_ui(*model)
 	}
 	fn model(&self) -> u32 {
 		u32::try_from(*self).unwrap_or(0)
@@ -328,19 +328,20 @@ fn meta_data(s: &m::MetaSurface, scale: f64) -> ui::MetaData {
 fn gate_data(base: &m::PartBase, g: &m::LogicGate, sim: &m::Simulation) -> ui::GateData {
 	let design = GateDesign::for_gate(g, sim);
 	let lambda = wavelength(g.design_frequency, 1.0, sim.source_frequency_scale);
-	let cells = |n: i64| i32::try_from(n).unwrap_or(i32::MAX);
 	let mut data = ui::GateData {
-		port_spacing: design.as_ref().map_or_else(|| Bridge::show(&g.port_spacing), |d| cells(d.port_spacing)),
+		port_spacing: design
+			.as_ref()
+			.map_or_else(|| Bridge::show(&g.port_spacing), |d| models::count_to_ui(d.port_spacing)),
 		wavelength: if lambda.is_finite() && lambda > 0.0 { lambda as f32 } else { 0.0 },
 		designed: design.is_some(),
 		..Data::show(g)
 	};
 	if let Some(d) = &design {
 		data.quarter_wave = (d.wavelength / (4.0 * d.core_index.sqrt())) as f32;
-		data.core_width = cells(d.core_width);
-		data.gap = cells(d.coupled - d.core_width);
-		data.coupler_length = cells(d.coupler_len);
-		data.length = cells(d.length);
+		data.core_width = models::count_to_ui(d.core_width);
+		data.gap = models::count_to_ui(d.coupled - d.core_width);
+		data.coupler_length = models::count_to_ui(d.coupler_len);
+		data.length = models::count_to_ui(d.length);
 		let [a, b, upper, lower] = ports_of(d, base).map(|p| Data::show(&p));
 		(data.input_a, data.input_b, data.upper_out, data.lower_out) = (a, b, upper, lower);
 	}
@@ -350,7 +351,7 @@ fn gate_data(base: &m::PartBase, g: &m::LogicGate, sim: &m::Simulation) -> ui::G
 /// Writes a logic gate's changed fields; a port spacing typed is the design's raised one replaced.
 fn apply_gate(d: &ui::GateData, g: &mut m::LogicGate, sim: &m::Simulation) {
 	let used = GateDesign::for_gate(g, sim)
-		.map_or_else(|| Bridge::show(&g.port_spacing), |design| i32::try_from(design.port_spacing).unwrap_or(i32::MAX));
+		.map_or_else(|| Bridge::show(&g.port_spacing), |design| models::count_to_ui(design.port_spacing));
 	d.apply(&Data::show(&*g), g);
 	if d.port_spacing != used {
 		g.port_spacing = d.port_spacing.model();
@@ -396,7 +397,7 @@ fn scene_data(scene: &m::Scene) -> ui::SceneData {
 		readable: scene.image_size != (0, 0),
 		image_width: Bridge::show(&image_width),
 		image_height: Bridge::show(&image_height),
-		image_kb: scene.image_data.as_ref().map_or(0, |b| i32::try_from(b.len() / 1024).unwrap_or(i32::MAX).max(1)),
+		image_kb: scene.image_data.as_ref().map_or(0, |b| models::count_to_ui(b.len() / 1024).max(1)),
 		..Data::show(scene)
 	}
 }
@@ -487,7 +488,7 @@ fn show_part(form: &Form<'_>, project: &Project, part: &Part) {
 				profile.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), &p| (l.min(p), h.max(p)));
 			let data = ui::DiffuserData {
 				profile_height: (high - low) as f32,
-				ripples: i32::try_from(d.components().len()).unwrap_or(i32::MAX),
+				ripples: models::count_to_ui(d.components().len()),
 				..Data::show(d)
 			};
 			put(form.get_diffuser(), data, |d| form.set_diffuser(d));
@@ -496,7 +497,7 @@ fn show_part(form: &Form<'_>, project: &Project, part: &Part) {
 			let scale = project.simulation.source_frequency_scale;
 			let data = ui::ZonePlateData {
 				wavelength: z.wavelength(scale).unwrap_or_default() as f32,
-				zones: i32::try_from(z.zone_count(scale)).unwrap_or(i32::MAX),
+				zones: models::count_to_ui(z.zone_count(scale)),
 				outer_zone: z.outer_zone_width(scale).unwrap_or_default() as f32,
 				..Data::show(z)
 			};

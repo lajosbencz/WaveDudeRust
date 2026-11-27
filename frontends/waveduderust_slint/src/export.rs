@@ -489,7 +489,7 @@ mod native {
 				);
 				return Err(outcome);
 			}
-			let count = |n: &AtomicUsize| i32::try_from(n.load(Ordering::Relaxed)).unwrap_or(i32::MAX);
+			let count = |n: &AtomicUsize| models::count_to_ui(n.load(Ordering::Relaxed));
 			Ok(ExportProgress {
 				active: true,
 				done: count(&self.done),

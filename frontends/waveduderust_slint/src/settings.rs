@@ -41,7 +41,7 @@ pub(crate) fn data(s: &Settings) -> SettingsData {
 		},
 		title_full_path: s.title_full_path,
 		show_startup: s.show_startup,
-		undo_steps: i32::try_from(s.undo_steps).unwrap_or(i32::MAX),
+		undo_steps: models::count_to_ui(s.undo_steps),
 		preview_resolution: scale(s.preview_resolution),
 		preview_frames: scale(s.preview_frames),
 		preview_index: s.preview_sample_bytes < 2,
@@ -142,10 +142,9 @@ pub(crate) fn undo_spec() -> NumberSpec {
 
 /// The preview levers as they are.
 pub(crate) fn levers(settings: &Settings) -> Levers {
-	let int = |n: u32| i32::try_from(n).unwrap_or(i32::MAX);
 	Levers {
-		resolution: int(settings.preview_resolution),
-		frames: int(settings.preview_frames),
+		resolution: models::count_to_ui(settings.preview_resolution),
+		frames: models::count_to_ui(settings.preview_frames),
 		bits: if settings.preview_sample_bytes >= 2 { 16 } else { 8 },
 		preset: models::index_to_ui(
 			settings.preset().and_then(|tier| PreviewTier::ALL.iter().position(|&t| t == tier)),

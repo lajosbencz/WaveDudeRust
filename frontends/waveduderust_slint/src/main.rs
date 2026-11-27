@@ -874,14 +874,13 @@ fn transport_state(
 	paused: bool,
 	empty: bool,
 ) -> ui::Transport {
-	let int = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
 	let (start, end) = p.range();
 	ui::Transport {
-		frames: int(p.frames),
-		position: int(p.position),
-		made: shown.made.map_or(-1, int),
-		start: int(start),
-		end: int(end),
+		frames: models::count_to_ui(p.frames),
+		position: models::count_to_ui(p.position),
+		made: shown.made.map_or(-1, models::count_to_ui),
+		start: models::count_to_ui(start),
+		end: models::count_to_ui(end),
 		ranged: p.start.is_some() || p.end.is_some(),
 		playing: p.playing,
 		live: p.live,
