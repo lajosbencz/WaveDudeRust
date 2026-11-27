@@ -195,7 +195,7 @@ impl State {
 		}
 		self.show_warning(app);
 		let canvas = app.global::<ui::Canvas<'_>>();
-		canvas.set_field_brightness(self.doc.view.field.brightness as f32);
+		canvas::edit_layer(&canvas, ui::Layer::Field, |v| v.brightness = self.doc.view.field.brightness as f32);
 		let scene = &self.doc.project.scene;
 		canvas.set_edge(if scene.has_rim() {
 			ui::EdgeLine::Rim
@@ -204,7 +204,7 @@ impl State {
 		} else {
 			ui::EdgeLine::Open
 		});
-		canvas.set_intensity_brightness(self.doc.view.intensity.brightness as f32);
+		canvas::edit_layer(&canvas, ui::Layer::Intensity, |v| v.brightness = self.doc.view.intensity.brightness as f32);
 		let pictures = (self.doc.view.field.preview, self.doc.view.intensity.preview);
 		if pictures != self.pictures {
 			// a picture came or went (the toggles, the form, undo): a gesture on it gets no release

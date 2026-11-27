@@ -127,8 +127,8 @@ impl Graphs {
 	}
 
 	pub(crate) fn wire(&self, canvas: &ui::Canvas<'_>) {
-		canvas.set_field_graphs(ModelRc::from(self.rows[0].clone()));
-		canvas.set_intensity_graphs(ModelRc::from(self.rows[1].clone()));
+		crate::canvas::edit_layer(canvas, ui::Layer::Field, |v| v.graphs = ModelRc::from(self.rows[0].clone()));
+		crate::canvas::edit_layer(canvas, ui::Layer::Intensity, |v| v.graphs = ModelRc::from(self.rows[1].clone()));
 	}
 
 	/// Lays out the boxes of the active probes on both pictures, `scales` logical pixels per canvas pixel; the

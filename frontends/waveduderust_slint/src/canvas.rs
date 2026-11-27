@@ -182,13 +182,28 @@ fn polyline(points: &[(f32, f32)], closed: bool, out: &mut String) {
 	}
 }
 
+/// Changes `layer`'s view in the Canvas global; an unchanged view notifies nothing.
+pub(crate) fn edit_layer(canvas: &ui::Canvas<'_>, layer: ui::Layer, edit: impl FnOnce(&mut ui::LayerView)) {
+	let mut view = match layer {
+		ui::Layer::Field => canvas.get_field(),
+		ui::Layer::Intensity => canvas.get_intensity(),
+	};
+	edit(&mut view);
+	match layer {
+		ui::Layer::Field => canvas.set_field(view),
+		ui::Layer::Intensity => canvas.set_intensity(view),
+	}
+}
+
 impl Overlays {
 	pub(crate) fn wire(&self, canvas: &ui::Canvas<'_>) {
 		let [field, intensity] = &self.shown;
-		canvas.set_field_handles(ModelRc::from(field.handles.clone()));
-		canvas.set_field_labels(ModelRc::from(field.labels.clone()));
-		canvas.set_intensity_handles(ModelRc::from(intensity.handles.clone()));
-		canvas.set_intensity_labels(ModelRc::from(intensity.labels.clone()));
+		for (layer, shown) in [(ui::Layer::Field, field), (ui::Layer::Intensity, intensity)] {
+			edit_layer(canvas, layer, |v| {
+				v.handles = ModelRc::from(shown.handles.clone());
+				v.labels = ModelRc::from(shown.labels.clone());
+			});
+		}
 	}
 
 	/// Logical pixels per canvas pixel of `layer`'s picture.
@@ -268,10 +283,7 @@ impl Overlays {
 				dots: circles(m.dots.iter().filter(|d| !d.selected).map(|d| d.at), r).into(),
 				selected_dots: circles(m.dots.iter().filter(|d| d.selected).map(|d| d.at), r).into(),
 			};
-			match layer {
-				Layer::Field => canvas.set_field_art(art),
-				_ => canvas.set_intensity_art(art),
-			}
+			edit_layer(canvas, ui_layer, |v| v.art = art);
 			shown.model = m;
 		}
 	}

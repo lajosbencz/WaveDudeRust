@@ -73,16 +73,21 @@ export struct OverlayArt {
     selected-dots: string,
 }
 
+// What a picture draws over its layer: the overlay's handles, labels and art, the graph boxes, and the brightness (Display).
+export struct LayerView {
+    handles: [HandleData],
+    labels: [LabelData],
+    art: OverlayArt,
+    graphs: [GraphBox],
+    brightness: float,
+}
+
 export global Canvas {
     // canvas pixels
     in property <int> width: 1;
     in property <int> height: 1;
-    in property <[HandleData]> field-handles;
-    in property <[LabelData]> field-labels;
-    in property <OverlayArt> field-art;
-    in property <[HandleData]> intensity-handles;
-    in property <[LabelData]> intensity-labels;
-    in property <OverlayArt> intensity-art;
+    in property <LayerView> field: { brightness: 1 };
+    in property <LayerView> intensity: { brightness: 1 };
     // the pictures' zoom over fitting (1..64) and the canvas point at their centres; kept across projects
     in-out property <float> zoom: 1;
     in-out property <float> centre-x;
@@ -116,13 +121,9 @@ export global Canvas {
     // the pointer over a picture at canvas pixel (x, y)
     callback hover(layer: Layer, x: float, y: float);
     callback export-probe-csv(probe: int);
-    in property <[GraphBox]> field-graphs;
-    in property <[GraphBox]> intensity-graphs;
     // the run computes the frame wanted, not stored yet
     in property <bool> computing;
-    // the layers' brightness (Display), its edits and Auto
-    in property <float> field-brightness: 1;
-    in property <float> intensity-brightness: 1;
+    // a layer's brightness edits and Auto
     callback brightness(layer: Layer, value: float);
     callback auto(layer: Layer);
     // a key on `layer`'s picture, Shift held; whether it was taken

@@ -1,7 +1,7 @@
 import { Theme } from "theme.slint";
 import { Layer } from "data.slint";
 import { Splitter } from "splitter.slint";
-import { Canvas, EdgeLine, GraphBox, HandleData, HandleGlyph, HandleKey, HoverTip, LabelData, OverlayArt, TipKind } from "canvas.slint";
+import { Canvas, LayerView, EdgeLine, GraphBox, HandleData, HandleGlyph, HandleKey, HoverTip, LabelData, OverlayArt, TipKind } from "canvas.slint";
 import { Command } from "commands.slint";
 import { Button } from "std-widgets.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
@@ -181,12 +181,9 @@ component Picture inherits Rectangle {
     in property <string> title;
     // the picture's keys took or lost the keyboard focus
     callback focused(has: bool);
-    in property <image> source;
     in property <Layer> layer;
-    in property <[HandleData]> handles;
-    in property <[LabelData]> labels;
-    in property <OverlayArt> art;
-    in property <[GraphBox]> graphs;
+    property <image> source: root.layer == Layer.field ? Playback.field : Playback.intensity;
+    property <LayerView> view: root.layer == Layer.field ? Canvas.field : Canvas.intensity;
     in property <bool> can-export;
     property <bool> over-box: touch.has-hover && Canvas.hover-box >= 0 && Canvas.hover-layer == root.layer;
     // dimmed, a frame being computed for a while
@@ -265,7 +262,7 @@ component Picture inherits Rectangle {
                 transform-rotation: root.side && self.editing ? -90deg : 0deg;
                 property <length> shift: (self.width - root.band) / 4;
                 transform-origin: { x: self.width / 2 - self.shift, y: self.height / 2 - self.shift };
-                value: "\{root.layer == Layer.field ? Canvas.field-brightness : Canvas.intensity-brightness}";
+                value: "\{root.view.brightness}";
                 spec: root.brightness-spec;
                 tip: @tr("Gain applied to the values before the colour lookup.");
                 edited(t) => {
@@ -315,18 +312,18 @@ component Picture inherits Rectangle {
                 source: root.source;
                 image-fit: fill;
             }
-            if root.art.dots != "": Art { commands: root.art.dots; fill: Theme.picture-handle; }
-            if root.art.selected-dots != "": Art { commands: root.art.selected-dots; fill: Theme.picture-selection; }
-            if root.art.lines != "": Art { commands: root.art.lines; stroke: Theme.picture-handle; stroke-width: 1px; }
-            if root.art.selected-lines != "": Art {
-                commands: root.art.selected-lines;
+            if root.view.art.dots != "": Art { commands: root.view.art.dots; fill: Theme.picture-handle; }
+            if root.view.art.selected-dots != "": Art { commands: root.view.art.selected-dots; fill: Theme.picture-selection; }
+            if root.view.art.lines != "": Art { commands: root.view.art.lines; stroke: Theme.picture-handle; stroke-width: 1px; }
+            if root.view.art.selected-lines != "": Art {
+                commands: root.view.art.selected-lines;
                 stroke: Theme.picture-selection;
                 stroke-width: 1px;
             }
-            if root.art.outlines != "": Art { commands: root.art.outlines; stroke: Theme.picture-selection; stroke-width: 1px; }
-            for label in root.labels: LabelView { label: label; scale: cell.scale; }
-            for handle in root.handles: HandleView { handle: handle; scale: cell.scale; focus-shown: keys.has-focus; }
-            for graph in root.graphs: GraphBoxView {
+            if root.view.art.outlines != "": Art { commands: root.view.art.outlines; stroke: Theme.picture-selection; stroke-width: 1px; }
+            for label in root.view.labels: LabelView { label: label; scale: cell.scale; }
+            for handle in root.view.handles: HandleView { handle: handle; scale: cell.scale; focus-shown: keys.has-focus; }
+            for graph in root.view.graphs: GraphBoxView {
                 graph: graph;
                 scale: cell.scale;
                 hovered: touch.has-hover && Canvas.hover-layer == root.layer && Canvas.hover-box == graph.probe;
@@ -524,8 +521,6 @@ export component Preview inherits Rectangle {
         }
     }
     property <bool> busy-wanted: Canvas.computing;
-    property <image> field: Playback.field;
-    property <image> intensity: Playback.intensity;
     property <bool> stacked: Playback.stacked;
     in property <bool> can-export;
     // Display > Field / Intensity > Preview: a hidden picture gives its room to the other
@@ -566,12 +561,7 @@ export component Preview inherits Rectangle {
             min-height: 60px;
             preferred-height: 0px;
             title: @tr("Field");
-            source: root.field;
             layer: Layer.field;
-            handles: Canvas.field-handles;
-            labels: Canvas.field-labels;
-            art: Canvas.field-art;
-            graphs: Canvas.field-graphs;
             can-export: root.can-export;
             busy: root.busy;
             command(c) => { root.command(c); }
@@ -590,12 +580,7 @@ export component Preview inherits Rectangle {
             min-height: 60px;
             preferred-height: 0px;
             title: @tr("Intensity");
-            source: root.intensity;
             layer: Layer.intensity;
-            handles: Canvas.intensity-handles;
-            labels: Canvas.intensity-labels;
-            art: Canvas.intensity-art;
-            graphs: Canvas.intensity-graphs;
             can-export: root.can-export;
             busy: root.busy;
             command(c) => { root.command(c); }
@@ -608,12 +593,7 @@ export component Preview inherits Rectangle {
             min-width: 60px;
             preferred-width: 0px;
             title: @tr("Field");
-            source: root.field;
             layer: Layer.field;
-            handles: Canvas.field-handles;
-            labels: Canvas.field-labels;
-            art: Canvas.field-art;
-            graphs: Canvas.field-graphs;
             can-export: root.can-export;
             busy: root.busy;
             command(c) => { root.command(c); }
@@ -631,12 +611,7 @@ export component Preview inherits Rectangle {
             min-width: 60px;
             preferred-width: 0px;
             title: @tr("Intensity");
-            source: root.intensity;
             layer: Layer.intensity;
-            handles: Canvas.intensity-handles;
-            labels: Canvas.intensity-labels;
-            art: Canvas.intensity-art;
-            graphs: Canvas.intensity-graphs;
             can-export: root.can-export;
             busy: root.busy;
             command(c) => { root.command(c); }
