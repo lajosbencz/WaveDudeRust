@@ -99,6 +99,13 @@ The crates are listed in [`WORKSPACE.md`](../WORKSPACE.md) ([decision 0032](deci
   and its arm in `main`.
 - Widget: one `.slint` file per pane, dialog or reusable widget in
   [`frontends/waveduderust_slint/ui/`](../frontends/waveduderust_slint/ui/), its logic in the Rust module of the same concern.
+- The window's interface is one global per area, declared in the area's `.slint` file and re-exported from `ui/app.slint`
+  (`Tree`, `Playback`, `Dock`, `Log`, `Status`, one per dialog): data as `in` properties, grouped in structs where they
+  change together (`PaneSlot`, `LayerView`), and the area's callbacks with named arguments. Rust fills and serves it through
+  `app.global::<ui::Tree<'_>>()`, in `src/wire/` and a `State::show_*` per area. Computation Rust serves to `.slint` goes in
+  a `*Logic` global of pure callbacks (`NumberLogic`, `ChoiceLogic`); translated words in a `*Words` global of pure
+  functions (`TreeWords`, `StatusWords`). Leaf widgets take plain properties. A `changed` handler on a global's property
+  needs a local copy (`property <bool> shown: About.shown;`).
 - Project format quirks (9-point frequency units, versions, sparse writing) stay in [`crates/waveduderust/src/io/`](../crates/waveduderust/src/io/)
   ([`io/wdproj.rs`](../crates/waveduderust/src/io/wdproj.rs)); the model holds this program's units.
 - Example projects are `.wdproj` files under `examples/<topic>/`, the folder being the dialog's tab, named with their series prefix
@@ -112,7 +119,9 @@ The crates are listed in [`WORKSPACE.md`](../WORKSPACE.md) ([decision 0032](deci
 ## Naming
 
 - Slint components are UpperCamelCase, properties and callbacks kebab-case; Rust sees them snake_case
-  (`preview-stacked` -> `get_preview_stacked`).
+  (`Playback.stacked` -> `app.global::<ui::Playback<'_>>().get_stacked()`).
+- Callbacks are verbs: imperative for a request (`Dock.show-pane`, `Log.search`), past participle for a notification
+  (`Settings.edited`, `Dock.resized`).
 - Test names are snake_case sentences stating the behaviour (`an_edit_is_undone_and_redone_and_a_no_op_leaves_no_step`,
   [`frontends/waveduderust_slint/src/document.rs`](../frontends/waveduderust_slint/src/document.rs)); older ones are short noun phrases
   (`limits`, `probe_rules`).

@@ -22,19 +22,18 @@ pub(crate) fn wire_widgets(app: &AppWindow) {
 	numbers.on_scrub(|spec, start, dx, scale| number::scrub(&spec, &start, f64::from(dx), f64::from(scale)).into());
 	form::wire_colors(&app.global::<ui::ColorLogic<'_>>());
 	form_ui.set_pick_files(cfg!(not(target_arch = "wasm32")));
-	form_ui.on_next_enabled(|enabled, count, from, step| {
+	app.global::<ui::ChoiceLogic<'_>>().on_next_enabled(|enabled, count, from, step| {
 		let enabled: Vec<bool> = slint::Model::iter(&enabled).collect();
 		form::next_enabled(&enabled, usize::try_from(count).unwrap_or_default(), from, step)
 	});
-	app.global::<ui::Search<'_>>()
+	app.global::<ui::SearchLogic<'_>>()
 		.on_matches(|text, query| text.to_lowercase().contains(query.trim().to_lowercase().as_str()));
-	let parse = app.global::<ui::NumberParse<'_>>();
-	parse.on_int(|spec, text| {
+	numbers.on_parse_int(|spec, text| {
 		let value = number::commit(&spec, &text);
 		// `as` saturates: the box's f32 bounds round i32::MAX up a step
 		ui::ParsedInt { ok: value.is_some(), value: value.unwrap_or_default() as i32 }
 	});
-	parse.on_float(|spec, text| {
+	numbers.on_parse_float(|spec, text| {
 		let value = number::commit(&spec, &text);
 		ui::ParsedFloat { ok: value.is_some(), value: value.unwrap_or_default() as f32 }
 	});

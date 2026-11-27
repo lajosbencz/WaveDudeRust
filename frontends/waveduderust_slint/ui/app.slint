@@ -10,8 +10,8 @@ import { EditKeys } from "edit-keys.slint";
 import { Dock, PaneWords, PaneId } from "dock.slint";
 import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview, DockSide } from "@slint-dock/dock.slint";
 import { ProjectTree, Tree, TreeRow, TreeKind, TreeWords } from "tree.slint";
-import { Form, NumberParse } from "form.slint";
-export { Form, NumberParse }
+import { Form } from "form.slint";
+export { Form, ChoiceLogic } from "form.slint";
 export { Log }
 export { Dock, PaneWords, PaneId, PaneSlot, Panes } from "dock.slint";
 export { Playback } from "timeline.slint";
@@ -29,15 +29,15 @@ import { MemoryWarningLayer, MemoryWarning, MemoryWarningData, WarningTicks, War
 import { AboutLayer, About, AboutData } from "about.slint";
 import { ExportLayer, Export, ExportData, ExportReason } from "export-dialog.slint";
 export { Export, ExportData, ExportReason }
-import { SettingsLayer, Settings, SettingsData, ColorTheme, Language, Scale, Search } from "settings.slint";
-export { Settings, SettingsData, ColorTheme, Language, Scale, Search }
+import { SettingsLayer, Settings, SettingsData, ColorTheme, Language, Scale, SearchLogic } from "settings.slint";
+export { Settings, SettingsData, ColorTheme, Language, Scale, SearchLogic }
 import { WelcomeLayer, Welcome, Levers } from "welcome.slint";
 import { Ram, RamBar, RamBarView } from "ram-bar.slint";
 export { Welcome, Levers, Ram, RamBar }
 import { ExamplesLayer, Examples, ExampleRow, ExampleTopic } from "examples.slint";
 
 import { NumberSpec } from "number-box.slint";
-export { NumberLogic, NumberSpec } from "number-box.slint";
+export { NumberLogic, NumberSpec, ParsedInt, ParsedFloat } from "number-box.slint";
 export { ColorLogic, Hsv } from "color-picker.slint";
 export { Canvas, EdgeLine, GraphBox, GraphTick, HandleData, HandleGlyph, HandleKey, HoverTip, LabelData, OverlayArt, Rect, TipKind } from "canvas.slint";
 export { Command, Commands, Mine, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";

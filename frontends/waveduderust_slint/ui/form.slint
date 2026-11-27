@@ -1,15 +1,19 @@
 import { Button, CheckBox, ComboBox } from "std-widgets.slint";
 import { Icon, IconButton } from "icons.slint";
 import { Theme } from "theme.slint";
-import { NumberBox, NumberSpec } from "number-box.slint";
+import { NumberBox, NumberSpec, NumberLogic } from "number-box.slint";
 import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, FiberData, FiberNodeData, SchemeData, StopData, SchemeChoice, PointData, Layer } from "data.slint";
 import { EditKeys, EditLine } from "edit-keys.slint";
 import { Mine } from "commands.slint";
 
-// The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
-export global Form {
+// A choice's item search, in src/form.rs.
+export global ChoiceLogic {
     // the first item from `from` on, a `step` apart, that `enabled` lets pick among `count`; -1 when none
     pure callback next-enabled(enabled: [bool], count: int, from: int, step: int) -> int;
+}
+
+// The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
+export global Form {
     in property <FormKind> kind;
     // changes with the object shown, dropping text typed into the last one's boxes
     in property <int> token;
@@ -167,14 +171,6 @@ export component FormReadout inherits Rectangle {
     if root.tip != "": Tooltip { text: @markdown("\{root.tip}"); }
 }
 
-// The number box's parsing (src/number.rs): text to a value clamped and rounded to the box's spec.
-export struct ParsedInt { ok: bool, value: int }
-export struct ParsedFloat { ok: bool, value: float }
-export global NumberParse {
-    pure callback int(spec: NumberSpec, text: string) -> ParsedInt;
-    pure callback float(spec: NumberSpec, text: string) -> ParsedFloat;
-}
-
 // A whole number field; `blank` shows no number. `committed` follows each change, `invalid` gets text it could
 // not read.
 export component IntField inherits Rectangle {
@@ -199,7 +195,7 @@ export component IntField inherits Rectangle {
         token: root.token;
         value: root.blank ? "" : "\{root.value}";
         edited(t) => {
-            let parsed = NumberParse.int(root.spec, t);
+            let parsed = NumberLogic.parse-int(root.spec, t);
             if (!parsed.ok) {
                 root.invalid(t);
             } else {
@@ -236,7 +232,7 @@ export component FormFloat inherits Rectangle {
         token: Form.token;
         value: "\{root.value}";
         edited(t) => {
-            let parsed = NumberParse.float(root.spec, t);
+            let parsed = NumberLogic.parse-float(root.spec, t);
             if (!parsed.ok) {
                 Form.invalid = t;
             } else {
@@ -287,7 +283,7 @@ export component Choice inherits Rectangle {
     changed index => { combo.current-index = root.index; }
     function pick(i: int) {
         // arrows and the wheel step past a greyed item the way they moved
-        let to = Form.next-enabled(root.item-enabled, root.titles.length, i, i < root.index ? -1 : 1);
+        let to = ChoiceLogic.next-enabled(root.item-enabled, root.titles.length, i, i < root.index ? -1 : 1);
         if (to < 0 || to == root.index) {
             combo.current-index = root.index;
             return;

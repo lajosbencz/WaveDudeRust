@@ -4,8 +4,7 @@ import { Splitter } from "splitter.slint";
 import { Canvas, LayerView, EdgeLine, GraphBox, HandleData, HandleGlyph, HandleKey, HoverTip, LabelData, OverlayArt, TipKind } from "canvas.slint";
 import { Command } from "commands.slint";
 import { Button } from "std-widgets.slint";
-import { NumberBox, NumberSpec } from "number-box.slint";
-import { NumberParse } from "form.slint";
+import { NumberBox, NumberSpec, NumberLogic } from "number-box.slint";
 import { MenuIcons } from "menu-icons.slint";
 import { Playback } from "timeline.slint";
 
@@ -266,7 +265,7 @@ component Picture inherits Rectangle {
                 spec: root.brightness-spec;
                 tip: @tr("Gain applied to the values before the colour lookup.");
                 edited(t) => {
-                    let parsed = NumberParse.float(self.spec, t);
+                    let parsed = NumberLogic.parse-float(self.spec, t);
                     if (parsed.ok) {
                         Canvas.brightness(root.layer, parsed.value);
                     }

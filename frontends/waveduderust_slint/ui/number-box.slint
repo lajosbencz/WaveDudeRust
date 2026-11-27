@@ -24,8 +24,14 @@ export global Specs {
     out property <NumberSpec> whole: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
 }
 
-// The arithmetic, in src/number.rs.
+// The number box's parsing: text to a value clamped and rounded to the box's spec.
+export struct ParsedInt { ok: bool, value: int }
+export struct ParsedFloat { ok: bool, value: float }
+
+// The arithmetic and parsing, in src/number.rs.
 export global NumberLogic {
+    pure callback parse-int(spec: NumberSpec, text: string) -> ParsedInt;
+    pure callback parse-float(spec: NumberSpec, text: string) -> ParsedFloat;
     pure callback step(spec: NumberSpec, text: string, steps: int) -> string;
     pure callback scrub(spec: NumberSpec, start: string, dx: float, scale: float) -> string;
 }

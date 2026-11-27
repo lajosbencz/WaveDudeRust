@@ -62,7 +62,7 @@ component ScaleChoice inherits Choice {
 // The Settings window (docs/ui/70, Settings): sections on the left, the section's rows on the right; each change
 // applies and is saved at once.
 // the settings search: `text` holds `query`, case aside
-export global Search {
+export global SearchLogic {
     pure callback matches(text: string, query: string) -> bool;
 }
 
@@ -91,7 +91,7 @@ export component SettingsLayer inherits Overlay {
     property <bool> any: root.hits[0] || root.hits[1] || root.hits[2] || root.hits[3];
     // section `i` shows its row `label`: the open section, or while searching, a match of the label or section
     pure function shows(i: int, label: string) -> bool {
-        root.query == "" ? root.section == i : Search.matches(root.sections[i], root.query) || Search.matches(label, root.query)
+        root.query == "" ? root.section == i : SearchLogic.matches(root.sections[i], root.query) || SearchLogic.matches(label, root.query)
     }
 
     visible: Settings.shown;
