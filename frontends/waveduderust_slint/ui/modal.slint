@@ -1,5 +1,6 @@
 import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Overlay } from "overlay.slint";
 
 // The messages the app shows; `none` while none is.
 export enum Message { none, crashed, save-changes, discard-frames, export-running, scene-image, replace-it, replace-them, open-failed, save-failed, export-failed, run-failed, storage-full, export-ready }
@@ -19,7 +20,7 @@ struct Choice {
 }
 
 // The app's own message window (docs/ui/70, Message window), modal over the main window.
-export component ModalLayer inherits Rectangle {
+export component ModalLayer inherits Overlay {
     in property <Modal> modal;
     callback answer(Answer);
 
@@ -43,8 +44,6 @@ export component ModalLayer inherits Rectangle {
         : [{ text: @tr("OK"), answer: Answer.ok }];
 
     visible: modal.message != Message.none;
-    background: #00000080;
-    TouchArea { }
     focus := FocusScope {
         key-pressed(e) => {
             if (e.text == Key.Escape) { root.answer(root.confirms || root.reloads ? Answer.no : root.asks || root.offers ? Answer.cancel : Answer.ok); return accept; }

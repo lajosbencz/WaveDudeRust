@@ -1,6 +1,7 @@
 import { LineEdit, Button, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { EditKeys } from "edit-keys.slint";
+import { Overlay } from "overlay.slint";
 
 // The examples' topics, in tab order.
 export enum ExampleTopic { sources, lenses, gratings, metasurfaces, guides, detectors }
@@ -16,7 +17,7 @@ export struct ExampleRow {
 }
 
 // The Examples dialog (docs/ui/70, Examples dialog): topic tabs, search, the topic's examples, Open and Cancel.
-export component ExamplesLayer inherits Rectangle {
+export component ExamplesLayer inherits Overlay {
     in-out property <bool> shown;
     in property <ExampleTopic> topic;
     in property <[ExampleRow]> rows;
@@ -41,8 +42,6 @@ export component ExamplesLayer inherits Rectangle {
     callback welcome();
 
     visible: shown;
-    background: #00000080;
-    TouchArea { }
     focus := FocusScope {
         key-pressed(e) => {
             if (e.text == Key.Escape) { root.shown = false; return accept; }

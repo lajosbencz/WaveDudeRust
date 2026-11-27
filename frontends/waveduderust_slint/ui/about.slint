@@ -1,5 +1,6 @@
 import { Button, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Overlay } from "overlay.slint";
 
 // What the About window shows beside its own text.
 export struct AboutData {
@@ -43,7 +44,7 @@ component TextBox inherits Rectangle {
 }
 
 // The About window (docs/ui/70, About dialog): Esc or Enter closes, T and O show the licences, C copies the system lines.
-export component AboutLayer inherits Rectangle {
+export component AboutLayer inherits Overlay {
     in-out property <bool> shown;
     in property <AboutData> data;
     // the system lines to the clipboard
@@ -59,8 +60,6 @@ export component AboutLayer inherits Rectangle {
     property <bool> openh264-open;
 
     visible: root.shown;
-    background: #00000080;
-    TouchArea { }
     changed shown => {
         root.license-open = false;
         root.openh264-open = false;

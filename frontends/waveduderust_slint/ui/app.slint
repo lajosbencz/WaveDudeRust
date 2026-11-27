@@ -558,11 +558,6 @@ export component AppWindow inherits Window {
         }
     }
     WelcomeLayer {
-        // an overlay: its frame sets no bounds on the window
-        min-width: 0px;
-        max-width: 100000px;
-        min-height: 0px;
-        max-height: 100000px;
         shown <=> root.welcome-shown;
         levers: root.welcome-levers;
         show-startup: root.welcome-show-startup;
@@ -574,11 +569,6 @@ export component AppWindow inherits Window {
         show-startup-toggled(b) => { root.welcome-show-startup-toggled(b); }
     }
     ExamplesLayer {
-        // an overlay: its frame sets no bounds on the window
-        min-width: 0px;
-        max-width: 100000px;
-        min-height: 0px;
-        max-height: 100000px;
         shown <=> root.examples-shown;
         topic: root.example-topic;
         rows: root.example-rows;
@@ -588,11 +578,6 @@ export component AppWindow inherits Window {
         welcome => { root.command(Command.welcome); }
     }
     SettingsLayer {
-        // an overlay: its frame sets no bounds on the window
-        min-width: 0px;
-        max-width: 100000px;
-        min-height: 0px;
-        max-height: 100000px;
         shown <=> root.settings-shown;
         data <=> root.settings;
         undo-spec: root.undo-spec;
@@ -606,11 +591,6 @@ export component AppWindow inherits Window {
         triggered => { root.ram-refresh(); }
     }
     ExportLayer {
-        // an overlay: its frame sets no bounds on the window
-        min-width: 0px;
-        max-width: 100000px;
-        min-height: 0px;
-        max-height: 100000px;
         shown <=> root.export-shown;
         data <=> root.export-data;
         format(i) => { root.export-format(i); }
@@ -621,33 +601,18 @@ export component AppWindow inherits Window {
         path-edited => { root.export-path-edited(); }
     }
     AboutLayer {
-        // an overlay: its frame sets no bounds on the window
-        min-width: 0px;
-        max-width: 100000px;
-        min-height: 0px;
-        max-height: 100000px;
         shown <=> root.about-shown;
         data: root.about;
         copy => { root.about-copy(); }
         open-link(u) => { root.about-link(u); }
     }
     MemoryWarningLayer {
-        // an overlay: its frame sets no bounds on the window
-        min-width: 0px;
-        max-width: 100000px;
-        min-height: 0px;
-        max-height: 100000px;
         shown: root.memory-warning-shown;
         data: root.memory-warning;
         ticked(c, r, f, s) => { root.memory-warning-ticked(c, r, f, s); }
         answer(answer, mute) => { root.memory-warning-answer(answer, mute); }
     }
     ModalLayer {
-        // an overlay: its frame sets no bounds on the window
-        min-width: 0px;
-        max-width: 100000px;
-        min-height: 0px;
-        max-height: 100000px;
         modal: root.modal;
         answer(i) => { root.modal-answer(i); }
     }

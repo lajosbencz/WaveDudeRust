@@ -5,6 +5,7 @@ import { FormPanel, FormLabel, IntField, Check, Choice } from "form.slint";
 import { PreviewQuality } from "commands.slint";
 import { RamBar, RamBarView } from "ram-bar.slint";
 import { EditKeys } from "edit-keys.slint";
+import { Overlay } from "overlay.slint";
 
 export enum ColorTheme { system, light, dark }
 // `system`: the system's language when a table has it, else English
@@ -65,7 +66,7 @@ export global Search {
     pure callback matches(text: string, query: string) -> bool;
 }
 
-export component SettingsLayer inherits Rectangle {
+export component SettingsLayer inherits Overlay {
     in-out property <bool> shown;
     in-out property <SettingsData> data;
     in property <NumberSpec> undo-spec;
@@ -91,8 +92,6 @@ export component SettingsLayer inherits Rectangle {
     }
 
     visible: shown;
-    background: #00000080;
-    TouchArea { }
     focus := FocusScope {
         key-pressed(e) => {
             if (e.text == Key.Escape) { root.shown = false; return accept; }

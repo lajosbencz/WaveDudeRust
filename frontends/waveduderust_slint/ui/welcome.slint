@@ -3,6 +3,7 @@ import { MenuIcons } from "menu-icons.slint";
 import { Theme } from "theme.slint";
 import { IconButton } from "icons.slint";
 import { Command, PreviewQuality } from "commands.slint";
+import { Overlay } from "overlay.slint";
 
 // The Welcome page (docs/ui/70, Welcome page).
 // The preview levers as set: the resolution and frame divisors, the bits per sample.
@@ -14,7 +15,7 @@ export struct Levers {
     preset: int,
 }
 
-export component WelcomeLayer inherits Rectangle {
+export component WelcomeLayer inherits Overlay {
     in-out property <bool> shown;
     in property <Levers> levers;
     in property <bool> show-startup;
@@ -23,8 +24,6 @@ export component WelcomeLayer inherits Rectangle {
     callback show-startup-toggled(bool);
 
     visible: shown;
-    background: #00000080;
-    TouchArea { }
     focus := FocusScope {
         key-pressed(e) => {
             if (e.text == Key.Escape) { root.shown = false; return accept; }

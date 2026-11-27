@@ -1,0 +1,9 @@
+// A layer over the whole window: dims it, takes its clicks and sets no bounds on it.
+export component Overlay inherits Rectangle {
+    min-width: 0px;
+    max-width: 100000px;
+    min-height: 0px;
+    max-height: 100000px;
+    background: #00000080;
+    TouchArea { }
+}

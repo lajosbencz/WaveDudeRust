@@ -5,6 +5,7 @@ import { Button, LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Choice, Check } from "form.slint";
 import { EditKeys } from "edit-keys.slint";
+import { Overlay } from "overlay.slint";
 
 // Why the browser cannot start the export.
 export enum ExportReason { none, no-storage, no-webcodecs, no-profile, probing }
@@ -37,7 +38,7 @@ export struct ExportData {
     profile-supported: [bool],
 }
 
-export component ExportLayer inherits Rectangle {
+export component ExportLayer inherits Overlay {
     in-out property <bool> shown;
     in-out property <ExportData> data;
     callback format(index: int);
@@ -50,8 +51,6 @@ export component ExportLayer inherits Rectangle {
         && !(root.data.several && root.data.archive && root.data.archive-path.is-empty) && root.data.reason == ExportReason.none;
 
     visible: shown;
-    background: #00000080;
-    TouchArea { }
     focus := FocusScope {
         key-pressed(e) => {
             if (e.text == Key.Escape) { root.shown = false; return accept; }

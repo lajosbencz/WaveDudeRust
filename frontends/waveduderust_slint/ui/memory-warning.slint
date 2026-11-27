@@ -1,5 +1,6 @@
 import { Button, CheckBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Overlay } from "overlay.slint";
 
 // The memory warning's figures (MB or GB) and levers for the boxes ticked.
 export struct MemoryWarningData {
@@ -27,7 +28,7 @@ export struct MemoryWarningData {
 // The memory warning (docs/ui/60, Memory warning), modal over the main window: Run (Enter) or Cancel (Esc).
 export enum WarningAnswer { run, cancel }
 
-export component MemoryWarningLayer inherits Rectangle {
+export component MemoryWarningLayer inherits Overlay {
     in property <bool> shown;
     in property <MemoryWarningData> data;
     // the boxes as ticked
@@ -47,8 +48,6 @@ export component MemoryWarningLayer inherits Rectangle {
     changed data => { root.sync(); }
 
     visible: root.shown;
-    background: #00000080;
-    TouchArea { }
 
     changed shown => {
         if (self.shown) {
