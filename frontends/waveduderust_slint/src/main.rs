@@ -134,15 +134,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		#[cfg(target_arch = "wasm32")]
 		Action::OpenFile(_) => return,
 		Action::Example(i) => {
-			let e = &examples::all()[i];
-			match waveduderust::io::wdproj::read_str(e.text) {
-				Ok((project, view)) => {
-					state.doc.adopt(project, view, &format!("{}.wdproj", e.title));
-					state.opened();
-					tracing::info!("Opened the example {}", e.title);
-				}
-				Err(err) => tracing::error!("the example {} does not parse: {err}", e.file),
-			}
+			open_example(state, i);
 			return state.show(app);
 		}
 	};
@@ -218,20 +210,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 				return;
 			}
 			match export::Kind::of(command) {
-				Some(kind) => {
-					let words = app.global::<ui::Words<'_>>();
-					let name = state.doc.name().map_or_else(
-						|| words.get_export_file().to_string(),
-						|n| {
-							std::path::Path::new(&n).file_stem().map_or(n.clone(), |s| s.to_string_lossy().into_owned())
-						},
-					);
-					let opened =
-						export::Dialog::open(kind, &state.doc, &name, state.playback.position, &state.settings, &words);
-					if let Some((dialog, data)) = opened {
-						state.open_export(app, dialog, data);
-					}
-				}
+				Some(kind) => open_export_dialog(state, app, kind),
 				// Export last repeats the outputs and asks nothing
 				None => {
 					if let Some(plan) = state.last_export.clone() {
@@ -304,6 +283,32 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		Command::Delete | Command::MoveUp | Command::MoveDown | Command::Duplicate | Command::ToggleEnabled => {}
 	}
 	state.show(app);
+}
+
+/// Opens example `i` of the shipped ones; one that does not parse is logged.
+fn open_example(state: &mut State, i: usize) {
+	let e = &examples::all()[i];
+	match waveduderust::io::wdproj::read_str(e.text) {
+		Ok((project, view)) => {
+			state.doc.adopt(project, view, &format!("{}.wdproj", e.title));
+			state.opened();
+			tracing::info!("Opened the example {}", e.title);
+		}
+		Err(err) => tracing::error!("the example {} does not parse: {err}", e.file),
+	}
+}
+
+/// Opens the export dialog of `kind`, its file named after the project's.
+fn open_export_dialog(state: &mut State, app: &AppWindow, kind: export::Kind) {
+	let words = app.global::<ui::Words<'_>>();
+	let name = state.doc.name().map_or_else(
+		|| words.get_export_file().to_string(),
+		|n| std::path::Path::new(&n).file_stem().map_or(n.clone(), |s| s.to_string_lossy().into_owned()),
+	);
+	let opened = export::Dialog::open(kind, &state.doc, &name, state.playback.position, &state.settings, &words);
+	if let Some((dialog, data)) = opened {
+		state.open_export(app, dialog, data);
+	}
 }
 
 /// Removes the items of `group` (list items only) and keeps the user at the slot of the last one.
