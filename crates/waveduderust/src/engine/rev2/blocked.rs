@@ -309,9 +309,14 @@ impl Tiling {
 		(self.n, self.scheme, self.rim) == (n, scheme, rim)
 	}
 
+	/// The widest side of a band's trapezoid: the most rows any unit of a band stays from a side facing another band.
+	pub(super) fn side(&self) -> usize {
+		self.shrink.iter().flatten().copied().max().unwrap_or(0)
+	}
+
 	/// The fewest rows of a band.
 	pub(super) fn min_band(&self) -> usize {
-		2 * self.shrink.iter().flatten().copied().max().unwrap_or(0) + self.rho
+		2 * self.side() + self.rho
 	}
 
 	/// Runs `unit(u, q, j)` on the units `rows(k, j)` of each kind `k` in the sweep's order.

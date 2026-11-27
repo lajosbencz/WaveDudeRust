@@ -510,8 +510,7 @@ fn fused_agree(
 			e.set_probes(&probes);
 		}
 		let mut traces = (Vec::new(), Vec::new());
-		let want = if stencil == Stencil::NinePoint { k } else { 1 };
-		assert_eq!(WaveEngine::fused_steps(&fused), want, "{what}");
+		assert_eq!(WaveEngine::fused_steps(&fused), k, "{what}");
 		for (round, batch) in (0..rounds).flat_map(|r| BATCHES.map(|b| (r, b))) {
 			if round == silent && batch == BATCHES[0] {
 				fused.set_emitters(emitters);
@@ -609,10 +608,10 @@ fn fused_steps_agree_with_single_steps() {
 fn fused_steps_agree_with_odd_sub_steps_short_grids_and_silence() {
 	on_seams(|| {
 		let rim = [(Edges::Open, -RIM), (Edges::Open, 0)];
-		for (edges, damping_edge) in rim {
-			let what = format!("{edges:?} damping edge {damping_edge}");
+		for (stencil, (edges, damping_edge)) in STENCILS.into_iter().flat_map(|s| rim.map(|r| (s, r))) {
+			let what = format!("{stencil:?} {edges:?} damping edge {damping_edge}");
 			let build = || scene(edges, damping_edge, 100);
-			fused_agree(build, Stencil::NinePoint, Some(3), &detaching(), &format!("{what}, 3 sub-steps"), 3, 0);
+			fused_agree(build, stencil, Some(3), &detaching(), &format!("{what}, 3 sub-steps"), 3, 0);
 			// Fewer rows than 8 bands of a fused sweep take, and an uneven split.
 			for h in [12, 47, 61] {
 				let settings =
@@ -625,7 +624,7 @@ fn fused_steps_agree_with_odd_sub_steps_short_grids_and_silence() {
 				};
 				let sources =
 					[emitter(30, 0, 100.0), emitter(70, h as i32 / 2, 90.0), emitter(100, h as i32 - 1, 80.0)];
-				fused_agree(build, Stencil::NinePoint, None, &sources, &format!("{what}, {h} rows"), 3, 0);
+				fused_agree(build, stencil, None, &sources, &format!("{what}, {h} rows"), 3, 0);
 			}
 			// Nothing to compute for a round: no image sources, and the emitters set after it.
 			let settings = Scene::default().with_damping_edge(damping_edge).with_edges(edges);
@@ -635,7 +634,42 @@ fn fused_steps_agree_with_odd_sub_steps_short_grids_and_silence() {
 				scene.c2.iter_mut().for_each(|c2| *c2 *= 0.6 / max);
 				scene
 			};
-			fused_agree(build, Stencil::NinePoint, None, &detaching(), &format!("{what}, silent at first"), 4, 1);
+			fused_agree(build, stencil, None, &detaching(), &format!("{what}, silent at first"), 4, 1);
+		}
+	});
+}
+
+/// The 4th order on a grid tall enough for several bands, unevenly split, of a fused sweep of 2 to 4 steps (its
+/// trapezoids widen by 6 to 8 rows a level, so 8 steps with a rim fit one band), with sources by the seams: with a rim
+/// and with Mur's condition, one sub-step and the CFL's.
+#[test]
+fn fused_steps_of_the_4th_order_agree_across_bands() {
+	const TALL: u32 = 470;
+	on_seams(|| {
+		for (edges, damping_edge) in [(Edges::Open, -RIM), (Edges::Open, 0)] {
+			let settings = Scene::default().with_damping_edge(damping_edge).with_edges(edges).with_image_sources(true);
+			let tall = || {
+				let canvas = pixels(100);
+				let px: Vec<u8> =
+					canvas.chunks((W * 4) as usize).cycle().take(TALL as usize).flatten().copied().collect();
+				SceneData::from_pixels(&px, W, TALL, &settings)
+			};
+			let sources = [
+				emitter(30, 40, 100.0),
+				Emitter { pulsed: true, detach_after_step: Some(37), ..emitter(64, 150, 90.0) },
+				emitter(100, 320, 80.0),
+				emitter(20, 460, 70.0),
+			];
+			let what = format!("FourthOrder {edges:?} damping edge {damping_edge}, {TALL} rows");
+			fused_agree(tall, Stencil::FourthOrder, None, &sources, &format!("{what}, CFL sub-steps"), 3, 0);
+			let one = || {
+				let mut scene = tall();
+				let scale = 0.8 * courant_limit(Stencil::FourthOrder) as f32;
+				let max = scene.max_c2();
+				scene.c2.iter_mut().for_each(|c2| *c2 *= scale * scale / max);
+				scene
+			};
+			fused_agree(one, Stencil::FourthOrder, None, &sources, &format!("{what}, 1 sub-step"), 3, 0);
 		}
 	});
 }

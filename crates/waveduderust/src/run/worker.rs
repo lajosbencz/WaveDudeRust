@@ -1873,8 +1873,9 @@ mod tests {
 		assert_eq!(pumped.status().traces_steps, 300);
 	}
 
-	/// Steps fused into the CPU_REV2 engine's sweeps leave a run's frames and traces those of one step at a time: on
-	/// the generic backend, the legacy CPU engine's bit for bit, run to the end at once and pumped in short slices.
+	/// Steps fused into the CPU_REV2 engine's sweeps, of either stencil, leave a run's frames and traces those of one
+	/// step at a time: on the generic backend, the legacy CPU engine's bit for bit, run to the end at once and pumped
+	/// in short slices.
 	#[test]
 	fn fused_steps_leave_the_frames_and_traces_unchanged() {
 		use crate::engine::rev2::{Backend, CpuRev2Engine};
@@ -1887,9 +1888,10 @@ mod tests {
 				})
 			})
 		};
-		for every in [1, 2, 13] {
+		let stencils = [crate::model::Stencil::NinePoint, crate::model::Stencil::FourthOrder];
+		for (stencil, every) in stencils.into_iter().flat_map(|s| [1, 2, 13].map(|e| (s, e))) {
 			let mut p = long(300);
-			p.simulation.stencil = crate::model::Stencil::NinePoint;
+			p.simulation.stencil = stencil;
 			p.simulation.visualize_every = every;
 			p.probes.push(Probe { name: "I".into(), ax: 9, ay: 5, layer: Layer::Intensity, ..Probe::default() });
 			for budget in [Duration::ZERO, AMPLE] {
@@ -1906,10 +1908,10 @@ mod tests {
 				for frame in 0..sa.capacity() {
 					for &layer in sa.layers() {
 						let (x, y) = (sa.copy_layer(frame, layer).unwrap(), sb.copy_layer(frame, layer).unwrap());
-						assert!(x == y, "every {every}, {budget:?}: frame {frame} differs");
+						assert!(x == y, "{stencil:?}, every {every}, {budget:?}: frame {frame} differs");
 					}
 				}
-				a.with_traces(|t| b.with_traces(|u| assert_eq!(t, u, "every {every}, {budget:?}")));
+				a.with_traces(|t| b.with_traces(|u| assert_eq!(t, u, "{stencil:?}, every {every}, {budget:?}")));
 				assert_eq!(b.status().traces_steps, 300);
 			}
 		}

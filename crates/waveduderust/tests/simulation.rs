@@ -96,9 +96,16 @@ fn a_run_past_the_drains_keeps_every_reading() {
 /// faster backend than the generic one may change (tests/rev2.rs; bit for bit there and in the run worker's tests).
 #[test]
 fn runs_in_batches_step_as_single_steps() {
+	use waveduderust::model::Stencil;
+	for stencil in [Stencil::NinePoint, Stencil::FourthOrder] {
+		batches_step_as_single_steps(stencil);
+	}
+}
+
+fn batches_step_as_single_steps(stencil: waveduderust::model::Stencil) {
 	let mut p = project();
 	p.simulation.steps = 600;
-	p.simulation.stencil = waveduderust::model::Stencil::NinePoint;
+	p.simulation.stencil = stencil;
 	p.normalize();
 	let mut batched = cpu(&p);
 	for steps in [7, 250, 343] {
@@ -118,7 +125,7 @@ fn runs_in_batches_step_as_single_steps() {
 		);
 		let peak = b.series.iter().fold(0f32, |m, v| m.max(v.abs()));
 		let diff = a.series.iter().zip(&b.series).fold(0f32, |m, (x, y)| m.max((x - y).abs()));
-		assert!(diff <= 1e-4 * peak, "the batched trace differs by {diff} of {peak}");
+		assert!(diff <= 1e-4 * peak, "{stencil:?}: the batched trace differs by {diff} of {peak}");
 	}
 	let (fa, fb) = (batched.field().unwrap().field, single.field().unwrap().field);
 	let peak = fb.iter().fold(0f32, |m, v| m.max(v.abs()));

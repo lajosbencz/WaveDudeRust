@@ -69,10 +69,14 @@
 //!   The 4th order applies the rim twice, to the field in `W` and to `w` in `D`, each with its own memory variables and
 //!   its own psi of y unit. Each row's memory variables are its own, so the trapezoids carry them like the field.
 //!
-//! Fused steps: a sweep may take several whole steps too ([`CpuRev2Engine::advance_steps`], at most
-//! [`FUSED_STEPS`] by default, the 9-point only; `WaveEngine::advance_steps`), so a row is read from memory once per
-//! `k` steps. The sweep's levels are the `k n` sub-steps one after another, and what happens between two steps happens
-//! between their levels, row by row:
+//! Fused steps: a sweep may take several whole steps too ([`CpuRev2Engine::advance_steps`];
+//! `WaveEngine::advance_steps`), for both stencils, so a row is read from memory once per `k` steps. By default `k` is
+//! the most, up to [`FUSED_STEPS`], whose sweep's trapezoids (above, Threads) keep their sides within [`FUSED_SIDE`]
+//! rows: a side grows by 1 row a level for the 9-point, 4 with a rim, 6 for the 4th order, 8 with a rim, and with it
+//! the seams' share of the work and the rows in flight. With 2 sub-steps a step, that is 8 steps for the 9-point, 4
+//! with a rim, and 2 for the 4th order; more sub-steps fuse fewer steps (docs/measurements.md). The sweep's levels are
+//! the `k n` sub-steps one after another, and what happens between two steps happens between their levels, row by
+//! row:
 //!
 //! - the forcing: the source tables of all the levels are taken before the sweep, in order, each step's at its time
 //!   (an emitter that detaches within the sweep has its fade and its silence in them), and the driven cells are those
@@ -87,8 +91,7 @@
 //! Captures, checks and drains need the engine between steps, so a caller ends its batches there (run/worker.rs).
 //! The values are those of `k` single steps bit for bit on the generic backend; another backend, which may round a
 //! span's last cells otherwise (backend/mod.rs), within its tolerance, as the sweep's wider area splits the rows into
-//! other spans. A sweep of a single level (one sub-step, one step) runs the passes; the 4th order takes one step a
-//! sweep.
+//! other spans. A sweep of a single level (one sub-step, one step) runs the passes.
 //!
 //! Backends: an engine runs on one backend, chosen when it is built ([`Backend`]: the best one this CPU runs, or one
 //! named); the passes and the blocked steps are generic over the backend's type (`RowKernels`), which `on_backend!`
@@ -136,8 +139,10 @@ pub struct CpuRev2Engine {
 	driven: Vec<(usize, u32, u32)>,
 	/// The tilings of the last blocked steps by their levels, kept for the next.
 	tilings: Vec<Tiling>,
-	/// The most steps a blocked sweep fuses (module docs, Fused steps).
-	fused: u32,
+	/// The most steps a blocked sweep fuses (module docs, Fused steps): set for measurements, else `auto`.
+	fused: Option<u32>,
+	/// The most steps a blocked sweep fuses for the scene's sub-steps, scheme and rim ([`fused_by_side`]).
+	auto: u32,
 	/// The probe cells of a fused sweep by padded cell, with their place in a reading and whether they read the
 	/// intensity; and its readings, one after another.
 	probe_cells: Vec<(usize, u32, bool)>,
@@ -191,7 +196,8 @@ impl CpuRev2Engine {
 			tables: Vec::new(),
 			driven: Vec::new(),
 			tilings: Vec::new(),
-			fused: FUSED_STEPS,
+			fused: None,
+			auto: 1,
 			probe_cells: Vec::new(),
 			readings: Vec::new(),
 			rings: Rings::default(),
@@ -205,7 +211,8 @@ impl CpuRev2Engine {
 		self.backend
 	}
 
-	/// Fuses at most `k` steps into one sweep from now on ([`FUSED_STEPS`] by default); for measurements.
+	/// Fuses at most `k` steps into one sweep from now on, whatever the scene (module docs, Fused steps); for
+	/// measurements.
 	///
 	/// # Panics
 	///
@@ -213,16 +220,13 @@ impl CpuRev2Engine {
 	#[doc(hidden)]
 	pub fn set_fused_steps(&mut self, k: u32) {
 		assert!(k >= 1, "at least one step a sweep");
-		self.fused = k;
+		self.fused = Some(k);
 	}
 
-	/// [`WaveEngine::fused_steps`](super::WaveEngine::fused_steps): the most steps a sweep fuses; 1 for the 4th order,
-	/// whose steps are not fused.
+	/// [`WaveEngine::fused_steps`](super::WaveEngine::fused_steps): the most steps a sweep fuses, by default the most
+	/// whose trapezoids' sides stay within [`FUSED_SIDE`] rows ([`FUSED_STEPS`] at most; module docs, Fused steps).
 	pub fn fused_steps(&self) -> u32 {
-		match self.host.shared.scheme {
-			TimeScheme::Leapfrog => self.fused,
-			TimeScheme::ModifiedEquation => 1,
-		}
+		self.fused.unwrap_or(self.auto)
 	}
 
 	/// [`WaveEngine::advance_steps`](super::WaveEngine::advance_steps), which cannot fail here: `n` steps, in sweeps of
@@ -242,6 +246,7 @@ impl CpuRev2Engine {
 		let h = &self.host;
 		self.uniform = UniformRuns::of(&h.c2, &h.d, h.stride, h.gw());
 		self.mur = MurRows::of(&h.mur, h.stride, h.shared.scene.grid_height() as usize);
+		self.auto = fused_by_side(h.shared.sub_steps, h.shared.scheme, h.pml.is_some());
 		// The passes take `w` as 0 beyond the cells they wrote in earlier steps; a blocked step writes it on an area
 		// grown by its sub-steps, which a medium with fewer sub-steps would not cover.
 		self.host.w.fill(0.0);
@@ -472,8 +477,19 @@ host_engine!(
 	CpuRev2Engine::advance_steps
 );
 
-/// The most steps a blocked sweep fuses by default (module docs, Fused steps; docs/measurements.md).
-pub const FUSED_STEPS: u32 = 4;
+/// The cap on the steps a blocked sweep fuses by default, chosen by [`FUSED_SIDE`] (module docs, Fused steps; docs/measurements.md).
+pub const FUSED_STEPS: u32 = 8;
+
+/// The widest side of a sweep's trapezoids, in rows, up to which the engine fuses more steps by default (module docs,
+/// Fused steps; docs/measurements.md).
+pub const FUSED_SIDE: usize = 32;
+
+/// The most steps of `sub` sub-steps of `scheme`, with or without a rim, a sweep fuses by default: the most, up to
+/// [`FUSED_STEPS`], whose trapezoids' sides ([`Tiling`]) stay within [`FUSED_SIDE`] rows, at least one.
+fn fused_by_side(sub: u32, scheme: TimeScheme, rim: bool) -> u32 {
+	let fits = |k: u32| Tiling::new((k * sub) as usize, scheme, rim).side() <= FUSED_SIDE;
+	(2..=FUSED_STEPS).rev().find(|&k| fits(k)).unwrap_or(1)
+}
 
 /// The bands of a blocked step per thread of the rayon pool (blocked.rs).
 const BANDS_PER_THREAD: usize = 1;
@@ -706,4 +722,21 @@ fn grid_rows(
 fn span_rows<'a>(rows: &Rows<'a>, span: &Range<usize>) -> Rows<'a> {
 	// Grid column x is at PAD + x, so 3 cells left of the span's first is at its own index.
 	rows.map(|row| &row[span.start..PAD + span.end + 3])
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn the_fused_steps_follow_the_trapezoids_sides() {
+		// The sides of n levels: the 9-point's n - 1 rows, 4 n - 2 with a rim; the 4th order's 6 n - 3, with a rim
+		// 8 n - 2.
+		let (nine, drp) = (TimeScheme::Leapfrog, TimeScheme::ModifiedEquation);
+		let by_sub = |scheme, rim| [1, 2, 3, 4, 9].map(|sub| fused_by_side(sub, scheme, rim));
+		assert_eq!(by_sub(nine, false), [8, 8, 8, 8, 3]);
+		assert_eq!(by_sub(nine, true), [8, 4, 2, 2, 1]);
+		assert_eq!(by_sub(drp, false), [5, 2, 1, 1, 1]);
+		assert_eq!(by_sub(drp, true), [4, 2, 1, 1, 1]);
+	}
 }

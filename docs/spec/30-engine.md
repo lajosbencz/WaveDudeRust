@@ -117,8 +117,10 @@ changes ([docs/measurements.md](../measurements.md#the-cpu-engines-avx2-dispatch
 
 Rust, CPU engine: natively on x86-64 with AVX2 and FMA the CPU_REV2 engine (`engine/rev2`) runs by default in its
 place. It runs a step's sub-steps as one wavefront over the rows, so a row is still in cache when the next sub-step
-reads it, and with the 9-point stencil up to 4 whole steps per wavefront (`WaveEngine::advance_steps`; the run worker
-and `Simulation::run` hand it the steps between captures, probe drains and goal checks), and its row kernels are
+reads it, and several whole steps per wavefront, as many as keep the wavefront's trapezoids within 32 rows a side, 8
+at most: with 2 sub-steps a step 8 for the 9-point, 4 with a CPML rim, 2 for the 4th order
+([docs/measurements.md](../measurements.md#the-cpu_rev2-engines-fused-steps); `WaveEngine::advance_steps`, the run
+worker and `Simulation::run` hand it the steps between captures, probe drains and goal checks), and its row kernels are
 hand-written assembly with fused multiply-adds: its results match the CPU engine's within rounding (1e-4 of the
 peak), not bit for bit; on its generic backend they match bit for bit. Elsewhere, on the
 web among them, the CPU engine runs; for wasm built with simd128 the CPU_REV2 engine has a `simd128` backend (bit for

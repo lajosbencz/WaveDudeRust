@@ -504,28 +504,79 @@ runs in the browser, the comparison should be repeated on another machine and in
 from 3 to 4 threads). A harness outside the repository (`waveduderust` with `unstable-engine` and `unstable-scene`,
 `lto = "thin"`, `codegen-units = 1`) steps the CPU_REV2 engine on its AVX2 backend from a full-damage start (a smooth
 field over every cell, so every step covers the whole grid) on a blank scene with one source in the middle, intensity
-on, 9-point stencil, 2 sub-steps a step: 16 steps to warm up, then `advance_steps(16)` 8 to 72 times (24 to 72 on 8
-threads), at most `K` steps a sweep (`set_fused_steps`), so 16 steps go as sweeps of `K` and a rest. Steps a second,
-two passes; 1 thread is `taskset -c 3`.
+on, 2 sub-steps a step: 24 steps to warm up, then `advance_steps(24)` 4 to 36 times (12 to 36 on 8 threads), at most
+`K` steps a sweep (`set_fused_steps`), so 24 steps go as whole sweeps of `K`. Steps a second, two passes; 1 thread is
+`taskset -c 3`.
+
+The 9-point stencil:
 
 | Threads | Grid, rim | K = 1 | 2 | 3 | 4 | 6 | 8 |
 |---|---|---|---|---|---|---|---|
-| 1 | 1920x1080, 0 | 223, 246 | 331, 331 | 363, 363 | 430, 419 | 455, 446 | 485, 478 |
-| 1 | 1920x1080, 32 | 152, 151 | 214, 214 | 231, 234 | 254, 255 | 264, 260 | 273, 267 |
-| 1 | 800x600, 0 | 862, 863 | 1305, 1375 | 1441, 1468 | 1641, 1670 | 1673, 1792 | 1835, 1891 |
-| 1 | 800x600, 32 | 439, 446 | 600, 615 | 663, 673 | 733, 725 | 761, 738 | 781, 766 |
-| 8 | 1920x1080, 0 | 370, 400 | 733, 710 | 855, 960 | 1110, 1185 | 1189, 1750 | 1646, 1494 |
-| 8 | 1920x1080, 32 | 298, 287 | 482, 484 | 507, 592 | 570, 624 | 562, 551 | 481, 473 |
-| 8 | 800x600, 0 | 3256, 3263 | 4482, 3635 | 4259, 4654 | 5108, 5306 | 3697, 5178 | 6988, 6847 |
-| 8 | 800x600, 32 | 959, 990 | 1543, 1506 | 1497, 1676 | 1883, 1725 | 1564, 1376 | 1152, 1134 |
+| 1 | 1920x1080, 0 | 247, 245 | 360, 332 | 376, 381 | 420, 407 | 454, 453 | 444, 468 |
+| 1 | 1920x1080, 32 | 152, 154 | 214, 204 | 236, 222 | 248, 251 | 266, 260 | 256, 260 |
+| 1 | 800x600, 0 | 917, 888 | 1314, 1234 | 1578, 1496 | 1593, 1385 | 1768, 1602 | 1905, 1664 |
+| 1 | 800x600, 32 | 448, 421 | 584, 595 | 664, 621 | 706, 660 | 740, 685 | 714, 703 |
+| 8 | 1920x1080, 0 | 356, 378 | 611, 734 | 934, 952 | 1296, 1217 | 1198, 1235 | 1266, 1228 |
+| 8 | 1920x1080, 32 | 283, 272 | 453, 447 | 550, 487 | 540, 539 | 501, 489 | 432, 407 |
+| 8 | 800x600, 0 | 2545, 2216 | 3276, 3856 | 2734, 4722 | 4558, 4644 | 3472, 4741 | 3986, 5967 |
+| 8 | 800x600, 32 | 890, 1000 | 1435, 1366 | 1452, 1544 | 1509, 1638 | 1322, 1194 | 1266, 1105 |
 
-K = 1 is the engine before: one step a sweep, its 2 sub-steps fused. A sweep of `K` steps reads each row from memory
-once, so 1 thread gains 1.7 to 1.9 times at K = 4 and 8 threads 1.6 to 3 times. With a rim, 8 threads lose past K = 4:
-the trapezoids' sides grow by 4 rows a level (blocked.rs), 30 rows each at K = 4 and 62 at K = 8, against bands of 135
-and 75 rows, so the seams' phase takes a growing share. Without a rim K = 8 gains further on 8 threads, but the default
-is K = 4 ([`FUSED_STEPS`](../crates/waveduderust/src/engine/rev2/mod.rs)), the best or near it everywhere.
+The 4th order (DRP):
 
-CPU use on 8 threads, `/usr/bin/time`, 6416 steps of 1920x1080 (setup included), (user + sys) / wall / 8:
+| Threads | Grid, rim | K = 1 | 2 | 3 | 4 | 6 | 8 |
+|---|---|---|---|---|---|---|---|
+| 1 | 1920x1080, 0 | 155, 152 | 170, 172 | 165, 168 | 171, 168 | 149, 159 | 142, 142 |
+| 1 | 1920x1080, 32 | 95, 97 | 105, 106 | 105, 107 | 105, 103 | 89, 91 | 68, 72 |
+| 1 | 800x600, 0 | 569, 556 | 645, 632 | 692, 697 | 677, 705 | 667, 677 | 652, 688 |
+| 1 | 800x600, 32 | 280, 270 | 318, 318 | 326, 321 | 318, 323 | 294, 320 | 306, 302 |
+| 8 | 1920x1080, 0 | 279, 293 | 347, 391 | 306, 348 | 292, 296 | 240, 249 | 193, 202 |
+| 8 | 1920x1080, 32 | 185, 201 | 189, 207 | 185, 181 | 171, 168 | 133, 128 | 112, 116 |
+| 8 | 800x600, 0 | 1119, 1053 | 1544, 1364 | 1517, 1519 | 1612, 1690 | 1157, 978 | 871, 857 |
+| 8 | 800x600, 32 | 575, 584 | 666, 678 | 621, 642 | 545, 498 | 393, 373 | 301, 301 |
+
+K = 1 is one step a sweep, its 2 sub-steps fused. A sweep of `K` steps reads each row from memory once, so the 9-point
+gains 1.7 to 2 times on 1 thread and 1.7 to 3.4 times on 8 at its best K. The 4th order gains less, 1.1 to 1.25
+times on 1 thread and 1.03 to 1.5 on 8: its sub-step is two passes of a 13-point stencil through `w`, more arithmetic a row
+read, and past K = 2 to 4 it loses, more on 8 threads. What limits `K` is the trapezoids (blocked.rs): their sides
+grow by 1 row a level for the 9-point, 4 with a rim, 6 for the 4th order and 8 with a rim, so the seams' phase,
+which runs one seam per thread on 7 of the 8 and keeps no `w` in rings, takes a growing share; the bands of a sweep
+also need at least twice the side, so a wide trapezoid leaves threads without a band (the 4th order with a rim at K =
+8, 16 levels, sides of 126 rows: 4 bands at 1080 rows). The rows in flight grow too: per level, a ring of 13 or 14
+rows of `w` for the 4th order and a few rows of both planes, about 0.8 MB per band at 1920 wide and K = 4, past the
+512 KB of L2.
+
+So by default a sweep fuses the most steps, up to 8 ([`FUSED_STEPS`](../crates/waveduderust/src/engine/rev2/mod.rs)),
+whose trapezoids' sides stay within 32 rows ([`FUSED_SIDE`](../crates/waveduderust/src/engine/rev2/mod.rs)): with 2
+sub-steps, the 9-point K = 8 (sides of 15 rows), with a rim K = 4 (30); the 4th order K = 2 (21, with a rim 30). It
+is the best K of the tables or within their noise everywhere but the 4th order at 800x600 without a rim, where K = 3
+or 4 gain 9 to 13 % more, and the 9-point with a rim on 1 thread, where K = 6 gains 5 %. Against a fixed K it gains
+where the rim changes the side's growth: no fixed K serves both, K = 4 costs the 9-point without a rim up to 17 % (1
+thread, 800x600) and the 4th order 14 to 20 % on 8 threads at 1920x1080. A bound on the side as a share of a band's
+rows does not fit: at 800x600 on 8 threads the bands are 75 to 83 rows and the 9-point without a rim and the 4th
+order gain up to sides of 15 and 45 rows. With more sub-steps a step the same bound fuses fewer steps (3 sub-steps:
+the 9-point 8, with a rim 2; the 4th order 1). The rule, from the engine's defaults (two passes):
+
+| Stencil | Threads | Grid, rim | K | Steps a second |
+|---|---|---|---|---|
+| 9-point | 1 | 1920x1080, 0 | 8 | 481, 488 |
+| 9-point | 1 | 1920x1080, 32 | 4 | 255, 244 |
+| 9-point | 1 | 800x600, 0 | 8 | 1841, 1922 |
+| 9-point | 1 | 800x600, 32 | 4 | 719, 705 |
+| 9-point | 8 | 1920x1080, 0 | 8 | 1274, 1395 |
+| 9-point | 8 | 1920x1080, 32 | 4 | 529, 553 |
+| 9-point | 8 | 800x600, 0 | 8 | 5861, 5308 |
+| 9-point | 8 | 800x600, 32 | 4 | 1430, 1659 |
+| 4th order | 1 | 1920x1080, 0 | 2 | 161, 169 |
+| 4th order | 1 | 1920x1080, 32 | 2 | 106, 102 |
+| 4th order | 1 | 800x600, 0 | 2 | 659, 683 |
+| 4th order | 1 | 800x600, 32 | 2 | 312, 324 |
+| 4th order | 8 | 1920x1080, 0 | 2 | 378, 382 |
+| 4th order | 8 | 1920x1080, 32 | 2 | 210, 208 |
+| 4th order | 8 | 800x600, 0 | 2 | 1428, 1357 |
+| 4th order | 8 | 800x600, 32 | 2 | 714, 641 |
+
+CPU use on 8 threads, the 9-point, at a first measurement (in batches of 16 steps), `/usr/bin/time`, 6416 steps of
+1920x1080 (setup included), (user + sys) / wall / 8:
 
 | K, rim | Steps a second | Wall (s) | User + sys (s) | CPU use |
 |---|---|---|---|---|
@@ -539,12 +590,13 @@ CPU use on 8 threads, `/usr/bin/time`, 6416 steps of 1920x1080 (setup included),
 The threads still idle about half the time: the bands wait for the slowest at the end of each phase, the seams' phase
 runs a seam per thread on 7 of the 8, and this host preempts its guest's threads.
 
-The fused steps' values: on the generic backend those of one step a sweep bit for bit, and so the legacy CPU engine's
-(tests/rev2.rs; the run worker's frames and traces too, run/worker.rs). On the AVX2 backend they agree within 1e-4 of
+The fused steps' values, for both stencils: on the generic backend those of one step a sweep bit for bit, and so the
+legacy CPU engine's (tests/rev2.rs; the run worker's frames and traces too, run/worker.rs). On the AVX2 backend they agree within 1e-4 of
 the peak, not bit for bit: a sweep's area, grown by `K` steps' reach, splits a row into other spans while the damage
 grows, and the kernel takes a span's last `len % 8` cells through the generic backend's arithmetic. Once the damage
 covers the grid the spans are the same; from a full-damage start the field's difference to the legacy engine stays
-the K = 1 engine's (9.6e-7 of the peak at 800x600, rim 32, 8 threads, K = 1, 8 and 16).
+the K = 1 engine's (9.6e-7 of the peak at 800x600, rim 32, 8 threads, K = 1, 8 and 16; the 4th order 4.4e-7 at K =
+1, 2 and 8).
 
 ## Other operations
 
