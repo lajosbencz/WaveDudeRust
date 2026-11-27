@@ -174,9 +174,11 @@ impl State {
 		}
 		self.selection.retain(&self.doc.project);
 		self.show_tree(&app.global::<ui::Tree<'_>>());
-		app.set_file_name(self.doc.name().unwrap_or_default().into());
-		app.set_file_path(self.doc.path.as_deref().map_or_default(|p| p.display().to_string()).into());
-		app.set_dirty(self.doc.dirty());
+		app.set_doc(ui::DocTitle {
+			name: self.doc.name().unwrap_or_default().into(),
+			path: self.doc.path.as_deref().map_or_default(|p| p.display().to_string()).into(),
+			dirty: self.doc.dirty(),
+		});
 		app.set_commands(self.commands());
 		let mut change = live::Change::None;
 		if self.ran != self.doc.generation {

@@ -60,12 +60,17 @@ component DockedPane inherits Rectangle {
     }
 }
 
+// The open document as the title bar names it: its file name and path, empty when unsaved, and unsaved changes.
+export struct DocTitle {
+    name: string,
+    path: string,
+    dirty: bool,
+}
+
 // The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 export component AppWindow inherits Window {
     // the project's file: its name (empty without one), its full path, unsaved edits
-    in property <string> file-name;
-    in property <string> file-path;
-    in property <bool> dirty;
+    in property <DocTitle> doc;
     in property <bool> title-full-path;
     in property <Commands> commands;
     // The menu bar is Windows' native one (not `Platform.os`, which names a browser's host on the web).
@@ -135,7 +140,7 @@ export component AppWindow inherits Window {
         }
     }
 
-    title: "WaveDude Rust - " + (root.title-full-path && root.file-path != "" ? root.file-path : root.file-name != "" ? root.file-name : @tr("Untitled")) + (root.dirty ? "*" : "");
+    title: "WaveDude Rust - " + (root.title-full-path && root.doc.path != "" ? root.doc.path : root.doc.name != "" ? root.doc.name : @tr("Untitled")) + (root.doc.dirty ? "*" : "");
     icon: @image-url("../assets/icon.svg");
     min-width: 800px;
     min-height: 500px;
