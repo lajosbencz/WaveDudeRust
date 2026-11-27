@@ -16,13 +16,13 @@ path = "src/main.rs"
 workspace = true
 
 [build-dependencies]
-slint-build = "1.19"
+slint-build.workspace = true
 # its .slint library
 slint_dock = { path = "../../crates/slint_dock" }
 
 [dependencies]
-slint = { version = "1.19", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-30", "unstable-winit-030", "accessibility"] }
-sys-locale = "0.3"
+slint = { workspace = true, features = ["std", "compat-1-2", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-30", "unstable-winit-030", "accessibility"] }
+sys-locale.workspace = true
 webbrowser = "1"
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["fmt", "std", "ansi", "registry"] }
@@ -38,7 +38,7 @@ serde_json.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # the window without a GPU
-slint = { version = "1.19", default-features = false, features = ["renderer-software"] }
+slint = { workspace = true, features = ["renderer-software"] }
 # Slint's clipboard serves its text fields only; already in its winit backend's tree
 arboard = { version = "3.6", default-features = false }
 # the scene image file watched through its folder
@@ -51,7 +51,7 @@ gloo-timers = { version = "0.4", features = ["futures"] }
 js-sys.workspace = true
 tracing-web.workspace = true
 # the browser's language for System
-sys-locale = { version = "0.3", features = ["js"] }
+sys-locale = { workspace = true, features = ["js"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures.workspace = true
 # MP4 through the browser's WebCodecs encoder

@@ -26,9 +26,9 @@ anyhow.workspace = true
 clap.workspace = true
 ctrlc = "3.4"
 png.workspace = true
-tracing-subscriber = "0.3"
+tracing-subscriber = { workspace = true, features = ["smallvec", "fmt", "ansi", "tracing-log", "std"] }
 waveduderust = { path = "../waveduderust", default-features = false, features = ["unstable-engine", "unstable-scene", "unstable-run", "unstable-export", "gpu", "run", "export", "clap"] }
 waveduderust_platform = { path = "../waveduderust_platform" }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
