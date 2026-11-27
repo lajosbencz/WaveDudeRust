@@ -11,6 +11,15 @@ import { FormKind, GateKind, PointData, SchemeChoice, SchemeEntry, SceneMode, So
 import { Icon, IconButton } from "icons.slint";
 import { EditKeys } from "edit-keys.slint";
 
+// Tooltips that several fields share.
+global Tips {
+    out property <string> recorded: @tr("Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run.");
+    out property <string> design-wavelength: @tr("The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale");
+    out property <string> zones: @tr("The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)");
+    out property <string> layout: @tr("Computed from the design wavelength and the indices with the simulator's own wave equation (the 4th-order Laplacian)");
+    out property <string> ports: @tr("Canvas pixels. Feed the inputs with equal waves (the same frequency, amplitude and phase); a missing wave is a logical 0. The outputs line up with the inputs of gates set a port spacing above and below, one length on");
+}
+
 export component ProjectForm inherits VerticalLayout {
     alignment: start;
     FormSection { text: @tr("General"); }
@@ -684,18 +693,18 @@ export component ProbeForm inherits VerticalLayout {
         Row {
             FormLabel {
                 text: @tr("Label.Probe.Measurement" => "Measurement");
-                tip: @tr("Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run.");
+                tip: Tips.recorded;
             }
             // the layer's own measurements
             if root.field: FieldMeasurementChoice {
                 value <=> Form.probe.measurement;
                 enabled: root.standard;
-                tip: @tr("Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run.");
+                tip: Tips.recorded;
             }
             if !root.field: IntensityMeasurementChoice {
                 value <=> Form.probe.measurement;
                 enabled: root.standard;
-                tip: @tr("Recorded quantity. The field offers its amplitude only; the intensity layer its value, or the value integrated over the run.");
+                tip: Tips.recorded;
             }
         }
         Row {
@@ -1393,11 +1402,11 @@ export component ZonePlateForm inherits VerticalLayout {
         Row {
             FormLabel {
                 text: @tr("Wavelength");
-                tip: @tr("The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale");
+                tip: Tips.design-wavelength;
             }
             FormReadout {
                 text: Form.zone-plate.wavelength == 0 ? "\u{2013}" : "\u{2248} \{Form.zone-plate.wavelength.to-fixed(1)} px";
-                tip: @tr("The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale");
+                tip: Tips.design-wavelength;
             }
         }
         Row {
@@ -1472,18 +1481,18 @@ export component ZonePlateForm inherits VerticalLayout {
         Row {
             FormLabel {
                 text: @tr("Number of zones");
-                tip: @tr("The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)");
+                tip: Tips.zones;
             }
-            FormReadout { text: Form.zone-plate.zones == 0 ? "\u{2013}" : Form.zone-plate.zones; tip: @tr("The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)"); }
+            FormReadout { text: Form.zone-plate.zones == 0 ? "\u{2013}" : Form.zone-plate.zones; tip: Tips.zones; }
         }
         Row {
             FormLabel {
                 text: @tr("Outermost zone");
-                tip: @tr("The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)");
+                tip: Tips.zones;
             }
             FormReadout {
                 text: Form.zone-plate.zones == 0 ? "\u{2013}" : "\u{2248} \{Form.zone-plate.outer-zone.to-fixed(1)} px";
-                tip: @tr("The zones the plate gets within its diameter, and the width of the outermost whole one, which the grid must resolve (a few pixels at least)");
+                tip: Tips.zones;
             }
         }
     }
@@ -1766,11 +1775,11 @@ export component MetaSurfaceForm inherits VerticalLayout {
         Row {
             FormLabel {
                 text: @tr("Wavelength");
-                tip: @tr("The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale");
+                tip: Tips.design-wavelength;
             }
             PixelReadout {
                 pixels: Form.meta.wavelength;
-                tip: @tr("The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale");
+                tip: Tips.design-wavelength;
             }
         }
         if root.lens: Row {
@@ -1908,20 +1917,15 @@ component GateOutputCheck inherits FormCheck {
 
 // A logic gate's layout value; a dash without a design.
 component GateReadout inherits FormReadout {
-    tip: GateTips.layout;
+    tip: Tips.layout;
 }
 
-// The tips the Layout and Ports panels give each row, label and value.
-global GateTips {
-    out property <string> layout: @tr("Computed from the design wavelength and the indices with the simulator's own wave equation (the 4th-order Laplacian)");
-    out property <string> ports: @tr("Canvas pixels. Feed the inputs with equal waves (the same frequency, amplitude and phase); a missing wave is a logical 0. The outputs line up with the inputs of gates set a port spacing above and below, one length on");
-}
 
 // A port's place; a dash without a design.
 component PortReadout inherits FormReadout {
     in property <PointData> port;
     text: Form.gate.designed ? "(\{root.port.x}, \{root.port.y})" : "\u{2013}";
-    tip: GateTips.ports;
+    tip: Tips.ports;
 }
 
 export component LogicGateForm inherits VerticalLayout {
@@ -1948,11 +1952,11 @@ export component LogicGateForm inherits VerticalLayout {
         Row {
             FormLabel {
                 text: @tr("Wavelength");
-                tip: @tr("The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale");
+                tip: Tips.design-wavelength;
             }
             FormReadout {
                 text: Form.gate.wavelength == 0 ? "\u{2013}" : "\u{2248} \{Form.gate.wavelength.to-fixed(1)} px";
-                tip: @tr("The wavelength the design frequency gives in a medium of index 1, with the simulation's source frequency scale");
+                tip: Tips.design-wavelength;
             }
         }
     }
@@ -2054,38 +2058,38 @@ export component LogicGateForm inherits VerticalLayout {
     FormSection { text: @tr("Layout"); }
     FormPanel {
         Row {
-            FormLabel { text: @tr("Core width"); tip: GateTips.layout; }
+            FormLabel { text: @tr("Core width"); tip: Tips.layout; }
             GateReadout { text: root.designed ? "\{Form.gate.core-width} px" : "\u{2013}"; }
         }
         Row {
-            FormLabel { text: @tr("Coupler gap"); tip: GateTips.layout; }
+            FormLabel { text: @tr("Coupler gap"); tip: Tips.layout; }
             GateReadout { text: root.designed ? "\{Form.gate.gap} px" : "\u{2013}"; }
         }
         Row {
-            FormLabel { text: @tr("Coupler length"); tip: GateTips.layout; }
+            FormLabel { text: @tr("Coupler length"); tip: Tips.layout; }
             GateReadout { text: root.designed ? "\{Form.gate.coupler-length} px" : "\u{2013}"; }
         }
         Row {
-            FormLabel { text: @tr("Total length"); tip: GateTips.layout; }
+            FormLabel { text: @tr("Total length"); tip: Tips.layout; }
             GateReadout { text: root.designed ? "\{Form.gate.length} px" : "\u{2013}"; }
         }
     }
     FormSection { text: @tr("Ports"); }
     FormPanel {
         Row {
-            FormLabel { text: @tr("Input A"); tip: GateTips.ports; }
+            FormLabel { text: @tr("Input A"); tip: Tips.ports; }
             PortReadout { port: Form.gate.input-a; }
         }
         Row {
-            FormLabel { text: @tr("Input B"); tip: GateTips.ports; }
+            FormLabel { text: @tr("Input B"); tip: Tips.ports; }
             PortReadout { port: Form.gate.input-b; }
         }
         Row {
-            FormLabel { text: @tr("Upper output"); tip: GateTips.ports; }
+            FormLabel { text: @tr("Upper output"); tip: Tips.ports; }
             PortReadout { port: Form.gate.upper-out; }
         }
         Row {
-            FormLabel { text: @tr("Lower output"); tip: GateTips.ports; }
+            FormLabel { text: @tr("Lower output"); tip: Tips.ports; }
             PortReadout { port: Form.gate.lower-out; }
         }
     }
