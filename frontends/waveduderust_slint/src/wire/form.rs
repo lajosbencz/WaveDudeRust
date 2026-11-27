@@ -16,12 +16,13 @@ use crate::{files, form, models, number};
 
 /// The window-wide logic the boxes call, which needs no state.
 pub(crate) fn wire_widgets(app: &AppWindow) {
+	let form_ui = app.global::<ui::Form<'_>>();
 	let numbers = app.global::<ui::NumberLogic<'_>>();
 	numbers.on_step(|spec, text, steps| number::step(&spec, &text, steps).into());
 	numbers.on_scrub(|spec, start, dx, scale| number::scrub(&spec, &start, f64::from(dx), f64::from(scale)).into());
 	form::wire_colors(&app.global::<ui::ColorLogic<'_>>());
-	app.global::<ui::Form<'_>>().set_pick_files(cfg!(not(target_arch = "wasm32")));
-	app.global::<ui::Form<'_>>().on_next_enabled(|enabled, count, from, step| {
+	form_ui.set_pick_files(cfg!(not(target_arch = "wasm32")));
+	form_ui.on_next_enabled(|enabled, count, from, step| {
 		let enabled: Vec<bool> = slint::Model::iter(&enabled).collect();
 		form::next_enabled(&enabled, usize::try_from(count).unwrap_or_default(), from, step)
 	});
@@ -41,8 +42,9 @@ pub(crate) fn wire_widgets(app: &AppWindow) {
 
 /// The Properties form: edits, list rows, the gradient bar, colour schemes and the scene image.
 pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
+	let form_ui = app.global::<ui::Form<'_>>();
 	let h = Handle::new(state, app);
-	app.global::<ui::Form<'_>>().on_edited(move |typing| {
+	form_ui.on_edited(move |typing| {
 		h.show(|s, app| {
 			let form = app.global::<ui::Form<'_>>();
 			form.set_invalid("".into());
@@ -50,13 +52,13 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		});
 	});
 	let st = state.clone();
-	app.global::<ui::Form<'_>>().on_describe(move |open| {
+	form_ui.on_describe(move |open| {
 		let s = &mut *st.borrow_mut();
 		s.settings.part_description_expanded = open;
 		s.save_settings();
 	});
 	let h = Handle::new(state, app);
-	app.global::<ui::Form<'_>>().on_new_seed(move || {
+	form_ui.on_new_seed(move || {
 		h.show(|s, _| {
 			let seed = waveduderust::model::Project::new_random_seed().seed;
 			s.doc.edit(|p| p.seed = seed);
@@ -72,20 +74,19 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		}
 	};
 	let index = |k: i32| models::index_from_ui(k).unwrap_or(usize::MAX);
-	let rows = app.global::<ui::Form<'_>>();
-	rows.on_add_row({
+	form_ui.on_add_row({
 		let edit = edit_rows.clone();
 		move || edit(form::RowEdit::Add)
 	});
-	rows.on_remove_row({
+	form_ui.on_remove_row({
 		let edit = edit_rows.clone();
 		move |k| edit(form::RowEdit::Remove(index(k)))
 	});
-	rows.on_move_row({
+	form_ui.on_move_row({
 		let edit = edit_rows.clone();
 		move |from, to| edit(form::RowEdit::Move { from: index(from), to: index(to) })
 	});
-	rows.on_clear_rows(move || edit_rows(form::RowEdit::Clear));
+	form_ui.on_clear_rows(move || edit_rows(form::RowEdit::Clear));
 	// the gradient bar and the stop swatches: each edit on the scheme shown, the stop then selected handed back
 	let bar_edit = {
 		let (st, weak) = (state.clone(), app.as_weak());
@@ -105,12 +106,11 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 			selected
 		}
 	};
-	let bar = app.global::<ui::Form<'_>>();
-	bar.on_add_stop_at({
+	form_ui.on_add_stop_at({
 		let edit = bar_edit.clone();
 		move |at, gesture| edit(gesture, &|s| models::index_to_ui(Some(s.add_stop_at(form::thousandths(at)))))
 	});
-	bar.on_move_stop({
+	form_ui.on_move_stop({
 		let edit = bar_edit.clone();
 		move |k, at, gesture| {
 			edit(gesture, &|s| {
@@ -119,11 +119,11 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 			})
 		}
 	});
-	bar.on_remove_stop({
+	form_ui.on_remove_stop({
 		let edit = bar_edit.clone();
 		move |k, gesture| edit(gesture, &|s| models::index_from_ui(k).map_or(k, |k| form::remove_stop(s, k)))
 	});
-	bar.on_recolour_stop(move |k, colour, gesture| {
+	form_ui.on_recolour_stop(move |k, colour, gesture| {
 		let colour = form::rgb(colour);
 		bar_edit(gesture, &|s| {
 			if let Some(stop) = models::index_from_ui(k).and_then(|k| s.stops.get_mut(k)) {
@@ -133,13 +133,13 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		});
 	});
 	let h = Handle::new(state, app);
-	app.global::<ui::Form<'_>>().on_load_scheme_file(move |layer| {
+	form_ui.on_load_scheme_file(move |layer| {
 		h.read(|s, app| files::pick_scheme(&s.inbox, &app.global::<ui::Words<'_>>(), layer));
 	});
 	#[cfg(not(target_arch = "wasm32"))]
 	{
 		let (st, weak) = (state.clone(), app.as_weak());
-		app.global::<ui::Form<'_>>().on_pick_image(move || {
+		form_ui.on_pick_image(move || {
 			let Some(app) = weak.upgrade() else { return };
 			let words = app.global::<ui::Words<'_>>();
 			let picked = rfd::FileDialog::new()
@@ -153,7 +153,7 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 			}
 		});
 		let st = state.clone();
-		app.global::<ui::Form<'_>>().on_save_image(move || {
+		form_ui.on_save_image(move || {
 			let (Some(bytes), name) = ({
 				let scene = &st.borrow().doc.project.scene;
 				(scene.image_data.clone(), scene.image.clone())
@@ -169,11 +169,11 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		});
 	}
 	let h = Handle::new(state, app);
-	app.global::<ui::Form<'_>>().on_drop_image(move || h.show(|s, _| s.doc.edit(|p| p.scene.remove_image())));
+	form_ui.on_drop_image(move || h.show(|s, _| s.doc.edit(|p| p.scene.remove_image())));
 	let h = Handle::new(state, app);
-	app.global::<ui::Form<'_>>().on_toggle_mine(move || h.show(|s, _| s.toggle_mine()));
+	form_ui.on_toggle_mine(move || h.show(|s, _| s.toggle_mine()));
 	let h = Handle::new(state, app);
-	app.global::<ui::Form<'_>>().on_remove_my_scheme(move |layer| {
+	form_ui.on_remove_my_scheme(move |layer| {
 		h.with(|s, app| {
 			let Some(store) = &s.store else { return };
 			let name = form::layer_settings(&mut s.doc.view, layer).color_scheme.clone();
@@ -185,7 +185,7 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		});
 	});
 	let h = Handle::new(state, app);
-	app.global::<ui::Form<'_>>().on_edit_scheme_copy(move |layer| {
+	form_ui.on_edit_scheme_copy(move |layer| {
 		h.with(|s, app| {
 			let name = form::layer_settings(&mut s.doc.view, layer).color_scheme.clone();
 			let Some((scheme, own)) = form::find_scheme(&s.doc.project, &s.schemes, &name) else { return };
@@ -210,15 +210,15 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	});
 
 	let weak = app.as_weak();
-	bar.on_marker_at(move |at, reach, selected| {
+	form_ui.on_marker_at(move |at, reach, selected| {
 		weak.upgrade().map_or(-1, |app| form::marker_at(&app.global::<ui::Form<'_>>().get_stops(), at, reach, selected))
 	});
 	let weak = app.as_weak();
-	bar.on_stop_beside(move |k, step| {
+	form_ui.on_stop_beside(move |k, step| {
 		weak.upgrade().map_or(-1, |app| form::stop_beside(&app.global::<ui::Form<'_>>().get_stops(), k, step))
 	});
 	let h = Handle::new(state, app);
-	app.global::<ui::Form<'_>>().on_base_on(move |picked| {
+	form_ui.on_base_on(move |picked| {
 		h.show(|s, app| {
 			if let (Node::Scheme(i), Ok(k)) = (s.selection.current(), usize::try_from(picked)) {
 				let base = form::bases(&s.doc.project, &s.schemes, i).get(k).map(|&b| b.clone());
