@@ -1,5 +1,7 @@
-//! The CPU wave engine for x86-64 machines with AVX2 and FMA: the scheme, the grid and the features of the reference
-//! engine (engine/cpu.rs), its hot loops written as row kernels (kernels.rs) that take 8 lanes at a time.
+//! The CPU_REV2 engine: the scheme, the grid and the features of the reference CPU engine (engine/cpu.rs), its passes
+//! fused into blocked steps and its hot loops written as row kernels of a backend (backend/mod.rs): the generic one in
+//! portable Rust, or one for an instruction set (AVX2 and FMA). This module and blocked.rs, the orchestration, build
+//! for every target; only the backends are target-specific.
 //!
 //! The grid is the CPU engine's: padded by [`PAD`] rings, `stride = grid width + 2 PAD`, the rings 0 unless Mur's
 //! condition sets them in `u` on open edges without a rim, mirror cells at c2 = 0 with the taps across a mirror dropped
@@ -67,19 +69,18 @@
 //!   The 4th order applies the rim twice, to the field in `W` and to `w` in `D`, each with its own memory variables and
 //!   its own psi of y unit. Each row's memory variables are its own, so the trapezoids carry them like the field.
 //!
-//! Instruction set: the engine is built only on a CPU with AVX2 and FMA (its constructor asserts [`available`]), so
-//! the Rust around the kernels (the CPML's rows, the cut cells) runs compiled for them through `wide`, with no
-//! feature test on the way.
-//!
-//! Kernels: an engine picks its row kernels once, when built (kernels.rs, `RowKernels`). The reference kernels are
-//! safe Rust in the CPU engine's expressions and order, and Rust contracts no multiply-add, so with them the results
-//! are the CPU engine's bit for bit ([`AvxEngine::with_reference_kernels`]). The default kernels may round differently
-//! (fused multiply-adds); the engines then agree within a tolerance (tests/avx.rs).
+//! Backends: an engine runs on one backend, chosen when it is built ([`Backend`]: the best one this CPU runs, or one
+//! named); the passes and the blocked steps are generic over the backend's type (`RowKernels`), which `on_backend!`
+//! picks once per step. Each row's work goes through the backend's entry (`run_row`), so the Rust around the kernels
+//! (the CPML's rows, the cut cells) is compiled for the backend's instruction set, with no feature test on the way.
+//! The generic backend is safe Rust in the CPU engine's expressions and order, and Rust contracts no multiply-add, so
+//! on it the results are the CPU engine's bit for bit ([`Backend::Generic`]). Another backend may round differently
+//! (fused multiply-adds); the engines then agree within a tolerance (tests/rev2.rs).
 
 #![allow(unsafe_code)]
 
+mod backend;
 mod blocked;
-mod kernels;
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -87,8 +88,9 @@ use std::sync::Arc;
 use rayon::iter::Either;
 use rayon::prelude::*;
 
+pub use self::backend::Backend;
+use self::backend::{Intensity, RowKernels, RowMedium, advance, on_backend};
 use self::blocked::{Line, MurRows, Rim, RimSet, Rings, Shared, Step, Tiling};
-use self::kernels::{Intensity, NineRow, RowKernels, RowMedium, advance};
 use super::cpu::{Rows, UniformRuns, chunks_or_none, cut_spans, drp, medium_spans, nine_point, plane_rows, row_cuts};
 use super::damage::{Damage, extent};
 use super::forcing::live;
@@ -98,16 +100,12 @@ use super::stencil::{INV12, PAD, TimeScheme, centred};
 use super::substeps::sub_steps;
 use super::types::{EngineOptions, SceneData};
 
-/// Whether this CPU runs the engine: it has AVX2 and FMA.
-pub fn available() -> bool {
-	std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma")
-}
-
-/// The CPU engine on AVX2 and FMA. See the module docs; build it only where [`available`] holds.
-pub struct AvxEngine {
+/// The CPU_REV2 engine on one of its backends. See the module docs.
+pub struct CpuRev2Engine {
 	/// The planes, the medium, the forcing, the probes and the damage (host.rs).
 	host: Host,
-	kernels: RowKernels,
+	/// The backend the passes run on; it runs on this CPU.
+	backend: Backend,
 	/// The runs of each grid row where `c2` and `d` hold one value (engine/cpu.rs, Uniform medium).
 	uniform: UniformRuns,
 	/// Mur's chains by the grid row that owns them (blocked.rs).
@@ -121,26 +119,46 @@ pub struct AvxEngine {
 	rings: Rings,
 }
 
-impl AvxEngine {
-	/// An engine at rest on `scene` with the sub-steps its CFL bound requires.
+impl CpuRev2Engine {
+	/// An engine at rest on `scene` with the sub-steps its CFL bound requires, on the best backend this CPU runs
+	/// ([`Backend::best`]).
 	pub fn new(scene: impl Into<Arc<SceneData>>, options: EngineOptions) -> Self {
-		let scene = scene.into();
-		let n = sub_steps(options.stencil, scene.max_c2());
-		Self::with_sub_steps(scene, options, n)
+		Self::with_backend(scene, options, Backend::best())
 	}
 
-	/// An engine taking `n` sub-steps per step whatever the scene; below the CFL bound it diverges.
-	/// For tests of the bound.
+	/// An engine at rest on `scene` with the sub-steps its CFL bound requires, on `backend`.
 	///
 	/// # Panics
 	///
-	/// On a CPU without AVX2 and FMA ([`available`]).
+	/// When this CPU does not run `backend` ([`Backend::available`]).
+	pub fn with_backend(scene: impl Into<Arc<SceneData>>, options: EngineOptions, backend: Backend) -> Self {
+		let scene = scene.into();
+		let n = sub_steps(options.stencil, scene.max_c2());
+		Self::with_backend_and_sub_steps(scene, options, backend, n)
+	}
+
+	/// An engine on the best backend taking `n` sub-steps per step whatever the scene; below the CFL bound it diverges.
+	/// For tests of the bound.
 	pub fn with_sub_steps(scene: impl Into<Arc<SceneData>>, options: EngineOptions, n: u32) -> Self {
-		assert!(available(), "the AVX2 engine needs a CPU with AVX2 and FMA");
+		Self::with_backend_and_sub_steps(scene, options, Backend::best(), n)
+	}
+
+	/// An engine on `backend` taking `n` sub-steps per step whatever the scene ([`with_sub_steps`](Self::with_sub_steps)).
+	///
+	/// # Panics
+	///
+	/// When this CPU does not run `backend` ([`Backend::available`]).
+	pub fn with_backend_and_sub_steps(
+		scene: impl Into<Arc<SceneData>>,
+		options: EngineOptions,
+		backend: Backend,
+		n: u32,
+	) -> Self {
+		assert!(backend.available(), "this CPU does not run the {} backend", backend.name());
 		let host = Host::new(scene.into(), options, n);
 		let mut engine = Self {
 			host,
-			kernels: RowKernels::native(),
+			backend,
 			uniform: UniformRuns::default(),
 			mur: MurRows::default(),
 			tables: Vec::new(),
@@ -152,10 +170,9 @@ impl AvxEngine {
 		engine
 	}
 
-	/// This engine on the reference kernels (module docs, Kernels), whose results are the CPU engine's bit for bit.
-	/// For tests.
-	pub fn with_reference_kernels(self) -> Self {
-		Self { kernels: RowKernels::REFERENCE, ..self }
+	/// The backend the engine runs on.
+	pub fn backend(&self) -> Backend {
+		self.backend
 	}
 
 	/// Rebuilds the uniform runs from the medium the host loaded.
@@ -170,46 +187,54 @@ impl AvxEngine {
 
 	/// The leapfrog pass of the 9-point stencil: writes the next field over `prev`, and the intensity stages when
 	/// `intensity`.
-	fn leapfrog_pass(&mut self, intensity: bool) {
+	fn leapfrog_pass<B: RowKernels>(&mut self, kernels: B, intensity: bool) {
 		let h = &mut self.host;
 		let (s, area, xs) = (h.stride, &h.damage, h.damage.x.clone());
-		let line = NineLine::of((h.stride, &h.c2, &h.d, &h.cuts, h.mirrors), &self.uniform, self.kernels.nine, &xs);
+		let line = NineLine::of((h.stride, &h.c2, &h.d, &h.cuts, h.mirrors), &self.uniform, kernels, &xs);
 		let (u, c2, cuts) = (&h.u, &h.c2, &h.cuts);
 		let stages = Host::stages(&mut h.s1, &mut h.s2, h.alpha, intensity);
 		let mut rim = h.pml.as_mut().and_then(|p| p.begin(0, u, Medium { cuts, c2 }, 1.0, area));
-		grid_rows(&mut h.prev, stages, s, area, rim.as_mut(), |r, next, stages| {
+		grid_rows(kernels, &mut h.prev, stages, s, area, rim.as_mut(), |r, next, stages| {
 			line.row(r, &u[(r - 1) * s..(r + 2) * s], next, stages);
 		});
 	}
 
 	/// The modified equation's first pass: `w = c2 L u` on the damaged cells.
-	fn inner_pass(&mut self) {
+	fn inner_pass<B: RowKernels>(&mut self, kernels: B) {
 		let h = &mut self.host;
 		let (s, u, area) = (h.stride, &h.u, &h.damage);
-		let line =
-			DrpLine::of((h.stride, &h.c2, &h.d, &h.cuts, h.mirrors), h.axis, &self.uniform, self.kernels, &area.x);
+		let line = DrpLine::of((h.stride, &h.c2, &h.d, &h.cuts, h.mirrors), h.axis, &self.uniform, kernels, &area.x);
 		let medium = Medium { cuts: &h.cuts, c2: &h.c2 };
 		let mut rim = h.pml.as_mut().and_then(|p| p.begin(0, u, medium, 1.0, area));
-		grid_rows(&mut h.w, None, s, area, rim.as_mut(), |r, w, _| line.lap(r, &plane_rows(u, r, s), w));
+		grid_rows(kernels, &mut h.w, None, s, area, rim.as_mut(), |r, w, _| line.lap(r, &plane_rows(u, r, s), w));
 	}
 
 	/// The modified equation's second pass: writes the next field over `prev` from `u` and the plane `w`, and the
 	/// intensity stages when `intensity`.
-	fn outer_pass(&mut self, intensity: bool) {
+	fn outer_pass<B: RowKernels>(&mut self, kernels: B, intensity: bool) {
 		let h = &mut self.host;
 		let (s, gw, u, w, area) = (h.stride, h.gw(), &h.u, &h.w, &h.damage);
-		let line =
-			DrpLine::of((h.stride, &h.c2, &h.d, &h.cuts, h.mirrors), h.axis, &self.uniform, self.kernels, &area.x);
+		let line = DrpLine::of((h.stride, &h.c2, &h.d, &h.cuts, h.mirrors), h.axis, &self.uniform, kernels, &area.x);
 		let stages = Host::stages(&mut h.s1, &mut h.s2, h.alpha, intensity);
 		let mut rim = h.pml.as_mut().and_then(|p| p.begin(1, w, Medium { cuts: &h.cuts, c2: &h.c2 }, INV12, area));
-		grid_rows(&mut h.prev, stages, s, area, rim.as_mut(), |r, next, stages| {
+		grid_rows(kernels, &mut h.prev, stages, s, area, rim.as_mut(), |r, next, stages| {
 			line.outer(r, &u[r * s + PAD..][..gw], &plane_rows(w, r, s), next, stages);
 		});
 	}
 
-	/// One step (module docs, Blocked steps): the sub-steps fused into one sweep over the rows when there are two or
-	/// more and anything to compute, else one by one.
+	/// The engine's backend as its type, `B` being that type: an engine is only built on a backend this CPU runs.
+	fn kernels<B: RowKernels>(&self) -> B {
+		B::new().expect("an engine is built on a backend this CPU runs")
+	}
+
+	/// One step (module docs, Blocked steps) on the engine's backend.
 	fn step(&mut self) {
+		on_backend!(self.backend, B => self.step_on(self.kernels::<B>()));
+	}
+
+	/// One step: the sub-steps fused into one sweep over the rows when there are two or more and anything to compute,
+	/// else one by one.
+	fn step_on<B: RowKernels>(&mut self, kernels: B) {
 		let n = self.host.shared.sub_steps as usize;
 		if n < 2 {
 			return self.sub_steps_in_turn();
@@ -238,16 +263,16 @@ impl AvxEngine {
 			for k in 0..n {
 				self.host.values.copy_from_slice(&self.tables[k]);
 				let intensity = self.host.shared.accumulates(k as u32);
-				self.sub_step(intensity);
+				self.sub_step_on(kernels, intensity);
 			}
 			return;
 		}
-		self.blocked_step(n, known);
+		self.blocked_step(kernels, n, known);
 	}
 
 	/// The sub-steps of a step fused into one sweep (blocked.rs) on the damage with the step's driven cells, `known`,
 	/// grown by their reach; then the damage takes in what they made non-zero.
-	fn blocked_step(&mut self, n: usize, known: Damage) {
+	fn blocked_step<B: RowKernels>(&mut self, kernels: B, n: usize, known: Damage) {
 		let h = &mut self.host;
 		let (s, gw, gh, scheme) = (h.stride, h.gw(), h.shared.scene.grid_height() as usize, h.shared.scheme);
 		// The 4th order's sub-step is two passes, each reaching `reach`.
@@ -258,9 +283,9 @@ impl AvxEngine {
 		let planes = [Shared::of(&mut h.u), Shared::of(&mut h.prev)];
 		let medium = (h.stride, &h.c2[..], &h.d[..], &h.cuts[..], h.mirrors);
 		let line = match scheme {
-			TimeScheme::Leapfrog => Line::Nine(NineLine::of(medium, &self.uniform, self.kernels.nine, &area.x)),
+			TimeScheme::Leapfrog => Line::Nine(NineLine::of(medium, &self.uniform, kernels, &area.x)),
 			TimeScheme::ModifiedEquation => {
-				Line::Drp(DrpLine::of(medium, h.axis, &self.uniform, self.kernels, &area.x), Shared::of(&mut h.w))
+				Line::Drp(DrpLine::of(medium, h.axis, &self.uniform, kernels, &area.x), Shared::of(&mut h.w))
 			}
 		};
 		let pass = |scale| XPass { xs: area.x.clone(), medium: Medium { cuts: &h.cuts, c2: &h.c2 }, scale };
@@ -278,6 +303,7 @@ impl AvxEngine {
 			_ => Tiling::new(n, scheme, rim.is_some()),
 		};
 		let step = Step {
+			kernels,
 			s,
 			gw,
 			gh,
@@ -305,26 +331,31 @@ impl AvxEngine {
 		h.damage = extent(&h.prev, s, &area, damage);
 	}
 
+	/// One sub-step on the engine's backend ([`sub_step_on`](Self::sub_step_on)).
+	fn sub_step(&mut self, intensity: bool) {
+		on_backend!(self.backend, B => self.sub_step_on(self.kernels::<B>(), intensity));
+	}
+
 	/// One sub-step; the next field ends in `u`. Each pass runs on the damage grown by its reach; the damage then
 	/// takes in what the pass and the forcing made non-zero (engine/cpu.rs, Damage).
-	fn sub_step(&mut self, intensity: bool) {
+	fn sub_step_on<B: RowKernels>(&mut self, kernels: B, intensity: bool) {
 		let known = self.host.damage.clone();
 		let area = match self.host.shared.scheme {
 			TimeScheme::Leapfrog => {
 				self.host.damage = self.host.reached(&known);
-				self.leapfrog_pass(intensity);
+				self.leapfrog_pass(kernels, intensity);
 				self.host.force_next(intensity);
 				std::mem::replace(&mut self.host.damage, known)
 			}
 			TimeScheme::ModifiedEquation => {
 				// `w` is written on the inner area, which a later sub-step's covers, as the damage only grows.
 				self.host.damage = self.host.reached(&known);
-				self.inner_pass();
+				self.inner_pass(kernels);
 				self.host.force_w(&Damage::NONE, &mut Vec::new());
 				let inner = std::mem::replace(&mut self.host.damage, known.clone());
 				let excited = extent(&self.host.w, self.host.stride, &inner, known);
 				self.host.damage = self.host.reached(&excited);
-				self.outer_pass(intensity);
+				self.outer_pass(kernels, intensity);
 				std::mem::replace(&mut self.host.damage, excited)
 			}
 		};
@@ -332,18 +363,18 @@ impl AvxEngine {
 	}
 }
 
-host_engine!(AvxEngine, "CPU (AVX2)");
+host_engine!(CpuRev2Engine, |engine| engine.backend.engine_name());
 
 /// The bands of a blocked step per thread of the rayon pool (blocked.rs).
 const BANDS_PER_THREAD: usize = 1;
 
 /// What the 9-point leapfrog update of a grid row reads besides the field: the medium, its uniform runs and cuts, the
-/// row kernel, and the columns to update.
+/// backend, and the columns to update.
 #[derive(Clone, Copy)]
-struct NineLine<'a> {
+struct NineLine<'a, B> {
 	s: usize,
 	gw: usize,
-	nine: NineRow,
+	kernels: B,
 	uniform: &'a UniformRuns,
 	c2: &'a [f32],
 	d: &'a [f32],
@@ -352,16 +383,16 @@ struct NineLine<'a> {
 	xs: &'a Range<usize>,
 }
 
-impl<'a> NineLine<'a> {
+impl<'a, B: RowKernels> NineLine<'a, B> {
 	/// The update on a medium of rows of `s` with its `c2`, `d`, cuts and whether any cell is cut (a host's fields,
 	/// borrowed one by one so its planes stay free).
 	fn of(
 		(s, c2, d, cuts, mirrors): (usize, &'a [f32], &'a [f32], &'a [u8], bool),
 		uniform: &'a UniformRuns,
-		nine: NineRow,
+		kernels: B,
 		xs: &'a Range<usize>,
 	) -> Self {
-		Self { s, gw: s - 2 * PAD, nine, uniform, c2, d, cuts, mirrors, xs }
+		Self { s, gw: s - 2 * PAD, kernels, uniform, c2, d, cuts, mirrors, xs }
 	}
 
 	/// Writes the next field over `next`, the `gw` grid cells of padded row `r` holding the field one sub-step before,
@@ -369,7 +400,7 @@ impl<'a> NineLine<'a> {
 	/// padded rows `r - 1` to `r + 1` of the field.
 	#[inline(always)]
 	fn row(&self, r: usize, u: &[f32], next: &mut [f32], mut stages: Option<Intensity<'_>>) {
-		let Self { s, gw, nine, uniform, c2, d, cuts, mirrors, xs } = *self;
+		let Self { s, gw, kernels, uniform, c2, d, cuts, mirrors, xs } = *self;
 		let (at, runs) = (r * s + PAD, uniform.row(r - PAD));
 		let (c2, d) = (&c2[at..][..gw], &d[at..][..gw]);
 		// Grid column x of the rows above, of and below is at x + 1 of these; the row's own at `s + PAD`.
@@ -384,7 +415,7 @@ impl<'a> NineLine<'a> {
 					None => RowMedium::Planes { c2: &c2[piece.clone()], d: &d[piece.clone()] },
 				};
 				let stages = stages.as_mut().map(|st| st.span(piece.start, piece.len()));
-				nine(taps, medium, &mut next[piece], stages);
+				kernels.nine(taps, medium, &mut next[piece], stages);
 			});
 		};
 		let Some(cuts) = row_cuts(cuts, mirrors, at, gw, xs) else {
@@ -407,12 +438,12 @@ impl<'a> NineLine<'a> {
 }
 
 /// What the 4th order's two updates of a grid row read besides the fields: the medium, its uniform runs and cuts, the
-/// stencil's weights, the row kernels, and the columns to update.
+/// stencil's weights, the backend, and the columns to update.
 #[derive(Clone, Copy)]
-struct DrpLine<'a> {
+struct DrpLine<'a, B> {
 	s: usize,
 	gw: usize,
-	kernels: RowKernels,
+	kernels: B,
 	axis: [f32; 4],
 	uniform: &'a UniformRuns,
 	c2: &'a [f32],
@@ -422,14 +453,14 @@ struct DrpLine<'a> {
 	xs: &'a Range<usize>,
 }
 
-impl<'a> DrpLine<'a> {
+impl<'a, B: RowKernels> DrpLine<'a, B> {
 	/// The updates on a medium of rows of `s` with its `c2`, `d`, cuts and whether any cell is cut, and the stencil's
 	/// axis weights.
 	fn of(
 		(s, c2, d, cuts, mirrors): (usize, &'a [f32], &'a [f32], &'a [u8], bool),
 		axis: [f32; 4],
 		uniform: &'a UniformRuns,
-		kernels: RowKernels,
+		kernels: B,
 		xs: &'a Range<usize>,
 	) -> Self {
 		Self { s, gw: s - 2 * PAD, kernels, axis, uniform, c2, d, cuts, mirrors, xs }
@@ -454,9 +485,9 @@ impl<'a> DrpLine<'a> {
 	/// `u` around it.
 	#[inline(always)]
 	fn lap(&self, r: usize, u: &Rows<'_>, w: &mut [f32]) {
-		let (at, gw, lap, axis) = (r * self.s + PAD, self.gw, self.kernels.lap, &self.axis);
+		let (at, gw, kernels, axis) = (r * self.s + PAD, self.gw, self.kernels, &self.axis);
 		let uncut = |span: Range<usize>, w: &mut [f32]| {
-			self.pieces(r, span, |piece, medium| lap(span_rows(u, &piece), axis, medium, &mut w[piece]));
+			self.pieces(r, span, |piece, medium| kernels.lap(span_rows(u, &piece), axis, medium, &mut w[piece]));
 		};
 		let Some(cuts) = row_cuts(self.cuts, self.mirrors, at, gw, self.xs) else { return uncut(self.xs.clone(), w) };
 		let c2 = &self.c2[at..][..gw];
@@ -475,11 +506,11 @@ impl<'a> DrpLine<'a> {
 	/// `stages` (the row's), when given, by the values written.
 	#[inline(always)]
 	fn outer(&self, r: usize, u: &[f32], w: &Rows<'_>, next: &mut [f32], mut stages: Option<Intensity<'_>>) {
-		let (at, gw, outer, axis) = (r * self.s + PAD, self.gw, self.kernels.outer, &self.axis);
+		let (at, gw, kernels, axis) = (r * self.s + PAD, self.gw, self.kernels, &self.axis);
 		let uncut = |span: Range<usize>, next: &mut [f32], stages: &mut Option<Intensity<'_>>| {
 			self.pieces(r, span, |piece, medium| {
 				let stages = stages.as_mut().map(|st| st.span(piece.start, piece.len()));
-				outer(&u[piece.clone()], span_rows(w, &piece), axis, medium, &mut next[piece], stages);
+				kernels.outer(&u[piece.clone()], span_rows(w, &piece), axis, medium, &mut next[piece], stages);
 			});
 		};
 		let Some(cuts) = row_cuts(self.cuts, self.mirrors, at, gw, self.xs) else {
@@ -502,10 +533,12 @@ impl<'a> DrpLine<'a> {
 }
 
 /// Runs `row(r, cells, stages)` on the `gw` grid cells of every padded row `r` of `out` (rows of `s`) that `area`
-/// covers, one row per task on the rayon pool; `row` writes `area`'s columns and, when given the row's intensity stages,
-/// advances those of the cells it writes. Then runs the rim's psi of x and correction on the row, if given (pml.rs,
-/// `XShared::row`), as a pass over the grid followed by one over the rim would.
+/// covers, one row per task on the rayon pool, through the backend's row entry; `row` writes `area`'s columns and, when
+/// given the row's intensity stages, advances those of the cells it writes. Then runs the rim's psi of x and
+/// correction on the row, if given (pml.rs, `XShared::row`), as a pass over the grid followed by one over the rim
+/// would.
 fn grid_rows(
+	kernels: impl RowKernels,
 	out: &mut [f32],
 	stages: Option<Stages<'_>>,
 	s: usize,
@@ -545,7 +578,7 @@ fn grid_rows(
 					}
 					_ => None,
 				};
-				wide(
+				kernels.run_row(
 					#[inline(always)]
 					|| {
 						row(r, cells, stages);
@@ -563,20 +596,4 @@ fn grid_rows(
 fn span_rows<'a>(rows: &Rows<'a>, span: &Range<usize>) -> Rows<'a> {
 	// Grid column x is at PAD + x, so 3 cells left of the span's first is at its own index.
 	rows.map(|row| &row[span.start..PAD + span.end + 3])
-}
-
-/// Runs `f` compiled for AVX2 and FMA, which an [`AvxEngine`] has (its constructor asserts [`available`]); `f` takes
-/// the instruction set where it is inlined, so its closure is marked `#[inline(always)]`.
-#[inline(always)]
-fn wide<R>(f: impl FnOnce() -> R) -> R {
-	// SAFETY: called only from an `AvxEngine`'s passes, and `AvxEngine::with_sub_steps`, its only constructor, asserts
-	// the CPU has AVX2 and FMA, the features `with_avx2` is compiled for.
-	unsafe { with_avx2(f) }
-}
-
-/// [`wide`]'s body.
-#[target_feature(enable = "avx2,fma")]
-#[inline]
-fn with_avx2<R>(f: impl FnOnce() -> R) -> R {
-	f()
 }

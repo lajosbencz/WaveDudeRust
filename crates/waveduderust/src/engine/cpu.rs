@@ -29,7 +29,7 @@
 //! result is the same bit for bit.
 //!
 //! State: the planes, the medium, the forcing, the probes and the damage, with the calls that do not depend on the
-//! passes, are host.rs's, which the AVX2 engine (engine/avx) shares; this module owns the passes.
+//! passes, are host.rs's, which the CPU_REV2 engine (engine/rev2) shares; this module owns the passes.
 //!
 //! Threads: one driver thread; each pass fans out over rows, or blocks of rows, on the rayon pool, reading only its
 //! input fields.
@@ -324,7 +324,7 @@ impl CpuEngine {
 	}
 }
 
-host_engine!(CpuEngine, "CPU");
+host_engine!(CpuEngine, |_| "CPU");
 
 /// Runs `row(r, cells)` on the `gw` grid cells of every padded row `r` of `out` (rows of `s`) that `area`
 /// covers, in parallel; `row` writes `area`'s columns. Then advances the intensity stages of those cells by

@@ -3,8 +3,6 @@
 //! One driver thread per engine, no internal locking. The CPU engine is the
 //! reference; the GPU engine must agree within the tolerance in docs/physics.md.
 
-#[cfg(target_arch = "x86_64")]
-pub mod avx;
 pub mod capture;
 pub mod cpu;
 mod damage;
@@ -20,6 +18,7 @@ mod mur;
 pub mod pml;
 pub mod poisson;
 pub mod probes;
+pub mod rev2;
 mod shared;
 pub mod stencil;
 pub mod substeps;
@@ -44,7 +43,7 @@ pub enum EngineError {
 ///
 /// A GPU failure in a call that returns no `Result` is kept and returned by the next call that does.
 pub trait WaveEngine: MaybeSend {
-	/// "CPU", "CPU (AVX2)" or "GPU", for logs.
+	/// "CPU", `"CPU_REV2 (<backend>)"` or "GPU", for logs.
 	fn name(&self) -> &'static str;
 	/// Whether the GPU runs the steps.
 	fn is_gpu(&self) -> bool {
@@ -145,15 +144,40 @@ fn cpu_instead(scene: Arc<SceneData>, options: EngineOptions, why: Fallback) -> 
 	Built { engine: cpu_engine(scene, options), fallback: Some(why) }
 }
 
-/// The CPU engine: the portable one ([`cpu::CpuEngine`]), or the AVX2 one (`avx::AvxEngine`) when the environment
-/// variable `WAVEDUDE_CPU_ENGINE` is `avx` and the CPU is an x86-64 one with AVX2 and FMA. The AVX2 engine is opt-in
-/// until it is the faster.
+/// The CPU engine: the portable one ([`cpu::CpuEngine`]), or the CPU_REV2 engine ([`rev2::CpuRev2Engine`]) after the
+/// environment variable `WAVEDUDE_CPU_ENGINE` (natively; the web does not build it yet): `rev2` on the best backend
+/// this CPU runs, `rev2-<backend>` on that one (`rev2-generic`, `rev2-avx2`; [`rev2::Backend::named`]). A backend this
+/// build or this CPU lacks gives way to the generic one, and any other value to the portable engine, each with a
+/// warning. The CPU_REV2 engine is opt-in until it is the faster.
 fn cpu_engine(scene: Arc<SceneData>, options: EngineOptions) -> Box<dyn WaveEngine> {
-	#[cfg(target_arch = "x86_64")]
-	if std::env::var_os("WAVEDUDE_CPU_ENGINE").is_some_and(|v| v == "avx") && avx::available() {
-		return Box::new(avx::AvxEngine::new(scene, options));
+	#[cfg(not(target_arch = "wasm32"))]
+	if let Some(backend) = std::env::var("WAVEDUDE_CPU_ENGINE").ok().as_deref().and_then(rev2_backend) {
+		return Box::new(rev2::CpuRev2Engine::with_backend(scene, options, backend));
 	}
 	Box::new(cpu::CpuEngine::new(scene, options))
+}
+
+/// The CPU_REV2 engine's backend `WAVEDUDE_CPU_ENGINE=value` asks for ([`cpu_engine`]); None for another engine.
+#[cfg(not(target_arch = "wasm32"))]
+fn rev2_backend(value: &str) -> Option<rev2::Backend> {
+	let Some(rest) = value.strip_prefix("rev2") else {
+		tracing::warn!(
+			"WAVEDUDE_CPU_ENGINE={value} names no engine (rev2, rev2-<backend>); the portable CPU engine runs"
+		);
+		return None;
+	};
+	if rest.is_empty() {
+		return Some(rev2::Backend::best());
+	}
+	match rest.strip_prefix('-').and_then(rev2::Backend::named) {
+		Some(backend) if backend.available() => Some(backend),
+		_ => {
+			tracing::warn!(
+				"WAVEDUDE_CPU_ENGINE={value}: no such backend runs here; the CPU_REV2 engine runs on the generic one"
+			);
+			Some(rev2::Backend::Generic)
+		}
+	}
 }
 
 /// The engine for `scene`: the GPU's on `gpu` when given and it builds, else the CPU's.

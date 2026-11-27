@@ -1,4 +1,4 @@
-//! What the two CPU engines (engine/cpu.rs, engine/avx) keep alike: the padded planes, the medium, the forcing, the
+//! What the two CPU engines (engine/cpu.rs, engine/rev2) keep alike: the padded planes, the medium, the forcing, the
 //! probes, Mur's chains, the CPML's state and the damage, with the calls that do not depend on how the passes run;
 //! and [`host_engine`], which gives an engine on a [`Host`] its public calls and its [`WaveEngine`] impl.
 //!
@@ -336,12 +336,12 @@ impl Host {
 }
 
 /// The public calls and the [`WaveEngine`](super::WaveEngine) impl of an engine type on a [`Host`] in its field
-/// `host`, named `$name` for logs. The type has `fn step(&mut self)`, the sub-steps of one step with the next field
-/// ending in `u` (`sub_steps_in_turn`, which the macro adds, runs them one by one through
-/// `fn sub_step(&mut self, intensity: bool)`), and `fn scene_loaded(&mut self)`, which rebuilds what it derives from
-/// the scene.
+/// `host`, named for logs by `$name`, a `fn(&Self) -> &'static str`. The type has `fn step(&mut self)`, the sub-steps
+/// of one step with the next field ending in `u` (`sub_steps_in_turn`, which the macro adds, runs them one by one
+/// through `fn sub_step(&mut self, intensity: bool)`), and `fn scene_loaded(&mut self)`, which rebuilds what it
+/// derives from the scene.
 macro_rules! host_engine {
-	($engine:ty, $name:literal) => {
+	($engine:ty, $name:expr) => {
 		impl $engine {
 			/// Sets the field now and one sub-step before, each grid-sized (no padding), row-major.
 			/// For analytic tests that start from a given state.
@@ -403,7 +403,8 @@ macro_rules! host_engine {
 
 		impl crate::engine::WaveEngine for $engine {
 			fn name(&self) -> &'static str {
-				$name
+				let name: fn(&Self) -> &'static str = $name;
+				name(self)
 			}
 
 			fn scene(&self) -> &crate::engine::SceneData {

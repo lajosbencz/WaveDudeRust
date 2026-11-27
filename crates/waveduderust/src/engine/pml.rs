@@ -333,7 +333,7 @@ impl CpuPml {
 
 	/// Application `set`'s tables and memory variables, for an engine that runs all of its stages row by row: per y-strip
 	/// row [`RimTables::psi_y_line`] then [`RimTables::delta_y_line`], per grid row [`RimTables::x_line`], in an order
-	/// that gives each the inputs [`CpuPml::begin`] and [`XShared::row`] would (engine/avx, Blocked steps).
+	/// that gives each the inputs [`CpuPml::begin`] and [`XShared::row`] would (engine/rev2, Blocked steps).
 	pub fn row_wise(&mut self, set: usize) -> (RimTables<'_>, RimMemory<'_>) {
 		let Self { strips, stride, x, y, axis, cross, psi, xi, z, zeros } = self;
 		let (x_len, len) = (strips.x_len(), strips.len());

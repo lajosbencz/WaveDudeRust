@@ -1,4 +1,4 @@
-//! A step with its sub-steps fused into one sweep over the rows (module docs of engine/avx, Blocked steps).
+//! A step with its sub-steps fused into one sweep over the rows (module docs of engine/rev2, Blocked steps).
 //!
 //! A unit is the work of one grid row at one level `j` (1..=n) of the step, level 0 being the field before it:
 //!
@@ -39,7 +39,7 @@ use super::super::forcing::live;
 use super::super::mur::MurChain;
 use super::super::pml::{RimMemory, RimTables, XLine, XPass, XScratch};
 use super::super::stencil::{PAD, TimeScheme, centred};
-use super::kernels::Intensity;
+use super::backend::{Intensity, RowKernels};
 use super::{DrpLine, NineLine};
 
 /// A buffer the units of a blocked step share across threads: each unit takes the rows it reads and writes as slices
@@ -219,7 +219,7 @@ pub(super) struct Tiling {
 }
 
 /// The shape of a band's rings of `w` rows, one ring per level (derived by [`Tiling::new`]; module docs of
-/// engine/avx, Blocked steps).
+/// engine/rev2, Blocked steps).
 ///
 /// Row `q` of level `j` lives in slot `q % slots` of level `j`'s ring. `W(q + slots, j)` reuses the slot, an overwrite
 /// of `w` of level `j` by a unit of the same level `slots` rows on: a unit `X` reading `w` within `reach` rows of its
@@ -493,13 +493,15 @@ impl<'a> RimSet<'a> {
 
 /// How a blocked step updates a row: the 9-point leapfrog, or the 4th order's two passes through `w`, the plane given
 /// here and the bands' rings ([`Rings`]).
-pub(super) enum Line<'a> {
-	Nine(NineLine<'a>),
-	Drp(DrpLine<'a>, Shared),
+pub(super) enum Line<'a, B> {
+	Nine(NineLine<'a, B>),
+	Drp(DrpLine<'a, B>, Shared),
 }
 
 /// A blocked step: what its units read and write. Level `j` lives in `planes[j % 2]`.
-pub(super) struct Step<'a> {
+pub(super) struct Step<'a, B> {
+	/// The backend; each unit runs through its row entry.
+	pub(super) kernels: B,
 	pub(super) s: usize,
 	pub(super) gw: usize,
 	pub(super) gh: usize,
@@ -509,7 +511,7 @@ pub(super) struct Step<'a> {
 	/// The intensity stages and their weight, advanced on level `n` when given.
 	pub(super) stages: Option<(Shared, Shared, f32)>,
 	pub(super) alpha: f32,
-	pub(super) line: Line<'a>,
+	pub(super) line: Line<'a, B>,
 	pub(super) d: &'a [f32],
 	pub(super) cuts: &'a [u8],
 	/// The grid rows the passes run on; the columns are `line`'s.
@@ -523,7 +525,7 @@ pub(super) struct Step<'a> {
 	pub(super) rim: Option<Rim<'a>>,
 }
 
-impl Step<'_> {
+impl<B: RowKernels> Step<'_, B> {
 	/// The grid rows with units: the area's, and every row when Mur's chains run.
 	fn rows(&self) -> Range<usize> {
 		if self.mur.is_empty() { self.area.clone() } else { 0..self.gh }
@@ -571,7 +573,7 @@ impl Step<'_> {
 
 	/// Unit `unit` of row `q` and level `j`.
 	fn unit(&self, unit: Unit, q: usize, j: usize, lane: &mut Lane<'_>) {
-		super::wide(
+		self.kernels.run_row(
 			#[inline(always)]
 			|| match unit {
 				Unit::Psi(set) => self.psi(set, q, j, lane),
@@ -688,7 +690,7 @@ impl Step<'_> {
 	/// The 9-point's update of row `q` of the area to level `j`: `delta_y`, the leapfrog update, the rim's x part and
 	/// the forcing.
 	#[inline(always)]
-	fn leapfrog(&self, line: &NineLine<'_>, q: usize, j: usize, scratch: &mut Option<XScratch>) {
+	fn leapfrog(&self, line: &NineLine<'_, B>, q: usize, j: usize, scratch: &mut Option<XScratch>) {
 		let (s, gw, r) = (self.s, self.gw, q + PAD);
 		let (src, dst) = (self.planes[(j - 1) % 2], self.planes[j % 2]);
 		// The rim's y stages of a y-strip row read the field of level `j - 1` within 3 rows.
@@ -747,7 +749,7 @@ impl Step<'_> {
 	///
 	/// A band takes `w` from its ring, a seam from the plane.
 	#[inline(always)]
-	fn outer(&self, line: &DrpLine<'_>, w: Shared, q: usize, j: usize, lane: &mut Lane<'_>) {
+	fn outer(&self, line: &DrpLine<'_, B>, w: Shared, q: usize, j: usize, lane: &mut Lane<'_>) {
 		let (s, gw, r) = (self.s, self.gw, q + PAD);
 		let (src, dst) = (self.planes[(j - 1) % 2], self.planes[j % 2]);
 		let Lane { scratch, ring } = lane;
