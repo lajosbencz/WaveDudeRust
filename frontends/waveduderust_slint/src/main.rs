@@ -1051,15 +1051,58 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 	s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
 	s.live.prefetch(|count| s.playback.ahead(count, shown.made));
 	let empty = !s.doc.project.has_enabled_source();
-	app.global::<ui::Playback<'_>>().set_transport(transport_state(
-		&s.playback,
-		&shown,
-		&s.doc.view,
-		s.live.paused(),
-		empty,
-	));
+	let playback = app.global::<ui::Playback<'_>>();
+	playback.set_transport(transport_state(&s.playback, &shown, &s.doc.view, s.live.paused(), empty));
 	app.set_commands(s.commands());
-	match (shown.export, s.exporting.as_ref().and_then(export::Exporting::waits)) {
+	poll_export(s, app, shown.export);
+	if !s.pasted.borrow().is_empty() {
+		paste(s);
+		s.show(app);
+	}
+	watch_scene_image(s, app);
+	// a focus request no box took within a frame lapses
+	let form = app.global::<ui::Form<'_>>();
+	s.focus_seen = form.get_focus_pending() && !s.focus_seen;
+	if !s.focus_seen {
+		form.set_focus_pending(false);
+	}
+	open_picked(s, app);
+	if s.messages.take() {
+		s.messages.show(app);
+	}
+	if let Some((why, full)) = &shown.failed {
+		tell(app, if *full { ui::Message::StorageFull } else { ui::Message::RunFailed }, why);
+	}
+	if let Some((layer, fit)) = shown.fitted {
+		s.fitted(layer, fit);
+		s.show(app);
+	}
+	if shown.running || shown.changed || shown.field.is_some() || shown.intensity.is_some() {
+		s.show_graphs();
+	}
+	if let Some(image) = shown.field {
+		playback.set_field(image);
+	}
+	if let Some(image) = shown.intensity {
+		playback.set_intensity(image);
+	}
+	app.global::<ui::Status<'_>>().set_run(shown.status);
+	// Play and edits ask from here too
+	s.show_warning(app);
+	app.global::<ui::Canvas<'_>>().set_computing(shown.computing);
+	// classic's `Shell::next_tick`: ticks while something moves, else news wakes the window
+	shown.running
+		|| shown.computing
+		|| s.live.fit_pending()
+		|| s.playback.playing
+		|| s.exporting.is_some()
+		|| s.scene_watch.pending()
+		|| form.get_focus_pending()
+}
+
+/// The export's news from the run, the browser's late answers to the dialog, and the running export's progress or end.
+fn poll_export(s: &mut State, app: &AppWindow, news: Option<live::ExportNews>) {
+	match (news, s.exporting.as_ref().and_then(export::Exporting::waits)) {
 		(Some(live::ExportNews::Ready), Some(waiting)) => {
 			let (plan, position) = waiting.clone();
 			write_export(s, &plan, position);
@@ -1103,17 +1146,10 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 			}
 		}
 	}
-	if !s.pasted.borrow().is_empty() {
-		paste(s);
-		s.show(app);
-	}
-	watch_scene_image(s, app);
-	// a focus request no box took within a frame lapses
-	let form = app.global::<ui::Form<'_>>();
-	s.focus_seen = form.get_focus_pending() && !s.focus_seen;
-	if !s.focus_seen {
-		form.set_focus_pending(false);
-	}
+}
+
+/// Opens the files picked meanwhile: a project, or a colour scheme for a layer.
+fn open_picked(s: &mut State, app: &AppWindow) {
 	let picked = s.inbox.take();
 	for (layer, name, text) in picked {
 		if let Some(layer) = layer {
@@ -1133,37 +1169,6 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 			}
 		}
 	}
-	if s.messages.take() {
-		s.messages.show(app);
-	}
-	if let Some((why, full)) = &shown.failed {
-		tell(app, if *full { ui::Message::StorageFull } else { ui::Message::RunFailed }, why);
-	}
-	if let Some((layer, fit)) = shown.fitted {
-		s.fitted(layer, fit);
-		s.show(app);
-	}
-	if shown.running || shown.changed || shown.field.is_some() || shown.intensity.is_some() {
-		s.show_graphs();
-	}
-	if let Some(image) = shown.field {
-		app.global::<ui::Playback<'_>>().set_field(image);
-	}
-	if let Some(image) = shown.intensity {
-		app.global::<ui::Playback<'_>>().set_intensity(image);
-	}
-	app.global::<ui::Status<'_>>().set_run(shown.status);
-	// Play and edits ask from here too
-	s.show_warning(app);
-	app.global::<ui::Canvas<'_>>().set_computing(shown.computing);
-	// classic's `Shell::next_tick`: ticks while something moves, else news wakes the window
-	shown.running
-		|| shown.computing
-		|| s.live.fit_pending()
-		|| s.playback.playing
-		|| s.exporting.is_some()
-		|| s.scene_watch.pending()
-		|| form.get_focus_pending()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
