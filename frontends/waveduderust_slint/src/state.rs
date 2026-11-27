@@ -152,12 +152,21 @@ impl State {
 		}
 	}
 
+	/// Opens the export dialog with its data.
+	pub(crate) fn open_export(&mut self, app: &AppWindow, dialog: export::Dialog, data: ui::ExportData) {
+		self.export_dialog = Some(dialog);
+		let ui_export = app.global::<ui::Export<'_>>();
+		ui_export.set_data(data);
+		ui_export.set_shown(true);
+	}
+
 	/// `edit` on the export dialog's data with the dialog open; none open, nothing.
 	pub(crate) fn edit_export(&self, app: &AppWindow, edit: impl FnOnce(&export::Dialog, &mut ui::ExportData)) {
 		let Some(dialog) = &self.export_dialog else { return };
-		let mut data = app.global::<ui::Export<'_>>().get_data();
+		let ui_export = app.global::<ui::Export<'_>>();
+		let mut data = ui_export.get_data();
 		edit(dialog, &mut data);
-		app.global::<ui::Export<'_>>().set_data(data);
+		ui_export.set_data(data);
 	}
 
 	/// Saves the settings; a failure is logged.

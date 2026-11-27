@@ -229,9 +229,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 					let opened =
 						export::Dialog::open(kind, &state.doc, &name, state.playback.position, &state.settings, &words);
 					if let Some((dialog, data)) = opened {
-						state.export_dialog = Some(dialog);
-						app.global::<ui::Export<'_>>().set_data(data);
-						app.global::<ui::Export<'_>>().set_shown(true);
+						state.open_export(app, dialog, data);
 					}
 				}
 				// Export last repeats the outputs and asks nothing
@@ -1066,9 +1064,10 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 	// the browser's late answers: the H.264 profiles it encodes, its session for the spool
 	#[cfg(target_arch = "wasm32")]
 	if let Some(dialog) = &s.export_dialog {
-		let mut data = app.global::<ui::Export<'_>>().get_data();
+		let ui_export = app.global::<ui::Export<'_>>();
+		let mut data = ui_export.get_data();
 		if dialog.refresh(&mut data) {
-			app.global::<ui::Export<'_>>().set_data(data);
+			ui_export.set_data(data);
 		}
 	}
 	if let Some(e) = &mut s.exporting {
@@ -1259,9 +1258,7 @@ fn export_probe_csv(state: &mut State, app: &AppWindow, i: usize) {
 	#[cfg(target_arch = "wasm32")]
 	{
 		let (dialog, data) = export::Dialog::csv(&probe.name, csv, &app.global::<ui::Words<'_>>());
-		state.export_dialog = Some(dialog);
-		app.global::<ui::Export<'_>>().set_data(data);
-		app.global::<ui::Export<'_>>().set_shown(true);
+		state.open_export(app, dialog, data);
 	}
 }
 
