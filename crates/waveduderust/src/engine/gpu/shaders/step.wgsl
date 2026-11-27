@@ -1,4 +1,4 @@
-// The grid passes of a sub-step (engine/cpu.rs): `step` / `step_intensity` the 9-point leapfrog
+// The grid passes of a sub-step (engine/cpu): `step` / `step_intensity` the 9-point leapfrog
 // (next = c + ((c - prev) d + c2 L u h), written over prev); `inner` the modified equation's
 // w = c2 L u and `outer` / `outer_intensity` its next = c + ((c - prev) d + (w + c2 L w / 12) h) with
 // the DRP stencil (drp.wgsl); h = (1 + d) / 2 centres the damping (engine/stencil.rs, `centred`).
@@ -11,7 +11,7 @@
 @group(0) @binding(6) var<storage, read> tables: array<f32>;
 @group(0) @binding(7) var<storage, read_write> wbuf: array<f32>;
 
-// The 9-point as weighted sums of differences from the centre (engine/cpu.rs), a diagonal tap passing an
+// The 9-point as weighted sums of differences from the centre (engine/cpu/rows.rs, `nine_point`), a diagonal tap passing an
 // axis neighbour that is a mirror dropped (engine/pml.rs, diagonal_cuts).
 fn nine_point(i: u32, cut: u32) -> f32 {
 	let s = p.stride;

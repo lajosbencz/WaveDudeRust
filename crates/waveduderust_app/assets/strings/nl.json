@@ -252,6 +252,8 @@
 	"EngineGpuFormat": "GPU: {0}",
 	"EngineCpuOne": "CPU (1 thread)",
 	"EngineCpuManyFormat": "CPU ({0} threads)",
+	"EngineCpuNamedOneFormat": "{0}, 1 thread",
+	"EngineCpuNamedManyFormat": "{0}, {1} threads",
 	"Ready": "Gereed",
 	"ExportDialogFilter": "MP4-video, H.264 (*.mp4)|*.mp4|MPEG-1-video (*.mpg)|*.mpg|AVI-video, ongecomprimeerd (*.avi)|*.avi|QuickTime-film, Animation-codec, verliesvrij (*.mov)|*.mov|QuickTime-film, PNG-codec, verliesvrij (*.mov)|*.mov|PNG-beeldreeks (*.png)|*.png|JPEG-beeldreeks (*.jpg)|*.jpg|OpenEXR-beeldreeks, 16-bits drijvendekommagegevens, intensiteit als I (*.exr)|*.exr|OpenEXR-beeldreeks, 16-bits drijvendekommagegevens, intensiteit als √I (*.exr)|*.exr",
 	"ExportDialogTitleField": "Veld exporteren",

@@ -220,7 +220,8 @@ Content top to bottom:
    Shown: [LICENSE.md](../../LICENSE.md) rendered as a document (headings, lists, links) in a scrollable box (260 px, at most 30% of the window's height, min 120);
    a taller window gives its extra height to the document; hidden: window shrinks back.
 4. "System": read-only text box (max 160 px, scrolls), one line each: Program, Runtime, Operating system,
-   Processor (+ logical cores), GPU setting (on/off), Engine ("GPU: <wgpu adapter name>" or "CPU (n threads)"),
+   Processor (+ logical cores), GPU setting (on/off), Engine ("GPU: <wgpu adapter name>" or
+   "CPU (<backend>), n threads"),
    H.264 encoder ("Cisco's OpenH264 2.6.0" when enabled and downloaded, "not enabled", or "OpenH264, compiled
    in"). The original's Memory line is not ported.
    Port, before "System": "OpenH264": Cisco's notice and the toggle "Show the OpenH264 license" / "Hide the

@@ -252,6 +252,8 @@
 	"EngineGpuFormat": "GPU: {0}",
 	"EngineCpuOne": "CPU (1 thread)",
 	"EngineCpuManyFormat": "CPU ({0} threads)",
+	"EngineCpuNamedOneFormat": "{0}, 1 thread",
+	"EngineCpuNamedManyFormat": "{0}, {1} threads",
 	"Ready": "Ready",
 	"ExportDialogFilter": "MP4 video, H.264 (*.mp4)|*.mp4|MPEG-1 video (*.mpg)|*.mpg|AVI video, uncompressed (*.avi)|*.avi|QuickTime movie, Animation codec, lossless (*.mov)|*.mov|QuickTime movie, PNG codec, lossless (*.mov)|*.mov|PNG image sequence (*.png)|*.png|JPEG image sequence (*.jpg)|*.jpg|OpenEXR image sequence, 16-bit float data, intensity as I (*.exr)|*.exr|OpenEXR image sequence, 16-bit float data, intensity as √I (*.exr)|*.exr",
 	"ExportDialogTitleField": "Export the field",

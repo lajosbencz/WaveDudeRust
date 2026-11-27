@@ -1,5 +1,5 @@
 // The DRP Laplacian of buffer SRC at padded cell i (instantiated per buffer, with its taps), as weighted
-// sums of differences from the centre (engine/cpu.rs, `drp` and `drp_row`). cut: the cell's cut byte.
+// sums of differences from the centre (engine/cpu/rows.rs, `drp`). cut: the cell's cut byte.
 
 fn drp_SRC(i: u32, cut: u32) -> f32 {
 	let s = p.stride;

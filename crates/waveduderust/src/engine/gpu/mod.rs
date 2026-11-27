@@ -1,6 +1,6 @@
 //! The GPU wave engine on wgpu compute (docs/spec/30-engine.md, GPU engine; decision 0003).
 //!
-//! Same rules as the CPU engine (engine/cpu.rs), the reference; host-side shared parts are in engine/shared.rs.
+//! Same rules as the CPU engine (engine/cpu), the reference; host-side shared parts are in engine/shared.rs.
 //!
 //! - Buffers cover the padded grid ([`SceneData::stride`], [`PAD`](super::stencil::PAD) rings), all f32.
 //! - Kernels are WGSL under `shaders/` (kernels.rs); the `CUTS` override is compiled in only for scenes with

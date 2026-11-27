@@ -10,7 +10,7 @@ use std::time::Instant;
 use waveduderust::f16;
 use waveduderust::model::{Edges, Layer, PulseShape, Scene, Stencil};
 use waveduderust::unstable::engine::capture;
-use waveduderust::unstable::engine::cpu::CpuEngine;
+use waveduderust::unstable::engine::cpu::{Backend, CpuEngine};
 use waveduderust::unstable::engine::gpu::{BATCH_STEPS, GpuContext, GpuEngine, GpuError, context};
 use waveduderust::unstable::engine::{
 	Emitter, EngineOptions, FrameShape, ProbeCells, ProbeReadings, SampleFormat, SceneData, Snapshot, WaveEngine,
@@ -118,7 +118,7 @@ fn emitters() -> Vec<Emitter> {
 }
 
 fn engines(stencil: Stencil, edges: Edges) -> (CpuEngine, GpuEngine) {
-	let mut cpu = CpuEngine::new(scene(edges, 100), options(stencil));
+	let mut cpu = CpuEngine::with_backend(scene(edges, 100), options(stencil), Backend::Generic);
 	let mut gpu = GpuEngine::new(scene(edges, 100), options(stencil)).expect("GPU engine");
 	cpu.set_emitters(&emitters());
 	gpu.set_emitters(&emitters());
@@ -242,7 +242,7 @@ fn open_edges_without_a_rim_match_the_cpu() {
 				let settings =
 					Scene::default().with_damping_edge(band).with_edges(Edges::Open).with_image_sources(true);
 				let data = SceneData::from_pixels(&pixels(red), W, H, &settings);
-				let mut cpu = CpuEngine::new(data.clone(), options(stencil));
+				let mut cpu = CpuEngine::with_backend(data.clone(), options(stencil), Backend::Generic);
 				let mut gpu = GpuEngine::new(data, options(stencil)).expect("GPU engine");
 				cpu.set_emitters(&emitters());
 				gpu.set_emitters(&emitters());
