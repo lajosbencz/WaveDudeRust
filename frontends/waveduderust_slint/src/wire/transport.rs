@@ -3,22 +3,25 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use slint::ComponentHandle;
+
 use super::Handle;
 use crate::playback::Playback;
 use crate::state::State;
-use crate::ui::AppWindow;
+use crate::ui::{self, AppWindow};
 use crate::{number, transport, wake};
 
 /// The transport bar and the timeline: actions, seeking, the range brackets and the speed.
 pub(crate) fn wire_transport(state: &Rc<RefCell<State>>, app: &AppWindow) {
+	let playback = app.global::<ui::Playback<'_>>();
 	let h = Handle::new(state, app);
-	app.on_transport_action(move |action| h.with(|s, app| transport(s, app, action)));
+	playback.on_action(move |action| h.with(|s, app| transport(s, app, action)));
 	let st = state.clone();
-	app.on_seek(move |frame| scrub(&st, |p| p.seek(i64::from(frame))));
+	playback.on_seek(move |frame| scrub(&st, |p| p.seek(i64::from(frame))));
 	let st = state.clone();
-	app.on_bracket(move |bracket, frame| scrub(&st, |p| p.drag_bracket(bracket, i64::from(frame))));
+	playback.on_bracket(move |bracket, frame| scrub(&st, |p| p.drag_bracket(bracket, i64::from(frame))));
 	let st = state.clone();
-	app.on_transport_speed(move |text| {
+	playback.on_speed(move |text| {
 		let speed = &mut st.borrow_mut().playback.speed;
 		if let Some(v) = number::parse(&text) {
 			*speed = v.clamp(0.01, 100.0);

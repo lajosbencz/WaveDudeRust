@@ -576,7 +576,8 @@ fn apply_settings(state: &mut State, app: &AppWindow) {
 	let s = &state.settings;
 	show_recent(s, app);
 	app.set_title_full_path(s.title_full_path);
-	app.set_preview_stacked(s.preview_orientation == waveduderust_platform::settings::Orientation::Vertical);
+	app.global::<ui::Playback<'_>>()
+		.set_stacked(s.preview_orientation == waveduderust_platform::settings::Orientation::Vertical);
 	app.global::<ui::Form<'_>>().set_described(s.part_description_expanded);
 	state.doc.set_limit(s.undo_steps as usize);
 	state.live.set_quality(s.preview_quality());
@@ -861,8 +862,11 @@ fn transport(state: &mut State, app: &AppWindow, action: TransportAction) {
 			use waveduderust_platform::settings::Orientation;
 			// the pictures are made anew: a gesture on them gets no release
 			state.finish_gesture(app);
-			state.settings.preview_orientation =
-				if app.get_preview_stacked() { Orientation::Vertical } else { Orientation::Horizontal };
+			state.settings.preview_orientation = if app.global::<ui::Playback<'_>>().get_stacked() {
+				Orientation::Vertical
+			} else {
+				Orientation::Horizontal
+			};
 			state.save_settings();
 		}
 	}
@@ -1042,7 +1046,13 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 	s.playback.tick(web_time::Instant::now(), s.doc.view.video.fps, shown.made);
 	s.live.prefetch(|count| s.playback.ahead(count, shown.made));
 	let empty = !s.doc.project.has_enabled_source();
-	app.set_transport(transport_state(&s.playback, &shown, &s.doc.view, s.live.paused(), empty));
+	app.global::<ui::Playback<'_>>().set_transport(transport_state(
+		&s.playback,
+		&shown,
+		&s.doc.view,
+		s.live.paused(),
+		empty,
+	));
 	app.set_commands(s.commands());
 	match (shown.export, s.exporting.as_ref().and_then(export::Exporting::waits)) {
 		(Some(live::ExportNews::Ready), Some(waiting)) => {
@@ -1131,10 +1141,10 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 		s.show_graphs();
 	}
 	if let Some(image) = shown.field {
-		app.set_field(image);
+		app.global::<ui::Playback<'_>>().set_field(image);
 	}
 	if let Some(image) = shown.intensity {
-		app.set_intensity(image);
+		app.global::<ui::Playback<'_>>().set_intensity(image);
 	}
 	app.global::<ui::Status<'_>>().set_run(shown.status);
 	// Play and edits ask from here too
