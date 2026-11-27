@@ -8,10 +8,11 @@ export { Palette } from "std-widgets.slint";
 import { MenuIcons } from "menu-icons.slint";
 import { EditKeys } from "edit-keys.slint";
 import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview, DockSide } from "@slint-dock/dock.slint";
-import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
+import { ProjectTree, Tree, TreeRow, TreeKind, TreeWords } from "tree.slint";
 import { Form, NumberParse } from "form.slint";
 export { Form, NumberParse }
 export { Log }
+export { Tree, PropsHead } from "tree.slint";
 export { Status, StatusLine } from "status.slint";
 export { Words, ExportFileFormat } from "words.slint";
 import { Properties } from "properties.slint";
@@ -68,18 +69,6 @@ export component AppWindow inherits Window {
     in property <bool> native-access-keys;
     // Newest first, full paths.
     in property <[string]> recent-files;
-    in property <[TreeRow]> tree-rows;
-    // the current row's index among them, -1 when hidden
-    in property <int> tree-current;
-    callback tree-select(int, Pick);
-    callback tree-toggle(int);
-    callback tree-expand(int);
-    callback tree-navigate(TreeKey, bool);
-    pure callback tree-drag-data(int) -> data-transfer;
-    callback tree-drop-place(int, data-transfer, bool) -> DropPlace;
-    callback tree-drop(int, data-transfer, bool);
-    callback tree-shift(int, int);
-    callback tree-remove(int);
     in property <image> field;
     in property <image> intensity;
     in property <Transport> transport;
@@ -123,11 +112,6 @@ export component AppWindow inherits Window {
     callback transport-action(TransportAction);
     callback transport-speed(text: string) -> string;
     callback bracket(bracket: Bracket, frame: int);
-    // the selected row: its kind and an item's name
-    in property <TreeKind> props-kind;
-    in property <string> props-heading;
-    // a folder's item count; -1 for other rows
-    in property <int> props-entries: -1;
     // The dock (src/docking.rs): its chrome's models, its size, and per pane whether it is shown and where its
     // content goes; the preview is the centre.
     in property <[DockGroup]> dock-groups;
@@ -353,28 +337,16 @@ export component AppWindow inherits Window {
                         if root.project-shown: DockedPane {
                             place: root.project-place;
                             ProjectTree {
-                                rows: root.tree-rows;
-                                current-row: root.tree-current;
-                                select(i, pick) => { root.tree-select(i, pick); }
-                                toggle(i) => { root.tree-toggle(i); }
-                                expand(i) => { root.tree-expand(i); }
-                                shift(i, by) => { root.tree-shift(i, by); }
-                                remove(i) => { root.tree-remove(i); }
                                 commands: root.commands;
-                                probe-row: root.props-kind == TreeKind.probe;
                                 act(c) => { root.command(c); }
                                 add-item(item) => { root.add(item); }
-                                navigate(key, extend) => { root.tree-navigate(key, extend); }
-                                drag-data(row) => { return root.tree-drag-data(row); }
-                                drop-place(row, data, before) => { return root.tree-drop-place(row, data, before); }
-                                drop(row, data, before) => { root.tree-drop(row, data, before); }
                             }
                         }
                         if root.properties-shown: DockedPane {
                             place: root.properties-place;
                             Properties {
-                                heading: TreeWords.label(root.props-kind, root.props-heading);
-                                entries: root.props-entries;
+                                heading: TreeWords.label(Tree.head.kind, Tree.head.heading);
+                                entries: Tree.head.entries;
                             }
                         }
                         if root.messages-shown: DockedPane {

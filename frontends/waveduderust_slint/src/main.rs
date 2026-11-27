@@ -964,7 +964,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 		gesture: None,
 		drags: 0,
 	}));
-	app.set_tree_rows(ModelRc::from(state.borrow().tree_rows.clone()));
+	app.global::<ui::Tree<'_>>().set_rows(ModelRc::from(state.borrow().tree_rows.clone()));
 	app.set_native_access_keys(cfg!(windows));
 	apply_settings(&mut state.borrow_mut(), &app);
 	wire::wire_window_events(&state, &app);

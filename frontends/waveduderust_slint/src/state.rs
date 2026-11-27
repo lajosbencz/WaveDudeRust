@@ -173,14 +173,7 @@ impl State {
 			app.set_export_shown(false);
 		}
 		self.selection.retain(&self.doc.project);
-		// a row selected elsewhere (an add, a paste) shows its folder
-		let current = self.selection.current();
-		self.collapsed.retain(|&n| n == current || !tree::within(current, n));
-		let (nodes, rows) = tree::rows(&self.doc.project, &self.selection, &self.collapsed);
-		self.nodes = nodes;
-		models::update(&self.tree_rows, rows);
-		let current = self.nodes.iter().position(|&n| n == self.selection.current());
-		app.set_tree_current(models::index_to_ui(current));
+		self.show_tree(&app.global::<ui::Tree<'_>>());
 		app.set_file_name(self.doc.name().unwrap_or_default().into());
 		app.set_file_path(self.doc.path.as_deref().map_or_default(|p| p.display().to_string()).into());
 		app.set_dirty(self.doc.dirty());
@@ -226,10 +219,6 @@ impl State {
 		self.show_box_focus(app);
 		let node = self.selection.current();
 		let kind = form::kind(&self.doc.project, node);
-		app.set_props_kind(node.kind());
-		app.set_props_heading(tree::name(&self.doc.project, node).into());
-		let folder = tree::folder(&self.doc.project, node);
-		app.set_props_entries(folder.map_or(-1, models::count_to_ui));
 		let seen = (self.doc.generation, self.doc.view_generation);
 		if seen != self.form_seen {
 			self.form_seen = seen;
@@ -272,6 +261,24 @@ impl State {
 			}
 			self.typed_form.bar_edited = false;
 		}
+	}
+
+	/// The project tree's rows, its current row and the Properties pane's heading.
+	fn show_tree(&mut self, ui_tree: &ui::Tree<'_>) {
+		// a row selected elsewhere (an add, a paste) shows its folder
+		let current = self.selection.current();
+		self.collapsed.retain(|&n| n == current || !tree::within(current, n));
+		let (nodes, rows) = tree::rows(&self.doc.project, &self.selection, &self.collapsed);
+		self.nodes = nodes;
+		models::update(&self.tree_rows, rows);
+		let index = self.nodes.iter().position(|&n| n == current);
+		ui_tree.set_current(models::index_to_ui(index));
+		let folder = tree::folder(&self.doc.project, current);
+		ui_tree.set_head(ui::PropsHead {
+			kind: current.kind(),
+			heading: tree::name(&self.doc.project, current).into(),
+			entries: folder.map_or(-1, models::count_to_ui),
+		});
 	}
 
 	/// A project replaced the one shown: the selection and the timeline start over, frame 0 is made.
