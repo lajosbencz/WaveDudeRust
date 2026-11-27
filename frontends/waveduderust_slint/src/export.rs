@@ -13,7 +13,8 @@ use waveduderust::unstable::export::{ExportFormat, ExportLayers, ExportState};
 use waveduderust_platform::settings::Settings;
 
 use crate::live::Needs;
-use crate::ui::{Command, ExportFileFormat, Words};
+use crate::models;
+use crate::ui::{Command, ExportData, ExportFileFormat, Words};
 #[cfg(target_arch = "wasm32")]
 pub(crate) use web::{Dialog, Exporting, Plan, delete_codec, remember, start};
 
@@ -192,6 +193,22 @@ fn outputs_line(kind: Kind, path: &Path, format: ExportFormat) -> SharedString {
 	names.join(", ").into()
 }
 
+/// The format picked in the dialog, from its offered `formats`.
+fn format_at(formats: &[(ExportFormat, ExportFileFormat)], data: &ExportData) -> ExportFormat {
+	models::index_from_ui(data.format).and_then(|i| formats.get(i)).map_or(ExportFormat::Png, |(f, _)| *f)
+}
+
+/// Keeps the dialog's format and H.264 profile for the next export.
+fn remember_choice(settings: &mut Settings, format: ExportFormat, data: &ExportData) {
+	if let Some(i) = ExportFormat::ALL.iter().position(|f| *f == format).and_then(|i| u32::try_from(i).ok()) {
+		settings.export_filter_index = i;
+	}
+	if data.mp4 {
+		settings.h264_profile =
+			Profile::ALL.get(models::index_from_ui(data.profile).unwrap_or(0)).copied().unwrap_or_default();
+	}
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
 	use std::path::{Path, PathBuf};
@@ -203,12 +220,14 @@ mod native {
 	use waveduderust::io::schemes::SchemeStore;
 	use waveduderust::model::{Project, View};
 	use waveduderust::unstable::export::ExportFormat;
-	use waveduderust::unstable::export::h264::{H264Factory, OpenH264Factory, Profile};
+	use waveduderust::unstable::export::h264::{H264Factory, OpenH264Factory};
 	use waveduderust::unstable::export::naming::{layer_outputs, sequence_folder, with_layer_suffix};
 	use waveduderust_platform::export::{Made, Request, export_frames};
 	use waveduderust_platform::settings::{AppDirs, ExportHint, Settings};
 
-	use super::{Kind, Outcome, Written, outputs_line, profile_index, with_format_extension};
+	use super::{
+		Kind, Outcome, Written, format_at, outputs_line, profile_index, remember_choice, with_format_extension,
+	};
 	use crate::document::Document;
 	use crate::live::{ExportFrames, Needs};
 	use crate::models;
@@ -324,7 +343,7 @@ mod native {
 		}
 
 		fn format_of(&self, data: &ExportData) -> ExportFormat {
-			models::index_from_ui(data.format).and_then(|i| self.formats.get(i)).map_or(ExportFormat::Png, |(f, _)| *f)
+			format_at(&self.formats, data)
 		}
 
 		/// The format's flags and the outputs the path names.
@@ -388,15 +407,9 @@ mod native {
 			}
 			let out = with_format_extension(&path, format);
 			let out = std::path::absolute(&out).unwrap_or(out);
-			if let Some(i) = ExportFormat::ALL.iter().position(|f| *f == format).and_then(|i| u32::try_from(i).ok()) {
-				settings.export_filter_index = i;
-			}
-			if data.mp4 {
-				if !data.codec_built_in {
-					settings.use_openh264 = Some(data.use_openh264);
-				}
-				settings.h264_profile =
-					Profile::ALL.get(models::index_from_ui(data.profile).unwrap_or(0)).copied().unwrap_or_default();
+			remember_choice(settings, format, data);
+			if data.mp4 && !data.codec_built_in {
+				settings.use_openh264 = Some(data.use_openh264);
 			}
 			if data.several {
 				settings.export_archive = data.archive;

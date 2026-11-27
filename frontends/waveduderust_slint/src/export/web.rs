@@ -23,7 +23,7 @@ use web_sys::Blob;
 use web_time::Duration;
 
 use super::webcodecs::{Support, WebCodecsFactory, support};
-use super::{Kind, Outcome, Written, outputs_line, profile_index, with_format_extension};
+use super::{Kind, Outcome, Written, format_at, outputs_line, profile_index, remember_choice, with_format_extension};
 use crate::document::Document;
 use crate::files::Download;
 use crate::live::{ExportFrames, Needs};
@@ -238,7 +238,7 @@ impl Exports {
 	}
 
 	fn format_of(&self, data: &ExportData) -> ExportFormat {
-		models::index_from_ui(data.format).and_then(|i| self.formats.get(i)).map_or(ExportFormat::Png, |(f, _)| *f)
+		format_at(&self.formats, data)
 	}
 
 	/// The format's flags, the outputs the name gives and why the export cannot start.
@@ -304,13 +304,7 @@ impl Exports {
 	fn plan(&self, data: &ExportData, settings: &mut Settings) -> Result<Plan, String> {
 		let format = self.format_of(data);
 		let out = typed_name(data.path.as_str(), format).ok_or("Enter a file name.")?;
-		if let Some(i) = ExportFormat::ALL.iter().position(|f| *f == format).and_then(|i| u32::try_from(i).ok()) {
-			settings.export_filter_index = i;
-		}
-		if data.mp4 {
-			settings.h264_profile =
-				Profile::ALL.get(models::index_from_ui(data.profile).unwrap_or(0)).copied().unwrap_or_default();
-		}
+		remember_choice(settings, format, data);
 		let outputs = layer_outputs(&out, self.kind.layers());
 		let delivery = match self.kind {
 			Kind::Frame(_) => Delivery::Still(outputs[0].1.clone()),
