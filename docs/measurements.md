@@ -598,6 +598,53 @@ covers the grid the spans are the same; from a full-damage start the field's dif
 the K = 1 engine's (9.6e-7 of the peak at 800x600, rim 32, 8 threads, K = 1, 8 and 16; the 4th order 4.4e-7 at K =
 1, 2 and 8).
 
+### In wasm
+
+The harness of [The CPU_REV2 engine in wasm](#the-cpu_rev2-engine-in-wasm) (simd128, Node 22.22.1, one thread),
+stepped from the full-damage start above, against master at e6ceae4 built the same way: 48 steps to warm up, then 5
+runs of 12 (800x600) or 4 (1920x1080) batches of 24 steps, the CPU_REV2 engine taking each batch with
+`advance_steps(24)`, the others step by step; steps a second, the median run, two passes, `taskset -c 5`, one process
+per figure. Ratios are of the two passes' means, as speed-ups.
+
+| Stencil | Grid, rim | master | Legacy CPU engine | CPU_REV2, simd128, default K | Legacy / master | CPU_REV2 / master | CPU_REV2 / legacy |
+|---|---|---|---|---|---|---|---|
+| 9-point | 800x600, 0 | 576, 568 | 651, 696 | 951, 921 (K 8) | 1.18 | 1.64 | 1.39 |
+| 9-point | 800x600, 32 | 212, 218 | 277, 264 | 423, 419 (K 4) | 1.26 | 1.96 | 1.56 |
+| 9-point | 1920x1080, 0 | 135, 124 | 143, 140 | 229, 230 (K 8) | 1.09 | 1.77 | 1.62 |
+| 9-point | 1920x1080, 32 | 74, 72 | 96, 98 | 143, 142 (K 4) | 1.33 | 1.96 | 1.47 |
+| 4th order | 800x600, 0 | 290, 288 | 299, 296 | 319, 320 (K 2) | 1.03 | 1.11 | 1.08 |
+| 4th order | 800x600, 32 | 104, 112 | 136, 135 | 177, 178 (K 2) | 1.25 | 1.64 | 1.31 |
+| 4th order | 1920x1080, 0 | 65, 65 | 71, 70 | 72, 77 (K 2) | 1.08 | 1.14 | 1.06 |
+| 4th order | 1920x1080, 32 | 37, 38 | 45, 45 | 53, 56 (K 2) | 1.21 | 1.47 | 1.22 |
+
+The CPU_REV2 engine at a fixed K (`set_fused_steps`), the two passes' mean:
+
+| Stencil | Grid, rim | K = 1 | 2 | 4 | 8 | 12 | 16 |
+|---|---|---|---|---|---|---|---|
+| 9-point | 800x600, 0 | 656 | 801 | 885 | 934 | 943 | 946 |
+| 9-point | 800x600, 32 | 318 | 392 | 421 | 431 | 423 | 430 |
+| 9-point | 1920x1080, 0 | 164 | 203 | 217 | 229 | 229 | 229 |
+| 9-point | 1920x1080, 32 | 113 | 134 | 143 | 144 | 140 | 134 |
+| 4th order | 800x600, 0 | 303 | 319 | 324 | 320 | 315 | 308 |
+| 4th order | 800x600, 32 | 166 | 177 | 180 | 176 | 164 | 155 |
+| 4th order | 1920x1080, 0 | 73 | 75 | 75 | 70 | 62 | 59 |
+| 4th order | 1920x1080, 32 | 55 | 56 | 55 | 46 | 36 | 36 |
+
+One thread, one band, so no seams' phase: the 9-point gains up to K = 8 and flattens there (12 and 16 gain at most
+1 %), the 4th order peaks at K = 2 to 4 and loses past it, as natively on 1 thread. Fusing gains the 9-point 1.27 to
+1.42 times over K = 1, the 4th order 1.0 to 1.07. The native rule's K is within 2 % of the best K everywhere (the
+9-point with a rim gains 1 to 2 % at K = 8, the 4th order at 800x600 1 to 2 % at K = 4), within the passes'
+spread, so wasm keeps it. The CPU_REV2 engine is faster than the legacy engine in every case, 1.06 to 1.62 times;
+least so the 4th order without a rim, where both engines' DRP arithmetic, not the memory, bounds a step.
+
+Values: the harness steps fused CPU_REV2 on simd128, CPU_REV2 on the generic backend and the legacy engine in batches
+of 24, 312 steps, 200x150 and 333x211, both stencils, rim 0 and 32 (K 8, 4 and 2 as above), and compares the padded
+field and both intensity stages: all bit for bit equal; the benchmark's hashes agree with master's too, but for 2 of the 24
+4th-order processes of the first table, whose field hash differed from the others' (master's engine once, the legacy
+engine once, never the CPU_REV2 engine); 52 further processes per engine (16 at 400x300 and 10 at 800x600 per rim,
+1536 steps in batches of 24, 6 at a time) gave one hash per grid and rim, the same for all three engines. Like the divergence under register pressure in
+[The CPU_REV2 engine in wasm](#the-cpu_rev2-engine-in-wasm), not explained, and here on engines the web already runs.
+
 ## Other operations
 
 2026-11-06 unless noted.

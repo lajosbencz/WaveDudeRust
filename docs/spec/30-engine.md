@@ -124,7 +124,9 @@ worker and `Simulation::run` hand it the steps between captures, probe drains an
 hand-written assembly with fused multiply-adds: its results match the CPU engine's within rounding (1e-4 of the
 peak), not bit for bit; on its generic backend they match bit for bit. Elsewhere, on the
 web among them, the CPU engine runs; for wasm built with simd128 the CPU_REV2 engine has a `simd128` backend (bit for
-bit the CPU engine's), not chosen yet ([docs/measurements.md](../measurements.md#the-cpu_rev2-engine-in-wasm)).
+bit the CPU engine's, fused steps included), not chosen yet, though in Node on one thread it takes 1.06 to 1.6 times the
+CPU engine's steps a second ([docs/measurements.md](../measurements.md#the-cpu_rev2-engine-in-wasm), [In
+wasm](../measurements.md#in-wasm)).
 `WAVEDUDE_CPU_ENGINE=legacy` asks for the CPU engine, `rev2` or `rev2-<backend>` for the CPU_REV2 engine (`generic`,
 `avx2`). Where the CPU_REV2 engine would run, the app's Settings > Preview and memory > Use the legacy CPU engine
 (`LegacyCpuEngine`) brings the CPU engine back over both (`engine::set_legacy_cpu_engine`); the row is absent
