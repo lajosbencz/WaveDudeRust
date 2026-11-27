@@ -369,7 +369,7 @@ fn engines(gpu: Arc<Gpu>, use_gpu: Arc<AtomicBool>, queue: Arc<Mutex<Queue>>) ->
 			let Built { engine, fallback } = build_on(scene, options, device).await;
 			crate::log::engine_built(engine.name(), engine.scene(), engine.options(), engine.sub_steps());
 			let item = Item::Engine {
-				engine: EngineLabel::of(name.filter(|_| engine.is_gpu()).as_deref()),
+				engine: EngineLabel::built(name.filter(|_| engine.is_gpu()).as_deref(), engine.name()),
 				fallback: fallback.map(|f| f.to_string()).or(refused),
 			};
 			lock(&queue).push_back(item);

@@ -21,8 +21,9 @@ Edits of two classes at once (an undo, a paste) take the least destructive effec
 with a brightness change keeps the frames unless the preview samples are 8-bit.
 
 The status bar's run line says Running while frames are made, Stopped when some are missing and no more are wanted, Completed when all are there.
-It ends with the engine: "GPU: <adapter>" ("GPU: WebGPU" in the browser), "CPU (1 thread)" or "CPU (n threads)"; in
-the browser "engine starting" until the run worker is ready, "no engine" when it is gone before it built one.
+It ends with the engine: "GPU: <adapter>" ("GPU: WebGPU" in the browser), "CPU (1 thread)" or "CPU (n threads)" for
+the legacy CPU engine, the CPU_REV2 engine with its backend as "CPU_REV2 (AVX2), n threads"; in the browser "engine
+starting" until the run worker is ready, "no engine" when it is gone before it built one.
 
 ## The live run
 
