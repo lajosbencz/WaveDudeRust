@@ -880,14 +880,8 @@ impl Live {
 		self.publish();
 	}
 
-	/// The newest stored frame drawn, when it changed, and the run's state.
-	pub(crate) fn poll(&mut self, project: &Project, view: &View, schemes: &SchemeStore) -> Shown {
-		self.worker.pump();
-		// the parked run lands or drops what it was sent before it was parked
-		#[cfg(target_arch = "wasm32")]
-		if let Some(cpu) = &mut self.cpu {
-			cpu.pump();
-		}
+	/// A brightness fit that came in: an Auto read off a stored frame, or the worker's fit frame asked for.
+	fn take_fitted(&mut self) -> Option<(Layer, Option<f64>)> {
 		let mut fitted = None;
 		if let Some(layer) = self.read_fit.take()
 			&& let Fit::Done(fit) = self.auto(layer)
@@ -902,6 +896,60 @@ impl Live {
 			self.publish();
 			fitted = Some((layer, fit_plane(frame.snapshot.plane(layer), &frame.snapshot.shape, layer)));
 		}
+		fitted
+	}
+
+	/// The run's state as the window shows it; none before the first run.
+	fn run_state(&self, status: &Status) -> RunState {
+		self.started.map_or(RunState::None, |_| match &status.state {
+			WorkState::Stepping { .. } | WorkState::Fitting => RunState::Running,
+			WorkState::Paused => RunState::Paused,
+			WorkState::Failed(_) => RunState::Failed,
+			WorkState::Idle if status.store.as_ref().is_some_and(|s| s.is_complete()) => RunState::Completed,
+			WorkState::Idle => RunState::Stopped,
+		})
+	}
+
+	/// Logs the run's summary once it completed or was cancelled; a completed run is over.
+	fn summarise(&mut self, status: &Status, state: RunState, steps_done: u32) {
+		let (Some(started), RunState::Completed | RunState::Stopped, Some(store)) =
+			(self.started, state, status.store.as_ref())
+		else {
+			return;
+		};
+		if matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting) || self.summarised {
+			return;
+		}
+		self.summarised = true;
+		// a run with every frame made is over: nothing to stop or pause
+		if state == RunState::Completed {
+			(self.active, self.paused) = (false, false);
+		}
+		let gib = |b: u64| b as f64 / f64::from(1u32 << 30);
+		tracing::info!(
+			"Run {}: {} of {} steps, {} frames, {:.1} s; {} stored, {} in memory ({:.1} GB) and {} on disk ({:.1} GB)",
+			if state == RunState::Completed { "Completed" } else { "Cancelled" },
+			steps_done,
+			self.steps,
+			self.frames,
+			started.elapsed().as_secs_f64(),
+			store.present_count(),
+			store.frames_in_memory(),
+			gib(store.ram_bytes()),
+			store.frames_on_disk(),
+			gib(store.spill_bytes().unwrap_or(0)),
+		);
+	}
+
+	/// The newest stored frame drawn, when it changed, and the run's state.
+	pub(crate) fn poll(&mut self, project: &Project, view: &View, schemes: &SchemeStore) -> Shown {
+		self.worker.pump();
+		// the parked run lands or drops what it was sent before it was parked
+		#[cfg(target_arch = "wasm32")]
+		if let Some(cpu) = &mut self.cpu {
+			cpu.pump();
+		}
+		let fitted = self.take_fitted();
 		let status = self.worker.status();
 		let state = std::mem::discriminant(&status.state);
 		let changed = self.last_state != Some(state);
@@ -914,13 +962,7 @@ impl Live {
 				failed = Some((e.to_string(), e.storage_full()));
 			}
 		}
-		let state = self.started.map_or(RunState::None, |_| match &status.state {
-			WorkState::Stepping { .. } | WorkState::Fitting => RunState::Running,
-			WorkState::Paused => RunState::Paused,
-			WorkState::Failed(_) => RunState::Failed,
-			WorkState::Idle if status.store.as_ref().is_some_and(|s| s.is_complete()) => RunState::Completed,
-			WorkState::Idle => RunState::Stopped,
-		});
+		let state = self.run_state(&status);
 		// the worker has taken up the newest goal: its Idle is this run's, not the one before
 		let current = status.adopted == self.revision;
 		// a completed run reads at least the timeline it covers: a reused store or kept frames step less, probes on
@@ -929,31 +971,8 @@ impl Live {
 				.map_or(status.steps_done, |c| c.max(status.steps_done)),
 			_ => status.steps_done,
 		};
-		if let (Some(started), RunState::Completed | RunState::Stopped, Some(store)) =
-			(self.started, state, status.store.as_ref())
-			&& current
-			&& !matches!(status.state, WorkState::Stepping { .. } | WorkState::Fitting)
-			&& !self.summarised
-		{
-			self.summarised = true;
-			// a run with every frame made is over: nothing to stop or pause
-			if state == RunState::Completed {
-				(self.active, self.paused) = (false, false);
-			}
-			let gib = |b: u64| b as f64 / f64::from(1u32 << 30);
-			tracing::info!(
-				"Run {}: {} of {} steps, {} frames, {:.1} s; {} stored, {} in memory ({:.1} GB) and {} on disk ({:.1} GB)",
-				if state == RunState::Completed { "Completed" } else { "Cancelled" },
-				steps_done,
-				self.steps,
-				self.frames,
-				started.elapsed().as_secs_f64(),
-				store.present_count(),
-				store.frames_in_memory(),
-				gib(store.ram_bytes()),
-				store.frames_on_disk(),
-				gib(store.spill_bytes().unwrap_or(0)),
-			);
+		if current {
+			self.summarise(&status, state, steps_done);
 		}
 		let mut shown = Shown {
 			field: None,
