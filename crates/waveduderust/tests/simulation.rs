@@ -4,9 +4,8 @@
 use waveduderust::model::normalize::Normalize;
 use waveduderust::model::{Layer, Measurement, Probe, ProbeKind, Project, Source};
 use waveduderust::quality::{Brightness, PreviewQuality};
-use waveduderust::unstable::engine::WaveEngine;
-use waveduderust::unstable::engine::cpu::CpuEngine;
 use waveduderust::unstable::engine::probes::{ProbeCollector, record};
+use waveduderust::unstable::engine::{self, WaveEngine};
 use waveduderust::unstable::spec::RunSpec;
 use waveduderust::{Backend, Simulation, SimulationError};
 
@@ -49,7 +48,8 @@ fn cpu(p: &Project) -> Simulation {
 fn field_and_traces_match_a_hand_driven_engine() {
 	let p = project();
 	let spec = RunSpec::create(&p, None, PreviewQuality::FULL, Brightness::default(), true).unwrap();
-	let mut e: Box<dyn WaveEngine> = Box::new(CpuEngine::new(spec.scene.clone(), spec.options.clone()));
+	// The engine `Backend::Cpu` builds: the CPU engine this build and this CPU default to.
+	let mut e: Box<dyn WaveEngine> = engine::build(spec.scene.clone(), spec.options.clone(), false).engine;
 	let mut collector = ProbeCollector::new(&spec.probes, &spec.scene, spec.seed);
 	e.set_emitters(&spec.emitters);
 	e.set_probes(collector.cells());
@@ -185,8 +185,7 @@ mod background {
 
 	#[test]
 	fn index_frames_are_the_field_within_a_level() {
-		let index =
-			PreviewQuality { format: waveduderust::unstable::engine::SampleFormat::Index, ..PreviewQuality::FULL };
+		let index = PreviewQuality { format: engine::SampleFormat::Index, ..PreviewQuality::FULL };
 		let (field, _, _) = gaps(index, 13);
 		let brightness = Brightness::default().field as f32;
 		// a level of the truncating quantiser, the half rounding before it

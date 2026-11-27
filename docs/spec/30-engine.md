@@ -115,6 +115,13 @@ CPML's loops, compiled for those, chosen when the step runs (`engine/isa.rs`); t
 Rust contracts no `a * b + c` into a fused multiply-add, so both compute the same values bit for bit. In wasm nothing
 changes ([docs/measurements.md](../measurements.md#the-cpu-engines-avx2-dispatch)).
 
+Rust, CPU engine: natively on x86-64 with AVX2 and FMA the CPU_REV2 engine (`engine/rev2`) runs by default in its
+place. It runs a step's sub-steps as one wavefront over the rows, so a row is still in cache when the next sub-step
+reads it, and its row kernels are hand-written assembly with fused multiply-adds: its results match the CPU engine's
+within rounding (1e-4 of the peak), not bit for bit; on its generic backend they match bit for bit. Elsewhere, on the
+web among them, the CPU engine runs. `WAVEDUDE_CPU_ENGINE=legacy` asks for the CPU engine, `rev2` or `rev2-<backend>`
+for the CPU_REV2 engine (`generic`, `avx2`).
+
 ## Sources
 
 Constants: `SourceOpacity = 0.9`, `DetachRampSteps = 30`.

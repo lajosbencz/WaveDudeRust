@@ -144,27 +144,35 @@ fn cpu_instead(scene: Arc<SceneData>, options: EngineOptions, why: Fallback) -> 
 	Built { engine: cpu_engine(scene, options), fallback: Some(why) }
 }
 
-/// The CPU engine: the portable one ([`cpu::CpuEngine`]), or the CPU_REV2 engine ([`rev2::CpuRev2Engine`]) after the
-/// environment variable `WAVEDUDE_CPU_ENGINE` (natively; the web does not build it yet): `rev2` on the best backend
-/// this CPU runs, `rev2-<backend>` on that one (`rev2-generic`, `rev2-avx2`; [`rev2::Backend::named`]). A backend this
-/// build or this CPU lacks gives way to the generic one, and any other value to the portable engine, each with a
-/// warning. The CPU_REV2 engine is opt-in until it is the faster.
+/// The CPU engine: the CPU_REV2 engine ([`rev2::CpuRev2Engine`]) on the best backend this CPU runs when that is
+/// faster than the portable code (natively, on x86-64 with AVX2 and FMA), else the legacy one ([`cpu::CpuEngine`]),
+/// whose results the CPU_REV2 engine's generic backend repeats bit for bit and its faster backends within rounding.
+/// The environment variable `WAVEDUDE_CPU_ENGINE` overrides it natively ([`rev2_choice`]). The web builds the legacy
+/// engine until the CPU_REV2 engine has a backend there.
 fn cpu_engine(scene: Arc<SceneData>, options: EngineOptions) -> Box<dyn WaveEngine> {
 	#[cfg(not(target_arch = "wasm32"))]
-	if let Some(backend) = std::env::var("WAVEDUDE_CPU_ENGINE").ok().as_deref().and_then(rev2_backend) {
+	if let Some(backend) = rev2_choice(std::env::var("WAVEDUDE_CPU_ENGINE").ok().as_deref()) {
 		return Box::new(rev2::CpuRev2Engine::with_backend(scene, options, backend));
 	}
 	Box::new(cpu::CpuEngine::new(scene, options))
 }
 
-/// The CPU_REV2 engine's backend `WAVEDUDE_CPU_ENGINE=value` asks for ([`cpu_engine`]); None for another engine.
+/// The CPU_REV2 engine's backend for `WAVEDUDE_CPU_ENGINE=value`, None for the legacy engine: unset, the best backend
+/// when it is not the generic one; `legacy`, none; `rev2`, the best; `rev2-<backend>` that one (`rev2-generic`,
+/// `rev2-avx2`; [`rev2::Backend::named`]), the generic one when this build or this CPU lacks it; any other value the
+/// default. Each value it does not take is logged.
 #[cfg(not(target_arch = "wasm32"))]
-fn rev2_backend(value: &str) -> Option<rev2::Backend> {
-	let Some(rest) = value.strip_prefix("rev2") else {
-		tracing::warn!(
-			"WAVEDUDE_CPU_ENGINE={value} names no engine (rev2, rev2-<backend>); the portable CPU engine runs"
-		);
+fn rev2_choice(value: Option<&str>) -> Option<rev2::Backend> {
+	let default = || Some(rev2::Backend::best()).filter(|b| *b != rev2::Backend::Generic);
+	let Some(value) = value else {
+		return default();
+	};
+	if value == "legacy" {
 		return None;
+	}
+	let Some(rest) = value.strip_prefix("rev2") else {
+		tracing::warn!("WAVEDUDE_CPU_ENGINE={value} names no engine (legacy, rev2, rev2-<backend>); the default runs");
+		return default();
 	};
 	if rest.is_empty() {
 		return Some(rev2::Backend::best());
@@ -225,4 +233,40 @@ pub fn gpu_adapter() -> Option<Result<String, String>> {
 	});
 	#[cfg(not(feature = "gpu"))]
 	None
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+	use super::rev2::Backend;
+	use super::rev2_choice;
+
+	/// The best backend when it beats the portable code, else none (the legacy engine).
+	fn default() -> Option<Backend> {
+		Some(Backend::best()).filter(|b| *b != Backend::Generic)
+	}
+
+	#[test]
+	fn the_cpu_engine_follows_the_environment() {
+		assert_eq!(rev2_choice(None), default());
+		assert_eq!(rev2_choice(Some("legacy")), None);
+		assert_eq!(rev2_choice(Some("rev2")), Some(Backend::best()));
+		assert_eq!(rev2_choice(Some("rev2-generic")), Some(Backend::Generic));
+		assert_eq!(rev2_choice(Some("rev2-nonesuch")), Some(Backend::Generic));
+		assert_eq!(rev2_choice(Some("rev2x")), Some(Backend::Generic));
+		assert_eq!(rev2_choice(Some("avx")), default());
+		for &b in Backend::ALL {
+			let want = if b.available() { b } else { Backend::Generic };
+			assert_eq!(rev2_choice(Some(&format!("rev2-{}", b.name()))), Some(want));
+		}
+	}
+
+	#[test]
+	fn the_best_backend_runs_here() {
+		assert!(Backend::best().available());
+		assert_eq!(Backend::ALL.last(), Some(&Backend::Generic));
+		assert!(Backend::Generic.available());
+		for &b in Backend::ALL {
+			assert_eq!(Backend::named(b.name()), Some(b));
+		}
+	}
 }

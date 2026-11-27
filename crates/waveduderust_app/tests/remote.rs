@@ -14,10 +14,9 @@ use waveduderust::run::{
 	EngineFuture, FrameStore, Goal, Pump, PumpedFactory, RamCache, RunError, RunWorker, SpillBackend, SpillFactory,
 	StoreError, StoreLayout, Token, Wanted, WorkState,
 };
-use waveduderust::unstable::engine::cpu::CpuEngine;
+use waveduderust::unstable::engine::GpuHandle;
 use waveduderust::unstable::engine::gpu::GpuContext;
 use waveduderust::unstable::engine::probes::ProbeTrace;
-use waveduderust::unstable::engine::{GpuHandle, WaveEngine};
 use waveduderust::unstable::spec::{RunRequest, RunSpec, RunSpecError};
 use waveduderust::unstable::sync::lock;
 use waveduderust_app::build_id;
@@ -109,7 +108,8 @@ fn layout(p: &Project) -> StoreLayout {
 /// The same goal run directly on a pumped worker in memory.
 fn direct(p: &Project, wanted: Wanted) -> RunWorker {
 	let start: PumpedFactory = Box::new(|scene, options| -> EngineFuture {
-		Box::pin(async move { Box::new(CpuEngine::new(scene, options)) as Box<dyn WaveEngine> })
+		// The CPU engine the worker builds (engine::build): this build's and this CPU's default.
+		Box::pin(async move { waveduderust::unstable::engine::build(scene, options, false).engine })
 	});
 	let w = RunWorker::pumped(start, GIB, GIB, Box::new(Spill::default()), Arc::default());
 	w.set_goal(goal(p, 1, wanted));
